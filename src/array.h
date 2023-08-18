@@ -28,8 +28,8 @@
   size_t _ARRAY_METHOD(type, len);                                             \
   void _ARRAY_METHOD(type, free);
 
-DECLARE_ARRAY(Byte)
-DECLARE_ARRAY(UInt)
-DECLARE_ARRAY(Value)
+DECLARE_ARRAY(Byte)  /* OpCode Array */
+DECLARE_ARRAY(UInt)  /* Lines Array */
+DECLARE_ARRAY(Value) /* Constants Array */
 
 #endif

@@ -4,6 +4,5 @@
 #include "chunk.h"
 
 void Chunk_debug(Chunk *chunk, const char *name);
-int Instruction_debug(Chunk *chunk, int offset);
-
+UInt Instruction_debug(Chunk *chunk, UInt offset);
 #endif
