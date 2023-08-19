@@ -1,11 +1,9 @@
 #include "chunk.h"
+#include "mem.h"
 
 #include <stdio.h>
 
-#define BYTE(x, offset) (((x) >> (offset * 8)) & 0xff)
-
 static void LineArray_write(LineArray* lines, UInt line, UInt index);
-static UInt Chunk_add_constant(Chunk* chunk, Value constant);
 
 void Chunk_init(Chunk* chunk)
 {
@@ -28,20 +26,15 @@ void Chunk_free(Chunk* chunk)
     // Here chunk is at the init state
 }
 
-static UInt Chunk_add_constant(Chunk* chunk, Value constant)
-{
-    return ValueArray_push(&chunk->constants, constant);
-}
-
 void Chunk_write_constant(Chunk* chunk, Value constant, UInt line)
 {
-    UInt idx = Chunk_add_constant(chunk, constant);
+    UInt idx = ValueArray_push(&chunk->constants, constant);
 
     if (idx <= UINT8_MAX) {
-        Chunk_write(chunk, OP_CONSTANT, line);
+        Chunk_write(chunk, OP_CONST, line);
         Chunk_write(chunk, idx, line);
     } else {
-        Chunk_write(chunk, OP_CONSTANT_LONG, line);
+        Chunk_write(chunk, OP_CONSTL, line);
         Chunk_write(chunk, BYTE(idx, 0), line);
         Chunk_write(chunk, BYTE(idx, 1), line);
         Chunk_write(chunk, BYTE(idx, 2), line);

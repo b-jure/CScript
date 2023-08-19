@@ -5,9 +5,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Leave defined for debug build */
+#define DEBUG_TRACE_EXECUTION
+
 typedef uint8_t Byte;
 typedef uint32_t UInt;
 
+/* GCC attribute definitions */
 #define __UNUSED__ __attribute__((unused))
+#define UNUSED(x) (void)(x)
+#define __FORCE_INLINE__ __attribute__((always_inline)) inline
+#define LIKELY(cond) __glibc_likely(cond)
+#define UNLIKELY(cond) __glibc_unlikely(cond)
 
 #endif

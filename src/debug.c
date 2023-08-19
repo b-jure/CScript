@@ -1,5 +1,6 @@
 #include "chunk.h"
 #include "debug.h"
+#include "mem.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -19,7 +20,7 @@ void Chunk_debug(Chunk* chunk, const char* name)
 
 UInt Instruction_debug(Chunk* chunk, UInt offset)
 {
-    printf("%05d ", offset);
+    printf("%04d ", offset);
 
     UInt line = Chunk_getline(chunk, offset);
 
@@ -31,12 +32,22 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
 
     Byte instruction = chunk->code.data[offset];
     switch (instruction) {
-        case OP_RETURN:
-            return Instruction_simple("OP_RETURN", offset);
-        case OP_CONSTANT:
-            return Instruction_constant("OP_CONSTANT", chunk, offset);
-        case OP_CONSTANT_LONG:
-            return Instruction_constant_long("OP_CONSTANT_LONG", chunk, offset);
+        case OP_RET:
+            return Instruction_simple("OP_RET", offset);
+        case OP_CONST:
+            return Instruction_constant("OP_CONST", chunk, offset);
+        case OP_CONSTL:
+            return Instruction_constant_long("OP_CONSTL", chunk, offset);
+        case OP_NEG:
+            return Instruction_simple("OP_NEG", offset);
+        case OP_ADD:
+            return Instruction_simple("OP_ADD", offset);
+        case OP_SUB:
+            return Instruction_simple("OP_SUB", offset);
+        case OP_MUL:
+            return Instruction_simple("OP_MUL", offset);
+        case OP_DIV:
+            return Instruction_simple("OP_DIV", offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -60,7 +71,7 @@ static int Instruction_constant(const char* name, Chunk* chunk, UInt offset)
 
 static int Instruction_constant_long(const char* name, Chunk* chunk, UInt offset)
 {
-    UInt constant_index = *(UInt*)&chunk->code.data[offset + 1];
+    UInt constant_index = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-16s %5u '", name, constant_index);
     Value_print(ValueArray_index(&chunk->constants, constant_index));
     printf("'\n");

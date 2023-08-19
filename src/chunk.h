@@ -6,9 +6,14 @@
 #include "value.h"
 
 typedef enum {
-  OP_RETURN,
-  OP_CONSTANT,      /* Stores index up to 8 bits */
-  OP_CONSTANT_LONG, /* Stores index up to 24 bits */
+  OP_CONST = 0, /* Store 8-bit Value index instruction */
+  OP_CONSTL,    /* Store 24-bit Value index instruction */
+  OP_NEG,       /* Unary negation instruction */
+  OP_ADD,       /* Binary addition instruction */
+  OP_SUB,       /* Binary subtraction instruction */
+  OP_MUL,       /* Binary multiplication instruction */
+  OP_DIV,       /* Binary division instruction */
+  OP_RET,       /* Return.. */
 } OpCode;
 
 typedef UIntArray LineArray;

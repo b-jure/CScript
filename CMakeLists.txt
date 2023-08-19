@@ -7,6 +7,7 @@ set(BIN skooma)
 set(SRCDIR ${CMAKE_SOURCE_DIR}/src)
 set(CFLAGS -Wall -Werror -Wextra -Wpedantic)
 set(OPTS -Os)
+set(SANITIZER_FLAGS -fsanitize=address -fsanitize=undefined)
 set(SRCFILES
     ${SRCDIR}/mem.c
     ${SRCDIR}/main.c
@@ -14,8 +15,10 @@ set(SRCFILES
     ${SRCDIR}/chunk.c
     ${SRCDIR}/value.c
     ${SRCDIR}/array.c
+    ${SRCDIR}/vmachine.c
 )
 
 add_executable(${BIN} ${SRCFILES})
 target_include_directories(${BIN} PRIVATE ${SRCDIR})
-target_compile_options(${BIN} PRIVATE ${CFLAGS} ${OPTS})
+target_compile_options(${BIN} PRIVATE ${vmachine} ${OPTS} ${SANITIZER_FLAGS})
+target_link_options(${BIN} PRIVATE ${SANITIZER_FLAGS})

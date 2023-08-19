@@ -1,17 +1,21 @@
 #include "chunk.h"
 #include "debug.h"
-#include <assert.h>
+#include "vmachine.h"
 
 int main()
 {
-    int i;
+    VM* vm = VM_new();
+
     Chunk chunk;
     Chunk_init(&chunk);
-    for (i = 10; i < 267; i++) {
-        Chunk_write_constant(&chunk, 5.5, i);
-    }
-    Chunk_write(&chunk, OP_RETURN, 266);
-    Chunk_write_constant(&chunk, 15, 266);
-    Chunk_debug(&chunk, "test_chunk");
-    Chunk_free(&chunk);
+    Chunk_write_constant(&chunk, 8, 1);
+    Chunk_write_constant(&chunk, 10, 1);
+    Chunk_write(&chunk, OP_ADD, 1);
+    Chunk_write_constant(&chunk, 3.5, 2);
+    Chunk_write(&chunk, OP_DIV, 2);
+    Chunk_write(&chunk, OP_NEG, 2);
+    Chunk_write(&chunk, OP_RET, 2);
+
+    VM_interpret(vm, &chunk);
+    VM_free(vm);
 }
