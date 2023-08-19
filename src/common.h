@@ -13,9 +13,9 @@ typedef uint32_t UInt;
 
 /* GCC attribute definitions */
 #define __UNUSED__ __attribute__((unused))
-#define UNUSED(x) (void)(x)
 #define __FORCE_INLINE__ __attribute__((always_inline)) inline
 #define LIKELY(cond) __glibc_likely(cond)
 #define UNLIKELY(cond) __glibc_unlikely(cond)
+#define UNREACHABLE() __builtin_unreachable()
 
 #endif

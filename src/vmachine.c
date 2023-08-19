@@ -3,39 +3,25 @@
 #include "mem.h"
 #include "vmachine.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define FREE_VM(vm) MFREE((vm), sizeof(VM))
+/* Check if we can use labels as values for out computed goto/jmp table */
+#if defined(__GNUC__) && __GNUC__ >= 2
+    #define THREADED_CODE
+#endif
 
 static InterpretResult        VM_run(VM* vm);
 static __FORCE_INLINE__ Value VM_pop(VM* vm);
 static __FORCE_INLINE__ void  VM_push(VM* vm, Value val);
-
-/*
- *
- */
-/*============================ JMP TABLE ============================*/
-
-typedef void (*Handler)(VM* vm);
-
-static __FORCE_INLINE__ void VM_op_const(VM* vm);
-static __FORCE_INLINE__ void VM_op_constl(VM* vm);
-static __FORCE_INLINE__ void VM_op_neg(VM* vm);
-static __FORCE_INLINE__ void VM_op_add(VM* vm);
-static __FORCE_INLINE__ void VM_op_sub(VM* vm);
-static __FORCE_INLINE__ void VM_op_div(VM* vm);
-static __FORCE_INLINE__ void VM_op_mul(VM* vm);
-
-static Handler JmpTable[] = {
-    VM_op_const,
-    VM_op_constl,
-    VM_op_neg,
-    VM_op_add,
-    VM_op_sub,
-    VM_op_mul,
-    VM_op_div,
-};
+static __FORCE_INLINE__ void  VM_op_const(VM* vm);
+static __FORCE_INLINE__ void  VM_op_constl(VM* vm);
+static __FORCE_INLINE__ void  VM_op_neg(VM* vm);
+static __FORCE_INLINE__ void  VM_op_add(VM* vm);
+static __FORCE_INLINE__ void  VM_op_sub(VM* vm);
+static __FORCE_INLINE__ void  VM_op_div(VM* vm);
+static __FORCE_INLINE__ void  VM_op_mul(VM* vm);
 
 static __FORCE_INLINE__ void VM_op_const(VM* vm)
 {
@@ -122,17 +108,79 @@ static InterpretResult VM_run(VM* vm)
         printf("\n");
         Instruction_debug(vm->chunk, (UInt)(vm->ip - vm->chunk->code.data));
 #endif
+#ifdef THREADED_CODE
+        // NOTE: This is a GCC extension that might get removed in the future,
+        //       https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+        static const void* jmp_table[] = {
+            &&op_const,
+            &&op_constl,
+            &&op_neg,
+            &&op_add,
+            &&op_sub,
+            &&op_mul,
+            &&op_div,
+            &&op_ret,
+        };
 
-        Byte instruction = *vm->ip++;
+        goto* jmp_table[*vm->ip++];
 
-        if (instruction != OP_RET) {
-            JmpTable[instruction](vm);
-        } else {
-            Value_print(VM_pop(vm));
-            printf("\n");
-            return INTERPRET_OK;
-        }
+    op_const:
+        VM_op_const(vm);
+        continue;
+    op_constl:
+        VM_op_constl(vm);
+        continue;
+    op_neg:
+        VM_op_neg(vm);
+        continue;
+    op_add:
+        VM_op_add(vm);
+        continue;
+    op_sub:
+        VM_op_sub(vm);
+        continue;
+    op_mul:
+        VM_op_mul(vm);
+        continue;
+    op_div:
+        VM_op_div(vm);
+        continue;
+    op_ret:
+        Value_print(VM_pop(vm));
+        printf("\n");
+        return INTERPRET_OK;
     }
+
+    UNREACHABLE();
+#else
+        switch (*vm->ip++) {
+            case OP_CONST:
+                VM_op_const(vm);
+                break;
+            case OP_CONSTL:
+                VM_op_constl(vm);
+                break;
+            case OP_NEG:
+                VM_op_neg(vm);
+                break;
+            case OP_ADD:
+                VM_op_add(vm);
+                break;
+            case OP_SUB:
+                VM_op_sub(vm);
+                break;
+            case OP_MUL:
+                VM_op_mul(vm);
+                break;
+            case OP_DIV:
+                VM_op_div(vm);
+                break;
+            case OP_RET:
+                Value_print(VM_pop(vm));
+                printf("\n");
+                return INTERPRET_OK;
+        }
+#endif
 }
 
 void VM_free(VM* vm)
@@ -140,7 +188,7 @@ void VM_free(VM* vm)
     if (LIKELY(vm->chunk != NULL)) {
         Chunk_free(vm->chunk);
     }
-    FREE_VM(vm);
+    MFREE(vm, sizeof(VM));
 }
 
 /*

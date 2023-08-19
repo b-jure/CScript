@@ -5,8 +5,8 @@
 int main()
 {
     VM* vm = VM_new();
-
     Chunk chunk;
+
     Chunk_init(&chunk);
     Chunk_write_constant(&chunk, 8, 1);
     Chunk_write_constant(&chunk, 10, 1);
