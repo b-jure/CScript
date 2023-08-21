@@ -1,4 +1,5 @@
 #include "common.h"
+#include "compiler.h"
 #include "debug.h"
 #include "mem.h"
 #include "vmachine.h"
@@ -44,7 +45,7 @@ static __FORCE_INLINE__ void VM_op_neg(VM* vm)
         Value b = VM_pop(vm);                                                            \
         Value a = VM_pop(vm);                                                            \
         VM_push(vm, a op b);                                                             \
-    } while (false)
+    } while(false)
 
 static __FORCE_INLINE__ void VM_op_add(VM* vm)
 {
@@ -88,19 +89,18 @@ void VM_init(VM* vm)
     vm->sp    = vm->stack;
 }
 
-InterpretResult VM_interpret(VM* vm, Chunk* chunk)
+InterpretResult VM_interpret(VM* vm, const char* source)
 {
-    vm->chunk = chunk;
-    vm->ip    = chunk->code.data;
-    return VM_run(vm);
+    compile(source);
+    return INTERPRET_OK;
 }
 
 static InterpretResult VM_run(VM* vm)
 {
-    while (true) {
+    while(true) {
 #ifdef DEBUG_TRACE_EXECUTION
         printf("           ");
-        for (Value* ptr = vm->stack; ptr < vm->sp; ptr++) {
+        for(Value* ptr = vm->stack; ptr < vm->sp; ptr++) {
             printf("[");
             Value_print(*ptr);
             printf("]");
@@ -153,7 +153,7 @@ static InterpretResult VM_run(VM* vm)
 
     UNREACHABLE();
 #else
-        switch (*vm->ip++) {
+        switch(*vm->ip++) {
             case OP_CONST:
                 VM_op_const(vm);
                 break;
@@ -185,7 +185,7 @@ static InterpretResult VM_run(VM* vm)
 
 void VM_free(VM* vm)
 {
-    if (LIKELY(vm->chunk != NULL)) {
+    if(LIKELY(vm->chunk != NULL)) {
         Chunk_free(vm->chunk);
     }
     MFREE(vm, sizeof(VM));
@@ -198,7 +198,7 @@ void VM_free(VM* vm)
 
 static __FORCE_INLINE__ void VM_push(VM* vm, Value val)
 {
-    if (LIKELY(vm->sp - vm->stack < STACK_MAX)) {
+    if(LIKELY(vm->sp - vm->stack < STACK_MAX)) {
         *vm->sp++ = val;
     } else {
         fprintf(stderr, "Skooma: stack overflow\n");

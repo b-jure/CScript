@@ -2,20 +2,105 @@
 #include "debug.h"
 #include "vmachine.h"
 
-int main()
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAXLINE BUFSIZ
+
+static void  repl(VM* vm);
+static void  File_run(VM* vm, const char* path);
+static char* File_read(const char* path);
+
+static void repl(VM* vm)
+{
+    char line[MAXLINE];
+
+    while (true) {
+        printf(">> ");
+
+        if (!fgets(line, sizeof(line), stdin)) {
+            printf("\n");
+            break;
+        }
+
+        VM_interpret(vm, line);
+    }
+}
+
+static void File_run(VM* vm, const char* path)
+{
+    char*           source = File_read(path);
+    InterpretResult result = VM_interpret(vm, source);
+    free(source);
+
+    if (result == INTERPRET_COMPILE_ERROR) {
+        VM_free(vm);
+        exit(65);
+    }
+    if (result == INTERPRET_RUNTIME_ERROR) {
+        VM_free(vm);
+        exit(70);
+    }
+}
+
+static char* File_read(const char* path)
+{
+    FILE* fp = fopen(path, "rb");
+    if (fp == NULL) {
+        fprintf(stderr, "Could not open file \"%s\"\n", path);
+        perror("Skooma");
+        exit(74);
+    }
+
+    size_t len = fseek(fp, 0L, SEEK_END);
+    if (UNLIKELY(len < 0)) {
+        fprintf(stderr, "Failed processing file \"%s\"\n", path);
+        perror("Skooma");
+        exit(74);
+    }
+
+    char* buffer = malloc(len + 1);
+    if (UNLIKELY(buffer == NULL)) {
+        fprintf(stderr, "Could not allocate enough memory to read \"%s\"\n", path);
+        perror("Skooma");
+        exit(74);
+    }
+
+    rewind(fp);
+
+    size_t n = fread(buffer, sizeof(char), len, fp);
+    if (n < len) {
+        fprintf(stderr, "Could not read file \"%s\"\n", path);
+        free(buffer);
+        exit(74);
+    }
+
+    if (UNLIKELY(ferror(fp))) {
+        fprintf(stderr, "Error ocurred while read file \"%s\"\n", path);
+        perror("Skooma");
+        free(buffer);
+        exit(74);
+    }
+
+    buffer[n] = '\0';
+    return buffer;
+}
+
+int main(int argc, const char* argv[])
 {
     VM* vm = VM_new();
-    Chunk chunk;
 
-    Chunk_init(&chunk);
-    Chunk_write_constant(&chunk, 8, 1);
-    Chunk_write_constant(&chunk, 10, 1);
-    Chunk_write(&chunk, OP_ADD, 1);
-    Chunk_write_constant(&chunk, 3.5, 2);
-    Chunk_write(&chunk, OP_DIV, 2);
-    Chunk_write(&chunk, OP_NEG, 2);
-    Chunk_write(&chunk, OP_RET, 2);
+    if (argc == 1) {
+        repl(vm);
+    } else if (argc == 2) {
+        File_run(vm, argv[1]);
+    } else {
+        fprintf(stderr, "Usage: skooma [path.sk]\n");
+        VM_free(vm);
+        exit(64);
+    }
 
-    VM_interpret(vm, &chunk);
     VM_free(vm);
+    return 0;
 }
