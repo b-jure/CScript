@@ -30,7 +30,7 @@ void Chunk_write_constant(Chunk* chunk, Value constant, UInt line)
 {
     UInt idx = ValueArray_push(&chunk->constants, constant);
 
-    if (idx <= UINT8_MAX) {
+    if(idx <= UINT8_MAX) {
         Chunk_write(chunk, OP_CONST, line);
         Chunk_write(chunk, idx, line);
     } else {
@@ -43,12 +43,12 @@ void Chunk_write_constant(Chunk* chunk, Value constant, UInt line)
 
 UInt Chunk_getline(Chunk* chunk, UInt index)
 {
-    UIntArray* line_array = &chunk->lines;
-    UInt idx = UIntArray_len(line_array) - 1;
-    UInt instruction_idx = UIntArray_index(line_array, --idx);
+    UIntArray* line_array      = &chunk->lines;
+    UInt       idx             = UIntArray_len(line_array) - 1;
+    UInt       instruction_idx = UIntArray_index(line_array, --idx);
 
-    while (instruction_idx > index) {
-        idx -= 2;
+    while(instruction_idx > index) {
+        idx             -= 2;
         instruction_idx = UIntArray_index(line_array, idx);
     }
 
@@ -63,7 +63,7 @@ UInt Chunk_getline(Chunk* chunk, UInt index)
  */
 static void LineArray_write(LineArray* lines, UInt line, UInt index)
 {
-    if (UIntArray_len(lines) <= 0 || UIntArray_last(lines) < line) {
+    if(UIntArray_len(lines) <= 0 || UIntArray_last(lines) < line) {
         UIntArray_push(lines, index);
         UIntArray_push(lines, line);
     }

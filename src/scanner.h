@@ -38,7 +38,7 @@ typedef enum {
   TOK_FN,
   TOK_IF,
   TOK_IMPL,
-  TOK_DUST, /* Nil, NULL, ... */
+  TOK_NIL,
   TOK_OR,
   TOK_PRINT,
   TOK_RETURN,

@@ -16,10 +16,10 @@ static void repl(VM* vm)
 {
     char line[MAXLINE];
 
-    while (true) {
+    while(true) {
         printf(">> ");
 
-        if (!fgets(line, sizeof(line), stdin)) {
+        if(!fgets(line, sizeof(line), stdin)) {
             printf("\n");
             break;
         }
@@ -34,11 +34,11 @@ static void File_run(VM* vm, const char* path)
     InterpretResult result = VM_interpret(vm, source);
     free(source);
 
-    if (result == INTERPRET_COMPILE_ERROR) {
+    if(result == INTERPRET_COMPILE_ERROR) {
         VM_free(vm);
         exit(65);
     }
-    if (result == INTERPRET_RUNTIME_ERROR) {
+    if(result == INTERPRET_RUNTIME_ERROR) {
         VM_free(vm);
         exit(70);
     }
@@ -47,21 +47,21 @@ static void File_run(VM* vm, const char* path)
 static char* File_read(const char* path)
 {
     FILE* fp = fopen(path, "rb");
-    if (fp == NULL) {
+    if(fp == NULL) {
         fprintf(stderr, "Could not open file \"%s\"\n", path);
         perror("Skooma");
         exit(74);
     }
 
     size_t len = fseek(fp, 0L, SEEK_END);
-    if (UNLIKELY(len < 0)) {
+    if(_unlikely(len < 0)) {
         fprintf(stderr, "Failed processing file \"%s\"\n", path);
         perror("Skooma");
         exit(74);
     }
 
     char* buffer = malloc(len + 1);
-    if (UNLIKELY(buffer == NULL)) {
+    if(_unlikely(buffer == NULL)) {
         fprintf(stderr, "Could not allocate enough memory to read \"%s\"\n", path);
         perror("Skooma");
         exit(74);
@@ -70,13 +70,13 @@ static char* File_read(const char* path)
     rewind(fp);
 
     size_t n = fread(buffer, sizeof(char), len, fp);
-    if (n < len) {
+    if(n < len) {
         fprintf(stderr, "Could not read file \"%s\"\n", path);
         free(buffer);
         exit(74);
     }
 
-    if (UNLIKELY(ferror(fp))) {
+    if(_unlikely(ferror(fp))) {
         fprintf(stderr, "Error ocurred while read file \"%s\"\n", path);
         perror("Skooma");
         free(buffer);
@@ -91,9 +91,9 @@ int main(int argc, const char* argv[])
 {
     VM* vm = VM_new();
 
-    if (argc == 1) {
+    if(argc == 1) {
         repl(vm);
-    } else if (argc == 2) {
+    } else if(argc == 2) {
         File_run(vm, argv[1]);
     } else {
         fprintf(stderr, "Usage: skooma [path.sk]\n");

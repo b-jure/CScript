@@ -16,6 +16,8 @@ set(SRCFILES
     ${SRCDIR}/value.c
     ${SRCDIR}/array.c
     ${SRCDIR}/vmachine.c
+    ${SRCDIR}/compiler.c
+    ${SRCDIR}/scanner.c
 )
 
 add_executable(${BIN} ${SRCFILES})

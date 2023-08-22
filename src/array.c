@@ -27,7 +27,7 @@
             size_t old_cap = self->cap;                                                  \
             self->cap = GROW_CAPACITY(old_cap);                                          \
                                                                                          \
-            if (UNLIKELY(self->cap >= UINT32_MAX)) {                                     \
+            if (_unlikely(self->cap >= UINT32_MAX)) {                                     \
                 exit(EXIT_FAILURE);                                                      \
             } else {                                                                     \
                 self->data = GROW_ARRAY(type, self->data, old_cap, self->cap);           \

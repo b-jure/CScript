@@ -17,18 +17,17 @@ Scanner scanner;
 #define isend()     (*scanner.current == '\0')
 #define peek_next() ((isend()) ? '\0' : *(scanner.current + 1))
 
-static __FORCE_INLINE__ Token Token_new(TokenType type);
-static __FORCE_INLINE__ Token Token_error(const char* err);
-static __FORCE_INLINE__ Token Token_string(void);
-static __FORCE_INLINE__ Token Token_number(void);
-static __FORCE_INLINE__ Token Token_identifier(void);
-static TokenType              TokenType_identifier(void);
-static __FORCE_INLINE__ void  Scanner_skipws(void);
-static __FORCE_INLINE__ bool  Scanner_match(char c);
-static __FORCE_INLINE__ TokenType
-check_keyword(UInt start, UInt end, const char* pattern, TokenType type);
+static Token     Token_new(TokenType type);
+static Token     Token_error(const char* err);
+static Token     Token_string(void);
+static Token     Token_number(void);
+static Token     Token_identifier(void);
+static TokenType TokenType_identifier(void);
+static void      Scanner_skipws(void);
+static bool      Scanner_match(char c);
+static TokenType check_keyword(UInt start, UInt end, const char* pattern, TokenType type);
 
-void __FORCE_INLINE__ Scanner_init(const char* source)
+void Scanner_init(const char* source)
 {
     scanner.start   = source;
     scanner.current = source;
@@ -92,7 +91,7 @@ Token Scanner_scan(void)
     }
 }
 
-static __FORCE_INLINE__ bool Scanner_match(char c)
+static bool Scanner_match(char c)
 {
     if(isend() || c != peek()) {
         return false;
@@ -101,7 +100,7 @@ static __FORCE_INLINE__ bool Scanner_match(char c)
     return true;
 }
 
-static __FORCE_INLINE__ void Scanner_skipws(void)
+static void Scanner_skipws(void)
 {
     register char c;
 
@@ -130,7 +129,7 @@ static __FORCE_INLINE__ void Scanner_skipws(void)
     }
 }
 
-static __FORCE_INLINE__ Token Token_new(TokenType type)
+static Token Token_new(TokenType type)
 {
     Token token;
     token.type  = type;
@@ -140,7 +139,7 @@ static __FORCE_INLINE__ Token Token_new(TokenType type)
     return token;
 }
 
-static __FORCE_INLINE__ Token Token_error(const char* err)
+static Token Token_error(const char* err)
 {
     Token token;
     token.type  = TOK_ERROR;
@@ -150,7 +149,7 @@ static __FORCE_INLINE__ Token Token_error(const char* err)
     return token;
 }
 
-static __FORCE_INLINE__ Token Token_string(void)
+static Token Token_string(void)
 {
     while(peek() != '"' && !isend()) {
         if(peek() == '\n') {
@@ -167,7 +166,7 @@ static __FORCE_INLINE__ Token Token_string(void)
     return Token_new(TOK_STRING);
 }
 
-static __FORCE_INLINE__ Token Token_number(void)
+static Token Token_number(void)
 {
     advance();
     while(isdigit(peek())) {
@@ -184,7 +183,7 @@ static __FORCE_INLINE__ Token Token_number(void)
     return Token_new(TOK_NUMBER);
 }
 
-static __FORCE_INLINE__ Token Token_identifier(void)
+static Token Token_identifier(void)
 {
     register char c;
 
@@ -203,8 +202,6 @@ static TokenType TokenType_identifier(void)
             return check_keyword(1, 2, "nd", TOK_AND);
         case 'c':
             return check_keyword(1, 4, "lass", TOK_CLASS);
-        case 'd':
-            return check_keyword(1, 3, "ust", TOK_DUST);
         case 'e':
             return check_keyword(1, 3, "lse", TOK_ELSE);
         case 'f':
@@ -241,6 +238,8 @@ static TokenType TokenType_identifier(void)
                 }
             }
             break;
+        case 'n':
+            return check_keyword(1, 2, "il", TOK_NIL);
         case 'o':
             return check_keyword(1, 1, "r", TOK_OR);
         case 'p':
@@ -271,7 +270,7 @@ static TokenType TokenType_identifier(void)
     return TOK_IDENTIFIER;
 }
 
-static __FORCE_INLINE__ TokenType
+static TokenType
 check_keyword(UInt start, UInt length, const char* pattern, TokenType type)
 {
     if(scanner.current - scanner.start == start + length &&

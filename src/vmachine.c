@@ -13,29 +13,29 @@
     #define THREADED_CODE
 #endif
 
-static InterpretResult        VM_run(VM* vm);
-static __FORCE_INLINE__ Value VM_pop(VM* vm);
-static __FORCE_INLINE__ void  VM_push(VM* vm, Value val);
-static __FORCE_INLINE__ void  VM_op_const(VM* vm);
-static __FORCE_INLINE__ void  VM_op_constl(VM* vm);
-static __FORCE_INLINE__ void  VM_op_neg(VM* vm);
-static __FORCE_INLINE__ void  VM_op_add(VM* vm);
-static __FORCE_INLINE__ void  VM_op_sub(VM* vm);
-static __FORCE_INLINE__ void  VM_op_div(VM* vm);
-static __FORCE_INLINE__ void  VM_op_mul(VM* vm);
+static InterpretResult VM_run(VM* vm);
+static Value           VM_pop(VM* vm);
+static void            VM_push(VM* vm, Value val);
+static void            VM_op_const(VM* vm);
+static void            VM_op_constl(VM* vm);
+static void            VM_op_neg(VM* vm);
+static void            VM_op_add(VM* vm);
+static void            VM_op_sub(VM* vm);
+static void            VM_op_div(VM* vm);
+static void            VM_op_mul(VM* vm);
 
-static __FORCE_INLINE__ void VM_op_const(VM* vm)
+static void VM_op_const(VM* vm)
 {
     VM_push(vm, vm->chunk->constants.data[*vm->ip++]);
 }
 
-static __FORCE_INLINE__ void VM_op_constl(VM* vm)
+static void VM_op_constl(VM* vm)
 {
     VM_push(vm, vm->chunk->constants.data[GET_BYTES3(vm->ip)]);
     vm->ip += 3;
 }
 
-static __FORCE_INLINE__ void VM_op_neg(VM* vm)
+static void VM_op_neg(VM* vm)
 {
     *(vm->sp - 1) = -*(vm->sp - 1);
 }
@@ -47,22 +47,22 @@ static __FORCE_INLINE__ void VM_op_neg(VM* vm)
         VM_push(vm, a op b);                                                             \
     } while(false)
 
-static __FORCE_INLINE__ void VM_op_add(VM* vm)
+static void VM_op_add(VM* vm)
 {
     VM_BINARY_OP(+);
 }
 
-static __FORCE_INLINE__ void VM_op_sub(VM* vm)
+static void VM_op_sub(VM* vm)
 {
     VM_BINARY_OP(-);
 }
 
-static __FORCE_INLINE__ void VM_op_mul(VM* vm)
+static void VM_op_mul(VM* vm)
 {
     VM_BINARY_OP(*);
 }
 
-static __FORCE_INLINE__ void VM_op_div(VM* vm)
+static void VM_op_div(VM* vm)
 {
     VM_BINARY_OP(/);
 }
@@ -91,8 +91,21 @@ void VM_init(VM* vm)
 
 InterpretResult VM_interpret(VM* vm, const char* source)
 {
-    compile(source);
-    return INTERPRET_OK;
+    Chunk chunk;
+    Chunk_init(&chunk);
+
+    if(!compile(source, &chunk)) {
+        Chunk_free(&chunk);
+        return INTERPRET_COMPILE_ERROR;
+    }
+
+    vm->chunk = &chunk;
+    vm->ip    = vm->chunk->code.data;
+
+    InterpretResult result = VM_run(vm);
+
+    Chunk_free(&chunk);
+    return result;
 }
 
 static InterpretResult VM_run(VM* vm)
@@ -151,7 +164,7 @@ static InterpretResult VM_run(VM* vm)
         return INTERPRET_OK;
     }
 
-    UNREACHABLE();
+    _unreachable;
 #else
         switch(*vm->ip++) {
             case OP_CONST:
@@ -185,7 +198,7 @@ static InterpretResult VM_run(VM* vm)
 
 void VM_free(VM* vm)
 {
-    if(LIKELY(vm->chunk != NULL)) {
+    if(_likely(vm->chunk != NULL)) {
         Chunk_free(vm->chunk);
     }
     MFREE(vm, sizeof(VM));
@@ -196,9 +209,9 @@ void VM_free(VM* vm)
  */
 /*======================================= STACK =======================================*/
 
-static __FORCE_INLINE__ void VM_push(VM* vm, Value val)
+static void VM_push(VM* vm, Value val)
 {
-    if(LIKELY(vm->sp - vm->stack < STACK_MAX)) {
+    if(_likely(vm->sp - vm->stack < STACK_MAX)) {
         *vm->sp++ = val;
     } else {
         fprintf(stderr, "Skooma: stack overflow\n");
@@ -206,7 +219,7 @@ static __FORCE_INLINE__ void VM_push(VM* vm, Value val)
     }
 }
 
-static __FORCE_INLINE__ Value VM_pop(VM* vm)
+static Value VM_pop(VM* vm)
 {
     return *--vm->sp;
 }

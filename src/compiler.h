@@ -1,6 +1,32 @@
 #ifndef __SKOOMA_COMPILER_H__
 #define __SKOOMA_COMPILER_H__
 
-void compile(const char *source);
+#include "chunk.h"
+#include "common.h"
+
+bool compile(const char *source, Chunk *chunk);
+
+/* Precedence from LOW-est to HIGH-est */
+typedef enum {
+  PREC_NONE = 0,
+  PREC_ASSIGNMENT,
+  PREC_OR,
+  PREC_AND,
+  PREC_EQUALITY,
+  PREC_COMPARISON,
+  PREC_TERM,
+  PREC_FACTOR,
+  PREC_UNARY,
+  PREC_CALL,
+  PREC_PRIMARY
+} Precedence;
+
+typedef void (*ParseFn)(void);
+
+typedef struct {
+  ParseFn prefix;
+  ParseFn infix;
+  Precedence precedence;
+} ParseRule;
 
 #endif
