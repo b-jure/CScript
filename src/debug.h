@@ -5,4 +5,5 @@
 
 void Chunk_debug(Chunk *chunk, const char *name);
 UInt Instruction_debug(Chunk *chunk, UInt offset);
+
 #endif

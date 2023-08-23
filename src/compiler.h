@@ -3,6 +3,7 @@
 
 #include "chunk.h"
 #include "common.h"
+#include "scanner.h"
 
 bool compile(const char *source, Chunk *chunk);
 
@@ -21,7 +22,7 @@ typedef enum {
   PREC_PRIMARY
 } Precedence;
 
-typedef void (*ParseFn)(void);
+typedef void (*ParseFn)(Scanner*);
 
 typedef struct {
   ParseFn prefix;

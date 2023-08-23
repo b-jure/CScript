@@ -1,6 +1,8 @@
-#include "common.h"
 #include "compiler.h"
-#include "scanner.h"
+
+#ifdef DEBUG_PRINT_CODE
+    #include "debug.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +32,8 @@ static Chunk* compiling_chunk;
 
 /* Returns currently stored chunk in 'compiling_chunk' global. */
 static Chunk* current_chunk();
+/* Inits the parser */
+static void Parser_init(Scanner* scanner);
 /* Helper function for invoking parser errors. */
 static void Parser_error_at(Token* token, const char* error);
 /* Invokes 'Parser_error_at' function with 'token' parameter being
@@ -37,22 +41,27 @@ static void Parser_error_at(Token* token, const char* error);
 static void Parser_error(const char* error);
 /* Advances the parser until token type isn't 'TOK_ERROR',
  * invoking 'Parser_error' each time the token type is 'TOK_ERROR'. */
-static void Parser_advance(void);
+static void Parser_advance(Scanner* scanner);
 /* If current token matches the 'type', then the parser advances,
  * otherwise 'Parser_error' is invoked with the 'error' message. */
-static void Parser_expect(TokenType type, const char* error);
+static void Parser_expect(Scanner* scanner, TokenType type, const char* error);
 
-static void             emit_byte(Byte byte);
-static uint32_t         emit_constant(Value constant);
-static void             emit_return();
-static void             compile_end(void);
-static const ParseRule* ParseRule_get(TokenType tokentype);
-static void             parse_number(void);
-static void             parse_precedence(Precedence prec);
-static void             parse_grouping(void);
-static void             parse_binary(void);
-static void             parse_unary(void);
-static void             parse_expression(void);
+static void     emit_byte(Byte byte);
+static uint32_t emit_constant(Value constant);
+static void     emit_return(void);
+static void     compile_end(void);
+static void     parse_number(Scanner* scanner);
+static void     parse_precedence(Scanner* scanner, Precedence prec);
+static void     parse_grouping(Scanner* scanner);
+static void     parse_binary(Scanner* scanner);
+static void     parse_unary(Scanner* scanner);
+static void     parse_expression(Scanner* scanner);
+
+static void Parser_init(Scanner* scanner)
+{
+    Parser_state_clear();
+    Parser_advance(scanner);
+}
 
 static void Parser_error_at(Token* token, const char* error)
 {
@@ -78,12 +87,12 @@ static void Parser_error(const char* error)
     Parser_error_at(&parser.current, error);
 }
 
-static void Parser_advance(void)
+static void Parser_advance(Scanner* scanner)
 {
     parser.previous = parser.current;
 
     while(true) {
-        parser.current = Scanner_scan();
+        parser.current = Scanner_scan(scanner);
         if(parser.current.type != TOK_ERROR) {
             break;
         }
@@ -92,10 +101,10 @@ static void Parser_advance(void)
     }
 }
 
-static void Parser_expect(TokenType type, const char* error)
+static void Parser_expect(Scanner* scanner, TokenType type, const char* error)
 {
     if(parser.current.type == type) {
-        Parser_advance();
+        Parser_advance(scanner);
         return;
     }
     Parser_error(error);
@@ -103,12 +112,11 @@ static void Parser_expect(TokenType type, const char* error)
 
 bool compile(const char* source, Chunk* chunk)
 {
-    Scanner_init(source);
+    Scanner scanner = Scanner_new(source);
     compiling_chunk = chunk;
-    Parser_state_clear();
-    Parser_advance();
-    parse_expression();
-    Parser_expect(TOK_EOF, "Expect end of expression.");
+    Parser_init(&scanner);
+    parse_expression(&scanner);
+    Parser_expect(&scanner, TOK_EOF, "Expect end of expression.");
     compile_end();
     return !Parser_state_iserr();
 }
@@ -116,6 +124,11 @@ bool compile(const char* source, Chunk* chunk)
 static void compile_end(void)
 {
     emit_return();
+#ifdef DEBUG_PRINT_CODE
+    if(!Parser_state_iserr()) {
+        Chunk_debug(current_chunk(), "code");
+    }
+#endif
 }
 
 static Chunk* current_chunk()
@@ -131,7 +144,7 @@ static void emit_byte(Byte byte)
 
 static uint32_t emit_constant(Value constant)
 {
-    if(constant < MAXBYTES(3)) {
+    if(constant <= MAXBYTES(3)) {
         Chunk_write_constant(current_chunk(), constant, parser.previous.line);
     } else {
         Parser_error("Too many constants in one chunk.");
@@ -148,14 +161,13 @@ static void emit_return(void)
 
 /*========================== PARSE ========================
  * PP* (Pratt Parsing algorithm)
- */
-
-/* Parsing rules table,
+ *
+ * Parsing rules table,
  * First and second column are function pointers to 'ParseFn',
- * these functions are responsible for parsing the actual expression and are recursive.
- * First column parse function is used in case token is prefix,
- * while second column parse function is used in case token is inifx.
- * Third column marks the 'Precedence' of the token inside expression (PP*). */
+ * these functions are responsible for parsing the actual expression and most are
+ * recursive. First column parse function is used in case token is prefix, while second
+ * column parse function is used in case token is inifx. Third column marks the
+ * 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
     [TOK_LPAREN]        = {parse_grouping, NULL,         PREC_NONE  },
     [TOK_RPAREN]        = {NULL,           NULL,         PREC_NONE  },
@@ -199,53 +211,48 @@ static const ParseRule rules[] = {
     [TOK_EOF]           = {NULL,           NULL,         PREC_NONE  },
 };
 
-static const ParseRule* ParseRule_get(TokenType tokentype)
+static void parse_expression(Scanner* scanner)
 {
-    return &rules[tokentype];
+    parse_precedence(scanner, PREC_ASSIGNMENT);
 }
 
-static void parse_expression(void)
-{
-    parse_precedence(PREC_ASSIGNMENT);
-}
-
-static void parse_number(void)
+static void parse_number(_unused Scanner* scanner)
 {
     Value constant = strtod(parser.previous.start, NULL);
     emit_constant(constant);
 }
 
 /* This is the entry point to Pratt parsing */
-static void parse_precedence(Precedence prec)
+static void parse_precedence(Scanner* scanner, Precedence prec)
 {
-    Parser_advance();
-    ParseFn prefix_fn = &rules[parser.previous.type].prefix;
+    Parser_advance(scanner);
+    ParseFn prefix_fn = rules[parser.previous.type].prefix;
     if(prefix_fn == NULL) {
         Parser_error("Expect expression.");
         return;
     }
 
     /* Parse unary operator (prefix) or a literal */
-    prefix_fn();
+    prefix_fn(scanner);
 
     /* Parse binary operator (inifix) if any */
-    while(prec <= ParseRule_get(parser.current.type)->precedence) {
-        Parser_advance();
-        ParseFn infix_fn = ParseRule_get(parser.previous.type)->infix;
-        infix_fn();
+    while(prec <= rules[parser.current.type].precedence) {
+        Parser_advance(scanner);
+        ParseFn infix_fn = rules[parser.previous.type].infix;
+        infix_fn(scanner);
     }
 }
 
-static void parse_grouping(void)
+static void parse_grouping(Scanner* scanner)
 {
-    parse_expression();
-    Parser_expect(TOK_RPAREN, "Expect ')' after expression");
+    parse_expression(scanner);
+    Parser_expect(scanner, TOK_RPAREN, "Expect ')' after expression");
 }
 
-static void parse_unary(void)
+static void parse_unary(Scanner* scanner)
 {
     TokenType type = parser.previous.type;
-    parse_precedence(PREC_UNARY);
+    parse_precedence(scanner, PREC_UNARY);
 
     switch(type) {
         case TOK_MINUS:
@@ -257,11 +264,11 @@ static void parse_unary(void)
     }
 }
 
-static void parse_binary(void)
+static void parse_binary(Scanner* scanner)
 {
     TokenType        type = parser.previous.type;
-    const ParseRule* rule = ParseRule_get(type);
-    parse_precedence(rule->precedence + 1);
+    const ParseRule* rule = &rules[type];
+    parse_precedence(scanner, rule->precedence + 1);
 
     switch(type) {
         case TOK_MINUS:

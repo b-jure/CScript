@@ -1,8 +1,11 @@
 #include "common.h"
 #include "compiler.h"
-#include "debug.h"
 #include "mem.h"
 #include "vmachine.h"
+
+#ifdef DEBUG_TRACE_EXECUTION
+    #include "debug.h"
+#endif
 
 #include <assert.h>
 #include <stdio.h>
@@ -122,8 +125,8 @@ static InterpretResult VM_run(VM* vm)
         Instruction_debug(vm->chunk, (UInt)(vm->ip - vm->chunk->code.data));
 #endif
 #ifdef THREADED_CODE
-        // NOTE: This is a GCC extension that might get removed in the future,
-        //       https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+        // NOTE: This is a GCC extension
+        // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
         static const void* jmp_table[] = {
             &&op_const,
             &&op_constl,
