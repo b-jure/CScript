@@ -11,6 +11,7 @@ bool compile(const char *source, Chunk *chunk);
 typedef enum {
   PREC_NONE = 0,
   PREC_ASSIGNMENT,
+  PREC_TERNARY,
   PREC_OR,
   PREC_AND,
   PREC_EQUALITY,
@@ -22,7 +23,7 @@ typedef enum {
   PREC_PRIMARY
 } Precedence;
 
-typedef void (*ParseFn)(Scanner*);
+typedef void (*ParseFn)(Scanner *);
 
 typedef struct {
   ParseFn prefix;

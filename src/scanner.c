@@ -72,6 +72,10 @@ Token Scanner_scan(Scanner* scanner)
             return Token_new(scanner, TOK_PLUS);
         case ';':
             return Token_new(scanner, TOK_SEMICOLON);
+        case ':':
+            return Token_new(scanner, TOK_COLON);
+        case '?':
+            return Token_new(scanner, TOK_QMARK);
         case '/':
             return Token_new(scanner, TOK_SLASH);
         case '*':

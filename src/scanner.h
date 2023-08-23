@@ -13,9 +13,11 @@ typedef enum {
   TOK_COMMA,
   TOK_MINUS,
   TOK_PLUS,
+  TOK_COLON,
   TOK_SEMICOLON,
   TOK_SLASH,
   TOK_STAR,
+  TOK_QMARK,
   // One or two character tokens.
   TOK_BANG,
   TOK_BANG_EQUAL,

@@ -55,6 +55,7 @@ static void     parse_precedence(Scanner* scanner, Precedence prec);
 static void     parse_grouping(Scanner* scanner);
 static void     parse_binary(Scanner* scanner);
 static void     parse_unary(Scanner* scanner);
+static void     parse_ternarycond(Scanner* scanner);
 static void     parse_expression(Scanner* scanner);
 
 static void Parser_init(Scanner* scanner)
@@ -169,46 +170,48 @@ static void emit_return(void)
  * column parse function is used in case token is inifx. Third column marks the
  * 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
-    [TOK_LPAREN]        = {parse_grouping, NULL,         PREC_NONE  },
-    [TOK_RPAREN]        = {NULL,           NULL,         PREC_NONE  },
-    [TOK_LBRACE]        = {NULL,           NULL,         PREC_NONE  },
-    [TOK_RBRACE]        = {NULL,           NULL,         PREC_NONE  },
-    [TOK_COMMA]         = {NULL,           NULL,         PREC_NONE  },
-    [TOK_DOT]           = {NULL,           NULL,         PREC_NONE  },
-    [TOK_MINUS]         = {parse_unary,    parse_binary, PREC_TERM  },
-    [TOK_PLUS]          = {NULL,           parse_binary, PREC_TERM  },
-    [TOK_SEMICOLON]     = {NULL,           NULL,         PREC_NONE  },
-    [TOK_SLASH]         = {NULL,           parse_binary, PREC_FACTOR},
-    [TOK_STAR]          = {NULL,           parse_binary, PREC_FACTOR},
-    [TOK_BANG]          = {NULL,           NULL,         PREC_NONE  },
-    [TOK_BANG_EQUAL]    = {NULL,           NULL,         PREC_NONE  },
-    [TOK_EQUAL]         = {NULL,           NULL,         PREC_NONE  },
-    [TOK_EQUAL_EQUAL]   = {NULL,           NULL,         PREC_NONE  },
-    [TOK_GREATER]       = {NULL,           NULL,         PREC_NONE  },
-    [TOK_GREATER_EQUAL] = {NULL,           NULL,         PREC_NONE  },
-    [TOK_LESS]          = {NULL,           NULL,         PREC_NONE  },
-    [TOK_LESS_EQUAL]    = {NULL,           NULL,         PREC_NONE  },
-    [TOK_IDENTIFIER]    = {NULL,           NULL,         PREC_NONE  },
-    [TOK_STRING]        = {NULL,           NULL,         PREC_NONE  },
-    [TOK_NUMBER]        = {parse_number,   NULL,         PREC_NONE  },
-    [TOK_AND]           = {NULL,           NULL,         PREC_NONE  },
-    [TOK_CLASS]         = {NULL,           NULL,         PREC_NONE  },
-    [TOK_ELSE]          = {NULL,           NULL,         PREC_NONE  },
-    [TOK_FALSE]         = {NULL,           NULL,         PREC_NONE  },
-    [TOK_FOR]           = {NULL,           NULL,         PREC_NONE  },
-    [TOK_FN]            = {NULL,           NULL,         PREC_NONE  },
-    [TOK_IF]            = {NULL,           NULL,         PREC_NONE  },
-    [TOK_NIL]           = {NULL,           NULL,         PREC_NONE  },
-    [TOK_OR]            = {NULL,           NULL,         PREC_NONE  },
-    [TOK_PRINT]         = {NULL,           NULL,         PREC_NONE  },
-    [TOK_RETURN]        = {NULL,           NULL,         PREC_NONE  },
-    [TOK_SUPER]         = {NULL,           NULL,         PREC_NONE  },
-    [TOK_SELF]          = {NULL,           NULL,         PREC_NONE  },
-    [TOK_TRUE]          = {NULL,           NULL,         PREC_NONE  },
-    [TOK_VAR]           = {NULL,           NULL,         PREC_NONE  },
-    [TOK_WHILE]         = {NULL,           NULL,         PREC_NONE  },
-    [TOK_ERROR]         = {NULL,           NULL,         PREC_NONE  },
-    [TOK_EOF]           = {NULL,           NULL,         PREC_NONE  },
+    [TOK_LPAREN]        = {parse_grouping, NULL,              PREC_NONE   },
+    [TOK_RPAREN]        = {NULL,           NULL,              PREC_NONE   },
+    [TOK_LBRACE]        = {NULL,           NULL,              PREC_NONE   },
+    [TOK_RBRACE]        = {NULL,           NULL,              PREC_NONE   },
+    [TOK_COMMA]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_DOT]           = {NULL,           NULL,              PREC_NONE   },
+    [TOK_MINUS]         = {parse_unary,    parse_binary,      PREC_TERM   },
+    [TOK_PLUS]          = {NULL,           parse_binary,      PREC_TERM   },
+    [TOK_COLON]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_SEMICOLON]     = {NULL,           NULL,              PREC_NONE   },
+    [TOK_SLASH]         = {NULL,           parse_binary,      PREC_FACTOR },
+    [TOK_STAR]          = {NULL,           parse_binary,      PREC_FACTOR },
+    [TOK_QMARK]         = {NULL,           parse_ternarycond, PREC_TERNARY},
+    [TOK_BANG]          = {NULL,           NULL,              PREC_NONE   },
+    [TOK_BANG_EQUAL]    = {NULL,           NULL,              PREC_NONE   },
+    [TOK_EQUAL]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_EQUAL_EQUAL]   = {NULL,           NULL,              PREC_NONE   },
+    [TOK_GREATER]       = {NULL,           NULL,              PREC_NONE   },
+    [TOK_GREATER_EQUAL] = {NULL,           NULL,              PREC_NONE   },
+    [TOK_LESS]          = {NULL,           NULL,              PREC_NONE   },
+    [TOK_LESS_EQUAL]    = {NULL,           NULL,              PREC_NONE   },
+    [TOK_IDENTIFIER]    = {NULL,           NULL,              PREC_NONE   },
+    [TOK_STRING]        = {NULL,           NULL,              PREC_NONE   },
+    [TOK_NUMBER]        = {parse_number,   NULL,              PREC_NONE   },
+    [TOK_AND]           = {NULL,           NULL,              PREC_NONE   },
+    [TOK_CLASS]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_ELSE]          = {NULL,           NULL,              PREC_NONE   },
+    [TOK_FALSE]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_FOR]           = {NULL,           NULL,              PREC_NONE   },
+    [TOK_FN]            = {NULL,           NULL,              PREC_NONE   },
+    [TOK_IF]            = {NULL,           NULL,              PREC_NONE   },
+    [TOK_NIL]           = {NULL,           NULL,              PREC_NONE   },
+    [TOK_OR]            = {NULL,           NULL,              PREC_NONE   },
+    [TOK_PRINT]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_RETURN]        = {NULL,           NULL,              PREC_NONE   },
+    [TOK_SUPER]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_SELF]          = {NULL,           NULL,              PREC_NONE   },
+    [TOK_TRUE]          = {NULL,           NULL,              PREC_NONE   },
+    [TOK_VAR]           = {NULL,           NULL,              PREC_NONE   },
+    [TOK_WHILE]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_ERROR]         = {NULL,           NULL,              PREC_NONE   },
+    [TOK_EOF]           = {NULL,           NULL,              PREC_NONE   },
 };
 
 static void parse_expression(Scanner* scanner)
@@ -287,4 +290,11 @@ static void parse_binary(Scanner* scanner)
             _unreachable;
             return;
     }
+}
+
+static void parse_ternarycond(Scanner* scanner)
+{
+    parse_expression(scanner);
+    Parser_expect(scanner, TOK_COLON, "Expect ':' (ternary conditional).");
+    parse_expression(scanner);
 }
