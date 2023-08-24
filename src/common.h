@@ -44,6 +44,11 @@ typedef uint32_t UInt;
 #define __unreachable
 #endif
 
+/* Check if we can use labels as values for precomputed goto/jmp table */
+#if defined(__GNUC__) && __GNUC__ >= 2
+#define THREADED_CODE
+#endif
+
 #define _likely(cond) __likely(cond)
 #define _unlikely(cond) __unlikely(cond)
 #define _unused __unused

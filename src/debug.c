@@ -13,7 +13,7 @@ void Chunk_debug(Chunk* chunk, const char* name)
 {
     printf("=== %s ===\n", name);
 
-    for (UInt offset = 0; offset < ByteArray_len(&chunk->code);) {
+    for(UInt offset = 0; offset < ByteArray_len(&chunk->code);) {
         offset = Instruction_debug(chunk, offset);
     }
 }
@@ -24,20 +24,26 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
 
     UInt line = Chunk_getline(chunk, offset);
 
-    if (offset > 0 && line == Chunk_getline(chunk, offset - 1)) {
+    if(offset > 0 && line == Chunk_getline(chunk, offset - 1)) {
         printf("    | ");
     } else {
         printf("%5d ", line);
     }
 
     Byte instruction = chunk->code.data[offset];
-    switch (instruction) {
+    switch(instruction) {
         case OP_RET:
             return Instruction_simple("OP_RET", offset);
         case OP_CONST:
             return Instruction_constant("OP_CONST", chunk, offset);
         case OP_CONSTL:
             return Instruction_constant_long("OP_CONSTL", chunk, offset);
+        case OP_TRUE:
+            return Instruction_simple("OP_TRUE", offset);
+        case OP_FALSE:
+            return Instruction_simple("OP_FALSE", offset);
+        case OP_NIL:
+            return Instruction_simple("OP_NIL", offset);
         case OP_NEG:
             return Instruction_simple("OP_NEG", offset);
         case OP_ADD:
@@ -48,6 +54,20 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_simple("OP_MUL", offset);
         case OP_DIV:
             return Instruction_simple("OP_DIV", offset);
+        case OP_NOT:
+            return Instruction_simple("OP_NOT", offset);
+        case OP_NOT_EQUAL:
+            return Instruction_simple("OP_NOT_EQUAL", offset);
+        case OP_EQUAL:
+            return Instruction_simple("OP_EQUAL", offset);
+        case OP_GREATER_EQUAL:
+            return Instruction_simple("OP_GREATER_EQUAL", offset);
+        case OP_GREATER:
+            return Instruction_simple("OP_GREATER", offset);
+        case OP_LESS_EQUAL:
+            return Instruction_simple("OP_LESS_EQUAL", offset);
+        case OP_LESS:
+            return Instruction_simple("OP_LESS", offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;

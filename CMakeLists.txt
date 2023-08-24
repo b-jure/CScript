@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 11)
 set(BIN skooma)
 set(SRCDIR ${CMAKE_SOURCE_DIR}/src)
 set(CFLAGS -Wall -Werror -Wextra -Wpedantic -save-temps)
-set(OPTS -O3)
+set(OPTS -Os)
 set(SANITIZER_FLAGS -fsanitize=address -fsanitize=undefined)
 set(SRCFILES
     ${SRCDIR}/mem.c

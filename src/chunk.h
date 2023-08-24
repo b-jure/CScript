@@ -6,14 +6,24 @@
 #include "value.h"
 
 typedef enum {
-  OP_CONST = 0,  /* Store 8-bit Value index instruction */
-  OP_CONSTL = 1, /* Store 24-bit Value index instruction */
-  OP_NEG = 2,    /* Unary negation instruction */
-  OP_ADD = 3,    /* Binary addition instruction */
-  OP_SUB = 4,    /* Binary subtraction instruction */
-  OP_MUL = 5,    /* Binary multiplication instruction */
-  OP_DIV = 6,    /* Binary division instruction */
-  OP_RET = 7,    /* Return.. */
+  OP_CONST = 0,     /* Store 8-bit Value index */
+  OP_CONSTL,        /* Store 24-bit Value index */
+  OP_TRUE,          /* Store true (bool) literal */
+  OP_FALSE,         /* Store false (bool) literal */
+  OP_NIL,           /* Store nil (NULL) literal */
+  OP_NEG,           /* Unary negation */
+  OP_ADD,           /* Binary addition */
+  OP_SUB,           /* Binary subtraction */
+  OP_MUL,           /* Binary multiplication */
+  OP_DIV,           /* Binary division */
+  OP_NOT,           /* Unary not */
+  OP_NOT_EQUAL,     /* Binary 'not equal' comparison */
+  OP_EQUAL,         /* Binary 'equality' comparison */
+  OP_GREATER,       /* Binary 'greater than' comparison */
+  OP_GREATER_EQUAL, /* Binary 'greater than or equal to' comparison */
+  OP_LESS,          /* Binary 'less than' comparison */
+  OP_LESS_EQUAL,    /* BInary 'less than or equal to' comparison */
+  OP_RET,           /* Return instruction */
 } OpCode;
 
 typedef UIntArray LineArray;

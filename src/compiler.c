@@ -56,6 +56,7 @@ static void     parse_grouping(Scanner* scanner);
 static void     parse_binary(Scanner* scanner);
 static void     parse_unary(Scanner* scanner);
 static void     parse_ternarycond(Scanner* scanner);
+static void     parse_literal(Scanner* scanner);
 static void     parse_expression(Scanner* scanner);
 
 static void Parser_init(Scanner* scanner)
@@ -138,6 +139,7 @@ static Chunk* current_chunk()
 }
 
 /*========================== EMIT =========================*/
+
 static void emit_byte(Byte byte)
 {
     Chunk_write(current_chunk(), byte, parser.previous.line);
@@ -145,14 +147,14 @@ static void emit_byte(Byte byte)
 
 static uint32_t emit_constant(Value constant)
 {
-    if(constant <= MAXBYTES(3)) {
+    if(current_chunk()->constants.len <= MAXBYTES(3)) {
         Chunk_write_constant(current_chunk(), constant, parser.previous.line);
     } else {
         Parser_error("Too many constants in one chunk.");
         return 0;
     }
 
-    return (uint32_t)constant;
+    return (uint32_t)AS_NUMBER(constant);
 }
 
 static void emit_return(void)
@@ -170,48 +172,48 @@ static void emit_return(void)
  * column parse function is used in case token is inifx. Third column marks the
  * 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
-    [TOK_LPAREN]        = {parse_grouping, NULL,              PREC_NONE   },
-    [TOK_RPAREN]        = {NULL,           NULL,              PREC_NONE   },
-    [TOK_LBRACE]        = {NULL,           NULL,              PREC_NONE   },
-    [TOK_RBRACE]        = {NULL,           NULL,              PREC_NONE   },
-    [TOK_COMMA]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_DOT]           = {NULL,           NULL,              PREC_NONE   },
-    [TOK_MINUS]         = {parse_unary,    parse_binary,      PREC_TERM   },
-    [TOK_PLUS]          = {NULL,           parse_binary,      PREC_TERM   },
-    [TOK_COLON]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_SEMICOLON]     = {NULL,           NULL,              PREC_NONE   },
-    [TOK_SLASH]         = {NULL,           parse_binary,      PREC_FACTOR },
-    [TOK_STAR]          = {NULL,           parse_binary,      PREC_FACTOR },
-    [TOK_QMARK]         = {NULL,           parse_ternarycond, PREC_TERNARY},
-    [TOK_BANG]          = {NULL,           NULL,              PREC_NONE   },
-    [TOK_BANG_EQUAL]    = {NULL,           NULL,              PREC_NONE   },
-    [TOK_EQUAL]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_EQUAL_EQUAL]   = {NULL,           NULL,              PREC_NONE   },
-    [TOK_GREATER]       = {NULL,           NULL,              PREC_NONE   },
-    [TOK_GREATER_EQUAL] = {NULL,           NULL,              PREC_NONE   },
-    [TOK_LESS]          = {NULL,           NULL,              PREC_NONE   },
-    [TOK_LESS_EQUAL]    = {NULL,           NULL,              PREC_NONE   },
-    [TOK_IDENTIFIER]    = {NULL,           NULL,              PREC_NONE   },
-    [TOK_STRING]        = {NULL,           NULL,              PREC_NONE   },
-    [TOK_NUMBER]        = {parse_number,   NULL,              PREC_NONE   },
-    [TOK_AND]           = {NULL,           NULL,              PREC_NONE   },
-    [TOK_CLASS]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_ELSE]          = {NULL,           NULL,              PREC_NONE   },
-    [TOK_FALSE]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_FOR]           = {NULL,           NULL,              PREC_NONE   },
-    [TOK_FN]            = {NULL,           NULL,              PREC_NONE   },
-    [TOK_IF]            = {NULL,           NULL,              PREC_NONE   },
-    [TOK_NIL]           = {NULL,           NULL,              PREC_NONE   },
-    [TOK_OR]            = {NULL,           NULL,              PREC_NONE   },
-    [TOK_PRINT]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_RETURN]        = {NULL,           NULL,              PREC_NONE   },
-    [TOK_SUPER]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_SELF]          = {NULL,           NULL,              PREC_NONE   },
-    [TOK_TRUE]          = {NULL,           NULL,              PREC_NONE   },
-    [TOK_VAR]           = {NULL,           NULL,              PREC_NONE   },
-    [TOK_WHILE]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_ERROR]         = {NULL,           NULL,              PREC_NONE   },
-    [TOK_EOF]           = {NULL,           NULL,              PREC_NONE   },
+    [TOK_LPAREN]        = {parse_grouping, NULL,              PREC_NONE      },
+    [TOK_RPAREN]        = {NULL,           NULL,              PREC_NONE      },
+    [TOK_LBRACE]        = {NULL,           NULL,              PREC_NONE      },
+    [TOK_RBRACE]        = {NULL,           NULL,              PREC_NONE      },
+    [TOK_COMMA]         = {NULL,           NULL,              PREC_NONE      },
+    [TOK_DOT]           = {NULL,           NULL,              PREC_NONE      },
+    [TOK_MINUS]         = {parse_unary,    parse_binary,      PREC_TERM      },
+    [TOK_PLUS]          = {NULL,           parse_binary,      PREC_TERM      },
+    [TOK_COLON]         = {NULL,           NULL,              PREC_NONE      },
+    [TOK_SEMICOLON]     = {NULL,           NULL,              PREC_NONE      },
+    [TOK_SLASH]         = {NULL,           parse_binary,      PREC_FACTOR    },
+    [TOK_STAR]          = {NULL,           parse_binary,      PREC_FACTOR    },
+    [TOK_QMARK]         = {NULL,           parse_ternarycond, PREC_TERNARY   },
+    [TOK_BANG]          = {parse_unary,    NULL,              PREC_NONE      },
+    [TOK_BANG_EQUAL]    = {NULL,           parse_binary,      PREC_EQUALITY  },
+    [TOK_EQUAL]         = {NULL,           NULL,              PREC_NONE      },
+    [TOK_EQUAL_EQUAL]   = {NULL,           parse_binary,      PREC_EQUALITY  },
+    [TOK_GREATER]       = {NULL,           parse_binary,      PREC_COMPARISON},
+    [TOK_GREATER_EQUAL] = {NULL,           parse_binary,      PREC_COMPARISON},
+    [TOK_LESS]          = {NULL,           parse_binary,      PREC_COMPARISON},
+    [TOK_LESS_EQUAL]    = {NULL,           parse_binary,      PREC_COMPARISON},
+    [TOK_IDENTIFIER]    = {NULL,           NULL,              PREC_NONE      },
+    [TOK_STRING]        = {NULL,           NULL,              PREC_NONE      },
+    [TOK_NUMBER]        = {parse_number,   NULL,              PREC_NONE      },
+    [TOK_AND]           = {NULL,           NULL,              PREC_NONE      },
+    [TOK_CLASS]         = {NULL,           NULL,              PREC_NONE      },
+    [TOK_ELSE]          = {NULL,           NULL,              PREC_NONE      },
+    [TOK_FALSE]         = {parse_literal,  NULL,              PREC_NONE      },
+    [TOK_FOR]           = {NULL,           NULL,              PREC_NONE      },
+    [TOK_FN]            = {NULL,           NULL,              PREC_NONE      },
+    [TOK_IF]            = {NULL,           NULL,              PREC_NONE      },
+    [TOK_NIL]           = {parse_literal,  NULL,              PREC_NONE      },
+    [TOK_OR]            = {NULL,           NULL,              PREC_NONE      },
+    [TOK_PRINT]         = {NULL,           NULL,              PREC_NONE      },
+    [TOK_RETURN]        = {NULL,           NULL,              PREC_NONE      },
+    [TOK_SUPER]         = {NULL,           NULL,              PREC_NONE      },
+    [TOK_SELF]          = {NULL,           NULL,              PREC_NONE      },
+    [TOK_TRUE]          = {parse_literal,  NULL,              PREC_NONE      },
+    [TOK_VAR]           = {NULL,           NULL,              PREC_NONE      },
+    [TOK_WHILE]         = {NULL,           NULL,              PREC_NONE      },
+    [TOK_ERROR]         = {NULL,           NULL,              PREC_NONE      },
+    [TOK_EOF]           = {NULL,           NULL,              PREC_NONE      },
 };
 
 static void parse_expression(Scanner* scanner)
@@ -221,8 +223,8 @@ static void parse_expression(Scanner* scanner)
 
 static void parse_number(_unused Scanner* scanner)
 {
-    Value constant = strtod(parser.previous.start, NULL);
-    emit_constant(constant);
+    double constant = strtod(parser.previous.start, NULL);
+    emit_constant(NUMBER_VAL(constant));
 }
 
 /* This is the entry point to Pratt parsing */
@@ -257,14 +259,38 @@ static void parse_unary(Scanner* scanner)
     TokenType type = parser.previous.type;
     parse_precedence(scanner, PREC_UNARY);
 
+#ifdef THREADED_CODE
+    // NOTE: This is a GCC extension
+    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+    // IMPORTANT: update accordingly if TokenType enum is changed!
+    static const void* jump_table[TOK_EOF + 1] = {
+        0, 0, 0, 0, 0, 0, &&minus, 0, 0, 0, 0, 0, 0, &&bang, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0,       0, 0, 0, 0, 0, 0, 0,      0, 0, 0, 0, 0, 0, 0,
+    };
+
+    goto* jump_table[type];
+
+minus:
+    emit_byte(OP_NEG);
+    return;
+bang:
+    emit_byte(OP_NOT);
+    return;
+
+    _unreachable;
+#else
     switch(type) {
         case TOK_MINUS:
             emit_byte(OP_NEG);
+            break;
+        case TOK_BANG:
+            emit_byte(OP_NOT);
             break;
         default:
             _unreachable;
             return;
     }
+#endif
 }
 
 static void parse_binary(Scanner* scanner)
@@ -273,6 +299,51 @@ static void parse_binary(Scanner* scanner)
     const ParseRule* rule = &rules[type];
     parse_precedence(scanner, rule->precedence + 1);
 
+#ifdef THREADED_CODE
+    // NOTE: This is a GCC extension
+    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+    // IMPORTANT: update accordingly if TokenType enum is changed!
+    static const void* jump_table[TOK_EOF + 1] = {
+        0,     0, 0,    0,    0,      0,    &&minus, &&plus, 0, 0, &&slash, &&star, 0, 0,
+        &&neq, 0, &&eq, &&gt, &&gteq, &&lt, &&lteq,  0,      0, 0, 0,       0,      0, 0,
+        0,     0, 0,    0,    0,      0,    0,       0,      0, 0, 0,       0,      0, 0,
+    };
+
+    goto* jump_table[type];
+
+minus:
+    emit_byte(OP_SUB);
+    return;
+plus:
+    emit_byte(OP_ADD);
+    return;
+slash:
+    emit_byte(OP_DIV);
+    return;
+star:
+    emit_byte(OP_MUL);
+    return;
+neq:
+    emit_byte(OP_NOT_EQUAL);
+    return;
+eq:
+    emit_byte(OP_EQUAL);
+    return;
+gt:
+    emit_byte(OP_GREATER);
+    return;
+gteq:
+    emit_byte(OP_GREATER_EQUAL);
+    return;
+lt:
+    emit_byte(OP_LESS);
+    return;
+lteq:
+    emit_byte(OP_LESS_EQUAL);
+    return;
+
+    _unreachable;
+#else
     switch(type) {
         case TOK_MINUS:
             emit_byte(OP_SUB);
@@ -286,15 +357,80 @@ static void parse_binary(Scanner* scanner)
         case TOK_STAR:
             emit_byte(OP_MUL);
             break;
+        case TOK_BANG_EQUAL:
+            emit_byte(OP_NOT_EQUAL);
+            break;
+        case TOK_EQUAL_EQUAL:
+            emit_byte(OP_EQUAL);
+            break;
+        case TOK_GREATER:
+            emit_byte(OP_GREATER);
+            break;
+        case TOK_GREATER_EQUAL:
+            emit_byte(OP_GREATER_EQUAL);
+            break;
+        case TOK_LESS:
+            emit_byte(OP_LESS);
+            break;
+        case TOK_LESS_EQUAL:
+            emit_byte(OP_LESS_EQUAL);
+            break;
         default:
             _unreachable;
             return;
     }
+#endif
 }
 
 static void parse_ternarycond(Scanner* scanner)
 {
     parse_expression(scanner);
-    Parser_expect(scanner, TOK_COLON, "Expect ':' (ternary conditional).");
+    Parser_expect(
+        scanner,
+        TOK_COLON,
+        "Expect ': \033[3mexpr\033[0m' (ternary conditional).");
     parse_expression(scanner);
+}
+
+static void parse_literal(_unused Scanner* scanner)
+{
+#ifdef THREADED_CODE
+    // NOTE: This is a GCC extension
+    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+    // IMPORTANT: update accordingly if TokenType enum is changed!
+    static const void* jump_table[TOK_EOF + 1] = {
+        0, 0, 0, 0, 0,         0, 0, 0, 0, 0, 0,          0, 0, 0,
+        0, 0, 0, 0, 0,         0, 0, 0, 0, 0, 0,          0, 0, &&tok_false,
+        0, 0, 0, 0, &&tok_nil, 0, 0, 0, 0, 0, &&tok_true, 0, 0, 0,
+    };
+
+    goto* jump_table[parser.previous.type];
+
+tok_true:
+    emit_byte(OP_TRUE);
+    return;
+tok_false:
+    emit_byte(OP_FALSE);
+    return;
+tok_nil:
+    emit_byte(OP_NIL);
+    return;
+
+    _unreachable;
+#else
+    switch(parser.previous.type) {
+        case TOK_TRUE:
+            emit_byte(OP_TRUE);
+            break;
+        case TOK_FALSE:
+            emit_byte(OP_FALSE);
+            break;
+        case TOK_NIL:
+            emit_byte(OP_NIL);
+            break;
+        default:
+            _unreachable;
+            return;
+    }
+#endif
 }

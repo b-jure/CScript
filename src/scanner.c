@@ -53,6 +53,95 @@ Token Scanner_scan(Scanner* scanner)
         return Token_number(scanner);
     }
 
+#ifdef THREADED_CODE
+    #define lbrack &&err
+    #define rbrack &&err
+    // NOTE: This is a GCC extension
+    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+    // IMPORTANT: update accordingly if TokenType enum changes!
+    static const void* jump_table[UINT8_MAX + 1] = {
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&bang,   &&string, &&err,       &&err,  &&err,    &&err,     &&err,
+        &&lparen, &&rparen, &&star,   &&plus,      &&err,  &&minus,  &&dot,     &&slash,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&colon,  &&semicolon, &&less, &&equal,  &&greater, &&qmark,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    lbrack,      &&err,  rbrack,   &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&lbrace,    &&err,  &&rbrace, &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+    };
+    #undef lbrack
+    #undef rbrack
+
+    goto* jump_table[c];
+
+lparen:
+    return Token_new(scanner, TOK_LPAREN);
+rparen:
+    return Token_new(scanner, TOK_RPAREN);
+lbrace:
+    return Token_new(scanner, TOK_LBRACE);
+rbrace:
+    return Token_new(scanner, TOK_RBRACE);
+dot:
+    return Token_new(scanner, TOK_DOT);
+comma:
+    return Token_new(scanner, TOK_COMMA);
+minus:
+    return Token_new(scanner, TOK_MINUS);
+plus:
+    return Token_new(scanner, TOK_PLUS);
+colon:
+    return Token_new(scanner, TOK_COLON);
+semicolon:
+    return Token_new(scanner, TOK_SEMICOLON);
+slash:
+    return Token_new(scanner, TOK_SLASH);
+star:
+    return Token_new(scanner, TOK_STAR);
+qmark:
+    return Token_new(scanner, TOK_QMARK);
+bang:
+    return Token_new(scanner, Scanner_match(scanner, '=') ? TOK_BANG_EQUAL : TOK_BANG);
+equal:
+    return Token_new(scanner, Scanner_match(scanner, '=') ? TOK_EQUAL_EQUAL : TOK_EQUAL);
+greater:
+    return Token_new(
+        scanner,
+        Scanner_match(scanner, '=') ? TOK_GREATER_EQUAL : TOK_GREATER);
+less:
+    return Token_new(scanner, Scanner_match(scanner, '=') ? TOK_LESS_EQUAL : TOK_LESS);
+string:
+    return Token_string(scanner);
+err:
+    return Token_error(scanner, "Unexpected character.");
+
+    _unreachable;
+
+#else
     switch(c) {
         case '(':
             return Token_new(scanner, TOK_LPAREN);
@@ -101,6 +190,7 @@ Token Scanner_scan(Scanner* scanner)
         default:
             return Token_error(scanner, "Unexpected character.");
     }
+#endif
 }
 
 static bool Scanner_match(Scanner* scanner, char c)
@@ -117,6 +207,67 @@ static void Scanner_skipws(Scanner* scanner)
     register char c;
 
     while(true) {
+#ifdef THREADED_CODE
+    #define WS  &&ws
+    #define NL  &&nl
+    #define COM &&com
+        // NOTE: This is a GCC extension
+        // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+        // IMPORTANT: update accordingly if language grammar changes!
+        static const void* jump_table[UINT8_MAX + 1] = {
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, WS,    NL,
+            &&ret, &&ret, WS,    &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, WS,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, COM,   &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&com, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+            &&ret, &&ret, &&ret,
+        };
+    #undef WS
+    #undef NL
+    #undef COM
+
+        goto* jump_table[peek(scanner)];
+
+    nl:
+        scanner->line++;
+        advance(scanner);
+        continue;
+    ws:
+        advance(scanner);
+        continue;
+    com:
+        if((c = peek_next(scanner)) == '/') {
+            while(peek(scanner) != '\n' && !isend(scanner)) {
+                advance(scanner);
+            }
+        } else {
+            return;
+        }
+        continue;
+    ret:
+        return;
+
+        _unreachable;
+
+#else
         switch((c = peek(scanner))) {
             case '\n':
                 scanner->line++;
@@ -139,6 +290,7 @@ static void Scanner_skipws(Scanner* scanner)
             default:
                 return;
         }
+#endif
     }
 }
 
@@ -210,6 +362,107 @@ static Token Token_identifier(Scanner* scanner)
 
 static TokenType TokenType_identifier(Scanner* scanner)
 {
+#ifdef THREADED_CODE
+    // NOTE: This is a GCC extension
+    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+    // IMPORTANT: update accordingly if language grammar changes!
+    static const void* jump_table[UINT8_MAX + 1] = {
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&a,   &&ret,
+        &&c,   &&ret, &&e,   &&f,   &&ret, &&ret, &&i,   &&ret, &&ret, &&ret, &&ret,
+        &&n,   &&o,   &&p,   &&ret, &&r,   &&s,   &&t,   &&ret, &&v,   &&w,   &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
+        &&ret, &&ret, &&ret,
+    };
+
+    goto* jump_table[*scanner->start];
+
+a:
+    return check_keyword(scanner, 1, 2, "nd", TOK_AND);
+c:
+    return check_keyword(scanner, 1, 4, "lass", TOK_CLASS);
+e:
+    return check_keyword(scanner, 1, 3, "lse", TOK_ELSE);
+f:
+    if(scanner->current - scanner->start > 1) {
+        switch(scanner->start[1]) {
+            case 'a':
+                return check_keyword(scanner, 2, 3, "lse", TOK_FALSE);
+            case 'n':
+                if(scanner->current - scanner->start == 2) {
+                    return TOK_FN;
+                } else {
+                    return TOK_IDENTIFIER;
+                }
+            case 'o':
+                return check_keyword(scanner, 2, 1, "r", TOK_FOR);
+            default:
+                break;
+        }
+    }
+    goto ret;
+i:
+    if(scanner->current - scanner->start > 1) {
+        switch(scanner->start[1]) {
+            case 'm':
+                check_keyword(scanner, 2, 2, "pl", TOK_IMPL);
+            case 'f':
+                if(scanner->current - scanner->start == 2) {
+                    return TOK_IF;
+                } else {
+                    return TOK_IDENTIFIER;
+                }
+            default:
+                break;
+        }
+    }
+    goto ret;
+n:
+    return check_keyword(scanner, 1, 2, "il", TOK_NIL);
+o:
+    return check_keyword(scanner, 1, 1, "r", TOK_OR);
+p:
+    return check_keyword(scanner, 1, 4, "rint", TOK_PRINT);
+r:
+    return check_keyword(scanner, 1, 5, "eturn", TOK_RETURN);
+s:
+    if(scanner->current - scanner->start > 1) {
+        switch(scanner->start[1]) {
+            case 'u':
+                return check_keyword(scanner, 2, 3, "per", TOK_SUPER);
+            case 'e':
+                return check_keyword(scanner, 2, 2, "lf", TOK_SELF);
+            default:
+                break;
+        }
+    }
+    goto ret;
+t:
+    return check_keyword(scanner, 1, 3, "rue", TOK_TRUE);
+v:
+    return check_keyword(scanner, 1, 2, "ar", TOK_VAR);
+w:
+    return check_keyword(scanner, 1, 4, "hile", TOK_WHILE);
+
+#else
     switch(*scanner->start) {
         case 'a':
             return check_keyword(scanner, 1, 2, "nd", TOK_AND);
@@ -280,6 +533,8 @@ static TokenType TokenType_identifier(Scanner* scanner)
         default:
             break;
     }
+#endif
+ret:
     return TOK_IDENTIFIER;
 }
 
