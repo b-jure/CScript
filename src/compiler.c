@@ -260,12 +260,52 @@ static void parse_unary(Scanner* scanner)
     parse_precedence(scanner, PREC_UNARY);
 
 #ifdef THREADED_CODE
-    // NOTE: This is a GCC extension
-    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
     // IMPORTANT: update accordingly if TokenType enum is changed!
     static const void* jump_table[TOK_EOF + 1] = {
-        0, 0, 0, 0, 0, 0, &&minus, 0, 0, 0, 0, 0, 0, &&bang, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0,       0, 0, 0, 0, 0, 0, 0,      0, 0, 0, 0, 0, 0, 0,
+        // Make sure the order is same as in the TokenType enum
+        0,       /* TOK_LPAREN */
+        0,       /* TOK_RPAREN */
+        0,       /* TOK_LBRACE */
+        0,       /* TOK_RBRACE */
+        0,       /* TOK_DOT */
+        0,       /* TOK_COMMA */
+        &&minus, /* TOK_MINUS */
+        0,       /* TOK_PLUS */
+        0,       /* TOK_COLON */
+        0,       /* TOK_SEMICOLON */
+        0,       /* TOK_SLASH */
+        0,       /* TOK_STAR */
+        0,       /* TOK_QMARK */
+        &&bang,  /* TOK_BANG */
+        0,       /* TOK_BANG_EQUAL */
+        0,       /* TOK_EQUAL */
+        0,       /* TOK_EQUAL_EQUAL */
+        0,       /* TOK_GREATER */
+        0,       /* TOK_GREATER_EQUAL */
+        0,       /* TOK_LESS */
+        0,       /* TOK_LESS_EQUAL */
+        0,       /* TOK_IDENTIFIER */
+        0,       /* TOK_STRING */
+        0,       /* TOK_NUMBER */
+        0,       /* TOK_AND */
+        0,       /* TOK_CLASS */
+        0,       /* TOK_ELSE */
+        0,       /* TOK_FALSE */
+        0,       /* TOK_FOR */
+        0,       /* TOK_FN */
+        0,       /* TOK_IF */
+        0,       /* TOK_IMPL */
+        0,       /* TOK_NIL */
+        0,       /* TOK_OR */
+        0,       /* TOK_PRINT */
+        0,       /* TOK_RETURN */
+        0,       /* TOK_SUPER */
+        0,       /* TOK_SELF */
+        0,       /* TOK_TRUE */
+        0,       /* TOK_VAR */
+        0,       /* TOK_WHILE */
+        0,       /* TOK_ERROR */
+        0,       /* TOK_EOF */
     };
 
     goto* jump_table[type];
@@ -300,13 +340,52 @@ static void parse_binary(Scanner* scanner)
     parse_precedence(scanner, rule->precedence + 1);
 
 #ifdef THREADED_CODE
-    // NOTE: This is a GCC extension
-    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
     // IMPORTANT: update accordingly if TokenType enum is changed!
     static const void* jump_table[TOK_EOF + 1] = {
-        0,     0, 0,    0,    0,      0,    &&minus, &&plus, 0, 0, &&slash, &&star, 0, 0,
-        &&neq, 0, &&eq, &&gt, &&gteq, &&lt, &&lteq,  0,      0, 0, 0,       0,      0, 0,
-        0,     0, 0,    0,    0,      0,    0,       0,      0, 0, 0,       0,      0, 0,
+        // Make sure order is the same as in the TokenType enum
+        0,       /* TOK_LPAREN */
+        0,       /* TOK_RPAREN */
+        0,       /* TOK_LBRACE */
+        0,       /* TOK_RBRACE */
+        0,       /* TOK_DOT */
+        0,       /* TOK_COMMA */
+        &&minus, /* TOK_MINUS */
+        &&plus,  /* TOK_PLUS */
+        0,       /* TOK_COLON */
+        0,       /* TOK_SEMICOLON */
+        &&slash, /* TOK_SLASH */
+        &&star,  /* TOK_STAR */
+        0,       /* TOK_QMARK */
+        0,       /* TOK_BANG */
+        &&neq,   /* TOK_BANG_EQUAL */
+        0,       /* TOK_EQUAL */
+        &&eq,    /* TOK_EQUAL_EQUAL */
+        &&gt,    /* TOK_GREATER */
+        &&gteq,  /* TOK_GREATER_EQUAL */
+        &&lt,    /* TOK_LESS */
+        &&lteq,  /* TOK_LESS_EQUAL */
+        0,       /* TOK_IDENTIFIER */
+        0,       /* TOK_STRING */
+        0,       /* TOK_NUMBER */
+        0,       /* TOK_AND */
+        0,       /* TOK_CLASS */
+        0,       /* TOK_ELSE */
+        0,       /* TOK_FALSE */
+        0,       /* TOK_FOR */
+        0,       /* TOK_FN */
+        0,       /* TOK_IF */
+        0,       /* TOK_IMPL */
+        0,       /* TOK_NIL */
+        0,       /* TOK_OR */
+        0,       /* TOK_PRINT */
+        0,       /* TOK_RETURN */
+        0,       /* TOK_SUPER */
+        0,       /* TOK_SELF */
+        0,       /* TOK_TRUE */
+        0,       /* TOK_VAR */
+        0,       /* TOK_WHILE */
+        0,       /* TOK_ERROR */
+        0,       /* TOK_EOF */
     };
 
     goto* jump_table[type];

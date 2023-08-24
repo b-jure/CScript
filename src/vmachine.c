@@ -98,24 +98,25 @@ static InterpretResult VM_run(VM* vm)
 #ifdef THREADED_CODE
         // IMPORTANT: update accordingly if OpCode enum is changed!
         static const void* jmp_table[] = {
-            &&op_const,
-            &&op_constl,
-            &&op_true,
-            &&op_false,
-            &&op_nil,
-            &&op_neg,
-            &&op_add,
-            &&op_sub,
-            &&op_mul,
-            &&op_div,
-            &&op_not,
-            &&op_not_equal,
-            &&op_equal,
-            &&op_greater,
-            &&op_greater_equal,
-            &&op_less,
-            &&op_less_equal,
-            &&op_ret,
+            // Make sure order is same as in OpCode enum
+            &&op_const,         // OP_CONST
+            &&op_constl,        // OP_CONSTL
+            &&op_true,          // OP_TRUE
+            &&op_false,         // OP_FALSE
+            &&op_nil,           // OP_NIL
+            &&op_neg,           // OP_NEG
+            &&op_add,           // OP_ADD
+            &&op_sub,           // OP_SUB
+            &&op_mul,           // OP_MUL
+            &&op_div,           // OP_DIV
+            &&op_not,           // OP_NOT
+            &&op_not_equal,     // OP_NOT_EQUAL
+            &&op_equal,         // OP_EQUAL
+            &&op_greater,       // OP_GREATER
+            &&op_greater_equal, // OP_GREATER_EQUAL
+            &&op_less,          // OP_LESS
+            &&op_less_equal,    // OP_LESS_EQUAL
+            &&op_ret,           // OP_RET
         };
 
         goto* jmp_table[*vm->ip++];

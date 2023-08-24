@@ -56,43 +56,44 @@ Token Scanner_scan(Scanner* scanner)
 #ifdef THREADED_CODE
     #define lbrack &&err
     #define rbrack &&err
-    // NOTE: This is a GCC extension
-    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+    #define ERR    &&err
     // IMPORTANT: update accordingly if TokenType enum changes!
     static const void* jump_table[UINT8_MAX + 1] = {
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&bang,   &&string, &&err,       &&err,  &&err,    &&err,     &&err,
-        &&lparen, &&rparen, &&star,   &&plus,      &&err,  &&minus,  &&dot,     &&slash,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&colon,  &&semicolon, &&less, &&equal,  &&greater, &&qmark,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    lbrack,      &&err,  rbrack,   &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&lbrace,    &&err,  &&rbrace, &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
-        &&err,    &&err,    &&err,    &&err,       &&err,  &&err,    &&err,     &&err,
+        // Must be the same order as in ASCII Table - https://www.asciitable.com
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      &&bang,   &&string, ERR,         ERR,    ERR,      ERR,       ERR,
+        &&lparen, &&rparen, &&star,   &&plus,      ERR,    &&minus,  &&dot,     &&slash,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      &&colon,  &&semicolon, &&less, &&equal,  &&greater, &&qmark,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      lbrack,      ERR,    rbrack,   ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      &&lbrace,    ERR,    &&rbrace, ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,    ERR,      ERR,       ERR,
     };
+    #undef ERR
     #undef lbrack
     #undef rbrack
 
@@ -208,41 +209,32 @@ static void Scanner_skipws(Scanner* scanner)
 
     while(true) {
 #ifdef THREADED_CODE
-    #define WS  &&ws
-    #define NL  &&nl
-    #define COM &&com
-        // NOTE: This is a GCC extension
-        // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+    #define RET &&ret
         // IMPORTANT: update accordingly if language grammar changes!
         static const void* jump_table[UINT8_MAX + 1] = {
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, WS,    NL,
-            &&ret, &&ret, WS,    &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, WS,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, COM,   &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&com, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-            &&ret, &&ret, &&ret,
+            // Make sure the order is the same as in ASCII Table
+            // https://www.asciitable.com
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, &&ws, &&nl, RET, RET, &&ws,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, &&ws, RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  &&com, RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
+            RET, RET, RET, RET,
         };
-    #undef WS
-    #undef NL
-    #undef COM
+    #undef RET
 
         goto* jump_table[peek(scanner)];
 
@@ -363,35 +355,28 @@ static Token Token_identifier(Scanner* scanner)
 static TokenType TokenType_identifier(Scanner* scanner)
 {
 #ifdef THREADED_CODE
-    // NOTE: This is a GCC extension
-    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
+    #define RET &&ret
     // IMPORTANT: update accordingly if language grammar changes!
     static const void* jump_table[UINT8_MAX + 1] = {
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&a,   &&ret,
-        &&c,   &&ret, &&e,   &&f,   &&ret, &&ret, &&i,   &&ret, &&ret, &&ret, &&ret,
-        &&n,   &&o,   &&p,   &&ret, &&r,   &&s,   &&t,   &&ret, &&v,   &&w,   &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret, &&ret,
-        &&ret, &&ret, &&ret,
+        // Make sure the order is the same as in ASCII Table - https://www.asciitable.com
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, &&a, RET, &&c, RET, &&e, &&f, RET, RET, &&i, RET, RET, RET, RET, &&n, &&o,
+        &&p, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
     };
+    #undef RET
 
     goto* jump_table[*scanner->start];
 
