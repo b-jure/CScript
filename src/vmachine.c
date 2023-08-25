@@ -1,6 +1,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "mem.h"
+#include "object.h"
 #include "vmachine.h"
 
 #ifdef DEBUG_TRACE_EXECUTION
@@ -14,10 +15,13 @@
 // @TODO: Make some errors into warnings, for example emit warning when negating boolean
 // values by converting them implicitly during compilation into numbers.
 
-#define peek_stack(vm, top) ((Value) * ((vm)->sp - (top + 1)))
-#define reset_stack(vm)     (vm)->sp = (vm)->stack
+#define stack_peek(vm, top) ((Value) * ((vm)->sp - (top + 1)))
+#define stack_reset(vm)     (vm)->sp = (vm)->stack
+#define stack_size(vm)      ((vm)->sp - (vm)->stack)
 
-static void VM_push(VM* vm, Value val)
+/* This doesn't get inlined with gcc having -O3 optimizations enabled
+ * this is the reason behind the force_inline attribute  */
+static _force_inline void VM_push(VM* vm, Value val)
 {
     if(_likely(vm->sp - vm->stack < STACK_MAX)) {
         *vm->sp++ = val;
@@ -42,24 +46,84 @@ void VM_error(VM* vm, const char* errfmt, ...)
 
     UInt line = Chunk_getline(vm->chunk, vm->ip - vm->chunk->code.data - 1);
     fprintf(stderr, "[line: %u] in script\n", line);
-    reset_stack(vm);
+    stack_reset(vm);
 }
 
-/* nil, boolean false - are falsey */
+/* NIL and FALSE are always falsey */
 static bool isfalsey(Value value)
 {
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
-#define VM_BINARY_OP(value_type, op)                                                     \
+static uint8_t double_to_str(double dbl, char** out)
+{
+    // @ Implement
+    return 0;
+}
+
+static _force_inline size_t to_cstr(Value value, char** out, uint8_t idx)
+{
+    static char buffer[2][30] = {0};
+    size_t      len           = 0;
+
+    switch(value.type) {
+        case VAL_BOOL:
+            if(AS_BOOL(value)) {
+                memcpy(buffer[idx], "true", (len = sizeof("true") - 1));
+            } else {
+                memcpy(buffer[idx], "false", (len = sizeof("false") - 1));
+            }
+            break;
+        case VAL_NUMBER: {
+            len = snprintf(buffer[idx], 30, "%f", AS_NUMBER(value));
+            break;
+        }
+        case VAL_NIL:
+            memcpy(buffer[idx], "nil", (len = sizeof("nil") - 1));
+            break;
+        case VAL_OBJ:
+            *out = AS_CSTRING(value);
+            return AS_STRING(value)->len;
+        default:
+            _unreachable;
+    }
+
+    *out = buffer[idx];
+    return len;
+}
+
+static ObjString* concatenate(VM* vm, Value a, Value b)
+{
+    char*  astr;
+    char*  bstr;
+    size_t alen, blen;
+    alen = to_cstr(a, &astr, 0);
+    blen = to_cstr(b, &bstr, 1);
+    return ObjString_from_concat(vm, astr, alen, bstr, blen);
+}
+
+#define VM_BINARY_OP(vm, value_type, op)                                                 \
     do {                                                                                 \
-        if(!IS_NUMBER(peek_stack(vm, 0)) || !IS_NUMBER(peek_stack(vm, 1))) {             \
+        if(!IS_NUMBER(stack_peek(vm, 0)) || !IS_NUMBER(stack_peek(vm, 1))) {             \
             VM_error(vm, "Operands must be numbers (binary operation '" #op "').");      \
             return INTERPRET_RUNTIME_ERROR;                                              \
         }                                                                                \
         double b = AS_NUMBER(VM_pop(vm));                                                \
         double a = AS_NUMBER(VM_pop(vm));                                                \
         VM_push(vm, value_type(a op b));                                                 \
+    } while(false)
+
+#define VM_CONCAT_OR_ADD(vm)                                                             \
+    do {                                                                                 \
+        if(IS_NUMBER(stack_peek(vm, 0)) && IS_NUMBER(stack_peek(vm, 1))) {               \
+            double b = AS_NUMBER(VM_pop(vm));                                            \
+            double a = AS_NUMBER(VM_pop(vm));                                            \
+            VM_push(vm, NUMBER_VAL((a + b)));                                            \
+        } else {                                                                         \
+            Value b = VM_pop(vm);                                                        \
+            Value a = VM_pop(vm);                                                        \
+            VM_push(vm, OBJ_VAL(concatenate(vm, a, b)));                                 \
+        }                                                                                \
     } while(false)
 
 /*
@@ -70,16 +134,17 @@ static bool isfalsey(Value value)
 VM* VM_new(void)
 {
     VM* vm = NULL;
-    vm     = MALLOC(vm, sizeof(VM));
+    vm     = MALLOC(sizeof(VM));
     VM_init(vm);
     return vm;
 }
 
 void VM_init(VM* vm)
 {
-    vm->chunk = NULL;
-    vm->ip    = NULL;
-    reset_stack(vm);
+    vm->chunk   = NULL;
+    vm->ip      = NULL;
+    vm->objects = NULL;
+    stack_reset(vm);
 }
 
 static InterpretResult VM_run(VM* vm)
@@ -138,26 +203,26 @@ static InterpretResult VM_run(VM* vm)
         VM_push(vm, NIL_VAL);
         continue;
     op_neg:
-        if(!IS_NUMBER(peek_stack(vm, 0))) {
+        if(!IS_NUMBER(stack_peek(vm, 0))) {
             VM_error(vm, "Operand must be a number (unary negation '-').");
             return INTERPRET_RUNTIME_ERROR;
         }
-        AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(peek_stack(vm, 0));
+        AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(stack_peek(vm, 0));
         continue;
     op_add:
-        VM_BINARY_OP(NUMBER_VAL, +);
+        VM_CONCAT_OR_ADD(vm);
         continue;
     op_sub:
-        VM_BINARY_OP(NUMBER_VAL, -);
+        VM_BINARY_OP(vm, NUMBER_VAL, -);
         continue;
     op_mul:
-        VM_BINARY_OP(NUMBER_VAL, *);
+        VM_BINARY_OP(vm, NUMBER_VAL, *);
         continue;
     op_div:
-        VM_BINARY_OP(NUMBER_VAL, /);
+        VM_BINARY_OP(vm, NUMBER_VAL, /);
         continue;
     op_not:
-        *(vm->sp - 1) = BOOL_VAL(isfalsey(peek_stack(vm, 0)));
+        *(vm->sp - 1) = BOOL_VAL(isfalsey(stack_peek(vm, 0)));
         continue;
     op_not_equal : {
         Value a = VM_pop(vm);
@@ -172,16 +237,16 @@ static InterpretResult VM_run(VM* vm)
         continue;
     }
     op_greater:
-        VM_BINARY_OP(BOOL_VAL, >);
+        VM_BINARY_OP(vm, BOOL_VAL, >);
         continue;
     op_greater_equal:
-        VM_BINARY_OP(BOOL_VAL, >=);
+        VM_BINARY_OP(vm, BOOL_VAL, >=);
         continue;
     op_less:
-        VM_BINARY_OP(BOOL_VAL, <);
+        VM_BINARY_OP(vm, BOOL_VAL, <);
         continue;
     op_less_equal:
-        VM_BINARY_OP(BOOL_VAL, <=);
+        VM_BINARY_OP(vm, BOOL_VAL, <=);
         continue;
     op_ret:
         Value_print(VM_pop(vm));
@@ -209,11 +274,11 @@ static InterpretResult VM_run(VM* vm)
                 VM_push(vm, NIL_VAL);
                 break;
             case OP_NEG:
-                if(!IS_NUMBER(peek_stack(vm, 0))) {
+                if(!IS_NUMBER(stack_peek(vm, 0))) {
                     VM_error(vm, "Operand must be a number (unary negation '-').");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(peek_stack(vm, 0));
+                AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(stack_peek(vm, 0));
                 break;
             case OP_ADD:
                 VM_BINARY_OP(NUMBER_VAL, +);
@@ -228,7 +293,7 @@ static InterpretResult VM_run(VM* vm)
                 VM_BINARY_OP(NUMBER_VAL, /);
                 break;
             case OP_NOT:
-                *(vm->sp - 1) = BOOL_VAL(isfalsey(peek_stack(vm, 0)));
+                *(vm->sp - 1) = BOOL_VAL(isfalsey(stack_peek(vm, 0)));
                 break;
             case OP_NOT_EQUAL:
                 Value a = VM_pop(vm);
@@ -265,7 +330,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
     Chunk chunk;
     Chunk_init(&chunk);
 
-    if(!compile(source, &chunk)) {
+    if(!compile(vm, source, &chunk)) {
         Chunk_free(&chunk);
         return INTERPRET_COMPILE_ERROR;
     }
@@ -284,5 +349,6 @@ void VM_free(VM* vm)
     if(_likely(vm->chunk != NULL)) {
         Chunk_free(vm->chunk);
     }
+    MFREE_LIST(vm->objects, Obj_free);
     MFREE(vm, sizeof(VM));
 }

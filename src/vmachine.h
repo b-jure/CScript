@@ -11,6 +11,7 @@ typedef struct {
   Byte *ip;               /* Instruction pointer */
   Value stack[STACK_MAX]; /* Stack */
   Value *sp;              /* Stack pointer */
+  Obj *objects;
 } VM;
 
 typedef enum {

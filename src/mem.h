@@ -7,13 +7,25 @@
 
 /* Memory allocation/deallocation function (wrapper around realloc) */
 void *reallocate(void *ptr, size_t oldCap, size_t newCap);
+/* Copy 'len' bytes from 'src' returning null-terminated cstring */
+char *strncopy(const char *src, UInt len);
 
-/* Wrapper around reallocate, allocates 'bytes' amount returning
- * the start of allocation back into 'ptr' */
-#define MALLOC(ptr, bytes) reallocate((ptr), 0, bytes)
+/* Wrapper around reallocate that is equivallent to malloc, allocates 'bytes'
+ * amount */
+#define MALLOC(bytes) reallocate(NULL, 0, bytes)
 
 /* Wrapper around reallocate, frees the 'bytes' pointed by 'ptr' */
 #define MFREE(ptr, bytes) reallocate((ptr), bytes, 0)
+
+/* Frees the 'list' using 'free_fn' */
+#define MFREE_LIST(list, free_fn)                                              \
+  do {                                                                         \
+    Obj *head = list;                                                          \
+    for (Obj *object = list; head != NULL; object = head->next) {              \
+      head = object->next;                                                     \
+      free_fn(object);                                                         \
+    }                                                                          \
+  } while (false)
 
 /* Extracts the byte at the 'offset' from 'x' */
 #define BYTE(x, offset) (((x) >> (offset * 8)) & 0xff)

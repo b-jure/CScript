@@ -1,4 +1,5 @@
 #include "compiler.h"
+#include "object.h"
 
 #ifdef DEBUG_PRINT_CODE
     #include "debug.h"
@@ -50,14 +51,15 @@ static void     emit_byte(Byte byte);
 static uint32_t emit_constant(Value constant);
 static void     emit_return(void);
 static void     compile_end(void);
-static void     parse_number(Scanner* scanner);
-static void     parse_precedence(Scanner* scanner, Precedence prec);
-static void     parse_grouping(Scanner* scanner);
-static void     parse_binary(Scanner* scanner);
-static void     parse_unary(Scanner* scanner);
-static void     parse_ternarycond(Scanner* scanner);
-static void     parse_literal(Scanner* scanner);
-static void     parse_expression(Scanner* scanner);
+static void     parse_number(VM* vm, Scanner* scanner);
+static void     parse_string(VM* vm, Scanner* scanner);
+static void     parse_precedence(VM* vm, Scanner* scanner, Precedence prec);
+static void     parse_grouping(VM* vm, Scanner* scanner);
+static void     parse_binary(VM* vm, Scanner* scanner);
+static void     parse_unary(VM* vm, Scanner* scanner);
+static void     parse_ternarycond(VM* vm, Scanner* scanner);
+static void     parse_literal(VM* vm, Scanner* scanner);
+static void     parse_expression(VM* vm, Scanner* scanner);
 
 static void Parser_init(Scanner* scanner)
 {
@@ -112,12 +114,12 @@ static void Parser_expect(Scanner* scanner, TokenType type, const char* error)
     Parser_error(error);
 }
 
-bool compile(const char* source, Chunk* chunk)
+bool compile(VM* vm, const char* source, Chunk* chunk)
 {
     Scanner scanner = Scanner_new(source);
     compiling_chunk = chunk;
     Parser_init(&scanner);
-    parse_expression(&scanner);
+    parse_expression(vm, &scanner);
     Parser_expect(&scanner, TOK_EOF, "Expect end of expression.");
     compile_end();
     return !Parser_state_iserr();
@@ -194,7 +196,7 @@ static const ParseRule rules[] = {
     [TOK_LESS]          = {NULL,           parse_binary,      PREC_COMPARISON},
     [TOK_LESS_EQUAL]    = {NULL,           parse_binary,      PREC_COMPARISON},
     [TOK_IDENTIFIER]    = {NULL,           NULL,              PREC_NONE      },
-    [TOK_STRING]        = {NULL,           NULL,              PREC_NONE      },
+    [TOK_STRING]        = {parse_string,   NULL,              PREC_NONE      },
     [TOK_NUMBER]        = {parse_number,   NULL,              PREC_NONE      },
     [TOK_AND]           = {NULL,           NULL,              PREC_NONE      },
     [TOK_CLASS]         = {NULL,           NULL,              PREC_NONE      },
@@ -216,19 +218,26 @@ static const ParseRule rules[] = {
     [TOK_EOF]           = {NULL,           NULL,              PREC_NONE      },
 };
 
-static void parse_expression(Scanner* scanner)
+static void parse_expression(VM* vm, Scanner* scanner)
 {
-    parse_precedence(scanner, PREC_ASSIGNMENT);
+    parse_precedence(vm, scanner, PREC_ASSIGNMENT);
 }
 
-static void parse_number(_unused Scanner* scanner)
+static void parse_number(_unused VM* _, _unused Scanner* __)
 {
     double constant = strtod(parser.previous.start, NULL);
+    printf("constant: '%f'\n", constant);
     emit_constant(NUMBER_VAL(constant));
 }
 
+static void parse_string(_unused VM* vm, _unused Scanner* _)
+{
+    emit_constant(
+        OBJ_VAL(ObjString_from(vm, parser.previous.start + 1, parser.previous.len - 2)));
+}
+
 /* This is the entry point to Pratt parsing */
-static void parse_precedence(Scanner* scanner, Precedence prec)
+static void parse_precedence(VM* vm, Scanner* scanner, Precedence prec)
 {
     Parser_advance(scanner);
     ParseFn prefix_fn = rules[parser.previous.type].prefix;
@@ -238,26 +247,26 @@ static void parse_precedence(Scanner* scanner, Precedence prec)
     }
 
     /* Parse unary operator (prefix) or a literal */
-    prefix_fn(scanner);
+    prefix_fn(vm, scanner);
 
     /* Parse binary operator (inifix) if any */
     while(prec <= rules[parser.current.type].precedence) {
         Parser_advance(scanner);
         ParseFn infix_fn = rules[parser.previous.type].infix;
-        infix_fn(scanner);
+        infix_fn(vm, scanner);
     }
 }
 
-static void parse_grouping(Scanner* scanner)
+static void parse_grouping(VM* vm, Scanner* scanner)
 {
-    parse_expression(scanner);
+    parse_expression(vm, scanner);
     Parser_expect(scanner, TOK_RPAREN, "Expect ')' after expression");
 }
 
-static void parse_unary(Scanner* scanner)
+static void parse_unary(VM* vm, Scanner* scanner)
 {
     TokenType type = parser.previous.type;
-    parse_precedence(scanner, PREC_UNARY);
+    parse_precedence(vm, scanner, PREC_UNARY);
 
 #ifdef THREADED_CODE
     // IMPORTANT: update accordingly if TokenType enum is changed!
@@ -333,11 +342,11 @@ bang:
 #endif
 }
 
-static void parse_binary(Scanner* scanner)
+static void parse_binary(VM* vm, Scanner* scanner)
 {
     TokenType        type = parser.previous.type;
     const ParseRule* rule = &rules[type];
-    parse_precedence(scanner, rule->precedence + 1);
+    parse_precedence(vm, scanner, rule->precedence + 1);
 
 #ifdef THREADED_CODE
     // IMPORTANT: update accordingly if TokenType enum is changed!
@@ -461,26 +470,65 @@ lteq:
 #endif
 }
 
-static void parse_ternarycond(Scanner* scanner)
+static void parse_ternarycond(VM* vm, Scanner* scanner)
 {
-    parse_expression(scanner);
+    parse_expression(vm, scanner);
     Parser_expect(
         scanner,
         TOK_COLON,
         "Expect ': \033[3mexpr\033[0m' (ternary conditional).");
-    parse_expression(scanner);
+    parse_expression(vm, scanner);
 }
 
-static void parse_literal(_unused Scanner* scanner)
+static void parse_literal(_unused VM* _, _unused Scanner* __)
 {
 #ifdef THREADED_CODE
-    // NOTE: This is a GCC extension
-    // https://gcc.gnu.org/onlinedocs/gcc/Labels-as-Values.html
     // IMPORTANT: update accordingly if TokenType enum is changed!
     static const void* jump_table[TOK_EOF + 1] = {
-        0, 0, 0, 0, 0,         0, 0, 0, 0, 0, 0,          0, 0, 0,
-        0, 0, 0, 0, 0,         0, 0, 0, 0, 0, 0,          0, 0, &&tok_false,
-        0, 0, 0, 0, &&tok_nil, 0, 0, 0, 0, 0, &&tok_true, 0, 0, 0,
+        // Make sure the order is the same as in the TokenType enum
+        0,           /* TOK_LPAREN */
+        0,           /* TOK_RPAREN */
+        0,           /* TOK_LBRACE */
+        0,           /* TOK_RBRACE */
+        0,           /* TOK_DOT */
+        0,           /* TOK_COMMA */
+        0,           /* TOK_MINUS */
+        0,           /* TOK_PLUS */
+        0,           /* TOK_COLON */
+        0,           /* TOK_SEMICOLON */
+        0,           /* TOK_SLASH */
+        0,           /* TOK_STAR */
+        0,           /* TOK_QMARK */
+        0,           /* TOK_BANG */
+        0,           /* TOK_BANG_EQUAL */
+        0,           /* TOK_EQUAL */
+        0,           /* TOK_EQUAL_EQUAL */
+        0,           /* TOK_GREATER */
+        0,           /* TOK_GREATER_EQUAL */
+        0,           /* TOK_LESS */
+        0,           /* TOK_LESS_EQUAL */
+        0,           /* TOK_IDENTIFIER */
+        0,           /* TOK_STRING */
+        0,           /* TOK_NUMBER */
+        0,           /* TOK_AND */
+        0,           /* TOK_CLASS */
+        0,           /* TOK_ELSE */
+        &&tok_false, /* TOK_FALSE */
+        0,           /* TOK_FOR */
+        0,           /* TOK_FN */
+        0,           /* TOK_IF */
+        0,           /* TOK_IMPL */
+        &&tok_nil,   /* TOK_NIL */
+        0,           /* TOK_OR */
+        0,           /* TOK_PRINT */
+        0,           /* TOK_RETURN */
+        0,           /* TOK_SUPER */
+        0,           /* TOK_SELF */
+        &&tok_true,  /* TOK_TRUE */
+        0,           /* TOK_VAR */
+        0,           /* TOK_WHILE */
+        0,           /* TOK_ERROR */
+        0,           /* TOK_EOF */
     };
 
     goto* jump_table[parser.previous.type];

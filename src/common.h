@@ -14,9 +14,9 @@
 // Clear 'bit' from 'x'
 #define BIT_CLEAR(x, bit) ((x) &= ~((size_t)1 << (bit)))
 // Generate uint with 'bits' all set to 1
-#define MAXBITS(bits) (~((size_t)0) >> ((sizeof(size_t) * 8) - 1 - bits))
+#define MAXBITS(bits) (~((size_t)0) >> ((sizeof(size_t) * 8) - 1 - (bits)))
 // Wrapper around MAXBITS, uses 'bytes' instead
-#define MAXBYTES(bytes) MAXBITS(bytes * 8)
+#define MAXBYTES(bytes) MAXBITS((bytes)*8)
 
 /* Debug flag for debugging chunks. */
 #define DEBUG_PRINT_CODE
@@ -28,16 +28,19 @@ typedef uint32_t UInt;
 
 /* Compiler builtins (attributes) */
 #if defined(__GLIBC__)
+#define __force_inline __always_inline
 #define __likely(cond) __glibc_likely(cond)
 #define __unlikely(cond) __glibc_unlikely(cond)
 #define __unused __attribute__((unused))
 #define __unreachable __builtin_unreachable()
 #elif defined(__clang__)
+#define __force_inline __always_inline
 #define __likely(cond) [[likely]] cond
 #define __unlikely(cond) [[unlikely]] cond
 #define __unused [[maybe_unused]]
 #define __unreachable
 #else
+#define __force_inline inline
 #define __likely(cond) cond
 #define __unlikely(cond) cond
 #define __unused
@@ -49,6 +52,7 @@ typedef uint32_t UInt;
 #define THREADED_CODE
 #endif
 
+#define _force_inline __force_inline
 #define _likely(cond) __likely(cond)
 #define _unlikely(cond) __unlikely(cond)
 #define _unused __unused

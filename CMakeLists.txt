@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 11)
 set(BIN skooma)
 set(SRCDIR ${CMAKE_SOURCE_DIR}/src)
 set(CFLAGS -Wall -Werror -Wextra -Wpedantic -save-temps)
-set(OPTS -Os)
+set(OPTS -O3)
 set(SANITIZER_FLAGS -fsanitize=address -fsanitize=undefined)
 set(SRCFILES
     ${SRCDIR}/mem.c
@@ -18,6 +18,7 @@ set(SRCFILES
     ${SRCDIR}/vmachine.c
     ${SRCDIR}/compiler.c
     ${SRCDIR}/scanner.c
+    ${SRCDIR}/object.c
 )
 
 add_executable(${BIN} ${SRCFILES})

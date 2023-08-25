@@ -4,8 +4,9 @@
 #include "chunk.h"
 #include "common.h"
 #include "scanner.h"
+#include "vmachine.h"
 
-bool compile(const char *source, Chunk *chunk);
+bool compile(VM* vm, const char *source, Chunk *chunk);
 
 /* Precedence from LOW-est to HIGH-est */
 typedef enum {
@@ -23,7 +24,7 @@ typedef enum {
   PREC_PRIMARY
 } Precedence;
 
-typedef void (*ParseFn)(Scanner *);
+typedef void (*ParseFn)(VM *, Scanner *);
 
 typedef struct {
   ParseFn prefix;

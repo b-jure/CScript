@@ -28,6 +28,9 @@ void Chunk_free(Chunk* chunk)
 
 void Chunk_write_constant(Chunk* chunk, Value constant, UInt line)
 {
+    printf("Pushing constant -> ");
+    Value_print(constant);
+    printf("\n");
     UInt idx = ValueArray_push(&chunk->constants, constant);
 
     if(idx <= UINT8_MAX) {
