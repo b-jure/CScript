@@ -31,7 +31,7 @@ static _force_inline void VM_push(VM* vm, Value val)
     }
 }
 
-static Value VM_pop(VM* vm)
+static _force_inline Value VM_pop(VM* vm)
 {
     return *--vm->sp;
 }
@@ -50,7 +50,7 @@ void VM_error(VM* vm, const char* errfmt, ...)
 }
 
 /* NIL and FALSE are always falsey */
-static bool isfalsey(Value value)
+static _force_inline bool isfalsey(Value value)
 {
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
@@ -61,11 +61,40 @@ static uint8_t double_to_str(double dbl, char** out)
     return 0;
 }
 
-static _force_inline size_t to_cstr(Value value, char** out, uint8_t idx)
+static size_t to_cstr(Value value, char** out, uint8_t idx)
 {
     static char buffer[2][30] = {0};
     size_t      len           = 0;
 
+#ifdef THREADED_CODE
+    // NOTE: In case ValueType enum gets modified update this table
+    static const void* jump_table[] = {
+        // Keep this in the same order as in the ValueType enum
+        &&vbool,   /* VAL_BOOL */
+        &&vnumber, /* VAL_NUMBER */
+        &&vnil,    /* VAL_NIL */
+        &&vobj,    /* VAL_OBJ */
+    };
+
+    goto* jump_table[value.type];
+
+vbool:
+    if(AS_BOOL(value)) {
+        memcpy(buffer[idx], "true", (len = sizeof("true") - 1));
+    } else {
+        memcpy(buffer[idx], "false", (len = sizeof("false") - 1));
+    }
+    goto end;
+vnumber:
+    len = snprintf(buffer[idx], 30, "%f", AS_NUMBER(value));
+    goto end;
+vnil:
+    memcpy(buffer[idx], "nil", (len = sizeof("nil") - 1));
+    goto end;
+vobj:
+    *out = AS_CSTRING(value);
+    return AS_STRING(value)->len;
+#else
     switch(value.type) {
         case VAL_BOOL:
             if(AS_BOOL(value)) {
@@ -74,10 +103,9 @@ static _force_inline size_t to_cstr(Value value, char** out, uint8_t idx)
                 memcpy(buffer[idx], "false", (len = sizeof("false") - 1));
             }
             break;
-        case VAL_NUMBER: {
+        case VAL_NUMBER:
             len = snprintf(buffer[idx], 30, "%f", AS_NUMBER(value));
             break;
-        }
         case VAL_NIL:
             memcpy(buffer[idx], "nil", (len = sizeof("nil") - 1));
             break;
@@ -87,7 +115,8 @@ static _force_inline size_t to_cstr(Value value, char** out, uint8_t idx)
         default:
             _unreachable;
     }
-
+#endif
+end:
     *out = buffer[idx];
     return len;
 }

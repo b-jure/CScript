@@ -25,7 +25,7 @@ typedef struct Obj Obj;
 typedef struct ObjString ObjString;
 
 typedef enum {
-  VAL_BOOL,
+  VAL_BOOL = 0,
   VAL_NUMBER,
   VAL_NIL,
   VAL_OBJ,
