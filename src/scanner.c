@@ -337,8 +337,6 @@ static Token Token_number(Scanner* scanner)
         }
     }
 
-    Token token = Token_new(scanner, TOK_NUMBER);
-    printf("Got token: '%.*s'\n", token.len, token.start);
     return Token_new(scanner, TOK_NUMBER);
 }
 

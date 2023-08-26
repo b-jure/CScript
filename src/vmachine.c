@@ -55,80 +55,95 @@ static _force_inline bool isfalsey(Value value)
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
-static uint8_t double_to_str(double dbl, char** out)
+static _force_inline uint8_t bool_to_str(char** str, bool boolean)
 {
-    // @ Implement
-    return 0;
+    if(boolean) {
+        *str = "true";
+        return sizeof("true") - 1;
+    }
+    *str = "false";
+    return sizeof("false") - 1;
 }
 
-static size_t to_cstr(Value value, char** out, uint8_t idx)
+static _force_inline uint8_t nil_to_str(char** str)
 {
-    static char buffer[2][30] = {0};
-    size_t      len           = 0;
+    *str = "nil";
+    return sizeof("nil") - 1;
+}
 
-#ifdef THREADED_CODE
-    // NOTE: In case ValueType enum gets modified update this table
-    static const void* jump_table[] = {
-        // Keep this in the same order as in the ValueType enum
-        &&vbool,   /* VAL_BOOL */
-        &&vnumber, /* VAL_NUMBER */
-        &&vnil,    /* VAL_NIL */
-        &&vobj,    /* VAL_OBJ */
-    };
-
-    goto* jump_table[value.type];
-
-vbool:
-    if(AS_BOOL(value)) {
-        memcpy(buffer[idx], "true", (len = sizeof("true") - 1));
-    } else {
-        memcpy(buffer[idx], "false", (len = sizeof("false") - 1));
+/* Current number is stored in static memory to prevent the need
+ * for allocating before creating the 'ObjString', keep in mind this
+ * function is only safe for usage inside a concatenate function.
+ * Additionally concatenate function guarantees there is only one possible number Value,
+ * therefore there is no need for two static buffers inside of it. */
+static _force_inline uint8_t double_to_str(char** str, double dbl)
+{
+    static char buffer[30] = {0};
+    uint8_t     len;
+    len = snprintf(buffer, 30, "%f", dbl);
+    /* Trim excess zeroes */
+    for(uint8_t i = len - 1; i > 0; i--) {
+        if(buffer[i] == '0') {
+            len--;
+        }
     }
-    goto end;
-vnumber:
-    len = snprintf(buffer[idx], 30, "%f", AS_NUMBER(value));
-    goto end;
-vnil:
-    memcpy(buffer[idx], "nil", (len = sizeof("nil") - 1));
-    goto end;
-vobj:
-    *out = AS_CSTRING(value);
-    return AS_STRING(value)->len;
-#else
-    switch(value.type) {
-        case VAL_BOOL:
-            if(AS_BOOL(value)) {
-                memcpy(buffer[idx], "true", (len = sizeof("true") - 1));
-            } else {
-                memcpy(buffer[idx], "false", (len = sizeof("false") - 1));
-            }
-            break;
-        case VAL_NUMBER:
-            len = snprintf(buffer[idx], 30, "%f", AS_NUMBER(value));
-            break;
-        case VAL_NIL:
-            memcpy(buffer[idx], "nil", (len = sizeof("nil") - 1));
-            break;
-        case VAL_OBJ:
-            *out = AS_CSTRING(value);
-            return AS_STRING(value)->len;
-        default:
-            _unreachable;
-    }
-#endif
-end:
-    *out = buffer[idx];
+    *str = buffer;
     return len;
 }
 
 static ObjString* concatenate(VM* vm, Value a, Value b)
 {
-    char*  astr;
-    char*  bstr;
-    size_t alen, blen;
-    alen = to_cstr(a, &astr, 0);
-    blen = to_cstr(b, &bstr, 1);
-    return ObjString_from_concat(vm, astr, alen, bstr, blen);
+    Value  value[2] = {a, b};
+    size_t len[2]   = {0};
+    char*  str[2]   = {0};
+
+    for(int i = 0; i < 2; i++) {
+#ifdef THREADED_CODE
+        // NOTE: In case ValueType enum gets modified update this table
+        static const void* jump_table[] = {
+            // Keep this in the same order as in the ValueType enum
+            &&vbool,   /* VAL_BOOL */
+            &&vnumber, /* VAL_NUMBER */
+            &&vnil,    /* VAL_NIL */
+            &&vobj,    /* VAL_OBJ */
+        };
+
+        goto* jump_table[value[i].type];
+
+    vbool:
+        len[i] = bool_to_str(&str[i], AS_BOOL(value[i]));
+        continue;
+    vnumber:
+        len[i] = double_to_str(&str[i], AS_NUMBER(value[i]));
+        continue;
+    vnil:
+        len[i] = nil_to_str(&str[i]);
+        continue;
+    vobj:
+        str[i] = AS_CSTRING(value[i]);
+        len[i] = AS_STRING(value[i])->len;
+        continue;
+#else
+        switch(value[i].type) {
+            case VAL_BOOL:
+                len[i] = bool_to_str(&str[i], AS_BOOL(value[i]));
+                break;
+            case VAL_NUMBER:
+                len[i] = double_to_str(&str[i], AS_NUMBER(value[i]));
+                break;
+            case VAL_NIL:
+                len[i] = nil_to_str(&str[i]);
+                break;
+            case VAL_OBJ:
+                str[i] = AS_CSTRING(value[i]);
+                len[i] = AS_STRING(value[i])->len;
+                break;
+            default:
+                _unreachable;
+        }
+#endif
+    }
+    return ObjString_from_concat(vm, str[0], len[0], str[1], len[1]);
 }
 
 #define VM_BINARY_OP(vm, value_type, op)                                                 \

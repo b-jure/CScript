@@ -226,7 +226,6 @@ static void parse_expression(VM* vm, Scanner* scanner)
 static void parse_number(_unused VM* _, _unused Scanner* __)
 {
     double constant = strtod(parser.previous.start, NULL);
-    printf("constant: '%f'\n", constant);
     emit_constant(NUMBER_VAL(constant));
 }
 
