@@ -5,7 +5,6 @@
 #include "mem.h"
 #include "value.h"
 
-#define _FREE_ARRAY(type, ptr, cap) reallocate(ptr, cap * sizeof(type), 0)
 #define _CALL_ARRAY_METHOD(type, name, ...)                                    \
   _ARRAY_METHOD_NAME(type, name)(self __VA_OPT__(, ) __VA_ARGS__)
 #define _ARRAY_METHOD_NAME(type, b) type##Array_##b
@@ -49,7 +48,7 @@
   _force_inline size_t _ARRAY_METHOD(type, len) { return self->len; }          \
                                                                                \
   _force_inline void _ARRAY_METHOD(type, free) {                               \
-    _FREE_ARRAY(type, self->data, self->cap);                                  \
+    MFREE_ARRAY(type, self->data, self->cap);                                  \
     _CALL_ARRAY_METHOD(type, init);                                            \
   }
 

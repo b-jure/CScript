@@ -81,9 +81,9 @@ static _force_inline uint8_t double_to_str(char** str, double dbl)
     static char buffer[30] = {0};
     uint8_t     len;
     len = snprintf(buffer, 30, "%f", dbl);
-    /* Trim excess zeroes */
+    /* Trim excess zeroes and the floating point '.' if no fractional part */
     for(uint8_t i = len - 1; i > 0; i--) {
-        if(buffer[i] == '0') {
+        if(buffer[i] == '0' || buffer[i] == '.') {
             len--;
         }
     }
@@ -94,8 +94,8 @@ static _force_inline uint8_t double_to_str(char** str, double dbl)
 static ObjString* concatenate(VM* vm, Value a, Value b)
 {
     Value  value[2] = {a, b};
-    size_t len[2]   = {0};
-    char*  str[2]   = {0};
+    size_t len[2] = {0};
+    char*  str[2] = {0};
 
     for(int i = 0; i < 2; i++) {
 #ifdef THREADED_CODE
@@ -178,15 +178,15 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
 VM* VM_new(void)
 {
     VM* vm = NULL;
-    vm     = MALLOC(sizeof(VM));
+    vm = MALLOC(sizeof(VM));
     VM_init(vm);
     return vm;
 }
 
 void VM_init(VM* vm)
 {
-    vm->chunk   = NULL;
-    vm->ip      = NULL;
+    vm->chunk = NULL;
+    vm->ip = NULL;
     vm->objects = NULL;
     stack_reset(vm);
 }
@@ -380,7 +380,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
     }
 
     vm->chunk = &chunk;
-    vm->ip    = vm->chunk->code.data;
+    vm->ip = vm->chunk->code.data;
 
     InterpretResult result = VM_run(vm);
 

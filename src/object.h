@@ -21,6 +21,7 @@ struct Obj {
 struct ObjString {
   Obj obj;
   size_t len;
+  UInt hash;
   char storage[];
 };
 

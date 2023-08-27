@@ -27,6 +27,16 @@ char *strncopy(const char *src, UInt len);
     }                                                                          \
   } while (false)
 
+/* Wrapper around reallocate, frees the array at 'ptr' of type 'type' */
+#define MFREE_ARRAY(type, ptr, cap) reallocate(ptr, cap * sizeof(type), 0)
+
+/* Returns the new array capacity */
+#define GROW_ARRAY_CAPACITY(cap) ((cap) < 8 ? 8 : (cap)*2)
+
+/* Grows the array at 'ptr' to 'new_cap' */
+#define GROW_ARRAY(type, ptr, old_cap, new_cap)                                \
+  (type *)reallocate(ptr, sizeof(type) * (old_cap), sizeof(type) * (new_cap))
+
 /* Extracts the byte at the 'offset' from 'x' */
 #define BYTE(x, offset) (((x) >> (offset * 8)) & 0xff)
 

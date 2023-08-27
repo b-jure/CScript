@@ -90,6 +90,7 @@ static char* File_read(const char* path)
 int main(int argc, const char* argv[])
 {
     VM* vm = VM_new();
+    srand(rand());
 
     if(argc == 1) {
         repl(vm);

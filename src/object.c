@@ -1,25 +1,28 @@
 #include "mem.h"
 #include "object.h"
+#include "xxhash.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #define ALLOC_OBJ(vm, object, type) ((object*)Object_new((vm), sizeof(object), type))
-
+#define HASH_STRING(string)         hashstr((string)->storage, (string)->len)
 #define ALLOC_STRING(vm, len)                                                            \
     ((ObjString*)Object_new((vm), sizeof(ObjString) + (len) + 1, OBJ_STRING))
 
 static _force_inline void ObjString_free(ObjString* objstr);
+static _force_inline UInt hashstr(const char* str, size_t len);
 
 static _force_inline Obj* Object_new(VM* vm, size_t size, ObjType type)
 {
     /* Allocate a new object */
-    Obj* object  = MALLOC(size);
+    Obj* object = MALLOC(size);
     object->type = type;
 
     /* Add the object to the intrusive list */
     if(vm->objects != NULL) {
         vm->objects->next = vm->objects;
-        vm->objects       = object;
+        vm->objects = object;
     } else {
         vm->objects = object;
     }
@@ -64,10 +67,15 @@ void Obj_free(Obj* object)
     }
 }
 
+static _force_inline UInt hashstr(const char* str, size_t len)
+{
+    return XXH64(str, len, 31);
+}
+
 static _force_inline ObjString* ObjString_alloc(VM* vm, UInt len)
 {
     ObjString* string = ALLOC_STRING(vm, len);
-    string->len       = len;
+    string->len = len;
     return string;
 }
 
@@ -76,6 +84,7 @@ ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
     ObjString* string = ObjString_alloc(vm, len);
     memcpy(string->storage, chars, len);
     string->storage[len] = '\0';
+    string->hash = HASH_STRING(string);
     return string;
 }
 
@@ -86,10 +95,11 @@ ObjString* ObjString_from_concat(
     const char* right,
     size_t      rlen)
 {
-    ObjString* string = ALLOC_STRING(vm, llen + rlen);
+    ObjString* string = ObjString_alloc(vm, llen + rlen);
     memcpy(string->storage, left, llen);
     memcpy(string->storage + llen, right, rlen);
-    string->storage[(string->len = llen + rlen)] = '\0';
+    string->storage[string->len] = '\0';
+    string->hash = HASH_STRING(string);
     return string;
 }
 

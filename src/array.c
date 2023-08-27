@@ -1,18 +1,15 @@
 #include "array.h"
+#include "hashtable.h"
 #include "mem.h"
 
 #include <stdlib.h>
-
-#define GROW_CAPACITY(cap) ((cap) < 8 ? 8 : (cap)*2)
-#define GROW_ARRAY(type, ptr, old_cap, new_cap)                                          \
-    (type*)reallocate(ptr, sizeof(type) * (old_cap), sizeof(type) * (new_cap))
 
 #define DEFINE_ARRAY(type)                                                               \
     uint32_t _ARRAY_METHOD(type, push, type value)                                       \
     {                                                                                    \
         if(self->cap <= self->len) {                                                     \
             size_t old_cap = self->cap;                                                  \
-            self->cap      = GROW_CAPACITY(old_cap);                                     \
+            self->cap      = GROW_ARRAY_CAPACITY(old_cap);                               \
                                                                                          \
             if(_unlikely(self->cap >= UINT32_MAX)) {                                     \
                 exit(EXIT_FAILURE);                                                      \
@@ -39,11 +36,8 @@
         type  retval = self->data[index];                                                \
         memmove(dest, src, self->len - index);                                           \
         return retval;                                                                   \
-    }                                                                                    \
-                                                                                         \
-/* Instructions array */
-DEFINE_ARRAY(Byte)
-/* Line array */
-DEFINE_ARRAY(UInt)
-/* Constants array */
-DEFINE_ARRAY(Value)
+    }
+
+DEFINE_ARRAY(Byte);  /* Instructions array */
+DEFINE_ARRAY(UInt);  /* Line array */
+DEFINE_ARRAY(Value); /* Constants array */

@@ -8,6 +8,7 @@ set(SRCDIR ${CMAKE_SOURCE_DIR}/src)
 set(CFLAGS -Wall -Werror -Wextra -Wpedantic -save-temps)
 set(OPTS -O3)
 set(SANITIZER_FLAGS -fsanitize=address -fsanitize=undefined)
+set(DEPDIR ${CMAKE_SOURCE_DIR}/dependencies)
 set(SRCFILES
     ${SRCDIR}/mem.c
     ${SRCDIR}/main.c
@@ -23,6 +24,7 @@ set(SRCFILES
 
 add_executable(${BIN} ${SRCFILES})
 target_include_directories(${BIN} PRIVATE ${SRCDIR})
+target_link_libraries(${BIN} PRIVATE ${DEPDIR}/libxxhash.a)
 target_compile_options(${BIN} PRIVATE ${CLFAGS} ${SANITIZER_FLAGS} -flto -g)
 target_link_options(${BIN} PRIVATE ${SANITIZER_FLAGS})
 
