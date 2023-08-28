@@ -3,7 +3,6 @@
 
 #include "common.h"
 #include "object.h"
-#include "xxhash.h"
 
 typedef struct {
   ObjString *key;
@@ -19,7 +18,9 @@ typedef struct {
 } HashTable;
 
 void HashTable_init(HashTable *table);
-void HashTable_free(HashTable *table);
 bool HashTable_insert(HashTable *table, ObjString *key, Value value);
+bool HashTable_remove(HashTable *table, ObjString *key);
+bool HashTable_get(HashTable *table, ObjString *key, Value *out);
+void HashTable_free(HashTable *table);
 
 #endif
