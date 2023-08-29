@@ -106,6 +106,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
             &&vnumber, /* VAL_NUMBER */
             &&vnil,    /* VAL_NIL */
             &&vobj,    /* VAL_OBJ */
+            NULL,      /* VAL_EMPTY */
         };
 
         goto* jump_table[value[i].type];
@@ -138,6 +139,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
                 str[i] = AS_CSTRING(value[i]);
                 len[i] = AS_STRING(value[i])->len;
                 break;
+            case VAL_EMPTY:
             default:
                 _unreachable;
         }
@@ -189,6 +191,7 @@ void VM_init(VM* vm)
     vm->ip = NULL;
     vm->objects = NULL;
     stack_reset(vm);
+    HashTable_init(&vm->strings);
 }
 
 static InterpretResult VM_run(VM* vm)
@@ -393,6 +396,7 @@ void VM_free(VM* vm)
     if(_likely(vm->chunk != NULL)) {
         Chunk_free(vm->chunk);
     }
+    HashTable_free(&vm->strings);
     MFREE_LIST(vm->objects, Obj_free);
     MFREE(vm, sizeof(VM));
 }

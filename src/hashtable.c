@@ -1,6 +1,6 @@
-#include "array.h"
 #include "hashtable.h"
 #include "mem.h"
+#include "object.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,9 +10,10 @@
 #define TABLE_MAX_LOAD                     0.50
 #define TABLE_MAX_SIZE                     prime_table[PRIME_TABLE_LEN - 1]
 #define QUADRATIC_PROBE(hash, i, capacity) (((hash) + ((i) * (i))) % capacity)
-#define IS_TOMBSTONE(value)                IS_BOOL((value))
+#define IS_TOMBSTONE(entry)                IS_BOOL(entry->value)
+#define PLACE_TOMBSTONE(entry)             (entry->value = BOOL_VAL(true))
 #define INSERTS_UNTIL_EXPAND(table)                                                      \
-    ((UInt)((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap)
+    ((UInt)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
 
 /* List of possible table sizes up to the 2^31 - 1, they are all
  * prime numbers, that is because using open addressing with quadratic probing and
@@ -47,30 +48,45 @@ static _force_inline size_t get_prime_capacity(uint8_t old_prime)
             __func__);
         exit(EXIT_FAILURE);
     } else {
-        return prime_table[old_prime + 1];
+        return prime_table[old_prime];
     }
 }
 
-static _force_inline Entry* Entry_find(Entry* entries, UInt len, ObjString* key)
+static _force_inline Entry* Entry_find(Entry* entries, UInt len, Value key)
 {
-    UInt i = 0;
-    UInt index = key->hash % len;
-    while(true) {
+    UInt   i = 0;
+    Hash   hash = Value_hash(key);
+    UInt   index = hash % len;
+    UInt   start_index = index;
+    Entry* tombstone = NULL;
+
+    do {
         Entry* entry = &entries[index];
-        if(entry->key == key || (entry->key == NULL && !IS_TOMBSTONE(entry->value))) {
+
+        if(IS_EMPTY(entry->key)) {
+            if(!IS_TOMBSTONE(entry)) {
+                return (tombstone ? tombstone : entry);
+            } else if(tombstone == NULL) {
+                tombstone = entry;
+            }
+        } else if(Value_eq(key, entry->key)) {
             return entry;
         }
+
         ++i;
-        index = QUADRATIC_PROBE(key->hash, i, len);
-    }
+        index = QUADRATIC_PROBE(hash, i, len);
+    } while(_likely(start_index != index));
+
+    /* We did a cycle so we have a tombstone */
+    return tombstone;
 }
 
-/* Rehash all the keys in the 'from' into 'to' */
-static _force_inline void HashTable_rehash(HashTable* from, HashTable* to)
+/* Rehash all the keys from the table 'from' into the table 'to' */
+static _force_inline void HashTable_into(HashTable* from, HashTable* to)
 {
     for(UInt i = 0; i < from->cap; i++) {
         Entry* entry = &from->entries[i];
-        if(entry->key != NULL) {
+        if(!IS_EMPTY(entry->key)) {
             HashTable_insert(to, entry->key, entry->value);
         }
     }
@@ -86,10 +102,10 @@ static _force_inline double HashTable_lf(HashTable* table)
 static _force_inline void HashTable_expand(HashTable* table)
 {
     UInt   new_cap = GROW_TABLE_CAPACITY(table->prime++);
-    Entry* entries = MALLOC(new_cap);
-    for(UInt i = 0; i < table->cap; i++) {
-        entries[i].key = NULL;
-        entries[i].value = NIL_VAL;
+    Entry* entries = ALLOC_ARRAY(Entry, new_cap);
+    for(UInt i = 0; i < new_cap; i++) {
+        entries[i].key = EMPTY_VAL;
+        entries[i].value = EMPTY_VAL;
     }
 
     for(UInt i = 0; i < table->cap; i++) {
@@ -101,21 +117,25 @@ static _force_inline void HashTable_expand(HashTable* table)
         *dest = *entry;
     }
 
-    MFREE_ARRAY(Entry, table->entries, table->cap);
+    if(table->entries != NULL) {
+        MFREE_ARRAY(Entry, table->entries, table->cap);
+    }
+
     table->entries = entries;
     table->cap = new_cap;
+    table->left = INSERTS_UNTIL_EXPAND(table);
 }
 
 /* Return 'true' only when we insert the whole key/value pair,
  * otherwise change the value of the existing key and return false */
-bool HashTable_insert(HashTable* table, ObjString* key, Value value)
+bool HashTable_insert(HashTable* table, Value key, Value value)
 {
     if(table->left == 0) {
         HashTable_expand(table);
     }
 
     Entry* entry = Entry_find(table->entries, table->cap, key);
-    bool   new_key = entry->key == NULL;
+    bool   new_key = IS_EMPTY(entry->key);
 
     if(new_key) {
         table->left--;
@@ -127,29 +147,67 @@ bool HashTable_insert(HashTable* table, ObjString* key, Value value)
     return new_key;
 }
 
-bool HashTable_remove(HashTable* table, ObjString* key)
+bool HashTable_remove(HashTable* table, Value key)
 {
     Entry* entry = Entry_find(table->entries, table->cap, key);
 
-    if(entry == NULL) {
+    if(IS_EMPTY(entry->key)) {
         return false;
     }
 
-    entry->key = NULL;
-    entry->value = NIL_VAL;
+    entry->key = EMPTY_VAL;
+    PLACE_TOMBSTONE(entry);
+
     table->len--;
     table->left++;
     return true;
 }
 
-bool HashTable_get(HashTable* table, ObjString* key, Value* out)
+/* NOTE: This is used only for VM strings table */
+ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash)
+{
+    if(table->len == 0) {
+        return NULL;
+    }
+
+    UInt i = 0;
+    UInt index = hash % table->cap;
+    UInt start_index = index;
+
+    do {
+        Entry* entry = &table->entries[index];
+
+        if(IS_EMPTY(entry->key)) {
+            /* Maybe omit tombstone check if we are not deleting */
+            if(!IS_TOMBSTONE(entry)) {
+                return NULL;
+            }
+        } else {
+            ObjString* string = AS_STRING(entry->key);
+
+            if(string->len == len && string->hash == hash &&
+               memcmp(string->storage, str, len) == 0)
+            {
+                return string;
+            }
+        }
+
+        ++i;
+        index = QUADRATIC_PROBE(hash, i, len);
+    } while(_likely(start_index != index));
+
+    return NULL;
+}
+
+bool HashTable_get(HashTable* table, Value key, Value* out)
 {
     if(table->len == 0) {
         return false;
     }
 
     Entry* entry = Entry_find(table->entries, table->cap, key);
-    if(entry == NULL) {
+
+    if(IS_EMPTY(entry->key)) {
         return false;
     }
 

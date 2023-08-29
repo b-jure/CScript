@@ -2,10 +2,10 @@
 #define __SKOOMA_HASHTABLE_H__
 
 #include "common.h"
-#include "object.h"
+#include "value.h"
 
 typedef struct {
-  ObjString *key;
+  Value key;
   Value value;
 } Entry;
 
@@ -18,9 +18,11 @@ typedef struct {
 } HashTable;
 
 void HashTable_init(HashTable *table);
-bool HashTable_insert(HashTable *table, ObjString *key, Value value);
-bool HashTable_remove(HashTable *table, ObjString *key);
-bool HashTable_get(HashTable *table, ObjString *key, Value *out);
+bool HashTable_insert(HashTable *table, Value key, Value value);
+bool HashTable_remove(HashTable *table, Value key);
+ObjString *HashTable_get_intern(HashTable *table, const char *str, size_t len,
+                                uint64_t hash);
+bool HashTable_get(HashTable *table, Value key, Value *out);
 void HashTable_free(HashTable *table);
 
 #endif

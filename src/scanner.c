@@ -28,9 +28,9 @@ static TokenType check_keyword(
 Scanner Scanner_new(const char* source)
 {
     return (Scanner){
-        .start   = source,
+        .start = source,
         .current = source,
-        .line    = 1,
+        .line = 1,
     };
 }
 
@@ -289,20 +289,20 @@ static void Scanner_skipws(Scanner* scanner)
 static Token Token_new(Scanner* scanner, TokenType type)
 {
     Token token;
-    token.type  = type;
+    token.type = type;
     token.start = scanner->start;
-    token.len   = scanner->current - scanner->start;
-    token.line  = scanner->line;
+    token.len = scanner->current - scanner->start;
+    token.line = scanner->line;
     return token;
 }
 
 static Token Token_error(Scanner* scanner, const char* err)
 {
     Token token;
-    token.type  = TOK_ERROR;
+    token.type = TOK_ERROR;
     token.start = err;
-    token.len   = strlen(err);
-    token.line  = scanner->line;
+    token.len = strlen(err);
+    token.line = scanner->line;
     return token;
 }
 

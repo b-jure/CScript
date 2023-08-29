@@ -14,6 +14,13 @@ char *strncopy(const char *src, UInt len);
  * amount */
 #define MALLOC(bytes) reallocate(NULL, 0, bytes)
 
+/* Wrapper around reallocate, allocates a new array */
+#define ALLOC_ARRAY(type, size) (type *)reallocate(NULL, 0, sizeof(type) * size)
+
+/* Wrapper around reallocate, realloc's array at 'ptr' */
+#define REALLOC_ARRAY(type, ptr, old_cap, new_cap)                             \
+  (type *)reallocate((ptr), old_cap * sizeof(type), new_cap * sizeof(type))
+
 /* Wrapper around reallocate, frees the 'bytes' pointed by 'ptr' */
 #define MFREE(ptr, bytes) reallocate((ptr), bytes, 0)
 

@@ -2,6 +2,7 @@
 #define __SKOOMA_VALUE_H__
 
 #include "common.h"
+#include "hash.h"
 
 #define AS_OBJ(value) ((value).as.object)
 #define OBJ_TYPE(value) (AS_OBJ(value)->type)
@@ -19,7 +20,10 @@
 #define NUMBER_VAL(value) ((Value){.type = VAL_NUMBER, {.number = value}})
 
 #define IS_NIL(value) ((value).type == VAL_NIL)
-#define NIL_VAL ((Value){.type = VAL_NIL, {.number = 0}})
+#define NIL_VAL ((Value){.type = VAL_NIL, {0}})
+
+#define IS_EMPTY(value) ((value).type == VAL_EMPTY)
+#define EMPTY_VAL ((Value){.type = VAL_EMPTY, {0}})
 
 typedef struct Obj Obj;
 typedef struct ObjString ObjString;
@@ -29,6 +33,7 @@ typedef enum {
   VAL_NUMBER,
   VAL_NIL,
   VAL_OBJ,
+  VAL_EMPTY,
 } ValueType;
 
 typedef struct {
@@ -42,5 +47,6 @@ typedef struct {
 
 void Value_print(Value value);
 bool Value_eq(Value a, Value b);
+Hash Value_hash(Value value);
 
 #endif
