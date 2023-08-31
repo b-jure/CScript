@@ -5,15 +5,20 @@
 #include "hashtable.h"
 #include "value.h"
 
-/* Default 1 MiB stack size */
-#define STACK_MAX ((1 << 20) / sizeof(Value))
+/* Mebibytes */
+#define MIB(x) (x << 20)
+/* Stack size */
+#define STACK_MAX (MIB(1) / sizeof(Value))
+
+/* @TODO: Make stack size modifiable inside interpreter */
 
 typedef struct {
   Chunk *chunk;           /* Chunk being interpreted */
   Byte *ip;               /* Instruction pointer */
   Value stack[STACK_MAX]; /* Stack */
   Value *sp;              /* Stack pointer */
-  HashTable strings;      /* HashSet of strings (string interning) */
+  HashTable globals;      /* Global variables */
+  HashTable strings;      /* Strings (interning) */
   Obj *objects;           /* List of allocated object */
 } VM;
 

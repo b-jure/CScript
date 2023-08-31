@@ -1,6 +1,7 @@
 #ifndef __SKOOMA_OBJECT_H__
 #define __SKOOMA_OBJECT_H__
 
+#include "hash.h"
 #include "common.h"
 #include "value.h"
 #include "vmachine.h"
@@ -21,7 +22,7 @@ struct Obj {
 struct ObjString {
   Obj obj;
   size_t len;
-  uint64_t hash;
+  Hash hash;
   char storage[];
 };
 

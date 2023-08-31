@@ -5,25 +5,35 @@
 #include "common.h"
 #include "value.h"
 
+#define OPCODE_N ((uint32_t)(OP_RET + 1))
+
 typedef enum {
-  OP_CONST = 0,     /* Store 8-bit Value index */
-  OP_CONSTL,        /* Store 24-bit Value index */
-  OP_TRUE,          /* Store true (bool) literal */
-  OP_FALSE,         /* Store false (bool) literal */
-  OP_NIL,           /* Store nil (NULL) literal */
-  OP_NEG,           /* Unary negation */
-  OP_ADD,           /* Binary addition */
-  OP_SUB,           /* Binary subtraction */
-  OP_MUL,           /* Binary multiplication */
-  OP_DIV,           /* Binary division */
-  OP_NOT,           /* Unary not */
-  OP_NOT_EQUAL,     /* Binary 'not equal' comparison */
-  OP_EQUAL,         /* Binary 'equality' comparison */
-  OP_GREATER,       /* Binary 'greater than' comparison */
-  OP_GREATER_EQUAL, /* Binary 'greater than or equal to' comparison */
-  OP_LESS,          /* Binary 'less than' comparison */
-  OP_LESS_EQUAL,    /* BInary 'less than or equal to' comparison */
-  OP_RET,           /* Return instruction */
+  OP_CONST = 0,     /* Pop constant off the stack (8-bit idx)*/
+  OP_CONSTL,        /* Pop constant off the stack (24-bit idx) */
+  OP_TRUE,          /* Pop true literal of the stack */
+  OP_FALSE,         /* Pop false literal of the stack */
+  OP_NIL,           /* Pop nil literal of the stack */
+  OP_NEG,           /* Pop the value off the stack and negate it */
+  OP_ADD,           /* [Pop two values of the stack and] add them */
+  OP_SUB,           /* -||- subtract them */
+  OP_MUL,           /* -||- multiply them */
+  OP_DIV,           /* -||- divide them */
+  OP_NOT,           /* Pop the value of the stack and apply logical negation */
+  OP_NOT_EQUAL,     /* [Pop two values of the stack and] check for inequality */
+  OP_EQUAL,         /* -||- check for equality */
+  OP_GREATER,       /* -||- check if left greater than right */
+  OP_GREATER_EQUAL, /* -||- check if left greater or equal than right */
+  OP_LESS,          /* -||- check if left is less than right */
+  OP_LESS_EQUAL,    /* -||- check if left is less or equal than right */
+  OP_PRINT,         /* Pop the value off the stack and print it */
+  OP_POP,           /* Pop the value of the stack */
+  OP_DEFINE_GLOBAL, /* Pop global value off the stack (8-bit idx) and store it
+                       in chunk table for globals */
+  OP_DEFINE_GLOBALL, /* Pop global value off the stack (24-bit idx) and store it
+                        in chunk table for globals */
+  OP_GET_GLOBAL,
+  OP_GET_GLOBALL,
+  OP_RET, /* Stop interpreting ? */
 } OpCode;
 
 typedef UIntArray LineArray;
@@ -37,7 +47,10 @@ typedef struct {
 void Chunk_init(Chunk *chunk);
 void Chunk_free(Chunk *chunk);
 void Chunk_write(Chunk *chunk, uint8_t byte, UInt line);
-void Chunk_write_constant(Chunk *chunk, Value constant, UInt line);
+void Chunk_write_constant(Chunk *chunk, UInt line, UInt idx);
+void Chunk_write_global(Chunk *chunk, UInt idx, UInt line);
+void Chunk_write_global_get(Chunk *chunk, UInt idx, UInt line);
+UInt Chunk_make_constant(Chunk *chunk, Value value);
 UInt Chunk_getline(Chunk *chunk, UInt index);
 void Chunk_free(Chunk *chunk);
 

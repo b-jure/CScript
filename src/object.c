@@ -1,4 +1,3 @@
-#include "hash.h"
 #include "mem.h"
 #include "object.h"
 
@@ -14,13 +13,13 @@ static _force_inline void ObjString_free(ObjString* objstr);
 static _force_inline Obj* Object_new(VM* vm, size_t size, ObjType type)
 {
     /* Allocate a new object */
-    Obj* object = MALLOC(size);
+    Obj* object  = MALLOC(size);
     object->type = type;
 
     /* Add the object to the intrusive list */
     if(vm->objects != NULL) {
         vm->objects->next = vm->objects;
-        vm->objects = object;
+        vm->objects       = object;
     } else {
         vm->objects = object;
     }
@@ -63,13 +62,13 @@ Hash Obj_hash(Value value)
 static _force_inline ObjString* ObjString_alloc(VM* vm, UInt len)
 {
     ObjString* string = ALLOC_STRING(vm, len);
-    string->len = len;
+    string->len       = len;
     return string;
 }
 
 ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
 {
-    uint64_t   hash = Hash_string(chars, len);
+    uint64_t   hash     = Hash_string(chars, len);
     ObjString* interned = HashTable_get_intern(&vm->strings, chars, len, hash);
 
     if(interned) {
@@ -79,7 +78,7 @@ ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
 
     ObjString* string = ObjString_alloc(vm, len);
     memcpy(string->storage, chars, len);
-    string->hash = hash;
+    string->hash         = hash;
     string->storage[len] = '\0';
 
     HashTable_insert(&vm->strings, OBJ_VAL(string), NIL_VAL);
@@ -99,7 +98,7 @@ ObjString* ObjString_from_concat(
     memcpy(buffer + llen, right, rlen);
     buffer[len] = '\0';
 
-    Hash       hash = Hash_string(buffer, len);
+    Hash       hash     = Hash_string(buffer, len);
     ObjString* interned = HashTable_get_intern(&vm->strings, buffer, len, hash);
 
     /* Return very fast in case string is interned */
@@ -111,7 +110,7 @@ ObjString* ObjString_from_concat(
     ObjString* string = ObjString_alloc(vm, len);
     memcpy(string->storage, buffer, string->len);
     string->storage[string->len] = '\0';
-    string->hash = hash;
+    string->hash                 = hash;
 
     HashTable_insert(&vm->strings, OBJ_VAL(string), NIL_VAL);
     return string;

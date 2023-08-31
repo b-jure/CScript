@@ -69,6 +69,8 @@ typedef uint32_t UInt;
 #define _unlikely(cond) __unlikely(cond)
 #define _unused __unused
 #define _unreachable __unreachable
+
+#define SK_STATIC_INLINE(ret) static _force_inline ret
 /* ------------------------------------------------------------------------- */
 
 #endif

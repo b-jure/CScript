@@ -1,3 +1,4 @@
+#include "common.h"
 #include "compiler.h"
 #include "object.h"
 
@@ -22,46 +23,92 @@ static Parser parser;
 #define PANIC_BIT 1
 
 /* Parser 'state' bit manipulation function-like macro definitions. */
-#define Parser_state_set_err()   BIT_SET(parser.state, ERROR_BIT)
-#define Parser_state_set_panic() BIT_SET(parser.state, PANIC_BIT)
-#define Parser_state_iserr()     BIT_CHECK(parser.state, ERROR_BIT)
-#define Parser_state_ispanic()   BIT_CHECK(parser.state, PANIC_BIT)
-#define Parser_state_clear()     parser.state = 0
+#define Parser_state_set_err()     BIT_SET(parser.state, ERROR_BIT)
+#define Parser_state_clear_err()   BIT_CLEAR(parser.state, ERROR_BIT)
+#define Parser_state_set_panic()   BIT_SET(parser.state, PANIC_BIT)
+#define Parser_state_clear_panic() BIT_CLEAR(parser.state, PANIC_BIT)
+#define Parser_state_iserr()       BIT_CHECK(parser.state, ERROR_BIT)
+#define Parser_state_ispanic()     BIT_CHECK(parser.state, PANIC_BIT)
+#define Parser_state_clear()       parser.state = 0
+
+#define Parser_check(token_type) (parser.current.type == token_type)
 
 /* Chunk being currently compiled, see 'compile()' */
 static Chunk* compiling_chunk;
-
 /* Returns currently stored chunk in 'compiling_chunk' global. */
-static Chunk* current_chunk();
-/* Inits the parser */
-static void Parser_init(Scanner* scanner);
-/* Helper function for invoking parser errors. */
-static void Parser_error_at(Token* token, const char* error);
-/* Invokes 'Parser_error_at' function with 'token' parameter being
- * the token in the 'parser.current' field. */
-static void Parser_error(const char* error);
+SK_STATIC_INLINE(Chunk*) current_chunk();
+
 /* Advances the parser until token type isn't 'TOK_ERROR',
  * invoking 'Parser_error' each time the token type is 'TOK_ERROR'. */
-static void Parser_advance(Scanner* scanner);
-/* If current token matches the 'type', then the parser advances,
- * otherwise 'Parser_error' is invoked with the 'error' message. */
-static void Parser_expect(Scanner* scanner, TokenType type, const char* error);
+SK_STATIC_INLINE(void) Parser_advance(Scanner* scanner);
+/* Invokes 'Parser_error_at' function with 'token' parameter being
+ * the token in the 'parser.current' field. */
+SK_STATIC_INLINE(void) Parser_error(const char* error);
 
-static void     emit_byte(Byte byte);
-static uint32_t emit_constant(Value constant);
-static void     emit_return(void);
-static void     compile_end(void);
-static void     parse_number(VM* vm, Scanner* scanner);
-static void     parse_string(VM* vm, Scanner* scanner);
-static void     parse_precedence(VM* vm, Scanner* scanner, Precedence prec);
-static void     parse_grouping(VM* vm, Scanner* scanner);
-static void     parse_binary(VM* vm, Scanner* scanner);
-static void     parse_unary(VM* vm, Scanner* scanner);
-static void     parse_ternarycond(VM* vm, Scanner* scanner);
-static void     parse_literal(VM* vm, Scanner* scanner);
-static void     parse_expression(VM* vm, Scanner* scanner);
+/* Internal parse functions */
+SK_STATIC_INLINE(void) parse_number(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(void) parse_string(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(UInt) parse_varname(VM* vm, Scanner* scanner, const char* errmsg);
+SK_STATIC_INLINE(void) parse_precedence(VM* vm, Scanner* scanner, Precedence prec);
+SK_STATIC_INLINE(void) parse_grouping(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(void) parse_ternarycond(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(void) parse_expression(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(void) parse_declaration(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(void) parse_declaration_variable(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(void) parse_statement(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(void) parse_statement_print(VM* vm, Scanner* scanner);
+SK_STATIC_INLINE(void) parse_variable(VM* vm, Scanner* scanner);
+// These below use local labels, can't inline them
+static void parse_binary(VM* vm, Scanner* scanner);
+static void parse_unary(VM* vm, Scanner* scanner);
+static void parse_literal(VM* vm, Scanner* scanner);
 
-static void Parser_init(Scanner* scanner)
+/*========================== EMIT =========================*/
+
+SK_STATIC_INLINE(UInt) make_constant(Value constant)
+{
+    if(current_chunk()->constants.len <= MAXBYTES(3)) {
+        return Chunk_make_constant(current_chunk(), constant);
+    } else {
+        Parser_error("Too many constants in one chunk.");
+        return 0;
+    }
+}
+
+SK_STATIC_INLINE(UInt) make_constant_identifier(VM* vm, Token* name)
+{
+    return make_constant(OBJ_VAL(ObjString_from(vm, name->start, name->len)));
+}
+
+SK_STATIC_INLINE(void) emit_byte(Byte byte)
+{
+    Chunk_write(current_chunk(), byte, parser.previous.line);
+}
+
+SK_STATIC_INLINE(void) emit_constant(Value constant)
+{
+    Chunk_write_constant(current_chunk(), make_constant(constant), parser.previous.line);
+}
+
+SK_STATIC_INLINE(void) emit_return(void)
+{
+    emit_byte(OP_RET);
+}
+
+SK_STATIC_INLINE(void) emit_global(UInt idx)
+{
+    Chunk_write_global(current_chunk(), idx, parser.previous.line);
+}
+
+SK_STATIC_INLINE(void) emit_global_get(VM* vm, Token* name)
+{
+    UInt idx = make_constant_identifier(vm, name);
+    emit_byte(OP_GET_GLOBAL);
+}
+
+/*========================= PARSER ========================*/
+
+SK_STATIC_INLINE(void) Parser_init(Scanner* scanner)
 {
     Parser_state_clear();
     Parser_advance(scanner);
@@ -91,7 +138,7 @@ static void Parser_error(const char* error)
     Parser_error_at(&parser.current, error);
 }
 
-static void Parser_advance(Scanner* scanner)
+SK_STATIC_INLINE(void) Parser_advance(Scanner* scanner)
 {
     parser.previous = parser.current;
 
@@ -105,27 +152,52 @@ static void Parser_advance(Scanner* scanner)
     }
 }
 
-static void Parser_expect(Scanner* scanner, TokenType type, const char* error)
+static void Parser_sync(Scanner* scanner)
 {
-    if(parser.current.type == type) {
+    // @ Create precomputed goto table
+    Parser_state_clear_panic();
+
+    while(parser.current.type != TOK_EOF) {
+        if(parser.previous.type == TOK_SEMICOLON) {
+            return;
+        }
+
+        switch(parser.current.type) {
+            case TOK_FOR:
+            case TOK_FN:
+            case TOK_VAR:
+            case TOK_CLASS:
+            case TOK_IF:
+            case TOK_PRINT:
+            case TOK_RETURN:
+            case TOK_WHILE:
+                return;
+            default:
+                Parser_advance(scanner);
+                break;
+        }
+    }
+}
+
+SK_STATIC_INLINE(void) Parser_expect(Scanner* scanner, TokenType type, const char* error)
+{
+    if(Parser_check(type)) {
         Parser_advance(scanner);
         return;
     }
     Parser_error(error);
 }
 
-bool compile(VM* vm, const char* source, Chunk* chunk)
+SK_STATIC_INLINE(bool) Parser_match(Scanner* scanner, TokenType type)
 {
-    Scanner scanner = Scanner_new(source);
-    compiling_chunk = chunk;
-    Parser_init(&scanner);
-    parse_expression(vm, &scanner);
-    Parser_expect(&scanner, TOK_EOF, "Expect end of expression.");
-    compile_end();
-    return !Parser_state_iserr();
+    if(!Parser_check(type)) {
+        return false;
+    }
+    Parser_advance(scanner);
+    return true;
 }
 
-static void compile_end(void)
+SK_STATIC_INLINE(void) compile_end(void)
 {
     emit_return();
 #ifdef DEBUG_PRINT_CODE
@@ -135,33 +207,23 @@ static void compile_end(void)
 #endif
 }
 
-static Chunk* current_chunk()
+bool compile(VM* vm, const char* source, Chunk* chunk)
 {
-    return compiling_chunk;
-}
+    Scanner scanner = Scanner_new(source);
+    compiling_chunk = chunk;
+    Parser_init(&scanner);
 
-/*========================== EMIT =========================*/
-
-static void emit_byte(Byte byte)
-{
-    Chunk_write(current_chunk(), byte, parser.previous.line);
-}
-
-static uint32_t emit_constant(Value constant)
-{
-    if(current_chunk()->constants.len <= MAXBYTES(3)) {
-        Chunk_write_constant(current_chunk(), constant, parser.previous.line);
-    } else {
-        Parser_error("Too many constants in one chunk.");
-        return 0;
+    while(!Parser_match(&scanner, TOK_EOF)) {
+        parse_declaration(vm, &scanner);
     }
 
-    return (uint32_t)AS_NUMBER(constant);
+    compile_end();
+    return !Parser_state_iserr();
 }
 
-static void emit_return(void)
+SK_STATIC_INLINE(Chunk) * current_chunk()
 {
-    emit_byte(OP_RET);
+    return compiling_chunk;
 }
 
 /*========================== PARSE ========================
@@ -174,69 +236,63 @@ static void emit_return(void)
  * column parse function is used in case token is inifx. Third column marks the
  * 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
-    [TOK_LPAREN]        = {parse_grouping, NULL,              PREC_NONE      },
-    [TOK_RPAREN]        = {NULL,           NULL,              PREC_NONE      },
-    [TOK_LBRACE]        = {NULL,           NULL,              PREC_NONE      },
-    [TOK_RBRACE]        = {NULL,           NULL,              PREC_NONE      },
-    [TOK_COMMA]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_DOT]           = {NULL,           NULL,              PREC_NONE      },
-    [TOK_MINUS]         = {parse_unary,    parse_binary,      PREC_TERM      },
-    [TOK_PLUS]          = {NULL,           parse_binary,      PREC_TERM      },
-    [TOK_COLON]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_SEMICOLON]     = {NULL,           NULL,              PREC_NONE      },
-    [TOK_SLASH]         = {NULL,           parse_binary,      PREC_FACTOR    },
-    [TOK_STAR]          = {NULL,           parse_binary,      PREC_FACTOR    },
-    [TOK_QMARK]         = {NULL,           parse_ternarycond, PREC_TERNARY   },
-    [TOK_BANG]          = {parse_unary,    NULL,              PREC_NONE      },
-    [TOK_BANG_EQUAL]    = {NULL,           parse_binary,      PREC_EQUALITY  },
-    [TOK_EQUAL]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_EQUAL_EQUAL]   = {NULL,           parse_binary,      PREC_EQUALITY  },
-    [TOK_GREATER]       = {NULL,           parse_binary,      PREC_COMPARISON},
-    [TOK_GREATER_EQUAL] = {NULL,           parse_binary,      PREC_COMPARISON},
-    [TOK_LESS]          = {NULL,           parse_binary,      PREC_COMPARISON},
-    [TOK_LESS_EQUAL]    = {NULL,           parse_binary,      PREC_COMPARISON},
-    [TOK_IDENTIFIER]    = {NULL,           NULL,              PREC_NONE      },
-    [TOK_STRING]        = {parse_string,   NULL,              PREC_NONE      },
-    [TOK_NUMBER]        = {parse_number,   NULL,              PREC_NONE      },
-    [TOK_AND]           = {NULL,           NULL,              PREC_NONE      },
-    [TOK_CLASS]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_ELSE]          = {NULL,           NULL,              PREC_NONE      },
-    [TOK_FALSE]         = {parse_literal,  NULL,              PREC_NONE      },
-    [TOK_FOR]           = {NULL,           NULL,              PREC_NONE      },
-    [TOK_FN]            = {NULL,           NULL,              PREC_NONE      },
-    [TOK_IF]            = {NULL,           NULL,              PREC_NONE      },
-    [TOK_NIL]           = {parse_literal,  NULL,              PREC_NONE      },
-    [TOK_OR]            = {NULL,           NULL,              PREC_NONE      },
-    [TOK_PRINT]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_RETURN]        = {NULL,           NULL,              PREC_NONE      },
-    [TOK_SUPER]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_SELF]          = {NULL,           NULL,              PREC_NONE      },
-    [TOK_TRUE]          = {parse_literal,  NULL,              PREC_NONE      },
-    [TOK_VAR]           = {NULL,           NULL,              PREC_NONE      },
-    [TOK_WHILE]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_ERROR]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_EOF]           = {NULL,           NULL,              PREC_NONE      },
+    [TOK_LPAREN]        = {parse_grouping,             NULL,              PREC_NONE      },
+    [TOK_RPAREN]        = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_LBRACE]        = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_RBRACE]        = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_COMMA]         = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_DOT]           = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_MINUS]         = {parse_unary,                parse_binary,      PREC_TERM      },
+    [TOK_PLUS]          = {NULL,                       parse_binary,      PREC_TERM      },
+    [TOK_COLON]         = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_SEMICOLON]     = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_SLASH]         = {NULL,                       parse_binary,      PREC_FACTOR    },
+    [TOK_STAR]          = {NULL,                       parse_binary,      PREC_FACTOR    },
+    [TOK_QMARK]         = {NULL,                       parse_ternarycond, PREC_TERNARY   },
+    [TOK_BANG]          = {parse_unary,                NULL,              PREC_NONE      },
+    [TOK_BANG_EQUAL]    = {NULL,                       parse_binary,      PREC_EQUALITY  },
+    [TOK_EQUAL]         = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_EQUAL_EQUAL]   = {NULL,                       parse_binary,      PREC_EQUALITY  },
+    [TOK_GREATER]       = {NULL,                       parse_binary,      PREC_COMPARISON},
+    [TOK_GREATER_EQUAL] = {NULL,                       parse_binary,      PREC_COMPARISON},
+    [TOK_LESS]          = {NULL,                       parse_binary,      PREC_COMPARISON},
+    [TOK_LESS_EQUAL]    = {NULL,                       parse_binary,      PREC_COMPARISON},
+    [TOK_IDENTIFIER]    = {parse_variable,             NULL,              PREC_NONE      },
+    [TOK_STRING]        = {parse_string,               NULL,              PREC_NONE      },
+    [TOK_NUMBER]        = {parse_number,               NULL,              PREC_NONE      },
+    [TOK_AND]           = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_CLASS]         = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_ELSE]          = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_FALSE]         = {parse_literal,              NULL,              PREC_NONE      },
+    [TOK_FOR]           = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_FN]            = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_IF]            = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_NIL]           = {parse_literal,              NULL,              PREC_NONE      },
+    [TOK_OR]            = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_PRINT]         = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_RETURN]        = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_SUPER]         = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_SELF]          = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_TRUE]          = {parse_literal,              NULL,              PREC_NONE      },
+    [TOK_VAR]           = {parse_declaration_variable, NULL,              PREC_NONE      },
+    [TOK_WHILE]         = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_ERROR]         = {NULL,                       NULL,              PREC_NONE      },
+    [TOK_EOF]           = {NULL,                       NULL,              PREC_NONE      },
 };
 
-static void parse_expression(VM* vm, Scanner* scanner)
+SK_STATIC_INLINE(void) parse_statement_expression(VM* vm, Scanner* scanner)
+{
+    parse_expression(vm, scanner);
+    Parser_expect(scanner, TOK_SEMICOLON, "Expect ';' after expression.");
+    emit_byte(OP_POP);
+}
+
+SK_STATIC_INLINE(void) parse_expression(VM* vm, Scanner* scanner)
 {
     parse_precedence(vm, scanner, PREC_ASSIGNMENT);
 }
 
-static void parse_number(_unused VM* _, _unused Scanner* __)
-{
-    double constant = strtod(parser.previous.start, NULL);
-    emit_constant(NUMBER_VAL(constant));
-}
-
-static void parse_string(_unused VM* vm, _unused Scanner* _)
-{
-    emit_constant(
-        OBJ_VAL(ObjString_from(vm, parser.previous.start + 1, parser.previous.len - 2)));
-}
-
-/* This is the entry point to Pratt parsing */
-static void parse_precedence(VM* vm, Scanner* scanner, Precedence prec)
+SK_STATIC_INLINE(void) parse_precedence(VM* vm, Scanner* scanner, Precedence prec)
 {
     Parser_advance(scanner);
     ParseFn prefix_fn = rules[parser.previous.type].prefix;
@@ -248,7 +304,7 @@ static void parse_precedence(VM* vm, Scanner* scanner, Precedence prec)
     /* Parse unary operator (prefix) or a literal */
     prefix_fn(vm, scanner);
 
-    /* Parse binary operator (inifix) if any */
+    /* Parse binary operator (inifix) with higher or equal precedence if any */
     while(prec <= rules[parser.current.type].precedence) {
         Parser_advance(scanner);
         ParseFn infix_fn = rules[parser.previous.type].infix;
@@ -256,7 +312,74 @@ static void parse_precedence(VM* vm, Scanner* scanner, Precedence prec)
     }
 }
 
-static void parse_grouping(VM* vm, Scanner* scanner)
+SK_STATIC_INLINE(void) parse_declaration(VM* vm, Scanner* scanner)
+{
+    if(Parser_match(scanner, TOK_VAR)) {
+        parse_declaration_variable(vm, scanner);
+    } else {
+        parse_statement(vm, scanner);
+    }
+
+    if(Parser_state_ispanic()) {
+        Parser_sync(scanner);
+    }
+}
+
+SK_STATIC_INLINE(void) parse_declaration_variable(VM* vm, Scanner* scanner)
+{
+    UInt index = parse_varname(vm, scanner, "Expect variable name.");
+
+    if(Parser_match(scanner, TOK_EQUAL)) {
+        parse_expression(vm, scanner);
+    } else {
+        emit_byte(OP_NIL);
+    }
+
+    Parser_expect(scanner, TOK_SEMICOLON, "Expect ';' after variable declaration.");
+    emit_global(index);
+}
+
+SK_STATIC_INLINE(UInt) parse_varname(VM* vm, Scanner* scanner, const char* errmsg)
+{
+    Parser_expect(scanner, TOK_IDENTIFIER, errmsg);
+    return make_constant_identifier(vm, &parser.previous);
+}
+
+SK_STATIC_INLINE(void) parse_statement(VM* vm, Scanner* scanner)
+{
+    if(Parser_match(scanner, TOK_PRINT)) {
+        parse_statement_print(vm, scanner);
+    } else {
+        parse_statement_expression(vm, scanner);
+    }
+}
+
+SK_STATIC_INLINE(void) parse_statement_print(VM* vm, Scanner* scanner)
+{
+    parse_expression(vm, scanner);
+    Parser_expect(scanner, TOK_SEMICOLON, "Expect ';' after value");
+    emit_byte(OP_PRINT);
+}
+
+SK_STATIC_INLINE(void) parse_number(_unused VM* _, _unused Scanner* __)
+{
+    double constant = strtod(parser.previous.start, NULL);
+    emit_constant(NUMBER_VAL(constant));
+}
+
+SK_STATIC_INLINE(void) parse_variable(VM* _, _unused Scanner* __)
+{
+    // varname(&parser.previous);
+}
+
+SK_STATIC_INLINE(void) parse_string(_unused VM* vm, _unused Scanner* _)
+{
+    emit_constant(
+        OBJ_VAL(ObjString_from(vm, parser.previous.start + 1, parser.previous.len - 2)));
+}
+
+/* This is the entry point to Pratt parsing */
+SK_STATIC_INLINE(void) parse_grouping(VM* vm, Scanner* scanner)
 {
     parse_expression(vm, scanner);
     Parser_expect(scanner, TOK_RPAREN, "Expect ')' after expression");
@@ -469,7 +592,7 @@ lteq:
 #endif
 }
 
-static void parse_ternarycond(VM* vm, Scanner* scanner)
+SK_STATIC_INLINE(void) parse_ternarycond(VM* vm, Scanner* scanner)
 {
     parse_expression(vm, scanner);
     Parser_expect(

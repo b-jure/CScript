@@ -29,10 +29,10 @@ static const UInt prime_table[] = {
 /* Init the HashTable (same as memset(table, 0, sizeof(HashTable))) */
 void HashTable_init(HashTable* table)
 {
-    table->cap = 0;
-    table->len = 0;
-    table->left = 0;
-    table->prime = 0;
+    table->cap     = 0;
+    table->len     = 0;
+    table->left    = 0;
+    table->prime   = 0;
     table->entries = NULL;
 }
 
@@ -54,11 +54,11 @@ static _force_inline size_t get_prime_capacity(uint8_t old_prime)
 
 static _force_inline Entry* Entry_find(Entry* entries, UInt len, Value key)
 {
-    UInt   i = 0;
-    Hash   hash = Value_hash(key);
-    UInt   index = hash % len;
+    UInt   i           = 0;
+    Hash   hash        = Value_hash(key);
+    UInt   index       = hash % len;
     UInt   start_index = index;
-    Entry* tombstone = NULL;
+    Entry* tombstone   = NULL;
 
     do {
         Entry* entry = &entries[index];
@@ -104,7 +104,7 @@ static _force_inline void HashTable_expand(HashTable* table)
     UInt   new_cap = GROW_TABLE_CAPACITY(table->prime++);
     Entry* entries = ALLOC_ARRAY(Entry, new_cap);
     for(UInt i = 0; i < new_cap; i++) {
-        entries[i].key = EMPTY_VAL;
+        entries[i].key   = EMPTY_VAL;
         entries[i].value = EMPTY_VAL;
     }
 
@@ -114,7 +114,7 @@ static _force_inline void HashTable_expand(HashTable* table)
             continue;
         }
         Entry* dest = Entry_find(entries, new_cap, entry->key);
-        *dest = *entry;
+        *dest       = *entry;
     }
 
     if(table->entries != NULL) {
@@ -122,8 +122,8 @@ static _force_inline void HashTable_expand(HashTable* table)
     }
 
     table->entries = entries;
-    table->cap = new_cap;
-    table->left = INSERTS_UNTIL_EXPAND(table);
+    table->cap     = new_cap;
+    table->left    = INSERTS_UNTIL_EXPAND(table);
 }
 
 /* Return 'true' only when we insert the whole key/value pair,
@@ -134,7 +134,7 @@ bool HashTable_insert(HashTable* table, Value key, Value value)
         HashTable_expand(table);
     }
 
-    Entry* entry = Entry_find(table->entries, table->cap, key);
+    Entry* entry   = Entry_find(table->entries, table->cap, key);
     bool   new_key = IS_EMPTY(entry->key);
 
     if(new_key) {
@@ -142,7 +142,7 @@ bool HashTable_insert(HashTable* table, Value key, Value value)
         table->len++;
     }
 
-    entry->key = key;
+    entry->key   = key;
     entry->value = value;
     return new_key;
 }
@@ -170,8 +170,8 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
         return NULL;
     }
 
-    UInt i = 0;
-    UInt index = hash % table->cap;
+    UInt i           = 0;
+    UInt index       = hash % table->cap;
     UInt start_index = index;
 
     do {

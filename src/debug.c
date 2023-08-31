@@ -68,6 +68,14 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_simple("OP_LESS_EQUAL", offset);
         case OP_LESS:
             return Instruction_simple("OP_LESS", offset);
+        case OP_POP:
+            return Instruction_simple("OP_POP", offset);
+        case OP_PRINT:
+            return Instruction_simple("OP_PRINT", offset);
+        case OP_DEFINE_GLOBAL:
+            return Instruction_constant("OP_DEFINE_GLOBAL", chunk, offset);
+        case OP_DEFINE_GLOBALL:
+            return Instruction_constant_long("OP_DEFINE_GLOBAL", chunk, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
