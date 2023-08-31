@@ -21,7 +21,7 @@
 
 /* This doesn't get inlined with gcc having -O3 optimizations enabled
  * this is the reason behind the force_inline attribute  */
-static _force_inline void VM_push(VM* vm, Value val)
+SK_STATIC_INLINE(void) VM_push(VM* vm, Value val)
 {
     if(_likely(vm->sp - vm->stack < STACK_MAX)) {
         *vm->sp++ = val;
@@ -31,7 +31,7 @@ static _force_inline void VM_push(VM* vm, Value val)
     }
 }
 
-static _force_inline Value VM_pop(VM* vm)
+SK_STATIC_INLINE(Value) VM_pop(VM* vm)
 {
     return *--vm->sp;
 }
@@ -50,12 +50,12 @@ void VM_error(VM* vm, const char* errfmt, ...)
 }
 
 /* NIL and FALSE are always falsey */
-static _force_inline bool isfalsey(Value value)
+SK_STATIC_INLINE(bool) isfalsey(Value value)
 {
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
-static _force_inline uint8_t bool_to_str(char** str, bool boolean)
+SK_STATIC_INLINE(uint8_t) bool_to_str(char** str, bool boolean)
 {
     if(boolean) {
         *str = "true";
@@ -65,7 +65,7 @@ static _force_inline uint8_t bool_to_str(char** str, bool boolean)
     return sizeof("false") - 1;
 }
 
-static _force_inline uint8_t nil_to_str(char** str)
+SK_STATIC_INLINE(uint8_t) nil_to_str(char** str)
 {
     *str = "nil";
     return sizeof("nil") - 1;
@@ -76,7 +76,7 @@ static _force_inline uint8_t nil_to_str(char** str)
  * function is only safe for usage inside a concatenate function.
  * Additionally concatenate function guarantees there is only one possible number Value,
  * therefore there is no need for two static buffers inside of it. */
-static _force_inline uint8_t double_to_str(char** str, double dbl)
+SK_STATIC_INLINE(uint8_t) double_to_str(char** str, double dbl)
 {
     static char buffer[30] = {0};
     uint8_t     len        = snprintf(buffer, 30, "%f", dbl);
@@ -208,7 +208,12 @@ static InterpretResult VM_run(VM* vm)
 #define VM_BREAK         break
 
     while(true) {
+#ifdef THREADED_CODE
+    #include "jmptable.h"
+#endif
 #ifdef DEBUG_TRACE_EXECUTION
+    #undef VM_BREAK
+    #define VM_BREAK continue
         printf("           ");
         for(Value* ptr = vm->stack; ptr < vm->sp; ptr++) {
             printf("[");
@@ -217,9 +222,6 @@ static InterpretResult VM_run(VM* vm)
         }
         printf("\n");
         Instruction_debug(vm->chunk, (UInt)(vm->ip - vm->chunk->code.data));
-#endif
-#ifdef THREADED_CODE
-    #include "jmptable.h"
 #endif
         VM_DISPATCH(READ_BYTE())
         {

@@ -5,13 +5,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define GROW_TABLE_CAPACITY(prime)         get_prime_capacity(prime)
-#define PRIME_TABLE_LEN                    sizeof(prime_table) / sizeof(prime_table[0])
-#define TABLE_MAX_LOAD                     0.50
-#define TABLE_MAX_SIZE                     prime_table[PRIME_TABLE_LEN - 1]
+#define GROW_TABLE_CAPACITY(prime) get_prime_capacity(prime)
+
+#define PRIME_TABLE_LEN sizeof(prime_table) / sizeof(prime_table[0])
+
+#define TABLE_MAX_LOAD 0.50
+
+#define TABLE_MAX_SIZE prime_table[PRIME_TABLE_LEN - 1]
+
 #define QUADRATIC_PROBE(hash, i, capacity) (((hash) + ((i) * (i))) % capacity)
-#define IS_TOMBSTONE(entry)                IS_BOOL(entry->value)
-#define PLACE_TOMBSTONE(entry)             (entry->value = BOOL_VAL(true))
+
+#define IS_TOMBSTONE(entry) IS_BOOL(entry->value)
+
+#define PLACE_TOMBSTONE(entry) (entry->value = BOOL_VAL(true))
+
 #define INSERTS_UNTIL_EXPAND(table)                                                      \
     ((UInt)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
 
@@ -26,7 +33,7 @@ static const UInt prime_table[] = {
     33554393, 67108859, 134217689, 268435399, 536870909, 1073741789, 2147483647,
 };
 
-/* Init the HashTable (same as memset(table, 0, sizeof(HashTable))) */
+/* Init the HashTable */
 void HashTable_init(HashTable* table)
 {
     table->cap     = 0;
@@ -36,13 +43,14 @@ void HashTable_init(HashTable* table)
     table->entries = NULL;
 }
 
-/* Return the next prime capacity, or exit() if table size limit reached */
+/* Return the next prime capacity or exit if table size limit reached */
 static _force_inline size_t get_prime_capacity(uint8_t old_prime)
 {
     if(_unlikely(old_prime >= PRIME_TABLE_LEN)) {
         fprintf(
             stderr,
-            "HashTable size exceeded: %d:%s [%s]\n",
+            "HashTable size exceeded (LIMIT: %u entries): %d:%s [%s]\n",
+            prime_table[PRIME_TABLE_LEN - 1],
             __LINE__,
             __FILE__,
             __func__);
@@ -178,7 +186,6 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
         Entry* entry = &table->entries[index];
 
         if(IS_EMPTY(entry->key)) {
-            /* Maybe omit tombstone check if we are not deleting */
             if(!IS_TOMBSTONE(entry)) {
                 return NULL;
             }
@@ -193,7 +200,7 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
         }
 
         ++i;
-        index = QUADRATIC_PROBE(hash, i, len);
+        index = QUADRATIC_PROBE(hash, i, table->cap);
     } while(_likely(start_index != index));
 
     return NULL;

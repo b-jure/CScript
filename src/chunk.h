@@ -47,7 +47,7 @@ typedef struct {
 void Chunk_init(Chunk *chunk);
 void Chunk_free(Chunk *chunk);
 void Chunk_write(Chunk *chunk, uint8_t byte, UInt line);
-void Chunk_write_constant(Chunk *chunk, UInt line, UInt idx);
+void Chunk_write_constant(Chunk *chunk, UInt idx, UInt line);
 void Chunk_write_global(Chunk *chunk, UInt idx, UInt line);
 void Chunk_write_global_get(Chunk *chunk, UInt idx, UInt line);
 UInt Chunk_make_constant(Chunk *chunk, Value value);

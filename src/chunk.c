@@ -39,7 +39,7 @@ SK_STATIC_INLINE(void) Chunk_write_index24(Chunk* chunk, UInt idx, UInt line)
     Chunk_write(chunk, BYTE(idx, 2), line);
 }
 
-void Chunk_write_constant(Chunk* chunk, UInt line, UInt idx)
+void Chunk_write_constant(Chunk* chunk, UInt idx, UInt line)
 {
     if(idx <= UINT8_MAX) {
         Chunk_write(chunk, OP_CONST, line);
