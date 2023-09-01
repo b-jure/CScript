@@ -28,9 +28,9 @@ static TokenType check_keyword(
 Scanner Scanner_new(const char* source)
 {
     return (Scanner){
-        .start = source,
+        .start   = source,
         .current = source,
-        .line = 1,
+        .line    = 1,
     };
 }
 
@@ -208,58 +208,6 @@ static void Scanner_skipws(Scanner* scanner)
     register char c;
 
     while(true) {
-#ifdef THREADED_CODE
-    #define RET &&ret
-        // IMPORTANT: update accordingly if language grammar changes!
-        static const void* jump_table[UINT8_MAX + 1] = {
-            // Make sure the order is the same as in ASCII Table
-            // https://www.asciitable.com
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, &&ws, &&nl, RET, RET, &&ws,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, &&ws, RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  &&com, RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET, RET,  RET,   RET, RET, RET, RET,  RET,  RET, RET, RET,
-            RET, RET, RET, RET,
-        };
-    #undef RET
-
-        goto* jump_table[peek(scanner)];
-
-    nl:
-        scanner->line++;
-        advance(scanner);
-        continue;
-    ws:
-        advance(scanner);
-        continue;
-    com:
-        if((c = peek_next(scanner)) == '/') {
-            while(peek(scanner) != '\n' && !isend(scanner)) {
-                advance(scanner);
-            }
-        } else {
-            return;
-        }
-        continue;
-    ret:
-        return;
-
-        _unreachable;
-
-#else
         switch((c = peek(scanner))) {
             case '\n':
                 scanner->line++;
@@ -271,7 +219,7 @@ static void Scanner_skipws(Scanner* scanner)
                 advance(scanner);
                 break;
             case '/':
-                if((c = peek_next(scanner)) == '/') {
+                if(peek_next(scanner) == '/') {
                     while(peek(scanner) != '\n' && !isend(scanner)) {
                         advance(scanner);
                     }
@@ -282,27 +230,26 @@ static void Scanner_skipws(Scanner* scanner)
             default:
                 return;
         }
-#endif
     }
 }
 
 static Token Token_new(Scanner* scanner, TokenType type)
 {
     Token token;
-    token.type = type;
+    token.type  = type;
     token.start = scanner->start;
-    token.len = scanner->current - scanner->start;
-    token.line = scanner->line;
+    token.len   = scanner->current - scanner->start;
+    token.line  = scanner->line;
     return token;
 }
 
 static Token Token_error(Scanner* scanner, const char* err)
 {
     Token token;
-    token.type = TOK_ERROR;
+    token.type  = TOK_ERROR;
     token.start = err;
-    token.len = strlen(err);
-    token.line = scanner->line;
+    token.len   = strlen(err);
+    token.line  = scanner->line;
     return token;
 }
 
@@ -343,8 +290,6 @@ static Token Token_number(Scanner* scanner)
 static Token Token_identifier(Scanner* scanner)
 {
     register char c;
-
-    advance(scanner);
     while(isalnum((c = peek(scanner))) || c == '_') {
         advance(scanner);
     }

@@ -8,9 +8,7 @@
 #define OPCODE_N ((uint32_t)(OP_RET + 1))
 
 typedef enum {
-  OP_CONST = 0,     /* Pop constant off the stack (8-bit idx)*/
-  OP_CONSTL,        /* Pop constant off the stack (24-bit idx) */
-  OP_TRUE,          /* Pop true literal of the stack */
+  OP_TRUE = 0,      /* Pop true literal of the stack */
   OP_FALSE,         /* Pop false literal of the stack */
   OP_NIL,           /* Pop nil literal of the stack */
   OP_NEG,           /* Pop the value off the stack and negate it */
@@ -27,12 +25,16 @@ typedef enum {
   OP_LESS_EQUAL,    /* -||- check if left is less or equal than right */
   OP_PRINT,         /* Pop the value off the stack and print it */
   OP_POP,           /* Pop the value of the stack */
+  OP_CONST,         /* Pop constant off the stack (8-bit idx)*/
+  OP_CONSTL,        /* Pop constant off the stack (24-bit idx) */
   OP_DEFINE_GLOBAL, /* Pop global value off the stack (8-bit idx) and store it
                        in chunk table for globals */
   OP_DEFINE_GLOBALL, /* Pop global value off the stack (24-bit idx) and store it
                         in chunk table for globals */
   OP_GET_GLOBAL,
   OP_GET_GLOBALL,
+  OP_SET_GLOBAL,
+  OP_SET_GLOBALL,
   OP_RET, /* Stop interpreting ? */
 } OpCode;
 
@@ -47,10 +49,8 @@ typedef struct {
 void Chunk_init(Chunk *chunk);
 void Chunk_free(Chunk *chunk);
 void Chunk_write(Chunk *chunk, uint8_t byte, UInt line);
-void Chunk_write_constant(Chunk *chunk, UInt idx, UInt line);
-void Chunk_write_global(Chunk *chunk, UInt idx, UInt line);
-void Chunk_write_global_get(Chunk *chunk, UInt idx, UInt line);
 UInt Chunk_make_constant(Chunk *chunk, Value value);
+void Chunk_write_codewidx(Chunk *chunk, OpCode code, UInt idx, UInt line);
 UInt Chunk_getline(Chunk *chunk, UInt index);
 void Chunk_free(Chunk *chunk);
 

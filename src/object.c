@@ -85,37 +85,6 @@ ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
     return string;
 }
 
-ObjString* ObjString_from_concat(
-    VM*         vm,
-    const char* left,
-    size_t      llen,
-    const char* right,
-    size_t      rlen)
-{
-    size_t len = llen + rlen;
-    char   buffer[len + 1];
-    memcpy(buffer, left, llen);
-    memcpy(buffer + llen, right, rlen);
-    buffer[len] = '\0';
-
-    Hash       hash     = Hash_string(buffer, len);
-    ObjString* interned = HashTable_get_intern(&vm->strings, buffer, len, hash);
-
-    /* Return very fast in case string is interned */
-    if(interned) {
-        return interned;
-    }
-
-    /* Double copy because we are using flexible array member 'storage' */
-    ObjString* string = ObjString_alloc(vm, len);
-    memcpy(string->storage, buffer, string->len);
-    string->storage[string->len] = '\0';
-    string->hash                 = hash;
-
-    HashTable_insert(&vm->strings, OBJ_VAL(string), NIL_VAL);
-    return string;
-}
-
 static _force_inline void ObjString_free(ObjString* string)
 {
     MFREE(string, sizeof(ObjString) + string->len + 1);

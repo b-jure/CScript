@@ -2,6 +2,8 @@
 #include "common.h"
 #include "mem.h"
 
+typedef void (*WriteCodeFn)(Chunk* chunk, UInt index, UInt line);
+
 #include <stdio.h>
 
 SK_STATIC_INLINE(void) LineArray_write(LineArray* lines, UInt line, UInt index);
@@ -14,8 +16,7 @@ void Chunk_init(Chunk* chunk)
     UIntArray_init(&chunk->lines);
 }
 
-/* Writes OpCode or constants info into chunk while also
- * storing line information for the current byte being written. */
+/* Writes OpCodes that require no parameters */
 void Chunk_write(Chunk* chunk, uint8_t byte, UInt line)
 {
     UInt idx = ByteArray_push(&chunk->code, byte);
@@ -39,47 +40,148 @@ SK_STATIC_INLINE(void) Chunk_write_index24(Chunk* chunk, UInt idx, UInt line)
     Chunk_write(chunk, BYTE(idx, 2), line);
 }
 
-void Chunk_write_constant(Chunk* chunk, UInt idx, UInt line)
+/* Write OP_CONST (8-bit index) */
+SK_STATIC_INLINE(void) Chunk_write_constant(Chunk* chunk, UInt idx, UInt line)
 {
-    if(idx <= UINT8_MAX) {
-        Chunk_write(chunk, OP_CONST, line);
-        Chunk_write(chunk, idx, line);
-    } else {
-        Chunk_write(chunk, OP_CONSTL, line);
-        Chunk_write_index24(chunk, idx, line);
+    Chunk_write(chunk, OP_CONST, line);
+    Chunk_write(chunk, idx, line);
+}
+
+/* Write OP_CONSTL (24-bit index) */
+SK_STATIC_INLINE(void) Chunk_write_constantl(Chunk* chunk, UInt idx, UInt line)
+{
+    Chunk_write(chunk, OP_CONSTL, line);
+    Chunk_write_index24(chunk, idx, line);
+}
+
+/* Write OP_DEFINE_GLOBAL (8-bit index) */
+SK_STATIC_INLINE(void) Chunk_write_global(Chunk* chunk, UInt idx, UInt line)
+{
+    Chunk_write(chunk, OP_DEFINE_GLOBAL, line);
+    Chunk_write(chunk, idx, line);
+}
+
+/* Write OP_DEFINE_GLOBALL (24-bit index) */
+SK_STATIC_INLINE(void) Chunk_write_globall(Chunk* chunk, UInt idx, UInt line)
+{
+    Chunk_write(chunk, OP_DEFINE_GLOBALL, line);
+    Chunk_write_index24(chunk, idx, line);
+}
+
+/* Write OP_GET_GLOBAL (8-bit index) */
+SK_STATIC_INLINE(void) Chunk_write_get_global(Chunk* chunk, UInt idx, UInt line)
+{
+    Chunk_write(chunk, OP_GET_GLOBAL, line);
+    Chunk_write(chunk, idx, line);
+}
+
+/* Write OP_GET_GLOBALL (24-bit index) */
+SK_STATIC_INLINE(void) Chunk_write_get_globall(Chunk* chunk, UInt idx, UInt line)
+{
+    Chunk_write(chunk, OP_GET_GLOBALL, line);
+    Chunk_write_index24(chunk, idx, line);
+}
+
+SK_STATIC_INLINE(void) Chunk_write_set_global(Chunk* chunk, UInt idx, UInt line)
+{
+    Chunk_write(chunk, OP_SET_GLOBAL, line);
+    Chunk_write(chunk, idx, line);
+}
+
+SK_STATIC_INLINE(void) Chunk_write_set_globall(Chunk* chunk, UInt idx, UInt line)
+{
+    Chunk_write(chunk, OP_SET_GLOBALL, line);
+    Chunk_write_index24(chunk, idx, line);
+}
+
+void Chunk_write_codewidx(Chunk* chunk, OpCode code, UInt idx, UInt line)
+{
+#ifdef THREADED_CODE
+    #include "jmptable.h"
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+#endif
+#undef BREAK
+#define BREAK return
+
+    DISPATCH(code)
+    {
+        CASE(OP_TRUE)
+        CASE(OP_FALSE)
+        CASE(OP_NIL)
+        CASE(OP_NEG)
+        CASE(OP_ADD)
+        CASE(OP_SUB)
+        CASE(OP_MUL)
+        CASE(OP_DIV)
+        CASE(OP_NOT)
+        CASE(OP_NOT_EQUAL)
+        CASE(OP_EQUAL)
+        CASE(OP_GREATER)
+        CASE(OP_GREATER_EQUAL)
+        CASE(OP_LESS)
+        CASE(OP_LESS_EQUAL)
+        CASE(OP_PRINT)
+        CASE(OP_POP)
+        {
+            _unreachable;
+            BREAK;
+        }
+        CASE(OP_CONST)
+        {
+            Chunk_write_constant(chunk, idx, line);
+            BREAK;
+        }
+        CASE(OP_CONSTL)
+        {
+            Chunk_write_constantl(chunk, idx, line);
+            BREAK;
+        }
+        CASE(OP_DEFINE_GLOBAL)
+        {
+            Chunk_write_global(chunk, idx, line);
+            BREAK;
+        }
+        CASE(OP_DEFINE_GLOBALL)
+        {
+            Chunk_write_globall(chunk, idx, line);
+            BREAK;
+        }
+        CASE(OP_GET_GLOBAL)
+        {
+            Chunk_write_get_global(chunk, idx, line);
+            BREAK;
+        }
+        CASE(OP_GET_GLOBALL)
+        {
+            Chunk_write_get_globall(chunk, idx, line);
+            BREAK;
+        }
+        CASE(OP_SET_GLOBAL)
+        {
+            Chunk_write_set_global(chunk, idx, line);
+            BREAK;
+        }
+        CASE(OP_SET_GLOBALL)
+        {
+            Chunk_write_set_globall(chunk, idx, line);
+            BREAK;
+        }
+        CASE(OP_RET)
+        {
+            _unreachable;
+            BREAK;
+        }
     }
+#undef DISPATCH
+#undef CASE
+#undef BREAK
 }
 
 UInt Chunk_make_constant(Chunk* chunk, Value value)
 {
     return ValueArray_push(&chunk->constants, value);
-}
-
-void Chunk_write_global(Chunk* chunk, UInt idx, UInt line)
-{
-    if(idx <= UINT8_MAX) {
-        Chunk_write(chunk, OP_DEFINE_GLOBAL, line);
-        Chunk_write(chunk, idx, line);
-    } else {
-        Chunk_write(chunk, OP_DEFINE_GLOBALL, line);
-        Chunk_write_index24(chunk, idx, line);
-    }
-}
-
-void Chunk_write_opcode(Chunk* chunk, UInt idx, UInt line)
-{
-    // @TODO: Implement
-}
-
-void Chunk_write_global_get(Chunk* chunk, UInt idx, UInt line)
-{
-    if(idx <= UINT8_MAX) {
-        Chunk_write(chunk, OP_GET_GLOBAL, line);
-        Chunk_write(chunk, idx, line);
-    } else {
-        Chunk_write(chunk, OP_GET_GLOBALL, line);
-        Chunk_write_index24(chunk, idx, line);
-    }
 }
 
 /* Returns the line of the current instruction (DEBUG ONLY) */

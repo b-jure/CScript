@@ -33,6 +33,8 @@
 #define DEBUG_PRINT_CODE
 /* Debug flag for printing VM stack. */
 #define DEBUG_TRACE_EXECUTION
+/* Debug flag for assertions */
+#define DEBUG_ASSERTIONS
 
 /* Check if we can use labels as values for precomputed goto/jmp table */
 #if defined(__GNUC__) && __GNUC__ >= 2
