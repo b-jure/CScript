@@ -2,8 +2,6 @@
 #include "common.h"
 #include "mem.h"
 
-typedef void (*WriteCodeFn)(Chunk* chunk, UInt index, UInt line);
-
 #include <stdio.h>
 
 SK_STATIC_INLINE(void) LineArray_write(LineArray* lines, UInt line, UInt index);
@@ -82,18 +80,21 @@ SK_STATIC_INLINE(void) Chunk_write_get_globall(Chunk* chunk, UInt idx, UInt line
     Chunk_write_index24(chunk, idx, line);
 }
 
+/* Write OP_SET_GLOBAL (8-bit index) */
 SK_STATIC_INLINE(void) Chunk_write_set_global(Chunk* chunk, UInt idx, UInt line)
 {
     Chunk_write(chunk, OP_SET_GLOBAL, line);
     Chunk_write(chunk, idx, line);
 }
 
+/* Write OP_SET_GLOBALL (24-bit index) */
 SK_STATIC_INLINE(void) Chunk_write_set_globall(Chunk* chunk, UInt idx, UInt line)
 {
     Chunk_write(chunk, OP_SET_GLOBALL, line);
     Chunk_write_index24(chunk, idx, line);
 }
 
+/* Write generic OpCode-s with parameters. */
 void Chunk_write_codewidx(Chunk* chunk, OpCode code, UInt idx, UInt line)
 {
 #ifdef THREADED_CODE
