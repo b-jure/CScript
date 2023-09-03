@@ -24,8 +24,14 @@ set(SRCFILES
     ${SRCDIR}/hashtable.c
 )
 
+# xxHash dependency
+option(BUILD_SHARED_LIBS "Build shared libs" OFF)
+set(XXHASH_BUILD_ENABLE_INLINE_API OFF)
+set(XXHASH_BUILD_XXHSUM OFF)
+add_subdirectory(${DEPDIR}/xxHash/cmake_unofficial ${DEPDIR}/xxHash/build/> EXCLUDE_FROM_ALL)
+
 add_executable(${BIN} ${SRCFILES})
 target_include_directories(${BIN} PRIVATE ${SRCDIR})
-target_link_libraries(${BIN} PRIVATE ${DEPDIR}/libxxhash.a)
+target_link_libraries(${BIN} PRIVATE xxHash::xxhash) # Link to xxhash
 target_compile_options(${BIN} PRIVATE ${CLFAGS} ${SANITIZER_FLAGS} -g)
 target_link_options(${BIN} PRIVATE ${SANITIZER_FLAGS})

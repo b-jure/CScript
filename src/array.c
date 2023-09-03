@@ -4,4 +4,4 @@
 
 #include <stdlib.h>
 
-DEFINE_ARRAY(Value); /* Constants array */
+DEFINE_ARRAY(Value);

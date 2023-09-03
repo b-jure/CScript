@@ -90,6 +90,6 @@
     return retval;                                                             \
   }
 
-DECLARE_ARRAY(Value) /* Constants Array */
+DECLARE_ARRAY(Value);
 
 #endif

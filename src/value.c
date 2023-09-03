@@ -25,7 +25,6 @@ void Value_print(Value value)
             printf("<empty>");
             break;
         default:
-            printf("How??? %u\n", value.type);
             _unreachable;
     }
 }
