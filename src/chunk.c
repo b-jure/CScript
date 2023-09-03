@@ -3,8 +3,12 @@
 #include "mem.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 SK_STATIC_INLINE(void) LineArray_write(LineArray* lines, UInt line, UInt index);
+
+DEFINE_ARRAY(Byte);
+DEFINE_ARRAY(UInt);
 
 /* Initializes the Chunk */
 void Chunk_init(Chunk* chunk)
@@ -188,7 +192,7 @@ UInt Chunk_make_constant(Chunk* chunk, Value value)
 /* Returns the line of the current instruction (DEBUG ONLY) */
 UInt Chunk_getline(Chunk* chunk, UInt index)
 {
-    UIntArray* line_array      = &chunk->lines;
+    LineArray* line_array      = &chunk->lines;
     UInt       idx             = UIntArray_len(line_array) - 1;
     UInt       instruction_idx = UIntArray_index(line_array, --idx);
 
@@ -205,9 +209,9 @@ UInt Chunk_getline(Chunk* chunk, UInt index)
  * LOW ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ HIGH
  * [instruction_index, line_number, instruction_index, line_number, ...]
  *
- * Writes the current line into chunk line array only if the line is bigger than the last
- * one. Additionally stores the index of the instruction in order to retrieve it if
- * 'Chunk_getline' gets called; gets called only during debug or run-time errors.
+ * Writes the current line into the chunk line array only if the line is bigger than the
+ * last one. Additionally stores the index of the instruction in order to retrieve it if
+ * 'Chunk_getline' gets called; it gets called only during debug or run-time errors.
  */
 SK_STATIC_INLINE(void) LineArray_write(LineArray* lines, UInt line, UInt index)
 {

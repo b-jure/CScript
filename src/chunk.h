@@ -3,6 +3,7 @@
 
 #include "array.h"
 #include "common.h"
+#include "hashtable.h"
 #include "value.h"
 
 #define OPCODE_N ((uint32_t)(OP_RET + 1))
@@ -31,12 +32,15 @@ typedef enum {
                        in chunk table for globals */
   OP_DEFINE_GLOBALL, /* Pop global value off the stack (24-bit idx) and store it
                         in chunk table for globals */
-  OP_GET_GLOBAL,
-  OP_GET_GLOBALL,
-  OP_SET_GLOBAL,
-  OP_SET_GLOBALL,
-  OP_RET, /* Stop interpreting ? */
+  OP_GET_GLOBAL,     /* Push the global on the stack */
+  OP_GET_GLOBALL,    /* Push global on the stack long */
+  OP_SET_GLOBAL,     /* Set global value */
+  OP_SET_GLOBALL,    /* Set global value long */
+  OP_RET,            /* Stop interpreting ? */
 } OpCode;
+
+DECLARE_ARRAY(UInt);
+DECLARE_ARRAY(Byte);
 
 typedef UIntArray LineArray;
 

@@ -29,4 +29,3 @@ target_include_directories(${BIN} PRIVATE ${SRCDIR})
 target_link_libraries(${BIN} PRIVATE ${DEPDIR}/libxxhash.a)
 target_compile_options(${BIN} PRIVATE ${CLFAGS} ${SANITIZER_FLAGS} -g)
 target_link_options(${BIN} PRIVATE ${SANITIZER_FLAGS})
-

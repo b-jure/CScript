@@ -5,20 +5,22 @@
 #include <assert.h>
 #include <stdio.h>
 
-static int Instruction_constant(const char* name, Chunk* chunk, UInt offset);
+static int
+Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm);
+static int
+Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm);
 static int Instruction_simple(const char* name, UInt offset);
-static int Instruction_constant_long(const char* name, Chunk* chunk, UInt offset);
 
-void Chunk_debug(Chunk* chunk, const char* name)
+void Chunk_debug(Chunk* chunk, const char* name, VM* vm)
 {
     printf("=== %s ===\n", name);
 
     for(UInt offset = 0; offset < ByteArray_len(&chunk->code);) {
-        offset = Instruction_debug(chunk, offset);
+        offset = Instruction_debug(chunk, offset, vm);
     }
 }
 
-UInt Instruction_debug(Chunk* chunk, UInt offset)
+UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
 {
     printf("%04d ", offset);
 
@@ -35,9 +37,9 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_RET:
             return Instruction_simple("OP_RET", offset);
         case OP_CONST:
-            return Instruction_constant("OP_CONST", chunk, offset);
+            return Instruction_short("OP_CONST", chunk, OP_CONST, offset, vm);
         case OP_CONSTL:
-            return Instruction_constant_long("OP_CONSTL", chunk, offset);
+            return Instruction_long("OP_CONSTL", chunk, OP_CONSTL, offset, vm);
         case OP_TRUE:
             return Instruction_simple("OP_TRUE", offset);
         case OP_FALSE:
@@ -73,17 +75,27 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_PRINT:
             return Instruction_simple("OP_PRINT", offset);
         case OP_DEFINE_GLOBAL:
-            return Instruction_constant("OP_DEFINE_GLOBAL", chunk, offset);
+            return Instruction_short(
+                "OP_DEFINE_GLOBAL",
+                chunk,
+                OP_DEFINE_GLOBAL,
+                offset,
+                vm);
         case OP_DEFINE_GLOBALL:
-            return Instruction_constant_long("OP_DEFINE_GLOBAL", chunk, offset);
+            return Instruction_long(
+                "OP_DEFINE_GLOBAL",
+                chunk,
+                OP_DEFINE_GLOBALL,
+                offset,
+                vm);
         case OP_GET_GLOBAL:
-            return Instruction_constant("OP_GET_GLOBAL", chunk, offset);
+            return Instruction_short("OP_GET_GLOBAL", chunk, OP_GET_GLOBAL, offset, vm);
         case OP_GET_GLOBALL:
-            return Instruction_constant_long("OP_GET_GLOBALL", chunk, offset);
+            return Instruction_long("OP_GET_GLOBALL", chunk, OP_GET_GLOBALL, offset, vm);
         case OP_SET_GLOBAL:
-            return Instruction_constant("OP_SET_GLOBAL", chunk, offset);
+            return Instruction_short("OP_SET_GLOBAL", chunk, OP_SET_GLOBAL, offset, vm);
         case OP_SET_GLOBALL:
-            return Instruction_constant_long("OP_SET_GLOBALL", chunk, offset);
+            return Instruction_long("OP_SET_GLOBALL", chunk, OP_SET_GLOBALL, offset, vm);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -96,20 +108,45 @@ static int Instruction_simple(const char* name, UInt offset)
     return offset + 1; /* OpCode */
 }
 
-static int Instruction_constant(const char* name, Chunk* chunk, UInt offset)
+static int
+Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
     Byte constant_index = ByteArray_index(&chunk->code, offset + 1);
     printf("%-16s %5u '", name, constant_index);
-    Value_print(ValueArray_index(&chunk->constants, constant_index));
+    switch(code) {
+        case OP_CONST:
+            Value_print(ValueArray_index(&chunk->constants, constant_index));
+            break;
+        case OP_DEFINE_GLOBAL:
+        case OP_GET_GLOBAL:
+        case OP_SET_GLOBAL:
+            Value_print(vm->global_vals.data[constant_index]);
+            break;
+        default:
+            _unreachable;
+    }
     printf("'\n");
     return offset + 2; /* OpCode + 8-bit/1-byte index */
 }
 
-static int Instruction_constant_long(const char* name, Chunk* chunk, UInt offset)
+static int
+Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
     UInt constant_index = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-16s %5u '", name, constant_index);
-    Value_print(ValueArray_index(&chunk->constants, constant_index));
+
+    switch(code) {
+        case OP_CONSTL:
+            Value_print(ValueArray_index(&chunk->constants, constant_index));
+            break;
+        case OP_SET_GLOBALL:
+        case OP_GET_GLOBALL:
+        case OP_DEFINE_GLOBALL:
+            Value_print(vm->global_vals.data[constant_index]);
+            break;
+        default:
+            _unreachable;
+    }
     printf("'\n");
     return offset + 4; /* OpCode + 24-bit/3-byte index */
 }

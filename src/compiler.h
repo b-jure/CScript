@@ -6,7 +6,7 @@
 #include "scanner.h"
 #include "vmachine.h"
 
-bool compile(VM* vm, const char *source, Chunk *chunk);
+bool compile(VM *vm, const char *source, Chunk *chunk);
 
 /* Precedence from LOW-est to HIGH-est */
 typedef enum {
@@ -23,13 +23,5 @@ typedef enum {
   PREC_CALL,
   PREC_PRIMARY
 } Precedence;
-
-typedef void (*ParseFn)(VM *, Scanner *, bool);
-
-typedef struct {
-  ParseFn prefix;
-  ParseFn infix;
-  Precedence precedence;
-} ParseRule;
 
 #endif

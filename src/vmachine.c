@@ -13,18 +13,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// @TODO: Make some errors into warnings, for example emit warning when negating boolean
-// values by converting them implicitly during compilation into numbers.
-
 #define stack_peek(vm, top) ((Value) * ((vm)->sp - (top + 1)))
 #define stack_reset(vm)     (vm)->sp = (vm)->stack
 #define stack_size(vm)      ((vm)->sp - (vm)->stack)
 
-/* This doesn't get inlined with gcc having -O3 optimizations enabled
- * this is the reason behind the force_inline attribute  */
 SK_STATIC_INLINE(void) VM_push(VM* vm, Value val)
 {
-    if(_likely(vm->sp - vm->stack < STACK_MAX)) {
+    if(_likely(vm->sp - vm->stack < VM_STACK_MAX)) {
         *vm->sp++ = val;
     } else {
         fprintf(stderr, "Skooma: stack overflow\n");
@@ -183,7 +178,8 @@ void VM_init(VM* vm)
     vm->ip      = NULL;
     vm->objects = NULL;
     stack_reset(vm);
-    HashTable_init(&vm->globals);
+    HashTable_init(&vm->global_ids);
+    ValueArray_init(&vm->global_vals);
     HashTable_init(&vm->strings);
 }
 
@@ -214,6 +210,7 @@ static InterpretResult VM_run(VM* vm)
     } while(false)
 
 #define READ_BYTE()      (*vm->ip++)
+#define READ_BYTEL()     GET_BYTES3(vm->ip)
 #define READ_CONSTANT()  vm->chunk->constants.data[READ_BYTE()]
 #define READ_CONSTANTL() vm->chunk->constants.data[GET_BYTES3(vm->ip)]
 #define READ_STRING()    AS_STRING(READ_CONSTANT())
@@ -236,7 +233,7 @@ static InterpretResult VM_run(VM* vm)
             printf("]");
         }
         printf("\n");
-        Instruction_debug(vm->chunk, (UInt)(vm->ip - vm->chunk->code.data));
+        Instruction_debug(vm->chunk, (UInt)(vm->ip - vm->chunk->code.data), vm);
 #endif
         DISPATCH(READ_BYTE())
         {
@@ -347,25 +344,21 @@ static InterpretResult VM_run(VM* vm)
             }
             CASE(OP_DEFINE_GLOBAL)
             {
-                ObjString* name = READ_STRING();
-                HashTable_insert(&vm->globals, OBJ_VAL(name), stack_peek(vm, 0));
-                VM_pop(vm);
+                vm->global_vals.data[READ_BYTE()] = VM_pop(vm);
                 BREAK;
             }
             CASE(OP_DEFINE_GLOBALL)
             {
-                ObjString* name = READ_STRINGL();
-                vm->ip          += 3;
-                HashTable_insert(&vm->globals, OBJ_VAL(name), stack_peek(vm, 0));
-                VM_pop(vm);
+                vm->global_vals.data[READ_BYTEL()] = VM_pop(vm);
+                //
+                vm->ip += 3;
                 BREAK;
             }
             CASE(OP_GET_GLOBAL)
             {
-                ObjString* name = READ_STRING();
-                Value      val;
-                if(!HashTable_get(&vm->globals, OBJ_VAL(name), &val)) {
-                    VM_error(vm, "Undefined variable '%s'.", name->storage);
+                Value val = vm->global_vals.data[READ_BYTE()];
+                if(IS_UNDEFINED(val)) {
+                    VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 VM_push(vm, val);
@@ -373,11 +366,10 @@ static InterpretResult VM_run(VM* vm)
             }
             CASE(OP_GET_GLOBALL)
             {
-                ObjString* name = READ_STRINGL();
-                Value      val;
-                vm->ip += 3;
-                if(!HashTable_get(&vm->globals, OBJ_VAL(name), &val)) {
-                    VM_error(vm, "Undefined variable '%s'.", name->storage);
+                Value val = vm->global_vals.data[READ_BYTEL()];
+                vm->ip    += 3;
+                if(IS_UNDEFINED(val)) {
+                    VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 VM_push(vm, val);
@@ -385,23 +377,22 @@ static InterpretResult VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBAL)
             {
-                ObjString* name = READ_STRING();
-                if(HashTable_insert(&vm->globals, OBJ_VAL(name), stack_peek(vm, 0))) {
-                    sk_assertfn(HashTable_remove(&vm->globals, OBJ_VAL(name)));
-                    VM_error(vm, "Undefined variable '%s'.", name->storage);
+                UInt idx = READ_BYTE();
+                if(IS_UNDEFINED(vm->global_vals.data[idx])) {
+                    VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                vm->global_vals.data[idx] = stack_peek(vm, 0);
                 BREAK;
             }
             CASE(OP_SET_GLOBALL)
             {
-                ObjString* name = READ_STRINGL();
-                vm->ip          += 3;
-                if(HashTable_insert(&vm->globals, OBJ_VAL(name), stack_peek(vm, 0))) {
-                    sk_assertfn(HashTable_remove(&vm->globals, OBJ_VAL(name)));
-                    VM_error(vm, "Undefined variable '%s'.", name->storage);
+                UInt idx = READ_BYTEL();
+                if(IS_UNDEFINED(vm->global_vals.data[idx])) {
+                    VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                vm->global_vals.data[idx] = stack_peek(vm, 0);
                 BREAK;
             }
             CASE(OP_RET)
@@ -449,7 +440,8 @@ void VM_free(VM* vm)
     if(_likely(vm->chunk != NULL)) { // @TODO: Remove this?
         Chunk_free(vm->chunk);
     }
-    HashTable_free(&vm->globals);
+    HashTable_free(&vm->global_ids);
+    ValueArray_free(&vm->global_vals);
     HashTable_free(&vm->strings);
     MFREE_LIST(vm->objects, Obj_free);
     MFREE(vm, sizeof(VM));

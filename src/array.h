@@ -26,6 +26,8 @@
     self->data = NULL;                                                         \
   }                                                                            \
                                                                                \
+  void _ARRAY_METHOD(type, init_cap, uint32_t cap);                            \
+                                                                               \
   UInt _ARRAY_METHOD(type, push, type value);                                  \
                                                                                \
   _force_inline type _ARRAY_METHOD(type, pop) {                                \
@@ -52,8 +54,42 @@
     _CALL_ARRAY_METHOD(type, init);                                            \
   }
 
-DECLARE_ARRAY(Byte)  /* OpCode Array */
-DECLARE_ARRAY(UInt)  /* Lines Array */
+#define DEFINE_ARRAY(type)                                                     \
+  void _ARRAY_METHOD(type, init_cap, uint32_t cap) {                           \
+    self->data = GROW_ARRAY(type, self->data, self->cap, cap);                 \
+    self->cap = cap;                                                           \
+  }                                                                            \
+                                                                               \
+  uint32_t _ARRAY_METHOD(type, push, type value) {                             \
+    if (self->cap <= self->len) {                                              \
+      size_t old_cap = self->cap;                                              \
+      self->cap = GROW_ARRAY_CAPACITY(old_cap);                                \
+                                                                               \
+      if (_unlikely(self->cap >= UINT32_MAX)) {                                \
+        exit(EXIT_FAILURE);                                                    \
+      } else {                                                                 \
+        self->data = GROW_ARRAY(type, self->data, old_cap, self->cap);         \
+      }                                                                        \
+    }                                                                          \
+    self->data[self->len++] = value;                                           \
+    return self->len - 1;                                                      \
+  }                                                                            \
+                                                                               \
+  void _ARRAY_METHOD(type, insert, size_t index, type value) {                 \
+    type *src = self->data + index;                                            \
+    type *dest = src + 1;                                                      \
+    memmove(dest, src, self->len - index);                                     \
+    self->data[index] = value;                                                 \
+  }                                                                            \
+                                                                               \
+  type _ARRAY_METHOD(type, remove, size_t index) {                             \
+    type *src = self->data + index;                                            \
+    type *dest = src - 1;                                                      \
+    type retval = self->data[index];                                           \
+    memmove(dest, src, self->len - index);                                     \
+    return retval;                                                             \
+  }
+
 DECLARE_ARRAY(Value) /* Constants Array */
 
 #endif

@@ -24,6 +24,8 @@
 
 #define IS_EMPTY(value) ((value).type == VAL_EMPTY)
 #define EMPTY_VAL ((Value){.type = VAL_EMPTY, {0}})
+#define UNDEFINED_VAL EMPTY_VAL
+#define IS_UNDEFINED(val) IS_EMPTY(val)
 
 typedef struct Obj Obj;
 typedef struct ObjString ObjString;

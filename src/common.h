@@ -14,7 +14,7 @@
 // Clear 'bit' from 'x'
 #define BIT_CLEAR(x, bit) ((x) &= ~((size_t)1 << (bit)))
 // Generate uint with 'bits' all set to 1
-#define MAXBITS(bits) (~((size_t)0) >> ((sizeof(size_t) * 8) - 1 - (bits)))
+#define MAXBITS(bits) (~((size_t)0) >> ((sizeof(size_t) * 8) - ((size_t)bits)))
 // Wrapper around MAXBITS, uses 'bytes' instead
 #define MAXBYTES(bytes) MAXBITS((bytes)*8)
 /* ------------------------------------------------------------------------- */
