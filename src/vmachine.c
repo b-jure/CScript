@@ -9,6 +9,7 @@
     #include "debug.h"
 #endif
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,9 +18,9 @@
 #define stack_reset(vm)     (vm)->sp = (vm)->stack
 #define stack_size(vm)      ((vm)->sp - (vm)->stack)
 
-SK_STATIC_INLINE(void) VM_push(VM* vm, Value val)
+SK_INTERNAL(force_inline void) VM_push(VM* vm, Value val)
 {
-    if(_likely(vm->sp - vm->stack < VM_STACK_MAX)) {
+    if(likely(vm->sp - vm->stack < VM_STACK_MAX)) {
         *vm->sp++ = val;
     } else {
         fprintf(stderr, "Skooma: stack overflow\n");
@@ -27,7 +28,7 @@ SK_STATIC_INLINE(void) VM_push(VM* vm, Value val)
     }
 }
 
-SK_STATIC_INLINE(Value) VM_pop(VM* vm)
+SK_INTERNAL(force_inline Value) VM_pop(VM* vm)
 {
     return *--vm->sp;
 }
@@ -46,12 +47,12 @@ void VM_error(VM* vm, const char* errfmt, ...)
 }
 
 /* NIL and FALSE are always falsey */
-SK_STATIC_INLINE(bool) isfalsey(Value value)
+SK_INTERNAL(force_inline bool) isfalsey(Value value)
 {
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
-SK_STATIC_INLINE(uint8_t) bool_to_str(char** str, bool boolean)
+SK_INTERNAL(force_inline uint8_t) bool_to_str(char** str, bool boolean)
 {
     if(boolean) {
         *str = "true";
@@ -61,7 +62,7 @@ SK_STATIC_INLINE(uint8_t) bool_to_str(char** str, bool boolean)
     return sizeof("false") - 1;
 }
 
-SK_STATIC_INLINE(uint8_t) nil_to_str(char** str)
+SK_INTERNAL(force_inline uint8_t) nil_to_str(char** str)
 {
     *str = "nil";
     return sizeof("nil") - 1;
@@ -73,19 +74,26 @@ SK_STATIC_INLINE(uint8_t) nil_to_str(char** str)
  * Additionally concatenate function guarantees there is only one possible number Value
  * (because number + number is addition and not concatenation),
  * therefore there is no need for two static buffers inside of it. */
-SK_STATIC_INLINE(uint8_t) double_to_str(char** str, double dbl)
+SK_INTERNAL(force_inline uint8_t) double_to_str(char** str, double dbl)
 {
-    static char  buffer[30] = {0};
-    uint8_t      len        = snprintf(buffer, sizeof(buffer), "%f", dbl);
+    static char buffer[30] = {0};
+    uint8_t     len;
+
+    if(floor(dbl) != dbl) {
+        len = snprintf(buffer, sizeof(buffer), "%f", dbl);
+    } else {
+        /* Quick return */
+        len = snprintf(buffer, sizeof(buffer), "%ld", (int64_t)dbl);
+        goto end;
+    }
+
     register int c;
-    /* Trim excess zeroes and the floating point '.' if no fractional part */
-    for(uint8_t i = len - 1; i > 0; i--) {
+    /* Trim excess zeroes */
+    for(register uint8_t i = len - 1; i > 0; i--) {
         switch((c = buffer[i])) {
             case '0':
                 len--;
                 break;
-            case '.':
-                len--; // FALLTHRU
             default:
                 goto end;
         }
@@ -145,7 +153,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
                 break;
             case VAL_EMPTY:
             default:
-                _unreachable;
+                unreachable;
         }
 #endif
     }
@@ -331,6 +339,15 @@ static InterpretResult VM_run(VM* vm)
                 VM_pop(vm);
                 BREAK;
             }
+            CASE(OP_POPN)
+            {
+                UInt n = READ_BYTEL();
+                vm->ip += 3;
+                while(n--) {
+                    VM_pop(vm);
+                }
+                BREAK;
+            }
             CASE(OP_CONST)
             {
                 VM_push(vm, READ_CONSTANT());
@@ -395,6 +412,22 @@ static InterpretResult VM_run(VM* vm)
                 vm->global_vals.data[idx] = stack_peek(vm, 0);
                 BREAK;
             }
+            CASE(OP_GET_LOCAL)
+            {
+                BREAK;
+            }
+            CASE(OP_GET_LOCALL)
+            {
+                BREAK;
+            }
+            CASE(OP_SET_LOCAL)
+            {
+                BREAK;
+            }
+            CASE(OP_SET_LOCALL)
+            {
+                BREAK;
+            }
             CASE(OP_RET)
             {
                 return INTERPRET_OK;
@@ -402,7 +435,7 @@ static InterpretResult VM_run(VM* vm)
         }
     }
 
-    _unreachable;
+    unreachable;
 
 #undef VM_BINARY_OP
 #undef VM_CONCAT_OR_ADD
@@ -437,7 +470,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
 
 void VM_free(VM* vm)
 {
-    if(_likely(vm->chunk != NULL)) { // @TODO: Remove this?
+    if(likely(vm->chunk != NULL)) { // @TODO: Remove this?
         Chunk_free(vm->chunk);
     }
     HashTable_free(&vm->global_ids);

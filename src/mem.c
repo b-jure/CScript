@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 
-void* reallocate(void* ptr, _unused size_t oldc, size_t newc)
+void* reallocate(void* ptr, unused size_t oldc, size_t newc)
 {
     if(newc == 0) {
         free(ptr);

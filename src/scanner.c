@@ -5,20 +5,22 @@
 #include <stdio.h>
 #include <string.h>
 
-#define advance(scanner)   (*scanner->current++)
-#define peek(scanner)      (*scanner->current)
-#define isend(scanner)     (*scanner->current == '\0')
-#define peek_next(scanner) ((isend(scanner)) ? '\0' : *(scanner->current + 1))
+#define advance(scanner)   (*(scanner)->current++)
+#define peek(scanner)      (*(scanner)->current)
+#define isend(scanner)     (*(scanner)->current == '\0')
+#define peek_next(scanner) ((isend(scanner)) ? '\0' : *((scanner)->current + 1))
 
-static Token     Token_new(Scanner* scanner, TokenType type);
-static Token     Token_error(Scanner* scanner, const char* err);
-static Token     Token_string(Scanner* scanner);
-static Token     Token_number(Scanner* scanner);
-static Token     Token_identifier(Scanner* scanner);
-static TokenType TokenType_identifier(Scanner* scanner);
-static void      Scanner_skipws(Scanner* scanner);
-static bool      Scanner_match(Scanner* scanner, char c);
-static TokenType check_keyword(
+SK_INTERNAL(force_inline Token) Token_new(Scanner* scanner, TokenType type);
+SK_INTERNAL(Token) Token_error(Scanner* scanner, const char* err);
+SK_INTERNAL(force_inline Token) Token_string(Scanner* scanner);
+SK_INTERNAL(force_inline Token) Token_number(Scanner* scanner);
+SK_INTERNAL(force_inline Token) Token_identifier(Scanner* scanner);
+SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner);
+SK_INTERNAL(force_inline void) Scanner_skipws(Scanner* scanner);
+SK_INTERNAL(force_inline bool) Scanner_match(Scanner* scanner, char c);
+
+SK_INTERNAL(TokenType)
+check_keyword(
     Scanner*    scanner,
     UInt        start,
     UInt        end,
@@ -194,7 +196,7 @@ err:
 #endif
 }
 
-static bool Scanner_match(Scanner* scanner, char c)
+SK_INTERNAL(bool) Scanner_match(Scanner* scanner, char c)
 {
     if(isend(scanner) || c != peek(scanner)) {
         return false;
@@ -203,7 +205,7 @@ static bool Scanner_match(Scanner* scanner, char c)
     return true;
 }
 
-static void Scanner_skipws(Scanner* scanner)
+SK_INTERNAL(force_inline void) Scanner_skipws(Scanner* scanner)
 {
     register char c;
 
@@ -233,7 +235,7 @@ static void Scanner_skipws(Scanner* scanner)
     }
 }
 
-static Token Token_new(Scanner* scanner, TokenType type)
+SK_INTERNAL(force_inline Token) Token_new(Scanner* scanner, TokenType type)
 {
     Token token;
     token.type  = type;
@@ -243,7 +245,7 @@ static Token Token_new(Scanner* scanner, TokenType type)
     return token;
 }
 
-static Token Token_error(Scanner* scanner, const char* err)
+SK_INTERNAL(force_inline Token) Token_error(Scanner* scanner, const char* err)
 {
     Token token;
     token.type  = TOK_ERROR;
@@ -253,7 +255,7 @@ static Token Token_error(Scanner* scanner, const char* err)
     return token;
 }
 
-static Token Token_string(Scanner* scanner)
+SK_INTERNAL(force_inline Token) Token_string(Scanner* scanner)
 {
     while(peek(scanner) != '"' && !isend(scanner)) {
         if(peek(scanner) == '\n') {
@@ -270,7 +272,7 @@ static Token Token_string(Scanner* scanner)
     return Token_new(scanner, TOK_STRING);
 }
 
-static Token Token_number(Scanner* scanner)
+SK_INTERNAL(Token) Token_number(Scanner* scanner)
 {
     while(isdigit(peek(scanner))) {
         advance(scanner);
@@ -287,7 +289,7 @@ static Token Token_number(Scanner* scanner)
     return Token_new(scanner, TOK_NUMBER);
 }
 
-static Token Token_identifier(Scanner* scanner)
+SK_INTERNAL(force_inline Token) Token_identifier(Scanner* scanner)
 {
     register char c;
     while(isalnum((c = peek(scanner))) || c == '_') {
@@ -297,7 +299,7 @@ static Token Token_identifier(Scanner* scanner)
     return Token_new(scanner, TokenType_identifier(scanner));
 }
 
-static TokenType TokenType_identifier(Scanner* scanner)
+SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner)
 {
 #ifdef THREADED_CODE
     #define RET &&ret
@@ -468,7 +470,8 @@ ret:
     return TOK_IDENTIFIER;
 }
 
-static TokenType check_keyword(
+SK_INTERNAL(force_inline TokenType)
+check_keyword(
     Scanner*    scanner,
     UInt        start,
     UInt        length,

@@ -1,7 +1,10 @@
 #include "chunk.h"
 #include "common.h"
 #include "compiler.h"
+#include "mem.h"
 #include "object.h"
+#include "scanner.h"
+#include <stdint.h>
 
 #ifdef DEBUG_PRINT_CODE
     #include "debug.h"
@@ -10,6 +13,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define GET_OP_TYPE(idx, op) (idx <= UINT8_MAX) ? op : op##L
+
 typedef struct {
     Scanner scanner;
     Token   previous;
@@ -17,7 +22,31 @@ typedef struct {
     Byte    state;
 } Parser;
 
-typedef void (*ParseFn)(VM*, Parser*, bool);
+typedef struct {
+    Token token;
+    UInt  depth;
+} Local;
+
+#define LOCAL_STACK_MAX  MAXBYTES(3) + 1
+#define SHORT_STACK_SIZE (UINT8_MAX + 1)
+
+#define ALLOC_COMPILER() MALLOC(sizeof(Compiler) + (SHORT_STACK_SIZE * sizeof(Local)))
+
+#define GROW_LOCAL_STACK(ptr, oldcap, newcap)                                            \
+    (Compiler*)REALLOC(                                                                  \
+        ptr,                                                                             \
+        sizeof(Compiler) + (oldcap * sizeof(Local)),                                     \
+        sizeof(Compiler) + (newcap * sizeof(Local)))
+
+typedef struct {
+    Parser parser;   /* Grammar parser */
+    UInt   depth;    /* Scope depth */
+    UInt   llen;     /* Locals count */
+    UInt   lcap;     /* Locals array capacity */
+    Local  locals[]; /* Locals array (up to 24-bit [LOCAL_STACK_MAX]) */
+} Compiler;
+
+typedef void (*ParseFn)(VM*, Compiler**, bool);
 
 typedef struct {
     ParseFn    prefix;
@@ -25,150 +54,150 @@ typedef struct {
     Precedence precedence;
 } ParseRule;
 
-typedef struct {
-    Token token;
-    UInt  depth;
-} Local;
-
-/* Declare and define internal array */
-DECLARE_ARRAY(Local);
-DEFINE_ARRAY(Local);
-
-typedef struct {
-    Local      slocals[MAXBYTES(1) + 1]; /* Locals array (max 255 len) */
-    uint16_t   slen;                     /* Local stack allocated array length */
-    LocalArray llocals; /* In case slocals is not enough (up to 24-bit length combined) */
-    UInt       sdepth;  /* Scope depth */
-} Compiler;
+/* Chunk being currently compiled, see 'compile()' */
+static Chunk* compiling_chunk;
+/* Returns currently stored chunk in 'compiling_chunk' global. */
+SK_INTERNAL(Chunk*) current_chunk();
 
 /* Parser 'state' bits */
 #define ERROR_BIT 0
 #define PANIC_BIT 1
-/* Parser 'state' bit manipulation function-like macro definitions.
+/* Compiler (parser) 'state' bit manipulation function-like macro definitions.
  * Parser state is represented as a single byte, each bit defining state.
  * For now least significant bit is 'ERROR' bit, bit right after it is 'PANIC' bit. */
-#define Parser_state_set_err(parser)     BIT_SET((parser)->state, ERROR_BIT)
-#define Parser_state_clear_err(parser)   BIT_CLEAR((parser)->state, ERROR_BIT)
-#define Parser_state_set_panic(parser)   BIT_SET((parser)->state, PANIC_BIT)
-#define Parser_state_clear_panic(parser) BIT_CLEAR((parser)->state, PANIC_BIT)
-#define Parser_state_iserr(parser)       BIT_CHECK((parser)->state, ERROR_BIT)
-#define Parser_state_ispanic(parser)     BIT_CHECK((parser)->state, PANIC_BIT)
-#define Parser_state_clear(parser)       parser->state = 0
-
+#define Compiler_set_error(compiler)   BIT_SET((compiler)->parser.state, ERROR_BIT)
+#define Compiler_clear_error(compiler) BIT_CLEAR((compiler)->parser.state, ERROR_BIT)
+#define Compiler_set_panic(compiler)   BIT_SET((compiler)->parser.state, PANIC_BIT)
+#define Compiler_clear_panic(compiler) BIT_CLEAR((compiler)->parser.state, PANIC_BIT)
+#define Compiler_is_error(compiler)    BIT_CHECK((compiler)->parser.state, ERROR_BIT)
+#define Compiler_is_panic(compiler)    BIT_CHECK((compiler)->parser.state, PANIC_BIT)
+#define Compiler_clear_state(compiler) (compiler)->parser.state = 0
 /* Checks for equality between the 'token_type' and the current parser token */
-#define Parser_check(parser, token_type) ((parser)->current.type == token_type)
+#define Compiler_check(compiler, token_type)                                             \
+    ((compiler)->parser.current.type == token_type)
 
-/* Chunk being currently compiled, see 'compile()' */
-static Chunk* compiling_chunk;
-/* Returns currently stored chunk in 'compiling_chunk' global. */
-SK_STATIC_INLINE(Chunk*) current_chunk();
-
-/* Advances the parser until token type isn't 'TOK_ERROR',
- * invoking 'Parser_error' each time the token type is 'TOK_ERROR'. */
-SK_STATIC_INLINE(void) Parser_advance(Parser* parser);
-/* Invokes 'Parser_error_at' function with 'token' parameter being
- * the token in the 'parser.current' field. */
-SK_STATIC_INLINE(void) Parser_error(Parser* parser, const char* error);
-
+SK_INTERNAL(void) Compiler_advance(Compiler* compiler);
+SK_INTERNAL(void) Compiler_error(Compiler* compiler, const char* error);
+SK_INTERNAL(void) Parser_init(Parser* parser, const char* source);
 /* Internal parse functions */
-SK_STATIC_INLINE(void) parse_number(VM* vm, Parser* parser, bool can_assign);
-SK_STATIC_INLINE(void) parse_string(VM* vm, Parser* parser, bool can_assign);
-SK_STATIC_INLINE(UInt) parse_varname(VM* vm, Parser* parser, const char* errmsg);
-SK_STATIC_INLINE(void) parse_precedence(VM* vm, Parser* parser, Precedence prec);
-SK_STATIC_INLINE(void) parse_grouping(VM* vm, Parser* parser, bool can_assign);
-SK_STATIC_INLINE(void) parse_ternarycond(VM* vm, Parser* parser, bool can_assign);
-SK_STATIC_INLINE(void) parse_expression(VM* vm, Parser* parser);
-SK_STATIC_INLINE(void) parse_declaration(VM* vm, Parser* parser, bool can_assign);
-SK_STATIC_INLINE(void)
-parse_declaration_variable(VM* vm, Parser* parser, bool can_assign);
-SK_STATIC_INLINE(void) parse_statement(VM* vm, Parser* parser, bool can_assign);
-SK_STATIC_INLINE(void) parse_statement_print(VM* vm, Parser* parser, bool can_assign);
-SK_STATIC_INLINE(void) parse_variable(VM* vm, Parser* parser, bool can_assign);
+SK_INTERNAL(void) parse_number(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(void) parse_string(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(UInt) parse_varname(VM* vm, Compiler** Cptr, const char* errmsg);
+SK_INTERNAL(void) parse_precedence(VM* vm, Compiler** Cptr, Precedence prec);
+SK_INTERNAL(void) parse_grouping(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(void) parse_ternarycond(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(void) parse_expression(VM* vm, Compiler** Cptr);
+SK_INTERNAL(void) parse_declaration(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(void)
+parse_declaration_variable(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(void) parse_block(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(void) parse_statement(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(void) parse_statement_print(VM* vm, Compiler** Cptr, bool can_assign);
+SK_INTERNAL(void) parse_variable(VM* vm, Compiler** Cptr, bool can_assign);
 // These below use local labels, can't inline them
-static void parse_binary(VM* vm, Parser* parser, bool can_assign);
-static void parse_unary(VM* vm, Parser* parser, bool can_assign);
-static void parse_literal(VM* vm, Parser* parser, bool can_assign);
+static void parse_binary(VM* vm, Compiler** Cptr, bool can_assign);
+static void parse_unary(VM* vm, Compiler** Cptr, bool can_assign);
+static void parse_literal(VM* vm, Compiler** Cptr, bool can_assign);
+
+/*======================== COMPILER =======================*/
+
+SK_INTERNAL(Compiler*) Compiler_new(const char* source)
+{
+    Compiler* C = MALLOC(sizeof(Compiler) + ((UINT8_MAX + 1) * sizeof(Local)));
+    Parser_init(&C->parser, source);
+    C->llen  = 0;
+    C->lcap  = UINT8_MAX + 1;
+    C->depth = 0;
+    Compiler_advance(C);
+    return C;
+}
+
+SK_INTERNAL(force_inline void) Compiler_grow_stack(Compiler** Cptr)
+{
+    Compiler* C      = *Cptr;
+    UInt      oldcap = C->lcap;
+
+    C->lcap = MIN(GROW_ARRAY_CAPACITY(oldcap), MAXBYTES(3));
+    C       = GROW_LOCAL_STACK(C, oldcap, C->lcap);
+}
 
 /*========================== EMIT =========================*/
 
-SK_STATIC_INLINE(UInt) make_constant(Parser* parser, Value constant)
+SK_INTERNAL(force_inline UInt) make_constant(Compiler* compiler, Value constant)
 {
     if(current_chunk()->constants.len <= MAXBYTES(3)) {
         return Chunk_make_constant(current_chunk(), constant);
     } else {
-        Parser_error(parser, "Too many constants in one chunk.");
+        Compiler_error(compiler, "Too many constants in one chunk.");
         return 0;
     }
 }
 
-SK_STATIC_INLINE(UInt) make_constant_identifier(VM* vm, Token* name)
+SK_INTERNAL(force_inline UInt) make_constant_identifier(VM* vm, Token* name)
 {
     Value index;
     Value identifier = OBJ_VAL(ObjString_from(vm, name->start, name->len));
 
     if(!HashTable_get(&vm->global_ids, identifier, &index)) {
         index = NUMBER_VAL((double)ValueArray_push(&vm->global_vals, UNDEFINED_VAL));
-        sk_assertfn(HashTable_insert(&vm->global_ids, identifier, index));
+        HashTable_insert(&vm->global_ids, identifier, index);
     }
 
     return (UInt)AS_NUMBER(index);
 }
 
-SK_STATIC_INLINE(void) emit_byte(Parser* parser, Byte byte)
+SK_INTERNAL(force_inline void) emit_byte(Compiler* compiler, Byte byte)
 {
-    Chunk_write(current_chunk(), byte, parser->previous.line);
+    Chunk_write(current_chunk(), byte, compiler->parser.previous.line);
 }
 
-SK_STATIC_INLINE(void) emit_return(Parser* parser)
+SK_INTERNAL(force_inline void) emit_return(Compiler* compiler)
 {
-    emit_byte(parser, OP_RET);
+    emit_byte(compiler, OP_RET);
 }
 
-#define GET_OP_TYPE(idx, op) (idx <= UINT8_MAX) ? op : op##L
-
-SK_STATIC_INLINE(void) emit_constant(Parser* parser, Value constant)
+SK_INTERNAL(force_inline void) emit_constant(Compiler* compiler, Value constant)
 {
-    UInt   idx  = make_constant(parser, constant);
+    UInt   idx  = make_constant(compiler, constant);
     OpCode code = GET_OP_TYPE(idx, OP_CONST);
-    Chunk_write_codewidx(current_chunk(), code, idx, parser->previous.line);
+    Chunk_write_codewparam(current_chunk(), code, idx, compiler->parser.previous.line);
 }
 
-SK_STATIC_INLINE(void) emit_global(Parser* parser, UInt idx)
+SK_INTERNAL(force_inline void) emit_global(Compiler* compiler, UInt idx)
 {
+    // Do not define global if in local scope
+    if(compiler->depth > 0) {
+        return;
+    }
     OpCode code = GET_OP_TYPE(idx, OP_DEFINE_GLOBAL);
-    Chunk_write_codewidx(current_chunk(), code, idx, parser->previous.line);
+    Chunk_write_codewparam(current_chunk(), code, idx, compiler->parser.previous.line);
 }
 
-SK_STATIC_INLINE(void) emit_global_get(Parser* parser, UInt idx)
+SK_INTERNAL(force_inline void) emit_varop(Compiler* C, OpCode code, UInt idx)
 {
-    OpCode code = GET_OP_TYPE(idx, OP_GET_GLOBAL);
-    Chunk_write_codewidx(current_chunk(), code, idx, parser->previous.line);
+    Chunk_write_codewparam(current_chunk(), code, idx, C->parser.previous.line);
 }
 
-SK_STATIC_INLINE(void) emit_global_set(Parser* parser, UInt idx)
+SK_INTERNAL(force_inline void) emit_popn(Compiler* compiler, UInt n)
 {
-    OpCode code = GET_OP_TYPE(idx, OP_SET_GLOBAL);
-    Chunk_write_codewidx(current_chunk(), code, idx, parser->previous.line);
+    Chunk_write_codewparam(current_chunk(), OP_POPN, n, compiler->parser.previous.line);
 }
-
-#undef GET_OP_TYPE
 
 /*========================= PARSER ========================*/
 
-SK_STATIC_INLINE(void) Parser_init(Parser* parser, const char* source)
+SK_INTERNAL(force_inline void) Parser_init(Parser* parser, const char* source)
 {
     parser->scanner = Scanner_new(source);
-    Parser_state_clear(parser);
-    Parser_advance(parser);
+    parser->state   = 0;
 }
 
-static void Parser_error_at(Parser* parser, Token* token, const char* error)
+static void Compiler_error_at(Compiler* compiler, Token* token, const char* error)
 {
-    if(Parser_state_ispanic(parser)) {
+    if(Compiler_is_panic(compiler)) {
         return;
     }
 
-    Parser_state_set_panic(parser);
+    Compiler_set_panic(compiler);
     fprintf(stderr, "[line: %u] Error", token->line);
 
     if(token->type == TOK_EOF) {
@@ -178,39 +207,39 @@ static void Parser_error_at(Parser* parser, Token* token, const char* error)
     }
 
     fprintf(stderr, ": %s\n", error);
-    Parser_state_set_err(parser);
+    Compiler_set_error(compiler);
 }
 
-static void Parser_error(Parser* parser, const char* error)
+static void Compiler_error(Compiler* compiler, const char* error)
 {
-    Parser_error_at(parser, &parser->current, error);
+    Compiler_error_at(compiler, &compiler->parser.current, error);
 }
 
-SK_STATIC_INLINE(void) Parser_advance(Parser* parser)
+SK_INTERNAL(void) Compiler_advance(Compiler* compiler)
 {
-    parser->previous = parser->current;
+    compiler->parser.previous = compiler->parser.current;
 
     while(true) {
-        parser->current = Scanner_scan(&parser->scanner);
-        if(parser->current.type != TOK_ERROR) {
+        compiler->parser.current = Scanner_scan(&compiler->parser.scanner);
+        if(compiler->parser.current.type != TOK_ERROR) {
             break;
         }
 
-        Parser_error(parser, parser->current.start);
+        Compiler_error(compiler, compiler->parser.current.start);
     }
 }
 
-static void Parser_sync(Parser* parser)
+static void Parser_sync(Compiler* compiler)
 {
     // @ Create precomputed goto table
-    Parser_state_clear_panic(parser);
+    Compiler_clear_panic(compiler);
 
-    while(parser->current.type != TOK_EOF) {
-        if(parser->previous.type == TOK_SEMICOLON) {
+    while(compiler->parser.current.type != TOK_EOF) {
+        if(compiler->parser.previous.type == TOK_SEMICOLON) {
             return;
         }
 
-        switch(parser->current.type) {
+        switch(compiler->parser.current.type) {
             case TOK_FOR:
             case TOK_FN:
             case TOK_VAR:
@@ -221,39 +250,40 @@ static void Parser_sync(Parser* parser)
             case TOK_WHILE:
                 return;
             default:
-                Parser_advance(parser);
+                Compiler_advance(compiler);
                 break;
         }
     }
 }
 
-SK_STATIC_INLINE(void) Parser_expect(Parser* parser, TokenType type, const char* error)
+SK_INTERNAL(force_inline void)
+Compiler_expect(Compiler* compiler, TokenType type, const char* error)
 {
-    if(Parser_check(parser, type)) {
-        Parser_advance(parser);
+    if(Compiler_check(compiler, type)) {
+        Compiler_advance(compiler);
         return;
     }
-    Parser_error(parser, error);
+    Compiler_error(compiler, error);
 }
 
-SK_STATIC_INLINE(bool) Parser_match(Parser* parser, TokenType type)
+SK_INTERNAL(force_inline bool) Compiler_match(Compiler* compiler, TokenType type)
 {
-    if(!Parser_check(parser, type)) {
+    if(!Compiler_check(compiler, type)) {
         return false;
     }
-    Parser_advance(parser);
+    Compiler_advance(compiler);
     return true;
 }
 
 #ifndef DEBUG_TRACE_EXECUTION
-SK_STATIC_INLINE(void) compile_end(Parser* parser)
+SK_INTERNAL(force_inline void) compile_end(Compiler* compiler)
 #else
-SK_STATIC_INLINE(void) compile_end(Parser* parser, VM* vm)
+SK_INTERNAL(force_inline void) compile_end(Compiler* compiler, VM* vm)
 #endif
 {
-    emit_return(parser);
+    emit_return(compiler);
 #ifdef DEBUG_PRINT_CODE
-    if(!Parser_state_iserr(parser)) {
+    if(!Compiler_is_error(compiler)) {
         Chunk_debug(current_chunk(), "code", vm);
     }
 #endif
@@ -261,23 +291,22 @@ SK_STATIC_INLINE(void) compile_end(Parser* parser, VM* vm)
 
 bool compile(VM* vm, const char* source, Chunk* chunk)
 {
-    Parser parser;
-    Parser_init(&parser, source);
-    compiling_chunk = chunk;
+    Compiler* compiler = Compiler_new(source);
+    compiling_chunk    = chunk;
 
-    while(!Parser_match(&parser, TOK_EOF)) {
-        parse_declaration(vm, &parser, true);
+    while(!Compiler_match(compiler, TOK_EOF)) {
+        parse_declaration(vm, &compiler, true);
     }
 
 #ifndef DEBUG_TRACE_EXECUTION
-    compile_end(&parser);
+    compile_end(&compiler);
 #else
-    compile_end(&parser, vm);
+    compile_end(compiler, vm);
 #endif
-    return !Parser_state_iserr(&parser);
+    return !Compiler_is_error(compiler);
 }
 
-SK_STATIC_INLINE(Chunk) * current_chunk()
+SK_INTERNAL(Chunk) * current_chunk()
 {
     return compiling_chunk;
 }
@@ -336,157 +365,240 @@ static const ParseRule rules[] = {
     [TOK_EOF]           = {NULL,                       NULL,              PREC_NONE      },
 };
 
-SK_STATIC_INLINE(void)
-parse_statement_expression(VM* vm, Parser* parser, bool can_assign)
+SK_INTERNAL(void)
+parse_statement_expression(VM* vm, Compiler** Cptr, bool can_assign)
 {
-    parse_expression(vm, parser);
-    Parser_expect(parser, TOK_SEMICOLON, "Expect ';' after expression.");
-    emit_byte(parser, OP_POP);
+    parse_expression(vm, Cptr);
+    Compiler_expect(*Cptr, TOK_SEMICOLON, "Expect ';' after expression.");
+    emit_byte(*Cptr, OP_POP);
 }
 
-SK_STATIC_INLINE(void) parse_expression(VM* vm, Parser* parser)
+SK_INTERNAL(void) parse_expression(VM* vm, Compiler** Cptr)
 {
-    parse_precedence(vm, parser, PREC_ASSIGNMENT);
+    parse_precedence(vm, Cptr, PREC_ASSIGNMENT);
 }
 
-SK_STATIC_INLINE(void) parse_precedence(VM* vm, Parser* parser, Precedence prec)
+SK_INTERNAL(void) parse_precedence(VM* vm, Compiler** Cptr, Precedence prec)
 {
-    Parser_advance(parser);
-    ParseFn prefix_fn = rules[parser->previous.type].prefix;
+    Compiler_advance(*Cptr);
+    ParseFn prefix_fn = rules[(*Cptr)->parser.previous.type].prefix;
     if(prefix_fn == NULL) {
-        Parser_error(parser, "Expect expression.");
+        Compiler_error(*Cptr, "Expect expression.");
         return;
     }
 
     bool can_assign = prec <= PREC_ASSIGNMENT;
     /* Parse unary operator (prefix) or a literal */
-    prefix_fn(vm, parser, can_assign);
+    prefix_fn(vm, Cptr, can_assign);
 
     /* Parse binary operator (inifix) with higher or equal precedence if any */
-    while(prec <= rules[parser->current.type].precedence) {
-        Parser_advance(parser);
-        ParseFn infix_fn = rules[parser->previous.type].infix;
-        infix_fn(vm, parser, can_assign);
+    while(prec <= rules[(*Cptr)->parser.current.type].precedence) {
+        Compiler_advance(*Cptr);
+        ParseFn infix_fn = rules[(*Cptr)->parser.previous.type].infix;
+        infix_fn(vm, Cptr, can_assign);
     }
 
-    if(can_assign && Parser_match(parser, TOK_EQUAL)) {
-        Parser_error(parser, "Invalid assignment target.");
+    if(can_assign && Compiler_match(*Cptr, TOK_EQUAL)) {
+        Compiler_error(*Cptr, "Invalid assignment target.");
     }
 }
 
-SK_STATIC_INLINE(void) parse_declaration(VM* vm, Parser* parser, bool can_assign)
+SK_INTERNAL(void) parse_declaration(VM* vm, Compiler** Cptr, bool can_assign)
 {
-    if(Parser_match(parser, TOK_VAR)) {
-        parse_declaration_variable(vm, parser, can_assign);
+    if(Compiler_match(*Cptr, TOK_VAR)) {
+        parse_declaration_variable(vm, Cptr, can_assign);
     } else {
-        parse_statement(vm, parser, can_assign);
+        parse_statement(vm, Cptr, can_assign);
     }
 
-    if(Parser_state_ispanic(parser)) {
-        Parser_sync(parser);
+    if(Compiler_is_panic(*Cptr)) {
+        Parser_sync(*Cptr);
     }
 }
 
-SK_STATIC_INLINE(void)
-parse_declaration_variable(VM* vm, Parser* parser, bool can_assign)
+SK_INTERNAL(void)
+parse_declaration_variable(VM* vm, Compiler** Cptr, bool can_assign)
 {
-    UInt index = parse_varname(vm, parser, "Expect variable name.");
+    UInt index = parse_varname(vm, Cptr, "Expect variable name.");
 
-    if(Parser_match(parser, TOK_EQUAL)) {
-        parse_expression(vm, parser);
+    if(Compiler_match(*Cptr, TOK_EQUAL)) {
+        parse_expression(vm, Cptr);
     } else {
-        emit_byte(parser, OP_NIL);
+        emit_byte(*Cptr, OP_NIL);
     }
 
-    Parser_expect(parser, TOK_SEMICOLON, "Expect ';' after variable declaration.");
-    emit_global(parser, index);
+    Compiler_expect(*Cptr, TOK_SEMICOLON, "Expect ';' after variable declaration.");
+    emit_global(*Cptr, index);
 }
 
-SK_STATIC_INLINE(UInt) parse_varname(VM* vm, Parser* parser, const char* errmsg)
+SK_INTERNAL(void) Compiler_local_new(Compiler** Cptr)
 {
-    Parser_expect(parser, TOK_IDENTIFIER, errmsg);
-    return make_constant_identifier(vm, &parser->previous);
+    Compiler* C = *Cptr;
+
+    if(unlikely(C->llen >= C->lcap)) {
+        if(unlikely(C->llen >= LOCAL_STACK_MAX)) {
+            Compiler_error(C, "Too many variables defined in function.");
+            return;
+        }
+        Compiler_grow_stack(Cptr);
+        C = *Cptr;
+    }
+
+    Local* local = &C->locals[C->llen++];
+    local->token = C->parser.current;
+    local->depth = C->depth;
 }
 
-SK_STATIC_INLINE(void) parse_statement(VM* vm, Parser* parser, bool can_assign)
+SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
 {
-    if(Parser_match(parser, TOK_PRINT)) {
-        parse_statement_print(vm, parser, can_assign);
+    return left->len == right->len && memcmp(left->start, right->start, left->len) == 0;
+}
+
+SK_INTERNAL(UInt) parse_varname(VM* vm, Compiler** Cptr, const char* errmsg)
+{
+    Compiler_expect(*Cptr, TOK_IDENTIFIER, errmsg);
+    // If local scope make local variable
+    if((*Cptr)->depth > 0) {
+        Compiler* C    = *Cptr;
+        Token*    name = &C->parser.previous;
+
+        for(int64_t i = C->llen - 1; i >= 0; i--) {
+            Local* local = &C->locals[i];
+            if(local->depth != -1 && local->depth < C->depth) {
+                break;
+            }
+
+            if(Identifier_eq(name, &local->token)) {
+                Compiler_error(
+                    C,
+                    "Variable with the same name is already defined in this scope.");
+            }
+        }
+        Compiler_local_new(Cptr);
+        return 0;
+    }
+    // Otherwise make global variable
+    return make_constant_identifier(vm, &(*Cptr)->parser.previous);
+}
+
+SK_INTERNAL(void) parse_statement(VM* vm, Compiler** Cptr, bool can_assign)
+{
+    if(Compiler_match(*Cptr, TOK_PRINT)) {
+        parse_statement_print(vm, Cptr, can_assign);
+    } else if(Compiler_match(*Cptr, TOK_LBRACE)) {
+        Compiler* C = *Cptr;
+        C->depth++; /* Start of scope */
+        parse_block(vm, Cptr, can_assign);
+        C = *Cptr;
+        C->depth--; /* End of scope */
+        UInt popped = 0;
+        while(C->llen > 0 && C->locals[C->llen - 1].depth > C->depth) {
+            C->llen--;
+            popped++;
+        }
+        emit_popn(C, popped);
     } else {
-        parse_statement_expression(vm, parser, can_assign);
+        parse_statement_expression(vm, Cptr, can_assign);
     }
 }
 
-SK_STATIC_INLINE(void) parse_statement_print(VM* vm, Parser* parser, bool can_assign)
+SK_INTERNAL(void) parse_block(VM* vm, Compiler** Cptr, bool can_assign)
 {
-    parse_expression(vm, parser);
-    Parser_expect(parser, TOK_SEMICOLON, "Expect ';' after value");
-    emit_byte(parser, OP_PRINT);
+    while(!Compiler_match(*Cptr, TOK_RBRACE) && !Compiler_match(*Cptr, TOK_EOF)) {
+        parse_declaration(vm, Cptr, can_assign);
+    }
+    Compiler_expect(*Cptr, TOK_RBRACE, "Expect '}' after block.");
 }
 
-SK_STATIC_INLINE(void) parse_number(_unused VM* _, Parser* parser, bool can_assign)
+SK_INTERNAL(void) parse_statement_print(VM* vm, Compiler** Cptr, unused bool _)
 {
-    double constant = strtod(parser->previous.start, NULL);
-    emit_constant(parser, NUMBER_VAL(constant));
+    parse_expression(vm, Cptr);
+    Compiler_expect(*Cptr, TOK_SEMICOLON, "Expect ';' after value");
+    emit_byte(*Cptr, OP_PRINT);
 }
 
-/* Fetches or creates identifier constant inside a current chunk with the
- * name/identifier stored inside a token 'name'. */
-SK_STATIC_INLINE(void) varname(VM* vm, Parser* parser, Token* name, bool can_assign)
+SK_INTERNAL(void) parse_number(unused VM* _, Compiler** Cptr, unused bool __)
 {
-    UInt idx = make_constant_identifier(vm, name);
+    Compiler* C        = *Cptr;
+    double    constant = strtod(C->parser.previous.start, NULL);
+    emit_constant(C, NUMBER_VAL(constant));
+}
 
-    if(can_assign && Parser_match(parser, TOK_EQUAL)) {
-        parse_expression(vm, parser);
-        emit_global_set(parser, idx);
+SK_INTERNAL(int64_t) Local_idx(Compiler* C, Token* name)
+{
+    for(UInt i = C->llen - 1; i >= 0; i--) {
+        Local* local = &C->locals[i];
+        if(Identifier_eq(&local->token, name)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+SK_INTERNAL(force_inline void) parse_variable(VM* vm, Compiler** Cptr, bool can_assign)
+{
+    Token* name = &(*Cptr)->parser.previous;
+    OpCode setop, getop;
+    UInt   idx = Local_idx(*Cptr, name);
+
+    if(idx != -1) {
+        setop = GET_OP_TYPE(idx, OP_SET_LOCAL);
+        getop = GET_OP_TYPE(idx, OP_GET_LOCAL);
     } else {
-        emit_global_get(parser, idx);
+        idx   = make_constant_identifier(vm, name);
+        setop = GET_OP_TYPE(idx, OP_SET_GLOBAL);
+        getop = GET_OP_TYPE(idx, OP_GET_GLOBAL);
+    }
+
+    if(can_assign && Compiler_match(*Cptr, TOK_EQUAL)) {
+        parse_expression(vm, Cptr);
+        emit_varop(*Cptr, setop, idx);
+    } else {
+        emit_varop(*Cptr, getop, idx);
     }
 }
 
-SK_STATIC_INLINE(void) parse_variable(VM* vm, Parser* parser, bool can_assign)
+SK_INTERNAL(force_inline void) parse_string(VM* vm, Compiler** Cptr, unused bool _)
 {
-    varname(vm, parser, &parser->previous, can_assign);
-}
-
-SK_STATIC_INLINE(void) parse_string(VM* vm, Parser* parser, _unused bool _)
-{
+    Compiler* C = *Cptr;
     emit_constant(
-        parser,
-        OBJ_VAL(
-            ObjString_from(vm, parser->previous.start + 1, parser->previous.len - 2)));
+        C,
+        OBJ_VAL(ObjString_from(
+            vm,
+            C->parser.previous.start + 1,
+            C->parser.previous.len - 2)));
 }
 
 /* This is the entry point to Pratt parsing */
-SK_STATIC_INLINE(void) parse_grouping(VM* vm, Parser* parser, bool can_assign)
+SK_INTERNAL(force_inline void) parse_grouping(VM* vm, Compiler** Cptr, bool can_assign)
 {
-    parse_expression(vm, parser);
-    Parser_expect(parser, TOK_RPAREN, "Expect ')' after expression");
+    parse_expression(vm, Cptr);
+    Compiler_expect(*Cptr, TOK_RPAREN, "Expect ')' after expression");
 }
 
-static void parse_unary(VM* vm, Parser* parser, _unused bool _)
+static void parse_unary(VM* vm, Compiler** Cptr, unused bool _)
 {
-    TokenType type = parser->previous.type;
-    parse_precedence(vm, parser, PREC_UNARY);
+    TokenType type = (*Cptr)->parser.previous.type;
+    parse_precedence(vm, Cptr, PREC_UNARY);
 
     switch(type) {
         case TOK_MINUS:
-            emit_byte(parser, OP_NEG);
+            emit_byte(*Cptr, OP_NEG);
             break;
         case TOK_BANG:
-            emit_byte(parser, OP_NOT);
+            emit_byte(*Cptr, OP_NOT);
             break;
         default:
-            _unreachable;
+            unreachable;
             return;
     }
 }
 
-static void parse_binary(VM* vm, Parser* parser, _unused bool _)
+static void parse_binary(VM* vm, Compiler** Cptr, unused bool _)
 {
-    TokenType        type = parser->previous.type;
+    TokenType        type = (*Cptr)->parser.previous.type;
     const ParseRule* rule = &rules[type];
-    parse_precedence(vm, parser, rule->precedence + 1);
+    parse_precedence(vm, Cptr, rule->precedence + 1);
 
 #ifdef THREADED_CODE
     // IMPORTANT: update accordingly if TokenType enum is changed!
@@ -537,103 +649,103 @@ static void parse_binary(VM* vm, Parser* parser, _unused bool _)
         0,       /* TOK_EOF */
     };
 
-    goto* jump_table[type];
+    Compiler* C = *Cptr;
+    goto*     jump_table[type];
 
 minus:
-    emit_byte(parser, OP_SUB);
+    emit_byte(C, OP_SUB);
     return;
 plus:
-    emit_byte(parser, OP_ADD);
+    emit_byte(C, OP_ADD);
     return;
 slash:
-    emit_byte(parser, OP_DIV);
+    emit_byte(C, OP_DIV);
     return;
 star:
-    emit_byte(parser, OP_MUL);
+    emit_byte(C, OP_MUL);
     return;
 neq:
-    emit_byte(parser, OP_NOT_EQUAL);
+    emit_byte(C, OP_NOT_EQUAL);
     return;
 eq:
-    emit_byte(parser, OP_EQUAL);
+    emit_byte(C, OP_EQUAL);
     return;
 gt:
-    emit_byte(parser, OP_GREATER);
+    emit_byte(C, OP_GREATER);
     return;
 gteq:
-    emit_byte(parser, OP_GREATER_EQUAL);
+    emit_byte(C, OP_GREATER_EQUAL);
     return;
 lt:
-    emit_byte(parser, OP_LESS);
+    emit_byte(C, OP_LESS);
     return;
 lteq:
-    emit_byte(parser, OP_LESS_EQUAL);
+    emit_byte(C, OP_LESS_EQUAL);
     return;
 
-    _unreachable;
+    unreachable;
 #else
     switch(type) {
         case TOK_MINUS:
-            emit_byte(OP_SUB);
+            emit_byte(C, OP_SUB);
             break;
         case TOK_PLUS:
-            emit_byte(OP_ADD);
+            emit_byte(C, OP_ADD);
             break;
         case TOK_SLASH:
-            emit_byte(OP_DIV);
+            emit_byte(C, OP_DIV);
             break;
         case TOK_STAR:
-            emit_byte(OP_MUL);
+            emit_byte(C, OP_MUL);
             break;
         case TOK_BANG_EQUAL:
-            emit_byte(OP_NOT_EQUAL);
+            emit_byte(C, OP_NOT_EQUAL);
             break;
         case TOK_EQUAL_EQUAL:
-            emit_byte(OP_EQUAL);
+            emit_byte(C, OP_EQUAL);
             break;
         case TOK_GREATER:
-            emit_byte(OP_GREATER);
+            emit_byte(C, OP_GREATER);
             break;
         case TOK_GREATER_EQUAL:
-            emit_byte(OP_GREATER_EQUAL);
+            emit_byte(C, OP_GREATER_EQUAL);
             break;
         case TOK_LESS:
-            emit_byte(OP_LESS);
+            emit_byte(C, OP_LESS);
             break;
         case TOK_LESS_EQUAL:
-            emit_byte(OP_LESS_EQUAL);
+            emit_byte(C, OP_LESS_EQUAL);
             break;
         default:
-            _unreachable;
+            unreachable;
             return;
     }
 #endif
 }
 
-SK_STATIC_INLINE(void) parse_ternarycond(VM* vm, Parser* parser, _unused bool _)
+SK_INTERNAL(force_inline void) parse_ternarycond(VM* vm, Compiler** Cptr, unused bool _)
 {
-    parse_expression(vm, parser);
-    Parser_expect(
-        parser,
-        TOK_COLON,
-        "Expect ': \033[3mexpr\033[0m' (ternary conditional).");
-    parse_expression(vm, parser);
+    parse_expression(vm, Cptr);
+    Compiler_expect(*Cptr, TOK_COLON, "Expect ': expr' (ternary conditional).");
+    parse_expression(vm, Cptr);
 }
 
-static void parse_literal(_unused VM* _, Parser* parser, _unused bool __)
+SK_INTERNAL(force_inline void)
+parse_literal(unused VM* _, Compiler** Cptr, unused bool __)
 {
-    switch(parser->previous.type) {
+    Compiler* C = *Cptr;
+    switch(C->parser.previous.type) {
         case TOK_TRUE:
-            emit_byte(parser, OP_TRUE);
+            emit_byte(C, OP_TRUE);
             break;
         case TOK_FALSE:
-            emit_byte(parser, OP_FALSE);
+            emit_byte(C, OP_FALSE);
             break;
         case TOK_NIL:
-            emit_byte(parser, OP_NIL);
+            emit_byte(C, OP_NIL);
             break;
         default:
-            _unreachable;
+            unreachable;
             return;
     }
 }

@@ -2,6 +2,7 @@
 #include "object.h"
 #include "value.h"
 
+#include <math.h>
 #include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +14,11 @@ void Value_print(Value value)
             printf(AS_BOOL(value) ? "true" : "false");
             break;
         case VAL_NUMBER:
-            printf("%f", AS_NUMBER(value));
+            if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) {
+                printf("%f", AS_NUMBER(value));
+            } else {
+                printf("%ld", (int64_t)AS_NUMBER(value));
+            }
             break;
         case VAL_NIL:
             printf("nil");

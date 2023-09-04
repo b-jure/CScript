@@ -10,9 +10,12 @@ void *reallocate(void *ptr, size_t oldCap, size_t newCap);
 /* Copy 'len' bytes from 'src' returning null-terminated cstring */
 char *strncopy(const char *src, UInt len);
 
-/* Wrapper around reallocate that is equivallent to malloc, allocates 'bytes'
+/* Wrapper around reallocate that is equivalent to malloc, allocates 'bytes'
  * amount */
 #define MALLOC(bytes) reallocate(NULL, 0, bytes)
+
+/* Wrapper around reallocate, equivalent to realloc */
+#define REALLOC(ptr, oldsize, newsize) reallocate(ptr, oldsize, newsize)
 
 /* Wrapper around reallocate, allocates a new array */
 #define ALLOC_ARRAY(type, size) (type *)reallocate(NULL, 0, sizeof(type) * size)

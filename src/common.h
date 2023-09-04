@@ -27,6 +27,26 @@
 /* Check if double is NaN */
 #define IS_NAN(dbl)                                                            \
   ((*(uint64_t *)(&dbl) & 0x7FFFFFFFFFFFFFFFL) > 0x7FF0000000000000L)
+/* Return MAX */
+#if defined(__GNUC__) || defined(__clang__)
+#define MAX(a, b)                                                              \
+  ({                                                                           \
+    __typeof__(a) _a = (a);                                                    \
+    __typeof__(b) _b = (b);                                                    \
+    _a > _b ? _a : _b;                                                         \
+  })
+/* Return MIN */
+#define MIN(a, b)                                                              \
+  ({                                                                           \
+    __typeof__(a) _a = (a);                                                    \
+    __typeof__(b) _b = (b);                                                    \
+    _a > _b ? _b : _a;                                                         \
+  })
+#else
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) > (b) ? (b) : (a))
+#endif
+
 /* ------------------------------------------------------------------------- */
 
 /* Debug flag for debugging chunks. */
@@ -47,32 +67,32 @@ typedef uint32_t UInt;
 /* Compiler builtins (attributes)------------------------------------------- */
 
 #if defined(__GLIBC__)
-#define __force_inline __always_inline
-#define __likely(cond) __glibc_likely(cond)
-#define __unlikely(cond) __glibc_unlikely(cond)
-#define __unused __attribute__((unused))
-#define __unreachable __builtin_unreachable()
+#define _force_inline __always_inline
+#define _likely(cond) __glibc_likely(cond)
+#define _unlikely(cond) __glibc_unlikely(cond)
+#define _unused __attribute__((unused))
+#define _unreachable __builtin_unreachable()
 #elif defined(__clang__)
-#define __force_inline __always_inline
-#define __likely(cond) [[likely]] cond
-#define __unlikely(cond) [[unlikely]] cond
-#define __unused [[maybe_unused]]
-#define __unreachable
+#define _force_inline __always_inline
+#define _likely(cond) [[likely]] cond
+#define _unlikely(cond) [[unlikely]] cond
+#define _unused [[maybe_unused]]
+#define _unreachable
 #else
-#define __force_inline inline
-#define __likely(cond) cond
-#define __unlikely(cond) cond
-#define __unused
-#define __unreachable
+#define _force_inline inline
+#define _likely(cond) cond
+#define _unlikely(cond) cond
+#define _unused
+#define _unreachable
 #endif
 
-#define _force_inline __force_inline
-#define _likely(cond) __likely(cond)
-#define _unlikely(cond) __unlikely(cond)
-#define _unused __unused
-#define _unreachable __unreachable
+#define force_inline _force_inline
+#define likely(cond) _likely(cond)
+#define unlikely(cond) _unlikely(cond)
+#define unused _unused
+#define unreachable _unreachable
 
-#define SK_STATIC_INLINE(ret) static _force_inline ret
+#define SK_INTERNAL(ret) static ret
 /* ------------------------------------------------------------------------- */
 
 #endif
