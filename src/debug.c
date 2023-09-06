@@ -36,10 +36,6 @@ UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
     switch(instruction) {
         case OP_RET:
             return Instruction_simple("OP_RET", offset);
-        case OP_CONST:
-            return Instruction_short("OP_CONST", chunk, OP_CONST, offset, vm);
-        case OP_CONSTL:
-            return Instruction_long("OP_CONSTL", chunk, OP_CONSTL, offset, vm);
         case OP_TRUE:
             return Instruction_simple("OP_TRUE", offset);
         case OP_FALSE:
@@ -66,14 +62,20 @@ UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
             return Instruction_simple("OP_GREATER_EQUAL", offset);
         case OP_GREATER:
             return Instruction_simple("OP_GREATER", offset);
-        case OP_LESS_EQUAL:
-            return Instruction_simple("OP_LESS_EQUAL", offset);
         case OP_LESS:
             return Instruction_simple("OP_LESS", offset);
-        case OP_POP:
-            return Instruction_simple("OP_POP", offset);
+        case OP_LESS_EQUAL:
+            return Instruction_simple("OP_LESS_EQUAL", offset);
         case OP_PRINT:
             return Instruction_simple("OP_PRINT", offset);
+        case OP_POP:
+            return Instruction_simple("OP_POP", offset);
+        case OP_POPN:
+            return Instruction_long("OP_POPN", chunk, OP_POPN, offset, vm);
+        case OP_CONST:
+            return Instruction_short("OP_CONST", chunk, OP_CONST, offset, vm);
+        case OP_CONSTL:
+            return Instruction_long("OP_CONSTL", chunk, OP_CONSTL, offset, vm);
         case OP_DEFINE_GLOBAL:
             return Instruction_short(
                 "OP_DEFINE_GLOBAL",
@@ -96,6 +98,14 @@ UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
             return Instruction_short("OP_SET_GLOBAL", chunk, OP_SET_GLOBAL, offset, vm);
         case OP_SET_GLOBALL:
             return Instruction_long("OP_SET_GLOBALL", chunk, OP_SET_GLOBALL, offset, vm);
+        case OP_GET_LOCAL:
+            return Instruction_short("OP_GET_LOCAL", chunk, OP_GET_LOCAL, offset, vm);
+        case OP_GET_LOCALL:
+            return Instruction_long("OP_GET_LOCALL", chunk, OP_GET_LOCALL, offset, vm);
+        case OP_SET_LOCAL:
+            return Instruction_short("OP_SET_LOCAL", chunk, OP_SET_LOCAL, offset, vm);
+        case OP_SET_LOCALL:
+            return Instruction_long("OP_SET_LOCALL", chunk, OP_SET_LOCALL, offset, vm);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -111,42 +121,51 @@ static int Instruction_simple(const char* name, UInt offset)
 static int
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
-    Byte constant_index = ByteArray_index(&chunk->code, offset + 1);
-    printf("%-16s %5u '", name, constant_index);
+    Byte param = ByteArray_index(&chunk->code, offset + 1);
+    printf("%-16s %5u ", name, param);
     switch(code) {
         case OP_CONST:
-            Value_print(ValueArray_index(&chunk->constants, constant_index));
+            printf("'");
+            Value_print(ValueArray_index(&chunk->constants, param));
+            printf("'");
             break;
         case OP_DEFINE_GLOBAL:
         case OP_GET_GLOBAL:
         case OP_SET_GLOBAL:
-            Value_print(vm->global_vals.data[constant_index]);
+        case OP_GET_LOCAL:
+        case OP_SET_LOCAL:
+            // do nothing
             break;
         default:
-            _unreachable;
+            unreachable;
     }
-    printf("'\n");
+    printf("\n");
     return offset + 2; /* OpCode + 8-bit/1-byte index */
 }
 
 static int
 Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
-    UInt constant_index = GET_BYTES3(&chunk->code.data[offset + 1]);
-    printf("%-16s %5u '", name, constant_index);
+    UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
+    printf("%-16s %5u ", name, param);
 
     switch(code) {
         case OP_CONSTL:
-            Value_print(ValueArray_index(&chunk->constants, constant_index));
+            printf("'");
+            Value_print(ValueArray_index(&chunk->constants, param));
+            printf("'");
             break;
+        case OP_POPN:
         case OP_SET_GLOBALL:
         case OP_GET_GLOBALL:
         case OP_DEFINE_GLOBALL:
-            Value_print(vm->global_vals.data[constant_index]);
+        case OP_GET_LOCALL:
+        case OP_SET_LOCALL:
+            // do nothing
             break;
         default:
-            _unreachable;
+            unreachable;
     }
-    printf("'\n");
+    printf("\n");
     return offset + 4; /* OpCode + 24-bit/3-byte index */
 }

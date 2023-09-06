@@ -105,6 +105,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_GET_LOCAL)
         CASE(OP_SET_LOCAL)
         {
+            printf("Writing code: '%d'\n", code);
             Chunk_write_op(chunk, code, false, param, line);
             BREAK;
         }

@@ -12,7 +12,7 @@
 /* VM Stack size */
 #define VM_STACK_MAX STACK_MAX(Value)
 
-/* @TODO: Make stack size modifiable inside interpreter */
+/* @TODO: Make stack size modifiable (arguments to interpreter executable) */
 
 typedef struct {
   Chunk *chunk;              /* Chunk being interpreted */

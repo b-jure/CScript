@@ -30,7 +30,7 @@ void Value_print(Value value)
             printf("<empty>");
             break;
         default:
-            _unreachable;
+            unreachable;
     }
 }
 
@@ -51,7 +51,7 @@ bool Value_eq(Value a, Value b)
         case VAL_OBJ:
             return AS_OBJ(a) == AS_OBJ(b);
         default:
-            _unreachable;
+            unreachable;
     }
 }
 
@@ -69,6 +69,6 @@ Hash Value_hash(Value value)
         case VAL_EMPTY:
             return 0;
         default:
-            _unreachable;
+            unreachable;
     }
 }

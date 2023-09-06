@@ -14,9 +14,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define stack_peek(vm, top) ((Value) * ((vm)->sp - (top + 1)))
-#define stack_reset(vm)     (vm)->sp = (vm)->stack
-#define stack_size(vm)      ((vm)->sp - (vm)->stack)
+#define stack_peek(top) ((Value) * ((vm)->sp - (top + 1)))
+#define stack_reset(vm) (vm)->sp = (vm)->stack
+#define stack_size(vm)  ((vm)->sp - (vm)->stack)
 
 SK_INTERNAL(force_inline void) VM_push(VM* vm, Value val)
 {
@@ -87,9 +87,9 @@ SK_INTERNAL(force_inline uint8_t) double_to_str(char** str, double dbl)
         goto end;
     }
 
-    register int c;
+    int c;
     /* Trim excess zeroes */
-    for(register uint8_t i = len - 1; i > 0; i--) {
+    for(uint8_t i = len - 1; i > 0; i--) {
         switch((c = buffer[i])) {
             case '0':
                 len--;
@@ -164,6 +164,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     memcpy(buffer + len[0], str[1], len[1]);
     buffer[length] = '\0';
 
+    // @GC - allocated
     return ObjString_from(vm, buffer, length);
 }
 
@@ -195,7 +196,7 @@ static InterpretResult VM_run(VM* vm)
 {
 #define BINARY_OP(value_type, op)                                                        \
     do {                                                                                 \
-        if(!IS_NUMBER(stack_peek(vm, 0)) || !IS_NUMBER(stack_peek(vm, 1))) {             \
+        if(!IS_NUMBER(stack_peek(0)) || !IS_NUMBER(stack_peek(1))) {                     \
             VM_error(vm, "Operands must be numbers (binary operation '" #op "').");      \
             return INTERPRET_RUNTIME_ERROR;                                              \
         }                                                                                \
@@ -206,7 +207,7 @@ static InterpretResult VM_run(VM* vm)
 
 #define CONCAT_OR_ADD()                                                                  \
     do {                                                                                 \
-        if(IS_NUMBER(stack_peek(vm, 0)) && IS_NUMBER(stack_peek(vm, 1))) {               \
+        if(IS_NUMBER(stack_peek(0)) && IS_NUMBER(stack_peek(1))) {                       \
             double b = AS_NUMBER(VM_pop(vm));                                            \
             double a = AS_NUMBER(VM_pop(vm));                                            \
             VM_push(vm, NUMBER_VAL((a + b)));                                            \
@@ -262,11 +263,11 @@ static InterpretResult VM_run(VM* vm)
             }
             CASE(OP_NEG)
             {
-                if(!IS_NUMBER(stack_peek(vm, 0))) {
+                if(!IS_NUMBER(stack_peek(0))) {
                     VM_error(vm, "Operand must be a number (unary negation '-').");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(stack_peek(vm, 0));
+                AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(stack_peek(0));
                 BREAK;
             }
             CASE(OP_ADD)
@@ -291,7 +292,7 @@ static InterpretResult VM_run(VM* vm)
             }
             CASE(OP_NOT)
             {
-                *(vm->sp - 1) = BOOL_VAL(isfalsey(stack_peek(vm, 0)));
+                *(vm->sp - 1) = BOOL_VAL(isfalsey(stack_peek(0)));
                 BREAK;
             }
             CASE(OP_NOT_EQUAL)
@@ -394,12 +395,12 @@ static InterpretResult VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBAL)
             {
-                UInt idx = READ_BYTE();
+                uint8_t idx = READ_BYTE();
                 if(IS_UNDEFINED(vm->global_vals.data[idx])) {
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                vm->global_vals.data[idx] = stack_peek(vm, 0);
+                vm->global_vals.data[idx] = stack_peek(0);
                 BREAK;
             }
             CASE(OP_SET_GLOBALL)
@@ -409,23 +410,31 @@ static InterpretResult VM_run(VM* vm)
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                vm->global_vals.data[idx] = stack_peek(vm, 0);
+                vm->global_vals.data[idx] = stack_peek(0);
                 BREAK;
             }
             CASE(OP_GET_LOCAL)
             {
+                uint8_t slot = READ_BYTE();
+                VM_push(vm, vm->stack[slot]);
                 BREAK;
             }
             CASE(OP_GET_LOCALL)
             {
+                UInt slot = READ_BYTEL();
+                VM_push(vm, vm->stack[slot]);
                 BREAK;
             }
             CASE(OP_SET_LOCAL)
             {
+                uint8_t slot    = READ_BYTE();
+                vm->stack[slot] = stack_peek(0);
                 BREAK;
             }
             CASE(OP_SET_LOCALL)
             {
+                UInt slot       = READ_BYTEL();
+                vm->stack[slot] = stack_peek(0);
                 BREAK;
             }
             CASE(OP_RET)
@@ -456,6 +465,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
 
     if(!compile(vm, source, &chunk)) {
         Chunk_free(&chunk);
+        stack_reset(vm);
         return INTERPRET_COMPILE_ERROR;
     }
 

@@ -1,5 +1,6 @@
 #include "mem.h"
 
+#include <errno.h>
 #include <stdlib.h>
 
 void* reallocate(void* ptr, unused size_t oldc, size_t newc)
@@ -12,8 +13,9 @@ void* reallocate(void* ptr, unused size_t oldc, size_t newc)
     void* alloc = realloc(ptr, newc);
 
     if(alloc == NULL) {
-        exit(EXIT_FAILURE);
+        exit(errno);
     }
+
     return alloc;
 }
 

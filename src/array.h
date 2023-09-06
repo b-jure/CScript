@@ -5,6 +5,8 @@
 #include "mem.h"
 #include "value.h"
 
+#include <errno.h>
+
 #define _CALL_ARRAY_METHOD(type, name, ...)                                    \
   _ARRAY_METHOD_NAME(type, name)(self __VA_OPT__(, ) __VA_ARGS__)
 #define _ARRAY_METHOD_NAME(type, b) type##Array_##b
@@ -66,7 +68,7 @@
       self->cap = GROW_ARRAY_CAPACITY(old_cap);                                \
                                                                                \
       if (_unlikely(self->cap >= UINT32_MAX)) {                                \
-        exit(EXIT_FAILURE);                                                    \
+        exit(ENOMEM);                                                          \
       } else {                                                                 \
         self->data = GROW_ARRAY(type, self->data, old_cap, self->cap);         \
       }                                                                        \
@@ -79,14 +81,19 @@
     type *src = self->data + index;                                            \
     type *dest = src + 1;                                                      \
     memmove(dest, src, self->len - index);                                     \
+    self->len++;                                                               \
     self->data[index] = value;                                                 \
   }                                                                            \
                                                                                \
   type _ARRAY_METHOD(type, remove, size_t index) {                             \
+    if (self->len == 1) {                                                      \
+      return _CALL_ARRAY_METHOD(type, pop);                                    \
+    }                                                                          \
     type *src = self->data + index;                                            \
     type *dest = src - 1;                                                      \
-    type retval = self->data[index];                                           \
+    type retval = *src;                                                        \
     memmove(dest, src, self->len - index);                                     \
+    self->len--;                                                               \
     return retval;                                                             \
   }
 

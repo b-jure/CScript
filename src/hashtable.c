@@ -218,7 +218,9 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
         return false;
     }
 
-    *out = entry->value;
+    if(out != NULL) {
+        *out = entry->value;
+    }
     return true;
 }
 
