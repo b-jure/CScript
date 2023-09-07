@@ -129,7 +129,7 @@ SK_INTERNAL(void) C_error(Compiler* compiler, const char* error);
 SK_INTERNAL(void) Parser_init(Parser* parser, const char* source);
 SK_INTERNAL(void) parse_number(VM* vm, Compiler** Cptr, Byte flags);
 SK_INTERNAL(void) parse_string(VM* vm, Compiler** Cptr, Byte flags);
-SK_INTERNAL(UInt) parse_varname(VM* vm, Compiler** Cptr, const char* errmsg);
+SK_INTERNAL(UInt) parse_varname(VM* vm, Compiler** Cptr, bool fixed, const char* errmsg);
 SK_INTERNAL(void) parse_precedence(VM* vm, Compiler** Cptr, Precedence prec);
 SK_INTERNAL(void) parse_grouping(VM* vm, Compiler** Cptr, Byte flags);
 SK_INTERNAL(void) parse_ternarycond(VM* vm, Compiler** Cptr, Byte flags);
@@ -137,6 +137,8 @@ SK_INTERNAL(void) parse_expression(VM* vm, Compiler** Cptr);
 SK_INTERNAL(void) parse_dec(VM* vm, Compiler** Cptr, Byte flags);
 SK_INTERNAL(void)
 parse_decvar(VM* vm, Compiler** Cptr, Byte flags);
+SK_INTERNAL(void)
+parse_decvar_fixed(VM* vm, Compiler** Cptr, Byte flags);
 SK_INTERNAL(void) parse_block(VM* vm, Compiler** Cptr, Byte flags);
 SK_INTERNAL(void) parse_statement(VM* vm, Compiler** Cptr, Byte flags);
 SK_INTERNAL(void) parse_statement_print(VM* vm, Compiler** Cptr, Byte flags);
@@ -187,11 +189,13 @@ SK_INTERNAL(force_inline Value) Token_into_stringval(VM* vm, Token* name)
     return OBJ_VAL(ObjString_from(vm, name->start, name->len));
 }
 
-SK_INTERNAL(force_inline UInt) make_constant_identifier(VM* vm, Value identifier)
+SK_INTERNAL(force_inline UInt)
+make_constant_identifier(VM* vm, Value identifier, bool fixed)
 {
     Value index;
     if(!HashTable_get(&vm->global_ids, identifier, &index)) {
-        index = NUMBER_VAL((double)ValueArray_push(&vm->global_vals, UNDEFINED_VAL));
+        index = NUMBER_VAL(
+            (double)GlobalArray_push(&vm->global_vals, (Global){UNDEFINED_VAL, fixed}));
         HashTable_insert(&vm->global_ids, identifier, index);
     }
     return (UInt)AS_NUMBER(index);
@@ -347,49 +351,49 @@ SK_INTERNAL(Chunk) * current_chunk()
  * column parse function is used in case token is inifx. Third column marks the
  * 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
-    [TOK_LPAREN]        = {parse_grouping, NULL,              PREC_NONE      },
-    [TOK_RPAREN]        = {NULL,           NULL,              PREC_NONE      },
-    [TOK_LBRACE]        = {NULL,           NULL,              PREC_NONE      },
-    [TOK_RBRACE]        = {NULL,           NULL,              PREC_NONE      },
-    [TOK_COMMA]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_DOT]           = {NULL,           NULL,              PREC_NONE      },
-    [TOK_MINUS]         = {parse_unary,    parse_binary,      PREC_TERM      },
-    [TOK_PLUS]          = {NULL,           parse_binary,      PREC_TERM      },
-    [TOK_COLON]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_SEMICOLON]     = {NULL,           NULL,              PREC_NONE      },
-    [TOK_SLASH]         = {NULL,           parse_binary,      PREC_FACTOR    },
-    [TOK_STAR]          = {NULL,           parse_binary,      PREC_FACTOR    },
-    [TOK_QMARK]         = {NULL,           parse_ternarycond, PREC_TERNARY   },
-    [TOK_BANG]          = {parse_unary,    NULL,              PREC_NONE      },
-    [TOK_BANG_EQUAL]    = {NULL,           parse_binary,      PREC_EQUALITY  },
-    [TOK_EQUAL]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_EQUAL_EQUAL]   = {NULL,           parse_binary,      PREC_EQUALITY  },
-    [TOK_GREATER]       = {NULL,           parse_binary,      PREC_COMPARISON},
-    [TOK_GREATER_EQUAL] = {NULL,           parse_binary,      PREC_COMPARISON},
-    [TOK_LESS]          = {NULL,           parse_binary,      PREC_COMPARISON},
-    [TOK_LESS_EQUAL]    = {NULL,           parse_binary,      PREC_COMPARISON},
-    [TOK_IDENTIFIER]    = {parse_variable, NULL,              PREC_NONE      },
-    [TOK_STRING]        = {parse_string,   NULL,              PREC_NONE      },
-    [TOK_NUMBER]        = {parse_number,   NULL,              PREC_NONE      },
-    [TOK_AND]           = {NULL,           NULL,              PREC_NONE      },
-    [TOK_CLASS]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_ELSE]          = {NULL,           NULL,              PREC_NONE      },
-    [TOK_FALSE]         = {parse_literal,  NULL,              PREC_NONE      },
-    [TOK_FOR]           = {NULL,           NULL,              PREC_NONE      },
-    [TOK_FN]            = {NULL,           NULL,              PREC_NONE      },
-    [TOK_FIXED]         = {parse_decvar,   NULL,              PREC_NONE      },
-    [TOK_IF]            = {NULL,           NULL,              PREC_NONE      },
-    [TOK_NIL]           = {parse_literal,  NULL,              PREC_NONE      },
-    [TOK_OR]            = {NULL,           NULL,              PREC_NONE      },
-    [TOK_PRINT]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_RETURN]        = {NULL,           NULL,              PREC_NONE      },
-    [TOK_SUPER]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_SELF]          = {NULL,           NULL,              PREC_NONE      },
-    [TOK_TRUE]          = {parse_literal,  NULL,              PREC_NONE      },
-    [TOK_VAR]           = {parse_decvar,   NULL,              PREC_NONE      },
-    [TOK_WHILE]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_ERROR]         = {NULL,           NULL,              PREC_NONE      },
-    [TOK_EOF]           = {NULL,           NULL,              PREC_NONE      },
+    [TOK_LPAREN]        = {parse_grouping,     NULL,              PREC_NONE      },
+    [TOK_RPAREN]        = {NULL,               NULL,              PREC_NONE      },
+    [TOK_LBRACE]        = {NULL,               NULL,              PREC_NONE      },
+    [TOK_RBRACE]        = {NULL,               NULL,              PREC_NONE      },
+    [TOK_COMMA]         = {NULL,               NULL,              PREC_NONE      },
+    [TOK_DOT]           = {NULL,               NULL,              PREC_NONE      },
+    [TOK_MINUS]         = {parse_unary,        parse_binary,      PREC_TERM      },
+    [TOK_PLUS]          = {NULL,               parse_binary,      PREC_TERM      },
+    [TOK_COLON]         = {NULL,               NULL,              PREC_NONE      },
+    [TOK_SEMICOLON]     = {NULL,               NULL,              PREC_NONE      },
+    [TOK_SLASH]         = {NULL,               parse_binary,      PREC_FACTOR    },
+    [TOK_STAR]          = {NULL,               parse_binary,      PREC_FACTOR    },
+    [TOK_QMARK]         = {NULL,               parse_ternarycond, PREC_TERNARY   },
+    [TOK_BANG]          = {parse_unary,        NULL,              PREC_NONE      },
+    [TOK_BANG_EQUAL]    = {NULL,               parse_binary,      PREC_EQUALITY  },
+    [TOK_EQUAL]         = {NULL,               NULL,              PREC_NONE      },
+    [TOK_EQUAL_EQUAL]   = {NULL,               parse_binary,      PREC_EQUALITY  },
+    [TOK_GREATER]       = {NULL,               parse_binary,      PREC_COMPARISON},
+    [TOK_GREATER_EQUAL] = {NULL,               parse_binary,      PREC_COMPARISON},
+    [TOK_LESS]          = {NULL,               parse_binary,      PREC_COMPARISON},
+    [TOK_LESS_EQUAL]    = {NULL,               parse_binary,      PREC_COMPARISON},
+    [TOK_IDENTIFIER]    = {parse_variable,     NULL,              PREC_NONE      },
+    [TOK_STRING]        = {parse_string,       NULL,              PREC_NONE      },
+    [TOK_NUMBER]        = {parse_number,       NULL,              PREC_NONE      },
+    [TOK_AND]           = {NULL,               NULL,              PREC_NONE      },
+    [TOK_CLASS]         = {NULL,               NULL,              PREC_NONE      },
+    [TOK_ELSE]          = {NULL,               NULL,              PREC_NONE      },
+    [TOK_FALSE]         = {parse_literal,      NULL,              PREC_NONE      },
+    [TOK_FOR]           = {NULL,               NULL,              PREC_NONE      },
+    [TOK_FN]            = {NULL,               NULL,              PREC_NONE      },
+    [TOK_FIXED]         = {parse_decvar_fixed, NULL,              PREC_NONE      },
+    [TOK_IF]            = {NULL,               NULL,              PREC_NONE      },
+    [TOK_NIL]           = {parse_literal,      NULL,              PREC_NONE      },
+    [TOK_OR]            = {NULL,               NULL,              PREC_NONE      },
+    [TOK_PRINT]         = {NULL,               NULL,              PREC_NONE      },
+    [TOK_RETURN]        = {NULL,               NULL,              PREC_NONE      },
+    [TOK_SUPER]         = {NULL,               NULL,              PREC_NONE      },
+    [TOK_SELF]          = {NULL,               NULL,              PREC_NONE      },
+    [TOK_TRUE]          = {parse_literal,      NULL,              PREC_NONE      },
+    [TOK_VAR]           = {parse_decvar,       NULL,              PREC_NONE      },
+    [TOK_WHILE]         = {NULL,               NULL,              PREC_NONE      },
+    [TOK_ERROR]         = {NULL,               NULL,              PREC_NONE      },
+    [TOK_EOF]           = {NULL,               NULL,              PREC_NONE      },
 };
 
 SK_INTERNAL(void)
@@ -473,7 +477,7 @@ parse_decvar(VM* vm, Compiler** Cptr, Byte flags)
         set_fixed(flags);
     }
 
-    int64_t index = parse_varname(vm, Cptr, "Expect variable name.");
+    int64_t index = parse_varname(vm, Cptr, is_fixed(flags), "Expect variable name.");
 
     if(C_match(*Cptr, TOK_EQUAL)) {
         parse_expression(vm, Cptr);
@@ -533,13 +537,13 @@ SK_INTERNAL(void) C_make_local(Compiler** Cptr, VM* vm)
     C_new_local(Cptr);
 }
 
-SK_INTERNAL(int64_t) C_make_global(Compiler* C, VM* vm)
+SK_INTERNAL(int64_t) C_make_global(Compiler* C, VM* vm, bool fixed)
 {
     Value identifier = Token_into_stringval(vm, &C->parser.previous);
-    return make_constant_identifier(vm, identifier);
+    return make_constant_identifier(vm, identifier, fixed);
 }
 
-SK_INTERNAL(UInt) parse_varname(VM* vm, Compiler** Cptr, const char* errmsg)
+SK_INTERNAL(UInt) parse_varname(VM* vm, Compiler** Cptr, bool fixed, const char* errmsg)
 {
     C_expect(*Cptr, TOK_IDENTIFIER, errmsg);
     // If local scope make local variable
@@ -549,7 +553,7 @@ SK_INTERNAL(UInt) parse_varname(VM* vm, Compiler** Cptr, const char* errmsg)
     }
 
     // Otherwise make global variable (VM)
-    return C_make_global(*Cptr, vm);
+    return C_make_global(*Cptr, vm, fixed);
 }
 
 SK_INTERNAL(force_inline void) C_start_scope(Compiler* C)
@@ -634,7 +638,7 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, Compiler** Cptr, Byte flag
         setop = GET_OP_TYPE(idx, OP_SET_LOCAL);
         getop = GET_OP_TYPE(idx, OP_GET_LOCAL);
     } else {
-        idx   = C_make_global(*Cptr, vm);
+        idx   = C_make_global(*Cptr, vm, is_fixed(flags));
         setop = GET_OP_TYPE(idx, OP_SET_GLOBAL);
         getop = GET_OP_TYPE(idx, OP_GET_GLOBAL);
     }

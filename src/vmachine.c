@@ -1,3 +1,4 @@
+#include "array.h"
 #include "common.h"
 #include "compiler.h"
 #include "mem.h"
@@ -13,6 +14,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+DEFINE_ARRAY(Global);
 
 #define stack_peek(top) ((Value) * ((vm)->sp - (top + 1)))
 #define stack_reset(vm) (vm)->sp = (vm)->stack
@@ -188,7 +191,7 @@ void VM_init(VM* vm)
     vm->objects = NULL;
     stack_reset(vm);
     HashTable_init(&vm->global_ids);
-    ValueArray_init(&vm->global_vals);
+    GlobalArray_init(&vm->global_vals);
     HashTable_init(&vm->strings);
 }
 
@@ -362,55 +365,67 @@ static InterpretResult VM_run(VM* vm)
             }
             CASE(OP_DEFINE_GLOBAL)
             {
-                vm->global_vals.data[READ_BYTE()] = VM_pop(vm);
+                uint8_t idx               = READ_BYTE();
+                bool    fixed             = vm->global_vals.data[idx].fixed;
+                vm->global_vals.data[idx] = (Global){VM_pop(vm), fixed};
                 BREAK;
             }
             CASE(OP_DEFINE_GLOBALL)
             {
-                vm->global_vals.data[READ_BYTEL()] = VM_pop(vm);
+                UInt idx                  = READ_BYTEL();
+                bool fixed                = vm->global_vals.data[idx].fixed;
+                vm->global_vals.data[idx] = (Global){VM_pop(vm), fixed};
                 //
                 vm->ip += 3;
                 BREAK;
             }
             CASE(OP_GET_GLOBAL)
             {
-                Value val = vm->global_vals.data[READ_BYTE()];
-                if(IS_UNDEFINED(val)) {
+                Global global = vm->global_vals.data[READ_BYTE()];
+                if(IS_UNDEFINED(global.value)) {
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                VM_push(vm, val);
+                VM_push(vm, global.value);
                 BREAK;
             }
             CASE(OP_GET_GLOBALL)
             {
-                Value val = vm->global_vals.data[READ_BYTEL()];
-                vm->ip    += 3;
-                if(IS_UNDEFINED(val)) {
+                Global global = vm->global_vals.data[READ_BYTEL()];
+                vm->ip        += 3;
+                if(IS_UNDEFINED(global.value)) {
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                VM_push(vm, val);
+                VM_push(vm, global.value);
                 BREAK;
             }
             CASE(OP_SET_GLOBAL)
             {
-                uint8_t idx = READ_BYTE();
-                if(IS_UNDEFINED(vm->global_vals.data[idx])) {
+                uint8_t idx    = READ_BYTE();
+                Global* global = &vm->global_vals.data[idx];
+                if(IS_UNDEFINED(global->value)) {
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
+                } else if(global->fixed) {
+                    VM_error(vm, "Can't assign to 'fixed' variable.");
+                    return INTERPRET_RUNTIME_ERROR;
                 }
-                vm->global_vals.data[idx] = stack_peek(0);
+                global->value = stack_peek(0);
                 BREAK;
             }
             CASE(OP_SET_GLOBALL)
             {
-                UInt idx = READ_BYTEL();
-                if(IS_UNDEFINED(vm->global_vals.data[idx])) {
+                UInt    idx    = READ_BYTEL();
+                Global* global = &vm->global_vals.data[idx];
+                if(IS_UNDEFINED(global->value)) {
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
+                } else if(global->fixed) {
+                    VM_error(vm, "Can't assign to 'fixed' variable.");
+                    return INTERPRET_RUNTIME_ERROR;
                 }
-                vm->global_vals.data[idx] = stack_peek(0);
+                global->value = stack_peek(0);
                 BREAK;
             }
             CASE(OP_GET_LOCAL)
@@ -484,7 +499,7 @@ void VM_free(VM* vm)
         Chunk_free(vm->chunk);
     }
     HashTable_free(&vm->global_ids);
-    ValueArray_free(&vm->global_vals);
+    GlobalArray_free(&vm->global_vals);
     HashTable_free(&vm->strings);
     MFREE_LIST(vm->objects, Obj_free);
     MFREE(vm, sizeof(VM));

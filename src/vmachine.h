@@ -1,6 +1,7 @@
 #ifndef __SKOOMA_VMACHINE_H__
 #define __SKOOMA_VMACHINE_H__
 
+#include "array.h"
 #include "chunk.h"
 #include "hashtable.h"
 #include "value.h"
@@ -15,12 +16,19 @@
 /* @TODO: Make stack size modifiable (arguments to interpreter executable) */
 
 typedef struct {
+  Value value;
+  bool fixed;
+} Global;
+
+DECLARE_ARRAY(Global);
+
+typedef struct {
   Chunk *chunk;              /* Chunk being interpreted */
   Byte *ip;                  /* Instruction pointer */
   Value stack[VM_STACK_MAX]; /* Stack */
   Value *sp;                 /* Stack pointer */
   HashTable global_ids;      /* Global variable names */
-  ValueArray global_vals;    /* Global variable values */
+  GlobalArray global_vals;   /* Global variable values */
   HashTable strings;         /* Strings (interning) */
   Obj *objects;              /* List of allocated object */
 } VM;
