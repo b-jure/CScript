@@ -49,6 +49,7 @@ typedef enum {
   TOK_TRUE,
   TOK_VAR,
   TOK_WHILE,
+  TOK_FIXED,
 
   TOK_ERROR,
   TOK_EOF

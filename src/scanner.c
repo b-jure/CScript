@@ -338,6 +338,8 @@ f:
         switch(scanner->start[1]) {
             case 'a':
                 return check_keyword(scanner, 2, 3, "lse", TOK_FALSE);
+            case 'i':
+                return check_keyword(scanner, 2, 3, "xed", TOK_FIXED);
             case 'n':
                 if(scanner->current - scanner->start == 2) {
                     return TOK_FN;
@@ -407,6 +409,8 @@ w:
                 switch(scanner->start[1]) {
                     case 'a':
                         return check_keyword(scanner, 2, 3, "lse", TOK_FALSE);
+                    case 'i':
+                        return check_keyword(scanner, 2, 3, "xed", TOK_FIXED);
                     case 'n':
                         if(scanner->current - scanner->start == 2) {
                             return TOK_FN;
