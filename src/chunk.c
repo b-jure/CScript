@@ -43,10 +43,10 @@ SK_INTERNAL(force_inline void) Chunk_write_param24(Chunk* chunk, UInt param, UIn
 }
 
 SK_INTERNAL(force_inline void)
-Chunk_write_op(Chunk* chunk, OpCode code, bool l, UInt idx, UInt line)
+Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
 {
     Chunk_write(chunk, code, line);
-    if(!l) {
+    if(!islong) {
         Chunk_write(chunk, idx, line);
     } else {
         Chunk_write_param24(chunk, idx, line);
@@ -94,6 +94,8 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_SET_GLOBALL)
         CASE(OP_GET_LOCALL)
         CASE(OP_SET_LOCALL)
+        CASE(OP_JMP_IF_FALSE)
+        CASE(OP_JMP)
         {
             Chunk_write_op(chunk, code, true, param, line);
             BREAK;

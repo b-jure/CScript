@@ -49,7 +49,10 @@ void VM_error(VM* vm, const char* errfmt, ...)
     stack_reset(vm);
 }
 
-/* NIL and FALSE are always falsey */
+/* Returns true if 'value' is boolean 'false' or is 'nil', otherwise return false.
+ * DEV_NOTE: bool type must be 1 if true and 0 if false,
+ * otherwise this would break some logic, for example
+ * the case where the VM is executing OP_JMP_IF_FALSE instruction. */
 SK_INTERNAL(force_inline bool) isfalsey(Value value)
 {
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
@@ -222,9 +225,9 @@ static InterpretResult VM_run(VM* vm)
     } while(false)
 
 #define READ_BYTE()      (*vm->ip++)
-#define READ_BYTEL()     GET_BYTES3(vm->ip)
+#define READ_BYTEL()     (vm->ip += 3, GET_BYTES3(vm->ip - 3))
 #define READ_CONSTANT()  vm->chunk->constants.data[READ_BYTE()]
-#define READ_CONSTANTL() vm->chunk->constants.data[GET_BYTES3(vm->ip)]
+#define READ_CONSTANTL() vm->chunk->constants.data[READ_BYTEL()]
 #define READ_STRING()    AS_STRING(READ_CONSTANT())
 #define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
 #define DISPATCH(x)      switch(x)
@@ -346,7 +349,6 @@ static InterpretResult VM_run(VM* vm)
             CASE(OP_POPN)
             {
                 UInt n = READ_BYTEL();
-                vm->ip += 3;
                 while(n--) {
                     VM_pop(vm);
                 }
@@ -360,7 +362,6 @@ static InterpretResult VM_run(VM* vm)
             CASE(OP_CONSTL)
             {
                 VM_push(vm, READ_CONSTANTL());
-                vm->ip += 3;
                 BREAK;
             }
             CASE(OP_DEFINE_GLOBAL)
@@ -375,8 +376,6 @@ static InterpretResult VM_run(VM* vm)
                 UInt idx                  = READ_BYTEL();
                 bool fixed                = vm->global_vals.data[idx].fixed;
                 vm->global_vals.data[idx] = (Global){VM_pop(vm), fixed};
-                //
-                vm->ip += 3;
                 BREAK;
             }
             CASE(OP_GET_GLOBAL)
@@ -392,7 +391,6 @@ static InterpretResult VM_run(VM* vm)
             CASE(OP_GET_GLOBALL)
             {
                 Global global = vm->global_vals.data[READ_BYTEL()];
-                vm->ip        += 3;
                 if(IS_UNDEFINED(global.value)) {
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
@@ -452,6 +450,20 @@ static InterpretResult VM_run(VM* vm)
                 vm->stack[slot] = stack_peek(0);
                 BREAK;
             }
+            CASE(OP_JMP_IF_FALSE)
+            {
+                UInt skip_offset = READ_BYTEL();
+                //
+                vm->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
+                BREAK;
+            }
+            CASE(OP_JMP)
+            {
+                UInt skip_offset = READ_BYTEL();
+                //
+                vm->ip += skip_offset;
+                BREAK;
+            }
             CASE(OP_RET)
             {
                 return INTERPRET_OK;
@@ -464,6 +476,7 @@ static InterpretResult VM_run(VM* vm)
 #undef VM_BINARY_OP
 #undef VM_CONCAT_OR_ADD
 #undef READ_BYTE
+#undef READ_BYTEL
 #undef READ_CONSTANT
 #undef READ_CONSTANTL
 #undef READ_STRING

@@ -41,6 +41,8 @@ typedef enum {
   OP_GET_LOCALL,     /* Push local variable on the stack long */
   OP_SET_LOCAL,      /* Set local variable */
   OP_SET_LOCALL,     /* Set local variable long */
+  OP_JMP_IF_FALSE,   /* Conditional jump to instruction */
+  OP_JMP,            /* Jump to instruction */
   OP_RET,            /* Stop interpreting ? */
 } OpCode;
 

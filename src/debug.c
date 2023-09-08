@@ -1,15 +1,18 @@
 #include "chunk.h"
+#include "common.h"
 #include "debug.h"
 #include "mem.h"
 
 #include <assert.h>
 #include <stdio.h>
 
-static int
+SK_INTERNAL(int)
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm);
-static int
+SK_INTERNAL(int)
 Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm);
-static int Instruction_simple(const char* name, UInt offset);
+SK_INTERNAL(int) Instruction_simple(const char* name, UInt offset);
+SK_INTERNAL(int)
+Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset);
 
 void Chunk_debug(Chunk* chunk, const char* name, VM* vm)
 {
@@ -106,19 +109,31 @@ UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
             return Instruction_short("OP_SET_LOCAL", chunk, OP_SET_LOCAL, offset, vm);
         case OP_SET_LOCALL:
             return Instruction_long("OP_SET_LOCALL", chunk, OP_SET_LOCALL, offset, vm);
+        case OP_JMP_IF_FALSE:
+            return Instruction_jump("OP_JMP_IF_FALSE", 1, chunk, offset);
+        case OP_JMP:
+            return Instruction_jump("OP_JMP", 1, chunk, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
     }
 }
 
-static int Instruction_simple(const char* name, UInt offset)
+SK_INTERNAL(int) Instruction_simple(const char* name, UInt offset)
 {
     printf("%s\n", name);
     return offset + 1; /* OpCode */
 }
 
-static int
+SK_INTERNAL(int)
+Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
+{
+    UInt jmp = GET_BYTES3(&chunk->code.data[offset + 1]);
+    printf("%-16s %5u -> %u\n", name, offset, offset + 4 + (sign * jmp));
+    return offset + 4;
+}
+
+SK_INTERNAL(int)
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
     Byte param = ByteArray_index(&chunk->code, offset + 1);
@@ -129,21 +144,15 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* 
             Value_print(ValueArray_index(&chunk->constants, param));
             printf("'");
             break;
-        case OP_DEFINE_GLOBAL:
-        case OP_GET_GLOBAL:
-        case OP_SET_GLOBAL:
-        case OP_GET_LOCAL:
-        case OP_SET_LOCAL:
+        default:
             // do nothing
             break;
-        default:
-            unreachable;
     }
     printf("\n");
     return offset + 2; /* OpCode + 8-bit/1-byte index */
 }
 
-static int
+SK_INTERNAL(int)
 Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
     UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
@@ -155,16 +164,9 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* v
             Value_print(ValueArray_index(&chunk->constants, param));
             printf("'");
             break;
-        case OP_POPN:
-        case OP_SET_GLOBALL:
-        case OP_GET_GLOBALL:
-        case OP_DEFINE_GLOBALL:
-        case OP_GET_LOCALL:
-        case OP_SET_LOCALL:
+        default:
             // do nothing
             break;
-        default:
-            unreachable;
     }
     printf("\n");
     return offset + 4; /* OpCode + 24-bit/3-byte index */
