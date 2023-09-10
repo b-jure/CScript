@@ -65,7 +65,7 @@ typedef struct {
     Byte flags;
 } Local;
 
-#define LOCAL_STACK_MAX  UINT24_MAX + 1
+#define LOCAL_STACK_MAX  (UINT24_MAX + 1)
 #define SHORT_STACK_SIZE (UINT8_MAX + 1)
 
 #define ALLOC_COMPILER() MALLOC(sizeof(Compiler) + (SHORT_STACK_SIZE * sizeof(Local)))
@@ -169,12 +169,12 @@ SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr, Byte flags);
 
 SK_INTERNAL(Compiler*) C_new(const char* source)
 {
-    Compiler* C = MALLOC(sizeof(Compiler) + ((UINT8_MAX + 1) * sizeof(Local)));
+    Compiler* C = MALLOC(sizeof(Compiler) + ((SHORT_STACK_SIZE) * sizeof(Local)));
     Parser_init(&C->parser, source);
     HashTableArray_init(&C->ldefs);
-    HashTableArray_init_cap(&C->ldefs, UINT8_MAX + 1);
+    HashTableArray_init_cap(&C->ldefs, SHORT_STACK_SIZE);
     C->llen  = 0; /* @FIX: Make this pointer into the locals stack? */
-    C->lcap  = UINT8_MAX + 1;
+    C->lcap  = SHORT_STACK_SIZE;
     C->depth = 0;
     C_advance(C);
     return C;
@@ -923,6 +923,7 @@ SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr, unused Byte _)
         0,       /* TOK_TRUE */
         0,       /* TOK_VAR */
         0,       /* TOK_WHILE */
+        0,       /* TOK_FIXED */
         0,       /* TOK_ERROR */
         0,       /* TOK_EOF */
     };
