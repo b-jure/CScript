@@ -113,6 +113,8 @@ UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
             return Instruction_jump("OP_JMP_IF_FALSE", 1, chunk, offset);
         case OP_JMP:
             return Instruction_jump("OP_JMP", 1, chunk, offset);
+        case OP_LOOP:
+            return Instruction_jump("OP_LOOP", -1, chunk, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;

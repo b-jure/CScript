@@ -26,7 +26,7 @@ set(SRCFILES
 
 add_executable(${BIN} ${SRCFILES})
 target_include_directories(${BIN} PRIVATE ${SRCDIR})
-target_compile_options(${BIN} PRIVATE ${CLFAGS} ${SANITIZER_FLAGS} -g)
+target_compile_options(${BIN} PRIVATE ${CLFAGS} ${SANITIZER_FLAGS} -g -fno-omit-frame-pointer)
 target_link_options(${BIN} PRIVATE ${SANITIZER_FLAGS})
 
 # xxHash dependency

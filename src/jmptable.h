@@ -34,7 +34,7 @@ static const void *const optable[OPCODE_N] = {
     &&L_OP_GET_LOCAL,     &&L_OP_GET_LOCALL,
     &&L_OP_SET_LOCAL,     &&L_OP_SET_LOCALL,
     &&L_OP_JMP_IF_FALSE,  &&L_OP_JMP,
-    &&L_OP_RET,
+    &&L_OP_LOOP,          &&L_OP_RET,
 };
 
 #endif

@@ -96,6 +96,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_SET_LOCALL)
         CASE(OP_JMP_IF_FALSE)
         CASE(OP_JMP)
+        CASE(OP_LOOP)
         {
             Chunk_write_op(chunk, code, true, param, line);
             BREAK;

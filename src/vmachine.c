@@ -198,7 +198,7 @@ void VM_init(VM* vm)
     HashTable_init(&vm->strings);
 }
 
-static InterpretResult VM_run(VM* vm)
+SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 {
 #define BINARY_OP(value_type, op)                                                        \
     do {                                                                                 \
@@ -348,7 +348,7 @@ static InterpretResult VM_run(VM* vm)
             }
             CASE(OP_POPN)
             {
-                UInt n = READ_BYTEL();
+                int32_t n = READ_BYTEL();
                 while(n--) {
                     VM_pop(vm);
                 }
@@ -462,6 +462,13 @@ static InterpretResult VM_run(VM* vm)
                 UInt skip_offset = READ_BYTEL();
                 //
                 vm->ip += skip_offset;
+                BREAK;
+            }
+            CASE(OP_LOOP)
+            {
+                UInt offset = READ_BYTEL();
+                //
+                vm->ip -= offset;
                 BREAK;
             }
             CASE(OP_RET)

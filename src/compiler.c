@@ -65,7 +65,7 @@ typedef struct {
     Byte flags;
 } Local;
 
-#define LOCAL_STACK_MAX  MAXBYTES(3) + 1
+#define LOCAL_STACK_MAX  UINT24_MAX + 1
 #define SHORT_STACK_SIZE (UINT8_MAX + 1)
 
 #define ALLOC_COMPILER() MALLOC(sizeof(Compiler) + (SHORT_STACK_SIZE * sizeof(Local)))
@@ -142,6 +142,7 @@ SK_INTERNAL(Chunk*) current_chunk();
 /* Internal */
 SK_INTERNAL(void) C_advance(Compiler* compiler);
 SK_INTERNAL(void) C_error(Compiler* compiler, const char* error);
+SK_INTERNAL(void) Compiler_free(Compiler* C);
 SK_INTERNAL(void) Parser_init(Parser* parser, const char* source);
 SK_INTERNAL(void) parse_number(VM* vm, CompilerPPtr Cptr, Byte flags);
 SK_INTERNAL(void) parse_string(VM* vm, CompilerPPtr Cptr, Byte flags);
@@ -156,13 +157,15 @@ SK_INTERNAL(void)
 parse_decvar(VM* vm, CompilerPPtr Cptr, Byte flags);
 SK_INTERNAL(void)
 parse_decvar_fixed(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_block(VM* vm, CompilerPPtr Cptr, Byte flags);
+SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr, Byte flags);
 SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr, Byte flags);
 SK_INTERNAL(void) parse_stm_print(VM* vm, CompilerPPtr Cptr, Byte flags);
 SK_INTERNAL(void) parse_variable(VM* vm, CompilerPPtr Cptr, Byte flags);
 SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr, Byte flags);
 SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr, Byte flags);
 SK_INTERNAL(void) parse_literal(VM* vm, CompilerPPtr Cptr, Byte flags);
+SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr, Byte flags);
+SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr, Byte flags);
 
 SK_INTERNAL(Compiler*) C_new(const char* source)
 {
@@ -182,7 +185,7 @@ SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr)
     Compiler* C      = *Cptr;
     UInt      oldcap = C->lcap;
 
-    C->lcap = MIN(GROW_ARRAY_CAPACITY(oldcap), MAXBYTES(3));
+    C->lcap = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);
     C       = GROW_LOCAL_STACK(C, oldcap, C->lcap);
     *Cptr   = C;
 }
@@ -191,7 +194,7 @@ SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr)
 
 SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
 {
-    if(current_chunk()->constants.len <= MIN(VM_STACK_MAX, MAXBYTES(3))) {
+    if(current_chunk()->constants.len <= MIN(VM_STACK_MAX, UINT24_MAX)) {
         return Chunk_make_constant(current_chunk(), constant);
     } else {
         C_error(C, "Too many constants in one chunk.");
@@ -230,6 +233,21 @@ SK_INTERNAL(force_inline UInt) C_emit_jmp(Compiler* C, VM* vm, OpCode jmp)
 {
     Chunk_write_codewparam(current_chunk(), jmp, 0, C->parser.previous.line);
     return code_offset() - 3;
+}
+
+SK_INTERNAL(force_inline void) C_emit_loop(Compiler* C, UInt start)
+{
+    C_emit_byte(C, OP_LOOP);
+
+    UInt offset = current_chunk()->code.len - start + 3;
+
+    if(offset >= UINT24_MAX) {
+        C_error(C, "Too much code to jump over.");
+    }
+
+    C_emit_byte(C, BYTE(offset, 0));
+    C_emit_byte(C, BYTE(offset, 1));
+    C_emit_byte(C, BYTE(offset, 2));
 }
 
 /*========================= PARSER ========================*/
@@ -353,13 +371,19 @@ bool compile(VM* vm, const char* source, Chunk* chunk)
     compile_end(C, vm);
 #endif
     bool not_err = !C_is_error(C);
-    free(C);
+    Compiler_free(C);
     return not_err;
 }
 
 SK_INTERNAL(Chunk) * current_chunk()
 {
     return compiling_chunk;
+}
+
+SK_INTERNAL(void) Compiler_free(Compiler* C)
+{
+    HashTableArray_free(&C->ldefs);
+    free(C);
 }
 
 /*========================== PARSE ========================
@@ -396,7 +420,7 @@ static const ParseRule rules[] = {
     [TOK_IDENTIFIER]    = {parse_variable,     NULL,              PREC_NONE      },
     [TOK_STRING]        = {parse_string,       NULL,              PREC_NONE      },
     [TOK_NUMBER]        = {parse_number,       NULL,              PREC_NONE      },
-    [TOK_AND]           = {NULL,               NULL,              PREC_NONE      },
+    [TOK_AND]           = {NULL,               parse_and,         PREC_NONE      },
     [TOK_CLASS]         = {NULL,               NULL,              PREC_NONE      },
     [TOK_ELSE]          = {NULL,               NULL,              PREC_NONE      },
     [TOK_FALSE]         = {parse_literal,      NULL,              PREC_NONE      },
@@ -405,7 +429,7 @@ static const ParseRule rules[] = {
     [TOK_FIXED]         = {parse_decvar_fixed, NULL,              PREC_NONE      },
     [TOK_IF]            = {NULL,               NULL,              PREC_NONE      },
     [TOK_NIL]           = {parse_literal,      NULL,              PREC_NONE      },
-    [TOK_OR]            = {NULL,               NULL,              PREC_NONE      },
+    [TOK_OR]            = {NULL,               parse_or,          PREC_NONE      },
     [TOK_PRINT]         = {NULL,               NULL,              PREC_NONE      },
     [TOK_RETURN]        = {NULL,               NULL,              PREC_NONE      },
     [TOK_SUPER]         = {NULL,               NULL,              PREC_NONE      },
@@ -574,7 +598,7 @@ parse_varname(VM* vm, CompilerPPtr Cptr, bool fixed, const char* errmsg)
         return 0;
     }
 
-    // Otherwise make global variable (VM)
+    // Otherwise make global variable
     return C_make_global(*Cptr, vm, fixed);
 }
 
@@ -600,48 +624,30 @@ SK_INTERNAL(force_inline void) C_patch_jmp(Compiler* C, VM* vm, UInt jmp_offset)
 {
     UInt offset = code_offset() - jmp_offset - 3;
 
-    if(unlikely(offset >= MAXBYTES(3))) {
+    if(unlikely(offset >= UINT24_MAX)) {
         C_error(C, "Too much code to jump over.");
     }
 
     PUT_BYTES3(&current_chunk()->code.data[jmp_offset], offset);
 }
 
-SK_INTERNAL(void) parse_stm_if(CompilerPPtr Cptr, VM* vm, Byte flags)
+SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr, Byte flags)
 {
-    /*
-     * 00 [CONDITIONAL]
-     * 01 [JMP_IF_FALSE]
-     * 02 [15] // JUMP TO ELSE OR END
-     * 03 [0]  // unused
-     * 04 [0]  // unused
-     * 05 [POP]
-     * 06 [STATEMENT]
-     * ..
-     * 11 [OP_JMP]
-     * 12 [45]  // JUMP TO END
-     * 13 [IDX] // unused
-     * 14 [IDX] // unused
-     * 15 [ELSE]
-     * 16 [STATEMENT]
-     * ...
-     * 45 [NEXT INSTRUCTION]
-     */
     C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'if'.");
     parse_expr(vm, Cptr); /* Parse conditional */
     C_expect(*Cptr, TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional jump instruction */
     UInt iffalse_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
-
     C_emit_byte(*Cptr, OP_POP); /* Pop the conditional */
+
     parse_stm(vm, Cptr, flags); /* Parse the code in this branch */
 
     /* Prevent fall-through if 'else' exists. */
     UInt iftrue_jmp = C_emit_jmp(*Cptr, vm, OP_JMP);
+    C_emit_byte(*Cptr, OP_POP); /* Pop the conditional */
 
     C_patch_jmp(*Cptr, vm, iffalse_jmp); /* End of 'if' (maybe start of else) */
-    C_emit_byte(*Cptr, OP_POP);          /* Pop the conditional */
 
     if(C_match(*Cptr, TOK_ELSE)) {
         parse_stm(vm, Cptr, flags);         /* Parse the else branch */
@@ -649,31 +655,130 @@ SK_INTERNAL(void) parse_stm_if(CompilerPPtr Cptr, VM* vm, Byte flags)
     }
 }
 
+SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr, Byte flags)
+{
+    // @FIX: Make jump if false and pop into a single instruction
+    UInt jump = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
+    C_emit_byte(*Cptr, OP_POP);
+    parse_precedence(vm, Cptr, PREC_AND); /* Parse right side */
+    C_patch_jmp(*Cptr, vm, jump);
+}
+
+SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr, Byte flags)
+{
+    // @FIX: Make a jump if true (new instruction) and pop into a single instruction
+    UInt else_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
+    UInt end_jmp  = C_emit_jmp(*Cptr, vm, OP_JMP);
+
+    C_patch_jmp(*Cptr, vm, else_jmp);
+    C_emit_byte(*Cptr, OP_POP);
+
+    parse_precedence(vm, Cptr, PREC_OR);
+    C_patch_jmp(*Cptr, vm, end_jmp);
+}
+
+SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr, Byte flags)
+{
+    UInt loop_start = current_chunk()->code.len;
+    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'while'.");
+    parse_expr(vm, Cptr);
+    C_expect(*Cptr, TOK_RPAREN, "Expect ')' after condition.");
+
+    /* Setup the conditional exit jump */
+    UInt end_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
+    C_emit_byte(*Cptr, OP_POP);
+    parse_stm(vm, Cptr, flags);     /* Parse (loop 'body') statement */
+    C_emit_loop(*Cptr, loop_start); /* Jump to the start of the loop */
+
+    C_patch_jmp(*Cptr, vm, end_jmp); /* Set loop exit offset */
+    C_emit_byte(*Cptr, OP_POP);      /* Pop parsed value */
+}
+
+SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr, Byte flags)
+{
+    C_start_scope(*Cptr);
+    /*----------- INITIALIZER -------------*/
+    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'for'.");
+    if(C_match(*Cptr, TOK_SEMICOLON)) {
+        // No initializer
+    } else if(C_match(*Cptr, TOK_VAR)) {
+        parse_decvar(vm, Cptr, flags);
+    } else if(C_match(*Cptr, TOK_FIXED)) {
+        parse_decvar_fixed(vm, Cptr, flags);
+    } else {
+        parse_stm_expr(vm, Cptr, flags);
+    }
+    /*--------- END OF INITIALIZER -----------*/
+
+    /*----------- CONDITION -------------*/
+    UInt    loop_start = current_chunk()->code.len;
+    int32_t loop_end   = -1;
+    if(!C_match(*Cptr, TOK_SEMICOLON)) {
+        parse_expr(vm, Cptr);
+        C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' (condition).");
+
+        loop_end = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
+        C_emit_byte(*Cptr, OP_POP);
+    }
+    /*--------- END OF CONDITION -----------*/
+
+    /*----------- INCREMENT -------------*/
+    if(!C_match(*Cptr, TOK_SEMICOLON)) {
+        UInt body_start      = C_emit_jmp(*Cptr, vm, OP_JMP);
+        UInt increment_start = current_chunk()->code.len;
+        parse_expr(vm, Cptr);
+        C_emit_byte(*Cptr, OP_POP);
+        C_expect(*Cptr, TOK_RPAREN, "Expect ')' after last for-loop clause.");
+
+        C_emit_loop(*Cptr, loop_start);
+        loop_start = increment_start; /* If there is increment update the loop start */
+        C_patch_jmp(*Cptr, vm, body_start);
+    }
+    /*--------- END OF INCREMENT -----------*/
+
+    parse_stm(vm, Cptr, flags);
+    C_emit_loop(*Cptr, loop_start);
+
+    if(loop_end != -1) {
+        C_patch_jmp(*Cptr, vm, loop_end);
+        C_emit_byte(*Cptr, OP_POP);
+    }
+
+    C_end_scope(*Cptr);
+}
+
 SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr, Byte flags)
 {
     if(C_match(*Cptr, TOK_PRINT)) {
         parse_stm_print(vm, Cptr, flags);
+    } else if(C_match(*Cptr, TOK_WHILE)) {
+        parse_stm_while(vm, Cptr, flags);
+    } else if(C_match(*Cptr, TOK_FOR)) {
+        parse_stm_for(vm, Cptr, flags);
     } else if(C_match(*Cptr, TOK_IF)) {
-        parse_stm_if(Cptr, vm, flags);
+        parse_stm_if(vm, Cptr, flags);
     } else if(C_match(*Cptr, TOK_LBRACE)) {
-        Compiler* C = *Cptr;
-        C_start_scope(C);
-        parse_block(vm, Cptr, flags);
-        C_end_scope(C);
-        UInt popn = C->ldefs.data[C->depth].len;
-        C->llen   -= popn;
-        C_emit_op(C, OP_POPN, popn);
+        parse_stm_block(vm, Cptr, flags);
     } else {
         parse_stm_expr(vm, Cptr, flags);
     }
 }
 
-SK_INTERNAL(void) parse_block(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr, Byte flags)
 {
+    Compiler* C = *Cptr;
+    C_start_scope(C);
+
     while(!C_check(*Cptr, TOK_RBRACE) && !C_check(*Cptr, TOK_EOF)) {
         parse_dec(vm, Cptr, flags);
     }
+
     C_expect(*Cptr, TOK_RBRACE, "Expect '}' after block.");
+    C_end_scope(C);
+
+    UInt popn = C->ldefs.data[C->depth].len;
+    C->llen   -= popn;
+    C_emit_op(C, OP_POPN, popn);
 }
 
 SK_INTERNAL(force_inline void)

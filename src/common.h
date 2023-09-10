@@ -17,6 +17,8 @@
 #define MAXBITS(bits) (~((size_t)0) >> ((sizeof(size_t) * 8) - ((size_t)bits)))
 // Wrapper around MAXBITS, uses 'bytes' instead
 #define MAXBYTES(bytes) MAXBITS((bytes)*8)
+
+#define UINT24_MAX MAXBYTES(3)
 /* ------------------------------------------------------------------------- */
 
 /* Math--------------------------------------------------------------------- */
