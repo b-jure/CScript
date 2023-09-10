@@ -457,11 +457,37 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 vm->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
                 BREAK;
             }
+            CASE(OP_JMP_IF_FALSE_OR_POP)
+            {
+                UInt skip_offset = READ_BYTEL();
+                if(isfalsey(stack_peek(0))) {
+                    vm->ip += skip_offset;
+                } else {
+                    VM_pop(vm);
+                }
+                BREAK;
+            }
+            CASE(OP_JMP_IF_FALSE_AND_POP)
+            {
+                UInt skip_offset = READ_BYTEL();
+                //
+                vm->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
+                VM_pop(vm);
+                BREAK;
+            }
             CASE(OP_JMP)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
                 vm->ip += skip_offset;
+                BREAK;
+            }
+            CASE(OP_JMP_AND_POP)
+            {
+                UInt skip_offset = READ_BYTEL();
+                //
+                vm->ip += skip_offset;
+                VM_pop(vm);
                 BREAK;
             }
             CASE(OP_LOOP)

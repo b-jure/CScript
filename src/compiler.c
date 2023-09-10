@@ -618,6 +618,9 @@ SK_INTERNAL(force_inline void) C_end_scope(Compiler* C)
 {
     C->depth--;
     HashTableArray_pop(&C->ldefs);
+    UInt popn = C->ldefs.data[C->depth].len;
+    C->llen   -= popn;
+    C_emit_op(C, OP_POPN, popn);
 }
 
 SK_INTERNAL(force_inline void) C_patch_jmp(Compiler* C, VM* vm, UInt jmp_offset)
@@ -638,14 +641,12 @@ SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr, Byte flags)
     C_expect(*Cptr, TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional jump instruction */
-    UInt iffalse_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
-    C_emit_byte(*Cptr, OP_POP); /* Pop the conditional */
+    UInt iffalse_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
 
     parse_stm(vm, Cptr, flags); /* Parse the code in this branch */
 
     /* Prevent fall-through if 'else' exists. */
     UInt iftrue_jmp = C_emit_jmp(*Cptr, vm, OP_JMP);
-    C_emit_byte(*Cptr, OP_POP); /* Pop the conditional */
 
     C_patch_jmp(*Cptr, vm, iffalse_jmp); /* End of 'if' (maybe start of else) */
 
@@ -658,20 +659,18 @@ SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr, Byte flags)
 SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr, Byte flags)
 {
     // @FIX: Make jump if false and pop into a single instruction
-    UInt jump = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
-    C_emit_byte(*Cptr, OP_POP);
+    UInt jump = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_OR_POP);
     parse_precedence(vm, Cptr, PREC_AND); /* Parse right side */
-    C_patch_jmp(*Cptr, vm, jump);
+    C_patch_jmp(*Cptr, vm, jump);         /* @TODO: POP after and before jmp */
 }
 
 SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr, Byte flags)
 {
     // @FIX: Make a jump if true (new instruction) and pop into a single instruction
-    UInt else_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
+    UInt else_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
     UInt end_jmp  = C_emit_jmp(*Cptr, vm, OP_JMP);
 
-    C_patch_jmp(*Cptr, vm, else_jmp);
-    C_emit_byte(*Cptr, OP_POP);
+    C_patch_jmp(*Cptr, vm, else_jmp); /* @TODO: POP after jmp */
 
     parse_precedence(vm, Cptr, PREC_OR);
     C_patch_jmp(*Cptr, vm, end_jmp);
@@ -685,13 +684,11 @@ SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr, Byte flags)
     C_expect(*Cptr, TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional exit jump */
-    UInt end_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
-    C_emit_byte(*Cptr, OP_POP);
+    UInt end_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
     parse_stm(vm, Cptr, flags);     /* Parse (loop 'body') statement */
     C_emit_loop(*Cptr, loop_start); /* Jump to the start of the loop */
 
     C_patch_jmp(*Cptr, vm, end_jmp); /* Set loop exit offset */
-    C_emit_byte(*Cptr, OP_POP);      /* Pop parsed value */
 }
 
 SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr, Byte flags)
@@ -717,8 +714,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr, Byte flags)
         parse_expr(vm, Cptr);
         C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' (condition).");
 
-        loop_end = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE);
-        C_emit_byte(*Cptr, OP_POP);
+        loop_end = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
     }
     /*--------- END OF CONDITION -----------*/
 
@@ -741,10 +737,10 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr, Byte flags)
 
     if(loop_end != -1) {
         C_patch_jmp(*Cptr, vm, loop_end);
-        C_emit_byte(*Cptr, OP_POP);
     }
 
-    C_end_scope(*Cptr);
+    Compiler* C = *Cptr;
+    C_end_scope(C);
 }
 
 SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr, Byte flags)
@@ -775,10 +771,6 @@ SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr, Byte flags)
 
     C_expect(*Cptr, TOK_RBRACE, "Expect '}' after block.");
     C_end_scope(C);
-
-    UInt popn = C->ldefs.data[C->depth].len;
-    C->llen   -= popn;
-    C_emit_op(C, OP_POPN, popn);
 }
 
 SK_INTERNAL(force_inline void)

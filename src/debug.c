@@ -111,8 +111,14 @@ UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
             return Instruction_long("OP_SET_LOCALL", chunk, OP_SET_LOCALL, offset, vm);
         case OP_JMP_IF_FALSE:
             return Instruction_jump("OP_JMP_IF_FALSE", 1, chunk, offset);
+        case OP_JMP_IF_FALSE_OR_POP:
+            return Instruction_jump("OP_JMP_IF_FALSE_OR_POP", 1, chunk, offset);
+        case OP_JMP_IF_FALSE_AND_POP:
+            return Instruction_jump("OP_JMP_IF_FALSE_AND_POP", 1, chunk, offset);
         case OP_JMP:
             return Instruction_jump("OP_JMP", 1, chunk, offset);
+        case OP_JMP_AND_POP:
+            return Instruction_jump("OP_JMP_AND_POP", 1, chunk, offset);
         case OP_LOOP:
             return Instruction_jump("OP_LOOP", -1, chunk, offset);
         default:
@@ -131,7 +137,7 @@ SK_INTERNAL(int)
 Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
 {
     UInt jmp = GET_BYTES3(&chunk->code.data[offset + 1]);
-    printf("%-16s %5u -> %u\n", name, offset, offset + 4 + (sign * jmp));
+    printf("%-25s %5u -> %u\n", name, offset, offset + 4 + (sign * jmp));
     return offset + 4;
 }
 
@@ -139,7 +145,7 @@ SK_INTERNAL(int)
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
     Byte param = ByteArray_index(&chunk->code, offset + 1);
-    printf("%-16s %5u ", name, param);
+    printf("%-25s %5u ", name, param);
     switch(code) {
         case OP_CONST:
             printf("'");
@@ -158,7 +164,7 @@ SK_INTERNAL(int)
 Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
     UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
-    printf("%-16s %5u ", name, param);
+    printf("%-25s %5u ", name, param);
 
     switch(code) {
         case OP_CONSTL:

@@ -42,9 +42,14 @@ typedef enum {
   OP_SET_LOCAL,      /* Set local variable */
   OP_SET_LOCALL,     /* Set local variable long */
   OP_JMP_IF_FALSE,   /* Conditional jump to instruction */
-  OP_JMP,            /* Jump to instruction */
-  OP_LOOP,           /* Jump backwards unconditionally */
-  OP_RET,            /* Stop interpreting ? */
+  OP_JMP_IF_FALSE_OR_POP,  /* Conditional jump to instruction or pop stack value
+                            */
+  OP_JMP_IF_FALSE_AND_POP, /* Conditional jump to instruction and pop stack
+                              value */
+  OP_JMP,                  /* Jump to instruction */
+  OP_JMP_AND_POP,               /* Jump to instruction and pop stack value */
+  OP_LOOP,                 /* Jump backwards unconditionally */
+  OP_RET,                  /* Stop interpreting ? */
 } OpCode;
 
 DECLARE_ARRAY(UInt);
