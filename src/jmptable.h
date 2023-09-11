@@ -29,6 +29,7 @@ static const void *const optable[OPCODE_N] = {
     &&L_OP_NOT,
     &&L_OP_NOT_EQUAL,
     &&L_OP_EQUAL,
+    &&L_OP_EQ,
     &&L_OP_GREATER,
     &&L_OP_GREATER_EQUAL,
     &&L_OP_LESS,

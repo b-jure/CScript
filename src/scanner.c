@@ -303,7 +303,7 @@ SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner)
 {
 #ifdef THREADED_CODE
     #define RET &&ret
-    // IMPORTANT: update accordingly if language grammar changes!
+    // IMPORTANT: update accordingly if scanner tokens change!
     static const void* jump_table[UINT8_MAX + 1] = {
         // Make sure the order is the same as in ASCII Table - https://www.asciitable.com
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
@@ -312,7 +312,7 @@ SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner)
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, &&a, RET, &&c, RET, &&e, &&f, RET, RET, &&i, RET, RET, RET, RET, &&n, &&o,
+        RET, &&a, RET, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET, RET, RET, &&n, &&o,
         &&p, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET, RET, RET,
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
@@ -330,7 +330,19 @@ SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner)
 a:
     return check_keyword(scanner, 1, 2, "nd", TOK_AND);
 c:
-    return check_keyword(scanner, 1, 4, "lass", TOK_CLASS);
+    if(scanner->current - scanner->start > 1) {
+        switch(scanner->start[1]) {
+            case 'a':
+                return check_keyword(scanner, 2, 2, "se", TOK_CASE);
+            case 'l':
+                return check_keyword(scanner, 2, 3, "ass", TOK_CLASS); // Lmao
+            default:
+                break;
+        }
+    }
+    goto ret;
+d:
+    return check_keyword(scanner, 1, 6, "efault", TOK_DEFAULT);
 e:
     return check_keyword(scanner, 1, 3, "lse", TOK_ELSE);
 f:
@@ -384,6 +396,8 @@ s:
                 return check_keyword(scanner, 2, 3, "per", TOK_SUPER);
             case 'e':
                 return check_keyword(scanner, 2, 2, "lf", TOK_SELF);
+            case 'w':
+                return check_keyword(scanner, 2, 4, "itch", TOK_SWITCH);
             default:
                 break;
         }
@@ -401,7 +415,19 @@ w:
         case 'a':
             return check_keyword(scanner, 1, 2, "nd", TOK_AND);
         case 'c':
-            return check_keyword(scanner, 1, 4, "lass", TOK_CLASS);
+            if(scanner->current - scanner->start > 1) {
+                switch(scanner->start[1]) {
+                    case 'a':
+                        return check_keyword(scanner, 2, 2, "se", TOK_CASE);
+                    case 'l':
+                        return check_keyword(scanner, 2, 3, "ass", TOK_CLASS); // Lmao
+                    default:
+                        break;
+                }
+            }
+            break;
+        case 'd':
+            return check_keyword(scanner, 1, 6, "efault", TOK_DEFAULT);
         case 'e':
             return check_keyword(scanner, 1, 3, "lse", TOK_ELSE);
         case 'f':
@@ -455,6 +481,8 @@ w:
                         return check_keyword(scanner, 2, 3, "per", TOK_SUPER);
                     case 'e':
                         return check_keyword(scanner, 2, 2, "lf", TOK_SELF);
+                    case 'w':
+                        return check_keyword(scanner, 2, 4, "itch", TOK_SWITCH);
                     default:
                         break;
                 }

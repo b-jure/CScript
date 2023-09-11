@@ -50,10 +50,14 @@ typedef enum {
   TOK_VAR,
   TOK_WHILE,
   TOK_FIXED,
+  TOK_SWITCH,
+  TOK_CASE,
+  TOK_DEFAULT,
 
   TOK_ERROR,
   TOK_EOF
 } TokenType;
+// @TODO: Implement TOK_BREAK (track last loop start, otherwise error)
 
 typedef struct {
   TokenType type;

@@ -634,6 +634,54 @@ SK_INTERNAL(force_inline void) C_patch_jmp(Compiler* C, VM* vm, UInt jmp_offset)
     PUT_BYTES3(&current_chunk()->code.data[jmp_offset], offset);
 }
 
+SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr, Byte flags)
+{
+    UIntArray patches; /* Holds all jump patches for each case */
+    UIntArray_init(&patches);
+
+    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'switch'.");
+    parse_expr(vm, Cptr);
+    C_expect(*Cptr, TOK_RPAREN, "Expect ')' after condition.");
+
+    C_expect(*Cptr, TOK_LBRACE, "Expect '{' after ')'.");
+
+    bool dflt = false; /* Set if 'default' is parsed */
+
+    while(C_match(*Cptr, TOK_CASE) || C_match(*Cptr, TOK_DEFAULT)) {
+        int32_t case_end = -1;
+        if((*Cptr)->parser.previous.type == TOK_CASE) {
+            parse_expr(vm, Cptr);
+            C_emit_byte(*Cptr, OP_EQ);
+            C_expect(*Cptr, TOK_COLON, "Expect ':' after 'case'.");
+
+            case_end = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
+            parse_stm(vm, Cptr, flags);
+
+        } else if(!dflt) {
+            dflt = true;
+            C_expect(*Cptr, TOK_COLON, "Expect ':' after 'default'.");
+            parse_stm(vm, Cptr, flags);
+        } else {
+            C_error(*Cptr, "Multiple 'default' labels in a single 'switch'.");
+        }
+
+        UIntArray_push(&patches, C_emit_jmp(*Cptr, vm, OP_JMP_AND_POP));
+        if(case_end != -1) {
+            C_patch_jmp(*Cptr, vm, case_end);
+        }
+    }
+
+    C_expect(*Cptr, TOK_RBRACE, "Expect '}'.");
+
+    if(patches.len > 0) {
+        while(patches.len) {
+            C_patch_jmp(*Cptr, vm, UIntArray_pop(&patches));
+        }
+    } else {
+        C_emit_byte(*Cptr, OP_POP);
+    }
+}
+
 SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr, Byte flags)
 {
     C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'if'.");
@@ -753,6 +801,8 @@ SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr, Byte flags)
         parse_stm_for(vm, Cptr, flags);
     } else if(C_match(*Cptr, TOK_IF)) {
         parse_stm_if(vm, Cptr, flags);
+    } else if(C_match(*Cptr, TOK_SWITCH)) {
+        parse_stm_switch(vm, Cptr, flags);
     } else if(C_match(*Cptr, TOK_LBRACE)) {
         parse_stm_block(vm, Cptr, flags);
     } else {

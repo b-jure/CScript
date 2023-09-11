@@ -310,9 +310,16 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_EQUAL)
             {
-                Value a = VM_pop(vm);
                 Value b = VM_pop(vm);
-                VM_push(vm, BOOL_VAL(Value_eq(b, a)));
+                Value a = VM_pop(vm);
+                VM_push(vm, BOOL_VAL(Value_eq(a, b)));
+                BREAK;
+            }
+            CASE(OP_EQ)
+            {
+                Value b = VM_pop(vm);
+                Value a = stack_peek(0);
+                VM_push(vm, BOOL_VAL(Value_eq(a, b)));
                 BREAK;
             }
             CASE(OP_GREATER)

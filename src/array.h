@@ -6,6 +6,7 @@
 #include "value.h"
 
 #include <errno.h>
+#include <stdio.h>
 
 #define _CALL_ARRAY_METHOD(type, name, ...)                                    \
   _ARRAY_METHOD_NAME(type, name)(self __VA_OPT__(, ) __VA_ARGS__)
@@ -68,6 +69,9 @@
       self->cap = GROW_ARRAY_CAPACITY(old_cap);                                \
                                                                                \
       if (_unlikely(self->cap >= UINT32_MAX)) {                                \
+        fprintf(stderr,                                                        \
+                "Internal error, " #type "Array capacity exceeded! [%lu]\n",   \
+                self->cap);                                                    \
         exit(ENOMEM);                                                          \
       } else {                                                                 \
         self->data = GROW_ARRAY(type, self->data, old_cap, self->cap);         \

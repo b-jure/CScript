@@ -61,6 +61,8 @@ UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
             return Instruction_simple("OP_NOT_EQUAL", offset);
         case OP_EQUAL:
             return Instruction_simple("OP_EQUAL", offset);
+        case OP_EQ:
+            return Instruction_simple("OP_EQ", offset);
         case OP_GREATER_EQUAL:
             return Instruction_simple("OP_GREATER_EQUAL", offset);
         case OP_GREATER:
