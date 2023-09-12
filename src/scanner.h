@@ -33,7 +33,11 @@ typedef enum {
   TOK_NUMBER,
   // Keywords.
   TOK_AND,
+  TOK_BREAK,
+  TOK_CASE,
+  TOK_CONTINUE,
   TOK_CLASS,
+  TOK_DEFAULT,
   TOK_ELSE,
   TOK_FALSE,
   TOK_FOR,
@@ -46,13 +50,11 @@ typedef enum {
   TOK_RETURN,
   TOK_SUPER,
   TOK_SELF,
+  TOK_SWITCH,
   TOK_TRUE,
   TOK_VAR,
   TOK_WHILE,
   TOK_FIXED,
-  TOK_SWITCH,
-  TOK_CASE,
-  TOK_DEFAULT,
 
   TOK_ERROR,
   TOK_EOF

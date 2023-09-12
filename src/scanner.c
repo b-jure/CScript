@@ -312,7 +312,7 @@ SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner)
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, &&a, RET, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET, RET, RET, &&n, &&o,
+        RET, &&a, &&b, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET, RET, RET, &&n, &&o,
         &&p, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET, RET, RET,
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
         RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
@@ -329,6 +329,8 @@ SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner)
 
 a:
     return check_keyword(scanner, 1, 2, "nd", TOK_AND);
+b:
+    return check_keyword(scanner, 1, 4, "reak", TOK_BREAK);
 c:
     if(scanner->current - scanner->start > 1) {
         switch(scanner->start[1]) {
@@ -336,6 +338,8 @@ c:
                 return check_keyword(scanner, 2, 2, "se", TOK_CASE);
             case 'l':
                 return check_keyword(scanner, 2, 3, "ass", TOK_CLASS); // Lmao
+            case 'o':
+                return check_keyword(scanner, 2, 6, "ntinue", TOK_CONTINUE);
             default:
                 break;
         }
@@ -414,6 +418,8 @@ w:
     switch(*scanner->start) {
         case 'a':
             return check_keyword(scanner, 1, 2, "nd", TOK_AND);
+        case 'b':
+            return check_keyword(scanner, 1, 4, "reak", TOK_BREAK);
         case 'c':
             if(scanner->current - scanner->start > 1) {
                 switch(scanner->start[1]) {
@@ -421,6 +427,8 @@ w:
                         return check_keyword(scanner, 2, 2, "se", TOK_CASE);
                     case 'l':
                         return check_keyword(scanner, 2, 3, "ass", TOK_CLASS); // Lmao
+                    case 'o':
+                        return check_keyword(scanner, 2, 6, "ntinue", TOK_CONTINUE);
                     default:
                         break;
                 }

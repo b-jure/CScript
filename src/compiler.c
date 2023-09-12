@@ -14,52 +14,58 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* @TODO: Implement break, continue
+ *  - need to track the start of the loop
+ *  - if there is no start of the loop invoke error
+ *  - additionally track the scope depth and pop off all the
+ *  locals when continue is invoked, resetting the loop scope locals.
+ *  - when break is invoked jump to the end of the loop and remove scope. */
+
 #define GET_OP_TYPE(idx, op) (idx <= UINT8_MAX) ? op : op##L
 
 #define code_offset() (current_chunk()->code.len)
 
-/* Parser 'state' bits */
-#define ERROR_BIT 0
-#define PANIC_BIT 1
-/* Compiler (parser) 'state' manipulation macros.
- * Parser state is represented as a single byte, each bit defining state. */
-#define C_set_error(compiler)   BIT_SET((compiler)->parser.state, ERROR_BIT)
-#define C_clear_error(compiler) BIT_CLEAR((compiler)->parser.state, ERROR_BIT)
-#define C_set_panic(compiler)   BIT_SET((compiler)->parser.state, PANIC_BIT)
-#define C_clear_panic(compiler) BIT_CLEAR((compiler)->parser.state, PANIC_BIT)
-#define C_is_error(compiler)    BIT_CHECK((compiler)->parser.state, ERROR_BIT)
-#define C_is_panic(compiler)    BIT_CHECK((compiler)->parser.state, PANIC_BIT)
-#define C_clear_state(compiler) (compiler)->parser.state = 0
+/* Parser 'flags' bits */
+#define ERROR_BIT  1
+#define PANIC_BIT  2
+#define LOOP_BIT   3
+#define SWITCH_BIT 4
+#define ASSIGN_BIT 5
+#define FIXED_BIT  9
+
+#define C_flag_set(C, bit)   BIT_SET((C)->parser.flags, bit)
+#define C_flag_is(C, bit)    BIT_CHECK((C)->parser.flags, bit)
+#define C_flag_clear(C, bit) BIT_CLEAR((C)->parser.flags, bit)
+#define C_flags_clear(C)     ((C)->parser.flags = 0)
+#define C_flags(C)           ((C)->parser.flags)
 
 typedef struct {
     Scanner scanner;
     Token   previous;
     Token   current;
     /*
-     * Bits:
-     * 1 - error bit
-     * 2 - panic bit
-     * 3 - unused
-     * 4 - unused
-     * 5 - unused
+     * Parser flags.
+     * 1 - error bit <- error indicator
+     * 2 - panic bit <- panic mode
+     * 3 - loop bit <- inside a loop
+     * 4 - switch bit <- inside a switch statement
+     * 5 - assign bit <- can parse assignment
      * 6 - unused
      * 7 - unused
      * 8 - unused
+     * 9 - fixed bit <- variable modifier (immutable)
+     * ...
+     * 64 - unused
      */
-    Byte state;
+    uint64_t flags;
 } Parser;
 
 typedef struct {
     Token token;
     /*
-     * Bits:
-     * 1 - unused
-     * 2 - fixed
-     * 3 - unused
-     * 4 - unused
-     * 5 - unused
-     * 6 - unused
-     * 7 - unused
+     * Bits (var modifiers):
+     * 1 - fixed
+     * ...
      * 8 - unused
      */
     Byte flags;
@@ -80,6 +86,8 @@ DECLARE_ARRAY(HashTable);
 DEFINE_ARRAY(HashTable);
 
 typedef struct {
+    Int            ctjmp;    /* 'continue' jump */
+    Int            brjmp;    /* 'break' jump */
     Parser         parser;   /* Grammar parser */
     HashTableArray ldefs;    /* Tracks locals for each scope */
     UInt           depth;    /* Scope depth */
@@ -98,32 +106,17 @@ typedef struct {
  * new/old pointer returned by reallocate. */
 typedef Compiler** CompilerPPtr;
 
-/* ParseFn flags */
-#define ASSIGN_FLAG 0
-#define FIXED_FLAG  1
-/* Helper defs for ParseFn flags */
-#define is_assign(flags)  BIT_CHECK((flags), ASSIGN_FLAG)
-#define set_assign(flags) BIT_SET((flags), ASSIGN_FLAG)
-#define is_fixed(flags)   BIT_CHECK((flags), FIXED_FLAG)
-#define set_fixed(flags)  BIT_SET((flags), FIXED_FLAG)
+/* Variable modifier bits */
+#define VAR_FIXED_BIT (FIXED_BIT - 8)
 
-/* ParseFn - generic parsing function signature.
- *
- * Takes a pointer to 'VM' in case of allocating objects,
- * 'CompilerPPtr' which holds the state and locals and finally
- * a 'Byte' (uint8_t) representing flags.
- *
- * Flag bits:
- * 1 - assign bit
- * 2 - fixed bit
- * 3 - unused
- * 4 - unused
- * 5 - unused
- * 6 - unused
- * 7 - unused
- * 8 - unused
- */
-typedef void (*ParseFn)(VM*, CompilerPPtr, Byte flags);
+#define Var_flag_set(var, bit)   BIT_SET((var)->flags, bit)
+#define Var_flag_is(var, bit)    BIT_CHECK((var)->flags, bit)
+#define Var_flag_clear(var, bit) BIT_CLEAR((var) -.flags, bit)
+#define Var_flags_clear(var)     ((var)->flags = 0)
+#define Var_flags(var)           ((var)->flags)
+
+/* ParseFn - generic parsing function signature. */
+typedef void (*ParseFn)(VM*, CompilerPPtr);
 
 typedef struct {
     ParseFn    prefix;
@@ -144,28 +137,28 @@ SK_INTERNAL(void) C_advance(Compiler* compiler);
 SK_INTERNAL(void) C_error(Compiler* compiler, const char* error);
 SK_INTERNAL(void) Compiler_free(Compiler* C);
 SK_INTERNAL(void) Parser_init(Parser* parser, const char* source);
-SK_INTERNAL(void) parse_number(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_string(VM* vm, CompilerPPtr Cptr, Byte flags);
+SK_INTERNAL(void) parse_number(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_string(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(UInt)
-parse_varname(VM* vm, CompilerPPtr Cptr, bool fixed, const char* errmsg);
+parse_varname(VM* vm, CompilerPPtr Cptr, const char* errmsg);
 SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec);
-SK_INTERNAL(void) parse_grouping(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_ternarycond(VM* vm, CompilerPPtr Cptr, Byte flags);
+SK_INTERNAL(void) parse_grouping(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_ternarycond(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_expr(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr, Byte flags);
+SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void)
-parse_decvar(VM* vm, CompilerPPtr Cptr, Byte flags);
+parse_decvar(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void)
-parse_decvar_fixed(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_stm_print(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_variable(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_literal(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr, Byte flags);
-SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr, Byte flags);
+parse_decvar_fixed(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_stm_print(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_variable(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_literal(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr);
 
 SK_INTERNAL(Compiler*) C_new(const char* source)
 {
@@ -216,7 +209,11 @@ make_constant_identifier(VM* vm, Value identifier, bool fixed)
             (double)GlobalArray_push(&vm->global_vals, (Global){UNDEFINED_VAL, fixed}));
         HashTable_insert(&vm->global_ids, identifier, index);
     }
-    return (UInt)AS_NUMBER(index);
+
+    UInt i = (UInt)AS_NUMBER(index);
+    // Ensure global redefinition is (not) fixed
+    vm->global_vals.data[i].fixed = fixed;
+    return i;
 }
 
 SK_INTERNAL(force_inline void) C_emit_byte(Compiler* C, Byte byte)
@@ -255,16 +252,16 @@ SK_INTERNAL(force_inline void) C_emit_loop(Compiler* C, UInt start)
 SK_INTERNAL(force_inline void) Parser_init(Parser* parser, const char* source)
 {
     parser->scanner = Scanner_new(source);
-    parser->state   = 0;
+    parser->flags   = 0;
 }
 
-static void C_error_at(Compiler* compiler, Token* token, const char* error)
+static void C_error_at(Compiler* C, Token* token, const char* error)
 {
-    if(C_is_panic(compiler)) {
+    if(C_flag_is(C, PANIC_BIT)) {
         return;
     }
 
-    C_set_panic(compiler);
+    C_flag_set(C, PANIC_BIT);
     fprintf(stderr, "[line: %u] Error", token->line);
 
     if(token->type == TOK_EOF) {
@@ -274,7 +271,7 @@ static void C_error_at(Compiler* compiler, Token* token, const char* error)
     }
 
     fprintf(stderr, ": %s\n", error);
-    C_set_error(compiler);
+    C_flag_set(C, ERROR_BIT);
 }
 
 static void C_error(Compiler* compiler, const char* error)
@@ -296,17 +293,17 @@ SK_INTERNAL(void) C_advance(Compiler* compiler)
     }
 }
 
-static void Parser_sync(Compiler* compiler)
+static void Parser_sync(Compiler* C)
 {
     // @ Create precomputed goto table
-    C_clear_panic(compiler);
+    C_flag_clear(C, PANIC_BIT);
 
-    while(compiler->parser.current.type != TOK_EOF) {
-        if(compiler->parser.previous.type == TOK_SEMICOLON) {
+    while(C->parser.current.type != TOK_EOF) {
+        if(C->parser.previous.type == TOK_SEMICOLON) {
             return;
         }
 
-        switch(compiler->parser.current.type) {
+        switch(C->parser.current.type) {
             case TOK_FOR:
             case TOK_FN:
             case TOK_VAR:
@@ -317,7 +314,7 @@ static void Parser_sync(Compiler* compiler)
             case TOK_WHILE:
                 return;
             default:
-                C_advance(compiler);
+                C_advance(C);
                 break;
         }
     }
@@ -350,7 +347,7 @@ SK_INTERNAL(force_inline void) compile_end(Compiler* C, VM* vm)
 {
     C_emit_byte(C, OP_RET);
 #ifdef DEBUG_PRINT_CODE
-    if(!C_is_error(C)) {
+    if(!C_flag_is(C, ERROR_BIT)) {
         Chunk_debug(current_chunk(), "code", vm);
     }
 #endif
@@ -362,7 +359,7 @@ bool compile(VM* vm, const char* source, Chunk* chunk)
     compiling_chunk = chunk;
 
     while(!C_match(C, TOK_EOF)) {
-        parse_dec(vm, &C, true);
+        parse_dec(vm, &C);
     }
 
 #ifndef DEBUG_TRACE_EXECUTION
@@ -370,7 +367,7 @@ bool compile(VM* vm, const char* source, Chunk* chunk)
 #else
     compile_end(C, vm);
 #endif
-    bool not_err = !C_is_error(C);
+    bool not_err = !C_flag_is(C, ERROR_BIT);
     Compiler_free(C);
     return not_err;
 }
@@ -442,7 +439,7 @@ static const ParseRule rules[] = {
 };
 
 SK_INTERNAL(void)
-parse_stm_expr(VM* vm, CompilerPPtr Cptr, Byte flags)
+parse_stm_expr(VM* vm, CompilerPPtr Cptr)
 {
     parse_expr(vm, Cptr);
     C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' after expression.");
@@ -463,66 +460,71 @@ SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec)
         return;
     }
 
-    Byte flags = 0;
     if(prec <= PREC_ASSIGNMENT) {
-        set_assign(flags);
+        C_flag_set(*Cptr, ASSIGN_BIT);
+    } else {
+        C_flag_clear(*Cptr, ASSIGN_BIT);
     }
     /* Parse unary operator (prefix) or a literal */
-    prefix_fn(vm, Cptr, flags);
+    prefix_fn(vm, Cptr);
 
     /* Parse binary operator (inifix) with higher or equal precedence if any */
     while(prec <= rules[(*Cptr)->parser.current.type].precedence) {
         C_advance(*Cptr);
         ParseFn infix_fn = rules[(*Cptr)->parser.previous.type].infix;
-        infix_fn(vm, Cptr, flags);
+        infix_fn(vm, Cptr);
     }
 
-    if(is_assign(flags) && C_match(*Cptr, TOK_EQUAL)) {
+    if(C_flag_is(*Cptr, ASSIGN_BIT) && C_match(*Cptr, TOK_EQUAL)) {
         C_error(*Cptr, "Invalid assignment target.");
     }
 }
 
 SK_INTERNAL(void)
-parse_decvar_fixed(VM* vm, CompilerPPtr Cptr, Byte flags)
+parse_decvar_fixed(VM* vm, CompilerPPtr Cptr)
 {
-    set_fixed(flags);
+    C_flag_set(*Cptr, FIXED_BIT);
     C_expect(*Cptr, TOK_VAR, "Expect 'var' in variable declaration.");
-    parse_decvar(vm, Cptr, flags);
+    parse_decvar(vm, Cptr);
 }
 
-SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
 {
+    C_flags_clear(*Cptr);
+
     if(C_match(*Cptr, TOK_VAR)) {
-        parse_decvar(vm, Cptr, flags);
+        parse_decvar(vm, Cptr);
     } else if(C_match(*Cptr, TOK_FIXED)) {
-        parse_decvar_fixed(vm, Cptr, flags);
+        parse_decvar_fixed(vm, Cptr);
     } else {
-        parse_stm(vm, Cptr, flags);
+        parse_stm(vm, Cptr);
     }
 
-    if(C_is_panic(*Cptr)) {
+    if(C_flag_is(*Cptr, PANIC_BIT)) {
         Parser_sync(*Cptr);
     }
 }
 
-SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm, Byte flags)
+SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
 {
     Local*     local      = &C->locals[C->llen - 1]; /* Safe to decrement UInt */
     Value      identifier = Token_into_stringval(vm, &local->token);
     HashTable* scope_set  = &C->ldefs.data[C->depth - 1];
 
     HashTable_insert(scope_set, identifier, NUMBER_VAL(C->llen - 1));
-    local->flags = (flags & 0xfe); // Mask off the first bit (unused)
+    local->flags = C_flag_is(C, FIXED_BIT); // Mask off the first bit (unused)
 }
 
 SK_INTERNAL(void)
-parse_decvar(VM* vm, CompilerPPtr Cptr, Byte flags)
+parse_decvar(VM* vm, CompilerPPtr Cptr)
 {
     if(C_match(*Cptr, TOK_FIXED)) {
-        set_fixed(flags);
+        C_flag_set(*Cptr, FIXED_BIT);
+    } else {
+        C_flag_clear(*Cptr, FIXED_BIT);
     }
 
-    int64_t index = parse_varname(vm, Cptr, is_fixed(flags), "Expect variable name.");
+    int64_t index = parse_varname(vm, Cptr, "Expect variable name.");
 
     if(C_match(*Cptr, TOK_EQUAL)) {
         parse_expr(vm, Cptr);
@@ -535,7 +537,7 @@ parse_decvar(VM* vm, CompilerPPtr Cptr, Byte flags)
     // We declared local variable
     if((*Cptr)->depth > 0) {
         // now define/initialize it
-        C_initialize_local(*Cptr, vm, flags);
+        C_initialize_local(*Cptr, vm);
         return;
     }
 
@@ -568,8 +570,9 @@ SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
 
 SK_INTERNAL(bool) C_local_is_unique(Compiler* C, VM* vm)
 {
-    Value     identifier = Token_into_stringval(vm, &C->parser.previous);
-    HashTable scope_set  = HashTableArray_index(&C->ldefs, C->depth - 1);
+    Value identifier = Token_into_stringval(vm, &C->parser.previous);
+    // @FIX: Return pointer instead of a value in _index method
+    HashTable scope_set = HashTableArray_index(&C->ldefs, C->depth - 1);
     return !HashTable_get(&scope_set, identifier, NULL);
 }
 
@@ -588,8 +591,19 @@ SK_INTERNAL(int64_t) C_make_global(Compiler* C, VM* vm, bool fixed)
     return make_constant_identifier(vm, identifier, fixed);
 }
 
+SK_INTERNAL(UInt) Global_idx(Compiler* C, VM* vm)
+{
+    Value idx;
+    Value identifier = Token_into_stringval(vm, &C->parser.previous);
+    if(!HashTable_get(&vm->global_ids, identifier, &idx)) {
+        C_error(C, "Undefined variable.");
+        return 0;
+    }
+    return (UInt)AS_NUMBER(idx);
+}
+
 SK_INTERNAL(UInt)
-parse_varname(VM* vm, CompilerPPtr Cptr, bool fixed, const char* errmsg)
+parse_varname(VM* vm, CompilerPPtr Cptr, const char* errmsg)
 {
     C_expect(*Cptr, TOK_IDENTIFIER, errmsg);
     // If local scope make local variable
@@ -599,7 +613,7 @@ parse_varname(VM* vm, CompilerPPtr Cptr, bool fixed, const char* errmsg)
     }
 
     // Otherwise make global variable
-    return C_make_global(*Cptr, vm, fixed);
+    return C_make_global(*Cptr, vm, C_flag_is(*Cptr, FIXED_BIT));
 }
 
 SK_INTERNAL(force_inline void) C_start_scope(Compiler* C)
@@ -634,7 +648,7 @@ SK_INTERNAL(force_inline void) C_patch_jmp(Compiler* C, VM* vm, UInt jmp_offset)
     PUT_BYTES3(&current_chunk()->code.data[jmp_offset], offset);
 }
 
-SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
 {
     UIntArray patches; /* Holds all jump patches for each case */
     UIntArray_init(&patches);
@@ -648,19 +662,19 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr, Byte flags)
     bool dflt = false; /* Set if 'default' is parsed */
 
     while(C_match(*Cptr, TOK_CASE) || C_match(*Cptr, TOK_DEFAULT)) {
-        int32_t case_end = -1;
+        Int case_end = -1;
         if((*Cptr)->parser.previous.type == TOK_CASE) {
             parse_expr(vm, Cptr);
             C_emit_byte(*Cptr, OP_EQ);
             C_expect(*Cptr, TOK_COLON, "Expect ':' after 'case'.");
 
             case_end = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
-            parse_stm(vm, Cptr, flags);
+            parse_stm(vm, Cptr);
 
         } else if(!dflt) {
             dflt = true;
             C_expect(*Cptr, TOK_COLON, "Expect ':' after 'default'.");
-            parse_stm(vm, Cptr, flags);
+            parse_stm(vm, Cptr);
         } else {
             C_error(*Cptr, "Multiple 'default' labels in a single 'switch'.");
         }
@@ -682,7 +696,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr, Byte flags)
     }
 }
 
-SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr)
 {
     C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'if'.");
     parse_expr(vm, Cptr); /* Parse conditional */
@@ -691,7 +705,7 @@ SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr, Byte flags)
     /* Setup the conditional jump instruction */
     UInt iffalse_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
 
-    parse_stm(vm, Cptr, flags); /* Parse the code in this branch */
+    parse_stm(vm, Cptr); /* Parse the code in this branch */
 
     /* Prevent fall-through if 'else' exists. */
     UInt iftrue_jmp = C_emit_jmp(*Cptr, vm, OP_JMP);
@@ -699,12 +713,12 @@ SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr, Byte flags)
     C_patch_jmp(*Cptr, vm, iffalse_jmp); /* End of 'if' (maybe start of else) */
 
     if(C_match(*Cptr, TOK_ELSE)) {
-        parse_stm(vm, Cptr, flags);         /* Parse the else branch */
+        parse_stm(vm, Cptr);                /* Parse the else branch */
         C_patch_jmp(*Cptr, vm, iftrue_jmp); /* End of else branch */
     }
 }
 
-SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr)
 {
     // @FIX: Make jump if false and pop into a single instruction
     UInt jump = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_OR_POP);
@@ -712,7 +726,7 @@ SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr, Byte flags)
     C_patch_jmp(*Cptr, vm, jump);         /* @TODO: POP after and before jmp */
 }
 
-SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr)
 {
     // @FIX: Make a jump if true (new instruction) and pop into a single instruction
     UInt else_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
@@ -724,8 +738,9 @@ SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr, Byte flags)
     C_patch_jmp(*Cptr, vm, end_jmp);
 }
 
-SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr)
 {
+    C_flag_set(*Cptr, LOOP_BIT);
     UInt loop_start = current_chunk()->code.len;
     C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'while'.");
     parse_expr(vm, Cptr);
@@ -733,13 +748,13 @@ SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr, Byte flags)
 
     /* Setup the conditional exit jump */
     UInt end_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
-    parse_stm(vm, Cptr, flags);     /* Parse (loop 'body') statement */
+    parse_stm(vm, Cptr);            /* Parse (loop 'body') statement */
     C_emit_loop(*Cptr, loop_start); /* Jump to the start of the loop */
 
     C_patch_jmp(*Cptr, vm, end_jmp); /* Set loop exit offset */
 }
 
-SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
 {
     C_start_scope(*Cptr);
     /*----------- INITIALIZER -------------*/
@@ -747,17 +762,17 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr, Byte flags)
     if(C_match(*Cptr, TOK_SEMICOLON)) {
         // No initializer
     } else if(C_match(*Cptr, TOK_VAR)) {
-        parse_decvar(vm, Cptr, flags);
+        parse_decvar(vm, Cptr);
     } else if(C_match(*Cptr, TOK_FIXED)) {
-        parse_decvar_fixed(vm, Cptr, flags);
+        parse_decvar_fixed(vm, Cptr);
     } else {
-        parse_stm_expr(vm, Cptr, flags);
+        parse_stm_expr(vm, Cptr);
     }
     /*--------- END OF INITIALIZER -----------*/
 
     /*----------- CONDITION -------------*/
-    UInt    loop_start = current_chunk()->code.len;
-    int32_t loop_end   = -1;
+    UInt loop_start = current_chunk()->code.len;
+    Int  loop_end   = -1;
     if(!C_match(*Cptr, TOK_SEMICOLON)) {
         parse_expr(vm, Cptr);
         C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' (condition).");
@@ -780,7 +795,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr, Byte flags)
     }
     /*--------- END OF INCREMENT -----------*/
 
-    parse_stm(vm, Cptr, flags);
+    parse_stm(vm, Cptr);
     C_emit_loop(*Cptr, loop_start);
 
     if(loop_end != -1) {
@@ -791,32 +806,32 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr, Byte flags)
     C_end_scope(C);
 }
 
-SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
 {
     if(C_match(*Cptr, TOK_PRINT)) {
-        parse_stm_print(vm, Cptr, flags);
+        parse_stm_print(vm, Cptr);
     } else if(C_match(*Cptr, TOK_WHILE)) {
-        parse_stm_while(vm, Cptr, flags);
+        parse_stm_while(vm, Cptr);
     } else if(C_match(*Cptr, TOK_FOR)) {
-        parse_stm_for(vm, Cptr, flags);
+        parse_stm_for(vm, Cptr);
     } else if(C_match(*Cptr, TOK_IF)) {
-        parse_stm_if(vm, Cptr, flags);
+        parse_stm_if(vm, Cptr);
     } else if(C_match(*Cptr, TOK_SWITCH)) {
-        parse_stm_switch(vm, Cptr, flags);
+        parse_stm_switch(vm, Cptr);
     } else if(C_match(*Cptr, TOK_LBRACE)) {
-        parse_stm_block(vm, Cptr, flags);
+        parse_stm_block(vm, Cptr);
     } else {
-        parse_stm_expr(vm, Cptr, flags);
+        parse_stm_expr(vm, Cptr);
     }
 }
 
-SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr)
 {
     Compiler* C = *Cptr;
     C_start_scope(C);
 
     while(!C_check(*Cptr, TOK_RBRACE) && !C_check(*Cptr, TOK_EOF)) {
-        parse_dec(vm, Cptr, flags);
+        parse_dec(vm, Cptr);
     }
 
     C_expect(*Cptr, TOK_RBRACE, "Expect '}' after block.");
@@ -824,7 +839,7 @@ SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr, Byte flags)
 }
 
 SK_INTERNAL(force_inline void)
-parse_stm_print(VM* vm, CompilerPPtr Cptr, unused Byte _)
+parse_stm_print(VM* vm, CompilerPPtr Cptr)
 {
     parse_expr(vm, Cptr);
     C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' after value");
@@ -832,7 +847,7 @@ parse_stm_print(VM* vm, CompilerPPtr Cptr, unused Byte _)
 }
 
 SK_INTERNAL(force_inline void)
-parse_number(unused VM* _, CompilerPPtr Cptr, unused Byte __)
+parse_number(unused VM* _, CompilerPPtr Cptr)
 {
     Compiler* C        = *Cptr;
     double    constant = strtod(C->parser.previous.start, NULL);
@@ -840,37 +855,39 @@ parse_number(unused VM* _, CompilerPPtr Cptr, unused Byte __)
     C_emit_op(C, GET_OP_TYPE(idx, OP_CONST), idx);
 }
 
-SK_INTERNAL(force_inline int32_t) Local_idx(Compiler* C, VM* vm, Token* name)
+SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, Token* name)
 {
     Value index      = NUMBER_VAL(-1);
     Value identifier = Token_into_stringval(vm, name);
-    for(int32_t i = 0; i < C->ldefs.len; i++) {
+    for(Int i = 0; i < C->ldefs.len; i++) {
         HashTable* scope_set = &C->ldefs.data[i];
         if(HashTable_get(scope_set, identifier, &index)) {
-            return (int32_t)AS_NUMBER(index);
+            return (Int)AS_NUMBER(index);
         }
     }
     return -1;
 }
 
-SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
 {
-    Token*  name = &(*Cptr)->parser.previous;
-    OpCode  setop, getop;
-    int32_t idx = Local_idx(*Cptr, vm, name);
+    Token* name = &(*Cptr)->parser.previous;
+    OpCode setop, getop;
+    Int    idx   = Local_idx(*Cptr, vm, name);
+    Byte   flags = (C_flags(*Cptr) >> 8);
 
     if(idx != -1) {
-        flags |= (*Cptr)->locals[idx].flags;
-        setop = GET_OP_TYPE(idx, OP_SET_LOCAL);
-        getop = GET_OP_TYPE(idx, OP_GET_LOCAL);
+        Local* var = &(*Cptr)->locals[idx];
+        flags      = Var_flags(var);
+        setop      = GET_OP_TYPE(idx, OP_SET_LOCAL);
+        getop      = GET_OP_TYPE(idx, OP_GET_LOCAL);
     } else {
-        idx   = C_make_global(*Cptr, vm, is_fixed(flags));
+        idx   = Global_idx(*Cptr, vm);
         setop = GET_OP_TYPE(idx, OP_SET_GLOBAL);
         getop = GET_OP_TYPE(idx, OP_GET_GLOBAL);
     }
 
-    if(is_assign(flags) && C_match(*Cptr, TOK_EQUAL)) {
-        if(is_fixed(flags)) {
+    if(C_flag_is(*Cptr, ASSIGN_BIT) && C_match(*Cptr, TOK_EQUAL)) {
+        if(BIT_CHECK(flags, VAR_FIXED_BIT)) {
             C_error(*Cptr, "Can't assign to variable defined as 'fixed'.");
         }
         parse_expr(vm, Cptr);
@@ -880,7 +897,7 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr, Byte fl
     }
 }
 
-SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr, unused Byte _)
+SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr)
 {
     Compiler*  C = *Cptr;
     ObjString* string =
@@ -890,13 +907,13 @@ SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr, unused By
 }
 
 /* This is the entry point to Pratt parsing */
-SK_INTERNAL(force_inline void) parse_grouping(VM* vm, CompilerPPtr Cptr, Byte flags)
+SK_INTERNAL(force_inline void) parse_grouping(VM* vm, CompilerPPtr Cptr)
 {
     parse_expr(vm, Cptr);
     C_expect(*Cptr, TOK_RPAREN, "Expect ')' after expression");
 }
 
-SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr, unused Byte _)
+SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr)
 {
     TokenType type = (*Cptr)->parser.previous.type;
     parse_precedence(vm, Cptr, PREC_UNARY);
@@ -914,7 +931,7 @@ SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr, unused Byte _)
     }
 }
 
-SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr, unused Byte _)
+SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr)
 {
     TokenType        type = (*Cptr)->parser.previous.type;
     const ParseRule* rule = &rules[type];
@@ -1045,7 +1062,7 @@ lteq:
 }
 
 SK_INTERNAL(force_inline void)
-parse_ternarycond(VM* vm, CompilerPPtr Cptr, unused Byte _)
+parse_ternarycond(VM* vm, CompilerPPtr Cptr)
 {
     //@TODO: Implement...
     parse_expr(vm, Cptr);
@@ -1054,7 +1071,7 @@ parse_ternarycond(VM* vm, CompilerPPtr Cptr, unused Byte _)
 }
 
 SK_INTERNAL(force_inline void)
-parse_literal(unused VM* _, CompilerPPtr Cptr, unused Byte __)
+parse_literal(unused VM* _, CompilerPPtr Cptr)
 {
     Compiler* C = *Cptr;
     switch(C->parser.previous.type) {
