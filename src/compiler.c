@@ -195,7 +195,7 @@ SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
     }
 }
 
-SK_INTERNAL(force_inline Value) Token_into_stringval(VM* vm, Token* name)
+SK_INTERNAL(force_inline Value) Token_into_stringval(VM* vm, const Token* name)
 {
     return OBJ_VAL(ObjString_from(vm, name->start, name->len));
 }
@@ -340,9 +340,11 @@ SK_INTERNAL(force_inline bool) C_match(Compiler* compiler, TokenType type)
 }
 
 #ifndef DEBUG_TRACE_EXECUTION
-SK_INTERNAL(force_inline void) compile_end(Compiler* compiler)
+SK_INTERNAL(force_inline void)
+compile_end(Compiler* compiler)
 #else
-SK_INTERNAL(force_inline void) compile_end(Compiler* C, VM* vm)
+SK_INTERNAL(force_inline void)
+compile_end(Compiler* C, VM* vm)
 #endif
 {
     C_emit_byte(C, OP_RET);
@@ -388,10 +390,10 @@ SK_INTERNAL(void) Compiler_free(Compiler* C)
  *
  * Parsing rules table,
  * First and second column are function pointers to 'ParseFn',
- * these functions are responsible for parsing the actual expression and most are
- * recursive. First column parse function is used in case token is prefix, while second
- * column parse function is used in case token is inifx. Third column marks the
- * 'Precedence' of the token inside expression. */
+ * these functions are responsible for parsing the actual expression and most
+ * are recursive. First column parse function is used in case token is prefix,
+ * while second column parse function is used in case token is inifx. Third
+ * column marks the 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
     [TOK_LPAREN]        = {parse_grouping,     NULL,              PREC_NONE      },
     [TOK_RPAREN]        = {NULL,               NULL,              PREC_NONE      },
@@ -507,12 +509,11 @@ SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
 {
-    Local*     local      = &C->locals[C->llen - 1]; /* Safe to decrement UInt */
+    Local*     local      = &C->locals[C->llen - 1]; /* Safe to decrement unsigned int */
     Value      identifier = Token_into_stringval(vm, &local->token);
     HashTable* scope_set  = &C->ldefs.data[C->depth - 1];
 
     HashTable_insert(scope_set, identifier, NUMBER_VAL(C->llen - 1));
-    local->flags = C_flag_is(C, FIXED_BIT); // Mask off the first bit (unused)
 }
 
 SK_INTERNAL(void)
@@ -520,11 +521,9 @@ parse_decvar(VM* vm, CompilerPPtr Cptr)
 {
     if(C_match(*Cptr, TOK_FIXED)) {
         C_flag_set(*Cptr, FIXED_BIT);
-    } else {
-        C_flag_clear(*Cptr, FIXED_BIT);
     }
 
-    int64_t index = parse_varname(vm, Cptr, "Expect variable name.");
+    Int index = parse_varname(vm, Cptr, "Expect variable name.");
 
     if(C_match(*Cptr, TOK_EQUAL)) {
         parse_expr(vm, Cptr);
@@ -559,7 +558,7 @@ SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
 
     Local* local = &C->locals[C->llen++];
     local->token = C->parser.previous;
-    local->flags = 0;
+    local->flags = ((C_flags(C) >> 8) & 0xff);
 }
 
 SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
@@ -637,7 +636,8 @@ SK_INTERNAL(force_inline void) C_end_scope(Compiler* C)
     C_emit_op(C, OP_POPN, popn);
 }
 
-SK_INTERNAL(force_inline void) C_patch_jmp(Compiler* C, VM* vm, UInt jmp_offset)
+SK_INTERNAL(force_inline void)
+C_patch_jmp(Compiler* C, VM* vm, UInt jmp_offset)
 {
     UInt offset = code_offset() - jmp_offset - 3;
 
@@ -728,7 +728,8 @@ SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr)
 {
-    // @FIX: Make a jump if true (new instruction) and pop into a single instruction
+    // @FIX: Make a jump if true (new instruction) and pop into a single
+    // instruction
     UInt else_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
     UInt end_jmp  = C_emit_jmp(*Cptr, vm, OP_JMP);
 
@@ -855,7 +856,7 @@ parse_number(unused VM* _, CompilerPPtr Cptr)
     C_emit_op(C, GET_OP_TYPE(idx, OP_CONST), idx);
 }
 
-SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, Token* name)
+SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, const Token* name)
 {
     Value index      = NUMBER_VAL(-1);
     Value identifier = Token_into_stringval(vm, name);
@@ -870,10 +871,10 @@ SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, Token* name)
 
 SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
 {
-    Token* name = &(*Cptr)->parser.previous;
-    OpCode setop, getop;
-    Int    idx   = Local_idx(*Cptr, vm, name);
-    Byte   flags = (C_flags(*Cptr) >> 8);
+    const Token* name = &(*Cptr)->parser.previous;
+    OpCode       setop, getop;
+    Int          idx   = Local_idx(*Cptr, vm, name);
+    int16_t      flags = -1;
 
     if(idx != -1) {
         Local* var = &(*Cptr)->locals[idx];
@@ -887,7 +888,8 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
     }
 
     if(C_flag_is(*Cptr, ASSIGN_BIT) && C_match(*Cptr, TOK_EQUAL)) {
-        if(BIT_CHECK(flags, VAR_FIXED_BIT)) {
+        /* In case this is local variable statically check for mutability */
+        if(flags != -1 && BIT_CHECK(flags, VAR_FIXED_BIT)) {
             C_error(*Cptr, "Can't assign to variable defined as 'fixed'.");
         }
         parse_expr(vm, Cptr);

@@ -8,13 +8,13 @@
 /* Bit manipulation--------------------------------------------------------- */
 
 /* Return bit at 'bit' (0 or 1) from 'x'. */
-#define BIT_CHECK(x, bit) ((size_t)(x) & ((size_t)1 << (bit - 1)))
+#define BIT_CHECK(x, bit) ((size_t)(x) & ((size_t)1 << ((bit)-1)))
 // Set 'bit' from 'x'
-#define BIT_SET(x, bit) ((x) |= ((size_t)1 << (bit - 1)))
+#define BIT_SET(x, bit) ((x) |= ((size_t)1 << ((bit)-1)))
 // Clear 'bit' from 'x'
-#define BIT_CLEAR(x, bit) ((x) &= ~((size_t)1 << (bit - 1)))
+#define BIT_CLEAR(x, bit) ((x) &= ~((size_t)1 << ((bit)-1)))
 // Generate uint with 'bits' all set to 1
-#define MAXBITS(bits) (~((size_t)0) >> ((sizeof(size_t) * 8) - ((size_t)bits)))
+#define MAXBITS(bits) (~((size_t)0) >> ((sizeof(size_t) * 8) - (size_t)(bits)))
 // Wrapper around MAXBITS, uses 'bytes' instead
 #define MAXBYTES(bytes) MAXBITS((bytes)*8)
 
