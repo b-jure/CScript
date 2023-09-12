@@ -166,7 +166,7 @@ SK_INTERNAL(Compiler*) C_new(const char* source)
     Parser_init(&C->parser, source);
     HashTableArray_init(&C->ldefs);
     HashTableArray_init_cap(&C->ldefs, SHORT_STACK_SIZE);
-    C->llen  = 0; /* @FIX: Make this pointer into the locals stack? */
+    C->llen  = 0;
     C->lcap  = SHORT_STACK_SIZE;
     C->depth = 0;
     C_advance(C);
@@ -295,7 +295,7 @@ SK_INTERNAL(void) C_advance(Compiler* compiler)
 
 static void Parser_sync(Compiler* C)
 {
-    // @ Create precomputed goto table
+    // @TODO: Create precomputed goto table
     C_flag_clear(C, PANIC_BIT);
 
     while(C->parser.current.type != TOK_EOF) {
@@ -419,7 +419,7 @@ static const ParseRule rules[] = {
     [TOK_IDENTIFIER]    = {parse_variable,     NULL,              PREC_NONE      },
     [TOK_STRING]        = {parse_string,       NULL,              PREC_NONE      },
     [TOK_NUMBER]        = {parse_number,       NULL,              PREC_NONE      },
-    [TOK_AND]           = {NULL,               parse_and,         PREC_NONE      },
+    [TOK_AND]           = {NULL,               parse_and,         PREC_AND       },
     [TOK_CLASS]         = {NULL,               NULL,              PREC_NONE      },
     [TOK_ELSE]          = {NULL,               NULL,              PREC_NONE      },
     [TOK_FALSE]         = {parse_literal,      NULL,              PREC_NONE      },
@@ -428,7 +428,7 @@ static const ParseRule rules[] = {
     [TOK_FIXED]         = {parse_decvar_fixed, NULL,              PREC_NONE      },
     [TOK_IF]            = {NULL,               NULL,              PREC_NONE      },
     [TOK_NIL]           = {parse_literal,      NULL,              PREC_NONE      },
-    [TOK_OR]            = {NULL,               parse_or,          PREC_NONE      },
+    [TOK_OR]            = {NULL,               parse_or,          PREC_OR        },
     [TOK_PRINT]         = {NULL,               NULL,              PREC_NONE      },
     [TOK_RETURN]        = {NULL,               NULL,              PREC_NONE      },
     [TOK_SUPER]         = {NULL,               NULL,              PREC_NONE      },
@@ -467,10 +467,9 @@ SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec)
     } else {
         C_flag_clear(*Cptr, ASSIGN_BIT);
     }
-    /* Parse unary operator (prefix) or a literal */
+
     prefix_fn(vm, Cptr);
 
-    /* Parse binary operator (inifix) with higher or equal precedence if any */
     while(prec <= rules[(*Cptr)->parser.current.type].precedence) {
         C_advance(*Cptr);
         ParseFn infix_fn = rules[(*Cptr)->parser.previous.type].infix;
@@ -720,20 +719,17 @@ SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr)
 {
-    // @FIX: Make jump if false and pop into a single instruction
     UInt jump = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_OR_POP);
-    parse_precedence(vm, Cptr, PREC_AND); /* Parse right side */
-    C_patch_jmp(*Cptr, vm, jump);         /* @TODO: POP after and before jmp */
+    parse_precedence(vm, Cptr, PREC_AND);
+    C_patch_jmp(*Cptr, vm, jump);
 }
 
 SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr)
 {
-    // @FIX: Make a jump if true (new instruction) and pop into a single
-    // instruction
     UInt else_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
     UInt end_jmp  = C_emit_jmp(*Cptr, vm, OP_JMP);
 
-    C_patch_jmp(*Cptr, vm, else_jmp); /* @TODO: POP after jmp */
+    C_patch_jmp(*Cptr, vm, else_jmp);
 
     parse_precedence(vm, Cptr, PREC_OR);
     C_patch_jmp(*Cptr, vm, end_jmp);
