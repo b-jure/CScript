@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+DEFINE_ARRAY(Value);
+
 void Value_print(Value value)
 {
     switch(value.type) {

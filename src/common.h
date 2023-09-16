@@ -1,12 +1,24 @@
 #ifndef __SKOOMA_COMMON_H__
 #define __SKOOMA_COMMON_H__
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
+typedef uint8_t Byte;
+typedef uint32_t UInt;
+typedef int32_t Int;
+
 /* Bit manipulation--------------------------------------------------------- */
 
+static inline size_t bit_mask(uint8_t x) {
+  return (x >= sizeof(size_t) * CHAR_BIT) ? 0xffffffffffffffff
+                                          : (1UL << (x)) - 1;
+}
+
+// Convert bit into unsigned long integer */
+#define btoul(bit) (~((size_t)0) & (1UL << ((bit)-1)))
 /* Return bit at 'bit' (0 or 1) from 'x'. */
 #define BIT_CHECK(x, bit) ((size_t)(x) & ((size_t)1 << ((bit)-1)))
 // Set 'bit' from 'x'
@@ -62,10 +74,6 @@
 #if defined(__GNUC__) && __GNUC__ >= 2
 #define THREADED_CODE
 #endif
-
-typedef uint8_t Byte;
-typedef uint32_t UInt;
-typedef int32_t Int;
 
 /* Compiler builtins (attributes)------------------------------------------- */
 

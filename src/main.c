@@ -53,15 +53,16 @@ static char* File_read(const char* path)
         exit(74);
     }
 
-    size_t len = fseek(fp, 0L, SEEK_END);
-    if(_unlikely(len < 0)) {
+    if(unlikely(fseek(fp, 0L, SEEK_END) < 0)) {
         fprintf(stderr, "Failed processing file \"%s\"\n", path);
         perror("Skooma");
         exit(74);
     }
 
+    size_t len = ftell(fp);
+
     char* buffer = malloc(len + 1);
-    if(_unlikely(buffer == NULL)) {
+    if(unlikely(buffer == NULL)) {
         fprintf(stderr, "Could not allocate enough memory to read \"%s\"\n", path);
         perror("Skooma");
         exit(74);
@@ -76,7 +77,7 @@ static char* File_read(const char* path)
         exit(74);
     }
 
-    if(_unlikely(ferror(fp))) {
+    if(unlikely(ferror(fp))) {
         fprintf(stderr, "Error ocurred while read file \"%s\"\n", path);
         perror("Skooma");
         free(buffer);

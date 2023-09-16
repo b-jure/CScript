@@ -130,14 +130,14 @@ UInt Chunk_getline(Chunk* chunk, UInt index)
 {
     LineArray* line_array      = &chunk->lines;
     UInt       idx             = UIntArray_len(line_array) - 1;
-    UInt       instruction_idx = UIntArray_index(line_array, --idx);
+    UInt       instruction_idx = *UIntArray_index(line_array, --idx);
 
     while(instruction_idx > index) {
         idx             -= 2;
-        instruction_idx = UIntArray_index(line_array, idx);
+        instruction_idx = *UIntArray_index(line_array, idx);
     }
 
-    return UIntArray_index(line_array, idx + 1);
+    return *UIntArray_index(line_array, idx + 1);
 }
 
 /**
@@ -151,7 +151,7 @@ UInt Chunk_getline(Chunk* chunk, UInt index)
  */
 SK_INTERNAL(void) LineArray_write(LineArray* lines, UInt line, UInt index)
 {
-    if(UIntArray_len(lines) <= 0 || UIntArray_last(lines) < line) {
+    if(UIntArray_len(lines) <= 0 || *UIntArray_last(lines) < line) {
         UIntArray_push(lines, index);
         UIntArray_push(lines, line);
     }

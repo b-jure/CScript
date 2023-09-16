@@ -234,6 +234,9 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #define CASE(label)      case label:
 #define BREAK            break
 
+#ifdef DEBUG_TRACE_EXECUTION
+    printf("\n=== vmachine ===");
+#endif
     while(true) {
 #ifdef THREADED_CODE
     #include "jmptable.h"
@@ -548,9 +551,6 @@ InterpretResult VM_interpret(VM* vm, const char* source)
 
 void VM_free(VM* vm)
 {
-    if(likely(vm->chunk != NULL)) { // @TODO: Remove this?
-        Chunk_free(vm->chunk);
-    }
     HashTable_free(&vm->global_ids);
     GlobalArray_free(&vm->global_vals);
     HashTable_free(&vm->strings);

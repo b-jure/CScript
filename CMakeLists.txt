@@ -15,7 +15,6 @@ set(SRCFILES
     ${SRCDIR}/debug.c
     ${SRCDIR}/chunk.c
     ${SRCDIR}/value.c
-    ${SRCDIR}/array.c
     ${SRCDIR}/vmachine.c
     ${SRCDIR}/compiler.c
     ${SRCDIR}/scanner.c
@@ -33,5 +32,5 @@ target_link_options(${BIN} PRIVATE ${SANITIZER_FLAGS})
 option(BUILD_SHARED_LIBS "Build shared libs" OFF)
 set(XXHASH_BUILD_ENABLE_INLINE_API OFF)
 set(XXHASH_BUILD_XXHSUM OFF)
-add_subdirectory(${DEPDIR}/xxHash/cmake_unofficial ${DEPDIR}/xxHash/build/> EXCLUDE_FROM_ALL)
+add_subdirectory(${DEPDIR}/xxHash/cmake_unofficial ${DEPDIR}/xxHash/build EXCLUDE_FROM_ALL)
 target_link_libraries(${BIN} PRIVATE xxHash::xxhash) # Link to xxhash

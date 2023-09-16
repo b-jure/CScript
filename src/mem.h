@@ -31,10 +31,10 @@ char *strncopy(const char *src, UInt len);
 /* Frees the 'list' using 'free_fn' */
 #define MFREE_LIST(list, free_fn)                                              \
   do {                                                                         \
-    Obj *head = list;                                                          \
-    for (Obj *object = list; head != NULL; object = head->next) {              \
-      head = object->next;                                                     \
-      free_fn(object);                                                         \
+    Obj *next;                                                                 \
+    for (Obj *head = list; head != NULL; head = next) {                        \
+      next = head->next;                                                       \
+      free_fn(head);                                                           \
     }                                                                          \
   } while (false)
 

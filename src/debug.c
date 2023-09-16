@@ -146,12 +146,12 @@ Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
 SK_INTERNAL(int)
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
 {
-    Byte param = ByteArray_index(&chunk->code, offset + 1);
-    printf("%-25s %5u ", name, param);
+    Byte* param = ByteArray_index(&chunk->code, offset + 1);
+    printf("%-25s %5u ", name, *param);
     switch(code) {
         case OP_CONST:
             printf("'");
-            Value_print(ValueArray_index(&chunk->constants, param));
+            Value_print(*ValueArray_index(&chunk->constants, *param));
             printf("'");
             break;
         default:
@@ -171,7 +171,7 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* v
     switch(code) {
         case OP_CONSTL:
             printf("'");
-            Value_print(ValueArray_index(&chunk->constants, param));
+            Value_print(*ValueArray_index(&chunk->constants, param));
             printf("'");
             break;
         default:

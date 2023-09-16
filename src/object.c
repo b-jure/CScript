@@ -15,14 +15,11 @@ static _force_inline Obj* Object_new(VM* vm, size_t size, ObjType type)
     /* Allocate a new object */
     Obj* object  = MALLOC(size);
     object->type = type;
+    object->next = NULL;
 
-    /* Add the object to the intrusive list */
-    if(vm->objects != NULL) {
-        vm->objects->next = vm->objects;
-        vm->objects       = object;
-    } else {
-        vm->objects = object;
-    }
+    /* Add the object to the GC list */
+    object->next = vm->objects;
+    vm->objects  = object;
 
     return object;
 }
