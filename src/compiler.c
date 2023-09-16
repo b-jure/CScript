@@ -737,6 +737,9 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
         if(C_match(*Cptr, TOK_CASE) || C_match(*Cptr, TOK_DEFAULT)) {
             if(state != 0) {
                 IntArray_push(&fts, C_emit_jmp(*Cptr, vm, OP_JMP));
+                if(state != -1) {
+                    C_patch_jmp(*Cptr, state);
+                }
             }
 
             state = -1;
@@ -746,7 +749,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
                 C_emit_byte(*Cptr, OP_EQ);
                 C_expect(*Cptr, TOK_COLON, "Expect ':' after 'case'.");
 
-                state = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_OR_POP);
+                state = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
 
                 if(fts.len > 0) {
                     /* Patch Fall-through jump */
@@ -768,10 +771,6 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
             } else {
                 C_error(*Cptr, "Multiple 'default' labels in a single 'switch'.");
             }
-
-            if(state != -1) {
-                C_patch_jmp(*Cptr, state);
-            }
         } else {
             if(state == 0) {
                 C_error(*Cptr, "Can't have statements before first case.");
@@ -784,6 +783,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
         C_error(*Cptr, "Expect '}' at the end of 'switch'.");
     }
 
+    IntArray_free(&fts);
     /* Patch and remove breaks */
     C_rm_bstorage(*Cptr);
     /* Pop switch value */
@@ -955,6 +955,13 @@ SK_INTERNAL(void) parse_stm_continue(VM* vm, Compiler* C)
     for(Int i = C->llen - 1; i >= 0 && C->locals[i].depth > sdepth; i--) {
         popn++;
     }
+
+    /* If we have continue inside a switch statement
+     * then don't forget to pop off the switch value */
+    if(C_flag_is(C, SWITCH_BIT)) {
+        popn++;
+    }
+
     C_emit_op(C, OP_POPN, popn);
     C_emit_loop(C, C->context.innermostl_start);
 }
