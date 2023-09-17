@@ -1,10 +1,9 @@
 #include "array.h"
-#include "chunk.h"
 #include "common.h"
 #include "compiler.h"
 #include "mem.h"
-#include "object.h"
 #include "scanner.h"
+#include "skconf.h"
 #include "value.h"
 #include "vmachine.h"
 #ifdef DEBUG_PRINT_CODE
@@ -23,7 +22,7 @@
 
 #define GET_OP_TYPE(idx, op) (idx <= UINT8_MAX) ? op : op##L
 
-#define code_offset() (current_chunk()->code.len)
+#define code_offset(C) (current_chunk(C)->code.len)
 
 /* Parser 'flags' bits */
 #define ERROR_BIT  1
@@ -63,7 +62,7 @@ typedef struct {
 } Parser;
 
 typedef struct {
-    Token token;
+    Token name;
     /*
      * Bits (var modifiers):
      * 1 - fixed
@@ -85,13 +84,20 @@ typedef struct {
         sizeof(Compiler) + (oldcap * sizeof(Local)),                                     \
         sizeof(Compiler) + (newcap * sizeof(Local)))
 
+/* Array of HashTable(s) */
 DECLARE_ARRAY(HashTable);
 DEFINE_ARRAY(HashTable);
-
+/* Array of Int(s) */
 DECLARE_ARRAY(Int);
 DEFINE_ARRAY(Int);
+/* Two dimensional array */
 DECLARE_ARRAY(IntArray);
 DEFINE_ARRAY(IntArray);
+
+typedef enum {
+    FN_FUNCTION,
+    FN_SCRIPT,
+} FunctionType;
 
 /* Control Flow context */
 typedef struct {
@@ -102,12 +108,14 @@ typedef struct {
 } CFCtx;
 
 typedef struct {
-    Parser         parser;   /* Grammar parser */
+    Parser         parser; /* Grammar parser */
+    ObjFunction*   fn;
+    FunctionType   fn_type;
     CFCtx          context;  /* Control flow context */
-    HashTableArray ldefs;    /* Tracks locals for each scope */
+    HashTableArray loc_defs; /* Tracks locals for each scope */
     Int            depth;    /* Scope depth */
-    UInt           llen;     /* Locals count */
-    UInt           lcap;     /* Locals array capacity */
+    UInt           loc_len;  /* Locals count */
+    UInt           loc_cap;  /* Locals array capacity */
     Local          locals[]; /* Locals array (up to 24-bit [LOCAL_STACK_MAX]) */
 } Compiler;
 
@@ -122,8 +130,7 @@ typedef struct {
 typedef Compiler** CompilerPPtr;
 
 /* Variable modifier bits */
-#define VFIXED_BIT (FIXED_BIT - 8)
-
+#define VFIXED_BIT               (FIXED_BIT - 8)
 #define Var_flag_set(var, bit)   BIT_SET((var)->flags, bit)
 #define Var_flag_is(var, bit)    BIT_CHECK((var)->flags, bit)
 #define Var_flag_clear(var, bit) BIT_CLEAR((var)->flags, bit)
@@ -139,10 +146,8 @@ typedef struct {
     Precedence precedence;
 } ParseRule;
 
-/* Chunk being currently compiled, see 'compile()' */
-static Chunk* compiling_chunk;
 /* Returns currently stored chunk in 'compiling_chunk' global. */
-SK_INTERNAL(Chunk*) current_chunk();
+SK_INTERNAL(Chunk*) current_chunk(Compiler* C);
 
 /* Checks for equality between the 'token_type' and the current parser token */
 #define C_check(compiler, token_type) ((compiler)->parser.current.type == token_type)
@@ -162,9 +167,9 @@ SK_INTERNAL(void) parse_ternarycond(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_expr(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void)
-parse_decvar(VM* vm, CompilerPPtr Cptr);
+parse_dec_var(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void)
-parse_decvar_fixed(VM* vm, CompilerPPtr Cptr);
+parse_dec_var_fixed(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_stm_print(VM* vm, CompilerPPtr Cptr);
@@ -183,36 +188,41 @@ SK_INTERNAL(void) CFCtx_init(CFCtx* context)
     IntArrayArray_init(&context->breaks);
 }
 
-SK_INTERNAL(Compiler*) C_new(const char* source)
+SK_INTERNAL(void) C_init(Compiler* C, ObjFunction* fn, FunctionType fn_type)
 {
-    Compiler* C = MALLOC(sizeof(Compiler) + ((SHORT_STACK_SIZE) * sizeof(Local)));
-    Parser_init(&C->parser, source);
+    C->fn      = fn;
+    C->fn_type = fn_type;
     CFCtx_init(&C->context);
-    HashTableArray_init(&C->ldefs);
-    HashTableArray_init_cap(&C->ldefs, SHORT_STACK_SIZE);
-    C->llen  = 0;
-    C->lcap  = SHORT_STACK_SIZE;
-    C->depth = 0;
-    C_advance(C);
-    return C;
+    HashTableArray_init(&C->loc_defs);
+    HashTableArray_init_cap(&C->loc_defs, SHORT_STACK_SIZE);
+    C->loc_len = 0;
+    C->loc_cap = SHORT_STACK_SIZE;
+    C->depth   = 0;
+
+    /* Reserve first stack slot for VM */
+    Local* local      = &C->locals[C->loc_len++];
+    local->depth      = 0;
+    local->flags      = 0;
+    local->name.start = "";
+    local->name.len   = 0;
 }
 
 SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr)
 {
     Compiler* C      = *Cptr;
-    UInt      oldcap = C->lcap;
+    UInt      oldcap = C->loc_cap;
 
-    C->lcap = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);
-    C       = GROW_LOCAL_STACK(C, oldcap, C->lcap);
-    *Cptr   = C;
+    C->loc_cap = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);
+    C          = GROW_LOCAL_STACK(C, oldcap, C->loc_cap);
+    *Cptr      = C;
 }
 
 /*========================== EMIT =========================*/
 
 SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
 {
-    if(current_chunk()->constants.len <= MIN(VM_STACK_MAX, UINT24_MAX)) {
-        return Chunk_make_constant(current_chunk(), constant);
+    if(current_chunk(C)->constants.len <= MIN(VM_STACK_MAX, UINT24_MAX)) {
+        return Chunk_make_constant(current_chunk(C), constant);
     } else {
         C_error(C, "Too many constants in one chunk.");
         return 0;
@@ -242,18 +252,18 @@ make_constant_identifier(VM* vm, Value identifier, bool fixed)
 
 SK_INTERNAL(force_inline void) C_emit_byte(Compiler* C, Byte byte)
 {
-    Chunk_write(current_chunk(), byte, C->parser.previous.line);
+    Chunk_write(current_chunk(C), byte, C->parser.previous.line);
 }
 
 SK_INTERNAL(force_inline void) C_emit_op(Compiler* C, OpCode code, UInt param)
 {
-    Chunk_write_codewparam(current_chunk(), code, param, C->parser.previous.line);
+    Chunk_write_codewparam(current_chunk(C), code, param, C->parser.previous.line);
 }
 
 SK_INTERNAL(force_inline UInt) C_emit_jmp(Compiler* C, VM* vm, OpCode jmp)
 {
-    Chunk_write_codewparam(current_chunk(), jmp, 0, C->parser.previous.line);
-    return code_offset() - 3;
+    Chunk_write_codewparam(current_chunk(C), jmp, 0, C->parser.previous.line);
+    return code_offset(C) - 3;
 }
 
 SK_INTERNAL(force_inline void) _emit_24bit(Compiler* C, UInt bits)
@@ -267,7 +277,7 @@ SK_INTERNAL(force_inline void) C_emit_loop(Compiler* C, UInt start)
 {
     C_emit_byte(C, OP_LOOP);
 
-    UInt offset = current_chunk()->code.len - start + 3;
+    UInt offset = current_chunk(C)->code.len - start + 3;
 
     if(offset >= UINT24_MAX) {
         C_error(C, "Too much code to jump over.");
@@ -369,43 +379,49 @@ SK_INTERNAL(force_inline bool) C_match(Compiler* compiler, TokenType type)
 }
 
 #ifndef DEBUG_TRACE_EXECUTION
-SK_INTERNAL(force_inline void)
-compile_end(Compiler* compiler)
+SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* compiler)
 #else
-SK_INTERNAL(force_inline void)
-compile_end(Compiler* C, VM* vm)
+SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C, VM* vm)
 #endif
 {
+    ObjFunction* fn = C->fn;
     C_emit_byte(C, OP_RET);
 #ifdef DEBUG_PRINT_CODE
     if(!C_flag_is(C, ERROR_BIT)) {
-        Chunk_debug(current_chunk(), "code", vm);
+        Chunk_debug(current_chunk(C), (fn->name) ? fn->name->storage : "<script>", vm);
     }
 #endif
+    return fn;
 }
 
-bool compile(VM* vm, const char* source, Chunk* chunk)
+ObjFunction* compile(VM* vm, const char* source)
 {
-    Compiler* C     = C_new(source);
-    compiling_chunk = chunk;
+    Compiler*    C  = ALLOC_COMPILER();
+    ObjFunction* fn = ObjFunction_new(vm);
+
+    C_init(C, fn, FN_SCRIPT);
+    Parser_init(&C->parser, source);
+    C_advance(C);
 
     while(!C_match(C, TOK_EOF)) {
         parse_dec(vm, &C);
     }
 
 #ifndef DEBUG_TRACE_EXECUTION
-    compile_end(C);
+    fn = compile_end(C);
 #else
-    compile_end(C, vm);
+    fn = compile_end(C, vm);
 #endif
-    bool not_err = !C_flag_is(C, ERROR_BIT);
+
+    bool err = C_flag_is(C, ERROR_BIT);
     C_free(C);
-    return not_err;
+
+    return (err ? NULL : fn);
 }
 
-SK_INTERNAL(Chunk) * current_chunk()
+SK_INTERNAL(force_inline Chunk*) current_chunk(Compiler* C)
 {
-    return compiling_chunk;
+    return &C->fn->chunk;
 }
 
 SK_INTERNAL(void) CFCtx_free(CFCtx* context)
@@ -419,7 +435,7 @@ SK_INTERNAL(void) CFCtx_free(CFCtx* context)
 
 SK_INTERNAL(void) C_free(Compiler* C)
 {
-    HashTableArray_free(&C->ldefs);
+    HashTableArray_free(&C->loc_defs);
     CFCtx_free(&C->context);
     free(C);
 }
@@ -434,49 +450,49 @@ SK_INTERNAL(void) C_free(Compiler* C)
  * while second column parse function is used in case token is inifx. Third
  * column marks the 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
-    [TOK_LPAREN]        = {parse_grouping,     NULL,              PREC_NONE      },
-    [TOK_RPAREN]        = {NULL,               NULL,              PREC_NONE      },
-    [TOK_LBRACE]        = {NULL,               NULL,              PREC_NONE      },
-    [TOK_RBRACE]        = {NULL,               NULL,              PREC_NONE      },
-    [TOK_COMMA]         = {NULL,               NULL,              PREC_NONE      },
-    [TOK_DOT]           = {NULL,               NULL,              PREC_NONE      },
-    [TOK_MINUS]         = {parse_unary,        parse_binary,      PREC_TERM      },
-    [TOK_PLUS]          = {NULL,               parse_binary,      PREC_TERM      },
-    [TOK_COLON]         = {NULL,               NULL,              PREC_NONE      },
-    [TOK_SEMICOLON]     = {NULL,               NULL,              PREC_NONE      },
-    [TOK_SLASH]         = {NULL,               parse_binary,      PREC_FACTOR    },
-    [TOK_STAR]          = {NULL,               parse_binary,      PREC_FACTOR    },
-    [TOK_QMARK]         = {NULL,               parse_ternarycond, PREC_TERNARY   },
-    [TOK_BANG]          = {parse_unary,        NULL,              PREC_NONE      },
-    [TOK_BANG_EQUAL]    = {NULL,               parse_binary,      PREC_EQUALITY  },
-    [TOK_EQUAL]         = {NULL,               NULL,              PREC_NONE      },
-    [TOK_EQUAL_EQUAL]   = {NULL,               parse_binary,      PREC_EQUALITY  },
-    [TOK_GREATER]       = {NULL,               parse_binary,      PREC_COMPARISON},
-    [TOK_GREATER_EQUAL] = {NULL,               parse_binary,      PREC_COMPARISON},
-    [TOK_LESS]          = {NULL,               parse_binary,      PREC_COMPARISON},
-    [TOK_LESS_EQUAL]    = {NULL,               parse_binary,      PREC_COMPARISON},
-    [TOK_IDENTIFIER]    = {parse_variable,     NULL,              PREC_NONE      },
-    [TOK_STRING]        = {parse_string,       NULL,              PREC_NONE      },
-    [TOK_NUMBER]        = {parse_number,       NULL,              PREC_NONE      },
-    [TOK_AND]           = {NULL,               parse_and,         PREC_AND       },
-    [TOK_CLASS]         = {NULL,               NULL,              PREC_NONE      },
-    [TOK_ELSE]          = {NULL,               NULL,              PREC_NONE      },
-    [TOK_FALSE]         = {parse_literal,      NULL,              PREC_NONE      },
-    [TOK_FOR]           = {NULL,               NULL,              PREC_NONE      },
-    [TOK_FN]            = {NULL,               NULL,              PREC_NONE      },
-    [TOK_FIXED]         = {parse_decvar_fixed, NULL,              PREC_NONE      },
-    [TOK_IF]            = {NULL,               NULL,              PREC_NONE      },
-    [TOK_NIL]           = {parse_literal,      NULL,              PREC_NONE      },
-    [TOK_OR]            = {NULL,               parse_or,          PREC_OR        },
-    [TOK_PRINT]         = {NULL,               NULL,              PREC_NONE      },
-    [TOK_RETURN]        = {NULL,               NULL,              PREC_NONE      },
-    [TOK_SUPER]         = {NULL,               NULL,              PREC_NONE      },
-    [TOK_SELF]          = {NULL,               NULL,              PREC_NONE      },
-    [TOK_TRUE]          = {parse_literal,      NULL,              PREC_NONE      },
-    [TOK_VAR]           = {parse_decvar,       NULL,              PREC_NONE      },
-    [TOK_WHILE]         = {NULL,               NULL,              PREC_NONE      },
-    [TOK_ERROR]         = {NULL,               NULL,              PREC_NONE      },
-    [TOK_EOF]           = {NULL,               NULL,              PREC_NONE      },
+    [TOK_LPAREN]        = {parse_grouping,      NULL,              PREC_NONE      },
+    [TOK_RPAREN]        = {NULL,                NULL,              PREC_NONE      },
+    [TOK_LBRACE]        = {NULL,                NULL,              PREC_NONE      },
+    [TOK_RBRACE]        = {NULL,                NULL,              PREC_NONE      },
+    [TOK_COMMA]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_DOT]           = {NULL,                NULL,              PREC_NONE      },
+    [TOK_MINUS]         = {parse_unary,         parse_binary,      PREC_TERM      },
+    [TOK_PLUS]          = {NULL,                parse_binary,      PREC_TERM      },
+    [TOK_COLON]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_SEMICOLON]     = {NULL,                NULL,              PREC_NONE      },
+    [TOK_SLASH]         = {NULL,                parse_binary,      PREC_FACTOR    },
+    [TOK_STAR]          = {NULL,                parse_binary,      PREC_FACTOR    },
+    [TOK_QMARK]         = {NULL,                parse_ternarycond, PREC_TERNARY   },
+    [TOK_BANG]          = {parse_unary,         NULL,              PREC_NONE      },
+    [TOK_BANG_EQUAL]    = {NULL,                parse_binary,      PREC_EQUALITY  },
+    [TOK_EQUAL]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_EQUAL_EQUAL]   = {NULL,                parse_binary,      PREC_EQUALITY  },
+    [TOK_GREATER]       = {NULL,                parse_binary,      PREC_COMPARISON},
+    [TOK_GREATER_EQUAL] = {NULL,                parse_binary,      PREC_COMPARISON},
+    [TOK_LESS]          = {NULL,                parse_binary,      PREC_COMPARISON},
+    [TOK_LESS_EQUAL]    = {NULL,                parse_binary,      PREC_COMPARISON},
+    [TOK_IDENTIFIER]    = {parse_variable,      NULL,              PREC_NONE      },
+    [TOK_STRING]        = {parse_string,        NULL,              PREC_NONE      },
+    [TOK_NUMBER]        = {parse_number,        NULL,              PREC_NONE      },
+    [TOK_AND]           = {NULL,                parse_and,         PREC_AND       },
+    [TOK_CLASS]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_ELSE]          = {NULL,                NULL,              PREC_NONE      },
+    [TOK_FALSE]         = {parse_literal,       NULL,              PREC_NONE      },
+    [TOK_FOR]           = {NULL,                NULL,              PREC_NONE      },
+    [TOK_FN]            = {NULL,                NULL,              PREC_NONE      },
+    [TOK_FIXED]         = {parse_dec_var_fixed, NULL,              PREC_NONE      },
+    [TOK_IF]            = {NULL,                NULL,              PREC_NONE      },
+    [TOK_NIL]           = {parse_literal,       NULL,              PREC_NONE      },
+    [TOK_OR]            = {NULL,                parse_or,          PREC_OR        },
+    [TOK_PRINT]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_RETURN]        = {NULL,                NULL,              PREC_NONE      },
+    [TOK_SUPER]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_SELF]          = {NULL,                NULL,              PREC_NONE      },
+    [TOK_TRUE]          = {parse_literal,       NULL,              PREC_NONE      },
+    [TOK_VAR]           = {parse_dec_var,       NULL,              PREC_NONE      },
+    [TOK_WHILE]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_ERROR]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_EOF]           = {NULL,                NULL,              PREC_NONE      },
 };
 
 SK_INTERNAL(void)
@@ -521,11 +537,20 @@ SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec)
 }
 
 SK_INTERNAL(void)
-parse_decvar_fixed(VM* vm, CompilerPPtr Cptr)
+parse_dec_var_fixed(VM* vm, CompilerPPtr Cptr)
 {
     C_flag_set(*Cptr, FIXED_BIT);
     C_expect(*Cptr, TOK_VAR, "Expect 'var' in variable declaration.");
-    parse_decvar(vm, Cptr);
+    parse_dec_var(vm, Cptr);
+}
+
+SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
+{
+    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'fn'.");
+
+    C_expect(*Cptr, TOK_RPAREN, "Expect ')'.");
+    C_expect(*Cptr, TOK_LBRACE, "Expect '{' after ')'.");
+    C_expect(*Cptr, TOK_LBRACE, "Expect '}'.");
 }
 
 SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
@@ -534,9 +559,11 @@ SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
     C_flag_clear(*Cptr, FIXED_BIT);
 
     if(C_match(*Cptr, TOK_VAR)) {
-        parse_decvar(vm, Cptr);
+        parse_dec_var(vm, Cptr);
     } else if(C_match(*Cptr, TOK_FIXED)) {
-        parse_decvar_fixed(vm, Cptr);
+        parse_dec_var_fixed(vm, Cptr);
+    } else if(C_match(*Cptr, TOK_FN)) {
+        parse_dec_fn(vm, Cptr);
     } else {
         parse_stm(vm, Cptr);
     }
@@ -548,15 +575,15 @@ SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
 {
-    Local*     local      = &C->locals[C->llen - 1]; /* Safe to decrement unsigned int */
-    Value      identifier = Token_into_stringval(vm, &local->token);
-    HashTable* scope_set  = &C->ldefs.data[C->depth - 1];
+    Local*     local = &C->locals[C->loc_len - 1]; /* Safe to decrement unsigned int */
+    Value      identifier = Token_into_stringval(vm, &local->name);
+    HashTable* scope_set  = &C->loc_defs.data[C->depth - 1];
 
-    HashTable_insert(scope_set, identifier, NUMBER_VAL(C->llen - 1));
+    HashTable_insert(scope_set, identifier, NUMBER_VAL(C->loc_len - 1));
 }
 
 SK_INTERNAL(void)
-parse_decvar(VM* vm, CompilerPPtr Cptr)
+parse_dec_var(VM* vm, CompilerPPtr Cptr)
 {
     if(C_match(*Cptr, TOK_FIXED)) {
         C_flag_set(*Cptr, FIXED_BIT);
@@ -587,16 +614,16 @@ SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
 {
     Compiler* C = *Cptr;
 
-    if(unlikely(C->llen >= C->lcap)) {
-        if(unlikely(C->llen >= MIN(VM_STACK_MAX, LOCAL_STACK_MAX))) {
+    if(unlikely(C->loc_len >= C->loc_cap)) {
+        if(unlikely(C->loc_len >= MIN(VM_STACK_MAX, LOCAL_STACK_MAX))) {
             C_error(C, "Too many variables defined in function.");
             return;
         }
         C_grow_stack(Cptr);
     }
 
-    Local* local = &C->locals[C->llen++];
-    local->token = C->parser.previous;
+    Local* local = &C->locals[C->loc_len++];
+    local->name  = C->parser.previous;
     local->flags = ((C_flags(C) >> 8) & 0xff);
     local->depth = C->depth;
 }
@@ -610,7 +637,7 @@ SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
 SK_INTERNAL(bool) C_local_is_unique(Compiler* C, VM* vm)
 {
     Value      identifier = Token_into_stringval(vm, &C->parser.previous);
-    HashTable* scope_set  = HashTableArray_index(&C->ldefs, C->depth - 1);
+    HashTable* scope_set  = HashTableArray_index(&C->loc_defs, C->depth - 1);
     return !HashTable_get(scope_set, identifier, NULL);
 }
 
@@ -664,29 +691,29 @@ SK_INTERNAL(force_inline void) C_start_scope(Compiler* C)
     }
 
     C->depth++;
-    HashTableArray_push(&C->ldefs, scope_set);
+    HashTableArray_push(&C->loc_defs, scope_set);
 }
 
 SK_INTERNAL(force_inline void) C_end_scope(Compiler* C)
 {
-    UInt      popn       = C->ldefs.data[C->depth - 1].len;
-    HashTable scope_defs = HashTableArray_pop(&C->ldefs);
+    UInt      popn       = C->loc_defs.data[C->depth - 1].len;
+    HashTable scope_defs = HashTableArray_pop(&C->loc_defs);
     HashTable_free(&scope_defs);
     C->depth--;
-    C->llen -= popn;
+    C->loc_len -= popn;
     C_emit_op(C, OP_POPN, popn);
 }
 
 SK_INTERNAL(force_inline void)
 C_patch_jmp(Compiler* C, UInt jmp_offset)
 {
-    UInt offset = code_offset() - jmp_offset - 3;
+    UInt offset = code_offset(C) - jmp_offset - 3;
 
     if(unlikely(offset >= UINT24_MAX)) {
         C_error(C, "Too much code to jump over.");
     }
 
-    PUT_BYTES3(&current_chunk()->code.data[jmp_offset], offset);
+    PUT_BYTES3(&current_chunk(C)->code.data[jmp_offset], offset);
 }
 
 SK_INTERNAL(force_inline void) C_add_bstorage(Compiler* C)
@@ -751,25 +778,16 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
 
                 state = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
 
-                if(fts.len > 0) {
-                    /* Patch Fall-through jump */
-                    C_patch_jmp(*Cptr, *IntArray_last(&fts));
-                }
-
-                /* Parse case body */
-                parse_stm(vm, Cptr);
             } else if(!dflt) {
                 dflt = true;
                 C_expect(*Cptr, TOK_COLON, "Expect ':' after 'default'.");
-
-                if(fts.len > 0) {
-                    /* Patch Fall-through jump */
-                    C_patch_jmp(*Cptr, *IntArray_last(&fts));
-                }
-
-                parse_stm(vm, Cptr);
             } else {
                 C_error(*Cptr, "Multiple 'default' labels in a single 'switch'.");
+            }
+
+            if(fts.len > 0) {
+                /* Patch Fall-through jump */
+                C_patch_jmp(*Cptr, *IntArray_last(&fts));
             }
         } else {
             if(state == 0) {
@@ -783,6 +801,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
         C_error(*Cptr, "Expect '}' at the end of 'switch'.");
     }
 
+    /* Free fallthrough jumps array */
     IntArray_free(&fts);
     /* Patch and remove breaks */
     C_rm_bstorage(*Cptr);
@@ -846,7 +865,7 @@ SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr)
 
     Int outermostl_start              = (*Cptr)->context.innermostl_start;
     Int outermostl_depth              = (*Cptr)->context.innermostl_depth;
-    (*Cptr)->context.innermostl_start = current_chunk()->code.len;
+    (*Cptr)->context.innermostl_start = current_chunk(*Cptr)->code.len;
     (*Cptr)->context.innermostl_depth = (*Cptr)->depth;
 
     C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'while'.");
@@ -888,9 +907,9 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     if(C_match(*Cptr, TOK_SEMICOLON)) {
         // No initializer
     } else if(C_match(*Cptr, TOK_VAR)) {
-        parse_decvar(vm, Cptr);
+        parse_dec_var(vm, Cptr);
     } else if(C_match(*Cptr, TOK_FIXED)) {
-        parse_decvar_fixed(vm, Cptr);
+        parse_dec_var_fixed(vm, Cptr);
     } else {
         parse_stm_expr(vm, Cptr);
     }
@@ -899,7 +918,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     Int outermostl_start = (*Cptr)->context.innermostl_start;
     Int outermostl_depth = (*Cptr)->context.innermostl_depth;
     /* Update context inner loop start/depth to current state */
-    (*Cptr)->context.innermostl_start = current_chunk()->code.len;
+    (*Cptr)->context.innermostl_start = current_chunk(*Cptr)->code.len;
     (*Cptr)->context.innermostl_depth = (*Cptr)->depth;
 
     Int loop_end = -1;
@@ -912,7 +931,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
 
     if(!C_match(*Cptr, TOK_SEMICOLON)) {
         UInt body_start      = C_emit_jmp(*Cptr, vm, OP_JMP);
-        UInt increment_start = current_chunk()->code.len;
+        UInt increment_start = current_chunk(*Cptr)->code.len;
         parse_expr(vm, Cptr);
         C_emit_byte(*Cptr, OP_POP);
         C_expect(*Cptr, TOK_RPAREN, "Expect ')' after last for-loop clause.");
@@ -952,7 +971,7 @@ SK_INTERNAL(void) parse_stm_continue(VM* vm, Compiler* C)
     Int sdepth = C->context.innermostl_depth;
 
     UInt popn = 0;
-    for(Int i = C->llen - 1; i >= 0 && C->locals[i].depth > sdepth; i--) {
+    for(Int i = C->loc_len - 1; i >= 0 && C->locals[i].depth > sdepth; i--) {
         popn++;
     }
 
@@ -981,7 +1000,7 @@ SK_INTERNAL(void) parse_stm_break(VM* vm, Compiler* C)
                                          : C->context.innermostsw_depth;
 
     UInt popn = 0;
-    for(Int i = C->llen - 1; i >= 0 && C->locals[i].depth > sdepth; i--) {
+    for(Int i = C->loc_len - 1; i >= 0 && C->locals[i].depth > sdepth; i--) {
         popn++;
     }
 
@@ -1047,8 +1066,8 @@ SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, const Token* name)
 {
     Value index      = NUMBER_VAL(-1);
     Value identifier = Token_into_stringval(vm, name);
-    for(Int i = 0; i < C->ldefs.len; i++) {
-        HashTable* scope_set = &C->ldefs.data[i];
+    for(Int i = 0; i < C->loc_defs.len; i++) {
+        HashTable* scope_set = &C->loc_defs.data[i];
         if(HashTable_get(scope_set, identifier, &index)) {
             return (Int)AS_NUMBER(index);
         }

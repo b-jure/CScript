@@ -142,7 +142,7 @@ string:
 err:
     return Token_error(scanner, "Unexpected character.");
 
-    _unreachable;
+    unreachable;
 
 #else
     switch(c) {

@@ -4,16 +4,20 @@
 #include "array.h"
 #include "chunk.h"
 #include "hashtable.h"
+#include "skconf.h"
 #include "value.h"
 
-/* Mebibytes */
-#define MIB(x) (x << 20)
-#define STACK_MAX(type) (MIB(1) / sizeof(type))
+// Max depth of CallFrames
+#define VM_FRAMES_MAX SK_CALLFRAMES_MAX
 
-/* VM Stack size */
-#define VM_STACK_MAX STACK_MAX(Value)
+// Max stack size
+#define VM_STACK_MAX (SK_STACK_MAX / sizeof(Value))
 
-/* @TODO: Make stack size modifiable (arguments to interpreter executable) */
+typedef struct {
+  ObjFunction *fn; /* Function of this CallFrame */
+  Byte *ip;
+  Value *sp; /* Relative stack pointer */
+} CallFrame;
 
 typedef struct {
   Value value;
@@ -23,14 +27,14 @@ typedef struct {
 DECLARE_ARRAY(Global);
 
 typedef struct {
-  Chunk *chunk;              /* Chunk being interpreted */
-  Byte *ip;                  /* Instruction pointer */
-  Value stack[VM_STACK_MAX]; /* Stack */
-  Value *sp;                 /* Stack pointer */
-  HashTable global_ids;      /* Global variable names */
-  GlobalArray global_vals;   /* Global variable values */
-  HashTable strings;         /* Strings (interning) */
-  Obj *objects;              /* List of allocated object */
+  CallFrame frames[VM_FRAMES_MAX]; /* Call frames */
+  Int fc;                          /* Frame count */
+  Value stack[VM_STACK_MAX];       /* Stack */
+  Value *sp;                       /* Stack pointer */
+  HashTable global_ids;            /* Global variable names */
+  GlobalArray global_vals;         /* Global variable values */
+  HashTable strings;               /* Strings (interning) */
+  Obj *objects;                    /* List of allocated object */
 } VM;
 
 typedef enum {

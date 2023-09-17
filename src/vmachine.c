@@ -4,10 +4,10 @@
 #include "mem.h"
 #include "object.h"
 #include "vmachine.h"
-#include <assert.h>
 
 #ifdef DEBUG_TRACE_EXECUTION
     #include "debug.h"
+    #include <assert.h>
 #endif
 
 #include <math.h>
@@ -44,7 +44,9 @@ void VM_error(VM* vm, const char* errfmt, ...)
     va_end(ap);
     fputs("\n", stderr);
 
-    UInt line = Chunk_getline(vm->chunk, vm->ip - vm->chunk->code.data - 1);
+    CallFrame* frame = &vm->frames[vm->fc - 1];
+    Chunk*     chunk = &frame->fn->chunk;
+    UInt       line  = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
     fprintf(stderr, "[line: %u] in script\n", line);
     stack_reset(vm);
 }
@@ -189,8 +191,7 @@ VM* VM_new(void)
 
 void VM_init(VM* vm)
 {
-    vm->chunk   = NULL;
-    vm->ip      = NULL;
+    vm->fc      = 0;
     vm->objects = NULL;
     stack_reset(vm);
     HashTable_init(&vm->global_ids);
@@ -198,8 +199,6 @@ void VM_init(VM* vm)
     HashTable_init(&vm->strings);
 }
 
-SK_INTERNAL(InterpretResult) VM_run(VM* vm)
-{
 #define BINARY_OP(value_type, op)                                                        \
     do {                                                                                 \
         if(!IS_NUMBER(stack_peek(0)) || !IS_NUMBER(stack_peek(1))) {                     \
@@ -224,10 +223,16 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
         }                                                                                \
     } while(false)
 
-#define READ_BYTE()      (*vm->ip++)
-#define READ_BYTEL()     (vm->ip += 3, GET_BYTES3(vm->ip - 3))
-#define READ_CONSTANT()  vm->chunk->constants.data[READ_BYTE()]
-#define READ_CONSTANTL() vm->chunk->constants.data[READ_BYTEL()]
+SK_INTERNAL(InterpretResult) VM_run(VM* vm)
+{
+    // First frame is 'global' frame aka implicit
+    // function that contains all other code and/or functions
+    register CallFrame* frame = &vm->frames[vm->fc - 1];
+
+#define READ_BYTE()      (*frame->ip++)
+#define READ_BYTEL()     (frame->ip += 3, GET_BYTES3(frame->ip - 3))
+#define READ_CONSTANT()  frame->fn->chunk.constants.data[READ_BYTE()]
+#define READ_CONSTANTL() frame->fn->chunk.constants.data[READ_BYTEL()]
 #define READ_STRING()    AS_STRING(READ_CONSTANT())
 #define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
 #define DISPATCH(x)      switch(x)
@@ -251,7 +256,10 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             printf("]");
         }
         printf("\n");
-        Instruction_debug(vm->chunk, (UInt)(vm->ip - vm->chunk->code.data), vm);
+        Instruction_debug(
+            &frame->fn->chunk,
+            (UInt)(frame->ip - frame->fn->chunk.code.data),
+            vm);
 #endif
         DISPATCH(READ_BYTE())
         {
@@ -439,39 +447,39 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_GET_LOCAL)
             {
                 uint8_t slot = READ_BYTE();
-                VM_push(vm, vm->stack[slot]);
+                VM_push(vm, frame->sp[slot]);
                 BREAK;
             }
             CASE(OP_GET_LOCALL)
             {
                 UInt slot = READ_BYTEL();
-                VM_push(vm, vm->stack[slot]);
+                VM_push(vm, frame->sp[slot]);
                 BREAK;
             }
             CASE(OP_SET_LOCAL)
             {
                 uint8_t slot    = READ_BYTE();
-                vm->stack[slot] = stack_peek(0);
+                frame->sp[slot] = stack_peek(0);
                 BREAK;
             }
             CASE(OP_SET_LOCALL)
             {
                 UInt slot       = READ_BYTEL();
-                vm->stack[slot] = stack_peek(0);
+                frame->sp[slot] = stack_peek(0);
                 BREAK;
             }
             CASE(OP_JMP_IF_FALSE)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
-                vm->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
+                frame->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
                 BREAK;
             }
             CASE(OP_JMP_IF_FALSE_OR_POP)
             {
                 UInt skip_offset = READ_BYTEL();
                 if(isfalsey(stack_peek(0))) {
-                    vm->ip += skip_offset;
+                    frame->ip += skip_offset;
                 } else {
                     VM_pop(vm);
                 }
@@ -481,7 +489,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
-                vm->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
+                frame->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
                 VM_pop(vm);
                 BREAK;
             }
@@ -489,14 +497,14 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
-                vm->ip += skip_offset;
+                frame->ip += skip_offset;
                 BREAK;
             }
             CASE(OP_JMP_AND_POP)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
-                vm->ip += skip_offset;
+                frame->ip += skip_offset;
                 VM_pop(vm);
                 BREAK;
             }
@@ -504,7 +512,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt offset = READ_BYTEL();
                 //
-                vm->ip -= offset;
+                frame->ip -= offset;
                 BREAK;
             }
             CASE(OP_RET)
@@ -516,8 +524,6 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 
     unreachable;
 
-#undef VM_BINARY_OP
-#undef VM_CONCAT_OR_ADD
 #undef READ_BYTE
 #undef READ_BYTEL
 #undef READ_CONSTANT
@@ -529,24 +535,25 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #undef BREAK
 }
 
+#undef VM_BINARY_OP
+#undef VM_CONCAT_OR_ADD
+
 InterpretResult VM_interpret(VM* vm, const char* source)
 {
-    Chunk chunk;
-    Chunk_init(&chunk);
+    ObjFunction* fn = compile(vm, source);
 
-    if(!compile(vm, source, &chunk)) {
-        Chunk_free(&chunk);
-        stack_reset(vm);
+    if(fn == NULL) {
         return INTERPRET_COMPILE_ERROR;
     }
 
-    vm->chunk = &chunk;
-    vm->ip    = vm->chunk->code.data;
+    VM_push(vm, OBJ_VAL(fn));
 
-    InterpretResult result = VM_run(vm);
+    CallFrame* frame = &vm->frames[vm->fc++];
+    frame->fn        = fn;
+    frame->ip        = fn->chunk.code.data;
+    frame->sp        = vm->stack;
 
-    Chunk_free(&chunk);
-    return result;
+    return VM_run(vm);
 }
 
 void VM_free(VM* vm)

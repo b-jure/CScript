@@ -7,10 +7,13 @@
 #define ALLOC_OBJ(vm, object, type) ((object*)Object_new((vm), sizeof(object), type))
 #define ALLOC_STRING(vm, len)                                                            \
     ((ObjString*)Object_new((vm), sizeof(ObjString) + (len) + 1, OBJ_STRING))
+#define ALLOC_FUNCTION(vm)                                                               \
+    ((ObjFunction*)Object_new(vm, sizeof(ObjFunction), OBJ_FUNCTION))
 
-static _force_inline void ObjString_free(ObjString* objstr);
+static force_inline void ObjString_free(ObjString* objstr);
+static force_inline void ObjFunction_free(ObjFunction* objfn);
 
-static _force_inline Obj* Object_new(VM* vm, size_t size, ObjType type)
+static force_inline Obj* Object_new(VM* vm, size_t size, ObjType type)
 {
     /* Allocate a new object */
     Obj* object  = MALLOC(size);
@@ -28,10 +31,17 @@ void Object_print(Value value)
 {
     switch(OBJ_TYPE(value)) {
         case OBJ_STRING:
-            printf("%.*s", (int)AS_STRING(value)->len, AS_CSTRING(value));
+            printf("%s", AS_CSTRING(value));
+            break;
+        case OBJ_FUNCTION:
+            if(AS_FUNCTION(value)->name == NULL) {
+                printf("<script>");
+            } else {
+                printf("<fn %s>", AS_FUNCTION(value)->name->storage);
+            }
             break;
         default:
-            _unreachable;
+            unreachable;
     }
 }
 
@@ -41,8 +51,11 @@ void Obj_free(Obj* object)
         case OBJ_STRING:
             ObjString_free((ObjString*)object);
             break;
+        case OBJ_FUNCTION:
+            ObjFunction_free((ObjFunction*)object);
+            break;
         default:
-            _unreachable;
+            unreachable;
     }
 }
 
@@ -51,12 +64,14 @@ Hash Obj_hash(Value value)
     switch(OBJ_TYPE(value)) {
         case OBJ_STRING:
             return AS_STRING(value)->hash;
+        case OBJ_FUNCTION:
+            return AS_FUNCTION(value)->name->hash;
         default:
-            _unreachable;
+            unreachable;
     }
 }
 
-static _force_inline ObjString* ObjString_alloc(VM* vm, UInt len)
+static force_inline ObjString* ObjString_alloc(VM* vm, UInt len)
 {
     ObjString* string = ALLOC_STRING(vm, len);
     string->len       = len;
@@ -82,7 +97,22 @@ ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
     return string;
 }
 
-static _force_inline void ObjString_free(ObjString* string)
+static force_inline void ObjString_free(ObjString* string)
 {
     MFREE(string, sizeof(ObjString) + string->len + 1);
+}
+
+ObjFunction* ObjFunction_new(VM* vm)
+{
+    ObjFunction* fn = ALLOC_FUNCTION(vm);
+    fn->arity       = 0;
+    fn->name        = NULL;
+    Chunk_init(&fn->chunk);
+    return fn;
+}
+
+static force_inline void ObjFunction_free(ObjFunction* fn)
+{
+    Chunk_free(&fn->chunk);
+    MFREE(fn, sizeof(ObjFunction));
 }

@@ -1,12 +1,11 @@
 #ifndef __SKOOMA_COMPILER_H__
 #define __SKOOMA_COMPILER_H__
 
-#include "chunk.h"
 #include "common.h"
-#include "scanner.h"
+#include "object.h"
 #include "vmachine.h"
 
-bool compile(VM *vm, const char *source, Chunk *chunk);
+ObjFunction *compile(VM *vm, const char *source);
 
 /* Precedence from LOW-est to HIGH-est */
 typedef enum {

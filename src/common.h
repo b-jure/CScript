@@ -1,7 +1,8 @@
 #ifndef __SKOOMA_COMMON_H__
 #define __SKOOMA_COMMON_H__
 
-#include <limits.h>
+#include "skconf.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -41,6 +42,7 @@ static inline size_t bit_mask(uint8_t x) {
 /* Check if double is NaN */
 #define IS_NAN(dbl)                                                            \
   ((*(uint64_t *)(&dbl) & 0x7FFFFFFFFFFFFFFFL) > 0x7FF0000000000000L)
+
 /* Return MAX */
 #if defined(__GNUC__) || defined(__clang__)
 #define MAX(a, b)                                                              \
@@ -69,41 +71,5 @@ static inline size_t bit_mask(uint8_t x) {
 #define DEBUG_TRACE_EXECUTION
 /* Debug flag for assertions */
 #define DEBUG_ASSERTIONS
-
-/* Check if we can use labels as values for precomputed goto/jmp table */
-#if defined(__GNUC__) && __GNUC__ >= 2
-#define THREADED_CODE
-#endif
-
-/* Compiler builtins (attributes)------------------------------------------- */
-
-#if defined(__GLIBC__)
-#define _force_inline __always_inline
-#define _likely(cond) __glibc_likely(cond)
-#define _unlikely(cond) __glibc_unlikely(cond)
-#define _unused __attribute__((unused))
-#define _unreachable __builtin_unreachable()
-#elif defined(__clang__)
-#define _force_inline __always_inline
-#define _likely(cond) [[likely]] cond
-#define _unlikely(cond) [[unlikely]] cond
-#define _unused [[maybe_unused]]
-#define _unreachable
-#else
-#define _force_inline inline
-#define _likely(cond) cond
-#define _unlikely(cond) cond
-#define _unused
-#define _unreachable
-#endif
-
-#define force_inline _force_inline
-#define likely(cond) _likely(cond)
-#define unlikely(cond) _unlikely(cond)
-#define unused _unused
-#define unreachable _unreachable
-
-#define SK_INTERNAL(ret) static ret
-/* ------------------------------------------------------------------------- */
 
 #endif

@@ -44,9 +44,9 @@ void HashTable_init(HashTable* table)
 }
 
 /* Return the next prime capacity or exit if table size limit reached */
-static _force_inline size_t get_prime_capacity(uint8_t old_prime)
+static force_inline size_t get_prime_capacity(uint8_t old_prime)
 {
-    if(_unlikely(old_prime >= PRIME_TABLE_LEN)) {
+    if(unlikely(old_prime >= PRIME_TABLE_LEN)) {
         fprintf(
             stderr,
             "HashTable size exceeded (LIMIT: %u entries): %d:%s [%s]\n",
@@ -60,7 +60,7 @@ static _force_inline size_t get_prime_capacity(uint8_t old_prime)
     }
 }
 
-static _force_inline Entry* Entry_find(Entry* entries, UInt len, Value key)
+static force_inline Entry* Entry_find(Entry* entries, UInt len, Value key)
 {
     UInt   i           = 0;
     Hash   hash        = Value_hash(key);
@@ -83,14 +83,14 @@ static _force_inline Entry* Entry_find(Entry* entries, UInt len, Value key)
 
         ++i;
         index = QUADRATIC_PROBE(hash, i, len);
-    } while(_likely(start_index != index));
+    } while(likely(start_index != index));
 
     /* We did a cycle so we have a tombstone */
     return tombstone;
 }
 
 /* Rehash all the keys from the table 'from' into the table 'to' */
-static _force_inline void HashTable_into(HashTable* from, HashTable* to)
+static force_inline void HashTable_into(HashTable* from, HashTable* to)
 {
     for(UInt i = 0; i < from->cap; i++) {
         Entry* entry = &from->entries[i];
@@ -101,13 +101,13 @@ static _force_inline void HashTable_into(HashTable* from, HashTable* to)
 }
 
 /* HashTable load factor */
-static _force_inline double HashTable_lf(HashTable* table)
+static force_inline double HashTable_lf(HashTable* table)
 {
     return (double)table->len / (double)table->cap;
 }
 
 /* Expand the table array */
-static _force_inline void HashTable_expand(HashTable* table)
+static force_inline void HashTable_expand(HashTable* table)
 {
     UInt   new_cap = GROW_TABLE_CAPACITY(table->prime++);
     Entry* entries = ALLOC_ARRAY(Entry, new_cap);
@@ -201,7 +201,7 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
 
         ++i;
         index = QUADRATIC_PROBE(hash, i, table->cap);
-    } while(_likely(start_index != index));
+    } while(likely(start_index != index));
 
     return NULL;
 }

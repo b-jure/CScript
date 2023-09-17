@@ -25,7 +25,7 @@
     type *data;                                                                \
   } _ARRAY_STRUCT(type);                                                       \
                                                                                \
-  _force_inline void _ARRAY_METHOD(type, init) {                               \
+  force_inline void _ARRAY_METHOD(type, init) {                                \
     self->cap = 0;                                                             \
     self->len = 0;                                                             \
     self->data = NULL;                                                         \
@@ -35,26 +35,26 @@
                                                                                \
   UInt _ARRAY_METHOD(type, push, type value);                                  \
                                                                                \
-  _force_inline type _ARRAY_METHOD(type, pop) {                                \
+  force_inline type _ARRAY_METHOD(type, pop) {                                 \
     return self->data[--self->len];                                            \
   }                                                                            \
                                                                                \
-  _force_inline type *_ARRAY_METHOD(type, index, size_t index) {               \
+  force_inline type *_ARRAY_METHOD(type, index, size_t index) {                \
     return &self->data[index];                                                 \
   }                                                                            \
                                                                                \
-  _force_inline type *_ARRAY_METHOD(type, last) {                              \
+  force_inline type *_ARRAY_METHOD(type, last) {                               \
     return &self->data[self->len - 1];                                         \
   }                                                                            \
                                                                                \
-  _force_inline type *_ARRAY_METHOD(type, first) { return &self->data[0]; }    \
+  force_inline type *_ARRAY_METHOD(type, first) { return &self->data[0]; }     \
                                                                                \
   void _ARRAY_METHOD(type, insert, size_t index, type value);                  \
   type _ARRAY_METHOD(type, remove, size_t index);                              \
                                                                                \
-  _force_inline size_t _ARRAY_METHOD(type, len) { return self->len; }          \
+  force_inline size_t _ARRAY_METHOD(type, len) { return self->len; }           \
                                                                                \
-  _force_inline void _ARRAY_METHOD(type, free) {                               \
+  force_inline void _ARRAY_METHOD(type, free) {                                \
     MFREE_ARRAY(type, self->data, self->cap);                                  \
     _CALL_ARRAY_METHOD(type, init);                                            \
   }
@@ -71,7 +71,7 @@
       size_t old_cap = self->cap;                                              \
       self->cap = GROW_ARRAY_CAPACITY(old_cap);                                \
                                                                                \
-      if (_unlikely(self->cap >= UINT32_MAX)) {                                \
+      if (unlikely(self->cap >= UINT32_MAX)) {                                 \
         fprintf(stderr,                                                        \
                 "Internal error, " #type "Array capacity exceeded! [%lu]\n",   \
                 self->cap);                                                    \
