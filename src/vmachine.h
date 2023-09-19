@@ -11,7 +11,7 @@
 #define VM_FRAMES_MAX SK_CALLFRAMES_MAX
 
 // Max stack size
-#define VM_STACK_MAX (SK_STACK_MAX / sizeof(Value))
+#define VM_STACK_MAX ((uint32_t)(SK_STACK_MAX / sizeof(Value)))
 
 typedef struct {
   ObjFunction *fn; /* Function of this CallFrame */

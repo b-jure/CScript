@@ -212,6 +212,7 @@ SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_literal(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_call(VM* vm, CompilerPPtr Cptr);
 
 SK_INTERNAL(void) CFCtx_init(CFCtx* context)
 {
@@ -498,7 +499,7 @@ SK_INTERNAL(void) C_free(Compiler* C)
  * while second column parse function is used in case token is inifx. Third
  * column marks the 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
-    [TOK_LPAREN]        = {parse_grouping,      NULL,              PREC_NONE      },
+    [TOK_LPAREN]        = {parse_grouping,      parse_call,        PREC_NONE      },
     [TOK_RPAREN]        = {NULL,                NULL,              PREC_NONE      },
     [TOK_LBRACE]        = {NULL,                NULL,              PREC_NONE      },
     [TOK_RBRACE]        = {NULL,                NULL,              PREC_NONE      },
@@ -542,6 +543,30 @@ static const ParseRule rules[] = {
     [TOK_ERROR]         = {NULL,                NULL,              PREC_NONE      },
     [TOK_EOF]           = {NULL,                NULL,              PREC_NONE      },
 };
+
+SK_INTERNAL(UInt) parse_arglist(VM* vm, CompilerPPtr Cptr)
+{
+    UInt argc = 0;
+
+    if(!C_check(C(), TOK_RPAREN)) {
+        do {
+            parse_expr(vm, Cptr);
+            if(argc == UINT24_MAX) {
+                C_error(C(), "Can't have more than %u arguments.", UINT24_MAX);
+            }
+            argc++;
+        } while(C_match(C(), TOK_COMMA));
+    }
+
+    C_expect(C(), TOK_RPAREN, "Expect ')' after function arguments.");
+    return argc;
+}
+
+SK_INTERNAL(void) parse_call(VM* vm, CompilerPPtr Cptr)
+{
+    UInt argc = parse_arglist(vm, Cptr);
+    C_emit_op(C(), GET_OP_TYPE(argc, OP_CALL), argc);
+}
 
 SK_INTERNAL(void)
 parse_stm_expr(VM* vm, CompilerPPtr Cptr)
@@ -793,7 +818,7 @@ SK_INTERNAL(void) C_make_local(CompilerPPtr Cptr, VM* vm)
 SK_INTERNAL(int64_t) C_make_global(Compiler* C, VM* vm, bool fixed)
 {
     Value identifier = Token_into_stringval(vm, &C->parser.previous);
-    UInt idx = make_const_identifier(vm, identifier, fixed);
+    UInt  idx        = make_const_identifier(vm, identifier, fixed);
 
     if(unlikely(idx > UINT24_MAX)) {
         fprintf(

@@ -113,6 +113,10 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_jump("OP_JMP_AND_POP", 1, chunk, offset);
         case OP_LOOP:
             return Instruction_jump("OP_LOOP", -1, chunk, offset);
+        case OP_CALL:
+            return Instruction_short("OP_CALL", chunk, OP_CALL, offset);
+        case OP_CALLL:
+            return Instruction_long("OP_CALLL", chunk, OP_CALLL, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;

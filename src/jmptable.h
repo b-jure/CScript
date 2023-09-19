@@ -55,6 +55,8 @@ static const void *const optable[OPCODE_N] = {
     &&L_OP_JMP,
     &&L_OP_JMP_AND_POP,
     &&L_OP_LOOP,
+    &&L_OP_CALL,
+    &&L_OP_CALLL,
     &&L_OP_RET,
 };
 

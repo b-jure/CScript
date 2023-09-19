@@ -3,6 +3,8 @@
 #include "compiler.h"
 #include "mem.h"
 #include "object.h"
+#include "skconf.h"
+#include "value.h"
 #include "vmachine.h"
 
 #ifdef DEBUG
@@ -26,7 +28,10 @@ SK_INTERNAL(force_inline void) VM_push(VM* vm, Value val)
     if(likely(vm->sp - vm->stack < VM_STACK_MAX)) {
         *vm->sp++ = val;
     } else {
-        fprintf(stderr, "Internal error: vm stack overflow.\n");
+        fprintf(
+            stderr,
+            "Internal error: vm stack overflow, stack size limit reached [%d].\n",
+            VM_STACK_MAX);
         exit(EXIT_FAILURE);
     }
 }
@@ -189,6 +194,45 @@ void VM_init(VM* vm)
     HashTable_init(&vm->global_ids);
     GlobalArray_init(&vm->global_vals);
     HashTable_init(&vm->strings);
+}
+
+SK_INTERNAL(bool) call(VM* vm, ObjFunction* fn, UInt argc)
+{
+    if(fn->arity != argc) {
+        VM_error(vm, "Expected %u arguments, but got %u instead.", fn->arity, argc);
+        return false;
+    }
+
+    if(vm->fc == VM_FRAMES_MAX) {
+        VM_error(
+            vm,
+            "Internal error: vm stack overflow, recursion depth reached [%u].\n",
+            VM_FRAMES_MAX);
+    }
+
+    CallFrame* frame = &vm->frames[vm->fc++];
+    frame->fn        = fn;
+    frame->ip        = fn->chunk.code.data;
+    frame->sp        = vm->sp - argc - 1;
+    return true;
+}
+
+SK_INTERNAL(force_inline bool) call_val(VM* vm, Value fnval, UInt argc)
+{
+    if(IS_OBJ(fnval)) {
+        switch(OBJ_TYPE(fnval)) {
+            case OBJ_FUNCTION:
+                return call(vm, AS_FUNCTION(fnval), argc);
+                break;
+            default:
+                break;
+        }
+    }
+
+    VM_error(
+        vm,
+        "Tried calling non-callable object, only functions and classes can be called.");
+    return false;
 }
 
 #define BINARY_OP(value_type, op)                                                        \
@@ -508,6 +552,19 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 frame->ip -= offset;
                 BREAK;
             }
+            CASE(OP_CALL)
+            {
+                UInt argc = READ_BYTE();
+                if(!call_val(vm, stack_peek(argc), argc)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm->frames[vm->fc - 1];
+                BREAK;
+            }
+            CASE(OP_CALLL)
+            {
+                BREAK;
+            }
             CASE(OP_RET)
             {
                 return INTERPRET_OK;
@@ -539,12 +596,9 @@ InterpretResult VM_interpret(VM* vm, const char* source)
         return INTERPRET_COMPILE_ERROR;
     }
 
+    /* Push and call the implicit function */
     VM_push(vm, OBJ_VAL(fn));
-
-    CallFrame* frame = &vm->frames[vm->fc++];
-    frame->fn        = fn;
-    frame->ip        = fn->chunk.code.data;
-    frame->sp        = vm->stack;
+    call(vm, fn, 0);
 
     return VM_run(vm);
 }

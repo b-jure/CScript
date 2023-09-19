@@ -51,6 +51,8 @@ typedef enum {
   OP_JMP,                  /* Jump to instruction */
   OP_JMP_AND_POP,          /* Jump to instruction and pop stack value */
   OP_LOOP,                 /* Jump backwards unconditionally */
+  OP_CALL,                 /* Call instruction */
+  OP_CALLL,                /* Call long instruction */
   OP_RET,                  /* Stop interpreting ? */
 } OpCode;
 
