@@ -6,8 +6,15 @@
 
 #include <assert.h>
 
-void Chunk_debug(Chunk *chunk, const char *name, VM *vm);
-UInt Instruction_debug(Chunk *chunk, UInt offset, VM *vm);
+void Chunk_debug(Chunk *chunk, const char *name);
+UInt Instruction_debug(Chunk *chunk, UInt offset);
+
+/* Debug flag for debugging chunks. */
+#define DEBUG_PRINT_CODE
+/* Debug flag for printing VM stack. */
+#define DEBUG_TRACE_EXECUTION
+/* Debug flag for assertions */
+#define DEBUG_ASSERTIONS
 
 #ifdef DEBUG_ASSERTIONS
 #define sk_assert(expr) assert(expr)

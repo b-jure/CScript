@@ -16,7 +16,7 @@
 #define THREADED_CODE
 #endif
 
-/* Compiler builtins (attributes)------------------------------------------- */
+/* Compiler builtins ------------------------------------------------------- */
 
 #if defined(__GNUC__) && __GNUC__ >= 3
 #define force_inline __always_inline
@@ -24,18 +24,21 @@
 #define unlikely(cond) __glibc_unlikely(cond)
 #define unused __attribute__((unused))
 #define unreachable __builtin_unreachable()
+#define aligned(type, b) type __attribute__((aligned(b)))
 #elif defined(__clang__)
 #define force_inline __always_inline
 #define likely(cond) [[likely]] cond
 #define unlikely(cond) [[unlikely]] cond
 #define unused [[maybe_unused]]
 #define unreachable __builtin_unreachable()
+#define aligned(type, b) type __attribute__((aligned(b)))
 #else
 #define force_inline inline
 #define likely(cond) cond
 #define unlikely(cond) cond
 #define unused
 #define unreachable
+#define aligned(type, b) type
 #endif
 
 #define SK_INTERNAL(ret) static ret

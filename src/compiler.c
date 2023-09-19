@@ -6,19 +6,14 @@
 #include "skconf.h"
 #include "value.h"
 #include "vmachine.h"
-#ifdef DEBUG_PRINT_CODE
+
+#ifdef DEBUG
     #include "debug.h"
 #endif
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-/* @TODO: Implement break, continue
- *  - need to track the start of the loop
- *  - if there is no start of the loop invoke error
- *  - additionally track the scope depth and pop off all the
- *  locals when continue is invoked, resetting the loop scope locals.
- *  - when break is invoked jump to the end of the loop and remove scope. */
 
 #define GET_OP_TYPE(idx, op) (idx <= UINT8_MAX) ? op : op##L
 
@@ -38,7 +33,19 @@
 #define C_flags_clear(C)     ((C)->parser.flags = 0)
 #define C_flags(C)           ((C)->parser.flags)
 
+// clang-format off
+#define GSTATE_INIT { 0 }
+// clang-format on
 #define CFLOW_MASK(C) ((size_t)(btoul(SWITCH_BIT) | btoul(LOOP_BIT)) & C_flags(C))
+
+/* Global compiler state */
+typedef struct {
+    UInt loc_len; /* Total number of local variables across functions */
+} GState;
+
+GState gstate = GSTATE_INIT;
+
+#define C() (*Cptr)
 
 typedef struct {
     Scanner scanner;
@@ -69,15 +76,20 @@ typedef struct {
      * ...
      * 8 - unused
      */
-    Byte flags;
     Int  depth;
+    Byte flags;
 } Local;
 
-#define LOCAL_STACK_MAX  (UINT24_MAX + 1)
+/* Max 'Compiler' stack size, limited to long bytecode instructions */
+#define LOCAL_STACK_MAX (UINT24_MAX + 1)
+
+/* Default 'Compiler' stack size */
 #define SHORT_STACK_SIZE (UINT8_MAX + 1)
 
+/* Allocates 'Compiler' with the default stack size */
 #define ALLOC_COMPILER() MALLOC(sizeof(Compiler) + (SHORT_STACK_SIZE * sizeof(Local)))
 
+/* Grows 'Compiler' stack */
 #define GROW_LOCAL_STACK(ptr, oldcap, newcap)                                            \
     (Compiler*)REALLOC(                                                                  \
         ptr,                                                                             \
@@ -101,22 +113,44 @@ typedef enum {
 
 /* Control Flow context */
 typedef struct {
-    Int           innermostl_start;  /* Innermost loop start offset */
-    Int           innermostl_depth;  /* Innermost loop scope depth */
-    Int           innermostsw_depth; /* Innermost switch scope depth */
-    IntArrayArray breaks;            /* Break statement offsets */
+    /* We store break offsets inside an array because we don't
+     * know in advance where the end of the switch/loop statement
+     * is while parsing.
+     * When we hit the end of the loop/switch statement then
+     * we can just patch each parsed break statement.
+     * This would be the same for 'continue' in case of 'do while'
+     * loop.*/
+    IntArrayArray breaks; /* Break statement offsets */
+
+    Int innermostl_start;  /* Innermost loop start offset */
+    Int innermostl_depth;  /* Innermost loop scope depth */
+    Int innermostsw_depth; /* Innermost switch scope depth */
 } CFCtx;
 
 typedef struct {
-    Parser         parser; /* Grammar parser */
-    ObjFunction*   fn;
-    FunctionType   fn_type;
-    CFCtx          context;  /* Control flow context */
-    HashTableArray loc_defs; /* Tracks locals for each scope */
-    Int            depth;    /* Scope depth */
-    UInt           loc_len;  /* Locals count */
-    UInt           loc_cap;  /* Locals array capacity */
-    Local          locals[]; /* Locals array (up to 24-bit [LOCAL_STACK_MAX]) */
+    /* Grammar parser */
+    Parser parser;
+    /* Control flow context, tracks offsets and
+     * scope depth for 'continue' and 'break' statements. */
+    CFCtx context;
+    /* Tracks local variables for each scope. */
+    HashTableArray loc_defs;
+    /* Currently compiled function, meaning we write
+     * bytecode to the function chunk in this field. */
+    ObjFunction* fn;
+    FunctionType fn_type; /* Function type */
+    /* Current scope depth. */
+    Int depth;
+    /* Count of local variables in this function.
+     * In case of this function being FN_SCRIPT that would
+     * mean count of variables in case of block scope. */
+    UInt loc_len;
+    /* Capacity of 'locals' flexible array. */
+    UInt loc_cap;
+    /* Array that holds local variables 'Local's.
+     * It is a flexible array this way we avoid pointer
+     * dereference. */
+    Local locals[];
 } Compiler;
 
 /* We pass everywhere pointer to the pointer of compiler,
@@ -146,15 +180,13 @@ typedef struct {
     Precedence precedence;
 } ParseRule;
 
-/* Returns currently stored chunk in 'compiling_chunk' global. */
-SK_INTERNAL(Chunk*) current_chunk(Compiler* C);
-
 /* Checks for equality between the 'token_type' and the current parser token */
 #define C_check(compiler, token_type) ((compiler)->parser.current.type == token_type)
 
 /* Internal */
+SK_INTERNAL(Chunk*) current_chunk(Compiler* C);
 SK_INTERNAL(void) C_advance(Compiler* compiler);
-SK_INTERNAL(void) C_error(Compiler* compiler, const char* error);
+SK_INTERNAL(void) C_error(Compiler* compiler, const char* error, ...);
 SK_INTERNAL(void) C_free(Compiler* C);
 SK_INTERNAL(void) Parser_init(Parser* parser, const char* source);
 SK_INTERNAL(void) parse_number(VM* vm, CompilerPPtr Cptr);
@@ -170,6 +202,7 @@ SK_INTERNAL(void)
 parse_dec_var(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void)
 parse_dec_var_fixed(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_stm_print(VM* vm, CompilerPPtr Cptr);
@@ -188,33 +221,43 @@ SK_INTERNAL(void) CFCtx_init(CFCtx* context)
     IntArrayArray_init(&context->breaks);
 }
 
-SK_INTERNAL(void) C_init(Compiler* C, ObjFunction* fn, FunctionType fn_type)
+/* Have to pass VM while initializing 'Compiler' because we are allocating objects. */
+SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type)
 {
-    C->fn      = fn;
+    C->fn      = ObjFunction_new(vm);
     C->fn_type = fn_type;
+
     CFCtx_init(&C->context);
     HashTableArray_init(&C->loc_defs);
     HashTableArray_init_cap(&C->loc_defs, SHORT_STACK_SIZE);
+
     C->loc_len = 0;
     C->loc_cap = SHORT_STACK_SIZE;
     C->depth   = 0;
 
     /* Reserve first stack slot for VM */
-    Local* local      = &C->locals[C->loc_len++];
-    local->depth      = 0;
-    local->flags      = 0;
+    Local* local = &C->locals[C->loc_len++];
+    gstate.loc_len++;
+    local->depth = 0;
+    local->flags = 0;
+
+    if(fn_type != FN_SCRIPT) {
+        C->fn->name =
+            ObjString_from(vm, C->parser.previous.start, C->parser.previous.len);
+    }
+
     local->name.start = "";
     local->name.len   = 0;
 }
 
 SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr)
 {
-    Compiler* C      = *Cptr;
+    Compiler* C      = C();
     UInt      oldcap = C->loc_cap;
 
     C->loc_cap = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);
     C          = GROW_LOCAL_STACK(C, oldcap, C->loc_cap);
-    *Cptr      = C;
+    C()        = C;
 }
 
 /*========================== EMIT =========================*/
@@ -224,8 +267,12 @@ SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
     if(current_chunk(C)->constants.len <= MIN(VM_STACK_MAX, UINT24_MAX)) {
         return Chunk_make_constant(current_chunk(C), constant);
     } else {
-        C_error(C, "Too many constants in one chunk.");
-        return 0;
+        fprintf(
+            stderr,
+            "Too many constants defined in a single chunk. This function -> <fn %s>.",
+            C->fn->name->storage);
+        // @TODO: Perform some kind of cleanup
+        exit(EXIT_FAILURE); // exit don't parse the rest
     }
 }
 
@@ -235,12 +282,13 @@ SK_INTERNAL(force_inline Value) Token_into_stringval(VM* vm, const Token* name)
 }
 
 SK_INTERNAL(force_inline UInt)
-make_constant_identifier(VM* vm, Value identifier, bool fixed)
+make_const_identifier(VM* vm, Value identifier, bool fixed)
 {
     Value index;
     if(!HashTable_get(&vm->global_ids, identifier, &index)) {
         index = NUMBER_VAL(
             (double)GlobalArray_push(&vm->global_vals, (Global){UNDEFINED_VAL, fixed}));
+
         HashTable_insert(&vm->global_ids, identifier, index);
     }
 
@@ -280,7 +328,10 @@ SK_INTERNAL(force_inline void) C_emit_loop(Compiler* C, UInt start)
     UInt offset = current_chunk(C)->code.len - start + 3;
 
     if(offset >= UINT24_MAX) {
-        C_error(C, "Too much code to jump over.");
+        C_error(
+            C,
+            "Too much code to jump over. Bytecode index limit reached [%u].",
+            UINT24_MAX);
     }
 
     _emit_24bit(C, offset);
@@ -294,13 +345,12 @@ SK_INTERNAL(force_inline void) Parser_init(Parser* parser, const char* source)
     parser->flags   = 0;
 }
 
-static void C_error_at(Compiler* C, Token* token, const char* error)
+static void C_error_at(Compiler* C, Token* token, const char* error, va_list args)
 {
     if(C_flag_is(C, PANIC_BIT)) {
         return;
     }
 
-    C_flag_set(C, PANIC_BIT);
     fprintf(stderr, "[line: %u] Error", token->line);
 
     if(token->type == TOK_EOF) {
@@ -309,26 +359,33 @@ static void C_error_at(Compiler* C, Token* token, const char* error)
         fprintf(stderr, " at '%.*s'", token->len, token->start);
     }
 
-    fprintf(stderr, ": %s\n", error);
+    fputs(": ", stderr);
+    vfprintf(stderr, error, args);
+    fputs("\n", stderr);
+
+    C_flag_set(C, PANIC_BIT);
     C_flag_set(C, ERROR_BIT);
 }
 
-static void C_error(Compiler* compiler, const char* error)
+static void C_error(Compiler* compiler, const char* error, ...)
 {
-    C_error_at(compiler, &compiler->parser.current, error);
+    va_list args;
+    va_start(args, error);
+    C_error_at(compiler, &compiler->parser.current, error, args);
+    va_end(args);
 }
 
-SK_INTERNAL(void) C_advance(Compiler* compiler)
+SK_INTERNAL(void) C_advance(Compiler* C)
 {
-    compiler->parser.previous = compiler->parser.current;
+    C->parser.previous = C->parser.current;
 
     while(true) {
-        compiler->parser.current = Scanner_scan(&compiler->parser.scanner);
-        if(compiler->parser.current.type != TOK_ERROR) {
+        C->parser.current = Scanner_scan(&C->parser.scanner);
+        if(C->parser.current.type != TOK_ERROR) {
             break;
         }
 
-        C_error(compiler, compiler->parser.current.start);
+        C_error(C, C->parser.current.start);
     }
 }
 
@@ -378,17 +435,13 @@ SK_INTERNAL(force_inline bool) C_match(Compiler* compiler, TokenType type)
     return true;
 }
 
-#ifndef DEBUG_TRACE_EXECUTION
-SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* compiler)
-#else
-SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C, VM* vm)
-#endif
+SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C)
 {
     ObjFunction* fn = C->fn;
     C_emit_byte(C, OP_RET);
 #ifdef DEBUG_PRINT_CODE
     if(!C_flag_is(C, ERROR_BIT)) {
-        Chunk_debug(current_chunk(C), (fn->name) ? fn->name->storage : "<script>", vm);
+        Chunk_debug(current_chunk(C), (fn->name) ? fn->name->storage : "<script>");
     }
 #endif
     return fn;
@@ -396,10 +449,9 @@ SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C, VM* vm)
 
 ObjFunction* compile(VM* vm, const char* source)
 {
-    Compiler*    C  = ALLOC_COMPILER();
-    ObjFunction* fn = ObjFunction_new(vm);
+    Compiler* C = ALLOC_COMPILER();
+    C_init(C, vm, FN_SCRIPT);
 
-    C_init(C, fn, FN_SCRIPT);
     Parser_init(&C->parser, source);
     C_advance(C);
 
@@ -407,11 +459,7 @@ ObjFunction* compile(VM* vm, const char* source)
         parse_dec(vm, &C);
     }
 
-#ifndef DEBUG_TRACE_EXECUTION
-    fn = compile_end(C);
-#else
-    fn = compile_end(C, vm);
-#endif
+    ObjFunction* fn = compile_end(C);
 
     bool err = C_flag_is(C, ERROR_BIT);
     C_free(C);
@@ -499,8 +547,8 @@ SK_INTERNAL(void)
 parse_stm_expr(VM* vm, CompilerPPtr Cptr)
 {
     parse_expr(vm, Cptr);
-    C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' after expression.");
-    C_emit_byte(*Cptr, OP_POP);
+    C_expect(C(), TOK_SEMICOLON, "Expect ';' after expression.");
+    C_emit_byte(C(), OP_POP);
 }
 
 SK_INTERNAL(void) parse_expr(VM* vm, CompilerPPtr Cptr)
@@ -510,67 +558,38 @@ SK_INTERNAL(void) parse_expr(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec)
 {
-    C_advance(*Cptr);
-    ParseFn prefix_fn = rules[(*Cptr)->parser.previous.type].prefix;
+    C_advance(C());
+    ParseFn prefix_fn = rules[C()->parser.previous.type].prefix;
     if(prefix_fn == NULL) {
-        C_error(*Cptr, "Expect expression.");
+        C_error(C(), "Expect expression.");
         return;
     }
 
     if(prec <= PREC_ASSIGNMENT) {
-        C_flag_set(*Cptr, ASSIGN_BIT);
+        C_flag_set(C(), ASSIGN_BIT);
     } else {
-        C_flag_clear(*Cptr, ASSIGN_BIT);
+        C_flag_clear(C(), ASSIGN_BIT);
     }
 
     prefix_fn(vm, Cptr);
 
-    while(prec <= rules[(*Cptr)->parser.current.type].precedence) {
-        C_advance(*Cptr);
-        ParseFn infix_fn = rules[(*Cptr)->parser.previous.type].infix;
+    while(prec <= rules[(C())->parser.current.type].precedence) {
+        C_advance(C());
+        ParseFn infix_fn = rules[(C())->parser.previous.type].infix;
         infix_fn(vm, Cptr);
     }
 
-    if(C_flag_is(*Cptr, ASSIGN_BIT) && C_match(*Cptr, TOK_EQUAL)) {
-        C_error(*Cptr, "Invalid assignment target.");
+    if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
+        C_error(C(), "Invalid assignment target.");
     }
 }
 
 SK_INTERNAL(void)
 parse_dec_var_fixed(VM* vm, CompilerPPtr Cptr)
 {
-    C_flag_set(*Cptr, FIXED_BIT);
-    C_expect(*Cptr, TOK_VAR, "Expect 'var' in variable declaration.");
+    C_flag_set(C(), FIXED_BIT);
+    C_expect(C(), TOK_VAR, "Expect 'var' in variable declaration.");
     parse_dec_var(vm, Cptr);
-}
-
-SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
-{
-    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'fn'.");
-
-    C_expect(*Cptr, TOK_RPAREN, "Expect ')'.");
-    C_expect(*Cptr, TOK_LBRACE, "Expect '{' after ')'.");
-    C_expect(*Cptr, TOK_LBRACE, "Expect '}'.");
-}
-
-SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
-{
-    /* Clear variable modifiers from bit 9.. */
-    C_flag_clear(*Cptr, FIXED_BIT);
-
-    if(C_match(*Cptr, TOK_VAR)) {
-        parse_dec_var(vm, Cptr);
-    } else if(C_match(*Cptr, TOK_FIXED)) {
-        parse_dec_var_fixed(vm, Cptr);
-    } else if(C_match(*Cptr, TOK_FN)) {
-        parse_dec_fn(vm, Cptr);
-    } else {
-        parse_stm(vm, Cptr);
-    }
-
-    if(C_flag_is(*Cptr, PANIC_BIT)) {
-        Parser_sync(*Cptr);
-    }
 }
 
 SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
@@ -580,52 +599,169 @@ SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
     HashTable* scope_set  = &C->loc_defs.data[C->depth - 1];
 
     HashTable_insert(scope_set, identifier, NUMBER_VAL(C->loc_len - 1));
+    local->depth = C->depth; /* Not necessary */
+}
+
+SK_INTERNAL(force_inline void) C_start_scope(Compiler* C)
+{
+    HashTable scope_set;
+    HashTable_init(&scope_set);
+
+    if(unlikely(C->depth >= UINT32_MAX - 1)) {
+        C_error(C, "Scope nesting depth limit reached [%u].", UINT32_MAX);
+    }
+
+    C->depth++;
+    HashTableArray_push(&C->loc_defs, scope_set);
+}
+
+SK_INTERNAL(force_inline void) C_end_scope(Compiler* C)
+{
+    UInt      popn       = C->loc_defs.data[C->depth - 1].len;
+    HashTable scope_defs = HashTableArray_pop(&C->loc_defs);
+    HashTable_free(&scope_defs);
+    C->depth--;
+    C->loc_len     -= popn;
+    gstate.loc_len -= popn;
+    C_emit_op(C, OP_POPN, popn);
+}
+
+SK_INTERNAL(void)
+parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
+{
+#define C_new() (*Cptr_new)
+
+    Compiler* C_new = ALLOC_COMPILER(); /* Allocate new compiler */
+    C_new->parser   = C()->parser;      /* Use the same parser */
+    C_init(C_new, vm, type);            /* Initialize the new compiler */
+
+    /* Have to pass the pointer to pointer to Compiler to parse functions, check the
+     * typedef for 'CompilerPPtr' in this source file for the rationale behind this. */
+    CompilerPPtr Cptr_new = &C_new;
+
+    /* Start new scope */
+    C_start_scope(C_new());
+
+    C_expect(C_new(), TOK_LPAREN, "Expect '(' after function name.");
+
+    /* Parse function arguments */
+    if(!C_check(C_new(), TOK_RPAREN)) {
+        do {
+            C_new()->fn->arity++;
+            UInt idx = parse_varname(vm, Cptr_new, "Expect parameter name.");
+            C_initialize_local(C_new(), vm);
+        } while(C_match(C_new, TOK_COMMA));
+    }
+
+    C_expect(C_new(), TOK_RPAREN, "Expect ')' after parameters.");
+    C_expect(C_new(), TOK_LBRACE, "Expect '{' before function body.");
+
+    /* Parse the function body */
+    parse_stm_block(vm, Cptr_new);
+
+    /* End compilation after function body and emit bytecode */
+    ObjFunction* fn = compile_end(C_new);
+
+    /* Update the outer parser */
+    C()->parser = C_new()->parser;
+
+    /* Emit constant instruction with the value of the parsed function */
+    UInt idx = C_make_const(C(), OBJ_VAL(fn));
+    C_emit_op(C(), GET_OP_TYPE(idx, OP_CONST), idx);
+
+    /* Free the new compiler allocation */
+    C_free(C_new);
+#undef C_new
+}
+
+SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
+{
+    UInt idx = parse_varname(vm, Cptr, "Expect function name.");
+
+    /* Initialize the variable that holds the function, in order to
+     * allow usage of the function inside of its body. */
+    if(C()->depth > 0) {
+        C_initialize_local(C(), vm);
+    }
+
+    parse_fn(vm, Cptr, FN_FUNCTION);
+
+    if(C()->depth == 0) {
+        C_emit_op(C(), GET_OP_TYPE(idx, OP_DEFINE_GLOBAL), idx);
+    }
+}
+
+SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
+{
+    /* Clear variable modifiers from bit 9.. */
+    C_flag_clear(C(), FIXED_BIT);
+
+    if(C_match(C(), TOK_VAR)) {
+        parse_dec_var(vm, Cptr);
+    } else if(C_match(C(), TOK_FIXED)) {
+        parse_dec_var_fixed(vm, Cptr);
+    } else if(C_match(C(), TOK_FN)) {
+        parse_dec_fn(vm, Cptr);
+    } else {
+        parse_stm(vm, Cptr);
+    }
+
+    if(C_flag_is(C(), PANIC_BIT)) {
+        Parser_sync(C());
+    }
 }
 
 SK_INTERNAL(void)
 parse_dec_var(VM* vm, CompilerPPtr Cptr)
 {
-    if(C_match(*Cptr, TOK_FIXED)) {
-        C_flag_set(*Cptr, FIXED_BIT);
+    if(C_match(C(), TOK_FIXED)) {
+        C_flag_set(C(), FIXED_BIT);
     }
 
     Int index = parse_varname(vm, Cptr, "Expect variable name.");
 
-    if(C_match(*Cptr, TOK_EQUAL)) {
+    if(C_match(C(), TOK_EQUAL)) {
         parse_expr(vm, Cptr);
     } else {
-        C_emit_byte(*Cptr, OP_NIL);
+        C_emit_byte(C(), OP_NIL);
     }
 
-    C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' after variable declaration.");
+    C_expect(C(), TOK_SEMICOLON, "Expect ';' after variable declaration.");
 
     // We declared local variable
-    if((*Cptr)->depth > 0) {
+    if((C())->depth > 0) {
         // now define/initialize it
-        C_initialize_local(*Cptr, vm);
+        C_initialize_local(C(), vm);
         return;
     }
 
     // We defined/initialized global variable instead
-    C_emit_op(*Cptr, GET_OP_TYPE(index, OP_DEFINE_GLOBAL), index);
+    C_emit_op(C(), GET_OP_TYPE(index, OP_DEFINE_GLOBAL), index);
 }
 
 SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
 {
-    Compiler* C = *Cptr;
+    Compiler* C = C();
 
     if(unlikely(C->loc_len >= C->loc_cap)) {
-        if(unlikely(C->loc_len >= MIN(VM_STACK_MAX, LOCAL_STACK_MAX))) {
-            C_error(C, "Too many variables defined in function.");
+        if(unlikely(gstate.loc_len >= MIN(VM_STACK_MAX, LOCAL_STACK_MAX))) {
+            C_error(
+                C,
+                "Too many variables defined in this source file. Limit is minimum of "
+                "these two values: vm "
+                "stack limit [%u] | bytecode index limit [%u]",
+                VM_STACK_MAX,
+                LOCAL_STACK_MAX);
             return;
         }
         C_grow_stack(Cptr);
     }
 
     Local* local = &C->locals[C->loc_len++];
+    gstate.loc_len++;
     local->name  = C->parser.previous;
     local->flags = ((C_flags(C) >> 8) & 0xff);
-    local->depth = C->depth;
+    local->depth = -1; /* Not necessary, can initialize to C->depth instead */
 }
 
 SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
@@ -643,9 +779,13 @@ SK_INTERNAL(bool) C_local_is_unique(Compiler* C, VM* vm)
 
 SK_INTERNAL(void) C_make_local(CompilerPPtr Cptr, VM* vm)
 {
-    Compiler* C = *Cptr;
+    Compiler* C = C();
     if(!C_local_is_unique(C, vm)) {
-        C_error(C, "Redefinition of local variable.");
+        C_error(
+            C,
+            "Redefinition of local variable '%.*s'.",
+            C->parser.previous.len,
+            C->parser.previous.start);
     }
     C_new_local(Cptr);
 }
@@ -653,7 +793,19 @@ SK_INTERNAL(void) C_make_local(CompilerPPtr Cptr, VM* vm)
 SK_INTERNAL(int64_t) C_make_global(Compiler* C, VM* vm, bool fixed)
 {
     Value identifier = Token_into_stringval(vm, &C->parser.previous);
-    return make_constant_identifier(vm, identifier, fixed);
+    UInt idx = make_const_identifier(vm, identifier, fixed);
+
+    if(unlikely(idx > UINT24_MAX)) {
+        fprintf(
+            stderr,
+            "Too many global variables defined. Bytecode instruction index limit "
+            "reached [%u].",
+            UINT24_MAX);
+        // @TODO: Perform some kind of cleanup
+        exit(EXIT_FAILURE); // Just exit don't parse the rest
+    }
+
+    return idx;
 }
 
 SK_INTERNAL(UInt) Global_idx(Compiler* C, VM* vm)
@@ -661,7 +813,7 @@ SK_INTERNAL(UInt) Global_idx(Compiler* C, VM* vm)
     Value idx;
     Value identifier = Token_into_stringval(vm, &C->parser.previous);
     if(!HashTable_get(&vm->global_ids, identifier, &idx)) {
-        C_error(C, "Undefined variable.");
+        C_error(C, "Undefined variable '%s'.", AS_CSTRING(identifier));
         return 0;
     }
     return (UInt)AS_NUMBER(idx);
@@ -670,38 +822,16 @@ SK_INTERNAL(UInt) Global_idx(Compiler* C, VM* vm)
 SK_INTERNAL(UInt)
 parse_varname(VM* vm, CompilerPPtr Cptr, const char* errmsg)
 {
-    C_expect(*Cptr, TOK_IDENTIFIER, errmsg);
+    C_expect(C(), TOK_IDENTIFIER, errmsg);
+
     // If local scope make local variable
-    if((*Cptr)->depth > 0) {
+    if((C())->depth > 0) {
         C_make_local(Cptr, vm);
         return 0;
     }
 
     // Otherwise make global variable
-    return C_make_global(*Cptr, vm, C_flag_is(*Cptr, FIXED_BIT));
-}
-
-SK_INTERNAL(force_inline void) C_start_scope(Compiler* C)
-{
-    HashTable scope_set;
-    HashTable_init(&scope_set);
-
-    if(unlikely(C->depth >= UINT32_MAX - 1)) {
-        C_error(C, "Scope depth limit reached.");
-    }
-
-    C->depth++;
-    HashTableArray_push(&C->loc_defs, scope_set);
-}
-
-SK_INTERNAL(force_inline void) C_end_scope(Compiler* C)
-{
-    UInt      popn       = C->loc_defs.data[C->depth - 1].len;
-    HashTable scope_defs = HashTableArray_pop(&C->loc_defs);
-    HashTable_free(&scope_defs);
-    C->depth--;
-    C->loc_len -= popn;
-    C_emit_op(C, OP_POPN, popn);
+    return C_make_global(C(), vm, C_flag_is(C(), FIXED_BIT));
 }
 
 SK_INTERNAL(force_inline void)
@@ -710,7 +840,10 @@ C_patch_jmp(Compiler* C, UInt jmp_offset)
     UInt offset = code_offset(C) - jmp_offset - 3;
 
     if(unlikely(offset >= UINT24_MAX)) {
-        C_error(C, "Too much code to jump over.");
+        C_error(
+            C,
+            "Too much code to jump over. Bytecode index size limit reached [%u]",
+            UINT24_MAX);
     }
 
     PUT_BYTES3(&current_chunk(C)->code.data[jmp_offset], offset);
@@ -735,17 +868,17 @@ SK_INTERNAL(force_inline void) C_rm_bstorage(Compiler* C)
 
 SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
 {
-    uint64_t mask = CFLOW_MASK(*Cptr);
-    C_flag_clear(*Cptr, LOOP_BIT);
-    C_flag_set(*Cptr, SWITCH_BIT);
+    uint64_t mask = CFLOW_MASK(C());
+    C_flag_clear(C(), LOOP_BIT);
+    C_flag_set(C(), SWITCH_BIT);
 
-    C_add_bstorage(*Cptr);
+    C_add_bstorage(C());
 
-    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'switch'.");
+    C_expect(C(), TOK_LPAREN, "Expect '(' after 'switch'.");
     parse_expr(vm, Cptr);
-    C_expect(*Cptr, TOK_RPAREN, "Expect ')' after condition.");
+    C_expect(C(), TOK_RPAREN, "Expect ')' after condition.");
 
-    C_expect(*Cptr, TOK_LBRACE, "Expect '{' after ')'.");
+    C_expect(C(), TOK_LBRACE, "Expect '{' after ')'.");
 
     /* -1 = parsed TOK_DEFAULT
      *  0 = didn't parse TOK_DEFAULT or TOK_CASE yet
@@ -757,207 +890,205 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     IntArray fts;
     IntArray_init(&fts);
 
-    Int outermostsw_depth              = (*Cptr)->context.innermostsw_depth;
-    (*Cptr)->context.innermostsw_depth = (*Cptr)->depth;
+    Int outermostsw_depth            = (C())->context.innermostsw_depth;
+    (C())->context.innermostsw_depth = (C())->depth;
 
-    while(!C_match(*Cptr, TOK_RBRACE) && !C_check(*Cptr, TOK_EOF)) {
-        if(C_match(*Cptr, TOK_CASE) || C_match(*Cptr, TOK_DEFAULT)) {
+    while(!C_match(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
+        if(C_match(C(), TOK_CASE) || C_match(C(), TOK_DEFAULT)) {
             if(state != 0) {
-                IntArray_push(&fts, C_emit_jmp(*Cptr, vm, OP_JMP));
+                IntArray_push(&fts, C_emit_jmp(C(), vm, OP_JMP));
                 if(state != -1) {
-                    C_patch_jmp(*Cptr, state);
+                    C_patch_jmp(C(), state);
                 }
             }
 
             state = -1;
 
-            if((*Cptr)->parser.previous.type == TOK_CASE) {
+            if((C())->parser.previous.type == TOK_CASE) {
                 parse_expr(vm, Cptr);
-                C_emit_byte(*Cptr, OP_EQ);
-                C_expect(*Cptr, TOK_COLON, "Expect ':' after 'case'.");
+                C_emit_byte(C(), OP_EQ);
+                C_expect(C(), TOK_COLON, "Expect ':' after 'case'.");
 
-                state = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
+                state = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
 
             } else if(!dflt) {
                 dflt = true;
-                C_expect(*Cptr, TOK_COLON, "Expect ':' after 'default'.");
+                C_expect(C(), TOK_COLON, "Expect ':' after 'default'.");
             } else {
-                C_error(*Cptr, "Multiple 'default' labels in a single 'switch'.");
+                C_error(C(), "Multiple 'default' labels in a single 'switch'.");
             }
 
             if(fts.len > 0) {
                 /* Patch Fall-through jump */
-                C_patch_jmp(*Cptr, *IntArray_last(&fts));
+                C_patch_jmp(C(), *IntArray_last(&fts));
             }
         } else {
             if(state == 0) {
-                C_error(*Cptr, "Can't have statements before first case.");
+                C_error(C(), "Can't have statements before first case.");
             }
             parse_stm(vm, Cptr);
         }
     }
 
-    if((*Cptr)->parser.previous.type == TOK_EOF) {
-        C_error(*Cptr, "Expect '}' at the end of 'switch'.");
+    if((C())->parser.previous.type == TOK_EOF) {
+        C_error(C(), "Expect '}' at the end of 'switch'.");
     }
 
     /* Free fallthrough jumps array */
     IntArray_free(&fts);
     /* Patch and remove breaks */
-    C_rm_bstorage(*Cptr);
+    C_rm_bstorage(C());
     /* Pop switch value */
-    C_emit_byte(*Cptr, OP_POP);
+    C_emit_byte(C(), OP_POP);
     /* Restore scope depth */
-    (*Cptr)->context.innermostsw_depth = outermostsw_depth;
+    (C())->context.innermostsw_depth = outermostsw_depth;
     /* Clear switch flag and restore control flow flags */
-    C_flag_clear(*Cptr, SWITCH_BIT);
-    (*Cptr)->parser.flags |= mask;
+    C_flag_clear(C(), SWITCH_BIT);
+    (C())->parser.flags |= mask;
 }
 
 SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr)
 {
-    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'if'.");
+    C_expect(C(), TOK_LPAREN, "Expect '(' after 'if'.");
     parse_expr(vm, Cptr); /* Parse conditional */
-    C_expect(*Cptr, TOK_RPAREN, "Expect ')' after condition.");
+    C_expect(C(), TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional jump instruction */
-    UInt else_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
+    UInt else_jmp = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
 
     parse_stm(vm, Cptr); /* Parse the code in this branch */
 
     /* Prevent fall-through if 'else' exists. */
-    UInt end_jmp = C_emit_jmp(*Cptr, vm, OP_JMP);
+    UInt end_jmp = C_emit_jmp(C(), vm, OP_JMP);
 
-    C_patch_jmp(*Cptr, else_jmp); /* End of 'if' (maybe start of else) */
+    C_patch_jmp(C(), else_jmp); /* End of 'if' (maybe start of else) */
 
-    if(C_match(*Cptr, TOK_ELSE)) {
-        parse_stm(vm, Cptr);         /* Parse the else branch */
-        C_patch_jmp(*Cptr, end_jmp); /* End of else branch */
+    if(C_match(C(), TOK_ELSE)) {
+        parse_stm(vm, Cptr);       /* Parse the else branch */
+        C_patch_jmp(C(), end_jmp); /* End of else branch */
     }
 }
 
 SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr)
 {
-    UInt jump = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_OR_POP);
+    UInt jump = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_OR_POP);
     parse_precedence(vm, Cptr, PREC_AND);
-    C_patch_jmp(*Cptr, jump);
+    C_patch_jmp(C(), jump);
 }
 
 SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr)
 {
-    UInt else_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
-    UInt end_jmp  = C_emit_jmp(*Cptr, vm, OP_JMP);
+    UInt else_jmp = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
+    UInt end_jmp  = C_emit_jmp(C(), vm, OP_JMP);
 
-    C_patch_jmp(*Cptr, else_jmp);
+    C_patch_jmp(C(), else_jmp);
 
     parse_precedence(vm, Cptr, PREC_OR);
-    C_patch_jmp(*Cptr, end_jmp);
+    C_patch_jmp(C(), end_jmp);
 }
 
 SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr)
 {
-    uint64_t mask = CFLOW_MASK(*Cptr);
-    C_flag_clear(*Cptr, SWITCH_BIT);
-    C_flag_set(*Cptr, LOOP_BIT);
+    uint64_t mask = CFLOW_MASK(C());
+    C_flag_clear(C(), SWITCH_BIT);
+    C_flag_set(C(), LOOP_BIT);
 
     /* Add loop offset storage for 'break' */
-    C_add_bstorage(*Cptr);
+    C_add_bstorage(C());
 
-    Int outermostl_start              = (*Cptr)->context.innermostl_start;
-    Int outermostl_depth              = (*Cptr)->context.innermostl_depth;
-    (*Cptr)->context.innermostl_start = current_chunk(*Cptr)->code.len;
-    (*Cptr)->context.innermostl_depth = (*Cptr)->depth;
+    Int outermostl_start            = (C())->context.innermostl_start;
+    Int outermostl_depth            = (C())->context.innermostl_depth;
+    (C())->context.innermostl_start = current_chunk(C())->code.len;
+    (C())->context.innermostl_depth = (C())->depth;
 
-    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'while'.");
+    C_expect(C(), TOK_LPAREN, "Expect '(' after 'while'.");
     parse_expr(vm, Cptr);
-    C_expect(*Cptr, TOK_RPAREN, "Expect ')' after condition.");
+    C_expect(C(), TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional exit jump */
-    UInt end_jmp = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
-    parse_stm(vm, Cptr); /* Parse loop body */
-    C_emit_loop(
-        *Cptr,
-        (*Cptr)->context.innermostl_start); /* Jump to the start of the loop */
+    UInt end_jmp = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
+    parse_stm(vm, Cptr);                               /* Parse loop body */
+    C_emit_loop(C(), (C())->context.innermostl_start); /* Jump to the start of the loop */
 
-    C_patch_jmp(*Cptr, end_jmp); /* Set loop exit offset */
+    C_patch_jmp(C(), end_jmp); /* Set loop exit offset */
 
     /* Restore the outermost loop start/(scope)depth */
-    (*Cptr)->context.innermostl_start = outermostl_start;
-    (*Cptr)->context.innermostl_depth = outermostl_depth;
+    (C())->context.innermostl_start = outermostl_start;
+    (C())->context.innermostl_depth = outermostl_depth;
     /* Remove and patch breaks */
-    C_rm_bstorage(*Cptr);
+    C_rm_bstorage(C());
     /* Clear loop flag */
-    C_flag_clear(*Cptr, LOOP_BIT);
+    C_flag_clear(C(), LOOP_BIT);
     /* Restore old flags */
-    (*Cptr)->parser.flags |= mask;
+    (C())->parser.flags |= mask;
 }
 
 SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
 {
-    uint64_t mask = CFLOW_MASK(*Cptr);
-    C_flag_clear(*Cptr, SWITCH_BIT);
-    C_flag_set(*Cptr, LOOP_BIT);
+    uint64_t mask = CFLOW_MASK(C());
+    C_flag_clear(C(), SWITCH_BIT);
+    C_flag_set(C(), LOOP_BIT);
 
     /* Add loop offset storage for 'break' */
-    C_add_bstorage(*Cptr);
+    C_add_bstorage(C());
     /* Start a new local scope */
-    C_start_scope(*Cptr);
+    C_start_scope(C());
 
-    C_expect(*Cptr, TOK_LPAREN, "Expect '(' after 'for'.");
-    if(C_match(*Cptr, TOK_SEMICOLON)) {
+    C_expect(C(), TOK_LPAREN, "Expect '(' after 'for'.");
+    if(C_match(C(), TOK_SEMICOLON)) {
         // No initializer
-    } else if(C_match(*Cptr, TOK_VAR)) {
+    } else if(C_match(C(), TOK_VAR)) {
         parse_dec_var(vm, Cptr);
-    } else if(C_match(*Cptr, TOK_FIXED)) {
+    } else if(C_match(C(), TOK_FIXED)) {
         parse_dec_var_fixed(vm, Cptr);
     } else {
         parse_stm_expr(vm, Cptr);
     }
 
-    /* Cache outermost loop start/depth */
-    Int outermostl_start = (*Cptr)->context.innermostl_start;
-    Int outermostl_depth = (*Cptr)->context.innermostl_depth;
-    /* Update context inner loop start/depth to current state */
-    (*Cptr)->context.innermostl_start = current_chunk(*Cptr)->code.len;
-    (*Cptr)->context.innermostl_depth = (*Cptr)->depth;
+    /* Save outermost loop start/depth on the stack */
+    Int outermostl_start = (C())->context.innermostl_start;
+    Int outermostl_depth = (C())->context.innermostl_depth;
+    /* Update context inner loop start/depth */
+    (C())->context.innermostl_start = current_chunk(C())->code.len;
+    (C())->context.innermostl_depth = (C())->depth;
 
     Int loop_end = -1;
-    if(!C_match(*Cptr, TOK_SEMICOLON)) {
+    if(!C_match(C(), TOK_SEMICOLON)) {
         parse_expr(vm, Cptr);
-        C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' (condition).");
+        C_expect(C(), TOK_SEMICOLON, "Expect ';' (condition).");
 
-        loop_end = C_emit_jmp(*Cptr, vm, OP_JMP_IF_FALSE_AND_POP);
+        loop_end = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
     }
 
-    if(!C_match(*Cptr, TOK_SEMICOLON)) {
-        UInt body_start      = C_emit_jmp(*Cptr, vm, OP_JMP);
-        UInt increment_start = current_chunk(*Cptr)->code.len;
+    if(!C_match(C(), TOK_SEMICOLON)) {
+        UInt body_start      = C_emit_jmp(C(), vm, OP_JMP);
+        UInt increment_start = current_chunk(C())->code.len;
         parse_expr(vm, Cptr);
-        C_emit_byte(*Cptr, OP_POP);
-        C_expect(*Cptr, TOK_RPAREN, "Expect ')' after last for-loop clause.");
+        C_emit_byte(C(), OP_POP);
+        C_expect(C(), TOK_RPAREN, "Expect ')' after last for-loop clause.");
 
-        C_emit_loop(*Cptr, (*Cptr)->context.innermostl_start);
-        (*Cptr)->context.innermostl_start = increment_start;
-        C_patch_jmp(*Cptr, body_start);
+        C_emit_loop(C(), (C())->context.innermostl_start);
+        (C())->context.innermostl_start = increment_start;
+        C_patch_jmp(C(), body_start);
     }
 
     parse_stm(vm, Cptr);
-    C_emit_loop(*Cptr, (*Cptr)->context.innermostl_start);
+    C_emit_loop(C(), (C())->context.innermostl_start);
 
     if(loop_end != -1) {
-        C_patch_jmp(*Cptr, loop_end);
+        C_patch_jmp(C(), loop_end);
     }
 
     /* Restore the outermost loop start/depth */
-    (*Cptr)->context.innermostl_start = outermostl_start;
-    (*Cptr)->context.innermostl_depth = outermostl_depth;
+    (C())->context.innermostl_start = outermostl_start;
+    (C())->context.innermostl_depth = outermostl_depth;
     /* Remove and patch loop breaks */
-    C_rm_bstorage(*Cptr);
+    C_rm_bstorage(C());
     /* Finally end the scope */
-    C_end_scope(*Cptr);
+    C_end_scope(C());
     /* Restore old flags */
-    C_flag_clear(*Cptr, LOOP_BIT);
-    (*Cptr)->parser.flags |= mask;
+    C_flag_clear(C(), LOOP_BIT);
+    (C())->parser.flags |= mask;
 }
 
 SK_INTERNAL(void) parse_stm_continue(VM* vm, Compiler* C)
@@ -1010,7 +1141,7 @@ SK_INTERNAL(void) parse_stm_break(VM* vm, Compiler* C)
 
 SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
 {
-    Compiler* C = *Cptr;
+    Compiler* C = C();
     // @TODO: Implement goto table
     if(C_match(C, TOK_PRINT)) {
         parse_stm_print(vm, Cptr);
@@ -1023,6 +1154,7 @@ SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
     } else if(C_match(C, TOK_SWITCH)) {
         parse_stm_switch(vm, Cptr);
     } else if(C_match(C, TOK_LBRACE)) {
+        C_start_scope(C);
         parse_stm_block(vm, Cptr);
     } else if(C_match(C, TOK_CONTINUE)) {
         parse_stm_continue(vm, C);
@@ -1035,28 +1167,27 @@ SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr)
 {
-    C_start_scope(*Cptr);
-
-    while(!C_check(*Cptr, TOK_RBRACE) && !C_check(*Cptr, TOK_EOF)) {
+    while(!C_check(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
         parse_dec(vm, Cptr);
     }
 
-    C_expect(*Cptr, TOK_RBRACE, "Expect '}' after block.");
-    C_end_scope(*Cptr);
+    C_expect(C(), TOK_RBRACE, "Expect '}' after block.");
+
+    C_end_scope(C());
 }
 
 SK_INTERNAL(force_inline void)
 parse_stm_print(VM* vm, CompilerPPtr Cptr)
 {
     parse_expr(vm, Cptr);
-    C_expect(*Cptr, TOK_SEMICOLON, "Expect ';' after value");
-    C_emit_byte(*Cptr, OP_PRINT);
+    C_expect(C(), TOK_SEMICOLON, "Expect ';' after value");
+    C_emit_byte(C(), OP_PRINT);
 }
 
 SK_INTERNAL(force_inline void)
 parse_number(unused VM* _, CompilerPPtr Cptr)
 {
-    Compiler* C        = *Cptr;
+    Compiler* C        = C();
     double    constant = strtod(C->parser.previous.start, NULL);
     UInt      idx      = C_make_const(C, NUMBER_VAL(constant));
     C_emit_op(C, GET_OP_TYPE(idx, OP_CONST), idx);
@@ -1077,37 +1208,41 @@ SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, const Token* name)
 
 SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
 {
-    const Token* name = &(*Cptr)->parser.previous;
+    const Token* name = &(C())->parser.previous;
     OpCode       setop, getop;
-    Int          idx   = Local_idx(*Cptr, vm, name);
+    Int          idx   = Local_idx(C(), vm, name);
     int16_t      flags = -1;
 
     if(idx != -1) {
-        Local* var = &(*Cptr)->locals[idx];
+        Local* var = &(C())->locals[idx];
         flags      = Var_flags(var);
         setop      = GET_OP_TYPE(idx, OP_SET_LOCAL);
         getop      = GET_OP_TYPE(idx, OP_GET_LOCAL);
     } else {
-        idx   = Global_idx(*Cptr, vm);
+        idx   = Global_idx(C(), vm);
         setop = GET_OP_TYPE(idx, OP_SET_GLOBAL);
         getop = GET_OP_TYPE(idx, OP_GET_GLOBAL);
     }
 
-    if(C_flag_is(*Cptr, ASSIGN_BIT) && C_match(*Cptr, TOK_EQUAL)) {
+    if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
         /* In case this is local variable statically check for mutability */
         if(flags != -1 && BIT_CHECK(flags, VFIXED_BIT)) {
-            C_error(*Cptr, "Can't assign to variable defined as 'fixed'.");
+            C_error(
+                C(),
+                "Can't assign to variable '%.*s', it is declared as 'fixed'.",
+                name->len,
+                name->start);
         }
         parse_expr(vm, Cptr);
-        C_emit_op(*Cptr, setop, idx);
+        C_emit_op(C(), setop, idx);
     } else {
-        C_emit_op(*Cptr, getop, idx);
+        C_emit_op(C(), getop, idx);
     }
 }
 
 SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr)
 {
-    Compiler*  C = *Cptr;
+    Compiler*  C = C();
     ObjString* string =
         ObjString_from(vm, C->parser.previous.start + 1, C->parser.previous.len - 2);
     UInt idx = C_make_const(C, OBJ_VAL(string));
@@ -1118,20 +1253,20 @@ SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr)
 SK_INTERNAL(force_inline void) parse_grouping(VM* vm, CompilerPPtr Cptr)
 {
     parse_expr(vm, Cptr);
-    C_expect(*Cptr, TOK_RPAREN, "Expect ')' after expression");
+    C_expect(C(), TOK_RPAREN, "Expect ')' after expression");
 }
 
 SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr)
 {
-    TokenType type = (*Cptr)->parser.previous.type;
+    TokenType type = (C())->parser.previous.type;
     parse_precedence(vm, Cptr, PREC_UNARY);
 
     switch(type) {
         case TOK_MINUS:
-            C_emit_byte(*Cptr, OP_NEG);
+            C_emit_byte(C(), OP_NEG);
             break;
         case TOK_BANG:
-            C_emit_byte(*Cptr, OP_NOT);
+            C_emit_byte(C(), OP_NOT);
             break;
         default:
             unreachable;
@@ -1141,7 +1276,7 @@ SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr)
 {
-    TokenType        type = (*Cptr)->parser.previous.type;
+    TokenType        type = (C())->parser.previous.type;
     const ParseRule* rule = &rules[type];
     parse_precedence(vm, Cptr, rule->precedence + 1);
 
@@ -1195,7 +1330,7 @@ SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr)
         0,       /* TOK_EOF */
     };
 
-    Compiler* C = *Cptr;
+    Compiler* C = C();
     goto*     jump_table[type];
 
 minus:
@@ -1274,14 +1409,14 @@ parse_ternarycond(VM* vm, CompilerPPtr Cptr)
 {
     //@TODO: Implement...
     parse_expr(vm, Cptr);
-    C_expect(*Cptr, TOK_COLON, "Expect ': expr' (ternary conditional).");
+    C_expect(C(), TOK_COLON, "Expect ': expr' (ternary conditional).");
     parse_expr(vm, Cptr);
 }
 
 SK_INTERNAL(force_inline void)
 parse_literal(unused VM* _, CompilerPPtr Cptr)
 {
-    Compiler* C = *Cptr;
+    Compiler* C = C();
     switch(C->parser.previous.type) {
         case TOK_TRUE:
             C_emit_byte(C, OP_TRUE);

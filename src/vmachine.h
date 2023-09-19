@@ -43,7 +43,6 @@ typedef enum {
   INTERPRET_RUNTIME_ERROR,
 } InterpretResult;
 
-VM *VM_new(void);
 void VM_init(VM *vm);
 InterpretResult VM_interpret(VM *vm, const char *source_code);
 void VM_free(VM *vm);

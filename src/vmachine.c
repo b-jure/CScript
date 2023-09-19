@@ -5,7 +5,7 @@
 #include "object.h"
 #include "vmachine.h"
 
-#ifdef DEBUG_TRACE_EXECUTION
+#ifdef DEBUG
     #include "debug.h"
     #include <assert.h>
 #endif
@@ -26,7 +26,7 @@ SK_INTERNAL(force_inline void) VM_push(VM* vm, Value val)
     if(likely(vm->sp - vm->stack < VM_STACK_MAX)) {
         *vm->sp++ = val;
     } else {
-        fprintf(stderr, "Skooma: stack overflow\n");
+        fprintf(stderr, "Internal error: vm stack overflow.\n");
         exit(EXIT_FAILURE);
     }
 }
@@ -181,14 +181,6 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
  */
 /*======================= VM core functions ==========================*/
 
-VM* VM_new(void)
-{
-    VM* vm = NULL;
-    vm     = MALLOC(sizeof(VM));
-    VM_init(vm);
-    return vm;
-}
-
 void VM_init(VM* vm)
 {
     vm->fc      = 0;
@@ -240,7 +232,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #define BREAK            break
 
 #ifdef DEBUG_TRACE_EXECUTION
-    printf("\n=== vmachine ===");
+    printf("\n=== vmachine ===\n");
 #endif
     while(true) {
 #ifdef THREADED_CODE
@@ -258,8 +250,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
         printf("\n");
         Instruction_debug(
             &frame->fn->chunk,
-            (UInt)(frame->ip - frame->fn->chunk.code.data),
-            vm);
+            (UInt)(frame->ip - frame->fn->chunk.code.data));
 #endif
         DISPATCH(READ_BYTE())
         {
@@ -386,14 +377,16 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 uint8_t idx               = READ_BYTE();
                 bool    fixed             = vm->global_vals.data[idx].fixed;
-                vm->global_vals.data[idx] = (Global){VM_pop(vm), fixed};
+                vm->global_vals.data[idx] = (Global){stack_peek(0), fixed};
+                VM_pop(vm);
                 BREAK;
             }
             CASE(OP_DEFINE_GLOBALL)
             {
                 UInt idx                  = READ_BYTEL();
                 bool fixed                = vm->global_vals.data[idx].fixed;
-                vm->global_vals.data[idx] = (Global){VM_pop(vm), fixed};
+                vm->global_vals.data[idx] = (Global){stack_peek(0), fixed};
+                VM_pop(vm);
                 BREAK;
             }
             CASE(OP_GET_GLOBAL)

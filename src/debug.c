@@ -7,23 +7,23 @@
 #include <stdio.h>
 
 SK_INTERNAL(int)
-Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm);
+Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset);
 SK_INTERNAL(int)
-Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm);
+Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset);
 SK_INTERNAL(int) Instruction_simple(const char* name, UInt offset);
 SK_INTERNAL(int)
 Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset);
 
-void Chunk_debug(Chunk* chunk, const char* name, VM* vm)
+void Chunk_debug(Chunk* chunk, const char* name)
 {
     printf("=== %s ===\n", name);
 
-    for(UInt offset = 0; offset < ByteArray_len(&chunk->code);) {
-        offset = Instruction_debug(chunk, offset, vm);
+    for(UInt offset = 0; offset < chunk->code.len;) {
+        offset = Instruction_debug(chunk, offset);
     }
 }
 
-UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
+UInt Instruction_debug(Chunk* chunk, UInt offset)
 {
     printf("%04d ", offset);
 
@@ -76,41 +76,31 @@ UInt Instruction_debug(Chunk* chunk, UInt offset, VM* vm)
         case OP_POP:
             return Instruction_simple("OP_POP", offset);
         case OP_POPN:
-            return Instruction_long("OP_POPN", chunk, OP_POPN, offset, vm);
+            return Instruction_long("OP_POPN", chunk, OP_POPN, offset);
         case OP_CONST:
-            return Instruction_short("OP_CONST", chunk, OP_CONST, offset, vm);
+            return Instruction_short("OP_CONST", chunk, OP_CONST, offset);
         case OP_CONSTL:
-            return Instruction_long("OP_CONSTL", chunk, OP_CONSTL, offset, vm);
+            return Instruction_long("OP_CONSTL", chunk, OP_CONSTL, offset);
         case OP_DEFINE_GLOBAL:
-            return Instruction_short(
-                "OP_DEFINE_GLOBAL",
-                chunk,
-                OP_DEFINE_GLOBAL,
-                offset,
-                vm);
+            return Instruction_short("OP_DEFINE_GLOBAL", chunk, OP_DEFINE_GLOBAL, offset);
         case OP_DEFINE_GLOBALL:
-            return Instruction_long(
-                "OP_DEFINE_GLOBAL",
-                chunk,
-                OP_DEFINE_GLOBALL,
-                offset,
-                vm);
+            return Instruction_long("OP_DEFINE_GLOBAL", chunk, OP_DEFINE_GLOBALL, offset);
         case OP_GET_GLOBAL:
-            return Instruction_short("OP_GET_GLOBAL", chunk, OP_GET_GLOBAL, offset, vm);
+            return Instruction_short("OP_GET_GLOBAL", chunk, OP_GET_GLOBAL, offset);
         case OP_GET_GLOBALL:
-            return Instruction_long("OP_GET_GLOBALL", chunk, OP_GET_GLOBALL, offset, vm);
+            return Instruction_long("OP_GET_GLOBALL", chunk, OP_GET_GLOBALL, offset);
         case OP_SET_GLOBAL:
-            return Instruction_short("OP_SET_GLOBAL", chunk, OP_SET_GLOBAL, offset, vm);
+            return Instruction_short("OP_SET_GLOBAL", chunk, OP_SET_GLOBAL, offset);
         case OP_SET_GLOBALL:
-            return Instruction_long("OP_SET_GLOBALL", chunk, OP_SET_GLOBALL, offset, vm);
+            return Instruction_long("OP_SET_GLOBALL", chunk, OP_SET_GLOBALL, offset);
         case OP_GET_LOCAL:
-            return Instruction_short("OP_GET_LOCAL", chunk, OP_GET_LOCAL, offset, vm);
+            return Instruction_short("OP_GET_LOCAL", chunk, OP_GET_LOCAL, offset);
         case OP_GET_LOCALL:
-            return Instruction_long("OP_GET_LOCALL", chunk, OP_GET_LOCALL, offset, vm);
+            return Instruction_long("OP_GET_LOCALL", chunk, OP_GET_LOCALL, offset);
         case OP_SET_LOCAL:
-            return Instruction_short("OP_SET_LOCAL", chunk, OP_SET_LOCAL, offset, vm);
+            return Instruction_short("OP_SET_LOCAL", chunk, OP_SET_LOCAL, offset);
         case OP_SET_LOCALL:
-            return Instruction_long("OP_SET_LOCALL", chunk, OP_SET_LOCALL, offset, vm);
+            return Instruction_long("OP_SET_LOCALL", chunk, OP_SET_LOCALL, offset);
         case OP_JMP_IF_FALSE:
             return Instruction_jump("OP_JMP_IF_FALSE", 1, chunk, offset);
         case OP_JMP_IF_FALSE_OR_POP:
@@ -144,7 +134,7 @@ Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
 }
 
 SK_INTERNAL(int)
-Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
+Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     Byte* param = ByteArray_index(&chunk->code, offset + 1);
     printf("%-25s %5u ", name, *param);
@@ -163,7 +153,7 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* 
 }
 
 SK_INTERNAL(int)
-Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset, VM* vm)
+Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-25s %5u ", name, param);

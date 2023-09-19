@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define DEBUG
+
 typedef uint8_t Byte;
 typedef uint32_t UInt;
 typedef int32_t Int;
@@ -31,7 +33,7 @@ static inline size_t bit_mask(uint8_t x) {
 // Wrapper around MAXBITS, uses 'bytes' instead
 #define MAXBYTES(bytes) MAXBITS((bytes)*8)
 
-#define UINT24_MAX MAXBYTES(3)
+#define UINT24_MAX ((uint32_t)MAXBYTES(3))
 /* ------------------------------------------------------------------------- */
 
 /* Math--------------------------------------------------------------------- */
@@ -64,12 +66,5 @@ static inline size_t bit_mask(uint8_t x) {
 #endif
 
 /* ------------------------------------------------------------------------- */
-
-/* Debug flag for debugging chunks. */
-#define DEBUG_PRINT_CODE
-/* Debug flag for printing VM stack. */
-#define DEBUG_TRACE_EXECUTION
-/* Debug flag for assertions */
-#define DEBUG_ASSERTIONS
 
 #endif
