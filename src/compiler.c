@@ -304,6 +304,12 @@ SK_INTERNAL(force_inline void) C_emit_byte(Compiler* C, Byte byte)
     Chunk_write(current_chunk(C), byte, C->parser.previous.line);
 }
 
+SK_INTERNAL(force_inline void) C_emit_return(Compiler* C)
+{
+    C_emit_byte(C, OP_NIL);
+    C_emit_byte(C, OP_RET);
+}
+
 SK_INTERNAL(force_inline void) C_emit_op(Compiler* C, OpCode code, UInt param)
 {
     Chunk_write_codewparam(current_chunk(C), code, param, C->parser.previous.line);
@@ -499,7 +505,7 @@ SK_INTERNAL(void) C_free(Compiler* C)
  * while second column parse function is used in case token is inifx. Third
  * column marks the 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
-    [TOK_LPAREN]        = {parse_grouping,      parse_call,        PREC_NONE      },
+    [TOK_LPAREN]        = {parse_grouping,      parse_call,        PREC_CALL      },
     [TOK_RPAREN]        = {NULL,                NULL,              PREC_NONE      },
     [TOK_LBRACE]        = {NULL,                NULL,              PREC_NONE      },
     [TOK_RBRACE]        = {NULL,                NULL,              PREC_NONE      },
@@ -1164,6 +1170,21 @@ SK_INTERNAL(void) parse_stm_break(VM* vm, Compiler* C)
     IntArray_push(IntArrayArray_last(arr), C_emit_jmp(C, vm, OP_JMP));
 }
 
+SK_INTERNAL(void) parse_stm_return(VM* vm, CompilerPPtr Cptr)
+{
+    if(C()->fn_type == FN_SCRIPT) {
+        C_error(C(), "Can't return from top-level code.");
+    }
+
+    if(C_match(C(), TOK_SEMICOLON)) {
+        C_emit_return(C());
+    } else {
+        parse_expr(vm, Cptr);
+        C_expect(C(), TOK_SEMICOLON, "Expect ';' after return value.");
+        C_emit_byte(C(), OP_RET);
+    }
+}
+
 SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
 {
     Compiler* C = C();
@@ -1185,6 +1206,8 @@ SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
         parse_stm_continue(vm, C);
     } else if(C_match(C, TOK_BREAK)) {
         parse_stm_break(vm, C);
+    } else if(C_match(C, TOK_RETURN)) {
+        parse_stm_return(vm, Cptr);
     } else {
         parse_stm_expr(vm, Cptr);
     }
@@ -1245,13 +1268,14 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
         getop      = GET_OP_TYPE(idx, OP_GET_LOCAL);
     } else {
         idx   = Global_idx(C(), vm);
+        flags = vm->global_vals.data[idx].fixed;
         setop = GET_OP_TYPE(idx, OP_SET_GLOBAL);
         getop = GET_OP_TYPE(idx, OP_GET_GLOBAL);
     }
 
     if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
         /* In case this is local variable statically check for mutability */
-        if(flags != -1 && BIT_CHECK(flags, VFIXED_BIT)) {
+        if(BIT_CHECK(flags, VFIXED_BIT)) {
             C_error(
                 C(),
                 "Can't assign to variable '%.*s', it is declared as 'fixed'.",

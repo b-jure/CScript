@@ -15,13 +15,13 @@
 
 typedef struct {
   ObjFunction *fn; /* Function of this CallFrame */
-  Byte *ip;
-  Value *sp; /* Relative stack pointer */
+  Byte *ip;        /* Top of the CallFrame */
+  Value *sp;       /* Relative stack pointer */
 } CallFrame;
 
 typedef struct {
-  Value value;
-  bool fixed;
+  Value value; /* Global value */
+  bool fixed;  /* @TODO: Make this into a byte that holds flag bits */
 } Global;
 
 DECLARE_ARRAY(Global);
@@ -34,13 +34,13 @@ typedef struct {
   HashTable global_ids;            /* Global variable names */
   GlobalArray global_vals;         /* Global variable values */
   HashTable strings;               /* Strings (interning) */
-  Obj *objects;                    /* List of allocated object */
+  Obj *objects;                    /* List of allocated object (GC) */
 } VM;
 
 typedef enum {
-  INTERPRET_OK,
-  INTERPRET_COMPILE_ERROR,
-  INTERPRET_RUNTIME_ERROR,
+  INTERPRET_OK,            /* No error */
+  INTERPRET_COMPILE_ERROR, /* Compile time error */
+  INTERPRET_RUNTIME_ERROR, /* VM runtime error */
 } InterpretResult;
 
 void VM_init(VM *vm);

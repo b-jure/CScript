@@ -16,6 +16,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 DEFINE_ARRAY(Global);
 
@@ -49,12 +50,41 @@ void VM_error(VM* vm, const char* errfmt, ...)
     va_end(ap);
     fputs("\n", stderr);
 
-    CallFrame* frame = &vm->frames[vm->fc - 1];
-    Chunk*     chunk = &frame->fn->chunk;
-    UInt       line  = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
-    fprintf(stderr, "[line: %u] in script\n", line);
+    for(Int i = vm->fc - 1; i >= 0; i--) {
+        CallFrame* frame = &vm->frames[i];
+        Chunk*     chunk = &frame->fn->chunk;
+        UInt       line  = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
+
+        fprintf(stderr, "[line: %u] in ", line);
+
+        if(frame->fn->name != NULL) {
+            fprintf(stderr, "%s()\n", frame->fn->name->storage);
+        } else {
+            fprintf(stderr, "script\n");
+        }
+    }
+
     stack_reset(vm);
 }
+
+SK_INTERNAL(force_inline void) VM_define_native(VM* vm, const char* name, NativeFn native)
+{
+    VM_push(vm, OBJ_VAL(ObjString_from(vm, name, strlen(name))));
+    VM_push(vm, OBJ_VAL(ObjNative_new(vm, native)));
+
+    UInt idx = GlobalArray_push(&vm->global_vals, (Global){vm->stack[1], false});
+    HashTable_insert(&vm->global_ids, vm->stack[0], NUMBER_VAL((double)idx));
+
+    VM_pop(vm);
+    VM_pop(vm);
+}
+
+//-------------------------NATIVE FUNCTIONS-------------------------//
+SK_INTERNAL(force_inline Value) native_clock(Int argc, Value* argv)
+{
+    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
+//~
 
 /* Returns true if 'value' is boolean 'false' or is 'nil', otherwise return false.
  * DEV_NOTE: bool type must be 1 if true and 0 if false,
@@ -194,9 +224,11 @@ void VM_init(VM* vm)
     HashTable_init(&vm->global_ids);
     GlobalArray_init(&vm->global_vals);
     HashTable_init(&vm->strings);
+
+    VM_define_native(vm, "clock", native_clock);
 }
 
-SK_INTERNAL(bool) call(VM* vm, ObjFunction* fn, UInt argc)
+SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjFunction* fn, UInt argc)
 {
     if(fn->arity != argc) {
         VM_error(vm, "Expected %u arguments, but got %u instead.", fn->arity, argc);
@@ -206,7 +238,7 @@ SK_INTERNAL(bool) call(VM* vm, ObjFunction* fn, UInt argc)
     if(vm->fc == VM_FRAMES_MAX) {
         VM_error(
             vm,
-            "Internal error: vm stack overflow, recursion depth reached [%u].\n",
+            "Internal error: vm stack overflow, recursion depth limit reached [%u].\n",
             VM_FRAMES_MAX);
     }
 
@@ -217,13 +249,22 @@ SK_INTERNAL(bool) call(VM* vm, ObjFunction* fn, UInt argc)
     return true;
 }
 
-SK_INTERNAL(force_inline bool) call_val(VM* vm, Value fnval, UInt argc)
+SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
 {
     if(IS_OBJ(fnval)) {
         switch(OBJ_TYPE(fnval)) {
             case OBJ_FUNCTION:
-                return call(vm, AS_FUNCTION(fnval), argc);
+                return VM_call_fn(vm, AS_FUNCTION(fnval), argc);
                 break;
+            case OBJ_NATIVE: {
+                NativeFn native = AS_NATIVE(fnval);
+                // Call the native function
+                Value retval = native(argc, vm->sp - argc);
+                // Adjust stack pointer and push
+                vm->sp -= (argc + 1);
+                VM_push(vm, retval);
+                return true;
+            }
             default:
                 break;
         }
@@ -457,10 +498,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 uint8_t idx    = READ_BYTE();
                 Global* global = &vm->global_vals.data[idx];
-                if(IS_UNDEFINED(global->value)) {
-                    VM_error(vm, "Undefined variable.");
-                    return INTERPRET_RUNTIME_ERROR;
-                } else if(global->fixed) {
+                if(global->fixed) {
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -471,10 +509,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt    idx    = READ_BYTEL();
                 Global* global = &vm->global_vals.data[idx];
-                if(IS_UNDEFINED(global->value)) {
-                    VM_error(vm, "Undefined variable.");
-                    return INTERPRET_RUNTIME_ERROR;
-                } else if(global->fixed) {
+                if(global->fixed) {
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -555,7 +590,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_CALL)
             {
                 UInt argc = READ_BYTE();
-                if(!call_val(vm, stack_peek(argc), argc)) {
+                if(!VM_call_val(vm, stack_peek(argc), argc)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm->frames[vm->fc - 1];
@@ -563,11 +598,25 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_CALLL)
             {
+                UInt argc = READ_BYTEL();
+                if(!VM_call_val(vm, stack_peek(argc), argc)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm->frames[vm->fc - 1];
                 BREAK;
             }
             CASE(OP_RET)
             {
-                return INTERPRET_OK;
+                Value retval = VM_pop(vm);
+                vm->fc--;
+                if(vm->fc == 0) {
+                    VM_pop(vm);
+                    return INTERPRET_OK;
+                }
+                vm->sp = vm->frames[vm->fc].sp;
+                VM_push(vm, retval);
+                frame = &vm->frames[vm->fc - 1];
+                BREAK;
             }
         }
     }
@@ -598,7 +647,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
 
     /* Push and call the implicit function */
     VM_push(vm, OBJ_VAL(fn));
-    call(vm, fn, 0);
+    VM_call_fn(vm, fn, 0);
 
     return VM_run(vm);
 }
