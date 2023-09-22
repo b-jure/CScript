@@ -3,11 +3,10 @@
 
 #include "skconf.h"
 
+#include <memory.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#define DEBUG
 
 typedef uint8_t Byte;
 typedef uint32_t UInt;
@@ -39,11 +38,20 @@ static inline size_t bit_mask(uint8_t x) {
 /* Math--------------------------------------------------------------------- */
 
 /* Check if double is positive/negative infinity */
-#define IS_INFINITY(dbl)                                                       \
-  ((*(long *)(&dbl) & 0x7FFFFFFFFFFFFFFF) == 0x7FF0000000000000)
+force_inline static bool is_infinity(double dbl) {
+  // DEV NOTE: Assuming double and long are the same size
+  long integer;
+  memcpy(&integer, &dbl, sizeof(long));
+  return (integer & 0x7FFFFFFFFFFFFFFF) == 0x7FF0000000000000;
+}
+
 /* Check if double is NaN */
-#define IS_NAN(dbl)                                                            \
-  ((*(uint64_t *)(&dbl) & 0x7FFFFFFFFFFFFFFFL) > 0x7FF0000000000000L)
+force_inline static bool is_nan(double dbl) {
+  // DEV NOTE: Assuming double and long are the same size
+  long integer;
+  memcpy(&integer, &dbl, sizeof(long));
+  return (integer & 0x7FFFFFFFFFFFFFFFL) > 0x7FF0000000000000L;
+}
 
 /* Return MAX */
 #if defined(__GNUC__) || defined(__clang__)

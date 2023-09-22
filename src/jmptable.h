@@ -14,7 +14,7 @@
 #define CASE(label) L_##label:
 
 /* Redefine break into another goto/dispatch */
-#define BREAK VM_DISPATCH(READ_BYTE())
+#define BREAK DISPATCH(READ_BYTE())
 
 /* Make sure the order is the same as in the OpCode enum */
 static const void *const optable[OPCODE_N] = {

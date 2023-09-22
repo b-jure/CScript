@@ -10,4 +10,13 @@ then
     (cd $DEP_DIR || exit; git clone $UPSTREAM -o xxHash)
 fi
 
-(cd $BUILD_DIR || exit; cmake ..; make)
+(
+    cd $BUILD_DIR || exit;
+    cmake ..;
+    if [ $# -eq 0 ]
+    then
+        make release
+    else
+        make "$1"
+    fi
+)

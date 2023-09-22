@@ -67,10 +67,11 @@ void VM_error(VM* vm, const char* errfmt, ...)
     stack_reset(vm);
 }
 
-SK_INTERNAL(force_inline void) VM_define_native(VM* vm, const char* name, NativeFn native)
+SK_INTERNAL(force_inline void)
+VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
 {
     VM_push(vm, OBJ_VAL(ObjString_from(vm, name, strlen(name))));
-    VM_push(vm, OBJ_VAL(ObjNative_new(vm, native)));
+    VM_push(vm, OBJ_VAL(ObjNative_new(vm, native, arity)));
 
     UInt idx = GlobalArray_push(&vm->global_vals, (Global){vm->stack[1], false});
     HashTable_insert(&vm->global_ids, vm->stack[0], NUMBER_VAL((double)idx));
@@ -80,7 +81,7 @@ SK_INTERNAL(force_inline void) VM_define_native(VM* vm, const char* name, Native
 }
 
 //-------------------------NATIVE FUNCTIONS-------------------------//
-SK_INTERNAL(force_inline Value) native_clock(Int argc, Value* argv)
+SK_INTERNAL(force_inline Value) native_clock(unused Int _, unused Value* __)
 {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
@@ -95,7 +96,7 @@ SK_INTERNAL(force_inline bool) isfalsey(Value value)
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
-SK_INTERNAL(force_inline uint8_t) bool_to_str(char** str, bool boolean)
+SK_INTERNAL(force_inline Byte) bool_to_str(char** str, bool boolean)
 {
     if(boolean) {
         *str = "true";
@@ -105,7 +106,7 @@ SK_INTERNAL(force_inline uint8_t) bool_to_str(char** str, bool boolean)
     return sizeof("false") - 1;
 }
 
-SK_INTERNAL(force_inline uint8_t) nil_to_str(char** str)
+SK_INTERNAL(force_inline Byte) nil_to_str(char** str)
 {
     *str = "nil";
     return sizeof("nil") - 1;
@@ -117,10 +118,10 @@ SK_INTERNAL(force_inline uint8_t) nil_to_str(char** str)
  * Additionally concatenate function guarantees there is only one possible number Value
  * (because number + number is addition and not concatenation),
  * therefore there is no need for two static buffers inside of it. */
-SK_INTERNAL(force_inline uint8_t) double_to_str(char** str, double dbl)
+SK_INTERNAL(force_inline Byte) double_to_str(char** str, double dbl)
 {
     static char buffer[30] = {0};
-    uint8_t     len;
+    Byte        len;
 
     if(floor(dbl) != dbl) {
         len = snprintf(buffer, sizeof(buffer), "%f", dbl);
@@ -132,7 +133,7 @@ SK_INTERNAL(force_inline uint8_t) double_to_str(char** str, double dbl)
 
     int c;
     /* Trim excess zeroes */
-    for(uint8_t i = len - 1; i > 0; i--) {
+    for(Byte i = len - 1; i > 0; i--) {
         switch((c = buffer[i])) {
             case '0':
                 len--;
@@ -225,7 +226,7 @@ void VM_init(VM* vm)
     GlobalArray_init(&vm->global_vals);
     HashTable_init(&vm->strings);
 
-    VM_define_native(vm, "clock", native_clock);
+    VM_define_native(vm, "clock", native_clock, 0);
 }
 
 SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjFunction* fn, UInt argc)
@@ -246,6 +247,7 @@ SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjFunction* fn, UInt argc)
     frame->fn        = fn;
     frame->ip        = fn->chunk.code.data;
     frame->sp        = vm->sp - argc - 1;
+
     return true;
 }
 
@@ -255,11 +257,21 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
         switch(OBJ_TYPE(fnval)) {
             case OBJ_FUNCTION:
                 return VM_call_fn(vm, AS_FUNCTION(fnval), argc);
-                break;
             case OBJ_NATIVE: {
-                NativeFn native = AS_NATIVE(fnval);
-                // Call the native function
-                Value retval = native(argc, vm->sp - argc);
+                ObjNative* native = AS_NATIVE(fnval);
+
+                // This kills performance :'(
+                if(unlikely(native->arity != argc)) {
+                    VM_error(
+                        vm,
+                        "Expected %u arguments, but got %u instead.",
+                        native->arity,
+                        argc);
+                    return false;
+                }
+
+                NativeFn native_fn = AS_NATIVE_FN(fnval);
+                Value    retval    = native_fn(argc, vm->sp - argc);
                 // Adjust stack pointer and push
                 vm->sp -= (argc + 1);
                 VM_push(vm, retval);
@@ -276,9 +288,21 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
     return false;
 }
 
+SK_INTERNAL(InterpretResult) VM_run(VM* vm)
+{
+#define READ_BYTE()      (*ip++)
+#define READ_BYTEL()     (ip += 3, GET_BYTES3(ip - 3))
+#define READ_CONSTANT()  frame->fn->chunk.constants.data[READ_BYTE()]
+#define READ_CONSTANTL() frame->fn->chunk.constants.data[READ_BYTEL()]
+#define READ_STRING()    AS_STRING(READ_CONSTANT())
+#define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
+#define DISPATCH(x)      switch(x)
+#define CASE(label)      case label:
+#define BREAK            break
 #define BINARY_OP(value_type, op)                                                        \
     do {                                                                                 \
         if(!IS_NUMBER(stack_peek(0)) || !IS_NUMBER(stack_peek(1))) {                     \
+            frame->ip = ip;                                                              \
             VM_error(vm, "Operands must be numbers (binary operation '" #op "').");      \
             return INTERPRET_RUNTIME_ERROR;                                              \
         }                                                                                \
@@ -300,21 +324,12 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
         }                                                                                \
     } while(false)
 
-SK_INTERNAL(InterpretResult) VM_run(VM* vm)
-{
     // First frame is 'global' frame aka implicit
     // function that contains all other code and/or functions
     register CallFrame* frame = &vm->frames[vm->fc - 1];
-
-#define READ_BYTE()      (*frame->ip++)
-#define READ_BYTEL()     (frame->ip += 3, GET_BYTES3(frame->ip - 3))
-#define READ_CONSTANT()  frame->fn->chunk.constants.data[READ_BYTE()]
-#define READ_CONSTANTL() frame->fn->chunk.constants.data[READ_BYTEL()]
-#define READ_STRING()    AS_STRING(READ_CONSTANT())
-#define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
-#define DISPATCH(x)      switch(x)
-#define CASE(label)      case label:
-#define BREAK            break
+    // Keep instruction pointer in a local variable to encourage
+    // C compiler to keep it in a register.
+    register Byte* ip = frame->ip;
 
 #ifdef DEBUG_TRACE_EXECUTION
     printf("\n=== vmachine ===\n");
@@ -333,10 +348,9 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             printf("]");
         }
         printf("\n");
-        Instruction_debug(
-            &frame->fn->chunk,
-            (UInt)(frame->ip - frame->fn->chunk.code.data));
+        Instruction_debug(&frame->fn->chunk, (UInt)(ip - frame->fn->chunk.code.data));
 #endif
+
         DISPATCH(READ_BYTE())
         {
             CASE(OP_TRUE)
@@ -460,8 +474,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_DEFINE_GLOBAL)
             {
-                uint8_t idx               = READ_BYTE();
-                bool    fixed             = vm->global_vals.data[idx].fixed;
+                Byte idx                  = READ_BYTE();
+                bool fixed                = vm->global_vals.data[idx].fixed;
                 vm->global_vals.data[idx] = (Global){stack_peek(0), fixed};
                 VM_pop(vm);
                 BREAK;
@@ -478,6 +492,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 Global global = vm->global_vals.data[READ_BYTE()];
                 if(IS_UNDEFINED(global.value)) {
+                    frame->ip = ip;
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -488,6 +503,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 Global global = vm->global_vals.data[READ_BYTEL()];
                 if(IS_UNDEFINED(global.value)) {
+                    frame->ip = ip;
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -496,9 +512,10 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBAL)
             {
-                uint8_t idx    = READ_BYTE();
+                Byte    idx    = READ_BYTE();
                 Global* global = &vm->global_vals.data[idx];
                 if(global->fixed) {
+                    frame->ip = ip;
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -510,6 +527,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 UInt    idx    = READ_BYTEL();
                 Global* global = &vm->global_vals.data[idx];
                 if(global->fixed) {
+                    frame->ip = ip;
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -518,7 +536,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_LOCAL)
             {
-                uint8_t slot = READ_BYTE();
+                Byte slot = READ_BYTE();
                 VM_push(vm, frame->sp[slot]);
                 BREAK;
             }
@@ -530,7 +548,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_LOCAL)
             {
-                uint8_t slot    = READ_BYTE();
+                Byte slot       = READ_BYTE();
                 frame->sp[slot] = stack_peek(0);
                 BREAK;
             }
@@ -544,14 +562,14 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
-                frame->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
+                ip += ((Byte)isfalsey(stack_peek(0)) * skip_offset);
                 BREAK;
             }
             CASE(OP_JMP_IF_FALSE_OR_POP)
             {
                 UInt skip_offset = READ_BYTEL();
                 if(isfalsey(stack_peek(0))) {
-                    frame->ip += skip_offset;
+                    ip += skip_offset;
                 } else {
                     VM_pop(vm);
                 }
@@ -561,7 +579,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
-                frame->ip += (uint8_t)isfalsey(stack_peek(0)) * skip_offset;
+                ip += ((Byte)isfalsey(stack_peek(0)) * skip_offset);
                 VM_pop(vm);
                 BREAK;
             }
@@ -569,14 +587,14 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
-                frame->ip += skip_offset;
+                ip += skip_offset;
                 BREAK;
             }
             CASE(OP_JMP_AND_POP)
             {
                 UInt skip_offset = READ_BYTEL();
                 //
-                frame->ip += skip_offset;
+                ip += skip_offset;
                 VM_pop(vm);
                 BREAK;
             }
@@ -584,25 +602,29 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt offset = READ_BYTEL();
                 //
-                frame->ip -= offset;
+                ip -= offset;
                 BREAK;
             }
             CASE(OP_CALL)
             {
                 UInt argc = READ_BYTE();
+                frame->ip = ip;
                 if(!VM_call_val(vm, stack_peek(argc), argc)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
                 BREAK;
             }
             CASE(OP_CALLL)
             {
                 UInt argc = READ_BYTEL();
+                frame->ip = ip;
                 if(!VM_call_val(vm, stack_peek(argc), argc)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
                 BREAK;
             }
             CASE(OP_RET)
@@ -610,12 +632,14 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value retval = VM_pop(vm);
                 vm->fc--;
                 if(vm->fc == 0) {
+                    // @FIX: REPL not working, maybe sp - stack is -1
                     VM_pop(vm);
                     return INTERPRET_OK;
                 }
                 vm->sp = vm->frames[vm->fc].sp;
                 VM_push(vm, retval);
                 frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
                 BREAK;
             }
         }
@@ -632,10 +656,9 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #undef DISPATCH
 #undef CASE
 #undef BREAK
-}
-
 #undef VM_BINARY_OP
 #undef VM_CONCAT_OR_ADD
+}
 
 InterpretResult VM_interpret(VM* vm, const char* source)
 {

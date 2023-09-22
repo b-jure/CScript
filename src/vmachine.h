@@ -24,7 +24,7 @@ typedef struct {
   bool fixed;  /* @TODO: Make this into a byte that holds flag bits */
 } Global;
 
-DECLARE_ARRAY(Global);
+DECLARE_ARRAY(Global)
 
 typedef struct {
   CallFrame frames[VM_FRAMES_MAX]; /* Call frames */

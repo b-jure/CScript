@@ -315,7 +315,7 @@ SK_INTERNAL(force_inline void) C_emit_op(Compiler* C, OpCode code, UInt param)
     Chunk_write_codewparam(current_chunk(C), code, param, C->parser.previous.line);
 }
 
-SK_INTERNAL(force_inline UInt) C_emit_jmp(Compiler* C, VM* vm, OpCode jmp)
+SK_INTERNAL(force_inline UInt) C_emit_jmp(Compiler* C, OpCode jmp)
 {
     Chunk_write_codewparam(current_chunk(C), jmp, 0, C->parser.previous.line);
     return code_offset(C) - 3;
@@ -638,7 +638,7 @@ SK_INTERNAL(force_inline void) C_start_scope(Compiler* C)
     HashTable scope_set;
     HashTable_init(&scope_set);
 
-    if(unlikely(C->depth >= UINT32_MAX - 1)) {
+    if(unlikely((UInt)C->depth >= UINT32_MAX - 1)) {
         C_error(C, "Scope nesting depth limit reached [%u].", UINT32_MAX);
     }
 
@@ -679,7 +679,7 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
     if(!C_check(C_new(), TOK_RPAREN)) {
         do {
             C_new()->fn->arity++;
-            UInt idx = parse_varname(vm, Cptr_new, "Expect parameter name.");
+            parse_varname(vm, Cptr_new, "Expect parameter name.");
             C_initialize_local(C_new(), vm);
         } while(C_match(C_new, TOK_COMMA));
     }
@@ -890,7 +890,7 @@ SK_INTERNAL(force_inline void) C_add_bstorage(Compiler* C)
 SK_INTERNAL(force_inline void) C_rm_bstorage(Compiler* C)
 {
     IntArray* patches = IntArrayArray_last(&C->context.breaks);
-    for(Int i = 0; i < patches->len; i++) {
+    for(Int i = 0; i < (Int)patches->len; i++) {
         C_patch_jmp(C, patches->data[i]);
     }
     IntArray arr = IntArrayArray_pop(&C->context.breaks);
@@ -927,7 +927,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     while(!C_match(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
         if(C_match(C(), TOK_CASE) || C_match(C(), TOK_DEFAULT)) {
             if(state != 0) {
-                IntArray_push(&fts, C_emit_jmp(C(), vm, OP_JMP));
+                IntArray_push(&fts, C_emit_jmp(C(), OP_JMP));
                 if(state != -1) {
                     C_patch_jmp(C(), state);
                 }
@@ -940,7 +940,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
                 C_emit_byte(C(), OP_EQ);
                 C_expect(C(), TOK_COLON, "Expect ':' after 'case'.");
 
-                state = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
+                state = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
 
             } else if(!dflt) {
                 dflt = true;
@@ -985,12 +985,12 @@ SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr)
     C_expect(C(), TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional jump instruction */
-    UInt else_jmp = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
+    UInt else_jmp = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
 
     parse_stm(vm, Cptr); /* Parse the code in this branch */
 
     /* Prevent fall-through if 'else' exists. */
-    UInt end_jmp = C_emit_jmp(C(), vm, OP_JMP);
+    UInt end_jmp = C_emit_jmp(C(), OP_JMP);
 
     C_patch_jmp(C(), else_jmp); /* End of 'if' (maybe start of else) */
 
@@ -1002,15 +1002,15 @@ SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr)
 {
-    UInt jump = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_OR_POP);
+    UInt jump = C_emit_jmp(C(), OP_JMP_IF_FALSE_OR_POP);
     parse_precedence(vm, Cptr, PREC_AND);
     C_patch_jmp(C(), jump);
 }
 
 SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr)
 {
-    UInt else_jmp = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
-    UInt end_jmp  = C_emit_jmp(C(), vm, OP_JMP);
+    UInt else_jmp = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
+    UInt end_jmp  = C_emit_jmp(C(), OP_JMP);
 
     C_patch_jmp(C(), else_jmp);
 
@@ -1037,7 +1037,7 @@ SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr)
     C_expect(C(), TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional exit jump */
-    UInt end_jmp = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
+    UInt end_jmp = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
     parse_stm(vm, Cptr);                               /* Parse loop body */
     C_emit_loop(C(), (C())->context.innermostl_start); /* Jump to the start of the loop */
 
@@ -1088,11 +1088,11 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
         parse_expr(vm, Cptr);
         C_expect(C(), TOK_SEMICOLON, "Expect ';' (condition).");
 
-        loop_end = C_emit_jmp(C(), vm, OP_JMP_IF_FALSE_AND_POP);
+        loop_end = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
     }
 
     if(!C_match(C(), TOK_SEMICOLON)) {
-        UInt body_start      = C_emit_jmp(C(), vm, OP_JMP);
+        UInt body_start      = C_emit_jmp(C(), OP_JMP);
         UInt increment_start = current_chunk(C())->code.len;
         parse_expr(vm, Cptr);
         C_emit_byte(C(), OP_POP);
@@ -1122,7 +1122,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     (C())->parser.flags |= mask;
 }
 
-SK_INTERNAL(void) parse_stm_continue(VM* vm, Compiler* C)
+SK_INTERNAL(void) parse_stm_continue(Compiler* C)
 {
     C_expect(C, TOK_SEMICOLON, "Expect ';' after 'continue'.");
 
@@ -1147,7 +1147,7 @@ SK_INTERNAL(void) parse_stm_continue(VM* vm, Compiler* C)
     C_emit_loop(C, C->context.innermostl_start);
 }
 
-SK_INTERNAL(void) parse_stm_break(VM* vm, Compiler* C)
+SK_INTERNAL(void) parse_stm_break(Compiler* C)
 {
     C_expect(C, TOK_SEMICOLON, "Expect ';' after 'break'.");
 
@@ -1162,12 +1162,12 @@ SK_INTERNAL(void) parse_stm_break(VM* vm, Compiler* C)
                                          : C->context.innermostsw_depth;
 
     UInt popn = 0;
-    for(Int i = C->loc_len - 1; i >= 0 && C->locals[i].depth > sdepth; i--) {
+    for(Int i = C->loc_len - 1; i >= 0 && C->locals[i].depth > (Int)sdepth; i--) {
         popn++;
     }
 
     C_emit_op(C, OP_POPN, popn);
-    IntArray_push(IntArrayArray_last(arr), C_emit_jmp(C, vm, OP_JMP));
+    IntArray_push(IntArrayArray_last(arr), C_emit_jmp(C, OP_JMP));
 }
 
 SK_INTERNAL(void) parse_stm_return(VM* vm, CompilerPPtr Cptr)
@@ -1203,9 +1203,9 @@ SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
         C_start_scope(C);
         parse_stm_block(vm, Cptr);
     } else if(C_match(C, TOK_CONTINUE)) {
-        parse_stm_continue(vm, C);
+        parse_stm_continue(C);
     } else if(C_match(C, TOK_BREAK)) {
-        parse_stm_break(vm, C);
+        parse_stm_break(C);
     } else if(C_match(C, TOK_RETURN)) {
         parse_stm_return(vm, Cptr);
     } else {
@@ -1245,7 +1245,7 @@ SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, const Token* name)
 {
     Value index      = NUMBER_VAL(-1);
     Value identifier = Token_into_stringval(vm, name);
-    for(Int i = 0; i < C->loc_defs.len; i++) {
+    for(Int i = 0; i < (Int)C->loc_defs.len; i++) {
         HashTable* scope_set = &C->loc_defs.data[i];
         if(HashTable_get(scope_set, identifier, &index)) {
             return (Int)AS_NUMBER(index);

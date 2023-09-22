@@ -15,7 +15,8 @@
 #define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
 
 #define IS_NATIVE(value) is_object_type(value, OBJ_NATIVE)
-#define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value))->fn)
+#define AS_NATIVE(value) ((ObjNative *)AS_OBJ(value))
+#define AS_NATIVE_FN(value) (((ObjNative *)AS_OBJ(value))->fn)
 
 typedef enum {
   OBJ_STRING,
@@ -37,7 +38,7 @@ struct ObjString {
 
 struct ObjFunction {
   Obj obj;
-  Int arity;
+  UInt arity;
   Chunk chunk;
   ObjString *name;
 };
@@ -47,13 +48,14 @@ typedef Value (*NativeFn)(Int argc, Value *argv);
 typedef struct {
   Obj obj;
   NativeFn fn;
+  UInt arity;
 } ObjNative;
 
 static force_inline bool is_object_type(Value value, ObjType type) {
   return IS_OBJ(value) && AS_OBJ(value)->type == type;
 }
 
-ObjNative *ObjNative_new(VM *vm, NativeFn fn);
+ObjNative *ObjNative_new(VM *vm, NativeFn fn, UInt arity);
 uint64_t Obj_hash(Value value);
 ObjString *ObjString_from(VM *vm, const char *chars, size_t len);
 ObjFunction *ObjFunction_new(VM *vm);

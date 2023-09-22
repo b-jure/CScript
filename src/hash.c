@@ -1,3 +1,4 @@
+#include "common.h"
 #include "hash.h"
 #include "xxhash.h"
 
@@ -16,7 +17,7 @@ Hash Hash_ptr(const void* ptr)
 
 Hash Hash_double(double dbl)
 {
-    if(IS_INFINITY(dbl) || IS_NAN(dbl)) {
+    if(is_infinity(dbl) || is_nan(dbl)) {
         return (dbl > 0) ? HASH_INF : -HASH_INF;
     }
 

@@ -56,8 +56,8 @@ typedef enum {
   OP_RET,                  /* Stop interpreting ? */
 } OpCode;
 
-DECLARE_ARRAY(UInt);
-DECLARE_ARRAY(Byte);
+DECLARE_ARRAY(UInt)
+DECLARE_ARRAY(Byte)
 
 typedef UIntArray LineArray;
 

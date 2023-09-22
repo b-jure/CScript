@@ -109,11 +109,12 @@ SK_INTERNAL(force_inline void) ObjString_free(ObjString* string)
     MFREE(string, sizeof(ObjString) + string->len + 1);
 }
 
-ObjNative* ObjNative_new(VM* vm, NativeFn fn)
+ObjNative* ObjNative_new(VM* vm, NativeFn fn, UInt arity)
 {
     ObjNative* native = ALLOC_OBJ(vm, ObjNative, OBJ_NATIVE);
     //
-    native->fn = fn;
+    native->fn    = fn;
+    native->arity = arity;
     return native;
 }
 

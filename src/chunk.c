@@ -7,8 +7,8 @@
 
 SK_INTERNAL(void) LineArray_write(LineArray* lines, UInt line, UInt index);
 
-DEFINE_ARRAY(Byte);
-DEFINE_ARRAY(UInt);
+DEFINE_ARRAY(Byte)
+DEFINE_ARRAY(UInt)
 
 /* Initializes the Chunk */
 void Chunk_init(Chunk* chunk)

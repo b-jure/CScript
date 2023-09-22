@@ -5,10 +5,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#define advance(scanner)   (*(scanner)->current++)
-#define peek(scanner)      (*(scanner)->current)
-#define isend(scanner)     (*(scanner)->current == '\0')
-#define peek_next(scanner) ((isend(scanner)) ? '\0' : *((scanner)->current + 1))
+#define advance_unused(scanner) ((scanner)->current++)
+#define advance(scanner)        (*(scanner)->current++)
+#define peek(scanner)           (*(scanner)->current)
+#define isend(scanner)          (*(scanner)->current == '\0')
+#define peek_next(scanner)      ((isend(scanner)) ? '\0' : *((scanner)->current + 1))
 
 SK_INTERNAL(force_inline Token) Token_new(Scanner* scanner, TokenType type);
 SK_INTERNAL(Token) Token_error(Scanner* scanner, const char* err);
@@ -45,7 +46,7 @@ Token Scanner_scan(Scanner* scanner)
         return Token_new(scanner, TOK_EOF);
     }
 
-    char c = advance(scanner);
+    int c = advance(scanner);
 
     if(c == '_' || isalpha(c)) {
         return Token_identifier(scanner);
@@ -213,17 +214,17 @@ SK_INTERNAL(force_inline void) Scanner_skipws(Scanner* scanner)
         switch((c = peek(scanner))) {
             case '\n':
                 scanner->line++;
-                advance(scanner);
+                advance_unused(scanner);
                 break;
             case ' ':
             case '\r':
             case '\t':
-                advance(scanner);
+                advance_unused(scanner);
                 break;
             case '/':
                 if(peek_next(scanner) == '/') {
                     while(peek(scanner) != '\n' && !isend(scanner)) {
-                        advance(scanner);
+                        advance_unused(scanner);
                     }
                 } else {
                     return;
@@ -261,28 +262,28 @@ SK_INTERNAL(force_inline Token) Token_string(Scanner* scanner)
         if(peek(scanner) == '\n') {
             scanner->line++;
         }
-        advance(scanner);
+        advance_unused(scanner);
     }
 
     if(isend(scanner)) {
         return Token_error(scanner, "Unterminated string, missing closing quotes '\"'");
     }
 
-    advance(scanner);
+    advance_unused(scanner);
     return Token_new(scanner, TOK_STRING);
 }
 
 SK_INTERNAL(Token) Token_number(Scanner* scanner)
 {
     while(isdigit(peek(scanner))) {
-        advance(scanner);
+        advance_unused(scanner);
     }
 
     if(peek(scanner) == '.' && isdigit(peek_next(scanner))) {
-        advance(scanner);
+        advance_unused(scanner);
 
         while(isdigit(peek(scanner))) {
-            advance(scanner);
+            advance_unused(scanner);
         }
     }
 
@@ -293,7 +294,7 @@ SK_INTERNAL(force_inline Token) Token_identifier(Scanner* scanner)
 {
     register char c;
     while(isalnum((c = peek(scanner))) || c == '_') {
-        advance(scanner);
+        advance_unused(scanner);
     }
 
     return Token_new(scanner, TokenType_identifier(scanner));
@@ -325,7 +326,7 @@ SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner)
     };
     #undef RET
 
-    goto* jump_table[*scanner->start];
+    goto* jump_table[(Int)*scanner->start];
 
 a:
     return check_keyword(scanner, 1, 2, "nd", TOK_AND);
@@ -373,7 +374,7 @@ i:
     if(scanner->current - scanner->start > 1) {
         switch(scanner->start[1]) {
             case 'm':
-                check_keyword(scanner, 2, 2, "pl", TOK_IMPL);
+                return check_keyword(scanner, 2, 2, "pl", TOK_IMPL);
             case 'f':
                 if(scanner->current - scanner->start == 2) {
                     return TOK_IF;

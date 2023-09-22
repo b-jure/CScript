@@ -104,6 +104,6 @@
     return retval;                                                             \
   }
 
-DECLARE_ARRAY(Value);
+DECLARE_ARRAY(Value)
 
 #endif

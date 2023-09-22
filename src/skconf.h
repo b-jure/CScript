@@ -11,14 +11,10 @@
 /* Max function call frames. */
 #define SK_CALLFRAMES_MAX 1024
 
-/* Check if we can use labels as values for precomputed goto/jmp table */
-#if defined(__GNUC__) && __GNUC__ >= 3
-#define THREADED_CODE
-#endif
-
 /* Compiler builtins ------------------------------------------------------- */
 
 #if defined(__GNUC__) && __GNUC__ >= 3
+#define THREADED_CODE
 #define force_inline __always_inline
 #define likely(cond) __glibc_likely(cond)
 #define unlikely(cond) __glibc_unlikely(cond)
