@@ -2,6 +2,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "mem.h"
+#include "object.h"
 #include "scanner.h"
 #include "skconf.h"
 #include "value.h"
@@ -25,6 +26,7 @@
 #define LOOP_BIT   3
 #define SWITCH_BIT 4
 #define ASSIGN_BIT 5
+#define FN_BIT     6
 #define FIXED_BIT  9
 
 #define C_flag_set(C, bit)   BIT_SET((C)->parser.flags, bit)
@@ -36,7 +38,8 @@
 // clang-format off
 #define GSTATE_INIT { 0 }
 // clang-format on
-#define CFLOW_MASK(C) ((size_t)(btoul(SWITCH_BIT) | btoul(LOOP_BIT)) & C_flags(C))
+#define CFLOW_MASK(C) ((uint64_t)(btoul(SWITCH_BIT) | btoul(LOOP_BIT)) & C_flags(C))
+#define FN_MASK(C)    ((uint64_t)(btoul(FN_BIT)) & C_flags(C))
 
 /* Global compiler state */
 typedef struct {
@@ -58,7 +61,7 @@ typedef struct {
      * 3 - loop bit <- inside a loop
      * 4 - switch bit <- inside a switch statement
      * 5 - assign bit <- can parse assignment
-     * 6 - unused
+     * 6 - fn bit <- inside a function
      * 7 - unused
      * 8 - unused
      * 9 - fixed bit <- variable modifier (immutable)
@@ -70,13 +73,13 @@ typedef struct {
 
 typedef struct {
     Token name;
+    Int   depth;
     /*
      * Bits (var modifiers):
      * 1 - fixed
      * ...
      * 8 - unused
      */
-    Int  depth;
     Byte flags;
 } Local;
 
@@ -130,23 +133,30 @@ typedef struct {
 typedef struct {
     /* Grammar parser */
     Parser parser;
+
     /* Control flow context, tracks offsets and
      * scope depth for 'continue' and 'break' statements. */
     CFCtx context;
+
     /* Tracks local variables for each scope. */
     HashTableArray loc_defs;
+
     /* Currently compiled function, meaning we write
      * bytecode to the function chunk in this field. */
     ObjFunction* fn;
     FunctionType fn_type; /* Function type */
+
     /* Current scope depth. */
     Int depth;
+
     /* Count of local variables in this function.
      * In case of this function being FN_SCRIPT that would
-     * mean count of variables in case of block scope. */
+     * mean count of variables so far in this scope block (scope > 0) */
     UInt loc_len;
+
     /* Capacity of 'locals' flexible array. */
     UInt loc_cap;
+
     /* Array that holds local variables 'Local's.
      * It is a flexible array this way we avoid pointer
      * dereference. */
@@ -174,6 +184,7 @@ typedef Compiler** CompilerPPtr;
 /* ParseFn - generic parsing function signature. */
 typedef void (*ParseFn)(VM*, CompilerPPtr);
 
+// Used for Pratt parsing algorithm
 typedef struct {
     ParseFn    prefix;
     ParseFn    infix;
@@ -265,16 +276,14 @@ SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr)
 
 SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
 {
-    if(current_chunk(C)->constants.len <= MIN(VM_STACK_MAX, UINT24_MAX)) {
-        return Chunk_make_constant(current_chunk(C), constant);
-    } else {
-        fprintf(
-            stderr,
+    if(unlikely(current_chunk(C)->constants.len > MIN(VM_STACK_MAX, UINT24_MAX))) {
+        C_error(
+            C,
             "Too many constants defined in a single chunk. This function -> <fn %s>.",
             C->fn->name->storage);
-        // @TODO: Perform some kind of cleanup
-        exit(EXIT_FAILURE); // exit don't parse the rest
     }
+
+    return Chunk_make_constant(current_chunk(C), constant);
 }
 
 SK_INTERNAL(force_inline Value) Token_into_stringval(VM* vm, const Token* name)
@@ -283,9 +292,10 @@ SK_INTERNAL(force_inline Value) Token_into_stringval(VM* vm, const Token* name)
 }
 
 SK_INTERNAL(force_inline UInt)
-make_const_identifier(VM* vm, Value identifier, bool fixed)
+make_const_identifier(Compiler* C, VM* vm, Value identifier, bool fixed)
 {
     Value index;
+
     if(!HashTable_get(&vm->global_ids, identifier, &index)) {
         index = NUMBER_VAL(
             (double)GlobalArray_push(&vm->global_vals, (Global){UNDEFINED_VAL, fixed}));
@@ -294,8 +304,14 @@ make_const_identifier(VM* vm, Value identifier, bool fixed)
     }
 
     UInt i = (UInt)AS_NUMBER(index);
-    // Ensure global redefinition is (not) fixed
-    vm->global_vals.data[i].fixed = fixed;
+
+    if(IS_DECLARED(vm->global_vals.data[i].value)) {
+        C_error(
+            C,
+            "Redefinition of declared global variable '%s'.",
+            AS_CSTRING(identifier));
+    }
+
     return i;
 }
 
@@ -458,7 +474,6 @@ ObjFunction* compile(VM* vm, const char* source)
 {
     Compiler* C = ALLOC_COMPILER();
     C_init(C, vm, FN_SCRIPT);
-
     Parser_init(&C->parser, source);
     C_advance(C);
 
@@ -672,7 +687,6 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 
     /* Start new scope */
     C_start_scope(C_new());
-
     C_expect(C_new(), TOK_LPAREN, "Expect '(' after function name.");
 
     /* Parse function arguments */
@@ -707,6 +721,9 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 
 SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
 {
+    uint64_t mask = FN_MASK(C());
+    C_flag_set(C(), FN_BIT);
+
     UInt idx = parse_varname(vm, Cptr, "Expect function name.");
 
     /* Initialize the variable that holds the function, in order to
@@ -718,8 +735,13 @@ SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
     parse_fn(vm, Cptr, FN_FUNCTION);
 
     if(C()->depth == 0) {
+        // Mark as declared to guard against redefinition
+        vm->global_vals.data[idx].value = DECLARED_VAL;
         C_emit_op(C(), GET_OP_TYPE(idx, OP_DEFINE_GLOBAL), idx);
     }
+
+    C_flag_clear(C(), FN_BIT);
+    C()->parser.flags |= mask;
 }
 
 SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
@@ -759,14 +781,12 @@ parse_dec_var(VM* vm, CompilerPPtr Cptr)
 
     C_expect(C(), TOK_SEMICOLON, "Expect ';' after variable declaration.");
 
-    // We declared local variable
     if((C())->depth > 0) {
-        // now define/initialize it
         C_initialize_local(C(), vm);
         return;
     }
 
-    // We defined/initialized global variable instead
+    vm->global_vals.data[index].value = DECLARED_VAL;
     C_emit_op(C(), GET_OP_TYPE(index, OP_DEFINE_GLOBAL), index);
 }
 
@@ -778,11 +798,8 @@ SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
         if(unlikely(gstate.loc_len >= MIN(VM_STACK_MAX, LOCAL_STACK_MAX))) {
             C_error(
                 C,
-                "Too many variables defined in this source file. Limit is minimum of "
-                "these two values: vm "
-                "stack limit [%u] | bytecode index limit [%u]",
-                VM_STACK_MAX,
-                LOCAL_STACK_MAX);
+                "Too many variables defined in this source file. Limit is [%u].",
+                MIN(VM_STACK_MAX, LOCAL_STACK_MAX));
             return;
         }
         C_grow_stack(Cptr);
@@ -791,7 +808,7 @@ SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
     Local* local = &C->locals[C->loc_len++];
     gstate.loc_len++;
     local->name  = C->parser.previous;
-    local->flags = ((C_flags(C) >> 8) & 0xff);
+    local->flags = ((Byte)(C_flags(C) >> 8) & 0xff);
     local->depth = -1; /* Not necessary, can initialize to C->depth instead */
 }
 
@@ -821,32 +838,59 @@ SK_INTERNAL(void) C_make_local(CompilerPPtr Cptr, VM* vm)
     C_new_local(Cptr);
 }
 
-SK_INTERNAL(int64_t) C_make_global(Compiler* C, VM* vm, bool fixed)
+SK_INTERNAL(Int) C_make_global(Compiler* C, VM* vm, bool fixed)
 {
     Value identifier = Token_into_stringval(vm, &C->parser.previous);
-    UInt  idx        = make_const_identifier(vm, identifier, fixed);
+    UInt  idx        = make_const_identifier(C, vm, identifier, fixed);
 
     if(unlikely(idx > UINT24_MAX)) {
-        fprintf(
-            stderr,
+        C_error(
+            C,
             "Too many global variables defined. Bytecode instruction index limit "
             "reached [%u].",
             UINT24_MAX);
-        // @TODO: Perform some kind of cleanup
-        exit(EXIT_FAILURE); // Just exit don't parse the rest
     }
 
     return idx;
+}
+
+SK_INTERNAL(force_inline Int) C_make_undefined_global(Compiler* C, VM* vm)
+{
+    Value idx =
+        NUMBER_VAL(GlobalArray_push(&vm->global_vals, (Global){UNDEFINED_VAL, false}));
+    Value identifier = Token_into_stringval(vm, &C->parser.previous);
+
+    HashTable_insert(&vm->global_ids, identifier, idx);
+
+    return (Int)AS_NUMBER(idx);
 }
 
 SK_INTERNAL(UInt) Global_idx(Compiler* C, VM* vm)
 {
     Value idx;
     Value identifier = Token_into_stringval(vm, &C->parser.previous);
+
     if(!HashTable_get(&vm->global_ids, identifier, &idx)) {
-        C_error(C, "Undefined variable '%s'.", AS_CSTRING(identifier));
-        return 0;
+        if(C_flag_is(C, FN_BIT)) {
+            // Create reference to a global but don't declare or define it
+            idx = NUMBER_VAL(C_make_undefined_global(C, vm));
+        } else {
+            // If we are in global scope and there is no global identifier,
+            C_error(C, "Undefined variable '%s'.", AS_CSTRING(identifier));
+            return 0;
+        }
+    } else {
+        UInt i = (UInt)AS_NUMBER(idx);
+        // If we are in global scope and there is a global identifier
+        // but its value is of type undefined, that means we didn't omit
+        // OP_DEFINE_GLOBAL(L) instruction for it.
+        // @FIX: Make this somehow work in REPL mode
+        if(!C_flag_is(C, FN_BIT) && IS_UNDEFINED(vm->global_vals.data[i].value)) {
+            C_error(C, "Undefined variable '%s'.", AS_CSTRING(identifier));
+            return 0;
+        }
     }
+
     return (UInt)AS_NUMBER(idx);
 }
 
@@ -921,8 +965,8 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     IntArray fts;
     IntArray_init(&fts);
 
-    Int outermostsw_depth            = (C())->context.innermostsw_depth;
-    (C())->context.innermostsw_depth = (C())->depth;
+    Int outermostsw_depth          = C()->context.innermostsw_depth;
+    C()->context.innermostsw_depth = C()->depth;
 
     while(!C_match(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
         if(C_match(C(), TOK_CASE) || C_match(C(), TOK_DEFAULT)) {
@@ -972,10 +1016,10 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     /* Pop switch value */
     C_emit_byte(C(), OP_POP);
     /* Restore scope depth */
-    (C())->context.innermostsw_depth = outermostsw_depth;
+    C()->context.innermostsw_depth = outermostsw_depth;
     /* Clear switch flag and restore control flow flags */
     C_flag_clear(C(), SWITCH_BIT);
-    (C())->parser.flags |= mask;
+    C()->parser.flags |= mask;
 }
 
 SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr)
@@ -1245,12 +1289,14 @@ SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, const Token* name)
 {
     Value index      = NUMBER_VAL(-1);
     Value identifier = Token_into_stringval(vm, name);
+
     for(Int i = 0; i < (Int)C->loc_defs.len; i++) {
         HashTable* scope_set = &C->loc_defs.data[i];
         if(HashTable_get(scope_set, identifier, &index)) {
             return (Int)AS_NUMBER(index);
         }
     }
+
     return -1;
 }
 

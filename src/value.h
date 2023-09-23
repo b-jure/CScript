@@ -27,6 +27,9 @@
 #define UNDEFINED_VAL EMPTY_VAL
 #define IS_UNDEFINED(val) IS_EMPTY(val)
 
+#define IS_DECLARED(value) ((value).type == VAL_DECLARED)
+#define DECLARED_VAL ((Value){.type = VAL_DECLARED, {0}})
+
 typedef struct Obj Obj;
 typedef struct ObjString ObjString;
 typedef struct ObjFunction ObjFunction;
@@ -37,6 +40,7 @@ typedef enum {
   VAL_NIL,
   VAL_OBJ,
   VAL_EMPTY,
+  VAL_DECLARED,
 } ValueType;
 
 typedef struct {

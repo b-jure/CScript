@@ -1,15 +1,14 @@
 #include "array.h"
 #include "common.h"
 #include "compiler.h"
+#include "err.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
 #include "value.h"
 #include "vmachine.h"
-
 #ifdef DEBUG
     #include "debug.h"
-    #include <assert.h>
 #endif
 
 #include <math.h>
@@ -81,9 +80,17 @@ VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
 }
 
 //-------------------------NATIVE FUNCTIONS-------------------------//
-SK_INTERNAL(force_inline Value) native_clock(unused Int _, unused Value* __)
+SK_INTERNAL(force_inline bool) native_clock(VM* vm, unused Int _, unused Value* argv)
 {
-    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+    clock_t time = clock();
+
+    if(unlikely(time < 0)) {
+        argv[-1] = OBJ_VAL(ERR_NEW(CLOCK_ERR));
+        return false;
+    }
+
+    argv[-1] = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
+    return true;
 }
 //~
 
@@ -155,7 +162,6 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
 
     for(int i = 0; i < 2; i++) {
 #ifdef THREADED_CODE
-        // NOTE: In case ValueType enum gets modified update this table
         static const void* jump_table[] = {
             // Keep this in the same order as in the ValueType enum
             &&vbool,   /* VAL_BOOL */
@@ -251,6 +257,22 @@ SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjFunction* fn, UInt argc)
     return true;
 }
 
+SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, UInt argc)
+{
+    if(unlikely(native->arity != argc)) {
+        VM_error(vm, "Expected %u arguments, but got %u instead.", native->arity, argc);
+        return false;
+    }
+
+    if(native->fn(vm, argc, vm->sp - argc)) {
+        vm->sp -= (argc + 1);
+        return true;
+    } else {
+        VM_error(vm, AS_CSTRING(vm->sp[-argc - 1]));
+        return false;
+    }
+}
+
 SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
 {
     if(IS_OBJ(fnval)) {
@@ -258,24 +280,7 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
             case OBJ_FUNCTION:
                 return VM_call_fn(vm, AS_FUNCTION(fnval), argc);
             case OBJ_NATIVE: {
-                ObjNative* native = AS_NATIVE(fnval);
-
-                // This kills performance :'(
-                if(unlikely(native->arity != argc)) {
-                    VM_error(
-                        vm,
-                        "Expected %u arguments, but got %u instead.",
-                        native->arity,
-                        argc);
-                    return false;
-                }
-
-                NativeFn native_fn = AS_NATIVE_FN(fnval);
-                Value    retval    = native_fn(argc, vm->sp - argc);
-                // Adjust stack pointer and push
-                vm->sp -= (argc + 1);
-                VM_push(vm, retval);
-                return true;
+                return VM_call_native(vm, AS_NATIVE(fnval), argc);
             }
             default:
                 break;
@@ -490,35 +495,45 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_GLOBAL)
             {
-                Global global = vm->global_vals.data[READ_BYTE()];
-                if(IS_UNDEFINED(global.value)) {
+                Global* global = &vm->global_vals.data[READ_BYTE()];
+
+                if(IS_UNDEFINED(global->value)) {
                     frame->ip = ip;
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                VM_push(vm, global.value);
+
+                VM_push(vm, global->value);
                 BREAK;
             }
             CASE(OP_GET_GLOBALL)
             {
-                Global global = vm->global_vals.data[READ_BYTEL()];
-                if(IS_UNDEFINED(global.value)) {
+                Global* global = &vm->global_vals.data[READ_BYTEL()];
+
+                if(IS_UNDEFINED(global->value)) {
                     frame->ip = ip;
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                VM_push(vm, global.value);
+
+                VM_push(vm, global->value);
                 BREAK;
             }
             CASE(OP_SET_GLOBAL)
             {
                 Byte    idx    = READ_BYTE();
                 Global* global = &vm->global_vals.data[idx];
-                if(global->fixed) {
+
+                if(IS_UNDEFINED(global->value)) {
+                    frame->ip = ip;
+                    VM_error(vm, "Undefined variable.");
+                    return INTERPRET_RUNTIME_ERROR;
+                } else if(global->fixed) {
                     frame->ip = ip;
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
+
                 global->value = stack_peek(0);
                 BREAK;
             }
@@ -526,11 +541,17 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 UInt    idx    = READ_BYTEL();
                 Global* global = &vm->global_vals.data[idx];
-                if(global->fixed) {
+
+                if(IS_UNDEFINED(global->value)) {
+                    frame->ip = ip;
+                    VM_error(vm, "Undefined variable.");
+                    return INTERPRET_RUNTIME_ERROR;
+                } else if(global->fixed) {
                     frame->ip = ip;
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
+
                 global->value = stack_peek(0);
                 BREAK;
             }
