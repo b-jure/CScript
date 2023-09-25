@@ -130,7 +130,44 @@ typedef struct {
     Int innermostsw_depth; /* Innermost switch scope depth */
 } CFCtx;
 
+/* UpValue is a Value that is declared/defined inside of enclosing function.
+ * Contains stack index of that variable inside of that enclosing function.
+ * This is useful for closures when capturing enclosing function values.
+ * The 'local' field indicates if this is the local variable of the innermost
+ * enclosing function or the UpValue.
+ *
+ * More on this:
+ * Skooma is a language with first-class functions, meaning functions can be
+ * passed around as arguments the same way as numbers, strings, objects.. (also being
+ * first-class). Additionally this language supports closures which are basically wrappers
+ * around the functions but also pack additional information about the 'environment'.
+ * Environment is actually a mapping associating each free variable (variables used
+ * locally inside a function, but defined in an enclosing scope) with the value of
+ * the enclosing variable.
+ * So main thing to understand is that closures can access variables that are defined
+ * outside of them, right before the closure definition up to global scope.
+ * Now finally the 'UpValue' is a struct that helps us access those variables
+ * outside of the closure by accessing the enclosing function and searching
+ * its stack for the value at 'idx'.
+ * Because we want the closure to capture its environment across multiple enclosing
+ * functions, the UpValue might store the UpValue of the other enclosing function.
+ * This is bubbling up is performed until we find the actual index of the Value on the
+ * stack.
+ */
 typedef struct {
+    UInt idx;
+    bool local;
+} UpValue;
+
+DECLARE_ARRAY(UpValue);
+DEFINE_ARRAY(UpValue);
+
+typedef struct Compiler Compiler;
+
+struct Compiler {
+    /* Enclosing compiler */
+    Compiler* cenclosing;
+
     /* Grammar parser */
     Parser parser;
 
@@ -145,6 +182,9 @@ typedef struct {
      * bytecode to the function chunk in this field. */
     ObjFunction* fn;
     FunctionType fn_type; /* Function type */
+
+    /* Holds UpValues */
+    UpValueArray upvalues;
 
     /* Current scope depth. */
     Int depth;
@@ -161,7 +201,7 @@ typedef struct {
      * It is a flexible array this way we avoid pointer
      * dereference. */
     Local locals[];
-} Compiler;
+};
 
 /* We pass everywhere pointer to the pointer of compiler,
  * because of flexible array that stores 'Local' variables.
@@ -234,14 +274,20 @@ SK_INTERNAL(void) CFCtx_init(CFCtx* context)
 }
 
 /* Have to pass VM while initializing 'Compiler' because we are allocating objects. */
-SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type)
+SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* Cenclosing)
 {
+    C->cenclosing = Cenclosing;
+
     C->fn      = ObjFunction_new(vm);
     C->fn_type = fn_type;
 
     CFCtx_init(&C->context);
+
     HashTableArray_init(&C->loc_defs);
     HashTableArray_init_cap(&C->loc_defs, SHORT_STACK_SIZE);
+
+    UpValueArray_init(&C->upvalues);
+    UpValueArray_init_cap(&C->upvalues, SHORT_STACK_SIZE);
 
     C->loc_len = 0;
     C->loc_cap = SHORT_STACK_SIZE;
@@ -473,7 +519,7 @@ SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C)
 ObjFunction* compile(VM* vm, const char* source)
 {
     Compiler* C = ALLOC_COMPILER();
-    C_init(C, vm, FN_SCRIPT);
+    C_init(C, vm, FN_SCRIPT, NULL);
     Parser_init(&C->parser, source);
     C_advance(C);
 
@@ -679,13 +725,18 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 
     Compiler* C_new = ALLOC_COMPILER(); /* Allocate new compiler */
     C_new->parser   = C()->parser;      /* Use the same parser */
-    C_init(C_new, vm, type);            /* Initialize the new compiler */
+    C_init(C_new, vm, type, C());       /* Initialize the new compiler */
+
+    uint64_t mask = C_flags(C());
+    // We are compiling a fresh chunk of code, we must reset flags
+    // to keep sound behaviour, additionally indicate that we are
+    // parsing a function (closure).
+    C_new->parser.flags = 0 | bit_mask(FN_BIT);
 
     /* Have to pass the pointer to pointer to Compiler to parse functions, check the
      * typedef for 'CompilerPPtr' in this source file for the rationale behind this. */
     CompilerPPtr Cptr_new = &C_new;
 
-    /* Start new scope */
     C_start_scope(C_new());
     C_expect(C_new(), TOK_LPAREN, "Expect '(' after function name.");
 
@@ -701,29 +752,27 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
     C_expect(C_new(), TOK_RPAREN, "Expect ')' after parameters.");
     C_expect(C_new(), TOK_LBRACE, "Expect '{' before function body.");
 
-    /* Parse the function body */
     parse_stm_block(vm, Cptr_new);
-
-    /* End compilation after function body and emit bytecode */
     ObjFunction* fn = compile_end(C_new);
 
     /* Update the outer parser */
     C()->parser = C_new()->parser;
 
-    /* Emit constant instruction with the value of the parsed function */
     UInt idx = C_make_const(C(), OBJ_VAL(fn));
-    C_emit_op(C(), GET_OP_TYPE(idx, OP_CONST), idx);
-
-    /* Free the new compiler allocation */
+    /* We wrap every function in a closure even though not
+     * all of them capture their environment. */
+    C_emit_op(C(), GET_OP_TYPE(idx, OP_CLOSURE), idx);
     C_free(C_new);
+
+    C_flag_clear(C(), FN_BIT);
+    // Restore parser flags
+    C()->parser.flags |= mask;
+
 #undef C_new
 }
 
 SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
 {
-    uint64_t mask = FN_MASK(C());
-    C_flag_set(C(), FN_BIT);
-
     UInt idx = parse_varname(vm, Cptr, "Expect function name.");
 
     /* Initialize the variable that holds the function, in order to
@@ -739,9 +788,6 @@ SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
         vm->global_vals.data[idx].value = DECLARED_VAL;
         C_emit_op(C(), GET_OP_TYPE(idx, OP_DEFINE_GLOBAL), idx);
     }
-
-    C_flag_clear(C(), FN_BIT);
-    C()->parser.flags |= mask;
 }
 
 SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
@@ -1300,6 +1346,53 @@ SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, const Token* name)
     return -1;
 }
 
+SK_INTERNAL(force_inline UInt) C_add_UpValue(Compiler* C, UInt idx, bool local)
+{
+    for(Int i = 0; i < C->upvalues.len; i++) {
+        UpValue* upvalue = UpValueArray_index(&C->upvalues, i);
+        if(upvalue->idx == idx && upvalue->local == local) {
+            // Return existing UpValue index
+            return i;
+        }
+    }
+
+    if(unlikely(C->upvalues.len == MIN(VM_STACK_MAX, UINT24_MAX))) {
+        C_error(
+            C,
+            "Too many closure variables (upvalues) in function <fn %s>. Limit [%u].",
+            MIN(VM_STACK_MAX, UINT24_MAX),
+            C->fn->name->storage);
+        return 0;
+    }
+
+    // Otherwise add the UpValue into the array
+    return UpValueArray_push(&C->upvalues, (UpValue){idx, local});
+}
+
+SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, const Token* name)
+{
+    return 0;
+}
+
+SK_INTERNAL(force_inline Int) C_get_UpValue(Compiler* C, const Token* name)
+{
+    if(C->cenclosing == NULL) {
+        return -1;
+    }
+
+    Int idx = C_get_local(C->cenclosing, name);
+    if(idx != -1) {
+        return C_add_UpValue(C, idx, true);
+    }
+
+    idx = C_get_UpValue(C->cenclosing, name);
+    if(idx != -1) {
+        return C_add_UpValue(C, idx, false);
+    }
+
+    return -1;
+}
+
 SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
 {
     const Token* name = &(C())->parser.previous;
@@ -1312,6 +1405,9 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
         flags      = Var_flags(var);
         setop      = GET_OP_TYPE(idx, OP_SET_LOCAL);
         getop      = GET_OP_TYPE(idx, OP_GET_LOCAL);
+    } else if((idx = C_get_UpValue(C(), name)) != -1) {
+        setop = OP_GET_UPVALUE;
+        getop = OP_SET_UPVALUE;
     } else {
         idx   = Global_idx(C(), vm);
         flags = vm->global_vals.data[idx].fixed;

@@ -14,9 +14,9 @@
 #define VM_STACK_MAX ((uint32_t)(SK_STACK_MAX / sizeof(Value)))
 
 typedef struct {
-  ObjFunction *fn; /* Function of this CallFrame */
-  Byte *ip;        /* Top of the CallFrame */
-  Value *sp;       /* Relative stack pointer */
+  ObjClosure *closure; /* Closure of this CallFrame */
+  Byte *ip;            /* Top of the CallFrame */
+  Value *sp;           /* Relative stack pointer */
 } CallFrame;
 
 typedef struct {

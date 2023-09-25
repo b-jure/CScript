@@ -117,6 +117,10 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_short("OP_CALL", chunk, OP_CALL, offset);
         case OP_CALLL:
             return Instruction_long("OP_CALLL", chunk, OP_CALLL, offset);
+        case OP_CLOSURE:
+            return Instruction_short("OP_CLOSURE", chunk, OP_CLOSURE, offset);
+        case OP_CLOSUREL:
+            return Instruction_long("OP_CLOSUREL", chunk, OP_CLOSUREL, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -140,19 +144,20 @@ Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
 SK_INTERNAL(int)
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
-    Byte* param = ByteArray_index(&chunk->code, offset + 1);
-    printf("%-25s %5u ", name, *param);
+    Byte param = *ByteArray_index(&chunk->code, offset + 1);
+    printf("%-25s %5u ", name, param);
     switch(code) {
+        case OP_CLOSURE:
         case OP_CONST:
             printf("'");
-            Value_print(*ValueArray_index(&chunk->constants, *param));
+            Value_print(*ValueArray_index(&chunk->constants, param));
             printf("'");
             break;
         default:
             // do nothing
             break;
     }
-    printf("\n");
+    puts("\n");
     return offset + 2; /* OpCode + 8-bit/1-byte index */
 }
 
@@ -163,6 +168,7 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
     printf("%-25s %5u ", name, param);
 
     switch(code) {
+        case OP_CLOSUREL:
         case OP_CONSTL:
             printf("'");
             Value_print(*ValueArray_index(&chunk->constants, param));
@@ -172,6 +178,6 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
             // do nothing
             break;
     }
-    printf("\n");
+    puts("\n");
     return offset + 4; /* OpCode + 24-bit/3-byte index */
 }

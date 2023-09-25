@@ -18,9 +18,13 @@
 #define AS_NATIVE(value) ((ObjNative *)AS_OBJ(value))
 #define AS_NATIVE_FN(value) (((ObjNative *)AS_OBJ(value))->fn)
 
+#define IS_CLOSURE(value) is_object_type(value, OBJ_CLOSURE)
+#define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
+
 typedef enum {
   OBJ_STRING,
   OBJ_FUNCTION,
+  OBJ_CLOSURE,
   OBJ_NATIVE,
 } ObjType;
 
@@ -36,11 +40,16 @@ struct ObjString {
   char storage[];
 };
 
-struct ObjFunction {
+typedef struct {
   Obj obj;
   UInt arity;
   Chunk chunk;
   ObjString *name;
+} ObjFunction;
+
+struct ObjClosure {
+  Obj obj;
+  ObjFunction *fn;
 };
 
 typedef bool (*NativeFn)(VM *vm, Int argc, Value *argv);
@@ -55,6 +64,7 @@ static force_inline bool is_object_type(Value value, ObjType type) {
   return IS_OBJ(value) && AS_OBJ(value)->type == type;
 }
 
+ObjClosure *ObjClosure_new(VM *vm, ObjFunction *fn);
 ObjNative *ObjNative_new(VM *vm, NativeFn fn, UInt arity);
 uint64_t Obj_hash(Value value);
 ObjString *ObjString_from(VM *vm, const char *chars, size_t len);

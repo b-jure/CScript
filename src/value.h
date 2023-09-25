@@ -32,7 +32,7 @@
 
 typedef struct Obj Obj;
 typedef struct ObjString ObjString;
-typedef struct ObjFunction ObjFunction;
+typedef struct ObjClosure ObjClosure;
 
 typedef enum {
   VAL_BOOL = 0,

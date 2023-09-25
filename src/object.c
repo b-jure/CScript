@@ -10,6 +10,7 @@
 #define ALLOC_STRING(vm, len)                                                            \
     ((ObjString*)Object_new((vm), sizeof(ObjString) + (len) + 1, OBJ_STRING))
 
+SK_INTERNAL(force_inline void) ObjClosure_free(ObjClosure* objclosure);
 SK_INTERNAL(force_inline void) ObjString_free(ObjString* objstr);
 SK_INTERNAL(force_inline void) ObjFunction_free(ObjFunction* objfn);
 SK_INTERNAL(force_inline void) ObjNative_free(ObjNative* native);
@@ -28,6 +29,15 @@ SK_INTERNAL(force_inline Obj*) Object_new(VM* vm, size_t size, ObjType type)
     return object;
 }
 
+SK_INTERNAL(force_inline void) print_fn(ObjFunction* fn)
+{
+    if(fn->name == NULL) {
+        printf("<script>");
+    } else {
+        printf("<fn %s>", fn->name->storage);
+    }
+}
+
 void Object_print(Value value)
 {
     switch(OBJ_TYPE(value)) {
@@ -35,11 +45,10 @@ void Object_print(Value value)
             printf("%s", AS_CSTRING(value));
             break;
         case OBJ_FUNCTION:
-            if(AS_FUNCTION(value)->name == NULL) {
-                printf("<script>");
-            } else {
-                printf("<fn %s>", AS_FUNCTION(value)->name->storage);
-            }
+            print_fn(AS_FUNCTION(value));
+            break;
+        case OBJ_CLOSURE:
+            print_fn(AS_CLOSURE(value)->fn);
             break;
         case OBJ_NATIVE:
             printf("<native fn>");
@@ -57,6 +66,9 @@ void Obj_free(Obj* object)
             break;
         case OBJ_FUNCTION:
             ObjFunction_free((ObjFunction*)object);
+            break;
+        case OBJ_CLOSURE:
+            ObjClosure_free((ObjClosure*)object);
             break;
         case OBJ_NATIVE:
             ObjNative_free((ObjNative*)object);
@@ -136,4 +148,16 @@ SK_INTERNAL(force_inline void) ObjFunction_free(ObjFunction* fn)
 {
     Chunk_free(&fn->chunk);
     MFREE(fn, sizeof(ObjFunction));
+}
+
+ObjClosure* ObjClosure_new(VM* vm, ObjFunction* fn)
+{
+    ObjClosure* closure = ALLOC_OBJ(vm, ObjClosure, OBJ_CLOSURE);
+    closure->fn         = fn;
+    return closure;
+}
+
+SK_INTERNAL(force_inline void) ObjClosure_free(ObjClosure* closure)
+{
+    MFREE(closure, sizeof(ObjClosure));
 }

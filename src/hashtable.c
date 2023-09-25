@@ -122,7 +122,7 @@ static force_inline void HashTable_expand(HashTable* table)
             continue;
         }
         Entry* dest = Entry_find(entries, new_cap, entry->key);
-        *dest       = *entry;
+        memcpy(dest, entry, sizeof(Entry));
     }
 
     if(table->entries != NULL) {
@@ -142,8 +142,15 @@ bool HashTable_insert(HashTable* table, Value key, Value value)
         HashTable_expand(table);
     }
 
-    Entry* entry   = Entry_find(table->entries, table->cap, key);
-    bool   new_key = IS_EMPTY(entry->key);
+    Entry* entry = Entry_find(table->entries, table->cap, key);
+
+    // xxHash is pretty good
+    if(unlikely(IS_TOMBSTONE(entry))) {
+        HashTable_expand(table);
+        entry = Entry_find(table->entries, table->cap, key);
+    }
+
+    bool new_key = IS_EMPTY(entry->key);
 
     if(new_key) {
         table->left--;
@@ -203,6 +210,7 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
         index = QUADRATIC_PROBE(hash, i, table->cap);
     } while(likely(start_index != index));
 
+    // @FIX: Is this even possible?
     return NULL;
 }
 
@@ -214,6 +222,11 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
 
     Entry* entry = Entry_find(table->entries, table->cap, key);
 
+    if(unlikely(IS_TOMBSTONE(entry))) {
+        HashTable_expand(table);
+        entry = Entry_find(table->entries, table->cap, key);
+    }
+
     if(IS_EMPTY(entry->key)) {
         return false;
     }
@@ -221,6 +234,7 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
     if(out != NULL) {
         *out = entry->value;
     }
+
     return true;
 }
 
