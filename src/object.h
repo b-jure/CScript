@@ -45,6 +45,7 @@ typedef struct {
   UInt arity;
   Chunk chunk;
   ObjString *name;
+  UInt upvalc;
 } ObjFunction;
 
 struct ObjClosure {

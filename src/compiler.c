@@ -1331,14 +1331,13 @@ parse_number(unused VM* _, CompilerPPtr Cptr)
     C_emit_op(C, GET_OP_TYPE(idx, OP_CONST), idx);
 }
 
-SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, const Token* name)
+SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, Value name)
 {
-    Value index      = NUMBER_VAL(-1);
-    Value identifier = Token_into_stringval(vm, name);
+    Value index = NUMBER_VAL(-1);
 
     for(Int i = 0; i < (Int)C->loc_defs.len; i++) {
         HashTable* scope_set = &C->loc_defs.data[i];
-        if(HashTable_get(scope_set, identifier, &index)) {
+        if(HashTable_get(scope_set, name, &index)) {
             return (Int)AS_NUMBER(index);
         }
     }
@@ -1369,18 +1368,24 @@ SK_INTERNAL(force_inline UInt) C_add_UpValue(Compiler* C, UInt idx, bool local)
     return UpValueArray_push(&C->upvalues, (UpValue){idx, local});
 }
 
-SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, const Token* name)
+SK_INTERNAL(force_inline Int) C_get_closing_local(Compiler* C, const Value name)
 {
-    return 0;
+    Value      idx;
+    HashTable* enclosing_scope = HashTableArray_last(&C->loc_defs);
+
+    if(HashTable_get(enclosing_scope, name, &idx)) {
+        return (Int)AS_NUMBER(idx);
+    }
+    return -1;
 }
 
-SK_INTERNAL(force_inline Int) C_get_UpValue(Compiler* C, const Token* name)
+SK_INTERNAL(force_inline Int) C_get_UpValue(Compiler* C, const Value name)
 {
     if(C->cenclosing == NULL) {
         return -1;
     }
 
-    Int idx = C_get_local(C->cenclosing, name);
+    Int idx = C_get_closing_local(C->cenclosing, name);
     if(idx != -1) {
         return C_add_UpValue(C, idx, true);
     }
@@ -1395,10 +1400,10 @@ SK_INTERNAL(force_inline Int) C_get_UpValue(Compiler* C, const Token* name)
 
 SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
 {
-    const Token* name = &(C())->parser.previous;
-    OpCode       setop, getop;
-    Int          idx   = Local_idx(C(), vm, name);
-    int16_t      flags = -1;
+    const Value name = Token_into_stringval(vm, &C()->parser.previous);
+    OpCode      setop, getop;
+    Int         idx   = Local_idx(C(), vm, name);
+    int16_t     flags = -1;
 
     if(idx != -1) {
         Local* var = &(C())->locals[idx];
@@ -1406,8 +1411,8 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
         setop      = GET_OP_TYPE(idx, OP_SET_LOCAL);
         getop      = GET_OP_TYPE(idx, OP_GET_LOCAL);
     } else if((idx = C_get_UpValue(C(), name)) != -1) {
-        setop = OP_GET_UPVALUE;
-        getop = OP_SET_UPVALUE;
+        setop = GET_OP_TYPE(idx, OP_SET_UPVALUE);
+        getop = GET_OP_TYPE(idx, OP_SET_UPVALUE);
     } else {
         idx   = Global_idx(C(), vm);
         flags = vm->global_vals.data[idx].fixed;
@@ -1420,9 +1425,8 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
         if(BIT_CHECK(flags, VFIXED_BIT)) {
             C_error(
                 C(),
-                "Can't assign to variable '%.*s', it is declared as 'fixed'.",
-                name->len,
-                name->start);
+                "Can't assign to variable '%s', it is declared as 'fixed'.",
+                AS_CSTRING(name));
         }
         parse_expr(vm, Cptr);
         C_emit_op(C(), setop, idx);

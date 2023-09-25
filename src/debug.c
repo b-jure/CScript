@@ -2,6 +2,8 @@
 #include "common.h"
 #include "debug.h"
 #include "mem.h"
+#include "object.h"
+#include "skconf.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -121,6 +123,14 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_short("OP_CLOSURE", chunk, OP_CLOSURE, offset);
         case OP_CLOSUREL:
             return Instruction_long("OP_CLOSUREL", chunk, OP_CLOSUREL, offset);
+        case OP_GET_UPVALUE:
+            return Instruction_short("OP_GET_UPVALUE", chunk, OP_GET_UPVALUE, offset);
+        case OP_GET_UPVALUEL:
+            return Instruction_long("OP_GET_UPVALUEL", chunk, OP_GET_UPVALUEL, offset);
+        case OP_SET_UPVALUE:
+            return Instruction_short("OP_SET_UPVALUE", chunk, OP_SET_UPVALUE, offset);
+        case OP_SET_UPVALUEL:
+            return Instruction_long("OP_SET_UPVALUEL", chunk, OP_SET_UPVALUEL, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -141,17 +151,47 @@ Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
     return offset + 4;
 }
 
+SK_INTERNAL(void) disassemble_const(Chunk* chunk, UInt param)
+{
+    printf("'");
+    Value_print(*ValueArray_index(&chunk->constants, param));
+    printf("'");
+}
+
+SK_INTERNAL(UInt) disassemble_closure(Chunk* chunk, UInt param, UInt offset)
+{
+    Value value = *ValueArray_index(&chunk->constants, param);
+    Value_print(value);
+    printf("\n");
+
+    ObjFunction* fn = AS_FUNCTION(value);
+
+    for(Int i = 0; i < fn->upvalc; i++) {
+        bool local = chunk->code.data[offset++];
+        UInt idx   = chunk->code.data[offset++];
+        printf(
+            "%05d    |                   %s %d\n",
+            offset - 2,
+            local ? "local" : "upvalue",
+            idx);
+    }
+
+    return offset;
+}
+
 SK_INTERNAL(int)
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     Byte param = *ByteArray_index(&chunk->code, offset + 1);
     printf("%-25s %5u ", name, param);
     switch(code) {
-        case OP_CLOSURE:
+        case OP_CLOSURE: {
+            // Variable sized instruction
+            disassemble_closure(chunk, param, offset + 2);
+            break;
+        }
         case OP_CONST:
-            printf("'");
-            Value_print(*ValueArray_index(&chunk->constants, param));
-            printf("'");
+            disassemble_const(chunk, param);
             break;
         default:
             // do nothing
@@ -169,10 +209,9 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
 
     switch(code) {
         case OP_CLOSUREL:
+            return disassemble_closure(chunk, param, offset + 4);
         case OP_CONSTL:
-            printf("'");
-            Value_print(*ValueArray_index(&chunk->constants, param));
-            printf("'");
+            disassemble_const(chunk, param);
             break;
         default:
             // do nothing
