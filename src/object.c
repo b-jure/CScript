@@ -1,6 +1,8 @@
+#include "array.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
+#include "value.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +16,7 @@ SK_INTERNAL(force_inline void) ObjClosure_free(ObjClosure* objclosure);
 SK_INTERNAL(force_inline void) ObjString_free(ObjString* objstr);
 SK_INTERNAL(force_inline void) ObjFunction_free(ObjFunction* objfn);
 SK_INTERNAL(force_inline void) ObjNative_free(ObjNative* native);
+SK_INTERNAL(force_inline void) ObjUpvalue_free(ObjUpvalue* upval);
 
 SK_INTERNAL(force_inline Obj*) Object_new(VM* vm, size_t size, ObjType type)
 {
@@ -53,6 +56,9 @@ void Object_print(Value value)
         case OBJ_NATIVE:
             printf("<native fn>");
             break;
+        case OBJ_UPVAL:
+            printf("upvalue");
+            break;
         default:
             unreachable;
     }
@@ -72,6 +78,9 @@ void Obj_free(Obj* object)
             break;
         case OBJ_NATIVE:
             ObjNative_free((ObjNative*)object);
+            break;
+        case OBJ_UPVAL:
+            ObjUpvalue_free((ObjUpvalue*)object);
             break;
         default:
             unreachable;
@@ -140,6 +149,7 @@ ObjFunction* ObjFunction_new(VM* vm)
     ObjFunction* fn = ALLOC_OBJ(vm, ObjFunction, OBJ_FUNCTION);
     fn->arity       = 0;
     fn->name        = NULL;
+    fn->upvalc      = 0;
     Chunk_init(&fn->chunk);
     return fn;
 }
@@ -152,12 +162,35 @@ SK_INTERNAL(force_inline void) ObjFunction_free(ObjFunction* fn)
 
 ObjClosure* ObjClosure_new(VM* vm, ObjFunction* fn)
 {
+    ObjUpvalue** upvals = ALLOC_ARRAY(ObjUpvalue*, fn->upvalc);
+    for(UInt i = 0; i < fn->upvalc; i++) {
+        upvals[i] = NULL;
+    }
+
     ObjClosure* closure = ALLOC_OBJ(vm, ObjClosure, OBJ_CLOSURE);
     closure->fn         = fn;
+    closure->upvals     = upvals;
+    closure->upvalc     = fn->upvalc;
+
     return closure;
 }
 
 SK_INTERNAL(force_inline void) ObjClosure_free(ObjClosure* closure)
 {
+    MFREE_ARRAY(ObjUpvalue*, closure->upvals, closure->upvalc);
     MFREE(closure, sizeof(ObjClosure));
+}
+
+ObjUpvalue* ObjUpvalue_new(VM* vm, Value* var_ref)
+{
+    ObjUpvalue* upval = ALLOC_OBJ(vm, ObjUpvalue, OBJ_UPVAL);
+    upval->closed     = EMPTY_VAL;
+    upval->location   = var_ref;
+    upval->next       = NULL;
+    return upval;
+}
+
+SK_INTERNAL(force_inline void) ObjUpvalue_free(ObjUpvalue* upval)
+{
+    MFREE(upval, sizeof(ObjUpvalue));
 }

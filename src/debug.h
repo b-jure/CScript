@@ -10,12 +10,16 @@ void Chunk_debug(Chunk *chunk, const char *name);
 UInt Instruction_debug(Chunk *chunk, UInt offset);
 
 #ifdef DEBUG
+
 /* Debug flag for debugging chunks. */
 #define DEBUG_PRINT_CODE
+
 /* Debug flag for printing VM stack. */
 #define DEBUG_TRACE_EXECUTION
+
 /* Debug flag for assertions */
 #define DEBUG_ASSERTIONS
+
 #endif
 
 #ifdef DEBUG_ASSERTIONS

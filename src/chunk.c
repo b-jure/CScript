@@ -86,6 +86,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_PRINT)
         CASE(OP_POP)
         CASE(OP_LOOP)
+        CASE(OP_CLOSE_UPVAL)
         {
             unreachable;
         }
@@ -102,6 +103,10 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_JMP)
         CASE(OP_JMP_AND_POP)
         CASE(OP_CALLL)
+        CASE(OP_GET_UPVALUE)
+        CASE(OP_SET_UPVALUE)
+        CASE(OP_CLOSURE)
+        CASE(OP_CLOSE_UPVALN)
         {
             Chunk_write_op(chunk, code, true, param, line);
             BREAK;
@@ -122,6 +127,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
             unreachable;
         }
     }
+
 #undef DISPATCH
 #undef CASE
 #undef BREAK
@@ -136,7 +142,7 @@ UInt Chunk_getline(Chunk* chunk, UInt index)
 
     while(instruction_idx > index) {
         idx             -= 2;
-        instruction_idx = *UIntArray_index(line_array, idx);
+        instruction_idx  = *UIntArray_index(line_array, idx);
     }
 
     return *UIntArray_index(line_array, idx + 1);

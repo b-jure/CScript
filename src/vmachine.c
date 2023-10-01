@@ -41,6 +41,11 @@ SK_INTERNAL(force_inline Value) VM_pop(VM* vm)
     return *--vm->sp;
 }
 
+SK_INTERNAL(force_inline void) VM_popn(VM* vm, UInt n)
+{
+    vm->sp -= n;
+}
+
 void VM_error(VM* vm, const char* errfmt, ...)
 {
     va_list ap;
@@ -221,13 +226,16 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
 
 void VM_init(VM* vm)
 {
-    vm->fc      = 0;
-    vm->objects = NULL;
+    vm->fc          = 0;
+    vm->objects     = NULL;
+    vm->open_upvals = NULL;
     stack_reset(vm);
+
     HashTable_init(&vm->global_ids);
     GlobalArray_init(&vm->global_vals);
     HashTable_init(&vm->strings);
 
+    // Native function definitions
     VM_define_native(vm, "clock", native_clock, 0);
 }
 
@@ -289,6 +297,46 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
         vm,
         "Tried calling non-callable object, only functions and classes can be called.");
     return false;
+}
+
+// Bit confusing but keep in mind that pp is a double pointer to 'ObjUpValue'.
+// Think about it in a way that 'pp' holds the memory location of 'UpValue->next'
+// excluding the first iteration where it holds list head.
+// So the 'next' field is what we are holding onto, then when we dereference
+// the 'pp' we automatically dereference the 'next' field of the previous 'UpValue'.
+// This basically inserts new ObjUpvalue into the vm->open_upvals singly linked list
+// (in reverse stack order head:high -> tail:low) or it returns already inserted/existing
+// Upvalue.
+SK_INTERNAL(force_inline ObjUpvalue*) VM_capture_upval(VM* vm, Value* var_ref)
+{
+    ObjUpvalue** pp = &vm->open_upvals;
+
+    while(*pp != NULL && (*pp)->location > var_ref) {
+        pp = &(*pp)->next;
+    }
+
+    // If pointers are the same we already captured
+    if(*pp != NULL && (*pp)->location == var_ref) {
+        return *pp;
+    }
+
+    ObjUpvalue* upval = ObjUpvalue_new(vm, var_ref);
+    upval->next       = *pp;
+    *pp               = upval;
+
+    return upval;
+}
+
+SK_INTERNAL(force_inline void) VM_close_upval(VM* vm, Value* last)
+{
+    while(vm->open_upvals != NULL && vm->open_upvals->location >= last) {
+        // This is where closing happens, stack values
+        // get new 'location' on the heap (this 'Obj').
+        ObjUpvalue* upval = vm->open_upvals;
+        upval->closed     = *upval->location;
+        upval->location   = &upval->closed;
+        vm->open_upvals   = upval->next;
+    }
 }
 
 // @TODO: Encode type of instruction inside of OpCode but avoid branching.
@@ -464,10 +512,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_POPN)
             {
-                int32_t n = READ_BYTEL();
-                while(n--) {
-                    VM_pop(vm);
-                }
+                VM_popn(vm, READ_BYTEL());
                 BREAK;
             }
             CASE(OP_CONST)
@@ -653,21 +698,54 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_CLOSURE)
             {
-                ObjFunction* fn      = AS_FUNCTION(READ_CONSTANT());
-                ObjClosure*  closure = ObjClosure_new(vm, fn);
-                VM_push(vm, OBJ_VAL(closure));
-                BREAK;
-            }
-            CASE(OP_CLOSUREL)
-            {
                 ObjFunction* fn      = AS_FUNCTION(READ_CONSTANTL());
                 ObjClosure*  closure = ObjClosure_new(vm, fn);
                 VM_push(vm, OBJ_VAL(closure));
+
+                for(UInt i = 0; i < closure->upvalc; i++) {
+                    Byte local = READ_BYTE();
+                    UInt idx   = READ_BYTEL();
+
+                    if(local) {
+                        closure->upvals[i] = VM_capture_upval(vm, frame->sp + idx);
+                    } else {
+                        closure->upvals[i] = frame->closure->upvals[idx];
+                    }
+                }
+
+                BREAK;
+            }
+            CASE(OP_GET_UPVALUE)
+            {
+                UInt idx = READ_BYTEL();
+                VM_push(vm, *frame->closure->upvals[idx]->location);
+                BREAK;
+            }
+            CASE(OP_SET_UPVALUE)
+            {
+                UInt idx                               = READ_BYTEL();
+                *frame->closure->upvals[idx]->location = stack_peek(0);
+                BREAK;
+            }
+            CASE(OP_CLOSE_UPVAL)
+            {
+                VM_close_upval(vm, vm->sp - 1);
+                VM_pop(vm);
+                BREAK;
+            }
+            CASE(OP_CLOSE_UPVALN)
+            {
+                UInt close = READ_BYTEL();
+                for(UInt i = 1; i <= close; i++) {
+                    VM_close_upval(vm, vm->sp - i);
+                }
+                VM_popn(vm, close);
                 BREAK;
             }
             CASE(OP_RET)
             {
                 Value retval = VM_pop(vm);
+                VM_close_upval(vm, frame->sp);
                 vm->fc--;
                 if(vm->fc == 0) {
                     // @FIX: REPL not working, maybe sp - stack is -1
@@ -703,6 +781,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
     ObjFunction* fn = compile(vm, source);
 
     if(fn == NULL) {
+        printf("comp error fn is null\n");
         return INTERPRET_COMPILE_ERROR;
     }
 

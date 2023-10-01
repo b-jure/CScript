@@ -34,6 +34,7 @@ typedef struct {
   HashTable global_ids;            /* Global variable names */
   GlobalArray global_vals;         /* Global variable values */
   HashTable strings;               /* Strings (interning) */
+  ObjUpvalue *open_upvals;         /* List of heap allocated Upvalues */
   Obj *objects;                    /* List of allocated object (GC) */
 } VM;
 

@@ -58,11 +58,10 @@ static const void *const optable[OPCODE_N] = {
     &&L_OP_CALL,
     &&L_OP_CALLL,
     &&L_OP_CLOSURE,
-    &&L_OP_CLOSUREL,
     &&L_OP_GET_UPVALUE,
-    &&L_OP_GET_UPVALUEL,
     &&L_OP_SET_UPVALUE,
-    &&L_OP_SET_UPVALUEL,
+    &&L_OP_CLOSE_UPVAL,
+    &&L_OP_CLOSE_UPVALN,
     &&L_OP_RET,
 };
 

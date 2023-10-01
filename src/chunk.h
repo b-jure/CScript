@@ -54,11 +54,10 @@ typedef enum {
   OP_CALL,                 /* Call instruction */
   OP_CALLL,                /* Call long instruction */
   OP_CLOSURE,              /* Create a closure */
-  OP_CLOSUREL,             /* Create a closure long */
   OP_GET_UPVALUE,          /* Push the upvalue on the stack */
-  OP_GET_UPVALUEL,         /* Push the upvalue on the stack long */
   OP_SET_UPVALUE,          /* Set upvalue */
-  OP_SET_UPVALUEL,         /* Set upvalue long */
+  OP_CLOSE_UPVAL,          /* Close upvalue */
+  OP_CLOSE_UPVALN,         /* Close 'n' upvalues */
   OP_RET,                  /* Return from function, pop the call frame */
 } OpCode;
 

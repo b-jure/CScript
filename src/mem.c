@@ -10,7 +10,7 @@ void* reallocate(void* ptr, unused size_t oldc, size_t newc)
         return NULL;
     }
 
-    void*  alloc  = realloc(ptr, newc);
+    void* alloc = realloc(ptr, newc);
 
     if(alloc == NULL) {
         exit(errno);

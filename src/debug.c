@@ -120,17 +120,15 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_CALLL:
             return Instruction_long("OP_CALLL", chunk, OP_CALLL, offset);
         case OP_CLOSURE:
-            return Instruction_short("OP_CLOSURE", chunk, OP_CLOSURE, offset);
-        case OP_CLOSUREL:
-            return Instruction_long("OP_CLOSUREL", chunk, OP_CLOSUREL, offset);
+            return Instruction_long("OP_CLOSURE", chunk, OP_CLOSURE, offset);
         case OP_GET_UPVALUE:
-            return Instruction_short("OP_GET_UPVALUE", chunk, OP_GET_UPVALUE, offset);
-        case OP_GET_UPVALUEL:
-            return Instruction_long("OP_GET_UPVALUEL", chunk, OP_GET_UPVALUEL, offset);
+            return Instruction_long("OP_GET_UPVALUE", chunk, OP_GET_UPVALUE, offset);
         case OP_SET_UPVALUE:
-            return Instruction_short("OP_SET_UPVALUE", chunk, OP_SET_UPVALUE, offset);
-        case OP_SET_UPVALUEL:
-            return Instruction_long("OP_SET_UPVALUEL", chunk, OP_SET_UPVALUEL, offset);
+            return Instruction_long("OP_SET_UPVALUE", chunk, OP_SET_UPVALUE, offset);
+        case OP_CLOSE_UPVAL:
+            return Instruction_simple("OP_CLOSE_UPVAL", offset);
+        case OP_CLOSE_UPVALN:
+            return Instruction_long("OP_CLOSE_UPVALN", chunk, OP_CLOSE_UPVALN, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -166,14 +164,15 @@ SK_INTERNAL(UInt) disassemble_closure(Chunk* chunk, UInt param, UInt offset)
 
     ObjFunction* fn = AS_FUNCTION(value);
 
-    for(Int i = 0; i < fn->upvalc; i++) {
+    for(UInt i = 0; i < fn->upvalc; i++) {
         bool local = chunk->code.data[offset++];
-        UInt idx   = chunk->code.data[offset++];
+        UInt idx   = GET_BYTES3(&chunk->code.data[offset]);
         printf(
-            "%05d    |                   %s %d\n",
-            offset - 2,
+            "%04d     |                                 %s %d\n",
+            offset,
             local ? "local" : "upvalue",
             idx);
+        offset += 3;
     }
 
     return offset;
@@ -185,11 +184,6 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
     Byte param = *ByteArray_index(&chunk->code, offset + 1);
     printf("%-25s %5u ", name, param);
     switch(code) {
-        case OP_CLOSURE: {
-            // Variable sized instruction
-            disassemble_closure(chunk, param, offset + 2);
-            break;
-        }
         case OP_CONST:
             disassemble_const(chunk, param);
             break;
@@ -197,7 +191,7 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
             // do nothing
             break;
     }
-    puts("\n");
+    printf("\n");
     return offset + 2; /* OpCode + 8-bit/1-byte index */
 }
 
@@ -208,7 +202,7 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
     printf("%-25s %5u ", name, param);
 
     switch(code) {
-        case OP_CLOSUREL:
+        case OP_CLOSURE:
             return disassemble_closure(chunk, param, offset + 4);
         case OP_CONSTL:
             disassemble_const(chunk, param);
@@ -217,6 +211,6 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
             // do nothing
             break;
     }
-    puts("\n");
+    printf("\n");
     return offset + 4; /* OpCode + 24-bit/3-byte index */
 }

@@ -21,13 +21,14 @@
 #define code_offset(C) (current_chunk(C)->code.len)
 
 /* Parser 'flags' bits */
-#define ERROR_BIT  1
-#define PANIC_BIT  2
-#define LOOP_BIT   3
-#define SWITCH_BIT 4
-#define ASSIGN_BIT 5
-#define FN_BIT     6
-#define FIXED_BIT  9
+#define ERROR_BIT  (1)
+#define PANIC_BIT  (2)
+#define LOOP_BIT   (3)
+#define SWITCH_BIT (4)
+#define ASSIGN_BIT (5)
+#define FN_BIT     (6)
+/* Variable 'flags' bits */
+#define FIXED_BIT (9)
 
 #define C_flag_set(C, bit)   BIT_SET((C)->parser.flags, bit)
 #define C_flag_is(C, bit)    BIT_CHECK((C)->parser.flags, bit)
@@ -65,20 +66,38 @@ typedef struct {
      * 7 - unused
      * 8 - unused
      * 9 - fixed bit <- variable modifier (immutable)
+     * 10 - unused
      * ...
      * 64 - unused
      */
     uint64_t flags;
 } Parser;
 
+/* Variable modifier bits */
+#define VFIXED_BIT    (FIXED_BIT - 8)
+#define VCAPTURED_BIT (8)
+
+// Sets the 'bit' in 'var' flags.
+#define Var_flag_set(var, bit) BIT_SET((var)->flags, bit)
+// Checks if 'bit' is set.
+#define Var_flag_is(var, bit) BIT_CHECK((var)->flags, bit)
+// Clears the 'bit' in 'var' flags.
+#define Var_flag_clear(var, bit) BIT_CLEAR((var)->flags, bit)
+// Clears all flags in 'var' flags.
+#define Var_flags_clear(var) ((var)->flags = 0)
+// Returns 'var' flags.
+#define Var_flags(var) ((var)->flags)
+
 typedef struct {
     Token name;
     Int   depth;
     /*
      * Bits (var modifiers):
-     * 1 - fixed
+     * 1 - fixed <- variable is 'fixed'
+     * 2 - unused
      * ...
-     * 8 - unused
+     * 7 - unused
+     * 8 - captured <- variable is captured by Upvalue
      */
     Byte flags;
 } Local;
@@ -157,16 +176,16 @@ typedef struct {
 typedef struct {
     UInt idx;
     bool local;
-} UpValue;
+} Upvalue;
 
-DECLARE_ARRAY(UpValue);
-DEFINE_ARRAY(UpValue);
+DECLARE_ARRAY(Upvalue);
+DEFINE_ARRAY(Upvalue);
 
 typedef struct Compiler Compiler;
 
 struct Compiler {
     /* Enclosing compiler */
-    Compiler* cenclosing;
+    Compiler* enclosing;
 
     /* Grammar parser */
     Parser parser;
@@ -184,7 +203,7 @@ struct Compiler {
     FunctionType fn_type; /* Function type */
 
     /* Holds UpValues */
-    UpValueArray upvalues;
+    UpvalueArray upvalues;
 
     /* Current scope depth. */
     Int depth;
@@ -213,14 +232,6 @@ struct Compiler {
  * new/old pointer returned by reallocate. */
 typedef Compiler** CompilerPPtr;
 
-/* Variable modifier bits */
-#define VFIXED_BIT               (FIXED_BIT - 8)
-#define Var_flag_set(var, bit)   BIT_SET((var)->flags, bit)
-#define Var_flag_is(var, bit)    BIT_CHECK((var)->flags, bit)
-#define Var_flag_clear(var, bit) BIT_CLEAR((var)->flags, bit)
-#define Var_flags_clear(var)     ((var)->flags = 0)
-#define Var_flags(var)           ((var)->flags)
-
 /* ParseFn - generic parsing function signature. */
 typedef void (*ParseFn)(VM*, CompilerPPtr);
 
@@ -238,7 +249,7 @@ typedef struct {
 SK_INTERNAL(Chunk*) current_chunk(Compiler* C);
 SK_INTERNAL(void) C_advance(Compiler* compiler);
 SK_INTERNAL(void) C_error(Compiler* compiler, const char* error, ...);
-SK_INTERNAL(void) C_free(Compiler* C);
+SK_INTERNAL(void) C_free(Compiler* C, Compiler* enclosing);
 SK_INTERNAL(void) Parser_init(Parser* parser, const char* source);
 SK_INTERNAL(void) parse_number(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_string(VM* vm, CompilerPPtr Cptr);
@@ -276,7 +287,7 @@ SK_INTERNAL(void) CFCtx_init(CFCtx* context)
 /* Have to pass VM while initializing 'Compiler' because we are allocating objects. */
 SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* Cenclosing)
 {
-    C->cenclosing = Cenclosing;
+    C->enclosing = Cenclosing;
 
     C->fn      = ObjFunction_new(vm);
     C->fn_type = fn_type;
@@ -286,8 +297,13 @@ SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* Ce
     HashTableArray_init(&C->loc_defs);
     HashTableArray_init_cap(&C->loc_defs, SHORT_STACK_SIZE);
 
-    UpValueArray_init(&C->upvalues);
-    UpValueArray_init_cap(&C->upvalues, SHORT_STACK_SIZE);
+    // Initialize Upvalue array only once when initializing outermost compiler.
+    // This array then gets passed on to other nested compilers for each
+    // function.
+    if(Cenclosing == NULL) {
+        UpvalueArray_init(&C->upvalues);
+        UpvalueArray_init_cap(&C->upvalues, SHORT_STACK_SIZE);
+    }
 
     C->loc_len = 0;
     C->loc_cap = SHORT_STACK_SIZE;
@@ -383,7 +399,7 @@ SK_INTERNAL(force_inline UInt) C_emit_jmp(Compiler* C, OpCode jmp)
     return code_offset(C) - 3;
 }
 
-SK_INTERNAL(force_inline void) _emit_24bit(Compiler* C, UInt bits)
+SK_INTERNAL(force_inline void) C_emit_lbyte(Compiler* C, UInt bits)
 {
     C_emit_byte(C, BYTE(bits, 0));
     C_emit_byte(C, BYTE(bits, 1));
@@ -403,7 +419,7 @@ SK_INTERNAL(force_inline void) C_emit_loop(Compiler* C, UInt start)
             UINT24_MAX);
     }
 
-    _emit_24bit(C, offset);
+    C_emit_lbyte(C, offset);
 }
 
 /*========================= PARSER ========================*/
@@ -530,7 +546,7 @@ ObjFunction* compile(VM* vm, const char* source)
     ObjFunction* fn = compile_end(C);
 
     bool err = C_flag_is(C, ERROR_BIT);
-    C_free(C);
+    C_free(C, NULL);
 
     return (err ? NULL : fn);
 }
@@ -549,10 +565,18 @@ SK_INTERNAL(void) CFCtx_free(CFCtx* context)
     context->innermostsw_depth = 0;
 }
 
-SK_INTERNAL(void) C_free(Compiler* C)
+SK_INTERNAL(void) C_free(Compiler* C, Compiler* enclosing)
 {
+    // @TODO: add additional parameter to generic array when
+    //        freeing elements of the array (free fn pointer)
+    for(UInt i = 0; i < C->loc_defs.len; i++) {
+        HashTable_free(&C->loc_defs.data[i]);
+    }
     HashTableArray_free(&C->loc_defs);
     CFCtx_free(&C->context);
+    if(enclosing == NULL) {
+        UpvalueArray_free(&C->upvalues);
+    }
     free(C);
 }
 
@@ -691,10 +715,10 @@ SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
     HashTable* scope_set  = &C->loc_defs.data[C->depth - 1];
 
     HashTable_insert(scope_set, identifier, NUMBER_VAL(C->loc_len - 1));
-    local->depth = C->depth; /* Not necessary */
+    local->depth = C->depth;
 }
 
-SK_INTERNAL(force_inline void) C_start_scope(Compiler* C)
+SK_INTERNAL(force_inline void) C_scope_start(Compiler* C)
 {
     HashTable scope_set;
     HashTable_init(&scope_set);
@@ -707,15 +731,59 @@ SK_INTERNAL(force_inline void) C_start_scope(Compiler* C)
     HashTableArray_push(&C->loc_defs, scope_set);
 }
 
-SK_INTERNAL(force_inline void) C_end_scope(Compiler* C)
+SK_INTERNAL(force_inline void) C_scope_end(Compiler* C)
 {
-    UInt      popn       = C->loc_defs.data[C->depth - 1].len;
-    HashTable scope_defs = HashTableArray_pop(&C->loc_defs);
-    HashTable_free(&scope_defs);
+    Int popn = C->loc_defs.data[C->depth - 1].len;
+    Int len  = C->loc_len;
+
+    for(Int i = 1; i <= popn; i++) { // Count to-be-popped variables
+        Local* local = &C->locals[len - i];
+
+        if(Var_flag_is(local, VCAPTURED_BIT)) {
+            len  -= i;
+            popn -= i;
+
+            if(i > 1) { // Keep bytecode short
+                C_emit_op(C, OP_POPN, i);
+            } else {
+                C_emit_byte(C, OP_POP);
+            }
+
+            for(Int j = 1; j <= popn; j++) { // Count captured variables
+                Local* local = &C->locals[len - j];
+
+                if(!Var_flag_is(local, VCAPTURED_BIT)) {
+                    len  -= j;
+                    popn -= j;
+
+                    if(j > 1) { // Keep bytecode short
+                        C_emit_op(C, OP_CLOSE_UPVALN, j);
+                    } else {
+                        C_emit_byte(C, OP_CLOSE_UPVAL);
+                    }
+                    break;
+                }
+            }
+
+            i = 0; // Reset i (will get incremented to 1)
+        }
+    }
+
     C->depth--;
-    C->loc_len     -= popn;
-    gstate.loc_len -= popn;
-    C_emit_op(C, OP_POPN, popn);
+    UInt slen       = C->loc_defs.data[C->depth].len;
+    C->loc_len     -= slen;
+    gstate.loc_len -= slen;
+
+#ifdef DEBUG_ASSERTIONS
+    sk_assert(popn >= 0);
+#endif
+    if(popn == 0) { // Keep bytecode tidy
+        return;
+    } else if(popn > 1) {
+        C_emit_op(C, OP_POPN, popn);
+    } else {
+        C_emit_byte(C, OP_POP);
+    }
 }
 
 SK_INTERNAL(void)
@@ -724,23 +792,25 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 #define C_new() (*Cptr_new)
 
     Compiler* C_new = ALLOC_COMPILER(); /* Allocate new compiler */
-    C_new->parser   = C()->parser;      /* Use the same parser */
-    C_init(C_new, vm, type, C());       /* Initialize the new compiler */
+
+    C_new->parser   = C()->parser;   // UPDATE OUTER COMPILER LATER
+    C_new->upvalues = C()->upvalues; // UPDATE OUTER COMPILER LATER
+
+    C_init(C_new, vm, type, C()); /* Initialize the new compiler */
 
     uint64_t mask = C_flags(C());
-    // We are compiling a fresh chunk of code, we must reset flags
-    // to keep sound behaviour, additionally indicate that we are
-    // parsing a function (closure).
-    C_new->parser.flags = 0 | bit_mask(FN_BIT);
+    C_flags_clear(C_new);
+    C_flag_set(C_new, FN_BIT);
 
     /* Have to pass the pointer to pointer to Compiler to parse functions, check the
      * typedef for 'CompilerPPtr' in this source file for the rationale behind this. */
     CompilerPPtr Cptr_new = &C_new;
 
-    C_start_scope(C_new());
+    // No need to end this scope, the frame gets popped anyways.
+    C_scope_start(C_new());
     C_expect(C_new(), TOK_LPAREN, "Expect '(' after function name.");
 
-    /* Parse function arguments */
+    // Parse function arguments
     if(!C_check(C_new(), TOK_RPAREN)) {
         do {
             C_new()->fn->arity++;
@@ -751,22 +821,29 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 
     C_expect(C_new(), TOK_RPAREN, "Expect ')' after parameters.");
     C_expect(C_new(), TOK_LBRACE, "Expect '{' before function body.");
-
     parse_stm_block(vm, Cptr_new);
+
     ObjFunction* fn = compile_end(C_new);
 
-    /* Update the outer parser */
-    C()->parser = C_new()->parser;
+    // Restore flags but additionally transfer error flag
+    // if error happened in the new compiler.
+    C_flag_clear(C_new(), FN_BIT);
+    C_new()->parser.flags |= (mask | C_flag_is(C_new, ERROR_BIT));
 
-    UInt idx = C_make_const(C(), OBJ_VAL(fn));
+    C()->parser   = C_new()->parser;   // UPDATE OUTER COMPILER
+    C()->upvalues = C_new()->upvalues; // UPDATE OUTER COMPILER
+
     /* We wrap every function in a closure even though not
      * all of them capture their environment. */
-    C_emit_op(C(), GET_OP_TYPE(idx, OP_CLOSURE), idx);
-    C_free(C_new);
+    C_emit_op(C(), OP_CLOSURE, C_make_const(C(), OBJ_VAL(fn)));
 
-    C_flag_clear(C(), FN_BIT);
-    // Restore parser flags
-    C()->parser.flags |= mask;
+    for(UInt i = 0; i < fn->upvalc; i++) {
+        Upvalue* upval = UpvalueArray_index(&C()->upvalues, i);
+        C_emit_byte(C(), upval->local ? 1 : 0);
+        C_emit_lbyte(C(), upval->idx);
+    }
+
+    C_free(C_new, C());
 
 #undef C_new
 }
@@ -855,7 +932,7 @@ SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
     gstate.loc_len++;
     local->name  = C->parser.previous;
     local->flags = ((Byte)(C_flags(C) >> 8) & 0xff);
-    local->depth = -1; /* Not necessary, can initialize to C->depth instead */
+    local->depth = -1;
 }
 
 SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
@@ -911,7 +988,7 @@ SK_INTERNAL(force_inline Int) C_make_undefined_global(Compiler* C, VM* vm)
     return (Int)AS_NUMBER(idx);
 }
 
-SK_INTERNAL(UInt) Global_idx(Compiler* C, VM* vm)
+SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
 {
     Value idx;
     Value identifier = Token_into_stringval(vm, &C->parser.previous);
@@ -1153,7 +1230,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     /* Add loop offset storage for 'break' */
     C_add_bstorage(C());
     /* Start a new local scope */
-    C_start_scope(C());
+    C_scope_start(C());
 
     C_expect(C(), TOK_LPAREN, "Expect '(' after 'for'.");
     if(C_match(C(), TOK_SEMICOLON)) {
@@ -1206,7 +1283,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     /* Remove and patch loop breaks */
     C_rm_bstorage(C());
     /* Finally end the scope */
-    C_end_scope(C());
+    C_scope_end(C());
     /* Restore old flags */
     C_flag_clear(C(), LOOP_BIT);
     (C())->parser.flags |= mask;
@@ -1233,7 +1310,13 @@ SK_INTERNAL(void) parse_stm_continue(Compiler* C)
         popn++;
     }
 
-    C_emit_op(C, OP_POPN, popn);
+    // Keep bytecode tidy
+    if(popn > 1) {
+        C_emit_op(C, OP_POPN, popn);
+    } else {
+        C_emit_byte(C, OP_POP);
+    }
+
     C_emit_loop(C, C->context.innermostl_start);
 }
 
@@ -1256,7 +1339,13 @@ SK_INTERNAL(void) parse_stm_break(Compiler* C)
         popn++;
     }
 
-    C_emit_op(C, OP_POPN, popn);
+    // Keep bytecode tidy
+    if(popn > 1) {
+        C_emit_op(C, OP_POPN, popn);
+    } else {
+        C_emit_byte(C, OP_POP);
+    }
+
     IntArray_push(IntArrayArray_last(arr), C_emit_jmp(C, OP_JMP));
 }
 
@@ -1290,8 +1379,9 @@ SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
     } else if(C_match(C, TOK_SWITCH)) {
         parse_stm_switch(vm, Cptr);
     } else if(C_match(C, TOK_LBRACE)) {
-        C_start_scope(C);
+        C_scope_start(C);
         parse_stm_block(vm, Cptr);
+        C_scope_end(C());
     } else if(C_match(C, TOK_CONTINUE)) {
         parse_stm_continue(C);
     } else if(C_match(C, TOK_BREAK)) {
@@ -1308,10 +1398,7 @@ SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr)
     while(!C_check(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
         parse_dec(vm, Cptr);
     }
-
     C_expect(C(), TOK_RBRACE, "Expect '}' after block.");
-
-    C_end_scope(C());
 }
 
 SK_INTERNAL(force_inline void)
@@ -1331,13 +1418,15 @@ parse_number(unused VM* _, CompilerPPtr Cptr)
     C_emit_op(C, GET_OP_TYPE(idx, OP_CONST), idx);
 }
 
-SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, Value name)
+SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Value name)
 {
-    Value index = NUMBER_VAL(-1);
-
-    for(Int i = 0; i < (Int)C->loc_defs.len; i++) {
+    Value index;
+    for(UInt i = 0; i < C->loc_defs.len; i++) {
         HashTable* scope_set = &C->loc_defs.data[i];
         if(HashTable_get(scope_set, name, &index)) {
+            if(C->locals[(UInt)AS_NUMBER(index)].depth == -1) {
+                C_error(C, "Can't read local variable in its own initializer.");
+            }
             return (Int)AS_NUMBER(index);
         }
     }
@@ -1345,10 +1434,10 @@ SK_INTERNAL(force_inline Int) Local_idx(Compiler* C, VM* vm, Value name)
     return -1;
 }
 
-SK_INTERNAL(force_inline UInt) C_add_UpValue(Compiler* C, UInt idx, bool local)
+SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
 {
-    for(Int i = 0; i < C->upvalues.len; i++) {
-        UpValue* upvalue = UpValueArray_index(&C->upvalues, i);
+    for(UInt i = 0; i < C->upvalues.len; i++) {
+        Upvalue* upvalue = UpvalueArray_index(&C->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local) {
             // Return existing UpValue index
             return i;
@@ -1365,34 +1454,26 @@ SK_INTERNAL(force_inline UInt) C_add_UpValue(Compiler* C, UInt idx, bool local)
     }
 
     // Otherwise add the UpValue into the array
-    return UpValueArray_push(&C->upvalues, (UpValue){idx, local});
+    C->fn->upvalc++;
+    return UpvalueArray_push(&C->upvalues, (Upvalue){idx, local});
 }
 
-SK_INTERNAL(force_inline Int) C_get_closing_local(Compiler* C, const Value name)
+SK_INTERNAL(Int) C_get_upval(Compiler* C, const Value name)
 {
-    Value      idx;
-    HashTable* enclosing_scope = HashTableArray_last(&C->loc_defs);
-
-    if(HashTable_get(enclosing_scope, name, &idx)) {
-        return (Int)AS_NUMBER(idx);
-    }
-    return -1;
-}
-
-SK_INTERNAL(force_inline Int) C_get_UpValue(Compiler* C, const Value name)
-{
-    if(C->cenclosing == NULL) {
+    if(C->enclosing == NULL) {
         return -1;
     }
 
-    Int idx = C_get_closing_local(C->cenclosing, name);
+    Int idx = C_get_local(C->enclosing, name);
     if(idx != -1) {
-        return C_add_UpValue(C, idx, true);
+        // Local is captured by Upvalue
+        Var_flag_set(&C->enclosing->locals[idx], VCAPTURED_BIT);
+        return C_add_upval(C, (UInt)idx, true);
     }
 
-    idx = C_get_UpValue(C->cenclosing, name);
+    idx = C_get_upval(C->enclosing, name);
     if(idx != -1) {
-        return C_add_UpValue(C, idx, false);
+        return C_add_upval(C, (UInt)idx, false);
     }
 
     return -1;
@@ -1402,7 +1483,7 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
 {
     const Value name = Token_into_stringval(vm, &C()->parser.previous);
     OpCode      setop, getop;
-    Int         idx   = Local_idx(C(), vm, name);
+    Int         idx   = C_get_local(C(), name);
     int16_t     flags = -1;
 
     if(idx != -1) {
@@ -1410,11 +1491,11 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
         flags      = Var_flags(var);
         setop      = GET_OP_TYPE(idx, OP_SET_LOCAL);
         getop      = GET_OP_TYPE(idx, OP_GET_LOCAL);
-    } else if((idx = C_get_UpValue(C(), name)) != -1) {
-        setop = GET_OP_TYPE(idx, OP_SET_UPVALUE);
-        getop = GET_OP_TYPE(idx, OP_SET_UPVALUE);
+    } else if((idx = C_get_upval(C(), name)) != -1) {
+        setop = OP_SET_UPVALUE;
+        getop = OP_GET_UPVALUE;
     } else {
-        idx   = Global_idx(C(), vm);
+        idx   = C_get_global(C(), vm);
         flags = vm->global_vals.data[idx].fixed;
         setop = GET_OP_TYPE(idx, OP_SET_GLOBAL);
         getop = GET_OP_TYPE(idx, OP_GET_GLOBAL);

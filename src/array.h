@@ -8,6 +8,11 @@
 #include <errno.h>
 #include <stdio.h>
 
+// @TODO: Maybe parameterize using defines instead!
+//        This will make it more readable and the array of pointers
+//        can be defined easily without major structural change in the
+//        current implementation.
+
 /* Internal */
 #define _CALL_ARRAY_METHOD(type, name, ...)                                    \
   _ARRAY_METHOD_NAME(type, name)(self __VA_OPT__(, ) __VA_ARGS__)
