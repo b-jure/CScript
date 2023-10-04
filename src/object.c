@@ -170,14 +170,13 @@ ObjClosure* ObjClosure_new(VM* vm, ObjFunction* fn)
     ObjClosure* closure = ALLOC_OBJ(vm, ObjClosure, OBJ_CLOSURE);
     closure->fn         = fn;
     closure->upvals     = upvals;
-    closure->upvalc     = fn->upvalc;
 
     return closure;
 }
 
 SK_INTERNAL(force_inline void) ObjClosure_free(ObjClosure* closure)
 {
-    MFREE_ARRAY(ObjUpvalue*, closure->upvals, closure->upvalc);
+    MFREE_ARRAY(ObjUpvalue*, closure->upvals, closure->fn->upvalc);
     MFREE(closure, sizeof(ObjClosure));
 }
 

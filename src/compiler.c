@@ -1,4 +1,5 @@
 #include "array.h"
+#include "chunk.h"
 #include "common.h"
 #include "compiler.h"
 #include "mem.h"
@@ -234,6 +235,22 @@ typedef Compiler** CompilerPPtr;
 
 /* ParseFn - generic parsing function signature. */
 typedef void (*ParseFn)(VM*, CompilerPPtr);
+
+/* Precedence from LOW-est to HIGH-est (Pratt parsing) */
+typedef enum {
+    PREC_NONE = 0,
+    PREC_ASSIGNMENT,
+    PREC_TERNARY,
+    PREC_OR,
+    PREC_AND,
+    PREC_EQUALITY,
+    PREC_COMPARISON,
+    PREC_TERM,
+    PREC_FACTOR,
+    PREC_UNARY,
+    PREC_CALL,
+    PREC_PRIMARY
+} Precedence;
 
 // Used for Pratt parsing algorithm
 typedef struct {
@@ -710,7 +727,8 @@ parse_dec_var_fixed(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
 {
-    Local*     local = &C->locals[C->loc_len - 1]; /* Safe to decrement unsigned int */
+    // Safe to decrement loc_len (UInt), only gets called after declaring variable
+    Local*     local      = &C->locals[C->loc_len - 1];
     Value      identifier = Token_into_stringval(vm, &local->name);
     HashTable* scope_set  = &C->loc_defs.data[C->depth - 1];
 
@@ -731,59 +749,58 @@ SK_INTERNAL(force_inline void) C_scope_start(Compiler* C)
     HashTableArray_push(&C->loc_defs, scope_set);
 }
 
+// End scope and pop locals and/or close captured locals
 SK_INTERNAL(force_inline void) C_scope_end(Compiler* C)
 {
-    Int popn = C->loc_defs.data[C->depth - 1].len;
-    Int len  = C->loc_len;
+#define LOCAL_IS_CAPTURED(local) (Var_flag_is((local), VCAPTURED_BIT))
 
-    for(Int i = 1; i <= popn; i++) { // Count to-be-popped variables
-        Local* local = &C->locals[len - i];
+    Int    localc = C->loc_defs.data[C->depth - 1].len;
+    Local* local  = &C->locals[C->loc_len - 1];
 
-        if(Var_flag_is(local, VCAPTURED_BIT)) {
-            len  -= i;
-            popn -= i;
-
-            if(i > 1) { // Keep bytecode short
-                C_emit_op(C, OP_POPN, i);
-            } else {
-                C_emit_byte(C, OP_POP);
-            }
-
-            for(Int j = 1; j <= popn; j++) { // Count captured variables
-                Local* local = &C->locals[len - j];
-
-                if(!Var_flag_is(local, VCAPTURED_BIT)) {
-                    len  -= j;
-                    popn -= j;
-
-                    if(j > 1) { // Keep bytecode short
-                        C_emit_op(C, OP_CLOSE_UPVALN, j);
-                    } else {
-                        C_emit_byte(C, OP_CLOSE_UPVAL);
-                    }
-                    break;
+    Int popn = 0;
+    while(popn < localc) {
+        if(LOCAL_IS_CAPTURED(local)) {
+            if(popn > 0) {
+                localc -= popn;
+                if(popn == 1) {
+                    C_emit_byte(C, OP_POP);
+                } else {
+                    C_emit_op(C, OP_POPN, popn);
                 }
             }
 
-            i = 0; // Reset i (will get incremented to 1)
+            Int closen = 0;
+            while(closen < localc && LOCAL_IS_CAPTURED(local)) {
+                local--;
+                closen++;
+            }
+            localc -= closen;
+
+            if(closen == 1) {
+                C_emit_byte(C, OP_CLOSE_UPVAL);
+            } else {
+                C_emit_op(C, OP_CLOSE_UPVALN, closen);
+            }
+
+            popn = 0;
+            continue;
         }
+        local--;
+        popn++;
+    }
+
+    if(popn == 1) {
+        C_emit_byte(C, OP_POP);
+    } else if(popn > 1) {
+        C_emit_op(C, OP_POPN, popn);
     }
 
     C->depth--;
-    UInt slen       = C->loc_defs.data[C->depth].len;
-    C->loc_len     -= slen;
-    gstate.loc_len -= slen;
+    UInt len        = C->loc_defs.data[C->depth].len;
+    C->loc_len     -= len;
+    gstate.loc_len -= len;
 
-#ifdef DEBUG_ASSERTIONS
-    sk_assert(popn >= 0);
-#endif
-    if(popn == 0) { // Keep bytecode tidy
-        return;
-    } else if(popn > 1) {
-        C_emit_op(C, OP_POPN, popn);
-    } else {
-        C_emit_byte(C, OP_POP);
-    }
+#undef LOCAL_IS_CAPTURED
 }
 
 SK_INTERNAL(void)
@@ -833,14 +850,16 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
     C()->parser   = C_new()->parser;   // UPDATE OUTER COMPILER
     C()->upvalues = C_new()->upvalues; // UPDATE OUTER COMPILER
 
-    /* We wrap every function in a closure even though not
-     * all of them capture their environment. */
-    C_emit_op(C(), OP_CLOSURE, C_make_const(C(), OBJ_VAL(fn)));
-
-    for(UInt i = 0; i < fn->upvalc; i++) {
-        Upvalue* upval = UpvalueArray_index(&C()->upvalues, i);
-        C_emit_byte(C(), upval->local ? 1 : 0);
-        C_emit_lbyte(C(), upval->idx);
+    // Create a closure only when we have upvalues
+    if(fn->upvalc == 0) {
+        C_emit_op(C(), OP_CONST, C_make_const(C(), OBJ_VAL(fn)));
+    } else {
+        C_emit_op(C(), OP_CLOSURE, C_make_const(C(), OBJ_VAL(fn)));
+        for(UInt i = 0; i < fn->upvalc; i++) {
+            Upvalue* upval = UpvalueArray_index(&C()->upvalues, i);
+            C_emit_byte(C(), upval->local ? 1 : 0);
+            C_emit_lbyte(C(), upval->idx);
+        }
     }
 
     C_free(C_new, C());
@@ -926,12 +945,13 @@ SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
             return;
         }
         C_grow_stack(Cptr);
+        C = C();
     }
 
     Local* local = &C->locals[C->loc_len++];
     gstate.loc_len++;
     local->name  = C->parser.previous;
-    local->flags = ((Byte)(C_flags(C) >> 8) & 0xff);
+    local->flags = (((Byte)(C_flags(C) >> 8)) & 0xff);
     local->depth = -1;
 }
 
@@ -1253,7 +1273,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     Int loop_end = -1;
     if(!C_match(C(), TOK_SEMICOLON)) {
         parse_expr(vm, Cptr);
-        C_expect(C(), TOK_SEMICOLON, "Expect ';' (condition).");
+        C_expect(C(), TOK_SEMICOLON, "Expect ';' after for-loop condition clause.");
 
         loop_end = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
     }
@@ -1280,10 +1300,13 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     /* Restore the outermost loop start/depth */
     (C())->context.innermostl_start = outermostl_start;
     (C())->context.innermostl_depth = outermostl_depth;
+
     /* Remove and patch loop breaks */
     C_rm_bstorage(C());
-    /* Finally end the scope */
+
+    /* End the scope */
     C_scope_end(C());
+
     /* Restore old flags */
     C_flag_clear(C(), LOOP_BIT);
     (C())->parser.flags |= mask;

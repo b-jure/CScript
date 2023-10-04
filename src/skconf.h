@@ -12,7 +12,6 @@
 #define SK_CALLFRAMES_MAX 1024
 
 /* Compiler builtins ------------------------------------------------------- */
-
 #if defined(__GNUC__) && __GNUC__ >= 3
 #define THREADED_CODE
 #define force_inline __always_inline
@@ -29,14 +28,21 @@
 #define unreachable __builtin_unreachable()
 #define aligned(type, b) type __attribute__((aligned(b)))
 #else
-#define force_inline inline
+#warning                                                                       \
+    "Compiler or compiler version is not supported! Compiling might result in less optimized code. \
+Delete this warning in skconf.h:21 to proceed with compiling."
+#define force_inline
 #define likely(cond) cond
 #define unlikely(cond) cond
 #define unused
-#define unreachable
+#define unreachable                                                            \
+  #include<stdio.h> #include<stdlib.h> printf("Unreachable code: %s:%d\n",     \
+                                              __FILE__, __LINE__);             \
+  exit(1);
 #define aligned(type, b) type
 #endif
 
+// @TODO: Place this in api header (create one)
 #define SK_INTERNAL(ret) static ret
 /* ------------------------------------------------------------------------- */
 

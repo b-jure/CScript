@@ -51,19 +51,18 @@ struct ObjUpvalue { // typedef is inside 'value.h'
   ObjUpvalue *next;
 };
 
-typedef struct {
+struct ObjFunction { // typedef is inside 'value.h'
   Obj obj;
   UInt arity;
   Chunk chunk;
   ObjString *name;
   UInt upvalc; // Count of upvalues
-} ObjFunction;
+};
 
 struct ObjClosure { // typedef is inisde 'value.h'
   Obj obj;
   ObjFunction *fn;
   ObjUpvalue **upvals; // size of fn->upvalc
-  UInt upvalc;
 };
 
 typedef bool (*NativeFn)(VM *vm, Int argc, Value *argv);

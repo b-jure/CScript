@@ -56,13 +56,13 @@ void VM_error(VM* vm, const char* errfmt, ...)
 
     for(Int i = vm->fc - 1; i >= 0; i--) {
         CallFrame* frame = &vm->frames[i];
-        Chunk*     chunk = &frame->closure->fn->chunk;
+        Chunk*     chunk = &frame->fn->chunk;
         UInt       line  = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
 
         fprintf(stderr, "[line: %u] in ", line);
 
-        if(frame->closure->fn->name != NULL) {
-            fprintf(stderr, "%s()\n", frame->closure->fn->name->storage);
+        if(frame->fn->name != NULL) {
+            fprintf(stderr, "%s()\n", frame->fn->name->storage);
         } else {
             fprintf(stderr, "script\n");
         }
@@ -239,10 +239,8 @@ void VM_init(VM* vm)
     VM_define_native(vm, "clock", native_clock, 0);
 }
 
-SK_INTERNAL(bool) VM_call_closure(VM* vm, ObjClosure* closure, UInt argc)
+SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, UInt argc)
 {
-    ObjFunction* fn = closure->fn;
-
     if(fn->arity != argc) {
         VM_error(vm, "Expected %u arguments, but got %u instead.", fn->arity, argc);
         return false;
@@ -253,10 +251,12 @@ SK_INTERNAL(bool) VM_call_closure(VM* vm, ObjClosure* closure, UInt argc)
             vm,
             "Internal error: vm stack overflow, recursion depth limit reached [%u].\n",
             VM_FRAMES_MAX);
+        return false;
     }
 
     CallFrame* frame = &vm->frames[vm->fc++];
     frame->closure   = closure;
+    frame->fn        = fn;
     frame->ip        = fn->chunk.code.data;
     frame->sp        = vm->sp - argc - 1;
 
@@ -283,8 +283,12 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
 {
     if(IS_OBJ(fnval)) {
         switch(OBJ_TYPE(fnval)) {
-            case OBJ_CLOSURE:
-                return VM_call_closure(vm, AS_CLOSURE(fnval), argc);
+            case OBJ_FUNCTION:
+                return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc);
+            case OBJ_CLOSURE: {
+                ObjClosure* closure = AS_CLOSURE(fnval);
+                return VM_call_fn(vm, closure, closure->fn, argc);
+            }
             case OBJ_NATIVE: {
                 return VM_call_native(vm, AS_NATIVE(fnval), argc);
             }
@@ -346,8 +350,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 {
 #define READ_BYTE()      (*ip++)
 #define READ_BYTEL()     (ip += 3, GET_BYTES3(ip - 3))
-#define READ_CONSTANT()  frame->closure->fn->chunk.constants.data[READ_BYTE()]
-#define READ_CONSTANTL() frame->closure->fn->chunk.constants.data[READ_BYTEL()]
+#define READ_CONSTANT()  frame->fn->chunk.constants.data[READ_BYTE()]
+#define READ_CONSTANTL() frame->fn->chunk.constants.data[READ_BYTEL()]
 #define READ_STRING()    AS_STRING(READ_CONSTANT())
 #define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
 #define DISPATCH(x)      switch(x)
@@ -402,9 +406,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             printf("]");
         }
         printf("\n");
-        Instruction_debug(
-            &frame->closure->fn->chunk,
-            (UInt)(ip - frame->closure->fn->chunk.code.data));
+        Instruction_debug(&frame->fn->chunk, (UInt)(ip - frame->fn->chunk.code.data));
 #endif
 
         DISPATCH(READ_BYTE())
@@ -702,7 +704,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjClosure*  closure = ObjClosure_new(vm, fn);
                 VM_push(vm, OBJ_VAL(closure));
 
-                for(UInt i = 0; i < closure->upvalc; i++) {
+                for(UInt i = 0; i < closure->fn->upvalc; i++) {
                     Byte local = READ_BYTE();
                     UInt idx   = READ_BYTEL();
 
@@ -723,7 +725,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_UPVALUE)
             {
-                UInt idx                               = READ_BYTEL();
+                UInt idx = READ_BYTEL();
+                //
                 *frame->closure->upvals[idx]->location = stack_peek(0);
                 BREAK;
             }
@@ -735,11 +738,9 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_CLOSE_UPVALN)
             {
-                UInt close = READ_BYTEL();
-                for(UInt i = 1; i <= close; i++) {
-                    VM_close_upval(vm, vm->sp - i);
-                }
-                VM_popn(vm, close);
+                UInt last = READ_BYTEL();
+                VM_close_upval(vm, vm->sp - last);
+                VM_popn(vm, last);
                 BREAK;
             }
             CASE(OP_RET)
@@ -781,7 +782,6 @@ InterpretResult VM_interpret(VM* vm, const char* source)
     ObjFunction* fn = compile(vm, source);
 
     if(fn == NULL) {
-        printf("comp error fn is null\n");
         return INTERPRET_COMPILE_ERROR;
     }
 
@@ -789,7 +789,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
     ObjClosure* closure = ObjClosure_new(vm, fn);
     VM_pop(vm);
     VM_push(vm, OBJ_VAL(closure));
-    VM_call_closure(vm, closure, 0);
+    VM_call_fn(vm, closure, closure->fn, 0);
 
     return VM_run(vm);
 }

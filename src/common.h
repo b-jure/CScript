@@ -3,6 +3,7 @@
 
 #include "skconf.h"
 
+#include <assert.h>
 #include <memory.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -13,12 +14,10 @@ typedef uint32_t UInt;
 typedef int32_t Int;
 
 /* Bit manipulation--------------------------------------------------------- */
-
-static inline size_t bit_mask(uint8_t x) {
+SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x) {
   return (x >= sizeof(size_t) * CHAR_BIT) ? 0xffffffffffffffff
                                           : (1UL << (x)) - 1;
 }
-
 // Convert bit into unsigned long integer */
 #define btoul(bit) (~((size_t)0) & (1UL << ((bit)-1)))
 /* Return bit at 'bit' (0 or 1) from 'x'. */
@@ -31,23 +30,35 @@ static inline size_t bit_mask(uint8_t x) {
 #define MAXBITS(bits) (~((size_t)0) >> ((sizeof(size_t) * 8) - (size_t)(bits)))
 // Wrapper around MAXBITS, uses 'bytes' instead
 #define MAXBYTES(bytes) MAXBITS((bytes)*8)
-
+// Max unsigned 24-bit value
 #define UINT24_MAX ((uint32_t)MAXBYTES(3))
 /* ------------------------------------------------------------------------- */
-
+//
+//
+//
 /* Math--------------------------------------------------------------------- */
 
+// Check if compiler supports IEEE 754 floating point standard
+#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 ||                         \
+    __DBL_MANT_DIG__ != 53 || __DBL_MAX_10_EXP__ != 308 ||                     \
+    __DBL_MAX_EXP__ != 1024 || __DBL_MIN_10_EXP__ != -307 ||                   \
+    __DBL_MIN_EXP__ != -1021
+#error "Compiler missing IEEE 754 floating point!"
+#endif
+
+// Check if size of double and long match (C11)
+static_assert(sizeof(double) == sizeof(long),
+              "Size of 'double' and 'long' don't match!");
+
 /* Check if double is positive/negative infinity */
-force_inline static bool is_infinity(double dbl) {
-  // DEV NOTE: Assuming double and long are the same size
+SK_INTERNAL(force_inline bool) is_infinity(double dbl) {
   long integer;
   memcpy(&integer, &dbl, sizeof(long));
   return (integer & 0x7FFFFFFFFFFFFFFF) == 0x7FF0000000000000;
 }
 
 /* Check if double is NaN */
-force_inline static bool is_nan(double dbl) {
-  // DEV NOTE: Assuming double and long are the same size
+SK_INTERNAL(force_inline bool) is_nan(double dbl) {
   long integer;
   memcpy(&integer, &dbl, sizeof(long));
   return (integer & 0x7FFFFFFFFFFFFFFFL) > 0x7FF0000000000000L;
@@ -61,6 +72,7 @@ force_inline static bool is_nan(double dbl) {
     __typeof__(b) _b = (b);                                                    \
     _a > _b ? _a : _b;                                                         \
   })
+
 /* Return MIN */
 #define MIN(a, b)                                                              \
   ({                                                                           \
