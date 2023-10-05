@@ -1,6 +1,7 @@
 #include "chunk.h"
 #include "debug.h"
 #include "vmachine.h"
+#include "mem.h"
 
 #include <stdio.h>
 #include <stdlib.h>

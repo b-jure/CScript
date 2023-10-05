@@ -24,12 +24,12 @@
 #define IS_UPVAL(value) is_object_type(value, OBJ_UPVAL)
 #define AS_UPVAL(value) ((ObjUpvalue *)AS_OBJ(value))
 
-typedef enum {
-  OBJ_STRING,
-  OBJ_FUNCTION,
-  OBJ_CLOSURE,
-  OBJ_NATIVE,
-  OBJ_UPVAL,
+typedef enum { // 1 for marked
+  OBJ_STRING = 2,
+  OBJ_FUNCTION = 4,
+  OBJ_CLOSURE = 8,
+  OBJ_NATIVE = 16,
+  OBJ_UPVAL = 32,
 } ObjType;
 
 struct Obj { // typedef is inside 'value.h'
@@ -77,6 +77,8 @@ static force_inline bool is_object_type(Value value, ObjType type) {
   return IS_OBJ(value) && AS_OBJ(value)->type == type;
 }
 
+void Obj_mark(Obj* obj);
+void ObjType_print(ObjType type); // Debug
 ObjUpvalue *ObjUpvalue_new(VM *vm, Value *var_ref);
 ObjClosure *ObjClosure_new(VM *vm, ObjFunction *fn);
 ObjNative *ObjNative_new(VM *vm, NativeFn fn, UInt arity);
@@ -84,6 +86,6 @@ uint64_t Obj_hash(Value value);
 ObjString *ObjString_from(VM *vm, const char *chars, size_t len);
 ObjFunction *ObjFunction_new(VM *vm);
 void Object_print(const Value value);
-void Obj_free(Obj *object);
+void Obj_free(VM* vm, Obj *object);
 
 #endif

@@ -5,32 +5,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-SK_INTERNAL(void) LineArray_write(LineArray* lines, UInt line, UInt index);
-
-DEFINE_ARRAY(Byte)
-DEFINE_ARRAY(UInt)
+SK_INTERNAL(void) LineArray_write(Array_UInt* lines, UInt line, UInt index);
 
 /* Initializes the Chunk */
 void Chunk_init(Chunk* chunk)
 {
-    ByteArray_init(&chunk->code);
-    ValueArray_init(&chunk->constants);
-    UIntArray_init(&chunk->lines);
+    Array_Byte_init(&chunk->code, NULL, arr_reallocate);
+    Array_Value_init(&chunk->constants, NULL, arr_reallocate);
+    Array_UInt_init(&chunk->lines, NULL, arr_reallocate);
 }
 
 /* Writes OpCodes that require no parameters */
 void Chunk_write(Chunk* chunk, uint8_t byte, UInt line)
 {
-    UInt idx = ByteArray_push(&chunk->code, byte);
+    UInt idx = Array_Byte_push(&chunk->code, byte);
     LineArray_write(&chunk->lines, line, idx);
 }
 
 /* Frees the chunk memory (arrays) */
 void Chunk_free(Chunk* chunk)
 {
-    ByteArray_free(&chunk->code);
-    ValueArray_free(&chunk->constants);
-    UIntArray_free(&chunk->lines);
+    Array_Byte_free(&chunk->code);
+    Array_Value_free(&chunk->constants);
+    Array_UInt_free(&chunk->lines);
     // Here chunk is at the init state
 }
 
@@ -136,16 +133,16 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 /* Returns the line of the current instruction (DEBUG ONLY) */
 UInt Chunk_getline(Chunk* chunk, UInt index)
 {
-    LineArray* line_array      = &chunk->lines;
-    UInt       idx             = UIntArray_len(line_array) - 1;
-    UInt       instruction_idx = *UIntArray_index(line_array, --idx);
+    Array_UInt* line_array      = &chunk->lines;
+    UInt        idx             = Array_UInt_len(line_array) - 1;
+    UInt        instruction_idx = *Array_UInt_index(line_array, --idx);
 
     while(instruction_idx > index) {
         idx             -= 2;
-        instruction_idx  = *UIntArray_index(line_array, idx);
+        instruction_idx  = *Array_UInt_index(line_array, idx);
     }
 
-    return *UIntArray_index(line_array, idx + 1);
+    return *Array_UInt_index(line_array, idx + 1);
 }
 
 /**
@@ -157,10 +154,10 @@ UInt Chunk_getline(Chunk* chunk, UInt index)
  * last one. Additionally stores the index of the instruction in order to retrieve it if
  * 'Chunk_getline' gets called; it gets called only during debug or run-time errors.
  */
-SK_INTERNAL(void) LineArray_write(LineArray* lines, UInt line, UInt index)
+SK_INTERNAL(void) LineArray_write(Array_UInt* lines, UInt line, UInt index)
 {
-    if(UIntArray_len(lines) <= 0 || *UIntArray_last(lines) < line) {
-        UIntArray_push(lines, index);
-        UIntArray_push(lines, line);
+    if(Array_UInt_len(lines) <= 0 || *Array_UInt_last(lines) < line) {
+        Array_UInt_push(lines, index);
+        Array_UInt_push(lines, line);
     }
 }

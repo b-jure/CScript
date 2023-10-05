@@ -110,7 +110,7 @@ static force_inline double HashTable_lf(HashTable* table)
 static force_inline void HashTable_expand(HashTable* table)
 {
     UInt   new_cap = GROW_TABLE_CAPACITY(table->prime++);
-    Entry* entries = ALLOC_ARRAY(Entry, new_cap);
+    Entry* entries = MALLOC(new_cap * sizeof(Entry));
     for(UInt i = 0; i < new_cap; i++) {
         entries[i].key   = EMPTY_VAL;
         entries[i].value = EMPTY_VAL;
@@ -126,7 +126,7 @@ static force_inline void HashTable_expand(HashTable* table)
     }
 
     if(table->entries != NULL) {
-        MFREE_ARRAY(Entry, table->entries, table->cap);
+        FREE(table->entries);
     }
 
     table->entries = entries;
@@ -241,6 +241,6 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
 /* Free table array and reset table fields */
 void HashTable_free(HashTable* table)
 {
-    MFREE_ARRAY(Entry, table->entries, table->cap);
+    FREE(table->entries);
     HashTable_init(table);
 }

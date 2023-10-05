@@ -20,12 +20,12 @@ UInt Instruction_debug(Chunk *chunk, UInt offset);
 /* Debug flag for assertions */
 #define DEBUG_ASSERTIONS
 
-#endif
+/* Debug flag for garbage collection stress test */
+#define DEBUG_STRESS_GC
 
-#ifdef DEBUG_ASSERTIONS
-#define sk_assert(expr) assert(expr)
-#else
-#define sk_assert(expr)
+/* Debug flag for logging garbage collection */
+#define DEBUG_LOG_GC
+
 #endif
 
 #endif

@@ -12,16 +12,16 @@
 #define ALLOC_STRING(vm, len)                                                            \
     ((ObjString*)Object_new((vm), sizeof(ObjString) + (len) + 1, OBJ_STRING))
 
-SK_INTERNAL(force_inline void) ObjClosure_free(ObjClosure* objclosure);
-SK_INTERNAL(force_inline void) ObjString_free(ObjString* objstr);
-SK_INTERNAL(force_inline void) ObjFunction_free(ObjFunction* objfn);
-SK_INTERNAL(force_inline void) ObjNative_free(ObjNative* native);
-SK_INTERNAL(force_inline void) ObjUpvalue_free(ObjUpvalue* upval);
+SK_INTERNAL(force_inline void) ObjClosure_free(VM* vm, ObjClosure* objclosure);
+SK_INTERNAL(force_inline void) ObjString_free(VM* vm, ObjString* objstr);
+SK_INTERNAL(force_inline void) ObjFunction_free(VM* vm, ObjFunction* objfn);
+SK_INTERNAL(force_inline void) ObjNative_free(VM* vm, ObjNative* native);
+SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, ObjUpvalue* upval);
 
 SK_INTERNAL(force_inline Obj*) Object_new(VM* vm, size_t size, ObjType type)
 {
     /* Allocate a new object */
-    Obj* object  = MALLOC(size);
+    Obj* object  = VM_MALLOC(vm, size);
     object->type = type;
     object->next = NULL;
 
@@ -38,6 +38,55 @@ SK_INTERNAL(force_inline void) print_fn(ObjFunction* fn)
         printf("<script>");
     } else {
         printf("<fn %s>", fn->name->storage);
+    }
+}
+
+#define OBJ_IS_MARKED(obj) ((uint32_t)obj->type & (uint32_t)1)
+#define OBJ_MARK(obj)      (obj->type |= (uint32_t)1)
+
+void Obj_mark(Obj* obj)
+{
+    if(obj == NULL || OBJ_IS_MARKED(obj)) {
+        return;
+    }
+
+#ifdef DEBUG_LOG_GC
+    printf("%p mark ", (void*)obj);
+    Value_print(OBJ_VAL(obj));
+    printf("\n");
+#endif
+
+    if(obj->type & (OBJ_STRING | OBJ_UPVAL)) {
+        return;
+    }
+
+    OBJ_MARK(obj);
+}
+
+void ObjType_print(ObjType type) // Debug
+{
+    if(type & 1) { // If marked
+        type ^= 1;
+    }
+
+    switch(type) {
+        case OBJ_STRING:
+            printf("OBJ_STRING");
+            break;
+        case OBJ_FUNCTION:
+            printf("OBJ_FUNCTION");
+            break;
+        case OBJ_CLOSURE:
+            printf("OBJ_CLOSURE");
+            break;
+        case OBJ_NATIVE:
+            printf("OBJ_NATIVE");
+            break;
+        case OBJ_UPVAL:
+            printf("OBJ_UPVAL");
+            break;
+        default:
+            unreachable;
     }
 }
 
@@ -64,23 +113,28 @@ void Object_print(Value value)
     }
 }
 
-void Obj_free(Obj* object)
+void Obj_free(VM* vm, Obj* object)
 {
+#ifdef DEBUG_LOG_GC
+    printf("%p free type ", (void*)object);
+    ObjType_print(object->type);
+    printf("\n");
+#endif
     switch(object->type) {
         case OBJ_STRING:
-            ObjString_free((ObjString*)object);
+            ObjString_free(vm, (ObjString*)object);
             break;
         case OBJ_FUNCTION:
-            ObjFunction_free((ObjFunction*)object);
+            ObjFunction_free(vm, (ObjFunction*)object);
             break;
         case OBJ_CLOSURE:
-            ObjClosure_free((ObjClosure*)object);
+            ObjClosure_free(vm, (ObjClosure*)object);
             break;
         case OBJ_NATIVE:
-            ObjNative_free((ObjNative*)object);
+            ObjNative_free(vm, (ObjNative*)object);
             break;
         case OBJ_UPVAL:
-            ObjUpvalue_free((ObjUpvalue*)object);
+            ObjUpvalue_free(vm, (ObjUpvalue*)object);
             break;
         default:
             unreachable;
@@ -125,9 +179,9 @@ ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
     return string;
 }
 
-SK_INTERNAL(force_inline void) ObjString_free(ObjString* string)
+SK_INTERNAL(force_inline void) ObjString_free(VM* vm, ObjString* string)
 {
-    MFREE(string, sizeof(ObjString) + string->len + 1);
+    VM_FREE(vm, string, sizeof(ObjString) + string->len + 1);
 }
 
 ObjNative* ObjNative_new(VM* vm, NativeFn fn, UInt arity)
@@ -139,9 +193,9 @@ ObjNative* ObjNative_new(VM* vm, NativeFn fn, UInt arity)
     return native;
 }
 
-SK_INTERNAL(force_inline void) ObjNative_free(ObjNative* native)
+SK_INTERNAL(force_inline void) ObjNative_free(VM* vm, ObjNative* native)
 {
-    MFREE(native, sizeof(ObjNative));
+    VM_FREE(vm, native, sizeof(ObjNative));
 }
 
 ObjFunction* ObjFunction_new(VM* vm)
@@ -154,15 +208,15 @@ ObjFunction* ObjFunction_new(VM* vm)
     return fn;
 }
 
-SK_INTERNAL(force_inline void) ObjFunction_free(ObjFunction* fn)
+SK_INTERNAL(force_inline void) ObjFunction_free(VM* vm, ObjFunction* fn)
 {
     Chunk_free(&fn->chunk);
-    MFREE(fn, sizeof(ObjFunction));
+    VM_FREE(vm, fn, sizeof(ObjFunction));
 }
 
 ObjClosure* ObjClosure_new(VM* vm, ObjFunction* fn)
 {
-    ObjUpvalue** upvals = ALLOC_ARRAY(ObjUpvalue*, fn->upvalc);
+    ObjUpvalue** upvals = VM_MALLOC(vm, sizeof(ObjUpvalue*) * fn->upvalc);
     for(UInt i = 0; i < fn->upvalc; i++) {
         upvals[i] = NULL;
     }
@@ -174,10 +228,10 @@ ObjClosure* ObjClosure_new(VM* vm, ObjFunction* fn)
     return closure;
 }
 
-SK_INTERNAL(force_inline void) ObjClosure_free(ObjClosure* closure)
+SK_INTERNAL(force_inline void) ObjClosure_free(VM* vm, ObjClosure* closure)
 {
-    MFREE_ARRAY(ObjUpvalue*, closure->upvals, closure->fn->upvalc);
-    MFREE(closure, sizeof(ObjClosure));
+    VM_FREE(vm, closure->upvals, closure->fn->upvalc * sizeof(ObjUpvalue*));
+    VM_FREE(vm, closure, sizeof(ObjClosure));
 }
 
 ObjUpvalue* ObjUpvalue_new(VM* vm, Value* var_ref)
@@ -189,7 +243,7 @@ ObjUpvalue* ObjUpvalue_new(VM* vm, Value* var_ref)
     return upval;
 }
 
-SK_INTERNAL(force_inline void) ObjUpvalue_free(ObjUpvalue* upval)
+SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, ObjUpvalue* upval)
 {
-    MFREE(upval, sizeof(ObjUpvalue));
+    VM_FREE(vm, upval, sizeof(ObjUpvalue));
 }

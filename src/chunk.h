@@ -61,15 +61,13 @@ typedef enum {
   OP_RET,                  /* Return from function, pop the call frame */
 } OpCode;
 
-DECLARE_ARRAY(UInt)
-DECLARE_ARRAY(Byte)
-
-typedef UIntArray LineArray;
+ARRAY_NEW(Array_UInt, UInt);
+ARRAY_NEW(Array_Byte, Byte);
 
 typedef struct {
-  LineArray lines;
-  ValueArray constants;
-  ByteArray code;
+  Array_UInt lines;
+  Array_Value constants;
+  Array_Byte code;
 } Chunk;
 
 void Chunk_init(Chunk *chunk);
@@ -80,7 +78,7 @@ UInt Chunk_getline(Chunk *chunk, UInt index);
 void Chunk_free(Chunk *chunk);
 
 force_inline UInt Chunk_make_constant(Chunk *chunk, Value value) {
-  return ValueArray_push(&chunk->constants, value);
+  return Array_Value_push(&chunk->constants, value);
 }
 
 #endif

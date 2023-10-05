@@ -25,19 +25,23 @@ typedef struct {
   bool fixed;  /* @TODO: Make this into a byte that holds flag bits */
 } Global;
 
-DECLARE_ARRAY(Global)
+typedef struct VM VM;
 
-typedef struct {
+void *vm_reallocate(void *vm, void *ptr, size_t oldsize, size_t newsize);
+
+ARRAY_NEW(Array_Global, Global);
+
+struct VM {
   CallFrame frames[VM_FRAMES_MAX]; /* Call frames */
   Int fc;                          /* Frame count */
   Value stack[VM_STACK_MAX];       /* Stack */
   Value *sp;                       /* Stack pointer */
   HashTable global_ids;            /* Global variable names */
-  GlobalArray global_vals;         /* Global variable values */
+  Array_Global global_vals;        /* Global variable values */
   HashTable strings;               /* Strings (interning) */
   ObjUpvalue *open_upvals;         /* List of heap allocated Upvalues */
   Obj *objects;                    /* List of allocated object (GC) */
-} VM;
+};
 
 typedef enum {
   INTERPRET_OK,            /* No error */

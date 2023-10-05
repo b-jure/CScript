@@ -7,7 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-DEFINE_ARRAY(Value);
+void Value_mark(Value val)
+{
+    if(IS_OBJ(val)) {
+        Obj_mark(AS_OBJ(val));
+    }
+}
 
 void Value_print(Value value)
 {

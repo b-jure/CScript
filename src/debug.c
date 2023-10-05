@@ -152,13 +152,13 @@ Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
 SK_INTERNAL(void) disassemble_const(Chunk* chunk, UInt param)
 {
     printf("'");
-    Value_print(*ValueArray_index(&chunk->constants, param));
+    Value_print(*Array_Value_index(&chunk->constants, param));
     printf("'");
 }
 
 SK_INTERNAL(UInt) disassemble_closure(Chunk* chunk, UInt param, UInt offset)
 {
-    Value value = *ValueArray_index(&chunk->constants, param);
+    Value value = *Array_Value_index(&chunk->constants, param);
     Value_print(value);
     printf("\n");
 
@@ -181,7 +181,7 @@ SK_INTERNAL(UInt) disassemble_closure(Chunk* chunk, UInt param, UInt offset)
 SK_INTERNAL(int)
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
-    Byte param = *ByteArray_index(&chunk->code, offset + 1);
+    Byte param = *Array_Byte_index(&chunk->code, offset + 1);
     printf("%-25s %5u ", name, param);
     switch(code) {
         case OP_CONST:

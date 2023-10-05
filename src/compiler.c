@@ -114,20 +114,14 @@ typedef struct {
 
 /* Grows 'Compiler' stack */
 #define GROW_LOCAL_STACK(ptr, oldcap, newcap)                                            \
-    (Compiler*)REALLOC(                                                                  \
-        ptr,                                                                             \
-        sizeof(Compiler) + (oldcap * sizeof(Local)),                                     \
-        sizeof(Compiler) + (newcap * sizeof(Local)))
+    (Compiler*)REALLOC(ptr, sizeof(Compiler) + (newcap * sizeof(Local)))
 
 /* Array of HashTable(s) */
-DECLARE_ARRAY(HashTable);
-DEFINE_ARRAY(HashTable);
+ARRAY_NEW(Array_Table, HashTable);
 /* Array of Int(s) */
-DECLARE_ARRAY(Int);
-DEFINE_ARRAY(Int);
+ARRAY_NEW(Array_Int, Int);
 /* Two dimensional array */
-DECLARE_ARRAY(IntArray);
-DEFINE_ARRAY(IntArray);
+ARRAY_NEW(Array_Array_Int, Array_Int)
 
 typedef enum {
     FN_FUNCTION,
@@ -143,7 +137,7 @@ typedef struct {
      * we can just patch each parsed break statement.
      * This would be the same for 'continue' in case of 'do while'
      * loop.*/
-    IntArrayArray breaks; /* Break statement offsets */
+    Array_Array_Int breaks; /* Break statement offsets */
 
     Int innermostl_start;  /* Innermost loop start offset */
     Int innermostl_depth;  /* Innermost loop scope depth */
@@ -179,10 +173,7 @@ typedef struct {
     bool local;
 } Upvalue;
 
-DECLARE_ARRAY(Upvalue);
-DEFINE_ARRAY(Upvalue);
-
-typedef struct Compiler Compiler;
+ARRAY_NEW(Array_Upvalue, Upvalue);
 
 struct Compiler {
     /* Enclosing compiler */
@@ -196,7 +187,7 @@ struct Compiler {
     CFCtx context;
 
     /* Tracks local variables for each scope. */
-    HashTableArray loc_defs;
+    Array_Table loc_defs;
 
     /* Currently compiled function, meaning we write
      * bytecode to the function chunk in this field. */
@@ -204,7 +195,7 @@ struct Compiler {
     FunctionType fn_type; /* Function type */
 
     /* Holds UpValues */
-    UpvalueArray upvalues;
+    Array_Upvalue upvalues;
 
     /* Current scope depth. */
     Int depth;
@@ -298,7 +289,7 @@ SK_INTERNAL(void) CFCtx_init(CFCtx* context)
     context->innermostl_start  = -1;
     context->innermostl_depth  = 0;
     context->innermostsw_depth = 0;
-    IntArrayArray_init(&context->breaks);
+    Array_Array_Int_init(&context->breaks, NULL, arr_reallocate);
 }
 
 /* Have to pass VM while initializing 'Compiler' because we are allocating objects. */
@@ -311,15 +302,15 @@ SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* Ce
 
     CFCtx_init(&C->context);
 
-    HashTableArray_init(&C->loc_defs);
-    HashTableArray_init_cap(&C->loc_defs, SHORT_STACK_SIZE);
+    Array_Table_init(&C->loc_defs, NULL, arr_reallocate);
+    Array_Table_init_cap(&C->loc_defs, SHORT_STACK_SIZE);
 
     // Initialize Upvalue array only once when initializing outermost compiler.
     // This array then gets passed on to other nested compilers for each
     // function.
     if(Cenclosing == NULL) {
-        UpvalueArray_init(&C->upvalues);
-        UpvalueArray_init_cap(&C->upvalues, SHORT_STACK_SIZE);
+        Array_Upvalue_init(&C->upvalues, NULL, arr_reallocate);
+        Array_Upvalue_init_cap(&C->upvalues, SHORT_STACK_SIZE);
     }
 
     C->loc_len = 0;
@@ -351,6 +342,13 @@ SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr)
     C()        = C;
 }
 
+void mark_c_roots(Compiler* C)
+{
+    for(Compiler* current = C; current != NULL; current = current->enclosing) {
+        Obj_mark((Obj*)current->fn);
+    }
+}
+
 /*========================== EMIT =========================*/
 
 SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
@@ -377,7 +375,7 @@ make_const_identifier(Compiler* C, VM* vm, Value identifier, bool fixed)
 
     if(!HashTable_get(&vm->global_ids, identifier, &index)) {
         index = NUMBER_VAL(
-            (double)GlobalArray_push(&vm->global_vals, (Global){UNDEFINED_VAL, fixed}));
+            (double)Array_Global_push(&vm->global_vals, (Global){UNDEFINED_VAL, fixed}));
 
         HashTable_insert(&vm->global_ids, identifier, index);
     }
@@ -575,8 +573,8 @@ SK_INTERNAL(force_inline Chunk*) current_chunk(Compiler* C)
 
 SK_INTERNAL(void) CFCtx_free(CFCtx* context)
 {
-    IntArrayArray_free(&context->breaks);
-    IntArrayArray_init(&context->breaks);
+    Array_Array_Int_free(&context->breaks);
+    Array_Array_Int_init(&context->breaks, NULL, arr_reallocate);
     context->innermostl_start  = -1;
     context->innermostl_depth  = 0;
     context->innermostsw_depth = 0;
@@ -589,10 +587,10 @@ SK_INTERNAL(void) C_free(Compiler* C, Compiler* enclosing)
     for(UInt i = 0; i < C->loc_defs.len; i++) {
         HashTable_free(&C->loc_defs.data[i]);
     }
-    HashTableArray_free(&C->loc_defs);
+    Array_Table_free(&C->loc_defs);
     CFCtx_free(&C->context);
     if(enclosing == NULL) {
-        UpvalueArray_free(&C->upvalues);
+        Array_Upvalue_free(&C->upvalues);
     }
     free(C);
 }
@@ -746,7 +744,7 @@ SK_INTERNAL(force_inline void) C_scope_start(Compiler* C)
     }
 
     C->depth++;
-    HashTableArray_push(&C->loc_defs, scope_set);
+    Array_Table_push(&C->loc_defs, scope_set);
 }
 
 // End scope and pop locals and/or close captured locals
@@ -856,7 +854,7 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
     } else {
         C_emit_op(C(), OP_CLOSURE, C_make_const(C(), OBJ_VAL(fn)));
         for(UInt i = 0; i < fn->upvalc; i++) {
-            Upvalue* upval = UpvalueArray_index(&C()->upvalues, i);
+            Upvalue* upval = Array_Upvalue_index(&C()->upvalues, i);
             C_emit_byte(C(), upval->local ? 1 : 0);
             C_emit_lbyte(C(), upval->idx);
         }
@@ -964,7 +962,7 @@ SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
 SK_INTERNAL(bool) C_local_is_unique(Compiler* C, VM* vm)
 {
     Value      identifier = Token_into_stringval(vm, &C->parser.previous);
-    HashTable* scope_set  = HashTableArray_index(&C->loc_defs, C->depth - 1);
+    HashTable* scope_set  = Array_Table_index(&C->loc_defs, C->depth - 1);
     return !HashTable_get(scope_set, identifier, NULL);
 }
 
@@ -1000,7 +998,7 @@ SK_INTERNAL(Int) C_make_global(Compiler* C, VM* vm, bool fixed)
 SK_INTERNAL(force_inline Int) C_make_undefined_global(Compiler* C, VM* vm)
 {
     Value idx =
-        NUMBER_VAL(GlobalArray_push(&vm->global_vals, (Global){UNDEFINED_VAL, false}));
+        NUMBER_VAL(Array_Global_push(&vm->global_vals, (Global){UNDEFINED_VAL, false}));
     Value identifier = Token_into_stringval(vm, &C->parser.previous);
 
     HashTable_insert(&vm->global_ids, identifier, idx);
@@ -1069,19 +1067,19 @@ C_patch_jmp(Compiler* C, UInt jmp_offset)
 
 SK_INTERNAL(force_inline void) C_add_bstorage(Compiler* C)
 {
-    IntArray patches;
-    IntArray_init(&patches);
-    IntArrayArray_push(&C->context.breaks, patches);
+    Array_Int patches;
+    Array_Int_init(&patches, NULL, arr_reallocate);
+    Array_Array_Int_push(&C->context.breaks, patches);
 }
 
 SK_INTERNAL(force_inline void) C_rm_bstorage(Compiler* C)
 {
-    IntArray* patches = IntArrayArray_last(&C->context.breaks);
+    Array_Int* patches = Array_Array_Int_last(&C->context.breaks);
     for(Int i = 0; i < (Int)patches->len; i++) {
         C_patch_jmp(C, patches->data[i]);
     }
-    IntArray arr = IntArrayArray_pop(&C->context.breaks);
-    IntArray_free(&arr);
+    Array_Int arr = Array_Array_Int_pop(&C->context.breaks);
+    Array_Int_free(&arr);
 }
 
 SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
@@ -1105,8 +1103,8 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     bool dflt  = false; /* Set if 'default' is parsed */
 
     /* fall-through jumps that need patching */
-    IntArray fts;
-    IntArray_init(&fts);
+    Array_Int fts;
+    Array_Int_init(&fts, NULL, arr_reallocate);
 
     Int outermostsw_depth          = C()->context.innermostsw_depth;
     C()->context.innermostsw_depth = C()->depth;
@@ -1114,7 +1112,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     while(!C_match(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
         if(C_match(C(), TOK_CASE) || C_match(C(), TOK_DEFAULT)) {
             if(state != 0) {
-                IntArray_push(&fts, C_emit_jmp(C(), OP_JMP));
+                Array_Int_push(&fts, C_emit_jmp(C(), OP_JMP));
                 if(state != -1) {
                     C_patch_jmp(C(), state);
                 }
@@ -1138,7 +1136,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
 
             if(fts.len > 0) {
                 /* Patch Fall-through jump */
-                C_patch_jmp(C(), *IntArray_last(&fts));
+                C_patch_jmp(C(), *Array_Int_last(&fts));
             }
         } else {
             if(state == 0) {
@@ -1153,7 +1151,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     }
 
     /* Free fallthrough jumps array */
-    IntArray_free(&fts);
+    Array_Int_free(&fts);
     /* Patch and remove breaks */
     C_rm_bstorage(C());
     /* Pop switch value */
@@ -1347,7 +1345,7 @@ SK_INTERNAL(void) parse_stm_break(Compiler* C)
 {
     C_expect(C, TOK_SEMICOLON, "Expect ';' after 'break'.");
 
-    IntArrayArray* arr = &C->context.breaks;
+    Array_Array_Int* arr = &C->context.breaks;
 
     if(!C_flag_is(C, LOOP_BIT) && !C_flag_is(C, SWITCH_BIT)) {
         C_error(C, "'break' statement not in loop or switch statement.");
@@ -1369,7 +1367,7 @@ SK_INTERNAL(void) parse_stm_break(Compiler* C)
         C_emit_byte(C, OP_POP);
     }
 
-    IntArray_push(IntArrayArray_last(arr), C_emit_jmp(C, OP_JMP));
+    Array_Int_push(Array_Array_Int_last(arr), C_emit_jmp(C, OP_JMP));
 }
 
 SK_INTERNAL(void) parse_stm_return(VM* vm, CompilerPPtr Cptr)
@@ -1460,7 +1458,7 @@ SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Value name)
 SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
 {
     for(UInt i = 0; i < C->upvalues.len; i++) {
-        Upvalue* upvalue = UpvalueArray_index(&C->upvalues, i);
+        Upvalue* upvalue = Array_Upvalue_index(&C->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local) {
             // Return existing UpValue index
             return i;
@@ -1478,7 +1476,7 @@ SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
 
     // Otherwise add the UpValue into the array
     C->fn->upvalc++;
-    return UpvalueArray_push(&C->upvalues, (Upvalue){idx, local});
+    return Array_Upvalue_push(&C->upvalues, (Upvalue){idx, local});
 }
 
 SK_INTERNAL(Int) C_get_upval(Compiler* C, const Value name)

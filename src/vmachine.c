@@ -17,8 +17,6 @@
 #include <stdlib.h>
 #include <time.h>
 
-DEFINE_ARRAY(Global);
-
 #define stack_peek(top) ((Value) * ((vm)->sp - (top + 1)))
 #define stack_reset(vm) (vm)->sp = (vm)->stack
 #define stack_size(vm)  ((vm)->sp - (vm)->stack)
@@ -77,7 +75,7 @@ VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
     VM_push(vm, OBJ_VAL(ObjString_from(vm, name, strlen(name))));
     VM_push(vm, OBJ_VAL(ObjNative_new(vm, native, arity)));
 
-    UInt idx = GlobalArray_push(&vm->global_vals, (Global){vm->stack[1], false});
+    UInt idx = Array_Global_push(&vm->global_vals, (Global){vm->stack[1], false});
     HashTable_insert(&vm->global_ids, vm->stack[0], NUMBER_VAL((double)idx));
 
     VM_pop(vm);
@@ -232,7 +230,7 @@ void VM_init(VM* vm)
     stack_reset(vm);
 
     HashTable_init(&vm->global_ids);
-    GlobalArray_init(&vm->global_vals);
+    Array_Global_init(&vm->global_vals, vm, vm_reallocate);
     HashTable_init(&vm->strings);
 
     // Native function definitions
@@ -797,8 +795,14 @@ InterpretResult VM_interpret(VM* vm, const char* source)
 void VM_free(VM* vm)
 {
     HashTable_free(&vm->global_ids);
-    GlobalArray_free(&vm->global_vals);
+    Array_Global_free(&vm->global_vals);
     HashTable_free(&vm->strings);
-    MFREE_LIST(vm->objects, Obj_free);
-    MFREE(vm, sizeof(VM));
+
+    Obj* next;
+    for(Obj* head = vm->objects; head != NULL; head = next) {
+        next = head->next;
+        Obj_free(vm, head);
+    }
+
+    FREE(vm);
 }
