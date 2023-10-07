@@ -8,10 +8,10 @@
 SK_INTERNAL(void) LineArray_write(Array_UInt* lines, UInt line, UInt index);
 
 /* Initializes the Chunk */
-void Chunk_init(Chunk* chunk)
+void Chunk_init(Chunk* chunk, void* roots)
 {
     Array_Byte_init(&chunk->code, NULL, arr_reallocate);
-    Array_Value_init(&chunk->constants, NULL, arr_reallocate);
+    Array_Value_init(&chunk->constants, (Roots*)roots, gc_reallocate);
     Array_UInt_init(&chunk->lines, NULL, arr_reallocate);
 }
 
@@ -130,6 +130,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 #undef BREAK
 }
 
+// @TODO: Implement binary search
 /* Returns the line of the current instruction (DEBUG ONLY) */
 UInt Chunk_getline(Chunk* chunk, UInt index)
 {

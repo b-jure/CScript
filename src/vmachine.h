@@ -27,9 +27,8 @@ typedef struct {
 
 typedef struct VM VM;
 
-void *vm_reallocate(void *vm, void *ptr, size_t oldsize, size_t newsize);
-
 ARRAY_NEW(Array_Global, Global);
+ARRAY_NEW(Array_ObjRef, Obj *);
 
 struct VM {
   CallFrame frames[VM_FRAMES_MAX]; /* Call frames */
@@ -41,6 +40,7 @@ struct VM {
   HashTable strings;               /* Strings (interning) */
   ObjUpvalue *open_upvals;         /* List of heap allocated Upvalues */
   Obj *objects;                    /* List of allocated object (GC) */
+  Array_ObjRef gray_stack;
 };
 
 typedef enum {
@@ -49,8 +49,9 @@ typedef enum {
   INTERPRET_RUNTIME_ERROR, /* VM runtime error */
 } InterpretResult;
 
-void VM_init(VM *vm);
+void VM_init(VM *vm, void *roots);
 InterpretResult VM_interpret(VM *vm, const char *source_code);
+void VM_set_roots(VM *vm, void *roots);
 void VM_free(VM *vm);
 
 #endif

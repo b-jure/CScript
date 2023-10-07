@@ -70,7 +70,7 @@ typedef struct {
   Array_Byte code;
 } Chunk;
 
-void Chunk_init(Chunk *chunk);
+void Chunk_init(Chunk *chunk, void *roots);
 void Chunk_free(Chunk *chunk);
 void Chunk_write(Chunk *chunk, uint8_t byte, UInt line);
 void Chunk_write_codewparam(Chunk *chunk, OpCode code, UInt idx, UInt line);

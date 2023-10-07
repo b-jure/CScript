@@ -4,6 +4,7 @@
 #include "chunk.h"
 #include "common.h"
 #include "hash.h"
+#include "mem.h"
 #include "value.h"
 #include "vmachine.h"
 
@@ -77,15 +78,14 @@ static force_inline bool is_object_type(Value value, ObjType type) {
   return IS_OBJ(value) && AS_OBJ(value)->type == type;
 }
 
-void Obj_mark(Obj* obj);
 void ObjType_print(ObjType type); // Debug
-ObjUpvalue *ObjUpvalue_new(VM *vm, Value *var_ref);
-ObjClosure *ObjClosure_new(VM *vm, ObjFunction *fn);
-ObjNative *ObjNative_new(VM *vm, NativeFn fn, UInt arity);
+ObjUpvalue *ObjUpvalue_new(Roots *roots, Value *var_ref);
+ObjClosure *ObjClosure_new(Roots *roots, ObjFunction *fn);
+ObjNative *ObjNative_new(Roots *roots, NativeFn fn, UInt arity);
 uint64_t Obj_hash(Value value);
-ObjString *ObjString_from(VM *vm, const char *chars, size_t len);
-ObjFunction *ObjFunction_new(VM *vm);
+ObjString *ObjString_from(Roots *roots, const char *chars, size_t len);
+ObjFunction *ObjFunction_new(Roots *roots);
 void Object_print(const Value value);
-void Obj_free(VM* vm, Obj *object);
+void Obj_free(Roots *roots, Obj *object);
 
 #endif

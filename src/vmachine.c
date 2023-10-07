@@ -21,6 +21,8 @@
 #define stack_reset(vm) (vm)->sp = (vm)->stack
 #define stack_size(vm)  ((vm)->sp - (vm)->stack)
 
+Int runtime = 0;
+
 SK_INTERNAL(force_inline void) VM_push(VM* vm, Value val)
 {
     if(likely(vm->sp - vm->stack < VM_STACK_MAX)) {
@@ -72,8 +74,8 @@ void VM_error(VM* vm, const char* errfmt, ...)
 SK_INTERNAL(force_inline void)
 VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
 {
-    VM_push(vm, OBJ_VAL(ObjString_from(vm, name, strlen(name))));
-    VM_push(vm, OBJ_VAL(ObjNative_new(vm, native, arity)));
+    VM_push(vm, OBJ_VAL(ObjString_from(&(Roots){NULL, vm}, name, strlen(name))));
+    VM_push(vm, OBJ_VAL(ObjNative_new(&(Roots){NULL, vm}, native, arity)));
 
     UInt idx = Array_Global_push(&vm->global_vals, (Global){vm->stack[1], false});
     HashTable_insert(&vm->global_ids, vm->stack[0], NUMBER_VAL((double)idx));
@@ -88,7 +90,8 @@ SK_INTERNAL(force_inline bool) native_clock(VM* vm, unused Int _, unused Value* 
     clock_t time = clock();
 
     if(unlikely(time < 0)) {
-        argv[-1] = OBJ_VAL(ERR_NEW(CLOCK_ERR));
+        Roots roots = {NULL, vm};
+        argv[-1]    = OBJ_VAL(ERR_NEW(&roots, CLOCK_ERR));
         return false;
     }
 
@@ -214,7 +217,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     buffer[length] = '\0';
 
     // @GC - allocated
-    return ObjString_from(vm, buffer, length);
+    return ObjString_from(&(Roots){NULL, vm}, buffer, length);
 }
 
 /*
@@ -222,7 +225,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
  */
 /*======================= VM core functions ==========================*/
 
-void VM_init(VM* vm)
+void VM_init(VM* vm, void* roots)
 {
     vm->fc          = 0;
     vm->objects     = NULL;
@@ -230,8 +233,9 @@ void VM_init(VM* vm)
     stack_reset(vm);
 
     HashTable_init(&vm->global_ids);
-    Array_Global_init(&vm->global_vals, vm, vm_reallocate);
+    Array_Global_init(&vm->global_vals, roots, gc_reallocate);
     HashTable_init(&vm->strings);
+    Array_ObjRef_init(&vm->gray_stack, NULL, arr_reallocate);
 
     // Native function definitions
     VM_define_native(vm, "clock", native_clock, 0);
@@ -280,7 +284,7 @@ SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, UInt ar
 SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
 {
     if(IS_OBJ(fnval)) {
-        switch(OBJ_TYPE(fnval)) {
+        switch(OBJ_TYPE(fnval) & ~1) {
             case OBJ_FUNCTION:
                 return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc);
             case OBJ_CLOSURE: {
@@ -322,7 +326,7 @@ SK_INTERNAL(force_inline ObjUpvalue*) VM_capture_upval(VM* vm, Value* var_ref)
         return *pp;
     }
 
-    ObjUpvalue* upval = ObjUpvalue_new(vm, var_ref);
+    ObjUpvalue* upval = ObjUpvalue_new(&(Roots){NULL, vm}, var_ref);
     upval->next       = *pp;
     *pp               = upval;
 
@@ -346,6 +350,7 @@ SK_INTERNAL(force_inline void) VM_close_upval(VM* vm, Value* last)
 // that needs to avoid branching and figure out the instruction length arithmetically.
 SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 {
+    runtime = 1;
 #define READ_BYTE()      (*ip++)
 #define READ_BYTEL()     (ip += 3, GET_BYTES3(ip - 3))
 #define READ_CONSTANT()  frame->fn->chunk.constants.data[READ_BYTE()]
@@ -699,7 +704,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_CLOSURE)
             {
                 ObjFunction* fn      = AS_FUNCTION(READ_CONSTANTL());
-                ObjClosure*  closure = ObjClosure_new(vm, fn);
+                ObjClosure*  closure = ObjClosure_new(&(Roots){NULL, vm}, fn);
                 VM_push(vm, OBJ_VAL(closure));
 
                 for(UInt i = 0; i < closure->fn->upvalc; i++) {
@@ -784,10 +789,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
     }
 
     VM_push(vm, OBJ_VAL(fn));
-    ObjClosure* closure = ObjClosure_new(vm, fn);
-    VM_pop(vm);
-    VM_push(vm, OBJ_VAL(closure));
-    VM_call_fn(vm, closure, closure->fn, 0);
+    VM_call_fn(vm, NULL, fn, 0);
 
     return VM_run(vm);
 }
@@ -797,11 +799,12 @@ void VM_free(VM* vm)
     HashTable_free(&vm->global_ids);
     Array_Global_free(&vm->global_vals);
     HashTable_free(&vm->strings);
+    Array_ObjRef_free(&vm->gray_stack);
 
     Obj* next;
     for(Obj* head = vm->objects; head != NULL; head = next) {
         next = head->next;
-        Obj_free(vm, head);
+        Obj_free(&(Roots){NULL, vm}, head);
     }
 
     FREE(vm);

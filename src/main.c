@@ -1,7 +1,7 @@
 #include "chunk.h"
 #include "debug.h"
-#include "vmachine.h"
 #include "mem.h"
+#include "vmachine.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +26,7 @@ static void repl(VM* vm)
         }
 
         VM_interpret(vm, line);
+        runtime = 0;
     }
 }
 
@@ -33,6 +34,7 @@ static void File_run(VM* vm, const char* path)
 {
     char*           source = File_read(path);
     InterpretResult result = VM_interpret(vm, source);
+    runtime                = 0;
     free(source);
 
     if(result == INTERPRET_COMPILE_ERROR) {
@@ -91,8 +93,10 @@ static char* File_read(const char* path)
 
 int main(int argc, const char* argv[])
 {
-    VM* vm = MALLOC(sizeof(VM));
-    VM_init(vm);
+    runtime  = 0;
+    VM*   vm = MALLOC(sizeof(VM));
+    Roots r  = {NULL, vm};
+    VM_init(vm, (void*)&r);
 
     if(argc == 1) {
         repl(vm);

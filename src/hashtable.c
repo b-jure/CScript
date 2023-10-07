@@ -144,8 +144,7 @@ bool HashTable_insert(HashTable* table, Value key, Value value)
 
     Entry* entry = Entry_find(table->entries, table->cap, key);
 
-    // xxHash is pretty good
-    if(unlikely(IS_TOMBSTONE(entry))) {
+    if(unlikely(IS_TOMBSTONE(entry))) { // xxHash is pretty good
         HashTable_expand(table);
         entry = Entry_find(table->entries, table->cap, key);
     }
@@ -210,7 +209,6 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
         index = QUADRATIC_PROBE(hash, i, table->cap);
     } while(likely(start_index != index));
 
-    // @FIX: Is this even possible?
     return NULL;
 }
 

@@ -13,6 +13,12 @@ typedef uint8_t Byte;
 typedef uint32_t UInt;
 typedef int32_t Int;
 
+/*
+ * 0 - compiling source code
+ * 1 - VM is running
+ */
+extern Int runtime;
+
 /* Bit manipulation--------------------------------------------------------- */
 SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x) {
   return (x >= sizeof(size_t) * CHAR_BIT) ? 0xffffffffffffffff

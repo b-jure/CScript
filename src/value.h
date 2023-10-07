@@ -58,7 +58,6 @@ typedef struct {
 
 ARRAY_NEW(Array_Value, Value);
 
-void Value_mark(Value val);
 void Value_print(Value value);
 bool Value_eq(Value a, Value b);
 Hash Value_hash(Value value);

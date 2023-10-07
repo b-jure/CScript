@@ -20,7 +20,7 @@
 void *reallocate(void *ptr, size_t bytes);
 #endif
 
-typedef void *(*AllocatorFn)(void *owner, void *ptr, size_t oldsize,
+typedef void *(*AllocatorFn)(void *roots, void *ptr, size_t oldsize,
                              size_t newsize);
 
 static force_inline void *arr_reallocate(unused void *_, void *ptr,
@@ -33,16 +33,16 @@ static force_inline void *arr_reallocate(unused void *_, void *ptr,
 
 #define ARRAY_NEW(name, type)                                                  \
   typedef struct {                                                             \
-    void *type_owner;                                                          \
+    void *roots;                                                               \
     AllocatorFn allocator;                                                     \
     size_t cap;                                                                \
     size_t len;                                                                \
     type *data;                                                                \
   } name;                                                                      \
                                                                                \
-  force_inline void _ARRAY_METHOD(name, init, void *type_owner,                \
+  force_inline void _ARRAY_METHOD(name, init, void *roots,                     \
                                   AllocatorFn allocfn) {                       \
-    self->type_owner = type_owner;                                             \
+    self->roots = roots;                                                       \
     self->allocator = allocfn;                                                 \
     self->cap = 0;                                                             \
     self->len = 0;                                                             \
@@ -51,7 +51,7 @@ static force_inline void *arr_reallocate(unused void *_, void *ptr,
                                                                                \
   force_inline void _ARRAY_METHOD(name, init_cap, uint32_t cap) {              \
     self->data =                                                               \
-        (type *)self->allocator(self->type_owner, self->data,                  \
+        (type *)self->allocator(self->roots, self->data,                       \
                                 self->cap * sizeof(type), cap * sizeof(type)); \
     self->cap = cap;                                                           \
   }                                                                            \
@@ -67,7 +67,7 @@ static force_inline void *arr_reallocate(unused void *_, void *ptr,
                 self->cap);                                                    \
         exit(ENOMEM);                                                          \
       } else {                                                                 \
-        self->data = (type *)self->allocator(self->type_owner, self->data,     \
+        self->data = (type *)self->allocator(self->roots, self->data,          \
                                              old_cap * sizeof(type),           \
                                              self->cap * sizeof(type));        \
       }                                                                        \
@@ -113,9 +113,8 @@ static force_inline void *arr_reallocate(unused void *_, void *ptr,
   force_inline size_t _ARRAY_METHOD(name, len) { return self->len; }           \
                                                                                \
   force_inline void _ARRAY_METHOD(name, free) {                                \
-    self->allocator(self->type_owner, self->data, self->cap * sizeof(type),    \
-                    0);                                                        \
-    _CALL_ARRAY_METHOD(name, init, NULL, NULL);                                \
+    self->allocator(self->roots, self->data, self->cap * sizeof(type), 0);     \
+    _CALL_ARRAY_METHOD(name, init, self->roots, self->allocator);              \
   }
 
 #endif

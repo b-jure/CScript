@@ -7,13 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void Value_mark(Value val)
-{
-    if(IS_OBJ(val)) {
-        Obj_mark(AS_OBJ(val));
-    }
-}
-
 void Value_print(Value value)
 {
     switch(value.type) {

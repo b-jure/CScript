@@ -257,7 +257,7 @@ typedef struct {
 SK_INTERNAL(Chunk*) current_chunk(Compiler* C);
 SK_INTERNAL(void) C_advance(Compiler* compiler);
 SK_INTERNAL(void) C_error(Compiler* compiler, const char* error, ...);
-SK_INTERNAL(void) C_free(Compiler* C, Compiler* enclosing);
+SK_INTERNAL(void) C_free(Compiler* C);
 SK_INTERNAL(void) Parser_init(Parser* parser, const char* source);
 SK_INTERNAL(void) parse_number(VM* vm, CompilerPPtr Cptr);
 SK_INTERNAL(void) parse_string(VM* vm, CompilerPPtr Cptr);
@@ -293,11 +293,13 @@ SK_INTERNAL(void) CFCtx_init(CFCtx* context)
 }
 
 /* Have to pass VM while initializing 'Compiler' because we are allocating objects. */
-SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* Cenclosing)
+SK_INTERNAL(void)
+C_init(Compiler* C, Roots* roots, FunctionType fn_type, Compiler* enclosing)
 {
-    C->enclosing = Cenclosing;
+    C->enclosing = enclosing;
 
-    C->fn      = ObjFunction_new(vm);
+    C->fn      = NULL; // Initialize to NULL so gc does not get confused
+    C->fn      = ObjFunction_new(roots);
     C->fn_type = fn_type;
 
     CFCtx_init(&C->context);
@@ -308,9 +310,11 @@ SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* Ce
     // Initialize Upvalue array only once when initializing outermost compiler.
     // This array then gets passed on to other nested compilers for each
     // function.
-    if(Cenclosing == NULL) {
+    if(enclosing == NULL) {
         Array_Upvalue_init(&C->upvalues, NULL, arr_reallocate);
         Array_Upvalue_init_cap(&C->upvalues, SHORT_STACK_SIZE);
+    } else {
+        C->upvalues = enclosing->upvalues;
     }
 
     C->loc_len = 0;
@@ -325,27 +329,36 @@ SK_INTERNAL(void) C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* Ce
 
     if(fn_type != FN_SCRIPT) {
         C->fn->name =
-            ObjString_from(vm, C->parser.previous.start, C->parser.previous.len);
+            ObjString_from(roots, C->parser.previous.start, C->parser.previous.len);
     }
 
     local->name.start = "";
     local->name.len   = 0;
 }
 
-SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr)
+SK_INTERNAL(void) C_update_roots(Compiler* C, VM* vm)
+{
+    Roots* r = vm->global_vals.roots;
+    r->c     = C;
+    r        = C->fn->chunk.constants.roots;
+    r->c     = C;
+}
+
+SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr, VM* vm)
 {
     Compiler* C      = C();
     UInt      oldcap = C->loc_cap;
 
-    C->loc_cap = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);
+    C->loc_cap = MIN(GROW_ARRAY_CAPACITY(oldcap), VM_STACK_MAX);
     C          = GROW_LOCAL_STACK(C, oldcap, C->loc_cap);
     C()        = C;
+    C_update_roots(C(), vm);
 }
 
-void mark_c_roots(Compiler* C)
+void mark_c_roots(VM* vm, Compiler* C)
 {
     for(Compiler* current = C; current != NULL; current = current->enclosing) {
-        Obj_mark((Obj*)current->fn);
+        mark_obj(vm, (Obj*)current->fn);
     }
 }
 
@@ -363,9 +376,9 @@ SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
     return Chunk_make_constant(current_chunk(C), constant);
 }
 
-SK_INTERNAL(force_inline Value) Token_into_stringval(VM* vm, const Token* name)
+SK_INTERNAL(force_inline Value) Token_into_stringval(Roots* roots, const Token* name)
 {
-    return OBJ_VAL(ObjString_from(vm, name->start, name->len));
+    return OBJ_VAL(ObjString_from(roots, name->start, name->len));
 }
 
 SK_INTERNAL(force_inline UInt)
@@ -549,11 +562,13 @@ SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C)
 
 ObjFunction* compile(VM* vm, const char* source)
 {
-    Compiler* C = ALLOC_COMPILER();
-    C_init(C, vm, FN_SCRIPT, NULL);
+    Compiler* C           = ALLOC_COMPILER();
+    Roots     roots       = {C, vm};
+    vm->global_vals.roots = &roots;
+    C_init(C, &roots, FN_SCRIPT, NULL);
     Parser_init(&C->parser, source);
-    C_advance(C);
 
+    C_advance(C);
     while(!C_match(C, TOK_EOF)) {
         parse_dec(vm, &C);
     }
@@ -561,8 +576,14 @@ ObjFunction* compile(VM* vm, const char* source)
     ObjFunction* fn = compile_end(C);
 
     bool err = C_flag_is(C, ERROR_BIT);
-    C_free(C, NULL);
 
+
+    Roots* r = fn->chunk.constants.roots;
+    r->c     = NULL;
+    r        = vm->global_vals.roots;
+    r->c     = NULL;
+
+    C_free(C);
     return (err ? NULL : fn);
 }
 
@@ -580,7 +601,7 @@ SK_INTERNAL(void) CFCtx_free(CFCtx* context)
     context->innermostsw_depth = 0;
 }
 
-SK_INTERNAL(void) C_free(Compiler* C, Compiler* enclosing)
+SK_INTERNAL(void) C_free(Compiler* C)
 {
     // @TODO: add additional parameter to generic array when
     //        freeing elements of the array (free fn pointer)
@@ -589,10 +610,10 @@ SK_INTERNAL(void) C_free(Compiler* C, Compiler* enclosing)
     }
     Array_Table_free(&C->loc_defs);
     CFCtx_free(&C->context);
-    if(enclosing == NULL) {
+    if(C->enclosing == NULL) {
         Array_Upvalue_free(&C->upvalues);
     }
-    free(C);
+    FREE(C);
 }
 
 /*========================== PARSE ========================
@@ -727,7 +748,7 @@ SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
 {
     // Safe to decrement loc_len (UInt), only gets called after declaring variable
     Local*     local      = &C->locals[C->loc_len - 1];
-    Value      identifier = Token_into_stringval(vm, &local->name);
+    Value      identifier = Token_into_stringval(&(Roots){C, vm}, &local->name);
     HashTable* scope_set  = &C->loc_defs.data[C->depth - 1];
 
     HashTable_insert(scope_set, identifier, NUMBER_VAL(C->loc_len - 1));
@@ -808,10 +829,14 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 
     Compiler* C_new = ALLOC_COMPILER(); /* Allocate new compiler */
 
-    C_new->parser   = C()->parser;   // UPDATE OUTER COMPILER LATER
-    C_new->upvalues = C()->upvalues; // UPDATE OUTER COMPILER LATER
+    C_new->parser = C()->parser; // UPDATE OUTER COMPILER LATER
 
-    C_init(C_new, vm, type, C()); /* Initialize the new compiler */
+    // Update global_vals vm array with new compiler root
+    Roots* r = vm->global_vals.roots; // VM root never changes
+    r->c     = C_new;
+
+    /* Initialize the new compiler with the new roots */
+    C_init(C_new, r, type, C());
 
     uint64_t mask = C_flags(C());
     C_flags_clear(C_new);
@@ -840,19 +865,34 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 
     ObjFunction* fn = compile_end(C_new);
 
+    // Restore old compiler root for global_vals vm array
+    r->c = C();
+    // Null out compiled function compiler root
+    r    = fn->chunk.constants.roots;
+    r->c = NULL;
+
     // Restore flags but additionally transfer error flag
     // if error happened in the new compiler.
     C_flag_clear(C_new(), FN_BIT);
     C_new()->parser.flags |= (mask | C_flag_is(C_new, ERROR_BIT));
 
-    C()->parser   = C_new()->parser;   // UPDATE OUTER COMPILER
-    C()->upvalues = C_new()->upvalues; // UPDATE OUTER COMPILER
+    C()->parser = C_new()->parser; // UPDATE OUTER COMPILER
 
     // Create a closure only when we have upvalues
     if(fn->upvalc == 0) {
+        printf(
+            "Writting normal function; fn->upvalc = %u, fn = %s\n",
+            fn->upvalc,
+            fn->name->storage);
         C_emit_op(C(), OP_CONST, C_make_const(C(), OBJ_VAL(fn)));
+        printf("Done writting normal function '%s'\n", fn->name->storage);
     } else {
+        printf(
+            "Writting closure function; fn->upvalc = %u, fn = %s\n",
+            fn->upvalc,
+            fn->name->storage);
         C_emit_op(C(), OP_CLOSURE, C_make_const(C(), OBJ_VAL(fn)));
+        printf("Done writting closure function '%s'\n", fn->name->storage);
         for(UInt i = 0; i < fn->upvalc; i++) {
             Upvalue* upval = Array_Upvalue_index(&C()->upvalues, i);
             C_emit_byte(C(), upval->local ? 1 : 0);
@@ -860,7 +900,7 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
         }
     }
 
-    C_free(C_new, C());
+    C_free(C_new);
 
 #undef C_new
 }
@@ -930,7 +970,7 @@ parse_dec_var(VM* vm, CompilerPPtr Cptr)
     C_emit_op(C(), GET_OP_TYPE(index, OP_DEFINE_GLOBAL), index);
 }
 
-SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
+SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr, VM* vm)
 {
     Compiler* C = C();
 
@@ -942,7 +982,7 @@ SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr)
                 MIN(VM_STACK_MAX, LOCAL_STACK_MAX));
             return;
         }
-        C_grow_stack(Cptr);
+        C_grow_stack(Cptr, vm);
         C = C();
     }
 
@@ -961,7 +1001,7 @@ SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
 
 SK_INTERNAL(bool) C_local_is_unique(Compiler* C, VM* vm)
 {
-    Value      identifier = Token_into_stringval(vm, &C->parser.previous);
+    Value      identifier = Token_into_stringval(&(Roots){C, vm}, &C->parser.previous);
     HashTable* scope_set  = Array_Table_index(&C->loc_defs, C->depth - 1);
     return !HashTable_get(scope_set, identifier, NULL);
 }
@@ -976,12 +1016,12 @@ SK_INTERNAL(void) C_make_local(CompilerPPtr Cptr, VM* vm)
             C->parser.previous.len,
             C->parser.previous.start);
     }
-    C_new_local(Cptr);
+    C_new_local(Cptr, vm);
 }
 
 SK_INTERNAL(Int) C_make_global(Compiler* C, VM* vm, bool fixed)
 {
-    Value identifier = Token_into_stringval(vm, &C->parser.previous);
+    Value identifier = Token_into_stringval(&(Roots){C, vm}, &C->parser.previous);
     UInt  idx        = make_const_identifier(C, vm, identifier, fixed);
 
     if(unlikely(idx > UINT24_MAX)) {
@@ -999,7 +1039,7 @@ SK_INTERNAL(force_inline Int) C_make_undefined_global(Compiler* C, VM* vm)
 {
     Value idx =
         NUMBER_VAL(Array_Global_push(&vm->global_vals, (Global){UNDEFINED_VAL, false}));
-    Value identifier = Token_into_stringval(vm, &C->parser.previous);
+    Value identifier = Token_into_stringval(&(Roots){C, vm}, &C->parser.previous);
 
     HashTable_insert(&vm->global_ids, identifier, idx);
 
@@ -1009,7 +1049,7 @@ SK_INTERNAL(force_inline Int) C_make_undefined_global(Compiler* C, VM* vm)
 SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
 {
     Value idx;
-    Value identifier = Token_into_stringval(vm, &C->parser.previous);
+    Value identifier = Token_into_stringval(&(Roots){C, vm}, &C->parser.previous);
 
     if(!HashTable_get(&vm->global_ids, identifier, &idx)) {
         if(C_flag_is(C, FN_BIT)) {
@@ -1482,6 +1522,9 @@ SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
 SK_INTERNAL(Int) C_get_upval(Compiler* C, const Value name)
 {
     if(C->enclosing == NULL) {
+        printf(
+            "Enclosing is NULL, will get global with name: %s.\n",
+            AS_CSTRING(name));
         return -1;
     }
 
@@ -1502,7 +1545,7 @@ SK_INTERNAL(Int) C_get_upval(Compiler* C, const Value name)
 
 SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
 {
-    const Value name = Token_into_stringval(vm, &C()->parser.previous);
+    const Value name = Token_into_stringval(&(Roots){C(), vm}, &C()->parser.previous);
     OpCode      setop, getop;
     Int         idx   = C_get_local(C(), name);
     int16_t     flags = -1;
@@ -1539,9 +1582,11 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
 
 SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr)
 {
-    Compiler*  C = C();
-    ObjString* string =
-        ObjString_from(vm, C->parser.previous.start + 1, C->parser.previous.len - 2);
+    Compiler*  C      = C();
+    ObjString* string = ObjString_from(
+        &(Roots){C(), vm},
+        C->parser.previous.start + 1,
+        C->parser.previous.len - 2);
     UInt idx = C_make_const(C, OBJ_VAL(string));
     C_emit_op(C, OP_CONST, idx);
 }
