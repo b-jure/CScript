@@ -1,11 +1,20 @@
 #include "chunk.h"
 #include "common.h"
 #include "mem.h"
+#include "vmachine.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
 SK_INTERNAL(void) LineArray_write(Array_UInt* lines, UInt line, UInt index);
+
+UInt Chunk_make_constant(VM* vm, Chunk* chunk, Value value)
+{
+    VM_push(vm, value);
+    UInt idx = Array_Value_push(&chunk->constants, value);
+    VM_pop(vm);
+    return idx;
+}
 
 /* Initializes the Chunk */
 void Chunk_init(Chunk* chunk, void* roots)

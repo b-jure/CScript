@@ -34,7 +34,7 @@ typedef enum { // 1 for marked
 } ObjType;
 
 struct Obj { // typedef is inside 'value.h'
-  ObjType type;
+  ObjType otype;
   Obj *next;
 };
 
@@ -75,7 +75,7 @@ typedef struct {
 } ObjNative;
 
 static force_inline bool is_object_type(Value value, ObjType type) {
-  return IS_OBJ(value) && AS_OBJ(value)->type == type;
+  return IS_OBJ(value) && (AS_OBJ(value)->otype & ~1) == type;
 }
 
 void ObjType_print(ObjType type); // Debug

@@ -15,9 +15,9 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#define OBJ_MARK(obj)      (obj->type |= (uint32_t)1)
-#define OBJ_IS_MARKED(obj) ((uint32_t)(obj)->type & (uint32_t)1)
-#define OBJ_UNMARK(obj)    ((obj)->type &= (uint32_t)~1)
+#define OBJ_MARK(obj)      ((obj)->otype |= (uint32_t)1)
+#define OBJ_IS_MARKED(obj) ((uint32_t)(obj)->otype & (uint32_t)1)
+#define OBJ_UNMARK(obj)    ((obj)->otype &= (uint32_t)~1)
 
 // Make extern for 'mark_c_roots' function in 'compiler.c'.
 void mark_obj(VM* vm, Obj* obj)
@@ -27,7 +27,7 @@ void mark_obj(VM* vm, Obj* obj)
     }
 
     OBJ_MARK(obj);
-    if(obj->type & (OBJ_STRING | OBJ_NATIVE)) {
+    if((obj->otype & ~1) & (OBJ_STRING | OBJ_NATIVE)) {
 #ifdef DEBUG_LOG_GC
         printf("%p blacken ", (void*)obj);
         Value_print(OBJ_VAL(obj));
@@ -59,7 +59,15 @@ SK_INTERNAL(force_inline void) mark_globals(VM* vm)
 
         if(entry->key.type != VAL_EMPTY) {
             mark_obj(vm, AS_OBJ(entry->key));
-            mark_value(vm, vm->global_vals.data[(UInt)AS_NUMBER(entry->value)].value);
+            UInt idx = (UInt)AS_NUMBER(entry->value);
+            mark_value(vm, vm->global_vals.data[idx].value);
+        }
+    }
+
+    for(UInt i = 0; i < vm->global_vals.len; i++) {
+        Value val = vm->global_vals.data[i].value;
+        if(IS_OBJ(val)) {
+            assert(OBJ_IS_MARKED(AS_OBJ(val)));
         }
     }
 }
@@ -96,7 +104,7 @@ SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
     Value_print(OBJ_VAL(obj));
     printf("\n");
 #endif
-    switch(obj->type & ~1) {
+    switch(obj->otype & ~1) {
         case OBJ_UPVAL:
             mark_value(vm, ((ObjUpvalue*)obj)->closed);
             break;
@@ -133,30 +141,37 @@ SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)
 {
     for(UInt i = 0; i < vm->strings.cap; i++) {
         Entry* entry = &vm->strings.entries[i];
-        if(entry->key.type != VAL_EMPTY && !OBJ_IS_MARKED(AS_OBJ(entry->key))) {
+        if(entry->key.type == VAL_OBJ && !OBJ_IS_MARKED(AS_OBJ(entry->key))) {
             HashTable_remove(&vm->strings, entry->key);
         }
     }
 }
 
-// Check 'VM_capture_upval' if double pointer (pp) to object is confusing you.
 SK_INTERNAL(force_inline void) sweep(Roots* roots)
 {
-    Obj** pp = &roots->vm->objects;
+    Obj* previous = NULL;
+    Obj* current  = roots->vm->objects;
 
-    while(*pp != NULL) {
-        if(OBJ_IS_MARKED(*pp)) {
-            OBJ_UNMARK(*pp); // Unmark object for next gc run
-            pp = &(*pp)->next;
+    while(current != NULL) {
+        if(OBJ_IS_MARKED(current)) {
+            OBJ_UNMARK(current);
+            previous = current;
+            current  = current->next;
         } else {
-            Obj* unmarked = *pp;
-            *pp           = unmarked->next;
-            Obj_free(roots, unmarked);
+            Obj* unreached = current;
+            current        = current->next;
+            if(previous != NULL) {
+                previous->next = current;
+            } else {
+                roots->vm->objects = current;
+            }
+
+            Obj_free(roots, unreached);
         }
     }
 }
 
-static void gc(Roots* roots)
+unused static void gc(Roots* roots)
 {
     Compiler* c  = roots->c;
     VM*       vm = roots->vm;
@@ -165,8 +180,7 @@ static void gc(Roots* roots)
     printf("--> GC start\n");
 #endif
 
-    mark_vm_roots(vm); // Always mark vm roots
-
+    mark_vm_roots(vm);
 #ifdef THREADED_CODE
     static const void* jmptable[] = {&&mark, &&skip};
 
@@ -175,19 +189,14 @@ mark:
     mark_c_roots(vm, c);
 skip:
 #else
-    if(c != NULL) {
-        mark_c_roots(vm, c);
-    }
+    mark_c_roots(vm, c);
 #endif
     // Blacken gray objects
     while(vm->gray_stack.len > 0) {
         mark_black(vm, Array_ObjRef_pop(&vm->gray_stack));
     }
 
-    // Remove dangling pointers from VM 'strings' table.
-    // That table stores 'interned' strings.
     remove_weak_refs(vm);
-    // Finally sweep
     sweep(roots);
 
 #ifdef DEBUG_LOG_GC
@@ -196,7 +205,7 @@ skip:
 }
 
 /* Allocator that can trigger gc. */
-void* gc_reallocate(void* roots, void* ptr, size_t oldc, size_t newc)
+void* gc_reallocate(unused void* roots, void* ptr, unused size_t oldc, size_t newc)
 {
     if(newc > oldc) {
 #ifdef DEBUG_STRESS_GC
@@ -217,6 +226,7 @@ void* reallocate(void* ptr, size_t newc)
     void* alloc = realloc(ptr, newc);
 
     if(alloc == NULL) {
+        fprintf(stderr, "Internal error, allocation failure!\n");
         exit(errno);
     }
 

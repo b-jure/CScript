@@ -23,13 +23,18 @@ SK_INTERNAL(force_inline void) ObjUpvalue_free(Roots* roots, ObjUpvalue* upval);
 SK_INTERNAL(force_inline Obj*) Object_new(Roots* roots, size_t size, ObjType type)
 {
     /* Allocate a new object */
-    Obj* object  = GC_MALLOC(roots, size);
-    object->type = type;
-    object->next = NULL;
+    Obj* object   = GC_MALLOC(roots, size);
+    object->otype = type;
 
     /* Add the object to the GC list */
     object->next       = roots->vm->objects;
     roots->vm->objects = object;
+
+#ifdef DEBUG_LOG_GC
+    printf("%p allocate %zu for ", (void*)object, size);
+    ObjType_print(type);
+    printf("\n");
+#endif
 
     return object;
 }
@@ -72,7 +77,7 @@ void ObjType_print(ObjType type) // Debug
 
 void Object_print(Value value)
 {
-    switch(OBJ_TYPE(value) & ~1) {
+    switch(OBJ_TYPE(value)) {
         case OBJ_STRING:
             printf("%s", AS_CSTRING(value));
             break;
@@ -97,10 +102,10 @@ void Obj_free(Roots* roots, Obj* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p free object ", (void*)object);
-    Object_print(OBJ_VAL(object));
+    ObjType_print(object->otype & ~1);
     printf("\n");
 #endif
-    switch(object->type & ~1) {
+    switch(object->otype & ~1) {
         case OBJ_STRING:
             ObjString_free(roots, (ObjString*)object);
             break;
@@ -145,8 +150,8 @@ ObjString* ObjString_from(Roots* roots, const char* chars, size_t len)
     uint64_t   hash     = Hash_string(chars, len);
     ObjString* interned = HashTable_get_intern(&roots->vm->strings, chars, len, hash);
 
-    if(interned) {
-        /* Return interned string */
+    if(interned) { // Return interned string
+        printf("Interned String -> '%s'\n", interned->storage);
         return interned;
     }
 
@@ -155,7 +160,10 @@ ObjString* ObjString_from(Roots* roots, const char* chars, size_t len)
     string->hash         = hash;
     string->storage[len] = '\0';
 
+    printf("String -> '%s'\n", string->storage);
+    VM_push(roots->vm, OBJ_VAL(string));
     HashTable_insert(&roots->vm->strings, OBJ_VAL(string), NIL_VAL);
+    VM_pop(roots->vm);
     return string;
 }
 

@@ -9,6 +9,8 @@
 #include "value.h"
 #include "vmachine.h"
 
+#include <stdint.h>
+
 #ifdef DEBUG
     #include "debug.h"
 #endif
@@ -104,10 +106,10 @@ typedef struct {
 } Local;
 
 /* Max 'Compiler' stack size, limited to long bytecode instructions */
-#define LOCAL_STACK_MAX (UINT24_MAX + 1)
+#define LOCAL_STACK_MAX (UINT24_MAX)
 
 /* Default 'Compiler' stack size */
-#define SHORT_STACK_SIZE (UINT8_MAX + 1)
+#define SHORT_STACK_SIZE (UINT8_MAX)
 
 /* Allocates 'Compiler' with the default stack size */
 #define ALLOC_COMPILER() MALLOC(sizeof(Compiler) + (SHORT_STACK_SIZE * sizeof(Local)))
@@ -364,7 +366,7 @@ void mark_c_roots(VM* vm, Compiler* C)
 
 /*========================== EMIT =========================*/
 
-SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
+SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, VM* vm, Value constant)
 {
     if(unlikely(current_chunk(C)->constants.len > MIN(VM_STACK_MAX, UINT24_MAX))) {
         C_error(
@@ -373,7 +375,7 @@ SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, Value constant)
             C->fn->name->storage);
     }
 
-    return Chunk_make_constant(current_chunk(C), constant);
+    return Chunk_make_constant(vm, current_chunk(C), constant);
 }
 
 SK_INTERNAL(force_inline Value) Token_into_stringval(Roots* roots, const Token* name)
@@ -387,15 +389,15 @@ make_const_identifier(Compiler* C, VM* vm, Value identifier, bool fixed)
     Value index;
 
     if(!HashTable_get(&vm->global_ids, identifier, &index)) {
-        index = NUMBER_VAL(
-            (double)Array_Global_push(&vm->global_vals, (Global){UNDEFINED_VAL, fixed}));
-
+        Global glob = {UNDEFINED_VAL, fixed};
+        VM_push(vm, identifier); // GC
+        index = NUMBER_VAL((double)Array_Global_push(&vm->global_vals, glob));
         HashTable_insert(&vm->global_ids, identifier, index);
+        VM_pop(vm); // GC
     }
 
     UInt i = (UInt)AS_NUMBER(index);
-
-    if(IS_DECLARED(vm->global_vals.data[i].value)) {
+    if(IS_DECLARED(Array_Global_index(&vm->global_vals, i)->value)) {
         C_error(
             C,
             "Redefinition of declared global variable '%s'.",
@@ -865,12 +867,6 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 
     ObjFunction* fn = compile_end(C_new);
 
-    // Restore old compiler root for global_vals vm array
-    r->c = C();
-    // Null out compiled function compiler root
-    r    = fn->chunk.constants.roots;
-    r->c = NULL;
-
     // Restore flags but additionally transfer error flag
     // if error happened in the new compiler.
     C_flag_clear(C_new(), FN_BIT);
@@ -878,27 +874,26 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
 
     C()->parser = C_new()->parser; // UPDATE OUTER COMPILER
 
+
+
     // Create a closure only when we have upvalues
     if(fn->upvalc == 0) {
-        printf(
-            "Writting normal function; fn->upvalc = %u, fn = %s\n",
-            fn->upvalc,
-            fn->name->storage);
-        C_emit_op(C(), OP_CONST, C_make_const(C(), OBJ_VAL(fn)));
-        printf("Done writting normal function '%s'\n", fn->name->storage);
+        C_emit_op(C(), OP_CONST, C_make_const(C(), vm, OBJ_VAL(fn)));
     } else {
-        printf(
-            "Writting closure function; fn->upvalc = %u, fn = %s\n",
-            fn->upvalc,
-            fn->name->storage);
-        C_emit_op(C(), OP_CLOSURE, C_make_const(C(), OBJ_VAL(fn)));
-        printf("Done writting closure function '%s'\n", fn->name->storage);
+        C_emit_op(C(), OP_CLOSURE, C_make_const(C(), vm, OBJ_VAL(fn)));
         for(UInt i = 0; i < fn->upvalc; i++) {
             Upvalue* upval = Array_Upvalue_index(&C()->upvalues, i);
             C_emit_byte(C(), upval->local ? 1 : 0);
             C_emit_lbyte(C(), upval->idx);
         }
     }
+
+
+    // Restore old compiler root for global_vals vm array
+    r->c = C();
+    // Null out compiled function compiler root
+    r    = fn->chunk.constants.roots;
+    r->c = NULL;
 
     C_free(C_new);
 
@@ -1035,13 +1030,15 @@ SK_INTERNAL(Int) C_make_global(Compiler* C, VM* vm, bool fixed)
     return idx;
 }
 
-SK_INTERNAL(force_inline Int) C_make_undefined_global(Compiler* C, VM* vm)
+SK_INTERNAL(force_inline Int)
+make_undefined_global(VM* vm, Value identifier)
 {
-    Value idx =
-        NUMBER_VAL(Array_Global_push(&vm->global_vals, (Global){UNDEFINED_VAL, false}));
-    Value identifier = Token_into_stringval(&(Roots){C, vm}, &C->parser.previous);
+    Global glob = {UNDEFINED_VAL, false};
+    Value  idx  = NUMBER_VAL(Array_Global_push(&vm->global_vals, glob));
 
+    VM_push(vm, identifier); // GC
     HashTable_insert(&vm->global_ids, identifier, idx);
+    VM_pop(vm); // GC
 
     return (Int)AS_NUMBER(idx);
 }
@@ -1054,7 +1051,7 @@ SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
     if(!HashTable_get(&vm->global_ids, identifier, &idx)) {
         if(C_flag_is(C, FN_BIT)) {
             // Create reference to a global but don't declare or define it
-            idx = NUMBER_VAL(C_make_undefined_global(C, vm));
+            idx = NUMBER_VAL(make_undefined_global(vm, identifier));
         } else {
             // If we are in global scope and there is no global identifier,
             C_error(C, "Undefined variable '%s'.", AS_CSTRING(identifier));
@@ -1078,6 +1075,7 @@ SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
 SK_INTERNAL(UInt)
 parse_varname(VM* vm, CompilerPPtr Cptr, const char* errmsg)
 {
+    printf("Parsing function name!\n");
     C_expect(C(), TOK_IDENTIFIER, errmsg);
 
     // If local scope make local variable
@@ -1471,19 +1469,19 @@ parse_stm_print(VM* vm, CompilerPPtr Cptr)
 }
 
 SK_INTERNAL(force_inline void)
-parse_number(unused VM* _, CompilerPPtr Cptr)
+parse_number(VM* vm, CompilerPPtr Cptr)
 {
     Compiler* C        = C();
     double    constant = strtod(C->parser.previous.start, NULL);
-    UInt      idx      = C_make_const(C, NUMBER_VAL(constant));
+    UInt      idx      = C_make_const(C, vm, NUMBER_VAL(constant));
     C_emit_op(C, GET_OP_TYPE(idx, OP_CONST), idx);
 }
 
 SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Value name)
 {
     Value index;
-    for(UInt i = 0; i < C->loc_defs.len; i++) {
-        HashTable* scope_set = &C->loc_defs.data[i];
+    for(Int i = C->loc_defs.len - 1; i >= 0; i--) {
+        HashTable* scope_set = Array_Table_index(&C->loc_defs, i);
         if(HashTable_get(scope_set, name, &index)) {
             if(C->locals[(UInt)AS_NUMBER(index)].depth == -1) {
                 C_error(C, "Can't read local variable in its own initializer.");
@@ -1522,9 +1520,6 @@ SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
 SK_INTERNAL(Int) C_get_upval(Compiler* C, const Value name)
 {
     if(C->enclosing == NULL) {
-        printf(
-            "Enclosing is NULL, will get global with name: %s.\n",
-            AS_CSTRING(name));
         return -1;
     }
 
@@ -1553,16 +1548,28 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
     if(idx != -1) {
         Local* var = &(C())->locals[idx];
         flags      = Var_flags(var);
-        setop      = GET_OP_TYPE(idx, OP_SET_LOCAL);
-        getop      = GET_OP_TYPE(idx, OP_GET_LOCAL);
+        if(idx > SHORT_STACK_SIZE) {
+            setop = OP_SET_LOCALL;
+            getop = OP_GET_LOCALL;
+        } else {
+            setop = OP_SET_LOCAL;
+            getop = OP_GET_LOCAL;
+        }
     } else if((idx = C_get_upval(C(), name)) != -1) {
-        setop = OP_SET_UPVALUE;
-        getop = OP_GET_UPVALUE;
+        Local* var = &C()->locals[C()->upvalues.data[idx].idx];
+        flags      = Var_flags(var);
+        setop      = OP_SET_UPVALUE;
+        getop      = OP_GET_UPVALUE;
     } else {
         idx   = C_get_global(C(), vm);
         flags = vm->global_vals.data[idx].fixed;
-        setop = GET_OP_TYPE(idx, OP_SET_GLOBAL);
-        getop = GET_OP_TYPE(idx, OP_GET_GLOBAL);
+        if(idx > SHORT_STACK_SIZE) {
+            setop = OP_SET_GLOBALL;
+            getop = OP_GET_GLOBALL;
+        } else {
+            setop = OP_SET_GLOBAL;
+            getop = OP_GET_GLOBAL;
+        }
     }
 
     if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
@@ -1587,7 +1594,7 @@ SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr)
         &(Roots){C(), vm},
         C->parser.previous.start + 1,
         C->parser.previous.len - 2);
-    UInt idx = C_make_const(C, OBJ_VAL(string));
+    UInt idx = C_make_const(C, vm, OBJ_VAL(string));
     C_emit_op(C, OP_CONST, idx);
 }
 

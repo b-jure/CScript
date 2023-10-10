@@ -7,7 +7,7 @@
 #include "hash.h"
 
 #define AS_OBJ(value) ((value).as.object)
-#define OBJ_TYPE(value) (AS_OBJ(value)->type)
+#define OBJ_TYPE(value) (AS_OBJ(value)->otype & ~1)
 #define IS_OBJ(value) ((value).type == VAL_OBJ)
 #define OBJ_VAL(value) ((Value){.type = VAL_OBJ, {.object = (Obj *)value}})
 
@@ -39,12 +39,12 @@ typedef struct ObjClosure ObjClosure;
 typedef struct ObjUpvalue ObjUpvalue;
 
 typedef enum {
-  VAL_BOOL = 0,
-  VAL_NUMBER,
-  VAL_NIL,
-  VAL_OBJ,
-  VAL_EMPTY,
-  VAL_DECLARED,
+  VAL_BOOL = 2,
+  VAL_NUMBER = 4,
+  VAL_NIL = 8,
+  VAL_OBJ = 16,
+  VAL_EMPTY = 32,
+  VAL_DECLARED = 64,
 } ValueType;
 
 typedef struct {

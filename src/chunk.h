@@ -6,6 +6,10 @@
 #include "hashtable.h"
 #include "value.h"
 
+#ifndef __SKOOMA_VMACHINE_H__
+typedef struct VM VM;
+#endif
+
 #define OPCODE_N ((uint32_t)(OP_RET + 1))
 
 typedef enum {
@@ -76,9 +80,6 @@ void Chunk_write(Chunk *chunk, uint8_t byte, UInt line);
 void Chunk_write_codewparam(Chunk *chunk, OpCode code, UInt idx, UInt line);
 UInt Chunk_getline(Chunk *chunk, UInt index);
 void Chunk_free(Chunk *chunk);
-
-force_inline UInt Chunk_make_constant(Chunk *chunk, Value value) {
-  return Array_Value_push(&chunk->constants, value);
-}
+UInt Chunk_make_constant(VM *vm, Chunk *chunk, Value value);
 
 #endif

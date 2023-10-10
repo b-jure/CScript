@@ -23,7 +23,7 @@
 
 Int runtime = 0;
 
-SK_INTERNAL(force_inline void) VM_push(VM* vm, Value val)
+void VM_push(VM* vm, Value val)
 {
     if(likely(vm->sp - vm->stack < VM_STACK_MAX)) {
         *vm->sp++ = val;
@@ -36,7 +36,7 @@ SK_INTERNAL(force_inline void) VM_push(VM* vm, Value val)
     }
 }
 
-SK_INTERNAL(force_inline Value) VM_pop(VM* vm)
+Value VM_pop(VM* vm)
 {
     return *--vm->sp;
 }
@@ -158,9 +158,10 @@ end:
 
 static ObjString* concatenate(VM* vm, Value a, Value b)
 {
-    Value  value[2] = {a, b};
-    size_t len[2]   = {0};
-    char*  str[2]   = {0};
+    Value  value[2]   = {a, b};
+    size_t len[2]     = {0};
+    char*  str[2]     = {0};
+    void*  strings[2] = {0};
 
     for(int i = 0; i < 2; i++) {
 #ifdef THREADED_CODE
@@ -187,6 +188,8 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     vobj:
         str[i] = AS_CSTRING(value[i]);
         len[i] = AS_STRING(value[i])->len;
+        VM_push(vm, value[i]);
+        strings[i] = (void*)0xdeadbeef;
         continue;
 #else
         switch(value[i].type) {
@@ -202,6 +205,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
             case VAL_OBJ:
                 str[i] = AS_CSTRING(value[i]);
                 len[i] = AS_STRING(value[i])->len;
+                VM_push(vm, value[i]);
                 break;
             case VAL_EMPTY:
             default:
@@ -216,8 +220,15 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     memcpy(buffer + len[0], str[1], len[1]);
     buffer[length] = '\0';
 
-    // @GC - allocated
-    return ObjString_from(&(Roots){NULL, vm}, buffer, length);
+    ObjString* string = ObjString_from(&(Roots){NULL, vm}, buffer, length);
+
+    for(Int i = 0; i < 2; i++) {
+        if(strings[i] != NULL) {
+            VM_pop(vm);
+        }
+    }
+
+    return string;
 }
 
 /*
@@ -284,7 +295,7 @@ SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, UInt ar
 SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
 {
     if(IS_OBJ(fnval)) {
-        switch(OBJ_TYPE(fnval) & ~1) {
+        switch(OBJ_TYPE(fnval)) {
             case OBJ_FUNCTION:
                 return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc);
             case OBJ_CLOSURE: {
@@ -532,23 +543,25 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_DEFINE_GLOBAL)
             {
-                Byte idx                  = READ_BYTE();
-                bool fixed                = vm->global_vals.data[idx].fixed;
-                vm->global_vals.data[idx] = (Global){stack_peek(0), fixed};
+                Byte idx   = READ_BYTE();
+                bool fixed = Array_Global_index(&vm->global_vals, idx)->fixed;
+                *Array_Global_index(&vm->global_vals, idx) =
+                    (Global){stack_peek(0), fixed};
                 VM_pop(vm);
                 BREAK;
             }
             CASE(OP_DEFINE_GLOBALL)
             {
-                UInt idx                  = READ_BYTEL();
-                bool fixed                = vm->global_vals.data[idx].fixed;
-                vm->global_vals.data[idx] = (Global){stack_peek(0), fixed};
+                UInt idx   = READ_BYTEL();
+                bool fixed = Array_Global_index(&vm->global_vals, idx)->fixed;
+                *Array_Global_index(&vm->global_vals, idx) =
+                    (Global){stack_peek(0), fixed};
                 VM_pop(vm);
                 BREAK;
             }
             CASE(OP_GET_GLOBAL)
             {
-                Global* global = &vm->global_vals.data[READ_BYTE()];
+                Global* global = Array_Global_index(&vm->global_vals, READ_BYTE());
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
@@ -561,7 +574,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_GLOBALL)
             {
-                Global* global = &vm->global_vals.data[READ_BYTEL()];
+                Global* global = Array_Global_index(&vm->global_vals, READ_BYTEL());
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
@@ -574,8 +587,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBAL)
             {
-                Byte    idx    = READ_BYTE();
-                Global* global = &vm->global_vals.data[idx];
+                Global* global = Array_Global_index(&vm->global_vals, READ_BYTE());
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
@@ -592,8 +604,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBALL)
             {
-                UInt    idx    = READ_BYTEL();
-                Global* global = &vm->global_vals.data[idx];
+                Global* global = Array_Global_index(&vm->global_vals, READ_BYTEL());
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
