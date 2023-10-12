@@ -16,6 +16,10 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#ifndef GC_HEAP_GROW_FACTOR
+    #define GC_HEAP_GROW_FACTOR 2
+#endif
+
 #define OBJ_MARK(obj)      ((obj)->otype |= (uint32_t)1)
 #define OBJ_IS_MARKED(obj) ((uint32_t)(obj)->otype & (uint32_t)1)
 #define OBJ_UNMARK(obj)    ((obj)->otype &= (uint32_t)~1)
@@ -142,7 +146,6 @@ SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)
     for(UInt i = 0; i < vm->strings.cap; i++) {
         Entry* entry = &vm->strings.entries[i];
         if(entry->key.type == VAL_OBJ && !OBJ_IS_MARKED(AS_OBJ(entry->key))) {
-            printf("Removing interned string '%s'\n", AS_CSTRING(entry->key));
             HashTable_remove(&vm->strings, entry->key);
         }
     }
@@ -174,12 +177,13 @@ SK_INTERNAL(force_inline void) sweep(Roots* roots)
 
 unused static void gc(Roots* roots)
 {
-    Compiler* c  = roots->c;
-    VM*       vm = roots->vm;
-
 #ifdef DEBUG_LOG_GC
     printf("--> GC start\n");
+    size_t old_allocation = roots->vm->gc_allocated;
 #endif
+
+    Compiler* c  = roots->c;
+    VM*       vm = roots->vm;
 
     mark_vm_roots(vm);
 #ifdef THREADED_CODE
@@ -200,19 +204,35 @@ skip:
     remove_weak_refs(vm);
     sweep(roots);
 
+    vm->gc_next = vm->gc_allocated * GC_HEAP_GROW_FACTOR;
+
 #ifdef DEBUG_LOG_GC
     printf("--> GC end\n");
+    printf(
+        "    collected %lu bytes (from %lu to %lu) next collection at %lu\n",
+        old_allocation - vm->gc_allocated,
+        old_allocation,
+        vm->gc_allocated,
+        vm->gc_next);
 #endif
 }
 
 /* Allocator that can trigger gc. */
 void* gc_reallocate(unused void* roots, void* ptr, unused size_t oldc, size_t newc)
 {
-    if(newc > oldc) {
+    Roots* r             = roots;
+    r->vm->gc_allocated += newc - oldc;
+
 #ifdef DEBUG_STRESS_GC
-        gc((Roots*)roots);
-#endif
+    if(newc > oldc) {
+        gc(r);
     }
+#else
+    if(r->vm->gc_next < r->vm->gc_allocated) {
+        gc(r);
+    }
+#endif
+
     return reallocate(ptr, newc);
 }
 

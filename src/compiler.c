@@ -375,7 +375,6 @@ SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, VM* vm, Value constant)
 
 SK_INTERNAL(force_inline Value) Token_into_stringval(Roots* roots, const Token* name)
 {
-    printf("\t%s\n", __func__);
     return OBJ_VAL(ObjString_from(roots, name->start, name->len));
 }
 
@@ -1003,15 +1002,6 @@ SK_INTERNAL(void) C_make_local(PPC ppc, VM* vm)
             break;
         }
 
-        printf(
-            "%.*s [%u] == %.*s [%u]\n",
-            C->parser.previous.len,
-            C->parser.previous.start,
-            C->parser.previous.len,
-            local->name.len,
-            local->name.start,
-            local->name.len);
-        fflush(stdout);
         if(Identifier_eq(name, &local->name)) {
             C_error(
                 C,
@@ -1085,7 +1075,6 @@ SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
 SK_INTERNAL(UInt)
 parse_varname(VM* vm, PPC ppc, const char* errmsg)
 {
-    printf("Parsing variable name!\n");
     C_expect(C(), TOK_IDENTIFIER, errmsg);
 
     // If local scope make local variable
@@ -1489,7 +1478,6 @@ SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
     for(UInt i = 0; i < C->upvalues.len; i++) {
         Upvalue* upvalue = Array_Upvalue_index(&C->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local) {
-            printf("Got existing UpValue idx: %u\n", idx);
             // Return existing UpValue index
             return i;
         }
@@ -1505,12 +1493,7 @@ SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
     }
 
     // Otherwise add the UpValue into the array
-    printf(
-        "Returning new upvalue idx: %lu, upvalc: %u\n",
-        C->upvalues.len,
-        C->fn->upvalc + 1);
     C->fn->upvalc++;
-
     Upvalue upval = {idx, local};
     return Array_Upvalue_push(&C->upvalues, upval);
 }

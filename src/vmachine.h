@@ -57,6 +57,8 @@ struct VM {
     ObjUpvalue*  open_upvals;           /* List of heap allocated Upvalues */
     Obj*         objects;               /* List of allocated object (GC) */
     Array_ObjRef gray_stack;
+    size_t gc_allocated;
+    size_t gc_next;
 };
 
 typedef enum {

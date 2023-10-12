@@ -136,7 +136,7 @@ SK_INTERNAL(force_inline Byte) double_to_str(char** str, double dbl)
         len = snprintf(buffer, sizeof(buffer), "%f", dbl);
     } else {
         /* Quick return */
-        len = snprintf(buffer, sizeof(buffer), "%ld", (int64_t)dbl);
+        len = snprintf(buffer, sizeof(buffer), "%ld", (ssize_t)dbl);
         goto end;
     }
 
@@ -158,10 +158,9 @@ end:
 
 static ObjString* concatenate(VM* vm, Value a, Value b)
 {
-    Value  value[2]   = {a, b};
-    size_t len[2]     = {0};
-    char*  str[2]     = {0};
-    void*  strings[2] = {0};
+    Value  value[2] = {a, b};
+    size_t len[2]   = {0};
+    char*  str[2]   = {0};
 
     for(int i = 0; i < 2; i++) {
 #ifdef THREADED_CODE
@@ -188,8 +187,6 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     vobj:
         str[i] = AS_CSTRING(value[i]);
         len[i] = AS_STRING(value[i])->len;
-        VM_push(vm, value[i]);
-        strings[i] = (void*)0xdeadbeef;
         continue;
 #else
         switch(value[i].type) {
@@ -222,11 +219,8 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
 
     ObjString* string = ObjString_from(&(Roots){NULL, vm}, buffer, length);
 
-    for(Int i = 0; i < 2; i++) {
-        if(strings[i] != NULL) {
-            VM_pop(vm);
-        }
-    }
+    VM_pop(vm); // GC
+    VM_pop(vm); // GC
 
     return string;
 }
@@ -238,11 +232,15 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
 
 void VM_init(VM* vm, void* roots)
 {
-    vm->fc          = 0;
-    vm->objects     = NULL;
-    vm->open_upvals = NULL;
+    vm->fc           = 0;
+    vm->objects      = NULL;
+    vm->open_upvals  = NULL;
+    vm->gc_allocated = 0;
+    vm->gc_next      = MIB(1);
     stack_reset(vm);
 
+    // @TODO: Make HashTable internally contain roots in order
+    // to use gc_reallocate instead of non-gc reallocate.
     HashTable_init(&vm->global_ids);
     Array_Global_init(&vm->global_vals, roots, gc_reallocate);
     HashTable_init(&vm->strings);
@@ -390,8 +388,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             double a = AS_NUMBER(VM_pop(vm));                                            \
             VM_push(vm, NUMBER_VAL((a + b)));                                            \
         } else {                                                                         \
-            Value b = VM_pop(vm);                                                        \
-            Value a = VM_pop(vm);                                                        \
+            Value b = stack_peek(0);                                                     \
+            Value a = stack_peek(1);                                                     \
             VM_push(vm, OBJ_VAL(concatenate(vm, a, b)));                                 \
         }                                                                                \
     } while(false)
