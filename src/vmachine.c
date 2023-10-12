@@ -74,14 +74,14 @@ void VM_error(VM* vm, const char* errfmt, ...)
 SK_INTERNAL(force_inline void)
 VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
 {
-    VM_push(vm, OBJ_VAL(ObjString_from(&(Roots){NULL, vm}, name, strlen(name))));
-    VM_push(vm, OBJ_VAL(ObjNative_new(&(Roots){NULL, vm}, native, arity)));
+    VM_push(vm, OBJ_VAL(ObjString_from(&(Roots){NULL, vm}, name, strlen(name)))); // GC
+    VM_push(vm, OBJ_VAL(ObjNative_new(&(Roots){NULL, vm}, native, arity)));       // GC
 
     UInt idx = Array_Global_push(&vm->global_vals, (Global){vm->stack[1], false});
     HashTable_insert(&vm->global_ids, vm->stack[0], NUMBER_VAL((double)idx));
 
-    VM_pop(vm);
-    VM_pop(vm);
+    VM_pop(vm); // GC
+    VM_pop(vm); // GC
 }
 
 //-------------------------NATIVE FUNCTIONS-------------------------//
@@ -337,7 +337,7 @@ SK_INTERNAL(force_inline ObjUpvalue*) VM_capture_upval(VM* vm, Value* var_ref)
         return *pp;
     }
 
-    ObjUpvalue* upval = ObjUpvalue_new(&(Roots){NULL, vm}, var_ref);
+    ObjUpvalue* upval = ObjUpvalue_new(vm->global_vals.roots, var_ref);
     upval->next       = *pp;
     *pp               = upval;
 
@@ -544,7 +544,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_DEFINE_GLOBAL)
             {
                 Byte idx   = READ_BYTE();
-                bool fixed = Array_Global_index(&vm->global_vals, idx)->fixed;
+                bool fixed = Array_Global_index(&vm->global_vals, idx)->flags;
                 *Array_Global_index(&vm->global_vals, idx) =
                     (Global){stack_peek(0), fixed};
                 VM_pop(vm);
@@ -553,7 +553,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_DEFINE_GLOBALL)
             {
                 UInt idx   = READ_BYTEL();
-                bool fixed = Array_Global_index(&vm->global_vals, idx)->fixed;
+                bool fixed = Array_Global_index(&vm->global_vals, idx)->flags;
                 *Array_Global_index(&vm->global_vals, idx) =
                     (Global){stack_peek(0), fixed};
                 VM_pop(vm);
@@ -593,7 +593,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     frame->ip = ip;
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
-                } else if(unlikely(global->fixed)) {
+                } else if(unlikely(global->flags)) {
                     frame->ip = ip;
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
@@ -610,7 +610,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     frame->ip = ip;
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
-                } else if(unlikely(global->fixed)) {
+                } else if(unlikely(global->flags)) {
                     frame->ip = ip;
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
@@ -715,10 +715,10 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_CLOSURE)
             {
                 ObjFunction* fn      = AS_FUNCTION(READ_CONSTANTL());
-                ObjClosure*  closure = ObjClosure_new(&(Roots){NULL, vm}, fn);
+                ObjClosure*  closure = ObjClosure_new(vm->global_vals.roots, fn);
                 VM_push(vm, OBJ_VAL(closure));
 
-                for(UInt i = 0; i < closure->fn->upvalc; i++) {
+                for(UInt i = 0; i < closure->upvalc; i++) {
                     Byte local = READ_BYTE();
                     UInt idx   = READ_BYTEL();
 

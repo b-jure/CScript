@@ -22,7 +22,11 @@ SK_INTERNAL(force_inline void) ObjUpvalue_free(Roots* roots, ObjUpvalue* upval);
 
 SK_INTERNAL(force_inline Obj*) Object_new(Roots* roots, size_t size, ObjType type)
 {
+    printf("\t%s\n", __func__);
     /* Allocate a new object */
+    printf("\t\tGC_MALLOC -> ");
+    ObjType_print(type);
+    printf("\n");
     Obj* object   = GC_MALLOC(roots, size);
     object->otype = type;
 
@@ -101,8 +105,8 @@ void Object_print(Value value)
 void Obj_free(Roots* roots, Obj* object)
 {
 #ifdef DEBUG_LOG_GC
-    printf("%p free object ", (void*)object);
-    ObjType_print(object->otype & ~1);
+    printf("%p free type ", (void*)object);
+    ObjType_print(object->otype);
     printf("\n");
 #endif
     switch(object->otype & ~1) {
@@ -140,6 +144,7 @@ Hash Obj_hash(Value value)
 
 SK_INTERNAL(force_inline ObjString*) ObjString_alloc(Roots* roots, UInt len)
 {
+    printf("\t\t%s\n", __func__);
     ObjString* string = ALLOC_STRING(roots, len);
     string->len       = len;
     return string;
@@ -147,11 +152,12 @@ SK_INTERNAL(force_inline ObjString*) ObjString_alloc(Roots* roots, UInt len)
 
 ObjString* ObjString_from(Roots* roots, const char* chars, size_t len)
 {
+    printf("\t%s\n", __func__);
     uint64_t   hash     = Hash_string(chars, len);
     ObjString* interned = HashTable_get_intern(&roots->vm->strings, chars, len, hash);
 
     if(interned) { // Return interned string
-        printf("Interned String -> '%s'\n", interned->storage);
+        printf("\t\tInterned -> %s\n", interned->storage);
         return interned;
     }
 
@@ -159,11 +165,11 @@ ObjString* ObjString_from(Roots* roots, const char* chars, size_t len)
     memcpy(string->storage, chars, len);
     string->hash         = hash;
     string->storage[len] = '\0';
+    printf("\t\t\tAlloc -> %s\n", string->storage);
 
-    printf("String -> '%s'\n", string->storage);
-    VM_push(roots->vm, OBJ_VAL(string));
+    VM_push(roots->vm, OBJ_VAL(string)); // GC
     HashTable_insert(&roots->vm->strings, OBJ_VAL(string), NIL_VAL);
-    VM_pop(roots->vm);
+    VM_pop(roots->vm); // GC
     return string;
 }
 
@@ -174,6 +180,7 @@ SK_INTERNAL(force_inline void) ObjString_free(Roots* roots, ObjString* string)
 
 ObjNative* ObjNative_new(Roots* roots, NativeFn fn, UInt arity)
 {
+    printf("%s ", __func__);
     ObjNative* native = ALLOC_OBJ(roots, ObjNative, OBJ_NATIVE);
     //
     native->fn    = fn;
@@ -188,6 +195,7 @@ SK_INTERNAL(force_inline void) ObjNative_free(Roots* roots, ObjNative* native)
 
 ObjFunction* ObjFunction_new(Roots* roots)
 {
+    printf("%s ", __func__);
     ObjFunction* fn = ALLOC_OBJ(roots, ObjFunction, OBJ_FUNCTION);
     fn->arity       = 0;
     fn->name        = NULL;
@@ -204,6 +212,8 @@ SK_INTERNAL(force_inline void) ObjFunction_free(Roots* roots, ObjFunction* fn)
 
 ObjClosure* ObjClosure_new(Roots* roots, ObjFunction* fn)
 {
+    printf("%s ", __func__);
+    printf("~ GC_MALLOC ObjUpvalue array\n");
     ObjUpvalue** upvals = GC_MALLOC(roots, sizeof(ObjUpvalue*) * fn->upvalc);
     for(UInt i = 0; i < fn->upvalc; i++) {
         upvals[i] = NULL;
@@ -212,18 +222,20 @@ ObjClosure* ObjClosure_new(Roots* roots, ObjFunction* fn)
     ObjClosure* closure = ALLOC_OBJ(roots, ObjClosure, OBJ_CLOSURE);
     closure->fn         = fn;
     closure->upvals     = upvals;
+    closure->upvalc     = fn->upvalc;
 
     return closure;
 }
 
 SK_INTERNAL(force_inline void) ObjClosure_free(Roots* roots, ObjClosure* closure)
 {
-    GC_FREE(roots, closure->upvals, closure->fn->upvalc * sizeof(ObjUpvalue*));
+    GC_FREE(roots, closure->upvals, closure->upvalc * sizeof(ObjUpvalue*));
     GC_FREE(roots, closure, sizeof(ObjClosure));
 }
 
 ObjUpvalue* ObjUpvalue_new(Roots* roots, Value* var_ref)
 {
+    printf("%s ", __func__);
     ObjUpvalue* upval = ALLOC_OBJ(roots, ObjUpvalue, OBJ_UPVAL);
     upval->closed     = EMPTY_VAL;
     upval->location   = var_ref;

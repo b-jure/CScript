@@ -64,6 +64,7 @@ struct ObjClosure { // typedef is inisde 'value.h'
   Obj obj;
   ObjFunction *fn;
   ObjUpvalue **upvals; // size of fn->upvalc
+  UInt upvalc;
 };
 
 typedef bool (*NativeFn)(VM *vm, Int argc, Value *argv);

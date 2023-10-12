@@ -16,7 +16,14 @@ typedef struct {
 /* Memory allocator function. */
 void *reallocate(void *ptr, size_t newCap);
 void *gc_reallocate(void *roots, void *ptr, size_t oldc, size_t newc);
-void mark_obj(VM* vm, Obj* obj);
+void mark_obj(VM *vm, Obj *obj);
+
+#define mark_value(vm, value)                                                  \
+  do {                                                                         \
+    if (IS_OBJ(value)) {                                                       \
+      mark_obj(vm, AS_OBJ(value));                                             \
+    }                                                                          \
+  } while (false)
 
 /* Wrapper around reallocate that is equivalent to malloc, allocates 'bytes'
  * amount */

@@ -52,7 +52,7 @@ typedef struct {
 
 GState gstate = GSTATE_INIT;
 
-#define C() (*Cptr)
+#define C() (*ppc)
 
 typedef struct {
     Scanner scanner;
@@ -76,20 +76,18 @@ typedef struct {
     uint64_t flags;
 } Parser;
 
-/* Variable modifier bits */
-#define VFIXED_BIT    (FIXED_BIT - 8)
+/* Local variable modifier bits */
+#define VFIXED_BIT    (1)
 #define VCAPTURED_BIT (8)
 
 // Sets the 'bit' in 'var' flags.
-#define Var_flag_set(var, bit) BIT_SET((var)->flags, bit)
+#define LOCAL_SET(var, bit) BIT_SET((var)->flags, bit)
 // Checks if 'bit' is set.
-#define Var_flag_is(var, bit) BIT_CHECK((var)->flags, bit)
+#define LOCAL_IS(var, bit) BIT_CHECK((var)->flags, bit)
 // Clears the 'bit' in 'var' flags.
-#define Var_flag_clear(var, bit) BIT_CLEAR((var)->flags, bit)
-// Clears all flags in 'var' flags.
-#define Var_flags_clear(var) ((var)->flags = 0)
+#define LOCAL_CLEAR(var, bit) BIT_CLEAR((var)->flags, bit)
 // Returns 'var' flags.
-#define Var_flags(var) ((var)->flags)
+#define LOCAL_FLAGS(var) ((var)->flags)
 
 typedef struct {
     Token name;
@@ -118,8 +116,6 @@ typedef struct {
 #define GROW_LOCAL_STACK(ptr, oldcap, newcap)                                            \
     (Compiler*)REALLOC(ptr, sizeof(Compiler) + (newcap * sizeof(Local)))
 
-/* Array of HashTable(s) */
-ARRAY_NEW(Array_Table, HashTable);
 /* Array of Int(s) */
 ARRAY_NEW(Array_Int, Int);
 /* Two dimensional array */
@@ -188,9 +184,6 @@ struct Compiler {
      * scope depth for 'continue' and 'break' statements. */
     CFCtx context;
 
-    /* Tracks local variables for each scope. */
-    Array_Table loc_defs;
-
     /* Currently compiled function, meaning we write
      * bytecode to the function chunk in this field. */
     ObjFunction* fn;
@@ -224,10 +217,10 @@ struct Compiler {
  * subsequent call to 'reallocate'.
  * This way when expanding we just update the pointer to the
  * new/old pointer returned by reallocate. */
-typedef Compiler** CompilerPPtr;
+typedef Compiler** PPC;
 
 /* ParseFn - generic parsing function signature. */
-typedef void (*ParseFn)(VM*, CompilerPPtr);
+typedef void (*ParseFn)(VM*, PPC);
 
 /* Precedence from LOW-est to HIGH-est (Pratt parsing) */
 typedef enum {
@@ -261,37 +254,37 @@ SK_INTERNAL(void) C_advance(Compiler* compiler);
 SK_INTERNAL(void) C_error(Compiler* compiler, const char* error, ...);
 SK_INTERNAL(void) C_free(Compiler* C);
 SK_INTERNAL(void) Parser_init(Parser* parser, const char* source);
-SK_INTERNAL(void) parse_number(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_string(VM* vm, CompilerPPtr Cptr);
+SK_INTERNAL(void) parse_number(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_string(VM* vm, PPC ppc);
 SK_INTERNAL(UInt)
-parse_varname(VM* vm, CompilerPPtr Cptr, const char* errmsg);
-SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec);
-SK_INTERNAL(void) parse_grouping(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_ternarycond(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_expr(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr);
+parse_varname(VM* vm, PPC ppc, const char* errmsg);
+SK_INTERNAL(void) parse_precedence(VM* vm, PPC ppc, Precedence prec);
+SK_INTERNAL(void) parse_grouping(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_ternarycond(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_expr(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_dec(VM* vm, PPC ppc);
 SK_INTERNAL(void)
-parse_dec_var(VM* vm, CompilerPPtr Cptr);
+parse_dec_var(VM* vm, PPC ppc);
 SK_INTERNAL(void)
-parse_dec_var_fixed(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_stm_print(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_variable(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_literal(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr);
-SK_INTERNAL(void) parse_call(VM* vm, CompilerPPtr Cptr);
+parse_dec_var_fixed(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_dec_fn(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_stm_block(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_stm(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_stm_print(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_variable(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_binary(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_unary(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_literal(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_and(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_or(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_call(VM* vm, PPC ppc);
 
-SK_INTERNAL(void) CFCtx_init(CFCtx* context)
+SK_INTERNAL(void) CFCtx_init(CFCtx* context, Roots* roots)
 {
     context->innermostl_start  = -1;
     context->innermostl_depth  = 0;
     context->innermostsw_depth = 0;
-    Array_Array_Int_init(&context->breaks, NULL, arr_reallocate);
+    Array_Array_Int_init(&context->breaks, roots, gc_reallocate);
 }
 
 /* Have to pass VM while initializing 'Compiler' because we are allocating objects. */
@@ -304,19 +297,17 @@ C_init(Compiler* C, Roots* roots, FunctionType fn_type, Compiler* enclosing)
     C->fn      = ObjFunction_new(roots);
     C->fn_type = fn_type;
 
-    CFCtx_init(&C->context);
-
-    Array_Table_init(&C->loc_defs, NULL, arr_reallocate);
-    Array_Table_init_cap(&C->loc_defs, SHORT_STACK_SIZE);
+    CFCtx_init(&C->context, roots);
 
     // Initialize Upvalue array only once when initializing outermost compiler.
     // This array then gets passed on to other nested compilers for each
     // function.
     if(enclosing == NULL) {
-        Array_Upvalue_init(&C->upvalues, NULL, arr_reallocate);
-        Array_Upvalue_init_cap(&C->upvalues, SHORT_STACK_SIZE);
+        Array_Upvalue_init(&C->upvalues, roots, gc_reallocate);
     } else {
         C->upvalues = enclosing->upvalues;
+        Roots* r    = C->upvalues.roots;
+        r->c        = C;
     }
 
     C->loc_len = 0;
@@ -342,11 +333,15 @@ SK_INTERNAL(void) C_update_roots(Compiler* C, VM* vm)
 {
     Roots* r = vm->global_vals.roots;
     r->c     = C;
+    r        = C->context.breaks.roots;
+    r->c     = C;
     r        = C->fn->chunk.constants.roots;
+    r->c     = C;
+    r        = C->upvalues.roots;
     r->c     = C;
 }
 
-SK_INTERNAL(force_inline void) C_grow_stack(CompilerPPtr Cptr, VM* vm)
+SK_INTERNAL(force_inline void) C_grow_stack(PPC ppc, VM* vm)
 {
     Compiler* C      = C();
     UInt      oldcap = C->loc_cap;
@@ -380,6 +375,7 @@ SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, VM* vm, Value constant)
 
 SK_INTERNAL(force_inline Value) Token_into_stringval(Roots* roots, const Token* name)
 {
+    printf("\t%s\n", __func__);
     return OBJ_VAL(ObjString_from(roots, name->start, name->len));
 }
 
@@ -564,10 +560,10 @@ SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C)
 
 ObjFunction* compile(VM* vm, const char* source)
 {
-    Compiler* C           = ALLOC_COMPILER();
-    Roots     roots       = {C, vm};
-    vm->global_vals.roots = &roots;
-    C_init(C, &roots, FN_SCRIPT, NULL);
+    Compiler* C     = ALLOC_COMPILER();
+    Roots*    roots = vm->global_vals.roots;
+    roots->c        = C;
+    C_init(C, roots, FN_SCRIPT, NULL);
     Parser_init(&C->parser, source);
 
     C_advance(C);
@@ -579,10 +575,7 @@ ObjFunction* compile(VM* vm, const char* source)
 
     bool err = C_flag_is(C, ERROR_BIT);
 
-
-    Roots* r = fn->chunk.constants.roots;
-    r->c     = NULL;
-    r        = vm->global_vals.roots;
+    Roots* r = vm->global_vals.roots;
     r->c     = NULL;
 
     C_free(C);
@@ -597,7 +590,6 @@ SK_INTERNAL(force_inline Chunk*) current_chunk(Compiler* C)
 SK_INTERNAL(void) CFCtx_free(CFCtx* context)
 {
     Array_Array_Int_free(&context->breaks);
-    Array_Array_Int_init(&context->breaks, NULL, arr_reallocate);
     context->innermostl_start  = -1;
     context->innermostl_depth  = 0;
     context->innermostsw_depth = 0;
@@ -605,16 +597,20 @@ SK_INTERNAL(void) CFCtx_free(CFCtx* context)
 
 SK_INTERNAL(void) C_free(Compiler* C)
 {
-    // @TODO: add additional parameter to generic array when
-    //        freeing elements of the array (free fn pointer)
-    for(UInt i = 0; i < C->loc_defs.len; i++) {
-        HashTable_free(&C->loc_defs.data[i]);
-    }
-    Array_Table_free(&C->loc_defs);
     CFCtx_free(&C->context);
     if(C->enclosing == NULL) {
+#ifdef DEBUG
+        assert(C->fn_type == FN_SCRIPT);
+#endif
         Array_Upvalue_free(&C->upvalues);
+    } else {
+        Roots* roots = C->upvalues.roots;
+        roots->c     = C->enclosing;
     }
+
+    Roots* r = C->fn->chunk.constants.roots;
+    r->c     = NULL;
+
     FREE(C);
 }
 
@@ -673,13 +669,13 @@ static const ParseRule rules[] = {
     [TOK_EOF]           = {NULL,                NULL,              PREC_NONE      },
 };
 
-SK_INTERNAL(UInt) parse_arglist(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(UInt) parse_arglist(VM* vm, PPC ppc)
 {
     UInt argc = 0;
 
     if(!C_check(C(), TOK_RPAREN)) {
         do {
-            parse_expr(vm, Cptr);
+            parse_expr(vm, ppc);
             if(argc == UINT24_MAX) {
                 C_error(C(), "Can't have more than %u arguments.", UINT24_MAX);
             }
@@ -691,26 +687,26 @@ SK_INTERNAL(UInt) parse_arglist(VM* vm, CompilerPPtr Cptr)
     return argc;
 }
 
-SK_INTERNAL(void) parse_call(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_call(VM* vm, PPC ppc)
 {
-    UInt argc = parse_arglist(vm, Cptr);
+    UInt argc = parse_arglist(vm, ppc);
     C_emit_op(C(), GET_OP_TYPE(argc, OP_CALL), argc);
 }
 
 SK_INTERNAL(void)
-parse_stm_expr(VM* vm, CompilerPPtr Cptr)
+parse_stm_expr(VM* vm, PPC ppc)
 {
-    parse_expr(vm, Cptr);
+    parse_expr(vm, ppc);
     C_expect(C(), TOK_SEMICOLON, "Expect ';' after expression.");
     C_emit_byte(C(), OP_POP);
 }
 
-SK_INTERNAL(void) parse_expr(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_expr(VM* vm, PPC ppc)
 {
-    parse_precedence(vm, Cptr, PREC_ASSIGNMENT);
+    parse_precedence(vm, ppc, PREC_ASSIGNMENT);
 }
 
-SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec)
+SK_INTERNAL(void) parse_precedence(VM* vm, PPC ppc, Precedence prec)
 {
     C_advance(C());
     ParseFn prefix_fn = rules[C()->parser.previous.type].prefix;
@@ -725,12 +721,12 @@ SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec)
         C_flag_clear(C(), ASSIGN_BIT);
     }
 
-    prefix_fn(vm, Cptr);
+    prefix_fn(vm, ppc);
 
     while(prec <= rules[(C())->parser.current.type].precedence) {
         C_advance(C());
         ParseFn infix_fn = rules[(C())->parser.previous.type].infix;
-        infix_fn(vm, Cptr);
+        infix_fn(vm, ppc);
     }
 
     if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
@@ -739,102 +735,92 @@ SK_INTERNAL(void) parse_precedence(VM* vm, CompilerPPtr Cptr, Precedence prec)
 }
 
 SK_INTERNAL(void)
-parse_dec_var_fixed(VM* vm, CompilerPPtr Cptr)
+parse_dec_var_fixed(VM* vm, PPC ppc)
 {
     C_flag_set(C(), FIXED_BIT);
     C_expect(C(), TOK_VAR, "Expect 'var' in variable declaration.");
-    parse_dec_var(vm, Cptr);
+    parse_dec_var(vm, ppc);
 }
 
-SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C, VM* vm)
+SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C)
 {
-    // Safe to decrement loc_len (UInt), only gets called after declaring variable
-    Local*     local      = &C->locals[C->loc_len - 1];
-    Value      identifier = Token_into_stringval(&(Roots){C, vm}, &local->name);
-    HashTable* scope_set  = &C->loc_defs.data[C->depth - 1];
-
-    HashTable_insert(scope_set, identifier, NUMBER_VAL(C->loc_len - 1));
-    local->depth = C->depth;
+    C->locals[C->loc_len - 1].depth = C->depth;
 }
 
 SK_INTERNAL(force_inline void) C_scope_start(Compiler* C)
 {
-    HashTable scope_set;
-    HashTable_init(&scope_set);
-
     if(unlikely((UInt)C->depth >= UINT32_MAX - 1)) {
         C_error(C, "Scope nesting depth limit reached [%u].", UINT32_MAX);
     }
-
     C->depth++;
-    Array_Table_push(&C->loc_defs, scope_set);
 }
 
 // End scope and pop locals and/or close captured locals
 SK_INTERNAL(force_inline void) C_scope_end(Compiler* C)
 {
-#define LOCAL_IS_CAPTURED(local) (Var_flag_is((local), VCAPTURED_BIT))
-
-    Int    localc = C->loc_defs.data[C->depth - 1].len;
-    Local* local  = &C->locals[C->loc_len - 1];
-
-    Int popn = 0;
-    while(popn < localc) {
-        if(LOCAL_IS_CAPTURED(local)) {
-            if(popn > 0) {
-                localc -= popn;
-                if(popn == 1) {
-                    C_emit_byte(C, OP_POP);
-                } else {
-                    C_emit_op(C, OP_POPN, popn);
-                }
-            }
-
-            Int closen = 0;
-            while(closen < localc && LOCAL_IS_CAPTURED(local)) {
-                local--;
-                closen++;
-            }
-            localc -= closen;
-
-            if(closen == 1) {
-                C_emit_byte(C, OP_CLOSE_UPVAL);
-            } else {
-                C_emit_op(C, OP_CLOSE_UPVALN, closen);
-            }
-
-            popn = 0;
-            continue;
-        }
-        local--;
-        popn++;
-    }
-
-    if(popn == 1) {
-        C_emit_byte(C, OP_POP);
-    } else if(popn > 1) {
-        C_emit_op(C, OP_POPN, popn);
-    }
+#define LOCAL_IS_CAPTURED(local) (LOCAL_IS((local), VCAPTURED_BIT))
 
     C->depth--;
-    UInt len        = C->loc_defs.data[C->depth].len;
-    C->loc_len     -= len;
-    gstate.loc_len -= len;
+
+    Int pop = 0;
+    while(C->loc_len > 0 && C->locals[C->loc_len - 1].depth > C->depth) {
+
+        if(LOCAL_IS_CAPTURED(&C->locals[C->loc_len - 1])) {
+            Int capture = 1;
+            C->loc_len--;
+            gstate.loc_len--;
+
+            if(pop == 1) {
+                C_emit_byte(C, OP_POP);
+            } else if(pop > 1) {
+                C_emit_op(C, OP_POPN, pop);
+            }
+
+            pop = 0; // Reset pop count
+
+            do {
+                if(!LOCAL_IS_CAPTURED(&C->locals[C->loc_len - 1])) {
+
+                    if(capture == 1) {
+                        C_emit_byte(C, OP_CLOSE_UPVAL);
+                    } else {
+                        C_emit_op(C, OP_CLOSE_UPVALN, capture);
+                    }
+
+                    break;
+                }
+
+                capture++;
+                C->loc_len--;
+                gstate.loc_len--;
+            } while(C->loc_len > 0 && C->locals[C->loc_len - 1].depth > C->depth);
+
+        } else {
+            pop++;
+            C->loc_len--;
+            gstate.loc_len--;
+        }
+    }
+
+    if(pop == 1) {
+        C_emit_byte(C, OP_POP);
+    } else if(pop > 1) {
+        C_emit_op(C, OP_POPN, pop);
+    }
 
 #undef LOCAL_IS_CAPTURED
 }
 
 SK_INTERNAL(void)
-parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
+parse_fn(VM* vm, PPC ppc, FunctionType type)
 {
-#define C_new() (*Cptr_new)
+#define C_new() (*ppc_new)
 
     Compiler* C_new = ALLOC_COMPILER(); /* Allocate new compiler */
 
     C_new->parser = C()->parser; // UPDATE OUTER COMPILER LATER
 
-    // Update global_vals vm array with new compiler root
-    Roots* r = vm->global_vals.roots; // VM root never changes
+    Roots* r = vm->global_vals.roots;
     r->c     = C_new;
 
     /* Initialize the new compiler with the new roots */
@@ -845,8 +831,8 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
     C_flag_set(C_new, FN_BIT);
 
     /* Have to pass the pointer to pointer to Compiler to parse functions, check the
-     * typedef for 'CompilerPPtr' in this source file for the rationale behind this. */
-    CompilerPPtr Cptr_new = &C_new;
+     * typedef for 'PPC' in this source file for the rationale behind this. */
+    PPC ppc_new = &C_new;
 
     // No need to end this scope, the frame gets popped anyways.
     C_scope_start(C_new());
@@ -856,14 +842,14 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
     if(!C_check(C_new(), TOK_RPAREN)) {
         do {
             C_new()->fn->arity++;
-            parse_varname(vm, Cptr_new, "Expect parameter name.");
-            C_initialize_local(C_new(), vm);
+            parse_varname(vm, ppc_new, "Expect parameter name.");
+            C_initialize_local(C_new());
         } while(C_match(C_new, TOK_COMMA));
     }
 
     C_expect(C_new(), TOK_RPAREN, "Expect ')' after parameters.");
     C_expect(C_new(), TOK_LBRACE, "Expect '{' before function body.");
-    parse_stm_block(vm, Cptr_new);
+    parse_stm_block(vm, ppc_new);
 
     ObjFunction* fn = compile_end(C_new);
 
@@ -875,42 +861,40 @@ parse_fn(VM* vm, CompilerPPtr Cptr, FunctionType type)
     C()->parser = C_new()->parser; // UPDATE OUTER COMPILER
 
 
-
     // Create a closure only when we have upvalues
     if(fn->upvalc == 0) {
         C_emit_op(C(), OP_CONST, C_make_const(C(), vm, OBJ_VAL(fn)));
     } else {
         C_emit_op(C(), OP_CLOSURE, C_make_const(C(), vm, OBJ_VAL(fn)));
         for(UInt i = 0; i < fn->upvalc; i++) {
-            Upvalue* upval = Array_Upvalue_index(&C()->upvalues, i);
+            Upvalue* upval = Array_Upvalue_index(&C_new()->upvalues, i);
             C_emit_byte(C(), upval->local ? 1 : 0);
             C_emit_lbyte(C(), upval->idx);
         }
     }
 
 
-    // Restore old compiler root for global_vals vm array
+    // Update roots!
+    r    = vm->global_vals.roots; // global_vals array
     r->c = C();
-    // Null out compiled function compiler root
-    r    = fn->chunk.constants.roots;
-    r->c = NULL;
 
+    C()->upvalues = C_new->upvalues;
     C_free(C_new);
 
 #undef C_new
 }
 
-SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_dec_fn(VM* vm, PPC ppc)
 {
-    UInt idx = parse_varname(vm, Cptr, "Expect function name.");
+    UInt idx = parse_varname(vm, ppc, "Expect function name.");
 
     /* Initialize the variable that holds the function, in order to
      * allow usage of the function inside of its body. */
     if(C()->depth > 0) {
-        C_initialize_local(C(), vm);
+        C_initialize_local(C());
     }
 
-    parse_fn(vm, Cptr, FN_FUNCTION);
+    parse_fn(vm, ppc, FN_FUNCTION);
 
     if(C()->depth == 0) {
         // Mark as declared to guard against redefinition
@@ -919,19 +903,19 @@ SK_INTERNAL(void) parse_dec_fn(VM* vm, CompilerPPtr Cptr)
     }
 }
 
-SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_dec(VM* vm, PPC ppc)
 {
     /* Clear variable modifiers from bit 9.. */
     C_flag_clear(C(), FIXED_BIT);
 
     if(C_match(C(), TOK_VAR)) {
-        parse_dec_var(vm, Cptr);
+        parse_dec_var(vm, ppc);
     } else if(C_match(C(), TOK_FIXED)) {
-        parse_dec_var_fixed(vm, Cptr);
+        parse_dec_var_fixed(vm, ppc);
     } else if(C_match(C(), TOK_FN)) {
-        parse_dec_fn(vm, Cptr);
+        parse_dec_fn(vm, ppc);
     } else {
-        parse_stm(vm, Cptr);
+        parse_stm(vm, ppc);
     }
 
     if(C_flag_is(C(), PANIC_BIT)) {
@@ -940,16 +924,16 @@ SK_INTERNAL(void) parse_dec(VM* vm, CompilerPPtr Cptr)
 }
 
 SK_INTERNAL(void)
-parse_dec_var(VM* vm, CompilerPPtr Cptr)
+parse_dec_var(VM* vm, PPC ppc)
 {
     if(C_match(C(), TOK_FIXED)) {
         C_flag_set(C(), FIXED_BIT);
     }
 
-    Int index = parse_varname(vm, Cptr, "Expect variable name.");
+    Int index = parse_varname(vm, ppc, "Expect variable name.");
 
     if(C_match(C(), TOK_EQUAL)) {
-        parse_expr(vm, Cptr);
+        parse_expr(vm, ppc);
     } else {
         C_emit_byte(C(), OP_NIL);
     }
@@ -957,7 +941,7 @@ parse_dec_var(VM* vm, CompilerPPtr Cptr)
     C_expect(C(), TOK_SEMICOLON, "Expect ';' after variable declaration.");
 
     if((C())->depth > 0) {
-        C_initialize_local(C(), vm);
+        C_initialize_local(C());
         return;
     }
 
@@ -965,7 +949,7 @@ parse_dec_var(VM* vm, CompilerPPtr Cptr)
     C_emit_op(C(), GET_OP_TYPE(index, OP_DEFINE_GLOBAL), index);
 }
 
-SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr, VM* vm)
+SK_INTERNAL(void) C_new_local(PPC ppc, VM* vm, Token name)
 {
     Compiler* C = C();
 
@@ -977,41 +961,69 @@ SK_INTERNAL(void) C_new_local(CompilerPPtr Cptr, VM* vm)
                 MIN(VM_STACK_MAX, LOCAL_STACK_MAX));
             return;
         }
-        C_grow_stack(Cptr, vm);
+        C_grow_stack(ppc, vm);
         C = C();
     }
 
     Local* local = &C->locals[C->loc_len++];
     gstate.loc_len++;
-    local->name  = C->parser.previous;
+    local->name  = name;
     local->flags = (((Byte)(C_flags(C) >> 8)) & 0xff);
     local->depth = -1;
 }
 
 SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
 {
-    return (left->len == right->len) &&
-           (memcmp(left->start, right->start, left->len) == 0);
+    return left->len == right->len && memcmp(left->start, right->start, left->len) == 0;
 }
 
-SK_INTERNAL(bool) C_local_is_unique(Compiler* C, VM* vm)
+SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Token* name)
 {
-    Value      identifier = Token_into_stringval(&(Roots){C, vm}, &C->parser.previous);
-    HashTable* scope_set  = Array_Table_index(&C->loc_defs, C->depth - 1);
-    return !HashTable_get(scope_set, identifier, NULL);
+    for(Int i = C->loc_len - 1; i >= 0; i--) {
+        Local* local = &C->locals[i];
+        if(Identifier_eq(name, &local->name)) {
+            if(local->depth == -1) {
+                C_error(C, "Can't read local variable in its own initializer.");
+            }
+            return i;
+        }
+    }
+
+    return -1;
 }
 
-SK_INTERNAL(void) C_make_local(CompilerPPtr Cptr, VM* vm)
+SK_INTERNAL(void) C_make_local(PPC ppc, VM* vm)
 {
     Compiler* C = C();
-    if(!C_local_is_unique(C, vm)) {
-        C_error(
-            C,
-            "Redefinition of local variable '%.*s'.",
+
+    Token* name = &C->parser.previous;
+
+    for(Int i = C->loc_len - 1; i >= 0; i++) {
+        Local* local = &C->locals[i];
+
+        if(local->depth != -1 && local->depth < C->depth) {
+            break;
+        }
+
+        printf(
+            "%.*s [%u] == %.*s [%u]\n",
             C->parser.previous.len,
-            C->parser.previous.start);
+            C->parser.previous.start,
+            C->parser.previous.len,
+            local->name.len,
+            local->name.start,
+            local->name.len);
+        fflush(stdout);
+        if(Identifier_eq(name, &local->name)) {
+            C_error(
+                C,
+                "Redefinition of local variable '%.*s'.",
+                C->parser.previous.len,
+                C->parser.previous.start);
+        }
     }
-    C_new_local(Cptr, vm);
+
+    C_new_local(ppc, vm, *name);
 }
 
 SK_INTERNAL(Int) C_make_global(Compiler* C, VM* vm, bool fixed)
@@ -1073,14 +1085,14 @@ SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
 }
 
 SK_INTERNAL(UInt)
-parse_varname(VM* vm, CompilerPPtr Cptr, const char* errmsg)
+parse_varname(VM* vm, PPC ppc, const char* errmsg)
 {
-    printf("Parsing function name!\n");
+    printf("Parsing variable name!\n");
     C_expect(C(), TOK_IDENTIFIER, errmsg);
 
     // If local scope make local variable
     if((C())->depth > 0) {
-        C_make_local(Cptr, vm);
+        C_make_local(ppc, vm);
         return 0;
     }
 
@@ -1120,7 +1132,7 @@ SK_INTERNAL(force_inline void) C_rm_bstorage(Compiler* C)
     Array_Int_free(&arr);
 }
 
-SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_stm_switch(VM* vm, PPC ppc)
 {
     uint64_t mask = CFLOW_MASK(C());
     C_flag_clear(C(), LOOP_BIT);
@@ -1129,7 +1141,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     C_add_bstorage(C());
 
     C_expect(C(), TOK_LPAREN, "Expect '(' after 'switch'.");
-    parse_expr(vm, Cptr);
+    parse_expr(vm, ppc);
     C_expect(C(), TOK_RPAREN, "Expect ')' after condition.");
 
     C_expect(C(), TOK_LBRACE, "Expect '{' after ')'.");
@@ -1159,7 +1171,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
             state = -1;
 
             if((C())->parser.previous.type == TOK_CASE) {
-                parse_expr(vm, Cptr);
+                parse_expr(vm, ppc);
                 C_emit_byte(C(), OP_EQ);
                 C_expect(C(), TOK_COLON, "Expect ':' after 'case'.");
 
@@ -1180,7 +1192,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
             if(state == 0) {
                 C_error(C(), "Can't have statements before first case.");
             }
-            parse_stm(vm, Cptr);
+            parse_stm(vm, ppc);
         }
     }
 
@@ -1201,16 +1213,16 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, CompilerPPtr Cptr)
     C()->parser.flags |= mask;
 }
 
-SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_stm_if(VM* vm, PPC ppc)
 {
     C_expect(C(), TOK_LPAREN, "Expect '(' after 'if'.");
-    parse_expr(vm, Cptr); /* Parse conditional */
+    parse_expr(vm, ppc); /* Parse conditional */
     C_expect(C(), TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional jump instruction */
     UInt else_jmp = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
 
-    parse_stm(vm, Cptr); /* Parse the code in this branch */
+    parse_stm(vm, ppc); /* Parse the code in this branch */
 
     /* Prevent fall-through if 'else' exists. */
     UInt end_jmp = C_emit_jmp(C(), OP_JMP);
@@ -1218,30 +1230,30 @@ SK_INTERNAL(void) parse_stm_if(VM* vm, CompilerPPtr Cptr)
     C_patch_jmp(C(), else_jmp); /* End of 'if' (maybe start of else) */
 
     if(C_match(C(), TOK_ELSE)) {
-        parse_stm(vm, Cptr);       /* Parse the else branch */
+        parse_stm(vm, ppc);        /* Parse the else branch */
         C_patch_jmp(C(), end_jmp); /* End of else branch */
     }
 }
 
-SK_INTERNAL(void) parse_and(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_and(VM* vm, PPC ppc)
 {
     UInt jump = C_emit_jmp(C(), OP_JMP_IF_FALSE_OR_POP);
-    parse_precedence(vm, Cptr, PREC_AND);
+    parse_precedence(vm, ppc, PREC_AND);
     C_patch_jmp(C(), jump);
 }
 
-SK_INTERNAL(void) parse_or(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_or(VM* vm, PPC ppc)
 {
     UInt else_jmp = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
     UInt end_jmp  = C_emit_jmp(C(), OP_JMP);
 
     C_patch_jmp(C(), else_jmp);
 
-    parse_precedence(vm, Cptr, PREC_OR);
+    parse_precedence(vm, ppc, PREC_OR);
     C_patch_jmp(C(), end_jmp);
 }
 
-SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_stm_while(VM* vm, PPC ppc)
 {
     uint64_t mask = CFLOW_MASK(C());
     C_flag_clear(C(), SWITCH_BIT);
@@ -1256,12 +1268,12 @@ SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr)
     (C())->context.innermostl_depth = (C())->depth;
 
     C_expect(C(), TOK_LPAREN, "Expect '(' after 'while'.");
-    parse_expr(vm, Cptr);
+    parse_expr(vm, ppc);
     C_expect(C(), TOK_RPAREN, "Expect ')' after condition.");
 
     /* Setup the conditional exit jump */
     UInt end_jmp = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
-    parse_stm(vm, Cptr);                               /* Parse loop body */
+    parse_stm(vm, ppc);                                /* Parse loop body */
     C_emit_loop(C(), (C())->context.innermostl_start); /* Jump to the start of the loop */
 
     C_patch_jmp(C(), end_jmp); /* Set loop exit offset */
@@ -1277,7 +1289,7 @@ SK_INTERNAL(void) parse_stm_while(VM* vm, CompilerPPtr Cptr)
     (C())->parser.flags |= mask;
 }
 
-SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_stm_for(VM* vm, PPC ppc)
 {
     uint64_t mask = CFLOW_MASK(C());
     C_flag_clear(C(), SWITCH_BIT);
@@ -1292,11 +1304,11 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     if(C_match(C(), TOK_SEMICOLON)) {
         // No initializer
     } else if(C_match(C(), TOK_VAR)) {
-        parse_dec_var(vm, Cptr);
+        parse_dec_var(vm, ppc);
     } else if(C_match(C(), TOK_FIXED)) {
-        parse_dec_var_fixed(vm, Cptr);
+        parse_dec_var_fixed(vm, ppc);
     } else {
-        parse_stm_expr(vm, Cptr);
+        parse_stm_expr(vm, ppc);
     }
 
     /* Save outermost loop start/depth on the stack */
@@ -1308,16 +1320,16 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
 
     Int loop_end = -1;
     if(!C_match(C(), TOK_SEMICOLON)) {
-        parse_expr(vm, Cptr);
+        parse_expr(vm, ppc);
         C_expect(C(), TOK_SEMICOLON, "Expect ';' after for-loop condition clause.");
 
         loop_end = C_emit_jmp(C(), OP_JMP_IF_FALSE_AND_POP);
     }
 
-    if(!C_match(C(), TOK_SEMICOLON)) {
+    if(!C_match(C(), TOK_RPAREN)) {
         UInt body_start      = C_emit_jmp(C(), OP_JMP);
         UInt increment_start = current_chunk(C())->code.len;
-        parse_expr(vm, Cptr);
+        parse_expr(vm, ppc);
         C_emit_byte(C(), OP_POP);
         C_expect(C(), TOK_RPAREN, "Expect ')' after last for-loop clause.");
 
@@ -1326,7 +1338,7 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
         C_patch_jmp(C(), body_start);
     }
 
-    parse_stm(vm, Cptr);
+    parse_stm(vm, ppc);
     C_emit_loop(C(), (C())->context.innermostl_start);
 
     if(loop_end != -1) {
@@ -1336,13 +1348,10 @@ SK_INTERNAL(void) parse_stm_for(VM* vm, CompilerPPtr Cptr)
     /* Restore the outermost loop start/depth */
     (C())->context.innermostl_start = outermostl_start;
     (C())->context.innermostl_depth = outermostl_depth;
-
     /* Remove and patch loop breaks */
     C_rm_bstorage(C());
-
     /* End the scope */
     C_scope_end(C());
-
     /* Restore old flags */
     C_flag_clear(C(), LOOP_BIT);
     (C())->parser.flags |= mask;
@@ -1408,7 +1417,7 @@ SK_INTERNAL(void) parse_stm_break(Compiler* C)
     Array_Int_push(Array_Array_Int_last(arr), C_emit_jmp(C, OP_JMP));
 }
 
-SK_INTERNAL(void) parse_stm_return(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_stm_return(VM* vm, PPC ppc)
 {
     if(C()->fn_type == FN_SCRIPT) {
         C_error(C(), "Can't return from top-level code.");
@@ -1417,59 +1426,59 @@ SK_INTERNAL(void) parse_stm_return(VM* vm, CompilerPPtr Cptr)
     if(C_match(C(), TOK_SEMICOLON)) {
         C_emit_return(C());
     } else {
-        parse_expr(vm, Cptr);
+        parse_expr(vm, ppc);
         C_expect(C(), TOK_SEMICOLON, "Expect ';' after return value.");
         C_emit_byte(C(), OP_RET);
     }
 }
 
-SK_INTERNAL(void) parse_stm(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_stm(VM* vm, PPC ppc)
 {
     Compiler* C = C();
     // @TODO: Implement goto table
     if(C_match(C, TOK_PRINT)) {
-        parse_stm_print(vm, Cptr);
+        parse_stm_print(vm, ppc);
     } else if(C_match(C, TOK_WHILE)) {
-        parse_stm_while(vm, Cptr);
+        parse_stm_while(vm, ppc);
     } else if(C_match(C, TOK_FOR)) {
-        parse_stm_for(vm, Cptr);
+        parse_stm_for(vm, ppc);
     } else if(C_match(C, TOK_IF)) {
-        parse_stm_if(vm, Cptr);
+        parse_stm_if(vm, ppc);
     } else if(C_match(C, TOK_SWITCH)) {
-        parse_stm_switch(vm, Cptr);
+        parse_stm_switch(vm, ppc);
     } else if(C_match(C, TOK_LBRACE)) {
         C_scope_start(C);
-        parse_stm_block(vm, Cptr);
+        parse_stm_block(vm, ppc);
         C_scope_end(C());
     } else if(C_match(C, TOK_CONTINUE)) {
         parse_stm_continue(C);
     } else if(C_match(C, TOK_BREAK)) {
         parse_stm_break(C);
     } else if(C_match(C, TOK_RETURN)) {
-        parse_stm_return(vm, Cptr);
+        parse_stm_return(vm, ppc);
     } else {
-        parse_stm_expr(vm, Cptr);
+        parse_stm_expr(vm, ppc);
     }
 }
 
-SK_INTERNAL(void) parse_stm_block(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_stm_block(VM* vm, PPC ppc)
 {
     while(!C_check(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
-        parse_dec(vm, Cptr);
+        parse_dec(vm, ppc);
     }
     C_expect(C(), TOK_RBRACE, "Expect '}' after block.");
 }
 
 SK_INTERNAL(force_inline void)
-parse_stm_print(VM* vm, CompilerPPtr Cptr)
+parse_stm_print(VM* vm, PPC ppc)
 {
-    parse_expr(vm, Cptr);
+    parse_expr(vm, ppc);
     C_expect(C(), TOK_SEMICOLON, "Expect ';' after value");
     C_emit_byte(C(), OP_PRINT);
 }
 
 SK_INTERNAL(force_inline void)
-parse_number(VM* vm, CompilerPPtr Cptr)
+parse_number(VM* vm, PPC ppc)
 {
     Compiler* C        = C();
     double    constant = strtod(C->parser.previous.start, NULL);
@@ -1477,27 +1486,12 @@ parse_number(VM* vm, CompilerPPtr Cptr)
     C_emit_op(C, GET_OP_TYPE(idx, OP_CONST), idx);
 }
 
-SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Value name)
-{
-    Value index;
-    for(Int i = C->loc_defs.len - 1; i >= 0; i--) {
-        HashTable* scope_set = Array_Table_index(&C->loc_defs, i);
-        if(HashTable_get(scope_set, name, &index)) {
-            if(C->locals[(UInt)AS_NUMBER(index)].depth == -1) {
-                C_error(C, "Can't read local variable in its own initializer.");
-            }
-            return (Int)AS_NUMBER(index);
-        }
-    }
-
-    return -1;
-}
-
 SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
 {
     for(UInt i = 0; i < C->upvalues.len; i++) {
         Upvalue* upvalue = Array_Upvalue_index(&C->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local) {
+            printf("Got existing UpValue idx: %u\n", idx);
             // Return existing UpValue index
             return i;
         }
@@ -1513,11 +1507,17 @@ SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
     }
 
     // Otherwise add the UpValue into the array
+    printf(
+        "Returning new upvalue idx: %lu, upvalc: %u\n",
+        C->upvalues.len,
+        C->fn->upvalc + 1);
     C->fn->upvalc++;
-    return Array_Upvalue_push(&C->upvalues, (Upvalue){idx, local});
+
+    Upvalue upval = {idx, local};
+    return Array_Upvalue_push(&C->upvalues, upval);
 }
 
-SK_INTERNAL(Int) C_get_upval(Compiler* C, const Value name)
+SK_INTERNAL(Int) C_get_upval(Compiler* C, Token* name)
 {
     if(C->enclosing == NULL) {
         return -1;
@@ -1526,7 +1526,7 @@ SK_INTERNAL(Int) C_get_upval(Compiler* C, const Value name)
     Int idx = C_get_local(C->enclosing, name);
     if(idx != -1) {
         // Local is captured by Upvalue
-        Var_flag_set(&C->enclosing->locals[idx], VCAPTURED_BIT);
+        LOCAL_SET(&C->enclosing->locals[idx], VCAPTURED_BIT);
         return C_add_upval(C, (UInt)idx, true);
     }
 
@@ -1538,16 +1538,16 @@ SK_INTERNAL(Int) C_get_upval(Compiler* C, const Value name)
     return -1;
 }
 
-SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(force_inline void) parse_variable(VM* vm, PPC ppc)
 {
-    const Value name = Token_into_stringval(&(Roots){C(), vm}, &C()->parser.previous);
-    OpCode      setop, getop;
-    Int         idx   = C_get_local(C(), name);
-    int16_t     flags = -1;
+    Token   name = C()->parser.previous;
+    OpCode  setop, getop;
+    Int     idx   = C_get_local(C(), &name);
+    int16_t flags = -1;
 
     if(idx != -1) {
         Local* var = &(C())->locals[idx];
-        flags      = Var_flags(var);
+        flags      = LOCAL_FLAGS(var);
         if(idx > SHORT_STACK_SIZE) {
             setop = OP_SET_LOCALL;
             getop = OP_GET_LOCALL;
@@ -1555,14 +1555,16 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
             setop = OP_SET_LOCAL;
             getop = OP_GET_LOCAL;
         }
-    } else if((idx = C_get_upval(C(), name)) != -1) {
-        Local* var = &C()->locals[C()->upvalues.data[idx].idx];
-        flags      = Var_flags(var);
-        setop      = OP_SET_UPVALUE;
-        getop      = OP_GET_UPVALUE;
+    } else if((idx = C_get_upval(C(), &name)) != -1) {
+        Upvalue* upval = Array_Upvalue_index(&C()->upvalues, idx);
+        Local*   var   = &C()->locals[upval->idx];
+        flags          = LOCAL_FLAGS(var);
+        setop          = OP_SET_UPVALUE;
+        getop          = OP_GET_UPVALUE;
     } else {
-        idx   = C_get_global(C(), vm);
-        flags = vm->global_vals.data[idx].fixed;
+        idx          = C_get_global(C(), vm);
+        Global* glob = Array_Global_index(&vm->global_vals, idx);
+        flags        = GLOB_FLAGS(glob);
         if(idx > SHORT_STACK_SIZE) {
             setop = OP_SET_GLOBALL;
             getop = OP_GET_GLOBALL;
@@ -1577,17 +1579,18 @@ SK_INTERNAL(force_inline void) parse_variable(VM* vm, CompilerPPtr Cptr)
         if(BIT_CHECK(flags, VFIXED_BIT)) {
             C_error(
                 C(),
-                "Can't assign to variable '%s', it is declared as 'fixed'.",
-                AS_CSTRING(name));
+                "Can't assign to variable '%.*s', it is declared as 'fixed'.",
+                (Int)name.len,
+                name.start);
         }
-        parse_expr(vm, Cptr);
+        parse_expr(vm, ppc);
         C_emit_op(C(), setop, idx);
     } else {
         C_emit_op(C(), getop, idx);
     }
 }
 
-SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(force_inline void) parse_string(VM* vm, PPC ppc)
 {
     Compiler*  C      = C();
     ObjString* string = ObjString_from(
@@ -1599,16 +1602,16 @@ SK_INTERNAL(force_inline void) parse_string(VM* vm, CompilerPPtr Cptr)
 }
 
 /* This is the entry point to Pratt parsing */
-SK_INTERNAL(force_inline void) parse_grouping(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(force_inline void) parse_grouping(VM* vm, PPC ppc)
 {
-    parse_expr(vm, Cptr);
+    parse_expr(vm, ppc);
     C_expect(C(), TOK_RPAREN, "Expect ')' after expression");
 }
 
-SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_unary(VM* vm, PPC ppc)
 {
     TokenType type = (C())->parser.previous.type;
-    parse_precedence(vm, Cptr, PREC_UNARY);
+    parse_precedence(vm, ppc, PREC_UNARY);
 
     switch(type) {
         case TOK_MINUS:
@@ -1623,11 +1626,11 @@ SK_INTERNAL(void) parse_unary(VM* vm, CompilerPPtr Cptr)
     }
 }
 
-SK_INTERNAL(void) parse_binary(VM* vm, CompilerPPtr Cptr)
+SK_INTERNAL(void) parse_binary(VM* vm, PPC ppc)
 {
     TokenType        type = (C())->parser.previous.type;
     const ParseRule* rule = &rules[type];
-    parse_precedence(vm, Cptr, rule->precedence + 1);
+    parse_precedence(vm, ppc, rule->precedence + 1);
 
 #ifdef THREADED_CODE
     // IMPORTANT: update accordingly if TokenType enum is changed!
@@ -1754,16 +1757,16 @@ lteq:
 }
 
 SK_INTERNAL(force_inline void)
-parse_ternarycond(VM* vm, CompilerPPtr Cptr)
+parse_ternarycond(VM* vm, PPC ppc)
 {
     //@TODO: Implement...
-    parse_expr(vm, Cptr);
+    parse_expr(vm, ppc);
     C_expect(C(), TOK_COLON, "Expect ': expr' (ternary conditional).");
-    parse_expr(vm, Cptr);
+    parse_expr(vm, ppc);
 }
 
 SK_INTERNAL(force_inline void)
-parse_literal(unused VM* _, CompilerPPtr Cptr)
+parse_literal(unused VM* _, PPC ppc)
 {
     Compiler* C = C();
     switch(C->parser.previous.type) {

@@ -23,9 +23,24 @@ typedef struct {
     Value*       sp; /* Relative stack pointer */
 } CallFrame;
 
+#define GLOB_FIXED_BIT (1)
+#define GLOB_MARKED_BIT (2)
+
+#define GLOB_SET(glob, bit) BIT_SET((glob)->flags, bit)
+#define GLOB_CLEAR(glob, bit) BIT_CLEAR((glob)->flags, bit)
+#define GLOB_CHECK(glob, bit) BIT_CHECK((glob)->flags, bit)
+#define GLOB_FLAGS(glob) ((glob)->flags)
+
 typedef struct {
     Value value; /* Global value */
-    bool  fixed; /* @TODO: Make this into a byte that holds flag bits */
+    /*
+     * 1 - fixed
+     * 2 - marked
+     * 3 - unused
+     * ...
+     * 8 - unused
+     */
+    Byte  flags;
 } Global;
 
 ARRAY_NEW(Array_Global, Global);
