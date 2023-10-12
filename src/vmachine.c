@@ -544,18 +544,18 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_DEFINE_GLOBAL)
             {
                 Byte idx   = READ_BYTE();
-                bool fixed = Array_Global_index(&vm->global_vals, idx)->flags;
+                Byte flags = Array_Global_index(&vm->global_vals, idx)->flags;
                 *Array_Global_index(&vm->global_vals, idx) =
-                    (Global){stack_peek(0), fixed};
+                    (Global){stack_peek(0), flags};
                 VM_pop(vm);
                 BREAK;
             }
             CASE(OP_DEFINE_GLOBALL)
             {
                 UInt idx   = READ_BYTEL();
-                bool fixed = Array_Global_index(&vm->global_vals, idx)->flags;
+                Byte flags = Array_Global_index(&vm->global_vals, idx)->flags;
                 *Array_Global_index(&vm->global_vals, idx) =
-                    (Global){stack_peek(0), fixed};
+                    (Global){stack_peek(0), flags};
                 VM_pop(vm);
                 BREAK;
             }
@@ -593,7 +593,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     frame->ip = ip;
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
-                } else if(unlikely(global->flags)) {
+                } else if(unlikely(GLOB_CHECK(global, GLOB_FIXED_BIT))) {
                     frame->ip = ip;
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
@@ -610,7 +610,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     frame->ip = ip;
                     VM_error(vm, "Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
-                } else if(unlikely(global->flags)) {
+                } else if(unlikely(GLOB_CHECK(global, GLOB_FIXED_BIT))) {
                     frame->ip = ip;
                     VM_error(vm, "Can't assign to 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;

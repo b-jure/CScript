@@ -604,8 +604,9 @@ SK_INTERNAL(void) C_free(Compiler* C)
 #endif
         Array_Upvalue_free(&C->upvalues);
     } else {
-        Roots* roots = C->upvalues.roots;
-        roots->c     = C->enclosing;
+        Roots* roots           = C->upvalues.roots;
+        roots->c               = C->enclosing;
+        C->enclosing->upvalues = C->upvalues;
     }
 
     Roots* r = C->fn->chunk.constants.roots;
@@ -844,27 +845,30 @@ parse_fn(VM* vm, PPC ppc, FunctionType type)
             C_new()->fn->arity++;
             parse_varname(vm, ppc_new, "Expect parameter name.");
             C_initialize_local(C_new());
-        } while(C_match(C_new, TOK_COMMA));
+        } while(C_match(C_new(), TOK_COMMA));
     }
 
     C_expect(C_new(), TOK_RPAREN, "Expect ')' after parameters.");
     C_expect(C_new(), TOK_LBRACE, "Expect '{' before function body.");
     parse_stm_block(vm, ppc_new);
 
-    ObjFunction* fn = compile_end(C_new);
+    ObjFunction* fn = compile_end(C_new());
 
     // Restore flags but additionally transfer error flag
     // if error happened in the new compiler.
-    C_flag_clear(C_new(), FN_BIT);
-    C_new()->parser.flags |= (mask | C_flag_is(C_new, ERROR_BIT));
+    mask |= C_flag_is(C_new(), ERROR_BIT) ? 1 : 0;
+    BIT_CLEAR(mask, FN_BIT);
+    C_new()->parser.flags &= mask;
+    C()->parser            = C_new()->parser; // UPDATE OUTER COMPILER
 
-    C()->parser = C_new()->parser; // UPDATE OUTER COMPILER
+    // Update roots!
+    r    = vm->global_vals.roots; // global_vals array
+    r->c = C();
 
-
-    // Create a closure only when we have upvalues
     if(fn->upvalc == 0) {
         C_emit_op(C(), OP_CONST, C_make_const(C(), vm, OBJ_VAL(fn)));
     } else {
+        // Create a closure only when we have upvalues
         C_emit_op(C(), OP_CLOSURE, C_make_const(C(), vm, OBJ_VAL(fn)));
         for(UInt i = 0; i < fn->upvalc; i++) {
             Upvalue* upval = Array_Upvalue_index(&C_new()->upvalues, i);
@@ -873,12 +877,6 @@ parse_fn(VM* vm, PPC ppc, FunctionType type)
         }
     }
 
-
-    // Update roots!
-    r    = vm->global_vals.roots; // global_vals array
-    r->c = C();
-
-    C()->upvalues = C_new->upvalues;
     C_free(C_new);
 
 #undef C_new
