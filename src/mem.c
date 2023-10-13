@@ -16,23 +16,18 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#ifndef GC_HEAP_GROW_FACTOR
-    #define GC_HEAP_GROW_FACTOR 2
-#endif
-
-#define OBJ_MARK(obj)      ((obj)->otype |= (uint32_t)1)
-#define OBJ_IS_MARKED(obj) ((uint32_t)(obj)->otype & (uint32_t)1)
-#define OBJ_UNMARK(obj)    ((obj)->otype &= (uint32_t)~1)
+#define GC_HEAP_GROW_FACTOR 2
+double gc_grow_factor = 0;
 
 // Make extern for 'mark_c_roots' function in 'compiler.c'.
 void mark_obj(VM* vm, Obj* obj)
 {
-    if(obj == NULL || OBJ_IS_MARKED(obj)) {
+    if(obj == NULL || Obj_marked(obj)) {
         return;
     }
 
-    OBJ_MARK(obj);
-    if((obj->otype & ~1) & (OBJ_STRING | OBJ_NATIVE)) {
+    Obj_mark_set(obj, true);
+    if(Obj_type(obj) & (OBJ_STRING | OBJ_NATIVE)) {
 #ifdef DEBUG_LOG_GC
         printf("%p blacken ", (void*)obj);
         Value_print(OBJ_VAL(obj));
@@ -108,7 +103,7 @@ SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
     Value_print(OBJ_VAL(obj));
     printf("\n");
 #endif
-    switch(obj->otype & ~1) {
+    switch(Obj_type(obj)) {
         case OBJ_UPVAL:
             mark_value(vm, ((ObjUpvalue*)obj)->closed);
             break;
@@ -145,7 +140,7 @@ SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)
 {
     for(UInt i = 0; i < vm->strings.cap; i++) {
         Entry* entry = &vm->strings.entries[i];
-        if(entry->key.type == VAL_OBJ && !OBJ_IS_MARKED(AS_OBJ(entry->key))) {
+        if(entry->key.type == VAL_OBJ && !Obj_marked(AS_OBJ(entry->key))) {
             HashTable_remove(&vm->strings, entry->key);
         }
     }
@@ -157,15 +152,15 @@ SK_INTERNAL(force_inline void) sweep(Roots* roots)
     Obj* current  = roots->vm->objects;
 
     while(current != NULL) {
-        if(OBJ_IS_MARKED(current)) {
-            OBJ_UNMARK(current);
+        if(Obj_marked(current)) {
+            Obj_mark_set(current, false);
             previous = current;
-            current  = current->next;
+            current  = Obj_next(current);
         } else {
             Obj* unreached = current;
-            current        = current->next;
+            current        = Obj_next(current);
             if(previous != NULL) {
-                previous->next = current;
+                Obj_next_set(previous, current);
             } else {
                 roots->vm->objects = current;
             }
@@ -175,7 +170,7 @@ SK_INTERNAL(force_inline void) sweep(Roots* roots)
     }
 }
 
-unused static void gc(Roots* roots)
+void gc(Roots* roots)
 {
 #ifdef DEBUG_LOG_GC
     printf("--> GC start\n");
@@ -204,12 +199,13 @@ skip:
     remove_weak_refs(vm);
     sweep(roots);
 
-    vm->gc_next = vm->gc_allocated * GC_HEAP_GROW_FACTOR;
+    vm->gc_next = (double)vm->gc_allocated *
+                  (double)((gc_grow_factor == 0) ? GC_HEAP_GROW_FACTOR : gc_grow_factor);
 
 #ifdef DEBUG_LOG_GC
     printf("--> GC end\n");
     printf(
-        "    collected %lu bytes (from %lu to %lu) next collection at %lu\n",
+        "    collected %lu bytes (from %lu to %lu) next collection at %g\n",
         old_allocation - vm->gc_allocated,
         old_allocation,
         vm->gc_allocated,
@@ -218,7 +214,7 @@ skip:
 }
 
 /* Allocator that can trigger gc. */
-void* gc_reallocate(unused void* roots, void* ptr, unused size_t oldc, size_t newc)
+void* gc_reallocate(void* roots, void* ptr, size_t oldc, size_t newc)
 {
     Roots* r             = roots;
     r->vm->gc_allocated += newc - oldc;
@@ -228,7 +224,7 @@ void* gc_reallocate(unused void* roots, void* ptr, unused size_t oldc, size_t ne
         gc(r);
     }
 #else
-    if(r->vm->gc_next < r->vm->gc_allocated) {
+    if(!GC_CHECK(r->vm, GC_MANUAL_BIT) && r->vm->gc_next < r->vm->gc_allocated) {
         gc(r);
     }
 #endif

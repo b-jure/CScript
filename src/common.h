@@ -24,9 +24,9 @@ SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x) {
   return (x >= sizeof(size_t) * CHAR_BIT) ? 0xffffffffffffffff
                                           : (1UL << (x)) - 1;
 }
-// Convert bit into unsigned long integer */
+// Convert bit into unsigned long integer
 #define btoul(bit) (~((size_t)0) & (1UL << ((bit)-1)))
-/* Return bit at 'bit' (0 or 1) from 'x'. */
+// Return bit at 'bit' (0 or 1) from 'x'.
 #define BIT_CHECK(x, bit) ((size_t)(x) & ((size_t)1 << ((bit)-1)))
 // Set 'bit' from 'x'
 #define BIT_SET(x, bit) ((x) |= ((size_t)1 << ((bit)-1)))

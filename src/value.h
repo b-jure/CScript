@@ -6,54 +6,56 @@
 #include "common.h"
 #include "hash.h"
 
-#define AS_OBJ(value) ((value).as.object)
-#define OBJ_TYPE(value) (AS_OBJ(value)->otype & ~1)
-#define IS_OBJ(value) ((value).type == VAL_OBJ)
-#define OBJ_VAL(value) ((Value){.type = VAL_OBJ, {.object = (Obj *)value}})
+#define AS_OBJ(value)       ((value).as.object)
+#define AS_OBJREF(value)    ((value)->as.object)
+#define OBJ_TYPE(value)     (Obj_type(AS_OBJ(value)))
+#define OBJ_REF_TYPE(value) (Obj_type(AS_OBJREF(value)))
+#define IS_OBJ(value)       ((value).type == VAL_OBJ)
+#define OBJ_VAL(value)      ((Value){.type = VAL_OBJ, {.object = (Obj*)value}})
 
-#define AS_BOOL(value) ((value).as.boolean)
+#define AS_BOOL(value)     ((value).as.boolean)
 #define AS_BOOL_REF(value) ((value)->as.boolean)
-#define IS_BOOL(value) ((value).type == VAL_BOOL)
-#define BOOL_VAL(value) ((Value){.type = VAL_BOOL, {.boolean = value}})
+#define IS_BOOL(value)     ((value).type == VAL_BOOL)
+#define BOOL_VAL(value)    ((Value){.type = VAL_BOOL, {.boolean = value}})
 
-#define AS_NUMBER(value) ((value).as.number)
+#define AS_NUMBER(value)     ((value).as.number)
 #define AS_NUMBER_REF(value) ((value)->as.number)
-#define IS_NUMBER(value) ((value).type == VAL_NUMBER)
-#define NUMBER_VAL(value) ((Value){.type = VAL_NUMBER, {.number = value}})
+#define IS_NUMBER(value)     ((value).type == VAL_NUMBER)
+#define NUMBER_VAL(value)    ((Value){.type = VAL_NUMBER, {.number = value}})
 
 #define IS_NIL(value) ((value).type == VAL_NIL)
-#define NIL_VAL ((Value){.type = VAL_NIL, {0}})
+#define NIL_VAL       ((Value){.type = VAL_NIL, {0}})
 
-#define IS_EMPTY(value) ((value).type == VAL_EMPTY)
-#define EMPTY_VAL ((Value){.type = VAL_EMPTY, {0}})
-#define UNDEFINED_VAL EMPTY_VAL
+#define IS_EMPTY(value)   ((value).type == VAL_EMPTY)
+#define EMPTY_VAL         ((Value){.type = VAL_EMPTY, {0}})
+#define UNDEFINED_VAL     EMPTY_VAL
 #define IS_UNDEFINED(val) IS_EMPTY(val)
 
 #define IS_DECLARED(value) ((value).type == VAL_DECLARED)
-#define DECLARED_VAL ((Value){.type = VAL_DECLARED, {0}})
+#define DECLARED_VAL       ((Value){.type = VAL_DECLARED, {0}})
 
-typedef struct Obj Obj;
-typedef struct ObjString ObjString;
+typedef struct Obj         Obj;
+typedef struct ObjString   ObjString;
 typedef struct ObjFunction ObjFunction;
-typedef struct ObjClosure ObjClosure;
-typedef struct ObjUpvalue ObjUpvalue;
+typedef struct ObjClosure  ObjClosure;
+typedef struct ObjUpvalue  ObjUpvalue;
 
 typedef enum {
-  VAL_BOOL = 2,
-  VAL_NUMBER = 4,
-  VAL_NIL = 8,
-  VAL_OBJ = 16,
-  VAL_EMPTY = 32,
-  VAL_DECLARED = 64,
+    VAL_BOOL     = 2,
+    VAL_NUMBER   = 4,
+    VAL_NIL      = 8,
+    VAL_OBJ      = 16,
+    VAL_EMPTY    = 32,
+    VAL_DECLARED = 64,
 } ValueType;
 
 typedef struct {
-  ValueType type;
-  union {
-    bool boolean;
-    double number;
-    Obj *object;
-  } as;
+    ValueType type;
+    union {
+        bool   boolean;
+        double number;
+        Obj*   object;
+    } as;
 } Value;
 
 ARRAY_NEW(Array_Value, Value);

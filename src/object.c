@@ -9,10 +9,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define ALLOC_OBJ(roots, object, type) ((object*)Object_new(roots, sizeof(object), type))
+#define ALLOC_OBJ(roots, object, type) ((object*)Obj_new(roots, sizeof(object), type))
 
 #define ALLOC_STRING(roots, len)                                                         \
-    ((ObjString*)Object_new(roots, sizeof(ObjString) + (len) + 1, OBJ_STRING))
+    ((ObjString*)Obj_new(roots, sizeof(ObjString) + (len) + 1, OBJ_STRING))
 
 SK_INTERNAL(force_inline void) ObjClosure_free(Roots* roots, ObjClosure* objclosure);
 SK_INTERNAL(force_inline void) ObjString_free(Roots* roots, ObjString* objstr);
@@ -20,13 +20,17 @@ SK_INTERNAL(force_inline void) ObjFunction_free(Roots* roots, ObjFunction* objfn
 SK_INTERNAL(force_inline void) ObjNative_free(Roots* roots, ObjNative* native);
 SK_INTERNAL(force_inline void) ObjUpvalue_free(Roots* roots, ObjUpvalue* upval);
 
-SK_INTERNAL(force_inline Obj*) Object_new(Roots* roots, size_t size, ObjType type)
+SK_INTERNAL(force_inline Obj*) Obj_new(Roots* roots, size_t size, ObjType type)
 {
-    Obj* object   = GC_MALLOC(roots, size);
-    object->otype = type;
+    Obj* object = GC_MALLOC(roots, size);
 
-    /* Add the object to the GC list */
-    object->next       = roots->vm->objects;
+    object->header = (uint64_t)roots->vm->objects | ((uint64_t)type << 56);
+    // Malloc and C standard do not guarantee that upper 16 bits
+    // will be initialized to 0, we initialized all the bits except the
+    // mark bit, so make sure it is set to false!
+    Obj_mark_set(object, false);
+
+    // Add object to the GC list
     roots->vm->objects = object;
 
 #ifdef DEBUG_LOG_GC
@@ -101,10 +105,10 @@ void Obj_free(Roots* roots, Obj* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p free type ", (void*)object);
-    ObjType_print(object->otype);
+    ObjType_print(Obj_type(object));
     printf("\n");
 #endif
-    switch(object->otype & ~1) {
+    switch(Obj_type(object)) {
         case OBJ_STRING:
             ObjString_free(roots, (ObjString*)object);
             break;

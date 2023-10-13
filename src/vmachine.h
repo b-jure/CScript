@@ -23,13 +23,13 @@ typedef struct {
     Value*       sp; /* Relative stack pointer */
 } CallFrame;
 
-#define GLOB_FIXED_BIT (1)
+#define GLOB_FIXED_BIT  (1)
 #define GLOB_MARKED_BIT (2)
 
-#define GLOB_SET(glob, bit) BIT_SET((glob)->flags, bit)
+#define GLOB_SET(glob, bit)   BIT_SET((glob)->flags, bit)
 #define GLOB_CLEAR(glob, bit) BIT_CLEAR((glob)->flags, bit)
 #define GLOB_CHECK(glob, bit) BIT_CHECK((glob)->flags, bit)
-#define GLOB_FLAGS(glob) ((glob)->flags)
+#define GLOB_FLAGS(glob)      ((glob)->flags)
 
 typedef struct {
     Value value; /* Global value */
@@ -40,11 +40,18 @@ typedef struct {
      * ...
      * 8 - unused
      */
-    Byte  flags;
+    Byte flags;
 } Global;
 
 ARRAY_NEW(Array_Global, Global);
 ARRAY_NEW(Array_ObjRef, Obj*);
+
+/* GC flags */
+#define GC_MANUAL_BIT (1)
+
+#define GC_SET(vm, bit)   BIT_SET((vm)->gc_flags, bit)
+#define GC_CLEAR(vm, bit) BIT_CLEAR((vm)->gc_flags, bit)
+#define GC_CHECK(vm, bit) BIT_CHECK((vm)->gc_flags, bit)
 
 struct VM {
     CallFrame    frames[VM_FRAMES_MAX]; /* Call frames */
@@ -56,9 +63,10 @@ struct VM {
     HashTable    strings;               /* Strings (interning) */
     ObjUpvalue*  open_upvals;           /* List of heap allocated Upvalues */
     Obj*         objects;               /* List of allocated object (GC) */
-    Array_ObjRef gray_stack;
-    size_t gc_allocated;
-    size_t gc_next;
+    Array_ObjRef gray_stack;            /* marked objects stack */
+    size_t       gc_allocated;          /* count of allocated bytes */
+    double       gc_next;               /* next byte count on which gc triggers */
+    Byte         gc_flags;              /* gc flags */
 };
 
 typedef enum {

@@ -2,6 +2,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "err.h"
+#include "hash.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
@@ -70,35 +71,6 @@ void VM_error(VM* vm, const char* errfmt, ...)
 
     stack_reset(vm);
 }
-
-SK_INTERNAL(force_inline void)
-VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
-{
-    VM_push(vm, OBJ_VAL(ObjString_from(&(Roots){NULL, vm}, name, strlen(name)))); // GC
-    VM_push(vm, OBJ_VAL(ObjNative_new(&(Roots){NULL, vm}, native, arity)));       // GC
-
-    UInt idx = Array_Global_push(&vm->global_vals, (Global){vm->stack[1], false});
-    HashTable_insert(&vm->global_ids, vm->stack[0], NUMBER_VAL((double)idx));
-
-    VM_pop(vm); // GC
-    VM_pop(vm); // GC
-}
-
-//-------------------------NATIVE FUNCTIONS-------------------------//
-SK_INTERNAL(force_inline bool) native_clock(VM* vm, unused Int _, unused Value* argv)
-{
-    clock_t time = clock();
-
-    if(unlikely(time < 0)) {
-        Roots roots = {NULL, vm};
-        argv[-1]    = OBJ_VAL(ERR_NEW(&roots, CLOCK_ERR));
-        return false;
-    }
-
-    argv[-1] = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
-    return true;
-}
-// END OF NATIVE FUNCTIONS~
 
 SK_INTERNAL(force_inline bool) isfalsey(Value value)
 {
@@ -225,6 +197,179 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     return string;
 }
 
+SK_INTERNAL(force_inline void)
+VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
+{
+    VM_push(vm, OBJ_VAL(ObjString_from(&(Roots){NULL, vm}, name, strlen(name)))); // GC
+    VM_push(vm, OBJ_VAL(ObjNative_new(&(Roots){NULL, vm}, native, arity)));       // GC
+
+    UInt idx = Array_Global_push(&vm->global_vals, (Global){vm->stack[1], false});
+    HashTable_insert(&vm->global_ids, vm->stack[0], NUMBER_VAL((double)idx));
+
+    VM_pop(vm); // GC
+    VM_pop(vm); // GC
+}
+
+typedef struct {
+    const char* storage;
+    UInt        len;
+    Hash        hash;
+} NativeString;
+
+#define NATIVE_STR(str, len, hash)                                                       \
+    (NativeString)                                                                       \
+    {                                                                                    \
+        str, len, hash                                                                   \
+    }
+
+#define COLLECT 0
+#define STOP    1
+#define RESTART 2
+#define BYTES   3
+#define GFACT   4
+NativeString opts[GFACT + 1] = {0};
+
+SK_INTERNAL(force_inline void) Hash_native_strings(void)
+{
+    opts[COLLECT] = NATIVE_STR(
+        "collect",
+        sizeof("collect") - 1,
+        Hash_string("collect", sizeof("collect") - 1));
+
+    opts[STOP] =
+        NATIVE_STR("stop", sizeof("stop") - 1, Hash_string("stop", sizeof("stop") - 1));
+
+    opts[RESTART] = NATIVE_STR(
+        "restart",
+        sizeof("restart") - 1,
+        Hash_string("restart", sizeof("restart") - 1));
+
+    opts[BYTES] = NATIVE_STR(
+        "bytes",
+        sizeof("bytes") - 1,
+        Hash_string("bytes", sizeof("bytes") - 1));
+
+    opts[GFACT] = NATIVE_STR(
+        "gfact",
+        sizeof("gfact") - 1,
+        Hash_string("gfact", sizeof("bytes") - 1));
+}
+
+//-------------------------NATIVE FUNCTIONS-------------------------//
+SK_INTERNAL(force_inline bool) native_clock(VM* vm, unused Int _, Value* argv)
+{
+    clock_t time = clock();
+
+    if(unlikely(time < 0)) {
+        Roots roots = {NULL, vm};
+        argv[-1]    = OBJ_VAL(ERR_NEW(&roots, CLOCK_ERR));
+        return false;
+    }
+
+    argv[-1] = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
+    return true;
+}
+
+/*
+SK_INTERNAL(force_inline bool) native_gc_collect(VM* vm, Int argc, Value* argv)
+{
+    Roots roots = {NULL, vm};
+
+    if(argc == 0) {
+        gc(&roots);
+        return true;
+    }
+
+    if(unlikely(argv->type != VAL_OBJ || OBJ_REF_TYPE(argv) != OBJ_STRING)) {
+        argv[-1] = OBJ_VAL(ERR_NEW(&roots, COLLECT_OPT_TYPE_ERR));
+    } else {
+        ObjString* opt = (ObjString*)argv->as.object;
+        switch(opt->len) {
+            case sizeof("gfact") - 1: // Covers bytes
+
+                // Check if this is 'bytes' option
+                if(opt->hash == opts[BYTES].hash) {
+                    if(likely(strcmp(opt->storage, "bytes") == 0)) {
+                        argv[-1] = NUMBER_VAL(vm->gc_allocated);
+                        return true;
+                    }
+                    goto err;
+                }
+
+                // Hint to compiler that this branch will most likely be
+                // evaluated, this is okay even if it won't be evaluated because
+                // in case this is not evaluated the VM invokes runtime error
+                // and the program stops.
+                if(likely(opt->hash == opts[GFACT].hash)) {
+                    if(likely(strcmp(opt->storage, "gfact") == 0)) {
+
+                        // 'gfact' takes a second parameter ('grow')
+                        if(unlikely(argc != 2)) {
+                            argv[-1] = OBJ_VAL(ERR_NEW(&roots, COLLECT_GFACT_ARGC_ERR));
+                            return false;
+                        }
+
+                        // 'grow' must be of type VAL_NUMBER.
+                        Value* gfact = &argv[1];
+                        if(unlikely(gfact->type != VAL_NUMBER)) {
+                            argv[-1] =
+                                OBJ_VAL(ERR_NEW(&roots, COLLECT_GFACT_GROW_TYPE_ERR));
+                            return false;
+                        }
+
+                        // 'grow' must be >= 1.0
+                        double val = floor(AS_NUMBER(*gfact));
+                        if(unlikely(val < 1.0)) {
+                            argv[-1] = OBJ_VAL(
+                                ERR_NEW(&roots, COLLECT_GFACT_GROW_INVALID_VALUE_ERR));
+                            return false;
+                        }
+
+                        gc_grow_factor = val;
+                        argv[-1]       = NUMBER_VAL(val);
+                        return true;
+                    }
+                }
+                goto err;
+
+            case sizeof("collect") - 1: // Covers 'restart'
+                if(opt->hash == opts[COLLECT].hash) {
+                    if(likely(strcmp(opt->storage, "collect") == 0)) {
+                        gc(&roots);
+                        argv[-1] = BOOL_VAL(true);
+                        return true;
+                    }
+                } else if(opt->hash == opts[RESTART].hash) {
+                    if(likely(strcmp(opt->storage, "restart") == 0)) {
+                        GC_CLEAR(vm, GC_MANUAL_BIT);
+                        argv[-1] = BOOL_VAL(true);
+                        return true;
+                    }
+                }
+                goto err;
+
+            case sizeof("stop") - 1:
+                if(opt->hash == opts[STOP].hash) {
+                    if(likely(strcmp(opt->storage, "stop") == 0)) {
+                        GC_SET(vm, GC_MANUAL_BIT);
+                        argv[-1] = BOOL_VAL(true);
+                        return true;
+                    }
+                }
+                goto err;
+
+            default:
+            err:
+                argv[-1] = OBJ_VAL(ERR_NEW(&roots, COLLECT_OPT_INVALID_ERR));
+        }
+    }
+
+    return false;
+}
+*/
+// END OF NATIVE FUNCTIONS~
+
+
 /*
  *
  */
@@ -237,6 +382,7 @@ void VM_init(VM* vm, void* roots)
     vm->open_upvals  = NULL;
     vm->gc_allocated = 0;
     vm->gc_next      = MIB(1);
+    vm->gc_flags     = 0;
     stack_reset(vm);
 
     // @TODO: Make HashTable internally contain roots in order
@@ -248,6 +394,11 @@ void VM_init(VM* vm, void* roots)
 
     // Native function definitions
     VM_define_native(vm, "clock", native_clock, 0);
+    // @TODO: After implementing classes, define garbage collector
+    // class with its own interface of native functions
+    // VM_define_native(vm, "gcollector", native_gc_collect, 2);
+
+    Hash_native_strings();
 }
 
 SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, UInt argc)
@@ -810,10 +961,11 @@ void VM_free(VM* vm)
     HashTable_free(&vm->strings);
     Array_ObjRef_free(&vm->gray_stack);
 
-    Obj* next;
+    Obj*  next;
+    Roots roots = {NULL, vm};
     for(Obj* head = vm->objects; head != NULL; head = next) {
-        next = head->next;
-        Obj_free(&(Roots){NULL, vm}, head);
+        next = Obj_next(head);
+        Obj_free(&roots, head);
     }
 
     FREE(vm);
