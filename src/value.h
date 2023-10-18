@@ -1,7 +1,6 @@
 #ifndef __SKOOMA_VALUE_H__
 #define __SKOOMA_VALUE_H__
 
-// #include "array.h"
 #include "array.h"
 #include "common.h"
 #include "hash.h"
@@ -39,14 +38,16 @@ typedef struct ObjString   ObjString;
 typedef struct ObjFunction ObjFunction;
 typedef struct ObjClosure  ObjClosure;
 typedef struct ObjUpvalue  ObjUpvalue;
+typedef struct ObjClass    ObjClass;
+typedef struct ObjInstance ObjInstance;
 
 typedef enum {
-    VAL_BOOL     = 2,
-    VAL_NUMBER   = 4,
-    VAL_NIL      = 8,
-    VAL_OBJ      = 16,
-    VAL_EMPTY    = 32,
-    VAL_DECLARED = 64,
+    VAL_BOOL = 0,
+    VAL_NUMBER,
+    VAL_NIL,
+    VAL_OBJ,
+    VAL_EMPTY,
+    VAL_DECLARED,
 } ValueType;
 
 typedef struct {

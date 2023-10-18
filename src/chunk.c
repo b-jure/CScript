@@ -1,3 +1,4 @@
+#include "array.h"
 #include "chunk.h"
 #include "common.h"
 #include "mem.h"
@@ -8,20 +9,22 @@
 
 SK_INTERNAL(void) LineArray_write(Array_UInt* lines, UInt line, UInt index);
 
-UInt Chunk_make_constant(VM* vm, Chunk* chunk, Value value)
+UInt Chunk_make_constant(VM* vm, Compiler* C, Chunk* chunk, Value value)
 {
     VM_push(vm, value);
-    UInt idx = Array_Value_push(&chunk->constants, value);
+    UInt idx = CARRAY_PUSH(chunk, value, vm, C); // GC
     VM_pop(vm);
     return idx;
 }
 
 /* Initializes the Chunk */
-void Chunk_init(Chunk* chunk, void* roots)
+void Chunk_init(Chunk* chunk)
 {
-    Array_Byte_init(&chunk->code, NULL, arr_reallocate);
-    Array_Value_init(&chunk->constants, (Roots*)roots, gc_reallocate);
-    Array_UInt_init(&chunk->lines, NULL, arr_reallocate);
+    Array_Byte_init(&chunk->code);
+    chunk->constants = NULL;
+    chunk->clen      = 0;
+    chunk->ccap      = 0;
+    Array_UInt_init(&chunk->lines);
 }
 
 /* Writes OpCodes that require no parameters */
@@ -31,12 +34,12 @@ void Chunk_write(Chunk* chunk, uint8_t byte, UInt line)
     LineArray_write(&chunk->lines, line, idx);
 }
 
-/* Frees the chunk memory (arrays) */
-void Chunk_free(Chunk* chunk)
+/* Frees the chunk memory. */
+void Chunk_free(Chunk* chunk, VM* vm, Compiler* C)
 {
-    Array_Byte_free(&chunk->code);
-    Array_Value_free(&chunk->constants);
-    Array_UInt_free(&chunk->lines);
+    CARRAY_FREE(chunk, vm, C); // GC
+    Array_UInt_free(&chunk->lines, NULL);
+    Array_Byte_free(&chunk->code, NULL);
     // Here chunk is at the init state
 }
 
@@ -113,6 +116,9 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_SET_UPVALUE)
         CASE(OP_CLOSURE)
         CASE(OP_CLOSE_UPVALN)
+        CASE(OP_CLASSL)
+        CASE(OP_SET_PROPERTYL)
+        CASE(OP_GET_PROPERTYL)
         {
             Chunk_write_op(chunk, code, true, param, line);
             BREAK;
@@ -124,6 +130,9 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_GET_LOCAL)
         CASE(OP_SET_LOCAL)
         CASE(OP_CALL)
+        CASE(OP_CLASS)
+        CASE(OP_SET_PROPERTY)
+        CASE(OP_GET_PROPERTY)
         {
             Chunk_write_op(chunk, code, false, param, line);
             BREAK;

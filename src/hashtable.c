@@ -2,9 +2,6 @@
 #include "mem.h"
 #include "object.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
 #define GROW_TABLE_CAPACITY(prime) get_prime_capacity(prime)
 
 #define PRIME_TABLE_LEN sizeof(prime_table) / sizeof(prime_table[0])
@@ -25,7 +22,13 @@
 /* List of possible table sizes up to the 2^31 - 1, they are all
  * prime numbers, that is because using open addressing with quadratic probing and
  * having a table size be a prime number guarantees we will visit at least half of the
- * buckets in the table before needing to expand the table array to prevent cycles. */
+ * buckets in the table before needing to expand the table array to prevent cycles.
+ * However we still track the starting index when finding the entry, because this
+ * implementation does not count 'tombstones' as entries, which can cause a cycle.
+ * Rationale behind this is that xxhash is pretty good and cycle will
+ * almost never happen in tables of larger size (totally not tested/benchmarked
+ * just pure copium)
+ * @TODO: maybe increase memory usage by counting tombstones in favor of faster lookup. */
 static const UInt prime_table[] = {
     13,       31,       61,        127,       251,       509,        1021,
     2039,     4093,     8191,      16381,     32749,     65521,      131071,
@@ -44,7 +47,7 @@ void HashTable_init(HashTable* table)
 }
 
 /* Return the next prime capacity or exit if table size limit reached */
-static force_inline size_t get_prime_capacity(uint8_t old_prime)
+SK_INTERNAL(force_inline size_t) get_prime_capacity(uint8_t old_prime)
 {
     if(unlikely(old_prime >= PRIME_TABLE_LEN)) {
         fprintf(
@@ -60,7 +63,7 @@ static force_inline size_t get_prime_capacity(uint8_t old_prime)
     }
 }
 
-static force_inline Entry* Entry_find(Entry* entries, UInt len, Value key)
+SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt len, Value key)
 {
     UInt   i           = 0;
     Hash   hash        = Value_hash(key);
@@ -90,27 +93,28 @@ static force_inline Entry* Entry_find(Entry* entries, UInt len, Value key)
 }
 
 /* Rehash all the keys from the table 'from' into the table 'to' */
-static force_inline void HashTable_into(HashTable* from, HashTable* to)
+SK_INTERNAL(force_inline void)
+HashTable_into(VM* vm, Compiler* C, HashTable* from, HashTable* to)
 {
     for(UInt i = 0; i < from->cap; i++) {
         Entry* entry = &from->entries[i];
         if(!IS_EMPTY(entry->key)) {
-            HashTable_insert(to, entry->key, entry->value);
+            HashTable_insert(vm, C, to, entry->key, entry->value);
         }
     }
 }
 
 /* HashTable load factor */
-static force_inline double HashTable_lf(HashTable* table)
+SK_INTERNAL(force_inline double) HashTable_lf(HashTable* table)
 {
     return (double)table->len / (double)table->cap;
 }
 
 /* Expand the table array */
-static force_inline void HashTable_expand(HashTable* table)
+SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* table)
 {
     UInt   new_cap = GROW_TABLE_CAPACITY(table->prime++);
-    Entry* entries = MALLOC(new_cap * sizeof(Entry));
+    Entry* entries = GC_MALLOC(vm, C, new_cap * sizeof(Entry));
     for(UInt i = 0; i < new_cap; i++) {
         entries[i].key   = EMPTY_VAL;
         entries[i].value = EMPTY_VAL;
@@ -126,7 +130,7 @@ static force_inline void HashTable_expand(HashTable* table)
     }
 
     if(table->entries != NULL) {
-        FREE(table->entries);
+        GC_FREE(vm, C, table->entries, table->cap * sizeof(Entry));
     }
 
     table->entries = entries;
@@ -136,16 +140,20 @@ static force_inline void HashTable_expand(HashTable* table)
 
 /* Return 'true' only when we insert the whole key/value pair,
  * otherwise change the value of the existing key and return false */
-bool HashTable_insert(HashTable* table, Value key, Value value)
+bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value value)
 {
     if(table->left == 0) {
-        HashTable_expand(table);
+        HashTable_expand(vm, C, table);
     }
 
     Entry* entry = Entry_find(table->entries, table->cap, key);
 
-    if(unlikely(IS_TOMBSTONE(entry))) { // xxHash is pretty good
-        HashTable_expand(table);
+    // In case of a cycle expand, we don't count tombstones
+    // so table->left variable can't indicate if we need to expand.
+    // This only gets triggered in case of a cycle (hopefully rarely).
+    // @TODO: count tombstones to prevent cycles (more memory overhead faster lookup)
+    if(unlikely(IS_TOMBSTONE(entry))) {
+        HashTable_expand(vm, C, table);
         entry = Entry_find(table->entries, table->cap, key);
     }
 
@@ -212,7 +220,11 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
     return NULL;
 }
 
-bool HashTable_get(HashTable* table, Value key, Value* out)
+// 'get' can also expand, this is because we are not tracking/counting
+// 'tombstones' so cycle can occur in which case we also expand the table
+// on the lookup, this way when inserting or looking up the value next time,
+// we don't cycle again.
+bool HashTable_get(VM* vm, Compiler* C, HashTable* table, Value key, Value* out)
 {
     if(table->len == 0) {
         return false;
@@ -221,7 +233,7 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
     Entry* entry = Entry_find(table->entries, table->cap, key);
 
     if(unlikely(IS_TOMBSTONE(entry))) {
-        HashTable_expand(table);
+        HashTable_expand(vm, C, table);
         entry = Entry_find(table->entries, table->cap, key);
     }
 
@@ -237,8 +249,8 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
 }
 
 /* Free table array and reset table fields */
-void HashTable_free(HashTable* table)
+void HashTable_free(VM* vm, Compiler* C, HashTable* table)
 {
-    FREE(table->entries);
+    GC_FREE(vm, C, table->entries, table->cap * sizeof(Entry));
     HashTable_init(table);
 }

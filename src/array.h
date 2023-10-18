@@ -7,55 +7,162 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Internal --------------------------------------------------
+#ifndef DEBUG
+    #define GARRAY_PUSH_DEBUG(global)
+    #define GARRAY_STRUCT_DEBUG(vm)
+    #define CARRAY_PUSH_DEBUG(constant)
+    #define CARRAY_STRUCT_DEBUG(chunk)
+#else
+    #define GARRAY_PUSH_DEBUG(global)                                                    \
+        do {                                                                             \
+            printf("Push Global ");                                                      \
+            Value_print(global.value);                                                   \
+            printf(" with flags 0x%08x (bytes %lu)\n", global.flags, sizeof(Global));    \
+        } while(false)
+
+    #define GARRAY_STRUCT_DEBUG(vm)                                                      \
+        printf(                                                                          \
+            "GARRAY: { cap: %u, len: %u, bytes: %lu }\n",                                \
+            (vm)->globcap,                                                               \
+            (vm)->globlen,                                                               \
+            (vm)->globcap * sizeof(Global));
+
+    #define CARRAY_PUSH_DEBUG(constant)                                                  \
+        do {                                                                             \
+            printf("Push constant value ");                                              \
+            Value_print(constant);                                                       \
+            printf(" (bytes %lu)\n", sizeof(Value));                                     \
+        } while(false)
+
+    #define CARRAY_STRUCT_DEBUG(chunk)                                                   \
+        printf(                                                                          \
+            "CARRAY: { cap: %u, len: %u, bytes: %lu }\n",                                \
+            (chunk)->ccap,                                                               \
+            (chunk)->clen,                                                               \
+            (chunk)->ccap * sizeof(Value));
+#endif
+
+
+#define GROW_ARRAY_CAPACITY(cap) ((cap) < 8 ? 8 : (cap) * 2)
+
+/* CONSTANTS ARRAY (Chunk.h) */
+#define CARRAY_INIT(chunk)                                                               \
+    do {                                                                                 \
+        (chunk)->constants = NULL;                                                       \
+        (chunk)->clen      = 0;                                                          \
+        (chunk)->ccap      = 0;                                                          \
+    } while(false)
+
+#define CARRAY_PUSH(chunk, constant, vm, compiler)                                       \
+    ({                                                                                   \
+        CARRAY_PUSH_DEBUG(constant);                                                     \
+        if((chunk)->ccap <= (chunk)->clen) {                                             \
+            UInt oldcap        = (chunk)->ccap;                                          \
+            (chunk)->ccap      = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);           \
+            (chunk)->constants = gc_reallocate(                                          \
+                vm,                                                                      \
+                compiler,                                                                \
+                (chunk)->constants,                                                      \
+                oldcap * sizeof(Value),                                                  \
+                (chunk)->ccap * sizeof(Value));                                          \
+        }                                                                                \
+        (chunk)->constants[(chunk)->clen++] = constant;                                  \
+        CARRAY_STRUCT_DEBUG(chunk);                                                      \
+        (chunk)->clen - 1;                                                               \
+    })
+
+#define CARRAY_FREE(chunk, vm, compiler)                                                 \
+    do {                                                                                 \
+        gc_reallocate(vm, compiler, (chunk)->constants, (chunk)->ccap, 0);               \
+        CARRAY_INIT(chunk);                                                              \
+    } while(false)
+
+
+
+/* GLOBALS ARRAY (vm.h) */
+#define GARRAY_INIT(vm)                                                                  \
+    do {                                                                                 \
+        (vm)->globvals = NULL;                                                           \
+        (vm)->globlen  = 0;                                                              \
+        (vm)->globcap  = 0;                                                              \
+    } while(false)
+
+#define GARRAY_PUSH(vm, compiler, global)                                                \
+    ({                                                                                   \
+        GARRAY_PUSH_DEBUG(global);                                                       \
+        if((vm)->globcap <= (vm)->globlen) {                                             \
+            UInt oldcap    = (vm)->globcap;                                              \
+            (vm)->globcap  = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);               \
+            (vm)->globvals = gc_reallocate(                                              \
+                vm,                                                                      \
+                compiler,                                                                \
+                (vm)->globvals,                                                          \
+                oldcap * sizeof(Global),                                                 \
+                (vm)->globcap * sizeof(Global));                                         \
+        }                                                                                \
+        (vm)->globvals[(vm)->globlen++] = global;                                        \
+        GARRAY_STRUCT_DEBUG(vm);                                                         \
+        (vm)->globlen - 1;                                                               \
+    })
+
+#define GARRAY_REMOVE(vm, index)                                                         \
+    ({                                                                                   \
+        Global  retval;                                                                  \
+        Global* src = &vm->globvals[index];                                              \
+        memcpy(&retval, src, sizeof(Global));                                            \
+        memmove(src, src + 1, vm->globlen - index);                                      \
+        vm->globlen--;                                                                   \
+        retval;                                                                          \
+    })
+
+#define GARRAY_FREE(vm)                                                                  \
+    do {                                                                                 \
+        gc_reallocate(vm, NULL, (vm)->globvals, (vm)->globcap, 0);                       \
+        GARRAY_INIT(vm);                                                                 \
+    } while(false)
+
+
+
+
+/* GENERIC ARRAY (does not trigger garbage collector)
+ *
+ * These are internal only macros. */
 #define _CALL_ARRAY_METHOD(tname, name, ...)                                             \
     _ARRAY_METHOD_NAME(tname, name)(self __VA_OPT__(, ) __VA_ARGS__)
 #define _ARRAY_METHOD_NAME(tname, name) tname##_##name
 #define _ARRAY_METHOD(tname, name, ...)                                                  \
     _ARRAY_METHOD_NAME(tname, name)                                                      \
     (tname * self __VA_OPT__(, ) __VA_ARGS__)
-// -----------------------------------------------------------
 
-#ifndef SK_ALLOCATOR // @MAYBE_REMOVE?
-void* reallocate(void* ptr, size_t bytes);
-#endif
 
-typedef void* (*AllocatorFn)(void* roots, void* ptr, size_t oldsize, size_t newsize);
+typedef void (*FreeFn)(void* value);
 
-static force_inline void*
-arr_reallocate(unused void* _, void* ptr, unused size_t __, size_t newsize)
-{
-    return reallocate(ptr, newsize);
-}
-
-/* Returns the new array capacity */
-#define GROW_ARRAY_CAPACITY(cap) ((cap) < 8 ? 8 : (cap) * 2)
-
+/* Create new 'name' array with 'type' elements. */
 #define ARRAY_NEW(name, type)                                                            \
     typedef struct {                                                                     \
-        void*       roots;                                                               \
-        AllocatorFn allocator;                                                           \
-        size_t      cap;                                                                 \
-        size_t      len;                                                                 \
-        type*       data;                                                                \
+        size_t cap;                                                                      \
+        size_t len;                                                                      \
+        type*  data;                                                                     \
     } name;                                                                              \
                                                                                          \
-    force_inline void _ARRAY_METHOD(name, init, void* roots, AllocatorFn allocfn)        \
+    force_inline void _ARRAY_METHOD(name, init)                                          \
     {                                                                                    \
-        self->roots     = roots;                                                         \
-        self->allocator = allocfn;                                                       \
-        self->cap       = 0;                                                             \
-        self->len       = 0;                                                             \
-        self->data      = NULL;                                                          \
+        self->cap  = 0;                                                                  \
+        self->len  = 0;                                                                  \
+        self->data = NULL;                                                               \
     }                                                                                    \
                                                                                          \
     force_inline void _ARRAY_METHOD(name, init_cap, uint32_t cap)                        \
     {                                                                                    \
-        self->data = (type*)self->allocator(                                             \
-            self->roots,                                                                 \
-            self->data,                                                                  \
-            self->cap * sizeof(type),                                                    \
-            cap * sizeof(type));                                                         \
+        self->data = (type*)realloc(self->data, cap * sizeof(type));                     \
+        if(unlikely(self->data == NULL)) {                                               \
+            fprintf(                                                                     \
+                stderr,                                                                  \
+                "Internal error, failed allocating memory: %d:%s.\n",                    \
+                __LINE__,                                                                \
+                __FILE__);                                                               \
+            exit(ENOMEM);                                                                \
+        }                                                                                \
         self->cap = cap;                                                                 \
     }                                                                                    \
                                                                                          \
@@ -70,13 +177,17 @@ arr_reallocate(unused void* _, void* ptr, unused size_t __, size_t newsize)
                     stderr,                                                              \
                     "Internal error, " #name " capacity exceeded! [%lu]\n",              \
                     self->cap);                                                          \
-                exit(ENOMEM);                                                            \
+                exit(EXIT_FAILURE);                                                      \
             } else {                                                                     \
-                self->data = (type*)self->allocator(                                     \
-                    self->roots,                                                         \
-                    self->data,                                                          \
-                    old_cap * sizeof(type),                                              \
-                    self->cap * sizeof(type));                                           \
+                self->data = (type*)realloc(self->data, self->cap * sizeof(type));       \
+                if(unlikely(self->data == NULL)) {                                       \
+                    fprintf(                                                             \
+                        stderr,                                                          \
+                        "Internal error, failed allocating memory: %d:%s.\n",            \
+                        __LINE__,                                                        \
+                        __FILE__);                                                       \
+                    exit(ENOMEM);                                                        \
+                }                                                                        \
             }                                                                            \
         }                                                                                \
         self->data[self->len++] = value;                                                 \
@@ -130,9 +241,14 @@ arr_reallocate(unused void* _, void* ptr, unused size_t __, size_t newsize)
         return self->len;                                                                \
     }                                                                                    \
                                                                                          \
-    force_inline void _ARRAY_METHOD(name, free)                                          \
+    force_inline void _ARRAY_METHOD(name, free, FreeFn fn)                               \
     {                                                                                    \
-        self->allocator(self->roots, self->data, self->cap * sizeof(type), 0);           \
+        if(fn != NULL) {                                                                 \
+            for(UInt i = 0; i < self->len; i++) {                                        \
+                fn((void*)&self->data[i]);                                               \
+            }                                                                            \
+        }                                                                                \
+        free(self->data);                                                                \
     }
 
 #endif

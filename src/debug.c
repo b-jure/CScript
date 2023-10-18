@@ -129,6 +129,18 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_simple("OP_CLOSE_UPVAL", offset);
         case OP_CLOSE_UPVALN:
             return Instruction_long("OP_CLOSE_UPVALN", chunk, OP_CLOSE_UPVALN, offset);
+        case OP_CLASS:
+            return Instruction_short("OP_CLASS", chunk, OP_CLASS, offset);
+        case OP_CLASSL:
+            return Instruction_long("OP_CLASSL", chunk, OP_CLASSL, offset);
+        case OP_SET_PROPERTY:
+            return Instruction_short("OP_SET_PROPERTY", chunk, OP_SET_PROPERTY, offset);
+        case OP_SET_PROPERTYL:
+            return Instruction_long("OP_SET_PROPERTYL", chunk, OP_SET_PROPERTYL, offset);
+        case OP_GET_PROPERTY:
+            return Instruction_short("OP_GET_PROPERTY", chunk, OP_GET_PROPERTY, offset);
+        case OP_GET_PROPERTYL:
+            return Instruction_long("OP_GET_PROPERTYL", chunk, OP_GET_PROPERTYL, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -152,13 +164,13 @@ Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
 SK_INTERNAL(void) disassemble_const(Chunk* chunk, UInt param)
 {
     printf("'");
-    Value_print(*Array_Value_index(&chunk->constants, param));
+    Value_print(chunk->constants[param]);
     printf("'");
 }
 
 SK_INTERNAL(UInt) disassemble_closure(Chunk* chunk, UInt param, UInt offset)
 {
-    Value value = *Array_Value_index(&chunk->constants, param);
+    Value value = chunk->constants[param];
     Value_print(value);
     printf("\n");
 
@@ -185,6 +197,9 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
     printf("%-25s %5u ", name, param);
     switch(code) {
         case OP_CONST:
+        case OP_CLASS:
+        case OP_SET_PROPERTY:
+        case OP_GET_PROPERTY:
             disassemble_const(chunk, param);
             break;
         default:
@@ -205,6 +220,9 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
         case OP_CLOSURE:
             return disassemble_closure(chunk, param, offset + 4);
         case OP_CONSTL:
+        case OP_CLASSL:
+        case OP_SET_PROPERTYL:
+        case OP_GET_PROPERTYL:
             disassemble_const(chunk, param);
             break;
         default:

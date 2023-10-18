@@ -95,8 +95,7 @@ int main(int argc, const char* argv[])
 {
     runtime  = 0;
     VM*   vm = MALLOC(sizeof(VM));
-    Roots r  = {NULL, vm};
-    VM_init(vm, (void*)&r);
+    VM_init(vm);
 
     if(argc == 1) {
         repl(vm);

@@ -29,6 +29,9 @@ void Value_print(Value value)
         case VAL_EMPTY:
             printf("<empty>");
             break;
+        case VAL_DECLARED:
+            printf("<declared>");
+            break;
         default:
             unreachable;
     }
@@ -50,6 +53,7 @@ bool Value_eq(Value a, Value b)
             return true;
         case VAL_OBJ:
             return AS_OBJ(a) == AS_OBJ(b);
+        case VAL_DECLARED:
         default:
             unreachable;
     }

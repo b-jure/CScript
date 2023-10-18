@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define stack_peek(top) ((Value) * ((vm)->sp - (top + 1)))
+#define stack_peek(top) (*((vm)->sp - (top + 1)))
 #define stack_reset(vm) (vm)->sp = (vm)->stack
 #define stack_size(vm)  ((vm)->sp - (vm)->stack)
 
@@ -143,6 +143,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
             &&vnil,    /* VAL_NIL */
             &&vobj,    /* VAL_OBJ */
             NULL,      /* VAL_EMPTY */
+            NULL,      /* VAL_DECLARED */
         };
 
         goto* jump_table[value[i].type];
@@ -189,7 +190,7 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     memcpy(buffer + len[0], str[1], len[1]);
     buffer[length] = '\0';
 
-    ObjString* string = ObjString_from(&(Roots){NULL, vm}, buffer, length);
+    ObjString* string = ObjString_from(vm, NULL, buffer, length);
 
     VM_pop(vm); // GC
     VM_pop(vm); // GC
@@ -200,59 +201,14 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
 SK_INTERNAL(force_inline void)
 VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
 {
-    VM_push(vm, OBJ_VAL(ObjString_from(&(Roots){NULL, vm}, name, strlen(name)))); // GC
-    VM_push(vm, OBJ_VAL(ObjNative_new(&(Roots){NULL, vm}, native, arity)));       // GC
+    VM_push(vm, OBJ_VAL(ObjString_from(vm, NULL, name, strlen(name))));
+    VM_push(vm, OBJ_VAL(ObjNative_new(vm, NULL, native, arity)));
 
-    UInt idx = Array_Global_push(&vm->global_vals, (Global){vm->stack[1], false});
-    HashTable_insert(&vm->global_ids, vm->stack[0], NUMBER_VAL((double)idx));
+    UInt idx = GARRAY_PUSH(vm, NULL, ((Global){vm->stack[1], false}));               // GC
+    HashTable_insert(vm, NULL, &vm->globids, vm->stack[0], NUMBER_VAL((double)idx)); // GC
 
-    VM_pop(vm); // GC
-    VM_pop(vm); // GC
-}
-
-typedef struct {
-    const char* storage;
-    UInt        len;
-    Hash        hash;
-} NativeString;
-
-#define NATIVE_STR(str, len, hash)                                                       \
-    (NativeString)                                                                       \
-    {                                                                                    \
-        str, len, hash                                                                   \
-    }
-
-#define COLLECT 0
-#define STOP    1
-#define RESTART 2
-#define BYTES   3
-#define GFACT   4
-NativeString opts[GFACT + 1] = {0};
-
-SK_INTERNAL(force_inline void) Hash_native_strings(void)
-{
-    opts[COLLECT] = NATIVE_STR(
-        "collect",
-        sizeof("collect") - 1,
-        Hash_string("collect", sizeof("collect") - 1));
-
-    opts[STOP] =
-        NATIVE_STR("stop", sizeof("stop") - 1, Hash_string("stop", sizeof("stop") - 1));
-
-    opts[RESTART] = NATIVE_STR(
-        "restart",
-        sizeof("restart") - 1,
-        Hash_string("restart", sizeof("restart") - 1));
-
-    opts[BYTES] = NATIVE_STR(
-        "bytes",
-        sizeof("bytes") - 1,
-        Hash_string("bytes", sizeof("bytes") - 1));
-
-    opts[GFACT] = NATIVE_STR(
-        "gfact",
-        sizeof("gfact") - 1,
-        Hash_string("gfact", sizeof("bytes") - 1));
+    VM_pop(vm);
+    VM_pop(vm);
 }
 
 //-------------------------NATIVE FUNCTIONS-------------------------//
@@ -261,8 +217,7 @@ SK_INTERNAL(force_inline bool) native_clock(VM* vm, unused Int _, Value* argv)
     clock_t time = clock();
 
     if(unlikely(time < 0)) {
-        Roots roots = {NULL, vm};
-        argv[-1]    = OBJ_VAL(ERR_NEW(&roots, CLOCK_ERR));
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, NULL, CLOCK_ERR));
         return false;
     }
 
@@ -270,112 +225,15 @@ SK_INTERNAL(force_inline bool) native_clock(VM* vm, unused Int _, Value* argv)
     return true;
 }
 
-/*
-SK_INTERNAL(force_inline bool) native_gc_collect(VM* vm, Int argc, Value* argv)
-{
-    Roots roots = {NULL, vm};
-
-    if(argc == 0) {
-        gc(&roots);
-        return true;
-    }
-
-    if(unlikely(argv->type != VAL_OBJ || OBJ_REF_TYPE(argv) != OBJ_STRING)) {
-        argv[-1] = OBJ_VAL(ERR_NEW(&roots, COLLECT_OPT_TYPE_ERR));
-    } else {
-        ObjString* opt = (ObjString*)argv->as.object;
-        switch(opt->len) {
-            case sizeof("gfact") - 1: // Covers bytes
-
-                // Check if this is 'bytes' option
-                if(opt->hash == opts[BYTES].hash) {
-                    if(likely(strcmp(opt->storage, "bytes") == 0)) {
-                        argv[-1] = NUMBER_VAL(vm->gc_allocated);
-                        return true;
-                    }
-                    goto err;
-                }
-
-                // Hint to compiler that this branch will most likely be
-                // evaluated, this is okay even if it won't be evaluated because
-                // in case this is not evaluated the VM invokes runtime error
-                // and the program stops.
-                if(likely(opt->hash == opts[GFACT].hash)) {
-                    if(likely(strcmp(opt->storage, "gfact") == 0)) {
-
-                        // 'gfact' takes a second parameter ('grow')
-                        if(unlikely(argc != 2)) {
-                            argv[-1] = OBJ_VAL(ERR_NEW(&roots, COLLECT_GFACT_ARGC_ERR));
-                            return false;
-                        }
-
-                        // 'grow' must be of type VAL_NUMBER.
-                        Value* gfact = &argv[1];
-                        if(unlikely(gfact->type != VAL_NUMBER)) {
-                            argv[-1] =
-                                OBJ_VAL(ERR_NEW(&roots, COLLECT_GFACT_GROW_TYPE_ERR));
-                            return false;
-                        }
-
-                        // 'grow' must be >= 1.0
-                        double val = floor(AS_NUMBER(*gfact));
-                        if(unlikely(val < 1.0)) {
-                            argv[-1] = OBJ_VAL(
-                                ERR_NEW(&roots, COLLECT_GFACT_GROW_INVALID_VALUE_ERR));
-                            return false;
-                        }
-
-                        gc_grow_factor = val;
-                        argv[-1]       = NUMBER_VAL(val);
-                        return true;
-                    }
-                }
-                goto err;
-
-            case sizeof("collect") - 1: // Covers 'restart'
-                if(opt->hash == opts[COLLECT].hash) {
-                    if(likely(strcmp(opt->storage, "collect") == 0)) {
-                        gc(&roots);
-                        argv[-1] = BOOL_VAL(true);
-                        return true;
-                    }
-                } else if(opt->hash == opts[RESTART].hash) {
-                    if(likely(strcmp(opt->storage, "restart") == 0)) {
-                        GC_CLEAR(vm, GC_MANUAL_BIT);
-                        argv[-1] = BOOL_VAL(true);
-                        return true;
-                    }
-                }
-                goto err;
-
-            case sizeof("stop") - 1:
-                if(opt->hash == opts[STOP].hash) {
-                    if(likely(strcmp(opt->storage, "stop") == 0)) {
-                        GC_SET(vm, GC_MANUAL_BIT);
-                        argv[-1] = BOOL_VAL(true);
-                        return true;
-                    }
-                }
-                goto err;
-
-            default:
-            err:
-                argv[-1] = OBJ_VAL(ERR_NEW(&roots, COLLECT_OPT_INVALID_ERR));
-        }
-    }
-
-    return false;
-}
-*/
-// END OF NATIVE FUNCTIONS~
-
 
 /*
  *
  */
 /*======================= VM core functions ==========================*/
 
-void VM_init(VM* vm, void* roots)
+// @TODO: After implementing classes, define garbage collector
+// class with its own interface of native functions
+void VM_init(VM* vm)
 {
     vm->fc           = 0;
     vm->objects      = NULL;
@@ -385,20 +243,18 @@ void VM_init(VM* vm, void* roots)
     vm->gc_flags     = 0;
     stack_reset(vm);
 
-    // @TODO: Make HashTable internally contain roots in order
-    // to use gc_reallocate instead of non-gc reallocate.
-    HashTable_init(&vm->global_ids);
-    Array_Global_init(&vm->global_vals, roots, gc_reallocate);
-    HashTable_init(&vm->strings);
-    Array_ObjRef_init(&vm->gray_stack, NULL, arr_reallocate);
+    // @TODO_IMPORTANT: Make HashTable functions take VM and Compiler in
+    // order to have their memory tracked by garbage collection.
+
+    HashTable_init(&vm->globids); // Global variable identifiers (GC)
+    GARRAY_INIT(vm);              // Global values array (GC)
+
+    HashTable_init(&vm->strings); // Interned strings table (Weak_refs)
+
+    Array_ObjRef_init(&vm->gray_stack); // Gray stack (NO GC)
 
     // Native function definitions
-    VM_define_native(vm, "clock", native_clock, 0);
-    // @TODO: After implementing classes, define garbage collector
-    // class with its own interface of native functions
-    // VM_define_native(vm, "gcollector", native_gc_collect, 2);
-
-    Hash_native_strings();
+    VM_define_native(vm, "clock", native_clock, 0); // GC
 }
 
 SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, UInt argc)
@@ -425,15 +281,15 @@ SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, UInt 
     return true;
 }
 
-SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, UInt argc)
+SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, Int argc)
 {
     if(unlikely(native->arity != argc)) {
-        VM_error(vm, "Expected %u arguments, but got %u instead.", native->arity, argc);
+        VM_error(vm, "Expected %d arguments, but got %d instead.", native->arity, argc);
         return false;
     }
 
     if(native->fn(vm, argc, vm->sp - argc)) {
-        vm->sp -= (argc + 1);
+        vm->sp -= argc;
         return true;
     } else {
         VM_error(vm, AS_CSTRING(vm->sp[-argc - 1]));
@@ -441,19 +297,26 @@ SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, UInt ar
     }
 }
 
-SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, UInt argc)
+SK_INTERNAL(force_inline bool) VM_call_instance(VM* vm, ObjClass* cclass, Int argc)
+{
+    vm->sp[-argc - 1] = OBJ_VAL(ObjInstance_new(vm, NULL, cclass));
+    return true;
+}
+
+SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, Int argc)
 {
     if(IS_OBJ(fnval)) {
         switch(OBJ_TYPE(fnval)) {
+            case OBJ_CLASS:
+                return VM_call_instance(vm, AS_CLASS(fnval), argc);
             case OBJ_FUNCTION:
                 return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc);
             case OBJ_CLOSURE: {
                 ObjClosure* closure = AS_CLOSURE(fnval);
                 return VM_call_fn(vm, closure, closure->fn, argc);
             }
-            case OBJ_NATIVE: {
+            case OBJ_NATIVE:
                 return VM_call_native(vm, AS_NATIVE(fnval), argc);
-            }
             default:
                 break;
         }
@@ -486,7 +349,7 @@ SK_INTERNAL(force_inline ObjUpvalue*) VM_capture_upval(VM* vm, Value* var_ref)
         return *pp;
     }
 
-    ObjUpvalue* upval = ObjUpvalue_new(vm->global_vals.roots, var_ref);
+    ObjUpvalue* upval = ObjUpvalue_new(vm, NULL, var_ref);
     upval->next       = *pp;
     *pp               = upval;
 
@@ -505,16 +368,12 @@ SK_INTERNAL(force_inline void) VM_close_upval(VM* vm, Value* last)
     }
 }
 
-// @TODO: Encode type of instruction inside of OpCode but avoid branching.
-// This would result in having no 'L' (long) OpCodes but would require runtime check
-// that needs to avoid branching and figure out the instruction length arithmetically.
 SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 {
-    runtime = 1;
 #define READ_BYTE()      (*ip++)
 #define READ_BYTEL()     (ip += 3, GET_BYTES3(ip - 3))
-#define READ_CONSTANT()  frame->fn->chunk.constants.data[READ_BYTE()]
-#define READ_CONSTANTL() frame->fn->chunk.constants.data[READ_BYTEL()]
+#define READ_CONSTANT()  frame->fn->chunk.constants[READ_BYTE()]
+#define READ_CONSTANTL() frame->fn->chunk.constants[READ_BYTEL()]
 #define READ_STRING()    AS_STRING(READ_CONSTANT())
 #define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
 #define DISPATCH(x)      switch(x)
@@ -522,7 +381,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #define BREAK            break
 #define BINARY_OP(value_type, op)                                                        \
     do {                                                                                 \
-        if(!IS_NUMBER(stack_peek(0)) || !IS_NUMBER(stack_peek(1))) {                     \
+        if(unlikely(!IS_NUMBER(stack_peek(0)) || !IS_NUMBER(stack_peek(1)))) {           \
             frame->ip = ip;                                                              \
             VM_error(vm, "Operands must be numbers (operator '" #op "').");              \
             return INTERPRET_RUNTIME_ERROR;                                              \
@@ -545,6 +404,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
         }                                                                                \
     } while(false)
 
+    runtime = 1;
     // First frame is 'global' frame aka implicit
     // function that contains all other code and/or functions
     register CallFrame* frame = &vm->frames[vm->fc - 1];
@@ -692,29 +552,27 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_DEFINE_GLOBAL)
             {
-                Byte idx   = READ_BYTE();
-                Byte flags = Array_Global_index(&vm->global_vals, idx)->flags;
-                *Array_Global_index(&vm->global_vals, idx) =
-                    (Global){stack_peek(0), flags};
+                Byte idx = READ_BYTE();
+                //
+                vm->globvals[idx].value = stack_peek(0);
                 VM_pop(vm);
                 BREAK;
             }
             CASE(OP_DEFINE_GLOBALL)
             {
-                UInt idx   = READ_BYTEL();
-                Byte flags = Array_Global_index(&vm->global_vals, idx)->flags;
-                *Array_Global_index(&vm->global_vals, idx) =
-                    (Global){stack_peek(0), flags};
+                UInt idx = READ_BYTEL();
+                //
+                vm->globvals[idx].value = stack_peek(0);
                 VM_pop(vm);
                 BREAK;
             }
             CASE(OP_GET_GLOBAL)
             {
-                Global* global = Array_Global_index(&vm->global_vals, READ_BYTE());
+                Global* global = &vm->globvals[READ_BYTE()];
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
-                    VM_error(vm, "Undefined variable.");
+                    VM_error(vm, "Undefined global variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -723,11 +581,11 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_GLOBALL)
             {
-                Global* global = Array_Global_index(&vm->global_vals, READ_BYTEL());
+                Global* global = &vm->globvals[READ_BYTEL()];
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
-                    VM_error(vm, "Undefined variable.");
+                    VM_error(vm, "Undefined global variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -736,15 +594,15 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBAL)
             {
-                Global* global = Array_Global_index(&vm->global_vals, READ_BYTE());
+                Global* global = &vm->globvals[READ_BYTE()];
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
-                    VM_error(vm, "Undefined variable.");
+                    VM_error(vm, "Undefined global variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 } else if(unlikely(GLOB_CHECK(global, GLOB_FIXED_BIT))) {
                     frame->ip = ip;
-                    VM_error(vm, "Can't assign to 'fixed' variable.");
+                    VM_error(vm, "Can't assign to a 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -753,15 +611,15 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBALL)
             {
-                Global* global = Array_Global_index(&vm->global_vals, READ_BYTEL());
+                Global* global = &vm->globvals[READ_BYTEL()];
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
-                    VM_error(vm, "Undefined variable.");
+                    VM_error(vm, "Undefined global variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 } else if(unlikely(GLOB_CHECK(global, GLOB_FIXED_BIT))) {
                     frame->ip = ip;
-                    VM_error(vm, "Can't assign to 'fixed' variable.");
+                    VM_error(vm, "Can't assign to a 'fixed' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -841,7 +699,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_CALL)
             {
-                UInt argc = READ_BYTE();
+                Int argc  = READ_BYTE();
                 frame->ip = ip;
                 if(unlikely(!VM_call_val(vm, stack_peek(argc), argc))) {
                     return INTERPRET_RUNTIME_ERROR;
@@ -852,7 +710,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_CALLL)
             {
-                UInt argc = READ_BYTEL();
+                Int argc  = READ_BYTEL();
                 frame->ip = ip;
                 if(unlikely(!VM_call_val(vm, stack_peek(argc), argc))) {
                     return INTERPRET_RUNTIME_ERROR;
@@ -864,7 +722,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_CLOSURE)
             {
                 ObjFunction* fn      = AS_FUNCTION(READ_CONSTANTL());
-                ObjClosure*  closure = ObjClosure_new(vm->global_vals.roots, fn);
+                ObjClosure*  closure = ObjClosure_new(vm, NULL, fn);
                 VM_push(vm, OBJ_VAL(closure));
 
                 for(UInt i = 0; i < closure->upvalc; i++) {
@@ -904,6 +762,98 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 UInt last = READ_BYTEL();
                 VM_close_upval(vm, vm->sp - last);
                 VM_popn(vm, last);
+                BREAK;
+            }
+            CASE(OP_CLASS)
+            {
+                VM_push(vm, OBJ_VAL(ObjClass_new(vm, NULL, READ_STRING())));
+                BREAK;
+            }
+            CASE(OP_CLASSL)
+            {
+                VM_push(vm, OBJ_VAL(ObjClass_new(vm, NULL, READ_STRINGL())));
+                BREAK;
+            }
+            CASE(OP_SET_PROPERTY)
+            {
+                if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
+                    VM_error(vm, "Only class instances have properties.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjInstance* instance = AS_INSTANCE(stack_peek(1));
+                HashTable_insert(
+                    vm,
+                    NULL,
+                    &instance->fields,
+                    OBJ_VAL(READ_STRING()),
+                    stack_peek(0));
+                Value val = VM_pop(vm); // Get assigned value
+                VM_pop(vm);             // Pop instance
+                VM_push(vm, val);       // Push back the assigned value
+                BREAK;
+            }
+            CASE(OP_SET_PROPERTYL)
+            {
+                if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
+                    VM_error(vm, "Only class instances have properties.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjInstance* instance = AS_INSTANCE(stack_peek(1));
+                HashTable_insert(
+                    vm,
+                    NULL,
+                    &instance->fields,
+                    OBJ_VAL(READ_STRINGL()),
+                    stack_peek(0));
+                Value val = VM_pop(vm); // Get assigned value
+                VM_pop(vm);             // Pop instance
+                VM_push(vm, val);       // Push back the assigned value
+                BREAK;
+            }
+            CASE(OP_GET_PROPERTY)
+            {
+                if(unlikely(!IS_INSTANCE(stack_peek(0)))) {
+                    VM_error(vm, "Only class instances have properties.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjInstance* instance = AS_INSTANCE(stack_peek(0));
+                ObjString*   name     = READ_STRING();
+                Value        value;
+                if(unlikely(!HashTable_get(
+                       vm,
+                       NULL,
+                       &instance->fields,
+                       OBJ_VAL(name),
+                       &value)))
+                {
+                    VM_error(vm, "Undefined property '%s'.", name->storage);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                VM_pop(vm);
+                VM_push(vm, value);
+                BREAK;
+            }
+            CASE(OP_GET_PROPERTYL)
+            {
+                if(unlikely(!IS_INSTANCE(stack_peek(0)))) {
+                    VM_error(vm, "Only class instances have properties.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjInstance* instance = AS_INSTANCE(stack_peek(0));
+                ObjString*   name     = READ_STRINGL();
+                Value        value;
+                if(unlikely(!HashTable_get(
+                       vm,
+                       NULL,
+                       &instance->fields,
+                       OBJ_VAL(name),
+                       &value)))
+                {
+                    VM_error(vm, "Undefined property '%s'.", name->storage);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                VM_pop(vm);
+                VM_push(vm, value);
                 BREAK;
             }
             CASE(OP_RET)
@@ -956,16 +906,15 @@ InterpretResult VM_interpret(VM* vm, const char* source)
 
 void VM_free(VM* vm)
 {
-    HashTable_free(&vm->global_ids);
-    Array_Global_free(&vm->global_vals);
-    HashTable_free(&vm->strings);
-    Array_ObjRef_free(&vm->gray_stack);
+    HashTable_free(vm, NULL, &vm->globids);
+    GARRAY_FREE(vm);
+    HashTable_free(vm, NULL, &vm->strings);
+    Array_ObjRef_free(&vm->gray_stack, NULL);
 
-    Obj*  next;
-    Roots roots = {NULL, vm};
+    Obj* next;
     for(Obj* head = vm->objects; head != NULL; head = next) {
         next = Obj_next(head);
-        Obj_free(&roots, head);
+        Obj_free(vm, NULL, head);
     }
 
     FREE(vm);

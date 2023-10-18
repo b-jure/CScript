@@ -3,7 +3,7 @@
 
 #include "array.h"
 
-typedef struct VM VM; // For chunk.h
+typedef struct VM VM;
 
 #include "chunk.h"
 #include "hashtable.h"
@@ -54,19 +54,32 @@ ARRAY_NEW(Array_ObjRef, Obj*);
 #define GC_CHECK(vm, bit) BIT_CHECK((vm)->gc_flags, bit)
 
 struct VM {
-    CallFrame    frames[VM_FRAMES_MAX]; /* Call frames */
-    Int          fc;                    /* Frame count */
-    Value        stack[VM_STACK_MAX];   /* Stack */
-    Value*       sp;                    /* Stack pointer */
-    HashTable    global_ids;            /* Global variable names */
-    Array_Global global_vals;           /* Global variable values */
-    HashTable    strings;               /* Strings (interning) */
-    ObjUpvalue*  open_upvals;           /* List of heap allocated Upvalues */
-    Obj*         objects;               /* List of allocated object (GC) */
-    Array_ObjRef gray_stack;            /* marked objects stack */
-    size_t       gc_allocated;          /* count of allocated bytes */
-    double       gc_next;               /* next byte count on which gc triggers */
-    Byte         gc_flags;              /* gc flags */
+    // Function CallFrame-s
+    CallFrame frames[VM_FRAMES_MAX]; /* Call frames (GC) */
+    Int       fc;                    /* Frame count */
+
+    // Stack storage
+    Value  stack[VM_STACK_MAX]; /* Stack (GC) */
+    Value* sp;                  /* Stack pointer */
+
+    // Global names and values storage
+    HashTable globids;  /* Global names (GC) */
+    Global*   globvals; /* Global values (GC) */
+    UInt      globlen;  /* Global array length */
+    UInt      globcap;  /* Global array capacity */
+
+    // Weak references
+    HashTable strings; /* Interned strings (GC) */
+
+    // Closure values
+    ObjUpvalue* open_upvals; // List of open upvalues (NO GC)
+
+    // Garbage collection
+    Obj*         objects;      /* List of allocated object (GC) */
+    Array_ObjRef gray_stack;   /* marked objects stack (NO GC) */
+    size_t       gc_allocated; /* count of allocated bytes */
+    double       gc_next;      /* next byte threshold on which GC triggers */
+    Byte         gc_flags;     /* GC flags */
 };
 
 typedef enum {
@@ -75,9 +88,8 @@ typedef enum {
     INTERPRET_RUNTIME_ERROR, /* VM runtime error */
 } InterpretResult;
 
-void            VM_init(VM* vm, void* roots);
+void            VM_init(VM* vm);
 InterpretResult VM_interpret(VM* vm, const char* source_code);
-void            VM_set_roots(VM* vm, void* roots);
 void            VM_push(VM* vm, Value val);
 Value           VM_pop(VM* vm);
 void            VM_free(VM* vm);

@@ -9,29 +9,39 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define ALLOC_OBJ(roots, object, type) ((object*)Obj_new(roots, sizeof(object), type))
+#define ALLOC_OBJ(vm, c, object, type) ((object*)Obj_new(vm, c, sizeof(object), type))
 
-#define ALLOC_STRING(roots, len)                                                         \
-    ((ObjString*)Obj_new(roots, sizeof(ObjString) + (len) + 1, OBJ_STRING))
+#define ALLOC_STRING(vm, c, len)                                                         \
+    ((ObjString*)Obj_new(vm, c, sizeof(ObjString) + (len) + 1, OBJ_STRING))
 
-SK_INTERNAL(force_inline void) ObjClosure_free(Roots* roots, ObjClosure* objclosure);
-SK_INTERNAL(force_inline void) ObjString_free(Roots* roots, ObjString* objstr);
-SK_INTERNAL(force_inline void) ObjFunction_free(Roots* roots, ObjFunction* objfn);
-SK_INTERNAL(force_inline void) ObjNative_free(Roots* roots, ObjNative* native);
-SK_INTERNAL(force_inline void) ObjUpvalue_free(Roots* roots, ObjUpvalue* upval);
+SK_INTERNAL(force_inline void)
+ObjClosure_free(VM* vm, Compiler* C, ObjClosure* objclosure);
+SK_INTERNAL(force_inline void) ObjString_free(VM* vm, Compiler* C, ObjString* objstr);
+SK_INTERNAL(force_inline void) ObjFunction_free(VM* vm, Compiler* C, ObjFunction* objfn);
+SK_INTERNAL(force_inline void) ObjNative_free(VM* vm, Compiler* C, ObjNative* native);
+SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, Compiler* C, ObjUpvalue* upval);
+SK_INTERNAL(force_inline void) ObjClass_free(VM* vm, Compiler* C, ObjClass* cclass);
+SK_INTERNAL(force_inline void) ObjInstance_free(VM* vm, Compiler* C, ObjInstance* object);
 
-SK_INTERNAL(force_inline Obj*) Obj_new(Roots* roots, size_t size, ObjType type)
+SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, Compiler* C, size_t size, ObjType type)
 {
-    Obj* object = GC_MALLOC(roots, size);
+    Obj* object = GC_MALLOC(vm, C, size);
 
-    object->header = (uint64_t)roots->vm->objects | ((uint64_t)type << 56);
+    object->header = (uint64_t)vm->objects | ((uint64_t)type << 56);
+
     // Malloc and C standard do not guarantee that upper 16 bits
     // will be initialized to 0, we initialized all the bits except the
     // mark bit, so make sure it is set to false!
     Obj_mark_set(object, false);
 
+#ifdef DEBUG
+    assert(Obj_type(object) == type);
+    assert(Obj_next(object) == vm->objects);
+    assert(Obj_marked(object) == false);
+#endif
+
     // Add object to the GC list
-    roots->vm->objects = object;
+    vm->objects = object;
 
 #ifdef DEBUG_LOG_GC
     printf("%p allocate %zu for ", (void*)object, size);
@@ -53,10 +63,6 @@ SK_INTERNAL(force_inline void) print_fn(ObjFunction* fn)
 
 void ObjType_print(ObjType type) // Debug
 {
-    if(type & 1) { // If marked
-        type ^= 1;
-    }
-
     switch(type) {
         case OBJ_STRING:
             printf("OBJ_STRING");
@@ -72,6 +78,12 @@ void ObjType_print(ObjType type) // Debug
             break;
         case OBJ_UPVAL:
             printf("OBJ_UPVAL");
+            break;
+        case OBJ_CLASS:
+            printf("OBJ_CLASS");
+            break;
+        case OBJ_INSTANCE:
+            printf("OBJ_INSTANCE");
             break;
         default:
             unreachable;
@@ -96,12 +108,18 @@ void Object_print(Value value)
         case OBJ_UPVAL:
             printf("upvalue");
             break;
+        case OBJ_CLASS:
+            printf("%s class", AS_CLASS(value)->name->storage);
+            break;
+        case OBJ_INSTANCE:
+            printf("%s instance", AS_INSTANCE(value)->cclass->name->storage);
+            break;
         default:
             unreachable;
     }
 }
 
-void Obj_free(Roots* roots, Obj* object)
+void Obj_free(VM* vm, Compiler* C, Obj* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p free type ", (void*)object);
@@ -110,19 +128,25 @@ void Obj_free(Roots* roots, Obj* object)
 #endif
     switch(Obj_type(object)) {
         case OBJ_STRING:
-            ObjString_free(roots, (ObjString*)object);
+            ObjString_free(vm, C, (ObjString*)object);
             break;
         case OBJ_FUNCTION:
-            ObjFunction_free(roots, (ObjFunction*)object);
+            ObjFunction_free(vm, C, (ObjFunction*)object);
             break;
         case OBJ_CLOSURE:
-            ObjClosure_free(roots, (ObjClosure*)object);
+            ObjClosure_free(vm, C, (ObjClosure*)object);
             break;
         case OBJ_NATIVE:
-            ObjNative_free(roots, (ObjNative*)object);
+            ObjNative_free(vm, C, (ObjNative*)object);
             break;
         case OBJ_UPVAL:
-            ObjUpvalue_free(roots, (ObjUpvalue*)object);
+            ObjUpvalue_free(vm, C, (ObjUpvalue*)object);
+            break;
+        case OBJ_CLASS:
+            ObjClass_free(vm, C, (ObjClass*)object);
+            break;
+        case OBJ_INSTANCE:
+            ObjInstance_free(vm, C, (ObjInstance*)object);
             break;
         default:
             unreachable;
@@ -141,76 +165,76 @@ Hash Obj_hash(Value value)
     }
 }
 
-SK_INTERNAL(force_inline ObjString*) ObjString_alloc(Roots* roots, UInt len)
+SK_INTERNAL(force_inline ObjString*) ObjString_alloc(VM* vm, Compiler* C, UInt len)
 {
-    ObjString* string = ALLOC_STRING(roots, len);
+    ObjString* string = ALLOC_STRING(vm, C, len);
     string->len       = len;
     return string;
 }
 
-ObjString* ObjString_from(Roots* roots, const char* chars, size_t len)
+ObjString* ObjString_from(VM* vm, Compiler* C, const char* chars, size_t len)
 {
     uint64_t   hash     = Hash_string(chars, len);
-    ObjString* interned = HashTable_get_intern(&roots->vm->strings, chars, len, hash);
+    ObjString* interned = HashTable_get_intern(&vm->strings, chars, len, hash);
 
     if(interned) { // Return interned string
         return interned;
     }
 
-    ObjString* string = ObjString_alloc(roots, len);
+    ObjString* string = ObjString_alloc(vm, C, len);
     memcpy(string->storage, chars, len);
     string->hash         = hash;
     string->storage[len] = '\0';
 
-    VM_push(roots->vm, OBJ_VAL(string)); // GC
-    HashTable_insert(&roots->vm->strings, OBJ_VAL(string), NIL_VAL);
-    VM_pop(roots->vm); // GC
+    VM_push(vm, OBJ_VAL(string)); // GC
+    HashTable_insert(vm, C, &vm->strings, OBJ_VAL(string), NIL_VAL);
+    VM_pop(vm); // GC
     return string;
 }
 
-SK_INTERNAL(force_inline void) ObjString_free(Roots* roots, ObjString* string)
+SK_INTERNAL(force_inline void) ObjString_free(VM* vm, Compiler* C, ObjString* string)
 {
-    GC_FREE(roots, string, sizeof(ObjString) + string->len + 1);
+    GC_FREE(vm, C, string, sizeof(ObjString) + string->len + 1);
 }
 
-ObjNative* ObjNative_new(Roots* roots, NativeFn fn, UInt arity)
+ObjNative* ObjNative_new(VM* vm, Compiler* C, NativeFn fn, Int arity)
 {
-    ObjNative* native = ALLOC_OBJ(roots, ObjNative, OBJ_NATIVE);
+    ObjNative* native = ALLOC_OBJ(vm, C, ObjNative, OBJ_NATIVE);
     //
     native->fn    = fn;
     native->arity = arity;
     return native;
 }
 
-SK_INTERNAL(force_inline void) ObjNative_free(Roots* roots, ObjNative* native)
+SK_INTERNAL(force_inline void) ObjNative_free(VM* vm, Compiler* C, ObjNative* native)
 {
-    GC_FREE(roots, native, sizeof(ObjNative));
+    GC_FREE(vm, C, native, sizeof(ObjNative));
 }
 
-ObjFunction* ObjFunction_new(Roots* roots)
+ObjFunction* ObjFunction_new(VM* vm, Compiler* C)
 {
-    ObjFunction* fn = ALLOC_OBJ(roots, ObjFunction, OBJ_FUNCTION);
+    ObjFunction* fn = ALLOC_OBJ(vm, C, ObjFunction, OBJ_FUNCTION);
     fn->arity       = 0;
     fn->name        = NULL;
     fn->upvalc      = 0;
-    Chunk_init(&fn->chunk, (void*)roots);
+    Chunk_init(&fn->chunk);
     return fn;
 }
 
-SK_INTERNAL(force_inline void) ObjFunction_free(Roots* roots, ObjFunction* fn)
+SK_INTERNAL(force_inline void) ObjFunction_free(VM* vm, Compiler* C, ObjFunction* fn)
 {
-    Chunk_free(&fn->chunk);
-    GC_FREE(roots, fn, sizeof(ObjFunction));
+    Chunk_free(&fn->chunk, vm, C);
+    GC_FREE(vm, C, fn, sizeof(ObjFunction));
 }
 
-ObjClosure* ObjClosure_new(Roots* roots, ObjFunction* fn)
+ObjClosure* ObjClosure_new(VM* vm, Compiler* C, ObjFunction* fn)
 {
-    ObjUpvalue** upvals = GC_MALLOC(roots, sizeof(ObjUpvalue*) * fn->upvalc);
+    ObjUpvalue** upvals = GC_MALLOC(vm, C, sizeof(ObjUpvalue*) * fn->upvalc);
     for(UInt i = 0; i < fn->upvalc; i++) {
         upvals[i] = NULL;
     }
 
-    ObjClosure* closure = ALLOC_OBJ(roots, ObjClosure, OBJ_CLOSURE);
+    ObjClosure* closure = ALLOC_OBJ(vm, C, ObjClosure, OBJ_CLOSURE);
     closure->fn         = fn;
     closure->upvals     = upvals;
     closure->upvalc     = fn->upvalc;
@@ -218,22 +242,50 @@ ObjClosure* ObjClosure_new(Roots* roots, ObjFunction* fn)
     return closure;
 }
 
-SK_INTERNAL(force_inline void) ObjClosure_free(Roots* roots, ObjClosure* closure)
+SK_INTERNAL(force_inline void) ObjClosure_free(VM* vm, Compiler* C, ObjClosure* closure)
 {
-    GC_FREE(roots, closure->upvals, closure->upvalc * sizeof(ObjUpvalue*));
-    GC_FREE(roots, closure, sizeof(ObjClosure));
+    GC_FREE(vm, C, closure->upvals, closure->upvalc * sizeof(ObjUpvalue*));
+    GC_FREE(vm, C, closure, sizeof(ObjClosure));
 }
 
-ObjUpvalue* ObjUpvalue_new(Roots* roots, Value* var_ref)
+ObjUpvalue* ObjUpvalue_new(VM* vm, Compiler* C, Value* var_ref)
 {
-    ObjUpvalue* upval = ALLOC_OBJ(roots, ObjUpvalue, OBJ_UPVAL);
+    ObjUpvalue* upval = ALLOC_OBJ(vm, C, ObjUpvalue, OBJ_UPVAL);
     upval->closed     = EMPTY_VAL;
     upval->location   = var_ref;
     upval->next       = NULL;
     return upval;
 }
 
-SK_INTERNAL(force_inline void) ObjUpvalue_free(Roots* roots, ObjUpvalue* upval)
+SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, Compiler* C, ObjUpvalue* upval)
 {
-    GC_FREE(roots, upval, sizeof(ObjUpvalue));
+    GC_FREE(vm, C, upval, sizeof(ObjUpvalue));
+}
+
+ObjClass* ObjClass_new(VM* vm, Compiler* C, ObjString* name)
+{
+    ObjClass* cclass = ALLOC_OBJ(vm, C, ObjClass, OBJ_CLASS);
+    cclass->name     = name;
+    return cclass;
+}
+
+SK_INTERNAL(force_inline void) ObjClass_free(VM* vm, Compiler* C, ObjClass* cclass)
+{
+    GC_FREE(vm, C, cclass, sizeof(ObjClass));
+}
+
+
+ObjInstance* ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass)
+{
+    ObjInstance* instance = ALLOC_OBJ(vm, C, ObjInstance, OBJ_INSTANCE);
+    instance->cclass      = cclass;
+    HashTable_init(&instance->fields);
+    return instance;
+}
+
+SK_INTERNAL(force_inline void)
+ObjInstance_free(VM* vm, Compiler* C, ObjInstance* instance)
+{
+    HashTable_free(vm, C, &instance->fields);
+    GC_FREE(vm, C, instance, sizeof(ObjInstance));
 }

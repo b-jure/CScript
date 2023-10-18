@@ -25,13 +25,20 @@
 #define IS_UPVAL(value) is_object_type(value, OBJ_UPVAL)
 #define AS_UPVAL(value) ((ObjUpvalue*)AS_OBJ(value))
 
+#define IS_CLASS(value) is_object_type(value, OBJ_CLASS)
+#define AS_CLASS(value) ((ObjClass*)AS_OBJ(value))
 
-typedef enum { // 1 for marked
-    OBJ_STRING   = 2,
-    OBJ_FUNCTION = 4,
-    OBJ_CLOSURE  = 8,
-    OBJ_NATIVE   = 16,
-    OBJ_UPVAL    = 32,
+#define IS_INSTANCE(value) is_object_type(value, OBJ_INSTANCE)
+#define AS_INSTANCE(value) ((ObjInstance*)AS_OBJ(value))
+
+typedef enum {
+    OBJ_STRING,
+    OBJ_FUNCTION,
+    OBJ_CLOSURE,
+    OBJ_NATIVE,
+    OBJ_UPVAL,
+    OBJ_CLASS,
+    OBJ_INSTANCE,
 } ObjType;
 
 /*
@@ -105,11 +112,22 @@ struct ObjFunction { // typedef is inside 'value.h'
     UInt       upvalc; // Count of upvalues
 };
 
-struct ObjClosure { // typedef is inisde 'value.h'
+struct ObjClosure { // typedef is inside 'value.h'
     Obj          obj;
     ObjFunction* fn;
     ObjUpvalue** upvals; // size of fn->upvalc
     UInt         upvalc;
+};
+
+struct ObjClass { // typedef is inside 'value.h'
+    Obj        obj;
+    ObjString* name;
+};
+
+struct ObjInstance { // typedef is inside 'value.h'
+    Obj       obj;
+    ObjClass* cclass;
+    HashTable fields;
 };
 
 typedef bool (*NativeFn)(VM* vm, Int argc, Value* argv);
@@ -117,17 +135,19 @@ typedef bool (*NativeFn)(VM* vm, Int argc, Value* argv);
 typedef struct {
     Obj      obj;
     NativeFn fn;
-    UInt     arity;
+    Int     arity;
 } ObjNative;
 
+ObjInstance* ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass);
+ObjClass*    ObjClass_new(VM* vm, Compiler* C, ObjString* name);
 void         ObjType_print(ObjType type); // Debug
-ObjUpvalue*  ObjUpvalue_new(Roots* roots, Value* var_ref);
-ObjClosure*  ObjClosure_new(Roots* roots, ObjFunction* fn);
-ObjNative*   ObjNative_new(Roots* roots, NativeFn fn, UInt arity);
+ObjUpvalue*  ObjUpvalue_new(VM* vm, Compiler* C, Value* var_ref);
+ObjClosure*  ObjClosure_new(VM* vm, Compiler* C, ObjFunction* fn);
+ObjNative*   ObjNative_new(VM* vm, Compiler* C, NativeFn fn, Int arity);
 uint64_t     Obj_hash(Value value);
-ObjString*   ObjString_from(Roots* roots, const char* chars, size_t len);
-ObjFunction* ObjFunction_new(Roots* roots);
+ObjString*   ObjString_from(VM* vm, Compiler* C, const char* chars, size_t len);
+ObjFunction* ObjFunction_new(VM* vm, Compiler* C);
 void         Object_print(const Value value);
-void         Obj_free(Roots* roots, Obj* object);
+void         Obj_free(VM* vm, Compiler* C, Obj* object);
 
 #endif

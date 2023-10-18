@@ -1,8 +1,8 @@
 #ifndef __SKOOMA_ERR_H__
 #define __SKOOMA_ERR_H__
 
-#define NATIVE_FN_ERR(fn, err) "<native-fn " fn ">: "
-#define ERR_NEW(roots, err)    ObjString_from(roots, err, sizeof(err) - 1)
+#define NATIVE_FN_ERR(fn, err)     "<native-fn " fn ">: "
+#define ERR_NEW(vm, compiler, err) ObjString_from(vm, compiler, err, sizeof(err) - 1)
 
 #define CLOCK_ERR                                                                        \
     NATIVE_FN_ERR(                                                                       \

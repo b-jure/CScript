@@ -17,9 +17,8 @@
 #include <stdlib.h>
 
 #define GC_HEAP_GROW_FACTOR 2
-double gc_grow_factor = 0;
+double gc_grow_factor = 0; // @TODO: Use this in native GC interface
 
-// Make extern for 'mark_c_roots' function in 'compiler.c'.
 void mark_obj(VM* vm, Obj* obj)
 {
     if(obj == NULL || Obj_marked(obj)) {
@@ -27,7 +26,7 @@ void mark_obj(VM* vm, Obj* obj)
     }
 
     Obj_mark_set(obj, true);
-    if(Obj_type(obj) & (OBJ_STRING | OBJ_NATIVE)) {
+    if(Obj_type(obj) == OBJ_STRING || Obj_type(obj) == OBJ_NATIVE) {
 #ifdef DEBUG_LOG_GC
         printf("%p blacken ", (void*)obj);
         Value_print(OBJ_VAL(obj));
@@ -44,29 +43,32 @@ void mark_obj(VM* vm, Obj* obj)
     Array_ObjRef_push(&vm->gray_stack, obj);
 }
 
+SK_INTERNAL(force_inline void) mark_table(VM* vm, HashTable* table)
+{
+    for(UInt i = 0; i < table->cap; i++) {
+        Entry* entry = &table->entries[i];
+
+        if(entry->key.type != VAL_EMPTY) {
+            mark_obj(vm, AS_OBJ(entry->key));
+            mark_value(vm, entry->value);
+        }
+    }
+}
+
 SK_INTERNAL(force_inline void) mark_globals(VM* vm)
 {
-    for(UInt i = 0; i < vm->global_ids.cap; i++) {
-        Entry* entry = &vm->global_ids.entries[i];
+    for(UInt i = 0; i < vm->globids.cap; i++) {
+        Entry* entry = &vm->globids.entries[i];
 
         if(entry->key.type != VAL_EMPTY) {
             // Mark identifier
             mark_obj(vm, AS_OBJ(entry->key));
             // Mark value
             UInt    idx = (UInt)AS_NUMBER(entry->value);
-            Global* val = Array_Global_index(&vm->global_vals, idx);
+            Global* val = &vm->globvals[idx];
             mark_value(vm, val->value);
             // Mark global
             GLOB_SET(val, GLOB_MARKED_BIT);
-        }
-    }
-
-    // Remove unmarked global values before their
-    // identifiers get removed.
-    for(UInt i = 0; i < vm->global_vals.len; i++) {
-        Global* glob = Array_Global_index(&vm->global_vals, i);
-        if(!GLOB_CHECK(glob, GLOB_MARKED_BIT)) {
-            Array_Global_remove(&vm->global_vals, i);
         }
     }
 }
@@ -110,8 +112,8 @@ SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
         case OBJ_FUNCTION: {
             ObjFunction* fn = (ObjFunction*)obj;
             mark_obj(vm, (Obj*)fn->name);
-            for(UInt i = 0; i < fn->chunk.constants.len; i++) {
-                mark_value(vm, fn->chunk.constants.data[i]);
+            for(UInt i = 0; i < fn->chunk.clen; i++) {
+                mark_value(vm, fn->chunk.constants[i]);
             }
             break;
         }
@@ -121,6 +123,17 @@ SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
             for(UInt i = 0; i < closure->upvalc; i++) {
                 mark_obj(vm, (Obj*)closure->upvals[i]);
             }
+            break;
+        }
+        case OBJ_CLASS: {
+            ObjClass* cclass = (ObjClass*)obj;
+            mark_obj(vm, (Obj*)cclass->name);
+            break;
+        }
+        case OBJ_INSTANCE: {
+            ObjInstance* instance = (ObjInstance*)obj;
+            mark_obj(vm, (Obj*)instance->cclass);
+            mark_table(vm, &instance->fields);
             break;
         }
         default:
@@ -146,14 +159,17 @@ SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)
     }
 }
 
-SK_INTERNAL(force_inline void) sweep(Roots* roots)
+SK_INTERNAL(force_inline void) sweep(VM* vm, Compiler* C)
 {
     Obj* previous = NULL;
-    Obj* current  = roots->vm->objects;
+    Obj* current  = vm->objects;
 
     while(current != NULL) {
         if(Obj_marked(current)) {
             Obj_mark_set(current, false);
+#ifdef DEBUG
+            assert(Obj_marked(current) == false);
+#endif
             previous = current;
             current  = Obj_next(current);
         } else {
@@ -162,23 +178,20 @@ SK_INTERNAL(force_inline void) sweep(Roots* roots)
             if(previous != NULL) {
                 Obj_next_set(previous, current);
             } else {
-                roots->vm->objects = current;
+                vm->objects = current;
             }
 
-            Obj_free(roots, unreached);
+            Obj_free(vm, C, unreached);
         }
     }
 }
 
-void gc(Roots* roots)
+void gc(VM* vm, Compiler* C)
 {
 #ifdef DEBUG_LOG_GC
     printf("--> GC start\n");
-    size_t old_allocation = roots->vm->gc_allocated;
+    size_t old_allocation = vm->gc_allocated;
 #endif
-
-    Compiler* c  = roots->c;
-    VM*       vm = roots->vm;
 
     mark_vm_roots(vm);
 #ifdef THREADED_CODE
@@ -186,10 +199,10 @@ void gc(Roots* roots)
 
     goto* jmptable[runtime];
 mark:
-    mark_c_roots(vm, c);
+    mark_c_roots(vm, C);
 skip:
 #else
-    mark_c_roots(vm, c);
+    mark_c_roots(vm, C);
 #endif
 
     while(vm->gray_stack.len > 0) {
@@ -197,8 +210,9 @@ skip:
     }
 
     remove_weak_refs(vm);
-    sweep(roots);
+    sweep(vm, C);
 
+    // @TODO: Make use of gc_grow_factor global when GC class gets implemented
     vm->gc_next = (double)vm->gc_allocated *
                   (double)((gc_grow_factor == 0) ? GC_HEAP_GROW_FACTOR : gc_grow_factor);
 
@@ -214,18 +228,17 @@ skip:
 }
 
 /* Allocator that can trigger gc. */
-void* gc_reallocate(void* roots, void* ptr, size_t oldc, size_t newc)
+void* gc_reallocate(VM* vm, Compiler* C, void* ptr, size_t oldc, size_t newc)
 {
-    Roots* r             = roots;
-    r->vm->gc_allocated += newc - oldc;
+    vm->gc_allocated += newc - oldc;
 
 #ifdef DEBUG_STRESS_GC
     if(newc > oldc) {
-        gc(r);
+        gc(vm, C);
     }
 #else
-    if(!GC_CHECK(r->vm, GC_MANUAL_BIT) && r->vm->gc_next < r->vm->gc_allocated) {
-        gc(r);
+    if(!GC_CHECK(vm, GC_MANUAL_BIT) * vm->gc_next < vm->gc_allocated) {
+        gc(vm, C);
     }
 #endif
 

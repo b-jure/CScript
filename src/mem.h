@@ -7,16 +7,9 @@
 
 #include <memory.h>
 
-typedef struct {
-    Compiler* c;
-    VM*       vm;
-} Roots;
-
-#define SK_ALLOCATOR // @MAYBE_REMOVE? Redeclaration guard
-/* Memory allocator function. */
 void* reallocate(void* ptr, size_t newCap);
-void* gc_reallocate(void* roots, void* ptr, size_t oldc, size_t newc);
-void  gc(Roots* roots);
+void* gc_reallocate(VM* vm, Compiler* C, void* ptr, size_t oldc, size_t newc);
+void  gc(VM* vm, Compiler* C);
 void  mark_obj(VM* vm, Obj* obj);
 
 extern double gc_grow_factor;
@@ -33,20 +26,20 @@ extern double gc_grow_factor;
 #define MALLOC(bytes) reallocate(NULL, bytes)
 
 /* GC tracked memory alloc. */
-#define GC_MALLOC(roots, bytes) gc_reallocate(roots, NULL, 0, bytes)
+#define GC_MALLOC(vm, c, bytes) gc_reallocate(vm, c, NULL, 0, bytes)
 
 /* Wrapper around reallocate, equivalent to realloc */
 #define REALLOC(ptr, newsize) reallocate(ptr, newsize)
 
 /* GC tracked memory realloc. */
-#define GC_REALLOC(roots, ptr, oldsize, newsize)                                         \
-    gc_reallocate(roots, ptr, oldsize, newsize)
+#define GC_REALLOC(vm, c, ptr, oldsize, newsize)                                         \
+    gc_reallocate(vm, c, ptr, oldsize, newsize)
 
 /* Free allocation at 'ptr' */
 #define FREE(ptr) reallocate(ptr, 0)
 
 /* Free GC tracked allocation. */
-#define GC_FREE(roots, ptr, oldsize) gc_reallocate(roots, ptr, oldsize, 0)
+#define GC_FREE(vm, c, ptr, oldsize) gc_reallocate(vm, c, ptr, oldsize, 0)
 
 /* Extracts the byte at the 'offset' from 'x' */
 #define BYTE(x, offset) (((x) >> ((offset) * 8)) & 0xff)

@@ -8,7 +8,7 @@
 #undef BREAK
 
 /* Redefine dispatch from switch into goto */
-#define DISPATCH(x) goto *optable[x];
+#define DISPATCH(x) goto* optable[x];
 
 /* Redefine case into label */
 #define CASE(label) L_##label:
@@ -17,7 +17,7 @@
 #define BREAK DISPATCH(READ_BYTE())
 
 /* Make sure the order is the same as in the OpCode enum */
-static const void *const optable[OPCODE_N] = {
+static const void* const optable[OPCODE_N] = {
     &&L_OP_TRUE,
     &&L_OP_FALSE,
     &&L_OP_NIL,
@@ -62,6 +62,12 @@ static const void *const optable[OPCODE_N] = {
     &&L_OP_SET_UPVALUE,
     &&L_OP_CLOSE_UPVAL,
     &&L_OP_CLOSE_UPVALN,
+    &&L_OP_CLASS,
+    &&L_OP_CLASSL,
+    &&L_OP_SET_PROPERTY,
+    &&L_OP_SET_PROPERTYL,
+    &&L_OP_GET_PROPERTY,
+    &&L_OP_GET_PROPERTYL,
     &&L_OP_RET,
 };
 
