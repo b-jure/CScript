@@ -212,16 +212,74 @@ VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
 }
 
 //-------------------------NATIVE FUNCTIONS-------------------------//
-SK_INTERNAL(force_inline bool) native_clock(VM* vm, unused Int _, Value* argv)
+/**
+ * Determines processor time.
+ * @ret - approximation of processor time used by the program in seconds.
+ * @err - if the processor time used is not available or its value cannot
+ *        be represented.
+ **/
+SK_INTERNAL(force_inline bool) native_clock(VM* vm, Value* argv)
 {
     clock_t time = clock();
 
     if(unlikely(time < 0)) {
-        argv[-1] = OBJ_VAL(ERR_NEW(vm, NULL, CLOCK_ERR));
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, CLOCK_ERR));
         return false;
     }
 
     argv[-1] = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
+    return true;
+}
+
+/**
+ * Checks if ObjInstance contains field.
+ * @ret - bool, true if it contains, false otherwise
+ * @err - if first argument is not ObjInstance
+ *      - if second argument is not ObjString
+ **/
+SK_INTERNAL(force_inline bool) native_isfield(VM* vm, Value* argv)
+{
+    ObjString* err = NULL;
+
+    if(unlikely(!IS_INSTANCE(argv[0]))) {
+        err = ERR_NEW(vm, ISFIELD_INSTANCE_ERR);
+    } else if(unlikely(!IS_STRING(argv[1]))) {
+        err = ERR_NEW(vm, ISFIELD_FIELD_ERR);
+    } else {
+        goto fin;
+    }
+    argv[-1] = OBJ_VAL(err);
+    return false;
+
+fin:;
+    ObjInstance* instance = AS_INSTANCE(argv[0]);
+    Value        _dummy;
+    argv[-1] = BOOL_VAL(HashTable_get(&instance->fields, argv[1], &_dummy));
+    return true;
+}
+
+/**
+ * Deletes the field from ObjInstance.
+ * @ret - bool, true if field was removed false otherwise
+ * @err - if first argument is not ObjInstance
+ *      - if second argument is not ObjString
+ **/
+SK_INTERNAL(force_inline bool) native_delfield(VM* vm, Value* argv)
+{
+    ObjString* err = NULL;
+
+    if(unlikely(!IS_INSTANCE(argv[0]))) {
+        err = ERR_NEW(vm, DELFIELD_INSTANCE_ERR);
+    } else if(unlikely(!IS_STRING(argv[1]))) {
+        err = ERR_NEW(vm, DELFIELD_FIELD_ERR);
+    } else {
+        goto fin;
+    }
+    argv[-1] = OBJ_VAL(err);
+
+fin:;
+    ObjInstance* instance = AS_INSTANCE(argv[0]);
+    argv[-1]              = BOOL_VAL(HashTable_remove(&instance->fields, argv[1]));
     return true;
 }
 
@@ -243,9 +301,6 @@ void VM_init(VM* vm)
     vm->gc_flags     = 0;
     stack_reset(vm);
 
-    // @TODO_IMPORTANT: Make HashTable functions take VM and Compiler in
-    // order to have their memory tracked by garbage collection.
-
     HashTable_init(&vm->globids); // Global variable identifiers (GC)
     GARRAY_INIT(vm);              // Global values array (GC)
 
@@ -254,7 +309,9 @@ void VM_init(VM* vm)
     Array_ObjRef_init(&vm->gray_stack); // Gray stack (NO GC)
 
     // Native function definitions
-    VM_define_native(vm, "clock", native_clock, 0); // GC
+    VM_define_native(vm, "clock", native_clock, 0);       // GC
+    VM_define_native(vm, "isfield", native_isfield, 2);   // GC
+    VM_define_native(vm, "delfield", native_delfield, 2); // GC
 }
 
 SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, UInt argc)
@@ -288,7 +345,7 @@ SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, Int arg
         return false;
     }
 
-    if(native->fn(vm, argc, vm->sp - argc)) {
+    if(native->fn(vm, vm->sp - argc)) {
         vm->sp -= argc;
         return true;
     } else {
@@ -817,17 +874,11 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(stack_peek(0));
-                ObjString*   name     = READ_STRING();
+                Value        name     = OBJ_VAL(READ_STRING());
                 Value        value;
-                if(unlikely(!HashTable_get(
-                       vm,
-                       NULL,
-                       &instance->fields,
-                       OBJ_VAL(name),
-                       &value)))
-                {
-                    VM_error(vm, "Undefined property '%s'.", name->storage);
-                    return INTERPRET_RUNTIME_ERROR;
+                if(!HashTable_get(&instance->fields, name, &value)) {
+                    // Create a property if its missing and initialize it to 'nil'
+                    HashTable_insert(vm, NULL, &instance->fields, name, value = NIL_VAL);
                 }
                 VM_pop(vm);
                 VM_push(vm, value);
@@ -840,19 +891,47 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(stack_peek(0));
-                ObjString*   name     = READ_STRINGL();
+                Value        name     = OBJ_VAL(READ_STRINGL());
                 Value        value;
-                if(unlikely(!HashTable_get(
-                       vm,
-                       NULL,
-                       &instance->fields,
-                       OBJ_VAL(name),
-                       &value)))
-                {
-                    VM_error(vm, "Undefined property '%s'.", name->storage);
-                    return INTERPRET_RUNTIME_ERROR;
+                if(!HashTable_get(&instance->fields, name, &value)) {
+                    // Create a property if its missing and initialize it to 'nil'
+                    HashTable_insert(vm, NULL, &instance->fields, name, value = NIL_VAL);
                 }
                 VM_pop(vm);
+                VM_push(vm, value);
+                BREAK;
+            }
+            CASE(OP_SET_DYNPROPERTY)
+            {
+                if(unlikely(!IS_INSTANCE(stack_peek(2)))) {
+                    VM_error(vm, "Only class instances have properties.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjInstance* instance = AS_INSTANCE(stack_peek(2));
+                HashTable_insert(
+                    vm,
+                    NULL,
+                    &instance->fields,
+                    stack_peek(1),
+                    stack_peek(0));
+                Value val = VM_pop(vm); // Get assigned value
+                VM_popn(vm, 2);         // Pop instance and name
+                VM_push(vm, val);       // Push back the assigned value
+                BREAK;
+            }
+            CASE(OP_GET_DYNPROPERTY)
+            {
+                if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
+                    VM_error(vm, "Only class instances have properties.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjInstance* instance = AS_INSTANCE(stack_peek(1));
+                Value        name     = stack_peek(0);
+                Value        value;
+                if(!HashTable_get(&instance->fields, name, &value)) {
+                    HashTable_insert(vm, NULL, &instance->fields, name, value = NIL_VAL);
+                }
+                VM_popn(vm, 2);
                 VM_push(vm, value);
                 BREAK;
             }
@@ -862,7 +941,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 VM_close_upval(vm, frame->sp);
                 vm->fc--;
                 if(vm->fc == 0) {
-                    // @FIX: REPL not working, maybe sp - stack is -1
+                    // @FIX: REPL not working, maybe (sp - stack) == -1 (underflow)
                     VM_pop(vm);
                     return INTERPRET_OK;
                 }

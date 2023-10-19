@@ -96,6 +96,8 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_POP)
         CASE(OP_LOOP)
         CASE(OP_CLOSE_UPVAL)
+        CASE(OP_SET_DYNPROPERTY)
+        CASE(OP_GET_DYNPROPERTY)
         {
             unreachable;
         }

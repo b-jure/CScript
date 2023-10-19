@@ -7,42 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef DEBUG
-    #define GARRAY_PUSH_DEBUG(global)
-    #define GARRAY_STRUCT_DEBUG(vm)
-    #define CARRAY_PUSH_DEBUG(constant)
-    #define CARRAY_STRUCT_DEBUG(chunk)
-#else
-    #define GARRAY_PUSH_DEBUG(global)                                                    \
-        do {                                                                             \
-            printf("Push Global ");                                                      \
-            Value_print(global.value);                                                   \
-            printf(" with flags 0x%08x (bytes %lu)\n", global.flags, sizeof(Global));    \
-        } while(false)
-
-    #define GARRAY_STRUCT_DEBUG(vm)                                                      \
-        printf(                                                                          \
-            "GARRAY: { cap: %u, len: %u, bytes: %lu }\n",                                \
-            (vm)->globcap,                                                               \
-            (vm)->globlen,                                                               \
-            (vm)->globcap * sizeof(Global));
-
-    #define CARRAY_PUSH_DEBUG(constant)                                                  \
-        do {                                                                             \
-            printf("Push constant value ");                                              \
-            Value_print(constant);                                                       \
-            printf(" (bytes %lu)\n", sizeof(Value));                                     \
-        } while(false)
-
-    #define CARRAY_STRUCT_DEBUG(chunk)                                                   \
-        printf(                                                                          \
-            "CARRAY: { cap: %u, len: %u, bytes: %lu }\n",                                \
-            (chunk)->ccap,                                                               \
-            (chunk)->clen,                                                               \
-            (chunk)->ccap * sizeof(Value));
-#endif
-
-
 #define GROW_ARRAY_CAPACITY(cap) ((cap) < 8 ? 8 : (cap) * 2)
 
 /* CONSTANTS ARRAY (Chunk.h) */
@@ -55,7 +19,6 @@
 
 #define CARRAY_PUSH(chunk, constant, vm, compiler)                                       \
     ({                                                                                   \
-        CARRAY_PUSH_DEBUG(constant);                                                     \
         if((chunk)->ccap <= (chunk)->clen) {                                             \
             UInt oldcap        = (chunk)->ccap;                                          \
             (chunk)->ccap      = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);           \
@@ -67,7 +30,6 @@
                 (chunk)->ccap * sizeof(Value));                                          \
         }                                                                                \
         (chunk)->constants[(chunk)->clen++] = constant;                                  \
-        CARRAY_STRUCT_DEBUG(chunk);                                                      \
         (chunk)->clen - 1;                                                               \
     })
 
@@ -89,7 +51,6 @@
 
 #define GARRAY_PUSH(vm, compiler, global)                                                \
     ({                                                                                   \
-        GARRAY_PUSH_DEBUG(global);                                                       \
         if((vm)->globcap <= (vm)->globlen) {                                             \
             UInt oldcap    = (vm)->globcap;                                              \
             (vm)->globcap  = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);               \
@@ -101,7 +62,6 @@
                 (vm)->globcap * sizeof(Global));                                         \
         }                                                                                \
         (vm)->globvals[(vm)->globlen++] = global;                                        \
-        GARRAY_STRUCT_DEBUG(vm);                                                         \
         (vm)->globlen - 1;                                                               \
     })
 

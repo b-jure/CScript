@@ -68,6 +68,8 @@ static const void* const optable[OPCODE_N] = {
     &&L_OP_SET_PROPERTYL,
     &&L_OP_GET_PROPERTY,
     &&L_OP_GET_PROPERTYL,
+    &&L_OP_SET_DYNPROPERTY,
+    &&L_OP_GET_DYNPROPERTY,
     &&L_OP_RET,
 };
 

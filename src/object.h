@@ -130,12 +130,12 @@ struct ObjInstance { // typedef is inside 'value.h'
     HashTable fields;
 };
 
-typedef bool (*NativeFn)(VM* vm, Int argc, Value* argv);
+typedef bool (*NativeFn)(VM* vm, Value* argv);
 
 typedef struct {
     Obj      obj;
     NativeFn fn;
-    Int     arity;
+    Int      arity;
 } ObjNative;
 
 ObjInstance* ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass);

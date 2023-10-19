@@ -146,18 +146,8 @@ bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value va
         HashTable_expand(vm, C, table);
     }
 
-    Entry* entry = Entry_find(table->entries, table->cap, key);
-
-    // In case of a cycle expand, we don't count tombstones
-    // so table->left variable can't indicate if we need to expand.
-    // This only gets triggered in case of a cycle (hopefully rarely).
-    // @TODO: count tombstones to prevent cycles (more memory overhead faster lookup)
-    if(unlikely(IS_TOMBSTONE(entry))) {
-        HashTable_expand(vm, C, table);
-        entry = Entry_find(table->entries, table->cap, key);
-    }
-
-    bool new_key = IS_EMPTY(entry->key);
+    Entry* entry   = Entry_find(table->entries, table->cap, key);
+    bool   new_key = IS_EMPTY(entry->key);
 
     if(new_key) {
         table->left--;
@@ -220,11 +210,7 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
     return NULL;
 }
 
-// 'get' can also expand, this is because we are not tracking/counting
-// 'tombstones' so cycle can occur in which case we also expand the table
-// on the lookup, this way when inserting or looking up the value next time,
-// we don't cycle again.
-bool HashTable_get(VM* vm, Compiler* C, HashTable* table, Value key, Value* out)
+bool HashTable_get(HashTable* table, Value key, Value* out)
 {
     if(table->len == 0) {
         return false;
@@ -232,19 +218,11 @@ bool HashTable_get(VM* vm, Compiler* C, HashTable* table, Value key, Value* out)
 
     Entry* entry = Entry_find(table->entries, table->cap, key);
 
-    if(unlikely(IS_TOMBSTONE(entry))) {
-        HashTable_expand(vm, C, table);
-        entry = Entry_find(table->entries, table->cap, key);
-    }
-
     if(IS_EMPTY(entry->key)) {
         return false;
     }
 
-    if(out != NULL) {
-        *out = entry->value;
-    }
-
+    *out = entry->value;
     return true;
 }
 

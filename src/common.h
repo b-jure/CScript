@@ -29,7 +29,7 @@ SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x)
 // Return bit at 'bit' (0 or 1) from 'x'.
 #define BIT_CHECK(x, bit) ((size_t)(x) & ((size_t)1 << ((bit)-1)))
 // Toggle 'bit' from 'x'
-#define BIT_TOGGLE(x, bit, toggle) ((x) &= (toggle * 1) << ((bit)-1))
+#define BIT_TOGGLE(x, bit, toggle) ((x) |= (toggle * 1) << ((bit)-1))
 // Set 'bit' from 'x'
 #define BIT_SET(x, bit) ((x) |= ((size_t)1 << ((bit)-1)))
 // Clear 'bit' from 'x'

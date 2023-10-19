@@ -141,6 +141,10 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_short("OP_GET_PROPERTY", chunk, OP_GET_PROPERTY, offset);
         case OP_GET_PROPERTYL:
             return Instruction_long("OP_GET_PROPERTYL", chunk, OP_GET_PROPERTYL, offset);
+        case OP_SET_DYNPROPERTY:
+            return Instruction_simple("OP_SET_DYNPROPERTY", offset);
+        case OP_GET_DYNPROPERTY:
+            return Instruction_simple("OP_GET_DYNPROPERTY", offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;

@@ -57,9 +57,7 @@ Token Scanner_scan(Scanner* scanner)
     }
 
 #ifdef THREADED_CODE
-    #define lbrack &&err
-    #define rbrack &&err
-    #define ERR    &&err
+    #define ERR &&err
     // IMPORTANT: update accordingly if TokenType enum changes!
     static const void* jump_table[UINT8_MAX + 1] = {
         // Must be the same order as in ASCII Table - https://www.asciitable.com
@@ -74,7 +72,7 @@ Token Scanner_scan(Scanner* scanner)
         ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
         ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
         ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      lbrack,      ERR,     rbrack,   ERR,       ERR,
+        ERR,      ERR,      ERR,      &&lbrack,    ERR,     &&rbrack, ERR,       ERR,
         ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
         ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
         ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
@@ -97,11 +95,13 @@ Token Scanner_scan(Scanner* scanner)
         ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
     };
     #undef ERR
-    #undef lbrack
-    #undef rbrack
 
     goto* jump_table[c];
 
+lbrack:
+    return Token_new(scanner, TOK_LBRACK);
+rbrack:
+    return Token_new(scanner, TOK_RBRACK);
 lparen:
     return Token_new(scanner, TOK_LPAREN);
 rparen:
@@ -147,6 +147,10 @@ err:
 
 #else
     switch(c) {
+        case '[':
+            return Token_new(scanner, TOK_LBRACK);
+        case ']':
+            return Token_new(scanner, TOK_RBRACK);
         case '(':
             return Token_new(scanner, TOK_LPAREN);
         case ')':
