@@ -276,6 +276,7 @@ SK_INTERNAL(force_inline bool) native_delfield(VM* vm, Value* argv)
         goto fin;
     }
     argv[-1] = OBJ_VAL(err);
+    return false;
 
 fin:;
     ObjInstance* instance = AS_INSTANCE(argv[0]);
