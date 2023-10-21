@@ -47,9 +47,8 @@ SK_INTERNAL(force_inline void) mark_table(VM* vm, HashTable* table)
 {
     for(UInt i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
-
         if(entry->key.type != VAL_EMPTY) {
-            mark_obj(vm, AS_OBJ(entry->key));
+            mark_value(vm, entry->key);
             mark_value(vm, entry->value);
         }
     }
@@ -61,14 +60,11 @@ SK_INTERNAL(force_inline void) mark_globals(VM* vm)
         Entry* entry = &vm->globids.entries[i];
 
         if(entry->key.type != VAL_EMPTY) {
-            // Mark identifier
+            // Mark identifier (ObjString)
             mark_obj(vm, AS_OBJ(entry->key));
             // Mark value
-            UInt    idx = (UInt)AS_NUMBER(entry->value);
-            Global* val = &vm->globvals[idx];
-            mark_value(vm, val->value);
-            // Mark global
-            GLOB_SET(val, GLOB_MARKED_BIT);
+            UInt idx = (UInt)AS_NUMBER(entry->value);
+            mark_value(vm, vm->globvals[idx].value);
         }
     }
 }
@@ -128,12 +124,20 @@ SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
         case OBJ_CLASS: {
             ObjClass* cclass = (ObjClass*)obj;
             mark_obj(vm, (Obj*)cclass->name);
+            mark_table(vm, &cclass->methods);
             break;
         }
         case OBJ_INSTANCE: {
             ObjInstance* instance = (ObjInstance*)obj;
             mark_obj(vm, (Obj*)instance->cclass);
             mark_table(vm, &instance->fields);
+            break;
+        }
+        case OBJ_BOUND_METHOD: {
+            ObjBoundMethod* bound_method = (ObjBoundMethod*)obj;
+            mark_obj(vm, (Obj*)bound_method);
+            mark_value(vm, bound_method->receiver);
+            mark_obj(vm, bound_method->method);
             break;
         }
         default:

@@ -145,6 +145,10 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_simple("OP_SET_DYNPROPERTY", offset);
         case OP_GET_DYNPROPERTY:
             return Instruction_simple("OP_GET_DYNPROPERTY", offset);
+        case OP_METHOD:
+            return Instruction_short("OP_METHOD", chunk, OP_METHOD, offset);
+        case OP_METHODL:
+            return Instruction_long("OP_METHODL", chunk, OP_METHODL, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -204,6 +208,7 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
         case OP_CLASS:
         case OP_SET_PROPERTY:
         case OP_GET_PROPERTY:
+        case OP_METHOD:
             disassemble_const(chunk, param);
             break;
         default:
@@ -227,6 +232,7 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
         case OP_CLASSL:
         case OP_SET_PROPERTYL:
         case OP_GET_PROPERTYL:
+        case OP_METHODL:
             disassemble_const(chunk, param);
             break;
         default:

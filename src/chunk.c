@@ -121,6 +121,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_CLASSL)
         CASE(OP_SET_PROPERTYL)
         CASE(OP_GET_PROPERTYL)
+        CASE(OP_METHODL)
         {
             Chunk_write_op(chunk, code, true, param, line);
             BREAK;
@@ -135,6 +136,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_CLASS)
         CASE(OP_SET_PROPERTY)
         CASE(OP_GET_PROPERTY)
+        CASE(OP_METHOD)
         {
             Chunk_write_op(chunk, code, false, param, line);
             BREAK;

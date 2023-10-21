@@ -952,8 +952,7 @@ parse_fn(VM* vm, PPC ppc, FunctionType type)
 
     PPC ppc_new = &C_new;
 
-    // No need to end this scope, the frame gets popped anyways.
-    C_scope_start(C_new());
+    C_scope_start(C_new()); // No need to end this scope (hint CallFrame)
     C_expect(C_new(), TOK_LPAREN, "Expect '(' after function name.");
 
     // Parse function arguments
@@ -998,9 +997,9 @@ SK_INTERNAL(void) parse_dec_fn(VM* vm, PPC ppc)
 {
     UInt idx = parse_varname(vm, ppc, "Expect function name.");
 
-    /* Initialize the variable that holds the function, in order to
-     * allow usage of the function inside of its body. */
     if(C()->depth > 0) {
+        /* Initialize the variable that holds the function, in order to
+         * allow usage of the function inside of its body. */
         C_initialize_local(C());
     }
 
@@ -1011,31 +1010,146 @@ SK_INTERNAL(void) parse_dec_fn(VM* vm, PPC ppc)
     }
 }
 
+SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
+{
+    for(UInt i = 0; i < C->upvalues->len; i++) {
+        Upvalue* upvalue = Array_Upvalue_index(C->upvalues, i);
+        if(upvalue->idx == idx && upvalue->local == local) {
+            // Return existing UpValue index
+            return i;
+        }
+    }
+
+    if(unlikely(C->upvalues->len == MIN(VM_STACK_MAX, UINT24_MAX))) {
+        C_error(
+            C,
+            "Too many closure variables (upvalues) in function <fn %s>. Limit [%u].",
+            MIN(VM_STACK_MAX, UINT24_MAX),
+            C->fn->name->storage);
+        return 0;
+    }
+
+    // Otherwise add the UpValue into the array
+    C->fn->upvalc++;
+    Upvalue upval = {idx, local};
+    return Array_Upvalue_push(C->upvalues, upval);
+}
+
+
+SK_INTERNAL(Int) C_get_upval(Compiler* C, Token* name)
+{
+    if(C->enclosing == NULL) {
+        return -1;
+    }
+
+    Int idx = C_get_local(C->enclosing, name);
+    if(idx != -1) {
+        // Local is captured by Upvalue
+        LOCAL_SET(&C->enclosing->locals[idx], VCAPTURED_BIT);
+        return C_add_upval(C, (UInt)idx, true);
+    }
+
+    idx = C_get_upval(C->enclosing, name);
+    if(idx != -1) {
+        return C_add_upval(C, (UInt)idx, false);
+    }
+
+    return -1;
+}
+
+
+SK_INTERNAL(force_inline void) named_variable(VM* vm, PPC ppc, Token name)
+{
+    OpCode  setop, getop;
+    Int     idx   = C_get_local(C(), &name);
+    int16_t flags = -1;
+
+    if(idx != -1) {
+        Local* var = &(C())->locals[idx];
+        flags      = LOCAL_FLAGS(var);
+        if(idx > SHORT_STACK_SIZE) {
+            setop = OP_SET_LOCALL;
+            getop = OP_GET_LOCALL;
+        } else {
+            setop = OP_SET_LOCAL;
+            getop = OP_GET_LOCAL;
+        }
+    } else if((idx = C_get_upval(C(), &name)) != -1) {
+        Upvalue* upval = Array_Upvalue_index(C()->upvalues, idx);
+        Local*   var   = &C()->locals[upval->idx];
+        flags          = LOCAL_FLAGS(var);
+        setop          = OP_SET_UPVALUE;
+        getop          = OP_GET_UPVALUE;
+    } else {
+        idx          = C_get_global(C(), vm);
+        Global* glob = &vm->globvals[idx];
+        flags        = GLOB_FLAGS(glob);
+        if(idx > SHORT_STACK_SIZE) {
+            setop = OP_SET_GLOBALL;
+            getop = OP_GET_GLOBALL;
+        } else {
+            setop = OP_SET_GLOBAL;
+            getop = OP_GET_GLOBAL;
+        }
+    }
+
+    if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
+        /* In case this is local variable statically check for mutability */
+        if(BIT_CHECK(flags, VFIXED_BIT)) {
+            C_error(
+                C(),
+                "Can't assign to variable '%.*s', it is declared as 'fixed'.",
+                (Int)name.len,
+                name.start);
+        }
+        parse_expr(vm, ppc);
+        C_emit_op(C(), setop, idx);
+    } else {
+        C_emit_op(C(), getop, idx);
+    }
+}
+
+SK_INTERNAL(void) parse_method(VM* vm, PPC ppc)
+{
+    C_expect(C(), TOK_IDENTIFIER, "Expect method name.");
+    Value        identifier = Token_into_stringval(vm, C(), &C()->parser->previous);
+    UInt         idx        = C_make_const(C(), vm, identifier);
+    FunctionType type       = FN_FUNCTION;
+
+    parse_fn(vm, ppc, type);
+    C_emit_op(C(), GET_OP_TYPE(idx, OP_METHOD), idx);
+}
+
+
 SK_INTERNAL(void) parse_dec_class(VM* vm, PPC ppc)
 {
     C_expect(C(), TOK_IDENTIFIER, "Expect class name.");
 
-    Value identifier = Token_into_stringval(vm, C(), &C()->parser->previous);
+    Token class_name = C()->parser->previous;
+    Value identifier = Token_into_stringval(vm, C(), &class_name); // GC
 
     // Idx for OP_CLASS instruction
-    UInt idx = C_make_const(C(), vm, identifier); // GC (in this fn)
+    UInt idx = C_make_const(C(), vm, identifier); // GC
 
     C_emit_op(C(), GET_OP_TYPE(idx, OP_CLASS), idx);
 
-    // Because classes are declarations (because they are named),
-    // we immediately define either a local or global variable.
     if(C()->depth > 0) {
         C_make_local(ppc);
         C_initialize_local(C());
     } else {
-        // Idx for OP_DEFINE_GLOBAL instrucation
+        // index for OP_DEFINE_GLOBAL instruction
         UInt gidx = C_make_global_identifier(C(), vm, identifier, C_var_flags(C()));
         C_emit_op(C(), GET_OP_TYPE(gidx, OP_DEFINE_GLOBAL), gidx);
     }
 
-
+    C_flag_clear(C(), ASSIGN_BIT);
+    named_variable(vm, ppc, class_name); // Push the class
     C_expect(C(), TOK_LBRACE, "Expect '{' before class body.");
+    while(!C_check(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
+        parse_method(vm, ppc);
+    }
     C_expect(C(), TOK_RBRACE, "Expect '}' after class body.");
+    C_emit_byte(C(), OP_POP); // Pop the class
 }
 
 SK_INTERNAL(void) parse_dec(VM* vm, PPC ppc)
@@ -1486,102 +1600,9 @@ parse_number(VM* vm, PPC ppc)
     C_emit_op(C, GET_OP_TYPE(idx, OP_CONST), idx);
 }
 
-SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
-{
-    for(UInt i = 0; i < C->upvalues->len; i++) {
-        Upvalue* upvalue = Array_Upvalue_index(C->upvalues, i);
-        if(upvalue->idx == idx && upvalue->local == local) {
-            // Return existing UpValue index
-            return i;
-        }
-    }
-
-    if(unlikely(C->upvalues->len == MIN(VM_STACK_MAX, UINT24_MAX))) {
-        C_error(
-            C,
-            "Too many closure variables (upvalues) in function <fn %s>. Limit [%u].",
-            MIN(VM_STACK_MAX, UINT24_MAX),
-            C->fn->name->storage);
-        return 0;
-    }
-
-    // Otherwise add the UpValue into the array
-    C->fn->upvalc++;
-    Upvalue upval = {idx, local};
-    return Array_Upvalue_push(C->upvalues, upval);
-}
-
-SK_INTERNAL(Int) C_get_upval(Compiler* C, Token* name)
-{
-    if(C->enclosing == NULL) {
-        return -1;
-    }
-
-    Int idx = C_get_local(C->enclosing, name);
-    if(idx != -1) {
-        // Local is captured by Upvalue
-        LOCAL_SET(&C->enclosing->locals[idx], VCAPTURED_BIT);
-        return C_add_upval(C, (UInt)idx, true);
-    }
-
-    idx = C_get_upval(C->enclosing, name);
-    if(idx != -1) {
-        return C_add_upval(C, (UInt)idx, false);
-    }
-
-    return -1;
-}
-
 SK_INTERNAL(force_inline void) parse_variable(VM* vm, PPC ppc)
 {
-    Token   name = C()->parser->previous;
-    OpCode  setop, getop;
-    Int     idx   = C_get_local(C(), &name);
-    int16_t flags = -1;
-
-    if(idx != -1) {
-        Local* var = &(C())->locals[idx];
-        flags      = LOCAL_FLAGS(var);
-        if(idx > SHORT_STACK_SIZE) {
-            setop = OP_SET_LOCALL;
-            getop = OP_GET_LOCALL;
-        } else {
-            setop = OP_SET_LOCAL;
-            getop = OP_GET_LOCAL;
-        }
-    } else if((idx = C_get_upval(C(), &name)) != -1) {
-        Upvalue* upval = Array_Upvalue_index(C()->upvalues, idx);
-        Local*   var   = &C()->locals[upval->idx];
-        flags          = LOCAL_FLAGS(var);
-        setop          = OP_SET_UPVALUE;
-        getop          = OP_GET_UPVALUE;
-    } else {
-        idx          = C_get_global(C(), vm);
-        Global* glob = &vm->globvals[idx];
-        flags        = GLOB_FLAGS(glob);
-        if(idx > SHORT_STACK_SIZE) {
-            setop = OP_SET_GLOBALL;
-            getop = OP_GET_GLOBALL;
-        } else {
-            setop = OP_SET_GLOBAL;
-            getop = OP_GET_GLOBAL;
-        }
-    }
-
-    if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
-        /* In case this is local variable statically check for mutability */
-        if(BIT_CHECK(flags, VFIXED_BIT)) {
-            C_error(
-                C(),
-                "Can't assign to variable '%.*s', it is declared as 'fixed'.",
-                (Int)name.len,
-                name.start);
-        }
-        parse_expr(vm, ppc);
-        C_emit_op(C(), setop, idx);
-    } else {
-        C_emit_op(C(), getop, idx);
-    }
+    named_variable(vm, ppc, C()->parser->previous);
 }
 
 SK_INTERNAL(force_inline void) parse_string(VM* vm, PPC ppc)
@@ -1780,9 +1801,11 @@ SK_INTERNAL(void) parse_dot(VM* vm, PPC ppc)
     }
 }
 
+
 SK_INTERNAL(void) parse_property_name(VM* vm, PPC ppc)
 {
     C_expect(C(), TOK_IDENTIFIER, "Expect field name after '['.");
+    Token field_name = C()->parser->previous;
 
     // Clear assign bit, because we just want to have
     // the instructions that fetches the variable value.
@@ -1791,7 +1814,7 @@ SK_INTERNAL(void) parse_property_name(VM* vm, PPC ppc)
     // constants array.
     bool assign = C_flag_is(C(), ASSIGN_BIT);
     C_flag_clear(C(), ASSIGN_BIT);
-    parse_variable(vm, ppc);
+    named_variable(vm, ppc, field_name);
     C_flag_toggle(C(), ASSIGN_BIT, assign);
     C_expect(C(), TOK_RBRACK, "Expect ']' after property name.");
 

@@ -198,6 +198,21 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     return string;
 }
 
+SK_INTERNAL(force_inline ObjBoundMethod*)
+VM_bind_method(VM* vm, ObjInstance* instance, Value name)
+{
+    Value method;
+    if(unlikely(!HashTable_get(&instance->cclass->methods, name, &method))) {
+        VM_error(vm, "Undefined property '%s'.", AS_CSTRING(name));
+        return NULL;
+    }
+
+    ObjBoundMethod* bound_method =
+        ObjBoundMethod_new(vm, NULL, OBJ_VAL(instance), AS_OBJ(method)); // GC
+
+    return bound_method;
+}
+
 SK_INTERNAL(force_inline void)
 VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
 {
@@ -222,14 +237,25 @@ SK_INTERNAL(force_inline bool) native_clock(VM* vm, Value* argv)
 {
     clock_t time = clock();
 
-    if(unlikely(time < 0)) {
-        argv[-1] = OBJ_VAL(ERR_NEW(vm, CLOCK_ERR));
-        return false;
+    if(likely(time != -1)) {
+        argv[-1] = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
+        return true;
     }
 
-    argv[-1] = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
-    return true;
+    argv[-1] = OBJ_VAL(ERR_NEW(vm, CLOCK_ERR));
+    return false;
 }
+
+#define NATIVE_FIELD_ERR(argv, name)                                                     \
+    do {                                                                                 \
+        ObjString* err = NULL;                                                           \
+        if(unlikely(!IS_INSTANCE(argv[0]))) {                                            \
+            err = ERR_NEW(vm, name##_INSTANCE_ERR);                                      \
+        } else if(unlikely(!IS_STRING(argv[1]))) {                                       \
+            err = ERR_NEW(vm, name##_FIELD_ERR);                                         \
+        }                                                                                \
+        argv[-1] = OBJ_VAL(err);                                                         \
+    } while(false)
 
 /**
  * Checks if ObjInstance contains field.
@@ -239,23 +265,15 @@ SK_INTERNAL(force_inline bool) native_clock(VM* vm, Value* argv)
  **/
 SK_INTERNAL(force_inline bool) native_isfield(VM* vm, Value* argv)
 {
-    ObjString* err = NULL;
-
-    if(unlikely(!IS_INSTANCE(argv[0]))) {
-        err = ERR_NEW(vm, ISFIELD_INSTANCE_ERR);
-    } else if(unlikely(!IS_STRING(argv[1]))) {
-        err = ERR_NEW(vm, ISFIELD_FIELD_ERR);
-    } else {
-        goto fin;
+    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
+        ObjInstance* instance = AS_INSTANCE(argv[0]);
+        Value        _dummy;
+        argv[-1] = BOOL_VAL(HashTable_get(&instance->fields, argv[1], &_dummy));
+        return true;
     }
-    argv[-1] = OBJ_VAL(err);
-    return false;
 
-fin:;
-    ObjInstance* instance = AS_INSTANCE(argv[0]);
-    Value        _dummy;
-    argv[-1] = BOOL_VAL(HashTable_get(&instance->fields, argv[1], &_dummy));
-    return true;
+    NATIVE_FIELD_ERR(argv, ISFIELD);
+    return false;
 }
 
 /**
@@ -266,22 +284,33 @@ fin:;
  **/
 SK_INTERNAL(force_inline bool) native_delfield(VM* vm, Value* argv)
 {
-    ObjString* err = NULL;
-
-    if(unlikely(!IS_INSTANCE(argv[0]))) {
-        err = ERR_NEW(vm, DELFIELD_INSTANCE_ERR);
-    } else if(unlikely(!IS_STRING(argv[1]))) {
-        err = ERR_NEW(vm, DELFIELD_FIELD_ERR);
-    } else {
-        goto fin;
+    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
+        ObjInstance* instance = AS_INSTANCE(argv[0]);
+        argv[-1]              = BOOL_VAL(HashTable_remove(&instance->fields, argv[1]));
+        return true;
     }
-    argv[-1] = OBJ_VAL(err);
-    return false;
 
-fin:;
-    ObjInstance* instance = AS_INSTANCE(argv[0]);
-    argv[-1]              = BOOL_VAL(HashTable_remove(&instance->fields, argv[1]));
-    return true;
+    NATIVE_FIELD_ERR(argv, DELFIELD);
+    return false;
+}
+
+/**
+ * Creates or sets the value the field of ObjInstance.
+ * @ret - bool, true if field was created otherwise false (field value changed)
+ * @err - if first argument is not ObjInstance
+ *      - if second argument is not ObjString
+ **/
+SK_INTERNAL(force_inline bool) native_setfield(VM* vm, Value* argv)
+{
+    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
+        ObjInstance* instance = AS_INSTANCE(argv[0]);
+        argv[-1] =
+            BOOL_VAL(HashTable_insert(vm, NULL, &instance->fields, argv[1], argv[2]));
+        return true;
+    }
+
+    NATIVE_FIELD_ERR(argv, SETFIELD);
+    return false;
 }
 
 
@@ -313,6 +342,7 @@ void VM_init(VM* vm)
     VM_define_native(vm, "clock", native_clock, 0);       // GC
     VM_define_native(vm, "isfield", native_isfield, 2);   // GC
     VM_define_native(vm, "delfield", native_delfield, 2); // GC
+    VM_define_native(vm, "setfield", native_setfield, 3); // GC
 }
 
 SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, UInt argc)
@@ -365,14 +395,23 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, Int argc)
 {
     if(IS_OBJ(fnval)) {
         switch(OBJ_TYPE(fnval)) {
-            case OBJ_CLASS:
-                return VM_call_instance(vm, AS_CLASS(fnval), argc);
+            case OBJ_BOUND_METHOD: {
+                ObjBoundMethod* bound = AS_BOUND_METHOD(fnval);
+                if(Obj_type(bound->method) == OBJ_CLOSURE) {
+                    ObjClosure* closure = (ObjClosure*)bound->method;
+                    return VM_call_fn(vm, closure, closure->fn, argc);
+                } else {
+                    return VM_call_fn(vm, NULL, (ObjFunction*)bound->method, argc);
+                }
+            }
             case OBJ_FUNCTION:
                 return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc);
             case OBJ_CLOSURE: {
                 ObjClosure* closure = AS_CLOSURE(fnval);
                 return VM_call_fn(vm, closure, closure->fn, argc);
             }
+            case OBJ_CLASS:
+                return VM_call_instance(vm, AS_CLASS(fnval), argc);
             case OBJ_NATIVE:
                 return VM_call_native(vm, AS_NATIVE(fnval), argc);
             default:
@@ -877,12 +916,17 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjInstance* instance = AS_INSTANCE(stack_peek(0));
                 Value        name     = OBJ_VAL(READ_STRING());
                 Value        value;
-                if(!HashTable_get(&instance->fields, name, &value)) {
-                    // Create a property if its missing and initialize it to 'nil'
-                    HashTable_insert(vm, NULL, &instance->fields, name, value = NIL_VAL);
+                if(HashTable_get(&instance->fields, name, &value)) {
+                    VM_pop(vm);
+                    VM_push(vm, value);
+                    BREAK;
                 }
-                VM_pop(vm);
-                VM_push(vm, value);
+                ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
+                if(unlikely(bound == NULL)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                VM_pop(vm);                  // pop instance
+                VM_push(vm, OBJ_VAL(bound)); // Push bound method
                 BREAK;
             }
             CASE(OP_GET_PROPERTYL)
@@ -894,12 +938,17 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjInstance* instance = AS_INSTANCE(stack_peek(0));
                 Value        name     = OBJ_VAL(READ_STRINGL());
                 Value        value;
-                if(!HashTable_get(&instance->fields, name, &value)) {
-                    // Create a property if its missing and initialize it to 'nil'
-                    HashTable_insert(vm, NULL, &instance->fields, name, value = NIL_VAL);
+                if(HashTable_get(&instance->fields, name, &value)) {
+                    VM_pop(vm);
+                    VM_push(vm, value);
+                    BREAK;
                 }
-                VM_pop(vm);
-                VM_push(vm, value);
+                ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
+                if(unlikely(bound == NULL)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                VM_pop(vm);                  // pop instance
+                VM_push(vm, OBJ_VAL(bound)); // Push bound method
                 BREAK;
             }
             CASE(OP_SET_DYNPROPERTY)
@@ -929,11 +978,43 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjInstance* instance = AS_INSTANCE(stack_peek(1));
                 Value        name     = stack_peek(0);
                 Value        value;
-                if(!HashTable_get(&instance->fields, name, &value)) {
-                    HashTable_insert(vm, NULL, &instance->fields, name, value = NIL_VAL);
+                if(HashTable_get(&instance->fields, name, &value)) {
+                    VM_popn(vm, 2);
+                    VM_push(vm, value);
+                    BREAK;
+                }
+                ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
+                if(unlikely(bound == NULL)) {
+                    return INTERPRET_RUNTIME_ERROR;
                 }
                 VM_popn(vm, 2);
-                VM_push(vm, value);
+                VM_push(vm, OBJ_VAL(bound));
+                BREAK;
+            }
+            CASE(OP_METHOD)
+            {
+                Value     method = stack_peek(0); // Function or closure
+                ObjClass* cclass = AS_CLASS(stack_peek(1));
+                HashTable_insert(
+                    vm,
+                    NULL,
+                    &cclass->methods,
+                    OBJ_VAL(READ_STRING()),
+                    method); // GC
+                VM_pop(vm);  // pop the method (function/closure)
+                BREAK;
+            }
+            CASE(OP_METHODL)
+            {
+                Value     method = stack_peek(0); // Function or closure
+                ObjClass* cclass = AS_CLASS(stack_peek(1));
+                HashTable_insert(
+                    vm,
+                    NULL,
+                    &cclass->methods,
+                    OBJ_VAL(READ_STRINGL()),
+                    method); // GC
+                VM_pop(vm);  // pop the method (function/closure)
                 BREAK;
             }
             CASE(OP_RET)

@@ -1,4 +1,5 @@
 #include "array.h"
+#include "mem.h"
 #include "object.h"
 #include "skconf.h"
 #include "value.h"
@@ -13,15 +14,6 @@
 
 #define ALLOC_STRING(vm, c, len)                                                         \
     ((ObjString*)Obj_new(vm, c, sizeof(ObjString) + (len) + 1, OBJ_STRING))
-
-SK_INTERNAL(force_inline void)
-ObjClosure_free(VM* vm, Compiler* C, ObjClosure* objclosure);
-SK_INTERNAL(force_inline void) ObjString_free(VM* vm, Compiler* C, ObjString* objstr);
-SK_INTERNAL(force_inline void) ObjFunction_free(VM* vm, Compiler* C, ObjFunction* objfn);
-SK_INTERNAL(force_inline void) ObjNative_free(VM* vm, Compiler* C, ObjNative* native);
-SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, Compiler* C, ObjUpvalue* upval);
-SK_INTERNAL(force_inline void) ObjClass_free(VM* vm, Compiler* C, ObjClass* cclass);
-SK_INTERNAL(force_inline void) ObjInstance_free(VM* vm, Compiler* C, ObjInstance* object);
 
 SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, Compiler* C, size_t size, ObjType type)
 {
@@ -50,119 +42,6 @@ SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, Compiler* C, size_t size, ObjType
 #endif
 
     return object;
-}
-
-SK_INTERNAL(force_inline void) print_fn(ObjFunction* fn)
-{
-    if(fn->name == NULL) {
-        printf("<script>");
-    } else {
-        printf("<fn %s>", fn->name->storage);
-    }
-}
-
-void ObjType_print(ObjType type) // Debug
-{
-    switch(type) {
-        case OBJ_STRING:
-            printf("OBJ_STRING");
-            break;
-        case OBJ_FUNCTION:
-            printf("OBJ_FUNCTION");
-            break;
-        case OBJ_CLOSURE:
-            printf("OBJ_CLOSURE");
-            break;
-        case OBJ_NATIVE:
-            printf("OBJ_NATIVE");
-            break;
-        case OBJ_UPVAL:
-            printf("OBJ_UPVAL");
-            break;
-        case OBJ_CLASS:
-            printf("OBJ_CLASS");
-            break;
-        case OBJ_INSTANCE:
-            printf("OBJ_INSTANCE");
-            break;
-        default:
-            unreachable;
-    }
-}
-
-void Object_print(Value value)
-{
-    switch(OBJ_TYPE(value)) {
-        case OBJ_STRING:
-            printf("%s", AS_CSTRING(value));
-            break;
-        case OBJ_FUNCTION:
-            print_fn(AS_FUNCTION(value));
-            break;
-        case OBJ_CLOSURE:
-            print_fn(AS_CLOSURE(value)->fn);
-            break;
-        case OBJ_NATIVE:
-            printf("<native fn>");
-            break;
-        case OBJ_UPVAL:
-            printf("upvalue");
-            break;
-        case OBJ_CLASS:
-            printf("%s class", AS_CLASS(value)->name->storage);
-            break;
-        case OBJ_INSTANCE:
-            printf("%s instance", AS_INSTANCE(value)->cclass->name->storage);
-            break;
-        default:
-            unreachable;
-    }
-}
-
-void Obj_free(VM* vm, Compiler* C, Obj* object)
-{
-#ifdef DEBUG_LOG_GC
-    printf("%p free type ", (void*)object);
-    ObjType_print(Obj_type(object));
-    printf("\n");
-#endif
-    switch(Obj_type(object)) {
-        case OBJ_STRING:
-            ObjString_free(vm, C, (ObjString*)object);
-            break;
-        case OBJ_FUNCTION:
-            ObjFunction_free(vm, C, (ObjFunction*)object);
-            break;
-        case OBJ_CLOSURE:
-            ObjClosure_free(vm, C, (ObjClosure*)object);
-            break;
-        case OBJ_NATIVE:
-            ObjNative_free(vm, C, (ObjNative*)object);
-            break;
-        case OBJ_UPVAL:
-            ObjUpvalue_free(vm, C, (ObjUpvalue*)object);
-            break;
-        case OBJ_CLASS:
-            ObjClass_free(vm, C, (ObjClass*)object);
-            break;
-        case OBJ_INSTANCE:
-            ObjInstance_free(vm, C, (ObjInstance*)object);
-            break;
-        default:
-            unreachable;
-    }
-}
-
-Hash Obj_hash(Value value)
-{
-    switch(OBJ_TYPE(value)) {
-        case OBJ_STRING:
-            return AS_STRING(value)->hash;
-        case OBJ_FUNCTION:
-            return AS_FUNCTION(value)->name->hash;
-        default:
-            unreachable;
-    }
 }
 
 SK_INTERNAL(force_inline ObjString*) ObjString_alloc(VM* vm, Compiler* C, UInt len)
@@ -266,11 +145,13 @@ ObjClass* ObjClass_new(VM* vm, Compiler* C, ObjString* name)
 {
     ObjClass* cclass = ALLOC_OBJ(vm, C, ObjClass, OBJ_CLASS);
     cclass->name     = name;
+    HashTable_init(&cclass->methods);
     return cclass;
 }
 
 SK_INTERNAL(force_inline void) ObjClass_free(VM* vm, Compiler* C, ObjClass* cclass)
 {
+    HashTable_free(vm, C, &cclass->methods);
     GC_FREE(vm, C, cclass, sizeof(ObjClass));
 }
 
@@ -288,4 +169,147 @@ ObjInstance_free(VM* vm, Compiler* C, ObjInstance* instance)
 {
     HashTable_free(vm, C, &instance->fields);
     GC_FREE(vm, C, instance, sizeof(ObjInstance));
+}
+
+ObjBoundMethod* ObjBoundMethod_new(VM* vm, Compiler* C, Value receiver, Obj* method)
+{
+    ObjBoundMethod* bound_method = ALLOC_OBJ(vm, C, ObjBoundMethod, OBJ_BOUND_METHOD);
+    bound_method->receiver       = receiver;
+    bound_method->method         = method;
+    return bound_method;
+}
+
+SK_INTERNAL(force_inline void) print_fn(ObjFunction* fn)
+{
+    if(fn->name == NULL) {
+        printf("<script>");
+    } else {
+        printf("<fn %s>", fn->name->storage);
+    }
+}
+
+void ObjType_print(ObjType type) // Debug
+{
+    switch(type) {
+        case OBJ_STRING:
+            printf("OBJ_STRING");
+            break;
+        case OBJ_FUNCTION:
+            printf("OBJ_FUNCTION");
+            break;
+        case OBJ_CLOSURE:
+            printf("OBJ_CLOSURE");
+            break;
+        case OBJ_NATIVE:
+            printf("OBJ_NATIVE");
+            break;
+        case OBJ_UPVAL:
+            printf("OBJ_UPVAL");
+            break;
+        case OBJ_CLASS:
+            printf("OBJ_CLASS");
+            break;
+        case OBJ_INSTANCE:
+            printf("OBJ_INSTANCE");
+            break;
+        case OBJ_BOUND_METHOD:
+            printf("OBJ_BOUND_METHOD");
+            break;
+        default:
+            unreachable;
+    }
+}
+
+void Object_print(Value value)
+{
+    switch(OBJ_TYPE(value)) {
+        case OBJ_STRING:
+            printf("%s", AS_CSTRING(value));
+            break;
+        case OBJ_FUNCTION:
+            print_fn(AS_FUNCTION(value));
+            break;
+        case OBJ_CLOSURE:
+            print_fn(AS_CLOSURE(value)->fn);
+            break;
+        case OBJ_NATIVE:
+            printf("<native fn>");
+            break;
+        case OBJ_UPVAL:
+            printf("upvalue");
+            break;
+        case OBJ_CLASS:
+            printf("%s class", AS_CLASS(value)->name->storage);
+            break;
+        case OBJ_INSTANCE:
+            printf("%s instance", AS_INSTANCE(value)->cclass->name->storage);
+            break;
+        case OBJ_BOUND_METHOD: {
+            ObjBoundMethod* bound_method = AS_BOUND_METHOD(value);
+            if(Obj_type(bound_method->method) == OBJ_CLOSURE) {
+                print_fn(((ObjClosure*)bound_method->method)->fn);
+            } else {
+                print_fn(((ObjFunction*)bound_method->method));
+            }
+            break;
+        }
+        default:
+            unreachable;
+    }
+}
+
+Hash Obj_hash(Value value)
+{
+    switch(OBJ_TYPE(value)) {
+        case OBJ_STRING:
+            return AS_STRING(value)->hash;
+        case OBJ_FUNCTION:
+            return AS_FUNCTION(value)->name->hash;
+        default:
+            unreachable;
+    }
+}
+
+
+SK_INTERNAL(force_inline void)
+ObjBoundMethod_free(VM* vm, Compiler* C, ObjBoundMethod* bound_method)
+{
+    GC_FREE(vm, C, bound_method, sizeof(ObjBoundMethod));
+}
+
+void Obj_free(VM* vm, Compiler* C, Obj* object)
+{
+#ifdef DEBUG_LOG_GC
+    printf("%p free type ", (void*)object);
+    ObjType_print(Obj_type(object));
+    printf("\n");
+#endif
+    switch(Obj_type(object)) {
+        case OBJ_STRING:
+            ObjString_free(vm, C, (ObjString*)object);
+            break;
+        case OBJ_FUNCTION:
+            ObjFunction_free(vm, C, (ObjFunction*)object);
+            break;
+        case OBJ_CLOSURE:
+            ObjClosure_free(vm, C, (ObjClosure*)object);
+            break;
+        case OBJ_NATIVE:
+            ObjNative_free(vm, C, (ObjNative*)object);
+            break;
+        case OBJ_UPVAL:
+            ObjUpvalue_free(vm, C, (ObjUpvalue*)object);
+            break;
+        case OBJ_CLASS:
+            ObjClass_free(vm, C, (ObjClass*)object);
+            break;
+        case OBJ_INSTANCE:
+            ObjInstance_free(vm, C, (ObjInstance*)object);
+            break;
+        case OBJ_BOUND_METHOD:
+            ObjBoundMethod_free(vm, C, (ObjBoundMethod*)object);
+            break;
+        default:
+            unreachable;
+    }
 }

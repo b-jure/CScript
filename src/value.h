@@ -33,13 +33,14 @@
 #define IS_DECLARED(value) ((value).type == VAL_DECLARED)
 #define DECLARED_VAL       ((Value){.type = VAL_DECLARED, {0}})
 
-typedef struct Obj         Obj;
-typedef struct ObjString   ObjString;
-typedef struct ObjFunction ObjFunction;
-typedef struct ObjClosure  ObjClosure;
-typedef struct ObjUpvalue  ObjUpvalue;
-typedef struct ObjClass    ObjClass;
-typedef struct ObjInstance ObjInstance;
+typedef struct Obj            Obj;
+typedef struct ObjString      ObjString;
+typedef struct ObjFunction    ObjFunction;
+typedef struct ObjClosure     ObjClosure;
+typedef struct ObjUpvalue     ObjUpvalue;
+typedef struct ObjClass       ObjClass;
+typedef struct ObjInstance    ObjInstance;
+typedef struct ObjBoundMethod ObjBoundMethod;
 
 typedef enum {
     VAL_BOOL = 0,

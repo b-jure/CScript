@@ -73,6 +73,8 @@ typedef enum {
     OP_GET_PROPERTYL,        /* Get class instance property long */
     OP_SET_DYNPROPERTY,      /* Set class instance property created at runtime */
     OP_GET_DYNPROPERTY,      /* Get class instance property created at runtime */
+    OP_METHOD,               /* Get class method name */
+    OP_METHODL,              /* Get class method name long */
     OP_RET,                  /* Return from function, pop the CallFrame */
 } OpCode;
 

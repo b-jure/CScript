@@ -24,7 +24,6 @@ typedef struct {
 } CallFrame;
 
 #define GLOB_FIXED_BIT  (1)
-#define GLOB_MARKED_BIT (2)
 
 #define GLOB_SET(glob, bit)   BIT_SET((glob)->flags, bit)
 #define GLOB_CLEAR(glob, bit) BIT_CLEAR((glob)->flags, bit)

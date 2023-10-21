@@ -31,14 +31,18 @@
 #define IS_INSTANCE(value) is_object_type(value, OBJ_INSTANCE)
 #define AS_INSTANCE(value) ((ObjInstance*)AS_OBJ(value))
 
+#define IS_BOUND_METHOD(value) is_object_type(value, OBJ_BOUND_METHOD)
+#define AS_BOUND_METHOD(value) ((ObjBoundMethod*)AS_OBJ(value))
+
 typedef enum {
-    OBJ_STRING,
+    OBJ_STRING = 0,
     OBJ_FUNCTION,
     OBJ_CLOSURE,
     OBJ_NATIVE,
     OBJ_UPVAL,
     OBJ_CLASS,
     OBJ_INSTANCE,
+    OBJ_BOUND_METHOD,
 } ObjType;
 
 /*
@@ -122,12 +126,19 @@ struct ObjClosure { // typedef is inside 'value.h'
 struct ObjClass { // typedef is inside 'value.h'
     Obj        obj;
     ObjString* name;
+    HashTable  methods;
 };
 
 struct ObjInstance { // typedef is inside 'value.h'
     Obj       obj;
     ObjClass* cclass;
     HashTable fields;
+};
+
+struct ObjBoundMethod {
+    Obj   obj;
+    Value receiver; // ObjInstance
+    Obj*  method;   // ObjClosure of ObjFunction
 };
 
 typedef bool (*NativeFn)(VM* vm, Value* argv);
@@ -138,6 +149,8 @@ typedef struct {
     Int      arity;
 } ObjNative;
 
+ObjBoundMethod*
+             ObjBoundMethod_new(VM* vm, Compiler* C, Value receiver, Obj* method);
 ObjInstance* ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass);
 ObjClass*    ObjClass_new(VM* vm, Compiler* C, ObjString* name);
 void         ObjType_print(ObjType type); // Debug

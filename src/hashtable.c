@@ -6,7 +6,7 @@
 
 #define PRIME_TABLE_LEN sizeof(prime_table) / sizeof(prime_table[0])
 
-#define TABLE_MAX_LOAD 0.50
+#define TABLE_MAX_LOAD 0.45
 
 #define TABLE_MAX_SIZE prime_table[PRIME_TABLE_LEN - 1]
 
@@ -21,14 +21,9 @@
 
 /* List of possible table sizes up to the 2^31 - 1, they are all
  * prime numbers, that is because using open addressing with quadratic probing and
- * having a table size be a prime number guarantees we will visit at least half of the
- * buckets in the table before needing to expand the table array to prevent cycles.
- * However we still track the starting index when finding the entry, because this
- * implementation does not count 'tombstones' as entries, which can cause a cycle.
- * Rationale behind this is that xxhash is pretty good and cycle will
- * almost never happen in tables of larger size (totally not tested/benchmarked
- * just pure copium)
- * @TODO: maybe increase memory usage by counting tombstones in favor of faster lookup. */
+ * having a table size be a prime number guarantees there will be no cycle if
+ * the load factor (table len / table cap) of the table is equal or less than 0.5 (50%).
+ */
 static const UInt prime_table[] = {
     13,       31,       61,        127,       251,       509,        1021,
     2039,     4093,     8191,      16381,     32749,     65521,      131071,
@@ -65,13 +60,12 @@ SK_INTERNAL(force_inline size_t) get_prime_capacity(uint8_t old_prime)
 
 SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt len, Value key)
 {
-    UInt   i           = 0;
-    Hash   hash        = Value_hash(key);
-    UInt   index       = hash % len;
-    UInt   start_index = index;
-    Entry* tombstone   = NULL;
+    UInt   i         = 0;
+    Hash   hash      = Value_hash(key);
+    UInt   index     = hash % len;
+    Entry* tombstone = NULL;
 
-    do {
+    while(true) {
         Entry* entry = &entries[index];
 
         if(IS_EMPTY(entry->key)) {
@@ -86,10 +80,7 @@ SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt len, Value key)
 
         ++i;
         index = QUADRATIC_PROBE(hash, i, len);
-    } while(likely(start_index != index));
-
-    /* We did a cycle so we have a tombstone */
-    return tombstone;
+    };
 }
 
 /* Rehash all the keys from the table 'from' into the table 'to' */
@@ -150,7 +141,10 @@ bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value va
     bool   new_key = IS_EMPTY(entry->key);
 
     if(new_key) {
-        table->left--;
+        if(!IS_TOMBSTONE(entry)) {
+            // Only decrement if this entry was never inserted into
+            table->left--;
+        }
         table->len++;
     }
 
@@ -170,8 +164,9 @@ bool HashTable_remove(HashTable* table, Value key)
     entry->key = EMPTY_VAL;
     PLACE_TOMBSTONE(entry);
 
+    // Don't increment table->left, we
+    // count tombstones as entries
     table->len--;
-    table->left++;
     return true;
 }
 
@@ -182,11 +177,10 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
         return NULL;
     }
 
-    UInt i           = 0;
-    UInt index       = hash % table->cap;
-    UInt start_index = index;
+    UInt i     = 0;
+    UInt index = hash % table->cap;
 
-    do {
+    while(true) {
         Entry* entry = &table->entries[index];
 
         if(IS_EMPTY(entry->key)) {
@@ -205,9 +199,7 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
 
         ++i;
         index = QUADRATIC_PROBE(hash, i, table->cap);
-    } while(likely(start_index != index));
-
-    return NULL;
+    };
 }
 
 bool HashTable_get(HashTable* table, Value key, Value* out)

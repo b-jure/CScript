@@ -18,4 +18,7 @@
 #define DELFIELD_INSTANCE_ERR INSTANCE_ERR("delfield")
 #define DELFIELD_FIELD_ERR    FIELD_ERR("delfield")
 
+#define SETFIELD_INSTANCE_ERR INSTANCE_ERR("setfield")
+#define SETFIELD_FIELD_ERR FIELD_ERR("setfield")
+
 #endif
