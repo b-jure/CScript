@@ -13,7 +13,8 @@ static void  repl(VM* vm);
 static void  File_run(VM* vm, const char* path);
 static char* File_read(const char* path);
 
-static void repl(VM* vm)
+// @FIX: fix repl
+unused static void repl(VM* vm)
 {
     char line[MAXLINE];
 
@@ -93,12 +94,14 @@ static char* File_read(const char* path)
 
 int main(int argc, const char* argv[])
 {
-    runtime  = 0;
-    VM*   vm = MALLOC(sizeof(VM));
+    runtime = 0;
+    VM* vm  = MALLOC(sizeof(VM));
     VM_init(vm);
 
     if(argc == 1) {
-        repl(vm);
+        fprintf(stderr, "REPL not functional.\n");
+        return 1;
+        // repl(vm);
     } else if(argc == 2) {
         File_run(vm, argv[1]);
     } else {

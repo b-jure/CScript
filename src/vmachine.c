@@ -1,4 +1,5 @@
 #include "array.h"
+#include "chunk.h"
 #include "common.h"
 #include "compiler.h"
 #include "err.h"
@@ -22,30 +23,10 @@
 #define stack_reset(vm) (vm)->sp = (vm)->stack
 #define stack_size(vm)  ((vm)->sp - (vm)->stack)
 
+#define OBJSTR(vm, obj) Obj_to_str(vm, NULL, (Obj*)obj)
+#define VALSTR(vm, val) Value_to_str(vm, NULL, val)
+
 Int runtime = 0;
-
-void VM_push(VM* vm, Value val)
-{
-    if(likely(vm->sp - vm->stack < VM_STACK_MAX)) {
-        *vm->sp++ = val;
-    } else {
-        fprintf(
-            stderr,
-            "Internal error: vm stack overflow, stack size limit reached [%d].\n",
-            VM_STACK_MAX);
-        exit(EXIT_FAILURE);
-    }
-}
-
-Value VM_pop(VM* vm)
-{
-    return *--vm->sp;
-}
-
-SK_INTERNAL(force_inline void) VM_popn(VM* vm, UInt n)
-{
-    vm->sp -= n;
-}
 
 void VM_error(VM* vm, const char* errfmt, ...)
 {
@@ -70,6 +51,27 @@ void VM_error(VM* vm, const char* errfmt, ...)
     }
 
     stack_reset(vm);
+}
+
+
+void VM_push(VM* vm, Value val)
+{
+    if(likely(vm->sp - vm->stack < VM_STACK_MAX)) {
+        *vm->sp++ = val;
+    } else {
+        RUNTIME_INTERNAL_STACK_OVERFLOW_ERR(vm, VM_STACK_MAX);
+        exit(EXIT_FAILURE);
+    }
+}
+
+Value VM_pop(VM* vm)
+{
+    return *--vm->sp;
+}
+
+SK_INTERNAL(force_inline void) VM_popn(VM* vm, UInt n)
+{
+    vm->sp -= n;
 }
 
 SK_INTERNAL(force_inline bool) isfalsey(Value value)
@@ -203,7 +205,7 @@ VM_bind_method(VM* vm, ObjInstance* instance, Value name)
 {
     Value method;
     if(unlikely(!HashTable_get(&instance->cclass->methods, name, &method))) {
-        VM_error(vm, "Undefined property '%s'.", AS_CSTRING(name));
+        RUNTIME_INSTANCE_PROPERTY_ERR(vm, OBJSTR(vm, instance), AS_CSTRING(name));
         return NULL;
     }
 
@@ -217,7 +219,9 @@ SK_INTERNAL(force_inline void)
 VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
 {
     VM_push(vm, OBJ_VAL(ObjString_from(vm, NULL, name, strlen(name))));
-    VM_push(vm, OBJ_VAL(ObjNative_new(vm, NULL, native, arity)));
+    VM_push(
+        vm,
+        OBJ_VAL(ObjNative_new(vm, NULL, AS_STRING(stack_peek(0)), native, arity)));
 
     UInt idx = GARRAY_PUSH(vm, NULL, ((Global){vm->stack[1], false}));               // GC
     HashTable_insert(vm, NULL, &vm->globids, vm->stack[0], NUMBER_VAL((double)idx)); // GC
@@ -313,6 +317,17 @@ SK_INTERNAL(force_inline bool) native_setfield(VM* vm, Value* argv)
     return false;
 }
 
+/**
+ * Prints a string and a newline.
+ **/
+SK_INTERNAL(force_inline bool) native_printl(unused VM* _, Value* argv)
+{
+    Value_print(argv[0]);
+    printf("\n");
+    argv[-1] = BOOL_VAL(true);
+    return true;
+}
+
 
 /*
  *
@@ -338,26 +353,39 @@ void VM_init(VM* vm)
 
     Array_ObjRef_init(&vm->gray_stack); // Gray stack (NO GC)
 
+    // Class initializer string
+    vm->initstr = NULL; // GC stuff
+    vm->initstr = ObjString_from(vm, NULL, "__init__", sizeof("__init__") - 1);
+
     // Native function definitions
     VM_define_native(vm, "clock", native_clock, 0);       // GC
     VM_define_native(vm, "isfield", native_isfield, 2);   // GC
     VM_define_native(vm, "delfield", native_delfield, 2); // GC
     VM_define_native(vm, "setfield", native_setfield, 3); // GC
+    VM_define_native(vm, "printl", native_printl, 1);     // GC
 }
 
-SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, UInt argc)
+#define CALL_FN_OR_CLOSURE(vm, obj, argc)                                                \
+    ({                                                                                   \
+        bool ret;                                                                        \
+        if(Obj_type(obj) == OBJ_CLOSURE) {                                               \
+            ObjClosure* closure = (ObjClosure*)(obj);                                    \
+            ret                 = VM_call_fn(vm, closure, closure->fn, argc);            \
+        } else {                                                                         \
+            ret = VM_call_fn(vm, NULL, (ObjFunction*)(obj), argc);                       \
+        }                                                                                \
+        ret;                                                                             \
+    })
+
+SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, Int argc)
 {
-    if(fn->arity != argc) {
-        VM_error(vm, "Expected %u arguments, but got %u instead.", fn->arity, argc);
+    if(unlikely((Int)fn->arity != argc)) {
+        RUNTIME_ARGC_ERR(vm, OBJSTR(vm, fn), fn->arity, argc);
         return false;
     }
 
-    if(vm->fc == VM_FRAMES_MAX) {
-        VM_error(
-            vm,
-            "Internal error: vm stack overflow, recursion depth limit reached [%u].\n",
-            VM_FRAMES_MAX);
-        return false;
+    if(unlikely(vm->fc == VM_FRAMES_MAX)) {
+        RUNTIME_INTERNAL_FRAME_LIMIT_ERR(vm, VM_FRAMES_MAX);
     }
 
     CallFrame* frame = &vm->frames[vm->fc++];
@@ -372,11 +400,11 @@ SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, UInt 
 SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, Int argc)
 {
     if(unlikely(native->arity != argc)) {
-        VM_error(vm, "Expected %d arguments, but got %d instead.", native->arity, argc);
+        RUNTIME_ARGC_ERR(vm, OBJSTR(vm, native), native->arity, argc);
         return false;
     }
 
-    if(native->fn(vm, vm->sp - argc)) {
+    if(likely(native->fn(vm, vm->sp - argc))) {
         vm->sp -= argc;
         return true;
     } else {
@@ -388,6 +416,13 @@ SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, Int arg
 SK_INTERNAL(force_inline bool) VM_call_instance(VM* vm, ObjClass* cclass, Int argc)
 {
     vm->sp[-argc - 1] = OBJ_VAL(ObjInstance_new(vm, NULL, cclass));
+    Value init;
+    if(HashTable_get(&cclass->methods, OBJ_VAL(vm->initstr), &init)) {
+        return CALL_FN_OR_CLOSURE(vm, AS_OBJ(init), argc);
+    } else if(unlikely(argc != 0)) {
+        RUNTIME_INITIALIZER_ARGC_ERR(vm, OBJSTR(vm, cclass), vm->initstr->storage, argc);
+        return false;
+    }
     return true;
 }
 
@@ -397,12 +432,8 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, Int argc)
         switch(OBJ_TYPE(fnval)) {
             case OBJ_BOUND_METHOD: {
                 ObjBoundMethod* bound = AS_BOUND_METHOD(fnval);
-                if(Obj_type(bound->method) == OBJ_CLOSURE) {
-                    ObjClosure* closure = (ObjClosure*)bound->method;
-                    return VM_call_fn(vm, closure, closure->fn, argc);
-                } else {
-                    return VM_call_fn(vm, NULL, (ObjFunction*)bound->method, argc);
-                }
+                vm->sp[-argc - 1]     = bound->receiver; // class instance (self)
+                return CALL_FN_OR_CLOSURE(vm, bound->method, argc);
             }
             case OBJ_FUNCTION:
                 return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc);
@@ -419,11 +450,41 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, Int argc)
         }
     }
 
-    VM_error(
-        vm,
-        "Tried calling non-callable object, only functions and classes can be called.");
+
+    RUNTIME_NONCALLABLE_ERR(vm, VALSTR(vm, fnval));
     return false;
 }
+
+SK_INTERNAL(force_inline bool)
+VM_invoke_from_class(VM* vm, ObjClass* cclass, Value method_name, Int argc)
+{
+    Value method;
+    if(unlikely(!HashTable_get(&cclass->methods, method_name, &method))) {
+        RUNTIME_INSTANCE_PROPERTY_ERR(vm, OBJSTR(vm, cclass), AS_CSTRING(method_name));
+        return false;
+    }
+    return VM_call_val(vm, method, argc);
+}
+
+SK_INTERNAL(force_inline bool) VM_invoke(VM* vm, Value name, Int argc)
+{
+    Value receiver = stack_peek(argc);
+    if(unlikely(!IS_INSTANCE(receiver))) {
+        RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, receiver));
+        return false;
+    }
+
+    ObjInstance* instance = AS_INSTANCE(receiver);
+
+    Value value;
+    if(HashTable_get(&instance->fields, name, &value)) {
+        vm->sp[-argc - 1] = value;
+        return VM_call_val(vm, value, argc);
+    }
+
+    return VM_invoke_from_class(vm, instance->cclass, name, argc);
+}
+
 
 // Bit confusing but keep in mind that pp is a double pointer to 'ObjUpValue'.
 // Think about it in a way that 'pp' holds the memory location of 'UpValue->next'
@@ -457,7 +518,9 @@ SK_INTERNAL(force_inline void) VM_close_upval(VM* vm, Value* last)
 {
     while(vm->open_upvals != NULL && vm->open_upvals->location >= last) {
         // This is where closing happens, stack values
-        // get new 'location' on the heap (this 'Obj').
+        // get new 'location' (this 'Obj').
+        // Meaning when GC triggers they will get marked
+        // because open_upvals is considered as a root.
         ObjUpvalue* upval = vm->open_upvals;
         upval->closed     = *upval->location;
         upval->location   = &upval->closed;
@@ -473,7 +536,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #define READ_CONSTANTL() frame->fn->chunk.constants[READ_BYTEL()]
 #define READ_STRING()    AS_STRING(READ_CONSTANT())
 #define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
-#define DISPATCH(x)      switch(x)
+#define DISPATCH(x)      switch(READ_BYTE())
 #define CASE(label)      case label:
 #define BREAK            break
 #define BINARY_OP(value_type, op)                                                        \
@@ -501,8 +564,9 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
         }                                                                                \
     } while(false)
 
+    // Flag for gc to skip marking compiler roots ('mem.c' -> 'gc()')
     runtime = 1;
-    // First frame is 'global' frame aka implicit
+    // First frame is 'global' frame, implicit
     // function that contains all other code and/or functions
     register CallFrame* frame = &vm->frames[vm->fc - 1];
     // Keep instruction pointer in a local variable to encourage
@@ -514,7 +578,9 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #endif
     while(true) {
 #ifdef THREADED_CODE
+    #define OP_TABLE
     #include "jmptable.h"
+    #undef OP_TABLE
 #endif
 #ifdef DEBUG_TRACE_EXECUTION
     #undef BREAK
@@ -528,7 +594,6 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
         printf("\n");
         Instruction_debug(&frame->fn->chunk, (UInt)(ip - frame->fn->chunk.code.data));
 #endif
-
         DISPATCH(READ_BYTE())
         {
             CASE(OP_TRUE)
@@ -549,7 +614,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_NEG)
             {
                 if(unlikely(!IS_NUMBER(stack_peek(0)))) {
-                    VM_error(vm, "Operand must be a number (unary negation '-').");
+                    RUNTIME_UNARY_NEGATION_ERR(vm, VALSTR(vm, stack_peek(0)));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(stack_peek(0));
@@ -624,7 +689,6 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_PRINT)
             {
                 Value_print(VM_pop(vm));
-                printf("\n");
                 BREAK;
             }
             CASE(OP_POP)
@@ -669,7 +733,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
-                    VM_error(vm, "Undefined global variable.");
+                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -682,7 +746,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
-                    VM_error(vm, "Undefined global variable.");
+                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -695,11 +759,11 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
-                    VM_error(vm, "Undefined global variable.");
+                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm);
                     return INTERPRET_RUNTIME_ERROR;
                 } else if(unlikely(GLOB_CHECK(global, GLOB_FIXED_BIT))) {
                     frame->ip = ip;
-                    VM_error(vm, "Can't assign to a 'fixed' variable.");
+                    RUNTIME_GLOBAL_FIXED_ERR(vm);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -712,11 +776,11 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 
                 if(unlikely(IS_UNDEFINED(global->value))) {
                     frame->ip = ip;
-                    VM_error(vm, "Undefined global variable.");
+                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm);
                     return INTERPRET_RUNTIME_ERROR;
                 } else if(unlikely(GLOB_CHECK(global, GLOB_FIXED_BIT))) {
                     frame->ip = ip;
-                    VM_error(vm, "Can't assign to a 'fixed' variable.");
+                    RUNTIME_GLOBAL_FIXED_ERR(vm);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -832,7 +896,6 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                         closure->upvals[i] = frame->closure->upvals[idx];
                     }
                 }
-
                 BREAK;
             }
             CASE(OP_GET_UPVALUE)
@@ -874,7 +937,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_SET_PROPERTY)
             {
                 if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
-                    VM_error(vm, "Only class instances have properties.");
+                    frame->ip = ip;
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(1)));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(stack_peek(1));
@@ -892,7 +956,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_SET_PROPERTYL)
             {
                 if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
-                    VM_error(vm, "Only class instances have properties.");
+                    frame->ip = ip;
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(1)));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(stack_peek(1));
@@ -910,7 +975,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_GET_PROPERTY)
             {
                 if(unlikely(!IS_INSTANCE(stack_peek(0)))) {
-                    VM_error(vm, "Only class instances have properties.");
+                    frame->ip = ip;
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(0)));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(stack_peek(0));
@@ -921,6 +987,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     VM_push(vm, value);
                     BREAK;
                 }
+                frame->ip             = ip;
                 ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
@@ -932,7 +999,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_GET_PROPERTYL)
             {
                 if(unlikely(!IS_INSTANCE(stack_peek(0)))) {
-                    VM_error(vm, "Only class instances have properties.");
+                    frame->ip = ip;
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(0)));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(stack_peek(0));
@@ -943,6 +1011,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     VM_push(vm, value);
                     BREAK;
                 }
+                frame->ip             = ip;
                 ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
@@ -954,7 +1023,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_SET_DYNPROPERTY)
             {
                 if(unlikely(!IS_INSTANCE(stack_peek(2)))) {
-                    VM_error(vm, "Only class instances have properties.");
+                    frame->ip = ip;
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(2)));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(stack_peek(2));
@@ -972,7 +1042,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_GET_DYNPROPERTY)
             {
                 if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
-                    VM_error(vm, "Only class instances have properties.");
+                    frame->ip = ip;
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(1)));
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(stack_peek(1));
@@ -983,6 +1054,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     VM_push(vm, value);
                     BREAK;
                 }
+                frame->ip             = ip;
                 ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
@@ -1015,6 +1087,32 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     OBJ_VAL(READ_STRINGL()),
                     method); // GC
                 VM_pop(vm);  // pop the method (function/closure)
+                BREAK;
+            }
+            CASE(OP_INVOKE)
+            {
+                // Avoid allocating ObjBoundMethod and do immediate method call
+                ObjString* method_name = READ_STRING();
+                Value      argc        = READ_CONSTANTL();
+                frame->ip              = ip;
+                if(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc))) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
+                BREAK;
+            }
+            CASE(OP_INVOKEL)
+            {
+                // Avoid allocating ObjBoundMethod and do immediate method call long
+                ObjString* method_name = READ_STRINGL();
+                Value      argc        = READ_CONSTANTL();
+                frame->ip              = ip;
+                if(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc))) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
                 BREAK;
             }
             CASE(OP_RET)
@@ -1071,6 +1169,7 @@ void VM_free(VM* vm)
     GARRAY_FREE(vm);
     HashTable_free(vm, NULL, &vm->strings);
     Array_ObjRef_free(&vm->gray_stack, NULL);
+    vm->initstr = NULL;
 
     Obj* next;
     for(Obj* head = vm->objects; head != NULL; head = next) {

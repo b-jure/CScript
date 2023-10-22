@@ -1,20 +1,22 @@
 #ifndef __SKOOMA_JMPTABLE_H__
 #define __SKOOMA_JMPTABLE_H__
 
-#undef DISPATCH
+#if defined(OP_TABLE)
 
-#undef CASE
+    #undef DISPATCH
 
-#undef BREAK
+    #undef CASE
 
-/* Redefine dispatch from switch into goto */
-#define DISPATCH(x) goto* optable[x];
+    #undef BREAK
 
-/* Redefine case into label */
-#define CASE(label) L_##label:
+    /* Redefine dispatch from switch into goto */
+    #define DISPATCH(x) goto* optable[x];
 
-/* Redefine break into another goto/dispatch */
-#define BREAK DISPATCH(READ_BYTE())
+    /* Redefine case into label */
+    #define CASE(label) L_##label:
+
+    /* Redefine break into another goto/dispatch */
+    #define BREAK DISPATCH(READ_BYTE())
 
 /* Make sure the order is the same as in the OpCode enum */
 static const void* const optable[OPCODE_N] = {
@@ -72,7 +74,35 @@ static const void* const optable[OPCODE_N] = {
     &&L_OP_GET_DYNPROPERTY,
     &&L_OP_METHOD,
     &&L_OP_METHODL,
+    &&L_OP_INVOKE,
+    &&L_OP_INVOKEL,
     &&L_OP_RET,
 };
 
+#elif defined(OBJ_TABLE)
+
+    #undef DISPATCH
+
+    #undef CASE
+
+    #undef BREAK
+
+    #define DISPATCH(x) goto* objtable[x];
+
+    #define CASE(label) L_##label:
+
+    #define BREAK return
+
+static const void* objtable[OBJ_BOUND_METHOD + 1] = {
+    &&L_OBJ_STRING,
+    &&L_OBJ_FUNCTION,
+    &&L_OBJ_CLOSURE,
+    &&L_OBJ_NATIVE,
+    &&L_OBJ_UPVAL,
+    &&L_OBJ_CLASS,
+    &&L_OBJ_INSTANCE,
+    &&L_OBJ_BOUND_METHOD,
+};
+
+#endif
 #endif

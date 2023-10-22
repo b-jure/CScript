@@ -62,8 +62,8 @@ ObjString* ObjString_from(VM* vm, Compiler* C, const char* chars, size_t len)
 
     ObjString* string = ObjString_alloc(vm, C, len);
     memcpy(string->storage, chars, len);
-    string->hash         = hash;
     string->storage[len] = '\0';
+    string->hash         = hash;
 
     VM_push(vm, OBJ_VAL(string)); // GC
     HashTable_insert(vm, C, &vm->strings, OBJ_VAL(string), NIL_VAL);
@@ -76,10 +76,11 @@ SK_INTERNAL(force_inline void) ObjString_free(VM* vm, Compiler* C, ObjString* st
     GC_FREE(vm, C, string, sizeof(ObjString) + string->len + 1);
 }
 
-ObjNative* ObjNative_new(VM* vm, Compiler* C, NativeFn fn, Int arity)
+ObjNative* ObjNative_new(VM* vm, Compiler* C, ObjString* name, NativeFn fn, Int arity)
 {
     ObjNative* native = ALLOC_OBJ(vm, C, ObjNative, OBJ_NATIVE);
     //
+    native->name  = name;
     native->fn    = fn;
     native->arity = arity;
     return native;
@@ -181,8 +182,8 @@ ObjBoundMethod* ObjBoundMethod_new(VM* vm, Compiler* C, Value receiver, Obj* met
 
 SK_INTERNAL(force_inline void) print_fn(ObjFunction* fn)
 {
-    if(fn->name == NULL) {
-        printf("<script>");
+    if(unlikely(fn->name == NULL)) {
+        printf("<script>"); // Debug only
     } else {
         printf("<fn %s>", fn->name->storage);
     }
@@ -222,40 +223,71 @@ void ObjType_print(ObjType type) // Debug
 
 void Object_print(Value value)
 {
-    switch(OBJ_TYPE(value)) {
-        case OBJ_STRING:
+#ifdef THREADED_CODE
+    #define OBJ_TABLE
+    #include "jmptable.h"
+    #undef OBJ_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+    #define BREAK       break
+#endif
+
+    DISPATCH(OBJ_TYPE(value))
+    {
+        CASE(OBJ_STRING)
+        {
             printf("%s", AS_CSTRING(value));
-            break;
-        case OBJ_FUNCTION:
+            BREAK;
+        }
+        CASE(OBJ_FUNCTION)
+        {
             print_fn(AS_FUNCTION(value));
-            break;
-        case OBJ_CLOSURE:
+            BREAK;
+        }
+        CASE(OBJ_CLOSURE)
+        {
             print_fn(AS_CLOSURE(value)->fn);
-            break;
-        case OBJ_NATIVE:
-            printf("<native fn>");
-            break;
-        case OBJ_UPVAL:
-            printf("upvalue");
-            break;
-        case OBJ_CLASS:
-            printf("%s class", AS_CLASS(value)->name->storage);
-            break;
-        case OBJ_INSTANCE:
+            BREAK;
+        }
+        CASE(OBJ_NATIVE)
+        {
+            printf("<native fn %s>", AS_NATIVE(value)->name->storage);
+            BREAK;
+        }
+        CASE(OBJ_UPVAL)
+        {
+            ObjUpvalue* upval = AS_UPVAL(value);
+            Value_print(upval->closed);
+            BREAK;
+        }
+        CASE(OBJ_CLASS)
+        {
+            printf("%s", AS_CLASS(value)->name->storage);
+            BREAK;
+        }
+        CASE(OBJ_INSTANCE)
+        {
             printf("%s instance", AS_INSTANCE(value)->cclass->name->storage);
-            break;
-        case OBJ_BOUND_METHOD: {
+            BREAK;
+        }
+        CASE(OBJ_BOUND_METHOD)
+        {
             ObjBoundMethod* bound_method = AS_BOUND_METHOD(value);
             if(Obj_type(bound_method->method) == OBJ_CLOSURE) {
                 print_fn(((ObjClosure*)bound_method->method)->fn);
             } else {
                 print_fn(((ObjFunction*)bound_method->method));
             }
-            break;
+            BREAK;
         }
-        default:
-            unreachable;
     }
+
+    unreachable;
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
+#endif
 }
 
 Hash Obj_hash(Value value)
@@ -284,32 +316,124 @@ void Obj_free(VM* vm, Compiler* C, Obj* object)
     ObjType_print(Obj_type(object));
     printf("\n");
 #endif
-    switch(Obj_type(object)) {
-        case OBJ_STRING:
+
+#ifdef THREADED_CODE
+    #define OBJ_TABLE
+    #include "jmptable.h"
+    #undef OBJ_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+    #define BREAK       break
+#endif
+
+    DISPATCH(Obj_type(object))
+    {
+        CASE(OBJ_STRING)
+        {
             ObjString_free(vm, C, (ObjString*)object);
-            break;
-        case OBJ_FUNCTION:
+            BREAK;
+        }
+        CASE(OBJ_FUNCTION)
+        {
             ObjFunction_free(vm, C, (ObjFunction*)object);
-            break;
-        case OBJ_CLOSURE:
+            BREAK;
+        }
+        CASE(OBJ_CLOSURE)
+        {
             ObjClosure_free(vm, C, (ObjClosure*)object);
-            break;
-        case OBJ_NATIVE:
+            BREAK;
+        }
+        CASE(OBJ_NATIVE)
+        {
             ObjNative_free(vm, C, (ObjNative*)object);
-            break;
-        case OBJ_UPVAL:
+            BREAK;
+        }
+        CASE(OBJ_UPVAL)
+        {
             ObjUpvalue_free(vm, C, (ObjUpvalue*)object);
-            break;
-        case OBJ_CLASS:
+            BREAK;
+        }
+        CASE(OBJ_CLASS)
+        {
             ObjClass_free(vm, C, (ObjClass*)object);
-            break;
-        case OBJ_INSTANCE:
+            BREAK;
+        }
+        CASE(OBJ_INSTANCE)
+        {
             ObjInstance_free(vm, C, (ObjInstance*)object);
-            break;
-        case OBJ_BOUND_METHOD:
+            BREAK;
+        }
+        CASE(OBJ_BOUND_METHOD)
+        {
             ObjBoundMethod_free(vm, C, (ObjBoundMethod*)object);
-            break;
-        default:
-            unreachable;
+            BREAK;
+        }
     }
+
+    unreachable;
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
+#endif
+}
+
+ObjString* Obj_to_str(VM* vm, Compiler* C, Obj* object)
+{
+#ifdef THREADED_CODE
+    #define OBJ_TABLE
+    #include "jmptable.h"
+    #undef OBJ_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+    #define BREAK       break
+#endif
+
+    DISPATCH(Obj_type(object))
+    {
+        CASE(OBJ_STRING)
+        {
+            return (ObjString*)object;
+        }
+        CASE(OBJ_FUNCTION)
+        {
+            return ((ObjFunction*)object)->name;
+        }
+        CASE(OBJ_CLOSURE)
+        {
+            return ((ObjClosure*)object)->fn->name;
+        }
+        CASE(OBJ_NATIVE)
+        {
+            return ((ObjNative*)object)->name;
+        }
+        CASE(OBJ_UPVAL)
+        {
+            return Value_to_str(vm, C, ((ObjUpvalue*)object)->closed);
+        }
+        CASE(OBJ_CLASS)
+        {
+            return ((ObjClass*)object)->name;
+        }
+        CASE(OBJ_INSTANCE)
+        {
+            return ((ObjInstance*)object)->cclass->name;
+        }
+        CASE(OBJ_BOUND_METHOD)
+        {
+            ObjBoundMethod* bound = (ObjBoundMethod*)object;
+            if(Obj_type(bound->method) == OBJ_CLOSURE) {
+                return ((ObjClosure*)bound->method)->fn->name;
+            } else {
+                return ((ObjFunction*)bound->method)->name;
+            }
+        }
+    }
+
+    unreachable;
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
+#endif
 }

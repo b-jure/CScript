@@ -110,10 +110,10 @@ struct ObjUpvalue { // typedef is inside 'value.h'
 
 struct ObjFunction { // typedef is inside 'value.h'
     Obj        obj;
-    UInt       arity;
     Chunk      chunk;
     ObjString* name;
     UInt       upvalc; // Count of upvalues
+    UInt       arity;
 };
 
 struct ObjClosure { // typedef is inside 'value.h'
@@ -144,19 +144,20 @@ struct ObjBoundMethod {
 typedef bool (*NativeFn)(VM* vm, Value* argv);
 
 typedef struct {
-    Obj      obj;
-    NativeFn fn;
-    Int      arity;
+    Obj        obj;
+    NativeFn   fn;
+    ObjString* name;
+    Int        arity;
 } ObjNative;
 
-ObjBoundMethod*
-             ObjBoundMethod_new(VM* vm, Compiler* C, Value receiver, Obj* method);
-ObjInstance* ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass);
-ObjClass*    ObjClass_new(VM* vm, Compiler* C, ObjString* name);
-void         ObjType_print(ObjType type); // Debug
-ObjUpvalue*  ObjUpvalue_new(VM* vm, Compiler* C, Value* var_ref);
-ObjClosure*  ObjClosure_new(VM* vm, Compiler* C, ObjFunction* fn);
-ObjNative*   ObjNative_new(VM* vm, Compiler* C, NativeFn fn, Int arity);
+ObjString*      Obj_to_str(VM* vm, Compiler* C, Obj* object);
+ObjBoundMethod* ObjBoundMethod_new(VM* vm, Compiler* C, Value receiver, Obj* method);
+ObjInstance*    ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass);
+ObjClass*       ObjClass_new(VM* vm, Compiler* C, ObjString* name);
+void            ObjType_print(ObjType type); // Debug
+ObjUpvalue*     ObjUpvalue_new(VM* vm, Compiler* C, Value* var_ref);
+ObjClosure*     ObjClosure_new(VM* vm, Compiler* C, ObjFunction* fn);
+ObjNative*   ObjNative_new(VM* vm, Compiler* C, ObjString* name, NativeFn fn, Int arity);
 uint64_t     Obj_hash(Value value);
 ObjString*   ObjString_from(VM* vm, Compiler* C, const char* chars, size_t len);
 ObjFunction* ObjFunction_new(VM* vm, Compiler* C);

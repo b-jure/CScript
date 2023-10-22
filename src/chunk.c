@@ -66,10 +66,13 @@ Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
 void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 {
 #ifdef THREADED_CODE
+    #define OP_TABLE
     #include "jmptable.h"
+    #undef OP_TABLE
 #else
     #define DISPATCH(x) switch(x)
     #define CASE(label) case label:
+    #define BREAK       break
 #endif
 #undef BREAK
 #define BREAK return
@@ -98,6 +101,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_CLOSE_UPVAL)
         CASE(OP_SET_DYNPROPERTY)
         CASE(OP_GET_DYNPROPERTY)
+        CASE(OP_RET)
         {
             unreachable;
         }
@@ -122,6 +126,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_SET_PROPERTYL)
         CASE(OP_GET_PROPERTYL)
         CASE(OP_METHODL)
+        CASE(OP_INVOKEL)
         {
             Chunk_write_op(chunk, code, true, param, line);
             BREAK;
@@ -137,19 +142,20 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_SET_PROPERTY)
         CASE(OP_GET_PROPERTY)
         CASE(OP_METHOD)
+        CASE(OP_INVOKE)
         {
             Chunk_write_op(chunk, code, false, param, line);
             BREAK;
-        }
-        CASE(OP_RET)
-        {
-            unreachable;
         }
     }
 
 #undef DISPATCH
 #undef CASE
 #undef BREAK
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
+#endif
 }
 
 // @TODO: Implement binary search

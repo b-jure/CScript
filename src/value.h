@@ -66,4 +66,13 @@ void Value_print(Value value);
 bool Value_eq(Value a, Value b);
 Hash Value_hash(Value value);
 
+#ifndef __SKOOMA_COMPILER_H__
+typedef struct Compiler Compiler;
+#endif
+#ifndef __SKOOMA_VMACHINE_H__
+typedef struct VM VM;
+#endif
+
+ObjString* Value_to_str(VM* vm, Compiler* C, Value value);
+
 #endif

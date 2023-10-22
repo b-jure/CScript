@@ -26,7 +26,7 @@ void mark_obj(VM* vm, Obj* obj)
     }
 
     Obj_mark_set(obj, true);
-    if(Obj_type(obj) == OBJ_STRING || Obj_type(obj) == OBJ_NATIVE) {
+    if(Obj_type(obj) == OBJ_STRING) {
 #ifdef DEBUG_LOG_GC
         printf("%p blacken ", (void*)obj);
         Value_print(OBJ_VAL(obj));
@@ -140,6 +140,11 @@ SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
             mark_obj(vm, bound_method->method);
             break;
         }
+        case OBJ_NATIVE: {
+            ObjNative* native = (ObjNative*)obj;
+            mark_obj(vm, (Obj*)native->name);
+            break;
+        }
         default:
             unreachable;
     }
@@ -151,6 +156,7 @@ SK_INTERNAL(force_inline void) mark_vm_roots(VM* vm)
     mark_frames(vm);
     mark_upvalues(vm);
     mark_globals(vm);
+    mark_obj(vm, (Obj*)vm->initstr);
 }
 
 SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)

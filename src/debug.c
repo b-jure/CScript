@@ -15,6 +15,8 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset);
 SK_INTERNAL(int) Instruction_simple(const char* name, UInt offset);
 SK_INTERNAL(int)
 Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset);
+SK_INTERNAL(Int)
+disassemble_invoke(const char* name, Chunk* chunk, OpCode code, Int offset);
 
 void Chunk_debug(Chunk* chunk, const char* name)
 {
@@ -149,20 +151,24 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_short("OP_METHOD", chunk, OP_METHOD, offset);
         case OP_METHODL:
             return Instruction_long("OP_METHODL", chunk, OP_METHODL, offset);
+        case OP_INVOKE:
+            return disassemble_invoke("OP_INVOKE", chunk, OP_INVOKE, offset);
+        case OP_INVOKEL:
+            return disassemble_invoke("OP_INVOKEL", chunk, OP_INVOKEL, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
     }
 }
 
-SK_INTERNAL(int) Instruction_simple(const char* name, UInt offset)
+SK_INTERNAL(Int) Instruction_simple(const char* name, UInt offset)
 {
     printf("%s\n", name);
     return offset + 1; /* OpCode */
 }
 
-SK_INTERNAL(int)
-Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset)
+SK_INTERNAL(Int)
+Instruction_jump(const char* name, Int sign, Chunk* chunk, UInt offset)
 {
     UInt jmp = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-25s %5u -> %u\n", name, offset, offset + 4 + (sign * jmp));
@@ -198,7 +204,7 @@ SK_INTERNAL(UInt) disassemble_closure(Chunk* chunk, UInt param, UInt offset)
     return offset;
 }
 
-SK_INTERNAL(int)
+SK_INTERNAL(Int)
 Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     Byte param = *Array_Byte_index(&chunk->code, offset + 1);
@@ -219,7 +225,7 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
     return offset + 2; /* OpCode + 8-bit/1-byte index */
 }
 
-SK_INTERNAL(int)
+SK_INTERNAL(Int)
 Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
@@ -241,4 +247,26 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
     }
     printf("\n");
     return offset + 4; /* OpCode + 24-bit/3-byte index */
+}
+
+SK_INTERNAL(Int)
+disassemble_invoke(const char* name, Chunk* chunk, OpCode code, Int offset)
+{
+
+    UInt param;
+
+    if(code == OP_INVOKE) {
+        param   = *Array_Byte_index(&chunk->code, offset + 1);
+        offset += 2;
+    } else {
+        param   = GET_BYTES3(&chunk->code.data[offset + 1]);
+        offset += 4;
+    }
+
+    Int argc = GET_BYTES3(&chunk->code.data[offset]);
+
+    printf("%-25s (args %d) %5d ", name, argc, param);
+    disassemble_const(chunk, param);
+    printf("\n");
+    return offset + 3;
 }

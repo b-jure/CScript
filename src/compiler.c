@@ -2,6 +2,7 @@
 #include "chunk.h"
 #include "common.h"
 #include "compiler.h"
+#include "err.h"
 #include "mem.h"
 #include "object.h"
 #include "scanner.h"
@@ -124,6 +125,8 @@ ARRAY_NEW(Array_Array_Int, Array_Int)
 
 typedef enum {
     FN_FUNCTION,
+    FN_METHOD,
+    FN_INIT,
     FN_SCRIPT,
 } FunctionType;
 
@@ -173,9 +176,17 @@ typedef struct {
 
 ARRAY_NEW(Array_Upvalue, Upvalue);
 
+/* @TODO: add useful documentation */
+typedef struct Class {
+    struct Class* enclosing;
+} Class;
+
 struct Compiler {
     /* Enclosing compiler */
     Compiler* enclosing;
+
+    /* Currently compiled class */
+    Class* cclass;
 
     /* Grammar parser */
     Parser* parser;
@@ -280,6 +291,7 @@ SK_INTERNAL(void) parse_or(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_call(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_dot(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_property_name(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_self(VM* vm, PPC ppc);
 
 SK_INTERNAL(void) CFCtx_init(CFCtx* context)
 {
@@ -291,9 +303,10 @@ SK_INTERNAL(void) CFCtx_init(CFCtx* context)
 
 /* Have to pass VM while initializing 'Compiler' because we are allocating objects. */
 SK_INTERNAL(void)
-C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* enclosing)
+C_init(Compiler* C, Class* cclass, VM* vm, FunctionType fn_type, Compiler* enclosing)
 {
     C->enclosing = enclosing;
+    C->cclass    = cclass;
 
     C->fn      = NULL; // Initialize to NULL so gc does not get confused
     C->fn      = ObjFunction_new(vm, C);
@@ -317,19 +330,24 @@ C_init(Compiler* C, VM* vm, FunctionType fn_type, Compiler* enclosing)
     C->loc_cap = SHORT_STACK_SIZE;
     C->depth   = 0;
 
-    /* Reserve first stack slot for VM */
+    /* Reserve first stack slot for VM ('self' ObjInstance) */
     Local* local = &C->locals[C->loc_len++];
     gstate.loc_len++;
     local->depth = 0;
     local->flags = 0;
 
+    if(fn_type != FN_FUNCTION) {
+        local->name.start = "self";
+        local->name.len   = 4;
+    } else {
+        local->name.start = "";
+        local->name.len   = 0;
+    }
+
     if(fn_type != FN_SCRIPT) {
         C->fn->name =
             ObjString_from(vm, C, C->parser->previous.start, C->parser->previous.len);
     }
-
-    local->name.start = "";
-    local->name.len   = 0;
 }
 
 SK_INTERNAL(force_inline void) C_grow_stack(PPC ppc)
@@ -354,10 +372,10 @@ void mark_c_roots(VM* vm, Compiler* C)
 SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, VM* vm, Value constant)
 {
     if(unlikely(current_chunk(C)->clen > MIN(VM_STACK_MAX, UINT24_MAX))) {
-        C_error(
+        COMPILER_CONSTANT_LIMIT_ERR(
             C,
-            "Too many constants defined in a single chunk. This function -> <fn %s>.",
-            C->fn->name->storage);
+            C->fn->name->storage,
+            MIN(VM_STACK_MAX, UINT24_MAX));
     }
 
     return Chunk_make_constant(vm, C, current_chunk(C), constant);
@@ -378,10 +396,7 @@ C_make_global_identifier(Compiler* C, VM* vm, Value identifier, Byte flags)
         Global glob = {DECLARED_VAL, flags};
         VM_push(vm, identifier);
         if(unlikely((vm)->globlen + 1 > UINT24_MAX)) {
-            C_error(
-                C,
-                "Too many global values defined in this source file (Limit [%u]).",
-                UINT24_MAX);
+            COMPILER_GLOBALS_LIMIT_ERR(C, UINT24_MAX);
         }
         index = NUMBER_VAL(GARRAY_PUSH(vm, C, glob));             // GC
         HashTable_insert(vm, C, &vm->globids, identifier, index); // GC
@@ -392,14 +407,17 @@ C_make_global_identifier(Compiler* C, VM* vm, Value identifier, Byte flags)
     UInt i = (UInt)AS_NUMBER(index);
 
     if(IS_DECLARED(vm->globvals[i].value)) {
-        C_error(
-            C,
-            "Redefinition of declared global variable '%s'.",
-            AS_CSTRING(identifier));
+        COMPILER_GLOBAL_REDEFINITION_ERR(C, AS_CSTRING(identifier));
     }
 
     return i;
 }
+
+SK_INTERNAL(force_inline void) C_emit_op(Compiler* C, OpCode code, UInt param)
+{
+    Chunk_write_codewparam(current_chunk(C), code, param, C->parser->previous.line);
+}
+
 
 SK_INTERNAL(force_inline void) C_emit_byte(Compiler* C, Byte byte)
 {
@@ -408,13 +426,13 @@ SK_INTERNAL(force_inline void) C_emit_byte(Compiler* C, Byte byte)
 
 SK_INTERNAL(force_inline void) C_emit_return(Compiler* C)
 {
-    C_emit_byte(C, OP_NIL);
-    C_emit_byte(C, OP_RET);
-}
+    if(C->fn_type == FN_INIT) {
+        C_emit_op(C, OP_GET_LOCAL, 0);
+    } else {
+        C_emit_byte(C, OP_NIL);
+    }
 
-SK_INTERNAL(force_inline void) C_emit_op(Compiler* C, OpCode code, UInt param)
-{
-    Chunk_write_codewparam(current_chunk(C), code, param, C->parser->previous.line);
+    C_emit_byte(C, OP_RET);
 }
 
 SK_INTERNAL(force_inline UInt) C_emit_jmp(Compiler* C, OpCode jmp)
@@ -437,10 +455,7 @@ SK_INTERNAL(force_inline void) C_emit_loop(Compiler* C, UInt start)
     UInt offset = current_chunk(C)->code.len - start + 3;
 
     if(offset >= UINT24_MAX) {
-        C_error(
-            C,
-            "Too much code to jump over. Bytecode index limit reached [%u].",
-            UINT24_MAX);
+        COMPILER_JUMP_LIMIT_ERR(C, UINT24_MAX);
     }
 
     C_emit_lbyte(C, offset);
@@ -546,21 +561,22 @@ SK_INTERNAL(force_inline bool) C_match(Compiler* compiler, TokenType type)
 
 SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C)
 {
-    ObjFunction* fn = C->fn;
-    C_emit_byte(C, OP_RET);
+    C_emit_return(C);
 #ifdef DEBUG_PRINT_CODE
     if(!C_flag_is(C, ERROR_BIT)) {
+        ObjFunction* fn = C->fn;
         Chunk_debug(current_chunk(C), (fn->name) ? fn->name->storage : "<script>");
     }
 #endif
-    return fn;
+    return C->fn;
 }
 
 ObjFunction* compile(VM* vm, const char* source)
 {
-    Compiler* C = ALLOC_COMPILER();
+    Compiler* C      = ALLOC_COMPILER();
+    Class     cclass = {0};
 
-    C_init(C, vm, FN_SCRIPT, NULL);
+    C_init(C, &cclass, vm, FN_SCRIPT, NULL);
     Parser_init(C->parser, source);
 
     C_advance(C);
@@ -650,7 +666,7 @@ static const ParseRule rules[] = {
     [TOK_PRINT]         = {NULL,                NULL,                PREC_NONE      },
     [TOK_RETURN]        = {NULL,                NULL,                PREC_NONE      },
     [TOK_SUPER]         = {NULL,                NULL,                PREC_NONE      },
-    [TOK_SELF]          = {NULL,                NULL,                PREC_NONE      },
+    [TOK_SELF]          = {parse_self,          NULL,                PREC_NONE      },
     [TOK_TRUE]          = {parse_literal,       NULL,                PREC_NONE      },
     [TOK_VAR]           = {parse_dec_var,       NULL,                PREC_NONE      },
     [TOK_WHILE]         = {NULL,                NULL,                PREC_NONE      },
@@ -664,10 +680,7 @@ SK_INTERNAL(void) C_new_local(PPC ppc, Token name)
 
     if(unlikely(C->loc_len >= C->loc_cap)) {
         if(unlikely(gstate.loc_len >= MIN(VM_STACK_MAX, LOCAL_STACK_MAX))) {
-            C_error(
-                C,
-                "Too many variables defined in this source file. Limit is [%u].",
-                MIN(VM_STACK_MAX, LOCAL_STACK_MAX));
+            COMPILER_LOCAL_LIMIT_ERR(C, MIN(VM_STACK_MAX, LOCAL_STACK_MAX));
             return;
         }
         C_grow_stack(ppc);
@@ -692,7 +705,7 @@ SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Token* name)
         Local* local = &C->locals[i];
         if(Identifier_eq(name, &local->name)) {
             if(local->depth == -1) {
-                C_error(C, "Can't read local variable in its own initializer.");
+                COMPILER_LOCAL_DEFINITION_ERR(C, name->len, name->start);
             }
             return i;
         }
@@ -715,11 +728,7 @@ SK_INTERNAL(void) C_make_local(PPC ppc)
         }
 
         if(Identifier_eq(name, &local->name)) {
-            C_error(
-                C,
-                "Redefinition of local variable '%.*s'.",
-                C->parser->previous.len,
-                C->parser->previous.start);
+            COMPILER_LOCAL_REDEFINITION_ERR(C(), name->len, name->start);
         }
     }
 
@@ -729,17 +738,7 @@ SK_INTERNAL(void) C_make_local(PPC ppc)
 SK_INTERNAL(Int) C_make_global(Compiler* C, VM* vm, Byte flags)
 {
     Value identifier = Token_into_stringval(vm, C, &C->parser->previous);
-    UInt  idx        = C_make_global_identifier(C, vm, identifier, flags);
-
-    if(unlikely(idx > UINT24_MAX)) {
-        C_error(
-            C,
-            "Too many global variables defined. Bytecode instruction index limit "
-            "reached [%u].",
-            UINT24_MAX);
-    }
-
-    return idx;
+    return C_make_global_identifier(C, vm, identifier, flags);
 }
 
 SK_INTERNAL(force_inline Int)
@@ -748,10 +747,7 @@ make_undefined_global(VM* vm, Compiler* C, Value identifier)
     VM_push(vm, identifier);
     Global glob = {UNDEFINED_VAL, false};
     if(unlikely((vm)->globlen + 1 > UINT24_MAX)) {
-        C_error(
-            C,
-            "Too many global values defined in this source file (Limit [%u]).",
-            UINT24_MAX);
+        COMPILER_GLOBALS_LIMIT_ERR(C, UINT24_MAX);
     }
     Value idx = NUMBER_VAL(GARRAY_PUSH(vm, C, glob));       // GC
     HashTable_insert(vm, C, &vm->globids, identifier, idx); // GC
@@ -770,7 +766,7 @@ SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
             idx = NUMBER_VAL(make_undefined_global(vm, C, identifier));
         } else {
             // If we are in global scope and there is no global identifier,
-            C_error(C, "Undefined variable '%s'.", AS_CSTRING(identifier));
+            COMPILER_VAR_UNDEFINED_ERR(C, AS_CSTRING(identifier));
             return 0;
         }
     } else {
@@ -780,7 +776,7 @@ SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
         // OP_DEFINE_GLOBAL(L) instruction for it.
         // @FIX: Make this somehow work in REPL mode
         if(!C_flag_is(C, FN_BIT) && IS_UNDEFINED(vm->globvals[i].value)) {
-            C_error(C, "Undefined variable '%s'.", AS_CSTRING(identifier));
+            COMPILER_VAR_UNDEFINED_ERR(C, AS_CSTRING(identifier));
             return 0;
         }
     }
@@ -797,7 +793,7 @@ SK_INTERNAL(Int) parse_arglist(VM* vm, PPC ppc)
         do {
             parse_expr(vm, ppc);
             if(argc == UINT24_MAX) {
-                C_error(C(), "Can't have more than %u arguments.", UINT24_MAX);
+                COMPILER_ARGC_LIMIT_ERR(C(), UINT24_MAX);
             }
             argc++;
         } while(C_match(C(), TOK_COMMA));
@@ -834,7 +830,7 @@ SK_INTERNAL(void) parse_precedence(VM* vm, PPC ppc, Precedence prec)
     C_advance(C());
     ParseFn prefix_fn = rules[C()->parser->previous.type].prefix;
     if(prefix_fn == NULL) {
-        C_error(C(), "Expect expression.");
+        COMPILER_EXPECT_EXPRESSION_ERR(C());
         return;
     }
 
@@ -853,7 +849,7 @@ SK_INTERNAL(void) parse_precedence(VM* vm, PPC ppc, Precedence prec)
     }
 
     if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
-        C_error(C(), "Invalid assignment target.");
+        COMPILER_INVALID_ASSIGN_ERR(C());
     }
 
     // Restore assign bit
@@ -876,7 +872,8 @@ SK_INTERNAL(force_inline void) C_initialize_local(Compiler* C)
 SK_INTERNAL(force_inline void) C_scope_start(Compiler* C)
 {
     if(unlikely((UInt)C->depth >= UINT32_MAX - 1)) {
-        C_error(C, "Scope nesting depth limit reached [%u].", UINT32_MAX);
+        // @?: Maybe UINT24_MAX instead?
+        COMPILER_SCOPE_LIMIT_ERR(C, UINT32_MAX);
     }
     C->depth++;
 }
@@ -943,7 +940,9 @@ parse_fn(VM* vm, PPC ppc, FunctionType type)
 #define C_new() (*ppc_new)
 
     Compiler* C_new = ALLOC_COMPILER();
-    C_init(C_new, vm, type, C());
+    Class     cclass;
+    cclass.enclosing = C()->cclass;
+    C_init(C_new, &cclass, vm, type, C());
 
     uint64_t mask = C_flags(C());
     C_flags_clear(C_new);
@@ -1021,9 +1020,8 @@ SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
     }
 
     if(unlikely(C->upvalues->len == MIN(VM_STACK_MAX, UINT24_MAX))) {
-        C_error(
+        COMPILER_UPVALUE_LIMIT_ERR(
             C,
-            "Too many closure variables (upvalues) in function <fn %s>. Limit [%u].",
             MIN(VM_STACK_MAX, UINT24_MAX),
             C->fn->name->storage);
         return 0;
@@ -1094,13 +1092,8 @@ SK_INTERNAL(force_inline void) named_variable(VM* vm, PPC ppc, Token name)
     }
 
     if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
-        /* In case this is local variable statically check for mutability */
-        if(BIT_CHECK(flags, VFIXED_BIT)) {
-            C_error(
-                C(),
-                "Can't assign to variable '%.*s', it is declared as 'fixed'.",
-                (Int)name.len,
-                name.start);
+        if(BIT_CHECK(flags, VFIXED_BIT)) { /* Statical check for mutability */
+            COMPILER_VAR_ASSIGN_ERR(C(), (Int)name.len, name.start);
         }
         parse_expr(vm, ppc);
         C_emit_op(C(), setop, idx);
@@ -1112,11 +1105,17 @@ SK_INTERNAL(force_inline void) named_variable(VM* vm, PPC ppc, Token name)
 SK_INTERNAL(void) parse_method(VM* vm, PPC ppc)
 {
     C_expect(C(), TOK_IDENTIFIER, "Expect method name.");
-    Value        identifier = Token_into_stringval(vm, C(), &C()->parser->previous);
-    UInt         idx        = C_make_const(C(), vm, identifier);
-    FunctionType type       = FN_FUNCTION;
+    Value identifier = Token_into_stringval(vm, C(), &C()->parser->previous);
+    UInt  idx        = C_make_const(C(), vm, identifier);
 
+    FunctionType type = FN_METHOD;
+    if(vm->initstr->len == AS_STRING(identifier)->len &&
+       strcmp(AS_CSTRING(identifier), vm->initstr->storage) == 0)
+    {
+        type = FN_INIT;
+    }
     parse_fn(vm, ppc, type);
+
     C_emit_op(C(), GET_OP_TYPE(idx, OP_METHOD), idx);
 }
 
@@ -1220,10 +1219,7 @@ C_patch_jmp(Compiler* C, UInt jmp_offset)
     UInt offset = code_offset(C) - jmp_offset - 3;
 
     if(unlikely(offset >= UINT24_MAX)) {
-        C_error(
-            C,
-            "Too much code to jump over. Bytecode index size limit reached [%u]",
-            UINT24_MAX);
+        COMPILER_JUMP_LIMIT_ERR(C, UINT24_MAX);
     }
 
     PUT_BYTES3(&current_chunk(C)->code.data[jmp_offset], offset);
@@ -1295,7 +1291,7 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, PPC ppc)
                 dflt = true;
                 C_expect(C(), TOK_COLON, "Expect ':' after 'default'.");
             } else {
-                C_error(C(), "Multiple 'default' labels in a single 'switch'.");
+                COMPILER_SWITCH_DEFAULT_ERR(C());
             }
 
             if(fts.len > 0) {
@@ -1304,14 +1300,14 @@ SK_INTERNAL(void) parse_stm_switch(VM* vm, PPC ppc)
             }
         } else {
             if(state == 0) {
-                C_error(C(), "Can't have statements before first case.");
+                COMPILER_SWITCH_NOCASE_ERR(C());
             }
             parse_stm(vm, ppc);
         }
     }
 
     if(C()->parser->previous.type == TOK_EOF) {
-        C_error(C(), "Expect '}' at the end of 'switch'.");
+        COMPILER_SWITCH_RBRACE_ERR(C());
     }
 
     /* Free fallthrough jumps array */
@@ -1476,7 +1472,7 @@ SK_INTERNAL(void) parse_stm_continue(Compiler* C)
     C_expect(C, TOK_SEMICOLON, "Expect ';' after 'continue'.");
 
     if(C->context.innermostl_start == -1) {
-        C_error(C, "'continue' statement not in loop statement.");
+        COMPILER_CONTINUE_ERR(C);
     }
 
     Int sdepth = C->context.innermostl_depth;
@@ -1509,7 +1505,7 @@ SK_INTERNAL(void) parse_stm_break(Compiler* C)
     Array_Array_Int* arr = &C->context.breaks;
 
     if(!C_flag_is(C, LOOP_BIT) && !C_flag_is(C, SWITCH_BIT)) {
-        C_error(C, "'break' statement not in loop or switch statement.");
+        COMPILER_BREAK_ERR(C);
         return;
     }
 
@@ -1534,12 +1530,15 @@ SK_INTERNAL(void) parse_stm_break(Compiler* C)
 SK_INTERNAL(void) parse_stm_return(VM* vm, PPC ppc)
 {
     if(C()->fn_type == FN_SCRIPT) {
-        C_error(C(), "Can't return from top-level code.");
+        COMPILER_RETURN_SCRIPT_ERR(C());
     }
 
     if(C_match(C(), TOK_SEMICOLON)) {
         C_emit_return(C());
     } else {
+        if(C()->fn_type == FN_INIT) {
+            COMPILER_RETURN_INIT_ERR(C(), vm->initstr->storage);
+        }
         parse_expr(vm, ppc);
         C_expect(C(), TOK_SEMICOLON, "Expect ';' after return value.");
         C_emit_byte(C(), OP_RET);
@@ -1796,6 +1795,10 @@ SK_INTERNAL(void) parse_dot(VM* vm, PPC ppc)
     if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
         parse_expr(vm, ppc);
         C_emit_op(C(), GET_OP_TYPE(idx, OP_SET_PROPERTY), idx);
+    } else if(C_match(C(), TOK_LPAREN)) {
+        Int argc = parse_arglist(vm, ppc);
+        C_emit_op(C(), GET_OP_TYPE(idx, OP_INVOKE), idx);
+        C_emit_lbyte(C(), argc); // Emit always 24-bit parameter
     } else {
         C_emit_op(C(), GET_OP_TYPE(idx, OP_GET_PROPERTY), idx);
     }
@@ -1844,4 +1847,17 @@ parse_literal(unused VM* _, PPC ppc)
             unreachable;
             return;
     }
+}
+
+SK_INTERNAL(void) parse_self(VM* vm, PPC ppc)
+{
+    if(C()->cclass == NULL) {
+        COMPILER_SELF_ERR(C());
+        return;
+    }
+
+    bool assign = C_flag_is(C(), ASSIGN_BIT);
+    C_flag_clear(C(), ASSIGN_BIT); // Can't assign to 'self'
+    parse_variable(vm, ppc);
+    C_flag_toggle(C(), ASSIGN_BIT, assign);
 }

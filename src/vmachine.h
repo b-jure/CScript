@@ -23,7 +23,7 @@ typedef struct {
     Value*       sp; /* Relative stack pointer */
 } CallFrame;
 
-#define GLOB_FIXED_BIT  (1)
+#define GLOB_FIXED_BIT (1)
 
 #define GLOB_SET(glob, bit)   BIT_SET((glob)->flags, bit)
 #define GLOB_CLEAR(glob, bit) BIT_CLEAR((glob)->flags, bit)
@@ -72,6 +72,9 @@ struct VM {
 
     // Closure values
     ObjUpvalue* open_upvals; // List of open upvalues (NO GC)
+
+    // Class init method name
+    ObjString* initstr;
 
     // Garbage collection
     Obj*         objects;      /* List of allocated object (GC) */
