@@ -14,12 +14,13 @@ typedef uint32_t UInt;
 typedef int32_t  Int;
 
 /*
+ * garbage collection flag (check mem.c -> gc)
  * 0 - compiling source code
  * 1 - VM is running
  */
 extern Int runtime;
 
-/* Bit manipulation--------------------------------------------------------- */
+/* Bits -------------------------------------------------------------------- */
 SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x)
 {
     return (x >= sizeof(size_t) * CHAR_BIT) ? 0xffffffffffffffff : (1UL << (x)) - 1;
@@ -53,7 +54,7 @@ SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x)
     #error "Compiler missing IEEE 754 floating point!"
 #endif
 
-// Check if size of double and long match (C11)
+// Check if size of double and long match
 static_assert(sizeof(double) == sizeof(long), "Size of 'double' and 'long' don't match!");
 
 /* Check if double is positive/negative infinity */
@@ -93,6 +94,49 @@ SK_INTERNAL(force_inline bool) is_nan(double dbl)
     #define MIN(a, b) ((a) > (b) ? (b) : (a))
 #endif
 
-/* ------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------- */
+
+
+
+/* ----------- OPERATOR/CLASS INITIALIZER OVERLOADING ----------- */
+typedef struct {
+    const char* name;
+    const Byte  len;
+} Op;
+
+#define OPS_INIT 0
+#define OPS_ADD  1
+#define OPS_SUB  2
+#define OPS_MUL  3
+#define OPS_DIV  4
+#define OPS_REM  5
+#define OPS_NEG  6
+#define OPS_NOT  7
+
+// @TODO: Implement operator overloading!
+//        Hint: track overloaded classes during
+//        compiling (their names) and emit new overloaded
+//        instructions such as OP_OL_ADD, OP_OL_SUB, etc...
+//        This way we avoid checking if we have an instance
+//        and if it has overloaded operator during runtime.
+//        Do not mark these for gc, but keep them as weak refs,
+//        additionally remove them if they are not marked before sweeping.
+//        Much more stuff I need to figure out before trying this...
+
+#define OPSN (sizeof(ops) / sizeof(ops[0]))
+static const Op ops[] = {
+    {"__init__", sizeof("__init__") - 1},
+    {"__add__",  sizeof("__add__") - 1 },
+    {"__sub__",  sizeof("__sub__") - 1 },
+    {"__mul__",  sizeof("__mul__") - 1 },
+    {"__div__",  sizeof("__div__") - 1 },
+    {"__rem__",  sizeof("__rem__") - 1 },
+    {"__neg__",  sizeof("__neg__") - 1 },
+    {"__not__",  sizeof("__not__") - 1 },
+};
+
+static_assert(OPSN == (OPS_NOT + 1), "ops table broken");
+/* -------------------------------------------------------------- */
+
 
 #endif

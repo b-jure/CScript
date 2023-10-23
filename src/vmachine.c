@@ -53,7 +53,6 @@ void VM_error(VM* vm, const char* errfmt, ...)
     stack_reset(vm);
 }
 
-
 void VM_push(VM* vm, Value val)
 {
     if(likely(vm->sp - vm->stack < VM_STACK_MAX)) {
@@ -79,111 +78,66 @@ SK_INTERNAL(force_inline bool) isfalsey(Value value)
     return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
-SK_INTERNAL(force_inline Byte) bool_to_str(char** str, bool boolean)
+SK_INTERNAL(force_inline Byte) concat_bool(bool boolean, char** dest)
 {
     if(boolean) {
-        *str = "true";
+        *dest = "true";
         return sizeof("true") - 1;
     }
-    *str = "false";
+    *dest = "false";
     return sizeof("false") - 1;
 }
 
-SK_INTERNAL(force_inline Byte) nil_to_str(char** str)
+SK_INTERNAL(force_inline Byte) concat_nil(char** str)
 {
     *str = "nil";
     return sizeof("nil") - 1;
 }
 
-/* Current number is stored in static memory to prevent the need
- * for allocating before creating the 'ObjString', keep in mind this
- * function is only safe for usage inside a concatenate function.
- * Additionally concatenate function guarantees there is only one possible number Value
- * (because number + number is addition and not concatenation),
- * therefore there is no need for two static buffers inside of it. */
-SK_INTERNAL(force_inline Byte) double_to_str(char** str, double dbl)
-{
-    static char buffer[30] = {0};
-    Byte        len;
-
-    if(floor(dbl) != dbl) {
-        len = snprintf(buffer, sizeof(buffer), "%f", dbl);
-    } else {
-        /* Quick return */
-        len = snprintf(buffer, sizeof(buffer), "%ld", (ssize_t)dbl);
-        goto end;
-    }
-
-    int c;
-    /* Trim excess zeroes */
-    for(Byte i = len - 1; i > 0; i--) {
-        switch((c = buffer[i])) {
-            case '0':
-                len--;
-                break;
-            default:
-                goto end;
-        }
-    }
-end:
-    *str = buffer;
-    return len;
-}
-
-static ObjString* concatenate(VM* vm, Value a, Value b)
+SK_INTERNAL(ObjString*) concatenate(VM* vm, Value a, Value b)
 {
     Value  value[2] = {a, b};
     size_t len[2]   = {0};
     char*  str[2]   = {0};
 
+    char buff[30] = {0}; // Buffer for number
+
     for(int i = 0; i < 2; i++) {
 #ifdef THREADED_CODE
-        static const void* jump_table[] = {
-            // Keep this in the same order as in the ValueType enum
-            &&vbool,   /* VAL_BOOL */
-            &&vnumber, /* VAL_NUMBER */
-            &&vnil,    /* VAL_NIL */
-            &&vobj,    /* VAL_OBJ */
-            NULL,      /* VAL_EMPTY */
-            NULL,      /* VAL_DECLARED */
-        };
-
-        goto* jump_table[value[i].type];
-
-    vbool:
-        len[i] = bool_to_str(&str[i], AS_BOOL(value[i]));
-        continue;
-    vnumber:
-        len[i] = double_to_str(&str[i], AS_NUMBER(value[i]));
-        continue;
-    vnil:
-        len[i] = nil_to_str(&str[i]);
-        continue;
-    vobj:
-        str[i] = AS_CSTRING(value[i]);
-        len[i] = AS_STRING(value[i])->len;
-        continue;
+    #define VAL_TABLE
+    #include "jmptable.h"
+    #undef VAL_TABLE
 #else
-        switch(value[i].type) {
-            case VAL_BOOL:
-                len[i] = bool_to_str(&str[i], AS_BOOL(value[i]));
-                break;
-            case VAL_NUMBER:
-                len[i] = double_to_str(&str[i], AS_NUMBER(value[i]));
-                break;
-            case VAL_NIL:
-                len[i] = nil_to_str(&str[i]);
-                break;
-            case VAL_OBJ:
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+    #define BREAK       break
+#endif
+        DISPATCH(value[i].type)
+        {
+            CASE(VAL_BOOL)
+            {
+                len[i] = concat_bool(AS_BOOL(value[i]), &str[i]);
+                BREAK;
+            }
+            CASE(VAL_NUMBER)
+            {
+                len[i] = dbl_to_str_generic(AS_NUMBER(value[i]), buff, 30);
+                /* This is safe, there can only be one number on either side */
+                str[i] = buff;
+                BREAK;
+            }
+            CASE(VAL_NIL)
+            {
+                len[i] = concat_nil(&str[i]);
+                BREAK;
+            }
+            CASE(VAL_OBJ)
+            {
                 str[i] = AS_CSTRING(value[i]);
                 len[i] = AS_STRING(value[i])->len;
-                VM_push(vm, value[i]);
-                break;
-            case VAL_EMPTY:
-            default:
-                unreachable;
+                BREAK;
+            }
         }
-#endif
     }
 
     size_t length = len[0] + len[1];
@@ -198,6 +152,10 @@ static ObjString* concatenate(VM* vm, Value a, Value b)
     VM_pop(vm); // GC
 
     return string;
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
+#endif
 }
 
 SK_INTERNAL(force_inline ObjBoundMethod*)
@@ -230,7 +188,11 @@ VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
     VM_pop(vm);
 }
 
-//-------------------------NATIVE FUNCTIONS-------------------------//
+
+
+
+//------------------------- NATIVE -------------------------//
+
 /**
  * Determines processor time.
  * @ret - approximation of processor time used by the program in seconds.
@@ -328,6 +290,17 @@ SK_INTERNAL(force_inline bool) native_printl(unused VM* _, Value* argv)
     return true;
 }
 
+/**
+ * Converts the value into string.
+ **/
+SK_INTERNAL(force_inline bool) native_to_str(VM* vm, Value* argv)
+{
+    argv[-1] = OBJ_VAL(Value_to_str(vm, NULL, argv[0]));
+    return true;
+}
+
+
+
 
 /*
  *
@@ -353,9 +326,21 @@ void VM_init(VM* vm)
 
     Array_ObjRef_init(&vm->gray_stack); // Gray stack (NO GC)
 
-    // Class initializer string
-    vm->initstr = NULL; // GC stuff
-    vm->initstr = ObjString_from(vm, NULL, "__init__", sizeof("__init__") - 1);
+#ifdef DEBUG
+    assert(ops[OPS_ADD].len == ops[OPS_SUB].len);
+    assert(ops[OPS_ADD].len == ops[OPS_MUL].len);
+    assert(ops[OPS_ADD].len == ops[OPS_DIV].len);
+    assert(ops[OPS_ADD].len == ops[OPS_REM].len);
+    assert(ops[OPS_ADD].len == ops[OPS_NEG].len);
+    assert(ops[OPS_ADD].len == ops[OPS_NOT].len);
+#endif
+
+    // Create object strings to faster compile class methods
+    // Objects are equal if their address is the same.
+    for(UInt i = 0; i < OPSN; i++) {
+        vm->ops[i] = NULL;
+        vm->ops[i] = ObjString_from(vm, NULL, ops[i].name, ops[i].len);
+    }
 
     // Native function definitions
     VM_define_native(vm, "clock", native_clock, 0);       // GC
@@ -363,6 +348,7 @@ void VM_init(VM* vm)
     VM_define_native(vm, "delfield", native_delfield, 2); // GC
     VM_define_native(vm, "setfield", native_setfield, 3); // GC
     VM_define_native(vm, "printl", native_printl, 1);     // GC
+    VM_define_native(vm, "tostr", native_to_str, 1);      // GC
 }
 
 #define CALL_FN_OR_CLOSURE(vm, obj, argc)                                                \
@@ -416,11 +402,11 @@ SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, Int arg
 SK_INTERNAL(force_inline bool) VM_call_instance(VM* vm, ObjClass* cclass, Int argc)
 {
     vm->sp[-argc - 1] = OBJ_VAL(ObjInstance_new(vm, NULL, cclass));
-    Value init;
-    if(HashTable_get(&cclass->methods, OBJ_VAL(vm->initstr), &init)) {
-        return CALL_FN_OR_CLOSURE(vm, AS_OBJ(init), argc);
+    Obj* init         = cclass->overloaded[OPS_INIT];
+    if(init) {
+        return CALL_FN_OR_CLOSURE(vm, init, argc);
     } else if(unlikely(argc != 0)) {
-        RUNTIME_INITIALIZER_ARGC_ERR(vm, OBJSTR(vm, cclass), vm->initstr->storage, argc);
+        RUNTIME_INITIALIZER_ARGC_ERR(vm, OBJSTR(vm, cclass), ops[OPS_INIT].name, argc);
         return false;
     }
     return true;
@@ -536,9 +522,6 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #define READ_CONSTANTL() frame->fn->chunk.constants[READ_BYTEL()]
 #define READ_STRING()    AS_STRING(READ_CONSTANT())
 #define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
-#define DISPATCH(x)      switch(READ_BYTE())
-#define CASE(label)      case label:
-#define BREAK            break
 #define BINARY_OP(value_type, op)                                                        \
     do {                                                                                 \
         if(unlikely(!IS_NUMBER(stack_peek(0)) || !IS_NUMBER(stack_peek(1)))) {           \
@@ -581,6 +564,10 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
     #define OP_TABLE
     #include "jmptable.h"
     #undef OP_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+    #define BREAK       break
 #endif
 #ifdef DEBUG_TRACE_EXECUTION
     #undef BREAK
@@ -1065,28 +1052,34 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_METHOD)
             {
-                Value     method = stack_peek(0); // Function or closure
-                ObjClass* cclass = AS_CLASS(stack_peek(1));
+                Value      method      = stack_peek(0); // Function or closure
+                ObjClass*  cclass      = AS_CLASS(stack_peek(1));
+                ObjString* method_name = READ_STRING();
+
                 HashTable_insert(
                     vm,
                     NULL,
                     &cclass->methods,
-                    OBJ_VAL(READ_STRING()),
+                    OBJ_VAL(method_name),
                     method); // GC
-                VM_pop(vm);  // pop the method (function/closure)
+
+                VM_pop(vm); // pop the method (function/closure)
                 BREAK;
             }
             CASE(OP_METHODL)
             {
-                Value     method = stack_peek(0); // Function or closure
-                ObjClass* cclass = AS_CLASS(stack_peek(1));
+                Value      method      = stack_peek(0); // Function or closure
+                ObjClass*  cclass      = AS_CLASS(stack_peek(1));
+                ObjString* method_name = READ_STRINGL();
+
                 HashTable_insert(
                     vm,
                     NULL,
                     &cclass->methods,
-                    OBJ_VAL(READ_STRINGL()),
+                    OBJ_VAL(method_name),
                     method); // GC
-                VM_pop(vm);  // pop the method (function/closure)
+
+                VM_pop(vm); // pop the method (function/closure)
                 BREAK;
             }
             CASE(OP_INVOKE)
@@ -1113,6 +1106,15 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 }
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
+                BREAK;
+            }
+            CASE(OP_OVERLOAD)
+            {
+                // OP_METHOD must follow right after this instruction,
+                // compiler ensures it!
+                ObjClass* cclass        = AS_CLASS(stack_peek(1));
+                Byte      opn           = READ_BYTE();
+                cclass->overloaded[opn] = AS_OBJ(stack_peek(0));
                 BREAK;
             }
             CASE(OP_RET)
@@ -1169,7 +1171,6 @@ void VM_free(VM* vm)
     GARRAY_FREE(vm);
     HashTable_free(vm, NULL, &vm->strings);
     Array_ObjRef_free(&vm->gray_stack, NULL);
-    vm->initstr = NULL;
 
     Obj* next;
     for(Obj* head = vm->objects; head != NULL; head = next) {

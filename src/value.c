@@ -1,5 +1,6 @@
 #include "memory.h"
 #include "object.h"
+#include "skconf.h"
 #include "value.h"
 
 #include <math.h>
@@ -8,33 +9,46 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-ObjString* dbl_to_str(VM* vm, Compiler* C, double n)
+#define sizeoffalse (sizeof("false") - 1)
+#define sizeoftrue  (sizeof("true") - 1)
+#define sizeofnil   (sizeof("nil") - 1)
+
+Byte dbl_to_str_generic(double dbl, char* dest, UInt len)
 {
-    static char buff[UINT8_MAX];
-    size_t      len;
-
-    if(floor(n) != n) {
-        len = snprintf(buff, sizeof(buff), "%f", n);
+    if(floor(dbl) != dbl) {
+        return snprintf(dest, len, "%f", dbl);
     } else {
-        len = snprintf(buff, sizeof(buff), "%ld", (ssize_t)n);
+        return snprintf(dest, len, "%ld", (ssize_t)dbl);
     }
+}
 
-    int c;
-    /* Trim excess zeroes */
-    for(Byte i = len - 1; i > 0; i--) {
-        switch((c = buff[i])) {
-            case '0':
-                len--;
-                break;
-            default:
-                break;
-        }
+Byte bool_to_str_generic(bool boolean, char* dest, UInt len)
+{
+    if(boolean) {
+        len = MIN(len, sizeoftrue);
+        memcpy(dest, "true", len);
+        return len;
     }
+    len = MIN(len, sizeoffalse);
+    memcpy(dest, "false", len);
+    return len;
+}
 
+Byte nil_to_str_generic(char* dest, UInt len)
+{
+    len = MIN(len, sizeofnil);
+    memcpy(dest, "nil", len);
+    return len;
+}
+
+SK_INTERNAL(force_inline ObjString*) dbl_to_str(VM* vm, Compiler* C, double n)
+{
+    static char buff[30];
+    size_t      len = dbl_to_str_generic(n, buff, UINT8_MAX);
     return ObjString_from(vm, C, buff, len);
 }
 
-ObjString* bool_to_str(VM* vm, Compiler* C, bool boolean)
+SK_INTERNAL(force_inline ObjString*) bool_to_str(VM* vm, Compiler* C, bool boolean)
 {
     char*  str = NULL;
     ushort len = 0;
@@ -50,46 +64,83 @@ ObjString* bool_to_str(VM* vm, Compiler* C, bool boolean)
 
 ObjString* Value_to_str(VM* vm, Compiler* C, Value value)
 {
-    switch(value.type) {
-        case VAL_BOOL:
+#ifdef THREADED_CODE
+    #define VAL_TABLE
+    #include "jmptable.h"
+    #undef VAL_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+#endif
+    DISPATCH(value.type)
+    {
+        CASE(VAL_BOOL)
+        {
             return bool_to_str(vm, C, AS_BOOL(value));
-        case VAL_NUMBER:
+        }
+        CASE(VAL_NUMBER)
+        {
             return dbl_to_str(vm, C, AS_NUMBER(value));
-        case VAL_OBJ:
-            return Obj_to_str(vm, C, AS_OBJ(value));
-        case VAL_NIL:
+        }
+        CASE(VAL_NIL)
+        {
             return ObjString_from(vm, C, "nil", sizeof("nil") - 1);
-        case VAL_EMPTY:
-        case VAL_DECLARED:
-        default:
-            unreachable;
+        }
+        CASE(VAL_OBJ)
+        {
+            return Obj_to_str(vm, C, AS_OBJ(value));
+        }
     }
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
+#endif
 }
 
 void Value_print(Value value)
 {
-    switch(value.type) {
-        case VAL_BOOL:
+#ifdef THREADED_CODE
+    #define VAL_TABLE
+    #include "jmptable.h"
+    #undef BREAK
+    #define BREAK return
+    #undef VAL_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+    #define BREAK       break
+#endif
+    DISPATCH(value.type)
+    {
+        CASE(VAL_BOOL)
+        {
             printf(AS_BOOL(value) ? "true" : "false");
-            break;
-        case VAL_NUMBER:
+            BREAK;
+        }
+        CASE(VAL_NUMBER)
+        {
             if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) {
                 printf("%f", AS_NUMBER(value));
             } else {
                 printf("%ld", (int64_t)AS_NUMBER(value));
             }
-            break;
-        case VAL_NIL:
+            BREAK;
+        }
+        CASE(VAL_NIL)
+        {
             printf("nil");
-            break;
-        case VAL_OBJ:
+            BREAK;
+        }
+        CASE(VAL_OBJ)
+        {
             Object_print(value);
-            break;
-        case VAL_EMPTY:
-        case VAL_DECLARED:
-        default:
-            unreachable;
+            BREAK;
+        }
     }
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
+#endif
 }
 
 bool Value_eq(Value a, Value b)
@@ -98,37 +149,66 @@ bool Value_eq(Value a, Value b)
         return false;
     }
 
-    switch(a.type) {
-        case VAL_BOOL:
+#ifdef THREADED_CODE
+    #define VAL_TABLE
+    #include "jmptable.h"
+    #undef VAL_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+#endif
+    DISPATCH(a.type)
+    {
+        CASE(VAL_BOOL)
+        {
             return AS_BOOL(a) == AS_BOOL(b);
-        case VAL_NUMBER:
+        }
+        CASE(VAL_NUMBER)
+        {
             return AS_NUMBER(a) == AS_NUMBER(b);
-        case VAL_EMPTY:
-        case VAL_NIL:
+        }
+        CASE(VAL_NIL)
+        {
             return true;
-        case VAL_OBJ:
+        }
+        CASE(VAL_OBJ)
+        {
             return AS_OBJ(a) == AS_OBJ(b);
-        case VAL_DECLARED:
-        default:
-            unreachable;
+        }
     }
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
+#endif
 }
 
 Hash Value_hash(Value value)
 {
-    switch(value.type) {
-        case VAL_NIL:
-            return 7;
-        case VAL_BOOL:
+#ifdef THREADED_CODE
+    #define VAL_TABLE
+    #include "jmptable.h"
+    #undef VAL_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+#endif
+    DISPATCH(value.type)
+    {
+        CASE(VAL_BOOL)
+        {
             return AS_BOOL(value) ? 3 : 5;
-        case VAL_NUMBER:
+        }
+        CASE(VAL_NUMBER)
+        {
             return Hash_double(AS_NUMBER(value));
-        case VAL_OBJ:
+        }
+        CASE(VAL_NIL)
+        {
+            return 7;
+        }
+        CASE(VAL_OBJ)
+        {
             return Obj_hash(value);
-        case VAL_EMPTY:
-            return 0;
-        case VAL_DECLARED:
-        default:
-            unreachable;
+        }
     }
 }

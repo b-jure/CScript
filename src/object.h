@@ -127,6 +127,7 @@ struct ObjClass { // typedef is inside 'value.h'
     Obj        obj;
     ObjString* name;
     HashTable  methods;
+    Obj*       overloaded[OPSN];
 };
 
 struct ObjInstance { // typedef is inside 'value.h'

@@ -155,6 +155,8 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return disassemble_invoke("OP_INVOKE", chunk, OP_INVOKE, offset);
         case OP_INVOKEL:
             return disassemble_invoke("OP_INVOKEL", chunk, OP_INVOKEL, offset);
+        case OP_OVERLOAD:
+            return Instruction_short("OP_OVERLOAD", chunk, OP_OVERLOAD, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -216,6 +218,9 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
         case OP_GET_PROPERTY:
         case OP_METHOD:
             disassemble_const(chunk, param);
+            break;
+        case OP_OVERLOAD:
+            printf("'%s'", ops[OPS_INIT].name);
             break;
         default:
             // do nothing

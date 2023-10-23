@@ -1,6 +1,7 @@
 #include "hashtable.h"
 #include "mem.h"
 #include "object.h"
+#include "value.h"
 
 #define GROW_TABLE_CAPACITY(prime) get_prime_capacity(prime)
 
@@ -113,7 +114,7 @@ SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* 
 
     for(UInt i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
-        if(entry == NULL) {
+        if(entry->key.type == VAL_EMPTY) {
             continue;
         }
         Entry* dest = Entry_find(entries, new_cap, entry->key);

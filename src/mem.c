@@ -94,6 +94,22 @@ SK_INTERNAL(force_inline void) mark_upvalues(VM* vm)
     }
 }
 
+SK_INTERNAL(force_inline void) mark_ops(VM* vm)
+{
+    for(UInt i = 0; i < OPSN; i++) {
+        mark_obj(vm, (Obj*)vm->ops[i]);
+    }
+}
+
+SK_INTERNAL(force_inline void) mark_vm_roots(VM* vm)
+{
+    mark_stack(vm);
+    mark_frames(vm);
+    mark_upvalues(vm);
+    mark_globals(vm);
+    mark_ops(vm);
+}
+
 SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
 {
 #ifdef DEBUG_LOG_GC
@@ -125,6 +141,9 @@ SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
             ObjClass* cclass = (ObjClass*)obj;
             mark_obj(vm, (Obj*)cclass->name);
             mark_table(vm, &cclass->methods);
+            for(UInt i = 0; i < OPSN; i++) {
+                mark_obj(vm, cclass->overloaded[i]);
+            }
             break;
         }
         case OBJ_INSTANCE: {
@@ -148,15 +167,6 @@ SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
         default:
             unreachable;
     }
-}
-
-SK_INTERNAL(force_inline void) mark_vm_roots(VM* vm)
-{
-    mark_stack(vm);
-    mark_frames(vm);
-    mark_upvalues(vm);
-    mark_globals(vm);
-    mark_obj(vm, (Obj*)vm->initstr);
 }
 
 SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)

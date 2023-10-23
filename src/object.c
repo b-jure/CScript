@@ -144,9 +144,12 @@ SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, Compiler* C, ObjUpvalue* 
 
 ObjClass* ObjClass_new(VM* vm, Compiler* C, ObjString* name)
 {
-    ObjClass* cclass = ALLOC_OBJ(vm, C, ObjClass, OBJ_CLASS);
+    ObjClass* cclass = ALLOC_OBJ(vm, C, ObjClass, OBJ_CLASS); // GC
     cclass->name     = name;
     HashTable_init(&cclass->methods);
+    for(UInt i = 0; i < OPSN; i++) {
+        cclass->overloaded[i] = NULL;
+    }
     return cclass;
 }
 
@@ -268,7 +271,8 @@ void Object_print(Value value)
         }
         CASE(OBJ_INSTANCE)
         {
-            printf("%s instance", AS_INSTANCE(value)->cclass->name->storage);
+            // Print same as class or maybe add instance ?
+            printf("%s", AS_INSTANCE(value)->cclass->name->storage);
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)

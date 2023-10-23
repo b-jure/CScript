@@ -62,10 +62,6 @@ typedef struct {
 
 ARRAY_NEW(Array_Value, Value);
 
-void Value_print(Value value);
-bool Value_eq(Value a, Value b);
-Hash Value_hash(Value value);
-
 #ifndef __SKOOMA_COMPILER_H__
 typedef struct Compiler Compiler;
 #endif
@@ -74,5 +70,12 @@ typedef struct VM VM;
 #endif
 
 ObjString* Value_to_str(VM* vm, Compiler* C, Value value);
+void       Value_print(Value value);
+bool       Value_eq(Value a, Value b);
+Hash       Value_hash(Value value);
+
+Byte dbl_to_str_generic(double dbl, char* dest, UInt len);
+Byte bool_to_str_generic(bool boolean, char* dest, UInt len);
+Byte nil_to_str_generic(char* dest, UInt len);
 
 #endif

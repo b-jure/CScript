@@ -86,8 +86,6 @@ typedef struct {
 #define LOCAL_SET(var, bit) BIT_SET((var)->flags, bit)
 // Checks if 'bit' is set.
 #define LOCAL_IS(var, bit) BIT_CHECK((var)->flags, bit)
-// Clears the 'bit' in 'var' flags.
-#define LOCAL_CLEAR(var, bit) BIT_CLEAR((var)->flags, bit)
 // Returns 'var' flags.
 #define LOCAL_FLAGS(var) ((var)->flags)
 
@@ -148,26 +146,8 @@ typedef struct {
 
 /* UpValue is a Value that is declared/defined inside of enclosing function.
  * Contains stack index of that variable inside of that enclosing function.
- * This is useful for closures when capturing enclosing function values.
  * The 'local' field indicates if this is the local variable of the innermost
  * enclosing function or the UpValue.
- *
- * More on this:
- * Skooma is a language with first-class functions, meaning functions can be
- * passed around as arguments the same way as numbers, strings, objects.. (also being
- * first-class). Additionally this language supports closures which are basically wrappers
- * around the functions but also pack additional information about the 'environment'.
- * Environment is actually a mapping associating each free variable (variables used
- * locally inside a function, but defined in an enclosing scope) with the value of
- * the enclosing variable.
- * Main thing to understand is that closures can access variables that are defined
- * outside of them, right before the closure definition up to global scope.
- * Now finally the 'UpValue' is a struct that helps us access those variables
- * outside of the function currently being parsed by accessing the enclosing function and
- * searching its stack for the value at 'idx'. Because we want the closure to capture its
- * environment across multiple enclosing functions, the UpValue might store the UpValue of
- * the other enclosing function. This is bubbling up is performed until we find the actual
- * index of the Value on the stack or we find the matching global.
  */
 typedef struct {
     UInt idx;   // Stack index
@@ -1109,12 +1089,23 @@ SK_INTERNAL(void) parse_method(VM* vm, PPC ppc)
     UInt  idx        = C_make_const(C(), vm, identifier);
 
     FunctionType type = FN_METHOD;
-    if(vm->initstr->len == AS_STRING(identifier)->len &&
-       strcmp(AS_CSTRING(identifier), vm->initstr->storage) == 0)
-    {
+
+    if(AS_STRING(identifier) == vm->ops[OPS_INIT]) {
         type = FN_INIT;
     }
+
     parse_fn(vm, ppc, type);
+
+    if(type == FN_INIT) {
+        C_emit_op(C(), OP_OVERLOAD, OPS_INIT);
+    } else if(AS_STRING(identifier)->len == ops[OPS_ADD].len) {
+        for(UInt i = 1; i < OPSN; i++) {
+            if(AS_STRING(identifier) == vm->ops[i]) {
+                C_emit_op(C(), OP_OVERLOAD, i);
+                break;
+            }
+        }
+    }
 
     C_emit_op(C(), GET_OP_TYPE(idx, OP_METHOD), idx);
 }
@@ -1537,7 +1528,7 @@ SK_INTERNAL(void) parse_stm_return(VM* vm, PPC ppc)
         C_emit_return(C());
     } else {
         if(C()->fn_type == FN_INIT) {
-            COMPILER_RETURN_INIT_ERR(C(), vm->initstr->storage);
+            COMPILER_RETURN_INIT_ERR(C(), ops[OPS_INIT].name);
         }
         parse_expr(vm, ppc);
         C_expect(C(), TOK_SEMICOLON, "Expect ';' after return value.");

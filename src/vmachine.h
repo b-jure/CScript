@@ -73,8 +73,9 @@ struct VM {
     // Closure values
     ObjUpvalue* open_upvals; // List of open upvalues (NO GC)
 
-    // Class init method name
-    ObjString* initstr;
+    // Reserved names of class methods that overload
+    // operators and the name of class initializer function.
+    ObjString* ops[OPSN];
 
     // Garbage collection
     Obj*         objects;      /* List of allocated object (GC) */

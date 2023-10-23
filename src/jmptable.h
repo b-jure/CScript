@@ -76,6 +76,7 @@ static const void* const optable[OPCODE_N] = {
     &&L_OP_METHODL,
     &&L_OP_INVOKE,
     &&L_OP_INVOKEL,
+    &&L_OP_OVERLOAD,
     &&L_OP_RET,
 };
 
@@ -102,6 +103,30 @@ static const void* objtable[OBJ_BOUND_METHOD + 1] = {
     &&L_OBJ_CLASS,
     &&L_OBJ_INSTANCE,
     &&L_OBJ_BOUND_METHOD,
+};
+
+#elif defined(VAL_TABLE)
+
+    #undef DISPATCH
+
+    #undef CASE
+
+    #undef BREAK
+
+    #define DISPATCH(x) goto* valtable[x];
+
+    #define CASE(label) L_##label:
+
+    #define BREAK continue
+
+static const void* valtable[] = {
+    &&L_VAL_BOOL,
+    &&L_VAL_NUMBER,
+    &&L_VAL_NIL,
+    &&L_VAL_OBJ,
+    /* Placeholders */
+    NULL,
+    NULL,
 };
 
 #endif

@@ -143,6 +143,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_GET_PROPERTY)
         CASE(OP_METHOD)
         CASE(OP_INVOKE)
+        CASE(OP_OVERLOAD)
         {
             Chunk_write_op(chunk, code, false, param, line);
             BREAK;
