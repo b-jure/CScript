@@ -23,8 +23,8 @@
 #define stack_reset(vm) (vm)->sp = (vm)->stack
 #define stack_size(vm)  ((vm)->sp - (vm)->stack)
 
-#define OBJSTR(vm, obj) Obj_to_str(vm, NULL, (Obj*)obj)
-#define VALSTR(vm, val) Value_to_str(vm, NULL, val)
+#define OBJSTR(vm, obj) (Obj_to_str(vm, NULL, (Obj*)obj)->storage)
+#define VALSTR(vm, val) (Value_to_str(vm, NULL, val)->storage)
 
 Int runtime = 0;
 
@@ -295,7 +295,7 @@ SK_INTERNAL(force_inline bool) native_printl(unused VM* _, Value* argv)
  **/
 SK_INTERNAL(force_inline bool) native_to_str(VM* vm, Value* argv)
 {
-    argv[-1] = OBJ_VAL(Value_to_str(vm, NULL, argv[0]));
+    argv[-1] = OBJ_VAL(VALSTR(vm, argv[0]));
     return true;
 }
 
@@ -326,20 +326,11 @@ void VM_init(VM* vm)
 
     Array_ObjRef_init(&vm->gray_stack); // Gray stack (NO GC)
 
-#ifdef DEBUG
-    assert(ops[OPS_ADD].len == ops[OPS_SUB].len);
-    assert(ops[OPS_ADD].len == ops[OPS_MUL].len);
-    assert(ops[OPS_ADD].len == ops[OPS_DIV].len);
-    assert(ops[OPS_ADD].len == ops[OPS_REM].len);
-    assert(ops[OPS_ADD].len == ops[OPS_NEG].len);
-    assert(ops[OPS_ADD].len == ops[OPS_NOT].len);
-#endif
-
     // Create object strings to faster compile class methods
     // Objects are equal if their address is the same.
     for(UInt i = 0; i < OPSN; i++) {
-        vm->ops[i] = NULL;
-        vm->ops[i] = ObjString_from(vm, NULL, ops[i].name, ops[i].len);
+        vm->statics[i] = NULL;
+        vm->statics[i] = ObjString_from(vm, NULL, static_str[i].name, static_str[i].len);
     }
 
     // Native function definitions
@@ -351,22 +342,32 @@ void VM_init(VM* vm)
     VM_define_native(vm, "tostr", native_to_str, 1);      // GC
 }
 
-#define CALL_FN_OR_CLOSURE(vm, obj, argc)                                                \
+/**
+ * 'obj' is either a function or closure.
+ * 'argc' argument count.
+ * 'debug' is the receiver in case call is invoked on method otherwise NULL.
+ **/
+#define CALL_FN_OR_CLOSURE(vm, obj, argc, debug)                                         \
     ({                                                                                   \
         bool ret;                                                                        \
         if(Obj_type(obj) == OBJ_CLOSURE) {                                               \
             ObjClosure* closure = (ObjClosure*)(obj);                                    \
-            ret                 = VM_call_fn(vm, closure, closure->fn, argc);            \
+            ret                 = VM_call_fn(vm, closure, closure->fn, argc, debug);     \
         } else {                                                                         \
-            ret = VM_call_fn(vm, NULL, (ObjFunction*)(obj), argc);                       \
+            ret = VM_call_fn(vm, NULL, (ObjFunction*)(obj), argc, debug);                \
         }                                                                                \
         ret;                                                                             \
     })
 
-SK_INTERNAL(bool) VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, Int argc)
+SK_INTERNAL(bool)
+VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, Int argc, ObjClass* debug)
 {
     if(unlikely((Int)fn->arity != argc)) {
-        RUNTIME_ARGC_ERR(vm, OBJSTR(vm, fn), fn->arity, argc);
+        if(debug != NULL) {
+            RUNTIME_INSTANCE_ARGC_ERR(vm, OBJSTR(vm, debug), OBJSTR(vm, fn), argc);
+        } else {
+            RUNTIME_ARGC_ERR(vm, OBJSTR(vm, fn), fn->arity, argc);
+        }
         return false;
     }
 
@@ -402,11 +403,11 @@ SK_INTERNAL(force_inline bool) VM_call_native(VM* vm, ObjNative* native, Int arg
 SK_INTERNAL(force_inline bool) VM_call_instance(VM* vm, ObjClass* cclass, Int argc)
 {
     vm->sp[-argc - 1] = OBJ_VAL(ObjInstance_new(vm, NULL, cclass));
-    Obj* init         = cclass->overloaded[OPS_INIT];
-    if(init) {
-        return CALL_FN_OR_CLOSURE(vm, init, argc);
+    Obj* init         = cclass->overloaded[SS_INIT];
+    if(init != NULL) {
+        return CALL_FN_OR_CLOSURE(vm, init, argc, cclass);
     } else if(unlikely(argc != 0)) {
-        RUNTIME_INITIALIZER_ARGC_ERR(vm, OBJSTR(vm, cclass), ops[OPS_INIT].name, argc);
+        RUNTIME_INSTANCE_INIT_ARGC_ERR(vm, OBJSTR(vm, cclass), argc);
         return false;
     }
     return true;
@@ -419,13 +420,17 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, Int argc)
             case OBJ_BOUND_METHOD: {
                 ObjBoundMethod* bound = AS_BOUND_METHOD(fnval);
                 vm->sp[-argc - 1]     = bound->receiver; // class instance (self)
-                return CALL_FN_OR_CLOSURE(vm, bound->method, argc);
+                return CALL_FN_OR_CLOSURE(
+                    vm,
+                    bound->method,
+                    argc,
+                    AS_INSTANCE(bound->receiver)->cclass);
             }
             case OBJ_FUNCTION:
-                return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc);
+                return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc, NULL);
             case OBJ_CLOSURE: {
                 ObjClosure* closure = AS_CLOSURE(fnval);
-                return VM_call_fn(vm, closure, closure->fn, argc);
+                return VM_call_fn(vm, closure, closure->fn, argc, NULL);
             }
             case OBJ_CLASS:
                 return VM_call_instance(vm, AS_CLASS(fnval), argc);
@@ -514,6 +519,22 @@ SK_INTERNAL(force_inline void) VM_close_upval(VM* vm, Value* last)
     }
 }
 
+/**
+ * Searches the entire table (slow) for the matching index in order to
+ * provide more precise runtime error output.
+ * It is okay if the lookup is slow, this only gets called when runtime error occurs.
+ **/
+SK_INTERNAL(force_inline ObjString*) VM_find_glob_name(VM* vm, UInt idx)
+{
+    for(UInt i = 0; i < vm->globids.cap; i++) {
+        Entry* entry = &vm->globids.entries[i];
+        if(entry->key.type != VAL_EMPTY && AS_NUMBER(entry->value) == idx) {
+            return (ObjString*)AS_OBJ(entry->key);
+        }
+    }
+    unreachable;
+}
+
 SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 {
 #define READ_BYTE()      (*ip++)
@@ -600,11 +621,12 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_NEG)
             {
-                if(unlikely(!IS_NUMBER(stack_peek(0)))) {
-                    RUNTIME_UNARY_NEGATION_ERR(vm, VALSTR(vm, stack_peek(0)));
+                Value val = stack_peek(0);
+                if(unlikely(!IS_NUMBER(val))) {
+                    RUNTIME_UNARY_NEGATION_ERR(vm, VALSTR(vm, val));
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(stack_peek(0));
+                AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(val);
                 BREAK;
             }
             CASE(OP_ADD)
@@ -716,11 +738,12 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_GLOBAL)
             {
-                Global* global = &vm->globvals[READ_BYTE()];
+                Byte    idx    = READ_BYTE();
+                Global* global = &vm->globvals[idx];
 
-                if(unlikely(IS_UNDEFINED(global->value))) {
+                if(unlikely(IS_UNDEFINED(global->value) || IS_DECLARED(global->value))) {
                     frame->ip = ip;
-                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm);
+                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm, VM_find_glob_name(vm, idx)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -729,11 +752,12 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_GLOBALL)
             {
-                Global* global = &vm->globvals[READ_BYTEL()];
+                UInt    idx    = READ_BYTEL();
+                Global* global = &vm->globvals[idx];
 
-                if(unlikely(IS_UNDEFINED(global->value))) {
+                if(unlikely(IS_UNDEFINED(global->value) || IS_DECLARED(global->value))) {
                     frame->ip = ip;
-                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm);
+                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm, VM_find_glob_name(vm, idx)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -742,15 +766,17 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBAL)
             {
-                Global* global = &vm->globvals[READ_BYTE()];
+                Byte    idx    = READ_BYTE();
+                Global* global = &vm->globvals[idx];
 
-                if(unlikely(IS_UNDEFINED(global->value))) {
+                if(unlikely(IS_UNDEFINED(global->value) || IS_DECLARED(global->value))) {
                     frame->ip = ip;
-                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm);
+                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm, VM_find_glob_name(vm, idx)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 } else if(unlikely(GLOB_CHECK(global, GLOB_FIXED_BIT))) {
-                    frame->ip = ip;
-                    RUNTIME_GLOBAL_FIXED_ERR(vm);
+                    frame->ip       = ip;
+                    ObjString* name = VM_find_glob_name(vm, idx);
+                    RUNTIME_GLOBAL_FIXED_ERR(vm, name->len, name->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -759,15 +785,17 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_GLOBALL)
             {
-                Global* global = &vm->globvals[READ_BYTEL()];
+                UInt    idx    = READ_BYTEL();
+                Global* global = &vm->globvals[idx];
 
-                if(unlikely(IS_UNDEFINED(global->value))) {
+                if(unlikely(IS_UNDEFINED(global->value) || IS_DECLARED(global->value))) {
                     frame->ip = ip;
-                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm);
+                    RUNTIME_GLOBAL_UNDEFINED_ERR(vm, VM_find_glob_name(vm, idx)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 } else if(unlikely(GLOB_CHECK(global, GLOB_FIXED_BIT))) {
-                    frame->ip = ip;
-                    RUNTIME_GLOBAL_FIXED_ERR(vm);
+                    frame->ip       = ip;
+                    ObjString* name = VM_find_glob_name(vm, idx);
+                    RUNTIME_GLOBAL_FIXED_ERR(vm, name->len, name->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -1088,7 +1116,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjString* method_name = READ_STRING();
                 Value      argc        = READ_CONSTANTL();
                 frame->ip              = ip;
-                if(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc))) {
+                if(unlikely(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc)))) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm->frames[vm->fc - 1];
@@ -1101,7 +1129,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjString* method_name = READ_STRINGL();
                 Value      argc        = READ_CONSTANTL();
                 frame->ip              = ip;
-                if(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc))) {
+                if(unlikely(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc)))) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm->frames[vm->fc - 1];
@@ -1115,6 +1143,26 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjClass* cclass        = AS_CLASS(stack_peek(1));
                 Byte      opn           = READ_BYTE();
                 cclass->overloaded[opn] = AS_OBJ(stack_peek(0));
+                BREAK;
+            }
+            CASE(OP_INHERIT)
+            {
+                ObjClass* subclass   = AS_CLASS(stack_peek(0));
+                Value     superclass = stack_peek(1);
+                if(unlikely(!IS_CLASS(superclass))) {
+                    frame->ip = ip;
+                    RUNTIME_INHERIT_ERR(vm, OBJSTR(vm, subclass), VALSTR(vm, superclass));
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                HashTable_into(
+                    vm,
+                    NULL,
+                    &AS_CLASS(superclass)->methods,
+                    &subclass->methods);
+                for(UInt i = 0; i < OPSN; i++) {
+                    subclass->overloaded[i] = AS_CLASS(superclass)->overloaded[i];
+                }
+                VM_pop(vm);
                 BREAK;
             }
             CASE(OP_RET)
@@ -1160,7 +1208,7 @@ InterpretResult VM_interpret(VM* vm, const char* source)
     }
 
     VM_push(vm, OBJ_VAL(fn));
-    VM_call_fn(vm, NULL, fn, 0);
+    VM_call_fn(vm, NULL, fn, 0, NULL);
 
     return VM_run(vm);
 }

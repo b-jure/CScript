@@ -370,10 +370,10 @@ Token_into_stringval(VM* vm, Compiler* C, const Token* name)
 SK_INTERNAL(force_inline UInt)
 C_make_global_identifier(Compiler* C, VM* vm, Value identifier, Byte flags)
 {
-    Value index;
+    Value  index;
+    Global glob = {DECLARED_VAL, flags};
 
     if(!HashTable_get(&vm->globids, identifier, &index)) {
-        Global glob = {DECLARED_VAL, flags};
         VM_push(vm, identifier);
         if(unlikely((vm)->globlen + 1 > UINT24_MAX)) {
             COMPILER_GLOBALS_LIMIT_ERR(C, UINT24_MAX);
@@ -387,7 +387,12 @@ C_make_global_identifier(Compiler* C, VM* vm, Value identifier, Byte flags)
     UInt i = (UInt)AS_NUMBER(index);
 
     if(IS_DECLARED(vm->globvals[i].value)) {
-        COMPILER_GLOBAL_REDEFINITION_ERR(C, AS_CSTRING(identifier));
+        COMPILER_GLOBAL_REDEFINITION_ERR(
+            C,
+            AS_STRING(identifier)->len,
+            AS_CSTRING(identifier));
+    } else {
+        vm->globvals[i] = glob;
     }
 
     return i;
@@ -553,10 +558,9 @@ SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C)
 
 ObjFunction* compile(VM* vm, const char* source)
 {
-    Compiler* C      = ALLOC_COMPILER();
-    Class     cclass = {0};
+    Compiler* C = ALLOC_COMPILER();
 
-    C_init(C, &cclass, vm, FN_SCRIPT, NULL);
+    C_init(C, NULL, vm, FN_SCRIPT, NULL);
     Parser_init(C->parser, source);
 
     C_advance(C);
@@ -676,7 +680,8 @@ SK_INTERNAL(void) C_new_local(PPC ppc, Token name)
 
 SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
 {
-    return left->len == right->len && memcmp(left->start, right->start, left->len) == 0;
+    return (left->len == right->len) &&
+           (memcmp(left->start, right->start, left->len) == 0);
 }
 
 SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Token* name)
@@ -735,13 +740,14 @@ make_undefined_global(VM* vm, Compiler* C, Value identifier)
     return (Int)AS_NUMBER(idx);
 }
 
-SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
+// @FIX: repl
+SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm, Token* name)
 {
     Value idx;
-    Value identifier = Token_into_stringval(vm, C, &C->parser->previous);
+    Value identifier = Token_into_stringval(vm, C, name);
 
     if(!HashTable_get(&vm->globids, identifier, &idx)) {
-        if(C_flag_is(C, FN_BIT)) {
+        if(C->fn_type != FN_SCRIPT) {
             // Create reference to a global but don't declare or define it
             idx = NUMBER_VAL(make_undefined_global(vm, C, identifier));
         } else {
@@ -754,8 +760,7 @@ SK_INTERNAL(UInt) C_get_global(Compiler* C, VM* vm)
         // If we are in global scope and there is a global identifier
         // but its value is of type undefined, that means we didn't omit
         // OP_DEFINE_GLOBAL(L) instruction for it.
-        // @FIX: Make this somehow work in REPL mode
-        if(!C_flag_is(C, FN_BIT) && IS_UNDEFINED(vm->globvals[i].value)) {
+        if(C->fn_type == FN_SCRIPT && IS_UNDEFINED(vm->globvals[i].value)) {
             COMPILER_VAR_UNDEFINED_ERR(C, AS_CSTRING(identifier));
             return 0;
         }
@@ -840,7 +845,7 @@ SK_INTERNAL(void)
 parse_dec_var_fixed(VM* vm, PPC ppc)
 {
     C_flag_set(C(), FIXED_BIT);
-    C_expect(C(), TOK_VAR, "Expect 'var' in variable declaration.");
+    C_expect(C(), TOK_VAR, "Expect 'var' after 'fixed' in variable declaration.");
     parse_dec_var(vm, ppc);
 }
 
@@ -920,9 +925,7 @@ parse_fn(VM* vm, PPC ppc, FunctionType type)
 #define C_new() (*ppc_new)
 
     Compiler* C_new = ALLOC_COMPILER();
-    Class     cclass;
-    cclass.enclosing = C()->cclass;
-    C_init(C_new, &cclass, vm, type, C());
+    C_init(C_new, C()->cclass, vm, type, C());
 
     uint64_t mask = C_flags(C());
     C_flags_clear(C_new);
@@ -1059,7 +1062,7 @@ SK_INTERNAL(force_inline void) named_variable(VM* vm, PPC ppc, Token name)
         setop          = OP_SET_UPVALUE;
         getop          = OP_GET_UPVALUE;
     } else {
-        idx          = C_get_global(C(), vm);
+        idx          = C_get_global(C(), vm, &name);
         Global* glob = &vm->globvals[idx];
         flags        = GLOB_FLAGS(glob);
         if(idx > SHORT_STACK_SIZE) {
@@ -1073,7 +1076,7 @@ SK_INTERNAL(force_inline void) named_variable(VM* vm, PPC ppc, Token name)
 
     if(C_flag_is(C(), ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
         if(BIT_CHECK(flags, VFIXED_BIT)) { /* Statical check for mutability */
-            COMPILER_VAR_ASSIGN_ERR(C(), (Int)name.len, name.start);
+            COMPILER_VAR_FIXED_ERR(C(), (Int)name.len, name.start);
         }
         parse_expr(vm, ppc);
         C_emit_op(C(), setop, idx);
@@ -1090,17 +1093,18 @@ SK_INTERNAL(void) parse_method(VM* vm, PPC ppc)
 
     FunctionType type = FN_METHOD;
 
-    if(AS_STRING(identifier) == vm->ops[OPS_INIT]) {
+    if(AS_STRING(identifier) == vm->statics[SS_INIT]) {
         type = FN_INIT;
     }
 
     parse_fn(vm, ppc, type);
 
     if(type == FN_INIT) {
-        C_emit_op(C(), OP_OVERLOAD, OPS_INIT);
-    } else if(AS_STRING(identifier)->len == ops[OPS_ADD].len) {
+        C_emit_op(C(), OP_OVERLOAD, SS_INIT);
+    } else {
+        ObjString* str = AS_STRING(identifier);
         for(UInt i = 1; i < OPSN; i++) {
-            if(AS_STRING(identifier) == vm->ops[i]) {
+            if(str == vm->statics[i]) {
                 C_emit_op(C(), OP_OVERLOAD, i);
                 break;
             }
@@ -1132,12 +1136,32 @@ SK_INTERNAL(void) parse_dec_class(VM* vm, PPC ppc)
         C_emit_op(C(), GET_OP_TYPE(gidx, OP_DEFINE_GLOBAL), gidx);
     }
 
+    Class cclass;
+    cclass.enclosing = C()->cclass;
+    C()->cclass      = &cclass;
+
     C_flag_clear(C(), ASSIGN_BIT);
+
+    if(C_match(C(), TOK_IMPL)) {
+        C_expect(C(), TOK_IDENTIFIER, "Expect superclass name.");
+        parse_variable(vm, ppc);
+        if(Identifier_eq(&C()->parser->previous, &class_name)) {
+            COMPILER_CLASS_INHERIT_ERR(C(), AS_CSTRING(identifier));
+        }
+        named_variable(vm, ppc, class_name);
+        C_emit_byte(C(), OP_INHERIT);
+    }
+
     named_variable(vm, ppc, class_name); // Push the class
+
+
     C_expect(C(), TOK_LBRACE, "Expect '{' before class body.");
     while(!C_check(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
         parse_method(vm, ppc);
     }
+
+    C()->cclass = cclass.enclosing;
+
     C_expect(C(), TOK_RBRACE, "Expect '}' after class body.");
     C_emit_byte(C(), OP_POP); // Pop the class
 }
@@ -1168,6 +1192,9 @@ SK_INTERNAL(void)
 parse_dec_var(VM* vm, PPC ppc)
 {
     if(C_match(C(), TOK_FIXED)) {
+        if(C_flag_is(C(), FIXED_BIT)) {
+            C_error(C(), "Expect variable name.");
+        }
         C_flag_set(C(), FIXED_BIT);
     }
 
@@ -1528,7 +1555,7 @@ SK_INTERNAL(void) parse_stm_return(VM* vm, PPC ppc)
         C_emit_return(C());
     } else {
         if(C()->fn_type == FN_INIT) {
-            COMPILER_RETURN_INIT_ERR(C(), ops[OPS_INIT].name);
+            COMPILER_RETURN_INIT_ERR(C(), static_str[SS_INIT].name);
         }
         parse_expr(vm, ppc);
         C_expect(C(), TOK_SEMICOLON, "Expect ';' after return value.");

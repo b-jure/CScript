@@ -78,6 +78,7 @@ typedef enum {
     OP_INVOKE,               /* Invoke fast method call */
     OP_INVOKEL,              /* Invoke fast method call long */
     OP_OVERLOAD,             /* Overload operator or initializer for a class */
+    OP_INHERIT,              /* Inherit class properties. */
     OP_RET,                  /* Return from function, pop the CallFrame */
 } OpCode;
 

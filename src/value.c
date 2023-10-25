@@ -133,7 +133,7 @@ void Value_print(Value value)
         }
         CASE(VAL_OBJ)
         {
-            Object_print(value);
+            Obj_print(value);
             BREAK;
         }
     }

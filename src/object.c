@@ -224,7 +224,7 @@ void ObjType_print(ObjType type) // Debug
     }
 }
 
-void Object_print(Value value)
+void Obj_print(Value value)
 {
 #ifdef THREADED_CODE
     #define OBJ_TABLE
@@ -271,8 +271,7 @@ void Object_print(Value value)
         }
         CASE(OBJ_INSTANCE)
         {
-            // Print same as class or maybe add instance ?
-            printf("%s", AS_INSTANCE(value)->cclass->name->storage);
+            printf("%s instance", AS_INSTANCE(value)->cclass->name->storage);
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
@@ -422,7 +421,19 @@ ObjString* Obj_to_str(VM* vm, Compiler* C, Obj* object)
         }
         CASE(OBJ_INSTANCE)
         {
-            return ((ObjInstance*)object)->cclass->name;
+            ObjString*  name        = ((ObjInstance*)object)->cclass->name;
+            const char* class_name  = name->storage;
+            UInt        class_len   = name->len;
+            const char* literal     = " instance";
+            UInt        literal_len = sizeof(" instance") - 1;
+            UInt        arrlen      = literal_len + class_len + 1;
+            char        buff[arrlen];
+
+            memcpy(buff, class_name, class_len);
+            memcpy(buff + class_len, literal, literal_len);
+            buff[arrlen - 1] = '\0';
+
+            return ObjString_from(vm, C, buff, arrlen - 1);
         }
         CASE(OBJ_BOUND_METHOD)
         {

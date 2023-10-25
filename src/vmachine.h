@@ -52,6 +52,49 @@ ARRAY_NEW(Array_ObjRef, Obj*);
 #define GC_CLEAR(vm, bit) BIT_CLEAR((vm)->gc_flags, bit)
 #define GC_CHECK(vm, bit) BIT_CHECK((vm)->gc_flags, bit)
 
+/* Function names */
+#define SS_INIT 0
+#define SS_ADD  1
+#define SS_SUB  2
+#define SS_MUL  3
+#define SS_DIV  4
+#define SS_REM  5
+#define SS_NEG  6
+#define OPSN    (SS_NEG + 1) /* Number of overloadable methods */
+/* Value types */
+#define SS_STR  7
+#define SS_NUM  8
+#define SS_INS  9
+#define SS_BOOL 10
+#define SS_NIL  11
+/* Total size */
+#define SS_SIZE (sizeof(static_str) / sizeof(static_str[0]))
+
+typedef struct {
+    const char*   name;
+    const uint8_t len;
+} InternedString;
+
+#define sizeofstr(str) (sizeof(str) - 1)
+
+static const InternedString static_str[] = {
+  /* Reserved class function names for overloading */
+    {"__init__", sizeofstr("__init__")},
+    {"__add__",  sizeofstr("__add__") },
+    {"__sub__",  sizeofstr("__sub__") },
+    {"__mul__",  sizeofstr("__mul__") },
+    {"__div__",  sizeofstr("__div__") },
+    {"__rem__",  sizeofstr("__rem__") },
+    {"__neg__",  sizeofstr("__neg__") },
+    {"__not__",  sizeofstr("__not__") },
+ /* (user) Value types */
+    {"string",   sizeofstr("string")  },
+    {"number",   sizeofstr("number")  },
+    {"instance", sizeofstr("instance")},
+    {"bool",     sizeofstr("bool")    },
+    {"nil",      sizeofstr("nil")     },
+};
+
 struct VM {
     // Function CallFrame-s
     CallFrame frames[VM_FRAMES_MAX]; /* Call frames (GC) */
@@ -73,9 +116,8 @@ struct VM {
     // Closure values
     ObjUpvalue* open_upvals; // List of open upvalues (NO GC)
 
-    // Reserved names of class methods that overload
-    // operators and the name of class initializer function.
-    ObjString* ops[OPSN];
+    // static strings but allocated as ObjString's
+    ObjString* statics[SS_SIZE];
 
     // Garbage collection
     Obj*         objects;      /* List of allocated object (GC) */

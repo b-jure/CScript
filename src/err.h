@@ -2,6 +2,22 @@
 #define __SKOOMA_ERR_H__
 
 /**
+ * FORMAT STRINGS
+ **/
+#define FMT_VAR_FIXED_ERR(len, start)                                                    \
+    "Can't assign to variable '%.*s' it is declared as 'fixed'.\n\n"                     \
+    "Try removing 'fixed' from variable declaration.\n"                                  \
+    "Example:\n\tvar a = \"mutable\"; // mutable variable\n\tfixed var b = "             \
+    "\"immutable\"; // immutable variable\n\tvar fixed c = \"also immutable\"; // "      \
+    "immutable variable",                                                                \
+        len, start
+
+#define FMT_VAR_UNDEFINED_ERR(name) "Undefined variable '%s'.", name
+
+
+
+
+/**
  * COMPILER ERRORS
  **/
 #define COMPILER_CONSTANT_LIMIT_ERR(c, fnstr, limit)                                     \
@@ -14,18 +30,11 @@
 #define COMPILER_GLOBALS_LIMIT_ERR(c, limit)                                             \
     C_error(c, "Too many global values defined in script (limit %u).", limit)
 
-#define COMPILER_GLOBAL_REDEFINITION_ERR(c, varname)                                     \
-    C_error(c, "Redefinition of declared global variable '%s'.", varname)
+#define COMPILER_GLOBAL_REDEFINITION_ERR(c, len, start)                                  \
+    C_error(c, "Variable redefinition '%.*s'.", len, start)
 
-
-#define COMPILER_VAR_UNDEFINED_ERR(c, varname)                                           \
-    C_error(c, "Undefined variable '%s'.", varname)
-#define COMPILER_VAR_ASSIGN_ERR(c, len, start)                                           \
-    C_error(                                                                             \
-        c,                                                                               \
-        "Can't assign to a variable '%.*s', it is declared as 'fixed'.",                 \
-        len,                                                                             \
-        start)
+#define COMPILER_VAR_UNDEFINED_ERR(c, varname) C_error(c, FMT_VAR_UNDEFINED_ERR(varname))
+#define COMPILER_VAR_FIXED_ERR(c, len, start)  C_error(c, FMT_VAR_FIXED_ERR(len, start))
 
 #define COMPILER_JUMP_LIMIT_ERR(c, limit)                                                \
     C_error(c, "Too much code to jump over. Bytecode indexing limit reached [%u].", limit)
@@ -55,7 +64,7 @@
     C_error(c, "Redefinition of local variable '%.*s'.", len, start)
 
 #define COMPILER_ARGC_LIMIT_ERR(c, limit)                                                \
-    C_error(c, "Can't have mroe than %u arguments.", limit)
+    C_error(c, "Can't have more than %u arguments.", limit)
 
 #define COMPILER_EXPECT_EXPRESSION_ERR(c) C_error(c, "Expect expression.")
 
@@ -70,6 +79,9 @@
         "<fn %s>: closure variables (upvalues) limit reached (limit %u).",               \
         fnname,                                                                          \
         limit)
+
+#define COMPILER_CLASS_INHERIT_ERR(c, cclass)                                            \
+    C_error(C(), "class '%s' can't impl itself.", cclass);
 
 
 
@@ -118,22 +130,51 @@
         valstr)
 
 #define RUNTIME_ARGC_ERR(vm, fnstr, arity, argc)                                         \
-    VM_error(vm, "%s: expected %u arguments, but got %d instead.", fnstr, arity, argc)
+    VM_error(                                                                            \
+        vm,                                                                              \
+        "<fn %s>: expected %u arguments, but got %d instead.",                           \
+        fnstr,                                                                           \
+        arity,                                                                           \
+        argc)
 
-#define RUNTIME_INITIALIZER_ARGC_ERR(vm, classstr, initstr, argc)                        \
-    VM_error(vm, "%s (%s): expected 0 arguments but got %d.", classstr, initstr, argc)
-
-#define RUNTIME_INSTANCE_PROPERTY_ERR(vm, instance_name, property_name)                  \
-    RUNTIME_ERR(vm, "%s: undefined property '%s'.", instance_name, property_name)
+#define RUNTIME_INSTANCE_ARGC_ERR(vm, classstr, methodstr, argc)                         \
+    VM_error(                                                                            \
+        vm,                                                                              \
+        "Method <fn %s> defined in class '%s' expects 0 arguments but got %d.",          \
+        methodstr,                                                                       \
+        classstr,                                                                        \
+        argc)
+#define RUNTIME_INSTANCE_INIT_ARGC_ERR(vm, classstr, argc)                               \
+    VM_error(                                                                            \
+        vm,                                                                              \
+        "Invoked initializer for class '%s' with %u argument/s but expected 0.",         \
+        classstr,                                                                        \
+        argc)
 #define RUNTIME_INSTANCE_ERR(vm, valstr)                                                 \
     RUNTIME_ERR(                                                                         \
         vm,                                                                              \
         "%s is not an instance, only class instances have properties.",                  \
         valstr)
+#define RUNTIME_INSTANCE_PROPERTY_ERR(vm, instance_name, property_name)                  \
+    RUNTIME_ERR(                                                                         \
+        vm,                                                                              \
+        "Property '%s' is not defined for '%s'.",                                        \
+        property_name,                                                                   \
+        instance_name)
 
-#define RUNTIME_GLOBAL_UNDEFINED_ERR(vm) RUNTIME_ERR(vm, "Undefined global variable.")
-#define RUNTIME_GLOBAL_FIXED_ERR(vm)                                                     \
-    RUNTIME_ERR(vm, "Can't assign to a 'fixed' global variable.")
+#define RUNTIME_INHERIT_ERR(vm, subclass, superclass)                                    \
+    VM_error(                                                                            \
+        vm,                                                                              \
+        "Invalid \"class %s impl ...\", tried "                                          \
+        "impl from '%s', can only impl classes.\n\n"                                       \
+        "Example:\n\tclass A {}\n\tclass B impl A {}\n",                                 \
+        subclass,                                                                        \
+        superclass);
+
+#define RUNTIME_GLOBAL_UNDEFINED_ERR(vm, name)                                           \
+    RUNTIME_ERR(vm, FMT_VAR_UNDEFINED_ERR(name))
+#define RUNTIME_GLOBAL_FIXED_ERR(vm, len, start)                                         \
+    RUNTIME_ERR(vm, FMT_VAR_FIXED_ERR(len, start))
 
 #define RUNTIME_INTERNAL_FRAME_LIMIT_ERR(vm, frames_max)                                 \
     VM_error(                                                                            \

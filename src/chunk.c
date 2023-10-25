@@ -102,6 +102,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_SET_DYNPROPERTY)
         CASE(OP_GET_DYNPROPERTY)
         CASE(OP_RET)
+        CASE(OP_INHERIT)
         {
             unreachable;
         }

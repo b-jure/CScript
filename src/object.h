@@ -162,7 +162,7 @@ ObjNative*   ObjNative_new(VM* vm, Compiler* C, ObjString* name, NativeFn fn, In
 uint64_t     Obj_hash(Value value);
 ObjString*   ObjString_from(VM* vm, Compiler* C, const char* chars, size_t len);
 ObjFunction* ObjFunction_new(VM* vm, Compiler* C);
-void         Object_print(const Value value);
+void         Obj_print(const Value value);
 void         Obj_free(VM* vm, Compiler* C, Obj* object);
 
 #endif

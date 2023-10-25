@@ -85,8 +85,7 @@ SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt len, Value key)
 }
 
 /* Rehash all the keys from the table 'from' into the table 'to' */
-SK_INTERNAL(force_inline void)
-HashTable_into(VM* vm, Compiler* C, HashTable* from, HashTable* to)
+void HashTable_into(VM* vm, Compiler* C, HashTable* from, HashTable* to)
 {
     for(UInt i = 0; i < from->cap; i++) {
         Entry* entry = &from->entries[i];

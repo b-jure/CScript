@@ -97,7 +97,7 @@ SK_INTERNAL(force_inline void) mark_upvalues(VM* vm)
 SK_INTERNAL(force_inline void) mark_ops(VM* vm)
 {
     for(UInt i = 0; i < OPSN; i++) {
-        mark_obj(vm, (Obj*)vm->ops[i]);
+        mark_obj(vm, (Obj*)vm->statics[i]);
     }
 }
 
