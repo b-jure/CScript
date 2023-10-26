@@ -20,68 +20,91 @@
 /**
  * COMPILER ERRORS
  **/
+
+/* Compile constant */
 #define COMPILER_CONSTANT_LIMIT_ERR(c, fnstr, limit)                                     \
     C_error(                                                                             \
         c,                                                                               \
         "<fn %s>: Too many constants defined in a single chunk (limit %u).",             \
         fnstr,                                                                           \
         limit)
+/* ------------- */
 
-#define COMPILER_GLOBALS_LIMIT_ERR(c, limit)                                             \
-    C_error(c, "Too many global values defined in script (limit %u).", limit)
-
-#define COMPILER_GLOBAL_REDEFINITION_ERR(c, len, start)                                  \
-    C_error(c, "Variable redefinition '%.*s'.", len, start)
-
+/* Compile variable */
 #define COMPILER_VAR_UNDEFINED_ERR(c, varname) C_error(c, FMT_VAR_UNDEFINED_ERR(varname))
 #define COMPILER_VAR_FIXED_ERR(c, len, start)  C_error(c, FMT_VAR_FIXED_ERR(len, start))
-
-#define COMPILER_JUMP_LIMIT_ERR(c, limit)                                                \
-    C_error(c, "Too much code to jump over. Bytecode indexing limit reached [%u].", limit)
-
-#define COMPILER_SWITCH_DEFAULT_ERR(c)                                                   \
-    C_error(c, "Multiple 'default' labels in a single 'switch'.")
-#define COMPILER_SWITCH_NOCASE_ERR(c)                                                    \
-    C_error(c, "Can't have statements before first case.")
-#define COMPILER_SWITCH_RBRACE_ERR(c) C_error(c, "Expect '}' at the end of 'switch'.")
-
-#define COMPILER_CONTINUE_ERR(c) C_error(c, "'continue' statement not in loop statement.")
-
-#define COMPILER_BREAK_ERR(c)                                                            \
-    C_error(c, "'break' statement not in loop or switch statement.");
-
-#define COMPILER_RETURN_SCRIPT_ERR(c) C_error(c, "Can't 'return' from top-level code.")
-#define COMPILER_RETURN_INIT_ERR(c, initstr)                                             \
-    C_error(c, "Can't return a value from '%s' method.", initstr)
-
-#define COMPILER_SELF_ERR(c) C_error(c, "Can't use 'self' outside of a class.");
-
+#define COMPILER_GLOBALS_LIMIT_ERR(c, limit)                                             \
+    C_error(c, "Too many global values defined in script (limit %u).", limit)
+#define COMPILER_GLOBAL_REDEFINITION_ERR(c, len, start)                                  \
+    C_error(c, "Variable redefinition '%.*s'.", len, start)
 #define COMPILER_LOCAL_LIMIT_ERR(c, limit)                                               \
     C_error(c, "Too many local values defined in script (limit %u).", limit)
 #define COMPILER_LOCAL_DEFINITION_ERR(c, len, start)                                     \
     C_error(c, "Can't read local variable %.*s in its own initializer.", len, start)
 #define COMPILER_LOCAL_REDEFINITION_ERR(c, len, start)                                   \
     C_error(c, "Redefinition of local variable '%.*s'.", len, start)
+/* ------------- */
 
+/* Compile code jump */
+#define COMPILER_JUMP_LIMIT_ERR(c, limit)                                                \
+    C_error(c, "Too much code to jump over. Bytecode indexing limit reached [%u].", limit)
+/* ------------- */
+
+/* Compile 'switch' statement */
+#define COMPILER_SWITCH_DEFAULT_ERR(c)                                                   \
+    C_error(c, "Multiple 'default' labels in a single 'switch'.")
+#define COMPILER_SWITCH_NOCASE_ERR(c)                                                    \
+    C_error(c, "Can't have statements before first case.")
+#define COMPILER_SWITCH_RBRACE_ERR(c) C_error(c, "Expect '}' at the end of 'switch'.")
+/* ------------- */
+
+/* Compile 'continue' */
+#define COMPILER_CONTINUE_ERR(c) C_error(c, "'continue' statement not in loop statement.")
+/* ------------- */
+
+/* Compile 'break' */
+#define COMPILER_BREAK_ERR(c)                                                            \
+    C_error(c, "'break' statement not in loop or switch statement.");
+/* ------------- */
+
+/* Compile 'return' */
+#define COMPILER_RETURN_SCRIPT_ERR(c) C_error(c, "Can't 'return' from top-level code.")
+/* ------------- */
+
+/* Compile arglist */
 #define COMPILER_ARGC_LIMIT_ERR(c, limit)                                                \
     C_error(c, "Can't have more than %u arguments.", limit)
+/* ------------- */
 
+/* Compile expression */
 #define COMPILER_EXPECT_EXPRESSION_ERR(c) C_error(c, "Expect expression.")
+#define COMPILER_INVALID_ASSIGN_ERR(c)    C_error(c, "Invalid assignment target.")
+/* ------------- */
 
-#define COMPILER_INVALID_ASSIGN_ERR(c) C_error(c, "Invalid assignment target.")
-
+/* Compile block */
 #define COMPILER_SCOPE_LIMIT_ERR(c, limit)                                               \
     C_error(c, "Scope nesting limit reached (limit %u).", limit)
+/* ------------- */
 
+/* Compile closure upvalue */
 #define COMPILER_UPVALUE_LIMIT_ERR(c, fnname, limit)                                     \
     C_error(                                                                             \
         c,                                                                               \
         "<fn %s>: closure variables (upvalues) limit reached (limit %u).",               \
         fnname,                                                                          \
         limit)
+/* ------------- */
 
+/* Compile class */
 #define COMPILER_CLASS_INHERIT_ERR(c, cclass)                                            \
     C_error(C(), "class '%s' can't impl itself.", cclass);
+#define COMPILER_SUPER_ERR(c) C_error(c, "Can't use 'super' outside of a class.");
+#define COMPILER_NO_SUPER_ERR(c)                                                         \
+    C_error(c, "Can't use 'super', class does not have a superclass.");
+#define COMPILER_SELF_ERR(c) C_error(c, "Can't use 'self' outside of a class.");
+#define COMPILER_RETURN_INIT_ERR(c, initstr)                                             \
+    C_error(c, "Can't return a value from '%s' method.", initstr)
+/* ------------- */
 
 
 
@@ -89,25 +112,36 @@
 /**
  * NATIVE FUNCTIONS ERRORS
  **/
+
 #define NATIVE_FN_ERR(fn, err) "<native-fn " fn ">: " err
 #define ERR_NEW(vm, err)       ObjString_from(vm, NULL, err, sizeof(err) - 1)
 
+/* native_clock */
 #define CLOCK_ERR                                                                        \
     NATIVE_FN_ERR(                                                                       \
         "clock",                                                                         \
         "Processor time is not available or its value cannot be represented.")
+/* ------------- */
 
+/* native class field functions */
 #define INSTANCE_ERR(fn) NATIVE_FN_ERR(fn, "First parameter is not an instance.")
 #define FIELD_ERR(fn)    NATIVE_FN_ERR(fn, "Second parameter is not a valid field name.")
+/* ------------- */
 
+/* native_isfield */
 #define ISFIELD_INSTANCE_ERR INSTANCE_ERR("isfield")
 #define ISFIELD_FIELD_ERR    FIELD_ERR("isfield")
+/* ------------- */
 
+/* native_delfield */
 #define DELFIELD_INSTANCE_ERR INSTANCE_ERR("delfield")
 #define DELFIELD_FIELD_ERR    FIELD_ERR("delfield")
+/* ------------- */
 
+/* native_setfield */
 #define SETFIELD_INSTANCE_ERR INSTANCE_ERR("setfield")
 #define SETFIELD_FIELD_ERR    FIELD_ERR("setfield")
+/* ------------- */
 
 
 
@@ -166,10 +200,17 @@
     VM_error(                                                                            \
         vm,                                                                              \
         "Invalid \"class %s impl ...\", tried "                                          \
-        "impl from '%s', can only impl classes.\n\n"                                       \
+        "impl from '%s', can only impl classes.\n\n"                                     \
         "Example:\n\tclass A {}\n\tclass B impl A {}\n",                                 \
         subclass,                                                                        \
         superclass);
+
+#define RUNTIME_SUPER_CALL_ERR(vm, superclass, method_name)                              \
+    VM_error(                                                                            \
+        vm,                                                                              \
+        "Tried calling undefined method <fn '%s'> on superclass '%s'.",                  \
+        method_name,                                                                     \
+        superclass)
 
 #define RUNTIME_GLOBAL_UNDEFINED_ERR(vm, name)                                           \
     RUNTIME_ERR(vm, FMT_VAR_UNDEFINED_ERR(name))

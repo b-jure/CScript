@@ -75,15 +75,18 @@ typedef enum {
     OP_GET_DYNPROPERTY,      /* Get class instance property created at runtime */
     OP_METHOD,               /* Create class method */
     OP_METHODL,              /* Create class method long */
-    OP_INVOKE,               /* Invoke fast method call */
-    OP_INVOKEL,              /* Invoke fast method call long */
+    OP_INVOKE,               /* Invoke class method call */
+    OP_INVOKEL,              /* Invoke class method call long */
     OP_OVERLOAD,             /* Overload operator or initializer for a class */
     OP_INHERIT,              /* Inherit class properties. */
+    OP_GET_SUPER,            /* Fetch superclass method */
+    OP_GET_SUPERL,           /* Fetch superclass method long */
+    OP_INVOKE_SUPER,         /* Invoke superclass method call */
+    OP_INVOKE_SUPERL,        /* Invoke superclass method call */
     OP_RET,                  /* Return from function, pop the CallFrame */
 } OpCode;
 
 ARRAY_NEW(Array_UInt, UInt);
-ARRAY_NEW(Array_Byte, Byte);
 
 typedef struct {
     Value* constants; // Constants array

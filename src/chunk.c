@@ -128,6 +128,8 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_GET_PROPERTYL)
         CASE(OP_METHODL)
         CASE(OP_INVOKEL)
+        CASE(OP_GET_SUPERL)
+        CASE(OP_INVOKE_SUPERL)
         {
             Chunk_write_op(chunk, code, true, param, line);
             BREAK;
@@ -145,6 +147,8 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_METHOD)
         CASE(OP_INVOKE)
         CASE(OP_OVERLOAD)
+        CASE(OP_GET_SUPER)
+        CASE(OP_INVOKE_SUPER)
         {
             Chunk_write_op(chunk, code, false, param, line);
             BREAK;

@@ -159,16 +159,19 @@ SK_INTERNAL(ObjString*) concatenate(VM* vm, Value a, Value b)
 }
 
 SK_INTERNAL(force_inline ObjBoundMethod*)
-VM_bind_method(VM* vm, ObjInstance* instance, Value name)
+VM_bind_method(VM* vm, ObjClass* cclass, Value name)
 {
     Value method;
-    if(unlikely(!HashTable_get(&instance->cclass->methods, name, &method))) {
-        RUNTIME_INSTANCE_PROPERTY_ERR(vm, OBJSTR(vm, instance), AS_CSTRING(name));
+    if(unlikely(!HashTable_get(&cclass->methods, name, &method))) {
+        RUNTIME_INSTANCE_PROPERTY_ERR(
+            vm,
+            OBJSTR(vm, AS_OBJ(stack_peek(0))),
+            AS_CSTRING(name));
         return NULL;
     }
 
     ObjBoundMethod* bound_method =
-        ObjBoundMethod_new(vm, NULL, OBJ_VAL(instance), AS_OBJ(method)); // GC
+        ObjBoundMethod_new(vm, NULL, stack_peek(0), AS_OBJ(method)); // GC
 
     return bound_method;
 }
@@ -326,9 +329,8 @@ void VM_init(VM* vm)
 
     Array_ObjRef_init(&vm->gray_stack); // Gray stack (NO GC)
 
-    // Create object strings to faster compile class methods
-    // Objects are equal if their address is the same.
-    for(UInt i = 0; i < OPSN; i++) {
+    // Create ObjStrings for each static string
+    for(UInt i = 0; i < SS_SIZE; i++) {
         vm->statics[i] = NULL;
         vm->statics[i] = ObjString_from(vm, NULL, static_str[i].name, static_str[i].len);
     }
@@ -344,17 +346,18 @@ void VM_init(VM* vm)
 
 /**
  * 'obj' is either a function or closure.
- * 'argc' argument count.
+ * 'argc' is argument count.
  * 'debug' is the receiver in case call is invoked on method otherwise NULL.
  **/
-#define CALL_FN_OR_CLOSURE(vm, obj, argc, debug)                                         \
+#define CALL_FN_OR_CLOSURE(vm, obj, debug)                                               \
     ({                                                                                   \
         bool ret;                                                                        \
         if(Obj_type(obj) == OBJ_CLOSURE) {                                               \
             ObjClosure* closure = (ObjClosure*)(obj);                                    \
-            ret                 = VM_call_fn(vm, closure, closure->fn, argc, debug);     \
+            ret = VM_call_fn(vm, closure, closure->fn, closure->fn->arity, debug);       \
         } else {                                                                         \
-            ret = VM_call_fn(vm, NULL, (ObjFunction*)(obj), argc, debug);                \
+            ObjFunction* fn = (ObjFunction*)obj;                                         \
+            ret             = VM_call_fn(vm, NULL, fn, fn->arity, debug);                \
         }                                                                                \
         ret;                                                                             \
     })
@@ -405,7 +408,7 @@ SK_INTERNAL(force_inline bool) VM_call_instance(VM* vm, ObjClass* cclass, Int ar
     vm->sp[-argc - 1] = OBJ_VAL(ObjInstance_new(vm, NULL, cclass));
     Obj* init         = cclass->overloaded[SS_INIT];
     if(init != NULL) {
-        return CALL_FN_OR_CLOSURE(vm, init, argc, cclass);
+        return CALL_FN_OR_CLOSURE(vm, init, cclass);
     } else if(unlikely(argc != 0)) {
         RUNTIME_INSTANCE_INIT_ARGC_ERR(vm, OBJSTR(vm, cclass), argc);
         return false;
@@ -423,7 +426,6 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, Int argc)
                 return CALL_FN_OR_CLOSURE(
                     vm,
                     bound->method,
-                    argc,
                     AS_INSTANCE(bound->receiver)->cclass);
             }
             case OBJ_FUNCTION:
@@ -951,59 +953,63 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_PROPERTY)
             {
-                if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
+                Value val = stack_peek(1);
+                if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(1)));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance = AS_INSTANCE(stack_peek(1));
+                ObjInstance* instance = AS_INSTANCE(val);
                 HashTable_insert(
                     vm,
                     NULL,
                     &instance->fields,
                     OBJ_VAL(READ_STRING()),
                     stack_peek(0));
-                Value val = VM_pop(vm); // Get assigned value
+                Value ret = VM_pop(vm); // Get assigned value
                 VM_pop(vm);             // Pop instance
-                VM_push(vm, val);       // Push back the assigned value
+                VM_push(vm, ret);       // Push back the assigned value
                 BREAK;
             }
             CASE(OP_SET_PROPERTYL)
             {
-                if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
+                Value val = stack_peek(1);
+                if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(1)));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance = AS_INSTANCE(stack_peek(1));
+                ObjInstance* instance = AS_INSTANCE(val);
                 HashTable_insert(
                     vm,
                     NULL,
                     &instance->fields,
                     OBJ_VAL(READ_STRINGL()),
                     stack_peek(0));
-                Value val = VM_pop(vm); // Get assigned value
+                Value ret = VM_pop(vm); // Get assigned value
                 VM_pop(vm);             // Pop instance
-                VM_push(vm, val);       // Push back the assigned value
+                VM_push(vm, ret);       // Push back the assigned value
                 BREAK;
             }
             CASE(OP_GET_PROPERTY)
             {
-                if(unlikely(!IS_INSTANCE(stack_peek(0)))) {
+                Value val = stack_peek(0);
+                if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(0)));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance = AS_INSTANCE(stack_peek(0));
-                Value        name     = OBJ_VAL(READ_STRING());
-                Value        value;
-                if(HashTable_get(&instance->fields, name, &value)) {
+                ObjInstance* instance      = AS_INSTANCE(val);
+                Value        property_name = OBJ_VAL(READ_STRING());
+                Value        property;
+                if(HashTable_get(&instance->fields, property_name, &property)) {
                     VM_pop(vm);
-                    VM_push(vm, value);
+                    VM_push(vm, property);
                     BREAK;
                 }
-                frame->ip             = ip;
-                ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
+                frame->ip = ip;
+                ObjBoundMethod* bound =
+                    VM_bind_method(vm, instance->cclass, property_name);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -1013,21 +1019,23 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_PROPERTYL)
             {
-                if(unlikely(!IS_INSTANCE(stack_peek(0)))) {
+                Value val = stack_peek(0);
+                if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(0)));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance = AS_INSTANCE(stack_peek(0));
-                Value        name     = OBJ_VAL(READ_STRINGL());
-                Value        value;
-                if(HashTable_get(&instance->fields, name, &value)) {
+                ObjInstance* instance      = AS_INSTANCE(val);
+                Value        property_name = OBJ_VAL(READ_STRINGL());
+                Value        property;
+                if(HashTable_get(&instance->fields, property_name, &property)) {
                     VM_pop(vm);
-                    VM_push(vm, value);
+                    VM_push(vm, property);
                     BREAK;
                 }
-                frame->ip             = ip;
-                ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
+                frame->ip = ip;
+                ObjBoundMethod* bound =
+                    VM_bind_method(vm, instance->cclass, property_name);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -1037,40 +1045,43 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_DYNPROPERTY)
             {
-                if(unlikely(!IS_INSTANCE(stack_peek(2)))) {
+                Value val = stack_peek(2);
+                if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(2)));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance = AS_INSTANCE(stack_peek(2));
+                ObjInstance* instance = AS_INSTANCE(val);
                 HashTable_insert(
                     vm,
                     NULL,
                     &instance->fields,
                     stack_peek(1),
                     stack_peek(0));
-                Value val = VM_pop(vm); // Get assigned value
+                Value ret = VM_pop(vm); // Get assigned value
                 VM_popn(vm, 2);         // Pop instance and name
-                VM_push(vm, val);       // Push back the assigned value
+                VM_push(vm, ret);       // Push back the assigned value
                 BREAK;
             }
             CASE(OP_GET_DYNPROPERTY)
             {
-                if(unlikely(!IS_INSTANCE(stack_peek(1)))) {
+                Value val = stack_peek(1);
+                if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, stack_peek(1)));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance = AS_INSTANCE(stack_peek(1));
-                Value        name     = stack_peek(0);
+                ObjInstance* instance      = AS_INSTANCE(val);
+                Value        property_name = stack_peek(0);
                 Value        value;
-                if(HashTable_get(&instance->fields, name, &value)) {
+                if(HashTable_get(&instance->fields, property_name, &value)) {
                     VM_popn(vm, 2);
                     VM_push(vm, value);
                     BREAK;
                 }
-                frame->ip             = ip;
-                ObjBoundMethod* bound = VM_bind_method(vm, instance, name);
+                frame->ip = ip;
+                ObjBoundMethod* bound =
+                    VM_bind_method(vm, instance->cclass, property_name);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -1138,8 +1149,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_OVERLOAD)
             {
-                // OP_METHOD must follow right after this instruction,
-                // compiler ensures it!
+                // Note: Do not pop anything, next instruction is OP_METHOD
                 ObjClass* cclass        = AS_CLASS(stack_peek(1));
                 Byte      opn           = READ_BYTE();
                 cclass->overloaded[opn] = AS_OBJ(stack_peek(0));
@@ -1147,31 +1157,93 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_INHERIT)
             {
+                // Safety: It is safe to cast 'subclass' as ObjClass,
+                // compiler emits OP_INHERIT only when compiling a class.
                 ObjClass* subclass   = AS_CLASS(stack_peek(0));
                 Value     superclass = stack_peek(1);
+
                 if(unlikely(!IS_CLASS(superclass))) {
                     frame->ip = ip;
                     RUNTIME_INHERIT_ERR(vm, OBJSTR(vm, subclass), VALSTR(vm, superclass));
                     return INTERPRET_RUNTIME_ERROR;
                 }
+
+                // Impl all the methods
                 HashTable_into(
                     vm,
                     NULL,
                     &AS_CLASS(superclass)->methods,
                     &subclass->methods);
+
+                // Update the overloaded methods cache
                 for(UInt i = 0; i < OPSN; i++) {
                     subclass->overloaded[i] = AS_CLASS(superclass)->overloaded[i];
                 }
+
                 VM_pop(vm);
+                BREAK;
+            }
+            CASE(OP_GET_SUPER)
+            {
+                Value     name        = OBJ_VAL(READ_STRING());
+                ObjClass* superclass  = AS_CLASS(VM_pop(vm));
+                frame->ip             = ip;
+                ObjBoundMethod* bound = VM_bind_method(vm, superclass, name);
+                if(unlikely(bound == NULL)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                vm->sp[-1] = OBJ_VAL(bound); // Replace instance with bound method
+                BREAK;
+            }
+            CASE(OP_GET_SUPERL)
+            {
+                Value     name        = OBJ_VAL(READ_STRINGL());
+                ObjClass* superclass  = AS_CLASS(VM_pop(vm));
+                frame->ip             = ip;
+                ObjBoundMethod* bound = VM_bind_method(vm, superclass, name);
+                if(unlikely(bound == NULL)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                vm->sp[-1] = OBJ_VAL(bound); // Replace instance with bound method
+                BREAK;
+            }
+            CASE(OP_INVOKE_SUPER)
+            {
+                ObjClass* superclass  = AS_CLASS(VM_pop(vm));
+                Value     method_name = OBJ_VAL(READ_STRING());
+                Int       argc        = READ_BYTEL();
+                frame->ip             = ip;
+
+                if(unlikely(!VM_invoke_from_class(vm, superclass, method_name, argc))) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
+                BREAK;
+            }
+            CASE(OP_INVOKE_SUPERL)
+            {
+                ObjClass* superclass  = AS_CLASS(VM_pop(vm));
+                Value     method_name = OBJ_VAL(READ_STRINGL());
+                Int       argc        = READ_BYTEL();
+                frame->ip             = ip;
+
+                if(unlikely(!VM_invoke_from_class(vm, superclass, method_name, argc))) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
                 BREAK;
             }
             CASE(OP_RET)
             {
+                // @FIX: repl
                 Value retval = VM_pop(vm);
                 VM_close_upval(vm, frame->sp);
                 vm->fc--;
                 if(vm->fc == 0) {
-                    // @FIX: REPL not working, maybe (sp - stack) == -1 (underflow)
                     VM_pop(vm);
                     return INTERPRET_OK;
                 }

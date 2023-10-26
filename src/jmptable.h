@@ -78,6 +78,10 @@ static const void* const optable[OPCODE_N] = {
     &&L_OP_INVOKEL,
     &&L_OP_OVERLOAD,
     &&L_OP_INHERIT,
+    &&L_OP_GET_SUPER,
+    &&L_OP_GET_SUPERL,
+    &&L_OP_INVOKE_SUPER,
+    &&L_OP_INVOKE_SUPERL,
     &&L_OP_RET,
 };
 

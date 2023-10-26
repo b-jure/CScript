@@ -82,12 +82,9 @@ typedef struct {
 #define VFIXED_BIT    (1)
 #define VCAPTURED_BIT (8)
 
-// Sets the 'bit' in 'var' flags.
 #define LOCAL_SET(var, bit) BIT_SET((var)->flags, bit)
-// Checks if 'bit' is set.
-#define LOCAL_IS(var, bit) BIT_CHECK((var)->flags, bit)
-// Returns 'var' flags.
-#define LOCAL_FLAGS(var) ((var)->flags)
+#define LOCAL_IS(var, bit)  BIT_CHECK((var)->flags, bit)
+#define LOCAL_FLAGS(var)    ((var)->flags)
 
 typedef struct {
     Token name;
@@ -159,6 +156,7 @@ ARRAY_NEW(Array_Upvalue, Upvalue);
 /* @TODO: add useful documentation */
 typedef struct Class {
     struct Class* enclosing;
+    bool          superclass;
 } Class;
 
 struct Compiler {
@@ -272,6 +270,7 @@ SK_INTERNAL(void) parse_call(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_dot(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_property_name(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_self(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_super(VM* vm, PPC ppc);
 
 SK_INTERNAL(void) CFCtx_init(CFCtx* context)
 {
@@ -649,7 +648,7 @@ static const ParseRule rules[] = {
     [TOK_OR]            = {NULL,                parse_or,            PREC_OR        },
     [TOK_PRINT]         = {NULL,                NULL,                PREC_NONE      },
     [TOK_RETURN]        = {NULL,                NULL,                PREC_NONE      },
-    [TOK_SUPER]         = {NULL,                NULL,                PREC_NONE      },
+    [TOK_SUPER]         = {parse_super,         NULL,                PREC_NONE      },
     [TOK_SELF]          = {parse_self,          NULL,                PREC_NONE      },
     [TOK_TRUE]          = {parse_literal,       NULL,                PREC_NONE      },
     [TOK_VAR]           = {parse_dec_var,       NULL,                PREC_NONE      },
@@ -929,7 +928,6 @@ parse_fn(VM* vm, PPC ppc, FunctionType type)
 
     uint64_t mask = C_flags(C());
     C_flags_clear(C_new);
-    C_flag_set(C_new, FN_BIT);
     C_flag_toggle(C_new, ERROR_BIT, mask & btoul(ERROR_BIT));
 
     PPC ppc_new = &C_new;
@@ -1137,8 +1135,9 @@ SK_INTERNAL(void) parse_dec_class(VM* vm, PPC ppc)
     }
 
     Class cclass;
-    cclass.enclosing = C()->cclass;
-    C()->cclass      = &cclass;
+    cclass.enclosing  = C()->cclass;
+    cclass.superclass = false;
+    C()->cclass       = &cclass;
 
     C_flag_clear(C(), ASSIGN_BIT);
 
@@ -1148,22 +1147,29 @@ SK_INTERNAL(void) parse_dec_class(VM* vm, PPC ppc)
         if(Identifier_eq(&C()->parser->previous, &class_name)) {
             COMPILER_CLASS_INHERIT_ERR(C(), AS_CSTRING(identifier));
         }
+        cclass.superclass = true;
+        C_scope_start(C());
+        C_new_local(ppc, Token_syn_new("super"));
+        C_initialize_local(C());
         named_variable(vm, ppc, class_name);
         C_emit_byte(C(), OP_INHERIT);
     }
 
     named_variable(vm, ppc, class_name); // Push the class
 
-
     C_expect(C(), TOK_LBRACE, "Expect '{' before class body.");
     while(!C_check(C(), TOK_RBRACE) && !C_check(C(), TOK_EOF)) {
         parse_method(vm, ppc);
     }
 
-    C()->cclass = cclass.enclosing;
-
     C_expect(C(), TOK_RBRACE, "Expect '}' after class body.");
     C_emit_byte(C(), OP_POP); // Pop the class
+
+    C()->cclass = cclass.enclosing;
+
+    if(cclass.superclass) {
+        C_scope_end(C());
+    }
 }
 
 SK_INTERNAL(void) parse_dec(VM* vm, PPC ppc)
@@ -1877,5 +1883,36 @@ SK_INTERNAL(void) parse_self(VM* vm, PPC ppc)
     bool assign = C_flag_is(C(), ASSIGN_BIT);
     C_flag_clear(C(), ASSIGN_BIT); // Can't assign to 'self'
     parse_variable(vm, ppc);
+    C_flag_toggle(C(), ASSIGN_BIT, assign);
+}
+
+SK_INTERNAL(void) parse_super(VM* vm, PPC ppc)
+{
+    if(C()->cclass == NULL) {
+        COMPILER_SUPER_ERR(C());
+        return;
+    } else if(!C()->cclass->superclass) {
+        COMPILER_NO_SUPER_ERR(C());
+        return;
+    }
+
+    C_expect(C(), TOK_DOT, "Expect '.' after 'super'.");
+    C_expect(C(), TOK_IDENTIFIER, "Expect superclass method name after '.'.");
+
+    Value identifier = Token_into_stringval(vm, C(), &C()->parser->previous);
+    UInt  idx        = C_make_const(C(), vm, identifier);
+    bool  assign     = C_flag_is(C(), ASSIGN_BIT);
+
+    C_flag_clear(C(), ASSIGN_BIT);
+    named_variable(vm, ppc, Token_syn_new("self"));
+    if(C_match(C(), TOK_LPAREN)) {
+        UInt argc = parse_arglist(vm, ppc);
+        named_variable(vm, ppc, Token_syn_new("super"));
+        C_emit_op(C(), GET_OP_TYPE(idx, OP_INVOKE_SUPER), idx);
+        C_emit_lbyte(C(), argc);
+    } else {
+        named_variable(vm, ppc, Token_syn_new("super"));
+        C_emit_op(C(), GET_OP_TYPE(idx, OP_GET_SUPER), idx);
+    }
     C_flag_toggle(C(), ASSIGN_BIT, assign);
 }

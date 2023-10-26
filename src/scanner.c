@@ -5,11 +5,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#define advance_unused(scanner) ((scanner)->current++)
-#define advance(scanner)        (*(scanner)->current++)
-#define peek(scanner)           (*(scanner)->current)
-#define isend(scanner)          (*(scanner)->current == '\0')
-#define peek_next(scanner)      ((isend(scanner)) ? '\0' : *((scanner)->current + 1))
+#define nextchar(scanner)  ((scanner)->current++)
+#define advance(scanner)   (*(scanner)->current++)
+#define peek(scanner)      (*(scanner)->current)
+#define isend(scanner)     (*(scanner)->current == '\0')
+#define peek_next(scanner) ((isend(scanner)) ? '\0' : *((scanner)->current + 1))
 
 SK_INTERNAL(force_inline Token) Token_new(Scanner* scanner, TokenType type);
 SK_INTERNAL(Token) Token_error(Scanner* scanner, const char* err);
@@ -37,6 +37,9 @@ Scanner Scanner_new(const char* source)
     };
 }
 
+// @TODO: When token is string unescape it!
+// Allocate ObjString and have token point to its storage instead
+// of the source file one!
 Token Scanner_scan(Scanner* scanner)
 {
     Scanner_skipws(scanner);
@@ -218,17 +221,17 @@ SK_INTERNAL(force_inline void) Scanner_skipws(Scanner* scanner)
         switch((c = peek(scanner))) {
             case '\n':
                 scanner->line++;
-                advance_unused(scanner);
+                nextchar(scanner);
                 break;
             case ' ':
             case '\r':
             case '\t':
-                advance_unused(scanner);
+                nextchar(scanner);
                 break;
             case '/':
                 if(peek_next(scanner) == '/') {
                     while(peek(scanner) != '\n' && !isend(scanner)) {
-                        advance_unused(scanner);
+                        nextchar(scanner);
                     }
                 } else {
                     return;
@@ -238,6 +241,16 @@ SK_INTERNAL(force_inline void) Scanner_skipws(Scanner* scanner)
                 return;
         }
     }
+}
+
+Token Token_syn_new(const char* name)
+{
+    return (Token){
+        .type  = 0,
+        .line  = 0,
+        .start = name,
+        .len   = (UInt)strlen(name),
+    };
 }
 
 SK_INTERNAL(force_inline Token) Token_new(Scanner* scanner, TokenType type)
@@ -266,28 +279,28 @@ SK_INTERNAL(force_inline Token) Token_string(Scanner* scanner)
         if(peek(scanner) == '\n') {
             scanner->line++;
         }
-        advance_unused(scanner);
+        nextchar(scanner);
     }
 
     if(isend(scanner)) {
         return Token_error(scanner, "Unterminated string, missing closing quotes '\"'");
     }
 
-    advance_unused(scanner);
+    nextchar(scanner);
     return Token_new(scanner, TOK_STRING);
 }
 
 SK_INTERNAL(Token) Token_number(Scanner* scanner)
 {
     while(isdigit(peek(scanner))) {
-        advance_unused(scanner);
+        nextchar(scanner);
     }
 
     if(peek(scanner) == '.' && isdigit(peek_next(scanner))) {
-        advance_unused(scanner);
+        nextchar(scanner);
 
         while(isdigit(peek(scanner))) {
-            advance_unused(scanner);
+            nextchar(scanner);
         }
     }
 
@@ -298,7 +311,7 @@ SK_INTERNAL(force_inline Token) Token_identifier(Scanner* scanner)
 {
     register char c;
     while(isalnum((c = peek(scanner))) || c == '_') {
-        advance_unused(scanner);
+        nextchar(scanner);
     }
 
     return Token_new(scanner, TokenType_identifier(scanner));

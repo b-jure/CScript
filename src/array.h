@@ -211,4 +211,6 @@ typedef void (*FreeFn)(void* value);
         free(self->data);                                                                \
     }
 
+ARRAY_NEW(Array_Byte, Byte);
+
 #endif

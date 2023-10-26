@@ -16,7 +16,7 @@ SK_INTERNAL(int) Instruction_simple(const char* name, UInt offset);
 SK_INTERNAL(int)
 Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset);
 SK_INTERNAL(Int)
-disassemble_invoke(const char* name, Chunk* chunk, OpCode code, Int offset);
+disassemble_invoke(const char* name, Chunk* chunk, bool l, Int offset);
 
 void Chunk_debug(Chunk* chunk, const char* name)
 {
@@ -152,13 +152,21 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_METHODL:
             return Instruction_long("OP_METHODL", chunk, OP_METHODL, offset);
         case OP_INVOKE:
-            return disassemble_invoke("OP_INVOKE", chunk, OP_INVOKE, offset);
+            return disassemble_invoke("OP_INVOKE", chunk, false, offset);
         case OP_INVOKEL:
-            return disassemble_invoke("OP_INVOKEL", chunk, OP_INVOKEL, offset);
+            return disassemble_invoke("OP_INVOKEL", chunk, true, offset);
         case OP_OVERLOAD:
             return Instruction_short("OP_OVERLOAD", chunk, OP_OVERLOAD, offset);
         case OP_INHERIT:
             return Instruction_simple("OP_INHERIT", offset);
+        case OP_GET_SUPER:
+            return Instruction_short("OP_GET_SUPER", chunk, OP_GET_SUPER, offset);
+        case OP_GET_SUPERL:
+            return Instruction_long("OP_GET_SUPERL", chunk, OP_GET_SUPERL, offset);
+        case OP_INVOKE_SUPER:
+            return disassemble_invoke("OP_INVOKE_SUPER", chunk, false, offset);
+        case OP_INVOKE_SUPERL:
+            return disassemble_invoke("OP_INVOKE_SUPERL", chunk, true, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;
@@ -219,10 +227,12 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
         case OP_SET_PROPERTY:
         case OP_GET_PROPERTY:
         case OP_METHOD:
+        case OP_GET_SUPER:
+        case OP_INVOKE_SUPER:
             disassemble_const(chunk, param);
             break;
         case OP_OVERLOAD:
-            printf("'%s'", static_str[SS_INIT].name);
+            printf("'%s'", static_str[param].name);
             break;
         default:
             // do nothing
@@ -246,6 +256,8 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
         case OP_SET_PROPERTYL:
         case OP_GET_PROPERTYL:
         case OP_METHODL:
+        case OP_GET_SUPERL:
+        case OP_INVOKE_SUPERL:
             disassemble_const(chunk, param);
             break;
         default:
@@ -257,12 +269,12 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
 }
 
 SK_INTERNAL(Int)
-disassemble_invoke(const char* name, Chunk* chunk, OpCode code, Int offset)
+disassemble_invoke(const char* name, Chunk* chunk, bool l, Int offset)
 {
 
     UInt param;
 
-    if(code == OP_INVOKE) {
+    if(!l) {
         param   = *Array_Byte_index(&chunk->code, offset + 1);
         offset += 2;
     } else {

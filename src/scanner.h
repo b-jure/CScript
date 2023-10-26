@@ -2,6 +2,7 @@
 #define __SKOOMA_SCANNER_H__
 
 #include "common.h"
+#include "value.h"
 
 typedef enum {
     // Single character tokens.
@@ -77,5 +78,6 @@ typedef struct {
 
 Scanner Scanner_new(const char* source);
 Token   Scanner_scan(Scanner* scanner);
+Token   Token_syn_new(const char* name);
 
 #endif
