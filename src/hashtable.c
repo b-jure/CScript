@@ -3,6 +3,11 @@
 #include "object.h"
 #include "value.h"
 
+// @TODO:
+//      - LINEAR PROBING
+//      - POWER OF 2 TABLE SIZE
+//      - REMOVE MODULUS OPERATOR WITH: index = hash & (table size - 1)
+
 #define GROW_TABLE_CAPACITY(prime) get_prime_capacity(prime)
 
 #define PRIME_TABLE_LEN sizeof(prime_table) / sizeof(prime_table[0])
@@ -214,7 +219,7 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
         return false;
     }
 
-    *out = entry->value;
+    memcpy(out, &entry->value, sizeof(Value));
     return true;
 }
 

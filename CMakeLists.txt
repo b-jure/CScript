@@ -31,19 +31,27 @@ set(CFLAGS -Wall -Werror -Wextra)
 
 
 # DEBUG
-# Debug compile flags
-set(SAN_FLAGS -fsanitize=address -fsanitize=undefined)
-set(PF_FLAGS -pg)
-set(DC_FLAGS ${CFLAGS} ${SAN_FLAGS} ${PF_FLAGS} -DDEBUG -O0 -g -fno-omit-frame-pointer)
-# Debug link flags
-set(DL_FLAGS ${SAN_FLAGS} ${PF_FLAGS})
+# ASAN
+set(ASAN_FLAGS -fsanitize=address -fsanitize=undefined)
+# compile flags
+set(D_CFLAGS ${CFLAGS} ${ASAN_FLAGS} -DDEBUG -O0 -g -fno-omit-frame-pointer)
+# link flags
+set(D_LFLAGS ${ASAN_FLAGS})
 
 
 # RELEASE
-# Release compile flags
-set(RC_FLAGS ${CFLAGS} -O3)
-# Release link flags
-set(RL_FLAGS)
+# compile flags
+set(R_CFLAGS ${CFLAGS} -O3 -flto=auto)
+# link flags
+set(R_LFLAGS)
+
+
+# PROFILING
+# compile flags
+set(P_CFLAGS ${CFLAGS} ${R_CFLAGS} -pg -g)
+# link flags
+set(P_LFLAGS ${R_LFLAGS} -pg)
+
 
 
 
@@ -55,15 +63,17 @@ target_include_directories(${BIN} PRIVATE ${SRCDIR})
 target_compile_options(
     ${BIN}
     PRIVATE
-    $<$<CONFIG:Release>:${RC_FLAGS}>
-    $<$<CONFIG:Debug>:${DC_FLAGS}>
+    $<$<CONFIG:Release>:${R_CFLAGS}>
+    $<$<CONFIG:Debug>:${D_CFLAGS}>
+    $<$<CONFIG:Profiling>:${P_CFLAGS}>
 )
 
 target_link_options(
     ${BIN}
     PRIVATE
-    $<$<CONFIG:Release>:${RL_FLAGS}>
-    $<$<CONFIG:Debug>:${DL_FLAGS}>
+    $<$<CONFIG:Release>:${R_LFLAGS}>
+    $<$<CONFIG:Debug>:${D_LFLAGS}>
+    $<$<CONFIG:Profiling>:${P_LFLAGS}>
 )
 
 # xxHash dependency
@@ -78,26 +88,37 @@ target_link_libraries(${BIN} PRIVATE xxHash::xxhash m)
 
 
 
-# Custom targets
-#
+
+# DEBUG configuration
+add_custom_target(debug 
+    DEPENDS debug_config
+    COMMAND make ${BIN}
+)
 add_custom_target(debug_config
     COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Building Debug configuration"
 )
 
+# RELEASE configuration
+add_custom_target(release 
+    DEPENDS release_config
+    COMMAND make ${BIN}
+)
 add_custom_target(release_config
     COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Release ${CMAKE_SOURCE_DIR}
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Building Release configuration"
 ) 
 
-add_custom_target(debug 
-    DEPENDS debug_config
-    COMMAND make ${BIN}
+# PROFILING configuration
+add_custom_target(profiling_config
+    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Profiling ${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Building Profiling configuration"
 )
 
-add_custom_target(release 
-    DEPENDS release_config
+add_custom_target(profiling
+    DEPENDS profiling_config
     COMMAND make ${BIN}
 )
