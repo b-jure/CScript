@@ -21,7 +21,7 @@ SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, Compiler* C, size_t size, ObjType
 
     object->header = (uint64_t)vm->objects | ((uint64_t)type << 56);
 
-    // Malloc and C standard do not guarantee that upper 16 bits
+    // malloc and C standard do not guarantee that upper 16 bits
     // will be initialized to 0, we initialized all the bits except the
     // mark bit, so make sure it is set to false!
     Obj_mark_set(object, false);

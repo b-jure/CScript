@@ -1,3 +1,4 @@
+#include "hash.h"
 #include "memory.h"
 #include "object.h"
 #include "skconf.h"
@@ -64,15 +65,32 @@ SK_INTERNAL(force_inline ObjString*) bool_to_str(VM* vm, Compiler* C, bool boole
 
 ObjString* Value_to_str(VM* vm, Compiler* C, Value value)
 {
-#ifdef THREADED_CODE
-    #define VAL_TABLE
-    #include "jmptable.h"
-    #undef VAL_TABLE
+#ifdef NAN_BOXING
+
+    if(IS_BOOL(value)) {
+        return bool_to_str(vm, C, AS_BOOL(value));
+    } else if(IS_NIL(value)) {
+        return ObjString_from(vm, C, "nil", sizeofnil);
+    } else if(IS_OBJ(value)) {
+        return Obj_to_str(vm, C, AS_OBJ(value));
+    } else if(IS_NUMBER(value)) {
+        return dbl_to_str(vm, C, AS_NUMBER(value));
+    }
+
+    unreachable;
+
 #else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-#endif
-    DISPATCH(value.type)
+
+    #ifdef THREADED_CODE
+        #define VAL_TABLE
+        #include "jmptable.h"
+        #undef VAL_TABLE
+    #else
+        #define DISPATCH(x) switch(x)
+        #define CASE(label) case label:
+    #endif
+
+    DISPATCH(VALUE_TYPE(value))
     {
         CASE(VAL_BOOL)
         {
@@ -84,7 +102,7 @@ ObjString* Value_to_str(VM* vm, Compiler* C, Value value)
         }
         CASE(VAL_NIL)
         {
-            return ObjString_from(vm, C, "nil", sizeof("nil") - 1);
+            return ObjString_from(vm, C, "nil", sizeofnil);
         }
         CASE(VAL_OBJ)
         {
@@ -92,24 +110,50 @@ ObjString* Value_to_str(VM* vm, Compiler* C, Value value)
         }
     }
 
-#ifdef __SKOOMA_JMPTABLE_H__
-    #undef __SKOOMA_JMPTABLE_H__
+    #ifdef __SKOOMA_JMPTABLE_H__
+        #undef __SKOOMA_JMPTABLE_H__
+    #endif
+
 #endif
 }
 
 void Value_print(Value value)
 {
-#ifdef THREADED_CODE
-    #define VAL_TABLE
-    #include "jmptable.h"
-    #undef BREAK
-    #define BREAK return
-    #undef VAL_TABLE
+#ifdef NAN_BOXING
+
+    if(IS_BOOL(value)) {
+        printf(AS_BOOL(value) ? "true" : "false");
+        return;
+    } else if(IS_NIL(value)) {
+        printf("nil");
+        return;
+    } else if(IS_OBJ(value)) {
+        Obj_print(value);
+        return;
+    } else if(IS_NUMBER(value)) {
+        if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) {
+            printf("%f", AS_NUMBER(value));
+        } else {
+            printf("%ld", (int64_t)AS_NUMBER(value));
+        }
+        return;
+    }
+
+    unreachable;
+
 #else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-    #define BREAK       break
-#endif
+    #ifdef THREADED_CODE
+        #define VAL_TABLE
+        #include "jmptable.h"
+        #undef BREAK
+        #define BREAK return
+        #undef VAL_TABLE
+    #else
+        #define DISPATCH(x) switch(x)
+        #define CASE(label) case label:
+        #define BREAK       break
+    #endif
+
     DISPATCH(value.type)
     {
         CASE(VAL_BOOL)
@@ -138,25 +182,38 @@ void Value_print(Value value)
         }
     }
 
-#ifdef __SKOOMA_JMPTABLE_H__
-    #undef __SKOOMA_JMPTABLE_H__
+    #ifdef __SKOOMA_JMPTABLE_H__
+        #undef __SKOOMA_JMPTABLE_H__
+    #endif
+
 #endif
 }
 
 bool Value_eq(Value a, Value b)
 {
+#ifdef NAN_BOXING
+
+    // Preserve NaN != NaN
+    if(IS_NUMBER(a) && IS_NUMBER(b)) {
+        return AS_NUMBER(a) == AS_NUMBER(b);
+    }
+    return a == b;
+
+#else
+
     if(a.type != b.type) {
         return false;
     }
 
-#ifdef THREADED_CODE
-    #define VAL_TABLE
-    #include "jmptable.h"
-    #undef VAL_TABLE
-#else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-#endif
+    #ifdef THREADED_CODE
+        #define VAL_TABLE
+        #include "jmptable.h"
+        #undef VAL_TABLE
+    #else
+        #define DISPATCH(x) switch(x)
+        #define CASE(label) case label:
+    #endif
+
     DISPATCH(a.type)
     {
         CASE(VAL_BOOL)
@@ -177,21 +234,39 @@ bool Value_eq(Value a, Value b)
         }
     }
 
-#ifdef __SKOOMA_JMPTABLE_H__
-    #undef __SKOOMA_JMPTABLE_H__
+    #ifdef __SKOOMA_JMPTABLE_H__
+        #undef __SKOOMA_JMPTABLE_H__
+    #endif
+
 #endif
 }
 
 Hash Value_hash(Value value)
 {
-#ifdef THREADED_CODE
-    #define VAL_TABLE
-    #include "jmptable.h"
-    #undef VAL_TABLE
+#ifdef NAN_BOXING
+
+    if(IS_BOOL(value)) {
+        return AS_BOOL(value) ? 3 : 5;
+    } else if(IS_NIL(value)) {
+        return 7;
+    } else if(IS_OBJ(value)) {
+        return Obj_hash(value);
+    } else if(IS_NUMBER(value)) {
+        return Hash_double(AS_NUMBER(value));
+    }
+
+    unreachable;
+
 #else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-#endif
+    #ifdef THREADED_CODE
+        #define VAL_TABLE
+        #include "jmptable.h"
+        #undef VAL_TABLE
+    #else
+        #define DISPATCH(x) switch(x)
+        #define CASE(label) case label:
+    #endif
+
     DISPATCH(value.type)
     {
         CASE(VAL_BOOL)
@@ -211,4 +286,6 @@ Hash Value_hash(Value value)
             return Obj_hash(value);
         }
     }
+
+#endif
 }

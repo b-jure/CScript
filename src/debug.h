@@ -18,13 +18,13 @@ UInt Instruction_debug(Chunk* chunk, UInt offset);
     #define DEBUG_TRACE_EXECUTION
 
     /* Debug flag for assertions */
-    #define DEBUG_ASSERTIONS
+    //#define DEBUG_ASSERTIONS
 
     /* Debug flag for garbage collection stress test */
-    #define DEBUG_STRESS_GC
+    //#define DEBUG_STRESS_GC
 
     /* Debug flag for logging garbage collection */
-    #define DEBUG_LOG_GC
+    //#define DEBUG_LOG_GC
 
 #endif
 

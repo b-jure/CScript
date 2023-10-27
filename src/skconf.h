@@ -11,38 +11,39 @@
 /* Max function call frames. */
 #define SK_CALLFRAMES_MAX 1024
 
+/* Allow quiet NaN boxing of values. */
+#define NAN_BOXING
+
 /* Compiler builtins ------------------------------------------------------- */
 #if defined(__GNUC__) && __GNUC__ >= 3
-#define THREADED_CODE
-#define force_inline __always_inline
-#define likely(cond) __glibc_likely(cond)
-#define unlikely(cond) __glibc_unlikely(cond)
-#define unused __attribute__((unused))
-#define unreachable __builtin_unreachable()
-#define aligned(type, b) type __attribute__((aligned(b)))
+    #define THREADED_CODE
+    #define force_inline   __always_inline
+    #define likely(cond)   __glibc_likely(cond)
+    #define unlikely(cond) __glibc_unlikely(cond)
+    #define unused         __attribute__((unused))
+    #define unreachable    __builtin_unreachable()
 #elif defined(__clang__)
-#define force_inline __always_inline
-#define likely(cond) [[likely]] cond
-#define unlikely(cond) [[unlikely]] cond
-#define unused [[maybe_unused]]
-#define unreachable __builtin_unreachable()
-#define aligned(type, b) type __attribute__((aligned(b)))
+    #define force_inline   __always_inline
+    #define likely(cond)   [[likely]] cond
+    #define unlikely(cond) [[unlikely]] cond
+    #define unused         [[maybe_unused]]
+    #define unreachable    __builtin_unreachable()
 #else
-#warning                                                                       \
-    "Compiler or compiler version is not supported! Compiling might result in less optimized code. \
+    #warning                                                                             \
+        "Compiler or compiler version is not supported! Compiling might result in less optimized code. \
 Delete this warning in skconf.h:21 to proceed with compiling."
-#define force_inline
-#define likely(cond) cond
-#define unlikely(cond) cond
-#define unused
-#define unreachable                                                            \
-  #include<stdio.h> #include<stdlib.h> printf("Unreachable code: %s:%d\n",     \
-                                              __FILE__, __LINE__);             \
-  exit(1);
-#define aligned(type, b) type
+    #define force_inline
+    #define likely(cond)   cond
+    #define unlikely(cond) cond
+    #define unused
+    #define unreachable                                                                  \
+        #include<stdio.h> #include<stdlib.h> printf(                                     \
+            "Unreachable code: %s:%d\n",                                                 \
+            __FILE__,                                                                    \
+            __LINE__);                                                                   \
+        exit(1);
 #endif
 
-// @TODO: Place this in api header (create one)
 #define SK_INTERNAL(ret) static ret
 /* ------------------------------------------------------------------------- */
 

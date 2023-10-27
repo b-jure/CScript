@@ -101,7 +101,7 @@ SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* 
 
     for(UInt i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
-        if(entry->key.type == VAL_EMPTY) {
+        if(IS_EMPTY(entry->key)) {
             continue;
         }
         Entry* dest = Entry_find(entries, new_cap, entry->key);
@@ -120,7 +120,7 @@ SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* 
 // Insert 'key'/'value' pair into the table.
 // If the 'key' was not found insert it together with the 'value' and return true.
 // If the 'key' already exists overwrite the 'value' and return false.
-bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value value)
+bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value val)
 {
     if(table->left == 0) {
         HashTable_expand(vm, C, table);
@@ -138,7 +138,7 @@ bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value va
     }
 
     entry->key   = key;
-    entry->value = value;
+    entry->value = val;
     return new_key;
 }
 
@@ -208,7 +208,7 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
         return false;
     }
 
-    memcpy(out, &entry->value, sizeof(Value));
+    *out = entry->value;
     return true;
 }
 

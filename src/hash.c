@@ -17,20 +17,17 @@ Hash Hash_ptr(const void* ptr)
 
 Hash Hash_double(double dbl)
 {
-    /*
     if(is_infinity(dbl) || is_nan(dbl)) {
         return (dbl > 0) ? HASH_INF : -HASH_INF;
     }
-    */
 
-    union BitCast {
+    union {
         double   value;
         uint32_t ints[2];
-    };
+    } bitcast;
 
-    union BitCast cast;
-    cast.value = (dbl) + 1.0;
-    return cast.ints[0] + cast.ints[1];
+    bitcast.value = (dbl) + 1.0;
+    return bitcast.ints[0] + bitcast.ints[1];
 }
 
 Hash Hash_string(const char* str, size_t len)

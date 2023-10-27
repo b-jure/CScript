@@ -13,6 +13,9 @@ typedef uint8_t  Byte;
 typedef uint32_t UInt;
 typedef int32_t  Int;
 
+// Enable NaN boxing
+#define NAN_BOXING
+
 /*
  * garbage collection flag (check mem.c -> gc)
  * 0 - compiling source code
@@ -42,35 +45,48 @@ SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x)
 // Max unsigned 24-bit value
 #define UINT24_MAX ((uint32_t)MAXBYTES(3))
 /* ------------------------------------------------------------------------- */
-//
-//
-//
-/* Math--------------------------------------------------------------------- */
+
+
 
 // Check if compiler supports IEEE 754 floating point standard
 #if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||         \
     __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 ||                              \
     __DBL_MIN_10_EXP__ != -307 || __DBL_MIN_EXP__ != -1021
-    #error "Compiler missing IEEE 754 floating point!"
+
+    #error "Compiler missing IEEE-754 double precision floating point!"
+
+#elif(__SIZEOF_POINTER__ != 8)
+
+    #error "Size of pointer must be 8 bytes!"
+
+#else
+
+static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8 bytes!");
+
 #endif
 
-// Check if size of double and long match
-static_assert(sizeof(double) == sizeof(long), "Size of 'double' and 'long' don't match!");
+
 
 /* Check if double is positive/negative infinity */
 SK_INTERNAL(force_inline bool) is_infinity(double dbl)
 {
-    long integer;
-    memcpy(&integer, &dbl, sizeof(long));
-    return (integer & 0x7FFFFFFFFFFFFFFF) == 0x7FF0000000000000;
+    union {
+        uint64_t integer;
+        double   dbl;
+    } bitcast;
+    bitcast.dbl = dbl;
+    return (bitcast.integer & 0x7fffffffffffffff) == 0x7fffffffffffffff;
 }
 
 /* Check if double is NaN */
 SK_INTERNAL(force_inline bool) is_nan(double dbl)
 {
-    long integer;
-    memcpy(&integer, &dbl, sizeof(long));
-    return (integer & 0x7FFFFFFFFFFFFFFFL) > 0x7FF0000000000000L;
+    union {
+        uint64_t integer;
+        double   dbl;
+    } bitcast;
+    bitcast.dbl = dbl;
+    return (bitcast.integer & 0x7fffffffffffffffL) > 0x7ff0000000000000L;
 }
 
 /* Return MAX */
@@ -93,8 +109,5 @@ SK_INTERNAL(force_inline bool) is_nan(double dbl)
     #define MAX(a, b) ((a) > (b) ? (a) : (b))
     #define MIN(a, b) ((a) > (b) ? (b) : (a))
 #endif
-
-/* ----------------------------------------------------------------------- */
-
 
 #endif

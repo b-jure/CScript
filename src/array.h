@@ -74,7 +74,7 @@
     ({                                                                                   \
         Global  retval;                                                                  \
         Global* src = &vm->globvals[index];                                              \
-        memcpy(&retval, src, sizeof(Global));                                            \
+        retval      = *src;                                                              \
         memmove(src, src + 1, vm->globlen - index);                                      \
         vm->globlen--;                                                                   \
         retval;                                                                          \

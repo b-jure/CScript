@@ -47,7 +47,7 @@ SK_INTERNAL(force_inline void) mark_table(VM* vm, HashTable* table)
 {
     for(UInt i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
-        if(entry->key.type != VAL_EMPTY) {
+        if(!IS_EMPTY(entry->key)) {
             mark_value(vm, entry->key);
             mark_value(vm, entry->value);
         }
@@ -59,7 +59,7 @@ SK_INTERNAL(force_inline void) mark_globals(VM* vm)
     for(UInt i = 0; i < vm->globids.cap; i++) {
         Entry* entry = &vm->globids.entries[i];
 
-        if(entry->key.type != VAL_EMPTY) {
+        if(!IS_EMPTY(entry->key)) {
             // Mark identifier (ObjString)
             mark_obj(vm, AS_OBJ(entry->key));
             // Mark value
@@ -173,7 +173,7 @@ SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)
 {
     for(UInt i = 0; i < vm->strings.cap; i++) {
         Entry* entry = &vm->strings.entries[i];
-        if(entry->key.type == VAL_OBJ && !Obj_marked(AS_OBJ(entry->key))) {
+        if(IS_OBJ(entry->key) && !Obj_marked(AS_OBJ(entry->key))) {
             HashTable_remove(&vm->strings, entry->key);
         }
     }

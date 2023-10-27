@@ -96,54 +96,13 @@ SK_INTERNAL(force_inline Byte) concat_nil(char** str)
 
 SK_INTERNAL(ObjString*) concatenate(VM* vm, Value a, Value b)
 {
-    Value  value[2] = {a, b};
-    size_t len[2]   = {0};
-    char*  str[2]   = {0};
+    ObjString* left  = (ObjString*)AS_OBJ(a);
+    ObjString* right = (ObjString*)AS_OBJ(b);
 
-    char buff[30] = {0}; // Buffer for number
-
-    for(int i = 0; i < 2; i++) {
-#ifdef THREADED_CODE
-    #define VAL_TABLE
-    #include "jmptable.h"
-    #undef VAL_TABLE
-#else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-    #define BREAK       break
-#endif
-        DISPATCH(value[i].type)
-        {
-            CASE(VAL_BOOL)
-            {
-                len[i] = concat_bool(AS_BOOL(value[i]), &str[i]);
-                BREAK;
-            }
-            CASE(VAL_NUMBER)
-            {
-                len[i] = dbl_to_str_generic(AS_NUMBER(value[i]), buff, 30);
-                /* This is safe, there can only be one number on either side */
-                str[i] = buff;
-                BREAK;
-            }
-            CASE(VAL_NIL)
-            {
-                len[i] = concat_nil(&str[i]);
-                BREAK;
-            }
-            CASE(VAL_OBJ)
-            {
-                str[i] = AS_CSTRING(value[i]);
-                len[i] = AS_STRING(value[i])->len;
-                BREAK;
-            }
-        }
-    }
-
-    size_t length = len[0] + len[1];
+    size_t length = left->len + right->len;
     char   buffer[length + 1];
-    memcpy(buffer, str[0], len[0]);
-    memcpy(buffer + len[0], str[1], len[1]);
+    memcpy(buffer, left->storage, left->len);
+    memcpy(buffer + left->len, right->storage, right->len);
     buffer[length] = '\0';
 
     ObjString* string = ObjString_from(vm, NULL, buffer, length);
@@ -152,10 +111,6 @@ SK_INTERNAL(ObjString*) concatenate(VM* vm, Value a, Value b)
     VM_pop(vm); // GC
 
     return string;
-
-#ifdef __SKOOMA_JMPTABLE_H__
-    #undef __SKOOMA_JMPTABLE_H__
-#endif
 }
 
 SK_INTERNAL(force_inline ObjBoundMethod*)
@@ -184,8 +139,9 @@ VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
         vm,
         OBJ_VAL(ObjNative_new(vm, NULL, AS_STRING(stack_peek(0)), native, arity)));
 
-    UInt idx = GARRAY_PUSH(vm, NULL, ((Global){vm->stack[1], false}));               // GC
-    HashTable_insert(vm, NULL, &vm->globids, vm->stack[0], NUMBER_VAL((double)idx)); // GC
+    UInt idx = GARRAY_PUSH(vm, NULL, ((Global){vm->stack[1], false})); // GC
+    HashTable_insert(vm, NULL, &vm->globids, vm->stack[0],
+                     NUMBER_VAL((double)idx)); // GC
 
     VM_pop(vm);
     VM_pop(vm);
@@ -485,8 +441,8 @@ SK_INTERNAL(force_inline bool) VM_invoke(VM* vm, Value name, Int argc)
 // So the 'next' field is what we are holding onto, then when we dereference
 // the 'pp' we automatically dereference the 'next' field of the previous 'UpValue'.
 // This basically inserts new ObjUpvalue into the vm->open_upvals singly linked list
-// (in reverse stack order head:high -> tail:low) or it returns already inserted/existing
-// Upvalue.
+// (in reverse stack order head:high -> tail:low) or it returns already
+// inserted/existing Upvalue.
 SK_INTERNAL(force_inline ObjUpvalue*) VM_capture_upval(VM* vm, Value* var_ref)
 {
     ObjUpvalue** pp = &vm->open_upvals;
@@ -522,7 +478,7 @@ SK_INTERNAL(force_inline void) VM_close_upval(VM* vm, Value* last)
 }
 
 /**
- * Searches the entire table (slow) for the matching index in order to
+ * Searches the entire table for the matching index in order to
  * provide more precise runtime error output.
  * It is okay if the lookup is slow, this only gets called when runtime error occurs.
  **/
@@ -530,7 +486,7 @@ SK_INTERNAL(force_inline ObjString*) VM_find_glob_name(VM* vm, UInt idx)
 {
     for(UInt i = 0; i < vm->globids.cap; i++) {
         Entry* entry = &vm->globids.entries[i];
-        if(entry->key.type != VAL_EMPTY && AS_NUMBER(entry->value) == idx) {
+        if(!IS_EMPTY(entry->key) && AS_NUMBER(entry->value) == idx) {
             return (ObjString*)AS_OBJ(entry->key);
         }
     }
@@ -559,14 +515,22 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 
 #define CONCAT_OR_ADD()                                                                  \
     do {                                                                                 \
-        if(IS_NUMBER(stack_peek(0)) && IS_NUMBER(stack_peek(1))) {                       \
+        Value b = stack_peek(0);                                                         \
+        Value a = stack_peek(1);                                                         \
+        if(IS_NUMBER(b) && IS_NUMBER(a)) {                                               \
             double b = AS_NUMBER(VM_pop(vm));                                            \
             double a = AS_NUMBER(VM_pop(vm));                                            \
             VM_push(vm, NUMBER_VAL((a + b)));                                            \
-        } else {                                                                         \
-            Value b = stack_peek(0);                                                     \
-            Value a = stack_peek(1);                                                     \
+        } else if(IS_STRING(b) && IS_STRING(a)) {                                        \
             VM_push(vm, OBJ_VAL(concatenate(vm, a, b)));                                 \
+        } else {                                                                         \
+            VM_error(                                                                    \
+                vm,                                                                      \
+                "Only two numbers can be added together or two strings "                 \
+                "concatenated, this is invalid: '%s + %s'.",                             \
+                VALSTR(vm, a),                                                           \
+                VALSTR(vm, b));                                                          \
+            return INTERPRET_RUNTIME_ERROR;                                              \
         }                                                                                \
     } while(false)
 
@@ -633,6 +597,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_ADD)
             {
+                frame->ip = ip;
                 CONCAT_OR_ADD();
                 BREAK;
             }
@@ -1123,9 +1088,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_INVOKE)
             {
-                // Avoid allocating ObjBoundMethod and do immediate method call
                 ObjString* method_name = READ_STRING();
-                Value      argc        = READ_CONSTANTL();
+                Value      argc        = READ_BYTEL();
                 frame->ip              = ip;
                 if(unlikely(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc)))) {
                     return INTERPRET_RUNTIME_ERROR;
@@ -1136,9 +1100,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_INVOKEL)
             {
-                // Avoid allocating ObjBoundMethod and do immediate method call long
                 ObjString* method_name = READ_STRINGL();
-                Value      argc        = READ_CONSTANTL();
+                Value      argc        = READ_BYTEL();
                 frame->ip              = ip;
                 if(unlikely(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc)))) {
                     return INTERPRET_RUNTIME_ERROR;
@@ -1247,7 +1210,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     VM_pop(vm);
                     return INTERPRET_OK;
                 }
-                vm->sp = vm->frames[vm->fc].sp;
+                vm->sp = frame->sp;
                 VM_push(vm, retval);
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
