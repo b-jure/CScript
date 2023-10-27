@@ -7,7 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define GROW_ARRAY_CAPACITY(cap) ((cap) < 8 ? 8 : (cap) * 2)
+#define ARRAY_INITIAL_SIZE 8
+
+#define GROW_ARRAY_CAPACITY(cap, initial_size)                                           \
+    ((cap) < initial_size ? initial_size : (cap) * 2)
 
 /* CONSTANTS ARRAY (Chunk.h) */
 #define CARRAY_INIT(chunk)                                                               \
@@ -20,8 +23,9 @@
 #define CARRAY_PUSH(chunk, constant, vm, compiler)                                       \
     ({                                                                                   \
         if((chunk)->ccap <= (chunk)->clen) {                                             \
-            UInt oldcap        = (chunk)->ccap;                                          \
-            (chunk)->ccap      = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);           \
+            UInt oldcap = (chunk)->ccap;                                                 \
+            (chunk)->ccap =                                                              \
+                MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE), UINT24_MAX);        \
             (chunk)->constants = gc_reallocate(                                          \
                 vm,                                                                      \
                 compiler,                                                                \
@@ -52,8 +56,9 @@
 #define GARRAY_PUSH(vm, compiler, global)                                                \
     ({                                                                                   \
         if((vm)->globcap <= (vm)->globlen) {                                             \
-            UInt oldcap    = (vm)->globcap;                                              \
-            (vm)->globcap  = MIN(GROW_ARRAY_CAPACITY(oldcap), UINT24_MAX);               \
+            UInt oldcap = (vm)->globcap;                                                 \
+            (vm)->globcap =                                                              \
+                MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE), UINT24_MAX);        \
             (vm)->globvals = gc_reallocate(                                              \
                 vm,                                                                      \
                 compiler,                                                                \
@@ -130,7 +135,7 @@ typedef void (*FreeFn)(void* value);
     {                                                                                    \
         if(self->cap <= self->len) {                                                     \
             size_t old_cap = self->cap;                                                  \
-            self->cap      = GROW_ARRAY_CAPACITY(old_cap);                               \
+            self->cap      = GROW_ARRAY_CAPACITY(old_cap, ARRAY_INITIAL_SIZE);           \
                                                                                          \
             if(unlikely(self->cap >= UINT32_MAX)) {                                      \
                 fprintf(                                                                 \

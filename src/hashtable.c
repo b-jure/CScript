@@ -1,74 +1,58 @@
+#include "array.h"
 #include "hashtable.h"
 #include "mem.h"
 #include "object.h"
 #include "value.h"
 
-// @TODO:
-//      - LINEAR PROBING
-//      - POWER OF 2 TABLE SIZE
-//      - REMOVE MODULUS OPERATOR WITH: index = hash & (table size - 1)
+// Max table load factor before needing to expand.
+#define TABLE_MAX_LOAD 0.70
 
-#define GROW_TABLE_CAPACITY(prime) get_prime_capacity(prime)
 
-#define PRIME_TABLE_LEN sizeof(prime_table) / sizeof(prime_table[0])
-
-#define TABLE_MAX_LOAD 0.45
-
-#define TABLE_MAX_SIZE prime_table[PRIME_TABLE_LEN - 1]
-
-#define QUADRATIC_PROBE(hash, i, capacity) (((hash) + ((i) * (i))) % capacity)
-
-#define IS_TOMBSTONE(entry) IS_BOOL(entry->value)
-
+// Tombstone is a sentinel value indicating there was a collision,
+// its key value is VAL_EMPTY and its value is VAL_BOOL 'true'.
+#define IS_TOMBSTONE(entry)    (IS_BOOL(entry->value) && AS_BOOL(entry->value))
 #define PLACE_TOMBSTONE(entry) (entry->value = BOOL_VAL(true))
 
+
+// Calculate and cache inserts until we need to expand the table.
+//
+// This saves us from needing to calculate loadfactor each time we insert.
+// Instead we check if 'table->left' integer is zero and then expand
+// recalculating the load factor only then.
 #define INSERTS_UNTIL_EXPAND(table)                                                      \
     ((UInt)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
 
-/* List of possible table sizes up to the 2^31 - 1, they are all
- * prime numbers, that is because using open addressing with quadratic probing and
- * having a table size be a prime number guarantees there will be no cycle if
- * the load factor (table len / table cap) of the table is equal or less than 0.5 (50%).
- */
-static const UInt prime_table[] = {
-    13,       31,       61,        127,       251,       509,        1021,
-    2039,     4093,     8191,      16381,     32749,     65521,      131071,
-    262139,   524287,   1048573,   2097143,   4194301,   8388593,    16777213,
-    33554393, 67108859, 134217689, 268435399, 536870909, 1073741789, 2147483647,
-};
 
-/* Init the HashTable */
+// Initial table size when we expand for the first time (on first insert)
+//
+// Keep this number '2^n >= 2'.
+#define TABLE_INITIAL_SIZE 8
+
+
+// Initialize the HashTable
 void HashTable_init(HashTable* table)
 {
     table->cap     = 0;
     table->len     = 0;
     table->left    = 0;
-    table->prime   = 0;
     table->entries = NULL;
 }
 
-/* Return the next prime capacity or exit if table size limit reached */
-SK_INTERNAL(force_inline size_t) get_prime_capacity(uint8_t old_prime)
+// Find entry by linear probing, size of the table is always '2^n >= TABLE_INITIAL_SIZE'.
+//
+// In case of finding a 'tombstone' keep probing until the same 'key' was found
+// or empty spot.
+//
+// If the empty spot was found and there was a 'tombstone', then return
+// the tombstone, otherwise return the entry containing the same key.
+//
+// Safety: There can't be an infinite cycle, because load factor is being tracked.
+// Hashing: For info about how each 'Value' gets hashed refer to the [value.c].
+SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt capacity, Value key)
 {
-    if(unlikely(old_prime >= PRIME_TABLE_LEN)) {
-        fprintf(
-            stderr,
-            "HashTable size exceeded (LIMIT: %u entries): %d:%s [%s]\n",
-            prime_table[PRIME_TABLE_LEN - 1],
-            __LINE__,
-            __FILE__,
-            __func__);
-        exit(EXIT_FAILURE);
-    } else {
-        return prime_table[old_prime];
-    }
-}
-
-SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt len, Value key)
-{
-    UInt   i         = 0;
     Hash   hash      = Value_hash(key);
-    UInt   index     = hash % len;
+    UInt   mask      = capacity - 1; // 'capacity' is 2^n
+    UInt   index     = hash & mask;
     Entry* tombstone = NULL;
 
     while(true) {
@@ -84,32 +68,31 @@ SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt len, Value key)
             return entry;
         }
 
-        ++i;
-        index = QUADRATIC_PROBE(hash, i, len);
+        index = (index + 1) & mask;
     };
 }
 
-/* Rehash all the keys from the table 'from' into the table 'to' */
-void HashTable_into(VM* vm, Compiler* C, HashTable* from, HashTable* to)
+// Rehash all the 'keys' from the 'src' table into the 'dest' table.
+void HashTable_into(VM* vm, Compiler* C, HashTable* src, HashTable* dest)
 {
-    for(UInt i = 0; i < from->cap; i++) {
-        Entry* entry = &from->entries[i];
+    for(UInt i = 0; i < src->cap; i++) {
+        Entry* entry = &src->entries[i];
         if(!IS_EMPTY(entry->key)) {
-            HashTable_insert(vm, C, to, entry->key, entry->value);
+            HashTable_insert(vm, C, dest, entry->key, entry->value);
         }
     }
 }
 
-/* HashTable load factor */
+// Calculate HashTable 'load factor'.
 SK_INTERNAL(force_inline double) HashTable_lf(HashTable* table)
 {
     return (double)table->len / (double)table->cap;
 }
 
-/* Expand the table array */
+// Expands the table by rehashing all the keys into a new bigger table array.
 SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* table)
 {
-    UInt   new_cap = GROW_TABLE_CAPACITY(table->prime++);
+    UInt   new_cap = GROW_ARRAY_CAPACITY(table->cap, TABLE_INITIAL_SIZE);
     Entry* entries = GC_MALLOC(vm, C, new_cap * sizeof(Entry));
     for(UInt i = 0; i < new_cap; i++) {
         entries[i].key   = EMPTY_VAL;
@@ -134,8 +117,9 @@ SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* 
     table->left    = INSERTS_UNTIL_EXPAND(table);
 }
 
-/* Return 'true' only when we insert the whole key/value pair,
- * otherwise change the value of the existing key and return false */
+// Insert 'key'/'value' pair into the table.
+// If the 'key' was not found insert it together with the 'value' and return true.
+// If the 'key' already exists overwrite the 'value' and return false.
 bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value value)
 {
     if(table->left == 0) {
@@ -158,6 +142,9 @@ bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value va
     return new_key;
 }
 
+// Remove 'key' from the table.
+// If the 'key' was found (and removed) return true and place the tombstone.
+// If the 'key' was not found return false.
 bool HashTable_remove(HashTable* table, Value key)
 {
     Entry* entry = Entry_find(table->entries, table->cap, key);
@@ -175,15 +162,16 @@ bool HashTable_remove(HashTable* table, Value key)
     return true;
 }
 
-/* NOTE: This is used only for VM strings table */
+// VM specific function, used for finding interned strings before creating
+// new 'ObjString' objects.
 ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash)
 {
     if(table->len == 0) {
         return NULL;
     }
 
-    UInt i     = 0;
-    UInt index = hash % table->cap;
+    UInt mask  = table->cap - 1; // 'cap' is 2^n
+    UInt index = hash & mask;
 
     while(true) {
         Entry* entry = &table->entries[index];
@@ -194,7 +182,6 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
             }
         } else {
             ObjString* string = AS_STRING(entry->key);
-
             if(string->len == len && string->hash == hash &&
                memcmp(string->storage, str, len) == 0)
             {
@@ -202,11 +189,13 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
             }
         }
 
-        ++i;
-        index = QUADRATIC_PROBE(hash, i, table->cap);
+        index = (index + 1) & mask;
     };
 }
 
+// Fetch 'Value' for given 'key'.
+// If 'key' was not found return false, otherwise copy the 'Value'
+// for the given 'key' into 'out' and return true.
 bool HashTable_get(HashTable* table, Value key, Value* out)
 {
     if(table->len == 0) {
@@ -223,7 +212,7 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
     return true;
 }
 
-/* Free table array and reset table fields */
+// Free 'table' array and reinitialize the 'table'.
 void HashTable_free(VM* vm, Compiler* C, HashTable* table)
 {
     GC_FREE(vm, C, table->entries, table->cap * sizeof(Entry));

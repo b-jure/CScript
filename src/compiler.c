@@ -334,7 +334,7 @@ SK_INTERNAL(force_inline void) C_grow_stack(PPC ppc)
     Compiler* C      = C();
     UInt      oldcap = C->loc_cap;
 
-    C->loc_cap = MIN(GROW_ARRAY_CAPACITY(oldcap), VM_STACK_MAX);
+    C->loc_cap = MIN(GROW_ARRAY_CAPACITY(oldcap, SHORT_STACK_SIZE), VM_STACK_MAX);
     C          = GROW_LOCAL_STACK(C, oldcap, C->loc_cap);
     C()        = C;
 }
