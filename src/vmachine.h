@@ -48,9 +48,17 @@ ARRAY_NEW(Array_ObjRef, Obj*);
 /* GC flags */
 #define GC_MANUAL_BIT (1)
 
-#define GC_SET(vm, bit)   BIT_SET((vm)->gc_flags, bit)
-#define GC_CLEAR(vm, bit) BIT_CLEAR((vm)->gc_flags, bit)
-#define GC_CHECK(vm, bit) BIT_CHECK((vm)->gc_flags, bit)
+#define GC_SET(vm, bit)        BIT_SET((vm)->gc_flags, bit)
+#define GC_CLEAR(vm, bit)      BIT_CLEAR((vm)->gc_flags, bit)
+#define GC_TOGGLE(vm, bit, on) BIT_TOGGLE((vm)->gc_flags, bit, on)
+#define GC_CHECK(vm, bit)      BIT_CHECK((vm)->gc_flags, bit)
+
+typedef struct {
+    const char*   name;
+    const uint8_t len;
+} InternedString;
+
+#define sizeofstr(str) (sizeof(str) - 1)
 
 /* Function names */
 #define SS_INIT 0
@@ -60,39 +68,39 @@ ARRAY_NEW(Array_ObjRef, Obj*);
 #define SS_DIV  4
 #define SS_REM  5
 #define SS_NEG  6
-#define OPSN    (SS_NEG + 1) /* Number of overloadable methods */
+#define SS_NOT  7
+#define OPSN    (SS_NOT + 1) /* Number of overloadable methods */
 /* Value types */
-#define SS_STR  7
-#define SS_NUM  8
-#define SS_INS  9
-#define SS_BOOL 10
-#define SS_NIL  11
+#define SS_STR  8
+#define SS_NUM  9
+#define SS_INS  10
+#define SS_BOOL 11
+#define SS_NIL  12
+/* Native function params */
+#define SS_MANU 13
+#define SS_AUTO 14
 /* Total size */
 #define SS_SIZE (sizeof(static_str) / sizeof(static_str[0]))
-
-typedef struct {
-    const char*   name;
-    const uint8_t len;
-} InternedString;
-
-#define sizeofstr(str) (sizeof(str) - 1)
 
 static const InternedString static_str[] = {
   /* Reserved class function names for overloading */
     {"__init__", sizeofstr("__init__")},
-    {"__add__",  sizeofstr("__add__") },
-    {"__sub__",  sizeofstr("__sub__") },
-    {"__mul__",  sizeofstr("__mul__") },
-    {"__div__",  sizeofstr("__div__") },
-    {"__rem__",  sizeofstr("__rem__") },
-    {"__neg__",  sizeofstr("__neg__") },
-    {"__not__",  sizeofstr("__not__") },
- /* (user) Value types */
+    {"__add__",  sizeofstr("__add__") }, // Overloading not implemented
+    {"__sub__",  sizeofstr("__sub__") }, // Overloading not implemented
+    {"__mul__",  sizeofstr("__mul__") }, // Overloading not implemented
+    {"__div__",  sizeofstr("__div__") }, // Overloading not implemented
+    {"__rem__",  sizeofstr("__rem__") }, // Overloading not implemented
+    {"__neg__",  sizeofstr("__neg__") }, // Overloading not implemented
+    {"__not__",  sizeofstr("__not__") }, // Overloading not implemented
+  /* (user) Value types */
     {"string",   sizeofstr("string")  },
     {"number",   sizeofstr("number")  },
     {"instance", sizeofstr("instance")},
     {"bool",     sizeofstr("bool")    },
     {"nil",      sizeofstr("nil")     },
+ /* Native function arguments */
+    {"manual",   sizeofstr("manual")  },
+    {"auto",     sizeofstr("auto")    },
 };
 
 struct VM {
@@ -123,7 +131,7 @@ struct VM {
     Obj*         objects;      /* List of allocated object (GC) */
     Array_ObjRef gray_stack;   /* marked objects stack (NO GC) */
     size_t       gc_allocated; /* count of allocated bytes */
-    double       gc_next;      /* next byte threshold on which GC triggers */
+    size_t       gc_next;      /* next byte threshold on which GC triggers */
     Byte         gc_flags;     /* GC flags */
 };
 

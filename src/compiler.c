@@ -2,6 +2,7 @@
 #include "chunk.h"
 #include "common.h"
 #include "compiler.h"
+#include "debug.h"
 #include "err.h"
 #include "mem.h"
 #include "object.h"
@@ -9,12 +10,6 @@
 #include "skconf.h"
 #include "value.h"
 #include "vmachine.h"
-
-#include <stdint.h>
-
-#ifdef DEBUG
-    #include "debug.h"
-#endif
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -30,7 +25,7 @@
 #define LOOP_BIT   (3)
 #define SWITCH_BIT (4)
 #define ASSIGN_BIT (5)
-#define FN_BIT     (6)
+#define RET_BIT    (6)
 /* Variable 'flags' bits */
 #define FIXED_BIT (9)
 
@@ -62,20 +57,20 @@ typedef struct {
     Token   current;
     /*
      * Parser flags.
-     * 1 - error bit <- error indicator
-     * 2 - panic bit <- panic mode
-     * 3 - loop bit <- inside a loop
+     * 1 - error bit  <- error indicator
+     * 2 - panic bit  <- panic mode
+     * 3 - loop bit   <- inside a loop
      * 4 - switch bit <- inside a switch statement
      * 5 - assign bit <- can parse assignment
-     * 6 - fn bit <- inside a function
+     * 6 - return bit <- parsed return statement
      * 7 - unused
      * 8 - unused
      * 9 - fixed bit <- variable modifier (immutable)
      * 10 - unused
      * ...
-     * 64 - unused
+     * 16 - unused
      */
-    uint64_t flags;
+    uint16_t flags;
 } Parser;
 
 /* Local variable modifier bits */
@@ -410,6 +405,10 @@ SK_INTERNAL(force_inline void) C_emit_byte(Compiler* C, Byte byte)
 
 SK_INTERNAL(force_inline void) C_emit_return(Compiler* C)
 {
+    if(C_flag_is(C, RET_BIT)) {
+        return;
+    }
+
     if(C->fn_type == FN_INIT) {
         C_emit_op(C, OP_GET_LOCAL, 0);
     } else {
@@ -499,7 +498,6 @@ SK_INTERNAL(void) C_advance(Compiler* C)
 
 static void Parser_sync(Compiler* C)
 {
-    // @TODO: Create precomputed goto table
     C_flag_clear(C, PANIC_BIT);
 
     while(C->parser->current.type != TOK_EOF) {
@@ -546,12 +544,17 @@ SK_INTERNAL(force_inline bool) C_match(Compiler* compiler, TokenType type)
 SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C)
 {
     C_emit_return(C);
+
 #ifdef DEBUG_PRINT_CODE
     if(!C_flag_is(C, ERROR_BIT)) {
         ObjFunction* fn = C->fn;
         Chunk_debug(current_chunk(C), (fn->name) ? fn->name->storage : "<script>");
     }
 #endif
+
+    // Not really needed, we discard the compiler
+    // anyway after compiling the function.
+    C_flag_clear(C, RET_BIT);
     return C->fn;
 }
 
@@ -590,9 +593,9 @@ SK_INTERNAL(void) C_free(Compiler* C)
 {
     CFCtx_free(&C->context);
     if(C->enclosing == NULL) {
-#ifdef DEBUG
-        assert(C->fn_type == FN_SCRIPT);
-#endif
+        ASSERT(
+            C->fn_type == FN_SCRIPT,
+            "Compiler is top-level but the type is not FN_SCRIPT.");
         Array_Upvalue_free(C->upvalues, NULL);
         FREE(C->upvalues);
         FREE(C->parser);
@@ -1562,7 +1565,10 @@ SK_INTERNAL(void) parse_stm_return(VM* vm, PPC ppc)
     } else {
         if(C()->fn_type == FN_INIT) {
             COMPILER_RETURN_INIT_ERR(C(), static_str[SS_INIT].name);
+        } else {
+            C_flag_set(C(), RET_BIT);
         }
+
         parse_expr(vm, ppc);
         C_expect(C(), TOK_SEMICOLON, "Expect ';' after return value.");
         C_emit_byte(C(), OP_RET);
@@ -1670,134 +1676,119 @@ SK_INTERNAL(void) parse_binary(VM* vm, PPC ppc)
     const ParseRule* rule = &rules[type];
     parse_precedence(vm, ppc, rule->precedence + 1);
 
-#ifdef THREADED_CODE
-    // IMPORTANT: update accordingly if TokenType enum is changed!
-    static const void* jump_table[TOK_EOF + 1] = {
-        // Make sure order is the same as in the TokenType enum
-        0,       /* TOK_LBRACK */
-        0,       /* TOK_RBRACK */
-        0,       /* TOK_LPAREN */
-        0,       /* TOK_RPAREN */
-        0,       /* TOK_LBRACE */
-        0,       /* TOK_RBRACE */
-        0,       /* TOK_DOT */
-        0,       /* TOK_COMMA */
-        &&minus, /* TOK_MINUS */
-        &&plus,  /* TOK_PLUS */
-        0,       /* TOK_COLON */
-        0,       /* TOK_SEMICOLON */
-        &&slash, /* TOK_SLASH */
-        &&star,  /* TOK_STAR */
-        0,       /* TOK_QMARK */
-        0,       /* TOK_BANG */
-        &&neq,   /* TOK_BANG_EQUAL */
-        0,       /* TOK_EQUAL */
-        &&eq,    /* TOK_EQUAL_EQUAL */
-        &&gt,    /* TOK_GREATER */
-        &&gteq,  /* TOK_GREATER_EQUAL */
-        &&lt,    /* TOK_LESS */
-        &&lteq,  /* TOK_LESS_EQUAL */
-        0,       /* TOK_IDENTIFIER */
-        0,       /* TOK_STRING */
-        0,       /* TOK_NUMBER */
-        0,       /* TOK_AND */
-        0,       /* TOK_BREAK */
-        0,       /* TOK_CASE */
-        0,       /* TOK_CONTINUE */
-        0,       /* TOK_CLASS */
-        0,       /* TOK_DEFAULT */
-        0,       /* TOK_ELSE */
-        0,       /* TOK_FALSE */
-        0,       /* TOK_FOR */
-        0,       /* TOK_FN */
-        0,       /* TOK_IF */
-        0,       /* TOK_IMPL */
-        0,       /* TOK_NIL */
-        0,       /* TOK_OR */
-        0,       /* TOK_PRINT */
-        0,       /* TOK_RETURN */
-        0,       /* TOK_SUPER */
-        0,       /* TOK_SELF */
-        0,       /* TOK_SWITCH */
-        0,       /* TOK_TRUE */
-        0,       /* TOK_VAR */
-        0,       /* TOK_WHILE */
-        0,       /* TOK_FIXED */
-        0,       /* TOK_ERROR */
-        0,       /* TOK_EOF */
-    };
-
+#ifdef SK_PRECOMPUTED_GOTO
+    #define TOK_TABLE
+    #include "jmptable.h"
+    #undef TOK_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+    #define BREAK       break;
+#endif
     Compiler* C = C();
-    goto*     jump_table[type];
 
-minus:
-    C_emit_byte(C, OP_SUB);
-    return;
-plus:
-    C_emit_byte(C, OP_ADD);
-    return;
-slash:
-    C_emit_byte(C, OP_DIV);
-    return;
-star:
-    C_emit_byte(C, OP_MUL);
-    return;
-neq:
-    C_emit_byte(C, OP_NOT_EQUAL);
-    return;
-eq:
-    C_emit_byte(C, OP_EQUAL);
-    return;
-gt:
-    C_emit_byte(C, OP_GREATER);
-    return;
-gteq:
-    C_emit_byte(C, OP_GREATER_EQUAL);
-    return;
-lt:
-    C_emit_byte(C, OP_LESS);
-    return;
-lteq:
-    C_emit_byte(C, OP_LESS_EQUAL);
-    return;
+    DISPATCH(type)
+    {
+        CASE(TOK_MINUS)
+        {
+            C_emit_byte(C, OP_SUB);
+            BREAK;
+        }
+        CASE(TOK_PLUS)
+        {
+            C_emit_byte(C, OP_ADD);
+            BREAK;
+        }
+        CASE(TOK_SLASH)
+        {
+            C_emit_byte(C, OP_DIV);
+            BREAK;
+        }
+        CASE(TOK_STAR)
+        {
+            C_emit_byte(C, OP_MUL);
+            BREAK;
+        }
+        CASE(TOK_BANG_EQUAL)
+        {
+            C_emit_byte(C, OP_NOT_EQUAL);
+            BREAK;
+        }
+        CASE(TOK_EQUAL_EQUAL)
+        {
+            C_emit_byte(C, OP_EQUAL);
+            BREAK;
+        }
+        CASE(TOK_GREATER)
+        {
+            C_emit_byte(C, OP_GREATER);
+            BREAK;
+        }
+        CASE(TOK_GREATER_EQUAL)
+        {
+            C_emit_byte(C, OP_GREATER_EQUAL);
+            BREAK;
+        }
+        CASE(TOK_LESS)
+        {
+            C_emit_byte(C, OP_LESS);
+            BREAK;
+        }
+        CASE(TOK_LESS_EQUAL)
+        {
+            C_emit_byte(C, OP_LESS_EQUAL);
+            BREAK;
+        }
+        CASE(TOK_LBRACK)
+        CASE(TOK_RBRACK)
+        CASE(TOK_LPAREN)
+        CASE(TOK_RPAREN)
+        CASE(TOK_LBRACE)
+        CASE(TOK_RBRACE)
+        CASE(TOK_DOT)
+        CASE(TOK_COMMA)
+        CASE(TOK_COLON)
+        CASE(TOK_SEMICOLON)
+        CASE(TOK_QMARK)
+        CASE(TOK_BANG)
+        CASE(TOK_EQUAL)
+        CASE(TOK_IDENTIFIER)
+        CASE(TOK_STRING)
+        CASE(TOK_NUMBER)
+        CASE(TOK_AND)
+        CASE(TOK_BREAK)
+        CASE(TOK_CASE)
+        CASE(TOK_CONTINUE)
+        CASE(TOK_CLASS)
+        CASE(TOK_DEFAULT)
+        CASE(TOK_ELSE)
+        CASE(TOK_FALSE)
+        CASE(TOK_FOR)
+        CASE(TOK_FN)
+        CASE(TOK_IF)
+        CASE(TOK_IMPL)
+        CASE(TOK_NIL)
+        CASE(TOK_OR)
+        CASE(TOK_PRINT)
+        CASE(TOK_RETURN)
+        CASE(TOK_SUPER)
+        CASE(TOK_SELF)
+        CASE(TOK_SWITCH)
+        CASE(TOK_TRUE)
+        CASE(TOK_VAR)
+        CASE(TOK_WHILE)
+        CASE(TOK_FIXED)
+        CASE(TOK_ERROR)
+        CASE(TOK_EOF)
+        {
+            unreachable;
+        }
+    }
 
     unreachable;
-#else
-    switch(type) {
-        case TOK_MINUS:
-            emit_byte(C, OP_SUB);
-            break;
-        case TOK_PLUS:
-            emit_byte(C, OP_ADD);
-            break;
-        case TOK_SLASH:
-            emit_byte(C, OP_DIV);
-            break;
-        case TOK_STAR:
-            emit_byte(C, OP_MUL);
-            break;
-        case TOK_BANG_EQUAL:
-            emit_byte(C, OP_NOT_EQUAL);
-            break;
-        case TOK_EQUAL_EQUAL:
-            emit_byte(C, OP_EQUAL);
-            break;
-        case TOK_GREATER:
-            emit_byte(C, OP_GREATER);
-            break;
-        case TOK_GREATER_EQUAL:
-            emit_byte(C, OP_GREATER_EQUAL);
-            break;
-        case TOK_LESS:
-            emit_byte(C, OP_LESS);
-            break;
-        case TOK_LESS_EQUAL:
-            emit_byte(C, OP_LESS_EQUAL);
-            break;
-        default:
-            unreachable;
-            return;
-    }
+
+#ifdef __SKOOMA_JMPTABLE_H__
+    #undef __SKOOMA_JMPTABLE_H__
 #endif
 }
 

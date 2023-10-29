@@ -24,17 +24,25 @@ set(SRCFILES
     ${SRCDIR}/object.c
     ${SRCDIR}/hash.c
     ${SRCDIR}/hashtable.c
+    ${SRCDIR}/core.c
 )
 
 # Common flags
 set(CFLAGS -Wall -Werror -Wextra)
+
+# BIN
+set(BIN skooma)
+add_executable(${BIN} ${SRCFILES})
+target_include_directories(${BIN} PRIVATE ${SRCDIR})
+
+
 
 
 # DEBUG
 # ASAN
 set(ASAN_FLAGS -fsanitize=address -fsanitize=undefined)
 # compile flags
-set(D_CFLAGS ${CFLAGS} ${ASAN_FLAGS} -DDEBUG -O0 -g -fno-omit-frame-pointer)
+set(D_CFLAGS ${CFLAGS} ${ASAN_FLAGS} -O0 -g -fno-omit-frame-pointer)
 # link flags
 set(D_LFLAGS ${ASAN_FLAGS})
 
@@ -55,10 +63,48 @@ set(P_LFLAGS ${R_LFLAGS} -pg)
 
 
 
-# BUILD
-set(BIN skooma)
-add_executable(${BIN} ${SRCFILES})
-target_include_directories(${BIN} PRIVATE ${SRCDIR})
+# DEBUG build
+add_custom_target(
+    debug
+    DEPENDS debug_config
+    COMMAND make ${BIN}
+)
+add_custom_target(
+    debug_config
+    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Making Debug configuration."
+)
+
+# RELEASE build
+add_custom_target(
+    release
+    DEPENDS release_config
+    COMMAND make ${BIN}
+)
+add_custom_target(
+    release_config
+    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Release ${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Making Release configuration."
+)
+
+# PROFILING build
+add_custom_target(
+    profile
+    DEPENDS profile_config
+    COMMAND make ${BIN}
+)
+add_custom_target(
+    profile_config
+    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Profiling ${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Making Profiling configuration."
+)
+
+
+
+
 
 target_compile_options(
     ${BIN}
@@ -76,9 +122,17 @@ target_link_options(
     $<$<CONFIG:Profiling>:${P_LFLAGS}>
 )
 
+target_compile_definitions(
+    ${BIN} 
+    PRIVATE
+    $<$<CONFIG:Release>:>
+    $<$<CONFIG:Profiling>:>
+    $<$<CONFIG:Debug>:DEBUG>
+)
+
 # xxHash dependency
 option(BUILD_SHARED_LIBS "Build shared libs" OFF)
-set(XXHASH_BUILD_ENABLE_INLINE_API OFF)
+set(XXHASH_BUILD_ENABLE_INLINE_API ON)
 set(XXHASH_BUILD_XXHSUM OFF)
 add_subdirectory(${DEPDIR}/xxHash/cmake_unofficial ${DEPDIR}/xxHash/build EXCLUDE_FROM_ALL)
 
@@ -86,39 +140,3 @@ add_subdirectory(${DEPDIR}/xxHash/cmake_unofficial ${DEPDIR}/xxHash/build EXCLUD
 # Link binary
 target_link_libraries(${BIN} PRIVATE xxHash::xxhash m)
 
-
-
-
-# DEBUG configuration
-add_custom_target(debug 
-    DEPENDS debug_config
-    COMMAND make ${BIN}
-)
-add_custom_target(debug_config
-    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Debug ${CMAKE_SOURCE_DIR}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Building Debug configuration"
-)
-
-# RELEASE configuration
-add_custom_target(release 
-    DEPENDS release_config
-    COMMAND make ${BIN}
-)
-add_custom_target(release_config
-    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Release ${CMAKE_SOURCE_DIR}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Building Release configuration"
-) 
-
-# PROFILING configuration
-add_custom_target(profiling_config
-    COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=Profiling ${CMAKE_SOURCE_DIR}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Building Profiling configuration"
-)
-
-add_custom_target(profiling
-    DEPENDS profiling_config
-    COMMAND make ${BIN}
-)

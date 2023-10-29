@@ -2,6 +2,8 @@
 #include "chunk.h"
 #include "common.h"
 #include "compiler.h"
+#include "core.h"
+#include "debug.h"
 #include "err.h"
 #include "hash.h"
 #include "mem.h"
@@ -9,22 +11,14 @@
 #include "skconf.h"
 #include "value.h"
 #include "vmachine.h"
-#ifdef DEBUG
-    #include "debug.h"
-#endif
 
-#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 #define stack_peek(top) (*((vm)->sp - (top + 1)))
 #define stack_reset(vm) (vm)->sp = (vm)->stack
 #define stack_size(vm)  ((vm)->sp - (vm)->stack)
-
-#define OBJSTR(vm, obj) (Obj_to_str(vm, NULL, (Obj*)obj)->storage)
-#define VALSTR(vm, val) (Value_to_str(vm, NULL, val)->storage)
 
 Int runtime = 0;
 
@@ -96,8 +90,8 @@ SK_INTERNAL(force_inline Byte) concat_nil(char** str)
 
 SK_INTERNAL(ObjString*) concatenate(VM* vm, Value a, Value b)
 {
-    ObjString* left  = (ObjString*)AS_OBJ(a);
-    ObjString* right = (ObjString*)AS_OBJ(b);
+    ObjString* left  = AS_STRING(a);
+    ObjString* right = AS_STRING(b);
 
     size_t length = left->len + right->len;
     char   buffer[length + 1];
@@ -147,134 +141,13 @@ VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
     VM_pop(vm);
 }
 
-
-
-
-//------------------------- NATIVE -------------------------//
-
-/**
- * Determines processor time.
- * @ret - approximation of processor time used by the program in seconds.
- * @err - if the processor time used is not available or its value cannot
- *        be represented.
- **/
-SK_INTERNAL(force_inline bool) native_clock(VM* vm, Value* argv)
-{
-    clock_t time = clock();
-
-    if(likely(time != -1)) {
-        argv[-1] = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
-        return true;
-    }
-
-    argv[-1] = OBJ_VAL(ERR_NEW(vm, CLOCK_ERR));
-    return false;
-}
-
-#define NATIVE_FIELD_ERR(argv, name)                                                     \
-    do {                                                                                 \
-        ObjString* err = NULL;                                                           \
-        if(unlikely(!IS_INSTANCE(argv[0]))) {                                            \
-            err = ERR_NEW(vm, name##_INSTANCE_ERR);                                      \
-        } else if(unlikely(!IS_STRING(argv[1]))) {                                       \
-            err = ERR_NEW(vm, name##_FIELD_ERR);                                         \
-        }                                                                                \
-        argv[-1] = OBJ_VAL(err);                                                         \
-    } while(false)
-
-/**
- * Checks if ObjInstance contains field.
- * @ret - bool, true if it contains, false otherwise
- * @err - if first argument is not ObjInstance
- *      - if second argument is not ObjString
- **/
-SK_INTERNAL(force_inline bool) native_isfield(VM* vm, Value* argv)
-{
-    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
-        ObjInstance* instance = AS_INSTANCE(argv[0]);
-        Value        _dummy;
-        argv[-1] = BOOL_VAL(HashTable_get(&instance->fields, argv[1], &_dummy));
-        return true;
-    }
-
-    NATIVE_FIELD_ERR(argv, ISFIELD);
-    return false;
-}
-
-/**
- * Deletes the field from ObjInstance.
- * @ret - bool, true if field was removed false otherwise
- * @err - if first argument is not ObjInstance
- *      - if second argument is not ObjString
- **/
-SK_INTERNAL(force_inline bool) native_delfield(VM* vm, Value* argv)
-{
-    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
-        ObjInstance* instance = AS_INSTANCE(argv[0]);
-        argv[-1]              = BOOL_VAL(HashTable_remove(&instance->fields, argv[1]));
-        return true;
-    }
-
-    NATIVE_FIELD_ERR(argv, DELFIELD);
-    return false;
-}
-
-/**
- * Creates or sets the value the field of ObjInstance.
- * @ret - bool, true if field was created otherwise false (field value changed)
- * @err - if first argument is not ObjInstance
- *      - if second argument is not ObjString
- **/
-SK_INTERNAL(force_inline bool) native_setfield(VM* vm, Value* argv)
-{
-    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
-        ObjInstance* instance = AS_INSTANCE(argv[0]);
-        argv[-1] =
-            BOOL_VAL(HashTable_insert(vm, NULL, &instance->fields, argv[1], argv[2]));
-        return true;
-    }
-
-    NATIVE_FIELD_ERR(argv, SETFIELD);
-    return false;
-}
-
-/**
- * Prints a string and a newline.
- **/
-SK_INTERNAL(force_inline bool) native_printl(unused VM* _, Value* argv)
-{
-    Value_print(argv[0]);
-    printf("\n");
-    argv[-1] = BOOL_VAL(true);
-    return true;
-}
-
-/**
- * Converts the value into string.
- **/
-SK_INTERNAL(force_inline bool) native_to_str(VM* vm, Value* argv)
-{
-    argv[-1] = OBJ_VAL(VALSTR(vm, argv[0]));
-    return true;
-}
-
-
-
-
-/*
- *
- */
-/*======================= VM core functions ==========================*/
-
-// @TODO: After implementing classes, define garbage collector
-// class with its own interface of native functions
 void VM_init(VM* vm)
 {
     vm->fc           = 0;
     vm->objects      = NULL;
     vm->open_upvals  = NULL;
     vm->gc_allocated = 0;
-    vm->gc_next      = MIB(1);
+    vm->gc_next      = (1 << 20); // 1 MiB
     vm->gc_flags     = 0;
     stack_reset(vm);
 
@@ -285,19 +158,24 @@ void VM_init(VM* vm)
 
     Array_ObjRef_init(&vm->gray_stack); // Gray stack (NO GC)
 
-    // Create ObjStrings for each static string
     for(UInt i = 0; i < SS_SIZE; i++) {
         vm->statics[i] = NULL;
         vm->statics[i] = ObjString_from(vm, NULL, static_str[i].name, static_str[i].len);
     }
 
     // Native function definitions
-    VM_define_native(vm, "clock", native_clock, 0);       // GC
-    VM_define_native(vm, "isfield", native_isfield, 2);   // GC
-    VM_define_native(vm, "delfield", native_delfield, 2); // GC
-    VM_define_native(vm, "setfield", native_setfield, 3); // GC
-    VM_define_native(vm, "printl", native_printl, 1);     // GC
-    VM_define_native(vm, "tostr", native_to_str, 1);      // GC
+    VM_define_native(vm, "clock", native_clock, 0);         // GC
+    VM_define_native(vm, "isfield", native_isfield, 2);     // GC
+    VM_define_native(vm, "delfield", native_delfield, 2);   // GC
+    VM_define_native(vm, "setfield", native_setfield, 3);   // GC
+    VM_define_native(vm, "printl", native_printl, 1);       // GC
+    VM_define_native(vm, "tostr", native_tostr, 1);         // GC
+    VM_define_native(vm, "gcfactor", native_gcfactor, 1);   // GC
+    VM_define_native(vm, "gcmode", native_gcmode, 1);       // GC
+    VM_define_native(vm, "gccollect", native_gccollect, 0); // GC
+    VM_define_native(vm, "gcleft", native_gcleft, 0);       // GC
+    VM_define_native(vm, "gcusage", native_gcusage, 0);     // GC
+    VM_define_native(vm, "gcnext", native_gcnext, 0);       // GC
 }
 
 /**
@@ -400,7 +278,7 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, Int argc)
     }
 
 
-    RUNTIME_NONCALLABLE_ERR(vm, VALSTR(vm, fnval));
+    RUNTIME_NONCALLABLE_ERR(vm, VALSTR(vm, fnval)->storage);
     return false;
 }
 
@@ -419,7 +297,7 @@ SK_INTERNAL(force_inline bool) VM_invoke(VM* vm, Value name, Int argc)
 {
     Value receiver = stack_peek(argc);
     if(unlikely(!IS_INSTANCE(receiver))) {
-        RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, receiver));
+        RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, receiver)->storage);
         return false;
     }
 
@@ -528,8 +406,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 vm,                                                                      \
                 "Only two numbers can be added together or two strings "                 \
                 "concatenated, this is invalid: '%s + %s'.",                             \
-                VALSTR(vm, a),                                                           \
-                VALSTR(vm, b));                                                          \
+                VALSTR(vm, a)->storage,                                                  \
+                VALSTR(vm, b)->storage);                                                 \
             return INTERPRET_RUNTIME_ERROR;                                              \
         }                                                                                \
     } while(false)
@@ -547,7 +425,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
     printf("\n=== vmachine ===\n");
 #endif
     while(true) {
-#ifdef THREADED_CODE
+#ifdef SK_PRECOMPUTED_GOTO
     #define OP_TABLE
     #include "jmptable.h"
     #undef OP_TABLE
@@ -589,7 +467,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 Value val = stack_peek(0);
                 if(unlikely(!IS_NUMBER(val))) {
-                    RUNTIME_UNARY_NEGATION_ERR(vm, VALSTR(vm, val));
+                    RUNTIME_UNARY_NEGATION_ERR(vm, VALSTR(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(val);
@@ -921,7 +799,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value val = stack_peek(1);
                 if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(val);
@@ -941,7 +819,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value val = stack_peek(1);
                 if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(val);
@@ -961,7 +839,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value val = stack_peek(0);
                 if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance      = AS_INSTANCE(val);
@@ -987,7 +865,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value val = stack_peek(0);
                 if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance      = AS_INSTANCE(val);
@@ -1013,7 +891,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value val = stack_peek(2);
                 if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance = AS_INSTANCE(val);
@@ -1033,7 +911,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value val = stack_peek(1);
                 if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val));
+                    RUNTIME_INSTANCE_ERR(vm, VALSTR(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance* instance      = AS_INSTANCE(val);
@@ -1127,7 +1005,10 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 
                 if(unlikely(!IS_CLASS(superclass))) {
                     frame->ip = ip;
-                    RUNTIME_INHERIT_ERR(vm, OBJSTR(vm, subclass), VALSTR(vm, superclass));
+                    RUNTIME_INHERIT_ERR(
+                        vm,
+                        OBJSTR(vm, subclass),
+                        VALSTR(vm, superclass)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
 

@@ -1,23 +1,19 @@
 #include "compiler.h"
+#include "debug.h"
 #include "hashtable.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
 #include "value.h"
 #include "vmachine.h"
-#ifdef DEBUG
-    #include "debug.h"
-#endif
-#ifdef DEBUG_LOG_GC
-    #include "debug.h"
-    #include <stdio.h>
-#endif
 
 #include <errno.h>
+#include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #define GC_HEAP_GROW_FACTOR 2
-double gc_grow_factor = 0; // @TODO: Use this in native GC interface
+double gc_grow_factor = 0;
 
 void mark_obj(VM* vm, Obj* obj)
 {
@@ -27,11 +23,13 @@ void mark_obj(VM* vm, Obj* obj)
 
     Obj_mark_set(obj, true);
     if(Obj_type(obj) == OBJ_STRING) {
+
 #ifdef DEBUG_LOG_GC
         printf("%p blacken ", (void*)obj);
         Value_print(OBJ_VAL(obj));
         printf("\n");
 #endif
+
         return;
     }
 
@@ -40,6 +38,7 @@ void mark_obj(VM* vm, Obj* obj)
     Value_print(OBJ_VAL(obj));
     printf("\n");
 #endif
+
     Array_ObjRef_push(&vm->gray_stack, obj);
 }
 
@@ -94,9 +93,9 @@ SK_INTERNAL(force_inline void) mark_upvalues(VM* vm)
     }
 }
 
-SK_INTERNAL(force_inline void) mark_ops(VM* vm)
+SK_INTERNAL(force_inline void) mark_statics(VM* vm)
 {
-    for(UInt i = 0; i < OPSN; i++) {
+    for(UInt i = 0; i < SS_SIZE; i++) {
         mark_obj(vm, (Obj*)vm->statics[i]);
     }
 }
@@ -107,65 +106,85 @@ SK_INTERNAL(force_inline void) mark_vm_roots(VM* vm)
     mark_frames(vm);
     mark_upvalues(vm);
     mark_globals(vm);
-    mark_ops(vm);
+    mark_statics(vm);
 }
 
-SK_INTERNAL(force_inline void) mark_black(VM* vm, Obj* obj)
+void mark_black(VM* vm, Obj* obj)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p blacken ", (void*)obj);
     Value_print(OBJ_VAL(obj));
     printf("\n");
 #endif
-    switch(Obj_type(obj)) {
-        case OBJ_UPVAL:
+
+#ifdef SK_PRECOMPUTED_GOTO
+    #define OBJ_TABLE
+    #include "jmptable.h"
+    #undef OBJ_TABLE
+#else
+    #define DISPATCH(x) switch(x)
+    #define CASE(label) case label:
+    #define BREAK       break
+#endif
+
+    DISPATCH(Obj_type(obj))
+    {
+        CASE(OBJ_UPVAL)
+        {
             mark_value(vm, ((ObjUpvalue*)obj)->closed);
-            break;
-        case OBJ_FUNCTION: {
+            BREAK;
+        }
+        CASE(OBJ_FUNCTION)
+        {
             ObjFunction* fn = (ObjFunction*)obj;
             mark_obj(vm, (Obj*)fn->name);
             for(UInt i = 0; i < fn->chunk.clen; i++) {
                 mark_value(vm, fn->chunk.constants[i]);
             }
-            break;
+            BREAK;
         }
-        case OBJ_CLOSURE: {
+        CASE(OBJ_CLOSURE)
+        {
             ObjClosure* closure = (ObjClosure*)obj;
             mark_obj(vm, (Obj*)closure->fn);
             for(UInt i = 0; i < closure->upvalc; i++) {
                 mark_obj(vm, (Obj*)closure->upvals[i]);
             }
-            break;
+            BREAK;
         }
-        case OBJ_CLASS: {
+        CASE(OBJ_CLASS)
+        {
             ObjClass* cclass = (ObjClass*)obj;
             mark_obj(vm, (Obj*)cclass->name);
             mark_table(vm, &cclass->methods);
             for(UInt i = 0; i < OPSN; i++) {
                 mark_obj(vm, cclass->overloaded[i]);
             }
-            break;
+            BREAK;
         }
-        case OBJ_INSTANCE: {
+        CASE(OBJ_INSTANCE)
+        {
             ObjInstance* instance = (ObjInstance*)obj;
             mark_obj(vm, (Obj*)instance->cclass);
             mark_table(vm, &instance->fields);
-            break;
+            BREAK;
         }
-        case OBJ_BOUND_METHOD: {
+        CASE(OBJ_BOUND_METHOD)
+        {
             ObjBoundMethod* bound_method = (ObjBoundMethod*)obj;
             mark_obj(vm, (Obj*)bound_method);
             mark_value(vm, bound_method->receiver);
             mark_obj(vm, bound_method->method);
-            break;
+            BREAK;
         }
-        case OBJ_NATIVE: {
+        CASE(OBJ_NATIVE)
+        {
             ObjNative* native = (ObjNative*)obj;
             mark_obj(vm, (Obj*)native->name);
-            break;
+            BREAK;
         }
-        default:
-            unreachable;
+        CASE(OBJ_STRING)
+        unreachable;
     }
 }
 
@@ -187,9 +206,9 @@ SK_INTERNAL(force_inline void) sweep(VM* vm, Compiler* C)
     while(current != NULL) {
         if(Obj_marked(current)) {
             Obj_mark_set(current, false);
-#ifdef DEBUG
-            assert(Obj_marked(current) == false);
-#endif
+            ASSERT(
+                Obj_marked(current) == false,
+                "Object remained marked after unmarking.");
             previous = current;
             current  = Obj_next(current);
         } else {
@@ -206,15 +225,16 @@ SK_INTERNAL(force_inline void) sweep(VM* vm, Compiler* C)
     }
 }
 
-void gc(VM* vm, Compiler* C)
+size_t gc(VM* vm, Compiler* C)
 {
 #ifdef DEBUG_LOG_GC
     printf("--> GC start\n");
-    size_t old_allocation = vm->gc_allocated;
 #endif
 
+    size_t old_allocation = vm->gc_allocated;
     mark_vm_roots(vm);
-#ifdef THREADED_CODE
+
+#ifdef SK_PRECOMPUTED_GOTO
     static const void* jmptable[] = {&&mark, &&skip};
 
     goto* jmptable[runtime];
@@ -232,19 +252,20 @@ skip:
     remove_weak_refs(vm);
     sweep(vm, C);
 
-    // @TODO: Make use of gc_grow_factor global when GC class gets implemented
     vm->gc_next = (double)vm->gc_allocated *
                   (double)((gc_grow_factor == 0) ? GC_HEAP_GROW_FACTOR : gc_grow_factor);
 
 #ifdef DEBUG_LOG_GC
     printf("--> GC end\n");
     printf(
-        "    collected %lu bytes (from %lu to %lu) next collection at %g\n",
+        "    collected %lu bytes (from %lu to %lu) next collection at %lu\n",
         old_allocation - vm->gc_allocated,
         old_allocation,
         vm->gc_allocated,
-        vm->gc_next);
+        (size_t)vm->gc_next);
 #endif
+
+    return old_allocation - vm->gc_allocated;
 }
 
 /* Allocator that can trigger gc. */
@@ -257,9 +278,11 @@ void* gc_reallocate(VM* vm, Compiler* C, void* ptr, size_t oldc, size_t newc)
         gc(vm, C);
     }
 #else
-    if(!GC_CHECK(vm, GC_MANUAL_BIT) * vm->gc_next < vm->gc_allocated) {
+
+    if(!GC_CHECK(vm, GC_MANUAL_BIT) && vm->gc_next < vm->gc_allocated) {
         gc(vm, C);
     }
+
 #endif
 
     return reallocate(ptr, newc);

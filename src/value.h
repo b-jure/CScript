@@ -19,9 +19,9 @@ typedef struct ObjBoundMethod ObjBoundMethod;
 // Skooma 'Value' is NAN boxed except 'double'.
 //
 // Here is what each bit represents [0..63].
-// bits 0..48 (inclusive) -> value and type (except obj type),
-// bit  49                -> object tag,
-// bit  50                -> unused,
+// bits 0..3              -> type
+// bits 4..48             -> value,
+// bits 49..50            -> unused,
 // bit  51                -> QNaN Floating-Point Indefinite bit
 //                           (Intel Manual Volume 1: Chapter 4, 4-3 Table),
 // bit  52                -> Quiet NaN bit,
@@ -39,8 +39,8 @@ typedef uint64_t Value;
     #define DECLARED_TAG 0x05
     #define OBJECT_TAG   0x06 // 'Obj*' is 8 bytes aligned (first 3 bits are 0)
 
-    #define AS_OBJ(val)        ((Obj*)((uintptr_t)(val & 0x0000fffffffffff8)))
-    #define AS_BOOL(val)       ((bool)(val == TRUE_VAL))
+    #define AS_OBJ(val)        ((Obj*)((uintptr_t)((val) & 0x0000fffffffffff8)))
+    #define AS_BOOL(val)       ((bool)((val) == TRUE_VAL))
     #define AS_NUMBER(val)     (vton(val))
     #define AS_NUMBER_REF(val) *(val)
 
@@ -141,6 +141,8 @@ typedef struct Compiler Compiler;
 #ifndef __SKOOMA_VMACHINE_H__
 typedef struct VM VM;
 #endif
+
+#define VALSTR(vm, val) (Value_to_str(vm, NULL, val))
 
 ObjString* Value_to_str(VM* vm, Compiler* C, Value value);
 void       Value_print(Value value);

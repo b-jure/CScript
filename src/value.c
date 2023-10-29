@@ -45,8 +45,9 @@ Byte nil_to_str_generic(char* dest, UInt len)
 SK_INTERNAL(force_inline ObjString*) dbl_to_str(VM* vm, Compiler* C, double n)
 {
     static char buff[30];
-    size_t      len = dbl_to_str_generic(n, buff, UINT8_MAX);
-    return ObjString_from(vm, C, buff, len);
+    size_t      len    = dbl_to_str_generic(n, buff, 30);
+    ObjString*  string = ObjString_from(vm, C, buff, len);
+    return string;
 }
 
 SK_INTERNAL(force_inline ObjString*) bool_to_str(VM* vm, Compiler* C, bool boolean)
@@ -81,7 +82,7 @@ ObjString* Value_to_str(VM* vm, Compiler* C, Value value)
 
 #else
 
-    #ifdef THREADED_CODE
+    #ifdef SK_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
         #undef VAL_TABLE
@@ -142,7 +143,7 @@ void Value_print(Value value)
     unreachable;
 
 #else
-    #ifdef THREADED_CODE
+    #ifdef SK_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
         #undef BREAK
@@ -205,7 +206,7 @@ bool Value_eq(Value a, Value b)
         return false;
     }
 
-    #ifdef THREADED_CODE
+    #ifdef SK_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
         #undef VAL_TABLE
@@ -258,7 +259,7 @@ Hash Value_hash(Value value)
     unreachable;
 
 #else
-    #ifdef THREADED_CODE
+    #ifdef SK_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
         #undef VAL_TABLE

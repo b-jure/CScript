@@ -59,7 +59,7 @@ Token Scanner_scan(Scanner* scanner)
         return Token_number(scanner);
     }
 
-#ifdef THREADED_CODE
+#ifdef SK_PRECOMPUTED_GOTO
     #define ERR &&err
     // IMPORTANT: update accordingly if TokenType enum changes!
     static const void* jump_table[UINT8_MAX + 1] = {
@@ -319,7 +319,7 @@ SK_INTERNAL(force_inline Token) Token_identifier(Scanner* scanner)
 
 SK_INTERNAL(TokenType) TokenType_identifier(Scanner* scanner)
 {
-#ifdef THREADED_CODE
+#ifdef SK_PRECOMPUTED_GOTO
     #define RET &&ret
     // IMPORTANT: update accordingly if scanner tokens change!
     static const void* jump_table[UINT8_MAX + 1] = {

@@ -143,6 +143,27 @@
 #define SETFIELD_FIELD_ERR    FIELD_ERR("setfield")
 /* ------------- */
 
+/* native_gcfactor */
+#define GC_FACTOR_ARG_ERR                                                                \
+    NATIVE_FN_ERR(                                                                       \
+        "gcfactor",                                                                      \
+        "invalid argument, grow factor must be a number, either '0' or '>1'.")
+/* ------------- */
+
+/* native_gcmode */
+#define GC_MODE_ARG_ERR                                                                  \
+    NATIVE_FN_ERR("gcmode", "invalid argument type, 'mode' must be a string.")
+#define GC_MODE_INVALID_MODE_ERR                                                         \
+    NATIVE_FN_ERR("gcmode", "invalid mode, mode can be either 'auto' or 'manual'.")
+/* ------------- */
+
+/* native_gcset */
+#define GC_SET_ARG_ERR                                                                   \
+    NATIVE_FN_ERR("gcset", "invalid argument type, limit must be a number.")
+
+#define GC_SET_NEGATIVE_LIMIT_ERR NATIVE_FN_ERR(                                         \
+    "gcset",                                                                             \
+    "limit can't be negative, it must be positive or 0.")
 
 
 

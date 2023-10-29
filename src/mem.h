@@ -7,10 +7,10 @@
 
 #include <memory.h>
 
-void* reallocate(void* ptr, size_t newCap);
-void* gc_reallocate(VM* vm, Compiler* C, void* ptr, size_t oldc, size_t newc);
-void  gc(VM* vm, Compiler* C);
-void  mark_obj(VM* vm, Obj* obj);
+void*  reallocate(void* ptr, size_t newCap);
+void*  gc_reallocate(VM* vm, Compiler* C, void* ptr, size_t oldc, size_t newc);
+size_t gc(VM* vm, Compiler* C);
+void   mark_obj(VM* vm, Obj* obj);
 
 extern double gc_grow_factor;
 

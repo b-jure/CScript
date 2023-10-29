@@ -65,7 +65,7 @@ Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
 /* Write generic OpCode-s with parameters. */
 void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 {
-#ifdef THREADED_CODE
+#ifdef SK_PRECOMPUTED_GOTO
     #define OP_TABLE
     #include "jmptable.h"
     #undef OP_TABLE
@@ -165,7 +165,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 }
 
 // @TODO: Implement binary search
-/* Returns the line of the current instruction (DEBUG ONLY) */
+/* Returns the line of the current instruction. */
 UInt Chunk_getline(Chunk* chunk, UInt index)
 {
     Array_UInt* line_array      = &chunk->lines;

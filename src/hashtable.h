@@ -18,11 +18,9 @@ typedef struct {
 } Entry;
 
 typedef struct {
-    UInt    cap;    // table capacity
-    UInt    len;    // table length
-    UInt    left;   // avoid always calculating load factor
-    uint8_t prime;  // index into prime_table (internal) which
-                    // is the next table size when expansion occurs
+    UInt   cap;     // table capacity
+    UInt   len;     // table length
+    UInt   left;    // inserts until load factor exceeded
     Entry* entries; // table array (array of Entry)
 } HashTable;
 

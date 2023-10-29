@@ -151,6 +151,8 @@ typedef struct {
     Int        arity;
 } ObjNative;
 
+#define OBJSTR(vm, obj) (Obj_to_str(vm, NULL, (Obj*)obj)->storage)
+
 ObjString*      Obj_to_str(VM* vm, Compiler* C, Obj* object);
 ObjBoundMethod* ObjBoundMethod_new(VM* vm, Compiler* C, Value receiver, Obj* method);
 ObjInstance*    ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass);

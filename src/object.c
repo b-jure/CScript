@@ -1,11 +1,9 @@
 #include "array.h"
+#include "debug.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
 #include "value.h"
-#ifdef DEBUG
-    #include "debug.h"
-#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,11 +24,9 @@ SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, Compiler* C, size_t size, ObjType
     // mark bit, so make sure it is set to false!
     Obj_mark_set(object, false);
 
-#ifdef DEBUG
-    assert(Obj_type(object) == type);
-    assert(Obj_next(object) == vm->objects);
-    assert(Obj_marked(object) == false);
-#endif
+    ASSERT(Obj_type(object) == type, "Obj_type() returned invalid type.");
+    ASSERT(Obj_next(object) == vm->objects, "Obj_next() returned invalid pointer.");
+    ASSERT(Obj_marked(object) == false, "Obj_marked() returned invalid mark bit.");
 
     // Add object to the GC list
     vm->objects = object;
@@ -226,7 +222,7 @@ void ObjType_print(ObjType type) // Debug
 
 void Obj_print(Value value)
 {
-#ifdef THREADED_CODE
+#ifdef SK_PRECOMPUTED_GOTO
     #define OBJ_TABLE
     #include "jmptable.h"
     #undef OBJ_TABLE
@@ -320,7 +316,7 @@ void Obj_free(VM* vm, Compiler* C, Obj* object)
     printf("\n");
 #endif
 
-#ifdef THREADED_CODE
+#ifdef SK_PRECOMPUTED_GOTO
     #define OBJ_TABLE
     #include "jmptable.h"
     #undef OBJ_TABLE
@@ -383,7 +379,7 @@ void Obj_free(VM* vm, Compiler* C, Obj* object)
 
 ObjString* Obj_to_str(VM* vm, Compiler* C, Obj* object)
 {
-#ifdef THREADED_CODE
+#ifdef SK_PRECOMPUTED_GOTO
     #define OBJ_TABLE
     #include "jmptable.h"
     #undef OBJ_TABLE

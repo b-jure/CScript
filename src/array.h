@@ -4,15 +4,16 @@
 #include "common.h"
 
 #include <errno.h>
+#include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #define ARRAY_INITIAL_SIZE 8
 
 #define GROW_ARRAY_CAPACITY(cap, initial_size)                                           \
-    ((cap) < initial_size ? initial_size : (cap) * 2)
+    ((cap) < (initial_size) ? (initial_size) : (cap) * 2)
 
-/* CONSTANTS ARRAY (Chunk.h) */
+/* CONSTANTS ARRAY (chunk.h) */
 #define CARRAY_INIT(chunk)                                                               \
     do {                                                                                 \
         (chunk)->constants = NULL;                                                       \
@@ -45,7 +46,7 @@
 
 
 
-/* GLOBALS ARRAY (vm.h) */
+/* GLOBALS ARRAY (vmachine.h) */
 #define GARRAY_INIT(vm)                                                                  \
     do {                                                                                 \
         (vm)->globvals = NULL;                                                           \
