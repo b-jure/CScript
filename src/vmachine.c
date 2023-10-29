@@ -176,6 +176,7 @@ void VM_init(VM* vm)
     VM_define_native(vm, "gcleft", native_gcleft, 0);       // GC
     VM_define_native(vm, "gcusage", native_gcusage, 0);     // GC
     VM_define_native(vm, "gcnext", native_gcnext, 0);       // GC
+    VM_define_native(vm, "gcset", native_gcset, 1);         // GC
 }
 
 /**
