@@ -8,14 +8,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define ALLOC_OBJ(vm, c, object, type) ((object*)Obj_new(vm, c, sizeof(object), type))
+#define ALLOC_OBJ(vm, object, type) ((object*)Obj_new(vm, sizeof(object), type))
 
-#define ALLOC_STRING(vm, c, len)                                                         \
-    ((ObjString*)Obj_new(vm, c, sizeof(ObjString) + (len) + 1, OBJ_STRING))
+#define ALLOC_STRING(vm, len)                                                         \
+    ((ObjString*)Obj_new(vm, sizeof(ObjString) + (len) + 1, OBJ_STRING))
 
-SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, Compiler* C, size_t size, ObjType type)
+SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, size_t size, ObjType type)
 {
-    Obj* object = GC_MALLOC(vm, C, size);
+    Obj* object = GC_MALLOC(vm, size);
 
     object->header = (uint64_t)vm->objects | ((uint64_t)type << 56);
 
@@ -40,14 +40,14 @@ SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, Compiler* C, size_t size, ObjType
     return object;
 }
 
-SK_INTERNAL(force_inline ObjString*) ObjString_alloc(VM* vm, Compiler* C, UInt len)
+SK_INTERNAL(force_inline ObjString*) ObjString_alloc(VM* vm, UInt len)
 {
-    ObjString* string = ALLOC_STRING(vm, C, len);
+    ObjString* string = ALLOC_STRING(vm, len);
     string->len       = len;
     return string;
 }
 
-ObjString* ObjString_from(VM* vm, Compiler* C, const char* chars, size_t len)
+ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
 {
     uint64_t   hash     = Hash_string(chars, len);
     ObjString* interned = HashTable_get_intern(&vm->strings, chars, len, hash);
@@ -56,25 +56,25 @@ ObjString* ObjString_from(VM* vm, Compiler* C, const char* chars, size_t len)
         return interned;
     }
 
-    ObjString* string = ObjString_alloc(vm, C, len);
+    ObjString* string = ObjString_alloc(vm, len);
     memcpy(string->storage, chars, len);
     string->storage[len] = '\0';
     string->hash         = hash;
 
     VM_push(vm, OBJ_VAL(string)); // GC
-    HashTable_insert(vm, C, &vm->strings, OBJ_VAL(string), NIL_VAL);
+    HashTable_insert(vm, &vm->strings, OBJ_VAL(string), NIL_VAL);
     VM_pop(vm); // GC
     return string;
 }
 
-SK_INTERNAL(force_inline void) ObjString_free(VM* vm, Compiler* C, ObjString* string)
+SK_INTERNAL(force_inline void) ObjString_free(VM* vm, ObjString* string)
 {
-    GC_FREE(vm, C, string, sizeof(ObjString) + string->len + 1);
+    GC_FREE(vm, string, sizeof(ObjString) + string->len + 1);
 }
 
-ObjNative* ObjNative_new(VM* vm, Compiler* C, ObjString* name, NativeFn fn, Int arity)
+ObjNative* ObjNative_new(VM* vm, ObjString* name, NativeFn fn, Int arity)
 {
-    ObjNative* native = ALLOC_OBJ(vm, C, ObjNative, OBJ_NATIVE);
+    ObjNative* native = ALLOC_OBJ(vm, ObjNative, OBJ_NATIVE);
     //
     native->name  = name;
     native->fn    = fn;
@@ -82,14 +82,14 @@ ObjNative* ObjNative_new(VM* vm, Compiler* C, ObjString* name, NativeFn fn, Int 
     return native;
 }
 
-SK_INTERNAL(force_inline void) ObjNative_free(VM* vm, Compiler* C, ObjNative* native)
+SK_INTERNAL(force_inline void) ObjNative_free(VM* vm, ObjNative* native)
 {
-    GC_FREE(vm, C, native, sizeof(ObjNative));
+    GC_FREE(vm, native, sizeof(ObjNative));
 }
 
-ObjFunction* ObjFunction_new(VM* vm, Compiler* C)
+ObjFunction* ObjFunction_new(VM* vm)
 {
-    ObjFunction* fn = ALLOC_OBJ(vm, C, ObjFunction, OBJ_FUNCTION);
+    ObjFunction* fn = ALLOC_OBJ(vm, ObjFunction, OBJ_FUNCTION);
     fn->arity       = 0;
     fn->name        = NULL;
     fn->upvalc      = 0;
@@ -97,20 +97,20 @@ ObjFunction* ObjFunction_new(VM* vm, Compiler* C)
     return fn;
 }
 
-SK_INTERNAL(force_inline void) ObjFunction_free(VM* vm, Compiler* C, ObjFunction* fn)
+SK_INTERNAL(force_inline void) ObjFunction_free(VM* vm, ObjFunction* fn)
 {
-    Chunk_free(&fn->chunk, vm, C);
-    GC_FREE(vm, C, fn, sizeof(ObjFunction));
+    Chunk_free(&fn->chunk, vm);
+    GC_FREE(vm, fn, sizeof(ObjFunction));
 }
 
-ObjClosure* ObjClosure_new(VM* vm, Compiler* C, ObjFunction* fn)
+ObjClosure* ObjClosure_new(VM* vm, ObjFunction* fn)
 {
-    ObjUpvalue** upvals = GC_MALLOC(vm, C, sizeof(ObjUpvalue*) * fn->upvalc);
+    ObjUpvalue** upvals = GC_MALLOC(vm, sizeof(ObjUpvalue*) * fn->upvalc);
     for(UInt i = 0; i < fn->upvalc; i++) {
         upvals[i] = NULL;
     }
 
-    ObjClosure* closure = ALLOC_OBJ(vm, C, ObjClosure, OBJ_CLOSURE);
+    ObjClosure* closure = ALLOC_OBJ(vm, ObjClosure, OBJ_CLOSURE);
     closure->fn         = fn;
     closure->upvals     = upvals;
     closure->upvalc     = fn->upvalc;
@@ -118,62 +118,60 @@ ObjClosure* ObjClosure_new(VM* vm, Compiler* C, ObjFunction* fn)
     return closure;
 }
 
-SK_INTERNAL(force_inline void) ObjClosure_free(VM* vm, Compiler* C, ObjClosure* closure)
+SK_INTERNAL(force_inline void) ObjClosure_free(VM* vm, ObjClosure* closure)
 {
-    GC_FREE(vm, C, closure->upvals, closure->upvalc * sizeof(ObjUpvalue*));
-    GC_FREE(vm, C, closure, sizeof(ObjClosure));
+    GC_FREE(vm, closure->upvals, closure->upvalc * sizeof(ObjUpvalue*));
+    GC_FREE(vm, closure, sizeof(ObjClosure));
 }
 
-ObjUpvalue* ObjUpvalue_new(VM* vm, Compiler* C, Value* var_ref)
+ObjUpvalue* ObjUpvalue_new(VM* vm, Value* var_ref)
 {
-    ObjUpvalue* upval = ALLOC_OBJ(vm, C, ObjUpvalue, OBJ_UPVAL);
+    ObjUpvalue* upval = ALLOC_OBJ(vm, ObjUpvalue, OBJ_UPVAL);
     upval->closed     = EMPTY_VAL;
     upval->location   = var_ref;
     upval->next       = NULL;
     return upval;
 }
 
-SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, Compiler* C, ObjUpvalue* upval)
+SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, ObjUpvalue* upval)
 {
-    GC_FREE(vm, C, upval, sizeof(ObjUpvalue));
+    GC_FREE(vm, upval, sizeof(ObjUpvalue));
 }
 
-ObjClass* ObjClass_new(VM* vm, Compiler* C, ObjString* name)
+ObjClass* ObjClass_new(VM* vm, ObjString* name)
 {
-    ObjClass* cclass = ALLOC_OBJ(vm, C, ObjClass, OBJ_CLASS); // GC
+    ObjClass* cclass = ALLOC_OBJ(vm, ObjClass, OBJ_CLASS); // GC
     cclass->name     = name;
     HashTable_init(&cclass->methods);
-    for(UInt i = 0; i < OPSN; i++) {
-        cclass->overloaded[i] = NULL;
-    }
+    cclass->overloaded = NULL;
     return cclass;
 }
 
-SK_INTERNAL(force_inline void) ObjClass_free(VM* vm, Compiler* C, ObjClass* cclass)
+SK_INTERNAL(force_inline void) ObjClass_free(VM* vm, ObjClass* cclass)
 {
-    HashTable_free(vm, C, &cclass->methods);
-    GC_FREE(vm, C, cclass, sizeof(ObjClass));
+    HashTable_free(vm, &cclass->methods);
+    GC_FREE(vm, cclass, sizeof(ObjClass));
 }
 
 
-ObjInstance* ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass)
+ObjInstance* ObjInstance_new(VM* vm, ObjClass* cclass)
 {
-    ObjInstance* instance = ALLOC_OBJ(vm, C, ObjInstance, OBJ_INSTANCE);
+    ObjInstance* instance = ALLOC_OBJ(vm, ObjInstance, OBJ_INSTANCE);
     instance->cclass      = cclass;
     HashTable_init(&instance->fields);
     return instance;
 }
 
 SK_INTERNAL(force_inline void)
-ObjInstance_free(VM* vm, Compiler* C, ObjInstance* instance)
+ObjInstance_free(VM* vm, ObjInstance* instance)
 {
-    HashTable_free(vm, C, &instance->fields);
-    GC_FREE(vm, C, instance, sizeof(ObjInstance));
+    HashTable_free(vm, &instance->fields);
+    GC_FREE(vm, instance, sizeof(ObjInstance));
 }
 
-ObjBoundMethod* ObjBoundMethod_new(VM* vm, Compiler* C, Value receiver, Obj* method)
+ObjBoundMethod* ObjBoundMethod_new(VM* vm, Value receiver, Obj* method)
 {
-    ObjBoundMethod* bound_method = ALLOC_OBJ(vm, C, ObjBoundMethod, OBJ_BOUND_METHOD);
+    ObjBoundMethod* bound_method = ALLOC_OBJ(vm, ObjBoundMethod, OBJ_BOUND_METHOD);
     bound_method->receiver       = receiver;
     bound_method->method         = method;
     return bound_method;
@@ -303,12 +301,12 @@ Hash Obj_hash(Value value)
 
 
 SK_INTERNAL(force_inline void)
-ObjBoundMethod_free(VM* vm, Compiler* C, ObjBoundMethod* bound_method)
+ObjBoundMethod_free(VM* vm, ObjBoundMethod* bound_method)
 {
-    GC_FREE(vm, C, bound_method, sizeof(ObjBoundMethod));
+    GC_FREE(vm, bound_method, sizeof(ObjBoundMethod));
 }
 
-void Obj_free(VM* vm, Compiler* C, Obj* object)
+void Obj_free(VM* vm, Obj* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p free type ", (void*)object);
@@ -330,42 +328,42 @@ void Obj_free(VM* vm, Compiler* C, Obj* object)
     {
         CASE(OBJ_STRING)
         {
-            ObjString_free(vm, C, (ObjString*)object);
+            ObjString_free(vm, (ObjString*)object);
             BREAK;
         }
         CASE(OBJ_FUNCTION)
         {
-            ObjFunction_free(vm, C, (ObjFunction*)object);
+            ObjFunction_free(vm, (ObjFunction*)object);
             BREAK;
         }
         CASE(OBJ_CLOSURE)
         {
-            ObjClosure_free(vm, C, (ObjClosure*)object);
+            ObjClosure_free(vm, (ObjClosure*)object);
             BREAK;
         }
         CASE(OBJ_NATIVE)
         {
-            ObjNative_free(vm, C, (ObjNative*)object);
+            ObjNative_free(vm, (ObjNative*)object);
             BREAK;
         }
         CASE(OBJ_UPVAL)
         {
-            ObjUpvalue_free(vm, C, (ObjUpvalue*)object);
+            ObjUpvalue_free(vm, (ObjUpvalue*)object);
             BREAK;
         }
         CASE(OBJ_CLASS)
         {
-            ObjClass_free(vm, C, (ObjClass*)object);
+            ObjClass_free(vm, (ObjClass*)object);
             BREAK;
         }
         CASE(OBJ_INSTANCE)
         {
-            ObjInstance_free(vm, C, (ObjInstance*)object);
+            ObjInstance_free(vm, (ObjInstance*)object);
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            ObjBoundMethod_free(vm, C, (ObjBoundMethod*)object);
+            ObjBoundMethod_free(vm, (ObjBoundMethod*)object);
             BREAK;
         }
     }
@@ -377,7 +375,7 @@ void Obj_free(VM* vm, Compiler* C, Obj* object)
 #endif
 }
 
-ObjString* Obj_to_str(VM* vm, Compiler* C, Obj* object)
+ObjString* Obj_to_str(VM* vm, Obj* object)
 {
 #ifdef SK_PRECOMPUTED_GOTO
     #define OBJ_TABLE
@@ -409,7 +407,7 @@ ObjString* Obj_to_str(VM* vm, Compiler* C, Obj* object)
         }
         CASE(OBJ_UPVAL)
         {
-            return Value_to_str(vm, C, ((ObjUpvalue*)object)->closed);
+            return Value_to_str(vm, ((ObjUpvalue*)object)->closed);
         }
         CASE(OBJ_CLASS)
         {
@@ -429,7 +427,7 @@ ObjString* Obj_to_str(VM* vm, Compiler* C, Obj* object)
             memcpy(buff + class_len, literal, literal_len);
             buff[arrlen - 1] = '\0';
 
-            return ObjString_from(vm, C, buff, arrlen - 1);
+            return ObjString_from(vm, buff, arrlen - 1);
         }
         CASE(OBJ_BOUND_METHOD)
         {

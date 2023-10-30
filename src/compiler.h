@@ -8,6 +8,6 @@ typedef struct Compiler Compiler;
 #include "vmachine.h"
 
 ObjFunction* compile(VM* vm, const char* source);
-void         mark_c_roots(VM* vm, Compiler* c);
+void         mark_c_roots(VM* vm);
 
 #endif

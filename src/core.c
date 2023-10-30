@@ -1,11 +1,25 @@
 #include "core.h"
+#include "debug.h"
 #include "err.h"
 #include "object.h"
+#include "skconf.h"
 #include "value.h"
+#include "vmachine.h"
 
 #include <time.h>
 
-#define UNUSED(x) (void)(x)
+SK_INTERNAL(force_inline ObjString*)
+ObjString_from_static_prefix(VM* vm, ObjString* string, const InternedString* staticstr)
+{
+    UInt len = string->len + staticstr->len;
+    char buffer[len + 1];
+
+    memcpy(buffer, staticstr->name, staticstr->len);
+    memcpy(buffer + staticstr->len, string->storage, string->len);
+    buffer[len] = '\0';
+
+    return ObjString_from(vm, buffer, len);
+}
 
 //------------------------- NATIVE -------------------------//
 
@@ -86,8 +100,7 @@ NATIVE(setfield)
 {
     if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
         ObjInstance* instance = AS_INSTANCE(argv[0]);
-        argv[-1] =
-            BOOL_VAL(HashTable_insert(vm, NULL, &instance->fields, argv[1], argv[2]));
+        argv[-1] = BOOL_VAL(HashTable_insert(vm, &instance->fields, argv[1], argv[2]));
         return true;
     }
 
@@ -96,15 +109,27 @@ NATIVE(setfield)
 }
 
 /**
- * Prints a string and a newline.
- * @ret - returns 'true'.
+ * Prints a value and a newline.
+ * @ret - returns the 'value' printed
  **/
 NATIVE(printl)
 {
     UNUSED(vm);
     Value_print(argv[0]);
     printf("\n");
-    argv[-1] = TRUE_VAL;
+    argv[-1] = argv[0];
+    return true;
+}
+
+/**
+ * Prints a value.
+ * @ret - returns the 'value' printed
+ **/
+NATIVE(print)
+{
+    UNUSED(vm);
+    Value_print(argv[0]);
+    argv[-1] = argv[0];
     return true;
 }
 
@@ -114,7 +139,7 @@ NATIVE(printl)
  **/
 NATIVE(tostr)
 {
-    argv[-1] = OBJ_VAL(VALSTR(vm, argv[0]));
+    argv[-1] = OBJ_VAL(Value_to_str(vm, argv[0]));
     return true;
 }
 
@@ -173,6 +198,7 @@ NATIVE(gcmode)
 fin:;
     bool manual = AS_STRING(mode) == vm->statics[SS_MANU];
     GC_TOGGLE(vm, GC_MANUAL_BIT, manual);
+    printf("After toggling GC_MANUAL_BIT = %ld\n", GC_CHECK(vm, GC_MANUAL_BIT));
     argv[-1] = BOOL_VAL(!manual);
     return true;
 }
@@ -184,7 +210,7 @@ fin:;
  **/
 NATIVE(gccollect)
 {
-    argv[-1] = NUMBER_VAL((double)gc(vm, NULL));
+    argv[-1] = NUMBER_VAL((double)gc(vm));
     return true;
 }
 
@@ -246,4 +272,83 @@ fin:;
     argv[-1]    = NUMBER_VAL(vm->gc_next);
     vm->gc_next = AS_NUMBER(bytes);
     return true;
+}
+
+/**
+ * Checks if the garbage collector is in automatic mode (running).
+ * @ret - 'true' if the gc is in 'auto' mode (running),
+ *        'false' otherwise (if the mode is 'manual').
+ **/
+NATIVE(gcisauto)
+{
+    argv[-1] = !GC_CHECK(vm, GC_MANUAL_BIT);
+    return true;
+}
+
+/**
+ * Checks if the 'expr' is falsey ('false' or 'nil') and if it is
+ * it invokes runtime error printing the 'Assertion failed.' message.
+ * @ret - in case 'expr' is falsey it never returns, instead
+ *        invokes runtime error.
+ *        Otherwise it returns the 'expr' value (first argument).
+ **/
+NATIVE(assert)
+{
+    Value expr = argv[0];
+    if(ISFALSEY(expr)) {
+        argv[-1] = OBJ_VAL(ObjString_from_static_prefix(
+            vm,
+            vm->statics[SS_ASSERT_MSG],
+            &static_str[SS_ASSERT]));
+        return false;
+    } else {
+        argv[-1] = expr;
+        return true;
+    }
+}
+
+/**
+ * Checks if the 'expr' is falsey ('false' or 'nil') and if
+ * it is it invokes runtime error printing the passed in 'message'.
+ * @ret - invokes runtime error if 'expr' is falsey or if
+ *        the second argument 'message' is not string.
+ *        Otherwise it returns the 'expr' value (first argument).
+ **/
+NATIVE(assertf)
+{
+    Value expr    = argv[0];
+    Value message = argv[1];
+
+    if(unlikely(!IS_STRING(message))) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, ASSERTF_SECOND_ARG_TYPE_ERR));
+    } else {
+        if(ISFALSEY(expr)) {
+            argv[-1] = OBJ_VAL(ObjString_from_static_prefix(
+                vm,
+                AS_STRING(message),
+                &static_str[SS_ASSERT]));
+        } else {
+            argv[-1] = expr;
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Invokes runtime error printing the passed in 'message'.
+ * @ret - errors in case the argument 'message' is not a string,
+ *        otherwise it still only invokes runtime error with
+ *        the passed in 'message' and never returns.
+ **/
+NATIVE(error)
+{
+    Value message = argv[0];
+    if(unlikely(!IS_STRING(message))) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, ERROR_FIRST_ARG_TYPE_ERR));
+    } else {
+        argv[-1] = OBJ_VAL(
+            ObjString_from_static_prefix(vm, AS_STRING(message), &static_str[SS_ERROR]));
+    }
+    return false;
 }

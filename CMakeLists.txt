@@ -20,7 +20,7 @@ set(SRCFILES
     ${SRCDIR}/value.c
     ${SRCDIR}/vmachine.c
     ${SRCDIR}/compiler.c
-    ${SRCDIR}/scanner.c
+    ${SRCDIR}/parser.c
     ${SRCDIR}/object.c
     ${SRCDIR}/hash.c
     ${SRCDIR}/hashtable.c

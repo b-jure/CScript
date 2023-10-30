@@ -73,12 +73,12 @@ SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt capacity, Value
 }
 
 // Rehash all the 'keys' from the 'src' table into the 'dest' table.
-void HashTable_into(VM* vm, Compiler* C, HashTable* src, HashTable* dest)
+void HashTable_into(VM* vm, HashTable* src, HashTable* dest)
 {
     for(UInt i = 0; i < src->cap; i++) {
         Entry* entry = &src->entries[i];
         if(!IS_EMPTY(entry->key)) {
-            HashTable_insert(vm, C, dest, entry->key, entry->value);
+            HashTable_insert(vm, dest, entry->key, entry->value);
         }
     }
 }
@@ -90,10 +90,10 @@ SK_INTERNAL(force_inline double) HashTable_lf(HashTable* table)
 }
 
 // Expands the table by rehashing all the keys into a new bigger table array.
-SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* table)
+SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, HashTable* table)
 {
     UInt   new_cap = GROW_ARRAY_CAPACITY(table->cap, TABLE_INITIAL_SIZE);
-    Entry* entries = GC_MALLOC(vm, C, new_cap * sizeof(Entry));
+    Entry* entries = GC_MALLOC(vm, new_cap * sizeof(Entry));
     for(UInt i = 0; i < new_cap; i++) {
         entries[i].key   = EMPTY_VAL;
         entries[i].value = EMPTY_VAL;
@@ -109,7 +109,7 @@ SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* 
     }
 
     if(table->entries != NULL) {
-        GC_FREE(vm, C, table->entries, table->cap * sizeof(Entry));
+        GC_FREE(vm, table->entries, table->cap * sizeof(Entry));
     }
 
     table->entries = entries;
@@ -120,10 +120,10 @@ SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, Compiler* C, HashTable* 
 // Insert 'key'/'value' pair into the table.
 // If the 'key' was not found insert it together with the 'value' and return true.
 // If the 'key' already exists overwrite the 'value' and return false.
-bool HashTable_insert(VM* vm, Compiler* C, HashTable* table, Value key, Value val)
+bool HashTable_insert(VM* vm, HashTable* table, Value key, Value val)
 {
     if(table->left == 0) {
-        HashTable_expand(vm, C, table);
+        HashTable_expand(vm, table);
     }
 
     Entry* entry   = Entry_find(table->entries, table->cap, key);
@@ -213,8 +213,8 @@ bool HashTable_get(HashTable* table, Value key, Value* out)
 }
 
 // Free 'table' array and reinitialize the 'table'.
-void HashTable_free(VM* vm, Compiler* C, HashTable* table)
+void HashTable_free(VM* vm, HashTable* table)
 {
-    GC_FREE(vm, C, table->entries, table->cap * sizeof(Entry));
+    GC_FREE(vm, table->entries, table->cap * sizeof(Entry));
     HashTable_init(table);
 }

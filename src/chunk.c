@@ -9,10 +9,10 @@
 
 SK_INTERNAL(void) LineArray_write(Array_UInt* lines, UInt line, UInt index);
 
-UInt Chunk_make_constant(VM* vm, Compiler* C, Chunk* chunk, Value value)
+UInt Chunk_make_constant(VM* vm, Chunk* chunk, Value value)
 {
     VM_push(vm, value);
-    UInt idx = CARRAY_PUSH(chunk, value, vm, C); // GC
+    UInt idx = CARRAY_PUSH(chunk, value, vm); // GC
     VM_pop(vm);
     return idx;
 }
@@ -35,9 +35,9 @@ void Chunk_write(Chunk* chunk, uint8_t byte, UInt line)
 }
 
 /* Frees the chunk memory. */
-void Chunk_free(Chunk* chunk, VM* vm, Compiler* C)
+void Chunk_free(Chunk* chunk, VM* vm)
 {
-    CARRAY_FREE(chunk, vm, C); // GC
+    CARRAY_FREE(chunk, vm); // GC
     Array_UInt_free(&chunk->lines, NULL);
     Array_Byte_free(&chunk->code, NULL);
     // Here chunk is at the init state
@@ -95,7 +95,6 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_GREATER_EQUAL)
         CASE(OP_LESS)
         CASE(OP_LESS_EQUAL)
-        CASE(OP_PRINT)
         CASE(OP_POP)
         CASE(OP_LOOP)
         CASE(OP_CLOSE_UPVAL)
@@ -114,6 +113,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_GET_LOCALL)
         CASE(OP_SET_LOCALL)
         CASE(OP_JMP_IF_FALSE)
+        CASE(OP_JMP_IF_FALSE_POP)
         CASE(OP_JMP_IF_FALSE_OR_POP)
         CASE(OP_JMP_IF_FALSE_AND_POP)
         CASE(OP_JMP)

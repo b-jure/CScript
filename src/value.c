@@ -42,15 +42,15 @@ Byte nil_to_str_generic(char* dest, UInt len)
     return len;
 }
 
-SK_INTERNAL(force_inline ObjString*) dbl_to_str(VM* vm, Compiler* C, double n)
+SK_INTERNAL(force_inline ObjString*) dbl_to_str(VM* vm, double n)
 {
     static char buff[30];
     size_t      len    = dbl_to_str_generic(n, buff, 30);
-    ObjString*  string = ObjString_from(vm, C, buff, len);
+    ObjString*  string = ObjString_from(vm, buff, len);
     return string;
 }
 
-SK_INTERNAL(force_inline ObjString*) bool_to_str(VM* vm, Compiler* C, bool boolean)
+SK_INTERNAL(force_inline ObjString*) bool_to_str(VM* vm, bool boolean)
 {
     char*  str = NULL;
     ushort len = 0;
@@ -61,21 +61,21 @@ SK_INTERNAL(force_inline ObjString*) bool_to_str(VM* vm, Compiler* C, bool boole
         len = sizeof("false") - 1;
         str = "false";
     }
-    return ObjString_from(vm, C, str, len);
+    return ObjString_from(vm, str, len);
 }
 
-ObjString* Value_to_str(VM* vm, Compiler* C, Value value)
+ObjString* Value_to_str(VM* vm, Value value)
 {
 #ifdef NAN_BOXING
 
     if(IS_BOOL(value)) {
-        return bool_to_str(vm, C, AS_BOOL(value));
+        return bool_to_str(vm, AS_BOOL(value));
     } else if(IS_NIL(value)) {
-        return ObjString_from(vm, C, "nil", sizeofnil);
+        return ObjString_from(vm, "nil", sizeofnil);
     } else if(IS_OBJ(value)) {
-        return Obj_to_str(vm, C, AS_OBJ(value));
+        return Obj_to_str(vm, AS_OBJ(value));
     } else if(IS_NUMBER(value)) {
-        return dbl_to_str(vm, C, AS_NUMBER(value));
+        return dbl_to_str(vm, AS_NUMBER(value));
     }
 
     unreachable;
@@ -95,19 +95,19 @@ ObjString* Value_to_str(VM* vm, Compiler* C, Value value)
     {
         CASE(VAL_BOOL)
         {
-            return bool_to_str(vm, C, AS_BOOL(value));
+            return bool_to_str(vm, AS_BOOL(value));
         }
         CASE(VAL_NUMBER)
         {
-            return dbl_to_str(vm, C, AS_NUMBER(value));
+            return dbl_to_str(vm, AS_NUMBER(value));
         }
         CASE(VAL_NIL)
         {
-            return ObjString_from(vm, C, "nil", sizeofnil);
+            return ObjString_from(vm, "nil", sizeofnil);
         }
         CASE(VAL_OBJ)
         {
-            return Obj_to_str(vm, C, AS_OBJ(value));
+            return Obj_to_str(vm, AS_OBJ(value));
         }
     }
 

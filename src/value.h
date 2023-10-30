@@ -144,7 +144,7 @@ typedef struct VM VM;
 
 #define VALSTR(vm, val) (Value_to_str(vm, NULL, val))
 
-ObjString* Value_to_str(VM* vm, Compiler* C, Value value);
+ObjString* Value_to_str(VM* vm, Value value);
 void       Value_print(Value value);
 bool       Value_eq(Value a, Value b);
 Hash       Value_hash(Value value);

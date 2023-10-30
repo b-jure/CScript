@@ -21,7 +21,7 @@
         (chunk)->ccap      = 0;                                                          \
     } while(false)
 
-#define CARRAY_PUSH(chunk, constant, vm, compiler)                                       \
+#define CARRAY_PUSH(chunk, constant, vm)                                                 \
     ({                                                                                   \
         if((chunk)->ccap <= (chunk)->clen) {                                             \
             UInt oldcap = (chunk)->ccap;                                                 \
@@ -29,7 +29,6 @@
                 MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE), UINT24_MAX);        \
             (chunk)->constants = gc_reallocate(                                          \
                 vm,                                                                      \
-                compiler,                                                                \
                 (chunk)->constants,                                                      \
                 oldcap * sizeof(Value),                                                  \
                 (chunk)->ccap * sizeof(Value));                                          \
@@ -38,9 +37,9 @@
         (chunk)->clen - 1;                                                               \
     })
 
-#define CARRAY_FREE(chunk, vm, compiler)                                                 \
+#define CARRAY_FREE(chunk, vm)                                                           \
     do {                                                                                 \
-        gc_reallocate(vm, compiler, (chunk)->constants, (chunk)->ccap, 0);               \
+        gc_reallocate(vm, (chunk)->constants, (chunk)->ccap, 0);                         \
         CARRAY_INIT(chunk);                                                              \
     } while(false)
 
@@ -54,7 +53,7 @@
         (vm)->globcap  = 0;                                                              \
     } while(false)
 
-#define GARRAY_PUSH(vm, compiler, global)                                                \
+#define GARRAY_PUSH(vm, global)                                                          \
     ({                                                                                   \
         if((vm)->globcap <= (vm)->globlen) {                                             \
             UInt oldcap = (vm)->globcap;                                                 \
@@ -62,7 +61,6 @@
                 MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE), UINT24_MAX);        \
             (vm)->globvals = gc_reallocate(                                              \
                 vm,                                                                      \
-                compiler,                                                                \
                 (vm)->globvals,                                                          \
                 oldcap * sizeof(Global),                                                 \
                 (vm)->globcap * sizeof(Global));                                         \
@@ -83,7 +81,7 @@
 
 #define GARRAY_FREE(vm)                                                                  \
     do {                                                                                 \
-        gc_reallocate(vm, NULL, (vm)->globvals, (vm)->globcap, 0);                       \
+        gc_reallocate(vm, (vm)->globvals, (vm)->globcap, 0);                       \
         GARRAY_INIT(vm);                                                                 \
     } while(false)
 

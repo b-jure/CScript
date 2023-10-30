@@ -92,7 +92,7 @@ static char* File_read(const char* path)
     return buffer;
 }
 
-int main(int argc, const char* argv[])
+int main(int argc, char* argv[])
 {
     runtime = 0;
     VM* vm  = MALLOC(sizeof(VM));

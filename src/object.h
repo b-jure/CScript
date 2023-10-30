@@ -127,7 +127,7 @@ struct ObjClass { // typedef is inside 'value.h'
     Obj        obj;
     ObjString* name;
     HashTable  methods;
-    Obj*       overloaded[OPSN];
+    Obj*       overloaded;
 };
 
 struct ObjInstance { // typedef is inside 'value.h'
@@ -151,20 +151,18 @@ typedef struct {
     Int        arity;
 } ObjNative;
 
-#define OBJSTR(vm, obj) (Obj_to_str(vm, NULL, (Obj*)obj)->storage)
-
-ObjString*      Obj_to_str(VM* vm, Compiler* C, Obj* object);
-ObjBoundMethod* ObjBoundMethod_new(VM* vm, Compiler* C, Value receiver, Obj* method);
-ObjInstance*    ObjInstance_new(VM* vm, Compiler* C, ObjClass* cclass);
-ObjClass*       ObjClass_new(VM* vm, Compiler* C, ObjString* name);
+ObjString*      Obj_to_str(VM* vm, Obj* object);
+ObjBoundMethod* ObjBoundMethod_new(VM* vm, Value receiver, Obj* method);
+ObjInstance*    ObjInstance_new(VM* vm, ObjClass* cclass);
+ObjClass*       ObjClass_new(VM* vm, ObjString* name);
 void            ObjType_print(ObjType type); // Debug
-ObjUpvalue*     ObjUpvalue_new(VM* vm, Compiler* C, Value* var_ref);
-ObjClosure*     ObjClosure_new(VM* vm, Compiler* C, ObjFunction* fn);
-ObjNative*   ObjNative_new(VM* vm, Compiler* C, ObjString* name, NativeFn fn, Int arity);
-uint64_t     Obj_hash(Value value);
-ObjString*   ObjString_from(VM* vm, Compiler* C, const char* chars, size_t len);
-ObjFunction* ObjFunction_new(VM* vm, Compiler* C);
-void         Obj_print(const Value value);
-void         Obj_free(VM* vm, Compiler* C, Obj* object);
+ObjUpvalue*     ObjUpvalue_new(VM* vm, Value* var_ref);
+ObjClosure*     ObjClosure_new(VM* vm, ObjFunction* fn);
+ObjNative*      ObjNative_new(VM* vm, ObjString* name, NativeFn fn, Int arity);
+uint64_t        Obj_hash(Value value);
+ObjString*      ObjString_from(VM* vm, const char* chars, size_t len);
+ObjFunction*    ObjFunction_new(VM* vm);
+void            Obj_print(const Value value);
+void            Obj_free(VM* vm, Obj* object);
 
 #endif

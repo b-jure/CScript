@@ -75,8 +75,6 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_simple("OP_LESS", offset);
         case OP_LESS_EQUAL:
             return Instruction_simple("OP_LESS_EQUAL", offset);
-        case OP_PRINT:
-            return Instruction_simple("OP_PRINT", offset);
         case OP_POP:
             return Instruction_simple("OP_POP", offset);
         case OP_POPN:
@@ -107,6 +105,8 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
             return Instruction_long("OP_SET_LOCALL", chunk, OP_SET_LOCALL, offset);
         case OP_JMP_IF_FALSE:
             return Instruction_jump("OP_JMP_IF_FALSE", 1, chunk, offset);
+        case OP_JMP_IF_FALSE_POP:
+            return Instruction_jump("OP_JMP_IF_FALSE_POP", 1, chunk, offset);
         case OP_JMP_IF_FALSE_OR_POP:
             return Instruction_jump("OP_JMP_IF_FALSE_OR_POP", 1, chunk, offset);
         case OP_JMP_IF_FALSE_AND_POP:

@@ -36,7 +36,6 @@ static const void* const optable[OPCODE_N] = {
     &&L_OP_GREATER_EQUAL,
     &&L_OP_LESS,
     &&L_OP_LESS_EQUAL,
-    &&L_OP_PRINT,
     &&L_OP_POP,
     &&L_OP_POPN,
     &&L_OP_CONST,
@@ -52,6 +51,7 @@ static const void* const optable[OPCODE_N] = {
     &&L_OP_SET_LOCAL,
     &&L_OP_SET_LOCALL,
     &&L_OP_JMP_IF_FALSE,
+    &&L_OP_JMP_IF_FALSE_POP,
     &&L_OP_JMP_IF_FALSE_OR_POP,
     &&L_OP_JMP_IF_FALSE_AND_POP,
     &&L_OP_JMP,
@@ -162,10 +162,10 @@ static const void* toktable[TOK_EOF + 1] = {
     &&L_TOK_CLASS,       &&L_TOK_DEFAULT,    &&L_TOK_ELSE,
     &&L_TOK_FALSE,       &&L_TOK_FOR,        &&L_TOK_FN,
     &&L_TOK_IF,          &&L_TOK_IMPL,       &&L_TOK_NIL,
-    &&L_TOK_OR,          &&L_TOK_PRINT,      &&L_TOK_RETURN,
-    &&L_TOK_SUPER,       &&L_TOK_SELF,       &&L_TOK_SWITCH,
-    &&L_TOK_TRUE,        &&L_TOK_VAR,        &&L_TOK_WHILE,
-    &&L_TOK_FIXED,       &&L_TOK_ERROR,      &&L_TOK_EOF,
+    &&L_TOK_OR,          &&L_TOK_RETURN,     &&L_TOK_SUPER,
+    &&L_TOK_SELF,        &&L_TOK_SWITCH,     &&L_TOK_TRUE,
+    &&L_TOK_VAR,         &&L_TOK_WHILE,      &&L_TOK_FIXED,
+    &&L_TOK_ERROR,       &&L_TOK_EOF,
 };
 
 #endif

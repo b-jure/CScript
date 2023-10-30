@@ -157,9 +157,7 @@ void mark_black(VM* vm, Obj* obj)
             ObjClass* cclass = (ObjClass*)obj;
             mark_obj(vm, (Obj*)cclass->name);
             mark_table(vm, &cclass->methods);
-            for(UInt i = 0; i < OPSN; i++) {
-                mark_obj(vm, cclass->overloaded[i]);
-            }
+            mark_obj(vm, (Obj*)cclass->overloaded);
             BREAK;
         }
         CASE(OBJ_INSTANCE)
@@ -198,7 +196,7 @@ SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)
     }
 }
 
-SK_INTERNAL(force_inline void) sweep(VM* vm, Compiler* C)
+SK_INTERNAL(force_inline void) sweep(VM* vm)
 {
     Obj* previous = NULL;
     Obj* current  = vm->objects;
@@ -220,12 +218,12 @@ SK_INTERNAL(force_inline void) sweep(VM* vm, Compiler* C)
                 vm->objects = current;
             }
 
-            Obj_free(vm, C, unreached);
+            Obj_free(vm, unreached);
         }
     }
 }
 
-size_t gc(VM* vm, Compiler* C)
+size_t gc(VM* vm)
 {
 #ifdef DEBUG_LOG_GC
     printf("--> GC start\n");
@@ -239,10 +237,10 @@ size_t gc(VM* vm, Compiler* C)
 
     goto* jmptable[runtime];
 mark:
-    mark_c_roots(vm, C);
+    mark_c_roots(vm);
 skip:
 #else
-    mark_c_roots(vm, C);
+    mark_c_roots(vm);
 #endif
 
     while(vm->gray_stack.len > 0) {
@@ -250,7 +248,7 @@ skip:
     }
 
     remove_weak_refs(vm);
-    sweep(vm, C);
+    sweep(vm);
 
     vm->gc_next = (double)vm->gc_allocated *
                   (double)((gc_grow_factor == 0) ? GC_HEAP_GROW_FACTOR : gc_grow_factor);
@@ -269,22 +267,34 @@ skip:
 }
 
 /* Allocator that can trigger gc. */
-void* gc_reallocate(VM* vm, Compiler* C, void* ptr, size_t oldc, size_t newc)
+void* gc_reallocate(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 {
     vm->gc_allocated += newc - oldc;
 
 #ifdef DEBUG_STRESS_GC
     if(newc > oldc) {
-        gc(vm, C);
+        gc(vm);
     }
 #else
 
-    if(!GC_CHECK(vm, GC_MANUAL_BIT) && vm->gc_next < vm->gc_allocated) {
-        gc(vm, C);
+    // Guard against nested gc_reallocate() calls,
+    // this can occur when user fiddles with the gc api
+    // provided in core.c as native functions.
+    if(newc - oldc > 0) {
+        if(!GC_CHECK(vm, GC_MANUAL_BIT) && vm->gc_next < vm->gc_allocated) {
+            gc(vm);
+        }
     }
 
 #endif
 
+    return reallocate(ptr, newc);
+}
+
+/* Freeing memory never triggers GC */
+void* gc_free(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
+{
+    vm->gc_allocated += newc - oldc;
     return reallocate(ptr, newc);
 }
 

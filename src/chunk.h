@@ -34,7 +34,6 @@ typedef enum {
     OP_GREATER_EQUAL,        /* -||- check if left greater or equal than right */
     OP_LESS,                 /* -||- check if left is less than right */
     OP_LESS_EQUAL,           /* -||- check if left is less or equal than right */
-    OP_PRINT,                /* Pop and print the value on the stack. */
     OP_POP,                  /* Pop the value of the stack */
     OP_POPN,                 /* Pop 'n' values of the stack */
     OP_CONST,                /* Push constant on the stack */
@@ -52,9 +51,9 @@ typedef enum {
     OP_SET_LOCAL,            /* Set local variable */
     OP_SET_LOCALL,           /* Set local variable long */
     OP_JMP_IF_FALSE,         /* Conditional jump to instruction */
-    OP_JMP_IF_FALSE_OR_POP,  /* Conditional jump to instruction or pop stack value
-                              */
-    OP_JMP_IF_FALSE_AND_POP, /* Pop value off the stack and jump if false */
+    OP_JMP_IF_FALSE_POP,     /* Jump if false and pop unconditionally */
+    OP_JMP_IF_FALSE_OR_POP,  /* Conditional jump to instruction or pop stack value */
+    OP_JMP_IF_FALSE_AND_POP, /* Conditional jump to instruction and pop stack value */
     OP_JMP,                  /* Jump to instruction */
     OP_JMP_AND_POP,          /* Jump to instruction and pop the value of the stack */
     OP_LOOP,                 /* Jump backwards unconditionally */
@@ -101,7 +100,7 @@ void Chunk_init(Chunk* chunk);
 void Chunk_write(Chunk* chunk, uint8_t byte, UInt line);
 void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt idx, UInt line);
 UInt Chunk_getline(Chunk* chunk, UInt index);
-void Chunk_free(Chunk* chunk, VM* vm, Compiler* C);
-UInt Chunk_make_constant(VM* vm, Compiler* C, Chunk* chunk, Value value);
+void Chunk_free(Chunk* chunk, VM* vm);
+UInt Chunk_make_constant(VM* vm, Chunk* chunk, Value value);
 
 #endif

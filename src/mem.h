@@ -8,8 +8,9 @@
 #include <memory.h>
 
 void*  reallocate(void* ptr, size_t newCap);
-void*  gc_reallocate(VM* vm, Compiler* C, void* ptr, size_t oldc, size_t newc);
-size_t gc(VM* vm, Compiler* C);
+void*  gc_reallocate(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
+void*  gc_free(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
+size_t gc(VM* vm);
 void   mark_obj(VM* vm, Obj* obj);
 
 extern double gc_grow_factor;
@@ -26,20 +27,19 @@ extern double gc_grow_factor;
 #define MALLOC(bytes) reallocate(NULL, bytes)
 
 /* GC tracked memory alloc. */
-#define GC_MALLOC(vm, c, bytes) gc_reallocate(vm, c, NULL, 0, bytes)
+#define GC_MALLOC(vm, bytes) gc_reallocate(vm, NULL, 0, bytes)
 
 /* Wrapper around reallocate, equivalent to realloc */
 #define REALLOC(ptr, newsize) reallocate(ptr, newsize)
 
 /* GC tracked memory realloc. */
-#define GC_REALLOC(vm, c, ptr, oldsize, newsize)                                         \
-    gc_reallocate(vm, c, ptr, oldsize, newsize)
+#define GC_REALLOC(vm, ptr, oldsize, newsize) gc_reallocate(vm, ptr, oldsize, newsize)
 
 /* Free allocation at 'ptr' */
 #define FREE(ptr) reallocate(ptr, 0)
 
 /* Free GC tracked allocation. */
-#define GC_FREE(vm, c, ptr, oldsize) gc_reallocate(vm, c, ptr, oldsize, 0)
+#define GC_FREE(vm, ptr, oldsize) gc_free(vm, ptr, oldsize, 0)
 
 /* Extracts the byte at the 'offset' from 'x' */
 #define BYTE(x, offset) (((x) >> ((offset) * 8)) & 0xff)

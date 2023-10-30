@@ -114,7 +114,7 @@
  **/
 
 #define NATIVE_FN_ERR(fn, err) "<native-fn " fn ">: " err
-#define ERR_NEW(vm, err)       ObjString_from(vm, NULL, err, sizeof(err) - 1)
+#define ERR_NEW(vm, err)       ObjString_from(vm, err, sizeof(err) - 1)
 
 /* native_clock */
 #define CLOCK_ERR                                                                        \
@@ -161,9 +161,22 @@
 #define GC_SET_ARG_ERR                                                                   \
     NATIVE_FN_ERR("gcset", "invalid argument type, limit must be a number.")
 
-#define GC_SET_NEGATIVE_LIMIT_ERR NATIVE_FN_ERR(                                         \
-    "gcset",                                                                             \
-    "limit can't be negative, it must be positive or 0.")
+#define GC_SET_NEGATIVE_LIMIT_ERR                                                        \
+    NATIVE_FN_ERR("gcset", "limit can't be negative, it must be positive or 0.")
+/* ------------- */
+
+/* native_assertf */
+#define ASSERTF_SECOND_ARG_TYPE_ERR                                                      \
+    NATIVE_FN_ERR(                                                                       \
+        "assertf",                                                                       \
+        "invalid argument type, second argument (message) must be a string.")
+/* ------------- */
+
+/* native_error */
+#define ERROR_FIRST_ARG_TYPE_ERR                                                         \
+    NATIVE_FN_ERR("error", "invalid argument type, argument 'message' must be a string.")
+/* ------------- */
+
 
 
 
@@ -192,12 +205,13 @@
         arity,                                                                           \
         argc)
 
-#define RUNTIME_INSTANCE_ARGC_ERR(vm, classstr, methodstr, argc)                         \
+#define RUNTIME_INSTANCE_ARGC_ERR(vm, classstr, methodstr, expect, argc)                 \
     VM_error(                                                                            \
         vm,                                                                              \
-        "Method <fn %s> defined in class '%s' expects 0 arguments but got %d.",          \
+        "Method <fn %s> defined in class '%s' expects %d arguments but got %d.",         \
         methodstr,                                                                       \
         classstr,                                                                        \
+        expect,                                                                          \
         argc)
 #define RUNTIME_INSTANCE_INIT_ARGC_ERR(vm, classstr, argc)                               \
     VM_error(                                                                            \

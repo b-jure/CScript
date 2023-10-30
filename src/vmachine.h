@@ -6,6 +6,7 @@
 typedef struct VM VM;
 
 #include "chunk.h"
+#include "core.h"
 #include "hashtable.h"
 #include "skconf.h"
 #include "value.h"
@@ -16,12 +17,18 @@ typedef struct VM VM;
 // Max stack size
 #define VM_STACK_MAX ((uint32_t)(SK_STACK_MAX / sizeof(Value)))
 
+
+
+
 typedef struct {
     ObjClosure*  closure;
     ObjFunction* fn;
     Byte*        ip; /* Top of the CallFrame */
     Value*       sp; /* Relative stack pointer */
 } CallFrame;
+
+
+
 
 #define GLOB_FIXED_BIT (1)
 
@@ -42,8 +49,8 @@ typedef struct {
     Byte flags;
 } Global;
 
-ARRAY_NEW(Array_Global, Global);
-ARRAY_NEW(Array_ObjRef, Obj*);
+
+
 
 /* GC flags */
 #define GC_MANUAL_BIT (1)
@@ -53,57 +60,16 @@ ARRAY_NEW(Array_ObjRef, Obj*);
 #define GC_TOGGLE(vm, bit, on) BIT_TOGGLE((vm)->gc_flags, bit, on)
 #define GC_CHECK(vm, bit)      BIT_CHECK((vm)->gc_flags, bit)
 
-typedef struct {
-    const char*   name;
-    const uint8_t len;
-} InternedString;
 
-#define sizeofstr(str) (sizeof(str) - 1)
 
-/* Function names */
-#define SS_INIT 0
-#define SS_ADD  1
-#define SS_SUB  2
-#define SS_MUL  3
-#define SS_DIV  4
-#define SS_REM  5
-#define SS_NEG  6
-#define SS_NOT  7
-#define OPSN    (SS_NOT + 1) /* Number of overloadable methods */
-/* Value types */
-#define SS_STR  8
-#define SS_NUM  9
-#define SS_INS  10
-#define SS_BOOL 11
-#define SS_NIL  12
-/* Native function params */
-#define SS_MANU 13
-#define SS_AUTO 14
-/* Total size */
-#define SS_SIZE (sizeof(static_str) / sizeof(static_str[0]))
 
-static const InternedString static_str[] = {
-  /* Reserved class function names for overloading */
-    {"__init__", sizeofstr("__init__")},
-    {"__add__",  sizeofstr("__add__") }, // Overloading not implemented
-    {"__sub__",  sizeofstr("__sub__") }, // Overloading not implemented
-    {"__mul__",  sizeofstr("__mul__") }, // Overloading not implemented
-    {"__div__",  sizeofstr("__div__") }, // Overloading not implemented
-    {"__rem__",  sizeofstr("__rem__") }, // Overloading not implemented
-    {"__neg__",  sizeofstr("__neg__") }, // Overloading not implemented
-    {"__not__",  sizeofstr("__not__") }, // Overloading not implemented
-  /* (user) Value types */
-    {"string",   sizeofstr("string")  },
-    {"number",   sizeofstr("number")  },
-    {"instance", sizeofstr("instance")},
-    {"bool",     sizeofstr("bool")    },
-    {"nil",      sizeofstr("nil")     },
- /* Native function arguments */
-    {"manual",   sizeofstr("manual")  },
-    {"auto",     sizeofstr("auto")    },
-};
+ARRAY_NEW(Array_Global, Global);
+ARRAY_NEW(Array_ObjRef, Obj*);
 
 struct VM {
+    // Track innermost compiler for gc.
+    Compiler* compiler;
+
     // Function CallFrame-s
     CallFrame frames[VM_FRAMES_MAX]; /* Call frames (GC) */
     Int       fc;                    /* Frame count */
@@ -135,11 +101,17 @@ struct VM {
     Byte         gc_flags;     /* GC flags */
 };
 
+
+
+
 typedef enum {
     INTERPRET_OK,            /* No error */
     INTERPRET_COMPILE_ERROR, /* Compile time error */
     INTERPRET_RUNTIME_ERROR, /* VM runtime error */
 } InterpretResult;
+
+
+
 
 void            VM_init(VM* vm);
 InterpretResult VM_interpret(VM* vm, const char* source_code);
