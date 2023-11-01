@@ -3,8 +3,10 @@
 
 #define __STDC_LIMIT_MACROS
 
-#include <limits.h>
 #include <assert.h>
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef __STDC_VERSION__
     #if __STDC_VERSION__ < 201112L
@@ -18,15 +20,16 @@
     #error "Compiler not supported (no __STDC_VERSION__ or __cplusplus defined)."
 #endif
 
-#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||         \
-    __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 ||                              \
-    __DBL_MIN_10_EXP__ != -307 || __DBL_MIN_EXP__ != -1021
+#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||                   \
+    __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 || __DBL_MIN_10_EXP__ != -307 ||          \
+    __DBL_MIN_EXP__ != -1021
 
     #error "Compiler missing IEEE-754 double precision floating point!"
 #endif
 
-static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8 bytes!");
-
+static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8.");
+static_assert(sizeof(double) == sizeof(long), "Size of 'long' and 'double' not equal.");
+static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double' not equal.");
 
 /**
  *
@@ -106,14 +109,17 @@ static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8 bytes!");
     #define likely(cond)   cond
     #define unlikely(cond) cond
     #define unused
-    #define unreachable                                                                  \
-        #include<stdio.h> #include<stdlib.h> printf(                                     \
-            "Unreachable code: %s:%d\n",                                                 \
-            __FILE__,                                                                    \
-            __LINE__);                                                                   \
+    #define unreachable                                                                            \
+        #include<stdio.h> #include<stdlib.h> printf(                                               \
+            "Unreachable code: %s:%d\n",                                                           \
+            __FILE__,                                                                              \
+            __LINE__);                                                                             \
         abort();
 
 #endif
+
+
+
 
 #define SK_INTERNAL(ret) static ret
 
@@ -125,6 +131,12 @@ static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8 bytes!");
 
 /* Allow NaN boxing of values. */
 #define SK_NAN_BOX
+
+/* Default heap grow factor */
+#define GC_HEAP_GROW_FACTOR 2
+
+
+
 
 /* For debug builds comment out 'defines' you dont want. */
 #ifdef DEBUG
@@ -145,5 +157,26 @@ static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8 bytes!");
     #define DEBUG_LOG_GC
 
 #endif
+
+
+
+/* Generic allocator function, used for every allocation, free and reallocation. */
+typedef void* (*AllocatorFn)(void* ptr, size_t newsize, void* userdata);
+
+
+
+/**
+ * User modifiable configuration.
+ * Create and initialize this 'Config' struct and pass it to 'VM_new'.
+ **/
+typedef struct {
+    AllocatorFn reallocate;        // Generic allocator function
+    void*       userdata;          // User data (for 'AllocatorFn')
+    size_t      gc_init_heap_size; // Initial heap allocation
+    size_t      gc_min_heap_size;  // Minimum size of heap after recalculation
+    double      gc_grow_factor;    // Heap grow factor
+} Config;
+
+void Config_init(Config* config);
 
 #endif

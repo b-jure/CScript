@@ -122,38 +122,35 @@ Token Parser_next(Parser* parser)
     // IMPORTANT: update accordingly if TokenType enum changes!
     static const void* jump_table[UINT8_MAX + 1] = {
         // Must be the same order as in ASCII Table - https://www.asciitable.com
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      &&bang,   &&string, ERR,         ERR,     ERR,      ERR,       ERR,
-        &&lparen, &&rparen, &&star,   &&plus,      &&comma, &&minus,  &&dot,     &&slash,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      &&colon,  &&semicolon, &&less,  &&equal,  &&greater, &&qmark,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      &&lbrack,    ERR,     &&rbrack, ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      &&lbrace,    ERR,     &&rbrace, ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,      ERR,       ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         &&bang,   &&string, ERR,
+        ERR,     ERR,      ERR,     ERR,      &&lparen, &&rparen,    &&star,   &&plus,   &&comma,
+        &&minus, &&dot,    &&slash, ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      &&colon,  &&semicolon, &&less,   &&equal,  &&greater,
+        &&qmark, ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     &&lbrack, ERR,     &&rbrack, ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         &&lbrace, ERR,      &&rbrace,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,      ERR,     ERR,
     };
     #undef ERR
 
@@ -238,21 +235,13 @@ err:
         case '*':
             return Token_new(parser, TOK_STAR);
         case '!':
-            return Token_new(
-                parser,
-                Parser_match(parser, '=') ? TOK_BANG_EQUAL : TOK_BANG);
+            return Token_new(parser, Parser_match(parser, '=') ? TOK_BANG_EQUAL : TOK_BANG);
         case '=':
-            return Token_new(
-                parser,
-                Parser_match(parser, '=') ? TOK_EQUAL_EQUAL : TOK_EQUAL);
+            return Token_new(parser, Parser_match(parser, '=') ? TOK_EQUAL_EQUAL : TOK_EQUAL);
         case '>':
-            return Token_new(
-                parser,
-                Parser_match(parser, '=') ? TOK_GREATER_EQUAL : TOK_GREATER);
+            return Token_new(parser, Parser_match(parser, '=') ? TOK_GREATER_EQUAL : TOK_GREATER);
         case '<':
-            return Token_new(
-                parser,
-                Parser_match(parser, '=') ? TOK_LESS_EQUAL : TOK_LESS);
+            return Token_new(parser, Parser_match(parser, '=') ? TOK_LESS_EQUAL : TOK_LESS);
         case '"':
             return parse_string(parser);
         default:
@@ -550,22 +539,21 @@ SK_INTERNAL(TokenType) TokenType_identifier(Parser* parser)
     // IMPORTANT: update accordingly if parser tokens change!
     static const void* jump_table[UINT8_MAX + 1] = {
         // Make sure the order is the same as in ASCII Table - https://www.asciitable.com
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, &&a, &&b, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET, RET, RET, &&n, &&o,
-        RET, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, &&a, &&b, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET,
+        RET, RET, &&n, &&o, RET, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET,
     };
     #undef RET
 
@@ -751,12 +739,7 @@ ret:
 }
 
 SK_INTERNAL(force_inline TokenType)
-check_keyword(
-    Parser*     parser,
-    UInt        start,
-    UInt        length,
-    const char* pattern,
-    TokenType   type)
+check_keyword(Parser* parser, UInt start, UInt length, const char* pattern, TokenType type)
 {
     if(parser->_current - parser->start == start + length &&
        memcmp(parser->start + start, pattern, length) == 0)

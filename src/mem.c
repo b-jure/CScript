@@ -8,12 +8,9 @@
 #include "vmachine.h"
 
 #include <errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define GC_HEAP_GROW_FACTOR 2
-double gc_grow_factor = 0;
 
 void mark_obj(VM* vm, Obj* obj)
 {
@@ -204,9 +201,7 @@ SK_INTERNAL(force_inline void) sweep(VM* vm)
     while(current != NULL) {
         if(Obj_marked(current)) {
             Obj_mark_set(current, false);
-            ASSERT(
-                Obj_marked(current) == false,
-                "Object remained marked after unmarking.");
+            ASSERT(Obj_marked(current) == false, "Object remained marked after unmarking.");
             previous = current;
             current  = Obj_next(current);
         } else {
@@ -250,8 +245,8 @@ skip:
     remove_weak_refs(vm);
     sweep(vm);
 
-    vm->gc_next = (double)vm->gc_allocated *
-                  (double)((gc_grow_factor == 0) ? GC_HEAP_GROW_FACTOR : gc_grow_factor);
+    vm->gc_next =
+        MAX((double)vm->gc_allocated * vm->config.gc_grow_factor, vm->config.gc_min_heap_size);
 
 #ifdef DEBUG_LOG_GC
     printf("--> GC end\n");
@@ -288,19 +283,21 @@ void* gc_reallocate(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 
 #endif
 
-    return reallocate(ptr, newc);
+    return REALLOC(vm, ptr, newc);
 }
 
 /* Freeing memory never triggers GC */
 void* gc_free(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 {
     vm->gc_allocated += newc - oldc;
-    return reallocate(ptr, newc);
+    return REALLOC(vm, ptr, newc);
 }
 
 /* Allocator that never triggers gc. */
-void* reallocate(void* ptr, size_t newc)
+void* reallocate(void* ptr, size_t newc, void* _)
 {
+    UNUSED(_);
+
     if(newc == 0) {
         free(ptr);
         return NULL;

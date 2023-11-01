@@ -49,7 +49,7 @@ set(D_LFLAGS ${ASAN_FLAGS})
 
 # RELEASE
 # compile flags
-set(R_CFLAGS ${CFLAGS} -O3 -flto=auto)
+set(R_CFLAGS ${CFLAGS} -O3)
 # link flags
 set(R_LFLAGS)
 
@@ -139,4 +139,3 @@ add_subdirectory(${DEPDIR}/xxHash/cmake_unofficial ${DEPDIR}/xxHash/build EXCLUD
 
 # Link binary
 target_link_libraries(${BIN} PRIVATE xxHash::xxhash m)
-

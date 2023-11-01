@@ -54,10 +54,8 @@ static const InternedString static_str[] = {
 /* Time */
 NATIVE(clock);
 
-/* Class field functions */
+/* Class */
 NATIVE(isfield);
-NATIVE(delfield);
-NATIVE(setfield);
 
 /* Input/Output functions */
 NATIVE(printl);
@@ -65,6 +63,10 @@ NATIVE(print);
 
 /* String functions */
 NATIVE(tostr);
+NATIVE(isstr);
+NATIVE(strlen);
+NATIVE(strpat);
+NATIVE(strsub);
 
 /* Garbage collector API */
 NATIVE(gcfactor);
@@ -76,9 +78,11 @@ NATIVE(gcnext);
 NATIVE(gcset);
 NATIVE(gcisauto);
 
-/* asserts and error */
 NATIVE(assert);
 NATIVE(assertf);
 NATIVE(error);
+
+// @IMPLEMENT
+NATIVE(loadscript);
 
 #endif

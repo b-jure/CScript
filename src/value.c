@@ -2,9 +2,9 @@
 #include "memory.h"
 #include "object.h"
 #include "skconf.h"
+#include "skmath.h"
 #include "value.h"
 
-#include <math.h>
 #include <memory.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -78,8 +78,6 @@ ObjString* Value_to_str(VM* vm, Value value)
         return dbl_to_str(vm, AS_NUMBER(value));
     }
 
-    unreachable;
-
 #else
 
     #ifdef SK_PRECOMPUTED_GOTO
@@ -116,6 +114,8 @@ ObjString* Value_to_str(VM* vm, Value value)
     #endif
 
 #endif
+
+    unreachable;
 }
 
 void Value_print(Value value)
@@ -124,25 +124,22 @@ void Value_print(Value value)
 
     if(IS_BOOL(value)) {
         printf(AS_BOOL(value) ? "true" : "false");
-        return;
     } else if(IS_NIL(value)) {
         printf("nil");
-        return;
     } else if(IS_OBJ(value)) {
         Obj_print(value);
-        return;
     } else if(IS_NUMBER(value)) {
         if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) {
-            printf("%f", AS_NUMBER(value));
+            printf("%lg", AS_NUMBER(value));
         } else {
             printf("%ld", (int64_t)AS_NUMBER(value));
         }
-        return;
+    } else {
+        unreachable;
     }
 
-    unreachable;
-
 #else
+
     #ifdef SK_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
@@ -183,6 +180,8 @@ void Value_print(Value value)
         }
     }
 
+    unreachable;
+
     #ifdef __SKOOMA_JMPTABLE_H__
         #undef __SKOOMA_JMPTABLE_H__
     #endif
@@ -190,18 +189,9 @@ void Value_print(Value value)
 #endif
 }
 
+#ifndef NAN_BOXING
 bool Value_eq(Value a, Value b)
 {
-#ifdef NAN_BOXING
-
-    // Preserve NaN != NaN
-    if(IS_NUMBER(a) && IS_NUMBER(b)) {
-        return AS_NUMBER(a) == AS_NUMBER(b);
-    }
-    return a == b;
-
-#else
-
     if(a.type != b.type) {
         return false;
     }
@@ -238,25 +228,25 @@ bool Value_eq(Value a, Value b)
     #ifdef __SKOOMA_JMPTABLE_H__
         #undef __SKOOMA_JMPTABLE_H__
     #endif
-
-#endif
 }
+#endif
 
 Hash Value_hash(Value value)
 {
 #ifdef NAN_BOXING
 
     if(IS_BOOL(value)) {
-        return AS_BOOL(value) ? 3 : 5;
-    } else if(IS_NIL(value)) {
-        return 7;
+        return AS_BOOL(value) ? 1 : 0;
     } else if(IS_OBJ(value)) {
         return Obj_hash(value);
     } else if(IS_NUMBER(value)) {
-        return Hash_double(AS_NUMBER(value));
+        double num = AS_NUMBER(value);
+        if(floor(AS_NUMBER(value)) != AS_NUMBER(value) || AS_NUMBER(value) < 0) {
+            return Hash_double(num);
+        } else {
+            return num;
+        }
     }
-
-    unreachable;
 
 #else
     #ifdef SK_PRECOMPUTED_GOTO
@@ -272,15 +262,16 @@ Hash Value_hash(Value value)
     {
         CASE(VAL_BOOL)
         {
-            return AS_BOOL(value) ? 3 : 5;
+            return AS_BOOL(value) ? 1 : 0;
         }
         CASE(VAL_NUMBER)
         {
-            return Hash_double(AS_NUMBER(value));
-        }
-        CASE(VAL_NIL)
-        {
-            return 7;
+            double num = AS_NUMBER(value);
+            if(floor(AS_NUMBER(value)) != AS_NUMBER(value) || AS_NUMBER(value) < 0) {
+                return Hash_double(num);
+            } else {
+                return num;
+            }
         }
         CASE(VAL_OBJ)
         {
@@ -289,4 +280,6 @@ Hash Value_hash(Value value)
     }
 
 #endif
+
+    unreachable;
 }

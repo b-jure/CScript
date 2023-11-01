@@ -95,8 +95,7 @@ static char* File_read(const char* path)
 int main(int argc, char* argv[])
 {
     runtime = 0;
-    VM* vm  = MALLOC(sizeof(VM));
-    VM_init(vm);
+    VM* vm  = VM_new(NULL);
 
     if(argc == 1) {
         fprintf(stderr, "REPL not functional.\n");

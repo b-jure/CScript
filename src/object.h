@@ -112,7 +112,7 @@ struct ObjFunction { // typedef is inside 'value.h'
     Obj        obj;
     Chunk      chunk;
     ObjString* name;
-    UInt       upvalc; // Count of upvalues
+    UInt       upvalc; //@TODO: Remove this?
     UInt       arity;
 };
 

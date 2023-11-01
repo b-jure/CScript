@@ -98,10 +98,10 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_POP)
         CASE(OP_LOOP)
         CASE(OP_CLOSE_UPVAL)
-        CASE(OP_SET_DYNPROPERTY)
-        CASE(OP_GET_DYNPROPERTY)
         CASE(OP_RET)
         CASE(OP_INHERIT)
+        CASE(OP_INDEX)
+        CASE(OP_SET_INDEX)
         {
             unreachable;
         }
@@ -130,6 +130,7 @@ void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_INVOKEL)
         CASE(OP_GET_SUPERL)
         CASE(OP_INVOKE_SUPERL)
+        CASE(OP_INVOKE_INDEX)
         {
             Chunk_write_op(chunk, code, true, param, line);
             BREAK;

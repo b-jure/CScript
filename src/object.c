@@ -10,8 +10,7 @@
 
 #define ALLOC_OBJ(vm, object, type) ((object*)Obj_new(vm, sizeof(object), type))
 
-#define ALLOC_STRING(vm, len)                                                         \
-    ((ObjString*)Obj_new(vm, sizeof(ObjString) + (len) + 1, OBJ_STRING))
+#define ALLOC_STRING(vm, len) ((ObjString*)Obj_new(vm, sizeof(ObjString) + (len) + 1, OBJ_STRING))
 
 SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, size_t size, ObjType type)
 {
@@ -19,14 +18,7 @@ SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, size_t size, ObjType type)
 
     object->header = (uint64_t)vm->objects | ((uint64_t)type << 56);
 
-    // malloc and C standard do not guarantee that upper 16 bits
-    // will be initialized to 0, we initialized all the bits except the
-    // mark bit, so make sure it is set to false!
     Obj_mark_set(object, false);
-
-    ASSERT(Obj_type(object) == type, "Obj_type() returned invalid type.");
-    ASSERT(Obj_next(object) == vm->objects, "Obj_next() returned invalid pointer.");
-    ASSERT(Obj_marked(object) == false, "Obj_marked() returned invalid mark bit.");
 
     // Add object to the GC list
     vm->objects = object;

@@ -44,9 +44,8 @@ typedef uint64_t Value;
     #define AS_NUMBER(val)     (vton(val))
     #define AS_NUMBER_REF(val) *(val)
 
-    #define NUMBER_VAL(num) (ntov(num))
-    #define OBJ_VAL(ptr)                                                                 \
-        ((Value)((((uint64_t)(ptr)) & 0x0000fffffffffff8) | (OBJECT_TAG | QNAN)))
+    #define NUMBER_VAL(num)   (ntov(num))
+    #define OBJ_VAL(ptr)      ((Value)((((uint64_t)(ptr)) & 0x0000fffffffffff8) | (OBJECT_TAG | QNAN)))
     #define BOOL_VAL(boolean) ((Value)((FALSE_TAG | ((boolean) & 0x01)) | QNAN))
     #define TRUE_VAL          ((Value)(TRUE_TAG | QNAN))
     #define FALSE_VAL         ((Value)(FALSE_TAG | QNAN))
@@ -146,11 +145,21 @@ typedef struct VM VM;
 
 ObjString* Value_to_str(VM* vm, Value value);
 void       Value_print(Value value);
-bool       Value_eq(Value a, Value b);
 Hash       Value_hash(Value value);
+Byte       dbl_to_str_generic(double dbl, char* dest, UInt len);
+Byte       bool_to_str_generic(bool boolean, char* dest, UInt len);
+Byte       nil_to_str_generic(char* dest, UInt len);
 
-Byte dbl_to_str_generic(double dbl, char* dest, UInt len);
-Byte bool_to_str_generic(bool boolean, char* dest, UInt len);
-Byte nil_to_str_generic(char* dest, UInt len);
+#ifdef NAN_BOXING
+static force_inline bool Value_eq(Value a, Value b)
+{
+    if(IS_NUMBER(a) && IS_NUMBER(b)) {
+        return AS_NUMBER(a) == AS_NUMBER(b);
+    }
+    return a == b;
+}
+#else
+bool Value_eq(Value a, Value b);
+#endif
 
 #endif

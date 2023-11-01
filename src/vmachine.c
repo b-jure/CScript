@@ -9,6 +9,7 @@
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
+#include "skmath.h"
 #include "value.h"
 #include "vmachine.h"
 
@@ -16,7 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define stack_peek(top) (*((vm)->sp - (top + 1)))
+#define stack_peek(top) (*((vm)->sp - ((top) + 1)))
 #define stack_reset(vm) (vm)->sp = (vm)->stack
 #define stack_size(vm)  ((vm)->sp - (vm)->stack)
 
@@ -104,20 +105,15 @@ SK_INTERNAL(ObjString*) concatenate(VM* vm, Value a, Value b)
 }
 
 SK_INTERNAL(force_inline ObjBoundMethod*)
-VM_bind_method(VM* vm, ObjClass* cclass, Value name)
+VM_bind_method(VM* vm, ObjClass* cclass, Value name, Value receiver)
 {
     Value method;
     if(unlikely(!HashTable_get(&cclass->methods, name, &method))) {
-        RUNTIME_INSTANCE_PROPERTY_ERR(
-            vm,
-            Obj_to_str(vm, AS_OBJ(stack_peek(0)))->storage,
-            AS_CSTRING(name));
+        RUNTIME_INSTANCE_PROPERTY_ERR(vm, AS_CSTRING(name), cclass->name->storage);
         return NULL;
     }
 
-    ObjBoundMethod* bound_method =
-        ObjBoundMethod_new(vm, stack_peek(0), AS_OBJ(method)); // GC
-
+    ObjBoundMethod* bound_method = ObjBoundMethod_new(vm, receiver, AS_OBJ(method)); // GC
     return bound_method;
 }
 
@@ -135,8 +131,35 @@ VM_define_native(VM* vm, const char* name, NativeFn native, UInt arity)
     VM_pop(vm);
 }
 
-void VM_init(VM* vm)
+void Config_init(Config* config)
 {
+    config->reallocate        = reallocate;
+    config->userdata          = NULL;
+    config->gc_init_heap_size = 10 * (1 << 20); // 10 MiB
+    config->gc_min_heap_size  = (1 << 20);      // 1 MiB
+    config->gc_grow_factor    = GC_HEAP_GROW_FACTOR;
+}
+
+VM* VM_new(Config* config)
+{
+    AllocatorFn allocate = reallocate;
+    void*       userdata = NULL;
+
+    if(config != NULL) {
+        userdata = config->userdata;
+        allocate = config->reallocate ? config->reallocate : reallocate;
+    }
+
+    VM* vm = allocate(NULL, sizeof(VM), userdata);
+
+    if(config != NULL) {
+        memcpy(&vm->config, config, sizeof(Config));
+        // Make sure we have a valid allocator
+        vm->config.reallocate = allocate;
+    } else {
+        Config_init(&vm->config);
+    }
+
     vm->fc           = 0;
     vm->objects      = NULL;
     vm->open_upvals  = NULL;
@@ -145,11 +168,10 @@ void VM_init(VM* vm)
     vm->gc_flags     = 0;
     stack_reset(vm);
 
-    HashTable_init(&vm->globids); // Global variable identifiers (GC)
-    GARRAY_INIT(vm);              // Global values array (GC)
-
-    HashTable_init(&vm->strings); // Interned strings table (Weak_refs)
-
+    HashTable_init(&vm->loaded);        // Loaded scripts (filenames)
+    HashTable_init(&vm->globids);       // Global variable identifiers (GC)
+    GARRAY_INIT(vm);                    // Global values array (GC)
+    HashTable_init(&vm->strings);       // Interned strings table (Weak_refs)
     Array_ObjRef_init(&vm->gray_stack); // Gray stack (NO GC)
 
     for(UInt i = 0; i < SS_SIZE; i++) {
@@ -160,11 +182,13 @@ void VM_init(VM* vm)
     // Native function definitions
     VM_define_native(vm, "clock", native_clock, 0);         // GC
     VM_define_native(vm, "isfield", native_isfield, 2);     // GC
-    VM_define_native(vm, "delfield", native_delfield, 2);   // GC
-    VM_define_native(vm, "setfield", native_setfield, 3);   // GC
     VM_define_native(vm, "printl", native_printl, 1);       // GC
     VM_define_native(vm, "print", native_print, 1);         // GC
     VM_define_native(vm, "tostr", native_tostr, 1);         // GC
+    VM_define_native(vm, "isstr", native_isstr, 1);         // GC
+    VM_define_native(vm, "strlen", native_strlen, 1);       // GC
+    VM_define_native(vm, "strpat", native_strpat, 2);       // GC
+    VM_define_native(vm, "strsub", native_strsub, 3);       // GC
     VM_define_native(vm, "gcfactor", native_gcfactor, 1);   // GC
     VM_define_native(vm, "gcmode", native_gcmode, 1);       // GC
     VM_define_native(vm, "gccollect", native_gccollect, 0); // GC
@@ -176,48 +200,52 @@ void VM_init(VM* vm)
     VM_define_native(vm, "assert", native_assert, 1);       // GC
     VM_define_native(vm, "assertf", native_assertf, 2);     // GC
     VM_define_native(vm, "error", native_error, 1);         // GC
+    return vm;
 }
 
 /**
  * 'obj' is either a function or closure.
  * 'argc' is argument count.
+ * 'init' marks if the function is invoked as class initializer
  * 'debug' is the receiver in case call is invoked on method otherwise NULL.
  **/
-#define CALL_FN_OR_CLOSURE(vm, obj, argc, debug)                                         \
-    ({                                                                                   \
-        bool ret;                                                                        \
-        if(Obj_type(obj) == OBJ_CLOSURE) {                                               \
-            ObjClosure* closure = (ObjClosure*)(obj);                                    \
-            ret                 = VM_call_fn(vm, closure, closure->fn, argc, debug);     \
-        } else {                                                                         \
-            ObjFunction* fn = (ObjFunction*)obj;                                         \
-            ret             = VM_call_fn(vm, NULL, fn, argc, debug);                     \
-        }                                                                                \
-        ret;                                                                             \
+#define CALL_FN_OR_CLOSURE(vm, obj, argc, init, debug)                                             \
+    ({                                                                                             \
+        bool ret;                                                                                  \
+        if(Obj_type(obj) == OBJ_CLOSURE) {                                                         \
+            ObjClosure* closure = (ObjClosure*)(obj);                                              \
+            ret                 = VM_call_fn(vm, closure, closure->fn, argc, init, debug);         \
+        } else {                                                                                   \
+            ObjFunction* fn = (ObjFunction*)obj;                                                   \
+            ret             = VM_call_fn(vm, NULL, fn, argc, init, debug);                         \
+        }                                                                                          \
+        ret;                                                                                       \
     })
 
 SK_INTERNAL(bool)
-VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, Int argc, ObjClass* debug)
+VM_call_fn(VM* vm, ObjClosure* closure, ObjFunction* fn, Int argc, bool init, ObjClass* debug)
 {
-    if(unlikely((Int)fn->arity != argc)) {
+    if(unlikely(!init && vm->statics[SS_INIT] == fn->name)) {
+        RUNTIME_EXPLICIT_INIT_CALL(vm);
+        return false;
+    } else if(unlikely((Int)fn->arity != argc)) {
         if(debug != NULL) {
             ObjString* debugstr = Obj_to_str(vm, (Obj*)debug);
-            VM_push(vm, OBJ_VAL(debugstr)); // GC
+            VM_push(vm, OBJ_VAL(debugstr));
             RUNTIME_INSTANCE_ARGC_ERR(
                 vm,
                 debugstr->storage,
                 Obj_to_str(vm, (Obj*)fn)->storage,
                 fn->arity,
                 argc);
-            VM_pop(vm); // GC
+            VM_pop(vm);
         } else {
             RUNTIME_ARGC_ERR(vm, Obj_to_str(vm, (Obj*)fn)->storage, fn->arity, argc);
         }
         return false;
-    }
-
-    if(unlikely(vm->fc == VM_FRAMES_MAX)) {
+    } else if(unlikely(vm->fc == VM_FRAMES_MAX)) {
         RUNTIME_INTERNAL_FRAME_LIMIT_ERR(vm, VM_FRAMES_MAX);
+        return false;
     }
 
     CallFrame* frame = &vm->frames[vm->fc++];
@@ -250,7 +278,7 @@ SK_INTERNAL(force_inline bool) VM_call_instance(VM* vm, ObjClass* cclass, Int ar
     vm->sp[-argc - 1] = OBJ_VAL(ObjInstance_new(vm, cclass));
     Obj* init         = cclass->overloaded;
     if(init != NULL) {
-        return CALL_FN_OR_CLOSURE(vm, init, argc, cclass);
+        return CALL_FN_OR_CLOSURE(vm, init, argc, true, cclass);
     } else if(unlikely(argc != 0)) {
         RUNTIME_INSTANCE_INIT_ARGC_ERR(vm, Obj_to_str(vm, (Obj*)cclass)->storage, argc);
         return false;
@@ -269,13 +297,14 @@ SK_INTERNAL(force_inline bool) VM_call_val(VM* vm, Value fnval, Int argc)
                     vm,
                     bound->method,
                     argc,
+                    false,
                     AS_INSTANCE(bound->receiver)->cclass);
             }
             case OBJ_FUNCTION:
-                return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc, NULL);
+                return VM_call_fn(vm, NULL, AS_FUNCTION(fnval), argc, false, NULL);
             case OBJ_CLOSURE: {
                 ObjClosure* closure = AS_CLOSURE(fnval);
-                return VM_call_fn(vm, closure, closure->fn, argc, NULL);
+                return VM_call_fn(vm, closure, closure->fn, argc, false, NULL);
             }
             case OBJ_CLASS:
                 return VM_call_instance(vm, AS_CLASS(fnval), argc);
@@ -296,18 +325,53 @@ VM_invoke_from_class(VM* vm, ObjClass* cclass, Value method_name, Int argc)
 {
     Value method;
     if(unlikely(!HashTable_get(&cclass->methods, method_name, &method))) {
-        RUNTIME_INSTANCE_PROPERTY_ERR(
-            vm,
-            Obj_to_str(vm, (Obj*)cclass)->storage,
-            AS_CSTRING(method_name));
+        RUNTIME_INSTANCE_PROPERTY_ERR(vm, AS_CSTRING(method_name), cclass->name->storage);
         return false;
     }
     return VM_call_val(vm, method, argc);
 }
 
+SK_INTERNAL(force_inline bool) VM_invoke_index(VM* vm, Value name, Int argc)
+{
+    Value receiver = stack_peek(argc);
+
+    if(unlikely(!IS_INSTANCE(receiver))) {
+        RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, receiver)->storage);
+        return false;
+    }
+
+    ObjInstance* instance = AS_INSTANCE(receiver);
+
+    Value value;
+    if(HashTable_get(&instance->fields, name, &value)) {
+        vm->sp[-argc - 1] = value;
+        vm->sp--; // Remember we have additional argument on stack ('name')
+        return VM_call_val(vm, value, argc - 1);
+    }
+
+    if(unlikely(!HashTable_get(&instance->cclass->methods, name, &value))) {
+        // Convert hash into string in case index is
+        // not a string or a positive integer (whose fractional part is 0)
+        char optional[30] = {0};
+        optional[0]       = '\0';
+        if(IS_BOOL(name) || (IS_NUMBER(name) && skfloor(AS_NUMBER(name)))) {
+            dbl_to_str_generic(Value_hash(name), optional, 30);
+        }
+        RUNTIME_INSTANCE_PROPERTY_ERR(
+            vm,
+            optional[0] != '\0' ? optional : Value_to_str(vm, name)->storage,
+            instance->cclass->name->storage);
+        return false;
+    }
+
+    VM_pop(vm); // pop the name
+    return VM_call_val(vm, value, argc - 1);
+}
+
 SK_INTERNAL(force_inline bool) VM_invoke(VM* vm, Value name, Int argc)
 {
     Value receiver = stack_peek(argc);
+
     if(unlikely(!IS_INSTANCE(receiver))) {
         RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, receiver)->storage);
         return false;
@@ -446,58 +510,58 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
 #define READ_CONSTANTL() frame->fn->chunk.constants[READ_BYTEL()]
 #define READ_STRING()    AS_STRING(READ_CONSTANT())
 #define READ_STRINGL()   AS_STRING(READ_CONSTANTL())
-#define BINARY_OP(value_type, op)                                                        \
-    do {                                                                                 \
-        if(unlikely(!IS_NUMBER(stack_peek(0)) || !IS_NUMBER(stack_peek(1)))) {           \
-            frame->ip = ip;                                                              \
-            VM_error(vm, "Operands must be numbers (operator '" #op "').");              \
-            return INTERPRET_RUNTIME_ERROR;                                              \
-        }                                                                                \
-        double b = AS_NUMBER(VM_pop(vm));                                                \
-        double a = AS_NUMBER(VM_pop(vm));                                                \
-        VM_push(vm, value_type(a op b));                                                 \
+#define BINARY_OP(value_type, op)                                                                  \
+    do {                                                                                           \
+        if(unlikely(!IS_NUMBER(stack_peek(0)) || !IS_NUMBER(stack_peek(1)))) {                     \
+            frame->ip = ip;                                                                        \
+            VM_error(vm, "Operands must be numbers (operator '" #op "').");                        \
+            return INTERPRET_RUNTIME_ERROR;                                                        \
+        }                                                                                          \
+        double b = AS_NUMBER(VM_pop(vm));                                                          \
+        double a = AS_NUMBER(VM_pop(vm));                                                          \
+        VM_push(vm, value_type(a op b));                                                           \
     } while(false)
 
-#define CONCAT_OR_ADD(vm)                                                                \
-    do {                                                                                 \
-        Value b = stack_peek(0);                                                         \
-        Value a = stack_peek(1);                                                         \
-        if(IS_NUMBER(b) && IS_NUMBER(a)) {                                               \
-            double b = AS_NUMBER(VM_pop(vm));                                            \
-            double a = AS_NUMBER(VM_pop(vm));                                            \
-            VM_push(vm, NUMBER_VAL((a + b)));                                            \
-        } else if(IS_STRING(b) && IS_STRING(a)) {                                        \
-            VM_push(vm, OBJ_VAL(concatenate(vm, a, b)));                                 \
-        } else {                                                                         \
-            ObjString* astr = Value_to_str(vm, a);                                       \
-            VM_push(vm, OBJ_VAL(astr));                                                  \
-            ObjString* bstr = Value_to_str(vm, b);                                       \
-            VM_push(vm, OBJ_VAL(bstr));                                                  \
-            ObjString* unescaped_b = unescape(vm, bstr);                                 \
-            VM_pop(vm); /* pop 'bstr' */                                                 \
-            VM_push(vm, OBJ_VAL(unescaped_b));                                           \
-            ObjString* unescaped_a = unescape(vm, astr);                                 \
-            VM_pop(vm); /* pop 'astr' */                                                 \
-            VM_push(vm, OBJ_VAL(unescaped_a));                                           \
-            VM_error(                                                                    \
-                vm,                                                                      \
-                "Only two numbers can be added together or two strings "                 \
-                "concatenated.\nThis is invalid: ...\"%s\" + \"%s\"...\nTry "            \
-                "instead: "                                                              \
-                "...\"%s%s%s\" + "                                                       \
-                "\"%s%s%s\"...",                                                         \
-                unescaped_a->storage,                                                    \
-                unescaped_b->storage,                                                    \
-                IS_STRING(a) ? "" : "tostr(",                                            \
-                unescaped_a->storage,                                                    \
-                IS_STRING(a) ? "" : ")",                                                 \
-                IS_STRING(b) ? "" : "tostr(",                                            \
-                unescaped_b->storage,                                                    \
-                IS_STRING(b) ? "" : ")");                                                \
-            VM_pop(vm);                                                                  \
-            VM_pop(vm);                                                                  \
-            return INTERPRET_RUNTIME_ERROR;                                              \
-        }                                                                                \
+#define CONCAT_OR_ADD(vm)                                                                          \
+    do {                                                                                           \
+        Value b = stack_peek(0);                                                                   \
+        Value a = stack_peek(1);                                                                   \
+        if(IS_NUMBER(b) && IS_NUMBER(a)) {                                                         \
+            double b = AS_NUMBER(VM_pop(vm));                                                      \
+            double a = AS_NUMBER(VM_pop(vm));                                                      \
+            VM_push(vm, NUMBER_VAL((a + b)));                                                      \
+        } else if(IS_STRING(b) && IS_STRING(a)) {                                                  \
+            VM_push(vm, OBJ_VAL(concatenate(vm, a, b)));                                           \
+        } else {                                                                                   \
+            ObjString* astr = Value_to_str(vm, a);                                                 \
+            VM_push(vm, OBJ_VAL(astr));                                                            \
+            ObjString* bstr = Value_to_str(vm, b);                                                 \
+            VM_push(vm, OBJ_VAL(bstr));                                                            \
+            ObjString* unescaped_b = unescape(vm, bstr);                                           \
+            VM_pop(vm); /* pop 'bstr' */                                                           \
+            VM_push(vm, OBJ_VAL(unescaped_b));                                                     \
+            ObjString* unescaped_a = unescape(vm, astr);                                           \
+            VM_pop(vm); /* pop 'astr' */                                                           \
+            VM_push(vm, OBJ_VAL(unescaped_a));                                                     \
+            VM_error(                                                                              \
+                vm,                                                                                \
+                "Only two numbers can be added together or two strings "                           \
+                "concatenated.\nThis is invalid: ...\"%s\" + \"%s\"...\nTry "                      \
+                "instead: "                                                                        \
+                "...\"%s%s%s\" + "                                                                 \
+                "\"%s%s%s\"...",                                                                   \
+                unescaped_a->storage,                                                              \
+                unescaped_b->storage,                                                              \
+                IS_STRING(a) ? "" : "tostr(",                                                      \
+                unescaped_a->storage,                                                              \
+                IS_STRING(a) ? "" : ")",                                                           \
+                IS_STRING(b) ? "" : "tostr(",                                                      \
+                unescaped_b->storage,                                                              \
+                IS_STRING(b) ? "" : ")");                                                          \
+            VM_pop(vm);                                                                            \
+            VM_pop(vm);                                                                            \
+            return INTERPRET_RUNTIME_ERROR;                                                        \
+        }                                                                                          \
     } while(false)
 
     // Flag for gc to skip marking compiler roots ('mem.c' -> 'gc()')
@@ -555,10 +619,11 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             {
                 Value val = stack_peek(0);
                 if(unlikely(!IS_NUMBER(val))) {
+                    frame->ip = ip;
                     RUNTIME_UNARY_NEGATION_ERR(vm, Value_to_str(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                AS_NUMBER_REF(vm->sp - 1) = -AS_NUMBER(val);
+                AS_NUMBER_REF(vm->sp - 1) = NUMBER_VAL(-AS_NUMBER(val));
                 BREAK;
             }
             CASE(OP_ADD)
@@ -889,18 +954,17 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_PROPERTY)
             {
-                Value val = stack_peek(1);
+                Value      val           = stack_peek(1);
+                ObjString* property_name = READ_STRING();
+
                 if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
                     RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
+
                 ObjInstance* instance = AS_INSTANCE(val);
-                HashTable_insert(
-                    vm,
-                    &instance->fields,
-                    OBJ_VAL(READ_STRING()),
-                    stack_peek(0));
+                HashTable_insert(vm, &instance->fields, OBJ_VAL(property_name), stack_peek(0));
                 Value ret = VM_pop(vm); // Get assigned value
                 VM_pop(vm);             // Pop instance
                 VM_push(vm, ret);       // Push back the assigned value
@@ -908,18 +972,17 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_SET_PROPERTYL)
             {
-                Value val = stack_peek(1);
+                Value      val           = stack_peek(1);
+                ObjString* property_name = READ_STRINGL();
+
                 if(unlikely(!IS_INSTANCE(val))) {
                     frame->ip = ip;
                     RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, val)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
+
                 ObjInstance* instance = AS_INSTANCE(val);
-                HashTable_insert(
-                    vm,
-                    &instance->fields,
-                    OBJ_VAL(READ_STRINGL()),
-                    stack_peek(0));
+                HashTable_insert(vm, &instance->fields, OBJ_VAL(property_name), stack_peek(0));
                 Value ret = VM_pop(vm); // Get assigned value
                 VM_pop(vm);             // Pop instance
                 VM_push(vm, ret);       // Push back the assigned value
@@ -927,13 +990,13 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_PROPERTY)
             {
-                Value val = stack_peek(0);
-                if(unlikely(!IS_INSTANCE(val))) {
+                Value receiver = stack_peek(0);
+                if(unlikely(!IS_INSTANCE(receiver))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, val)->storage);
+                    RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, receiver)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance      = AS_INSTANCE(val);
+                ObjInstance* instance      = AS_INSTANCE(receiver);
                 Value        property_name = OBJ_VAL(READ_STRING());
                 Value        property;
                 if(HashTable_get(&instance->fields, property_name, &property)) {
@@ -943,7 +1006,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 }
                 frame->ip = ip;
                 ObjBoundMethod* bound =
-                    VM_bind_method(vm, instance->cclass, property_name);
+                    VM_bind_method(vm, instance->cclass, property_name, receiver);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -953,13 +1016,13 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             }
             CASE(OP_GET_PROPERTYL)
             {
-                Value val = stack_peek(0);
-                if(unlikely(!IS_INSTANCE(val))) {
+                Value receiver = stack_peek(0);
+                if(unlikely(!IS_INSTANCE(receiver))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, val)->storage);
+                    RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, receiver)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance      = AS_INSTANCE(val);
+                ObjInstance* instance      = AS_INSTANCE(receiver);
                 Value        property_name = OBJ_VAL(READ_STRINGL());
                 Value        property;
                 if(HashTable_get(&instance->fields, property_name, &property)) {
@@ -969,7 +1032,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 }
                 frame->ip = ip;
                 ObjBoundMethod* bound =
-                    VM_bind_method(vm, instance->cclass, property_name);
+                    VM_bind_method(vm, instance->cclass, property_name, receiver);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -977,45 +1040,71 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 VM_push(vm, OBJ_VAL(bound)); // Push bound method
                 BREAK;
             }
-            CASE(OP_SET_DYNPROPERTY)
+            CASE(OP_INDEX)
             {
-                Value val = stack_peek(2);
-                if(unlikely(!IS_INSTANCE(val))) {
+                Value receiver = stack_peek(1);
+                Value key      = stack_peek(0);
+
+                if(unlikely(!IS_INSTANCE(receiver))) {
                     frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, val)->storage);
+                    RUNTIME_INDEX_RECEIVER_ERR(vm);
+                    return INTERPRET_RUNTIME_ERROR;
+                } else if(unlikely(IS_NIL(key))) {
+                    frame->ip = ip;
+                    RUNTIME_INDEX_NIL_ERR(vm);
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                ObjInstance* instance = AS_INSTANCE(val);
-                HashTable_insert(vm, &instance->fields, stack_peek(1), stack_peek(0));
-                Value ret = VM_pop(vm); // Get assigned value
-                VM_popn(vm, 2);         // Pop instance and name
-                VM_push(vm, ret);       // Push back the assigned value
-                BREAK;
-            }
-            CASE(OP_GET_DYNPROPERTY)
-            {
-                Value val = stack_peek(1);
-                if(unlikely(!IS_INSTANCE(val))) {
-                    frame->ip = ip;
-                    RUNTIME_INSTANCE_ERR(vm, Value_to_str(vm, val)->storage);
-                    return INTERPRET_RUNTIME_ERROR;
-                }
-                ObjInstance* instance      = AS_INSTANCE(val);
-                Value        property_name = stack_peek(0);
+
                 Value        value;
-                if(HashTable_get(&instance->fields, property_name, &value)) {
-                    VM_popn(vm, 2);
-                    VM_push(vm, value);
+                ObjInstance* instance = AS_INSTANCE(receiver);
+
+                if(HashTable_get(&instance->fields, key, &value)) {
+                    VM_popn(vm, 2);     // Pop key and receiver
+                    VM_push(vm, value); // Push the field value
                     BREAK;
                 }
+
                 frame->ip = ip;
-                ObjBoundMethod* bound =
-                    VM_bind_method(vm, instance->cclass, property_name);
+
+                ObjBoundMethod* bound = VM_bind_method(vm, instance->cclass, key, receiver);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                VM_popn(vm, 2);
-                VM_push(vm, OBJ_VAL(bound));
+
+                VM_popn(vm, 2);              // Pop key and receiver
+                VM_push(vm, OBJ_VAL(bound)); // Push bound method
+                BREAK;
+            }
+            CASE(OP_SET_INDEX)
+            {
+                Value receiver = stack_peek(2);
+                Value property = stack_peek(1);
+                Value field    = stack_peek(0);
+
+                if(unlikely(!IS_INSTANCE(receiver))) {
+                    frame->ip = ip;
+                    RUNTIME_INDEX_RECEIVER_ERR(vm);
+                    return INTERPRET_RUNTIME_ERROR;
+                } else if(unlikely(IS_NIL(property))) {
+                    frame->ip = ip;
+                    RUNTIME_INDEX_NIL_ERR(vm);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                HashTable_insert(vm, &AS_INSTANCE(receiver)->fields, property, field);
+                VM_popn(vm, 3);
+                VM_push(vm, field);
+                BREAK;
+            }
+            CASE(OP_INVOKE_INDEX)
+            {
+                Int argc  = READ_BYTEL();
+                frame->ip = ip;
+                if(unlikely(!VM_invoke_index(vm, stack_peek(argc), argc + 1))) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
                 BREAK;
             }
             CASE(OP_METHOD)
@@ -1024,11 +1113,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjClass*  cclass      = AS_CLASS(stack_peek(1));
                 ObjString* method_name = READ_STRING();
 
-                HashTable_insert(
-                    vm,
-                    &cclass->methods,
-                    OBJ_VAL(method_name),
-                    method); // GC
+                HashTable_insert(vm, &cclass->methods, OBJ_VAL(method_name),
+                                 method); // GC
 
                 VM_pop(vm); // pop the method (function/closure)
                 BREAK;
@@ -1039,11 +1125,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 ObjClass*  cclass      = AS_CLASS(stack_peek(1));
                 ObjString* method_name = READ_STRINGL();
 
-                HashTable_insert(
-                    vm,
-                    &cclass->methods,
-                    OBJ_VAL(method_name),
-                    method); // GC
+                HashTable_insert(vm, &cclass->methods, OBJ_VAL(method_name),
+                                 method); // GC
 
                 VM_pop(vm); // pop the method (function/closure)
                 BREAK;
@@ -1051,9 +1134,9 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_INVOKE)
             {
                 ObjString* method_name = READ_STRING();
-                Value      argc        = READ_BYTEL();
+                Int        argc        = READ_BYTEL();
                 frame->ip              = ip;
-                if(unlikely(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc)))) {
+                if(unlikely(!VM_invoke(vm, OBJ_VAL(method_name), argc))) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm->frames[vm->fc - 1];
@@ -1063,9 +1146,9 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
             CASE(OP_INVOKEL)
             {
                 ObjString* method_name = READ_STRINGL();
-                Value      argc        = READ_BYTEL();
+                Int        argc        = READ_BYTEL();
                 frame->ip              = ip;
-                if(unlikely(!VM_invoke(vm, OBJ_VAL(method_name), (Int)AS_NUMBER(argc)))) {
+                if(unlikely(!VM_invoke(vm, OBJ_VAL(method_name), argc))) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm->frames[vm->fc - 1];
@@ -1098,9 +1181,8 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                     frame->ip = ip;
                     RUNTIME_INHERIT_ERR(
                         vm,
-                        Obj_to_str(vm, (Obj*)subclass)
-                            ->storage, // no need to VM_push
-                                       // classes already have names
+                        Obj_to_str(vm, (Obj*)subclass)->storage, // no need to VM_push
+                                                                 // classes already have names
                         Value_to_str(vm, superclass)->storage);
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -1120,7 +1202,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value     name        = OBJ_VAL(READ_STRING());
                 ObjClass* superclass  = AS_CLASS(VM_pop(vm));
                 frame->ip             = ip;
-                ObjBoundMethod* bound = VM_bind_method(vm, superclass, name);
+                ObjBoundMethod* bound = VM_bind_method(vm, superclass, name, stack_peek(0));
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -1132,7 +1214,7 @@ SK_INTERNAL(InterpretResult) VM_run(VM* vm)
                 Value     name        = OBJ_VAL(READ_STRINGL());
                 ObjClass* superclass  = AS_CLASS(VM_pop(vm));
                 frame->ip             = ip;
-                ObjBoundMethod* bound = VM_bind_method(vm, superclass, name);
+                ObjBoundMethod* bound = VM_bind_method(vm, superclass, name, stack_peek(0));
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -1212,13 +1294,14 @@ InterpretResult VM_interpret(VM* vm, const char* source)
     }
 
     VM_push(vm, OBJ_VAL(fn));
-    VM_call_fn(vm, NULL, fn, 0, NULL);
+    VM_call_fn(vm, NULL, fn, 0, false, NULL);
 
     return VM_run(vm);
 }
 
 void VM_free(VM* vm)
 {
+    HashTable_free(vm, &vm->loaded);
     HashTable_free(vm, &vm->globids);
     GARRAY_FREE(vm);
     HashTable_free(vm, &vm->strings);
@@ -1230,5 +1313,5 @@ void VM_free(VM* vm)
         Obj_free(vm, head);
     }
 
-    FREE(vm);
+    vm->config.reallocate(vm, 0, vm->config.userdata);
 }

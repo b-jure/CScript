@@ -17,20 +17,20 @@ typedef struct Compiler Compiler;
 #define OPCODE_N ((uint32_t)(OP_RET + 1))
 
 typedef enum {
-    OP_TRUE = 0,  /* Push true literal on the stack */
-    OP_FALSE,     /* Push false literal on the stack */
-    OP_NIL,       /* Push nil literal on the stack */
-    OP_NEG,       /* Negate the value on top of the stack */
-    OP_ADD,       /* [Pop two values of the stack and] add them [pushing the result] */
-    OP_SUB,       /* -||- subtract them -||- */
-    OP_MUL,       /* -||- multiply them -||- */
-    OP_DIV,       /* -||- divide them -||- */
-    OP_NOT,       /* Apply logical negation on the value on top of the stack. */
-    OP_NOT_EQUAL, /* [Pop two values of the stack and] check for inequality */
-    OP_EQUAL,     /* -||- check for equality */
-    OP_EQ,        /* Check two values for equality, pop only value on top of the stack */
-    OP_GREATER,   /* [Pop two values of the stack and] check if left greater than
-                     right */
+    OP_TRUE = 0,             /* Push true literal on the stack */
+    OP_FALSE,                /* Push false literal on the stack */
+    OP_NIL,                  /* Push nil literal on the stack */
+    OP_NEG,                  /* Negate the value on top of the stack */
+    OP_ADD,                  /* [Pop two values of the stack and] add them [pushing the result] */
+    OP_SUB,                  /* -||- subtract them -||- */
+    OP_MUL,                  /* -||- multiply them -||- */
+    OP_DIV,                  /* -||- divide them -||- */
+    OP_NOT,                  /* Apply logical negation on the value on top of the stack. */
+    OP_NOT_EQUAL,            /* [Pop two values of the stack and] check for inequality */
+    OP_EQUAL,                /* -||- check for equality */
+    OP_EQ,                   /* Check two values for equality, pop only value on top of the stack */
+    OP_GREATER,              /* [Pop two values of the stack and] check if left greater than
+                                right */
     OP_GREATER_EQUAL,        /* -||- check if left greater or equal than right */
     OP_LESS,                 /* -||- check if left is less than right */
     OP_LESS_EQUAL,           /* -||- check if left is less or equal than right */
@@ -70,12 +70,13 @@ typedef enum {
     OP_SET_PROPERTYL,        /* Set class instance property long */
     OP_GET_PROPERTY,         /* Get class instance property */
     OP_GET_PROPERTYL,        /* Get class instance property long */
-    OP_SET_DYNPROPERTY,      /* Set class instance property created at runtime */
-    OP_GET_DYNPROPERTY,      /* Get class instance property created at runtime */
+    OP_INDEX,                /* Index operator */
+    OP_SET_INDEX,            /* Set class instance property dynamically */
+    OP_INVOKE_INDEX,         /* Invoke class method name resolved dynamically */
     OP_METHOD,               /* Create class method */
     OP_METHODL,              /* Create class method long */
-    OP_INVOKE,               /* Invoke class method call */
-    OP_INVOKEL,              /* Invoke class method call long */
+    OP_INVOKE,               /* Invoke class method */
+    OP_INVOKEL,              /* Invoke class method long */
     OP_OVERLOAD,             /* Overload operator or initializer for a class */
     OP_INHERIT,              /* Inherit class properties. */
     OP_GET_SUPER,            /* Fetch superclass method */

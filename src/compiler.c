@@ -180,12 +180,12 @@ struct Compiler {
 };
 
 /* Allocates 'Compiler' with the default stack size */
-#define ALLOC_COMPILER() MALLOC(sizeof(Compiler) + (SHORT_STACK_SIZE * sizeof(Local)))
+#define ALLOC_COMPILER(vm) MALLOC(vm, sizeof(Compiler) + (SHORT_STACK_SIZE * sizeof(Local)))
 
 // Grows 'Compiler', compiler uses flexible array to store Local's
 // and this is why the whole 'Compiler' needs to resize.
-#define GROW_COMPILER(ptr, oldcap, newcap)                                               \
-    (Compiler*)REALLOC(ptr, sizeof(Compiler) + (newcap * sizeof(Local)))
+#define GROW_COMPILER(ptr, oldcap, newcap)                                                         \
+    (Compiler*)REALLOC(vm, ptr, sizeof(Compiler) + (newcap * sizeof(Local)))
 
 /* Pointer to pointer to 'Compiler' */
 typedef Compiler** PPC;
@@ -228,7 +228,7 @@ typedef struct {
 SK_INTERNAL(Chunk*) current_chunk(Compiler* C);
 SK_INTERNAL(void) C_advance(Compiler* compiler);
 SK_INTERNAL(void) C_error(Compiler* compiler, const char* error, ...);
-SK_INTERNAL(void) C_free(Compiler* C);
+SK_INTERNAL(void) C_free(VM* vm, Compiler* C);
 SK_INTERNAL(void) compile_number(VM* vm, PPC ppc);
 SK_INTERNAL(void) compile_string(VM* vm, PPC ppc);
 SK_INTERNAL(UInt)
@@ -253,7 +253,7 @@ SK_INTERNAL(void) parse_and(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_or(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_call(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_dot(VM* vm, PPC ppc);
-SK_INTERNAL(void) parse_property_name(VM* vm, PPC ppc);
+SK_INTERNAL(void) parse_index(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_self(VM* vm, PPC ppc);
 SK_INTERNAL(void) parse_super(VM* vm, PPC ppc);
 
@@ -288,7 +288,7 @@ C_init(Compiler* C, Class* cclass, VM* vm, FunctionType fn_type, Compiler* enclo
     // This array then gets passed on to other nested compilers for each
     // function.
     if(enclosing == NULL) {
-        C->upvalues = MALLOC(sizeof(Array_Upvalue));
+        C->upvalues = MALLOC(vm, sizeof(Array_Upvalue));
         Array_Upvalue_init(C->upvalues);
     } else {
         C->parser   = enclosing->parser;
@@ -314,18 +314,17 @@ C_init(Compiler* C, Class* cclass, VM* vm, FunctionType fn_type, Compiler* enclo
     }
 
     if(fn_type != FN_SCRIPT) {
-        C->fn->name =
-            ObjString_from(vm, C->parser->previous.start, C->parser->previous.len);
+        C->fn->name = ObjString_from(vm, C->parser->previous.start, C->parser->previous.len);
     }
 }
 
-SK_INTERNAL(force_inline void) C_grow_stack(PPC ppc)
+SK_INTERNAL(force_inline void) C_grow_stack(VM* vm, PPC ppc)
 {
     Compiler* C      = C();
     UInt      oldcap = C->loc_cap;
 
     C->loc_cap = MIN(GROW_ARRAY_CAPACITY(oldcap, SHORT_STACK_SIZE), VM_STACK_MAX);
-    C          = GROW_COMPILER(C, oldcap, C->loc_cap);
+    C          = GROW_COMPILER(vm, C, C->loc_cap);
     C()        = C;
 }
 
@@ -346,10 +345,7 @@ void mark_c_roots(VM* vm)
 SK_INTERNAL(force_inline UInt) C_make_const(Compiler* C, VM* vm, Value constant)
 {
     if(unlikely(current_chunk(C)->clen > MIN(VM_STACK_MAX, UINT24_MAX))) {
-        COMPILER_CONSTANT_LIMIT_ERR(
-            C,
-            C->fn->name->storage,
-            MIN(VM_STACK_MAX, UINT24_MAX));
+        COMPILER_CONSTANT_LIMIT_ERR(C, C->fn->name->storage, MIN(VM_STACK_MAX, UINT24_MAX));
     }
 
     return Chunk_make_constant(vm, current_chunk(C), constant);
@@ -381,10 +377,7 @@ C_make_global_identifier(Compiler* C, VM* vm, Value identifier, Byte flags)
     UInt i = (UInt)AS_NUMBER(index);
 
     if(IS_DECLARED(vm->globvals[i].value)) {
-        COMPILER_GLOBAL_REDEFINITION_ERR(
-            C,
-            AS_STRING(identifier)->len,
-            AS_CSTRING(identifier));
+        COMPILER_GLOBAL_REDEFINITION_ERR(C, AS_STRING(identifier)->len, AS_CSTRING(identifier));
     } else {
         vm->globvals[i] = glob;
     }
@@ -393,25 +386,25 @@ C_make_global_identifier(Compiler* C, VM* vm, Value identifier, Byte flags)
 }
 
 // Emit instruction
-#define EMIT_OP(c, code, param)                                                          \
+#define EMIT_OP(c, code, param)                                                                    \
     Chunk_write_codewparam(current_chunk(c), code, param, (c)->parser->previous.line)
 
 // Emit bytecode
 #define EMIT_BYTE(c, byte) Chunk_write(current_chunk(c), byte, (c)->parser->previous.line)
 
 // Emit jump instruction
-#define EMIT_JMP(c, jmp)                                                                 \
-    ({                                                                                   \
-        EMIT_OP(c, jmp, 0);                                                              \
-        code_offset(c) - 3;                                                              \
+#define EMIT_JMP(c, jmp)                                                                           \
+    ({                                                                                             \
+        EMIT_OP(c, jmp, 0);                                                                        \
+        code_offset(c) - 3;                                                                        \
     })
 
 // Emit 3 bytes
-#define EMIT_LBYTE(c, bytes)                                                             \
-    do {                                                                                 \
-        EMIT_BYTE(c, BYTE(bytes, 0));                                                    \
-        EMIT_BYTE(c, BYTE(bytes, 1));                                                    \
-        EMIT_BYTE(c, BYTE(bytes, 2));                                                    \
+#define EMIT_LBYTE(c, bytes)                                                                       \
+    do {                                                                                           \
+        EMIT_BYTE(c, BYTE(bytes, 0));                                                              \
+        EMIT_BYTE(c, BYTE(bytes, 1));                                                              \
+        EMIT_BYTE(c, BYTE(bytes, 2));                                                              \
     } while(false)
 
 SK_INTERNAL(force_inline void) C_emit_return(Compiler* C)
@@ -538,7 +531,7 @@ SK_INTERNAL(force_inline ObjFunction*) compile_end(Compiler* C)
 
 ObjFunction* compile(VM* vm, const char* source)
 {
-    Compiler* C   = ALLOC_COMPILER();
+    Compiler* C   = ALLOC_COMPILER(vm);
     vm->compiler  = C;
     Parser parser = Parser_new(source, vm);
     C_init(C, NULL, vm, FN_SCRIPT, NULL);
@@ -551,7 +544,7 @@ ObjFunction* compile(VM* vm, const char* source)
 
     ObjFunction* fn  = compile_end(C);
     bool         err = PFLAG_CHECK(C->parser, ERROR_BIT);
-    C_free(C);
+    C_free(vm, C);
     return (err ? NULL : fn);
 }
 
@@ -568,18 +561,16 @@ SK_INTERNAL(void) CFCtx_free(CFCtx* context)
     context->innermostsw_depth = 0;
 }
 
-SK_INTERNAL(void) C_free(Compiler* C)
+SK_INTERNAL(void) C_free(VM* vm, Compiler* C)
 {
     CFCtx_free(&C->context);
     C->parser->vm->compiler = C->enclosing;
     if(C->enclosing == NULL) {
-        ASSERT(
-            C->fn_type == FN_SCRIPT,
-            "Compiler is top-level but the type is not FN_SCRIPT.");
+        ASSERT(C->fn_type == FN_SCRIPT, "Compiler is top-level but the type is not FN_SCRIPT.");
         Array_Upvalue_free(C->upvalues, NULL);
-        FREE(C->upvalues);
+        FREE(vm, C->upvalues);
     }
-    FREE(C);
+    FREE(vm, C);
 }
 
 /*========================== PARSE ========================
@@ -592,52 +583,52 @@ SK_INTERNAL(void) C_free(Compiler* C)
  * while second column parse function is used in case token is inifx. Third
  * column marks the 'Precedence' of the token inside expression. */
 static const ParseRule rules[] = {
-    [TOK_LBRACK]        = {NULL,                parse_property_name, PREC_CALL      },
-    [TOK_LPAREN]        = {parse_grouping,      parse_call,          PREC_CALL      },
-    [TOK_RPAREN]        = {NULL,                NULL,                PREC_NONE      },
-    [TOK_LBRACE]        = {NULL,                NULL,                PREC_NONE      },
-    [TOK_RBRACE]        = {NULL,                NULL,                PREC_NONE      },
-    [TOK_COMMA]         = {NULL,                NULL,                PREC_NONE      },
-    [TOK_DOT]           = {NULL,                parse_dot,           PREC_CALL      },
-    [TOK_MINUS]         = {parse_unary,         parse_binary,        PREC_TERM      },
-    [TOK_PLUS]          = {NULL,                parse_binary,        PREC_TERM      },
-    [TOK_COLON]         = {NULL,                NULL,                PREC_NONE      },
-    [TOK_SEMICOLON]     = {NULL,                NULL,                PREC_NONE      },
-    [TOK_SLASH]         = {NULL,                parse_binary,        PREC_FACTOR    },
-    [TOK_STAR]          = {NULL,                parse_binary,        PREC_FACTOR    },
-    [TOK_QMARK]         = {NULL,                parse_ternarycond,   PREC_TERNARY   },
-    [TOK_BANG]          = {parse_unary,         NULL,                PREC_NONE      },
-    [TOK_BANG_EQUAL]    = {NULL,                parse_binary,        PREC_EQUALITY  },
-    [TOK_EQUAL]         = {NULL,                NULL,                PREC_NONE      },
-    [TOK_EQUAL_EQUAL]   = {NULL,                parse_binary,        PREC_EQUALITY  },
-    [TOK_GREATER]       = {NULL,                parse_binary,        PREC_COMPARISON},
-    [TOK_GREATER_EQUAL] = {NULL,                parse_binary,        PREC_COMPARISON},
-    [TOK_LESS]          = {NULL,                parse_binary,        PREC_COMPARISON},
-    [TOK_LESS_EQUAL]    = {NULL,                parse_binary,        PREC_COMPARISON},
-    [TOK_IDENTIFIER]    = {parse_variable,      NULL,                PREC_NONE      },
-    [TOK_STRING]        = {compile_string,      NULL,                PREC_NONE      },
-    [TOK_NUMBER]        = {compile_number,      NULL,                PREC_NONE      },
-    [TOK_AND]           = {NULL,                parse_and,           PREC_AND       },
-    [TOK_CLASS]         = {NULL,                NULL,                PREC_NONE      },
-    [TOK_ELSE]          = {NULL,                NULL,                PREC_NONE      },
-    [TOK_FALSE]         = {parse_literal,       NULL,                PREC_NONE      },
-    [TOK_FOR]           = {NULL,                NULL,                PREC_NONE      },
-    [TOK_FN]            = {NULL,                NULL,                PREC_NONE      },
-    [TOK_FIXED]         = {parse_dec_var_fixed, NULL,                PREC_NONE      },
-    [TOK_IF]            = {NULL,                NULL,                PREC_NONE      },
-    [TOK_NIL]           = {parse_literal,       NULL,                PREC_NONE      },
-    [TOK_OR]            = {NULL,                parse_or,            PREC_OR        },
-    [TOK_RETURN]        = {NULL,                NULL,                PREC_NONE      },
-    [TOK_SUPER]         = {parse_super,         NULL,                PREC_NONE      },
-    [TOK_SELF]          = {parse_self,          NULL,                PREC_NONE      },
-    [TOK_TRUE]          = {parse_literal,       NULL,                PREC_NONE      },
-    [TOK_VAR]           = {parse_dec_var,       NULL,                PREC_NONE      },
-    [TOK_WHILE]         = {NULL,                NULL,                PREC_NONE      },
-    [TOK_ERROR]         = {NULL,                NULL,                PREC_NONE      },
-    [TOK_EOF]           = {NULL,                NULL,                PREC_NONE      },
+    [TOK_LBRACK]        = {NULL,                parse_index,       PREC_CALL      },
+    [TOK_LPAREN]        = {parse_grouping,      parse_call,        PREC_CALL      },
+    [TOK_RPAREN]        = {NULL,                NULL,              PREC_NONE      },
+    [TOK_LBRACE]        = {NULL,                NULL,              PREC_NONE      },
+    [TOK_RBRACE]        = {NULL,                NULL,              PREC_NONE      },
+    [TOK_COMMA]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_DOT]           = {NULL,                parse_dot,         PREC_CALL      },
+    [TOK_MINUS]         = {parse_unary,         parse_binary,      PREC_TERM      },
+    [TOK_PLUS]          = {NULL,                parse_binary,      PREC_TERM      },
+    [TOK_COLON]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_SEMICOLON]     = {NULL,                NULL,              PREC_NONE      },
+    [TOK_SLASH]         = {NULL,                parse_binary,      PREC_FACTOR    },
+    [TOK_STAR]          = {NULL,                parse_binary,      PREC_FACTOR    },
+    [TOK_QMARK]         = {NULL,                parse_ternarycond, PREC_TERNARY   },
+    [TOK_BANG]          = {parse_unary,         NULL,              PREC_NONE      },
+    [TOK_BANG_EQUAL]    = {NULL,                parse_binary,      PREC_EQUALITY  },
+    [TOK_EQUAL]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_EQUAL_EQUAL]   = {NULL,                parse_binary,      PREC_EQUALITY  },
+    [TOK_GREATER]       = {NULL,                parse_binary,      PREC_COMPARISON},
+    [TOK_GREATER_EQUAL] = {NULL,                parse_binary,      PREC_COMPARISON},
+    [TOK_LESS]          = {NULL,                parse_binary,      PREC_COMPARISON},
+    [TOK_LESS_EQUAL]    = {NULL,                parse_binary,      PREC_COMPARISON},
+    [TOK_IDENTIFIER]    = {parse_variable,      NULL,              PREC_NONE      },
+    [TOK_STRING]        = {compile_string,      NULL,              PREC_NONE      },
+    [TOK_NUMBER]        = {compile_number,      NULL,              PREC_NONE      },
+    [TOK_AND]           = {NULL,                parse_and,         PREC_AND       },
+    [TOK_CLASS]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_ELSE]          = {NULL,                NULL,              PREC_NONE      },
+    [TOK_FALSE]         = {parse_literal,       NULL,              PREC_NONE      },
+    [TOK_FOR]           = {NULL,                NULL,              PREC_NONE      },
+    [TOK_FN]            = {NULL,                NULL,              PREC_NONE      },
+    [TOK_FIXED]         = {parse_dec_var_fixed, NULL,              PREC_NONE      },
+    [TOK_IF]            = {NULL,                NULL,              PREC_NONE      },
+    [TOK_NIL]           = {parse_literal,       NULL,              PREC_NONE      },
+    [TOK_OR]            = {NULL,                parse_or,          PREC_OR        },
+    [TOK_RETURN]        = {NULL,                NULL,              PREC_NONE      },
+    [TOK_SUPER]         = {parse_super,         NULL,              PREC_NONE      },
+    [TOK_SELF]          = {parse_self,          NULL,              PREC_NONE      },
+    [TOK_TRUE]          = {parse_literal,       NULL,              PREC_NONE      },
+    [TOK_VAR]           = {parse_dec_var,       NULL,              PREC_NONE      },
+    [TOK_WHILE]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_ERROR]         = {NULL,                NULL,              PREC_NONE      },
+    [TOK_EOF]           = {NULL,                NULL,              PREC_NONE      },
 };
 
-SK_INTERNAL(void) C_new_local(PPC ppc, Token name)
+SK_INTERNAL(void) C_new_local(VM* vm, PPC ppc, Token name)
 {
     Compiler* C = C();
 
@@ -646,7 +637,7 @@ SK_INTERNAL(void) C_new_local(PPC ppc, Token name)
             COMPILER_LOCAL_LIMIT_ERR(C, MIN(VM_STACK_MAX, LOCAL_STACK_MAX));
             return;
         }
-        C_grow_stack(ppc);
+        C_grow_stack(vm, ppc);
         C = C();
     }
 
@@ -659,8 +650,7 @@ SK_INTERNAL(void) C_new_local(PPC ppc, Token name)
 
 SK_INTERNAL(force_inline bool) Identifier_eq(Token* left, Token* right)
 {
-    return (left->len == right->len) &&
-           (memcmp(left->start, right->start, left->len) == 0);
+    return (left->len == right->len) && (memcmp(left->start, right->start, left->len) == 0);
 }
 
 SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Token* name)
@@ -678,7 +668,7 @@ SK_INTERNAL(force_inline Int) C_get_local(Compiler* C, Token* name)
     return -1;
 }
 
-SK_INTERNAL(void) C_make_local(PPC ppc)
+SK_INTERNAL(void) C_make_local(VM* vm, PPC ppc)
 {
     Compiler* C = C();
 
@@ -696,7 +686,7 @@ SK_INTERNAL(void) C_make_local(PPC ppc)
         }
     }
 
-    C_new_local(ppc, *name);
+    C_new_local(vm, ppc, *name);
 }
 
 SK_INTERNAL(Int) C_make_global(Compiler* C, VM* vm, Byte flags)
@@ -753,7 +743,6 @@ SK_INTERNAL(Int) parse_arglist(VM* vm, PPC ppc)
 {
     Int argc = 0;
 
-    // @TODO: Fix parser 'parse_string' maybe?
     if(!C_check(C(), TOK_RPAREN)) {
         do {
             parse_expr(vm, ppc);
@@ -904,7 +893,7 @@ parse_fn(VM* vm, PPC ppc, FunctionType type)
 {
 #define C_new() (*ppc_new)
 
-    Compiler* C_new = ALLOC_COMPILER();
+    Compiler* C_new = ALLOC_COMPILER(vm);
     vm->compiler    = C_new;
     C_init(C_new, C()->cclass, vm, type, C());
 
@@ -951,7 +940,7 @@ parse_fn(VM* vm, PPC ppc, FunctionType type)
         }
     }
 
-    C_free(C_new);
+    C_free(vm, C_new);
 
 #undef C_new
 }
@@ -984,10 +973,7 @@ SK_INTERNAL(force_inline UInt) C_add_upval(Compiler* C, UInt idx, bool local)
     }
 
     if(unlikely(C->upvalues->len == MIN(VM_STACK_MAX, UINT24_MAX))) {
-        COMPILER_UPVALUE_LIMIT_ERR(
-            C,
-            MIN(VM_STACK_MAX, UINT24_MAX),
-            C->fn->name->storage);
+        COMPILER_UPVALUE_LIMIT_ERR(C, MIN(VM_STACK_MAX, UINT24_MAX), C->fn->name->storage);
         return 0;
     }
 
@@ -1068,6 +1054,7 @@ SK_INTERNAL(force_inline void) named_variable(VM* vm, PPC ppc, Token name)
 
 SK_INTERNAL(void) parse_method(VM* vm, PPC ppc)
 {
+    C_expect(C(), TOK_FN, "Expect 'fn'.");
     C_expect(C(), TOK_IDENTIFIER, "Expect method name.");
     Value identifier = Token_into_stringval(vm, &C()->parser->previous);
     UInt  idx        = C_make_const(C(), vm, identifier);
@@ -1101,12 +1088,11 @@ SK_INTERNAL(void) parse_dec_class(VM* vm, PPC ppc)
     EMIT_OP(C(), GET_OP_TYPE(idx, OP_CLASS), idx);
 
     if(C()->depth > 0) {
-        C_make_local(ppc);
+        C_make_local(vm, ppc);
         C_initialize_local(C());
     } else {
         // index for OP_DEFINE_GLOBAL instruction
-        UInt gidx =
-            C_make_global_identifier(C(), vm, identifier, PVAR_FLAGS(C()->parser));
+        UInt gidx = C_make_global_identifier(C(), vm, identifier, PVAR_FLAGS(C()->parser));
         EMIT_OP(C(), GET_OP_TYPE(gidx, OP_DEFINE_GLOBAL), gidx);
     }
 
@@ -1125,7 +1111,7 @@ SK_INTERNAL(void) parse_dec_class(VM* vm, PPC ppc)
         }
         cclass.superclass = true;
         C_scope_start(C());
-        C_new_local(ppc, Token_syn_new("super"));
+        C_new_local(vm, ppc, Token_syn_new("super"));
         C_initialize_local(C());
         named_variable(vm, ppc, class_name);
         EMIT_BYTE(C(), OP_INHERIT);
@@ -1208,7 +1194,7 @@ parse_varname(VM* vm, PPC ppc, const char* errmsg)
 
     // If local scope make local variable
     if((C())->depth > 0) {
-        C_make_local(ppc);
+        C_make_local(vm, ppc);
         return 0;
     }
 
@@ -1731,6 +1717,7 @@ SK_INTERNAL(void) parse_binary(VM* vm, PPC ppc)
         CASE(TOK_VAR)
         CASE(TOK_WHILE)
         CASE(TOK_FIXED)
+        CASE(TOK_IMPORT)
         CASE(TOK_ERROR)
         CASE(TOK_EOF)
         {
@@ -1778,27 +1765,19 @@ SK_INTERNAL(void) parse_dot(VM* vm, PPC ppc)
 }
 
 
-SK_INTERNAL(void) parse_property_name(VM* vm, PPC ppc)
+SK_INTERNAL(void) parse_index(VM* vm, PPC ppc)
 {
-    C_expect(C(), TOK_IDENTIFIER, "Expect field name after '['.");
-    Token field_name = C()->parser->previous;
+    parse_expr(vm, ppc);
+    C_expect(C(), TOK_RBRACK, "Expect ']'.");
 
-    // Clear assign bit, because we just want to have
-    // the instructions that fetches the variable value.
-    // Then DYNPROPERTY instruction just takes the top
-    // variable on the stack instead of a index into the
-    // constants array.
-    bool assign = PFLAG_CHECK(C()->parser, ASSIGN_BIT);
-    PFLAG_CLEAR(C()->parser, ASSIGN_BIT);
-    named_variable(vm, ppc, field_name);
-    PFLAG_TOGGLE(C()->parser, ASSIGN_BIT, assign);
-    C_expect(C(), TOK_RBRACK, "Expect ']' after property name.");
-
-    if(assign && C_match(C(), TOK_EQUAL)) {
+    if(PFLAG_CHECK(C()->parser, ASSIGN_BIT) && C_match(C(), TOK_EQUAL)) {
         parse_expr(vm, ppc);
-        EMIT_BYTE(C(), OP_SET_DYNPROPERTY);
+        EMIT_BYTE(C(), OP_SET_INDEX);
+    } else if(C_match(C(), TOK_LPAREN)) {
+        Int argc = parse_arglist(vm, ppc);
+        EMIT_OP(C(), OP_INVOKE_INDEX, argc);
     } else {
-        EMIT_BYTE(C(), OP_GET_DYNPROPERTY);
+        EMIT_BYTE(C(), OP_INDEX);
     }
 }
 

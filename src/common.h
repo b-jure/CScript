@@ -4,8 +4,6 @@
 #include "skconf.h"
 
 #include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
 
 typedef uint8_t  Byte;
 typedef uint32_t UInt;
@@ -47,43 +45,21 @@ SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x)
 /* ------------------------------------------------------------------------- */
 
 
-/* Check if double is positive/negative infinity */
-static force_inline bool is_infinity(double dbl)
-{
-    union {
-        uint64_t integer;
-        double   dbl;
-    } bitcast;
-    bitcast.dbl = dbl;
-    return (bitcast.integer & 0x7fffffffffffffff) == 0x7fffffffffffffff;
-}
-
-/* Check if double is NaN */
-static force_inline bool is_nan(double dbl)
-{
-    union {
-        uint64_t integer;
-        double   dbl;
-    } bitcast;
-    bitcast.dbl = dbl;
-    return (bitcast.integer & 0x7fffffffffffffffL) > 0x7ff0000000000000L;
-}
-
 /* Return MAX */
 #if defined(__GNUC__) || defined(__clang__)
-    #define MAX(a, b)                                                                    \
-        ({                                                                               \
-            __typeof__(a) _a = (a);                                                      \
-            __typeof__(b) _b = (b);                                                      \
-            _a > _b ? _a : _b;                                                           \
+    #define MAX(a, b)                                                                              \
+        ({                                                                                         \
+            __typeof__(a) _a = (a);                                                                \
+            __typeof__(b) _b = (b);                                                                \
+            _a > _b ? _a : _b;                                                                     \
         })
 
     /* Return MIN */
-    #define MIN(a, b)                                                                    \
-        ({                                                                               \
-            __typeof__(a) _a = (a);                                                      \
-            __typeof__(b) _b = (b);                                                      \
-            _a > _b ? _b : _a;                                                           \
+    #define MIN(a, b)                                                                              \
+        ({                                                                                         \
+            __typeof__(a) _a = (a);                                                                \
+            __typeof__(b) _b = (b);                                                                \
+            _a > _b ? _b : _a;                                                                     \
         })
 #else
     #define MAX(a, b) ((a) > (b) ? (a) : (b))

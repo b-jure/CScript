@@ -67,6 +67,12 @@ ARRAY_NEW(Array_Global, Global);
 ARRAY_NEW(Array_ObjRef, Obj*);
 
 struct VM {
+    // VM configuration
+    Config config;
+
+    // Loaded scripts (filenames)
+    HashTable loaded;
+
     // Track innermost compiler for gc.
     Compiler* compiler;
 
@@ -113,7 +119,7 @@ typedef enum {
 
 
 
-void            VM_init(VM* vm);
+VM*             VM_new(Config* config);
 InterpretResult VM_interpret(VM* vm, const char* source_code);
 void            VM_push(VM* vm, Value val);
 Value           VM_pop(VM* vm);

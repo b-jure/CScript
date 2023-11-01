@@ -70,8 +70,9 @@ static const void* const optable[OPCODE_N] = {
     &&L_OP_SET_PROPERTYL,
     &&L_OP_GET_PROPERTY,
     &&L_OP_GET_PROPERTYL,
-    &&L_OP_SET_DYNPROPERTY,
-    &&L_OP_GET_DYNPROPERTY,
+    &&L_OP_INDEX,
+    &&L_OP_SET_INDEX,
+    &&L_OP_INVOKE_INDEX,
     &&L_OP_METHOD,
     &&L_OP_METHODL,
     &&L_OP_INVOKE,
@@ -165,7 +166,7 @@ static const void* toktable[TOK_EOF + 1] = {
     &&L_TOK_OR,          &&L_TOK_RETURN,     &&L_TOK_SUPER,
     &&L_TOK_SELF,        &&L_TOK_SWITCH,     &&L_TOK_TRUE,
     &&L_TOK_VAR,         &&L_TOK_WHILE,      &&L_TOK_FIXED,
-    &&L_TOK_ERROR,       &&L_TOK_EOF,
+    &&L_TOK_IMPORT,      &&L_TOK_ERROR,      &&L_TOK_EOF,
 };
 
 #endif
