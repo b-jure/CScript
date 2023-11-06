@@ -8,17 +8,13 @@
 #include <assert.h>
 #include <stdio.h>
 
-SK_INTERNAL(int)
-Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset);
-SK_INTERNAL(int)
-Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset);
-SK_INTERNAL(int) Instruction_simple(const char* name, UInt offset);
-SK_INTERNAL(int)
-Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset);
-SK_INTERNAL(Int)
-disassemble_invoke(const char* name, Chunk* chunk, bool l, Int offset);
+sstatic Int Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset);
+sstatic Int Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset);
+sstatic Int Instruction_simple(const char* name, UInt offset);
+sstatic Int Instruction_jump(const char* name, int sign, Chunk* chunk, UInt offset);
+sstatic Int disassemble_invoke(const char* name, Chunk* chunk, bool l, Int offset);
 
-void Chunk_debug(Chunk* chunk, const char* name)
+sdebug void Chunk_debug(Chunk* chunk, const char* name)
 {
     printf("=== %s ===\n", name);
 
@@ -27,7 +23,7 @@ void Chunk_debug(Chunk* chunk, const char* name)
     }
 }
 
-UInt Instruction_debug(Chunk* chunk, UInt offset)
+sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
 {
     printf("%04d ", offset);
 
@@ -175,28 +171,27 @@ UInt Instruction_debug(Chunk* chunk, UInt offset)
     }
 }
 
-SK_INTERNAL(Int) Instruction_simple(const char* name, UInt offset)
+sstatic Int Instruction_simple(const char* name, UInt offset)
 {
     printf("%s\n", name);
     return offset + 1; /* OpCode */
 }
 
-SK_INTERNAL(Int)
-Instruction_jump(const char* name, Int sign, Chunk* chunk, UInt offset)
+sstatic Int Instruction_jump(const char* name, Int sign, Chunk* chunk, UInt offset)
 {
     UInt jmp = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-25s %5u -> %u\n", name, offset, offset + 4 + (sign * jmp));
     return offset + 4;
 }
 
-SK_INTERNAL(void) disassemble_const(Chunk* chunk, UInt param)
+sstatic void disassemble_const(Chunk* chunk, UInt param)
 {
     printf("'");
     Value_print(chunk->constants[param]);
     printf("'");
 }
 
-SK_INTERNAL(UInt) disassemble_closure(Chunk* chunk, UInt param, UInt offset)
+sstatic UInt disassemble_closure(Chunk* chunk, UInt param, UInt offset)
 {
     Value value = chunk->constants[param];
     Value_print(value);
@@ -218,8 +213,7 @@ SK_INTERNAL(UInt) disassemble_closure(Chunk* chunk, UInt param, UInt offset)
     return offset;
 }
 
-SK_INTERNAL(Int)
-Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
+sstatic Int Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     Byte param = *Array_Byte_index(&chunk->code, offset + 1);
     printf("%-25s %5u ", name, param);
@@ -244,8 +238,7 @@ Instruction_short(const char* name, Chunk* chunk, OpCode code, UInt offset)
     return offset + 2; /* OpCode + 8-bit/1-byte index */
 }
 
-SK_INTERNAL(Int)
-Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
+sstatic Int Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-25s %5u ", name, param);
@@ -270,8 +263,7 @@ Instruction_long(const char* name, Chunk* chunk, OpCode code, UInt offset)
     return offset + 4; /* OpCode + 24-bit/3-byte index */
 }
 
-SK_INTERNAL(Int)
-disassemble_invoke(const char* name, Chunk* chunk, bool l, Int offset)
+sstatic Int disassemble_invoke(const char* name, Chunk* chunk, bool l, Int offset)
 {
 
     UInt param;

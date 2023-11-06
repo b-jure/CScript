@@ -7,7 +7,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-SK_INTERNAL(void) LineArray_write(Array_UInt* lines, UInt line, UInt index);
+/**
+ * RLA-ENCODED:
+ * LOW ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ HIGH
+ * [instruction_index, line_number, instruction_index, line_number, ...]
+ *
+ * Writes the current line into the chunk line array only if the line is bigger than the
+ * last one. Additionally stores the index of the instruction in order to retrieve it if
+ * 'Chunk_getline' gets called; it gets called only during debug or run-time errors.
+ */
+sstatic void LineArray_write(Array_UInt* lines, UInt line, UInt index)
+{
+    if(Array_UInt_len(lines) <= 0 || *Array_UInt_last(lines) < line) {
+        Array_UInt_push(lines, index);
+        Array_UInt_push(lines, line);
+    }
+}
 
 UInt Chunk_make_constant(VM* vm, Chunk* chunk, Value value)
 {
@@ -18,13 +33,13 @@ UInt Chunk_make_constant(VM* vm, Chunk* chunk, Value value)
 }
 
 /* Initializes the Chunk */
-void Chunk_init(Chunk* chunk)
+void Chunk_init(Chunk* chunk, VM* vm)
 {
-    Array_Byte_init(&chunk->code);
+    Array_Byte_init(&chunk->code, vm);
     chunk->constants = NULL;
     chunk->clen      = 0;
     chunk->ccap      = 0;
-    Array_UInt_init(&chunk->lines);
+    Array_UInt_init(&chunk->lines, vm);
 }
 
 /* Writes OpCodes that require no parameters */
@@ -44,15 +59,15 @@ void Chunk_free(Chunk* chunk, VM* vm)
 }
 
 /* Write long param (24-bit) */
-SK_INTERNAL(force_inline void) Chunk_write_param24(Chunk* chunk, UInt param, UInt line)
+sstatic force_inline void Chunk_write_param24(Chunk* chunk, UInt param, UInt line)
 {
     Chunk_write(chunk, BYTE(param, 0), line);
     Chunk_write(chunk, BYTE(param, 1), line);
     Chunk_write(chunk, BYTE(param, 2), line);
 }
 
-SK_INTERNAL(force_inline void)
-Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
+sstatic force_inline void
+    Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
 {
     Chunk_write(chunk, code, line);
     if(!islong) {
@@ -65,7 +80,7 @@ Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
 /* Write generic OpCode-s with parameters. */
 void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 {
-#ifdef SK_PRECOMPUTED_GOTO
+#ifdef S_PRECOMPUTED_GOTO
     #define OP_TABLE
     #include "jmptable.h"
     #undef OP_TABLE
@@ -179,21 +194,4 @@ UInt Chunk_getline(Chunk* chunk, UInt index)
     }
 
     return *Array_UInt_index(line_array, idx + 1);
-}
-
-/**
- * RLA-ENCODED:
- * LOW ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ HIGH
- * [instruction_index, line_number, instruction_index, line_number, ...]
- *
- * Writes the current line into the chunk line array only if the line is bigger than the
- * last one. Additionally stores the index of the instruction in order to retrieve it if
- * 'Chunk_getline' gets called; it gets called only during debug or run-time errors.
- */
-SK_INTERNAL(void) LineArray_write(Array_UInt* lines, UInt line, UInt index)
-{
-    if(Array_UInt_len(lines) <= 0 || *Array_UInt_last(lines) < line) {
-        Array_UInt_push(lines, index);
-        Array_UInt_push(lines, line);
-    }
 }

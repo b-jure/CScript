@@ -42,7 +42,7 @@ Byte nil_to_str_generic(char* dest, UInt len)
     return len;
 }
 
-SK_INTERNAL(force_inline ObjString*) dbl_to_str(VM* vm, double n)
+sstatic force_inline ObjString* dbl_to_str(VM* vm, double n)
 {
     static char buff[30];
     size_t      len    = dbl_to_str_generic(n, buff, 30);
@@ -50,7 +50,7 @@ SK_INTERNAL(force_inline ObjString*) dbl_to_str(VM* vm, double n)
     return string;
 }
 
-SK_INTERNAL(force_inline ObjString*) bool_to_str(VM* vm, bool boolean)
+sstatic force_inline ObjString* bool_to_str(VM* vm, bool boolean)
 {
     char*  str = NULL;
     ushort len = 0;
@@ -66,7 +66,7 @@ SK_INTERNAL(force_inline ObjString*) bool_to_str(VM* vm, bool boolean)
 
 ObjString* Value_to_str(VM* vm, Value value)
 {
-#ifdef NAN_BOXING
+#ifdef S_NAN_BOX
 
     if(IS_BOOL(value)) {
         return bool_to_str(vm, AS_BOOL(value));
@@ -80,7 +80,7 @@ ObjString* Value_to_str(VM* vm, Value value)
 
 #else
 
-    #ifdef SK_PRECOMPUTED_GOTO
+    #ifdef S_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
         #undef VAL_TABLE
@@ -120,7 +120,7 @@ ObjString* Value_to_str(VM* vm, Value value)
 
 void Value_print(Value value)
 {
-#ifdef NAN_BOXING
+#ifdef S_NAN_BOX
 
     if(IS_BOOL(value)) {
         printf(AS_BOOL(value) ? "true" : "false");
@@ -140,7 +140,7 @@ void Value_print(Value value)
 
 #else
 
-    #ifdef SK_PRECOMPUTED_GOTO
+    #ifdef S_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
         #undef BREAK
@@ -189,14 +189,14 @@ void Value_print(Value value)
 #endif
 }
 
-#ifndef NAN_BOXING
+#ifndef S_NAN_BOX
 bool Value_eq(Value a, Value b)
 {
     if(a.type != b.type) {
         return false;
     }
 
-    #ifdef SK_PRECOMPUTED_GOTO
+    #ifdef S_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
         #undef VAL_TABLE
@@ -233,7 +233,7 @@ bool Value_eq(Value a, Value b)
 
 Hash Value_hash(Value value)
 {
-#ifdef NAN_BOXING
+#ifdef S_NAN_BOX
 
     if(IS_BOOL(value)) {
         return AS_BOOL(value) ? 1 : 0;
@@ -241,7 +241,7 @@ Hash Value_hash(Value value)
         return Obj_hash(value);
     } else if(IS_NUMBER(value)) {
         double num = AS_NUMBER(value);
-        if(floor(AS_NUMBER(value)) != AS_NUMBER(value) || AS_NUMBER(value) < 0) {
+        if(floor(num) != num || num < 0) {
             return Hash_double(num);
         } else {
             return num;
@@ -249,7 +249,7 @@ Hash Value_hash(Value value)
     }
 
 #else
-    #ifdef SK_PRECOMPUTED_GOTO
+    #ifdef S_PRECOMPUTED_GOTO
         #define VAL_TABLE
         #include "jmptable.h"
         #undef VAL_TABLE

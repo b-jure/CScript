@@ -142,7 +142,7 @@ struct ObjBoundMethod {
     Obj*  method;   // ObjClosure of ObjFunction
 };
 
-typedef bool (*NativeFn)(VM* vm, Value* argv);
+typedef bool (*NativeFn)(VM* vm, Value* argv, Int argc);
 
 typedef struct {
     Obj        obj;

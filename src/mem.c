@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Generic function signature for Mark and Sweep functions
+#define MANDS_FN(name) sstatic force_inline void name(VM* vm)
 
 void mark_obj(VM* vm, Obj* obj)
 {
@@ -19,14 +21,13 @@ void mark_obj(VM* vm, Obj* obj)
     }
 
     Obj_mark_set(obj, true);
+    ASSERT(Obj_marked(obj), "Object not marked right after call to Obj_mark_set().");
     if(Obj_type(obj) == OBJ_STRING) {
-
 #ifdef DEBUG_LOG_GC
         printf("%p blacken ", (void*)obj);
         Value_print(OBJ_VAL(obj));
         printf("\n");
 #endif
-
         return;
     }
 
@@ -36,10 +37,11 @@ void mark_obj(VM* vm, Obj* obj)
     printf("\n");
 #endif
 
-    Array_ObjRef_push(&vm->gray_stack, obj);
+    GSARRAY_PUSH(vm, obj);
 }
 
-SK_INTERNAL(force_inline void) mark_table(VM* vm, HashTable* table)
+// helper
+sstatic force_inline void mark_table(VM* vm, HashTable* table)
 {
     for(UInt i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
@@ -50,7 +52,7 @@ SK_INTERNAL(force_inline void) mark_table(VM* vm, HashTable* table)
     }
 }
 
-SK_INTERNAL(force_inline void) mark_globals(VM* vm)
+MANDS_FN(mark_globals)
 {
     for(UInt i = 0; i < vm->globids.cap; i++) {
         Entry* entry = &vm->globids.entries[i];
@@ -65,45 +67,91 @@ SK_INTERNAL(force_inline void) mark_globals(VM* vm)
     }
 }
 
-SK_INTERNAL(force_inline void) mark_stack(VM* vm)
+MANDS_FN(mark_stack)
 {
     for(Value* local = vm->stack; local < vm->sp; local++) {
         mark_value(vm, *local);
     }
 }
 
-SK_INTERNAL(force_inline void) mark_frames(VM* vm)
+MANDS_FN(mark_frames)
 {
     for(Int i = 0; i < vm->fc; i++) {
-        if(vm->frames[i].closure == NULL) {
-            mark_obj(vm, (Obj*)vm->frames[i].fn);
-        } else {
-            mark_obj(vm, (Obj*)vm->frames[i].closure);
-        }
+        mark_obj(vm, vm->frames[i].fn);
     }
 }
 
-SK_INTERNAL(force_inline void) mark_upvalues(VM* vm)
+MANDS_FN(mark_upvalues)
 {
     for(ObjUpvalue* upval = vm->open_upvals; upval != NULL; upval = upval->next) {
         mark_obj(vm, (Obj*)upval);
     }
 }
 
-SK_INTERNAL(force_inline void) mark_statics(VM* vm)
+MANDS_FN(mark_statics)
 {
     for(UInt i = 0; i < SS_SIZE; i++) {
         mark_obj(vm, (Obj*)vm->statics[i]);
     }
 }
 
-SK_INTERNAL(force_inline void) mark_vm_roots(VM* vm)
+MANDS_FN(mark_loaded)
+{
+    mark_table(vm, &vm->loaded);
+}
+
+MANDS_FN(mark_temp)
+{
+    for(UInt i = 0; i < vm->tempc; i++) {
+        mark_value(vm, vm->temp[i]);
+    }
+}
+
+MANDS_FN(mark_vm_roots)
 {
     mark_stack(vm);
     mark_frames(vm);
     mark_upvalues(vm);
     mark_globals(vm);
     mark_statics(vm);
+    mark_loaded(vm);
+    mark_temp(vm);
+    mark_value(vm, vm->script); // @? Remove
+}
+
+MANDS_FN(remove_weak_refs)
+{
+    for(UInt i = 0; i < vm->strings.cap; i++) {
+        Entry* entry = &vm->strings.entries[i];
+        if(IS_OBJ(entry->key) && !Obj_marked(AS_OBJ(entry->key))) {
+            HashTable_remove(&vm->strings, entry->key);
+        }
+    }
+}
+
+MANDS_FN(sweep)
+{
+    Obj* previous = NULL;
+    Obj* current  = vm->objects;
+
+    while(current != NULL) {
+        if(Obj_marked(current)) {
+            Obj_mark_set(current, false);
+            ASSERT(Obj_marked(current) == false, "Object remained marked after unmarking.");
+            previous = current;
+            current  = Obj_next(current);
+        } else {
+            Obj* unreached = current;
+            current        = Obj_next(current);
+            if(previous != NULL) {
+                Obj_next_set(previous, current);
+            } else {
+                vm->objects = current;
+            }
+
+            Obj_free(vm, unreached);
+        }
+    }
 }
 
 void mark_black(VM* vm, Obj* obj)
@@ -111,10 +159,10 @@ void mark_black(VM* vm, Obj* obj)
 #ifdef DEBUG_LOG_GC
     printf("%p blacken ", (void*)obj);
     Value_print(OBJ_VAL(obj));
-    printf("\n");
+    printf(" header: 0x%08lx\n", obj->header);
 #endif
 
-#ifdef SK_PRECOMPUTED_GOTO
+#ifdef S_PRECOMPUTED_GOTO
     #define OBJ_TABLE
     #include "jmptable.h"
     #undef OBJ_TABLE
@@ -123,6 +171,8 @@ void mark_black(VM* vm, Obj* obj)
     #define CASE(label) case label:
     #define BREAK       break
 #endif
+
+    ASSERT(Obj_marked(obj), "Object in mark_black() must be marked.");
 
     DISPATCH(Obj_type(obj))
     {
@@ -183,41 +233,6 @@ void mark_black(VM* vm, Obj* obj)
     }
 }
 
-SK_INTERNAL(force_inline void) remove_weak_refs(VM* vm)
-{
-    for(UInt i = 0; i < vm->strings.cap; i++) {
-        Entry* entry = &vm->strings.entries[i];
-        if(IS_OBJ(entry->key) && !Obj_marked(AS_OBJ(entry->key))) {
-            HashTable_remove(&vm->strings, entry->key);
-        }
-    }
-}
-
-SK_INTERNAL(force_inline void) sweep(VM* vm)
-{
-    Obj* previous = NULL;
-    Obj* current  = vm->objects;
-
-    while(current != NULL) {
-        if(Obj_marked(current)) {
-            Obj_mark_set(current, false);
-            ASSERT(Obj_marked(current) == false, "Object remained marked after unmarking.");
-            previous = current;
-            current  = Obj_next(current);
-        } else {
-            Obj* unreached = current;
-            current        = Obj_next(current);
-            if(previous != NULL) {
-                Obj_next_set(previous, current);
-            } else {
-                vm->objects = current;
-            }
-
-            Obj_free(vm, unreached);
-        }
-    }
-}
-
 size_t gc(VM* vm)
 {
 #ifdef DEBUG_LOG_GC
@@ -227,7 +242,7 @@ size_t gc(VM* vm)
     size_t old_allocation = vm->gc_allocated;
     mark_vm_roots(vm);
 
-#ifdef SK_PRECOMPUTED_GOTO
+#ifdef S_PRECOMPUTED_GOTO
     static const void* jmptable[] = {&&mark, &&skip};
 
     goto* jmptable[runtime];
@@ -238,8 +253,8 @@ skip:
     mark_c_roots(vm);
 #endif
 
-    while(vm->gray_stack.len > 0) {
-        mark_black(vm, Array_ObjRef_pop(&vm->gray_stack));
+    while(vm->gslen > 0) {
+        mark_black(vm, GSARRAY_POP(vm));
     }
 
     remove_weak_refs(vm);
@@ -265,6 +280,7 @@ skip:
 void* gc_reallocate(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 {
     vm->gc_allocated += newc - oldc;
+    ASSERT(newc > oldc, "Tried freeing memory with gc_reallocate() (or zero sized allocation).");
 
 #ifdef DEBUG_STRESS_GC
     if(newc > oldc) {
@@ -272,13 +288,8 @@ void* gc_reallocate(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
     }
 #else
 
-    // Guard against nested gc_reallocate() calls,
-    // this can occur when user fiddles with the gc api
-    // provided in core.c as native functions.
-    if(newc - oldc > 0) {
-        if(!GC_CHECK(vm, GC_MANUAL_BIT) && vm->gc_next < vm->gc_allocated) {
-            gc(vm);
-        }
+    if(!GC_CHECK(vm, GC_MANUAL_BIT) && vm->gc_next < vm->gc_allocated) {
+        gc(vm);
     }
 
 #endif
@@ -290,6 +301,7 @@ void* gc_reallocate(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 void* gc_free(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 {
     vm->gc_allocated += newc - oldc;
+    ASSERT(newc <= oldc, "Tried allocating memory with gc_free().");
     return REALLOC(vm, ptr, newc);
 }
 

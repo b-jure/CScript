@@ -3,8 +3,6 @@
 
 #include "array.h"
 
-typedef struct VM VM;
-
 #include "chunk.h"
 #include "core.h"
 #include "hashtable.h"
@@ -12,30 +10,38 @@ typedef struct VM VM;
 #include "value.h"
 
 // Max depth of CallFrames
-#define VM_FRAMES_MAX SK_CALLFRAMES_MAX
+#define VM_FRAMES_MAX S_CALLFRAMES_MAX
 
 // Max stack size
-#define VM_STACK_MAX ((uint32_t)(SK_STACK_MAX / sizeof(Value)))
+#define VM_STACK_MAX (S_STACK_MAX / sizeof(Value))
 
 
 
+
+// Get frame function
+#define FRAME_FN(frame) GET_FN((frame)->fn)
+// Get frame closure
+#define FRAME_CLOSURE(frame) ((ObjClosure*)(frame->fn))
+// Get function from obj
+#define GET_FN(obj)                                                                                \
+    (Obj_type(obj) == OBJ_CLOSURE ? ((ObjClosure*)(obj))->fn : ((ObjFunction*)(obj)))
 
 typedef struct {
-    ObjClosure*  closure;
-    ObjFunction* fn;
-    Byte*        ip; /* Top of the CallFrame */
-    Value*       sp; /* Relative stack pointer */
+    Obj*   fn;
+    Byte*  ip; /* Top of the CallFrame */
+    Value* sp; /* Relative stack pointer */
 } CallFrame;
 
 
 
 
-#define GLOB_FIXED_BIT (1)
+#define VAR_FIXED_BIT     (1)
+#define ISFIXED(variable) VAR_CHECK(variable, VAR_FIXED_BIT)
 
-#define GLOB_SET(glob, bit)   BIT_SET((glob)->flags, bit)
-#define GLOB_CLEAR(glob, bit) BIT_CLEAR((glob)->flags, bit)
-#define GLOB_CHECK(glob, bit) BIT_CHECK((glob)->flags, bit)
-#define GLOB_FLAGS(glob)      ((glob)->flags)
+#define VAR_SET(variable, bit)   BIT_SET((variable)->flags, bit)
+#define VAR_CLEAR(variable, bit) BIT_CLEAR((variable)->flags, bit)
+#define VAR_CHECK(variable, bit) BIT_CHECK((variable)->flags, bit)
+#define VAR_FLAGS(variable)      ((variable)->flags)
 
 typedef struct {
     Value value; /* Global value */
@@ -47,7 +53,7 @@ typedef struct {
      * 8 - unused
      */
     Byte flags;
-} Global;
+} Variable;
 
 
 
@@ -62,16 +68,23 @@ typedef struct {
 
 
 
-
-ARRAY_NEW(Array_Global, Global);
 ARRAY_NEW(Array_ObjRef, Obj*);
 
 struct VM {
+    // Temporary values (loaded functions)
+    Value temp[S_TEMP_MAX];
+    UInt  tempc;
+
+
+
     // VM configuration
     Config config;
 
     // Loaded scripts (filenames)
     HashTable loaded;
+
+    // Currently compiled script (name)
+    Value script;
 
     // Track innermost compiler for gc.
     Compiler* compiler;
@@ -86,7 +99,7 @@ struct VM {
 
     // Global names and values storage
     HashTable globids;  /* Global names (GC) */
-    Global*   globvals; /* Global values (GC) */
+    Variable* globvals; /* Global values (GC) */
     UInt      globlen;  /* Global array length */
     UInt      globcap;  /* Global array capacity */
 
@@ -96,15 +109,21 @@ struct VM {
     // Closure values
     ObjUpvalue* open_upvals; // List of open upvalues (NO GC)
 
-    // static strings but allocated as ObjString's
+    // Static strings but allocated as ObjString's.
+    // Do not store them in global table, some
+    // of these are reserved for native functions in
+    // order to do object comparison or avoid runtime
+    // allocation.
     ObjString* statics[SS_SIZE];
 
     // Garbage collection
-    Obj*         objects;      /* List of allocated object (GC) */
-    Array_ObjRef gray_stack;   /* marked objects stack (NO GC) */
-    size_t       gc_allocated; /* count of allocated bytes */
-    size_t       gc_next;      /* next byte threshold on which GC triggers */
-    Byte         gc_flags;     /* GC flags */
+    Obj*   objects; /* List of allocated object (GC) */
+    Obj**  gray_stack;
+    UInt   gslen;
+    UInt   gscap;
+    size_t gc_allocated; /* count of allocated bytes */
+    size_t gc_next;      /* next byte threshold on which GC triggers */
+    Byte   gc_flags;     /* GC flags */
 };
 
 
@@ -119,10 +138,14 @@ typedef enum {
 
 
 
-VM*             VM_new(Config* config);
-InterpretResult VM_interpret(VM* vm, const char* source_code);
+InterpretResult VM_interpret(VM* vm, const char* source, const char* filename);
+bool            VM_call_fn(VM* vm, Obj* callee, Int argc, bool init, ObjClass* debug);
 void            VM_push(VM* vm, Value val);
 Value           VM_pop(VM* vm);
+void            VM_push_temp(VM* vm, Value temp);
+Value           VM_pop_temp(VM* vm);
 void            VM_free(VM* vm);
+void            _cleanup_vm(VM* vm);
+VM*             VM_new(Config* config);
 
 #endif

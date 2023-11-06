@@ -8,7 +8,7 @@
 
 Hash Hash_double(double dbl)
 {
-    if(is_infinity(dbl) || is_nan(dbl)) {
+    if(sisinf(dbl) || sisnan(dbl)) {
         return (dbl > 0) ? HASH_INF : -HASH_INF;
     }
 

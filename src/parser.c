@@ -1,4 +1,5 @@
 #include "common.h"
+#include "debug.h"
 #include "object.h"
 #include "parser.h"
 #include "skconf.h"
@@ -17,17 +18,17 @@ typedef enum {
     NUM_OCT,
 } NumberType;
 
-SK_INTERNAL(force_inline Token) Token_new(Parser* parser, TokenType type);
-SK_INTERNAL(Token) Token_error(Parser* parser, const char* err);
-SK_INTERNAL(force_inline Token) parse_string(Parser* parser);
-SK_INTERNAL(force_inline Token) parse_hex(Parser* parser);
-SK_INTERNAL(force_inline Token) parse_octal(Parser* parser);
-SK_INTERNAL(force_inline Token) parse_decimal(Parser* parser);
-SK_INTERNAL(force_inline Token) Token_identifier(Parser* parser);
-SK_INTERNAL(TokenType) TokenType_identifier(Parser* parser);
-SK_INTERNAL(force_inline void) Parser_skipws(Parser* parser);
-SK_INTERNAL(force_inline bool) Parser_match(Parser* parser, char c);
-SK_INTERNAL(TokenType)
+sstatic force_inline Token Token_new(Parser* parser, TokenType type);
+sstatic Token              Token_error(Parser* parser, const char* err);
+sstatic force_inline Token parse_string(Parser* parser);
+sstatic force_inline Token parse_hex(Parser* parser);
+sstatic force_inline Token parse_octal(Parser* parser);
+sstatic force_inline Token parse_decimal(Parser* parser);
+sstatic force_inline Token Token_identifier(Parser* parser);
+sstatic TokenType          TokenType_identifier(Parser* parser);
+sstatic force_inline void  Parser_skipws(Parser* parser);
+sstatic force_inline bool  Parser_match(Parser* parser, char c);
+sstatic TokenType
 check_keyword(Parser* parser, UInt start, UInt end, const char* pattern, TokenType type);
 
 
@@ -38,9 +39,15 @@ check_keyword(Parser* parser, UInt start, UInt end, const char* pattern, TokenTy
 
 void print_error(Parser* parser, const char* err, va_list args)
 {
+    PFLAG_SET(parser, PANIC_BIT);
+    PFLAG_SET(parser, ERROR_BIT);
+
+    ASSERT(PFLAG_CHECK(parser, PANIC_BIT), "Panic flag not set after printing the error.");
+    ASSERT(PFLAG_CHECK(parser, ERROR_BIT), "Error flag not set after printing the error.");
+
     const Token* token = &parser->previous;
 
-    fprintf(stderr, "[line: %u] Error", token->line);
+    fprintf(stderr, "skooma: [%s][line: %u] Error", AS_CSTRING(parser->vm->script), token->line);
 
     if(token->type == TOK_EOF) {
         fprintf(stderr, " at end of file");
@@ -53,26 +60,22 @@ void print_error(Parser* parser, const char* err, va_list args)
     putc('\n', stderr);
 }
 
-SK_INTERNAL(void) Parser_error(Parser* parser, const char* err, ...)
+sstatic void Parser_error(Parser* parser, const char* err, ...)
 {
     va_list args;
-
-    PFLAG_SET(parser, PANIC_BIT);
-    PFLAG_SET(parser, ERROR_BIT);
-
     va_start(args, err);
     print_error(parser, err, args);
     va_end(args);
 }
 
-SK_INTERNAL(force_inline void) advance(Parser* parser)
+sstatic force_inline void advance(Parser* parser)
 {
     if(*parser->_current++ == '\n') {
         parser->line++;
     }
 }
 
-SK_INTERNAL(force_inline char) nextchar(Parser* parser)
+sstatic force_inline char nextchar(Parser* parser)
 {
     char c = *parser->_current++;
     if(c == '\n') {
@@ -85,6 +88,7 @@ Parser Parser_new(const char* source, VM* vm)
 {
     return (Parser){
         .vm       = vm,
+        .source   = source,
         .start    = source,
         ._current = source,
         .line     = 1,
@@ -117,7 +121,7 @@ Token Parser_next(Parser* parser)
         }
     }
 
-#ifdef SK_PRECOMPUTED_GOTO
+#ifdef S_PRECOMPUTED_GOTO
     #define ERR &&err
     // IMPORTANT: update accordingly if TokenType enum changes!
     static const void* jump_table[UINT8_MAX + 1] = {
@@ -250,7 +254,7 @@ err:
 #endif
 }
 
-SK_INTERNAL(bool) Parser_match(Parser* parser, char c)
+sstatic bool Parser_match(Parser* parser, char c)
 {
     if(isend(parser) || c != peek(parser)) {
         return false;
@@ -259,7 +263,7 @@ SK_INTERNAL(bool) Parser_match(Parser* parser, char c)
     return true;
 }
 
-SK_INTERNAL(force_inline void) Parser_skipws(Parser* parser)
+sstatic force_inline void Parser_skipws(Parser* parser)
 {
     while(true) {
         switch(peek(parser)) {
@@ -296,7 +300,7 @@ Token Token_syn_new(const char* name)
     };
 }
 
-SK_INTERNAL(force_inline Token) Token_new(Parser* parser, TokenType type)
+sstatic force_inline Token Token_new(Parser* parser, TokenType type)
 {
     Token token;
     token.type  = type;
@@ -306,7 +310,7 @@ SK_INTERNAL(force_inline Token) Token_new(Parser* parser, TokenType type)
     return token;
 }
 
-SK_INTERNAL(force_inline Token) Token_error(Parser* parser, const char* err)
+sstatic force_inline Token Token_error(Parser* parser, const char* err)
 {
     Token token;
     token.type  = TOK_ERROR;
@@ -316,7 +320,7 @@ SK_INTERNAL(force_inline Token) Token_error(Parser* parser, const char* err)
     return token;
 }
 
-SK_INTERNAL(force_inline Int) parse_hex_digit(Parser* parser)
+sstatic force_inline Int parse_hex_digit(Parser* parser)
 {
     char hex = nextchar(parser);
 
@@ -332,7 +336,7 @@ SK_INTERNAL(force_inline Int) parse_hex_digit(Parser* parser)
     return -1;
 }
 
-SK_INTERNAL(force_inline Int) parse_esc_hex(Parser* parser)
+sstatic force_inline Int parse_esc_hex(Parser* parser)
 {
     Int number = 0;
 
@@ -357,10 +361,10 @@ SK_INTERNAL(force_inline Int) parse_esc_hex(Parser* parser)
 }
 
 // @TODO: Prevent __init__ from being called like this: class.__init__()
-SK_INTERNAL(force_inline Token) parse_string(Parser* parser)
+sstatic force_inline Token parse_string(Parser* parser)
 {
     Array_Byte buffer;
-    Array_Byte_init(&buffer);
+    Array_Byte_init(&buffer, parser->vm);
 
     while(true) {
         char c = nextchar(parser);
@@ -421,7 +425,6 @@ SK_INTERNAL(force_inline Token) parse_string(Parser* parser)
     }
 
     ObjString* string = ObjString_from(parser->vm, (void*)buffer.data, buffer.len);
-
     Array_Byte_free(&buffer, NULL);
 
     Token token = Token_new(parser, TOK_STRING);
@@ -429,7 +432,7 @@ SK_INTERNAL(force_inline Token) parse_string(Parser* parser)
     return token;
 }
 
-SK_INTERNAL(Token) Token_number(Parser* parser, NumberType type)
+sstatic Token Token_number(Parser* parser, NumberType type)
 {
     errno = 0;
 
@@ -458,7 +461,7 @@ SK_INTERNAL(Token) Token_number(Parser* parser, NumberType type)
     return token;
 }
 
-SK_INTERNAL(Token) parse_octal(Parser* parser)
+sstatic Token parse_octal(Parser* parser)
 {
     nextchar(parser); // skip leading zero
 
@@ -474,7 +477,7 @@ SK_INTERNAL(Token) parse_octal(Parser* parser)
     return Token_number(parser, NUM_OCT);
 }
 
-SK_INTERNAL(Token) parse_hex(Parser* parser)
+sstatic Token parse_hex(Parser* parser)
 {
     nextchar(parser); // skip 'x' or 'X'
 
@@ -488,7 +491,7 @@ SK_INTERNAL(Token) parse_hex(Parser* parser)
     return Token_number(parser, NUM_HEX);
 }
 
-SK_INTERNAL(Token) parse_decimal(Parser* parser)
+sstatic Token parse_decimal(Parser* parser)
 {
     while(isdigit(peek(parser))) {
         advance(parser);
@@ -522,7 +525,7 @@ SK_INTERNAL(Token) parse_decimal(Parser* parser)
     return Token_number(parser, NUM_DEC);
 }
 
-SK_INTERNAL(force_inline Token) Token_identifier(Parser* parser)
+sstatic force_inline Token Token_identifier(Parser* parser)
 {
     char c;
     while(isalnum((c = peek(parser))) || c == '_') {
@@ -532,9 +535,9 @@ SK_INTERNAL(force_inline Token) Token_identifier(Parser* parser)
     return Token_new(parser, TokenType_identifier(parser));
 }
 
-SK_INTERNAL(TokenType) TokenType_identifier(Parser* parser)
+sstatic TokenType TokenType_identifier(Parser* parser)
 {
-#ifdef SK_PRECOMPUTED_GOTO
+#ifdef S_PRECOMPUTED_GOTO
     #define RET &&ret
     // IMPORTANT: update accordingly if parser tokens change!
     static const void* jump_table[UINT8_MAX + 1] = {
@@ -738,7 +741,7 @@ ret:
     return TOK_IDENTIFIER;
 }
 
-SK_INTERNAL(force_inline TokenType)
+sstatic force_inline TokenType
 check_keyword(Parser* parser, UInt start, UInt length, const char* pattern, TokenType type)
 {
     if(parser->_current - parser->start == start + length &&

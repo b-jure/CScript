@@ -45,7 +45,7 @@ static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double'
 
 #if defined(__GNUC__)
 
-    #define SK_PRECOMPUTED_GOTO
+    #define S_PRECOMPUTED_GOTO
 
     #define force_inline   __always_inline
     #define likely(cond)   __glibc_likely(cond)
@@ -75,7 +75,7 @@ static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double'
 
 #elif defined(__clang__)
 
-    #define SK_PRECOMPUTED_GOTO
+    #define S_PRECOMPUTED_GOTO
 
     #if __has_attribute(always_inline)
         #define force_inline __attribute__((always_inline))
@@ -121,20 +121,45 @@ static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double'
 
 
 
-#define SK_INTERNAL(ret) static ret
+#define sstatic static
 
-/* Max stack size in bytes, default 1 MiB */
-#define SK_STACK_MAX (1 << 20)
+#ifdef DEBUG
+    #define sdebug
+#else
+    #define sdebug unused
+#endif
 
-/* Max function call frames. */
-#define SK_CALLFRAMES_MAX 1024
+/**
+ * Max stack size in bytes, default set to 524 KiB.
+ **/
+#define S_STACK_MAX (1 << 19)
 
-/* Allow NaN boxing of values. */
-#define SK_NAN_BOX
+/**
+ * Max temporary values VM can hold.
+ * This stack grows only when loading scripts.
+ * Each new script that gets loaded grows the stack.
+ **/
+#define S_TEMP_MAX 64
+
+/**
+ * Max function call frames.
+ * This grows each time user calls a
+ * callable value.
+ **/
+#define S_CALLFRAMES_MAX 256
+
+/**
+ * Allow NaN boxing of values.
+ * NaN boxing requires that systems uses
+ * lower 48 bits of a pointer for the actual
+ * memory addressing and that memory is 4/8 byte
+ * aligned.
+ * Note: Skooma only compiles on 64-bit machines.
+ **/
+#define S_NAN_BOX
 
 /* Default heap grow factor */
 #define GC_HEAP_GROW_FACTOR 2
-
 
 
 
@@ -144,37 +169,83 @@ static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double'
     /* Enable asserts */
     #define DEBUG_ASSERTIONS
 
-    /* Print and disassemble bytecode */
+    /* Print and disassemble bytecode for each chunk/function */
     #define DEBUG_PRINT_CODE
 
-    /* Trace VM stack */
+    /* Trace VM stack while executing */
     #define DEBUG_TRACE_EXECUTION
 
     /* Run garbage collection on each allocation */
-    // #define DEBUG_STRESS_GC
+    #define DEBUG_STRESS_GC
 
     /* Log garbage collection */
-    #define DEBUG_LOG_GC
+    // #define DEBUG_LOG_GC
+
+    /* Dump stack of local variables on compile error */
+    #define DEBUG_LOCAL_STACK
 
 #endif
 
 
+/* Virtual Machine (more in 'vm.h') */
+typedef struct VM VM;
 
-/* Generic allocator function, used for every allocation, free and reallocation. */
+
+/**
+ * Generic allocator function, used for every allocation, free and reallocation.
+ * */
 typedef void* (*AllocatorFn)(void* ptr, size_t newsize, void* userdata);
 
 
+/**
+ * Canonicalize the name of the script, the returned name will
+ * be used: when reporting error inside that script, in comparisons
+ * when resolving duplicate imports and finally will be passed
+ * to 'ScriptLoadFinFn' as argument.
+ **/
+typedef const char* (*ScriptRenameFn)(VM* vm, const char* importer_script, const char* name);
+
+
+/* Forward declare */
+typedef struct ScriptLoadResult ScriptLoadResult;
+
+
+/**
+ * Function called after 'ScriptLoadFn' finishes, to perform
+ * cleanup (if any).
+ **/
+typedef void (*ScriptLoadFinFn)(VM* vm, const char* name, ScriptLoadResult result);
+
+
+/* Return result of 'ScriptLoadFn'. */
+struct ScriptLoadResult {
+    const char*     source;   // Source file
+    ScriptLoadFinFn finfn;    // Cleanup/post-script-load function
+    void*           userdata; // Custom user data (if any)
+};
+
+
+/**
+ * Finds and loads the script returning 'ScriptLoadResult'.
+ * Any memory allocated inside this function is user managed.
+ * In order to cleanup that memory (if any) the 'ScriptLoadFinFn'
+ * function should be provided, that function will run right after
+ * this one finishes.
+ **/
+typedef ScriptLoadResult (*ScriptLoadFn)(VM* vm, const char* name);
 
 /**
  * User modifiable configuration.
  * Create and initialize this 'Config' struct and pass it to 'VM_new'.
  **/
 typedef struct {
-    AllocatorFn reallocate;        // Generic allocator function
-    void*       userdata;          // User data (for 'AllocatorFn')
-    size_t      gc_init_heap_size; // Initial heap allocation
-    size_t      gc_min_heap_size;  // Minimum size of heap after recalculation
-    double      gc_grow_factor;    // Heap grow factor
+    AllocatorFn    reallocate;        // Generic allocator function
+    ScriptRenameFn rename_script;     // Script rename fn
+    ScriptLoadFn   load_script;       // Script loader fn
+    void*          userdata;          // User data (for 'AllocatorFn')
+    size_t         gc_init_heap_size; // Initial heap allocation
+    size_t         gc_min_heap_size;  // Minimum size of heap after recalculation
+    double         gc_grow_factor;    // Heap grow factor
 } Config;
 
 void Config_init(Config* config);

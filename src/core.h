@@ -45,44 +45,46 @@ static const InternedString static_str[] = {
     {"Assert: ",          sizeofstr("Assert: ")         },
 };
 
+Value             resolve_script(VM* vm, Value name);
+const char*       load_script_default(VM* vm, const char* path);
 
 #define ISFALSEY(val) (IS_NIL(val) || (IS_BOOL(val) && !AS_BOOL(val)))
 
 /* Native functions written in C. */
-#define NATIVE(name) bool native_##name(VM* vm, Value* argv)
+#define snative(name) bool native_##name(VM* vm, Value* argv, Int argc)
 
 /* Time */
-NATIVE(clock);
+snative(clock);
 
 /* Class */
-NATIVE(isfield);
+snative(isfield);
 
 /* Input/Output functions */
-NATIVE(printl);
-NATIVE(print);
+snative(printl);
+snative(print);
 
 /* String functions */
-NATIVE(tostr);
-NATIVE(isstr);
-NATIVE(strlen);
-NATIVE(strpat);
-NATIVE(strsub);
+snative(tostr);
+snative(isstr);
+snative(strlen);
+snative(strpat);
+snative(strsub);
 
 /* Garbage collector API */
-NATIVE(gcfactor);
-NATIVE(gcmode);
-NATIVE(gccollect);
-NATIVE(gcleft);
-NATIVE(gcusage);
-NATIVE(gcnext);
-NATIVE(gcset);
-NATIVE(gcisauto);
+snative(gcfactor);
+snative(gcmode);
+snative(gccollect);
+snative(gcleft);
+snative(gcusage);
+snative(gcnext);
+snative(gcset);
+snative(gcisauto);
 
-NATIVE(assert);
-NATIVE(assertf);
-NATIVE(error);
+snative(assert);
+snative(assertf);
+snative(error);
 
 // @IMPLEMENT
-NATIVE(loadscript);
+snative(loadscript);
 
 #endif

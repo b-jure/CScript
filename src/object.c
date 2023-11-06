@@ -12,7 +12,7 @@
 
 #define ALLOC_STRING(vm, len) ((ObjString*)Obj_new(vm, sizeof(ObjString) + (len) + 1, OBJ_STRING))
 
-SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, size_t size, ObjType type)
+sstatic force_inline Obj* Obj_new(VM* vm, size_t size, ObjType type)
 {
     Obj* object = GC_MALLOC(vm, size);
 
@@ -32,7 +32,7 @@ SK_INTERNAL(force_inline Obj*) Obj_new(VM* vm, size_t size, ObjType type)
     return object;
 }
 
-SK_INTERNAL(force_inline ObjString*) ObjString_alloc(VM* vm, UInt len)
+sstatic force_inline ObjString* ObjString_alloc(VM* vm, UInt len)
 {
     ObjString* string = ALLOC_STRING(vm, len);
     string->len       = len;
@@ -49,9 +49,20 @@ ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
     }
 
     ObjString* string = ObjString_alloc(vm, len);
-    memcpy(string->storage, chars, len);
-    string->storage[len] = '\0';
-    string->hash         = hash;
+
+    /**
+     * According to C standard passing NULL pointer to memcpy
+     * is considered undefined behaviour even if the number
+     * of bytes to copy were 0.
+     **/
+    if(len == 0) {
+        *string->storage = '\0';
+    } else {
+        memcpy(string->storage, chars, len);
+        string->storage[len] = '\0';
+    }
+
+    string->hash = hash;
 
     VM_push(vm, OBJ_VAL(string)); // GC
     HashTable_insert(vm, &vm->strings, OBJ_VAL(string), NIL_VAL);
@@ -59,7 +70,7 @@ ObjString* ObjString_from(VM* vm, const char* chars, size_t len)
     return string;
 }
 
-SK_INTERNAL(force_inline void) ObjString_free(VM* vm, ObjString* string)
+sstatic force_inline void ObjString_free(VM* vm, ObjString* string)
 {
     GC_FREE(vm, string, sizeof(ObjString) + string->len + 1);
 }
@@ -74,7 +85,7 @@ ObjNative* ObjNative_new(VM* vm, ObjString* name, NativeFn fn, Int arity)
     return native;
 }
 
-SK_INTERNAL(force_inline void) ObjNative_free(VM* vm, ObjNative* native)
+sstatic force_inline void ObjNative_free(VM* vm, ObjNative* native)
 {
     GC_FREE(vm, native, sizeof(ObjNative));
 }
@@ -85,11 +96,11 @@ ObjFunction* ObjFunction_new(VM* vm)
     fn->arity       = 0;
     fn->name        = NULL;
     fn->upvalc      = 0;
-    Chunk_init(&fn->chunk);
+    Chunk_init(&fn->chunk, vm);
     return fn;
 }
 
-SK_INTERNAL(force_inline void) ObjFunction_free(VM* vm, ObjFunction* fn)
+sstatic force_inline void ObjFunction_free(VM* vm, ObjFunction* fn)
 {
     Chunk_free(&fn->chunk, vm);
     GC_FREE(vm, fn, sizeof(ObjFunction));
@@ -110,7 +121,7 @@ ObjClosure* ObjClosure_new(VM* vm, ObjFunction* fn)
     return closure;
 }
 
-SK_INTERNAL(force_inline void) ObjClosure_free(VM* vm, ObjClosure* closure)
+sstatic force_inline void ObjClosure_free(VM* vm, ObjClosure* closure)
 {
     GC_FREE(vm, closure->upvals, closure->upvalc * sizeof(ObjUpvalue*));
     GC_FREE(vm, closure, sizeof(ObjClosure));
@@ -125,7 +136,7 @@ ObjUpvalue* ObjUpvalue_new(VM* vm, Value* var_ref)
     return upval;
 }
 
-SK_INTERNAL(force_inline void) ObjUpvalue_free(VM* vm, ObjUpvalue* upval)
+sstatic force_inline void ObjUpvalue_free(VM* vm, ObjUpvalue* upval)
 {
     GC_FREE(vm, upval, sizeof(ObjUpvalue));
 }
@@ -139,7 +150,7 @@ ObjClass* ObjClass_new(VM* vm, ObjString* name)
     return cclass;
 }
 
-SK_INTERNAL(force_inline void) ObjClass_free(VM* vm, ObjClass* cclass)
+sstatic force_inline void ObjClass_free(VM* vm, ObjClass* cclass)
 {
     HashTable_free(vm, &cclass->methods);
     GC_FREE(vm, cclass, sizeof(ObjClass));
@@ -154,8 +165,7 @@ ObjInstance* ObjInstance_new(VM* vm, ObjClass* cclass)
     return instance;
 }
 
-SK_INTERNAL(force_inline void)
-ObjInstance_free(VM* vm, ObjInstance* instance)
+sstatic force_inline void ObjInstance_free(VM* vm, ObjInstance* instance)
 {
     HashTable_free(vm, &instance->fields);
     GC_FREE(vm, instance, sizeof(ObjInstance));
@@ -169,16 +179,16 @@ ObjBoundMethod* ObjBoundMethod_new(VM* vm, Value receiver, Obj* method)
     return bound_method;
 }
 
-SK_INTERNAL(force_inline void) print_fn(ObjFunction* fn)
+sstatic force_inline void print_fn(ObjFunction* fn)
 {
     if(unlikely(fn->name == NULL)) {
-        printf("<script>"); // Debug only
+        printf("<script>");
     } else {
-        printf("<fn %s>", fn->name->storage);
+        printf("<fn %s>: %p", fn->name->storage, fn);
     }
 }
 
-void ObjType_print(ObjType type) // Debug
+sdebug void ObjType_print(ObjType type)
 {
     switch(type) {
         case OBJ_STRING:
@@ -212,14 +222,14 @@ void ObjType_print(ObjType type) // Debug
 
 void Obj_print(Value value)
 {
-#ifdef SK_PRECOMPUTED_GOTO
+#ifdef S_PRECOMPUTED_GOTO
     #define OBJ_TABLE
     #include "jmptable.h"
     #undef OBJ_TABLE
 #else
     #define DISPATCH(x) switch(x)
     #define CASE(label) case label:
-    #define BREAK       break
+    #define BREAK       return
 #endif
 
     DISPATCH(OBJ_TYPE(value))
@@ -241,7 +251,7 @@ void Obj_print(Value value)
         }
         CASE(OBJ_NATIVE)
         {
-            printf("<native fn %s>", AS_NATIVE(value)->name->storage);
+            printf("<native-fn %s>", AS_NATIVE(value)->name->storage);
             BREAK;
         }
         CASE(OBJ_UPVAL)
@@ -252,12 +262,12 @@ void Obj_print(Value value)
         }
         CASE(OBJ_CLASS)
         {
-            printf("%s", AS_CLASS(value)->name->storage);
+            printf("%p-%s", AS_OBJ(value), AS_CLASS(value)->name->storage);
             BREAK;
         }
         CASE(OBJ_INSTANCE)
         {
-            printf("%s instance", AS_INSTANCE(value)->cclass->name->storage);
+            printf("%p-%s instance", AS_OBJ(value), AS_INSTANCE(value)->cclass->name->storage);
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
@@ -292,8 +302,7 @@ Hash Obj_hash(Value value)
 }
 
 
-SK_INTERNAL(force_inline void)
-ObjBoundMethod_free(VM* vm, ObjBoundMethod* bound_method)
+sstatic force_inline void ObjBoundMethod_free(VM* vm, ObjBoundMethod* bound_method)
 {
     GC_FREE(vm, bound_method, sizeof(ObjBoundMethod));
 }
@@ -306,14 +315,14 @@ void Obj_free(VM* vm, Obj* object)
     printf("\n");
 #endif
 
-#ifdef SK_PRECOMPUTED_GOTO
+#ifdef S_PRECOMPUTED_GOTO
     #define OBJ_TABLE
     #include "jmptable.h"
     #undef OBJ_TABLE
 #else
     #define DISPATCH(x) switch(x)
     #define CASE(label) case label:
-    #define BREAK       break
+    #define BREAK       return
 #endif
 
     DISPATCH(Obj_type(object))
@@ -369,14 +378,14 @@ void Obj_free(VM* vm, Obj* object)
 
 ObjString* Obj_to_str(VM* vm, Obj* object)
 {
-#ifdef SK_PRECOMPUTED_GOTO
+#ifdef S_PRECOMPUTED_GOTO
     #define OBJ_TABLE
     #include "jmptable.h"
     #undef OBJ_TABLE
 #else
     #define DISPATCH(x) switch(x)
     #define CASE(label) case label:
-    #define BREAK       break
+    #define BREAK       return
 #endif
 
     DISPATCH(Obj_type(object))

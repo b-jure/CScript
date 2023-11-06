@@ -42,7 +42,7 @@ target_include_directories(${BIN} PRIVATE ${SRCDIR})
 # ASAN
 set(ASAN_FLAGS -fsanitize=address -fsanitize=undefined)
 # compile flags
-set(D_CFLAGS ${CFLAGS} ${ASAN_FLAGS} -O0 -g -fno-omit-frame-pointer)
+set(D_CFLAGS ${CFLAGS} ${ASAN_FLAGS} -O0 -g3 -ggdb -fkeep-inline-functions -fno-omit-frame-pointer)
 # link flags
 set(D_LFLAGS ${ASAN_FLAGS})
 

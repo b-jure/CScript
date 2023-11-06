@@ -130,8 +130,7 @@ static const void* valtable[] = {
     &&L_VAL_NUMBER,
     &&L_VAL_NIL,
     &&L_VAL_OBJ,
-    /* Placeholders */
-    NULL,
+    /* Unreachable */
     NULL,
 };
 
@@ -166,7 +165,7 @@ static const void* toktable[TOK_EOF + 1] = {
     &&L_TOK_OR,          &&L_TOK_RETURN,     &&L_TOK_SUPER,
     &&L_TOK_SELF,        &&L_TOK_SWITCH,     &&L_TOK_TRUE,
     &&L_TOK_VAR,         &&L_TOK_WHILE,      &&L_TOK_FIXED,
-    &&L_TOK_IMPORT,      &&L_TOK_ERROR,      &&L_TOK_EOF,
+    &&L_TOK_ERROR,       &&L_TOK_EOF,
 };
 
 #endif

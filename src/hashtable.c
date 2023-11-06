@@ -19,7 +19,7 @@
 // This saves us from needing to calculate loadfactor each time we insert.
 // Instead we check if 'table->left' integer is zero and then expand
 // recalculating the load factor only then.
-#define INSERTS_UNTIL_EXPAND(table)                                                      \
+#define INSERTS_UNTIL_EXPAND(table)                                                                \
     ((UInt)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
 
 
@@ -48,7 +48,7 @@ void HashTable_init(HashTable* table)
 //
 // Safety: There can't be an infinite cycle, because load factor is being tracked.
 // Hashing: For info about how each 'Value' gets hashed refer to the [value.c].
-SK_INTERNAL(force_inline Entry*) Entry_find(Entry* entries, UInt capacity, Value key)
+sstatic force_inline Entry* Entry_find(Entry* entries, UInt capacity, Value key)
 {
     Hash   hash      = Value_hash(key);
     UInt   mask      = capacity - 1; // 'capacity' is 2^n
@@ -84,13 +84,13 @@ void HashTable_into(VM* vm, HashTable* src, HashTable* dest)
 }
 
 // Calculate HashTable 'load factor'.
-SK_INTERNAL(force_inline double) HashTable_lf(HashTable* table)
+sstatic force_inline double HashTable_lf(HashTable* table)
 {
     return (double)table->len / (double)table->cap;
 }
 
 // Expands the table by rehashing all the keys into a new bigger table array.
-SK_INTERNAL(force_inline void) HashTable_expand(VM* vm, HashTable* table)
+sstatic force_inline void HashTable_expand(VM* vm, HashTable* table)
 {
     UInt   new_cap = GROW_ARRAY_CAPACITY(table->cap, TABLE_INITIAL_SIZE);
     Entry* entries = GC_MALLOC(vm, new_cap * sizeof(Entry));
@@ -182,8 +182,7 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
             }
         } else {
             ObjString* string = AS_STRING(entry->key);
-            if(string->len == len && string->hash == hash &&
-               memcmp(string->storage, str, len) == 0)
+            if(string->len == len && string->hash == hash && memcmp(string->storage, str, len) == 0)
             {
                 return string;
             }

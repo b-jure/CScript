@@ -9,8 +9,9 @@
 
 #include <fcntl.h>
 #include <time.h>
+#include <unistd.h>
 
-SK_INTERNAL(force_inline ObjString*)
+sstatic force_inline ObjString*
 ObjString_from_static_prefix(VM* vm, ObjString* string, const InternedString* staticstr)
 {
     UInt len = string->len + staticstr->len;
@@ -23,7 +24,7 @@ ObjString_from_static_prefix(VM* vm, ObjString* string, const InternedString* st
     return ObjString_from(vm, buffer, len);
 }
 
-//------------------------- NATIVE -------------------------//
+//------------------------- snative -------------------------//
 
 /**
  * Determines processor time.
@@ -31,8 +32,9 @@ ObjString_from_static_prefix(VM* vm, ObjString* string, const InternedString* st
  * @err - if the processor time used is not available or its value cannot
  *        be represented.
  **/
-NATIVE(clock)
+snative(clock)
 {
+    UNUSED(argc);
     clock_t time = clock();
 
     if(likely(time != -1)) {
@@ -44,78 +46,42 @@ NATIVE(clock)
     return false;
 }
 
-#define NATIVE_FIELD_ERR(argv, name)                                                               \
-    do {                                                                                           \
-        ObjString* err = NULL;                                                                     \
-        if(unlikely(!IS_INSTANCE(argv[0]))) {                                                      \
-            err = ERR_NEW(vm, name##_INSTANCE_ERR);                                                \
-        } else if(unlikely(!IS_STRING(argv[1]))) {                                                 \
-            err = ERR_NEW(vm, name##_FIELD_ERR);                                                   \
-        }                                                                                          \
-        argv[-1] = OBJ_VAL(err);                                                                   \
-    } while(false)
-
 /**
  * Checks if ObjInstance contains field.
  * @ret - bool, true if it contains, false otherwise
  * @err - if first argument is not ObjInstance
  *      - if second argument is not ObjString
  **/
-NATIVE(isfield)
+snative(isfield)
 {
-    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
-        ObjInstance* instance = AS_INSTANCE(argv[0]);
-        Value        _dummy;
-        argv[-1] = BOOL_VAL(HashTable_get(&instance->fields, argv[1], &_dummy));
-        return true;
+    UNUSED(argc);
+    Value      receiver = argv[0];
+    Value      field    = argv[1];
+    ObjString* err      = NULL;
+
+    if(unlikely(!IS_INSTANCE(receiver))) {
+        err = ERR_NEW(vm, ISFIELD_INSTANCE_ERR);
+    } else if(unlikely(!IS_STRING(field))) {
+        err = ERR_NEW(vm, ISFIELD_FIELD_TYPE_ERR);
+    } else {
+        goto fin;
     }
-
-    NATIVE_FIELD_ERR(argv, ISFIELD);
+    argv[-1] = OBJ_VAL(err);
     return false;
-}
 
-/**
- * Deletes the field from ObjInstance.
- * @ret - bool, true if field was removed false otherwise
- * @err - if first argument is not ObjInstance
- *      - if second argument is not ObjString
- **/
-NATIVE(delfield)
-{
-    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
-        ObjInstance* instance = AS_INSTANCE(argv[0]);
-        argv[-1]              = BOOL_VAL(HashTable_remove(&instance->fields, argv[1]));
-        return true;
-    }
-
-    NATIVE_FIELD_ERR(argv, DELFIELD);
-    return false;
-}
-
-/**
- * Creates or sets the value the field of ObjInstance.
- * @ret - bool, true if field was created otherwise false (field value changed)
- * @err - if first argument is not ObjInstance
- *      - if second argument is not ObjString
- **/
-NATIVE(setfield)
-{
-    if(likely(IS_INSTANCE(argv[0]) && IS_STRING(argv[1]))) {
-        ObjInstance* instance = AS_INSTANCE(argv[0]);
-        argv[-1]              = BOOL_VAL(HashTable_insert(vm, &instance->fields, argv[1], argv[2]));
-        return true;
-    }
-
-    NATIVE_FIELD_ERR(argv, SETFIELD);
-    return false;
+fin:;
+    Value _dummy;
+    argv[-1] = BOOL_VAL(HashTable_get(&AS_INSTANCE(receiver)->fields, field, &_dummy));
+    return true;
 }
 
 /**
  * Prints a value and a newline.
  * @ret - returns the 'value' printed
  **/
-NATIVE(printl)
+snative(printl)
 {
+    UNUSED(argc);
     UNUSED(vm);
     Value_print(argv[0]);
     printf("\n");
@@ -127,8 +93,9 @@ NATIVE(printl)
  * Prints a value.
  * @ret - returns the 'value' printed
  **/
-NATIVE(print)
+snative(print)
 {
+    UNUSED(argc);
     UNUSED(vm);
     Value_print(argv[0]);
     argv[-1] = argv[0];
@@ -139,8 +106,9 @@ NATIVE(print)
  * Converts the value into string.
  * @ret - returns 'string' of the value.
  **/
-NATIVE(tostr)
+snative(tostr)
 {
+    UNUSED(argc);
     argv[-1] = OBJ_VAL(Value_to_str(vm, argv[0]));
     return true;
 }
@@ -150,8 +118,9 @@ NATIVE(tostr)
  * @ret - returns 'true' if the value is a string type,
  *        otherwise 'false'.
  **/
-NATIVE(isstr)
+snative(isstr)
 {
+    UNUSED(argc);
     UNUSED(vm);
     argv[-1] = BOOL_VAL(IS_STRING(argv[0]));
     return true;
@@ -162,8 +131,9 @@ NATIVE(isstr)
  * @err - if the value is not a string error is invoked,
  *        otherwise return string length (in bytes).
  **/
-NATIVE(strlen)
+snative(strlen)
 {
+    UNUSED(argc);
     Value string = argv[0];
     if(unlikely(!IS_STRING(string))) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, STRLEN_FIRST_ARG_TYPE_ERR));
@@ -180,8 +150,9 @@ NATIVE(strlen)
           pattern was not found it returns 'nil'.
           Invokes error if 'haystack' or a 'needle' (pattern) is not a string.
  **/
-NATIVE(strpat)
+snative(strpat)
 {
+    UNUSED(argc);
     Value      string  = argv[0];
     Value      pattern = argv[1];
     ObjString* err     = NULL;
@@ -216,8 +187,9 @@ fin:;
  * @err - if first argument is not 'string' or both 'i' and 'j'
  *        are not numbers.
  **/
-NATIVE(strsub)
+snative(strsub)
 {
+    UNUSED(argc);
     Value      string = argv[0];
     Value      i      = argv[1];
     Value      j      = argv[2];
@@ -227,7 +199,7 @@ NATIVE(strsub)
         err = ERR_NEW(vm, STRSUB_FIRST_ARG_TYPE_ERR);
     } else if(unlikely(
                   (!IS_NUMBER(i) || !IS_NUMBER(j)) &&
-                  (skfloor(AS_NUMBER(i)) != AS_NUMBER(i) || skfloor(AS_NUMBER(j)) != AS_NUMBER(j))))
+                  (sfloor(AS_NUMBER(i)) != AS_NUMBER(i) || sfloor(AS_NUMBER(j)) != AS_NUMBER(j))))
     {
         err = ERR_NEW(vm, STRSUB_INDICES_TYPE_ERR);
     } else {
@@ -271,8 +243,9 @@ fin:;
  * @err - if the value is neither '0' and bigger than '1',
  * @ret - returns 'true'.
  **/
-NATIVE(gcfactor)
+snative(gcfactor)
 {
+    UNUSED(argc);
     Value factor = argv[0];
     if(unlikely(!IS_NUMBER(factor) || (AS_NUMBER(factor) <= 1 && AS_NUMBER(factor) != 0))) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, GC_FACTOR_ARG_ERR));
@@ -295,8 +268,9 @@ NATIVE(gcfactor)
  * @ret - returns 'true' if garbage collection is set as 'auto',
  *        otherwise 'false'.
  **/
-NATIVE(gcmode)
+snative(gcmode)
 {
+    UNUSED(argc);
     Value      mode = argv[0];
     ObjString* err  = NULL;
 
@@ -317,7 +291,6 @@ NATIVE(gcmode)
 fin:;
     bool manual = AS_STRING(mode) == vm->statics[SS_MANU];
     GC_TOGGLE(vm, GC_MANUAL_BIT, manual);
-    printf("After toggling GC_MANUAL_BIT = %ld\n", GC_CHECK(vm, GC_MANUAL_BIT));
     argv[-1] = BOOL_VAL(!manual);
     return true;
 }
@@ -327,8 +300,9 @@ fin:;
  * It does mark and sweep collection.
  * @ret - returns number of bytes collected.
  **/
-NATIVE(gccollect)
+snative(gccollect)
 {
+    UNUSED(argc);
     argv[-1] = NUMBER_VAL((double)gc(vm));
     return true;
 }
@@ -337,8 +311,9 @@ NATIVE(gccollect)
  * Returns memory left before next collection.
  * @ret - memory in bytes before next gc.
  **/
-NATIVE(gcleft)
+snative(gcleft)
 {
+    UNUSED(argc);
     argv[-1] = NUMBER_VAL(((double)vm->gc_next - vm->gc_allocated));
     return true;
 }
@@ -347,8 +322,9 @@ NATIVE(gcleft)
  * Returns program current memory usage.
  * @ret - memory usage in bytes.
  **/
-NATIVE(gcusage)
+snative(gcusage)
 {
+    UNUSED(argc);
     argv[-1] = NUMBER_VAL((double)vm->gc_allocated);
     return true;
 }
@@ -359,8 +335,9 @@ NATIVE(gcusage)
  * @ret - return amount of memory in bytes
  *        at which next collection triggers.
  **/
-NATIVE(gcnext)
+snative(gcnext)
 {
+    UNUSED(argc);
     argv[-1] = NUMBER_VAL((double)vm->gc_next);
     return true;
 }
@@ -372,8 +349,9 @@ NATIVE(gcnext)
  * @ret - returns the old limit in bytes
  * @err - if the limit is negative.
  **/
-NATIVE(gcset)
+snative(gcset)
 {
+    UNUSED(argc);
     Value      bytes = argv[0];
     ObjString* err   = NULL;
     if(unlikely(!IS_NUMBER(bytes))) {
@@ -398,8 +376,9 @@ fin:;
  * @ret - 'true' if the gc is in 'auto' mode (running),
  *        'false' otherwise (if the mode is 'manual').
  **/
-NATIVE(gcisauto)
+snative(gcisauto)
 {
+    UNUSED(argc);
     argv[-1] = !GC_CHECK(vm, GC_MANUAL_BIT);
     return true;
 }
@@ -411,8 +390,9 @@ NATIVE(gcisauto)
  *        invokes runtime error.
  *        Otherwise it returns the 'expr' value (first argument).
  **/
-NATIVE(assert)
+snative(assert)
 {
+    UNUSED(argc);
     Value expr = argv[0];
     if(ISFALSEY(expr)) {
         argv[-1] = OBJ_VAL(
@@ -431,8 +411,9 @@ NATIVE(assert)
  *        the second argument 'message' is not string.
  *        Otherwise it returns the 'expr' value (first argument).
  **/
-NATIVE(assertf)
+snative(assertf)
 {
+    UNUSED(argc);
     Value expr    = argv[0];
     Value message = argv[1];
 
@@ -456,8 +437,9 @@ NATIVE(assertf)
  *        otherwise it still only invokes runtime error with
  *        the passed in 'message' and never returns.
  **/
-NATIVE(error)
+snative(error)
 {
+    UNUSED(argc);
     Value message = argv[0];
     if(unlikely(!IS_STRING(message))) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, ERROR_FIRST_ARG_TYPE_ERR));
@@ -468,21 +450,165 @@ NATIVE(error)
     return false;
 }
 
+// @FIX: Make index operator work depending on the receiver,
+//       if the receiver is the string type, than it can only be a
+//       integer constant or integer variable.
+//       If the type is class instance (ObjInstance) then the index
+//       value can be integer constant, integer variable, boolean constant,
+//       boolean variable, string constant or a string variable.
+
+
+const char* load_script_default(VM* vm, const char* name)
+{
+    // Perform default script load
+    int fd = open(name, O_RDONLY);
+
+    if(unlikely(fd < 0)) {
+        perror("ScriptLoader");
+        return NULL;
+    }
+
+    ssize_t len = lseek(fd, 0, SEEK_END);
+
+    if(unlikely(len < 0)) {
+        perror("ScriptLoader");
+        return NULL;
+    }
+
+    if(unlikely(lseek(fd, 0, SEEK_SET) < 0)) {
+        perror("ScriptLoader");
+        return NULL;
+    }
+
+    char*   source = MALLOC(vm, len + 1);
+    ssize_t n      = read(fd, source, len);
+    if(unlikely(n < len)) {
+        if(n < 0) {
+            perror("ScriptLoader");
+        } else {
+            fprintf(stderr, "Could not read script '%s'\n", name);
+        }
+        return NULL;
+    }
+
+    source[n] = '\0';
+    return source;
+}
+
+ScriptLoadResult* load_script(VM* vm, ScriptLoadResult* result)
+{
+    if(vm->config.load_script != NULL) {
+        *result = vm->config.load_script(vm, AS_CSTRING(vm->script));
+    }
+
+    if(result->source == NULL) {
+        result->finfn  = NULL;
+        result->source = load_script_default(vm, AS_CSTRING(vm->script));
+    }
+
+    if(result->source == NULL) {
+        return NULL;
+    }
+
+    return result;
+}
+
+ObjFunction* compile_script(VM* vm, ScriptLoadResult* result)
+{
+    runtime         = 0;
+    ObjFunction* fn = compile(vm, result->source, vm->script);
+    runtime         = 1;
+
+    if(result->finfn != NULL) {
+        result->finfn(vm, AS_CSTRING(vm->script), *result);
+    } else {
+        FREE(vm, (char*)result->source);
+    }
+
+    return fn;
+}
+
+Value resolve_script(VM* vm, Value name)
+{
+    if(vm->config.rename_script == NULL) {
+        return name;
+    }
+
+    const char* renamed = vm->config.rename_script(vm, AS_CSTRING(vm->script), AS_CSTRING(name));
+
+    if(renamed == NULL) {
+        return NIL_VAL;
+    }
+
+    if(renamed == AS_CSTRING(name)) {
+        return name;
+    }
+
+    name = OBJ_VAL(ObjString_from(vm, renamed, strlen(renamed)));
+    VM_push(vm, name);
+    GC_FREE(vm, (char*)renamed, 0);
+    VM_pop(vm);
+    return name;
+}
+
 /**
  * Loads the 'sk' file, compiles and runs it.
  * @ret - returns 'true' if the file is successfully loaded,
  *        otherwise this function won't return, it will instead
  *        invoke error.
  **/
-NATIVE(loadscript)
+snative(loadscript)
 {
-    Value script = argv[0];
-    if(unlikely(!IS_STRING(script))) {
+    Value name = argv[0];
+    if(unlikely(!IS_STRING(name))) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_ARG_TYPE_ERR));
         return false;
     }
 
-    // @IMPLEMENT
+    name = resolve_script(vm, name);
+    if(name == NIL_VAL) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RESOLVE_ERR));
+        return false;
+    }
+
+    vm->script = name;
+    Value retval;
+    if(HashTable_get(&vm->loaded, name, &retval)) {
+        if(unlikely(retval == EMPTY_VAL)) {
+            argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RECURSION_ERR));
+            return false;
+        } else if(retval != NIL_VAL) {
+            argv[-1] = retval;
+            return true;
+        } // else load the script again
+    }
+
+    ScriptLoadResult result = {0};
+    if(load_script(vm, &result) == NULL) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_LOAD_ERR));
+        return false;
+    }
+
+    ObjFunction* scriptfn = compile_script(vm, &result);
+    if(scriptfn == NULL) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_COMPILE_ERR));
+        return false;
+    }
+
+    Value fn = OBJ_VAL(scriptfn);
+    VM_push_temp(vm, fn);
+    HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL); // Update loaded table
+
+    vm->sp     -= argc;
+    vm->script  = name;
+    bool ok     = VM_call_fn(vm, AS_OBJ(fn), 0, false, NULL);
+    vm->sp     += argc; // Little bit of cheating
+    VM_pop_temp(vm);
+
+    if(unlikely(!ok)) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RUN_ERR));
+        return false;
+    }
 
     return true;
 }

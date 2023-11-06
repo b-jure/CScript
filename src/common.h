@@ -4,13 +4,11 @@
 #include "skconf.h"
 
 #include <stdbool.h>
+#include <sys/types.h>
 
 typedef uint8_t  Byte;
 typedef uint32_t UInt;
 typedef int32_t  Int;
-
-// Enable NaN boxing
-#define NAN_BOXING
 
 #define UNUSED(x) (void)(x)
 
@@ -21,8 +19,12 @@ typedef int32_t  Int;
  */
 extern Int runtime;
 
+// Memory alloc/dealloc
+void* gc_reallocate(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
+void* gc_free(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
+
 /* Bits -------------------------------------------------------------------- */
-SK_INTERNAL(force_inline size_t) bit_mask(uint8_t x)
+sstatic force_inline size_t bit_mask(uint8_t x)
 {
     return (x >= sizeof(size_t) * CHAR_BIT) ? 0xffffffffffffffff : (1UL << (x)) - 1;
 }

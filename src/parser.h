@@ -2,6 +2,7 @@
 #define __SKOOMA_SCANNER_H__
 
 #include "common.h"
+#include "mem.h"
 #include "value.h"
 
 #include <stdarg.h>
@@ -59,7 +60,6 @@ typedef enum {
     TOK_VAR,
     TOK_WHILE,
     TOK_FIXED,
-    TOK_IMPORT,
 
     TOK_ERROR,
     TOK_EOF
@@ -89,6 +89,7 @@ typedef struct {
 #define SWITCH_BIT (4) // inside of a switch statement
 #define ASSIGN_BIT (5) // can compile assignment
 #define RET_BIT    (6) // compiled 'return' statement
+#define TOPRET_BIT (7) // compiled top-level code 'return' statement
 
 /* Variable 'flags' bits, variable modifiers
  * are stored in the upper byte. */
@@ -108,6 +109,10 @@ typedef struct {
     // Pointers to root holders in order
     // to properly mark objects for gc.
     VM* vm;
+
+    // Pointer to the start of the source file,
+    // used for cleanup only!
+    const char* source;
 
     // Token slice start
     const char* start;

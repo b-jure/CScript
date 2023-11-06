@@ -1,41 +1,185 @@
 #ifndef __SKOOMA_MATH_H__
 #define __SKOOMA_MATH_H__
 
-#include "common.h"
-
 #include <math.h>
-#include <stdio.h>
 
-typedef struct {
-    double   fract;
-    uint64_t integer;
-} Bitcast;
+/* Functions */
+#define sabs(x)        abs(x)
+#define slabs(x)       labs(x)
+#define sllabs(x)      llabs(x)
+#define sdiv(x, y)     div(x, y)
+#define sldiv(x, y)    ldiv(x, y)
+#define slldiv(x, y)   lldiv(x, y)
+#define simaxabs(x)    imaxabs(x)
+#define simaxdiv(x, y) imaxdiv(x, y)
 
-#define skfloor(dbl) floor(dbl)
+/* Basic operations */
+#define sfabs(x)          fabs(x)
+#define sfabsf(x)         fabsf(x)
+#define sfabsl(x)         fabsfl(x)
+#define smod(x, y)        mod(x, y)
+#define smodf(x, y)       modf(x, y)
+#define smodl(x, y)       modl(x, y)
+#define sremainder(x, y)  remainder(x, y)
+#define sremainderf(x, y) remainderf(x, y)
+#define sremainderl(x, y) remainderl(x, y)
+#define sremquo(x, y)     remquo(x, y)
+#define sremquof(x, y)    remquof(x, y)
+#define sremquol(x, y)    remequol(x, y)
+#define sfm(x, y, z)      fm(x, y, z)
+#define sfmf(x, y, z)     fmf(x, y, z)
+#define sfml(x, y, z)     fml(x, y, z)
+#define sfmax(x, y)       fmax(x, y)
+#define sfmaxf(x, y)      fmaxf(x, y)
+#define sfmaxl(x, y)      fmaxl(x, y)
+#define sfmin(x, y)       fmin(x)
+#define sfminf(x, y)      fminf(x)
+#define sfminl(x, y)      fminl(x)
+#define sfdim(x, y)       fdim(x, y)
+#define sfdimf(x, y)      fdimf(x, y)
+#define sfdiml(x, y)      fdiml(x, y)
+#define snan(x)           nan(x)
+#define snanl(x)          nanf(x)
+#define snanf(x)          nanl(x)
 
-#define skceil(dbl) ceil(dbl)
+/* Exponential functions */
+#define sexp(x)    exp(x)
+#define sexpf(x)   expf(x)
+#define sexpl(x)   expl(x)
+#define sexp2(x)   exp2(x)
+#define sexp2f(x)  exp2f(x)
+#define sexp2l(x)  exp2l(x)
+#define sexp1(x)   expm1(x)
+#define sexp1f(x)  expm1f(x)
+#define sexp1l(x)  expm1l(x)
+#define slog(x)    log(x)
+#define slogf(x)   logf(x)
+#define slogl(x)   logl(x)
+#define slog10(x)  log10(x)
+#define slog10f(x) log10f(x)
+#define slog10l(x) log10l(x)
+#define slog2(x)   log2(x)
+#define slog2f(x)  log2f(x)
+#define slog2l(x)  log2l(x)
+#define slog1p(x)  log1p(x)
+#define slog1pf(x) log1pf(x)
+#define slog1pl(x) log1pl(x)
 
-/* Check if double is positive/negative infinity */
-static force_inline bool is_infinity(double dbl)
-{
-    union {
-        uint64_t integer;
-        double   dbl;
-    } bcast;
-    bcast.dbl = dbl;
-    return (bcast.integer & 0x7fffffffffffffff) == 0x7fffffffffffffff;
-}
+/* Power functions */
+#define spow(x, y)    pow(x, y)
+#define spowf(x, y)   powf(x, y)
+#define spowl(x, y)   powl(x, y)
+#define ssqrt(x)      sqrt(x)
+#define ssqrtf(x)     sqrtf(x)
+#define ssqrtl(x)     sqrtl(x)
+#define scbrt(x)      cbrt(x)
+#define scbrtf(x)     cbrtf(x)
+#define scbrtl(x)     cbrtl(x)
+#define shypot(x, y)  hypot(x, y)
+#define shypotf(x, y) hypotf(x, y)
+#define shypotl(x, y) hypotl(x, y)
 
-/* Check if double is NaN */
-static force_inline bool is_nan(double dbl)
-{
-    union {
-        uint64_t integer;
-        double   dbl;
-    } bitcast;
-    bitcast.dbl = dbl;
-    return (bitcast.integer & 0x7fffffffffffffffL) > 0x7ff0000000000000L;
-}
+/* Trigonometric functions */
+#define ssin(x)    sin(x)
+#define ssinf(x)   sinf(x)
+#define ssinl(x)   sinl(x)
+#define scos(x)    cos(x)
+#define scosf(x)   cosf(x)
+#define scosl(x)   cosl(x)
+#define stan(x)    tan(x)
+#define stanf(x)   tanf(x)
+#define stanl(x)   tanl(x)
+#define sasin(x)   asin(x)
+#define sasinf(x)  asinf(x)
+#define sasinl(x)  asinl(x)
+#define sacos(x)   acos(x)
+#define sacosf(x)  acosf(x)
+#define sacosl(x)  acosl(x)
+#define satan(x)   atan(x)
+#define satanf(x)  atanf(x)
+#define satanl(x)  atanl(x)
+#define satan2(x)  atan2(x)
+#define satan2f(x) atan2f(x)
+#define satan2l(x) atan2l(x)
 
+/* Hyperbolic functions */
+#define ssinh(x)   sinh(x)
+#define ssinhf(x)  sinhf(x)
+#define ssinhl(x)  sinhl(x)
+#define scosh(x)   cosh(x)
+#define scoshf(x)  coshf(x)
+#define scoshl(x)  coshl(x)
+#define stanh(x)   tanh(x)
+#define stanhf(x)  tanhf(x)
+#define stanhl(x)  tanhl(x)
+#define sasinh(x)  asinh(x)
+#define sasinhf(x) asinhf(x)
+#define sasinhl(x) asinhl(x)
+#define sacosh(x)  acosh(x)
+#define sacoshf(x) acoshf(x)
+#define sacoshl(x) acoshl(x)
+#define satanh(x)  atanh(x)
+#define satanhf(x) atanhf(x)
+#define satanhl(x) atanhl(x)
+
+/* Error and gamma functions */
+#define serf(x)     erf(x)
+#define serff(x)    erff(x)
+#define serfl(x)    erfl(x)
+#define serfc(x)    erfc(x)
+#define serfcf(x)   erfcf(x)
+#define serfcl(x)   erfcl(x)
+#define stgamma(x)  tgamma(x)
+#define stgammaf(x) tgammaf(x)
+#define stgammal(x) tgammal(x)
+#define slgamma(x)  lgamma(x)
+#define slgammaf(x) lgammaf(x)
+#define slgammal(x) lgammal(x)
+
+/* Nearest integer floating-point operations */
+#define sceil(x)       ceil(x)
+#define sceilf(x)      ceilf(x)
+#define sceill(x)      ceill(x)
+#define sfloor(x)      floor(x)
+#define sfloorf(x)     floorf(x)
+#define sfloorl(x)     floorl(x)
+#define strunc(x)      trunc(x)
+#define struncf(x)     truncf(x)
+#define struncl(x)     truncl(x)
+#define sround(x)      round(x)
+#define sroundf(x)     roundf(x)
+#define sroundl(x)     roundl(x)
+#define slround(x)     lround(x)
+#define slroundf(x)    lroundf(x)
+#define slroundl(x)    lroundl(x)
+#define sllround(x)    llround(x)
+#define sllroundf(x)   llroundf(x)
+#define sllroundl(x)   llroundl(x)
+#define snearbyint(x)  nearbyint(x)
+#define snearbyintf(x) nearbyintf(x)
+#define snearbyintl(x) nearbyintl(x)
+#define srint(x)       rint(x)
+#define srintf(x)      rintf(x)
+#define srintl(x)      rintl(x)
+#define slrint(x)      lrint(x)
+#define slrintf(x)     lrintf(x)
+#define slrintl(x)     lrintl(x)
+#define sllrint(x)     llrint(x)
+#define sllrintf(x)    llrintf(x)
+#define sllrintl(x)    llrintl(x)
+
+/* Classification and comparison */
+#define sfpclassify(x)        fpclassify(x)
+#define sisnan(x)             isnan(x)
+#define sisinf(x)             isinf(x)
+#define sisfinite(x)          isfinite(x)
+#define sisnormal(x)          isnormal(x)
+#define ssignbit(x)           signbit(x)
+#define sisgreater(x, y)      isgreater(x, y)
+#define sisgreaterequal(x, y) isgreaterequal(x, y)
+#define sisless(x, y)         isless(x, y)
+#define sislessequal(x, y)    islessequal(x, y)
+#define sislessgreater(x, y)  islessgreater(x, y)
+#define sisunordered(x, y)    isunordered(x, y)
 
 #endif

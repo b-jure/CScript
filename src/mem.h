@@ -8,10 +8,14 @@
 #include <memory.h>
 
 void*  reallocate(void* ptr, size_t newsize, void* userdata);
-void*  gc_reallocate(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
-void*  gc_free(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
 size_t gc(VM* vm);
 void   mark_obj(VM* vm, Obj* obj);
+
+#define CLEANUP(vm)                                                                        \
+    do {                                                                                           \
+        _cleanup_vm(vm);                                                                              \
+        exit(EXIT_FAILURE);                                                                        \
+    } while(false)
 
 #define mark_value(vm, value)                                                                      \
     do {                                                                                           \

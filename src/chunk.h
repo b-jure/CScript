@@ -6,9 +6,7 @@
 #include "hashtable.h"
 #include "value.h"
 
-#ifndef __SKOOMA_VMACHINE_H__
-typedef struct VM VM;
-#endif
+ARRAY_NEW(Array_Byte, Byte);
 
 #ifndef __SKOOMA_COMPILER_H__
 typedef struct Compiler Compiler;
@@ -97,10 +95,9 @@ typedef struct {
     Array_Byte code;  // Bytecode array
 } Chunk;
 
-void Chunk_init(Chunk* chunk);
+void Chunk_init(Chunk* chunk, VM* vm);
 void Chunk_write(Chunk* chunk, uint8_t byte, UInt line);
 void Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt idx, UInt line);
-UInt Chunk_getline(Chunk* chunk, UInt index);
 void Chunk_free(Chunk* chunk, VM* vm);
 UInt Chunk_make_constant(VM* vm, Chunk* chunk, Value value);
 

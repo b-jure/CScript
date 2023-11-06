@@ -99,83 +99,74 @@
  * NATIVE FUNCTIONS ERRORS
  **/
 
-
-
-#define NATIVE_FN_ERR(fn, err) "<native-fn " fn ">: " err
-#define ERR_NEW(vm, err)       ObjString_from(vm, err, sizeof(err) - 1)
+#define NATIVE_FN_ERR(fn, err, ...) ("<native-fn " #fn ">: " err)
+#define ERR_NEW(vm, err)            ObjString_from(vm, err, sizeof(err) - 1)
 
 /* native_clock */
 #define CLOCK_ERR                                                                                  \
-    NATIVE_FN_ERR("clock", "Processor time is not available or its value cannot be represented.")
-/* ------------- */
-
-/* native class field functions */
-#define INSTANCE_ERR(fn) NATIVE_FN_ERR(fn, "")
-#define FIELD_ERR(fn)    NATIVE_FN_ERR(fn, "Second parameter is not a valid field name.")
+    NATIVE_FN_ERR(clock, "Processor time is not available or its value cannot be represented.")
 /* ------------- */
 
 /* native_isfield */
-#define ISFIELD_INSTANCE_ERR INSTANCE_ERR("isfield")
-#define ISFIELD_FIELD_ERR    FIELD_ERR("isfield")
-/* ------------- */
-
-/* native_delfield */
-#define DELFIELD_INSTANCE_ERR INSTANCE_ERR("delfield")
-#define DELFIELD_FIELD_ERR    FIELD_ERR("delfield")
-/* ------------- */
-
-/* native_setfield */
-#define SETFIELD_INSTANCE_ERR INSTANCE_ERR("setfield")
-#define SETFIELD_FIELD_ERR    FIELD_ERR("setfield")
+#define ISFIELD_INSTANCE_ERR   NATIVE_FN_ERR(isfield, "Receiver is not a class instance.")
+#define ISFIELD_FIELD_TYPE_ERR NATIVE_FN_ERR(isfield, "'field' is not a string.")
 /* ------------- */
 
 /* native_gcfactor */
 #define GC_FACTOR_ARG_ERR                                                                          \
-    NATIVE_FN_ERR("gcfactor", "invalid argument, grow factor must be a number, either '0' or '>1'.")
+    NATIVE_FN_ERR(gcfactor, "invalid argument, grow factor must be a number, either '0' or '>1'.")
 /* ------------- */
 
 #define INVALID_FIRST_ARG_TYPE(type)  "invalid first argument type, argument must be #type."
 #define INVALID_SECOND_ARG_TYPE(type) "invalid second argument type, argument must be #type."
 
 /* native_gcmode */
-#define GC_MODE_ARG_ERR NATIVE_FN_ERR("gcmode", INVALID_FIRST_ARG_TYPE(string))
+#define GC_MODE_ARG_ERR NATIVE_FN_ERR(gcmode, INVALID_FIRST_ARG_TYPE(string))
 #define GC_MODE_INVALID_MODE_ERR                                                                   \
-    NATIVE_FN_ERR("gcmode", "invalid mode string, mode can be either 'auto' or 'manual'.")
+    NATIVE_FN_ERR(gcmode, "invalid mode string, mode can be either 'auto' or 'manual'.")
 /* ------------- */
 
 /* native_gcset */
-#define GC_SET_ARG_ERR NATIVE_FN_ERR("gcset", INVALID_FIRST_ARG_TYPE(number))
+#define GC_SET_ARG_ERR NATIVE_FN_ERR(gcset, INVALID_FIRST_ARG_TYPE(number))
 
 #define GC_SET_NEGATIVE_LIMIT_ERR                                                                  \
-    NATIVE_FN_ERR("gcset", "limit can't be negative, it must be positive or 0.")
+    NATIVE_FN_ERR(gcset, "limit can't be negative, it must be positive or 0.")
 /* ------------- */
 
 /* native_assertf */
-#define ASSERTF_SECOND_ARG_TYPE_ERR NATIVE_FN_ERR("assertf", INVALID_SECOND_ARG_TYPE(string))
+#define ASSERTF_SECOND_ARG_TYPE_ERR NATIVE_FN_ERR(assertf, INVALID_SECOND_ARG_TYPE(string))
 /* ------------- */
 
 /* native_error */
-#define ERROR_FIRST_ARG_TYPE_ERR NATIVE_FN_ERR("error", INVALID_FIRST_ARG_TYPE(string))
+#define ERROR_FIRST_ARG_TYPE_ERR NATIVE_FN_ERR(error, INVALID_FIRST_ARG_TYPE(string))
 /* ------------- */
 
 /* native_strlen */
-#define STRLEN_FIRST_ARG_TYPE_ERR NATIVE_FN_ERR("strlen", INVALID_FIRST_ARG_TYPE(string))
+#define STRLEN_FIRST_ARG_TYPE_ERR NATIVE_FN_ERR(strlen, INVALID_FIRST_ARG_TYPE(string))
 /* ------------- */
 
 /* native_strlen */
-#define STRPAT_FIRST_ARG_TYPE_ERR  NATIVE_FN_ERR("strpat", INVALID_FIRST_ARG_TYPE(string))
-#define STRPAT_SECOND_ARG_TYPE_ERR NATIVE_FN_ERR("strpat", INVALID_SECOND_ARG_TYPE(string))
+#define STRPAT_FIRST_ARG_TYPE_ERR  NATIVE_FN_ERR(strpat, INVALID_FIRST_ARG_TYPE(string))
+#define STRPAT_SECOND_ARG_TYPE_ERR NATIVE_FN_ERR(strpat, INVALID_SECOND_ARG_TYPE(string))
 /* ------------- */
 
 /* native_strsub */
-#define STRSUB_FIRST_ARG_TYPE_ERR NATIVE_FN_ERR("strsub", INVALID_FIRST_ARG_TYPE(string))
-#define STRSUB_INDICES_TYPE_ERR   NATIVE_FN_ERR("strsub", "indices 'i' and 'j' must be numbers.")
+#define STRSUB_FIRST_ARG_TYPE_ERR NATIVE_FN_ERR(strsub, INVALID_FIRST_ARG_TYPE(string))
+#define STRSUB_INDICES_TYPE_ERR   NATIVE_FN_ERR(strsub, "indices 'i' and 'j' must be numbers.")
 /* ------------- */
 
 /* native_loadscript */
-#define LOADSCRIPT_ARG_TYPE_ERR NATIVE_FN_ERR("loadscript", INVALID_FIRST_ARG_TYPE(string))
+#define LOADSCRIPT_ARG_TYPE_ERR  NATIVE_FN_ERR(loadscript, INVALID_FIRST_ARG_TYPE(string))
+#define LOADSCRIPT_RESOLVE_ERR   NATIVE_FN_ERR(loadscript, "Couldn't resolve script.")
+#define LOADSCRIPT_RECURSION_ERR NATIVE_FN_ERR(loadscript, "Can't recursively load the script.")
+#define LOADSCRIPT_LOAD_ERR      NATIVE_FN_ERR(loadscript, "Couldn't load the script.")
+#define LOADSCRIPT_COMPILE_ERR   NATIVE_FN_ERR(loadscript, "Errored while compiling the script.")
+#define LOADSCRIPT_RUN_ERR       NATIVE_FN_ERR(loadscript, "Errored while running the script.")
 /* ------------- */
 
+//@FIX: Call VM_error from native functions to properly print
+//      the location of the error in case it happens in another script.
+//      This also requires refactor in vm.c.
 
 
 
@@ -240,14 +231,21 @@
         "Proper usage: \n\tclass A {}\n\tvar instance = A();",                                     \
         (vm)->statics[SS_INIT]->storage)
 
-#define RUNTIME_GLOBAL_UNDEFINED_ERR(vm, name)   RUNTIME_ERR(vm, FMT_VAR_UNDEFINED_ERR(name))
-#define RUNTIME_GLOBAL_FIXED_ERR(vm, len, start) RUNTIME_ERR(vm, FMT_VAR_FIXED_ERR(len, start))
+#define RUNTIME_GLOBAL_UNDEFINED_ERR(vm, name) RUNTIME_ERR(vm, FMT_VAR_UNDEFINED_ERR(name))
+
+#define RUNTIME_VARIABLE_FIXED_ERR(vm, len, start) RUNTIME_ERR(vm, FMT_VAR_FIXED_ERR(len, start))
 
 #define RUNTIME_INTERNAL_FRAME_LIMIT_ERR(vm, frames_max)                                           \
-    VM_error(vm, "Internal error: VM stack overflow, call frame limit reached [%u].", frames_max)
+    VM_error(                                                                                      \
+        vm,                                                                                        \
+        "Internal error: VM call stack overflow, call frame limit reached [%u].",                  \
+        frames_max)
 
-#define RUNTIME_INTERNAL_STACK_OVERFLOW_ERR(vm, stackmax)                                          \
-    VM_error(vm, "Internal error: VM stack overflow, stack size limit reached [%u].", stackmax)
+#define RUNTIME_INTERNAL_SCRIPT_STACK_OVERFLOW_ERR(vm, tempmax)                                    \
+    VM_error(                                                                                      \
+        vm,                                                                                        \
+        "Internal error: VM script stack overflow, compiling too many scripts, limit [%u].",       \
+        tempmax)
 
 #define RUNTIME_INDEX_RECEIVER_ERR(vm)                                                             \
     VM_error(vm, "Reciever of index operator must be a class instance.")
