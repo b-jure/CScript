@@ -410,19 +410,17 @@ C_make_global_identifier(Compiler* C, VM* vm, Value identifier, Byte flags)
 
 sstatic force_inline void C_emit_return(Compiler* C)
 {
-    if(PFLAG_CHECK(C->parser, RET_BIT)) {
-        return;
-    }
-
     if(C->fn_type == FN_INIT) {
         EMIT_OP(C, OP_GET_LOCAL, 0);
-    } else if(C->fn_type == FN_SCRIPT) {
-        EMIT_BYTE(C, OP_TRUE);
     } else {
         EMIT_BYTE(C, OP_NIL);
     }
 
-    EMIT_BYTE(C, OP_RET);
+    if(C->fn_type == FN_SCRIPT) {
+        EMIT_BYTE(C, OP_TOPRET);
+    } else {
+        EMIT_BYTE(C, OP_RET);
+    }
 }
 
 sstatic force_inline void C_emit_loop(Compiler* C, UInt start)
@@ -569,9 +567,6 @@ sstatic force_inline ObjFunction* compile_end(Compiler* C)
     }
 #endif
 
-    // Not really needed, parser gets its flags back
-    // from the bit mask we cached.
-    PFLAG_CLEAR(C->parser, RET_BIT);
     return C->fn;
 }
 
@@ -1135,8 +1130,6 @@ sstatic void compile_dec_class(VM* vm, PPC ppc)
 
 sstatic void compile_dec(VM* vm, PPC ppc)
 {
-    // Clear upper byte of parser flags
-    // for now only 'FIXED' flag
     PFLAG_CLEAR(C()->parser, FIXED_BIT);
     PFLAG_SET(C()->parser, ASSIGN_BIT);
 
@@ -1510,25 +1503,24 @@ sstatic void compile_stm_break(Compiler* C)
 
 sstatic void compile_stm_return(VM* vm, PPC ppc)
 {
-    PFLAG_SET(C()->parser, RET_BIT);
-
-    if(C()->fn_type == FN_SCRIPT) {
-        PFLAG_SET(C()->parser, TOPRET_BIT);
-    }
+    FunctionType type = C()->fn_type;
 
     if(C_match(C(), TOK_SEMICOLON)) {
         C_emit_return(C());
     } else {
-        if(C()->fn_type == FN_INIT) {
+        if(type == FN_INIT) {
             COMPILER_RETURN_INIT_ERR(C(), static_str[SS_INIT].name);
         }
 
         compile_expr(vm, ppc);
         C_expect(C(), TOK_SEMICOLON, "Expect ';' after return value.");
-        EMIT_BYTE(C(), OP_RET);
-    }
 
-    PFLAG_CLEAR(C()->parser, TOPRET_BIT);
+        if(type == FN_SCRIPT) {
+            EMIT_BYTE(C(), OP_TOPRET);
+        } else {
+            EMIT_BYTE(C(), OP_RET);
+        }
+    }
 }
 
 sstatic void compile_stm(VM* vm, PPC ppc)
@@ -1789,9 +1781,6 @@ sstatic force_inline void compile_literal(unused VM* _, PPC ppc)
             EMIT_BYTE(C, OP_FALSE);
             break;
         case TOK_NIL:
-            if(PFLAG_CHECK(C()->parser, TOPRET_BIT)) {
-                C_error(C(), "Top-level function can't return 'nil'.");
-            }
             EMIT_BYTE(C, OP_NIL);
             break;
         default:

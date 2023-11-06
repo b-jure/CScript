@@ -88,8 +88,6 @@ typedef struct {
 #define LOOP_BIT   (3) // inside of a loop statement
 #define SWITCH_BIT (4) // inside of a switch statement
 #define ASSIGN_BIT (5) // can compile assignment
-#define RET_BIT    (6) // compiled 'return' statement
-#define TOPRET_BIT (7) // compiled top-level code 'return' statement
 
 /* Variable 'flags' bits, variable modifiers
  * are stored in the upper byte. */

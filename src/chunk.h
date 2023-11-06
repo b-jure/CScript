@@ -81,6 +81,7 @@ typedef enum {
     OP_GET_SUPERL,           /* Fetch superclass method long */
     OP_INVOKE_SUPER,         /* Invoke superclass method call */
     OP_INVOKE_SUPERL,        /* Invoke superclass method call */
+    OP_TOPRET,               /* Return from top-level function */
     OP_RET,                  /* Return from function, pop the CallFrame */
 } OpCode;
 

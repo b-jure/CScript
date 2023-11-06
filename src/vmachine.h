@@ -75,8 +75,6 @@ struct VM {
     Value temp[S_TEMP_MAX];
     UInt  tempc;
 
-
-
     // VM configuration
     Config config;
 

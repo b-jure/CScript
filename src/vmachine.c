@@ -38,11 +38,19 @@ void VM_error(VM* vm, const char* errfmt, ...)
         Chunk*     chunk = &FRAME_FN(frame)->chunk;
         UInt       line  = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
 
-        ASSERT(FRAME_FN(frame)->name != NULL, "CallFrame function name is NULL??");
+        ASSERT(FRAME_FN(frame)->name != NULL, "CallFrame function name can't be NULL.");
 
-        fprintf(stderr, "[line: %u] in ", line);
-        if(AS_STRING(vm->script) == FRAME_FN(frame)->name) {
-            fprintf(stderr, "%s script\n", AS_CSTRING(vm->script));
+        Value _dummy;
+        bool  loaded = false;
+        if(HashTable_get(&vm->loaded, OBJ_VAL(FRAME_FN(frame)->name), &_dummy)) {
+            vm->script = OBJ_VAL(FRAME_FN(frame)->name);
+            loaded     = true;
+        }
+
+        fprintf(stderr, "[FILE '%s']:[line: %u] in ", AS_CSTRING(vm->script), line);
+
+        if(loaded) {
+            fprintf(stderr, "%s\n", AS_CSTRING(vm->script));
         } else {
             fprintf(stderr, "%s()\n", FRAME_FN(frame)->name->storage);
         }
@@ -1208,21 +1216,36 @@ sstatic InterpretResult VM_run(VM* vm)
                 VM_pop(vm);
                 BREAK;
             }
-            CASE(OP_RET)
             {
-                // @FIX: repl
-                Value retval = VM_pop(vm);
-                VM_close_upval(vm, frame->sp);
-                vm->fc--;
-                if(vm->fc == 0) {
-                    VM_pop(vm);
-                    return INTERPRET_OK;
+                Value retval;
+                CASE(OP_TOPRET) // Called loadscript, return true instead of nil
+                {
+                    retval = VM_pop(vm);
+                    if(retval == NIL_VAL) {
+                        retval = TRUE_VAL;
+                    }
+                    HashTable_insert(vm, &vm->loaded, OBJ_VAL(FRAME_FN(frame)->name), retval);
+                    goto ret_fin;
                 }
-                vm->sp = frame->sp;
-                VM_push(vm, retval);
-                frame = &vm->frames[vm->fc - 1];
-                ip    = frame->ip;
-                BREAK;
+                CASE(OP_RET)
+                {
+                    retval = VM_pop(vm);
+                    goto ret_fin;
+                }
+            ret_fin:;
+                {
+                    VM_close_upval(vm, frame->sp);
+                    vm->fc--;
+                    if(vm->fc == 0) {
+                        VM_pop(vm);
+                        return INTERPRET_OK;
+                    }
+                    vm->sp = frame->sp;
+                    VM_push(vm, retval);
+                    frame = &vm->frames[vm->fc - 1];
+                    ip    = frame->ip;
+                    BREAK;
+                }
             }
         }
     }
@@ -1251,12 +1274,7 @@ InterpretResult VM_interpret(VM* vm, const char* source, const char* filename)
         return INTERPRET_COMPILE_ERROR;
     }
 
-    VM_push(vm, OBJ_VAL(fn));
-    HashTable_insert(vm, &vm->loaded, name, OBJ_VAL(fn));
-    VM_pop(vm);
-
     VM_call_fn(vm, (Obj*)fn, 0, false, NULL);
-
     return VM_run(vm);
 }
 

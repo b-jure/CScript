@@ -571,8 +571,8 @@ snative(loadscript)
         return false;
     }
 
-    vm->script = name;
-    Value retval;
+    vm->script   = name;
+    Value retval = EMPTY_VAL;
     if(HashTable_get(&vm->loaded, name, &retval)) {
         if(unlikely(retval == EMPTY_VAL)) {
             argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RECURSION_ERR));
@@ -598,7 +598,6 @@ snative(loadscript)
     Value fn = OBJ_VAL(scriptfn);
     VM_push_temp(vm, fn);
     HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL); // Update loaded table
-
     vm->sp     -= argc;
     vm->script  = name;
     bool ok     = VM_call_fn(vm, AS_OBJ(fn), 0, false, NULL);

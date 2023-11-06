@@ -45,8 +45,8 @@ static const InternedString static_str[] = {
     {"Assert: ",          sizeofstr("Assert: ")         },
 };
 
-Value             resolve_script(VM* vm, Value name);
-const char*       load_script_default(VM* vm, const char* path);
+Value       resolve_script(VM* vm, Value name);
+const char* load_script_default(VM* vm, const char* path);
 
 #define ISFALSEY(val) (IS_NIL(val) || (IS_BOOL(val) && !AS_BOOL(val)))
 

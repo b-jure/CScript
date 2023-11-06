@@ -39,6 +39,8 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
     switch(instruction) {
         case OP_RET:
             return Instruction_simple("OP_RET", offset);
+        case OP_TOPRET:
+            return Instruction_simple("OP_TOPRET", offset);
         case OP_TRUE:
             return Instruction_simple("OP_TRUE", offset);
         case OP_FALSE:
