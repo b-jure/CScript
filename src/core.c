@@ -7,6 +7,7 @@
 #include "value.h"
 #include "vmachine.h"
 
+#include <ctype.h>
 #include <fcntl.h>
 #include <time.h>
 #include <unistd.h>
@@ -126,6 +127,41 @@ snative(isstr)
     return true;
 }
 
+sstatic force_inline ObjString* typename(VM* vm, Value type)
+{
+    if(IS_NUMBER(type)) {
+        return vm->statics[SS_NUM];
+    } else if(IS_STRING(type)) {
+        return vm->statics[SS_STR];
+    } else if(IS_FUNCTION(type) || IS_BOUND_METHOD(type) || IS_CLOSURE(type) || IS_NATIVE(type)) {
+        return vm->statics[SS_FUNC];
+    } else if(IS_BOOL(type)) {
+        return vm->statics[SS_BOOL];
+    } else if(IS_NIL(type)) {
+        return vm->statics[SS_NIL];
+    } else if(IS_INSTANCE(type)) {
+        return vm->statics[SS_INS];
+    } else if(IS_CLASS(type)) {
+        return vm->statics[SS_CLASS];
+    }
+
+    unreachable;
+}
+
+snative(typeof)
+{
+    UNUSED(argc);
+    Value value = argv[0];
+
+    if(IS_UPVAL(value)) {
+        argv[-1] = OBJ_VAL(typename(vm, AS_UPVAL(value)->closed));
+    } else {
+        argv[-1] = OBJ_VAL(typename(vm, value));
+    }
+
+    return true;
+}
+
 /**
  * Returns the length of the string.
  * @err - if the value is not a string error is invoked,
@@ -233,6 +269,155 @@ fin:;
     } else {
         argv[-1] = OBJ_VAL(ObjString_from(vm, substr->storage + ii, ij - ii));
     }
+    return true;
+}
+
+snative(strbyte)
+{
+    UNUSED(argc);
+    Value value = argv[0];
+    Value index = argv[1];
+
+    ObjString* err = NULL;
+
+    if(unlikely(!IS_STRING(value))) {
+        err = ERR_NEW(vm, STRBYTE_FIRST_ARG_TYPE_ERR);
+    } else if(unlikely(!IS_NUMBER(index) || sfloor(AS_NUMBER(index)) != AS_NUMBER(index))) {
+        err = ERR_NEW(vm, STRBYTE_SECOND_ARG_TYPE_ERR);
+    } else {
+        goto fin;
+    }
+    argv[-1] = OBJ_VAL(err);
+    return false;
+
+fin:;
+    ObjString* string = AS_STRING(value);
+    Int        slen   = string->len;
+    Int        idx    = AS_NUMBER(index);
+
+    if(idx < 0 || idx > slen - 1) { // Index out of range
+        argv[-1] = NIL_VAL;
+    } else {
+        argv[-1] = NUMBER_VAL(string->storage[idx]);
+    }
+    return true;
+}
+
+sstatic force_inline ObjString* changecase(VM* vm, ObjString* string, int (*changecasefn)(int))
+{
+    UInt        slen = string->len;
+    const char* str  = string->storage;
+    char        buffer[slen];
+
+    UInt i = 0;
+    while(i < slen) {
+        buffer[i++] = changecasefn(*str++);
+    }
+    buffer[i] = '\0';
+
+    return ObjString_from(vm, buffer, slen);
+}
+
+snative(strlower)
+{
+    UNUSED(argc);
+
+    Value value = argv[0];
+
+    if(unlikely(!IS_STRING(value))) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, STRLOWER_ARG_ERR));
+        return false;
+    }
+
+    argv[-1] = OBJ_VAL(changecase(vm, AS_STRING(value), tolower));
+    return true;
+}
+
+snative(strupper)
+{
+    UNUSED(argc);
+
+    Value value = argv[0];
+
+    if(unlikely(!IS_STRING(value))) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, STRUPPER_ARG_ERR));
+        return false;
+    }
+
+    argv[-1] = OBJ_VAL(changecase(vm, AS_STRING(value), toupper));
+    return true;
+}
+
+sstatic force_inline ObjString* revstring(VM* vm, ObjString* string)
+{
+    char buffer[string->len];
+    UInt slen = string->len - 1;
+    UInt i    = 0;
+    while(i <= slen) {
+        buffer[i] = string->storage[slen - i];
+        i++;
+    }
+    buffer[i] = '\0';
+    return ObjString_from(vm, buffer, slen + 1);
+}
+
+snative(strrev)
+{
+    UNUSED(argc);
+
+    Value value = argv[0];
+
+    if(unlikely(!IS_STRING(value))) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, STRREV_ARG_ERR));
+        return false;
+    }
+    argv[-1] = OBJ_VAL(revstring(vm, AS_STRING(value)));
+    return true;
+}
+
+sstatic force_inline ObjString* concatstring(VM* vm, ObjString* left, ObjString* right)
+{
+    size_t len = left->len + right->len;
+    char   buffer[len + 1];
+    memcpy(buffer, left->storage, left->len);
+    memcpy(buffer + left->len, right->storage, right->len);
+    buffer[len] = '\0';
+    return ObjString_from(vm, buffer, len);
+}
+
+snative(strconcat)
+{
+    UNUSED(argc);
+
+    Value left  = argv[0];
+    Value right = argv[1];
+
+    ObjString* err = NULL;
+
+    if(unlikely(!IS_STRING(left))) {
+        err = ERR_NEW(vm, STRCONCAT_FIRST_ARG_TYPE_ERR);
+    } else if(unlikely(!IS_STRING(right))) {
+        err = ERR_NEW(vm, STRCONCAT_SECOND_ARG_TYPE_ERR);
+    } else {
+        goto fin;
+    }
+    argv[-1] = OBJ_VAL(err);
+    return false;
+
+fin:;
+    argv[-1] = OBJ_VAL(concatstring(vm, AS_STRING(left), AS_STRING(right)));
+    return true;
+}
+
+snative(byte)
+{
+    UNUSED(argc);
+    Value string = argv[0];
+    if(unlikely(!IS_STRING(string))) {
+        argv[-1] = OBJ_VAL(ERR_NEW(vm, BYTE_ARG_ERR));
+        return false;
+    }
+    argv[-1] = NUMBER_VAL(AS_STRING(string)->storage[0]);
     return true;
 }
 

@@ -164,9 +164,34 @@
 #define LOADSCRIPT_RUN_ERR       NATIVE_FN_ERR(loadscript, "Errored while running the script.")
 /* ------------- */
 
-//@FIX: Call VM_error from native functions to properly print
-//      the location of the error in case it happens in another script.
-//      This also requires refactor in vm.c.
+/* native_strbyte */
+#define STRBYTE_FIRST_ARG_TYPE_ERR  NATIVE_FN_ERR(strbyte, INVALID_FIRST_ARG_TYPE(string))
+#define STRBYTE_SECOND_ARG_TYPE_ERR NATIVE_FN_ERR(strbyte, INVALID_SECOND_ARG_TYPE(integer number))
+/* ------------- */
+
+#define INVALID_ARG(expected) "Invalid argument provided, argument must be a #expected."
+
+/* native_strbyte */
+#define BYTE_ARG_ERR NATIVE_FN_ERR(byte, INVALID_ARG(string))
+/* ------------- */
+
+/* native_strlower */
+#define STRLOWER_ARG_ERR NATIVE_FN_ERR(strlower, INVALID_ARG(string))
+/* ------------- */
+
+/* native_strupper */
+#define STRUPPER_ARG_ERR NATIVE_FN_ERR(strupper, INVALID_ARG(string))
+/* ------------- */
+
+/* native_strrev */
+#define STRREV_ARG_ERR NATIVE_FN_ERR(strrev, INVALID_ARG(string))
+/* ------------- */
+
+/* native_strrev */
+#define STRCONCAT_FIRST_ARG_TYPE_ERR  NATIVE_FN_ERR(strconcat, INVALID_FIRST_ARG_TYPE(string))
+#define STRCONCAT_SECOND_ARG_TYPE_ERR NATIVE_FN_ERR(strconcat, INVALID_SECOND_ARG_TYPE(string))
+/* ------------- */
+
 
 
 

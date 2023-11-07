@@ -207,6 +207,16 @@ VM* VM_new(Config* config)
         vm->statics[i] = ObjString_from(vm, static_str[i].name, static_str[i].len);
     }
 
+    // @REFACTOR?: Maybe make the native functions private and only
+    //             callable inside class instances?
+    //             Upside: less branching resulting in more straightforward code.
+    //             Downside: slower function call (maybe not so bad because
+    //             of removal of type checking inside the native functions, needs testing)
+    //
+    // @TODO?: Change NativeFn signature to accept variable amount of arguments.
+    //         Upside: More expressive and flexible functions.
+    //         Downside: va_list parsing resulting in slower function call processing
+
     // Native function definitions
     VM_define_native(vm, "clock", native_clock, 0);           // GC
     VM_define_native(vm, "isfield", native_isfield, 2);       // GC
@@ -217,6 +227,12 @@ VM* VM_new(Config* config)
     VM_define_native(vm, "strlen", native_strlen, 1);         // GC
     VM_define_native(vm, "strpat", native_strpat, 2);         // GC
     VM_define_native(vm, "strsub", native_strsub, 3);         // GC
+    VM_define_native(vm, "strbyte", native_strbyte, 2);       // GC
+    VM_define_native(vm, "strlower", native_strlower, 1);     // GC
+    VM_define_native(vm, "strupper", native_strupper, 1);     // GC
+    VM_define_native(vm, "strrev", native_strrev, 1);         // GC
+    VM_define_native(vm, "strconcat", native_strconcat, 2);   // GC
+    VM_define_native(vm, "byte", native_byte, 1);             // GC
     VM_define_native(vm, "gcfactor", native_gcfactor, 1);     // GC
     VM_define_native(vm, "gcmode", native_gcmode, 1);         // GC
     VM_define_native(vm, "gccollect", native_gccollect, 0);   // GC
@@ -228,6 +244,7 @@ VM* VM_new(Config* config)
     VM_define_native(vm, "assert", native_assert, 1);         // GC
     VM_define_native(vm, "assertf", native_assertf, 2);       // GC
     VM_define_native(vm, "error", native_error, 1);           // GC
+    VM_define_native(vm, "typeof", native_typeof, 1);         // GC
     VM_define_native(vm, "loadscript", native_loadscript, 1); // GC
     return vm;
 }
