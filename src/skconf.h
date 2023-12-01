@@ -20,16 +20,21 @@
     #error "Compiler not supported (no __STDC_VERSION__ or __cplusplus defined)."
 #endif
 
-#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||                   \
-    __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 || __DBL_MIN_10_EXP__ != -307 ||          \
+#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 ||                          \
+    __DBL_MANT_DIG__ != 53 || __DBL_MAX_10_EXP__ != 308 ||                      \
+    __DBL_MAX_EXP__ != 1024 || __DBL_MIN_10_EXP__ != -307 ||                    \
     __DBL_MIN_EXP__ != -1021
 
     #error "Compiler missing IEEE-754 double precision floating point!"
 #endif
 
 static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8.");
-static_assert(sizeof(double) == sizeof(long), "Size of 'long' and 'double' not equal.");
-static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double' not equal.");
+static_assert(
+    sizeof(double) == sizeof(long),
+    "Size of 'long' and 'double' not equal.");
+static_assert(
+    sizeof(int64_t) == sizeof(double),
+    "Size of 'int64_t' and 'double' not equal.");
 
 /**
  *
@@ -109,11 +114,11 @@ static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double'
     #define likely(cond)   cond
     #define unlikely(cond) cond
     #define unused
-    #define unreachable                                                                            \
-        #include<stdio.h> #include<stdlib.h> printf(                                               \
-            "Unreachable code: %s:%d\n",                                                           \
-            __FILE__,                                                                              \
-            __LINE__);                                                                             \
+    #define unreachable                                                         \
+        #include<stdio.h> #include<stdlib.h> printf(                            \
+            "Unreachable code: %s:%d\n",                                        \
+            __FILE__,                                                           \
+            __LINE__);                                                          \
         abort();
 
 #endif
@@ -135,11 +140,10 @@ static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double'
 #define S_STACK_MAX (1 << 19)
 
 /**
- * Max temporary values VM can hold.
- * This stack grows only when loading scripts.
- * Each new script that gets loaded grows the stack.
+ * Max temporary values VM can hold when
+ * returning from a function.
  **/
-#define S_TEMP_MAX 64
+#define S_TEMP_MAX 0xffffff
 
 /**
  * Max function call frames.
@@ -150,15 +154,12 @@ static_assert(sizeof(int64_t) == sizeof(double), "Size of 'int64_t' and 'double'
 
 /**
  * Allow NaN boxing of values.
- * NaN boxing requires that systems uses
- * lower 48 bits of a pointer for the actual
- * memory addressing and that memory is 4/8 byte
- * aligned.
- * Note: Skooma only compiles on 64-bit machines.
  **/
 #define S_NAN_BOX
 
-/* Default heap grow factor */
+/**
+ * Default heap grow factor
+ **/
 #define GC_HEAP_GROW_FACTOR 2
 
 
@@ -200,10 +201,11 @@ typedef void* (*AllocatorFn)(void* ptr, size_t newsize, void* userdata);
 /**
  * Canonicalize the name of the script, the returned name will
  * be used: when reporting error inside that script, in comparisons
- * when resolving duplicate imports and finally will be passed
+ * when resolving duplicate loads and finally will be passed
  * to 'ScriptLoadFinFn' as argument.
  **/
-typedef const char* (*ScriptRenameFn)(VM* vm, const char* importer_script, const char* name);
+typedef const char* (
+    *ScriptRenameFn)(VM* vm, const char* importer_script, const char* name);
 
 
 /* Forward declare */
@@ -214,13 +216,14 @@ typedef struct ScriptLoadResult ScriptLoadResult;
  * Function called after 'ScriptLoadFn' finishes, to perform
  * cleanup (if any).
  **/
-typedef void (*ScriptLoadFinFn)(VM* vm, const char* name, ScriptLoadResult result);
+typedef void (
+    *ScriptLoadFinFn)(VM* vm, const char* name, ScriptLoadResult result);
 
 
 /* Return result of 'ScriptLoadFn'. */
 struct ScriptLoadResult {
-    const char*     source;   // Source file
-    ScriptLoadFinFn finfn;    // Cleanup/post-script-load function
+    const char*     source; // Source file
+    ScriptLoadFinFn finfn; // Cleanup/post-script-load function
     void*           userdata; // Custom user data (if any)
 };
 
@@ -239,13 +242,13 @@ typedef ScriptLoadResult (*ScriptLoadFn)(VM* vm, const char* name);
  * Create and initialize this 'Config' struct and pass it to 'VM_new'.
  **/
 typedef struct {
-    AllocatorFn    reallocate;        // Generic allocator function
-    ScriptRenameFn rename_script;     // Script rename fn
-    ScriptLoadFn   load_script;       // Script loader fn
-    void*          userdata;          // User data (for 'AllocatorFn')
+    AllocatorFn    reallocate; // Generic allocator function
+    ScriptRenameFn rename_script; // Script rename fn
+    ScriptLoadFn   load_script; // Script loader fn
+    void*          userdata; // User data (for 'AllocatorFn')
     size_t         gc_init_heap_size; // Initial heap allocation
-    size_t         gc_min_heap_size;  // Minimum size of heap after recalculation
-    double         gc_grow_factor;    // Heap grow factor
+    size_t         gc_min_heap_size; // Minimum size of heap after recalculation
+    double         gc_grow_factor; // Heap grow factor
 } Config;
 
 void Config_init(Config* config);

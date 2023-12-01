@@ -5,8 +5,8 @@
 
 typedef size_t Hash;
 
-Hash Hash_ptr(const void *ptr);
-Hash Hash_double(double dbl);
-Hash Hash_string(const char *str, size_t len);
+Hash ptrhash(const void* ptr);
+Hash dblhash(double dbl);
+Hash stringhash(const char* str, size_t len);
 
 #endif

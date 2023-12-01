@@ -19,7 +19,7 @@
 // This saves us from needing to calculate loadfactor each time we insert.
 // Instead we check if 'table->left' integer is zero and then expand
 // recalculating the load factor only then.
-#define INSERTS_UNTIL_EXPAND(table)                                                                \
+#define INSERTS_UNTIL_EXPAND(table)                                             \
     ((UInt)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
 
 
@@ -38,7 +38,8 @@ void HashTable_init(HashTable* table)
     table->entries = NULL;
 }
 
-// Find entry by linear probing, size of the table is always '2^n >= TABLE_INITIAL_SIZE'.
+// Find entry by linear probing, size of the table is always '2^n >=
+// TABLE_INITIAL_SIZE'.
 //
 // In case of finding a 'tombstone' keep probing until the same 'key' was found
 // or empty spot.
@@ -46,28 +47,21 @@ void HashTable_init(HashTable* table)
 // If the empty spot was found and there was a 'tombstone', then return
 // the tombstone, otherwise return the entry containing the same key.
 //
-// Safety: There can't be an infinite cycle, because load factor is being tracked.
-// Hashing: For info about how each 'Value' gets hashed refer to the [value.c].
+// Safety: There can't be an infinite cycle, because load factor is being
+// tracked. Hashing: For info about how each 'Value' gets hashed refer to the
+// [value.c].
 sstatic force_inline Entry* Entry_find(Entry* entries, UInt capacity, Value key)
 {
-    Hash   hash      = Value_hash(key);
+    Hash   hash      = vhash(key);
     UInt   mask      = capacity - 1; // 'capacity' is 2^n
     UInt   index     = hash & mask;
     Entry* tombstone = NULL;
-
     while(true) {
         Entry* entry = &entries[index];
-
         if(IS_EMPTY(entry->key)) {
-            if(!IS_TOMBSTONE(entry)) {
-                return (tombstone ? tombstone : entry);
-            } else if(tombstone == NULL) {
-                tombstone = entry;
-            }
-        } else if(Value_eq(key, entry->key)) {
-            return entry;
-        }
-
+            if(!IS_TOMBSTONE(entry)) return (tombstone ? tombstone : entry);
+            else if(tombstone == NULL) tombstone = entry;
+        } else if(veq(key, entry->key)) return entry;
         index = (index + 1) & mask;
     };
 }
@@ -77,9 +71,8 @@ void HashTable_into(VM* vm, HashTable* src, HashTable* dest)
 {
     for(UInt i = 0; i < src->cap; i++) {
         Entry* entry = &src->entries[i];
-        if(!IS_EMPTY(entry->key)) {
+        if(!IS_EMPTY(entry->key))
             HashTable_insert(vm, dest, entry->key, entry->value);
-        }
     }
 }
 
@@ -98,45 +91,33 @@ sstatic force_inline void HashTable_expand(VM* vm, HashTable* table)
         entries[i].key   = EMPTY_VAL;
         entries[i].value = EMPTY_VAL;
     }
-
     for(UInt i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
-        if(IS_EMPTY(entry->key)) {
-            continue;
-        }
+        if(IS_EMPTY(entry->key)) continue;
         Entry* dest = Entry_find(entries, new_cap, entry->key);
         memcpy(dest, entry, sizeof(Entry));
     }
-
-    if(table->entries != NULL) {
+    if(table->entries != NULL)
         GC_FREE(vm, table->entries, table->cap * sizeof(Entry));
-    }
-
     table->entries = entries;
     table->cap     = new_cap;
     table->left    = INSERTS_UNTIL_EXPAND(table);
 }
 
 // Insert 'key'/'value' pair into the table.
-// If the 'key' was not found insert it together with the 'value' and return true.
-// If the 'key' already exists overwrite the 'value' and return false.
+// If the 'key' was not found insert it together with the 'value' and return
+// true. If the 'key' already exists overwrite the 'value' and return false.
 bool HashTable_insert(VM* vm, HashTable* table, Value key, Value val)
 {
-    if(table->left == 0) {
-        HashTable_expand(vm, table);
-    }
-
+    if(table->left == 0) HashTable_expand(vm, table);
     Entry* entry   = Entry_find(table->entries, table->cap, key);
     bool   new_key = IS_EMPTY(entry->key);
-
     if(new_key) {
-        if(!IS_TOMBSTONE(entry)) {
+        if(!IS_TOMBSTONE(entry))
             // Only decrement if this entry was never inserted into
             table->left--;
-        }
         table->len++;
     }
-
     entry->key   = key;
     entry->value = val;
     return new_key;
@@ -148,14 +129,9 @@ bool HashTable_insert(VM* vm, HashTable* table, Value key, Value val)
 bool HashTable_remove(HashTable* table, Value key)
 {
     Entry* entry = Entry_find(table->entries, table->cap, key);
-
-    if(IS_EMPTY(entry->key)) {
-        return false;
-    }
-
+    if(IS_EMPTY(entry->key)) return false;
     entry->key = EMPTY_VAL;
     PLACE_TOMBSTONE(entry);
-
     // Don't increment table->left, we
     // count tombstones as entries
     table->len--;
@@ -164,30 +140,22 @@ bool HashTable_remove(HashTable* table, Value key)
 
 // VM specific function, used for finding interned strings before creating
 // new 'ObjString' objects.
-ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash)
+OString*
+HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash)
 {
-    if(table->len == 0) {
-        return NULL;
-    }
-
+    if(table->len == 0) return NULL;
     UInt mask  = table->cap - 1; // 'cap' is 2^n
     UInt index = hash & mask;
-
     while(true) {
         Entry* entry = &table->entries[index];
-
         if(IS_EMPTY(entry->key)) {
-            if(!IS_TOMBSTONE(entry)) {
-                return NULL;
-            }
+            if(!IS_TOMBSTONE(entry)) return NULL;
         } else {
-            ObjString* string = AS_STRING(entry->key);
-            if(string->len == len && string->hash == hash && memcmp(string->storage, str, len) == 0)
-            {
+            OString* string = AS_STRING(entry->key);
+            if(string->len == len && string->hash == hash &&
+               memcmp(string->storage, str, len) == 0)
                 return string;
-            }
         }
-
         index = (index + 1) & mask;
     };
 }
@@ -197,16 +165,9 @@ ObjString* HashTable_get_intern(HashTable* table, const char* str, size_t len, H
 // for the given 'key' into 'out' and return true.
 bool HashTable_get(HashTable* table, Value key, Value* out)
 {
-    if(table->len == 0) {
-        return false;
-    }
-
+    if(table->len == 0) return false;
     Entry* entry = Entry_find(table->entries, table->cap, key);
-
-    if(IS_EMPTY(entry->key)) {
-        return false;
-    }
-
+    if(IS_EMPTY(entry->key)) return false;
     *out = entry->value;
     return true;
 }

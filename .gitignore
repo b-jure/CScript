@@ -1,6 +1,7 @@
 ### C ###
 # Prerequisites
 build
+bench
 dependencies
 .vim_undo
 *.d

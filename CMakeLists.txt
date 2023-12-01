@@ -25,6 +25,8 @@ set(SRCFILES
     ${SRCDIR}/hash.c
     ${SRCDIR}/hashtable.c
     ${SRCDIR}/core.c
+    ${SRCDIR}/sstring.c
+    ${SRCDIR}/sgc.c
 )
 
 # Common flags

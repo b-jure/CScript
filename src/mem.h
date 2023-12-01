@@ -2,25 +2,24 @@
 #define __SKOOMA_MEM_H___
 
 #include "common.h"
-#include "compiler.h"
 #include "vmachine.h"
 
 #include <memory.h>
 
 void*  reallocate(void* ptr, size_t newsize, void* userdata);
 size_t gc(VM* vm);
-void   mark_obj(VM* vm, Obj* obj);
+void   omark(VM* vm, O* obj);
 
-#define CLEANUP(vm)                                                                        \
+#define CLEANUP(vm)                                                                                \
     do {                                                                                           \
-        _cleanup_vm(vm);                                                                              \
+        _cleanupvm(vm);                                                                           \
         exit(EXIT_FAILURE);                                                                        \
     } while(false)
 
-#define mark_value(vm, value)                                                                      \
+#define vmark(vm, value)                                                                      \
     do {                                                                                           \
         if(IS_OBJ(value)) {                                                                        \
-            mark_obj(vm, AS_OBJ(value));                                                           \
+            omark(vm, AS_OBJ(value));                                                           \
         }                                                                                          \
     } while(false)
 
@@ -50,8 +49,10 @@ void   mark_obj(VM* vm, Obj* obj);
 
 /* Writes the first 3 bytes of 'x' to 'ptr' */
 #define PUT_BYTES3(ptr, x)                                                                         \
-    *((uint8_t*)(ptr))     = BYTE((x), 0);                                                         \
-    *((uint8_t*)(ptr) + 1) = BYTE((x), 1);                                                         \
-    *((uint8_t*)(ptr) + 2) = BYTE((x), 2);
+    do {                                                                                           \
+        *((uint8_t*)(ptr))     = BYTE((x), 0);                                                     \
+        *((uint8_t*)(ptr) + 1) = BYTE((x), 1);                                                     \
+        *((uint8_t*)(ptr) + 2) = BYTE((x), 2);                                                     \
+    } while(false)
 
 #endif

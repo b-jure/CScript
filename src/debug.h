@@ -11,20 +11,23 @@ sdebug UInt Chunk_getline(Chunk* chunk, UInt index);
 #ifdef DEBUG_ASSERTIONS
     #include <stdio.h>
     #include <stdlib.h>
-    #define ASSERT(expr, message)                                                                  \
-        do {                                                                                       \
-            if(!(expr)) {                                                                          \
-                fprintf(                                                                           \
-                    stderr,                                                                        \
-                    "Assertion failed at %d:%s\n\t'" #expr "'\n\t%s",                              \
-                    __LINE__,                                                                      \
-                    __FILE__,                                                                      \
-                    message);                                                                      \
-                abort();                                                                           \
-            }                                                                                      \
+    #define ASSERT(expr, message)                                               \
+        do {                                                                    \
+            if(!(expr)) {                                                       \
+                fprintf(                                                        \
+                    stderr,                                                     \
+                    "Assertion failed at %d:%s\n\t'" #expr "'\n\t%s",           \
+                    __LINE__,                                                   \
+                    __FILE__,                                                   \
+                    message);                                                   \
+                abort();                                                        \
+            }                                                                   \
         } while(false)
 #else
     #define ASSERT(expr, message)
 #endif
+
+#define TODO(info)  ASSERT(false, "TODO: " info)
+#define PANIC(info) ASSERT(false, "PANIC: " info)
 
 #endif
