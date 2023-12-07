@@ -19,7 +19,7 @@ set(SRCFILES
     ${SRCDIR}/chunk.c
     ${SRCDIR}/value.c
     ${SRCDIR}/vmachine.c
-    ${SRCDIR}/compiler.c
+    ${SRCDIR}/lexer.c
     ${SRCDIR}/parser.c
     ${SRCDIR}/object.c
     ${SRCDIR}/hash.c

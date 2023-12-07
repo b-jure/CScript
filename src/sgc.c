@@ -38,7 +38,7 @@ snative(gcmode)
 {
     UNUSED(argc);
     Value      mode = argv[0];
-    ObjString* err  = NULL;
+    OString* err  = NULL;
 
     if(unlikely(!IS_STRING(mode))) {
         err = ERR_NEW(vm, GC_MODE_ARG_ERR);
@@ -119,7 +119,7 @@ snative(gcset)
 {
     UNUSED(argc);
     Value      bytes = argv[0];
-    ObjString* err   = NULL;
+    OString* err   = NULL;
     if(unlikely(!IS_NUMBER(bytes))) {
         err = ERR_NEW(vm, GC_SET_ARG_ERR);
     } else if(unlikely(AS_NUMBER(bytes) < 0)) {

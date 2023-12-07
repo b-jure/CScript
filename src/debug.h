@@ -11,20 +11,19 @@ sdebug UInt Chunk_getline(Chunk* chunk, UInt index);
 #ifdef DEBUG_ASSERTIONS
     #include <stdio.h>
     #include <stdlib.h>
-    #define ASSERT(expr, message)                                               \
+    #define ASSERT(expr, fmt, ...)                                              \
         do {                                                                    \
             if(!(expr)) {                                                       \
                 fprintf(                                                        \
                     stderr,                                                     \
-                    "Assertion failed at %d:%s\n\t'" #expr "'\n\t%s",           \
+                    "Assertion failed at %d:%s\n\t'" #expr "'\n\t" fmt "\n",   \
                     __LINE__,                                                   \
-                    __FILE__,                                                   \
-                    message);                                                   \
+                    __FILE__ __VA_OPT__(, ) __VA_ARGS__);                       \
                 abort();                                                        \
             }                                                                   \
         } while(false)
 #else
-    #define ASSERT(expr, message)
+    #define ASSERT(expr, fmt, ...)
 #endif
 
 #define TODO(info)  ASSERT(false, "TODO: " info)

@@ -1,8 +1,8 @@
-#include "compiler.h"
 #include "core.h"
 #include "debug.h"
 #include "err.h"
 #include "object.h"
+#include "parser.h"
 #include "skconf.h"
 #include "skmath.h"
 #include "value.h"
@@ -13,8 +13,10 @@
 #include <time.h>
 #include <unistd.h>
 
-sstatic force_inline ObjString*
-ObjString_from_static_prefix(VM* vm, ObjString* string, const InternedString* staticstr)
+sstatic force_inline OString* ObjString_from_static_prefix(
+    VM*                   vm,
+    OString*              string,
+    const InternedString* staticstr)
 {
     UInt len = string->len + staticstr->len;
     char buffer[len + 1];
@@ -23,7 +25,7 @@ ObjString_from_static_prefix(VM* vm, ObjString* string, const InternedString* st
     memcpy(buffer + staticstr->len, string->storage, string->len);
     buffer[len] = '\0';
 
-    return ObjString_from(vm, buffer, len);
+    return OString_from(vm, buffer, len);
 }
 
 //------------------------- snative -------------------------//
@@ -52,14 +54,14 @@ snative(clock)
  * Checks if ObjInstance contains field.
  * @ret - bool, true if it contains, false otherwise
  * @err - if first argument is not ObjInstance
- *      - if second argument is not ObjString
+ *      - if second argument is not OString
  **/
 snative(isfield)
 {
     UNUSED(argc);
-    Value      receiver = argv[0];
-    Value      field    = argv[1];
-    ObjString* err      = NULL;
+    Value    receiver = argv[0];
+    Value    field    = argv[1];
+    OString* err      = NULL;
 
     if(unlikely(!IS_INSTANCE(receiver))) {
         err = ERR_NEW(vm, ISFIELD_INSTANCE_ERR);
@@ -73,7 +75,8 @@ snative(isfield)
 
 fin:;
     Value _dummy;
-    argv[-1] = BOOL_VAL(HashTable_get(&AS_INSTANCE(receiver)->fields, field, &_dummy));
+    argv[-1] =
+        BOOL_VAL(HashTable_get(&AS_INSTANCE(receiver)->fields, field, &_dummy));
     return true;
 }
 
@@ -85,7 +88,7 @@ snative(printl)
 {
     UNUSED(argc);
     UNUSED(vm);
-    Value_print(argv[0]);
+    vprint(argv[0]);
     printf("\n");
     argv[-1] = argv[0];
     return true;
@@ -99,18 +102,21 @@ snative(print)
 {
     UNUSED(argc);
     UNUSED(vm);
-    Value_print(argv[0]);
+    vprint(argv[0]);
     argv[-1] = argv[0];
     return true;
 }
 
-sstatic force_inline ObjString* typename(VM* vm, Value type)
+sstatic force_inline OString* typename(VM* vm, Value type)
 {
     if(IS_NUMBER(type)) {
         return vm->statics[SS_NUM];
     } else if(IS_STRING(type)) {
         return vm->statics[SS_STR];
-    } else if(IS_FUNCTION(type) || IS_BOUND_METHOD(type) || IS_CLOSURE(type) || IS_NATIVE(type)) {
+    } else if(
+        IS_FUNCTION(type) || IS_BOUND_METHOD(type) || IS_CLOSURE(type) ||
+        IS_NATIVE(type))
+    {
         return vm->statics[SS_FUNC];
     } else if(IS_BOOL(type)) {
         return vm->statics[SS_BOOL];
@@ -152,8 +158,10 @@ snative(assert)
     UNUSED(argc);
     Value expr = argv[0];
     if(ISFALSEY(expr)) {
-        argv[-1] = OBJ_VAL(
-            ObjString_from_static_prefix(vm, vm->statics[SS_ASSERT_MSG], &static_str[SS_ASSERT]));
+        argv[-1] = OBJ_VAL(ObjString_from_static_prefix(
+            vm,
+            vm->statics[SS_ASSERT_MSG],
+            &static_str[SS_ASSERT]));
         return false;
     } else {
         argv[-1] = expr;
@@ -178,8 +186,10 @@ snative(assertf)
         argv[-1] = OBJ_VAL(ERR_NEW(vm, ASSERTF_SECOND_ARG_TYPE_ERR));
     } else {
         if(ISFALSEY(expr)) {
-            argv[-1] = OBJ_VAL(
-                ObjString_from_static_prefix(vm, AS_STRING(message), &static_str[SS_ASSERT]));
+            argv[-1] = OBJ_VAL(ObjString_from_static_prefix(
+                vm,
+                AS_STRING(message),
+                &static_str[SS_ASSERT]));
         } else {
             argv[-1] = expr;
             return true;
@@ -201,8 +211,10 @@ snative(error)
     if(unlikely(!IS_STRING(message))) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, ERROR_FIRST_ARG_TYPE_ERR));
     } else {
-        argv[-1] =
-            OBJ_VAL(ObjString_from_static_prefix(vm, AS_STRING(message), &static_str[SS_ERROR]));
+        argv[-1] = OBJ_VAL(ObjString_from_static_prefix(
+            vm,
+            AS_STRING(message),
+            &static_str[SS_ERROR]));
     }
     return false;
 }
@@ -270,11 +282,11 @@ ScriptLoadResult* load_script(VM* vm, ScriptLoadResult* result)
     return result;
 }
 
-ObjFunction* compile_script(VM* vm, ScriptLoadResult* result)
+OFunction* compile_script(VM* vm, ScriptLoadResult* result)
 {
-    runtime         = 0;
-    ObjFunction* fn = compile(vm, result->source, vm->script);
-    runtime         = 1;
+    runtime       = 0;
+    OFunction* fn = compile(vm, result->source, vm->script);
+    runtime       = 1;
 
     if(result->finfn != NULL) {
         result->finfn(vm, AS_CSTRING(vm->script), *result);
@@ -291,7 +303,8 @@ Value resolve_script(VM* vm, Value name)
         return name;
     }
 
-    const char* renamed = vm->config.rename_script(vm, AS_CSTRING(vm->script), AS_CSTRING(name));
+    const char* renamed =
+        vm->config.rename_script(vm, AS_CSTRING(vm->script), AS_CSTRING(name));
 
     if(renamed == NULL) {
         return NIL_VAL;
@@ -301,10 +314,10 @@ Value resolve_script(VM* vm, Value name)
         return name;
     }
 
-    name = OBJ_VAL(ObjString_from(vm, renamed, strlen(renamed)));
-    VM_push(vm, name);
+    name = OBJ_VAL(OString_from(vm, renamed, strlen(renamed)));
+    push(vm, name);
     GC_FREE(vm, (char*)renamed, 0);
-    VM_pop(vm);
+    pop(vm);
     return name;
 }
 
@@ -347,16 +360,16 @@ snative(loadscript)
         return false;
     }
 
-    ObjFunction* scriptfn = compile_script(vm, &result);
+    OFunction* scriptfn = compile_script(vm, &result);
     if(scriptfn == NULL) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_COMPILE_ERR));
         return false;
     }
 
     Value fn = OBJ_VAL(scriptfn);
-    VM_push(vm, fn);
+    push(vm, fn);
     HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL); // Update loaded table
-    VM_pop(vm);
+    pop(vm);
     vm->sp     -= argc;
     vm->script  = name;
     // bool ok     = VM_call_fn(vm, AS_OBJ(fn), 0, false, retcnt);

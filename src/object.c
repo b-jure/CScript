@@ -68,7 +68,7 @@ sstatic force_inline void OString_free(VM* vm, OString* string)
     GC_FREE(vm, string, sizeof(OString) + string->len + 1);
 }
 
-ONative* ObjNative_new(VM* vm, OString* name, NativeFn fn, Int arity, bool isva)
+ONative* ONative_new(VM* vm, OString* name, NativeFn fn, Int arity, bool isva)
 {
     ONative* native = ALLOC_OBJ(vm, ONative, OBJ_NATIVE);
     native->name    = name;
@@ -78,12 +78,12 @@ ONative* ObjNative_new(VM* vm, OString* name, NativeFn fn, Int arity, bool isva)
     return native;
 }
 
-sstatic force_inline void ObjNative_free(VM* vm, ONative* native)
+sstatic force_inline void ONative_free(VM* vm, ONative* native)
 {
     GC_FREE(vm, native, sizeof(ONative));
 }
 
-OFunction* ObjFunction_new(VM* vm)
+OFunction* OFunction_new(VM* vm)
 {
     OFunction* fn = ALLOC_OBJ(vm, OFunction, OBJ_FUNCTION);
     fn->name      = NULL;
@@ -98,11 +98,11 @@ OFunction* ObjFunction_new(VM* vm)
 
 sstatic force_inline void ObjFunction_free(VM* vm, OFunction* fn)
 {
-    Chunk_free(&fn->chunk, vm);
+    Chunk_free(&fn->chunk);
     GC_FREE(vm, fn, sizeof(OFunction));
 }
 
-OClosure* ObjClosure_new(VM* vm, OFunction* fn)
+OClosure* OClosure_new(VM* vm, OFunction* fn)
 {
     OUpvalue** upvals = GC_MALLOC(vm, sizeof(OUpvalue*) * fn->upvalc);
     for(UInt i = 0; i < fn->upvalc; i++)
@@ -114,13 +114,13 @@ OClosure* ObjClosure_new(VM* vm, OFunction* fn)
     return closure;
 }
 
-sstatic force_inline void ObjClosure_free(VM* vm, OClosure* closure)
+sstatic force_inline void OClosure_free(VM* vm, OClosure* closure)
 {
     GC_FREE(vm, closure->upvals, closure->upvalc * sizeof(OUpvalue*));
     GC_FREE(vm, closure, sizeof(OClosure));
 }
 
-OUpvalue* ObjUpvalue_new(VM* vm, Value* var_ref)
+OUpvalue* OUpvalue_new(VM* vm, Value* var_ref)
 {
     OUpvalue* upval = ALLOC_OBJ(vm, OUpvalue, OBJ_UPVAL);
     upval->closed   = (Variable){EMPTY_VAL, 0};
@@ -129,12 +129,12 @@ OUpvalue* ObjUpvalue_new(VM* vm, Value* var_ref)
     return upval;
 }
 
-sstatic force_inline void ObjUpvalue_free(VM* vm, OUpvalue* upval)
+sstatic force_inline void OUpvalue_free(VM* vm, OUpvalue* upval)
 {
     GC_FREE(vm, upval, sizeof(OUpvalue));
 }
 
-OClass* ObjClass_new(VM* vm, OString* name)
+OClass* OClass_new(VM* vm, OString* name)
 {
     OClass* cclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS); // GC
     cclass->name   = name;
@@ -143,14 +143,14 @@ OClass* ObjClass_new(VM* vm, OString* name)
     return cclass;
 }
 
-sstatic force_inline void ObjClass_free(VM* vm, OClass* cclass)
+sstatic force_inline void OClass_free(VM* vm, OClass* cclass)
 {
     HashTable_free(vm, &cclass->methods);
     GC_FREE(vm, cclass, sizeof(OClass));
 }
 
 
-OInstance* ObjInstance_new(VM* vm, OClass* cclass)
+OInstance* OInstance_new(VM* vm, OClass* cclass)
 {
     OInstance* instance = ALLOC_OBJ(vm, OInstance, OBJ_INSTANCE);
     instance->cclass    = cclass;
@@ -158,13 +158,13 @@ OInstance* ObjInstance_new(VM* vm, OClass* cclass)
     return instance;
 }
 
-sstatic force_inline void ObjInstance_free(VM* vm, OInstance* instance)
+sstatic force_inline void OInstance_free(VM* vm, OInstance* instance)
 {
     HashTable_free(vm, &instance->fields);
     GC_FREE(vm, instance, sizeof(OInstance));
 }
 
-OBoundMethod* ObjBoundMethod_new(VM* vm, Value receiver, O* method)
+OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, O* method)
 {
     OBoundMethod* bound_method = ALLOC_OBJ(vm, OBoundMethod, OBJ_BOUND_METHOD);
     bound_method->receiver     = receiver;
@@ -290,7 +290,7 @@ Hash ohash(Value value)
 }
 
 
-sstatic force_inline void ObjBoundMethod_free(VM* vm, OBoundMethod* bound_method)
+sstatic force_inline void OBoundMethod_free(VM* vm, OBoundMethod* bound_method)
 {
     GC_FREE(vm, bound_method, sizeof(OBoundMethod));
 }
@@ -299,7 +299,7 @@ void ofree(VM* vm, O* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p free type ", (void*)object);
-    ObjType_print(otype(object));
+    otypeprint(otype(object));
     printf("\n");
 #endif
 #ifdef S_PRECOMPUTED_GOTO
@@ -325,32 +325,32 @@ void ofree(VM* vm, O* object)
         }
         CASE(OBJ_CLOSURE)
         {
-            ObjClosure_free(vm, (OClosure*)object);
+            OClosure_free(vm, (OClosure*)object);
             BREAK;
         }
         CASE(OBJ_NATIVE)
         {
-            ObjNative_free(vm, (ONative*)object);
+            ONative_free(vm, (ONative*)object);
             BREAK;
         }
         CASE(OBJ_UPVAL)
         {
-            ObjUpvalue_free(vm, (OUpvalue*)object);
+            OUpvalue_free(vm, (OUpvalue*)object);
             BREAK;
         }
         CASE(OBJ_CLASS)
         {
-            ObjClass_free(vm, (OClass*)object);
+            OClass_free(vm, (OClass*)object);
             BREAK;
         }
         CASE(OBJ_INSTANCE)
         {
-            ObjInstance_free(vm, (OInstance*)object);
+            OInstance_free(vm, (OInstance*)object);
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            ObjBoundMethod_free(vm, (OBoundMethod*)object);
+            OBoundMethod_free(vm, (OBoundMethod*)object);
             BREAK;
         }
     }

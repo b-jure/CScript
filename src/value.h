@@ -36,7 +36,7 @@ typedef uint64_t Value;
     #define FALSE_TAG  0x02
     #define TRUE_TAG   0x03
     #define EMPTY_TAG  0x04
-    #define OBJECT_TAG 0x05 // 'O*' is 8 bytes aligned (first 3 bits are 0)
+    #define OBJECT_TAG 0x05 // 'O*' is on 8 byte alignment (first 3 bits are 0)
 
     #define AS_OBJ(val)        ((O*)((uintptr_t)((val) & 0x0000fffffffffff8)))
     #define AS_BOOL(val)       ((bool)((val) == TRUE_VAL))

@@ -76,7 +76,7 @@ sstatic Int shorinst(const char* name, Chunk* chunk, OpCode code, UInt offset)
             break;
     }
     printf("\n");
-    return offset + 2; /* OpCode + 8-bit/1-byte index */
+    return offset + 2; /* OpCode + param(8-bit/1-byte) */
 }
 
 sstatic Int longins(const char* name, Chunk* chunk, OpCode code, UInt offset)
@@ -99,7 +99,7 @@ sstatic Int longins(const char* name, Chunk* chunk, OpCode code, UInt offset)
             break;
     }
     printf("\n");
-    return offset + 4; /* OpCode + 24-bit/3-byte index */
+    return offset + 4; /* OpCode(8-bit/1-byte) + param(24-bit/3-bytes) */
 }
 
 sstatic Int invoke(const char* name, Chunk* chunk, Int offset)
@@ -130,7 +130,9 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_FALSE:
             return simpleins("OP_FALSE", offset);
         case OP_NIL:
-            return shorinst("OP_NIL", chunk, OP_NIL, offset);
+            return simpleins("OP_NIL", offset);
+        case OP_NILN:
+            return longins("OP_NILN", chunk, OP_NILN, offset);
         case OP_VALIST:
             return longins("OP_VALIST", chunk, OP_VALIST, offset);
         case OP_NEG:
@@ -141,6 +143,10 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
             return simpleins("OP_SUB", offset);
         case OP_MUL:
             return simpleins("OP_MUL", offset);
+        case OP_MOD:
+            return simpleins("OP_MOD", offset);
+        case OP_POW:
+            return simpleins("OP_POW", offset);
         case OP_DIV:
             return simpleins("OP_DIV", offset);
         case OP_NOT:
@@ -168,7 +174,7 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_DEFINE_GLOBAL:
             return shorinst("OP_DEFINE_GLOBAL", chunk, OP_DEFINE_GLOBAL, offset);
         case OP_DEFINE_GLOBALL:
-            return longins("OP_DEFINE_GLOBAL", chunk, OP_DEFINE_GLOBALL, offset);
+            return longins("OP_DEFINE_GLOBALL", chunk, OP_DEFINE_GLOBALL, offset);
         case OP_GET_GLOBAL:
             return shorinst("OP_GET_GLOBAL", chunk, OP_GET_GLOBAL, offset);
         case OP_GET_GLOBALL:

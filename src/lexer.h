@@ -89,13 +89,13 @@ typedef struct {
     UInt        line; // source file line
     bool        panic; // sync flag
     bool        error; // parse error flag
-} L; // Lexer
+} Lexer; // Lexer
 
 
 
-L     L_new(const char* source, VM* vm);
-Token scan(L* lexer);
+Lexer     L_new(const char* source, VM* vm);
+Token scan(Lexer* lexer);
 Token syntoken(const char* name);
-void  printerror(L* parser, const char* fmt, va_list args);
+void  printerror(Lexer* parser, const char* fmt, va_list args);
 
 #endif

@@ -29,7 +29,7 @@ Token syntoken(const char* name)
     };
 }
 
-sstatic force_inline Token token(L* lexer, TokenType type)
+sstatic force_inline Token token(Lexer* lexer, TokenType type)
 {
     Token token;
     token.type  = type;
@@ -39,7 +39,7 @@ sstatic force_inline Token token(L* lexer, TokenType type)
     return token;
 }
 
-sstatic force_inline Token errtoken(L* lexer, const char* err)
+sstatic force_inline Token errtoken(Lexer* lexer, const char* err)
 {
     Token token;
     token.type  = TOK_ERROR;
@@ -53,7 +53,7 @@ sstatic force_inline Token errtoken(L* lexer, const char* err)
 #define isend(lexer)     (peek(lexer) == '\0')
 #define peek_next(lexer) ((isend(lexer)) ? '\0' : *((lexer)->_current + 1))
 
-void printerror(L* lexer, const char* err, va_list args)
+void printerror(Lexer* lexer, const char* err, va_list args)
 {
     lexer->panic       = true;
     lexer->error       = true;
@@ -71,7 +71,7 @@ void printerror(L* lexer, const char* err, va_list args)
     putc('\n', stderr);
 }
 
-sstatic void lexerror(L* lexer, const char* err, ...)
+sstatic void lexerror(Lexer* lexer, const char* err, ...)
 {
     va_list args;
     va_start(args, err);
@@ -79,21 +79,21 @@ sstatic void lexerror(L* lexer, const char* err, ...)
     va_end(args);
 }
 
-sstatic force_inline void advance(L* lexer)
+sstatic force_inline void advance(Lexer* lexer)
 {
     if(*lexer->_current++ == '\n') lexer->line++;
 }
 
-sstatic force_inline char nextchar(L* lexer)
+sstatic force_inline char nextchar(Lexer* lexer)
 {
     char c = *lexer->_current++;
     if(c == '\n') lexer->line++;
     return c;
 }
 
-L L_new(const char* source, VM* vm)
+Lexer L_new(const char* source, VM* vm)
 {
-    return (L){
+    return (Lexer){
         .vm       = vm,
         .source   = source,
         .start    = source,
@@ -104,7 +104,7 @@ L L_new(const char* source, VM* vm)
     };
 }
 
-sstatic force_inline Int hexdigit(L* lexer)
+sstatic force_inline Int hexdigit(Lexer* lexer)
 {
     char hex = nextchar(lexer);
     if(hex >= '0' && hex <= '9') return hex - '0';
@@ -114,7 +114,7 @@ sstatic force_inline Int hexdigit(L* lexer)
     return -1;
 }
 
-sstatic force_inline Int eschex(L* lexer)
+sstatic force_inline Int eschex(Lexer* lexer)
 {
     Int number = 0;
     for(UInt i = 0; i < 2; i++) {
@@ -133,7 +133,7 @@ sstatic force_inline Int eschex(L* lexer)
     return number;
 }
 
-sstatic force_inline Token string(L* lexer)
+sstatic force_inline Token string(Lexer* lexer)
 {
     Array_Byte buffer;
     Array_Byte_init(&buffer, lexer->vm);
@@ -196,13 +196,23 @@ sstatic force_inline Token string(L* lexer)
     return tok;
 }
 
-sstatic Token numtoken(L* lexer, NumberType type)
+sstatic Token numtoken(Lexer* lexer, NumberType type)
 {
     errno = 0;
     Value number;
-    if(type == NUM_HEX) number = NUMBER_VAL(strtoll(lexer->start, NULL, 16));
-    else if(type == NUM_DEC) number = NUMBER_VAL(strtod(lexer->start, NULL));
-    else number = NUMBER_VAL(strtoll(lexer->start, NULL, 8));
+    switch(type) {
+        case NUM_HEX:
+            number = NUMBER_VAL(strtoll(lexer->start, NULL, 16));
+            break;
+        case NUM_DEC:
+            number = NUMBER_VAL(strtod(lexer->start, NULL));
+            break;
+        case NUM_OCT:
+            number = NUMBER_VAL(strtoll(lexer->start, NULL, 8));
+            break;
+        default:
+            unreachable;
+    }
     if(errno == ERANGE) {
         lexerror(
             lexer,
@@ -216,7 +226,7 @@ sstatic Token numtoken(L* lexer, NumberType type)
     return tok;
 }
 
-sstatic Token octal(L* lexer)
+sstatic Token octal(Lexer* lexer)
 {
     nextchar(lexer); // skip leading zero
     char c;
@@ -230,7 +240,7 @@ sstatic Token octal(L* lexer)
     return numtoken(lexer, NUM_OCT);
 }
 
-sstatic Token hex(L* lexer)
+sstatic Token hex(Lexer* lexer)
 {
     nextchar(lexer); // skip 'x' or 'X'
     if(!isxdigit(peek(lexer))) lexerror(lexer, "Invalid hexadecimal constant.");
@@ -239,7 +249,7 @@ sstatic Token hex(L* lexer)
     return numtoken(lexer, NUM_HEX);
 }
 
-sstatic Token decimal(L* lexer)
+sstatic Token decimal(Lexer* lexer)
 {
     while(isdigit(peek(lexer)))
         advance(lexer);
@@ -262,8 +272,12 @@ sstatic Token decimal(L* lexer)
     return numtoken(lexer, NUM_DEC);
 }
 
-sstatic force_inline TokenType
-keyword(L* lexer, UInt start, UInt length, const char* pattern, TokenType type)
+sstatic force_inline TokenType keyword(
+    Lexer*      lexer,
+    UInt        start,
+    UInt        length,
+    const char* pattern,
+    TokenType   type)
 {
     if(lexer->_current - lexer->start == start + length &&
        memcmp(lexer->start + start, pattern, length) == 0)
@@ -271,7 +285,7 @@ keyword(L* lexer, UInt start, UInt length, const char* pattern, TokenType type)
     return TOK_IDENTIFIER;
 }
 
-sstatic TokenType TokenType_identifier(L* lexer)
+sstatic TokenType TokenType_identifier(Lexer* lexer)
 {
 #ifdef S_PRECOMPUTED_GOTO
     #define RET &&ret
@@ -487,7 +501,7 @@ ret:
     return TOK_IDENTIFIER;
 }
 
-sstatic force_inline Token idtoken(L* lexer)
+sstatic force_inline Token idtoken(Lexer* lexer)
 {
     char c;
     while(isalnum((c = peek(lexer))) || c == '_')
@@ -495,7 +509,7 @@ sstatic force_inline Token idtoken(L* lexer)
     return token(lexer, TokenType_identifier(lexer));
 }
 
-sstatic force_inline void skipws(L* lexer)
+sstatic force_inline void skipws(Lexer* lexer)
 {
     while(true) {
         switch(peek(lexer)) {
@@ -519,14 +533,14 @@ sstatic force_inline void skipws(L* lexer)
     }
 }
 
-sstatic bool lmatch(L* lexer, char c)
+sstatic bool lmatch(Lexer* lexer, char c)
 {
     if(isend(lexer) || c != peek(lexer)) return false;
     lexer->_current++;
     return true;
 }
 
-Token scan(L* lexer)
+Token scan(Lexer* lexer)
 {
     skipws(lexer);
     lexer->start = lexer->_current;
@@ -534,9 +548,11 @@ Token scan(L* lexer)
     int c = nextchar(lexer);
     if(c == '_' || isalpha(c)) return idtoken(lexer);
     if(isdigit(c)) {
-        if(peek(lexer) == 'x' || peek(lexer) == 'X') return hex(lexer);
-        else if(c == '0' && isdigit(peek(lexer))) return octal(lexer);
-        else return decimal(lexer);
+        if(c == '0') {
+            if(peek(lexer) == 'x' || peek(lexer) == 'X') return hex(lexer);
+            else if(isdigit(peek(lexer))) return octal(lexer);
+        }
+        return decimal(lexer);
     }
 #ifdef S_PRECOMPUTED_GOTO
     #define ERR &&err

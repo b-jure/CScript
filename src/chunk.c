@@ -1,6 +1,7 @@
 #include "array.h"
 #include "chunk.h"
 #include "common.h"
+#include "debug.h"
 #include "mem.h"
 #include "vmachine.h"
 
@@ -50,7 +51,7 @@ UInt Chunk_write(Chunk* chunk, uint8_t byte, UInt line)
 }
 
 /* Frees the chunk memory. */
-void Chunk_free(Chunk* chunk, VM* vm)
+void Chunk_free(Chunk* chunk)
 {
     Array_Value_free(&chunk->constants, NULL);
     Array_UInt_free(&chunk->lines, NULL);
@@ -65,6 +66,9 @@ Chunk_write_param24(Chunk* chunk, UInt param, UInt line)
     Chunk_write(chunk, BYTE(param, 0), line);
     Chunk_write(chunk, BYTE(param, 1), line);
     Chunk_write(chunk, BYTE(param, 2), line);
+    ASSERT(
+        GET_BYTES3(Array_Byte_last(&chunk->code) - 2) == param,
+        "Invalid write to chunk bytecode array.");
 }
 
 sstatic force_inline UInt
@@ -95,6 +99,7 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
     {
         CASE(OP_TRUE)
         CASE(OP_FALSE)
+        CASE(OP_NIL)
         CASE(OP_NEG)
         CASE(OP_ADD)
         CASE(OP_SUB)
@@ -117,13 +122,12 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_CALLSTART)
         CASE(OP_RETSTART)
         CASE(OP_MOD)
-        CASE(OP_FOREACH_PREP)
-        CASE(OP_RET)
-        CASE(OP_TOPRET)
-        CASE(OP_NIL)
+        CASE(OP_POW)
         {
             unreachable;
         }
+        CASE(OP_RET)
+        CASE(OP_TOPRET)
         CASE(OP_POPN)
         CASE(OP_DEFINE_GLOBALL)
         CASE(OP_GET_GLOBALL)

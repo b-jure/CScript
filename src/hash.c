@@ -6,7 +6,7 @@
 #define XXH64_SEED 31
 #define HASH_INF   314159
 
-Hash Hash_double(double dbl)
+Hash dblhash(double dbl)
 {
     if(sisinf(dbl) || sisnan(dbl)) {
         return (dbl > 0) ? HASH_INF : -HASH_INF;
@@ -21,7 +21,7 @@ Hash Hash_double(double dbl)
     return bitcast.ints[0] + bitcast.ints[1];
 }
 
-Hash Hash_string(const char* str, size_t len)
+Hash stringhash(const char* str, size_t len)
 {
     return XXH64(str, len, XXH64_SEED);
 }

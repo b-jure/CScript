@@ -21,14 +21,14 @@ void omark(VM* vm, O* obj)
     if(otype(obj) == OBJ_STRING) {
 #ifdef DEBUG_LOG_GC
         printf("%p blacken ", (void*)obj);
-        Value_print(OBJ_VAL(obj));
+        vprint(OBJ_VAL(obj));
         printf("\n");
 #endif
         return;
     }
 #ifdef DEBUG_LOG_GC
     printf("%p mark ", (void*)obj);
-    Value_print(OBJ_VAL(obj));
+    vprint(OBJ_VAL(obj));
     printf("\n");
 #endif
     GSARRAY_PUSH(vm, obj);
@@ -110,8 +110,7 @@ MS_FN(markroots)
     markglobals(vm);
     markstatics(vm);
     markloaded(vm);
-    marktemp(vm);
-    vmark(vm, vm->script); // @? Remove
+    vmark(vm, vm->script);
 }
 
 MS_FN(rmweakrefs)
@@ -151,7 +150,7 @@ void mark_black(VM* vm, O* obj)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p blacken ", (void*)obj);
-    Value_print(OBJ_VAL(obj));
+    vprint(OBJ_VAL(obj));
     printf(" header: 0x%08lx\n", obj->header);
 #endif
 #ifdef S_PRECOMPUTED_GOTO
@@ -261,15 +260,14 @@ void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 {
     vm->gc_allocated += newc - oldc;
     ASSERT(
-        newc > oldc,
-        "Tried freeing memory with gcrealloc() (or zero sized "
-        "allocation).");
+        newc >= oldc,
+        "Tried freeing memory with gcrealloc() [newsize:%ld | oldsize:%ld].",
+        newc,
+        oldc);
 #ifdef DEBUG_STRESS_GC
-    if(newc > oldc) {
-        gc(vm);
-    }
+    if(newc > oldc) gc(vm);
 #else
-    if(!GC_CHECK(vm, GC_MANUAL_BIT) && vm->gc_next < vm->gc_allocated) gc(vm);
+    if(!GC_CHECK(vm, GC_MANUAL_BIT) && vm->gc_next <= vm->gc_allocated) gc(vm);
 #endif
     return REALLOC(vm, ptr, newc);
 }
@@ -278,7 +276,11 @@ void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 void* gcfree(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 {
     vm->gc_allocated += newc - oldc;
-    ASSERT(newc <= oldc, "Tried allocating memory with gcfree().");
+    ASSERT(
+        newc <= oldc,
+        "Tried allocating memory with gcfree() [newsize:%ld | oldsize:%ld]",
+        newc,
+        oldc);
     return REALLOC(vm, ptr, newc);
 }
 

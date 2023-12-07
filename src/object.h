@@ -98,24 +98,24 @@ sstatic force_inline bool isotype(Value value, OType type)
 }
 
 struct OString { // typedef is inside 'value.h'
-    O      obj;
-    size_t len;
-    Hash   hash;
-    char   storage[];
+    O      obj; // shared header
+    size_t len; // string length (excluding null term)
+    Hash   hash; // cached hash
+    char   storage[]; // bytes (chars)
 };
 
 struct OUpvalue { // typedef is inside 'value.h'
-    O         obj;
-    Variable  closed;
-    Value*    location;
-    OUpvalue* next;
+    O         obj; // shared header
+    Variable  closed; // is upvalue closed over
+    Value*    location; // ptr to 'closed' or VM stack
+    OUpvalue* next; // chain
 };
 
 struct OFunction { // typedef is inside 'value.h'
-    O        obj;
-    Chunk    chunk;
-    OString* name;
-    UInt     upvalc;
+    O        obj; // shared header
+    Chunk    chunk; // bytecode and constants
+    OString* name; // script name
+    UInt     upvalc; // number of upvalues
     UInt     arity; // Min amount of arguments required
     UInt     vacnt; // Variable arguments count
     Byte     isva : 1; // If this function takes valist
@@ -123,39 +123,39 @@ struct OFunction { // typedef is inside 'value.h'
 };
 
 struct OClosure { // typedef is inside 'value.h'
-    O          obj;
-    OFunction* fn;
-    OUpvalue** upvals; // size of fn->upvalc
-    UInt       upvalc;
+    O          obj; // shared header
+    OFunction* fn; // wrapped function
+    OUpvalue** upvals; // array of ptr to OUpvalue
+    UInt       upvalc; // array len
 };
 
 struct OClass { // typedef is inside 'value.h'
-    O         obj;
-    OString*  name;
-    HashTable methods;
+    O         obj; // shared header
+    OString*  name; // class name
+    HashTable methods; // class methods
     O*        overloaded; // @TODO: array of overloadable ops
 };
 
 struct OInstance { // typedef is inside 'value.h'
-    O         obj;
-    OClass*   cclass;
-    HashTable fields;
+    O         obj; // shared header
+    OClass*   cclass; // ptr to class we instantiated from
+    HashTable fields; // Instance fields
 };
 
-struct OBoundMethod {
-    O     obj;
-    Value receiver; // OInstance
-    O*    method; // OClosure of OFunction
+struct OBoundMethod { // typedef is inside 'value.h'
+    O     obj; // shared header
+    Value receiver; // ptr to OInstance this method is bound to
+    O*    method; // OClosure or OFunction
 };
 
 typedef struct {
-    O        obj;
-    NativeFn fn;
-    OString* name;
-    Int      arity;
-    bool     isva;
-    Int      vacnt;
-} ONative;
+    O        obj; // shared header
+    NativeFn fn; // native functions signature
+    OString* name; // native function name
+    Int      arity; // how many arguments
+    bool     isva; // is this vararg function
+    Int      vacnt; // count of varargs
+} ONative; // Native function written in C
 
 OString*      OString_from(VM* vm, const char* chars, size_t len);
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, O* method);

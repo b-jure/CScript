@@ -3,6 +3,7 @@
 
 #include "common.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <memory.h>
 #include <stdio.h>
@@ -25,9 +26,9 @@
 #define GSARRAY_PUSH(vm, objref)                                                \
     ({                                                                          \
         if((vm)->gscap <= (vm)->gslen) {                                        \
-            UInt oldcap = (vm)->gscap;                                          \
+            Int oldcap = (vm)->gscap;                                           \
             (vm)->gscap =                                                       \
-                MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE),            \
+                MIN(GROW_ARRAY_CAPACITY((Int)oldcap, ARRAY_INITIAL_SIZE),       \
                     UINT24_MAX);                                                \
             (vm)->gray_stack =                                                  \
                 (O**)realloc((vm)->gray_stack, (vm)->gscap * sizeof(O*));       \
@@ -63,7 +64,7 @@
 #define CARRAY_PUSH(chunk, constant, vm)                                        \
     ({                                                                          \
         if((chunk)->ccap <= (chunk)->clen) {                                    \
-            UInt oldcap = (chunk)->ccap;                                        \
+            Int oldcap = (chunk)->ccap;                                         \
             (chunk)->ccap =                                                     \
                 MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE),            \
                     UINT24_MAX);                                                \
@@ -97,7 +98,7 @@
 #define GARRAY_PUSH(vm, global)                                                 \
     ({                                                                          \
         if((vm)->globcap <= (vm)->globlen) {                                    \
-            UInt oldcap = (vm)->globcap;                                        \
+            Int oldcap = (vm)->globcap;                                         \
             (vm)->globcap =                                                     \
                 MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE),            \
                     UINT24_MAX);                                                \
@@ -133,9 +134,9 @@
 /* GENERIC ARRAY (does not trigger garbage collector)
  *
  * These are internal only macros. */
+#define _ARRAY_METHOD_NAME(tname, name) tname##_##name
 #define _CALL_ARRAY_METHOD(tname, name, ...)                                    \
     _ARRAY_METHOD_NAME(tname, name)(self __VA_OPT__(, ) __VA_ARGS__)
-#define _ARRAY_METHOD_NAME(tname, name) tname##_##name
 #define _ARRAY_METHOD(tname, name, ...)                                         \
     _ARRAY_METHOD_NAME(tname, name)                                             \
     (tname * self __VA_OPT__(, ) __VA_ARGS__)
@@ -154,104 +155,106 @@ typedef void (*FreeFn)(void* value);
                                                                                 \
     force_inline void _ARRAY_METHOD(name, init, VM* vmachine)                   \
     {                                                                           \
-        self->cap  = 0;                                                         \
-        self->len  = 0;                                                         \
-        self->data = NULL;                                                      \
-        self->vm   = vmachine;                                                  \
+        (self)->cap  = 0;                                                       \
+        (self)->len  = 0;                                                       \
+        (self)->data = NULL;                                                    \
+        (self)->vm   = vmachine;                                                \
     }                                                                           \
                                                                                 \
     force_inline void _ARRAY_METHOD(name, init_cap, uint32_t cap)               \
     {                                                                           \
-        self->data =                                                            \
-            (type*)gcrealloc(self->vm, self->data, 0, cap * sizeof(type));      \
-        self->cap = cap;                                                        \
+        (self)->data =                                                          \
+            (type*)gcrealloc((self)->vm, (self)->data, 0, cap * sizeof(type));  \
+        (self)->cap = cap;                                                      \
     }                                                                           \
                                                                                 \
     force_inline UInt _ARRAY_METHOD(name, push, type value)                     \
     {                                                                           \
-        if(self->cap <= self->len) {                                            \
-            size_t old_cap = self->cap;                                         \
-            self->cap      = GROW_ARRAY_CAPACITY(old_cap, ARRAY_INITIAL_SIZE);  \
-            if(unlikely(self->cap >= UINT32_MAX)) {                             \
+        if((self)->cap <= (self)->len) {                                        \
+            size_t old_cap = (self)->cap;                                       \
+            (self)->cap    = GROW_ARRAY_CAPACITY(old_cap, ARRAY_INITIAL_SIZE);  \
+            if(unlikely((self)->cap >= UINT32_MAX)) {                           \
                 fprintf(                                                        \
                     stderr,                                                     \
-                    "Internal error, " #name " capacity exceeded! [%lu]\n",     \
-                    self->cap);                                                 \
+                    "Internal error, %s capacity exceeded! [%lu]\n",            \
+                    #name,                                                      \
+                    (self)->cap);                                               \
                 exit(EXIT_FAILURE);                                             \
             } else {                                                            \
-                self->data = (type*)gcrealloc(                                  \
-                    self->vm,                                                   \
-                    self->data,                                                 \
+                (self)->data = (type*)gcrealloc(                                \
+                    (self)->vm,                                                 \
+                    (self)->data,                                               \
                     old_cap * sizeof(type),                                     \
-                    self->cap * sizeof(type));                                  \
+                    (self)->cap * sizeof(type));                                \
             }                                                                   \
         }                                                                       \
-        self->data[self->len++] = value;                                        \
-        return self->len - 1;                                                   \
+        (self)->data[(self)->len++] = value;                                    \
+        return (self)->len - 1;                                                 \
     }                                                                           \
                                                                                 \
     force_inline type _ARRAY_METHOD(name, pop)                                  \
     {                                                                           \
-        return self->data[--self->len];                                         \
+        return (self)->data[--(self)->len];                                     \
     }                                                                           \
                                                                                 \
     force_inline type* _ARRAY_METHOD(name, index, size_t index)                 \
     {                                                                           \
-        return &self->data[index];                                              \
+        return &(self)->data[index];                                            \
     }                                                                           \
                                                                                 \
     force_inline type* _ARRAY_METHOD(name, last)                                \
     {                                                                           \
-        return &self->data[self->len - 1];                                      \
+        return &(self)->data[(self)->len - 1];                                  \
     }                                                                           \
                                                                                 \
     force_inline type* _ARRAY_METHOD(name, first)                               \
     {                                                                           \
-        return &self->data[0];                                                  \
+        return &(self)->data[0];                                                \
     }                                                                           \
                                                                                 \
     force_inline void _ARRAY_METHOD(name, insert, size_t index, type value)     \
     {                                                                           \
-        type* src  = self->data + index;                                        \
+        type* src  = (self)->data + index;                                      \
         type* dest = src + 1;                                                   \
-        memmove(dest, src, self->len - index);                                  \
-        self->len++;                                                            \
-        self->data[index] = value;                                              \
+        memmove(dest, src, (self)->len - index);                                \
+        (self)->len++;                                                          \
+        (self)->data[index] = value;                                            \
     }                                                                           \
                                                                                 \
     force_inline type _ARRAY_METHOD(name, remove, size_t index)                 \
     {                                                                           \
-        if(self->len == 1) return _CALL_ARRAY_METHOD(name, pop);                \
-        type* src    = self->data + index;                                      \
+        if((self)->len == 1) return _CALL_ARRAY_METHOD(name, pop);              \
+        type* src    = (self)->data + index;                                    \
         type* dest   = src - 1;                                                 \
         type  retval = *src;                                                    \
-        memmove(dest, src, self->len - index);                                  \
-        self->len--;                                                            \
+        memmove(dest, src, (self)->len - index);                                \
+        (self)->len--;                                                          \
         return retval;                                                          \
     }                                                                           \
                                                                                 \
     force_inline size_t _ARRAY_METHOD(name, len)                                \
     {                                                                           \
-        return self->len;                                                       \
+        return (self)->len;                                                     \
     }                                                                           \
                                                                                 \
     force_inline void _ARRAY_METHOD(name, shrink)                               \
     {                                                                           \
-        if(self->cap > self->len) {                                             \
+        if((self)->cap > (self)->len) {                                         \
             gcrealloc(                                                          \
-                self->vm,                                                       \
-                self->data,                                                     \
-                self->cap * sizeof(name),                                       \
-                self->len * sizeof(name));                                      \
+                (self)->vm,                                                     \
+                (self)->data,                                                   \
+                (self)->cap * sizeof(name),                                     \
+                (self)->len * sizeof(name));                                    \
         }                                                                       \
     }                                                                           \
                                                                                 \
     force_inline void _ARRAY_METHOD(name, free, FreeFn fn)                      \
     {                                                                           \
         if(fn != NULL)                                                          \
-            for(UInt i = 0; i < self->len; i++)                                 \
-                fn((void*)&self->data[i]);                                      \
-        if(self.data != NULL) gcfree(self->vm, self->data, self->cap, 0);       \
+            for(UInt i = 0; i < (self)->len; i++)                               \
+                fn((void*)&(self)->data[i]);                                    \
+        if((self)->data != NULL)                                                \
+            gcfree((self)->vm, (self)->data, (self)->cap, 0);                   \
     }
 
 #endif

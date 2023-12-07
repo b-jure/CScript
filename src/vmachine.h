@@ -12,18 +12,18 @@
 #define VM_FRAMES_MAX S_CALLFRAMES_MAX
 
 // Max stack size
-#define VM_STACK_MAX (S_STACK_MAX / sizeof(Value))
+#define VM_STACK_MAX ((Int)(S_STACK_MAX / sizeof(Value)))
 
 
 
 
+// Get function from obj
+#define GET_FN(obj)                                                             \
+    (otype(obj) == OBJ_CLOSURE ? ((OClosure*)(obj))->fn : ((OFunction*)(obj)))
 // Get frame function
 #define FRAME_FN(frame) GET_FN((frame)->fn)
 // Get frame closure
 #define FRAME_CLOSURE(frame) ((OClosure*)((frame)->fn))
-// Get function from obj
-#define GET_FN(obj)                                                             \
-    (otype(obj) == OBJ_CLOSURE ? ((OClosure*)(obj))->fn : ((OFunction*)(obj)))
 
 typedef struct {
     O*     fn;
@@ -71,30 +71,31 @@ typedef struct {
 ARRAY_NEW(Array_ORef, O*);
 
 struct VM {
-    Config    config; // user configuration
-    HashTable loaded; // loaded scripts
-    Value     script; // current script name
-    Function* F; // function state
-    CallFrame frames[VM_FRAMES_MAX];
-    Int       fc; // frame count
-    Value     stack[VM_STACK_MAX];
-    Value*    sp; // stack pointer
-    Value*    callstart; // start of call args
-    Value*    retstart; // start of return values
-    HashTable globids; // global variable names
-    Variable* globvals; // global variable values
-    UInt      globlen; // global variable count
-    UInt      globcap; // global variable array size
-    HashTable strings; // interned strings (weak refs)
-    OUpvalue* open_upvals; // closure values
-    OString*  statics[SS_SIZE]; // static strings
-    O*        objects; // list of all allocated objects
-    O**       gray_stack; // tricolor gc (stores marked objects)
-    UInt      gslen; // gray stack length
-    UInt      gscap; // gray stack capacity
-    size_t    gc_allocated; // count of allocated bytes in use
-    size_t    gc_next; // next threshold where gc triggers
-    Byte      gc_flags; // gc flags (sk API)
+    Config      config; // user configuration
+    HashTable   loaded; // loaded scripts
+    Value       script; // current script name
+    Function*   F; // function state
+    CallFrame   frames[VM_FRAMES_MAX];
+    Int         fc; // frame count
+    Value       stack[VM_STACK_MAX];
+    Value*      sp; // stack pointer
+    Value*      callstart; // start of call args
+    Value*      retstart; // start of return values
+    HashTable   globids; // global variable names
+    Variable*   globvals; // global variable values
+    UInt        globlen; // global variable count
+    UInt        globcap; // global variable array size
+    Array_Value temp; // temporary return values
+    HashTable   strings; // interned strings (weak refs)
+    OUpvalue*   open_upvals; // closure values
+    OString*    statics[SS_SIZE]; // static strings
+    O*          objects; // list of all allocated objects
+    O**         gray_stack; // tricolor gc (stores marked objects)
+    UInt        gslen; // gray stack length
+    UInt        gscap; // gray stack capacity
+    size_t      gc_allocated; // count of allocated bytes in use
+    size_t      gc_next; // next threshold where gc triggers
+    Byte        gc_flags; // gc flags (sk API)
 };
 
 
@@ -113,10 +114,10 @@ typedef enum {
 
 
 
-VM*  VM_new(Config* config);
-void VM_free(VM* vm);
-void push(VM* vm, Value val);
-#define pop(vm) *--vm->sp
+VM*             VM_new(Config* config);
+void            VM_free(VM* vm);
+void            push(VM* vm, Value val);
+Value           pop(VM* vm);
 InterpretResult interpret(VM* vm, const char* source, const char* filename);
 bool            fncall(VM* vm, O* callee, Int argc, Int retcnt);
 void            _cleanupvm(VM* vm);

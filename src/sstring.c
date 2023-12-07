@@ -11,7 +11,7 @@
 snative(tostr)
 {
     UNUSED(argc);
-    argv[-1] = OBJ_VAL(Value_to_str(vm, argv[0]));
+    argv[-1] = OBJ_VAL(vtostr(vm, argv[0]));
     return true;
 }
 
@@ -57,7 +57,7 @@ snative(strpat)
     UNUSED(argc);
     Value      string  = argv[0];
     Value      pattern = argv[1];
-    ObjString* err     = NULL;
+    OString* err     = NULL;
     if(unlikely(!IS_STRING(string))) {
         err = ERR_NEW(vm, STRPAT_FIRST_ARG_TYPE_ERR);
     } else if(unlikely(!IS_STRING(pattern))) {
@@ -70,8 +70,8 @@ snative(strpat)
     return false;
 
 fin:;
-    ObjString* haystack = AS_STRING(string);
-    ObjString* needle   = AS_STRING(pattern);
+    OString* haystack = AS_STRING(string);
+    OString* needle   = AS_STRING(pattern);
     char*      start    = strstr(haystack->storage, needle->storage);
     argv[-1]            = start == NULL ? NIL_VAL : NUMBER_VAL(start - haystack->storage);
     return true;
@@ -95,7 +95,7 @@ snative(strsub)
     Value      string = argv[0];
     Value      i      = argv[1];
     Value      j      = argv[2];
-    ObjString* err    = NULL;
+    OString* err    = NULL;
 
     if(unlikely(!IS_STRING(string))) {
         err = ERR_NEW(vm, STRSUB_FIRST_ARG_TYPE_ERR);
@@ -111,7 +111,7 @@ snative(strsub)
     return false;
 
 fin:;
-    ObjString* substr = AS_STRING(string);
+    OString* substr = AS_STRING(string);
     int64_t    ii     = AS_NUMBER(i);
     int64_t    ij     = AS_NUMBER(j);
     int64_t    len    = substr->len + 1;
@@ -131,9 +131,9 @@ fin:;
     }
 
     if(ii > ij) {
-        argv[-1] = OBJ_VAL(ObjString_from(vm, "", 0));
+        argv[-1] = OBJ_VAL(OString_from(vm, "", 0));
     } else {
-        argv[-1] = OBJ_VAL(ObjString_from(vm, substr->storage + ii, ij - ii));
+        argv[-1] = OBJ_VAL(OString_from(vm, substr->storage + ii, ij - ii));
     }
     return true;
 }
@@ -144,7 +144,7 @@ snative(strbyte)
     Value value = argv[0];
     Value index = argv[1];
 
-    ObjString* err = NULL;
+    OString* err = NULL;
 
     if(unlikely(!IS_STRING(value))) {
         err = ERR_NEW(vm, STRBYTE_FIRST_ARG_TYPE_ERR);
@@ -157,7 +157,7 @@ snative(strbyte)
     return false;
 
 fin:;
-    ObjString* string = AS_STRING(value);
+    OString* string = AS_STRING(value);
     Int        slen   = string->len;
     Int        idx    = AS_NUMBER(index);
 
@@ -169,7 +169,7 @@ fin:;
     return true;
 }
 
-sstatic force_inline ObjString* changecase(VM* vm, ObjString* string, int (*changecasefn)(int))
+sstatic force_inline OString* changecase(VM* vm, OString* string, int (*changecasefn)(int))
 {
     UInt        slen = string->len;
     const char* str  = string->storage;
@@ -181,7 +181,7 @@ sstatic force_inline ObjString* changecase(VM* vm, ObjString* string, int (*chan
     }
     buffer[i] = '\0';
 
-    return ObjString_from(vm, buffer, slen);
+    return OString_from(vm, buffer, slen);
 }
 
 snative(strlower)
@@ -214,7 +214,7 @@ snative(strupper)
     return true;
 }
 
-sstatic force_inline ObjString* revstring(VM* vm, ObjString* string)
+sstatic force_inline OString* revstring(VM* vm, OString* string)
 {
     char buffer[string->len];
     UInt slen = string->len - 1;
@@ -224,7 +224,7 @@ sstatic force_inline ObjString* revstring(VM* vm, ObjString* string)
         i++;
     }
     buffer[i] = '\0';
-    return ObjString_from(vm, buffer, slen + 1);
+    return OString_from(vm, buffer, slen + 1);
 }
 
 snative(strrev)
@@ -241,14 +241,14 @@ snative(strrev)
     return true;
 }
 
-sstatic force_inline ObjString* concatstring(VM* vm, ObjString* left, ObjString* right)
+sstatic force_inline OString* concatstring(VM* vm, OString* left, OString* right)
 {
     size_t len = left->len + right->len;
     char   buffer[len + 1];
     memcpy(buffer, left->storage, left->len);
     memcpy(buffer + left->len, right->storage, right->len);
     buffer[len] = '\0';
-    return ObjString_from(vm, buffer, len);
+    return OString_from(vm, buffer, len);
 }
 
 snative(strconcat)
@@ -258,7 +258,7 @@ snative(strconcat)
     Value left  = argv[0];
     Value right = argv[1];
 
-    ObjString* err = NULL;
+    OString* err = NULL;
 
     if(unlikely(!IS_STRING(left))) {
         err = ERR_NEW(vm, STRCONCAT_FIRST_ARG_TYPE_ERR);

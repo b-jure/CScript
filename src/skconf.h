@@ -180,7 +180,7 @@ static_assert(
     #define DEBUG_STRESS_GC
 
     /* Log garbage collection */
-    // #define DEBUG_LOG_GC
+    #define DEBUG_LOG_GC
 
     /* Dump stack of local variables on compile error */
     #define DEBUG_LOCAL_STACK

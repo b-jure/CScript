@@ -98,7 +98,7 @@ typedef struct {
 void Chunk_init(Chunk* chunk, VM* vm);
 UInt Chunk_write(Chunk* chunk, uint8_t byte, UInt line);
 UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt idx, UInt line);
-void Chunk_free(Chunk* chunk, VM* vm);
+void Chunk_free(Chunk* chunk);
 UInt Chunk_make_constant(VM* vm, Chunk* chunk, Value value);
 
 #endif

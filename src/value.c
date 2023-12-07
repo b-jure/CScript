@@ -14,13 +14,13 @@
 #define sizeoftrue  (sizeof("true") - 1)
 #define sizeofnil   (sizeof("nil") - 1)
 
-Byte dbl_to_str_generic(double dbl, char* dest, UInt len)
+Byte dtos_generic(double dbl, char* dest, UInt len)
 {
     if(floor(dbl) != dbl) return snprintf(dest, len, "%f", dbl);
     else return snprintf(dest, len, "%ld", (ssize_t)dbl);
 }
 
-Byte bool_to_str_generic(bool boolean, char* dest, UInt len)
+Byte booltos_generic(bool boolean, char* dest, UInt len)
 {
     if(boolean) {
         len = MIN(len, sizeoftrue);
@@ -32,7 +32,7 @@ Byte bool_to_str_generic(bool boolean, char* dest, UInt len)
     return len;
 }
 
-Byte nil_to_str_generic(char* dest, UInt len)
+Byte niltos_generic(char* dest, UInt len)
 {
     len = MIN(len, sizeofnil);
     memcpy(dest, "nil", len);
@@ -42,7 +42,7 @@ Byte nil_to_str_generic(char* dest, UInt len)
 sstatic force_inline OString* dbl_to_str(VM* vm, double n)
 {
     static char buff[30];
-    size_t      len    = dbl_to_str_generic(n, buff, 30);
+    size_t      len    = dtos_generic(n, buff, 30);
     OString*    string = OString_from(vm, buff, len);
     return string;
 }
@@ -61,7 +61,7 @@ sstatic force_inline OString* bool_to_str(VM* vm, bool boolean)
     return OString_from(vm, str, len);
 }
 
-OString* Value_to_str(VM* vm, Value value)
+OString* vtostr(VM* vm, Value value)
 {
 #ifdef S_NAN_BOX
     if(IS_BOOL(value)) return bool_to_str(vm, AS_BOOL(value));
@@ -103,7 +103,7 @@ OString* Value_to_str(VM* vm, Value value)
     unreachable;
 }
 
-void Value_print(Value value)
+void vprint(Value value)
 {
 #ifdef S_NAN_BOX
     if(IS_BOOL(value)) printf(AS_BOOL(value) ? "true" : "false");
@@ -195,7 +195,7 @@ bool Value_eq(Value a, Value b)
 }
 #endif
 
-Hash Value_hash(Value value)
+Hash vhash(Value value)
 {
 #ifdef S_NAN_BOX
     if(IS_BOOL(value)) return AS_BOOL(value) ? 1 : 0;
@@ -225,12 +225,12 @@ Hash Value_hash(Value value)
             double num = AS_NUMBER(value);
             if(floor(AS_NUMBER(value)) != AS_NUMBER(value) ||
                AS_NUMBER(value) < 0)
-                return Hash_double(num);
+                return dblhash(num);
             else return num;
         }
         CASE(VAL_OBJ)
         {
-            return Obj_hash(value);
+            return ohash(value);
         }
     }
 #endif

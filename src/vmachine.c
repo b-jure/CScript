@@ -36,7 +36,7 @@ Int runtime = 0; // Indicator if the VM is currently running
 
 void runerror(VM* vm, const char* errfmt, ...)
 {
-    fputs("\n======= runtime error =======\n", stderr);
+    fputs("\nSkooma: [runtime error] \n", stderr);
     va_list ap;
     va_start(ap, errfmt);
     vfprintf(stderr, errfmt, ap);
@@ -60,11 +60,8 @@ void runerror(VM* vm, const char* errfmt, ...)
             "[FILE: '%s']>>[LINE: %u] in ",
             AS_CSTRING(vm->script),
             line);
-        if(loaded) {
-            fprintf(stderr, "%s\n", AS_CSTRING(vm->script));
-        } else {
-            fprintf(stderr, "%s()\n", FRAME_FN(frame)->name->storage);
-        }
+        if(loaded) fprintf(stderr, "%s\n", AS_CSTRING(vm->script));
+        else fprintf(stderr, "%s()\n", FRAME_FN(frame)->name->storage);
     }
     stack_reset(vm);
 }
@@ -76,6 +73,11 @@ void push(VM* vm, Value val)
         fprintf(stderr, "VM stack overflow. Limit [%u].\n", (UInt)VM_STACK_MAX);
         CLEANUP(vm);
     }
+}
+
+force_inline Value pop(VM* vm)
+{
+    return *--vm->sp;
 }
 
 sstatic force_inline void pushn(VM* vm, Int n, Value val)
@@ -173,27 +175,26 @@ VM* VM_new(Config* config)
     memset(&vm->config, 0, sizeof(Config));
     if(config != NULL) {
         memcpy(&vm->config, config, sizeof(Config));
-        // Make sure we have a valid allocator
         vm->config.reallocate = allocate;
     } else Config_init(&vm->config);
     vm->fc           = 0;
     vm->objects      = NULL;
     vm->F            = NULL;
-    vm->script       = NIL_VAL;
     vm->open_upvals  = NULL;
+    vm->script       = NIL_VAL;
     vm->gc_allocated = 0;
     vm->gc_next      = (1 << 20); // 1 MiB
     vm->gc_flags     = 0;
     stack_reset(vm);
     HashTable_init(&vm->loaded); // Loaded scripts and their functions
-    HashTable_init(&vm->globids); // Global variable identifiers (GC)
-    GARRAY_INIT(vm); // Global values array (GC)
+    HashTable_init(&vm->globids); // Global variable identifiers
+    GARRAY_INIT(vm); // Global values array
     GSARRAY_INIT(vm); // Gray stack array (no GC)
+    Array_Value_init(&vm->temp, vm); // Temp values storage (return values)
     HashTable_init(&vm->strings); // Interned strings table (Weak_refs)
-    for(UInt i = 0; i < SS_SIZE; i++) {
-        vm->statics[i] = NULL;
+    memset(vm->statics, 0, sizeof(vm->statics));
+    for(UInt i = 0; i < SS_SIZE; i++)
         vm->statics[i] = OString_from(vm, static_str[i].name, static_str[i].len);
-    }
     // @REFACTOR?: Maybe make the native functions private and only
     //             callable inside class instances?
     //             Upside: less branching resulting in more straightforward code.
@@ -240,11 +241,11 @@ bool fncall(VM* vm, O* callee, Int argc, Int retcnt)
 {
     OFunction* fn = GET_FN(callee);
     if(unlikely(!fn->isva && (Int)fn->arity != argc)) {
-        VM_FN_ARGC_ERR(vm, fn->arity, argc);
+        FN_ARGC_ERR(vm, fn->arity, argc);
         return false;
     }
     if(unlikely(fn->isva && (Int)fn->arity > argc)) {
-        VM_FN_VA_ARGC_ERR(vm, fn->arity, argc);
+        FN_VA_ARGC_ERR(vm, fn->arity, argc);
         return false;
     }
     if(unlikely(vm->fc == VM_FRAMES_MAX)) {
@@ -262,8 +263,12 @@ bool fncall(VM* vm, O* callee, Int argc, Int retcnt)
 
 sstatic force_inline bool nativecall(VM* vm, ONative* native, Int argc)
 {
-    if(unlikely(native->arity != argc)) {
-        VM_FN_ARGC_ERR(vm, native->arity, argc);
+    if(unlikely(native->isva && native->arity > argc)) {
+        FN_VA_ARGC_ERR(vm, native->arity, argc);
+        return false;
+    }
+    if(unlikely(!native->isva && native->arity != argc)) {
+        FN_ARGC_ERR(vm, native->arity, argc);
         return false;
     }
     if(likely(native->fn(vm, vm->sp - argc, argc))) {
@@ -282,7 +287,7 @@ sstatic force_inline bool instancecall(VM* vm, OClass* cclass, Int argc)
     O* init           = cclass->overloaded;
     if(init != NULL) return fncall(vm, init, argc, NO_RETURN);
     else if(unlikely(argc != 0)) {
-        VM_FN_ARGC_ERR(vm, 0, argc);
+        FN_ARGC_ERR(vm, 0, argc);
         return false;
     }
     return true;
@@ -489,47 +494,6 @@ sstatic InterpretResult VM_run(VM* vm)
         double a = AS_NUMBER(pop(vm));                                          \
         push(vm, value_type(a op b));                                           \
     } while(false)
-#define CONCAT_OR_ADD(vm)                                                       \
-    do {                                                                        \
-        Value b = getstackval(0);                                               \
-        Value a = getstackval(1);                                               \
-        if(IS_NUMBER(b) && IS_NUMBER(a)) {                                      \
-            double b = AS_NUMBER(pop(vm));                                      \
-            double a = AS_NUMBER(pop(vm));                                      \
-            push(vm, NUMBER_VAL((a + b)));                                      \
-        } else if(IS_STRING(b) && IS_STRING(a)) {                               \
-            push(vm, OBJ_VAL(concatenate(vm, a, b)));                           \
-        } else {                                                                \
-            OString* astr = vtostr(vm, a);                                      \
-            push(vm, OBJ_VAL(astr));                                            \
-            OString* bstr = vtostr(vm, b);                                      \
-            push(vm, OBJ_VAL(bstr));                                            \
-            OString* unescaped_b = unescape(vm, bstr);                          \
-            pop(vm); /* pop 'bstr' */                                           \
-            push(vm, OBJ_VAL(unescaped_b));                                     \
-            OString* unescaped_a = unescape(vm, astr);                          \
-            pop(vm); /* pop 'astr' */                                           \
-            push(vm, OBJ_VAL(unescaped_a));                                     \
-            runerror(                                                           \
-                vm,                                                             \
-                "Only two numbers can be added together or two strings "        \
-                "concatenated.\nThis is invalid: ...\"%s\" + \"%s\"...\nTry "   \
-                "instead: "                                                     \
-                "...\"%s%s%s\" + "                                              \
-                "\"%s%s%s\"...",                                                \
-                unescaped_a->storage,                                           \
-                unescaped_b->storage,                                           \
-                IS_STRING(a) ? "" : "tostr(",                                   \
-                unescaped_a->storage,                                           \
-                IS_STRING(a) ? "" : ")",                                        \
-                IS_STRING(b) ? "" : "tostr(",                                   \
-                unescaped_b->storage,                                           \
-                IS_STRING(b) ? "" : ")");                                       \
-            pop(vm);                                                            \
-            pop(vm);                                                            \
-            return INTERPRET_RUNTIME_ERROR;                                     \
-        }                                                                       \
-    } while(false)
 
     runtime = 1;
     // cache these hopefully in a register
@@ -554,7 +518,7 @@ sstatic InterpretResult VM_run(VM* vm)
         printf("           ");
         for(Value* ptr = vm->stack; ptr < vm->sp; ptr++) {
             printf("[");
-            Value_print(*ptr);
+            vprint(*ptr);
             printf("]");
         }
         printf("\n");
@@ -597,8 +561,19 @@ sstatic InterpretResult VM_run(VM* vm)
             }
             CASE(OP_ADD)
             {
-                frame->ip = ip;
-                CONCAT_OR_ADD(vm);
+                Value b = getstackval(0);
+                Value a = getstackval(1);
+                if(IS_NUMBER(b) && IS_NUMBER(a)) {
+                    double b = AS_NUMBER(pop(vm));
+                    double a = AS_NUMBER(pop(vm));
+                    push(vm, NUMBER_VAL((a + b)));
+                } else if(IS_STRING(b) && IS_STRING(a)) {
+                    push(vm, OBJ_VAL(concatenate(vm, a, b)));
+                } else {
+                    frame->ip = ip;
+                    ADD_OPERATOR_ERR(vm, a, b);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 BREAK;
             }
             CASE(OP_SUB)
@@ -613,6 +588,12 @@ sstatic InterpretResult VM_run(VM* vm)
             }
             CASE(OP_MOD)
             {
+                TODO("Implement OP_MOD");
+                BREAK;
+            }
+            CASE(OP_POW)
+            {
+                TODO("Implement OP_POW");
                 BREAK;
             }
             CASE(OP_DIV)
@@ -770,9 +751,7 @@ sstatic InterpretResult VM_run(VM* vm)
                     &AS_INSTANCE(receiver)->fields,
                     property_name,
                     getstackval(0));
-                Value ret = pop(vm); // Get assigned value
-                pop(vm); // Pop instance
-                push(vm, ret); // Push back the assigned value
+                popn(vm, 2);
                 BREAK;
             }
             CASE(OP_GET_PROPERTY)
@@ -802,7 +781,6 @@ sstatic InterpretResult VM_run(VM* vm)
             {
                 // Short and long instructions have identical code
                 Int bcp; // Bytecode parameter
-
                 CASE(OP_DEFINE_GLOBAL)
                 {
                     bcp = READ_BYTE();
@@ -867,7 +845,7 @@ sstatic InterpretResult VM_run(VM* vm)
                         VM_VARIABLE_FIXED_ERR(vm, name->len, name->storage);
                         return INTERPRET_RUNTIME_ERROR;
                     }
-                    global->value = getstackval(0);
+                    global->value = pop(vm);
                     BREAK;
                 }
                 CASE(OP_GET_LOCAL)
@@ -897,10 +875,10 @@ sstatic InterpretResult VM_run(VM* vm)
                 }
             set_local_fin:;
                 {
-                    frame->sp[bcp] = getstackval(0);
+                    frame->sp[bcp] = pop(vm);
                     BREAK;
                 }
-                CASE(OP_TOPRET)
+                CASE(OP_TOPRET) // return from top-level code
                 {
                     Value* first = frame->sp + 1;
                     if(veq(*first, NIL_VAL)) *first = TRUE_VAL;
@@ -911,7 +889,7 @@ sstatic InterpretResult VM_run(VM* vm)
                         *first);
                     goto ret_fin;
                 }
-                CASE(OP_RET)
+                CASE(OP_RET) // function return
                 {
                 ret_fin:;
                     Int retcnt = vm->sp - vm->retstart;
@@ -922,11 +900,10 @@ sstatic InterpretResult VM_run(VM* vm)
                         if(pushc < 0) popn(vm, sabs(pushc));
                         else pushn(vm, pushc, NIL_VAL);
                     } else frame->retcnt = 0;
-                    Array_Value temp;
-                    Array_Value_init(&temp, vm);
+                    ASSERT(vm->temp.len == 0, "Temporary array not empty.");
                     for(Int expected_retcnt = frame->retcnt; expected_retcnt--;)
                     {
-                        Array_Value_push(&temp, getstackval(0));
+                        Array_Value_push(&vm->temp, getstackval(0));
                         pop(vm);
                     }
                     closeupval(vm, frame->sp);
@@ -936,9 +913,9 @@ sstatic InterpretResult VM_run(VM* vm)
                         return INTERPRET_OK;
                     }
                     vm->sp = frame->sp;
-                    while(temp.len > 0)
-                        push(vm, Array_Value_pop(&temp));
-                    Array_Value_free(&temp, NULL);
+                    while(vm->temp.len > 0)
+                        push(vm, Array_Value_pop(&vm->temp));
+                    ASSERT(vm->temp.len == 0, "Temporary array not empty.");
                     frame = &vm->frames[vm->fc - 1];
                     ip    = frame->ip;
                     BREAK;
@@ -1025,7 +1002,7 @@ sstatic InterpretResult VM_run(VM* vm)
                         "Can't assign to a variable declared as 'fixed'.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                *upval->location = getstackval(0);
+                *upval->location = pop(vm);
                 BREAK;
             }
             CASE(OP_CLOSE_UPVAL)
@@ -1192,9 +1169,9 @@ sstatic InterpretResult VM_run(VM* vm)
 
 
 
-InterpretResult VM_interpret(VM* vm, const char* source, const char* filename)
+InterpretResult interpret(VM* vm, const char* source, const char* path)
 {
-    Value      name = OBJ_VAL(OString_from(vm, filename, strlen(filename)));
+    Value      name = OBJ_VAL(OString_from(vm, path, strlen(path)));
     OFunction* fn   = compile(vm, source, name);
     if(fn == NULL) return INTERPRET_COMPILE_ERROR;
     fncall(vm, (O*)fn, 0, 1);
@@ -1203,17 +1180,19 @@ InterpretResult VM_interpret(VM* vm, const char* source, const char* filename)
 
 void VM_free(VM* vm)
 {
+    if(vm == NULL) return;
     HashTable_free(vm, &vm->loaded);
     HashTable_free(vm, &vm->globids);
     GARRAY_FREE(vm);
     GSARRAY_FREE(vm);
+    Array_Value_free(&vm->temp, NULL);
     HashTable_free(vm, &vm->strings);
     O* next;
     for(O* head = vm->objects; head != NULL; head = next) {
         next = onext(head);
         ofree(vm, head);
     }
-    vm->config.reallocate(vm, 0, vm->config.userdata);
+    FREE(vm, vm);
 }
 
 void _cleanupvm(VM* vm)
