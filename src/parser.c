@@ -798,7 +798,7 @@ sstatic void F_init(
     globscope->depth    = 0;
     globscope->isloop   = 0;
     globscope->isswitch = 0;
-    globscope->localc   = 0;
+    globscope->localc   = 1;
     globscope->isupval  = 0;
     // Initialize Function state
     F->vm        = vm;
@@ -830,11 +830,8 @@ sstatic void F_init(
         local->name.start = "";
         local->name.len   = 0;
     }
-    if(fn_type == FN_SCRIPT) {
-        vm->script  = loaded;
-        F->fn->name = AS_STRING(loaded);
-    } else if(fn_type != FN_SCRIPT)
-        F->fn->name = OString_from(vm, PREVT(F).start, PREVT(F).len);
+    if(fn_type == FN_SCRIPT) F->fn->name = AS_STRING(loaded);
+    else F->fn->name = OString_from(vm, PREVT(F).start, PREVT(F).len);
 }
 
 void F_free(Function* F)
@@ -842,14 +839,12 @@ void F_free(Function* F)
     VM* vm = F->vm;
     ControlFlow_free(&F->cflow);
     if(F->enclosing == NULL) {
-        vm->script = NIL_VAL;
         ASSERT(
             F->fn_type == FN_SCRIPT,
             "Function is top-level but the type is not 'FN_SCRIPT'.");
         Array_Upvalue_free(F->upvalues, NULL);
         GC_FREE(vm, F->upvalues, sizeof(Array_Upvalue));
-    } else if(F->enclosing->fn_type == FN_SCRIPT)
-        vm->script = OBJ_VAL(F->enclosing->fn->name);
+    }
     Array_Local_free(&F->locals, NULL);
     vm->F = F->enclosing;
     GC_FREE(vm, F, sizeof(Function));
@@ -959,8 +954,7 @@ sstatic force_inline OFunction* compile_end(Function* F)
 // Compile source code
 OFunction* compile(VM* vm, const char* source, Value name)
 {
-    ASSERT(IS_STRING(name) && AS_STRING(name) != NULL, "Invalid script name.");
-    vm->script = name; // GC marks this field
+    vm->script = name;
     HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL);
     Function* F = MALLOC(vm, sizeof(Function));
     Lexer     L = L_new(source, vm);
@@ -1430,7 +1424,7 @@ sstatic void fn(Function* F, FunctionType type)
     if(F->fn->isva) expect(Fnew, TOK_RPAREN, "'...' must be last argument.");
     else expect(Fnew, TOK_RPAREN, "Expect ')' after parameters.");
     expect(Fnew, TOK_LBRACE, "Expect '{' before function body.");
-    block(Fnew); // function body
+    block(Fnew); // body
     OFunction* fn = compile_end(Fnew);
     fn->isinit    = (type == FN_INIT);
     if(fn->upvalc == 0) CODEOP(F, OP_CONST, make_constant(F, OBJ_VAL(fn)));
@@ -2113,7 +2107,6 @@ sstatic void suffixedexp(Function* F, Exp* E)
                 if(etisconst(E->type)) CALL_CONST_ERR(F);
                 advance(F);
                 codecall(F, E);
-                ASSERT(PREVT(F).type == TOK_RPAREN, "SDF");
                 break;
             case TOK_LBRACK:
                 advance(F);

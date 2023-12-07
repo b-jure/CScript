@@ -18,9 +18,7 @@ void   omark(VM* vm, O* obj);
 
 #define vmark(vm, value)                                                        \
     do {                                                                        \
-        if(IS_OBJ(value)) {                                                     \
-            omark(vm, AS_OBJ(value));                                           \
-        }                                                                       \
+        if(IS_OBJ(value)) omark(vm, AS_OBJ(value));                             \
     } while(false)
 
 /* Wrapper around reallocate that is equivalent to malloc, allocates 'bytes'

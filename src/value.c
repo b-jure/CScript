@@ -39,7 +39,7 @@ Byte niltos_generic(char* dest, UInt len)
     return len;
 }
 
-sstatic force_inline OString* dbl_to_str(VM* vm, double n)
+sstatic force_inline OString* dtostr(VM* vm, double n)
 {
     static char buff[30];
     size_t      len    = dtos_generic(n, buff, 30);
@@ -47,7 +47,7 @@ sstatic force_inline OString* dbl_to_str(VM* vm, double n)
     return string;
 }
 
-sstatic force_inline OString* bool_to_str(VM* vm, bool boolean)
+sstatic force_inline OString* booltostr(VM* vm, bool boolean)
 {
     char*  str = NULL;
     ushort len = 0;
@@ -64,10 +64,10 @@ sstatic force_inline OString* bool_to_str(VM* vm, bool boolean)
 OString* vtostr(VM* vm, Value value)
 {
 #ifdef S_NAN_BOX
-    if(IS_BOOL(value)) return bool_to_str(vm, AS_BOOL(value));
+    if(IS_BOOL(value)) return booltostr(vm, AS_BOOL(value));
     else if(IS_NIL(value)) return OString_from(vm, "nil", sizeofnil);
     else if(IS_OBJ(value)) return otostr(vm, AS_OBJ(value));
-    else if(IS_NUMBER(value)) return dbl_to_str(vm, AS_NUMBER(value));
+    else if(IS_NUMBER(value)) return dtostr(vm, AS_NUMBER(value));
 #else
     #ifdef S_PRECOMPUTED_GOTO
         #define VAL_TABLE
@@ -81,11 +81,11 @@ OString* vtostr(VM* vm, Value value)
     {
         CASE(VAL_BOOL)
         {
-            return bool_to_str(vm, AS_BOOL(value));
+            return booltostr(vm, AS_BOOL(value));
         }
         CASE(VAL_NUMBER)
         {
-            return dbl_to_str(vm, AS_NUMBER(value));
+            return dtostr(vm, AS_NUMBER(value));
         }
         CASE(VAL_NIL)
         {
@@ -93,7 +93,7 @@ OString* vtostr(VM* vm, Value value)
         }
         CASE(VAL_OBJ)
         {
-            return Obj_to_str(vm, AS_OBJ(value));
+            return otostr(vm, AS_OBJ(value));
         }
     }
     #ifdef __SKOOMA_JMPTABLE_H__
@@ -147,7 +147,7 @@ void vprint(Value value)
         }
         CASE(VAL_OBJ)
         {
-            Obj_print(value);
+            oprint(value);
             BREAK;
         }
     }

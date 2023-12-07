@@ -151,7 +151,7 @@ void mark_black(VM* vm, O* obj)
 #ifdef DEBUG_LOG_GC
     printf("%p blacken ", (void*)obj);
     vprint(OBJ_VAL(obj));
-    printf(" header: 0x%08lx\n", obj->header);
+    printf("\n");
 #endif
 #ifdef S_PRECOMPUTED_GOTO
     #define OBJ_TABLE

@@ -69,6 +69,7 @@ typedef struct {
 
 
 ARRAY_NEW(Array_ORef, O*);
+ARRAY_NEW(Array_VRef, Value*);
 
 struct VM {
     Config      config; // user configuration
@@ -79,8 +80,8 @@ struct VM {
     Int         fc; // frame count
     Value       stack[VM_STACK_MAX];
     Value*      sp; // stack pointer
-    Value*      callstart; // start of call args
-    Value*      retstart; // start of return values
+    Array_VRef  callstart;
+    Array_VRef  retstart;
     HashTable   globids; // global variable names
     Variable*   globvals; // global variable values
     UInt        globlen; // global variable count

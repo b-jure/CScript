@@ -89,7 +89,7 @@ snative(printl)
     UNUSED(argc);
     UNUSED(vm);
     vprint(argv[0]);
-    printf("\n");
+    putc('\n', stdout);
     argv[-1] = argv[0];
     return true;
 }

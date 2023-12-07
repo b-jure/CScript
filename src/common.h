@@ -17,7 +17,7 @@ typedef int32_t  Int;
  * 0 - compiling source code
  * 1 - VM is running
  */
-extern Int runtime;
+extern volatile Int runtime;
 
 
 // Memory alloc/dealloc
