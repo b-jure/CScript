@@ -122,9 +122,9 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
     Byte instruction = chunk->code.data[offset];
     switch(instruction) {
         case OP_RET:
-            return longins("OP_RET", chunk, OP_RET, offset);
+            return simpleins("OP_RET", offset);
         case OP_TOPRET:
-            return longins("OP_TOPRET", chunk, OP_TOPRET, offset);
+            return simpleins("OP_TOPRET", offset);
         case OP_TRUE:
             return simpleins("OP_TRUE", offset);
         case OP_FALSE:
@@ -174,7 +174,11 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_DEFINE_GLOBAL:
             return shorinst("OP_DEFINE_GLOBAL", chunk, OP_DEFINE_GLOBAL, offset);
         case OP_DEFINE_GLOBALL:
-            return longins("OP_DEFINE_GLOBALL", chunk, OP_DEFINE_GLOBALL, offset);
+            return longins(
+                "OP_DEFINE_GLOBALL",
+                chunk,
+                OP_DEFINE_GLOBALL,
+                offset);
         case OP_GET_GLOBAL:
             return shorinst("OP_GET_GLOBAL", chunk, OP_GET_GLOBAL, offset);
         case OP_GET_GLOBALL:

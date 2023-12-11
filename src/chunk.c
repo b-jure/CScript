@@ -97,6 +97,8 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 
     DISPATCH(code)
     {
+        CASE(OP_RET)
+        CASE(OP_TOPRET)
         CASE(OP_TRUE)
         CASE(OP_FALSE)
         CASE(OP_NIL)
@@ -126,8 +128,6 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         {
             unreachable;
         }
-        CASE(OP_RET)
-        CASE(OP_TOPRET)
         CASE(OP_POPN)
         CASE(OP_DEFINE_GLOBALL)
         CASE(OP_GET_GLOBALL)

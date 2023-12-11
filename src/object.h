@@ -120,6 +120,7 @@ struct OFunction { // typedef is inside 'value.h'
     UInt     vacnt; // Variable arguments count
     Byte     isva : 1; // If this function takes valist
     Byte     isinit : 1; // If this function is class initializer
+    Byte     gotret : 1; // last instruction is 'OP_TOP/RET'
 };
 
 struct OClosure { // typedef is inside 'value.h'

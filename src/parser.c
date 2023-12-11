@@ -439,7 +439,11 @@ sstatic void error(Function* F, const char* error, ...)
     Chunk_write_codewparam(CHUNK(F), code, param, PREVT(F).line)
 
 // Single byte instruction
-#define CODE(F, byte) Chunk_write(CHUNK(F), byte, PREVT(F).line)
+#define CODE(F, byte)                                                           \
+    ({                                                                          \
+        (F)->fn->gotret = (((byte) == OP_RET) | ((byte) == OP_TOPRET));         \
+        Chunk_write(CHUNK(F), byte, PREVT(F).line);                             \
+    })
 
 // 3 byte parameter
 #define CODEL(F, bytes)                                                         \
@@ -459,8 +463,10 @@ sstatic void error(Function* F, const char* error, ...)
 // Emit pop instruction
 #define CODEPOP(F, n)                                                           \
     do {                                                                        \
-        if((n) > 1) CODEOP(F, OP_POPN, n);                                      \
-        else CODE(F, OP_POP);                                                   \
+        if(n > 0) {                                                             \
+            if((n) > 1) CODEOP(F, OP_POPN, n);                                  \
+            else CODE(F, OP_POP);                                               \
+        }                                                                       \
     } while(false)
 
 // Emit unary instruction
@@ -470,19 +476,23 @@ sstatic void error(Function* F, const char* error, ...)
 #define CODEBIN(F, opr) CODE(F, binopr2op(opr))
 
 // Emit return instruction
-sstatic force_inline void coderet(Function* F, bool explicit)
+sstatic force_inline void coderet(Function* F, bool explicit, bool gotret)
 {
+    if(gotret) {
+        F->fn->gotret = 1;
+        return;
+    }
     if(!explicit) CODE(F, OP_RETSTART);
     if(F->fn_type == FN_INIT) CODEOP(F, OP_GET_LOCAL, 0);
     else {
         if(F->fn_type == FN_SCRIPT) {
             CODE(F, OP_TRUE);
-            CODEOP(F, OP_TOPRET, 1);
+            CODE(F, OP_TOPRET);
             return;
         }
         CODE(F, OP_NIL);
     }
-    CODEOP(F, OP_RET, 1);
+    CODE(F, OP_RET);
 }
 
 // Emit loop instruction
@@ -588,7 +598,7 @@ sstatic force_inline Value tokintostr(VM* vm, const Token* name)
         globalvar(F, identifier);                                               \
     })
 
-sstatic force_inline Int codevarprev(Function* F, Token name, Exp* E)
+sstatic force_inline Int codevar(Function* F, Token name, Exp* E)
 {
     OpCode getop;
     Int    idx = get_local(F, &name);
@@ -596,8 +606,9 @@ sstatic force_inline Int codevarprev(Function* F, Token name, Exp* E)
         E->type = EXP_LOCAL;
         getop   = GET_OP_TYPE(idx, OP_GET_LOCAL, E);
     } else if((idx = get_upval(F, &name)) != -1) {
-        E->type = EXP_UPVAL;
-        getop   = OP_GET_UPVALUE;
+        E->type  = EXP_UPVAL;
+        E->ins.l = true;
+        getop    = OP_GET_UPVALUE;
     } else {
         E->type = EXP_GLOBAL;
         idx     = MAKE_GLOBAL(F, &name);
@@ -608,9 +619,9 @@ sstatic force_inline Int codevarprev(Function* F, Token name, Exp* E)
     else return -1; // this is assignment
 }
 
-sstatic force_inline UInt codevar(Function* F, Exp* E)
+sstatic force_inline UInt codevarprev(Function* F, Exp* E)
 {
-    return (E->ins.code = codevarprev(F, PREVT(F), E));
+    return (E->ins.code = codevar(F, PREVT(F), E));
 }
 
 // helper [rmlastins]
@@ -713,21 +724,19 @@ startscope(Function* F, Scope* S, Byte isloop, Byte isswitch)
 sstatic void endscope(Function* F)
 {
 #define LOCAL_IS_CAPTURED(local) (LFLAG_CHECK((local), VCAPTURED_BIT))
+
+    F->fn->gotret  = 0;
+    Int    pop     = 0;
     Scope* current = F->S;
-    ASSERT(current->depth != 0, "Ending global scope.");
-    // Pop the scope, this is safe no need for NULL check,
-    // last scope of the function does not get popped, instead
-    // the CallFrame gets popped
-    F->S    = current->prev;
-    Int pop = 0;
+    ASSERT(current->depth != 0, "Cannot end global scope.");
+    F->S = current->prev;
     // If there are some captured variables we need to properly
     // close them while also emitting correct OP_POP[N] instructions.
     if(current->isupval) {
-        // These 2 loops represent possible interleaved set of upvalues
-        // and locals on the stack.
-        while(
-            F->locals.len > 0 &&
-            (F->S == NULL || Array_Local_last(&F->locals)->depth > F->S->depth))
+        // These 2 loops represent possible interleaved set
+        // of upvalues and locals on the stack.
+        while(F->locals.len > 0 &&
+              Array_Local_last(&F->locals)->depth > F->S->depth)
         {
             if(LOCAL_IS_CAPTURED(Array_Local_last(&F->locals))) {
                 Int capture = 1;
@@ -750,10 +759,11 @@ sstatic void endscope(Function* F)
             }
         }
     } else { // If there are no captured vars, just pop the locals
-        pop            = F->locals.len - (F->S ? F->S->localc : 0);
+        pop            = F->locals.len - current->localc;
         F->locals.len -= pop;
     }
     CODEPOP(F, pop);
+
 #undef LOCAL_IS_CAPTURED
 }
 
@@ -941,7 +951,7 @@ sstatic force_inline void expect(Function* F, TokenType type, const char* err)
 // End compilation of the function and emit return instruction
 sstatic force_inline OFunction* compile_end(Function* F)
 {
-    coderet(F, false);
+    coderet(F, false, F->fn->gotret);
 #ifdef DEBUG_PRINT_CODE
     if(!F->lexer->error) {
         OFunction* fn = F->fn;
@@ -1202,6 +1212,21 @@ sstatic force_inline UInt vararg(Function* F)
     return CODEOP(F, OP_VALIST, 1);
 }
 
+sstatic void setmulret(Function* F, Exp* E)
+{
+    switch(E->type) {
+        case EXP_INVOKE_INDEX:
+        case EXP_CALL:
+            SET_RETCNT(F, E, MULRET);
+            break;
+        case EXP_INVOKE:
+            SET_RETCNTL(F, E, MULRET);
+            break;
+        default:
+            unreachable;
+    }
+}
+
 // Adjust assign expressions in case last expression is a function call
 sstatic void adjustassign(Function* F, Exp* E, Int left, Int right)
 {
@@ -1284,6 +1309,7 @@ sstatic void codesetall(Function* F, Array_Exp* Earr)
 sstatic void exprstm(Function* F)
 {
     Exp E;
+    E.ins.set = false;
     suffixedexp(F, &E);
     TokenType next = CURRT(F).type;
     if(next == TOK_EQUAL || next == TOK_COMMA) {
@@ -1303,7 +1329,8 @@ sstatic void exprstm(Function* F)
             Array_Exp_push(&Earr, E);
         }
         expect(F, TOK_EQUAL, "Expect '='.");
-        Int expc = explist(F, vars, &E);
+        E.ins.set = false;
+        Int expc  = explist(F, vars, &E);
         if(vars != expc) adjustassign(F, &E, vars, expc);
         codesetall(F, &Earr);
         Array_Exp_free(&Earr, NULL);
@@ -1451,14 +1478,14 @@ sstatic void fndec(Function* F)
     if(F->S->depth == 0) INIT_GLOBAL(F, idx, 0, &_);
 }
 
-sstatic void method(VM* vm, Function* F)
+sstatic void method(Function* F)
 {
     expect(F, TOK_FN, "Expect 'fn'.");
     expect(F, TOK_IDENTIFIER, "Expect method name.");
-    Value        identifier = tokintostr(vm, &PREVT(F));
+    Value        identifier = tokintostr(F->vm, &PREVT(F));
     UInt         idx        = make_constant(F, identifier);
     FunctionType type       = FN_METHOD;
-    if(AS_STRING(identifier) == vm->statics[SS_INIT]) type = FN_INIT;
+    if(AS_STRING(identifier) == F->vm->statics[SS_INIT]) type = FN_INIT;
     fn(F, type);
     if(type == FN_INIT) CODEOP(F, OP_OVERLOAD, SS_INIT);
     CODEOP(F, OP_METHOD, idx);
@@ -1470,40 +1497,38 @@ sstatic void classdec(Function* F)
     Token class_name = PREVT(F);
     Value identifier = tokintostr(F->vm, &class_name);
     UInt  idx        = make_constant(F, identifier);
+    Exp   _; // dummy
     CODEOP(F, OP_CLASS, idx);
     if(F->S->depth > 0) {
         make_local(F, &class_name);
         INIT_LOCAL(F, 0);
-    } else {
-        Exp _; // dummy
-        INIT_GLOBAL(F, MAKE_GLOBAL(F, &class_name), 0, &_);
-    }
+    } else INIT_GLOBAL(F, MAKE_GLOBAL(F, &class_name), 0, &_);
     Class cclass;
     cclass.enclosing  = F->cclass;
     cclass.superclass = false;
     F->cclass         = &cclass;
     Scope S;
-    Exp   _; // dummy
+    _.ins.set = false;
     if(match(F, TOK_IMPL)) {
         expect(F, TOK_IDENTIFIER, "Expect superclass name.");
-        codevar(F, &_); // Get superclass
+        codevarprev(F, &_); // Get superclass
         if(Identifier_eq(&PREVT(F), &class_name))
             CLASS_INHERIT_ERR(F, AS_CSTRING(identifier));
-        cclass.superclass = true;
         startscope(F, &S, 0, 0);
         local_new(F, syntoken("super"));
         INIT_LOCAL(F, 0);
-        codevarprev(F, class_name, &_);
+        codevar(F, class_name, &_);
         CODE(F, OP_INHERIT);
+        cclass.superclass = true;
     }
-    codevarprev(F, class_name, &_);
+    codevar(F, class_name, &_);
     expect(F, TOK_LBRACE, "Expect '{' before class body.");
     while(!check(F, TOK_RBRACE) && !check(F, TOK_EOF))
-        method(F->vm, F);
+        method(F);
     expect(F, TOK_RBRACE, "Expect '}' after class body.");
     CODE(F, OP_POP); // Pop the class
-    F->cclass = cclass.enclosing;
     if(cclass.superclass) endscope(F);
+    F->cclass = cclass.enclosing;
 }
 
 /// call ::= '(' ')'
@@ -1512,8 +1537,9 @@ sstatic void call(Function* F, Exp* E)
 {
     CODE(F, OP_CALLSTART);
     if(!check(F, TOK_RPAREN)) explist(F, BYTECODE_MAX, E);
+    else E->type = EXP_NONE;
     expect(F, TOK_RPAREN, "Expect ')'.");
-    if(ethasmulret(E->type)) SET_LPARAM(F, E, MULRET);
+    if(ethasmulret(E->type)) setmulret(F, E);
 }
 
 sstatic void codecall(Function* F, Exp* E)
@@ -1624,14 +1650,20 @@ sstatic void switchstm(Function* F)
     startscope(F, &S, 0, 1); // implicit scope
     startbreaklist(F);
     expect(F, TOK_LPAREN, "Expect '(' after 'switch'.");
+    E1.ins.set = false;
     expr(F, &E1);
     expect(F, TOK_RPAREN, "Expect ')' after condition.");
     expect(F, TOK_LBRACE, "Expect '{' after ')'.");
     sdepth               = F->cflow.innersdepth;
     F->cflow.innersdepth = F->S->depth;
+    // Switch must contain case or default before any statements
+    if(!check(F, TOK_RBRACE) && !check(F, TOK_EOF) && !check(F, TOK_CASE) &&
+       !check(F, TOK_DEFAULT))
+        SWITCH_NOCASE_ERR(F);
     // 'switch' body
     while(!match(F, TOK_RBRACE) && !check(F, TOK_EOF)) {
         if(match(F, TOK_CASE) || match(F, TOK_DEFAULT)) {
+            F->fn->gotret = 0;
             if(swstate.casestate != CS_NONE) {
                 Array_Int_push(&fts, CODEJMP(F, OP_JMP));
                 if(swstate.casestate != CS_DFLT && swstate.casestate != CS_MATCH)
@@ -1640,6 +1672,7 @@ sstatic void switchstm(Function* F)
             swstate.casestate = CS_DFLT;
             if(PREVT(F).type == TOK_CASE) {
                 Exp E2;
+                E2.ins.set = false;
                 expr(F, &E2);
                 expect(F, TOK_COLON, "Expect ':' after 'case'.");
                 switchconstants(F, &swstate, &E2);
@@ -1658,17 +1691,20 @@ sstatic void switchstm(Function* F)
             } else SWITCH_DEFAULT_ERR(F);
             if(fts.len > 0) patchjmp(F, Array_Int_pop(&fts));
         } else {
-            if(swstate.casestate == CS_NONE) SWITCH_NOCASE_ERR(F);
             stm(F);
+            if(swstate.casestate == CS_MATCH && F->fn->gotret) {
+                // @TODO: Implement optimizations.
+                // Also check if last 'stm' was 'breakstm' (same effect)
+            }
         }
     }
-    endscope(F);
     if(PREVT(F).type == TOK_EOF) SWITCH_RBRACE_ERR(F);
     Array_Int_free(&fts, NULL);
     SwitchState_free(&swstate);
+    endscope(F);
+    CODE(F, OP_POP); // pop switch expression
     patchbreaklist(F);
     endbreaklist(F);
-    CODE(F, OP_POP); // pop switch expression
     F->cflow.innersdepth = sdepth;
     F->S->isswitch       = inswitch;
 }
@@ -1682,7 +1718,8 @@ sstatic void ifstm(Function* F)
     Int     jmptoelse, jmptoend = -1;
     savecontext(F, &C);
     expect(F, TOK_LPAREN, "Expect '(' after 'if'.");
-    expr(F, &E);
+    E.ins.set = false;
+    expr(F, &E); // condition
     expect(F, TOK_RPAREN, "Expect ')' after condition.");
     bool remove = false;
     bool istrue = false;
@@ -1695,11 +1732,15 @@ sstatic void ifstm(Function* F)
     if(!remove) {
         jmptoend = CODEJMP(F, OP_JMP);
         if(!istrue) patchjmp(F, jmptoelse);
+        else if(F->fn->gotret) { // condition is true and 'stm' was a 'returnstm'
+            // @TODO: Implement optimization.
+        }
     } else {
         ASSERT((Int)F->locals.len == localc, "localc does not match."); // @?
         ASSERT((Int)F->upvalues->len == upvalc, "upvalc does not match."); // @?
         restorecontext(F, &C);
     }
+    F->fn->gotret = 0;
     if(match(F, TOK_ELSE)) { // there is 'else' branch?
         stm(F);
         if(!remove) patchjmp(F, jmptoend);
@@ -1735,6 +1776,7 @@ sstatic void whilestm(Function* F)
     startloop(F, &S, &lstart, &ldepth);
     startbreaklist(F);
     expect(F, TOK_LPAREN, "Expect '(' after 'while'.");
+    E.ins.set = false;
     expr(F, &E); // conditional
     if(etisconst(E.type)) {
         rmlastins(F, &E);
@@ -1742,7 +1784,8 @@ sstatic void whilestm(Function* F)
         else infinite = true;
     } else jmptoend = CODEJMP(F, OP_JMP_IF_FALSE_POP);
     expect(F, TOK_RPAREN, "Expect ')' after condition.");
-    stm(F);
+    stm(F); // body
+    bool gotret = F->fn->gotret;
     endloop(F, lstart, ldepth);
     endscope(F);
     if(!remove) {
@@ -1750,6 +1793,8 @@ sstatic void whilestm(Function* F)
         if(!infinite) {
             ASSERT(jmptoend != -1, "end jmp invalid but flag is false.");
             patchjmp(F, jmptoend);
+        } else if(gotret) { // cond true and 'stm' was 'returnstm'
+            // @TODO: Implement optimizations
         }
         patchbreaklist(F);
     } else {
@@ -1777,13 +1822,14 @@ sstatic void forstm(Function* F)
     startscope(F, &S, 1, 0);
     startbreaklist(F);
     expect(F, TOK_LPAREN, "Expect '(' after 'for'.");
-    if(match(F, TOK_SEMICOLON))
+    if(match(F, TOK_SEMICOLON)) // Initializer for-clause
         ; // no initializer
     else if(match(F, TOK_VAR)) vardec(F);
     else if(match(F, TOK_FIXED)) fvardec(F);
     else exprstm(F);
     startloop(F, &S, &lstart, &ldepth);
-    if(!match(F, TOK_SEMICOLON)) {
+    if(!match(F, TOK_SEMICOLON)) { // conditional
+        E.ins.set = false;
         expr(F, &E);
         if(etisconst(E.type)) {
             rmlastins(F, &E);
@@ -1792,14 +1838,12 @@ sstatic void forstm(Function* F)
         } else jmptoend = CODEJMP(F, OP_JMP_IF_FALSE_POP);
         expect(F, TOK_SEMICOLON, "Expect ';' after for-loop condition clause.");
     }
-    if(!match(F, TOK_RPAREN)) {
+    if(!match(F, TOK_RPAREN)) { // last for-clause
         Int jmptobody = -1;
         Int jmptoincr = -1;
         if(!infinite && !remove) jmptobody = CODEJMP(F, OP_JMP);
         if(!remove) jmptoincr = codeoffset(F);
-        Exp _;
-        expr(F, &_);
-        CODE(F, OP_POP);
+        exprstm(F);
         if(!infinite && !remove) {
             codeloop(F, (F)->cflow.innerlstart);
             patchjmp(F, jmptobody);
@@ -1808,10 +1852,14 @@ sstatic void forstm(Function* F)
         expect(F, TOK_RPAREN, "Expect ')' after last for-loop clause.");
     }
     stm(F); // Loop body
+    bool gotret = F->fn->gotret;
     endscope(F);
     if(!remove) {
         codeloop(F, (F)->cflow.innerlstart);
         if(!infinite) patchjmp(F, jmptoend);
+        else if(gotret) { // 'stm' was 'returnstm' and conditional is true
+            // @TODO: Implement optimizations
+        }
         patchbreaklist(F);
     } else {
         // remove these assertions after testing
@@ -1855,6 +1903,7 @@ sstatic void foreachstm(Function* F)
     newlocalliteral(F, "(for ctlvar)"); // control variable
     vars = foreachvars(F); // declared vars
     expect(F, TOK_IN, "Expect 'in'.");
+    E.ins.set = false;
     expr(F, &E); // iterator factory
     expect_cond(F, !etisconst(E.type), "Can't call constant expression.");
     expc = 1;
@@ -1881,6 +1930,9 @@ sstatic void loopstm(Function* F)
     startbreaklist(F);
     startloop(F, &S, &lstart, &ldepth);
     stm(F);
+    if(F->fn->gotret) {
+        // @TODO: Implement optimizations
+    }
     codeloop(F, (F)->cflow.innerlstart);
     endscope(F);
     patchbreaklist(F);
@@ -1898,7 +1950,7 @@ sstatic force_inline Scope* loopscope(Function* F)
     return NULL;
 }
 
-// Return count of switch statements until the loop 'Scope'
+// Return count of switch statements until the first loop 'Scope'
 // or the top-level code counting from the current 'Scope' in the 'Function'.
 sstatic force_inline Int switchcnt(Function* F)
 {
@@ -1934,7 +1986,7 @@ sstatic void breakstm(Function* F)
             BREAK_ERR(F);
             return;
         case 0: // in switch
-            popn++;
+            popn++; // switch expression
         case 1: // in loop
             break;
         default:
@@ -1945,19 +1997,34 @@ sstatic void breakstm(Function* F)
     Array_Int_push(Array_Array_Int_last(arr), CODEJMP(F, OP_JMP));
 }
 
+/// return ::= 'return' ';'
+///          | 'return' explist ';'
 sstatic void returnstm(Function* F)
 {
-    FunctionType type = F->fn_type;
-    if(match(F, TOK_SEMICOLON)) coderet(F, true);
+    /*
+     * @TODO:
+     * Optimize even further by removing all of the unreachable code.
+     */
+    Context      C;
+    bool         gotret = F->fn->gotret;
+    FunctionType type   = F->fn_type;
+    savecontext(F, &C);
+    CODE(F, OP_RETSTART);
+    if(match(F, TOK_SEMICOLON)) coderet(F, true, gotret);
     else {
         if(type == FN_INIT) RETURN_INIT_ERR(F, static_str[SS_INIT].name);
-        CODE(F, OP_RETSTART);
         Exp E;
+        E.ins.set = false;
         explist(F, BYTECODE_MAX, &E);
-        expect(F, TOK_SEMICOLON, "Expect ';' after return value/s.");
-        if(ethasmulret(E.type)) SET_RETCNT(F, &E, MULRET);
-        if(type == FN_SCRIPT) CODE(F, OP_TOPRET);
-        else CODE(F, OP_RET);
+        expect(F, TOK_SEMICOLON, "Expect ';' after return statement value/s.");
+        if(gotret) {
+            F->fn->gotret = 1;
+            restorecontext(F, &C);
+        } else {
+            if(ethasmulret(E.type)) setmulret(F, &E);
+            if(type == FN_SCRIPT) CODE(F, OP_TOPRET);
+            else CODE(F, OP_RET);
+        }
     }
 }
 
@@ -1969,9 +2036,8 @@ sstatic void dot(Function* F, Exp* E)
     expect(F, TOK_IDENTIFIER, "Expect property name after '.'.");
     Value identifier = tokintostr(F->vm, &PREVT(F));
     UInt  idx        = make_constant(F, identifier);
-    if(match(F, TOK_LPAREN)) {
-        codeinvoke(F, E, idx);
-    } else {
+    if(match(F, TOK_LPAREN)) codeinvoke(F, E, idx);
+    else {
         E->type  = EXP_INDEXED;
         E->value = idx;
         if(!E->ins.set) E->ins.code = CODEOP(F, OP_GET_PROPERTY, idx);
@@ -2000,6 +2066,7 @@ sstatic void stm(Function* F)
 sstatic force_inline void indexed(Function* F, Exp* E)
 {
     Exp E2;
+    E2.ins.set = false;
     expr(F, &E2);
     expect(F, TOK_RBRACK, "Expect ']'.");
     if(match(F, TOK_LPAREN)) {
@@ -2031,7 +2098,7 @@ sstatic void _self(Function* F, Exp* E)
     }
     advance(F);
     Exp _;
-    codevar(F, &_);
+    codevarprev(F, &_);
     E->type = EXP_SELF;
 }
 
@@ -2045,20 +2112,22 @@ sstatic void _super(Function* F, Exp* E)
         NO_SUPER_ERR(F);
         return;
     }
+    advance(F);
     expect(F, TOK_DOT, "Expect '.' after 'super'.");
     expect(F, TOK_IDENTIFIER, "Expect superclass method name after '.'.");
     Value id  = tokintostr(F->vm, &PREVT(F));
     Int   idx = make_constant(F, id);
     Exp   _; // dummy
-    codevarprev(F, syntoken("self"), &_);
+    _.ins.set = false;
+    codevar(F, syntoken("self"), &_);
     if(match(F, TOK_LPAREN)) {
         call(F, E);
-        codevarprev(F, syntoken("super"), &_);
+        codevar(F, syntoken("super"), &_);
         E->ins.code = CODEOP(F, OP_INVOKE_SUPER, idx);
         CODEL(F, 1);
         E->type = EXP_INVOKE;
     } else {
-        codevarprev(F, syntoken("super"), &_);
+        codevar(F, syntoken("super"), &_);
         if(E->ins.set) error(F, "Can't assign to methods from superclass.");
         E->ins.code = CODEOP(F, OP_GET_SUPER, idx);
         E->type     = EXP_INDEXED; // superclass method
@@ -2078,7 +2147,7 @@ sstatic void primaryexp(Function* F, Exp* E)
             break;
         case TOK_IDENTIFIER:
             advance(F);
-            codevar(F, E);
+            codevarprev(F, E);
             break;
         case TOK_SELF:
             _self(F, E);
@@ -2373,6 +2442,7 @@ sstatic BinaryOpr subexp(Function* F, Exp* E1, Int limit)
     BinaryOpr binop = getbinaryopr(CURRT(F).type);
     while(binop != OPR_NOBINOPR && priority[binop].left > limit) {
         Exp E2;
+        E2.ins.set = false;
         advance(F); // skip binary operator
         shortcircuit(F, binop, E1);
         BinaryOpr nextop = subexp(F, &E2, priority[binop].right);

@@ -300,12 +300,12 @@
             vm,                                                                 \
             "'%s' is not an <instance>, only class instances have properties.", \
             valstr)
-    #define VM_INSTANCE_PROPERTY_ERR(vm, property_name, instance_name)          \
+    #define VM_PROPERTY_ERR(vm, property, class)                                \
         RUNTIME_ERR(                                                            \
             vm,                                                                 \
-            "Property '%s' is not defined for <instance '%s'>.",                \
-            property_name,                                                      \
-            instance_name)
+            "Property '%s' is not defined for <class '%s'>.",                   \
+            property,                                                           \
+            class)
     #define VM_INHERIT_ERR(vm, subclass, superclass)                            \
         RUNTIME_ERR(                                                            \
             vm,                                                                 \

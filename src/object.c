@@ -92,6 +92,7 @@ OFunction* OFunction_new(VM* vm)
     fn->vacnt     = 0;
     fn->isva      = 0;
     fn->isinit    = 0;
+    fn->gotret    = 0;
     Chunk_init(&fn->chunk, vm);
     return fn;
 }

@@ -122,7 +122,7 @@ bindmethod(VM* vm, OClass* cclass, Value name, Value receiver)
 {
     Value method;
     if(unlikely(!HashTable_get(&cclass->methods, name, &method))) {
-        VM_INSTANCE_PROPERTY_ERR(vm, AS_CSTRING(name), cclass->name->storage);
+        VM_PROPERTY_ERR(vm, AS_CSTRING(name), cclass->name->storage);
         return NULL;
     }
     OBoundMethod* bound_method = OBoundMethod_new(vm, receiver, AS_OBJ(method));
@@ -276,12 +276,11 @@ sstatic force_inline bool nativecall(VM* vm, ONative* native, Int argc)
     }
 }
 
-#define NO_RETURN -1
 sstatic force_inline bool instancecall(VM* vm, OClass* cclass, Int argc)
 {
     vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, cclass));
     O* init           = cclass->overloaded;
-    if(init != NULL) return fncall(vm, init, argc, NO_RETURN);
+    if(init != NULL) return fncall(vm, init, argc, 1);
     else if(unlikely(argc != 0)) {
         FN_ARGC_ERR(vm, 0, argc);
         return false;
@@ -314,14 +313,11 @@ sstatic force_inline bool vcall(VM* vm, Value callee, Int argc, Int retcnt)
 }
 
 sstatic force_inline bool
-invokefrom(VM* vm, OClass* cclass, Value method_name, Int argc, Int retcnt)
+invokefrom(VM* vm, OClass* cclass, Value methodname, Int argc, Int retcnt)
 {
     Value method;
-    if(unlikely(!HashTable_get(&cclass->methods, method_name, &method))) {
-        VM_INSTANCE_PROPERTY_ERR(
-            vm,
-            AS_CSTRING(method_name),
-            cclass->name->storage);
+    if(unlikely(!HashTable_get(&cclass->methods, methodname, &method))) {
+        VM_PROPERTY_ERR(vm, AS_CSTRING(methodname), cclass->name->storage);
         return false;
     }
     return vcall(vm, method, argc, retcnt);
@@ -342,7 +338,7 @@ sstatic force_inline bool invokeindex(VM* vm, Value name, Int argc, Int retcnt)
         return vcall(vm, value, argc - 1, retcnt);
     }
     if(unlikely(!HashTable_get(&instance->cclass->methods, name, &value))) {
-        VM_INSTANCE_PROPERTY_ERR(
+        VM_PROPERTY_ERR(
             vm,
             vtostr(vm, name)->storage,
             instance->cclass->name->storage);
@@ -673,24 +669,24 @@ sstatic InterpretResult VM_run(VM* vm)
             }
             CASE(OP_METHOD)
             {
-                OString* method_name = AS_STRING(READ_CONSTANT());
-                Value    method      = *stackpeek(0); // OFunction or OClosure
-                OClass*  cclass      = AS_CLASS(*stackpeek(1));
+                OString* methodname = AS_STRING(READ_CONSTANT());
+                Value    method     = *stackpeek(0); // OFunction or OClosure
+                OClass*  cclass     = AS_CLASS(*stackpeek(1));
                 HashTable_insert(
                     vm,
                     &cclass->methods,
-                    OBJ_VAL(method_name),
+                    OBJ_VAL(methodname),
                     method);
                 pop(vm); // pop the method (function/closure)
                 BREAK;
             }
             CASE(OP_INVOKE)
             {
-                OString* method_name = AS_STRING(READ_CONSTANT()); // method name
-                Int      retcnt      = READ_BYTEL(); // number of return values
-                Int      argc        = vm->sp - Array_VRef_pop(&vm->callstart);
-                frame->ip            = ip;
-                if(unlikely(!invoke(vm, OBJ_VAL(method_name), argc, retcnt)))
+                OString* methodname = AS_STRING(READ_CONSTANT()); // method name
+                Int      retcnt     = READ_BYTEL(); // number of return values
+                Int      argc       = vm->sp - Array_VRef_pop(&vm->callstart);
+                frame->ip           = ip;
+                if(unlikely(!invoke(vm, OBJ_VAL(methodname), argc, retcnt)))
                     return INTERPRET_RUNTIME_ERROR;
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
@@ -698,24 +694,25 @@ sstatic InterpretResult VM_run(VM* vm)
             }
             CASE(OP_GET_SUPER)
             {
-                Value   method_name = READ_CONSTANT();
-                OClass* superclass  = AS_CLASS(pop(vm));
-                frame->ip           = ip;
+                Value   methodname = READ_CONSTANT();
+                OClass* superclass = AS_CLASS(pop(vm));
+                frame->ip          = ip;
                 OBoundMethod* bound =
-                    bindmethod(vm, superclass, method_name, *stackpeek(0));
+                    bindmethod(vm, superclass, methodname, *stackpeek(0));
                 if(unlikely(bound == NULL)) return INTERPRET_RUNTIME_ERROR;
                 vm->sp[-1] = OBJ_VAL(bound);
                 BREAK;
             }
             CASE(OP_INVOKE_SUPER)
             {
-                Value   method_name = READ_CONSTANT();
-                OClass* superclass  = AS_CLASS(pop(vm));
-                UInt    argc        = vm->sp - Array_VRef_pop(&vm->callstart);
-                Int     retcnt      = READ_BYTEL();
-                frame->ip           = ip;
+                Value methodname = READ_CONSTANT();
+                ASSERT(IS_CLASS(*stackpeek(0)), "superclass must be class.");
+                OClass* superclass = AS_CLASS(pop(vm));
+                UInt    argc       = vm->sp - Array_VRef_pop(&vm->callstart);
+                Int     retcnt     = READ_BYTEL();
+                frame->ip          = ip;
                 if(unlikely(
-                       !invokefrom(vm, superclass, method_name, argc, retcnt)))
+                       !invokefrom(vm, superclass, methodname, argc, retcnt)))
                     return INTERPRET_RUNTIME_ERROR;
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
@@ -878,12 +875,12 @@ sstatic InterpretResult VM_run(VM* vm)
                 ret_fin:;
                     Int retcnt = vm->sp - Array_VRef_pop(&vm->retstart);
                     Int pushc;
-                    if(frame->retcnt != NO_RETURN) { // this isn't initializer
-                        if(frame->retcnt == 0) pushc = retcnt;
-                        else pushc = frame->retcnt - retcnt;
-                        if(pushc < 0) popn(vm, sabs(pushc));
-                        else pushn(vm, pushc, NIL_VAL);
-                    } else frame->retcnt = 0;
+                    if(frame->retcnt == 0) {
+                        pushc         = 0;
+                        frame->retcnt = retcnt;
+                    } else pushc = frame->retcnt - retcnt;
+                    if(pushc < 0) popn(vm, sabs(pushc));
+                    else pushn(vm, pushc, NIL_VAL);
                     ASSERT(vm->temp.len == 0, "Temporary array not empty.");
                     for(Int expected_retcnt = frame->retcnt; expected_retcnt--;)
                     {
@@ -1101,7 +1098,7 @@ sstatic InterpretResult VM_run(VM* vm)
                     &AS_CLASS(superclass)->methods,
                     &subclass->methods);
                 subclass->overloaded = AS_CLASS(superclass)->overloaded;
-                pop(vm);
+                pop(vm); // pop subclass
                 BREAK;
             }
             CASE(OP_FOREACH)
