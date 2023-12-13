@@ -266,54 +266,33 @@ const char* load_script_default(VM* vm, const char* name)
 
 ScriptLoadResult* load_script(VM* vm, ScriptLoadResult* result)
 {
-    if(vm->config.load_script != NULL) {
+    if(vm->config.load_script != NULL)
         *result = vm->config.load_script(vm, AS_CSTRING(vm->script));
-    }
-
     if(result->source == NULL) {
         result->finfn  = NULL;
         result->source = load_script_default(vm, AS_CSTRING(vm->script));
     }
-
-    if(result->source == NULL) {
-        return NULL;
-    }
-
+    if(result->source == NULL) return NULL;
     return result;
 }
 
-OFunction* compile_script(VM* vm, ScriptLoadResult* result)
+OClosure* compile_script(VM* vm, ScriptLoadResult* result)
 {
-    runtime       = 0;
-    OFunction* fn = compile(vm, result->source, vm->script);
-    runtime       = 1;
-
-    if(result->finfn != NULL) {
-        result->finfn(vm, AS_CSTRING(vm->script), *result);
-    } else {
-        FREE(vm, (char*)result->source);
-    }
-
-    return fn;
+    runtime           = 0;
+    OClosure* closure = compile(vm, result->source, vm->script);
+    runtime           = 1;
+    if(result->finfn != NULL) result->finfn(vm, AS_CSTRING(vm->script), *result);
+    else FREE(vm, (char*)result->source);
+    return closure;
 }
 
 Value resolve_script(VM* vm, Value name)
 {
-    if(vm->config.rename_script == NULL) {
-        return name;
-    }
-
+    if(vm->config.rename_script == NULL) return name;
     const char* renamed =
         vm->config.rename_script(vm, AS_CSTRING(vm->script), AS_CSTRING(name));
-
-    if(renamed == NULL) {
-        return NIL_VAL;
-    }
-
-    if(renamed == AS_CSTRING(name)) {
-        return name;
-    }
-
+    if(renamed == NULL) return NIL_VAL;
+    if(renamed == AS_CSTRING(name)) return name;
     name = OBJ_VAL(OString_from(vm, renamed, strlen(renamed)));
     push(vm, name);
     GC_FREE(vm, (char*)renamed, 0);
@@ -335,13 +314,11 @@ snative(loadscript)
         argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_ARG_TYPE_ERR));
         return false;
     }
-
     name = resolve_script(vm, name);
     if(name == NIL_VAL) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RESOLVE_ERR));
         return false;
     }
-
     vm->script   = name;
     Value retval = EMPTY_VAL;
     if(HashTable_get(&vm->loaded, name, &retval)) {
@@ -360,14 +337,14 @@ snative(loadscript)
         return false;
     }
 
-    OFunction* scriptfn = compile_script(vm, &result);
-    if(scriptfn == NULL) {
+    OClosure* closure = compile_script(vm, &result);
+    if(closure == NULL) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_COMPILE_ERR));
         return false;
     }
 
-    Value fn = OBJ_VAL(scriptfn);
-    push(vm, fn);
+    Value scriptfn = OBJ_VAL(closure);
+    push(vm, scriptfn);
     HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL); // Update loaded table
     pop(vm);
     vm->sp     -= argc;

@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_HASH_H__
-#define __SKOOMA_HASH_H__
+#ifndef SKOOMA_HASH_H
+#define SKOOMA_HASH_H
 
 #include "common.h"
 

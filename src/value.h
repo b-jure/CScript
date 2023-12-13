@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_VALUE_H__
-#define __SKOOMA_VALUE_H__
+#ifndef SKOOMA_VALUE_H
+#define SKOOMA_VALUE_H
 
 #include "array.h"
 #include "common.h"
@@ -137,10 +137,7 @@ bool Value_eq(Value a, Value b);
 
 ARRAY_NEW(Array_Value, Value);
 
-#ifndef __SKOOMA_COMPILER_H__
-typedef struct Function Function;
-#endif
-#ifndef __SKOOMA_VMACHINE_H__
+#ifndef SKOOMA_VMACHINE_H
 typedef struct VM VM;
 #endif
 

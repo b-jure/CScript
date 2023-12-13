@@ -76,7 +76,7 @@ MS_FN(markstack)
 MS_FN(markframes)
 {
     for(Int i = 0; i < vm->fc; i++)
-        omark(vm, vm->frames[i].fn);
+        omark(vm, (O*)vm->frames[i].closure);
 }
 
 MS_FN(markupvalues)
@@ -188,16 +188,16 @@ void mark_black(VM* vm, O* obj)
         }
         CASE(OBJ_CLASS)
         {
-            OClass* cclass = (OClass*)obj;
-            omark(vm, (O*)cclass->name);
-            marktable(vm, &cclass->methods);
-            omark(vm, (O*)cclass->overloaded);
+            OClass* oclass = (OClass*)obj;
+            omark(vm, (O*)oclass->name);
+            marktable(vm, &oclass->methods);
+            omark(vm, (O*)oclass->overloaded);
             BREAK;
         }
         CASE(OBJ_INSTANCE)
         {
             OInstance* instance = (OInstance*)obj;
-            omark(vm, (O*)instance->cclass);
+            omark(vm, (O*)instance->oclass);
             marktable(vm, &instance->fields);
             BREAK;
         }
@@ -206,7 +206,7 @@ void mark_black(VM* vm, O* obj)
             OBoundMethod* bound_method = (OBoundMethod*)obj;
             omark(vm, (O*)bound_method);
             vmark(vm, bound_method->receiver);
-            omark(vm, bound_method->method);
+            omark(vm, (O*)bound_method->method);
             BREAK;
         }
         CASE(OBJ_NATIVE)

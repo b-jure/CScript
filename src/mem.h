@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_MEM_H___
-#define __SKOOMA_MEM_H___
+#ifndef SKOOMA_MEM_H
+#define SKOOMA_MEM_H
 
 #include "common.h"
 #include "vmachine.h"

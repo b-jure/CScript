@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_ERR_H__
-    #define __SKOOMA_ERR_H__
+#ifndef SKOOMA_ERR_H
+    #define SKOOMA_ERR_H
 
     /**
      * FORMAT STRINGS

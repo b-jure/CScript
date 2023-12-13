@@ -244,7 +244,7 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_GET_SUPER:
             return longins("OP_GET_SUPER", chunk, OP_GET_SUPER, offset);
         case OP_INVOKE_SUPER:
-            return longins("OP_INVOKE_SUPER", chunk, OP_INVOKE_SUPER, offset);
+            return invoke("OP_INVOKE_SUPER", chunk, offset);
         case OP_CALLSTART:
             return simpleins("OP_CALLSTART", offset);
         case OP_RETSTART:

@@ -33,6 +33,8 @@
 volatile Int runtime = 0; // VM is running?
 
 
+#define FFN(frame) frame->closure->fn
+
 void runerror(VM* vm, const char* errfmt, ...)
 {
     fputs("\nSkooma: [runtime error]\nSkooma: ", stderr);
@@ -43,12 +45,12 @@ void runerror(VM* vm, const char* errfmt, ...)
     putc('\n', stderr);
     for(Int i = vm->fc - 1; i >= 0; i--) {
         CallFrame* frame = &vm->frames[i];
-        Chunk*     chunk = &FRAME_FN(frame)->chunk;
+        Chunk*     chunk = &frame->closure->fn->chunk;
         UInt       line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
         Value      _;
         bool       loaded = false;
-        if(HashTable_get(&vm->loaded, OBJ_VAL(FRAME_FN(frame)->name), &_)) {
-            vm->script = OBJ_VAL(FRAME_FN(frame)->name);
+        if(HashTable_get(&vm->loaded, OBJ_VAL(FFN(frame)->name), &_)) {
+            vm->script = OBJ_VAL(FFN(frame)->name);
             loaded     = true;
         }
         fprintf(
@@ -57,7 +59,7 @@ void runerror(VM* vm, const char* errfmt, ...)
             AS_CSTRING(vm->script),
             line);
         if(loaded) fprintf(stderr, "script\n");
-        else fprintf(stderr, "%s()\n", FRAME_FN(frame)->name->storage);
+        else fprintf(stderr, "%s()\n", FFN(frame)->name->storage);
     }
     stack_reset(vm);
 }
@@ -118,14 +120,15 @@ sstatic OString* concatenate(VM* vm, Value a, Value b)
 }
 
 sstatic force_inline OBoundMethod*
-bindmethod(VM* vm, OClass* cclass, Value name, Value receiver)
+bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 {
     Value method;
-    if(unlikely(!HashTable_get(&cclass->methods, name, &method))) {
-        VM_PROPERTY_ERR(vm, AS_CSTRING(name), cclass->name->storage);
+    if(unlikely(!HashTable_get(&oclass->methods, name, &method))) {
+        VM_PROPERTY_ERR(vm, AS_CSTRING(name), oclass->name->storage);
         return NULL;
     }
-    OBoundMethod* bound_method = OBoundMethod_new(vm, receiver, AS_OBJ(method));
+    OBoundMethod* bound_method =
+        OBoundMethod_new(vm, receiver, AS_CLOSURE(method));
     return bound_method;
 }
 
@@ -233,9 +236,9 @@ VM* VM_new(Config* config)
     return vm;
 }
 
-bool fncall(VM* vm, O* callee, Int argc, Int retcnt)
+bool fncall(VM* vm, OClosure* callee, Int argc, Int retcnt)
 {
-    OFunction* fn = GET_FN(callee);
+    OFunction* fn = callee->fn;
     if(unlikely(!fn->isva && (Int)fn->arity != argc)) {
         FN_ARGC_ERR(vm, fn->arity, argc);
         return false;
@@ -251,7 +254,7 @@ bool fncall(VM* vm, O* callee, Int argc, Int retcnt)
     fn->vacnt        = argc - fn->arity;
     CallFrame* frame = &vm->frames[vm->fc++];
     frame->retcnt    = retcnt;
-    frame->fn        = callee;
+    frame->closure   = callee;
     frame->ip        = fn->chunk.code.data;
     frame->sp        = vm->sp - argc - 1;
     return true;
@@ -276,10 +279,10 @@ sstatic force_inline bool nativecall(VM* vm, ONative* native, Int argc)
     }
 }
 
-sstatic force_inline bool instancecall(VM* vm, OClass* cclass, Int argc)
+sstatic force_inline bool instancecall(VM* vm, OClass* oclass, Int argc)
 {
-    vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, cclass));
-    O* init           = cclass->overloaded;
+    vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, oclass));
+    OClosure* init    = oclass->overloaded;
     if(init != NULL) return fncall(vm, init, argc, 1);
     else if(unlikely(argc != 0)) {
         FN_ARGC_ERR(vm, 0, argc);
@@ -299,7 +302,7 @@ sstatic force_inline bool vcall(VM* vm, Value callee, Int argc, Int retcnt)
             }
             case OBJ_CLOSURE:
             case OBJ_FUNCTION:
-                return fncall(vm, AS_OBJ(callee), argc, retcnt);
+                return fncall(vm, AS_CLOSURE(callee), argc, retcnt);
             case OBJ_CLASS:
                 return instancecall(vm, AS_CLASS(callee), argc);
             case OBJ_NATIVE:
@@ -313,11 +316,11 @@ sstatic force_inline bool vcall(VM* vm, Value callee, Int argc, Int retcnt)
 }
 
 sstatic force_inline bool
-invokefrom(VM* vm, OClass* cclass, Value methodname, Int argc, Int retcnt)
+invokefrom(VM* vm, OClass* oclass, Value methodname, Int argc, Int retcnt)
 {
     Value method;
-    if(unlikely(!HashTable_get(&cclass->methods, methodname, &method))) {
-        VM_PROPERTY_ERR(vm, AS_CSTRING(methodname), cclass->name->storage);
+    if(unlikely(!HashTable_get(&oclass->methods, methodname, &method))) {
+        VM_PROPERTY_ERR(vm, AS_CSTRING(methodname), oclass->name->storage);
         return false;
     }
     return vcall(vm, method, argc, retcnt);
@@ -337,11 +340,11 @@ sstatic force_inline bool invokeindex(VM* vm, Value name, Int argc, Int retcnt)
         vm->sp--; // additional argument on stack ('name')
         return vcall(vm, value, argc - 1, retcnt);
     }
-    if(unlikely(!HashTable_get(&instance->cclass->methods, name, &value))) {
+    if(unlikely(!HashTable_get(&instance->oclass->methods, name, &value))) {
         VM_PROPERTY_ERR(
             vm,
             vtostr(vm, name)->storage,
-            instance->cclass->name->storage);
+            instance->oclass->name->storage);
         return false;
     }
     pop(vm); // pop the name
@@ -361,28 +364,28 @@ sstatic force_inline bool invoke(VM* vm, Value name, Int argc, Int retcnt)
         vm->sp[-argc - 1] = value;
         return vcall(vm, value, argc, retcnt);
     }
-    return invokefrom(vm, instance->cclass, name, argc, retcnt);
+    return invokefrom(vm, instance->oclass, name, argc, retcnt);
 }
 
-sstatic force_inline OUpvalue* captureupval(VM* vm, Value* var_ref)
+sstatic force_inline OUpvalue* captureupval(VM* vm, Value* valp)
 {
-    OUpvalue** pp = &vm->open_upvals;
-    while(*pp != NULL && (*pp)->location > var_ref)
-        pp = &(*pp)->next;
-    if(*pp != NULL && (*pp)->location == var_ref) return *pp;
-    OUpvalue* upval = OUpvalue_new(vm, var_ref);
-    upval->next     = *pp;
-    *pp             = upval;
-    return upval;
+    OUpvalue** upvalpp = &vm->open_upvals;
+    while(*upvalpp != NULL && (*upvalpp)->location > valp)
+        upvalpp = &(*upvalpp)->next;
+    if(*upvalpp != NULL && (*upvalpp)->location == valp) return *upvalpp;
+    OUpvalue* upvalp = OUpvalue_new(vm, valp);
+    upvalp->next     = *upvalpp;
+    *upvalpp         = upvalp;
+    return upvalp;
 }
 
 sstatic force_inline void closeupval(VM* vm, Value* last)
 {
     while(vm->open_upvals != NULL && vm->open_upvals->location >= last) {
-        OUpvalue* upval     = vm->open_upvals;
-        upval->closed.value = *upval->location;
-        upval->location     = &upval->closed.value;
-        vm->open_upvals     = upval->next;
+        OUpvalue* upvalp     = vm->open_upvals;
+        upvalp->closed.value = *upvalp->location;
+        upvalp->location     = &upvalp->closed.value;
+        vm->open_upvals      = upvalp->next;
     }
 }
 
@@ -461,7 +464,7 @@ sstatic InterpretResult VM_run(VM* vm)
 {
 #define READ_BYTE()     (*ip++)
 #define READ_BYTEL()    (ip += 3, GET_BYTES3(ip - 3))
-#define READ_CONSTANT() FRAME_FN(frame)->chunk.constants.data[READ_BYTEL()]
+#define READ_CONSTANT() FFN(frame)->chunk.constants.data[READ_BYTEL()]
 #define READ_STRING()   AS_STRING(READ_CONSTANT())
 #define BINARY_OP(value_type, op)                                               \
     do {                                                                        \
@@ -503,8 +506,8 @@ sstatic InterpretResult VM_run(VM* vm)
         }
         printf("\n");
         Instruction_debug(
-            &FRAME_FN(frame)->chunk,
-            (UInt)(ip - FRAME_FN(frame)->chunk.code.data));
+            &FFN(frame)->chunk,
+            (UInt)(ip - FFN(frame)->chunk.code.data));
 #endif
         DISPATCH(READ_BYTE())
         {
@@ -588,7 +591,7 @@ sstatic InterpretResult VM_run(VM* vm)
             }
             CASE(OP_VALIST)
             {
-                OFunction* fn    = FRAME_FN(frame);
+                OFunction* fn    = FFN(frame);
                 UInt       vacnt = READ_BYTEL();
                 vacnt            = (vacnt == 0 ? fn->vacnt : vacnt);
                 for(UInt i = 1; i <= vacnt; i++) {
@@ -669,24 +672,20 @@ sstatic InterpretResult VM_run(VM* vm)
             }
             CASE(OP_METHOD)
             {
-                OString* methodname = AS_STRING(READ_CONSTANT());
-                Value    method     = *stackpeek(0); // OFunction or OClosure
-                OClass*  cclass     = AS_CLASS(*stackpeek(1));
-                HashTable_insert(
-                    vm,
-                    &cclass->methods,
-                    OBJ_VAL(methodname),
-                    method);
-                pop(vm); // pop the method (function/closure)
+                Value   methodname = READ_CONSTANT();
+                Value   method     = *stackpeek(0); // OFunction or OClosure
+                OClass* oclass     = AS_CLASS(*stackpeek(1));
+                HashTable_insert(vm, &oclass->methods, methodname, method);
+                pop(vm); // pop method
                 BREAK;
             }
             CASE(OP_INVOKE)
             {
-                OString* methodname = AS_STRING(READ_CONSTANT()); // method name
-                Int      retcnt     = READ_BYTEL(); // number of return values
-                Int      argc       = vm->sp - Array_VRef_pop(&vm->callstart);
-                frame->ip           = ip;
-                if(unlikely(!invoke(vm, OBJ_VAL(methodname), argc, retcnt)))
+                Value methodname = READ_CONSTANT();
+                Int   retcnt     = READ_BYTEL();
+                Int   argc       = vm->sp - Array_VRef_pop(&vm->callstart);
+                frame->ip        = ip;
+                if(unlikely(!invoke(vm, methodname, argc, retcnt)))
                     return INTERPRET_RUNTIME_ERROR;
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
@@ -752,7 +751,7 @@ sstatic InterpretResult VM_run(VM* vm)
                 }
                 frame->ip = ip;
                 OBoundMethod* bound =
-                    bindmethod(vm, instance->cclass, property_name, receiver);
+                    bindmethod(vm, instance->oclass, property_name, receiver);
                 if(unlikely(bound == NULL)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -866,7 +865,7 @@ sstatic InterpretResult VM_run(VM* vm)
                     HashTable_insert(
                         vm,
                         &vm->loaded,
-                        OBJ_VAL(FRAME_FN(frame)->name),
+                        OBJ_VAL(FFN(frame)->name),
                         *first);
                     goto ret_fin;
                 }
@@ -961,7 +960,7 @@ sstatic InterpretResult VM_run(VM* vm)
                     UInt idx   = READ_BYTEL();
                     if(local)
                         closure->upvals[i] = captureupval(vm, frame->sp + idx);
-                    else closure->upvals[i] = FRAME_CLOSURE(frame)->upvals[idx];
+                    else closure->upvals[i] = frame->closure->upvals[idx];
                     closure->upvals[i]->closed.flags = flags;
                 }
                 BREAK;
@@ -969,13 +968,13 @@ sstatic InterpretResult VM_run(VM* vm)
             CASE(OP_GET_UPVALUE)
             {
                 UInt idx = READ_BYTEL();
-                push(vm, *FRAME_CLOSURE(frame)->upvals[idx]->location);
+                push(vm, *frame->closure->upvals[idx]->location);
                 BREAK;
             }
             CASE(OP_SET_UPVALUE)
             {
                 UInt      idx   = READ_BYTEL();
-                OUpvalue* upval = FRAME_CLOSURE(frame)->upvals[idx];
+                OUpvalue* upval = frame->closure->upvals[idx];
                 if(unlikely(VAR_CHECK(&upval->closed, VAR_FIXED_BIT))) {
                     frame->ip = ip;
                     runerror(
@@ -1026,7 +1025,7 @@ sstatic InterpretResult VM_run(VM* vm)
                 }
                 frame->ip = ip;
                 OBoundMethod* bound =
-                    bindmethod(vm, instance->cclass, key, receiver);
+                    bindmethod(vm, instance->oclass, key, receiver);
                 if(unlikely(bound == NULL)) return INTERPRET_RUNTIME_ERROR;
                 popn(vm, 2); // Pop key and receiver
                 push(vm, OBJ_VAL(bound)); // Push bound method
@@ -1069,7 +1068,7 @@ sstatic InterpretResult VM_run(VM* vm)
             }
             CASE(OP_OVERLOAD)
             {
-                OClass* cclass = AS_CLASS(*stackpeek(1));
+                OClass* oclass = AS_CLASS(*stackpeek(1));
                 // Right now the only thing that can be overloaded
                 // is class initializer, so this parameter is not useful,
                 // but if the operator overloading gets implemented
@@ -1077,12 +1076,13 @@ sstatic InterpretResult VM_run(VM* vm)
                 // overload-able methods/operators.
                 Byte opn = READ_BYTE();
                 UNUSED(opn);
-                cclass->overloaded = AS_OBJ(*stackpeek(0));
+                oclass->overloaded = AS_CLOSURE(*stackpeek(0));
                 ASSERT(*ip == OP_METHOD, "Expected 'OP_METHOD'.");
                 BREAK;
             }
             CASE(OP_INHERIT)
             {
+                ASSERT(IS_CLASS(*stackpeek(0)), "subclass must be class.");
                 OClass* subclass   = AS_CLASS(*stackpeek(0));
                 Value   superclass = *stackpeek(1);
                 if(unlikely(!IS_CLASS(superclass))) {
@@ -1152,10 +1152,10 @@ sstatic InterpretResult VM_run(VM* vm)
 
 InterpretResult interpret(VM* vm, const char* source, const char* path)
 {
-    Value      name = OBJ_VAL(OString_from(vm, path, strlen(path)));
-    OFunction* fn   = compile(vm, source, name);
-    if(fn == NULL) return INTERPRET_COMPILE_ERROR;
-    fncall(vm, (O*)fn, 0, 1);
+    Value     name    = OBJ_VAL(OString_from(vm, path, strlen(path)));
+    OClosure* closure = compile(vm, source, name);
+    if(closure == NULL) return INTERPRET_COMPILE_ERROR;
+    fncall(vm, closure, 0, 1);
     return VM_run(vm);
 }
 

@@ -272,7 +272,6 @@ typedef struct Scope Scope;
 struct Scope {
     Scope* prev; // Linked List
     UInt   localc; // Count of locals up until this scope
-    Byte   isupval : 1; // True if some variable in the scope is an upvalue
     Byte   isloop : 1; // This scope is loop
     Byte   isswitch : 1; // This scope is switch
     Int    depth; // scope depth (index)
@@ -336,7 +335,7 @@ struct Function {
     Scope*         S; // scope state
     OFunction*     fn; // currently parsed function (bytecode chunk)
     FunctionType   fn_type;
-    Array_Upvalue* upvalues; // captured variables (hint: closure)
+    Array_Upvalue* upvalues; // captured variables
     Byte           vflags; // variable flags
     Array_Local    locals; // local variables stack
 };
@@ -504,17 +503,15 @@ sstatic force_inline void codeloop(Function* F, UInt start)
     CODEL(F, offset);
 }
 
-#define GLOBVAL(F, idx) (&(F)->vm->globvals[idx])
-
 // Initialize global variable
 #define INIT_GLOBAL(F, idx, vflags, E)                                          \
     do {                                                                        \
-        GLOBVAL(F, idx)->flags = vflags;                                        \
+        (F)->vm->globvals[idx].flags = vflags;                                  \
         CODEOP(F, GET_OP_TYPE(idx, OP_DEFINE_GLOBAL, E), idx);                  \
     } while(false)
 
 // Check if Tokens are equal
-sstatic force_inline bool Identifier_eq(Token* left, Token* right)
+sstatic force_inline bool nameeq(Token* left, Token* right)
 {
     return (left->len == right->len) &&
            (memcmp(left->start, right->start, left->len) == 0);
@@ -525,7 +522,7 @@ sstatic force_inline Int get_local(Function* F, Token* name)
 {
     for(Int i = F->locals.len - 1; i >= 0; i--) {
         Local* local = Array_Local_index(&F->locals, i);
-        if(Identifier_eq(name, &local->name)) {
+        if(nameeq(name, &local->name)) {
             if(local->depth == -1)
                 LOCAL_DEFINITION_ERR(F, name->len, name->start);
             return i;
@@ -537,20 +534,19 @@ sstatic force_inline Int get_local(Function* F, Token* name)
 sstatic force_inline UInt
 add_upval(Function* F, UInt idx, Byte flags, bool local)
 {
-    for(UInt i = 0; i < F->upvalues->len; i++) {
+    Int upvalc = F->fn->upvalc;
+    for(Int i = 0; i < upvalc; i++) {
         Upvalue* upvalue = Array_Upvalue_index(F->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local)
-            // Return existing UpValue index
-            return i;
+            return i; // already exists
     }
-    if(unlikely((Int)F->upvalues->len == INDEX_MAX)) {
+    if(unlikely(upvalc >= INDEX_MAX)) {
         UPVALUE_LIMIT_ERR(F, INDEX_MAX, F->fn->name->storage);
         return 0;
     }
-    // Otherwise add the UpValue into the array
-    F->fn->upvalc++;
-    Upvalue upval = {idx, flags, local};
-    return Array_Upvalue_push(F->upvalues, upval);
+    Array_Upvalue_ensure(F->upvalues, upvalc);
+    F->upvalues->data[upvalc] = (Upvalue){idx, flags, local};
+    return F->fn->upvalc++;
 }
 
 sstatic Int get_upval(Function* F, Token* name)
@@ -576,8 +572,8 @@ sstatic force_inline UInt globalvar(Function* F, Value identifier)
     Variable glob = {UNDEFINED_VAL, F->vflags};
     VM*      vm   = F->vm;
     if(!HashTable_get(&vm->globids, identifier, &index)) {
-        if(unlikely((vm)->globlen + 1 > UINT24_MAX))
-            GLOBALS_LIMIT_ERR(F, UINT24_MAX);
+        if(unlikely((vm)->globlen + 1 > BYTECODE_MAX))
+            GLOBALS_LIMIT_ERR(F, BYTECODE_MAX);
         push(vm, identifier);
         index = NUMBER_VAL(GARRAY_PUSH(vm, glob));
         HashTable_insert(vm, &vm->globids, identifier, index);
@@ -615,13 +611,13 @@ sstatic force_inline Int codevar(Function* F, Token name, Exp* E)
         getop   = GET_OP_TYPE(idx, OP_GET_GLOBAL, E);
     }
     E->value = idx;
-    if(!E->ins.set) return CODEOP(F, getop, idx);
-    else return -1; // this is assignment
+    if(!E->ins.set) return (E->ins.code = CODEOP(F, getop, idx));
+    else return (E->ins.code = -1); // this is assignment
 }
 
 sstatic force_inline UInt codevarprev(Function* F, Exp* E)
 {
-    return (E->ins.code = codevar(F, PREVT(F), E));
+    return codevar(F, PREVT(F), E);
 }
 
 // helper [rmlastins]
@@ -712,7 +708,6 @@ startscope(Function* F, Scope* S, Byte isloop, Byte isswitch)
     if(unlikely((UInt)F->S->depth >= BYTECODE_MAX))
         SCOPE_LIMIT_ERR(F, BYTECODE_MAX);
     S->localc   = F->locals.len;
-    S->isupval  = 0;
     S->isloop   = isloop;
     S->isswitch = isswitch;
     S->depth    = F->S->depth + 1;
@@ -728,39 +723,28 @@ sstatic void endscope(Function* F)
     F->fn->gotret  = 0;
     Int    pop     = 0;
     Scope* current = F->S;
-    ASSERT(current->depth != 0, "Cannot end global scope.");
-    F->S = current->prev;
-    // If there are some captured variables we need to properly
-    // close them while also emitting correct OP_POP[N] instructions.
-    if(current->isupval) {
-        // These 2 loops represent possible interleaved set
-        // of upvalues and locals on the stack.
-        while(F->locals.len > 0 &&
-              Array_Local_last(&F->locals)->depth > F->S->depth)
-        {
-            if(LOCAL_IS_CAPTURED(Array_Local_last(&F->locals))) {
-                Int capture = 1;
+    F->S           = current->prev;
+    while(F->locals.len > 0 && Array_Local_last(&F->locals)->depth > F->S->depth)
+    {
+        if(LOCAL_IS_CAPTURED(Array_Local_last(&F->locals))) {
+            Int capture = 1;
+            F->locals.len--;
+            CODEPOP(F, pop);
+            pop = 0; // Reset pop count
+            do {
+                if(!LOCAL_IS_CAPTURED(Array_Local_last(&F->locals))) {
+                    if(capture == 1) CODE(F, OP_CLOSE_UPVAL);
+                    else CODEOP(F, OP_CLOSE_UPVALN, capture);
+                    break;
+                }
+                capture++;
                 F->locals.len--;
-                CODEPOP(F, pop);
-                pop = 0; // Reset pop count
-                do {
-                    if(!LOCAL_IS_CAPTURED(Array_Local_last(&F->locals))) {
-                        if(capture == 1) CODE(F, OP_CLOSE_UPVAL);
-                        else CODEOP(F, OP_CLOSE_UPVALN, capture);
-                        break;
-                    }
-                    capture++;
-                    F->locals.len--;
-                } while(F->locals.len > 0 &&
-                        Array_Local_last(&F->locals)->depth > F->S->depth);
-            } else {
-                pop++;
-                F->locals.len--;
-            }
+            } while(F->locals.len > 0 &&
+                    Array_Local_last(&F->locals)->depth > F->S->depth);
+        } else {
+            pop++;
+            F->locals.len--;
         }
-    } else { // If there are no captured vars, just pop the locals
-        pop            = F->locals.len - current->localc;
-        F->locals.len -= pop;
     }
     CODEPOP(F, pop);
 
@@ -809,7 +793,6 @@ sstatic void F_init(
     globscope->isloop   = 0;
     globscope->isswitch = 0;
     globscope->localc   = 1;
-    globscope->isupval  = 0;
     // Initialize Function state
     F->vm        = vm;
     F->S         = globscope;
@@ -962,7 +945,7 @@ sstatic force_inline OFunction* compile_end(Function* F)
 }
 
 // Compile source code
-OFunction* compile(VM* vm, const char* source, Value name)
+OClosure* compile(VM* vm, const char* source, Value name)
 {
     vm->script = name;
     HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL);
@@ -976,7 +959,10 @@ OFunction* compile(VM* vm, const char* source, Value name)
     OFunction* fn  = compile_end(F);
     bool       err = F->lexer->error;
     F_free(F);
-    return (err ? NULL : fn);
+    push(vm, OBJ_VAL(fn));
+    OClosure* closure = OClosure_new(vm, fn);
+    pop(vm);
+    return (err ? NULL : closure);
 }
 
 // Create new local variable
@@ -995,7 +981,7 @@ sstatic void make_local(Function* F, Token* name)
     for(Int i = F->locals.len - 1; i >= 0; i--) {
         Local* local = Array_Local_index(&F->locals, i);
         if(local->depth != -1 && local->depth < F->S->depth) break;
-        if(Identifier_eq(name, &local->name))
+        if(nameeq(name, &local->name))
             LOCAL_REDEFINITION_ERR(F, name->len, name->start);
     }
     local_new(F, *name);
@@ -1217,6 +1203,7 @@ sstatic void setmulret(Function* F, Exp* E)
     switch(E->type) {
         case EXP_INVOKE_INDEX:
         case EXP_CALL:
+        case EXP_VARARG:
             SET_RETCNT(F, E, MULRET);
             break;
         case EXP_INVOKE:
@@ -1448,22 +1435,18 @@ sstatic void fn(Function* F, FunctionType type)
     startscope(Fnew, &S, 0, 0); // no need to end this scope
     expect(Fnew, TOK_LPAREN, "Expect '(' after function name.");
     if(!check(Fnew, TOK_RPAREN)) arglist(Fnew);
-    if(F->fn->isva) expect(Fnew, TOK_RPAREN, "'...' must be last argument.");
+    if(F->fn->isva) expect(Fnew, TOK_RPAREN, "Expect ')' after '...'.");
     else expect(Fnew, TOK_RPAREN, "Expect ')' after parameters.");
     expect(Fnew, TOK_LBRACE, "Expect '{' before function body.");
     block(Fnew); // body
     OFunction* fn = compile_end(Fnew);
     fn->isinit    = (type == FN_INIT);
-    if(fn->upvalc == 0) CODEOP(F, OP_CONST, make_constant(F, OBJ_VAL(fn)));
-    else {
-        // Create a closure only when function captured variables
-        CODEOP(F, OP_CLOSURE, make_constant(F, OBJ_VAL(fn)));
-        for(UInt i = 0; i < fn->upvalc; i++) {
-            Upvalue* upval = Array_Upvalue_index(Fnew->upvalues, i);
-            CODE(F, upval->local ? 1 : 0);
-            CODE(F, upval->flags);
-            CODEL(F, upval->idx);
-        }
+    CODEOP(F, OP_CLOSURE, make_constant(F, OBJ_VAL(fn)));
+    for(UInt i = 0; i < fn->upvalc; i++) {
+        Upvalue* upval = Array_Upvalue_index(Fnew->upvalues, i);
+        CODE(F, upval->local ? 1 : 0);
+        CODE(F, upval->flags);
+        CODEL(F, upval->idx);
     }
     F_free(Fnew);
 }
@@ -1507,12 +1490,12 @@ sstatic void classdec(Function* F)
     cclass.enclosing  = F->cclass;
     cclass.superclass = false;
     F->cclass         = &cclass;
+    _.ins.set         = false;
     Scope S;
-    _.ins.set = false;
-    if(match(F, TOK_IMPL)) {
+    if(match(F, TOK_IMPL)) { // have superclass ?
         expect(F, TOK_IDENTIFIER, "Expect superclass name.");
-        codevarprev(F, &_); // Get superclass
-        if(Identifier_eq(&PREVT(F), &class_name))
+        codevarprev(F, &_); // get superclass
+        if(nameeq(&PREVT(F), &class_name))
             CLASS_INHERIT_ERR(F, AS_CSTRING(identifier));
         startscope(F, &S, 0, 0);
         local_new(F, syntoken("super"));
@@ -2097,8 +2080,7 @@ sstatic void _self(Function* F, Exp* E)
         return;
     }
     advance(F);
-    Exp _;
-    codevarprev(F, &_);
+    codevarprev(F, E);
     E->type = EXP_SELF;
 }
 
@@ -2115,8 +2097,8 @@ sstatic void _super(Function* F, Exp* E)
     advance(F);
     expect(F, TOK_DOT, "Expect '.' after 'super'.");
     expect(F, TOK_IDENTIFIER, "Expect superclass method name after '.'.");
-    Value id  = tokintostr(F->vm, &PREVT(F));
-    Int   idx = make_constant(F, id);
+    Value methodname = tokintostr(F->vm, &PREVT(F));
+    Int   idx        = make_constant(F, methodname);
     Exp   _; // dummy
     _.ins.set = false;
     codevar(F, syntoken("self"), &_);

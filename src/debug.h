@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_DEBUG_H__
-#define __SKOOMA_DEBUG_H__
+#ifndef SKOOMA_DEBUG_H
+#define SKOOMA_DEBUG_H
 
 #include "chunk.h"
 #include "vmachine.h"

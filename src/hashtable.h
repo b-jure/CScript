@@ -1,14 +1,10 @@
-#ifndef __SKOOMA_HASHTABLE_H__
-#define __SKOOMA_HASHTABLE_H__
+#ifndef SKOOMA_HASHTABLE_H
+#define SKOOMA_HASHTABLE_H
 
 #include "common.h"
 #include "value.h"
 
-#ifndef __SKOOMA_COMPILER_H__
-typedef struct Compiler Compiler;
-#endif
-
-#ifndef __SKOOMA_VMACHINE_H__
+#ifndef SKOOMA_VMACHINE_H
 typedef struct VM VM;
 #endif
 

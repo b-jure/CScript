@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_OBJECT_H__
-#define __SKOOMA_OBJECT_H__
+#ifndef SKOOMA_OBJECT_H
+#define SKOOMA_OBJECT_H
 
 #include "chunk.h"
 #include "common.h"
@@ -134,19 +134,19 @@ struct OClass { // typedef is inside 'value.h'
     O         obj; // shared header
     OString*  name; // class name
     HashTable methods; // class methods
-    O*        overloaded; // @TODO: array of overloadable ops
+    OClosure* overloaded; // @TODO: array of overloadable ops
 };
 
 struct OInstance { // typedef is inside 'value.h'
     O         obj; // shared header
-    OClass*   cclass; // ptr to class we instantiated from
+    OClass*   oclass; // ptr to class we instantiated from
     HashTable fields; // Instance fields
 };
 
 struct OBoundMethod { // typedef is inside 'value.h'
-    O     obj; // shared header
-    Value receiver; // ptr to OInstance this method is bound to
-    O*    method; // OClosure or OFunction
+    O         obj; // shared header
+    Value     receiver; // ptr to OInstance this method is bound to
+    OClosure* method;
 };
 
 typedef struct {
@@ -159,7 +159,7 @@ typedef struct {
 } ONative; // Native function written in C
 
 OString*      OString_from(VM* vm, const char* chars, size_t len);
-OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, O* method);
+OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method);
 OInstance*    OInstance_new(VM* vm, OClass* cclass);
 OClass*       OClass_new(VM* vm, OString* name);
 OUpvalue*     OUpvalue_new(VM* vm, Value* var_ref);

@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_CHUNK_H__
-#define __SKOOMA_CHUNK_H__
+#ifndef SKOOMA_CHUNK_H
+#define SKOOMA_CHUNK_H
 
 #include "array.h"
 #include "common.h"
@@ -7,10 +7,6 @@
 #include "value.h"
 
 ARRAY_NEW(Array_Byte, Byte);
-
-#ifndef __SKOOMA_COMPILER_H__
-typedef struct Function Function;
-#endif
 
 #define OPCODE_N ((uint32_t)(OP_RET + 1))
 

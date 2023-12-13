@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_CONFIG_H__
-#define __SKOOMA_CONFIG_H__
+#ifndef SKOOMA_CONFIG_H
+#define SKOOMA_CONFIG_H
 
 #define __STDC_LIMIT_MACROS
 
@@ -188,7 +188,7 @@ static_assert(
 #endif
 
 
-/* Virtual Machine (more in 'vm.h') */
+/* Virtual Machine */
 typedef struct VM VM;
 
 

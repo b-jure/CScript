@@ -1,10 +1,13 @@
-#ifndef __SKOOMA_COMMON_H__
-#define __SKOOMA_COMMON_H__
+#ifndef SKOOMA_COMMON_H
+#define SKOOMA_COMMON_H
 
 #include "skconf.h"
 
 #include <stdbool.h>
 #include <sys/types.h>
+
+/* Forward declare */
+typedef struct Function Function;
 
 typedef uint8_t  Byte;
 typedef uint32_t UInt;
@@ -17,12 +20,13 @@ typedef int32_t  Int;
  * 0 - compiling source code
  * 1 - VM is running
  */
-extern volatile Int runtime;
+extern volatile Int runtime; // in 'vmachine.c'
 
 
 // Memory alloc/dealloc
 void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
 void* gcfree(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
+void  _cleanupvm(VM* vm); // cleanup function signature
 
 
 

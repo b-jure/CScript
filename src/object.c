@@ -121,11 +121,11 @@ sstatic force_inline void OClosure_free(VM* vm, OClosure* closure)
     GC_FREE(vm, closure, sizeof(OClosure));
 }
 
-OUpvalue* OUpvalue_new(VM* vm, Value* var_ref)
+OUpvalue* OUpvalue_new(VM* vm, Value* valp)
 {
     OUpvalue* upval = ALLOC_OBJ(vm, OUpvalue, OBJ_UPVAL);
     upval->closed   = (Variable){EMPTY_VAL, 0};
-    upval->location = var_ref;
+    upval->location = valp;
     upval->next     = NULL;
     return upval;
 }
@@ -137,24 +137,24 @@ sstatic force_inline void OUpvalue_free(VM* vm, OUpvalue* upval)
 
 OClass* OClass_new(VM* vm, OString* name)
 {
-    OClass* cclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS); // GC
-    cclass->name   = name;
-    HashTable_init(&cclass->methods);
-    cclass->overloaded = NULL;
-    return cclass;
+    OClass* oclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS); // GC
+    oclass->name   = name;
+    HashTable_init(&oclass->methods);
+    oclass->overloaded = NULL;
+    return oclass;
 }
 
-sstatic force_inline void OClass_free(VM* vm, OClass* cclass)
+sstatic force_inline void OClass_free(VM* vm, OClass* oclass)
 {
-    HashTable_free(vm, &cclass->methods);
-    GC_FREE(vm, cclass, sizeof(OClass));
+    HashTable_free(vm, &oclass->methods);
+    GC_FREE(vm, oclass, sizeof(OClass));
 }
 
 
-OInstance* OInstance_new(VM* vm, OClass* cclass)
+OInstance* OInstance_new(VM* vm, OClass* oclass)
 {
     OInstance* instance = ALLOC_OBJ(vm, OInstance, OBJ_INSTANCE);
-    instance->cclass    = cclass;
+    instance->oclass    = oclass;
     HashTable_init(&instance->fields);
     return instance;
 }
@@ -165,7 +165,7 @@ sstatic force_inline void OInstance_free(VM* vm, OInstance* instance)
     GC_FREE(vm, instance, sizeof(OInstance));
 }
 
-OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, O* method)
+OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method)
 {
     OBoundMethod* bound_method = ALLOC_OBJ(vm, OBoundMethod, OBJ_BOUND_METHOD);
     bound_method->receiver     = receiver;
@@ -247,7 +247,7 @@ void oprint(Value value)
         CASE(OBJ_UPVAL)
         {
             OUpvalue* upval = AS_UPVAL(value);
-            vprint(upval->closed.value);
+            vprint(*upval->location);
             BREAK;
         }
         CASE(OBJ_CLASS)
@@ -260,21 +260,18 @@ void oprint(Value value)
             printf(
                 "%p-%s instance",
                 AS_OBJ(value),
-                AS_INSTANCE(value)->cclass->name->storage);
+                AS_INSTANCE(value)->oclass->name->storage);
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            OBoundMethod* bound_method = AS_BOUND_METHOD(value);
-            if(otype(bound_method->method) == OBJ_CLOSURE)
-                fnprint(((OClosure*)bound_method->method)->fn);
-            else fnprint(((OFunction*)bound_method->method));
+            fnprint(AS_BOUND_METHOD(value)->method->fn);
             BREAK;
         }
     }
     unreachable;
-#ifdef __SKOOMA_JMPTABLE_H__
-    #undef __SKOOMA_JMPTABLE_H__
+#ifdef SKOOMA_JMPTABLE_H
+    #undef SKOOMA_JMPTABLE_H
 #endif
 }
 
@@ -356,8 +353,8 @@ void ofree(VM* vm, O* object)
         }
     }
     unreachable;
-#ifdef __SKOOMA_JMPTABLE_H__
-    #undef __SKOOMA_JMPTABLE_H__
+#ifdef SKOOMA_JMPTABLE_H
+    #undef SKOOMA_JMPTABLE_H
 #endif
 }
 
@@ -400,7 +397,7 @@ OString* otostr(VM* vm, O* object)
         }
         CASE(OBJ_INSTANCE)
         {
-            OString*    name        = ((OInstance*)object)->cclass->name;
+            OString*    name        = ((OInstance*)object)->oclass->name;
             const char* class_name  = name->storage;
             UInt        class_len   = name->len;
             const char* literal     = " instance";
@@ -414,14 +411,11 @@ OString* otostr(VM* vm, O* object)
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            OBoundMethod* bound = (OBoundMethod*)object;
-            if(otype(bound->method) == OBJ_CLOSURE)
-                return ((OClosure*)bound->method)->fn->name;
-            else return ((OFunction*)bound->method)->name;
+            return ((OBoundMethod*)object)->method->fn->name;
         }
     }
     unreachable;
-#ifdef __SKOOMA_JMPTABLE_H__
-    #undef __SKOOMA_JMPTABLE_H__
+#ifdef SKOOMA_JMPTABLE_H
+    #undef SKOOMA_JMPTLE_H
 #endif
 }

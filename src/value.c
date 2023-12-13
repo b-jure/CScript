@@ -96,8 +96,8 @@ OString* vtostr(VM* vm, Value value)
             return otostr(vm, AS_OBJ(value));
         }
     }
-    #ifdef __SKOOMA_JMPTABLE_H__
-        #undef __SKOOMA_JMPTABLE_H__
+    #ifdef SKOOMA_JMPTABLE_H
+        #undef SKOOMA_JMPTABLE_H
     #endif
 #endif
     unreachable;
@@ -152,8 +152,8 @@ void vprint(Value value)
         }
     }
     unreachable;
-    #ifdef __SKOOMA_JMPTABLE_H__
-        #undef __SKOOMA_JMPTABLE_H__
+    #ifdef SKOOMA_JMPTABLE_H
+        #undef SKOOMA_JMPTABLE_H
     #endif
 #endif
 }
@@ -189,8 +189,8 @@ bool Value_eq(Value a, Value b)
             return AS_OBJ(a) == AS_OBJ(b);
         }
     }
-    #ifdef __SKOOMA_JMPTABLE_H__
-        #undef __SKOOMA_JMPTABLE_H__
+    #ifdef SKOOMA_JMPTABLE_H
+        #undef SKOOMA_JMPTABLE_H
     #endif
 }
 #endif

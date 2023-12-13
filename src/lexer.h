@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_LEXER_H__
-#define __SKOOMA_LEXER_H__
+#ifndef SKOOMA_LEXER_H
+#define SKOOMA_LEXER_H
 
 #include "common.h"
 #include "mem.h"

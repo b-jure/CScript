@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_JMPTABLE_H__
-#define __SKOOMA_JMPTABLE_H__
+#ifndef SKOOMA_JMPTABLE_H
+#define SKOOMA_JMPTABLE_H
 
 #if defined(OP_TABLE)
 

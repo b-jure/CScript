@@ -1,5 +1,5 @@
-#ifndef __SKOOMA_VMACHINE_H__
-#define __SKOOMA_VMACHINE_H__
+#ifndef SKOOMA_VMACHINE_H
+#define SKOOMA_VMACHINE_H
 
 #include "array.h"
 
@@ -17,19 +17,12 @@
 
 
 
-// Get function from obj
-#define GET_FN(obj)                                                             \
-    (otype(obj) == OBJ_CLOSURE ? ((OClosure*)(obj))->fn : ((OFunction*)(obj)))
-// Get frame function
-#define FRAME_FN(frame) GET_FN((frame)->fn)
-// Get frame closure
-#define FRAME_CLOSURE(frame) ((OClosure*)((frame)->fn))
 
 typedef struct {
-    O*     fn;
-    Byte*  ip; /* Top of the CallFrame */
-    Value* sp; /* Relative stack pointer */
-    Int    retcnt; /* Expected value return count */
+    OClosure* closure; /* Function or Closure */
+    Byte*     ip; /* Top of the CallFrame */
+    Value*    sp; /* Relative stack pointer */
+    Int       retcnt; /* Expected value return count */
 } CallFrame;
 
 
@@ -68,6 +61,23 @@ typedef struct {
 
 
 
+
+typedef enum {
+    INTERPRET_OK, /* No error */
+    INTERPRET_COMPILE_ERROR, /* Compile time error */
+    INTERPRET_RUNTIME_ERROR, /* VM runtime error */
+} InterpretResult;
+
+
+
+VM*             VM_new(Config* config);
+void            VM_free(VM* vm);
+void            push(VM* vm, Value val);
+Value           pop(VM* vm);
+InterpretResult interpret(VM* vm, const char* source, const char* filename);
+bool            fncall(VM* vm, OClosure* callee, Int argc, Int retcnt);
+
+
 ARRAY_NEW(Array_ORef, O*);
 ARRAY_NEW(Array_VRef, Value*);
 
@@ -98,29 +108,5 @@ struct VM {
     size_t      gc_next; // next threshold where gc triggers
     Byte        gc_flags; // gc flags (sk API)
 };
-
-
-
-
-
-
-typedef enum {
-    INTERPRET_OK, /* No error */
-    INTERPRET_COMPILE_ERROR, /* Compile time error */
-    INTERPRET_RUNTIME_ERROR, /* VM runtime error */
-} InterpretResult;
-
-
-
-
-
-
-VM*             VM_new(Config* config);
-void            VM_free(VM* vm);
-void            push(VM* vm, Value val);
-Value           pop(VM* vm);
-InterpretResult interpret(VM* vm, const char* source, const char* filename);
-bool            fncall(VM* vm, O* callee, Int argc, Int retcnt);
-void            _cleanupvm(VM* vm);
 
 #endif

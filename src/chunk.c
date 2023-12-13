@@ -20,7 +20,7 @@
  */
 sstatic void LineArray_write(Array_UInt* lines, UInt line, UInt index)
 {
-    if(Array_UInt_len(lines) <= 0 || *Array_UInt_last(lines) < line) {
+    if(lines->len <= 0 || *Array_UInt_last(lines) < line) {
         Array_UInt_push(lines, index);
         Array_UInt_push(lines, line);
     }
@@ -176,8 +176,8 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 #undef CASE
 #undef BREAK
 
-#ifdef __SKOOMA_JMPTABLE_H__
-    #undef __SKOOMA_JMPTABLE_H__
+#ifdef SKOOMA_JMPTABLE_H
+    #undef SKOOMA_JMPTABLE_H
 #endif
 }
 
@@ -186,7 +186,7 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 UInt Chunk_getline(Chunk* chunk, UInt index)
 {
     Array_UInt* line_array      = &chunk->lines;
-    UInt        idx             = Array_UInt_len(line_array) - 1;
+    UInt        idx             = line_array->len - 1;
     UInt        instruction_idx = *Array_UInt_index(line_array, --idx);
     while(instruction_idx > index) {
         idx             -= 2;
