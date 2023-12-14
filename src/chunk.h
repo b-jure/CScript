@@ -77,8 +77,8 @@ typedef enum {
     OP_INVOKE_SUPER, /* Invoke superclass method call */
     OP_CALLSTART, /* Start of call instruction arguments */
     OP_RETSTART, /* Start of return instruction values */
-    OP_FOREACH,
-    OP_FOREACH_END,
+    OP_FOREACH, /* Generic for loop */
+    OP_FOREACH_PREP, /* Generic for loop stack prep */
     OP_TOPRET, /* Return from top-level function */
     OP_RET, /* Return from function, pop the CallFrame */
 } OpCode;

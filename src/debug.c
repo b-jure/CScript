@@ -251,8 +251,8 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
             return simpleins("OP_RETSTART", offset);
         case OP_FOREACH:
             return longins("OP_FOREACH", chunk, OP_FOREACH, offset);
-        case OP_FOREACH_END:
-            return longins("OP_FOREACH_END", chunk, OP_FOREACH_END, offset);
+        case OP_FOREACH_PREP:
+            return longins("OP_FOREACH_PREP", chunk, OP_FOREACH_PREP, offset);
         default:
             printf("Unknown opcode: %d\n", instruction);
             return offset + 1;

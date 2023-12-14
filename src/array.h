@@ -243,13 +243,6 @@ typedef void (*FreeFn)(void* value);
         return retval;                                                          \
     }                                                                           \
                                                                                 \
-    sstatic force_inline void _ARRAY_METHOD(name, ensure, size_t capacity)      \
-    {                                                                           \
-        size_t cap = capacity == 0 ? 1 : capacity;                              \
-        while(self->cap < cap)                                                  \
-            _CALL_ARRAY_METHOD(name, grow);                                     \
-    }                                                                           \
-                                                                                \
     sstatic force_inline void _ARRAY_METHOD(name, free, FreeFn fn)              \
     {                                                                           \
         if(fn != NULL)                                                          \

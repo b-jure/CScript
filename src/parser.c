@@ -152,14 +152,13 @@ typedef enum {
     EXP_INVOKE_INDEX,
     EXP_INVOKE,
     EXP_VARARG,
-    EXP_SELF,
     EXP_EXPR,
     EXP_JMP,
 } ExpType;
 
-#define etisconst(exptype)   ((exptype) >= EXP_TRUE && (exptype) <= EXP_NUMBER)
-#define etisfalse(exptype)   ((exptype) == EXP_FALSE || (exptype) == EXP_NIL)
-#define etistrue(exptype)    ((exptype) >= EXP_TRUE || (exptype) <= EXP_NUMBER)
+#define etisconst(exptype)   ((exptype) >= EXP_FALSE && (exptype) <= EXP_NUMBER)
+#define etisfalse(exptype)   ((exptype) >= EXP_FALSE && (exptype) <= EXP_NIL)
+#define etistrue(exptype)    ((exptype) >= EXP_TRUE && (exptype) <= EXP_NUMBER)
 #define etisvar(exptype)     ((exptype) >= EXP_UPVAL && (exptype) <= EXP_INDEXED)
 #define etiscall(exptype)    ((exptype) >= EXP_CALL || (exptype) <= EXP_INVOKE)
 #define ethasmulret(exptype) ((exptype) >= EXP_CALL && (exptype) <= EXP_VARARG)
@@ -274,6 +273,7 @@ struct Scope {
     UInt   localc; // Count of locals up until this scope
     Byte   isloop : 1; // This scope is loop
     Byte   isswitch : 1; // This scope is switch
+    Byte   isgloop : 1; // This scope is generic loop
     Int    depth; // scope depth (index)
 };
 
@@ -535,6 +535,7 @@ sstatic force_inline UInt
 add_upval(Function* F, UInt idx, Byte flags, bool local)
 {
     Int upvalc = F->fn->upvalc;
+    ASSERT(upvalc < (Int)F->upvalues->len + 1, "Invalid upvalc.");
     for(Int i = 0; i < upvalc; i++) {
         Upvalue* upvalue = Array_Upvalue_index(F->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local)
@@ -544,8 +545,9 @@ add_upval(Function* F, UInt idx, Byte flags, bool local)
         UPVALUE_LIMIT_ERR(F, INDEX_MAX, F->fn->name->storage);
         return 0;
     }
-    Array_Upvalue_ensure(F->upvalues, upvalc);
-    F->upvalues->data[upvalc] = (Upvalue){idx, flags, local};
+    Upvalue upval = {idx, flags, local};
+    if(upvalc == (Int)F->upvalues->len) Array_Upvalue_push(F->upvalues, upval);
+    else *Array_Upvalue_index(F->upvalues, upvalc) = upval;
     return F->fn->upvalc++;
 }
 
@@ -675,9 +677,6 @@ sstatic void rmlastins(Function* F, Exp* E)
     else if(etiscall(type)) popcallins(F, E);
     else switch(type)
         {
-            case EXP_SELF:
-                if(E->ins.l) LINSTRUCTION_POP(F);
-                else INSTRUCTION_POP(F);
             case EXP_JMP:
                 goto panic;
                 break;
@@ -1011,7 +1010,8 @@ sstatic force_inline void patchbreaklist(Function* F)
 
 sstatic force_inline void endbreaklist(Function* F)
 {
-    Array_Int_free(Array_Array_Int_last(&F->cflow.breaks), NULL);
+    Array_Int last = Array_Array_Int_pop(&F->cflow.breaks);
+    Array_Int_free(&last, NULL);
 }
 
 
@@ -1293,7 +1293,7 @@ sstatic void codesetall(Function* F, Array_Exp* Earr)
 
 /// exprstm ::= functioncall
 ///           | varlist '=' explist
-sstatic void exprstm(Function* F)
+sstatic void exprstm(Function* F, bool lastclause)
 {
     Exp E;
     E.ins.set = false;
@@ -1329,7 +1329,7 @@ sstatic void exprstm(Function* F)
         } else if(etiscall(E.type)) CODE(F, OP_POP);
         else error(F, "Invalid syntax, expect exprstm or dec.");
     }
-    expect(F, TOK_SEMICOLON, "Expect ';'.");
+    if(!lastclause) expect(F, TOK_SEMICOLON, "Expect ';'.");
 }
 
 sstatic void block(Function* F)
@@ -1710,7 +1710,7 @@ sstatic void ifstm(Function* F)
         rmlastins(F, &E);
         if(etisfalse(E.type)) remove = true;
         else istrue = true;
-    } else jmptoelse = CODEJMP(F, OP_JMP_IF_FALSE_AND_POP);
+    } else jmptoelse = CODEJMP(F, OP_JMP_IF_FALSE_POP);
     stm(F);
     if(!remove) {
         jmptoend = CODEJMP(F, OP_JMP);
@@ -1730,12 +1730,12 @@ sstatic void ifstm(Function* F)
     }
 }
 
-sstatic void startloop(Function* F, Scope* S, Int* lstart, Int* ldepth)
+sstatic void startloop(Function* F, Int* lstart, Int* ldepth)
 {
     *lstart                = (F)->cflow.innerlstart;
     *ldepth                = (F)->cflow.innerldepth;
     (F)->cflow.innerlstart = codeoffset(F);
-    (F)->cflow.innerldepth = S->depth;
+    (F)->cflow.innerldepth = F->S->depth;
 }
 
 sstatic void endloop(Function* F, Int lstart, Int ldepth)
@@ -1756,7 +1756,7 @@ sstatic void whilestm(Function* F)
     bool    infinite, remove = false;
     savecontext(F, &C);
     startscope(F, &S, 1, 0);
-    startloop(F, &S, &lstart, &ldepth);
+    startloop(F, &lstart, &ldepth);
     startbreaklist(F);
     expect(F, TOK_LPAREN, "Expect '(' after 'while'.");
     E.ins.set = false;
@@ -1769,7 +1769,6 @@ sstatic void whilestm(Function* F)
     expect(F, TOK_RPAREN, "Expect ')' after condition.");
     stm(F); // body
     bool gotret = F->fn->gotret;
-    endloop(F, lstart, ldepth);
     endscope(F);
     if(!remove) {
         codeloop(F, (F)->cflow.innerlstart);
@@ -1782,12 +1781,15 @@ sstatic void whilestm(Function* F)
         patchbreaklist(F);
     } else {
         // After testing remove these assertions and those vars
-        ASSERT(localc = (Int)F->locals.len, "local count does not match."); // @?
         ASSERT(
-            upvalc = (Int)F->upvalues->len,
+            localc == (Int)F->locals.len,
+            "local count does not match."); // @?
+        ASSERT(
+            upvalc == (Int)F->upvalues->len,
             "upvalue count does not match."); // @?
         restorecontext(F, &C);
     }
+    endloop(F, lstart, ldepth);
     endbreaklist(F);
 }
 
@@ -1801,7 +1803,6 @@ sstatic void forstm(Function* F)
     Int     upvalc   = F->upvalues->len; // remove after testing ?
     Int     localc   = F->locals.len; // remove after testing ?
     bool    remove, infinite = false;
-    savecontext(F, &C);
     startscope(F, &S, 1, 0);
     startbreaklist(F);
     expect(F, TOK_LPAREN, "Expect '(' after 'for'.");
@@ -1809,8 +1810,9 @@ sstatic void forstm(Function* F)
         ; // no initializer
     else if(match(F, TOK_VAR)) vardec(F);
     else if(match(F, TOK_FIXED)) fvardec(F);
-    else exprstm(F);
-    startloop(F, &S, &lstart, &ldepth);
+    else exprstm(F, false);
+    savecontext(F, &C);
+    startloop(F, &lstart, &ldepth);
     if(!match(F, TOK_SEMICOLON)) { // conditional
         E.ins.set = false;
         expr(F, &E);
@@ -1820,13 +1822,13 @@ sstatic void forstm(Function* F)
             else remove = true;
         } else jmptoend = CODEJMP(F, OP_JMP_IF_FALSE_POP);
         expect(F, TOK_SEMICOLON, "Expect ';' after for-loop condition clause.");
-    }
+    } else infinite = true;
     if(!match(F, TOK_RPAREN)) { // last for-clause
         Int jmptobody = -1;
         Int jmptoincr = -1;
         if(!infinite && !remove) jmptobody = CODEJMP(F, OP_JMP);
         if(!remove) jmptoincr = codeoffset(F);
-        exprstm(F);
+        exprstm(F, true);
         if(!infinite && !remove) {
             codeloop(F, (F)->cflow.innerlstart);
             patchjmp(F, jmptobody);
@@ -1835,12 +1837,10 @@ sstatic void forstm(Function* F)
         expect(F, TOK_RPAREN, "Expect ')' after last for-loop clause.");
     }
     stm(F); // Loop body
-    bool gotret = F->fn->gotret;
-    endscope(F);
     if(!remove) {
         codeloop(F, (F)->cflow.innerlstart);
         if(!infinite) patchjmp(F, jmptoend);
-        else if(gotret) { // 'stm' was 'returnstm' and conditional is true
+        else if(F->fn->gotret) { // 'stm' was 'returnstm' and conditional is true
             // @TODO: Implement optimizations
         }
         patchbreaklist(F);
@@ -1850,6 +1850,7 @@ sstatic void forstm(Function* F)
         ASSERT(upvalc == (Int)F->upvalues->len, "upvalc does not match."); // @?
         restorecontext(F, &C);
     }
+    endscope(F);
     endloop(F, lstart, ldepth);
     endbreaklist(F);
 }
@@ -1880,10 +1881,11 @@ sstatic void foreachstm(Function* F)
     Int   lstart, ldepth, vars, expc, endjmp;
     Exp   E;
     startscope(F, &S, 1, 0);
+    S.isgloop = 1; // set as generic loop
     startbreaklist(F);
     newlocalliteral(F, "(for iterator)"); // iterator function
     newlocalliteral(F, "(for invstate)"); // invariant state
-    newlocalliteral(F, "(for ctlvar)"); // control variable
+    newlocalliteral(F, "(for cntlvar)"); // control variable
     vars = foreachvars(F); // declared vars
     expect(F, TOK_IN, "Expect 'in'.");
     E.ins.set = false;
@@ -1892,16 +1894,17 @@ sstatic void foreachstm(Function* F)
     expc = 1;
     if(match(F, TOK_COMMA)) expc += explist(F, 2, &E);
     adjustassign(F, &E, 3, expc);
-    startloop(F, &S, &lstart, &ldepth);
+    startloop(F, &lstart, &ldepth);
+    CODEOP(F, OP_FOREACH_PREP, vars);
     CODEOP(F, OP_FOREACH, vars);
     endjmp = CODEJMP(F, OP_JMP);
     stm(F);
-    CODEOP(F, OP_FOREACH_END, vars);
+    CODEPOP(F, vars);
     codeloop(F, (F)->cflow.innerlstart);
+    patchjmp(F, endjmp);
     endscope(F);
     patchbreaklist(F);
     endbreaklist(F);
-    patchjmp(F, endjmp);
     endloop(F, lstart, ldepth);
 }
 
@@ -1911,7 +1914,7 @@ sstatic void loopstm(Function* F)
     Int   lstart, ldepth;
     startscope(F, &S, 1, 0);
     startbreaklist(F);
-    startloop(F, &S, &lstart, &ldepth);
+    startloop(F, &lstart, &ldepth);
     stm(F);
     if(F->fn->gotret) {
         // @TODO: Implement optimizations
@@ -1953,7 +1956,8 @@ sstatic void continuestm(Function* F)
     else {
         Scope* S = loopscope(F);
         ASSERT(S != NULL, "Loop scope not found but cflow offset is set.");
-        CODEPOP(F, (F->locals.len - S->localc) + switchcnt(F));
+        Int popn = F->locals.len - (S->isgloop * 3) - S->localc + switchcnt(F);
+        CODEPOP(F, popn);
         codeloop(F, F->cflow.innerlstart);
     }
 }
@@ -1977,7 +1981,8 @@ sstatic void breakstm(Function* F)
     }
     popn += F->locals.len - scope->localc;
     CODEPOP(F, popn);
-    Array_Int_push(Array_Array_Int_last(arr), CODEJMP(F, OP_JMP));
+    Array_Int* last = Array_Array_Int_last(arr);
+    Array_Int_push(last, CODEJMP(F, OP_JMP));
 }
 
 /// return ::= 'return' ';'
@@ -2041,7 +2046,7 @@ sstatic void stm(Function* F)
     else if(match(F, TOK_LOOP)) loopstm(F);
     else if(match(F, TOK_SEMICOLON))
         ; // empty statement
-    else exprstm(F);
+    else exprstm(F, false);
 }
 
 // indexed ::= '[' expr ']'
@@ -2081,7 +2086,6 @@ sstatic void _self(Function* F, Exp* E)
     }
     advance(F);
     codevarprev(F, E);
-    E->type = EXP_SELF;
 }
 
 sstatic void _super(Function* F, Exp* E)

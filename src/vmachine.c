@@ -450,7 +450,7 @@ sstatic OString* unescape(VM* vm, OString* string)
  * It is okay if the lookup is slow, this only gets called when runtime error
  * occurs (which is the end of the program execution).
  **/
-sstatic force_inline OString* VM_find_glob_name(VM* vm, UInt idx)
+sstatic force_inline OString* globalname(VM* vm, UInt idx)
 {
     for(UInt i = 0; i < vm->globids.cap; i++) {
         Entry* entry = &vm->globids.entries[i];
@@ -460,7 +460,21 @@ sstatic force_inline OString* VM_find_glob_name(VM* vm, UInt idx)
     unreachable;
 }
 
-sstatic InterpretResult VM_run(VM* vm)
+sstatic sdebug void dumpstack(VM* vm, CallFrame* frame, Byte* ip)
+{
+    printf("           ");
+    for(Value* ptr = vm->stack; ptr < vm->sp; ptr++) {
+        printf("[");
+        vprint(*ptr);
+        printf("]");
+    }
+    printf("\n");
+    Instruction_debug(
+        &FFN(frame)->chunk,
+        (UInt)(ip - FFN(frame)->chunk.code.data));
+}
+
+sstatic InterpretResult run(VM* vm)
 {
 #define READ_BYTE()     (*ip++)
 #define READ_BYTEL()    (ip += 3, GET_BYTES3(ip - 3))
@@ -498,16 +512,7 @@ sstatic InterpretResult VM_run(VM* vm)
 #ifdef DEBUG_TRACE_EXECUTION
     #undef BREAK
     #define BREAK continue
-        printf("           ");
-        for(Value* ptr = vm->stack; ptr < vm->sp; ptr++) {
-            printf("[");
-            vprint(*ptr);
-            printf("]");
-        }
-        printf("\n");
-        Instruction_debug(
-            &FFN(frame)->chunk,
-            (UInt)(ip - FFN(frame)->chunk.code.data));
+        dumpstack(vm, frame, ip);
 #endif
         DISPATCH(READ_BYTE())
         {
@@ -794,7 +799,7 @@ sstatic InterpretResult VM_run(VM* vm)
                         frame->ip = ip;
                         VM_GLOBAL_UNDEFINED_ERR(
                             vm,
-                            VM_find_glob_name(vm, bcp)->storage);
+                            globalname(vm, bcp)->storage);
                         return INTERPRET_RUNTIME_ERROR;
                     }
                     push(vm, global->value);
@@ -817,11 +822,11 @@ sstatic InterpretResult VM_run(VM* vm)
                         frame->ip = ip;
                         VM_GLOBAL_UNDEFINED_ERR(
                             vm,
-                            VM_find_glob_name(vm, bcp)->storage);
+                            globalname(vm, bcp)->storage);
                         return INTERPRET_RUNTIME_ERROR;
                     } else if(unlikely(VAR_CHECK(global, VAR_FIXED_BIT))) {
                         frame->ip     = ip;
-                        OString* name = VM_find_glob_name(vm, bcp);
+                        OString* name = globalname(vm, bcp);
                         VM_VARIABLE_FIXED_ERR(vm, name->len, name->storage);
                         return INTERPRET_RUNTIME_ERROR;
                     }
@@ -888,7 +893,7 @@ sstatic InterpretResult VM_run(VM* vm)
                     }
                     closeupval(vm, frame->sp);
                     vm->fc--;
-                    if(vm->fc == 0) {
+                    if(vm->fc == 0) { // end of main script
                         popn(vm, vm->sp - vm->stack);
                         return INTERPRET_OK;
                     }
@@ -1101,23 +1106,24 @@ sstatic InterpretResult VM_run(VM* vm)
                 pop(vm); // pop subclass
                 BREAK;
             }
-            CASE(OP_FOREACH)
+            CASE(OP_FOREACH_PREP)
             {
-                Int   vars   = READ_BYTEL();
-                Value iterfn = *stackpeek(2);
-                frame->ip    = ip;
-                if(unlikely(!vcall(vm, iterfn, 2, vars)))
+                Int vars = READ_BYTEL();
+                memcpy(vm->sp, stackpeek(2), 3 * sizeof(Value));
+                vm->sp    += 3;
+                frame->ip  = ip;
+                if(unlikely(!vcall(vm, *stackpeek(2), 2, vars)))
                     return INTERPRET_RUNTIME_ERROR;
-                *stackpeek(vars) = *stackpeek(vars - 1);
-                if(IS_NIL(*stackpeek(vars))) popn(vm, vars + 3);
-                else ip += 4; // skip OP_JMP
+                frame = &vm->frames[vm->fc - 1];
+                ip    = frame->ip;
                 BREAK;
             }
-            CASE(OP_FOREACH_END)
+            CASE(OP_FOREACH)
             {
-                Int vars = READ_BYTEL(); // needed to support 'switch' statement
-                popn(vm, vars);
-                ASSERT(*ip == OP_LOOP, "Expected 'OP_LOOP'.");
+                Int vars         = READ_BYTEL();
+                *stackpeek(vars) = *stackpeek(vars - 1); // cntlvar
+                ASSERT(*ip == OP_JMP, "Expect 'OP_JMP'.");
+                if(!IS_NIL(*stackpeek(vars))) ip += 4;
                 BREAK;
             }
             CASE(OP_CALLSTART)
@@ -1156,7 +1162,7 @@ InterpretResult interpret(VM* vm, const char* source, const char* path)
     OClosure* closure = compile(vm, source, name);
     if(closure == NULL) return INTERPRET_COMPILE_ERROR;
     fncall(vm, closure, 0, 1);
-    return VM_run(vm);
+    return run(vm);
 }
 
 void VM_free(VM* vm)

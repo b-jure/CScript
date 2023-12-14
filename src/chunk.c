@@ -157,7 +157,7 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_NILN)
         CASE(OP_CALL)
         CASE(OP_FOREACH);
-        CASE(OP_FOREACH_END);
+        CASE(OP_FOREACH_PREP);
         {
             return Chunk_write_op(chunk, code, true, param, line);
         }
