@@ -21,7 +21,7 @@
 
 
 // Get instruction length
-#define GET_OP_TYPE(idx, op, E)                                                 \
+#define GET_OP_TYPE(idx, op, E)                                                          \
     ((idx <= UINT8_MAX) ? ((E)->ins.l = false, op) : ((E)->ins.l = true, op##L))
 
 // Return current chunk code offset
@@ -57,12 +57,11 @@ typedef struct {
 } Local;
 
 // Initialize local variable
-#define INIT_LOCAL(F, i)                                                        \
-    do {                                                                        \
-        Local* local =                                                          \
-            Array_Local_index(&(F)->locals, (F)->locals.len - (i + 1));         \
-        local->depth = (F)->S->depth;                                           \
-        local->flags = (F)->vflags;                                             \
+#define INIT_LOCAL(F, i)                                                                 \
+    do {                                                                                 \
+        Local* local = Array_Local_index(&(F)->locals, (F)->locals.len - (i + 1));       \
+        local->depth = (F)->S->depth;                                                    \
+        local->flags = (F)->vflags;                                                      \
     } while(false)
 
 
@@ -202,12 +201,11 @@ sstatic force_inline void Exp_init(Exp* E, ExpType type, Int code, Int value)
 // Get constant
 #define CONSTANT(F, E) Array_Value_index(&CHUNK(F)->constants, (E)->value)
 // Get instruction
-#define INSTRUCTION(F, E)                                                       \
-    byteptr(Array_Byte_index(&CHUNK(F)->code, (E)->ins.code))
+#define INSTRUCTION(F, E) byteptr(Array_Byte_index(&CHUNK(F)->code, (E)->ins.code))
 
 // Expressions are constants and their Values are equal
-#define eareconstandeq(F, E1, E2)                                               \
-    (etisconst((E1)->type) && etisconst((E2)->type) &&                          \
+#define eareconstandeq(F, E1, E2)                                                        \
+    (etisconst((E1)->type) && etisconst((E2)->type) &&                                   \
      veq(*CONSTANT(F, E1), *CONSTANT(F, E2)))
 
 
@@ -223,41 +221,41 @@ sstatic force_inline void Exp_init(Exp* E, ExpType type, Int code, Int value)
 #define SET_RETCNTL(F, E, cnt) SET_LLPARAM(F, E, cnt)
 
 // Pop last instruction parameter (1 byte)
-#define PARAM_POP(F)                                                            \
-    do {                                                                        \
-        ASSERT(CHUNK(F)->code.len >= 1, "Invalid PARAM_POP.");                  \
-        CHUNK(F)->code.len--;                                                   \
+#define PARAM_POP(F)                                                                     \
+    do {                                                                                 \
+        ASSERT(CHUNK(F)->code.len >= 1, "Invalid PARAM_POP.");                           \
+        CHUNK(F)->code.len--;                                                            \
     } while(false)
 // Pop last instruction long parameter (3 bytes)
-#define LPARAM_POP(F)                                                           \
-    do {                                                                        \
-        ASSERT(CHUNK(F)->code.len >= 3, "Invalid LPARAM_POP.");                 \
-        CHUNK(F)->code.len -= 3;                                                \
+#define LPARAM_POP(F)                                                                    \
+    do {                                                                                 \
+        ASSERT(CHUNK(F)->code.len >= 3, "Invalid LPARAM_POP.");                          \
+        CHUNK(F)->code.len -= 3;                                                         \
     } while(false)
 // Pop last short/simple instruction (1 byte)
-#define SINSTRUCTION_POP(F)                                                     \
-    do {                                                                        \
-        ASSERT(CHUNK(F)->code.len >= 1, "Invalid SINSTRUCTION_POP.");           \
-        CHUNK(F)->code.len--;                                                   \
+#define SINSTRUCTION_POP(F)                                                              \
+    do {                                                                                 \
+        ASSERT(CHUNK(F)->code.len >= 1, "Invalid SINSTRUCTION_POP.");                    \
+        CHUNK(F)->code.len--;                                                            \
     } while(false)
 // Pop last instruction with parameter (2 bytes)
-#define INSTRUCTION_POP(F)                                                      \
-    do {                                                                        \
-        ASSERT(CHUNK(F)->code.len >= 2, "Invalid INSTRUCTION_POP.");            \
-        CHUNK(F)->code.len -= 2;                                                \
+#define INSTRUCTION_POP(F)                                                               \
+    do {                                                                                 \
+        ASSERT(CHUNK(F)->code.len >= 2, "Invalid INSTRUCTION_POP.");                     \
+        CHUNK(F)->code.len -= 2;                                                         \
     } while(false)
 // Pop last instruction with long parameter (4 bytes)
-#define LINSTRUCTION_POP(F)                                                     \
-    do {                                                                        \
-        ASSERT(CHUNK(F)->code.len >= 4, "Invalid LINSTRUCTION_POP.");           \
-        CHUNK(F)->code.len -= 4;                                                \
+#define LINSTRUCTION_POP(F)                                                              \
+    do {                                                                                 \
+        ASSERT(CHUNK(F)->code.len >= 4, "Invalid LINSTRUCTION_POP.");                    \
+        CHUNK(F)->code.len -= 4;                                                         \
     } while(false)
 
 // Pop last constant
-#define CONSTANT_POP(F)                                                         \
-    do {                                                                        \
-        ASSERT(CHUNK(F)->constants.len > 0, "Invalid CONSTANT_POP.");           \
-        Array_Value_pop(&CHUNK(F)->constants);                                  \
+#define CONSTANT_POP(F)                                                                  \
+    do {                                                                                 \
+        ASSERT(CHUNK(F)->constants.len > 0, "Invalid CONSTANT_POP.");                    \
+        Array_Value_pop(&CHUNK(F)->constants);                                           \
     } while(false)
 
 
@@ -374,8 +372,7 @@ sstatic force_inline void savecontext(Function* F, Context* C)
 }
 
 // Trim/set length of code and/or constant array
-sstatic force_inline void
-concatcode(Function* F, Int codeoffset, Int constoffset)
+sstatic force_inline void concatcode(Function* F, Int codeoffset, Int constoffset)
 {
     CHUNK(F)->code.len      = codeoffset;
     CHUNK(F)->constants.len = constoffset;
@@ -434,38 +431,38 @@ sstatic void error(Function* F, const char* error, ...)
 //======================= CODE =======================//
 
 // Multi-byte instruction (up to 4 bytes)
-#define CODEOP(F, code, param)                                                  \
+#define CODEOP(F, code, param)                                                           \
     Chunk_write_codewparam(CHUNK(F), code, param, PREVT(F).line)
 
 // Single byte instruction
-#define CODE(F, byte)                                                           \
-    ({                                                                          \
-        (F)->fn->gotret = (((byte) == OP_RET) | ((byte) == OP_TOPRET));         \
-        Chunk_write(CHUNK(F), byte, PREVT(F).line);                             \
+#define CODE(F, byte)                                                                    \
+    ({                                                                                   \
+        (F)->fn->gotret = (((byte) == OP_RET) | ((byte) == OP_TOPRET));                  \
+        Chunk_write(CHUNK(F), byte, PREVT(F).line);                                      \
     })
 
 // 3 byte parameter
-#define CODEL(F, bytes)                                                         \
-    do {                                                                        \
-        CODE(F, BYTE(bytes, 0));                                                \
-        CODE(F, BYTE(bytes, 1));                                                \
-        CODE(F, BYTE(bytes, 2));                                                \
+#define CODEL(F, bytes)                                                                  \
+    do {                                                                                 \
+        CODE(F, BYTE(bytes, 0));                                                         \
+        CODE(F, BYTE(bytes, 1));                                                         \
+        CODE(F, BYTE(bytes, 2));                                                         \
     } while(false)
 
 // Emit jump instruction
-#define CODEJMP(F, jmp)                                                         \
-    ({                                                                          \
-        CODEOP(F, jmp, 0);                                                      \
-        codeoffset(F) - 3;                                                      \
+#define CODEJMP(F, jmp)                                                                  \
+    ({                                                                                   \
+        CODEOP(F, jmp, 0);                                                               \
+        codeoffset(F) - 3;                                                               \
     })
 
 // Emit pop instruction
-#define CODEPOP(F, n)                                                           \
-    do {                                                                        \
-        if(n > 0) {                                                             \
-            if((n) > 1) CODEOP(F, OP_POPN, n);                                  \
-            else CODE(F, OP_POP);                                               \
-        }                                                                       \
+#define CODEPOP(F, n)                                                                    \
+    do {                                                                                 \
+        if(n > 0) {                                                                      \
+            if((n) > 1) CODEOP(F, OP_POPN, n);                                           \
+            else CODE(F, OP_POP);                                                        \
+        }                                                                                \
     } while(false)
 
 // Emit unary instruction
@@ -504,10 +501,10 @@ sstatic force_inline void codeloop(Function* F, UInt start)
 }
 
 // Initialize global variable
-#define INIT_GLOBAL(F, idx, vflags, E)                                          \
-    do {                                                                        \
-        (F)->vm->globvals[idx].flags = vflags;                                  \
-        CODEOP(F, GET_OP_TYPE(idx, OP_DEFINE_GLOBAL, E), idx);                  \
+#define INIT_GLOBAL(F, idx, vflags, E)                                                   \
+    do {                                                                                 \
+        (F)->vm->globvals[idx].flags = vflags;                                           \
+        CODEOP(F, GET_OP_TYPE(idx, OP_DEFINE_GLOBAL, E), idx);                           \
     } while(false)
 
 // Check if Tokens are equal
@@ -523,23 +520,20 @@ sstatic force_inline Int get_local(Function* F, Token* name)
     for(Int i = F->locals.len - 1; i >= 0; i--) {
         Local* local = Array_Local_index(&F->locals, i);
         if(nameeq(name, &local->name)) {
-            if(local->depth == -1)
-                LOCAL_DEFINITION_ERR(F, name->len, name->start);
+            if(local->depth == -1) LOCAL_DEFINITION_ERR(F, name->len, name->start);
             return i;
         }
     }
     return -1;
 }
 
-sstatic force_inline UInt
-add_upval(Function* F, UInt idx, Byte flags, bool local)
+sstatic force_inline UInt add_upval(Function* F, UInt idx, Byte flags, bool local)
 {
     Int upvalc = F->fn->upvalc;
     ASSERT(upvalc < (Int)F->upvalues->len + 1, "Invalid upvalc.");
     for(Int i = 0; i < upvalc; i++) {
         Upvalue* upvalue = Array_Upvalue_index(F->upvalues, i);
-        if(upvalue->idx == idx && upvalue->local == local)
-            return i; // already exists
+        if(upvalue->idx == idx && upvalue->local == local) return i; // already exists
     }
     if(unlikely(upvalc >= INDEX_MAX)) {
         UPVALUE_LIMIT_ERR(F, INDEX_MAX, F->fn->name->storage);
@@ -574,8 +568,7 @@ sstatic force_inline UInt globalvar(Function* F, Value identifier)
     Variable glob = {UNDEFINED_VAL, F->vflags};
     VM*      vm   = F->vm;
     if(!HashTable_get(&vm->globids, identifier, &index)) {
-        if(unlikely((vm)->globlen + 1 > BYTECODE_MAX))
-            GLOBALS_LIMIT_ERR(F, BYTECODE_MAX);
+        if(unlikely((vm)->globlen + 1 > BYTECODE_MAX)) GLOBALS_LIMIT_ERR(F, BYTECODE_MAX);
         push(vm, identifier);
         index = NUMBER_VAL(GARRAY_PUSH(vm, glob));
         HashTable_insert(vm, &vm->globids, identifier, index);
@@ -590,10 +583,10 @@ sstatic force_inline Value tokintostr(VM* vm, const Token* name)
 }
 
 // Make global variable
-#define MAKE_GLOBAL(F, name)                                                    \
-    ({                                                                          \
-        Value identifier = tokintostr((F)->vm, name);                           \
-        globalvar(F, identifier);                                               \
+#define MAKE_GLOBAL(F, name)                                                             \
+    ({                                                                                   \
+        Value identifier = tokintostr((F)->vm, name);                                    \
+        globalvar(F, identifier);                                                        \
     })
 
 sstatic force_inline Int codevar(Function* F, Token name, Exp* E)
@@ -703,11 +696,9 @@ sstatic void rmlastins(Function* F, Exp* E)
 //======================= SCOPE/CFLOW =======================//
 
 // Start new 'Scope'
-sstatic force_inline void
-startscope(Function* F, Scope* S, Byte isloop, Byte isswitch)
+sstatic force_inline void startscope(Function* F, Scope* S, Byte isloop, Byte isswitch)
 {
-    if(unlikely((UInt)F->S->depth >= BYTECODE_MAX))
-        SCOPE_LIMIT_ERR(F, BYTECODE_MAX);
+    if(unlikely((UInt)F->S->depth >= BYTECODE_MAX)) SCOPE_LIMIT_ERR(F, BYTECODE_MAX);
     S->localc   = F->locals.len;
     S->isloop   = isloop;
     S->isswitch = isswitch;
@@ -725,8 +716,7 @@ sstatic void endscope(Function* F)
     Int    pop     = 0;
     Scope* current = F->S;
     F->S           = current->prev;
-    while(F->locals.len > 0 && Array_Local_last(&F->locals)->depth > F->S->depth)
-    {
+    while(F->locals.len > 0 && Array_Local_last(&F->locals)->depth > F->S->depth) {
         if(LOCAL_IS_CAPTURED(Array_Local_last(&F->locals))) {
             Int capture = 1;
             F->locals.len--;
@@ -857,8 +847,7 @@ void _cleanup_function(Function* F)
 void mark_function_roots(VM* vm)
 {
     // Mark all functions and token values
-    for(Function* current = vm->F; current != NULL; current = current->enclosing)
-    {
+    for(Function* current = vm->F; current != NULL; current = current->enclosing) {
         vmark(vm, PREVT(current).value);
         vmark(vm, CURRT(current).value);
         omark(vm, (O*)current->fn);
@@ -924,7 +913,7 @@ sstatic void sync(Function* F)
 #define check(F, toktype) (CURRT(F).type == (toktype))
 
 // Invoke compile-time error if 'cond' is false
-#define expect_cond(F, cond, err)                                               \
+#define expect_cond(F, cond, err)                                                        \
     if(!cond) error(F, err);
 
 // Invoke compile-time error if 'type' does not match the current token type
@@ -987,8 +976,7 @@ sstatic void make_local(Function* F, Token* name)
     for(Int i = F->locals.len - 1; i >= 0; i--) {
         Local* local = Array_Local_index(&F->locals, i);
         if(local->depth != -1 && local->depth < F->S->depth) break;
-        if(nameeq(name, &local->name))
-            LOCAL_REDEFINITION_ERR(F, name->len, name->start);
+        if(nameeq(name, &local->name)) LOCAL_REDEFINITION_ERR(F, name->len, name->start);
     }
     local_new(F, *name);
 }
@@ -1261,16 +1249,29 @@ sstatic Int name(Function* F, const char* errmsg)
     return MAKE_GLOBAL(F, name);
 }
 
+sstatic Local* upvalvar(Function* F, Int idx)
+{
+    Upvalue* upval = &F->upvalues->data[idx];
+    if(!upval->local) upvalvar(F->enclosing, idx);
+    return &F->locals.data[upval->idx];
+}
+
 // helper [exprstm]
 sstatic void codeset(Function* F, Exp* E)
 {
     switch(E->type) {
-        case EXP_UPVAL:
+        case EXP_UPVAL: {
+            Local* local = upvalvar(F, E->value);
+            if(BIT_CHECK(local->flags, VFIXED_BIT)) LOCAL_FIXED_ERR(F, local->name);
             CODEOP(F, OP_SET_UPVALUE, E->value);
             break;
-        case EXP_LOCAL:
+        }
+        case EXP_LOCAL: {
+            Local* local = &F->locals.data[E->value];
+            if(BIT_CHECK(local->flags, VFIXED_BIT)) LOCAL_FIXED_ERR(F, local->name);
             CODEOP(F, GET_OP_TYPE(E->value, OP_SET_LOCAL, E), E->value);
             break;
+        }
         case EXP_GLOBAL:
             CODEOP(F, GET_OP_TYPE(E->value, OP_SET_GLOBAL, E), E->value);
             break;
@@ -1310,8 +1311,7 @@ sstatic void exprstm(Function* F, bool lastclause)
         Array_Exp_push(&Earr, E);
         Int vars = 1;
         while(match(F, TOK_COMMA)) {
-            if(unlikely(vars >= BYTECODE_MAX))
-                VARLIST_LIMIT_ERR(F, BYTECODE_MAX);
+            if(unlikely(vars >= BYTECODE_MAX)) VARLIST_LIMIT_ERR(F, BYTECODE_MAX);
             vars++;
             suffixedexp(F, &E);
             expect_cond(F, etisvar(E.type), "Expect variable.");
@@ -1329,7 +1329,7 @@ sstatic void exprstm(Function* F, bool lastclause)
             CODE(F, OP_NIL);
             codeset(F, &E);
         } else if(etiscall(E.type)) CODE(F, OP_POP);
-        else error(F, "Invalid syntax, expect exprstm or dec.");
+        else error(F, "Invalid syntax.");
     }
     if(!lastclause) expect(F, TOK_SEMICOLON, "Expect ';'.");
 }
@@ -1498,8 +1498,7 @@ sstatic void classdec(Function* F)
     if(match(F, TOK_IMPL)) { // have superclass ?
         expect(F, TOK_IDENTIFIER, "Expect superclass name.");
         codevarprev(F, &_); // get superclass
-        if(nameeq(&PREVT(F), &class_name))
-            CLASS_INHERIT_ERR(F, AS_CSTRING(identifier));
+        if(nameeq(&PREVT(F), &class_name)) CLASS_INHERIT_ERR(F, AS_CSTRING(identifier));
         startscope(F, &S, 0, 0);
         local_new(F, syntoken("super"));
         INIT_LOCAL(F, 0);
@@ -1588,8 +1587,7 @@ sstatic force_inline void SwitchState_init(Function* F, SwitchState* state)
  * Updates 'switch' constants and checks if the constant
  * already exists, but only if 'e' is constant expression.
  */
-sstatic force_inline void
-switchconstants(Function* F, SwitchState* state, Exp* E)
+sstatic force_inline void switchconstants(Function* F, SwitchState* state, Exp* E)
 {
     if(!etisconst(E->type)) return;
     switch(E->type) {
@@ -2210,8 +2208,7 @@ sstatic bool foldunary(Function* F, UnaryOpr opr, Exp* E)
     return false;
 }
 
-// Calculate result of two constant number values by applying binary
-// operation (helper function when folding binary operations)
+// Fold constant number expressions
 sstatic void
 calcnum(Function* F, BinaryOpr opr, const Exp* E1, const Exp* E2, Value* result)
 {
@@ -2257,8 +2254,7 @@ sstatic bool validop(Function* F, BinaryOpr opr, const Exp* E1, const Exp* E2)
 // Example: OP_CONST (1), OP_CONST (2), OP_ADD => OP_CONST (3)
 sstatic bool foldbinary(Function* F, BinaryOpr opr, Exp* E1, const Exp* E2)
 {
-    if(E1->type != E2->type || E1->type != EXP_NUMBER ||
-       !validop(F, opr, E1, E2))
+    if(E1->type != E2->type || E1->type != EXP_NUMBER || !validop(F, opr, E1, E2))
         return false;
     Value result;
     calcnum(F, opr, E1, E2, &result);

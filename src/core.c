@@ -13,22 +13,16 @@
 #include <time.h>
 #include <unistd.h>
 
-sstatic force_inline OString* ObjString_from_static_prefix(
-    VM*                   vm,
-    OString*              string,
-    const InternedString* staticstr)
+sstatic force_inline OString*
+OString_from_static_prefix(VM* vm, OString* string, const InternedString* staticstr)
 {
     UInt len = string->len + staticstr->len;
     char buffer[len + 1];
-
     memcpy(buffer, staticstr->name, staticstr->len);
     memcpy(buffer + staticstr->len, string->storage, string->len);
     buffer[len] = '\0';
-
     return OString_from(vm, buffer, len);
 }
-
-//------------------------- snative -------------------------//
 
 /**
  * Determines processor time.
@@ -38,84 +32,118 @@ sstatic force_inline OString* ObjString_from_static_prefix(
  **/
 snative(clock)
 {
-    UNUSED(argc);
+    UNUSED(retcnt);
     clock_t time = clock();
-
     if(likely(time != -1)) {
-        argv[-1] = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
+        argv[-1]  = NUMBER_VAL((double)time / CLOCKS_PER_SEC);
+        vm->sp   -= argc;
         return true;
     }
-
-    argv[-1] = OBJ_VAL(ERR_NEW(vm, CLOCK_ERR));
+    vm->sp   -= argc;
+    argv[-1]  = OBJ_VAL(ERR_NEW(vm, CLOCK_ERR));
     return false;
 }
 
 /**
- * Checks if ObjInstance contains field.
+ * Checks if OInstance contains field.
  * @ret - bool, true if it contains, false otherwise
- * @err - if first argument is not ObjInstance
+ * @err - if first argument is not OInstance
  *      - if second argument is not OString
  **/
 snative(isfield)
 {
-    UNUSED(argc);
-    Value    receiver = argv[0];
-    Value    field    = argv[1];
-    OString* err      = NULL;
-
-    if(unlikely(!IS_INSTANCE(receiver))) {
-        err = ERR_NEW(vm, ISFIELD_INSTANCE_ERR);
-    } else if(unlikely(!IS_STRING(field))) {
-        err = ERR_NEW(vm, ISFIELD_FIELD_TYPE_ERR);
-    } else {
-        goto fin;
-    }
+    UNUSED(retcnt);
+    Value    receiver  = argv[0];
+    Value    field     = argv[1];
+    OString* err       = NULL;
+    vm->sp            -= argc;
+    if(unlikely(!IS_INSTANCE(receiver))) err = ERR_NEW(vm, ISFIELD_INSTANCE_ERR);
+    else if(unlikely(!IS_STRING(field))) err = ERR_NEW(vm, ISFIELD_FIELD_TYPE_ERR);
+    else goto fin;
     argv[-1] = OBJ_VAL(err);
     return false;
-
 fin:;
-    Value _dummy;
-    argv[-1] =
-        BOOL_VAL(HashTable_get(&AS_INSTANCE(receiver)->fields, field, &_dummy));
+    Value _;
+    argv[-1] = BOOL_VAL(HashTable_get(&AS_INSTANCE(receiver)->fields, field, &_));
     return true;
 }
 
 /**
  * Prints a value and a newline.
- * @ret - returns the 'value' printed
+ * @ret - nil
  **/
 snative(printl)
 {
-    UNUSED(argc);
-    UNUSED(vm);
-    vprint(argv[0]);
+    UNUSED(retcnt);
+    for(Int i = 0; i < argc; i++) {
+        vprint(argv[i]);
+        printf("\t");
+    }
     putc('\n', stdout);
-    argv[-1] = argv[0];
+    argv[-1]  = NIL_VAL;
+    vm->sp   -= argc;
     return true;
 }
 
 /**
  * Prints a value.
- * @ret - returns the 'value' printed
+ * @ret - nil
  **/
 snative(print)
 {
-    UNUSED(argc);
-    UNUSED(vm);
-    vprint(argv[0]);
-    argv[-1] = argv[0];
+    UNUSED(retcnt);
+    for(Int i = 0; i < argc; i++) {
+        vprint(argv[i]);
+        printf("\t");
+    }
+    argv[-1]  = NIL_VAL;
+    vm->sp   -= argc;
     return true;
 }
 
 sstatic force_inline OString* typename(VM* vm, Value type)
 {
+#if defined(S_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
+    sstatic void* jmptable[] = {
+        &&num,
+        &&str,
+        &&fn,
+        &&bl,
+        &&nil,
+        &&ins,
+        &&cls,
+    };
+    UInt sum = (IS_NUMBER(type) * 1) | (IS_STRING(type) * 2) |
+               ((IS_FUNCTION(type) | IS_BOUND_METHOD(type) | IS_CLOSURE(type) |
+                 IS_NATIVE(type)) *
+                4) |
+               IS_BOOL(type) * 8 | IS_NIL(type) * 16 | IS_INSTANCE(type) * 32 |
+               IS_CLASS(type) * 64;
+    ASSERT(sum != 0, "Type doesn't exist.");
+    // https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html#index-_005f_005fbuiltin_005fctz
+    Byte  idx = __builtin_ctz(sum);
+    goto* jmptable[idx];
+num:
+    return vm->statics[SS_NUM];
+str:
+    return vm->statics[SS_STR];
+fn:
+    return vm->statics[SS_FUNC];
+bl:
+    return vm->statics[SS_BOOL];
+nil:
+    return vm->statics[SS_NIL];
+ins:
+    return vm->statics[SS_INS];
+cls:
+    return vm->statics[SS_CLASS];
+#else
     if(IS_NUMBER(type)) {
         return vm->statics[SS_NUM];
     } else if(IS_STRING(type)) {
         return vm->statics[SS_STR];
     } else if(
-        IS_FUNCTION(type) || IS_BOUND_METHOD(type) || IS_CLOSURE(type) ||
-        IS_NATIVE(type))
+        IS_FUNCTION(type) || IS_BOUND_METHOD(type) || IS_CLOSURE(type) || IS_NATIVE(type))
     {
         return vm->statics[SS_FUNC];
     } else if(IS_BOOL(type)) {
@@ -127,70 +155,66 @@ sstatic force_inline OString* typename(VM* vm, Value type)
     } else if(IS_CLASS(type)) {
         return vm->statics[SS_CLASS];
     }
-
+#endif
     unreachable;
 }
 
+/**
+ * Returns the value type.
+ * @ret - string
+ **/
 snative(typeof)
 {
-    UNUSED(argc);
-    Value value = argv[0];
-
-    if(IS_UPVAL(value)) {
-        argv[-1] = OBJ_VAL(typename(vm, AS_UPVAL(value)->closed.value));
-    } else {
-        argv[-1] = OBJ_VAL(typename(vm, value));
-    }
-
+    UNUSED(retcnt);
+    Value value  = argv[0];
+    vm->sp      -= argc;
+    if(!IS_UPVAL(value)) argv[-1] = OBJ_VAL(typename(vm, value));
+    else argv[-1] = OBJ_VAL(typename(vm, AS_UPVAL(value)->closed.value));
     return true;
 }
 
 
 /**
  * Checks if the 'expr' is falsey ('false' or 'nil') and if it is
- * it invokes runtime error printing the 'Assertion failed.' message.
- * @ret - in case 'expr' is falsey it never returns, instead
- *        invokes runtime error.
- *        Otherwise it returns the 'expr' value (first argument).
+ * it invokes runtime error printing the default 'Assertion failed.' message.
+ * @ret - true if assertion passed else it returns error message.
  **/
 snative(assert)
 {
-    UNUSED(argc);
-    Value expr = argv[0];
+    UNUSED(retcnt);
+    Value expr  = argv[0];
+    vm->sp     -= argc;
     if(ISFALSEY(expr)) {
-        argv[-1] = OBJ_VAL(ObjString_from_static_prefix(
+        argv[-1] = OBJ_VAL(OString_from_static_prefix(
             vm,
             vm->statics[SS_ASSERT_MSG],
             &static_str[SS_ASSERT]));
         return false;
     } else {
-        argv[-1] = expr;
+        argv[-1] = TRUE_VAL;
         return true;
     }
 }
 
 /**
- * Checks if the 'expr' is falsey ('false' or 'nil') and if
- * it is it invokes runtime error printing the passed in 'message'.
- * @ret - invokes runtime error if 'expr' is falsey or if
- *        the second argument 'message' is not string.
- *        Otherwise it returns the 'expr' value (first argument).
+ * Same as 'assert' except you can provide your own message.
+ * @ret - true if assertion passed otherwise returns the provided error message.
  **/
 snative(assertf)
 {
-    UNUSED(argc);
-    Value expr    = argv[0];
-    Value message = argv[1];
-
-    if(unlikely(!IS_STRING(message))) {
+    UNUSED(retcnt);
+    Value expr     = argv[0];
+    Value message  = argv[1];
+    vm->sp        -= argc;
+    if(unlikely(!IS_STRING(message)))
         argv[-1] = OBJ_VAL(ERR_NEW(vm, ASSERTF_SECOND_ARG_TYPE_ERR));
-    } else {
-        if(ISFALSEY(expr)) {
-            argv[-1] = OBJ_VAL(ObjString_from_static_prefix(
+    else {
+        if(ISFALSEY(expr))
+            argv[-1] = OBJ_VAL(OString_from_static_prefix(
                 vm,
                 AS_STRING(message),
                 &static_str[SS_ASSERT]));
-        } else {
+        else {
             argv[-1] = expr;
             return true;
         }
@@ -200,70 +224,57 @@ snative(assertf)
 
 /**
  * Invokes runtime error printing the passed in 'message'.
- * @ret - errors in case the argument 'message' is not a string,
- *        otherwise it still only invokes runtime error with
- *        the passed in 'message' and never returns.
+ * @ret - string (error message)
  **/
 snative(error)
 {
-    UNUSED(argc);
-    Value message = argv[0];
-    if(unlikely(!IS_STRING(message))) {
+    UNUSED(retcnt);
+    Value message  = argv[0];
+    vm->sp        -= argc;
+    if(unlikely(!IS_STRING(message)))
         argv[-1] = OBJ_VAL(ERR_NEW(vm, ERROR_FIRST_ARG_TYPE_ERR));
-    } else {
-        argv[-1] = OBJ_VAL(ObjString_from_static_prefix(
-            vm,
-            AS_STRING(message),
-            &static_str[SS_ERROR]));
-    }
+    else
+        argv[-1] = OBJ_VAL(
+            OString_from_static_prefix(vm, AS_STRING(message), &static_str[SS_ERROR]));
     return false;
 }
 
-// @FIX: Make index operator work depending on the receiver,
-//       if the receiver is the string type, than it can only be a
-//       integer constant or integer variable.
-//       If the type is class instance (ObjInstance) then the index
-//       value can be integer constant, integer variable, boolean constant,
-//       boolean variable, string constant or a string variable.
-
-
+/**
+ * Load script (.sk) into memory (default).
+ **/
 const char* load_script_default(VM* vm, const char* name)
 {
-    // Perform default script load
     int fd = open(name, O_RDONLY);
-
     if(unlikely(fd < 0)) {
         perror("ScriptLoader");
         return NULL;
     }
-
     ssize_t len = lseek(fd, 0, SEEK_END);
-
     if(unlikely(len < 0)) {
         perror("ScriptLoader");
+        close(fd);
         return NULL;
     }
-
     if(unlikely(lseek(fd, 0, SEEK_SET) < 0)) {
         perror("ScriptLoader");
+        close(fd);
         return NULL;
     }
-
     char*   source = MALLOC(vm, len + 1);
     ssize_t n      = read(fd, source, len);
     if(unlikely(n < len)) {
-        if(n < 0) {
-            perror("ScriptLoader");
-        } else {
-            fprintf(stderr, "Could not read script '%s'\n", name);
-        }
+        if(n < 0) perror("ScriptLoader");
+        else fprintf(stderr, "Could not read script '%s'\n", name);
+        close(fd);
         return NULL;
     }
-
     source[n] = '\0';
     return source;
 }
 
+/**
+ * Load script into memory depending on how 'Config' load function is set.
+ **/
 ScriptLoadResult* load_script(VM* vm, ScriptLoadResult* result)
 {
     if(vm->config.load_script != NULL)
@@ -276,6 +287,9 @@ ScriptLoadResult* load_script(VM* vm, ScriptLoadResult* result)
     return result;
 }
 
+/**
+ * Compile the loaded script.
+ **/
 OClosure* compile_script(VM* vm, ScriptLoadResult* result)
 {
     runtime           = 0;
@@ -286,6 +300,9 @@ OClosure* compile_script(VM* vm, ScriptLoadResult* result)
     return closure;
 }
 
+/**
+ * Possibly canonicalize the name of the script.
+ **/
 Value resolve_script(VM* vm, Value name)
 {
     if(vm->config.rename_script == NULL) return name;
@@ -301,56 +318,58 @@ Value resolve_script(VM* vm, Value name)
 }
 
 /**
- * Loads the 'sk' file, compiles and runs it.
- * @ret - returns 'true' if the file is successfully loaded,
- *        otherwise this function won't return, it will instead
- *        invoke error.
+ * Loads, compiles and runs the script file (.sk).
+ * @ret - script return values if the script has loaded,
+ *        if the script was already loaded before, then it returns true.
  **/
 snative(loadscript)
 {
-    TODO("Update 'loadscript' to work with new changes.");
     Value name = argv[0];
     if(unlikely(!IS_STRING(name))) {
-        argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_ARG_TYPE_ERR));
+        argv[-1]  = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_ARG_TYPE_ERR));
+        vm->sp   -= argc;
         return false;
     }
     name = resolve_script(vm, name);
     if(name == NIL_VAL) {
-        argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RESOLVE_ERR));
+        argv[-1]  = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RESOLVE_ERR));
+        vm->sp   -= argc;
         return false;
     }
     vm->script   = name;
     Value retval = EMPTY_VAL;
-    if(HashTable_get(&vm->loaded, name, &retval)) {
-        if(unlikely(retval == EMPTY_VAL)) {
-            argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RECURSION_ERR));
+    if(HashTable_get(&vm->loaded, name, &retval)) { // is script already loaded ?
+        if(unlikely(retval == EMPTY_VAL)) { // is this recursive load ?
+            argv[-1]  = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RECURSION_ERR));
+            vm->sp   -= argc;
             return false;
-        } else if(retval != NIL_VAL) {
-            argv[-1] = retval;
+        } else if(retval != NIL_VAL) { // do not reload the script ?
+            argv[-1]  = TRUE_VAL;
+            vm->sp   -= argc;
             return true;
         } // else load the script again
     }
-
     ScriptLoadResult result = {0};
     if(load_script(vm, &result) == NULL) {
-        argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_LOAD_ERR));
+        argv[-1]  = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_LOAD_ERR));
+        vm->sp   -= argc;
         return false;
     }
-
     OClosure* closure = compile_script(vm, &result);
     if(closure == NULL) {
-        argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_COMPILE_ERR));
+        argv[-1]  = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_COMPILE_ERR));
+        vm->sp   -= argc;
         return false;
     }
-
+    TODO("Finish implementing.");
     Value scriptfn = OBJ_VAL(closure);
     push(vm, scriptfn);
-    HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL); // Update loaded table
+    HashTable_insert(vm, &vm->loaded, name, TRUE_VAL); // Update loaded table
     pop(vm);
     vm->sp     -= argc;
     vm->script  = name;
-    // bool ok     = VM_call_fn(vm, AS_OBJ(fn), 0, false, retcnt);
-    vm->sp += argc; // Little bit of cheating
+    bool ok     = fncall(vm, AS_CLOSURE(scriptfn), 0, retcnt);
+    vm->sp     += argc; // Little bit of cheating
 
     // if(unlikely(!ok)) {
     //     argv[-1] = OBJ_VAL(ERR_NEW(vm, LOADSCRIPT_RUN_ERR));

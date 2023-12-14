@@ -13,7 +13,7 @@
 
 #define ALLOC_OBJ(vm, object, type) ((object*)onew(vm, sizeof(object), type))
 
-#define ALLOC_STRING(vm, len)                                                   \
+#define ALLOC_STRING(vm, len)                                                            \
     ((OString*)onew(vm, sizeof(OString) + (len) + 1, OBJ_STRING))
 
 

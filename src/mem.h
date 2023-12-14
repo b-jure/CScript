@@ -10,12 +10,6 @@ void*  reallocate(void* ptr, size_t newsize, void* userdata);
 size_t gc(VM* vm);
 void   omark(VM* vm, O* obj);
 
-#define CLEANUP(vm)                                                             \
-    do {                                                                        \
-        _cleanupvm(vm);                                                         \
-        exit(EXIT_FAILURE);                                                     \
-    } while(false)
-
 #define vmark(vm, value)                                                        \
     do {                                                                        \
         if(IS_OBJ(value)) omark(vm, AS_OBJ(value));                             \

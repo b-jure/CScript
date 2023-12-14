@@ -155,7 +155,6 @@ typedef struct {
     OString* name; // native function name
     Int      arity; // how many arguments
     bool     isva; // is this vararg function
-    Int      vacnt; // count of varargs
 } ONative; // Native function written in C
 
 OString*      OString_from(VM* vm, const char* chars, size_t len);

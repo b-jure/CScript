@@ -5,7 +5,7 @@
 #include "skmath.h"
 #include "value.h"
 
-typedef bool (*NativeFn)(VM* vm, Value* argv, Int argc, ...);
+typedef bool (*NativeFn)(VM* vm, Value* argv, Int argc, Int retcnt, ...);
 
 Value       resolve_script(VM* vm, Value name);
 const char* load_script_default(VM* vm, const char* path);
@@ -13,7 +13,7 @@ const char* load_script_default(VM* vm, const char* path);
 #define ISFALSEY(val) (IS_NIL(val) || (IS_BOOL(val) && !AS_BOOL(val)))
 
 /* Native functions written in C. */
-#define snative(name) bool native_##name(VM* vm, Value* argv, Int argc, ...)
+#define snative(name) bool native_##name(VM* vm, Value* argv, Int argc, Int retcnt, ...)
 
 /* Time */
 snative(clock);
