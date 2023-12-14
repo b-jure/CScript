@@ -16,7 +16,7 @@ sdebug UInt Chunk_getline(Chunk* chunk, UInt index);
             if(!(expr)) {                                                       \
                 fprintf(                                                        \
                     stderr,                                                     \
-                    "Assertion failed at %d:%s\n\t'" #expr "'\n\t" fmt "\n",   \
+                    "Assertion failed at %d:%s\n\t'" #expr "'\n\t" fmt "\n",    \
                     __LINE__,                                                   \
                     __FILE__ __VA_OPT__(, ) __VA_ARGS__);                       \
                 abort();                                                        \

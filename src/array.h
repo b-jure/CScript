@@ -183,6 +183,7 @@ typedef void (*FreeFn)(void* value);
                 #name,                                                          \
                 UINT32_MAX);                                                    \
             _cleanupvm(self->vm);                                               \
+            exit(EXIT_FAILURE);                                                 \
         } else {                                                                \
             self->data = (type*)gcrealloc(                                      \
                 self->vm,                                                       \

@@ -679,12 +679,14 @@ sstatic void rmlastins(Function* F, Exp* E)
         {
             case EXP_JMP:
                 goto panic;
-                break;
             case EXP_EXPR:
-                if(E->ins.binop) LINSTRUCTION_POP(F);
-                else {
-                panic:
+                if(E->ins.binop) {
+                    LINSTRUCTION_POP(F);
+                    break;
+                } else {
+                panic: // FALLTHRU
                     PANIC("Tried removing 'and'/'or' expression.");
+                    unreachable;
                 }
             default:
                 unreachable;
@@ -904,7 +906,12 @@ sstatic void sync(Function* F)
             case TOK_CLASS:
             case TOK_IF:
             case TOK_RETURN:
+            case TOK_CONTINUE:
+            case TOK_BREAK:
             case TOK_WHILE:
+            case TOK_FOREACH:
+            case TOK_LOOP:
+            case TOK_SWITCH:
                 return;
             default:
                 advance(F);
@@ -918,7 +925,7 @@ sstatic void sync(Function* F)
 
 // Invoke compile-time error if 'cond' is false
 #define expect_cond(F, cond, err)                                               \
-    if(!cond) error(F, "Syntax error.");
+    if(!cond) error(F, err);
 
 // Invoke compile-time error if 'type' does not match the current token type
 sstatic force_inline void expect(Function* F, TokenType type, const char* err)
@@ -1189,12 +1196,7 @@ sstatic const struct {
 // vararg ::= '...'
 sstatic force_inline UInt vararg(Function* F)
 {
-    if(!F->fn->isva) {
-        error(
-            F,
-            "'...' can only be used inside functions that accept variable "
-            "number of arguments.");
-    }
+    if(!F->fn->isva) VARARG_ERR(F);
     return CODEOP(F, OP_VALIST, 1);
 }
 
@@ -1411,6 +1413,7 @@ sstatic void vardec(Function* F)
     Int names = namelist(F, &nameidx);
     Int expc  = 0;
     Exp E;
+    E.ins.set = false;
     if(match(F, TOK_EQUAL)) expc = explist(F, names, &E);
     if(names != expc) adjustassign(F, &E, names, expc);
     codeassign(F, names, &nameidx);
@@ -1696,8 +1699,6 @@ sstatic void ifstm(Function* F)
 {
     Exp     E;
     Context C;
-    Int     localc = F->locals.len; // remove after testing ?
-    Int     upvalc = F->upvalues->len; // remove after testing ?
     Int     jmptoelse, jmptoend = -1;
     savecontext(F, &C);
     expect(F, TOK_LPAREN, "Expect '(' after 'if'.");
@@ -1718,11 +1719,7 @@ sstatic void ifstm(Function* F)
         else if(F->fn->gotret) { // condition is true and 'stm' was a 'returnstm'
             // @TODO: Implement optimization.
         }
-    } else {
-        ASSERT((Int)F->locals.len == localc, "localc does not match."); // @?
-        ASSERT((Int)F->upvalues->len == upvalc, "upvalc does not match."); // @?
-        restorecontext(F, &C);
-    }
+    } else restorecontext(F, &C);
     F->fn->gotret = 0;
     if(match(F, TOK_ELSE)) { // there is 'else' branch?
         stm(F);
@@ -1751,9 +1748,8 @@ sstatic void whilestm(Function* F)
     Exp     E;
     Int     lstart, ldepth;
     Int     jmptoend = -1;
-    Int     upvalc   = F->upvalues->len; // after testing remove?
-    Int     localc   = F->locals.len; // after testing remove?
-    bool    infinite, remove = false;
+    bool    infinite = false;
+    bool    remove   = false;
     savecontext(F, &C);
     startscope(F, &S, 1, 0);
     startloop(F, &lstart, &ldepth);
@@ -1779,16 +1775,7 @@ sstatic void whilestm(Function* F)
             // @TODO: Implement optimizations
         }
         patchbreaklist(F);
-    } else {
-        // After testing remove these assertions and those vars
-        ASSERT(
-            localc == (Int)F->locals.len,
-            "local count does not match."); // @?
-        ASSERT(
-            upvalc == (Int)F->upvalues->len,
-            "upvalue count does not match."); // @?
-        restorecontext(F, &C);
-    }
+    } else restorecontext(F, &C);
     endloop(F, lstart, ldepth);
     endbreaklist(F);
 }
@@ -1800,9 +1787,8 @@ sstatic void forstm(Function* F)
     Exp     E;
     Int     lstart, ldepth;
     Int     jmptoend = -1;
-    Int     upvalc   = F->upvalues->len; // remove after testing ?
-    Int     localc   = F->locals.len; // remove after testing ?
-    bool    remove, infinite = false;
+    bool    remove   = false;
+    bool    infinite = false;
     startscope(F, &S, 1, 0);
     startbreaklist(F);
     expect(F, TOK_LPAREN, "Expect '(' after 'for'.");
@@ -1844,12 +1830,7 @@ sstatic void forstm(Function* F)
             // @TODO: Implement optimizations
         }
         patchbreaklist(F);
-    } else {
-        // remove these assertions after testing
-        ASSERT(localc == (Int)F->locals.len, "localc does not match."); // @?
-        ASSERT(upvalc == (Int)F->upvalues->len, "upvalc does not match."); // @?
-        restorecontext(F, &C);
-    }
+    } else restorecontext(F, &C);
     endscope(F);
     endloop(F, lstart, ldepth);
     endbreaklist(F);

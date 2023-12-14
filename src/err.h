@@ -22,13 +22,15 @@
 
 
 
-    /**
-     * Compile-time errors
-     **/
+/**
+ * Compile-time errors
+ **/
+
+    #define COMPILE_ERR(F, fmt, ...) error(F, fmt __VA_OPT__(, ) __VA_ARGS__)
 
     /* Parse constant */
     #define CONSTANT_LIMIT_ERR(F, fnstr, limit)                                 \
-        error(                                                                  \
+        COMPILE_ERR(                                                            \
             F,                                                                  \
             "<fn %s>: Too many constants defined in a single chunk (limit "     \
             "%u).",                                                             \
@@ -38,27 +40,34 @@
 
     /* Parse variable */
     #define VAR_UNDEFINED_ERR(F, varname)                                       \
-        error(F, FMT_VAR_UNDEFINED_ERR(varname))
-    #define VAR_FIXED_ERR(F, len, start) error(F, FMT_VAR_FIXED_ERR(len, start))
+        COMPILE_ERR(F, FMT_VAR_UNDEFINED_ERR(varname))
+    #define VAR_FIXED_ERR(F, len, start)                                        \
+        COMPILE_ERR(F, FMT_VAR_FIXED_ERR(len, start))
     #define GLOBALS_LIMIT_ERR(F, limit)                                         \
-        error(F, "Too many global values defined in script (limit %u).", limit)
+        COMPILE_ERR(                                                            \
+            F,                                                                  \
+            "Too many global values defined in script (limit %u).",             \
+            limit)
     #define GLOBAL_REDEFINITION_ERR(F, len, start)                              \
-        error(F, "Variable redefinition '%.*s'.", len, start)
+        COMPILE_ERR(F, "Variable redefinition '%.*s'.", len, start)
     #define LOCAL_LIMIT_ERR(F, limit)                                           \
-        error(F, "Too many local values defined in script (limit %u).", limit)
+        COMPILE_ERR(                                                            \
+            F,                                                                  \
+            "Too many local values defined in script (limit %u).",              \
+            limit)
     #define LOCAL_DEFINITION_ERR(F, len, start)                                 \
-        error(                                                                  \
+        COMPILE_ERR(                                                            \
             F,                                                                  \
             "Can't read local variable %.*s in its own initializer.",           \
             len,                                                                \
             start)
     #define LOCAL_REDEFINITION_ERR(F, len, start)                               \
-        error(F, "Redefinition of local variable '%.*s'.", len, start)
+        COMPILE_ERR(F, "Redefinition of local variable '%.*s'.", len, start)
     /* ------------- */
 
     /* codeloop() */
     #define JUMP_LIMIT_ERR(F, limit)                                            \
-        error(                                                                  \
+        COMPILE_ERR(                                                            \
             F,                                                                  \
             "Too much code to jump over. Bytecode indexing limit reached "      \
             "[%u].",                                                            \
@@ -66,42 +75,43 @@
     /* ------------- */
 
     /* switchstm() */
-    #define SWITCH_DEFAULT_ERR(F) error(F, "Multiple 'default' labels.")
+    #define SWITCH_DEFAULT_ERR(F) COMPILE_ERR(F, "Multiple 'default' labels.")
     #define SWITCH_NOCASE_ERR(F)                                                \
-        error(F, "Can't have statements before first case.")
-    #define SWITCH_RBRACE_ERR(F) error(F, "Expect '}' at the end of 'switch'.")
+        COMPILE_ERR(F, "Can't have statements before first case.")
+    #define SWITCH_RBRACE_ERR(F)                                                \
+        COMPILE_ERR(F, "Expect '}' at the end of 'switch'.")
     #define SWITCH_DUPLICATE_ERR(F, val)                                        \
-        error(F, "Already have case with constant '%s'.", val)
+        COMPILE_ERR(F, "Already have case with constant '%s'.", val)
     /* ------------- */
 
     /* continuestm() */
     #define CONTINUE_ERR(F)                                                     \
-        error(F, "'continue' statement not in loop statement.")
+        COMPILE_ERR(F, "'continue' statement not in loop statement.")
     /* ------------- */
 
     /* breakstm() */
     #define BREAK_ERR(F)                                                        \
-        error(F, "'break' statement not in loop or switch statement.");
+        COMPILE_ERR(F, "'break' statement not in loop or switch statement.");
     /* ------------- */
 
     /* Parse 'return' */
     #define RETURN_INIT_ERR(F, initstr)                                         \
-        error(F, "Can't return a value from '%s' method.", initstr)
+        COMPILE_ERR(F, "Can't return a value from '%s' method.", initstr)
     /* ------------- */
 
     /* Parse arglist */
     #define ARGC_LIMIT_ERR(F, limit)                                            \
-        error(F, "Can't have more than %u arguments.", limit)
+        COMPILE_ERR(F, "Can't have more than %u arguments.", limit)
     /* ------------- */
 
     /* scope_start() */
     #define SCOPE_LIMIT_ERR(F, limit)                                           \
-        error(F, "Scope nesting limit reached (limit %u).", limit)
+        COMPILE_ERR(F, "Scope nesting limit reached (limit %u).", limit)
     /* ------------- */
 
     /* Parse closure upvalue */
     #define UPVALUE_LIMIT_ERR(F, fnname, limit)                                 \
-        error(                                                                  \
+        COMPILE_ERR(                                                            \
             F,                                                                  \
             "<fn %s>: closure variables (upvalues) limit reached (limit %d).",  \
             fnname,                                                             \
@@ -110,30 +120,42 @@
 
     /* classdec() */
     #define CLASS_INHERIT_ERR(F, cclass)                                        \
-        error(F, "class '%s' can't impl itself.", cclass);
-    #define SUPER_ERR(F) error(F, "Can't use 'super' outside of a class.");
+        COMPILE_ERR(F, "class '%s' can't impl itself.", cclass);
+    #define SUPER_ERR(F) COMPILE_ERR(F, "Can't use 'super' outside of a class.");
     #define NO_SUPER_ERR(F)                                                     \
-        error(F, "Can't use 'super', class does not have a superclass.");
-    #define SELF_ERR(F) error(F, "Can't use 'self' outside of a class.");
+        COMPILE_ERR(F, "Can't use 'super', class does not have a superclass.");
+    #define SELF_ERR(F) COMPILE_ERR(F, "Can't use 'self' outside of a class.");
     /* ------------- */
 
     /* namelist() */
     #define NAMELIST_LIMIT_ERR(F, limit)                                        \
-        error(F, "Too many names in namelist, limit [%d]", limit)
+        COMPILE_ERR(F, "Too many names in namelist, limit [%d]", limit)
     /* ------------- */
 
     /* explist() */
     #define EXPLIST_LIMIT_ERR(F, limit)                                         \
-        error(F, "Too many expressions in explist, expected at most %d.", limit)
+        COMPILE_ERR(                                                            \
+            F,                                                                  \
+            "Too many expressions in explist, expected at most %d.",            \
+            limit)
     /* ------------- */
 
     /* exprstm() */
     #define VARLIST_LIMIT_ERR(F, limit)                                         \
-        error(F, "Too many variables in varlist, limit [%d].", limit)
+        COMPILE_ERR(F, "Too many variables in varlist, limit [%d].", limit)
     /* ------------- */
 
     /* suffixedexp() */
-    #define CALL_CONST_ERR(F) error(F, "Attempted to call a constant value.");
+    #define CALL_CONST_ERR(F)                                                   \
+        COMPILE_ERR(F, "Attempted to call a constant value.");
+    /* ------------- */
+
+    /* vararg() */
+    #define VARARG_ERR(F)                                                       \
+        COMPILE_ERR(                                                            \
+            F,                                                                  \
+            "'...' can only be used inside functions that accept variable "     \
+            "number of arguments.")
 /* ------------- */
 
 
@@ -390,27 +412,24 @@
             OString* str2 = vtostr(vm, b);                                      \
             push(vm, OBJ_VAL(str2));                                            \
             OString* unesc2 = unescape(vm, str2);                               \
-            pop(vm);                                                            \
             push(vm, OBJ_VAL(unesc2));                                          \
             OString* unesc1 = unescape(vm, str1);                               \
-            pop(vm);                                                            \
             push(vm, OBJ_VAL(unesc1));                                          \
             RUNTIME_ERR(                                                        \
                 vm,                                                             \
                 "Only two numbers can be added together or two strings "        \
                 "concatenated.\n"                                               \
-                "This is invalid: ...\"%s\" + \"%s\"...\n"                      \
-                "Try instead: ...\"%s%s%s\" + \"%s%s%s\"...",                   \
-                unesc1,                                                         \
-                unesc2,                                                         \
+                "\tThis is invalid: \"%s\" + \"%s\"\n"                          \
+                "\tTry instead: \"%s%s%s\" + \"%s%s%s\"",                       \
+                unesc1->storage,                                                \
+                unesc2->storage,                                                \
                 IS_STRING(a) ? "" : "tostr(",                                   \
-                unesc1,                                                         \
+                unesc1->storage,                                                \
                 IS_STRING(a) ? "" : ")",                                        \
                 IS_STRING(b) ? "" : "tostr(",                                   \
-                unesc2,                                                         \
+                unesc2->storage,                                                \
                 IS_STRING(b) ? "" : ")");                                       \
-            pop(vm);                                                            \
-            pop(vm);                                                            \
+            popn(vm, 4);                                                        \
         } while(false)
 
 #endif

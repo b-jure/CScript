@@ -105,7 +105,12 @@ static_assert(
     #if __has_builtin(__builtin_unreachable)
         #define unreachable __builtin_unreachable()
     #else
-        #define unreachable
+        #define unreachable                                                     \
+            #include<stdio.h> #include<stdlib.h> printf(                        \
+                "Unreachable code: %s:%d\n",                                    \
+                __FILE__,                                                       \
+                __LINE__);                                                      \
+            abort();
     #endif
 
 #else

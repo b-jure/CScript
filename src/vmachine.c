@@ -497,22 +497,29 @@ sstatic InterpretResult run(VM* vm)
     register CallFrame* frame = &vm->frames[vm->fc - 1];
     register Byte*      ip    = frame->ip;
 #ifdef DEBUG_TRACE_EXECUTION
-    printf("\n=== vmachine ===\n");
+    printf("\n=== VM - execution ===\n");
 #endif
     while(true) {
 #ifdef S_PRECOMPUTED_GOTO
     #define OP_TABLE
     #include "jmptable.h"
     #undef OP_TABLE
+    #ifdef DEBUG_TRACE_EXECUTION
+        #undef BREAK
+        #define BREAK                                                           \
+            dumpstack(vm, frame, ip);                                           \
+            DISPATCH(READ_BYTE())
+    #endif
 #else
     #define DISPATCH(x) switch(x)
     #define CASE(label) case label:
-    #define BREAK       break
-#endif
-#ifdef DEBUG_TRACE_EXECUTION
-    #undef BREAK
-    #define BREAK continue
-        dumpstack(vm, frame, ip);
+    #ifdef DEBUG_TRACE_EXECUTION
+        #define BREAK                                                           \
+            dumpstack(vm, frame, ip);                                           \
+            break
+    #else
+        #define BREAK break
+    #endif
 #endif
         DISPATCH(READ_BYTE())
         {
@@ -1151,7 +1158,6 @@ sstatic InterpretResult run(VM* vm)
 #undef CASE
 #undef BREAK
 #undef VM_BINARY_OP
-#undef VM_CONCAT_OR_ADD
 }
 
 
