@@ -1,5 +1,5 @@
-#ifndef SKOOMA_CONFIG_H
-#define SKOOMA_CONFIG_H
+#ifndef SKCONFIG_H
+#define SKCONFIG_H
 
 #define __STDC_LIMIT_MACROS
 
@@ -20,18 +20,15 @@
     #error "Compiler not supported (no __STDC_VERSION__ or __cplusplus defined)."
 #endif
 
-#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 ||                          \
-    __DBL_MANT_DIG__ != 53 || __DBL_MAX_10_EXP__ != 308 ||                      \
-    __DBL_MAX_EXP__ != 1024 || __DBL_MIN_10_EXP__ != -307 ||                    \
-    __DBL_MIN_EXP__ != -1021
+#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||         \
+    __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 ||                              \
+    __DBL_MIN_10_EXP__ != -307 || __DBL_MIN_EXP__ != -1021
 
     #error "Compiler missing IEEE-754 double precision floating point!"
 #endif
 
 static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8.");
-static_assert(
-    sizeof(double) == sizeof(long),
-    "Size of 'long' and 'double' not equal.");
+static_assert(sizeof(double) == sizeof(long), "Size of 'long' and 'double' not equal.");
 static_assert(
     sizeof(int64_t) == sizeof(double),
     "Size of 'int64_t' and 'double' not equal.");
@@ -105,11 +102,11 @@ static_assert(
     #if __has_builtin(__builtin_unreachable)
         #define unreachable __builtin_unreachable()
     #else
-        #define unreachable                                                     \
-            #include<stdio.h> #include<stdlib.h> printf(                        \
-                "Unreachable code: %s:%d\n",                                    \
-                __FILE__,                                                       \
-                __LINE__);                                                      \
+        #define unreachable                                                              \
+            #include<stdio.h> #include<stdlib.h> printf(                                 \
+                "Unreachable code: %s:%d\n",                                             \
+                __FILE__,                                                                \
+                __LINE__);                                                               \
             abort();
     #endif
 
@@ -119,25 +116,17 @@ static_assert(
     #define likely(cond)   cond
     #define unlikely(cond) cond
     #define unused
-    #define unreachable                                                         \
-        #include<stdio.h> #include<stdlib.h> printf(                            \
-            "Unreachable code: %s:%d\n",                                        \
-            __FILE__,                                                           \
-            __LINE__);                                                          \
+    #define unreachable                                                                  \
+        #include<stdio.h> #include<stdlib.h> printf(                                     \
+            "Unreachable code: %s:%d\n",                                                 \
+            __FILE__,                                                                    \
+            __LINE__);                                                                   \
         abort();
 
 #endif
 
 
 
-
-#define sstatic static
-
-#ifdef DEBUG
-    #define sdebug
-#else
-    #define sdebug unused
-#endif
 
 /**
  * Max stack size in bytes, default set to 524 KiB.
@@ -169,10 +158,59 @@ static_assert(
 
 
 
+/**
+ * Enables assertions when doing API calls from C.
+ * Enabled by default, to disable remove this define
+ * or comment it out.
+ **/
+#define S_CHECK_API
+
+
+#if defined(S_CHECK_API)
+    #include <assert.h>
+    #define sk_checkapi(vm, cond, msg) assert(cond)
+#endif
+
+
+
+/**
+ * Enables default lock mechanism each time VM is accessed
+ * via API calls made from C.
+ * This ensures multi-thread safety in case user
+ * is not ensuring safe access himself.
+ * Basically a mutex; in case the user doesn't need
+ * this, he should remove this define or comment it out.
+ **/
+#define S_LOCK_DFLT
+
+/**
+ * In case user wants to use his own locking mechanism,
+ * he should enable this define.
+ * This just basically undef's the default sk_lock and sk_unlock.
+ **/
+#ifndef S_LOCK_DFLT
+    // #define S_LOCK_USR
+#endif
+
+
+
+/*
+ * Mark/signature for core API functions.
+ */
+#define SK_API extern
+
+/*
+ * Signature for library functions.
+ */
+#define SK_LIBAPI SK_API
+
+
+
 /* For debug builds comment out 'defines' you dont want. */
 #ifdef DEBUG
+    #define sdebug
 
-    /* Enable asserts */
+    /* Enable debug asserts */
     #define DEBUG_ASSERTIONS
 
     /* Print and disassemble bytecode for each chunk/function */
@@ -186,10 +224,8 @@ static_assert(
 
     /* Log garbage collection */
     // #define DEBUG_LOG_GC
-
-    /* Dump stack of local variables on compile error */
-    #define DEBUG_LOCAL_STACK
-
+#else
+    #define sdebug unused
 #endif
 
 
@@ -221,8 +257,7 @@ typedef struct ScriptLoadResult ScriptLoadResult;
  * Function called after 'ScriptLoadFn' finishes, to perform
  * cleanup (if any).
  **/
-typedef void (
-    *ScriptLoadFinFn)(VM* vm, const char* name, ScriptLoadResult result);
+typedef void (*ScriptLoadFinFn)(VM* vm, const char* name, ScriptLoadResult result);
 
 
 /* Return result of 'ScriptLoadFn'. */

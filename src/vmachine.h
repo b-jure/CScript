@@ -6,13 +6,14 @@
 #include "chunk.h"
 #include "hashtable.h"
 #include "skconf.h"
+#include "skooma.h"
 #include "value.h"
 
 // Max depth of CallFrames
 #define VM_FRAMES_MAX S_CALLFRAMES_MAX
 
 // Max stack size
-#define VM_STACK_MAX ((Int)(S_STACK_MAX / sizeof(Value)))
+#define VM_STACK_MAX ((int)(S_STACK_MAX / sizeof(Value)))
 
 
 
@@ -71,42 +72,53 @@ typedef enum {
 
 
 VM*             VM_new(Config* config);
-void            VM_free(VM* vm);
+void            VM_free(VM** vm);
 void            push(VM* vm, Value val);
+void            pushn(VM* vm, Int n, Value val);
 Value           pop(VM* vm);
 InterpretResult interpret(VM* vm, const char* source, const char* filename);
 bool            fncall(VM* vm, OClosure* callee, Int argc, Int retcnt);
 
+typedef struct CallInfo CallInfo;
+struct CallInfo {
+    CallInfo *prev, *next;
+    Value*    fnloc; // Location of the function being called
+    Int       argc; // arguments count
+    Int       retc; // expected return count
+    Int       varargc; // variable argument list args count
+};
 
 ARRAY_NEW(Array_ORef, O*);
 ARRAY_NEW(Array_VRef, Value*);
 
 struct VM {
-    Config      config; // user configuration
-    HashTable   loaded; // loaded scripts
-    Value       script; // current script name
-    Function*   F; // function state
-    CallFrame   frames[VM_FRAMES_MAX];
-    Int         fc; // frame count
-    Value       stack[VM_STACK_MAX];
-    Value*      sp; // stack pointer
-    Array_VRef  callstart;
-    Array_VRef  retstart;
-    HashTable   globids; // global variable names
-    Variable*   globvals; // global variable values
-    UInt        globlen; // global variable count
-    UInt        globcap; // global variable array size
-    Array_Value temp; // temporary return values
-    HashTable   strings; // interned strings (weak refs)
-    OUpvalue*   open_upvals; // closure values
-    OString*    statics[SS_SIZE]; // static strings
-    O*          objects; // list of all allocated objects
-    O**         gray_stack; // tricolor gc (stores marked objects)
-    UInt        gslen; // gray stack length
-    UInt        gscap; // gray stack capacity
-    size_t      gc_allocated; // count of allocated bytes in use
-    size_t      gc_next; // next threshold where gc triggers
-    Byte        gc_flags; // gc flags (sk API)
+    Config        config; // user configuration
+    CallInfo      cinfo; // function call info
+    unsigned long seed; // randomized seed for hashing
+    HashTable     loaded; // loaded scripts
+    Value         script; // current script name
+    Function*     F; // function state
+    CallFrame     frames[VM_FRAMES_MAX];
+    Int           fc; // frame count
+    Value         stack[VM_STACK_MAX];
+    Value*        sp; // stack pointer
+    Array_VRef    callstart;
+    Array_VRef    retstart;
+    HashTable     globids; // global variable names
+    Variable*     globvals; // global variable values
+    UInt          globlen; // global variable count
+    UInt          globcap; // global variable array size
+    Array_Value   temp; // temporary return values
+    HashTable     strings; // interned strings (weak refs)
+    OUpvalue*     open_upvals; // closure values
+    OString*      statics[SS_SIZE]; // static strings
+    O*            objects; // list of all allocated objects
+    O**           gray_stack; // tricolor gc (stores marked objects)
+    UInt          gslen; // gray stack length
+    UInt          gscap; // gray stack capacity
+    size_t        gc_allocated; // count of allocated bytes in use
+    size_t        gc_next; // next threshold where gc triggers
+    Byte          gc_flags; // gc flags (sk API)
 };
 
 #endif

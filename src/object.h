@@ -1,11 +1,11 @@
-#ifndef SKOOMA_OBJECT_H
-#define SKOOMA_OBJECT_H
+#ifndef SKOBJECT_H
+#define SKOBJECT_H
 
 #include "chunk.h"
 #include "common.h"
-#include "core.h"
 #include "hash.h"
 #include "mem.h"
+#include "skooma.h"
 #include "value.h"
 
 #define IS_STRING(value)  isotype(value, OBJ_STRING)
@@ -60,39 +60,37 @@ struct O { // typedef is inside 'value.h'
     uint64_t header;
 };
 
-sstatic force_inline OType otype(O* object)
+static force_inline OType otype(O* object)
 {
     return (OType)((object->header >> 56) & 0xff);
 }
 
-sstatic force_inline void otypeset(O* object, OType type)
+static force_inline void otypeset(O* object, OType type)
 {
-    object->header =
-        (object->header & 0x00ffffffffffffff) | ((uint64_t)type << 56);
+    object->header = (object->header & 0x00ffffffffffffff) | ((uint64_t)type << 56);
 }
 
-sstatic force_inline bool oismarked(O* object)
+static force_inline bool oismarked(O* object)
 {
     return (bool)((object->header >> 48) & 0x01);
 }
 
-sstatic force_inline void osetmark(O* object, bool mark)
+static force_inline void osetmark(O* object, bool mark)
 {
-    object->header =
-        (object->header & 0xff00ffffffffffff) | ((uint64_t)mark << 48);
+    object->header = (object->header & 0xff00ffffffffffff) | ((uint64_t)mark << 48);
 }
 
-sstatic force_inline O* onext(O* object)
+static force_inline O* onext(O* object)
 {
     return (O*)(object->header & 0x0000ffffffffffff);
 }
 
-sstatic force_inline void osetnext(O* object, O* next)
+static force_inline void osetnext(O* object, O* next)
 {
     object->header = (object->header & 0xffff000000000000) | (uint64_t)next;
 }
 
-sstatic force_inline bool isotype(Value value, OType type)
+static force_inline bool isotype(Value value, OType type)
 {
     return IS_OBJ(value) && otype(AS_OBJ(value)) == type;
 }
@@ -150,11 +148,11 @@ struct OBoundMethod { // typedef is inside 'value.h'
 };
 
 typedef struct {
-    O        obj; // shared header
-    NativeFn fn; // native functions signature
-    OString* name; // native function name
-    Int      arity; // how many arguments
-    bool     isva; // is this vararg function
+    O         obj; // shared header
+    CFunction fn; // native functions signature
+    OString*  name; // native function name
+    Int       arity; // how many arguments
+    bool      isva; // is this vararg function
 } ONative; // Native function written in C
 
 OString*      OString_from(VM* vm, const char* chars, size_t len);
@@ -163,10 +161,10 @@ OInstance*    OInstance_new(VM* vm, OClass* cclass);
 OClass*       OClass_new(VM* vm, OString* name);
 OUpvalue*     OUpvalue_new(VM* vm, Value* var_ref);
 OClosure*     OClosure_new(VM* vm, OFunction* fn);
-ONative*   ONative_new(VM* vm, OString* name, NativeFn fn, Int arity, bool isva);
-OFunction* OFunction_new(VM* vm);
-void       otypeprint(OType type); // Debug
-OString*   otostr(VM* vm, O* object);
+ONative*      ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva);
+OFunction*    OFunction_new(VM* vm);
+void          otypeprint(OType type); // Debug
+OString*      otostr(VM* vm, O* object);
 
 void oprint(const Value value);
 Hash ohash(Value value);

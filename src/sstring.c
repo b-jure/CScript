@@ -1,6 +1,6 @@
 #include "core.h"
-#include "object.h"
 #include "err.h"
+#include "object.h"
 
 #include <ctype.h>
 
@@ -10,8 +10,9 @@
  **/
 snative(tostr)
 {
-    UNUSED(argc);
-    argv[-1] = OBJ_VAL(vtostr(vm, argv[0]));
+    vm->sp   -= argc;
+    argv[-1]  = OBJ_VAL(vtostr(vm, argv[0]));
+    pushn(vm, retcnt, NIL_VAL);
     return true;
 }
 
@@ -22,9 +23,9 @@ snative(tostr)
  **/
 snative(isstr)
 {
-    UNUSED(argc);
-    UNUSED(vm);
-    argv[-1] = BOOL_VAL(IS_STRING(argv[0]));
+    vm->sp   -= argc;
+    argv[-1]  = BOOL_VAL(IS_STRING(argv[0]));
+    pushn(vm, retcnt, NIL_VAL);
     return true;
 }
 
@@ -35,13 +36,14 @@ snative(isstr)
  **/
 snative(strlen)
 {
-    UNUSED(argc);
-    Value string = argv[0];
+    Value string  = argv[0];
+    vm->sp       -= argc;
     if(unlikely(!IS_STRING(string))) {
         argv[-1] = OBJ_VAL(ERR_NEW(vm, STRLEN_FIRST_ARG_TYPE_ERR));
         return false;
     }
     argv[-1] = NUMBER_VAL(AS_STRING(string)->len);
+    pushn(vm, retcnt, NIL_VAL);
     return true;
 }
 
@@ -54,26 +56,21 @@ snative(strlen)
  **/
 snative(strpat)
 {
-    UNUSED(argc);
-    Value      string  = argv[0];
-    Value      pattern = argv[1];
-    OString* err     = NULL;
-    if(unlikely(!IS_STRING(string))) {
-        err = ERR_NEW(vm, STRPAT_FIRST_ARG_TYPE_ERR);
-    } else if(unlikely(!IS_STRING(pattern))) {
-        err = ERR_NEW(vm, STRPAT_SECOND_ARG_TYPE_ERR);
-    } else {
-        goto fin;
-    }
-
+    vm->sp           -= argc;
+    Value    string   = argv[0];
+    Value    pattern  = argv[1];
+    OString* err      = NULL;
+    if(unlikely(!IS_STRING(string))) err = ERR_NEW(vm, STRPAT_FIRST_ARG_TYPE_ERR);
+    else if(unlikely(!IS_STRING(pattern))) err = ERR_NEW(vm, STRPAT_SECOND_ARG_TYPE_ERR);
+    else goto fin;
     argv[-1] = OBJ_VAL(err);
     return false;
-
 fin:;
     OString* haystack = AS_STRING(string);
     OString* needle   = AS_STRING(pattern);
-    char*      start    = strstr(haystack->storage, needle->storage);
-    argv[-1]            = start == NULL ? NIL_VAL : NUMBER_VAL(start - haystack->storage);
+    char*    start    = strstr(haystack->storage, needle->storage);
+    argv[-1]          = start == NULL ? NIL_VAL : NUMBER_VAL(start - haystack->storage);
+    pushn(vm, retcnt, NIL_VAL);
     return true;
 }
 
@@ -91,50 +88,30 @@ fin:;
  **/
 snative(strsub)
 {
-    UNUSED(argc);
-    Value      string = argv[0];
-    Value      i      = argv[1];
-    Value      j      = argv[2];
-    OString* err    = NULL;
-
-    if(unlikely(!IS_STRING(string))) {
-        err = ERR_NEW(vm, STRSUB_FIRST_ARG_TYPE_ERR);
-    } else if(unlikely(
-                  (!IS_NUMBER(i) || !IS_NUMBER(j)) &&
-                  (sfloor(AS_NUMBER(i)) != AS_NUMBER(i) || sfloor(AS_NUMBER(j)) != AS_NUMBER(j))))
-    {
+    vm->sp          -= argc;
+    Value    string  = argv[0];
+    Value    i       = argv[1];
+    Value    j       = argv[2];
+    OString* err     = NULL;
+    if(unlikely(!IS_STRING(string))) err = ERR_NEW(vm, STRSUB_FIRST_ARG_TYPE_ERR);
+    else if(unlikely(
+                (!IS_NUMBER(i) || !IS_NUMBER(j)) &&
+                (sfloor(AS_NUMBER(i)) != AS_NUMBER(i) ||
+                 sfloor(AS_NUMBER(j)) != AS_NUMBER(j))))
         err = ERR_NEW(vm, STRSUB_INDICES_TYPE_ERR);
-    } else {
-        goto fin;
-    }
+    else goto fin;
     argv[-1] = OBJ_VAL(err);
     return false;
-
 fin:;
     OString* substr = AS_STRING(string);
-    int64_t    ii     = AS_NUMBER(i);
-    int64_t    ij     = AS_NUMBER(j);
-    int64_t    len    = substr->len + 1;
-
-    // If negative, convert
-    if(ii < 0) {
-        ii = len + ii < 0 ? 0 : len + ii;
-    }
-    // If negative, convert
-    if(ij < 0) {
-        ij = len + ij < 0 ? 0 : len + ij;
-    }
-
-    // If 'j' bigger than len, truncate
-    if(ij > len) {
-        ij = len;
-    }
-
-    if(ii > ij) {
-        argv[-1] = OBJ_VAL(OString_from(vm, "", 0));
-    } else {
-        argv[-1] = OBJ_VAL(OString_from(vm, substr->storage + ii, ij - ii));
-    }
+    int64_t  ii     = AS_NUMBER(i);
+    int64_t  ij     = AS_NUMBER(j);
+    int64_t  len    = substr->len + 1;
+    if(ii < 0) ii = len + ii < 0 ? 0 : len + ii;
+    if(ij < 0) ij = len + ij < 0 ? 0 : len + ij;
+    if(ij > len) ij = len;
+    if(ii > ij) argv[-1] = OBJ_VAL(OString_from(vm, "", 0));
+    else argv[-1] = OBJ_VAL(OString_from(vm, substr->storage + ii, ij - ii));
     return true;
 }
 
@@ -148,7 +125,8 @@ snative(strbyte)
 
     if(unlikely(!IS_STRING(value))) {
         err = ERR_NEW(vm, STRBYTE_FIRST_ARG_TYPE_ERR);
-    } else if(unlikely(!IS_NUMBER(index) || sfloor(AS_NUMBER(index)) != AS_NUMBER(index))) {
+    } else if(unlikely(!IS_NUMBER(index) || sfloor(AS_NUMBER(index)) != AS_NUMBER(index)))
+    {
         err = ERR_NEW(vm, STRBYTE_SECOND_ARG_TYPE_ERR);
     } else {
         goto fin;
@@ -158,8 +136,8 @@ snative(strbyte)
 
 fin:;
     OString* string = AS_STRING(value);
-    Int        slen   = string->len;
-    Int        idx    = AS_NUMBER(index);
+    Int      slen   = string->len;
+    Int      idx    = AS_NUMBER(index);
 
     if(idx < 0 || idx > slen - 1) { // Index out of range
         argv[-1] = NIL_VAL;
@@ -169,7 +147,8 @@ fin:;
     return true;
 }
 
-sstatic force_inline OString* changecase(VM* vm, OString* string, int (*changecasefn)(int))
+sstatic force_inline OString*
+changecase(VM* vm, OString* string, int (*changecasefn)(int))
 {
     UInt        slen = string->len;
     const char* str  = string->storage;

@@ -42,7 +42,7 @@ sstatic force_inline OString* OString_alloc(VM* vm, UInt len)
 
 OString* OString_from(VM* vm, const char* chars, size_t len)
 {
-    uint64_t hash     = stringhash(chars, len);
+    Hash     hash     = stringhash(chars, len, vm->seed);
     OString* interned = HashTable_get_intern(&vm->strings, chars, len, hash);
     if(interned) return interned; // Return interned string
     OString* string = OString_alloc(vm, len);

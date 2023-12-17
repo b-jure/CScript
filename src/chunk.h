@@ -1,5 +1,5 @@
-#ifndef SKOOMA_CHUNK_H
-#define SKOOMA_CHUNK_H
+#ifndef SKCHUNK_H
+#define SKCHUNK_H
 
 #include "array.h"
 #include "common.h"

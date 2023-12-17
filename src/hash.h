@@ -6,6 +6,6 @@
 typedef size_t Hash;
 
 Hash dblhash(double dbl);
-Hash stringhash(const char* str, size_t len);
+Hash stringhash(const char* str, size_t len, unsigned long seed);
 
 #endif
