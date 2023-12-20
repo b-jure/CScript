@@ -26,13 +26,16 @@ OString_from_static_prefix(VM* vm, OString* string, const InternedString* static
 
 
 
-/**
+/*
  * Determines processor time, returning approximation of processor time used by the
  * program in seconds.
-clock **/
-corelib(cpuclock)
+ */
+corelib(clock)
 {
-    return 0;
+    clock_t time = clock();
+    if(time == -1) {
+    } else sk_pushnumber(vm, time);
+    return 1;
 }
 
 /**

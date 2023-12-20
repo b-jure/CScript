@@ -10,6 +10,8 @@
 #include "skconf.h"
 #include "value.h"
 #include "vmachine.h"
+#include "skmath.h"
+
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -186,7 +188,7 @@ typedef struct {
 } Exp;
 
 // Initialize expression
-sstatic force_inline void Exp_init(Exp* E, ExpType type, Int code, Int value)
+static force_inline void Exp_init(Exp* E, ExpType type, Int code, Int value)
 {
     E->type      = type;
     E->jmp.t     = NO_JMP;
@@ -279,7 +281,7 @@ struct Scope {
  * Returns 1 if 'S' is in loop, 0 if inside of a switch
  * and -1 if outside.
  */
-sstatic force_inline Int inwhat(Scope* S, Scope** target)
+static force_inline Int inwhat(Scope* S, Scope** target)
 {
     Int    which = -1;
     Scope* head  = S;
@@ -338,7 +340,7 @@ struct Function {
     Array_Local    locals; // local variables stack
 };
 
-sstatic force_inline Scope* getscope(Function* F, Int depth)
+static force_inline Scope* getscope(Function* F, Int depth)
 {
     Scope* scope = F->S;
     while(scope != NULL) {
@@ -363,7 +365,7 @@ typedef struct {
     Int upvalc;
 } Context;
 
-sstatic force_inline void savecontext(Function* F, Context* C)
+static force_inline void savecontext(Function* F, Context* C)
 {
     C->codeoffset = codeoffset(F);
     C->constlen   = CHUNK(F)->constants.len;
@@ -372,13 +374,13 @@ sstatic force_inline void savecontext(Function* F, Context* C)
 }
 
 // Trim/set length of code and/or constant array
-sstatic force_inline void concatcode(Function* F, Int codeoffset, Int constoffset)
+static force_inline void concatcode(Function* F, Int codeoffset, Int constoffset)
 {
     CHUNK(F)->code.len      = codeoffset;
     CHUNK(F)->constants.len = constoffset;
 }
 
-sstatic force_inline void restorecontext(Function* F, Context* C)
+static force_inline void restorecontext(Function* F, Context* C)
 {
     concatcode(F, C->codeoffset, C->constlen);
     F->locals.len    = C->localc;
@@ -393,10 +395,10 @@ sstatic force_inline void restorecontext(Function* F, Context* C)
 
 
 // Forward declare
-sstatic void dec(Function* F);
-sstatic void expr(Function* F, Exp* E);
-sstatic void suffixedexp(Function* F, Exp* E);
-sstatic void stm(Function* F);
+static void dec(Function* F);
+static void expr(Function* F, Exp* E);
+static void suffixedexp(Function* F, Exp* E);
+static void stm(Function* F);
 
 
 
@@ -408,7 +410,7 @@ sstatic void stm(Function* F);
 /*========================== ERROR =========================*/
 
 // Compile-time error
-sstatic void error(Function* F, const char* error, ...)
+static void error(Function* F, const char* error, ...)
 {
     Token*  token = &PREVT(F);
     va_list args;
@@ -472,7 +474,7 @@ sstatic void error(Function* F, const char* error, ...)
 #define CODEBIN(F, opr) CODE(F, binopr2op(opr))
 
 // Emit return instruction
-sstatic force_inline void coderet(Function* F, bool explicit, bool gotret)
+static force_inline void coderet(Function* F, bool explicit, bool gotret)
 {
     if(gotret) {
         F->fn->gotret = 1;
@@ -492,7 +494,7 @@ sstatic force_inline void coderet(Function* F, bool explicit, bool gotret)
 }
 
 // Emit loop instruction
-sstatic force_inline void codeloop(Function* F, UInt start)
+static force_inline void codeloop(Function* F, UInt start)
 {
     CODE(F, OP_LOOP);
     UInt offset = codeoffset(F) - start + 3;
@@ -508,14 +510,14 @@ sstatic force_inline void codeloop(Function* F, UInt start)
     } while(false)
 
 // Check if Tokens are equal
-sstatic force_inline bool nameeq(Token* left, Token* right)
+static force_inline bool nameeq(Token* left, Token* right)
 {
     return (left->len == right->len) &&
            (memcmp(left->start, right->start, left->len) == 0);
 }
 
 // Get local variable
-sstatic force_inline Int get_local(Function* F, Token* name)
+static force_inline Int get_local(Function* F, Token* name)
 {
     for(Int i = F->locals.len - 1; i >= 0; i--) {
         Local* local = Array_Local_index(&F->locals, i);
@@ -527,7 +529,7 @@ sstatic force_inline Int get_local(Function* F, Token* name)
     return -1;
 }
 
-sstatic force_inline UInt add_upval(Function* F, UInt idx, Byte flags, bool local)
+static force_inline UInt add_upval(Function* F, UInt idx, Byte flags, bool local)
 {
     Int upvalc = F->fn->upvalc;
     ASSERT(upvalc < (Int)F->upvalues->len + 1, "Invalid upvalc.");
@@ -545,7 +547,7 @@ sstatic force_inline UInt add_upval(Function* F, UInt idx, Byte flags, bool loca
     return F->fn->upvalc++;
 }
 
-sstatic Int get_upval(Function* F, Token* name)
+static Int get_upval(Function* F, Token* name)
 {
     if(F->enclosing == NULL) return -1;
     Int idx = get_local(F->enclosing, name);
@@ -562,7 +564,7 @@ sstatic Int get_upval(Function* F, Token* name)
     return -1;
 }
 
-sstatic force_inline UInt globalvar(Function* F, Value identifier)
+static force_inline UInt globalvar(Function* F, Value identifier)
 {
     Value    index;
     Variable glob = {UNDEFINED_VAL, F->vflags};
@@ -577,7 +579,7 @@ sstatic force_inline UInt globalvar(Function* F, Value identifier)
     return (UInt)AS_NUMBER(index);
 }
 
-sstatic force_inline Value tokintostr(VM* vm, const Token* name)
+static force_inline Value tokintostr(VM* vm, const Token* name)
 {
     return OBJ_VAL(OString_from(vm, name->start, name->len));
 }
@@ -589,7 +591,7 @@ sstatic force_inline Value tokintostr(VM* vm, const Token* name)
         globalvar(F, identifier);                                                        \
     })
 
-sstatic force_inline Int codevar(Function* F, Token name, Exp* E)
+static force_inline Int codevar(Function* F, Token name, Exp* E)
 {
     OpCode getop;
     Int    idx = get_local(F, &name);
@@ -610,13 +612,13 @@ sstatic force_inline Int codevar(Function* F, Token name, Exp* E)
     else return (E->ins.code = -1); // this is assignment
 }
 
-sstatic force_inline UInt codevarprev(Function* F, Exp* E)
+static force_inline UInt codevarprev(Function* F, Exp* E)
 {
     return codevar(F, PREVT(F), E);
 }
 
 // helper [rmlastins]
-sstatic force_inline void popvarins(Function* F, Exp* E)
+static force_inline void popvarins(Function* F, Exp* E)
 {
     switch(E->type) {
         case EXP_UPVAL:
@@ -645,7 +647,7 @@ sstatic force_inline void popvarins(Function* F, Exp* E)
 }
 
 // helper [rmlastins]
-sstatic force_inline void popcallins(Function* F, Exp* E)
+static force_inline void popcallins(Function* F, Exp* E)
 {
     switch(E->type) {
         case EXP_CALL:
@@ -661,7 +663,7 @@ sstatic force_inline void popcallins(Function* F, Exp* E)
     }
 }
 
-sstatic void rmlastins(Function* F, Exp* E)
+static void rmlastins(Function* F, Exp* E)
 {
     ExpType type = E->type;
     if(etisliteral(type)) SINSTRUCTION_POP(F);
@@ -696,7 +698,7 @@ sstatic void rmlastins(Function* F, Exp* E)
 //======================= SCOPE/CFLOW =======================//
 
 // Start new 'Scope'
-sstatic force_inline void startscope(Function* F, Scope* S, Byte isloop, Byte isswitch)
+static force_inline void startscope(Function* F, Scope* S, Byte isloop, Byte isswitch)
 {
     if(unlikely((UInt)F->S->depth >= BYTECODE_MAX)) SCOPE_LIMIT_ERR(F, BYTECODE_MAX);
     S->localc   = F->locals.len;
@@ -708,7 +710,7 @@ sstatic force_inline void startscope(Function* F, Scope* S, Byte isloop, Byte is
 }
 
 // End scope and pop locals and/or close captured locals
-sstatic void endscope(Function* F)
+static void endscope(Function* F)
 {
 #define LOCAL_IS_CAPTURED(local) (LFLAG_CHECK((local), VCAPTURED_BIT))
 
@@ -743,7 +745,7 @@ sstatic void endscope(Function* F)
 }
 
 
-sstatic void ControlFlow_init(VM* vm, ControlFlow* cflow)
+static void ControlFlow_init(VM* vm, ControlFlow* cflow)
 {
     cflow->innerlstart = -1;
     cflow->innerldepth = 0;
@@ -751,7 +753,7 @@ sstatic void ControlFlow_init(VM* vm, ControlFlow* cflow)
     Array_Array_Int_init(&cflow->breaks, vm);
 }
 
-sstatic void ControlFlow_free(ControlFlow* context)
+static void ControlFlow_free(ControlFlow* context)
 {
     Array_Array_Int_free(&context->breaks, NULL);
     context->innerlstart = -1;
@@ -768,7 +770,7 @@ sstatic void ControlFlow_free(ControlFlow* context)
 
 /*========================== FUNCTION STATE =========================*/
 
-sstatic void F_init(
+static void F_init(
     Function*    F,
     Scope*       globscope,
     Class*       cclass,
@@ -864,7 +866,7 @@ void mark_function_roots(VM* vm)
 /*========================== PARSING =========================*/
 
 // Advance to the next token
-sstatic void advance(Function* F)
+static void advance(Function* F)
 {
     PREVT(F) = CURRT(F);
     while(true) {
@@ -875,7 +877,7 @@ sstatic void advance(Function* F)
 }
 
 // Advance and return true if 'type' matches the current token type
-sstatic force_inline bool match(Function* F, TokenType type)
+static force_inline bool match(Function* F, TokenType type)
 {
     if(CURRT(F).type != type) return false;
     advance(F);
@@ -883,7 +885,7 @@ sstatic force_inline bool match(Function* F, TokenType type)
 }
 
 // Sync lexer to the next statement
-sstatic void sync(Function* F)
+static void sync(Function* F)
 {
     F->lexer->panic = false;
     while(CURRT(F).type != TOK_EOF) {
@@ -917,7 +919,7 @@ sstatic void sync(Function* F)
     if(!cond) error(F, err);
 
 // Invoke compile-time error if 'type' does not match the current token type
-sstatic force_inline void expect(Function* F, TokenType type, const char* err)
+static force_inline void expect(Function* F, TokenType type, const char* err)
 {
     if(CURRT(F).type == type) {
         advance(F);
@@ -927,7 +929,7 @@ sstatic force_inline void expect(Function* F, TokenType type, const char* err)
 }
 
 // End compilation of the function and emit return instruction
-sstatic force_inline OFunction* compile_end(Function* F)
+static force_inline OFunction* compile_end(Function* F)
 {
     coderet(F, false, F->fn->gotret);
 #ifdef DEBUG_PRINT_CODE
@@ -961,7 +963,7 @@ OClosure* compile(VM* vm, const char* source, Value name)
 }
 
 // Create new local variable
-sstatic void local_new(Function* F, Token name)
+static void local_new(Function* F, Token name)
 {
     if(unlikely((Int)F->locals.len >= INDEX_MAX)) {
         LOCAL_LIMIT_ERR(F, INDEX_MAX);
@@ -971,7 +973,7 @@ sstatic void local_new(Function* F, Token name)
 }
 
 // Make local variable but check for redefinitions in local scope
-sstatic void make_local(Function* F, Token* name)
+static void make_local(Function* F, Token* name)
 {
     for(Int i = F->locals.len - 1; i >= 0; i--) {
         Local* local = Array_Local_index(&F->locals, i);
@@ -982,35 +984,35 @@ sstatic void make_local(Function* F, Token* name)
 }
 
 // Patch jump instruction
-sstatic force_inline void patchjmp(Function* F, Int jmp_offset)
+static force_inline void patchjmp(Function* F, Int jmp_offset)
 {
     Int offset = codeoffset(F) - jmp_offset - 3;
     if(unlikely(offset >= BYTECODE_MAX)) JUMP_LIMIT_ERR(F, BYTECODE_MAX);
     PUT_BYTES3(&CHUNK(F)->code.data[jmp_offset], offset);
 }
 
-sstatic force_inline void startbreaklist(Function* F)
+static force_inline void startbreaklist(Function* F)
 {
     Array_Int patches;
     Array_Int_init(&patches, F->vm);
     Array_Array_Int_push(&F->cflow.breaks, patches);
 }
 
-sstatic force_inline void patchbreaklist(Function* F)
+static force_inline void patchbreaklist(Function* F)
 {
     Array_Int* patches = Array_Array_Int_last(&F->cflow.breaks);
     for(Int i = 0; i < (Int)patches->len; i++)
         patchjmp(F, patches->data[i]);
 }
 
-sstatic force_inline void endbreaklist(Function* F)
+static force_inline void endbreaklist(Function* F)
 {
     Array_Int last = Array_Array_Int_pop(&F->cflow.breaks);
     Array_Int_free(&last, NULL);
 }
 
 
-sstatic force_inline UInt make_constant(Function* F, Value constant)
+static force_inline UInt make_constant(Function* F, Value constant)
 {
     if(unlikely((Int)CHUNK(F)->constants.len > INDEX_MAX))
         CONSTANT_LIMIT_ERR(F, F->fn->name->storage, INDEX_MAX);
@@ -1053,7 +1055,7 @@ typedef enum {
 #define FOLDABLE(opr) ((opr) <= OPR_POW)
 
 // Fetch unary operation
-sstatic UnaryOpr getunaryopr(TokenType type)
+static UnaryOpr getunaryopr(TokenType type)
 {
     switch(type) {
         case TOK_BANG:
@@ -1066,7 +1068,7 @@ sstatic UnaryOpr getunaryopr(TokenType type)
 }
 
 // Fetch binary operation
-sstatic BinaryOpr getbinaryopr(TokenType type)
+static BinaryOpr getbinaryopr(TokenType type)
 {
     switch(type) {
         case TOK_PLUS:
@@ -1103,7 +1105,7 @@ sstatic BinaryOpr getbinaryopr(TokenType type)
 }
 
 // Fetch unary instruction
-sstatic OpCode unopr2op(UnaryOpr opr)
+static OpCode unopr2op(UnaryOpr opr)
 {
     switch(opr) {
         case OPR_NEGATE:
@@ -1116,7 +1118,7 @@ sstatic OpCode unopr2op(UnaryOpr opr)
 }
 
 // Fetch binary instruction
-sstatic OpCode binopr2op(BinaryOpr opr)
+static OpCode binopr2op(BinaryOpr opr)
 {
     switch(opr) {
         case OPR_ADD:
@@ -1150,7 +1152,7 @@ sstatic OpCode binopr2op(BinaryOpr opr)
     }
 }
 
-sstatic const struct {
+static const struct {
     Byte left; // Left priority
     Byte right; // Right priority
 } priority[] = {
@@ -1182,13 +1184,13 @@ sstatic const struct {
 /*========================== STATEMENT/DECLARATION =========================*/
 
 // vararg ::= '...'
-sstatic force_inline UInt vararg(Function* F)
+static force_inline UInt vararg(Function* F)
 {
     if(!F->fn->isva) VARARG_ERR(F);
     return CODEOP(F, OP_VALIST, 1);
 }
 
-sstatic void setmulret(Function* F, Exp* E)
+static void setmulret(Function* F, Exp* E)
 {
     switch(E->type) {
         case EXP_INVOKE_INDEX:
@@ -1205,7 +1207,7 @@ sstatic void setmulret(Function* F, Exp* E)
 }
 
 // Adjust assign expressions in case last expression is a function call
-sstatic void adjustassign(Function* F, Exp* E, Int left, Int right)
+static void adjustassign(Function* F, Exp* E, Int left, Int right)
 {
     Int leftover = left - right; // Safety: left < right is a compile error
     switch(E->type) {
@@ -1225,7 +1227,7 @@ sstatic void adjustassign(Function* F, Exp* E, Int left, Int right)
 
 // explist ::= expr
 //           | expr ',' explist
-sstatic Int explist(Function* F, Int limit, Exp* E)
+static Int explist(Function* F, Int limit, Exp* E)
 {
     Int left = limit;
     Int got  = 0;
@@ -1238,7 +1240,7 @@ sstatic Int explist(Function* F, Int limit, Exp* E)
     return got;
 }
 
-sstatic Int name(Function* F, const char* errmsg)
+static Int name(Function* F, const char* errmsg)
 {
     expect(F, TOK_IDENTIFIER, errmsg);
     Token* name = &PREVT(F);
@@ -1249,7 +1251,7 @@ sstatic Int name(Function* F, const char* errmsg)
     return MAKE_GLOBAL(F, name);
 }
 
-sstatic Local* upvalvar(Function* F, Int idx)
+static Local* upvalvar(Function* F, Int idx)
 {
     Upvalue* upval = &F->upvalues->data[idx];
     if(!upval->local) upvalvar(F->enclosing, idx);
@@ -1257,7 +1259,7 @@ sstatic Local* upvalvar(Function* F, Int idx)
 }
 
 // helper [exprstm]
-sstatic void codeset(Function* F, Exp* E)
+static void codeset(Function* F, Exp* E)
 {
     switch(E->type) {
         case EXP_UPVAL: {
@@ -1286,7 +1288,7 @@ sstatic void codeset(Function* F, Exp* E)
 
 ARRAY_NEW(Array_Exp, Exp);
 // helper [exprstm]
-sstatic void codesetall(Function* F, Array_Exp* Earr)
+static void codesetall(Function* F, Array_Exp* Earr)
 {
     for(Int i = 0; i < (Int)Earr->len; i++) {
         Exp* E = Array_Exp_index(Earr, i);
@@ -1296,7 +1298,7 @@ sstatic void codesetall(Function* F, Array_Exp* Earr)
 
 /// exprstm ::= functioncall
 ///           | varlist '=' explist
-sstatic void exprstm(Function* F, bool lastclause)
+static void exprstm(Function* F, bool lastclause)
 {
     Exp E;
     E.ins.set = false;
@@ -1334,14 +1336,14 @@ sstatic void exprstm(Function* F, bool lastclause)
     if(!lastclause) expect(F, TOK_SEMICOLON, "Expect ';'.");
 }
 
-sstatic void block(Function* F)
+static void block(Function* F)
 {
     while(!check(F, TOK_RBRACE) && !check(F, TOK_EOF))
         dec(F);
     expect(F, TOK_RBRACE, "Expect '}' after block.");
 }
 
-sstatic force_inline void blockstm(Function* F)
+static force_inline void blockstm(Function* F)
 {
     Scope S;
     startscope(F, &S, 0, 0);
@@ -1352,7 +1354,7 @@ sstatic force_inline void blockstm(Function* F)
 // arglist ::= name
 //           | '...'
 //           | name ',' arglist
-sstatic void arglist(Function* F)
+static void arglist(Function* F)
 {
     do {
         if(match(F, TOK_DOT_DOT_DOT)) {
@@ -1367,7 +1369,7 @@ sstatic void arglist(Function* F)
 
 // namelist ::= name
 //            | name ',' namelist
-sstatic UInt namelist(Function* F, Array_Int* nameidx)
+static UInt namelist(Function* F, Array_Int* nameidx)
 {
     Int names = 0;
     do {
@@ -1379,7 +1381,7 @@ sstatic UInt namelist(Function* F, Array_Int* nameidx)
     return names;
 }
 
-sstatic void codeassign(Function* F, Int names, Array_Int* nameidx)
+static void codeassign(Function* F, Int names, Array_Int* nameidx)
 {
     if(F->S->depth > 0) {
         for(Int i = 0; i < names; i++)
@@ -1402,7 +1404,7 @@ sstatic void codeassign(Function* F, Int names, Array_Int* nameidx)
 //          | 'fixed' 'var' namelist ';'
 //          | 'fixed' 'var' name '=' explist ';'
 //          | 'fixed' 'var' namelist '=' explist ';'
-sstatic void vardec(Function* F)
+static void vardec(Function* F)
 {
     if(match(F, TOK_FIXED)) {
         if(FIS(F, FFIXED)) error(F, "Expect variable name.");
@@ -1422,7 +1424,7 @@ sstatic void vardec(Function* F)
 }
 
 // fvardec ::= 'fixed' vardec
-sstatic force_inline void fvardec(Function* F)
+static force_inline void fvardec(Function* F)
 {
     FSET(F, FFIXED);
     advance(F);
@@ -1430,7 +1432,7 @@ sstatic force_inline void fvardec(Function* F)
 }
 
 // Create and parse a new Function
-sstatic void fn(Function* F, FunctionType type)
+static void fn(Function* F, FunctionType type)
 {
     Function* Fnew = GC_MALLOC(F->vm, sizeof(Function));
     Scope     globscope, S;
@@ -1455,7 +1457,7 @@ sstatic void fn(Function* F, FunctionType type)
 }
 
 // fndec ::= 'fn' name '(' arglist ')' '{' block '}'
-sstatic void fndec(Function* F)
+static void fndec(Function* F)
 {
     UInt idx = name(F, "Expect function name.");
     if(F->S->depth > 0) INIT_LOCAL(F, 0); // initialize to allow recursion
@@ -1464,7 +1466,7 @@ sstatic void fndec(Function* F)
     if(F->S->depth == 0) INIT_GLOBAL(F, idx, 0, &_);
 }
 
-sstatic void method(Function* F)
+static void method(Function* F)
 {
     expect(F, TOK_FN, "Expect 'fn'.");
     expect(F, TOK_IDENTIFIER, "Expect method name.");
@@ -1477,7 +1479,7 @@ sstatic void method(Function* F)
     CODEOP(F, OP_METHOD, idx);
 }
 
-sstatic void classdec(Function* F)
+static void classdec(Function* F)
 {
     expect(F, TOK_IDENTIFIER, "Expect class name.");
     Token class_name = PREVT(F);
@@ -1518,7 +1520,7 @@ sstatic void classdec(Function* F)
 
 /// call ::= '(' ')'
 ///        | '(' explist ')'
-sstatic void call(Function* F, Exp* E)
+static void call(Function* F, Exp* E)
 {
     CODE(F, OP_CALLSTART);
     if(!check(F, TOK_RPAREN)) explist(F, BYTECODE_MAX, E);
@@ -1527,14 +1529,14 @@ sstatic void call(Function* F, Exp* E)
     if(ethasmulret(E->type)) setmulret(F, E);
 }
 
-sstatic void codecall(Function* F, Exp* E)
+static void codecall(Function* F, Exp* E)
 {
     call(F, E);
     E->type     = EXP_CALL;
     E->ins.code = CODEOP(F, OP_CALL, 1);
 }
 
-sstatic void codeinvoke(Function* F, Exp* E, Int idx)
+static void codeinvoke(Function* F, Exp* E, Int idx)
 {
     call(F, E);
     E->type     = EXP_INVOKE;
@@ -1542,7 +1544,7 @@ sstatic void codeinvoke(Function* F, Exp* E, Int idx)
     CODEL(F, 1); // retcnt
 }
 
-sstatic void dec(Function* F)
+static void dec(Function* F)
 {
     F->vflags = 0;
     if(match(F, TOK_VAR)) vardec(F);
@@ -1570,7 +1572,7 @@ typedef struct {
     Array_Value constants; // all case constant expressions
 } SwitchState;
 
-sstatic force_inline void SwitchState_init(Function* F, SwitchState* state)
+static force_inline void SwitchState_init(Function* F, SwitchState* state)
 {
     state->patch     = -1;
     state->casestate = CS_NONE;
@@ -1587,7 +1589,7 @@ sstatic force_inline void SwitchState_init(Function* F, SwitchState* state)
  * Updates 'switch' constants and checks if the constant
  * already exists, but only if 'e' is constant expression.
  */
-sstatic force_inline void switchconstants(Function* F, SwitchState* state, Exp* E)
+static force_inline void switchconstants(Function* F, SwitchState* state, Exp* E)
 {
     if(!etisconst(E->type)) return;
     switch(E->type) {
@@ -1619,7 +1621,7 @@ sstatic force_inline void switchconstants(Function* F, SwitchState* state, Exp* 
     }
 }
 
-sstatic void switchstm(Function* F)
+static void switchstm(Function* F)
 {
     Context     C;
     Scope       S;
@@ -1693,7 +1695,7 @@ sstatic void switchstm(Function* F)
     F->S->isswitch       = inswitch;
 }
 
-sstatic void ifstm(Function* F)
+static void ifstm(Function* F)
 {
     Exp     E;
     Context C;
@@ -1725,7 +1727,7 @@ sstatic void ifstm(Function* F)
     }
 }
 
-sstatic void startloop(Function* F, Int* lstart, Int* ldepth)
+static void startloop(Function* F, Int* lstart, Int* ldepth)
 {
     *lstart                = (F)->cflow.innerlstart;
     *ldepth                = (F)->cflow.innerldepth;
@@ -1733,13 +1735,13 @@ sstatic void startloop(Function* F, Int* lstart, Int* ldepth)
     (F)->cflow.innerldepth = F->S->depth;
 }
 
-sstatic void endloop(Function* F, Int lstart, Int ldepth)
+static void endloop(Function* F, Int lstart, Int ldepth)
 {
     (F)->cflow.innerlstart = lstart;
     (F)->cflow.innerldepth = ldepth;
 }
 
-sstatic void whilestm(Function* F)
+static void whilestm(Function* F)
 {
     Scope   S;
     Context C;
@@ -1778,7 +1780,7 @@ sstatic void whilestm(Function* F)
     endbreaklist(F);
 }
 
-sstatic void forstm(Function* F)
+static void forstm(Function* F)
 {
     Scope   S;
     Context C;
@@ -1834,7 +1836,7 @@ sstatic void forstm(Function* F)
     endbreaklist(F);
 }
 
-sstatic Int foreachvars(Function* F)
+static Int foreachvars(Function* F)
 {
     Int vars = 0;
     do {
@@ -1847,14 +1849,14 @@ sstatic Int foreachvars(Function* F)
     return vars;
 }
 
-sstatic void newlocalliteral(Function* F, const char* name)
+static void newlocalliteral(Function* F, const char* name)
 {
     Token syntok = syntoken(name);
     local_new(F, syntok);
     INIT_LOCAL(F, 0);
 }
 
-sstatic void foreachstm(Function* F)
+static void foreachstm(Function* F)
 {
     Scope S;
     Int   lstart, ldepth, vars, expc, endjmp;
@@ -1887,7 +1889,7 @@ sstatic void foreachstm(Function* F)
     endloop(F, lstart, ldepth);
 }
 
-sstatic void loopstm(Function* F)
+static void loopstm(Function* F)
 {
     Scope S;
     Int   lstart, ldepth;
@@ -1905,7 +1907,7 @@ sstatic void loopstm(Function* F)
     endloop(F, lstart, ldepth);
 }
 
-sstatic force_inline Scope* loopscope(Function* F)
+static force_inline Scope* loopscope(Function* F)
 {
     Scope* S = F->S;
     while(S != NULL) {
@@ -1917,7 +1919,7 @@ sstatic force_inline Scope* loopscope(Function* F)
 
 // Return count of switch statements until the first loop 'Scope'
 // or the top-level code counting from the current 'Scope' in the 'Function'.
-sstatic force_inline Int switchcnt(Function* F)
+static force_inline Int switchcnt(Function* F)
 {
     Scope* S     = F->S;
     Int    count = 0;
@@ -1928,7 +1930,7 @@ sstatic force_inline Int switchcnt(Function* F)
     return count;
 }
 
-sstatic void continuestm(Function* F)
+static void continuestm(Function* F)
 {
     expect(F, TOK_SEMICOLON, "Expect ';' after 'continue'.");
     if(F->cflow.innerlstart == -1) CONTINUE_ERR(F);
@@ -1941,7 +1943,7 @@ sstatic void continuestm(Function* F)
     }
 }
 
-sstatic void breakstm(Function* F)
+static void breakstm(Function* F)
 {
     expect(F, TOK_SEMICOLON, "Expect ';' after 'break'.");
     Array_Array_Int* arr   = &F->cflow.breaks;
@@ -1966,7 +1968,7 @@ sstatic void breakstm(Function* F)
 
 /// return ::= 'return' ';'
 ///          | 'return' explist ';'
-sstatic void returnstm(Function* F)
+static void returnstm(Function* F)
 {
     /*
      * @TODO:
@@ -1998,7 +2000,7 @@ sstatic void returnstm(Function* F)
 
 /// dot ::= '.' name
 ///       | '.' name call
-sstatic void dot(Function* F, Exp* E)
+static void dot(Function* F, Exp* E)
 {
     expect(F, TOK_IDENTIFIER, "Expect property name after '.'.");
     Value identifier = tokintostr(F->vm, &PREVT(F));
@@ -2011,7 +2013,7 @@ sstatic void dot(Function* F, Exp* E)
     }
 }
 
-sstatic void stm(Function* F)
+static void stm(Function* F)
 {
     if(match(F, TOK_WHILE)) whilestm(F);
     else if(match(F, TOK_FOR)) forstm(F);
@@ -2030,7 +2032,7 @@ sstatic void stm(Function* F)
 
 // indexed ::= '[' expr ']'
 //           | '[' expr ']' call
-sstatic force_inline void indexed(Function* F, Exp* E)
+static force_inline void indexed(Function* F, Exp* E)
 {
     Exp E2;
     E2.ins.set = false;
@@ -2057,7 +2059,7 @@ sstatic force_inline void indexed(Function* F, Exp* E)
 
 /*========================== EXPRESSION =========================*/
 
-sstatic void _self(Function* F, Exp* E)
+static void _self(Function* F, Exp* E)
 {
     if(F->cclass == NULL) {
         SELF_ERR(F);
@@ -2067,7 +2069,7 @@ sstatic void _self(Function* F, Exp* E)
     codevarprev(F, E);
 }
 
-sstatic void _super(Function* F, Exp* E)
+static void _super(Function* F, Exp* E)
 {
     if(!F->cclass) {
         SUPER_ERR(F);
@@ -2102,7 +2104,7 @@ sstatic void _super(Function* F, Exp* E)
 // primary_exp ::= '(' exp ')'
 //               | name
 //               | 'self'
-sstatic void primaryexp(Function* F, Exp* E)
+static void primaryexp(Function* F, Exp* E)
 {
     switch(CURRT(F).type) {
         case TOK_LPAREN:
@@ -2128,7 +2130,7 @@ sstatic void primaryexp(Function* F, Exp* E)
 
 // suffixedexp ::= primaryexp
 //               | primaryexp [dot|call|indexed...]
-sstatic void suffixedexp(Function* F, Exp* E)
+static void suffixedexp(Function* F, Exp* E)
 {
     primaryexp(F, E);
     while(true) {
@@ -2159,7 +2161,7 @@ sstatic void suffixedexp(Function* F, Exp* E)
 //             | 'false'
 //             | '...'
 //             | suffixedexp
-sstatic void simpleexp(Function* F, Exp* E)
+static void simpleexp(Function* F, Exp* E)
 {
     UInt    constidx;
     ExpType type;
@@ -2197,7 +2199,7 @@ sstatic void simpleexp(Function* F, Exp* E)
 
 // Try folding unary operation.
 // Example: OP_CONST (1), OP_NEG => OP_CONST (-1)
-sstatic bool foldunary(Function* F, UnaryOpr opr, Exp* E)
+static bool foldunary(Function* F, UnaryOpr opr, Exp* E)
 {
     if(E->type == EXP_NUMBER && opr == OPR_NEGATE) {
         double val = AS_NUMBER(*CONSTANT(F, E));
@@ -2209,7 +2211,7 @@ sstatic bool foldunary(Function* F, UnaryOpr opr, Exp* E)
 }
 
 // Fold constant number expressions
-sstatic void
+static void
 calcnum(Function* F, BinaryOpr opr, const Exp* E1, const Exp* E2, Value* result)
 {
 #define BINOP(op, n1, n2) NUMBER_VAL((n1)op(n2))
@@ -2243,7 +2245,7 @@ calcnum(Function* F, BinaryOpr opr, const Exp* E1, const Exp* E2, Value* result)
 }
 
 // Check if the binary operation is valid
-sstatic bool validop(Function* F, BinaryOpr opr, const Exp* E1, const Exp* E2)
+static bool validop(Function* F, BinaryOpr opr, const Exp* E1, const Exp* E2)
 {
     double n1 = AS_NUMBER(*CONSTANT(F, E1));
     double n2 = AS_NUMBER(*CONSTANT(F, E2));
@@ -2252,7 +2254,7 @@ sstatic bool validop(Function* F, BinaryOpr opr, const Exp* E1, const Exp* E2)
 
 // Try folding binary operation
 // Example: OP_CONST (1), OP_CONST (2), OP_ADD => OP_CONST (3)
-sstatic bool foldbinary(Function* F, BinaryOpr opr, Exp* E1, const Exp* E2)
+static bool foldbinary(Function* F, BinaryOpr opr, Exp* E1, const Exp* E2)
 {
     if(E1->type != E2->type || E1->type != EXP_NUMBER || !validop(F, opr, E1, E2))
         return false;
@@ -2266,7 +2268,7 @@ sstatic bool foldbinary(Function* F, BinaryOpr opr, Exp* E1, const Exp* E2)
 }
 
 // Emit optimized 'and' instruction
-sstatic void codeand(Function* F, Exp* E)
+static void codeand(Function* F, Exp* E)
 {
     switch(E->type) {
         case EXP_TRUE:
@@ -2289,7 +2291,7 @@ sstatic void codeand(Function* F, Exp* E)
 }
 
 // Emit optimized 'or' instruction
-sstatic void codeor(Function* F, Exp* E)
+static void codeor(Function* F, Exp* E)
 {
     switch(E->type) {
         case EXP_NIL:
@@ -2314,7 +2316,7 @@ sstatic void codeor(Function* F, Exp* E)
 }
 
 // Emit binary instruction
-sstatic void postfix(Function* F, BinaryOpr opr, Exp* E1, Exp* E2)
+static void postfix(Function* F, BinaryOpr opr, Exp* E1, Exp* E2)
 {
     if(FOLDABLE(opr) && foldbinary(F, opr, E1, E2)) return;
     switch(opr) {
@@ -2357,7 +2359,7 @@ sstatic void postfix(Function* F, BinaryOpr opr, Exp* E1, Exp* E2)
 
 // Intermediate step that tries to optimize/process 'and' and 'or'
 // instructions before the second expression gets parsed.
-sstatic void shortcircuit(Function* F, BinaryOpr opr, Exp* E)
+static void shortcircuit(Function* F, BinaryOpr opr, Exp* E)
 {
     switch(opr) {
         case OPR_AND:
@@ -2372,7 +2374,7 @@ sstatic void shortcircuit(Function* F, BinaryOpr opr, Exp* E)
 }
 
 // Emit prefix instruction (only if folding didn't work)
-sstatic force_inline void prefix(Function* F, UnaryOpr opr, Exp* E)
+static force_inline void prefix(Function* F, UnaryOpr opr, Exp* E)
 {
     if(!foldunary(F, opr, E)) CODE(F, unopr2op(opr));
 }
@@ -2394,7 +2396,7 @@ sstatic force_inline void prefix(Function* F, UnaryOpr opr, Exp* E)
 //           | simpleexp '>=' subexpr
 //           | simpleexp 'and' subexpr
 //           | simpleexp 'or' subexpr
-sstatic BinaryOpr subexp(Function* F, Exp* E1, Int limit)
+static BinaryOpr subexp(Function* F, Exp* E1, Int limit)
 {
     UnaryOpr unaryop = getunaryopr(CURRT(F).type);
     if(unaryop != OPR_NOUNARYOPR) {
@@ -2416,7 +2418,7 @@ sstatic BinaryOpr subexp(Function* F, Exp* E1, Int limit)
 }
 
 // expr ::= subexpr
-sstatic void expr(Function* F, Exp* E)
+static void expr(Function* F, Exp* E)
 {
     subexp(F, E, 0);
 }

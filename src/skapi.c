@@ -1,6 +1,7 @@
 #include "object.h"
 #include "skconf.h"
 #include "skooma.h"
+#include "value.h"
 #include "vmachine.h"
 
 
@@ -18,23 +19,51 @@ force_inline void sk_destroy(VM** vmp)
 {
     sk_lock(*vmp);
     VM_free(vmp);
-    sk_lock(*vmp)
 }
 
 
 
 
-/*
- * Push values on the stack.
- */
+#define stklast(vm) cast_intptr(vm->stack + VM_STACK_MAX - 1)
 
-#define vmstklast(vm) (vm->stack + VM_STACK_MAX - 1)
 #define incsp(vm)                                                                        \
     do {                                                                                 \
         (vm)->sp++;                                                                      \
         sk_checkapi(vm, vm->sp - vm->stack <= VM_STACK_MAX, "stack overflow.");          \
     } while(0)
 
+#define decsp(vm)                                                                        \
+    do {                                                                                 \
+        (vm)->sp--;                                                                      \
+        sk_checkapi(vm, vm->stack <= (vm)->sp, "stack underflow.");                      \
+    } while(0)
+
+#define sk_apiensure(vm, n)                                                              \
+    do {                                                                                 \
+        (vm)->sp += n;                                                                   \
+        sk_checkapi(vm, (vm)->stack <= (vm)->sp, "stack overflow.");                     \
+    } while(0)
+
+
+/*
+ * Get stack value at 'idx'.
+ */
+static force_inline Value* idx2val(const VM* vm, int idx)
+{
+    Value* fn = vm->cinfo.fnloc;
+    if(idx >= 0) {
+        sk_checkapi(vm, idx < vm->sp - 1 - fn, "index too big.");
+        return (fn + 1 + idx);
+    } else { // idx is negative
+        sk_checkapi(vm, -idx <= (vm->sp - fn), "Invalid index.");
+        return (vm->sp + idx);
+    }
+}
+
+
+/*
+ * Push values on the stack.
+ */
 SK_API void sk_pushnil(VM* vm)
 {
     sk_lock(vm);
@@ -59,10 +88,10 @@ SK_API void sk_pushstring(VM* vm, const char* str, size_t len)
     sk_unlock(vm);
 }
 
-static size_t sk_strlen(const char* str)
+static force_inline size_t skstrlen(const char* str)
 {
-    size_t                  len = 0;
-    register unsigned char* c   = (unsigned char*)str;
+    size_t         len = 0;
+    unsigned char* c   = (unsigned char*)str;
     while(*c++)
         len++;
     return len;
@@ -72,7 +101,7 @@ SK_API void sk_pushcstring(VM* vm, const char* str)
 {
     sk_lock(vm);
     if(str == NULL) *vm->sp = NIL_VAL;
-    else *vm->sp = OBJ_VAL(OString_from(vm, str, sk_strlen(str)));
+    else *vm->sp = OBJ_VAL(OString_from(vm, str, skstrlen(str)));
     incsp(vm);
     sk_unlock(vm);
 }
@@ -85,17 +114,63 @@ SK_API void sk_pushbool(VM* vm, int boolean)
     sk_unlock(vm);
 }
 
+/*
+ * Shifts values on stack either to the left or right (once).
+ * 0 direction is a left shift, anything else is a right shift.
+ */
+static force_inline void stackshift(VM* vm, Value* val, int direction)
+{
+#define LSHFT 0
 
+    uintptr_t shift = vm->sp - (val + 1);
+    if(direction == LSHFT && shift > 0) memcpy(val, val + 1, shift);
+    else if(shift > 0) memcpy(val + 1, val, shift);
+
+#undef LSHFT
+}
+
+
+static force_inline void popatidx(VM* vm, int idx)
+{
+    Value* val = idx2val(vm, idx);
+    stackshift(vm, val, 0);
+    decsp(vm);
+}
+
+static force_inline void pusho(VM* vm, O* obj)
+{
+    *vm->sp = OBJ_VAL(obj);
+    incsp(vm);
+}
+
+#define pushostring(vm, string)   pusho(vm, (O*)(string))
+#define pushoclosure(vm, closure) pusho(vm, (O*)(closure))
+
+
+static force_inline int getmethod(VM* vm, OClass* class, const char* method)
+{
+    Value    m;
+    OString* name = OString_from(vm, method, skstrlen(method));
+    pushostring(vm, name);
+    if(HashTable_get(&class->methods, OBJ_VAL(name), &m)) {
+        decsp(vm); // pop method string
+        pushoclosure(vm, AS_CLOSURE(m));
+        return 1;
+    }
+    return 0;
+}
 
 /*
- * Ensure the stack has enough space.
+ * Push class method of an instance at idx on top of the stack.
+ * Return 1 if class instance has a method with 'name' otherwise 0.
  */
-
-SK_API int sk_ensurestack(VM* vm, int n)
+SK_API int sk_hasmethod(VM* vm, int idx, const char* method)
 {
+    int res;
     sk_lock(vm);
-    sk_checkapi(vm, n >= 0, "negative 'n'.");
-    int res = (((vm->sp - vm->stack) + n) < VM_STACK_MAX);
+    Value val = *idx2val(vm, idx);
+    sk_checkapi(vm, IS_INSTANCE(val), "expected instance.");
+    res = getmethod(vm, AS_INSTANCE(val)->oclass, method);
     sk_unlock(vm);
     return res;
 }
@@ -103,15 +178,18 @@ SK_API int sk_ensurestack(VM* vm, int n)
 
 
 
-static Value* sk_idx2val(const VM* vm, int idx)
+
+
+/*
+ * Ensure the stack has enough space.
+ */
+SK_API int sk_ensurestack(VM* vm, int n)
 {
-    Value* val = NULL;
-    if(idx < 0) {
-        sk_checkapi(vm, idx > -(VM_STACK_MAX), "Invalid index.");
-    } else {
-    }
-    return val;
+    sk_checkapi(vm, n >= 0, "negative 'n'.");
+    return (((vm->sp - vm->stack) + n) < VM_STACK_MAX);
 }
+
+
 
 
 
@@ -122,16 +200,16 @@ static Value* sk_idx2val(const VM* vm, int idx)
 
 /* Create type bitmask from the value.
  * First least significant set bit acts as a type tag.
- * bit 0 -> number
- * bit 1 -> string
- * bit 2 -> callable
- * bit 3 -> bool
- * bit 4 -> nil
- * bit 5 -> instance
- * bit 6 -> class */
+ * bit 0 is set -> number
+ * bit 1 is set -> string
+ * bit 2 is set -> callable
+ * bit 3 is set -> bool
+ * bit 4 is set -> nil
+ * bit 5 is set -> instance
+ * bit 6 is set -> class */
 #define val2tbmask(value)                                                                \
     cast_uint(                                                                           \
-        (IS_NUMBER(value) * 1) | (IS_STRING(value) * 2) |                                \
+        0 | (IS_NUMBER(value) * 1) | (IS_STRING(value) * 2) |                            \
         ((IS_FUNCTION(value) | IS_BOUND_METHOD(value) | IS_CLOSURE(value) |              \
           IS_NATIVE(value)) *                                                            \
          4) |                                                                            \
@@ -141,132 +219,117 @@ static Value* sk_idx2val(const VM* vm, int idx)
 
 static int sk_val2type(const VM* vm, Value* value)
 {
-    int type = SK_TNONE;
 #if defined(S_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
-    static const void* jmptable[] = {
-        &&num,
-        &&str,
-        &&fn,
-        &&bl,
-        &&nil,
-        &&ins,
-        &&cls,
+    static const int typetable[] = {
+        SK_TNUMBER,
+        SK_TSTRING,
+        SK_TFUNCTION,
+        SK_TBOOL,
+        SK_TNIL,
+        SK_TINSTANCE,
+        SK_TCLASS,
     };
     // https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html#index-_005f_005fbuiltin_005fctz
     unsigned char bitidx = __builtin_ctz(val2tbmask(*value));
-    goto*         jmptable[bitidx];
-num:
-    type = SK_TNUMBER;
-str:
-    type = SK_TSTRING;
-fn:
-    type = SK_TFUNCTION;
-bl:
-    type = SK_TBOOL;
-nil:
-    type = SK_TNIL;
-ins:
-    type = SK_TINSTANCE;
-cls:
-    type = SK_TCLASS;
+    return typetable[bitidx];
 #else
     if(IS_NUMBER(value)) return SK_TNUMBER;
-    else if(IS_STRING(value)) type = SK_TSTRING;
+    else if(IS_STRING(value)) return SK_TSTRING;
     else if(
         IS_FUNCTION(value) || IS_BOUND_METHOD(value) || IS_CLOSURE(value) ||
         IS_NATIVE(value))
-        type = SK_TFUNCTION;
-    else if(IS_BOOL(value)) type = SK_TBOOL;
-    else if(IS_NIL(value)) type = SK_TNIL;
-    else if(IS_INSTANCE(value)) type = SK_TINSTANCE;
-    else if(IS_CLASS(value)) type = SK_TCLASS;
+        return SK_TFUNCTION;
+    else if(IS_BOOL(value)) return SK_TBOOL;
+    else if(IS_NIL(value)) return SK_TNIL;
+    else if(IS_INSTANCE(value)) return SK_TINSTANCE;
+    else if(IS_CLASS(value)) return SK_TCLASS;
 #endif
-    sk_checkapi(vm, type != SK_TNONE, "Invalid type.");
-    return type;
+    unreachable;
 }
 
 SK_API int sk_typeof(const VM* vm, int idx)
 {
-    int    type;
-    Value* value;
-    sk_lock(vm);
-    value = sk_idx2val(vm, idx);
-    type  = sk_val2type(vm, value);
-    sk_unlock(vm);
-    return type;
+    Value* value = idx2val(vm, idx);
+    return sk_val2type(vm, value);
 }
+
+SK_API int sk_isnil(VM* vm, int idx)
+{
+    return IS_NIL(*idx2val(vm, idx));
+}
+
+SK_API int sk_isnumber(VM* vm, int idx)
+{
+    return IS_NUMBER(*idx2val(vm, idx));
+}
+
+SK_API int sk_isstring(VM* vm, int idx)
+{
+    return IS_STRING(*idx2val(vm, idx));
+}
+
+SK_API int sk_isbool(VM* vm, int idx)
+{
+    return IS_BOOL(*idx2val(vm, idx));
+}
+
+SK_API int sk_isclass(VM* vm, int idx)
+{
+    return IS_CLASS(*idx2val(vm, idx));
+}
+
+SK_API int sk_isinstance(VM* vm, int idx)
+{
+    return IS_INSTANCE(*idx2val(vm, idx));
+}
+
 
 
 
 /*
  * Get values from stack.
  */
-
-SK_API int sk_getbool(const VM* vm, int idx)
+SK_API int sk_getbool(const VM* vm, int idx, int* isbool)
 {
-    int    type = SK_TNONE;
-    int    bval;
-    Value* val;
-    sk_lock(vm);
-    val  = sk_idx2val(vm, idx);
-    type = sk_val2type(vm, val);
-    (type == SK_TBOOL) ? bval = AS_BOOL(*val) : 0;
-    sk_unlock(vm);
+    int   bval;
+    Value val = *idx2val(vm, idx);
+    int   is  = tobool(val, &bval);
+    if(isbool) *isbool = is;
     return bval;
 }
 
-SK_API double sk_getnumber(const VM* vm, int idx)
+SK_API double sk_getnumber(const VM* vm, int idx, int* isnum)
 {
-    int    type = SK_TNONE;
     double nval;
-    Value* val;
-    sk_lock(vm);
-    val  = sk_idx2val(vm, idx);
-    type = sk_val2type(vm, val);
-    (type == SK_TNUMBER) ? nval = AS_NUMBER(*val) : 0.0;
-    sk_unlock(vm);
+    Value  val = *idx2val(vm, idx);
+    int    is  = tonumber(val, &nval);
+    if(isnum) *isnum = is;
     return nval;
 }
 
 SK_API const char* sk_getstring(const VM* vm, int idx)
 {
-    int         type = SK_TNONE;
-    const char* sval = NULL;
-    Value*      val;
-    sk_lock(vm);
-    val  = sk_idx2val(vm, idx);
-    type = sk_val2type(vm, val);
-    (type == SK_TSTRING) ? sval = AS_CSTRING(*val) : 0;
-    sk_unlock(vm);
-    return sval;
+    Value val = *idx2val(vm, idx);
+    return IS_STRING(val) ? AS_CSTRING(val) : 0;
 }
-
 
 SK_API size_t sk_rawlen(const VM* vm, int idx)
 {
-#define stringlen(val) (AS_STRING(val)->len)
-#define classlen(val)  (AS_CLASS(val)->methods.len)
-    int    type = SK_TNONE;
     size_t len;
-    Value* val;
-    sk_lock(vm);
-    val  = sk_idx2val(vm, idx);
-    type = sk_val2type(vm, val);
+    Value* val  = idx2val(vm, idx);
+    int    type = sk_val2type(vm, val);
     switch(type) {
         case SK_TSTRING:
-            len = stringlen(*val);
+            len = AS_STRING(*val)->len;
             break;
         case SK_TCLASS:
-            len = classlen(*val);
+            len = AS_CLASS(*val)->methods.len;
             break;
         default:
             len = 0;
             break;
     }
-    sk_unlock(vm);
     return len;
-#undef stringlen
-#undef classlen
 }
 
 
@@ -279,30 +342,31 @@ SK_API int sk_gettop(const VM* vm)
 
 SK_API void sk_settop(VM* vm, int idx)
 {
-    Value*   fn;
+    Value *  fn, *val;
+    Value*   newtop;
     intptr_t diff;
     sk_lock(vm);
     fn = vm->cinfo.fnloc;
-    if(idx >= 0) { // index positive
-        sk_checkapi(vm, idx < (vmstklast(vm) - fn), "index too big.");
+    if(idx >= 0) {
+        sk_checkapi(vm, idx < ((Value*)stklast(vm) - fn), "index too big.");
         diff = ((fn + 1) + idx) - vm->sp;
         for(; diff > 0; diff--)
             *vm->sp++ = NIL_VAL;
     } else { // index negative
-        sk_checkapi(vm, -idx <= (vm->sp - fn), "index too small.");
+        sk_checkapi(vm, -idx <= (vm->sp - fn), "invalid index.");
         diff = idx + 1;
     }
-    vm->sp += diff;
+    newtop = vm->sp + diff;
+    if(diff < 0) closeupval(vm, newtop);
+    vm->sp = newtop;
     sk_unlock(vm);
 }
 
 
 SK_API void sk_push(VM* vm, int idx)
 {
-    Value* val;
     sk_lock(vm);
-    val     = sk_idx2val(vm, idx);
-    *vm->sp = *val;
+    *vm->sp = *idx2val(vm, idx);
     incsp(vm);
     sk_unlock(vm);
 }
@@ -310,9 +374,32 @@ SK_API void sk_push(VM* vm, int idx)
 
 SK_API void sk_remove(VM* vm, int idx)
 {
-    // @TODO: Implement
-    Value* val;
     sk_lock(vm);
-    val = sk_idx2val(vm, idx);
+    Value* val = idx2val(vm, idx);
+    stackshift(vm, val, 0);
+    closeupval(vm, vm->sp - 1);
+    decsp(vm);
+    sk_unlock(vm);
+}
+
+SK_API void sk_insert(VM* vm, int idx)
+{
+    sk_lock(vm);
+    Value* top = vm->sp - 1;
+    Value* val = idx2val(vm, idx);
+    stackshift(vm, val, 1);
+    *val = *top;
+    incsp(vm);
+    sk_unlock(vm);
+}
+
+SK_API void sk_replace(VM* vm, int idx)
+{
+    sk_lock(vm);
+    Value* top = vm->sp - 1;
+    Value* val = idx2val(vm, idx);
+    if(top != val) *val = *top;
+    closeupval(vm, top);
+    decsp(vm);
     sk_unlock(vm);
 }

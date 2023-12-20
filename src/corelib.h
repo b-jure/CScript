@@ -15,7 +15,7 @@ const char* load_script_default(VM* vm, const char* path);
 #define corelib(name) int skcore_##name(VM* vm)
 
 /* Time */
-corelib(cpuclock);
+corelib(clock);
 
 corelib(isfield);
 corelib(typeof);

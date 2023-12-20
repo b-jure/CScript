@@ -368,7 +368,7 @@ static force_inline OUpvalue* captureupval(VM* vm, Value* valp)
     return upvalp;
 }
 
-static force_inline void closeupval(VM* vm, Value* last)
+void closeupval(VM* vm, Value* last)
 {
     while(vm->open_upvals != NULL && vm->open_upvals->location >= last) {
         OUpvalue* upvalp     = vm->open_upvals;

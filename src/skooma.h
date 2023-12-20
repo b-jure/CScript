@@ -22,6 +22,8 @@
 #define SK_COPYRIGHT SK_RELEASE " Copyright (C) 2023-2024 B. Jure"
 #define SK_AUTHORS   "B. Jure"
 
+
+
 #if !defined(sk_assert)
     #define sk_assert(vm, cond, msg) ((void)0)
 #endif
@@ -31,11 +33,12 @@
 #endif
 
 /*
- * Multi-thread locking mechanism.
+ * Locking mechanism.
  * By default Skooma uses POSIX mutex from libc.
- * User can disable this in 'skconf.h' or provide his
- * own locking by changing few defines in 'skconf.h' and
- * defining his own sk_lock, sk_unlock.
+ * User can disable this in 'skconf.h', additionally
+ * user can provide his own locking mechanism by disabling
+ * default locking in 'skconf.h' and then defining his own sk_lock
+ * and sk_unlock.
  */
 #ifdef S_LOCK_DFLT
     #define sk_lock(vm)
@@ -48,8 +51,22 @@
     #undef sk_unlock(vm)
 #endif
 
+
+
+
+/*
+ * Skooma uses only doubles for its number
+ * representation there is no integer type,
+ * this is to retain consistency between NaN
+ * boxing and tagged union value representation.
+ */
+#define SK_NUMBER double
+#define SK_Number SK_NUMBER
+
 /* C functions signature. */
 typedef int (*CFunction)(VM* vm);
+
+
 
 
 /* Create new virtual machine. */
@@ -92,10 +109,12 @@ SK_API int sk_ensurestack(VM* vm, int n);
  * the end of the stack going backwards.
  */
 SK_API int sk_typeof(const VM* vm, int idx);
-#define sk_isnil(vm, idx)    (sk_typeof(vm, idx) == SK_TNIL)
-#define sk_isnumber(vm, idx) (sk_typeof(vm, idx) == SK_TNUMBER)
-#define sk_isstring(vm, idx) (sk_typeof(vm, idx) == SK_TSTRING)
-#define sk_isbool(vm, idx)   (sk_typeof(vm, idx) == SK_TBOOL)
+SK_API int sk_isnil(VM* vm, int idx);
+SK_API int sk_isnumber(VM* vm, int idx);
+SK_API int sk_isstring(VM* vm, int idx);
+SK_API int sk_isbool(VM* vm, int idx);
+SK_API int sk_isclass(VM* vm, int idx);
+SK_API int sk_isinstance(VM* vm, int idx);
 
 
 
@@ -107,11 +126,11 @@ SK_API int sk_typeof(const VM* vm, int idx);
  * If idx is negative then it refers to the
  * top of the stack going backwards (-1 == stack top).
  */
-SK_API int         sk_getbool(const VM* vm, int idx);
-SK_API double      sk_getnumber(const VM* vm, int idx);
+SK_API int         sk_getbool(const VM* vm, int idx, int* isbool);
+SK_API double      sk_getnumber(const VM* vm, int idx, int* isnum);
 SK_API const char* sk_getstring(const VM* vm, int idx);
 SK_API size_t      sk_rawlen(const VM* vm, int idx);
-
+SK_API int         sk_hasmethod(VM* vm, int idx, const char* method);
 
 
 
@@ -141,11 +160,12 @@ SK_API void sk_push(VM* vm, int idx);
 SK_API void sk_remove(VM* vm, int idx);
 
 /* Inserts the Value on top at the location of idx, shifting
- * other Values up to give space. */
-SK_API void sk_remove(VM* vm, int idx);
+ * other Values up to give space for the inserted value. */
+SK_API void sk_insert(VM* vm, int idx);
 
 /* Pops the Value on top and replaces the Value at idx with it. */
 SK_API void sk_replace(VM* vm, int idx);
+
 
 
 
@@ -205,8 +225,9 @@ static const InternedString static_str[] = {
  * Casts
  */
 
-#define cast_uint(e) ((unsigned int)(e))
-#define cast_int(e)  ((int)(e))
+#define cast_uint(e)   ((unsigned int)(e))
+#define cast_int(e)    ((int)(e))
+#define cast_intptr(e) ((intptr_t)(e))
 
 
 

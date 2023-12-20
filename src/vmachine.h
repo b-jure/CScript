@@ -70,6 +70,10 @@ typedef enum {
 } InterpretResult;
 
 
+#define tonumber(val, np)   (IS_NUMBER(val) ? (*(np) = AS_NUMBER(val), 1) : 0)
+#define tostring(val, strp) (IS_STRING(val) ? (*(strp) = AS_CSTRING(val), 1) : 0)
+#define tobool(val, bval)   (IS_BOOL(val) ? (*(bval) = AS_BOOL(val), 1) : 0)
+
 
 VM*             VM_new(Config* config);
 void            VM_free(VM** vm);
@@ -78,6 +82,7 @@ void            pushn(VM* vm, Int n, Value val);
 Value           pop(VM* vm);
 InterpretResult interpret(VM* vm, const char* source, const char* filename);
 bool            fncall(VM* vm, OClosure* callee, Int argc, Int retcnt);
+void            closeupval(VM* vm, Value* last);
 
 typedef struct CallInfo CallInfo;
 struct CallInfo {
