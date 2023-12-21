@@ -16,8 +16,8 @@
 
 Byte dtos_generic(double dbl, char* dest, UInt len)
 {
-    if(floor(dbl) != dbl) return snprintf(dest, len, "%f", dbl);
-    else return snprintf(dest, len, "%ld", (ssize_t)dbl);
+    if(floor(dbl) != dbl) return snprintf(dest, len, "%g", dbl);
+    else return snprintf(dest, len, "%ld", (int64_t)dbl);
 }
 
 Byte booltos_generic(bool boolean, char* dest, UInt len)
@@ -39,7 +39,7 @@ Byte niltos_generic(char* dest, UInt len)
     return len;
 }
 
-sstatic force_inline OString* dtostr(VM* vm, double n)
+static force_inline OString* dtostr(VM* vm, double n)
 {
     static char buff[30];
     size_t      len    = dtos_generic(n, buff, 30);
@@ -47,7 +47,7 @@ sstatic force_inline OString* dtostr(VM* vm, double n)
     return string;
 }
 
-sstatic force_inline OString* booltostr(VM* vm, bool boolean)
+static force_inline OString* booltostr(VM* vm, bool boolean)
 {
     char*  str = NULL;
     ushort len = 0;
@@ -110,8 +110,7 @@ void vprint(Value value)
     else if(IS_NIL(value)) printf("nil");
     else if(IS_OBJ(value)) oprint(value);
     else if(IS_NUMBER(value)) {
-        if(floor(AS_NUMBER(value)) != AS_NUMBER(value))
-            printf("%lg", AS_NUMBER(value));
+        if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%lg", AS_NUMBER(value));
         else printf("%ld", (int64_t)AS_NUMBER(value));
     } else unreachable;
 #else
@@ -223,8 +222,7 @@ Hash vhash(Value value)
         CASE(VAL_NUMBER)
         {
             double num = AS_NUMBER(value);
-            if(floor(AS_NUMBER(value)) != AS_NUMBER(value) ||
-               AS_NUMBER(value) < 0)
+            if(floor(AS_NUMBER(value)) != AS_NUMBER(value) || AS_NUMBER(value) < 0)
                 return dblhash(num);
             else return num;
         }

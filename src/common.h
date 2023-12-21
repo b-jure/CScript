@@ -84,4 +84,13 @@ static force_inline size_t bit_mask(uint8_t x)
 #endif
 
 
+
+/* Casting */
+#define cast_int(e)    ((int)(e))
+#define cast_uint(e)   ((unsigned int)(e))
+#define cast_intptr(e) ((intptr_t)(e))
+#define cast_double(e) ((double)(e))
+#define cast_char(e)   ((char)(e))
+
+
 #endif

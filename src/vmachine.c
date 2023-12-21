@@ -22,7 +22,6 @@
 
 
 
-#define stackpeek(top)  ((vm)->sp - ((top) + 1))
 #define stack_reset(vm) (vm)->sp = (vm)->stack
 #define stack_size(vm)  ((vm)->sp - (vm)->stack)
 
@@ -58,7 +57,10 @@ void runerror(VM* vm, const char* errfmt, ...)
         if(loaded) fprintf(stderr, "script\n");
         else fprintf(stderr, "%s()\n", FFN(frame)->name->storage);
     }
-    stack_reset(vm);
+    // for cleanup virtual machine and abort
+    // TODO: add error handlers/hooks to 'Config' struct
+    _cleanupvm(&vm);
+    abort();
 }
 
 void push(VM* vm, Value val)
@@ -280,7 +282,7 @@ static force_inline bool instancecall(VM* vm, OClass* oclass, Int argc)
     return true;
 }
 
-static force_inline bool vcall(VM* vm, Value callee, Int argc, Int retcnt)
+int vcall(VM* vm, Value callee, Int argc, Int retcnt)
 {
     if(IS_OBJ(callee)) {
         switch(OBJ_TYPE(callee)) {
@@ -300,8 +302,9 @@ static force_inline bool vcall(VM* vm, Value callee, Int argc, Int retcnt)
                 break;
         }
     }
+    vm->sp[-argc - 1] = NIL_VAL;
     NONCALLABLE_ERR(vm, vtostr(vm, callee)->storage);
-    return false;
+    return 0;
 }
 
 static force_inline bool

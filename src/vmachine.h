@@ -83,6 +83,8 @@ Value           pop(VM* vm);
 InterpretResult interpret(VM* vm, const char* source, const char* filename);
 bool            fncall(VM* vm, OClosure* callee, Int argc, Int retcnt);
 void            closeupval(VM* vm, Value* last);
+void            runerror(VM* vm, const char* errfmt, ...);
+int             vcall(VM* vm, Value callee, Int argc, Int retcnt);
 
 typedef struct CallInfo CallInfo;
 struct CallInfo {
@@ -125,5 +127,7 @@ struct VM {
     size_t        gc_next; // next threshold where gc triggers
     Byte          gc_flags; // gc flags (sk API)
 };
+
+#define stackpeek(top) ((vm)->sp - ((top) + 1))
 
 #endif

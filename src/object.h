@@ -156,6 +156,7 @@ typedef struct {
 } ONative; // Native function written in C
 
 OString*      OString_from(VM* vm, const char* chars, size_t len);
+OString*      OStringf_from(VM* vm, const char* fmt, va_list argp);
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method);
 OInstance*    OInstance_new(VM* vm, OClass* cclass);
 OClass*       OClass_new(VM* vm, OString* name);

@@ -1,8 +1,10 @@
 #include "array.h"
+#include "common.h"
 #include "debug.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
+#include "stdarg.h"
 #include "value.h"
 
 #include <stdio.h>
@@ -19,7 +21,7 @@
 
 
 
-sstatic force_inline O* onew(VM* vm, size_t size, OType type)
+static force_inline O* onew(VM* vm, size_t size, OType type)
 {
     O* object      = GC_MALLOC(vm, size);
     object->header = (uint64_t)vm->objects | ((uint64_t)type << 56);
@@ -33,7 +35,7 @@ sstatic force_inline O* onew(VM* vm, size_t size, OType type)
     return object;
 }
 
-sstatic force_inline OString* OString_alloc(VM* vm, UInt len)
+static force_inline OString* OString_alloc(VM* vm, UInt len)
 {
     OString* string = ALLOC_STRING(vm, len);
     string->len     = len;
@@ -63,12 +65,78 @@ OString* OString_from(VM* vm, const char* chars, size_t len)
     return string;
 }
 
-sstatic force_inline void OString_free(VM* vm, OString* string)
+OString* OStringf_from(VM* vm, const char* fmt, va_list argp)
+{
+#define MAXDIGITS 45
+
+    unsigned char c;
+    Array_Byte    buff;
+    Array_Byte_init(&buff, vm);
+    for(;;) {
+        while((c = *fmt++) != '%')
+            Array_Byte_push(&buff, c);
+        c = *fmt++;
+        switch(c) {
+            case '%': {
+                Array_Byte_push(&buff, '%');
+                break;
+            }
+            case 'd': { /* int */
+                int n = va_arg(argp, int);
+                Array_Byte_ensure(&buff, MAXDIGITS);
+                buff.len += snprintf((char*)&buff.data[buff.len], MAXDIGITS, "%d", n);
+                break;
+            }
+            case 'n': { /* SK_Number */
+                sk_number n = va_arg(argp, sk_number);
+                Array_Byte_ensure(&buff, MAXDIGITS);
+                buff.len += dtos_generic(n, (char*)&buff.data[buff.len], MAXDIGITS);
+                break;
+            }
+            case 'f': { /* double */
+                double n = va_arg(argp, double);
+                Array_Byte_ensure(&buff, MAXDIGITS);
+                buff.len += snprintf((char*)&buff.data[buff.len], MAXDIGITS, "%g", n);
+                break;
+            }
+            case 's': { /* string */
+                const char* str = va_arg(argp, char*);
+                if(str == NULL) str = "(null)";
+                size_t len = strlen(str);
+                Array_Byte_ensure(&buff, len);
+                memcpy(&buff.data[buff.len], str, len);
+                buff.len += len;
+                break;
+            }
+            case 'c': { /* char */
+                char c = va_arg(argp, int);
+                Array_Byte_push(&buff, c);
+                break;
+            }
+            case 'p': { /* pointer */
+                Array_Byte_ensure(&buff, 11);
+                void* ptr = va_arg(argp, void*);
+                snprintf((char*)&buff.data[buff.len], 11, "%p", ptr);
+                break;
+            }
+            default: { /* invalid format specifier */
+                runerror(vm, "invalid format specifier '%%%c' for 'sk_pushfstring'", c);
+            }
+        }
+    }
+    OString* fstr = OString_from(vm, (char*)buff.data, buff.len);
+    Array_Byte_free(&buff, NULL);
+    return fstr;
+
+#undef MAXDIGITS
+}
+
+static force_inline void OString_free(VM* vm, OString* string)
 {
     GC_FREE(vm, string, sizeof(OString) + string->len + 1);
 }
 
-ONative* ONative_new(VM* vm, OString* name, NativeFn fn, Int arity, bool isva)
+ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva)
 {
     ONative* native = ALLOC_OBJ(vm, ONative, OBJ_NATIVE);
     native->name    = name;
@@ -78,7 +146,7 @@ ONative* ONative_new(VM* vm, OString* name, NativeFn fn, Int arity, bool isva)
     return native;
 }
 
-sstatic force_inline void ONative_free(VM* vm, ONative* native)
+static force_inline void ONative_free(VM* vm, ONative* native)
 {
     GC_FREE(vm, native, sizeof(ONative));
 }
@@ -97,7 +165,7 @@ OFunction* OFunction_new(VM* vm)
     return fn;
 }
 
-sstatic force_inline void ObjFunction_free(VM* vm, OFunction* fn)
+static force_inline void ObjFunction_free(VM* vm, OFunction* fn)
 {
     Chunk_free(&fn->chunk);
     GC_FREE(vm, fn, sizeof(OFunction));
@@ -115,7 +183,7 @@ OClosure* OClosure_new(VM* vm, OFunction* fn)
     return closure;
 }
 
-sstatic force_inline void OClosure_free(VM* vm, OClosure* closure)
+static force_inline void OClosure_free(VM* vm, OClosure* closure)
 {
     GC_FREE(vm, closure->upvals, closure->upvalc * sizeof(OUpvalue*));
     GC_FREE(vm, closure, sizeof(OClosure));
@@ -130,7 +198,7 @@ OUpvalue* OUpvalue_new(VM* vm, Value* valp)
     return upval;
 }
 
-sstatic force_inline void OUpvalue_free(VM* vm, OUpvalue* upval)
+static force_inline void OUpvalue_free(VM* vm, OUpvalue* upval)
 {
     GC_FREE(vm, upval, sizeof(OUpvalue));
 }
@@ -144,7 +212,7 @@ OClass* OClass_new(VM* vm, OString* name)
     return oclass;
 }
 
-sstatic force_inline void OClass_free(VM* vm, OClass* oclass)
+static force_inline void OClass_free(VM* vm, OClass* oclass)
 {
     HashTable_free(vm, &oclass->methods);
     GC_FREE(vm, oclass, sizeof(OClass));
@@ -159,7 +227,7 @@ OInstance* OInstance_new(VM* vm, OClass* oclass)
     return instance;
 }
 
-sstatic force_inline void OInstance_free(VM* vm, OInstance* instance)
+static force_inline void OInstance_free(VM* vm, OInstance* instance)
 {
     HashTable_free(vm, &instance->fields);
     GC_FREE(vm, instance, sizeof(OInstance));
@@ -173,7 +241,7 @@ OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method)
     return bound_method;
 }
 
-sstatic force_inline void fnprint(OFunction* fn)
+static force_inline void fnprint(OFunction* fn)
 {
     if(unlikely(fn->name == NULL)) printf("<script>");
     else printf("<fn %s>: %p", fn->name->storage, fn);
@@ -288,7 +356,7 @@ Hash ohash(Value value)
 }
 
 
-sstatic force_inline void OBoundMethod_free(VM* vm, OBoundMethod* bound_method)
+static force_inline void OBoundMethod_free(VM* vm, OBoundMethod* bound_method)
 {
     GC_FREE(vm, bound_method, sizeof(OBoundMethod));
 }

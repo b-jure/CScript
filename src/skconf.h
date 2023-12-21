@@ -172,24 +172,12 @@ static_assert(
 #endif
 
 
-
-/**
- * Enables default lock mechanism each time VM is accessed
- * via API calls made from C.
- * This ensures multi-thread safety in case user
- * is not ensuring safe access himself.
- * Basically a mutex; in case the user doesn't need
- * this, he should remove this define or comment it out.
- **/
-#define S_LOCK_DFLT
-
 /**
  * In case user wants to use his own locking mechanism,
- * he should enable this define.
- * This just basically undef's the default sk_lock and sk_unlock.
+ * he should define his own sk_unlock and sk_lock.
  **/
-#ifndef S_LOCK_DFLT
-    // #define S_LOCK_USR
+#if defined(sk_lock) && defined(sk_unlock)
+    #define S_LOCK_USR
 #endif
 
 
@@ -204,6 +192,19 @@ static_assert(
  */
 #define SK_LIBAPI SK_API
 
+
+/*
+ * https://www.lua.org/source/5.4/llimits.h.html#l_noret
+ */
+#if !defined(sk_noret)
+    #if defined(__GNUC__)
+        #define sk_noret void __attribute__((noreturn))
+    #elif defined(_MSC_VER) && _MSC_VER >= 1200
+        #define sk_noret void __declspec(noreturn)
+    #else
+        #define sk_noret void
+    #endif
+#endif
 
 
 /* For debug builds comment out 'defines' you dont want. */

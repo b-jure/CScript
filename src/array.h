@@ -234,6 +234,12 @@ typedef void (*FreeFn)(void* value);
         return retval;                                                                   \
     }                                                                                    \
                                                                                          \
+    static force_inline void _ARRAY_METHOD(name, ensure, unsigned int len)               \
+    {                                                                                    \
+        while(self->cap < self->len + len)                                               \
+            _CALL_ARRAY_METHOD(name, grow);                                              \
+    }                                                                                    \
+                                                                                         \
     static force_inline void _ARRAY_METHOD(name, free, FreeFn fn)                        \
     {                                                                                    \
         if(fn != NULL)                                                                   \

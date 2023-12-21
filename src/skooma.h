@@ -24,6 +24,11 @@
 
 
 
+/*
+ * User can define his own sk_assert if he requires
+ * different/custom behaviour.
+ * By default sk_assert is a nop.
+ */
 #if !defined(sk_assert)
     #define sk_assert(vm, cond, msg) ((void)0)
 #endif
@@ -32,23 +37,17 @@
     #define sk_checkapi(vm, cond, msg) sk_assert(cond)
 #endif
 
+
+
 /*
- * Locking mechanism.
- * By default Skooma uses POSIX mutex from libc.
- * User can disable this in 'skconf.h', additionally
- * user can provide his own locking mechanism by disabling
- * default locking in 'skconf.h' and then defining his own sk_lock
- * and sk_unlock.
+ * Locking mechanism (by default nop).
+ * By default skooma does not assume your VM is shared
+ * by multiple threads, it is up to user to decide whether
+ * to define his own sk_lock/sk_unlock.
  */
-#ifdef S_LOCK_DFLT
-    #define sk_lock(vm)
-    #define sk_unlock(vm)
-#elif defined(S_LOCK_USR)
-    #undef sk_lock(vm)
-    #undef sk_unlock(vm)
-#else
-    #undef sk_lock(vm)
-    #undef sk_unlock(vm)
+#if !defined(S_LOCK_USR)
+    #define sk_lock(vm)   ((void)0)
+    #define sk_unlock(vm) ((void)0)
 #endif
 
 
@@ -61,32 +60,11 @@
  * boxing and tagged union value representation.
  */
 #define SK_NUMBER double
-#define SK_Number SK_NUMBER
+#define sk_number SK_NUMBER
 
-/* C functions signature. */
+
+/* Native C function signature */
 typedef int (*CFunction)(VM* vm);
-
-
-
-
-/* Create new virtual machine. */
-SK_API VM* sk_create(Config* cfg);
-
-/* Destroy/cleanup the virtual machine. */
-SK_API void sk_destroy(VM** vmp);
-
-
-/* API for pushing new Values on the C-stack */
-SK_API void sk_pushnil(VM* vm);
-SK_API void sk_pushnumber(VM* vm, double number);
-SK_API void sk_pushstring(VM* vm, const char* str, size_t len);
-SK_API void sk_pushcstring(VM* vm, const char* str);
-SK_API void sk_pushbool(VM* vm, int boolean);
-
-
-/* Check if C-stack has enough space */
-SK_API int sk_ensurestack(VM* vm, int n);
-
 
 
 /*
@@ -102,68 +80,69 @@ SK_API int sk_ensurestack(VM* vm, int n);
 #define SK_TFUNCTION 6
 #define SK_TC        7 // Types count
 
-/*
- * API for checking value types on the stack.
- * idx is the index into the C-stack, it can also
- * be a negative integer, this would then reference
- * the end of the stack going backwards.
- */
-SK_API int sk_typeof(const VM* vm, int idx);
-SK_API int sk_isnil(VM* vm, int idx);
-SK_API int sk_isnumber(VM* vm, int idx);
-SK_API int sk_isstring(VM* vm, int idx);
-SK_API int sk_isbool(VM* vm, int idx);
-SK_API int sk_isclass(VM* vm, int idx);
-SK_API int sk_isinstance(VM* vm, int idx);
+SK_API int         sk_type(const VM* vm, int idx);
+SK_API const char* sk_typename(const VM* vm, int idx);
+
+SK_API int sk_isnil(const VM* vm, int idx);
+SK_API int sk_isnumber(const VM* vm, int idx);
+SK_API int sk_isstring(const VM* vm, int idx);
+SK_API int sk_isbool(const VM* vm, int idx);
+SK_API int sk_isclass(const VM* vm, int idx);
+SK_API int sk_isinstance(const VM* vm, int idx);
 
 
+/* Create new virtual machine. */
+SK_API VM* sk_create(Config* cfg);
 
-/*
- * API for getting the values from the C-stack.
- *
- * If the Value at 'idx' is not of the type you requested,
- * then the getter will return 0 or NULL.
- * If idx is negative then it refers to the
- * top of the stack going backwards (-1 == stack top).
- */
-SK_API int         sk_getbool(const VM* vm, int idx, int* isbool);
-SK_API double      sk_getnumber(const VM* vm, int idx, int* isnum);
-SK_API const char* sk_getstring(const VM* vm, int idx);
-SK_API size_t      sk_rawlen(const VM* vm, int idx);
-SK_API int         sk_hasmethod(VM* vm, int idx, const char* method);
+/* Destroy/cleanup the virtual machine. */
+SK_API void sk_destroy(VM** vmp);
 
 
 
 
 /*
- * Stack manipulation
+ * PUSH from C -> STACK
  */
 
-/* Return index of the last value on the stack
- * relative to the current function. */
-SK_API int sk_gettop(const VM* vm);
-
-/* Set the new stack top.
- * If the new stack top is higher than previous one,
- * then the nil's get pushed on stack.
- * If the stack top is lower than the previous top,
- * then the values get discarded. */
-SK_API void sk_settop(VM* vm, int idx);
-
-/* Pops n values off the stack */
-#define sk_pop(vm, n) sk_settop(vm, -(n)-1)
-
-/* Pushes the copy of the Value at idx on the stack. */
+SK_API void sk_pushnil(VM* vm);
+SK_API void sk_pushnumber(VM* vm, sk_number number);
+SK_API void sk_pushstring(VM* vm, const char* str, size_t len);
+SK_API void sk_pushcstring(VM* vm, const char* str);
+SK_API void sk_pushbool(VM* vm, int boolean);
+SK_API int  sk_pushmethod(VM* vm, int idx, const char* method);
+SK_API int  sk_pushglobal(VM* vm, const char* name);
 SK_API void sk_push(VM* vm, int idx);
 
-/* Removes the Value at idx, shifting down other Values if any. */
+
+
+/* Check if C-stack has enough space */
+SK_API int sk_ensurestack(VM* vm, int n);
+
+
+
+
+/*
+ * GET from STACK -> C
+ */
+
+SK_API int         sk_getbool(const VM* vm, int idx, int* isbool);
+SK_API sk_number   sk_getnumber(const VM* vm, int idx, int* isnum);
+SK_API const char* sk_getstring(const VM* vm, int idx);
+SK_API size_t      sk_rawlen(const VM* vm, int idx);
+SK_API int         sk_gettop(const VM* vm);
+
+
+
+
+/*
+ * STACK MANIPULATION
+ */
+
+SK_API void sk_settop(VM* vm, int idx);
+/* Pops n values off the stack */
+#define sk_pop(vm, n) sk_settop(vm, -(n)-1)
 SK_API void sk_remove(VM* vm, int idx);
-
-/* Inserts the Value on top at the location of idx, shifting
- * other Values up to give space for the inserted value. */
 SK_API void sk_insert(VM* vm, int idx);
-
-/* Pops the Value on top and replaces the Value at idx with it. */
 SK_API void sk_replace(VM* vm, int idx);
 
 
@@ -171,25 +150,20 @@ SK_API void sk_replace(VM* vm, int idx);
 
 
 /*
- * Default interned strings.
+ * INTERNED STRINGS
  */
 
-typedef struct {
-    const char*   name;
-    const uint8_t len;
-} InternedString;
-
 #define sizeofstr(str) (sizeof(str) - 1)
-/* Class initializer */
-#define SS_INIT 0
 /* Value types */
-#define SS_STR   1
-#define SS_NUM   2
-#define SS_INS   3
-#define SS_CLASS 4
-#define SS_BOOL  5
-#define SS_NIL   6
-#define SS_FUNC  7
+#define SS_STR   0
+#define SS_NUM   1
+#define SS_INS   2
+#define SS_CLASS 3
+#define SS_BOOL  4
+#define SS_NIL   5
+#define SS_FUNC  6
+/* Class overload-able method names */
+#define SS_INIT 7
 /* Native functions argument names */
 #define SS_MANU       8
 #define SS_AUTO       9
@@ -199,18 +173,23 @@ typedef struct {
 /* Size */
 #define SS_SIZE (sizeof(static_str) / sizeof(static_str[0]))
 
+typedef struct {
+    const char*   name;
+    const uint8_t len;
+} InternedString;
+
 static const InternedString static_str[] = {
-  /* Class initializer name. */
-    {"__init__",          sizeofstr("__init__")         },
- /* (user) Value types */
-    {"string",            sizeofstr("string")           },
-    {"number",            sizeofstr("number")           },
-    {"instance",          sizeofstr("instance")         },
-    {"class",             sizeofstr("class")            },
-    {"bool",              sizeofstr("bool")             },
+  /* Value types */
     {"nil",               sizeofstr("nil")              },
+    {"number",            sizeofstr("number")           },
+    {"string",            sizeofstr("string")           },
+    {"bool",              sizeofstr("bool")             },
+    {"class",             sizeofstr("class")            },
+    {"instance",          sizeofstr("instance")         },
     {"function",          sizeofstr("function")         },
- /* Native function statics */
+ /* Class overload-able method names. */
+    {"__init__",          sizeofstr("__init__")         },
+ /* corelib statics */
     {"manual",            sizeofstr("manual")           },
     {"auto",              sizeofstr("auto")             },
     {"assertion failed.", sizeofstr("assertion failed.")},
@@ -219,16 +198,4 @@ static const InternedString static_str[] = {
 };
 
 
-
-
-/*
- * Casts
- */
-
-#define cast_uint(e)   ((unsigned int)(e))
-#define cast_int(e)    ((int)(e))
-#define cast_intptr(e) ((intptr_t)(e))
-
-
-
-#endif
+#endif // SKOOMA_H
