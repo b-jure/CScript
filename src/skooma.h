@@ -148,6 +148,19 @@ SK_API void sk_replace(VM* vm, int idx);
 
 
 
+/*
+ * CALL
+ */
+
+/* Call the value on the stack located on
+ * the top right before arguments (argc). */
+#define sk_call(vm, argc, retcnt) vcall(vm, *stackpeek(0), argc, retcnt)
+/* Call the value on the stack at the 'idx'. */
+SK_API int sk_vcall(VM* vm, int idx, int argc, int retcntc);
+
+
+
+
 
 /*
  * INTERNED STRINGS

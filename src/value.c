@@ -43,7 +43,7 @@ static force_inline OString* dtostr(VM* vm, double n)
 {
     static char buff[30];
     size_t      len    = dtos_generic(n, buff, 30);
-    OString*    string = OString_from(vm, buff, len);
+    OString*    string = OString_new(vm, buff, len);
     return string;
 }
 
@@ -58,14 +58,14 @@ static force_inline OString* booltostr(VM* vm, bool boolean)
         len = sizeof("false") - 1;
         str = "false";
     }
-    return OString_from(vm, str, len);
+    return OString_new(vm, str, len);
 }
 
 OString* vtostr(VM* vm, Value value)
 {
 #ifdef S_NAN_BOX
     if(IS_BOOL(value)) return booltostr(vm, AS_BOOL(value));
-    else if(IS_NIL(value)) return OString_from(vm, "nil", sizeofnil);
+    else if(IS_NIL(value)) return OString_new(vm, "nil", sizeofnil);
     else if(IS_OBJ(value)) return otostr(vm, AS_OBJ(value));
     else if(IS_NUMBER(value)) return dtostr(vm, AS_NUMBER(value));
 #else

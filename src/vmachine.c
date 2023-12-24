@@ -10,9 +10,11 @@
 #include "parser.h"
 #include "skconf.h"
 #include "skmath.h"
+#include "skooma.h"
 #include "value.h"
 #include "vmachine.h"
 
+#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,20 +22,9 @@
 
 
 
-
-
-#define stack_reset(vm) (vm)->sp = (vm)->stack
-#define stack_size(vm)  ((vm)->sp - (vm)->stack)
-
-
-
-
-
-
 volatile Int runtime = 0; // VM is running?
 
 
-#define FFN(frame) frame->closure->fn
 
 void runerror(VM* vm, const char* errfmt, ...)
 {
@@ -57,10 +48,6 @@ void runerror(VM* vm, const char* errfmt, ...)
         if(loaded) fprintf(stderr, "script\n");
         else fprintf(stderr, "%s()\n", FFN(frame)->name->storage);
     }
-    // for cleanup virtual machine and abort
-    // TODO: add error handlers/hooks to 'Config' struct
-    _cleanupvm(&vm);
-    abort();
 }
 
 void push(VM* vm, Value val)
@@ -73,38 +60,6 @@ void push(VM* vm, Value val)
     }
 }
 
-force_inline Value pop(VM* vm)
-{
-    return *--vm->sp;
-}
-
-void pushn(VM* vm, Int n, Value val)
-{
-    while(n-- > 0)
-        push(vm, val);
-}
-
-static force_inline void popn(VM* vm, UInt n)
-{
-    vm->sp -= n;
-}
-
-static force_inline Byte concat_bool(bool boolean, char** dest)
-{
-    if(boolean) {
-        *dest = "true";
-        return sizeof("true") - 1;
-    }
-    *dest = "false";
-    return sizeof("false") - 1;
-}
-
-static force_inline Byte concat_nil(char** str)
-{
-    *str = "nil";
-    return sizeof("nil") - 1;
-}
-
 static OString* concatenate(VM* vm, Value a, Value b)
 {
     OString* left   = AS_STRING(a);
@@ -114,7 +69,7 @@ static OString* concatenate(VM* vm, Value a, Value b)
     memcpy(buffer, left->storage, left->len);
     memcpy(buffer + left->len, right->storage, right->len);
     buffer[length]  = '\0';
-    OString* string = OString_from(vm, buffer, length);
+    OString* string = OString_new(vm, buffer, length);
     popn(vm, 2);
     return string;
 }
@@ -124,7 +79,8 @@ bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 {
     Value method;
     if(unlikely(!HashTable_get(&oclass->methods, name, &method))) {
-        UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(name), oclass->name->storage);
+        vm->sp[-1] =
+            OBJ_VAL(UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(name), oclass->name->storage));
         return NULL;
     }
     OBoundMethod* bound_method = OBoundMethod_new(vm, receiver, AS_CLOSURE(method));
@@ -134,7 +90,7 @@ bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 static force_inline void
 VM_define_native(VM* vm, const char* name, CFunction native, UInt arity, bool isva)
 {
-    push(vm, OBJ_VAL(OString_from(vm, name, strlen(name))));
+    push(vm, OBJ_VAL(OString_new(vm, name, strlen(name))));
     push(vm, OBJ_VAL(ONative_new(vm, AS_STRING(*stackpeek(0)), native, arity, isva)));
     UInt idx = GARRAY_PUSH(vm, ((Variable){.value = vm->stack[1], .flags = 0x00}));
     HashTable_insert(vm, &vm->globids, vm->stack[0], NUMBER_VAL((double)idx));
@@ -152,159 +108,89 @@ void Config_init(Config* config)
     config->gc_grow_factor    = GC_HEAP_GROW_FACTOR;
 }
 
-VM* VM_new(Config* config)
-{
-    AllocatorFn allocate = reallocate;
-    void*       userdata = NULL;
-    if(config != NULL) {
-        userdata = config->userdata;
-        allocate = config->reallocate ? config->reallocate : reallocate;
-    }
-    VM* vm = allocate(NULL, sizeof(VM), userdata);
-    memset(&vm->config, 0, sizeof(Config));
-    if(config != NULL) {
-        memcpy(&vm->config, config, sizeof(Config));
-        vm->config.reallocate = allocate;
-    } else Config_init(&vm->config);
-    srand(time(0));
-    vm->seed         = rand();
-    vm->fc           = 0;
-    vm->objects      = NULL;
-    vm->F            = NULL;
-    vm->open_upvals  = NULL;
-    vm->script       = NIL_VAL;
-    vm->gc_allocated = 0;
-    vm->gc_next      = (1 << 20); // 1 MiB
-    vm->gc_flags     = 0;
-    stack_reset(vm);
-    HashTable_init(&vm->loaded); // Loaded scripts and their functions
-    HashTable_init(&vm->globids); // Global variable identifiers
-    GARRAY_INIT(vm); // Global values array
-    GSARRAY_INIT(vm); // Gray stack array (no GC)
-    Array_Value_init(&vm->temp, vm); // Temp values storage (return values)
-    Array_VRef_init(&vm->callstart, vm);
-    Array_VRef_init(&vm->retstart, vm);
-    HashTable_init(&vm->strings); // Interned strings table (Weak_refs)
-    memset(vm->statics, 0, sizeof(vm->statics));
-    for(UInt i = 0; i < SS_SIZE; i++)
-        vm->statics[i] = OString_from(vm, static_str[i].name, static_str[i].len);
-    // @REFACTOR?: Maybe make the native functions private and only
-    //             callable inside class instances?
-    //             Upside: less branching resulting in more straightforward code.
-    //             Downside: slower function call (maybe not so bad because
-    //             of removal of type checking inside the native functions, needs
-    //             testing)
-    //
-    // @TODO?: Change NativeFn signature to accept variable amount of arguments.
-    //         Upside: More expressive and flexible functions.
-    //         Downside: va_list parsing resulting in slower function call
-    //         processing
-    // VM_define_native(vm, "clock", native_clock, 0, false); // GC
-    // VM_define_native(vm, "isfield", native_isfield, 2, false); // GC
-    // VM_define_native(vm, "printl", native_printl, 1, false); // GC
-    // VM_define_native(vm, "print", native_print, 1, false); // GC
-    // VM_define_native(vm, "tostr", native_tostr, 1, false); // GC
-    // VM_define_native(vm, "isstr", native_isstr, 1, false); // GC
-    // VM_define_native(vm, "strlen", native_strlen, 1, false); // GC
-    // VM_define_native(vm, "strpat", native_strpat, 2, false); // GC
-    // VM_define_native(vm, "strsub", native_strsub, 3, false); // GC
-    // VM_define_native(vm, "strbyte", native_strbyte, 2, false); // GC
-    // VM_define_native(vm, "strlower", native_strlower, 1, false); // GC
-    // VM_define_native(vm, "strupper", native_strupper, 1, false); // GC
-    // VM_define_native(vm, "strrev", native_strrev, 1, false); // GC
-    // VM_define_native(vm, "strconcat", native_strconcat, 2, false); // GC
-    // VM_define_native(vm, "byte", native_byte, 1, false); // GC
-    // VM_define_native(vm, "gcfactor", native_gcfactor, 1, false); // GC
-    // VM_define_native(vm, "gcmode", native_gcmode, 1, false); // GC
-    // VM_define_native(vm, "gccollect", native_gccollect, 0, false); // GC
-    // VM_define_native(vm, "gcleft", native_gcleft, 0, false); // GC
-    // VM_define_native(vm, "gcusage", native_gcusage, 0, false); // GC
-    // VM_define_native(vm, "gcnext", native_gcnext, 0, false); // GC
-    // VM_define_native(vm, "gcset", native_gcset, 1, false); // GC
-    // VM_define_native(vm, "gcisauto", native_gcisauto, 0, false); // GC
-    // VM_define_native(vm, "assert", native_assert, 1, false); // GC
-    // VM_define_native(vm, "assertf", native_assertf, 2, false); // GC
-    // VM_define_native(vm, "error", native_error, 1, false); // GC
-    // VM_define_native(vm, "typeof", native_typeof, 1, false); // GC
-    // VM_define_native(vm, "loadscript", native_loadscript, 1, false); // GC
-    return vm;
-}
 
-bool fncall(VM* vm, OClosure* callee, Int argc, Int retcnt)
+static bool callfn(VM* vm, OClosure* callee, Int argc, Int retcnt)
 {
+    OString*   err;
     OFunction* fn = callee->fn;
     if(unlikely(!fn->isva && (Int)fn->arity != argc)) {
-        FN_ARGC_ERR(vm, fn->arity, argc);
-        return false;
-    }
-    if(unlikely(fn->isva && (Int)fn->arity > argc)) {
-        FN_VA_ARGC_ERR(vm, fn->arity, argc);
-        return false;
-    }
-    if(unlikely(vm->fc == VM_FRAMES_MAX)) {
-        FRAME_LIMIT_ERR(vm, VM_FRAMES_MAX);
-        return false;
-    }
-    fn->vacnt        = argc - fn->arity;
+        err = FN_ARGC_ERR(vm, fn->arity, argc);
+    } else if(unlikely(fn->isva && (Int)fn->arity > argc)) {
+        err = FN_VA_ARGC_ERR(vm, fn->arity, argc);
+    } else if(unlikely(vm->fc == VM_FRAMES_MAX)) {
+        err = FRAME_LIMIT_ERR(vm, VM_FRAMES_MAX);
+    } else goto ok;
+    vm->sp[-argc - 1] = OBJ_VAL(err);
+    return false;
+ok:;
     CallFrame* frame = &vm->frames[vm->fc++];
+    frame->vacnt     = argc - fn->arity;
     frame->retcnt    = retcnt;
     frame->closure   = callee;
     frame->ip        = fn->chunk.code.data;
-    frame->sp        = vm->sp - argc - 1;
+    frame->callee    = vm->sp - argc - 1;
     return true;
 }
 
-static force_inline bool nativecall(VM* vm, ONative* native, Int argc, Int retcnt)
+static force_inline void moveresults(VM* vm, Value* nativefn, Int got, Int expect)
 {
-    if(unlikely(native->isva && native->arity > argc)) {
-        FN_VA_ARGC_ERR(vm, native->arity, argc);
-        return false;
+    Value* retstart = vm->sp - got; // start of return values
+    if(expect == 0) expect = got; // all results (MULRET)
+    if(got > expect) got = expect; // remove extra results
+    memcpy(nativefn, retstart, got); // Safety: 'retstart' >= 'nativefn'
+    for(int i = got; i < expect; i++) // replace missing values with nil
+        nativefn[i] = NIL_VAL;
+    vm->sp = nativefn + expect;
+}
+
+static force_inline bool callnative(VM* vm, ONative* native, Int argc, Int retcnt)
+{
+    OString* err;
+    if(unlikely(!sk_ensurestack(vm, retcnt))) {
+        err = RETCNT_STACK_OVERFLOW(vm, native->name->storage);
+    } else if(unlikely(native->isva && native->arity > argc)) {
+        err = FN_VA_ARGC_ERR(vm, native->arity, argc);
     } else if(unlikely(!native->isva && native->arity != argc)) {
-        FN_ARGC_ERR(vm, native->arity, argc);
-        return false;
-    } else if(likely(native->fn(vm))) {
-        return true;
-    } else {
-        runerror(vm, AS_CSTRING(vm->sp[-argc - 1]));
-        return false;
-    }
+        err = FN_ARGC_ERR(vm, native->arity, argc);
+    } else goto callnative;
+    vm->sp[-argc - 1] = OBJ_VAL(err);
+    return false;
+callnative:;
+    int values = native->fn(vm); // perform the call
+    moveresults(vm, vm->sp - argc - 1, values, retcnt);
+    return values;
 }
 
-static force_inline bool instancecall(VM* vm, OClass* oclass, Int argc)
-{
-    vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, oclass));
-    OClosure* init    = oclass->overloaded;
-    if(init != NULL) return fncall(vm, init, argc, 1);
-    else if(unlikely(argc != 0)) {
-        FN_ARGC_ERR(vm, 0, argc);
-        return false;
-    }
-    return true;
-}
-
-int vcall(VM* vm, Value callee, Int argc, Int retcnt)
+bool callv(VM* vm, Value callee, Int argc, Int retcnt)
 {
     if(IS_OBJ(callee)) {
         switch(OBJ_TYPE(callee)) {
             case OBJ_BOUND_METHOD: {
                 OBoundMethod* bound = AS_BOUND_METHOD(callee);
                 vm->sp[-argc - 1]   = bound->receiver; // class instance (self)
-                return fncall(vm, bound->method, argc, retcnt);
+                return callfn(vm, bound->method, argc, retcnt);
             }
             case OBJ_CLOSURE:
             case OBJ_FUNCTION:
-                return fncall(vm, AS_CLOSURE(callee), argc, retcnt);
-            case OBJ_CLASS:
-                return instancecall(vm, AS_CLASS(callee), argc);
-            case OBJ_NATIVE:
-                return nativecall(vm, AS_NATIVE(callee), argc, retcnt);
+                return callfn(vm, AS_CLOSURE(callee), argc, retcnt);
+            case OBJ_CLASS: {
+                OClass* oclass    = AS_CLASS(callee);
+                vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, oclass));
+                OClosure* init    = oclass->overloaded;
+                if(init != NULL) return callfn(vm, init, argc, 1);
+                else if(unlikely(argc != 0)) {
+                    FN_ARGC_ERR(vm, 0, argc);
+                    return false;
+                } else return true;
+            }
+            case OBJ_NATIVE: // A C function ?
+                return callnative(vm, AS_NATIVE(callee), argc, retcnt);
             default:
                 break;
         }
     }
-    vm->sp[-argc - 1] = NIL_VAL;
-    NONCALLABLE_ERR(vm, vtostr(vm, callee)->storage);
-    return 0;
+    vm->sp[-argc - 1] = OBJ_VAL(NONCALLABLE_ERR(vm, vtostr(vm, callee)->storage));
+    return false;
 }
 
 static force_inline bool
@@ -315,7 +201,7 @@ invokefrom(VM* vm, OClass* oclass, Value methodname, Int argc, Int retcnt)
         UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(methodname), oclass->name->storage);
         return false;
     }
-    return vcall(vm, method, argc, retcnt);
+    return callv(vm, method, argc, retcnt);
 }
 
 static force_inline bool invokeindex(VM* vm, Value name, Int argc, Int retcnt)
@@ -330,7 +216,7 @@ static force_inline bool invokeindex(VM* vm, Value name, Int argc, Int retcnt)
     if(HashTable_get(&instance->fields, name, &value)) {
         vm->sp[-argc - 1] = value;
         vm->sp--; // additional argument on stack ('name')
-        return vcall(vm, value, argc - 1, retcnt);
+        return callv(vm, value, argc - 1, retcnt);
     }
     if(unlikely(!HashTable_get(&instance->oclass->methods, name, &value))) {
         UNDEFINED_PROPERTY_ERR(
@@ -340,21 +226,21 @@ static force_inline bool invokeindex(VM* vm, Value name, Int argc, Int retcnt)
         return false;
     }
     pop(vm); // pop the name
-    return vcall(vm, value, argc - 1, retcnt);
+    return callv(vm, value, argc - 1, retcnt);
 }
 
 static force_inline bool invoke(VM* vm, Value name, Int argc, Int retcnt)
 {
     Value receiver = *stackpeek(argc);
     if(unlikely(!IS_INSTANCE(receiver))) {
-        NOT_INSTANCE_ERR(vm, vtostr(vm, receiver)->storage);
+        vm->sp[-argc - 1] = OBJ_VAL(NOT_INSTANCE_ERR(vm, vtostr(vm, receiver)->storage));
         return false;
     }
     OInstance* instance = AS_INSTANCE(receiver);
     Value      value;
     if(HashTable_get(&instance->fields, name, &value)) {
         vm->sp[-argc - 1] = value;
-        return vcall(vm, value, argc, retcnt);
+        return callv(vm, value, argc, retcnt);
     }
     return invokefrom(vm, instance->oclass, name, argc, retcnt);
 }
@@ -429,7 +315,7 @@ static OString* unescape(VM* vm, OString* string)
                 Array_Byte_push(&new, string->storage[i]);
         }
     }
-    OString* unescaped = OString_from(vm, (void*)new.data, new.len);
+    OString* unescaped = OString_new(vm, (void*)new.data, new.len);
     push(vm, OBJ_VAL(unescaped));
     Array_Byte_free(&new, NULL);
     pop(vm);
@@ -466,6 +352,7 @@ static sdebug void dumpstack(VM* vm, CallFrame* frame, Byte* ip)
 
 static InterpretResult run(VM* vm)
 {
+#define throwerr(vm)    runerror(vm, vtostr(vm, *stackpeek(0))->storage)
 #define READ_BYTE()     (*ip++)
 #define READ_BYTEL()    (ip += 3, GET_BYTES3(ip - 3))
 #define READ_CONSTANT() FFN(frame)->chunk.constants.data[READ_BYTEL()]
@@ -595,9 +482,9 @@ static InterpretResult run(VM* vm)
             {
                 OFunction* fn    = FFN(frame);
                 UInt       vacnt = READ_BYTEL();
-                vacnt            = (vacnt == 0 ? fn->vacnt : vacnt);
+                if(vacnt == 0) vacnt = frame->vacnt;
                 for(UInt i = 1; i <= vacnt; i++) {
-                    Value* next = frame->sp + fn->arity + i;
+                    Value* next = frame->callee + fn->arity + i;
                     push(vm, *next);
                 }
                 BREAK;
@@ -666,8 +553,10 @@ static InterpretResult run(VM* vm)
                 Int retcnt = READ_BYTEL();
                 Int argc   = vm->sp - Array_VRef_pop(&vm->callstart);
                 frame->ip  = ip;
-                if(unlikely(!vcall(vm, *stackpeek(argc), argc, retcnt)))
+                if(unlikely(!callv(vm, *stackpeek(argc), argc, retcnt))) {
+                    throwerr(vm);
                     return INTERPRET_RUNTIME_ERROR;
+                }
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
                 BREAK;
@@ -687,8 +576,10 @@ static InterpretResult run(VM* vm)
                 Int   retcnt     = READ_BYTEL();
                 Int   argc       = vm->sp - Array_VRef_pop(&vm->callstart);
                 frame->ip        = ip;
-                if(unlikely(!invoke(vm, methodname, argc, retcnt)))
+                if(unlikely(!invoke(vm, methodname, argc, retcnt))) {
+                    throwerr(vm);
                     return INTERPRET_RUNTIME_ERROR;
+                }
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
                 BREAK;
@@ -700,7 +591,10 @@ static InterpretResult run(VM* vm)
                 frame->ip          = ip;
                 OBoundMethod* bound =
                     bindmethod(vm, superclass, methodname, *stackpeek(0));
-                if(unlikely(bound == NULL)) return INTERPRET_RUNTIME_ERROR;
+                if(unlikely(bound == NULL)) {
+                    throwerr(vm);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 vm->sp[-1] = OBJ_VAL(bound);
                 BREAK;
             }
@@ -712,8 +606,10 @@ static InterpretResult run(VM* vm)
                 UInt    argc       = vm->sp - Array_VRef_pop(&vm->callstart);
                 Int     retcnt     = READ_BYTEL();
                 frame->ip          = ip;
-                if(unlikely(!invokefrom(vm, superclass, methodname, argc, retcnt)))
+                if(unlikely(!invokefrom(vm, superclass, methodname, argc, retcnt))) {
+                    throwerr(vm);
                     return INTERPRET_RUNTIME_ERROR;
+                }
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
                 BREAK;
@@ -842,7 +738,7 @@ static InterpretResult run(VM* vm)
                 }
             get_local_fin:;
                 {
-                    push(vm, frame->sp[bcp]);
+                    push(vm, frame->callee[bcp]);
                     BREAK;
                 }
                 CASE(OP_SET_LOCAL)
@@ -857,7 +753,7 @@ static InterpretResult run(VM* vm)
                 }
             set_local_fin:;
                 {
-                    frame->sp[bcp] = pop(vm);
+                    frame->callee[bcp] = pop(vm);
                     BREAK;
                 }
                 CASE(OP_TOPRET) // return from script
@@ -885,13 +781,13 @@ static InterpretResult run(VM* vm)
                         Array_Value_push(&vm->temp, *stackpeek(0));
                         pop(vm);
                     }
-                    closeupval(vm, frame->sp);
+                    closeupval(vm, frame->callee);
                     vm->fc--;
                     if(vm->fc == 0) { // end of main script
                         popn(vm, vm->sp - vm->stack);
                         return INTERPRET_OK;
                     }
-                    vm->sp = frame->sp;
+                    vm->sp = frame->callee;
                     while(vm->temp.len > 0)
                         push(vm, Array_Value_pop(&vm->temp));
                     ASSERT(vm->temp.len == 0, "Temporary array must be empty.");
@@ -957,7 +853,7 @@ static InterpretResult run(VM* vm)
                     Byte local = READ_BYTE();
                     Byte flags = READ_BYTE();
                     UInt idx   = READ_BYTEL();
-                    if(local) closure->upvals[i] = captureupval(vm, frame->sp + idx);
+                    if(local) closure->upvals[i] = captureupval(vm, frame->callee + idx);
                     else closure->upvals[i] = frame->closure->upvals[idx];
                     closure->upvals[i]->closed.flags = flags;
                 }
@@ -1098,7 +994,7 @@ static InterpretResult run(VM* vm)
                 memcpy(vm->sp, stackpeek(2), 3 * sizeof(Value));
                 vm->sp    += 3;
                 frame->ip  = ip;
-                if(unlikely(!vcall(vm, *stackpeek(2), 2, vars)))
+                if(unlikely(!callv(vm, *stackpeek(2), 2, vars)))
                     return INTERPRET_RUNTIME_ERROR;
                 frame = &vm->frames[vm->fc - 1];
                 ip    = frame->ip;
@@ -1143,36 +1039,15 @@ static InterpretResult run(VM* vm)
 
 InterpretResult interpret(VM* vm, const char* source, const char* path)
 {
-    Value     name    = OBJ_VAL(OString_from(vm, path, strlen(path)));
+    Value     name    = OBJ_VAL(OString_new(vm, path, strlen(path)));
     OClosure* closure = compile(vm, source, name);
     if(closure == NULL) return INTERPRET_COMPILE_ERROR;
-    fncall(vm, closure, 0, 1);
+    callfn(vm, closure, 0, 1);
     return run(vm);
-}
-
-void VM_free(VM** vmp)
-{
-    if(*vmp == NULL) return;
-    VM* vm = *vmp;
-    HashTable_free(vm, &vm->loaded);
-    HashTable_free(vm, &vm->globids);
-    GARRAY_FREE(vm);
-    GSARRAY_FREE(vm);
-    Array_Value_free(&vm->temp, NULL);
-    Array_VRef_free(&vm->callstart, NULL);
-    Array_VRef_free(&vm->retstart, NULL);
-    HashTable_free(vm, &vm->strings);
-    O* next;
-    for(O* head = vm->objects; head != NULL; head = next) {
-        next = onext(head);
-        ofree(vm, head);
-    }
-    FREE(vm, vm);
-    *vmp = NULL;
 }
 
 void _cleanupvm(VM** vmp)
 {
     _cleanup_function((*vmp)->F);
-    VM_free(vmp);
+    sk_destroy(vmp);
 }

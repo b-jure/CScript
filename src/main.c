@@ -1,7 +1,8 @@
 #include "chunk.h"
-#include "core.h"
+#include "corelib.h"
 #include "debug.h"
 #include "mem.h"
+#include "skooma.h"
 #include "vmachine.h"
 
 #include <stdio.h>
@@ -17,11 +18,11 @@ static void File_run(VM* vm, const char* path)
     runtime                = 0;
     free((void*)source);
     if(result == INTERPRET_COMPILE_ERROR) {
-        VM_free(vm);
+        sk_destroy(&vm);
         exit(EXIT_FAILURE);
     }
     if(result == INTERPRET_RUNTIME_ERROR) {
-        VM_free(vm);
+        sk_destroy(&vm);
         exit(EXIT_FAILURE);
     }
 }
@@ -31,12 +32,12 @@ int main(int argc, char* argv[])
     runtime = 0;
     VM* vm  = NULL;
     if(argc == 1) {
-        fprintf(stderr, "REPL is not implemented!\n");
+        fprintf(stderr, "REPL is not implemented, contributions are welcome :)!\n");
         return 1;
     } else if(argc == 2) {
-        vm = VM_new(NULL);
+        vm = sk_create(NULL);
         File_run(vm, argv[1]);
-        VM_free(vm);
+        sk_destroy(&vm);
     } else {
         fprintf(stderr, "Usage: skooma [path.sk]\n");
         exit(EXIT_FAILURE);

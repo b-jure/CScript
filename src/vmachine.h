@@ -19,12 +19,18 @@
 
 
 
-typedef struct {
-    OClosure* closure; /* Function or Closure */
-    Byte*     ip; /* Top of the CallFrame */
-    Value*    sp; /* Relative stack pointer */
+typedef struct CallFrame CallFrame;
+
+struct CallFrame {
+    OClosure* closure;
+    Byte*     ip; /* Instruction pointer (closure chunk) */
+    Value*    callee; /* Pointer to the callee on the stack */
     Int       retcnt; /* Expected value return count */
-} CallFrame;
+    Int       vacnt; /* Count of extra arguments in vararg functions */
+};
+
+#define FFN(frame) (frame->closure->fn)
+
 
 
 
@@ -51,18 +57,6 @@ typedef struct {
 
 
 
-
-/* GC flags */
-#define GC_MANUAL_BIT (1)
-
-#define GC_SET(vm, bit)        BIT_SET((vm)->gc_flags, bit)
-#define GC_CLEAR(vm, bit)      BIT_CLEAR((vm)->gc_flags, bit)
-#define GC_TOGGLE(vm, bit, on) BIT_TOGGLE((vm)->gc_flags, bit, on)
-#define GC_CHECK(vm, bit)      BIT_CHECK((vm)->gc_flags, bit)
-
-
-
-
 typedef enum {
     INTERPRET_OK, /* No error */
     INTERPRET_COMPILE_ERROR, /* Compile time error */
@@ -75,32 +69,26 @@ typedef enum {
 #define tobool(val, bval)   (IS_BOOL(val) ? (*(bval) = AS_BOOL(val), 1) : 0)
 
 
-VM*             VM_new(Config* config);
-void            VM_free(VM** vm);
-void            push(VM* vm, Value val);
-void            pushn(VM* vm, Int n, Value val);
-Value           pop(VM* vm);
-InterpretResult interpret(VM* vm, const char* source, const char* filename);
-bool            fncall(VM* vm, OClosure* callee, Int argc, Int retcnt);
-void            closeupval(VM* vm, Value* last);
-void            runerror(VM* vm, const char* errfmt, ...);
-int             vcall(VM* vm, Value callee, Int argc, Int retcnt);
+void push(VM* vm, Value val);
+#define pushn(vm, n, val)                                                                \
+    do {                                                                                 \
+        int cnt = n;                                                                     \
+        while(cnt-- > 0)                                                                 \
+            push(vm, val);                                                               \
+    } while(0)
 
-typedef struct CallInfo CallInfo;
-struct CallInfo {
-    CallInfo *prev, *next;
-    Value*    fnloc; // Location of the function being called
-    Int       argc; // arguments count
-    Int       retc; // expected return count
-    Int       varargc; // variable argument list args count
-};
+#define pop(vm)     (*--(vm)->sp)
+#define popn(vm, n) (vm->sp -= n)
+
+InterpretResult interpret(VM* vm, const char* source, const char* filename);
+void            runerror(VM* vm, const char* errfmt, ...);
+bool            callv(VM* vm, Value callee, Int argc, Int retcnt);
 
 ARRAY_NEW(Array_ORef, O*);
 ARRAY_NEW(Array_VRef, Value*);
 
 struct VM {
     Config        config; // user configuration
-    CallInfo      cinfo; // function call info
     unsigned long seed; // randomized seed for hashing
     HashTable     loaded; // loaded scripts
     Value         script; // current script name

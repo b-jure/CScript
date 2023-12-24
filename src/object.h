@@ -115,7 +115,6 @@ struct OFunction { // typedef is inside 'value.h'
     OString* name; // script name
     UInt     upvalc; // number of upvalues
     UInt     arity; // Min amount of arguments required
-    UInt     vacnt; // Variable arguments count
     Byte     isva : 1; // If this function takes valist
     Byte     isinit : 1; // If this function is class initializer
     Byte     gotret : 1; // last instruction is 'OP_TOP/RET'
@@ -155,8 +154,9 @@ typedef struct {
     bool      isva; // is this vararg function
 } ONative; // Native function written in C
 
-OString*      OString_from(VM* vm, const char* chars, size_t len);
-OString*      OStringf_from(VM* vm, const char* fmt, va_list argp);
+OString*      OString_new(VM* vm, const char* chars, size_t len);
+OString*      OString_fmt_from(VM* vm, const char* fmt, va_list argp);
+OString*      OString_fmt(VM* vm, const char* fmt, ...);
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method);
 OInstance*    OInstance_new(VM* vm, OClass* cclass);
 OClass*       OClass_new(VM* vm, OString* name);

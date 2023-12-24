@@ -42,7 +42,7 @@ static force_inline OString* OString_alloc(VM* vm, UInt len)
     return string;
 }
 
-OString* OString_from(VM* vm, const char* chars, size_t len)
+OString* OString_new(VM* vm, const char* chars, size_t len)
 {
     Hash     hash     = stringhash(chars, len, vm->seed);
     OString* interned = HashTable_get_intern(&vm->strings, chars, len, hash);
@@ -65,7 +65,7 @@ OString* OString_from(VM* vm, const char* chars, size_t len)
     return string;
 }
 
-OString* OStringf_from(VM* vm, const char* fmt, va_list argp)
+OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
 {
 #define MAXDIGITS 45
 
@@ -121,14 +121,25 @@ OString* OStringf_from(VM* vm, const char* fmt, va_list argp)
             }
             default: { /* invalid format specifier */
                 runerror(vm, "invalid format specifier '%%%c' for 'sk_pushfstring'", c);
+                Array_Byte_free(&buff, NULL);
+                return NULL;
             }
         }
     }
-    OString* fstr = OString_from(vm, (char*)buff.data, buff.len);
+    OString* fstr = OString_new(vm, (char*)buff.data, buff.len);
     Array_Byte_free(&buff, NULL);
     return fstr;
 
 #undef MAXDIGITS
+}
+
+OString* OString_fmt(VM* vm, const char* fmt, ...)
+{
+    va_list argp;
+    va_start(argp, fmt);
+    OString* str = OString_fmt_from(vm, fmt, argp);
+    va_end(argp);
+    return str;
 }
 
 static force_inline void OString_free(VM* vm, OString* string)
@@ -475,7 +486,7 @@ OString* otostr(VM* vm, O* object)
             memcpy(buff, class_name, class_len);
             memcpy(buff + class_len, literal, literal_len);
             buff[arrlen - 1] = '\0';
-            return OString_from(vm, buff, arrlen - 1);
+            return OString_new(vm, buff, arrlen - 1);
         }
         CASE(OBJ_BOUND_METHOD)
         {

@@ -5,6 +5,8 @@
 #include "value.h"
 #include "vmachine.h"
 
+#include <time.h>
+
 
 
 
@@ -29,7 +31,7 @@
 /* Get stack value at 'idx'. */
 static force_inline Value* idx2val(const VM* vm, int idx)
 {
-    Value* fn = vm->cinfo.fnloc;
+    Value* fn = vm->frames[vm->fc - 1]->callee;
     if(idx >= 0) {
         sk_checkapi(vm, idx < vm->sp - 1 - fn, "index too big.");
         return (fn + 1 + idx);
@@ -79,20 +81,110 @@ SK_API int sk_ensurestack(VM* vm, int n)
  * CREATE/DESTROY the VM.
  */
 
-/* Initialize the VM with the 'Config'.
- * If 'cfg' is NULL then the VM initializes per default settings.
- * Otherwise 'cfg' fields are used. */
+/* Create the VM initialized with the 'cfg'.
+ * If 'cfg' is NULL then the VM initializes per default settings. */
 SK_API VM* sk_create(Config* cfg)
 {
-    return VM_new(cfg);
+    AllocatorFn allocate = reallocate;
+    void*       userdata = NULL;
+    if(cfg != NULL) {
+        userdata = cfg->userdata;
+        allocate = cfg->reallocate ? cfg->reallocate : reallocate;
+    }
+    VM* vm = allocate(NULL, sizeof(VM), userdata);
+    memset(&vm->config, 0, sizeof(Config));
+    if(cfg != NULL) {
+        memcpy(&vm->config, cfg, sizeof(Config));
+        vm->config.reallocate = allocate;
+    } else Config_init(&vm->config);
+    srand(time(0));
+    vm->seed         = rand();
+    vm->fc           = 0;
+    vm->objects      = NULL;
+    vm->F            = NULL;
+    vm->open_upvals  = NULL;
+    vm->script       = NIL_VAL;
+    vm->gc_allocated = 0;
+    vm->gc_next      = (1 << 20); // 1 MiB
+    vm->gc_flags     = 0;
+    vm->sp           = vm->stack;
+    HashTable_init(&vm->loaded); // Loaded scripts and their functions
+    HashTable_init(&vm->globids); // Global variable identifiers
+    GARRAY_INIT(vm); // Global values array
+    GSARRAY_INIT(vm); // Gray stack array (no GC)
+    Array_Value_init(&vm->temp, vm); // Temp values storage (return values)
+    Array_VRef_init(&vm->callstart, vm);
+    Array_VRef_init(&vm->retstart, vm);
+    HashTable_init(&vm->strings); // Interned strings table (Weak_refs)
+    memset(vm->statics, 0, sizeof(vm->statics));
+    for(UInt i = 0; i < SS_SIZE; i++)
+        vm->statics[i] = OString_new(vm, static_str[i].name, static_str[i].len);
+    // @REFACTOR?: Maybe make the native functions private and only
+    //             callable inside class instances?
+    //             Upside: less branching resulting in more straightforward code.
+    //             Downside: slower function call (maybe not so bad because
+    //             of removal of type checking inside the native functions, needs
+    //             testing)
+    //
+    // @TODO?: Change NativeFn signature to accept variable amount of arguments.
+    //         Upside: More expressive and flexible functions.
+    //         Downside: va_list parsing resulting in slower function call
+    //         processing
+    // VM_define_native(vm, "clock", native_clock, 0, false); // GC
+    // VM_define_native(vm, "isfield", native_isfield, 2, false); // GC
+    // VM_define_native(vm, "printl", native_printl, 1, false); // GC
+    // VM_define_native(vm, "print", native_print, 1, false); // GC
+    // VM_define_native(vm, "tostr", native_tostr, 1, false); // GC
+    // VM_define_native(vm, "isstr", native_isstr, 1, false); // GC
+    // VM_define_native(vm, "strlen", native_strlen, 1, false); // GC
+    // VM_define_native(vm, "strpat", native_strpat, 2, false); // GC
+    // VM_define_native(vm, "strsub", native_strsub, 3, false); // GC
+    // VM_define_native(vm, "strbyte", native_strbyte, 2, false); // GC
+    // VM_define_native(vm, "strlower", native_strlower, 1, false); // GC
+    // VM_define_native(vm, "strupper", native_strupper, 1, false); // GC
+    // VM_define_native(vm, "strrev", native_strrev, 1, false); // GC
+    // VM_define_native(vm, "strconcat", native_strconcat, 2, false); // GC
+    // VM_define_native(vm, "byte", native_byte, 1, false); // GC
+    // VM_define_native(vm, "gcfactor", native_gcfactor, 1, false); // GC
+    // VM_define_native(vm, "gcmode", native_gcmode, 1, false); // GC
+    // VM_define_native(vm, "gccollect", native_gccollect, 0, false); // GC
+    // VM_define_native(vm, "gcleft", native_gcleft, 0, false); // GC
+    // VM_define_native(vm, "gcusage", native_gcusage, 0, false); // GC
+    // VM_define_native(vm, "gcnext", native_gcnext, 0, false); // GC
+    // VM_define_native(vm, "gcset", native_gcset, 1, false); // GC
+    // VM_define_native(vm, "gcisauto", native_gcisauto, 0, false); // GC
+    // VM_define_native(vm, "assert", native_assert, 1, false); // GC
+    // VM_define_native(vm, "assertf", native_assertf, 2, false); // GC
+    // VM_define_native(vm, "error", native_error, 1, false); // GC
+    // VM_define_native(vm, "typeof", native_typeof, 1, false); // GC
+    // VM_define_native(vm, "loadscript", native_loadscript, 1, false); // GC
+    return vm;
 }
 
 
 /* Free the VM allocation, the pointer to VM will be nulled out. */
 SK_API void sk_destroy(VM** vmp)
 {
-    sk_lock(*vmp);
-    VM_free(vmp);
+    if(likely(vmp)) { // non-null pointer ?
+        sk_lock(*vmp);
+        if(*vmp == NULL) return;
+        VM* vm = *vmp;
+        HashTable_free(vm, &vm->loaded);
+        HashTable_free(vm, &vm->globids);
+        GARRAY_FREE(vm);
+        GSARRAY_FREE(vm);
+        Array_Value_free(&vm->temp, NULL);
+        Array_VRef_free(&vm->callstart, NULL);
+        Array_VRef_free(&vm->retstart, NULL);
+        HashTable_free(vm, &vm->strings);
+        O* next;
+        for(O* head = vm->objects; head != NULL; head = next) {
+            next = onext(head);
+            ofree(vm, head);
+        }
+        FREE(vm, vm);
+        *vmp = NULL;
+    }
 }
 
 
@@ -250,13 +342,14 @@ SK_API int sk_isinstance(const VM* vm, int idx)
 /* Push nil literal */
 #define pushnil(vm) pushval(vm, NIL_VAL)
 
+/* Push formatted cstring */
 #define pushfstr(vm, fmt, argp)                                                          \
-    if(fmt) pushostring(vm, OStringf_from(vm, fmt, argp));                               \
+    if(fmt) pushostring(vm, OString_fmt_from(vm, fmt, argp));                            \
     else pushnil(vm);
 
-/* Push generic string */
+/* Push string */
 #define pushstr(vm, ptr, len)                                                            \
-    if(ptr) pushostring(vm, OString_from(vm, ptr, len));                                 \
+    if(ptr) pushostring(vm, OString_new(vm, ptr, len));                                  \
     else pushnil(vm);
 
 /* Push cstring */
@@ -464,7 +557,7 @@ SK_API size_t sk_rawlen(const VM* vm, int idx)
  * relative to the current function */
 SK_API int sk_gettop(const VM* vm)
 {
-    return cast_int(vm->sp - (vm->cinfo.fnloc + 1));
+    return cast_int(vm->sp - (vm->frames[vm->fc - 1]->callee + 1));
 }
 
 
@@ -482,7 +575,7 @@ SK_API int sk_gettop(const VM* vm)
 SK_API void sk_settop(VM* vm, int idx)
 {
     sk_lock(vm);
-    Value* fn = vm->cinfo.fnloc;
+    Value* fn = vm->frames[vm->fc - 1]->callee;
     if(idx >= 0) {
         sk_checkapi(vm, idx < ((Value*)stklast(vm) - fn), "index too big.");
         intptr_t diff = ((fn + 1) + idx) - vm->sp;
@@ -533,11 +626,14 @@ SK_API void sk_replace(VM* vm, int idx)
 
 
 
-/*
- * Call
- */
-
-SK_API int sk_call(VM* vm, int argc, int retcnt)
+/* Call the value on the stack located at the 'idx'. */
+SK_API int sk_vcall(VM* vm, int idx, int argc, int retcnt)
 {
-    return vcall(vm, *stackpeek(0), argc, retcnt);
+    sk_lock(vm);
+    Value callee = *idx2val(vm, idx);
+    int   res    = callv(vm, callee, argc, retcnt);
+    if(!callv(vm, callee, argc, retcnt)) {
+    }
+    sk_unlock(vm);
+    return res;
 }

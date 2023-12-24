@@ -1,6 +1,7 @@
 #ifndef SKOOMA_ERR_H
     #define SKOOMA_ERR_H
 
+
     /**
      * FORMAT STRINGS
      **/
@@ -305,17 +306,19 @@
     /**
      * VM RUNTIME ERRORS
      **/
-    #define RUNTIME_ERR(vm, fmt, ...) runerror(vm, fmt __VA_OPT__(, ) __VA_ARGS__)
+
+    /* Create formatted object string */
+    #define OSTRINGF(vm, fmt, ...) OString_fmt(vm, fmt __VA_OPT__(, ) __VA_ARGS__)
 
     /* OP_SUB | OP_MUL | OP_MOD | OP_POW | OP_DIV | OP_GREATER | OP_GREATER_EQUAL |
      * OP_LESS | OP_LESS_EQUAL */
     #define BINARYOP_ERR(vm, op)                                                         \
-        RUNTIME_ERR(vm, "Operands must be numbers or overload the operator '#op'.");     \
+        OSTRINGF(vm, "Operands must be numbers or overload the operator '#op'.");        \
     /*-----------------*/
 
     /* OP_NEG */
     #define UNARYNEG_ERR(vm, valstr)                                                     \
-        RUNTIME_ERR(                                                                     \
+        OSTRINGF(                                                                        \
             vm,                                                                          \
             "'%s' is not a number, operand must be a number or it must overload unary "  \
             "operator '-'.",                                                             \
@@ -324,7 +327,7 @@
 
     /* invokeindex() | invoke() | OP_SET_PROPERTY | OP_GET_PROPERTY */
     #define NOT_INSTANCE_ERR(vm, valstr)                                                 \
-        RUNTIME_ERR(                                                                     \
+        OSTRINGF(                                                                        \
             vm,                                                                          \
             "'%s' is not an <instance>, only class instances have properties.",          \
             valstr)
@@ -332,12 +335,12 @@
 
     /* bindmethod() | invokefrom() | invokeindex() */
     #define UNDEFINED_PROPERTY_ERR(vm, property, class)                                  \
-        RUNTIME_ERR(vm, "Property '%s' is not defined for <class '%s'>.", property, class)
+        OSTRINGF(vm, "Property '%s' is not defined for <class '%s'>.", property, class)
     /*-----------------*/
 
     /* OP_INHERIT */
     #define INHERIT_ERR(vm, subclass, superclass)                                        \
-        RUNTIME_ERR(                                                                     \
+        OSTRINGF(                                                                        \
             vm,                                                                          \
             "Invalid impl: \"class %s impl ...\", tried "                                \
             "inheriting from '%s', classes can only inherit from other classes.\n"       \
@@ -348,40 +351,42 @@
 
     /* OP_GET_GLOBAL | OP_GET_GLOBALL | OP_SET_GLOBAL | OP_SET_GLOBALL */
     #define UNDEFINED_GLOBAL_ERR(vm, name)                                               \
-        RUNTIME_ERR(vm, "Undefined global variable '%s'.", name)
+        OSTRINGF(vm, "Undefined global variable '%s'.", name)
     /*-----------------*/
 
     /* OP_DEFINE_GLOBAL | OP_DEFINE_GLOBALL */
     #define GLOBALVAR_REDEFINITION_ERR(vm, name)                                         \
-        RUNTIME_ERR(vm, "Redefinition of global variable '%s'.", name);
+        OSTRINGF(vm, "Redefinition of global variable '%s'.", name);
     /*-----------------*/
 
     /* OP_SET_UPVALUE */
-    #define VARIABLE_FIXED_ERR(vm, len, start)                                           \
-        RUNTIME_ERR(vm, FMT_VAR_FIXED_ERR(len, start))
+    #define VARIABLE_FIXED_ERR(vm, len, start) OSTRINGF(vm, FMT_VAR_FIXED_ERR(len, start))
     /*-----------------*/
 
     /* OP_INDEX | OP_SET_INDEX */
     #define INDEX_RECEIVER_ERR(vm, receiver)                                             \
-        RUNTIME_ERR(vm, "Can't index '%s', indexing can be used on instances.")
+        OSTRINGF(vm, "Can't index '%s', indexing can be used on instances.")
     #define INVALID_INDEX_ERR(vm)                                                        \
-        RUNTIME_ERR(                                                                     \
-            vm,                                                                          \
-            "Instances can only be indexed with strings (literal or variable).");
+        OSTRINGF(vm, "Instances can only be indexed with strings (literal or variable).");
     /*-----------------*/
 
-    /* fncall() | nativecall() | instancecall() */
+    /* callv() | callnative() | callfn() */
     #define FN_ARGC_ERR(vm, arity, argc)                                                 \
-        RUNTIME_ERR(vm, "Expected %d argument/s, instead got %d.", arity, argc)
+        OSTRINGF(vm, "Expected %d argument/s, instead got %d.", arity, argc)
     #define FN_VA_ARGC_ERR(vm, arity, argc)                                              \
-        RUNTIME_ERR(vm, "Expected at least %d argument/s, instead got %d.", arity, argc)
+        OSTRINGF(vm, "Expected at least %d argument/s, instead got %d.", arity, argc)
     #define FRAME_LIMIT_ERR(vm, frames_max)                                              \
-        RUNTIME_ERR(vm, "Call-frame stack overflow, limit reached [%u].", frames_max)
+        OSTRINGF(vm, "Call-frame stack overflow, limit reached [%u].", frames_max)
+    #define RETCNT_STACK_OVERFLOW(vm, native)                                            \
+        OSTRINGF(                                                                        \
+            vm,                                                                          \
+            "Called function <native %s> return count would overflow the stack.",        \
+            native)
     /* -------------- */
 
-    /* vcall() { OP_CALL } */
+    /* callv() { OP_CALL } */
     #define NONCALLABLE_ERR(vm, valstr)                                                  \
-        RUNTIME_ERR(                                                                     \
+        OSTRINGF(                                                                        \
             vm,                                                                          \
             "Tried calling '%s' which is non-callable value, only functions "            \
             "and classes can be called.",                                                \
@@ -390,7 +395,7 @@
 
     /* OP_ADD */
     #define ADD_OPERATOR_ERR(vm, a, b)                                                   \
-        do {                                                                             \
+        ({                                                                               \
             OString* str1 = vtostr(vm, a);                                               \
             push(vm, OBJ_VAL(str1));                                                     \
             OString* str2 = vtostr(vm, b);                                               \
@@ -399,7 +404,7 @@
             push(vm, OBJ_VAL(unesc2));                                                   \
             OString* unesc1 = unescape(vm, str1);                                        \
             push(vm, OBJ_VAL(unesc1));                                                   \
-            RUNTIME_ERR(                                                                 \
+            OString* s = OSTRINGF(                                                       \
                 vm,                                                                      \
                 "Only two numbers can be added together or two strings "                 \
                 "concatenated.\n"                                                        \
@@ -414,7 +419,8 @@
                 unesc2->storage,                                                         \
                 IS_STRING(b) ? "" : ")");                                                \
             popn(vm, 4);                                                                 \
-        } while(false)
+            s;                                                                           \
+        })
 
 #endif
 /**/
