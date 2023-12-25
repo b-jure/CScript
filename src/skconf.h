@@ -9,22 +9,22 @@
 #include <stdint.h>
 
 #ifdef __STDC_VERSION__
-    #if __STDC_VERSION__ < 201112L
-        #error "Minimum required C standard must be C11 (201112L)."
-    #endif
+#if __STDC_VERSION__ < 201112L
+#error "Minimum required C standard must be C11 (201112L)."
+#endif
 #elif defined __cplusplus
-    #if __cplusplus < 201103L
-        #error "Minimum required C++ standard must be C++11 (201103L)."
-    #endif
+#if __cplusplus < 201103L
+#error "Minimum required C++ standard must be C++11 (201103L)."
+#endif
 #else
-    #error "Compiler not supported (no __STDC_VERSION__ or __cplusplus defined)."
+#error "Compiler not supported (no __STDC_VERSION__ or __cplusplus defined)."
 #endif
 
 #if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||         \
     __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 ||                              \
     __DBL_MIN_10_EXP__ != -307 || __DBL_MIN_EXP__ != -1021
 
-    #error "Compiler missing IEEE-754 double precision floating point!"
+#error "Compiler missing IEEE-754 double precision floating point!"
 #endif
 
 static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8.");
@@ -47,81 +47,81 @@ static_assert(
 
 #if defined(__GNUC__)
 
-    #define S_PRECOMPUTED_GOTO
+#define S_PRECOMPUTED_GOTO
 
-    #define force_inline   __always_inline
-    #define likely(cond)   __glibc_likely(cond)
-    #define unlikely(cond) __glibc_unlikely(cond)
-    #define unused         __attribute__((unused))
-    #define unreachable    __builtin_unreachable()
+#define force_inline   __always_inline
+#define likely(cond)   __glibc_likely(cond)
+#define unlikely(cond) __glibc_unlikely(cond)
+#define unused         __attribute__((unused))
+#define unreachable    __builtin_unreachable()
 
 #elif defined(_MSC_VER) && !defined(__clang__)
 
-    #define force_inline __force_inline
-    #define unreachable  __assume(0)
-    #define unused
+#define force_inline __force_inline
+#define unreachable  __assume(0)
+#define unused
 
-    #ifndef __cplusplus
-        #define inline         _inline
-        #define likely(cond)   cond
-        #define unlikely(cond) cond
-    #elif _MSC_VER >= 1926
-        #define likely(cond)   [[likely]] cond
-        #define unlikely(cond) [[unlikely]] cond
-    #else
-        #define likely(cond)   cond
-        #define unlikely(cond) cond
-    #endif
+#ifndef __cplusplus
+#define inline         _inline
+#define likely(cond)   cond
+#define unlikely(cond) cond
+#elif _MSC_VER >= 1926
+#define likely(cond)   [[likely]] cond
+#define unlikely(cond) [[unlikely]] cond
+#else
+#define likely(cond)   cond
+#define unlikely(cond) cond
+#endif
 
-    #define unused
+#define unused
 
 #elif defined(__clang__)
 
-    #define S_PRECOMPUTED_GOTO
+#define S_PRECOMPUTED_GOTO
 
-    #if __has_attribute(always_inline)
-        #define force_inline __attribute__((always_inline))
-    #else
-        #define force_inline inline
-    #endif
+#if __has_attribute(always_inline)
+#define force_inline __attribute__((always_inline))
+#else
+#define force_inline inline
+#endif
 
-    #if __has_attribute(unused)
-        #define unused __attribute__((unused))
-    #else
-        #define unused
-    #endif
+#if __has_attribute(unused)
+#define unused __attribute__((unused))
+#else
+#define unused
+#endif
 
-    #if __has_builtin(__builtin_expect)
-        #define likely(cond)   __builtin_expect(cond, 1)
-        #define unlikely(cond) __builtin_expect(cond, 0)
-    #else
-        #define likely(cond)   cond
-        #define unlikely(cond) cond
-    #endif
+#if __has_builtin(__builtin_expect)
+#define likely(cond)   __builtin_expect(cond, 1)
+#define unlikely(cond) __builtin_expect(cond, 0)
+#else
+#define likely(cond)   cond
+#define unlikely(cond) cond
+#endif
 
-    #if __has_builtin(__builtin_unreachable)
-        #define unreachable __builtin_unreachable()
-    #else
-        #define unreachable                                                              \
-            #include<stdio.h> #include<stdlib.h> printf(                                 \
-                "Unreachable code: %s:%d\n",                                             \
-                __FILE__,                                                                \
-                __LINE__);                                                               \
-            abort();
-    #endif
+#if __has_builtin(__builtin_unreachable)
+#define unreachable __builtin_unreachable()
+#else
+#define unreachable                                                                      \
+    #include<stdio.h> #include<stdlib.h> printf(                                         \
+        "Unreachable code: %s:%d\n",                                                     \
+        __FILE__,                                                                        \
+        __LINE__);                                                                       \
+    abort();
+#endif
 
 #else
 
-    #define force_inline
-    #define likely(cond)   cond
-    #define unlikely(cond) cond
-    #define unused
-    #define unreachable                                                                  \
-        #include<stdio.h> #include<stdlib.h> printf(                                     \
-            "Unreachable code: %s:%d\n",                                                 \
-            __FILE__,                                                                    \
-            __LINE__);                                                                   \
-        abort();
+#define force_inline
+#define likely(cond)   cond
+#define unlikely(cond) cond
+#define unused
+#define unreachable                                                                      \
+    #include<stdio.h> #include<stdlib.h> printf(                                         \
+        "Unreachable code: %s:%d\n",                                                     \
+        __FILE__,                                                                        \
+        __LINE__);                                                                       \
+    abort();
 
 #endif
 
@@ -167,8 +167,9 @@ static_assert(
 
 
 #if defined(S_CHECK_API)
-    #include <assert.h>
-    #define sk_checkapi(vm, cond, msg) assert(cond)
+#undef NDEBUG
+#include <assert.h>
+#define sk_checkapi(vm, cond, msg) assert(cond)
 #endif
 
 
@@ -177,7 +178,7 @@ static_assert(
  * he should define his own sk_unlock and sk_lock.
  **/
 #if defined(sk_lock) && defined(sk_unlock)
-    #define S_LOCK_USR
+#define S_LOCK_USR
 #endif
 
 
@@ -197,36 +198,36 @@ static_assert(
  * https://www.lua.org/source/5.4/llimits.h.html#l_noret
  */
 #if !defined(sk_noret)
-    #if defined(__GNUC__)
-        #define sk_noret void __attribute__((noreturn))
-    #elif defined(_MSC_VER) && _MSC_VER >= 1200
-        #define sk_noret void __declspec(noreturn)
-    #else
-        #define sk_noret void
-    #endif
+#if defined(__GNUC__)
+#define sk_noret void __attribute__((noreturn))
+#elif defined(_MSC_VER) && _MSC_VER >= 1200
+#define sk_noret void __declspec(noreturn)
+#else
+#define sk_noret void
+#endif
 #endif
 
 
 /* For debug builds comment out 'defines' you dont want. */
 #ifdef DEBUG
-    #define sdebug
+#define sdebug
 
-    /* Enable debug asserts */
-    #define DEBUG_ASSERTIONS
+/* Enable debug asserts */
+#define DEBUG_ASSERTIONS
 
-    /* Print and disassemble bytecode for each chunk/function */
-    #define DEBUG_PRINT_CODE
+/* Print and disassemble bytecode for each chunk/function */
+#define DEBUG_PRINT_CODE
 
-    /* Trace VM stack while executing */
-    #define DEBUG_TRACE_EXECUTION
+/* Trace VM stack while executing */
+#define DEBUG_TRACE_EXECUTION
 
-    /* Run garbage collection on each allocation */
-    #define DEBUG_STRESS_GC
+/* Run garbage collection on each allocation */
+#define DEBUG_STRESS_GC
 
-    /* Log garbage collection */
-    // #define DEBUG_LOG_GC
+/* Log garbage collection */
+// #define DEBUG_LOG_GC
 #else
-    #define sdebug unused
+#define sdebug unused
 #endif
 
 
@@ -278,6 +279,14 @@ struct ScriptLoadResult {
  **/
 typedef ScriptLoadResult (*ScriptLoadFn)(VM* vm, const char* name);
 
+
+/*
+ * Panic function signature.
+ * This function gets called when runtime errors occur.
+ */
+typedef sk_noret (*PanicFn)(VM* vm);
+
+
 /**
  * User modifiable configuration.
  * Create and initialize this 'Config' struct and pass it to 'VM_new'.
@@ -286,10 +295,12 @@ typedef struct {
     AllocatorFn    reallocate; // Generic allocator function
     ScriptRenameFn rename_script; // Script rename fn
     ScriptLoadFn   load_script; // Script loader fn
+    PanicFn        panic;
     void*          userdata; // User data (for 'AllocatorFn')
     size_t         gc_init_heap_size; // Initial heap allocation
     size_t         gc_min_heap_size; // Minimum size of heap after recalculation
     double         gc_grow_factor; // Heap grow factor
+
 } Config;
 
 void Config_init(Config* config);

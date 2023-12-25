@@ -157,6 +157,7 @@ typedef struct {
 OString*      OString_new(VM* vm, const char* chars, size_t len);
 OString*      OString_fmt_from(VM* vm, const char* fmt, va_list argp);
 OString*      OString_fmt(VM* vm, const char* fmt, ...);
+OString*      unescape(VM* vm, OString* string);
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method);
 OInstance*    OInstance_new(VM* vm, OClass* cclass);
 OClass*       OClass_new(VM* vm, OString* name);

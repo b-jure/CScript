@@ -3,7 +3,7 @@
 
 SK_LIBAPI int sk_terror(VM* vm, int argidx, const char* tname)
 {
-    const char* argname  = NULL;
+    const char* argname = NULL;
     const char* argtname = NULL;
     if((sk_isinstance(vm, argidx) || sk_isclass(vm, argidx)) &&
        sk_pushmethod(vm, argidx, "__display__"))

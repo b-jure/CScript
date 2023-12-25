@@ -8,9 +8,9 @@
 #include "object.h"
 #include "parser.h"
 #include "skconf.h"
+#include "skmath.h"
 #include "value.h"
 #include "vmachine.h"
-#include "skmath.h"
 
 
 #include <stdarg.h>
@@ -581,7 +581,7 @@ static force_inline UInt globalvar(Function* F, Value identifier)
 
 static force_inline Value tokintostr(VM* vm, const Token* name)
 {
-    return OBJ_VAL(OString_from(vm, name->start, name->len));
+    return OBJ_VAL(OString_new(vm, name->start, name->len));
 }
 
 // Make global variable
@@ -817,7 +817,7 @@ static void F_init(
         local->name.len   = 0;
     }
     if(fn_type == FN_SCRIPT) F->fn->name = AS_STRING(loaded);
-    else F->fn->name = OString_from(vm, PREVT(F).start, PREVT(F).len);
+    else F->fn->name = OString_new(vm, PREVT(F).start, PREVT(F).len);
 }
 
 void F_free(Function* F)

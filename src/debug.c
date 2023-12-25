@@ -6,7 +6,59 @@
 #include "skconf.h"
 
 #include <assert.h>
+#include <stdarg.h>
 #include <stdio.h>
+
+
+/* Performs long jump if there is one otherwise prints
+ * the runtime error and invokes either a panic handler or aborts.
+ * Error message is on top of the stack, or whatever value
+ * was passed to sk_error. */
+sk_noret runerror(VM* vm, Int status)
+{
+    struct sk_longjmp* errjmp = vm->errjmp;
+    if(errjmp) { // protected call?
+        errjmp->status = status; // error status
+        longjmp(errjmp->buf, 1);
+    } else { // print error otherwise
+        fputs("\nSkooma: [runtime error]\nSkooma: ", stderr);
+        fprintf(stderr, "%s", vtostr(vm, *stackpeek(0))->storage);
+        putc('\n', stderr);
+        for(Int i = vm->fc - 1; i >= 0; i--) {
+            CallFrame* frame = &vm->frames[i];
+            Chunk*     chunk = &frame->closure->fn->chunk;
+            UInt       line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
+            Value      _;
+            bool       loaded = false;
+            if(HashTable_get(&vm->loaded, OBJ_VAL(FFN(frame)->name), &_)) {
+                vm->script = OBJ_VAL(FFN(frame)->name);
+                loaded = true;
+            }
+            fprintf(
+                stderr,
+                "Skooma: ['%s' on line %u] in ",
+                AS_CSTRING(vm->script),
+                line);
+            if(loaded) fprintf(stderr, "script\n");
+            else fprintf(stderr, "%s()\n", FFN(frame)->name->storage);
+        }
+        if(vm->config.panic) vm->config.panic(vm);
+        else abort();
+    }
+}
+
+void dumpstack(VM* vm, CallFrame* frame, Byte* ip)
+{
+    printf("           ");
+    for(Value* ptr = vm->stack; ptr < vm->sp; ptr++) {
+        printf("[");
+        vprint(*ptr);
+        printf("]");
+    }
+    printf("\n");
+    Instruction_debug(&FFN(frame)->chunk, (UInt)(ip - FFN(frame)->chunk.code.data));
+}
+
 
 sdebug void Chunk_debug(Chunk* chunk, const char* name)
 {
@@ -15,27 +67,27 @@ sdebug void Chunk_debug(Chunk* chunk, const char* name)
         offset = Instruction_debug(chunk, offset);
 }
 
-sstatic Int simpleins(const char* name, UInt offset)
+static Int simpleins(const char* name, UInt offset)
 {
     printf("%s\n", name);
     return offset + 1; /* OpCode */
 }
 
-sstatic Int jmpins(const char* name, Int sign, Chunk* chunk, UInt offset)
+static Int jmpins(const char* name, Int sign, Chunk* chunk, UInt offset)
 {
     UInt jmp = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-25s %5u -> %u\n", name, offset, offset + 4 + (sign * jmp));
     return offset + 4;
 }
 
-sstatic void constant(Chunk* chunk, UInt param)
+static void constant(Chunk* chunk, UInt param)
 {
     printf("'");
     vprint(*Array_Value_index(&chunk->constants, param));
     printf("'");
 }
 
-sstatic UInt closure(Chunk* chunk, UInt param, UInt offset)
+static UInt closure(Chunk* chunk, UInt param, UInt offset)
 {
     Value value = *Array_Value_index(&chunk->constants, param);
     vprint(value);
@@ -55,7 +107,7 @@ sstatic UInt closure(Chunk* chunk, UInt param, UInt offset)
     return offset;
 }
 
-sstatic Int shorinst(const char* name, Chunk* chunk, OpCode code, UInt offset)
+static Int shorinst(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     Byte param = *Array_Byte_index(&chunk->code, offset + 1);
     printf("%-25s %5u ", name, param);
@@ -79,7 +131,7 @@ sstatic Int shorinst(const char* name, Chunk* chunk, OpCode code, UInt offset)
     return offset + 2; /* OpCode + param(8-bit/1-byte) */
 }
 
-sstatic Int longins(const char* name, Chunk* chunk, OpCode code, UInt offset)
+static Int longins(const char* name, Chunk* chunk, OpCode code, UInt offset)
 {
     UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-25s %5u ", name, param);
@@ -102,11 +154,11 @@ sstatic Int longins(const char* name, Chunk* chunk, OpCode code, UInt offset)
     return offset + 4; /* OpCode(8-bit/1-byte) + param(24-bit/3-bytes) */
 }
 
-sstatic Int invoke(const char* name, Chunk* chunk, Int offset)
+static Int invoke(const char* name, Chunk* chunk, Int offset)
 {
-    UInt param  = GET_BYTES3(&chunk->code.data[offset + 1]);
-    offset     += 4;
-    Int retcnt  = GET_BYTES3(&chunk->code.data[offset]);
+    UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
+    offset += 4;
+    Int retcnt = GET_BYTES3(&chunk->code.data[offset]);
     printf("%-25s (retcnt %d) %5d ", name, retcnt, param);
     constant(chunk, param);
     printf("\n");
@@ -174,11 +226,7 @@ sdebug UInt Instruction_debug(Chunk* chunk, UInt offset)
         case OP_DEFINE_GLOBAL:
             return shorinst("OP_DEFINE_GLOBAL", chunk, OP_DEFINE_GLOBAL, offset);
         case OP_DEFINE_GLOBALL:
-            return longins(
-                "OP_DEFINE_GLOBALL",
-                chunk,
-                OP_DEFINE_GLOBALL,
-                offset);
+            return longins("OP_DEFINE_GLOBALL", chunk, OP_DEFINE_GLOBALL, offset);
         case OP_GET_GLOBAL:
             return shorinst("OP_GET_GLOBAL", chunk, OP_GET_GLOBAL, offset);
         case OP_GET_GLOBALL:

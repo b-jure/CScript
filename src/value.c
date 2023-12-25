@@ -14,69 +14,42 @@
 #define sizeoftrue  (sizeof("true") - 1)
 #define sizeofnil   (sizeof("nil") - 1)
 
-Byte dtos_generic(double dbl, char* dest, UInt len)
+Byte dtos_generic(double dbl, char* dest, UInt limit)
 {
-    if(floor(dbl) != dbl) return snprintf(dest, len, "%g", dbl);
-    else return snprintf(dest, len, "%ld", (int64_t)dbl);
-}
-
-Byte booltos_generic(bool boolean, char* dest, UInt len)
-{
-    if(boolean) {
-        len = MIN(len, sizeoftrue);
-        memcpy(dest, "true", len);
-        return len;
-    }
-    len = MIN(len, sizeoffalse);
-    memcpy(dest, "false", len);
-    return len;
-}
-
-Byte niltos_generic(char* dest, UInt len)
-{
-    len = MIN(len, sizeofnil);
-    memcpy(dest, "nil", len);
-    return len;
+    if(floor(dbl) != dbl) return snprintf(dest, limit, "%g", dbl);
+    else return snprintf(dest, limit, "%ld", (int64_t)dbl);
 }
 
 static force_inline OString* dtostr(VM* vm, double n)
 {
-    static char buff[30];
-    size_t      len    = dtos_generic(n, buff, 30);
+    static char buff[50];
+    size_t      len    = dtos_generic(n, buff, 45);
     OString*    string = OString_new(vm, buff, len);
     return string;
 }
 
 static force_inline OString* booltostr(VM* vm, bool boolean)
 {
-    char*  str = NULL;
-    ushort len = 0;
-    if(boolean) {
-        len = sizeof("true") - 1;
-        str = "true";
-    } else {
-        len = sizeof("false") - 1;
-        str = "false";
-    }
-    return OString_new(vm, str, len);
+    if(boolean) return vm->statics[SS_TRUE];
+    else return vm->statics[SS_FALSE];
 }
 
 OString* vtostr(VM* vm, Value value)
 {
 #ifdef S_NAN_BOX
     if(IS_BOOL(value)) return booltostr(vm, AS_BOOL(value));
-    else if(IS_NIL(value)) return OString_new(vm, "nil", sizeofnil);
+    else if(IS_NIL(value)) return vm->statics[SS_NIL];
     else if(IS_OBJ(value)) return otostr(vm, AS_OBJ(value));
     else if(IS_NUMBER(value)) return dtostr(vm, AS_NUMBER(value));
 #else
-    #ifdef S_PRECOMPUTED_GOTO
-        #define VAL_TABLE
-        #include "jmptable.h"
-        #undef VAL_TABLE
-    #else
-        #define DISPATCH(x) switch(x)
-        #define CASE(label) case label:
-    #endif
+#ifdef S_PRECOMPUTED_GOTO
+#define VAL_TABLE
+#include "jmptable.h"
+#undef VAL_TABLE
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#endif
     DISPATCH(VALUE_TYPE(value))
     {
         CASE(VAL_BOOL)
@@ -89,16 +62,16 @@ OString* vtostr(VM* vm, Value value)
         }
         CASE(VAL_NIL)
         {
-            return ObjString_from(vm, "nil", sizeofnil);
+            return vm->statics[SS_NIL];
         }
         CASE(VAL_OBJ)
         {
             return otostr(vm, AS_OBJ(value));
         }
     }
-    #ifdef SKOOMA_JMPTABLE_H
-        #undef SKOOMA_JMPTABLE_H
-    #endif
+#ifdef SKOOMA_JMPTABLE_H
+#undef SKOOMA_JMPTABLE_H
+#endif
 #endif
     unreachable;
 }
@@ -114,17 +87,17 @@ void vprint(Value value)
         else printf("%ld", (int64_t)AS_NUMBER(value));
     } else unreachable;
 #else
-    #ifdef S_PRECOMPUTED_GOTO
-        #define VAL_TABLE
-        #include "jmptable.h"
-        #undef BREAK
-        #define BREAK return
-        #undef VAL_TABLE
-    #else
-        #define DISPATCH(x) switch(x)
-        #define CASE(label) case label:
-        #define BREAK       break
-    #endif
+#ifdef S_PRECOMPUTED_GOTO
+#define VAL_TABLE
+#include "jmptable.h"
+#undef BREAK
+#define BREAK return
+#undef VAL_TABLE
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       break
+#endif
     DISPATCH(value.type)
     {
         CASE(VAL_BOOL)
@@ -151,9 +124,9 @@ void vprint(Value value)
         }
     }
     unreachable;
-    #ifdef SKOOMA_JMPTABLE_H
-        #undef SKOOMA_JMPTABLE_H
-    #endif
+#ifdef SKOOMA_JMPTABLE_H
+#undef SKOOMA_JMPTABLE_H
+#endif
 #endif
 }
 
@@ -161,14 +134,14 @@ void vprint(Value value)
 bool Value_eq(Value a, Value b)
 {
     if(a.type != b.type) return false;
-    #ifdef S_PRECOMPUTED_GOTO
-        #define VAL_TABLE
-        #include "jmptable.h"
-        #undef VAL_TABLE
-    #else
-        #define DISPATCH(x) switch(x)
-        #define CASE(label) case label:
-    #endif
+#ifdef S_PRECOMPUTED_GOTO
+#define VAL_TABLE
+#include "jmptable.h"
+#undef VAL_TABLE
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#endif
     DISPATCH(a.type)
     {
         CASE(VAL_BOOL)
@@ -188,9 +161,9 @@ bool Value_eq(Value a, Value b)
             return AS_OBJ(a) == AS_OBJ(b);
         }
     }
-    #ifdef SKOOMA_JMPTABLE_H
-        #undef SKOOMA_JMPTABLE_H
-    #endif
+#ifdef SKOOMA_JMPTABLE_H
+#undef SKOOMA_JMPTABLE_H
+#endif
 }
 #endif
 
@@ -205,14 +178,14 @@ Hash vhash(Value value)
         else return num;
     }
 #else
-    #ifdef S_PRECOMPUTED_GOTO
-        #define VAL_TABLE
-        #include "jmptable.h"
-        #undef VAL_TABLE
-    #else
-        #define DISPATCH(x) switch(x)
-        #define CASE(label) case label:
-    #endif
+#ifdef S_PRECOMPUTED_GOTO
+#define VAL_TABLE
+#include "jmptable.h"
+#undef VAL_TABLE
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#endif
     DISPATCH(value.type)
     {
         CASE(VAL_BOOL)

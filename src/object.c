@@ -1,6 +1,7 @@
 #include "array.h"
 #include "common.h"
 #include "debug.h"
+#include "err.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
@@ -120,8 +121,9 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
                 break;
             }
             default: { /* invalid format specifier */
-                runerror(vm, "invalid format specifier '%%%c' for 'sk_pushfstring'", c);
                 Array_Byte_free(&buff, NULL);
+                OString* fn = vtostr(vm, *vm->frames[vm->fc - 1].callee);
+                vm->sp[-1]  = OBJ_VAL(OSTRINGF_ERR(vm, c, fn->storage));
                 return NULL;
             }
         }
@@ -147,6 +149,61 @@ static force_inline void OString_free(VM* vm, OString* string)
     GC_FREE(vm, string, sizeof(OString) + string->len + 1);
 }
 
+OString* unescape(VM* vm, OString* string)
+{
+    Array_Byte new;
+    Array_Byte_init(&new, vm);
+    Array_Byte_init_cap(&new, string->len + 1);
+    for(UInt i = 0; i < string->len; i++) {
+        switch(string->storage[i]) {
+            case '\n':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, 'n');
+                break;
+            case '\0':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, '0');
+                break;
+            case '\a':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, 'a');
+                break;
+            case '\b':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, 'b');
+                break;
+            case '\33':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, 'e');
+                break;
+            case '\f':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, 'f');
+                break;
+            case '\r':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, 'r');
+                break;
+            case '\t':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, 't');
+                break;
+            case '\v':
+                Array_Byte_push(&new, '\\');
+                Array_Byte_push(&new, 'v');
+                break;
+            default:
+                Array_Byte_push(&new, string->storage[i]);
+        }
+    }
+    OString* unescaped = OString_new(vm, (void*)new.data, new.len);
+    push(vm, OBJ_VAL(unescaped));
+    Array_Byte_free(&new, NULL);
+    pop(vm);
+    return unescaped;
+}
+
+
 ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva)
 {
     ONative* native = ALLOC_OBJ(vm, ONative, OBJ_NATIVE);
@@ -168,7 +225,6 @@ OFunction* OFunction_new(VM* vm)
     fn->name      = NULL;
     fn->upvalc    = 0;
     fn->arity     = 0;
-    fn->vacnt     = 0;
     fn->isva      = 0;
     fn->isinit    = 0;
     fn->gotret    = 0;
@@ -293,13 +349,13 @@ sdebug void otypeprint(OType type)
 void oprint(Value value)
 {
 #ifdef S_PRECOMPUTED_GOTO
-    #define OBJ_TABLE
-    #include "jmptable.h"
-    #undef OBJ_TABLE
+#define OBJ_TABLE
+#include "jmptable.h"
+#undef OBJ_TABLE
 #else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-    #define BREAK       return
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       return
 #endif
     DISPATCH(OBJ_TYPE(value))
     {
@@ -350,7 +406,7 @@ void oprint(Value value)
     }
     unreachable;
 #ifdef SKOOMA_JMPTABLE_H
-    #undef SKOOMA_JMPTABLE_H
+#undef SKOOMA_JMPTABLE_H
 #endif
 }
 
@@ -380,13 +436,13 @@ void ofree(VM* vm, O* object)
     printf("\n");
 #endif
 #ifdef S_PRECOMPUTED_GOTO
-    #define OBJ_TABLE
-    #include "jmptable.h"
-    #undef OBJ_TABLE
+#define OBJ_TABLE
+#include "jmptable.h"
+#undef OBJ_TABLE
 #else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-    #define BREAK       return
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       return
 #endif
     DISPATCH(otype(object))
     {
@@ -433,20 +489,20 @@ void ofree(VM* vm, O* object)
     }
     unreachable;
 #ifdef SKOOMA_JMPTABLE_H
-    #undef SKOOMA_JMPTABLE_H
+#undef SKOOMA_JMPTABLE_H
 #endif
 }
 
 OString* otostr(VM* vm, O* object)
 {
 #ifdef S_PRECOMPUTED_GOTO
-    #define OBJ_TABLE
-    #include "jmptable.h"
-    #undef OBJ_TABLE
+#define OBJ_TABLE
+#include "jmptable.h"
+#undef OBJ_TABLE
 #else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-    #define BREAK       return
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       return
 #endif
     DISPATCH(otype(object))
     {
@@ -495,6 +551,6 @@ OString* otostr(VM* vm, O* object)
     }
     unreachable;
 #ifdef SKOOMA_JMPTABLE_H
-    #undef SKOOMA_JMPTLE_H
+#undef SKOOMA_JMPTLE_H
 #endif
 }

@@ -1,3 +1,4 @@
+#include "debug.h"
 #include "object.h"
 #include "skconf.h"
 #include "skooma.h"
@@ -27,11 +28,10 @@
     } while(0)
 
 
-
 /* Get stack value at 'idx'. */
 static force_inline Value* idx2val(const VM* vm, int idx)
 {
-    Value* fn = vm->frames[vm->fc - 1]->callee;
+    Value* fn = vm->frames[vm->fc - 1].callee;
     if(idx >= 0) {
         sk_checkapi(vm, idx < vm->sp - 1 - fn, "index too big.");
         return (fn + 1 + idx);
@@ -46,7 +46,7 @@ static force_inline Value* idx2val(const VM* vm, int idx)
 static force_inline size_t skstrlen(const char* str)
 {
     size_t         len = 0;
-    unsigned char* c   = (unsigned char*)str;
+    unsigned char* c = (unsigned char*)str;
     while(*c++)
         len++;
     return len;
@@ -98,16 +98,16 @@ SK_API VM* sk_create(Config* cfg)
         vm->config.reallocate = allocate;
     } else Config_init(&vm->config);
     srand(time(0));
-    vm->seed         = rand();
-    vm->fc           = 0;
-    vm->objects      = NULL;
-    vm->F            = NULL;
-    vm->open_upvals  = NULL;
-    vm->script       = NIL_VAL;
+    vm->seed = rand();
+    vm->fc = 0;
+    vm->objects = NULL;
+    vm->F = NULL;
+    vm->open_upvals = NULL;
+    vm->script = NIL_VAL;
     vm->gc_allocated = 0;
-    vm->gc_next      = (1 << 20); // 1 MiB
-    vm->gc_flags     = 0;
-    vm->sp           = vm->stack;
+    vm->gc_next = (1 << 20); // 1 MiB
+    vm->gc_flags = 0;
+    vm->sp = vm->stack;
     HashTable_init(&vm->loaded); // Loaded scripts and their functions
     HashTable_init(&vm->globids); // Global variable identifiers
     GARRAY_INIT(vm); // Global values array
@@ -200,24 +200,24 @@ SK_API void sk_destroy(VM** vmp)
  * If the hardware supports 'find first set' (has the instruction)
  * bit operation then enable this define
  */
-#if __has_builtin(__builtin_ctz)
-    /* Create type bitmask from the value.
-     * First least significant set bit acts as a type tag.
-     * bit 0 is set -> number
-     * bit 1 is set -> string
-     * bit 2 is set -> callable
-     * bit 3 is set -> bool
-     * bit 4 is set -> nil
-     * bit 5 is set -> instance
-     * bit 6 is set -> class */
-    #define val2tbmask(value)                                                            \
-        cast_uint(                                                                       \
-            0 | (IS_NUMBER(value) * 1) | (IS_STRING(value) * 2) |                        \
-            ((IS_FUNCTION(value) | IS_BOUND_METHOD(value) | IS_CLOSURE(value) |          \
-              IS_NATIVE(value)) *                                                        \
-             4) |                                                                        \
-            IS_BOOL(value) * 8 | IS_NIL(value) * 16 | IS_INSTANCE(value) * 32 |          \
-            IS_CLASS(value) * 64)
+#if defined(S_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
+/* Create type bitmask from the value.
+ * First least significant set bit acts as a type tag.
+ * bit 0 is set -> number
+ * bit 1 is set -> string
+ * bit 2 is set -> callable
+ * bit 3 is set -> bool
+ * bit 4 is set -> nil
+ * bit 5 is set -> instance
+ * bit 6 is set -> class */
+#define val2tbmask(value)                                                                \
+    cast_uint(                                                                           \
+        0 | (IS_NUMBER(value) * 1) | (IS_STRING(value) * 2) |                            \
+        ((IS_FUNCTION(value) | IS_BOUND_METHOD(value) | IS_CLOSURE(value) |              \
+          IS_NATIVE(value)) *                                                            \
+         4) |                                                                            \
+        IS_BOOL(value) * 8 | IS_NIL(value) * 16 | IS_INSTANCE(value) * 32 |              \
+        IS_CLASS(value) * 64)
 #endif
 
 
@@ -226,7 +226,7 @@ static int val2type(const VM* vm, Value* value)
 {
 /* If the hardware supports 'find first set' and
  * compiler supports threaded code then use that. */
-#if defined(S_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
+#if defined(val2tbmask)
     static const int typetable[] = {
         SK_TNUMBER,
         SK_TSTRING,
@@ -239,8 +239,6 @@ static int val2type(const VM* vm, Value* value)
     // https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html#index-_005f_005fbuiltin_005fctz
     unsigned char bitidx = __builtin_ctz(val2tbmask(*value));
     return typetable[bitidx];
-
-/* Otherwise use this as fallback */
 #else
     if(IS_NUMBER(value)) return SK_TNUMBER;
     else if(IS_STRING(value)) return SK_TSTRING;
@@ -269,7 +267,7 @@ SK_API int sk_type(const VM* vm, int idx)
 SK_API const char* sk_typename(const VM* vm, int idx)
 {
     Value* value = idx2val(vm, idx);
-    int    type  = val2type(vm, value);
+    int    type = val2type(vm, value);
     return vm->statics[type]->storage;
 }
 
@@ -458,7 +456,7 @@ static force_inline int getglobal(VM* vm, const char* name)
     Value gval;
     pushstr(vm, name, skstrlen(name));
     if(HashTable_get(&vm->globids, *stackpeek(0), &gval)) {
-        int idx       = (int)AS_NUMBER(gval);
+        int idx = (int)AS_NUMBER(gval);
         *stackpeek(0) = vm->globvals[idx].value;
         return 1;
     }
@@ -505,7 +503,7 @@ SK_API int sk_getbool(const VM* vm, int idx, int* isbool)
 {
     int   bval;
     Value val = *idx2val(vm, idx);
-    int   is  = tobool(val, &bval);
+    int   is = tobool(val, &bval);
     if(isbool) *isbool = is;
     return bval;
 }
@@ -516,8 +514,8 @@ SK_API int sk_getbool(const VM* vm, int idx, int* isbool)
 SK_API sk_number sk_getnumber(const VM* vm, int idx, int* isnum)
 {
     sk_number nval = 0.0;
-    Value     val  = *idx2val(vm, idx);
-    int       is   = tonumber(val, &nval);
+    Value     val = *idx2val(vm, idx);
+    int       is = tonumber(val, &nval);
     if(isnum) *isnum = is;
     return nval;
 }
@@ -537,7 +535,7 @@ SK_API const char* sk_getstring(const VM* vm, int idx)
 SK_API size_t sk_rawlen(const VM* vm, int idx)
 {
     size_t len;
-    Value* val  = idx2val(vm, idx);
+    Value* val = idx2val(vm, idx);
     int    type = val2type(vm, val);
     switch(type) {
         case SK_TSTRING:
@@ -557,7 +555,7 @@ SK_API size_t sk_rawlen(const VM* vm, int idx)
  * relative to the current function */
 SK_API int sk_gettop(const VM* vm)
 {
-    return cast_int(vm->sp - (vm->frames[vm->fc - 1]->callee + 1));
+    return cast_int(vm->sp - (vm->frames[vm->fc - 1].callee + 1));
 }
 
 
@@ -575,7 +573,7 @@ SK_API int sk_gettop(const VM* vm)
 SK_API void sk_settop(VM* vm, int idx)
 {
     sk_lock(vm);
-    Value* fn = vm->frames[vm->fc - 1]->callee;
+    Value* fn = vm->frames[vm->fc - 1].callee;
     if(idx >= 0) {
         sk_checkapi(vm, idx < ((Value*)stklast(vm) - fn), "index too big.");
         intptr_t diff = ((fn + 1) + idx) - vm->sp;
@@ -626,14 +624,53 @@ SK_API void sk_replace(VM* vm, int idx)
 
 
 
-/* Call the value on the stack located at the 'idx'. */
-SK_API int sk_vcall(VM* vm, int idx, int argc, int retcnt)
+
+
+/*
+ * CALL FUNCTION
+ */
+
+static force_inline void precall(VM* vm, Value* callee, int retcnt)
+{
+    int res;
+    int callres = callv(vm, *callee, cast_int(vm->sp - callee) - 1, retcnt);
+    if(callres == CALL_SKOOMAFN) res = run(vm);
+    if(unlikely(res == CALL_ERR || res == INTERPRET_RUNTIME_ERROR))
+        runerror(vm, vm->frames[vm->fc - 1].status);
+}
+
+/* Call the value on the stack located just before the arguments (argc). */
+SK_API int sk_call(VM* vm, int argc, int retcnt)
 {
     sk_lock(vm);
-    Value callee = *idx2val(vm, idx);
-    int   res    = callv(vm, callee, argc, retcnt);
-    if(!callv(vm, callee, argc, retcnt)) {
-    }
+    Value callee = *idx2val(vm, (vm->sp - vm->stack) - argc);
+    int   res = callv(vm, callee, argc, retcnt);
+    if(res == CALL_SKOOMAFN) res = run(vm);
+    if(unlikely(res == CALL_ERR || res == INTERPRET_RUNTIME_ERROR))
+        runerror(vm, vm->frames[vm->fc - 1].status);
     sk_unlock(vm);
     return res;
+}
+
+
+/* Same as sk_call except this runs the function in protected
+ * mode, meaning that in case the function errors it won't abort
+ * or invoke panic handler.
+ * Instead it restores the old call frame and returns the error
+ * message and the status code in that order. */
+SK_API int sk_pcall(VM* vm, int argc, int retcnt)
+{
+    struct sk_longjmp errjmp;
+    sk_lock(vm);
+    Int   oldfc = vm->fc;
+    Value callee = *idx2val(vm, (vm->sp - vm->stack) - argc);
+    errjmp.status = SK_ROK;
+    errjmp.prev = vm->errjmp;
+    vm->errjmp = &errjmp;
+    if(setjmp(errjmp.buf) == 0) { // setter ?
+    }
+    vm->errjmp = errjmp.prev;
+    vm->fc = oldfc;
+    sk_unlock(vm);
+    return errjmp.status;
 }

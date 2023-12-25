@@ -30,11 +30,11 @@
  * By default sk_assert is a nop.
  */
 #if !defined(sk_assert)
-    #define sk_assert(vm, cond, msg) ((void)0)
+#define sk_assert(vm, cond, msg) ((void)0)
 #endif
 
 #if !defined(sk_checkapi)
-    #define sk_checkapi(vm, cond, msg) sk_assert(cond)
+#define sk_checkapi(vm, cond, msg) sk_assert(cond)
 #endif
 
 
@@ -46,8 +46,8 @@
  * to define his own sk_lock/sk_unlock.
  */
 #if !defined(S_LOCK_USR)
-    #define sk_lock(vm)   ((void)0)
-    #define sk_unlock(vm) ((void)0)
+#define sk_lock(vm)   ((void)0)
+#define sk_unlock(vm) ((void)0)
 #endif
 
 
@@ -65,6 +65,23 @@
 
 /* Native C function signature */
 typedef int (*CFunction)(VM* vm);
+
+
+
+/*
+ * Runtime status codes
+ */
+#define SK_ROK      0 // no errors
+#define SK_RERR     1 // generic runtime error
+#define SK_RETYPE   2 // invalid type
+#define SK_RESTKOVF 3 // stack overflow
+#define SK_REARGC   4 // argc does not match arity
+#define SK_REARGCVA 5 // argc is smaller than arity
+#define SK_REFRAME  6 // CallFrame limit reached
+
+
+
+
 
 
 /*
@@ -118,6 +135,14 @@ SK_API void sk_push(VM* vm, int idx);
 /* Check if C-stack has enough space */
 SK_API int sk_ensurestack(VM* vm, int n);
 
+/* Check if stack has enough elements */
+#define sk_checkelems(vm, n)                                                             \
+    sk_checkapi(                                                                         \
+        vm,                                                                              \
+        ((vm)->sp - (vm)->frames[(vm)->fc - 1].callee) > (n),                            \
+        "not enough elements in the stack.");
+
+
 
 
 
@@ -152,11 +177,19 @@ SK_API void sk_replace(VM* vm, int idx);
  * CALL
  */
 
+/* Call return values, these indicate which kind
+ * of function was called or if call error occurred. */
+#define CALL_ERR      0
+#define CALL_SKOOMAFN -1
+#define CALL_NATIVEFN -2
+#define CALL_CLASS    -3
+
+
 /* Call the value on the stack located on
- * the top right before arguments (argc). */
-#define sk_call(vm, argc, retcnt) vcall(vm, *stackpeek(0), argc, retcnt)
-/* Call the value on the stack at the 'idx'. */
-SK_API int sk_vcall(VM* vm, int idx, int argc, int retcntc);
+ * the top right before arguments (argc).
+ * Returns function type which was called or
+ * if error occured as negative integer. */
+SK_API int sk_call(VM* vm, int argc, int retcnt);
 
 
 
@@ -175,14 +208,17 @@ SK_API int sk_vcall(VM* vm, int idx, int argc, int retcntc);
 #define SS_BOOL  4
 #define SS_NIL   5
 #define SS_FUNC  6
+/* Boolean strings */
+#define SS_TRUE  7
+#define SS_FALSE 8
 /* Class overload-able method names */
-#define SS_INIT 7
+#define SS_INIT 9
 /* Native functions argument names */
-#define SS_MANU       8
-#define SS_AUTO       9
-#define SS_ASSERT_MSG 10
-#define SS_ERROR      11
-#define SS_ASSERT     12
+#define SS_MANU       10
+#define SS_AUTO       11
+#define SS_ASSERT_MSG 12
+#define SS_ERROR      13
+#define SS_ASSERT     14
 /* Size */
 #define SS_SIZE (sizeof(static_str) / sizeof(static_str[0]))
 
@@ -200,6 +236,9 @@ static const InternedString static_str[] = {
     {"class",             sizeofstr("class")            },
     {"instance",          sizeofstr("instance")         },
     {"function",          sizeofstr("function")         },
+ /* Boolean strings */
+    {"true",              sizeofstr("true")             },
+    {"false",             sizeofstr("false")            },
  /* Class overload-able method names. */
     {"__init__",          sizeofstr("__init__")         },
  /* corelib statics */
