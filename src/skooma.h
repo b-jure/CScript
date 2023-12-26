@@ -71,14 +71,21 @@ typedef int (*CFunction)(VM* vm);
 /*
  * Runtime status codes
  */
-#define SK_ROK      0 // no errors
-#define SK_RERR     1 // generic runtime error
-#define SK_RETYPE   2 // invalid type
-#define SK_RESTKOVF 3 // stack overflow
-#define SK_REARGC   4 // argc does not match arity
-#define SK_REARGCVA 5 // argc is smaller than arity
-#define SK_REFRAME  6 // CallFrame limit reached
-
+typedef enum {
+    S_OK = 0,
+    S_ETYPE, // invalid value type
+    S_ESOVERFLOW, // stack overflow
+    S_EFOVERFLOW, // CallFrame overflow
+    S_EARGC, // argc does not match function arity
+    S_EARGCMIN, // argc is smaller than arity
+    S_EBINOP, // binary operator error
+    S_EUDPROPERTY, // undefined property
+    S_EPACCESS, // invalid property access
+    S_EINHERIT, // inheriting from non-class value
+    S_EFIXEDASSING, // assigning to fixed value
+    S_UDGLOBAL, // undefined global variable
+    S_GLOBALREDEF, // redefinition of global variable
+} Status;
 
 
 
@@ -97,7 +104,7 @@ typedef int (*CFunction)(VM* vm);
 #define SK_TFUNCTION 6
 #define SK_TC        7 // Types count
 
-SK_API int         sk_type(const VM* vm, int idx);
+SK_API int sk_type(const VM* vm, int idx);
 SK_API const char* sk_typename(const VM* vm, int idx);
 
 SK_API int sk_isnil(const VM* vm, int idx);
@@ -126,8 +133,8 @@ SK_API void sk_pushnumber(VM* vm, sk_number number);
 SK_API void sk_pushstring(VM* vm, const char* str, size_t len);
 SK_API void sk_pushcstring(VM* vm, const char* str);
 SK_API void sk_pushbool(VM* vm, int boolean);
-SK_API int  sk_pushmethod(VM* vm, int idx, const char* method);
-SK_API int  sk_pushglobal(VM* vm, const char* name);
+SK_API int sk_pushmethod(VM* vm, int idx, const char* method);
+SK_API int sk_pushglobal(VM* vm, const char* name);
 SK_API void sk_push(VM* vm, int idx);
 
 
@@ -135,11 +142,20 @@ SK_API void sk_push(VM* vm, int idx);
 /* Check if C-stack has enough space */
 SK_API int sk_ensurestack(VM* vm, int n);
 
+
+
+/* Check if function results would overflow the stack */
+#define sk_checkresults(vm, n)                                                           \
+    sk_checkapi(                                                                         \
+        vm,                                                                              \
+        (((vm)->sp - (vm)->stack) + (n)) < VM_STACK_MAX,                                 \
+        "function results overflow the stack.")
+
 /* Check if stack has enough elements */
 #define sk_checkelems(vm, n)                                                             \
     sk_checkapi(                                                                         \
         vm,                                                                              \
-        ((vm)->sp - (vm)->frames[(vm)->fc - 1].callee) > (n),                            \
+        ((vm)->sp - last_frame(vm).callee) > (n),                                        \
         "not enough elements in the stack.");
 
 
@@ -150,11 +166,11 @@ SK_API int sk_ensurestack(VM* vm, int n);
  * GET from STACK -> C
  */
 
-SK_API int         sk_getbool(const VM* vm, int idx, int* isbool);
-SK_API sk_number   sk_getnumber(const VM* vm, int idx, int* isnum);
+SK_API int sk_getbool(const VM* vm, int idx, int* isbool);
+SK_API sk_number sk_getnumber(const VM* vm, int idx, int* isnum);
 SK_API const char* sk_getstring(const VM* vm, int idx);
-SK_API size_t      sk_rawlen(const VM* vm, int idx);
-SK_API int         sk_gettop(const VM* vm);
+SK_API size_t sk_rawlen(const VM* vm, int idx);
+SK_API int sk_gettop(const VM* vm);
 
 
 
@@ -173,9 +189,15 @@ SK_API void sk_replace(VM* vm, int idx);
 
 
 
+
 /*
  * CALL
  */
+
+
+/* Type of protected function */
+typedef void (*ProtectedFn)(VM* vm, void* userdata);
+
 
 /* Call return values, these indicate which kind
  * of function was called or if call error occurred. */
@@ -189,7 +211,7 @@ SK_API void sk_replace(VM* vm, int idx);
  * the top right before arguments (argc).
  * Returns function type which was called or
  * if error occured as negative integer. */
-SK_API int sk_call(VM* vm, int argc, int retcnt);
+SK_API void sk_call(VM* vm, int argc, int retcnt);
 
 
 
@@ -223,7 +245,7 @@ SK_API int sk_call(VM* vm, int argc, int retcnt);
 #define SS_SIZE (sizeof(static_str) / sizeof(static_str[0]))
 
 typedef struct {
-    const char*   name;
+    const char* name;
     const uint8_t len;
 } InternedString;
 

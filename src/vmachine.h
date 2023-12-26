@@ -24,8 +24,8 @@
  * Check 'sk_pcall' in 'skapi.c' for a reference. */
 struct sk_longjmp {
     struct sk_longjmp* prev;
-    jmp_buf            buf;
-    volatile int       status;
+    jmp_buf buf;
+    volatile int status;
 };
 
 
@@ -38,16 +38,15 @@ struct sk_longjmp {
 
 
 
-
 typedef struct CallFrame CallFrame;
 
 struct CallFrame {
     OClosure* closure;
-    Byte*     ip; /* Instruction pointer (closure chunk) */
-    Value*    callee; /* Pointer to the callee on the stack */
-    Int       retcnt; /* Expected value return count */
-    Int       vacnt; /* Count of extra arguments in vararg functions */
-    Int       status; /* In case of call errors */
+    Byte* ip; /* Instruction pointer (closure chunk) */
+    Value* callee; /* Pointer to the callee on the stack */
+    Int retcnt; /* Expected value return count */
+    Int vacnt; /* Count of extra arguments in vararg functions */
+    Int status; /* In case of call errors */
 };
 
 #define FFN(frame) (frame->closure->fn)
@@ -103,42 +102,48 @@ void push(VM* vm, Value val);
 
 InterpretResult interpret(VM* vm, const char* source, const char* filename);
 InterpretResult run(VM* vm);
-int             callv(VM* vm, Value callee, Int argc, Int retcnt);
-void            closeupval(VM* vm, Value* last);
+void call(VM* vm, Value* callee, Int retcnt);
+int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);
+void closeupval(VM* vm, Value* last);
 
 ARRAY_NEW(Array_ORef, O*);
 ARRAY_NEW(Array_VRef, Value*);
 
 struct VM {
-    Config             config; // user configuration
-    unsigned long      seed; // randomized seed for hashing
+    Config config; // user configuration
+    unsigned long seed; // randomized seed for hashing
     struct sk_longjmp* errjmp;
-    HashTable          loaded; // loaded scripts
-    Value              script; // current script name
-    Function*          F; // function state
-    CallFrame          frames[VM_FRAMES_MAX];
-    Int                fc; // frame count
-    Value              stack[VM_STACK_MAX];
-    Value*             sp; // stack pointer
-    Array_VRef         callstart;
-    Array_VRef         retstart;
-    HashTable          globids; // global variable names
-    Variable*          globvals; // global variable values
-    UInt               globlen; // global variable count
-    UInt               globcap; // global variable array size
-    Array_Value        temp; // temporary return values
-    HashTable          strings; // interned strings (weak refs)
-    OUpvalue*          open_upvals; // closure values
-    OString*           statics[SS_SIZE]; // static strings
-    O*                 objects; // list of all allocated objects
-    O**                gray_stack; // tricolor gc (stores marked objects)
-    UInt               gslen; // gray stack length
-    UInt               gscap; // gray stack capacity
-    size_t             gc_allocated; // count of allocated bytes in use
-    size_t             gc_next; // next threshold where gc triggers
-    Byte               gc_flags; // gc flags (sk API)
+    HashTable loaded; // loaded scripts
+    Value script; // current script name
+    Function* F; // function state
+    CallFrame frames[VM_FRAMES_MAX];
+    Int fc; // frame count
+    Value stack[VM_STACK_MAX];
+    Value* sp; // stack pointer
+    Array_VRef callstart;
+    Array_VRef retstart;
+    HashTable globids; // global variable names
+    Variable* globvals; // global variable values
+    UInt globlen; // global variable count
+    UInt globcap; // global variable array size
+    Array_Value temp; // temporary return values
+    HashTable strings; // interned strings (weak refs)
+    OUpvalue* open_upvals; // closure values
+    OString* statics[SS_SIZE]; // static strings
+    O* objects; // list of all allocated objects
+    O** gray_stack; // tricolor gc (stores marked objects)
+    UInt gslen; // gray stack length
+    UInt gscap; // gray stack capacity
+    size_t gc_allocated; // count of allocated bytes in use
+    size_t gc_next; // next threshold where gc triggers
+    Byte gc_flags; // gc flags (sk API)
 };
 
+#define restore_stack(vm, n) cast(Value*, (cast_charp((vm)->stack) + (n)))
+#define save_stack(vm, ptr)  (cast_charp(ptr) - cast_charp((vm)->stack))
+
 #define stackpeek(top) ((vm)->sp - ((top) + 1))
+
+#define last_frame(vm) ((vm)->frames[(vm)->fc - 1])
 
 #endif

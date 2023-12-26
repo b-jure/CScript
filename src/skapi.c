@@ -45,7 +45,7 @@ static force_inline Value* idx2val(const VM* vm, int idx)
 /* Local strlen implementation. */
 static force_inline size_t skstrlen(const char* str)
 {
-    size_t         len = 0;
+    size_t len = 0;
     unsigned char* c = (unsigned char*)str;
     while(*c++)
         len++;
@@ -86,7 +86,7 @@ SK_API int sk_ensurestack(VM* vm, int n)
 SK_API VM* sk_create(Config* cfg)
 {
     AllocatorFn allocate = reallocate;
-    void*       userdata = NULL;
+    void* userdata = NULL;
     if(cfg != NULL) {
         userdata = cfg->userdata;
         allocate = cfg->reallocate ? cfg->reallocate : reallocate;
@@ -267,7 +267,7 @@ SK_API int sk_type(const VM* vm, int idx)
 SK_API const char* sk_typename(const VM* vm, int idx)
 {
     Value* value = idx2val(vm, idx);
-    int    type = val2type(vm, value);
+    int type = val2type(vm, value);
     return vm->statics[type]->storage;
 }
 
@@ -403,7 +403,7 @@ SK_API void sk_pushcstring(VM* vm, const char* str)
 SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...)
 {
     const char* str;
-    va_list     argp;
+    va_list argp;
     sk_lock(vm);
     va_start(argp, fmt);
     pushfstr(vm, fmt, argp);
@@ -501,9 +501,9 @@ SK_API void sk_push(VM* vm, int idx)
  * if provided 'isbool' is set as 0, otherwise flag is set to 1. */
 SK_API int sk_getbool(const VM* vm, int idx, int* isbool)
 {
-    int   bval;
+    int bval;
     Value val = *idx2val(vm, idx);
-    int   is = tobool(val, &bval);
+    int is = tobool(val, &bval);
     if(isbool) *isbool = is;
     return bval;
 }
@@ -514,8 +514,8 @@ SK_API int sk_getbool(const VM* vm, int idx, int* isbool)
 SK_API sk_number sk_getnumber(const VM* vm, int idx, int* isnum)
 {
     sk_number nval = 0.0;
-    Value     val = *idx2val(vm, idx);
-    int       is = tonumber(val, &nval);
+    Value val = *idx2val(vm, idx);
+    int is = tonumber(val, &nval);
     if(isnum) *isnum = is;
     return nval;
 }
@@ -536,7 +536,7 @@ SK_API size_t sk_rawlen(const VM* vm, int idx)
 {
     size_t len;
     Value* val = idx2val(vm, idx);
-    int    type = val2type(vm, val);
+    int type = val2type(vm, val);
     switch(type) {
         case SK_TSTRING:
             len = AS_STRING(*val)->len;
@@ -627,50 +627,50 @@ SK_API void sk_replace(VM* vm, int idx)
 
 
 /*
- * CALL FUNCTION
+ * CALL
  */
 
-static force_inline void precall(VM* vm, Value* callee, int retcnt)
-{
-    int res;
-    int callres = callv(vm, *callee, cast_int(vm->sp - callee) - 1, retcnt);
-    if(callres == CALL_SKOOMAFN) res = run(vm);
-    if(unlikely(res == CALL_ERR || res == INTERPRET_RUNTIME_ERROR))
-        runerror(vm, vm->frames[vm->fc - 1].status);
-}
 
-/* Call the value on the stack located just before the arguments (argc). */
-SK_API int sk_call(VM* vm, int argc, int retcnt)
+/* Call the value on the stack (behind the arguments) */
+SK_API void sk_call(VM* vm, int argc, int retcnt)
 {
     sk_lock(vm);
-    Value callee = *idx2val(vm, (vm->sp - vm->stack) - argc);
-    int   res = callv(vm, callee, argc, retcnt);
-    if(res == CALL_SKOOMAFN) res = run(vm);
-    if(unlikely(res == CALL_ERR || res == INTERPRET_RUNTIME_ERROR))
-        runerror(vm, vm->frames[vm->fc - 1].status);
+    sk_checkelems(vm, argc + 1);
+    sk_checkresults(vm, retcnt);
+    Value* fn = vm->sp - (argc + 1);
+    call(vm, fn, retcnt);
     sk_unlock(vm);
-    return res;
 }
 
 
-/* Same as sk_call except this runs the function in protected
+
+/* Data used for 'fcall' */
+struct CallStack {
+    Value* callee;
+    int retcnt;
+};
+
+/* Wrapper function */
+static void fcall(VM* vm, void* userdata)
+{
+    struct CallStack* cs = cast(struct CallStack*, userdata);
+    int argc = vm->sp - cs->callee - 1;
+    call(vm, cs->callee, cs->retcnt);
+}
+
+/* Protected call.
+ * Same as sk_call except this runs the function in protected
  * mode, meaning that in case the function errors it won't abort
  * or invoke panic handler.
  * Instead it restores the old call frame and returns the error
  * message and the status code in that order. */
 SK_API int sk_pcall(VM* vm, int argc, int retcnt)
 {
-    struct sk_longjmp errjmp;
+    struct CallStack cs;
     sk_lock(vm);
-    Int   oldfc = vm->fc;
-    Value callee = *idx2val(vm, (vm->sp - vm->stack) - argc);
-    errjmp.status = SK_ROK;
-    errjmp.prev = vm->errjmp;
-    vm->errjmp = &errjmp;
-    if(setjmp(errjmp.buf) == 0) { // setter ?
-    }
-    vm->errjmp = errjmp.prev;
-    vm->fc = oldfc;
+    cs.retcnt = retcnt;
+    cs.callee = vm->sp - (argc + 1);
+    int status = pcall(vm, fcall, &cs, save_stack(vm, cs.callee));
     sk_unlock(vm);
-    return errjmp.status;
+    return status;
 }

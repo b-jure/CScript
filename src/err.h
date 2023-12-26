@@ -352,8 +352,7 @@
 /* OP_INDEX | OP_SET_INDEX */
 #define INDEX_RECEIVER_ERR(vm, receiver)                                                 \
     OSTRINGF(vm, "Can't index '%s', indexing can be used on instances.")
-#define INVALID_INDEX_ERR(vm)                                                            \
-    OSTRINGF(vm, "Instances can only be indexed with strings (literal or variable).");
+#define NIL_INDEX_ERR(vm) OSTRINGF(vm, "Instances can't be indexed with 'nil'.")
 /*-----------------*/
 
 /* callv() | callnative() | callfn() */
