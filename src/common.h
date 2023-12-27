@@ -15,6 +15,7 @@ typedef int32_t Int;
 
 #define UNUSED(x) (void)(x)
 
+
 /*
  * garbage collection flag (check mem.c -> gc())
  * 0 - compiling source code
@@ -31,12 +32,6 @@ void _cleanupvm(VM** vm); // cleanup function signature
 
 
 /* Bits -------------------------------------------------------------------- */
-static force_inline size_t bit_mask(uint8_t x)
-{
-    return (x >= sizeof(size_t) * CHAR_BIT) ? 0xffffffffffffffff : (1UL << (x)) - 1;
-}
-// Convert bit into unsigned long integer
-#define btoul(bit) (~((size_t)0) & (1UL << ((bit)-1)))
 // Return bit at 'bit' (0 or 1) from 'x'.
 #define BIT_CHECK(x, bit) ((x >> ((bit)-1)) & ((size_t)1))
 // Toggle 'bit' from 'x'

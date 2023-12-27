@@ -68,24 +68,18 @@ typedef int (*CFunction)(VM* vm);
 
 
 
-/*
- * Runtime status codes
- */
-typedef enum {
-    S_OK = 0,
-    S_ETYPE, // invalid value type
-    S_ESOVERFLOW, // stack overflow
-    S_EFOVERFLOW, // CallFrame overflow
-    S_EARGC, // argc does not match function arity
-    S_EARGCMIN, // argc is smaller than arity
-    S_EBINOP, // binary operator error
-    S_EUDPROPERTY, // undefined property
-    S_EPACCESS, // invalid property access
-    S_EINHERIT, // inheriting from non-class value
-    S_EFIXEDASSING, // assigning to fixed value
-    S_UDGLOBAL, // undefined global variable
-    S_GLOBALREDEF, // redefinition of global variable
-} Status;
+
+SK_API sk_number sk_version(VM* vm);
+
+
+
+
+/* Create new virtual machine. */
+SK_API VM* sk_create(Config* cfg);
+
+/* Destroy/cleanup the virtual machine. */
+SK_API void sk_destroy(VM** vmp);
+
 
 
 
@@ -102,10 +96,12 @@ typedef enum {
 #define SK_TCLASS    4
 #define SK_TINSTANCE 5
 #define SK_TFUNCTION 6
-#define SK_TC        7 // Types count
+#define SK_TNATIVE   7
+#define SK_TC        8 // Types count
 
 SK_API int sk_type(const VM* vm, int idx);
 SK_API const char* sk_typename(const VM* vm, int idx);
+SK_API const char* sk_tagname(const VM* vm, int type);
 
 SK_API int sk_isnil(const VM* vm, int idx);
 SK_API int sk_isnumber(const VM* vm, int idx);
@@ -113,13 +109,9 @@ SK_API int sk_isstring(const VM* vm, int idx);
 SK_API int sk_isbool(const VM* vm, int idx);
 SK_API int sk_isclass(const VM* vm, int idx);
 SK_API int sk_isinstance(const VM* vm, int idx);
+SK_API int sk_isnative(const VM* vm, int idx);
 
 
-/* Create new virtual machine. */
-SK_API VM* sk_create(Config* cfg);
-
-/* Destroy/cleanup the virtual machine. */
-SK_API void sk_destroy(VM** vmp);
 
 
 
@@ -131,6 +123,7 @@ SK_API void sk_destroy(VM** vmp);
 SK_API void sk_pushnil(VM* vm);
 SK_API void sk_pushnumber(VM* vm, sk_number number);
 SK_API void sk_pushstring(VM* vm, const char* str, size_t len);
+SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...);
 SK_API void sk_pushcstring(VM* vm, const char* str);
 SK_API void sk_pushbool(VM* vm, int boolean);
 SK_API int sk_pushmethod(VM* vm, int idx, const char* method);
@@ -143,22 +136,34 @@ SK_API void sk_push(VM* vm, int idx);
 SK_API int sk_ensurestack(VM* vm, int n);
 
 
+/* option for multiple returns in sk_call and sk_pcall */
+#define SK_MULRET (-1)
+
 
 /* Check if function results would overflow the stack */
-#define sk_checkresults(vm, n)                                                           \
+#define skapi_checkresults(vm, n, nr)                                                    \
     sk_checkapi(                                                                         \
         vm,                                                                              \
-        (((vm)->sp - (vm)->stack) + (n)) < VM_STACK_MAX,                                 \
+        (nr) == SK_MULRET || (((vm)->sp - (vm)->stack) + (n) + (nr)) < VM_STACK_MAX,     \
         "function results overflow the stack.")
 
 /* Check if stack has enough elements */
-#define sk_checkelems(vm, n)                                                             \
+#define skapi_checkelems(vm, n)                                                          \
     sk_checkapi(                                                                         \
         vm,                                                                              \
         ((vm)->sp - last_frame(vm).callee) > (n),                                        \
         "not enough elements in the stack.");
 
+/* Check if the error code is valid (exists) */
+#define skapi_checkerrcode(vm, errcode)                                                  \
+    sk_checkapi(vm, (errcode) >= S_EARG && (errcode) <= S_GLOBALREDEF, "invalid errcode")
 
+
+
+
+
+/* Convert value on the stack at 'idx' into string. */
+SK_API const char* sk_tostring(VM* vm, int idx);
 
 
 
@@ -212,6 +217,35 @@ typedef void (*ProtectedFn)(VM* vm, void* userdata);
  * Returns function type which was called or
  * if error occured as negative integer. */
 SK_API void sk_call(VM* vm, int argc, int retcnt);
+
+
+
+
+
+/*
+ * ERROR
+ */
+
+/* Runtime status codes */
+typedef enum {
+    S_OK = 0,
+    S_EARG, // invalid argument
+    S_ESOVERFLOW, // stack overflow
+    S_EFOVERFLOW, // CallFrame overflow
+    S_EARGC, // argc does not match function arity
+    S_EARGCMIN, // argc is smaller than arity
+    S_EBINOP, // binary operator error
+    S_EUDPROPERTY, // undefined property
+    S_EPACCESS, // invalid property access
+    S_EINHERIT, // inheriting from non-class value
+    S_EFIXEDASSING, // assigning to fixed value
+    S_UDGLOBAL, // undefined global variable
+    S_GLOBALREDEF, // redefinition of global variable
+} Status;
+
+/* Invoke runtime error */
+SK_API int sk_error(VM* vm, Status errcode);
+
 
 
 

@@ -18,7 +18,7 @@
  * to retrieve it if 'Chunk_getline' gets called; it gets called only during
  * debug or run-time errors.
  */
-sstatic void LineArray_write(Array_UInt* lines, UInt line, UInt index)
+static void LineArray_write(Array_UInt* lines, UInt line, UInt index)
 {
     if(lines->len <= 0 || *Array_UInt_last(lines) < line) {
         Array_UInt_push(lines, index);
@@ -60,8 +60,7 @@ void Chunk_free(Chunk* chunk)
 }
 
 /* Write long param (24-bit) */
-sstatic force_inline void
-Chunk_write_param24(Chunk* chunk, UInt param, UInt line)
+static force_inline void Chunk_write_param24(Chunk* chunk, UInt param, UInt line)
 {
     Chunk_write(chunk, BYTE(param, 0), line);
     Chunk_write(chunk, BYTE(param, 1), line);
@@ -71,7 +70,7 @@ Chunk_write_param24(Chunk* chunk, UInt param, UInt line)
         "Invalid write to chunk bytecode array.");
 }
 
-sstatic force_inline UInt
+static force_inline UInt
 Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
 {
     UInt start = Chunk_write(chunk, code, line);
@@ -83,14 +82,14 @@ Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
 /* Write generic OpCode-s with parameters. */
 UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 {
-#ifdef S_PRECOMPUTED_GOTO
-    #define OP_TABLE
-    #include "jmptable.h"
-    #undef OP_TABLE
+#ifdef SK_PRECOMPUTED_GOTO
+#define OP_TABLE
+#include "jmptable.h"
+#undef OP_TABLE
 #else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-    #define BREAK       break
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       break
 #endif
 #undef BREAK
 #define BREAK return
@@ -176,8 +175,8 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 #undef CASE
 #undef BREAK
 
-#ifdef SKOOMA_JMPTABLE_H
-    #undef SKOOMA_JMPTABLE_H
+#ifdef SKJMPTABLE_H
+#undef SKJMPTABLE_H
 #endif
 }
 
@@ -185,12 +184,12 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 /* Returns the line of the current instruction. */
 UInt Chunk_getline(Chunk* chunk, UInt index)
 {
-    Array_UInt* line_array      = &chunk->lines;
-    UInt        idx             = line_array->len - 1;
-    UInt        instruction_idx = *Array_UInt_index(line_array, --idx);
+    Array_UInt* line_array = &chunk->lines;
+    UInt idx = line_array->len - 1;
+    UInt instruction_idx = *Array_UInt_index(line_array, --idx);
     while(instruction_idx > index) {
-        idx             -= 2;
-        instruction_idx  = *Array_UInt_index(line_array, idx);
+        idx -= 2;
+        instruction_idx = *Array_UInt_index(line_array, idx);
     }
     return *Array_UInt_index(line_array, idx + 1);
 }

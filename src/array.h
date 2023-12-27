@@ -3,7 +3,6 @@
 
 #include "common.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <memory.h>
 #include <stdio.h>
@@ -19,8 +18,8 @@
 #define GSARRAY_INIT(vm)                                                                 \
     do {                                                                                 \
         (vm)->gray_stack = NULL;                                                         \
-        (vm)->gslen      = 0;                                                            \
-        (vm)->gscap      = 0;                                                            \
+        (vm)->gslen = 0;                                                                 \
+        (vm)->gscap = 0;                                                                 \
     } while(false)
 
 #define GSARRAY_PUSH(vm, objref)                                                         \
@@ -55,8 +54,8 @@
 #define CARRAY_INIT(chunk)                                                               \
     do {                                                                                 \
         (chunk)->constants = NULL;                                                       \
-        (chunk)->clen      = 0;                                                          \
-        (chunk)->ccap      = 0;                                                          \
+        (chunk)->clen = 0;                                                               \
+        (chunk)->ccap = 0;                                                               \
     } while(false)
 
 #define CARRAY_PUSH(chunk, constant, vm)                                                 \
@@ -88,8 +87,8 @@
 #define GARRAY_INIT(vm)                                                                  \
     do {                                                                                 \
         (vm)->globvals = NULL;                                                           \
-        (vm)->globlen  = 0;                                                              \
-        (vm)->globcap  = 0;                                                              \
+        (vm)->globlen = 0;                                                               \
+        (vm)->globcap = 0;                                                               \
     } while(false)
 
 #define GARRAY_PUSH(vm, global)                                                          \
@@ -110,9 +109,9 @@
 
 #define GARRAY_REMOVE(vm, index)                                                         \
     ({                                                                                   \
-        Variable  retval;                                                                \
+        Variable retval;                                                                 \
         Variable* src = &vm->globvals[index];                                            \
-        retval        = *src;                                                            \
+        retval = *src;                                                                   \
         memmove(src, src + 1, vm->globlen - index);                                      \
         vm->globlen--;                                                                   \
         retval;                                                                          \
@@ -145,22 +144,22 @@ typedef void (*FreeFn)(void* value);
     typedef struct {                                                                     \
         size_t cap;                                                                      \
         size_t len;                                                                      \
-        type*  data;                                                                     \
-        VM*    vm;                                                                       \
+        type* data;                                                                      \
+        VM* vm;                                                                          \
     } name;                                                                              \
                                                                                          \
     static force_inline void _ARRAY_METHOD(name, init, VM* vmachine)                     \
     {                                                                                    \
-        self->cap  = 0;                                                                  \
-        self->len  = 0;                                                                  \
+        self->cap = 0;                                                                   \
+        self->len = 0;                                                                   \
         self->data = NULL;                                                               \
-        self->vm   = vmachine;                                                           \
+        self->vm = vmachine;                                                             \
     }                                                                                    \
                                                                                          \
     static force_inline void _ARRAY_METHOD(name, init_cap, uint32_t cap)                 \
     {                                                                                    \
         self->data = (type*)gcrealloc(self->vm, self->data, 0, cap * sizeof(type));      \
-        self->cap  = cap;                                                                \
+        self->cap = cap;                                                                 \
     }                                                                                    \
                                                                                          \
     static force_inline void _ARRAY_METHOD(name, grow)                                   \
@@ -216,7 +215,7 @@ typedef void (*FreeFn)(void* value);
                                                                                          \
     static force_inline void _ARRAY_METHOD(name, insert, size_t index, type value)       \
     {                                                                                    \
-        type* src  = self->data + index;                                                 \
+        type* src = self->data + index;                                                  \
         type* dest = src + 1;                                                            \
         memmove(dest, src, self->len - index);                                           \
         self->len++;                                                                     \
@@ -226,9 +225,9 @@ typedef void (*FreeFn)(void* value);
     static force_inline type _ARRAY_METHOD(name, remove, size_t index)                   \
     {                                                                                    \
         if(self->len == 1) return _CALL_ARRAY_METHOD(name, pop);                         \
-        type* src    = self->data + index;                                               \
-        type* dest   = src - 1;                                                          \
-        type  retval = *src;                                                             \
+        type* src = self->data + index;                                                  \
+        type* dest = src - 1;                                                            \
+        type retval = *src;                                                              \
         memmove(dest, src, self->len - index);                                           \
         self->len--;                                                                     \
         return retval;                                                                   \

@@ -22,30 +22,30 @@ typedef enum {
 Token syntoken(const char* name)
 {
     return (Token){
-        .type  = 0,
-        .line  = 0,
+        .type = 0,
+        .line = 0,
         .start = name,
-        .len   = (UInt)strlen(name),
+        .len = (UInt)strlen(name),
     };
 }
 
-sstatic force_inline Token token(Lexer* lexer, TokenType type)
+static force_inline Token token(Lexer* lexer, TokenType type)
 {
     Token token;
-    token.type  = type;
+    token.type = type;
     token.start = lexer->start;
-    token.len   = lexer->_current - lexer->start;
-    token.line  = lexer->line;
+    token.len = lexer->_current - lexer->start;
+    token.line = lexer->line;
     return token;
 }
 
-sstatic force_inline Token errtoken(Lexer* lexer, const char* err)
+static force_inline Token errtoken(Lexer* lexer, const char* err)
 {
     Token token;
-    token.type  = TOK_ERROR;
+    token.type = TOK_ERROR;
     token.start = err;
-    token.len   = strlen(err);
-    token.line  = lexer->line;
+    token.len = strlen(err);
+    token.line = lexer->line;
     return token;
 }
 
@@ -55,8 +55,8 @@ sstatic force_inline Token errtoken(Lexer* lexer, const char* err)
 
 void printerror(Lexer* lexer, const char* err, va_list args)
 {
-    lexer->panic       = true;
-    lexer->error       = true;
+    lexer->panic = true;
+    lexer->error = true;
     const Token* token = &lexer->previous;
     fprintf(
         stderr,
@@ -71,7 +71,7 @@ void printerror(Lexer* lexer, const char* err, va_list args)
     putc('\n', stderr);
 }
 
-sstatic void lexerror(Lexer* lexer, const char* err, ...)
+static void lexerror(Lexer* lexer, const char* err, ...)
 {
     va_list args;
     va_start(args, err);
@@ -79,12 +79,12 @@ sstatic void lexerror(Lexer* lexer, const char* err, ...)
     va_end(args);
 }
 
-sstatic force_inline void advance(Lexer* lexer)
+static force_inline void advance(Lexer* lexer)
 {
     if(*lexer->_current++ == '\n') lexer->line++;
 }
 
-sstatic force_inline char nextchar(Lexer* lexer)
+static force_inline char nextchar(Lexer* lexer)
 {
     char c = *lexer->_current++;
     if(c == '\n') lexer->line++;
@@ -94,17 +94,17 @@ sstatic force_inline char nextchar(Lexer* lexer)
 Lexer L_new(const char* source, VM* vm)
 {
     return (Lexer){
-        .vm       = vm,
-        .source   = source,
-        .start    = source,
+        .vm = vm,
+        .source = source,
+        .start = source,
         ._current = source,
-        .line     = 1,
-        .panic    = false,
-        .error    = false,
+        .line = 1,
+        .panic = false,
+        .error = false,
     };
 }
 
-sstatic force_inline Int hexdigit(Lexer* lexer)
+static force_inline Int hexdigit(Lexer* lexer)
 {
     char hex = nextchar(lexer);
     if(hex >= '0' && hex <= '9') return hex - '0';
@@ -114,7 +114,7 @@ sstatic force_inline Int hexdigit(Lexer* lexer)
     return -1;
 }
 
-sstatic force_inline Int eschex(Lexer* lexer)
+static force_inline Int eschex(Lexer* lexer)
 {
     Int number = 0;
     for(UInt i = 0; i < 2; i++) {
@@ -133,7 +133,7 @@ sstatic force_inline Int eschex(Lexer* lexer)
     return number;
 }
 
-sstatic force_inline Token string(Lexer* lexer)
+static force_inline Token string(Lexer* lexer)
 {
     Array_Byte buffer;
     Array_Byte_init(&buffer, lexer->vm);
@@ -189,14 +189,14 @@ sstatic force_inline Token string(Lexer* lexer)
             }
         } else Array_Byte_push(&buffer, c);
     }
-    OString* string = OString_from(lexer->vm, (void*)buffer.data, buffer.len);
+    OString* string = OString_new(lexer->vm, (void*)buffer.data, buffer.len);
     Array_Byte_free(&buffer, NULL);
     Token tok = token(lexer, TOK_STRING);
     tok.value = OBJ_VAL(string);
     return tok;
 }
 
-sstatic Token numtoken(Lexer* lexer, NumberType type)
+static Token numtoken(Lexer* lexer, NumberType type)
 {
     errno = 0;
     Value number;
@@ -226,7 +226,7 @@ sstatic Token numtoken(Lexer* lexer, NumberType type)
     return tok;
 }
 
-sstatic Token octal(Lexer* lexer)
+static Token octal(Lexer* lexer)
 {
     nextchar(lexer); // skip leading zero
     char c;
@@ -240,7 +240,7 @@ sstatic Token octal(Lexer* lexer)
     return numtoken(lexer, NUM_OCT);
 }
 
-sstatic Token hex(Lexer* lexer)
+static Token hex(Lexer* lexer)
 {
     nextchar(lexer); // skip 'x' or 'X'
     if(!isxdigit(peek(lexer))) lexerror(lexer, "Invalid hexadecimal constant.");
@@ -249,7 +249,7 @@ sstatic Token hex(Lexer* lexer)
     return numtoken(lexer, NUM_HEX);
 }
 
-sstatic Token decimal(Lexer* lexer)
+static Token decimal(Lexer* lexer)
 {
     while(isdigit(peek(lexer)))
         advance(lexer);
@@ -272,12 +272,8 @@ sstatic Token decimal(Lexer* lexer)
     return numtoken(lexer, NUM_DEC);
 }
 
-sstatic force_inline TokenType keyword(
-    Lexer*      lexer,
-    UInt        start,
-    UInt        length,
-    const char* pattern,
-    TokenType   type)
+static force_inline TokenType
+keyword(Lexer* lexer, UInt start, UInt length, const char* pattern, TokenType type)
 {
     if(lexer->_current - lexer->start == start + length &&
        memcmp(lexer->start + start, pattern, length) == 0)
@@ -285,35 +281,32 @@ sstatic force_inline TokenType keyword(
     return TOK_IDENTIFIER;
 }
 
-sstatic TokenType TokenType_identifier(Lexer* lexer)
+static TokenType TokenType_identifier(Lexer* lexer)
 {
-#ifdef S_PRECOMPUTED_GOTO
-    #define RET &&ret
+#ifdef SK_PRECOMPUTED_GOTO
+#define RET &&ret
     // IMPORTANT: update accordingly if lexer tokens change!
     static const void* jump_table[UINT8_MAX + 1] = {
         // Make sure the order is the same as in ASCII Table -
         // https://www.asciitable.com
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, &&a,
-        &&b, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET, &&l, RET, &&n, &&o,
-        RET, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, &&a, &&b, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET, &&l, RET, &&n, &&o,
+        RET, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
     };
-    #undef RET
+#undef RET
 
     goto* jump_table[(Int)*lexer->start];
 a:
@@ -501,7 +494,7 @@ ret:
     return TOK_IDENTIFIER;
 }
 
-sstatic force_inline Token idtoken(Lexer* lexer)
+static force_inline Token idtoken(Lexer* lexer)
 {
     char c;
     while(isalnum((c = peek(lexer))) || c == '_')
@@ -509,7 +502,7 @@ sstatic force_inline Token idtoken(Lexer* lexer)
     return token(lexer, TokenType_identifier(lexer));
 }
 
-sstatic force_inline void skipws(Lexer* lexer)
+static force_inline void skipws(Lexer* lexer)
 {
     while(true) {
         switch(peek(lexer)) {
@@ -533,7 +526,7 @@ sstatic force_inline void skipws(Lexer* lexer)
     }
 }
 
-sstatic bool lmatch(Lexer* lexer, char c)
+static bool lmatch(Lexer* lexer, char c)
 {
     if(isend(lexer) || c != peek(lexer)) return false;
     lexer->_current++;
@@ -554,50 +547,45 @@ Token scan(Lexer* lexer)
         }
         return decimal(lexer);
     }
-#ifdef S_PRECOMPUTED_GOTO
-    #define ERR &&err
+#ifdef SK_PRECOMPUTED_GOTO
+#define ERR &&err
     // IMPORTANT: update accordingly if TokenType enum changes!
     static const void* jump_table[UINT8_MAX + 1] = {
         // order = https://www.asciitable.com
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      &&bang,   &&string,
-        ERR,      ERR,    &&percent, ERR,         ERR,      &&lparen, &&rparen,
-        &&star,   &&plus, &&comma,   &&minus,     &&dot,    &&slash,  ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    &&colon,   &&semicolon, &&less,   &&equal,  &&greater,
-        &&qmark,  ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        &&lbrack, ERR,    &&rbrack,  &&caret,     ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         &&lbrace, ERR,      &&rbrace,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,         ERR,      ERR,      ERR,
-        ERR,      ERR,    ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      &&bang,   &&string, ERR,         ERR,     &&percent, ERR,       ERR,
+        &&lparen, &&rparen, &&star,   &&plus,      &&comma, &&minus,   &&dot,     &&slash,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      &&colon,  &&semicolon, &&less,  &&equal,   &&greater, &&qmark,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      &&lbrack,    ERR,     &&rbrack,  &&caret,   ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      &&lbrace,    ERR,     &&rbrace,  ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
     };
-    #undef ERR
+#undef ERR
     goto* jump_table[c];
 lbrack:
     return token(lexer, TOK_LBRACK);
@@ -688,23 +676,15 @@ err:
         case '*':
             return Token_new(lexer, TOK_STAR);
         case '!':
-            return Token_new(
-                lexer,
-                lmatch(lexer, '=') ? TOK_BANG_EQUAL : TOK_BANG);
+            return Token_new(lexer, lmatch(lexer, '=') ? TOK_BANG_EQUAL : TOK_BANG);
         case '%':
             return Token_new(lexer, TOK_PERCENT);
         case '=':
-            return Token_new(
-                lexer,
-                lmatch(lexer, '=') ? TOK_EQUAL_EQUAL : TOK_EQUAL);
+            return Token_new(lexer, lmatch(lexer, '=') ? TOK_EQUAL_EQUAL : TOK_EQUAL);
         case '>':
-            return Token_new(
-                lexer,
-                lmatch(lexer, '=') ? TOK_GREATER_EQUAL : TOK_GREATER);
+            return Token_new(lexer, lmatch(lexer, '=') ? TOK_GREATER_EQUAL : TOK_GREATER);
         case '<':
-            return Token_new(
-                lexer,
-                lmatch(lexer, '=') ? TOK_LESS_EQUAL : TOK_LESS);
+            return Token_new(lexer, lmatch(lexer, '=') ? TOK_LESS_EQUAL : TOK_LESS);
         case '"':
             return string(lexer);
         default:

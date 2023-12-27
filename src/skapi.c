@@ -10,6 +10,13 @@
 
 
 
+SK_API sk_number sk_version(VM* vm)
+{
+    UNUSED(vm);
+    return SK_VERSION_NUMBER;
+}
+
+
 
 #define stklast(vm) cast_intptr(vm->stack + VM_STACK_MAX - 1)
 
@@ -200,7 +207,7 @@ SK_API void sk_destroy(VM** vmp)
  * If the hardware supports 'find first set' (has the instruction)
  * bit operation then enable this define
  */
-#if defined(S_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
+#if defined(SK_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
 /* Create type bitmask from the value.
  * First least significant set bit acts as a type tag.
  * bit 0 is set -> number
@@ -271,6 +278,12 @@ SK_API const char* sk_typename(const VM* vm, int idx)
     return vm->statics[type]->storage;
 }
 
+/* Convert type tag into name */
+SK_API const char* sk_tagname(const VM* vm, int type)
+{
+    return vm->statics[type]->storage;
+}
+
 /* Check if the value on the stack at 'idx' is nil. */
 SK_API int sk_isnil(const VM* vm, int idx)
 {
@@ -305,6 +318,12 @@ SK_API int sk_isclass(const VM* vm, int idx)
 SK_API int sk_isinstance(const VM* vm, int idx)
 {
     return IS_INSTANCE(*idx2val(vm, idx));
+}
+
+/* Check if the value on the stack at 'idx' is native C function. */
+SK_API int sk_isnative(const VM* vm, int idx)
+{
+    return IS_NATIVE(*idx2val(vm, idx));
 }
 
 
@@ -443,7 +462,7 @@ SK_API int sk_pushmethod(VM* vm, int idx, const char* method)
 {
     sk_lock(vm);
     Value val = *idx2val(vm, idx);
-    sk_checkapi(vm, IS_INSTANCE(val), "expected instance.");
+    sk_checkapi(vm, IS_INSTANCE(val), "expected class instance.");
     int res = getmethod(vm, AS_INSTANCE(val)->oclass, method);
     sk_unlock(vm);
     return res;
@@ -488,6 +507,17 @@ SK_API void sk_push(VM* vm, int idx)
 
 
 
+
+/* Convert a value into string. */
+SK_API const char* sk_tostring(VM* vm, int idx)
+{
+    sk_lock(vm);
+    Value* slot = idx2val(vm, idx);
+    Value value = *slot;
+    if(!IS_STRING(value)) *slot = OBJ_VAL(vtostr(vm, value));
+    sk_unlock(vm);
+    return AS_CSTRING(*slot);
+}
 
 
 
@@ -615,9 +645,8 @@ SK_API void sk_insert(VM* vm, int idx)
 SK_API void sk_replace(VM* vm, int idx)
 {
     sk_lock(vm);
-    Value* top = vm->sp - 1;
     Value* val = idx2val(vm, idx);
-    if(top != val) *val = *top;
+    *val = *(vm->sp - 1);
     decsp(vm);
     sk_unlock(vm);
 }
@@ -635,10 +664,11 @@ SK_API void sk_replace(VM* vm, int idx)
 SK_API void sk_call(VM* vm, int argc, int retcnt)
 {
     sk_lock(vm);
-    sk_checkelems(vm, argc + 1);
-    sk_checkresults(vm, retcnt);
+    sk_checkapi(vm, retcnt >= SK_MULRET, "invalid return count");
+    skapi_checkelems(vm, argc + 1);
+    skapi_checkresults(vm, argc, retcnt);
     Value* fn = vm->sp - (argc + 1);
-    call(vm, fn, retcnt);
+    callv(vm, fn, retcnt);
     sk_unlock(vm);
 }
 
@@ -654,23 +684,45 @@ struct CallStack {
 static void fcall(VM* vm, void* userdata)
 {
     struct CallStack* cs = cast(struct CallStack*, userdata);
-    int argc = vm->sp - cs->callee - 1;
-    call(vm, cs->callee, cs->retcnt);
+    callv(vm, cs->callee, cs->retcnt);
 }
 
 /* Protected call.
  * Same as sk_call except this runs the function in protected
- * mode, meaning that in case the function errors it won't abort
- * or invoke panic handler.
+ * mode, meaning that in case the function errors it won't print
+ * the error and abort or invoke panic handler.
  * Instead it restores the old call frame and returns the error
  * message and the status code in that order. */
 SK_API int sk_pcall(VM* vm, int argc, int retcnt)
 {
-    struct CallStack cs;
     sk_lock(vm);
+    sk_checkapi(vm, retcnt >= SK_MULRET, "invalid return count");
+    skapi_checkelems(vm, argc + 1);
+    skapi_checkresults(vm, argc, retcnt);
+    struct CallStack cs;
     cs.retcnt = retcnt;
     cs.callee = vm->sp - (argc + 1);
     int status = pcall(vm, fcall, &cs, save_stack(vm, cs.callee));
     sk_unlock(vm);
     return status;
+}
+
+
+
+
+
+/*
+ * ERROR
+ */
+
+/* Invoke a runetime error with errcode */
+SK_API int sk_error(VM* vm, Status errcode)
+{
+    sk_lock(vm);
+    Value* errobj = stackpeek(0);
+    skapi_checkelems(vm, 1);
+    skapi_checkerrcode(vm, errcode);
+    runerror(vm, errcode); // sk_unlock in here
+    // unreachable;
+    return 0; // to avoid compiler warnings
 }

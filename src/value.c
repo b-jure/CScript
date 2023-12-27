@@ -23,8 +23,8 @@ Byte dtos_generic(double dbl, char* dest, UInt limit)
 static force_inline OString* dtostr(VM* vm, double n)
 {
     static char buff[50];
-    size_t      len    = dtos_generic(n, buff, 45);
-    OString*    string = OString_new(vm, buff, len);
+    size_t len = dtos_generic(n, buff, 45);
+    OString* string = OString_new(vm, buff, len);
     return string;
 }
 
@@ -36,13 +36,13 @@ static force_inline OString* booltostr(VM* vm, bool boolean)
 
 OString* vtostr(VM* vm, Value value)
 {
-#ifdef S_NAN_BOX
+#ifdef SK_NAN_BOX
     if(IS_BOOL(value)) return booltostr(vm, AS_BOOL(value));
     else if(IS_NIL(value)) return vm->statics[SS_NIL];
     else if(IS_OBJ(value)) return otostr(vm, AS_OBJ(value));
     else if(IS_NUMBER(value)) return dtostr(vm, AS_NUMBER(value));
 #else
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
 #include "jmptable.h"
 #undef VAL_TABLE
@@ -69,8 +69,8 @@ OString* vtostr(VM* vm, Value value)
             return otostr(vm, AS_OBJ(value));
         }
     }
-#ifdef SKOOMA_JMPTABLE_H
-#undef SKOOMA_JMPTABLE_H
+#ifdef SKJMPTABLE_H
+#undef SKJMPTABLE_H
 #endif
 #endif
     unreachable;
@@ -78,7 +78,7 @@ OString* vtostr(VM* vm, Value value)
 
 void vprint(Value value)
 {
-#ifdef S_NAN_BOX
+#ifdef SK_NAN_BOX
     if(IS_BOOL(value)) printf(AS_BOOL(value) ? "true" : "false");
     else if(IS_NIL(value)) printf("nil");
     else if(IS_OBJ(value)) oprint(value);
@@ -87,7 +87,7 @@ void vprint(Value value)
         else printf("%ld", (int64_t)AS_NUMBER(value));
     } else unreachable;
 #else
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
 #include "jmptable.h"
 #undef BREAK
@@ -124,17 +124,17 @@ void vprint(Value value)
         }
     }
     unreachable;
-#ifdef SKOOMA_JMPTABLE_H
-#undef SKOOMA_JMPTABLE_H
+#ifdef SKJMPTABLE_H
+#undef SKJMPTABLE_H
 #endif
 #endif
 }
 
-#ifndef S_NAN_BOX
+#ifndef SK_NAN_BOX
 bool Value_eq(Value a, Value b)
 {
     if(a.type != b.type) return false;
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
 #include "jmptable.h"
 #undef VAL_TABLE
@@ -161,15 +161,15 @@ bool Value_eq(Value a, Value b)
             return AS_OBJ(a) == AS_OBJ(b);
         }
     }
-#ifdef SKOOMA_JMPTABLE_H
-#undef SKOOMA_JMPTABLE_H
+#ifdef SKJMPTABLE_H
+#undef SKJMPTABLE_H
 #endif
 }
 #endif
 
 Hash vhash(Value value)
 {
-#ifdef S_NAN_BOX
+#ifdef SK_NAN_BOX
     if(IS_BOOL(value)) return AS_BOOL(value) ? 1 : 0;
     else if(IS_OBJ(value)) return ohash(value);
     else if(IS_NUMBER(value)) {
@@ -178,7 +178,7 @@ Hash vhash(Value value)
         else return num;
     }
 #else
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
 #include "jmptable.h"
 #undef VAL_TABLE

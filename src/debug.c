@@ -19,31 +19,44 @@ sk_noret runerror(VM* vm, Int status)
     struct sk_longjmp* errjmp = vm->errjmp;
     if(errjmp) { // protected call?
         errjmp->status = status; // error status
+        // sk_unlock is somewhere after the 'longjmp'
         longjmp(errjmp->buf, 1);
-    } else { // print error otherwise
-        fputs("\nSkooma: [runtime error]\nSkooma: ", stderr);
-        fprintf(stderr, "%s", vtostr(vm, *stackpeek(0))->storage);
-        putc('\n', stderr);
-        for(Int i = vm->fc - 1; i >= 0; i--) {
-            CallFrame* frame = &vm->frames[i];
-            Chunk*     chunk = &frame->closure->fn->chunk;
-            UInt       line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
-            Value      _;
-            bool       loaded = false;
+        unreachable;
+    } // Otherwise print the error
+    fputs("\nSkooma: [runtime error]\nSkooma: ", stderr);
+    fprintf(stderr, "%s\n", vtostr(vm, *stackpeek(0))->storage);
+    for(Int i = vm->fc - 1; i >= 0; i--) {
+        CallFrame* frame = &vm->frames[i];
+        if(frame->closure != NULL) { // Skooma function ?
+            Chunk* chunk = &frame->closure->fn->chunk;
+            UInt line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
+            Value _; // dummy
+            bool loaded = false;
             if(HashTable_get(&vm->loaded, OBJ_VAL(FFN(frame)->name), &_)) {
                 vm->script = OBJ_VAL(FFN(frame)->name);
                 loaded = true;
             }
             fprintf(
                 stderr,
-                "Skooma: ['%s' on line %u] in ",
+                "        ['%s' on line %u] in ",
                 AS_CSTRING(vm->script),
                 line);
             if(loaded) fprintf(stderr, "script\n");
             else fprintf(stderr, "%s()\n", FFN(frame)->name->storage);
+        } else { // this is a C function
+            fprintf(
+                stderr,
+                "        in %s()\n",
+                AS_NATIVE(*frame->callee)->name->storage);
         }
-        if(vm->config.panic) vm->config.panic(vm);
-        else abort();
+    }
+    fflush(stderr);
+    if(vm->config.panic) {
+        sk_unlock(vm);
+        vm->config.panic(vm);
+    } else {
+        _cleanupvm(&vm);
+        abort();
     }
 }
 

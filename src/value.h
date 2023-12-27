@@ -14,7 +14,7 @@ typedef struct OClass       OClass;
 typedef struct OInstance    OInstance;
 typedef struct OBoundMethod OBoundMethod;
 
-#ifdef S_NAN_BOX
+#ifdef SK_NAN_BOX
 
 // Skooma 'Value' is NAN boxed except 'double'.
 //

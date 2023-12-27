@@ -8,17 +8,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __STDC_VERSION__
+#if defined(__STDC_VERSION__)
 #if __STDC_VERSION__ < 201112L
 #error "Minimum required C standard must be C11 (201112L)."
 #endif
-#elif defined __cplusplus
+#elif defined(__cplusplus)
 #if __cplusplus < 201103L
 #error "Minimum required C++ standard must be C++11 (201103L)."
 #endif
 #else
 #error "Compiler not supported (no __STDC_VERSION__ or __cplusplus defined)."
-#endif
+#endif // __STDC_VERSION__
 
 #if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||         \
     __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 ||                              \
@@ -47,7 +47,7 @@ static_assert(
 
 #if defined(__GNUC__)
 
-#define S_PRECOMPUTED_GOTO
+#define SK_PRECOMPUTED_GOTO
 
 #define force_inline   __always_inline
 #define likely(cond)   __glibc_likely(cond)
@@ -77,7 +77,7 @@ static_assert(
 
 #elif defined(__clang__)
 
-#define S_PRECOMPUTED_GOTO
+#define SK_PRECOMPUTED_GOTO
 
 #if __has_attribute(always_inline)
 #define force_inline __attribute__((always_inline))
@@ -131,25 +131,25 @@ static_assert(
 /**
  * Max stack size in bytes, default set to 524 KiB.
  **/
-#define S_STACK_MAX (1 << 19)
+#define SK_STACK_MAX (1 << 19)
 
 /**
  * Max temporary values VM can hold when
  * returning from a function.
  **/
-#define S_TEMP_MAX 0xffffff
+#define SK_TEMP_MAX 0xffffff
 
 /**
  * Max function call frames.
  * This grows each time user calls a
  * callable value.
  **/
-#define S_CALLFRAMES_MAX 256
+#define SK_CALLFRAMES_MAX 256
 
 /**
  * Allow NaN boxing of values.
  **/
-#define S_NAN_BOX
+#define SK_NAN_BOX
 
 /**
  * Default heap grow factor
@@ -163,10 +163,10 @@ static_assert(
  * Enabled by default, to disable remove this define
  * or comment it out.
  **/
-#define S_CHECK_API
+#define SK_CHECK_API
 
 
-#if defined(S_CHECK_API)
+#if defined(SK_CHECK_API)
 #undef NDEBUG
 #include <assert.h>
 #define sk_checkapi(vm, cond, msg) assert(cond)
@@ -178,7 +178,7 @@ static_assert(
  * he should define his own sk_unlock and sk_lock.
  **/
 #if defined(sk_lock) && defined(sk_unlock)
-#define S_LOCK_USR
+#define SK_LOCK_USR
 #endif
 
 
@@ -205,7 +205,7 @@ static_assert(
 #else
 #define sk_noret void
 #endif
-#endif
+#endif // sk_noret
 
 
 /* For debug builds comment out 'defines' you dont want. */
@@ -237,7 +237,7 @@ typedef struct VM VM;
 
 /**
  * Generic allocator function, used for every allocation, free and reallocation.
- * */
+ **/
 typedef void* (*AllocatorFn)(void* ptr, size_t newsize, void* userdata);
 
 
@@ -264,9 +264,9 @@ typedef void (*ScriptLoadFinFn)(VM* vm, const char* name, ScriptLoadResult resul
 
 /* Return result of 'ScriptLoadFn'. */
 struct ScriptLoadResult {
-    const char*     source; // Source file
+    const char* source; // Source file
     ScriptLoadFinFn finfn; // Cleanup/post-script-load function
-    void*           userdata; // Custom user data (if any)
+    void* userdata; // Custom user data (if any)
 };
 
 
@@ -282,7 +282,8 @@ typedef ScriptLoadResult (*ScriptLoadFn)(VM* vm, const char* name);
 
 /*
  * Panic function signature.
- * This function gets called when runtime errors occur.
+ * This function gets called when runtime errors occur
+ * in standard call (non-protected).
  */
 typedef sk_noret (*PanicFn)(VM* vm);
 
@@ -292,15 +293,14 @@ typedef sk_noret (*PanicFn)(VM* vm);
  * Create and initialize this 'Config' struct and pass it to 'VM_new'.
  **/
 typedef struct {
-    AllocatorFn    reallocate; // Generic allocator function
+    AllocatorFn reallocate; // Generic allocator function
     ScriptRenameFn rename_script; // Script rename fn
-    ScriptLoadFn   load_script; // Script loader fn
-    PanicFn        panic;
-    void*          userdata; // User data (for 'AllocatorFn')
-    size_t         gc_init_heap_size; // Initial heap allocation
-    size_t         gc_min_heap_size; // Minimum size of heap after recalculation
-    double         gc_grow_factor; // Heap grow factor
-
+    ScriptLoadFn load_script; // Script loader fn
+    PanicFn panic;
+    void* userdata; // User data (for 'AllocatorFn')
+    size_t gc_init_heap_size; // Initial heap allocation
+    size_t gc_min_heap_size; // Minimum size of heap after recalculation
+    double gc_grow_factor; // Heap grow factor
 } Config;
 
 void Config_init(Config* config);

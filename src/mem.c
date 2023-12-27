@@ -35,7 +35,7 @@ void omark(VM* vm, O* obj)
 }
 
 
-sstatic force_inline void marktable(VM* vm, HashTable* table)
+static force_inline void marktable(VM* vm, HashTable* table)
 {
     for(UInt i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
@@ -51,7 +51,7 @@ sstatic force_inline void marktable(VM* vm, HashTable* table)
 
 
 // Generic function signature for Mark and Sweep functions
-#define MS_FN(name) sstatic force_inline void name(VM* vm)
+#define MS_FN(name) static force_inline void name(VM* vm)
 
 MS_FN(markglobals)
 {
@@ -125,15 +125,15 @@ MS_FN(rmweakrefs)
 MS_FN(sweep)
 {
     O* previous = NULL;
-    O* current  = vm->objects;
+    O* current = vm->objects;
     while(current != NULL) {
         if(oismarked(current)) {
             osetmark(current, false);
             previous = current;
-            current  = onext(current);
+            current = onext(current);
         } else {
             O* unreached = current;
-            current      = onext(current);
+            current = onext(current);
             if(previous != NULL) osetnext(previous, current);
             else vm->objects = current;
             ofree(vm, unreached);
@@ -153,14 +153,14 @@ void mark_black(VM* vm, O* obj)
     vprint(OBJ_VAL(obj));
     printf("\n");
 #endif
-#ifdef S_PRECOMPUTED_GOTO
-    #define OBJ_TABLE
-    #include "jmptable.h"
-    #undef OBJ_TABLE
+#ifdef SK_PRECOMPUTED_GOTO
+#define OBJ_TABLE
+#include "jmptable.h"
+#undef OBJ_TABLE
 #else
-    #define DISPATCH(x) switch(x)
-    #define CASE(label) case label:
-    #define BREAK       break
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       break
 #endif
     ASSERT(oismarked(obj), "Object is not marked.");
     DISPATCH(otype(obj))
@@ -227,9 +227,9 @@ size_t gc(VM* vm)
 #endif
     size_t old_allocation = vm->gc_allocated;
     markroots(vm);
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
     static const void* jmptable[] = {&&mark, &&skip};
-    goto*              jmptable[runtime];
+    goto* jmptable[runtime];
 mark:
     mark_function_roots(vm);
 skip:
@@ -267,7 +267,7 @@ void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 #ifdef DEBUG_STRESS_GC
     if(newc > oldc) gc(vm);
 #else
-    if(!GC_CHECK(vm, GC_MANUAL_BIT) && vm->gc_next <= vm->gc_allocated) gc(vm);
+    if(!BIT_CHECK(vm->gc_flags, GC_MANUAL) && vm->gc_next <= vm->gc_allocated) gc(vm);
 #endif
     return REALLOC(vm, ptr, newc);
 }

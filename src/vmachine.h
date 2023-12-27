@@ -30,10 +30,10 @@ struct sk_longjmp {
 
 
 // Max depth of CallFrames
-#define VM_FRAMES_MAX S_CALLFRAMES_MAX
+#define VM_FRAMES_MAX SK_CALLFRAMES_MAX
 
 // Max stack size
-#define VM_STACK_MAX ((int)(S_STACK_MAX / sizeof(Value)))
+#define VM_STACK_MAX ((int)(SK_STACK_MAX / sizeof(Value)))
 
 
 
@@ -102,12 +102,16 @@ void push(VM* vm, Value val);
 
 InterpretResult interpret(VM* vm, const char* source, const char* filename);
 InterpretResult run(VM* vm);
-void call(VM* vm, Value* callee, Int retcnt);
+void callv(VM* vm, Value* callee, Int retcnt);
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);
 void closeupval(VM* vm, Value* last);
 
 ARRAY_NEW(Array_ORef, O*);
 ARRAY_NEW(Array_VRef, Value*);
+
+typedef enum {
+    GC_MANUAL = 1,
+} GCFlags;
 
 struct VM {
     Config config; // user configuration

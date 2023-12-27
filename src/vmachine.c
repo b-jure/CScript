@@ -85,7 +85,7 @@ void Config_init(Config* config)
 
 
 
-#if defined(S_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
+#if defined(SK_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
 #define callbitmask(vm, isva, arity, argc, retcnt)                                       \
     cast_uint(                                                                           \
         0 | (!sk_ensurestack(vm, retcnt) * 1) | (((isva) * ((arity) > (argc))) * 2) |    \
@@ -178,7 +178,7 @@ callval:;
     return type;
 }
 
-static int callval(VM* vm, Value callee, Int argc, Int retcnt)
+static int trycall(VM* vm, Value callee, Int argc, Int retcnt)
 {
     if(IS_OBJ(callee)) {
         switch(OBJ_TYPE(callee)) {
@@ -226,17 +226,17 @@ static force_inline void moveresults(VM* vm, Value* nativefn, Int got, Int expec
 }
 
 /* Call the value */
-void call(VM* vm, Value* fn, Int retcnt)
+void callv(VM* vm, Value* fn, Int retcnt)
 {
     int argc = vm->sp - fn - 1;
-    int callres = callval(vm, *fn, argc, retcnt);
+    int callres = trycall(vm, *fn, argc, retcnt);
     if(callres == CALL_SKOOMAFN) {
         callres = run(vm);
     } else if(callres == CALL_NATIVEFN) {
         sk_unlock(vm);
         callres = AS_NATIVE(*fn)->fn(vm); // perform the call
         sk_lock(vm);
-        sk_checkelems(vm, callres);
+        skapi_checkelems(vm, callres);
         moveresults(vm, fn, callres, retcnt);
     }
     if(unlikely(callres == CALL_ERR || callres == INTERPRET_RUNTIME_ERROR))
@@ -283,7 +283,7 @@ invokefrom(VM* vm, OClass* oclass, Value methodname, Int argc, Int retcnt)
         last_frame(vm).status = S_EUDPROPERTY;
         return false;
     }
-    return callval(vm, method, argc, retcnt);
+    return trycall(vm, method, argc, retcnt);
 }
 
 static force_inline bool invokeindex(VM* vm, Int argc, Int retcnt)
@@ -314,7 +314,7 @@ call:
     *stackpeek(argc + 1) = property; // swap receiver with property
     memcpy(stackpeek(argc), stackpeek(argc - 1), argc); // shift stack to left
     vm->sp--; // adjust stack pointer
-    return callval(vm, property, argc, retcnt);
+    return trycall(vm, property, argc, retcnt);
 }
 
 static force_inline bool invoke(VM* vm, Value name, Int argc, Int retcnt)
@@ -329,7 +329,7 @@ static force_inline bool invoke(VM* vm, Value name, Int argc, Int retcnt)
     Value field;
     if(HashTable_get(&instance->fields, name, &field)) {
         *stackpeek(argc) = field; // swap receiver with field
-        return callval(vm, field, argc, retcnt);
+        return trycall(vm, field, argc, retcnt);
     }
     return invokefrom(vm, instance->oclass, name, argc, retcnt);
 }
@@ -399,7 +399,7 @@ InterpretResult run(VM* vm)
     printf("\n=== VM - execution ===\n");
 #endif
     while(true) {
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
 #define OP_TABLE
 #include "jmptable.h"
 #undef OP_TABLE
@@ -466,7 +466,7 @@ InterpretResult run(VM* vm)
                     push(vm, NUMBER_VAL((a + b)));
                 } else if(IS_STRING(b) && IS_STRING(a)) {
                     push(vm, OBJ_VAL(concatenate(vm, a, b)));
-                } else { // @TODO: Operator overloading
+                } else { // @TODO: Operator overloading or not?
                     frame->ip = ip;
                     vm->sp[-1] = OBJ_VAL(ADD_OPERATOR_ERR(vm, a, b));
                     frame->status = S_EBINOP;
@@ -579,7 +579,7 @@ InterpretResult run(VM* vm)
                 Int retcnt = READ_BYTEL();
                 Int argc = vm->sp - Array_VRef_pop(&vm->callstart);
                 frame->ip = ip;
-                if(unlikely(callval(vm, *stackpeek(argc), argc, retcnt) == CALL_ERR))
+                if(unlikely(trycall(vm, *stackpeek(argc), argc, retcnt) == CALL_ERR))
                     return INTERPRET_RUNTIME_ERROR;
                 frame = &vm->frames[vm->fc - 1];
                 ip = frame->ip;
@@ -798,11 +798,11 @@ InterpretResult run(VM* vm)
                 ret_fin:;
                     Int retcnt = vm->sp - Array_VRef_pop(&vm->retstart);
                     Int pushc;
-                    if(frame->retcnt == 0) {
+                    if(frame->retcnt == 0) { // multiple return values ?
                         pushc = 0;
                         frame->retcnt = retcnt;
                     } else pushc = frame->retcnt - retcnt;
-                    if(pushc < 0) popn(vm, sabs(pushc));
+                    if(pushc < 0) popn(vm, -pushc);
                     else pushn(vm, pushc, NIL_VAL);
                     ASSERT(vm->temp.len == 0, "Temporary array must be empty.");
                     for(Int returns = frame->retcnt; returns--;) {
@@ -1034,7 +1034,7 @@ InterpretResult run(VM* vm)
                 memcpy(vm->sp, stackpeek(2), 3 * sizeof(Value));
                 vm->sp += 3;
                 frame->ip = ip;
-                if(unlikely(callval(vm, *stackpeek(2), 2, vars) == CALL_ERR))
+                if(unlikely(trycall(vm, *stackpeek(2), 2, vars) == CALL_ERR))
                     return INTERPRET_RUNTIME_ERROR;
                 frame = &vm->frames[vm->fc - 1];
                 ip = frame->ip;
@@ -1082,7 +1082,7 @@ InterpretResult interpret(VM* vm, const char* source, const char* path)
     Value name = OBJ_VAL(OString_new(vm, path, strlen(path)));
     OClosure* closure = compile(vm, source, name);
     if(closure == NULL) return INTERPRET_COMPILE_ERROR;
-    callval(vm, OBJ_VAL(closure), 0, 1);
+    trycall(vm, OBJ_VAL(closure), 0, 1);
     return run(vm);
 }
 

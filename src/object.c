@@ -24,7 +24,7 @@
 
 static force_inline O* onew(VM* vm, size_t size, OType type)
 {
-    O* object      = GC_MALLOC(vm, size);
+    O* object = GC_MALLOC(vm, size);
     object->header = (uint64_t)vm->objects | ((uint64_t)type << 56);
     osetmark(object, false);
     vm->objects = object; // Add object to the GC list
@@ -39,13 +39,13 @@ static force_inline O* onew(VM* vm, size_t size, OType type)
 static force_inline OString* OString_alloc(VM* vm, UInt len)
 {
     OString* string = ALLOC_STRING(vm, len);
-    string->len     = len;
+    string->len = len;
     return string;
 }
 
 OString* OString_new(VM* vm, const char* chars, size_t len)
 {
-    Hash     hash     = stringhash(chars, len, vm->seed);
+    Hash hash = stringhash(chars, len, vm->seed);
     OString* interned = HashTable_get_intern(&vm->strings, chars, len, hash);
     if(interned) return interned; // Return interned string
     OString* string = OString_alloc(vm, len);
@@ -71,7 +71,7 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
 #define MAXDIGITS 45
 
     unsigned char c;
-    Array_Byte    buff;
+    Array_Byte buff;
     Array_Byte_init(&buff, vm);
     for(;;) {
         while((c = *fmt++) != '%')
@@ -123,7 +123,7 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
             default: { /* invalid format specifier */
                 Array_Byte_free(&buff, NULL);
                 OString* fn = vtostr(vm, *vm->frames[vm->fc - 1].callee);
-                vm->sp[-1]  = OBJ_VAL(OSTRINGF_ERR(vm, c, fn->storage));
+                vm->sp[-1] = OBJ_VAL(OSTRINGF_ERR(vm, c, fn->storage));
                 return NULL;
             }
         }
@@ -207,10 +207,10 @@ OString* unescape(VM* vm, OString* string)
 ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva)
 {
     ONative* native = ALLOC_OBJ(vm, ONative, OBJ_NATIVE);
-    native->name    = name;
-    native->fn      = fn;
-    native->arity   = arity;
-    native->isva    = isva;
+    native->name = name;
+    native->fn = fn;
+    native->arity = arity;
+    native->isva = isva;
     return native;
 }
 
@@ -222,12 +222,12 @@ static force_inline void ONative_free(VM* vm, ONative* native)
 OFunction* OFunction_new(VM* vm)
 {
     OFunction* fn = ALLOC_OBJ(vm, OFunction, OBJ_FUNCTION);
-    fn->name      = NULL;
-    fn->upvalc    = 0;
-    fn->arity     = 0;
-    fn->isva      = 0;
-    fn->isinit    = 0;
-    fn->gotret    = 0;
+    fn->name = NULL;
+    fn->upvalc = 0;
+    fn->arity = 0;
+    fn->isva = 0;
+    fn->isinit = 0;
+    fn->gotret = 0;
     Chunk_init(&fn->chunk, vm);
     return fn;
 }
@@ -244,9 +244,9 @@ OClosure* OClosure_new(VM* vm, OFunction* fn)
     for(UInt i = 0; i < fn->upvalc; i++)
         upvals[i] = NULL;
     OClosure* closure = ALLOC_OBJ(vm, OClosure, OBJ_CLOSURE);
-    closure->fn       = fn;
-    closure->upvals   = upvals;
-    closure->upvalc   = fn->upvalc;
+    closure->fn = fn;
+    closure->upvals = upvals;
+    closure->upvalc = fn->upvalc;
     return closure;
 }
 
@@ -259,9 +259,9 @@ static force_inline void OClosure_free(VM* vm, OClosure* closure)
 OUpvalue* OUpvalue_new(VM* vm, Value* valp)
 {
     OUpvalue* upval = ALLOC_OBJ(vm, OUpvalue, OBJ_UPVAL);
-    upval->closed   = (Variable){EMPTY_VAL, 0};
+    upval->closed = (Variable){EMPTY_VAL, 0};
     upval->location = valp;
-    upval->next     = NULL;
+    upval->next = NULL;
     return upval;
 }
 
@@ -273,7 +273,7 @@ static force_inline void OUpvalue_free(VM* vm, OUpvalue* upval)
 OClass* OClass_new(VM* vm, OString* name)
 {
     OClass* oclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS); // GC
-    oclass->name   = name;
+    oclass->name = name;
     HashTable_init(&oclass->methods);
     oclass->overloaded = NULL;
     return oclass;
@@ -289,7 +289,7 @@ static force_inline void OClass_free(VM* vm, OClass* oclass)
 OInstance* OInstance_new(VM* vm, OClass* oclass)
 {
     OInstance* instance = ALLOC_OBJ(vm, OInstance, OBJ_INSTANCE);
-    instance->oclass    = oclass;
+    instance->oclass = oclass;
     HashTable_init(&instance->fields);
     return instance;
 }
@@ -303,8 +303,8 @@ static force_inline void OInstance_free(VM* vm, OInstance* instance)
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method)
 {
     OBoundMethod* bound_method = ALLOC_OBJ(vm, OBoundMethod, OBJ_BOUND_METHOD);
-    bound_method->receiver     = receiver;
-    bound_method->method       = method;
+    bound_method->receiver = receiver;
+    bound_method->method = method;
     return bound_method;
 }
 
@@ -348,7 +348,7 @@ sdebug void otypeprint(OType type)
 
 void oprint(Value value)
 {
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
 #include "jmptable.h"
 #undef OBJ_TABLE
@@ -405,8 +405,8 @@ void oprint(Value value)
         }
     }
     unreachable;
-#ifdef SKOOMA_JMPTABLE_H
-#undef SKOOMA_JMPTABLE_H
+#ifdef SKJMPTABLE_H
+#undef SKJMPTABLE_H
 #endif
 }
 
@@ -435,7 +435,7 @@ void ofree(VM* vm, O* object)
     otypeprint(otype(object));
     printf("\n");
 #endif
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
 #include "jmptable.h"
 #undef OBJ_TABLE
@@ -488,14 +488,14 @@ void ofree(VM* vm, O* object)
         }
     }
     unreachable;
-#ifdef SKOOMA_JMPTABLE_H
-#undef SKOOMA_JMPTABLE_H
+#ifdef SKJMPTABLE_H
+#undef SKJMPTABLE_H
 #endif
 }
 
 OString* otostr(VM* vm, O* object)
 {
-#ifdef S_PRECOMPUTED_GOTO
+#ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
 #include "jmptable.h"
 #undef OBJ_TABLE
@@ -532,13 +532,13 @@ OString* otostr(VM* vm, O* object)
         }
         CASE(OBJ_INSTANCE)
         {
-            OString*    name        = ((OInstance*)object)->oclass->name;
-            const char* class_name  = name->storage;
-            UInt        class_len   = name->len;
-            const char* literal     = " instance";
-            UInt        literal_len = sizeof(" instance") - 1;
-            UInt        arrlen      = literal_len + class_len + 1;
-            char        buff[arrlen];
+            OString* name = ((OInstance*)object)->oclass->name;
+            const char* class_name = name->storage;
+            UInt class_len = name->len;
+            const char* literal = " instance";
+            UInt literal_len = sizeof(" instance") - 1;
+            UInt arrlen = literal_len + class_len + 1;
+            char buff[arrlen];
             memcpy(buff, class_name, class_len);
             memcpy(buff + class_len, literal, literal_len);
             buff[arrlen - 1] = '\0';
@@ -550,7 +550,7 @@ OString* otostr(VM* vm, O* object)
         }
     }
     unreachable;
-#ifdef SKOOMA_JMPTABLE_H
-#undef SKOOMA_JMPTLE_H
+#ifdef SKJMPTABLE_H
+#undef SKJMPTLE_H
 #endif
 }
