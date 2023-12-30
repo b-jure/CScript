@@ -128,41 +128,31 @@ static_assert(
 
 
 
-/**
- * Max stack size in bytes, default set to 524 KiB.
- **/
+/* Max stack size in bytes, default set to 524 KiB. */
 #define SK_STACK_MAX (1 << 19)
 
-/**
- * Max temporary values VM can hold when
- * returning from a function.
- **/
+/* Max temporary values VM can hold when
+ * returning from a function. */
 #define SK_TEMP_MAX 0xffffff
 
-/**
- * Max function call frames.
- * This grows each time user calls a
- * callable value.
- **/
+/* Max function call frames.
+ * This grows each time user calls a callable value. */
 #define SK_CALLFRAMES_MAX 256
 
-/**
- * Allow NaN boxing of values.
- **/
+/* Allow NaN boxing of values by default. */
 #define SK_NAN_BOX
 
-/**
- * Default heap grow factor
- **/
-#define GC_HEAP_GROW_FACTOR 2
+/* Default heap grow factor is 2.0. */
+#define GC_HEAP_GROW_FACTOR 2.0
+
+/* Default heap initial threshold is 1 MiB. */
+#define GC_HEAP_INIT (1 << 20)
 
 
 
-/**
- * Enables assertions when doing API calls from C.
+/* Enables assertions when doing API calls from C.
  * Enabled by default, to disable remove this define
- * or comment it out.
- **/
+ * or comment it out. */
 #define SK_CHECK_API
 
 
@@ -173,30 +163,22 @@ static_assert(
 #endif
 
 
-/**
- * In case user wants to use his own locking mechanism,
- * he should define his own sk_unlock and sk_lock.
- **/
+/* In case user wants to use his own locking mechanism,
+ * he should define his own sk_unlock and sk_lock. */
 #if defined(sk_lock) && defined(sk_unlock)
 #define SK_LOCK_USR
 #endif
 
 
 
-/*
- * Mark/signature for core API functions.
- */
+/* Mark/signature for core API functions. */
 #define SK_API extern
 
-/*
- * Signature for library functions.
- */
+/* Signature for library functions. */
 #define SK_LIBAPI SK_API
 
 
-/*
- * https://www.lua.org/source/5.4/llimits.h.html#l_noret
- */
+/* https://www.lua.org/source/5.4/llimits.h.html#l_noret */
 #if !defined(sk_noret)
 #if defined(__GNUC__)
 #define sk_noret void __attribute__((noreturn))
@@ -230,79 +212,5 @@ static_assert(
 #define sdebug unused
 #endif
 
-
-/* Virtual Machine */
-typedef struct VM VM;
-
-
-/**
- * Generic allocator function, used for every allocation, free and reallocation.
- **/
-typedef void* (*AllocatorFn)(void* ptr, size_t newsize, void* userdata);
-
-
-/**
- * Canonicalize the name of the script, the returned name will
- * be used: when reporting error inside that script, in comparisons
- * when resolving duplicate loads and finally will be passed
- * to 'ScriptLoadFinFn' as argument.
- **/
-typedef const char* (
-    *ScriptRenameFn)(VM* vm, const char* importer_script, const char* name);
-
-
-/* Forward declare */
-typedef struct ScriptLoadResult ScriptLoadResult;
-
-
-/**
- * Function called after 'ScriptLoadFn' finishes, to perform
- * cleanup (if any).
- **/
-typedef void (*ScriptLoadFinFn)(VM* vm, const char* name, ScriptLoadResult result);
-
-
-/* Return result of 'ScriptLoadFn'. */
-struct ScriptLoadResult {
-    const char* source; // Source file
-    ScriptLoadFinFn finfn; // Cleanup/post-script-load function
-    void* userdata; // Custom user data (if any)
-};
-
-
-/**
- * Finds and loads the script returning 'ScriptLoadResult'.
- * Any memory allocated inside this function is user managed.
- * In order to cleanup that memory (if any) the 'ScriptLoadFinFn'
- * function should be provided, that function will run right after
- * this one finishes.
- **/
-typedef ScriptLoadResult (*ScriptLoadFn)(VM* vm, const char* name);
-
-
-/*
- * Panic function signature.
- * This function gets called when runtime errors occur
- * in standard call (non-protected).
- */
-typedef sk_noret (*PanicFn)(VM* vm);
-
-
-/**
- * User modifiable configuration.
- * Create and initialize this 'Config' struct and pass it to 'VM_new'.
- **/
-typedef struct {
-    AllocatorFn reallocate; // Generic allocator function
-    ScriptRenameFn rename_script; // Script rename fn
-    ScriptLoadFn load_script; // Script loader fn
-    PanicFn panic;
-    void* userdata; // User data (for 'AllocatorFn')
-    size_t gc_init_heap_size; // Initial heap allocation
-    size_t gc_min_heap_size; // Minimum size of heap after recalculation
-    double gc_grow_factor; // Heap grow factor
-} Config;
-
-void Config_init(Config* config);
 
 #endif

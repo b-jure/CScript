@@ -96,79 +96,81 @@ static force_inline bool isotype(Value value, OType type)
 }
 
 struct OString { // typedef is inside 'value.h'
-    O      obj; // shared header
+    O obj; // shared header
     size_t len; // string length (excluding null term)
-    Hash   hash; // cached hash
-    char   storage[]; // bytes (chars)
+    Hash hash; // cached hash
+    char storage[]; // bytes (chars)
 };
 
 struct OUpvalue { // typedef is inside 'value.h'
-    O         obj; // shared header
-    Variable  closed; // is upvalue closed over
-    Value*    location; // ptr to 'closed' or VM stack
+    O obj; // shared header
+    Variable closed; // is upvalue closed over
+    Value* location; // ptr to 'closed' or VM stack
     OUpvalue* next; // chain
 };
 
 struct OFunction { // typedef is inside 'value.h'
-    O        obj; // shared header
-    Chunk    chunk; // bytecode and constants
+    O obj; // shared header
+    Chunk chunk; // bytecode and constants
     OString* name; // script name
-    UInt     upvalc; // number of upvalues
-    UInt     arity; // Min amount of arguments required
-    Byte     isva : 1; // If this function takes valist
-    Byte     isinit : 1; // If this function is class initializer
-    Byte     gotret : 1; // last instruction is 'OP_TOP/RET'
+    UInt upvalc; // number of upvalues
+    UInt arity; // Min amount of arguments required
+    Byte isva : 1; // If this function takes valist
+    Byte isinit : 1; // If this function is class initializer
+    Byte gotret : 1; // last instruction is 'OP_TOP/RET'
 };
 
 struct OClosure { // typedef is inside 'value.h'
-    O          obj; // shared header
+    O obj; // shared header
     OFunction* fn; // wrapped function
     OUpvalue** upvals; // array of ptr to OUpvalue
-    UInt       upvalc; // array len
+    UInt upvalc; // array len
 };
 
 struct OClass { // typedef is inside 'value.h'
-    O         obj; // shared header
-    OString*  name; // class name
+    O obj; // shared header
+    OString* name; // class name
     HashTable methods; // class methods
-    OClosure* overloaded; // @TODO: array of overloadable ops
+    OClosure* omethods[OM_CNT]; // overloaded methods
+    Value sfields[SF_CNT]; // special fields
 };
 
 struct OInstance { // typedef is inside 'value.h'
-    O         obj; // shared header
-    OClass*   oclass; // ptr to class we instantiated from
+    O obj; // shared header
+    OClass* oclass; // ptr to class we instantiated from
     HashTable fields; // Instance fields
 };
 
 struct OBoundMethod { // typedef is inside 'value.h'
-    O         obj; // shared header
-    Value     receiver; // ptr to OInstance this method is bound to
+    O obj; // shared header
+    Value receiver; // ptr to OInstance this method is bound to
     OClosure* method;
 };
 
 typedef struct {
-    O         obj; // shared header
+    O obj; // shared header
     CFunction fn; // native functions signature
-    OString*  name; // native function name
-    Int       arity; // how many arguments
-    bool      isva; // is this vararg function
+    OString* name; // native function name
+    Int arity; // how many arguments
+    bool isva; // is this vararg function
 } ONative; // Native function written in C
 
-OString*      OString_new(VM* vm, const char* chars, size_t len);
-OString*      OString_fmt_from(VM* vm, const char* fmt, va_list argp);
-OString*      OString_fmt(VM* vm, const char* fmt, ...);
-OString*      unescape(VM* vm, OString* string);
+OString* OString_new(VM* vm, const char* chars, size_t len);
+OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp);
+OString* OString_fmt(VM* vm, const char* fmt, ...);
+OString* concatenate(VM* vm, Value a, Value b);
+OString* unescape(VM* vm, OString* string);
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method);
-OInstance*    OInstance_new(VM* vm, OClass* cclass);
-OClass*       OClass_new(VM* vm, OString* name);
-OUpvalue*     OUpvalue_new(VM* vm, Value* var_ref);
-OClosure*     OClosure_new(VM* vm, OFunction* fn);
-ONative*      ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva);
-OFunction*    OFunction_new(VM* vm);
-void          otypeprint(OType type); // Debug
-OString*      otostr(VM* vm, O* object);
+OInstance* OInstance_new(VM* vm, OClass* cclass);
+OClass* OClass_new(VM* vm, OString* name);
+OUpvalue* OUpvalue_new(VM* vm, Value* var_ref);
+OClosure* OClosure_new(VM* vm, OFunction* fn);
+ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva);
+OFunction* OFunction_new(VM* vm);
+void otypeprint(OType type); // Debug
+OString* otostr(VM* vm, O* object);
 
-void oprint(const Value value);
+void oprint(VM* vm, Value value);
 Hash ohash(Value value);
 void ofree(VM* vm, O* object);
 

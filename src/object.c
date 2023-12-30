@@ -149,6 +149,22 @@ static force_inline void OString_free(VM* vm, OString* string)
     GC_FREE(vm, string, sizeof(OString) + string->len + 1);
 }
 
+
+OString* concatenate(VM* vm, Value a, Value b)
+{
+    OString* left = AS_STRING(a);
+    OString* right = AS_STRING(b);
+    size_t length = left->len + right->len;
+    char buffer[length + 1];
+    memcpy(buffer, left->storage, left->len);
+    memcpy(buffer + left->len, right->storage, right->len);
+    buffer[length] = '\0';
+    OString* string = OString_new(vm, buffer, length);
+    popn(vm, 2);
+    return string;
+}
+
+
 OString* unescape(VM* vm, OString* string)
 {
     Array_Byte new;
@@ -346,7 +362,7 @@ sdebug void otypeprint(OType type)
     }
 }
 
-void oprint(Value value)
+void oprint(VM* vm, Value value)
 {
 #ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
@@ -392,10 +408,30 @@ void oprint(Value value)
         }
         CASE(OBJ_INSTANCE)
         {
-            printf(
-                "%p-%s instance",
-                AS_OBJ(value),
-                AS_INSTANCE(value)->oclass->name->storage);
+            OInstance* instance = AS_INSTANCE(value);
+            Value display;
+            Value top;
+            if(HashTable_get(
+                   &instance->oclass->methods,
+                   OBJ_VAL(vm->statics[SS_DISP]),
+                   &display))
+            {
+                push(vm, display); // push display method
+                sk_call(vm, 0, 1); // call it
+                if(unlikely(!IS_STRING(top = *stackpeek(0)))) {
+                    push(vm, OBJ_VAL(vtostr(vm, top)));
+                    vm->sp[-2] =
+                        OBJ_VAL(DISPLAY_INVALID_TYPE(vm, AS_CSTRING(*stackpeek(0))));
+                    vm->sp--;
+                    runerror(vm, S_EDISPLAY);
+                }
+                printf("%s", AS_CSTRING(top));
+            } else {
+                printf(
+                    "%p-%s instance",
+                    AS_OBJ(value),
+                    AS_INSTANCE(value)->oclass->name->storage);
+            }
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
@@ -448,42 +484,42 @@ void ofree(VM* vm, O* object)
     {
         CASE(OBJ_STRING)
         {
-            OString_free(vm, (OString*)object);
+            OString_free(vm, cast(OString*, object));
             BREAK;
         }
         CASE(OBJ_FUNCTION)
         {
-            ObjFunction_free(vm, (OFunction*)object);
+            ObjFunction_free(vm, cast(OFunction*, object));
             BREAK;
         }
         CASE(OBJ_CLOSURE)
         {
-            OClosure_free(vm, (OClosure*)object);
+            OClosure_free(vm, cast(OClosure*, object));
             BREAK;
         }
         CASE(OBJ_NATIVE)
         {
-            ONative_free(vm, (ONative*)object);
+            ONative_free(vm, cast(ONative*, object));
             BREAK;
         }
         CASE(OBJ_UPVAL)
         {
-            OUpvalue_free(vm, (OUpvalue*)object);
+            OUpvalue_free(vm, cast(OUpvalue*, object));
             BREAK;
         }
         CASE(OBJ_CLASS)
         {
-            OClass_free(vm, (OClass*)object);
+            OClass_free(vm, cast(OClass*, object));
             BREAK;
         }
         CASE(OBJ_INSTANCE)
         {
-            OInstance_free(vm, (OInstance*)object);
+            OInstance_free(vm, cast(OInstance*, object));
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            OBoundMethod_free(vm, (OBoundMethod*)object);
+            OBoundMethod_free(vm, cast(OBoundMethod*, object));
             BREAK;
         }
     }
@@ -508,45 +544,40 @@ OString* otostr(VM* vm, O* object)
     {
         CASE(OBJ_STRING)
         {
-            return (OString*)object;
+            return cast(OString*, object);
         }
         CASE(OBJ_FUNCTION)
         {
-            return ((OFunction*)object)->name;
+            return cast(OFunction*, object)->name;
         }
         CASE(OBJ_CLOSURE)
         {
-            return ((OClosure*)object)->fn->name;
+            return cast(OClosure*, object)->fn->name;
         }
         CASE(OBJ_NATIVE)
         {
-            return ((ONative*)object)->name;
+            return cast(ONative*, object)->name;
         }
         CASE(OBJ_UPVAL)
         {
-            return vtostr(vm, ((OUpvalue*)object)->closed.value);
+            return vtostr(vm, cast(OUpvalue*, object)->closed.value);
         }
         CASE(OBJ_CLASS)
         {
-            return ((OClass*)object)->name;
+            return cast(OClass*, object)->name;
         }
         CASE(OBJ_INSTANCE)
         {
-            OString* name = ((OInstance*)object)->oclass->name;
-            const char* class_name = name->storage;
-            UInt class_len = name->len;
-            const char* literal = " instance";
-            UInt literal_len = sizeof(" instance") - 1;
-            UInt arrlen = literal_len + class_len + 1;
-            char buff[arrlen];
-            memcpy(buff, class_name, class_len);
-            memcpy(buff + class_len, literal, literal_len);
-            buff[arrlen - 1] = '\0';
-            return OString_new(vm, buff, arrlen - 1);
+            Value debug;
+            OInstance* instance = cast(OInstance*, object);
+            if(HashTable_get(&instance->fields, OBJ_VAL(vm->statics[SS_DBG]), &debug) &&
+               IS_STRING(debug))
+                return AS_STRING(debug);
+            return instance->oclass->name;
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            return ((OBoundMethod*)object)->method->fn->name;
+            return cast(OBoundMethod*, object)->method->fn->name;
         }
     }
     unreachable;

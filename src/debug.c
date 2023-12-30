@@ -16,6 +16,7 @@
  * was passed to sk_error. */
 sk_noret runerror(VM* vm, Int status)
 {
+    last_frame(vm).status = status;
     struct sk_longjmp* errjmp = vm->errjmp;
     if(errjmp) { // protected call?
         errjmp->status = status; // error status
@@ -54,11 +55,23 @@ sk_noret runerror(VM* vm, Int status)
     if(vm->config.panic) {
         sk_unlock(vm);
         vm->config.panic(vm);
+        unreachable;
     } else {
         _cleanupvm(&vm);
         abort();
     }
 }
+
+
+sk_noret ordererror(VM* vm, Value* a, Value* b)
+{
+    const char* t1 = vm->statics[val2type(a)]->storage;
+    const char* t2 = vm->statics[val2type(a)]->storage;
+    if(strcmp(t1, t2) == 0) sk_pushfstring(vm, "Attempt to compare two %s values.", t1);
+    else sk_pushfstring(vm, "Attempt to compare %s and %s.", t1, t2);
+    runerror(vm, S_ECMP);
+}
+
 
 void dumpstack(VM* vm, CallFrame* frame, Byte* ip)
 {

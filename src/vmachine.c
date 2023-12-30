@@ -8,9 +8,7 @@
 #include "mem.h"
 #include "object.h"
 #include "parser.h"
-#include "skconf.h"
 #include "skmath.h"
-#include "skooma.h"
 #include "value.h"
 #include "vmachine.h"
 
@@ -25,72 +23,64 @@ volatile Int runtime = 0; // VM is running?
 
 
 
+/* Push the value on the stack */
 void push(VM* vm, Value val)
 {
     if(likely(vm->sp - vm->stack < (UInt)VM_STACK_MAX)) *vm->sp++ = val;
     else {
-        fprintf(stderr, "VM stack overflow. Limit [%u].\n", (UInt)VM_STACK_MAX);
-        _cleanupvm(&vm);
-        exit(EXIT_FAILURE);
+        ASSERT(vm->sp - vm->stack > 0, "invalid VM_STACK_MAX");
+        vm->sp--; // make some space
+        push(vm, OBJ_VAL(VM_STACK_OVERFLOW(vm, VM_STACK_MAX)));
+        runerror(vm, S_ESOVERFLOW);
     }
 }
 
-static OString* concatenate(VM* vm, Value a, Value b)
-{
-    OString* left = AS_STRING(a);
-    OString* right = AS_STRING(b);
-    size_t length = left->len + right->len;
-    char buffer[length + 1];
-    memcpy(buffer, left->storage, left->len);
-    memcpy(buffer + left->len, right->storage, right->len);
-    buffer[length] = '\0';
-    OString* string = OString_new(vm, buffer, length);
-    popn(vm, 2);
-    return string;
-}
-
-static force_inline OBoundMethod*
-bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
+/* Bind class method in order to preserve the receiver.
+ * By doing so the interpreter can then push the receiver on the
+ * stack before running the function.
+ * This is needed because class methods expect the receiver to be
+ * the first argument ('self' local variable). */
+void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 {
     Value method;
     if(unlikely(!HashTable_get(&oclass->methods, name, &method))) {
-        vm->sp[-1] =
-            OBJ_VAL(UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(name), oclass->name->storage));
-        return NULL;
+        const char* classname = oclass->name->storage;
+        push(vm, OBJ_VAL(UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(name), classname)));
+        runerror(vm, S_EUDPROPERTY);
     }
-    OBoundMethod* bound_method = OBoundMethod_new(vm, receiver, AS_CLOSURE(method));
-    return bound_method;
+    *stackpeek(0) = OBJ_VAL(OBoundMethod_new(vm, receiver, AS_CLOSURE(method)));
 }
 
-static force_inline void
-VM_define_native(VM* vm, const char* name, CFunction native, UInt arity, bool isva)
+
+/* Public interface for creating new global native C functions. */
+void globalnative_new(VM* vm, const char* name, CFunction cfunc, UInt arity, bool isva)
 {
     push(vm, OBJ_VAL(OString_new(vm, name, strlen(name))));
-    push(vm, OBJ_VAL(ONative_new(vm, AS_STRING(*stackpeek(0)), native, arity, isva)));
-    UInt idx = GARRAY_PUSH(vm, ((Variable){.value = vm->stack[1], .flags = 0x00}));
-    HashTable_insert(vm, &vm->globids, vm->stack[0], NUMBER_VAL((double)idx));
-    popn(vm, 2);
+    push(vm, OBJ_VAL(ONative_new(vm, AS_STRING(*stackpeek(0)), cfunc, arity, isva)));
+    UInt idx = Array_Variable_push(&vm->globvars, (Variable){*stackpeek(0), 0x00});
+    HashTable_insert(vm, &vm->globids, *stackpeek(1), NUMBER_VAL(idx));
+    vm->sp -= 2;
 }
 
+
+/*
+ * Configuration.
+ * Contains various hooks and configurable options.
+ * 'reallocate' - allocator function.
+ * 'userdata' - additional data for allocator.
+ * 'panic' - panic handler in case of runtime errors.
+ * 'gc_heapinit' - starting treshold when gc triggers.
+ * 'gc_growfactor' - garbage collector grow factor (incremental gc).
+ */
 void Config_init(Config* config)
 {
     config->reallocate = reallocate;
     config->userdata = NULL;
-    config->load_script = NULL;
-    config->rename_script = NULL;
-    config->gc_init_heap_size = 10 * (1 << 20); // 10 MiB
-    config->gc_min_heap_size = (1 << 20); // 1 MiB
-    config->gc_grow_factor = GC_HEAP_GROW_FACTOR;
+    config->panic = NULL;
+    config->gc_heapinit = GC_HEAP_INIT;
+    config->gc_growfactor = GC_HEAP_GROW_FACTOR;
 }
 
-
-
-#if defined(SK_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
-#define callbitmask(vm, isva, arity, argc, retcnt)                                       \
-    cast_uint(                                                                           \
-        0 | (!sk_ensurestack(vm, retcnt) * 1) | (((isva) * ((arity) > (argc))) * 2) |    \
-        ((!(isva) * ((arity) != (argc))) * 4) | (((vm)->fc == VM_FRAMES_MAX) * 8))
-#endif
 
 /* Calls have lots of checks and there are two main reasons why.
  * Skooma does not allow extra arguments if the function does not
@@ -100,8 +90,9 @@ static int precall(VM* vm, Value callee, Int argc, Int retcnt)
 {
     CallFrame* frame = &vm->frames[vm->fc];
     OString* err;
+    Int status;
     Int arity, isva, isnative;
-    Int type = CALL_NATIVEFN;
+    Int type = CALL_SKOOMAFN;
     const char* name = NULL;
     isnative = IS_NATIVE(callee);
     if(!isnative) {
@@ -112,13 +103,13 @@ static int precall(VM* vm, Value callee, Int argc, Int retcnt)
         arity = fn->arity;
         isva = fn->isva;
         name = fn->name->storage;
-        type = CALL_SKOOMAFN;
     } else {
         ONative* native = AS_NATIVE(callee);
         frame->closure = NULL;
         frame->ip = NULL;
         arity = native->arity;
         isva = native->isva;
+        type = CALL_NATIVEFN;
         name = native->name->storage;
     }
 #if defined(callbitmask)
@@ -130,122 +121,147 @@ static int precall(VM* vm, Value callee, Int argc, Int retcnt)
         &&callval,
     };
     UInt bitmask = callbitmask(vm, isva, arity, argc, retcnt);
-    // https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html#index-_005f_005fbuiltin_005fctz
-    UInt idx = __builtin_ctz(bitmask);
+    UInt idx = sk_ctz(bitmask);
     goto* jmptable[idx];
 eoverflow:
     err = RETCNT_STACK_OVERFLOW(vm, name);
-    frame->status = S_ESOVERFLOW;
+    status = S_ESOVERFLOW;
     goto err;
 eargcva:
     err = FN_VA_ARGC_ERR(vm, arity, argc);
-    frame->status = S_EARGCMIN;
+    status = S_EARGCMIN;
     goto err;
 eargc:
     err = FN_ARGC_ERR(vm, arity, argc);
-    frame->status = S_EARGC;
+    status = S_EARGC;
     goto err;
 eframe:
     err = FRAME_LIMIT_ERR(vm, VM_FRAMES_MAX);
-    frame->status = S_EFOVERFLOW;
+    status = S_EFOVERFLOW;
 err:
-    vm->sp -= argc;
-    vm->sp[-1] = OBJ_VAL(err);
-    return CALL_ERR;
+    push(vm, OBJ_VAL(err));
+    runerror(vm, status);
 #else
     if(unlikely(!sk_ensurestack(vm, retcnt))) {
         err = RETCNT_STACK_OVERFLOW(vm, name);
-        frame->status = S_ESOVERFLOW;
+        status = S_ESOVERFLOW;
     } else if(unlikely(isva && arity > argc)) {
         err = FN_VA_ARGC_ERR(vm, arity, argc);
-        frame->status = S_EARGCMIN;
+        status = S_EARGCMIN;
     } else if(unlikely(!isva && arity != argc)) {
         err = FN_ARGC_ERR(vm, arity, argc);
-        frame->status = S_EARGC;
+        status = S_EARGC;
     } else if(unlikely(vm->fc == VM_FRAMES_MAX)) {
         err = FRAME_LIMIT_ERR(vm, VM_FRAMES_MAX);
-        frame->status = S_EFOVERFLOW;
+        status = S_EFOVERFLOW;
     } else goto callval;
-    vm->sp -= argc;
-    vm->sp[-1] = OBJ_VAL(err);
-    return CALL_ERR;
+    push(vm, OBJ_VAL(err));
+    runerror(vm, status);
 #endif
 callval:;
     frame->vacnt = argc - arity;
     frame->retcnt = retcnt;
     frame->callee = vm->sp - argc - 1;
+    frame->status = S_OK;
     vm->fc++;
     return type;
 }
 
+/* Tries to call a value.
+ * If value is a callable skooma function it sets up
+ * the new call frame and returns 'CALL_SKOOMAFN'.
+ * If value is a native C function, it also sets up the
+ * new call frame and returns 'CALL_NATIVEFN'.
+ * If the value is a class object it creates a new class instance,
+ * additionally if there is overload method for that class it
+ * sets up the new call frame and returns 'CALL_SKOOMAFN'.
+ * If there is no overloaded method it just returns 'CALL_CLASS'.
+ * Overloaded methods are only allowed to be Skooma closures. */
 static int trycall(VM* vm, Value callee, Int argc, Int retcnt)
 {
-    if(IS_OBJ(callee)) {
-        switch(OBJ_TYPE(callee)) {
-            case OBJ_BOUND_METHOD: {
-                OBoundMethod* bound = AS_BOUND_METHOD(callee);
-                vm->sp[-argc - 1] = bound->receiver; // class instance (self)
-                return precall(vm, OBJ_VAL(bound->method), argc, retcnt);
-            }
-            case OBJ_CLASS: {
-                OClass* oclass = AS_CLASS(callee);
-                vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, oclass));
-                OClosure* init = oclass->overloaded;
-                if(init != NULL) return precall(vm, OBJ_VAL(init), argc, 1);
-                else if(unlikely(argc != 0)) {
-                    vm->sp[-1] = OBJ_VAL(FN_ARGC_ERR(vm, 0, argc));
-                    last_frame(vm).status = S_EARGC;
-                    return CALL_ERR;
-                }
-                return CALL_CLASS;
-            }
-            case OBJ_CLOSURE:
-            case OBJ_FUNCTION:
-            case OBJ_NATIVE:
-                return precall(vm, callee, argc, retcnt);
-            default:
-                break;
-        }
+    if(unlikely(!IS_OBJ(callee))) {
+        push(vm, OBJ_VAL(vtostr(vm, callee)));
+        push(vm, OBJ_VAL(NONCALLABLE_ERR(vm, AS_CSTRING(*stackpeek(0)))));
+        runerror(vm, S_ECALLVAL);
     }
-    push(vm, OBJ_VAL(vtostr(vm, callee)));
-    vm->sp[-2] = OBJ_VAL(NONCALLABLE_ERR(vm, AS_CSTRING(*stackpeek(0))));
-    vm->sp--;
-    return CALL_ERR;
+    switch(OBJ_TYPE(callee)) {
+        case OBJ_BOUND_METHOD: {
+            OBoundMethod* bound = AS_BOUND_METHOD(callee);
+            vm->sp[-argc - 1] = bound->receiver; // class instance (self)
+            return precall(vm, OBJ_VAL(bound->method), argc, retcnt);
+        }
+        case OBJ_CLASS: {
+            OClass* oclass = AS_CLASS(callee);
+            vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, oclass));
+            OClosure* init = oclass->omethods[OM_INIT];
+            if(init) return precall(vm, OBJ_VAL(init), argc, 1);
+            else if(unlikely(argc != 0)) {
+                push(vm, OBJ_VAL(FN_ARGC_ERR(vm, 0, argc)));
+                runerror(vm, S_EARGC);
+            }
+            return CALL_CLASS;
+        }
+        case OBJ_CLOSURE:
+        case OBJ_FUNCTION:
+        case OBJ_NATIVE:
+            return precall(vm, callee, argc, retcnt);
+        default:
+            unreachable;
+    }
 }
 
-/* Adjust results stack position for native (C) functions */
-static force_inline void moveresults(VM* vm, Value* nativefn, Int got, Int expect)
+/* Adjust return values after native call finishes. */
+static force_inline void moveresults(VM* vm, Value* fn, Int got, Int expect)
 {
     Value* retstart = vm->sp - got; // start of return values
     if(expect == 0) expect = got; // all results (MULRET)
     if(got > expect) got = expect; // remove extra results
-    memcpy(nativefn, retstart, got); // Safety: 'retstart' >= 'nativefn'
+    memcpy(fn, retstart, got); // Safety: 'retstart' >= 'nativefn'
     for(int i = got; i < expect; i++) // replace missing values with nil
-        nativefn[i] = NIL_VAL;
-    vm->sp = nativefn + expect;
+        fn[i] = NIL_VAL;
+    vm->sp = fn + expect;
 }
 
-/* Call the value */
-void callv(VM* vm, Value* fn, Int retcnt)
+/* Call native function without locking (for use inside the interpreter). */
+static force_inline int callnative_nolock(VM* vm, Value* retstart, Value fn, int retcnt)
 {
-    int argc = vm->sp - fn - 1;
-    int callres = trycall(vm, *fn, argc, retcnt);
-    if(callres == CALL_SKOOMAFN) {
-        callres = run(vm);
-    } else if(callres == CALL_NATIVEFN) {
-        sk_unlock(vm);
-        callres = AS_NATIVE(*fn)->fn(vm); // perform the call
-        sk_lock(vm);
-        skapi_checkelems(vm, callres);
-        moveresults(vm, fn, callres, retcnt);
-    }
-    if(unlikely(callres == CALL_ERR || callres == INTERPRET_RUNTIME_ERROR))
-        // Error occurred while trying to call the value
-        // or inside the interpreter loop.
-        runerror(vm, last_frame(vm).status);
+    int n = AS_NATIVE(fn)->fn(vm);
+    skapi_checkelems(vm, n);
+    moveresults(vm, retstart, n, retcnt);
+    return n;
 }
 
-/* Protected call with longjmp */
+/* Call native function. */
+static force_inline int callnative(VM* vm, Value* retstart, Value fn, int retcnt)
+{
+    sk_unlock(vm);
+    int n = AS_NATIVE(fn)->fn(vm);
+    sk_lock(vm);
+    skapi_checkelems(vm, n);
+    moveresults(vm, retstart, n, retcnt);
+    return n;
+}
+
+/* Public interface for normal call (unprotected).
+ * Performs a normal function call, in case the function is
+ * the skooma function it runs the interpreter and in
+ * case of the native C function it calls it directly. */
+int ncall(VM* vm, Value* retstart, Value fn, Int retcnt)
+{
+    int argc = vm->sp - retstart - 1;
+    int calltype = trycall(vm, fn, argc, retcnt);
+    if(calltype == CALL_SKOOMAFN) run(vm);
+    else if(calltype == CALL_NATIVEFN) callnative(vm, retstart, fn, retcnt);
+    return calltype;
+}
+
+/* Protected call with longjmp.
+ * Performs a protected call, calling the wrapper 'ProtectedFn' around
+ * a Skooma function or native C function.
+ * Returns status of the called function, this status is modified
+ * by function that errors and performs the long jump or it
+ * stays unchanged and the wrapper function just returns and
+ * execution continues. */
 static force_inline int protectedcall(VM* vm, ProtectedFn fn, void* userdata)
 {
     int oldfc = vm->fc;
@@ -260,7 +276,10 @@ static force_inline int protectedcall(VM* vm, ProtectedFn fn, void* userdata)
     return lj.status;
 }
 
-/* Public interface to 'protectedcall' */
+/* Public interface to 'protectedcall'.
+ * In case of errors it performs a recovery by closing all
+ * open upvalues (values to be closed) and restoring the
+ * old stack pointer (oldtop). */
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop)
 {
     int status = protectedcall(vm, fn, userdata);
@@ -273,68 +292,74 @@ int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop)
     return status;
 }
 
-static force_inline bool
-invokefrom(VM* vm, OClass* oclass, Value methodname, Int argc, Int retcnt)
+
+/* Private to the interpreter.
+ * Tries to call the superclass method named 'name'. */
+static force_inline void
+invokefrom(VM* vm, OClass* oclass, Value name, Int argc, Int retcnt)
 {
     Value method;
-    if(unlikely(!HashTable_get(&oclass->methods, methodname, &method))) {
-        vm->sp[-1] = OBJ_VAL(
-            UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(methodname), oclass->name->storage));
-        last_frame(vm).status = S_EUDPROPERTY;
-        return false;
+    if(unlikely(!HashTable_get(&oclass->methods, name, &method))) {
+        const char* classname = oclass->name->storage;
+        push(vm, OBJ_VAL(UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(name), classname)));
+        runerror(vm, S_EUDPROPERTY);
     }
-    return trycall(vm, method, argc, retcnt);
+    if(trycall(vm, method, argc, retcnt) == CALL_NATIVEFN)
+        callnative_nolock(vm, last_frame(vm).callee, method, retcnt);
 }
 
-static force_inline bool invokeindex(VM* vm, Int argc, Int retcnt)
+/* Private to interpreter.
+ * Small optimization, tries to get and call the indexed
+ * value directly as a part of a single instruction. */
+static force_inline void invokeindex(VM* vm, Int argc, Int retcnt)
 {
     Value key = *stackpeek(argc);
     Value receiver = *stackpeek(argc + 1);
     if(unlikely(!IS_INSTANCE(receiver))) {
         push(vm, OBJ_VAL(vtostr(vm, receiver)));
-        vm->sp[-2] = OBJ_VAL(NOT_INSTANCE_ERR(vm, AS_CSTRING(*stackpeek(0))));
-        vm->sp--;
-        last_frame(vm).status = S_EPACCESS;
-        return false;
+        push(vm, OBJ_VAL(NOT_INSTANCE_ERR(vm, AS_CSTRING(*stackpeek(0)))));
+        runerror(vm, S_EPACCESS);
     }
     OInstance* instance = AS_INSTANCE(receiver);
     Value property;
     if(HashTable_get(&instance->fields, key, &property)) goto call;
     if(unlikely(!HashTable_get(&instance->oclass->methods, key, &property))) {
+        const char* classname = instance->oclass->name->storage;
         push(vm, OBJ_VAL(vtostr(vm, key)));
-        vm->sp[-2] = OBJ_VAL(UNDEFINED_PROPERTY_ERR(
-            vm,
-            AS_CSTRING(*stackpeek(0)),
-            instance->oclass->name->storage));
-        vm->sp--;
-        last_frame(vm).status = S_EUDPROPERTY;
-        return false;
+        const char* propname = AS_CSTRING(*stackpeek(0));
+        push(vm, OBJ_VAL(UNDEFINED_PROPERTY_ERR(vm, propname, classname)));
+        runerror(vm, S_EUDPROPERTY);
     }
 call:
-    *stackpeek(argc + 1) = property; // swap receiver with property
-    memcpy(stackpeek(argc), stackpeek(argc - 1), argc); // shift stack to left
-    vm->sp--; // adjust stack pointer
-    return trycall(vm, property, argc, retcnt);
+    if(trycall(vm, property, argc, retcnt) == CALL_NATIVEFN)
+        callnative_nolock(vm, stackpeek(argc + 1), property, retcnt);
 }
 
-static force_inline bool invoke(VM* vm, Value name, Int argc, Int retcnt)
+/* Private to interpreter.
+ * Invokes the field/method of the instance class directly in a single
+ * instruction.
+ * First it tries to find the field with the 'name', if it was not
+ * found it calls the method of its own class or errors if the method
+ * was not found. */
+static force_inline void invoke(VM* vm, Value name, Int argc, Int retcnt)
 {
     Value receiver = *stackpeek(argc);
     if(unlikely(!IS_INSTANCE(receiver))) {
-        vm->sp -= argc;
-        vm->sp[-1] = OBJ_VAL(NOT_INSTANCE_ERR(vm, vtostr(vm, receiver)->storage));
-        return false;
+        push(vm, OBJ_VAL(vtostr(vm, receiver)));
+        push(vm, OBJ_VAL(NOT_INSTANCE_ERR(vm, *stackpeek(0))));
+        runerror(vm, S_EARG);
     }
     OInstance* instance = AS_INSTANCE(receiver);
     Value field;
     if(HashTable_get(&instance->fields, name, &field)) {
         *stackpeek(argc) = field; // swap receiver with field
-        return trycall(vm, field, argc, retcnt);
+        if(trycall(vm, field, argc, retcnt) == CALL_NATIVEFN)
+            callnative_nolock(vm, stackpeek(argc), field, retcnt);
     }
-    return invokefrom(vm, instance->oclass, name, argc, retcnt);
+    invokefrom(vm, instance->oclass, name, argc, retcnt);
 }
 
-static force_inline OUpvalue* captureupval(VM* vm, Value* valp)
+OUpvalue* captureupval(VM* vm, Value* valp)
 {
     OUpvalue** upvalpp = &vm->open_upvals;
     while(*upvalpp != NULL && (*upvalpp)->location > valp)
@@ -372,24 +397,23 @@ static force_inline OString* globalname(VM* vm, UInt idx)
     unreachable;
 }
 
-InterpretResult run(VM* vm)
+void run(VM* vm)
 {
 #define throwerr(vm)    runerror(vm, vtostr(vm, *stackpeek(0))->storage)
 #define READ_BYTE()     (*ip++)
 #define READ_BYTEL()    (ip += 3, GET_BYTES3(ip - 3))
 #define READ_CONSTANT() FFN(frame)->chunk.constants.data[READ_BYTEL()]
 #define READ_STRING()   AS_STRING(READ_CONSTANT())
-#define BINARY_OP(vm, vtype, op)                                                         \
+#define BINARY_OP(vm, type, op)                                                          \
     do {                                                                                 \
         if(unlikely(!IS_NUMBER(*stackpeek(0)) || !IS_NUMBER(*stackpeek(1)))) {           \
             frame->ip = ip;                                                              \
             (vm)->sp[-1] = OBJ_VAL(BINARYOP_ERR(vm, op));                                \
-            frame->status = S_EBINOP;                                                    \
-            return INTERPRET_RUNTIME_ERROR;                                              \
+            runerror(vm, S_EBINOP);                                                      \
         }                                                                                \
         double b = AS_NUMBER(pop(vm));                                                   \
         double a = AS_NUMBER(pop(vm));                                                   \
-        push(vm, vtype(a op b));                                                         \
+        push(vm, type(a op b));                                                          \
     } while(false)
     runtime = 1;
     // cache these hopefully in a register
@@ -450,8 +474,7 @@ InterpretResult run(VM* vm)
                     push(vm, OBJ_VAL(vtostr(vm, val)));
                     vm->sp[-2] = OBJ_VAL(UNARYNEG_ERR(vm, AS_CSTRING(*stackpeek(0))));
                     vm->sp--;
-                    frame->status = S_EBINOP;
-                    return INTERPRET_RUNTIME_ERROR;
+                    runerror(vm, S_EBINOP);
                 }
                 AS_NUMBER_REF(vm->sp - 1) = NUMBER_VAL(-AS_NUMBER(val));
                 BREAK;
@@ -469,8 +492,7 @@ InterpretResult run(VM* vm)
                 } else { // @TODO: Operator overloading or not?
                     frame->ip = ip;
                     vm->sp[-1] = OBJ_VAL(ADD_OPERATOR_ERR(vm, a, b));
-                    frame->status = S_EBINOP;
-                    return INTERPRET_RUNTIME_ERROR;
+                    runerror(vm, S_EBINOP);
                 }
                 BREAK;
             }
@@ -501,7 +523,7 @@ InterpretResult run(VM* vm)
             }
             CASE(OP_NOT)
             {
-                *(vm->sp - 1) = BOOL_VAL(ISFALSEY(*stackpeek(0)));
+                *stackpeek(0) = BOOL_VAL(ISFALSEY(*stackpeek(0)));
                 BREAK;
             }
             CASE(OP_VALIST)
@@ -519,44 +541,49 @@ InterpretResult run(VM* vm)
             {
                 Value b = pop(vm);
                 Value a = pop(vm);
-                push(vm, BOOL_VAL(!veq(a, b)));
+                push(vm, BOOL_VAL(!veq(vm, a, b)));
                 BREAK;
             }
+            CASE(OP_EQUAL)
             {
-                Value a, b;
-                CASE(OP_EQUAL)
-                {
-                    b = pop(vm);
-                    a = pop(vm);
-                    goto op_equal_fin;
-                }
-                CASE(OP_EQ)
-                {
-                    b = pop(vm);
-                    a = *stackpeek(0);
-                op_equal_fin:
-                    push(vm, BOOL_VAL(veq(a, b)));
-                    BREAK;
-                }
+                Value b = pop(vm);
+                Value a = pop(vm);
+                push(vm, BOOL_VAL(veq(vm, a, b)));
+                BREAK;
+            }
+            CASE(OP_EQ)
+            {
+                Value b = pop(vm);
+                Value a = *stackpeek(0);
+                push(vm, BOOL_VAL(veq(vm, a, b)));
+                BREAK;
             }
             CASE(OP_GREATER)
             {
-                BINARY_OP(vm, BOOL_VAL, >);
+                Value b = pop(vm);
+                Value a = pop(vm);
+                push(vm, BOOL_VAL(vgt(vm, a, b)));
                 BREAK;
             }
             CASE(OP_GREATER_EQUAL)
             {
-                BINARY_OP(vm, BOOL_VAL, >=);
+                Value b = pop(vm);
+                Value a = pop(vm);
+                push(vm, BOOL_VAL(vge(vm, a, b)));
                 BREAK;
             }
             CASE(OP_LESS)
             {
-                BINARY_OP(vm, BOOL_VAL, <);
+                Value b = pop(vm);
+                Value a = pop(vm);
+                push(vm, BOOL_VAL(vlt(vm, a, b)));
                 BREAK;
             }
             CASE(OP_LESS_EQUAL)
             {
-                BINARY_OP(vm, BOOL_VAL, <=);
+                Value b = pop(vm);
+                Value a = pop(vm);
+                push(vm, BOOL_VAL(vle(vm, a, b)));
                 BREAK;
             }
             CASE(OP_POP)
@@ -580,8 +607,7 @@ InterpretResult run(VM* vm)
                 Int argc = vm->sp - Array_VRef_pop(&vm->callstart);
                 frame->ip = ip;
                 if(unlikely(trycall(vm, *stackpeek(argc), argc, retcnt) == CALL_ERR))
-                    return INTERPRET_RUNTIME_ERROR;
-                frame = &vm->frames[vm->fc - 1];
+                    frame = &vm->frames[vm->fc - 1];
                 ip = frame->ip;
                 BREAK;
             }
@@ -611,10 +637,7 @@ InterpretResult run(VM* vm)
                 Value methodname = READ_CONSTANT();
                 OClass* superclass = AS_CLASS(pop(vm));
                 frame->ip = ip;
-                OBoundMethod* bound =
-                    bindmethod(vm, superclass, methodname, *stackpeek(0));
-                if(unlikely(bound == NULL)) return INTERPRET_RUNTIME_ERROR;
-                vm->sp[-1] = OBJ_VAL(bound);
+                bindmethod(vm, superclass, methodname, *stackpeek(0));
                 BREAK;
             }
             CASE(OP_INVOKE_SUPER)
@@ -625,8 +648,7 @@ InterpretResult run(VM* vm)
                 UInt argc = vm->sp - Array_VRef_pop(&vm->callstart);
                 Int retcnt = READ_BYTEL();
                 frame->ip = ip;
-                if(unlikely(!invokefrom(vm, superclass, methodname, argc, retcnt)))
-                    return INTERPRET_RUNTIME_ERROR;
+                invokefrom(vm, superclass, methodname, argc, retcnt);
                 frame = &vm->frames[vm->fc - 1];
                 ip = frame->ip;
                 BREAK;
@@ -670,10 +692,7 @@ InterpretResult run(VM* vm)
                     BREAK;
                 }
                 frame->ip = ip;
-                OBoundMethod* bound =
-                    bindmethod(vm, instance->oclass, property_name, receiver);
-                if(unlikely(bound == NULL)) return INTERPRET_RUNTIME_ERROR;
-                *(vm->sp - 1) = OBJ_VAL(bound);
+                bindmethod(vm, instance->oclass, property_name, receiver);
                 BREAK;
             }
             {
@@ -811,10 +830,7 @@ InterpretResult run(VM* vm)
                     }
                     closeupval(vm, frame->callee);
                     vm->fc--;
-                    if(vm->fc == 0) { // end of main script
-                        popn(vm, vm->sp - vm->stack);
-                        return INTERPRET_OK;
-                    }
+                    if(vm->fc == 0) return;
                     vm->sp = frame->callee;
                     while(vm->temp.len > 0)
                         push(vm, Array_Value_pop(&vm->temp));
@@ -951,10 +967,9 @@ InterpretResult run(VM* vm)
                     BREAK;
                 }
                 frame->ip = ip;
-                OBoundMethod* bound = bindmethod(vm, instance->oclass, key, receiver);
-                if(unlikely(bound == NULL)) return INTERPRET_RUNTIME_ERROR;
-                popn(vm, 2); // Pop key and receiver
-                push(vm, OBJ_VAL(bound)); // Push bound method
+                bindmethod(vm, instance->oclass, key, receiver);
+                *stackpeek(2) = *stackpeek(0); // replace key with the bmethod
+                vm->sp -= 2; // adjust stack pointer
                 BREAK;
             }
             CASE(OP_SET_INDEX)
@@ -1003,7 +1018,7 @@ InterpretResult run(VM* vm)
                 // overload-able methods/operators.
                 Byte opn = READ_BYTE();
                 UNUSED(opn);
-                oclass->overloaded = AS_CLOSURE(*stackpeek(0));
+                oclass->omethods = AS_CLOSURE(*stackpeek(0));
                 ASSERT(*ip == OP_METHOD, "Expected 'OP_METHOD'.");
                 BREAK;
             }
@@ -1024,7 +1039,7 @@ InterpretResult run(VM* vm)
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 HashTable_into(vm, &AS_CLASS(superclass)->methods, &subclass->methods);
-                subclass->overloaded = AS_CLASS(superclass)->overloaded;
+                subclass->omethods = AS_CLASS(superclass)->omethods;
                 pop(vm); // pop subclass
                 BREAK;
             }

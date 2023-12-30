@@ -6,6 +6,7 @@
 
 #include <memory.h>
 
+
 void* reallocate(void* ptr, size_t newsize, void* userdata);
 size_t gc(VM* vm);
 void omark(VM* vm, O* obj);

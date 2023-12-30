@@ -63,45 +63,88 @@
 #define sk_number SK_NUMBER
 
 
+
+/* Virtual Machine */
+typedef struct VM VM;
+
+
+
 /* Native C function signature */
 typedef int (*CFunction)(VM* vm);
 
 
+/* Memory allocator function signature. */
+typedef void* (*AllocFn)(void* ptr, size_t newsize, void* userdata);
 
 
+/* TODO: Figure out do we need these after implementing corelib
+typedef const char* (
+    *ScriptRenameFn)(VM* vm, const char* importer_script, const char* name);
+
+
+typedef struct ScriptLoadResult ScriptLoadResult;
+
+typedef void (*ScriptLoadFinFn)(VM* vm, const char* name, ScriptLoadResult result);
+
+struct ScriptLoadResult {
+    const char* source;
+    ScriptLoadFinFn finfn;
+    void* userdata;
+};
+
+typedef ScriptLoadResult (*ScriptLoadFn)(VM* vm, const char* name);
+*/
+
+
+/* Return the version number */
 SK_API sk_number sk_version(VM* vm);
 
 
-
-
 /* Create new virtual machine. */
-SK_API VM* sk_create(Config* cfg);
+SK_API VM* sk_create(AllocFn allocator, void* ud);
 
-/* Destroy/cleanup the virtual machine. */
+/* Destroy/cleanup the virtual machine and null-out the provided pointer. */
 SK_API void sk_destroy(VM** vmp);
 
 
+/* Set panic handler and return old one */
+SK_API CFunction sk_set_panic(VM* vm, CFunction panicfn);
+
+/* Get panic handler */
+SK_API CFunction sk_get_panic(VM* vm);
+
+/* Set allocator function and return old one */
+SK_API AllocFn sk_set_alloc(VM* vm, AllocFn allocfn, void* ud);
+
+/* Get allocator function */
+SK_API AllocFn sk_get_alloc(VM* vm, void** ud);
 
 
 
 
-/*
- * Value Types
- */
-#define SK_TNONE     (-1)
-#define SK_TNIL      0
-#define SK_TNUMBER   1
-#define SK_TSTRING   2
-#define SK_TBOOL     3
-#define SK_TCLASS    4
-#define SK_TINSTANCE 5
-#define SK_TFUNCTION 6
-#define SK_TNATIVE   7
-#define SK_TC        8 // Types count
+#define TT_NONE (-1) // indicates absence of value
+
+/* Value Types */
+typedef enum {
+    TT_NIL = 0,
+    TT_NUMBER,
+    TT_STRING,
+    TT_BOOL,
+    TT_CLASS,
+    TT_INSTANCE,
+    TT_FUNCTION,
+    TT_CLOSURE,
+    TT_NATIVE,
+    TT_UPVAL,
+    TT_METHOD,
+} TypeTag;
+
+#define TT_CNT (TT_NATIVE + 1) // Types count
+
 
 SK_API int sk_type(const VM* vm, int idx);
 SK_API const char* sk_typename(const VM* vm, int idx);
-SK_API const char* sk_tagname(const VM* vm, int type);
+SK_API const char* sk_tagname(const VM* vm, TypeTag tag);
 
 SK_API int sk_isnil(const VM* vm, int idx);
 SK_API int sk_isnumber(const VM* vm, int idx);
@@ -113,6 +156,18 @@ SK_API int sk_isnative(const VM* vm, int idx);
 
 
 
+/* Comparison operations */
+typedef enum {
+    CMP_EQ = 0,
+    CMP_LT,
+    CMP_GT,
+    CMP_LEQ,
+    CMP_GEQ,
+} Cmp;
+
+SK_API int sk_compare(VM* vm, int idx1, int idx2, Cmp op);
+
+
 
 
 
@@ -120,13 +175,43 @@ SK_API int sk_isnative(const VM* vm, int idx);
  * PUSH from C -> STACK
  */
 
+
+/* Tag for overloaded methods.
+ * Each tag is index into overloaded methods array.
+ * Each class has this array, use this enum to
+ * interface with the 'sk_pushoverloaded' function
+ * in order to soundly fetch overloaded methods if any. */
+typedef enum {
+    OM_INIT = 0,
+    OM_DISPLAY,
+} OMTag;
+
+#define OM_CNT (OM_DISPLAY + 1)
+
+
+
+/* Tag for special fields.
+ * Each tag is index into special fields array.
+ * Each class has this array, use this enum to
+ * interface with the 'sk_pushspecialfield' function
+ * in order to soundly fetch special fields if any. */
+typedef enum {
+    SF_DEBUG = 0,
+} SFTag;
+
+#define SF_CNT (SF_DEBUG + 1)
+
+
+
 SK_API void sk_pushnil(VM* vm);
 SK_API void sk_pushnumber(VM* vm, sk_number number);
 SK_API void sk_pushstring(VM* vm, const char* str, size_t len);
 SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...);
 SK_API void sk_pushcstring(VM* vm, const char* str);
 SK_API void sk_pushbool(VM* vm, int boolean);
-SK_API int sk_pushmethod(VM* vm, int idx, const char* method);
+SK_API void sk_pushmethod(VM* vm, int idx, const char* method);
+SK_API TypeTag sk_pushfield(VM* vm, int idx, const char* field);
+SK_API void sk_pushoverloaded(VM* vm, int idx, OMTag method);
 SK_API int sk_pushglobal(VM* vm, const char* name);
 SK_API void sk_push(VM* vm, int idx);
 
@@ -156,8 +241,14 @@ SK_API int sk_ensurestack(VM* vm, int n);
 
 /* Check if the error code is valid (exists) */
 #define skapi_checkerrcode(vm, errcode)                                                  \
-    sk_checkapi(vm, (errcode) >= S_EARG && (errcode) <= S_GLOBALREDEF, "invalid errcode")
+    sk_checkapi(vm, (errcode) >= S_EARG && (errcode) <= S_EGLOBALREDEF, "invalid errcode")
 
+/* Check if OMTag is valid */
+#define skapi_checkomtag(vm, omtag)                                                      \
+    sk_checkapi(vm, (omtag) >= 0 && (omtag) < OM_CNT, "invalid OMTag")
+
+#define skapi_checksftag(vm, sftag)                                                      \
+    sk_checkapi(vm, (sftag) >= 0 && (sftag) < SF_CNT, "invalid SFTag")
 
 
 
@@ -174,7 +265,7 @@ SK_API const char* sk_tostring(VM* vm, int idx);
 SK_API int sk_getbool(const VM* vm, int idx, int* isbool);
 SK_API sk_number sk_getnumber(const VM* vm, int idx, int* isnum);
 SK_API const char* sk_getstring(const VM* vm, int idx);
-SK_API size_t sk_rawlen(const VM* vm, int idx);
+SK_API size_t sk_strlen(const VM* vm, int idx);
 SK_API int sk_gettop(const VM* vm);
 
 
@@ -185,8 +276,8 @@ SK_API int sk_gettop(const VM* vm);
  */
 
 SK_API void sk_settop(VM* vm, int idx);
-/* Pops n values off the stack */
 #define sk_pop(vm, n) sk_settop(vm, -(n)-1)
+SK_API int sk_setfield(VM* vm, int idx, const char* field);
 SK_API void sk_remove(VM* vm, int idx);
 SK_API void sk_insert(VM* vm, int idx);
 SK_API void sk_replace(VM* vm, int idx);
@@ -206,10 +297,9 @@ typedef void (*ProtectedFn)(VM* vm, void* userdata);
 
 /* Call return values, these indicate which kind
  * of function was called or if call error occurred. */
-#define CALL_ERR      0
-#define CALL_SKOOMAFN -1
-#define CALL_NATIVEFN -2
-#define CALL_CLASS    -3
+#define CALL_SKOOMAFN 0
+#define CALL_NATIVEFN 1
+#define CALL_CLASS    2
 
 
 /* Call the value on the stack located on
@@ -230,6 +320,7 @@ SK_API void sk_call(VM* vm, int argc, int retcnt);
 typedef enum {
     S_OK = 0,
     S_EARG, // invalid argument
+    S_ECMP, // invalid comparison
     S_ESOVERFLOW, // stack overflow
     S_EFOVERFLOW, // CallFrame overflow
     S_EARGC, // argc does not match function arity
@@ -239,8 +330,10 @@ typedef enum {
     S_EPACCESS, // invalid property access
     S_EINHERIT, // inheriting from non-class value
     S_EFIXEDASSING, // assigning to fixed value
-    S_UDGLOBAL, // undefined global variable
-    S_GLOBALREDEF, // redefinition of global variable
+    S_EUDGLOBAL, // undefined global variable
+    S_EGLOBALREDEF, // redefinition of global variable
+    S_EDISPLAY, // display method returned invalid value
+    S_ECALLVAL, // tried calling non-callable value
 } Status;
 
 /* Invoke runtime error */
@@ -257,24 +350,30 @@ SK_API int sk_error(VM* vm, Status errcode);
 
 #define sizeofstr(str) (sizeof(str) - 1)
 /* Value types */
-#define SS_STR   0
-#define SS_NUM   1
-#define SS_INS   2
-#define SS_CLASS 3
-#define SS_BOOL  4
-#define SS_NIL   5
-#define SS_FUNC  6
+#define SS_NIL    0
+#define SS_NUM    1
+#define SS_STR    2
+#define SS_BOOL   3
+#define SS_CLASS  4
+#define SS_INS    5
+#define SS_FUNC   6
+#define SS_CLS    7
+#define SS_NAT    8
+#define SS_UPVAL  9
+#define SS_METHOD 10
 /* Boolean strings */
-#define SS_TRUE  7
-#define SS_FALSE 8
-/* Class overload-able method names */
-#define SS_INIT 9
+#define SS_TRUE  11
+#define SS_FALSE 12
+/* Class overload-able method/field names */
+#define SS_INIT 13
+#define SS_DISP 14
+#define SS_DBG  15
 /* Native functions argument names */
-#define SS_MANU       10
-#define SS_AUTO       11
-#define SS_ASSERT_MSG 12
-#define SS_ERROR      13
-#define SS_ASSERT     14
+#define SS_MANU       16
+#define SS_AUTO       17
+#define SS_ASSERT_MSG 18
+#define SS_ERROR      19
+#define SS_ASSERT     20
 /* Size */
 #define SS_SIZE (sizeof(static_str) / sizeof(static_str[0]))
 
@@ -292,11 +391,18 @@ static const InternedString static_str[] = {
     {"class",             sizeofstr("class")            },
     {"instance",          sizeofstr("instance")         },
     {"function",          sizeofstr("function")         },
+    {"closure",           sizeofstr("closure")          },
+    {"native",            sizeofstr("native")           },
+    {"upvalue",           sizeofstr("upvalue")          },
+    {"method",            sizeofstr("method")           },
  /* Boolean strings */
     {"true",              sizeofstr("true")             },
     {"false",             sizeofstr("false")            },
  /* Class overload-able method names. */
     {"__init__",          sizeofstr("__init__")         },
+    {"__display__",       sizeofstr("__display__")      },
+ /* Class special field names. */
+    {"__debug",           sizeofstr("__debug")          },
  /* corelib statics */
     {"manual",            sizeofstr("manual")           },
     {"auto",              sizeofstr("auto")             },

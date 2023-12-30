@@ -25,9 +25,20 @@
 #define GSARRAY_PUSH(vm, objref)                                                         \
     ({                                                                                   \
         if((vm)->gscap <= (vm)->gslen) {                                                 \
+            if(unlikely((vm)->gscap >= UINT64_MAX)) {                                    \
+                fprintf(                                                                 \
+                    stderr,                                                              \
+                    "[%s:%d] Internal error, gray stack capacity exceeded! [gslimit -> " \
+                    "%ul]\n",                                                            \
+                    __FILE__,                                                            \
+                    __LINE__,                                                            \
+                    (UINT64_MAX >> 1));                                                  \
+                if((vm)->config.panic) (vm)->config.panic(vm);                           \
+                else abort();                                                            \
+            }                                                                            \
             Int oldcap = (vm)->gscap;                                                    \
             (vm)->gscap =                                                                \
-                MIN(GROW_ARRAY_CAPACITY((Int)oldcap, ARRAY_INITIAL_SIZE), UINT24_MAX);   \
+                MIN(GROW_ARRAY_CAPACITY((Int)oldcap, ARRAY_INITIAL_SIZE), UINT64_MAX);   \
             (vm)->gray_stack = (O**)realloc((vm)->gray_stack, (vm)->gscap * sizeof(O*)); \
         }                                                                                \
         (vm)->gray_stack[(vm)->gslen++] = objref;                                        \
@@ -49,86 +60,14 @@
 
 
 
-// @TODO: Make this generic
-/* CONSTANTS ARRAY (chunk.h) */
-#define CARRAY_INIT(chunk)                                                               \
-    do {                                                                                 \
-        (chunk)->constants = NULL;                                                       \
-        (chunk)->clen = 0;                                                               \
-        (chunk)->ccap = 0;                                                               \
-    } while(false)
-
-#define CARRAY_PUSH(chunk, constant, vm)                                                 \
-    ({                                                                                   \
-        if((chunk)->ccap <= (chunk)->clen) {                                             \
-            Int oldcap = (chunk)->ccap;                                                  \
-            (chunk)->ccap =                                                              \
-                MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE), UINT24_MAX);        \
-            (chunk)->constants = gcrealloc(                                              \
-                vm,                                                                      \
-                (chunk)->constants,                                                      \
-                oldcap * sizeof(Value),                                                  \
-                (chunk)->ccap * sizeof(Value));                                          \
-        }                                                                                \
-        (chunk)->constants[(chunk)->clen++] = constant;                                  \
-        (chunk)->clen - 1;                                                               \
-    })
-
-#define CARRAY_FREE(chunk, vm)                                                           \
-    do {                                                                                 \
-        gcfree(vm, (chunk)->constants, (chunk)->ccap, 0);                                \
-        CARRAY_INIT(chunk);                                                              \
-    } while(false)
 
 
-
-// @TODO: Make this generic
-/* GLOBALS ARRAY (vmachine.h) */
-#define GARRAY_INIT(vm)                                                                  \
-    do {                                                                                 \
-        (vm)->globvals = NULL;                                                           \
-        (vm)->globlen = 0;                                                               \
-        (vm)->globcap = 0;                                                               \
-    } while(false)
-
-#define GARRAY_PUSH(vm, global)                                                          \
-    ({                                                                                   \
-        if((vm)->globcap <= (vm)->globlen) {                                             \
-            Int oldcap = (vm)->globcap;                                                  \
-            (vm)->globcap =                                                              \
-                MIN(GROW_ARRAY_CAPACITY(oldcap, ARRAY_INITIAL_SIZE), UINT24_MAX);        \
-            (vm)->globvals = gcrealloc(                                                  \
-                vm,                                                                      \
-                (vm)->globvals,                                                          \
-                oldcap * sizeof(Variable),                                               \
-                (vm)->globcap * sizeof(Variable));                                       \
-        }                                                                                \
-        (vm)->globvals[(vm)->globlen++] = global;                                        \
-        (vm)->globlen - 1;                                                               \
-    })
-
-#define GARRAY_REMOVE(vm, index)                                                         \
-    ({                                                                                   \
-        Variable retval;                                                                 \
-        Variable* src = &vm->globvals[index];                                            \
-        retval = *src;                                                                   \
-        memmove(src, src + 1, vm->globlen - index);                                      \
-        vm->globlen--;                                                                   \
-        retval;                                                                          \
-    })
-
-#define GARRAY_FREE(vm)                                                                  \
-    do {                                                                                 \
-        gcfree(vm, (vm)->globvals, (vm)->globcap, 0);                                    \
-        GARRAY_INIT(vm);                                                                 \
-    } while(false)
+/*
+ * [======== GENERIC ARRAY =========]
+ */
 
 
-
-
-/* GENERIC ARRAY (does not trigger garbage collector)
- *
- * These are internal only macros. */
+/* These are internal only macros. */
 #define _ARRAY_METHOD_NAME(tname, name) tname##_##name
 #define _CALL_ARRAY_METHOD(tname, name, ...)                                             \
     _ARRAY_METHOD_NAME(tname, name)(self __VA_OPT__(, ) __VA_ARGS__)
@@ -165,8 +104,9 @@ typedef void (*FreeFn)(void* value);
     static force_inline void _ARRAY_METHOD(name, grow)                                   \
     {                                                                                    \
         size_t old_cap = self->cap;                                                      \
-        self->cap = MIN(GROW_ARRAY_CAPACITY(old_cap, ARRAY_INITIAL_SIZE), UINT32_MAX);   \
-        if(unlikely(self->cap >= UINT32_MAX)) {                                          \
+        self->cap =                                                                      \
+            MIN(GROW_ARRAY_CAPACITY(old_cap, ARRAY_INITIAL_SIZE), BYTECODE_MAX + 1);     \
+        if(unlikely(self->cap >= BYTECODE_MAX + 1)) {                                    \
             fprintf(                                                                     \
                 stderr,                                                                  \
                 "[%s:%d] Internal error, %s capacity exceeded! [capmax -> "              \
@@ -174,9 +114,8 @@ typedef void (*FreeFn)(void* value);
                 __FILE__,                                                                \
                 __LINE__,                                                                \
                 #name,                                                                   \
-                UINT32_MAX);                                                             \
-            _cleanupvm(&self->vm);                                                       \
-            exit(EXIT_FAILURE);                                                          \
+                BYTECODE_MAX);                                                           \
+            abort();                                                                     \
         } else {                                                                         \
             self->data = (type*)gcrealloc(                                               \
                 self->vm,                                                                \

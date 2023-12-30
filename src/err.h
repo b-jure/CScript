@@ -324,6 +324,11 @@
     OSTRINGF(vm, "Property '%s' is not defined for <class '%s'>.", property, class)
 /*-----------------*/
 
+/* bindomethod() */
+#define NO_OVERLOAD_ERR(vm, olname, class)                                               \
+    OSTRINGF(vm, "Method '%s' is not overloaded for <class '%s'>.", olname, class)
+/*-----------------*/
+
 /* OP_INHERIT */
 #define INHERIT_ERR(vm, subclass, superclass)                                            \
     OSTRINGF(                                                                            \
@@ -363,10 +368,12 @@
 #define FRAME_LIMIT_ERR(vm, frames_max)                                                  \
     OSTRINGF(vm, "Call-frame stack overflow, limit reached [%u].", frames_max)
 #define RETCNT_STACK_OVERFLOW(vm, native)                                                \
-    OSTRINGF(                                                                            \
-        vm,                                                                              \
-        "Called function <native %s> return count would overflow the stack.",            \
-        native)
+    OSTRINGF(vm, "Called function '%s' return count would overflow the stack.", native)
+/* -------------- */
+
+/* push() */
+#define VM_STACK_OVERFLOW(vm, limit)                                                     \
+    OSTRINGF(vm, "VM stack overflow, limit %ul.", cast(unsigned long, limit))
 /* -------------- */
 
 /* callv() { OP_CALL } */
@@ -406,5 +413,11 @@
         popn(vm, 4);                                                                     \
         s;                                                                               \
     })
+/* -------------- */
+
+/* oprint() */
+#define DISPLAY_INVALID_TYPE(vm, typename)                                               \
+    OSTRINGF(vm, "Display method must return a string, instead got %s.", typename)
+/* -------------- */
 
 #endif
