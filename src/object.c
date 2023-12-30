@@ -291,7 +291,8 @@ OClass* OClass_new(VM* vm, OString* name)
     OClass* oclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS); // GC
     oclass->name = name;
     HashTable_init(&oclass->methods);
-    oclass->overloaded = NULL;
+    memset(oclass->omethods, 0, sizeof(oclass->omethods) / sizeof(OClosure*));
+    memset(oclass->sfields, 0, sizeof(oclass->sfields) / sizeof(Value));
     return oclass;
 }
 
@@ -398,7 +399,7 @@ void oprint(VM* vm, Value value)
         CASE(OBJ_UPVAL)
         {
             OUpvalue* upval = AS_UPVAL(value);
-            vprint(*upval->location);
+            vprint(vm, *upval->location);
             BREAK;
         }
         CASE(OBJ_CLASS)

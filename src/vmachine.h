@@ -28,6 +28,7 @@ struct sk_longjmp {
 };
 
 
+/* Max call frames */
 #define VM_FRAMES_MAX SK_CALLFRAMES_MAX
 
 typedef struct {
@@ -39,22 +40,33 @@ typedef struct {
     Int status; /* In case of call errors */
 } CallFrame;
 
+/* Fetch the frame closure (skooma function) */
 #define FFN(frame) (frame->closure->fn)
 
 
-#define VAR_FIXED_BIT     (1)
-#define ISFIXED(variable) VAR_CHECK(variable, VAR_FIXED_BIT)
 
+
+/* Variable flags */
+#define VAR_FIXED_BIT 1
+
+/* set/clear/test variable flags */
 #define VAR_SET(variable, bit)   BIT_SET((variable)->flags, bit)
 #define VAR_CLEAR(variable, bit) BIT_CLEAR((variable)->flags, bit)
 #define VAR_CHECK(variable, bit) BIT_CHECK((variable)->flags, bit)
 #define VAR_FLAGS(variable)      ((variable)->flags)
 
+/* Check if variable is 'fixed' */
+#define ISFIXED(variable) VAR_CHECK(variable, VAR_FIXED_BIT)
+
+/* Variable, it has a 'Value' and flags (modifiers),
+ * only globals and upvalues are 'Variable' type,
+ * locals do not require this wrapper as they are
+ * resolved during compilation. */
 typedef struct {
     Value value; /* Global value */
     /*
      * 1 - fixed
-     * 2 - marked
+     * 2 - captured
      * 3 - unused
      * ...
      * 8 - unused
@@ -63,11 +75,13 @@ typedef struct {
 } Variable;
 
 
+/* Garbage collector flags */
 typedef enum {
     GC_MANUAL = 1,
 } GCFlags;
 
 
+/* Configuration file, configurable by user (C API) */
 typedef struct {
     AllocFn reallocate; // allocator
     void* userdata; // userdata for allocator
@@ -77,12 +91,17 @@ typedef struct {
 } Config;
 
 
+/* Generic Arrays for VM */
 ARRAY_NEW(Array_ORef, O*);
 ARRAY_NEW(Array_VRef, Value*);
 ARRAY_NEW(Array_Variable, Variable);
 
+
+/* Max size of the stack */
 #define VM_STACK_MAX ((int)(SK_STACK_MAX / sizeof(Value)))
 
+
+/* Skooma Virtual Machine */
 struct VM {
     Config config; // user configuration
     unsigned long seed; // randomized seed for hashing
@@ -112,24 +131,19 @@ struct VM {
 };
 
 
-/* Stack */
+/* Fetch the last call frame (current) */
+#define last_frame(vm) ((vm)->frames[(vm)->fc - 1])
+
+
+/* STACK */
 #define restore_stack(vm, n) cast(Value*, (cast_charp((vm)->stack) + (n)))
 #define save_stack(vm, ptr)  (cast_charp(ptr) - cast_charp((vm)->stack))
 #define stackpeek(top)       ((vm)->sp - ((top) + 1))
-#define last_frame(vm)       ((vm)->frames[(vm)->fc - 1])
 
 
-typedef enum {
-    INTERPRET_COMPILE_ERROR = 0, /* compile error */
-    INTERPRET_OK, /* No error */
-} InterpretResult;
-
-
-#define tonumber(val, np)   (IS_NUMBER(val) ? (*(np) = AS_NUMBER(val), 1) : 0)
-#define tostring(val, strp) (IS_STRING(val) ? (*(strp) = AS_CSTRING(val), 1) : 0)
-#define tobool(val, bval)   (IS_BOOL(val) ? (*(bval) = AS_BOOL(val), 1) : 0)
-
-
+/* PUSH/POP */
+#define pop(vm)     (*--(vm)->sp)
+#define popn(vm, n) ((vm)->sp -= n)
 void push(VM* vm, Value val);
 #define pushn(vm, n, val)                                                                \
     do {                                                                                 \
@@ -138,11 +152,16 @@ void push(VM* vm, Value val);
             push(vm, val);                                                               \
     } while(0)
 
-#define pop(vm)     (*--(vm)->sp)
-#define popn(vm, n) ((vm)->sp -= n)
+
+/* Check if value is correct type and set the pointer.
+ * Return 1 if pointer was set, 0 if not. */
+#define tonumber(val, np)   (IS_NUMBER(val) ? (*(np) = AS_NUMBER(val), 1) : 0)
+#define tostring(val, strp) (IS_STRING(val) ? (*(strp) = AS_CSTRING(val), 1) : 0)
+#define tobool(val, bp)     (IS_BOOL(val) ? (*(bp) = AS_BOOL(val), 1) : 0)
 
 
-InterpretResult interpret(VM* vm, const char* source, const char* filename);
+/* VM interface */
+void interpret(VM* vm, const char* source, const char* filename);
 void run(VM* vm);
 int ncall(VM* vm, Value* retstart, Value callee, Int retcnt);
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);

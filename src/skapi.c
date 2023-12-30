@@ -98,8 +98,8 @@ SK_API VM* sk_create(AllocFn allocator, void* ud)
     vm->sp = vm->stack;
     HashTable_init(&vm->loaded); // Loaded scripts and their functions
     HashTable_init(&vm->globids); // Global variable identifiers
-    GARRAY_INIT(vm); // Global values array
     GSARRAY_INIT(vm); // Gray stack array (no GC)
+    Array_Variable_init(&vm->globvars, vm);
     Array_Value_init(&vm->temp, vm); // Temp values storage (return values)
     Array_VRef_init(&vm->callstart, vm);
     Array_VRef_init(&vm->retstart, vm);
@@ -159,8 +159,8 @@ SK_API void sk_destroy(VM** vmp)
         VM* vm = *vmp;
         HashTable_free(vm, &vm->loaded);
         HashTable_free(vm, &vm->globids);
-        GARRAY_FREE(vm);
         GSARRAY_FREE(vm);
+        Array_Variable_free(&vm->globvars, NULL);
         Array_Value_free(&vm->temp, NULL);
         Array_VRef_free(&vm->callstart, NULL);
         Array_VRef_free(&vm->retstart, NULL);
@@ -529,7 +529,7 @@ static force_inline int getglobal(VM* vm, const char* name)
     pushstr(vm, name, strlen(name));
     if(HashTable_get(&vm->globids, *stackpeek(0), &gval)) {
         int idx = (int)AS_NUMBER(gval);
-        *stackpeek(0) = vm->globvals[idx].value;
+        *stackpeek(0) = vm->globvars.data[idx].value;
         return 1;
     }
     vm->sp--; // pop global name

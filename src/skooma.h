@@ -294,13 +294,7 @@ SK_API void sk_replace(VM* vm, int idx);
 /* Type of protected function */
 typedef void (*ProtectedFn)(VM* vm, void* userdata);
 
-
-/* Call return values, these indicate which kind
- * of function was called or if call error occurred. */
-#define CALL_SKOOMAFN 0
-#define CALL_NATIVEFN 1
-#define CALL_CLASS    2
-
+SK_API int sk_pcall(VM* vm, int argc, int retcnt);
 
 /* Call the value on the stack located on
  * the top right before arguments (argc).

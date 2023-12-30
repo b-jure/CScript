@@ -19,6 +19,11 @@
 
 
 
+#define CALL_SKOOMAFN 0
+#define CALL_NATIVEFN 1
+#define CALL_CLASS    2
+
+
 volatile Int runtime = 0; // VM is running?
 
 
@@ -358,6 +363,7 @@ static force_inline void invoke(VM* vm, Value name, Int argc, Int retcnt)
     }
     invokefrom(vm, instance->oclass, name, argc, retcnt);
 }
+
 
 OUpvalue* captureupval(VM* vm, Value* valp)
 {
@@ -763,7 +769,7 @@ void run(VM* vm)
                             UNDEFINED_GLOBAL_ERR(vm, globalname(vm, bcp)->storage));
                         frame->status = S_UDGLOBAL;
                         return INTERPRET_RUNTIME_ERROR;
-                    } else if(unlikely(VAR_CHECK(global, VAR_FIXED_BIT))) {
+                    } else if(unlikely(ISFIXED(global))) {
                         frame->ip = ip;
                         OString* s = globalname(vm, bcp);
                         vm->sp[-1] = OBJ_VAL(VARIABLE_FIXED_ERR(vm, s->len, s->storage));
@@ -1092,13 +1098,13 @@ void run(VM* vm)
 
 
 
-InterpretResult interpret(VM* vm, const char* source, const char* path)
+void interpret(VM* vm, const char* source, const char* path)
 {
     Value name = OBJ_VAL(OString_new(vm, path, strlen(path)));
     OClosure* closure = compile(vm, source, name);
     if(closure == NULL) return INTERPRET_COMPILE_ERROR;
     trycall(vm, OBJ_VAL(closure), 0, 1);
-    return run(vm);
+    run(vm);
 }
 
 void _cleanupvm(VM** vmp)
