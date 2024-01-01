@@ -29,7 +29,7 @@
                 fprintf(                                                                 \
                     stderr,                                                              \
                     "[%s:%d] Internal error, gray stack capacity exceeded! [gslimit -> " \
-                    "%ul]\n",                                                            \
+                    "%lu]\n",                                                            \
                     __FILE__,                                                            \
                     __LINE__,                                                            \
                     (UINT64_MAX >> 1));                                                  \

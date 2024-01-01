@@ -9,15 +9,6 @@
 #include <time.h>
 
 
-
-SK_API sk_number sk_version(VM* vm)
-{
-    UNUSED(vm);
-    return SK_VERSION_NUMBER;
-}
-
-
-
 #define stklast(vm) cast_intptr(vm->stack + VM_STACK_MAX - 1)
 
 /* Increment stack pointer */
@@ -35,6 +26,7 @@ SK_API sk_number sk_version(VM* vm)
     } while(0)
 
 
+
 /* Get stack value at 'idx'. */
 static force_inline Value* idx2val(const VM* vm, int idx)
 {
@@ -47,6 +39,7 @@ static force_inline Value* idx2val(const VM* vm, int idx)
         return (vm->sp + idx);
     }
 }
+
 
 
 /* Shifts values on stack either to the left or right (once).
@@ -68,14 +61,6 @@ SK_API int sk_ensurestack(VM* vm, int n)
 }
 
 
-
-
-
-
-
-/*
- * CREATE/DESTROY the VM.
- */
 
 /* Create the VM, you can additionally provide your own allocator. */
 SK_API VM* sk_create(AllocFn allocator, void* ud)
@@ -150,6 +135,7 @@ SK_API VM* sk_create(AllocFn allocator, void* ud)
 }
 
 
+
 /* Free the VM allocation, the pointer to VM will be nulled out. */
 SK_API void sk_destroy(VM** vmp)
 {
@@ -176,48 +162,6 @@ SK_API void sk_destroy(VM** vmp)
 }
 
 
-/* Sets up the new panic handler and returns the old one. */
-SK_API CFunction sk_set_panic(VM* vm, CFunction panicfn)
-{
-    sk_lock(vm);
-    CFunction old_handler = vm->config.panic;
-    vm->config.panic = panicfn;
-    sk_unlock(vm);
-    return old_handler;
-}
-
-SK_API CFunction sk_get_panic(VM* vm)
-{
-    sk_lock(vm);
-    CFunction panic_handler = vm->config.panic;
-    sk_unlock(vm);
-    return panic_handler;
-}
-
-
-SK_API AllocFn sk_set_alloc(VM* vm, AllocFn allocfn, void* ud)
-{
-    sk_lock(vm);
-    AllocFn old_alloc = vm->config.reallocate;
-    vm->config.reallocate = allocfn;
-    vm->config.userdata = ud;
-    sk_unlock(vm);
-    return old_alloc;
-}
-
-
-SK_API AllocFn sk_get_alloc(VM* vm, void** ud)
-{
-    sk_lock(vm);
-    AllocFn alloc = vm->config.reallocate;
-    if(ud) *ud = vm->config.userdata;
-    sk_unlock(vm);
-    return alloc;
-}
-
-
-
-
 
 /* Convert 'acceptable' stack index into an absolute index.
  * For example: -1 would be index 4, if there are 5 values on the stack
@@ -229,17 +173,14 @@ SK_API int sk_absidx(VM* vm, int idx)
 
 
 
-
-/*
- * CHECK/GET VALUE TYPE.
- */
-
 /* Return type of the value on the stack at 'idx'. */
 SK_API int sk_type(const VM* vm, int idx)
 {
     Value* value = idx2val(vm, idx);
     return val2type(*value);
 }
+
+
 
 /* Return type name of the value on the stack at 'idx'.
  * This returned pointer is 'const' indicating the
@@ -251,11 +192,15 @@ SK_API const char* sk_typename(const VM* vm, int idx)
     return vm->statics[type]->storage;
 }
 
+
+
 /* Convert type tag into name */
 SK_API const char* sk_tagname(const VM* vm, TypeTag type)
 {
     return vm->statics[type]->storage;
 }
+
+
 
 /* Check if the value on the stack at 'idx' is nil. */
 SK_API int sk_isnil(const VM* vm, int idx)
@@ -263,11 +208,15 @@ SK_API int sk_isnil(const VM* vm, int idx)
     return IS_NIL(*idx2val(vm, idx));
 }
 
+
+
 /* Check if the value on the stack at 'idx' is number. */
 SK_API int sk_isnumber(const VM* vm, int idx)
 {
     return IS_NUMBER(*idx2val(vm, idx));
 }
+
+
 
 /* Check if the value on the stack at 'idx' is string. */
 SK_API int sk_isstring(const VM* vm, int idx)
@@ -275,11 +224,15 @@ SK_API int sk_isstring(const VM* vm, int idx)
     return IS_STRING(*idx2val(vm, idx));
 }
 
+
+
 /* Check if the value on the stack at 'idx' is bool. */
 SK_API int sk_isbool(const VM* vm, int idx)
 {
     return IS_BOOL(*idx2val(vm, idx));
 }
+
+
 
 /* Check if the value on the stack at 'idx' is class. */
 SK_API int sk_isclass(const VM* vm, int idx)
@@ -287,11 +240,15 @@ SK_API int sk_isclass(const VM* vm, int idx)
     return IS_CLASS(*idx2val(vm, idx));
 }
 
+
+
 /* Check if the value on the stack at 'idx' is instance. */
 SK_API int sk_isinstance(const VM* vm, int idx)
 {
     return IS_INSTANCE(*idx2val(vm, idx));
 }
+
+
 
 /* Check if the value on the stack at 'idx' is native C function. */
 SK_API int sk_isnative(const VM* vm, int idx)
@@ -300,42 +257,22 @@ SK_API int sk_isnative(const VM* vm, int idx)
 }
 
 
-/* Compare 2 values on the stack */
-SK_API int sk_compare(VM* vm, int idx1, int idx2, Cmp op)
+
+/* Check if the value on the stack at 'idx' is bound method (instance method). */
+SK_API int sk_ismethod(const VM* vm, int idx)
 {
-    sk_lock(vm);
-    Value a = *idx2val(vm, idx1);
-    Value b = *idx2val(vm, idx2);
-    int res;
-    switch(op) {
-        case CMP_EQ:
-            res = veq(a, b);
-            break;
-        case CMP_LT:
-            res = vlt(vm, a, b);
-            break;
-        case CMP_GT:
-            res = vgt(vm, a, b);
-            break;
-        case CMP_LEQ:
-            res = vle(vm, a, b);
-            break;
-        case CMP_GEQ:
-            res = vge(vm, a, b);
-            break;
-        default:
-            sk_checkapi(vm, 0, "invalid comparison 'op'");
-    }
-    sk_unlock(vm);
-    return res;
+    return IS_BOUND_METHOD(*idx2val(vm, idx));
 }
 
 
 
+/* Check if the value on the stack at 'idx' is skooma closure. */
+SK_API int sk_isclosure(const VM* vm, int idx)
+{
+    return IS_CLOSURE(*idx2val(vm, idx));
+}
 
-/*
- * PUSH from C -> stack
- */
+
 
 /* Push value on the stack */
 #define pushval(vm, val)                                                                 \
@@ -358,6 +295,9 @@ SK_API int sk_compare(VM* vm, int idx1, int idx2, Cmp op)
 
 /* Push instance */
 #define pushoinst(vm, inst) pusho(vm, (O*)(inst))
+
+/* Push native (C closure) */
+#define pushonative(vm, native) pusho(vm, (O*)(native))
 
 /* Push nil literal */
 #define pushnil(vm) pushval(vm, NIL_VAL)
@@ -401,6 +341,8 @@ SK_API void sk_pushnil(VM* vm)
     sk_unlock(vm);
 }
 
+
+
 /* Push number on the stack */
 SK_API void sk_pushnumber(VM* vm, sk_number number)
 {
@@ -408,6 +350,8 @@ SK_API void sk_pushnumber(VM* vm, sk_number number)
     pushnum(vm, number);
     sk_unlock(vm);
 }
+
+
 
 /* Push string on the stack */
 SK_API void sk_pushstring(VM* vm, const char* str, size_t len)
@@ -417,6 +361,8 @@ SK_API void sk_pushstring(VM* vm, const char* str, size_t len)
     sk_unlock(vm);
 }
 
+
+
 /* Push cstring on the stack */
 SK_API void sk_pushcstring(VM* vm, const char* str)
 {
@@ -424,6 +370,8 @@ SK_API void sk_pushcstring(VM* vm, const char* str)
     pushstr(vm, str, strlen(str));
     sk_unlock(vm);
 }
+
+
 
 /* Push formatted cstring on the stack */
 SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...)
@@ -437,6 +385,8 @@ SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...)
     sk_unlock(vm);
     return str;
 }
+
+
 
 /* Concatenate 2 strings on top of the stack, pop them off both
  * leaving the concatenated string on the top.
@@ -452,6 +402,8 @@ SK_API const char* sk_concat(VM* vm)
     sk_unlock(vm);
 }
 
+
+
 /* Push boolean on the stack */
 SK_API void sk_pushbool(VM* vm, int boolean)
 {
@@ -462,6 +414,41 @@ SK_API void sk_pushbool(VM* vm, int boolean)
 }
 
 
+
+/* Push C function (closure) on to the stack.
+ * The 'args' is how many arguments this function expects (minimum),
+ * 'isva' is a boolean value indicating if this function takes in
+ * variable amount of arguments, 'upvals' is the number of
+ * upvalues this C function (closure) has.
+ * These upvalues are stored directly in this function and can
+ * be accessed with the provided API in this source file.
+ * This function will remove 'upvals' amount of values from the stack
+ * and store them in this function. */
+SK_API void sk_pushcfn(VM* vm, CFunction fn, int args, int isva, unsigned int upvals)
+{
+    sk_lock(vm);
+    skapi_checkelems(vm, upvals);
+    skapi_checkptr(vm, fn);
+    ONative* native = ONative_new(vm, NULL, fn, args, isva, upvals);
+    vm->sp -= upvals;
+    while(upvals--)
+        native->upvalue[upvals] = *(vm->sp + upvals);
+    pushonative(vm, native);
+    sk_unlock(vm);
+}
+
+
+
+/* Push value from the stack located at 'idx', on top of the stack */
+SK_API void sk_push(VM* vm, int idx)
+{
+    sk_lock(vm);
+    pushval(vm, *idx2val(vm, idx));
+    sk_unlock(vm);
+}
+
+
+
 /* Push class method of an instance at idx on top of the stack.
  * If method doesn't exist this function invokes runtime error
  * with status 'S_EUDPROPERTY' (undefined property).
@@ -470,9 +457,10 @@ SK_API void sk_pushbool(VM* vm, int boolean)
  * aka type of 'TT_METHOD'.
  * And this is because bound methods preserve the receiver (instance)
  * they belong to in order to access instance fields/methods. */
-SK_API void sk_pushmethod(VM* vm, int idx, const char* method)
+SK_API void sk_getmethod(VM* vm, int idx, const char* method)
 {
     sk_lock(vm);
+    skapi_checkptr(vm, method);
     Value val = *idx2val(vm, idx);
     sk_checkapi(vm, IS_INSTANCE(val), "expected class instance");
     pushstr(vm, method, strlen(method));
@@ -481,33 +469,15 @@ SK_API void sk_pushmethod(VM* vm, int idx, const char* method)
 }
 
 
-/* Set the field of the class instance to the value on top of the stack.
- * Class should be located at 'idx' and the name of the field to be set is 'field'.
- * This sets the field to that value and pops it off the top of the stack.
- * Returns true if the field didn't exist before and true if the value
- * of the field got overwritten. */
-SK_API int sk_setfield(VM* vm, int idx, const char* field)
-{
-    sk_lock(vm);
-    skapi_checkelems(vm, 1);
-    Value insval = *idx2val(vm, idx);
-    sk_checkapi(vm, IS_INSTANCE(insval), "expect class instance");
-    OInstance* instance = AS_INSTANCE(insval);
-    pushcstr(vm, field);
-    int res = HashTable_insert(vm, &instance->fields, *stackpeek(0), *stackpeek(1));
-    vm->sp -= 2;
-    sk_unlock(vm);
-    return res;
-}
-
 
 /* Pushes the field value of the class instance at 'idx' on top
  * of the stack and returns the type of the value, or if the
  * field does not exist it returns 'TT_NONE' to indicate that. */
-SK_API TypeTag sk_pushfield(VM* vm, int idx, const char* field)
+SK_API TypeTag sk_getfield(VM* vm, int idx, const char* field)
 {
     int type;
     sk_lock(vm);
+    skapi_checkptr(vm, field);
     Value insval = *idx2val(vm, idx);
     sk_checkapi(vm, IS_INSTANCE(insval), "expect class instance");
     OInstance* instance = AS_INSTANCE(insval);
@@ -522,75 +492,52 @@ SK_API TypeTag sk_pushfield(VM* vm, int idx, const char* field)
 }
 
 
-/* Auxiliary to 'sk_pushglobal' */
-static force_inline int getglobal(VM* vm, const char* name)
-{
-    Value gval;
-    pushstr(vm, name, strlen(name));
-    if(HashTable_get(&vm->globids, *stackpeek(0), &gval)) {
-        int idx = (int)AS_NUMBER(gval);
-        *stackpeek(0) = vm->globvars.data[idx].value;
-        return 1;
-    }
-    vm->sp--; // pop global name
-    return 0;
-}
 
 /* Push global value on top of the stack.
  * In case global value was found, it will be on top of the stack,
  * and this function will return 1, otherwise nothing will be pushed
  * on the stack and the function will return 0. */
-SK_API int sk_pushglobal(VM* vm, const char* name)
+SK_API int sk_getglobal(VM* vm, const char* name)
 {
     sk_lock(vm);
-    int res = getglobal(vm, name);
+    skapi_checkptr(vm, name);
+    int res = 0;
+    Value gval;
+    skapi_checkptr(vm, name);
+    OString* str = OString_new(vm, name, strlen(name));
+    if(HashTable_get(&vm->globids, OBJ_VAL(str), &gval)) {
+        int idx = (int)AS_NUMBER(gval);
+        pushval(vm, vm->globvars.data[idx].value);
+        res = 1;
+    }
     sk_unlock(vm);
     return res;
 }
 
 
-/* Set global value on top of the stack to the 'name'.
- * The value gets popped and is now a global variable
- * associated with the provided 'name'. */
-SK_API void sk_setglobal(VM* vm, const char* name)
+
+/* Get panic handler */
+SK_API CFunction sk_getpanic(VM* vm)
 {
     sk_lock(vm);
-    skapi_checkelems(vm, 1);
-    Value gname = OBJ_VAL(OString_new(vm, name, strlen(name)));
-    // TODO: Implement
+    CFunction panic_handler = vm->config.panic;
     sk_unlock(vm);
-}
-
-
-/* Push value from the stack located at 'idx', on top of the stack */
-SK_API void sk_push(VM* vm, int idx)
-{
-    sk_lock(vm);
-    pushval(vm, *idx2val(vm, idx));
-    sk_unlock(vm);
+    return panic_handler;
 }
 
 
 
-
-
-/* Convert a value into string. */
-SK_API const char* sk_tostring(VM* vm, int idx)
+/* Get allocator function */
+SK_API AllocFn sk_getalloc(VM* vm, void** ud)
 {
     sk_lock(vm);
-    Value* slot = idx2val(vm, idx);
-    Value value = *slot;
-    if(!IS_STRING(value)) *slot = OBJ_VAL(vtostr(vm, value));
+    AllocFn alloc = vm->config.reallocate;
+    if(ud) *ud = vm->config.userdata;
     sk_unlock(vm);
-    return AS_CSTRING(*slot);
+    return alloc;
 }
 
 
-
-
-/*
- * GET from STACK -> C
- */
 
 /* Get boolean value (int 1/0) from the stack at 'idx'.
  * If the value at 'idx' is not a boolean, then the flag
@@ -604,6 +551,8 @@ SK_API int sk_getbool(const VM* vm, int idx, int* isbool)
     return bval;
 }
 
+
+
 /* Get number value (sk_number) from the stack at 'idx'.
  * If the value at 'idx' is not a number, then the flag
  * if provided 'isnum' is set as 0, otherwise flag is set to 1. */
@@ -616,6 +565,8 @@ SK_API sk_number sk_getnumber(const VM* vm, int idx, int* isnum)
     return nval;
 }
 
+
+
 /* Get string value from the stack at 'idx'.
  * Returns NULL (0) if the value is not a string.
  * Otherwise it returns pointer to the start of the string.
@@ -627,52 +578,79 @@ SK_API const char* sk_getstring(const VM* vm, int idx)
     return IS_STRING(val) ? AS_CSTRING(val) : 0;
 }
 
-/* Return the length of the string at 'idx'. */
-SK_API size_t sk_strlen(const VM* vm, int idx)
-{
-    Value val = *idx2val(vm, idx);
-    sk_checkapi(vm, IS_STRING(val), "expect string");
-    return AS_STRING(val)->len;
-}
+
 
 /* Return the number of values currently on the stack
  * relative to the current function */
 SK_API int sk_gettop(const VM* vm)
 {
-    return cast_int(vm->sp - (vm->frames[vm->fc - 1].callee + 1));
+    return cast_int(vm->sp - (last_frame(vm).callee + 1));
 }
 
 
 
-
-
-
-
-
-/*
- * STACK MANIPULATION
- */
-
-/* Sets the new stack top relative to the current function */
-SK_API void sk_settop(VM* vm, int idx)
+/* Copy value on the stack located at index 'src'
+ * to value on the stack located at index 'dest'. */
+SK_API void sk_copy(VM* vm, int src, int dest)
 {
     sk_lock(vm);
-    Value* newtop;
-    Value* fn = vm->frames[vm->fc - 1].callee;
-    ptrdiff_t diff;
-    if(idx >= 0) {
-        sk_checkapi(vm, idx < ((Value*)stklast(vm) - fn), "index too big.");
-        diff = ((fn + 1) + idx) - vm->sp;
-        for(; diff > 0; diff--)
-            *vm->sp++ = NIL_VAL;
-    } else { // index negative
-        sk_checkapi(vm, -idx <= (vm->sp - fn), "invalid index.");
-        diff = idx + 1;
-    }
-    vm->sp += diff; // set new top
-    if(diff < 0) closeupval(vm, vm->sp);
+    *idx2val(vm, dest) = *idx2val(vm, src);
     sk_unlock(vm);
 }
+
+
+
+/* Auxiliary to 'sk_rotate', reverses values from 'from' until 'to'. */
+static force_inline void reverse(Value* from, Value* to)
+{
+    for(; from < to; from++, to--) {
+        *from ^= *to;
+        *to ^= *from;
+        *from ^= *to;
+    }
+}
+
+
+
+/**
+ * This is basically a stack-array rotation between the
+ * top of the stack and the index 'idx' for 'n' elements.
+ * Negative '-n' indicates left-rotation, while positive
+ * 'n' right-rotation.
+ * The absolute value of 'n' must not be greater
+ * than the array slice we are rotating.
+ *
+ * Example right-rotation:
+ * - Before rotation:
+ * [callee][0][1][2][3][4][sp]
+ * - Do the rotation:
+ * sk_rotate(vm, 2, 2);
+ * - After right-rotation:
+ * [callee][0][1][3][4][2][sp]
+ *
+ *
+ * Example left-rotation:
+ * - Before rotation:
+ * [callee][0][1][2][3][4][sp]
+ * - Do the rotation:
+ * sk_rotate(vm, 2, -2);
+ * -After left-rotation:
+ * [callee][0][1][4][3][2][sp]
+ **/
+SK_API void sk_rotate(VM* vm, int idx, int n)
+{
+    sk_lock(vm);
+    Value* end = stackpeek(0);
+    Value* start = idx2val(vm, idx);
+    sk_checkapi(vm, (n >= 0 ? n : -n) <= end - start + 1, "invalid 'n'");
+    Value* pivot = (n >= 0 ? end - n : end - n - 1);
+    reverse(pivot, start);
+    reverse(pivot + 1, end);
+    reverse(start, end);
+    sk_unlock(vm);
+}
+
+
 
 /* Remove the value from the stack at 'idx' and shift the
  * stack to the left to fill the gap */
@@ -685,6 +663,8 @@ SK_API void sk_remove(VM* vm, int idx)
     decsp(vm);
     sk_unlock(vm);
 }
+
+
 
 /* Insert the value on top of the stack at the 'idx' and
  * shift the stack to the right to make space for the new value */
@@ -699,24 +679,6 @@ SK_API void sk_insert(VM* vm, int idx)
     sk_unlock(vm);
 }
 
-/* Pop the value on top of the stack and then replace the
- * value at 'idx' with the popped value. */
-SK_API void sk_replace(VM* vm, int idx)
-{
-    sk_lock(vm);
-    Value* val = idx2val(vm, idx);
-    *val = *(vm->sp - 1);
-    decsp(vm);
-    sk_unlock(vm);
-}
-
-
-
-
-
-/*
- * CALL
- */
 
 
 /* Call the value on the stack (behind the arguments) */
@@ -739,12 +701,16 @@ struct CallStack {
     int retcnt;
 };
 
+
+
 /* Wrapper function */
 static void fcall(VM* vm, void* userdata)
 {
     struct CallStack* cs = cast(struct CallStack*, userdata);
     ncall(vm, cs->callee, *cs->callee, cs->retcnt);
 }
+
+
 
 /* Protected call.
  * Same as sk_call except this runs the function in protected
@@ -768,12 +734,203 @@ SK_API int sk_pcall(VM* vm, int argc, int retcnt)
 
 
 
+SK_API void sk_dumpstack(VM* vm)
+{
+    // TODO: Implement (hint: dumpstack in debug.c)
+    sk_lock(vm);
+    sk_unlock(vm);
+}
 
 
 
-/*
- * ERROR
- */
+/* Sets the new stack top relative to the current function */
+SK_API void sk_settop(VM* vm, int idx)
+{
+    sk_lock(vm);
+    Value* newtop;
+    Value* fn = vm->frames[vm->fc - 1].callee;
+    ptrdiff_t diff;
+    if(idx >= 0) {
+        sk_checkapi(vm, idx < ((Value*)stklast(vm) - fn), "index too big.");
+        diff = ((fn + 1) + idx) - vm->sp;
+        for(; diff > 0; diff--)
+            *vm->sp++ = NIL_VAL;
+    } else { // index negative
+        sk_checkapi(vm, -idx <= (vm->sp - fn), "invalid index.");
+        diff = idx + 1;
+    }
+    vm->sp += diff; // set new top
+    if(diff < 0) closeupval(vm, vm->sp);
+    sk_unlock(vm);
+}
+
+
+
+/* Set global value 'name' to the value on top of the stack.
+ * In case the global variable 'name' does not exist, then
+ * the new one is declared and 'isfixed' modifier is considered
+ * when creating it.
+ * Otherwise 'isfixed' modifier is ignored and the global
+ * variable is set to the new value UNLESS the variable was
+ * previously defined, but this is up to the API user to ensure.
+ * Meaning it won't get checked in the API call and might
+ * cause bugs in user code if user doesn't respect this modifier. */
+SK_API int sk_setglobal(VM* vm, const char* name, int isfixed)
+{
+    sk_lock(vm);
+    skapi_checkelems(vm, 1);
+    skapi_checkptr(vm, name);
+    pushstr(vm, name, strlen(name));
+    Value id = *stackpeek(0);
+    Value newval = *stackpeek(1);
+    int isnew = 0;
+    Value gidx;
+    if((isnew = !HashTable_get(&vm->globids, id, &gidx))) {
+        Variable gvar = {newval, cast_uchar(0x00 & isfixed)};
+        Value idx = NUMBER_VAL(cast(sk_number, Array_Variable_push(&vm->globvars, gvar)));
+        HashTable_insert(vm, &vm->globids, id, idx);
+        vm->sp -= 2;
+    } else Array_Variable_index(&vm->globvars, AS_NUMBER(gidx))->value = newval;
+    sk_unlock(vm);
+    return isnew;
+}
+
+
+
+/* Set the field of the class instance to the value on top of the stack.
+ * Class should be located at 'idx' and the name of the field to be set is 'field'.
+ * This sets the field to that value and pops it off the top of the stack.
+ * Returns true if the field didn't exist before and true if the value
+ * of the field got overwritten. */
+SK_API int sk_setfield(VM* vm, int idx, const char* field)
+{
+    sk_lock(vm);
+    skapi_checkelems(vm, 1);
+    skapi_checkptr(vm, field);
+    Value insval = *idx2val(vm, idx);
+    sk_checkapi(vm, IS_INSTANCE(insval), "expect class instance");
+    OInstance* instance = AS_INSTANCE(insval);
+    pushcstr(vm, field);
+    int res = HashTable_insert(vm, &instance->fields, *stackpeek(0), *stackpeek(1));
+    vm->sp -= 2;
+    sk_unlock(vm);
+    return res;
+}
+
+
+
+/* Set panic handler and return old one */
+SK_API CFunction sk_setpanic(VM* vm, CFunction panicfn)
+{
+    sk_lock(vm);
+    CFunction old_handler = vm->config.panic;
+    vm->config.panic = panicfn;
+    sk_unlock(vm);
+    return old_handler;
+}
+
+
+
+/* Set allocator function and return old one */
+SK_API AllocFn sk_setalloc(VM* vm, AllocFn allocfn, void* ud)
+{
+    sk_lock(vm);
+    skapi_checkptr(vm, allocfn);
+    AllocFn old_alloc = vm->config.reallocate;
+    vm->config.reallocate = allocfn;
+    vm->config.userdata = ud;
+    sk_unlock(vm);
+    return old_alloc;
+}
+
+
+
+/* Convert a value on the stack at 'idx' into string. */
+SK_API const char* sk_tostring(VM* vm, int idx)
+{
+    sk_lock(vm);
+    Value* slot = idx2val(vm, idx);
+    Value value = *slot;
+    if(!IS_STRING(value)) *slot = OBJ_VAL(vtostr(vm, value));
+    sk_unlock(vm);
+    return AS_CSTRING(*slot);
+}
+
+
+
+/* Auxiliary function for 'sk_getupval' and 'sk_setupval'.
+ * Returns pointer to the upvalue. */
+static force_inline Value* getupval(Value fn, int n)
+{
+    if(IS_CLOSURE(fn)) { // Skooma closure ?
+        OClosure* closure = AS_CLOSURE(fn);
+        if(cast_uint(n) > closure->upvalc - 1) return NULL;
+        return closure->upvalue[n]->location;
+    } else if(IS_NATIVE(fn)) { // native C function ?
+        ONative* native = AS_NATIVE(fn);
+        if(cast_uint(n) > native->upvalc - 1) return NULL;
+        return &native->upvalue[n];
+    } else return NULL;
+}
+
+
+
+/* Get upvalue belonging to the function at 'fidx'.
+ * 'idx' is the index of the upvalue.
+ * Function pushes the upvalue on top of the stack and returns 1.
+ * If the upvalue does not exist and/or the function at 'fidx' is not
+ * a closure or native C function then nothing will be pushed on
+ * the stack and 0 is returned. */
+SK_API int sk_getupvalue(VM* vm, int fidx, int idx)
+{
+    sk_lock(vm);
+    int ret = 0;
+    Value fn = *idx2val(vm, fidx);
+    Value* upval = getupval(fn, idx);
+    if(upval) {
+        pushval(vm, *upval);
+        ret = 1;
+    }
+    sk_unlock(vm);
+    return ret;
+}
+
+
+
+/* Sets the upvalue belonging to the function at 'fidx'.
+ * 'idx' is the index of the upvalue.
+ * Function pops the top value on the stack and sets
+ * it as the new value of the upvalue.
+ * If the upvalue doesn't exist and/or 'fidx' is not a
+ * closure or native C function, then the function returns 0
+ * indicating the upvalue was not set, otherwise it returns 1. */
+SK_API int sk_setupvalue(VM* vm, int fidx, int idx)
+{
+    sk_lock(vm);
+    skapi_checkelems(vm, 1);
+    int changed = 0;
+    Value fn = *idx2val(vm, fidx);
+    Value* upval = getupval(fn, idx);
+    if(upval) {
+        *upval = *stackpeek(0);
+        vm->sp--;
+        changed = 1;
+    }
+    sk_unlock(vm);
+    return changed;
+}
+
+
+
+/* Return the length of the string at 'idx'. */
+SK_API size_t sk_strlen(const VM* vm, int idx)
+{
+    Value val = *idx2val(vm, idx);
+    sk_checkapi(vm, IS_STRING(val), "expect string");
+    return AS_STRING(val)->len;
+}
+
+
 
 /* Invoke a runetime error with errcode */
 SK_API int sk_error(VM* vm, Status errcode)
@@ -783,23 +940,76 @@ SK_API int sk_error(VM* vm, Status errcode)
     skapi_checkelems(vm, 1);
     skapi_checkerrcode(vm, errcode);
     runerror(vm, errcode); // sk_unlock in here
-    // unreachable;
     return 0; // to avoid compiler warnings
 }
 
 
 
-
-
-/*
- * DEBUG
- */
-
-SK_API void sk_dumpstack(VM* vm)
+/* Compare 2 values on the stack */
+SK_API int sk_compare(VM* vm, int idx1, int idx2, Cmp op)
 {
-    // TODO: Implement (hint: dumpstack in debug.c)
     sk_lock(vm);
+    Value a = *idx2val(vm, idx1);
+    Value b = *idx2val(vm, idx2);
+    int res;
+    switch(op) {
+        case CMP_EQ:
+            res = veq(a, b);
+            break;
+        case CMP_LT:
+            res = vlt(vm, a, b);
+            break;
+        case CMP_GT:
+            res = vgt(vm, a, b);
+            break;
+        case CMP_LE:
+            res = vle(vm, a, b);
+            break;
+        case CMP_GE:
+            res = vge(vm, a, b);
+            break;
+        default:
+            sk_checkapi(vm, 0, "invalid comparison 'op'");
+    }
+    sk_unlock(vm);
+    return res;
+}
+
+
+
+SK_API void sk_arith(VM* vm, Ar op)
+{
+    // TODO: Implement, would be good to refactor the whole arithmetics done
+    // in the project, for example parser when trying to fold constants
+    // should call to rawarith function same as this function.
+    // Additionally provide and define macros/functions for each binary unary
+    // operation.
+    // If rawarith fails (value is instance object), then try to use
+    // overloaded method or maybe not, will I allow overloads @?
+    // @PRIO
+    sk_lock(vm);
+    skapi_checkarop(vm, op);
+    skapi_checkelems(vm, 2);
+    switch(op) {
+        case AR_ADD:
+        case AR_SUB:
+        case AR_MUL:
+        case AR_DIV:
+        case AR_MOD:
+        case AR_POW:
+        case AR_NOT:
+        case AR_MIN:
+        default:
+            unreachable;
+    }
     sk_unlock(vm);
 }
 
-// SK_API int sk_load(VM* vm,
+
+
+/* Return 'skooma' current version. */
+SK_API int sk_version(VM* vm)
+{
+    UNUSED(vm);
+    return SK_VERSION_NUMBER;
+}

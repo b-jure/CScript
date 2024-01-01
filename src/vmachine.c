@@ -364,8 +364,9 @@ static force_inline void invoke(VM* vm, Value name, Int argc, Int retcnt)
     invokefrom(vm, instance->oclass, name, argc, retcnt);
 }
 
-
-OUpvalue* captureupval(VM* vm, Value* valp)
+/* Private to interpreter.
+ * Used when creating a skooma closure. */
+static force_inline OUpvalue* captureupval(VM* vm, Value* valp)
 {
     OUpvalue** upvalpp = &vm->open_upvals;
     while(*upvalpp != NULL && (*upvalpp)->location > valp)
@@ -377,6 +378,9 @@ OUpvalue* captureupval(VM* vm, Value* valp)
     return upvalp;
 }
 
+/* Closes all of the captured variables moving
+ * them from the stack onto the heap (open_upvals array),
+ * making them reachable for gc. */
 void closeupval(VM* vm, Value* last)
 {
     while(vm->open_upvals != NULL && vm->open_upvals->location >= last) {

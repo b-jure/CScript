@@ -16,6 +16,9 @@
 
 #define ALLOC_OBJ(vm, object, type) ((object*)onew(vm, sizeof(object), type))
 
+#define ALLOC_NATIVE(vm, upvals)                                                         \
+    ((ONative*)onew(vm, sizeof(ONative) + ((upvals) * sizeof(Value)), OBJ_NATIVE))
+
 #define ALLOC_STRING(vm, len)                                                            \
     ((OString*)onew(vm, sizeof(OString) + (len) + 1, OBJ_STRING))
 
@@ -220,19 +223,23 @@ OString* unescape(VM* vm, OString* string)
 }
 
 
-ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva)
+ONative*
+ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals)
 {
-    ONative* native = ALLOC_OBJ(vm, ONative, OBJ_NATIVE);
+    ONative* native = ALLOC_NATIVE(vm, upvals);
     native->name = name;
     native->fn = fn;
     native->arity = arity;
     native->isva = isva;
+    native->upvalc = upvals;
+    for(Int i = 0; i < upvals; i++)
+        native->upvalue[i] = NIL_VAL;
     return native;
 }
 
 static force_inline void ONative_free(VM* vm, ONative* native)
 {
-    GC_FREE(vm, native, sizeof(ONative));
+    GC_FREE(vm, native, sizeof(ONative) + (native->upvalc * sizeof(Value)));
 }
 
 OFunction* OFunction_new(VM* vm)
@@ -261,14 +268,14 @@ OClosure* OClosure_new(VM* vm, OFunction* fn)
         upvals[i] = NULL;
     OClosure* closure = ALLOC_OBJ(vm, OClosure, OBJ_CLOSURE);
     closure->fn = fn;
-    closure->upvals = upvals;
+    closure->upvalue = upvals;
     closure->upvalc = fn->upvalc;
     return closure;
 }
 
 static force_inline void OClosure_free(VM* vm, OClosure* closure)
 {
-    GC_FREE(vm, closure->upvals, closure->upvalc * sizeof(OUpvalue*));
+    GC_FREE(vm, closure->upvalue, closure->upvalc * sizeof(OUpvalue*));
     GC_FREE(vm, closure, sizeof(OClosure));
 }
 

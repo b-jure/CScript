@@ -56,6 +56,7 @@ void _cleanupvm(VM** vm); // cleanup function signature
 #define cast_intptr(e)   ((intptr_t)(e))
 #define cast_double(e)   ((double)(e))
 #define cast_char(e)     ((char)(e))
+#define cast_uchar(e)    ((unsigned char)(e))
 #define cast_charp(e)    ((char*)(e))
 #define cast(type, expr) ((type)(expr))
 

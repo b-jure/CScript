@@ -63,7 +63,7 @@ sk_noret runerror(VM* vm, Int status)
 }
 
 
-sk_noret ordererror(VM* vm, Value* a, Value* b)
+sk_noret ordererror(VM* vm, Value a, Value b)
 {
     const char* t1 = vm->statics[val2type(a)]->storage;
     const char* t2 = vm->statics[val2type(a)]->storage;

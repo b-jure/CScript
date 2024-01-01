@@ -49,7 +49,6 @@ static force_inline void marktable(VM* vm, HashTable* table)
 
 
 
-
 // Generic function signature for Mark and Sweep functions
 #define MS_FN(name) static force_inline void name(VM* vm)
 
@@ -61,8 +60,8 @@ MS_FN(markglobals)
             // Mark identifier (ObjString)
             omark(vm, AS_OBJ(entry->key));
             // Mark value
-            UInt idx = (UInt)AS_NUMBER(entry->value);
-            vmark(vm, vm->globvals[idx].value);
+            UInt idx = cast_uint(AS_NUMBER(entry->value));
+            vmark(vm, vm->globvars.data[idx].value);
         }
     }
 }
@@ -76,19 +75,19 @@ MS_FN(markstack)
 MS_FN(markframes)
 {
     for(Int i = 0; i < vm->fc; i++)
-        omark(vm, (O*)vm->frames[i].closure);
+        omark(vm, cast(O*, vm->frames[i].closure));
 }
 
 MS_FN(markupvalues)
 {
     for(OUpvalue* upval = vm->open_upvals; upval != NULL; upval = upval->next)
-        omark(vm, (O*)upval);
+        omark(vm, cast(O*, upval));
 }
 
 MS_FN(markstatics)
 {
     for(UInt i = 0; i < SS_SIZE; i++)
-        omark(vm, (O*)vm->statics[i]);
+        omark(vm, cast(O*, vm->statics[i]));
 }
 
 MS_FN(markloaded)
@@ -172,8 +171,8 @@ void mark_black(VM* vm, O* obj)
         }
         CASE(OBJ_FUNCTION)
         {
-            OFunction* fn = (OFunction*)obj;
-            omark(vm, (O*)fn->name);
+            OFunction* fn = cast(OFunction*, obj);
+            omark(vm, cast(O*, fn->name));
             for(UInt i = 0; i < fn->chunk.constants.len; i++)
                 vmark(vm, fn->chunk.constants.data[i]);
             BREAK;
@@ -183,42 +182,47 @@ void mark_black(VM* vm, O* obj)
             OClosure* closure = (OClosure*)obj;
             omark(vm, (O*)closure->fn);
             for(UInt i = 0; i < closure->upvalc; i++)
-                omark(vm, (O*)closure->upvals[i]);
+                omark(vm, cast(O*, closure->upvalue[i]));
             BREAK;
         }
         CASE(OBJ_CLASS)
         {
-            OClass* oclass = (OClass*)obj;
-            omark(vm, (O*)oclass->name);
+            OClass* oclass = cast(OClass*, obj);
+            omark(vm, cast(O*, oclass->name));
             marktable(vm, &oclass->methods);
-            omark(vm, (O*)oclass->overloaded);
+            for(int8_t i = 0; i < OM_CNT; i++)
+                omark(vm, cast(O*, oclass->omethods[i]));
             BREAK;
         }
         CASE(OBJ_INSTANCE)
         {
-            OInstance* instance = (OInstance*)obj;
-            omark(vm, (O*)instance->oclass);
+            OInstance* instance = cast(OInstance*, obj);
+            omark(vm, cast(O*, instance->oclass));
             marktable(vm, &instance->fields);
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            OBoundMethod* bound_method = (OBoundMethod*)obj;
-            omark(vm, (O*)bound_method);
+            OBoundMethod* bound_method = cast(OBoundMethod*, obj);
+            omark(vm, cast(O*, bound_method));
             vmark(vm, bound_method->receiver);
-            omark(vm, (O*)bound_method->method);
+            omark(vm, cast(O*, bound_method->method));
             BREAK;
         }
         CASE(OBJ_NATIVE)
         {
-            ONative* native = (ONative*)obj;
-            omark(vm, (O*)native->name);
+            ONative* native = cast(ONative*, obj);
+            omark(vm, cast(O*, native->name));
+            for(UInt i = 0; i < native->upvalc; i++)
+                vmark(vm, native->upvalue[i]);
             BREAK;
         }
         CASE(OBJ_STRING)
         unreachable;
     }
 }
+
+
 
 size_t gc(VM* vm)
 {
@@ -241,8 +245,8 @@ skip:
     rmweakrefs(vm);
     sweep(vm);
     vm->gc_next =
-        MAX((double)vm->gc_allocated * vm->config.gc_grow_factor,
-            vm->config.gc_min_heap_size);
+        MAX(cast(double, vm->gc_allocated) * vm->config.gc_growfactor,
+            vm->config.gc_heapmin);
 #ifdef DEBUG_LOG_GC
     printf("--> GC end\n");
     printf(
@@ -254,6 +258,9 @@ skip:
 #endif
     return old_allocation - vm->gc_allocated;
 }
+
+
+
 
 /* Allocator that can trigger gc. */
 void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
@@ -272,7 +279,9 @@ void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
     return REALLOC(vm, ptr, newc);
 }
 
-/* Freeing memory never triggers GC */
+
+
+/* Free memory and update the allocated bytes count. */
 void* gcfree(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 {
     vm->gc_allocated += newc - oldc;
@@ -284,7 +293,9 @@ void* gcfree(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
     return REALLOC(vm, ptr, newc);
 }
 
-/* Allocator that never triggers gc. */
+
+
+/* Default allocator */
 void* reallocate(void* ptr, size_t newc, void* _)
 {
     UNUSED(_);

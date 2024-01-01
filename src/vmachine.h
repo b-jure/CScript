@@ -87,6 +87,7 @@ typedef struct {
     void* userdata; // userdata for allocator
     CFunction panic; // panic handler
     size_t gc_heapinit; // initial heap threshold
+    size_t gc_heapmin; // minimum heap size
     double gc_growfactor; // garbage collector grow factor
 } Config;
 
@@ -123,8 +124,8 @@ struct VM {
     OString* statics[SS_SIZE]; // static strings
     O* objects; // list of all allocated objects
     O** gray_stack; // tricolor gc (stores marked objects)
-    UInt gslen; // gray stack length
-    UInt gscap; // gray stack capacity
+    uint64_t gslen; // gray stack length
+    uint64_t gscap; // gray stack capacity
     size_t gc_allocated; // count of allocated bytes in use
     size_t gc_next; // next threshold where gc triggers
     Byte gc_flags; // gc flags (sk API)
@@ -166,7 +167,6 @@ void run(VM* vm);
 int ncall(VM* vm, Value* retstart, Value callee, Int retcnt);
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);
 void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver);
-OUpvalue* captureupval(VM* vm, Value* valp);
 void closeupval(VM* vm, Value* last);
 void Config_init(Config* config);
 

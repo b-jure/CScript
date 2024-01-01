@@ -1,3 +1,4 @@
+#include "debug.h"
 #include "hash.h"
 #include "memory.h"
 #include "object.h"
@@ -26,14 +27,12 @@
  * bit 4 is set -> nil
  * bit 5 is set -> instance
  * bit 6 is set -> class */
-#define val2tbmask(value)                                                                \
+#define val2tbmask(v)                                                                    \
     cast_uint(                                                                           \
-        0 | (IS_NUMBER(value) * 1) | (IS_STRING(value) * 2) |                            \
-        ((IS_FUNCTION(value) | IS_BOUND_METHOD(value) | IS_CLOSURE(value) |              \
-          IS_NATIVE(value)) *                                                            \
-         4) |                                                                            \
-        IS_BOOL(value) * 8 | IS_NIL(value) * 16 | IS_INSTANCE(value) * 32 |              \
-        IS_CLASS(value) * 64)
+        0 | (IS_NIL(v) * 1) | (IS_NUMBER(v) * 2) | (IS_STRING(v) * 4) |                  \
+        (IS_BOOL(v) * 8) | (IS_CLASS(v) * 16) | (IS_INSTANCE(v) * 32) |                  \
+        (IS_FUNCTION(v) * 64) | (IS_CLOSURE(v) * 128) | (IS_NATIVE(v) * 256) |           \
+        (IS_BOUND_METHOD(v) * 512))
 #endif
 
 
@@ -51,22 +50,21 @@ int val2type(Value value)
         TT_FUNCTION,
         TT_CLOSURE,
         TT_NATIVE,
-        TT_UPVAL,
         TT_METHOD,
     };
     unsigned char bitidx = sk_ctz(val2tbmask(value));
     return typetable[bitidx];
 #else
-    if(IS_NUMBER(value)) return TT_NUMBER;
+    if(IS_NIL(value)) return TT_NIL;
+    else if(IS_NUMBER(value)) return TT_NUMBER;
     else if(IS_STRING(value)) return TT_STRING;
+    else if(IS_BOOL(value)) return TT_BOOL;
+    else if(IS_CLASS(value)) return TT_CLASS;
+    else if(IS_INSTANCE(value)) return TT_INSTANCE;
     else if(IS_FUNCTION(value)) return TT_FUNCTION;
-    else if(IS_BOUND_METHOD(value)) return TT_METHOD;
     else if(IS_CLOSURE(value)) return TT_CLOSURE;
     else if(IS_NATIVE(value)) return TT_NATIVE;
-    else if(IS_BOOL(value)) return TT_BOOL;
-    else if(IS_NIL(value)) return TT_NIL;
-    else if(IS_INSTANCE(value)) return TT_INSTANCE;
-    else if(IS_CLASS(value)) return TT_CLASS;
+    else if(IS_BOUND_METHOD(value)) return TT_METHOD;
 #endif
     unreachable;
 }
@@ -163,7 +161,7 @@ CMPFN(vlt)
 {
     if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) < AS_NUMBER(b);
     if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) < 0;
-    return ordererror(vm, a, b);
+    ordererror(vm, a, b);
 }
 
 
@@ -172,7 +170,7 @@ CMPFN(vgt)
 {
     if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) > AS_NUMBER(b);
     if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) > 0;
-    return ordererror(vm, a, b);
+    ordererror(vm, a, b);
 }
 
 
@@ -216,17 +214,6 @@ static force_inline OString* booltostr(VM* vm, bool boolean)
 {
     if(boolean) return vm->statics[SS_TRUE];
     else return vm->statics[SS_FALSE];
-}
-
-/* Used when printing errors and debug info */
-const char* vtodstr(VM* vm, Value value)
-{
-    // TODO: Implement
-    // 1. Extract the type bitmask into object.h or value.h
-    // 2. Update vtostr, everywhere where we invoke runtime error
-    //    instead of using 'vtostr' use this function.
-    // 3. Debug names will default to statics table the VM keeps,
-    //    unless an instance has a non nil '__debug' field defined.
 }
 
 /* Converts value to OString */

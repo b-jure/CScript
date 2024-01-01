@@ -123,7 +123,7 @@ struct OFunction { // typedef is inside 'value.h'
 struct OClosure { // typedef is inside 'value.h'
     O obj; // shared header
     OFunction* fn; // wrapped function
-    OUpvalue** upvals; // array of ptr to OUpvalue
+    OUpvalue** upvalue; // array of ptr to OUpvalue
     UInt upvalc; // array len
 };
 
@@ -153,6 +153,8 @@ typedef struct {
     OString* name; // native function name
     Int arity; // how many arguments
     bool isva; // is this vararg function
+    UInt upvalc;
+    Value upvalue[1]; // list of upvalues
 } ONative; // Native function written in C
 
 OString* OString_new(VM* vm, const char* chars, size_t len);
@@ -165,7 +167,8 @@ OInstance* OInstance_new(VM* vm, OClass* cclass);
 OClass* OClass_new(VM* vm, OString* name);
 OUpvalue* OUpvalue_new(VM* vm, Value* var_ref);
 OClosure* OClosure_new(VM* vm, OFunction* fn);
-ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva);
+ONative*
+ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals);
 OFunction* OFunction_new(VM* vm);
 void otypeprint(OType type); // Debug
 OString* otostr(VM* vm, O* object);
