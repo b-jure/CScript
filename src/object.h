@@ -34,6 +34,7 @@
 #define IS_BOUND_METHOD(value) isotype(value, OBJ_BOUND_METHOD)
 #define AS_BOUND_METHOD(value) ((OBoundMethod*)AS_OBJ(value))
 
+/* Object types */
 typedef enum {
     OBJ_STRING = 0,
     OBJ_FUNCTION,
@@ -60,36 +61,43 @@ struct O { // typedef is inside 'value.h'
     uint64_t header;
 };
 
+/* Get object type */
 static force_inline OType otype(O* object)
 {
     return (OType)((object->header >> 56) & 0xff);
 }
 
+/* Set object type */
 static force_inline void otypeset(O* object, OType type)
 {
     object->header = (object->header & 0x00ffffffffffffff) | ((uint64_t)type << 56);
 }
 
+/* Check if object is marked */
 static force_inline bool oismarked(O* object)
 {
     return (bool)((object->header >> 48) & 0x01);
 }
 
+/* Toggle object mark */
 static force_inline void osetmark(O* object, bool mark)
 {
     object->header = (object->header & 0xff00ffffffffffff) | ((uint64_t)mark << 48);
 }
 
+/* Get pointer to the next object */
 static force_inline O* onext(O* object)
 {
     return (O*)(object->header & 0x0000ffffffffffff);
 }
 
+/* Set object next pointer to point to 'next' */
 static force_inline void osetnext(O* object, O* next)
 {
     object->header = (object->header & 0xffff000000000000) | (uint64_t)next;
 }
 
+/* Check if object is of type 'type' */
 static force_inline bool isotype(Value value, OType type)
 {
     return IS_OBJ(value) && otype(AS_OBJ(value)) == type;
@@ -157,24 +165,51 @@ typedef struct {
     Value upvalue[1]; // list of upvalues
 } ONative; // Native function written in C
 
+/* Construct object strings */
 OString* OString_new(VM* vm, const char* chars, size_t len);
 OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp);
 OString* OString_fmt(VM* vm, const char* fmt, ...);
 OString* concatenate(VM* vm, Value a, Value b);
 OString* unescape(VM* vm, OString* string);
+
+/* Create wrapper around instance method */
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method);
+
+/* Create class instance */
 OInstance* OInstance_new(VM* vm, OClass* cclass);
+
+/* Create class */
 OClass* OClass_new(VM* vm, OString* name);
+
+/* Create upvalue */
 OUpvalue* OUpvalue_new(VM* vm, Value* var_ref);
+
+/* Create skooma closure */
 OClosure* OClosure_new(VM* vm, OFunction* fn);
+
+/* Create native C function */
 ONative*
 ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals);
+
+/* Create skoomoa function */
 OFunction* OFunction_new(VM* vm);
+
+/* debug only, prints object type name */
 void otypeprint(OType type); // Debug
+
+/* Gets/Creates object string from object */
 OString* otostr(VM* vm, O* object);
 
+/* Tries calling binary or unary operator overload method */
+void otryop(VM* vm, Value a, Value b, OMTag op, Value* res);
+
+/* Prints the object value */
 void oprint(VM* vm, Value value);
+
+/* Hashes the object value */
 Hash ohash(Value value);
+
+/* Free object memory */
 void ofree(VM* vm, O* object);
 
 #endif

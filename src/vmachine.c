@@ -8,6 +8,7 @@
 #include "mem.h"
 #include "object.h"
 #include "parser.h"
+#include "skapi.h"
 #include "skmath.h"
 #include "value.h"
 #include "vmachine.h"
@@ -57,26 +58,13 @@ void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 }
 
 
-/* Public interface for creating new global native C functions. */
-void globalnative_new(VM* vm, const char* name, CFunction cfunc, UInt arity, bool isva)
-{
-    push(vm, OBJ_VAL(OString_new(vm, name, strlen(name))));
-    push(vm, OBJ_VAL(ONative_new(vm, AS_STRING(*stackpeek(0)), cfunc, arity, isva)));
-    UInt idx = Array_Variable_push(&vm->globvars, (Variable){*stackpeek(0), 0x00});
-    HashTable_insert(vm, &vm->globids, *stackpeek(1), NUMBER_VAL(idx));
-    vm->sp -= 2;
-}
-
-
-/*
- * Configuration.
+/* Configuration.
  * Contains various hooks and configurable options.
  * 'reallocate' - allocator function.
  * 'userdata' - additional data for allocator.
  * 'panic' - panic handler in case of runtime errors.
  * 'gc_heapinit' - starting treshold when gc triggers.
- * 'gc_growfactor' - garbage collector grow factor (incremental gc).
- */
+ * 'gc_growfactor' - garbage collector grow factor (incremental gc). */
 void Config_init(Config* config)
 {
     config->reallocate = reallocate;
@@ -126,7 +114,7 @@ static int precall(VM* vm, Value callee, Int argc, Int retcnt)
         &&callval,
     };
     UInt bitmask = callbitmask(vm, isva, arity, argc, retcnt);
-    UInt idx = sk_ctz(bitmask);
+    uint8_t idx = sk_ctz(bitmask);
     goto* jmptable[idx];
 eoverflow:
     err = RETCNT_STACK_OVERFLOW(vm, name);
@@ -163,7 +151,7 @@ err:
     push(vm, OBJ_VAL(err));
     runerror(vm, status);
 #endif
-callval:;
+callval:
     frame->vacnt = argc - arity;
     frame->retcnt = retcnt;
     frame->callee = vm->sp - argc - 1;
@@ -616,7 +604,7 @@ void run(VM* vm)
                 Int retcnt = READ_BYTEL();
                 Int argc = vm->sp - Array_VRef_pop(&vm->callstart);
                 frame->ip = ip;
-                if(unlikely(trycall(vm, *stackpeek(argc), argc, retcnt) == CALL_ERR))
+                if(trycall(vm, *stackpeek(argc), argc, retcnt))
                     frame = &vm->frames[vm->fc - 1];
                 ip = frame->ip;
                 BREAK;
@@ -840,11 +828,11 @@ void run(VM* vm)
                     }
                     closeupval(vm, frame->callee);
                     vm->fc--;
-                    if(vm->fc == 0) return;
                     vm->sp = frame->callee;
                     while(vm->temp.len > 0)
                         push(vm, Array_Value_pop(&vm->temp));
                     ASSERT(vm->temp.len == 0, "Temporary array must be empty.");
+                    if(vm->fc == 0 || vm->lastskframe == vm->fc) return;
                     frame = &vm->frames[vm->fc - 1];
                     ip = frame->ip;
                     BREAK;

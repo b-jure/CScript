@@ -1029,7 +1029,7 @@ static force_inline UInt make_constant(Function* F, Value constant)
 /*========================== OPERATIONS/PRIORITY =========================*/
 
 typedef enum {
-    OPR_FALSEY = 0,
+    OPR_NOT = 0,
     OPR_NEGATE,
     OPR_NOUNARYOPR,
 } UnaryOpr;
@@ -1059,7 +1059,7 @@ static UnaryOpr getunaryopr(TokenType type)
 {
     switch(type) {
         case TOK_BANG:
-            return OPR_FALSEY;
+            return OPR_NOT;
         case TOK_MINUS:
             return OPR_NEGATE;
         default:
@@ -1108,10 +1108,10 @@ static BinaryOpr getbinaryopr(TokenType type)
 static OpCode unopr2op(UnaryOpr opr)
 {
     switch(opr) {
+        case OPR_NOT:
+            return OP_NOT;
         case OPR_NEGATE:
             return OP_NEG;
-        case OPR_FALSEY:
-            return OP_NOT;
         default:
             unreachable;
     }

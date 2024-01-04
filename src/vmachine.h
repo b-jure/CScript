@@ -31,6 +31,10 @@ struct sk_longjmp {
 /* Max call frames */
 #define VM_FRAMES_MAX SK_CALLFRAMES_MAX
 
+typedef enum {
+    CFI_FRESH = 1,
+} CFInfo;
+
 typedef struct {
     OClosure* closure;
     Byte* ip; /* Instruction pointer (closure chunk) */
@@ -38,6 +42,7 @@ typedef struct {
     Int retcnt; /* Expected value return count */
     Int vacnt; /* Count of extra arguments in vararg functions */
     Int status; /* In case of call errors */
+    Byte info; /* Additional context */
 } CallFrame;
 
 /* Fetch the frame closure (skooma function) */

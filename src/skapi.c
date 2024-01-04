@@ -1,5 +1,6 @@
 #include "debug.h"
 #include "object.h"
+#include "skapi.h"
 #include "skconf.h"
 #include "skooma.h"
 #include "stdarg.h"
@@ -7,24 +8,6 @@
 #include "vmachine.h"
 
 #include <time.h>
-
-
-#define stklast(vm) cast_intptr(vm->stack + VM_STACK_MAX - 1)
-
-/* Increment stack pointer */
-#define incsp(vm)                                                                        \
-    do {                                                                                 \
-        (vm)->sp++;                                                                      \
-        sk_checkapi(vm, vm->sp - vm->stack <= VM_STACK_MAX, "stack overflow.");          \
-    } while(0)
-
-/* Decrement stack pointer */
-#define decsp(vm)                                                                        \
-    do {                                                                                 \
-        (vm)->sp--;                                                                      \
-        sk_checkapi(vm, vm->stack <= (vm)->sp, "stack underflow.");                      \
-    } while(0)
-
 
 
 /* Get stack value at 'idx'. */
@@ -274,62 +257,6 @@ SK_API int sk_isclosure(const VM* vm, int idx)
 
 
 
-/* Push value on the stack */
-#define pushval(vm, val)                                                                 \
-    do {                                                                                 \
-        *(vm)->sp = val;                                                                 \
-        incsp(vm);                                                                       \
-    } while(0)
-
-/* Push object on the stack */
-#define pusho(vm, o) pushval(vm, OBJ_VAL(o))
-
-/* Push string object */
-#define pushostring(vm, string) pusho(vm, (O*)(string))
-
-/* Push closure object */
-#define pushoclosure(vm, closure) pusho(vm, (O*)(closure))
-
-/* Push class */
-#define pushoclass(vm, class) pusho(vm, (O*)(class))
-
-/* Push instance */
-#define pushoinst(vm, inst) pusho(vm, (O*)(inst))
-
-/* Push native (C closure) */
-#define pushonative(vm, native) pusho(vm, (O*)(native))
-
-/* Push nil literal */
-#define pushnil(vm) pushval(vm, NIL_VAL)
-
-#define pushfstrva(vm, fmt, ...)                                                         \
-    if(fmt) pushostring(vm, OString_fmt(vm, fmt __VA_OPT__(, ) __VA_ARGS__));            \
-    else pushnil(vm);
-
-/* Push formatted cstring */
-#define pushfstr(vm, fmt, argp)                                                          \
-    if(fmt) pushostring(vm, OString_fmt_from(vm, fmt, argp));                            \
-    else pushnil(vm);
-
-/* Push string */
-#define pushstr(vm, ptr, len)                                                            \
-    if(ptr) pushostring(vm, OString_new(vm, ptr, len));                                  \
-    else pushnil(vm);
-
-/* Push cstring */
-#define pushcstr(vm, ptr) pushstr(vm, ptr, strlen(ptr))
-
-/* Push true literal */
-#define pushtrue(vm) pushval(vm, TRUE_VAL)
-
-/* Push false literal */
-#define pushfalse(vm) pushval(vm, FALSE_VAL)
-
-/* Push bool */
-#define pushbool(vm, b) pushval(vm, BOOL_VAL(b))
-
-/* Push number */
-#define pushnum(vm, n) pushval(vm, NUMBER_VAL(n))
 
 
 
@@ -337,7 +264,7 @@ SK_API int sk_isclosure(const VM* vm, int idx)
 SK_API void sk_pushnil(VM* vm)
 {
     sk_lock(vm);
-    pushnil(vm);
+    skapi_pushnil(vm);
     sk_unlock(vm);
 }
 
@@ -347,7 +274,7 @@ SK_API void sk_pushnil(VM* vm)
 SK_API void sk_pushnumber(VM* vm, sk_number number)
 {
     sk_lock(vm);
-    pushnum(vm, number);
+    skapi_pushnum(vm, number);
     sk_unlock(vm);
 }
 
@@ -357,7 +284,7 @@ SK_API void sk_pushnumber(VM* vm, sk_number number)
 SK_API void sk_pushstring(VM* vm, const char* str, size_t len)
 {
     sk_lock(vm);
-    pushstr(vm, str, len);
+    skapi_pushstr(vm, str, len);
     sk_unlock(vm);
 }
 
@@ -367,7 +294,7 @@ SK_API void sk_pushstring(VM* vm, const char* str, size_t len)
 SK_API void sk_pushcstring(VM* vm, const char* str)
 {
     sk_lock(vm);
-    pushstr(vm, str, strlen(str));
+    skapi_pushstr(vm, str, strlen(str));
     sk_unlock(vm);
 }
 
@@ -380,7 +307,7 @@ SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...)
     va_list argp;
     sk_lock(vm);
     va_start(argp, fmt);
-    pushfstr(vm, fmt, argp);
+    skapi_pushfstr(vm, fmt, argp);
     va_end(argp);
     sk_unlock(vm);
     return str;
@@ -398,7 +325,7 @@ SK_API const char* sk_concat(VM* vm)
     Value right = *idx2val(vm, -1);
     Value left = *idx2val(vm, -2);
     sk_checkapi(vm, IS_STRING(right) && IS_STRING(left), "expect strings");
-    pushfstrva(vm, "%s%s", AS_CSTRING(left), AS_CSTRING(right));
+    skapi_pushfstrva(vm, "%s%s", AS_CSTRING(left), AS_CSTRING(right));
     sk_unlock(vm);
 }
 
@@ -409,7 +336,7 @@ SK_API void sk_pushbool(VM* vm, int boolean)
 {
     sk_lock(vm);
     sk_checkapi(vm, boolean == 0 || boolean == 1, "invalid boolean.");
-    pushbool(vm, boolean);
+    skapi_pushbool(vm, boolean);
     sk_unlock(vm);
 }
 
@@ -433,7 +360,7 @@ SK_API void sk_pushcfn(VM* vm, CFunction fn, int args, int isva, unsigned int up
     vm->sp -= upvals;
     while(upvals--)
         native->upvalue[upvals] = *(vm->sp + upvals);
-    pushonative(vm, native);
+    skapi_pushonative(vm, native);
     sk_unlock(vm);
 }
 
@@ -443,7 +370,7 @@ SK_API void sk_pushcfn(VM* vm, CFunction fn, int args, int isva, unsigned int up
 SK_API void sk_push(VM* vm, int idx)
 {
     sk_lock(vm);
-    pushval(vm, *idx2val(vm, idx));
+    skapi_pushval(vm, *idx2val(vm, idx));
     sk_unlock(vm);
 }
 
@@ -463,7 +390,7 @@ SK_API void sk_getmethod(VM* vm, int idx, const char* method)
     skapi_checkptr(vm, method);
     Value val = *idx2val(vm, idx);
     sk_checkapi(vm, IS_INSTANCE(val), "expected class instance");
-    pushstr(vm, method, strlen(method));
+    skapi_pushstr(vm, method, strlen(method));
     bindmethod(vm, AS_INSTANCE(val)->oclass, *stackpeek(0), val);
     sk_unlock(vm);
 }
@@ -481,10 +408,10 @@ SK_API TypeTag sk_getfield(VM* vm, int idx, const char* field)
     Value insval = *idx2val(vm, idx);
     sk_checkapi(vm, IS_INSTANCE(insval), "expect class instance");
     OInstance* instance = AS_INSTANCE(insval);
-    pushcstr(vm, field);
+    skapi_pushcstr(vm, field);
     Value fieldval;
     if(HashTable_get(&instance->fields, *stackpeek(0), &fieldval)) {
-        pushval(vm, fieldval);
+        skapi_pushval(vm, fieldval);
         type = val2type(fieldval);
     } else type = TT_NONE;
     sk_unlock(vm);
@@ -507,7 +434,7 @@ SK_API int sk_getglobal(VM* vm, const char* name)
     OString* str = OString_new(vm, name, strlen(name));
     if(HashTable_get(&vm->globids, OBJ_VAL(str), &gval)) {
         int idx = (int)AS_NUMBER(gval);
-        pushval(vm, vm->globvars.data[idx].value);
+        skapi_pushval(vm, vm->globvars.data[idx].value);
         res = 1;
     }
     sk_unlock(vm);
@@ -660,7 +587,7 @@ SK_API void sk_remove(VM* vm, int idx)
     Value* val = idx2val(vm, idx);
     stackshift(vm, val, 0);
     closeupval(vm, vm->sp);
-    decsp(vm);
+    skapi_decsp(vm);
     sk_unlock(vm);
 }
 
@@ -675,7 +602,7 @@ SK_API void sk_insert(VM* vm, int idx)
     Value* val = idx2val(vm, idx);
     stackshift(vm, val, 1);
     *val = *top;
-    incsp(vm);
+    skapi_incsp(vm);
     sk_unlock(vm);
 }
 
@@ -780,7 +707,7 @@ SK_API int sk_setglobal(VM* vm, const char* name, int isfixed)
     sk_lock(vm);
     skapi_checkelems(vm, 1);
     skapi_checkptr(vm, name);
-    pushstr(vm, name, strlen(name));
+    skapi_pushstr(vm, name, strlen(name));
     Value id = *stackpeek(0);
     Value newval = *stackpeek(1);
     int isnew = 0;
@@ -810,7 +737,7 @@ SK_API int sk_setfield(VM* vm, int idx, const char* field)
     Value insval = *idx2val(vm, idx);
     sk_checkapi(vm, IS_INSTANCE(insval), "expect class instance");
     OInstance* instance = AS_INSTANCE(insval);
-    pushcstr(vm, field);
+    skapi_pushcstr(vm, field);
     int res = HashTable_insert(vm, &instance->fields, *stackpeek(0), *stackpeek(1));
     vm->sp -= 2;
     sk_unlock(vm);
@@ -888,7 +815,7 @@ SK_API int sk_getupvalue(VM* vm, int fidx, int idx)
     Value fn = *idx2val(vm, fidx);
     Value* upval = getupval(fn, idx);
     if(upval) {
-        pushval(vm, *upval);
+        skapi_pushval(vm, *upval);
         ret = 1;
     }
     sk_unlock(vm);
@@ -954,7 +881,7 @@ SK_API int sk_compare(VM* vm, int idx1, int idx2, Cmp op)
     int res;
     switch(op) {
         case CMP_EQ:
-            res = veq(a, b);
+            res = veq(vm, a, b);
             break;
         case CMP_LT:
             res = vlt(vm, a, b);
@@ -979,29 +906,15 @@ SK_API int sk_compare(VM* vm, int idx1, int idx2, Cmp op)
 
 SK_API void sk_arith(VM* vm, Ar op)
 {
-    // TODO: Implement, would be good to refactor the whole arithmetics done
-    // in the project, for example parser when trying to fold constants
-    // should call to rawarith function same as this function.
-    // Additionally provide and define macros/functions for each binary unary
-    // operation.
-    // If rawarith fails (value is instance object), then try to use
-    // overloaded method or maybe not, will I allow overloads @?
-    // @PRIO
     sk_lock(vm);
     skapi_checkarop(vm, op);
-    skapi_checkelems(vm, 2);
-    switch(op) {
-        case AR_ADD:
-        case AR_SUB:
-        case AR_MUL:
-        case AR_DIV:
-        case AR_MOD:
-        case AR_POW:
-        case AR_NOT:
-        case AR_MIN:
-        default:
-            unreachable;
-    }
+    int adjust = 0;
+    if(arisbin(op)) {
+        skapi_checkelems(vm, 2);
+        adjust = 1;
+    } else skapi_checkelems(vm, 1);
+    tryvarithm(vm, *stackpeek(1), *stackpeek(0), op, stackpeek(0));
+    vm->sp -= adjust; // result is where the first operand was
     sk_unlock(vm);
 }
 

@@ -2,9 +2,11 @@
 #include "common.h"
 #include "debug.h"
 #include "err.h"
+#include "hashtable.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
+#include "skmath.h"
 #include "stdarg.h"
 #include "value.h"
 
@@ -75,6 +77,7 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
 
     unsigned char c;
     Array_Byte buff;
+    const char* fmttype = NULL;
     Array_Byte_init(&buff, vm);
     for(;;) {
         while((c = *fmt++) != '%')
@@ -85,22 +88,25 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
                 Array_Byte_push(&buff, '%');
                 break;
             }
-            case 'd': { /* int */
-                int n = va_arg(argp, int);
+            case 'd': { /* long int */
+                long int n = va_arg(argp, long int);
                 Array_Byte_ensure(&buff, MAXDIGITS);
-                buff.len += snprintf((char*)&buff.data[buff.len], MAXDIGITS, "%d", n);
+                buff.len += snprintf((char*)&buff.data[buff.len], MAXDIGITS, "%ld", n);
                 break;
             }
-            case 'n': { /* SK_Number */
+            case 'n': { /* sk_number (as double) */
+                fmttype = "%g";
+                goto sknum;
+            }
+            case 'f': { /* sk_number (as float) */
+                fmttype = "%f";
+                goto sknum;
+            }
+            sknum: {
                 sk_number n = va_arg(argp, sk_number);
                 Array_Byte_ensure(&buff, MAXDIGITS);
-                buff.len += dtos_generic(n, (char*)&buff.data[buff.len], MAXDIGITS);
-                break;
-            }
-            case 'f': { /* double */
-                double n = va_arg(argp, double);
-                Array_Byte_ensure(&buff, MAXDIGITS);
-                buff.len += snprintf((char*)&buff.data[buff.len], MAXDIGITS, "%g", n);
+                char* s = cast_charp(&buff.data[buff.len]);
+                buff.len += snprintf(s, MAXDIGITS, fmttype, n);
                 break;
             }
             case 's': { /* string */
@@ -593,3 +599,81 @@ OString* otostr(VM* vm, O* object)
 #undef SKJMPTLE_H
 #endif
 }
+
+
+/* Return overloaded method or NULL if value
+ * is not an instance value or method is not overloaded. */
+static force_inline OClosure* getomethod(VM* vm, Value val, OMTag om)
+{
+    if(!IS_INSTANCE(val)) return NULL;
+    return AS_INSTANCE(val)->oclass->omethods[om];
+}
+
+
+
+/* =============== operator overloading =============== */
+
+#if defined(S_OVERLOAD_OPS)
+
+
+/* Calls the method for the overloaded unary operator. */
+void callomunop(VM* vm, const OClosure* om, Value operand1, Value* res)
+{
+    Value* fn = vm->sp;
+    push(vm, OBJ_VAL(om));
+    push(vm, operand1);
+    ncall(vm, fn, *fn, 1);
+    *res = *--vm->sp; // move method result
+}
+
+
+/* Calls the method for the overloaded binary operator. */
+void callombinop(VM* vm, const OClosure* om, Value operand1, Value operand2, Value* res)
+{
+    Value* fn = vm->sp;
+    push(vm, OBJ_VAL(om));
+    push(vm, operand1);
+    push(vm, operand2);
+    ncall(vm, fn, *fn, 1);
+    *res = *--vm->sp; // move method result
+}
+
+
+
+/* Tries to call class overloaded unary operator method 'op'.
+ * Returns 1 if it was called (class overloaded that method),
+ * 0 otherwise. */
+static int callunop(VM* vm, Value a, OMTag op, Value* res)
+{
+    OClosure* om = getomethod(vm, a, op);
+    if(om == NULL) return 0;
+    callomunop(vm, om, a, res);
+    return 1;
+}
+
+
+/* Tries to call class overloaded binary operator method 'op'.
+ * Returns 1 if it was called (class overloaded that method),
+ * 0 otherwise. */
+static int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res)
+{
+    OClosure* om = getomethod(vm, a, op);
+    if(om == NULL) om = getomethod(vm, b, op);
+    if(om == NULL) return 0;
+    callombinop(vm, om, a, b, res);
+    return 1;
+}
+
+/* Tries calling binary or unary operator overload method,
+ * errors on failure. */
+void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
+{
+    if(!omisunop(op)) {
+        if(unlikely(!callbinop(vm, a, b, op, res))) binoperr(vm, a, b, op);
+    } else if(unlikely(!callunop(vm, a, op, res))) unoperr(vm, a, op);
+}
+
+
+#endif // if defined(S_OVERLOAD_OPS)
+
+/* ---------------------------------------------------- */

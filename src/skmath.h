@@ -1,6 +1,15 @@
 #ifndef __SKOOMA_MATH_H__
 #define __SKOOMA_MATH_H__
 
+/* Primitive operations over skooma numbers */
+#define sk_nadd(vm, a, b) ((a) + (b))
+#define sk_nsub(vm, a, b) ((a) - (b))
+#define sk_nmul(vm, a, b) ((a) * (b))
+#define sk_ndiv(vm, a, b) ((a) / (b))
+#define sk_nmod(vm, a, b) cast_lint(cast_lint(a) % cast_lint(b))
+#define sk_npow(vm, a, b) sk_pow(a, b)
+#define sk_numin(vm, a)   (-(a))
+
 #include <math.h>
 
 /* Functions */

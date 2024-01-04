@@ -10,18 +10,45 @@
 #endif
 
 
+/* If we have support for a threaded code and the machine
+ * contains find first set (count trailing zeros), then we
+ * can transform multiple if statements or switch statements
+ * with lot's of cases into a simple 'ffs + array index', of
+ * course there is some overhead from the expression that
+ * is generating the bit-mask, but it is mostly only a couple
+ * of bit and(&)/or(|) instructions.
+ * Almost always this will be faster because it plays nice with
+ * CPU pipeline.
+ * 'Almost always' means sometimes it won't, but that is in
+ * cases where the program is too large to fit in cpu cache
+ * but even then it might be faster than branching code. */
 #if defined(SK_PRECOMPUTED_GOTO) && defined(sk_ctz)
+
+/* Used in jmptable located in [vmachine.c][precall()] */
 #define callbitmask(vm, isva, arity, argc, retcnt)                                       \
     cast_uint(                                                                           \
         0 | (!sk_ensurestack(vm, retcnt) * 1) | (((isva) * ((arity) > (argc))) * 2) |    \
         ((!(isva) * ((arity) != (argc))) * 4) | (((vm)->fc == VM_FRAMES_MAX) * 8) | 16)
 
 
-// TODO: typebitmask
+/* Used in jmptable located in [value.c][val2type] */
+#define val2tbmask(v)                                                                    \
+    cast_uint(                                                                           \
+        0 | (IS_NIL(v) * 1) | (IS_NUMBER(v) * 2) | (IS_STRING(v) * 4) |                  \
+        (IS_BOOL(v) * 8) | (IS_CLASS(v) * 16) | (IS_INSTANCE(v) * 32) |                  \
+        (IS_FUNCTION(v) * 64) | (IS_CLOSURE(v) * 128) | (IS_NATIVE(v) * 256) |           \
+        (IS_BOUND_METHOD(v) * 512))
+
+
+/* Used in jmptable located in [value.c][vtostr] */
+#define val2tbmask_1(v)                                                                  \
+    cast_uint(                                                                           \
+        0 | (IS_NIL(v) * 1) | (IS_NUMBER(v) * 2) | (IS_BOOL(v) * 4) | (IS_OBJ(v) * 8))
+
 #endif
 
 
-// check is 'x' power of 2
+// check is 'x' power of 2 (assuming x is not 0)
 #define ispow2(x) (((x) & ((x)-1)) == 0)
 
 // Return bit at 'bit' (0 or 1) from 'x'.

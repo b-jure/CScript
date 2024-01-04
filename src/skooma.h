@@ -93,7 +93,7 @@ typedef enum {
     TT_CLOSURE,
     TT_NATIVE,
     TT_METHOD,
-    TT_CNT,
+    TT_CNT, // keep this last
 } TypeTag;
 
 /* -------------------------------------------------*/
@@ -108,13 +108,34 @@ typedef enum {
 typedef enum {
     OM_INIT = 0,
     OM_DISPLAY,
-    OM_CNT,
+#if defined(S_OVERLOAD_OPS)
+    OM_ADD,
+    OM_SUB,
+    OM_MUL,
+    OM_DIV,
+    OM_MOD,
+    OM_POW,
+    OM_NOT,
+    OM_UMIN,
+    OM_NE,
+    OM_EQ,
+    OM_LT,
+    OM_LE,
+    OM_GT,
+    OM_GE,
+    OM_AND,
+    OM_OR,
+#endif
+    OM_CNT, // keep this last
 } OMTag;
+
+/* Only useful if S_OVERLOAD_OPS is defined. */
+#define omisunop(omtag) ((omtag) == OM_NOT | (omtag) == OM_UMIN)
 
 /* Tag for special class fields. */
 typedef enum {
     SF_DEBUG = 0,
-    SF_CNT,
+    SF_CNT, // keep this last
 } SFTag;
 
 /* -------------------------------------------------*/
@@ -126,36 +147,6 @@ typedef enum {
  */
 
 SK_API int sk_ensurestack(VM* vm, int n);
-
-/* option for multiple returns in sk_call and sk_pcall */
-#define SK_MULRET (-1)
-
-#define skapi_checkresults(vm, n, nr)                                                    \
-    sk_checkapi(                                                                         \
-        vm,                                                                              \
-        (nr) == SK_MULRET || (((vm)->sp - (vm)->stack) + (n) + (nr)) < VM_STACK_MAX,     \
-        "function results overflow the stack.")
-
-#define skapi_checkelems(vm, n)                                                          \
-    sk_checkapi(                                                                         \
-        vm,                                                                              \
-        ((vm)->sp - last_frame(vm).callee) > (n),                                        \
-        "not enough elements in the stack.");
-
-#define skapi_checkerrcode(vm, errcode)                                                  \
-    sk_checkapi(vm, (errcode) >= S_EARG && (errcode) <= S_EGLOBALREDEF, "invalid errcode")
-
-#define skapi_checkomtag(vm, omtag)                                                      \
-    sk_checkapi(vm, (omtag) >= 0 && (omtag) < OM_CNT, "invalid OMTag")
-
-#define skapi_checksftag(vm, sftag)                                                      \
-    sk_checkapi(vm, (sftag) >= 0 && (sftag) < SF_CNT, "invalid SFTag")
-
-#define skapi_checkarop(vm, op)                                                          \
-    sk_checkapi(vm, (op) >= 0 && (op) < AR_CNT, "invalid arithmetic operation");
-
-#define skapi_checkptr(vm, ptr)                                                          \
-    sk_checkapi(vm, (ptr) != NULL, "#ptr can't be (null) pointer")
 
 /* -------------------------------------------------*/
 
@@ -197,9 +188,12 @@ typedef enum {
     AR_MOD, // mod '%'
     AR_POW, // pow '2^n'
     AR_NOT, // (unary) not '!'
-    AR_MIN, // (unary) negation '-'
+    AR_UMIN, // (unary) negation '-'
     AR_CNT, // Ar count
 } Ar;
+
+#define arisbin(ar) ((ar) >= AR_ADD && (ar) <= AR_POW)
+#define arisun(ar)  ((ar) >= AR_NOT && (ar) <= AR_UMIN)
 
 SK_API void sk_arith(VM* vm, Ar op);
 
@@ -297,6 +291,9 @@ SK_API void sk_copy(VM* vm, int src, int dest);
  * ========== call functions ==========
  */
 
+/* option for multiple returns (retcnt) in sk_call and sk_pcall */
+#define SK_MULRET (-1)
+
 typedef void (*ProtectedFn)(VM* vm, void* userdata);
 
 SK_API int sk_pcall(VM* vm, int argc, int retcnt);
@@ -314,6 +311,8 @@ SK_API void sk_call(VM* vm, int argc, int retcnt);
 /* Runtime status codes */
 typedef enum {
     S_OK = 0,
+    S_EARUN, // unary arithmetic operation error
+    S_EARBIN, // binary arithmetic operation error
     S_EARG, // invalid argument
     S_ECMP, // invalid comparison
     S_ESOVERFLOW, // stack overflow
@@ -368,6 +367,24 @@ typedef enum {
     /* Class overload-able method names. */
     SS_INIT,
     SS_DISP,
+#if defined(S_OVERLOAD_OPS)
+    SS_ADD,
+    SS_SUB,
+    SS_MUL,
+    SS_DIV,
+    SS_MOD,
+    SS_POW,
+    SS_NOT,
+    SS_UMIN,
+    SS_NE,
+    SS_EQ,
+    SS_LT,
+    SS_LE,
+    SS_GT,
+    SS_GE,
+    SS_ANd,
+    SS_OR,
+#endif
     /* Class special field names. */
     SS_DBG,
     /* Other statics */
@@ -404,7 +421,26 @@ static const InternedString static_str[] = {
  /* Class overload-able method names. */
     {"__init__",          sizeofstr("__init__")         },
     {"__display__",       sizeofstr("__display__")      },
- /* Class special field names. */
+#if defined(S_OVERLOAD_OPS)  // operator overloading enabled?
+  /* Overload-able operators */
+    {"__add__",           sizeofstr("__add__")          },
+    {"__sub__",           sizeofstr("__sub__")          },
+    {"__mul__",           sizeofstr("__mul__")          },
+    {"__div__",           sizeofstr("__div__")          },
+    {"__mod__",           sizeofstr("__mod__")          },
+    {"__pow__",           sizeofstr("__pow__")          },
+    {"__not__",           sizeofstr("__not__")          },
+    {"__umin__",          sizeofstr("__umin__")         },
+    {"__ne__",            sizeofstr("__ne__")           },
+    {"__eq__",            sizeofstr("__eq__")           },
+    {"__lt__",            sizeofstr("__lt__")           },
+    {"__le__",            sizeofstr("__le__")           },
+    {"__gt__",            sizeofstr("__gt__")           },
+    {"__ge__",            sizeofstr("__ge__")           },
+    {"__and__",           sizeofstr("__and__")          },
+    {"__or__",            sizeofstr("__or__")           },
+#endif
+  /* Class special field names. */
     {"__debug",           sizeofstr("__debug")          },
  /* Other statics */
     {"manual",            sizeofstr("manual")           },

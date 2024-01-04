@@ -129,32 +129,35 @@ typedef struct {
 #endif
 
 
-
-
-/*
- * CMP
- */
-
-#define CMPFN(cmp) bool cmp(VM* vm, Value a, Value b)
-
-bool veq(Value a, Value b);
-CMPFN(vlt);
-CMPFN(vgt);
-CMPFN(vle);
-CMPFN(vge);
-
-
-// Get value type
-int val2type(Value value);
-
-
+/* Array of 'Value' */
 ARRAY_NEW(Array_Value, Value);
 
+/* Compare */
+bool veq(VM* vm, Value a, Value b);
+bool vlt(VM* vm, Value a, Value b);
+bool vgt(VM* vm, Value a, Value b);
+bool vle(VM* vm, Value a, Value b);
+bool vge(VM* vm, Value a, Value b);
+
+/* Tries to perform arithmetic operation on skooma values. */
+void tryvarithm(VM* vm, Value a, Value b, Ar op, Value* res);
+
+/* Get value type (TypeTag) */
+int val2type(Value value);
+
+/* Get/Create string object from value */
 OString* vtostr(VM* vm, Value value);
+
+/* Auxiliary functions/defines for converting skooma primitive types into strings */
+OString* dtostr(VM* vm, sk_number n);
+OString* btostr(VM* vm, int b);
+#define niltostr(vm) (vm)->statics[SS_NIL]
+
+/* Print value */
 void vprint(VM* vm, Value value);
+
+/* Hash value */
 Hash vhash(Value value);
-Byte dtos_generic(double dbl, char* dest, UInt len);
-Byte booltos_generic(bool boolean, char* dest, UInt len);
-Byte niltos_generic(char* dest, UInt len);
+
 
 #endif

@@ -11,29 +11,57 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static sk_number narith(VM* vm, sk_number a, sk_number b, Ar op)
+{
+    switch(op) {
+        case AR_ADD:
+            return sk_nadd(vm, a, b);
+        case AR_SUB:
+            return sk_nsub(vm, a, b);
+        case AR_MUL:
+            return sk_nmul(vm, a, b);
+        case AR_DIV:
+            return sk_ndiv(vm, a, b);
+        case AR_MOD:
+            return sk_nmod(vm, a, b);
+        case AR_POW:
+            return sk_npow(vm, a, b);
+        case AR_UMIN:
+            return sk_numin(vm, a);
+        case AR_NOT:
+            return cast(sk_number, 0); // never 'falsey'
+        default:
+            unreachable;
+            return 0;
+    }
+}
 
 
-/*
- * If the hardware supports 'find first set' (has the instruction)
- * bit operation then enable this define
- */
-#if defined(SK_PRECOMPUTED_GOTO) && __has_builtin(__builtin_ctz)
-/* Create type bitmask from the value.
- * First least significant set bit acts as a type tag.
- * bit 0 is set -> number
- * bit 1 is set -> string
- * bit 2 is set -> callable
- * bit 3 is set -> bool
- * bit 4 is set -> nil
- * bit 5 is set -> instance
- * bit 6 is set -> class */
-#define val2tbmask(v)                                                                    \
-    cast_uint(                                                                           \
-        0 | (IS_NIL(v) * 1) | (IS_NUMBER(v) * 2) | (IS_STRING(v) * 4) |                  \
-        (IS_BOOL(v) * 8) | (IS_CLASS(v) * 16) | (IS_INSTANCE(v) * 32) |                  \
-        (IS_FUNCTION(v) * 64) | (IS_CLOSURE(v) * 128) | (IS_NATIVE(v) * 256) |           \
-        (IS_BOUND_METHOD(v) * 512))
-#endif
+/* Perform arithmetic operation 'op' on skooma numbers.
+ * If arithmetic operation was executed successfully then this
+ * returns 1, otherwise 0. */
+int varith(VM* vm, Value a, Value b, Ar op, Value* res)
+{
+    if(arisbin(op)) {
+        if(IS_NUMBER(a) && IS_NUMBER(b)) {
+            sk_number ret = narith(vm, AS_NUMBER(a), AS_NUMBER(b), op);
+            *res = (op != AR_NOT ? NUMBER_VAL(ret) : FALSE_VAL);
+            return 1;
+        } else if(op == AR_ADD && IS_STRING(a) && IS_STRING(b)) {
+            concatenate(vm, a, b);
+        }
+    } else { // op is unary operation
+    }
+    return 0;
+}
+
+/* Perform binary/unary operation on values. */
+void tryvarithm(VM* vm, Value a, Value b, Ar op, Value* res)
+{
+    if(!varith(vm, a, b, op, res)) {
+        otryop(vm, a, b, (op - AR_ADD) + OM_ADD, res);
+    }
+}
 
 
 /* Get value type */
@@ -72,38 +100,72 @@ int val2type(Value value)
 
 const char* vname(VM* vm, Value* val)
 {
-#if defined(SK_PRECOMPUTED_GOTO)
     TypeTag tag = val2type(*val);
+#if defined(SK_PRECOMPUTED_GOTO)
     static const void* jmptable[TT_CNT] = {
+        &&nil,
         &&number,
         &&string,
-        &&function,
         &&boolean,
-        &&nil,
+        &&oclass,
         &&instance,
-        &&class,
+        &&function,
+        &&closure,
         &&native,
+        &&method,
     };
+    goto* jmptable[tag];
 nil:
 number:
 string:
 boolean:
     return vm->statics[tag]->storage;
-    class : return AS_CLASS(*val)->name->storage;
-instance:;
+oclass:
+    return AS_CLASS(*val)->name->storage;
+instance: {
     OInstance* instance = AS_INSTANCE(*val);
     Value name;
     if(HashTable_get(&instance->fields, OBJ_VAL(vm->statics[SS_DBG]), &name) &&
        IS_STRING(name))
         return AS_CSTRING(name);
     return instance->oclass->name->storage;
+}
 function:
     return AS_FUNCTION(*val)->name->storage;
 closure:
     return AS_CLOSURE(*val)->fn->name->storage;
 native:
     return AS_NATIVE(*val)->name->storage;
+method:
+    return AS_BOUND_METHOD(*val)->method->fn->name->storage;
 #else
+    switch(tag) {
+        case TT_NIL:
+        case TT_NUMBER:
+        case TT_STRING:
+        case TT_BOOL:
+            return vm->statics[tag]->storage;
+        case TT_CLASS:
+            return AS_CLASS(*val)->name->storage;
+        case TT_INSTANCE: {
+            OInstance* instance = AS_INSTANCE(*val);
+            Value name;
+            if(HashTable_get(&instance->fields, OBJ_VAL(vm->statics[SS_DBG]), &name) &&
+               IS_STRING(name))
+                return AS_CSTRING(name);
+            return instance->oclass->name->storage;
+        }
+        case TT_FUNCTION:
+            return AS_FUNCTION(*val)->name->storage;
+        case TT_CLOSURE:
+            return AS_CLOSURE(*val)->fn->name->storage;
+        case TT_NATIVE:
+            return AS_NATIVE(*val)->name->storage;
+        case TT_METHOD:
+            return AS_BOUND_METHOD(*val)->method->fn->name->storage;
+        default:
+            unreachable;
+    }
 #endif
 }
 
@@ -111,13 +173,12 @@ native:
 
 
 
-/*
- * CMP
- */
+/* ================= Compare ================= */
 
 // Values are equal
-bool veq(Value a, Value b)
+bool veq(VM* vm, Value a, Value b)
 {
+    UNUSED(vm);
 #ifdef SK_NAN_BOX
     if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) == AS_NUMBER(b);
     return a == b;
@@ -157,7 +218,7 @@ bool veq(Value a, Value b)
 }
 
 // Value less than
-CMPFN(vlt)
+bool vlt(VM* vm, Value a, Value b)
 {
     if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) < AS_NUMBER(b);
     if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) < 0;
@@ -166,7 +227,7 @@ CMPFN(vlt)
 
 
 // Value greater than
-CMPFN(vgt)
+bool vgt(VM* vm, Value a, Value b)
 {
     if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) > AS_NUMBER(b);
     if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) > 0;
@@ -175,7 +236,7 @@ CMPFN(vgt)
 
 
 // Value less equal
-CMPFN(vle)
+bool vle(VM* vm, Value a, Value b)
 {
     if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) <= AS_NUMBER(b);
     if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) <= 0;
@@ -184,7 +245,7 @@ CMPFN(vle)
 
 
 // Value greater equal
-CMPFN(vge)
+bool vge(VM* vm, Value a, Value b)
 {
     if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) >= AS_NUMBER(b);
     if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) >= 0;
@@ -194,38 +255,48 @@ CMPFN(vge)
 
 
 
-
-
-Byte dtos_generic(double dbl, char* dest, UInt limit)
-{
-    if(floor(dbl) != dbl) return snprintf(dest, limit, "%g", dbl);
-    else return snprintf(dest, limit, "%ld", (int64_t)dbl);
-}
-
-static force_inline OString* dtostr(VM* vm, double n)
+OString* dtostr(VM* vm, sk_number n)
 {
     static char buff[50];
-    size_t len = dtos_generic(n, buff, 45);
-    OString* string = OString_new(vm, buff, len);
-    return string;
+    size_t len;
+    if(floor(n) != n) len = snprintf(buff, 45, "%g", n);
+    else len = snprintf(buff, 45, "%ld", cast(int64_t, n));
+    return OString_new(vm, buff, len);
 }
 
-static force_inline OString* booltostr(VM* vm, bool boolean)
+OString* btostr(VM* vm, int b)
 {
-    if(boolean) return vm->statics[SS_TRUE];
+    if(b) return vm->statics[SS_TRUE];
     else return vm->statics[SS_FALSE];
 }
 
 /* Converts value to OString */
 OString* vtostr(VM* vm, Value value)
 {
-#ifdef SK_NAN_BOX
+#if defined(val2tbmask_1)
+    static const void* jmptable[] = {
+        &&nil,
+        &&number,
+        &&boolean,
+        &&obj,
+    };
+    uint8_t idx = sk_ctz(val2tbmask_1(value));
+    goto* jmptable[idx];
+nil:
+    return niltostr(vm);
+number:
+    return dtostr(vm, AS_NUMBER(value));
+boolean:
+    return btostr(vm, AS_BOOL(value));
+obj:
+    return otostr(vm, AS_OBJ(value));
+#elif defined(SK_NAN_BOX)
     if(IS_BOOL(value)) return booltostr(vm, AS_BOOL(value));
     else if(IS_NIL(value)) return vm->statics[SS_NIL];
     else if(IS_OBJ(value)) return otostr(vm, AS_OBJ(value));
     else if(IS_NUMBER(value)) return dtostr(vm, AS_NUMBER(value));
 #else
-#ifdef SK_PRECOMPUTED_GOTO
+#if defined(SK_PRECOMPUTED_GOTO)
 #define VAL_TABLE
 #include "jmptable.h"
 #undef VAL_TABLE
