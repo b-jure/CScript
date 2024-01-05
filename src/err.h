@@ -165,10 +165,22 @@
 
 /* ==================== runtime errors ====================== */
 
+/* Generic runtime error */
+sk_noret runerror(VM* vm, Int status);
+
+/* Ordering error */
+sk_noret ordererror(VM* vm, Value a, Value b);
+
 /* Binary arithmetic operation error */
 sk_noret binoperr(VM* vm, Value a, Value b, OMTag op);
 /* Unary arithmetic operation error */
 sk_noret unoperr(VM* vm, Value a, OMTag op);
+
+/* Display method (__display__) error */
+sk_noret omdisplayerr(VM* vm, Value result);
+
+/* Object string format error */
+sk_noret ostringfmterr(VM* vm, int c, Value callee);
 
 
 #endif

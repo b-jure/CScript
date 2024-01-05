@@ -213,9 +213,9 @@ static_assert(
 #endif
 
 
-/* Allow operator overloading */
-#ifndef S_OVERLOAD_OPS
-#define S_OVERLOAD_OPS
+/* Allow operator overloading by default */
+#ifndef SK_OVERLOAD_OPS
+#define SK_OVERLOAD_OPS
 #endif
 
 #endif

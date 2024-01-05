@@ -108,7 +108,7 @@ typedef enum {
 typedef enum {
     OM_INIT = 0,
     OM_DISPLAY,
-#if defined(S_OVERLOAD_OPS)
+#if defined(SK_OVERLOAD_OPS)
     OM_ADD,
     OM_SUB,
     OM_MUL,
@@ -129,7 +129,7 @@ typedef enum {
     OM_CNT, // keep this last
 } OMTag;
 
-/* Only useful if S_OVERLOAD_OPS is defined. */
+/* Only useful if SK_OVERLOAD_OPS is defined. */
 #define omisunop(omtag) ((omtag) == OM_NOT | (omtag) == OM_UMIN)
 
 /* Tag for special class fields. */
@@ -328,14 +328,17 @@ typedef enum {
     S_EGLOBALREDEF, // redefinition of global variable
     S_EDISPLAY, // display method returned invalid value
     S_ECALLVAL, // tried calling non-callable value
+    S_ESTRFMT, // string format error
+    S_CNT,
 } Status;
+
+SK_API int sk_error(VM* vm, Status errcode);
 
 SK_API int sk_version(VM* vm);
 SK_API const char* sk_tostring(VM* vm, int idx);
 SK_API int sk_getupvalue(VM* vm, int fidx, int idx);
 SK_API int sk_setupvalue(VM* vm, int fidx, int idx);
 SK_API size_t sk_strlen(const VM* vm, int idx);
-SK_API int sk_error(VM* vm, Status errcode);
 
 /* -------------------------------------------------*/
 
@@ -367,7 +370,7 @@ typedef enum {
     /* Class overload-able method names. */
     SS_INIT,
     SS_DISP,
-#if defined(S_OVERLOAD_OPS)
+#if defined(SK_OVERLOAD_OPS)
     SS_ADD,
     SS_SUB,
     SS_MUL,
@@ -387,6 +390,23 @@ typedef enum {
 #endif
     /* Class special field names. */
     SS_DBG,
+    /* Operator strings */
+    SS_OPADD,
+    SS_OPSUB,
+    SS_OPMUL,
+    SS_OPDIV,
+    SS_OPMOD,
+    SS_OPEXP,
+    SS_OPNOT,
+    SS_OPNEG,
+    SS_OPNE,
+    SS_OPEQ,
+    SS_OPLT,
+    SS_OPLE,
+    SS_OPGT,
+    SS_OPGE,
+    SS_OPAND,
+    SS_OPOR,
     /* Other statics */
     SS_MANU,
     SS_AUTO,
@@ -404,50 +424,69 @@ typedef struct {
 #define sizeofstr(str) (sizeof(str) - 1)
 static const InternedString static_str[] = {
   /* Value types */
-    {"nil",               sizeofstr("nil")              },
-    {"number",            sizeofstr("number")           },
-    {"string",            sizeofstr("string")           },
-    {"bool",              sizeofstr("bool")             },
-    {"class",             sizeofstr("class")            },
-    {"instance",          sizeofstr("instance")         },
-    {"function",          sizeofstr("function")         },
-    {"closure",           sizeofstr("closure")          },
-    {"native",            sizeofstr("native")           },
-    {"upvalue",           sizeofstr("upvalue")          },
-    {"method",            sizeofstr("method")           },
+    {"nil",                sizeofstr("nil")               },
+    {"number",             sizeofstr("number")            },
+    {"string",             sizeofstr("string")            },
+    {"bool",               sizeofstr("bool")              },
+    {"class",              sizeofstr("class")             },
+    {"instance",           sizeofstr("instance")          },
+    {"function",           sizeofstr("function")          },
+    {"closure",            sizeofstr("closure")           },
+    {"native",             sizeofstr("native")            },
+    {"upvalue",            sizeofstr("upvalue")           },
+    {"method",             sizeofstr("method")            },
  /* Boolean strings */
-    {"true",              sizeofstr("true")             },
-    {"false",             sizeofstr("false")            },
+    {"true",               sizeofstr("true")              },
+    {"false",              sizeofstr("false")             },
  /* Class overload-able method names. */
-    {"__init__",          sizeofstr("__init__")         },
-    {"__display__",       sizeofstr("__display__")      },
-#if defined(S_OVERLOAD_OPS)  // operator overloading enabled?
-  /* Overload-able operators */
-    {"__add__",           sizeofstr("__add__")          },
-    {"__sub__",           sizeofstr("__sub__")          },
-    {"__mul__",           sizeofstr("__mul__")          },
-    {"__div__",           sizeofstr("__div__")          },
-    {"__mod__",           sizeofstr("__mod__")          },
-    {"__pow__",           sizeofstr("__pow__")          },
-    {"__not__",           sizeofstr("__not__")          },
-    {"__umin__",          sizeofstr("__umin__")         },
-    {"__ne__",            sizeofstr("__ne__")           },
-    {"__eq__",            sizeofstr("__eq__")           },
-    {"__lt__",            sizeofstr("__lt__")           },
-    {"__le__",            sizeofstr("__le__")           },
-    {"__gt__",            sizeofstr("__gt__")           },
-    {"__ge__",            sizeofstr("__ge__")           },
-    {"__and__",           sizeofstr("__and__")          },
-    {"__or__",            sizeofstr("__or__")           },
+    {"__init__",           sizeofstr("__init__")          },
+    {"__display__",        sizeofstr("__display__")       },
+#if defined(SK_OVERLOAD_OPS)  // operator overloading enabled?
+  /* Overload-able arithmetic operators */
+    {"__add__",            sizeofstr("__add__")           },
+    {"__sub__",            sizeofstr("__sub__")           },
+    {"__mul__",            sizeofstr("__mul__")           },
+    {"__div__",            sizeofstr("__div__")           },
+    {"__mod__",            sizeofstr("__mod__")           },
+    {"__pow__",            sizeofstr("__pow__")           },
+    {"__not__",            sizeofstr("__not__")           },
+    {"__umin__",           sizeofstr("__umin__")          },
+ /* Overload-able ordering operators */
+    {"__ne__",             sizeofstr("__ne__")            },
+    {"__eq__",             sizeofstr("__eq__")            },
+    {"__lt__",             sizeofstr("__lt__")            },
+    {"__le__",             sizeofstr("__le__")            },
+    {"__gt__",             sizeofstr("__gt__")            },
+    {"__ge__",             sizeofstr("__ge__")            },
+ /* Short-circuit operators */
+    {"__and__",            sizeofstr("__and__")           },
+    {"__or__",             sizeofstr("__or__")            },
 #endif
   /* Class special field names. */
-    {"__debug",           sizeofstr("__debug")          },
+    {"__debug",            sizeofstr("__debug")           },
+ /* Operator strings */
+    {"addition [+]",       sizeofstr("addition [+]")      },
+    {"subtraction [-]",    sizeofstr("subtraction [-]")   },
+    {"multiplication [*]", sizeofstr("multiplication [*]")},
+    {"division [/]",       sizeofstr("division [/]")      },
+    {"modulo [%]",         sizeofstr("modulo [%]")        },
+    {"exponentiation [^]", sizeofstr("exponentiation [^]")},
+    {"not [!]",            sizeofstr("not [!]")           },
+    {"negation [-]",       sizeofstr("negation [-]")      },
+    {"ne [!=]",            sizeofstr("ne [!=]")           },
+    {"eq [==]",            sizeofstr("eq [==]")           },
+    {"lt [<]",             sizeofstr("lt [<]")            },
+    {"le [<=]",            sizeofstr("le [<=]")           },
+    {"gt [>]",             sizeofstr("gt [>]")            },
+    {"ge [>=]",            sizeofstr("ge [>=]")           },
+    {"and [and]",          sizeofstr("and [and]")         },
+    {"or [or]",            sizeofstr("or [or]")           },
  /* Other statics */
-    {"manual",            sizeofstr("manual")           },
-    {"auto",              sizeofstr("auto")             },
-    {"assertion failed.", sizeofstr("assertion failed.")},
-    {"Error: ",           sizeofstr("Error: ")          },
-    {"Assert: ",          sizeofstr("Assert: ")         },
+    {"manual",             sizeofstr("manual")            },
+    {"auto",               sizeofstr("auto")              },
+    {"assertion failed.",  sizeofstr("assertion failed.") },
+    {"Error: ",            sizeofstr("Error: ")           },
+    {"Assert: ",           sizeofstr("Assert: ")          },
 };
 #undef sizeofstr
 

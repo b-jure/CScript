@@ -4,12 +4,10 @@
 #include "chunk.h"
 #include "vmachine.h"
 
-sdebug void Chunk_debug(Chunk* chunk, const char* name);
-sdebug UInt Instruction_debug(Chunk* chunk, UInt offset);
+sdebug void Chunk_debug(VM* vm, Chunk* chunk, const char* name);
+sdebug UInt Instruction_debug(VM* vm, Chunk* chunk, UInt offset);
 sdebug UInt Chunk_getline(Chunk* chunk, UInt index);
 void dumpstack(VM* vm, CallFrame* frame, Byte* ip);
-sk_noret runerror(VM* vm, Int status);
-sk_noret ordererror(VM* vm, Value a, Value b);
 
 #ifdef DEBUG_ASSERTIONS
 #include <stdio.h>

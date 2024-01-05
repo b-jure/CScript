@@ -139,8 +139,8 @@ bool vgt(VM* vm, Value a, Value b);
 bool vle(VM* vm, Value a, Value b);
 bool vge(VM* vm, Value a, Value b);
 
-/* Tries to perform arithmetic operation on skooma values. */
-void tryvarithm(VM* vm, Value a, Value b, Ar op, Value* res);
+/* Performs arithmetic operation on skooma values. */
+void arith(VM* vm, Value a, Value b, Ar op, Value* res);
 
 /* Get value type (TypeTag) */
 int val2type(Value value);

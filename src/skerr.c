@@ -10,27 +10,10 @@
 #define OSTRINGF(vm, fmt, ...) OString_fmt(vm, fmt __VA_OPT__(, ) __VA_ARGS__)
 
 
-/* otryop() */
-#define UNOP_ERR(vm, op, operand)                                                        \
-    OSTRINGF(vm, "Attempt to perform unary %s on %s.", op, operand)
-#define BINOP_ERR(vm, op, left, right)                                                   \
-    OSTRINGF(                                                                            \
-        vm,                                                                              \
-        "Attempt to perform binary %s on %s (left) and %s (right).",                     \
-        op,                                                                              \
-        left,                                                                            \
-        right)
-
 
 /* OString_fmt_from() */
 #define OSTRINGF_ERR(vm, c, fn)                                                          \
     OSTRINGF(vm, "invalid format specifier '%%%c' for '%s'", c, fn)
-
-
-/* OP_SUB | OP_MUL | OP_MOD | OP_POW | OP_DIV | OP_GREATER | OP_GREATER_EQUAL |
- * OP_LESS | OP_LESS_EQUAL */
-#define BINARYOP_ERR(vm, op)                                                             \
-    OSTRINGF(vm, "Operands must be numbers or overload the operator '#op'.")
 
 
 /* OP_NEG */
@@ -146,34 +129,113 @@
     })
 
 
-/* oprint() */
-#define DISPLAY_INVALID_TYPE(vm, typename)                                               \
-    OSTRINGF(vm, "Display method must return a string, instead got %s.", typename)
-
 
 
 
 /* ==================== runtime errors ====================== */
 
+/* Performs long jump if there is one otherwise prints
+ * the runtime error and invokes either a panic handler or aborts.
+ * Error message is on top of the stack, or whatever value
+ * was passed to sk_error. */
+sk_noret runerror(VM* vm, Int status)
+{
+    last_frame(vm).status = status;
+    struct sk_longjmp* errjmp = vm->errjmp;
+    if(errjmp) { // protected call?
+        errjmp->status = status; // error status
+        // sk_unlock is somewhere after the 'longjmp'
+        longjmp(errjmp->buf, 1);
+        unreachable;
+    } // Otherwise print the error
+    fputs("\nSkooma: [runtime error]\nSkooma: ", stderr);
+    fprintf(stderr, "%s\n", vtostr(vm, *stackpeek(0))->storage);
+    for(Int i = vm->fc - 1; i >= 0; i--) {
+        CallFrame* frame = &vm->frames[i];
+        if(frame->closure != NULL) { // Skooma function ?
+            Chunk* chunk = &frame->closure->fn->chunk;
+            UInt line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
+            Value _; // dummy
+            bool loaded = false;
+            if(HashTable_get(&vm->loaded, OBJ_VAL(FFN(frame)->name), &_)) {
+                vm->script = OBJ_VAL(FFN(frame)->name);
+                loaded = true;
+            }
+            fprintf(
+                stderr,
+                "        ['%s' on line %u] in ",
+                AS_CSTRING(vm->script),
+                line);
+            if(loaded) fprintf(stderr, "script\n");
+            else fprintf(stderr, "%s()\n", FFN(frame)->name->storage);
+        } else { // this is a C function
+            fprintf(
+                stderr,
+                "        in %s()\n",
+                AS_NATIVE(*frame->callee)->name->storage);
+        }
+    }
+    fflush(stderr);
+    if(vm->config.panic) {
+        sk_unlock(vm);
+        vm->config.panic(vm);
+        unreachable;
+    } else {
+        _cleanupvm(&vm);
+        abort();
+    }
+}
+
+
+sk_noret ordererror(VM* vm, Value a, Value b)
+{
+    const char* t1 = vm->statics[val2type(a)]->storage;
+    const char* t2 = vm->statics[val2type(a)]->storage;
+    if(strcmp(t1, t2) == 0) sk_pushfstring(vm, "Attempt to compare two %s values.", t1);
+    else sk_pushfstring(vm, "Attempt to compare %s and %s.", t1, t2);
+    runerror(vm, S_ECMP);
+}
+
+
 sk_noret binoperr(VM* vm, Value a, Value b, OMTag op)
 {
+    const char* fmt = "Attempt to perform binary %s on %s (left) and %s (right).";
     push(vm, OBJ_VAL(vtostr(vm, a)));
     push(vm, OBJ_VAL(vtostr(vm, b)));
-    const char* operation = vm->statics[op]->storage;
+    const char* operation = vm->statics[op + SS_ADD]->storage;
     const char* left = AS_CSTRING(*stackpeek(1));
     const char* right = AS_CSTRING(*stackpeek(0));
-    push(vm, OBJ_VAL(BINOP_ERR(vm, operation, left, right)));
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, operation, left, right)));
     runerror(vm, S_EARBIN);
 }
 
 
 sk_noret unoperr(VM* vm, Value a, OMTag op)
 {
+    const char* fmt = "Attempt to perform unary '%s' on %s.";
     push(vm, OBJ_VAL(vtostr(vm, a)));
-    const char* operation = vm->statics[op]->storage;
+    const char* operation = vm->statics[op + SS_OPADD]->storage;
     const char* operand = AS_CSTRING(*stackpeek(0));
-    push(vm, OBJ_VAL(UNOP_ERR(vm, operation, operand)));
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, operation, operand)));
     runerror(vm, S_EARUN);
 }
 
 
+sk_noret omdisplayerr(VM* vm, Value result)
+{
+    const char* fmt = "Display method must return a string, instead got '%s'.";
+    push(vm, OBJ_VAL(vtostr(vm, result)));
+    const char* resultstring = AS_CSTRING(*stackpeek(0));
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, resultstring)));
+    runerror(vm, S_EDISPLAY);
+}
+
+
+sk_noret ostringfmterr(VM* vm, int c, Value callee)
+{
+    const char* fmt = "Invalid format specifier '%%%c' for '%s'";
+    push(vm, OBJ_VAL(vtostr(vm, callee)));
+    const char* fn = AS_CSTRING(*stackpeek(0));
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, c, fn)));
+    runerror(vm, S_ESTRFMT);
+}

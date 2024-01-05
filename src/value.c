@@ -1,4 +1,5 @@
 #include "debug.h"
+#include "err.h"
 #include "hash.h"
 #include "memory.h"
 #include "object.h"
@@ -11,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Perform arithmetic operation on numbers. */
 static sk_number narith(VM* vm, sk_number a, sk_number b, Ar op)
 {
     switch(op) {
@@ -37,26 +39,31 @@ static sk_number narith(VM* vm, sk_number a, sk_number b, Ar op)
 }
 
 
-/* Perform arithmetic operation 'op' on skooma numbers.
+/* Perform arithmetic operation 'op' on skooma values.
  * If arithmetic operation was executed successfully then this
  * returns 1, otherwise 0. */
 int varith(VM* vm, Value a, Value b, Ar op, Value* res)
 {
-    if(arisbin(op)) {
-        if(IS_NUMBER(a) && IS_NUMBER(b)) {
+    if(arisbin(op)) { // binary operation
+        if(IS_NUMBER(a) && IS_NUMBER(b)) goto unarynum;
+        else if(IS_STRING(a) && IS_STRING(b)) *res = OBJ_VAL(concatenate(vm, a, b));
+        else return 0;
+    } else { // unary operation
+        if(IS_NUMBER(a)) {
+        unarynum:;
             sk_number ret = narith(vm, AS_NUMBER(a), AS_NUMBER(b), op);
             *res = (op != AR_NOT ? NUMBER_VAL(ret) : FALSE_VAL);
-            return 1;
-        } else if(op == AR_ADD && IS_STRING(a) && IS_STRING(b)) {
-            concatenate(vm, a, b);
-        }
-    } else { // op is unary operation
+        } else if(op == AR_NOT) {
+            if(IS_BOOL(a)) *res = !AS_BOOL(a);
+            else if(IS_STRING(a)) *res = FALSE_VAL;
+            else return 0;
+        } else return 0;
     }
-    return 0;
+    return 1;
 }
 
 /* Perform binary/unary operation on values. */
-void tryvarithm(VM* vm, Value a, Value b, Ar op, Value* res)
+void arith(VM* vm, Value a, Value b, Ar op, Value* res)
 {
     if(!varith(vm, a, b, op, res)) {
         otryop(vm, a, b, (op - AR_ADD) + OM_ADD, res);
@@ -266,8 +273,7 @@ OString* dtostr(VM* vm, sk_number n)
 
 OString* btostr(VM* vm, int b)
 {
-    if(b) return vm->statics[SS_TRUE];
-    else return vm->statics[SS_FALSE];
+    return (b ? vm->statics[SS_TRUE] : vm->statics[SS_FALSE]);
 }
 
 /* Converts value to OString */
@@ -326,7 +332,7 @@ obj:
 #ifdef SKJMPTABLE_H
 #undef SKJMPTABLE_H
 #endif
-#endif
+#endif // val2tbmask_1
     unreachable;
 }
 
@@ -339,7 +345,10 @@ void vprint(VM* vm, Value value)
     else if(IS_NUMBER(value)) {
         if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%lg", AS_NUMBER(value));
         else printf("%ld", (int64_t)AS_NUMBER(value));
-    } else unreachable;
+    } else {
+        unreachable;
+        return;
+    }
 #else
 #ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
@@ -381,7 +390,8 @@ void vprint(VM* vm, Value value)
 #ifdef SKJMPTABLE_H
 #undef SKJMPTABLE_H
 #endif
-#endif
+#endif // SK_NAN_BOX
+    return;
 }
 
 Hash vhash(Value value)

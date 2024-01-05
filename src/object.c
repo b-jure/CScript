@@ -131,9 +131,7 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
             }
             default: { /* invalid format specifier */
                 Array_Byte_free(&buff, NULL);
-                OString* fn = vtostr(vm, *vm->frames[vm->fc - 1].callee);
-                vm->sp[-1] = OBJ_VAL(OSTRINGF_ERR(vm, c, fn->storage));
-                return NULL;
+                ostringfmterr(vm, c, *last_frame(vm).callee);
             }
         }
     }
@@ -324,6 +322,31 @@ OInstance* OInstance_new(VM* vm, OClass* oclass)
     return instance;
 }
 
+
+/* Return overloaded method or NULL if value
+ * is not an instance value or method is not overloaded. */
+static force_inline OClosure* getomethod(VM* vm, Value val, OMTag om)
+{
+    if(!IS_INSTANCE(val)) return NULL;
+    return AS_INSTANCE(val)->oclass->omethods[om];
+}
+
+static int callomdisplay(VM* vm, Value val)
+{
+    OClosure* omethod = getomethod(vm, val, OM_DISPLAY);
+    if(omethod) {
+        Value top;
+        Value* fn = vm->sp;
+        push(vm, OBJ_VAL(omethod));
+        ncall(vm, fn, *fn, 1);
+        if(unlikely(!IS_STRING((top = *stackpeek(0))))) omdisplayerr(vm, top);
+        printf("%s", AS_CSTRING(top));
+        pop(vm);
+        return 1;
+    }
+    return 0;
+}
+
 static force_inline void OInstance_free(VM* vm, OInstance* instance)
 {
     HashTable_free(vm, &instance->fields);
@@ -422,30 +445,11 @@ void oprint(VM* vm, Value value)
         }
         CASE(OBJ_INSTANCE)
         {
-            OInstance* instance = AS_INSTANCE(value);
-            Value display;
-            Value top;
-            if(HashTable_get(
-                   &instance->oclass->methods,
-                   OBJ_VAL(vm->statics[SS_DISP]),
-                   &display))
-            {
-                push(vm, display); // push display method
-                sk_call(vm, 0, 1); // call it
-                if(unlikely(!IS_STRING(top = *stackpeek(0)))) {
-                    push(vm, OBJ_VAL(vtostr(vm, top)));
-                    vm->sp[-2] =
-                        OBJ_VAL(DISPLAY_INVALID_TYPE(vm, AS_CSTRING(*stackpeek(0))));
-                    vm->sp--;
-                    runerror(vm, S_EDISPLAY);
-                }
-                printf("%s", AS_CSTRING(top));
-            } else {
+            if(!callomdisplay(vm, value))
                 printf(
                     "%p-%s instance",
                     AS_OBJ(value),
                     AS_INSTANCE(value)->oclass->name->storage);
-            }
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
@@ -601,19 +605,20 @@ OString* otostr(VM* vm, O* object)
 }
 
 
-/* Return overloaded method or NULL if value
- * is not an instance value or method is not overloaded. */
-static force_inline OClosure* getomethod(VM* vm, Value val, OMTag om)
+
+
+
+/* =============== call overload-able methods =============== */
+
+int callom(VM* vm, Value val, OMTag om)
 {
-    if(!IS_INSTANCE(val)) return NULL;
-    return AS_INSTANCE(val)->oclass->omethods[om];
 }
 
 
 
 /* =============== operator overloading =============== */
 
-#if defined(S_OVERLOAD_OPS)
+#if defined(SK_OVERLOAD_OPS)
 
 
 /* Calls the method for the overloaded unary operator. */
@@ -637,7 +642,6 @@ void callombinop(VM* vm, const OClosure* om, Value operand1, Value operand2, Val
     ncall(vm, fn, *fn, 1);
     *res = *--vm->sp; // move method result
 }
-
 
 
 /* Tries to call class overloaded unary operator method 'op'.
@@ -664,6 +668,7 @@ static int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res)
     return 1;
 }
 
+
 /* Tries calling binary or unary operator overload method,
  * errors on failure. */
 void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
@@ -674,6 +679,6 @@ void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
 }
 
 
-#endif // if defined(S_OVERLOAD_OPS)
+#endif // if defined(SK_OVERLOAD_OPS)
 
 /* ---------------------------------------------------- */
