@@ -413,6 +413,7 @@ void run(VM* vm)
         double a = AS_NUMBER(pop(vm));                                                   \
         push(vm, type(a op b));                                                          \
     } while(false)
+    last_frame(vm).info = CFI_FRESH;
     runtime = 1;
     // cache these hopefully in a register
     register CallFrame* frame = &vm->frames[vm->fc - 1];

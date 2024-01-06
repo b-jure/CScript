@@ -123,8 +123,6 @@ typedef enum {
     OM_LE,
     OM_GT,
     OM_GE,
-    OM_AND,
-    OM_OR,
 #endif
     OM_CNT, // keep this last
 } OMTag;
@@ -385,8 +383,6 @@ typedef enum {
     SS_LE,
     SS_GT,
     SS_GE,
-    SS_ANd,
-    SS_OR,
 #endif
     /* Class special field names. */
     SS_DBG,
@@ -421,74 +417,7 @@ typedef struct {
     const uint8_t len;
 } InternedString;
 
-#define sizeofstr(str) (sizeof(str) - 1)
-static const InternedString static_str[] = {
-  /* Value types */
-    {"nil",                sizeofstr("nil")               },
-    {"number",             sizeofstr("number")            },
-    {"string",             sizeofstr("string")            },
-    {"bool",               sizeofstr("bool")              },
-    {"class",              sizeofstr("class")             },
-    {"instance",           sizeofstr("instance")          },
-    {"function",           sizeofstr("function")          },
-    {"closure",            sizeofstr("closure")           },
-    {"native",             sizeofstr("native")            },
-    {"upvalue",            sizeofstr("upvalue")           },
-    {"method",             sizeofstr("method")            },
- /* Boolean strings */
-    {"true",               sizeofstr("true")              },
-    {"false",              sizeofstr("false")             },
- /* Class overload-able method names. */
-    {"__init__",           sizeofstr("__init__")          },
-    {"__display__",        sizeofstr("__display__")       },
-#if defined(SK_OVERLOAD_OPS)  // operator overloading enabled?
-  /* Overload-able arithmetic operators */
-    {"__add__",            sizeofstr("__add__")           },
-    {"__sub__",            sizeofstr("__sub__")           },
-    {"__mul__",            sizeofstr("__mul__")           },
-    {"__div__",            sizeofstr("__div__")           },
-    {"__mod__",            sizeofstr("__mod__")           },
-    {"__pow__",            sizeofstr("__pow__")           },
-    {"__not__",            sizeofstr("__not__")           },
-    {"__umin__",           sizeofstr("__umin__")          },
- /* Overload-able ordering operators */
-    {"__ne__",             sizeofstr("__ne__")            },
-    {"__eq__",             sizeofstr("__eq__")            },
-    {"__lt__",             sizeofstr("__lt__")            },
-    {"__le__",             sizeofstr("__le__")            },
-    {"__gt__",             sizeofstr("__gt__")            },
-    {"__ge__",             sizeofstr("__ge__")            },
- /* Short-circuit operators */
-    {"__and__",            sizeofstr("__and__")           },
-    {"__or__",             sizeofstr("__or__")            },
-#endif
-  /* Class special field names. */
-    {"__debug",            sizeofstr("__debug")           },
- /* Operator strings */
-    {"addition [+]",       sizeofstr("addition [+]")      },
-    {"subtraction [-]",    sizeofstr("subtraction [-]")   },
-    {"multiplication [*]", sizeofstr("multiplication [*]")},
-    {"division [/]",       sizeofstr("division [/]")      },
-    {"modulo [%]",         sizeofstr("modulo [%]")        },
-    {"exponentiation [^]", sizeofstr("exponentiation [^]")},
-    {"not [!]",            sizeofstr("not [!]")           },
-    {"negation [-]",       sizeofstr("negation [-]")      },
-    {"ne [!=]",            sizeofstr("ne [!=]")           },
-    {"eq [==]",            sizeofstr("eq [==]")           },
-    {"lt [<]",             sizeofstr("lt [<]")            },
-    {"le [<=]",            sizeofstr("le [<=]")           },
-    {"gt [>]",             sizeofstr("gt [>]")            },
-    {"ge [>=]",            sizeofstr("ge [>=]")           },
-    {"and [and]",          sizeofstr("and [and]")         },
-    {"or [or]",            sizeofstr("or [or]")           },
- /* Other statics */
-    {"manual",             sizeofstr("manual")            },
-    {"auto",               sizeofstr("auto")              },
-    {"assertion failed.",  sizeofstr("assertion failed.") },
-    {"Error: ",            sizeofstr("Error: ")           },
-    {"Assert: ",           sizeofstr("Assert: ")          },
-};
-#undef sizeofstr
+extern const InternedString static_str[SS_SIZE];
 
 /* -------------------------------------------------*/
 

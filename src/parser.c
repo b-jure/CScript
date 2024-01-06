@@ -19,6 +19,8 @@
 
 
 
+// TODO: Refactor compile-time errors? Or keep them as is?
+//       - 90% sure will keep them as is [06.01.24][dd/mm/yy]
 
 
 
@@ -208,7 +210,7 @@ static force_inline void Exp_init(Exp* E, ExpType type, Int code, Int value)
 // Expressions are constants and their Values are equal
 #define eareconstandeq(F, E1, E2)                                                        \
     (etisconst((E1)->type) && etisconst((E2)->type) &&                                   \
-     veq(*CONSTANT(F, E1), *CONSTANT(F, E2)))
+     veq((F)->vm, *CONSTANT(F, E1), *CONSTANT(F, E2)))
 
 
 // Set first long parameter
@@ -505,7 +507,7 @@ static force_inline void codeloop(Function* F, UInt start)
 // Initialize global variable
 #define INIT_GLOBAL(F, idx, vflags, E)                                                   \
     do {                                                                                 \
-        (F)->vm->globvals[idx].flags = vflags;                                           \
+        (F)->vm->globvars.data[idx].flags = vflags;                                      \
         CODEOP(F, GET_OP_TYPE(idx, OP_DEFINE_GLOBAL, E), idx);                           \
     } while(false)
 
@@ -570,9 +572,10 @@ static force_inline UInt globalvar(Function* F, Value identifier)
     Variable glob = {UNDEFINED_VAL, F->vflags};
     VM* vm = F->vm;
     if(!HashTable_get(&vm->globids, identifier, &index)) {
-        if(unlikely((vm)->globlen + 1 > BYTECODE_MAX)) GLOBALS_LIMIT_ERR(F, BYTECODE_MAX);
+        if(unlikely((vm)->globvars.len + 1 > BYTECODE_MAX))
+            GLOBALS_LIMIT_ERR(F, BYTECODE_MAX);
         push(vm, identifier);
-        index = NUMBER_VAL(GARRAY_PUSH(vm, glob));
+        index = NUMBER_VAL(Array_Variable_push(&vm->globvars, glob));
         HashTable_insert(vm, &vm->globids, identifier, index);
         pop(vm);
     }
@@ -1609,7 +1612,7 @@ static force_inline void switchconstants(Function* F, SwitchState* state, Exp* E
         case EXP_NUMBER:;
             Value caseval = *CONSTANT(F, E);
             for(Int i = 0; i < (Int)state->constants.len; i++) {
-                if(veq(state->constants.data[i], caseval)) {
+                if(veq(F->vm, state->constants.data[i], caseval)) {
                     SWITCH_DUPLICATE_ERR(F, vtostr(F->vm, caseval)->storage);
                     return;
                 }

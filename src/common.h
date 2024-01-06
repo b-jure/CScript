@@ -59,6 +59,7 @@ void _cleanupvm(VM** vm); // cleanup function signature
 #define cast_uchar(e)    ((unsigned char)(e))
 #define cast_charp(e)    ((char*)(e))
 #define cast_lint(e)     ((long int)(e))
+#define cast_hash(e)     ((Hash)(e))
 #define cast(type, expr) ((type)(expr))
 
 

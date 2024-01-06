@@ -129,14 +129,11 @@ boolean:
     return vm->statics[tag]->storage;
 oclass:
     return AS_CLASS(*val)->name->storage;
-instance: {
+instance:;
     OInstance* instance = AS_INSTANCE(*val);
-    Value name;
-    if(HashTable_get(&instance->fields, OBJ_VAL(vm->statics[SS_DBG]), &name) &&
-       IS_STRING(name))
-        return AS_CSTRING(name);
+    Value debug = getsfield(instance, SF_DEBUG);
+    if(IS_STRING(debug)) return AS_CSTRING(debug);
     return instance->oclass->name->storage;
-}
 function:
     return AS_FUNCTION(*val)->name->storage;
 closure:
@@ -156,10 +153,8 @@ method:
             return AS_CLASS(*val)->name->storage;
         case TT_INSTANCE: {
             OInstance* instance = AS_INSTANCE(*val);
-            Value name;
-            if(HashTable_get(&instance->fields, OBJ_VAL(vm->statics[SS_DBG]), &name) &&
-               IS_STRING(name))
-                return AS_CSTRING(name);
+            Value debug = getsfield(instance, SF_DEBUG);
+            if(IS_STRING(debug)) return AS_CSTRING(debug);
             return instance->oclass->name->storage;
         }
         case TT_FUNCTION:
@@ -172,6 +167,7 @@ method:
             return AS_BOUND_METHOD(*val)->method->fn->name->storage;
         default:
             unreachable;
+            return 0;
     }
 #endif
 }
@@ -338,17 +334,28 @@ obj:
 
 void vprint(VM* vm, Value value)
 {
-#ifdef SK_NAN_BOX
-    if(IS_BOOL(value)) printf(AS_BOOL(value) ? "true" : "false");
-    else if(IS_NIL(value)) printf("nil");
-    else if(IS_OBJ(value)) oprint(vm, value);
-    else if(IS_NUMBER(value)) {
-        if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%lg", AS_NUMBER(value));
-        else printf("%ld", (int64_t)AS_NUMBER(value));
-    } else {
-        unreachable;
-        return;
-    }
+#if defined(val2tbmask_1)
+    static const void* jmptable[] = {
+        &&nil,
+        &&number,
+        &&boolean,
+        &&object,
+
+    };
+    goto* jmptable[val2tbmask_1(value)];
+nil:
+    printf("nil");
+    return;
+number:
+    if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%lg", AS_NUMBER(value));
+    else printf("%ld", (int64_t)AS_NUMBER(value));
+    return;
+boolean:
+    printf(AS_BOOL(value) ? "true" : "false");
+    return;
+object:
+    oprint(vm, value);
+    return;
 #else
 #ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
@@ -390,20 +397,31 @@ void vprint(VM* vm, Value value)
 #ifdef SKJMPTABLE_H
 #undef SKJMPTABLE_H
 #endif
-#endif // SK_NAN_BOX
+#endif // defined(val2tbmask_1)
     return;
 }
 
 Hash vhash(Value value)
 {
-#ifdef SK_NAN_BOX
-    if(IS_BOOL(value)) return AS_BOOL(value) ? 1 : 0;
-    else if(IS_OBJ(value)) return ohash(value);
-    else if(IS_NUMBER(value)) {
-        double num = AS_NUMBER(value);
-        if(floor(num) != num || num < 0) return dblhash(num);
-        else return num;
-    }
+#if defined(val2tbmask_1)
+    static const void* jmptable[] = {
+        &&nil,
+        &&number,
+        &&boolean,
+        &&object,
+
+    };
+    goto* jmptable[val2tbmask_1(value)];
+nil:
+    unreachable; // nil can't be used for indexing
+number:;
+    double num = AS_NUMBER(value);
+    if(floor(num) != num || num < 0) return dblhash(num);
+    else return cast(Hash, num);
+boolean:
+    return cast(Hash, AS_BOOL(value));
+object:
+    return ohash(value);
 #else
 #ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
@@ -431,6 +449,7 @@ Hash vhash(Value value)
             return ohash(value);
         }
     }
-#endif
+#endif // defined(val2tbmask_1)
     unreachable;
+    return 0;
 }

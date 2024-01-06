@@ -26,6 +26,13 @@
 
 
 
+/* Call info for overload-able methods */
+const int overloadret[OM_DISPLAY + 1] = {
+    0, // __init__
+    1, // __display__
+};
+
+
 
 static force_inline O* onew(VM* vm, size_t size, OType type)
 {
@@ -40,6 +47,9 @@ static force_inline O* onew(VM* vm, size_t size, OType type)
 #endif
     return object;
 }
+
+
+
 
 static force_inline OString* OString_alloc(VM* vm, UInt len)
 {
@@ -227,6 +237,8 @@ OString* unescape(VM* vm, OString* string)
 }
 
 
+
+
 ONative*
 ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals)
 {
@@ -245,6 +257,9 @@ static force_inline void ONative_free(VM* vm, ONative* native)
 {
     GC_FREE(vm, native, sizeof(ONative) + (native->upvalc * sizeof(Value)));
 }
+
+
+
 
 OFunction* OFunction_new(VM* vm)
 {
@@ -265,6 +280,16 @@ static force_inline void ObjFunction_free(VM* vm, OFunction* fn)
     GC_FREE(vm, fn, sizeof(OFunction));
 }
 
+static force_inline void fnprint(OFunction* fn)
+{
+    if(unlikely(fn->name == NULL)) printf("<script>");
+    else printf("<fn %s>: %p", fn->name->storage, fn);
+}
+
+
+
+
+
 OClosure* OClosure_new(VM* vm, OFunction* fn)
 {
     OUpvalue** upvals = GC_MALLOC(vm, sizeof(OUpvalue*) * fn->upvalc);
@@ -283,6 +308,9 @@ static force_inline void OClosure_free(VM* vm, OClosure* closure)
     GC_FREE(vm, closure, sizeof(OClosure));
 }
 
+
+
+
 OUpvalue* OUpvalue_new(VM* vm, Value* valp)
 {
     OUpvalue* upval = ALLOC_OBJ(vm, OUpvalue, OBJ_UPVAL);
@@ -296,6 +324,9 @@ static force_inline void OUpvalue_free(VM* vm, OUpvalue* upval)
 {
     GC_FREE(vm, upval, sizeof(OUpvalue));
 }
+
+
+
 
 OClass* OClass_new(VM* vm, OString* name)
 {
@@ -314,6 +345,8 @@ static force_inline void OClass_free(VM* vm, OClass* oclass)
 }
 
 
+
+
 OInstance* OInstance_new(VM* vm, OClass* oclass)
 {
     OInstance* instance = ALLOC_OBJ(vm, OInstance, OBJ_INSTANCE);
@@ -321,7 +354,6 @@ OInstance* OInstance_new(VM* vm, OClass* oclass)
     HashTable_init(&instance->fields);
     return instance;
 }
-
 
 /* Return overloaded method or NULL if value
  * is not an instance value or method is not overloaded. */
@@ -331,27 +363,19 @@ static force_inline OClosure* getomethod(VM* vm, Value val, OMTag om)
     return AS_INSTANCE(val)->oclass->omethods[om];
 }
 
-static int callomdisplay(VM* vm, Value val)
-{
-    OClosure* omethod = getomethod(vm, val, OM_DISPLAY);
-    if(omethod) {
-        Value top;
-        Value* fn = vm->sp;
-        push(vm, OBJ_VAL(omethod));
-        ncall(vm, fn, *fn, 1);
-        if(unlikely(!IS_STRING((top = *stackpeek(0))))) omdisplayerr(vm, top);
-        printf("%s", AS_CSTRING(top));
-        pop(vm);
-        return 1;
-    }
-    return 0;
-}
+/* Get the value of the class special field */
+#define getsfield(instance, sftag) (instance)->oclass->sfields[sftag]
+
 
 static force_inline void OInstance_free(VM* vm, OInstance* instance)
 {
     HashTable_free(vm, &instance->fields);
     GC_FREE(vm, instance, sizeof(OInstance));
 }
+
+
+
+
 
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method)
 {
@@ -361,11 +385,14 @@ OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method)
     return bound_method;
 }
 
-static force_inline void fnprint(OFunction* fn)
+static force_inline void OBoundMethod_free(VM* vm, OBoundMethod* bound_method)
 {
-    if(unlikely(fn->name == NULL)) printf("<script>");
-    else printf("<fn %s>: %p", fn->name->storage, fn);
+    GC_FREE(vm, bound_method, sizeof(OBoundMethod));
 }
+
+
+
+
 
 sdebug void otypeprint(OType type)
 {
@@ -399,89 +426,19 @@ sdebug void otypeprint(OType type)
     }
 }
 
-void oprint(VM* vm, Value value)
-{
-#ifdef SK_PRECOMPUTED_GOTO
-#define OBJ_TABLE
-#include "jmptable.h"
-#undef OBJ_TABLE
-#else
-#define DISPATCH(x) switch(x)
-#define CASE(label) case label:
-#define BREAK       return
-#endif
-    DISPATCH(OBJ_TYPE(value))
-    {
-        CASE(OBJ_STRING)
-        {
-            printf("%s", AS_CSTRING(value));
-            BREAK;
-        }
-        CASE(OBJ_FUNCTION)
-        {
-            fnprint(AS_FUNCTION(value));
-            BREAK;
-        }
-        CASE(OBJ_CLOSURE)
-        {
-            fnprint(AS_CLOSURE(value)->fn);
-            BREAK;
-        }
-        CASE(OBJ_NATIVE)
-        {
-            printf("<native-fn %s>", AS_NATIVE(value)->name->storage);
-            BREAK;
-        }
-        CASE(OBJ_UPVAL)
-        {
-            OUpvalue* upval = AS_UPVAL(value);
-            vprint(vm, *upval->location);
-            BREAK;
-        }
-        CASE(OBJ_CLASS)
-        {
-            printf("%p-%s", AS_OBJ(value), AS_CLASS(value)->name->storage);
-            BREAK;
-        }
-        CASE(OBJ_INSTANCE)
-        {
-            if(!callomdisplay(vm, value))
-                printf(
-                    "%p-%s instance",
-                    AS_OBJ(value),
-                    AS_INSTANCE(value)->oclass->name->storage);
-            BREAK;
-        }
-        CASE(OBJ_BOUND_METHOD)
-        {
-            fnprint(AS_BOUND_METHOD(value)->method->fn);
-            BREAK;
-        }
-    }
-    unreachable;
-#ifdef SKJMPTABLE_H
-#undef SKJMPTABLE_H
-#endif
-}
-
+/* Hash object value */
 Hash ohash(Value value)
 {
     switch(OBJ_TYPE(value)) {
         case OBJ_STRING:
             return AS_STRING(value)->hash;
-        case OBJ_FUNCTION:
-            return AS_FUNCTION(value)->name->hash;
         default:
-            unreachable;
+            return ptrhash(cast(const void*, AS_OBJ(value)));
     }
 }
 
 
-static force_inline void OBoundMethod_free(VM* vm, OBoundMethod* bound_method)
-{
-    GC_FREE(vm, bound_method, sizeof(OBoundMethod));
-}
-
+/* Free object memory */
 void ofree(VM* vm, O* object)
 {
 #ifdef DEBUG_LOG_GC
@@ -547,6 +504,97 @@ void ofree(VM* vm, O* object)
 #endif
 }
 
+
+
+
+
+
+
+/* =============== call overload-able methods =============== */
+
+// Important questions:
+// 1. Are we sure the instance is pushed on the stack?
+// 2. How will this interact with C API?
+static int callomdisplay(VM* vm, Value val)
+{
+    OClosure* omethod = getomethod(vm, val, OM_DISPLAY);
+    if(omethod) {
+        Value top;
+        Value* fn = vm->sp;
+        push(vm, OBJ_VAL(omethod));
+        ncall(vm, fn, *fn, 1);
+        if(unlikely(!IS_STRING((top = *stackpeek(0))))) omdisplayerr(vm, top);
+        printf("%s", AS_CSTRING(top));
+        pop(vm);
+        return 1;
+    }
+    return 0;
+}
+
+
+
+
+
+
+
+/* =============== operator overloading =============== */
+
+#if defined(SK_OVERLOAD_OPS)
+
+
+/* Tries to call class overloaded unary operator method 'op'.
+ * Returns 1 if it was called (class overloaded that method),
+ * 0 otherwise. */
+static force_inline int callunop(VM* vm, Value a, OMTag op, Value* res)
+{
+    OClosure* om = getomethod(vm, a, op);
+    if(om == NULL) return 0;
+    Value* fn = vm->sp;
+    push(vm, OBJ_VAL(om));
+    push(vm, a);
+    ncall(vm, fn, *fn, 1);
+    *res = *--vm->sp; // move method result
+    return 1;
+}
+
+
+/* Tries to call class overloaded binary operator method 'op'.
+ * Returns 1 if it was called (class overloaded that method),
+ * 0 otherwise. */
+static force_inline int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res)
+{
+    OClosure* om = getomethod(vm, a, op);
+    if(om == NULL) om = getomethod(vm, b, op);
+    if(om == NULL) return 0;
+    Value* fn = vm->sp;
+    push(vm, OBJ_VAL(om));
+    push(vm, a);
+    push(vm, b);
+    ncall(vm, fn, *fn, 1);
+    *res = *--vm->sp; // move method result
+    return 1;
+}
+
+
+/* Tries calling binary or unary overloaded operator method,
+ * errors on failure. */
+void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
+{
+    if(!omisunop(op)) {
+        if(unlikely(!callbinop(vm, a, b, op, res))) binoperr(vm, a, b, op);
+    } else if(unlikely(!callunop(vm, a, op, res))) unoperr(vm, a, op);
+}
+
+
+#endif // if defined(SK_OVERLOAD_OPS)
+
+/* ---------------------------------------------------- */
+
+
+
+
+
+/* Create/Get object string from 'object' */
 OString* otostr(VM* vm, O* object)
 {
 #ifdef SK_PRECOMPUTED_GOTO
@@ -600,85 +648,73 @@ OString* otostr(VM* vm, O* object)
     }
     unreachable;
 #ifdef SKJMPTABLE_H
-#undef SKJMPTLE_H
+#undef SKJMPTABLE_H
 #endif
 }
 
 
-
-
-
-/* =============== call overload-able methods =============== */
-
-int callom(VM* vm, Value val, OMTag om)
+/* Print the object value */
+void oprint(VM* vm, Value value)
 {
+#ifdef SK_PRECOMPUTED_GOTO
+#define OBJ_TABLE
+#include "jmptable.h"
+#undef OBJ_TABLE
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       return
+#endif
+    DISPATCH(OBJ_TYPE(value))
+    {
+        CASE(OBJ_STRING)
+        {
+            printf("%s", AS_CSTRING(value));
+            BREAK;
+        }
+        CASE(OBJ_FUNCTION)
+        {
+            fnprint(AS_FUNCTION(value));
+            BREAK;
+        }
+        CASE(OBJ_CLOSURE)
+        {
+            fnprint(AS_CLOSURE(value)->fn);
+            BREAK;
+        }
+        CASE(OBJ_NATIVE)
+        {
+            printf("<native-fn %s>", AS_NATIVE(value)->name->storage);
+            BREAK;
+        }
+        CASE(OBJ_UPVAL)
+        {
+            OUpvalue* upval = AS_UPVAL(value);
+            vprint(vm, *upval->location);
+            BREAK;
+        }
+        CASE(OBJ_CLASS)
+        {
+            printf("%p-%s", AS_OBJ(value), AS_CLASS(value)->name->storage);
+            BREAK;
+        }
+        CASE(OBJ_INSTANCE)
+        {
+            if(!callomdisplay(vm, value))
+                printf(
+                    "%p-%s instance",
+                    AS_OBJ(value),
+                    AS_INSTANCE(value)->oclass->name->storage);
+            BREAK;
+        }
+        CASE(OBJ_BOUND_METHOD)
+        {
+            fnprint(AS_BOUND_METHOD(value)->method->fn);
+            BREAK;
+        }
+    }
+    unreachable;
+#ifdef SKJMPTABLE_H
+#undef SKJMPTABLE_H
+#endif
 }
-
-
-
-/* =============== operator overloading =============== */
-
-#if defined(SK_OVERLOAD_OPS)
-
-
-/* Calls the method for the overloaded unary operator. */
-void callomunop(VM* vm, const OClosure* om, Value operand1, Value* res)
-{
-    Value* fn = vm->sp;
-    push(vm, OBJ_VAL(om));
-    push(vm, operand1);
-    ncall(vm, fn, *fn, 1);
-    *res = *--vm->sp; // move method result
-}
-
-
-/* Calls the method for the overloaded binary operator. */
-void callombinop(VM* vm, const OClosure* om, Value operand1, Value operand2, Value* res)
-{
-    Value* fn = vm->sp;
-    push(vm, OBJ_VAL(om));
-    push(vm, operand1);
-    push(vm, operand2);
-    ncall(vm, fn, *fn, 1);
-    *res = *--vm->sp; // move method result
-}
-
-
-/* Tries to call class overloaded unary operator method 'op'.
- * Returns 1 if it was called (class overloaded that method),
- * 0 otherwise. */
-static int callunop(VM* vm, Value a, OMTag op, Value* res)
-{
-    OClosure* om = getomethod(vm, a, op);
-    if(om == NULL) return 0;
-    callomunop(vm, om, a, res);
-    return 1;
-}
-
-
-/* Tries to call class overloaded binary operator method 'op'.
- * Returns 1 if it was called (class overloaded that method),
- * 0 otherwise. */
-static int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res)
-{
-    OClosure* om = getomethod(vm, a, op);
-    if(om == NULL) om = getomethod(vm, b, op);
-    if(om == NULL) return 0;
-    callombinop(vm, om, a, b, res);
-    return 1;
-}
-
-
-/* Tries calling binary or unary operator overload method,
- * errors on failure. */
-void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
-{
-    if(!omisunop(op)) {
-        if(unlikely(!callbinop(vm, a, b, op, res))) binoperr(vm, a, b, op);
-    } else if(unlikely(!callunop(vm, a, op, res))) unoperr(vm, a, op);
-}
-
-
-#endif // if defined(SK_OVERLOAD_OPS)
-
-/* ---------------------------------------------------- */

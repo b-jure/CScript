@@ -1,6 +1,7 @@
 #ifndef SKJMPTABLE_H
 #define SKJMPTABLE_H
 
+
 #if defined(OP_TABLE)
 
 #undef DISPATCH

@@ -212,4 +212,11 @@ Hash ohash(Value value);
 /* Free object memory */
 void ofree(VM* vm, O* object);
 
+
+
+/* Array holding 'retcnt' for each overload-able method (excluding operators) */
+extern const int overloadret[OM_DISPLAY + 1];
+
+
+
 #endif

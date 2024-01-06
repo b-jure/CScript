@@ -3,9 +3,10 @@
 
 #include "common.h"
 
-typedef size_t Hash;
+typedef uint64_t Hash;
 
 Hash dblhash(double dbl);
 Hash stringhash(const char* str, size_t len, unsigned long seed);
+Hash ptrhash(const void* ptr);
 
 #endif
