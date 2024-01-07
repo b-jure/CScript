@@ -41,7 +41,7 @@ static force_inline void stackshift(VM* vm, Value* val, int direction)
 SK_API int sk_ensurestack(VM* vm, int n)
 {
     sk_checkapi(vm, n >= 0, "negative 'n'.");
-    return (((vm->sp - vm->stack) + n) < VM_STACK_MAX);
+    return (((vm->sp - vm->stack) + n) <= VM_STACK_LIMIT);
 }
 
 

@@ -173,6 +173,7 @@ sk_noret ordererror(VM* vm, Value a, Value b);
 
 /* Binary arithmetic operation error */
 sk_noret binoperr(VM* vm, Value a, Value b, OMTag op);
+
 /* Unary arithmetic operation error */
 sk_noret unoperr(VM* vm, Value a, OMTag op);
 
@@ -181,6 +182,26 @@ sk_noret omdisplayerr(VM* vm, Value result);
 
 /* Object string format error */
 sk_noret ostringfmterr(VM* vm, int c, Value callee);
+
+/* Stack overflow error */
+sk_noret sovferror(VM* vm);
+
+/* Undefined property error */
+sk_noret udproperror(VM* vm, Value property, OClass* oclass);
+
+/* Return count stack overflow */
+sk_noret retovferror(VM* vm, const char* fn);
+
+/* Function invalid argument count error */
+sk_noret arityerror(VM* vm, int expected, int got);
+
+/* Call stack overflow (frame count) */
+sk_noret fcovferror(VM* vm);
+
+/* Called non-callable value */
+sk_noret callerror(VM* vm, Value callee);
+
+/* ---------------------------------------------------------- */
 
 
 #endif

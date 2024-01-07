@@ -157,7 +157,7 @@ OString* btostr(VM* vm, int b);
 void vprint(VM* vm, Value value);
 
 /* Hash value */
-Hash vhash(Value value);
+Hash vhash(VM* vm, Value value);
 
 
 #endif

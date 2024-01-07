@@ -2,6 +2,7 @@
 #define SKCOMMON_H
 
 #include "skbits.h"
+#include "sklimits.h"
 #include "skooma.h"
 
 #include <stdbool.h>

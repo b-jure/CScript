@@ -83,7 +83,7 @@ OString* OString_new(VM* vm, const char* chars, size_t len)
 
 OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
 {
-#define MAXDIGITS 45
+#define MAXDIGITS 25
 
     unsigned char c;
     Array_Byte buff;
@@ -98,8 +98,8 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
                 Array_Byte_push(&buff, '%');
                 break;
             }
-            case 'd': { /* long int */
-                long int n = va_arg(argp, long int);
+            case 'd': { /* int64_t */
+                long int n = va_arg(argp, int64_t);
                 Array_Byte_ensure(&buff, MAXDIGITS);
                 buff.len += snprintf((char*)&buff.data[buff.len], MAXDIGITS, "%ld", n);
                 break;
@@ -359,12 +359,9 @@ OInstance* OInstance_new(VM* vm, OClass* oclass)
  * is not an instance value or method is not overloaded. */
 static force_inline OClosure* getomethod(VM* vm, Value val, OMTag om)
 {
-    if(!IS_INSTANCE(val)) return NULL;
-    return AS_INSTANCE(val)->oclass->omethods[om];
+    if(IS_INSTANCE(val)) return AS_INSTANCE(val)->oclass->omethods[om];
+    return NULL;
 }
-
-/* Get the value of the class special field */
-#define getsfield(instance, sftag) (instance)->oclass->sfields[sftag]
 
 
 static force_inline void OInstance_free(VM* vm, OInstance* instance)
@@ -372,7 +369,6 @@ static force_inline void OInstance_free(VM* vm, OInstance* instance)
     HashTable_free(vm, &instance->fields);
     GC_FREE(vm, instance, sizeof(OInstance));
 }
-
 
 
 
@@ -512,20 +508,16 @@ void ofree(VM* vm, O* object)
 
 /* =============== call overload-able methods =============== */
 
-// Important questions:
-// 1. Are we sure the instance is pushed on the stack?
-// 2. How will this interact with C API?
 static int callomdisplay(VM* vm, Value val)
 {
     OClosure* omethod = getomethod(vm, val, OM_DISPLAY);
     if(omethod) {
-        Value top;
-        Value* fn = vm->sp;
+        Value* ret = vm->sp;
+        push(vm, val); // push instance 'self'
         push(vm, OBJ_VAL(omethod));
-        ncall(vm, fn, *fn, 1);
-        if(unlikely(!IS_STRING((top = *stackpeek(0))))) omdisplayerr(vm, top);
-        printf("%s", AS_CSTRING(top));
-        pop(vm);
+        ncall(vm, ret, OBJ_VAL(omethod), 1);
+        Value top = *stackpeek(0);
+        if(unlikely(!IS_STRING(top))) omdisplayerr(vm, top);
         return 1;
     }
     return 0;
@@ -540,7 +532,6 @@ static int callomdisplay(VM* vm, Value val)
 /* =============== operator overloading =============== */
 
 #if defined(SK_OVERLOAD_OPS)
-
 
 /* Tries to call class overloaded unary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
@@ -576,8 +567,7 @@ static force_inline int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res
 }
 
 
-/* Tries calling binary or unary overloaded operator method,
- * errors on failure. */
+/* Tries calling binary or unary overloaded operator method, errors on failure. */
 void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
 {
     if(!omisunop(op)) {
@@ -586,9 +576,64 @@ void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
 }
 
 
+
+
+
+/* =============== ordering =============== */
+
+static force_inline int omcallorder(VM* vm, Value l, Value r, OMTag ordop)
+{
+    sk_assert(vm, ordop >= OM_NE && ordop <= OM_GE, "invalid OMTag for order");
+    if(callbinop(vm, l, r, ordop, stackpeek(1))) { // try overload
+        --vm->sp; // remove second operand
+        return 1;
+    }
+    if(unlikely(ordop != OM_EQ)) ordererror(vm, l, r);
+    return 0;
+}
+
+
+int oeq(VM* vm, Value l, Value r)
+{
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) == 0;
+    if(omcallorder(vm, l, r, OM_EQ)) return !ISFALSE(*stackpeek(0));
+    return l == r;
+}
+
+int olt(VM* vm, Value l, Value r)
+{
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0;
+    omcallorder(vm, l, r, OM_LT); // can fail
+    return !ISFALSE(*stackpeek(0));
+}
+
+int ogt(VM* vm, Value l, Value r)
+{
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0;
+    omcallorder(vm, l, r, OM_GT); // can fail
+    return !ISFALSE(*stackpeek(0));
+}
+
+int ole(VM* vm, Value l, Value r)
+{
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0;
+    omcallorder(vm, l, r, OM_LE); // can fail
+    return !ISFALSE(*stackpeek(0));
+}
+
+int oge(VM* vm, Value l, Value r)
+{
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0;
+    omcallorder(vm, l, r, OM_GE); // can fail
+    return !ISFALSE(*stackpeek(0));
+}
+
+/* ---------------------------------------------------- */ // ordering
+
 #endif // if defined(SK_OVERLOAD_OPS)
 
-/* ---------------------------------------------------- */
+/* ---------------------------------------------------- */ // operator overloading
+
 
 
 
@@ -604,7 +649,6 @@ OString* otostr(VM* vm, O* object)
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
-#define BREAK       return
 #endif
     DISPATCH(otype(object))
     {
@@ -634,11 +678,9 @@ OString* otostr(VM* vm, O* object)
         }
         CASE(OBJ_INSTANCE)
         {
-            Value debug;
             OInstance* instance = cast(OInstance*, object);
-            if(HashTable_get(&instance->fields, OBJ_VAL(vm->statics[SS_DBG]), &debug) &&
-               IS_STRING(debug))
-                return AS_STRING(debug);
+            Value debug = getsfield(instance, SF_DEBUG);
+            if(IS_STRING(debug)) return AS_STRING(debug);
             return instance->oclass->name;
         }
         CASE(OBJ_BOUND_METHOD)
@@ -700,7 +742,9 @@ void oprint(VM* vm, Value value)
         }
         CASE(OBJ_INSTANCE)
         {
-            if(!callomdisplay(vm, value))
+            if(callomdisplay(vm, value)) {
+                printf("%s", AS_CSTRING(*stackpeek(0)));
+            } else
                 printf(
                     "%p-%s instance",
                     AS_OBJ(value),

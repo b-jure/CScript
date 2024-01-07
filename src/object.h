@@ -34,6 +34,8 @@
 #define IS_BOUND_METHOD(value) isotype(value, OBJ_BOUND_METHOD)
 #define AS_BOUND_METHOD(value) ((OBoundMethod*)AS_OBJ(value))
 
+#define ISFALSE(value) (IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value)))
+
 /* Object types */
 typedef enum {
     OBJ_STRING = 0,
@@ -172,46 +174,73 @@ OString* OString_fmt(VM* vm, const char* fmt, ...);
 OString* concatenate(VM* vm, Value a, Value b);
 OString* unescape(VM* vm, OString* string);
 
+
 /* Create wrapper around instance method */
 OBoundMethod* OBoundMethod_new(VM* vm, Value receiver, OClosure* method);
+
 
 /* Create class instance */
 OInstance* OInstance_new(VM* vm, OClass* cclass);
 
+
 /* Create class */
 OClass* OClass_new(VM* vm, OString* name);
+
+/* Get the value of the class special field */
+#define getsfield(instance, sftag) (instance)->oclass->sfields[sftag]
+
 
 /* Create upvalue */
 OUpvalue* OUpvalue_new(VM* vm, Value* var_ref);
 
+
 /* Create skooma closure */
 OClosure* OClosure_new(VM* vm, OFunction* fn);
+
 
 /* Create native C function */
 ONative*
 ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals);
 
+
 /* Create skoomoa function */
 OFunction* OFunction_new(VM* vm);
+
 
 /* debug only, prints object type name */
 void otypeprint(OType type); // Debug
 
+
 /* Gets/Creates object string from object */
 OString* otostr(VM* vm, O* object);
+
 
 /* Tries calling binary or unary operator overload method */
 void otryop(VM* vm, Value a, Value b, OMTag op, Value* res);
 
+
 /* Prints the object value */
 void oprint(VM* vm, Value value);
+
+
+/* Object value equality */
+#if defined(SK_OVERLOAD_OPS)
+int oeq(VM* vm, Value l, Value r);
+int olt(VM* vm, Value l, Value r);
+int ogt(VM* vm, Value l, Value r);
+int ole(VM* vm, Value l, Value r);
+int oge(VM* vm, Value l, Value r);
+#else
+#define oeq(vm, l, r) ((l) == (r))
+#endif
+
 
 /* Hashes the object value */
 Hash ohash(Value value);
 
+
 /* Free object memory */
 void ofree(VM* vm, O* object);
-
 
 
 /* Array holding 'retcnt' for each overload-able method (excluding operators) */

@@ -315,8 +315,7 @@ typedef enum {
     S_ECMP, // invalid comparison
     S_ESOVERFLOW, // stack overflow
     S_EFOVERFLOW, // CallFrame overflow
-    S_EARGC, // argc does not match function arity
-    S_EARGCMIN, // argc is smaller than arity
+    S_EARITY, // function argument count is less than its arity
     S_EBINOP, // binary operator error
     S_EUDPROPERTY, // undefined property
     S_EPACCESS, // invalid property access
@@ -325,7 +324,7 @@ typedef enum {
     S_EUDGLOBAL, // undefined global variable
     S_EGLOBALREDEF, // redefinition of global variable
     S_EDISPLAY, // display method returned invalid value
-    S_ECALLVAL, // tried calling non-callable value
+    S_ECALL, // tried calling non-callable value
     S_ESTRFMT, // string format error
     S_CNT,
 } Status;

@@ -1,66 +1,40 @@
 #ifndef SKCONFIG_H
 #define SKCONFIG_H
 
-#define __STDC_LIMIT_MACROS
-
-#include <assert.h>
-#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(__STDC_VERSION__)
-#if __STDC_VERSION__ < 201112L
-#error "Minimum required C standard must be C11 (201112L)."
-#endif
-#elif defined(__cplusplus)
-#if __cplusplus < 201103L
-#error "Minimum required C++ standard must be C++11 (201103L)."
-#endif
-#else
-#error "Compiler not supported (no __STDC_VERSION__ or __cplusplus defined)."
-#endif // __STDC_VERSION__
 
+
+/* Check if double precision floating point is missing */
 #if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||         \
     __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 ||                              \
     __DBL_MIN_10_EXP__ != -307 || __DBL_MIN_EXP__ != -1021
-
 #error "Compiler missing IEEE-754 double precision floating point!"
 #endif
 
-static_assert(sizeof(void*) == 8, "Size of 'void*' is not 8.");
-static_assert(sizeof(double) == sizeof(long), "Size of 'long' and 'double' not equal.");
-static_assert(
-    sizeof(int64_t) == sizeof(double),
-    "Size of 'int64_t' and 'double' not equal.");
-
-/**
- *
- * Note: Assuming GCC, MSVC or clang are newer versions
- * because they are supporting C11 or C++11!
- *
- * GCC      >= 4.6
- * Clang    >= 3.1
- * MSVC     >= 16.8
- *
- **/
 
 
+/*
+ * Are we using GNU C compatible compiler ?
+ */
 #if defined(__GNUC__)
-
 #define SK_PRECOMPUTED_GOTO
-
 #define force_inline   __always_inline
-#define likely(cond)   __glibc_likely(cond)
-#define unlikely(cond) __glibc_unlikely(cond)
+#define likely(cond)   __builtin_expect(cond, 1)
+#define unlikely(cond) __builtin_expect(cond, 0)
 #define unused         __attribute__((unused))
 #define unreachable    __builtin_unreachable()
+#define sk_noret       void __attribute__((noreturn))
 
+
+/*
+ * Are we using MSVC ?
+ */
 #elif defined(_MSC_VER) && !defined(__clang__)
-
 #define force_inline __force_inline
 #define unreachable  __assume(0)
 #define unused
-
 #ifndef __cplusplus
 #define inline         _inline
 #define likely(cond)   cond
@@ -71,76 +45,116 @@ static_assert(
 #else
 #define likely(cond)   cond
 #define unlikely(cond) cond
-#endif
-
+#endif // __cplusplus
 #define unused
-
-#elif defined(__clang__)
-
-#define SK_PRECOMPUTED_GOTO
-
-#if __has_attribute(always_inline)
-#define force_inline __attribute__((always_inline))
+#if _MSC_VER >= 1200
+#define sk_noret void __declspec(noreturn)
 #else
-#define force_inline inline
+#define sk_noret void
 #endif
 
-#if __has_attribute(unused)
-#define unused __attribute__((unused))
+/*
+ * We are not using MSVC and/or GNU compiler
+ */
 #else
-#define unused
-#endif
-
-#if __has_builtin(__builtin_expect)
-#define likely(cond)   __builtin_expect(cond, 1)
-#define unlikely(cond) __builtin_expect(cond, 0)
-#else
-#define likely(cond)   cond
-#define unlikely(cond) cond
-#endif
-
-#if __has_builtin(__builtin_unreachable)
-#define unreachable __builtin_unreachable()
-#else
-#define unreachable                                                                      \
-    #include<stdio.h> #include<stdlib.h> printf(                                         \
-        "Unreachable code: %s:%d\n",                                                     \
-        __FILE__,                                                                        \
-        __LINE__);                                                                       \
-    abort();
-#endif
-
-#else
-
-#define force_inline
+#define force_inline   inline
 #define likely(cond)   cond
 #define unlikely(cond) cond
 #define unused
 #define unreachable                                                                      \
     #include<stdio.h> #include<stdlib.h> printf(                                         \
-        "Unreachable code: %s:%d\n",                                                     \
+        "Unreachable code is reached: %s:%d\n",                                          \
         __FILE__,                                                                        \
         __LINE__);                                                                       \
     abort();
+#define sk_noret void
 
-#endif
+#endif // defined(__GNUC__)
 
 
 
 
-/* Max stack size in bytes, default set to 524 KiB. */
-#define SK_STACK_MAX (1 << 19)
+/* This is the limit of almost everything inside the
+ * interpreter, it is the maximum amount of variables,
+ * constants, upvalues, local or global values you can
+ * define.
+ * It is also the limit of arguments a function
+ * can take or maximum amount of values a function can
+ * return.
+ * Additionally it is the limit of OP_JMP family of
+ * instructions, meaning you can't jump over more than
+ * this amount of bytecode.
+ *
+ * The reason behind this is the size of the bytecode,
+ * the longest encoded instruction in Skooma is 3 bytes.
+ *
+ * Changing this to a lower value will enforce the new
+ * limit on everything that was mentioned above.
+ *
+ * HOWEVER SETTING THIS TO A HIGHER VALUE THAN THE
+ * DEFAULT ONE IS NOT RECOMMENDED, BECAUSE IN CASE
+ * YOU REACH THIS LIMIT IN ANY OF THE AREAS MENTIONED
+ * ABOVE, IT WILL BREAK THE INTERPRETER. */
+#define SK_BYTECODE_MAX 16777215
 
-/* Max temporary values VM can hold when
- * returning from a function. */
-#define SK_TEMP_MAX 0xffffff
+/* Maximum amount of arguments a function can take.
+ * By default it is set to 'SK_BYTECODE_MAX', can be changed
+ * to a lower value if desired. */
+#define SK_ARG_MAX SK_BYTECODE_MAX
+
+/* Maximum amount of return values in the function
+ * return statement and on the right side of assignment.
+ * By default it is set to 'SK_BYTECODE_MAX', can be changed
+ * to a lower value if desired. */
+#define SK_RET_MAX SK_BYTECODE_MAX
+
+/* Maximum amount of local variables.
+ * By default it is set to 'SK_BYTECODE_MAX', can be changed
+ * to a lower value if desired. */
+#define SK_LVAR_MAX SK_BYTECODE_MAX
+
+/* Maximum amount of global variables.
+ * By default it is set to 'SK_BYTECODE_MAX', can be changed
+ * to a lower value if desired. */
+#define SK_GVAR_MAX SK_BYTECODE_MAX
+
+/* Code jump limit, used in conditional jumps or loops.
+ * By default it is set to 'SK_BYTECODE_MAX', can be changed
+ * to a lower value if desired. */
+#define SK_JMP_MAX SK_BYTECODE_MAX
+
+
+
+
+/* Max stack size in bytes, default set to 524 KiB.
+ * In case the value (amount of memory) is set too low
+ * in which case the stack wouldn't be able to store
+ * a single Skooma value, then the size of the stack
+ * is automatically set to '_FALLBACK_STACK' defined
+ * in [sklimits.h].
+ * In case the value (amount of memory) is set too
+ * high, where the stack size is bigger than
+ * 'SK_BYTECODE_MAX' limit, then the stack size will
+ * be set to 'SK_BYTECODE_MAX' instead. */
+#define SK_STACK_MAX 536574
+
+
+
 
 /* Max function call frames.
- * This grows each time user calls a callable value. */
+ * This is basically size of a call stack (total
+ * count of all the functions that are currently
+ * being executed). */
 #define SK_CALLFRAMES_MAX 256
+
+
+
 
 /* Allow NaN boxing of values by default. */
 #define SK_NAN_BOX
+
+
+
 
 /* Default heap grow factor is 2.0. */
 #define GC_HEAP_GROW_FACTOR 2.0
@@ -150,17 +164,19 @@ static_assert(
 
 
 
+
 /* Enables assertions when doing API calls from C.
  * Enabled by default, to disable remove this define
  * or comment it out. */
 #define SK_CHECK_API
-
 
 #if defined(SK_CHECK_API)
 #undef NDEBUG
 #include <assert.h>
 #define sk_checkapi(vm, cond, msg) assert(cond)
 #endif
+
+
 
 
 /* In case user wants to use his own locking mechanism,
@@ -171,6 +187,7 @@ static_assert(
 
 
 
+
 /* Mark/signature for core API functions. */
 #define SK_API extern
 
@@ -178,44 +195,35 @@ static_assert(
 #define SK_LIBAPI SK_API
 
 
-/* https://www.lua.org/source/5.4/llimits.h.html#l_noret */
-#if !defined(sk_noret)
-#if defined(__GNUC__)
-#define sk_noret void __attribute__((noreturn))
-#elif defined(_MSC_VER) && _MSC_VER >= 1200
-#define sk_noret void __declspec(noreturn)
-#else
-#define sk_noret void
-#endif
-#endif // sk_noret
 
 
 /* For debug builds comment out 'defines' you dont want. */
-#ifdef DEBUG
+#ifdef SK_DEBUG_BUILD
 #define sdebug
 
 /* Enable debug asserts */
-#define DEBUG_ASSERTIONS
+#define SK_DEBUG_ASSERTIONS
 
 /* Print and disassemble bytecode for each chunk/function */
-#define DEBUG_PRINT_CODE
+#define SK_DEBUG_PRINT_CODE
 
 /* Trace VM stack while executing */
-#define DEBUG_TRACE_EXECUTION
+#define SK_DEBUG_TRACE_EXECUTION
 
 /* Run garbage collection on each allocation */
-#define DEBUG_STRESS_GC
+#define SK_DEBUG_STRESS_GC
 
 /* Log garbage collection */
-// #define DEBUG_LOG_GC
+#define SK_DEBUG_LOG_GC
 #else
 #define sdebug unused
 #endif
 
 
+
 /* Allow operator overloading by default */
-#ifndef SK_OVERLOAD_OPS
 #define SK_OVERLOAD_OPS
-#endif
+
+
 
 #endif

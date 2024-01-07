@@ -79,10 +79,10 @@
     OSTRINGF(vm, "Expected %d argument/s, instead got %d.", arity, argc)
 #define FN_VA_ARGC_ERR(vm, arity, argc)                                                  \
     OSTRINGF(vm, "Expected at least %d argument/s, instead got %d.", arity, argc)
-#define FRAME_LIMIT_ERR(vm, frames_max)                                                  \
-    OSTRINGF(vm, "Call-frame stack overflow, limit reached [%u].", frames_max)
-#define RETCNT_STACK_OVERFLOW(vm, native)                                                \
-    OSTRINGF(vm, "Called function '%s' return count would overflow the stack.", native)
+#define FRAME_LIMIT_ERR(vm, frlimit)                                                     \
+    OSTRINGF(vm, "Callstack overflow, limit overflown -> %u.", frlimit)
+#define RETCNT_STACK_OVERFLOW(vm, fname)                                                 \
+    OSTRINGF(vm, "Called function '%s' return count overflows the stack.", fname)
 
 
 /* push() */
@@ -202,7 +202,7 @@ sk_noret binoperr(VM* vm, Value a, Value b, OMTag op)
     const char* fmt = "Attempt to perform binary %s on %s (left) and %s (right).";
     push(vm, OBJ_VAL(vtostr(vm, a)));
     push(vm, OBJ_VAL(vtostr(vm, b)));
-    const char* operation = vm->statics[op + SS_ADD]->storage;
+    const char* operation = vm->statics[op + SS_OPADD]->storage;
     const char* left = AS_CSTRING(*stackpeek(1));
     const char* right = AS_CSTRING(*stackpeek(0));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, operation, left, right)));
@@ -223,7 +223,7 @@ sk_noret unoperr(VM* vm, Value a, OMTag op)
 
 sk_noret omdisplayerr(VM* vm, Value result)
 {
-    const char* fmt = "Display method must return a string, instead got '%s'.";
+    const char* fmt = "Display method must return a string, instead got %s.";
     push(vm, OBJ_VAL(vtostr(vm, result)));
     const char* resultstring = AS_CSTRING(*stackpeek(0));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, resultstring)));
@@ -239,3 +239,58 @@ sk_noret ostringfmterr(VM* vm, int c, Value callee)
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, c, fn)));
     runerror(vm, S_ESTRFMT);
 }
+
+
+sk_noret sovferror(VM* vm)
+{
+    const char* fmt = "Stack overflow, limit overflown -> %d.";
+    vm->sp--; // make some space
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, VM_STACK_LIMIT)));
+    runerror(vm, S_ESOVERFLOW);
+}
+
+
+sk_noret udproperror(VM* vm, Value property, OClass* oclass)
+{
+    const char* fmt = "Property '%s' is not defined for <class '%s'>.";
+    const char* pname = AS_CSTRING(property);
+    const char* classname = oclass->name->storage;
+    push(vm, OBJ_VAL(OString_fmt(vm, pname, classname)));
+    runerror(vm, S_EUDPROPERTY);
+}
+
+
+sk_noret retovferror(VM* vm, const char* fn)
+{
+    const char* fmt = "Called function '%s' return count overflows the stack.";
+    if(vm->sp - vm->stack >= VM_STACK_LIMIT) vm->sp--;
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, fn)));
+    runerror(vm, S_ESOVERFLOW);
+}
+
+
+sk_noret arityerror(VM* vm, int expected, int got)
+{
+    const char* fmt = "Expected %d arguments instead got %d.";
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, expected, got)));
+    runerror(vm, S_EARITY);
+}
+
+
+sk_noret fcovferror(VM* vm)
+{
+    const char* fmt = "Callstack overflow, limit overflown -> %lu.";
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, VM_CALLSTACK_LIMIT)));
+    runerror(vm, S_EFOVERFLOW);
+}
+
+
+sk_noret callerror(VM* vm, Value callee)
+{
+    const char* fmt = "Tried calling non-callable value %s.";
+    push(vm, OBJ_VAL(vtostr(vm, callee)));
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stackpeek(0)))));
+    runerror(vm, S_ECALL);
+}
+
+/* --------------------------------------------------------- */ // runtime errors

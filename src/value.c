@@ -66,7 +66,9 @@ int varith(VM* vm, Value a, Value b, Ar op, Value* res)
 void arith(VM* vm, Value a, Value b, Ar op, Value* res)
 {
     if(!varith(vm, a, b, op, res)) {
+#if defined(SK_OVERLOAD_OPS)
         otryop(vm, a, b, (op - AR_ADD) + OM_ADD, res);
+#endif
     }
 }
 
@@ -75,6 +77,7 @@ void arith(VM* vm, Value a, Value b, Ar op, Value* res)
 int val2type(Value value)
 {
 #if defined(val2tbmask)
+
     static const int typetable[] = {
         TT_NIL,
         TT_NUMBER,
@@ -87,9 +90,11 @@ int val2type(Value value)
         TT_NATIVE,
         TT_METHOD,
     };
-    unsigned char bitidx = sk_ctz(val2tbmask(value));
+    uint8_t bitidx = sk_ctz(val2tbmask(value));
     return typetable[bitidx];
-#else
+
+#elif defined(SK_NAN_BOX)
+
     if(IS_NIL(value)) return TT_NIL;
     else if(IS_NUMBER(value)) return TT_NUMBER;
     else if(IS_STRING(value)) return TT_STRING;
@@ -100,8 +105,56 @@ int val2type(Value value)
     else if(IS_CLOSURE(value)) return TT_CLOSURE;
     else if(IS_NATIVE(value)) return TT_NATIVE;
     else if(IS_BOUND_METHOD(value)) return TT_METHOD;
-#endif
     unreachable;
+
+#else
+
+#if defined(SK_PRECOMPUTED_GOTO)
+#define VAL_TABLE
+#include "jmptable.h"
+#undef VAL_TABLE
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(l)     case l:
+#endif
+    DISPATCH(value.type)
+    {
+        CASE(VAL_NIL)
+        {
+            return TT_NIL;
+        }
+        CASE(VAL_NUMBER)
+        {
+            return TT_NUMBER;
+        }
+        CASE(VAL_BOOL)
+        {
+            return TT_BOOL;
+        }
+        CASE(VAL_OBJ)
+        {
+            switch(otype(AS_OBJ(value))) {
+                case OBJ_STRING:
+                    return TT_STRING;
+                case OBJ_CLASS:
+                    return TT_CLASS;
+                case OBJ_NATIVE:
+                    return TT_NATIVE;
+                case OBJ_FUNCTION:
+                    return TT_FUNCTION;
+                case OBJ_CLOSURE:
+                    return TT_CLOSURE;
+                case OBJ_BOUND_METHOD:
+                    return TT_METHOD;
+                case OBJ_INSTANCE:
+                    return TT_INSTANCE;
+                default:
+                    unreachable; // upvalue
+            }
+        }
+    }
+
+#endif
 }
 
 
@@ -176,17 +229,17 @@ method:
 
 
 
-/* ================= Compare ================= */
+/* ================= ordering ================= */
 
 // Values are equal
-bool veq(VM* vm, Value a, Value b)
+bool veq(VM* vm, Value l, Value r)
 {
     UNUSED(vm);
 #ifdef SK_NAN_BOX
-    if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) == AS_NUMBER(b);
-    return a == b;
+    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) == AS_NUMBER(r);
+    return oeq(vm, l, r);
 #else
-    if(a.type != b.type) return false;
+    if(l.type != r.type) return false;
 #ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
 #include "jmptable.h"
@@ -195,15 +248,15 @@ bool veq(VM* vm, Value a, Value b)
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
 #endif
-    DISPATCH(a.type)
+    DISPATCH(l.type)
     {
         CASE(VAL_BOOL)
         {
-            return AS_BOOL(a) == AS_BOOL(b);
+            return AS_BOOL(l) == AS_BOOL(r);
         }
         CASE(VAL_NUMBER)
         {
-            return AS_NUMBER(a) == AS_NUMBER(b);
+            return AS_NUMBER(l) == AS_NUMBER(r);
         }
         CASE(VAL_NIL)
         {
@@ -211,7 +264,7 @@ bool veq(VM* vm, Value a, Value b)
         }
         CASE(VAL_OBJ)
         {
-            return AS_OBJ(a) == AS_OBJ(b);
+            return oeq(vm, l, r);
         }
     }
 #endif
@@ -221,39 +274,57 @@ bool veq(VM* vm, Value a, Value b)
 }
 
 // Value less than
-bool vlt(VM* vm, Value a, Value b)
+bool vlt(VM* vm, Value l, Value r)
 {
-    if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) < AS_NUMBER(b);
-    if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) < 0;
-    ordererror(vm, a, b);
+    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) < AS_NUMBER(r);
+#if defined(SK_OVERLOAD_OPS)
+    return olt(vm, l, r);
+#else
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0;
+    ordererror(vm, l, r);
+#endif
 }
 
 
 // Value greater than
-bool vgt(VM* vm, Value a, Value b)
+bool vgt(VM* vm, Value l, Value r)
 {
-    if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) > AS_NUMBER(b);
-    if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) > 0;
-    ordererror(vm, a, b);
+    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) > AS_NUMBER(r);
+#if defined(SK_OVERLOAD_OPS)
+    return ogt(vm, l, r);
+#else
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0;
+    ordererror(vm, l, r);
+#endif
 }
 
 
 // Value less equal
-bool vle(VM* vm, Value a, Value b)
+bool vle(VM* vm, Value l, Value r)
 {
-    if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) <= AS_NUMBER(b);
-    if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) <= 0;
-    ordererror(vm, a, b);
+    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) <= AS_NUMBER(r);
+#if defined(SK_OVERLOAD_OPS)
+    return ole(vm, l, r);
+#else
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0;
+    ordererror(vm, l, r);
+#endif
 }
 
 
 // Value greater equal
-bool vge(VM* vm, Value a, Value b)
+bool vge(VM* vm, Value l, Value r)
 {
-    if(IS_NUMBER(a) && IS_NUMBER(b)) return AS_NUMBER(a) >= AS_NUMBER(b);
-    if(IS_STRING(a) && IS_STRING(b)) return strcmp(AS_CSTRING(a), AS_CSTRING(b)) >= 0;
-    ordererror(vm, a, b);
+    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) >= AS_NUMBER(r);
+#if defined(SK_OVERLOAD_OPS)
+    return oge(vm, l, r);
+#else
+    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0;
+    ordererror(vm, l, r);
+#endif
 }
+
+/* ---------------------------------------- */ // ordering
 
 
 
@@ -293,7 +364,7 @@ boolean:
 obj:
     return otostr(vm, AS_OBJ(value));
 #elif defined(SK_NAN_BOX)
-    if(IS_BOOL(value)) return booltostr(vm, AS_BOOL(value));
+    if(IS_BOOL(value)) return btostr(vm, AS_BOOL(value));
     else if(IS_NIL(value)) return vm->statics[SS_NIL];
     else if(IS_OBJ(value)) return otostr(vm, AS_OBJ(value));
     else if(IS_NUMBER(value)) return dtostr(vm, AS_NUMBER(value));
@@ -332,6 +403,8 @@ obj:
     unreachable;
 }
 
+
+/* Print value */
 void vprint(VM* vm, Value value)
 {
 #if defined(val2tbmask_1)
@@ -356,6 +429,13 @@ boolean:
 object:
     oprint(vm, value);
     return;
+#elif defined(SK_NAN_BOX)
+    if(IS_NIL(value)) printf("nil");
+    else if(IS_NUMBER(value)) {
+        if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%lg", AS_NUMBER(value));
+        else printf("%ld", (int64_t)AS_NUMBER(value));
+    } else if(IS_BOOL(value)) printf(AS_BOOL(value) ? "true" : "false");
+    else oprint(vm, value);
 #else
 #ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
@@ -393,16 +473,17 @@ object:
             BREAK;
         }
     }
-    unreachable;
 #ifdef SKJMPTABLE_H
 #undef SKJMPTABLE_H
 #endif
 #endif // defined(val2tbmask_1)
-    return;
 }
 
-Hash vhash(Value value)
+
+/* Hash value */
+Hash vhash(VM* vm, Value value)
 {
+    sk_assert(vm, !IS_NIL(value), "can't hash nil values");
 #if defined(val2tbmask_1)
     static const void* jmptable[] = {
         &&nil,
@@ -422,6 +503,13 @@ boolean:
     return cast(Hash, AS_BOOL(value));
 object:
     return ohash(value);
+#elif defined(SK_NAN_BOX)
+    if(IS_NUMBER(value)) {
+        sk_number num = AS_NUMBER(value);
+        if(num < 0 || floor(num) != num) return dblhash(num);
+        else return cast(Hash, num);
+    } else if(IS_BOOL(value)) return cast(Hash, AS_BOOL(value));
+    else return ohash(value);
 #else
 #ifdef SK_PRECOMPUTED_GOTO
 #define VAL_TABLE
@@ -433,6 +521,10 @@ object:
 #endif
     DISPATCH(value.type)
     {
+        CASE(VAL_NIL) // only avoid unused 'label' warning
+        {
+            unreachable;
+        }
         CASE(VAL_BOOL)
         {
             return AS_BOOL(value) ? 1 : 0;
@@ -449,7 +541,5 @@ object:
             return ohash(value);
         }
     }
-#endif // defined(val2tbmask_1)
-    unreachable;
-    return 0;
+#endif
 }

@@ -8,6 +8,7 @@
 #include "object.h"
 #include "parser.h"
 #include "skconf.h"
+#include "sklimits.h"
 #include "skmath.h"
 #include "value.h"
 #include "vmachine.h"
@@ -319,9 +320,9 @@ typedef enum {
     FN_SCRIPT, // Top-level code (implicit function)
 } FunctionType;
 
-#define FCLEAR(F, modifier) BIT_CLEAR((F)->vflags, modifier)
-#define FSET(F, modifier)   BIT_SET((F)->vflags, modifier)
-#define FIS(F, modifier)    BIT_CHECK((F)->vflags, modifier)
+#define FCLEAR(F, modifier) bclear((F)->vflags, modifier)
+#define FSET(F, modifier)   bset((F)->vflags, modifier)
+#define FIS(F, modifier)    btest((F)->vflags, modifier)
 
 #define FFIXED 1 // Variable is fixed
 
@@ -500,7 +501,7 @@ static force_inline void codeloop(Function* F, UInt start)
 {
     CODE(F, OP_LOOP);
     UInt offset = codeoffset(F) - start + 3;
-    if(offset >= BYTECODE_MAX) JUMP_LIMIT_ERR(F, BYTECODE_MAX);
+    if(offset >= VM_JMP_LIMIT) JUMP_LIMIT_ERR(F, VM_JMP_LIMIT);
     CODEL(F, offset);
 }
 
@@ -539,8 +540,8 @@ static force_inline UInt add_upval(Function* F, UInt idx, Byte flags, bool local
         Upvalue* upvalue = Array_Upvalue_index(F->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local) return i; // already exists
     }
-    if(unlikely(upvalc >= INDEX_MAX)) {
-        UPVALUE_LIMIT_ERR(F, INDEX_MAX, F->fn->name->storage);
+    if(unlikely(upvalc >= VM_STACK_LIMIT)) {
+        UPVALUE_LIMIT_ERR(F, VM_STACK_LIMIT, F->fn->name->storage);
         return 0;
     }
     Upvalue upval = {idx, flags, local};
@@ -555,7 +556,7 @@ static Int get_upval(Function* F, Token* name)
     Int idx = get_local(F->enclosing, name);
     if(idx != -1) {
         Local* l = Array_Local_index(&F->enclosing->locals, idx);
-        LFLAG_SET(l, VCAPTURED_BIT);
+        bset(l->flags, VCAPTURED_BIT);
         return add_upval(F, (UInt)idx, l->flags, true);
     }
     idx = get_upval(F->enclosing, name);
@@ -572,8 +573,8 @@ static force_inline UInt globalvar(Function* F, Value identifier)
     Variable glob = {UNDEFINED_VAL, F->vflags};
     VM* vm = F->vm;
     if(!HashTable_get(&vm->globids, identifier, &index)) {
-        if(unlikely((vm)->globvars.len + 1 > BYTECODE_MAX))
-            GLOBALS_LIMIT_ERR(F, BYTECODE_MAX);
+        if(unlikely((vm)->globvars.len + 1 > VM_GVAR_LIMIT))
+            GLOBALS_LIMIT_ERR(F, VM_GVAR_LIMIT);
         push(vm, identifier);
         index = NUMBER_VAL(Array_Variable_push(&vm->globvars, glob));
         HashTable_insert(vm, &vm->globids, identifier, index);
@@ -703,7 +704,8 @@ static void rmlastins(Function* F, Exp* E)
 // Start new 'Scope'
 static force_inline void startscope(Function* F, Scope* S, Byte isloop, Byte isswitch)
 {
-    if(unlikely((UInt)F->S->depth >= BYTECODE_MAX)) SCOPE_LIMIT_ERR(F, BYTECODE_MAX);
+    if(unlikely((UInt)F->S->depth >= SK_BYTECODE_MAX))
+        SCOPE_LIMIT_ERR(F, SK_BYTECODE_MAX);
     S->localc = F->locals.len;
     S->isloop = isloop;
     S->isswitch = isswitch;
@@ -715,7 +717,7 @@ static force_inline void startscope(Function* F, Scope* S, Byte isloop, Byte iss
 // End scope and pop locals and/or close captured locals
 static void endscope(Function* F)
 {
-#define LOCAL_IS_CAPTURED(local) (LFLAG_CHECK((local), VCAPTURED_BIT))
+#define LOCAL_IS_CAPTURED(local) (btest((local)->flags, VCAPTURED_BIT))
 
     F->fn->gotret = 0;
     Int pop = 0;
@@ -968,8 +970,8 @@ OClosure* compile(VM* vm, const char* source, Value name)
 // Create new local variable
 static void local_new(Function* F, Token name)
 {
-    if(unlikely((Int)F->locals.len >= INDEX_MAX)) {
-        LOCAL_LIMIT_ERR(F, INDEX_MAX);
+    if(unlikely((Int)F->locals.len >= VM_LVAR_LIMIT)) {
+        LOCAL_LIMIT_ERR(F, VM_LVAR_LIMIT);
         return;
     }
     Array_Local_push(&F->locals, (Local){name, -1, F->vflags});
@@ -990,7 +992,7 @@ static void make_local(Function* F, Token* name)
 static force_inline void patchjmp(Function* F, Int jmp_offset)
 {
     Int offset = codeoffset(F) - jmp_offset - 3;
-    if(unlikely(offset >= BYTECODE_MAX)) JUMP_LIMIT_ERR(F, BYTECODE_MAX);
+    if(unlikely(offset >= VM_JMP_LIMIT)) JUMP_LIMIT_ERR(F, VM_JMP_LIMIT);
     PUT_BYTES3(&CHUNK(F)->code.data[jmp_offset], offset);
 }
 
@@ -1017,8 +1019,8 @@ static force_inline void endbreaklist(Function* F)
 
 static force_inline UInt make_constant(Function* F, Value constant)
 {
-    if(unlikely((Int)CHUNK(F)->constants.len > INDEX_MAX))
-        CONSTANT_LIMIT_ERR(F, F->fn->name->storage, INDEX_MAX);
+    if(unlikely((Int)CHUNK(F)->constants.len > SK_BYTECODE_MAX))
+        CONSTANT_LIMIT_ERR(F, F->fn->name->storage, SK_BYTECODE_MAX);
     return Chunk_make_constant(F->vm, CHUNK(F), constant);
 }
 
@@ -1267,13 +1269,13 @@ static void codeset(Function* F, Exp* E)
     switch(E->type) {
         case EXP_UPVAL: {
             Local* local = upvalvar(F, E->value);
-            if(BIT_CHECK(local->flags, VFIXED_BIT)) LOCAL_FIXED_ERR(F, local->name);
+            if(btest(local->flags, VFIXED_BIT)) LOCAL_FIXED_ERR(F, local->name);
             CODEOP(F, OP_SET_UPVALUE, E->value);
             break;
         }
         case EXP_LOCAL: {
             Local* local = &F->locals.data[E->value];
-            if(BIT_CHECK(local->flags, VFIXED_BIT)) LOCAL_FIXED_ERR(F, local->name);
+            if(btest(local->flags, VFIXED_BIT)) LOCAL_FIXED_ERR(F, local->name);
             CODEOP(F, GET_OP_TYPE(E->value, OP_SET_LOCAL, E), E->value);
             break;
         }
@@ -1316,7 +1318,7 @@ static void exprstm(Function* F, bool lastclause)
         Array_Exp_push(&Earr, E);
         Int vars = 1;
         while(match(F, TOK_COMMA)) {
-            if(unlikely(vars >= BYTECODE_MAX)) VARLIST_LIMIT_ERR(F, BYTECODE_MAX);
+            if(unlikely(vars >= SK_BYTECODE_MAX)) VARLIST_LIMIT_ERR(F, SK_BYTECODE_MAX);
             vars++;
             suffixedexp(F, &E);
             expect_cond(F, etisvar(E.type), "Expect variable.");
@@ -1376,7 +1378,7 @@ static UInt namelist(Function* F, Array_Int* nameidx)
 {
     Int names = 0;
     do {
-        if(names >= BYTECODE_MAX) NAMELIST_LIMIT_ERR(F, BYTECODE_MAX);
+        if(names >= SK_BYTECODE_MAX) NAMELIST_LIMIT_ERR(F, SK_BYTECODE_MAX);
         names++;
         Int idx = name(F, "Expect name."); // initialize later
         if(F->S->depth == 0) Array_Int_push(nameidx, idx);
@@ -1526,7 +1528,7 @@ static void classdec(Function* F)
 static void call(Function* F, Exp* E)
 {
     CODE(F, OP_CALLSTART);
-    if(!check(F, TOK_RPAREN)) explist(F, BYTECODE_MAX, E);
+    if(!check(F, TOK_RPAREN)) explist(F, VM_ARG_LIMIT, E);
     else E->type = EXP_NONE;
     expect(F, TOK_RPAREN, "Expect ')'.");
     if(ethasmulret(E->type)) setmulret(F, E);
@@ -1843,7 +1845,7 @@ static Int foreachvars(Function* F)
 {
     Int vars = 0;
     do {
-        if(vars >= BYTECODE_MAX) VARLIST_LIMIT_ERR(F, BYTECODE_MAX);
+        if(vars >= SK_BYTECODE_MAX) VARLIST_LIMIT_ERR(F, SK_BYTECODE_MAX);
         vars++;
         expect(F, TOK_IDENTIFIER, "Expect varname.");
         make_local(F, &PREVT(F));
@@ -1987,7 +1989,7 @@ static void returnstm(Function* F)
         if(type == FN_INIT) RETURN_INIT_ERR(F, static_str[SS_INIT].name);
         Exp E;
         E.ins.set = false;
-        explist(F, BYTECODE_MAX, &E);
+        explist(F, VM_RET_LIMIT, &E);
         expect(F, TOK_SEMICOLON, "Expect ';' after return statement value/s.");
         if(gotret) {
             F->fn->gotret = 1;

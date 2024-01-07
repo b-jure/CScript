@@ -25,20 +25,21 @@
 #define GSARRAY_PUSH(vm, objref)                                                         \
     ({                                                                                   \
         if((vm)->gscap <= (vm)->gslen) {                                                 \
-            if(unlikely((vm)->gscap >= UINT64_MAX)) {                                    \
+            if(unlikely((vm)->gscap >= VM_GRAYSTACK_LIMIT)) {                            \
                 fprintf(                                                                 \
                     stderr,                                                              \
                     "[%s:%d] Internal error, gray stack capacity exceeded! [gslimit -> " \
                     "%lu]\n",                                                            \
                     __FILE__,                                                            \
                     __LINE__,                                                            \
-                    (UINT64_MAX >> 1));                                                  \
+                    (VM_GRAYSTACK_LIMIT >> 1));                                          \
                 if((vm)->config.panic) (vm)->config.panic(vm);                           \
                 else abort();                                                            \
             }                                                                            \
             Int oldcap = (vm)->gscap;                                                    \
             (vm)->gscap =                                                                \
-                MIN(GROW_ARRAY_CAPACITY((Int)oldcap, ARRAY_INITIAL_SIZE), UINT64_MAX);   \
+                MIN(GROW_ARRAY_CAPACITY((Int)oldcap, ARRAY_INITIAL_SIZE),                \
+                    VM_GRAYSTACK_LIMIT);                                                 \
             (vm)->gray_stack = (O**)realloc((vm)->gray_stack, (vm)->gscap * sizeof(O*)); \
         }                                                                                \
         (vm)->gray_stack[(vm)->gslen++] = objref;                                        \
@@ -105,8 +106,8 @@ typedef void (*FreeFn)(void* value);
     {                                                                                    \
         size_t old_cap = self->cap;                                                      \
         self->cap =                                                                      \
-            MIN(GROW_ARRAY_CAPACITY(old_cap, ARRAY_INITIAL_SIZE), BYTECODE_MAX + 1);     \
-        if(unlikely(self->cap >= BYTECODE_MAX + 1)) {                                    \
+            MIN(GROW_ARRAY_CAPACITY(old_cap, ARRAY_INITIAL_SIZE), SK_BYTECODE_MAX + 1);  \
+        if(unlikely(self->cap >= SK_BYTECODE_MAX + 1)) {                                 \
             fprintf(                                                                     \
                 stderr,                                                                  \
                 "[%s:%d] Internal error, %s capacity exceeded! [capmax -> "              \
@@ -114,7 +115,7 @@ typedef void (*FreeFn)(void* value);
                 __FILE__,                                                                \
                 __LINE__,                                                                \
                 #name,                                                                   \
-                BYTECODE_MAX);                                                           \
+                SK_BYTECODE_MAX);                                                        \
             abort();                                                                     \
         } else {                                                                         \
             self->data = (type*)gcrealloc(                                               \

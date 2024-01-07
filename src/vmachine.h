@@ -3,9 +3,8 @@
 
 #include "array.h"
 #include "chunk.h"
+#include "common.h"
 #include "hashtable.h"
-#include "skconf.h"
-#include "skooma.h"
 #include "value.h"
 
 #include <setjmp.h>
@@ -103,9 +102,6 @@ ARRAY_NEW(Array_VRef, Value*);
 ARRAY_NEW(Array_Variable, Variable);
 
 
-/* Max size of the stack */
-#define VM_STACK_MAX ((int)(SK_STACK_MAX / sizeof(Value)))
-
 
 /* Skooma Virtual Machine */
 struct VM {
@@ -117,7 +113,7 @@ struct VM {
     Function* F; // function state
     CallFrame frames[VM_FRAMES_MAX];
     Int fc; // frame count
-    Value stack[VM_STACK_MAX];
+    Value stack[VM_STACK_LIMIT];
     Value* sp; // stack pointer
     Array_VRef callstart;
     Array_VRef retstart;

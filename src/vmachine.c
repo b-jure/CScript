@@ -32,13 +32,8 @@ volatile Int runtime = 0; // VM is running?
 /* Push the value on the stack */
 void push(VM* vm, Value val)
 {
-    if(likely(vm->sp - vm->stack < (UInt)VM_STACK_MAX)) *vm->sp++ = val;
-    else {
-        ASSERT(vm->sp - vm->stack > 0, "invalid VM_STACK_MAX");
-        vm->sp--; // make some space
-        push(vm, OBJ_VAL(VM_STACK_OVERFLOW(vm, VM_STACK_MAX)));
-        runerror(vm, S_ESOVERFLOW);
-    }
+    if(likely(cast_int(vm->sp - vm->stack) < VM_STACK_LIMIT)) *vm->sp++ = val;
+    else sovferror(vm);
 }
 
 /* Bind class method in order to preserve the receiver.
@@ -49,11 +44,8 @@ void push(VM* vm, Value val)
 void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 {
     Value method;
-    if(unlikely(!HashTable_get(&oclass->methods, name, &method))) {
-        const char* classname = oclass->name->storage;
-        push(vm, OBJ_VAL(UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(name), classname)));
-        runerror(vm, S_EUDPROPERTY);
-    }
+    if(unlikely(!HashTable_get(&oclass->methods, name, &method)))
+        udproperror(vm, name, oclass);
     *stackpeek(0) = OBJ_VAL(OBoundMethod_new(vm, receiver, AS_CLOSURE(method)));
 }
 
@@ -82,8 +74,6 @@ void Config_init(Config* config)
 static int precall(VM* vm, Value callee, Int argc, Int retcnt)
 {
     CallFrame* frame = &vm->frames[vm->fc];
-    OString* err;
-    Int status;
     Int arity, isva, isnative;
     Int type = CALL_SKOOMAFN;
     const char* name = NULL;
@@ -107,51 +97,30 @@ static int precall(VM* vm, Value callee, Int argc, Int retcnt)
     }
 #if defined(callbitmask)
     const static void* jmptable[] = {
-        &&eoverflow,
-        &&eargcva,
-        &&eargc,
-        &&eframe,
-        &&callval,
+        &&stack_overflow,
+        &&invalid_argc,
+        &&callstack_overflow,
+        &&ok,
     };
     UInt bitmask = callbitmask(vm, isva, arity, argc, retcnt);
     uint8_t idx = sk_ctz(bitmask);
     goto* jmptable[idx];
-eoverflow:
-    err = RETCNT_STACK_OVERFLOW(vm, name);
-    status = S_ESOVERFLOW;
-    goto err;
-eargcva:
-    err = FN_VA_ARGC_ERR(vm, arity, argc);
-    status = S_EARGCMIN;
-    goto err;
-eargc:
-    err = FN_ARGC_ERR(vm, arity, argc);
-    status = S_EARGC;
-    goto err;
-eframe:
-    err = FRAME_LIMIT_ERR(vm, VM_FRAMES_MAX);
-    status = S_EFOVERFLOW;
-err:
-    push(vm, OBJ_VAL(err));
-    runerror(vm, status);
+stack_overflow:
+    retovferror(vm, name);
+invalid_argc:
+    arityerror(vm, arity, argc);
+callstack_overflow:
+    fcovferror(vm);
 #else
     if(unlikely(!sk_ensurestack(vm, retcnt))) {
-        err = RETCNT_STACK_OVERFLOW(vm, name);
-        status = S_ESOVERFLOW;
-    } else if(unlikely(isva && arity > argc)) {
-        err = FN_VA_ARGC_ERR(vm, arity, argc);
-        status = S_EARGCMIN;
-    } else if(unlikely(!isva && arity != argc)) {
-        err = FN_ARGC_ERR(vm, arity, argc);
-        status = S_EARGC;
+        retovferror(vm, name);
+    } else if(unlikely((isva && arity > argc) || (!isva && arity != argc))) {
+        arityerror(vm, arity, argc);
     } else if(unlikely(vm->fc == VM_FRAMES_MAX)) {
-        err = FRAME_LIMIT_ERR(vm, VM_FRAMES_MAX);
-        status = S_EFOVERFLOW;
-    } else goto callval;
-    push(vm, OBJ_VAL(err));
-    runerror(vm, status);
+        fcovferror(vm);
+    }
 #endif
-callval:
+ok:
     frame->vacnt = argc - arity;
     frame->retcnt = retcnt;
     frame->callee = vm->sp - argc - 1;
@@ -172,11 +141,7 @@ callval:
  * Overloaded methods are only allowed to be Skooma closures. */
 static int trycall(VM* vm, Value callee, Int argc, Int retcnt)
 {
-    if(unlikely(!IS_OBJ(callee))) {
-        push(vm, OBJ_VAL(vtostr(vm, callee)));
-        push(vm, OBJ_VAL(NONCALLABLE_ERR(vm, AS_CSTRING(*stackpeek(0)))));
-        runerror(vm, S_ECALLVAL);
-    }
+    if(unlikely(!IS_OBJ(callee))) callerror(vm, callee);
     switch(OBJ_TYPE(callee)) {
         case OBJ_BOUND_METHOD: {
             OBoundMethod* bound = AS_BOUND_METHOD(callee);
