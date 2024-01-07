@@ -171,23 +171,28 @@ sk_noret runerror(VM* vm, Int status);
 /* Ordering error */
 sk_noret ordererror(VM* vm, Value a, Value b);
 
+/* Binary/Unary arithmetic operation error */
+#define operror(vm, l, r, op)                                                            \
+    (arisbin(op) ? binoperror(vm, l, r, cast(OMTag, op))                                 \
+                 : unoperror(vm, l, cast(OMTag, op)))
+
 /* Binary arithmetic operation error */
-sk_noret binoperr(VM* vm, Value a, Value b, OMTag op);
+sk_noret binoperror(VM* vm, Value a, Value b, OMTag op);
 
 /* Unary arithmetic operation error */
-sk_noret unoperr(VM* vm, Value a, OMTag op);
+sk_noret unoperror(VM* vm, Value a, OMTag op);
 
 /* Display method (__display__) error */
-sk_noret omdisplayerr(VM* vm, Value result);
+sk_noret disperror(VM* vm, Value result);
 
 /* Object string format error */
-sk_noret ostringfmterr(VM* vm, int c, Value callee);
+sk_noret ofmterror(VM* vm, int c, Value callee);
 
 /* Stack overflow error */
 sk_noret sovferror(VM* vm);
 
 /* Undefined property error */
-sk_noret udproperror(VM* vm, Value property, OClass* oclass);
+sk_noret udperror(VM* vm, Value property, OClass* oclass);
 
 /* Return count stack overflow */
 sk_noret retovferror(VM* vm, const char* fn);
@@ -200,6 +205,9 @@ sk_noret fcovferror(VM* vm);
 
 /* Called non-callable value */
 sk_noret callerror(VM* vm, Value callee);
+
+/* Invalid property access error */
+sk_noret ipaerror(VM* vm, Value notinstance);
 
 /* ---------------------------------------------------------- */
 

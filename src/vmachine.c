@@ -45,7 +45,7 @@ void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 {
     Value method;
     if(unlikely(!HashTable_get(&oclass->methods, name, &method)))
-        udproperror(vm, name, oclass);
+        udperror(vm, name, oclass);
     *stackpeek(0) = OBJ_VAL(OBoundMethod_new(vm, receiver, AS_CLOSURE(method)));
 }
 
@@ -153,10 +153,7 @@ static int trycall(VM* vm, Value callee, Int argc, Int retcnt)
             vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, oclass));
             OClosure* init = oclass->omethods[OM_INIT];
             if(init) return precall(vm, OBJ_VAL(init), argc, 1);
-            else if(unlikely(argc != 0)) {
-                push(vm, OBJ_VAL(FN_ARGC_ERR(vm, 0, argc)));
-                runerror(vm, S_EARGC);
-            }
+            if(unlikely(argc != 0)) arityerror(vm, 0, argc);
             return CALL_CLASS;
         }
         case OBJ_CLOSURE:
@@ -257,11 +254,8 @@ static force_inline void
 invokefrom(VM* vm, OClass* oclass, Value name, Int argc, Int retcnt)
 {
     Value method;
-    if(unlikely(!HashTable_get(&oclass->methods, name, &method))) {
-        const char* classname = oclass->name->storage;
-        push(vm, OBJ_VAL(UNDEFINED_PROPERTY_ERR(vm, AS_CSTRING(name), classname)));
-        runerror(vm, S_EUDPROPERTY);
-    }
+    if(unlikely(!HashTable_get(&oclass->methods, name, &method)))
+        udperror(vm, name, oclass);
     if(trycall(vm, method, argc, retcnt) == CALL_NATIVEFN)
         callnative_nolock(vm, last_frame(vm).callee, method, retcnt);
 }
@@ -273,21 +267,12 @@ static force_inline void invokeindex(VM* vm, Int argc, Int retcnt)
 {
     Value key = *stackpeek(argc);
     Value receiver = *stackpeek(argc + 1);
-    if(unlikely(!IS_INSTANCE(receiver))) {
-        push(vm, OBJ_VAL(vtostr(vm, receiver)));
-        push(vm, OBJ_VAL(NOT_INSTANCE_ERR(vm, AS_CSTRING(*stackpeek(0)))));
-        runerror(vm, S_EPACCESS);
-    }
+    if(unlikely(!IS_INSTANCE(receiver))) ipaerror(vm, receiver);
     OInstance* instance = AS_INSTANCE(receiver);
     Value property;
     if(HashTable_get(&instance->fields, key, &property)) goto call;
-    if(unlikely(!HashTable_get(&instance->oclass->methods, key, &property))) {
-        const char* classname = instance->oclass->name->storage;
-        push(vm, OBJ_VAL(vtostr(vm, key)));
-        const char* propname = AS_CSTRING(*stackpeek(0));
-        push(vm, OBJ_VAL(UNDEFINED_PROPERTY_ERR(vm, propname, classname)));
-        runerror(vm, S_EUDPROPERTY);
-    }
+    if(unlikely(!HashTable_get(&instance->oclass->methods, key, &property)))
+        udperror(vm, key, instance->oclass);
 call:
     if(trycall(vm, property, argc, retcnt) == CALL_NATIVEFN)
         callnative_nolock(vm, stackpeek(argc + 1), property, retcnt);
@@ -302,11 +287,7 @@ call:
 static force_inline void invoke(VM* vm, Value name, Int argc, Int retcnt)
 {
     Value receiver = *stackpeek(argc);
-    if(unlikely(!IS_INSTANCE(receiver))) {
-        push(vm, OBJ_VAL(vtostr(vm, receiver)));
-        push(vm, OBJ_VAL(NOT_INSTANCE_ERR(vm, *stackpeek(0))));
-        runerror(vm, S_EARG);
-    }
+    if(unlikely(!IS_INSTANCE(receiver))) ipaerror(vm, receiver);
     OInstance* instance = AS_INSTANCE(receiver);
     Value field;
     if(HashTable_get(&instance->fields, name, &field)) {
@@ -367,20 +348,20 @@ void run(VM* vm)
 #define READ_BYTEL()    (ip += 3, GET_BYTES3(ip - 3))
 #define READ_CONSTANT() FFN(frame)->chunk.constants.data[READ_BYTEL()]
 #define READ_STRING()   AS_STRING(READ_CONSTANT())
-#define BINARY_OP(vm, type, op)                                                          \
+#define BINARY_OP(vm, op)                                                                \
     do {                                                                                 \
-        if(unlikely(!IS_NUMBER(*stackpeek(0)) || !IS_NUMBER(*stackpeek(1)))) {           \
-            frame->ip = ip;                                                              \
-            (vm)->sp[-1] = OBJ_VAL(BINARYOP_ERR(vm, op));                                \
-            runerror(vm, S_EBINOP);                                                      \
-        }                                                                                \
-        double b = AS_NUMBER(pop(vm));                                                   \
-        double a = AS_NUMBER(pop(vm));                                                   \
-        push(vm, type(a op b));                                                          \
-    } while(false)
+        Value* l = stackpeek(1);                                                         \
+        Value r = *stackpeek(0);                                                         \
+        arith(vm, *l, r, op, l);                                                         \
+    } while(0)
+#define UNARY_OP(vm, op)                                                                 \
+    do {                                                                                 \
+        Value* l = stackpeek(0);                                                         \
+        arith(vm, *l, NIL_VAL, op, l);                                                   \
+    } while(0)
+
     last_frame(vm).info = CFI_FRESH;
     runtime = 1;
-    // cache these hopefully in a register
     register CallFrame* frame = &vm->frames[vm->fc - 1];
     register Byte* ip = frame->ip;
 #ifdef DEBUG_TRACE_EXECUTION
@@ -432,62 +413,43 @@ void run(VM* vm)
             }
             CASE(OP_NEG)
             {
-                Value val = *stackpeek(0);
-                if(unlikely(!IS_NUMBER(val))) {
-                    frame->ip = ip;
-                    push(vm, OBJ_VAL(vtostr(vm, val)));
-                    vm->sp[-2] = OBJ_VAL(UNARYNEG_ERR(vm, AS_CSTRING(*stackpeek(0))));
-                    vm->sp--;
-                    runerror(vm, S_EBINOP);
-                }
-                AS_NUMBER_REF(vm->sp - 1) = NUMBER_VAL(-AS_NUMBER(val));
+                Value* res = stackpeek(0);
+                arith(vm, *res, NIL_VAL, AR_UMIN, res);
                 BREAK;
             }
             CASE(OP_ADD)
             {
-                Value b = *stackpeek(0);
-                Value a = *stackpeek(1);
-                if(IS_NUMBER(b) && IS_NUMBER(a)) {
-                    double b = AS_NUMBER(pop(vm));
-                    double a = AS_NUMBER(pop(vm));
-                    push(vm, NUMBER_VAL((a + b)));
-                } else if(IS_STRING(b) && IS_STRING(a)) {
-                    push(vm, OBJ_VAL(concatenate(vm, a, b)));
-                } else { // @TODO: Operator overloading or not?
-                    frame->ip = ip;
-                    vm->sp[-1] = OBJ_VAL(ADD_OPERATOR_ERR(vm, a, b));
-                    runerror(vm, S_EBINOP);
-                }
+                BINARY_OP(vm, AR_ADD);
                 BREAK;
             }
             CASE(OP_SUB)
             {
-                BINARY_OP(vm, NUMBER_VAL, -);
+                BINARY_OP(vm, AR_SUB);
                 BREAK;
             }
             CASE(OP_MUL)
             {
-                BINARY_OP(vm, NUMBER_VAL, *);
+                BINARY_OP(vm, AR_MUL);
                 BREAK;
             }
             CASE(OP_MOD)
             {
-                TODO("Implement OP_MOD");
+                BINARY_OP(vm, AR_MOD);
                 BREAK;
             }
             CASE(OP_POW)
             {
-                TODO("Implement OP_POW");
+                BINARY_OP(vm, AR_POW);
                 BREAK;
             }
             CASE(OP_DIV)
             {
-                BINARY_OP(vm, NUMBER_VAL, /);
+                BINARY_OP(vm, AR_DIV);
                 BREAK;
             }
             CASE(OP_NOT)
             {
-                *stackpeek(0) = BOOL_VAL(ISFALSEY(*stackpeek(0)));
+                UNARY_OP(vm, AR_NOT);
                 BREAK;
             }
             CASE(OP_VALIST)

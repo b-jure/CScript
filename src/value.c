@@ -68,6 +68,8 @@ void arith(VM* vm, Value a, Value b, Ar op, Value* res)
     if(!varith(vm, a, b, op, res)) {
 #if defined(SK_OVERLOAD_OPS)
         otryop(vm, a, b, (op - AR_ADD) + OM_ADD, res);
+#else
+        operror(vm, a, b, op);
 #endif
     }
 }

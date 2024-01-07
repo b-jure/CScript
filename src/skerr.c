@@ -2,6 +2,7 @@
 #include "debug.h"
 #include "err.h"
 #include "object.h"
+#include "value.h"
 #include "vmachine.h"
 
 /* ================= runtime error format strings ================= */
@@ -189,17 +190,19 @@ sk_noret runerror(VM* vm, Int status)
 
 sk_noret ordererror(VM* vm, Value a, Value b)
 {
+    static const char* fmt1 = "Attempt to compare two %s values.";
+    static const char* fmt2 = "Attempt to compare %s and %s.";
     const char* t1 = vm->statics[val2type(a)]->storage;
     const char* t2 = vm->statics[val2type(a)]->storage;
-    if(strcmp(t1, t2) == 0) sk_pushfstring(vm, "Attempt to compare two %s values.", t1);
-    else sk_pushfstring(vm, "Attempt to compare %s and %s.", t1, t2);
+    if(strcmp(t1, t2) == 0) sk_pushfstring(vm, fmt1, t1);
+    else sk_pushfstring(vm, fmt2, t1, t2);
     runerror(vm, S_ECMP);
 }
 
 
-sk_noret binoperr(VM* vm, Value a, Value b, OMTag op)
+sk_noret binoperror(VM* vm, Value a, Value b, OMTag op)
 {
-    const char* fmt = "Attempt to perform binary %s on %s (left) and %s (right).";
+    static const char* fmt = "Attempt to perform binary %s on %s (left) and %s (right).";
     push(vm, OBJ_VAL(vtostr(vm, a)));
     push(vm, OBJ_VAL(vtostr(vm, b)));
     const char* operation = vm->statics[op + SS_OPADD]->storage;
@@ -210,9 +213,9 @@ sk_noret binoperr(VM* vm, Value a, Value b, OMTag op)
 }
 
 
-sk_noret unoperr(VM* vm, Value a, OMTag op)
+sk_noret unoperror(VM* vm, Value a, OMTag op)
 {
-    const char* fmt = "Attempt to perform unary '%s' on %s.";
+    static const char* fmt = "Attempt to perform unary '%s' on %s.";
     push(vm, OBJ_VAL(vtostr(vm, a)));
     const char* operation = vm->statics[op + SS_OPADD]->storage;
     const char* operand = AS_CSTRING(*stackpeek(0));
@@ -221,9 +224,9 @@ sk_noret unoperr(VM* vm, Value a, OMTag op)
 }
 
 
-sk_noret omdisplayerr(VM* vm, Value result)
+sk_noret disperror(VM* vm, Value result)
 {
-    const char* fmt = "Display method must return a string, instead got %s.";
+    static const char* fmt = "Display method must return a string, instead got %s.";
     push(vm, OBJ_VAL(vtostr(vm, result)));
     const char* resultstring = AS_CSTRING(*stackpeek(0));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, resultstring)));
@@ -231,9 +234,9 @@ sk_noret omdisplayerr(VM* vm, Value result)
 }
 
 
-sk_noret ostringfmterr(VM* vm, int c, Value callee)
+sk_noret ofmterror(VM* vm, int c, Value callee)
 {
-    const char* fmt = "Invalid format specifier '%%%c' for '%s'";
+    static const char* fmt = "Invalid format specifier '%%%c' for '%s'";
     push(vm, OBJ_VAL(vtostr(vm, callee)));
     const char* fn = AS_CSTRING(*stackpeek(0));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, c, fn)));
@@ -243,7 +246,7 @@ sk_noret ostringfmterr(VM* vm, int c, Value callee)
 
 sk_noret sovferror(VM* vm)
 {
-    const char* fmt = "Stack overflow, limit overflown -> %d.";
+    static const char* fmt = "Stack overflow, limit overflown -> %d.";
     vm->sp--; // make some space
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, VM_STACK_LIMIT)));
     runerror(vm, S_ESOVERFLOW);
@@ -252,7 +255,7 @@ sk_noret sovferror(VM* vm)
 
 sk_noret udproperror(VM* vm, Value property, OClass* oclass)
 {
-    const char* fmt = "Property '%s' is not defined for <class '%s'>.";
+    static const char* fmt = "Property '%s' is not defined for <class '%s'>.";
     const char* pname = AS_CSTRING(property);
     const char* classname = oclass->name->storage;
     push(vm, OBJ_VAL(OString_fmt(vm, pname, classname)));
@@ -262,7 +265,7 @@ sk_noret udproperror(VM* vm, Value property, OClass* oclass)
 
 sk_noret retovferror(VM* vm, const char* fn)
 {
-    const char* fmt = "Called function '%s' return count overflows the stack.";
+    static const char* fmt = "Called function '%s' return count overflows the stack.";
     if(vm->sp - vm->stack >= VM_STACK_LIMIT) vm->sp--;
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, fn)));
     runerror(vm, S_ESOVERFLOW);
@@ -271,7 +274,7 @@ sk_noret retovferror(VM* vm, const char* fn)
 
 sk_noret arityerror(VM* vm, int expected, int got)
 {
-    const char* fmt = "Expected %d arguments instead got %d.";
+    static const char* fmt = "Expected %d arguments instead got %d.";
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, expected, got)));
     runerror(vm, S_EARITY);
 }
@@ -279,7 +282,7 @@ sk_noret arityerror(VM* vm, int expected, int got)
 
 sk_noret fcovferror(VM* vm)
 {
-    const char* fmt = "Callstack overflow, limit overflown -> %lu.";
+    static const char* fmt = "Callstack overflow, limit overflown -> %lu.";
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, VM_CALLSTACK_LIMIT)));
     runerror(vm, S_EFOVERFLOW);
 }
@@ -287,10 +290,19 @@ sk_noret fcovferror(VM* vm)
 
 sk_noret callerror(VM* vm, Value callee)
 {
-    const char* fmt = "Tried calling non-callable value %s.";
+    static const char* fmt = "Tried calling non-callable value %s.";
     push(vm, OBJ_VAL(vtostr(vm, callee)));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stackpeek(0)))));
     runerror(vm, S_ECALL);
+}
+
+
+sk_noret ipaerror(VM* vm, Value notinstance)
+{
+    static const char* fmt = "Invalid property access, tried accessing property on %s";
+    push(vm, OBJ_VAL(vtostr(vm, notinstance)));
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stackpeek(0)))));
+    runerror(vm, S_EPACCESS);
 }
 
 /* --------------------------------------------------------- */ // runtime errors

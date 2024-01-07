@@ -141,7 +141,7 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
             }
             default: { /* invalid format specifier */
                 Array_Byte_free(&buff, NULL);
-                ostringfmterr(vm, c, *last_frame(vm).callee);
+                ofmterror(vm, c, *last_frame(vm).callee);
             }
         }
     }
@@ -517,7 +517,7 @@ static int callomdisplay(VM* vm, Value val)
         push(vm, OBJ_VAL(omethod));
         ncall(vm, ret, OBJ_VAL(omethod), 1);
         Value top = *stackpeek(0);
-        if(unlikely(!IS_STRING(top))) omdisplayerr(vm, top);
+        if(unlikely(!IS_STRING(top))) disperror(vm, top);
         return 1;
     }
     return 0;
@@ -571,8 +571,8 @@ static force_inline int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res
 void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
 {
     if(!omisunop(op)) {
-        if(unlikely(!callbinop(vm, a, b, op, res))) binoperr(vm, a, b, op);
-    } else if(unlikely(!callunop(vm, a, op, res))) unoperr(vm, a, op);
+        if(unlikely(!callbinop(vm, a, b, op, res))) binoperror(vm, a, b, op - OM_ADD);
+    } else if(unlikely(!callunop(vm, a, op, res))) unoperror(vm, a, op - OM_ADD);
 }
 
 
