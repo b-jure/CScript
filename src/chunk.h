@@ -79,16 +79,15 @@ typedef enum {
     OP_RETSTART, /* Start of return instruction values */
     OP_FOREACH, /* Generic for loop */
     OP_FOREACH_PREP, /* Generic for loop stack prep */
-    OP_TOPRET, /* Return from top-level function */
-    OP_RET, /* Return from function, pop the CallFrame */
+    OP_RET, /* Return from function */
 } OpCode;
 
 ARRAY_NEW(Array_UInt, UInt);
 
 typedef struct {
     Array_Value constants; // Constant values
-    Array_UInt  lines; // Lines array (in case of compile time errors or debug)
-    Array_Byte  code; // Bytecode array
+    Array_UInt lines; // Lines array (in case of compile time errors or debug)
+    Array_Byte code; // Bytecode array
 } Chunk;
 
 void Chunk_init(Chunk* chunk, VM* vm);

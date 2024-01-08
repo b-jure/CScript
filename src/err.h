@@ -4,23 +4,6 @@
 #include "skooma.h"
 #include "value.h"
 
-/* FORMAT STRINGS */
-
-#define FMT_VAR_FIXED_ERR(len, start)                                                    \
-    "Can't assign to variable '%.*s' it is declared as 'fixed'.\n\n"                     \
-    "Try removing 'fixed' from variable declaration.\n"                                  \
-    "Example:\n\tvar a = \"mutable\"; // mutable variable\n\tfixed var b "               \
-    "= "                                                                                 \
-    "\"immutable\"; // immutable variable\n\tvar fixed c = \"also "                      \
-    "immutable\"; // "                                                                   \
-    "immutable variable",                                                                \
-        len, start
-
-
-
-
-
-
 
 /* Compile-time errors */
 
@@ -38,8 +21,7 @@
 /* ------------- */
 
 /* codeset() */
-#define LOCAL_FIXED_ERR(F, token)                                                        \
-    COMPILE_ERR(F, FMT_VAR_FIXED_ERR((token).len, (token).start))
+#define LOCAL_FIXED_ERR(F, token) COMPILE_ERR(F, "TODO: new err msg")
 /* ------------- */
 
 /* globalvar() */
@@ -208,6 +190,21 @@ sk_noret callerror(VM* vm, Value callee);
 
 /* Invalid property access error */
 sk_noret ipaerror(VM* vm, Value notinstance);
+
+/* Global variable redefinition error */
+sk_noret redefgerror(VM* vm, const char* gname);
+
+/* Undefined global variable error */
+sk_noret udgerror(VM* vm, const char* gname);
+
+/* Assigning to variable defined as 'fixed' error */
+sk_noret fixederror(VM* vm, const char* var);
+
+/* 'nil' index error */
+sk_noret nilidxerror(VM* vm);
+
+/* Inheritance error */
+sk_noret inheriterror(VM* vm, Value notclass);
 
 /* ---------------------------------------------------------- */
 

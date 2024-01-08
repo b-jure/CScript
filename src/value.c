@@ -233,16 +233,75 @@ method:
 
 /* ================= ordering ================= */
 
-// Values are equal
-bool veq(VM* vm, Value l, Value r)
+
+/* Special equality ordering that preserves left operand ('switch' statement) */
+void eq_preserveL(VM* vm, Value l, Value r)
 {
-    UNUSED(vm);
-#ifdef SK_NAN_BOX
-    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) == AS_NUMBER(r);
-    return oeq(vm, l, r);
+    push(vm, r);
+    *stackpeek(1) = l;
+    veq(vm, l, r);
+}
+
+/* != */
+void vne(VM* vm, Value l, Value r)
+{
+#if defined(SK_NAN_BOX)
+    if(IS_NUMBER(l) && IS_NUMBER(r)) push(vm, BOOL_VAL(AS_NUMBER(l) != AS_NUMBER(r)));
+    else one(vm, l, r);
 #else
-    if(l.type != r.type) return false;
-#ifdef SK_PRECOMPUTED_GOTO
+    if(l.type != r.type) push(vm, TRUE_VAL);
+#if defined(SK_PRECOMPUTED_GOTO)
+#define VAL_TABLE
+#include "jmptable.h"
+#undef VAL_TABLE
+#undef BREAK
+#define BREAK return
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       break
+#endif
+    DISPATCH(l.type)
+    {
+        CASE(VAL_BOOL)
+        {
+            push(vm, BOOL_VAL(AS_BOOL(l) != AS_BOOL(r)));
+            BREAK;
+        }
+        CASE(VAL_NUMBER)
+        {
+            push(vm, BOOL_VAL(AS_NUMBER(l) != AS_NUMBER(r)));
+            BREAK;
+        }
+        CASE(VAL_NIL)
+        {
+            push(vm, FALSE_VAL);
+            BREAK;
+        }
+        CASE(VAL_OBJ)
+        {
+            one(vm, l, r);
+            BREAK;
+        }
+    }
+#endif
+#if defined(SKJMPTABLE_H)
+#undef SKJMPTABLE_H
+#endif
+}
+
+
+/* Equality between constant expressions.
+ * (string literals, numbers, true/false literals, nil)
+ * Primarily used in parser. */
+int raweq(VM* vm, Value l, Value r)
+{
+#if defined(SK_NAN_BOX)
+    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) == AS_NUMBER(r);
+    else return l == r;
+#else
+    if(l.type != r.type) return 0;
+#if defined(SK_PRECOMPUTED_GOTO)
 #define VAL_TABLE
 #include "jmptable.h"
 #undef VAL_TABLE
@@ -262,67 +321,123 @@ bool veq(VM* vm, Value l, Value r)
         }
         CASE(VAL_NIL)
         {
-            return true;
+            return 1;
         }
         CASE(VAL_OBJ)
         {
-            return oeq(vm, l, r);
+            sk_assert(
+                vm,
+                IS_STRING(l) && IS_STRING(r),
+                "only string objects can be constant expressions.");
+            return AS_STRING(l) == AS_STRING(r);
         }
     }
 #endif
-#ifdef SKJMPTABLE_H
+#if defined(SKJMPTABLE_H)
+#undef SKJMPTABLE_H
+#endif
+}
+
+// Values are equal
+void veq(VM* vm, Value l, Value r)
+{
+#if defined(SK_NAN_BOX)
+    if(IS_NUMBER(l) && IS_NUMBER(r)) push(vm, BOOL_VAL(AS_NUMBER(l) == AS_NUMBER(r)));
+    else oeq(vm, l, r);
+#else
+    if(l.type != r.type) push(vm, FALSE_VAL);
+#if defined(SK_PRECOMPUTED_GOTO)
+#define VAL_TABLE
+#include "jmptable.h"
+#undef VAL_TABLE
+#undef BREAK
+#define BREAK return
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#define BREAK       break
+#endif
+    DISPATCH(l.type)
+    {
+        CASE(VAL_BOOL)
+        {
+            push(vm, BOOL_VAL(AS_BOOL(l) == AS_BOOL(r)));
+            BREAK;
+        }
+        CASE(VAL_NUMBER)
+        {
+            push(vm, BOOL_VAL(AS_NUMBER(l) == AS_NUMBER(r)));
+            BREAK;
+        }
+        CASE(VAL_NIL)
+        {
+            push(vm, TRUE_VAL);
+            BREAK;
+        }
+        CASE(VAL_OBJ)
+        {
+            oeq(vm, l, r);
+            BREAK;
+        }
+    }
+#endif
+#if defined(SKJMPTABLE_H)
 #undef SKJMPTABLE_H
 #endif
 }
 
 // Value less than
-bool vlt(VM* vm, Value l, Value r)
+void vlt(VM* vm, Value l, Value r)
 {
-    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) < AS_NUMBER(r);
+    if(IS_NUMBER(l) && IS_NUMBER(r)) push(vm, BOOL_VAL(AS_NUMBER(l) < AS_NUMBER(r)));
 #if defined(SK_OVERLOAD_OPS)
-    return olt(vm, l, r);
+    else olt(vm, l, r);
 #else
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0;
-    ordererror(vm, l, r);
+    else if(IS_STRING(l) && IS_STRING(r))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0));
+    else ordererror(vm, l, r);
 #endif
 }
 
 
 // Value greater than
-bool vgt(VM* vm, Value l, Value r)
+void vgt(VM* vm, Value l, Value r)
 {
-    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) > AS_NUMBER(r);
+    if(IS_NUMBER(l) && IS_NUMBER(r)) push(vm, BOOL_VAL(AS_NUMBER(l) > AS_NUMBER(r)));
 #if defined(SK_OVERLOAD_OPS)
-    return ogt(vm, l, r);
+    else ogt(vm, l, r);
 #else
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0;
-    ordererror(vm, l, r);
+    else if(IS_STRING(l) && IS_STRING(r))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0));
+    else ordererror(vm, l, r);
 #endif
 }
 
 
 // Value less equal
-bool vle(VM* vm, Value l, Value r)
+void vle(VM* vm, Value l, Value r)
 {
-    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) <= AS_NUMBER(r);
+    if(IS_NUMBER(l) && IS_NUMBER(r)) push(vm, BOOL_VAL(AS_NUMBER(l) <= AS_NUMBER(r)));
 #if defined(SK_OVERLOAD_OPS)
-    return ole(vm, l, r);
+    else ole(vm, l, r);
 #else
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0;
-    ordererror(vm, l, r);
+    else if(IS_STRING(l) && IS_STRING(r))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0));
+    else ordererror(vm, l, r);
 #endif
 }
 
 
 // Value greater equal
-bool vge(VM* vm, Value l, Value r)
+void vge(VM* vm, Value l, Value r)
 {
-    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) >= AS_NUMBER(r);
+    if(IS_NUMBER(l) && IS_NUMBER(r)) push(vm, BOOL_VAL(AS_NUMBER(l) >= AS_NUMBER(r)));
 #if defined(SK_OVERLOAD_OPS)
-    return oge(vm, l, r);
+    else oge(vm, l, r);
 #else
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0;
-    ordererror(vm, l, r);
+    else if(IS_STRING(l) && IS_STRING(r))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0));
+    else ordererror(vm, l, r);
 #endif
 }
 
@@ -398,7 +513,7 @@ obj:
             return otostr(vm, AS_OBJ(value));
         }
     }
-#ifdef SKJMPTABLE_H
+#if defined(SKJMPTABLE_H)
 #undef SKJMPTABLE_H
 #endif
 #endif // val2tbmask_1
@@ -407,7 +522,7 @@ obj:
 
 
 /* Print value */
-void vprint(VM* vm, Value value)
+void vprint(VM* vm, Value value, FILE* stream)
 {
 #if defined(val2tbmask_1)
     static const void* jmptable[] = {
@@ -419,17 +534,17 @@ void vprint(VM* vm, Value value)
     };
     goto* jmptable[val2tbmask_1(value)];
 nil:
-    printf("nil");
+    fprintf(stream, "nil");
     return;
 number:
-    if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%lg", AS_NUMBER(value));
-    else printf("%ld", (int64_t)AS_NUMBER(value));
+    if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) fprintf(stream, "%lg", AS_NUMBER(value));
+    else fprintf(stream, "%ld", (int64_t)AS_NUMBER(value));
     return;
 boolean:
-    printf(AS_BOOL(value) ? "true" : "false");
+    fprintf(stream, AS_BOOL(value) ? "true" : "false");
     return;
 object:
-    oprint(vm, value);
+    oprint(vm, value, stream);
     return;
 #elif defined(SK_NAN_BOX)
     if(IS_NIL(value)) printf("nil");
@@ -475,7 +590,7 @@ object:
             BREAK;
         }
     }
-#ifdef SKJMPTABLE_H
+#if defined(SKJMPTABLE_H)
 #undef SKJMPTABLE_H
 #endif
 #endif // defined(val2tbmask_1)
@@ -543,5 +658,8 @@ object:
             return ohash(value);
         }
     }
+#endif
+#if defined(SKJMPTABLE_H)
+#undef SKJMPTABLE_H
 #endif
 }

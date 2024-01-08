@@ -173,7 +173,7 @@
 #if defined(SK_CHECK_API)
 #undef NDEBUG
 #include <assert.h>
-#define sk_checkapi(vm, cond, msg) assert(cond)
+#define sk_checkapi(vm, cond, msg) assert(cond&& msg)
 #endif
 
 

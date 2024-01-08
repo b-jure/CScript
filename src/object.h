@@ -114,7 +114,7 @@ struct OString { // typedef is inside 'value.h'
 
 struct OUpvalue { // typedef is inside 'value.h'
     O obj; // shared header
-    Variable closed; // is upvalue closed over
+    Value closed;
     Value* location; // ptr to 'closed' or VM stack
     OUpvalue* next; // chain
 };
@@ -220,19 +220,24 @@ void otryop(VM* vm, Value a, Value b, OMTag op, Value* res);
 
 
 /* Prints the object value */
-void oprint(VM* vm, Value value);
+void oprint(VM* vm, Value value, FILE* stream);
 
 
-/* Object value equality */
+/* Ordering */
 #if defined(SK_OVERLOAD_OPS)
-int oeq(VM* vm, Value l, Value r);
-int olt(VM* vm, Value l, Value r);
-int ogt(VM* vm, Value l, Value r);
-int ole(VM* vm, Value l, Value r);
-int oge(VM* vm, Value l, Value r);
+void oeq(VM* vm, Value l, Value r);
+void one(VM* vm, Value l, Value r);
+void olt(VM* vm, Value l, Value r);
+void ogt(VM* vm, Value l, Value r);
+void ole(VM* vm, Value l, Value r);
+void oge(VM* vm, Value l, Value r);
 #else
-#define oeq(vm, l, r) ((l) == (r))
+#define oeq(vm, l, r) push(BOOL_VAL((l) == (r)))
+#define one(vm, l, r) push(BOOL_VAL((l) != (r)))
 #endif
+
+/* Only for constant expressions */
+int raweq(VM* vm, Value l, Value r);
 
 
 /* Hashes the object value */

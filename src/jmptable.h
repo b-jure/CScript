@@ -83,7 +83,6 @@ static const void* const optable[OPCODE_N] = {
     &&L_OP_RETSTART,
     &&L_OP_FOREACH,
     &&L_OP_FOREACH_PREP,
-    &&L_OP_TOPRET,
     &&L_OP_RET,
 };
 

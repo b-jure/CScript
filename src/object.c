@@ -280,10 +280,10 @@ static force_inline void ObjFunction_free(VM* vm, OFunction* fn)
     GC_FREE(vm, fn, sizeof(OFunction));
 }
 
-static force_inline void fnprint(OFunction* fn)
+static force_inline void fnprint(OFunction* fn, FILE* stream)
 {
-    if(unlikely(fn->name == NULL)) printf("<script>");
-    else printf("<fn %s>: %p", fn->name->storage, fn);
+    if(unlikely(fn->name == NULL)) fprintf(stream, "<script>");
+    else fprintf(stream, "<fn %s>: %p", fn->name->storage, fn);
 }
 
 
@@ -314,7 +314,7 @@ static force_inline void OClosure_free(VM* vm, OClosure* closure)
 OUpvalue* OUpvalue_new(VM* vm, Value* valp)
 {
     OUpvalue* upval = ALLOC_OBJ(vm, OUpvalue, OBJ_UPVAL);
-    upval->closed = (Variable){EMPTY_VAL, 0};
+    upval->closed = EMPTY_VAL;
     upval->location = valp;
     upval->next = NULL;
     return upval;
@@ -541,10 +541,10 @@ static force_inline int callunop(VM* vm, Value a, OMTag op, Value* res)
     OClosure* om = getomethod(vm, a, op);
     if(om == NULL) return 0;
     Value* fn = vm->sp;
-    push(vm, OBJ_VAL(om));
+    push(vm, OBJ_VAL(AS_INSTANCE(a)->oclass));
     push(vm, a);
-    ncall(vm, fn, *fn, 1);
-    *res = *--vm->sp; // move method result
+    ncall(vm, fn, OBJ_VAL(om), 1);
+    *res = pop(vm);
     return 1;
 }
 
@@ -554,15 +554,19 @@ static force_inline int callunop(VM* vm, Value a, OMTag op, Value* res)
  * 0 otherwise. */
 static force_inline int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res)
 {
+    Value receiver = a;
     OClosure* om = getomethod(vm, a, op);
-    if(om == NULL) om = getomethod(vm, b, op);
+    if(om == NULL) {
+        receiver = b;
+        om = getomethod(vm, b, op);
+    }
     if(om == NULL) return 0;
     Value* fn = vm->sp;
-    push(vm, OBJ_VAL(om));
+    push(vm, OBJ_VAL(AS_INSTANCE(receiver)->oclass));
     push(vm, a);
     push(vm, b);
-    ncall(vm, fn, *fn, 1);
-    *res = *--vm->sp; // move method result
+    ncall(vm, fn, OBJ_VAL(om), 1);
+    *res = pop(vm);
     return 1;
 }
 
@@ -588,44 +592,54 @@ static force_inline int omcallorder(VM* vm, Value l, Value r, OMTag ordop)
         --vm->sp; // remove second operand
         return 1;
     }
-    if(unlikely(ordop != OM_EQ)) ordererror(vm, l, r);
+    if(unlikely(ordop != OM_EQ || ordop != OM_NE)) ordererror(vm, l, r);
     return 0;
 }
 
-
-int oeq(VM* vm, Value l, Value r)
+/* != */
+void one(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) == 0;
-    if(omcallorder(vm, l, r, OM_EQ)) return !ISFALSE(*stackpeek(0));
-    return l == r;
+    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(l != r));
+    else if(!omcallorder(vm, l, r, OM_NE)) push(vm, BOOL_VAL(l != r));
 }
 
-int olt(VM* vm, Value l, Value r)
+/* == */
+void oeq(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0;
-    omcallorder(vm, l, r, OM_LT); // can fail
-    return !ISFALSE(*stackpeek(0));
+    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(l == r));
+    else if(!omcallorder(vm, l, r, OM_EQ)) push(vm, BOOL_VAL(l == r));
 }
 
-int ogt(VM* vm, Value l, Value r)
+/* < */
+void olt(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0;
-    omcallorder(vm, l, r, OM_GT); // can fail
-    return !ISFALSE(*stackpeek(0));
+    if(IS_STRING(l) && IS_STRING(r))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0));
+    else omcallorder(vm, l, r, OM_LT);
 }
 
-int ole(VM* vm, Value l, Value r)
+/* > */
+void ogt(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0;
-    omcallorder(vm, l, r, OM_LE); // can fail
-    return !ISFALSE(*stackpeek(0));
+    if(IS_STRING(l) && IS_STRING(r))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0));
+    else omcallorder(vm, l, r, OM_GT);
 }
 
-int oge(VM* vm, Value l, Value r)
+/* <= */
+void ole(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r)) return strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0;
-    omcallorder(vm, l, r, OM_GE); // can fail
-    return !ISFALSE(*stackpeek(0));
+    if(IS_STRING(l) && IS_STRING(r))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0));
+    else omcallorder(vm, l, r, OM_LE);
+}
+
+/* >= */
+void oge(VM* vm, Value l, Value r)
+{
+    if(IS_STRING(l) && IS_STRING(r))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0));
+    else omcallorder(vm, l, r, OM_GE);
 }
 
 /* ---------------------------------------------------- */ // ordering
@@ -670,7 +684,7 @@ OString* otostr(VM* vm, O* object)
         }
         CASE(OBJ_UPVAL)
         {
-            return vtostr(vm, cast(OUpvalue*, object)->closed.value);
+            return vtostr(vm, cast(OUpvalue*, object)->closed);
         }
         CASE(OBJ_CLASS)
         {
@@ -696,7 +710,7 @@ OString* otostr(VM* vm, O* object)
 
 
 /* Print the object value */
-void oprint(VM* vm, Value value)
+void oprint(VM* vm, Value value, FILE* stream)
 {
 #ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
@@ -711,41 +725,42 @@ void oprint(VM* vm, Value value)
     {
         CASE(OBJ_STRING)
         {
-            printf("%s", AS_CSTRING(value));
+            fprintf(stream, "%s", AS_CSTRING(value));
             BREAK;
         }
         CASE(OBJ_FUNCTION)
         {
-            fnprint(AS_FUNCTION(value));
+            fnprint(AS_FUNCTION(value), stream);
             BREAK;
         }
         CASE(OBJ_CLOSURE)
         {
-            fnprint(AS_CLOSURE(value)->fn);
+            fnprint(AS_CLOSURE(value)->fn, stream);
             BREAK;
         }
         CASE(OBJ_NATIVE)
         {
-            printf("<native-fn %s>", AS_NATIVE(value)->name->storage);
+            fprintf(stream, "<native-fn %s>", AS_NATIVE(value)->name->storage);
             BREAK;
         }
         CASE(OBJ_UPVAL)
         {
             OUpvalue* upval = AS_UPVAL(value);
-            vprint(vm, *upval->location);
+            vprint(vm, *upval->location, stream);
             BREAK;
         }
         CASE(OBJ_CLASS)
         {
-            printf("%p-%s", AS_OBJ(value), AS_CLASS(value)->name->storage);
+            fprintf(stream, "%p-%s", AS_OBJ(value), AS_CLASS(value)->name->storage);
             BREAK;
         }
         CASE(OBJ_INSTANCE)
         {
             if(callomdisplay(vm, value)) {
-                printf("%s", AS_CSTRING(*stackpeek(0)));
+                fprintf(stream, "%s", AS_CSTRING(*stackpeek(0)));
             } else
-                printf(
+                fprintf(
+                    stream,
                     "%p-%s instance",
                     AS_OBJ(value),
                     AS_INSTANCE(value)->oclass->name->storage);
@@ -753,7 +768,7 @@ void oprint(VM* vm, Value value)
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            fnprint(AS_BOUND_METHOD(value)->method->fn);
+            fnprint(AS_BOUND_METHOD(value)->method->fn, stream);
             BREAK;
         }
     }

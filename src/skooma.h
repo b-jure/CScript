@@ -320,12 +320,14 @@ typedef enum {
     S_EUDPROPERTY, // undefined property
     S_EPACCESS, // invalid property access
     S_EINHERIT, // inheriting from non-class value
-    S_EFIXEDASSING, // assigning to fixed value
+    S_EFIXEDASSIGN, // assigning to fixed value
     S_EUDGLOBAL, // undefined global variable
     S_EGLOBALREDEF, // redefinition of global variable
     S_EDISPLAY, // display method returned invalid value
     S_ECALL, // tried calling non-callable value
     S_ESTRFMT, // string format error
+    S_ECOMP, // compile error
+    S_ENILIDX, // indexing with 'nil' error
     S_CNT,
 } Status;
 
@@ -416,7 +418,7 @@ typedef struct {
     const uint8_t len;
 } InternedString;
 
-extern const InternedString static_str[SS_SIZE];
+extern const InternedString static_strings[SS_SIZE];
 
 /* -------------------------------------------------*/
 

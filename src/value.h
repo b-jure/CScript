@@ -132,12 +132,14 @@ typedef struct {
 /* Array of 'Value' */
 ARRAY_NEW(Array_Value, Value);
 
-/* Compare */
-bool veq(VM* vm, Value a, Value b);
-bool vlt(VM* vm, Value a, Value b);
-bool vgt(VM* vm, Value a, Value b);
-bool vle(VM* vm, Value a, Value b);
-bool vge(VM* vm, Value a, Value b);
+/* Ordering */
+void eq_preserveL(VM* vm, Value l, Value r);
+void vne(VM* vm, Value l, Value r);
+void veq(VM* vm, Value l, Value r);
+void vlt(VM* vm, Value l, Value r);
+void vgt(VM* vm, Value l, Value r);
+void vle(VM* vm, Value l, Value r);
+void vge(VM* vm, Value l, Value r);
 
 /* Performs arithmetic operation on skooma values. */
 void arith(VM* vm, Value a, Value b, Ar op, Value* res);
@@ -154,7 +156,7 @@ OString* btostr(VM* vm, int b);
 #define niltostr(vm) (vm)->statics[SS_NIL]
 
 /* Print value */
-void vprint(VM* vm, Value value);
+void vprint(VM* vm, Value value, FILE* stream);
 
 /* Hash value */
 Hash vhash(VM* vm, Value value);

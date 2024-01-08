@@ -54,9 +54,9 @@ typedef struct {
 #define VAR_FIXED_BIT 1
 
 /* set/clear/test variable flags */
-#define VAR_SET(variable, bit)   BIT_SET((variable)->flags, bit)
-#define VAR_CLEAR(variable, bit) BIT_CLEAR((variable)->flags, bit)
-#define VAR_CHECK(variable, bit) BIT_CHECK((variable)->flags, bit)
+#define VAR_SET(variable, bit)   bset((variable)->flags, bit)
+#define VAR_CLEAR(variable, bit) bclear((variable)->flags, bit)
+#define VAR_CHECK(variable, bit) btest((variable)->flags, bit)
 #define VAR_FLAGS(variable)      ((variable)->flags)
 
 /* Check if variable is 'fixed' */

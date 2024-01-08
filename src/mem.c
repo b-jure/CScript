@@ -166,7 +166,7 @@ void mark_black(VM* vm, O* obj)
     {
         CASE(OBJ_UPVAL)
         {
-            vmark(vm, ((OUpvalue*)obj)->closed.value);
+            vmark(vm, cast(OUpvalue*, obj)->closed);
             BREAK;
         }
         CASE(OBJ_FUNCTION)
@@ -274,7 +274,7 @@ void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
 #ifdef DEBUG_STRESS_GC
     if(newc > oldc) gc(vm);
 #else
-    if(!BIT_CHECK(vm->gc_flags, GC_MANUAL) && vm->gc_next <= vm->gc_allocated) gc(vm);
+    if(!btest(vm->gc_flags, GC_MANUAL) && vm->gc_next <= vm->gc_allocated) gc(vm);
 #endif
     return REALLOC(vm, ptr, newc);
 }

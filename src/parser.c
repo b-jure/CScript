@@ -20,8 +20,13 @@
 
 
 
-// TODO: Refactor compile-time errors? Or keep them as is?
-//       - 90% sure will keep them as is [06.01.24][dd/mm/yy]
+// TODO: Refactor compile-time errors!
+//       Stack needs to be used to store the error as the compiler,
+//       might be called from C API.
+//       Putting the error message on the stack will propagate the error
+//       correctly, so all compile-time errors won't be printed directly,
+//       instead only propagated to the callee.
+//       This is kinda big refactor but it is straightforward.
 
 
 
@@ -211,7 +216,7 @@ static force_inline void Exp_init(Exp* E, ExpType type, Int code, Int value)
 // Expressions are constants and their Values are equal
 #define eareconstandeq(F, E1, E2)                                                        \
     (etisconst((E1)->type) && etisconst((E2)->type) &&                                   \
-     veq((F)->vm, *CONSTANT(F, E1), *CONSTANT(F, E2)))
+     raweq((F)->vm, *CONSTANT(F, E1), *CONSTANT(F, E2)))
 
 
 // Set first long parameter
@@ -442,7 +447,7 @@ static void error(Function* F, const char* error, ...)
 // Single byte instruction
 #define CODE(F, byte)                                                                    \
     ({                                                                                   \
-        (F)->fn->gotret = (((byte) == OP_RET) | ((byte) == OP_TOPRET));                  \
+        (F)->fn->gotret = ((byte) == OP_RET);                                            \
         Chunk_write(CHUNK(F), byte, PREVT(F).line);                                      \
     })
 
@@ -485,14 +490,7 @@ static force_inline void coderet(Function* F, bool explicit, bool gotret)
     }
     if(!explicit) CODE(F, OP_RETSTART);
     if(F->fn_type == FN_INIT) CODEOP(F, OP_GET_LOCAL, 0);
-    else {
-        if(F->fn_type == FN_SCRIPT) {
-            CODE(F, OP_TRUE);
-            CODE(F, OP_TOPRET);
-            return;
-        }
-        CODE(F, OP_NIL);
-    }
+    else CODE(F, OP_NIL);
     CODE(F, OP_RET);
 }
 
@@ -535,7 +533,7 @@ static force_inline Int get_local(Function* F, Token* name)
 static force_inline UInt add_upval(Function* F, UInt idx, Byte flags, bool local)
 {
     Int upvalc = F->fn->upvalc;
-    ASSERT(upvalc < (Int)F->upvalues->len + 1, "Invalid upvalc.");
+    sk_assert(F->vm, upvalc < cast_int(F->upvalues->len + 1), "Invalid upvalc.");
     for(Int i = 0; i < upvalc; i++) {
         Upvalue* upvalue = Array_Upvalue_index(F->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local) return i; // already exists
@@ -545,7 +543,7 @@ static force_inline UInt add_upval(Function* F, UInt idx, Byte flags, bool local
         return 0;
     }
     Upvalue upval = {idx, flags, local};
-    if(upvalc == (Int)F->upvalues->len) Array_Upvalue_push(F->upvalues, upval);
+    if(upvalc == cast_int(F->upvalues->len)) Array_Upvalue_push(F->upvalues, upval);
     else *Array_Upvalue_index(F->upvalues, upvalc) = upval;
     return F->fn->upvalc++;
 }
@@ -1393,7 +1391,7 @@ static void codeassign(Function* F, Int names, Array_Int* nameidx)
             INIT_LOCAL(F, i);
         return;
     }
-    ASSERT(names == (Int)nameidx->len, "name count != indexes array len.");
+    sk_assert(F->vm, names == cast_int(nameidx->len), "name count != indexes array len.");
     while(nameidx->len > 0) {
         Int idx = Array_Int_pop(nameidx);
         Exp _; // dummy
@@ -1455,7 +1453,6 @@ static void fn(Function* F, FunctionType type)
     for(UInt i = 0; i < fn->upvalc; i++) {
         Upvalue* upval = Array_Upvalue_index(Fnew->upvalues, i);
         CODE(F, upval->local ? 1 : 0);
-        CODE(F, upval->flags);
         CODEL(F, upval->idx);
     }
     F_free(Fnew);
@@ -1599,22 +1596,22 @@ static force_inline void switchconstants(Function* F, SwitchState* state, Exp* E
     if(!etisconst(E->type)) return;
     switch(E->type) {
         case EXP_FALSE:
-            if(state->havefalse) SWITCH_DUPLICATE_ERR(F, "false");
+            if(unlikely(state->havefalse)) SWITCH_DUPLICATE_ERR(F, "false");
             state->havefalse = true;
             break;
         case EXP_TRUE:
-            if(state->havetrue) SWITCH_DUPLICATE_ERR(F, "true");
+            if(unlikely(state->havetrue)) SWITCH_DUPLICATE_ERR(F, "true");
             state->havetrue = true;
             break;
         case EXP_NIL:
-            if(state->havenil) SWITCH_DUPLICATE_ERR(F, "nil");
+            if(unlikely(state->havenil)) SWITCH_DUPLICATE_ERR(F, "nil");
             state->havenil = true;
             break;
         case EXP_STRING:
         case EXP_NUMBER:;
             Value caseval = *CONSTANT(F, E);
             for(Int i = 0; i < (Int)state->constants.len; i++) {
-                if(veq(F->vm, state->constants.data[i], caseval)) {
+                if(unlikely(raweq(F->vm, state->constants.data[i], caseval))) {
                     SWITCH_DUPLICATE_ERR(F, vtostr(F->vm, caseval)->storage);
                     return;
                 }
@@ -1986,7 +1983,7 @@ static void returnstm(Function* F)
     CODE(F, OP_RETSTART);
     if(match(F, TOK_SEMICOLON)) coderet(F, true, gotret);
     else {
-        if(type == FN_INIT) RETURN_INIT_ERR(F, static_str[SS_INIT].name);
+        if(type == FN_INIT) RETURN_INIT_ERR(F, static_strings[SS_INIT].name);
         Exp E;
         E.ins.set = false;
         explist(F, VM_RET_LIMIT, &E);
@@ -1996,8 +1993,7 @@ static void returnstm(Function* F)
             restorecontext(F, &C);
         } else {
             if(ethasmulret(E.type)) setmulret(F, &E);
-            if(type == FN_SCRIPT) CODE(F, OP_TOPRET);
-            else CODE(F, OP_RET);
+            CODE(F, OP_RET);
         }
     }
 }

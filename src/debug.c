@@ -84,7 +84,7 @@ static Int shorinst(VM* vm, const char* name, Chunk* chunk, OpCode code, UInt of
             constant(vm, chunk, param);
             break;
         case OP_OVERLOAD:
-            printf("'%s'", static_str[param].name);
+            printf("'%s'", static_strings[param].name);
             break;
         default:
             // do nothing
@@ -138,8 +138,6 @@ sdebug UInt Instruction_debug(VM* vm, Chunk* chunk, UInt offset)
     switch(instruction) {
         case OP_RET:
             return simpleins("OP_RET", offset);
-        case OP_TOPRET:
-            return simpleins("OP_TOPRET", offset);
         case OP_TRUE:
             return simpleins("OP_TRUE", offset);
         case OP_FALSE:

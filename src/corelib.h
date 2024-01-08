@@ -9,8 +9,6 @@
 Value       resolve_script(VM* vm, Value name);
 const char* load_script_default(VM* vm, const char* path);
 
-#define ISFALSEY(val) (IS_NIL(val) || (IS_BOOL(val) && !AS_BOOL(val)))
-
 /* Native functions written in C. */
 #define corelib(name) int skcore_##name(VM* vm)
 

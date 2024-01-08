@@ -5,151 +5,20 @@
 #include "value.h"
 #include "vmachine.h"
 
-/* ================= runtime error format strings ================= */
-
-/* Create formatted object string */
-#define OSTRINGF(vm, fmt, ...) OString_fmt(vm, fmt __VA_OPT__(, ) __VA_ARGS__)
-
-
-
-/* OString_fmt_from() */
-#define OSTRINGF_ERR(vm, c, fn)                                                          \
-    OSTRINGF(vm, "invalid format specifier '%%%c' for '%s'", c, fn)
-
-
-/* OP_NEG */
-#define UNARYNEG_ERR(vm, valstr)                                                         \
-    OSTRINGF(                                                                            \
-        vm,                                                                              \
-        "'%s' is not a number, operand must be a number or it must overload unary "      \
-        "operator '-'.",                                                                 \
-        valstr)
-
-
-/* invokeindex() | invoke() | OP_SET_PROPERTY | OP_GET_PROPERTY */
-#define NOT_INSTANCE_ERR(vm, valstr)                                                     \
-    OSTRINGF(                                                                            \
-        vm,                                                                              \
-        "'%s' is not an <instance>, only class instances have properties.",              \
-        valstr)
-
-
-/* bindmethod() | invokefrom() | invokeindex() */
-#define UNDEFINED_PROPERTY_ERR(vm, property, class)                                      \
-    OSTRINGF(vm, "Property '%s' is not defined for <class '%s'>.", property, class)
-
-
-/* bindomethod() */
-#define NO_OVERLOAD_ERR(vm, olname, class)                                               \
-    OSTRINGF(vm, "Method '%s' is not overloaded for <class '%s'>.", olname, class)
-
-
-/* OP_INHERIT */
-#define INHERIT_ERR(vm, subclass, superclass)                                            \
-    OSTRINGF(                                                                            \
-        vm,                                                                              \
-        "Invalid impl: \"class %s impl ...\", tried "                                    \
-        "inheriting from '%s', classes can only inherit from other classes.\n"           \
-        "\tExample:\n\t\tclass A {}\n\t\tclass B impl A {}\n",                           \
-        subclass,                                                                        \
-        superclass)
-
-
-/* OP_GET_GLOBAL | OP_GET_GLOBALL | OP_SET_GLOBAL | OP_SET_GLOBALL */
-#define UNDEFINED_GLOBAL_ERR(vm, name)                                                   \
-    OSTRINGF(vm, "Undefined global variable '%s'.", name)
-
-
-/* OP_DEFINE_GLOBAL | OP_DEFINE_GLOBALL */
-#define GLOBALVAR_REDEFINITION_ERR(vm, name)                                             \
-    OSTRINGF(vm, "Redefinition of global variable '%s'.", name)
-
-
-/* OP_SET_UPVALUE */
-#define VARIABLE_FIXED_ERR(vm, len, start) OSTRINGF(vm, FMT_VAR_FIXED_ERR(len, start))
-
-
-/* OP_INDEX | OP_SET_INDEX */
-#define INDEX_RECEIVER_ERR(vm, receiver)                                                 \
-    OSTRINGF(vm, "Can't index '%s', indexing can be used on instances.")
-#define NIL_INDEX_ERR(vm) OSTRINGF(vm, "Instances can't be indexed with 'nil'.")
-
-
-/* callv() | callnative() | callfn() */
-#define FN_ARGC_ERR(vm, arity, argc)                                                     \
-    OSTRINGF(vm, "Expected %d argument/s, instead got %d.", arity, argc)
-#define FN_VA_ARGC_ERR(vm, arity, argc)                                                  \
-    OSTRINGF(vm, "Expected at least %d argument/s, instead got %d.", arity, argc)
-#define FRAME_LIMIT_ERR(vm, frlimit)                                                     \
-    OSTRINGF(vm, "Callstack overflow, limit overflown -> %u.", frlimit)
-#define RETCNT_STACK_OVERFLOW(vm, fname)                                                 \
-    OSTRINGF(vm, "Called function '%s' return count overflows the stack.", fname)
-
-
-/* push() */
-#define VM_STACK_OVERFLOW(vm, limit)                                                     \
-    OSTRINGF(vm, "VM stack overflow, limit %ul.", cast(unsigned long, limit))
-
-
-/* callv() { OP_CALL } */
-#define NONCALLABLE_ERR(vm, valstr)                                                      \
-    OSTRINGF(                                                                            \
-        vm,                                                                              \
-        "Tried calling '%s' which is non-callable value, only functions "                \
-        "and classes can be called.",                                                    \
-        valstr)
-
-
-/* OP_ADD */
-#define ADD_OPERATOR_ERR(vm, a, b)                                                       \
-    ({                                                                                   \
-        OString* str1 = vtostr(vm, a);                                                   \
-        push(vm, OBJ_VAL(str1));                                                         \
-        OString* str2 = vtostr(vm, b);                                                   \
-        push(vm, OBJ_VAL(str2));                                                         \
-        OString* unesc2 = unescape(vm, str2);                                            \
-        push(vm, OBJ_VAL(unesc2));                                                       \
-        OString* unesc1 = unescape(vm, str1);                                            \
-        push(vm, OBJ_VAL(unesc1));                                                       \
-        OString* s = OSTRINGF(                                                           \
-            vm,                                                                          \
-            "Only two numbers can be added together or two strings "                     \
-            "concatenated.\n"                                                            \
-            "\tThis is invalid: \"%s\" + \"%s\"\n"                                       \
-            "\tTry instead: \"%s%s%s\" + \"%s%s%s\"",                                    \
-            unesc1->storage,                                                             \
-            unesc2->storage,                                                             \
-            IS_STRING(a) ? "" : "tostr(",                                                \
-            unesc1->storage,                                                             \
-            IS_STRING(a) ? "" : ")",                                                     \
-            IS_STRING(b) ? "" : "tostr(",                                                \
-            unesc2->storage,                                                             \
-            IS_STRING(b) ? "" : ")");                                                    \
-        popn(vm, 4);                                                                     \
-        s;                                                                               \
-    })
-
-
-
-
 
 /* ==================== runtime errors ====================== */
 
-/* Performs long jump if there is one otherwise prints
- * the runtime error and invokes either a panic handler or aborts.
- * Error message is on top of the stack, or whatever value
- * was passed to sk_error. */
-sk_noret runerror(VM* vm, Int status)
+static force_inline void printerror(VM* vm)
 {
-    last_frame(vm).status = status;
-    struct sk_longjmp* errjmp = vm->errjmp;
-    if(errjmp) { // protected call?
-        errjmp->status = status; // error status
-        // sk_unlock is somewhere after the 'longjmp'
-        longjmp(errjmp->buf, 1);
-        unreachable;
-    } // Otherwise print the error
+    Value errobj = *stackpeek(0);
+    if(IS_STRING(errobj)) fprintf(stderr, "%s\n", AS_CSTRING(errobj));
+    else vprint(vm, errobj, stderr);
+}
+
+static void stacktrace(VM* vm)
+{
     fputs("\nSkooma: [runtime error]\nSkooma: ", stderr);
+    printerror(vm);
     fprintf(stderr, "%s\n", vtostr(vm, *stackpeek(0))->storage);
     for(Int i = vm->fc - 1; i >= 0; i--) {
         CallFrame* frame = &vm->frames[i];
@@ -177,13 +46,31 @@ sk_noret runerror(VM* vm, Int status)
         }
     }
     fflush(stderr);
-    if(vm->config.panic) {
-        sk_unlock(vm);
-        vm->config.panic(vm);
+}
+
+/* Performs long jump if there is one otherwise prints
+ * the runtime error and invokes either a panic handler or aborts.
+ * Error message is on top of the stack, or whatever value
+ * was passed to sk_error. */
+sk_noret runerror(VM* vm, Int status)
+{
+    last_frame(vm).status = status;
+    struct sk_longjmp* errjmp = vm->errjmp;
+    if(errjmp) { // protected call?
+        errjmp->status = status;
+        // sk_unlock is after the 'longjmp'
+        longjmp(errjmp->buf, 1);
         unreachable;
-    } else {
-        _cleanupvm(&vm);
-        abort();
+    } else { // otherwise not protected...
+        stacktrace(vm);
+        if(vm->config.panic) {
+            sk_unlock(vm);
+            vm->config.panic(vm);
+            unreachable;
+        } else {
+            _cleanupvm(&vm);
+            abort();
+        }
     }
 }
 
@@ -303,6 +190,47 @@ sk_noret ipaerror(VM* vm, Value notinstance)
     push(vm, OBJ_VAL(vtostr(vm, notinstance)));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stackpeek(0)))));
     runerror(vm, S_EPACCESS);
+}
+
+
+sk_noret redefgerror(VM* vm, const char* gname)
+{
+    static const char* fmt = "Redefinition of global variable '%s'.";
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, gname)));
+    runerror(vm, S_EGLOBALREDEF);
+}
+
+
+sk_noret udgerror(VM* vm, const char* gname)
+{
+    static const char* fmt = "Undefined global variable '%s'.";
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, gname)));
+    runerror(vm, S_EUDGLOBAL);
+}
+
+
+sk_noret fixederror(VM* vm, const char* var)
+{
+    static const char* fmt = "Can't assign to variable '%s', it is declared as 'fixed'.";
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, var)));
+    runerror(vm, S_EFIXEDASSIGN);
+}
+
+
+sk_noret nilidxerror(VM* vm)
+{
+    static const char* fmt = "Can't index with 'nil'.";
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt)));
+    runerror(vm, S_ENILIDX);
+}
+
+
+sk_noret inheriterror(VM* vm, Value notclass)
+{
+    static const char* fmt = "Can't inherit from '%s', value must be class object.";
+    push(vm, OBJ_VAL(vtostr(vm, notclass)));
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stackpeek(0)))));
+    runerror(vm, S_EINHERIT);
 }
 
 /* --------------------------------------------------------- */ // runtime errors
