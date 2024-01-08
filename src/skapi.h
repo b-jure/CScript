@@ -8,7 +8,7 @@
 #define skapi_checkresults(vm, n, nr)                                                    \
     sk_checkapi(                                                                         \
         vm,                                                                              \
-        (nr) == SK_MULRET || (((vm)->sp - (vm)->stack) + (n) + (nr)) < VM_STACK_MAX,     \
+        (nr) == SK_MULRET || (((vm)->sp - (vm)->stack) + (n) + (nr)) < VM_STACK_LIMIT,   \
         "function results overflow the stack.")
 
 #define skapi_checkelems(vm, n)                                                          \
@@ -35,8 +35,11 @@
 #define skapi_checkstack(vm, n)                                                          \
     sk_checkapi(                                                                         \
         vm,                                                                              \
-        ((vm)->sp - (vm)->stack) + cast(ptrdiff_t, n) <= VM_STACK_MAX,                   \
+        ((vm)->sp - (vm)->stack) + cast(ptrdiff_t, n) <= VM_STACK_LIMIT,                 \
         "not enough stack space for #n elements")
+
+#define skapi_checkordop(vm, ord)                                                        \
+    sk_checkapi(vm, ((ord) >= 0 && (ord) < ORD_CNT), "invalid Ord operation")
 
 /* ------------------------------------------------------ */
 
@@ -47,13 +50,13 @@
 
 /* ==================== change stack pointer with checks ==================== */
 
-#define stklast(vm) cast_intptr(vm->stack + VM_STACK_MAX - 1)
+#define stklast(vm) cast_intptr(vm->stack + VM_STACK_LIMIT - 1)
 
 /* Increment stack pointer */
 #define skapi_incsp(vm)                                                                  \
     do {                                                                                 \
         (vm)->sp++;                                                                      \
-        sk_checkapi(vm, vm->sp - vm->stack <= VM_STACK_MAX, "stack overflow.");          \
+        sk_checkapi(vm, vm->sp - vm->stack <= VM_STACK_LIMIT, "stack overflow.");        \
     } while(0)
 
 /* Decrement stack pointer */

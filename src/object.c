@@ -83,9 +83,7 @@ OString* OString_new(VM* vm, const char* chars, size_t len)
 
 OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
 {
-#define MAXDIGITS 25
-
-    unsigned char c;
+    uint8_t c;
     Array_Byte buff;
     const char* fmttype = NULL;
     Array_Byte_init(&buff, vm);
@@ -99,9 +97,9 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
                 break;
             }
             case 'd': { /* int64_t */
-                long int n = va_arg(argp, int64_t);
-                Array_Byte_ensure(&buff, MAXDIGITS);
-                buff.len += snprintf((char*)&buff.data[buff.len], MAXDIGITS, "%ld", n);
+                int64_t n = va_arg(argp, int64_t);
+                Array_Byte_ensure(&buff, SK_NDIGITS);
+                buff.len += snprintf((char*)&buff.data[buff.len], SK_NDIGITS, "%ld", n);
                 break;
             }
             case 'n': { /* sk_number (as double) */
@@ -114,9 +112,9 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
             }
             sknum: {
                 sk_number n = va_arg(argp, sk_number);
-                Array_Byte_ensure(&buff, MAXDIGITS);
+                Array_Byte_ensure(&buff, SK_NDIGITS);
                 char* s = cast_charp(&buff.data[buff.len]);
-                buff.len += snprintf(s, MAXDIGITS, fmttype, n);
+                buff.len += snprintf(s, SK_NDIGITS, fmttype, n);
                 break;
             }
             case 's': { /* string */
@@ -129,7 +127,7 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
                 break;
             }
             case 'c': { /* char */
-                char c = va_arg(argp, int);
+                int8_t c = va_arg(argp, int);
                 Array_Byte_push(&buff, c);
                 break;
             }
@@ -148,8 +146,6 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
     OString* fstr = OString_new(vm, (char*)buff.data, buff.len);
     Array_Byte_free(&buff, NULL);
     return fstr;
-
-#undef MAXDIGITS
 }
 
 OString* OString_fmt(VM* vm, const char* fmt, ...)

@@ -144,14 +144,23 @@ void vge(VM* vm, Value l, Value r);
 /* Performs arithmetic operation on skooma values. */
 void arith(VM* vm, Value a, Value b, Ar op, Value* res);
 
+#define concatonstack(vm)                                                                \
+    do {                                                                                 \
+        *stackpeek(1) = OBJ_VAL(concatenate(vm, *stackpeek(1), *stackpeek(0)));          \
+        vm->sp--;                                                                        \
+    } while(0)
+
 /* Get value type (TypeTag) */
 int val2type(Value value);
 
 /* Get/Create string object from value */
 OString* vtostr(VM* vm, Value value);
 
+/* cstring from number */
+const char* dtostr(sk_number n, uint8_t* lenp);
+
 /* Auxiliary functions/defines for converting skooma primitive types into strings */
-OString* dtostr(VM* vm, sk_number n);
+OString* dtoostr(VM* vm, sk_number n);
 OString* btostr(VM* vm, int b);
 #define niltostr(vm) (vm)->statics[SS_NIL]
 

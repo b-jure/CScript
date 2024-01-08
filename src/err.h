@@ -6,81 +6,11 @@
 
 
 /* Compile-time errors */
-
+extern const char* comperrors[];
 
 #define COMPILE_ERR(F, fmt, ...) error(F, fmt __VA_OPT__(, ) __VA_ARGS__)
 
-/* make_constant() */
-#define CONSTANT_LIMIT_ERR(F, fnstr, limit)                                              \
-    COMPILE_ERR(                                                                         \
-        F,                                                                               \
-        "<fn %s>: Too many constants defined in a single chunk (limit "                  \
-        "%u).",                                                                          \
-        fnstr,                                                                           \
-        limit)
-/* ------------- */
 
-/* codeset() */
-#define LOCAL_FIXED_ERR(F, token) COMPILE_ERR(F, "TODO: new err msg")
-/* ------------- */
-
-/* globalvar() */
-#define GLOBALS_LIMIT_ERR(F, limit)                                                      \
-    COMPILE_ERR(F, "Too many global values defined in script (limit %u).", limit)
-/* ------------- */
-
-/* ------------- */
-#define GLOBAL_REDEFINITION_ERR(F, len, start)                                           \
-    COMPILE_ERR(F, "Variable redefinition '%.*s'.", len, start)
-/* ------------- */
-
-/* local_new() */
-#define LOCAL_LIMIT_ERR(F, limit)                                                        \
-    COMPILE_ERR(F, "Too many local values defined in script (limit %u).", limit)
-/* ------------- */
-
-/* get_local() */
-#define LOCAL_DEFINITION_ERR(F, len, start)                                              \
-    COMPILE_ERR(F, "Can't read local variable %.*s in its own initializer.", len, start)
-/* ------------- */
-
-/* make_local() */
-#define LOCAL_REDEFINITION_ERR(F, len, start)                                            \
-    COMPILE_ERR(F, "Redefinition of local variable '%.*s'.", len, start)
-/* ------------- */
-
-/* codeloop() | patchjmp() */
-#define JUMP_LIMIT_ERR(F, limit)                                                         \
-    COMPILE_ERR(                                                                         \
-        F,                                                                               \
-        "Too much code to jump over. Bytecode indexing limit reached "                   \
-        "[%u].",                                                                         \
-        limit)
-/* ------------- */
-
-/* switchstm() */
-#define SWITCH_DEFAULT_ERR(F) COMPILE_ERR(F, "Multiple 'default' labels.")
-#define SWITCH_NOCASE_ERR(F)  COMPILE_ERR(F, "Can't have statements before first case.")
-#define SWITCH_RBRACE_ERR(F)  COMPILE_ERR(F, "Expect '}' at the end of 'switch'.")
-/* ------------- */
-
-/* switchconstants() */
-#define SWITCH_DUPLICATE_ERR(F, val)                                                     \
-    COMPILE_ERR(F, "Already have case with constant '%s'.", val)
-/* ------------- */
-
-/* continuestm() */
-#define CONTINUE_ERR(F) COMPILE_ERR(F, "'continue' statement not in loop statement.")
-/* ------------- */
-
-/* breakstm() */
-#define BREAK_ERR(F) COMPILE_ERR(F, "'break' statement not in loop or switch statement.");
-/* ------------- */
-
-/* returnstm() */
-#define RETURN_INIT_ERR(F, initstr)                                                      \
-    COMPILE_ERR(F, "Can't return a value from '%s' method.", initstr)
-/* ------------- */
 
 /* Parse arglist */
 #define ARGC_LIMIT_ERR(F, limit)                                                         \
@@ -147,8 +77,13 @@
 
 /* ==================== runtime errors ====================== */
 
+/* Lower-level error invocation, skips the part where
+ * we check if the function is protected and instead
+ * prints the stack trace and invokes panic handler. */
+sk_noret printandpanic(VM* vm);
+
 /* Generic runtime error */
-sk_noret runerror(VM* vm, Int status);
+sk_noret runerror(VM* vm, int8_t status);
 
 /* Ordering error */
 sk_noret ordererror(VM* vm, Value a, Value b);
@@ -168,7 +103,7 @@ sk_noret unoperror(VM* vm, Value a, OMTag op);
 sk_noret disperror(VM* vm, Value result);
 
 /* Object string format error */
-sk_noret ofmterror(VM* vm, int c, Value callee);
+sk_noret ofmterror(VM* vm, int8_t c, Value callee);
 
 /* Stack overflow error */
 sk_noret sovferror(VM* vm);
@@ -180,7 +115,7 @@ sk_noret udperror(VM* vm, Value property, OClass* oclass);
 sk_noret retovferror(VM* vm, const char* fn);
 
 /* Function invalid argument count error */
-sk_noret arityerror(VM* vm, int expected, int got);
+sk_noret arityerror(VM* vm, int32_t expected, int32_t got);
 
 /* Call stack overflow (frame count) */
 sk_noret fcovferror(VM* vm);

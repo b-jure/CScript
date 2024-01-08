@@ -75,7 +75,7 @@ SK_API VM* sk_create(AllocFn allocator, void* ud)
     HashTable_init(&vm->strings); // Interned strings table (Weak_refs)
     memset(vm->statics, 0, sizeof(vm->statics));
     for(UInt i = 0; i < SS_SIZE; i++)
-        vm->statics[i] = OString_new(vm, static_str[i].name, static_str[i].len);
+        vm->statics[i] = OString_new(vm, static_strings[i].name, static_strings[i].len);
     // @REFACTOR?: Maybe make the native functions private and only
     //             callable inside class instances?
     //             Upside: less branching resulting in more straightforward code.
@@ -123,7 +123,7 @@ SK_API VM* sk_create(AllocFn allocator, void* ud)
 /* Free the VM allocation, the pointer to VM will be nulled out. */
 SK_API void sk_destroy(VM** vmp)
 {
-    if(likely(vmp)) { // non-null pointer ?
+    if(likely(vmp != NULL)) { // non-null pointer ?
         sk_lock(*vmp);
         if(*vmp == NULL) return;
         VM* vm = *vmp;
@@ -326,8 +326,10 @@ SK_API const char* sk_concat(VM* vm)
     Value right = *idx2val(vm, -1);
     Value left = *idx2val(vm, -2);
     sk_checkapi(vm, IS_STRING(right) && IS_STRING(left), "expect strings");
-    skapi_pushfstrva(vm, "%s%s", AS_CSTRING(left), AS_CSTRING(right));
+    concatonstack(vm);
+    const char* concated = AS_CSTRING(*stackpeek(0));
     sk_unlock(vm);
+    return concated;
 }
 
 
@@ -873,34 +875,43 @@ SK_API int sk_error(VM* vm, Status errcode)
 
 
 
-/* Compare 2 values on the stack */
-SK_API int sk_compare(VM* vm, int idx1, int idx2, Cmp op)
+/* Apply ordering on 2 values on the stack.
+ * First both values are pushed on top of the
+ * stack (idx1 then idx2) and ordering is applied.
+ * Result in placed at first operand (left one) and
+ * the second operand is popped off. */
+SK_API void sk_compare(VM* vm, int idx1, int idx2, Ord ord)
 {
     sk_lock(vm);
-    Value a = *idx2val(vm, idx1);
-    Value b = *idx2val(vm, idx2);
-    int res;
-    switch(op) {
-        case CMP_EQ:
-            res = veq(vm, a, b);
+    skapi_checkordop(vm, ord);
+    skapi_checkstack(vm, 2);
+    Value l = *idx2val(vm, idx1);
+    Value r = *idx2val(vm, idx2);
+    *vm->sp++ = l;
+    *vm->sp++ = r;
+    switch(ord) {
+        case ORD_EQ:
+            veq(vm, l, r);
             break;
-        case CMP_LT:
-            res = vlt(vm, a, b);
+        case ORD_NE:
+            vne(vm, l, r);
             break;
-        case CMP_GT:
-            res = vgt(vm, a, b);
+        case ORD_LT:
+            vlt(vm, l, r);
             break;
-        case CMP_LE:
-            res = vle(vm, a, b);
+        case ORD_GT:
+            vgt(vm, l, r);
             break;
-        case CMP_GE:
-            res = vge(vm, a, b);
+        case ORD_LE:
+            vle(vm, l, r);
+            break;
+        case ORD_GE:
+            vge(vm, l, r);
             break;
         default:
-            sk_checkapi(vm, 0, "invalid comparison 'op'");
+            unreachable;
     }
     sk_unlock(vm);
-    return res;
 }
 
 
@@ -934,7 +945,7 @@ SK_API int sk_version(VM* vm)
 
 #define sizeofstr(str) (sizeof(str) - 1)
 
-const InternedString static_str[] = {
+const InternedString static_strings[] = {
   /* Value types */
     {"nil",                sizeofstr("nil")               },
     {"number",             sizeofstr("number")            },

@@ -36,12 +36,13 @@ void push(VM* vm, Value val)
     else sovferror(vm);
 }
 
-/* Bind class method in order to preserve the receiver.
+/* Private to interpreter.
+ * Bind class method in order to preserve the receiver.
  * By doing so the interpreter can then push the receiver on the
  * stack before running the function.
  * This is needed because class methods expect the receiver to be
  * the first argument ('self' local variable). */
-void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
+static force_inline void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 {
     Value method;
     if(unlikely(!HashTable_get(&oclass->methods, name, &method)))
@@ -839,6 +840,7 @@ void run(VM* vm)
             }
             CASE(OP_INDEX)
             {
+                // TODO: Fix this up when overloading is implemented
                 Value receiver = *stackpeek(1);
                 Value key = *stackpeek(0);
                 if(unlikely(!IS_INSTANCE(receiver))) {
@@ -863,6 +865,7 @@ void run(VM* vm)
             }
             CASE(OP_SET_INDEX)
             {
+                // @TODO: Fix this up when overloading gets implemented
                 Value receiver = *stackpeek(2);
                 Value property = *stackpeek(1);
                 Value value = *stackpeek(0);
@@ -873,7 +876,6 @@ void run(VM* vm)
                     saveip();
                     nilidxerror(vm);
                 }
-                // @TODO: Fix this up when overloading gets implemented
                 HashTable_insert(vm, &AS_INSTANCE(receiver)->fields, property, value);
                 popn(vm, 3);
                 push(vm, value);
@@ -881,10 +883,10 @@ void run(VM* vm)
             }
             CASE(OP_INVOKE_INDEX)
             {
+                // @TODO: Fix this up when overloading gets implemented
                 int32_t retcnt = READ_BYTEL();
                 int32_t argc = vm->sp - Array_VRef_pop(&vm->callstart);
                 saveip();
-                // @TODO: Fix this up when overloading gets implemented
                 invokeindex(vm, argc, retcnt);
                 updatestate();
                 BREAK;
@@ -922,16 +924,15 @@ void run(VM* vm)
                 saveip();
                 Value fn = *stackpeek(2);
                 if(trycall(vm, fn, 2, vars) == CALL_NATIVEFN)
-                    callnative_nolock(vm, last_frame(vm).callee, fn, // finish this
-                updatestate() frame = &vm->frames[vm->fc - 1];
-                ip = frame->ip;
+                    callnative_nolock(vm, last_frame(vm).callee, fn, vars);
+                updatestate();
                 BREAK;
             }
             CASE(OP_FOREACH)
             {
                 int32_t vars = READ_BYTEL();
                 *stackpeek(vars) = *stackpeek(vars - 1); // cntlvar
-                ASSERT(*ip == OP_JMP, "Expect 'OP_JMP'.");
+                sk_assert(vm, *ip == OP_JMP, "Expect 'OP_JMP'.");
                 if(!IS_NIL(*stackpeek(vars))) ip += 4;
                 BREAK;
             }
@@ -964,15 +965,22 @@ void run(VM* vm)
 
 
 
+/*
+ * Interprets (compiles and runs) the 'source'.
+ * Does not work in protected mode.
+ */
 void interpret(VM* vm, const char* source, const char* path)
 {
     Value name = OBJ_VAL(OString_new(vm, path, strlen(path)));
     OClosure* closure = compile(vm, source, name);
-    if(closure == NULL) return INTERPRET_COMPILE_ERROR;
+    if(closure == NULL) printandpanic(vm);
     trycall(vm, OBJ_VAL(closure), 0, 1);
     run(vm);
 }
 
+/*
+ * Frees the VM and nulls out its pointer.
+ */
 void _cleanupvm(VM** vmp)
 {
     _cleanup_function((*vmp)->F);

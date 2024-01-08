@@ -53,36 +53,41 @@ static force_inline Token errtoken(Lexer* lexer, const char* err)
 #define isend(lexer)     (peek(lexer) == '\0')
 #define peek_next(lexer) ((isend(lexer)) ? '\0' : *((lexer)->_current + 1))
 
-void printerror(Lexer* lexer, const char* err, va_list args)
+/* Register compile-time error */
+void regcomperror(Lexer* lexer, const char* err, va_list args)
 {
+    static const char* prefix_fmt = "[%s][line: %u] Error";
+    bool preverr = lexer->error;
     lexer->panic = true;
     lexer->error = true;
+    VM* vm = lexer->vm;
     const Token* token = &lexer->previous;
-    fprintf(
-        stderr,
-        "skooma: [%s][line: %u] Error",
-        AS_CSTRING(lexer->vm->script),
-        token->line);
-    if(token->type == TOK_EOF) fprintf(stderr, " at end of file");
-    else if(token->type != TOK_ERROR)
-        fprintf(stderr, " at '%.*s'", token->len, token->start);
-    fputs(": ", stderr);
-    vfprintf(stderr, err, args);
-    putc('\n', stderr);
+    OString* prefix = OString_fmt(vm, prefix_fmt, AS_CSTRING(vm->script), token->line);
+    push(vm, OBJ_VAL(prefix));
+    if(token->type == TOK_EOF) {
+        push(vm, OBJ_VAL(OString_fmt(vm, " at end of file: ")));
+    } else if(token->type != TOK_ERROR) {
+        push(vm, OBJ_VAL(OString_fmt(vm, " at '%.*s': ", token->len, token->start)));
+    } else goto pusherr;
+    concatonstack(vm);
+pusherr:
+    push(vm, OBJ_VAL(OString_fmt_from(vm, err, args)));
+    concatonstack(vm);
+    if(preverr) concatonstack(vm);
 }
 
 static void lexerror(Lexer* lexer, const char* err, ...)
 {
     va_list args;
     va_start(args, err);
-    printerror(lexer, err, args);
+    regcomperror(lexer, err, args);
     va_end(args);
 }
 
-static force_inline void advance(Lexer* lexer)
-{
+
+#define advance(lexer)                                                                   \
     if(*lexer->_current++ == '\n') lexer->line++;
-}
+
 
 static force_inline char nextchar(Lexer* lexer)
 {

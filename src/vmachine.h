@@ -27,9 +27,6 @@ struct sk_longjmp {
 };
 
 
-/* Max call frames */
-#define VM_FRAMES_MAX SK_CALLFRAMES_MAX
-
 typedef enum {
     CFI_FRESH = 1,
 } CFInfo;
@@ -52,15 +49,8 @@ typedef struct {
 
 /* Variable flags */
 #define VAR_FIXED_BIT 1
-
-/* set/clear/test variable flags */
-#define VAR_SET(variable, bit)   bset((variable)->flags, bit)
-#define VAR_CLEAR(variable, bit) bclear((variable)->flags, bit)
-#define VAR_CHECK(variable, bit) btest((variable)->flags, bit)
-#define VAR_FLAGS(variable)      ((variable)->flags)
-
 /* Check if variable is 'fixed' */
-#define ISFIXED(variable) VAR_CHECK(variable, VAR_FIXED_BIT)
+#define ISFIXED(variable) btest((variable)->flags, VAR_FIXED_BIT)
 
 /* Variable, it has a 'Value' and flags (modifiers),
  * only globals and upvalues are 'Variable' type,
@@ -68,13 +58,11 @@ typedef struct {
  * resolved during compilation. */
 typedef struct {
     Value value; /* Global value */
-    /*
-     * 1 - fixed
+    /* 1 - fixed
      * 2 - captured
      * 3 - unused
      * ...
-     * 8 - unused
-     */
+     * 8 - unused */
     Byte flags;
 } Variable;
 
@@ -102,7 +90,6 @@ ARRAY_NEW(Array_VRef, Value*);
 ARRAY_NEW(Array_Variable, Variable);
 
 
-
 /* Skooma Virtual Machine */
 struct VM {
     Config config; // user configuration
@@ -111,7 +98,7 @@ struct VM {
     HashTable loaded; // loaded scripts
     Value script; // current script name
     Function* F; // function state
-    CallFrame frames[VM_FRAMES_MAX];
+    CallFrame frames[VM_CALLSTACK_LIMIT];
     Int fc; // frame count
     Value stack[VM_STACK_LIMIT];
     Value* sp; // stack pointer
@@ -131,7 +118,6 @@ struct VM {
     size_t gc_next; // next threshold where gc triggers
     Byte gc_flags; // gc flags (sk API)
 };
-
 
 /* Fetch the last call frame (current) */
 #define last_frame(vm) ((vm)->frames[(vm)->fc - 1])
@@ -162,13 +148,24 @@ void push(VM* vm, Value val);
 #define tobool(val, bp)     (IS_BOOL(val) ? (*(bp) = AS_BOOL(val), 1) : 0)
 
 
-/* VM interface */
+/* ================== VM interface ================== */
+
+/* Compile and run the chunk generated from 'source'. */
 void interpret(VM* vm, const char* source, const char* filename);
+
+/* Run interpreter. */
 void run(VM* vm);
+
+/* Normal call. */
 int ncall(VM* vm, Value* retstart, Value callee, Int retcnt);
+
+/* Protected call. */
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);
-void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver);
+
+/* Close any open upvalues up to 'last' (stack position). */
 void closeupval(VM* vm, Value* last);
+
+/* Initialize config as per default settings. */
 void Config_init(Config* config);
 
 

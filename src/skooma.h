@@ -164,19 +164,20 @@ SK_API void sk_destroy(VM** vmp);
 
 
 /*
- * ========== Comparison and arithmetic functions ==========
+ * ========== Ordering and arithmetic functions ==========
  */
 
 typedef enum {
-    CMP_EQ = 0, // equal '=='
-    CMP_LT, // less '<'
-    CMP_GT, // greater '>'
-    CMP_LE, // less or equal '<='
-    CMP_GE, // greater or equal '>='
-    CMP_CNT, // Cmp count
-} Cmp;
+    ORD_EQ = 0, // equal '=='
+    ORD_NE, // not equal '!='
+    ORD_LT, // less '<'
+    ORD_GT, // greater '>'
+    ORD_LE, // less or equal '<='
+    ORD_GE, // greater or equal '>='
+    ORD_CNT, // Ord count
+} Ord;
 
-SK_API int sk_compare(VM* vm, int idx1, int idx2, Cmp op);
+SK_API void sk_compare(VM* vm, int idx1, int idx2, Ord op);
 
 typedef enum {
     AR_ADD = 0, // addition '+'

@@ -39,6 +39,7 @@ static sk_number narith(VM* vm, sk_number a, sk_number b, Ar op)
 }
 
 
+
 /* Perform arithmetic operation 'op' on skooma values.
  * If arithmetic operation was executed successfully then this
  * returns 1, otherwise 0. */
@@ -444,14 +445,18 @@ void vge(VM* vm, Value l, Value r)
 /* ---------------------------------------- */ // ordering
 
 
-
-
-OString* dtostr(VM* vm, sk_number n)
+const char* dtostr(sk_number n, uint8_t* lenp)
 {
-    static char buff[50];
-    size_t len;
-    if(floor(n) != n) len = snprintf(buff, 45, "%g", n);
-    else len = snprintf(buff, 45, "%ld", cast(int64_t, n));
+    static char buff[SK_NDIGITS];
+    if(floor(n) != n) *lenp = snprintf(buff, SK_NDIGITS, "%g", n);
+    else *lenp = snprintf(buff, SK_NDIGITS, "%ld", cast(int64_t, n));
+    return buff;
+}
+
+OString* dtoostr(VM* vm, sk_number n)
+{
+    uint8_t len;
+    const char* buff = dtostr(n, &len);
     return OString_new(vm, buff, len);
 }
 
@@ -475,7 +480,7 @@ OString* vtostr(VM* vm, Value value)
 nil:
     return niltostr(vm);
 number:
-    return dtostr(vm, AS_NUMBER(value));
+    return dtoostr(vm, AS_NUMBER(value));
 boolean:
     return btostr(vm, AS_BOOL(value));
 obj:
@@ -537,7 +542,8 @@ nil:
     fprintf(stream, "nil");
     return;
 number:
-    if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) fprintf(stream, "%lg", AS_NUMBER(value));
+    if(floor(AS_NUMBER(value)) != AS_NUMBER(value))
+        fprintf(stream, "%lg", AS_NUMBER(value));
     else fprintf(stream, "%ld", (int64_t)AS_NUMBER(value));
     return;
 boolean:

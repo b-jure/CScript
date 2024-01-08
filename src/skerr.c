@@ -10,68 +10,68 @@
 
 static force_inline void printerror(VM* vm)
 {
+    fputs("\nSkooma: ", stderr);
     Value errobj = *stackpeek(0);
     if(IS_STRING(errobj)) fprintf(stderr, "%s\n", AS_CSTRING(errobj));
-    else vprint(vm, errobj, stderr);
+    else {
+        vprint(vm, errobj, stderr);
+        fputc('\n', stderr);
+    }
 }
 
-static void stacktrace(VM* vm)
+static void stacktraceback(VM* vm)
 {
-    fputs("\nSkooma: [runtime error]\nSkooma: ", stderr);
-    printerror(vm);
-    fprintf(stderr, "%s\n", vtostr(vm, *stackpeek(0))->storage);
-    for(Int i = vm->fc - 1; i >= 0; i--) {
+    static const char* fmt1 = "\t['%s' on line %u] in ";
+    static const char* fmt2 = "\tin %s()\n";
+    fputs("Stack traceback:\n", stderr);
+    for(int32_t i = vm->fc - 1; i >= 0; i--) {
         CallFrame* frame = &vm->frames[i];
-        if(frame->closure != NULL) { // Skooma function ?
+        if(frame->closure) { // Skooma function ?
             Chunk* chunk = &frame->closure->fn->chunk;
-            UInt line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
+            int32_t line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
             Value _; // dummy
             bool loaded = false;
             if(HashTable_get(&vm->loaded, OBJ_VAL(FFN(frame)->name), &_)) {
                 vm->script = OBJ_VAL(FFN(frame)->name);
                 loaded = true;
             }
-            fprintf(
-                stderr,
-                "        ['%s' on line %u] in ",
-                AS_CSTRING(vm->script),
-                line);
+            fprintf(stderr, fmt1, AS_CSTRING(vm->script), line);
             if(loaded) fprintf(stderr, "script\n");
             else fprintf(stderr, "%s()\n", FFN(frame)->name->storage);
         } else { // this is a C function
-            fprintf(
-                stderr,
-                "        in %s()\n",
-                AS_NATIVE(*frame->callee)->name->storage);
+            fprintf(stderr, fmt2, AS_NATIVE(*frame->callee)->name->storage);
         }
     }
     fflush(stderr);
+}
+
+sk_noret printandpanic(VM* vm)
+{
+    printerror(vm);
+    stacktraceback(vm);
+    if(vm->config.panic) {
+        sk_unlock(vm);
+        vm->config.panic(vm);
+        unreachable;
+    } else {
+        _cleanupvm(&vm);
+        abort();
+    }
 }
 
 /* Performs long jump if there is one otherwise prints
  * the runtime error and invokes either a panic handler or aborts.
  * Error message is on top of the stack, or whatever value
  * was passed to sk_error. */
-sk_noret runerror(VM* vm, Int status)
+sk_noret runerror(VM* vm, int8_t status)
 {
     last_frame(vm).status = status;
     struct sk_longjmp* errjmp = vm->errjmp;
     if(errjmp) { // protected call?
         errjmp->status = status;
-        // sk_unlock is after the 'longjmp'
         longjmp(errjmp->buf, 1);
-        unreachable;
-    } else { // otherwise not protected...
-        stacktrace(vm);
-        if(vm->config.panic) {
-            sk_unlock(vm);
-            vm->config.panic(vm);
-            unreachable;
-        } else {
-            _cleanupvm(&vm);
-            abort();
-        }
-    }
+    } else printandpanic(vm);
+    unreachable;
 }
 
 
@@ -121,7 +121,7 @@ sk_noret disperror(VM* vm, Value result)
 }
 
 
-sk_noret ofmterror(VM* vm, int c, Value callee)
+sk_noret ofmterror(VM* vm, int8_t c, Value callee)
 {
     static const char* fmt = "Invalid format specifier '%%%c' for '%s'";
     push(vm, OBJ_VAL(vtostr(vm, callee)));

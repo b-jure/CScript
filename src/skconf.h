@@ -97,6 +97,11 @@
  * ABOVE, IT WILL BREAK THE INTERPRETER. */
 #define SK_BYTECODE_MAX 16777215
 
+/* Maximum amount of constants.
+ * By defautl it is set to 'SK_BYTECODE_MAX', can be changed
+ * to a lower value if desired. */
+#define SK_CONST_MAX SK_BYTECODE_MAX
+
 /* Maximum amount of arguments a function can take.
  * By default it is set to 'SK_BYTECODE_MAX', can be changed
  * to a lower value if desired. */
@@ -198,7 +203,7 @@
 
 
 /* For debug builds comment out 'defines' you dont want. */
-#ifdef SK_DEBUG_BUILD
+#ifdef SK_DEBUG
 #define sdebug
 
 /* Enable debug asserts */

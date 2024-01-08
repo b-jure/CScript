@@ -72,30 +72,30 @@ typedef enum {
 } TokenType;
 
 typedef struct {
-    TokenType   type;
+    TokenType type;
     const char* start; // slice start
-    UInt        len; // slice length
-    UInt        line; // source file line
-    Value       value; // constant value
+    UInt len; // slice length
+    UInt line; // source file line
+    Value value; // constant value
 } Token;
 
 typedef struct {
-    VM*         vm; // virtual machine
+    VM* vm; // virtual machine
     const char* source; // source file
     const char* start; // slice/token start
     const char* _current; // current byte in the source file
-    Token       previous;
-    Token       current;
-    UInt        line; // source file line
-    bool        panic; // sync flag
-    bool        error; // parse error flag
+    Token previous;
+    Token current;
+    UInt line; // source file line
+    bool panic; // sync flag
+    bool error; // parse error flag
 } Lexer; // Lexer
 
 
 
-Lexer     L_new(const char* source, VM* vm);
+Lexer L_new(const char* source, VM* vm);
 Token scan(Lexer* lexer);
 Token syntoken(const char* name);
-void  printerror(Lexer* parser, const char* fmt, va_list args);
+void regcomperror(Lexer* lexer, const char* err, va_list args);
 
 #endif
