@@ -6,7 +6,7 @@
 #include "value.h"
 #include "vmachine.h"
 
-OClosure* compile(VM* vm, const char* source, Value name);
+OClosure* compile(VM* vm, const char* source, Value name, bool globscope);
 void      _cleanup_function(Function* F);
 void      F_free(Function* F);
 void      mark_function_roots(VM* vm);

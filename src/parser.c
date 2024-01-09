@@ -19,6 +19,10 @@
 #include <stdlib.h>
 
 
+
+
+/* ================== Compile errors ================== */
+
 typedef enum {
     CE_JMPLIMIT,
     CE_LREAD,
@@ -32,6 +36,17 @@ typedef enum {
     CE_CONT,
     CE_BREAK,
     CE_INITRET,
+    CE_EXPLIST,
+    CE_VARLIST,
+    CE_SCOPE,
+    CE_UVALLIMIT,
+    CE_INHERIT,
+    CE_VARARG,
+    CE_NAMELIST,
+    CE_CALLCONST,
+    CE_SELF,
+    CE_SUPER,
+    CE_NOSUPER,
 } CompErr;
 
 const char* comperrors[] = {
@@ -46,7 +61,23 @@ const char* comperrors[] = {
     "\tAlready have case with constant '%s'.\n",
     "\t'continue' statement not in loop statement.\n",
     "\t'break' statement not in loop or switch statement.\n",
-    "\tCan't return a value from '%s' method.\n"};
+    "\tCan't return a value from '%s' method.\n",
+    "\tToo many expressions in explist, expected at most '%d'.\n",
+    "\tToo many variables in varlist, limit is '%d'.\n",
+    "\tScope nesting limit reached, limit is '%d'.\n",
+    "\tToo many upvalues in '%s', limit is '%d'.\n",
+    "\t<class '%s'> can't 'impl' itself.\n",
+    "\t'...' can only be used inside functions that accept variable number of "
+    "arguments.\n",
+    "\tToo many names in namelist, limit is '%d'\n",
+    "\tAttempted to call a constant value.\n",
+    "\tCan't use 'self' outside of a class.\n",
+    "\tCan't use 'super' outside of a class.\n",
+    "\tCan't use 'super', class does not have a superclass.\n",
+};
+
+/* ----------------------------------------------------------- */ // Compile errors
+
 
 
 
@@ -558,7 +589,7 @@ static uint32_t add_upval(Function* F, uint32_t idx, uint8_t flags, bool local)
         if(upvalue->idx == idx && upvalue->local == local) return i; // already exists
     }
     if(unlikely(upvalc >= VM_STACK_LIMIT)) {
-        UPVALUE_LIMIT_ERR(F, VM_STACK_LIMIT, F->fn->name->storage);
+        error(F, comperrors[CE_UVALLIMIT], VM_STACK_LIMIT, F->fn->name->storage);
         return 0;
     }
     Upvalue upval = {idx, flags, local};
@@ -719,7 +750,8 @@ static void rmlastins(Function* F, Exp* E)
 static force_inline void
 startscope(Function* F, Scope* S, uint8_t isloop, uint8_t isswitch)
 {
-    if(unlikely(F->S->depth >= SK_BYTECODE_MAX)) SCOPE_LIMIT_ERR(F, SK_BYTECODE_MAX);
+    if(unlikely(F->S->depth >= SK_BYTECODE_MAX))
+        error(F, comperrors[CE_SCOPE], SK_BYTECODE_MAX);
     S->localc = F->locals.len;
     S->isloop = isloop;
     S->isswitch = isswitch;
@@ -947,6 +979,8 @@ static force_inline void expect(Function* F, TokenType type, const char* err)
     error(F, err);
 }
 
+#define expectstr(str) "\t" str "\n"
+
 // End compilation of the function and emit return instruction
 static force_inline OFunction* compile_end(Function* F)
 {
@@ -961,18 +995,20 @@ static force_inline OFunction* compile_end(Function* F)
 }
 
 // Compile source code
-OClosure* compile(VM* vm, const char* source, Value name)
+OClosure* compile(VM* vm, const char* source, Value name, bool globscope)
 {
     vm->script = name;
     HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL);
     Function* F = MALLOC(vm, sizeof(Function));
     Lexer L = L_new(source, vm);
-    Scope globalscope;
+    Scope globalscope, local;
     F_init(F, &globalscope, NULL, vm, &L, FN_SCRIPT, name, vm->F);
+    if(!globscope) startscope(F, &local, 0, 0);
     advance(F);
     while(!match(F, TOK_EOF))
         dec(F);
     OFunction* fn = compile_end(F);
+    // no need to end scope if 'globscope' is true
     bool err = F->lexer->error;
     F_free(F);
     push(vm, OBJ_VAL(fn));
@@ -1210,7 +1246,7 @@ static const struct {
 // vararg ::= '...'
 static force_inline uint32_t vararg(Function* F)
 {
-    if(!F->fn->isva) VARARG_ERR(F);
+    if(!F->fn->isva) error(F, comperrors[CE_VARARG]);
     return CODEOP(F, OP_VALIST, 1);
 }
 
@@ -1258,7 +1294,7 @@ static int32_t explist(Function* F, int32_t limit, Exp* E)
     do {
         left--;
         got++;
-        if(left < 0) EXPLIST_LIMIT_ERR(F, limit);
+        if(left < 0) error(F, comperrors[CE_EXPLIST], limit);
         expr(F, E);
     } while(match(F, TOK_COMMA));
     return got;
@@ -1336,18 +1372,19 @@ static void exprstm(Function* F, bool lastclause)
         E.ins.set = true;
         Array_Exp Earr;
         Array_Exp_init(&Earr, F->vm);
-        expect_cond(F, etisvar(E.type), "Expect variable.\n");
+        expect_cond(F, etisvar(E.type), expectstr("Expect variable."));
         rmlastins(F, &E); // remove 'OP_GET..'
         Array_Exp_push(&Earr, E);
         int32_t vars = 1;
         while(match(F, TOK_COMMA)) {
-            if(unlikely(vars >= SK_BYTECODE_MAX)) VARLIST_LIMIT_ERR(F, SK_BYTECODE_MAX);
+            if(unlikely(vars >= SK_BYTECODE_MAX))
+                error(F, comperrors[CE_VARLIST], SK_BYTECODE_MAX);
             vars++;
             suffixedexp(F, &E);
-            expect_cond(F, etisvar(E.type), "Expect variable.\n");
+            expect_cond(F, etisvar(E.type), expectstr("Expect variable."));
             Array_Exp_push(&Earr, E);
         }
-        expect(F, TOK_EQUAL, "Expect '='.\n");
+        expect(F, TOK_EQUAL, expectstr("Expect '='."));
         E.ins.set = false;
         int32_t expc = explist(F, vars, &E);
         if(vars != expc) adjustassign(F, &E, vars, expc);
@@ -1361,14 +1398,14 @@ static void exprstm(Function* F, bool lastclause)
         } else if(etiscall(E.type)) CODE(F, OP_POP);
         else error(F, "Invalid syntax.\n");
     }
-    if(!lastclause) expect(F, TOK_SEMICOLON, "Expect ';'.\n");
+    if(!lastclause) expect(F, TOK_SEMICOLON, expectstr("Expect ';'."));
 }
 
 static void block(Function* F)
 {
     while(!check(F, TOK_RBRACE) && !check(F, TOK_EOF))
         dec(F);
-    expect(F, TOK_RBRACE, "Expect '}' after block.\n");
+    expect(F, TOK_RBRACE, expectstr("Expect '}' after block."));
 }
 
 static force_inline void blockstm(Function* F)
@@ -1390,7 +1427,7 @@ static void arglist(Function* F)
             break;
         }
         F->fn->arity++;
-        name(F, "Expect parameter name.\n");
+        name(F, expectstr("Expect parameter name."));
         INIT_LOCAL(F, 0);
     } while(match(F, TOK_COMMA));
 }
@@ -1401,9 +1438,9 @@ static uint32_t namelist(Function* F, Array_Int* nameidx)
 {
     int32_t names = 0;
     do {
-        if(names >= SK_BYTECODE_MAX) NAMELIST_LIMIT_ERR(F, SK_BYTECODE_MAX);
+        if(names >= SK_BYTECODE_MAX) error(F, comperrors[CE_NAMELIST], SK_BYTECODE_MAX);
         names++;
-        int32_t idx = name(F, "Expect name.\n"); // initialize later
+        int32_t idx = name(F, expectstr("Expect name.")); // initialize later
         if(F->S->depth == 0) Array_Int_push(nameidx, idx);
     } while(match(F, TOK_COMMA));
     return names;
@@ -1435,7 +1472,7 @@ static void codeassign(Function* F, int32_t names, Array_Int* nameidx)
 static void vardec(Function* F)
 {
     if(match(F, TOK_FIXED)) {
-        if(FIS(F, FFIXED)) error(F, "Expect variable name.\n");
+        if(FIS(F, FFIXED)) error(F, expectstr("Expect variable name."));
         FSET(F, FFIXED);
     }
     Array_Int nameidx;
@@ -1448,7 +1485,7 @@ static void vardec(Function* F)
     if(names != expc) adjustassign(F, &E, names, expc);
     codeassign(F, names, &nameidx);
     Array_Int_free(&nameidx, NULL);
-    expect(F, TOK_SEMICOLON, "Expect ';'.\n");
+    expect(F, TOK_SEMICOLON, expectstr("Expect ';'."));
 }
 
 // fvardec ::= 'fixed' vardec
@@ -1466,11 +1503,11 @@ static void fn(Function* F, FunctionType type)
     Scope globscope, S;
     F_init(Fnew, &globscope, F->cclass, F->vm, F->lexer, type, NIL_VAL, F);
     startscope(Fnew, &S, 0, 0); // no need to end this scope
-    expect(Fnew, TOK_LPAREN, "Expect '(' after function name.\n");
+    expect(Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
     if(!check(Fnew, TOK_RPAREN)) arglist(Fnew);
-    if(F->fn->isva) expect(Fnew, TOK_RPAREN, "Expect ')' after '...'.\n");
-    else expect(Fnew, TOK_RPAREN, "Expect ')' after parameters.\n");
-    expect(Fnew, TOK_LBRACE, "Expect '{' before function body.\n");
+    if(F->fn->isva) expect(Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
+    else expect(Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
+    expect(Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
     block(Fnew); // body
     OFunction* fn = compile_end(Fnew);
     fn->isinit = (type == FN_INIT);
@@ -1486,7 +1523,7 @@ static void fn(Function* F, FunctionType type)
 // fndec ::= 'fn' name '(' arglist ')' '{' block '}'
 static void fndec(Function* F)
 {
-    uint32_t idx = name(F, "Expect function name.\n");
+    uint32_t idx = name(F, expectstr("Expect function name."));
     if(F->S->depth > 0) INIT_LOCAL(F, 0); // initialize to allow recursion
     fn(F, FN_FUNCTION);
     Exp _; // dummy
@@ -1495,8 +1532,8 @@ static void fndec(Function* F)
 
 static void method(Function* F)
 {
-    expect(F, TOK_FN, "Expect 'fn'.\n");
-    expect(F, TOK_IDENTIFIER, "Expect method name.\n");
+    expect(F, TOK_FN, expectstr("Expect 'fn'."));
+    expect(F, TOK_IDENTIFIER, expectstr("Expect method name."));
     Value identifier = tokintostr(F->vm, &PREVT(F));
     uint32_t idx = make_constant(F, identifier);
     FunctionType type = FN_METHOD;
@@ -1508,7 +1545,7 @@ static void method(Function* F)
 
 static void classdec(Function* F)
 {
-    expect(F, TOK_IDENTIFIER, "Expect class name.\n");
+    expect(F, TOK_IDENTIFIER, expectstr("Expect class name."));
     Token class_name = PREVT(F);
     Value identifier = tokintostr(F->vm, &class_name);
     uint32_t idx = make_constant(F, identifier);
@@ -1525,9 +1562,10 @@ static void classdec(Function* F)
     _.ins.set = false;
     Scope S;
     if(match(F, TOK_IMPL)) { // have superclass ?
-        expect(F, TOK_IDENTIFIER, "Expect superclass name.\n");
+        expect(F, TOK_IDENTIFIER, expectstr("Expect superclass name."));
         codevarprev(F, &_); // get superclass
-        if(nameeq(&PREVT(F), &class_name)) CLASS_INHERIT_ERR(F, AS_CSTRING(identifier));
+        if(nameeq(&PREVT(F), &class_name))
+            error(F, comperrors[CE_INHERIT], AS_CSTRING(identifier));
         startscope(F, &S, 0, 0);
         local_new(F, syntoken("super"));
         INIT_LOCAL(F, 0);
@@ -1536,10 +1574,10 @@ static void classdec(Function* F)
         cclass.superclass = true;
     }
     codevar(F, class_name, &_);
-    expect(F, TOK_LBRACE, "Expect '{' before class body.\n");
+    expect(F, TOK_LBRACE, expectstr("Expect '{' before class body."));
     while(!check(F, TOK_RBRACE) && !check(F, TOK_EOF))
         method(F);
-    expect(F, TOK_RBRACE, "Expect '}' after class body.\n");
+    expect(F, TOK_RBRACE, expectstr("Expect '}' after class body."));
     CODE(F, OP_POP); // Pop the class
     if(cclass.superclass) endscope(F);
     F->cclass = cclass.enclosing;
@@ -1552,7 +1590,7 @@ static void call(Function* F, Exp* E)
     CODE(F, OP_CALLSTART);
     if(!check(F, TOK_RPAREN)) explist(F, VM_ARG_LIMIT, E);
     else E->type = EXP_NONE;
-    expect(F, TOK_RPAREN, "Expect ')'.\n");
+    expect(F, TOK_RPAREN, expectstr("Expect ')'."));
     if(ethasmulret(E->type)) setmulret(F, E);
 }
 
@@ -1666,11 +1704,11 @@ static void switchstm(Function* F)
     Array_Int_init(&fts, F->vm);
     startscope(F, &S, 0, 1); // implicit scope
     startbreaklist(F);
-    expect(F, TOK_LPAREN, "Expect '(' after 'switch'.\n");
+    expect(F, TOK_LPAREN, expectstr("Expect '(' after 'switch'."));
     E1.ins.set = false;
     expr(F, &E1);
-    expect(F, TOK_RPAREN, "Expect ')' after condition.\n");
-    expect(F, TOK_LBRACE, "Expect '{' after ')'.\n");
+    expect(F, TOK_RPAREN, expectstr("Expect ')' after condition."));
+    expect(F, TOK_LBRACE, expectstr("Expect '{' after ')'."));
     sdepth = F->cflow.innersdepth;
     F->cflow.innersdepth = F->S->depth;
     // Switch must contain case or default before any statements
@@ -1691,7 +1729,7 @@ static void switchstm(Function* F)
                 Exp E2;
                 E2.ins.set = false;
                 expr(F, &E2);
-                expect(F, TOK_COLON, "Expect ':' after 'case'.\n");
+                expect(F, TOK_COLON, expectstr("Expect ':' after 'case'."));
                 switchconstants(F, &swstate, &E2);
                 if(eareconstandeq(F, &E1, &E2)) {
                     restorecontext(F, &C);
@@ -1704,7 +1742,7 @@ static void switchstm(Function* F)
             } else if(!swstate.dflt) {
                 swstate.dflt = true;
                 swstate.casestate = CS_DFLT;
-                expect(F, TOK_COLON, "Expect ':' after 'default'.\n");
+                expect(F, TOK_COLON, expectstr("Expect ':' after 'default'."));
             } else error(F, comperrors[CE_SWDEF]);
             if(fts.len > 0) patchjmp(F, Array_Int_pop(&fts));
         } else {
@@ -1732,10 +1770,10 @@ static void ifstm(Function* F)
     Context C;
     int32_t jmptoelse, jmptoend = -1;
     savecontext(F, &C);
-    expect(F, TOK_LPAREN, "Expect '(' after 'if'.\n");
+    expect(F, TOK_LPAREN, expectstr("Expect '(' after 'if'."));
     E.ins.set = false;
     expr(F, &E); // condition
-    expect(F, TOK_RPAREN, "Expect ')' after condition.\n");
+    expect(F, TOK_RPAREN, expectstr("Expect ')' after condition."));
     bool remove = false;
     bool istrue = false;
     if(etisconst(E.type)) {
@@ -1785,7 +1823,7 @@ static void whilestm(Function* F)
     startscope(F, &S, 1, 0);
     startloop(F, &lstart, &ldepth);
     startbreaklist(F);
-    expect(F, TOK_LPAREN, "Expect '(' after 'while'.\n");
+    expect(F, TOK_LPAREN, expectstr("Expect '(' after 'while'."));
     E.ins.set = false;
     expr(F, &E); // conditional
     if(etisconst(E.type)) {
@@ -1793,7 +1831,7 @@ static void whilestm(Function* F)
         if(etisfalse(E.type)) remove = true;
         else infinite = true;
     } else jmptoend = CODEJMP(F, OP_JMP_IF_FALSE_POP);
-    expect(F, TOK_RPAREN, "Expect ')' after condition.\n");
+    expect(F, TOK_RPAREN, expectstr("Expect ')' after condition."));
     stm(F); // body
     bool gotret = F->fn->gotret;
     endscope(F);
@@ -1822,7 +1860,7 @@ static void forstm(Function* F)
     bool infinite = false;
     startscope(F, &S, 1, 0);
     startbreaklist(F);
-    expect(F, TOK_LPAREN, "Expect '(' after 'for'.\n");
+    expect(F, TOK_LPAREN, expectstr("Expect '(' after 'for'."));
     if(match(F, TOK_SEMICOLON)) // Initializer for-clause
         ; // no initializer
     else if(match(F, TOK_VAR)) vardec(F);
@@ -1838,7 +1876,10 @@ static void forstm(Function* F)
             if(etistrue(E.type)) infinite = true;
             else remove = true;
         } else jmptoend = CODEJMP(F, OP_JMP_IF_FALSE_POP);
-        expect(F, TOK_SEMICOLON, "Expect ';' after for-loop condition clause.\n");
+        expect(
+            F,
+            TOK_SEMICOLON,
+            expectstr("Expect ';' after for-loop condition clause."));
     } else infinite = true;
     if(!match(F, TOK_RPAREN)) { // last for-clause
         int32_t jmptobody = -1;
@@ -1851,7 +1892,7 @@ static void forstm(Function* F)
             patchjmp(F, jmptobody);
             (F)->cflow.innerlstart = jmptoincr;
         }
-        expect(F, TOK_RPAREN, "Expect ')' after last for-loop clause.\n");
+        expect(F, TOK_RPAREN, expectstr("Expect ')' after last for-loop clause."));
     }
     stm(F); // Loop body
     if(!remove) {
@@ -1871,9 +1912,9 @@ static int32_t foreachvars(Function* F)
 {
     int32_t vars = 0;
     do {
-        if(vars >= SK_BYTECODE_MAX) VARLIST_LIMIT_ERR(F, SK_BYTECODE_MAX);
+        if(vars >= SK_BYTECODE_MAX) error(F, comperrors[CE_VARLIST], SK_BYTECODE_MAX);
         vars++;
-        expect(F, TOK_IDENTIFIER, "Expect varname.\n");
+        expect(F, TOK_IDENTIFIER, expectstr("Expect varname."));
         make_local(F, &PREVT(F));
         INIT_LOCAL(F, 0);
     } while(match(F, TOK_COMMA));
@@ -1899,7 +1940,7 @@ static void foreachstm(Function* F)
     newlocalliteral(F, "(for invstate)"); // invariant state
     newlocalliteral(F, "(for cntlvar)"); // control variable
     vars = foreachvars(F); // declared vars
-    expect(F, TOK_IN, "Expect 'in'.\n");
+    expect(F, TOK_IN, expectstr("Expect 'in'."));
     E.ins.set = false;
     expr(F, &E); // iterator factory
     expect_cond(F, !etisconst(E.type), "Can't call constant expression.");
@@ -1963,7 +2004,7 @@ static force_inline int32_t switchcnt(Function* F)
 
 static void continuestm(Function* F)
 {
-    expect(F, TOK_SEMICOLON, "Expect ';' after 'continue'.\n");
+    expect(F, TOK_SEMICOLON, expectstr("Expect ';' after 'continue'."));
     if(unlikely(F->cflow.innerlstart == -1)) error(F, comperrors[CE_CONT]);
     else {
         Scope* S = loopscope(F);
@@ -1976,7 +2017,7 @@ static void continuestm(Function* F)
 
 static void breakstm(Function* F)
 {
-    expect(F, TOK_SEMICOLON, "Expect ';' after 'break'.\n");
+    expect(F, TOK_SEMICOLON, expectstr("Expect ';' after 'break'."));
     Array_Array_Int* arr = &F->cflow.breaks;
     int32_t popn = 0;
     Scope* scope = NULL;
@@ -2017,7 +2058,7 @@ static void returnstm(Function* F)
         Exp E;
         E.ins.set = false;
         explist(F, VM_RET_LIMIT, &E);
-        expect(F, TOK_SEMICOLON, "Expect ';' after return statement value/s.\n");
+        expect(F, TOK_SEMICOLON, expectstr("Expect ';' after return statement value/s."));
         if(gotret) {
             F->fn->gotret = 1;
             restorecontext(F, &C);
@@ -2033,7 +2074,7 @@ static void returnstm(Function* F)
 ///       | '.' name call
 static void dot(Function* F, Exp* E)
 {
-    expect(F, TOK_IDENTIFIER, "Expect property name after '.'.\n");
+    expect(F, TOK_IDENTIFIER, expectstr("Expect property name after '.'."));
     Value identifier = tokintostr(F->vm, &PREVT(F));
     uint32_t idx = make_constant(F, identifier);
     if(match(F, TOK_LPAREN)) codeinvoke(F, E, idx);
@@ -2068,9 +2109,9 @@ static force_inline void indexed(Function* F, Exp* E)
     Exp E2;
     E2.ins.set = false;
     expr(F, &E2);
-    expect(F, TOK_RBRACK, "Expect ']'.\n");
+    expect(F, TOK_RBRACK, expectstr("Expect ']'."));
     if(match(F, TOK_LPAREN)) {
-        if(etisconst(E2.type)) CALL_CONST_ERR(F);
+        if(etisconst(E2.type)) error(F, comperrors[CE_CALLCONST]);
         call(F, E);
         E->type = EXP_INVOKE_INDEX;
         E->ins.code = CODEOP(F, OP_INVOKE_INDEX, 1);
@@ -2093,7 +2134,7 @@ static force_inline void indexed(Function* F, Exp* E)
 static void _self(Function* F, Exp* E)
 {
     if(F->cclass == NULL) {
-        SELF_ERR(F);
+        error(F, comperrors[CE_SELF]);
         return;
     }
     advance(F);
@@ -2103,16 +2144,16 @@ static void _self(Function* F, Exp* E)
 static void _super(Function* F, Exp* E)
 {
     if(!F->cclass) {
-        SUPER_ERR(F);
+        error(F, comperrors[CE_SUPER]);
         return;
     }
     if(!F->cclass->superclass) {
-        NO_SUPER_ERR(F);
+        error(F, comperrors[CE_NOSUPER]);
         return;
     }
     advance(F);
-    expect(F, TOK_DOT, "Expect '.' after 'super'.\n");
-    expect(F, TOK_IDENTIFIER, "Expect superclass method name after '.'.\n");
+    expect(F, TOK_DOT, expectstr("Expect '.' after 'super'."));
+    expect(F, TOK_IDENTIFIER, expectstr("Expect superclass method name after '.'."));
     Value methodname = tokintostr(F->vm, &PREVT(F));
     int32_t idx = make_constant(F, methodname);
     Exp _; // dummy
@@ -2171,7 +2212,7 @@ static void suffixedexp(Function* F, Exp* E)
                 dot(F, E);
                 break;
             case TOK_LPAREN:
-                if(etisconst(E->type)) CALL_CONST_ERR(F);
+                if(etisconst(E->type)) error(F, comperrors[CE_CALLCONST]);
                 advance(F);
                 codecall(F, E);
                 break;

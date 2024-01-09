@@ -33,12 +33,12 @@ typedef enum {
 
 typedef struct {
     OClosure* closure;
-    Byte* ip; /* Instruction pointer (closure chunk) */
+    uint8_t* ip; /* Instruction pointer (closure chunk) */
     Value* callee; /* Pointer to the callee on the stack */
-    Int retcnt; /* Expected value return count */
-    Int vacnt; /* Count of extra arguments in vararg functions */
-    Int status; /* In case of call errors */
-    Byte info; /* Additional context */
+    int32_t retcnt; /* Expected value return count */
+    int32_t vacnt; /* Count of extra arguments in vararg functions */
+    int32_t status; /* In case of call errors */
+    uint8_t cfinfo; /* Additional context */
 } CallFrame;
 
 /* Fetch the frame closure (skooma function) */

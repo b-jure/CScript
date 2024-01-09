@@ -74,8 +74,8 @@ typedef enum {
 typedef struct {
     TokenType type;
     const char* start; // slice start
-    UInt len; // slice length
-    UInt line; // source file line
+    uint32_t len; // slice length
+    uint32_t line; // source file line
     Value value; // constant value
 } Token;
 
@@ -86,7 +86,7 @@ typedef struct {
     const char* _current; // current byte in the source file
     Token previous;
     Token current;
-    UInt line; // source file line
+    uint32_t line; // source file line
     bool panic; // sync flag
     bool error; // parse error flag
 } Lexer; // Lexer

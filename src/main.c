@@ -13,24 +13,16 @@
 
 static void File_run(VM* vm, const char* path)
 {
-    const char*     source = load_script_default(vm, path);
-    InterpretResult result = interpret(vm, source, path);
-    runtime                = 0;
+    const char* source = load_script_default(vm, path);
+    interpret(vm, source, path);
+    runtime = 0;
     free((void*)source);
-    if(result == INTERPRET_COMPILE_ERROR) {
-        sk_destroy(&vm);
-        exit(EXIT_FAILURE);
-    }
-    if(result == INTERPRET_RUNTIME_ERROR) {
-        sk_destroy(&vm);
-        exit(EXIT_FAILURE);
-    }
 }
 
 int main(int argc, char* argv[])
 {
     runtime = 0;
-    VM* vm  = NULL;
+    VM* vm = NULL;
     if(argc == 1) {
         fprintf(stderr, "REPL is not implemented, contributions are welcome :)!\n");
         return 1;

@@ -12,6 +12,36 @@
 #define MAX_ERR_STRING 50
 #define ERR_LEN(len)   (MIN(MAX_ERR_STRING, len))
 
+
+/* ==================== Lexer errors ==================== */
+
+typedef enum {
+    LE_INCHEXESC,
+    LE_INVHEXESC,
+    LE_STRING,
+    LE_LARGECONST,
+    LE_DIGOCTAL,
+    LE_HEXCONST,
+    LE_EXPNODIG,
+    LE_CHAR,
+} LexErr;
+
+static const char* lexerrors[] = {
+    "\tIncomplete hex escape sequence.\n",
+    "\tInvalid hexadecimal escape sequence.\n",
+    "\tUnterminated string.\n",
+    "\tToo large number constant '%.*s'...\n",
+    "\tInvalid digit '%c' in octal number.\n",
+    "\tInvalid hexadecimal constant.\n",
+    "\tExponent has no digits.\n",
+    "\tUnexpected character '%c'.\n",
+};
+
+/* ------------------------------------------------------ */ // Lexer errors
+
+
+
+
 typedef enum {
     NUM_HEX,
     NUM_DEC,
@@ -124,13 +154,13 @@ static force_inline Int eschex(Lexer* lexer)
     Int number = 0;
     for(UInt i = 0; i < 2; i++) {
         if(peek(lexer) == '"' || peek(lexer) == '\0') {
-            lexerror(lexer, "Incomplete hex escape sequence.");
+            lexerror(lexer, lexerrors[LE_INCHEXESC]);
             lexer->_current--;
             break;
         }
         Int digit = hexdigit(lexer);
         if(digit == -1) {
-            lexerror(lexer, "Invalid hexadecimal escape sequence.");
+            lexerror(lexer, lexerrors[LE_INVHEXESC]);
             break;
         }
         number = (number << 4) | digit;
@@ -145,7 +175,7 @@ static force_inline Token string(Lexer* lexer)
     while(true) {
         char c = nextchar(lexer);
         if(c == '\0') {
-            lexerror(lexer, "Unterminated string.");
+            lexerror(lexer, lexerrors[LE_STRING]);
             lexer->_current--;
             break;
         } else if(c == '\r') continue;
@@ -221,7 +251,7 @@ static Token numtoken(Lexer* lexer, NumberType type)
     if(errno == ERANGE) {
         lexerror(
             lexer,
-            "Too large number constant '%.*s'...",
+            lexerrors[LE_LARGECONST],
             ERR_LEN(lexer->_current - lexer->start),
             lexer->start);
         number = NUMBER_VAL(0);
@@ -237,7 +267,7 @@ static Token octal(Lexer* lexer)
     char c;
     while(isdigit((c = peek(lexer)))) {
         if(c >= '8') {
-            lexerror(lexer, "Invalid digit '%c' in octal number.", c);
+            lexerror(lexer, lexerrors[LE_DIGOCTAL], c);
             break;
         }
         advance(lexer);
@@ -248,7 +278,7 @@ static Token octal(Lexer* lexer)
 static Token hex(Lexer* lexer)
 {
     nextchar(lexer); // skip 'x' or 'X'
-    if(!isxdigit(peek(lexer))) lexerror(lexer, "Invalid hexadecimal constant.");
+    if(!isxdigit(peek(lexer))) lexerror(lexer, lexerrors[LE_HEXCONST]);
     while(hexdigit(lexer) != -1)
         ;
     return numtoken(lexer, NUM_HEX);
@@ -266,7 +296,7 @@ static Token decimal(Lexer* lexer)
             advance(lexer); // skip 'e' or 'E'
             if(peek(lexer) == '+' || peek(lexer) == '-')
                 advance(lexer); // skip '+' or '-'
-            if(!isdigit(peek(lexer))) lexerror(lexer, "Exponent has no digits.");
+            if(!isdigit(peek(lexer))) lexerror(lexer, lexerrors[LE_EXPNODIG]);
             else {
                 nextchar(lexer); // skip digit
                 while(isdigit(peek(lexer)))
@@ -641,7 +671,7 @@ less:
 string:
     return string(lexer);
 err:
-    lexerror(lexer, "Unexpected character '%c'.", c);
+    lexerror(lexer, lexerrors[LE_CHAR], c);
     return token(lexer, TOK_ERROR);
     unreachable;
 #else

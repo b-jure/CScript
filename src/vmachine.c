@@ -72,7 +72,7 @@ void Config_init(Config* config)
  * Skooma does not allow extra arguments if the function does not
  * accept variable number of arguments and you are not allowed to
  * provide less arguments than the function arity. */
-static int precall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
+static int32_t precall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
 {
     CallFrame* frame = &vm->frames[vm->fc];
     int32_t arity, isva, isnative;
@@ -119,7 +119,7 @@ callstack_overflow:
         arityerror(vm, arity, argc);
     } else if(unlikely(vm->fc == VM_FRAMES_MAX)) {
         fcovferror(vm);
-    }
+    } else goto ok;
 #endif
 ok:
     frame->vacnt = argc - arity;
@@ -140,7 +140,7 @@ ok:
  * sets up the new call frame and returns 'CALL_SKOOMAFN'.
  * If there is no overloaded method it just returns 'CALL_CLASS'.
  * Overloaded methods are only allowed to be Skooma closures. */
-static int trycall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
+static int8_t trycall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
 {
     if(unlikely(!IS_OBJ(callee))) callerror(vm, callee);
     switch(OBJ_TYPE(callee)) {
@@ -173,15 +173,16 @@ static force_inline void moveresults(VM* vm, Value* fn, int32_t got, int32_t exp
     if(expect == 0) expect = got; // all results (MULRET)
     if(got > expect) got = expect; // remove extra results
     memcpy(fn, retstart, got); // Safety: 'retstart' >= 'nativefn'
-    for(int i = got; i < expect; i++) // replace missing values with nil
+    for(int32_t i = got; i < expect; i++) // replace missing values with nil
         fn[i] = NIL_VAL;
     vm->sp = fn + expect;
 }
 
 /* Call native function without locking (for use inside the interpreter). */
-static force_inline int callnative_nolock(VM* vm, Value* retstart, Value fn, int retcnt)
+static force_inline int32_t
+callnative_nolock(VM* vm, Value* retstart, Value fn, int32_t retcnt)
 {
-    int n = AS_NATIVE(fn)->fn(vm);
+    int32_t n = AS_NATIVE(fn)->fn(vm);
     skapi_checkelems(vm, n);
     moveresults(vm, retstart, n, retcnt);
     vm->fc--;
@@ -189,10 +190,10 @@ static force_inline int callnative_nolock(VM* vm, Value* retstart, Value fn, int
 }
 
 /* Call native function. */
-static force_inline int callnative(VM* vm, Value* retstart, Value fn, int retcnt)
+static force_inline int32_t callnative(VM* vm, Value* retstart, Value fn, int32_t retcnt)
 {
     sk_unlock(vm);
-    int n = AS_NATIVE(fn)->fn(vm);
+    int32_t n = AS_NATIVE(fn)->fn(vm);
     sk_lock(vm);
     skapi_checkelems(vm, n);
     moveresults(vm, retstart, n, retcnt);
@@ -204,10 +205,10 @@ static force_inline int callnative(VM* vm, Value* retstart, Value fn, int retcnt
  * Performs a normal function call, in case the function is
  * the skooma function it runs the interpreter and in
  * case of the native C function it calls it directly. */
-int ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt)
+int32_t ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt)
 {
-    int argc = vm->sp - retstart - 1;
-    int calltype = trycall(vm, fn, argc, retcnt);
+    int32_t argc = vm->sp - retstart - 1;
+    int8_t calltype = trycall(vm, fn, argc, retcnt);
     if(calltype == CALL_SKOOMAFN) run(vm);
     else if(calltype == CALL_NATIVEFN) callnative(vm, retstart, fn, retcnt);
     return calltype;
@@ -220,9 +221,9 @@ int ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt)
  * by function that errors and performs the long jump or it
  * stays unchanged and the wrapper function just returns and
  * execution continues. */
-static force_inline int protectedcall(VM* vm, ProtectedFn fn, void* userdata)
+static force_inline int32_t protectedcall(VM* vm, ProtectedFn fn, void* userdata)
 {
-    int oldfc = vm->fc;
+    int32_t oldfc = vm->fc;
     struct sk_longjmp lj;
     lj.status = S_OK;
     lj.prev = vm->errjmp;
@@ -238,9 +239,9 @@ static force_inline int protectedcall(VM* vm, ProtectedFn fn, void* userdata)
  * In case of errors it performs a recovery by closing all
  * open upvalues (values to be closed) and restoring the
  * old stack pointer (oldtop). */
-int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop)
+int32_t pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop)
 {
-    int status = protectedcall(vm, fn, userdata);
+    int8_t status = protectedcall(vm, fn, userdata);
     if(unlikely(status != S_OK)) {
         closeupval(vm, vm->sp);
         Value* oldsp = restore_stack(vm, oldtop);
@@ -377,10 +378,10 @@ void run(VM* vm)
     } while(0)
 
 
-    last_frame(vm).info = CFI_FRESH;
+    last_frame(vm).cfinfo = CFI_FRESH;
     runtime = 1;
     register CallFrame* frame = &vm->frames[vm->fc - 1];
-    register Byte* ip = frame->ip;
+    register uint8_t* ip = frame->ip;
 #ifdef DEBUG_TRACE_EXECUTION
     printf("\n=== VM - execution ===\n");
 #endif
@@ -803,7 +804,7 @@ void run(VM* vm)
                 OClosure* closure = OClosure_new(vm, fn);
                 push(vm, OBJ_VAL(closure));
                 for(uint32_t i = 0; i < closure->upvalc; i++) {
-                    Byte local = READ_BYTE();
+                    uint8_t local = READ_BYTE();
                     uint32_t idx = READ_BYTEL();
                     if(local) closure->upvalue[i] = captureupval(vm, frame->callee + idx);
                     else closure->upvalue[i] = frame->closure->upvalue[idx];
@@ -894,7 +895,7 @@ void run(VM* vm)
             CASE(OP_OVERLOAD)
             {
                 OClass* oclass = AS_CLASS(*stackpeek(1));
-                Byte opn = READ_BYTE();
+                uint8_t opn = READ_BYTE();
                 oclass->omethods[opn] = AS_CLOSURE(*stackpeek(0));
                 sk_assert(vm, *ip == OP_METHOD, "Expected 'OP_METHOD'.");
                 BREAK;
@@ -967,15 +968,13 @@ void run(VM* vm)
 
 /*
  * Interprets (compiles and runs) the 'source'.
- * Does not work in protected mode.
  */
 void interpret(VM* vm, const char* source, const char* path)
 {
     Value name = OBJ_VAL(OString_new(vm, path, strlen(path)));
-    OClosure* closure = compile(vm, source, name);
+    OClosure* closure = compile(vm, source, name, true);
     if(closure == NULL) printandpanic(vm);
-    trycall(vm, OBJ_VAL(closure), 0, 1);
-    run(vm);
+    sk_pcall(vm, 0, 0);
 }
 
 /*
