@@ -1,7 +1,4 @@
-#include "chunk.h"
 #include "corelib.h"
-#include "debug.h"
-#include "mem.h"
 #include "skooma.h"
 #include "vmachine.h"
 
@@ -28,7 +25,7 @@ int main(int argc, char* argv[])
         return 1;
     } else if(argc == 2) {
         vm = sk_create(NULL, NULL);
-        sk_runfile(vm, argv[1]);
+        // TODO:  sk_runfile(vm, argv[1]);
         File_run(vm, argv[1]);
         sk_destroy(&vm);
     } else {

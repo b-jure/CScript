@@ -252,8 +252,7 @@ skip:
     rmweakrefs(vm);
     sweep(vm);
     vm->gc_next =
-        MAX(cast(double, vm->gc_allocated) * vm->config.gc_growfactor,
-            vm->config.gc_heapmin);
+        MAX(cast(double, vm->gc_allocated) * vm->config.gc_growfactor, vm->config.gc_heapmin);
 #ifdef DEBUG_LOG_GC
     printf("--> GC end\n");
     printf(

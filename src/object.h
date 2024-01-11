@@ -107,7 +107,7 @@ static force_inline bool isotype(Value value, OType type)
 
 struct OString { // typedef is inside 'value.h'
     O obj; // shared header
-    size_t len; // string length (excluding null term)
+    uint32_t len; // string length (excluding null term)
     Hash hash; // cached hash
     char storage[]; // bytes (chars)
 };
@@ -123,18 +123,18 @@ struct OFunction { // typedef is inside 'value.h'
     O obj; // shared header
     Chunk chunk; // bytecode and constants
     OString* name; // script name
-    UInt upvalc; // number of upvalues
-    UInt arity; // Min amount of arguments required
-    Byte isva : 1; // If this function takes valist
-    Byte isinit : 1; // If this function is class initializer
-    Byte gotret : 1; // last instruction is 'OP_TOP/RET'
+    uint32_t upvalc; // number of upvalues
+    uint32_t arity; // Min amount of arguments required
+    uint8_t isva : 1; // If this function takes valist
+    uint8_t isinit : 1; // If this function is class initializer
+    uint8_t gotret : 1; // last instruction is 'OP_TOP/RET'
 };
 
 struct OClosure { // typedef is inside 'value.h'
     O obj; // shared header
     OFunction* fn; // wrapped function
     OUpvalue** upvalue; // array of ptr to OUpvalue
-    UInt upvalc; // array len
+    uint32_t upvalc; // array len
 };
 
 struct OClass { // typedef is inside 'value.h'
@@ -161,9 +161,9 @@ typedef struct {
     O obj; // shared header
     CFunction fn; // native functions signature
     OString* name; // native function name
-    Int arity; // how many arguments
+    int32_t arity; // how many arguments
     bool isva; // is this vararg function
-    UInt upvalc;
+    uint32_t upvalc;
     Value upvalue[1]; // list of upvalues
 } ONative; // Native function written in C
 
@@ -201,7 +201,7 @@ OClosure* OClosure_new(VM* vm, OFunction* fn);
 
 /* Create native C function */
 ONative*
-ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals);
+ONative_new(VM* vm, OString* name, CFunction fn, int32_t arity, bool isva, uint32_t upvals);
 
 
 /* Create skoomoa function */
@@ -247,7 +247,7 @@ void ofree(VM* vm, O* object);
 
 
 /* Array holding 'retcnt' for each overload-able method (excluding operators) */
-extern const int overloadret[OM_DISPLAY + 1];
+extern const int32_t overloadret[OM_DISPLAY + 1];
 
 
 

@@ -25,8 +25,9 @@ Lexer L_new(VM* vm, BuffReader* br)
     Array_Byte_init(&L.buffer, vm);
     Array_Byte_init_cap(&L.buffer, 32);
     L.line = 1;
-    L.panic = false;
-    L.error = false;
+    L.panic = 0;
+    L.error = 0;
+    L.skip = 0;
     return L;
 }
 
@@ -118,7 +119,7 @@ static void lexerror(Lexer* lexer, const char* err, ...)
 /* ================== Lexer buffer and auxiliary functions ================== */
 
 /* Checks for end of stream */
-#define isend(c) ((c) == SKEOF || (c) == '\0')
+#define isend(c) ((c) == SKEOF)
 
 /* Increments line number if 'c' is newline character */
 #define incrline(l, c) ((c) == '\n' || (c) == '\r' ? ((l)->line++, c) : c)
@@ -139,9 +140,6 @@ static void lexerror(Lexer* lexer, const char* err, ...)
 
 /* Same as 'advance_and_push' except the character is 'c' */
 #define advance_and_pushc(l, c) (pushc(l, c), advance(l))
-
-/* Peeks previous character in 'BuffReader' buffer */
-#define peekprev(l) brprevc((l)->br) // TODO: Do I need this?
 
 /* pointer to start of lexer buffer */
 #define lbptr(lexer) cast_charp((lexer)->buffer.data)
@@ -247,7 +245,6 @@ static force_inline Token errtoken(Lexer* lexer, const char* err)
 /* Get new hex digit from current char */
 static int8_t hexdigit(Lexer* lexer)
 {
-    advance(lexer);
     if(lexer->c >= '0' && lexer->c <= '9') return lexer->c - '0';
     else if(lexer->c >= 'a' && lexer->c <= 'f') return (lexer->c - 'a') + 10;
     else if(lexer->c >= 'A' && lexer->c <= 'F') return (lexer->c - 'A') + 10;
@@ -258,9 +255,9 @@ static int8_t hexdigit(Lexer* lexer)
 /* Parse hex escape sequence '\x' */
 static uint8_t eschex(Lexer* lexer)
 {
+    advance(lexer); // skip 'x'
     uint8_t number = 0;
     for(uint8_t i = 0; i < 2; i++) {
-        advance(lexer);
         if(unlikely(isend(lexer->c) || lexer->c == '"')) {
             lexerror(lexer, lexerrors[LE_INCHEXESC]);
             break;
@@ -271,6 +268,7 @@ static uint8_t eschex(Lexer* lexer)
             break;
         }
         number = (number << 4) | digit;
+        advance(lexer);
     }
     return number;
 }
@@ -279,8 +277,8 @@ static uint8_t eschex(Lexer* lexer)
 /* Create string token and escape the escape sequences if any */
 static force_inline Token string(Lexer* lexer)
 {
+    advance(lexer); // skip first '"'
     while(true) {
-        advance(lexer); // skip '"'
         if(unlikely(isend(lexer->c) || lexer->c == '\n' || lexer->c == '\r')) {
             lexerror(lexer, lexerrors[LE_UNTSTR]);
             break;
@@ -323,9 +321,10 @@ static force_inline Token string(Lexer* lexer)
                 case 'v':
                     advance_and_pushc(lexer, '\v');
                     break;
-                case 'x':
-                    advance_and_pushc(lexer, cast(int32_t, eschex(lexer)));
+                case 'x': {
+                    pushc(lexer, cast(int32_t, eschex(lexer)));
                     break;
+                }
                 case SKEOF: // raise error next iteration
                     break;
                 default:
@@ -669,7 +668,7 @@ Token scan(Lexer* lexer)
 {
     lexer->buffer.len = 0; // reset buffer
     skipws(lexer);
-    if(lexer->c == '\0') return token(lexer, TOK_EOF, EMPTY_VAL);
+    if(lexer->c == SKEOF) return token(lexer, TOK_EOF, EMPTY_VAL);
     if(lexer->c == '_' || isalpha(lexer->c)) return idtoken(lexer);
     if(isdigit(lexer->c)) return number(lexer);
         // Otherwise try single character tokens

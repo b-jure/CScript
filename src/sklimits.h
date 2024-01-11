@@ -31,8 +31,8 @@
 
 #define _FALLBACK_STACK 20000
 #define _STACK_CNT      cast_uint(SK_STACK_MAX / sizeof(Value))
-#define _STACK_SIZE                                                                      \
-    (_STACK_CNT == 0 ? _FALLBACK_STACK                                                   \
+#define _STACK_SIZE                                                                                \
+    (_STACK_CNT == 0 ? _FALLBACK_STACK                                                             \
                      : (_STACK_CNT > SK_BYTECODE_MAX ? SK_BYTECODE_MAX : _STACK_CNT))
 
 /* Virtual Machine stack limit size. */
@@ -50,7 +50,7 @@
 /* ==================== Lexer limits ==================== */
 
 /* Token size limit in bytes. */
-#define LEX_TOKEN_LEN_LIMIT 200
+#define LEX_TOKEN_LEN_LIMIT 2000
 
 /* ------------------------------------------------------ */
 

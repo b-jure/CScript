@@ -44,9 +44,8 @@ typedef uint64_t Value;
 #define AS_NUMBER(val)     (vton(val))
 #define AS_NUMBER_REF(val) *(val)
 
-#define NUMBER_VAL(num) (ntov(num))
-#define OBJ_VAL(ptr)                                                                     \
-    ((Value)((((uint64_t)(ptr)) & 0x0000fffffffffff8) | (OBJECT_TAG | QNAN)))
+#define NUMBER_VAL(num)   (ntov(num))
+#define OBJ_VAL(ptr)      ((Value)((((uint64_t)(ptr)) & 0x0000fffffffffff8) | (OBJECT_TAG | QNAN)))
 #define BOOL_VAL(boolean) ((Value)((FALSE_TAG | ((boolean) & 0x01)) | QNAN))
 #define TRUE_VAL          ((Value)(TRUE_TAG | QNAN))
 #define FALSE_VAL         ((Value)(FALSE_TAG | QNAN))
@@ -148,10 +147,10 @@ int raweq(Value l, Value r);
 /* Performs arithmetic operation on skooma values. */
 void arith(VM* vm, Value a, Value b, Ar op, Value* res);
 
-#define concatonstack(vm)                                                                \
-    do {                                                                                 \
-        *stackpeek(1) = OBJ_VAL(concatenate(vm, *stackpeek(1), *stackpeek(0)));          \
-        vm->sp--;                                                                        \
+#define concatonstack(vm)                                                                          \
+    do {                                                                                           \
+        *stackpeek(1) = OBJ_VAL(concatenate(vm, *stackpeek(1), *stackpeek(0)));                    \
+        vm->sp--;                                                                                  \
     } while(0)
 
 /* Get value type (TypeTag) */
@@ -166,7 +165,7 @@ const char* dtostr(sk_number n, uint8_t* lenp);
 /* Auxiliary functions/defines for converting skooma primitive types into strings */
 OString* dtoostr(VM* vm, sk_number n);
 OString* btostr(VM* vm, int b);
-#define niltostr(vm) (vm)->statics[SS_NIL]
+#define niltostr(vm) (vm)->faststatic[SS_NIL]
 
 /* Print value */
 void vprint(VM* vm, Value value, FILE* stream);

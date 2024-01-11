@@ -1,7 +1,4 @@
-#include "debug.h"
-#include "err.h"
 #include "hash.h"
-#include "memory.h"
 #include "object.h"
 #include "skconf.h"
 #include "skmath.h"
@@ -185,7 +182,7 @@ nil:
 number:
 string:
 boolean:
-    return vm->statics[tag]->storage;
+    return vm->faststatic[tag]->storage;
 oclass:
     return AS_CLASS(*val)->name->storage;
 instance:;
@@ -464,7 +461,7 @@ OString* dtoostr(VM* vm, sk_number n)
 
 OString* btostr(VM* vm, int b)
 {
-    return (b ? vm->statics[SS_TRUE] : vm->statics[SS_FALSE]);
+    return (b ? vm->faststatic[SS_TRUE] : vm->faststatic[SS_FALSE]);
 }
 
 /* Converts value to OString */
@@ -544,8 +541,7 @@ nil:
     fprintf(stream, "nil");
     return;
 number:
-    if(floor(AS_NUMBER(value)) != AS_NUMBER(value))
-        fprintf(stream, "%lg", AS_NUMBER(value));
+    if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) fprintf(stream, "%lg", AS_NUMBER(value));
     else fprintf(stream, "%ld", (int64_t)AS_NUMBER(value));
     return;
 boolean:
@@ -582,8 +578,7 @@ object:
         }
         CASE(VAL_NUMBER)
         {
-            if(floor(AS_NUMBER(value)) != AS_NUMBER(value))
-                printf("%f", AS_NUMBER(value));
+            if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%f", AS_NUMBER(value));
             else printf("%ld", (int64_t)AS_NUMBER(value));
             BREAK;
         }

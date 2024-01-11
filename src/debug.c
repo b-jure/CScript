@@ -5,8 +5,6 @@
 #include "object.h"
 #include "skconf.h"
 
-#include <assert.h>
-#include <stdarg.h>
 #include <stdio.h>
 
 
@@ -15,51 +13,51 @@ void dumpstack(VM* vm, CallFrame* frame, Byte* ip)
     printf("           ");
     for(Value* ptr = vm->stack; ptr < vm->sp; ptr++) {
         printf("[");
-        vprint(vm, *ptr);
+        vprint(vm, *ptr, stderr);
         printf("]");
     }
     printf("\n");
-    Instruction_debug(vm, &FFN(frame)->chunk, (UInt)(ip - FFN(frame)->chunk.code.data));
+    Instruction_debug(vm, &FFN(frame)->chunk, (uint32_t)(ip - FFN(frame)->chunk.code.data));
 }
 
 
 sdebug void Chunk_debug(VM* vm, Chunk* chunk, const char* name)
 {
     printf("=== %s ===\n", name);
-    for(UInt offset = 0; offset < chunk->code.len;)
+    for(uint32_t offset = 0; offset < chunk->code.len;)
         offset = Instruction_debug(vm, chunk, offset);
 }
 
-static Int simpleins(const char* name, UInt offset)
+static int32_t simpleins(const char* name, uint32_t offset)
 {
     printf("%s\n", name);
     return offset + 1; /* OpCode */
 }
 
-static Int jmpins(const char* name, Int sign, Chunk* chunk, UInt offset)
+static int32_t jmpins(const char* name, int8_t sign, Chunk* chunk, uint32_t offset)
 {
-    UInt jmp = GET_BYTES3(&chunk->code.data[offset + 1]);
-    printf("%-25s %5u -> %u\n", name, offset, offset + 4 + (sign * jmp));
+    int32_t jmp = GET_BYTES3(&chunk->code.data[offset + 1]);
+    printf("%-25s %5u -> %d\n", name, offset, offset + 4 + (sign * jmp));
     return offset + 4;
 }
 
-static void constant(VM* vm, Chunk* chunk, UInt param)
+static void constant(VM* vm, Chunk* chunk, uint32_t param)
 {
     printf("'");
-    vprint(vm, *Array_Value_index(&chunk->constants, param));
+    vprint(vm, *Array_Value_index(&chunk->constants, param), stderr);
     printf("'");
 }
 
-static UInt closure(VM* vm, Chunk* chunk, UInt param, UInt offset)
+static uint32_t closure(VM* vm, Chunk* chunk, uint32_t param, uint32_t offset)
 {
     Value value = *Array_Value_index(&chunk->constants, param);
-    vprint(vm, value);
+    vprint(vm, value, stderr);
     printf("\n");
     OFunction* fn = AS_FUNCTION(value);
-    for(UInt i = 0; i < fn->upvalc; i++) {
+    for(uint32_t i = 0; i < fn->upvalc; i++) {
         bool local = chunk->code.data[offset++];
         offset++; // flags
-        UInt idx = GET_BYTES3(&chunk->code.data[offset]);
+        uint32_t idx = GET_BYTES3(&chunk->code.data[offset]);
         printf(
             "%04d     |                                 %s %d\n",
             offset,
@@ -70,7 +68,7 @@ static UInt closure(VM* vm, Chunk* chunk, UInt param, UInt offset)
     return offset;
 }
 
-static Int shorinst(VM* vm, const char* name, Chunk* chunk, OpCode code, UInt offset)
+static int32_t shorinst(VM* vm, const char* name, Chunk* chunk, OpCode code, uint32_t offset)
 {
     Byte param = *Array_Byte_index(&chunk->code, offset + 1);
     printf("%-25s %5u ", name, param);
@@ -94,9 +92,9 @@ static Int shorinst(VM* vm, const char* name, Chunk* chunk, OpCode code, UInt of
     return offset + 2; /* OpCode + param(8-bit/1-byte) */
 }
 
-static Int longins(VM* vm, const char* name, Chunk* chunk, OpCode code, UInt offset)
+static int32_t longins(VM* vm, const char* name, Chunk* chunk, OpCode code, uint32_t offset)
 {
-    UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
+    uint32_t param = GET_BYTES3(&chunk->code.data[offset + 1]);
     printf("%-25s %5u ", name, param);
     switch(code) {
         case OP_CLOSURE:
@@ -117,21 +115,21 @@ static Int longins(VM* vm, const char* name, Chunk* chunk, OpCode code, UInt off
     return offset + 4; /* OpCode(8-bit/1-byte) + param(24-bit/3-bytes) */
 }
 
-static Int invoke(VM* vm, const char* name, Chunk* chunk, Int offset)
+static int32_t invoke(VM* vm, const char* name, Chunk* chunk, int32_t offset)
 {
-    UInt param = GET_BYTES3(&chunk->code.data[offset + 1]);
+    uint32_t param = GET_BYTES3(&chunk->code.data[offset + 1]);
     offset += 4;
-    Int retcnt = GET_BYTES3(&chunk->code.data[offset]);
+    int32_t retcnt = GET_BYTES3(&chunk->code.data[offset]);
     printf("%-25s (retcnt %d) %5d ", name, retcnt, param);
     constant(vm, chunk, param);
     printf("\n");
     return offset + 3;
 }
 
-sdebug UInt Instruction_debug(VM* vm, Chunk* chunk, UInt offset)
+sdebug uint32_t Instruction_debug(VM* vm, Chunk* chunk, uint32_t offset)
 {
     printf("%04d ", offset);
-    UInt line = Chunk_getline(chunk, offset);
+    uint32_t line = Chunk_getline(chunk, offset);
     if(offset > 0 && line == Chunk_getline(chunk, offset - 1)) printf("    | ");
     else printf("%5d ", line);
     Byte instruction = chunk->code.data[offset];

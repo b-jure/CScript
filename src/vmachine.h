@@ -114,8 +114,8 @@ struct VM {
     OString* faststatic[SS_SIZE]; // static strings with fast access
     O* objects; // list of all allocated objects
     O** gray_stack; // tricolor gc (stores marked objects)
-    uint64_t gslen; // gray stack length
-    uint64_t gscap; // gray stack capacity
+    size_t gslen; // gray stack length
+    size_t gscap; // gray stack capacity
     size_t gc_allocated; // count of allocated bytes in use
     size_t gc_next; // next threshold where gc triggers
     Byte gc_flags; // gc flags (sk API)
@@ -135,11 +135,11 @@ struct VM {
 #define pop(vm)     (*--(vm)->sp)
 #define popn(vm, n) ((vm)->sp -= n)
 void push(VM* vm, Value val);
-#define pushn(vm, n, val)                                                                \
-    do {                                                                                 \
-        int cnt = n;                                                                     \
-        while(cnt-- > 0)                                                                 \
-            push(vm, val);                                                               \
+#define pushn(vm, n, val)                                                                          \
+    do {                                                                                           \
+        int cnt = n;                                                                               \
+        while(cnt-- > 0)                                                                           \
+            push(vm, val);                                                                         \
     } while(0)
 
 

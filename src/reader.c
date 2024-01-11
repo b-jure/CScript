@@ -11,11 +11,11 @@ void BR_init(VM* vm, BuffReader* BR, ReadFn reader, void* userdata)
 }
 
 
-/* Invoke 'ReadFn' returning the size read and the current
- * buffer position.
- * In case the buffer position is NULL and size is 0 return SKEOF (-1).
- * Otherwise progress the buffer and return the read character */
-int8_t BR_fill(BuffReader* BR)
+/* Invoke 'ReadFn' returning the first character or SKEOF (-1).
+ * 'ReadFn' should set the 'size' to the amount of bytes
+ * reader read and return the pointer to the start of that
+ * buffer. */
+int32_t BR_fill(BuffReader* BR)
 {
     size_t size;
     VM* vm = BR->vm;
@@ -25,7 +25,7 @@ int8_t BR_fill(BuffReader* BR)
     if(buff == NULL || size == 0) return SKEOF;
     BR->buff = buff;
     BR->n = size - 1;
-    return cast_uchar(*BR->buff++);
+    return cast(uint8_t, *BR->buff++);
 }
 
 

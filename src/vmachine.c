@@ -1,20 +1,14 @@
-#include "array.h"
 #include "chunk.h"
 #include "common.h"
-#include "corelib.h"
 #include "debug.h"
 #include "err.h"
-#include "hash.h"
 #include "mem.h"
 #include "object.h"
 #include "parser.h"
 #include "skapi.h"
-#include "skmath.h"
 #include "value.h"
 #include "vmachine.h"
 
-#include <assert.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -180,8 +174,7 @@ static force_inline void moveresults(VM* vm, Value* fn, int32_t got, int32_t exp
 }
 
 /* Call native function without locking (for use inside the interpreter). */
-static force_inline int32_t
-callnative_nolock(VM* vm, Value* retstart, Value fn, int32_t retcnt)
+static force_inline int32_t callnative_nolock(VM* vm, Value* retstart, Value fn, int32_t retcnt)
 {
     int32_t n = AS_NATIVE(fn)->fn(vm);
     skapi_checkelems(vm, n);
@@ -259,8 +252,7 @@ static force_inline void
 invokefrom(VM* vm, OClass* oclass, Value name, int32_t argc, int32_t retcnt)
 {
     Value method;
-    if(unlikely(!HashTable_get(&oclass->methods, name, &method)))
-        udperror(vm, name, oclass);
+    if(unlikely(!HashTable_get(&oclass->methods, name, &method))) udperror(vm, name, oclass);
     if(trycall(vm, method, argc, retcnt) == CALL_NATIVEFN)
         callnative_nolock(vm, last_frame(vm).callee, method, retcnt);
 }
@@ -357,25 +349,25 @@ void run(VM* vm)
 #define READ_STRING()   AS_STRING(READ_CONSTANT())
 #define bcstart()       (FFN(frame).chunk.code.data)
 #define ipinbounds()    (ip - bcstart() < VM_STACK_LIMIT && ip >= bcstart())
-#define BINARY_OP(vm, op)                                                                \
-    do {                                                                                 \
-        saveip();                                                                        \
-        Value* l = stackpeek(1);                                                         \
-        Value r = *stackpeek(0);                                                         \
-        arith(vm, *l, r, op, l);                                                         \
+#define BINARY_OP(vm, op)                                                                          \
+    do {                                                                                           \
+        saveip();                                                                                  \
+        Value* l = stackpeek(1);                                                                   \
+        Value r = *stackpeek(0);                                                                   \
+        arith(vm, *l, r, op, l);                                                                   \
     } while(0)
-#define UNARY_OP(vm, op)                                                                 \
-    do {                                                                                 \
-        saveip();                                                                        \
-        Value* l = stackpeek(0);                                                         \
-        arith(vm, *l, NIL_VAL, op, l);                                                   \
+#define UNARY_OP(vm, op)                                                                           \
+    do {                                                                                           \
+        saveip();                                                                                  \
+        Value* l = stackpeek(0);                                                                   \
+        arith(vm, *l, NIL_VAL, op, l);                                                             \
     } while(0)
-#define ORDER_OP(vm, fnop)                                                               \
-    do {                                                                                 \
-        saveip();                                                                        \
-        Value l = *stackpeek(1);                                                         \
-        Value r = *stackpeek(0);                                                         \
-        fnop(vm, l, r);                                                                  \
+#define ORDER_OP(vm, fnop)                                                                         \
+    do {                                                                                           \
+        saveip();                                                                                  \
+        Value l = *stackpeek(1);                                                                   \
+        Value r = *stackpeek(0);                                                                   \
+        fnop(vm, l, r);                                                                            \
     } while(0)
 
 
@@ -393,16 +385,16 @@ void run(VM* vm)
 #undef OP_TABLE
 #ifdef DEBUG_TRACE_EXECUTION
 #undef BREAK
-#define BREAK                                                                            \
-    dumpstack(vm, frame, ip);                                                            \
+#define BREAK                                                                                      \
+    dumpstack(vm, frame, ip);                                                                      \
     DISPATCH(READ_BYTE())
 #endif
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
 #ifdef DEBUG_TRACE_EXECUTION
-#define BREAK                                                                            \
-    dumpstack(vm, frame, ip);                                                            \
+#define BREAK                                                                                      \
+    dumpstack(vm, frame, ip);                                                                      \
     break
 #else
 #define BREAK break
@@ -598,11 +590,7 @@ void run(VM* vm)
                     saveip();
                     ipaerror(vm, receiver);
                 }
-                HashTable_insert(
-                    vm,
-                    &AS_INSTANCE(receiver)->fields,
-                    property_name,
-                    *stackpeek(0));
+                HashTable_insert(vm, &AS_INSTANCE(receiver)->fields, property_name, *stackpeek(0));
                 popn(vm, 2); // receiver + new property value
                 BREAK;
             }
@@ -978,7 +966,7 @@ void interpret(VM* vm, const char* source, const char* path)
 {
     TODO("Refactor")
     Value name = OBJ_VAL(OString_new(vm, path, strlen(path)));
-    OClosure* closure = compile(vm, source, name, true);
+    OClosure* closure = NULL; // TODO: compile(vm, source, name, true);
     if(closure == NULL) printandpanic(vm);
     sk_pcall(vm, 0, 0);
 }

@@ -1,12 +1,9 @@
-#include "array.h"
 #include "common.h"
-#include "debug.h"
 #include "err.h"
 #include "hashtable.h"
 #include "mem.h"
 #include "object.h"
 #include "skconf.h"
-#include "skmath.h"
 #include "stdarg.h"
 #include "value.h"
 
@@ -18,11 +15,10 @@
 
 #define ALLOC_OBJ(vm, object, type) ((object*)onew(vm, sizeof(object), type))
 
-#define ALLOC_NATIVE(vm, upvals)                                                         \
+#define ALLOC_NATIVE(vm, upvals)                                                                   \
     ((ONative*)onew(vm, sizeof(ONative) + ((upvals) * sizeof(Value)), OBJ_NATIVE))
 
-#define ALLOC_STRING(vm, len)                                                            \
-    ((OString*)onew(vm, sizeof(OString) + (len) + 1, OBJ_STRING))
+#define ALLOC_STRING(vm, len) ((OString*)onew(vm, sizeof(OString) + (len) + 1, OBJ_STRING))
 
 
 
@@ -61,7 +57,7 @@ static force_inline OString* OString_alloc(VM* vm, UInt len)
 OString* OString_new(VM* vm, const char* chars, size_t len)
 {
     Hash hash = stringhash(chars, len, vm->seed);
-    OString* interned = HashTable_get_intern(&vm->strings, chars, len, hash);
+    OString* interned = HashTable_get_intern(&vm->weakrefs, chars, len, hash);
     if(interned) return interned; // Return interned string
     OString* string = OString_alloc(vm, len);
     /**
@@ -76,7 +72,7 @@ OString* OString_new(VM* vm, const char* chars, size_t len)
     }
     string->hash = hash;
     push(vm, OBJ_VAL(string));
-    HashTable_insert(vm, &vm->strings, OBJ_VAL(string), NIL_VAL);
+    HashTable_insert(vm, &vm->weakrefs, OBJ_VAL(string), NIL_VAL);
     pop(vm);
     return string;
 }
@@ -235,8 +231,7 @@ OString* unescape(VM* vm, OString* string)
 
 
 
-ONative*
-ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals)
+ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals)
 {
     ONative* native = ALLOC_NATIVE(vm, upvals);
     native->name = name;
@@ -609,32 +604,28 @@ void oeq(VM* vm, Value l, Value r)
 /* < */
 void olt(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r))
-        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0));
+    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0));
     else omcallorder(vm, l, r, OM_LT);
 }
 
 /* > */
 void ogt(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r))
-        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0));
+    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0));
     else omcallorder(vm, l, r, OM_GT);
 }
 
 /* <= */
 void ole(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r))
-        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0));
+    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0));
     else omcallorder(vm, l, r, OM_LE);
 }
 
 /* >= */
 void oge(VM* vm, Value l, Value r)
 {
-    if(IS_STRING(l) && IS_STRING(r))
-        push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0));
+    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0));
     else omcallorder(vm, l, r, OM_GE);
 }
 

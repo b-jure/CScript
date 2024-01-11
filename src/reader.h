@@ -14,24 +14,12 @@ typedef struct {
 } BuffReader;
 
 /* Return next char and progress the buffer or try fill the buffer. */
-#define brgetc(br) ((br)->n-- > 0 ? *(br)->buff++ : BR_fill(br))
-
-/* Peek previous char. */
-#define brprevc(br)                                                                      \
-    (sk_assert((br)->vm, (br)->buff != NULL, "NULL buff"), *((br)->buff - 1))
-
-/* Progress the buffer back by one char. */
-#define brungetc(br)                                                                     \
-    {                                                                                    \
-        sk_assert((br)->vm, (br)->buff != NULL, "NULL buff");                            \
-        (br)->buff--;                                                                    \
-        (br)->n++;                                                                       \
-    }
+#define brgetc(br) ((br)->n-- > 0 ? cast(uint8_t, *(br)->buff++) : BR_fill(br))
 
 
 void BR_init(VM* vm, BuffReader* br, ReadFn reader, void* userdata);
 
-int8_t BR_fill(BuffReader* br);
+int32_t BR_fill(BuffReader* br);
 
 void BR_backone(BuffReader* br);
 

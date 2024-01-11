@@ -1,4 +1,3 @@
-#include "debug.h"
 #include "err.h"
 #include "object.h"
 #include "parser.h"
@@ -63,49 +62,11 @@ SK_API VM* sk_create(AllocFn allocator, void* ud)
     Array_Value_init(&vm->temp, vm); // Temp values storage (return values)
     Array_VRef_init(&vm->callstart, vm);
     Array_VRef_init(&vm->retstart, vm);
-    HashTable_init(&vm->strings); // Interned strings table (Weak_refs)
-    memset(vm->statics, 0, sizeof(vm->statics));
-    for(UInt i = 0; i < SS_SIZE; i++)
-        vm->statics[i] = OString_new(vm, static_strings[i].name, static_strings[i].len);
-    // @REFACTOR?: Maybe make the native functions private and only
-    //             callable inside class instances?
-    //             Upside: less branching resulting in more straightforward code.
-    //             Downside: slower function call (maybe not so bad because
-    //             of removal of type checking inside the native functions, needs
-    //             testing)
-    //
-    // @TODO?: Change NativeFn signature to accept variable amount of arguments.
-    //         Upside: More expressive and flexible functions.
-    //         Downside: va_list parsing resulting in slower function call
-    //         processing
-    // VM_define_native(vm, "clock", native_clock, 0, false); // GC
-    // VM_define_native(vm, "isfield", native_isfield, 2, false); // GC
-    // VM_define_native(vm, "printl", native_printl, 1, false); // GC
-    // VM_define_native(vm, "print", native_print, 1, false); // GC
-    // VM_define_native(vm, "tostr", native_tostr, 1, false); // GC
-    // VM_define_native(vm, "isstr", native_isstr, 1, false); // GC
-    // VM_define_native(vm, "strlen", native_strlen, 1, false); // GC
-    // VM_define_native(vm, "strpat", native_strpat, 2, false); // GC
-    // VM_define_native(vm, "strsub", native_strsub, 3, false); // GC
-    // VM_define_native(vm, "strbyte", native_strbyte, 2, false); // GC
-    // VM_define_native(vm, "strlower", native_strlower, 1, false); // GC
-    // VM_define_native(vm, "strupper", native_strupper, 1, false); // GC
-    // VM_define_native(vm, "strrev", native_strrev, 1, false); // GC
-    // VM_define_native(vm, "strconcat", native_strconcat, 2, false); // GC
-    // VM_define_native(vm, "byte", native_byte, 1, false); // GC
-    // VM_define_native(vm, "gcfactor", native_gcfactor, 1, false); // GC
-    // VM_define_native(vm, "gcmode", native_gcmode, 1, false); // GC
-    // VM_define_native(vm, "gccollect", native_gccollect, 0, false); // GC
-    // VM_define_native(vm, "gcleft", native_gcleft, 0, false); // GC
-    // VM_define_native(vm, "gcusage", native_gcusage, 0, false); // GC
-    // VM_define_native(vm, "gcnext", native_gcnext, 0, false); // GC
-    // VM_define_native(vm, "gcset", native_gcset, 1, false); // GC
-    // VM_define_native(vm, "gcisauto", native_gcisauto, 0, false); // GC
-    // VM_define_native(vm, "assert", native_assert, 1, false); // GC
-    // VM_define_native(vm, "assertf", native_assertf, 2, false); // GC
-    // VM_define_native(vm, "error", native_error, 1, false); // GC
-    // VM_define_native(vm, "typeof", native_typeof, 1, false); // GC
-    // VM_define_native(vm, "loadscript", native_loadscript, 1, false); // GC
+    Array_OSRef_init(&vm->interned, vm);
+    HashTable_init(&vm->weakrefs); // Interned strings table (Weak_refs)
+    memset(vm->faststatic, 0, sizeof(vm->faststatic));
+    for(uint8_t i = 0; i < SS_SIZE; i++)
+        vm->faststatic[i] = OString_new(vm, static_strings[i].name, static_strings[i].len);
     return vm;
 }
 
@@ -125,7 +86,8 @@ SK_API void sk_destroy(VM** vmp)
         Array_Value_free(&vm->temp, NULL);
         Array_VRef_free(&vm->callstart, NULL);
         Array_VRef_free(&vm->retstart, NULL);
-        HashTable_free(vm, &vm->strings);
+        Array_OSRef_free(&vm->interned, NULL);
+        HashTable_free(vm, &vm->weakrefs);
         O* next;
         for(O* head = vm->objects; head != NULL; head = next) {
             next = onext(head);
@@ -164,7 +126,7 @@ SK_API const char* sk_typename(const VM* vm, int idx)
 {
     Value* value = idx2val(vm, idx);
     int type = val2type(*value);
-    return vm->statics[type]->storage;
+    return vm->faststatic[type]->storage;
 }
 
 
@@ -172,7 +134,7 @@ SK_API const char* sk_typename(const VM* vm, int idx)
 /* Convert type tag into name */
 SK_API const char* sk_tagname(const VM* vm, TypeTag type)
 {
-    return vm->statics[type]->storage;
+    return vm->faststatic[type]->storage;
 }
 
 
