@@ -37,7 +37,7 @@ void omark(VM* vm, O* obj)
 
 static force_inline void marktable(VM* vm, HashTable* table)
 {
-    for(UInt i = 0; i < table->cap; i++) {
+    for(uint32_t i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
         if(!IS_EMPTY(entry->key)) {
             vmark(vm, entry->key);
@@ -54,13 +54,13 @@ static force_inline void marktable(VM* vm, HashTable* table)
 
 MS_FN(markglobals)
 {
-    for(UInt i = 0; i < vm->globids.cap; i++) {
+    for(uint32_t i = 0; i < vm->globids.cap; i++) {
         Entry* entry = &vm->globids.entries[i];
         if(!IS_EMPTY(entry->key)) {
             // Mark identifier (ObjString)
             omark(vm, AS_OBJ(entry->key));
             // Mark value
-            UInt idx = cast_uint(AS_NUMBER(entry->value));
+            uint32_t idx = cast_uint(AS_NUMBER(entry->value));
             vmark(vm, vm->globvars.data[idx].value);
         }
     }
@@ -86,8 +86,14 @@ MS_FN(markupvalues)
 
 MS_FN(markstatics)
 {
-    for(UInt i = 0; i < SS_SIZE; i++)
-        omark(vm, cast(O*, vm->statics[i]));
+    for(uint32_t i = 0; i < SS_SIZE; i++)
+        omark(vm, cast(O*, vm->faststatic[i]));
+}
+
+MS_FN(markinterned)
+{
+    for(uint32_t i = 0; i < vm->interned.len; i++)
+        omark(vm, cast(O*, vm->interned.data[i]));
 }
 
 MS_FN(markloaded)
@@ -97,27 +103,28 @@ MS_FN(markloaded)
 
 MS_FN(marktemp)
 {
-    for(UInt i = 0; i < vm->temp.len; i++)
+    for(uint32_t i = 0; i < vm->temp.len; i++)
         vmark(vm, vm->temp.data[i]);
 }
 
 MS_FN(markroots)
 {
-    markstack(vm);
-    markframes(vm);
-    markupvalues(vm);
-    markglobals(vm);
-    markstatics(vm);
-    markloaded(vm);
-    vmark(vm, vm->script);
+    markstack(vm); // VM stack
+    markframes(vm); // VM call stack
+    markupvalues(vm); // VM open upvalues (to be closed)
+    markglobals(vm); // global values and identifiers
+    markstatics(vm); // fast statics (interned strings)
+    markinterned(vm); // normal statics (interned strings)
+    markloaded(vm); // mark loaded script names table
+    vmark(vm, vm->script); // mark current script name value
 }
 
 MS_FN(rmweakrefs)
 {
-    for(UInt i = 0; i < vm->strings.cap; i++) {
-        Entry* entry = &vm->strings.entries[i];
+    for(uint32_t i = 0; i < vm->weakrefs.cap; i++) {
+        Entry* entry = &vm->weakrefs.entries[i];
         if(IS_OBJ(entry->key) && !oismarked(AS_OBJ(entry->key)))
-            HashTable_remove(&vm->strings, entry->key);
+            HashTable_remove(&vm->weakrefs, entry->key);
     }
 }
 
@@ -173,7 +180,7 @@ void mark_black(VM* vm, O* obj)
         {
             OFunction* fn = cast(OFunction*, obj);
             omark(vm, cast(O*, fn->name));
-            for(UInt i = 0; i < fn->chunk.constants.len; i++)
+            for(uint32_t i = 0; i < fn->chunk.constants.len; i++)
                 vmark(vm, fn->chunk.constants.data[i]);
             BREAK;
         }
@@ -181,7 +188,7 @@ void mark_black(VM* vm, O* obj)
         {
             OClosure* closure = (OClosure*)obj;
             omark(vm, (O*)closure->fn);
-            for(UInt i = 0; i < closure->upvalc; i++)
+            for(uint32_t i = 0; i < closure->upvalc; i++)
                 omark(vm, cast(O*, closure->upvalue[i]));
             BREAK;
         }
@@ -190,7 +197,7 @@ void mark_black(VM* vm, O* obj)
             OClass* oclass = cast(OClass*, obj);
             omark(vm, cast(O*, oclass->name));
             marktable(vm, &oclass->methods);
-            for(int8_t i = 0; i < OM_CNT; i++)
+            for(uint8_t i = 0; i < OM_CNT; i++)
                 omark(vm, cast(O*, oclass->omethods[i]));
             BREAK;
         }
@@ -213,7 +220,7 @@ void mark_black(VM* vm, O* obj)
         {
             ONative* native = cast(ONative*, obj);
             omark(vm, cast(O*, native->name));
-            for(UInt i = 0; i < native->upvalc; i++)
+            for(uint32_t i = 0; i < native->upvalc; i++)
                 vmark(vm, native->upvalue[i]);
             BREAK;
         }

@@ -186,6 +186,7 @@ OInstance* OInstance_new(VM* vm, OClass* cclass);
 /* Create class */
 OClass* OClass_new(VM* vm, OString* name);
 
+
 /* Get the value of the class special field */
 #define getsfield(instance, sftag) (instance)->oclass->sfields[sftag]
 
@@ -235,9 +236,6 @@ void oge(VM* vm, Value l, Value r);
 #define oeq(vm, l, r) push(BOOL_VAL((l) == (r)))
 #define one(vm, l, r) push(BOOL_VAL((l) != (r)))
 #endif
-
-/* Only for constant expressions */
-int raweq(VM* vm, Value l, Value r);
 
 
 /* Hashes the object value */

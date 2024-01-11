@@ -20,14 +20,21 @@ typedef struct {
     Entry* entries; // table array (array of Entry)
 } HashTable;
 
+
 void HashTable_init(HashTable* table);
-bool HashTable_insert(VM* vm, HashTable* table, Value key, Value value);
-void HashTable_into(VM* vm, HashTable* from, HashTable* to);
-bool HashTable_remove(HashTable* table, Value key);
-OString*
-HashTable_get_intern(HashTable* table, const char* str, size_t len, uint64_t hash);
-bool HashTable_get(HashTable* table, Value key, Value* out);
 void HashTable_free(VM* vm, HashTable* table);
-unsigned int resizetable(unsigned int wanted);
+
+bool HashTable_insert(VM* vm, HashTable* table, Value key, Value value);
+bool HashTable_remove(HashTable* table, Value key);
+
+bool HashTable_get(HashTable* table, Value key, Value* out);
+OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash);
+
+void HashTable_into(VM* vm, HashTable* from, HashTable* to);
+
+uint32_t resizetable(uint32_t wanted);
+
+void internliteral(VM* vm, const char* string);
+void internfmt(VM* vm, const char* fmt, ...);
 
 #endif

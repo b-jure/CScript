@@ -9,6 +9,7 @@ sdebug UInt Instruction_debug(VM* vm, Chunk* chunk, UInt offset);
 sdebug UInt Chunk_getline(Chunk* chunk, UInt index);
 void dumpstack(VM* vm, CallFrame* frame, Byte* ip);
 
+// Internal assertions
 #ifdef DEBUG_ASSERTIONS
 #include <stdio.h>
 #include <stdlib.h>

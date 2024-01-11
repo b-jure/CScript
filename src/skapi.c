@@ -1,6 +1,8 @@
 #include "debug.h"
 #include "err.h"
 #include "object.h"
+#include "parser.h"
+#include "reader.h"
 #include "skapi.h"
 #include "skconf.h"
 #include "skooma.h"
@@ -22,17 +24,6 @@ static force_inline Value* idx2val(const VM* vm, int idx)
         sk_checkapi(vm, -idx <= (vm->sp - fn), "Invalid index.");
         return (vm->sp + idx);
     }
-}
-
-
-
-/* Shifts values on stack either to the left or right (once).
- * 0 direction is a left shift, anything else is a right shift. */
-static force_inline void stackshift(VM* vm, Value* val, int direction)
-{
-    uintptr_t shift = vm->sp - (val + 1);
-    if(direction == 0 && shift > 0) memcpy(val, val + 1, shift);
-    else if(shift > 0) memcpy(val + 1, val, shift);
 }
 
 
@@ -380,22 +371,23 @@ SK_API void sk_push(VM* vm, int idx)
 
 
 /* Push class method of an instance at idx on top of the stack.
- * If method doesn't exist this function invokes runtime error
- * with status 'S_EUDPROPERTY' (undefined property).
- * Class methods are all Skooma closures.
+ * If method doesn't exist this function returns 0 otherwise 1.
+ *
+ * Note: Class methods are all Skooma closures.
  * Once you push them on the stack they become Bound Methods
  * aka type of 'TT_METHOD'.
  * And this is because bound methods preserve the receiver (instance)
  * they belong to in order to access instance fields/methods. */
-SK_API void sk_getmethod(VM* vm, int idx, const char* method)
+SK_API int8_t sk_getmethod(VM* vm, int idx, const char* method)
 {
     sk_lock(vm);
     skapi_checkptr(vm, method);
     Value val = *idx2val(vm, idx);
     sk_checkapi(vm, IS_INSTANCE(val), "expected class instance");
     skapi_pushstr(vm, method, strlen(method));
-    bindmethod(vm, AS_INSTANCE(val)->oclass, *stackpeek(0), val);
+    int8_t haveit = bindmethod(vm, AS_INSTANCE(val)->oclass, *stackpeek(0), val);
     sk_unlock(vm);
+    return haveit;
 }
 
 
@@ -582,34 +574,6 @@ SK_API void sk_rotate(VM* vm, int idx, int n)
 
 
 
-/* Remove the value from the stack at 'idx' and shift the
- * stack to the left to fill the gap */
-SK_API void sk_remove(VM* vm, int idx)
-{
-    sk_lock(vm);
-    Value* val = idx2val(vm, idx);
-    stackshift(vm, val, 0);
-    closeupval(vm, vm->sp);
-    skapi_decsp(vm);
-    sk_unlock(vm);
-}
-
-
-
-/* Insert the value on top of the stack at the 'idx' and
- * shift the stack to the right to make space for the new value */
-SK_API void sk_insert(VM* vm, int idx)
-{
-    sk_lock(vm);
-    Value* top = vm->sp - 1;
-    Value* val = idx2val(vm, idx);
-    stackshift(vm, val, 1);
-    *val = *top;
-    skapi_incsp(vm);
-    sk_unlock(vm);
-}
-
-
 
 /* Call the value on the stack (behind the arguments) */
 SK_API void sk_call(VM* vm, int argc, int retcnt)
@@ -661,6 +625,18 @@ SK_API int sk_pcall(VM* vm, int argc, int retcnt)
     sk_unlock(vm);
     return status;
 }
+
+
+SK_API int32_t sk_compilefile(VM* vm, ReadFn reader, void* userdata, const char* dbgname)
+{
+    BuffReader BR;
+    sk_lock(vm);
+    BR_init(vm, &BR, reader, userdata);
+    uint8_t status = protectedcompile(vm, &BR, dbgname);
+    sk_unlock(vm);
+    return status;
+}
+
 
 
 
@@ -1001,10 +977,4 @@ const InternedString static_strings[] = {
     {"ge [>=]",            sizeofstr("ge [>=]")           },
     {"and [and]",          sizeofstr("and [and]")         },
     {"or [or]",            sizeofstr("or [or]")           },
- /* Other statics */
-    {"manual",             sizeofstr("manual")            },
-    {"auto",               sizeofstr("auto")              },
-    {"assertion failed.",  sizeofstr("assertion failed.") },
-    {"Error: ",            sizeofstr("Error: ")           },
-    {"Assert: ",           sizeofstr("Assert: ")          },
 };

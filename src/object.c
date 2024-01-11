@@ -422,9 +422,9 @@ sdebug void otypeprint(OType type)
 Hash ohash(Value value)
 {
     switch(OBJ_TYPE(value)) {
-        case OBJ_STRING:
+        case OBJ_STRING: // we already have the hash (xxHash64)
             return AS_STRING(value)->hash;
-        default:
+        default: // just hash the pointer
             return ptrhash(cast(const void*, AS_OBJ(value)));
     }
 }

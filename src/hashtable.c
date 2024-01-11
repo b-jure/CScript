@@ -3,6 +3,7 @@
 #include "hashtable.h"
 #include "mem.h"
 #include "object.h"
+#include "stdarg.h"
 #include "value.h"
 
 // Max table load factor before needing to expand.
@@ -21,7 +22,7 @@
 // Instead we check if 'table->left' integer is zero and then expand
 // recalculating the load factor only then.
 #define INSERTS_UNTIL_EXPAND(table)                                                      \
-    ((UInt)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
+    ((uint64_t)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
 
 
 // Initial table size when we expand for the first time (on first insert)
@@ -51,18 +52,18 @@ void HashTable_init(HashTable* table)
 // Safety: There can't be an infinite cycle, because load factor is being
 // tracked. Hashing: For info about how each 'Value' gets hashed refer to the
 // [value.c].
-static force_inline Entry* Entry_find(Entry* entries, UInt capacity, Value key)
+static force_inline Entry* Entry_find(Entry* entries, uint32_t capacity, Value key)
 {
     Hash hash = vhash(key);
-    UInt mask = capacity - 1; // 'capacity' is 2^n
-    UInt index = hash & mask;
+    uint32_t mask = capacity - 1; // 'capacity' is 2^n
+    uint64_t index = hash & mask;
     Entry* tombstone = NULL;
     while(true) {
         Entry* entry = &entries[index];
         if(IS_EMPTY(entry->key)) {
             if(!IS_TOMBSTONE(entry)) return (tombstone ? tombstone : entry);
             else if(tombstone == NULL) tombstone = entry;
-        } else if(veq(key, entry->key)) return entry;
+        } else if(raweq(key, entry->key)) return entry;
         index = (index + 1) & mask;
     };
 }
@@ -70,7 +71,7 @@ static force_inline Entry* Entry_find(Entry* entries, UInt capacity, Value key)
 // Rehash all the 'keys' from the 'src' table into the 'dest' table.
 void HashTable_into(VM* vm, HashTable* src, HashTable* dest)
 {
-    for(UInt i = 0; i < src->cap; i++) {
+    for(uint32_t i = 0; i < src->cap; i++) {
         Entry* entry = &src->entries[i];
         if(!IS_EMPTY(entry->key)) HashTable_insert(vm, dest, entry->key, entry->value);
     }
@@ -83,8 +84,8 @@ static force_inline double HashTable_lf(HashTable* table)
 }
 
 
-/* Auxiliary to skapi.c */
-unsigned int resizetable(unsigned int wanted)
+// Auxiliary to 'skooma.c' source file
+uint32_t resizetable(uint32_t wanted)
 {
     // Safety: We already ensured wanted != 0
     if(ispow2(wanted)) return wanted;
@@ -102,17 +103,37 @@ unsigned int resizetable(unsigned int wanted)
     }
 }
 
+// Interns string literal.
+void internliteral(VM* vm, const char* string)
+{
+    push(vm, OBJ_VAL(OString_new(vm, string, strlen(string))));
+    Array_OSRef_push(&vm->interned, AS_STRING(*stackpeek(0)));
+    pop(vm); // string
+}
+
+
+// Intern formatted string.
+void internfmt(VM* vm, const char* fmt, ...)
+{
+    va_list argp;
+    va_start(argp, fmt);
+    push(vm, OBJ_VAL(OString_fmt_from(vm, fmt, argp)));
+    Array_OSRef_push(&vm->interned, AS_STRING(*stackpeek(0)));
+    pop(vm); // string
+    va_end(argp);
+}
+
 
 // Expands the table by rehashing all the keys into a new bigger table array.
 static force_inline void HashTable_expand(VM* vm, HashTable* table)
 {
-    UInt new_cap = GROW_ARRAY_CAPACITY(table->cap, TABLE_INITIAL_SIZE);
+    uint32_t new_cap = GROW_ARRAY_CAPACITY(table->cap, TABLE_INITIAL_SIZE);
     Entry* entries = GC_MALLOC(vm, new_cap * sizeof(Entry));
-    for(UInt i = 0; i < new_cap; i++) {
+    for(uint32_t i = 0; i < new_cap; i++) {
         entries[i].key = EMPTY_VAL;
         entries[i].value = EMPTY_VAL;
     }
-    for(UInt i = 0; i < table->cap; i++) {
+    for(uint32_t i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
         if(IS_EMPTY(entry->key)) continue;
         Entry* dest = Entry_find(entries, new_cap, entry->key);
@@ -163,8 +184,8 @@ bool HashTable_remove(HashTable* table, Value key)
 OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash)
 {
     if(table->len == 0) return NULL;
-    UInt mask = table->cap - 1; // 'cap' is 2^n
-    UInt index = hash & mask;
+    uint64_t mask = table->cap - 1; // 'cap' is 2^n
+    uint64_t index = hash & mask;
     while(true) {
         Entry* entry = &table->entries[index];
         if(IS_EMPTY(entry->key)) {

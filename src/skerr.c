@@ -10,7 +10,7 @@
 
 static force_inline void printerror(VM* vm)
 {
-    fputs("\nSkooma: ", stderr);
+    fputs("\tSkooma: ", stderr);
     Value errobj = *stackpeek(0);
     if(IS_STRING(errobj)) fprintf(stderr, "%s\n", AS_CSTRING(errobj));
     else {

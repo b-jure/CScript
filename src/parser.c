@@ -995,10 +995,10 @@ static force_inline OFunction* compile_end(Function* F)
 }
 
 // Compile source code
-OClosure* compile(VM* vm, const char* source, Value name, bool globscope)
+uint8_t compile(VM* vm, BuffReader* BR, const char* name)
 {
-    vm->script = name;
-    HashTable_insert(vm, &vm->loaded, name, EMPTY_VAL);
+    vm->script = OBJ_VAL(OString_new(vm, name, strlen(name)));
+    HashTable_insert(vm, &vm->loaded, vm->script, EMPTY_VAL);
     Function* F = MALLOC(vm, sizeof(Function));
     Lexer L = L_new(source, vm);
     Scope globalscope, local;

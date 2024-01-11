@@ -1,16 +1,46 @@
-#include "common.h"
-#include "debug.h"
 #include "lexer.h"
 #include "object.h"
-#include "skconf.h"
-#include "value.h"
 
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
+
+
+/* Maximum size of error token string. */
 #define MAX_ERR_STRING 50
 #define ERR_LEN(len)   (MIN(MAX_ERR_STRING, len))
+
+
+
+
+/* ================= Create/Free ================= */
+
+Lexer L_new(VM* vm, BuffReader* br)
+{
+    Lexer L;
+    L.vm = vm;
+    L.br = br;
+    L.c = brgetc(L.br); // prime the lexer
+    Array_Byte_init(&L.buffer, vm);
+    Array_Byte_init_cap(&L.buffer, 32);
+    L.line = 1;
+    L.panic = false;
+    L.error = false;
+    return L;
+}
+
+void L_free(Lexer* lexer)
+{
+    Array_Byte_free(&lexer->buffer, NULL);
+}
+
+/* ----------------------------------------------- */
+
+
+
+
+
 
 
 /* ==================== Lexer errors ==================== */
@@ -18,12 +48,13 @@
 typedef enum {
     LE_INCHEXESC,
     LE_INVHEXESC,
-    LE_STRING,
+    LE_UNTSTR,
     LE_LARGECONST,
     LE_DIGOCTAL,
     LE_HEXCONST,
-    LE_EXPNODIG,
-    LE_CHAR,
+    LE_DECCONST,
+    LE_ESCSEQ,
+    LE_TOKENLIMIT,
 } LexErr;
 
 static const char* lexerrors[] = {
@@ -33,8 +64,9 @@ static const char* lexerrors[] = {
     "\tToo large number constant '%.*s'...\n",
     "\tInvalid digit '%c' in octal number.\n",
     "\tInvalid hexadecimal constant.\n",
-    "\tExponent has no digits.\n",
-    "\tUnexpected character '%c'.\n",
+    "\tInvalid decimal constant.\n",
+    "\tUnkown escape sequence '\\%c'.\n",
+    "\tToken contains too many characters, limit is %d.\n",
 };
 
 /* ------------------------------------------------------ */ // Lexer errors
@@ -42,48 +74,10 @@ static const char* lexerrors[] = {
 
 
 
-typedef enum {
-    NUM_HEX,
-    NUM_DEC,
-    NUM_OCT,
-} NumberType;
 
-// 'synthetic' token
-Token syntoken(const char* name)
-{
-    return (Token){
-        .type = 0,
-        .line = 0,
-        .start = name,
-        .len = (UInt)strlen(name),
-    };
-}
 
-static force_inline Token token(Lexer* lexer, TokenType type)
-{
-    Token token;
-    token.type = type;
-    token.start = lexer->start;
-    token.len = lexer->_current - lexer->start;
-    token.line = lexer->line;
-    return token;
-}
+/* ==============  Register compile-time error (lexing/parsing) ============== */
 
-static force_inline Token errtoken(Lexer* lexer, const char* err)
-{
-    Token token;
-    token.type = TOK_ERROR;
-    token.start = err;
-    token.len = strlen(err);
-    token.line = lexer->line;
-    return token;
-}
-
-#define peek(lexer)      (*(lexer)->_current)
-#define isend(lexer)     (peek(lexer) == '\0')
-#define peek_next(lexer) ((isend(lexer)) ? '\0' : *((lexer)->_current + 1))
-
-/* Register compile-time error */
 void regcomperror(Lexer* lexer, const char* err, va_list args)
 {
     static const char* prefix_fmt = "[%s][line: %u] Error";
@@ -106,6 +100,7 @@ pusherr:
     if(preverr) concatonstack(vm);
 }
 
+
 static void lexerror(Lexer* lexer, const char* err, ...)
 {
     va_list args;
@@ -114,51 +109,163 @@ static void lexerror(Lexer* lexer, const char* err, ...)
     va_end(args);
 }
 
-
-#define advance(lexer)                                                                   \
-    if(*lexer->_current++ == '\n') lexer->line++;
+/* ------------------------------------------------------------ */ // register error
 
 
-static force_inline char nextchar(Lexer* lexer)
+
+
+
+/* ================== Lexer buffer and auxiliary functions ================== */
+
+/* Checks for end of stream */
+#define isend(c) ((c) == SKEOF || (c) == '\0')
+
+/* Increments line number if 'c' is newline character */
+#define incrline(l, c) ((c) == '\n' || (c) == '\r' ? ((l)->line++, c) : c)
+
+/* Fetches new character from BuffReader, also increments
+ * the line number if newline character was fetched. */
+#define nextchar(l) incrline(l, brgetc((l)->br))
+
+/* Fetches the next character and stores it as current char */
+#define advance(l) ((l)->c = nextchar(l))
+
+/* Push current character into lexer buffer */
+#define pushl(l) pushc(l, (l)->c)
+
+/* Pushes the current character into lexer buffer and
+ * advances the lexer */
+#define advance_and_push(l) (pushl(l), advance(l))
+
+/* Same as 'advance_and_push' except the character is 'c' */
+#define advance_and_pushc(l, c) (pushc(l, c), advance(l))
+
+/* Peeks previous character in 'BuffReader' buffer */
+#define peekprev(l) brprevc((l)->br) // TODO: Do I need this?
+
+/* pointer to start of lexer buffer */
+#define lbptr(lexer) cast_charp((lexer)->buffer.data)
+
+/* length of lexer buffer */
+#define lblen(lexer) (lexer)->buffer.len
+
+/* Pop character from lexer buffer */
+#define lbpop(l) (Array_Byte_pop(&lexer->buffer))
+
+
+
+/* Pushes 'c' into lexer buffer */
+static void pushc(Lexer* lexer, int32_t c)
 {
-    char c = *lexer->_current++;
-    if(c == '\n') lexer->line++;
-    return c;
+    if(unlikely(lblen(lexer) >= LEX_TOKEN_LEN_LIMIT)) {
+        lexerror(lexer, lexerrors[LE_TOKENLIMIT], LEX_TOKEN_LEN_LIMIT);
+        lexer->skip = true;
+    }
+    Array_Byte_push(&lexer->buffer, c);
 }
 
-Lexer L_new(const char* source, VM* vm)
+
+/* Check if current character matches 'c', if so
+ * return true and advance the lexer, otherwise return false. */
+static bool lmatch(Lexer* lexer, int32_t c)
 {
-    return (Lexer){
-        .vm = vm,
-        .source = source,
-        .start = source,
-        ._current = source,
-        .line = 1,
-        .panic = false,
-        .error = false,
+    if(isend(lexer->c) || c != lexer->c) return false;
+    advance(lexer);
+    return true;
+}
+
+
+/* Skip white-space and comments. */
+static void skipws(Lexer* lexer)
+{
+read_more:
+    switch(lexer->c) {
+        case '\n':
+        case ' ':
+        case '\r':
+        case '\t':
+            advance(lexer);
+            goto read_more;
+        case '#':
+            advance(lexer);
+            while(!isend(lexer->c) && lexer->c != '\n')
+                advance(lexer);
+            goto read_more;
+        default:
+            break;
+    }
+}
+
+/* -------------------------------------------------- */ // Lexer buffer and aux functions
+
+
+
+
+
+/* =================== Tokens =================== */
+
+/* Create 'synthetic' token */
+Token syntoken(const char* name)
+{
+    return (Token){
+        .type = 0,
+        .line = 0,
+        .start = name,
+        .len = cast(uint8_t, strlen(name)),
     };
 }
 
-static force_inline Int hexdigit(Lexer* lexer)
+/* Create generic token */
+static Token token(Lexer* lexer, TokenType type, Value value)
 {
-    char hex = nextchar(lexer);
-    if(hex >= '0' && hex <= '9') return hex - '0';
-    else if(hex >= 'a' && hex <= 'f') return (hex - 'a') + 10;
-    else if(hex >= 'A' && hex <= 'F') return (hex - 'A') + 10;
-    lexer->_current--;
+    Token token;
+    token.type = type;
+    token.value = value;
+    token.start = lbptr(lexer);
+    token.len = cast(uint8_t, lblen(lexer));
+    token.line = lexer->line;
+    return token;
+}
+
+/* Keyword tokens contain no values */
+#define keywordtoken(lexer, type) (advance(lexer), token(lexer, type, EMPTY_VAL))
+
+
+
+/* Create error token with 'err' message */
+static force_inline Token errtoken(Lexer* lexer, const char* err)
+{
+    Token token;
+    token.type = TOK_ERROR;
+    token.start = err;
+    token.len = cast(uint8_t, strlen(err));
+    token.line = lexer->line;
+    return token;
+}
+
+
+/* Get new hex digit from current char */
+static int8_t hexdigit(Lexer* lexer)
+{
+    advance(lexer);
+    if(lexer->c >= '0' && lexer->c <= '9') return lexer->c - '0';
+    else if(lexer->c >= 'a' && lexer->c <= 'f') return (lexer->c - 'a') + 10;
+    else if(lexer->c >= 'A' && lexer->c <= 'F') return (lexer->c - 'A') + 10;
     return -1;
 }
 
-static force_inline Int eschex(Lexer* lexer)
+
+/* Parse hex escape sequence '\x' */
+static uint8_t eschex(Lexer* lexer)
 {
-    Int number = 0;
-    for(UInt i = 0; i < 2; i++) {
-        if(peek(lexer) == '"' || peek(lexer) == '\0') {
+    uint8_t number = 0;
+    for(uint8_t i = 0; i < 2; i++) {
+        advance(lexer);
+        if(unlikely(isend(lexer->c) || lexer->c == '"')) {
             lexerror(lexer, lexerrors[LE_INCHEXESC]);
-            lexer->_current--;
             break;
         }
-        Int digit = hexdigit(lexer);
+        int8_t digit = hexdigit(lexer);
         if(digit == -1) {
             lexerror(lexer, lexerrors[LE_INVHEXESC]);
             break;
@@ -168,193 +275,214 @@ static force_inline Int eschex(Lexer* lexer)
     return number;
 }
 
+
+/* Create string token and escape the escape sequences if any */
 static force_inline Token string(Lexer* lexer)
 {
-    Array_Byte buffer;
-    Array_Byte_init(&buffer, lexer->vm);
     while(true) {
-        char c = nextchar(lexer);
-        if(c == '\0') {
-            lexerror(lexer, lexerrors[LE_STRING]);
-            lexer->_current--;
+        advance(lexer); // skip '"'
+        if(unlikely(isend(lexer->c) || lexer->c == '\n' || lexer->c == '\r')) {
+            lexerror(lexer, lexerrors[LE_UNTSTR]);
             break;
-        } else if(c == '\r') continue;
-        else if(c == '"') break;
-        else if(c == '\\') {
-            switch((c = nextchar(lexer))) {
+        }
+        if(lexer->c == '"') break;
+        if(lexer->c == '\\') {
+            advance(lexer);
+            switch(lexer->c) {
                 case '"':
-                    Array_Byte_push(&buffer, '"');
-                    break;
+                case '\'':
                 case '%':
-                    Array_Byte_push(&buffer, '%');
+                case '\\':
+                case '?':
+                    advance_and_push(lexer);
                     break;
                 case '0':
-                    Array_Byte_push(&buffer, '\0');
-                    break;
-                case '\\':
-                    Array_Byte_push(&buffer, '\\');
+                    advance_and_pushc(lexer, '\0');
                     break;
                 case 'a':
-                    Array_Byte_push(&buffer, '\a');
+                    advance_and_pushc(lexer, '\a');
                     break;
                 case 'b':
-                    Array_Byte_push(&buffer, '\b');
+                    advance_and_pushc(lexer, '\b');
                     break;
                 case 'e':
-                    Array_Byte_push(&buffer, '\33');
+                    advance_and_pushc(lexer, '\33');
                     break;
                 case 'f':
-                    Array_Byte_push(&buffer, '\f');
+                    advance_and_pushc(lexer, '\f');
                     break;
                 case 'n':
-                    Array_Byte_push(&buffer, '\n');
+                    advance_and_pushc(lexer, '\n');
                     break;
                 case 'r':
-                    Array_Byte_push(&buffer, '\r');
+                    advance_and_pushc(lexer, '\r');
                     break;
                 case 't':
-                    Array_Byte_push(&buffer, '\t');
+                    advance_and_pushc(lexer, '\t');
                     break;
                 case 'v':
-                    Array_Byte_push(&buffer, '\v');
+                    advance_and_pushc(lexer, '\v');
                     break;
                 case 'x':
-                    Array_Byte_push(&buffer, (Byte)eschex(lexer));
+                    advance_and_pushc(lexer, cast(int32_t, eschex(lexer)));
+                    break;
+                case SKEOF: // raise error next iteration
+                    break;
+                default:
+                    lexerror(lexer, lexerrors[LE_ESCSEQ], lexer->c);
                     break;
             }
-        } else Array_Byte_push(&buffer, c);
+        } else pushc(lexer, lexer->c);
     }
-    OString* string = OString_new(lexer->vm, (void*)buffer.data, buffer.len);
-    Array_Byte_free(&buffer, NULL);
-    Token tok = token(lexer, TOK_STRING);
-    tok.value = OBJ_VAL(string);
+    advance(lexer);
+    OString* string = OString_new(lexer->vm, lbptr(lexer), lblen(lexer));
+    Token tok = token(lexer, TOK_STRING, OBJ_VAL(string));
     return tok;
 }
 
-static Token numtoken(Lexer* lexer, NumberType type)
-{
-    errno = 0;
-    Value number;
-    switch(type) {
-        case NUM_HEX:
-            number = NUMBER_VAL(strtoll(lexer->start, NULL, 16));
-            break;
-        case NUM_DEC:
-            number = NUMBER_VAL(strtod(lexer->start, NULL));
-            break;
-        case NUM_OCT:
-            number = NUMBER_VAL(strtoll(lexer->start, NULL, 8));
-            break;
-        default:
-            unreachable;
-    }
-    if(errno == ERANGE) {
-        lexerror(
-            lexer,
-            lexerrors[LE_LARGECONST],
-            ERR_LEN(lexer->_current - lexer->start),
-            lexer->start);
-        number = NUMBER_VAL(0);
-    }
-    Token tok = token(lexer, TOK_NUMBER);
-    tok.value = number;
-    return tok;
-}
 
-static Token octal(Lexer* lexer)
+/* Create number value from string in decimal format */
+static void decimal(Lexer* lexer, Value* res)
 {
-    nextchar(lexer); // skip leading zero
-    char c;
-    while(isdigit((c = peek(lexer)))) {
-        if(c >= '8') {
-            lexerror(lexer, lexerrors[LE_DIGOCTAL], c);
-            break;
-        }
-        advance(lexer);
+    for(;; advance(lexer)) {
+        if(lexer->c == '_') continue;
+        if(!isdigit(lexer->c)) break;
+        pushl(lexer);
     }
-    return numtoken(lexer, NUM_OCT);
-}
-
-static Token hex(Lexer* lexer)
-{
-    nextchar(lexer); // skip 'x' or 'X'
-    if(!isxdigit(peek(lexer))) lexerror(lexer, lexerrors[LE_HEXCONST]);
-    while(hexdigit(lexer) != -1)
-        ;
-    return numtoken(lexer, NUM_HEX);
-}
-
-static Token decimal(Lexer* lexer)
-{
-    while(isdigit(peek(lexer)))
-        advance(lexer);
-    if(peek(lexer) == '.') {
-        advance(lexer); // skip '.'
-        while(isdigit(peek(lexer)))
-            advance(lexer);
-        if(peek(lexer) == 'e' || peek(lexer) == 'E') {
-            advance(lexer); // skip 'e' or 'E'
-            if(peek(lexer) == '+' || peek(lexer) == '-')
-                advance(lexer); // skip '+' or '-'
-            if(!isdigit(peek(lexer))) lexerror(lexer, lexerrors[LE_EXPNODIG]);
+    if(lexer->c == '.') {
+        advance_and_push(lexer);
+        while(isdigit(lexer->c))
+            advance_and_push(lexer);
+        if(lexer->c == 'e' || lexer->c == 'E') {
+            advance_and_push(lexer);
+            if(lexer->c == '+' || lexer->c == '-') advance_and_push(lexer);
+            if(unlikely(!isdigit(lexer->c))) lexerror(lexer, lexerrors[LE_DECCONST]);
             else {
-                nextchar(lexer); // skip digit
-                while(isdigit(peek(lexer)))
-                    advance(lexer);
+                advance_and_push(lexer);
+                for(;; advance(lexer)) {
+                    if(lexer->c == '_') continue;
+                    if(!isdigit(lexer->c)) break;
+                    pushl(lexer);
+                }
             }
         }
     }
-    return numtoken(lexer, NUM_DEC);
+    pushc(lexer, '\0');
+    errno = 0;
+    if(!lexer->skip) *res = NUMBER_VAL(strtod(lbptr(lexer), NULL));
+    else {
+        lexer->skip = 0;
+        *res = NUMBER_VAL(0.0);
+    }
+    lbpop(lexer); // '\0'
 }
 
-static force_inline TokenType
-keyword(Lexer* lexer, UInt start, UInt length, const char* pattern, TokenType type)
+
+/* Create number value from string in hexadecimal format */
+static void hex(Lexer* lexer, Value* res)
 {
-    if(lexer->_current - lexer->start == start + length &&
-       memcmp(lexer->start + start, pattern, length) == 0)
+    advance(lexer); // skip 'x' | 'X'
+    while(isxdigit(lexer->c))
+        advance_and_push(lexer);
+    if(unlikely(lblen(lexer) == 0)) lexerror(lexer, lexerrors[LE_HEXCONST]);
+    pushc(lexer, '\0');
+    errno = 0;
+    if(!lexer->skip) *res = NUMBER_VAL(strtoll(lbptr(lexer), NULL, 16));
+    else {
+        lexer->skip = 0;
+        *res = NUMBER_VAL(0.0);
+    }
+    lbpop(lexer); // '\0'
+}
+
+
+/* Create number value from string in octal format */
+static force_inline void octal(Lexer* lexer, Value* res)
+{
+    while(lexer->c >= '0' && lexer->c <= '7')
+        advance_and_push(lexer);
+    pushc(lexer, '\0');
+    *res = NUMBER_VAL(strtoll(lbptr(lexer), NULL, 8));
+    lbpop(lexer); // '\0'
+}
+
+
+/* Check if number constant overflows after conversion, auxiliary to 'number'. */
+static force_inline void checkoverflow(Lexer* lexer, Value* n)
+{
+    if(unlikely(errno == ERANGE)) {
+        lexerror(lexer, lexerrors[LE_LARGECONST], ERR_LEN(lblen(lexer)), lbptr(lexer));
+        *n = NUMBER_VAL(0);
+        errno = 0;
+    }
+}
+
+/* Create number token */
+static Token number(Lexer* lexer)
+{
+    Value num;
+    char c = lexer->c;
+    advance_and_push(lexer);
+    if(c == '0' && (lexer->c == 'x' || lexer->c == 'X')) // hexadecimal?
+        hex(lexer, &num);
+    else if(c == '0' && (lexer->c >= '0' && lexer->c <= '7')) // octal ?
+        octal(lexer, &num);
+    else // otherwise it must be decimal
+        decimal(lexer, &num);
+    checkoverflow(lexer, &num);
+    return token(lexer, TOK_NUMBER, num);
+}
+
+
+/* Check if rest of the slice matches the pattern and
+ * return appropriate 'TokenType' otherwise return 'TOK_IDENTIFIER'.
+ * Auxiliary to 'TokenType_identifier' */
+static force_inline TokenType
+keyword(Lexer* lexer, uint32_t start, uint32_t length, const char* pattern, TokenType type)
+{
+    advance(lexer); // skip past the keyword for the next scan
+    if(lblen(lexer) == start + length && memcmp(lbptr(lexer) + start, pattern, length) == 0)
         return type;
     return TOK_IDENTIFIER;
 }
 
+/* Return appropriate 'TokenType' for the identifier */
 static TokenType TokenType_identifier(Lexer* lexer)
 {
 #ifdef SK_PRECOMPUTED_GOTO
 #define RET &&ret
     // IMPORTANT: update accordingly if lexer tokens change!
-    static const void* jump_table[UINT8_MAX + 1] = {
-        // Make sure the order is the same as in ASCII Table -
-        // https://www.asciitable.com
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, &&a, &&b, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET, &&l, RET, &&n, &&o,
-        RET, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
-        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+    // Make sure the order is the same as in ASCII Table - https://www.asciitable.com
+    static const void* ASCII_table[UINT8_MAX + 1] = {
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, &&a, &&b, &&c, &&d, &&e, &&f, RET, RET, &&i, RET, RET,
+        &&l, RET, &&n, &&o, RET, RET, &&r, &&s, &&t, RET, &&v, &&w, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET, RET,
+        RET, RET, RET, RET,
     };
 #undef RET
-
-    goto* jump_table[(Int)*lexer->start];
+    goto* ASCII_table[lexer->c];
 a:
     return keyword(lexer, 1, 2, "nd", TOK_AND);
 b:
     return keyword(lexer, 1, 4, "reak", TOK_BREAK);
 c:
-    if(lexer->_current - lexer->start > 1) {
-        switch(lexer->start[1]) {
+    if(lblen(lexer) > 1) {
+        switch(lbptr(lexer)[1]) {
             case 'a':
                 return keyword(lexer, 2, 2, "se", TOK_CASE);
             case 'l':
-                return keyword(lexer, 2, 3, "ass", TOK_CLASS); // Lmao
+                return keyword(lexer, 2, 3, "ass", TOK_CLASS); // lmao
             case 'o':
                 return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
             default:
@@ -367,18 +495,17 @@ d:
 e:
     return keyword(lexer, 1, 3, "lse", TOK_ELSE);
 f:
-    if(lexer->_current - lexer->start > 1) {
-        switch(lexer->start[1]) {
+    if(lblen(lexer) > 1) {
+        switch(lbptr(lexer)[1]) {
             case 'a':
                 return keyword(lexer, 2, 3, "lse", TOK_FALSE);
             case 'i':
                 return keyword(lexer, 2, 3, "xed", TOK_FIXED);
             case 'n':
-                if(lexer->_current - lexer->start == 2) return TOK_FN;
+                if(lblen(lexer) == 2) return TOK_FN;
                 else return TOK_IDENTIFIER;
             case 'o':
-                if(lexer->_current - lexer->start > 3)
-                    return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
+                if(lblen(lexer) > 3) return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
                 else return keyword(lexer, 2, 1, "r", TOK_FOR);
             default:
                 break;
@@ -386,15 +513,15 @@ f:
     }
     goto ret;
 i:
-    if(lexer->_current - lexer->start > 1) {
-        switch(lexer->start[1]) {
+    if(lblen(lexer) > 1) {
+        switch(lbptr(lexer)[1]) {
             case 'm':
                 return keyword(lexer, 2, 2, "pl", TOK_IMPL);
             case 'n':
-                if(lexer->_current - lexer->start == 2) return TOK_IN;
+                if(lblen(lexer) == 2) return TOK_IN;
                 else return TOK_IDENTIFIER;
             case 'f':
-                if(lexer->_current - lexer->start == 2) return TOK_IF;
+                if(lblen(lexer) == 2) return TOK_IF;
                 else return TOK_IDENTIFIER;
             default:
                 break;
@@ -410,8 +537,8 @@ o:
 r:
     return keyword(lexer, 1, 5, "eturn", TOK_RETURN);
 s:
-    if(lexer->_current - lexer->start > 1) {
-        switch(lexer->start[1]) {
+    if(lblen(lexer) > 1) {
+        switch(lbptr(lexer)[1]) {
             case 'u':
                 return keyword(lexer, 2, 3, "per", TOK_SUPER);
             case 'e':
@@ -431,23 +558,18 @@ w:
     return keyword(lexer, 1, 4, "hile", TOK_WHILE);
 
 #else
-    switch(*lexer->start) {
+    switch(lexer->c) {
         case 'a':
             return keyword(lexer, 1, 2, "nd", TOK_AND);
         case 'b':
             return keyword(lexer, 1, 4, "reak", TOK_BREAK);
         case 'c':
-            if(lexer->_current - lexer->start > 1) {
-                switch(lexer->start[1]) {
+            if(lblen(lexer) > 1) {
+                switch(lbptr(lexer)[1]) {
                     case 'a':
                         return keyword(lexer, 2, 2, "se", TOK_CASE);
                     case 'l':
-                        return keyword(
-                            lexer,
-                            2,
-                            3,
-                            "ass", // Lmao
-                            TOK_CLASS);
+                        return keyword(lexer, 2, 3, "ass", TOK_CLASS);
                     case 'o':
                         return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
                     default:
@@ -460,17 +582,16 @@ w:
         case 'e':
             return keyword(lexer, 1, 3, "lse", TOK_ELSE);
         case 'f':
-            if(lexer->_current - lexer->start > 1) {
-                switch(lexer->start[1]) {
+            if(lblen(lexer) > 1) {
+                switch(lbptr(lexer)[1]) {
                     case 'a':
                         return keyword(lexer, 2, 3, "lse", TOK_FALSE);
                     case 'i':
                         return keyword(lexer, 2, 3, "xed", TOK_FIXED);
                     case 'n':
-                        if(lexer->_current - lexer->start == 2) return TOK_FN;
+                        if(lblen(lexer) == 2) return TOK_FN;
                         else return TOK_IDENTIFIER;
-                        if(lexer->_current - lexer->start > 3)
-                            return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
+                        if(lblen(lexer) > 3) return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
                         else return keyword(lexer, 2, 1, "r", TOK_FOR);
                     default:
                         break;
@@ -478,15 +599,15 @@ w:
             }
             break;
         case 'i':
-            if(lexer->_current - lexer->start > 1) {
-                switch(lexer->start[1]) {
+            if(lblen(lexer) > 1) {
+                switch(lbptr(lexer)[1]) {
                     case 'm':
                         keyword(lexer, 2, 2, "pl", TOK_IMPL);
                     case 'n':
-                        if(lexer->_current - lexer->start == 2) return TOK_IN;
+                        if(lblen(lexer) == 2) return TOK_IN;
                         else return TOK_IDENTIFIER;
                     case 'f':
-                        if(lexer->_current - lexer->start == 2) return TOK_IF;
+                        if(lblen(lexer) == 2) return TOK_IF;
                         else return TOK_IDENTIFIER;
                     default:
                         break;
@@ -502,8 +623,8 @@ w:
         case 'r':
             return keyword(lexer, 1, 5, "eturn", TOK_RETURN);
         case 's':
-            if(lexer->_current - lexer->start > 1) {
-                switch(lexer->start[1]) {
+            if(lblen(lexer) > 1) {
+                switch(lbptr(lexer)[1]) {
                     case 'u':
                         return keyword(lexer, 2, 3, "per", TOK_SUPER);
                     case 'e':
@@ -531,199 +652,190 @@ ret:
 
 static force_inline Token idtoken(Lexer* lexer)
 {
-    char c;
-    while(isalnum((c = peek(lexer))) || c == '_')
-        advance(lexer);
-    return token(lexer, TokenType_identifier(lexer));
+    while(isalnum(lexer->c) || lexer->c == '_')
+        advance_and_push(lexer);
+    return token(lexer, TokenType_identifier(lexer), EMPTY_VAL);
 }
 
-static force_inline void skipws(Lexer* lexer)
-{
-    while(true) {
-        switch(peek(lexer)) {
-            case '\n':
-                nextchar(lexer);
-                break;
-            case ' ':
-            case '\r':
-            case '\t':
-                nextchar(lexer);
-                break;
-            case '/':
-                if(peek_next(lexer) == '/')
-                    while(peek(lexer) != '\n' && !isend(lexer))
-                        nextchar(lexer);
-                else return;
-                break;
-            default:
-                return;
-        }
-    }
-}
+/* -------------------------------------------------- */ // Tokens
 
-static bool lmatch(Lexer* lexer, char c)
-{
-    if(isend(lexer) || c != peek(lexer)) return false;
-    lexer->_current++;
-    return true;
-}
+
+
+
+
+/* =================== Scanning =================== */
 
 Token scan(Lexer* lexer)
 {
+    lexer->buffer.len = 0; // reset buffer
     skipws(lexer);
-    lexer->start = lexer->_current;
-    if(isend(lexer)) return token(lexer, TOK_EOF);
-    int c = nextchar(lexer);
-    if(c == '_' || isalpha(c)) return idtoken(lexer);
-    if(isdigit(c)) {
-        if(c == '0') {
-            if(peek(lexer) == 'x' || peek(lexer) == 'X') return hex(lexer);
-            else if(isdigit(peek(lexer))) return octal(lexer);
-        }
-        return decimal(lexer);
-    }
+    if(lexer->c == '\0') return token(lexer, TOK_EOF, EMPTY_VAL);
+    if(lexer->c == '_' || isalpha(lexer->c)) return idtoken(lexer);
+    if(isdigit(lexer->c)) return number(lexer);
+        // Otherwise try single character tokens
 #ifdef SK_PRECOMPUTED_GOTO
 #define ERR &&err
     // IMPORTANT: update accordingly if TokenType enum changes!
-    static const void* jump_table[UINT8_MAX + 1] = {
-        // order = https://www.asciitable.com
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      &&bang,   &&string, ERR,         ERR,     &&percent, ERR,       ERR,
-        &&lparen, &&rparen, &&star,   &&plus,      &&comma, &&minus,   &&dot,     &&slash,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      &&colon,  &&semicolon, &&less,  &&equal,   &&greater, &&qmark,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      &&lbrack,    ERR,     &&rbrack,  &&caret,   ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      &&lbrace,    ERR,     &&rbrace,  ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
-        ERR,      ERR,      ERR,      ERR,         ERR,     ERR,       ERR,       ERR,
+    // https://www.asciitable.com
+    static const void* ASCII_table[UINT8_MAX + 1] = {
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         &&bang,   &&string, ERR,
+        ERR,     &&percent, ERR,     ERR,      &&lparen, &&rparen,    &&star,   &&plus,   &&comma,
+        &&minus, &&dot,     &&slash, ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      &&colon,  &&semicolon, &&less,   &&equal,  &&greater,
+        &&qmark, ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     &&lbrack,  ERR,     &&rbrack, &&caret,  ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         &&lbrace, ERR,      &&rbrace,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
+        ERR,     ERR,       ERR,     ERR,
     };
 #undef ERR
-    goto* jump_table[c];
+    goto* ASCII_table[lexer->c];
 lbrack:
-    return token(lexer, TOK_LBRACK);
+    return keywordtoken(lexer, TOK_LBRACK);
 rbrack:
-    return token(lexer, TOK_RBRACK);
+    return keywordtoken(lexer, TOK_RBRACK);
 caret:
-    return token(lexer, TOK_CARET);
+    return keywordtoken(lexer, TOK_CARET);
 lparen:
-    return token(lexer, TOK_LPAREN);
+    return keywordtoken(lexer, TOK_LPAREN);
 rparen:
-    return token(lexer, TOK_RPAREN);
+    return keywordtoken(lexer, TOK_RPAREN);
 lbrace:
-    return token(lexer, TOK_LBRACE);
+    return keywordtoken(lexer, TOK_LBRACE);
 rbrace:
-    return token(lexer, TOK_RBRACE);
-dot:;
-    if(peek(lexer) == TOK_DOT && peek_next(lexer) == TOK_DOT) {
-        advance(lexer);
-        advance(lexer);
-        return token(lexer, TOK_DOT_DOT_DOT);
-    } else return token(lexer, TOK_DOT);
+    return keywordtoken(lexer, TOK_RBRACE);
+dot:
+    advance(lexer);
+    if(lmatch(lexer, '.') && lmatch(lexer, '.')) { // is '...' ?
+        return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
+    } else return token(lexer, TOK_DOT, EMPTY_VAL);
 comma:
-    return token(lexer, TOK_COMMA);
+    return keywordtoken(lexer, TOK_COMMA);
 minus:
-    return token(lexer, TOK_MINUS);
+    return keywordtoken(lexer, TOK_MINUS);
 plus:
-    return token(lexer, TOK_PLUS);
+    return keywordtoken(lexer, TOK_PLUS);
 colon:
-    return token(lexer, TOK_COLON);
+    return keywordtoken(lexer, TOK_COLON);
 semicolon:
-    return token(lexer, TOK_SEMICOLON);
+    return keywordtoken(lexer, TOK_SEMICOLON);
 slash:
-    return token(lexer, TOK_SLASH);
+    return keywordtoken(lexer, TOK_SLASH);
 star:
-    return token(lexer, TOK_STAR);
+    return keywordtoken(lexer, TOK_STAR);
 qmark:
-    return token(lexer, TOK_QMARK);
+    return keywordtoken(lexer, TOK_QMARK);
 percent:
-    return token(lexer, TOK_PERCENT);
+    return keywordtoken(lexer, TOK_PERCENT);
 bang:
-    return token(lexer, lmatch(lexer, '=') ? TOK_BANG_EQUAL : TOK_BANG);
+    return token(
+        lexer,
+        lmatch(lexer, '=') ? TOK_BANG_EQUAL : (advance(lexer), TOK_BANG),
+        EMPTY_VAL);
 equal:
-    return token(lexer, lmatch(lexer, '=') ? TOK_EQUAL_EQUAL : TOK_EQUAL);
+    return token(
+        lexer,
+        lmatch(lexer, '=') ? TOK_EQUAL_EQUAL : (advance(lexer), TOK_EQUAL),
+        EMPTY_VAL);
 greater:
-    return token(lexer, lmatch(lexer, '=') ? TOK_GREATER_EQUAL : TOK_GREATER);
+    return token(
+        lexer,
+        lmatch(lexer, '=') ? TOK_GREATER_EQUAL : (advance(lexer), TOK_GREATER),
+        EMPTY_VAL);
 less:
-    return token(lexer, lmatch(lexer, '=') ? TOK_LESS_EQUAL : TOK_LESS);
+    return token(
+        lexer,
+        lmatch(lexer, '=') ? TOK_LESS_EQUAL : (advance(lexer), TOK_LESS),
+        EMPTY_VAL);
 string:
     return string(lexer);
 err:
-    lexerror(lexer, lexerrors[LE_CHAR], c);
-    return token(lexer, TOK_ERROR);
-    unreachable;
+    advance(lexer);
+    return errtoken(lexer, "Unexpected character.");
 #else
-    switch(c) {
+    switch(lexer->c) {
         case '[':
-            return Token_new(lexer, TOK_LBRACK);
+            return keywordtoken(lexer, TOK_LBRACK);
         case ']':
-            return Token_new(lexer, TOK_RBRACK);
+            return keywordtoken(lexer, TOK_RBRACK);
         case '(':
-            return Token_new(lexer, TOK_LPAREN);
+            return keywordtoken(lexer, TOK_LPAREN);
         case ')':
-            return Token_new(lexer, TOK_RPAREN);
+            return keywordtoken(lexer, TOK_RPAREN);
         case '{':
-            return Token_new(lexer, TOK_LBRACE);
+            return keywordtoken(lexer, TOK_LBRACE);
         case '}':
-            return Token_new(lexer, TOK_RBRACE);
+            return keywordtoken(lexer, TOK_RBRACE);
         case '.':
-            if(peek(lexer) == TOK_DOT && peek_next(lexer) == TOK_DOT) {
-                advance(lexer);
-                advance(lexer);
-                return Token_new(lexer, TOK_DOT_DOT_DOT);
-            } else return Token_new(lexer, TOK_DOT);
+            advance(lexer);
+            if(lmatch(lexer, '.') && lmatch(lexer, '.')) {
+                return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
+            } else return token(lexer, TOK_DOT, EMPTY_VAL);
         case ',':
-            return Token_new(lexer, TOK_COMMA);
+            return keywordtoken(lexer, TOK_COMMA);
         case '-':
-            return Token_new(lexer, TOK_MINUS);
+            return keywordtoken(lexer, TOK_MINUS);
         case '+':
-            return Token_new(lexer, TOK_PLUS);
+            return keywordtoken(lexer, TOK_PLUS);
         case ';':
-            return Token_new(lexer, TOK_SEMICOLON);
+            return keywordtoken(lexer, TOK_SEMICOLON);
         case ':':
-            return Token_new(lexer, TOK_COLON);
+            return keywordtoken(lexer, TOK_COLON);
         case '?':
-            return Token_new(lexer, TOK_QMARK);
+            return keywordtoken(lexer, TOK_QMARK);
         case '/':
-            return Token_new(lexer, TOK_SLASH);
+            return keywordtoken(lexer, TOK_SLASH);
         case '*':
-            return Token_new(lexer, TOK_STAR);
-        case '!':
-            return Token_new(lexer, lmatch(lexer, '=') ? TOK_BANG_EQUAL : TOK_BANG);
+            return keywordtoken(lexer, TOK_STAR);
         case '%':
-            return Token_new(lexer, TOK_PERCENT);
+            return keywordtoken(lexer, TOK_PERCENT);
+        case '!':
+            return token(
+                lexer,
+                lmatch(lexer, '=') ? TOK_BANG_EQUAL : (advance(lexer), TOK_BANG),
+                EMPTY_VAL);
         case '=':
-            return Token_new(lexer, lmatch(lexer, '=') ? TOK_EQUAL_EQUAL : TOK_EQUAL);
+            return token(
+                lexer,
+                lmatch(lexer, '=') ? TOK_EQUAL_EQUAL : (advance(lexer), TOK_EQUAL),
+                EMPTY_VAL);
         case '>':
-            return Token_new(lexer, lmatch(lexer, '=') ? TOK_GREATER_EQUAL : TOK_GREATER);
+            return token(
+                lexer,
+                lmatch(lexer, '=') ? TOK_GREATER_EQUAL : (advance(lexer), TOK_GREATER),
+                EMPTY_VAL);
         case '<':
-            return Token_new(lexer, lmatch(lexer, '=') ? TOK_LESS_EQUAL : TOK_LESS);
+            return token(
+                lexer,
+                lmatch(lexer, '=') ? TOK_LESS_EQUAL : (advance(lexer), TOK_LESS),
+                EMPTY_VAL);
         case '"':
             return string(lexer);
         default:
+            advance(lexer);
             return errtoken(lexer, "Unexpected character.");
     }
 #endif
 }
+
+/* ----------------------------------------------- */ // Scanning

@@ -3,12 +3,14 @@
 
 #include "array.h"
 #include "common.h"
+#include "reader.h"
 #include "value.h"
 #include "vmachine.h"
 
-OClosure* compile(VM* vm, const char* source, Value name, bool globscope);
-void      _cleanup_function(Function* F);
-void      F_free(Function* F);
-void      mark_function_roots(VM* vm);
+uint8_t protectedcompile(VM* vm, BuffReader* br, const char* name);
+uint8_t compile(VM* vm, BuffReader* br, const char* name);
+void _cleanup_function(Function* F);
+void F_free(Function* F);
+void mark_function_roots(VM* vm);
 
 #endif

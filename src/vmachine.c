@@ -25,7 +25,7 @@
 #define CALL_CLASS    2
 
 
-volatile int32_t runtime = 0; // VM is running?
+volatile uint8_t runtime = 0; // VM is running?
 
 
 
@@ -42,13 +42,14 @@ void push(VM* vm, Value val)
  * stack before running the function.
  * This is needed because class methods expect the receiver to be
  * the first argument ('self' local variable). */
-static force_inline void bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
+int8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 {
     Value method;
-    if(unlikely(!HashTable_get(&oclass->methods, name, &method)))
-        udperror(vm, name, oclass);
+    if(!HashTable_get(&oclass->methods, name, &method)) return 0;
     *stackpeek(0) = OBJ_VAL(OBoundMethod_new(vm, receiver, AS_CLOSURE(method)));
+    return 1;
 }
+
 
 
 /* Configuration.
@@ -569,10 +570,12 @@ void run(VM* vm)
             }
             CASE(OP_GET_SUPER)
             {
+                sk_assert(vm, IS_CLASS(*stackpeek(0)), "Expect OClass.");
                 Value methodname = READ_CONSTANT();
                 OClass* superclass = AS_CLASS(pop(vm));
                 saveip();
-                bindmethod(vm, superclass, methodname, *stackpeek(0));
+                if(unlikely(!bindmethod(vm, superclass, methodname, *stackpeek(0))))
+                    udperror(vm, methodname, superclass);
                 BREAK;
             }
             CASE(OP_INVOKE_SUPER)
@@ -618,7 +621,8 @@ void run(VM* vm)
                     BREAK;
                 }
                 saveip();
-                bindmethod(vm, instance->oclass, property_name, receiver);
+                if(unlikely(!bindmethod(vm, instance->oclass, property_name, receiver)))
+                    udperror(vm, property_name, instance->oclass);
                 BREAK;
             }
             {
@@ -859,7 +863,8 @@ void run(VM* vm)
                     BREAK;
                 }
                 saveip();
-                bindmethod(vm, instance->oclass, key, receiver);
+                if(unlikely(!bindmethod(vm, instance->oclass, key, receiver)))
+                    udperror(vm, key, instance->oclass);
                 *stackpeek(1) = *stackpeek(0); // replace receiver with method
                 pop(vm); // pop key
                 BREAK;
@@ -971,6 +976,7 @@ void run(VM* vm)
  */
 void interpret(VM* vm, const char* source, const char* path)
 {
+    TODO("Refactor")
     Value name = OBJ_VAL(OString_new(vm, path, strlen(path)));
     OClosure* closure = compile(vm, source, name, true);
     if(closure == NULL) printandpanic(vm);

@@ -7,22 +7,24 @@
 #include <limits.h>
 
 
-/* ====================== Language limits ====================== */
+/* ====================== Parser limits ====================== */
 
 /* Limit of constants created in a function. */
-#define VM_CONST_LIMIT SK_CONST_MAX
+#define PARSER_CONST_LIMIT SK_CONST_MAX
 /* Limit of function arguments provided. */
-#define VM_ARG_LIMIT SK_ARG_MAX
+#define PARSER_ARG_LIMIT SK_ARG_MAX
 /* Limit of return values. */
-#define VM_RET_LIMIT SK_ARG_MAX
+#define PARSER_RET_LIMIT SK_ARG_MAX
 /* Limit of local variable defines. */
-#define VM_LVAR_LIMIT SK_LVAR_MAX
+#define PARSER_LVAR_LIMIT SK_LVAR_MAX
 /* Limit of global variable defines. */
-#define VM_GVAR_LIMIT SK_GVAR_MAX
+#define PARSER_GVAR_LIMIT SK_GVAR_MAX
 /* Limit of code jump size. */
-#define VM_JMP_LIMIT SK_JMP_MAX
+#define PARSER_JMP_LIMIT SK_JMP_MAX
 
 /* -------------------------------------------------------- */
+
+
 
 
 /* ====================== VM limits ====================== */
@@ -43,9 +45,20 @@
 /* -------------------------------------------------------- */
 
 
-/* ====================== Type limits ====================== */
 
-/* How many digits/chars/bytes sk_number has when converted into string. */
+
+/* ==================== Lexer limits ==================== */
+
+/* Token size limit in bytes. */
+#define LEX_TOKEN_LEN_LIMIT 200
+
+/* ------------------------------------------------------ */
+
+
+
+/* ====================== Conversion limits ====================== */
+
+/* 'sk_number' byte limit when being converted to string. */
 #define SK_NDIGITS 30
 
 /* -------------------------------------------------------- */

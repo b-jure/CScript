@@ -88,28 +88,30 @@ typedef struct {
 ARRAY_NEW(Array_ORef, O*);
 ARRAY_NEW(Array_VRef, Value*);
 ARRAY_NEW(Array_Variable, Variable);
+ARRAY_NEW(Array_OSRef, OString*);
 
 
 /* Skooma Virtual Machine */
 struct VM {
     Config config; // user configuration
     unsigned long seed; // randomized seed for hashing
-    struct sk_longjmp* errjmp;
+    struct sk_longjmp* errjmp; // error longjmp
     HashTable loaded; // loaded scripts
     Value script; // current script name
     Function* F; // function state
-    CallFrame frames[VM_CALLSTACK_LIMIT];
-    Int fc; // frame count
-    Value stack[VM_STACK_LIMIT];
+    CallFrame frames[VM_CALLSTACK_LIMIT]; // call stack
+    Int fc; // call stack length
+    Value stack[VM_STACK_LIMIT]; // values stack
     Value* sp; // stack pointer
-    Array_VRef callstart;
-    Array_VRef retstart;
+    Array_VRef callstart; // start of call arguments
+    Array_VRef retstart; // start of return values
     HashTable globids; // global variable names
     Array_Variable globvars; // global variable values
     Array_Value temp; // temporary return values
-    HashTable strings; // interned strings (weak refs)
     OUpvalue* open_upvals; // closure values
-    OString* statics[SS_SIZE]; // static strings
+    HashTable weakrefs; // interned strings (weak refs/not marked)
+    Array_OSRef interned; // interned strings (marked)
+    OString* faststatic[SS_SIZE]; // static strings with fast access
     O* objects; // list of all allocated objects
     O** gray_stack; // tricolor gc (stores marked objects)
     uint64_t gslen; // gray stack length
@@ -167,6 +169,9 @@ void closeupval(VM* vm, Value* last);
 
 /* Initialize config as per default settings. */
 void Config_init(Config* config);
+
+/* Bind class method creating OBoundMethod */
+int8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver);
 
 
 #endif

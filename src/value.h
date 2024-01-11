@@ -141,6 +141,10 @@ void vgt(VM* vm, Value l, Value r);
 void vle(VM* vm, Value l, Value r);
 void vge(VM* vm, Value l, Value r);
 
+
+/* Do not invoke methods only do 'raw' equality. */
+int raweq(Value l, Value r);
+
 /* Performs arithmetic operation on skooma values. */
 void arith(VM* vm, Value a, Value b, Ar op, Value* res);
 
@@ -168,7 +172,7 @@ OString* btostr(VM* vm, int b);
 void vprint(VM* vm, Value value, FILE* stream);
 
 /* Hash value */
-Hash vhash(VM* vm, Value value);
+Hash vhash(Value value);
 
 
 #endif

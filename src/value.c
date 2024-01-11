@@ -157,6 +157,9 @@ int val2type(Value value)
         }
     }
 
+#if defined(SKJMPTABLE_H)
+#undef SKJMPTABLE_H
+#endif
 #endif
 }
 
@@ -243,6 +246,52 @@ void eq_preserveL(VM* vm, Value l, Value r)
     veq(vm, l, r);
 }
 
+/* Raw equality.
+ * VM stack won't be used, instead the result is directly
+ * returned from the function. */
+int raweq(Value l, Value r)
+{
+#if defined(SK_NAN_BOX)
+    // NaN != NaN
+    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) == AS_NUMBER(r);
+    else return l == r;
+#else
+    if(l.type != r.type) return 0;
+#if defined(SK_PRECOMPUTED_GOTO)
+#define VAL_TABLE
+#include "jmptable.h"
+#undef VAL_TABLE
+#else
+#define DISPATCH(x) switch(x)
+#define CASE(label) case label:
+#endif
+    DISPATCH(l.type)
+    {
+        CASE(VAL_BOOL)
+        {
+            return AS_BOOL(l) == AS_BOOL(r);
+        }
+        CASE(VAL_NUMBER)
+        {
+            return AS_NUMBER(l) == AS_NUMBER(r);
+        }
+        CASE(VAL_NIL)
+        {
+            return 1;
+        }
+        CASE(VAL_OBJ)
+        {
+            return l == r;
+        }
+    }
+#if defined(SKJMPTABLE_H)
+#undef SKJMPTABLE_H
+#endif
+#endif
+}
+
+
+
 /* != */
 void vne(VM* vm, Value l, Value r)
 {
@@ -285,61 +334,14 @@ void vne(VM* vm, Value l, Value r)
             BREAK;
         }
     }
-#endif
 #if defined(SKJMPTABLE_H)
 #undef SKJMPTABLE_H
+#endif
 #endif
 }
 
 
-/* Equality between constant expressions.
- * (string literals, numbers, true/false literals, nil)
- * Primarily used in parser. */
-int raweq(VM* vm, Value l, Value r)
-{
-#if defined(SK_NAN_BOX)
-    if(IS_NUMBER(l) && IS_NUMBER(r)) return AS_NUMBER(l) == AS_NUMBER(r);
-    else return l == r;
-#else
-    if(l.type != r.type) return 0;
-#if defined(SK_PRECOMPUTED_GOTO)
-#define VAL_TABLE
-#include "jmptable.h"
-#undef VAL_TABLE
-#else
-#define DISPATCH(x) switch(x)
-#define CASE(label) case label:
-#endif
-    DISPATCH(l.type)
-    {
-        CASE(VAL_BOOL)
-        {
-            return AS_BOOL(l) == AS_BOOL(r);
-        }
-        CASE(VAL_NUMBER)
-        {
-            return AS_NUMBER(l) == AS_NUMBER(r);
-        }
-        CASE(VAL_NIL)
-        {
-            return 1;
-        }
-        CASE(VAL_OBJ)
-        {
-            sk_assert(
-                vm,
-                IS_STRING(l) && IS_STRING(r),
-                "only string objects can be constant expressions.");
-            return AS_STRING(l) == AS_STRING(r);
-        }
-    }
-#endif
-#if defined(SKJMPTABLE_H)
-#undef SKJMPTABLE_H
-#endif
-}
-
-// Values are equal
+/* == */
 void veq(VM* vm, Value l, Value r)
 {
 #if defined(SK_NAN_BOX)
@@ -604,20 +606,17 @@ object:
 
 
 /* Hash value */
-Hash vhash(VM* vm, Value value)
+Hash vhash(Value value)
 {
-    sk_assert(vm, !IS_NIL(value), "can't hash nil values");
 #if defined(val2tbmask_1)
     static const void* jmptable[] = {
-        &&nil,
+        NULL, // null can't be used for indexing
         &&number,
         &&boolean,
         &&object,
 
     };
     goto* jmptable[val2tbmask_1(value)];
-nil:
-    unreachable; // nil can't be used for indexing
 number:;
     double num = AS_NUMBER(value);
     if(floor(num) != num || num < 0) return dblhash(num);
@@ -644,20 +643,20 @@ object:
 #endif
     DISPATCH(value.type)
     {
-        CASE(VAL_NIL) // only avoid unused 'label' warning
+        CASE(VAL_NIL) // only to avoid unused 'label' warning
         {
             unreachable;
         }
         CASE(VAL_BOOL)
         {
-            return AS_BOOL(value) ? 1 : 0;
+            return cast(Hash, AS_BOOL(value));
         }
         CASE(VAL_NUMBER)
         {
             double num = AS_NUMBER(value);
-            if(floor(AS_NUMBER(value)) != AS_NUMBER(value) || AS_NUMBER(value) < 0)
+            if(AS_NUMBER(value) < 0 || floor(AS_NUMBER(value)) != AS_NUMBER(value))
                 return dblhash(num);
-            else return num;
+            else return cast(Hash, num);
         }
         CASE(VAL_OBJ)
         {

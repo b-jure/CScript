@@ -27,7 +27,8 @@ int main(int argc, char* argv[])
         fprintf(stderr, "REPL is not implemented, contributions are welcome :)!\n");
         return 1;
     } else if(argc == 2) {
-        vm = sk_create(NULL);
+        vm = sk_create(NULL, NULL);
+        sk_runfile(vm, argv[1]);
         File_run(vm, argv[1]);
         sk_destroy(&vm);
     } else {

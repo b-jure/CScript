@@ -20,7 +20,7 @@ typedef int32_t Int;
 /* garbage collection flag (check mem.c -> gc())
  * 0 - compiling source code
  * 1 - VM is running */
-extern volatile Int runtime; // in 'vmachine.c'
+extern volatile uint8_t runtime; // in 'vmachine.c'
 
 
 // Memory alloc/dealloc

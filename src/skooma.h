@@ -76,6 +76,12 @@ typedef int (*CFunction)(VM* vm);
 typedef void* (*AllocFn)(void* ptr, size_t newsize, void* userdata);
 
 
+/* Reader function signature. */
+typedef const char* (*ReadFn)(VM* vm, void* userdata, size_t* szread);
+
+
+// TODO: WriteFn
+
 
 /*
  * ============== value types ==============
@@ -221,7 +227,7 @@ SK_API void sk_push(VM* vm, int idx);
  * ========== get functions, skooma -> stack ==========
  */
 
-SK_API void sk_getmethod(VM* vm, int idx, const char* method);
+SK_API int8_t sk_getmethod(VM* vm, int idx, const char* method);
 SK_API int sk_getglobal(VM* vm, const char* name);
 SK_API TypeTag sk_getfield(VM* vm, int idx, const char* field);
 
@@ -274,13 +280,26 @@ SK_API CFunction sk_tocfunction(const VM* vm, int idx);
 
 SK_API void sk_settop(VM* vm, int idx);
 #define sk_pop(vm, n) sk_settop(vm, -(n)-1)
+SK_API void sk_rotate(VM* vm, int idx, int n);
+SK_API void sk_copy(VM* vm, int src, int dest);
+/**
+ * Pops off the stack top and copies over that
+ * value into the stack slot at 'idx'.
+ **/
+#define sk_replace(vm, idx) (sk_copy(vm, -1, idx), sk_pop(vm, 1))
 SK_API int sk_setfield(VM* vm, int idx, const char* field);
 SK_API int sk_setglobal(VM* vm, const char* name, int isfixed);
-SK_API void sk_remove(VM* vm, int idx);
-SK_API void sk_insert(VM* vm, int idx);
-SK_API void sk_replace(VM* vm, int idx);
-SK_API void sk_copy(VM* vm, int src, int dest);
-#define sk_replace(vm, idx) (sk_copy(vm, -1, idx), sk_pop(vm, 1))
+/**
+ * Removes the value on stack at 'idx' shifting
+ * the stack once to the left and adjusting the
+ * stack top by one to compensate the shift.
+ **/
+#define sk_remove(vm, idx) (sk_rotate(vm, idx, -1), sk_pop(vm, 1))
+/**
+ * Inserts the value on top of the stack at 'idx'
+ * shifting the stack once to the right.
+ **/
+#define sk_insert(vm, idx) sk_rotate(vm, idx, 1)
 
 /* -------------------------------------------------*/
 
@@ -350,7 +369,7 @@ SK_API size_t sk_strlen(const VM* vm, int idx);
  * ========== Static strings ==========
  */
 
-/* Indices into static strings table */
+/* Indices into static strings table (fast access) */
 typedef enum {
     /* Value types */
     SS_NIL = 0,
@@ -405,12 +424,6 @@ typedef enum {
     SS_OPGE,
     SS_OPAND,
     SS_OPOR,
-    /* Other statics */
-    SS_MANU,
-    SS_AUTO,
-    SS_ASSERT_MSG,
-    SS_ERROR,
-    SS_ASSERT,
     SS_SIZE,
 } SSTag;
 

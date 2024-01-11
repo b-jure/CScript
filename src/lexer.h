@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "mem.h"
+#include "reader.h"
 #include "value.h"
 
 #include <stdarg.h>
@@ -74,26 +75,28 @@ typedef enum {
 typedef struct {
     TokenType type;
     const char* start; // slice start
-    uint32_t len; // slice length
+    uint8_t len; // slice length (LEX_TOKEN_LEN_LIMIT)
     uint32_t line; // source file line
     Value value; // constant value
 } Token;
 
 typedef struct {
     VM* vm; // virtual machine
-    const char* source; // source file
-    const char* start; // slice/token start
-    const char* _current; // current byte in the source file
+    BuffReader* br; // buffered reader
+    int32_t c; // current char
+    Array_Byte buffer; // for tokens
     Token previous;
     Token current;
     uint32_t line; // source file line
+    bool skip; // skip current token (LEX_TOKEN_LIMIT reached)
     bool panic; // sync flag
     bool error; // parse error flag
 } Lexer; // Lexer
 
 
 
-Lexer L_new(const char* source, VM* vm);
+Lexer L_new(VM* vm, BuffReader* br);
+void L_free(Lexer* L);
 Token scan(Lexer* lexer);
 Token syntoken(const char* name);
 void regcomperror(Lexer* lexer, const char* err, va_list args);
