@@ -95,7 +95,7 @@ typedef struct {
 
 
 
-Lexer L_new(VM* vm, BuffReader* br);
+void L_init(Lexer* L, VM* vm, BuffReader* br);
 void L_free(Lexer* L);
 Token scan(Lexer* lexer);
 Token syntoken(const char* name);

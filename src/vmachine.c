@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 
 
@@ -44,23 +45,6 @@ int8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
     return 1;
 }
 
-
-
-/* Configuration.
- * Contains various hooks and configurable options.
- * 'reallocate' - allocator function.
- * 'userdata' - additional data for allocator.
- * 'panic' - panic handler in case of runtime errors.
- * 'gc_heapinit' - starting treshold when gc triggers.
- * 'gc_growfactor' - garbage collector grow factor (incremental gc). */
-void Config_init(Config* config)
-{
-    config->reallocate = reallocate;
-    config->userdata = NULL;
-    config->panic = NULL;
-    config->gc_heapinit = GC_HEAP_INIT;
-    config->gc_growfactor = GC_HEAP_GROW_FACTOR;
-}
 
 
 /* Calls have lots of checks and there are two main reasons why.
@@ -120,7 +104,6 @@ ok:
     frame->vacnt = argc - arity;
     frame->retcnt = retcnt;
     frame->callee = vm->sp - argc - 1;
-    frame->status = S_OK;
     vm->fc++;
     return type;
 }
@@ -732,7 +715,7 @@ void run(VM* vm)
                     while(vm->temp.len > 0)
                         push(vm, Array_Value_pop(&vm->temp));
                     sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
-                    if(last_frame(vm).status == CFI_FRESH) return;
+                    if(last_frame(vm).cfinfo == CFI_FRESH) return;
                     sk_assert(vm, vm->fc > 0, "Invalid CallFrame status.");
                     updatestate();
                     BREAK;
@@ -970,6 +953,57 @@ void interpret(VM* vm, const char* source, const char* path)
     if(closure == NULL) printandpanic(vm);
     sk_pcall(vm, 0, 0);
 }
+
+
+/* Initialize the allocated VM */
+void VM_init(VM* vm)
+{
+    srand(time(0));
+    vm->seed = rand();
+    vm->fc = 0;
+    vm->objects = NULL;
+    vm->F = NULL;
+    vm->open_upvals = NULL;
+    vm->script = NIL_VAL;
+    vm->gc.gc_heapmin = GC_HEAP_MIN;
+    vm->gc.gc_nextgc = GC_HEAP_INIT; // 1 MiB
+    vm->gc.gc_allocated = 0;
+    vm->gc.gc_growfactor = GC_HEAP_GROW_FACTOR;
+    vm->gc.gc_stopped = 0;
+    vm->sp = vm->stack;
+    HashTable_init(&vm->loaded); // Loaded scripts and their functions
+    HashTable_init(&vm->globids); // Global variable identifiers
+    GSARRAY_INIT(vm); // Gray stack array (no GC)
+    Array_Variable_init(&vm->globvars, vm);
+    Array_Value_init(&vm->temp, vm); // Temp values storage (return values)
+    Array_VRef_init(&vm->callstart, vm);
+    Array_VRef_init(&vm->retstart, vm);
+    Array_OSRef_init(&vm->interned, vm);
+    HashTable_init(&vm->weakrefs); // Interned strings table (Weak_refs)
+    memset(vm->faststatic, 0, sizeof(vm->faststatic));
+    for(uint8_t i = 0; i < SS_SIZE; i++)
+        vm->faststatic[i] = OString_new(vm, static_strings[i].name, static_strings[i].len);
+}
+
+
+
+/*
+ * Reset virtual machine call stack and close all upvalues.
+ * Additionally set the error object on top of the stack
+ * if the 'status' is error code.
+ */
+void resetvm(VM* vm, Status status)
+{
+    Value* top = vm->stack;
+    closeupval(vm, top + 1); // close all open upvalues
+    vm->fc = 0; // reset call stack
+    if(status != S_OK) {
+        if(status == S_EMEM) *top = OBJ_VAL(vm->memerror);
+        else *top = *stackpeek(0); // err obj on top
+        vm->sp = top + 1;
+    } else vm->sp = top;
+}
+
 
 /*
  * Frees the VM and nulls out its pointer.

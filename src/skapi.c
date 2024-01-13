@@ -36,40 +36,30 @@ SK_API int sk_ensurestack(VM* vm, int n)
 
 
 
-/* Create the VM, you can additionally provide your own allocator. */
+/* Create and allocate VM by providing your own 'allocator'.
+ * In case the NULL pointer is provided as 'allocator' and/or
+ * allocation fails NULL is returned. */
 SK_API VM* sk_create(AllocFn allocator, void* ud)
 {
-    AllocFn allocate = allocator ? allocator : reallocate;
-    VM* vm = allocate(NULL, sizeof(VM), ud);
-    memset(&vm->config, 0, sizeof(Config));
-    vm->config.reallocate = allocate;
-    vm->config.userdata = ud;
-    srand(time(0));
-    vm->seed = rand();
-    vm->fc = 0;
-    vm->objects = NULL;
-    vm->F = NULL;
-    vm->open_upvals = NULL;
-    vm->script = NIL_VAL;
-    vm->gc_allocated = 0;
-    vm->gc_next = (1 << 20); // 1 MiB
-    vm->gc_flags = 0;
-    vm->sp = vm->stack;
-    HashTable_init(&vm->loaded); // Loaded scripts and their functions
-    HashTable_init(&vm->globids); // Global variable identifiers
-    GSARRAY_INIT(vm); // Gray stack array (no GC)
-    Array_Variable_init(&vm->globvars, vm);
-    Array_Value_init(&vm->temp, vm); // Temp values storage (return values)
-    Array_VRef_init(&vm->callstart, vm);
-    Array_VRef_init(&vm->retstart, vm);
-    Array_OSRef_init(&vm->interned, vm);
-    HashTable_init(&vm->weakrefs); // Interned strings table (Weak_refs)
-    memset(vm->faststatic, 0, sizeof(vm->faststatic));
-    for(uint8_t i = 0; i < SS_SIZE; i++)
-        vm->faststatic[i] = OString_new(vm, static_strings[i].name, static_strings[i].len);
+    if(unlikely(allocator == NULL)) return NULL;
+    VM* vm = allocator(NULL, sizeof(VM), ud);
+    if(unlikely(vm == NULL)) return NULL;
+    memset(&vm->hooks, 0, sizeof(Hooks));
+    vm->hooks.reallocate = allocator;
+    vm->hooks.userdata = ud;
+    vm->gc.gc_stopped = 1; // wait until VM is initialized
+    VM_init(vm);
+    vm->gc.gc_stopped = 0;
     return vm;
 }
 
+
+/* Resets 'VM' clearing its call stack and closing all
+ * to be closed variables. */
+SK_API void sk_resetvm(VM* vm)
+{
+    resetvm(vm, vm->status);
+}
 
 
 /* Free the VM allocation, the pointer to VM will be nulled out. */
@@ -401,12 +391,23 @@ SK_API int sk_getglobal(VM* vm, const char* name)
 
 
 /* Get panic handler */
-SK_API CFunction sk_getpanic(VM* vm)
+SK_API PanicFn sk_getpanic(VM* vm)
 {
     sk_lock(vm);
-    CFunction panic_handler = vm->config.panic;
+    PanicFn panic_handler = vm->hooks.panic;
     sk_unlock(vm);
     return panic_handler;
+}
+
+
+
+/* Get reader function */
+SK_API ReadFn sk_getreader(VM* vm)
+{
+    sk_lock(vm);
+    ReadFn reader = vm->hooks.reader;
+    sk_unlock(vm);
+    return reader;
 }
 
 
@@ -415,8 +416,8 @@ SK_API CFunction sk_getpanic(VM* vm)
 SK_API AllocFn sk_getalloc(VM* vm, void** ud)
 {
     sk_lock(vm);
-    AllocFn alloc = vm->config.reallocate;
-    if(ud) *ud = vm->config.userdata;
+    AllocFn alloc = vm->hooks.reallocate;
+    if(ud) *ud = vm->hooks.userdata;
     sk_unlock(vm);
     return alloc;
 }
@@ -496,7 +497,7 @@ static force_inline void reverse(Value* from, Value* to)
 
 
 
-/**
+/*
  * This is basically a stack-array rotation between the
  * top of the stack and the index 'idx' for 'n' elements.
  * Negative '-n' indicates left-rotation, while positive
@@ -520,7 +521,7 @@ static force_inline void reverse(Value* from, Value* to)
  * sk_rotate(vm, 2, -2);
  * -After left-rotation:
  * [callee][0][1][4][3][2][sp]
- **/
+ */
 SK_API void sk_rotate(VM* vm, int idx, int n)
 {
     sk_lock(vm);
@@ -552,52 +553,98 @@ SK_API void sk_call(VM* vm, int argc, int retcnt)
 
 
 /* Data used for 'fcall' */
-struct CallStack {
+struct CallData {
     Value* callee;
     int retcnt;
 };
 
 
-
 /* Wrapper function */
 static void fcall(VM* vm, void* userdata)
 {
-    struct CallStack* cs = cast(struct CallStack*, userdata);
-    ncall(vm, cs->callee, *cs->callee, cs->retcnt);
+    struct CallData* cd = cast(struct CallData*, userdata);
+    ncall(vm, cd->callee, *cd->callee, cd->retcnt);
 }
-
 
 
 /* Protected call.
  * Same as sk_call except this runs the function in protected
  * mode, meaning that in case the function errors it won't print
- * the error and abort or invoke panic handler.
- * Instead it restores the old call frame and returns the error
- * message and the status code in that order. */
-SK_API int sk_pcall(VM* vm, int argc, int retcnt)
+ * invoke panic handler.
+ * Instead it restores the old call frame and pushes the error object
+ * on top of the stack.
+ * This function returns 'Status' [defined @skooma.h] code. */
+SK_API Status sk_pcall(VM* vm, int argc, int retcnt)
 {
     sk_lock(vm);
     sk_checkapi(vm, retcnt >= SK_MULRET, "invalid return count");
     skapi_checkelems(vm, argc + 1);
     skapi_checkresults(vm, argc, retcnt);
-    struct CallStack cs;
-    cs.retcnt = retcnt;
-    cs.callee = vm->sp - (argc + 1);
-    int status = pcall(vm, fcall, &cs, save_stack(vm, cs.callee));
+    struct CallData cd;
+    cd.retcnt = retcnt;
+    cd.callee = vm->sp - (argc + 1);
+    int status = pcall(vm, fcall, &cd, save_stack(vm, cd.callee));
     sk_unlock(vm);
     return status;
 }
 
 
-SK_API int32_t sk_compilefile(VM* vm, ReadFn reader, void* userdata, const char* dbgname)
+
+/*
+ * Loads (compiles) skooma script using provided 'reader'.
+ * Returns 'Status' [defined @skooma.h].
+ * If the script compiled without any errors then the compiled
+ * function (Skooma closure) gets pushed on top of the stack.
+ * In case there were compile-time errors, then the error object
+ * gets pushed on top of the stack (error message).
+ *
+ * 'reader' - user provided 'ReadFn' responsible for reading
+ *            the '.sk' source file.
+ *            Refer to 'ReadFn' in [@skooma.h] for more
+ *            information on how this reader should 'behave'.
+ * 'userdata' - user provided data for 'reader'.
+ * 'dbgname' - name of the skooma script you are loading.
+ */
+SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* dbgname)
 {
-    BuffReader BR;
+    BuffReader br;
     sk_lock(vm);
-    BR_init(vm, &BR, reader, userdata);
-    uint8_t status = protectedcompile(vm, &BR, dbgname);
+    BuffReader_init(vm, &br, reader, userdata);
+    uint8_t status = pcompile(vm, &br, dbgname, 0);
     sk_unlock(vm);
     return status;
 }
+
+
+
+SK_API int32_t sk_gc(VM* vm, GCOpt option, ...)
+{
+    va_list argp;
+    int32_t res = 0;
+    sk_lock(vm);
+    va_start(argp, option);
+    switch(option) {
+        case GCO_STOP:
+            vm->gc.gc_stopped = 1;
+            break;
+        case GCO_RESTART:
+            vm->gc.gc_stopped = 0;
+            break;
+        case GCO_COLLECT:
+            gc(vm);
+            break;
+        case GCO_COUNT:
+            break;
+        case GCO_ISRUNNING:
+            break;
+        case GCO_NEXTGC:
+            break;
+    }
+    va_end(argp);
+    sk_unlock(vm);
+    return res;
+}
+
 
 
 
@@ -688,13 +735,25 @@ SK_API int sk_setfield(VM* vm, int idx, const char* field)
 
 
 /* Set panic handler and return old one */
-SK_API CFunction sk_setpanic(VM* vm, CFunction panicfn)
+SK_API PanicFn sk_setpanic(VM* vm, PanicFn panicfn)
 {
     sk_lock(vm);
-    CFunction old_handler = vm->config.panic;
-    vm->config.panic = panicfn;
+    PanicFn old_panic = vm->hooks.panic;
+    vm->hooks.panic = panicfn;
     sk_unlock(vm);
-    return old_handler;
+    return old_panic;
+}
+
+
+
+/* Set read function and return the old one */
+SK_API ReadFn sk_setreader(VM* vm, ReadFn readfn)
+{
+    sk_lock(vm);
+    ReadFn old_reader = vm->hooks.reader;
+    vm->hooks.reader = readfn;
+    sk_unlock(vm);
+    return old_reader;
 }
 
 
@@ -704,9 +763,9 @@ SK_API AllocFn sk_setalloc(VM* vm, AllocFn allocfn, void* ud)
 {
     sk_lock(vm);
     skapi_checkptr(vm, allocfn);
-    AllocFn old_alloc = vm->config.reallocate;
-    vm->config.reallocate = allocfn;
-    vm->config.userdata = ud;
+    AllocFn old_alloc = vm->hooks.reallocate;
+    vm->hooks.reallocate = allocfn;
+    vm->hooks.userdata = ud;
     sk_unlock(vm);
     return old_alloc;
 }

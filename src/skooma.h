@@ -19,7 +19,7 @@
 
 #define SK_VERSION   "Skooma " SK_VERSION_MAJOR "." SK_VERSION_MINOR
 #define SK_RELEASE   SK_VERSION "." SK_VERSION_RELEASE
-#define SK_COPYRIGHT SK_RELEASE " Copyright (C) 2023-2024 B. Jure"
+#define SK_COPYRIGHT SK_RELEASE " Copyright (C) 2024 B. Jure"
 #define SK_AUTHORS   "B. Jure"
 
 
@@ -72,6 +72,10 @@ typedef struct VM VM;
 typedef int (*CFunction)(VM* vm);
 
 
+/* Panic handler (same signature as 'CFunction') */
+typedef int (*PanicFn)(VM* vm);
+
+
 /* Memory allocator function signature. */
 typedef void* (*AllocFn)(void* ptr, size_t newsize, void* userdata);
 
@@ -79,8 +83,6 @@ typedef void* (*AllocFn)(void* ptr, size_t newsize, void* userdata);
 /* Reader function signature. */
 typedef const char* (*ReadFn)(VM* vm, void* userdata, size_t* szread);
 
-
-// TODO: WriteFn
 
 
 /*
@@ -102,7 +104,7 @@ typedef enum {
     TT_CNT, // keep this last
 } TypeTag;
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // value types
 
 
 
@@ -142,7 +144,7 @@ typedef enum {
     SF_CNT, // keep this last
 } SFTag;
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // class method/field tag
 
 
 
@@ -152,7 +154,7 @@ typedef enum {
 
 SK_API int sk_ensurestack(VM* vm, int n);
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // API check
 
 
 
@@ -161,9 +163,10 @@ SK_API int sk_ensurestack(VM* vm, int n);
  */
 
 SK_API VM* sk_create(AllocFn allocator, void* ud);
+SK_API void sk_resetvm(VM* vm);
 SK_API void sk_destroy(VM** vmp);
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // create/destroy
 
 
 
@@ -202,7 +205,7 @@ typedef enum {
 
 SK_API void sk_arith(VM* vm, Ar op);
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // Ordering/arith
 
 
 
@@ -219,7 +222,7 @@ SK_API void sk_pushbool(VM* vm, int boolean);
 SK_API void sk_pushcfn(VM* vm, CFunction fn, int args, int isva, unsigned int upvals);
 SK_API void sk_push(VM* vm, int idx);
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // push functions
 
 
 
@@ -231,7 +234,7 @@ SK_API int8_t sk_getmethod(VM* vm, int idx, const char* method);
 SK_API int sk_getglobal(VM* vm, const char* name);
 SK_API TypeTag sk_getfield(VM* vm, int idx, const char* field);
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // get functions
 
 
 
@@ -242,10 +245,11 @@ SK_API TypeTag sk_getfield(VM* vm, int idx, const char* field);
 SK_API void sk_settop(VM* vm, int idx);
 SK_API int sk_setglobal(VM* vm, const char* name, int isfixed);
 SK_API int sk_setfield(VM* vm, int idx, const char* field);
-SK_API CFunction sk_setpanic(VM* vm, CFunction panicfn);
+SK_API PanicFn sk_setpanic(VM* vm, PanicFn panicfn);
+SK_API ReadFn sk_setreader(VM* vm, ReadFn readfn);
 SK_API AllocFn sk_setalloc(VM* vm, AllocFn allocfn, void* ud);
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // set functions
 
 
 /*
@@ -265,12 +269,15 @@ SK_API int sk_type(const VM* vm, int idx);
 SK_API const char* sk_typename(const VM* vm, int idx);
 SK_API const char* sk_tagname(const VM* vm, TypeTag type);
 
+SK_API PanicFn sk_getpanic(VM* vm);
+SK_API ReadFn sk_getreader(VM* vm);
+SK_API AllocFn sk_getalloc(VM* vm, void** ud);
 SK_API int sk_getbool(const VM* vm, int idx, int* isbool);
 SK_API sk_number sk_getnumber(const VM* vm, int idx, int* isnum);
 SK_API const char* sk_getstring(const VM* vm, int idx);
 SK_API CFunction sk_tocfunction(const VM* vm, int idx);
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // get/access
 
 
 
@@ -301,23 +308,7 @@ SK_API int sk_setglobal(VM* vm, const char* name, int isfixed);
  **/
 #define sk_insert(vm, idx) sk_rotate(vm, idx, 1)
 
-/* -------------------------------------------------*/
-
-
-
-/*
- * ========== call functions ==========
- */
-
-/* option for multiple returns (retcnt) in sk_call and sk_pcall */
-#define SK_MULRET (-1)
-
-typedef void (*ProtectedFn)(VM* vm, void* userdata);
-
-SK_API int sk_pcall(VM* vm, int argc, int retcnt);
-SK_API void sk_call(VM* vm, int argc, int retcnt);
-
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // stack manipulation
 
 
 
@@ -329,6 +320,7 @@ SK_API void sk_call(VM* vm, int argc, int retcnt);
 /* Runtime status codes */
 typedef enum {
     S_OK = 0,
+    S_EMEM, // memory allocation error
     S_EARUN, // unary arithmetic operation error
     S_EARBIN, // binary arithmetic operation error
     S_EARG, // invalid argument
@@ -359,7 +351,45 @@ SK_API int sk_getupvalue(VM* vm, int fidx, int idx);
 SK_API int sk_setupvalue(VM* vm, int fidx, int idx);
 SK_API size_t sk_strlen(const VM* vm, int idx);
 
-/* -------------------------------------------------*/
+/* -------------------------------------------------*/ // misc functions
+
+
+
+
+
+/*
+ * ========== call/load/run functions ==========
+ */
+
+/* option for multiple returns (retcnt) in sk_call and sk_pcall */
+#define SK_MULRET (-1)
+
+SK_API Status sk_pcall(VM* vm, int argc, int retcnt);
+SK_API void sk_call(VM* vm, int argc, int retcnt);
+
+SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* dbgname);
+
+/* -------------------------------------------------*/ // call/load/run
+
+
+
+
+
+/*
+ * ========== garbage collector ==========
+ */
+
+typedef enum {
+    GCO_STOP, // stop GC
+    GCO_RESTART, // restart GC (start if stopped)
+    GCO_COLLECT, // perform full GC cycle
+    GCO_COUNT, // get number of bytes allocated
+    GCO_ISRUNNING, // check whether GC is stopped
+    GCO_NEXTGC, // set bytes amount when the next GC will trigger
+} GCOpt; // Garbage collector options
+
+/* ---------------------------------------- */ // garbage collector
+
 
 
 

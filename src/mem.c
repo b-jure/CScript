@@ -1,4 +1,5 @@
 #include "debug.h"
+#include "err.h"
 #include "hashtable.h"
 #include "mem.h"
 #include "object.h"
@@ -7,7 +8,6 @@
 #include "value.h"
 #include "vmachine.h"
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -236,7 +236,7 @@ size_t gc(VM* vm)
 #ifdef DEBUG_LOG_GC
     printf("--> GC start\n");
 #endif
-    size_t old_allocation = vm->gc_allocated;
+    size_t old_allocation = vm->gc.gc_allocated;
     markroots(vm);
 #ifdef SK_PRECOMPUTED_GOTO
     static const void* jmptable[] = {&&mark, &&skip};
@@ -251,68 +251,59 @@ skip:
         mark_black(vm, GSARRAY_POP(vm));
     rmweakrefs(vm);
     sweep(vm);
-    vm->gc_next =
-        MAX(cast(double, vm->gc_allocated) * vm->config.gc_growfactor, vm->config.gc_heapmin);
+    size_t nextgc = cast(size_t, cast(double, vm->gc.gc_allocated) * vm->gc.gc_growfactor);
+    vm->gc.gc_nextgc = MAX(nextgc, vm->gc.gc_heapmin);
 #ifdef DEBUG_LOG_GC
     printf("--> GC end\n");
     printf(
         "    collected %lu bytes (from %lu to %lu) next collection at %lu\n",
-        old_allocation - vm->gc_allocated,
+        old_allocation - vm->gc.gc_allocated,
         old_allocation,
-        vm->gc_allocated,
-        (size_t)vm->gc_next);
+        vm->gc.gc_allocated,
+        (size_t)vm->gc.gc_nextgc);
 #endif
-    return old_allocation - vm->gc_allocated;
+    return old_allocation - vm->gc.gc_allocated;
 }
 
 
 
 
-/* Allocator that can trigger gc. */
-void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
+/* Allocator that can trigger collection.
+ * NOTE: Upon failed allocation (allocator returned NULL),
+ *       full collection will be invoked (gc) and second try
+ *       in allocating will be attempted. */
+void* gcrealloc(VM* vm, void* ptr, size_t oldc, size_t newc)
 {
-    vm->gc_allocated += newc - oldc;
-    ASSERT(
-        newc >= oldc,
-        "Tried freeing memory with gcrealloc() [newsize:%ld | oldsize:%ld].",
-        newc,
-        oldc);
+    uint8_t first_try = 1;
+    sk_assert(vm, newc >= oldc, "Can't free memory with 'gcrealloc'");
 #ifdef DEBUG_STRESS_GC
     if(newc > oldc) gc(vm);
 #else
-    if(!btest(vm->gc_flags, GC_MANUAL) && vm->gc_next <= vm->gc_allocated) gc(vm);
+    if(!vm->gc.gc_stopped && (vm->gc.gc_nextgc <= vm->gc.gc_allocated + (newc - oldc))) gc(vm);
 #endif
-    return REALLOC(vm, ptr, newc);
-}
-
-
-
-/* Free memory and update the allocated bytes count. */
-void* gcfree(VM* vm, void* ptr, ssize_t oldc, ssize_t newc)
-{
-    vm->gc_allocated += newc - oldc;
-    ASSERT(
-        newc <= oldc,
-        "Tried allocating memory with gcfree() [newsize:%ld | oldsize:%ld]",
-        newc,
-        oldc);
-    return REALLOC(vm, ptr, newc);
-}
-
-
-
-/* Default allocator */
-void* reallocate(void* ptr, size_t newc, void* _)
-{
-    UNUSED(_);
-    if(newc == 0) {
-        free(ptr);
-        return NULL;
+try_again:;
+    void* allocation = REALLOC(vm, ptr, newc);
+    if(unlikely(allocation == NULL)) {
+        if(likely(first_try)) {
+            gc(vm); // try free some memory
+            first_try = 0;
+            goto try_again; // copium
+        } else memerror(vm); // we tried all we could :(
     }
-    void* alloc = realloc(ptr, newc);
-    if(alloc == NULL) {
-        fprintf(stderr, "Internal error, allocation failure!\n");
-        exit(errno);
-    }
-    return alloc;
+    vm->gc.gc_allocated += newc - oldc;
+    return allocation;
 }
+
+
+
+/* Free memory and update the allocated bytes count.
+ * NOTE: Never triggers collection and can't fail. */
+void gcfree(VM* vm, void* ptr, size_t oldc, size_t newc)
+{
+    vm->gc.gc_allocated += newc - oldc;
+    sk_assert(vm, newc <= oldc, "Can't allocate with 'gcfree'");
+    REALLOC(vm, ptr, newc);
+}
+
+
+

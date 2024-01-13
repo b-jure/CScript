@@ -15,13 +15,15 @@ sk_noret printandpanic(VM* vm);
 /* Generic runtime error */
 sk_noret runerror(VM* vm, int8_t status);
 
+/* Memory allocation error */
+sk_noret memerror(VM* vm);
+
 /* Ordering error */
 sk_noret ordererror(VM* vm, Value a, Value b);
 
 /* Binary/Unary arithmetic operation error */
-#define operror(vm, l, r, op)                                                            \
-    (arisbin(op) ? binoperror(vm, l, r, cast(OMTag, op))                                 \
-                 : unoperror(vm, l, cast(OMTag, op)))
+#define operror(vm, l, r, op)                                                                      \
+    (arisbin(op) ? binoperror(vm, l, r, cast(OMTag, op)) : unoperror(vm, l, cast(OMTag, op)))
 
 /* Binary arithmetic operation error */
 sk_noret binoperror(VM* vm, Value a, Value b, OMTag op);

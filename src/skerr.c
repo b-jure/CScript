@@ -1,5 +1,3 @@
-#include "common.h"
-#include "debug.h"
 #include "err.h"
 #include "object.h"
 #include "value.h"
@@ -8,56 +6,6 @@
 
 /* ==================== runtime errors ====================== */
 
-static force_inline void printerror(VM* vm)
-{
-    fputs("\tSkooma: ", stderr);
-    Value errobj = *stackpeek(0);
-    if(IS_STRING(errobj)) fprintf(stderr, "%s\n", AS_CSTRING(errobj));
-    else {
-        vprint(vm, errobj, stderr);
-        fputc('\n', stderr);
-    }
-}
-
-static void stacktraceback(VM* vm)
-{
-    static const char* fmt1 = "\t['%s' on line %u] in ";
-    static const char* fmt2 = "\tin %s()\n";
-    fputs("Stack traceback:\n", stderr);
-    for(int32_t i = vm->fc - 1; i >= 0; i--) {
-        CallFrame* frame = &vm->frames[i];
-        if(frame->closure) { // Skooma function ?
-            Chunk* chunk = &frame->closure->fn->chunk;
-            int32_t line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
-            Value _; // dummy
-            bool loaded = false;
-            if(HashTable_get(&vm->loaded, OBJ_VAL(FFN(frame)->name), &_)) {
-                vm->script = OBJ_VAL(FFN(frame)->name);
-                loaded = true;
-            }
-            fprintf(stderr, fmt1, AS_CSTRING(vm->script), line);
-            if(loaded) fprintf(stderr, "script\n");
-            else fprintf(stderr, "%s()\n", FFN(frame)->name->storage);
-        } else { // this is a C function
-            fprintf(stderr, fmt2, AS_NATIVE(*frame->callee)->name->storage);
-        }
-    }
-    fflush(stderr);
-}
-
-sk_noret printandpanic(VM* vm)
-{
-    printerror(vm);
-    stacktraceback(vm);
-    if(vm->config.panic) {
-        sk_unlock(vm);
-        vm->config.panic(vm);
-        unreachable;
-    } else {
-        _cleanupvm(&vm);
-        abort();
-    }
-}
 
 /* Performs long jump if there is one otherwise prints
  * the runtime error and invokes either a panic handler or aborts.
@@ -65,13 +13,23 @@ sk_noret printandpanic(VM* vm)
  * was passed to sk_error. */
 sk_noret runerror(VM* vm, int8_t status)
 {
-    last_frame(vm).status = status;
+    vm->status = status;
     struct sk_longjmp* errjmp = vm->errjmp;
     if(errjmp) { // protected call?
         errjmp->status = status;
         longjmp(errjmp->buf, 1);
-    } else printandpanic(vm);
-    unreachable;
+    } else if(vm->hooks.panic) { // panic handler ?
+        sk_unlock(vm);
+        vm->hooks.panic(vm);
+    }
+    abort(); // gg
+}
+
+
+sk_noret memerror(VM* vm)
+{
+    push(vm, OBJ_VAL(vm->memerror));
+    runerror(vm, S_EMEM);
 }
 
 
@@ -79,8 +37,8 @@ sk_noret ordererror(VM* vm, Value a, Value b)
 {
     static const char* fmt1 = "Attempt to compare two %s values.";
     static const char* fmt2 = "Attempt to compare %s and %s.";
-    const char* t1 = vm->statics[val2type(a)]->storage;
-    const char* t2 = vm->statics[val2type(a)]->storage;
+    const char* t1 = vm->faststatic[val2type(a)]->storage;
+    const char* t2 = vm->faststatic[val2type(a)]->storage;
     if(strcmp(t1, t2) == 0) sk_pushfstring(vm, fmt1, t1);
     else sk_pushfstring(vm, fmt2, t1, t2);
     runerror(vm, S_ECMP);
@@ -92,7 +50,7 @@ sk_noret binoperror(VM* vm, Value a, Value b, OMTag op)
     static const char* fmt = "Attempt to perform binary %s on %s (left) and %s (right).";
     push(vm, OBJ_VAL(vtostr(vm, a)));
     push(vm, OBJ_VAL(vtostr(vm, b)));
-    const char* operation = vm->statics[op + SS_OPADD]->storage;
+    const char* operation = vm->faststatic[op + SS_OPADD]->storage;
     const char* left = AS_CSTRING(*stackpeek(1));
     const char* right = AS_CSTRING(*stackpeek(0));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, operation, left, right)));
@@ -104,7 +62,7 @@ sk_noret unoperror(VM* vm, Value a, OMTag op)
 {
     static const char* fmt = "Attempt to perform unary '%s' on %s.";
     push(vm, OBJ_VAL(vtostr(vm, a)));
-    const char* operation = vm->statics[op + SS_OPADD]->storage;
+    const char* operation = vm->faststatic[op + SS_OPADD]->storage;
     const char* operand = AS_CSTRING(*stackpeek(0));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, operation, operand)));
     runerror(vm, S_EARUN);

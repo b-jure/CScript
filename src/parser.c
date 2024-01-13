@@ -2,6 +2,7 @@
 #include "chunk.h"
 #include "common.h"
 #include "debug.h"
+#include "err.h"
 #include "lexer.h"
 #include "mem.h"
 #include "object.h"
@@ -368,10 +369,10 @@ static force_inline int32_t inwhat(Scope* S, Scope** target)
 
 // Type of function being parsed
 typedef enum {
-    FN_FUNCTION, // Normal function declaration
-    FN_METHOD, // Class method function
-    FN_INIT, // Class initializer function
-    FN_SCRIPT, // Top-level code (implicit function)
+    FN_FUNCTION = 1, // Normal function declaration
+    FN_METHOD = 2, // Class method function
+    FN_INIT = 4, // Class initializer function
+    FN_SCRIPT = 8, // Top-level code (implicit function)
 } FunctionType;
 
 #define FCLEAR(F, modifier) bclear((F)->vflags, modifier)
@@ -739,7 +740,7 @@ static void rmlastins(Function* F, Exp* E)
 
 
 
-//======================= SCOPE/CFLOW =======================//
+//======================= SCOPE/C-FLOW =======================//
 
 // Start new 'Scope'
 static force_inline void startscope(Function* F, Scope* S, uint8_t isloop, uint8_t isswitch)
@@ -822,12 +823,6 @@ static void F_init(
     FunctionType fn_type,
     Function* enclosing)
 {
-    // Initialize global scope
-    globscope->prev = NULL;
-    globscope->depth = 0;
-    globscope->isloop = 0;
-    globscope->isswitch = 0;
-    globscope->localc = 1;
     // Initialize Function state
     F->vm = vm;
     F->S = globscope;
@@ -840,18 +835,19 @@ static void F_init(
     F->fn_type = fn_type;
     F->vflags = 0;
     ControlFlow_init(vm, &F->cflow);
+    // Setup upvalues storage
     if(enclosing == NULL) {
         F->upvalues = MALLOC(vm, sizeof(Array_Upvalue));
         Array_Upvalue_init(F->upvalues, vm);
     } else F->upvalues = enclosing->upvalues;
+    // Setup local variables storage
     Array_Local_init(&F->locals, vm);
     Array_Local_init_cap(&F->locals, SHORT_STACK_SIZE);
-    /* Reserve first stack slot for VM ('self' ObjInstance) */
-    F->locals.len++; // Safe, we already initialized array to capacity
+    F->locals.len++;
     Local* local = F->locals.data;
     local->depth = 0;
     local->flags = 0;
-    if(fn_type != FN_FUNCTION) {
+    if(fn_type & (FN_METHOD | FN_INIT)) {
         local->name.start = "self";
         local->name.len = 4;
     } else {
@@ -872,7 +868,7 @@ void F_free(Function* F)
             F->fn_type == FN_SCRIPT,
             "Function is top-level but the type is not 'FN_SCRIPT'.");
         Array_Upvalue_free(F->upvalues, NULL);
-        FREE(vm, F->upvalues);
+        FREE(vm, F->upvalues); // free the memory holding the pointer
     }
     Array_Local_free(&F->locals, NULL);
     vm->F = F->enclosing;
@@ -985,31 +981,39 @@ static force_inline OFunction* compile_end(Function* F)
     return F->fn;
 }
 
-// Compile source code
-uint8_t compile(VM* vm, BuffReader* BR, const char* name, bool globscope)
+
+// Compiles source code, 'global' determines if the script
+// 'name' is in global or local scope.
+// Parser only registers compile-time errors but does not
+// call the usual 'runerror' [@err.h], this ensures that all of the
+// compile-time errors will be reported/returned.
+OClosure* compile(VM* vm, BuffReader* br, const char* name, bool isingscope)
 {
-    vm->script = OBJ_VAL(OString_new(vm, name, strlen(name)));
-    HashTable_insert(vm, &vm->loaded, vm->script, EMPTY_VAL);
-    Function* F = MALLOC(vm, sizeof(Function));
-    Lexer L = L_new(vm, BR);
     Scope globalscope, local;
-    F_init(F, &globalscope, NULL, vm, &L, FN_SCRIPT, vm->F);
-    if(!globscope) startscope(F, &local, 0, 0);
-    advance(F);
-    while(!match(F, TOK_EOF))
-        dec(F);
-    OFunction* fn = compile_end(F);
-    // no need to end scope if 'globscope' is true
-    bool err = F->lexer->error;
-    F_free(F);
-    if(!err) {
-        push(vm, OBJ_VAL(fn));
+    Function F;
+    Lexer L;
+    setscript(vm, name);
+    L_init(&L, vm, br);
+    F_init(&F, &globalscope, NULL, vm, &L, FN_SCRIPT, vm->F);
+    startscope(&F, &globalscope, 0, 0);
+    if(!isingscope) // script not in global scope?
+        startscope(&F, &local, 0, 0);
+    advance(&F); // fetch first token
+    while(!match(&F, TOK_EOF))
+        dec(&F);
+    OFunction* fn = compile_end(&F);
+    uint8_t comperr = F.lexer->error;
+    L_free(&L);
+    F_free(&F);
+    if(likely(!comperr)) {
+        push(vm, OBJ_VAL(fn)); // prevent 'fn' from getting collected
         OClosure* closure = OClosure_new(vm, fn);
-        pop(vm);
+        pop(vm); // 'fn'
         push(vm, OBJ_VAL(closure));
-        return 1;
+        loadscript(vm, vm->script, OBJ_VAL(closure)); // only load if no errors
+        return closure;
     }
-    return 0;
+    return NULL;
 }
 
 // Create new local variable
@@ -1070,6 +1074,42 @@ static force_inline uint32_t make_constant(Function* F, Value constant)
     }
     return Chunk_make_constant(F->vm, CHUNK(F), constant);
 }
+
+
+
+
+
+
+
+
+/* =================== protected 'compile' =================== */
+
+// Data for 'protectedcompile'
+typedef struct {
+    BuffReader* br;
+    const char* name;
+    uint8_t isingscope;
+} PCompile;
+
+// Wrapper around 'compile' to match 'ProtectedFn' signature
+static void protectedcompile(VM* vm, void* userdata)
+{
+    PCompile* pcompile = cast(PCompile*, userdata);
+    if(unlikely(compile(vm, pcompile->br, pcompile->name, pcompile->isingscope) == NULL))
+        runerror(vm, S_ECOMP);
+}
+
+// External interface for 'protectedcompile'.
+// Runs compiler in protected mode and returns runtime 'status'.
+uint8_t pcompile(VM* vm, void* userdata, const char* name, uint8_t isingscope)
+{
+    BuffReader br;
+    BuffReader_init(vm, &br, (vm)->hooks.reader, userdata);
+    PCompile pcompile = {&br, name, isingscope};
+    return pcall(vm, protectedcompile, &pcompile, save_stack(vm, vm->sp));
+}
+
+/* -------------------------------------------------------- */ // protected 'compile'
 
 
 

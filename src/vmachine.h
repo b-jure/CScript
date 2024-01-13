@@ -27,6 +27,10 @@ struct sk_longjmp {
 };
 
 
+/* Protected function signature */
+typedef void (*ProtectedFn)(VM* vm, void* userdata);
+
+
 typedef enum {
     CFI_FRESH = 1,
 } CFInfo;
@@ -37,7 +41,6 @@ typedef struct {
     Value* callee; /* Pointer to the callee on the stack */
     int32_t retcnt; /* Expected value return count */
     int32_t vacnt; /* Count of extra arguments in vararg functions */
-    int32_t status; /* In case of call errors */
     uint8_t cfinfo; /* Additional context */
 } CallFrame;
 
@@ -52,10 +55,10 @@ typedef struct {
 /* Check if variable is 'fixed' */
 #define ISFIXED(variable) btest((variable)->flags, VAR_FIXED_BIT)
 
-/* Variable, it has a 'Value' and flags (modifiers),
- * only globals and upvalues are 'Variable' type,
- * locals do not require this wrapper as they are
- * resolved during compilation. */
+/* Variable has a 'Value' and flags (modifiers),
+ * only globals are 'Variable' type, locals do
+ * not require this wrapper as they are resolved
+ * during compilation. */
 typedef struct {
     Value value; /* Global value */
     /* 1 - fixed
@@ -67,21 +70,21 @@ typedef struct {
 } Variable;
 
 
-/* Garbage collector flags */
-typedef enum {
-    GC_MANUAL = 1,
-} GCFlags;
-
-
-/* Configuration file, configurable by user (C API) */
 typedef struct {
     AllocFn reallocate; // allocator
-    void* userdata; // userdata for allocator
-    CFunction panic; // panic handler
-    size_t gc_heapinit; // initial heap threshold
-    size_t gc_heapmin; // minimum heap size
-    double gc_growfactor; // garbage collector grow factor
-} Config;
+    void* userdata; // for allocator
+    ReadFn reader; // for reading skooma scripts
+    PanicFn panic; // panic handler
+} Hooks; // Configurable hooks
+
+
+typedef struct {
+    size_t gc_heapmin; // minimum GC threshold
+    size_t gc_nextgc; // next byte threshold when GC triggers
+    size_t gc_allocated; // number of allocated bytes
+    double gc_growfactor; // GC grow factor
+    uint8_t gc_stopped : 1; // this flag is set if GC was stopped
+} GC; // Configurable incremental garbage collection parameters
 
 
 /* Generic Arrays for VM */
@@ -93,9 +96,11 @@ ARRAY_NEW(Array_OSRef, OString*);
 
 /* Skooma Virtual Machine */
 struct VM {
-    Config config; // user configuration
+    Hooks hooks;
+    GC gc;
     unsigned long seed; // randomized seed for hashing
     struct sk_longjmp* errjmp; // error longjmp
+    Status status; // status code
     HashTable loaded; // loaded scripts
     Value script; // current script name
     Function* F; // function state
@@ -112,14 +117,18 @@ struct VM {
     HashTable weakrefs; // interned strings (weak refs/not marked)
     Array_OSRef interned; // interned strings (marked)
     OString* faststatic[SS_SIZE]; // static strings with fast access
+    OString* memerror; // preallocated object string for memory errors
     O* objects; // list of all allocated objects
     O** gray_stack; // tricolor gc (stores marked objects)
     size_t gslen; // gray stack length
     size_t gscap; // gray stack capacity
-    size_t gc_allocated; // count of allocated bytes in use
-    size_t gc_next; // next threshold where gc triggers
-    Byte gc_flags; // gc flags (sk API)
 };
+
+// Set 'vm' script field (name of the current script)
+#define setscript(vm, name) (vm)->script = OBJ_VAL(OString_new(vm, name, strlen(name)));
+
+// Load script
+#define loadscript(vm, sname, sclosure) HashTable_insert(vm, &(vm)->loaded, sname, sclosure)
 
 /* Fetch the last call frame (current) */
 #define last_frame(vm) ((vm)->frames[(vm)->fc - 1])
@@ -152,26 +161,20 @@ void push(VM* vm, Value val);
 
 /* ================== VM interface ================== */
 
-/* Compile and run the chunk generated from 'source'. */
+void VM_init(VM* vm);
+
 void interpret(VM* vm, const char* source, const char* filename);
 
-/* Run interpreter. */
 void run(VM* vm);
 
-/* Normal call. */
 int ncall(VM* vm, Value* retstart, Value callee, Int retcnt);
 
-/* Protected call. */
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);
 
-/* Close any open upvalues up to 'last' (stack position). */
 void closeupval(VM* vm, Value* last);
 
-/* Initialize config as per default settings. */
-void Config_init(Config* config);
-
-/* Bind class method creating OBoundMethod */
 int8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver);
 
+void resetvm(VM* vm, Status status);
 
 #endif

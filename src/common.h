@@ -24,26 +24,26 @@ extern volatile uint8_t runtime; // in 'vmachine.c'
 
 
 // Memory alloc/dealloc
-void* gcrealloc(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
-void* gcfree(VM* vm, void* ptr, ssize_t oldc, ssize_t newc);
+void* gcrealloc(VM* vm, void* ptr, size_t oldc, size_t newc);
+void gcfree(VM* vm, void* ptr, size_t oldc, size_t newc);
 void _cleanupvm(VM** vm); // cleanup function signature
 
 
 /* Return MAX */
 #if defined(__GNUC__) || defined(__clang__)
-#define MAX(a, b)                                                                        \
-    ({                                                                                   \
-        __typeof__(a) _a = (a);                                                          \
-        __typeof__(b) _b = (b);                                                          \
-        _a > _b ? _a : _b;                                                               \
+#define MAX(a, b)                                                                                  \
+    ({                                                                                             \
+        __typeof__(a) _a = (a);                                                                    \
+        __typeof__(b) _b = (b);                                                                    \
+        _a > _b ? _a : _b;                                                                         \
     })
 
 /* Return MIN */
-#define MIN(a, b)                                                                        \
-    ({                                                                                   \
-        __typeof__(a) _a = (a);                                                          \
-        __typeof__(b) _b = (b);                                                          \
-        _a > _b ? _b : _a;                                                               \
+#define MIN(a, b)                                                                                  \
+    ({                                                                                             \
+        __typeof__(a) _a = (a);                                                                    \
+        __typeof__(b) _b = (b);                                                                    \
+        _a > _b ? _b : _a;                                                                         \
     })
 #else
 #define MAX(a, b) ((a) > (b) ? (a) : (b))

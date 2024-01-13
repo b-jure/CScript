@@ -2,7 +2,85 @@
 #include "skooma.h"
 
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
+
+// TODO: Make basic debug API in order to fetch line and file information.
+//       This will then be available to other libraries such as this one.
+
+/*
+static force_inline void printerror(VM* vm)
+{
+    Value errobj = *stackpeek(0);
+    const char* errmsg = NULL;
+    if(IS_STRING(errobj)) {
+        errmsg = AS_CSTRING(errobj);
+    } else errmsg = "error object is not a string";
+    sk_writetoerrf(
+        "Skooma [PANIC]: Errored in unprotected call to Skooma API (error: %s)\n",
+        errmsg);
+}
+
+static void stacktraceback(VM* vm)
+{
+#define isloaded(vm, sname, closure) HashTable_get(&(vm)->loaded, sname, closure)
+
+    static const char* fmt1 = "\t['%s' on line %u] in ";
+    static const char* fmt2 = "\tin %s()\n";
+    sk_writetoerr("Stack traceback:\n");
+    for(int32_t i = vm->fc - 1; i >= 0; i--) {
+        CallFrame* frame = &vm->frames[i];
+        if(frame->closure) { // Skooma function ?
+            Chunk* chunk = &frame->closure->fn->chunk;
+            int32_t line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
+            Value _; // dummy
+            Value sname = OBJ_VAL(FFN(frame)->name);
+            bool loaded;
+            if((loaded = isloaded(vm, sname, &_))) vm->script = sname;
+            sk_writetoerrf(fmt1, AS_CSTRING(vm->script), line);
+            if(loaded) sk_writetoerr("script\n");
+            else sk_writetoerrf("%s()\n", FFN(frame)->name->storage);
+        } else // this is a C function
+            sk_writetoerrf(fmt2, AS_NATIVE(*frame->callee)->name->storage);
+    }
+
+#undef isloaded
+}
+*/
+
+
+/* Panic handler */
+int panic(VM* vm)
+{
+    // printerror(vm);
+    // stacktraceback(vm);
+    return 0; // FALLTHRU into 'abort()'
+}
+
+
+/* Allocator */
+static void* reallocate(void* ptr, size_t newc, void* _)
+{
+    (void)(_);
+    if(newc == 0) {
+        free(ptr);
+        return NULL;
+    }
+    return realloc(ptr, newc);
+}
+
+
+/* Create and allocate VM. */
+SK_LIBAPI VM* skaux_create(void)
+{
+    VM* vm = sk_create(reallocate, NULL);
+    if(likely(vm != NULL)) {
+        sk_setalloc(vm, reallocate, NULL);
+        sk_setpanic(vm, panic);
+    }
+    return vm;
+}
+
 
 
 SK_LIBAPI int sk_argerror(VM* vm, int argidx, const char* extra)
@@ -70,5 +148,3 @@ static ALE fileerror(VM* vm, const char* action, int32_t idx)
     sk_remove(vm, idx);
     return ALE_FILE;
 }
-
-

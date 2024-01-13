@@ -1,7 +1,7 @@
 #include "common.h"
 #include "reader.h"
 
-void BR_init(VM* vm, BuffReader* BR, ReadFn reader, void* userdata)
+void BuffReader_init(VM* vm, BuffReader* BR, ReadFn reader, void* userdata)
 {
     BR->n = 0;
     BR->buff = NULL;
@@ -15,7 +15,7 @@ void BR_init(VM* vm, BuffReader* BR, ReadFn reader, void* userdata)
  * 'ReadFn' should set the 'size' to the amount of bytes
  * reader read and return the pointer to the start of that
  * buffer. */
-int32_t BR_fill(BuffReader* BR)
+int32_t BuffReader_fill(BuffReader* BR)
 {
     size_t size;
     VM* vm = BR->vm;
@@ -31,12 +31,12 @@ int32_t BR_fill(BuffReader* BR)
 
 /* Read 'n' bytes from 'BuffReader' returning
  * count of unread bytes or 0 if all bytes were read. */
-int8_t BR_readn(BuffReader* BR, size_t n)
+int8_t BuffReader_readn(BuffReader* BR, size_t n)
 {
     while(n) {
         size_t min;
         if(BR->n == 0) {
-            if(BR_fill(BR) == SKEOF) return n;
+            if(BuffReader_fill(BR) == SKEOF) return n;
             BR->n++; // BR_fill decremented it
             BR->buff--; // Restore that character
         }

@@ -7,8 +7,7 @@
 #include "value.h"
 #include "vmachine.h"
 
-uint8_t protectedcompile(VM* vm, BuffReader* br, const char* name);
-uint8_t compile(VM* vm, BuffReader* br, const char* name, bool globscope);
+uint8_t pcompile(VM* vm, void* userdata, const char* name, uint8_t isingscope);
 void _cleanup_function(Function* F);
 void F_free(Function* F);
 void mark_function_roots(VM* vm);

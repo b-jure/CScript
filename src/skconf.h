@@ -7,9 +7,9 @@
 
 
 /* Check if double precision floating point is missing */
-#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||         \
-    __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 ||                              \
-    __DBL_MIN_10_EXP__ != -307 || __DBL_MIN_EXP__ != -1021
+#if !defined(__STDC_IEC_559__) || __DBL_DIG__ != 15 || __DBL_MANT_DIG__ != 53 ||                   \
+    __DBL_MAX_10_EXP__ != 308 || __DBL_MAX_EXP__ != 1024 || __DBL_MIN_10_EXP__ != -307 ||          \
+    __DBL_MIN_EXP__ != -1021
 #error "Compiler missing IEEE-754 double precision floating point!"
 #endif
 
@@ -61,11 +61,11 @@
 #define likely(cond)   cond
 #define unlikely(cond) cond
 #define unused
-#define unreachable                                                                      \
-    #include<stdio.h> #include<stdlib.h> printf(                                         \
-        "Unreachable code is reached: %s:%d\n",                                          \
-        __FILE__,                                                                        \
-        __LINE__);                                                                       \
+#define unreachable                                                                                \
+    #include<stdio.h> #include<stdlib.h> printf(                                                   \
+        "Unreachable code is reached: %s:%d\n",                                                    \
+        __FILE__,                                                                                  \
+        __LINE__);                                                                                 \
     abort();
 #define sk_noret void
 
@@ -161,11 +161,15 @@
 
 
 
-/* Default heap grow factor is 2.0. */
-#define GC_HEAP_GROW_FACTOR 2.0
-
-/* Default heap initial threshold is 1 MiB. */
+/* Default GC threshold is 1 mb. */
 #define GC_HEAP_INIT (1 << 20)
+
+/* Default lowest GC threshold (4 kb) */
+#define GC_HEAP_MIN 4096
+
+/* Default GC threshold grow factor */
+#define GC_HEAP_GROW_FACTOR 1.5
+
 
 
 

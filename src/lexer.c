@@ -16,24 +16,22 @@
 
 /* ================= Create/Free ================= */
 
-Lexer L_new(VM* vm, BuffReader* br)
+void L_init(Lexer* L, VM* vm, BuffReader* br)
 {
-    Lexer L;
-    L.vm = vm;
-    L.br = br;
-    L.c = brgetc(L.br); // prime the lexer
-    Array_Byte_init(&L.buffer, vm);
-    Array_Byte_init_cap(&L.buffer, 32);
-    L.line = 1;
-    L.panic = 0;
-    L.error = 0;
-    L.skip = 0;
-    return L;
+    L->vm = vm;
+    L->br = br;
+    L->c = brgetc(L->br); // prime the lexer
+    Array_Byte_init(&L->buffer, vm);
+    Array_Byte_init_cap(&L->buffer, 32);
+    L->line = 1;
+    L->panic = 0;
+    L->error = 0;
+    L->skip = 0;
 }
 
-void L_free(Lexer* lexer)
+void L_free(Lexer* L)
 {
-    Array_Byte_free(&lexer->buffer, NULL);
+    Array_Byte_free(&L->buffer, NULL);
 }
 
 /* ----------------------------------------------- */
@@ -130,6 +128,9 @@ static void lexerror(Lexer* lexer, const char* err, ...)
 
 /* Fetches the next character and stores it as current char */
 #define advance(l) ((l)->c = nextchar(l))
+
+/* Go back one character (byte) */
+#define fallback(l, oldc) (brungetc((l)->br), (l)->c = oldc)
 
 /* Push current character into lexer buffer */
 #define pushl(l) pushc(l, (l)->c)
@@ -671,10 +672,8 @@ Token scan(Lexer* lexer)
     if(lexer->c == SKEOF) return token(lexer, TOK_EOF, EMPTY_VAL);
     if(lexer->c == '_' || isalpha(lexer->c)) return idtoken(lexer);
     if(isdigit(lexer->c)) return number(lexer);
-        // Otherwise try single character tokens
 #ifdef SK_PRECOMPUTED_GOTO
 #define ERR &&err
-    // IMPORTANT: update accordingly if TokenType enum changes!
     // https://www.asciitable.com
     static const void* ASCII_table[UINT8_MAX + 1] = {
         ERR,     ERR,       ERR,     ERR,      ERR,      ERR,         ERR,      ERR,      ERR,
@@ -725,9 +724,12 @@ rbrace:
     return keywordtoken(lexer, TOK_RBRACE);
 dot:
     advance(lexer);
-    if(lmatch(lexer, '.') && lmatch(lexer, '.')) { // is '...' ?
-        return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
-    } else return token(lexer, TOK_DOT, EMPTY_VAL);
+    int32_t fallbackc = lexer->c;
+    if(lmatch(lexer, '.')) { // is '...' ?
+        if(lmatch(lexer, '.')) return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
+        else fallback(lexer, fallbackc);
+    }
+    return token(lexer, TOK_DOT, EMPTY_VAL);
 comma:
     return keywordtoken(lexer, TOK_COMMA);
 minus:
@@ -787,9 +789,12 @@ err:
             return keywordtoken(lexer, TOK_RBRACE);
         case '.':
             advance(lexer);
-            if(lmatch(lexer, '.') && lmatch(lexer, '.')) {
-                return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
-            } else return token(lexer, TOK_DOT, EMPTY_VAL);
+            int32_t fallbackc = lexer->c;
+            if(lmatch(lexer, '.')) { // is '...' ?
+                if(lmatch(lexer, '.')) return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
+                else fallback(lexer, fallbackc);
+            }
+            return token(lexer, TOK_DOT, EMPTY_VAL);
         case ',':
             return keywordtoken(lexer, TOK_COMMA);
         case '-':
