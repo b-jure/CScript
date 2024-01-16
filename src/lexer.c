@@ -85,7 +85,7 @@ void regcomperror(Lexer* lexer, const char* err, va_list args)
     lexer->error = true;
     VM* vm = lexer->vm;
     const Token* token = &lexer->previous;
-    OString* prefix = OString_fmt(vm, prefix_fmt, AS_CSTRING(vm->script), token->line);
+    OString* prefix = OString_fmt(vm, prefix_fmt, vm->source->storage, token->line);
     push(vm, OBJ_VAL(prefix));
     if(token->type == TOK_EOF) {
         push(vm, OBJ_VAL(OString_fmt(vm, " at end of file: ")));

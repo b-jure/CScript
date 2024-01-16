@@ -35,14 +35,16 @@ typedef enum {
     CFI_FRESH = 1,
 } CFInfo;
 
-typedef struct {
+struct CallFrame {
     OClosure* closure;
     uint8_t* ip; /* Instruction pointer (closure chunk) */
     Value* callee; /* Pointer to the callee on the stack */
     int32_t retcnt; /* Expected value return count */
     int32_t vacnt; /* Count of extra arguments in vararg functions */
+    // @TODO[debug] uint32_t firsttransfer; /* debug info */
+    // @TODO[debug] uint32_t ntransferrs; /* debug info */
     uint8_t cfinfo; /* Additional context */
-} CallFrame;
+};
 
 /* Fetch the frame closure (skooma function) */
 #define FFN(frame) (frame->closure->fn)
@@ -101,10 +103,11 @@ struct VM {
     unsigned long seed; // randomized seed for hashing
     struct sk_longjmp* errjmp; // error longjmp
     Status status; // status code
+    OString* source; // debug info (current source file)
     HashTable loaded; // loaded scripts
-    Value script; // current script name
     Function* F; // function state
     CallFrame frames[VM_CALLSTACK_LIMIT]; // call stack
+    CallFrame* firstframe; // ptr to the first frame @remove ?
     Int fc; // call stack length
     Value stack[VM_STACK_LIMIT]; // values stack
     Value* sp; // stack pointer
@@ -124,14 +127,14 @@ struct VM {
     size_t gscap; // gray stack capacity
 };
 
-// Set 'vm' script field (name of the current script)
-#define setscript(vm, name) (vm)->script = OBJ_VAL(OString_new(vm, name, strlen(name)));
-
 // Load script
 #define loadscript(vm, sname, sclosure) HashTable_insert(vm, &(vm)->loaded, sname, sclosure)
+// Check if script is loaded
+#define isloaded(vm, sname, sclosure) (HashTable_get(&(vm)->loaded, sname, &sclosure))
 
 /* Fetch the last call frame (current) */
 #define last_frame(vm) ((vm)->frames[(vm)->fc - 1])
+
 
 
 /* STACK */

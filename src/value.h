@@ -7,6 +7,7 @@
 
 typedef struct O O;
 typedef struct OString OString;
+typedef struct FnPrototype FnPrototype;
 typedef struct OFunction OFunction;
 typedef struct OClosure OClosure;
 typedef struct OUpvalue OUpvalue;

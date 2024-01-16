@@ -68,6 +68,10 @@
 typedef struct VM VM;
 
 
+/* Holds debug information */
+typedef struct DebugInfo DebugInfo;
+
+
 /* Native C function signature */
 typedef int (*CFunction)(VM* vm);
 
@@ -98,9 +102,6 @@ typedef enum {
     TT_CLASS,
     TT_INSTANCE,
     TT_FUNCTION,
-    TT_CLOSURE,
-    TT_NATIVE,
-    TT_METHOD,
     TT_CNT, // keep this last
 } TypeTag;
 
@@ -389,6 +390,51 @@ typedef enum {
 } GCOpt; // Garbage collector options
 
 /* ---------------------------------------- */ // garbage collector
+
+
+
+
+
+
+/*
+ * ============= debug API =============
+ * @https://www.lua.org/manual/5.4/manual.html#lua_Debug
+ */
+
+typedef enum {
+    DW_FNGET = 1, // get the function on top of the stack and pop it
+    DW_FN = 2, // push current function on top of the stack (after debugging)
+    DW_LINE = 4, // fill 'line'
+    DW_SRC = 8, // fill 'source', 'srclen', 'type', 'shortsrc'
+    DW_DEFINFO = 16, // fill 'nups', 'nparams' and 'isvararg'
+    // TODO@ DW_ARG = 32, // fill 'firsttransfer' and 'ntransfers'
+} DebugWhat; // bits for creating debug bitmask ('sk_getinfo')
+
+SK_API uint8_t getstack(VM* vm, int32_t level, DebugInfo* di);
+SK_API uint8_t sk_getinfo(VM* vm, uint8_t dbmask, DebugInfo* di);
+
+/* Forward declare the private type */
+typedef struct CallFrame CallFrame;
+
+struct DebugInfo {
+    int32_t event;
+    const char* source; // function name
+    const char* type; // function type ('Skooma', 'main' or 'C')
+    size_t srclen; // size of 'source' string
+    int32_t line; // current line in Skooma script
+    uint32_t nups; // number of function upvalues
+    uint32_t nparams; // number of function parameters
+    uint8_t isvararg; // is function vararg ('...')
+    int32_t defline; // line number where the function definition starts
+    int32_t deflastline; // line number where the function definition ends
+    // TODO@ int32_t firsttransfer; // index of first transferred value
+    // TODO@ int32_t ntransferrs; // number of transferred values
+    char shortsrc[SK_SRC_MAX]; // printable version of 'source'
+    /* private */
+    CallFrame* frame; // active function frame
+};
+
+/* ---------------------------------------- */ // debug API
 
 
 

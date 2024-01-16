@@ -5,8 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-// TODO: Make basic debug API in order to fetch line and file information.
-//       This will then be available to other libraries such as this one.
+
+// @TODO: Finish this, basic debugging is now implemented and I should
+//        be able to implement stack traceback.
 
 /*
 static force_inline void printerror(VM* vm)

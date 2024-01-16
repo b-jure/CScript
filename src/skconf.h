@@ -145,12 +145,19 @@
 
 
 
-
 /* Max function call frames.
  * This is basically size of a call stack (total
  * count of all the functions that are currently
  * being executed). */
 #define SK_CALLFRAMES_MAX 256
+
+
+
+
+/* Maximum size for the description of the source
+ * of a function in debug information. */
+#define SK_SRC_MAX 70
+
 
 
 

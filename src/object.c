@@ -33,7 +33,7 @@ const int overloadret[OM_DISPLAY + 1] = {
 static force_inline O* onew(VM* vm, size_t size, OType type)
 {
     O* object = GC_MALLOC(vm, size);
-    object->header = (uint64_t)vm->objects | ((uint64_t)type << 56);
+    object->header = cast(uint64_t, vm->objects) | (cast(uint64_t, type) << 56);
     osetmark(object, false);
     vm->objects = object; // Add object to the GC list
 #ifdef DEBUG_LOG_GC
@@ -60,16 +60,11 @@ OString* OString_new(VM* vm, const char* chars, size_t len)
     OString* interned = HashTable_get_intern(&vm->weakrefs, chars, len, hash);
     if(interned) return interned; // Return interned string
     OString* string = OString_alloc(vm, len);
-    /**
-     * According to C standard passing NULL pointer to memcpy
+    /* According to C standard passing NULL pointer to memcpy
      * is considered undefined behaviour even if the number
-     * of bytes to copy were 0.
-     **/
-    if(len == 0) *string->storage = '\0';
-    else {
-        memcpy(string->storage, chars, len);
-        string->storage[len] = '\0';
-    }
+     * of bytes to copy were 0. */
+    if(len != 0) memcpy(string->storage, chars, len);
+    string->storage[len] = '\0';
     string->hash = hash;
     push(vm, OBJ_VAL(string));
     HashTable_insert(vm, &vm->weakrefs, OBJ_VAL(string), NIL_VAL);
@@ -231,22 +226,25 @@ OString* unescape(VM* vm, OString* string)
 
 
 
-ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, bool isva, UInt upvals)
+ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, uint8_t isvararg, UInt upvalc)
 {
-    ONative* native = ALLOC_NATIVE(vm, upvals);
-    native->name = name;
+    ONative* native = ALLOC_NATIVE(vm, upvalc);
     native->fn = fn;
-    native->arity = arity;
-    native->isva = isva;
-    native->upvalc = upvals;
-    for(Int i = 0; i < upvals; i++)
+    FnPrototype* p = &native->p;
+    p->name = name;
+    p->arity = arity;
+    p->isvararg = isvararg;
+    p->upvalc = upvalc;
+    p->defline = -1;
+    p->deflastline = -1;
+    for(Int i = 0; i < upvalc; i++)
         native->upvalue[i] = NIL_VAL;
     return native;
 }
 
 static force_inline void ONative_free(VM* vm, ONative* native)
 {
-    GC_FREE(vm, native, sizeof(ONative) + (native->upvalc * sizeof(Value)));
+    GC_FREE(vm, native, sizeof(ONative) + (native->p.upvalc * sizeof(Value)));
 }
 
 
@@ -255,12 +253,8 @@ static force_inline void ONative_free(VM* vm, ONative* native)
 OFunction* OFunction_new(VM* vm)
 {
     OFunction* fn = ALLOC_OBJ(vm, OFunction, OBJ_FUNCTION);
-    fn->name = NULL;
-    fn->upvalc = 0;
-    fn->arity = 0;
-    fn->isva = 0;
-    fn->isinit = 0;
-    fn->gotret = 0;
+    FnPrototype* p = &fn->p;
+    memset(p, 0, sizeof(FnPrototype));
     Chunk_init(&fn->chunk, vm);
     return fn;
 }
@@ -273,8 +267,8 @@ static force_inline void ObjFunction_free(VM* vm, OFunction* fn)
 
 static force_inline void fnprint(OFunction* fn, FILE* stream)
 {
-    if(unlikely(fn->name == NULL)) fprintf(stream, "<script>");
-    else fprintf(stream, "<fn %s>: %p", fn->name->storage, fn);
+    if(unlikely(fn->p.name == NULL)) fprintf(stream, "<script>");
+    else fprintf(stream, "<fn %s>: %p", fn->p.name->storage, fn);
 }
 
 
@@ -283,19 +277,19 @@ static force_inline void fnprint(OFunction* fn, FILE* stream)
 
 OClosure* OClosure_new(VM* vm, OFunction* fn)
 {
-    OUpvalue** upvals = GC_MALLOC(vm, sizeof(OUpvalue*) * fn->upvalc);
-    for(UInt i = 0; i < fn->upvalc; i++)
+    FnPrototype* p = &fn->p;
+    OUpvalue** upvals = GC_MALLOC(vm, sizeof(OUpvalue*) * p->upvalc);
+    for(UInt i = 0; i < p->upvalc; i++)
         upvals[i] = NULL;
     OClosure* closure = ALLOC_OBJ(vm, OClosure, OBJ_CLOSURE);
     closure->fn = fn;
     closure->upvalue = upvals;
-    closure->upvalc = fn->upvalc;
     return closure;
 }
 
 static force_inline void OClosure_free(VM* vm, OClosure* closure)
 {
-    GC_FREE(vm, closure->upvalue, closure->upvalc * sizeof(OUpvalue*));
+    GC_FREE(vm, closure->upvalue, closure->fn->p.upvalc * sizeof(OUpvalue*));
     GC_FREE(vm, closure, sizeof(OClosure));
 }
 
@@ -640,7 +634,7 @@ void oge(VM* vm, Value l, Value r)
 
 
 
-/* Create/Get object string from 'object' */
+/* Get object string from 'object' */
 OString* otostr(VM* vm, O* object)
 {
 #ifdef SK_PRECOMPUTED_GOTO
@@ -659,15 +653,15 @@ OString* otostr(VM* vm, O* object)
         }
         CASE(OBJ_FUNCTION)
         {
-            return cast(OFunction*, object)->name;
+            return cast(OFunction*, object)->p.name;
         }
         CASE(OBJ_CLOSURE)
         {
-            return cast(OClosure*, object)->fn->name;
+            return cast(OClosure*, object)->fn->p.name;
         }
         CASE(OBJ_NATIVE)
         {
-            return cast(ONative*, object)->name;
+            return cast(ONative*, object)->p.name;
         }
         CASE(OBJ_UPVAL)
         {
@@ -686,7 +680,7 @@ OString* otostr(VM* vm, O* object)
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            return cast(OBoundMethod*, object)->method->fn->name;
+            return cast(OBoundMethod*, object)->method->fn->p.name;
         }
     }
     unreachable;
@@ -727,7 +721,7 @@ void oprint(VM* vm, Value value, FILE* stream)
         }
         CASE(OBJ_NATIVE)
         {
-            fprintf(stream, "<native-fn %s>", AS_NATIVE(value)->name->storage);
+            fprintf(stream, "<native-fn %s>", AS_NATIVE(value)->p.name->storage);
             BREAK;
         }
         CASE(OBJ_UPVAL)

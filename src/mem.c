@@ -116,7 +116,6 @@ MS_FN(markroots)
     markstatics(vm); // fast statics (interned strings)
     markinterned(vm); // normal statics (interned strings)
     markloaded(vm); // mark loaded script names table
-    vmark(vm, vm->script); // mark current script name value
 }
 
 MS_FN(rmweakrefs)
@@ -179,7 +178,8 @@ void mark_black(VM* vm, O* obj)
         CASE(OBJ_FUNCTION)
         {
             OFunction* fn = cast(OFunction*, obj);
-            omark(vm, cast(O*, fn->name));
+            omark(vm, cast(O*, fn->p.name));
+            omark(vm, cast(O*, fn->p.source));
             for(uint32_t i = 0; i < fn->chunk.constants.len; i++)
                 vmark(vm, fn->chunk.constants.data[i]);
             BREAK;
@@ -188,7 +188,7 @@ void mark_black(VM* vm, O* obj)
         {
             OClosure* closure = (OClosure*)obj;
             omark(vm, (O*)closure->fn);
-            for(uint32_t i = 0; i < closure->upvalc; i++)
+            for(uint32_t i = 0; i < closure->fn->p.upvalc; i++)
                 omark(vm, cast(O*, closure->upvalue[i]));
             BREAK;
         }
@@ -219,8 +219,8 @@ void mark_black(VM* vm, O* obj)
         CASE(OBJ_NATIVE)
         {
             ONative* native = cast(ONative*, obj);
-            omark(vm, cast(O*, native->name));
-            for(uint32_t i = 0; i < native->upvalc; i++)
+            omark(vm, cast(O*, native->p.name));
+            for(uint32_t i = 0; i < native->p.upvalc; i++)
                 vmark(vm, native->upvalue[i]);
             BREAK;
         }
@@ -304,6 +304,3 @@ void gcfree(VM* vm, void* ptr, size_t oldc, size_t newc)
     sk_assert(vm, newc <= oldc, "Can't allocate with 'gcfree'");
     REALLOC(vm, ptr, newc);
 }
-
-
-

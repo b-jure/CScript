@@ -290,19 +290,19 @@ SK_API void sk_pushbool(VM* vm, int boolean)
 
 /* Push C function (closure) on to the stack.
  * The 'args' is how many arguments this function expects (minimum),
- * 'isva' is a boolean value indicating if this function takes in
+ * 'isvararg' is a boolean value indicating if this function takes in
  * variable amount of arguments, 'upvals' is the number of
  * upvalues this C function (closure) has.
  * These upvalues are stored directly in this function and can
- * be accessed with the provided API in this source file.
+ * be accessed with the provided API in this header file.
  * This function will remove 'upvals' amount of values from the stack
- * and store them in this function. */
-SK_API void sk_pushcfn(VM* vm, CFunction fn, int args, int isva, unsigned int upvals)
+ * and store them in C closure. */
+SK_API void sk_pushcfn(VM* vm, CFunction fn, int args, int isvararg, unsigned int upvals)
 {
     sk_lock(vm);
     skapi_checkelems(vm, upvals);
     skapi_checkptr(vm, fn);
-    ONative* native = ONative_new(vm, NULL, fn, args, isva, upvals);
+    ONative* native = ONative_new(vm, NULL, fn, args, isvararg, upvals);
     vm->sp -= upvals;
     while(upvals--)
         native->upvalue[upvals] = *(vm->sp + upvals);
@@ -619,6 +619,7 @@ SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* dbgname
 
 SK_API int32_t sk_gc(VM* vm, GCOpt option, ...)
 {
+    // TODO: Finish implementing
     va_list argp;
     int32_t res = 0;
     sk_lock(vm);
@@ -791,11 +792,11 @@ static force_inline Value* getupval(Value fn, int n)
 {
     if(IS_CLOSURE(fn)) { // Skooma closure ?
         OClosure* closure = AS_CLOSURE(fn);
-        if(cast_uint(n) > closure->upvalc - 1) return NULL;
+        if(cast_uint(n) > closure->fn->p.upvalc - 1) return NULL;
         return closure->upvalue[n]->location;
     } else if(IS_NATIVE(fn)) { // native C function ?
         ONative* native = AS_NATIVE(fn);
-        if(cast_uint(n) > native->upvalc - 1) return NULL;
+        if(cast_uint(n) > native->p.upvalc - 1) return NULL;
         return &native->upvalue[n];
     } else return NULL;
 }

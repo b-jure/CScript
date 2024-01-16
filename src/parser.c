@@ -88,11 +88,8 @@ const char* comperrors[] = {
 // Return current chunk code offset
 #define codeoffset(F) (CHUNK(F)->code.len)
 
-// Any 'stack' size limit
-#define INDEX_MAX (MIN(VM_STACK_MAX, BYTECODE_MAX))
-
-
-
+// Is 'name' same as init method name
+#define isinit(F, name) (name == F->vm->faststatic[SS_INIT])
 
 
 
@@ -371,8 +368,7 @@ static force_inline int32_t inwhat(Scope* S, Scope** target)
 typedef enum {
     FN_FUNCTION = 1, // Normal function declaration
     FN_METHOD = 2, // Class method function
-    FN_INIT = 4, // Class initializer function
-    FN_SCRIPT = 8, // Top-level code (implicit function)
+    FN_SCRIPT = 4, // Top-level code (implicit function)
 } FunctionType;
 
 #define FCLEAR(F, modifier) bclear((F)->vflags, modifier)
@@ -537,7 +533,7 @@ static force_inline void coderet(Function* F, bool explicit, bool gotret)
         return;
     }
     if(!explicit) CODE(F, OP_RETSTART);
-    if(F->fn_type == FN_INIT) CODEOP(F, OP_GET_LOCAL, 0);
+    if(isinit(F, F->fn->p.name)) CODEOP(F, OP_GET_LOCAL, 0);
     else CODE(F, OP_NIL);
     CODE(F, OP_RET);
 }
@@ -578,20 +574,20 @@ static force_inline int32_t get_local(Function* F, Token* name)
 
 static uint32_t add_upval(Function* F, uint32_t idx, uint8_t flags, bool local)
 {
-    int32_t upvalc = F->fn->upvalc;
+    int32_t upvalc = F->fn->p.upvalc;
     sk_assert(F->vm, upvalc < cast_int(F->upvalues->len + 1), "Invalid upvalc.");
     for(int32_t i = 0; i < upvalc; i++) {
         Upvalue* upvalue = Array_Upvalue_index(F->upvalues, i);
         if(upvalue->idx == idx && upvalue->local == local) return i; // already exists
     }
     if(unlikely(upvalc >= VM_STACK_LIMIT)) {
-        error(F, comperrors[CE_UVALLIMIT], VM_STACK_LIMIT, F->fn->name->storage);
+        error(F, comperrors[CE_UVALLIMIT], VM_STACK_LIMIT, F->fn->p.name->storage);
         return 0;
     }
     Upvalue upval = {idx, flags, local};
     if(upvalc == cast_int(F->upvalues->len)) Array_Upvalue_push(F->upvalues, upval);
     else *Array_Upvalue_index(F->upvalues, upvalc) = upval;
-    return F->fn->upvalc++;
+    return F->fn->p.upvalc++;
 }
 
 static int32_t get_upval(Function* F, Token* name)
@@ -847,15 +843,17 @@ static void F_init(
     Local* local = F->locals.data;
     local->depth = 0;
     local->flags = 0;
-    if(fn_type & (FN_METHOD | FN_INIT)) {
+    if(fn_type == FN_METHOD) {
         local->name.start = "self";
         local->name.len = 4;
     } else {
         local->name.start = "";
         local->name.len = 0;
     }
-    if(fn_type == FN_SCRIPT) F->fn->name = AS_STRING(vm->script);
-    else F->fn->name = OString_new(vm, PREVT(F).start, PREVT(F).len);
+    if(fn_type != FN_SCRIPT) {
+        F->fn->p.defline = PREVT(F).line;
+        F->fn->p.name = OString_new(vm, PREVT(F).start, PREVT(F).len);
+    }
 }
 
 void F_free(Function* F)
@@ -972,29 +970,29 @@ static force_inline void expect(Function* F, TokenType type, const char* err)
 static force_inline OFunction* compile_end(Function* F)
 {
     coderet(F, false, F->fn->gotret);
+    Chunk* c = &F->fn->chunk;
+    F->fn->p.deflastline = PREVT(F).line;
 #ifdef SK_DEBUG_PRINT_CODE
-    if(!F->lexer->error) {
-        OFunction* fn = F->fn;
-        Chunk_debug(F->vm, CHUNK(F), fn->name->storage);
-    }
+    if(!F->lexer->error) Chunk_debug(F->vm, CHUNK(F), F->fn->name->storage);
 #endif
     return F->fn;
 }
 
 
-// Compiles source code, 'global' determines if the script
-// 'name' is in global or local scope.
-// Parser only registers compile-time errors but does not
+// Compiles source code, 'isingscope' determines if the script getting
+// compiled is in global or local scope.
+// Additionally parser only registers compile-time errors but it does not
 // call the usual 'runerror' [@err.h], this ensures that all of the
-// compile-time errors will be reported/returned.
+// compile-time errors will be reported.
 OClosure* compile(VM* vm, BuffReader* br, const char* name, bool isingscope)
 {
     Scope globalscope, local;
     Function F;
     Lexer L;
-    setscript(vm, name);
+    if(name == NULL) name = "?";
     L_init(&L, vm, br);
     F_init(&F, &globalscope, NULL, vm, &L, FN_SCRIPT, vm->F);
+    vm->source = F.fn->p.source = OString_new(F.vm, name, strlen(name));
     startscope(&F, &globalscope, 0, 0);
     if(!isingscope) // script not in global scope?
         startscope(&F, &local, 0, 0);
@@ -1010,7 +1008,6 @@ OClosure* compile(VM* vm, BuffReader* br, const char* name, bool isingscope)
         OClosure* closure = OClosure_new(vm, fn);
         pop(vm); // 'fn'
         push(vm, OBJ_VAL(closure));
-        loadscript(vm, vm->script, OBJ_VAL(closure)); // only load if no errors
         return closure;
     }
     return NULL;
@@ -1278,7 +1275,7 @@ static const struct {
 // vararg ::= '...'
 static force_inline uint32_t vararg(Function* F)
 {
-    if(!F->fn->isva) error(F, comperrors[CE_VARARG]);
+    if(!F->fn->p.isvararg) error(F, comperrors[CE_VARARG]);
     return CODEOP(F, OP_VALIST, 1);
 }
 
@@ -1453,10 +1450,10 @@ static void arglist(Function* F)
 {
     do {
         if(match(F, TOK_DOT_DOT_DOT)) {
-            F->fn->isva = true;
+            F->fn->p.isvararg = 1;
             break;
         }
-        F->fn->arity++;
+        F->fn->p.arity++;
         name(F, expectstr("Expect parameter name."));
         INIT_LOCAL(F, 0);
     } while(match(F, TOK_COMMA));
@@ -1535,14 +1532,13 @@ static void fn(Function* F, FunctionType type)
     startscope(Fnew, &S, 0, 0); // no need to end this scope
     expect(Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
     if(!check(Fnew, TOK_RPAREN)) arglist(Fnew);
-    if(F->fn->isva) expect(Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
+    if(F->fn->p.isvararg) expect(Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
     else expect(Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
     expect(Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
     block(Fnew); // body
     OFunction* fn = compile_end(Fnew);
-    fn->isinit = (type == FN_INIT);
     CODEOP(F, OP_CLOSURE, make_constant(F, OBJ_VAL(fn)));
-    for(uint32_t i = 0; i < fn->upvalc; i++) {
+    for(uint32_t i = 0; i < fn->p.upvalc; i++) {
         Upvalue* upval = Array_Upvalue_index(Fnew->upvalues, i);
         CODE(F, upval->local ? 1 : 0);
         CODEL(F, upval->idx);
@@ -1566,10 +1562,8 @@ static void method(Function* F)
     expect(F, TOK_IDENTIFIER, expectstr("Expect method name."));
     Value identifier = tokintostr(F->vm, &PREVT(F));
     uint32_t idx = make_constant(F, identifier);
-    FunctionType type = FN_METHOD;
-    if(AS_STRING(identifier) == F->vm->faststatic[SS_INIT]) type = FN_INIT;
-    fn(F, type);
-    if(type == FN_INIT) CODEOP(F, OP_OVERLOAD, SS_INIT);
+    fn(F, FN_METHOD);
+    if(isinit(F, AS_STRING(identifier))) CODEOP(F, OP_OVERLOAD, SS_INIT);
     CODEOP(F, OP_METHOD, idx);
 }
 
@@ -2073,12 +2067,11 @@ static void returnstm(Function* F)
      */
     Context C;
     bool gotret = F->fn->gotret;
-    FunctionType type = F->fn_type;
     savecontext(F, &C);
     CODE(F, OP_RETSTART);
     if(match(F, TOK_SEMICOLON)) coderet(F, true, gotret);
     else {
-        if(type == FN_INIT) error(F, comperrors[CE_INITRET], static_strings[SS_INIT].name);
+        if(isinit(F, F->fn->p.name)) error(F, comperrors[CE_INITRET], static_strings[SS_INIT].name);
         Exp E;
         E.ins.set = false;
         explist(F, PARSER_RET_LIMIT, &E);

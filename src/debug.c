@@ -3,10 +3,167 @@
 #include "debug.h"
 #include "mem.h"
 #include "object.h"
-#include "skconf.h"
+#include "skapi.h"
+#include "vmachine.h"
 
 #include <stdio.h>
 
+
+#define isSkooma(cf) ((cf)->closure)
+
+
+// Load current function/frame into the 'private' part of 'DebugInfo'.
+// Level 0 means the current function, level 1 the function that
+// invoked the current one, and so on...
+// If 'level' is invalid, this function returns 0 otherwise 1.
+SK_API uint8_t sk_getstack(VM* vm, int32_t level, DebugInfo* di)
+{
+    CallFrame* frame = NULL;
+    if(level > vm->fc || level < 0) return 0;
+    sk_lock(vm);
+    frame = &vm->frames[vm->fc - 1 - level];
+    di->frame = frame;
+    sk_unlock(vm);
+    return 1;
+}
+
+
+// Gets function definition information.
+// Sets 'defline', 'deflastline', 'isvararg', 'nups' and 'nparams'
+// in 'DebugInfo'.
+//
+// 'defline' - line on which the function definition begins
+// 'deflastline' - function definition last line
+// 'isvararg' - does this function take variable number of arguments
+// 'nups' - number of upvalues
+// 'nparams' - function arity (min amount of arguments)
+static void getfndefinfo(VM* vm, Value cl, DebugInfo* di)
+{
+    FnPrototype* p = NULL;
+    p = ((IS_CLOSURE(cl)) ? &AS_CLOSURE(cl)->fn->p : &AS_NATIVE(cl)->p);
+    di->defline = p->defline;
+    di->deflastline = p->deflastline;
+    di->isvararg = p->isvararg;
+    di->nups = p->upvalc;
+    di->nparams = p->arity;
+}
+
+
+// Gets source information into 'DebugInfo'.
+// Sets 'type', 'source', 'srclen' and 'shortsrc'.
+//
+// 'type' - can be 'Skooma', 'main' (top-level function) or 'C'.
+// 'source' - name of the function
+// 'srclen' - length of 'source' string
+// 'shortsrc' - printable version of 'source'
+static void getsrcinfo(VM* vm, Value cl, CallFrame* cf, DebugInfo* di)
+{
+    sk_assert(vm, cf != NULL, "CallFrame is NULL");
+    di->source = vtostr(vm, cl)->storage;
+    if(IS_CLOSURE(cl)) { // Skooma closure
+        if(cf && (cf->cfinfo & CFI_FRESH)) di->type = "main";
+        else di->type = "Skooma";
+        if(di->source == NULL) di->source = AS_CLOSURE(cl)->fn->p.source->storage;
+        sk_assert(vm, di->source != NULL, "Skooma function is name NULL");
+    } else { // C closure
+        sk_assert(vm, di->source != NULL, "Native C function name NULL");
+        di->type = "C";
+    }
+    di->srclen = strlen(di->source);
+    uint8_t len = MIN(di->srclen, SK_SRC_MAX);
+    memcpy(di->shortsrc, di->source, len);
+    di->shortsrc[len - 1] = '\0';
+}
+
+
+// Auxiliary function to 'auxgetinfo'
+// Sets 'line' in 'DebugInfo'.
+//
+// 'line' - current line number
+static force_inline void auxgetline(Value cl, CallFrame* cf, DebugInfo* di)
+{
+    if(cf && isSkooma(cf)) {
+        Chunk* c = &AS_CLOSURE(cl)->fn->chunk;
+        di->line = Chunk_getline(c, cf->ip - c->code.data);
+    } else di->line = -1;
+}
+
+
+// TODO: Debug API value transfer information
+// Sets 'firsttransfer' and 'ntransfers' in 'DebugInfo'.
+//
+// 'firsttransfer' - index of first transferred value during
+//                   function return or function call.
+// 'ntransfers' - total count of transferred values.
+// static void gettransfers(VM* vm, Value cl, CallFrame* cf, DebugInfo* di)
+// {
+//     if(cf) {
+//         FnPrototype* p = NULL;
+//         p = (isSkooma(cf) ? &AS_CLOSURE(cl)->fn->p : &AS_NATIVE(cl)->p);
+//         di->firsttransfer = cf->firsttransfer;
+//         di->ntransferrs = cf->ntransferrs;
+//     } else di->firsttransfer = di->ntransferrs = 0;
+// }
+
+
+// Auxiliary to 'sk_getinfo', parses debug bit mask and
+// fills out the 'DebugInfo' accordingly.
+// If any invalid bit/option is inside the 'dbmask' this
+// function returns 0, otherwise 1.
+static uint8_t auxgetinfo(VM* vm, uint8_t dbmask, Value* cl, CallFrame* cf, DebugInfo* di)
+{
+    uint8_t status = 1;
+    for(uint8_t bit = 3; dbmask > 0; bit++) {
+        switch(bit) {
+            case 3:; // DW_LINE
+                auxgetline(*cl, cf, di);
+                break;
+            case 4: // DW_SRC
+                getsrcinfo(vm, *cl, cf, di);
+                break;
+            case 5: // DW_DEFINFO
+                getfndefinfo(vm, *cl, di);
+                break;
+                // TODO@ DW_ARG
+            case 6:
+                // gettransfers(vm, *cl, cf, di);
+                // break;
+            case 7: // unused
+            case 8: // unused
+                status = 0;
+                break;
+            default:
+                unreachable;
+        }
+        dbmask >>= 1;
+    }
+    return status;
+}
+
+// Fill out 'DebugInfo' according to 'dbmask'.
+// Return 0 if any of the bits in 'dbmask' is invalid,
+// otherwise 1.
+SK_API uint8_t sk_getinfo(VM* vm, uint8_t dbmask, DebugInfo* di)
+{
+    Value* fn = NULL;
+    CallFrame* frame = NULL;
+    uint8_t status = 1;
+    uint8_t pushfn = dbmask & DW_FN;
+    sk_lock(vm);
+    if(dbmask & DW_FNGET) { // first bit is set ?
+        fn = stackpeek(0);
+        skapi_checktype(vm, *fn, TT_FUNCTION);
+    } else {
+        frame = &last_frame(vm);
+        fn = last_frame(vm).callee;
+        sk_assert(vm, val2type(*fn) == TT_FUNCTION, "expect function");
+    }
+    dbmask >>= 2; // skip DW_FNGET and DW_FN
+    status = auxgetinfo(vm, dbmask, fn, frame, di);
+    if(pushfn) skapi_pushval(vm, *fn);
+    sk_unlock(vm);
+    return status;
+}
 
 void dumpstack(VM* vm, CallFrame* frame, Byte* ip)
 {
@@ -54,7 +211,7 @@ static uint32_t closure(VM* vm, Chunk* chunk, uint32_t param, uint32_t offset)
     vprint(vm, value, stderr);
     printf("\n");
     OFunction* fn = AS_FUNCTION(value);
-    for(uint32_t i = 0; i < fn->upvalc; i++) {
+    for(uint32_t i = 0; i < fn->p.upvalc; i++) {
         bool local = chunk->code.data[offset++];
         offset++; // flags
         uint32_t idx = GET_BYTES3(&chunk->code.data[offset]);

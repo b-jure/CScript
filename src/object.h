@@ -105,40 +105,61 @@ static force_inline bool isotype(Value value, OType type)
     return IS_OBJ(value) && otype(AS_OBJ(value)) == type;
 }
 
+
+
+
+
+
+/*
+ * ================ objects ================
+ */
 struct OString { // typedef is inside 'value.h'
-    O obj; // shared header
+    O obj; // common header
     uint32_t len; // string length (excluding null term)
     Hash hash; // cached hash
     char storage[]; // bytes (chars)
 };
 
 struct OUpvalue { // typedef is inside 'value.h'
-    O obj; // shared header
+    O obj; // common header
     Value closed;
     Value* location; // ptr to 'closed' or VM stack
     OUpvalue* next; // chain
 };
 
-struct OFunction { // typedef is inside 'value.h'
-    O obj; // shared header
-    Chunk chunk; // bytecode and constants
-    OString* name; // script name
-    uint32_t upvalc; // number of upvalues
-    uint32_t arity; // Min amount of arguments required
-    uint8_t isva : 1; // If this function takes valist
-    uint8_t isinit : 1; // If this function is class initializer
-    uint8_t gotret : 1; // last instruction is 'OP_TOP/RET'
+// Function prototype
+struct FnPrototype {
+    OString* name; // for function declarations and native C functions
+    OString* source; // for top-level functions ('main')
+    int32_t defline; // debug info
+    int32_t deflastline; // debug info
+    int32_t arity; // min number of parameters
+    uint32_t upvalc; // upvalues count
+    uint8_t isvararg;
 };
 
+struct OFunction { // typedef is inside 'value.h'
+    O o; // common header
+    FnPrototype p; // function prototype
+    Chunk chunk; // bytecode and constants
+    uint8_t gotret : 1; // @maybe_remove
+};
+
+typedef struct {
+    O obj; // common header
+    FnPrototype p; // function prototype
+    CFunction fn; // C function
+    Value upvalue[1]; // list of upvalues
+} ONative; // Native function written in C
+
 struct OClosure { // typedef is inside 'value.h'
-    O obj; // shared header
+    O obj; // common header
     OFunction* fn; // wrapped function
     OUpvalue** upvalue; // array of ptr to OUpvalue
-    uint32_t upvalc; // array len
 };
 
 struct OClass { // typedef is inside 'value.h'
-    O obj; // shared header
+    O obj; // common header
     OString* name; // class name
     HashTable methods; // class methods
     OClosure* omethods[OM_CNT]; // overloaded methods
@@ -146,26 +167,27 @@ struct OClass { // typedef is inside 'value.h'
 };
 
 struct OInstance { // typedef is inside 'value.h'
-    O obj; // shared header
+    O obj; // common header
     OClass* oclass; // ptr to class we instantiated from
     HashTable fields; // Instance fields
 };
 
 struct OBoundMethod { // typedef is inside 'value.h'
-    O obj; // shared header
+    O obj; // common header
     Value receiver; // ptr to OInstance this method is bound to
     OClosure* method;
 };
 
-typedef struct {
-    O obj; // shared header
-    CFunction fn; // native functions signature
-    OString* name; // native function name
-    int32_t arity; // how many arguments
-    bool isva; // is this vararg function
-    uint32_t upvalc;
-    Value upvalue[1]; // list of upvalues
-} ONative; // Native function written in C
+/* --------------------------------------------------------- */ // objects
+
+
+
+
+
+
+/*
+ * ================== Object functions ==================
+ */
 
 /* Construct object strings */
 OString* OString_new(VM* vm, const char* chars, size_t len);
@@ -201,7 +223,7 @@ OClosure* OClosure_new(VM* vm, OFunction* fn);
 
 /* Create native C function */
 ONative*
-ONative_new(VM* vm, OString* name, CFunction fn, int32_t arity, bool isva, uint32_t upvals);
+ONative_new(VM* vm, OString* name, CFunction fn, int32_t arity, uint8_t isvararg, uint32_t upvals);
 
 
 /* Create skoomoa function */
@@ -245,10 +267,14 @@ Hash ohash(Value value);
 /* Free object memory */
 void ofree(VM* vm, O* object);
 
+/* ------------------------------------------------------ */ // object functions
+
+
+
+
 
 /* Array holding 'retcnt' for each overload-able method (excluding operators) */
 extern const int32_t overloadret[OM_DISPLAY + 1];
-
 
 
 #endif

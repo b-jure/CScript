@@ -6,6 +6,7 @@
 #include "object.h"
 #include "parser.h"
 #include "skapi.h"
+#include "sklimits.h"
 #include "value.h"
 #include "vmachine.h"
 
@@ -53,27 +54,21 @@ int8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
  * provide less arguments than the function arity. */
 static int32_t precall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
 {
+    FnPrototype* p = NULL;
     CallFrame* frame = &vm->frames[vm->fc];
-    int32_t arity, isva, isnative;
     int32_t type = CALL_SKOOMAFN;
-    const char* name = NULL;
-    isnative = IS_NATIVE(callee);
-    if(!isnative) {
+    if(!IS_NATIVE(callee)) {
         OClosure* closure = AS_CLOSURE(callee);
         OFunction* fn = closure->fn;
+        p = &fn->p;
         frame->closure = closure;
         frame->ip = fn->chunk.code.data;
-        arity = fn->arity;
-        isva = fn->isva;
-        name = fn->name->storage;
     } else {
         ONative* native = AS_NATIVE(callee);
+        p = &native->p;
         frame->closure = NULL;
         frame->ip = NULL;
-        arity = native->arity;
-        isva = native->isva;
         type = CALL_NATIVEFN;
-        name = native->name->storage;
     }
 #if defined(callbitmask)
     const static void* jmptable[] = {
@@ -82,28 +77,29 @@ static int32_t precall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
         &&callstack_overflow,
         &&ok,
     };
-    uint32_t bitmask = callbitmask(vm, isva, arity, argc, retcnt);
+    uint32_t bitmask = callbitmask(vm, p->isvararg, p->arity, argc, retcnt);
     uint8_t idx = sk_ctz(bitmask);
     goto* jmptable[idx];
 stack_overflow:
-    retovferror(vm, name);
+    retovferror(vm, p->name->storage);
 invalid_argc:
-    arityerror(vm, arity, argc);
+    arityerror(vm, p->arity, argc);
 callstack_overflow:
     fcovferror(vm);
 #else
     if(unlikely(!sk_ensurestack(vm, retcnt))) {
-        retovferror(vm, name);
-    } else if(unlikely((isva && arity > argc) || (!isva && arity != argc))) {
-        arityerror(vm, arity, argc);
-    } else if(unlikely(vm->fc == VM_FRAMES_MAX)) {
+        retovferror(vm, p->name->storage);
+    } else if(unlikely((p->isvararg && p->arity > argc) || (!p->isvararg && p->arity != argc))) {
+        arityerror(vm, p->arity, argc);
+    } else if(unlikely(vm->fc == VM_CALLSTACK_LIMIT)) {
         fcovferror(vm);
     } else goto ok;
 #endif
 ok:
-    frame->vacnt = argc - arity;
+    frame->vacnt = argc - p->arity;
     frame->retcnt = retcnt;
     frame->callee = vm->sp - argc - 1;
+    frame->cfinfo = 0;
     vm->fc++;
     return type;
 }
@@ -456,7 +452,7 @@ void run(VM* vm)
                 uint32_t vacnt = READ_BYTEL();
                 if(vacnt == 0) vacnt = frame->vacnt;
                 for(uint32_t i = 1; i <= vacnt; i++) {
-                    Value* next = frame->callee + fn->arity + i;
+                    Value* next = frame->callee + fn->p.arity + i;
                     push(vm, *next);
                 }
                 BREAK;
@@ -778,7 +774,7 @@ void run(VM* vm)
                 OFunction* fn = AS_FUNCTION(READ_CONSTANT());
                 OClosure* closure = OClosure_new(vm, fn);
                 push(vm, OBJ_VAL(closure));
-                for(uint32_t i = 0; i < closure->upvalc; i++) {
+                for(uint32_t i = 0; i < closure->fn->p.upvalc; i++) {
                     uint8_t local = READ_BYTE();
                     uint32_t idx = READ_BYTEL();
                     if(local) closure->upvalue[i] = captureupval(vm, frame->callee + idx);
@@ -964,7 +960,6 @@ void VM_init(VM* vm)
     vm->objects = NULL;
     vm->F = NULL;
     vm->open_upvals = NULL;
-    vm->script = NIL_VAL;
     vm->gc.gc_heapmin = GC_HEAP_MIN;
     vm->gc.gc_nextgc = GC_HEAP_INIT; // 1 MiB
     vm->gc.gc_allocated = 0;
