@@ -54,14 +54,12 @@
 
 
 /*
- * Skooma uses only doubles for its number
- * representation there is no integer type,
- * this is to retain consistency between NaN
- * boxing and tagged union value representation.
+ * ============== Skooma types ==============
  */
-#define SK_NUMBER double
-#define sk_number SK_NUMBER
 
+
+/* Skooma number */
+typedef double sk_number;
 
 
 /* Virtual Machine */
@@ -89,10 +87,6 @@ typedef const char* (*ReadFn)(VM* vm, void* userdata, size_t* szread);
 
 
 
-/*
- * ============== value types ==============
- */
-
 #define TT_NONE (-1) // indicates absence of value
 typedef enum {
     TT_NIL = 0,
@@ -105,7 +99,10 @@ typedef enum {
     TT_CNT, // keep this last
 } TypeTag;
 
-/* -------------------------------------------------*/ // value types
+/* -------------------------------------------------*/ // Skooma types
+
+
+
 
 
 
@@ -149,6 +146,9 @@ typedef enum {
 
 
 
+
+
+
 /*
  * ========== API check ==========
  */
@@ -156,6 +156,10 @@ typedef enum {
 SK_API int sk_ensurestack(VM* vm, int n);
 
 /* -------------------------------------------------*/ // API check
+
+
+
+
 
 
 
@@ -168,6 +172,8 @@ SK_API void sk_resetvm(VM* vm);
 SK_API void sk_destroy(VM** vmp);
 
 /* -------------------------------------------------*/ // create/destroy
+
+
 
 
 
@@ -210,6 +216,9 @@ SK_API void sk_arith(VM* vm, Ar op);
 
 
 
+
+
+
 /*
  * ========== push functions, skooma -> stack ==========
  */
@@ -227,6 +236,7 @@ SK_API void sk_push(VM* vm, int idx);
 
 
 
+
 /*
  * ========== get functions, skooma -> stack ==========
  */
@@ -236,6 +246,8 @@ SK_API int sk_getglobal(VM* vm, const char* name);
 SK_API TypeTag sk_getfield(VM* vm, int idx, const char* field);
 
 /* -------------------------------------------------*/ // get functions
+
+
 
 
 
@@ -251,6 +263,10 @@ SK_API ReadFn sk_setreader(VM* vm, ReadFn readfn);
 SK_API AllocFn sk_setalloc(VM* vm, AllocFn allocfn, void* ud);
 
 /* -------------------------------------------------*/ // set functions
+
+
+
+
 
 
 /*
@@ -279,6 +295,10 @@ SK_API const char* sk_getstring(const VM* vm, int idx);
 SK_API CFunction sk_tocfunction(const VM* vm, int idx);
 
 /* -------------------------------------------------*/ // get/access
+
+
+
+
 
 
 
@@ -314,8 +334,11 @@ SK_API int sk_setglobal(VM* vm, const char* name, int isfixed);
 
 
 
+
+
+
 /*
- * ========== miscellaneous functions ==========
+ * ========== error reporting ==========
  */
 
 /* Runtime status codes */
@@ -344,8 +367,19 @@ typedef enum {
     S_CNT,
 } Status;
 
+SK_API Status sk_getstatus(VM* vm);
 SK_API int sk_error(VM* vm, Status errcode);
 
+/* -------------------------------------------------*/ // error reporting
+
+
+
+
+
+
+/*
+ * ========== miscellaneous functions ==========
+ */
 SK_API int sk_version(VM* vm);
 SK_API const char* sk_tostring(VM* vm, int idx);
 SK_API int sk_getupvalue(VM* vm, int fidx, int idx);
@@ -353,6 +387,7 @@ SK_API int sk_setupvalue(VM* vm, int fidx, int idx);
 SK_API size_t sk_strlen(const VM* vm, int idx);
 
 /* -------------------------------------------------*/ // misc functions
+
 
 
 
@@ -371,6 +406,7 @@ SK_API void sk_call(VM* vm, int argc, int retcnt);
 SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* dbgname);
 
 /* -------------------------------------------------*/ // call/load/run
+
 
 
 
@@ -396,120 +432,43 @@ typedef enum {
 
 
 
+
+
 /*
  * ============= debug API =============
  * @https://www.lua.org/manual/5.4/manual.html#lua_Debug
  */
 
 typedef enum {
-    DW_FNGET = 1, // get the function on top of the stack and pop it
-    DW_FN = 2, // push current function on top of the stack (after debugging)
-    DW_LINE = 4, // fill 'line'
-    DW_SRC = 8, // fill 'source', 'srclen', 'type', 'shortsrc'
-    DW_DEFINFO = 16, // fill 'nups', 'nparams' and 'isvararg'
-    // TODO@ DW_ARG = 32, // fill 'firsttransfer' and 'ntransfers'
+    DW_FNGET = (1 << 0), // load the function on top of the stack (processed first)
+    DW_LINE = (1 << 1), // fill 'line'
+    DW_FNINFO = (1 << 2), // fill all function info in 'DebugInfo'
+    DW_FNSRC = (1 << 3), // fill function source information
+    DW_FNPUSH = (1 << 4), // push current function on the stack (processed last)
 } DebugWhat; // bits for creating debug bitmask ('sk_getinfo')
 
-SK_API uint8_t getstack(VM* vm, int32_t level, DebugInfo* di);
+SK_API uint8_t sk_getstack(VM* vm, int32_t level, DebugInfo* di);
 SK_API uint8_t sk_getinfo(VM* vm, uint8_t dbmask, DebugInfo* di);
 
 /* Forward declare the private type */
 typedef struct CallFrame CallFrame;
 
 struct DebugInfo {
-    int32_t event;
-    const char* source; // function name
+    const char* name; // function name (declaration name in Skooma script)
     const char* type; // function type ('Skooma', 'main' or 'C')
-    size_t srclen; // size of 'source' string
+    const char* source; // function source
+    size_t srclen; // length of 'source'
     int32_t line; // current line in Skooma script
     uint32_t nups; // number of function upvalues
     uint32_t nparams; // number of function parameters
     uint8_t isvararg; // is function vararg ('...')
     int32_t defline; // line number where the function definition starts
     int32_t deflastline; // line number where the function definition ends
-    // TODO@ int32_t firsttransfer; // index of first transferred value
-    // TODO@ int32_t ntransferrs; // number of transferred values
-    char shortsrc[SK_SRC_MAX]; // printable version of 'source'
+    char shortsrc[SK_SRCID_MAX];
     /* private */
     CallFrame* frame; // active function frame
 };
 
 /* ---------------------------------------- */ // debug API
-
-
-
-
-
-
-/*
- * ========== Static strings ==========
- */
-
-/* Indices into static strings table (fast access) */
-typedef enum {
-    /* Value types */
-    SS_NIL = 0,
-    SS_NUM,
-    SS_STR,
-    SS_BOOL,
-    SS_CLASS,
-    SS_INS,
-    SS_FUNC,
-    SS_CLS,
-    SS_NAT,
-    SS_UPVAL,
-    SS_METHOD,
-    /* Boolean strings */
-    SS_TRUE,
-    SS_FALSE,
-    /* Class overload-able method names. */
-    SS_INIT,
-    SS_DISP,
-#if defined(SK_OVERLOAD_OPS)
-    SS_ADD,
-    SS_SUB,
-    SS_MUL,
-    SS_DIV,
-    SS_MOD,
-    SS_POW,
-    SS_NOT,
-    SS_UMIN,
-    SS_NE,
-    SS_EQ,
-    SS_LT,
-    SS_LE,
-    SS_GT,
-    SS_GE,
-#endif
-    /* Class special field names. */
-    SS_DBG,
-    /* Operator strings */
-    SS_OPADD,
-    SS_OPSUB,
-    SS_OPMUL,
-    SS_OPDIV,
-    SS_OPMOD,
-    SS_OPEXP,
-    SS_OPNOT,
-    SS_OPNEG,
-    SS_OPNE,
-    SS_OPEQ,
-    SS_OPLT,
-    SS_OPLE,
-    SS_OPGT,
-    SS_OPGE,
-    SS_OPAND,
-    SS_OPOR,
-    SS_SIZE,
-} SSTag;
-
-typedef struct {
-    const char* name;
-    const uint8_t len;
-} InternedString;
-
-extern const InternedString static_strings[SS_SIZE];
-
-/* -------------------------------------------------*/
 
 #endif // SKOOMA_H

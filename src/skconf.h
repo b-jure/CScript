@@ -21,7 +21,7 @@
 #if defined(__GNUC__)
 #define SK_PRECOMPUTED_GOTO
 #define force_inline   __always_inline
-#define likely(cond)   __builtin_expect(cond, 1)
+#define likely(cond)   __builtin_expect(cond, 2)
 #define unlikely(cond) __builtin_expect(cond, 0)
 #define unused         __attribute__((unused))
 #define unreachable    __builtin_unreachable()
@@ -154,9 +154,8 @@
 
 
 
-/* Maximum size for the description of the source
- * of a function in debug information. */
-#define SK_SRC_MAX 70
+/* Maximum size of function source (check debug API). */
+#define SK_SRCID_MAX 70
 
 
 

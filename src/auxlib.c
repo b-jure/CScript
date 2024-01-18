@@ -2,59 +2,46 @@
 #include "skooma.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 
-// @TODO: Finish this, basic debugging is now implemented and I should
-//        be able to implement stack traceback.
-
-/*
+// Prints error message located on top of the stack
 static force_inline void printerror(VM* vm)
 {
-    Value errobj = *stackpeek(0);
-    const char* errmsg = NULL;
-    if(IS_STRING(errobj)) {
-        errmsg = AS_CSTRING(errobj);
-    } else errmsg = "error object is not a string";
-    sk_writetoerrf(
+    const char* errmsg = sk_getstring(vm, -1);
+    if(errmsg == NULL) errmsg = "error object is not a string";
+    skaux_writetoerrf(
         "Skooma [PANIC]: Errored in unprotected call to Skooma API (error: %s)\n",
         errmsg);
 }
 
+
+// Auxiliary to 'panic', prints stack trace-back
 static void stacktraceback(VM* vm)
 {
-#define isloaded(vm, sname, closure) HashTable_get(&(vm)->loaded, sname, closure)
-
-    static const char* fmt1 = "\t['%s' on line %u] in ";
-    static const char* fmt2 = "\tin %s()\n";
-    sk_writetoerr("Stack traceback:\n");
-    for(int32_t i = vm->fc - 1; i >= 0; i--) {
-        CallFrame* frame = &vm->frames[i];
-        if(frame->closure) { // Skooma function ?
-            Chunk* chunk = &frame->closure->fn->chunk;
-            int32_t line = Chunk_getline(chunk, frame->ip - chunk->code.data - 1);
-            Value _; // dummy
-            Value sname = OBJ_VAL(FFN(frame)->name);
-            bool loaded;
-            if((loaded = isloaded(vm, sname, &_))) vm->script = sname;
-            sk_writetoerrf(fmt1, AS_CSTRING(vm->script), line);
-            if(loaded) sk_writetoerr("script\n");
-            else sk_writetoerrf("%s()\n", FFN(frame)->name->storage);
-        } else // this is a C function
-            sk_writetoerrf(fmt2, AS_NATIVE(*frame->callee)->name->storage);
-    }
-
-#undef isloaded
+    DebugInfo di;
+    uint32_t level = 0;
+    if(!sk_getstack(vm, level, &di)) return;
+    skaux_writetoerr("Stack traceback:\n");
+    do {
+        sk_getinfo(vm, DW_LINE | DW_FNINFO | DW_FNSRC, &di);
+        if(*di.type == 'C') skaux_writetoerrf("\t'%s' in %s()\n", di.source, di.name);
+        else {
+            skaux_writetoerrf("\t'%s' on line '%u' in ", di.source, di.line);
+            if(*di.type == 'm') skaux_writetoerr("main\n");
+            else skaux_writetoerrf("%s()\n", di.name);
+        }
+    } while(sk_getstack(vm, level, &di));
 }
-*/
 
 
 /* Panic handler */
 int panic(VM* vm)
 {
-    // printerror(vm);
-    // stacktraceback(vm);
+    printerror(vm);
+    stacktraceback(vm);
     return 0; // FALLTHRU into 'abort()'
 }
 
@@ -83,15 +70,14 @@ SK_LIBAPI VM* skaux_create(void)
 }
 
 
-
-SK_LIBAPI int sk_argerror(VM* vm, int argidx, const char* extra)
+SK_LIBAPI int skaux_argerror(VM* vm, int argidx, const char* extra)
 {
     sk_pushfstring(vm, "Invalid argument '%d' %s", argidx, extra);
     return sk_error(vm, S_EARG);
 }
 
 
-SK_LIBAPI int sk_typeerror(VM* vm, int argidx, const char* tname)
+SK_LIBAPI int skaux_typeerror(VM* vm, int argidx, const char* tname)
 {
     const char* argmsg = NULL;
     const char* argtype = NULL;
@@ -100,14 +86,14 @@ SK_LIBAPI int sk_typeerror(VM* vm, int argidx, const char* tname)
         argtype = sk_tostring(vm, -1); // leave on stack, who cares...
     } else argtype = sk_typename(vm, argidx);
     argmsg = sk_pushfstring(vm, "expected '%s', instead got '%s'", tname, argtype);
-    return sk_argerror(vm, argidx, argmsg);
+    return skaux_argerror(vm, argidx, argmsg);
 }
 
 
-#define tagerror(vm, idx, type) sk_typeerror(vm, idx, sk_tagname(vm, idx))
+#define tagerror(vm, idx, type) skaux_typeerror(vm, idx, sk_tagname(vm, idx))
 
 
-SK_LIBAPI sk_number sk_checknumber(VM* vm, int idx)
+SK_LIBAPI sk_number skaux_checknumber(VM* vm, int idx)
 {
     int isnum = 0;
     sk_number n = sk_getnumber(vm, idx, &isnum);
@@ -116,7 +102,7 @@ SK_LIBAPI sk_number sk_checknumber(VM* vm, int idx)
 }
 
 
-SK_LIBAPI const char* sk_checkstring(VM* vm, int idx)
+SK_LIBAPI const char* skaux_checkstring(VM* vm, int idx)
 {
     const char* str = sk_getstring(vm, idx);
     if(unlikely(str == NULL)) tagerror(vm, idx, TT_STRING);
@@ -124,7 +110,7 @@ SK_LIBAPI const char* sk_checkstring(VM* vm, int idx)
 }
 
 
-SK_LIBAPI int sk_checkbool(VM* vm, int idx)
+SK_LIBAPI int skaux_checkbool(VM* vm, int idx)
 {
     int isbool = 0;
     int b = sk_getbool(vm, idx, &isbool);
@@ -133,7 +119,7 @@ SK_LIBAPI int sk_checkbool(VM* vm, int idx)
 }
 
 
-SK_LIBAPI void sk_checktype(VM* vm, int idx, int type)
+SK_LIBAPI void skaux_checktype(VM* vm, int idx, int type)
 {
     if(unlikely(sk_type(vm, idx) != type)) tagerror(vm, idx, type);
 }

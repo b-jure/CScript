@@ -87,6 +87,7 @@ typedef struct {
     Array_Byte buffer; // for tokens
     Token previous;
     Token current;
+    OString* source; // current source name
     uint32_t line; // source file line
     bool skip; // skip current token (LEX_TOKEN_LIMIT reached)
     bool panic; // sync flag
@@ -95,7 +96,7 @@ typedef struct {
 
 
 
-void L_init(Lexer* L, VM* vm, BuffReader* br);
+void L_init(Lexer* L, VM* vm, BuffReader* br, OString* source);
 void L_free(Lexer* L);
 Token scan(Lexer* lexer);
 Token syntoken(const char* name);

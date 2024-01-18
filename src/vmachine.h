@@ -33,6 +33,7 @@ typedef void (*ProtectedFn)(VM* vm, void* userdata);
 
 typedef enum {
     CFI_FRESH = 1,
+    CFI_CCALL = 2,
 } CFInfo;
 
 struct CallFrame {
@@ -103,7 +104,6 @@ struct VM {
     unsigned long seed; // randomized seed for hashing
     struct sk_longjmp* errjmp; // error longjmp
     Status status; // status code
-    OString* source; // debug info (current source file)
     HashTable loaded; // loaded scripts
     Function* F; // function state
     CallFrame frames[VM_CALLSTACK_LIMIT]; // call stack

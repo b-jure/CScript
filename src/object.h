@@ -130,7 +130,7 @@ struct OUpvalue { // typedef is inside 'value.h'
 // Function prototype
 struct FnPrototype {
     OString* name; // for function declarations and native C functions
-    OString* source; // for top-level functions ('main')
+    OString* source; // source name (script name or function)
     int32_t defline; // debug info
     int32_t deflastline; // debug info
     int32_t arity; // min number of parameters

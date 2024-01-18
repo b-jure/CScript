@@ -37,14 +37,14 @@ SK_LIBAPI VM* skaux_create(void);
  * ================= Auxiliary library errors =================
  */
 
-SK_LIBAPI int sk_typeerror(VM* vm, int argidx, const char* tname);
-SK_LIBAPI int sk_argerror(VM* vm, int argidx, const char* extra);
+SK_LIBAPI int skaux_typeerror(VM* vm, int argidx, const char* tname);
+SK_LIBAPI int skaux_argerror(VM* vm, int argidx, const char* extra);
 
-SK_LIBAPI sk_number sk_checknumber(VM* vm, int idx);
-#define sk_checkinteger(vm, idx) cast(int64_t, sk_checknumber(vm, idx))
-SK_LIBAPI const char* sk_checkstring(VM* vm, int idx);
-SK_LIBAPI int sk_checkbool(VM* vm, int idx);
-SK_LIBAPI void sk_checktype(VM* vm, int idx, int type);
+SK_LIBAPI sk_number skaux_checknumber(VM* vm, int idx);
+#define skaux_checkinteger(vm, idx) cast(int64_t, skaux_checknumber(vm, idx))
+SK_LIBAPI const char* skaux_checkstring(VM* vm, int idx);
+SK_LIBAPI int skaux_checkbool(VM* vm, int idx);
+SK_LIBAPI void skaux_checktype(VM* vm, int idx, int type);
 
 /* ---------------------------------------------------------- */ // aux errors
 
@@ -52,13 +52,13 @@ SK_LIBAPI void sk_checktype(VM* vm, int idx, int type);
 
 
 /* Write to 'stderr' */
-#if !defined(sk_writetoerr)
-#define sk_writetoerr(msg, ...) (fprintf(stderr, msg), fflush(stderr))
+#if !defined(skaux_writetoerr)
+#define skaux_writetoerr(msg, ...) (fprintf(stderr, msg), fflush(stderr))
 #endif
 
 /* Write to 'stderr' formatted */
-#if !defined(sk_writetoerrf)
-#define sk_writetoerrf(msg, ...) (fprintf(stderr, msg, __VA_ARGS__), fflush(stderr))
+#if !defined(skaux_writetoerrf)
+#define skaux_writetoerrf(msg, ...) (fprintf(stderr, msg, __VA_ARGS__), fflush(stderr))
 #endif
 
 

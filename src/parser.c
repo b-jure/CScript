@@ -811,11 +811,10 @@ static void ControlFlow_free(ControlFlow* context)
 /*========================== FUNCTION STATE =========================*/
 
 static void F_init(
+    VM* vm,
     Function* F,
     Scope* globscope,
     Class* cclass,
-    VM* vm,
-    Lexer* lexer,
     FunctionType fn_type,
     Function* enclosing)
 {
@@ -824,7 +823,6 @@ static void F_init(
     F->S = globscope;
     F->enclosing = enclosing;
     F->cclass = cclass;
-    F->lexer = lexer;
     vm->F = F;
     F->fn = NULL; // Initialize to NULL so gc does not get confused
     F->fn = OFunction_new(vm);
@@ -990,9 +988,9 @@ OClosure* compile(VM* vm, BuffReader* br, const char* name, bool isingscope)
     Function F;
     Lexer L;
     if(name == NULL) name = "?";
-    L_init(&L, vm, br);
-    F_init(&F, &globalscope, NULL, vm, &L, FN_SCRIPT, vm->F);
-    vm->source = F.fn->p.source = OString_new(F.vm, name, strlen(name));
+    F_init(vm, &F, &globalscope, NULL, FN_SCRIPT, vm->F);
+    F.fn->p.source = OString_new(vm, name, strlen(name));
+    L_init(&L, vm, br, F.fn->p.source);
     startscope(&F, &globalscope, 0, 0);
     if(!isingscope) // script not in global scope?
         startscope(&F, &local, 0, 0);
@@ -1526,24 +1524,25 @@ static force_inline void fvardec(Function* F)
 // Create and parse a new Function
 static void fn(Function* F, FunctionType type)
 {
-    Function* Fnew = MALLOC(F->vm, sizeof(Function));
+    Function Fnew;
     Scope globscope, S;
-    F_init(Fnew, &globscope, F->cclass, F->vm, F->lexer, type, F);
-    startscope(Fnew, &S, 0, 0); // no need to end this scope
-    expect(Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
-    if(!check(Fnew, TOK_RPAREN)) arglist(Fnew);
-    if(F->fn->p.isvararg) expect(Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
-    else expect(Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
-    expect(Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
-    block(Fnew); // body
-    OFunction* fn = compile_end(Fnew);
+    F_init(F->vm, &Fnew, &globscope, F->cclass, type, F);
+    Fnew.fn->p.source = F->fn->p.source; // source is same
+    startscope(&Fnew, &S, 0, 0); // no need to end this scope
+    expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
+    if(!check(&Fnew, TOK_RPAREN)) arglist(&Fnew);
+    if(F->fn->p.isvararg) expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
+    else expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
+    expect(&Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
+    block(&Fnew); // body
+    OFunction* fn = compile_end(&Fnew);
     CODEOP(F, OP_CLOSURE, make_constant(F, OBJ_VAL(fn)));
     for(uint32_t i = 0; i < fn->p.upvalc; i++) {
-        Upvalue* upval = Array_Upvalue_index(Fnew->upvalues, i);
+        Upvalue* upval = Array_Upvalue_index(Fnew.upvalues, i);
         CODE(F, upval->local ? 1 : 0);
         CODEL(F, upval->idx);
     }
-    F_free(Fnew);
+    F_free(&Fnew);
 }
 
 // fndec ::= 'fn' name '(' arglist ')' '{' block '}'

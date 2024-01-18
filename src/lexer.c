@@ -16,7 +16,7 @@
 
 /* ================= Create/Free ================= */
 
-void L_init(Lexer* L, VM* vm, BuffReader* br)
+void L_init(Lexer* L, VM* vm, BuffReader* br, OString* source)
 {
     L->vm = vm;
     L->br = br;
@@ -85,7 +85,7 @@ void regcomperror(Lexer* lexer, const char* err, va_list args)
     lexer->error = true;
     VM* vm = lexer->vm;
     const Token* token = &lexer->previous;
-    OString* prefix = OString_fmt(vm, prefix_fmt, vm->source->storage, token->line);
+    OString* prefix = OString_fmt(vm, prefix_fmt, lexer->source->storage, token->line);
     push(vm, OBJ_VAL(prefix));
     if(token->type == TOK_EOF) {
         push(vm, OBJ_VAL(OString_fmt(vm, " at end of file: ")));

@@ -460,7 +460,7 @@ SK_API sk_number sk_getnumber(const VM* vm, int idx, int* isnum)
 SK_API const char* sk_getstring(const VM* vm, int idx)
 {
     Value val = *idx2val(vm, idx);
-    return IS_STRING(val) ? AS_CSTRING(val) : 0;
+    return IS_STRING(val) ? AS_CSTRING(val) : NULL;
 }
 
 
@@ -859,6 +859,12 @@ SK_API size_t sk_strlen(const VM* vm, int idx)
 }
 
 
+/* Return 'VM' 'Status' code. */
+SK_API Status sk_getstatus(VM* vm)
+{
+    return vm->status;
+}
+
 
 /* Invoke a runetime error with errcode */
 SK_API int sk_error(VM* vm, Status errcode)
@@ -937,66 +943,3 @@ SK_API int sk_version(VM* vm)
     UNUSED(vm);
     return SK_VERSION_NUMBER;
 }
-
-
-
-
-#define sizeofstr(str) (sizeof(str) - 1)
-
-const InternedString static_strings[] = {
-  /* Value types */
-    {"nil",                sizeofstr("nil")               },
-    {"number",             sizeofstr("number")            },
-    {"string",             sizeofstr("string")            },
-    {"bool",               sizeofstr("bool")              },
-    {"class",              sizeofstr("class")             },
-    {"instance",           sizeofstr("instance")          },
-    {"function",           sizeofstr("function")          },
-    {"closure",            sizeofstr("closure")           },
-    {"native",             sizeofstr("native")            },
-    {"upvalue",            sizeofstr("upvalue")           },
-    {"method",             sizeofstr("method")            },
- /* Boolean strings */
-    {"true",               sizeofstr("true")              },
-    {"false",              sizeofstr("false")             },
- /* Class overload-able method names. */
-    {"__init__",           sizeofstr("__init__")          },
-    {"__display__",        sizeofstr("__display__")       },
-#if defined(SK_OVERLOAD_OPS)  // operator overloading enabled?
-  /* Overload-able arithmetic operators */
-    {"__add__",            sizeofstr("__add__")           },
-    {"__sub__",            sizeofstr("__sub__")           },
-    {"__mul__",            sizeofstr("__mul__")           },
-    {"__div__",            sizeofstr("__div__")           },
-    {"__mod__",            sizeofstr("__mod__")           },
-    {"__pow__",            sizeofstr("__pow__")           },
-    {"__not__",            sizeofstr("__not__")           },
-    {"__umin__",           sizeofstr("__umin__")          },
- /* Overload-able ordering operators */
-    {"__ne__",             sizeofstr("__ne__")            },
-    {"__eq__",             sizeofstr("__eq__")            },
-    {"__lt__",             sizeofstr("__lt__")            },
-    {"__le__",             sizeofstr("__le__")            },
-    {"__gt__",             sizeofstr("__gt__")            },
-    {"__ge__",             sizeofstr("__ge__")            },
-#endif
-  /* Class special field names. */
-    {"__debug",            sizeofstr("__debug")           },
- /* Operator strings */
-    {"addition [+]",       sizeofstr("addition [+]")      },
-    {"subtraction [-]",    sizeofstr("subtraction [-]")   },
-    {"multiplication [*]", sizeofstr("multiplication [*]")},
-    {"division [/]",       sizeofstr("division [/]")      },
-    {"modulo [%]",         sizeofstr("modulo [%]")        },
-    {"exponentiation [^]", sizeofstr("exponentiation [^]")},
-    {"not [!]",            sizeofstr("not [!]")           },
-    {"negation [-]",       sizeofstr("negation [-]")      },
-    {"ne [!=]",            sizeofstr("ne [!=]")           },
-    {"eq [==]",            sizeofstr("eq [==]")           },
-    {"lt [<]",             sizeofstr("lt [<]")            },
-    {"le [<=]",            sizeofstr("le [<=]")           },
-    {"gt [>]",             sizeofstr("gt [>]")            },
-    {"ge [>=]",            sizeofstr("ge [>=]")           },
-    {"and [and]",          sizeofstr("and [and]")         },
-    {"or [or]",            sizeofstr("or [or]")           },
-};

@@ -226,12 +226,14 @@ OString* unescape(VM* vm, OString* string)
 
 
 
+// TODO: Different constructor if constructing using C API
 ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, uint8_t isvararg, UInt upvalc)
 {
     ONative* native = ALLOC_NATIVE(vm, upvalc);
     native->fn = fn;
     FnPrototype* p = &native->p;
-    p->name = name;
+    p->name = (name ? name : vm->faststatic[SS_UNKNOWN]);
+    p->source = vm->faststatic[SS_CSRC];
     p->arity = arity;
     p->isvararg = isvararg;
     p->upvalc = upvalc;
@@ -758,3 +760,67 @@ void oprint(VM* vm, Value value, FILE* stream)
 #undef SKJMPTABLE_H
 #endif
 }
+
+
+
+
+const InternedString static_strings[] = {
+  /* Value types */
+    {"nil",                SSS("nil")               },
+    {"number",             SSS("number")            },
+    {"string",             SSS("string")            },
+    {"bool",               SSS("bool")              },
+    {"class",              SSS("class")             },
+    {"instance",           SSS("instance")          },
+    {"function",           SSS("function")          },
+    {"closure",            SSS("closure")           },
+    {"native",             SSS("native")            },
+    {"upvalue",            SSS("upvalue")           },
+    {"method",             SSS("method")            },
+ /* Boolean strings */
+    {"true",               SSS("true")              },
+    {"false",              SSS("false")             },
+ /* Class overload-able method names. */
+    {"__init__",           SSS("__init__")          },
+    {"__display__",        SSS("__display__")       },
+#if defined(SK_OVERLOAD_OPS)  // operator overloading enabled?
+  /* Overload-able arithmetic operators */
+    {"__add__",            SSS("__add__")           },
+    {"__sub__",            SSS("__sub__")           },
+    {"__mul__",            SSS("__mul__")           },
+    {"__div__",            SSS("__div__")           },
+    {"__mod__",            SSS("__mod__")           },
+    {"__pow__",            SSS("__pow__")           },
+    {"__not__",            SSS("__not__")           },
+    {"__umin__",           SSS("__umin__")          },
+ /* Overload-able ordering operators */
+    {"__ne__",             SSS("__ne__")            },
+    {"__eq__",             SSS("__eq__")            },
+    {"__lt__",             SSS("__lt__")            },
+    {"__le__",             SSS("__le__")            },
+    {"__gt__",             SSS("__gt__")            },
+    {"__ge__",             SSS("__ge__")            },
+#endif
+  /* Class special field names. */
+    {"__debug",            SSS("__debug")           },
+ /* Operator strings */
+    {"addition [+]",       SSS("addition [+]")      },
+    {"subtraction [-]",    SSS("subtraction [-]")   },
+    {"multiplication [*]", SSS("multiplication [*]")},
+    {"division [/]",       SSS("division [/]")      },
+    {"modulo [%]",         SSS("modulo [%]")        },
+    {"exponentiation [^]", SSS("exponentiation [^]")},
+    {"not [!]",            SSS("not [!]")           },
+    {"negation [-]",       SSS("negation [-]")      },
+    {"ne [!=]",            SSS("ne [!=]")           },
+    {"eq [==]",            SSS("eq [==]")           },
+    {"lt [<]",             SSS("lt [<]")            },
+    {"le [<=]",            SSS("le [<=]")           },
+    {"gt [>]",             SSS("gt [>]")            },
+    {"ge [>=]",            SSS("ge [>=]")           },
+    {"and [and]",          SSS("and [and]")         },
+    {"or [or]",            SSS("or [or]")           },
+ /* Other statics */
+    {"?",                  SSS("?")                 },
+    {"[C]",                SSS("[C]")               },
+};

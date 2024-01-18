@@ -13,8 +13,8 @@
 
 
 // Load current function/frame into the 'private' part of 'DebugInfo'.
-// Level 0 means the current function, level 1 the function that
-// invoked the current one, and so on...
+// Level 0 means the current function, level 1 is the previous call
+// and so on...
 // If 'level' is invalid, this function returns 0 otherwise 1.
 SK_API uint8_t sk_getstack(VM* vm, int32_t level, DebugInfo* di)
 {
@@ -28,55 +28,36 @@ SK_API uint8_t sk_getstack(VM* vm, int32_t level, DebugInfo* di)
 }
 
 
-// Gets function definition information.
-// Sets 'defline', 'deflastline', 'isvararg', 'nups' and 'nparams'
-// in 'DebugInfo'.
+
+// Sets: 'name', 'type', 'nups', 'nparams', 'isvararg',
+//       'defline', 'deflastline' in 'DebugInfo'.
 //
-// 'defline' - line on which the function definition begins
-// 'deflastline' - function definition last line
-// 'isvararg' - does this function take variable number of arguments
+// 'name' - function name
+// 'type' - function type ('Skooma', 'main' or 'C')
 // 'nups' - number of upvalues
-// 'nparams' - function arity (min amount of arguments)
-static void getfndefinfo(VM* vm, Value cl, DebugInfo* di)
+// 'nparams' - function arity
+// 'isvararg' - does this function take variable number of arguments
+// 'defline' - line on which the function definition begins
+// 'deflastline' - line on which the function definition ends
+static void getfuncinfo(VM* vm, Value cl, DebugInfo* di)
 {
-    FnPrototype* p = NULL;
-    p = ((IS_CLOSURE(cl)) ? &AS_CLOSURE(cl)->fn->p : &AS_NATIVE(cl)->p);
+    const FnPrototype* p = NULL;
+    if(IS_NATIVE(cl)) {
+        p = &AS_NATIVE(cl)->p;
+        di->type = "C";
+    } else {
+        p = &AS_CLOSURE(cl)->fn->p;
+        di->type = (p->defline == 0 ? "main" : "Skooma");
+    }
+    di->name = p->name->storage;
     di->defline = p->defline;
     di->deflastline = p->deflastline;
-    di->isvararg = p->isvararg;
-    di->nups = p->upvalc;
     di->nparams = p->arity;
+    di->nups = p->upvalc;
+    di->isvararg = p->isvararg;
 }
 
 
-// Gets source information into 'DebugInfo'.
-// Sets 'type', 'source', 'srclen' and 'shortsrc'.
-//
-// 'type' - can be 'Skooma', 'main' (top-level function) or 'C'.
-// 'source' - name of the function
-// 'srclen' - length of 'source' string
-// 'shortsrc' - printable version of 'source'
-static void getsrcinfo(VM* vm, Value cl, CallFrame* cf, DebugInfo* di)
-{
-    sk_assert(vm, cf != NULL, "CallFrame is NULL");
-    di->source = vtostr(vm, cl)->storage;
-    if(IS_CLOSURE(cl)) { // Skooma closure
-        if(cf && (cf->cfinfo & CFI_FRESH)) di->type = "main";
-        else di->type = "Skooma";
-        if(di->source == NULL) di->source = AS_CLOSURE(cl)->fn->p.source->storage;
-        sk_assert(vm, di->source != NULL, "Skooma function is name NULL");
-    } else { // C closure
-        sk_assert(vm, di->source != NULL, "Native C function name NULL");
-        di->type = "C";
-    }
-    di->srclen = strlen(di->source);
-    uint8_t len = MIN(di->srclen, SK_SRC_MAX);
-    memcpy(di->shortsrc, di->source, len);
-    di->shortsrc[len - 1] = '\0';
-}
-
-
-// Auxiliary function to 'auxgetinfo'
 // Sets 'line' in 'DebugInfo'.
 //
 // 'line' - current line number
@@ -84,26 +65,29 @@ static force_inline void auxgetline(Value cl, CallFrame* cf, DebugInfo* di)
 {
     if(cf && isSkooma(cf)) {
         Chunk* c = &AS_CLOSURE(cl)->fn->chunk;
-        di->line = Chunk_getline(c, cf->ip - c->code.data);
+        di->line = Chunk_getline(c, cf->ip - c->code.data - 1);
     } else di->line = -1;
 }
 
 
-// TODO: Debug API value transfer information
-// Sets 'firsttransfer' and 'ntransfers' in 'DebugInfo'.
+// Sets 'source', 'srclen' and 'shortsrc' in 'DebugInfo'.
 //
-// 'firsttransfer' - index of first transferred value during
-//                   function return or function call.
-// 'ntransfers' - total count of transferred values.
-// static void gettransfers(VM* vm, Value cl, CallFrame* cf, DebugInfo* di)
-// {
-//     if(cf) {
-//         FnPrototype* p = NULL;
-//         p = (isSkooma(cf) ? &AS_CLOSURE(cl)->fn->p : &AS_NATIVE(cl)->p);
-//         di->firsttransfer = cf->firsttransfer;
-//         di->ntransferrs = cf->ntransferrs;
-//     } else di->firsttransfer = di->ntransferrs = 0;
-// }
+// 'source' - source of the function
+// 'srclen' - length of 'source' string
+// 'shortsrc' - printable version of 'source'
+static void getsrcinfo(Value cl, DebugInfo* di)
+{
+    FnPrototype* p = (IS_NATIVE(cl) ? &AS_NATIVE(cl)->p : &AS_CLOSURE(cl)->fn->p);
+    di->source = p->source->storage;
+    di->srclen = p->source->len;
+    size_t bufflen = SK_SRCID_MAX - 1;
+    if(bufflen < di->srclen) {
+        memcpy(di->shortsrc, di->source, bufflen - SSS("..."));
+        memcpy(di->shortsrc, "...", SSS("..."));
+    } else memcpy(di->shortsrc, di->source, bufflen);
+    di->shortsrc[bufflen] = '\0';
+}
+
 
 
 // Auxiliary to 'sk_getinfo', parses debug bit mask and
@@ -113,23 +97,22 @@ static force_inline void auxgetline(Value cl, CallFrame* cf, DebugInfo* di)
 static uint8_t auxgetinfo(VM* vm, uint8_t dbmask, Value* cl, CallFrame* cf, DebugInfo* di)
 {
     uint8_t status = 1;
-    for(uint8_t bit = 3; dbmask > 0; bit++) {
+    for(uint8_t bit = 2; dbmask > 0; bit++) {
         switch(bit) {
-            case 3:; // DW_LINE
+            case 2:; // DW_LINE
                 auxgetline(*cl, cf, di);
                 break;
-            case 4: // DW_SRC
-                getsrcinfo(vm, *cl, cf, di);
+            case 3: // DW_FNINFO
+                getfuncinfo(vm, *cl, di);
                 break;
-            case 5: // DW_DEFINFO
-                getfndefinfo(vm, *cl, di);
+            case 4: // DW_FNSRC
+                getsrcinfo(*cl, di);
                 break;
-                // TODO@ DW_ARG
-            case 6:
-                // gettransfers(vm, *cl, cf, di);
-                // break;
+            case 5: // DW_FNPUSH
+                skapi_pushval(vm, *di->frame->callee);
+                break;
+            case 6: // unused
             case 7: // unused
-            case 8: // unused
                 status = 0;
                 break;
             default:
@@ -148,19 +131,17 @@ SK_API uint8_t sk_getinfo(VM* vm, uint8_t dbmask, DebugInfo* di)
     Value* fn = NULL;
     CallFrame* frame = NULL;
     uint8_t status = 1;
-    uint8_t pushfn = dbmask & DW_FN;
     sk_lock(vm);
-    if(dbmask & DW_FNGET) { // first bit is set ?
+    if(dbmask & DW_FNGET) { // use function on top of the stack ?
         fn = stackpeek(0);
         skapi_checktype(vm, *fn, TT_FUNCTION);
-    } else {
+    } else { // use function stored in current frame
         frame = &last_frame(vm);
         fn = last_frame(vm).callee;
         sk_assert(vm, val2type(*fn) == TT_FUNCTION, "expect function");
     }
-    dbmask >>= 2; // skip DW_FNGET and DW_FN
+    dbmask >>= 1; // skip DW_FNGET
     status = auxgetinfo(vm, dbmask, fn, frame, di);
-    if(pushfn) skapi_pushval(vm, *fn);
     sk_unlock(vm);
     return status;
 }
