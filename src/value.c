@@ -74,7 +74,7 @@ void arith(VM* vm, Value a, Value b, Ar op, Value* res)
 
 
 /* Get value type */
-int val2type(Value value)
+TypeTag val2type(Value value)
 {
 #if defined(val2tbmask)
 
@@ -110,7 +110,7 @@ int val2type(Value value)
 #undef VAL_TABLE
 #else
 #define DISPATCH(x) switch(x)
-#define CASE(l)     case l:
+#define CASE(l) case l:
 #endif
     DISPATCH(value.type)
     {
@@ -153,9 +153,9 @@ int val2type(Value value)
 }
 
 
-const char* vname(VM* vm, Value* val)
+const char* vname(VM* vm, Value val)
 {
-    TypeTag tag = val2type(*val);
+    TypeTag tag = val2type(val);
 #if defined(SK_PRECOMPUTED_GOTO)
     static const void* jmptable[TT_CNT] = {
         &&nil,
@@ -173,18 +173,20 @@ string:
 boolean:
     return vm->faststatic[tag]->storage;
 oclass:
-    return AS_CLASS(*val)->name->storage;
+    return AS_CLASS(val)->name->storage;
 instance:;
-    OInstance* instance = AS_INSTANCE(*val);
-    Value debug = getsfield(instance, SF_DEBUG);
-    if(IS_STRING(debug)) return AS_CSTRING(debug);
+    OInstance* instance = AS_INSTANCE(val);
+    Value debug;
+    if(HashTable_get(&instance->fields, OBJ_VAL(vm->faststatic[SS_DBG]), &debug) &&
+       IS_STRING(debug))
+        return AS_CSTRING(debug);
     return instance->oclass->name->storage;
 function:;
-    Value value = *val;
+    Value value = val;
     if(IS_CLOSURE(value)) return AS_CLOSURE(value)->fn->p.name->storage;
     else if(IS_NATIVE(value)) return AS_NATIVE(value)->p.name->storage;
     else if(IS_BOUND_METHOD(value)) return AS_BOUND_METHOD(value)->method->fn->p.name->storage;
-    else return AS_FUNCTION(*val)->p.name->storage; // is this reachable ??
+    else return AS_FUNCTION(val)->p.name->storage; // is this reachable ??
 #else
     switch(tag) {
         case TT_NIL:
@@ -193,20 +195,20 @@ function:;
         case TT_BOOL:
             return vm->statics[tag]->storage;
         case TT_CLASS:
-            return AS_CLASS(*val)->name->storage;
+            return AS_CLASS(val)->name->storage;
         case TT_INSTANCE: {
-            OInstance* instance = AS_INSTANCE(*val);
+            OInstance* instance = AS_INSTANCE(val);
             Value debug = getsfield(instance, SF_DEBUG);
             if(IS_STRING(debug)) return AS_CSTRING(debug);
             return instance->oclass->name->storage;
         }
         case TT_FUNCTION: {
-            Value value = *val;
+            Value value = val;
             if(IS_CLOSURE(value)) return AS_CLOSURE(value)->fn->name->storage;
             else if(IS_NATIVE(value)) return AS_NATIVE(value)->name->storage;
             else if(IS_BOUND_METHOD(value))
                 return AS_BOUND_METHOD(value)->method->fn->name->storage;
-            else return AS_FUNCTION(*val)->name->storage; // is this reachable ??
+            else return AS_FUNCTION(val)->name->storage; // is this reachable ??
         }
         default:
             unreachable;
@@ -232,7 +234,7 @@ void eq_preserveL(VM* vm, Value l, Value r)
 /* Raw equality.
  * VM stack won't be used, instead the result is directly
  * returned from the function. */
-int raweq(Value l, Value r)
+uint8_t raweq(Value l, Value r)
 {
 #if defined(SK_NAN_BOX)
     // NaN != NaN
@@ -292,7 +294,7 @@ void vne(VM* vm, Value l, Value r)
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
-#define BREAK       break
+#define BREAK break
 #endif
         DISPATCH(l.type)
         {
@@ -341,7 +343,7 @@ void veq(VM* vm, Value l, Value r)
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
-#define BREAK       break
+#define BREAK break
 #endif
         DISPATCH(l.type)
         {
@@ -553,7 +555,7 @@ object:
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
-#define BREAK       break
+#define BREAK break
 #endif
     DISPATCH(value.type)
     {

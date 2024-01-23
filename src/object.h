@@ -8,15 +8,15 @@
 #include "skooma.h"
 #include "value.h"
 
-#define IS_STRING(value)  isotype(value, OBJ_STRING)
-#define AS_STRING(value)  ((OString*)AS_OBJ(value))
+#define IS_STRING(value) isotype(value, OBJ_STRING)
+#define AS_STRING(value) ((OString*)AS_OBJ(value))
 #define AS_CSTRING(value) (((OString*)AS_OBJ(value))->storage)
 
 #define IS_FUNCTION(value) isotype(value, OBJ_FUNCTION)
 #define AS_FUNCTION(value) ((OFunction*)AS_OBJ(value))
 
-#define IS_NATIVE(value)    isotype(value, OBJ_NATIVE)
-#define AS_NATIVE(value)    ((ONative*)AS_OBJ(value))
+#define IS_NATIVE(value) isotype(value, OBJ_NATIVE)
+#define AS_NATIVE(value) ((ONative*)AS_OBJ(value))
 #define AS_NATIVE_FN(value) (((ONative*)AS_OBJ(value))->fn)
 
 #define IS_CLOSURE(value) isotype(value, OBJ_CLOSURE)
@@ -163,7 +163,6 @@ struct OClass { // typedef is inside 'value.h'
     OString* name; // class name
     HashTable methods; // class methods
     OClosure* omethods[OM_CNT]; // overloaded methods
-    Value sfields[SF_CNT]; // special fields
 };
 
 struct OInstance { // typedef is inside 'value.h'
@@ -209,10 +208,6 @@ OInstance* OInstance_new(VM* vm, OClass* cclass);
 OClass* OClass_new(VM* vm, OString* name);
 
 
-/* Get the value of the class special field */
-#define getsfield(instance, sftag) (instance)->oclass->sfields[sftag]
-
-
 /* Create upvalue */
 OUpvalue* OUpvalue_new(VM* vm, Value* var_ref);
 
@@ -228,6 +223,18 @@ ONative_new(VM* vm, OString* name, CFunction fn, int32_t arity, uint8_t isvararg
 
 /* Create skoomoa function */
 OFunction* OFunction_new(VM* vm);
+
+
+
+/* Call overload-able methods, return 0 if 'instance' is not
+ * an instance or the method is not overloaded, otherwise return 1. */
+uint8_t callomdisplay(VM* vm, Value instance); // __display__
+uint8_t callomgetidx(VM* vm, Value instance); // __getidx__
+uint8_t callomsetidx(VM* vm, Value instance); // __setidx__
+
+/* Raw access */
+uint8_t rawindex(VM* vm, Value instance, uint8_t what);
+
 
 
 /* debug only, prints object type name */

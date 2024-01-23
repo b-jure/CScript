@@ -12,7 +12,7 @@
 
 // Tombstone is a sentinel value indicating there was a collision,
 // its key value is VAL_EMPTY and its value is VAL_BOOL 'true'.
-#define IS_TOMBSTONE(entry)    (IS_BOOL(entry->value) && AS_BOOL(entry->value))
+#define IS_TOMBSTONE(entry) (IS_BOOL(entry->value) && AS_BOOL(entry->value))
 #define PLACE_TOMBSTONE(entry) (entry->value = BOOL_VAL(true))
 
 
@@ -21,7 +21,7 @@
 // This saves us from needing to calculate loadfactor each time we insert.
 // Instead we check if 'table->left' integer is zero and then expand
 // recalculating the load factor only then.
-#define INSERTS_UNTIL_EXPAND(table)                                                      \
+#define INSERTS_UNTIL_EXPAND(table)                                                                \
     ((uint64_t)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
 
 
@@ -68,6 +68,26 @@ static force_inline Entry* Entry_find(Entry* entries, uint32_t capacity, Value k
     };
 }
 
+/* Find next table entry after 'key' entry.
+ * If table had next entry then top of the stack will contain
+ * key of that entry and its value (in that order).
+ * Otherwise 0 is returned. */
+uint8_t HashTable_next(VM* vm, HashTable* table, Value* key)
+{
+    Entry* last = NULL;
+    Entry* e = Entry_find(table->entries, table->cap, *key);
+    if(e == NULL || IS_EMPTY(e->key)) return 0;
+    last = table->entries + table->cap;
+    for(; e < last; e++) {
+        if(!IS_EMPTY(e->key)) { // non-empty entry
+            *key = e->key;
+            *(key + 1) = e->value;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // Rehash all the 'keys' from the 'src' table into the 'dest' table.
 void HashTable_into(VM* vm, HashTable* src, HashTable* dest)
 {
@@ -102,6 +122,7 @@ uint32_t resizetable(uint32_t wanted)
         return cap;
     }
 }
+
 
 // Interns string literal.
 void internliteral(VM* vm, const char* string)
@@ -192,8 +213,7 @@ OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Has
             if(!IS_TOMBSTONE(entry)) return NULL;
         } else {
             OString* string = AS_STRING(entry->key);
-            if(string->len == len && string->hash == hash &&
-               memcmp(string->storage, str, len) == 0)
+            if(string->len == len && string->hash == hash && memcmp(string->storage, str, len) == 0)
                 return string;
         }
         index = (index + 1) & mask;

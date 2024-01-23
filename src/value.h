@@ -129,8 +129,22 @@ typedef struct {
 #endif
 
 
+#define arisbin(ar) ((ar) >= AR_ADD && (ar) <= AR_POW)
+#define arisun(ar)  ((ar) >= AR_NOT && (ar) <= AR_UMIN)
+
+
+/* Concatenate strings and place the result in the left
+ * operand string, additionally pop of the second operand string. */
+#define concatonstack(vm)                                                                          \
+    do {                                                                                           \
+        *stackpeek(1) = OBJ_VAL(concatenate(vm, *stackpeek(1), *stackpeek(0)));                    \
+        vm->sp--;                                                                                  \
+    } while(0)
+
+
 /* Array of 'Value' */
 ARRAY_NEW(Array_Value, Value);
+
 
 /* Ordering */
 void eq_preserveL(VM* vm, Value l, Value r);
@@ -142,34 +156,35 @@ void vle(VM* vm, Value l, Value r);
 void vge(VM* vm, Value l, Value r);
 
 
-/* Do not invoke methods only do 'raw' equality. */
-int raweq(Value l, Value r);
+/* Do not invoke overloaded operator methods only do 'raw' equality. */
+uint8_t raweq(Value l, Value r);
+
 
 /* Performs arithmetic operation on skooma values. */
 void arith(VM* vm, Value a, Value b, Ar op, Value* res);
 
-#define concatonstack(vm)                                                                          \
-    do {                                                                                           \
-        *stackpeek(1) = OBJ_VAL(concatenate(vm, *stackpeek(1), *stackpeek(0)));                    \
-        vm->sp--;                                                                                  \
-    } while(0)
 
 /* Get value type (TypeTag) */
-int val2type(Value value);
+TypeTag val2type(Value value);
+
 
 /* Get/Create string object from value */
 OString* vtostr(VM* vm, Value value);
 
+
 /* cstring from number */
 const char* dtostr(sk_number n, uint8_t* lenp);
+
 
 /* Auxiliary functions/defines for converting skooma primitive types into strings */
 OString* dtoostr(VM* vm, sk_number n);
 OString* btostr(VM* vm, int b);
 #define niltostr(vm) (vm)->faststatic[SS_NIL]
 
+
 /* Print value */
 void vprint(VM* vm, Value value, FILE* stream);
+
 
 /* Hash value */
 Hash vhash(Value value);

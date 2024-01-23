@@ -6,40 +6,40 @@
 /* ==================== check C API  ==================== */
 
 #define skapi_checkresults(vm, n, nr)                                                              \
-    sk_checkapi(                                                                                   \
+    skapi_check(                                                                                   \
         vm,                                                                                        \
         (nr) == SK_MULRET || (((vm)->sp - (vm)->stack) + (n) + (nr)) < VM_STACK_LIMIT,             \
         "function results overflow the stack.")
 
 #define skapi_checkelems(vm, n)                                                                    \
-    sk_checkapi(vm, ((vm)->sp - last_frame(vm).callee) > (n), "not enough elements in the stack.")
+    skapi_check(vm, ((vm)->sp - last_frame(vm).callee) > (n), "not enough elements in the stack.")
 
 #define skapi_checkerrcode(vm, errcode)                                                            \
-    sk_checkapi(vm, (errcode) >= S_EARG && (errcode) <= S_EGLOBALREDEF, "invalid errcode")
+    skapi_check(vm, (errcode) >= S_EARG && (errcode) <= S_EGLOBALREDEF, "invalid errcode")
 
 #define skapi_checkomtag(vm, omtag)                                                                \
-    sk_checkapi(vm, (omtag) >= 0 && (omtag) < OM_CNT, "invalid OMTag")
+    skapi_check(vm, (omtag) >= 0 && (omtag) < OM_CNT, "invalid OMTag")
 
 #define skapi_checksftag(vm, sftag)                                                                \
-    sk_checkapi(vm, (sftag) >= 0 && (sftag) < SF_CNT, "invalid SFTag")
+    skapi_check(vm, (sftag) >= 0 && (sftag) < SF_CNT, "invalid SFTag")
 
 #define skapi_checkarop(vm, op)                                                                    \
-    sk_checkapi(vm, (op) >= 0 && (op) < AR_CNT, "invalid arithmetic operation")
+    skapi_check(vm, (op) >= 0 && (op) < AR_CNT, "invalid arithmetic operation")
 
-#define skapi_checkptr(vm, ptr) sk_checkapi(vm, (ptr) != NULL, "#ptr can't be (null) pointer")
+#define skapi_checkptr(vm, ptr) skapi_check(vm, (ptr) != NULL, "#ptr can't be (null) pointer")
 
 #define skapi_checkstack(vm, n)                                                                    \
-    sk_checkapi(                                                                                   \
+    skapi_check(                                                                                   \
         vm,                                                                                        \
         ((vm)->sp - (vm)->stack) + cast(ptrdiff_t, n) <= VM_STACK_LIMIT,                           \
-        "not enough stack space for #n elements")
+        "not enough stack space for #n element/s")
 
 #define skapi_checkordop(vm, ord)                                                                  \
-    sk_checkapi(vm, ((ord) >= 0 && (ord) < ORD_CNT), "invalid Ord operation")
+    skapi_check(vm, ((ord) >= 0 && (ord) < ORD_CNT), "invalid Ord operation")
 
 // Make sure 'typetag' is valid 'TypeTag'!
 #define skapi_checktype(vm, value, typetag)                                                        \
-    sk_checkapi(vm, val2type(value) == (typetag), "expect #typetag")
+    skapi_check(vm, val2type(value) == (typetag), "expect #typetag")
 
 /* ------------------------------------------------------ */
 
@@ -56,14 +56,14 @@
 #define skapi_incsp(vm)                                                                            \
     do {                                                                                           \
         (vm)->sp++;                                                                                \
-        sk_checkapi(vm, vm->sp - vm->stack <= VM_STACK_LIMIT, "stack overflow.");                  \
+        skapi_check(vm, vm->sp - vm->stack <= VM_STACK_LIMIT, "stack overflow.");                  \
     } while(0)
 
 /* Decrement stack pointer */
 #define skapi_decsp(vm)                                                                            \
     do {                                                                                           \
         (vm)->sp--;                                                                                \
-        sk_checkapi(vm, vm->stack <= (vm)->sp, "stack underflow.");                                \
+        skapi_check(vm, vm->stack <= (vm)->sp, "stack underflow.");                                \
     } while(0)
 
 /* ------------------------------------------------------ */

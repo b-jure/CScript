@@ -18,7 +18,7 @@
 
 #define CALL_SKOOMAFN 0
 #define CALL_NATIVEFN 1
-#define CALL_CLASS    2
+#define CALL_CLASS 2
 
 
 volatile uint8_t runtime = 0; // VM is running?
@@ -32,16 +32,15 @@ void push(VM* vm, Value val)
     else sovferror(vm);
 }
 
-/* Private to interpreter.
- * Bind class method in order to preserve the receiver.
+/* Bind class method in order to preserve the receiver.
  * By doing so the interpreter can then push the receiver on the
  * stack before running the function.
  * This is needed because class methods expect the receiver to be
- * the first argument ('self' local variable). */
-int8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
+ * the first argument ('self' automatic var). */
+uint8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 {
     Value method;
-    if(!HashTable_get(&oclass->methods, name, &method)) return 0;
+    if(!rawget(&oclass->methods, name, &method)) return 0;
     *stackpeek(0) = OBJ_VAL(OBoundMethod_new(vm, receiver, AS_CLOSURE(method)));
     return 1;
 }
@@ -63,6 +62,7 @@ static int32_t precall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
         p = &fn->p;
         frame->closure = closure;
         frame->ip = fn->chunk.code.data;
+        retcnt = (retcnt == SK_MULRET ? 0 : retcnt); // adjust return count
     } else {
         ONative* native = AS_NATIVE(callee);
         p = &native->p;
@@ -319,15 +319,15 @@ static force_inline OString* globalname(VM* vm, uint32_t idx)
 
 void run(VM* vm)
 {
-#define saveip()        (frame->ip = ip)
-#define updatestate()   (frame = &last_frame(vm), ip = frame->ip)
-#define throwerr(vm)    runerror(vm, vtostr(vm, *stackpeek(0))->storage)
-#define READ_BYTE()     (*ip++)
-#define READ_BYTEL()    (ip += 3, GET_BYTES3(ip - 3))
+#define saveip() (frame->ip = ip)
+#define updatestate() (frame = &last_frame(vm), ip = frame->ip)
+#define throwerr(vm) runerror(vm, vtostr(vm, *stackpeek(0))->storage)
+#define READ_BYTE() (*ip++)
+#define READ_BYTEL() (ip += 3, GET_BYTES3(ip - 3))
 #define READ_CONSTANT() FFN(frame)->chunk.constants.data[READ_BYTEL()]
-#define READ_STRING()   AS_STRING(READ_CONSTANT())
-#define bcstart()       (FFN(frame).chunk.code.data)
-#define ipinbounds()    (ip - bcstart() < VM_STACK_LIMIT && ip >= bcstart())
+#define READ_STRING() AS_STRING(READ_CONSTANT())
+#define bcstart() (FFN(frame).chunk.code.data)
+#define ipinbounds() (ip - bcstart() < VM_STACK_LIMIT && ip >= bcstart())
 #define BINARY_OP(vm, op)                                                                          \
     do {                                                                                           \
         saveip();                                                                                  \
@@ -688,41 +688,43 @@ void run(VM* vm)
                     frame->callee[bcp] = pop(vm);
                     BREAK;
                 }
-                CASE(OP_RET) // function return
-                {
-                ret_fin:;
-                    saveip();
-                    int32_t retcnt = vm->sp - Array_VRef_pop(&vm->retstart);
-                    int32_t pushc;
-                    if(frame->retcnt == 0) { // multiple return values ?
-                        pushc = 0;
-                        frame->retcnt = retcnt;
-                    } else pushc = frame->retcnt - retcnt;
-                    if(pushc < 0) popn(vm, -pushc);
-                    else pushn(vm, pushc, NIL_VAL);
-                    sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
-                    for(int32_t returns = frame->retcnt; returns--;) {
-                        Array_Value_push(&vm->temp, *stackpeek(0));
-                        pop(vm);
-                    }
-                    closeupval(vm, frame->callee);
-                    vm->fc--;
-                    vm->sp = frame->callee;
-                    while(vm->temp.len > 0)
-                        push(vm, Array_Value_pop(&vm->temp));
-                    sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
-                    if(last_frame(vm).cfinfo == CFI_FRESH) return;
-                    sk_assert(vm, vm->fc > 0, "Invalid CallFrame status.");
-                    updatestate();
-                    BREAK;
-                }
             }
-            CASE(OP_JMP_IF_FALSE)
+            CASE(OP_RET) // function return
+            {
+                saveip();
+                int32_t retcnt = vm->sp - Array_VRef_pop(&vm->retstart);
+                int32_t pushc;
+                if(frame->retcnt == 0) { // multiple return values ?
+                    pushc = 0;
+                    frame->retcnt = retcnt;
+                } else pushc = frame->retcnt - retcnt;
+                if(pushc < 0) popn(vm, -pushc);
+                else pushn(vm, pushc, NIL_VAL);
+                sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
+                for(int32_t returns = frame->retcnt; returns--;) {
+                    Array_Value_push(&vm->temp, *stackpeek(0));
+                    pop(vm);
+                }
+                closeupval(vm, frame->callee);
+                vm->fc--;
+                vm->sp = frame->callee;
+                while(vm->temp.len > 0)
+                    push(vm, Array_Value_pop(&vm->temp));
+                sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
+                if(last_frame(vm).cfinfo == CFI_FRESH) return;
+                sk_assert(vm, vm->fc > 0, "Invalid CallFrame status.");
+                updatestate();
+                BREAK;
+            }
             {
                 uint32_t skip_offset = READ_BYTEL();
                 ip += ISFALSE(*stackpeek(0)) * skip_offset;
                 sk_assert(vm, ipinbounds(), "Invalid jump.");
                 BREAK;
+            }
+            CASE(OP_JMP_IF_FALSE) // unused
+            {
+                unreachable;
             }
             CASE(OP_JMP_IF_FALSE_POP)
             {

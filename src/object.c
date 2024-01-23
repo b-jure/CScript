@@ -154,17 +154,16 @@ static force_inline void OString_free(VM* vm, OString* string)
 }
 
 
-OString* concatenate(VM* vm, Value a, Value b)
+OString* concatenate(VM* vm, Value l, Value r)
 {
-    OString* left = AS_STRING(a);
-    OString* right = AS_STRING(b);
+    OString* left = AS_STRING(l);
+    OString* right = AS_STRING(r);
     size_t length = left->len + right->len;
     char buffer[length + 1];
     memcpy(buffer, left->storage, left->len);
     memcpy(buffer + left->len, right->storage, right->len);
     buffer[length] = '\0';
     OString* string = OString_new(vm, buffer, length);
-    popn(vm, 2);
     return string;
 }
 
@@ -321,7 +320,6 @@ OClass* OClass_new(VM* vm, OString* name)
     oclass->name = name;
     HashTable_init(&oclass->methods);
     memset(oclass->omethods, 0, sizeof(oclass->omethods) / sizeof(OClosure*));
-    memset(oclass->sfields, 0, sizeof(oclass->sfields) / sizeof(Value));
     return oclass;
 }
 
@@ -436,7 +434,7 @@ void ofree(VM* vm, O* object)
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
-#define BREAK       return
+#define BREAK return
 #endif
     DISPATCH(otype(object))
     {
@@ -495,14 +493,14 @@ void ofree(VM* vm, O* object)
 
 /* =============== call overload-able methods =============== */
 
-static int callomdisplay(VM* vm, Value val)
+uint8_t callomdisplay(VM* vm, Value instance)
 {
-    OClosure* omethod = getomethod(vm, val, OM_DISPLAY);
-    if(omethod) {
+    OClosure* fn = getomethod(vm, instance, OM_DISPLAY);
+    if(fn) {
         Value* ret = vm->sp;
-        push(vm, val); // push instance 'self'
-        push(vm, OBJ_VAL(omethod));
-        ncall(vm, ret, OBJ_VAL(omethod), 1);
+        push(vm, instance);
+        push(vm, OBJ_VAL(fn));
+        ncall(vm, ret, OBJ_VAL(fn), 1);
         Value top = *stackpeek(0);
         if(unlikely(!IS_STRING(top))) disperror(vm, top);
         return 1;
@@ -510,6 +508,93 @@ static int callomdisplay(VM* vm, Value val)
     return 0;
 }
 
+uint8_t callomgetidx(VM* vm, Value instance)
+{
+    OClosure* fn = getomethod(vm, instance, OM_GETIDX);
+    if(fn) {
+        Value* idx = stackpeek(0); // index value
+        Value* ret = vm->sp;
+        push(vm, instance);
+        push(vm, OBJ_VAL(fn));
+        push(vm, *idx);
+        ncall(vm, ret, OBJ_VAL(fn), 1);
+    }
+    return 0;
+}
+
+uint8_t callomsetidx(VM* vm, Value instance)
+{
+    OClosure* fn = getomethod(vm, instance, OM_SETIDX);
+    if(fn) {
+        Value* idx = stackpeek(1); // index value
+        Value* rhs = stackpeek(0); // right side expression
+        Value* ret = vm->sp;
+        push(vm, instance);
+        push(vm, OBJ_VAL(fn));
+        push(vm, *idx);
+        push(vm, *rhs);
+        ncall(vm, ret, OBJ_VAL(fn), 1);
+        vm->sp--; // pop nil
+    }
+    return 0;
+}
+
+
+
+
+/* =============== raw =============== */
+
+static force_inline uint8_t
+rawgetproperty(VM* vm, OInstance* instance, Value key, Value* out, uint8_t what)
+{
+    sk_assert(vm, instance != NULL, "Expect non-NULL");
+    sk_assert(vm, what == SK_RAWFIELD || what == SK_RAWMETHOD, "Invalid 'what'");
+    HashTable* table = rawgettable(vm, instance, what);
+    return rawget(table, key, out);
+}
+
+static force_inline uint8_t
+rawsetproperty(VM* vm, OInstance* instance, Value key, Value value, uint8_t what)
+{
+    sk_assert(vm, instance != NULL, "Expect non-NULL");
+    sk_assert(vm, what == SK_RAWFIELD || what == SK_RAWMETHOD, "Invalid 'what'");
+    HashTable* table = rawgettable(vm, instance, what);
+    return rawset(table, key, value);
+}
+
+
+/* Perform raw index access on instance object.
+ * 'what' determines if we are getting or setting the indexed value. */
+uint8_t rawindex(VM* vm, Value value, uint8_t what)
+{
+    sk_assert(vm, IS_INSTANCE(value), "Expect instance");
+    OInstance* instance = AS_INSTANCE(value);
+    Value* index;
+    Value out;
+    uint8_t res = 0;
+    switch(what) {
+        case SK_RAWSET: {
+            Value rhs = *stackpeek(0); // rhs
+            index = stackpeek(1);
+            res = rawsetproperty(vm, instance, *index, rhs, SK_RAWFIELD);
+            vm->sp -= 2; // pop [index] and [rhs]
+            break;
+        }
+        case SK_RAWGET: {
+            index = stackpeek(0);
+            if(rawgetproperty(vm, instance, *index, &out, SK_RAWFIELD) ||
+               rawgetproperty(vm, instance, *index, &out, SK_RAWMETHOD))
+            {
+                *index = out; // replace [index] with property
+                res = 1;
+            }
+            break;
+        }
+        default:
+            unreachable;
+    }
+    return res;
+}
 
 
 
@@ -676,8 +761,10 @@ OString* otostr(VM* vm, O* object)
         CASE(OBJ_INSTANCE)
         {
             OInstance* instance = cast(OInstance*, object);
-            Value debug = getsfield(instance, SF_DEBUG);
-            if(IS_STRING(debug)) return AS_STRING(debug);
+            Value debug;
+            if(HashTable_get(&instance->fields, OBJ_VAL(vm->faststatic[SS_DBG]), &debug) &&
+               IS_STRING(debug))
+                return AS_STRING(debug);
             return instance->oclass->name;
         }
         CASE(OBJ_BOUND_METHOD)
@@ -702,7 +789,7 @@ void oprint(VM* vm, Value value, FILE* stream)
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
-#define BREAK       return
+#define BREAK return
 #endif
     DISPATCH(OBJ_TYPE(value))
     {
@@ -763,7 +850,6 @@ void oprint(VM* vm, Value value, FILE* stream)
 
 
 
-
 const InternedString static_strings[] = {
   /* Value types */
     {"nil",                SSS("nil")               },
@@ -783,6 +869,8 @@ const InternedString static_strings[] = {
  /* Class overload-able method names. */
     {"__init__",           SSS("__init__")          },
     {"__display__",        SSS("__display__")       },
+    {"__getidx__",         SSS("__getidx__")        },
+    {"__setidx__",         SSS("__setidx__")        },
 #if defined(SK_OVERLOAD_OPS)  // operator overloading enabled?
   /* Overload-able arithmetic operators */
     {"__add__",            SSS("__add__")           },

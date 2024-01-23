@@ -268,10 +268,11 @@ skip:
 
 
 
-/* Allocator that can trigger collection.
- * NOTE: Upon failed allocation (allocator returned NULL),
- *       full collection will be invoked (gc) and second try
- *       in allocating will be attempted. */
+/* Safe allocator that can trigger collection.
+ * Upon failed allocation (allocator returned NULL),
+ * full collection will be invoked (gc) and second try
+ * in allocating will be attempted.
+ * If second try fails memory error is invoked. */
 void* gcrealloc(VM* vm, void* ptr, size_t oldc, size_t newc)
 {
     uint8_t first_try = 1;

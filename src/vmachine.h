@@ -162,7 +162,6 @@ void push(VM* vm, Value val);
 #define tobool(val, bp)     (IS_BOOL(val) ? (*(bp) = AS_BOOL(val), 1) : 0)
 
 
-/* ================== VM interface ================== */
 
 void VM_init(VM* vm);
 
@@ -176,7 +175,7 @@ int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);
 
 void closeupval(VM* vm, Value* last);
 
-int8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver);
+uint8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver);
 
 void resetvm(VM* vm, Status status);
 

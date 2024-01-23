@@ -188,7 +188,7 @@
 #if defined(SK_CHECK_API)
 #undef NDEBUG
 #include <assert.h>
-#define sk_checkapi(vm, cond, msg) assert(cond&& msg)
+#define skapi_check(vm, cond, msg) assert(cond&& msg)
 #endif
 
 

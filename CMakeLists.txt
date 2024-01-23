@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.27)
 project(skooma)
 
 # C11 standard
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 99)
 
 # Source files directory
 set(SRCDIR ${CMAKE_SOURCE_DIR}/src)

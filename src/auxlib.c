@@ -49,7 +49,7 @@ int panic(VM* vm)
 /* Allocator */
 static void* reallocate(void* ptr, size_t newc, void* _)
 {
-    (void)(_);
+    (void)(_); // unused
     if(newc == 0) {
         free(ptr);
         return NULL;
@@ -81,9 +81,8 @@ SK_LIBAPI int skaux_typeerror(VM* vm, int argidx, const char* tname)
 {
     const char* argmsg = NULL;
     const char* argtype = NULL;
-    if(sk_isinstance(vm, argidx) && sk_getmethod(vm, argidx, "__display__")) {
-        sk_call(vm, 0, 1);
-        argtype = sk_tostring(vm, -1); // leave on stack, who cares...
+    if(sk_isinstance(vm, argidx) && (sk_getfield(vm, argidx, "__debug") == TT_STRING)) {
+        argtype = sk_getstring(vm, -1); // leave on stack, who cares...
     } else argtype = sk_typename(vm, argidx);
     argmsg = sk_pushfstring(vm, "expected '%s', instead got '%s'", tname, argtype);
     return skaux_argerror(vm, argidx, argmsg);
@@ -95,7 +94,7 @@ SK_LIBAPI int skaux_typeerror(VM* vm, int argidx, const char* tname)
 
 SK_LIBAPI sk_number skaux_checknumber(VM* vm, int idx)
 {
-    int isnum = 0;
+    sk_byte isnum = 0;
     sk_number n = sk_getnumber(vm, idx, &isnum);
     if(unlikely(!isnum)) tagerror(vm, idx, TT_NUMBER);
     return n;
@@ -112,8 +111,8 @@ SK_LIBAPI const char* skaux_checkstring(VM* vm, int idx)
 
 SK_LIBAPI int skaux_checkbool(VM* vm, int idx)
 {
-    int isbool = 0;
-    int b = sk_getbool(vm, idx, &isbool);
+    sk_byte isbool = 0;
+    sk_byte b = sk_getbool(vm, idx, &isbool);
     if(unlikely(isbool == 0)) tagerror(vm, idx, TT_BOOL);
     return b;
 }

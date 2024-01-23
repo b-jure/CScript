@@ -9,83 +9,94 @@
 
 #include "skconf.h"
 
+#include <stdarg.h>
 
-#define SK_VERSION_MAJOR   "1"
-#define SK_VERSION_MINOR   "0"
+
+/* ================= Version info and Copyright ================= */
+#define SK_VERSION_MAJOR "1"
+#define SK_VERSION_MINOR "0"
 #define SK_VERSION_RELEASE "0"
 
-#define SK_VERSION_NUMBER      100
+#define SK_VERSION_NUMBER 100
 #define SK_VERSION_RELEASE_NUM (SK_VERSION_NUMBER * 100);
 
-#define SK_VERSION   "Skooma " SK_VERSION_MAJOR "." SK_VERSION_MINOR
-#define SK_RELEASE   SK_VERSION "." SK_VERSION_RELEASE
+#define SK_VERSION "Skooma " SK_VERSION_MAJOR "." SK_VERSION_MINOR
+#define SK_RELEASE SK_VERSION "." SK_VERSION_RELEASE
 #define SK_COPYRIGHT SK_RELEASE " Copyright (C) 2024 B. Jure"
-#define SK_AUTHORS   "B. Jure"
+#define SK_AUTHORS "B. Jure"
+/* --------------------------------------------------------------------- */
 
 
-
-/*
- * User can define his own sk_assert if he requires
+/* ================ API assertions ================ */
+/* User can define his own sk_assert if he requires
  * different/custom behaviour.
- * By default sk_assert is a nop.
- */
+ * By default sk_assert is a nop. */
 #if !defined(sk_assert)
 #define sk_assert(vm, cond, msg) ((void)0)
 #endif
-
 #if !defined(sk_checkapi)
 #define sk_checkapi(vm, cond, msg) sk_assert(cond)
 #endif
 
-
-
-/*
- * Locking mechanism (by default nop).
+/* Locking mechanism (by default nop).
  * By default skooma does not assume your VM is shared
  * by multiple threads, it is up to user to decide whether
- * to define his own sk_lock/sk_unlock.
- */
+ * to define his own sk_lock/sk_unlock. */
 #if !defined(S_LOCK_USR)
-#define sk_lock(vm)   ((void)0)
+#define sk_lock(vm) ((void)0)
 #define sk_unlock(vm) ((void)0)
 #endif
+/* --------------------------------------------------------------------- */
 
 
+/* =============== API typedefs =============== */
+/* Skooma unsigned and signed byte */
+typedef uint8_t sk_byte;
+typedef int8_t sk_sbyte;
+/* Skooma signed and unsigned integer (32 bit) */
+typedef int32_t sk_int;
+typedef uint32_t sk_uint;
+/* Skooma signed and unsigned long integer (64 bit) */
+typedef int64_t sk_lint;
+typedef uint64_t sk_ulint;
+/* --------------------------------------------------------------------- */
 
 
-/*
- * ============== Skooma types ==============
- */
-
-
+/* ============== Skooma types ============== */
 /* Skooma number */
 typedef double sk_number;
-
 
 /* Virtual Machine */
 typedef struct VM VM;
 
-
 /* Holds debug information */
 typedef struct DebugInfo DebugInfo;
 
-
 /* Native C function signature */
-typedef int (*CFunction)(VM* vm);
-
+typedef sk_int (*CFunction)(VM* vm);
 
 /* Panic handler (same signature as 'CFunction') */
-typedef int (*PanicFn)(VM* vm);
-
+typedef sk_int (*PanicFn)(VM* vm);
 
 /* Memory allocator function signature. */
 typedef void* (*AllocFn)(void* ptr, size_t newsize, void* userdata);
 
-
-/* Reader function signature. */
+/* Reader function signature.
+ * @sk_load uses this reader to compile skooma scripts.
+ * Each time @sk_load tries to load another chunk of the
+ * script, it calls this reader together with the 'userdata'.
+ *
+ * Expected behaviour:
+ * - 'ReadFn' must return a pointer to the block of memory
+ *   it read and set the 'szread' to the size of the block.
+ *
+ * - The block must exist until the 'ReadFn' is called again.
+ *
+ * - To signal the end of the chunk, 'ReadFn' must return NULL
+ *   or set the 'szread' to 0.
+ *
+ * - 'ReadFn' can return any block size greater than zero. */
 typedef const char* (*ReadFn)(VM* vm, void* userdata, size_t* szread);
-
-
 
 #define TT_NONE (-1) // indicates absence of value
 typedef enum {
@@ -98,22 +109,29 @@ typedef enum {
     TT_FUNCTION,
     TT_CNT, // keep this last
 } TypeTag;
-
-/* -------------------------------------------------*/ // Skooma types
-
+/* --------------------------------------------------------------------- */
 
 
+/* ========== 'VM' state manipulation ========== */
+SK_API VM* sk_create(AllocFn allocator, void* ud);
+SK_API void sk_resetvm(VM* vm);
+SK_API void sk_destroy(VM** vmp);
+
+/* Set VM hooks */
+SK_API PanicFn sk_setpanic(VM* vm, PanicFn panicfn);
+SK_API ReadFn sk_setreader(VM* vm, ReadFn readfn);
+SK_API AllocFn sk_setalloc(VM* vm, AllocFn allocfn, void* ud);
+
+SK_API sk_number sk_version(VM* vm);
+/* --------------------------------------------------------------------- */
 
 
-
-/*
- * ============== Class method/field tags ==============
- */
-
-/* Tag for overload-able class methods. */
+/* ============== Class method/field tags ============== */
 typedef enum {
     OM_INIT = 0,
     OM_DISPLAY,
+    OM_GETIDX,
+    OM_SETIDX,
 #if defined(SK_OVERLOAD_OPS)
     OM_ADD,
     OM_SUB,
@@ -131,58 +149,15 @@ typedef enum {
     OM_GE,
 #endif
     OM_CNT, // keep this last
-} OMTag;
+} OMTag; // tag for overload-able class methods
 
-/* Only useful if SK_OVERLOAD_OPS is defined. */
+#if defined(SK_OVERLOAD_OPS)
 #define omisunop(omtag) ((omtag) == OM_NOT | (omtag) == OM_UMIN)
-
-/* Tag for special class fields. */
-typedef enum {
-    SF_DEBUG = 0,
-    SF_CNT, // keep this last
-} SFTag;
-
-/* -------------------------------------------------*/ // class method/field tag
+#endif
+/* --------------------------------------------------------------------- */
 
 
-
-
-
-
-/*
- * ========== API check ==========
- */
-
-SK_API int sk_ensurestack(VM* vm, int n);
-
-/* -------------------------------------------------*/ // API check
-
-
-
-
-
-
-
-/*
- * ========== create/destroy VM ==========
- */
-
-SK_API VM* sk_create(AllocFn allocator, void* ud);
-SK_API void sk_resetvm(VM* vm);
-SK_API void sk_destroy(VM** vmp);
-
-/* -------------------------------------------------*/ // create/destroy
-
-
-
-
-
-
-
-/*
- * ========== Ordering and arithmetic functions ==========
- */
-
+/* ========== Ordering and arithmetic functions ========== */
 typedef enum {
     ORD_EQ = 0, // equal '=='
     ORD_NE, // not equal '!='
@@ -191,9 +166,9 @@ typedef enum {
     ORD_LE, // less or equal '<='
     ORD_GE, // greater or equal '>='
     ORD_CNT, // Ord count
-} Ord;
-
-SK_API void sk_compare(VM* vm, int idx1, int idx2, Ord op);
+} Ord; // ordering operations
+SK_API sk_byte sk_compare(VM* vm, sk_int idx1, sk_int idx2, Ord op);
+SK_API sk_byte sk_rawequal(VM* vm, sk_int idx1, sk_int idx2);
 
 typedef enum {
     AR_ADD = 0, // addition '+'
@@ -205,143 +180,85 @@ typedef enum {
     AR_NOT, // (unary) not '!'
     AR_UMIN, // (unary) negation '-'
     AR_CNT, // Ar count
-} Ar;
-
-#define arisbin(ar) ((ar) >= AR_ADD && (ar) <= AR_POW)
-#define arisun(ar)  ((ar) >= AR_NOT && (ar) <= AR_UMIN)
-
+} Ar; // arithmetic operations
 SK_API void sk_arith(VM* vm, Ar op);
-
-/* -------------------------------------------------*/ // Ordering/arith
-
+/* --------------------------------------------------------------------- */
 
 
-
-
-
-/*
- * ========== push functions, skooma -> stack ==========
- */
-
+/* ========== push functions, C -> stack ========== */
 SK_API void sk_pushnil(VM* vm);
 SK_API void sk_pushnumber(VM* vm, sk_number number);
 SK_API void sk_pushstring(VM* vm, const char* str, size_t len);
 SK_API void sk_pushcstring(VM* vm, const char* str);
+SK_API const char* sk_pushvfstring(VM* vm, const char* fmt, va_list argp);
 SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...);
-SK_API void sk_pushbool(VM* vm, int boolean);
-SK_API void sk_pushcfn(VM* vm, CFunction fn, int args, int isva, unsigned int upvals);
-SK_API void sk_push(VM* vm, int idx);
-
-/* -------------------------------------------------*/ // push functions
-
+SK_API void sk_pushbool(VM* vm, sk_int boolean);
+SK_API void sk_pushcclosure(VM* vm, CFunction fn, sk_uint args, sk_byte isvararg, sk_uint upvals);
+SK_API void sk_push(VM* vm, sk_int idx);
+/* --------------------------------------------------------------------- */
 
 
+/* ========== raw access ========== */
+#define SK_RAWGET 1
+#define SK_RAWSET 0
 
-/*
- * ========== get functions, skooma -> stack ==========
- */
-
-SK_API int8_t sk_getmethod(VM* vm, int idx, const char* method);
-SK_API int sk_getglobal(VM* vm, const char* name);
-SK_API TypeTag sk_getfield(VM* vm, int idx, const char* field);
-
-/* -------------------------------------------------*/ // get functions
+SK_API sk_byte sk_rawindex(VM* vm, sk_int idx, uint8_t what);
+/* --------------------------------------------------------------------- */
 
 
+/* ========== get functions, skooma -> stack ========== */
+SK_API sk_byte sk_getglobal(VM* vm, const char* name);
+SK_API sk_byte sk_getmethod(VM* vm, sk_int idx, const char* method);
+SK_API sk_byte sk_getfield(VM* vm, sk_int idx, const char* field);
+SK_API sk_byte sk_getindex(VM* vm, sk_int idx);
+#define sk_rawgetindex(vm, idx) sk_rawindex(vm, idx, SK_RAWGET)
+/* --------------------------------------------------------------------- */
 
 
-
-/*
- * ========== set functions ==========
- */
-
-SK_API void sk_settop(VM* vm, int idx);
-SK_API int sk_setglobal(VM* vm, const char* name, int isfixed);
-SK_API int sk_setfield(VM* vm, int idx, const char* field);
-SK_API PanicFn sk_setpanic(VM* vm, PanicFn panicfn);
-SK_API ReadFn sk_setreader(VM* vm, ReadFn readfn);
-SK_API AllocFn sk_setalloc(VM* vm, AllocFn allocfn, void* ud);
-
-/* -------------------------------------------------*/ // set functions
+/* ========== set functions stack -> skooma =========== */
+SK_API sk_byte sk_setglobal(VM* vm, const char* name, sk_int isfixed);
+SK_API sk_byte sk_setfield(VM* vm, sk_int idx, const char* field);
+SK_API sk_byte sk_setindex(VM* vm, sk_int idx);
+#define sk_rawsetindex(vm, idx) sk_rawindex(vm, idx, SK_RAWSET)
+/* --------------------------------------------------------------------- */
 
 
-
-
-
-
-/*
- * ========== get/access functions, stack -> C ==========
- */
-
-SK_API int sk_isnil(const VM* vm, int idx);
-SK_API int sk_isnumber(const VM* vm, int idx);
-SK_API int sk_isstring(const VM* vm, int idx);
-SK_API int sk_isbool(const VM* vm, int idx);
-SK_API int sk_isclass(const VM* vm, int idx);
-SK_API int sk_isinstance(const VM* vm, int idx);
-SK_API int sk_isnative(const VM* vm, int idx);
-SK_API int sk_ismethod(const VM* vm, int idx);
-SK_API int sk_isclosure(const VM* vm, int idx);
-SK_API int sk_type(const VM* vm, int idx);
-SK_API const char* sk_typename(const VM* vm, int idx);
+/* ========== access functions, stack -> C ========== */
+SK_API sk_byte sk_isnil(const VM* vm, sk_int idx);
+SK_API sk_byte sk_isnumber(const VM* vm, sk_int idx);
+SK_API sk_byte sk_isstring(const VM* vm, sk_int idx);
+SK_API sk_byte sk_isbool(const VM* vm, sk_int idx);
+SK_API sk_byte sk_isclass(const VM* vm, sk_int idx);
+SK_API sk_byte sk_isinstance(const VM* vm, sk_int idx);
+SK_API sk_byte sk_isnative(const VM* vm, sk_int idx);
+SK_API sk_byte sk_ismethod(const VM* vm, sk_int idx);
+SK_API sk_byte sk_isclosure(const VM* vm, sk_int idx);
+SK_API TypeTag sk_type(const VM* vm, sk_int idx);
+SK_API const char* sk_typename(const VM* vm, sk_int idx);
 SK_API const char* sk_tagname(const VM* vm, TypeTag type);
 
 SK_API PanicFn sk_getpanic(VM* vm);
 SK_API ReadFn sk_getreader(VM* vm);
 SK_API AllocFn sk_getalloc(VM* vm, void** ud);
-SK_API int sk_getbool(const VM* vm, int idx, int* isbool);
-SK_API sk_number sk_getnumber(const VM* vm, int idx, int* isnum);
-SK_API const char* sk_getstring(const VM* vm, int idx);
-SK_API CFunction sk_tocfunction(const VM* vm, int idx);
-
-/* -------------------------------------------------*/ // get/access
-
-
+SK_API sk_byte sk_getbool(const VM* vm, sk_int idx, sk_byte* isbool);
+SK_API sk_number sk_getnumber(const VM* vm, sk_int idx, sk_byte* isnum);
+SK_API const char* sk_getstring(const VM* vm, sk_int idx);
+SK_API CFunction sk_getcfunction(const VM* vm, sk_int idx);
+SK_API size_t sk_strlen(const VM* vm, sk_int idx);
+/* --------------------------------------------------------------------- */
 
 
+/* ========== stack manipulation functions ========== */
+SK_API void sk_settop(VM* vm, sk_int idx);
+SK_API sk_uint sk_gettop(const VM* vm);
+SK_API sk_uint sk_absidx(VM* vm, sk_int idx);
+SK_API void sk_rotate(VM* vm, sk_int idx, sk_int n);
+SK_API void sk_copy(VM* vm, sk_int src, sk_int dest);
+SK_API sk_int sk_ensurestack(VM* vm, sk_int n);
+/* --------------------------------------------------------------------- */
 
 
-
-/*
- * ========== stack manipulation functions ==========
- */
-
-SK_API void sk_settop(VM* vm, int idx);
-#define sk_pop(vm, n) sk_settop(vm, -(n)-1)
-SK_API void sk_rotate(VM* vm, int idx, int n);
-SK_API void sk_copy(VM* vm, int src, int dest);
-/**
- * Pops off the stack top and copies over that
- * value into the stack slot at 'idx'.
- **/
-#define sk_replace(vm, idx) (sk_copy(vm, -1, idx), sk_pop(vm, 1))
-SK_API int sk_setfield(VM* vm, int idx, const char* field);
-SK_API int sk_setglobal(VM* vm, const char* name, int isfixed);
-/**
- * Removes the value on stack at 'idx' shifting
- * the stack once to the left and adjusting the
- * stack top by one to compensate the shift.
- **/
-#define sk_remove(vm, idx) (sk_rotate(vm, idx, -1), sk_pop(vm, 1))
-/**
- * Inserts the value on top of the stack at 'idx'
- * shifting the stack once to the right.
- **/
-#define sk_insert(vm, idx) sk_rotate(vm, idx, 1)
-
-/* -------------------------------------------------*/ // stack manipulation
-
-
-
-
-
-
-
-/*
- * ========== error reporting ==========
- */
-
-/* Runtime status codes */
+/* ========== error reporting ========== */
 typedef enum {
     S_OK = 0,
     S_EMEM, // memory allocation error
@@ -365,80 +282,67 @@ typedef enum {
     S_ECOMP, // compile error
     S_ENILIDX, // indexing with 'nil' error
     S_CNT,
-} Status;
-
+} Status; // Runtime status codes
 SK_API Status sk_getstatus(VM* vm);
-SK_API int sk_error(VM* vm, Status errcode);
-
-/* -------------------------------------------------*/ // error reporting
-
+SK_API sk_int sk_error(VM* vm, Status errcode);
+/* --------------------------------------------------------------------- */
 
 
+/* ========== miscellaneous functions/macros ========== */
+SK_API const char* sk_stringify(VM* vm, sk_int idx);
+SK_API sk_int sk_getupvalue(VM* vm, sk_int fidx, sk_int idx);
+SK_API sk_int sk_setupvalue(VM* vm, sk_int fidx, sk_int idx);
+SK_API const char* sk_concat(VM* vm);
+SK_API sk_byte sk_nextproperty(VM* vm, sk_int idx, sk_byte what);
+
+#define sk_nextfield(vm, idx) sk_nextproperty(vm, idx, 0)
+#define sk_nextmethod(vm, idx) sk_nextproperty(vm, idx, 1)
+#define sk_register(vm, name, cfn, args, isvararg, upvals)                                         \
+    (sk_pushcclosure(vm, cfn, args, isvararg, upvals), sk_setglobal(vm, name, 0))
+#define sk_pushcfunction(vm, cfn, args, isvararg) sk_pushcclosure(vm, cfn, args, isvararg, 0)
+#define sk_pop(vm, n) sk_settop(vm, -(n)-1)
+#define sk_replace(vm, idx) (sk_copy(vm, -1, idx), sk_pop(vm, 1))
+#define sk_remove(vm, idx) (sk_rotate(vm, idx, -1), sk_pop(vm, 1))
+#define sk_insert(vm, idx) sk_rotate(vm, idx, 1)
+/* --------------------------------------------------------------------- */
 
 
-
-/*
- * ========== miscellaneous functions ==========
- */
-SK_API int sk_version(VM* vm);
-SK_API const char* sk_tostring(VM* vm, int idx);
-SK_API int sk_getupvalue(VM* vm, int fidx, int idx);
-SK_API int sk_setupvalue(VM* vm, int fidx, int idx);
-SK_API size_t sk_strlen(const VM* vm, int idx);
-
-/* -------------------------------------------------*/ // misc functions
-
-
-
-
-
-
-/*
- * ========== call/load/run functions ==========
- */
-
-/* option for multiple returns (retcnt) in sk_call and sk_pcall */
+/* ========== call/load/run functions ========== */
+// returns all of the returned values from the function ('retcnt')
 #define SK_MULRET (-1)
 
-SK_API Status sk_pcall(VM* vm, int argc, int retcnt);
-SK_API void sk_call(VM* vm, int argc, int retcnt);
-
-SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* dbgname);
-
-/* -------------------------------------------------*/ // call/load/run
+SK_API Status sk_pcall(VM* vm, sk_int argc, sk_int retcnt);
+SK_API void sk_call(VM* vm, sk_int argc, sk_int retcnt);
+SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* source);
+/* --------------------------------------------------------------------- */
 
 
+/* ========== garbage collector ========== */
 
-
-
-
-/*
- * ========== garbage collector ==========
- */
+// @TODO: Implement 'GCO_STEP' option, this will invoke
+//        garbage collection same as 'GCO_COLLECT', but
+//        collection will continue only up to the provided
+//        limit (in kilobytes).
+//        For example 'sk_gc(vm, GCO_STEP, 5)' will sweep
+//        5 kilobytes before the collection stops (or less in
+//        case total collectable memory is less than 5 kilobytes).
 
 typedef enum {
     GCO_STOP, // stop GC
     GCO_RESTART, // restart GC (start if stopped)
     GCO_COLLECT, // perform full GC cycle
+    // @TODO: GCO_STEP,
     GCO_COUNT, // get number of bytes allocated
     GCO_ISRUNNING, // check whether GC is stopped
     GCO_NEXTGC, // set bytes amount when the next GC will trigger
 } GCOpt; // Garbage collector options
 
-/* ---------------------------------------- */ // garbage collector
+SK_API size_t sk_gc(VM* vm, GCOpt option, ...);
+/* --------------------------------------------------------------------- */
 
 
-
-
-
-
-
-
-/*
- * ============= debug API =============
- * @https://www.lua.org/manual/5.4/manual.html#lua_Debug
- */
-
+/* ============= debug API ============= */
+SK_API sk_byte sk_getstack(VM* vm, int32_t level, DebugInfo* di);
 typedef enum {
     DW_FNGET = (1 << 0), // load the function on top of the stack (processed first)
     DW_LINE = (1 << 1), // fill 'line'
@@ -447,12 +351,15 @@ typedef enum {
     DW_FNPUSH = (1 << 4), // push current function on the stack (processed last)
 } DebugWhat; // bits for creating debug bitmask ('sk_getinfo')
 
-SK_API uint8_t sk_getstack(VM* vm, int32_t level, DebugInfo* di);
-SK_API uint8_t sk_getinfo(VM* vm, uint8_t dbmask, DebugInfo* di);
+SK_API sk_byte sk_getinfo(VM* vm, sk_byte dbmask, DebugInfo* di);
 
 /* Forward declare the private type */
 typedef struct CallFrame CallFrame;
 
+/* Struct for interfacing with Skooma debug API, this gets passed
+ * in every debug function, main one being 'sk_getinfo'.
+ * These functions fill out 'DebugInfo' with requested information
+ * as stated in bit mask [@DebugWhat]. */
 struct DebugInfo {
     const char* name; // function name (declaration name in Skooma script)
     const char* type; // function type ('Skooma', 'main' or 'C')
@@ -461,14 +368,13 @@ struct DebugInfo {
     int32_t line; // current line in Skooma script
     uint32_t nups; // number of function upvalues
     uint32_t nparams; // number of function parameters
-    uint8_t isvararg; // is function vararg ('...')
+    sk_byte isvararg; // is function vararg ('...')
     int32_t defline; // line number where the function definition starts
     int32_t deflastline; // line number where the function definition ends
     char shortsrc[SK_SRCID_MAX];
     /* private */
     CallFrame* frame; // active function frame
 };
-
-/* ---------------------------------------- */ // debug API
+/* --------------------------------------------------------------------- */
 
 #endif // SKOOMA_H
