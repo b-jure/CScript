@@ -89,9 +89,9 @@ typedef struct {
     Token current;
     OString* source; // current source name
     uint32_t line; // source file line
-    bool skip; // skip current token (LEX_TOKEN_LIMIT reached)
-    bool panic; // sync flag
-    bool error; // parse error flag
+    uint8_t skip; // skip current token (LEX_TOKEN_LIMIT reached)
+    uint8_t panic; // sync flag
+    uint8_t error; // parse error flag
 } Lexer; // Lexer
 
 

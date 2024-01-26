@@ -35,7 +35,6 @@ typedef enum {
     CE_SWDUP,
     CE_CONT,
     CE_BREAK,
-    CE_OMRET,
     CE_EXPLIST,
     CE_VARLIST,
     CE_SCOPE,
@@ -47,9 +46,11 @@ typedef enum {
     CE_SELF,
     CE_SUPER,
     CE_NOSUPER,
+    CE_OMSIG,
+    CE_CNT,
 } CompErr;
 
-const char* comperrors[] = {
+const char* comperrors[CE_CNT] = {
     "\tToo much code to jump over, limit is '%d'.\n",
     "\tCan't read local variable %.*s in its own initializer.\n",
     "\tToo many global values defined in script, limit is '%d'.\n",
@@ -61,7 +62,6 @@ const char* comperrors[] = {
     "\tAlready have case with constant '%s'.\n",
     "\t'continue' statement not in loop statement.\n",
     "\t'break' statement not in loop or switch statement.\n",
-    "\tCan't return values from '%s' method.\n",
     "\tToo many expressions in explist, expected at most '%d'.\n",
     "\tToo many variables in varlist, limit is '%d'.\n",
     "\tScope nesting limit reached, limit is '%d'.\n",
@@ -74,6 +74,7 @@ const char* comperrors[] = {
     "\tCan't use 'self' outside of a class.\n",
     "\tCan't use 'super' outside of a class.\n",
     "\tCan't use 'super', class does not have a superclass.\n",
+    "\tOverload-able method %s expects %d parameters, instead defined %d.\n",
 };
 
 /* ----------------------------------------------------------- */ // Compile errors
@@ -400,6 +401,8 @@ struct Function {
     Array_Local locals; // local variables stack
 };
 
+#define isom(F) ((F)->tag != -1)
+
 static force_inline Scope* getscope(Function* F, int32_t depth)
 {
     Scope* scope = F->S;
@@ -536,48 +539,6 @@ static void error(Function* F, const char* error, ...)
 
 // Class initializer return
 #define initreturn(F) (CODEOP(F, OP_GET_LOCAL, 0), CODE(F, OP_RET1))
-
-// Emit return instruction
-static force_inline void coderet(Function* F, uint8_t explicit, uint8_t gotret)
-{
-    if(gotret && (F->fn->gotret = 1)) return;
-    if(F->tag != -1) { // return from overloaded method ?
-        switch(F->tag - SS_INIT) {
-            case OM_INIT:
-                sk_assert(F->vm, !explicit, "must be implicit return");
-                initreturn(F);
-                break;
-            case OM_SETIDX:
-                sk_assert(F->vm, !explicit, "must be implicit return");
-                CODE(F, OP_RET0);
-                break;
-            case OM_DISPLAY:
-            case OM_GETIDX:
-                sk_assert(F->vm, explicit, "must be explicit return");
-#if defined(SK_OVERLOAD_OPS)
-            case OM_ADD:
-            case OM_SUB:
-            case OM_MUL:
-            case OM_DIV:
-            case OM_MOD:
-            case OM_POW:
-            case OM_NOT:
-            case OM_UMIN:
-            case OM_NE:
-            case OM_EQ:
-            case OM_LT:
-            case OM_LE:
-            case OM_GT:
-            case OM_GE:
-#endif
-                break;
-            default:
-                unreachable;
-        }
-        return;
-    }
-    CODE(F, OP_RET);
-}
 
 // Emit loop instruction
 static force_inline void codeloop(Function* F, uint32_t start)
@@ -1003,13 +964,20 @@ static force_inline void expect(Function* F, TokenType type, const char* err)
     error(F, err);
 }
 
+// String literal as argument to 'expect()'
 #define expectstr(str) "\t" str "\n"
 
 // End compilation of the function and emit return instruction
 static force_inline OFunction* compile_end(Function* F)
 {
-    coderet(F, 0, F->fn->gotret);
-    Chunk* c = &F->fn->chunk;
+    if(!F->fn->gotret) { // last statement wasn't 'return' ?
+        if(isom(F) && tagisnoret(F->tag)) { // om that can't return values with 'return' ?
+            if(F->tag == SS_INIT) { // return 'self'
+                CODEOP(F, OP_GET_LOCAL, 0);
+                CODE(F, OP_RET1);
+            } else CODE(F, OP_RET0); // no return
+        } else implicitreturn(F); // otherwise implicit 'nil' return
+    }
     F->fn->p.deflastline = PREVT(F).line;
 #ifdef SK_DEBUG_PRINT_CODE
     if(!F->lexer->error) Chunk_debug(F->vm, CHUNK(F), F->fn->name->storage);
@@ -1022,7 +990,7 @@ static force_inline OFunction* compile_end(Function* F)
 // compiled is in global or local scope.
 // Additionally parser only registers compile-time errors but it does not
 // call the usual 'runerror' [@err.h], this ensures that all of the
-// compile-time errors will be reported.
+// compile-time errors will be reported (exhaustive parser).
 OClosure* compile(VM* vm, BuffReader* br, const char* name, uint8_t isingscope)
 {
     Scope globalscope, local;
@@ -1105,9 +1073,8 @@ static force_inline void endbreaklist(Function* F)
 
 static force_inline uint32_t make_constant(Function* F, Value constant)
 {
-    if(unlikely(cast_int(CHUNK(F)->constants.len) > PARSER_CONST_LIMIT)) {
+    if(unlikely(cast_int(CHUNK(F)->constants.len) > PARSER_CONST_LIMIT))
         error(F, "Too many constants created in this chunk, limit is '%d'.\n", PARSER_CONST_LIMIT);
-    }
     return Chunk_make_constant(F->vm, CHUNK(F), constant);
 }
 
@@ -1562,18 +1529,26 @@ static force_inline void fvardec(Function* F)
     vardec(F);
 }
 
+
 // Create and parse a new Function
 static void fn(Function* F, FunctionType type)
 {
     Function Fnew;
     Scope globscope, S;
     F_init(F->vm, &Fnew, &globscope, F->cclass, type, F);
+    Fnew.tag = F->tag;
     Fnew.fn->p.source = F->fn->p.source; // source is same
     startscope(&Fnew, &S, 0, 0); // no need to end this scope
     expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
     if(!check(&Fnew, TOK_RPAREN)) arglist(&Fnew);
     if(F->fn->p.isvararg) expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
     else expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
+    int32_t arity = Fnew.fn->p.arity;
+    int32_t expected = ominfo[F->tag].arity;
+    if(unlikely(isom(F) && expected != arity)) {
+        error(F, comperrors[CE_OMSIG], F->vm->faststatic[F->tag]->storage, expected, arity);
+        Fnew.lexer->panic = 0; // clear panic flag do not sync yet
+    }
     expect(&Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
     block(&Fnew); // body
     OFunction* fn = compile_end(&Fnew);
@@ -2114,12 +2089,13 @@ static void returnstm(Function* F)
 {
     /* @TODO: Optimize even further by removing all of the unreachable code. */
     static const char* expectstr = expectstr("Expect ';' after return statement values.");
-    Context C;
     uint8_t gotret = F->fn->gotret;
+    Context C;
     savecontext(F, &C);
     if(F->tag != -1) { // overload-able method ?
         if(tagisnoret(F->tag)) {
             if(F->tag == SS_INIT) CODEOP(F, OP_GET_LOCAL, 0);
+
             expect(F, TOK_SEMICOLON, "Expect ';' after 'return'");
         } else { // has return values
             switch(F->tag - SS_INIT) {
@@ -2153,8 +2129,8 @@ static void returnstm(Function* F)
                     unreachable;
             }
         }
-    } else if(match(F, TOK_SEMICOLON)) { // no return value
-        CODE(F, OP_RET0);
+    } else if(match(F, TOK_SEMICOLON)) { // implicit 'nil' return
+        implicitreturn(F);
     } else { // generic return
         uint32_t idx = CODE(F, OP_RETSTART);
         Exp E;
@@ -2170,13 +2146,13 @@ static void returnstm(Function* F)
             // @Safety:
             // this is fine, there can't be any jump instructions
             // in 'return' STATEMENT except 'and'/'or' which are fine
-            // by themselves (no relative jumps beyond return statement).
+            // by themselves (no jumps beyond/outside of return statement).
             Array_Byte_remove(&CHUNK(F)->code, idx); // remove 'OP_RETSTART'
             CODE(F, OP_RET1);
         } else CODE(F, OP_RET);
     }
     if(gotret) { // last statement was 'return' ?
-        F->fn->gotret = 1;
+        F->fn->gotret = 1; // this is also a 'return' statement
         restorecontext(F, &C);
     }
 }
