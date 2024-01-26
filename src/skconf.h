@@ -20,12 +20,12 @@
  */
 #if defined(__GNUC__)
 #define SK_PRECOMPUTED_GOTO
-#define force_inline   __always_inline
-#define likely(cond)   __builtin_expect(cond, 2)
+#define force_inline __always_inline
+#define likely(cond) __builtin_expect(cond, 2)
 #define unlikely(cond) __builtin_expect(cond, 0)
-#define unused         __attribute__((unused))
-#define unreachable    __builtin_unreachable()
-#define sk_noret       void __attribute__((noreturn))
+#define unused __attribute__((unused))
+#define unreachable __builtin_unreachable()
+#define sk_noret void __attribute__((noreturn))
 
 
 /*
@@ -33,17 +33,17 @@
  */
 #elif defined(_MSC_VER) && !defined(__clang__)
 #define force_inline __force_inline
-#define unreachable  __assume(0)
+#define unreachable __assume(0)
 #define unused
 #ifndef __cplusplus
-#define inline         _inline
-#define likely(cond)   cond
+#define inline _inline
+#define likely(cond) cond
 #define unlikely(cond) cond
 #elif _MSC_VER >= 1926
-#define likely(cond)   [[likely]] cond
+#define likely(cond) [[likely]] cond
 #define unlikely(cond) [[unlikely]] cond
 #else
-#define likely(cond)   cond
+#define likely(cond) cond
 #define unlikely(cond) cond
 #endif // __cplusplus
 #define unused
@@ -57,8 +57,8 @@
  * We are not using MSVC and/or GNU compiler
  */
 #else
-#define force_inline   inline
-#define likely(cond)   cond
+#define force_inline inline
+#define likely(cond) cond
 #define unlikely(cond) cond
 #define unused
 #define unreachable                                                                                \
@@ -75,7 +75,7 @@
 
 
 /* This is the limit of almost everything inside the
- * interpreter, it is the maximum amount of variables,
+ * virtual machine, it is the maximum amount of variables,
  * constants, upvalues, local or global values you can
  * define.
  * It is also the limit of arguments a function
@@ -94,11 +94,11 @@
  * HOWEVER SETTING THIS TO A HIGHER VALUE THAN THE
  * DEFAULT ONE IS NOT RECOMMENDED, BECAUSE IN CASE
  * YOU REACH THIS LIMIT IN ANY OF THE AREAS MENTIONED
- * ABOVE, IT WILL BREAK THE INTERPRETER. */
+ * ABOVE, IT WILL PROBABLY BREAK THE VM. */
 #define SK_BYTECODE_MAX 16777215
 
 /* Maximum amount of constants.
- * By defautl it is set to 'SK_BYTECODE_MAX', can be changed
+ * By default it is set to 'SK_BYTECODE_MAX', can be changed
  * to a lower value if desired. */
 #define SK_CONST_MAX SK_BYTECODE_MAX
 
@@ -107,8 +107,8 @@
  * to a lower value if desired. */
 #define SK_ARG_MAX SK_BYTECODE_MAX
 
-/* Maximum amount of return values in the function
- * return statement and on the right side of assignment.
+/* Maximum amount of return values in the function return
+ * statement.
  * By default it is set to 'SK_BYTECODE_MAX', can be changed
  * to a lower value if desired. */
 #define SK_RET_MAX SK_BYTECODE_MAX

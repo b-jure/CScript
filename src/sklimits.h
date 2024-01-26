@@ -30,7 +30,7 @@
 /* ====================== VM limits ====================== */
 
 #define _FALLBACK_STACK 20000
-#define _STACK_CNT      cast_uint(SK_STACK_MAX / sizeof(Value))
+#define _STACK_CNT cast_uint(SK_STACK_MAX / sizeof(Value))
 #define _STACK_SIZE                                                                                \
     (_STACK_CNT == 0 ? _FALLBACK_STACK                                                             \
                      : (_STACK_CNT > SK_BYTECODE_MAX ? SK_BYTECODE_MAX : _STACK_CNT))

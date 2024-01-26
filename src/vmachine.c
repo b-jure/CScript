@@ -46,29 +46,58 @@ uint8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver)
 }
 
 
+/* Adjust return values after native call finishes. */
+static force_inline void moveresults(VM* vm, Value* fn, int32_t got, int32_t expect)
+{
+    Value* retstart = vm->sp - got; // start of return values
+    if(expect == 0) expect = got; // all results (MULRET)
+    if(got > expect) got = expect; // remove extra results
+    memcpy(fn, retstart, got); // Safety: 'retstart' >= 'nativefn'
+    for(int32_t i = got; i < expect; i++) // replace missing values with nil
+        fn[i] = NIL_VAL;
+    vm->sp = fn + expect;
+}
+
+
+/* Call native function. */
+static force_inline int32_t callnative(VM* vm, Value fn)
+{
+    sk_unlock(vm);
+    int32_t n = AS_NATIVE(fn)->fn(vm);
+    sk_lock(vm);
+    skapi_checkelems(vm, n);
+    CallFrame* f = &last_frame(vm);
+    moveresults(vm, f->callee, n, f->retcnt);
+    vm->fc--; // pop frame
+    return n;
+}
+
+
 
 /* Calls have lots of checks and there are two main reasons why.
  * Skooma does not allow extra arguments if the function does not
  * accept variable number of arguments and you are not allowed to
- * provide less arguments than the function arity. */
-static int32_t precall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
+ * provide less arguments than the function arity.
+ * In case 'callee' is a Skooma closure then just return the new 'CallFrame',
+ * otherwise run the C closure and return NULL. */
+static CallFrame* precall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
 {
     FnPrototype* p = NULL;
     CallFrame* frame = &vm->frames[vm->fc];
-    int32_t type = CALL_SKOOMAFN;
     if(!IS_NATIVE(callee)) {
         OClosure* closure = AS_CLOSURE(callee);
         OFunction* fn = closure->fn;
         p = &fn->p;
         frame->closure = closure;
         frame->ip = fn->chunk.code.data;
+        frame->cfinfo = 0;
         retcnt = (retcnt == SK_MULRET ? 0 : retcnt); // adjust return count
     } else {
         ONative* native = AS_NATIVE(callee);
         p = &native->p;
         frame->closure = NULL;
         frame->ip = NULL;
-        type = CALL_NATIVEFN;
+        frame->cfinfo = CFI_CCALL;
     }
 #if defined(callbitmask)
     const static void* jmptable[] = {
@@ -99,22 +128,15 @@ ok:
     frame->vacnt = argc - p->arity;
     frame->retcnt = retcnt;
     frame->callee = vm->sp - argc - 1;
-    frame->cfinfo = 0;
     vm->fc++;
-    return type;
+    if(frame->cfinfo & CFI_CCALL) {
+        callnative(vm, callee);
+        return NULL;
+    } else return &last_frame(vm);
 }
 
-/* Tries to call a value.
- * If value is a callable skooma function it sets up
- * the new call frame and returns 'CALL_SKOOMAFN'.
- * If value is a native C function, it also sets up the
- * new call frame and returns 'CALL_NATIVEFN'.
- * If the value is a class object it creates a new class instance,
- * additionally if there is overload method for that class it
- * sets up the new call frame and returns 'CALL_SKOOMAFN'.
- * If there is no overloaded method it just returns 'CALL_CLASS'.
- * Overloaded methods are only allowed to be Skooma closures. */
-static int8_t trycall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
+/* Call '()' a value (closure, method, class). */
+static CallFrame* call(VM* vm, Value callee, int32_t argc, int32_t retcnt)
 {
     if(unlikely(!IS_OBJ(callee))) callerror(vm, callee);
     switch(OBJ_TYPE(callee)) {
@@ -126,10 +148,11 @@ static int8_t trycall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
         case OBJ_CLASS: {
             OClass* oclass = AS_CLASS(callee);
             vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, oclass));
-            OClosure* init = oclass->omethods[OM_INIT];
+            O* init = oclass->omethods[OM_INIT];
             if(init) return precall(vm, OBJ_VAL(init), argc, 1);
-            if(unlikely(argc != 0)) arityerror(vm, 0, argc);
-            return CALL_CLASS;
+            int32_t arity = ominfo[OM_INIT].arity;
+            if(unlikely(argc != arity)) arityerror(vm, arity, argc);
+            return NULL;
         }
         case OBJ_CLOSURE:
         case OBJ_FUNCTION:
@@ -140,52 +163,23 @@ static int8_t trycall(VM* vm, Value callee, int32_t argc, int32_t retcnt)
     }
 }
 
-/* Adjust return values after native call finishes. */
-static force_inline void moveresults(VM* vm, Value* fn, int32_t got, int32_t expect)
-{
-    Value* retstart = vm->sp - got; // start of return values
-    if(expect == 0) expect = got; // all results (MULRET)
-    if(got > expect) got = expect; // remove extra results
-    memcpy(fn, retstart, got); // Safety: 'retstart' >= 'nativefn'
-    for(int32_t i = got; i < expect; i++) // replace missing values with nil
-        fn[i] = NIL_VAL;
-    vm->sp = fn + expect;
-}
-
-/* Call native function without locking (for use inside the interpreter). */
-static force_inline int32_t callnative_nolock(VM* vm, Value* retstart, Value fn, int32_t retcnt)
-{
-    int32_t n = AS_NATIVE(fn)->fn(vm);
-    skapi_checkelems(vm, n);
-    moveresults(vm, retstart, n, retcnt);
-    vm->fc--;
-    return n;
-}
-
-/* Call native function. */
-static force_inline int32_t callnative(VM* vm, Value* retstart, Value fn, int32_t retcnt)
-{
-    sk_unlock(vm);
-    int32_t n = AS_NATIVE(fn)->fn(vm);
-    sk_lock(vm);
-    skapi_checkelems(vm, n);
-    moveresults(vm, retstart, n, retcnt);
-    vm->fc--; // pop frame
-    return n;
-}
-
-/* Public interface for normal call (unprotected).
- * Performs a normal function call, in case the function is
- * the skooma function it runs the interpreter and in
- * case of the native C function it calls it directly. */
-int32_t ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt)
+/* Public interface for normal call (unprotected). */
+void ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt)
 {
     int32_t argc = vm->sp - retstart - 1;
-    int8_t calltype = trycall(vm, fn, argc, retcnt);
-    if(calltype == CALL_SKOOMAFN) run(vm);
-    else if(calltype == CALL_NATIVEFN) callnative(vm, retstart, fn, retcnt);
-    return calltype;
+    if(call(vm, fn, argc, retcnt) != NULL) run(vm);
 }
+
+
+/* Call overload-able method */
+static CallFrame* calloverload(VM* vm, Value om, OMTag tag)
+{
+    Tuple t = ominfo[tag];
+    int32_t retcnt = t.retcnt == 0 && IS_NATIVE(om) ? SK_MULRET : 0;
+    return call(vm, om, t.arity, retcnt);
+}
+
+
 
 /* Protected call with longjmp.
  * Performs a protected call, calling the wrapper 'ProtectedFn' around
@@ -226,32 +220,29 @@ int32_t pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop)
 
 
 /* Private to the interpreter.
- * Tries to call the superclass method named 'name'. */
+ * Tries to call the superclass method 'name'. */
 static force_inline void
 invokefrom(VM* vm, OClass* oclass, Value name, int32_t argc, int32_t retcnt)
 {
     Value method;
-    if(unlikely(!HashTable_get(&oclass->methods, name, &method))) udperror(vm, name, oclass);
-    if(trycall(vm, method, argc, retcnt) == CALL_NATIVEFN)
-        callnative_nolock(vm, last_frame(vm).callee, method, retcnt);
+    if(unlikely(!rawget(&oclass->methods, name, &method))) udperror(vm, name, oclass);
+    call(vm, method, argc, retcnt);
 }
+
+
+/* Check if receiver and key are valid for indexing. */
+static force_inline void checkindex(VM* vm, Value receiver, Value key)
+{
+    if(unlikely(!IS_INSTANCE(receiver))) ipaerror(vm, receiver);
+    else if(unlikely(IS_NIL(key))) nilidxerror(vm);
+}
+
 
 /* Private to interpreter.
  * Small optimization, tries to get and call the indexed
  * value directly as a part of a single instruction. */
 static force_inline void invokeindex(VM* vm, int32_t argc, int32_t retcnt)
 {
-    Value key = *stackpeek(argc);
-    Value receiver = *stackpeek(argc + 1);
-    if(unlikely(!IS_INSTANCE(receiver))) ipaerror(vm, receiver);
-    OInstance* instance = AS_INSTANCE(receiver);
-    Value property;
-    if(HashTable_get(&instance->fields, key, &property)) goto call;
-    if(unlikely(!HashTable_get(&instance->oclass->methods, key, &property)))
-        udperror(vm, key, instance->oclass);
-call:
-    if(trycall(vm, property, argc, retcnt) == CALL_NATIVEFN)
-        callnative_nolock(vm, stackpeek(argc + 1), property, retcnt);
 }
 
 /* Private to interpreter.
@@ -266,10 +257,9 @@ static force_inline void invoke(VM* vm, Value name, int32_t argc, int32_t retcnt
     if(unlikely(!IS_INSTANCE(receiver))) ipaerror(vm, receiver);
     OInstance* instance = AS_INSTANCE(receiver);
     Value field;
-    if(HashTable_get(&instance->fields, name, &field)) {
+    if(rawget(&instance->fields, name, &field)) {
         *stackpeek(argc) = field; // swap receiver with field
-        if(trycall(vm, field, argc, retcnt) == CALL_NATIVEFN)
-            callnative_nolock(vm, stackpeek(argc), field, retcnt);
+        call(vm, field, argc, retcnt);
     }
     invokefrom(vm, instance->oclass, name, argc, retcnt);
 }
@@ -317,6 +307,7 @@ static force_inline OString* globalname(VM* vm, uint32_t idx)
     unreachable;
 }
 
+
 void run(VM* vm)
 {
 #define saveip() (frame->ip = ip)
@@ -350,7 +341,7 @@ void run(VM* vm)
     } while(0)
 
 
-    last_frame(vm).cfinfo = CFI_FRESH;
+    last_frame(vm).cfinfo = CFI_FRESH; // mark as fresh execute of Skooma script
     runtime = 1;
     register CallFrame* frame = &vm->frames[vm->fc - 1];
     register uint8_t* ip = frame->ip;
@@ -515,8 +506,7 @@ void run(VM* vm)
                 Value callee = *stackpeek(argc);
                 frame->ip = ip;
                 saveip();
-                if(trycall(vm, callee, argc, retcnt) == CALL_NATIVEFN)
-                    callnative_nolock(vm, last_frame(vm).callee, callee, retcnt);
+                call(vm, callee, argc, retcnt);
                 updatestate();
                 BREAK;
             }
@@ -583,7 +573,7 @@ void run(VM* vm)
                 }
                 OInstance* instance = AS_INSTANCE(receiver);
                 Value property;
-                if(HashTable_get(&instance->fields, property_name, &property)) {
+                if(rawget(&instance->fields, property_name, &property)) {
                     *stackpeek(0) = property;
                     BREAK;
                 }
@@ -689,42 +679,13 @@ void run(VM* vm)
                     BREAK;
                 }
             }
-            CASE(OP_RET) // function return
+            CASE(OP_JMP_IF_FALSE) // unused
             {
-                saveip();
-                int32_t retcnt = vm->sp - Array_VRef_pop(&vm->retstart);
-                int32_t pushc;
-                if(frame->retcnt == 0) { // multiple return values ?
-                    pushc = 0;
-                    frame->retcnt = retcnt;
-                } else pushc = frame->retcnt - retcnt;
-                if(pushc < 0) popn(vm, -pushc);
-                else pushn(vm, pushc, NIL_VAL);
-                sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
-                for(int32_t returns = frame->retcnt; returns--;) {
-                    Array_Value_push(&vm->temp, *stackpeek(0));
-                    pop(vm);
-                }
-                closeupval(vm, frame->callee);
-                vm->fc--;
-                vm->sp = frame->callee;
-                while(vm->temp.len > 0)
-                    push(vm, Array_Value_pop(&vm->temp));
-                sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
-                if(last_frame(vm).cfinfo == CFI_FRESH) return;
-                sk_assert(vm, vm->fc > 0, "Invalid CallFrame status.");
-                updatestate();
-                BREAK;
-            }
-            {
+                unreachable;
                 uint32_t skip_offset = READ_BYTEL();
                 ip += ISFALSE(*stackpeek(0)) * skip_offset;
                 sk_assert(vm, ipinbounds(), "Invalid jump.");
                 BREAK;
-            }
-            CASE(OP_JMP_IF_FALSE) // unused
-            {
-                unreachable;
             }
             CASE(OP_JMP_IF_FALSE_POP)
             {
@@ -814,46 +775,50 @@ void run(VM* vm)
             }
             CASE(OP_INDEX)
             {
-                // TODO: Fix this up when overloading is implemented
                 Value receiver = *stackpeek(1);
                 Value key = *stackpeek(0);
-                if(unlikely(!IS_INSTANCE(receiver))) {
-                    saveip();
-                    ipaerror(vm, receiver);
-                } else if(unlikely(IS_NIL(key))) {
-                    saveip();
-                    nilidxerror(vm);
-                }
-                Value field;
-                OInstance* instance = AS_INSTANCE(receiver);
-                if(HashTable_get(&instance->fields, key, &field)) {
-                    *stackpeek(1) = field; // replace receiver with field
-                    pop(vm); // pop key
-                    BREAK;
-                }
                 saveip();
-                if(unlikely(!bindmethod(vm, instance->oclass, key, receiver)))
-                    udperror(vm, key, instance->oclass);
-                *stackpeek(1) = *stackpeek(0); // replace receiver with method
-                pop(vm); // pop key
+                checkindex(vm, receiver, key);
+                Value property;
+                OInstance* instance = AS_INSTANCE(receiver);
+                O* om = instance->oclass->omethods[OM_GETIDX];
+                if(om) { // overloaded ?
+                    calloverload(vm, OBJ_VAL(om), OM_GETIDX);
+                    Tuple t = ominfo[OM_GETIDX];
+                    call(vm, OBJ_VAL(om), t.arity, t.retcnt);
+                    updatestate();
+                } else { // no overload, do the default behaviour
+                    if(rawget(&instance->fields, key, &property)) {
+                        *stackpeek(1) = property; // replace receiver with field value
+                        pop(vm); // pop key
+                        BREAK;
+                    } // try get method
+                    if(unlikely(!bindmethod(vm, instance->oclass, key, receiver)))
+                        udperror(vm, key, instance->oclass);
+                    *stackpeek(1) = *--vm->sp; // replace receiver with method
+                }
                 BREAK;
             }
             CASE(OP_SET_INDEX)
             {
-                // @TODO: Fix this up when overloading gets implemented
+                // @TODO: Parser must emit OP_RET0 if __setidx__ is overloaded
+                //        Additionally same as __init__ it should invoke compile-time
+                //        error if __setidx__ contains non-empty 'return' statement.
                 Value receiver = *stackpeek(2);
-                Value property = *stackpeek(1);
+                Value key = *stackpeek(1);
                 Value value = *stackpeek(0);
-                if(unlikely(!IS_INSTANCE(receiver))) {
-                    saveip();
-                    ipaerror(vm, receiver);
-                } else if(unlikely(IS_NIL(property))) {
-                    saveip();
-                    nilidxerror(vm);
+                saveip();
+                checkindex(vm, receiver, key);
+                OInstance* instance = AS_INSTANCE(receiver);
+                O* om = instance->oclass->omethods[OM_SETIDX];
+                if(om) { // overloaded ?
+                    calloverload(vm, OBJ_VAL(om), OM_SETIDX);
+                    updatestate();
+                } else { // no overload, do the default behaviour
+                    HashTable_insert(vm, &AS_INSTANCE(receiver)->fields, key, value);
+                    popn(vm, 3);
+                    push(vm, value);
                 }
-                HashTable_insert(vm, &AS_INSTANCE(receiver)->fields, property, value);
-                popn(vm, 3);
-                push(vm, value);
                 BREAK;
             }
             CASE(OP_INVOKE_INDEX)
@@ -861,8 +826,33 @@ void run(VM* vm)
                 // @TODO: Fix this up when overloading gets implemented
                 int32_t retcnt = READ_BYTEL();
                 int32_t argc = vm->sp - Array_VRef_pop(&vm->callstart);
+                Value key = *stackpeek(argc);
+                Value receiver = *stackpeek(argc + 1);
                 saveip();
-                invokeindex(vm, argc, retcnt);
+                checkindex(vm, receiver, key);
+                OInstance* instance = AS_INSTANCE(receiver);
+                O* om = instance->oclass->omethods[OM_GETIDX];
+                if(om) { // overloaded ?
+                    Tuple t = ominfo[OM_GETIDX];
+                    call(vm, OBJ_VAL(om), t.arity, t.retcnt);
+                    updatestate();
+                }
+                Value property;
+                if(rawget(&instance->fields, key, &property)) goto call;
+                if(unlikely(!rawget(&instance->oclass->methods, key, &property)))
+                    udperror(vm, key, instance->oclass);
+                else { // no overload, do the default behaviour
+                    if(rawget(&instance->fields, key, &property)) {
+                        *stackpeek(1) = property; // replace receiver with field value
+                        pop(vm); // pop key
+                        BREAK;
+                    } // try get method
+                    if(unlikely(!bindmethod(vm, instance->oclass, key, receiver)))
+                        udperror(vm, key, instance->oclass);
+                    *stackpeek(1) = *--vm->sp; // replace receiver with method
+                }
+            call:
+                call(vm, property, argc, retcnt);
                 updatestate();
                 BREAK;
             }
@@ -870,7 +860,7 @@ void run(VM* vm)
             {
                 OClass* oclass = AS_CLASS(*stackpeek(1));
                 uint8_t opn = READ_BYTE();
-                oclass->omethods[opn] = AS_CLOSURE(*stackpeek(0));
+                oclass->omethods[opn] = AS_OBJ(*stackpeek(0));
                 sk_assert(vm, *ip == OP_METHOD, "Expected 'OP_METHOD'.");
                 BREAK;
             }
@@ -898,7 +888,7 @@ void run(VM* vm)
                 vm->sp += 3;
                 saveip();
                 Value fn = *stackpeek(2);
-                if(trycall(vm, fn, 2, vars) == CALL_NATIVEFN)
+                if(call(vm, fn, 2, vars) == CALL_NATIVEFN)
                     callnative_nolock(vm, last_frame(vm).callee, fn, vars);
                 updatestate();
                 BREAK;
@@ -921,6 +911,31 @@ void run(VM* vm)
                 Array_VRef_push(&vm->retstart, vm->sp);
                 BREAK;
             }
+            CASE(OP_RET) // function return
+            {
+                saveip();
+                int32_t retvalcnt = vm->sp - Array_VRef_pop(&vm->retstart);
+                int32_t unaccounted;
+                if(frame->retcnt == 0) { // multiple return values ?
+                    unaccounted = 0;
+                    frame->retcnt = retvalcnt;
+                } else unaccounted = frame->retcnt - retvalcnt;
+                if(unaccounted < 0) popn(vm, -unaccounted);
+                else pushn(vm, unaccounted, NIL_VAL);
+                sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
+                for(int32_t returns = frame->retcnt; returns--;)
+                    Array_Value_push(&vm->temp, *--vm->sp);
+                closeupval(vm, frame->callee); // close any open upvalues
+                vm->fc--; // pop the frame
+                vm->sp = frame->callee; // adjust the stack pointer
+                while(vm->temp.len > 0) // push return values
+                    push(vm, Array_Value_pop(&vm->temp));
+                sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
+                if(last_frame(vm).cfinfo == CFI_FRESH) return;
+                sk_assert(vm, vm->fc > 0, "Invalid cfinfo.");
+                updatestate();
+                BREAK;
+            }
         }
     }
 
@@ -937,8 +952,6 @@ void run(VM* vm)
 #undef BREAK
 #undef VM_BINARY_OP
 }
-
-
 
 /*
  * Interprets (compiles and runs) the 'source'.

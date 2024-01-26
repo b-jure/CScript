@@ -139,12 +139,12 @@ struct VM {
 
 /* STACK */
 #define restore_stack(vm, n) cast(Value*, (cast_charp((vm)->stack) + (n)))
-#define save_stack(vm, ptr)  (cast_charp(ptr) - cast_charp((vm)->stack))
-#define stackpeek(top)       ((vm)->sp - ((top) + 1))
+#define save_stack(vm, ptr) (cast_charp(ptr) - cast_charp((vm)->stack))
+#define stackpeek(top) ((vm)->sp - ((top) + 1))
 
 
 /* PUSH/POP */
-#define pop(vm)     (*--(vm)->sp)
+#define pop(vm) (*--(vm)->sp)
 #define popn(vm, n) ((vm)->sp -= n)
 void push(VM* vm, Value val);
 #define pushn(vm, n, val)                                                                          \
@@ -157,26 +157,19 @@ void push(VM* vm, Value val);
 
 /* Check if value is correct type and set the pointer.
  * Return 1 if pointer was set, 0 if not. */
-#define tonumber(val, np)   (IS_NUMBER(val) ? (*(np) = AS_NUMBER(val), 1) : 0)
+#define tonumber(val, np) (IS_NUMBER(val) ? (*(np) = AS_NUMBER(val), 1) : 0)
 #define tostring(val, strp) (IS_STRING(val) ? (*(strp) = AS_CSTRING(val), 1) : 0)
-#define tobool(val, bp)     (IS_BOOL(val) ? (*(bp) = AS_BOOL(val), 1) : 0)
+#define tobool(val, bp) (IS_BOOL(val) ? (*(bp) = AS_BOOL(val), 1) : 0)
 
 
 
 void VM_init(VM* vm);
-
 void interpret(VM* vm, const char* source, const char* filename);
-
 void run(VM* vm);
-
-int ncall(VM* vm, Value* retstart, Value callee, Int retcnt);
-
+void ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt);
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);
-
 void closeupval(VM* vm, Value* last);
-
 uint8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver);
-
 void resetvm(VM* vm, Status status);
 
 #endif

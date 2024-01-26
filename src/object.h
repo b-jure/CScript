@@ -162,7 +162,7 @@ struct OClass { // typedef is inside 'value.h'
     O obj; // common header
     OString* name; // class name
     HashTable methods; // class methods
-    OClosure* omethods[OM_CNT]; // overloaded methods
+    O* omethods[OM_CNT]; // overloaded methods (native C or skooma closure)
 };
 
 struct OInstance { // typedef is inside 'value.h'
@@ -279,9 +279,13 @@ void ofree(VM* vm, O* object);
 
 
 
+typedef struct {
+    int32_t arity;
+    int32_t retcnt;
+} Tuple;
 
-/* Array holding 'retcnt' for each overload-able method (excluding operators) */
-extern const int32_t overloadret[OM_DISPLAY + 1];
+/* Array holding return count and arity for each overload-able method. */
+extern const Tuple ominfo[OM_CNT];
 
 
 #endif

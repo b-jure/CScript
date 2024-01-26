@@ -75,11 +75,13 @@ typedef enum {
     OP_INHERIT, /* Inherit class properties. */
     OP_GET_SUPER, /* Fetch superclass method */
     OP_INVOKE_SUPER, /* Invoke superclass method call */
-    OP_CALLSTART, /* Start of call instruction arguments */
-    OP_RETSTART, /* Start of return instruction values */
+    OP_CALLSTART, /* Start of call arguments */
+    OP_RETSTART, /* Start of return values */
     OP_FOREACH, /* Generic for loop */
     OP_FOREACH_PREP, /* Generic for loop stack prep */
-    OP_RET, /* Return from function */
+    OP_RET0, /* No return value, overrides frame's 'retcnt' */
+    OP_RET1, /* Return single value, optimization */
+    OP_RET, /* Return from function, generic return */
 } OpCode;
 
 ARRAY_NEW(Array_UInt, UInt);

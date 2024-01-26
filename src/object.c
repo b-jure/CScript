@@ -22,10 +22,28 @@
 
 
 
-/* Call info for overload-able methods */
-const int overloadret[OM_DISPLAY + 1] = {
-    0, // __init__
-    1, // __display__
+/* Call info for overload-able methods '{ arity, retcnt }' */
+const Tuple ominfo[] = {
+    {0, 0}, // __init__
+    {1, 1}, // __display__
+    {2, 1}, // __getidx__
+    {3, 0}, // __setidx__
+#if defined(SK_OVERLOAD_OPS)
+    {2, 1}, // __add__
+    {2, 1}, // __sub__
+    {2, 1}, // __mul__
+    {2, 1}, // __div__
+    {2, 1}, // __mod__
+    {2, 1}, // __pow__
+    {1, 1}, // __not__
+    {1, 1}, // __umin__
+    {2, 1}, // __ne__
+    {2, 1}, // __eq__
+    {2, 1}, // __lt__
+    {2, 1}, // __le__
+    {2, 1}, // __gt__
+    {2, 1}, // __ge__
+#endif
 };
 
 
@@ -319,7 +337,7 @@ OClass* OClass_new(VM* vm, OString* name)
     OClass* oclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS); // GC
     oclass->name = name;
     HashTable_init(&oclass->methods);
-    memset(oclass->omethods, 0, sizeof(oclass->omethods) / sizeof(OClosure*));
+    memset(oclass->omethods, 0, sizeof(oclass->omethods) / sizeof(oclass->omethods[0]));
     return oclass;
 }
 
@@ -342,7 +360,7 @@ OInstance* OInstance_new(VM* vm, OClass* oclass)
 
 /* Return overloaded method or NULL if value
  * is not an instance value or method is not overloaded. */
-static force_inline OClosure* getomethod(VM* vm, Value val, OMTag om)
+static force_inline O* getomethod(VM* vm, Value val, OMTag om)
 {
     if(IS_INSTANCE(val)) return AS_INSTANCE(val)->oclass->omethods[om];
     return NULL;
@@ -495,7 +513,7 @@ void ofree(VM* vm, O* object)
 
 uint8_t callomdisplay(VM* vm, Value instance)
 {
-    OClosure* fn = getomethod(vm, instance, OM_DISPLAY);
+    O* fn = getomethod(vm, instance, OM_DISPLAY);
     if(fn) {
         Value* ret = vm->sp;
         push(vm, instance);
@@ -510,7 +528,7 @@ uint8_t callomdisplay(VM* vm, Value instance)
 
 uint8_t callomgetidx(VM* vm, Value instance)
 {
-    OClosure* fn = getomethod(vm, instance, OM_GETIDX);
+    O* fn = getomethod(vm, instance, OM_GETIDX);
     if(fn) {
         Value* idx = stackpeek(0); // index value
         Value* ret = vm->sp;
@@ -524,7 +542,7 @@ uint8_t callomgetidx(VM* vm, Value instance)
 
 uint8_t callomsetidx(VM* vm, Value instance)
 {
-    OClosure* fn = getomethod(vm, instance, OM_SETIDX);
+    O* fn = getomethod(vm, instance, OM_SETIDX);
     if(fn) {
         Value* idx = stackpeek(1); // index value
         Value* rhs = stackpeek(0); // right side expression
@@ -610,7 +628,7 @@ uint8_t rawindex(VM* vm, Value value, uint8_t what)
  * 0 otherwise. */
 static force_inline int callunop(VM* vm, Value a, OMTag op, Value* res)
 {
-    OClosure* om = getomethod(vm, a, op);
+    O* om = getomethod(vm, a, op);
     if(om == NULL) return 0;
     Value* fn = vm->sp;
     push(vm, OBJ_VAL(AS_INSTANCE(a)->oclass));
@@ -627,7 +645,7 @@ static force_inline int callunop(VM* vm, Value a, OMTag op, Value* res)
 static force_inline int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res)
 {
     Value receiver = a;
-    OClosure* om = getomethod(vm, a, op);
+    O* om = getomethod(vm, a, op);
     if(om == NULL) {
         receiver = b;
         om = getomethod(vm, b, op);
