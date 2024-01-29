@@ -49,7 +49,7 @@
 /* --------------------------------------------------------------------- */
 
 
-/* =============== API typedefs =============== */
+/* =============== API integer typedefs =============== */
 /* Skooma unsigned and signed byte */
 typedef uint8_t sk_byte;
 typedef int8_t sk_sbyte;
@@ -59,6 +59,8 @@ typedef uint32_t sk_uint;
 /* Skooma signed and unsigned long integer (64 bit) */
 typedef int64_t sk_lint;
 typedef uint64_t sk_ulint;
+/* Skooma (unsigned) size of objects in memory */
+typedef size_t sk_memsize;
 /* --------------------------------------------------------------------- */
 
 
@@ -79,7 +81,7 @@ typedef sk_int (*CFunction)(VM* vm);
 typedef sk_int (*PanicFn)(VM* vm);
 
 /* Memory allocator function signature. */
-typedef void* (*AllocFn)(void* ptr, size_t newsize, void* userdata);
+typedef void* (*AllocFn)(void* ptr, sk_memsize newsize, void* userdata);
 
 /* Reader function signature.
  * @sk_load uses this reader to compile skooma scripts.
@@ -96,7 +98,7 @@ typedef void* (*AllocFn)(void* ptr, size_t newsize, void* userdata);
  *   or set the 'szread' to 0.
  *
  * - 'ReadFn' can return any block size greater than zero. */
-typedef const char* (*ReadFn)(VM* vm, void* userdata, size_t* szread);
+typedef const char* (*ReadFn)(VM* vm, void* userdata, sk_memsize* szread);
 
 #define TT_NONE (-1) // indicates absence of value
 typedef enum {
@@ -188,7 +190,7 @@ SK_API void sk_arith(VM* vm, Ar op);
 /* ========== push functions, C -> stack ========== */
 SK_API void sk_pushnil(VM* vm);
 SK_API void sk_pushnumber(VM* vm, sk_number number);
-SK_API void sk_pushstring(VM* vm, const char* str, size_t len);
+SK_API void sk_pushstring(VM* vm, const char* str, sk_memsize len);
 SK_API void sk_pushcstring(VM* vm, const char* str);
 SK_API const char* sk_pushvfstring(VM* vm, const char* fmt, va_list argp);
 SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...);
@@ -201,7 +203,7 @@ SK_API void sk_push(VM* vm, sk_int idx);
 /* ========== raw access ========== */
 #define SK_RAWSET 0
 
-SK_API sk_byte sk_rawindex(VM* vm, sk_int idx, uint8_t what);
+SK_API sk_byte sk_rawindex(VM* vm, sk_int idx, sk_byte what);
 /* --------------------------------------------------------------------- */
 
 
@@ -243,7 +245,7 @@ SK_API sk_byte sk_getbool(const VM* vm, sk_int idx, sk_byte* isbool);
 SK_API sk_number sk_getnumber(const VM* vm, sk_int idx, sk_byte* isnum);
 SK_API const char* sk_getstring(const VM* vm, sk_int idx);
 SK_API CFunction sk_getcfunction(const VM* vm, sk_int idx);
-SK_API size_t sk_strlen(const VM* vm, sk_int idx);
+SK_API sk_memsize sk_strlen(const VM* vm, sk_int idx);
 /* --------------------------------------------------------------------- */
 
 
@@ -336,12 +338,12 @@ typedef enum {
     GCO_NEXTGC, // set bytes amount when the next GC will trigger
 } GCOpt; // Garbage collector options
 
-SK_API size_t sk_gc(VM* vm, GCOpt option, ...);
+SK_API sk_memsize sk_gc(VM* vm, GCOpt option, ...);
 /* --------------------------------------------------------------------- */
 
 
 /* ============= debug API ============= */
-SK_API sk_byte sk_getstack(VM* vm, int32_t level, DebugInfo* di);
+SK_API sk_byte sk_getstack(VM* vm, sk_int level, DebugInfo* di);
 typedef enum {
     DW_FNGET = (1 << 0), // load the function on top of the stack (processed first)
     DW_LINE = (1 << 1), // fill 'line'
@@ -363,13 +365,13 @@ struct DebugInfo {
     const char* name; // function name (declaration name in Skooma script)
     const char* type; // function type ('Skooma', 'main' or 'C')
     const char* source; // function source
-    size_t srclen; // length of 'source'
-    int32_t line; // current line in Skooma script
-    uint32_t nups; // number of function upvalues
-    uint32_t nparams; // number of function parameters
+    sk_memsize srclen; // length of 'source'
+    sk_int line; // current line in Skooma script
+    sk_uint nups; // number of function upvalues
+    sk_uint nparams; // number of function parameters
     sk_byte isvararg; // is function vararg ('...')
-    int32_t defline; // line number where the function definition starts
-    int32_t deflastline; // line number where the function definition ends
+    sk_int defline; // line number where the function definition starts
+    sk_int deflastline; // line number where the function definition ends
     char shortsrc[SK_SRCID_MAX];
     /* private */
     CallFrame* frame; // active function frame

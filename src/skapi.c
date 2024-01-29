@@ -711,9 +711,15 @@ SK_API size_t sk_gc(VM* vm, GCOpt option, ...)
     sk_lock(vm);
     va_start(argp, option);
     switch(option) {
-        case GCO_STOP: vm->gc.gc_stopped = 1; break;
-        case GCO_RESTART: vm->gc.gc_stopped = 0; break;
-        case GCO_COLLECT: gc(vm); break;
+        case GCO_STOP:
+            res = vm->gc.gc_stopped;
+            vm->gc.gc_stopped = 1;
+            break;
+        case GCO_RESTART:
+            res = vm->gc.gc_stopped;
+            vm->gc.gc_stopped = 0;
+            break;
+        case GCO_COLLECT: res = gc(vm); break;
         case GCO_COUNT: res = vm->gc.gc_allocated; break;
         case GCO_ISRUNNING: res = (vm->gc.gc_stopped == 0); break;
         case GCO_NEXTGC: res = vm->gc.gc_nextgc; break;
