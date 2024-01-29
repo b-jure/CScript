@@ -69,8 +69,7 @@ static force_inline void Chunk_write_param24(Chunk* chunk, UInt param, UInt line
         "Invalid write to chunk bytecode array.");
 }
 
-static force_inline UInt
-Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
+static force_inline UInt Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
 {
     UInt start = Chunk_write(chunk, code, line);
     if(!islong) Chunk_write(chunk, idx, line);
@@ -88,14 +87,13 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
-#define BREAK       break
+#define BREAK break
 #endif
 #undef BREAK
 #define BREAK return
 
     DISPATCH(code)
     {
-        CASE(OP_RET)
         CASE(OP_TOPRET)
         CASE(OP_TRUE)
         CASE(OP_FALSE)
@@ -123,6 +121,9 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_RETSTART)
         CASE(OP_MOD)
         CASE(OP_POW)
+        CASE(OP_RET0)
+        CASE(OP_RET1)
+        CASE(OP_RET)
         {
             unreachable;
         }
@@ -146,13 +147,19 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_SET_PROPERTY)
         CASE(OP_GET_PROPERTY)
         CASE(OP_METHOD)
+        CASE(OP_INVOKE0)
+        CASE(OP_INVOKE1)
         CASE(OP_INVOKE)
         CASE(OP_VALIST)
         CASE(OP_GET_SUPER)
+        CASE(OP_INVOKE_SUPER0)
+        CASE(OP_INVOKE_SUPER1)
         CASE(OP_INVOKE_SUPER)
         CASE(OP_INVOKE_INDEX)
         CASE(OP_CONST)
         CASE(OP_NILN)
+        CASE(OP_CALL0)
+        CASE(OP_CALL1)
         CASE(OP_CALL)
         CASE(OP_FOREACH);
         CASE(OP_FOREACH_PREP);

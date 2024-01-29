@@ -47,6 +47,7 @@ typedef enum {
     CE_SUPER,
     CE_NOSUPER,
     CE_OMSIG,
+    CE_EXPSTM,
     CE_CNT,
 } CompErr;
 
@@ -75,6 +76,7 @@ const char* comperrors[CE_CNT] = {
     "\tCan't use 'super' outside of a class.\n",
     "\tCan't use 'super', class does not have a superclass.\n",
     "\tOverload-able method %s expects %d parameters, instead defined %d.\n",
+    "\tInvalid statement, expect function call or assignment.\n",
 };
 
 /* ----------------------------------------------------------- */ // Compile errors
@@ -212,7 +214,6 @@ typedef enum {
     EXP_GLOBAL,
     EXP_INDEXED,
     EXP_CALL,
-    EXP_INVOKE_INDEX,
     EXP_INVOKE,
     EXP_VARARG,
     EXP_EXPR,
@@ -229,9 +230,10 @@ typedef enum {
 
 #define MULRET 0
 #define SINGLEVAL 1
-#define NO_JMP -1
-#define NO_CODE -1
-#define NO_VAL -1
+#define NONE -1
+#define NO_JMP NONE
+#define NO_CODE NONE
+#define NO_VAL NONE
 
 // Expression description
 typedef struct {
@@ -673,19 +675,13 @@ static force_inline void popvarins(Function* F, Exp* E)
         case EXP_INDEXED:
             // @?: setters are not reachable ?
             switch(*INSTRUCTION(F, E)) {
-                case OP_INDEX:
-                    SINSTRUCTION_POP(F);
-                    break;
+                case OP_INDEX: SINSTRUCTION_POP(F); break;
                 case OP_GET_PROPERTY:
-                case OP_GET_SUPER:
-                    LINSTRUCTION_POP(F);
-                    break;
-                default:
-                    unreachable;
+                case OP_GET_SUPER: LINSTRUCTION_POP(F); break;
+                default: unreachable;
             }
             break;
-        default:
-            unreachable;
+        default: unreachable;
     }
 }
 
@@ -693,16 +689,12 @@ static force_inline void popvarins(Function* F, Exp* E)
 static force_inline void popcallins(Function* F, Exp* E)
 {
     switch(E->type) {
-        case EXP_CALL:
-        case EXP_INVOKE_INDEX:
-            LINSTRUCTION_POP(F);
-            break;
+        case EXP_CALL: LINSTRUCTION_POP(F); break;
         case EXP_INVOKE:
             LINSTRUCTION_POP(F);
             LPARAM_POP(F);
             break;
-        default:
-            unreachable;
+        default: unreachable;
     }
 }
 
@@ -715,8 +707,7 @@ static void rmlastins(Function* F, Exp* E)
     else if(etiscall(type)) popcallins(F, E);
     else switch(type)
         {
-            case EXP_JMP:
-                goto panic;
+            case EXP_JMP: goto panic;
             case EXP_EXPR:
                 if(E->ins.binop) {
                     LINSTRUCTION_POP(F);
@@ -726,8 +717,7 @@ static void rmlastins(Function* F, Exp* E)
                     PANIC("Tried removing 'and'/'or' expression.");
                     unreachable;
                 }
-            default:
-                unreachable;
+            default: unreachable;
         }
 }
 
@@ -833,9 +823,13 @@ static void F_init(
     ControlFlow_init(vm, &F->cflow);
     // Setup upvalues storage
     if(enclosing == NULL) {
+        F->tag = -1;
         F->upvalues = MALLOC(vm, sizeof(Array_Upvalue));
         Array_Upvalue_init(F->upvalues, vm);
-    } else F->upvalues = enclosing->upvalues;
+    } else {
+        F->tag = enclosing->tag;
+        F->upvalues = enclosing->upvalues;
+    }
     // Setup local variables storage
     Array_Local_init(&F->locals, vm);
     Array_Local_init_cap(&F->locals, SHORT_STACK_SIZE);
@@ -938,11 +932,8 @@ static void sync(Function* F)
             case TOK_WHILE:
             case TOK_FOREACH:
             case TOK_LOOP:
-            case TOK_SWITCH:
-                return;
-            default:
-                advance(F);
-                break;
+            case TOK_SWITCH: return;
+            default: advance(F); break;
         }
     }
 }
@@ -1153,12 +1144,9 @@ typedef enum {
 static UnaryOpr getunaryopr(TokenType type)
 {
     switch(type) {
-        case TOK_BANG:
-            return OPR_NOT;
-        case TOK_MINUS:
-            return OPR_NEGATE;
-        default:
-            return OPR_NOUNARYOPR;
+        case TOK_BANG: return OPR_NOT;
+        case TOK_MINUS: return OPR_NEGATE;
+        default: return OPR_NOUNARYOPR;
     }
 }
 
@@ -1166,36 +1154,21 @@ static UnaryOpr getunaryopr(TokenType type)
 static BinaryOpr getbinaryopr(TokenType type)
 {
     switch(type) {
-        case TOK_PLUS:
-            return OPR_ADD;
-        case TOK_MINUS:
-            return OPR_SUB;
-        case TOK_STAR:
-            return OPR_MUL;
-        case TOK_SLASH:
-            return OPR_DIV;
-        case TOK_PERCENT:
-            return OPR_MOD;
-        case TOK_CARET:
-            return OPR_POW;
-        case TOK_BANG_EQUAL:
-            return OPR_NE;
-        case TOK_EQUAL_EQUAL:
-            return OPR_EQ;
-        case TOK_LESS:
-            return OPR_LT;
-        case TOK_LESS_EQUAL:
-            return OPR_LE;
-        case TOK_GREATER:
-            return OPR_GT;
-        case TOK_GREATER_EQUAL:
-            return OPR_GE;
-        case TOK_AND:
-            return OPR_AND;
-        case TOK_OR:
-            return OPR_OR;
-        default:
-            return OPR_NOBINOPR;
+        case TOK_PLUS: return OPR_ADD;
+        case TOK_MINUS: return OPR_SUB;
+        case TOK_STAR: return OPR_MUL;
+        case TOK_SLASH: return OPR_DIV;
+        case TOK_PERCENT: return OPR_MOD;
+        case TOK_CARET: return OPR_POW;
+        case TOK_BANG_EQUAL: return OPR_NE;
+        case TOK_EQUAL_EQUAL: return OPR_EQ;
+        case TOK_LESS: return OPR_LT;
+        case TOK_LESS_EQUAL: return OPR_LE;
+        case TOK_GREATER: return OPR_GT;
+        case TOK_GREATER_EQUAL: return OPR_GE;
+        case TOK_AND: return OPR_AND;
+        case TOK_OR: return OPR_OR;
+        default: return OPR_NOBINOPR;
     }
 }
 
@@ -1203,12 +1176,9 @@ static BinaryOpr getbinaryopr(TokenType type)
 static OpCode unopr2op(UnaryOpr opr)
 {
     switch(opr) {
-        case OPR_NOT:
-            return OP_NOT;
-        case OPR_NEGATE:
-            return OP_NEG;
-        default:
-            unreachable;
+        case OPR_NOT: return OP_NOT;
+        case OPR_NEGATE: return OP_NEG;
+        default: unreachable;
     }
 }
 
@@ -1216,30 +1186,18 @@ static OpCode unopr2op(UnaryOpr opr)
 static OpCode binopr2op(BinaryOpr opr)
 {
     switch(opr) {
-        case OPR_ADD:
-            return OP_ADD;
-        case OPR_SUB:
-            return OP_SUB;
-        case OPR_MUL:
-            return OP_MUL;
-        case OPR_DIV:
-            return OP_DIV;
-        case OPR_MOD:
-            return OP_MOD;
-        case OPR_POW:
-            return OP_POW;
-        case OPR_NE:
-            return OP_NOT_EQUAL;
-        case OPR_EQ:
-            return OP_EQUAL;
-        case OPR_LT:
-            return OP_LESS;
-        case OPR_LE:
-            return OP_LESS_EQUAL;
-        case OPR_GT:
-            return OP_GREATER;
-        case OPR_GE:
-            return OP_GREATER_EQUAL;
+        case OPR_ADD: return OP_ADD;
+        case OPR_SUB: return OP_SUB;
+        case OPR_MUL: return OP_MUL;
+        case OPR_DIV: return OP_DIV;
+        case OPR_MOD: return OP_MOD;
+        case OPR_POW: return OP_POW;
+        case OPR_NE: return OP_NOT_EQUAL;
+        case OPR_EQ: return OP_EQUAL;
+        case OPR_LT: return OP_LESS;
+        case OPR_LE: return OP_LESS_EQUAL;
+        case OPR_GT: return OP_GREATER;
+        case OPR_GE: return OP_GREATER_EQUAL;
         default:
             /// OPR_AND and OPR_OR do not emit direct bytecode,
             /// they are instead sets of OP_JMP and OP_JMP_IF_FALSE instructions
@@ -1288,16 +1246,10 @@ static force_inline uint32_t vararg(Function* F)
 static void setmulret(Function* F, Exp* E)
 {
     switch(E->type) {
-        case EXP_INVOKE_INDEX:
         case EXP_CALL:
-        case EXP_VARARG:
-            SET_RETCNT(F, E, MULRET);
-            break;
-        case EXP_INVOKE:
-            SET_RETCNTL(F, E, MULRET);
-            break;
-        default:
-            unreachable;
+        case EXP_VARARG: SET_RETCNT(F, E, MULRET); break;
+        case EXP_INVOKE: SET_RETCNTL(F, E, MULRET); break;
+        default: unreachable;
     }
 }
 
@@ -1306,13 +1258,8 @@ static void adjustassign(Function* F, Exp* E, int32_t left, int32_t right)
 {
     int32_t leftover = left - right; // Safety: left < right is a compile error
     switch(E->type) {
-        case EXP_INVOKE_INDEX:
-        case EXP_CALL:
-            SET_RETCNT(F, E, leftover + 1);
-            break;
-        case EXP_INVOKE:
-            SET_RETCNTL(F, E, leftover + 1);
-            break;
+        case EXP_CALL: SET_RETCNT(F, E, leftover + 1); break;
+        case EXP_INVOKE: SET_RETCNTL(F, E, leftover + 1); break;
         default:
             if(leftover > 1) CODEOP(F, OP_NILN, leftover);
             else if(leftover == 1) CODE(F, OP_NIL);
@@ -1372,15 +1319,12 @@ static void codeset(Function* F, Exp* E)
             CODEOP(F, GET_OP_TYPE(E->value, OP_SET_LOCAL, E), E->value);
             break;
         }
-        case EXP_GLOBAL:
-            CODEOP(F, GET_OP_TYPE(E->value, OP_SET_GLOBAL, E), E->value);
-            break;
+        case EXP_GLOBAL: CODEOP(F, GET_OP_TYPE(E->value, OP_SET_GLOBAL, E), E->value); break;
         case EXP_INDEXED:
             if(E->value == NO_VAL) CODE(F, OP_SET_INDEX);
             else CODEOP(F, OP_SET_PROPERTY, E->value);
             break;
-        default:
-            return;
+        default: return;
     }
 }
 
@@ -1423,14 +1367,8 @@ static void exprstm(Function* F, uint8_t lastclause)
         if(vars != expc) adjustassign(F, &E, vars, expc);
         codesetall(F, &Earr);
         Array_Exp_free(&Earr, NULL);
-    } else {
-        if(etisvar(E.type)) {
-            rmlastins(F, &E); // remove 'OP_GET...'
-            CODE(F, OP_NIL);
-            codeset(F, &E);
-        } else if(etiscall(E.type)) CODE(F, OP_POP);
-        else error(F, "Invalid syntax.\n");
-    }
+    } else if(etiscall(E.type)) CODE(F, OP_POP);
+    else error(F, comperrors[CE_EXPSTM]);
     if(!lastclause) expect(F, TOK_SEMICOLON, expectstr("Expect ';'."));
 }
 
@@ -1536,12 +1474,11 @@ static void fn(Function* F, FunctionType type)
     Function Fnew;
     Scope globscope, S;
     F_init(F->vm, &Fnew, &globscope, F->cclass, type, F);
-    Fnew.tag = F->tag;
     Fnew.fn->p.source = F->fn->p.source; // source is same
     startscope(&Fnew, &S, 0, 0); // no need to end this scope
     expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
     if(!check(&Fnew, TOK_RPAREN)) arglist(&Fnew);
-    if(F->fn->p.isvararg) expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
+    if(Fnew.fn->p.isvararg) expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
     else expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
     int32_t arity = Fnew.fn->p.arity;
     int32_t expected = ominfo[F->tag].arity;
@@ -1634,27 +1571,47 @@ static void classdec(Function* F)
 
 /// call ::= '(' ')'
 ///        | '(' explist ')'
-static void call(Function* F, Exp* E)
+static OpCode call(Function* F, Exp* E)
 {
-    CODE(F, OP_CALLSTART);
-    if(!check(F, TOK_RPAREN)) explist(F, PARSER_ARG_LIMIT, E);
-    else E->type = EXP_NONE;
+    OpCode op;
+    if(!check(F, TOK_RPAREN)) {
+        int32_t index = CODE(F, OP_CALLSTART);
+        int32_t argc = explist(F, PARSER_ARG_LIMIT, E);
+        if(argc == 1 && !ethasmulret(E->type)) {
+            Array_Byte_remove(&CHUNK(F)->code, index); // remove 'OP_CALLSTART'
+            op = OP_CALL1;
+        } else {
+            setmulret(F, E);
+            op = OP_CALL;
+        }
+    } else {
+        E->type = EXP_NONE;
+        op = OP_CALL0;
+    }
     expect(F, TOK_RPAREN, expectstr("Expect ')'."));
-    if(ethasmulret(E->type)) setmulret(F, E);
+    return op;
 }
 
 static void codecall(Function* F, Exp* E)
 {
-    call(F, E);
+    OpCode callop = call(F, E);
     E->type = EXP_CALL;
-    E->ins.code = CODEOP(F, OP_CALL, 1);
+    if(callop == OP_CALL0 || callop == OP_CALL1) E->ins.code = CODE(F, callop);
+    else E->ins.code = CODEOP(F, callop, 1);
 }
 
 static void codeinvoke(Function* F, Exp* E, int32_t idx)
 {
-    call(F, E);
+    OpCode callop = call(F, E);
     E->type = EXP_INVOKE;
-    E->ins.code = CODEOP(F, OP_INVOKE, idx);
+    OpCode invokeop;
+    switch(callop) {
+        case OP_CALL0:; invokeop = OP_INVOKE0; break;
+        case OP_CALL1: invokeop = OP_INVOKE1; break;
+        case OP_CALL: invokeop = OP_INVOKE; break;
+        default: unreachable;
+    }
+    E->ins.code = CODEOP(F, invokeop, idx);
     CODEL(F, 1); // retcnt
 }
 
@@ -1734,8 +1691,7 @@ static force_inline void switchconstants(Function* F, SwitchState* state, Exp* E
             }
             Array_Value_push(&state->constants, caseval);
             break;
-        default:
-            unreachable;
+        default: unreachable;
     }
 }
 
@@ -2074,8 +2030,7 @@ static void breakstm(Function* F)
         case -1: // outside
             error(F, comperrors[CE_BREAK]);
             return;
-        default:
-            unreachable;
+        default: unreachable;
     }
     popn += F->locals.len - scope->localc;
     CODEPOP(F, popn);
@@ -2125,8 +2080,7 @@ static void returnstm(Function* F)
                     CODE(F, OP_RET1);
                     break;
                 }
-                default:
-                    unreachable;
+                default: unreachable;
             }
         }
     } else if(match(F, TOK_SEMICOLON)) { // implicit 'nil' return
@@ -2143,10 +2097,6 @@ static void returnstm(Function* F)
             setmulret(F, &E);
         }
         if(singleret) { // single return value ?
-            // @Safety:
-            // this is fine, there can't be any jump instructions
-            // in 'return' STATEMENT except 'and'/'or' which are fine
-            // by themselves (no jumps beyond/outside of return statement).
             Array_Byte_remove(&CHUNK(F)->code, idx); // remove 'OP_RETSTART'
             CODE(F, OP_RET1);
         } else CODE(F, OP_RET);
@@ -2191,23 +2141,15 @@ static void stm(Function* F)
 }
 
 // indexed ::= '[' expr ']'
-//           | '[' expr ']' call
 static force_inline void indexed(Function* F, Exp* E)
 {
     Exp E2;
     E2.ins.set = 0;
     expr(F, &E2);
     expect(F, TOK_RBRACK, expectstr("Expect ']'."));
-    if(match(F, TOK_LPAREN)) {
-        if(etisconst(E2.type)) error(F, comperrors[CE_CALLCONST]);
-        call(F, E);
-        E->type = EXP_INVOKE_INDEX;
-        E->ins.code = CODEOP(F, OP_INVOKE_INDEX, 1);
-    } else {
-        E->type = EXP_INDEXED;
-        E->value = NO_VAL;
-        if(!E->ins.set) E->ins.code = CODE(F, OP_INDEX);
-    }
+    E->type = EXP_INDEXED;
+    E->value = NO_VAL;
+    if(!E->ins.set) E->ins.code = CODE(F, OP_INDEX);
 }
 
 
@@ -2248,10 +2190,17 @@ static void _super(Function* F, Exp* E)
     _.ins.set = 0;
     codevar(F, syntoken("self"), &_);
     if(match(F, TOK_LPAREN)) {
-        call(F, E);
+        OpCode opcall = call(F, E);
         codevar(F, syntoken("super"), &_);
-        E->ins.code = CODEOP(F, OP_INVOKE_SUPER, idx);
-        CODEL(F, 1);
+        OpCode invokesuperop;
+        switch(opcall) {
+            case OP_CALL0: invokesuperop = OP_INVOKE_SUPER0; break;
+            case OP_CALL1: invokesuperop = OP_INVOKE_SUPER1; break;
+            case OP_CALL: invokesuperop = OP_INVOKE_SUPER; break;
+            default: unreachable;
+        }
+        E->ins.code = CODEOP(F, invokesuperop, idx);
+        CODEL(F, 1); // retcnt
         E->type = EXP_INVOKE;
     } else {
         codevar(F, syntoken("super"), &_);
@@ -2276,15 +2225,9 @@ static void primaryexp(Function* F, Exp* E)
             advance(F);
             codevarprev(F, E);
             break;
-        case TOK_SELF:
-            _self(F, E);
-            break;
-        case TOK_SUPER:
-            _super(F, E);
-            break;
-        default:
-            error(F, "Unexpected symbol.\n");
-            return;
+        case TOK_SELF: _self(F, E); break;
+        case TOK_SUPER: _super(F, E); break;
+        default: error(F, "Unexpected symbol.\n"); return;
     }
 }
 
@@ -2308,8 +2251,7 @@ static void suffixedexp(Function* F, Exp* E)
                 advance(F);
                 indexed(F, E);
                 break;
-            default:
-                return;
+            default: return;
         }
     }
 }
@@ -2337,21 +2279,11 @@ static void simpleexp(Function* F, Exp* E)
             constidx = make_constant(F, CURRT(F).value);
             Exp_init(E, type, CODEOP(F, OP_CONST, constidx), constidx);
             break;
-        case TOK_NIL:
-            Exp_init(E, EXP_NIL, CODE(F, OP_NIL), 0);
-            break;
-        case TOK_TRUE:
-            Exp_init(E, EXP_TRUE, CODE(F, OP_TRUE), 0);
-            break;
-        case TOK_FALSE:
-            Exp_init(E, EXP_FALSE, CODE(F, OP_FALSE), 0);
-            break;
-        case TOK_DOT_DOT_DOT:
-            Exp_init(E, EXP_VARARG, vararg(F), 0);
-            break;
-        default:
-            suffixedexp(F, E);
-            return;
+        case TOK_NIL: Exp_init(E, EXP_NIL, CODE(F, OP_NIL), 0); break;
+        case TOK_TRUE: Exp_init(E, EXP_TRUE, CODE(F, OP_TRUE), 0); break;
+        case TOK_FALSE: Exp_init(E, EXP_FALSE, CODE(F, OP_FALSE), 0); break;
+        case TOK_DOT_DOT_DOT: Exp_init(E, EXP_VARARG, vararg(F), 0); break;
+        default: suffixedexp(F, E); return;
     }
     advance(F);
 }
@@ -2378,26 +2310,13 @@ static void calcnum(Function* F, BinaryOpr opr, const Exp* E1, const Exp* E2, Va
     double n1 = AS_NUMBER(*CONSTANT(F, E1));
     double n2 = AS_NUMBER(*CONSTANT(F, E2));
     switch(opr) {
-        case OPR_ADD:
-            *result = BINOP(+, n1, n2);
-            break;
-        case OPR_SUB:
-            *result = BINOP(-, n1, n2);
-            break;
-        case OPR_MUL:
-            *result = BINOP(*, n1, n2);
-            break;
-        case OPR_DIV:
-            *result = BINOP(/, n1, n2);
-            break;
-        case OPR_MOD:
-            *result = BINOP(%, (long int)n1, (long int)n2);
-            break;
-        case OPR_POW:
-            *result = NUMBER_VAL((sk_powl(n1, n2)));
-            break;
-        default:
-            unreachable;
+        case OPR_ADD: *result = BINOP(+, n1, n2); break;
+        case OPR_SUB: *result = BINOP(-, n1, n2); break;
+        case OPR_MUL: *result = BINOP(*, n1, n2); break;
+        case OPR_DIV: *result = BINOP(/, n1, n2); break;
+        case OPR_MOD: *result = BINOP(%, (long int)n1, (long int)n2); break;
+        case OPR_POW: *result = NUMBER_VAL((sk_powl(n1, n2))); break;
+        default: unreachable;
     }
 
 #undef BINOP
@@ -2429,9 +2348,7 @@ static uint8_t foldbinary(Function* F, BinaryOpr opr, Exp* E1, const Exp* E2)
 static void codeand(Function* F, Exp* E)
 {
     switch(E->type) {
-        case EXP_TRUE:
-            INSTRUCTION_POP(F);
-            goto fin;
+        case EXP_TRUE: INSTRUCTION_POP(F); goto fin;
         case EXP_STRING:
         case EXP_NUMBER:
             LINSTRUCTION_POP(F);
@@ -2510,8 +2427,7 @@ static void postfix(Function* F, BinaryOpr opr, Exp* E1, Exp* E2)
                 E1->type = EXP_EXPR;
             }
             break;
-        default:
-            unreachable;
+        default: unreachable;
     }
 }
 
@@ -2520,14 +2436,9 @@ static void postfix(Function* F, BinaryOpr opr, Exp* E1, Exp* E2)
 static void shortcircuit(Function* F, BinaryOpr opr, Exp* E)
 {
     switch(opr) {
-        case OPR_AND:
-            codeand(F, E);
-            break;
-        case OPR_OR:
-            codeor(F, E);
-            break;
-        default:
-            return;
+        case OPR_AND: codeand(F, E); break;
+        case OPR_OR: codeor(F, E); break;
+        default: return;
     }
 }
 

@@ -22,8 +22,9 @@
 
 
 
-/* Call info for overload-able methods '{ arity, retcnt }' */
+/* Call info for overload-able methods */
 const Tuple ominfo[] = {
+  // {arity, retcnt}
     {0, 0}, // __init__
     {1, 1}, // __display__
     {2, 1}, // __getidx__
@@ -65,7 +66,7 @@ static force_inline O* onew(VM* vm, size_t size, OType type)
 
 
 
-static force_inline OString* OString_alloc(VM* vm, UInt len)
+static force_inline OString* OString_alloc(VM* vm, uint32_t len)
 {
     OString* string = ALLOC_STRING(vm, len);
     string->len = len;
@@ -105,17 +106,20 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
                 Array_Byte_push(&buff, '%');
                 break;
             }
-            case 'd': { /* int64_t */
+            case 'd': /* int64_t */
+            {
                 int64_t n = va_arg(argp, int64_t);
                 Array_Byte_ensure(&buff, SK_NDIGITS);
                 buff.len += snprintf((char*)&buff.data[buff.len], SK_NDIGITS, "%ld", n);
                 break;
             }
-            case 'n': { /* sk_number (as double) */
+            case 'n': /* sk_number (as double) */
+            {
                 fmttype = "%g";
                 goto sknum;
             }
-            case 'f': { /* sk_number (as float) */
+            case 'f': /* sk_number (as float) */
+            {
                 fmttype = "%f";
                 goto sknum;
             }
@@ -135,18 +139,21 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
                 buff.len += len;
                 break;
             }
-            case 'c': { /* char */
+            case 'c': /* char */
+            {
                 int8_t c = va_arg(argp, int);
                 Array_Byte_push(&buff, c);
                 break;
             }
-            case 'p': { /* pointer */
+            case 'p': /* pointer */
+            {
                 Array_Byte_ensure(&buff, 11);
                 void* ptr = va_arg(argp, void*);
                 snprintf((char*)&buff.data[buff.len], 11, "%p", ptr);
                 break;
             }
-            default: { /* invalid format specifier */
+            default: /* invalid format specifier */
+            {
                 Array_Byte_free(&buff, NULL);
                 ofmterror(vm, c, *last_frame(vm).callee);
             }
@@ -191,7 +198,7 @@ OString* unescape(VM* vm, OString* string)
     Array_Byte new;
     Array_Byte_init(&new, vm);
     Array_Byte_init_cap(&new, string->len + 1);
-    for(UInt i = 0; i < string->len; i++) {
+    for(uint32_t i = 0; i < string->len; i++) {
         switch(string->storage[i]) {
             case '\n':
                 Array_Byte_push(&new, '\\');
@@ -229,8 +236,7 @@ OString* unescape(VM* vm, OString* string)
                 Array_Byte_push(&new, '\\');
                 Array_Byte_push(&new, 'v');
                 break;
-            default:
-                Array_Byte_push(&new, string->storage[i]);
+            default: Array_Byte_push(&new, string->storage[i]);
         }
     }
     OString* unescaped = OString_new(vm, (void*)new.data, new.len);
@@ -244,7 +250,8 @@ OString* unescape(VM* vm, OString* string)
 
 
 // TODO: Different constructor if constructing using C API
-ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, uint8_t isvararg, UInt upvalc)
+ONative*
+ONative_new(VM* vm, OString* name, CFunction fn, int32_t arity, uint8_t isvararg, uint32_t upvalc)
 {
     ONative* native = ALLOC_NATIVE(vm, upvalc);
     native->fn = fn;
@@ -256,7 +263,7 @@ ONative* ONative_new(VM* vm, OString* name, CFunction fn, Int arity, uint8_t isv
     p->upvalc = upvalc;
     p->defline = -1;
     p->deflastline = -1;
-    for(Int i = 0; i < upvalc; i++)
+    for(int32_t i = 0; i < upvalc; i++)
         native->upvalue[i] = NIL_VAL;
     return native;
 }
@@ -298,7 +305,7 @@ OClosure* OClosure_new(VM* vm, OFunction* fn)
 {
     FnPrototype* p = &fn->p;
     OUpvalue** upvals = GC_MALLOC(vm, sizeof(OUpvalue*) * p->upvalc);
-    for(UInt i = 0; i < p->upvalc; i++)
+    for(uint32_t i = 0; i < p->upvalc; i++)
         upvals[i] = NULL;
     OClosure* closure = ALLOC_OBJ(vm, OClosure, OBJ_CLOSURE);
     closure->fn = fn;
@@ -334,7 +341,7 @@ static force_inline void OUpvalue_free(VM* vm, OUpvalue* upval)
 
 OClass* OClass_new(VM* vm, OString* name)
 {
-    OClass* oclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS); // GC
+    OClass* oclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS);
     oclass->name = name;
     HashTable_init(&oclass->methods);
     memset(oclass->omethods, 0, sizeof(oclass->omethods) / sizeof(oclass->omethods[0]));
@@ -393,46 +400,29 @@ static force_inline void OBoundMethod_free(VM* vm, OBoundMethod* bound_method)
 
 
 
+/* Debug */
 sdebug void otypeprint(OType type)
 {
     switch(type) {
-        case OBJ_STRING:
-            printf("OBJ_STRING");
-            break;
-        case OBJ_FUNCTION:
-            printf("OBJ_FUNCTION");
-            break;
-        case OBJ_CLOSURE:
-            printf("OBJ_CLOSURE");
-            break;
-        case OBJ_NATIVE:
-            printf("OBJ_NATIVE");
-            break;
-        case OBJ_UPVAL:
-            printf("OBJ_UPVAL");
-            break;
-        case OBJ_CLASS:
-            printf("OBJ_CLASS");
-            break;
-        case OBJ_INSTANCE:
-            printf("OBJ_INSTANCE");
-            break;
-        case OBJ_BOUND_METHOD:
-            printf("OBJ_BOUND_METHOD");
-            break;
-        default:
-            unreachable;
+        case OBJ_STRING: printf("OBJ_STRING"); break;
+        case OBJ_FUNCTION: printf("OBJ_FUNCTION"); break;
+        case OBJ_CLOSURE: printf("OBJ_CLOSURE"); break;
+        case OBJ_NATIVE: printf("OBJ_NATIVE"); break;
+        case OBJ_UPVAL: printf("OBJ_UPVAL"); break;
+        case OBJ_CLASS: printf("OBJ_CLASS"); break;
+        case OBJ_INSTANCE: printf("OBJ_INSTANCE"); break;
+        case OBJ_BOUND_METHOD: printf("OBJ_BOUND_METHOD"); break;
+        default: unreachable;
     }
 }
+
 
 /* Hash object value */
 Hash ohash(Value value)
 {
     switch(OBJ_TYPE(value)) {
-        case OBJ_STRING: // we already have the hash (xxHash64)
-            return AS_STRING(value)->hash;
-        default: // just hash the pointer
-            return ptrhash(cast(const void*, AS_OBJ(value)));
+        case OBJ_STRING: return AS_STRING(value)->hash;
+        default: return ptrhash(cast(const void*, AS_OBJ(value)));
     }
 }
 
@@ -515,10 +505,9 @@ uint8_t callomdisplay(VM* vm, Value instance)
 {
     O* fn = getomethod(vm, instance, OM_DISPLAY);
     if(fn) {
-        Value* ret = vm->sp;
-        push(vm, instance);
-        push(vm, OBJ_VAL(fn));
-        ncall(vm, ret, OBJ_VAL(fn), 1);
+        Value* retstart = vm->sp;
+        push(vm, instance); // 'self'
+        ncall(vm, retstart, OBJ_VAL(fn), ominfo[OM_DISPLAY].retcnt);
         Value top = *stackpeek(0);
         if(unlikely(!IS_STRING(top))) disperror(vm, top);
         return 1;
@@ -531,11 +520,11 @@ uint8_t callomgetidx(VM* vm, Value instance)
     O* fn = getomethod(vm, instance, OM_GETIDX);
     if(fn) {
         Value* idx = stackpeek(0); // index value
-        Value* ret = vm->sp;
-        push(vm, instance);
-        push(vm, OBJ_VAL(fn));
+        Value* retstart = vm->sp;
+        push(vm, instance); // 'self'
         push(vm, *idx);
-        ncall(vm, ret, OBJ_VAL(fn), 1);
+        ncall(vm, retstart, OBJ_VAL(fn), ominfo[OM_GETIDX].retcnt);
+        return 1;
     }
     return 0;
 }
@@ -546,12 +535,11 @@ uint8_t callomsetidx(VM* vm, Value instance)
     if(fn) {
         Value* idx = stackpeek(1); // index value
         Value* rhs = stackpeek(0); // right side expression
-        Value* ret = vm->sp;
-        push(vm, instance);
-        push(vm, OBJ_VAL(fn));
+        Value* retstart = vm->sp;
+        push(vm, instance); // 'self'
         push(vm, *idx);
         push(vm, *rhs);
-        ncall(vm, ret, OBJ_VAL(fn), 1);
+        ncall(vm, retstart, OBJ_VAL(fn), 1);
         vm->sp--; // pop nil
     }
     return 0;
@@ -560,13 +548,11 @@ uint8_t callomsetidx(VM* vm, Value instance)
 
 
 
-/* =============== raw =============== */
+/* =============== raw access =============== */
 
 static force_inline uint8_t
 rawgetproperty(VM* vm, OInstance* instance, Value key, Value* out, uint8_t what)
 {
-    sk_assert(vm, instance != NULL, "Expect non-NULL");
-    sk_assert(vm, what == SK_RAWFIELD || what == SK_RAWMETHOD, "Invalid 'what'");
     HashTable* table = rawgettable(vm, instance, what);
     return rawget(table, key, out);
 }
@@ -574,42 +560,36 @@ rawgetproperty(VM* vm, OInstance* instance, Value key, Value* out, uint8_t what)
 static force_inline uint8_t
 rawsetproperty(VM* vm, OInstance* instance, Value key, Value value, uint8_t what)
 {
-    sk_assert(vm, instance != NULL, "Expect non-NULL");
-    sk_assert(vm, what == SK_RAWFIELD || what == SK_RAWMETHOD, "Invalid 'what'");
     HashTable* table = rawgettable(vm, instance, what);
     return rawset(table, key, value);
 }
 
 
 /* Perform raw index access on instance object.
- * 'what' determines if we are getting or setting the indexed value. */
+ * 'what' determines if we are getting or setting the indexed value.
+ * Note: Invokes runtime error if the 'index' value is 'nil'. */
 uint8_t rawindex(VM* vm, Value value, uint8_t what)
 {
-    sk_assert(vm, IS_INSTANCE(value), "Expect instance");
     OInstance* instance = AS_INSTANCE(value);
-    Value* index;
-    Value out;
+    Value* idxstk = NULL;
+    Value idx, out;
     uint8_t res = 0;
-    switch(what) {
-        case SK_RAWSET: {
-            Value rhs = *stackpeek(0); // rhs
-            index = stackpeek(1);
-            res = rawsetproperty(vm, instance, *index, rhs, SK_RAWFIELD);
-            vm->sp -= 2; // pop [index] and [rhs]
-            break;
+    if(what == SK_RAWSET) {
+        Value rhs = *stackpeek(0); // rhs
+        idxstk = stackpeek(1);
+        idx = *idxstk;
+        if(unlikely(IS_NIL(idx))) nilidxerror(vm);
+        rawsetproperty(vm, instance, idx, rhs, 0);
+        vm->sp -= 2; // pop [index] and [rhs]
+        res = 1;
+    } else {
+        idxstk = stackpeek(0);
+        if(unlikely(IS_NIL(idx))) nilidxerror(vm);
+        if(rawgetproperty(vm, instance, idx, &out, 0) || rawgetproperty(vm, instance, idx, &out, 1))
+        {
+            *idxstk = out; // replace [index] with property
+            res = 1;
         }
-        case SK_RAWGET: {
-            index = stackpeek(0);
-            if(rawgetproperty(vm, instance, *index, &out, SK_RAWFIELD) ||
-               rawgetproperty(vm, instance, *index, &out, SK_RAWMETHOD))
-            {
-                *index = out; // replace [index] with property
-                res = 1;
-            }
-            break;
-        }
-        default:
-            unreachable;
     }
     return res;
 }
@@ -626,15 +606,15 @@ uint8_t rawindex(VM* vm, Value value, uint8_t what)
 /* Tries to call class overloaded unary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
  * 0 otherwise. */
-static force_inline int callunop(VM* vm, Value a, OMTag op, Value* res)
+static force_inline int callunop(VM* vm, Value lhs, OMTag op, Value* res)
 {
-    O* om = getomethod(vm, a, op);
+    O* om = getomethod(vm, lhs, op);
     if(om == NULL) return 0;
-    Value* fn = vm->sp;
-    push(vm, OBJ_VAL(AS_INSTANCE(a)->oclass));
-    push(vm, a);
-    ncall(vm, fn, OBJ_VAL(om), 1);
-    *res = pop(vm);
+    Value* retstart = vm->sp;
+    push(vm, lhs); // 'self'
+    push(vm, lhs);
+    ncall(vm, retstart, OBJ_VAL(om), ominfo[op].retcnt);
+    *res = pop(vm); // assign and pop the method result
     return 1;
 }
 
@@ -642,31 +622,31 @@ static force_inline int callunop(VM* vm, Value a, OMTag op, Value* res)
 /* Tries to call class overloaded binary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
  * 0 otherwise. */
-static force_inline int callbinop(VM* vm, Value a, Value b, OMTag op, Value* res)
+static force_inline int callbinop(VM* vm, Value lhs, Value rhs, OMTag op, Value* res)
 {
-    Value receiver = a;
-    O* om = getomethod(vm, a, op);
+    Value instance;
+    O* om = getomethod(vm, lhs, op);
     if(om == NULL) {
-        receiver = b;
-        om = getomethod(vm, b, op);
-    }
-    if(om == NULL) return 0;
-    Value* fn = vm->sp;
-    push(vm, OBJ_VAL(AS_INSTANCE(receiver)->oclass));
-    push(vm, a);
-    push(vm, b);
-    ncall(vm, fn, OBJ_VAL(om), 1);
-    *res = pop(vm);
+        om = getomethod(vm, rhs, op);
+        if(om == NULL) return 0;
+        instance = rhs;
+    } else instance = lhs;
+    Value* retstart = vm->sp;
+    push(vm, instance); // 'self'
+    push(vm, lhs);
+    push(vm, rhs);
+    ncall(vm, retstart, OBJ_VAL(om), ominfo[op].retcnt);
+    *res = pop(vm); // assign and pop the method result
     return 1;
 }
 
 
 /* Tries calling binary or unary overloaded operator method, errors on failure. */
-void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
+void otryop(VM* vm, Value lhs, Value rhs, OMTag op, Value* res)
 {
     if(!omisunop(op)) {
-        if(unlikely(!callbinop(vm, a, b, op, res))) binoperror(vm, a, b, op - OM_ADD);
-    } else if(unlikely(!callunop(vm, a, op, res))) unoperror(vm, a, op - OM_ADD);
+        if(unlikely(!callbinop(vm, lhs, rhs, op, res))) binoperror(vm, lhs, rhs, op - OM_ADD);
+    } else if(unlikely(!callunop(vm, lhs, op, res))) unoperror(vm, lhs, op - OM_ADD);
 }
 
 
@@ -675,57 +655,64 @@ void otryop(VM* vm, Value a, Value b, OMTag op, Value* res)
 
 /* =============== ordering =============== */
 
-static force_inline int omcallorder(VM* vm, Value l, Value r, OMTag ordop)
+static force_inline int omcallorder(VM* vm, Value lhs, Value rhs, OMTag ordop)
 {
     sk_assert(vm, ordop >= OM_NE && ordop <= OM_GE, "invalid OMTag for order");
-    if(callbinop(vm, l, r, ordop, stackpeek(1))) { // try overload
-        --vm->sp; // remove second operand
+    if(callbinop(vm, lhs, rhs, ordop, stackpeek(1))) { // try overload
+        pop(vm); // remove second operand
         return 1;
     }
-    if(unlikely(ordop != OM_EQ || ordop != OM_NE)) ordererror(vm, l, r);
+    // Instances (and Skooma objects) can always have equality comparison.
+    // If their pointers are the same then the underlying objects are equal;
+    // otherwise they are not equal.
+    if(unlikely(ordop != OM_EQ && ordop != OM_NE)) ordererror(vm, lhs, rhs);
     return 0;
 }
 
 /* != */
-void one(VM* vm, Value l, Value r)
+void one(VM* vm, Value lhs, Value rhs)
 {
-    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(l != r));
-    else if(!omcallorder(vm, l, r, OM_NE)) push(vm, BOOL_VAL(l != r));
+    if(IS_STRING(lhs) && IS_STRING(rhs)) push(vm, BOOL_VAL(lhs != rhs));
+    else if(!omcallorder(vm, lhs, rhs, OM_NE)) push(vm, BOOL_VAL(lhs != rhs));
 }
 
 /* == */
-void oeq(VM* vm, Value l, Value r)
+void oeq(VM* vm, Value lhs, Value rhs)
 {
-    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(l == r));
-    else if(!omcallorder(vm, l, r, OM_EQ)) push(vm, BOOL_VAL(l == r));
+    if(IS_STRING(lhs) && IS_STRING(rhs)) push(vm, BOOL_VAL(lhs == rhs));
+    else if(!omcallorder(vm, lhs, rhs, OM_EQ)) push(vm, BOOL_VAL(lhs == rhs));
 }
 
 /* < */
-void olt(VM* vm, Value l, Value r)
+void olt(VM* vm, Value lhs, Value rhs)
 {
-    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) < 0));
-    else omcallorder(vm, l, r, OM_LT);
+    if(IS_STRING(lhs) && IS_STRING(rhs))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(lhs), AS_CSTRING(rhs)) < 0));
+    else omcallorder(vm, lhs, rhs, OM_LT);
 }
 
 /* > */
-void ogt(VM* vm, Value l, Value r)
+void ogt(VM* vm, Value lhs, Value rhs)
 {
-    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) > 0));
-    else omcallorder(vm, l, r, OM_GT);
+    if(IS_STRING(lhs) && IS_STRING(rhs))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(lhs), AS_CSTRING(rhs)) > 0));
+    else omcallorder(vm, lhs, rhs, OM_GT);
 }
 
 /* <= */
-void ole(VM* vm, Value l, Value r)
+void ole(VM* vm, Value lhs, Value rhs)
 {
-    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) <= 0));
-    else omcallorder(vm, l, r, OM_LE);
+    if(IS_STRING(lhs) && IS_STRING(rhs))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(lhs), AS_CSTRING(rhs)) <= 0));
+    else omcallorder(vm, lhs, rhs, OM_LE);
 }
 
 /* >= */
-void oge(VM* vm, Value l, Value r)
+void oge(VM* vm, Value lhs, Value rhs)
 {
-    if(IS_STRING(l) && IS_STRING(r)) push(vm, BOOL_VAL(strcmp(AS_CSTRING(l), AS_CSTRING(r)) >= 0));
-    else omcallorder(vm, l, r, OM_GE);
+    if(IS_STRING(lhs) && IS_STRING(rhs))
+        push(vm, BOOL_VAL(strcmp(AS_CSTRING(lhs), AS_CSTRING(rhs)) >= 0));
+    else omcallorder(vm, lhs, rhs, OM_GE);
 }
 
 /* ---------------------------------------------------- */ // ordering
@@ -779,11 +766,15 @@ OString* otostr(VM* vm, O* object)
         CASE(OBJ_INSTANCE)
         {
             OInstance* instance = cast(OInstance*, object);
-            Value debug;
-            if(HashTable_get(&instance->fields, OBJ_VAL(vm->faststatic[SS_DBG]), &debug) &&
-               IS_STRING(debug))
-                return AS_STRING(debug);
-            return instance->oclass->name;
+            if(callomdisplay(vm, OBJ_VAL(instance))) { // display ?
+                return AS_STRING(*stackpeek(0));
+            } else {
+                Value debug;
+                Value key = OBJ_VAL(vm->faststatic[SS_DBG]);
+                if(rawget(&instance->fields, key, &debug) && IS_STRING(debug)) // debug ?
+                    return AS_STRING(debug);
+                return instance->oclass->name; // default
+            }
         }
         CASE(OBJ_BOUND_METHOD)
         {

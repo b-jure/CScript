@@ -13,25 +13,15 @@
 static sk_number narith(VM* vm, sk_number a, sk_number b, Ar op)
 {
     switch(op) {
-        case AR_ADD:
-            return sk_nadd(vm, a, b);
-        case AR_SUB:
-            return sk_nsub(vm, a, b);
-        case AR_MUL:
-            return sk_nmul(vm, a, b);
-        case AR_DIV:
-            return sk_ndiv(vm, a, b);
-        case AR_MOD:
-            return sk_nmod(vm, a, b);
-        case AR_POW:
-            return sk_npow(vm, a, b);
-        case AR_UMIN:
-            return sk_numin(vm, a);
-        case AR_NOT:
-            return cast(sk_number, 0); // never 'falsey'
-        default:
-            unreachable;
-            return 0;
+        case AR_ADD: return sk_nadd(vm, a, b);
+        case AR_SUB: return sk_nsub(vm, a, b);
+        case AR_MUL: return sk_nmul(vm, a, b);
+        case AR_DIV: return sk_ndiv(vm, a, b);
+        case AR_MOD: return sk_nmod(vm, a, b);
+        case AR_POW: return sk_npow(vm, a, b);
+        case AR_UMIN: return sk_numin(vm, a);
+        case AR_NOT: return cast(sk_number, 0); // never 'falsey'
+        default: unreachable; return 0;
     }
 }
 
@@ -43,12 +33,12 @@ static sk_number narith(VM* vm, sk_number a, sk_number b, Ar op)
 int varith(VM* vm, Value a, Value b, Ar op, Value* res)
 {
     if(arisbin(op)) { // binary operation
-        if(IS_NUMBER(a) && IS_NUMBER(b)) goto unarynum;
+        if(IS_NUMBER(a) && IS_NUMBER(b)) goto l_unarynum;
         else if(IS_STRING(a) && IS_STRING(b)) *res = OBJ_VAL(concatenate(vm, a, b));
         else return 0;
     } else { // unary operation
         if(IS_NUMBER(a)) {
-        unarynum:;
+        l_unarynum:;
             sk_number ret = narith(vm, AS_NUMBER(a), AS_NUMBER(b), op);
             *res = (op != AR_NOT ? NUMBER_VAL(ret) : FALSE_VAL);
         } else if(op == AR_NOT) {
@@ -129,19 +119,14 @@ TypeTag val2type(Value value)
         CASE(VAL_OBJ)
         {
             switch(otype(AS_OBJ(value))) {
-                case OBJ_STRING:
-                    return TT_STRING;
-                case OBJ_CLASS:
-                    return TT_CLASS;
+                case OBJ_STRING: return TT_STRING;
+                case OBJ_CLASS: return TT_CLASS;
                 case OBJ_NATIVE:
                 case OBJ_FUNCTION:
                 case OBJ_CLOSURE:
-                case OBJ_BOUND_METHOD:
-                    return TT_FUNCTION;
-                case OBJ_INSTANCE:
-                    return TT_INSTANCE;
-                default:
-                    unreachable; // upvalue
+                case OBJ_BOUND_METHOD: return TT_FUNCTION;
+                case OBJ_INSTANCE: return TT_INSTANCE;
+                default: unreachable; // upvalue
             }
         }
     }
@@ -153,6 +138,7 @@ TypeTag val2type(Value value)
 }
 
 
+/* @TODO: What is this used for ?? */
 const char* vname(VM* vm, Value val)
 {
     TypeTag tag = val2type(val);
@@ -177,8 +163,7 @@ oclass:
 instance:;
     OInstance* instance = AS_INSTANCE(val);
     Value debug;
-    if(HashTable_get(&instance->fields, OBJ_VAL(vm->faststatic[SS_DBG]), &debug) &&
-       IS_STRING(debug))
+    if(rawget(&instance->fields, OBJ_VAL(vm->faststatic[SS_DBG]), &debug) && IS_STRING(debug))
         return AS_CSTRING(debug);
     return instance->oclass->name->storage;
 function:;
@@ -192,10 +177,8 @@ function:;
         case TT_NIL:
         case TT_NUMBER:
         case TT_STRING:
-        case TT_BOOL:
-            return vm->statics[tag]->storage;
-        case TT_CLASS:
-            return AS_CLASS(val)->name->storage;
+        case TT_BOOL: return vm->statics[tag]->storage;
+        case TT_CLASS: return AS_CLASS(val)->name->storage;
         case TT_INSTANCE: {
             OInstance* instance = AS_INSTANCE(val);
             Value debug = getsfield(instance, SF_DEBUG);
@@ -210,9 +193,7 @@ function:;
                 return AS_BOUND_METHOD(value)->method->fn->name->storage;
             else return AS_FUNCTION(val)->name->storage; // is this reachable ??
         }
-        default:
-            unreachable;
-            return 0;
+        default: unreachable; return 0;
 #endif
 }
 
@@ -232,7 +213,7 @@ void eq_preserveL(VM* vm, Value l, Value r)
 }
 
 /* Raw equality.
- * VM stack won't be used, instead the result is directly
+ * No overloaded method will be invoked, instead the result is directly
  * returned from the function. */
 uint8_t raweq(Value l, Value r)
 {
@@ -435,7 +416,7 @@ void vge(VM* vm, Value l, Value r)
 const char* dtostr(sk_number n, uint8_t* lenp)
 {
     static char buff[SK_NDIGITS];
-    if(floor(n) != n) *lenp = snprintf(buff, SK_NDIGITS, "%g", n);
+    if(sk_floor(n) != n) *lenp = snprintf(buff, SK_NDIGITS, "%g", n);
     else *lenp = snprintf(buff, SK_NDIGITS, "%ld", cast(int64_t, n));
     return buff;
 }
@@ -508,7 +489,7 @@ obj:
 #if defined(SKJMPTABLE_H)
 #undef SKJMPTABLE_H
 #endif
-#endif // val2tbmask_1
+#endif
     unreachable;
 }
 
@@ -529,7 +510,7 @@ nil:
     fprintf(stream, "nil");
     return;
 number:
-    if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) fprintf(stream, "%lg", AS_NUMBER(value));
+    if(sk_floor(AS_NUMBER(value)) != AS_NUMBER(value)) fprintf(stream, "%lg", AS_NUMBER(value));
     else fprintf(stream, "%ld", (int64_t)AS_NUMBER(value));
     return;
 boolean:
@@ -541,7 +522,7 @@ object:
 #elif defined(SK_NAN_BOX)
         if(IS_NIL(value)) printf("nil");
         else if(IS_NUMBER(value)) {
-            if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%lg", AS_NUMBER(value));
+            if(sk_floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%lg", AS_NUMBER(value));
             else printf("%ld", (int64_t)AS_NUMBER(value));
         } else if(IS_BOOL(value)) printf(AS_BOOL(value) ? "true" : "false");
         else oprint(vm, value);
@@ -566,7 +547,7 @@ object:
         }
         CASE(VAL_NUMBER)
         {
-            if(floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%f", AS_NUMBER(value));
+            if(sk_floor(AS_NUMBER(value)) != AS_NUMBER(value)) printf("%f", AS_NUMBER(value));
             else printf("%ld", (int64_t)AS_NUMBER(value));
             BREAK;
         }
@@ -601,8 +582,8 @@ Hash vhash(Value value)
     };
     goto* jmptable[val2tbmask_1(value)];
 number:;
-    double num = AS_NUMBER(value);
-    if(floor(num) != num || num < 0) return dblhash(num);
+    sk_number num = AS_NUMBER(value);
+    if(num < 0 || sk_floor(num) != num) return dblhash(num);
     else return cast(Hash, num);
 boolean:
     return cast(Hash, AS_BOOL(value));
@@ -611,7 +592,7 @@ object:
 #elif defined(SK_NAN_BOX)
         if(IS_NUMBER(value)) {
             sk_number num = AS_NUMBER(value);
-            if(num < 0 || floor(num) != num) return dblhash(num);
+            if(num < 0 || sk_floor(num) != num) return dblhash(num);
             else return cast(Hash, num);
         } else if(IS_BOOL(value)) return cast(Hash, AS_BOOL(value));
         else return ohash(value);
@@ -637,7 +618,7 @@ object:
         CASE(VAL_NUMBER)
         {
             double num = AS_NUMBER(value);
-            if(AS_NUMBER(value) < 0 || floor(AS_NUMBER(value)) != AS_NUMBER(value))
+            if(AS_NUMBER(value) < 0 || sk_floor(AS_NUMBER(value)) != AS_NUMBER(value))
                 return dblhash(num);
             else return cast(Hash, num);
         }

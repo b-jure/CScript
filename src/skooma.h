@@ -199,7 +199,6 @@ SK_API void sk_push(VM* vm, sk_int idx);
 
 
 /* ========== raw access ========== */
-#define SK_RAWGET 1
 #define SK_RAWSET 0
 
 SK_API sk_byte sk_rawindex(VM* vm, sk_int idx, uint8_t what);

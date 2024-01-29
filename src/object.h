@@ -235,6 +235,9 @@ uint8_t callomsetidx(VM* vm, Value instance); // __setidx__
 /* Raw access */
 uint8_t rawindex(VM* vm, Value instance, uint8_t what);
 
+/* Get table, if 'what' is zero fetch fields, otherwise methods */
+#define rawgettable(vm, instance, what)                                                            \
+    (what == 0 ? &(instance)->fields : &(instance)->oclass->methods)
 
 
 /* debug only, prints object type name */

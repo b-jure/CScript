@@ -5,7 +5,7 @@
 
 typedef uint64_t Hash;
 
-Hash dblhash(double dbl);
+Hash dblhash(sk_number dbl);
 Hash stringhash(const char* str, size_t len, unsigned long seed);
 Hash ptrhash(const void* ptr);
 

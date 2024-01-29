@@ -47,10 +47,4 @@ void internfmt(VM* vm, const char* fmt, ...);
 #define rawget(table, key, out) (HashTable_get(table, key, out))
 #define rawset(table, key, value) (HashTable_insert(vm, table, key, value))
 
-#define SK_RAWFIELD 0
-#define SK_RAWMETHOD 1
-
-#define rawgettable(vm, instance, what)                                                            \
-    (what == SK_RAWFIELD ? &(instance)->fields : &(instance)->oclass->methods)
-
 #endif

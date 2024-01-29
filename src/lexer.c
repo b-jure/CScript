@@ -9,7 +9,7 @@
 
 /* Maximum size of error token string. */
 #define MAX_ERR_STRING 50
-#define ERR_LEN(len)   (MIN(MAX_ERR_STRING, len))
+#define ERR_LEN(len) (MIN(MAX_ERR_STRING, len))
 
 
 
@@ -182,16 +182,13 @@ read_more:
         case '\n':
         case ' ':
         case '\r':
-        case '\t':
-            advance(lexer);
-            goto read_more;
+        case '\t': advance(lexer); goto read_more;
         case '#':
             advance(lexer);
             while(!isend(lexer->c) && lexer->c != '\n')
                 advance(lexer);
             goto read_more;
-        default:
-            break;
+        default: break;
     }
 }
 
@@ -292,45 +289,23 @@ static force_inline Token string(Lexer* lexer)
                 case '\'':
                 case '%':
                 case '\\':
-                case '?':
-                    advance_and_push(lexer);
-                    break;
-                case '0':
-                    advance_and_pushc(lexer, '\0');
-                    break;
-                case 'a':
-                    advance_and_pushc(lexer, '\a');
-                    break;
-                case 'b':
-                    advance_and_pushc(lexer, '\b');
-                    break;
-                case 'e':
-                    advance_and_pushc(lexer, '\33');
-                    break;
-                case 'f':
-                    advance_and_pushc(lexer, '\f');
-                    break;
-                case 'n':
-                    advance_and_pushc(lexer, '\n');
-                    break;
-                case 'r':
-                    advance_and_pushc(lexer, '\r');
-                    break;
-                case 't':
-                    advance_and_pushc(lexer, '\t');
-                    break;
-                case 'v':
-                    advance_and_pushc(lexer, '\v');
-                    break;
+                case '?': advance_and_push(lexer); break;
+                case '0': advance_and_pushc(lexer, '\0'); break;
+                case 'a': advance_and_pushc(lexer, '\a'); break;
+                case 'b': advance_and_pushc(lexer, '\b'); break;
+                case 'e': advance_and_pushc(lexer, '\33'); break;
+                case 'f': advance_and_pushc(lexer, '\f'); break;
+                case 'n': advance_and_pushc(lexer, '\n'); break;
+                case 'r': advance_and_pushc(lexer, '\r'); break;
+                case 't': advance_and_pushc(lexer, '\t'); break;
+                case 'v': advance_and_pushc(lexer, '\v'); break;
                 case 'x': {
                     pushc(lexer, cast(int32_t, eschex(lexer)));
                     break;
                 }
                 case SKEOF: // raise error next iteration
                     break;
-                default:
-                    lexerror(lexer, lexerrors[LE_ESCSEQ], lexer->c);
-                    break;
+                default: lexerror(lexer, lexerrors[LE_ESCSEQ], lexer->c); break;
             }
         } else pushc(lexer, lexer->c);
     }
@@ -479,14 +454,10 @@ b:
 c:
     if(lblen(lexer) > 1) {
         switch(lbptr(lexer)[1]) {
-            case 'a':
-                return keyword(lexer, 2, 2, "se", TOK_CASE);
-            case 'l':
-                return keyword(lexer, 2, 3, "ass", TOK_CLASS); // lmao
-            case 'o':
-                return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
-            default:
-                break;
+            case 'a': return keyword(lexer, 2, 2, "se", TOK_CASE);
+            case 'l': return keyword(lexer, 2, 3, "ass", TOK_CLASS); // lmao
+            case 'o': return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
+            default: break;
         }
     }
     goto ret;
@@ -497,34 +468,29 @@ e:
 f:
     if(lblen(lexer) > 1) {
         switch(lbptr(lexer)[1]) {
-            case 'a':
-                return keyword(lexer, 2, 3, "lse", TOK_FALSE);
-            case 'i':
-                return keyword(lexer, 2, 3, "xed", TOK_FIXED);
+            case 'a': return keyword(lexer, 2, 3, "lse", TOK_FALSE);
+            case 'i': return keyword(lexer, 2, 3, "xed", TOK_FIXED);
             case 'n':
                 if(lblen(lexer) == 2) return TOK_FN;
                 else return TOK_IDENTIFIER;
             case 'o':
                 if(lblen(lexer) > 3) return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
                 else return keyword(lexer, 2, 1, "r", TOK_FOR);
-            default:
-                break;
+            default: break;
         }
     }
     goto ret;
 i:
     if(lblen(lexer) > 1) {
         switch(lbptr(lexer)[1]) {
-            case 'm':
-                return keyword(lexer, 2, 2, "pl", TOK_IMPL);
+            case 'm': return keyword(lexer, 2, 2, "pl", TOK_IMPL);
             case 'n':
                 if(lblen(lexer) == 2) return TOK_IN;
                 else return TOK_IDENTIFIER;
             case 'f':
                 if(lblen(lexer) == 2) return TOK_IF;
                 else return TOK_IDENTIFIER;
-            default:
-                break;
+            default: break;
         }
     }
     goto ret;
@@ -539,14 +505,10 @@ r:
 s:
     if(lblen(lexer) > 1) {
         switch(lbptr(lexer)[1]) {
-            case 'u':
-                return keyword(lexer, 2, 3, "per", TOK_SUPER);
-            case 'e':
-                return keyword(lexer, 2, 2, "lf", TOK_SELF);
-            case 'w':
-                return keyword(lexer, 2, 4, "itch", TOK_SWITCH);
-            default:
-                break;
+            case 'u': return keyword(lexer, 2, 3, "per", TOK_SUPER);
+            case 'e': return keyword(lexer, 2, 2, "lf", TOK_SELF);
+            case 'w': return keyword(lexer, 2, 4, "itch", TOK_SWITCH);
+            default: break;
         }
     }
     goto ret;
@@ -559,91 +521,66 @@ w:
 
 #else
     switch(lexer->c) {
-        case 'a':
-            return keyword(lexer, 1, 2, "nd", TOK_AND);
-        case 'b':
-            return keyword(lexer, 1, 4, "reak", TOK_BREAK);
+        case 'a': return keyword(lexer, 1, 2, "nd", TOK_AND);
+        case 'b': return keyword(lexer, 1, 4, "reak", TOK_BREAK);
         case 'c':
             if(lblen(lexer) > 1) {
                 switch(lbptr(lexer)[1]) {
-                    case 'a':
-                        return keyword(lexer, 2, 2, "se", TOK_CASE);
-                    case 'l':
-                        return keyword(lexer, 2, 3, "ass", TOK_CLASS);
-                    case 'o':
-                        return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
-                    default:
-                        break;
+                    case 'a': return keyword(lexer, 2, 2, "se", TOK_CASE);
+                    case 'l': return keyword(lexer, 2, 3, "ass", TOK_CLASS);
+                    case 'o': return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
+                    default: break;
                 }
             }
             break;
-        case 'd':
-            return keyword(lexer, 1, 6, "efault", TOK_DEFAULT);
-        case 'e':
-            return keyword(lexer, 1, 3, "lse", TOK_ELSE);
+        case 'd': return keyword(lexer, 1, 6, "efault", TOK_DEFAULT);
+        case 'e': return keyword(lexer, 1, 3, "lse", TOK_ELSE);
         case 'f':
             if(lblen(lexer) > 1) {
                 switch(lbptr(lexer)[1]) {
-                    case 'a':
-                        return keyword(lexer, 2, 3, "lse", TOK_FALSE);
-                    case 'i':
-                        return keyword(lexer, 2, 3, "xed", TOK_FIXED);
+                    case 'a': return keyword(lexer, 2, 3, "lse", TOK_FALSE);
+                    case 'i': return keyword(lexer, 2, 3, "xed", TOK_FIXED);
                     case 'n':
                         if(lblen(lexer) == 2) return TOK_FN;
                         else return TOK_IDENTIFIER;
                         if(lblen(lexer) > 3) return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
                         else return keyword(lexer, 2, 1, "r", TOK_FOR);
-                    default:
-                        break;
+                    default: break;
                 }
             }
             break;
         case 'i':
             if(lblen(lexer) > 1) {
                 switch(lbptr(lexer)[1]) {
-                    case 'm':
-                        keyword(lexer, 2, 2, "pl", TOK_IMPL);
+                    case 'm': keyword(lexer, 2, 2, "pl", TOK_IMPL);
                     case 'n':
                         if(lblen(lexer) == 2) return TOK_IN;
                         else return TOK_IDENTIFIER;
                     case 'f':
                         if(lblen(lexer) == 2) return TOK_IF;
                         else return TOK_IDENTIFIER;
-                    default:
-                        break;
+                    default: break;
                 }
             }
             break;
-        case 'l':
-            return keyword(lexer, 1, 3, "oop", TOK_LOOP);
-        case 'n':
-            return keyword(lexer, 1, 2, "il", TOK_NIL);
-        case 'o':
-            return keyword(lexer, 1, 1, "r", TOK_OR);
-        case 'r':
-            return keyword(lexer, 1, 5, "eturn", TOK_RETURN);
+        case 'l': return keyword(lexer, 1, 3, "oop", TOK_LOOP);
+        case 'n': return keyword(lexer, 1, 2, "il", TOK_NIL);
+        case 'o': return keyword(lexer, 1, 1, "r", TOK_OR);
+        case 'r': return keyword(lexer, 1, 5, "eturn", TOK_RETURN);
         case 's':
             if(lblen(lexer) > 1) {
                 switch(lbptr(lexer)[1]) {
-                    case 'u':
-                        return keyword(lexer, 2, 3, "per", TOK_SUPER);
-                    case 'e':
-                        return keyword(lexer, 2, 2, "lf", TOK_SELF);
-                    case 'w':
-                        return keyword(lexer, 2, 4, "itch", TOK_SWITCH);
-                    default:
-                        break;
+                    case 'u': return keyword(lexer, 2, 3, "per", TOK_SUPER);
+                    case 'e': return keyword(lexer, 2, 2, "lf", TOK_SELF);
+                    case 'w': return keyword(lexer, 2, 4, "itch", TOK_SWITCH);
+                    default: break;
                 }
             }
             break;
-        case 't':
-            return keyword(lexer, 1, 3, "rue", TOK_TRUE);
-        case 'v':
-            return keyword(lexer, 1, 2, "ar", TOK_VAR);
-        case 'w':
-            return keyword(lexer, 1, 4, "hile", TOK_WHILE);
-        default:
-            break;
+        case 't': return keyword(lexer, 1, 3, "rue", TOK_TRUE);
+        case 'v': return keyword(lexer, 1, 2, "ar", TOK_VAR);
+        case 'w': return keyword(lexer, 1, 4, "hile", TOK_WHILE);
+        default: break;
     }
 #endif
 ret:
@@ -775,18 +712,12 @@ err:
     return errtoken(lexer, "Unexpected character.");
 #else
     switch(lexer->c) {
-        case '[':
-            return keywordtoken(lexer, TOK_LBRACK);
-        case ']':
-            return keywordtoken(lexer, TOK_RBRACK);
-        case '(':
-            return keywordtoken(lexer, TOK_LPAREN);
-        case ')':
-            return keywordtoken(lexer, TOK_RPAREN);
-        case '{':
-            return keywordtoken(lexer, TOK_LBRACE);
-        case '}':
-            return keywordtoken(lexer, TOK_RBRACE);
+        case '[': return keywordtoken(lexer, TOK_LBRACK);
+        case ']': return keywordtoken(lexer, TOK_RBRACK);
+        case '(': return keywordtoken(lexer, TOK_LPAREN);
+        case ')': return keywordtoken(lexer, TOK_RPAREN);
+        case '{': return keywordtoken(lexer, TOK_LBRACE);
+        case '}': return keywordtoken(lexer, TOK_RBRACE);
         case '.':
             advance(lexer);
             int32_t fallbackc = lexer->c;
@@ -795,24 +726,15 @@ err:
                 else fallback(lexer, fallbackc);
             }
             return token(lexer, TOK_DOT, EMPTY_VAL);
-        case ',':
-            return keywordtoken(lexer, TOK_COMMA);
-        case '-':
-            return keywordtoken(lexer, TOK_MINUS);
-        case '+':
-            return keywordtoken(lexer, TOK_PLUS);
-        case ';':
-            return keywordtoken(lexer, TOK_SEMICOLON);
-        case ':':
-            return keywordtoken(lexer, TOK_COLON);
-        case '?':
-            return keywordtoken(lexer, TOK_QMARK);
-        case '/':
-            return keywordtoken(lexer, TOK_SLASH);
-        case '*':
-            return keywordtoken(lexer, TOK_STAR);
-        case '%':
-            return keywordtoken(lexer, TOK_PERCENT);
+        case ',': return keywordtoken(lexer, TOK_COMMA);
+        case '-': return keywordtoken(lexer, TOK_MINUS);
+        case '+': return keywordtoken(lexer, TOK_PLUS);
+        case ';': return keywordtoken(lexer, TOK_SEMICOLON);
+        case ':': return keywordtoken(lexer, TOK_COLON);
+        case '?': return keywordtoken(lexer, TOK_QMARK);
+        case '/': return keywordtoken(lexer, TOK_SLASH);
+        case '*': return keywordtoken(lexer, TOK_STAR);
+        case '%': return keywordtoken(lexer, TOK_PERCENT);
         case '!':
             return token(
                 lexer,
@@ -833,11 +755,8 @@ err:
                 lexer,
                 lmatch(lexer, '=') ? TOK_LESS_EQUAL : (advance(lexer), TOK_LESS),
                 EMPTY_VAL);
-        case '"':
-            return string(lexer);
-        default:
-            advance(lexer);
-            return errtoken(lexer, "Unexpected character.");
+        case '"': return string(lexer);
+        default: advance(lexer); return errtoken(lexer, "Unexpected character.");
     }
 #endif
 }

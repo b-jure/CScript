@@ -362,17 +362,15 @@ SK_API uint8_t sk_getmethod(VM* vm, sk_int idx, const char* method)
  * class instance return 0, otherwise 1. */
 SK_API sk_byte sk_getfield(VM* vm, sk_int idx, const char* field)
 {
-    // @TODO: Refactor
     sk_byte res = 0;
     sk_lock(vm);
     skapi_checkptr(vm, field);
-    skapi_checkstack(vm, 1);
     Value insval = *idx2val(vm, idx);
     if(IS_INSTANCE(insval)) {
         OInstance* instance = AS_INSTANCE(insval);
         Value key = OBJ_VAL(OString_new(vm, field, strlen(field)));
         Value fieldval;
-        if((res = HashTable_get(&instance->fields, key, &fieldval))) skapi_pushval(vm, fieldval);
+        if((res = rawget(&instance->fields, key, &fieldval))) skapi_pushval(vm, fieldval);
     }
     sk_unlock(vm);
     return res;
@@ -420,12 +418,21 @@ SK_API sk_byte sk_setindex(VM* vm, sk_int idx)
 
 
 
-/* @TODO: Add description */
+/* Performs 'raw' index operation, meaning it doesn't invoke
+ * overloaded methods when getting/setting the instance property.
+ * 'what' parameter if it is a zero means we are setting and
+ * non-zero 'what' means we are getting the value at that index.
+ * In case we are setting the indexed value then the 'value' we are
+ * assigning will be on top of the stack and the 'index' value right
+ * below it; if we are getting the value then the 'key' will be on top
+ * of the stack.
+ * If the operation was successful then 1 is returned; otherwise 0.
+ * @ERR: if value we are indexing with is 'nil'. */
 SK_API sk_byte sk_rawindex(VM* vm, sk_int idx, uint8_t what)
 {
     sk_byte res = 0;
     sk_lock(vm);
-    skapi_checkelems(vm, what == SK_RAWGET ? 1 : 2);
+    skapi_checkelems(vm, what == SK_RAWSET ? 2 : 1);
     Value value = *idx2val(vm, idx);
     if(!IS_INSTANCE(value)) return res;
     res = rawindex(vm, value, what);
@@ -447,7 +454,7 @@ SK_API sk_byte sk_getglobal(VM* vm, const char* name)
     Value gval;
     skapi_checkptr(vm, name);
     OString* str = OString_new(vm, name, strlen(name));
-    if(HashTable_get(&vm->globids, OBJ_VAL(str), &gval)) {
+    if(rawget(&vm->globids, OBJ_VAL(str), &gval)) {
         sk_int idx = (sk_int)AS_NUMBER(gval);
         skapi_pushval(vm, vm->globvars.data[idx].value);
         res = 1;
@@ -704,24 +711,12 @@ SK_API size_t sk_gc(VM* vm, GCOpt option, ...)
     sk_lock(vm);
     va_start(argp, option);
     switch(option) {
-        case GCO_STOP:
-            vm->gc.gc_stopped = 1;
-            break;
-        case GCO_RESTART:
-            vm->gc.gc_stopped = 0;
-            break;
-        case GCO_COLLECT:
-            gc(vm);
-            break;
-        case GCO_COUNT:
-            res = vm->gc.gc_allocated;
-            break;
-        case GCO_ISRUNNING:
-            res = (vm->gc.gc_stopped == 0);
-            break;
-        case GCO_NEXTGC:
-            res = vm->gc.gc_nextgc;
-            break;
+        case GCO_STOP: vm->gc.gc_stopped = 1; break;
+        case GCO_RESTART: vm->gc.gc_stopped = 0; break;
+        case GCO_COLLECT: gc(vm); break;
+        case GCO_COUNT: res = vm->gc.gc_allocated; break;
+        case GCO_ISRUNNING: res = (vm->gc.gc_stopped == 0); break;
+        case GCO_NEXTGC: res = vm->gc.gc_nextgc; break;
     }
     va_end(argp);
     sk_unlock(vm);
@@ -782,7 +777,7 @@ SK_API sk_byte sk_setglobal(VM* vm, const char* name, sk_int isfixed)
     Value key = OBJ_VAL(OString_new(vm, name, strlen(name)));
     sk_byte isnew = 0;
     Value gidx;
-    if((isnew = !HashTable_get(&vm->globids, key, &gidx))) {
+    if((isnew = !rawget(&vm->globids, key, &gidx))) {
         skapi_pushval(vm, key);
         Variable gvar = {newval, cast_uchar(0x01 & isfixed)};
         Value idx = NUMBER_VAL(Array_Variable_push(&vm->globvars, gvar));
@@ -935,17 +930,28 @@ SK_API sk_int sk_setupvalue(VM* vm, sk_int fidx, sk_int idx)
 
 
 
-/* @TODO: add description */
+/* Get the next property of the instance located at 'idx' on the stack.
+ * The 'key' value (string) used for lookup is on top of the stack.
+ * 'what' parameter determines which next property we need,
+ * 0 means instance field otherwise instance method.
+ * This function returns 1 if there is next property and
+ * the value on top of the stack (key) is replaced with the
+ * next key; additionally value associated with that key is
+ * also pushed on top of the stack.
+ * If there is no next property 0 is returned and stack
+ * remains unchanged. */
 SK_API sk_byte sk_nextproperty(VM* vm, sk_int idx, sk_byte what)
 {
     sk_byte hasnext = 0;
     sk_lock(vm);
-    skapi_checkelems(vm, 1); // key
+    skapi_checkelems(vm, 2); // key and instance
+    skapi_checkstack(vm, 1); // for the value
     Value value = *idx2val(vm, idx);
+    Value* key = stackpeek(0);
     skapi_check(vm, IS_INSTANCE(value), "Expect instance");
     OInstance* instance = AS_INSTANCE(value);
     HashTable* table = rawgettable(vm, instance, what);
-    hasnext = HashTable_next(vm, table, stackpeek(0));
+    hasnext = HashTable_next(vm, table, key);
     if(hasnext) skapi_incsp(vm);
     else vm->sp--;
     sk_unlock(vm);
@@ -1001,26 +1007,13 @@ SK_API sk_byte sk_compare(VM* vm, sk_int idx1, sk_int idx2, Ord ord)
     *vm->sp++ = l; // push left operand
     *vm->sp++ = r; // push right operand
     switch(ord) {
-        case ORD_EQ:
-            veq(vm, l, r);
-            break;
-        case ORD_NE:
-            vne(vm, l, r);
-            break;
-        case ORD_LT:
-            vlt(vm, l, r);
-            break;
-        case ORD_GT:
-            vgt(vm, l, r);
-            break;
-        case ORD_LE:
-            vle(vm, l, r);
-            break;
-        case ORD_GE:
-            vge(vm, l, r);
-            break;
-        default:
-            unreachable;
+        case ORD_EQ: veq(vm, l, r); break;
+        case ORD_NE: vne(vm, l, r); break;
+        case ORD_LT: vlt(vm, l, r); break;
+        case ORD_GT: vgt(vm, l, r); break;
+        case ORD_LE: vle(vm, l, r); break;
+        case ORD_GE: vge(vm, l, r); break;
+        default: unreachable;
     }
     sk_byte res = !ISFALSE(*stackpeek(0));
     sk_unlock(vm);

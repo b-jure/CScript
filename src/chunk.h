@@ -57,6 +57,8 @@ typedef enum {
     OP_JMP, /* Jump to instruction */
     OP_JMP_AND_POP, /* Jump to instruction and pop the value of the stack */
     OP_LOOP, /* Jump backwards unconditionally */
+    OP_CALL0, /* Call instruction without arguments */
+    OP_CALL1, /* Call instruction with a single argument */
     OP_CALL, /* Call instruction */
     OP_CLOSURE, /* Create a closure */
     OP_GET_UPVALUE, /* Push the upvalue on the stack */
@@ -68,12 +70,15 @@ typedef enum {
     OP_GET_PROPERTY, /* Get class instance property */
     OP_INDEX, /* Index operator */
     OP_SET_INDEX, /* Set class instance property dynamically */
-    OP_INVOKE_INDEX, /* Invoke class method name resolved dynamically */
     OP_METHOD, /* Create class method */
+    OP_INVOKE0, /* Invoke class method with no arguments */
+    OP_INVOKE1, /* Invoke class method with single argument */
     OP_INVOKE, /* Invoke class method */
     OP_OVERLOAD, /* Overload operator or initializer for a class */
     OP_INHERIT, /* Inherit class properties. */
     OP_GET_SUPER, /* Fetch superclass method */
+    OP_INVOKE_SUPER0, /* Invoke superclass method call with no arguments */
+    OP_INVOKE_SUPER1, /* Invoke superclass method call with single argument */
     OP_INVOKE_SUPER, /* Invoke superclass method call */
     OP_CALLSTART, /* Start of call arguments */
     OP_RETSTART, /* Start of return values */

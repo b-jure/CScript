@@ -165,7 +165,7 @@ void mark_black(VM* vm, O* obj)
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
-#define BREAK       break
+#define BREAK break
 #endif
     ASSERT(oismarked(obj), "Object is not marked.");
     DISPATCH(otype(obj))

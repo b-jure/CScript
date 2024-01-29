@@ -149,17 +149,15 @@ static CallFrame* call(VM* vm, Value callee, int32_t argc, int32_t retcnt)
             OClass* oclass = AS_CLASS(callee);
             vm->sp[-argc - 1] = OBJ_VAL(OInstance_new(vm, oclass));
             O* init = oclass->omethods[OM_INIT];
-            if(init) return precall(vm, OBJ_VAL(init), argc, 1);
+            if(init) return precall(vm, OBJ_VAL(init), argc, ominfo[OM_INIT].retcnt);
             int32_t arity = ominfo[OM_INIT].arity;
             if(unlikely(argc != arity)) arityerror(vm, arity, argc);
             return NULL;
         }
         case OBJ_CLOSURE:
         case OBJ_FUNCTION:
-        case OBJ_NATIVE:
-            return precall(vm, callee, argc, retcnt);
-        default:
-            unreachable;
+        case OBJ_NATIVE: return precall(vm, callee, argc, retcnt);
+        default: unreachable;
     }
 }
 
@@ -171,12 +169,16 @@ void ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt)
 }
 
 
-/* Call overload-able method */
-static CallFrame* calloverload(VM* vm, Value om, OMTag tag)
+/* Call overload-able class method.
+ * If method is not overloaded return 0, otherwise call it and return 1. */
+static uint8_t calloverload(VM* vm, OInstance* instance, OMTag tag)
 {
+    O* om = instance->oclass->omethods[tag];
+    if(!om) return 0;
+    Value method = OBJ_VAL(om);
     Tuple t = ominfo[tag];
-    int32_t retcnt = t.retcnt == 0 && IS_NATIVE(om) ? SK_MULRET : 0;
-    return call(vm, om, t.arity, retcnt);
+    call(vm, method, t.arity, t.retcnt);
+    return 1;
 }
 
 
@@ -499,35 +501,66 @@ void run(VM* vm)
                 push(vm, READ_CONSTANT());
                 BREAK;
             }
-            CASE(OP_CALL)
             {
-                int32_t retcnt = READ_BYTEL();
-                int32_t argc = vm->sp - Array_VRef_pop(&vm->callstart);
-                Value callee = *stackpeek(argc);
-                frame->ip = ip;
-                saveip();
-                call(vm, callee, argc, retcnt);
-                updatestate();
-                BREAK;
+                int32_t argc; // shared
+                CASE(OP_CALL0)
+                {
+                    argc = 0;
+                    goto l_call;
+                }
+                CASE(OP_CALL1)
+                {
+                    argc = 1;
+                    goto l_call;
+                }
+                CASE(OP_CALL)
+                {
+                    argc = cast(int32_t, vm->sp - Array_VRef_pop(&vm->callstart));
+                l_call:;
+                    {
+                        int32_t retcnt = READ_BYTEL();
+                        Value callee = *stackpeek(argc);
+                        saveip();
+                        call(vm, callee, argc, retcnt);
+                        updatestate();
+                        BREAK;
+                    }
+                }
             }
             CASE(OP_METHOD)
             {
                 Value methodname = READ_CONSTANT();
-                Value method = *stackpeek(0); // OFunction or OClosure
+                Value method = *stackpeek(0); // OClosure or ONative
                 OClass* oclass = AS_CLASS(*stackpeek(1));
                 HashTable_insert(vm, &oclass->methods, methodname, method);
                 pop(vm); // pop method
                 BREAK;
             }
-            CASE(OP_INVOKE)
             {
-                Value methodname = READ_CONSTANT();
-                int32_t retcnt = READ_BYTEL();
-                int32_t argc = vm->sp - Array_VRef_pop(&vm->callstart);
-                saveip();
-                invoke(vm, methodname, argc, retcnt);
-                updatestate();
-                BREAK;
+                int32_t argc; // shared
+                CASE(OP_INVOKE0)
+                {
+                    argc = 0;
+                    goto l_invoke;
+                }
+                CASE(OP_INVOKE1)
+                {
+                    argc = 1;
+                    goto l_invoke;
+                }
+                CASE(OP_INVOKE)
+                {
+                    argc = cast(int32_t, vm->sp - Array_VRef_pop(&vm->callstart));
+                l_invoke:;
+                    {
+                        Value methodname = READ_CONSTANT();
+                        int32_t retcnt = READ_BYTEL();
+                        saveip();
+                        invoke(vm, methodname, argc, retcnt);
+                        updatestate();
+                        BREAK;
+                    }
+                }
             }
             CASE(OP_GET_SUPER)
             {
@@ -539,17 +572,33 @@ void run(VM* vm)
                     udperror(vm, methodname, superclass);
                 BREAK;
             }
-            CASE(OP_INVOKE_SUPER)
             {
-                Value methodname = READ_CONSTANT();
-                sk_assert(vm, IS_CLASS(*stackpeek(0)), "superclass must be class.");
-                OClass* superclass = AS_CLASS(pop(vm));
-                uint32_t argc = vm->sp - Array_VRef_pop(&vm->callstart);
-                int32_t retcnt = READ_BYTEL();
-                saveip();
-                invokefrom(vm, superclass, methodname, argc, retcnt);
-                updatestate();
-                BREAK;
+                int32_t argc; // shared
+                CASE(OP_INVOKE_SUPER0)
+                {
+                    argc = 0;
+                    goto l_invoke_super;
+                }
+                CASE(OP_INVOKE_SUPER1)
+                {
+                    argc = 1;
+                    goto l_invoke_super;
+                }
+                CASE(OP_INVOKE_SUPER)
+                {
+                    argc = cast(int32_t, vm->sp - Array_VRef_pop(&vm->callstart));
+                l_invoke_super:;
+                    {
+                        Value methodname = READ_CONSTANT();
+                        int32_t retcnt = READ_BYTEL();
+                        sk_assert(vm, IS_CLASS(*stackpeek(0)), "superclass must be class.");
+                        OClass* superclass = AS_CLASS(pop(vm));
+                        saveip();
+                        invokefrom(vm, superclass, methodname, argc, retcnt);
+                        updatestate();
+                        BREAK;
+                    }
+                }
             }
             CASE(OP_SET_PROPERTY)
             {
@@ -583,19 +632,18 @@ void run(VM* vm)
                 BREAK;
             }
             {
-                // Short and long instructions have identical code
-                int32_t bcp; // Bytecode parameter
+                int32_t bcp; // shared
                 CASE(OP_DEFINE_GLOBAL)
                 {
                     bcp = READ_BYTE();
-                    goto define_global_fin;
+                    goto l_define_global;
                 }
                 CASE(OP_DEFINE_GLOBALL)
                 {
                     bcp = READ_BYTEL();
-                    goto define_global_fin;
+                    goto l_define_global;
                 }
-            define_global_fin:;
+            l_define_global:;
                 {
                     Value* gvalue = &vm->globvars.data[bcp].value;
                     if(unlikely(*gvalue != EMPTY_VAL)) {
@@ -608,14 +656,14 @@ void run(VM* vm)
                 CASE(OP_GET_GLOBAL)
                 {
                     bcp = READ_BYTE();
-                    goto get_global_fin;
+                    goto l_get_global;
                 }
                 CASE(OP_GET_GLOBALL)
                 {
                     bcp = READ_BYTEL();
-                    goto get_global_fin;
+                    goto l_get_global;
                 }
-            get_global_fin:;
+            l_get_global:;
                 {
                     Value* gvalue = &vm->globvars.data[bcp].value;
                     if(unlikely(*gvalue == EMPTY_VAL)) {
@@ -628,14 +676,14 @@ void run(VM* vm)
                 CASE(OP_SET_GLOBAL)
                 {
                     bcp = READ_BYTE();
-                    goto set_global_fin;
+                    goto l_set_global;
                 }
                 CASE(OP_SET_GLOBALL)
                 {
                     bcp = READ_BYTEL();
-                    goto set_global_fin;
+                    goto l_set_global;
                 }
-            set_global_fin:;
+            l_set_global:;
                 {
                     Variable* gvar = &vm->globvars.data[bcp];
                     if(unlikely(gvar->value == EMPTY_VAL)) {
@@ -651,14 +699,14 @@ void run(VM* vm)
                 CASE(OP_GET_LOCAL)
                 {
                     bcp = READ_BYTE();
-                    goto get_local_fin;
+                    goto l_get_local;
                 }
                 CASE(OP_GET_LOCALL)
                 {
                     bcp = READ_BYTEL();
-                    goto get_local_fin;
+                    goto l_get_local;
                 }
-            get_local_fin:;
+            l_get_local:;
                 {
                     push(vm, frame->callee[bcp]);
                     BREAK;
@@ -666,20 +714,20 @@ void run(VM* vm)
                 CASE(OP_SET_LOCAL)
                 {
                     bcp = READ_BYTE();
-                    goto set_local_fin;
+                    goto l_set_local;
                 }
                 CASE(OP_SET_LOCALL)
                 {
                     bcp = READ_BYTEL();
-                    goto set_local_fin;
+                    goto l_set_local;
                 }
-            set_local_fin:;
+            l_set_local:;
                 {
                     frame->callee[bcp] = pop(vm);
                     BREAK;
                 }
             }
-            CASE(OP_JMP_IF_FALSE) // unused
+            CASE(OP_JMP_IF_FALSE) // unused, using 'optimized' versions with pop
             {
                 unreachable;
                 uint32_t skip_offset = READ_BYTEL();
@@ -747,12 +795,14 @@ void run(VM* vm)
             }
             CASE(OP_GET_UPVALUE)
             {
-                push(vm, *frame->closure->upvalue[READ_BYTEL()]->location);
+                uint32_t idx = READ_BYTEL();
+                push(vm, *frame->closure->upvalue[idx]->location);
                 BREAK;
             }
             CASE(OP_SET_UPVALUE)
             {
-                *frame->closure->upvalue[READ_BYTEL()]->location = pop(vm);
+                uint32_t idx = READ_BYTEL();
+                *frame->closure->upvalue[idx]->location = pop(vm);
                 BREAK;
             }
             CASE(OP_CLOSE_UPVAL)
@@ -779,88 +829,39 @@ void run(VM* vm)
                 Value key = *stackpeek(0);
                 saveip();
                 checkindex(vm, receiver, key);
-                Value property;
                 OInstance* instance = AS_INSTANCE(receiver);
-                O* om = instance->oclass->omethods[OM_GETIDX];
-                if(om) { // overloaded ?
-                    calloverload(vm, OBJ_VAL(om), OM_GETIDX);
-                    Tuple t = ominfo[OM_GETIDX];
-                    call(vm, OBJ_VAL(om), t.arity, t.retcnt);
-                    updatestate();
-                } else { // no overload, do the default behaviour
+                if(!calloverload(vm, instance, OM_GETIDX)) { // not overloaded ?
+                    Value property;
                     if(rawget(&instance->fields, key, &property)) {
                         *stackpeek(1) = property; // replace receiver with field value
                         pop(vm); // pop key
                         BREAK;
-                    } // try get method
+                    } // else try get method
                     if(unlikely(!bindmethod(vm, instance->oclass, key, receiver)))
                         udperror(vm, key, instance->oclass);
                     *stackpeek(1) = *--vm->sp; // replace receiver with method
-                }
+                } else updatestate();
                 BREAK;
             }
             CASE(OP_SET_INDEX)
             {
-                // @TODO: Parser must emit OP_RET0 if __setidx__ is overloaded
-                //        Additionally same as __init__ it should invoke compile-time
-                //        error if __setidx__ contains non-empty 'return' statement.
                 Value receiver = *stackpeek(2);
                 Value key = *stackpeek(1);
                 Value value = *stackpeek(0);
                 saveip();
                 checkindex(vm, receiver, key);
                 OInstance* instance = AS_INSTANCE(receiver);
-                O* om = instance->oclass->omethods[OM_SETIDX];
-                if(om) { // overloaded ?
-                    calloverload(vm, OBJ_VAL(om), OM_SETIDX);
-                    updatestate();
-                } else { // no overload, do the default behaviour
-                    HashTable_insert(vm, &AS_INSTANCE(receiver)->fields, key, value);
-                    popn(vm, 3);
-                    push(vm, value);
-                }
-                BREAK;
-            }
-            CASE(OP_INVOKE_INDEX)
-            {
-                // @TODO: Fix this up when overloading gets implemented
-                int32_t retcnt = READ_BYTEL();
-                int32_t argc = vm->sp - Array_VRef_pop(&vm->callstart);
-                Value key = *stackpeek(argc);
-                Value receiver = *stackpeek(argc + 1);
-                saveip();
-                checkindex(vm, receiver, key);
-                OInstance* instance = AS_INSTANCE(receiver);
-                O* om = instance->oclass->omethods[OM_GETIDX];
-                if(om) { // overloaded ?
-                    Tuple t = ominfo[OM_GETIDX];
-                    call(vm, OBJ_VAL(om), t.arity, t.retcnt);
-                    updatestate();
-                }
-                Value property;
-                if(rawget(&instance->fields, key, &property)) goto call;
-                if(unlikely(!rawget(&instance->oclass->methods, key, &property)))
-                    udperror(vm, key, instance->oclass);
-                else { // no overload, do the default behaviour
-                    if(rawget(&instance->fields, key, &property)) {
-                        *stackpeek(1) = property; // replace receiver with field value
-                        pop(vm); // pop key
-                        BREAK;
-                    } // try get method
-                    if(unlikely(!bindmethod(vm, instance->oclass, key, receiver)))
-                        udperror(vm, key, instance->oclass);
-                    *stackpeek(1) = *--vm->sp; // replace receiver with method
-                }
-            call:
-                call(vm, property, argc, retcnt);
-                updatestate();
+                if(!calloverload(vm, instance, OM_SETIDX)) { // not overloaded ?
+                    HashTable_insert(vm, &instance->fields, key, value);
+                    popn(vm, 3); // pop [receiver], [key] and [value]
+                } else updatestate();
                 BREAK;
             }
             CASE(OP_OVERLOAD)
             {
+                uint8_t omidx = READ_BYTE();
                 OClass* oclass = AS_CLASS(*stackpeek(1));
-                uint8_t opn = READ_BYTE();
-                oclass->omethods[opn] = AS_OBJ(*stackpeek(0));
+                oclass->omethods[omidx] = AS_OBJ(*stackpeek(0));
                 sk_assert(vm, *ip == OP_METHOD, "Expected 'OP_METHOD'.");
                 BREAK;
             }
@@ -888,17 +889,17 @@ void run(VM* vm)
                 vm->sp += 3;
                 saveip();
                 Value fn = *stackpeek(2);
-                if(call(vm, fn, 2, vars) == CALL_NATIVEFN)
-                    callnative_nolock(vm, last_frame(vm).callee, fn, vars);
+                call(vm, fn, 2, vars);
                 updatestate();
                 BREAK;
             }
             CASE(OP_FOREACH)
             {
                 int32_t vars = READ_BYTEL();
-                *stackpeek(vars) = *stackpeek(vars - 1); // cntlvar
+                Value* cntlvar = stackpeek(vars);
+                *cntlvar = *stackpeek(vars - 1);
                 sk_assert(vm, *ip == OP_JMP, "Expect 'OP_JMP'.");
-                if(!IS_NIL(*stackpeek(vars))) ip += 4;
+                if(!IS_NIL(*cntlvar)) ip += 4;
                 BREAK;
             }
             CASE(OP_CALLSTART)
@@ -911,17 +912,36 @@ void run(VM* vm)
                 Array_VRef_push(&vm->retstart, vm->sp);
                 BREAK;
             }
+            CASE(OP_RET0) // should not return anything
+            {
+                // When returning from overload-able methods (such as '__setidx__').
+                frame->retcnt = 0;
+                goto l_ret;
+            }
+            CASE(OP_RET1) // single value return
+            {
+                // Stack already contains only a single return value;
+                // this instruction comes in handy when returning from
+                // overloaded method.
+                // Because grammar and parser ensure there can only be
+                // a single return value from __getidx__, __add__, __sub__, etc...
+                // So instead of shuffling and checking if stack has enough
+                // or lack of values, we skip the check instead.
+                sk_assert(vm, frame->retcnt == 1, "invalid retcnt");
+                goto l_ret;
+            }
             CASE(OP_RET) // function return
             {
-                saveip();
-                int32_t retvalcnt = vm->sp - Array_VRef_pop(&vm->retstart);
-                int32_t unaccounted;
+                int32_t retvalcnt, unaccounted;
+                retvalcnt = cast(int32_t, vm->sp - Array_VRef_pop(&vm->retstart));
                 if(frame->retcnt == 0) { // multiple return values ?
                     unaccounted = 0;
                     frame->retcnt = retvalcnt;
                 } else unaccounted = frame->retcnt - retvalcnt;
                 if(unaccounted < 0) popn(vm, -unaccounted);
                 else pushn(vm, unaccounted, NIL_VAL);
+            l_ret:
+                saveip();
                 sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
                 for(int32_t returns = frame->retcnt; returns--;)
                     Array_Value_push(&vm->temp, *--vm->sp);
@@ -931,7 +951,7 @@ void run(VM* vm)
                 while(vm->temp.len > 0) // push return values
                     push(vm, Array_Value_pop(&vm->temp));
                 sk_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
-                if(last_frame(vm).cfinfo == CFI_FRESH) return;
+                if(last_frame(vm).cfinfo & CFI_FRESH) return;
                 sk_assert(vm, vm->fc > 0, "Invalid cfinfo.");
                 updatestate();
                 BREAK;
@@ -953,9 +973,8 @@ void run(VM* vm)
 #undef VM_BINARY_OP
 }
 
-/*
- * Interprets (compiles and runs) the 'source'.
- */
+
+/* Interprets (compiles and runs) the 'source'. */
 void interpret(VM* vm, const char* source, const char* path)
 {
     TODO("Refactor")
