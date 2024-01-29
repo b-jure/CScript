@@ -225,7 +225,7 @@ SK_API void sk_pushnumber(VM* vm, sk_number number)
 
 
 /* Push string on the stack */
-SK_API void sk_pushstring(VM* vm, const char* str, size_t len)
+SK_API void sk_pushstring(VM* vm, const char* str, sk_memsize len)
 {
     sk_lock(vm);
     skapi_pushstr(vm, str, len);
@@ -342,14 +342,14 @@ SK_API void sk_push(VM* vm, sk_int idx)
 /* Push class method of an instance at idx on top of the stack.
  * If method doesn't exist this function returns 0 otherwise 1.
  * Note: Class instance methods are all Skooma closures. */
-SK_API uint8_t sk_getmethod(VM* vm, sk_int idx, const char* method)
+SK_API sk_byte sk_getmethod(VM* vm, sk_int idx, const char* method)
 {
     sk_lock(vm);
     skapi_checkptr(vm, method);
     Value val = *idx2val(vm, idx);
     if(!IS_INSTANCE(val)) return 0;
     skapi_pushstr(vm, method, strlen(method));
-    uint8_t haveit = bindmethod(vm, AS_INSTANCE(val)->oclass, *stackpeek(0), val);
+    sk_byte haveit = bindmethod(vm, AS_INSTANCE(val)->oclass, *stackpeek(0), val);
     sk_unlock(vm);
     return haveit;
 }
@@ -428,7 +428,7 @@ SK_API sk_byte sk_setindex(VM* vm, sk_int idx)
  * of the stack.
  * If the operation was successful then 1 is returned; otherwise 0.
  * @ERR: if value we are indexing with is 'nil'. */
-SK_API sk_byte sk_rawindex(VM* vm, sk_int idx, uint8_t what)
+SK_API sk_byte sk_rawindex(VM* vm, sk_int idx, sk_byte what)
 {
     sk_byte res = 0;
     sk_lock(vm);
@@ -697,17 +697,19 @@ SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* source)
     BuffReader br;
     sk_lock(vm);
     BuffReader_init(vm, &br, reader, userdata);
-    uint8_t status = pcompile(vm, &br, source, 0);
+    sk_byte status = pcompile(vm, &br, source, 0);
     sk_unlock(vm);
     return status;
 }
 
 
 
-SK_API size_t sk_gc(VM* vm, GCOpt option, ...)
+/* Garbage collection API.
+ * Refer to the @skooma.h and 'GCOpt' enum defined in the same header. */
+SK_API sk_memsize sk_gc(VM* vm, GCOpt option, ...)
 {
     va_list argp;
-    size_t res = 0;
+    sk_memsize res = 0;
     sk_lock(vm);
     va_start(argp, option);
     switch(option) {
@@ -733,11 +735,10 @@ SK_API size_t sk_gc(VM* vm, GCOpt option, ...)
 
 
 
+// TODO: Implement
 SK_API void sk_dumpstack(VM* vm)
 {
-    // TODO: Implement (hint: dumpstack in debug.c)
-    sk_lock(vm);
-    sk_unlock(vm);
+    (void)(0);
 }
 
 
@@ -968,7 +969,7 @@ SK_API sk_byte sk_nextproperty(VM* vm, sk_int idx, sk_byte what)
 
 /* Return the length of the string at 'idx'.
  * If the value is not a string then return 0. */
-SK_API size_t sk_strlen(const VM* vm, sk_int idx)
+SK_API sk_memsize sk_strlen(const VM* vm, sk_int idx)
 {
     Value val = *idx2val(vm, idx);
     return (IS_STRING(val) ? AS_STRING(val)->len : 0);

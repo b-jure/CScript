@@ -94,7 +94,7 @@ SK_LIBAPI sk_int skaux_typeerror(VM* vm, sk_int argidx, const char* tname)
 
 
 /* Invokes generic 'skaux_typeerror' */
-#define tagerror(vm, idx, type) skaux_typeerror(vm, idx, sk_tagname(vm, idx))
+#define tagerror(vm, idx, type) skaux_typeerror(vm, idx, sk_tagname(vm, type))
 
 
 
