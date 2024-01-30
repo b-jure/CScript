@@ -361,7 +361,8 @@ SK_API void sk_push(VM* vm, sk_int idx)
  * array of 'sk_entry' will have.
  * Top of the stack shall contain the name of the class.
  * Each 'sk_entry' contains the 'name' of the C function,
- * its argument count (arity) and if the function accepts variable.
+ * its argument count (arity) and if the function accepts variable
+ * number of arguments (isvararg).
  * This is all what the C function needs to become a C closure inside
  * of Skooma, with the exception of 'nup'.
  * The reason why each entry does not contain 'nup' is because
