@@ -1,7 +1,7 @@
 #include "common.h"
 #include "reader.h"
 
-void BuffReader_init(VM* vm, BuffReader* BR, ReadFn reader, void* userdata)
+void BuffReader_init(VM* vm, BuffReader* BR, sk_reader reader, void* userdata)
 {
     BR->n = 0;
     BR->buff = NULL;
@@ -11,8 +11,8 @@ void BuffReader_init(VM* vm, BuffReader* BR, ReadFn reader, void* userdata)
 }
 
 
-/* Invoke 'ReadFn' returning the first character or SKEOF (-1).
- * 'ReadFn' should set the 'size' to the amount of bytes
+/* Invoke 'sk_reader' returning the first character or SKEOF (-1).
+ * 'sk_reader' should set the 'size' to the amount of bytes
  * reader read and return the pointer to the start of that
  * buffer. */
 int32_t BuffReader_fill(BuffReader* BR)

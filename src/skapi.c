@@ -1,4 +1,5 @@
 #include "err.h"
+#include "hashtable.h"
 #include "object.h"
 #include "parser.h"
 #include "reader.h"
@@ -8,8 +9,6 @@
 #include "stdarg.h"
 #include "value.h"
 #include "vmachine.h"
-
-#include <time.h>
 
 
 /* Get stack value at 'idx'. */
@@ -28,7 +27,7 @@ static force_inline Value* idx2val(const VM* vm, sk_int idx)
 
 
 /* Ensure the stack has enough space. */
-SK_API sk_int sk_ensurestack(VM* vm, sk_int n)
+SK_API sk_byte sk_checkstack(VM* vm, sk_int n)
 {
     skapi_check(vm, n >= 0, "negative 'n'.");
     return (((vm->sp - vm->stack) + n) <= VM_STACK_LIMIT);
@@ -39,7 +38,7 @@ SK_API sk_int sk_ensurestack(VM* vm, sk_int n)
 /* Create and allocate VM by providing your own 'allocator'.
  * In case the NULL pointer is provided as 'allocator' and/or
  * allocation fails NULL is returned. */
-SK_API VM* sk_create(AllocFn allocator, void* ud)
+SK_API VM* sk_create(sk_alloc allocator, void* ud)
 {
     if(unlikely(allocator == NULL)) return NULL;
     VM* vm = allocator(NULL, sizeof(VM), ud);
@@ -101,7 +100,7 @@ SK_API sk_uint sk_absidx(VM* vm, sk_int idx)
 
 
 /* Return type of the value on the stack at 'idx'. */
-SK_API TypeTag sk_type(const VM* vm, sk_int idx)
+SK_API sk_tt sk_type(const VM* vm, sk_int idx)
 {
     Value* value = idx2val(vm, idx);
     return val2type(*value);
@@ -122,7 +121,7 @@ SK_API const char* sk_typename(const VM* vm, sk_int idx)
 
 
 /* Convert type tag into name */
-SK_API const char* sk_tagname(const VM* vm, TypeTag type)
+SK_API const char* sk_tagname(const VM* vm, sk_tt type)
 {
     return vm->faststatic[type]->storage;
 }
@@ -304,6 +303,18 @@ SK_API void sk_pushbool(VM* vm, sk_int boolean)
 
 
 
+/* Auxiliary to 'sk_pushcclosure' and 'sk_pushclass' */
+static ONative* auxpushcclosure(VM* vm, sk_cfunc fn, sk_uint args, sk_byte isvararg, sk_uint upvals)
+{
+    OString* name = AS_STRING(*stackpeek(0));
+    ONative* native = ONative_new(vm, name, fn, args, isvararg, upvals);
+    pop(vm); // name
+    vm->sp -= upvals;
+    while(upvals--)
+        native->upvalue[upvals] = *(vm->sp + upvals);
+    return native;
+}
+
 /* Push C closure on to the stack.
  * The 'args' is how many arguments this function expects (minimum),
  * 'isvararg' is a boolean value indicating if this function takes in
@@ -313,15 +324,21 @@ SK_API void sk_pushbool(VM* vm, sk_int boolean)
  * be accessed with the provided API in this header file.
  * This function will remove 'upvals' amount of values from the stack
  * and store them in C closure. */
-SK_API void sk_pushcclosure(VM* vm, CFunction fn, sk_uint args, sk_byte isvararg, sk_uint upvals)
+SK_API void sk_pushcclosure(
+    VM* vm,
+    const char* name,
+    sk_cfunc fn,
+    sk_uint args,
+    sk_byte isvararg,
+    sk_uint upvals)
 {
     sk_lock(vm);
     skapi_checkelems(vm, upvals);
     skapi_checkptr(vm, fn);
-    ONative* native = ONative_new(vm, NULL, fn, args, isvararg, upvals);
-    vm->sp -= upvals;
-    while(upvals--)
-        native->upvalue[upvals] = *(vm->sp + upvals);
+    OString* fname = vm->faststatic[SS_CSRC];
+    if(name) fname = OString_new(vm, name, strlen(name));
+    skapi_pusho(vm, fname);
+    ONative* native = auxpushcclosure(vm, fn, args, isvararg, upvals);
     skapi_pushonative(vm, native);
     sk_unlock(vm);
 }
@@ -334,6 +351,56 @@ SK_API void sk_push(VM* vm, sk_int idx)
     sk_lock(vm);
     Value* val = idx2val(vm, idx);
     skapi_pushval(vm, *val);
+    sk_unlock(vm);
+}
+
+
+
+/* Push class on the stack.
+ * Stack will contain 'nup' upvalues that the 'sk_cfunc' located in
+ * array of 'sk_entry' will have.
+ * Top of the stack shall contain the name of the class.
+ * Each 'sk_entry' contains the 'name' of the C function,
+ * its argument count (arity) and if the function accepts variable.
+ * This is all what the C function needs to become a C closure inside
+ * of Skooma, with the exception of 'nup'.
+ * The reason why each entry does not contain 'nup' is because
+ * all of the functions in entries array share the same upvalues.
+ * This is in order to simplify the implementation.
+ * In case the function name is overload-able method (such as __init__),
+ * then 'args' and 'isvararg' in that 'sk_entry' are ignored and
+ * the appropriate values are used.
+ * After the function returns upvalues will be popped together with
+ * the class name; top of the stack will contain newly created class. */
+SK_API void sk_pushclass(VM* vm, sk_entry entries[], sk_uint nup)
+{
+    sk_lock(vm);
+    skapi_checkelems(vm, nup + 1); // upvalues + class name
+    Value classname = *stackpeek(0);
+    skapi_check(vm, IS_STRING(classname), "Expect string");
+    OClass* oclass = OClass_new(vm, AS_STRING(classname));
+    pop(vm); // class name
+    skapi_pusho(vm, oclass);
+    sk_entry* entry = entries;
+    while(entry->name && entry->fn) { // while valid entry
+        for(sk_int i = 0; i < nup; i++)
+            skapi_pushval(vm, *stackpeek(nup - 1));
+        OString* name = OString_new(vm, entry->name, strlen(entry->name));
+        skapi_pusho(vm, name);
+        sk_int tag = id2omtag(vm, OBJ_VAL(name));
+        if(tag == -1) { // not overload ?
+            ONative* native = auxpushcclosure(vm, entry->fn, entry->args, entry->isvararg, nup);
+            *stackpeek(0) = OBJ_VAL(native);
+            rawset(&oclass->methods, OBJ_VAL(name), OBJ_VAL(native));
+            pop(vm); // native
+        } else { // overloaded, override 'arity' and 'isvararg'
+            ONative* native = auxpushcclosure(vm, entry->fn, ominfo[tag].arity, 0, nup);
+            oclass->omethods[tag] = cast(O*, native);
+        }
+        entry = ++entries;
+    }
+    *(vm->sp - nup) = pop(vm); // move class to first upvalue
+    popn(vm, nup - 1); // pop the rest of the upvalues
     sk_unlock(vm);
 }
 
@@ -466,10 +533,10 @@ SK_API sk_byte sk_getglobal(VM* vm, const char* name)
 
 
 /* Get panic handler */
-SK_API PanicFn sk_getpanic(VM* vm)
+SK_API sk_panic sk_getpanic(VM* vm)
 {
     sk_lock(vm);
-    PanicFn panic_handler = vm->hooks.panic;
+    sk_panic panic_handler = vm->hooks.panic;
     sk_unlock(vm);
     return panic_handler;
 }
@@ -477,10 +544,10 @@ SK_API PanicFn sk_getpanic(VM* vm)
 
 
 /* Get allocator function */
-SK_API AllocFn sk_getalloc(VM* vm, void** ud)
+SK_API sk_alloc sk_getalloc(VM* vm, void** ud)
 {
     sk_lock(vm);
-    AllocFn alloc = vm->hooks.reallocate;
+    sk_alloc alloc = vm->hooks.reallocate;
     if(ud) *ud = vm->hooks.userdata;
     sk_unlock(vm);
     return alloc;
@@ -530,8 +597,8 @@ SK_API const char* sk_getstring(const VM* vm, sk_int idx)
 
 
 /* Get native C function from the stack at 'idx'.
- * Return NULL if the value is not a 'CFunction'. */
-SK_API CFunction sk_getcfunction(const VM* vm, sk_int idx)
+ * Return NULL if the value is not a 'sk_cfunc'. */
+SK_API sk_cfunc sk_getcfunction(const VM* vm, sk_int idx)
 {
     Value val = *idx2val(vm, idx);
     return IS_NATIVE(val) ? AS_NATIVE(val)->fn : NULL;
@@ -649,8 +716,8 @@ static void fcall(VM* vm, void* userdata)
  * invoke panic handler.
  * Instead it restores the old call frame and pushes the error object
  * on top of the stack.
- * This function returns 'Status' [defined @skooma.h] code. */
-SK_API Status sk_pcall(VM* vm, sk_int argc, sk_int retcnt)
+ * This function returns 'sk_status' [defined @skooma.h] code. */
+SK_API sk_status sk_pcall(VM* vm, sk_int argc, sk_int retcnt)
 {
     sk_lock(vm);
     skapi_check(vm, retcnt >= SK_MULRET, "invalid return count");
@@ -668,25 +735,25 @@ SK_API Status sk_pcall(VM* vm, sk_int argc, sk_int retcnt)
 
 /*
  * Loads (compiles) skooma script using provided 'reader'.
- * Returns 'Status' [defined @skooma.h] code.
+ * Returns 'sk_status' [defined @skooma.h] code.
  * If the script compiled without any errors then the compiled
  * function (Skooma closure) gets pushed on top of the stack.
  * In case there were any compile errors, then the error object
  * gets pushed on top of the stack (error message).
  *
- * 'reader' - user provided 'ReadFn' responsible for reading
+ * 'reader' - user provided 'sk_reader' responsible for reading
  *            the '.sk' source file.
- *            Refer to 'ReadFn' in [@skooma.h] for more
+ *            Refer to 'sk_reader' in [@skooma.h] for more
  *            information on how this reader should 'behave'.
  * 'userdata' - user provided data for 'reader'.
  * 'source' - name of the skooma script you are loading.
  */
-SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* source)
+SK_API sk_status sk_load(VM* vm, sk_reader reader, void* userdata, const char* source)
 {
     BuffReader br;
     sk_lock(vm);
     BuffReader_init(vm, &br, reader, userdata);
-    Status status = pcompile(vm, &br, source, 0);
+    sk_status status = pcompile(vm, &br, source, 0);
     sk_unlock(vm);
     return status;
 }
@@ -694,8 +761,8 @@ SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* source)
 
 
 /* Garbage collection API.
- * Refer to the @skooma.h and 'GCOpt' enum defined in the same header. */
-SK_API sk_memsize sk_gc(VM* vm, GCOpt option, ...)
+ * Refer to the @skooma.h and 'sk_gco' enum defined in the same header. */
+SK_API sk_memsize sk_gc(VM* vm, sk_gco option, ...)
 {
     va_list argp;
     sk_memsize res = 0;
@@ -760,10 +827,8 @@ SK_API void sk_settop(VM* vm, sk_int idx)
  * the new one is declared and 'isfixed' modifier is considered
  * when creating it.
  * Otherwise 'isfixed' modifier is ignored and the global
- * variable is set to the new value UNLESS the variable was
- * previously defined, but this is up to the API user to ensure.
- * Meaning it won't get checked in the API call and might
- * cause bugs in user code if user doesn't respect this modifier. */
+ * variable is set to the new value UNLESS the variable is
+ * set as 'fixed'; in that case runtime error is invoked. */
 SK_API sk_byte sk_setglobal(VM* vm, const char* name, sk_int isfixed)
 {
     sk_lock(vm);
@@ -775,13 +840,15 @@ SK_API sk_byte sk_setglobal(VM* vm, const char* name, sk_int isfixed)
     Value gidx;
     if((isnew = !rawget(&vm->globids, key, &gidx))) {
         skapi_pushval(vm, key);
-        Variable gvar = {newval, cast_uchar(0x01 & isfixed)};
+        Variable gvar = {newval, 0x01 & isfixed};
         Value idx = NUMBER_VAL(Array_Variable_push(&vm->globvars, gvar));
-        HashTable_insert(vm, &vm->globids, key, idx);
-        vm->sp -= 2; // pop value and key
+        rawset(&vm->globids, key, idx);
+        popn(vm, 2); // value and key
     } else {
-        Array_Variable_index(&vm->globvars, AS_NUMBER(gidx))->value = newval;
-        vm->sp--; // pop value
+        Variable* gvar = Array_Variable_index(&vm->globvars, AS_NUMBER(gidx));
+        if(unlikely(ISFIXED(gvar))) fixederror(vm, vtostr(vm, gvar->value)->storage);
+        gvar->value = newval;
+        pop(vm); // value
     }
     sk_unlock(vm);
     return isnew;
@@ -803,7 +870,7 @@ SK_API sk_byte sk_setfield(VM* vm, sk_int idx, const char* field)
     skapi_check(vm, IS_INSTANCE(insval), "expect class instance");
     OInstance* instance = AS_INSTANCE(insval);
     skapi_pushcstr(vm, field);
-    sk_byte res = HashTable_insert(vm, &instance->fields, *stackpeek(0), *stackpeek(1));
+    sk_byte res = rawset(&instance->fields, *stackpeek(0), *stackpeek(1));
     vm->sp -= 2; // pop value and key
     sk_unlock(vm);
     return res;
@@ -812,27 +879,13 @@ SK_API sk_byte sk_setfield(VM* vm, sk_int idx, const char* field)
 
 
 /* Set panic handler and return old one */
-SK_API PanicFn sk_setpanic(VM* vm, PanicFn panicfn)
+SK_API sk_panic sk_setpanic(VM* vm, sk_panic panicfn)
 {
     sk_lock(vm);
-    PanicFn old_panic = vm->hooks.panic;
+    sk_panic old_panic = vm->hooks.panic;
     vm->hooks.panic = panicfn;
     sk_unlock(vm);
     return old_panic;
-}
-
-
-
-/* Set allocator function and return old one */
-SK_API AllocFn sk_setalloc(VM* vm, AllocFn allocfn, void* ud)
-{
-    sk_lock(vm);
-    skapi_checkptr(vm, allocfn);
-    AllocFn old_alloc = vm->hooks.reallocate;
-    vm->hooks.reallocate = allocfn;
-    vm->hooks.userdata = ud;
-    sk_unlock(vm);
-    return old_alloc;
 }
 
 
@@ -870,13 +923,13 @@ static force_inline Value* getupval(Value fn, sk_int n)
 /* Get upvalue belonging to the function at 'fidx'.
  * 'idx' is the index of the upvalue.
  * Function pushes the upvalue on top of the stack and returns 1.
- * If the upvalue does not exist and/or the function at 'fidx' is not
- * a closure or native C function then nothing will be pushed on
- * the stack and 0 is returned. */
-SK_API sk_int sk_getupvalue(VM* vm, sk_int fidx, sk_int idx)
+ * If the upvalue was not found or the function at 'fidx' is not
+ * a Skooma or C closure then nothing will be pushed on the stack and
+ * 0 is returned. */
+SK_API sk_byte sk_getupvalue(VM* vm, sk_int fidx, sk_int idx)
 {
     sk_lock(vm);
-    sk_int ret = 0;
+    sk_byte ret = 0;
     Value fn = *idx2val(vm, fidx);
     Value* upval = getupval(fn, idx);
     if(upval) {
@@ -953,8 +1006,8 @@ SK_API sk_memsize sk_strlen(const VM* vm, sk_int idx)
 }
 
 
-/* Return 'VM' 'Status' code. */
-SK_API Status sk_getstatus(VM* vm)
+/* Return 'VM' 'sk_status' code. */
+SK_API sk_status sk_getstatus(VM* vm)
 {
     UNUSED(vm);
     return vm->status;
@@ -962,7 +1015,7 @@ SK_API Status sk_getstatus(VM* vm)
 
 
 /* Invoke a runetime error with errcode */
-SK_API sk_int sk_error(VM* vm, Status errcode)
+SK_API sk_int sk_error(VM* vm, sk_status errcode)
 {
     sk_lock(vm);
     Value* errobj = stackpeek(0);
@@ -981,7 +1034,7 @@ SK_API sk_int sk_error(VM* vm, Status errcode)
  * Result in placed in place of first operand and the second operand
  * is popped off.
  * Returned value of 1 means ordering applied is true, otherwise 0 is returned. */
-SK_API sk_byte sk_compare(VM* vm, sk_int idx1, sk_int idx2, Ord ord)
+SK_API sk_byte sk_compare(VM* vm, sk_int idx1, sk_int idx2, sk_ord ord)
 {
     sk_lock(vm);
     skapi_checkordop(vm, ord);
@@ -1031,7 +1084,7 @@ SK_API sk_byte sk_rawequal(VM* vm, sk_int idx1, sk_int idx2)
  * This function is free to call overload-able operator methods.
  * Result is pushed on top of the stack in place of the
  * first operand and second operand is popped of. */
-SK_API void sk_arith(VM* vm, Ar op)
+SK_API void sk_arith(VM* vm, sk_ar op)
 {
     sk_lock(vm);
     skapi_checkarop(vm, op);

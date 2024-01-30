@@ -1,8 +1,6 @@
 #include "corelib.h"
 #include "debug.h"
-#include "err.h"
 #include "object.h"
-#include "parser.h"
 #include "skooma.h"
 
 #include <fcntl.h>

@@ -8,9 +8,9 @@
 typedef struct {
     size_t n; /* unread bytes */
     const char* buff; /* position in buffer */
-    ReadFn reader; /* reader function */
-    void* userdata; /* user data for 'ReadFn' */
-    VM* vm; /* 'VM' for 'ReadFn' */
+    sk_reader reader; /* reader function */
+    void* userdata; /* user data for 'sk_reader' */
+    VM* vm; /* 'VM' for 'sk_reader' */
 } BuffReader;
 
 /* Return next char and progress the buffer or try fill the buffer. */
@@ -18,7 +18,7 @@ typedef struct {
 /* Go back one character (byte) */
 #define brungetc(br) ((br)->n++, (br)->buff--)
 
-void BuffReader_init(VM* vm, BuffReader* br, ReadFn reader, void* userdata);
+void BuffReader_init(VM* vm, BuffReader* br, sk_reader reader, void* userdata);
 
 int32_t BuffReader_fill(BuffReader* br);
 

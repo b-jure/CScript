@@ -145,6 +145,39 @@ SK_LIBAPI void skaux_checktype(VM* vm, sk_int idx, sk_int type)
 }
 
 
+SK_LIBAPI void skaux_where(VM* vm, sk_uint level)
+{
+    sk_debuginfo di;
+    if(sk_getstack(vm, level, &di)) {
+        sk_getinfo(vm, DW_LINE | DW_FNSRC, &di);
+        if(di.line > 0) {
+            sk_pushfstring(vm, "%s:%d ", di.shortsrc, di.line);
+            return;
+        }
+    }
+    sk_pushcstring(vm, "");
+}
+
+
+SK_LIBAPI sk_int skaux_error(VM* vm, sk_status errcode, const char* fmt, ...)
+{
+    va_list argp;
+    va_start(argp, fmt);
+    skaux_where(vm, 0); // current level
+    sk_pushvfstring(vm, fmt, argp);
+    va_end(argp);
+    sk_concat(vm);
+    return sk_error(vm, errcode);
+}
+
+
+SK_LIBAPI void skaux_checkstack(VM* vm, sk_int space, const char* msg)
+{
+    if(unlikely(!sk_checkstack(vm, space))) {
+        if(msg) skaux_error(vm, S_ESOVERFLOW, "stack overflow, %s", msg);
+        else skaux_error(vm, S_ESOVERFLOW, "stack overflow");
+    }
+}
 
 
 

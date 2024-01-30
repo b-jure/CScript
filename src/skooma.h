@@ -119,9 +119,7 @@ SK_API VM* sk_create(sk_alloc allocator, void* ud);
 SK_API void sk_resetvm(VM* vm);
 SK_API void sk_destroy(VM** vmp);
 
-/* Set VM hooks */
 SK_API sk_panic sk_setpanic(VM* vm, sk_panic panicfn);
-SK_API sk_alloc sk_setalloc(VM* vm, sk_alloc allocfn, void* ud);
 
 SK_API sk_number sk_version(VM* vm);
 /* --------------------------------------------------------------------- */
@@ -194,8 +192,22 @@ SK_API void sk_pushcstring(VM* vm, const char* str);
 SK_API const char* sk_pushvfstring(VM* vm, const char* fmt, va_list argp);
 SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...);
 SK_API void sk_pushbool(VM* vm, sk_int boolean);
-SK_API void sk_pushcclosure(VM* vm, sk_cfunc fn, sk_uint args, sk_byte isvararg, sk_uint upvals);
+SK_API void sk_pushcclosure(
+    VM* vm,
+    const char* name,
+    sk_cfunc fn,
+    sk_uint args,
+    sk_byte isvararg,
+    sk_uint upvals);
 SK_API void sk_push(VM* vm, sk_int idx);
+
+typedef struct {
+    const char* name;
+    sk_cfunc fn; // C function
+    sk_uint args; // argument count (arity)
+    sk_byte isvararg; // is '...'
+} sk_entry; // class method entry
+SK_API void sk_pushclass(VM* vm, sk_entry entries[], sk_uint nup);
 /* --------------------------------------------------------------------- */
 
 
@@ -253,15 +265,9 @@ SK_API sk_uint sk_gettop(const VM* vm);
 SK_API sk_uint sk_absidx(VM* vm, sk_int idx);
 SK_API void sk_rotate(VM* vm, sk_int idx, sk_int n);
 SK_API void sk_copy(VM* vm, sk_int src, sk_int dest);
-SK_API sk_int sk_ensurestack(VM* vm, sk_int n);
+SK_API sk_byte sk_checkstack(VM* vm, sk_int n);
 /* --------------------------------------------------------------------- */
 
-
-/* ========== create classes ========== */
-typedef struct {
-
-} sk_ClassMethod;
-/* --------------------------------------------------------------------- */
 
 /* ========== error reporting ========== */
 typedef enum {
@@ -296,7 +302,7 @@ SK_API sk_int sk_error(VM* vm, sk_status errcode);
 
 /* ========== miscellaneous functions/macros ========== */
 SK_API const char* sk_stringify(VM* vm, sk_int idx);
-SK_API sk_int sk_getupvalue(VM* vm, sk_int fidx, sk_int idx);
+SK_API sk_byte sk_getupvalue(VM* vm, sk_int fidx, sk_int idx);
 SK_API sk_int sk_setupvalue(VM* vm, sk_int fidx, sk_int idx);
 SK_API const char* sk_concat(VM* vm);
 SK_API sk_byte sk_nextproperty(VM* vm, sk_int idx, sk_byte what);
@@ -304,8 +310,9 @@ SK_API sk_byte sk_nextproperty(VM* vm, sk_int idx, sk_byte what);
 #define sk_nextfield(vm, idx) sk_nextproperty(vm, idx, 0)
 #define sk_nextmethod(vm, idx) sk_nextproperty(vm, idx, 1)
 #define sk_register(vm, name, cfn, args, isvararg, upvals)                                         \
-    (sk_pushcclosure(vm, cfn, args, isvararg, upvals), sk_setglobal(vm, name, 0))
-#define sk_pushcfunction(vm, cfn, args, isvararg) sk_pushcclosure(vm, cfn, args, isvararg, 0)
+    (sk_pushcclosure(vm, name, cfn, args, isvararg, upvals), sk_setglobal(vm, name, 0))
+#define sk_pushcfunction(vm, name, cfn, args, isvararg)                                            \
+    sk_pushcclosure(vm, name, cfn, args, isvararg, 0)
 #define sk_pop(vm, n) sk_settop(vm, -(n)-1)
 #define sk_replace(vm, idx) (sk_copy(vm, -1, idx), sk_pop(vm, 1))
 #define sk_remove(vm, idx) (sk_rotate(vm, idx, -1), sk_pop(vm, 1))
@@ -313,7 +320,7 @@ SK_API sk_byte sk_nextproperty(VM* vm, sk_int idx, sk_byte what);
 /* --------------------------------------------------------------------- */
 
 
-/* ========== call/load/run functions ========== */
+/* ========== call/load ========== */
 // returns all of the returned values from the function ('retcnt')
 #define SK_MULRET (-1)
 

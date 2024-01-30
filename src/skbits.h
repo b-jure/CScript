@@ -24,7 +24,7 @@ uint32_t __inline ctz(uint32_t value)
 #if defined(sk_ctz)
 #define callbitmask(vm, isva, arity, argc, retcnt)                                                 \
     cast_uint(                                                                                     \
-        0 | (!sk_ensurestack(vm, retcnt) * 1) |                                                    \
+        0 | (!sk_checkstack(vm, retcnt) * 1) |                                                    \
         ((((isva) * ((arity) > (argc))) | (!(isva) * ((arity) != (argc)))) * 2) |                  \
         (((vm)->fc == VM_CALLSTACK_LIMIT) * 4) | 8)
 

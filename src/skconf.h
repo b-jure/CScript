@@ -206,7 +206,7 @@
 /* Mark/signature for core API functions. */
 #define SK_API extern
 
-/* Signature for library functions. */
+/* Signature for auxiliary library functions. */
 #define SK_LIBAPI SK_API
 
 

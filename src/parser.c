@@ -92,7 +92,7 @@ const char* comperrors[CE_CNT] = {
 #define codeoffset(F) (CHUNK(F)->code.len)
 
 
-// If OMTag does not return values
+// If 'sk_om' does not return values
 #define omisnoret(omtag) ((omtag) == OM_INIT || (omtag) == OM_SETIDX)
 
 // If current function is overload-able 'method' and does not return values
@@ -1506,16 +1506,6 @@ static void fndec(Function* F)
     fn(F, FN_FUNCTION);
     Exp _; // dummy
     if(F->S->depth == 0) INIT_GLOBAL(F, idx, 0, &_);
-}
-
-/* Note: Objects with the same pointer are the same object. */
-static force_inline OMTag id2omtag(VM* vm, Value id)
-{
-    uintptr_t ptr = cast(uintptr_t, AS_STRING(id));
-    uintptr_t start = cast(uintptr_t, vm->faststatic[SS_INIT]);
-    uintptr_t end = cast(uintptr_t, vm->faststatic[SS_DBG]);
-    if(ptr < start || ptr >= end) return -1;
-    return cast(OMTag, SS_INIT + (ptr - start));
 }
 
 static void method(Function* F)

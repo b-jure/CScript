@@ -148,7 +148,7 @@ struct OFunction { // typedef is inside 'value.h'
 typedef struct {
     O obj; // common header
     FnPrototype p; // function prototype
-    CFunction fn; // C function
+    sk_cfunc fn; // C function
     Value upvalue[1]; // list of upvalues
 } ONative; // Native function written in C
 
@@ -188,6 +188,9 @@ struct OBoundMethod { // typedef is inside 'value.h'
  * ================== Object functions ==================
  */
 
+/* Note: Objects with the same pointer are the same object. */
+int32_t id2omtag(VM* vm, Value id);
+
 /* Construct object strings */
 OString* OString_new(VM* vm, const char* chars, size_t len);
 OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp);
@@ -218,7 +221,7 @@ OClosure* OClosure_new(VM* vm, OFunction* fn);
 
 /* Create native C function */
 ONative*
-ONative_new(VM* vm, OString* name, CFunction fn, int32_t arity, uint8_t isvararg, uint32_t upvals);
+ONative_new(VM* vm, OString* name, sk_cfunc fn, int32_t arity, uint8_t isvararg, uint32_t upvals);
 
 
 /* Create skoomoa function */
@@ -249,7 +252,7 @@ OString* otostr(VM* vm, O* object);
 
 
 /* Tries calling binary or unary operator overload method */
-void otryop(VM* vm, Value a, Value b, OMTag op, Value* res);
+void otryop(VM* vm, Value a, Value b, sk_om op, Value* res);
 
 
 /* Prints the object value */

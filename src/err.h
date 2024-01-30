@@ -23,13 +23,13 @@ sk_noret ordererror(VM* vm, Value a, Value b);
 
 /* Binary/Unary arithmetic operation error */
 #define operror(vm, l, r, op)                                                                      \
-    (arisbin(op) ? binoperror(vm, l, r, cast(OMTag, op)) : unoperror(vm, l, cast(OMTag, op)))
+    (arisbin(op) ? binoperror(vm, l, r, cast(sk_om, op)) : unoperror(vm, l, cast(sk_om, op)))
 
 /* Binary arithmetic operation error */
-sk_noret binoperror(VM* vm, Value a, Value b, OMTag op);
+sk_noret binoperror(VM* vm, Value a, Value b, sk_om op);
 
 /* Unary arithmetic operation error */
-sk_noret unoperror(VM* vm, Value a, OMTag op);
+sk_noret unoperror(VM* vm, Value a, sk_om op);
 
 /* Display method (__display__) error */
 sk_noret disperror(VM* vm, Value result);

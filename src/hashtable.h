@@ -24,10 +24,10 @@ typedef struct {
 void HashTable_init(HashTable* table);
 void HashTable_free(VM* vm, HashTable* table);
 
-bool HashTable_insert(VM* vm, HashTable* table, Value key, Value value);
-bool HashTable_remove(HashTable* table, Value key);
+uint8_t HashTable_insert(VM* vm, HashTable* table, Value key, Value value);
+uint8_t HashTable_remove(HashTable* table, Value key);
 
-bool HashTable_get(HashTable* table, Value key, Value* out);
+uint8_t HashTable_get(HashTable* table, Value key, Value* out);
 OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash);
 uint8_t HashTable_next(VM* vm, HashTable* table, Value* key);
 

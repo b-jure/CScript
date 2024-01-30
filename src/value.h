@@ -34,31 +34,31 @@ typedef uint64_t Value;
 #define QNAN 0x7ffc000000000000
 
 // Value type tags
-#define NIL_TAG    0x01
-#define FALSE_TAG  0x02
-#define TRUE_TAG   0x03
-#define EMPTY_TAG  0x04
+#define NIL_TAG 0x01
+#define FALSE_TAG 0x02
+#define TRUE_TAG 0x03
+#define EMPTY_TAG 0x04
 #define OBJECT_TAG 0x05 // 'O*' is on 8 byte alignment (first 3 bits are 0)
 
-#define AS_OBJ(val)        ((O*)((uintptr_t)((val) & 0x0000fffffffffff8)))
-#define AS_BOOL(val)       ((bool)((val) == TRUE_VAL))
-#define AS_NUMBER(val)     (vton(val))
+#define AS_OBJ(val) ((O*)((uintptr_t)((val) & 0x0000fffffffffff8)))
+#define AS_BOOL(val) ((bool)((val) == TRUE_VAL))
+#define AS_NUMBER(val) (vton(val))
 #define AS_NUMBER_REF(val) *(val)
 
-#define NUMBER_VAL(num)   (ntov(num))
-#define OBJ_VAL(ptr)      ((Value)((((uint64_t)(ptr)) & 0x0000fffffffffff8) | (OBJECT_TAG | QNAN)))
+#define NUMBER_VAL(num) (ntov(num))
+#define OBJ_VAL(ptr) ((Value)((((uint64_t)(ptr)) & 0x0000fffffffffff8) | (OBJECT_TAG | QNAN)))
 #define BOOL_VAL(boolean) ((Value)((FALSE_TAG | ((boolean) & 0x01)) | QNAN))
-#define TRUE_VAL          ((Value)(TRUE_TAG | QNAN))
-#define FALSE_VAL         ((Value)(FALSE_TAG | QNAN))
-#define NIL_VAL           ((Value)(QNAN | NIL_TAG))
-#define EMPTY_VAL         ((Value)(QNAN | EMPTY_TAG))
-#define UNDEFINED_VAL     EMPTY_VAL
+#define TRUE_VAL ((Value)(TRUE_TAG | QNAN))
+#define FALSE_VAL ((Value)(FALSE_TAG | QNAN))
+#define NIL_VAL ((Value)(QNAN | NIL_TAG))
+#define EMPTY_VAL ((Value)(QNAN | EMPTY_TAG))
+#define UNDEFINED_VAL EMPTY_VAL
 
-#define IS_NUMBER(val)    (((val) & QNAN) != QNAN)
-#define IS_NIL(val)       ((val) == NIL_VAL)
-#define IS_OBJ(val)       (((val) & (OBJECT_TAG | QNAN)) == (OBJECT_TAG | QNAN))
-#define IS_BOOL(val)      (((val) | 0x01) == TRUE_VAL)
-#define IS_EMPTY(val)     ((val) == EMPTY_VAL)
+#define IS_NUMBER(val) (((val) & QNAN) != QNAN)
+#define IS_NIL(val) ((val) == NIL_VAL)
+#define IS_OBJ(val) (((val) & (OBJECT_TAG | QNAN)) == (OBJECT_TAG | QNAN))
+#define IS_BOOL(val) (((val) | 0x01) == TRUE_VAL)
+#define IS_EMPTY(val) ((val) == EMPTY_VAL)
 #define IS_UNDEFINED(val) IS_EMPTY(val)
 
 #define OBJ_TYPE(val) (otype(AS_OBJ(val)))
@@ -95,26 +95,26 @@ typedef enum {
 } ValueType;
 
 
-#define AS_OBJ(value)        ((value).as.object)
-#define AS_BOOL(value)       ((value).as.boolean)
-#define AS_NUMBER(value)     ((value).as.number)
+#define AS_OBJ(value) ((value).as.object)
+#define AS_BOOL(value) ((value).as.boolean)
+#define AS_NUMBER(value) ((value).as.number)
 #define AS_NUMBER_REF(value) ((value)->as.number)
 
-#define IS_OBJ(value)     ((value).type == VAL_OBJ)
-#define IS_BOOL(value)    ((value).type == VAL_BOOL)
-#define IS_NUMBER(value)  ((value).type == VAL_NUMBER)
-#define IS_NIL(value)     ((value).type == VAL_NIL)
-#define IS_EMPTY(value)   ((value).type == VAL_EMPTY)
+#define IS_OBJ(value) ((value).type == VAL_OBJ)
+#define IS_BOOL(value) ((value).type == VAL_BOOL)
+#define IS_NUMBER(value) ((value).type == VAL_NUMBER)
+#define IS_NIL(value) ((value).type == VAL_NIL)
+#define IS_EMPTY(value) ((value).type == VAL_EMPTY)
 #define IS_UNDEFINED(val) IS_EMPTY(val)
 
-#define OBJ_VAL(value)    ((Value){.type = VAL_OBJ, {.object = (O*)value}})
-#define BOOL_VAL(value)   ((Value){.type = VAL_BOOL, {.boolean = value}})
+#define OBJ_VAL(value) ((Value){.type = VAL_OBJ, {.object = (O*)value}})
+#define BOOL_VAL(value) ((Value){.type = VAL_BOOL, {.boolean = value}})
 #define NUMBER_VAL(value) ((Value){.type = VAL_NUMBER, {.number = value}})
-#define EMPTY_VAL         ((Value){.type = VAL_EMPTY, {0}})
-#define NIL_VAL           ((Value){.type = VAL_NIL, {0}})
-#define UNDEFINED_VAL     EMPTY_VAL
+#define EMPTY_VAL ((Value){.type = VAL_EMPTY, {0}})
+#define NIL_VAL ((Value){.type = VAL_NIL, {0}})
+#define UNDEFINED_VAL EMPTY_VAL
 
-#define OBJ_TYPE(value)   (Obj_type(AS_OBJ(value)))
+#define OBJ_TYPE(value) (Obj_type(AS_OBJ(value)))
 #define VALUE_TYPE(value) ((value).type)
 
 typedef struct {
@@ -130,7 +130,7 @@ typedef struct {
 
 
 #define arisbin(ar) ((ar) >= AR_ADD && (ar) <= AR_POW)
-#define arisun(ar)  ((ar) >= AR_NOT && (ar) <= AR_UMIN)
+#define arisun(ar) ((ar) >= AR_NOT && (ar) <= AR_UMIN)
 
 
 /* Concatenate strings and place the result in the left
@@ -161,11 +161,11 @@ uint8_t raweq(Value l, Value r);
 
 
 /* Performs arithmetic operation on skooma values. */
-void arith(VM* vm, Value a, Value b, Ar op, Value* res);
+void arith(VM* vm, Value a, Value b, sk_ar op, Value* res);
 
 
-/* Get value type (TypeTag) */
-TypeTag val2type(Value value);
+/* Get value type */
+sk_tt val2type(Value value);
 
 
 /* Get/Create string object from value */

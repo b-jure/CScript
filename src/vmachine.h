@@ -69,15 +69,15 @@ typedef struct {
      * 3 - unused
      * ...
      * 8 - unused */
-    Byte flags;
+    uint8_t flags;
 } Variable;
 
 
 typedef struct {
-    AllocFn reallocate; // allocator
+    sk_alloc reallocate; // allocator
     void* userdata; // for allocator
-    ReadFn reader; // for reading skooma scripts
-    PanicFn panic; // panic handler
+    sk_reader reader; // for reading skooma scripts
+    sk_panic panic; // panic handler
 } Hooks; // Configurable hooks
 
 
@@ -103,7 +103,7 @@ struct VM {
     GC gc;
     unsigned long seed; // randomized seed for hashing
     struct sk_longjmp* errjmp; // error longjmp
-    Status status; // status code
+    sk_status status; // status code
     HashTable loaded; // loaded scripts
     Function* F; // function state
     CallFrame frames[VM_CALLSTACK_LIMIT]; // call stack
@@ -170,6 +170,6 @@ void ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt);
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);
 void closeupval(VM* vm, Value* last);
 uint8_t bindmethod(VM* vm, OClass* oclass, Value name, Value receiver);
-void resetvm(VM* vm, Status status);
+void resetvm(VM* vm, sk_status status);
 
 #endif

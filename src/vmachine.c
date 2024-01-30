@@ -171,7 +171,7 @@ void ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt)
 
 /* Call overload-able class method.
  * If method is not overloaded return 0, otherwise call it and return 1. */
-static uint8_t calloverload(VM* vm, OInstance* instance, OMTag tag)
+static uint8_t calloverload(VM* vm, OInstance* instance, sk_om tag)
 {
     O* om = instance->oclass->omethods[tag];
     if(!om) return 0;
@@ -239,13 +239,6 @@ static force_inline void checkindex(VM* vm, Value receiver, Value key)
     else if(unlikely(IS_NIL(key))) nilidxerror(vm);
 }
 
-
-/* Private to interpreter.
- * Small optimization, tries to get and call the indexed
- * value directly as a part of a single instruction. */
-static force_inline void invokeindex(VM* vm, int32_t argc, int32_t retcnt)
-{
-}
 
 /* Private to interpreter.
  * Invokes the field/method of the instance class directly in a single
@@ -1021,7 +1014,7 @@ void VM_init(VM* vm)
  * Additionally set the error object on top of the stack
  * if the 'status' is error code.
  */
-void resetvm(VM* vm, Status status)
+void resetvm(VM* vm, sk_status status)
 {
     Value* top = vm->stack;
     closeupval(vm, top + 1); // close all open upvalues

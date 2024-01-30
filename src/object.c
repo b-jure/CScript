@@ -64,6 +64,15 @@ static force_inline O* onew(VM* vm, size_t size, OType type)
 }
 
 
+/* Note: Objects with the same pointer are the same object. */
+int32_t id2omtag(VM* vm, Value id)
+{
+    uintptr_t ptr = cast(uintptr_t, AS_STRING(id));
+    uintptr_t start = cast(uintptr_t, vm->faststatic[SS_INIT]);
+    uintptr_t end = cast(uintptr_t, vm->faststatic[SS_DBG]);
+    if(ptr < start || ptr >= end) return -1;
+    return SS_INIT + (ptr - start);
+}
 
 
 static force_inline OString* OString_alloc(VM* vm, uint32_t len)
@@ -251,7 +260,7 @@ OString* unescape(VM* vm, OString* string)
 
 // TODO: Different constructor if constructing using C API
 ONative*
-ONative_new(VM* vm, OString* name, CFunction fn, int32_t arity, uint8_t isvararg, uint32_t upvalc)
+ONative_new(VM* vm, OString* name, sk_cfunc fn, int32_t arity, uint8_t isvararg, uint32_t upvalc)
 {
     ONative* native = ALLOC_NATIVE(vm, upvalc);
     native->fn = fn;
@@ -367,7 +376,7 @@ OInstance* OInstance_new(VM* vm, OClass* oclass)
 
 /* Return overloaded method or NULL if value
  * is not an instance value or method is not overloaded. */
-static force_inline O* getomethod(VM* vm, Value val, OMTag om)
+static force_inline O* getomethod(VM* vm, Value val, sk_om om)
 {
     if(IS_INSTANCE(val)) return AS_INSTANCE(val)->oclass->omethods[om];
     return NULL;
@@ -606,7 +615,7 @@ uint8_t rawindex(VM* vm, Value value, uint8_t what)
 /* Tries to call class overloaded unary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
  * 0 otherwise. */
-static force_inline int callunop(VM* vm, Value lhs, OMTag op, Value* res)
+static force_inline int callunop(VM* vm, Value lhs, sk_om op, Value* res)
 {
     O* om = getomethod(vm, lhs, op);
     if(om == NULL) return 0;
@@ -622,7 +631,7 @@ static force_inline int callunop(VM* vm, Value lhs, OMTag op, Value* res)
 /* Tries to call class overloaded binary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
  * 0 otherwise. */
-static force_inline int callbinop(VM* vm, Value lhs, Value rhs, OMTag op, Value* res)
+static force_inline int callbinop(VM* vm, Value lhs, Value rhs, sk_om op, Value* res)
 {
     Value instance;
     O* om = getomethod(vm, lhs, op);
@@ -642,7 +651,7 @@ static force_inline int callbinop(VM* vm, Value lhs, Value rhs, OMTag op, Value*
 
 
 /* Tries calling binary or unary overloaded operator method, errors on failure. */
-void otryop(VM* vm, Value lhs, Value rhs, OMTag op, Value* res)
+void otryop(VM* vm, Value lhs, Value rhs, sk_om op, Value* res)
 {
     if(!omisunop(op)) {
         if(unlikely(!callbinop(vm, lhs, rhs, op, res))) binoperror(vm, lhs, rhs, op - OM_ADD);
@@ -655,9 +664,9 @@ void otryop(VM* vm, Value lhs, Value rhs, OMTag op, Value* res)
 
 /* =============== ordering =============== */
 
-static force_inline int omcallorder(VM* vm, Value lhs, Value rhs, OMTag ordop)
+static force_inline int omcallorder(VM* vm, Value lhs, Value rhs, sk_om ordop)
 {
-    sk_assert(vm, ordop >= OM_NE && ordop <= OM_GE, "invalid OMTag for order");
+    sk_assert(vm, ordop >= OM_NE && ordop <= OM_GE, "invalid sk_om for order");
     if(callbinop(vm, lhs, rhs, ordop, stackpeek(1))) { // try overload
         pop(vm); // remove second operand
         return 1;

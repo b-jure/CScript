@@ -10,7 +10,7 @@
 #include <stdlib.h>
 
 /* Perform arithmetic operation on numbers. */
-static sk_number narith(VM* vm, sk_number a, sk_number b, Ar op)
+static sk_number narith(VM* vm, sk_number a, sk_number b, sk_ar op)
 {
     switch(op) {
         case AR_ADD: return sk_nadd(vm, a, b);
@@ -30,7 +30,7 @@ static sk_number narith(VM* vm, sk_number a, sk_number b, Ar op)
 /* Perform arithmetic operation 'op' on skooma values.
  * If arithmetic operation was executed successfully then this
  * returns 1, otherwise 0. */
-int varith(VM* vm, Value a, Value b, Ar op, Value* res)
+int varith(VM* vm, Value a, Value b, sk_ar op, Value* res)
 {
     if(arisbin(op)) { // binary operation
         if(IS_NUMBER(a) && IS_NUMBER(b)) goto l_unarynum;
@@ -51,7 +51,7 @@ int varith(VM* vm, Value a, Value b, Ar op, Value* res)
 }
 
 /* Perform binary/unary operation on values. */
-void arith(VM* vm, Value a, Value b, Ar op, Value* res)
+void arith(VM* vm, Value a, Value b, sk_ar op, Value* res)
 {
     if(!varith(vm, a, b, op, res)) {
 #if defined(SK_OVERLOAD_OPS)
@@ -64,7 +64,7 @@ void arith(VM* vm, Value a, Value b, Ar op, Value* res)
 
 
 /* Get value type */
-TypeTag val2type(Value value)
+sk_tt val2type(Value value)
 {
 #if defined(val2tbmask)
 
@@ -141,7 +141,7 @@ TypeTag val2type(Value value)
 /* @TODO: What is this used for ?? */
 const char* vname(VM* vm, Value val)
 {
-    TypeTag tag = val2type(val);
+    sk_tt tag = val2type(val);
 #if defined(SK_PRECOMPUTED_GOTO)
     static const void* jmptable[TT_CNT] = {
         &&nil,

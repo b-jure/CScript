@@ -45,7 +45,7 @@ sk_noret ordererror(VM* vm, Value a, Value b)
 }
 
 
-sk_noret binoperror(VM* vm, Value a, Value b, OMTag op)
+sk_noret binoperror(VM* vm, Value a, Value b, sk_om op)
 {
     static const char* fmt = "Attempt to perform binary %s on %s (left) and %s (right).";
     push(vm, OBJ_VAL(vtostr(vm, a)));
@@ -58,7 +58,7 @@ sk_noret binoperror(VM* vm, Value a, Value b, OMTag op)
 }
 
 
-sk_noret unoperror(VM* vm, Value a, OMTag op)
+sk_noret unoperror(VM* vm, Value a, sk_om op)
 {
     static const char* fmt = "Attempt to perform unary '%s' on %s.";
     push(vm, OBJ_VAL(vtostr(vm, a)));

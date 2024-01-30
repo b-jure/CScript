@@ -9,14 +9,11 @@
 #include <stdio.h>
 
 
-#define isSkooma(cf) ((cf)->closure)
-
-
-// Load current function/frame into the 'private' part of 'DebugInfo'.
+// Load current CallFrame into the 'private' part of 'sk_debuginfo'.
 // Level 0 means the current function, level 1 is the previous call
 // and so on...
 // If 'level' is invalid, this function returns 0 otherwise 1.
-SK_API uint8_t sk_getstack(VM* vm, int32_t level, DebugInfo* di)
+SK_API uint8_t sk_getstack(VM* vm, int32_t level, sk_debuginfo* di)
 {
     CallFrame* frame = NULL;
     if(level > vm->fc || level < 0) return 0;
@@ -30,7 +27,7 @@ SK_API uint8_t sk_getstack(VM* vm, int32_t level, DebugInfo* di)
 
 
 // Sets: 'name', 'type', 'nups', 'nparams', 'isvararg',
-//       'defline', 'deflastline' in 'DebugInfo'.
+//       'defline', 'deflastline' in 'sk_debuginfo'.
 //
 // 'name' - function name
 // 'type' - function type ('Skooma', 'main' or 'C')
@@ -39,7 +36,7 @@ SK_API uint8_t sk_getstack(VM* vm, int32_t level, DebugInfo* di)
 // 'isvararg' - does this function take variable number of arguments
 // 'defline' - line on which the function definition begins
 // 'deflastline' - line on which the function definition ends
-static void getfuncinfo(VM* vm, Value cl, DebugInfo* di)
+static void getfuncinfo(VM* vm, Value cl, sk_debuginfo* di)
 {
     const FnPrototype* p = NULL;
     if(IS_NATIVE(cl)) {
@@ -58,24 +55,24 @@ static void getfuncinfo(VM* vm, Value cl, DebugInfo* di)
 }
 
 
-// Sets 'line' in 'DebugInfo'.
+// Sets 'line' in 'sk_debuginfo'.
 //
 // 'line' - current line number
-static force_inline void auxgetline(Value cl, CallFrame* cf, DebugInfo* di)
+static force_inline void auxgetline(Value cl, CallFrame* cf, sk_debuginfo* di)
 {
-    if(cf && isSkooma(cf)) {
+    if(cf && cf->closure) {
         Chunk* c = &AS_CLOSURE(cl)->fn->chunk;
         di->line = Chunk_getline(c, cf->ip - c->code.data - 1);
     } else di->line = -1;
 }
 
 
-// Sets 'source', 'srclen' and 'shortsrc' in 'DebugInfo'.
+// Sets 'source', 'srclen' and 'shortsrc' in 'sk_debuginfo'.
 //
 // 'source' - source of the function
 // 'srclen' - length of 'source' string
 // 'shortsrc' - printable version of 'source'
-static void getsrcinfo(Value cl, DebugInfo* di)
+static void getsrcinfo(Value cl, sk_debuginfo* di)
 {
     FnPrototype* p = (IS_NATIVE(cl) ? &AS_NATIVE(cl)->p : &AS_CLOSURE(cl)->fn->p);
     di->source = p->source->storage;
@@ -91,10 +88,10 @@ static void getsrcinfo(Value cl, DebugInfo* di)
 
 
 // Auxiliary to 'sk_getinfo', parses debug bit mask and
-// fills out the 'DebugInfo' accordingly.
+// fills out the 'sk_debuginfo' accordingly.
 // If any invalid bit/option is inside the 'dbmask' this
 // function returns 0, otherwise 1.
-static uint8_t auxgetinfo(VM* vm, uint8_t dbmask, Value* cl, CallFrame* cf, DebugInfo* di)
+static uint8_t auxgetinfo(VM* vm, uint8_t dbmask, Value* cl, CallFrame* cf, sk_debuginfo* di)
 {
     uint8_t status = 1;
     for(uint8_t bit = 2; dbmask > 0; bit++) {
@@ -122,10 +119,10 @@ static uint8_t auxgetinfo(VM* vm, uint8_t dbmask, Value* cl, CallFrame* cf, Debu
     return status;
 }
 
-// Fill out 'DebugInfo' according to 'dbmask'.
+// Fill out 'sk_debuginfo' according to 'dbmask'.
 // Return 0 if any of the bits in 'dbmask' is invalid,
 // otherwise 1.
-SK_API uint8_t sk_getinfo(VM* vm, uint8_t dbmask, DebugInfo* di)
+SK_API uint8_t sk_getinfo(VM* vm, uint8_t dbmask, sk_debuginfo* di)
 {
     Value* fn = NULL;
     CallFrame* frame = NULL;
