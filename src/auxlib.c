@@ -21,7 +21,7 @@ static force_inline void printerror(VM* vm)
 /* Auxiliary to 'panic', prints stack trace-back */
 static void stacktraceback(VM* vm)
 {
-    DebugInfo di;
+    sk_debuginfo di;
     sk_uint level = 0;
     if(!sk_getstack(vm, level, &di)) return;
     skaux_writetoerr("Stack traceback:\n");
@@ -45,22 +45,23 @@ static sk_int panic(VM* vm)
 }
 
 /* Allocator */
-static void* reallocate(void* ptr, sk_memsize newc, void* _)
+static void* allocator(void* ptr, sk_memsize size, void* _)
 {
     (void)(_); // unused
-    if(newc == 0) {
+    if(size == 0) {
         free(ptr);
         return NULL;
     }
-    return realloc(ptr, newc);
+    return realloc(ptr, size);
 }
 
-/* Create and allocate VM using allocator and panic
- * handler from this library. */
+/* Create and allocate VM using 'alloc' from this library.
+ * Additionally set 'panic' as the default panic handler. */
 SK_LIBAPI VM* skaux_create(void)
 {
-    VM* vm = sk_create(reallocate, NULL);
+    VM* vm = sk_create(allocator, NULL);
     if(likely(vm != NULL)) {
+        sk_setalloc(vm, allocator, NULL);
         sk_setpanic(vm, panic);
     }
     return vm;
@@ -145,13 +146,96 @@ SK_LIBAPI void skaux_checktype(VM* vm, sk_int idx, sk_int type)
 
 
 
+
+
+
+
+/* ================ Load chunk from file ================ */
+
+typedef struct {
+    FILE* fp;
+    sk_memsize n;
+    char buffer[BUFSIZ];
+} FileReader;
+
 /* File manipulation related error */
-static ALE fileerror(VM* vm, const char* action, sk_int idx)
+static sk_int fileerror(VM* vm, const char* action, sk_int idx)
 {
-    static const char* fmt = "Cannot %s %s: %s.";
     const char* ferr = strerror(errno);
     const char* filename = sk_getstring(vm, idx);
-    sk_pushfstring(vm, fmt, action, filename, ferr);
+    sk_pushfstring(vm, "Cannot %s %s: %s.", action, filename, ferr);
     sk_remove(vm, idx);
-    return ALE_FILE;
+    sk_error(vm, S_EFILE);
+    return 0; // unreachable
 }
+
+static const char* filereader(VM* vm, void* userdata, sk_memsize* szread)
+{
+    (void)(vm); // unused
+    FileReader* reader = (FileReader*)userdata;
+    if(reader->n > 0) { // have unread chars ?
+        *szread = reader->n;
+        reader->n = 0;
+    } else {
+        if(feof(reader->fp)) return NULL; // last read has set 'EOF'
+        *szread = fread(reader->buffer, sizeof(char), sizeof(reader->buffer), reader->fp);
+    }
+    return reader->buffer;
+}
+
+SK_LIBAPI sk_status skaux_loadfile(VM* vm, const char* filename)
+{
+    FileReader reader = {0};
+    sk_int fnameidx = sk_gettop(vm) + 1; // '+1' we will push it in case of errors
+    if(filename == NULL) {
+        sk_pushcstring(vm, "stdin");
+        reader.fp = stdin;
+    } else {
+        sk_pushcstring(vm, filename);
+        reader.fp = fopen(filename, "r");
+        if(unlikely(reader.fp == NULL)) return fileerror(vm, "open", fnameidx);
+    }
+    sk_status status = sk_load(vm, filereader, &reader, sk_getstring(vm, -1));
+    if(filename) fclose(reader.fp);
+    if(ferror(reader.fp)) { // had read error?
+        sk_settop(vm, fnameidx);
+        return fileerror(vm, "read", fnameidx);
+    }
+    sk_remove(vm, fnameidx);
+    return status;
+}
+
+/* --------------------------------------------------------- */
+
+
+
+
+
+
+/* ================ Load chunk from string ================ */
+
+typedef struct {
+    const char* str;
+    sk_memsize size;
+} StringReader;
+
+
+const char* stringreader(VM* vm, void* userdata, sk_memsize* szread)
+{
+    (void)(vm); // unused
+    StringReader* reader = (StringReader*)userdata;
+    if(reader->size == 0) return NULL;
+    *szread = reader->size;
+    reader->size = 0;
+    return reader->str;
+}
+
+SK_LIBAPI sk_status skaux_loadstring(VM* vm, const char* string)
+{
+    StringReader reader = {0};
+    reader.str = string;
+    reader.size = strlen(string);
+    return sk_load(vm, stringreader, &reader, "string");
+}
+
+/* --------------------------------------------------------- */

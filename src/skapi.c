@@ -476,17 +476,6 @@ SK_API PanicFn sk_getpanic(VM* vm)
 
 
 
-/* Get reader function */
-SK_API ReadFn sk_getreader(VM* vm)
-{
-    sk_lock(vm);
-    ReadFn reader = vm->hooks.reader;
-    sk_unlock(vm);
-    return reader;
-}
-
-
-
 /* Get allocator function */
 SK_API AllocFn sk_getalloc(VM* vm, void** ud)
 {
@@ -697,7 +686,7 @@ SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* source)
     BuffReader br;
     sk_lock(vm);
     BuffReader_init(vm, &br, reader, userdata);
-    sk_byte status = pcompile(vm, &br, source, 0);
+    Status status = pcompile(vm, &br, source, 0);
     sk_unlock(vm);
     return status;
 }
@@ -830,18 +819,6 @@ SK_API PanicFn sk_setpanic(VM* vm, PanicFn panicfn)
     vm->hooks.panic = panicfn;
     sk_unlock(vm);
     return old_panic;
-}
-
-
-
-/* Set read function and return the old one */
-SK_API ReadFn sk_setreader(VM* vm, ReadFn readfn)
-{
-    sk_lock(vm);
-    ReadFn old_reader = vm->hooks.reader;
-    vm->hooks.reader = readfn;
-    sk_unlock(vm);
-    return old_reader;
 }
 
 

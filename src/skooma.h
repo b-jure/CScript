@@ -72,16 +72,16 @@ typedef double sk_number;
 typedef struct VM VM;
 
 /* Holds debug information */
-typedef struct DebugInfo DebugInfo;
+typedef struct sk_debuginfo sk_debuginfo;
 
 /* Native C function signature */
-typedef sk_int (*CFunction)(VM* vm);
+typedef sk_int (*sk_cfunc)(VM* vm);
 
 /* Panic handler (same signature as 'CFunction') */
-typedef sk_int (*PanicFn)(VM* vm);
+typedef sk_int (*sk_panic)(VM* vm);
 
 /* Memory allocator function signature. */
-typedef void* (*AllocFn)(void* ptr, sk_memsize newsize, void* userdata);
+typedef void* (*sk_alloc)(void* ptr, sk_memsize newsize, void* userdata);
 
 /* Reader function signature.
  * @sk_load uses this reader to compile skooma scripts.
@@ -89,16 +89,16 @@ typedef void* (*AllocFn)(void* ptr, sk_memsize newsize, void* userdata);
  * script, it calls this reader together with the 'userdata'.
  *
  * Expected behaviour:
- * - 'ReadFn' must return a pointer to the block of memory
+ * - 'sk_reader' must return a pointer to the block of memory
  *   it read and set the 'szread' to the size of the block.
  *
- * - The block must exist until the 'ReadFn' is called again.
+ * - The block must exist until the 'sk_reader' is called again.
  *
- * - To signal the end of the chunk, 'ReadFn' must return NULL
+ * - To signal the end of the chunk, 'sk_reader' must return NULL
  *   or set the 'szread' to 0.
  *
- * - 'ReadFn' can return any block size greater than zero. */
-typedef const char* (*ReadFn)(VM* vm, void* userdata, sk_memsize* szread);
+ * - 'sk_reader' can return any block size greater than zero. */
+typedef const char* (*sk_reader)(VM* vm, void* userdata, sk_memsize* szread);
 
 #define TT_NONE (-1) // indicates absence of value
 typedef enum {
@@ -110,19 +110,18 @@ typedef enum {
     TT_INSTANCE,
     TT_FUNCTION,
     TT_CNT, // keep this last
-} TypeTag;
+} sk_tt;
 /* --------------------------------------------------------------------- */
 
 
 /* ========== 'VM' state manipulation ========== */
-SK_API VM* sk_create(AllocFn allocator, void* ud);
+SK_API VM* sk_create(sk_alloc allocator, void* ud);
 SK_API void sk_resetvm(VM* vm);
 SK_API void sk_destroy(VM** vmp);
 
 /* Set VM hooks */
-SK_API PanicFn sk_setpanic(VM* vm, PanicFn panicfn);
-SK_API ReadFn sk_setreader(VM* vm, ReadFn readfn);
-SK_API AllocFn sk_setalloc(VM* vm, AllocFn allocfn, void* ud);
+SK_API sk_panic sk_setpanic(VM* vm, sk_panic panicfn);
+SK_API sk_alloc sk_setalloc(VM* vm, sk_alloc allocfn, void* ud);
 
 SK_API sk_number sk_version(VM* vm);
 /* --------------------------------------------------------------------- */
@@ -151,7 +150,7 @@ typedef enum {
     OM_GE,
 #endif
     OM_CNT, // keep this last
-} OMTag; // tag for overload-able class methods
+} sk_om; // tag for overload-able class methods
 
 #if defined(SK_OVERLOAD_OPS)
 #define omisunop(omtag) ((omtag) == OM_NOT | (omtag) == OM_UMIN)
@@ -168,8 +167,8 @@ typedef enum {
     ORD_LE, // less or equal '<='
     ORD_GE, // greater or equal '>='
     ORD_CNT, // Ord count
-} Ord; // ordering operations
-SK_API sk_byte sk_compare(VM* vm, sk_int idx1, sk_int idx2, Ord op);
+} sk_ord; // ordering operations
+SK_API sk_byte sk_compare(VM* vm, sk_int idx1, sk_int idx2, sk_ord op);
 SK_API sk_byte sk_rawequal(VM* vm, sk_int idx1, sk_int idx2);
 
 typedef enum {
@@ -182,8 +181,8 @@ typedef enum {
     AR_NOT, // (unary) not '!'
     AR_UMIN, // (unary) negation '-'
     AR_CNT, // Ar count
-} Ar; // arithmetic operations
-SK_API void sk_arith(VM* vm, Ar op);
+} sk_ar; // arithmetic operations
+SK_API void sk_arith(VM* vm, sk_ar op);
 /* --------------------------------------------------------------------- */
 
 
@@ -195,7 +194,7 @@ SK_API void sk_pushcstring(VM* vm, const char* str);
 SK_API const char* sk_pushvfstring(VM* vm, const char* fmt, va_list argp);
 SK_API const char* sk_pushfstring(VM* vm, const char* fmt, ...);
 SK_API void sk_pushbool(VM* vm, sk_int boolean);
-SK_API void sk_pushcclosure(VM* vm, CFunction fn, sk_uint args, sk_byte isvararg, sk_uint upvals);
+SK_API void sk_pushcclosure(VM* vm, sk_cfunc fn, sk_uint args, sk_byte isvararg, sk_uint upvals);
 SK_API void sk_push(VM* vm, sk_int idx);
 /* --------------------------------------------------------------------- */
 
@@ -212,7 +211,7 @@ SK_API sk_byte sk_getglobal(VM* vm, const char* name);
 SK_API sk_byte sk_getmethod(VM* vm, sk_int idx, const char* method);
 SK_API sk_byte sk_getfield(VM* vm, sk_int idx, const char* field);
 SK_API sk_byte sk_getindex(VM* vm, sk_int idx);
-#define sk_rawgetindex(vm, idx) sk_rawindex(vm, idx, SK_RAWGET)
+#define sk_rawgetindex(vm, idx) sk_rawindex(vm, idx, 1)
 /* --------------------------------------------------------------------- */
 
 
@@ -234,17 +233,16 @@ SK_API sk_byte sk_isinstance(const VM* vm, sk_int idx);
 SK_API sk_byte sk_isnative(const VM* vm, sk_int idx);
 SK_API sk_byte sk_ismethod(const VM* vm, sk_int idx);
 SK_API sk_byte sk_isclosure(const VM* vm, sk_int idx);
-SK_API TypeTag sk_type(const VM* vm, sk_int idx);
+SK_API sk_tt sk_type(const VM* vm, sk_int idx);
 SK_API const char* sk_typename(const VM* vm, sk_int idx);
-SK_API const char* sk_tagname(const VM* vm, TypeTag type);
+SK_API const char* sk_tagname(const VM* vm, sk_tt type);
 
-SK_API PanicFn sk_getpanic(VM* vm);
-SK_API ReadFn sk_getreader(VM* vm);
-SK_API AllocFn sk_getalloc(VM* vm, void** ud);
+SK_API sk_panic sk_getpanic(VM* vm);
+SK_API sk_alloc sk_getalloc(VM* vm, void** ud);
 SK_API sk_byte sk_getbool(const VM* vm, sk_int idx, sk_byte* isbool);
 SK_API sk_number sk_getnumber(const VM* vm, sk_int idx, sk_byte* isnum);
 SK_API const char* sk_getstring(const VM* vm, sk_int idx);
-SK_API CFunction sk_getcfunction(const VM* vm, sk_int idx);
+SK_API sk_cfunc sk_getcfunction(const VM* vm, sk_int idx);
 SK_API sk_memsize sk_strlen(const VM* vm, sk_int idx);
 /* --------------------------------------------------------------------- */
 
@@ -258,6 +256,12 @@ SK_API void sk_copy(VM* vm, sk_int src, sk_int dest);
 SK_API sk_int sk_ensurestack(VM* vm, sk_int n);
 /* --------------------------------------------------------------------- */
 
+
+/* ========== create classes ========== */
+typedef struct {
+
+} sk_ClassMethod;
+/* --------------------------------------------------------------------- */
 
 /* ========== error reporting ========== */
 typedef enum {
@@ -282,10 +286,11 @@ typedef enum {
     S_ESTRFMT, // string format error
     S_ECOMP, // compile error
     S_ENILIDX, // indexing with 'nil' error
+    S_EFILE, // file related error
     S_CNT,
-} Status; // Runtime status codes
-SK_API Status sk_getstatus(VM* vm);
-SK_API sk_int sk_error(VM* vm, Status errcode);
+} sk_status; // Runtime status codes
+SK_API sk_status sk_getstatus(VM* vm);
+SK_API sk_int sk_error(VM* vm, sk_status errcode);
 /* --------------------------------------------------------------------- */
 
 
@@ -312,9 +317,9 @@ SK_API sk_byte sk_nextproperty(VM* vm, sk_int idx, sk_byte what);
 // returns all of the returned values from the function ('retcnt')
 #define SK_MULRET (-1)
 
-SK_API Status sk_pcall(VM* vm, sk_int argc, sk_int retcnt);
+SK_API sk_status sk_pcall(VM* vm, sk_int argc, sk_int retcnt);
 SK_API void sk_call(VM* vm, sk_int argc, sk_int retcnt);
-SK_API Status sk_load(VM* vm, ReadFn reader, void* userdata, const char* source);
+SK_API sk_status sk_load(VM* vm, sk_reader reader, void* userdata, const char* source);
 /* --------------------------------------------------------------------- */
 
 
@@ -336,32 +341,32 @@ typedef enum {
     GCO_COUNT, // get number of bytes allocated
     GCO_ISRUNNING, // check whether GC is stopped
     GCO_NEXTGC, // set bytes amount when the next GC will trigger
-} GCOpt; // Garbage collector options
+} sk_gco; // Garbage collector options
 
-SK_API sk_memsize sk_gc(VM* vm, GCOpt option, ...);
+SK_API sk_memsize sk_gc(VM* vm, sk_gco option, ...);
 /* --------------------------------------------------------------------- */
 
 
 /* ============= debug API ============= */
-SK_API sk_byte sk_getstack(VM* vm, sk_int level, DebugInfo* di);
+SK_API sk_byte sk_getstack(VM* vm, sk_int level, sk_debuginfo* di);
 typedef enum {
     DW_FNGET = (1 << 0), // load the function on top of the stack (processed first)
     DW_LINE = (1 << 1), // fill 'line'
-    DW_FNINFO = (1 << 2), // fill all function info in 'DebugInfo'
+    DW_FNINFO = (1 << 2), // fill all function info in 'sk_DebugInfo'
     DW_FNSRC = (1 << 3), // fill function source information
     DW_FNPUSH = (1 << 4), // push current function on the stack (processed last)
-} DebugWhat; // bits for creating debug bitmask ('sk_getinfo')
+} sk_dw; // bits for creating debug bitmask ('sk_getinfo')
 
-SK_API sk_byte sk_getinfo(VM* vm, sk_byte dbmask, DebugInfo* di);
+SK_API sk_byte sk_getinfo(VM* vm, sk_byte dbmask, sk_debuginfo* di);
 
 /* Forward declare the private type */
 typedef struct CallFrame CallFrame;
 
 /* Struct for interfacing with Skooma debug API, this gets passed
  * in every debug function, main one being 'sk_getinfo'.
- * These functions fill out 'DebugInfo' with requested information
+ * These functions fill out 'sk_DebugInfo' with requested information
  * as stated in bit mask [@DebugWhat]. */
-struct DebugInfo {
+struct sk_debuginfo {
     const char* name; // function name (declaration name in Skooma script)
     const char* type; // function type ('Skooma', 'main' or 'C')
     const char* source; // function source

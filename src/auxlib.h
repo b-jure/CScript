@@ -5,19 +5,12 @@
 #include "skooma.h"
 
 
-/* ================= AUXLIB error codes ================= */
-typedef enum {
-    ALE_FILE = S_CNT, // file related error
-} ALE;
-/* ---------------------------------------------------------- */
-
-
 /* ================= Create VM (auxlib allocator) ================= */
 SK_LIBAPI VM* skaux_create(void);
 /* ---------------------------------------------------------- */
 
 
-/* ================= Auxiliary library errors ================= */
+/* ================= Auxiliary type checking ================= */
 SK_LIBAPI sk_int skaux_typeerror(VM* vm, sk_int argidx, const char* tname);
 SK_LIBAPI sk_int skaux_argerror(VM* vm, sk_int argidx, const char* extra);
 
@@ -25,6 +18,12 @@ SK_LIBAPI sk_number skaux_checknumber(VM* vm, sk_int idx);
 SK_LIBAPI const char* skaux_checkstring(VM* vm, sk_int idx);
 SK_LIBAPI sk_byte skaux_checkbool(VM* vm, sk_int idx);
 SK_LIBAPI void skaux_checktype(VM* vm, sk_int idx, sk_int type);
+/* ---------------------------------------------------------- */
+
+
+/* ================= Load functions ================= */
+SK_LIBAPI sk_status skaux_loadfile(VM* vm, const char* filename);
+SK_LIBAPI sk_status skaux_loadstring(VM* vm, const char* string);
 /* ---------------------------------------------------------- */
 
 
@@ -37,7 +36,6 @@ SK_LIBAPI void skaux_checktype(VM* vm, sk_int idx, sk_int type);
 #define skaux_writetoerrf(msg, ...) (fprintf(stderr, msg, __VA_ARGS__), fflush(stderr))
 #endif
 /* ---------------------------------------------------------- */
-
 
 
 #endif
