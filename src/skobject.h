@@ -17,12 +17,12 @@
 #ifndef SKOBJECT_H
 #define SKOBJECT_H
 
-#include "chunk.h"
-#include "common.h"
-#include "hash.h"
-#include "mem.h"
+#include "skchunk.h"
+#include "skcommon.h"
+#include "skhash.h"
+#include "skmem.h"
 #include "skooma.h"
-#include "value.h"
+#include "skvalue.h"
 
 #define IS_STRING(value) isotype(value, OBJ_STRING)
 #define AS_STRING(value) ((OString*)AS_OBJ(value))

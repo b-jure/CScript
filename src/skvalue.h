@@ -17,9 +17,9 @@
 #ifndef SKVALUE_H
 #define SKVALUE_H
 
-#include "array.h"
-#include "common.h"
-#include "hash.h"
+#include "skarray.h"
+#include "skcommon.h"
+#include "skhash.h"
 
 typedef struct O O;
 typedef struct OString OString;

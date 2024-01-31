@@ -14,7 +14,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "auxlib.h"
+#include "skauxlib.h"
 #include "skooma.h"
 
 #include <errno.h>
@@ -76,10 +76,8 @@ static void* allocator(void* ptr, sk_memsize size, void* _)
 SK_LIBAPI VM* skaux_create(void)
 {
     VM* vm = sk_create(allocator, NULL);
-    if(likely(vm != NULL)) {
-        sk_setalloc(vm, allocator, NULL);
+    if(likely(vm != NULL))
         sk_setpanic(vm, panic);
-    }
     return vm;
 }
 

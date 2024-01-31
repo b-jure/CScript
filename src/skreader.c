@@ -14,8 +14,8 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "common.h"
-#include "reader.h"
+#include "skcommon.h"
+#include "skreader.h"
 
 void BuffReader_init(VM* vm, BuffReader* BR, sk_reader reader, void* userdata)
 {

@@ -17,8 +17,8 @@
 #ifndef SKHASHTABLE_H
 #define SKHASHTABLE_H
 
-#include "common.h"
-#include "value.h"
+#include "skcommon.h"
+#include "skvalue.h"
 
 #ifndef SKOOMA_VMACHINE_H
 typedef struct VM VM;

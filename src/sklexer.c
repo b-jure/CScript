@@ -14,8 +14,8 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "lexer.h"
-#include "object.h"
+#include "sklexer.h"
+#include "skobject.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -24,7 +24,7 @@
 
 
 /* Maximum size of error token string. */
-#define MAX_ERR_STRING 50
+#define MAX_ERR_STRING SK_SRCID_MAX
 #define ERR_LEN(len) (MIN(MAX_ERR_STRING, len))
 
 

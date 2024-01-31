@@ -14,14 +14,14 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "common.h"
-#include "err.h"
-#include "hashtable.h"
-#include "mem.h"
-#include "object.h"
+#include "skcommon.h"
+#include "skerr.h"
+#include "skhashtable.h"
+#include "skmem.h"
+#include "skobject.h"
 #include "skconf.h"
 #include "stdarg.h"
-#include "value.h"
+#include "skvalue.h"
 
 #include <stdio.h>
 #include <stdlib.h>

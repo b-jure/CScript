@@ -14,11 +14,11 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "hash.h"
-#include "object.h"
+#include "skhash.h"
+#include "skobject.h"
 #include "skconf.h"
 #include "skmath.h"
-#include "value.h"
+#include "skvalue.h"
 
 #include <memory.h>
 #include <stdint.h>

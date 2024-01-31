@@ -17,11 +17,11 @@
 #ifndef SKPARSER_H
 #define SKPARSER_H
 
-#include "array.h"
-#include "common.h"
-#include "reader.h"
-#include "value.h"
-#include "vmachine.h"
+#include "skarray.h"
+#include "skcommon.h"
+#include "skreader.h"
+#include "skvalue.h"
+#include "skvm.h"
 
 uint8_t pcompile(VM* vm, void* userdata, const char* name, uint8_t isingscope);
 void _cleanup_function(Function* F);

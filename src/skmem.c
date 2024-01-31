@@ -14,15 +14,15 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "debug.h"
-#include "err.h"
-#include "hashtable.h"
-#include "mem.h"
-#include "object.h"
-#include "parser.h"
+#include "skdebug.h"
+#include "skerr.h"
+#include "skhashtable.h"
+#include "skmem.h"
+#include "skobject.h"
+#include "skparser.h"
 #include "skconf.h"
-#include "value.h"
-#include "vmachine.h"
+#include "skvalue.h"
+#include "skvm.h"
 
 #include <stdio.h>
 #include <stdlib.h>

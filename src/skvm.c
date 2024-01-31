@@ -14,17 +14,17 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "chunk.h"
-#include "common.h"
-#include "debug.h"
-#include "err.h"
-#include "mem.h"
-#include "object.h"
-#include "parser.h"
+#include "skchunk.h"
+#include "skcommon.h"
+#include "skdebug.h"
+#include "skerr.h"
+#include "skmem.h"
+#include "skobject.h"
+#include "skparser.h"
 #include "skapi.h"
 #include "sklimits.h"
-#include "value.h"
-#include "vmachine.h"
+#include "skvalue.h"
+#include "skvm.h"
 
 #include <stdio.h>
 #include <stdlib.h>

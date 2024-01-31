@@ -17,7 +17,7 @@
 #ifndef SKARRAY_H
 #define SKARRAY_H
 
-#include "common.h"
+#include "skcommon.h"
 
 #include <errno.h>
 #include <memory.h>

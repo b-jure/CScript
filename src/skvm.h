@@ -17,11 +17,11 @@
 #ifndef SKVM_H
 #define SKVM_H
 
-#include "array.h"
-#include "chunk.h"
-#include "common.h"
-#include "hashtable.h"
-#include "value.h"
+#include "skarray.h"
+#include "skchunk.h"
+#include "skcommon.h"
+#include "skhashtable.h"
+#include "skvalue.h"
 
 #include <setjmp.h>
 

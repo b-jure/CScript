@@ -14,10 +14,10 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "err.h"
-#include "object.h"
-#include "value.h"
-#include "vmachine.h"
+#include "skerr.h"
+#include "skobject.h"
+#include "skvalue.h"
+#include "skvm.h"
 
 
 /* ==================== runtime errors ====================== */

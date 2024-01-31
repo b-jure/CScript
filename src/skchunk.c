@@ -14,11 +14,11 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "chunk.h"
-#include "common.h"
-#include "debug.h"
-#include "mem.h"
-#include "vmachine.h"
+#include "skchunk.h"
+#include "skcommon.h"
+#include "skdebug.h"
+#include "skmem.h"
+#include "skvm.h"
 
 #include <stdio.h>
 #include <stdlib.h>

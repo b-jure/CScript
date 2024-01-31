@@ -14,13 +14,12 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "array.h"
-#include "debug.h"
-#include "hashtable.h"
-#include "mem.h"
-#include "object.h"
-#include "stdarg.h"
-#include "value.h"
+#include "skarray.h"
+#include "skdebug.h"
+#include "skhashtable.h"
+#include "skmem.h"
+#include "skobject.h"
+#include "skvalue.h"
 
 // Max table load factor before needing to expand.
 #define TABLE_MAX_LOAD 0.70
@@ -185,7 +184,7 @@ static force_inline void HashTable_expand(VM* vm, HashTable* table)
 // Insert 'key'/'value' pair into the table.
 // If the 'key' was not found insert it together with the 'value' and return
 // true. If the 'key' already exists overwrite the 'value' and return false.
-bool HashTable_insert(VM* vm, HashTable* table, Value key, Value val)
+uint8_t HashTable_insert(VM* vm, HashTable* table, Value key, Value val)
 {
     if(table->left == 0) HashTable_expand(vm, table);
     Entry* entry = Entry_find(table->entries, table->cap, key);
@@ -204,7 +203,7 @@ bool HashTable_insert(VM* vm, HashTable* table, Value key, Value val)
 // Remove 'key' from the table.
 // If the 'key' was found (and removed) return true and place the tombstone.
 // If the 'key' was not found return false.
-bool HashTable_remove(HashTable* table, Value key)
+uint8_t HashTable_remove(HashTable* table, Value key)
 {
     Entry* entry = Entry_find(table->entries, table->cap, key);
     if(IS_EMPTY(entry->key)) return false;
@@ -239,7 +238,7 @@ OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Has
 // Fetch 'Value' for given 'key'.
 // If 'key' was not found return false, otherwise copy the 'Value'
 // for the given 'key' into 'out' and return true.
-bool HashTable_get(HashTable* table, Value key, Value* out)
+uint8_t HashTable_get(HashTable* table, Value key, Value* out)
 {
     if(table->len == 0) return false;
     Entry* entry = Entry_find(table->entries, table->cap, key);

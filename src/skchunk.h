@@ -17,10 +17,10 @@
 #ifndef SKCHUNK_H
 #define SKCHUNK_H
 
-#include "array.h"
-#include "common.h"
-#include "hashtable.h"
-#include "value.h"
+#include "skarray.h"
+#include "skcommon.h"
+#include "skhashtable.h"
+#include "skvalue.h"
 
 ARRAY_NEW(Array_Byte, Byte);
 

@@ -18,10 +18,10 @@
 #ifndef SKLEXER_H
 #define SKLEXER_H
 
-#include "common.h"
-#include "mem.h"
-#include "reader.h"
-#include "value.h"
+#include "skcommon.h"
+#include "skmem.h"
+#include "skreader.h"
+#include "skvalue.h"
 
 #include <stdarg.h>
 

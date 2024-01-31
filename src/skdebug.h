@@ -17,8 +17,8 @@
 #ifndef SKDEBUG_H
 #define SKDEBUG_H
 
-#include "chunk.h"
-#include "vmachine.h"
+#include "skchunk.h"
+#include "skvm.h"
 
 sdebug void Chunk_debug(VM* vm, Chunk* chunk, const char* name);
 sdebug uint32_t Instruction_debug(VM* vm, Chunk* chunk, uint32_t offset);

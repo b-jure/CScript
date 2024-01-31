@@ -42,8 +42,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "common.h"
-#include "hash.h"
+#include "skcommon.h"
+#include "skhash.h"
 #include "skmath.h"
 #include "xxhash.h"
 

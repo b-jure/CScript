@@ -18,7 +18,7 @@
 #define SKERR_H
 
 #include "skooma.h"
-#include "value.h"
+#include "skvalue.h"
 
 
 /* ==================== runtime errors ====================== */

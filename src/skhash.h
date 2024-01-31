@@ -17,7 +17,7 @@
 #ifndef SKHASH_H
 #define SKHASH_H
 
-#include "common.h"
+#include "skcommon.h"
 
 typedef uint64_t Hash;
 

@@ -17,8 +17,8 @@
 #ifndef SKMEM_H
 #define SKMEM_H
 
-#include "common.h"
-#include "vmachine.h"
+#include "skcommon.h"
+#include "skvm.h"
 
 #include <memory.h>
 
