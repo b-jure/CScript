@@ -14,17 +14,17 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
+#include "skapi.h"
+#include "skconf.h"
 #include "skerr.h"
 #include "skhashtable.h"
 #include "skobject.h"
+#include "skooma.h"
 #include "skparser.h"
 #include "skreader.h"
-#include "skapi.h"
-#include "skconf.h"
-#include "skooma.h"
-#include "stdarg.h"
 #include "skvalue.h"
 #include "skvm.h"
+#include "stdarg.h"
 
 
 /* Get stack value at 'idx'. */

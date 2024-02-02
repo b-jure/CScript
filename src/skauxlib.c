@@ -76,8 +76,7 @@ static void* allocator(void* ptr, sk_memsize size, void* _)
 SK_LIBAPI VM* skaux_create(void)
 {
     VM* vm = sk_create(allocator, NULL);
-    if(likely(vm != NULL))
-        sk_setpanic(vm, panic);
+    if(likely(vm != NULL)) sk_setpanic(vm, panic);
     return vm;
 }
 
@@ -159,6 +158,7 @@ SK_LIBAPI void skaux_checktype(VM* vm, sk_int idx, sk_int type)
 }
 
 
+/* @TODO: add description */
 SK_LIBAPI void skaux_where(VM* vm, sk_uint level)
 {
     sk_debuginfo di;
@@ -173,6 +173,7 @@ SK_LIBAPI void skaux_where(VM* vm, sk_uint level)
 }
 
 
+/* @TODO: add description */
 SK_LIBAPI sk_int skaux_error(VM* vm, sk_status errcode, const char* fmt, ...)
 {
     va_list argp;
@@ -185,6 +186,7 @@ SK_LIBAPI sk_int skaux_error(VM* vm, sk_status errcode, const char* fmt, ...)
 }
 
 
+/* @TODO: add description */
 SK_LIBAPI void skaux_checkstack(VM* vm, sk_int space, const char* msg)
 {
     if(unlikely(!sk_checkstack(vm, space))) {
@@ -230,6 +232,7 @@ static const char* filereader(VM* vm, void* userdata, sk_memsize* szread)
     return reader->buffer;
 }
 
+/* @TODO: add description */
 SK_LIBAPI sk_status skaux_loadfile(VM* vm, const char* filename)
 {
     FileReader reader = {0};
@@ -277,6 +280,7 @@ const char* stringreader(VM* vm, void* userdata, sk_memsize* szread)
     return reader->str;
 }
 
+/* @TODO: add description */
 SK_LIBAPI sk_status skaux_loadstring(VM* vm, const char* string)
 {
     StringReader reader = {0};

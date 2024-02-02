@@ -21,29 +21,27 @@
 #include "skooma.h"
 
 
-/* ================= Create VM (auxlib allocator) ================= */
+/* ================= create VM (auxlib allocator) ================= */
 SK_LIBAPI VM* skaux_create(void);
 /* ---------------------------------------------------------- */
 
 
-/* ================= Checks and errors ================= */
+/* ================= debug ================= */
 SK_LIBAPI sk_int skaux_error(VM* vm, sk_status errcode, const char* fmt, ...);
 SK_LIBAPI sk_int skaux_typeerror(VM* vm, sk_int argidx, const char* tname);
 SK_LIBAPI sk_int skaux_argerror(VM* vm, sk_int argidx, const char* extra);
 
 SK_LIBAPI sk_number skaux_checknumber(VM* vm, sk_int idx);
 SK_LIBAPI const char* skaux_checkstring(VM* vm, sk_int idx);
+SK_LIBAPI const char* skaux_optstring(VM* vm, sk_int idx);
 SK_LIBAPI sk_byte skaux_checkbool(VM* vm, sk_int idx);
 SK_LIBAPI void skaux_checktype(VM* vm, sk_int idx, sk_int type);
-/* ---------------------------------------------------------- */
-
-
-/* ================= Other checks ================= */
 SK_LIBAPI void skaux_checkstack(VM* vm, sk_int space, const char* msg);
+SK_LIBAPI void skaux_where(VM* vm, sk_uint level);
 /* ---------------------------------------------------------- */
 
 
-/* ================= Load functions (protected) ================= */
+/* ================= load functions (protected) ================= */
 SK_LIBAPI sk_status skaux_loadfile(VM* vm, const char* filename);
 SK_LIBAPI sk_status skaux_loadstring(VM* vm, const char* string);
 /* ---------------------------------------------------------- */

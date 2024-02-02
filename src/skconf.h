@@ -225,6 +225,9 @@
 /* Signature for auxiliary library functions. */
 #define SK_LIBAPI SK_API
 
+/* Signature for functions that are loading libraries. */
+#define SK_LOADAPI SK_API
+
 
 
 
