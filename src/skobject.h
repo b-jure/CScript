@@ -92,13 +92,13 @@ static force_inline void otypeset(O* object, OType type)
 }
 
 /* Check if object is marked */
-static force_inline bool oismarked(O* object)
+static force_inline uint8_t oismarked(O* object)
 {
-    return (bool)((object->header >> 48) & 0x01);
+    return (uint8_t)((object->header >> 48) & 0x01);
 }
 
 /* Toggle object mark */
-static force_inline void osetmark(O* object, bool mark)
+static force_inline void osetmark(O* object, uint8_t mark)
 {
     object->header = (object->header & 0xff00ffffffffffff) | ((uint64_t)mark << 48);
 }
@@ -116,7 +116,7 @@ static force_inline void osetnext(O* object, O* next)
 }
 
 /* Check if object is of type 'type' */
-static force_inline bool isotype(Value value, OType type)
+static force_inline uint8_t isotype(Value value, OType type)
 {
     return IS_OBJ(value) && otype(AS_OBJ(value)) == type;
 }
@@ -132,7 +132,7 @@ static force_inline bool isotype(Value value, OType type)
 struct OString { // typedef is inside 'value.h'
     O obj; // common header
     uint32_t len; // string length (excluding null term)
-    Hash hash; // cached hash
+    sk_hash hash; // cached hash
     char storage[]; // bytes (chars)
 };
 
@@ -235,7 +235,7 @@ OUpvalue* OUpvalue_new(VM* vm, Value* var_ref);
 OClosure* OClosure_new(VM* vm, OFunction* fn);
 
 
-/* Create native C function */
+/* Create native C closure */
 ONative*
 ONative_new(VM* vm, OString* name, sk_cfunc fn, int32_t arity, uint8_t isvararg, uint32_t upvals);
 
@@ -244,14 +244,10 @@ ONative_new(VM* vm, OString* name, sk_cfunc fn, int32_t arity, uint8_t isvararg,
 OFunction* OFunction_new(VM* vm);
 
 
+/* Call overload-able method */
+uint8_t calloverload(VM* vm, Value instance, sk_om tag);
 
-/* Call overload-able methods, return 0 if 'instance' is not
- * an instance or the method is not overloaded, otherwise return 1. */
-uint8_t callomdisplay(VM* vm, Value instance); // __display__
-uint8_t callomgetidx(VM* vm, Value instance); // __getidx__
-uint8_t callomsetidx(VM* vm, Value instance); // __setidx__
-
-/* Raw access */
+/* Raw index ('[]') access */
 uint8_t rawindex(VM* vm, Value instance, uint8_t what);
 
 /* Get table, if 'what' is zero fetch fields, otherwise methods */
@@ -263,16 +259,16 @@ uint8_t rawindex(VM* vm, Value instance, uint8_t what);
 void otypeprint(OType type); // Debug
 
 
-/* Gets/Creates object string from object */
-OString* otostr(VM* vm, O* object);
+/* Convert object to string object. */
+OString* otostr(VM* vm, Value* ostk, Value oval, uint8_t raw);
 
 
-/* Tries calling binary or unary operator overload method */
+/* Tries calling binary or unary operator overload method. */
 void otryop(VM* vm, Value a, Value b, sk_om op, Value* res);
 
 
-/* Prints the object value */
-void oprint(VM* vm, Value value, FILE* stream);
+/* Prints the object value; can call __display__ if 'raw' is 0. */
+void oprint(VM* vm, Value value, uint8_t raw, FILE* stream);
 
 
 /* Ordering */
@@ -289,8 +285,8 @@ void oge(VM* vm, Value l, Value r);
 #endif
 
 
-/* Hashes the object value */
-Hash ohash(Value value);
+/* Hashes the object value, can call __hash__ if 'raw' is 0. */
+sk_hash ohash(VM* vm, Value value, uint8_t raw);
 
 
 /* Free object memory */

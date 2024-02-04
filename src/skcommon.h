@@ -21,7 +21,6 @@
 #include "sklimits.h"
 #include "skooma.h"
 
-#include <stdbool.h>
 #include <sys/types.h>
 
 /* Forward declare */
@@ -69,15 +68,15 @@ void _cleanupvm(VM** vm); // cleanup function signature
 
 
 /* Casting */
-#define cast_int(e) ((int)(e))
-#define cast_uint(e) ((unsigned int)(e))
+#define cast_int(e) ((int32_t)(e))
+#define cast_uint(e) ((uint32_t)(e))
 #define cast_intptr(e) ((intptr_t)(e))
 #define cast_double(e) ((double)(e))
 #define cast_char(e) ((char)(e))
 #define cast_uchar(e) ((unsigned char)(e))
 #define cast_charp(e) ((char*)(e))
-#define cast_lint(e) ((long int)(e))
-#define cast_hash(e) ((Hash)(e))
+#define cast_lint(e) ((int64_t)(e))
+#define cast_hash(e) ((sk_hash)(e))
 #define cast(type, expr) ((type)(expr))
 
 
@@ -111,9 +110,12 @@ typedef enum {
     SS_FALSE,
     /* Class overload-able method names. */
     SS_INIT,
+    SS_TOSTRING,
     SS_DISP,
     SS_GETIDX,
     SS_SETIDX,
+    SS_HASH,
+    SS_FREE,
 #if defined(SK_OVERLOAD_OPS)
     SS_ADD,
     SS_SUB,
@@ -153,7 +155,7 @@ typedef enum {
     SS_UNKNOWN,
     SS_CSRC,
     SS_SIZE,
-} SSTag;
+} sk_ss;
 
 typedef struct {
     const char* name;

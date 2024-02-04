@@ -95,6 +95,8 @@ typedef int64_t sk_lint;
 typedef uint64_t sk_ulint;
 /* Skooma (unsigned) size of objects in memory */
 typedef size_t sk_memsize;
+/* Skooma hash size */
+typedef sk_ulint sk_hash;
 /* --------------------------------------------------------------------- */
 
 
@@ -161,10 +163,13 @@ SK_API sk_number sk_version(VM* vm);
 
 /* ============== Class method/field tags ============== */
 typedef enum {
-    OM_INIT = 0,
-    OM_DISPLAY,
-    OM_GETIDX,
-    OM_SETIDX,
+    OM_INIT = 0, // __init__
+    OM_DISPLAY, // __display__
+    OM_TOSTRING, // __tostring__
+    OM_GETIDX, // __getidx__
+    OM_SETIDX, // __setidx__
+    OM_HASH, // __hash__
+    OM_FREE, // __free__
 #if defined(SK_OVERLOAD_OPS)
     OM_ADD,
     OM_SUB,
@@ -294,6 +299,7 @@ SK_API sk_memsize sk_strlen(const VM* vm, sk_int idx);
 
 
 /* ========== stack manipulation functions ========== */
+SK_API const char* sk_tostring(VM* vm, sk_int idx, sk_memsize* len, sk_hash* hash);
 SK_API void sk_settop(VM* vm, sk_int idx);
 SK_API sk_uint sk_gettop(const VM* vm);
 SK_API sk_uint sk_absidx(VM* vm, sk_int idx);
@@ -321,7 +327,7 @@ typedef enum {
     S_EFIXEDASSIGN, // assigning to fixed value
     S_EUDGLOBAL, // undefined global variable
     S_EGLOBALREDEF, // redefinition of global variable
-    S_EDISPLAY, // display method returned invalid value
+    S_EOMRET, // overload-able method invalid return type
     S_ECALL, // tried calling non-callable value
     S_ESTRFMT, // string format error
     S_ECOMP, // compile error

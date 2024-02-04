@@ -17,15 +17,15 @@
 #include "skarray.h"
 #include "skchunk.h"
 #include "skcommon.h"
+#include "skconf.h"
 #include "skdebug.h"
 #include "skerr.h"
 #include "sklexer.h"
+#include "sklimits.h"
+#include "skmath.h"
 #include "skmem.h"
 #include "skobject.h"
 #include "skparser.h"
-#include "skconf.h"
-#include "sklimits.h"
-#include "skmath.h"
 #include "skvalue.h"
 #include "skvm.h"
 
@@ -64,6 +64,7 @@ typedef enum {
     CE_NOSUPER,
     CE_OMSIG,
     CE_EXPSTM,
+    CE_NORET,
     CE_CNT,
 } CompErr;
 
@@ -93,6 +94,7 @@ const char* comperrors[CE_CNT] = {
     "\tCan't use 'super', class does not have a superclass.\n",
     "\tOverload-able method %s expects %d parameters, instead defined %d.\n",
     "\tInvalid statement, expect function call or assignment.\n",
+    "\tExpect ';' after explicit 'return' in '%s' (no return values).\n",
 };
 
 /* ----------------------------------------------------------- */ // Compile errors
@@ -632,12 +634,12 @@ static uint32_t globalvar(Function* F, Value identifier)
     Value idx;
     Variable glob = {UNDEFINED_VAL, F->vflags};
     VM* vm = F->vm;
-    if(!HashTable_get(&vm->globids, identifier, &idx)) {
+    if(!rawget(vm, &vm->globids, identifier, &idx)) {
         if(unlikely((vm)->globvars.len + 1 > PARSER_GVAR_LIMIT))
             error(F, comperrors[CE_GVARLIMIT], PARSER_GVAR_LIMIT);
         push(vm, identifier);
         idx = NUMBER_VAL(Array_Variable_push(&vm->globvars, glob));
-        HashTable_insert(vm, &vm->globids, identifier, idx);
+        rawset(vm, &vm->globids, identifier, idx);
         pop(vm);
     }
     return cast_uint(AS_NUMBER(idx));
@@ -1533,7 +1535,7 @@ static void method(Function* F)
     F->tag = id2omtag(F->vm, identifier); // set tag in case method is overload-able
     fn(F, FN_METHOD);
     if(F->tag != -1) CODEOP(F, OP_OVERLOAD, F->tag - SS_INIT);
-    CODEOP(F, OP_METHOD, idx);
+    else CODEOP(F, OP_METHOD, idx);
 }
 
 static void classdec(Function* F)
@@ -1689,7 +1691,7 @@ static force_inline void switchconstants(Function* F, SwitchState* state, Exp* E
             for(int32_t i = 0; i < cast_int(state->constants.len); i++) {
                 if(unlikely(raweq(state->constants.data[i], caseval))) {
                     const char* casename = NULL;
-                    if(E->type == EXP_STRING) casename = vtostr(F->vm, caseval)->storage;
+                    if(E->type == EXP_STRING) casename = vtostr(F->vm, caseval, 1)->storage;
                     else casename = dtostr(AS_NUMBER(caseval), &_);
                     error(F, comperrors[CE_SWDUP], casename);
                     return;
@@ -2054,12 +2056,16 @@ static void returnstm(Function* F)
     Context C;
     savecontext(F, &C);
     if(F->tag != -1) { // overload-able method ?
+        const char* method = F->vm->faststatic[F->tag]->storage;
         if(tagisnoret(F->tag)) {
-            if(F->tag == SS_INIT) CODEOP(F, OP_GET_LOCAL, 0);
-
-            expect(F, TOK_SEMICOLON, "Expect ';' after 'return'");
+            if(F->tag == SS_INIT) { // init is a function call in Skooma syntax
+                CODEOP(F, OP_GET_LOCAL, 0);
+                CODE(F, OP_RET1);
+            } else CODE(F, OP_RET0);
+            if(!match(F, TOK_SEMICOLON)) error(F, comperrors[CE_NORET], method);
         } else { // has return values
-            switch(F->tag - SS_INIT) {
+            sk_om tag = F->tag - SS_INIT;
+            switch(tag) {
                 case OM_DISPLAY:
                 case OM_GETIDX:
 #if defined(SK_OVERLOAD_OPS)
@@ -2081,7 +2087,7 @@ static void returnstm(Function* F)
                 {
                     Exp _; // dummy
                     _.ins.set = 0;
-                    expr(F, &_);
+                    explist(F, 1, &_);
                     expect(F, TOK_SEMICOLON, expectstr);
                     CODE(F, OP_RET1);
                     break;

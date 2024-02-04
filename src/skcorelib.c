@@ -1,7 +1,14 @@
 #include "skooma.h"
 
+#include <stdio.h>
+
 sk_int skcore_print(VM* vm)
 {
+    sk_int args = sk_gettop(vm);
+    while(args--) {
+
+        fputc('\t', stdout);
+    }
     return 0;
 }
 

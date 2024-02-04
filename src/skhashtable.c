@@ -28,7 +28,7 @@
 // Tombstone is a sentinel value indicating there was a collision,
 // its key value is VAL_EMPTY and its value is VAL_BOOL 'true'.
 #define IS_TOMBSTONE(entry) (IS_BOOL(entry->value) && AS_BOOL(entry->value))
-#define PLACE_TOMBSTONE(entry) (entry->value = BOOL_VAL(true))
+#define PLACE_TOMBSTONE(entry) (entry->value = BOOL_VAL(1))
 
 
 // Calculate and cache inserts until we need to expand the table.
@@ -67,13 +67,14 @@ void HashTable_init(HashTable* table)
 // Safety: There can't be an infinite cycle, because load factor is being
 // tracked. Hashing: For info about how each 'Value' gets hashed refer to the
 // [value.c].
-static force_inline Entry* Entry_find(Entry* entries, uint32_t capacity, Value key)
+static force_inline Entry*
+Entry_find(VM* vm, Entry* entries, uint32_t capacity, Value key, uint8_t raw)
 {
-    Hash hash = vhash(key);
+    sk_hash hash = vhash(vm, key, raw);
     uint32_t mask = capacity - 1; // 'capacity' is 2^n
     uint64_t index = hash & mask;
     Entry* tombstone = NULL;
-    while(true) {
+    while(1) {
         Entry* entry = &entries[index];
         if(IS_EMPTY(entry->key)) {
             if(!IS_TOMBSTONE(entry)) return (tombstone ? tombstone : entry);
@@ -90,7 +91,7 @@ static force_inline Entry* Entry_find(Entry* entries, uint32_t capacity, Value k
 uint8_t HashTable_next(VM* vm, HashTable* table, Value* key)
 {
     Entry* last = NULL;
-    Entry* e = Entry_find(table->entries, table->cap, *key);
+    Entry* e = Entry_find(vm, table->entries, table->cap, *key, 0);
     if(e == NULL || IS_EMPTY(e->key)) return 0;
     last = table->entries + table->cap;
     for(; e < last; e++) {
@@ -104,11 +105,11 @@ uint8_t HashTable_next(VM* vm, HashTable* table, Value* key)
 }
 
 // Rehash all the 'keys' from the 'src' table into the 'dest' table.
-void HashTable_into(VM* vm, HashTable* src, HashTable* dest)
+void HashTable_into(VM* vm, HashTable* src, HashTable* dest, uint8_t raw)
 {
     for(uint32_t i = 0; i < src->cap; i++) {
         Entry* entry = &src->entries[i];
-        if(!IS_EMPTY(entry->key)) HashTable_insert(vm, dest, entry->key, entry->value);
+        if(!IS_EMPTY(entry->key)) HashTable_insert(vm, dest, entry->key, entry->value, raw);
     }
 }
 
@@ -161,7 +162,7 @@ void internfmt(VM* vm, const char* fmt, ...)
 
 
 // Expands the table by rehashing all the keys into a new bigger table array.
-static force_inline void HashTable_expand(VM* vm, HashTable* table)
+static force_inline void HashTable_expand(VM* vm, HashTable* table, uint8_t raw)
 {
     uint32_t new_cap = GROW_ARRAY_CAPACITY(table->cap, TABLE_INITIAL_SIZE);
     Entry* entries = GC_MALLOC(vm, new_cap * sizeof(Entry));
@@ -172,7 +173,7 @@ static force_inline void HashTable_expand(VM* vm, HashTable* table)
     for(uint32_t i = 0; i < table->cap; i++) {
         Entry* entry = &table->entries[i];
         if(IS_EMPTY(entry->key)) continue;
-        Entry* dest = Entry_find(entries, new_cap, entry->key);
+        Entry* dest = Entry_find(vm, entries, new_cap, entry->key, raw);
         memcpy(dest, entry, sizeof(Entry));
     }
     if(table->entries != NULL) GC_FREE(vm, table->entries, table->cap * sizeof(Entry));
@@ -184,11 +185,11 @@ static force_inline void HashTable_expand(VM* vm, HashTable* table)
 // Insert 'key'/'value' pair into the table.
 // If the 'key' was not found insert it together with the 'value' and return
 // true. If the 'key' already exists overwrite the 'value' and return false.
-uint8_t HashTable_insert(VM* vm, HashTable* table, Value key, Value val)
+uint8_t HashTable_insert(VM* vm, HashTable* table, Value key, Value val, uint8_t raw)
 {
-    if(table->left == 0) HashTable_expand(vm, table);
-    Entry* entry = Entry_find(table->entries, table->cap, key);
-    bool new_key = IS_EMPTY(entry->key);
+    if(table->left == 0) HashTable_expand(vm, table, raw);
+    Entry* entry = Entry_find(vm, table->entries, table->cap, key, raw);
+    uint8_t new_key = IS_EMPTY(entry->key);
     if(new_key) {
         if(!IS_TOMBSTONE(entry))
             // Only decrement if this entry was never inserted into
@@ -203,26 +204,26 @@ uint8_t HashTable_insert(VM* vm, HashTable* table, Value key, Value val)
 // Remove 'key' from the table.
 // If the 'key' was found (and removed) return true and place the tombstone.
 // If the 'key' was not found return false.
-uint8_t HashTable_remove(HashTable* table, Value key)
+uint8_t HashTable_remove(VM* vm, HashTable* table, Value key, uint8_t raw)
 {
-    Entry* entry = Entry_find(table->entries, table->cap, key);
-    if(IS_EMPTY(entry->key)) return false;
+    Entry* entry = Entry_find(vm, table->entries, table->cap, key, raw);
+    if(IS_EMPTY(entry->key)) return 0;
     entry->key = EMPTY_VAL;
     PLACE_TOMBSTONE(entry);
     // Don't increment table->left, we
     // count tombstones as entries
     table->len--;
-    return true;
+    return 1;
 }
 
 // VM specific function, used for finding interned strings before creating
 // new 'ObjString' objects.
-OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash)
+OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, sk_hash hash)
 {
     if(table->len == 0) return NULL;
     uint64_t mask = table->cap - 1; // 'cap' is 2^n
     uint64_t index = hash & mask;
-    while(true) {
+    for(;;) {
         Entry* entry = &table->entries[index];
         if(IS_EMPTY(entry->key)) {
             if(!IS_TOMBSTONE(entry)) return NULL;
@@ -238,13 +239,13 @@ OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Has
 // Fetch 'Value' for given 'key'.
 // If 'key' was not found return false, otherwise copy the 'Value'
 // for the given 'key' into 'out' and return true.
-uint8_t HashTable_get(HashTable* table, Value key, Value* out)
+uint8_t HashTable_get(VM* vm, HashTable* table, Value key, Value* out, uint8_t raw)
 {
-    if(table->len == 0) return false;
-    Entry* entry = Entry_find(table->entries, table->cap, key);
-    if(IS_EMPTY(entry->key)) return false;
+    if(table->len == 0) return 0;
+    Entry* entry = Entry_find(vm, table->entries, table->cap, key, raw);
+    if(IS_EMPTY(entry->key)) return 0;
     *out = entry->value;
-    return true;
+    return 1;
 }
 
 // Free 'table' array and reinitialize the 'table'.

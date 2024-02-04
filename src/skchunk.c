@@ -85,7 +85,8 @@ static force_inline void Chunk_write_param24(Chunk* chunk, UInt param, UInt line
         "Invalid write to chunk bytecode array.");
 }
 
-static force_inline UInt Chunk_write_op(Chunk* chunk, OpCode code, bool islong, UInt idx, UInt line)
+static force_inline UInt
+Chunk_write_op(Chunk* chunk, OpCode code, uint8_t islong, UInt idx, UInt line)
 {
     UInt start = Chunk_write(chunk, code, line);
     if(!islong) Chunk_write(chunk, idx, line);
@@ -98,7 +99,7 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
 {
 #ifdef SK_PRECOMPUTED_GOTO
 #define OP_TABLE
-#include "jmptable.h"
+#include "skjmptable.h"
 #undef OP_TABLE
 #else
 #define DISPATCH(x) switch(x)
@@ -180,7 +181,7 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_FOREACH);
         CASE(OP_FOREACH_PREP);
         {
-            return Chunk_write_op(chunk, code, true, param, line);
+            return Chunk_write_op(chunk, code, 1, param, line);
         }
         CASE(OP_DEFINE_GLOBAL)
         CASE(OP_GET_GLOBAL)
@@ -189,7 +190,7 @@ UInt Chunk_write_codewparam(Chunk* chunk, OpCode code, UInt param, UInt line)
         CASE(OP_SET_LOCAL)
         CASE(OP_OVERLOAD)
         {
-            return Chunk_write_op(chunk, code, false, param, line);
+            return Chunk_write_op(chunk, code, 0, param, line);
         }
     }
 

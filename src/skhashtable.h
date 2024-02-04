@@ -40,15 +40,15 @@ typedef struct {
 void HashTable_init(HashTable* table);
 void HashTable_free(VM* vm, HashTable* table);
 
-uint8_t HashTable_insert(VM* vm, HashTable* table, Value key, Value value);
-uint8_t HashTable_remove(HashTable* table, Value key);
+uint8_t HashTable_insert(VM* vm, HashTable* table, Value key, Value value, uint8_t raw);
+uint8_t HashTable_remove(VM* vm, HashTable* table, Value key, uint8_t raw);
 
-uint8_t HashTable_get(HashTable* table, Value key, Value* out);
-OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, Hash hash);
+uint8_t HashTable_get(VM* vm, HashTable* table, Value key, Value* out, uint8_t raw);
+OString* HashTable_get_intern(HashTable* table, const char* str, size_t len, sk_hash hash);
 uint8_t HashTable_next(VM* vm, HashTable* table, Value* key);
 
 
-void HashTable_into(VM* vm, HashTable* from, HashTable* to);
+void HashTable_into(VM* vm, HashTable* from, HashTable* to, uint8_t raw);
 
 
 uint32_t resizetable(uint32_t wanted);
@@ -58,9 +58,13 @@ void internliteral(VM* vm, const char* string);
 void internfmt(VM* vm, const char* fmt, ...);
 
 
+// table access
+#define tableget(vm, table, key, out) (HashTable_get(vm, table, key, out, 0))
+#define tableset(vm, table, key, value) (HashTable_insert(vm, table, key, value, 0))
 
 // Raw table access
-#define rawget(table, key, out) (HashTable_get(table, key, out))
-#define rawset(table, key, value) (HashTable_insert(vm, table, key, value))
+#define rawget(vm, table, key, out) (HashTable_get(vm, table, key, out, 1))
+#define rawset(vm, table, key, value) (HashTable_insert(vm, table, key, value, 1))
+
 
 #endif

@@ -408,7 +408,7 @@ SK_API void sk_pushclass(VM* vm, sk_entry entries[], sk_uint nup)
         if(tag == -1) { // not overload ?
             ONative* native = auxpushcclosure(vm, entry->fn, entry->args, entry->isvararg, nup);
             *stackpeek(0) = OBJ_VAL(native);
-            rawset(&oclass->methods, OBJ_VAL(name), OBJ_VAL(native));
+            rawset(vm, &oclass->methods, OBJ_VAL(name), OBJ_VAL(native));
             pop(vm); // native
         } else { // overloaded, override 'arity' and 'isvararg'
             ONative* native = auxpushcclosure(vm, entry->fn, ominfo[tag].arity, 0, nup);
@@ -454,7 +454,7 @@ SK_API sk_byte sk_getfield(VM* vm, sk_int idx, const char* field)
         OInstance* instance = AS_INSTANCE(insval);
         Value key = OBJ_VAL(OString_new(vm, field, strlen(field)));
         Value fieldval;
-        if((res = rawget(&instance->fields, key, &fieldval))) skapi_pushval(vm, fieldval);
+        if((res = rawget(vm, &instance->fields, key, &fieldval))) skapi_pushval(vm, fieldval);
     }
     sk_unlock(vm);
     return res;
@@ -475,8 +475,9 @@ SK_API sk_byte sk_getindex(VM* vm, sk_int idx)
     sk_lock(vm);
     skapi_checkelems(vm, 1); // [index]
     Value* index = stackpeek(0);
-    res = callomgetidx(vm, *idx2val(vm, idx));
-    *index = *--vm->sp; // replace [index] with result
+    Value value = *idx2val(vm, idx);
+    res = calloverload(vm, value, OM_GETIDX);
+    *index = pop(vm); // replace [index] with result
     sk_unlock(vm);
     return res;
 }
@@ -494,8 +495,9 @@ SK_API sk_byte sk_setindex(VM* vm, sk_int idx)
     sk_byte res = 0;
     sk_lock(vm);
     skapi_checkelems(vm, 2); // [index][expr]
-    res = callomsetidx(vm, *idx2val(vm, idx));
-    vm->sp -= 2; // pop [index] and [expr]
+    Value value = *idx2val(vm, idx);
+    res = calloverload(vm, value, OM_SETIDX);
+    popn(vm, 2); // pop [index] and [expr]
     sk_unlock(vm);
     return res;
 }
@@ -538,7 +540,7 @@ SK_API sk_byte sk_getglobal(VM* vm, const char* name)
     Value gval;
     skapi_checkptr(vm, name);
     OString* str = OString_new(vm, name, strlen(name));
-    if(rawget(&vm->globids, OBJ_VAL(str), &gval)) {
+    if(rawget(vm, &vm->globids, OBJ_VAL(str), &gval)) {
         sk_int idx = (sk_int)AS_NUMBER(gval);
         skapi_pushval(vm, vm->globvars.data[idx].value);
         res = 1;
@@ -816,6 +818,26 @@ SK_API void sk_dumpstack(VM* vm)
 
 
 
+/* Converts value on the stack at the 'idx' into string.
+ * Additionally if the 'len' and/or 'hash' are non-NULL then
+ * it also fills them.
+ * This can call overload-able method '__tostring__'. */
+SK_API const char* sk_tostring(VM* vm, sk_int idx, sk_memsize* len, sk_hash* hash)
+{
+    const char* str = NULL;
+    sk_lock(vm);
+    Value* v = idx2val(vm, idx);
+    OString* ostr = vtostr(vm, *v, 0);
+    *v = OBJ_VAL(ostr);
+    str = ostr->storage;
+    *len = ostr->len;
+    *hash = ostr->hash;
+    sk_unlock(vm);
+    return str;
+}
+
+
+
 /* Sets the new stack top relative to the current function */
 SK_API void sk_settop(VM* vm, sk_int idx)
 {
@@ -855,15 +877,18 @@ SK_API sk_byte sk_setglobal(VM* vm, const char* name, sk_int isfixed)
     Value key = OBJ_VAL(OString_new(vm, name, strlen(name)));
     sk_byte isnew = 0;
     Value gidx;
-    if((isnew = !rawget(&vm->globids, key, &gidx))) {
+    if((isnew = !rawget(vm, &vm->globids, key, &gidx))) {
         skapi_pushval(vm, key);
         Variable gvar = {newval, 0x01 & isfixed};
         Value idx = NUMBER_VAL(Array_Variable_push(&vm->globvars, gvar));
-        rawset(&vm->globids, key, idx);
+        rawset(vm, &vm->globids, key, idx);
         popn(vm, 2); // value and key
     } else {
         Variable* gvar = Array_Variable_index(&vm->globvars, AS_NUMBER(gidx));
-        if(unlikely(ISFIXED(gvar))) fixederror(vm, vtostr(vm, gvar->value)->storage);
+        if(unlikely(ISFIXED(gvar))) {
+            const char* name = vtostr(vm, gvar->value, 0)->storage;
+            fixederror(vm, name);
+        }
         gvar->value = newval;
         pop(vm); // value
     }
@@ -887,7 +912,7 @@ SK_API sk_byte sk_setfield(VM* vm, sk_int idx, const char* field)
     skapi_check(vm, IS_INSTANCE(insval), "expect class instance");
     OInstance* instance = AS_INSTANCE(insval);
     skapi_pushcstr(vm, field);
-    sk_byte res = rawset(&instance->fields, *stackpeek(0), *stackpeek(1));
+    sk_byte res = rawset(vm, &instance->fields, *stackpeek(0), *stackpeek(1));
     vm->sp -= 2; // pop value and key
     sk_unlock(vm);
     return res;
@@ -903,19 +928,6 @@ SK_API sk_panic sk_setpanic(VM* vm, sk_panic panicfn)
     vm->hooks.panic = panicfn;
     sk_unlock(vm);
     return old_panic;
-}
-
-
-
-/* Convert a value on the stack at 'idx' into string. */
-SK_API const char* sk_stringify(VM* vm, sk_int idx)
-{
-    sk_lock(vm);
-    Value* slot = idx2val(vm, idx);
-    Value value = *slot;
-    if(!IS_STRING(value)) *slot = OBJ_VAL(vtostr(vm, value));
-    sk_unlock(vm);
-    return AS_CSTRING(*slot);
 }
 
 

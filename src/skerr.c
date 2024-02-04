@@ -64,8 +64,8 @@ sk_noret ordererror(VM* vm, Value a, Value b)
 sk_noret binoperror(VM* vm, Value a, Value b, sk_om op)
 {
     static const char* fmt = "Attempt to perform binary %s on %s (left) and %s (right).";
-    push(vm, OBJ_VAL(vtostr(vm, a)));
-    push(vm, OBJ_VAL(vtostr(vm, b)));
+    push(vm, OBJ_VAL(vtostr(vm, a, 0)));
+    push(vm, OBJ_VAL(vtostr(vm, b, 0)));
     const char* operation = vm->faststatic[op + SS_OPADD]->storage;
     const char* left = AS_CSTRING(*stackpeek(1));
     const char* right = AS_CSTRING(*stackpeek(0));
@@ -77,7 +77,7 @@ sk_noret binoperror(VM* vm, Value a, Value b, sk_om op)
 sk_noret unoperror(VM* vm, Value a, sk_om op)
 {
     static const char* fmt = "Attempt to perform unary '%s' on %s.";
-    push(vm, OBJ_VAL(vtostr(vm, a)));
+    push(vm, OBJ_VAL(vtostr(vm, a, 0)));
     const char* operation = vm->faststatic[op + SS_OPADD]->storage;
     const char* operand = AS_CSTRING(*stackpeek(0));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, operation, operand)));
@@ -85,20 +85,19 @@ sk_noret unoperror(VM* vm, Value a, sk_om op)
 }
 
 
-sk_noret disperror(VM* vm, Value result)
+sk_noret omreterror(VM* vm, const char* what, sk_om tag)
 {
-    static const char* fmt = "Display method must return a string, instead got %s.";
-    push(vm, OBJ_VAL(vtostr(vm, result)));
-    const char* resultstring = AS_CSTRING(*stackpeek(0));
-    push(vm, OBJ_VAL(OString_fmt(vm, fmt, resultstring)));
-    runerror(vm, S_EDISPLAY);
+    static const char* fmt = "%s method must return value of type %s.";
+    const char* method = vm->faststatic[tag + SS_INIT]->storage;
+    push(vm, OBJ_VAL(OString_fmt(vm, fmt, what, method)));
+    runerror(vm, S_EOMRET);
 }
 
 
 sk_noret ofmterror(VM* vm, int8_t c, Value callee)
 {
     static const char* fmt = "Invalid format specifier '%%%c' for '%s'";
-    push(vm, OBJ_VAL(vtostr(vm, callee)));
+    push(vm, OBJ_VAL(vtostr(vm, callee, 0)));
     const char* fn = AS_CSTRING(*stackpeek(0));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, c, fn)));
     runerror(vm, S_ESTRFMT);
@@ -151,8 +150,8 @@ sk_noret fcovferror(VM* vm)
 
 sk_noret callerror(VM* vm, Value callee)
 {
-    static const char* fmt = "Tried calling non-callable value %s.";
-    push(vm, OBJ_VAL(vtostr(vm, callee)));
+    static const char* fmt = "Tried calling non-callable value '%s'.";
+    push(vm, OBJ_VAL(vtostr(vm, callee, 0)));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stackpeek(0)))));
     runerror(vm, S_ECALL);
 }
@@ -161,7 +160,7 @@ sk_noret callerror(VM* vm, Value callee)
 sk_noret ipaerror(VM* vm, Value notinstance)
 {
     static const char* fmt = "Invalid property access, tried accessing property on %s";
-    push(vm, OBJ_VAL(vtostr(vm, notinstance)));
+    push(vm, OBJ_VAL(vtostr(vm, notinstance, 1)));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stackpeek(0)))));
     runerror(vm, S_EPACCESS);
 }
@@ -202,7 +201,7 @@ sk_noret nilidxerror(VM* vm)
 sk_noret inheriterror(VM* vm, Value notclass)
 {
     static const char* fmt = "Can't inherit from '%s', value must be class object.";
-    push(vm, OBJ_VAL(vtostr(vm, notclass)));
+    push(vm, OBJ_VAL(vtostr(vm, notclass, 1)));
     push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stackpeek(0)))));
     runerror(vm, S_EINHERIT);
 }

@@ -35,7 +35,7 @@
         (vm)->gray_stack = NULL;                                                                   \
         (vm)->gslen = 0;                                                                           \
         (vm)->gscap = 0;                                                                           \
-    } while(false)
+    } while(0)
 
 #define GSARRAY_PUSH(vm, objref)                                                                   \
     ({                                                                                             \
@@ -71,7 +71,7 @@
     do {                                                                                           \
         free((vm)->gray_stack);                                                                    \
         GSARRAY_INIT(vm);                                                                          \
-    } while(false)
+    } while(0)
 
 
 

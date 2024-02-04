@@ -57,7 +57,7 @@ typedef uint64_t Value;
 #define OBJECT_TAG 0x05 // 'O*' is on 8 byte alignment (first 3 bits are 0)
 
 #define AS_OBJ(val) ((O*)((uintptr_t)((val) & 0x0000fffffffffff8)))
-#define AS_BOOL(val) ((bool)((val) == TRUE_VAL))
+#define AS_BOOL(val) ((uint8_t)((val) == TRUE_VAL))
 #define AS_NUMBER(val) (vton(val))
 #define AS_NUMBER_REF(val) *(val)
 
@@ -136,8 +136,8 @@ typedef enum {
 typedef struct {
     ValueType type;
     union {
-        bool boolean;
-        double number;
+        uint8_t boolean;
+        sk_number number;
         O* object;
     } as;
 } Value;
@@ -185,7 +185,7 @@ sk_tt val2type(Value value);
 
 
 /* Get/Create string object from value */
-OString* vtostr(VM* vm, Value value);
+OString* vtostr(VM* vm, Value* vstk, Value value, uint8_t raw);
 
 
 /* cstring from number */
@@ -199,11 +199,11 @@ OString* btostr(VM* vm, int b);
 
 
 /* Print value */
-void vprint(VM* vm, Value value, FILE* stream);
+void vprint(VM* vm, Value value, uint8_t raw, FILE* stream);
 
 
 /* Hash value */
-Hash vhash(Value value);
+sk_hash vhash(VM* vm, Value value, uint8_t raw);
 
 
 #endif

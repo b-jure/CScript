@@ -15,13 +15,14 @@
  * ----------------------------------------------------------------------------------------------*/
 
 #include "skcommon.h"
+#include "skconf.h"
 #include "skerr.h"
 #include "skhashtable.h"
+#include "skmath.h"
 #include "skmem.h"
 #include "skobject.h"
-#include "skconf.h"
-#include "stdarg.h"
 #include "skvalue.h"
+#include "stdarg.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,28 +39,31 @@
 
 
 
+// @TODO: Update 'calloverload()'
 /* Call info for overload-able methods */
 const Tuple ominfo[] = {
   // {arity, retcnt}
-    {0, 0}, // __init__
-    {1, 1}, // __display__
-    {2, 1}, // __getidx__
-    {3, 0}, // __setidx__
+    {1, 1}, // __init__     { args: self             - return: instance }
+    {1, 1}, // __tostring__ { args: self             - return: string }
+    {2, 1}, // __getidx__   { args: self, idx        - return: value }
+    {3, 0}, // __setidx__   { args: self, idx, value - return: none }
+    {1, 1}, // __hash__     { args: self             - return: number }
+    {1, 0}, // __free__     { args: self             - return: none }
 #if defined(SK_OVERLOAD_OPS)
-    {2, 1}, // __add__
-    {2, 1}, // __sub__
-    {2, 1}, // __mul__
-    {2, 1}, // __div__
-    {2, 1}, // __mod__
-    {2, 1}, // __pow__
-    {1, 1}, // __not__
-    {1, 1}, // __umin__
-    {2, 1}, // __ne__
-    {2, 1}, // __eq__
-    {2, 1}, // __lt__
-    {2, 1}, // __le__
-    {2, 1}, // __gt__
-    {2, 1}, // __ge__
+    {3, 1}, // __add__  { args: self, lhs, rhs - return: value }
+    {3, 1}, // __sub__  { args: self, lhs, rhs - return: value }
+    {3, 1}, // __mul__  { args: self, lhs, rhs - return: value }
+    {3, 1}, // __div__  { args: self, lhs, rhs - return: value }
+    {3, 1}, // __mod__  { args: self, lhs, rhs - return: value }
+    {3, 1}, // __pow__  { args: self, lhs, rhs - return: value }
+    {2, 1}, // __not__  { args: self, lhs      - return: value }
+    {2, 1}, // __umin__ { args: self, lhs      - return: value }
+    {3, 1}, // __ne__   { args: self, lhs, rhs - return: value }
+    {3, 1}, // __eq__   { args: self, lhs, rhs - return: value }
+    {3, 1}, // __lt__   { args: self, lhs, rhs - return: value }
+    {3, 1}, // __le__   { args: self, lhs, rhs - return: value }
+    {3, 1}, // __gt__   { args: self, lhs, rhs - return: value }
+    {3, 1}, // __ge__   { args: self, lhs, rhs - return: value }
 #endif
 };
 
@@ -69,7 +73,7 @@ static force_inline O* onew(VM* vm, size_t size, OType type)
 {
     O* object = GC_MALLOC(vm, size);
     object->header = cast(uint64_t, vm->objects) | (cast(uint64_t, type) << 56);
-    osetmark(object, false);
+    osetmark(object, 0);
     vm->objects = object; // Add object to the GC list
 #ifdef DEBUG_LOG_GC
     printf("%p allocate %zu for ", (void*)object, size);
@@ -80,7 +84,8 @@ static force_inline O* onew(VM* vm, size_t size, OType type)
 }
 
 
-/* Note: Objects with the same pointer are the same object. */
+/* Note: Objects with the same pointer are the same
+ * objects in memory... */
 int32_t id2omtag(VM* vm, Value id)
 {
     uintptr_t ptr = cast(uintptr_t, AS_STRING(id));
@@ -100,7 +105,7 @@ static force_inline OString* OString_alloc(VM* vm, uint32_t len)
 
 OString* OString_new(VM* vm, const char* chars, size_t len)
 {
-    Hash hash = stringhash(chars, len, vm->seed);
+    sk_hash hash = stringhash(chars, len, vm->seed);
     OString* interned = HashTable_get_intern(&vm->weakrefs, chars, len, hash);
     if(interned) return interned; // Return interned string
     OString* string = OString_alloc(vm, len);
@@ -111,7 +116,7 @@ OString* OString_new(VM* vm, const char* chars, size_t len)
     string->storage[len] = '\0';
     string->hash = hash;
     push(vm, OBJ_VAL(string));
-    HashTable_insert(vm, &vm->weakrefs, OBJ_VAL(string), NIL_VAL);
+    rawset(vm, &vm->weakrefs, OBJ_VAL(string), NIL_VAL);
     pop(vm);
     return string;
 }
@@ -141,14 +146,14 @@ OString* OString_fmt_from(VM* vm, const char* fmt, va_list argp)
             case 'n': /* sk_number (as double) */
             {
                 fmttype = "%g";
-                goto sknum;
+                goto l_sknum;
             }
             case 'f': /* sk_number (as float) */
             {
                 fmttype = "%f";
-                goto sknum;
+                goto l_sknum;
             }
-            sknum: {
+            l_sknum: {
                 sk_number n = va_arg(argp, sk_number);
                 Array_Byte_ensure(&buff, SK_NDIGITS);
                 char* s = cast_charp(&buff.data[buff.len]);
@@ -218,63 +223,6 @@ OString* concatenate(VM* vm, Value l, Value r)
 }
 
 
-OString* unescape(VM* vm, OString* string)
-{
-    Array_Byte new;
-    Array_Byte_init(&new, vm);
-    Array_Byte_init_cap(&new, string->len + 1);
-    for(uint32_t i = 0; i < string->len; i++) {
-        switch(string->storage[i]) {
-            case '\n':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, 'n');
-                break;
-            case '\0':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, '0');
-                break;
-            case '\a':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, 'a');
-                break;
-            case '\b':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, 'b');
-                break;
-            case '\33':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, 'e');
-                break;
-            case '\f':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, 'f');
-                break;
-            case '\r':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, 'r');
-                break;
-            case '\t':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, 't');
-                break;
-            case '\v':
-                Array_Byte_push(&new, '\\');
-                Array_Byte_push(&new, 'v');
-                break;
-            default: Array_Byte_push(&new, string->storage[i]);
-        }
-    }
-    OString* unescaped = OString_new(vm, (void*)new.data, new.len);
-    push(vm, OBJ_VAL(unescaped));
-    Array_Byte_free(&new, NULL);
-    pop(vm);
-    return unescaped;
-}
-
-
-
-
-// TODO: Different constructor if constructing using C API
 ONative*
 ONative_new(VM* vm, OString* name, sk_cfunc fn, int32_t arity, uint8_t isvararg, uint32_t upvalc)
 {
@@ -318,7 +266,8 @@ static force_inline void ObjFunction_free(VM* vm, OFunction* fn)
 
 static force_inline void fnprint(OFunction* fn, FILE* stream)
 {
-    if(unlikely(fn->p.name == NULL)) fprintf(stream, "<script>");
+    if(unlikely(fn->p.name == NULL))
+        fprintf(stream, "<script-fn %s>: %p", fn->p.source->storage, fn);
     else fprintf(stream, "<fn %s>: %p", fn->p.name->storage, fn);
 }
 
@@ -443,16 +392,24 @@ sdebug void otypeprint(OType type)
 
 
 /* Hash object value */
-Hash ohash(Value value)
+sk_hash ohash(VM* vm, Value value, uint8_t raw)
 {
     switch(OBJ_TYPE(value)) {
         case OBJ_STRING: return AS_STRING(value)->hash;
-        default: return ptrhash(cast(const void*, AS_OBJ(value)));
+        default: {
+            sk_hash hash = 0;
+            if(!raw && calloverload(vm, value, OM_HASH)) {
+                Value result = *stackpeek(0);
+                if(!IS_NUMBER(result)) omreterror(vm, "number", OM_HASH);
+                hash = sk_floor(AS_NUMBER(*stackpeek(0)));
+            } else hash = ptrhash(cast(const void*, AS_OBJ(value)));
+            return hash;
+        }
     }
 }
 
 
-/* Free object memory */
+/* Free object memory, invokes '__free__' if defined. */
 void ofree(VM* vm, O* object)
 {
 #ifdef DEBUG_LOG_GC
@@ -462,7 +419,7 @@ void ofree(VM* vm, O* object)
 #endif
 #ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
-#include "jmptable.h"
+#include "skjmptable.h"
 #undef OBJ_TABLE
 #else
 #define DISPATCH(x) switch(x)
@@ -503,7 +460,9 @@ void ofree(VM* vm, O* object)
         }
         CASE(OBJ_INSTANCE)
         {
-            OInstance_free(vm, cast(OInstance*, object));
+            OInstance* instance = cast(OInstance*, object);
+            calloverload(vm, OBJ_VAL(instance), OM_FREE); // try call '__free__'
+            OInstance_free(vm, instance);
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
@@ -524,54 +483,6 @@ void ofree(VM* vm, O* object)
 
 
 
-/* =============== call overload-able methods =============== */
-
-uint8_t callomdisplay(VM* vm, Value instance)
-{
-    O* fn = getomethod(vm, instance, OM_DISPLAY);
-    if(fn) {
-        Value* retstart = vm->sp;
-        push(vm, instance); // 'self'
-        ncall(vm, retstart, OBJ_VAL(fn), ominfo[OM_DISPLAY].retcnt);
-        Value top = *stackpeek(0);
-        if(unlikely(!IS_STRING(top))) disperror(vm, top);
-        return 1;
-    }
-    return 0;
-}
-
-uint8_t callomgetidx(VM* vm, Value instance)
-{
-    O* fn = getomethod(vm, instance, OM_GETIDX);
-    if(fn) {
-        Value* idx = stackpeek(0); // index value
-        Value* retstart = vm->sp;
-        push(vm, instance); // 'self'
-        push(vm, *idx);
-        ncall(vm, retstart, OBJ_VAL(fn), ominfo[OM_GETIDX].retcnt);
-        return 1;
-    }
-    return 0;
-}
-
-uint8_t callomsetidx(VM* vm, Value instance)
-{
-    O* fn = getomethod(vm, instance, OM_SETIDX);
-    if(fn) {
-        Value* idx = stackpeek(1); // index value
-        Value* rhs = stackpeek(0); // right side expression
-        Value* retstart = vm->sp;
-        push(vm, instance); // 'self'
-        push(vm, *idx);
-        push(vm, *rhs);
-        ncall(vm, retstart, OBJ_VAL(fn), 1);
-        vm->sp--; // pop nil
-    }
-    return 0;
-}
-
-
-
 
 /* =============== raw access =============== */
 
@@ -579,14 +490,14 @@ static force_inline uint8_t
 rawgetproperty(VM* vm, OInstance* instance, Value key, Value* out, uint8_t what)
 {
     HashTable* table = rawgettable(vm, instance, what);
-    return rawget(table, key, out);
+    return rawget(vm, table, key, out);
 }
 
 static force_inline uint8_t
 rawsetproperty(VM* vm, OInstance* instance, Value key, Value value, uint8_t what)
 {
     HashTable* table = rawgettable(vm, instance, what);
-    return rawset(table, key, value);
+    return rawset(vm, table, key, value);
 }
 
 
@@ -596,19 +507,17 @@ rawsetproperty(VM* vm, OInstance* instance, Value key, Value value, uint8_t what
 uint8_t rawindex(VM* vm, Value value, uint8_t what)
 {
     OInstance* instance = AS_INSTANCE(value);
-    Value* idxstk = NULL;
     Value idx, out;
     uint8_t res = 0;
     if(what == SK_RAWSET) {
         Value rhs = *stackpeek(0); // rhs
-        idxstk = stackpeek(1);
-        idx = *idxstk;
+        idx = *stackpeek(1);
         if(unlikely(IS_NIL(idx))) nilidxerror(vm);
         rawsetproperty(vm, instance, idx, rhs, 0);
-        vm->sp -= 2; // pop [index] and [rhs]
+        popn(vm, 2); // pop [index] and [rhs]
         res = 1;
     } else {
-        idxstk = stackpeek(0);
+        Value* idxstk = stackpeek(0);
         if(unlikely(IS_NIL(idx))) nilidxerror(vm);
         if(rawgetproperty(vm, instance, idx, &out, 0) || rawgetproperty(vm, instance, idx, &out, 1))
         {
@@ -619,14 +528,42 @@ uint8_t rawindex(VM* vm, Value value, uint8_t what)
     return res;
 }
 
+/* ---------------------------------------------------- */
 
 
 
+
+
+
+/* =============== call overload-able methods =============== */
+
+uint8_t calloverload(VM* vm, Value instance, sk_om tag)
+{
+    O* const fn = getomethod(vm, instance, tag);
+    if(fn) {
+        Value* const retstart = vm->sp;
+        const int32_t retcnt = ominfo[tag].retcnt;
+        const int32_t arity = ominfo[tag].arity;
+        push(vm, instance); // push 'self'
+        for(int32_t i = 1; i <= arity; i++) // push args
+            push(vm, *stackpeek(arity - i));
+        ncall(vm, retstart, OBJ_VAL(fn), retcnt);
+        return 1;
+    }
+    return 0;
+}
+
+/* ---------------------------------------------------- */
+
+
+
+
+
+
+#if defined(SK_OVERLOAD_OPS)
 
 
 /* =============== operator overloading =============== */
-
-#if defined(SK_OVERLOAD_OPS)
 
 /* Tries to call class overloaded unary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
@@ -673,6 +610,8 @@ void otryop(VM* vm, Value lhs, Value rhs, sk_om op, Value* res)
         if(unlikely(!callbinop(vm, lhs, rhs, op, res))) binoperror(vm, lhs, rhs, op - OM_ADD);
     } else if(unlikely(!callunop(vm, lhs, op, res))) unoperror(vm, lhs, op - OM_ADD);
 }
+
+/* ---------------------------------------------------- */
 
 
 
@@ -740,11 +679,9 @@ void oge(VM* vm, Value lhs, Value rhs)
     else omcallorder(vm, lhs, rhs, OM_GE);
 }
 
-/* ---------------------------------------------------- */ // ordering
+/* ---------------------------------------------------- */
 
 #endif // if defined(SK_OVERLOAD_OPS)
-
-/* ---------------------------------------------------- */ // operator overloading
 
 
 
@@ -752,61 +689,76 @@ void oge(VM* vm, Value lhs, Value rhs)
 
 
 /* Get object string from 'object' */
-OString* otostr(VM* vm, O* object)
+OString* otostr(VM* vm, Value* ostk, Value oval, uint8_t raw)
 {
 #ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
-#include "jmptable.h"
+#include "skjmptable.h"
 #undef OBJ_TABLE
 #else
 #define DISPATCH(x) switch(x)
 #define CASE(label) case label:
 #endif
-    DISPATCH(otype(object))
+    OString* ostr = NULL;
+    DISPATCH(otype(AS_OBJ(*ostk)))
     {
         CASE(OBJ_STRING)
         {
-            return cast(OString*, object);
+            ostr = AS_STRING(oval);
+            goto l_ret;
         }
         CASE(OBJ_FUNCTION)
         {
-            return cast(OFunction*, object)->p.name;
+            ostr = AS_FUNCTION(oval)->p.name;
+            goto l_ret;
         }
         CASE(OBJ_CLOSURE)
         {
-            return cast(OClosure*, object)->fn->p.name;
+            ostr = AS_CLOSURE(oval)->fn->p.name;
+            goto l_ret;
         }
         CASE(OBJ_NATIVE)
         {
-            return cast(ONative*, object)->p.name;
+            ostr = AS_NATIVE(oval)->p.name;
+            goto l_ret;
         }
         CASE(OBJ_UPVAL)
-        {
-            return vtostr(vm, cast(OUpvalue*, object)->closed);
+        { // recursion
+            return vtostr(vm, ostk, AS_UPVAL(oval)->closed, raw);
         }
         CASE(OBJ_CLASS)
         {
-            return cast(OClass*, object)->name;
+            ostr = AS_CLASS(oval)->name;
+            goto l_ret;
         }
         CASE(OBJ_INSTANCE)
         {
-            OInstance* instance = cast(OInstance*, object);
-            if(callomdisplay(vm, OBJ_VAL(instance))) { // display ?
-                return AS_STRING(*stackpeek(0));
+            if(!raw && calloverload(vm, oval, OM_TOSTRING)) {
+                Value result = *stackpeek(0);
+                if(!IS_STRING(result)) omreterror(vm, "string", OM_TOSTRING);
+                *ostk = pop(vm);
+                return AS_STRING(result);
             } else {
+                OInstance* instance = AS_INSTANCE(oval);
                 Value debug;
                 Value key = OBJ_VAL(vm->faststatic[SS_DBG]);
-                if(rawget(&instance->fields, key, &debug) && IS_STRING(debug)) // debug ?
-                    return AS_STRING(debug);
-                return instance->oclass->name; // default
+                if(rawget(vm, &instance->fields, key, &debug) && IS_STRING(debug)) {
+                    *ostk = debug;
+                    return AS_STRING(debug); // have debug name
+                }
+                return AS_STRING(*ostk = OBJ_VAL(instance->oclass->name));
             }
         }
         CASE(OBJ_BOUND_METHOD)
         {
-            return cast(OBoundMethod*, object)->method->fn->p.name;
+            ostr = AS_BOUND_METHOD(oval)->method->fn->p.name;
+            goto l_ret;
         }
     }
-    unreachable;
+l_ret:
+    *ostk = OBJ_VAL(ostr);
+    return ostr;
+
 #ifdef SKJMPTABLE_H
 #undef SKJMPTABLE_H
 #endif
@@ -814,11 +766,11 @@ OString* otostr(VM* vm, O* object)
 
 
 /* Print the object value */
-void oprint(VM* vm, Value value, FILE* stream)
+void oprint(VM* vm, Value value, uint8_t raw, FILE* stream)
 {
 #ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
-#include "jmptable.h"
+#include "skjmptable.h"
 #undef OBJ_TABLE
 #else
 #define DISPATCH(x) switch(x)
@@ -848,9 +800,9 @@ void oprint(VM* vm, Value value, FILE* stream)
             BREAK;
         }
         CASE(OBJ_UPVAL)
-        {
+        { // recursion
             OUpvalue* upval = AS_UPVAL(value);
-            vprint(vm, *upval->location, stream);
+            vprint(vm, *upval->location, raw, stream);
             BREAK;
         }
         CASE(OBJ_CLASS)
@@ -860,14 +812,25 @@ void oprint(VM* vm, Value value, FILE* stream)
         }
         CASE(OBJ_INSTANCE)
         {
-            if(callomdisplay(vm, value)) {
+            if(!raw && calloverload(vm, value, OM_TOSTRING)) { // have '__tostring__' ?
+                Value result = *stackpeek(0);
+                if(!IS_STRING(result)) omreterror(vm, "string", OM_TOSTRING);
                 fprintf(stream, "%s", AS_CSTRING(*stackpeek(0)));
-            } else
-                fprintf(
-                    stream,
-                    "%p-%s instance",
-                    AS_OBJ(value),
-                    AS_INSTANCE(value)->oclass->name->storage);
+                pop(vm); // pop result
+            } else { // no overload
+                OInstance* instance = AS_INSTANCE(value);
+                Value debug;
+                Value key = OBJ_VAL(vm->faststatic[SS_DBG]);
+                if(rawget(vm, &instance->fields, key, &debug) && IS_STRING(debug)) {
+                    fprintf(stream, "%s", AS_CSTRING(debug)); // __debug field
+                } else { // default print
+                    fprintf(
+                        stream,
+                        "%p-%s instance",
+                        AS_OBJ(value),
+                        AS_INSTANCE(value)->oclass->name->storage);
+                }
+            }
             BREAK;
         }
         CASE(OBJ_BOUND_METHOD)
@@ -902,9 +865,12 @@ const InternedString static_strings[] = {
     {"false",              SSS("false")             },
  /* Class overload-able method names. */
     {"__init__",           SSS("__init__")          },
+    {"__tostring__",       SSS("__tostring__")      },
     {"__display__",        SSS("__display__")       },
     {"__getidx__",         SSS("__getidx__")        },
     {"__setidx__",         SSS("__setidx__")        },
+    {"__hash__",           SSS("__hash__")          },
+    {"__free__",           SSS("__free__")          },
 #if defined(SK_OVERLOAD_OPS)  // operator overloading enabled?
   /* Overload-able arithmetic operators */
     {"__add__",            SSS("__add__")           },

@@ -47,8 +47,8 @@ sk_noret binoperror(VM* vm, Value a, Value b, sk_om op);
 /* Unary arithmetic operation error */
 sk_noret unoperror(VM* vm, Value a, sk_om op);
 
-/* Display method (__display__) error */
-sk_noret disperror(VM* vm, Value result);
+/* Overload-able method didn't return valid type (what) error */
+sk_noret omreterror(VM* vm, const char* what, sk_om tag);
 
 /* Object string format error */
 sk_noret ofmterror(VM* vm, int8_t c, Value callee);

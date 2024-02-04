@@ -19,10 +19,8 @@
 
 #include "skcommon.h"
 
-typedef uint64_t Hash;
-
-Hash dblhash(sk_number dbl);
-Hash stringhash(const char* str, size_t len, unsigned long seed);
-Hash ptrhash(const void* ptr);
+sk_hash dblhash(sk_number dbl);
+sk_hash stringhash(const char* str, size_t len, unsigned long seed);
+sk_hash ptrhash(const void* ptr);
 
 #endif
