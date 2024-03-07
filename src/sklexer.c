@@ -96,9 +96,9 @@ static const char* lexerrors[] = {
 void regcomperror(Lexer* lexer, const char* err, va_list args)
 {
     static const char* prefix_fmt = "[%s][line: %u] Error";
-    bool preverr = lexer->error;
-    lexer->panic = true;
-    lexer->error = true;
+    uint8_t preverr = lexer->error;
+    lexer->panic = 1;
+    lexer->error = 1;
     VM* vm = lexer->vm;
     const Token* token = &lexer->previous;
     OString* prefix = OString_fmt(vm, prefix_fmt, lexer->source->storage, token->line);
@@ -174,19 +174,19 @@ static void pushc(Lexer* lexer, int32_t c)
 {
     if(unlikely(lblen(lexer) >= LEX_TOKEN_LEN_LIMIT)) {
         lexerror(lexer, lexerrors[LE_TOKENLIMIT], LEX_TOKEN_LEN_LIMIT);
-        lexer->skip = true;
+        lexer->skip = 1;
     }
     Array_Byte_push(&lexer->buffer, c);
 }
 
 
 /* Check if current character matches 'c', if so
- * return true and advance the lexer, otherwise return false. */
-static bool lmatch(Lexer* lexer, int32_t c)
+ * return 1 and advance the lexer, otherwise return 0. */
+static uint8_t lmatch(Lexer* lexer, int32_t c)
 {
-    if(isend(lexer->c) || c != lexer->c) return false;
+    if(isend(lexer->c) || c != lexer->c) return 0;
     advance(lexer);
-    return true;
+    return 1;
 }
 
 
@@ -292,7 +292,7 @@ static uint8_t eschex(Lexer* lexer)
 static force_inline Token string(Lexer* lexer)
 {
     advance(lexer); // skip first '"'
-    while(true) {
+    while(1) {
         if(unlikely(isend(lexer->c) || lexer->c == '\n' || lexer->c == '\r')) {
             lexerror(lexer, lexerrors[LE_UNTSTR]);
             break;

@@ -32,11 +32,11 @@
 
 
 /*
- * Are we using GNU C compatible compiler ?
+ * Are we using GNU C compiler ?
  */
 #if defined(__GNUC__)
 #define SK_PRECOMPUTED_GOTO
-#define force_inline __always_inline
+#define force_inline __attribute__((always_inline))
 #define likely(cond) __builtin_expect(cond, 2)
 #define unlikely(cond) __builtin_expect(cond, 0)
 #define unused __attribute__((unused))
@@ -90,6 +90,10 @@
 
 
 
+
+/* === START OF CONFIGURATION === */
+
+
 /* This is the limit of almost everything inside the
  * virtual machine, it is the maximum amount of variables,
  * constants, upvalues, local or global values you can
@@ -101,16 +105,16 @@
  * instructions, meaning you can't jump over more than
  * this amount of bytecode.
  *
- * The reason behind this is the size of the bytecode,
- * the longest encoded instruction in Skooma is 3 bytes.
+ * The reason behind this is the size of the bytecode;
+ * the longest instruction in Skooma is 3 bytes.
  *
  * Changing this to a lower value will enforce the new
  * limit on everything that was mentioned above.
  *
- * HOWEVER SETTING THIS TO A HIGHER VALUE THAN THE
- * DEFAULT ONE IS NOT RECOMMENDED, BECAUSE IN CASE
- * YOU REACH THIS LIMIT IN ANY OF THE AREAS MENTIONED
- * ABOVE, IT WILL PROBABLY BREAK THE VM. */
+ * WARNING: setting this to a higher value than the
+ * default one is not recommended, because in case
+ * you reach this limit in any of the areas mentioned
+ * above, it will probably break the VM. */
 #define SK_BYTECODE_MAX 16777215
 
 /* Maximum amount of constants.
@@ -176,17 +180,20 @@
 
 
 
-
-/* Allow NaN boxing of values by default. */
+/* Allow NaN boxing of values by default.
+ * If this define is removed 'Value' will be
+ * represented as a tagged union. */
 #define SK_NAN_BOX
 
 
 
 
-/* Default GC threshold is 1 mb. */
-#define GC_HEAP_INIT (1 << 20)
+/* INCREMENTAL GC
+ *
+ * Default GC threshold when collection is triggered */
+#define GC_HEAP_INIT (1024 * 1024)
 
-/* Default lowest GC threshold (4 kb) */
+/* Default lowest GC threshold */
 #define GC_HEAP_MIN 4096
 
 /* Default GC threshold grow factor */

@@ -1667,6 +1667,7 @@ static force_inline void SwitchState_init(Function* F, SwitchState* state)
 /*
  * Updates 'switch' constants and checks if the constant
  * already exists, but only if 'e' is constant expression.
+ * TODO: Refactor a bit, logic can be compressed
  */
 static force_inline void switchconstants(Function* F, SwitchState* state, Exp* E)
 {
@@ -1808,7 +1809,7 @@ static void ifstm(Function* F)
     }
 }
 
-static void startloop(Function* F, int32_t* lstart, int32_t* ldepth)
+static force_inline void startloop(Function* F, int32_t* lstart, int32_t* ldepth)
 {
     *lstart = (F)->cflow.innerlstart;
     *ldepth = (F)->cflow.innerldepth;
@@ -1816,7 +1817,7 @@ static void startloop(Function* F, int32_t* lstart, int32_t* ldepth)
     (F)->cflow.innerldepth = F->S->depth;
 }
 
-static void endloop(Function* F, int32_t lstart, int32_t ldepth)
+static force_inline void endloop(Function* F, int32_t lstart, int32_t ldepth)
 {
     (F)->cflow.innerlstart = lstart;
     (F)->cflow.innerldepth = ldepth;

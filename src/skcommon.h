@@ -111,7 +111,6 @@ typedef enum {
     /* Class overload-able method names. */
     SS_INIT,
     SS_TOSTRING,
-    SS_DISP,
     SS_GETIDX,
     SS_SETIDX,
     SS_HASH,

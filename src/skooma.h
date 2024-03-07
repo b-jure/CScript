@@ -72,7 +72,7 @@
 #define sk_checkapi(vm, cond, msg) sk_assert(cond)
 #endif
 
-/* Locking mechanism (by default nop).
+/* Locking mechanism.
  * By default skooma does not assume your VM is shared
  * by multiple threads, it is up to user to decide whether
  * to define his own sk_lock/sk_unlock. */
@@ -101,11 +101,11 @@ typedef sk_ulint sk_hash;
 
 
 /* ============== Skooma types ============== */
-/* Skooma number */
-typedef double sk_number;
-
 /* Virtual Machine */
 typedef struct VM VM;
+
+/* Skooma number */
+typedef double sk_number;
 
 /* Holds debug information */
 typedef struct sk_debuginfo sk_debuginfo;
@@ -375,10 +375,9 @@ SK_API sk_status sk_load(VM* vm, sk_reader reader, void* userdata, const char* s
 // @TODO: Implement 'GCO_STEP' option, this will invoke
 //        garbage collection same as 'GCO_COLLECT', but
 //        collection will continue only up to the provided
-//        limit (in kilobytes).
+//        limit (in kibibytes).
 //        For example 'sk_gc(vm, GCO_STEP, 5)' will sweep
-//        5 kilobytes before the collection stops (or less in
-//        case total collectable memory is less than 5 kilobytes).
+//        5 kibibytes before the collection stops.
 
 typedef enum {
     GCO_STOP, // stop GC
@@ -399,7 +398,7 @@ SK_API sk_byte sk_getstack(VM* vm, sk_int level, sk_debuginfo* di);
 typedef enum {
     DW_FNGET = (1 << 0), // load the function on top of the stack (processed first)
     DW_LINE = (1 << 1), // fill 'line'
-    DW_FNINFO = (1 << 2), // fill all function info in 'sk_DebugInfo'
+    DW_FNINFO = (1 << 2), // fill all function info in 'sk_debuginfo'
     DW_FNSRC = (1 << 3), // fill function source information
     DW_FNPUSH = (1 << 4), // push current function on the stack (processed last)
 } sk_dw; // bits for creating debug bitmask ('sk_getinfo')

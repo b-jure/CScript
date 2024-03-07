@@ -827,11 +827,10 @@ SK_API const char* sk_tostring(VM* vm, sk_int idx, sk_memsize* len, sk_hash* has
     const char* str = NULL;
     sk_lock(vm);
     Value* v = idx2val(vm, idx);
-    OString* ostr = vtostr(vm, *v, 0);
-    *v = OBJ_VAL(ostr);
+    OString* ostr = vtostr(vm, v, *v, 0);
     str = ostr->storage;
-    *len = ostr->len;
-    *hash = ostr->hash;
+    if(len) *len = ostr->len;
+    if(hash) *hash = ostr->hash;
     sk_unlock(vm);
     return str;
 }
@@ -886,8 +885,7 @@ SK_API sk_byte sk_setglobal(VM* vm, const char* name, sk_int isfixed)
     } else {
         Variable* gvar = Array_Variable_index(&vm->globvars, AS_NUMBER(gidx));
         if(unlikely(ISFIXED(gvar))) {
-            const char* name = vtostr(vm, gvar->value, 0)->storage;
-            fixederror(vm, name);
+            fixederror(vm, globalname(vm, AS_NUMBER(gidx))->storage);
         }
         gvar->value = newval;
         pop(vm); // value

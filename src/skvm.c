@@ -32,11 +32,6 @@
 
 
 
-#define CALL_SKOOMAFN 0
-#define CALL_NATIVEFN 1
-#define CALL_CLASS 2
-
-
 volatile uint8_t runtime = 0; // VM is running?
 
 
@@ -165,9 +160,9 @@ static CallFrame* call(VM* vm, Value callee, int32_t argc, int32_t retcnt)
             OClass* oclass = AS_CLASS(callee);
             Value instance = OBJ_VAL(OInstance_new(vm, oclass));
             if(!calloverload(vm, instance, OM_INIT)) { // not overloaded ?
+                *stackpeek(argc) = instance; // 'self'
                 int32_t arity = ominfo[OM_INIT].arity; // default arity
                 if(unlikely(argc != arity)) arityerror(vm, arity, argc);
-                *stackpeek(argc) = instance; // replace class with instance
             }
             return NULL;
         }
@@ -292,10 +287,8 @@ void closeupval(VM* vm, Value* last)
 /**
  * Searches the entire table for the matching index in order to
  * provide more descriptive runtime error.
- * It is okay if the lookup is slow, this only gets called when runtime error
- * occurs (which is follows the end of the program execution).
  **/
-static force_inline OString* globalname(VM* vm, uint32_t idx)
+OString* globalname(VM* vm, uint32_t idx)
 {
     for(uint32_t i = 0; i < vm->globids.cap; i++) {
         Entry* entry = &vm->globids.entries[i];

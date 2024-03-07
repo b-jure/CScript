@@ -43,27 +43,27 @@
 /* Call info for overload-able methods */
 const Tuple ominfo[] = {
   // {arity, retcnt}
-    {1, 1}, // __init__     { args: self             - return: instance }
-    {1, 1}, // __tostring__ { args: self             - return: string }
-    {2, 1}, // __getidx__   { args: self, idx        - return: value }
-    {3, 0}, // __setidx__   { args: self, idx, value - return: none }
-    {1, 1}, // __hash__     { args: self             - return: number }
-    {1, 0}, // __free__     { args: self             - return: none }
+    {0, 1}, // __init__     { args: self             - return: instance }
+    {0, 1}, // __tostring__ { args: self             - return: string }
+    {1, 1}, // __getidx__   { args: self, idx        - return: value }
+    {2, 0}, // __setidx__   { args: self, idx, value - return: none }
+    {0, 1}, // __hash__     { args: self             - return: number }
+    {0, 0}, // __free__     { args: self             - return: none }
 #if defined(SK_OVERLOAD_OPS)
-    {3, 1}, // __add__  { args: self, lhs, rhs - return: value }
-    {3, 1}, // __sub__  { args: self, lhs, rhs - return: value }
-    {3, 1}, // __mul__  { args: self, lhs, rhs - return: value }
-    {3, 1}, // __div__  { args: self, lhs, rhs - return: value }
-    {3, 1}, // __mod__  { args: self, lhs, rhs - return: value }
-    {3, 1}, // __pow__  { args: self, lhs, rhs - return: value }
-    {2, 1}, // __not__  { args: self, lhs      - return: value }
-    {2, 1}, // __umin__ { args: self, lhs      - return: value }
-    {3, 1}, // __ne__   { args: self, lhs, rhs - return: value }
-    {3, 1}, // __eq__   { args: self, lhs, rhs - return: value }
-    {3, 1}, // __lt__   { args: self, lhs, rhs - return: value }
-    {3, 1}, // __le__   { args: self, lhs, rhs - return: value }
-    {3, 1}, // __gt__   { args: self, lhs, rhs - return: value }
-    {3, 1}, // __ge__   { args: self, lhs, rhs - return: value }
+    {2, 1}, // __add__  { args: self, lhs, rhs - return: value }
+    {2, 1}, // __sub__  { args: self, lhs, rhs - return: value }
+    {2, 1}, // __mul__  { args: self, lhs, rhs - return: value }
+    {2, 1}, // __div__  { args: self, lhs, rhs - return: value }
+    {2, 1}, // __mod__  { args: self, lhs, rhs - return: value }
+    {2, 1}, // __pow__  { args: self, lhs, rhs - return: value }
+    {1, 1}, // __not__  { args: self, lhs      - return: value }
+    {1, 1}, // __umin__ { args: self, lhs      - return: value }
+    {2, 1}, // __ne__   { args: self, lhs, rhs - return: value }
+    {2, 1}, // __eq__   { args: self, lhs, rhs - return: value }
+    {2, 1}, // __lt__   { args: self, lhs, rhs - return: value }
+    {2, 1}, // __le__   { args: self, lhs, rhs - return: value }
+    {2, 1}, // __gt__   { args: self, lhs, rhs - return: value }
+    {2, 1}, // __ge__   { args: self, lhs, rhs - return: value }
 #endif
 };
 
@@ -542,11 +542,11 @@ uint8_t calloverload(VM* vm, Value instance, sk_om tag)
     O* const fn = getomethod(vm, instance, tag);
     if(fn) {
         Value* const retstart = vm->sp;
-        const int32_t retcnt = ominfo[tag].retcnt;
-        const int32_t arity = ominfo[tag].arity;
+        int32_t const retcnt = ominfo[tag].retcnt;
+        int32_t const arity = ominfo[tag].arity;
         push(vm, instance); // push 'self'
-        for(int32_t i = 1; i <= arity; i++) // push args
-            push(vm, *stackpeek(arity - i));
+        for(int32_t i = 0; i < arity; i++) // push args
+            push(vm, *stackpeek(arity - 1));
         ncall(vm, retstart, OBJ_VAL(fn), retcnt);
         return 1;
     }
@@ -866,7 +866,6 @@ const InternedString static_strings[] = {
  /* Class overload-able method names. */
     {"__init__",           SSS("__init__")          },
     {"__tostring__",       SSS("__tostring__")      },
-    {"__display__",        SSS("__display__")       },
     {"__getidx__",         SSS("__getidx__")        },
     {"__setidx__",         SSS("__setidx__")        },
     {"__hash__",           SSS("__hash__")          },

@@ -181,6 +181,7 @@ void push(VM* vm, Value val);
 
 void VM_init(VM* vm);
 void interpret(VM* vm, const char* source, const char* filename);
+OString* globalname(VM* vm, uint32_t idx);
 void run(VM* vm);
 void ncall(VM* vm, Value* retstart, Value fn, int32_t retcnt);
 int pcall(VM* vm, ProtectedFn fn, void* userdata, ptrdiff_t oldtop);

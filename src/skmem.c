@@ -33,7 +33,7 @@
 void omark(VM* vm, O* obj)
 {
     if(obj == NULL || oismarked(obj)) return;
-    osetmark(obj, true);
+    osetmark(obj, 1);
     if(otype(obj) == OBJ_STRING) {
 #ifdef DEBUG_LOG_GC
         printf("%p blacken ", (void*)obj);
@@ -139,7 +139,7 @@ MS_FN(rmweakrefs)
     for(uint32_t i = 0; i < vm->weakrefs.cap; i++) {
         Entry* entry = &vm->weakrefs.entries[i];
         if(IS_OBJ(entry->key) && !oismarked(AS_OBJ(entry->key)))
-            HashTable_remove(&vm->weakrefs, entry->key);
+            HashTable_remove(vm, &vm->weakrefs, entry->key, 0);
     }
 }
 
@@ -149,7 +149,7 @@ MS_FN(sweep)
     O* current = vm->objects;
     while(current != NULL) {
         if(oismarked(current)) {
-            osetmark(current, false);
+            osetmark(current, 0);
             previous = current;
             current = onext(current);
         } else {
@@ -176,7 +176,7 @@ void mark_black(VM* vm, O* obj)
 #endif
 #ifdef SK_PRECOMPUTED_GOTO
 #define OBJ_TABLE
-#include "jmptable.h"
+#include "skjmptable.h"
 #undef OBJ_TABLE
 #else
 #define DISPATCH(x) switch(x)
