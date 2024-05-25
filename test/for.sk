@@ -17,6 +17,6 @@ for(;true;) {
 // Optimized loop (removed)
 for(;false;) {
     printl("This whole block (bytecode) should be deleted.");
-    printl("Skooma can see that conditional is a false constant expression.");
+    printl("cript can see that conditional is a false constant expression.");
     printl("And it will optimize away the whole for-statement.");
 }

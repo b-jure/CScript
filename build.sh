@@ -18,7 +18,7 @@ fi
     if [ $# -eq 0 ]
     then
         make release
-        cp skooma ../.
+        cp cript ../.
     elif [ $# -eq 1 ]
     then
         case $1 in

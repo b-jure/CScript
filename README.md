@@ -1,1 +1,1 @@
-# Skooma-lang
+# cript-lang
