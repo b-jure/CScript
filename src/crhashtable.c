@@ -62,22 +62,22 @@ static Node *mainposition(HashTable *tab, const Value *k)
 {
 	void *p;
 	cr_cfunc f;
-	O* o;
+	GCObject* o;
 
 	switch (vtt(k)) {
-	case VT_BOOL:
+	case VTBOOL:
 		return hashslot(tab, hashboolean(asbool(k)));
-	case VT_INTEGER:
+	case VTINTEGER:
 		return hashslot(tab, hashinteger(asint(k)));
-	case VT_NUMBER:
+	case VTNUMBER:
 		return hashslot(tab, hashnumber(asnum(k)));
-	case VT_LUDATA:
+	case VTLUDATA:
 		p = asludata(k);
 		return hashslot(tab, hashpointer(p));
-	case VT_CFUNC:
+	case VTCFUNC:
 		f = ascfunc(k);
 		return hashslot(tab, hashpointer(f));
-	case VT_OBJ:
+	case VTOBJ:
 		if (IS_STRING
 	default:
 		cr_assert(!isemptyval(k) && !isnilval(k) && isobjval(k));
@@ -263,7 +263,7 @@ cr_ubyte HashTable_remove(VM *vm, HashTable *table, Value key, cr_ubyte raw)
 
 // VM specific function, used for finding interned strings before creating
 // new 'ObjString' objects.
-OString *HashTable_get_intern(HashTable *table, const char *str, size_t len, cr_hash hash)
+CRString *HashTable_get_intern(HashTable *table, const char *str, size_t len, cr_hash hash)
 {
 	if (table->len == 0)
 		return NULL;
@@ -275,7 +275,7 @@ OString *HashTable_get_intern(HashTable *table, const char *str, size_t len, cr_
 			if (!valistombstone(entry))
 				return NULL;
 		} else {
-			OString *string = AS_STRING(entry->key);
+			CRString *string = AS_STRING(entry->key);
 			if (string->len == len && string->hash == hash && memcmp(string->storage, str, len) == 0)
 				return string;
 		}

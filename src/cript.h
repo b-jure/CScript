@@ -63,16 +63,17 @@ typedef struct VM VM;
 /* types of values */
 #define CR_TNONE	(-1)
 
-#define CR_TBOOL	0
-#define CR_TNUMBER	1
-#define CR_TLUDATA	2
-#define CR_TSTRING	3
-#define CR_TFUNCTION	4
-#define CR_TCLASS	5
-#define CR_TINSTANCE	6
-#define CR_TNIL		7
+#define CR_TBOOL	0 /* boolean */
+#define CR_NTYPESUMBER	1 /* 'cr_number' */
+#define CR_TLUDATA	2 /* light userdata */
+#define CR_TSTRING	3 /* string */
+#define CR_TFUNCTION	4 /* function */
+#define CR_TCLASS	5 /* class */
+#define CR_TINSTANCE	6 /* instance */
+#define CR_TUDATA	7 /* userdata */
+#define CR_NTYPESIL		8 /* nil */
 
-#define CR_TN		8
+#define CR_NTYPES		9
 
 
 
@@ -160,6 +161,8 @@ CR_API const void      *cr_getpointer(VM *vm, int idx); // TODO
 #define CR_OPNOT	6
 #define CR_OPUMIN	7
 
+#define CR_ARN		8
+
 CR_API void	cr_arith(VM *vm, int op);
 
 #define CR_OPEQ		0
@@ -168,6 +171,8 @@ CR_API void	cr_arith(VM *vm, int op);
 #define CR_OPGT		3
 #define CR_OPLE		4
 #define CR_OPGE		5
+
+#define CR_CMPN		6
 
 CR_API int 	cr_rawequal(VM *vm, int idx1, int idx2);
 CR_API int	cr_compare(VM *vm, int idx1, int idx2, int op);
@@ -214,7 +219,6 @@ CR_API int cr_getuservalue(VM *vm, int idx, int n);
 /* types of methods for 'cr_vtable' */
 #define CR_MTCFUNCTION		0
 #define CR_MTINDEX		1
-#define CR_MTNONE		2
 
 /* 'cr_vtable' methods */
 #define CR_MINIT		0
@@ -240,30 +244,47 @@ CR_API int cr_getuservalue(VM *vm, int idx, int n);
 
 #define CR_MN			20
 
+
 /* type for class interface */
 struct cr_vtable {
 	struct {
 		union {
 			cr_cfunc cfunction; /* C function */
 			int stkidx; /* value on stack */
-		} m;
-		int mt; /* method type */
+		} method;
+		int mtt; /* method type tag */
 	} methods[CR_MN];
 }; // TODO
 
-/* Helper for setting 'cr_vtable' methods.
- * @vt - 'cr_vtable'
- * @mt - method (index into 'methods' array)
- * @t - type of method
- * @v - method value */
-#define cr_vtset(vt,mt,t,v) { \
-	(vt).methods[(mt)].m = (t); \
-	switch ((t)) { \
-	case CR_VTECFUNCTION: (vt).methods[(mt)].m.cfunction = (v); break; \
-	case CR_VTEINDEX: (vt).methods[(mt)].m.stkidx = (v); break; \
+
+/* 
+ * Helpers for setting 'cr_vtable'. 
+ * @vt - pointer to 'cr_vtable'
+ * @m - method ('CR_M*')
+ * @mt - type of method ('CR_MT*')
+ * @v - method value ('cr_cfunc' or 'int')
+ */
+
+/* set index value for method 'm' */
+#define cr_vtablesetidx(vt,m,idx) \
+	{ (vt)->methods[(m)].mtt = CR_MTINDEX; \
+	  (vt)->methods[(m)].method.stkidx = (idx); }
+
+/* set function value for method 'm' */
+#define cr_vtablesetfunc(vt,m,fn) \
+	{ (vt)->methods[(m)].mtt = CR_MTCFUNCTION; \
+	  (vt)->methods[(m)].method.cfunction = (fn); }
+
+/* set value 'v' for method 'm' (bit slower but generic) */
+#define cr_vtableset(vt,m,mt,v) { \
+	(vt)->methods[(m)].mtt = (mt); \
+	switch ((mt)) { \
+	case CR_VTECFUNCTION: (vt).methods[(m)].method.cfunction = (v); break; \
+	case CR_VTEINDEX: (vt).methods[(m)].method.stkidx = (v); break; \
 	case CR_VTNONE: case default: break; }}
 
-CR_API void cr_createclass(VM *vm, cr_vtable *tab); // TODO
+
+CR_API void cr_createclass(VM *vm, cr_vtable *vt); // TODO
 
 
 
@@ -312,6 +333,9 @@ CR_API int cr_getstatus(VM *vm);
 #define CR_SEFILE		22 /* file related error */
 #define CR_SEBCLIMIT		23 /* bytecode limit exceeded error */
 #define CR_SGSLIMIT		24 /* gray stack limit exceeded error */
+
+/* number of status codes */
+#define CR_SN			25
 
 CR_API int cr_error(VM *vm, int code);
 

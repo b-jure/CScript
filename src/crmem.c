@@ -38,7 +38,7 @@
 cr_sinline void *tryagain(VM *vm, void *ptr, size_t osize, size_t nsize)
 {
 	if (cantryagain(vm)) {
-		crg_gcfull(vm);
+		cr_gc_full(vm);
 		return cr_mm_rawrealloc(vm, ptr, nsize);
 	}
 	return NULL;

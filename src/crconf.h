@@ -302,7 +302,7 @@
 
 /* 
  * @CR_MAXSTACK - maximum stack size. 
- * Any value is fine as long as it fits in UINT_MAX/2
+ * Any value is fine as long as it fits in UINT_MAX/2.
  */
 #define CR_MAXSTACK	5000000
 

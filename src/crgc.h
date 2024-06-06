@@ -22,12 +22,13 @@
 
 
 
-/* GC state bits */
-#define GCS_STOPPED	0
+/* 'stopped' bits */
+#define GCstopped	0
+#define GCuserstopped	1
 
 
-/* GC is running */
-#define gcrunning(gc)	(!testbit((gc).state, GCS_STOPPED))
+/* garbage collector is not 'stopped' */
+#define gcrunning(gc)	((gc)->stopped == 0)
 
 
 /* default GC parameters */
@@ -46,24 +47,14 @@ typedef struct {
 	cr_ubyte stepmul; /* collector grow speed */
 	cr_ubyte stepsize; /* step size in bytes (log2) */
 	cr_ubyte stopem; /* stops emergency collection */
-	cr_ubyte state; /* GC state */
+	cr_ubyte stopped; /* collector is stopped */
 } GC;
 
 
+size_t cr_gc_full(VM *vm);
+size_t cf_gc_step(VM *vm);
 
-/* run full incremental gc (sweep all) */
-size_t crg_gcfull(VM *vm);
-
-size_t crg_gcstep(VM *vm);
-
-
-#define vmark(vm, v)   \
-	if (IS_OBJ(v)) \
-		omark(vm, asobj(v));
-
-void omark(VM *vm, GCObject *obj);
-
-
+void cr_gc_mark(VM *vm, Value *v);
 
 
 #endif

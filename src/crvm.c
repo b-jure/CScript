@@ -102,7 +102,7 @@ static CallFrame *precall(VM *vm, Value callee, int32_t argc, int32_t retcnt)
 	CallFrame *frame = &vm->frames[vm->fc];
 	if (!iscfunction(callee)) {
 		CriptClosure *closure = asclosure(callee);
-		OFunction *fn = closure->fn;
+		Function *fn = closure->fn;
 		p = &fn->p;
 		frame->closure = closure;
 		frame->ip = fn->chunk.code.data;
@@ -160,7 +160,7 @@ static CallFrame *call(VM *vm, Value callee, int32_t argc, int32_t retcnt)
 		callerror(vm, callee);
 	switch (OBJ_TYPE(callee)) {
 	case OBJ_BOUND_METHOD: {
-		OBoundMethod *bound = asboundmethod(callee);
+		InstanceMethod *bound = asboundmethod(callee);
 		vm->sp[-argc - 1] = bound->receiver; // class instance (self)
 		return precall(vm, OBJ_VAL(bound->method), argc, retcnt);
 	}
@@ -263,7 +263,7 @@ static cr_inline void invoke(VM *vm, Value name, int32_t argc, int32_t retcnt)
 	Value receiver = *stkpeek(argc);
 	if (cr_unlikely(!isinstance(receiver)))
 		ipaerror(vm, receiver);
-	OInstance *instance = asinstance(receiver);
+	Instance *instance = asinstance(receiver);
 	Value field;
 	if (rawget(vm, &instance->fields, name, &field)) {
 		*stkpeek(argc) = field; // swap receiver with field
@@ -292,7 +292,7 @@ static cr_inline OUpvalue *captureupval(VM *vm, Value *valp)
  * making them reachable for gc. */
 void closeupval(VM *vm, Value *last)
 {
-	while (vm->open_upvals != NULL && vm->open_upvals->location >= last) {
+	while (vm->openuvals != NULL && vm->openuvals->location >= last) {
 		OUpvalue *upvalp = vm->open_upvals;
 		upvalp->closed = *upvalp->location;
 		upvalp->location = &upvalp->closed;
@@ -304,7 +304,7 @@ void closeupval(VM *vm, Value *last)
  * Searches the entire table for the matching index in order to
  * provide more descriptive runtime error.
  **/
-OString *globalname(VM *vm, uint32_t idx)
+CRString *globalname(VM *vm, uint32_t idx)
 {
 	for (uint32_t i = 0; i < vm->globids.cap; i++) {
 		Entry *entry = &vm->globids.entries[i];
@@ -329,22 +329,22 @@ void run(VM *vm)
 #define BINARY_OP(vm, op)                \
 	do {                             \
 		saveip();                \
-		Value *l = stkpeek(1); \
-		Value r = *stkpeek(0); \
+		Value *l = stkpeek(1);   \
+		Value r = *stkpeek(0);   \
 		arith(vm, *l, r, op, l); \
 	} while (0)
 #define UNARY_OP(vm, op)                       \
 	do {                                   \
 		saveip();                      \
-		Value *l = stkpeek(0);       \
+		Value *l = stkpeek(0);         \
 		arith(vm, *l, NIL_VAL, op, l); \
 	} while (0)
-#define ORDER_OP(vm, fnop)               \
-	do {                             \
-		saveip();                \
+#define ORDER_OP(vm, fnop)             \
+	do {                           \
+		saveip();              \
 		Value l = *stkpeek(1); \
 		Value r = *stkpeek(0); \
-		fnop(vm, l, r);          \
+		fnop(vm, l, r);        \
 	} while (0)
 
 
@@ -446,7 +446,7 @@ void run(VM *vm)
 			CASE(OP_VARARG)
 			{
 				saveip();
-				OFunction *fn = FFN(frame);
+				Function *fn = FFN(frame);
 				uint32_t vacnt = READ_BYTEL();
 				if (vacnt == 0)
 					vacnt = frame->vacnt;
@@ -615,7 +615,7 @@ l_invoke_super:;
 					saveip();
 					ipaerror(vm, receiver);
 				}
-				OInstance *instance = asinstance(receiver);
+				Instance *instance = asinstance(receiver);
 				rawset(vm, &instance->fields, property_name, property);
 				popn(vm, 2); // instance + property
 				BREAK;
@@ -628,7 +628,7 @@ l_invoke_super:;
 					saveip();
 					ipaerror(vm, receiver);
 				}
-				OInstance *instance = asinstance(receiver);
+				Instance *instance = asinstance(receiver);
 				Value property;
 				if (rawget(vm, &instance->fields, property_name, &property)) {
 					*stkpeek(0) = property;
@@ -790,7 +790,7 @@ l_set_local:;
 			}
 			CASE(OP_CLOSURE)
 			{
-				OFunction *fn = asfn(READ_CONSTANT());
+				Function *fn = asfn(READ_CONSTANT());
 				CriptClosure *closure = OClosure_new(vm, fn);
 				push(vm, OBJ_VAL(closure));
 				for (uint32_t i = 0; i < closure->fn->p.upvalc; i++) {
@@ -840,7 +840,7 @@ l_set_local:;
 				saveip();
 				checkindex(vm, receiver, key);
 				if (!calloverload(vm, receiver, OM_GETIDX)) { // not overloaded ?
-					OInstance *instance = asinstance(receiver);
+					Instance *instance = asinstance(receiver);
 					Value property;
 					if (tableget(vm, &instance->fields, key, &property)) {
 						*stkpeek(1) = property; // replace receiver with field value
@@ -861,7 +861,7 @@ l_set_local:;
 				Value value = *stkpeek(0);
 				saveip();
 				checkindex(vm, receiver, key);
-				OInstance *instance = asinstance(receiver);
+				Instance *instance = asinstance(receiver);
 				if (!calloverload(vm, receiver, OM_SETIDX)) { // not overloaded ?
 					tableset(vm, &instance->fields, key, value);
 					popn(vm, 3); // pop instance, key and value
@@ -1009,7 +1009,7 @@ void VM_init(VM *vm)
 	vm->seed = rand();
 	vm->fc = 0;
 	vm->objects = NULL;
-	vm->open_upvals = NULL;
+	vm->openuvals = NULL;
 	vm->gc.heapmin = GC_HEAP_MIN;
 	vm->gc.nextgc = GC_HEAP_INIT; // 1 MiB
 	vm->gc.allocated = 0;

@@ -23,8 +23,8 @@
 
 
 /* Maximum size of error token string. */
-#define MAX_ERR_STRING		CR_MAXSRC
-#define errlen(len)		(MIN(MAX_ERR_STRING, len))
+#define MAXERR		CR_MAXSRC
+#define errlen(len)	(MIN(MAXERR, len))
 
 
 
@@ -79,8 +79,7 @@ void cr_lx_free(Lexer *lx)
 
 static cr_noret lexerror(Lexer *lexer, const char *err, va_list ap)
 {
-	err = lineinfo
-	regcomperror(lexer, err, args);
+	// TODO
 }
 
 
@@ -100,9 +99,9 @@ void cr_lx_syntaxerror(Lexer *L, const char *err, va_list args)
 	prefix = OString_fmt(vm, "[%s][line: %u] Error", src, token->line);
 	push(vm, OBJ_VAL(prefix));
 
-	if (token->type == TOK_EOF) {
+	if (token->tt == TOK_EOF) {
 		push(vm, OBJ_VAL(OString_fmt(vm, " at end of file: ")));
-	} else if (token->type != TOK_ERROR) {
+	} else if (token->tt != TOK_ERROR) {
 		push(vm, OBJ_VAL(OString_fmt(vm, " at '%.*s': ", token->len, token->start)));
 	} else
 		goto pusherr;
@@ -224,7 +223,7 @@ Token syntoken(const char *name)
 static Token token(Lexer *lexer, TType type, Value value)
 {
 	Token token;
-	token.type = type;
+	token.tt = type;
 	token.value = value;
 	token.start = lbptr(lexer);
 	token.len = cast(cr_ubyte, lblen(lexer));
@@ -241,7 +240,7 @@ static Token token(Lexer *lexer, TType type, Value value)
 static cr_inline Token errtoken(Lexer *lexer, const char *err)
 {
 	Token token;
-	token.type = TOK_ERROR;
+	token.tt = TOK_ERROR;
 	token.start = err;
 	token.len = cast(cr_ubyte, strlen(err));
 	token.line = lexer->currentline;

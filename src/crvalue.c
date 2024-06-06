@@ -295,24 +295,24 @@ cr_ubyte veq(VM *vm, Value l, Value r)
 	}
 
 	switch(VT(l)) {
-	case VT_BOOL:
+	case VTBOOL:
 		res = BOOL_VAL(AS_BOOL(l) == AS_BOOL(r));
 		break;
-	case VT_INTEGER:
+	case VTINTEGER:
 		res = BOOL_VAL(cr_flteq(asint(l), asint(r)));
 		break;
-	case VT_NUMBER:
+	case VTNUMBER:
 		res = BOOL_VAL(asnum(l) == asnum(r));
 		break;
-	case VT_LUDATA:
+	case VTLUDATA:
 		break;
-	case VT_CFUNC:
+	case VTCFUNC:
 		break;
-	case VT_NIL:
+	case VTNIL:
 		break;
-	case VT_OBJ:
+	case VTOBJ:
 		break;
-	case VT_EMPTY:
+	case VTEMPTY:
 		break;
 	}
 	DISPATCH(l.type)
@@ -392,7 +392,7 @@ void vge(VM *vm, Value l, Value r)
 Value tostr_integer(VM *vm, cr_integer n)
 {
 	static char buff[MAXINT2STR];
-	OString *str;
+	CRString *str;
 	cr_ubyte len;
 
 	len = snprintf(buff, sizeof(buff), INTEGERFMT, n);
@@ -403,7 +403,7 @@ Value tostr_integer(VM *vm, cr_integer n)
 Value tostr_floating(VM *vm, cr_floating n)
 {
 	static char buff[MAXFLT2STR];
-	OString *str;
+	CRString *str;
 	cr_ubyte len;
 
 	len = snprintf(buff, sizeof(buff), FLTFMT, n);
@@ -414,7 +414,7 @@ Value tostr_floating(VM *vm, cr_floating n)
 Value tostr_ptr(VM *vm, void *ptr)
 {
 	static char buff[MAXVOIDP2STR];
-	OString *str;
+	CRString *str;
 	cr_ubyte len;
 
 	len = snprintf(buff, sizeof(buff), PTRFMT, ptr);
@@ -430,19 +430,19 @@ Value tostr_ptr(VM *vm, void *ptr)
 Value vtostr(VM *vm, Value v, cr_ubyte raw)
 {
 	switch (VT(v)) {
-	case VT_BOOL:
+	case VTBOOL:
 		return ssvbool(vm, AS_BOOL(v));
-	case VT_INTEGER:
+	case VTINTEGER:
 		return tostr_integer(vm, asint(v));
-	case VT_NUMBER:
+	case VTNUMBER:
 		return tostr_flt(vm, asnum(v));
-	case VT_NIL:
+	case VTNIL:
 		return ssv(vm, SS_NIL);
-	case VT_LUDATA:
+	case VTLUDATA:
 		return tostr_ptr(vm, AS_LUDATA(v));
-	case VT_CFUNC:
+	case VTCFUNC:
 		return tostr_ptr(vm, cast(void *, AS_CFUNC(v)));
-	case VT_OBJ:
+	case VTOBJ:
 		return otostr(vm, asobj(v), raw);
 	default:
 		cr_unreachable;

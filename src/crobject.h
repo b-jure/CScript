@@ -42,7 +42,7 @@ typedef enum {
 
 
 /* common header for objects */
-#define ObjectHeader	struct GCObject* next; cr_ubyte otype; cr_ubyte marked
+#define ObjectHeader	struct GCObject* next; cr_ubyte ott; cr_ubyte marked
 
 
 /* common type for collectable objects */
@@ -51,24 +51,12 @@ typedef struct GCObject {
 } GCObject;
 
 
+#define ott(v)		(ovalue(v)->ott)
+#define setott(v,t)	(ott(v) = (t))
+#define isott(v,t)	(ott(v) == (t))
 
-/* set/check object type */
-#define osett(o,t)	((o)->otype = (t))
-#define oist(o,t)	((o)->otype == (t))
-
-/* mark object (GC) */
-#define omark(o)	((o)->omark = 1)
-
-/* get object type from value */
-#define otype(v)	(asobj(v)->otype)
-
-
-/* check if value is object and it's object type matches @t */
-#define isot(v, t)	(isobj(v) && oist(asobj(v), t))
-
-
-/* check if value is 'falsey' */
-#define isfalsey(v)	(isnil(v) || (isboolval(v) && !asboolean(v)))
+/* mark collectable object */
+#define markobject(o)	((o)->omark = 1)
 
 
 
@@ -78,20 +66,19 @@ typedef struct GCObject {
  * ---------------------------------------------------------------------------
  */
 
-#define isstring(v)	isot(v, OBJ_STRING)
-#define asstring(v)   	((OString *)asobj(v))
-#define ascstring(v)   	(asstring(v)->bytes)
-
-/* set 'strp' to cstring if 'v' is string object value */
-#define tostring(v, strp) 	(isstring(v) ? (*(strp) = ascstring(v), 1) : 0)
-
-
 typedef struct {
 	ObjectHeader;
 	int len; /* excluding null terminator */
 	unsigned int hash;
 	char bytes[];
 } OString;
+
+
+#define CR_VSTRING	makevariant(CR_TSTRING, 0)
+
+#define ttisstr(v)	isott((v), CR_VSTRING)
+#define strvalue(v)	((OString*)ovalue(v))
+#define cstrvalue(v)	(strvalue(v)->bytes)
 
 
 
@@ -101,16 +88,18 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-#define isupvalue(v)	isot(v, OBJ_UPVAL)
-#define asupvalue(v)	((UValue *)asobj(v))
-
-
 typedef struct UValue {
 	ObjectHeader;
 	Value closed; /* value */
 	Value *location; /* stack or 'closed' */
-	UValue *nextuv; /* chain */
+	struct UValue *nextuv; /* chain */
 } UValue;
+
+
+#define CR_VUVALUE	makevariant(CR_TUVALUE, 0)
+
+#define ttisuval(o)	isott((v), CR_VUVALUE)
+#define uvvalue(v)	((UValue *)ovalue(v))
 
 
 
@@ -119,10 +108,6 @@ typedef struct UValue {
  * Function
  * ---------------------------------------------------------------------------
  */
-
-#define isfunction(v)  	isot(v, OBJ_FUNCTION)
-#define asfunction(v)	((Function *)asobj(v))
-
 
 /* line information and associated instruction */
 typedef struct {
@@ -152,6 +137,13 @@ typedef struct {
 } Function;
 
 
+#define CR_VFUNCTION	makevariant(CR_TFUNCTION, 0)
+
+#define ttisfn(v)	isott((v), CR_VFUNCTION)
+#define fnvalue(v)	((Function *)asobj(v))
+
+
+
 
 /* 
  * ---------------------------------------------------------------------------
@@ -159,42 +151,49 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
+
+#define CR_VCL		makevariant(CR_TFUNCTION, 1) /* 'Closure' */
+#define CR_VCRCL	makevariant(CR_TFUNCTION, 2) /* 'CriptClosure' */
+#define CR_VCCL		makevariant(CR_TFUNCTION, 3) /* 'CClosure' */
+
+
 /* common closure header */
 #define ClosureHeader	ObjectHeader; int nupvalues;
 
 
-#define iscrclosure(v)   	isot(v, OBJ_CRLOSURE)
-#define ascrclosure(v)   	((CriptClosure *)asobj(v))
-
 typedef struct {
 	ClosureHeader;
 	Function *fn;
-	UValue *upvalue[1]; /* upvalues */
+	UValue *upvalue[1];
 } CriptClosure;
 
+#define ttiscrcl(v)		isott((v), CR_VCRCL)
+#define crclvalue(v)		((CriptClosure*)ovalue(v))
 
 
-#define iscclosure(v)  	isot(v, OBJ_CCLOSURE)
-#define ascclosure(v)   ((CClosure *)asobj(v))
 
 typedef struct {
 	ClosureHeader;
-	cr_cfunc fn; /* C function */
-	Value upvalue[1]; /* upvalues */
+	cr_cfunc fn;
+	Value upvalue[1];
 } CClosure;
 
+#define ttisccl(v)		isott((v), CR_VCCL)
+#define cclvalue(v)		((CClosure*)ovalue(v))
+
+/* 'cl' is not a 'CriptClosure' */
+#define noCriptclosure(cl)	((cl) == NULL || (cl)->cc.ott != CR_VCRCL)
 
 
-/* check if 'Closure' is 'CClosure' */
-#define isccl(cl)	((cl) != NULL && (cl)->cc.otype == OBJ_CCLOSURE)
-
-#define isclosure(v)  	isot(v, OBJ_CLOSURE)
-#define asclosure(v)   ((Closure *)asobj(v))
 
 typedef union {
 	CClosure cc;
 	CriptClosure crc;
 } Closure;
+
+#define ttiscl(v)		isott((v), CR_VCL)
+#define clvalue(v)		((Closure*)ovalue(v))
+
 
 
 
@@ -204,16 +203,18 @@ typedef union {
  * ---------------------------------------------------------------------------
  */
 
-#define isclass(v)	isot(v, OBJ_CLASS)
-#define asclass(v) 	((OClass *)asobj(v))
-
-
 typedef struct {
 	ObjectHeader;
 	OString *name; /* class name */
 	HashTable mtab; /* method table */
 	GCObject *vtable[CR_MN]; /* overloadable methods */
 } OClass;
+
+
+#define CR_VCLASS	makevariant(CR_TCLASS, 0)
+
+#define ttiscls(v)	isott((v), CR_VCLASS)
+#define clsvalue(v)	((OClass*)ovalue(v))
 
 
 
@@ -223,9 +224,6 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-#define isinstance(v)  	(isot(v, OBJ_INSTANCE))
-#define asinstance(v)  	((OInstance *)asobj(v))
-
 
 /* 'OClass' instance */
 typedef struct {
@@ -234,6 +232,11 @@ typedef struct {
 	HashTable fields; /* instance fields */
 } Instance;
 
+
+#define CR_VINSTANCE	makevariant(CR_TINSTANCE, 0)
+
+#define ttisins(v)	isott((v), CR_VINSTANCE)
+#define insvalue(v)	((Instance*)ovalue(v))
 
 
 /*
@@ -254,6 +257,13 @@ typedef struct {
 } InstanceMethod;
 
 
+
+#define CR_VINSTANCE	makevariant(CR_TINSTANCE, 0)
+
+#define ttisins(v)	isott((v), CR_VINSTANCE)
+#define insvalue(v)	((Instance*)ovalue(v))
+
+/* --------------------------------------------------------------------------- */
 
 
 int32_t cr_ob_id2mtag(VM *vm, OString *id);
@@ -303,14 +313,12 @@ void cr_ob_tryop(VM *vm, Value a, Value b, int op, Value *res);
 void oprint(VM *vm, Value value, cr_ubyte raw, FILE *stream);
 
 
-/* ordering */
-#define ordop(name) void name(VM *vm, Value l, Value r)
-ordop(oeq);
-ordop(one);
-ordop(olt);
-ordop(ogt);
-ordop(ole);
-ordop(oge);
+void oeq(VM *vm, Value l, Value r);
+void one(VM *vm, Value l, Value r);
+void olt(VM *vm, Value l, Value r);
+void ogt(VM *vm, Value l, Value r);
+void ole(VM *vm, Value l, Value r);
+void oge(VM *vm, Value l, Value r);
 
 
 /* Free object memory */

@@ -18,6 +18,7 @@
 #ifndef CRVALUE_H
 #define CRVALUE_H
 
+
 #include "crcommon.h"
 #include "crhash.h"
 #include "crmem.h"
@@ -26,45 +27,60 @@
 #include <string.h>
 
 
+/* additional types that are used only as markers internally */
+#define CR_TUVALUE	CR_NTYPES	/* upvalue */
+#define CR_TOBJECT	(CR_NTYPES + 1)	/* for marking object values */
+#define CR_TTOMBSTONE	(CR_NTYPES + 2)	/* for marking 'dead' keys in hashtable */
 
-/* types of values (tags) */
-typedef enum {
-	VT_BOOL = 0,
-	VT_INTEGER,
-	VT_NUMBER,
-	VT_LUDATA,
-	VT_CFUNC,
-	VT_NIL,
-	VT_OBJ,
-	VT_EMPTY,
-} ValueType;
+
+/* 
+ * Number of all types ('CR_T*') but excluding marker types
+ * 'CR_TOBJECT' and 'CR_TTOMBSTONE', but including 'CR_TNONE'.
+ */
+#define CR_TOTALTYPES	(CR_TUVALUE + 2)
+
+
+/*
+ * Tagged value types.
+ * Bits 0-4 are for value types (CR_T*).
+ * Bits 5-7 are for variant types (CR_V*).
+ */
+
+/* set variant bytes for type 't' */
+#define makevariant(t, v)	((t) | ((b) << 5))
+
+
+/* 'mod' bits */
+#define CRMconst	0 /* value is constant */
 
 
 /* tagged union */
 typedef struct {
 	union {
-		cr_ubyte boolean; /* boolean */
+		int boolean; /* boolean */
 		cr_integer integer; /* integer */
 		cr_number number; /* float */
 		void *lud; /* light userdata */
 		cr_cfunc cfn; /* C function */
 		struct GCObject *o; /* collectable value */
 	} as;
-	ValueType type;
+	unsigned char tt; /* type tag */
+	unsigned char mod; /* modifiers */
 } Value;
 
 
 Vec(ValueVec, Value);
 
 
-/* value type */
-#define vtt(v)		((v)->type)
-
-/* check if value type matches 't' */
+#define vtt(v)		((v)->tt)
 #define isvtt(v,t)	(vtt(v) == (t))
+#define setvtt(v,t)	(vtt(v) = (t))
 
 
-#define s2v(sv)		(
+#define vmod(v)		((v)->mod)
+#define ismod(v,m)	testbit(vmod(v), (m))
+#define isconst(v)	ismod(v, CRMconst)
+
 
 
 
@@ -73,11 +89,13 @@ Vec(ValueVec, Value);
  * It contains 'tbc' fields which represents
  * offset from the current stack value to the
  * next value on the stack that needs to-be-closed.
- * 'tbc' being 0 indicates that the value
- * doesn't fit in 'unsigned short' and it is
+ * 'tbc' being 0 indicates that the distance value
+ * doesn't fit in 'unsigned short' and then it is
  * assumed that the actual value is USHRT_MAX.
  * This way we can represent larger distances
  * without using larger data type.
+ * On 8-byte alignment 'SValue' is 16 bytes,
+ * while on 4-byte alignement 'SValue' is 8 bytes.
  */
 typedef union {
 	Value sv;
@@ -85,8 +103,12 @@ typedef union {
 } SValue;
 
 
+/* stack value to value */
+#define s2v(s)		(&(s)->sv)
 
-/* stack pointer */
+
+
+/* pointer to the value on the stack */
 typedef SValue *SPtr;
 
 
@@ -110,17 +132,22 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-/* get boolean from value 'v' */
-#define asboolean(v)		((v)->as.boolean)
+#define CR_VFALSE	makevariant(CR_TBOOL, 0)
+#define CR_VTRUE	makevariant(CR_TBOOL, 1)
 
-/* create boolean value */
-#define booleanval(v)		((Value){ .type = VT_BOOL, { .boolean = v } })
+#define bvalue(v)	((v)->as.boolean)
 
-/* check if value 'v' is boolean value */
-#define isboolean(v)		isvtt(v, VT_BOOL)
+#define ttisboolean(v)		isvtt(v, CR_TBOOL)
+#define ttistrue(v)		isvtt(v, CR_VTRUE)
+#define ttisfalse(v)		isvtt(v, CR_VFALSE)
 
-/* set 'bp' to boolean if 'v' is boolean value */
-#define toboolean(v, bp)	(isboolval(v) ? (*(bp) = asbool(v), 1) : 0)
+#define setbfvalue(v)		setvtt(v, CR_VFALSE)
+#define setbtvalue(v)		setvtt(v, CR_VTRUE)
+
+#define ttisfalsey(v)	(ttisfalse(v) || ttisnil(v))
+
+#define booleanval(v) \
+	((Value){ .tt = makevariant(CR_TBOOL, (v)), { .boolean = (v) } })
 
 
 
@@ -130,38 +157,19 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-/* check if 'ar' is binary arithmetic operation */
-#define arisbin(ar)	((ar) >= CR_AR_ADD && (ar) <= CR_AR_POW)
+#define CR_VNUMINT	makevariant(CR_NTYPESUMBER, 0)
+#define CR_VNUMFLT	makevariant(CR_NTYPESUMBER, 1)
 
-/* check if 'ar' is unary arithmetic operation */
-#define arisun(ar)	((ar) >= CR_AR_NOT && (ar) <= CR_AR_UMIN)
+#define ivalue(v)	((v)->as.integer)
+#define fvalue(v)	((v)->as.number)
+#define nvalue(v)	(isvtt(CR_VNUMINT) ? cast_num(ivalue(v)) : fvalue(v))
 
-/* get 'cr_integer' from value 'v' */
-#define asinteger(v)	((v)->as.integer)
+#define ttisflt(v)	isvtt(v, CR_VNUMFLT)
+#define ttisint(v)	isvtt(v, CR_VNUMINT)
+#define ttisnum(v)	isvtt(v, CR_NTYPESUMBER)
 
-/* get 'cr_number' from value 'v' */
-#define asnumber(v)	((v)->as.number)
-
-/* create 'cr_integer' value */
-#define integerval(v)	((Value){ .type = VT_INTEGER, { .integer = v } })
-
-/* create 'cr_number' value */
-#define numberval(v)	((Value){ .type = VT_NUMBER, { .number = v } })
-
-/* check if value 'v' is 'cr_integer' value */
-#define isinteger(v)	isvtt(v, VT_INTEGER)
-
-/* check if value 'v' is 'cr_number' value */
-#define isnumber(v)	isvtt(v, VT_NUMBER)
-
-/* set 'np' to 'cr_integer' value if 'v' is integer value */
-#define tointeger(v, np)	(isintval(v) ? (*(np) = asint(v), 1) : 0)
-
-/* set 'np' to 'cr_number' value if 'v' is floating value */
-#define tonumber(v, np)		(isnumval(v) ? (*(np) = asnum(v), 1) : 0)
-
-
-void varith(VM *vm, Value a, Value b, int op, Value *res);
+#define newfvalue(v)	((Value){.tt = CR_VNUMFLT, {.number = (v)}})
+#define newivalue(v)	((Value){.tt = CR_VNUMINT, {.integer = (v)}})
 
 
 
@@ -171,14 +179,13 @@ void varith(VM *vm, Value a, Value b, int op, Value *res);
  * ---------------------------------------------------------------------------
  */
 
-/* get light userdata from value 'v' */
-#define asludata(v) 		((v)->as.lud)
+#define CR_VLUDATA	makevariant(CR_TLUDATA, 0)
 
-/* create light userdata value */
-#define ludataval(v)		((Value){ .type = VT_LUDATA, { .lud = v } })
+#define pvalue(v)	((v)->as.lud)
 
-/* check if value 'v' is light userdata value */
-#define isludata(v)		isvtt(v, VT_LUDATA)
+#define ttislud(v)	isvtt(v, CR_VLUDATA)
+
+#define newpvalue(v)	((Value){.tt = CR_VLUDATA, {.lud = (v)}})
 
 
 
@@ -188,14 +195,13 @@ void varith(VM *vm, Value a, Value b, int op, Value *res);
  * ---------------------------------------------------------------------------
  */
 
-/* get 'cr_cfunc' from value 'v' */
-#define ascfunction(v)  	((v)->as.cfn)
+#define CR_VCFUNCTION	makevariant(CR_TFUNCTION, 0)
 
-/* create 'cr_cfunc' value */
-#define cfunctionval(v) 	((Value){ .type = VT_CFUNC, { .cfn = v } })
+#define cfvalue(v)	((v)->as.cfn)
 
-/* check if value 'v' is 'cr_cfunc' value */
-#define iscfunction(v)		isvtt(v, VT_CFUNC)
+#define ttiscfn(v)	isvtt(v, CR_VCFUNCTION)
+
+#define newcfnvalue(v)	((Value){.type = CR_VCFUNCTION, {.cfn = (v)}})
 
 
 
@@ -205,14 +211,16 @@ void varith(VM *vm, Value a, Value b, int op, Value *res);
  * ---------------------------------------------------------------------------
  */
 
-/* get object from value 'v' */
-#define asobj(v)		((v)->as.o)
+/*
+ * All collectable objects create variant from this type.
+ *
+ */
+#define ovalue(v)	((v)->as.o)
 
-/* create object value */
-#define objval(v)    		((Value){ .type = VT_OBJ, { .o = (GCObject *)v } })
+#define ttiso(v)	isvtt(v, CR_TOBJECT)
 
-/* check if value 'v' is object value */
-#define isobj(v)		isvtt(v, VT_OBJ)
+#define newovalue(v)	((Value){.tt = CR_TOBJECT, {.o = (GCObject *)(v)}})
+
 
 
 /* 
@@ -221,42 +229,22 @@ void varith(VM *vm, Value a, Value b, int op, Value *res);
  * ---------------------------------------------------------------------------
  */
 
-/* create nil value */
-#define nilval()	      	((Value){ .type = VT_NIL, { 0 } })
+#define CR_VNIL		makevariant(CR_NTYPESIL, 0)
+#define CR_VEMPTY	makevariant(CR_NTYPESIL, 1)
 
-/* check if value 'v' is nil value */
-#define isnil(v)		isvtt(v, VT_NIL)
+#define ttisnil(v)	isvtt((v), CR_VNIL)
+#define ttisempty(v)	isvtt((v), CR_VEMPTY)
 
+#define newnilvalue()	((Value){.type = CR_VNIL, {0}})
+#define newemptyvalue() ((Value){.type = CR_VEMPTY, {0}})
 
-
-/* 
- * ---------------------------------------------------------------------------
- * Empty (private)
- * ---------------------------------------------------------------------------
- */
-
-/* create empty value */
-#define empytval()     		((Value){ .type = VT_EMPTY, { 0 } })
-
-/* check if value 'v' is empty value */
-#define isempty(v)		isvtt(v, VT_EMPTY)
-
-/* marker for undefined values (global ids) */
-#define undefval() 		empytval()
-
-/* check if value 'v' is undefined */
-#define isundef(v)		isemptyval(v)
+/* --------------------------------------------------------------------------- */
 
 
-
-/*
- * ---------------------------------------------------------------------------
- * Generic functions/macros
- * ---------------------------------------------------------------------------
- */
 
 int v2t(Value value);
 Value vtostr(VM *vm, Value value, cr_ubyte raw);
-unsigned int vhash(VM *vm, Value value, cr_ubyte raw);
+void varith(VM *vm, Value a, Value b, int op, Value *res);
+
 
 #endif

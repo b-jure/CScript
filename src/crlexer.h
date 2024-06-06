@@ -22,7 +22,6 @@
 #include "crmem.h"
 #include "crreader.h"
 #include "crvalue.h"
-#include "crvec.h"
 #include "crobject.h"
 
 #include <stdarg.h>
@@ -49,19 +48,23 @@ typedef enum {
 } TType;
 
 
+
+/* constant values for tokens */
 typedef union {
 	cr_integer i;
 	cr_number n;
 	OString *str;
-} ConstantValue;
+} KValue;
+
 
 
 typedef struct {
-	TType type;
-	ConstantValue k;
+	TType tt;
+	KValue k;
 } Token;
 
 
+/* buffer for strings */
 Vec(Buffer, char);
 
 

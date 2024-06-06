@@ -111,7 +111,7 @@ typedef signed char cr_byte;
 /* non-return type */
 #if defined(__GNUC__)
 #define cr_noret	void __attribute__((noreturn))
-#elif defined(_MSC_VEC) && _MSC_VEC >= 1200
+#elif defined(_MSC_VER) && _MSC_VER >= 1200
 #define cr_noret	void __declspec(noreturn)
 #else
 #define cr_noret	void
@@ -119,15 +119,13 @@ typedef signed char cr_byte;
 
 
 
-/* mark unreachable code (optimization) */
+/* unreachable code (optimization) */
 #if defined(__GNUC__)
-#define cr_unreachable	__builtin_unreachable()
+#define cr_unreachable()	__builtin_unreachable()
+#elif defined(_MSC_VER) && _MSC_VER >= 1200 /* I guess ? */
+#define cr_unreachable()	__assume(0)
 #else
-#define cr_unreachable \
-	{ #include<stdlib.h> \
-	  cr_assert(0 && "unreachable"); \
-	  abort(); }
-
+#define cr_unreachable()	cr_assert(0 && "unreachable")
 #endif
 
 
@@ -147,7 +145,7 @@ typedef cr_ubyte Instruction;
  * This is the maximum unsigned value that fits in 3 bytes.
  * Transitively this defines various compiler limits. 
  */
-#define CR_MAXCODE		16777215
+#define CR_MAXCODE		16777215U
 
 
 

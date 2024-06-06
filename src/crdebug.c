@@ -20,27 +20,51 @@
 #include "crdebug.h"
 #include "crmem.h"
 #include "crobject.h"
+#include "crlimits.h"
 #include "criptapi.h"
 #include "crvm.h"
 
 #include <stdio.h>
 
 
-// Load current CallFrame into the 'private' part of 'cr_debuginfo'.
-// Level 0 means the current function, level 1 is the previous call
-// and so on...
-// If 'level' is invalid, this function returns 0 otherwise 1.
+
+/* get line number of instruction ('pc') */
+int cr_dg_getfuncline(const Function *fn, int pc)
+{
+	// TODO
+	cr_assert(fn->lineinfo.ptr != NULL);
+	return 0;
+}
+
+
+cr_sinline int getcurrentpc(const CallFrame *cf)
+{
+	cr_assert(cfiscript(cf));
+	return cast_int(cf->pc - cffn(cf)->code.ptr) - 1;
+}
+
+
+cr_sinline int getcurrentline(CallFrame *cf) 
+{
+	return cr_dg_getfuncline(cffn(cf), getcurrentpc(cf));
+}
+
+
+/* 
+ * Sets 'frame' in 'cr_debuginfo'.
+ * Level defines which call stack 'CallFrame' to use.
+ * If you wish for currently active 'CallFrame' then 'level'
+ * should be 0.
+ * If 'level' is invalid, this function returns 0. 
+ */
 CR_API int cr_getstack(VM *vm, int level, cr_debuginfo *di)
 {
-	CallFrame *cf;
-
 	cr_lock(vm);
 	if (level > vm->frames.len || level < 0) {
 		cr_unlock(vm);
 		return 0;
 	}
-	cf = &vm->frames.ptr[vm->frames.len - 1 - level];
-	di->frame = cf;
+	di->frame = &vm->frames.ptr[vm->frames.len - 1 - level];
 	cr_unlock(vm);
 	return 1;
 }
@@ -51,16 +75,16 @@ CR_API int cr_getstack(VM *vm, int level, cr_debuginfo *di)
  * Sets 'name', 'type', 'nups', 'nparams', 'isvararg', 'defline',
  * 'deflastline' in 'cr_debuginfo'.
  */
-static void getfuncinfo(VM *vm, Closure *cl, cr_debuginfo *di)
+static void getfuncinfo(Closure *cl, cr_debuginfo *di)
 {
 	const Function *fn;
 
-	if (isccl(cl)) {
-		di->nups = cl->cc.nupvalues;
+	if (noCriptclosure(cl)) {
+		di->nups = (cl == NULL ? 0 : cl->cc.nupvalues);
 		di->defline = -1;
 		di->deflastline = -1;
-		di->nparams = -1;
-		di->isvararg = 0;
+		di->nparams = 0;
+		di->isvararg = 1;
 		di->name = "?";
 		di->type = "C";
 	} else {
@@ -76,72 +100,63 @@ static void getfuncinfo(VM *vm, Closure *cl, cr_debuginfo *di)
 }
 
 
-int cr_dg_getfuncline(const Function *fn, int pc)
-{
-	// TODO
-	cr_assert(fn->lineinfo.ptr != NULL);
-	return 0;
-}
-
-
-cr_sinline int getcurrentpc(const CallFrame *cf)
-{
-	cr_assert(cfiscript(cf));
-	return cast_int(cf->f.pc - cffn(cf)->code.ptr) - 1;
-}
-
-
-cr_sinline int getcurrentline(CallFrame *cf) 
-{
-	return cr_dg_getfuncline(cf->f.cl->fn, getcurrentpc(cf));
-}
-
-
 /* sets 'source', 'srclen' and 'shortsrc' in 'cr_debuginfo' */
 static void getsrcinfo(Closure *cl, cr_debuginfo *di)
 {
-	if (isccl(cl)) {
+	Function *fn;
+	size_t bufflen;
+
+	if (noCriptclosure(cl)) {
+		di->source = "[C]";
+		di->srclen = SLL("[C]");
+	} else {
+		fn = cl->crc.fn;
+		di->source = fn->source->bytes;
+		di->srclen = fn->source->len;
 	}
-	di->source = p->source->storage;
-	di->srclen = p->source->len;
-	size_t bufflen = CR_SRCID_MAX - 1;
+	bufflen = CR_MAXSRC - 1;
 	if (bufflen < di->srclen) {
 		memcpy(di->shortsrc, di->source, bufflen - SLL("..."));
 		memcpy(di->shortsrc, "...", SLL("..."));
-	} else
+	} else {
 		memcpy(di->shortsrc, di->source, bufflen);
+	}
 	di->shortsrc[bufflen] = '\0';
 }
 
 
 
-// Auxiliary to 'cr_getinfo', parses debug bit mask and
-// fills out the 'cr_debuginfo' accordingly.
-// If any invalid bit/option is inside the 'dbmask' this
-// function returns 0, otherwise 1.
-static cr_ubyte auxgetinfo(VM *vm, cr_ubyte dbmask, Value *cl, CallFrame *cf, cr_debuginfo *di)
+/* 
+ * Auxiliary to 'cr_getinfo', parses debug bit mask and
+ * fills out the 'cr_debuginfo' accordingly.
+ * If any invalid bit/option is inside the 'dbmask' this
+ * function returns 0, otherwise 1. 
+ */
+static int getinfo(VM *vm, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debuginfo *di)
 {
-	cr_ubyte status = 1;
-	for (cr_ubyte bit = 2; dbmask > 0; bit++) {
+	cr_ubyte status, bit;
+
+	status = 1;
+	for (bit = 2; dbmask > 0; bit++) {
 		switch (bit) {
-		case 2:; // DW_LINE
+		case 2: /* DW_LINE */
 			di->line = (cfiscript(cf) ? getcurrentline(cf) : -1);
 			break;
-		case 3: // DW_FNINFO
-			getfuncinfo(vm, *cl, di);
+		case 3: /* DW_FNINFO */
+			getfuncinfo(cl, di);
 			break;
-		case 4: // DW_FNSRC
-			getsrcinfo(asclosure(cl), di);
+		case 4: /* DW_FNSRC */
+			getsrcinfo(cl, di);
 			break;
-		case 5: // DW_FNPUSH
-			criptapi_pushval(vm, *di->frame->callee);
+		case 5: /* DW_FNPUSH */
+			// criptapi_pushval(vm, *di->frame->callee);
 			break;
-		case 6: // unused
-		case 7: // unused
+		case 6: /* unused */
+		case 7: /* unused */
 			status = 0;
 			break;
 		default:
-			cr_unreachable;
+			cr_unreachable();
 		}
 		dbmask >>= 1;
 	}
@@ -160,7 +175,8 @@ CR_API int cr_getinfo(VM *vm, int dbmask, cr_debuginfo *di)
 	cr_lock(vm);
 	status = 1;
 	if (dbmask & CR_DBGFNGET) { /* use function on top of the stack ? */
-		fn = stkpeek(0);
+		fn = s2v(vm->stacktop.p - 1);
+		cr_checkapi(vm, isfunction
 		criptapi_checktype(vm, *fn, TT_FUNCTION);
 	} else { // use function stored in current frame
 		frame = &last_frame(vm);
@@ -168,7 +184,7 @@ CR_API int cr_getinfo(VM *vm, int dbmask, cr_debuginfo *di)
 		cr_assert(vm, val2type(*fn) == TT_FUNCTION, "expect function");
 	}
 	dbmask >>= 1; // skip DW_FNGET
-	status = auxgetinfo(vm, dbmask, fn, frame, di);
+	status = getinfo(vm, dbmask, fn, frame, di);
 	cr_unlock(vm);
 	return status;
 }

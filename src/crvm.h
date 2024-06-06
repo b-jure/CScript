@@ -22,7 +22,6 @@
 #include "crcommon.h"
 #include "crhashtable.h"
 #include "crvalue.h"
-#include "crvec.h"
 
 #include <setjmp.h>
 
@@ -65,7 +64,7 @@ typedef struct cr_longjmp {
 
 
 /* get Cript 'Function' */
-#define cffn(cf)	(ascrclosure((cf)->callee.sv)->fn)
+#define cffn(cf)	(ascrclosure(s2v((cf)->callee.p))->fn)
 
 
 /* active function is 'CClosure' */
@@ -89,8 +88,8 @@ typedef struct cr_longjmp {
 
 /* function CallFrame */
 typedef struct CallFrame {
-	StkValue callee;
-	StkValue top;
+	SIndex callee;
+	SIndex top;
 	const Instruction *pc;	/* only for non-C callee */
 	int nvarargs;		/* only for non-C callee */
 	int nreturns;
@@ -105,21 +104,15 @@ typedef struct CallFrame {
  * ---------
  */
 
-/* local/global variable bits */
-#define VARconst	0 /* variable is const */
-#define VARcaptured	1 /* local variable is captured */
-
-#define isconst(var)	testbit((var)->flags, VARconst)
-
 
 /* 
- * This is a wrapper around 'Value' with it's modifiers (flags).
+ * This is a wrapper around 'Value' with additional 'constant' flag.
  * Local variables do not require this wrapper as they are resolved
- * during compilation meaning they do not need to store 'flags'. 
+ * during compilation. 
  */
 typedef struct {
 	Value value;
-	cr_ubyte flags;
+	cr_ubyte constant;
 } GlobalVar;
 
 
@@ -133,7 +126,7 @@ typedef struct {
 typedef struct {
 	cr_alloc reallocate; /* allocator */
 	void *userdata; /* userdata for allocator */
-	cr_reader reader; /* source file reader */
+	cr_reader reader; /* script reader */
 	cr_cfunc panic; /* panic handler */
 } Hooks; 
 
@@ -260,24 +253,27 @@ void push(VM *vm, Value val);
 
 
 void initvm(VM *vm);
-void resetvm(VM *vm, cr_status status);
+void resetvm(VM *vm, int status);
 
 void vminterpret(VM *vm, const char *source, const char *filename);
 void vmrun(VM *vm);
-void vmcall(VM *vm, Value *retstart, Value fn, int retcnt);
-void vmpcall(VM *vm, ProtectedFn fn, void *userdata, cr_ptrdiff oldtop);
-cr_ubyte vmcompile(VM *vm, void *userdata, const char *name, cr_ubyte globalscope);
-void vmcloseupval(VM *vm, Value *last);
-cr_ubyte vmbindmethod(VM *vm, OClass *oclass, Value name, Value receiver);
-Value vmconcat(VM *vm, Value l, Value r);
+void vmcall(VM *vm, SIndex *retstart, SIndex fn, int nreturns);
+void vmpcall(VM *vm, ProtectedFn fn, void *userdata, ptrdiff_t oldtop);
+cr_ubyte vmcompile(VM *vm, void *userdata, const char *name, int gscope);
 
-cr_ubyte vmequal(VM *vm, StkValue l, StkValue r);
-cr_ubyte vmeqraw(StkValue l, StkValue r);
-cr_ubyte vmeq(VM *vm, StkValue l, StkValue r);
-cr_ubyte vmne(VM *vm, StkValue l, StkValue r);
-cr_ubyte vmlt(VM *vm, StkValue l, StkValue r);
-cr_ubyte vmgt(VM *vm, StkValue l, StkValue r);
-cr_ubyte vmle(VM *vm, StkValue l, StkValue r);
-cr_ubyte vmge(VM *vm, StkValue l, StkValue r);
+void vmcloseupval(VM *vm, SIndex *last);
+
+cr_ubyte vmbindmethod(VM *vm, OClass *oclass, SIndex name, SIndex receiver);
+
+Value vmconcat(VM *vm, SIndex l, SIndex r);
+
+cr_ubyte vmequal(VM *vm, SIndex l, SIndex r);
+cr_ubyte vmeqraw(SIndex l, SIndex r);
+cr_ubyte vmeq(VM *vm, SIndex l, SIndex r);
+cr_ubyte vmne(VM *vm, SIndex l, SIndex r);
+cr_ubyte vmlt(VM *vm, SIndex l, SIndex r);
+cr_ubyte vmgt(VM *vm, SIndex l, SIndex r);
+cr_ubyte vmle(VM *vm, SIndex l, SIndex r);
+cr_ubyte vmge(VM *vm, SIndex l, SIndex r);
 
 #endif
