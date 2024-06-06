@@ -65,10 +65,10 @@ const Tuple ominfo[] = {
 
 
 
-/* Create new unmarked 'O' (object) and append it to GC list. */
-static force_inline O *onew(VM *vm, size_t size, OType type)
+/* Create new unmarked 'GCObject' (object) and append it to GC list. */
+static force_inline GCObject *onew(VM *vm, size_t size, OType type)
 {
-	O *object;
+	GCObject *object;
 
 	object = GC_MALLOC(vm, size);
 	object->header = cast(cr_uintptr, vm->objects) | (cast(cr_uintptr, type) << 56);
@@ -403,7 +403,7 @@ OInstance *OInstance_new(VM *vm, OClass *oclass)
 
 /* Return overloaded method or NULL if value
  * is not an instance value or method is not overloaded. */
-static force_inline O *getomethod(VM *vm, Value val, cr_om om)
+static force_inline GCObject *getomethod(VM *vm, Value val, cr_om om)
 {
 	if (isinstance(val))
 		return asinstance(val)->oclass->omethods[om];
@@ -471,7 +471,7 @@ void otypeprint(OType type)
 
 
 /* Free object memory, invokes '__free__' if defined. */
-void ofree(VM *vm, O *object)
+void ofree(VM *vm, GCObject *object)
 {
 #ifdef DEBUG_LOG_GC
 	printf("%p free type ", (void *)object);
@@ -602,7 +602,7 @@ cr_ubyte rawindex(VM *vm, Value value, cr_ubyte get)
 
 cr_ubyte calloverload(VM *vm, Value instance, cr_om tag)
 {
-	O *const fn;
+	GCObject *const fn;
 	Value *const retstart;
 	int retcnt, arity, i;
 
@@ -633,7 +633,7 @@ cr_ubyte calloverload(VM *vm, Value instance, cr_om tag)
  * 0 otherwise. */
 static force_inline int callunop(VM *vm, Value lhs, cr_om op, Value *res)
 {
-	O *om = getomethod(vm, lhs, op);
+	GCObject *om = getomethod(vm, lhs, op);
 	if (om == NULL)
 		return 0;
 	Value *retstart = vm->sp;
@@ -651,7 +651,7 @@ static force_inline int callunop(VM *vm, Value lhs, cr_om op, Value *res)
 static force_inline int callbinop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
 {
 	Value instance;
-	O *om = getomethod(vm, lhs, op);
+	GCObject *om = getomethod(vm, lhs, op);
 	if (om == NULL) {
 		om = getomethod(vm, rhs, op);
 		if (om == NULL)
@@ -766,7 +766,7 @@ void oge(VM *vm, Value lhs, Value rhs)
  * Get 'OString' from object 'o'. 
  * 'raw' indicates raw access in case the object type is 'OBJ_INSTANCE'.
  */
-OString *otostr(VM *vm, O *o, cr_ubyte raw)
+OString *otostr(VM *vm, GCObject *o, cr_ubyte raw)
 {
 	OInstance *ins;
 	Value debug, key, result;

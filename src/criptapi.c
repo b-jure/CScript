@@ -84,7 +84,7 @@ CR_API void cr_resetvm(VM *vm)
 CR_API void cr_destroy(VM **vmp)
 {
 	VM *vm;
-	O *head, *next;
+	GCObject *head, *next;
 
 	if (cr_likely(vmp != NULL)) { // non-null pointer ?
 		cr_lock(*vmp);
@@ -296,11 +296,11 @@ CR_API void cr_pushbool(VM *vm, int boolean)
 
 
 /* Auxiliary to 'cr_pushcclosure' and 'cr_pushclass' */
-static ONative *auxpushcclosure(VM *vm, cr_cfunc fn, int args, cr_ubyte isvararg,
+static CClosure *auxpushcclosure(VM *vm, cr_cfunc fn, int args, cr_ubyte isvararg,
 				int upvals)
 {
-	OString *name = asstring(*stkpeek(0));
-	ONative *native = ONative_new(vm, name, fn, args, isvararg, upvals);
+	CRString *name = asstring(*stkpeek(0));
+	CClosure *native = ONative_new(vm, name, fn, args, isvararg, upvals);
 	pop(vm); // name
 	vm->sp -= upvals;
 	while (upvals--)
@@ -324,11 +324,11 @@ CR_API void cr_pushcclosure(VM *vm, const char *name, cr_cfunc fn, int args, cr_
 	cr_lock(vm);
 	criptapi_checkelems(vm, upvals);
 	criptapi_checkptr(vm, fn);
-	OString *fname = vm->faststatic[SS_CSRC];
+	CRString *fname = vm->faststatic[SS_CSRC];
 	if (name)
 		fname = OString_new(vm, name, strlen(name));
 	criptapi_pusho(vm, fname);
-	ONative *native = auxpushcclosure(vm, fn, args, isvararg, upvals);
+	CClosure *native = auxpushcclosure(vm, fn, args, isvararg, upvals);
 	criptapi_pushonative(vm, native);
 	cr_unlock(vm);
 }
@@ -375,18 +375,18 @@ CR_API void cr_pushclass(VM *vm, cr_entry entries[], int nup)
 	while (entry->name && entry->fn) { // while valid entry
 		for (int i = 0; i < nup; i++)
 			criptapi_pushval(vm, *stkpeek(nup - 1));
-		OString *name = OString_new(vm, entry->name, strlen(entry->name));
+		CRString *name = OString_new(vm, entry->name, strlen(entry->name));
 		criptapi_pusho(vm, name);
 		int tag = id2omtag(vm, name);
 		if (tag == -1) { // not overload ?
-			ONative *native =
+			CClosure *native =
 				auxpushcclosure(vm, entry->fn, entry->args, entry->isvararg, nup);
 			*stkpeek(0) = OBJ_VAL(native);
-			rawset(vm, &oclass->methods, OBJ_VAL(name), OBJ_VAL(native));
+			rawset(vm, &oclass->mtab, OBJ_VAL(name), OBJ_VAL(native));
 			pop(vm); // native
 		} else { // overloaded, override 'arity' and 'isvararg'
-			ONative *native = auxpushcclosure(vm, entry->fn, ominfo[tag].arity, 0, nup);
-			oclass->omethods[tag] = cast(O *, native);
+			CClosure *native = auxpushcclosure(vm, entry->fn, ominfo[tag].arity, 0, nup);
+			oclass->vtable[tag] = cast(GCObject *, native);
 		}
 		entry = ++entries;
 	}
@@ -559,7 +559,7 @@ CR_API cr_ubyte cr_getfield(VM *vm, int idx, const char *field)
 	criptapi_checkptr(vm, field);
 	Value insval = *idx2val(vm, idx);
 	if (isinstance(insval)) {
-		OInstance *instance = asinstance(insval);
+		Instance *instance = asinstance(insval);
 		Value key = OBJ_VAL(OString_new(vm, field, strlen(field)));
 		Value fieldval;
 		if ((res = rawget(vm, &instance->fields, key, &fieldval)))
@@ -649,7 +649,7 @@ CR_API cr_ubyte cr_getglobal(VM *vm, const char *name)
 	int res = 0;
 	Value gval;
 	criptapi_checkptr(vm, name);
-	OString *str = OString_new(vm, name, strlen(name));
+	CRString *str = OString_new(vm, name, strlen(name));
 	if (rawget(vm, &vm->globids, OBJ_VAL(str), &gval)) {
 		int idx = (int)AS_NUMBER(gval);
 		criptapi_pushval(vm, vm->globvars.data[idx].value);
@@ -947,7 +947,7 @@ CR_API const char *cr_tostring(VM *vm, int idx, cr_umem *len, cr_hash *hash)
 	const char *str = NULL;
 	cr_lock(vm);
 	Value *v = idx2val(vm, idx);
-	OString *ostr = vtostr(vm, v, *v, 0);
+	CRString *ostr = vtostr(vm, v, *v, 0);
 	str = ostr->bytes;
 	if (len)
 		*len = ostr->len;
@@ -1031,7 +1031,7 @@ CR_API cr_ubyte cr_setfield(VM *vm, int idx, const char *field)
 	criptapi_checkptr(vm, field);
 	Value insval = *idx2val(vm, idx);
 	cr_checkapi(vm, isinstance(insval), "expect class instance");
-	OInstance *instance = asinstance(insval);
+	Instance *instance = asinstance(insval);
 	criptapi_pushcstr(vm, field);
 	cr_ubyte res = rawset(vm, &instance->fields, *stkpeek(0), *stkpeek(1));
 	vm->sp -= 2; // pop value and key
@@ -1046,12 +1046,12 @@ CR_API cr_ubyte cr_setfield(VM *vm, int idx, const char *field)
 static cr_inline Value *getupval(Value fn, int n)
 {
 	if (isclosureobj(fn)) { // cript closure ?
-		OClosure *closure = asclosure(fn);
+		CriptClosure *closure = asclosure(fn);
 		if (cast_uint(n) > closure->fn->p.upvalc - 1)
 			return NULL;
 		return closure->upvalue[n]->location;
 	} else if (iscfunction(fn)) { // native C function ?
-		ONative *native = ascfn(fn);
+		CClosure *native = ascfn(fn);
 		if (cast_uint(n) > native->p.upvalc - 1)
 			return NULL;
 		return &native->upvalue[n];
@@ -1127,7 +1127,7 @@ CR_API cr_ubyte cr_nextproperty(VM *vm, int idx, cr_ubyte what)
 	Value value = *idx2val(vm, idx);
 	Value *key = stkpeek(0);
 	cr_checkapi(vm, isinstance(value), "Expect instance");
-	OInstance *instance = asinstance(value);
+	Instance *instance = asinstance(value);
 	HashTable *table = rawgettable(vm, instance, what);
 	hasnext = HashTable_next(vm, table, key);
 	if (hasnext)

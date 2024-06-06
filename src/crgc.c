@@ -80,25 +80,25 @@ MS_FN(markstack)
 MS_FN(markframes)
 {
 	for (int i = 0; i < vm->fc; i++)
-		omark(vm, cast(O *, vm->frames[i].closure));
+		omark(vm, cast(GCObject *, vm->frames[i].closure));
 }
 
 MS_FN(markupvalues)
 {
 	for (OUpvalue *upval = vm->open_upvals; upval != NULL; upval = upval->next)
-		omark(vm, cast(O *, upval));
+		omark(vm, cast(GCObject *, upval));
 }
 
 MS_FN(markstatics)
 {
 	for (uint32_t i = 0; i < SS_N; i++)
-		omark(vm, cast(O *, vm->faststatic[i]));
+		omark(vm, cast(GCObject *, vm->faststatic[i]));
 }
 
 MS_FN(markinterned)
 {
 	for (uint32_t i = 0; i < vm->interned.len; i++)
-		omark(vm, cast(O *, vm->interned.data[i]));
+		omark(vm, cast(GCObject *, vm->interned.data[i]));
 }
 
 MS_FN(markloaded)
@@ -134,15 +134,15 @@ MS_FN(rmweakrefs)
 
 MS_FN(sweep)
 {
-	O *previous = NULL;
-	O *current = vm->objects;
+	GCObject *previous = NULL;
+	GCObject *current = vm->objects;
 	while (current != NULL) {
 		if (oismarked(current)) {
 			osetmark(current, 0);
 			previous = current;
 			current = onext(current);
 		} else {
-			O *unreached = current;
+			GCObject *unreached = current;
 			current = onext(current);
 			if (previous != NULL)
 				osetnext(previous, current);
@@ -156,7 +156,7 @@ MS_FN(sweep)
 
 
 
-void mark_black(VM *vm, O *obj)
+void mark_black(VM *vm, GCObject *obj)
 {
 #ifdef DEBUG_LOG_GC
 	printf("%p blacken ", (void *)obj);
@@ -175,56 +175,56 @@ void mark_black(VM *vm, O *obj)
 	ASSERT(oismarked(obj), "Object is not marked.");
 	DISPATCH(otype(obj))
 	{
-		CASE(OBJ_UPVAL)
+		CASE(OBJ_UVAL)
 		{
 			vmark(vm, cast(OUpvalue *, obj)->closed);
 			BREAK;
 		}
 		CASE(OBJ_FUNCTION)
 		{
-			OFunction *fn = cast(OFunction *, obj);
-			omark(vm, cast(O *, fn->p.name));
-			omark(vm, cast(O *, fn->p.source));
+			Function *fn = cast(Function *, obj);
+			omark(vm, cast(GCObject *, fn->p.name));
+			omark(vm, cast(GCObject *, fn->p.source));
 			for (uint32_t i = 0; i < fn->chunk.constants.len; i++)
 				vmark(vm, fn->chunk.constants.data[i]);
 			BREAK;
 		}
 		CASE(OBJ_CLOSURE)
 		{
-			OClosure *closure = (OClosure *)obj;
-			omark(vm, (O *)closure->fn);
+			CriptClosure *closure = (CriptClosure *)obj;
+			omark(vm, (GCObject *)closure->fn);
 			for (uint32_t i = 0; i < closure->fn->p.upvalc; i++)
-				omark(vm, cast(O *, closure->upvalue[i]));
+				omark(vm, cast(GCObject *, closure->upvalue[i]));
 			BREAK;
 		}
 		CASE(OBJ_CLASS)
 		{
 			OClass *oclass = cast(OClass *, obj);
-			omark(vm, cast(O *, oclass->name));
-			marktable(vm, &oclass->methods);
+			omark(vm, cast(GCObject *, oclass->name));
+			marktable(vm, &oclass->mtab);
 			for (cr_ubyte i = 0; i < OM_CNT; i++)
-				omark(vm, cast(O *, oclass->omethods[i]));
+				omark(vm, cast(GCObject *, oclass->omethods[i]));
 			BREAK;
 		}
 		CASE(OBJ_INSTANCE)
 		{
-			OInstance *instance = cast(OInstance *, obj);
-			omark(vm, cast(O *, instance->oclass));
+			Instance *instance = cast(Instance *, obj);
+			omark(vm, cast(GCObject *, instance->oclass));
 			marktable(vm, &instance->fields);
 			BREAK;
 		}
 		CASE(OBJ_BOUND_METHOD)
 		{
-			OBoundMethod *bound_method = cast(OBoundMethod *, obj);
-			omark(vm, cast(O *, bound_method));
+			InstanceMethod *bound_method = cast(InstanceMethod *, obj);
+			omark(vm, cast(GCObject *, bound_method));
 			vmark(vm, bound_method->receiver);
-			omark(vm, cast(O *, bound_method->method));
+			omark(vm, cast(GCObject *, bound_method->method));
 			BREAK;
 		}
-		CASE(OBJ_NATIVE)
+		CASE(OBJ_CFUNCTION)
 		{
-			ONative *native = cast(ONative *, obj);
-			omark(vm, cast(O *, native->p.name));
+			CClosure *native = cast(CClosure *, obj);
+			omark(vm, cast(GCObject *, native->p.name));
 			for (uint32_t i = 0; i < native->p.upvalc; i++)
 				vmark(vm, native->upvalue[i]);
 			BREAK;
