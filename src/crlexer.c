@@ -15,7 +15,6 @@
  * ----------------------------------------------------------------------------------------------*/
 
 #include "crlexer.h"
-#include "crobject.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -24,37 +23,12 @@
 
 
 /* Maximum size of error token string. */
-#define MAX_ERR_STRING		CR_SRCID_MAX
-#define ERR_LEN(len)		(MIN(MAX_ERR_STRING, len))
+#define MAX_ERR_STRING		CR_MAXSRC
+#define errlen(len)		(MIN(MAX_ERR_STRING, len))
 
 
 
-
-/* ================= Create/Free ================= */
-
-void initlexer(Lexer *L, VM *vm, BuffReader *br, Value source)
-{
-	L->vm = vm;
-	L->br = br;
-	L->c = brgetc(L->br);
-	ubyteVec_init(&L->buffer, vm);
-	ubyteVec_init_cap(&L->buffer, vm, 32);
-	L->line = 1;
-	L->panic = L->error = L->skip = 0;
-}
-
-void freelexer(Lexer *L)
-{
-	ubyteVec_free(&L->buffer, NULL);
-}
-
-/* ----------------------------------------------- */
-
-
-
-
-/* ==================== Lexer errors ==================== */
-
+/* errors */
 typedef enum {
 	LE_INCHEXESC,
 	LE_INVHEXESC,
@@ -67,6 +41,7 @@ typedef enum {
 	LE_TOKENLIMIT,
 } LexErr;
 
+/* error description */
 static const char *lexerrors[] = {
 	"\tIncomplete hex escape sequence.\n",
 	"\tInvalid hexadecimal escape sequence.\n",
@@ -79,14 +54,37 @@ static const char *lexerrors[] = {
 	"\tToken contains too many characters, limit is %d.\n",
 };
 
-/* ------------------------------------------------------ */
 
 
+void cr_lx_init(VM *vm, Lexer *lx, BuffReader *br, OString *source)
+{
+	lx->vm = vm;
+	lx->fs = NULL;
+	lx->br = br;
+	lx->src = source;
+	lx->c = brgetc(lx->br);
+	lx->currline = 1;
+	lx->prevline = 1;
+	lx->skip = 0;
+	createvec(vm, &lx->buf, MAXSIZE>>1, "chars");
+	reallocvec(vm, &lx->buf, CR_MINBUFFER);
+}
 
 
-/* ==============  Register compile-time error (lexing/parsing) ============== */
+void cr_lx_free(Lexer *lx)
+{
+	freevec(lx->vm, &lx->buf);
+}
 
-void regcomperror(Lexer *L, const char *err, va_list args)
+
+static cr_noret lexerror(Lexer *lexer, const char *err, va_list ap)
+{
+	err = lineinfo
+	regcomperror(lexer, err, args);
+}
+
+
+void cr_lx_syntaxerror(Lexer *L, const char *err, va_list args)
 {
 	VM *vm;
 	OString *prefix;
@@ -94,11 +92,11 @@ void regcomperror(Lexer *L, const char *err, va_list args)
 	const Token *token;
 	const char *src;
 
-	L->panic = L->error = 1;
+	L->error = 1;
 	vm = L->vm;
 	preverr = L->error;
 	token = &L->previous;
-	src = AS_CSTRING(L->src);
+	src = ascstring(L->src);
 	prefix = OString_fmt(vm, "[%s][line: %u] Error", src, token->line);
 	push(vm, OBJ_VAL(prefix));
 
@@ -117,14 +115,6 @@ pusherr:
 }
 
 
-static void lexerror(Lexer *lexer, const char *err, ...)
-{
-	va_list args;
-	va_start(args, err);
-	regcomperror(lexer, err, args);
-	va_end(args);
-}
-
 /* ------------------------------------------------------------ */ // register error
 
 
@@ -133,7 +123,7 @@ static void lexerror(Lexer *lexer, const char *err, ...)
 /* ================== Lexer buffer and auxiliary functions ================== */
 
 /* Checks for end of stream */
-#define isend(c) ((c) == SKEOF)
+#define isend(c) ((c) == CREOF)
 
 /* Increments line number if 'c' is newline character */
 #define incrline(l, c) ((c) == '\n' || (c) == '\r' ? ((l)->line++, c) : c)
@@ -172,7 +162,7 @@ static void lexerror(Lexer *lexer, const char *err, ...)
 /* Pushes 'c' into lexer buffer */
 static void pushc(Lexer *lexer, int32_t c)
 {
-	if (unlikely(lblen(lexer) >= LEX_TOKEN_LEN_LIMIT)) {
+	if (cr_unlikely(lblen(lexer) >= LEX_TOKEN_LEN_LIMIT)) {
 		lexerror(lexer, lexerrors[LE_TOKENLIMIT], LEX_TOKEN_LEN_LIMIT);
 		lexer->skip = 1;
 	}
@@ -231,14 +221,14 @@ Token syntoken(const char *name)
 }
 
 /* Create generic token */
-static Token token(Lexer *lexer, TokenType type, Value value)
+static Token token(Lexer *lexer, TType type, Value value)
 {
 	Token token;
 	token.type = type;
 	token.value = value;
 	token.start = lbptr(lexer);
 	token.len = cast(cr_ubyte, lblen(lexer));
-	token.line = lexer->line;
+	token.line = lexer->currentline;
 	return token;
 }
 
@@ -248,13 +238,13 @@ static Token token(Lexer *lexer, TokenType type, Value value)
 
 
 /* Create error token with 'err' message */
-static force_inline Token errtoken(Lexer *lexer, const char *err)
+static cr_inline Token errtoken(Lexer *lexer, const char *err)
 {
 	Token token;
 	token.type = TOK_ERROR;
 	token.start = err;
 	token.len = cast(cr_ubyte, strlen(err));
-	token.line = lexer->line;
+	token.line = lexer->currentline;
 	return token;
 }
 
@@ -278,7 +268,7 @@ static cr_ubyte eschex(Lexer *lexer)
 	advance(lexer); // skip 'x'
 	cr_ubyte number = 0;
 	for (cr_ubyte i = 0; i < 2; i++) {
-		if (unlikely(isend(lexer->c) || lexer->c == '"')) {
+		if (cr_unlikely(isend(lexer->c) || lexer->c == '"')) {
 			lexerror(lexer, lexerrors[LE_INCHEXESC]);
 			break;
 		}
@@ -295,11 +285,11 @@ static cr_ubyte eschex(Lexer *lexer)
 
 
 /* Create string token and escape the escape sequences if any */
-static force_inline Token string(Lexer *lexer)
+static cr_inline Token string(Lexer *lexer)
 {
 	advance(lexer); // skip first '"'
 	while (1) {
-		if (unlikely(isend(lexer->c) || lexer->c == '\n' || lexer->c == '\r')) {
+		if (cr_unlikely(isend(lexer->c) || lexer->c == '\n' || lexer->c == '\r')) {
 			lexerror(lexer, lexerrors[LE_UNTSTR]);
 			break;
 		}
@@ -346,7 +336,7 @@ static force_inline Token string(Lexer *lexer)
 				pushc(lexer, cast(int32_t, eschex(lexer)));
 				break;
 			}
-			case SKEOF: // raise error next iteration
+			case CREOF: // raise error next iteration
 				break;
 			default:
 				lexerror(lexer, lexerrors[LE_ESCSEQ], lexer->c);
@@ -380,7 +370,7 @@ static void decimal(Lexer *lexer, Value *res)
 			advance_and_push(lexer);
 			if (lexer->c == '+' || lexer->c == '-')
 				advance_and_push(lexer);
-			if (unlikely(!isdigit(lexer->c)))
+			if (cr_unlikely(!isdigit(lexer->c)))
 				lexerror(lexer, lexerrors[LE_DECCONST]);
 			else {
 				advance_and_push(lexer);
@@ -412,7 +402,7 @@ static void hex(Lexer *lexer, Value *res)
 	advance(lexer); // skip 'x' | 'X'
 	while (isxdigit(lexer->c))
 		advance_and_push(lexer);
-	if (unlikely(lblen(lexer) == 0))
+	if (cr_unlikely(lblen(lexer) == 0))
 		lexerror(lexer, lexerrors[LE_HEXCONST]);
 	pushc(lexer, '\0');
 	errno = 0;
@@ -427,7 +417,7 @@ static void hex(Lexer *lexer, Value *res)
 
 
 /* Create number value from string in octal format */
-static force_inline void octal(Lexer *lexer, Value *res)
+static cr_inline void octal(Lexer *lexer, Value *res)
 {
 	while (lexer->c >= '0' && lexer->c <= '7')
 		advance_and_push(lexer);
@@ -438,10 +428,10 @@ static force_inline void octal(Lexer *lexer, Value *res)
 
 
 /* Check if number constant overflows after conversion, auxiliary to 'number'. */
-static force_inline void checkoverflow(Lexer *lexer, Value *n)
+static cr_inline void checkoverflow(Lexer *lexer, Value *n)
 {
-	if (unlikely(errno == ERANGE)) {
-		lexerror(lexer, lexerrors[LE_LARGECONST], ERR_LEN(lblen(lexer)), lbptr(lexer));
+	if (cr_unlikely(errno == ERANGE)) {
+		lexerror(lexer, lexerrors[LE_LARGECONST], errlen(lblen(lexer)), lbptr(lexer));
 		*n = NUMBER_VAL(0);
 		errno = 0;
 	}
@@ -467,8 +457,8 @@ static Token number(Lexer *lexer)
 /* Check if rest of the slice matches the pattern and
  * return appropriate 'TokenType' otherwise return 'TOK_IDENTIFIER'.
  * Auxiliary to 'TokenType_identifier' */
-static force_inline TokenType keyword(Lexer *lexer, uint32_t start, uint32_t length, const char *pattern,
-				      TokenType type)
+static cr_inline TType keyword(Lexer *lexer, uint32_t start, uint32_t length, const char *pattern,
+				      TType type)
 {
 	advance(lexer); // skip past the keyword for the next scan
 	if (lblen(lexer) == start + length && memcmp(lbptr(lexer) + start, pattern, length) == 0)
@@ -477,7 +467,7 @@ static force_inline TokenType keyword(Lexer *lexer, uint32_t start, uint32_t len
 }
 
 /* Return appropriate 'TokenType' for the identifier */
-static TokenType TokenType_identifier(Lexer *lexer)
+static TType TokenType_identifier(Lexer *lexer)
 {
 #ifdef CR_PRECOMPUTED_GOTO
 #define RET &&ret
@@ -694,7 +684,7 @@ ret:
 	return TOK_IDENTIFIER;
 }
 
-static force_inline Token idtoken(Lexer *lexer)
+static cr_inline Token idtoken(Lexer *lexer)
 {
 	while (isalnum(lexer->c) || lexer->c == '_')
 		advance_and_push(lexer);
@@ -712,7 +702,7 @@ Token scan(Lexer *lexer)
 {
 	lexer->buffer.len = 0; // reset buffer
 	skipws(lexer);
-	if (lexer->c == SKEOF)
+	if (lexer->c == CREOF)
 		return token(lexer, TOK_EOF, EMPTY_VAL);
 	if (lexer->c == '_' || isalpha(lexer->c))
 		return idtoken(lexer);

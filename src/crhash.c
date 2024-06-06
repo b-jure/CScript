@@ -12,65 +12,44 @@
  *
  * You should have received a copy of the GNU General Public License along with cript.
  * If not, see <https://www.gnu.org/licenses/>.
- *
- *
- * xxHash Library
- * Copyright (c) 2012-2021 Yann Collet
- * All rights reserved.
- *
- * BSD 2-Clause License (https://www.opensource.org/licenses/bsd-license.php)
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- *
- *  - Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- *  - Redistributions in binary form must reproduce the above copyright notice, this
- *    list of conditions and the following disclaimer in the documentation and/or
- *    other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "skhash.h"
-#include "skmath.h"
-#include "xxhash.h"
+#include <math.h>
 
-#define HASH_INF 314159
+#include "crhash.h"
 
-/* Hash double */
-cr_hash dblhash(double dbl)
+
+/* hash 'cr_number' */
+unsigned int hashnumber(cr_number n)
 {
-    if(cr_isinf(dbl) || cr_isnan(dbl)) return (dbl > 0) ? HASH_INF : -HASH_INF;
-    union {
-        double value;
-        uint32_t ints[2];
-    } bitcast;
-    bitcast.value = (dbl) + 1.0;
-    return bitcast.ints[0] + bitcast.ints[1];
+	unsigned int ui;
+	cr_integer ni;
+	int exp;
+	
+	n = cr_math(frexp(n, &exp)) * -cast_num(INT_MIN);
+	if (cr_likely(cr_number2integer(n,&ni))) {
+		ui = cast_uint(exp) + cast_uint(ni);
+		return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
+	}
+	cr_assert(cr_numisnan(n) || cr_math(fabs)(n) == cast_num(HUGE_VAL));
+	return 0;
 }
 
-/* Hash string (xxHash) */
-cr_hash stringhash(const char* str, size_t len, unsigned long seed)
+/* 
+ * hash string
+ * One-byte-at-a-time hash based on Murmur's mix
+ * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp 
+ */
+unsigned int hashstring(const char *str, size_t len, unsigned int seed)
 {
-    return XXH64(str, len, seed);
-}
+	const cr_ubyte *data = cast(const cr_ubyte *, str);
+	unsigned int h = seed;
+	int i;
 
-/* Hash pointer (for objects except strings) */
-cr_hash ptrhash(const void* ptr)
-{
-    uintptr_t x = (uintptr_t)ptr;
-    // https://github.com/python/cpython/blob/3375dfed400494ba5cc1b744d52f6fb8b7796059/Include/internal/pycore_pyhash.h#L10
-    x = (x >> 4) | (x << (8 * sizeof(uintptr_t) - 4));
-    return x;
+	for (i = 0; i < len; i++) {
+		h ^= data[i];
+		h *= 0x5bd1e995;
+		h ^= h >> 15;
+	}
+	return h;
 }

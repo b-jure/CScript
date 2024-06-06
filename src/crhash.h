@@ -19,8 +19,11 @@
 
 #include "crcommon.h"
 
-cr_hash dblhash(cr_double dbl);
-cr_hash stringhash(const char* str, size_t len, unsigned long seed);
-cr_hash ptrhash(const void* ptr);
+unsigned int hashnumber(cr_number n);
+unsigned int hashstring(const char* str, size_t len, unsigned int seed);
+
+#define hashinteger(i)		cast_uint(cr_castS2U((i)))
+#define hashboolean(b)		cast_uint((b) != 0)
+#define hashpointer(p)		pointer2uint((p))
 
 #endif

@@ -14,107 +14,316 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
+/* internal macros, limits and types */
 #ifndef CRLIMITS_H
 #define CRLIMITS_H
 
 #include "cript.h"
 
-#define __STDC_LIMIT_MACROS
 #include <limits.h>
 
 
-/* ====================== Parser limits ====================== */
-/* Limit of constants created in a function. */
-#define PARSER_CONST_LIMIT	CR_CONST_MAX
-/* Limit of function arguments provided. */
-#define PARSER_ARG_LIMIT	CR_ARG_MAX
-/* Limit of return values. */
-#define PARSER_RET_LIMIT	CR_ARG_MAX
-/* Limit of local variable defines. */
-#define PARSER_LVAR_LIMIT	CR_LVAR_MAX
-/* Limit of global variable defines. */
-#define PARSER_GVAR_LIMIT	CR_GVAR_MAX
-/* Limit of code jump size. */
-#define PARSER_JMP_LIMIT	CR_JMP_MAX
-/* -------------------------------------------------------- */
+
+/*
+ * Signed and unsigned types that represent count 
+ * in bytes of total memory used by cript.
+ */
+typedef size_t cr_umem;
+typedef ptrdiff_t cr_mem;
+
+#define CRUMEM_MAX	((cr_umem)(~(cr_umem)(0)))
+#define CRMEM_MAX	((cr_mem)(CR_UMEM_MAX >> 1))
 
 
-/* ====================== VM limits ====================== */
-/* Virtual Machine stack limit size. */
-#define VM_STACK_LIMIT		CR_STACK_MAX
-/* Virtual Machine functions called limit. */
-#define VM_CALLSTACK_LIMIT	CR_CALLFRAMES_MAX
-/* Virtual Machine garbage collector gray-stack size limit. */
-#define VM_GRAYSTACK_LIMIT	UINT64_MAX
-/* -------------------------------------------------------- */
+/*
+ * Used for representing small signed/unsigned
+ * numbers instead of declaring them 'char'.
+ */
+typedef unsigned char cr_ubyte;
+typedef signed char cr_byte;
+
+#define CRUBYTE_MAX	((cr_ubyte)(~(cr_ubyte)(0)))
+#define CRBYTE_MAX	((cr_ubyte)(CR_UBYTE_MAX >> 1))
 
 
-/* ==================== Lexer limits ==================== */
-/* Token size limit in bytes. */
-#define LEX_TOKEN_LEN_LIMIT 2000
-/* ------------------------------------------------------ */
+
+/* 
+ * Maximum size visible for cript.
+ * It must be less than what is representable by 'cr_integer'. 
+ */
+#define MAXSIZE		(sizeof(size_t) < sizeof(cr_integer) ? \
+				(SIZE_MAX) : (size_t)(CR_INTEGER_MAX))
 
 
-/* ====================== Conversion limits ====================== */
-/* limit for 'cr_integer' is 20 digits/bytes + 1 sign byte + null term */
-#define MAXINT2STR 22
 
-/* limit for 'cr_floating' */
-#define MAXFLT2STR 42
-
-/* limit for pointer to 'void' is 8 digits/bytes + 2 hex bytes + null term */
-#define MAXVOIDP2STR 11
-/* -------------------------------------------------------- */
+/* convert pointer 'p' to 'unsigned int' */
+#define pointer2uint(p)		((unsigned int)((uintptr_t)(p)&(UINT_MAX)))
 
 
-/* ====================== Format specifiers ====================== */
-/* format specifer for 'cr_integer' */
-#define INTEGERFMT "%ld"
 
-/* format specifer for 'cr_floating' */
-#define FLTFMT "%g"
+/* internal assertions for debugging */
+#if defined(CRI_DEBUG_ASSERT)
+#undef NDEBUG
+#include <assert.h>
+#define cr_assert(e)		assert(e)
+#endif
 
-/* format specifier for pointer */
-#define PTRFMT "%p"
-/* -------------------------------------------------------- */
+#if defined(cr_assert)
+#define check_exp(c,e)		(cr_assert(c),(e))
+#else
+#define cr_assert(e)		((void)0)
+#define check_exp(c,e)		(e)
+#endif
 
+/* C API assertions */
+#if !defined(cri_checkapi)
+#define cri_checkapi(vm,e)	((void)vm, cr_assert(e))
+#endif
 
-/* ====================== Integer type limits ====================== */
-/* maximum */
-#define CR_UBYTE_MAX		bmax(cr_ubyte)
-#define CR_BYTE_MAX    		((cr_byte)(CR_UBYTE_MAX >> 1))
-#define CR_UINT_MAX    		bmax(cr_uint)
-#define CR_INT_MAX     		((cr_int)(CR_UINT_MAX >> 1))
-#define CR_ULINT_MAX   		bmax(cr_ulint)
-#define CR_LINT_MAX    		((cr_lint)(CR_ULINT_MAX >> 1))
-#define CR_UMEM_MAX    		bmax(cr_umem)
-#define CR_MEM_MAX     		((cr_mem)(UMEM_MAX >> 1))
-#define CR_HASH_MAX    		CR_ULINT_MAX
-#define CR_UINTPTR_MAX 		bmax(cr_uintptr)
-#define CR_INTPTR_MAX  		bmax(cr_intptr)
-#define CR_INTEGER_MAX 		CR_LINT_MAX
-/* minimum */
-#define CR_UBYTE_MIN		bmax(cr_ubyte)
-#define CR_BYTE_MIN    		bmax(cr_byte)
-#define CR_INT_MIN     		bmax(cr_int)
-#define CR_UINT_MIN    		bmax(cr_uint)
-#define CR_LINT_MIN    		bmax(cr_lint)
-#define CR_ULINT_MIN   		bmax(cr_ulint)
-#define CR_UMEM_MIN    		bmax(cr_umem)
-#define CR_MEM_MIN     		((cr_mem)(UMEM_MAX >> 1))
-#define CR_HASH_MIN    		CR_ULINT_MIN
-#define CR_UINTPTR_MIN 		bmax(cr_uintptr)
-#define CR_INTPTR_MIN  		bmax(cr_intptr)
-#define CR_INTEGER_MIN 		CR_LINT_MAX
-/* -------------------------------------------------------- */
+#define checkapi(vm,e,err)	cri_checkapi(vm,(e) && err)
 
 
-/* ====================== Other limits ====================== */
-/* minimum ensured stack space */
-#define EXTRASTACK 5
 
-/* 'Vec' size limit */
-#define VECSIZE_LIMIT	CR_BYTECODE_MAX
-/* -------------------------------------------------------- */
+/* 
+ * Allow threaded code by default on GNU C compilers.
+ * What this allows is usage of jump table aka using
+ * local labels inside arrays making O(1) jumps to
+ * instructions inside interpreter loop.
+ */
+#if defined(__GNUC__)
+#define PRECOMPUTED_GOTO
+#endif
+
+
+
+/* inline functions */
+#if defined(__GNUC__)
+#define cr_inline	__inline__
+#else
+#define cr_inline	inline
+#endif
+
+/* static inline */
+#define cr_sinline	static cr_inline
+
+
+
+/* non-return type */
+#if defined(__GNUC__)
+#define cr_noret	void __attribute__((noreturn))
+#elif defined(_MSC_VEC) && _MSC_VEC >= 1200
+#define cr_noret	void __declspec(noreturn)
+#else
+#define cr_noret	void
+#endif
+
+
+
+/* mark unreachable code (optimization) */
+#if defined(__GNUC__)
+#define cr_unreachable	__builtin_unreachable()
+#else
+#define cr_unreachable \
+	{ #include<stdlib.h> \
+	  cr_assert(0 && "unreachable"); \
+	  abort(); }
+
+#endif
+
+
+
+/* 
+ * Type for virtual-machine instructions 
+ * Instructions (opcodes) are 1 byte in size not including
+ * the arguments; arguments vary in size (short/long) and
+ * more on that in 'cropcode.h'.
+ */
+typedef cr_ubyte Instruction;
+
+
+
+/* 
+ * Maximum instruction parameter size.
+ * This is the maximum unsigned value that fits in 3 bytes.
+ * Transitively this defines various compiler limits. 
+ */
+#define CR_MAXCODE		16777215
+
+
+
+/*
+ * Initial size for the interned strings table.
+ * It has to be power of 2, because of the implementation
+ * of the table itself.
+ */
+#if !defined(CR_MINSTRTABSIZE)
+#define CR_MINSTRTABSIZE	64
+#endif
+
+
+
+/* minimum size for string buffer */
+#if !defined(CR_MINBUFFER)
+#define CR_MINBUFFER	32
+#endif
+
+
+
+/* maximum table load factor */
+#if !defined(CR_MAXTABLOAD)
+#define CR_MAXTABLOAD	0.70
+#endif
+
+
+
+/* 
+ * Maximum call depth for nested C calls including the
+ * parser limit for syntactically nested non-terminals and
+ * other features implemented through recursion in C.
+ * Any value will suffice as long as it fits in 'unsigned short'.
+ * By design smaller type (unsigned short) is chosen than the stack
+ * size so you can't mess up.
+ */
+#define CR_MAXCCALLS	4096
+
+
+
+/* 
+ * Runs each time program enters ('cr_lock') and
+ * leaves ('cr_unlock') cript core (C API).
+ */
+#if !defined(cr_lock)
+#define	cr_lock(vm)	((void)0)
+#define	cr_unlock(vm)	((void)0)
+#endif
+
+
+
+/*
+ * These allow user-defined action to be taken each
+ * time VM (thread) is created or deleted.
+ */
+#if !defined(cri_threadcreated)
+#define cri_threadcreated(vm)	((void)(vm))
+#endif
+
+#if !defined(cri_threaddelete)
+#define cri_threaddelete(vm)	((void)(vm))
+#endif
+
+
+
+/* 
+ * @MAX - return maximum value.
+ * @MIN - return minimum value.
+ */
+#if defined(__GNUC__)
+#define MAX(a, b) \
+	({ __typeof__(a) _a = (a); \
+	   __typeof__(b) _b = (b); \
+	   _a > _b ? _a : _b; })
+
+#define MIN(a, b) \
+	({ __typeof__(a) _a = (a); \
+	   __typeof__(b) _b = (b); \
+	   _a > _b ? _b : _a; })
+#else
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) > (b) ? (b) : (a))
+#endif
+
+
+
+/* 
+ * @UNUSED - marks variable unused to avoid compiler
+ * warnings. 
+ */
+#ifndef UNUSED
+#define UNUSED(x) ((void)(x))
+#endif
+
+
+
+/* @cast - cast expression 'e' as type 't'. */
+#define cast(t, e)	((t)(e))
+
+#define cast_ubyte(e)	cast(cr_ubyte,(e))
+#define cast_byte(e)	cast(cr_byte,(e))
+#define cast_num(e)	cast(cr_number,(e))
+#define cast_int(e)	cast(int,(e))
+#define cast_uint(e)	cast(unsigned int,(e))
+
+
+/* @cast_umem - cast expression 'e' as 'cr_umem'. */
+#define cast_umem(e)	cast(cr_umem, (e))
+
+/* cast 'cr_integer' to 'cr_uinteger' */
+#define cr_castS2U(i)	((cr_uinteger)(i))
+
+/* cast 'cr_uinteger' to 'cr_integer' */
+#define cr_castU2S(i)	((cr_integer)(i))
+
+
+
+/* string literal length */
+#define SLL(sl) (sizeof(sl) - 1)
+
+
+
+/* @cr_nummod - modulo 'a - floor(a/b)*b'. */
+#define cr_nummod(vm,a,b,m) { \
+	(m)=fmod((a),(b)); \
+	if (((m) > 0) ? (b)<0 : ((m)<0 && (b)>0)) (m)+=(b); }
+
+/* @cr_numdiv - float division. */
+#ifndef cr_numdiv
+#define cr_numdiv(vm, a, b)	((a)/(b))
+#endif
+
+/* @cr_numidiv - floor division (or division between integers). */
+#ifndef cr_numidiv
+#define cr_numidiv(vm, a, b)	(floor(cr_numdiv(a, b))
+#endif
+
+/* @cr_numpow - exponentiation. */
+#ifndef cr_numpow
+#define cr_numpow(vm, a, b)	((b)==2 ? (a)*(a) : pow((a),(b)))
+#endif
+
+/* 
+ * @cr_numadd - addition.
+ * @cr_numsub - subtraction.
+ * @cr_nummul - multiplication.
+ * @cr_numunm - negation.
+ */
+#ifndef cr_numadd
+#define cr_numadd(vm, a, b) 	((a)+(b))
+#define cr_numsub(vm, a, b) 	((a)-(b))
+#define cr_nummul(vm, a, b) 	((a)*(b))
+#define cr_numunm(vm, a)	(-(a))
+#endif
+
+/* 
+ * @cr_numeq - ordering equal.
+ * @cr_numne - ordering not equal.
+ * @cr_numlt - ordering less than.
+ * @cr_numle - ordering less equal.
+ * @cr_numgt - ordering greater than.
+ * @cr_numge - ordering greater equal.
+ */
+#ifndef cr_numeq
+#define cr_numeq(a, b)		((a)==(b))
+#define cr_numne(a, b) 		(!cr_numeq(a,b))
+#define cr_numlt(a, b) 		((a)<(b))
+#define cr_numle(a, b) 		((a)<=(b))
+#define cr_numgt(a, b) 		((a)>(b))
+#define cr_numge(a, b) 		((a)>=(b))
+#endif
+
+/* @cr_numisnan - check if number is 'NaN'. */
+#ifndef cr_numisnan
+#define cr_numisnan(a)		(!cr_numeq(a,a))
+#endif
+
 
 #endif

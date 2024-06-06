@@ -17,6 +17,7 @@
 #ifndef CROBJECT_H
 #define CROBJECT_H
 
+
 #include "crchunk.h"
 #include "crcommon.h"
 #include "crhash.h"
@@ -29,250 +30,253 @@
 typedef enum {
 	OBJ_STRING = 0,
 	OBJ_FUNCTION,
-	OBJ_CLOSURE,
-	OBJ_NATIVE,
-	OBJ_UPVAL,
+	OBJ_CLOSURE,	/* 'Closure' */
+	OBJ_CRLOSURE,	/* 'CriptClosure' */
+	OBJ_CCLOSURE,	/* 'CClosure' */
+	OBJ_UVAL,
 	OBJ_CLASS,
 	OBJ_INSTANCE,
 	OBJ_BOUND_METHOD,
 } OType;
 
 
-#define ObjectHeader	struct O* next; cr_ubyte otype; cr_ubyte marked
+
+/* common header for objects */
+#define ObjectHeader	struct GCObject* next; cr_ubyte otype; cr_ubyte marked
 
 
-/* every object type contains this type */
-typedef struct O {
+/* common type for collectable objects */
+typedef struct GCObject {
 	ObjectHeader;
-} O;
+} GCObject;
 
 
 
-/* object manipulation macros */
-#define otypeset(o, t)	(o)->header = ((o)->header & 0x00ffffffffffffff) | (cast(t, cr_uintptr) << 56)
-#define otype(o)       	((OType)(((o)->header >> 56) & 0xff))
-#define oismarked(o)   	cast(cr_ubyte, ((o)->header >> 48) & 0x01)
-#define osetmark(o, m) 	(((o)->header & 0xff00ffffffffffff) | (cast(cr_uintptr, (m)) << 48))
-#define onext(o)       	cast(O *, (o)->header & 0x0000ffffffffffff)
-#define osetnext(o, n) 	(o)->header = ((o)->header & 0xffff000000000000) | cast(cr_uintptr, next)
-#define oistype(o, t)  	(otype(o) == (t))
+/* set/check object type */
+#define osett(o,t)	((o)->otype = (t))
+#define oist(o,t)	((o)->otype == (t))
 
+/* mark object (GC) */
+#define omark(o)	((o)->omark = 1)
 
-/* get object type of value */
-#define OBJ_TYPE(v)	(otype(AS_OBJ(v)))
+/* get object type from value */
+#define otype(v)	(asobj(v)->otype)
 
 
 /* check if value is object and it's object type matches @t */
-#define isot(v, t)	(IS_OBJ(v) && oistype(AS_OBJ(v), t))
-
-
-/* miscellaneous object macros */
-#define IS_STRING(v)		isot(v, OBJ_STRING)
-#define AS_STRING(v)	   	((OString *)AS_OBJ(v))
-#define AS_CSTRING(v)	   	(((OString *)AS_OBJ(v))->bytes)
-#define IS_FUNCTION(v)	   	isot(v, OBJ_FUNCTION)
-#define AS_FUNCTION(v)	   	((OFunction *)AS_OBJ(v))
-#define IS_NATIVE(v)	   	isot(v, OBJ_NATIVE)
-#define AS_NATIVE(v)	   	((ONative *)AS_OBJ(v))
-#define IS_CLOSURE(v)	   	isot(v, OBJ_CLOSURE)
-#define AS_CLOSURE(v)	   	((OClosure *)AS_OBJ(v))
-#define IS_UPVAL(v)	   	isot(v, OBJ_UPVAL)
-#define AS_UPVAL(v)	   	((OUpvalue *)AS_OBJ(v))
-#define IS_CLASS(v)	   	isot(v, OBJ_CLASS)
-#define AS_CLASS(v)	   	((OClass *)AS_OBJ(v))
-#define IS_INSTANCE(v)	   	(isot(v, OBJ_INSTANCE))
-#define AS_INSTANCE(v)	   	((OInstance *)AS_OBJ(v))
-#define IS_BOUND_METHOD(v) 	isot(v, OBJ_BOUND_METHOD)
-#define AS_BOUND_METHOD(v) 	((OBoundMethod *)AS_OBJ(v))
+#define isot(v, t)	(isobj(v) && oist(asobj(v), t))
 
 
 /* check if value is 'falsey' */
-#define ISFALSEY(v)	(IS_NIL(v) || (IS_BOOL(v) && !AS_BOOL(v)))
+#define isfalsey(v)	(isnil(v) || (isboolval(v) && !asboolean(v)))
 
+
+
+/* 
+ * ---------------------------------------------------------------------------
+ * OString 
+ * ---------------------------------------------------------------------------
+ */
+
+#define isstring(v)	isot(v, OBJ_STRING)
+#define asstring(v)   	((OString *)asobj(v))
+#define ascstring(v)   	(asstring(v)->bytes)
 
 /* set 'strp' to cstring if 'v' is string object value */
-#define tostring(v, strp) 	(IS_STRING(v) ? (*(strp) = AS_CSTRING(v), 1) : 0)
+#define tostring(v, strp) 	(isstring(v) ? (*(strp) = ascstring(v), 1) : 0)
 
 
-/*
- * Heap allocated bytes that are null-terminated.
- * Additionally 'OString' contains 'hash' for various
- * reasons such as string interning, table lookup and comparisons.
- */
 typedef struct {
-	O obj;
-	cr_uint len; /* excluding null terminator */
-	cr_hash hash;
+	ObjectHeader;
+	int len; /* excluding null terminator */
+	unsigned int hash;
 	char bytes[];
 } OString;
 
 
-/*
- * Captured local variable.
- * 'location' contains pointer to the local variable.
- * That local variable can be captured - in that case
- * the variable is copied over to the 'closed' field -
- * or it can live on stack - meaning the local variable
- * won't be stored in 'closed' - so the 'location'
- * points to the stack instead of 'closed'.
- * 'OUpvalue' is also an implicit linked list, it stores
- * the pointer to the 'next' 'OUpvalue'.
+
+/* 
+ * ---------------------------------------------------------------------------
+ * UValue 
+ * ---------------------------------------------------------------------------
  */
-typedef struct OUpvalue OUpvalue;
-struct OUpvalue {
-	O obj;
-	Value closed;
-	Value *location;
-	OUpvalue *next; /* list */
-};
+
+#define isupvalue(v)	isot(v, OBJ_UPVAL)
+#define asupvalue(v)	((UValue *)asobj(v))
 
 
+typedef struct UValue {
+	ObjectHeader;
+	Value closed; /* value */
+	Value *location; /* stack or 'closed' */
+	UValue *nextuv; /* chain */
+} UValue;
+
+
+
 /*
- * Both 'OFunction' (cript function) and 'ONative' (C function)
- * contain this structure.
- * It contains both debug information and information that is
- * checked at runtime to ensure function signature is upheld.
+ * ---------------------------------------------------------------------------
+ * Function
+ * ---------------------------------------------------------------------------
  */
+
+#define isfunction(v)  	isot(v, OBJ_FUNCTION)
+#define asfunction(v)	((Function *)asobj(v))
+
+
+/* line information and associated instruction */
 typedef struct {
-	OString *name; /* function name (declaration or userdata) */
-	OString *source; /* source name (script name or 'name') */
-	int32_t defline; /* function definition start or -1 */
-	int32_t deflastline; /* function definition end or -1 */
-	int32_t arity;
-	cr_uint upvalcnt;
-	cr_ubyte isvararg; /* '...' */
-} FnInfo;
+	int pc;
+	int line;
+} LineInfo;
 
-/*
- * cript function which always gets wrapped in 'OClosure'.
- * It contains it's own 'Chunk' which contains the compiled bytecode
- * together with the constants contained in that 'Chunk'.
- */
-typedef struct {
-	O o;
-	FnInfo p;
-	Chunk chunk;
-	cr_ubyte gotret : 1; // TODO: maybe_remove
-} OFunction;
 
-/*
- * Wrapper around C function.
- * Because the body of this function is pure C code
- * it doesn't require it's own 'Chunk' where it would
- * store the constants and its instructions.
- * Additionally because of the lack of the 'Chunk' any
- * upvalues get stored inside the 'upvalue' array.
- * The lenght of that array is stored inside the 'FnInfo'
- * structure.
- */
+Vec(LineInfoVec, LineInfo);
+
+
+/* 'code' array */
+typedef ubyteVec InstructionVec;
+
+
 typedef struct {
-	O obj;
-	FnInfo p;
+	ObjectHeader;
+	OString *name; /* function name */
+	OString *source; /* source name */
+	ValueVec constants;
+	LineInfoVec lineinfo;
+	InstructionVec code;
+	int arity; /* number of arguments */
+	int defline; /* function definition line */
+	int deflastline; /* function definition end line */
+	cr_ubyte isvararg; /* set if contains '...' */
+} Function;
+
+
+
+/* 
+ * ---------------------------------------------------------------------------
+ * Closures
+ * ---------------------------------------------------------------------------
+ */
+
+/* common closure header */
+#define ClosureHeader	ObjectHeader; int nupvalues;
+
+
+#define iscrclosure(v)   	isot(v, OBJ_CRLOSURE)
+#define ascrclosure(v)   	((CriptClosure *)asobj(v))
+
+typedef struct {
+	ClosureHeader;
+	Function *fn;
+	UValue *upvalue[1]; /* upvalues */
+} CriptClosure;
+
+
+
+#define iscclosure(v)  	isot(v, OBJ_CCLOSURE)
+#define ascclosure(v)   ((CClosure *)asobj(v))
+
+typedef struct {
+	ClosureHeader;
 	cr_cfunc fn; /* C function */
-	Value upvalue[1]; /* upvalue storage */
-} ONative;
+	Value upvalue[1]; /* upvalues */
+} CClosure;
 
-/*
- * This is a function closure, a wrapper around the 'OFunction'.
- * What this means is that each 'OFunction' that accesses a
- * local variable outside of its scope - this would mean that
- * the local variable being accessed is located in the scope
- * beyond (before) current function scope - must keep it's own
- * copy/reference of that variable.
- *
- * The reason why is because 'OFunction' is an object 'Value'.
- * This means that all the stuff you do with other 'Value's
- * can also be done on 'OFunction's.
- * If you would like to use a local variable defined before
- * the current function scope and later return the function,
- * you would need to copy over (capture) that local variable
- * because the variable might get out of scope.
- * This is what the 'upvalue' array is used for, it stores
- * references to the 'OUpvalues's, which are captured local
- * variables.
- */
-typedef struct {
-	O obj;
-	OFunction *fn;
-	OUpvalue **upvalue; /* array of 'OUpvalue' references */
-} OClosure;
 
-/*
- * Class objects are nothing more than named objects
- * with their own methods (functions).
- * Each method is made of 'OString' (name) and the
- * 'OClosure' (function).
- * Additionally because cript allows overloading
- * operators, class objects also contain 'omethods' field.
- * That field is a storage for all the overloadable methods.
+
+/* check if 'Closure' is 'CClosure' */
+#define isccl(cl)	((cl) != NULL && (cl)->cc.otype == OBJ_CCLOSURE)
+
+#define isclosure(v)  	isot(v, OBJ_CLOSURE)
+#define asclosure(v)   ((Closure *)asobj(v))
+
+typedef union {
+	CClosure cc;
+	CriptClosure crc;
+} Closure;
+
+
+
+/* 
+ * ---------------------------------------------------------------------------
+ * OClass 
+ * ---------------------------------------------------------------------------
  */
+
+#define isclass(v)	isot(v, OBJ_CLASS)
+#define asclass(v) 	((OClass *)asobj(v))
+
+
 typedef struct {
-	O obj;
+	ObjectHeader;
 	OString *name; /* class name */
-	HashTable methods; /* name/function pairs ('OString'/'OClosure') */
-	O *omethods[CR_OM_CNT]; /* overloaded methods ('ONative' or 'OClosure') */
+	HashTable mtab; /* method table */
+	GCObject *vtable[CR_MN]; /* overloadable methods */
 } OClass;
 
+
+
 /*
- * This is instance of 'OClass'.
- * It additionally contains its own fields and pointer
- * to the class that it was created from.
- * These fields are private to the instance object and
- * are not to be confused with methods defined in 'OClass'.
- * Pointer to the class is kept for inheritance purposes.
+ * ---------------------------------------------------------------------------
+ *  Instance
+ * ---------------------------------------------------------------------------
  */
+
+#define isinstance(v)  	(isot(v, OBJ_INSTANCE))
+#define asinstance(v)  	((OInstance *)asobj(v))
+
+
+/* 'OClass' instance */
 typedef struct {
-	O obj;
+	ObjectHeader;
 	OClass *oclass; /* pointer to class */
 	HashTable fields; /* instance fields */
-} OInstance;
+} Instance;
+
+
 
 /*
- * This is wrapper around a method of a particular 'OInstance'.
- * The wrapping happens in case the method of the instance gets
- * bound to a variable.
- * Then the method must have some kind of way to find it's
- * 'OInstance' to properly push that instance on stack
- * before the calls to 'self'/'super'.
+ * ---------------------------------------------------------------------------
+ *  InstanceMethod
+ * ---------------------------------------------------------------------------
  */
+
+#define ismethod(v)	isot(v, OBJ_BOUND_METHOD)
+#define asmethod(v) 	((InstanceMethod *)asobj(v))
+
+
+/* method bound to 'receiver' (Instance) */
 typedef struct {
-	O obj;
-	Value receiver; /* pointer to OInstance */
-	OClosure *method; /* actual method */
-} OBoundMethod;
-
-/* --------------------------------------------------------- */ // objects
+	ObjectHeader;
+	Instance *receiver;
+	GCObject *method;
+} InstanceMethod;
 
 
 
 
-/*
- * ================== Object functions ==================
- */
-
-int32_t id2omtag(VM *vm, OString *id);
+int32_t cr_ob_id2mtag(VM *vm, OString *id);
 
 
-// clang-format off
-/* object constructors */
-OString *OString_new(VM *vm, const char *chars, size_t len);
-#define OString_newlit(vm, lit) OString_new(vm, lit, SLL(lit))
-OString *OString_fmt_from(VM *vm, const char *fmt, va_list argp);
-OString *OString_fmt(VM *vm, const char *fmt, ...);
-OString *concatenate(VM *vm, O* a, O* b);
-OString *unescape(VM *vm, OString *string);
-OBoundMethod *OBoundMethod_new(VM *vm, Value receiver, OClosure *method);
-OInstance *OInstance_new(VM *vm, OClass *cclass);
-OClass *OClass_new(VM *vm, OString *name);
-OUpvalue *OUpvalue_new(VM *vm, Value *var_ref);
-OClosure *OClosure_new(VM *vm, OFunction *fn);
-ONative *ONative_new(VM *vm, OString *name, cr_cfunc fn, int32_t arity, cr_ubyte isvararg, cr_uint upvals);
-OFunction *OFunction_new(VM *vm);
-// clang-format on
+OString *cr_ob_newstring(VM *vm, const char *chars, size_t len);
+OString *cr_ob_newvstringf(VM *vm, const char *fmt, va_list argp);
+OString *cr_ob_newstringf(VM *vm, const char *fmt, ...);
+OString *cr_ob_concatenate(VM *vm, GCObject* a, GCObject* b);
+
+#define cr_ob_newstringlit(vm, lit)	OString_new((vm), (lit), SLL(lit))
+
+InstanceMethod *cr_ob_newinstancemethod(VM *vm, Value receiver, CriptClosure *method);
+Instance *cr_ob_newinstance(VM *vm, OClass *cclass);
+OClass *cr_ob_newclass(VM *vm, OString *name);
+UValue *cr_ob_newuvalue(VM *vm, Value *var_ref);
+CriptClosure *cr_ob_newcrclosure(VM *vm, Function *fn);
+CClosure *cr_ob_newcclosure(VM *vm, OString *name, cr_cfunc fn, int32_t arity, cr_ubyte isvararg, int upvals);
+Function *cr_ob_newfunction(VM *vm);
 
 
 /* call ('()') overload-able method */
-cr_ubyte calloverload(VM *vm, Value instance, cr_om tag);
+cr_ubyte cr_ob_vtcall(VM *vm, Value instance, int tag);
 
 
 /* get 'OInstance' tables */
@@ -281,18 +285,18 @@ cr_ubyte calloverload(VM *vm, Value instance, cr_om tag);
 
 
 /* raw index ('[]') access */
-cr_ubyte rawindex(VM *vm, Value instance, cr_ubyte get);
+cr_ubyte cr_ob_rawindex(VM *vm, Value instance, cr_ubyte get);
 
 
 /* debug only, prints object type name */
 void otypeprint(OType type);
 
 /* Convert object to string object. */
-OString *otostr(VM *vm, O *o, cr_ubyte raw);
+OString *cr_ob_tostr(VM *vm, GCObject *o, cr_ubyte raw);
 
 
 /* Tries calling binary or unary operator overload method. */
-void otryop(VM *vm, Value a, Value b, cr_om op, Value *res);
+void cr_ob_tryop(VM *vm, Value a, Value b, int op, Value *res);
 
 
 /* Prints the object value; can call __display__ if 'raw' is 0. */
@@ -309,12 +313,8 @@ ordop(ole);
 ordop(oge);
 
 
-/* Hashes the object value, can call __hash__ if 'raw' is 0. */
-cr_hash ohash(VM *vm, Value value, cr_ubyte raw);
-
-
 /* Free object memory */
-void ofree(VM *vm, O *object);
+void cr_ob_free(VM *vm, GCObject *object);
 
 /* ------------------------------------------------------ */ // object functions
 
@@ -327,7 +327,7 @@ typedef struct {
 } Tuple;
 
 /* Array holding return count and arity for each overload-able method. */
-extern const Tuple ominfo[CR_OM_CNT];
+extern const Tuple ominfo[CR_MN];
 
 
 #endif

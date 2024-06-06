@@ -25,7 +25,7 @@
 
 /* Auxiliary to 'panic' handler, prints error message
  * located on top of the stack */
-static force_inline void printerror(VM* vm)
+static cr_inline void printerror(VM* vm)
 {
     const char* errmsg = cr_getstring(vm, -1);
     if(errmsg == NULL) errmsg = "error object is not a string";
@@ -38,7 +38,7 @@ static force_inline void printerror(VM* vm)
 static void stacktraceback(VM* vm)
 {
     cr_debuginfo di;
-    cr_uint level = 0;
+    int level = 0;
     if(!cr_getstack(vm, level, &di)) return;
     skaux_writetoerr("Stack traceback:\n");
     do {
@@ -53,7 +53,7 @@ static void stacktraceback(VM* vm)
 }
 
 /* Panic handler */
-static cr_int panic(VM* vm)
+static int panic(VM* vm)
 {
     printerror(vm);
     stacktraceback(vm);
@@ -76,7 +76,7 @@ static void* allocator(void* ptr, cr_umem size, void* _)
 CR_LIBAPI VM* skaux_create(void)
 {
     VM* vm = cr_create(allocator, NULL);
-    if(likely(vm != NULL)) cr_setpanic(vm, panic);
+    if(cr_likely(vm != NULL)) cr_setpanic(vm, panic);
     return vm;
 }
 
@@ -84,7 +84,7 @@ CR_LIBAPI VM* skaux_create(void)
 /* Invokes runtime error 'invalid argument' at 'argidx'.
  * 'extra' is additional information user wants to display in the
  * error message. */
-CR_LIBAPI cr_int skaux_argerror(VM* vm, cr_int argidx, const char* extra)
+CR_LIBAPI int skaux_argerror(VM* vm, int argidx, const char* extra)
 {
     cr_pushfstring(vm, "Invalid argument '%d' %s", argidx, extra);
     return cr_error(vm, S_EARG);
@@ -94,7 +94,7 @@ CR_LIBAPI cr_int skaux_argerror(VM* vm, cr_int argidx, const char* extra)
 /* Invokes runtime error due to invalid type provided.
  * 'argidx' is the index of the invalid argument on the stack.
  * 'tname' is the cstring of the type that was expected instead. */
-CR_LIBAPI cr_int skaux_typeerror(VM* vm, cr_int argidx, const char* tname)
+CR_LIBAPI int skaux_typeerror(VM* vm, int argidx, const char* tname)
 {
     const char* argmsg = NULL;
     const char* argtype = NULL;
@@ -115,11 +115,11 @@ CR_LIBAPI cr_int skaux_typeerror(VM* vm, cr_int argidx, const char* tname)
 /* Checks if the value on the stack at 'idx' is number,
  * if not runtime error is invoked.
  * Otherwise the number value is returned. */
-CR_LIBAPI cr_double skaux_checknumber(VM* vm, cr_int idx)
+CR_LIBAPI cr_double skaux_checknumber(VM* vm, int idx)
 {
     cr_ubyte isnum = 0;
     cr_double n = cr_getnumber(vm, idx, &isnum);
-    if(unlikely(!isnum)) tagerror(vm, idx, TT_NUMBER);
+    if(cr_unlikely(!isnum)) tagerror(vm, idx, TT_NUMBER);
     return n;
 }
 
@@ -128,10 +128,10 @@ CR_LIBAPI cr_double skaux_checknumber(VM* vm, cr_int idx)
 /* Checks if the value on the stack at 'idx' is string,
  * if not runtime error is invoked.
  * Otherwise the string value is returned. */
-CR_LIBAPI const char* skaux_checkstring(VM* vm, cr_int idx)
+CR_LIBAPI const char* skaux_checkstring(VM* vm, int idx)
 {
     const char* str = cr_getstring(vm, idx);
-    if(unlikely(str == NULL)) tagerror(vm, idx, TT_STRING);
+    if(cr_unlikely(str == NULL)) tagerror(vm, idx, TT_STRING);
     return str;
 }
 
@@ -140,11 +140,11 @@ CR_LIBAPI const char* skaux_checkstring(VM* vm, cr_int idx)
 /* Checks if the value on the stack at 'idx' is boolean,
  * if not runtime error is invoked.
  * Otherwise the boolean value is returned. */
-CR_LIBAPI cr_ubyte skaux_checkbool(VM* vm, cr_int idx)
+CR_LIBAPI cr_ubyte skaux_checkbool(VM* vm, int idx)
 {
     cr_ubyte isbool = 0;
     cr_ubyte b = cr_getbool(vm, idx, &isbool);
-    if(unlikely(isbool == 0)) tagerror(vm, idx, TT_BOOL);
+    if(cr_unlikely(isbool == 0)) tagerror(vm, idx, TT_BOOL);
     return b;
 }
 
@@ -152,14 +152,14 @@ CR_LIBAPI cr_ubyte skaux_checkbool(VM* vm, cr_int idx)
 
 /* Checks if the value on the stack at 'idx' is 'type'.
  * If not then runtime error is invoked. */
-CR_LIBAPI void skaux_checktype(VM* vm, cr_int idx, cr_int type)
+CR_LIBAPI void skaux_checktype(VM* vm, int idx, int type)
 {
-    if(unlikely(cr_type(vm, idx) != type)) tagerror(vm, idx, type);
+    if(cr_unlikely(cr_type(vm, idx) != type)) tagerror(vm, idx, type);
 }
 
 
 /* @TODO: add description */
-CR_LIBAPI void skaux_where(VM* vm, cr_uint level)
+CR_LIBAPI void skaux_where(VM* vm, int level)
 {
     cr_debuginfo di;
     if(cr_getstack(vm, level, &di)) {
@@ -174,7 +174,7 @@ CR_LIBAPI void skaux_where(VM* vm, cr_uint level)
 
 
 /* @TODO: add description */
-CR_LIBAPI cr_int skaux_error(VM* vm, cr_status errcode, const char* fmt, ...)
+CR_LIBAPI int skaux_error(VM* vm, cr_status errcode, const char* fmt, ...)
 {
     va_list argp;
     va_start(argp, fmt);
@@ -187,9 +187,9 @@ CR_LIBAPI cr_int skaux_error(VM* vm, cr_status errcode, const char* fmt, ...)
 
 
 /* @TODO: add description */
-CR_LIBAPI void skaux_checkstack(VM* vm, cr_int space, const char* msg)
+CR_LIBAPI void skaux_checkstack(VM* vm, int space, const char* msg)
 {
-    if(unlikely(!cr_checkstack(vm, space))) {
+    if(cr_unlikely(!cr_checkstack(vm, space))) {
         if(msg) skaux_error(vm, S_ESOVERFLOW, "stack overflow, %s", msg);
         else skaux_error(vm, S_ESOVERFLOW, "stack overflow");
     }
@@ -208,14 +208,14 @@ typedef struct {
 } FileReader;
 
 /* File manipulation related error */
-static cr_int fileerror(VM* vm, const char* action, cr_int idx)
+static int fileerror(VM* vm, const char* action, int idx)
 {
     const char* ferr = strerror(errno);
     const char* filename = cr_getstring(vm, idx);
     cr_pushfstring(vm, "Cannot %s %s: %s.", action, filename, ferr);
     cr_remove(vm, idx);
     cr_error(vm, S_EFILE);
-    return 0; // unreachable
+    return 0; // cr_unreachable
 }
 
 static const char* filereader(VM* vm, void* userdata, cr_umem* szread)
@@ -236,14 +236,14 @@ static const char* filereader(VM* vm, void* userdata, cr_umem* szread)
 CR_LIBAPI cr_status skaux_loadfile(VM* vm, const char* filename)
 {
     FileReader reader = {0};
-    cr_int fnameidx = cr_gettop(vm) + 1; // '+1' we will push it in case of errors
+    int fnameidx = cr_gettop(vm) + 1; // '+1' we will push it in case of errors
     if(filename == NULL) {
         cr_pushcstring(vm, "stdin");
         reader.fp = stdin;
     } else {
         cr_pushcstring(vm, filename);
         reader.fp = fopen(filename, "r");
-        if(unlikely(reader.fp == NULL)) return fileerror(vm, "open", fnameidx);
+        if(cr_unlikely(reader.fp == NULL)) return fileerror(vm, "open", fnameidx);
     }
     cr_status status = cr_load(vm, filereader, &reader, cr_getstring(vm, -1));
     if(filename) fclose(reader.fp);

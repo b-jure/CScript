@@ -17,54 +17,42 @@
 #ifndef SKHASHTABLE_H
 #define SKHASHTABLE_H
 
+
 #include "crcommon.h"
 #include "crvalue.h"
 
-#ifndef cript_VMACHINE_H
-typedef struct VM VM;
-#endif
 
 typedef struct {
 	Value key;
 	Value value;
-} Entry;
+} Node;
 
 typedef struct {
-	cr_uint cap; // table capacity
-	cr_uint len; // table length
-	cr_uint left; // inserts until load factor exceeded
-	Entry *entries; // table array (array of Entry)
+	int size;
+	int len;
+	int left;
+	Node *mem;
 } HashTable;
 
 
-void HashTable_init(HashTable *table);
-void HashTable_free(VM *vm, HashTable *table);
+void cr_ht_init(HashTable *tab);
+void cr_ht_free(VM *vm, HashTable *tab);
 
-cr_ubyte HashTable_insert(VM *vm, HashTable *table, Value key, Value value, cr_ubyte raw);
-cr_ubyte HashTable_remove(VM *vm, HashTable *table, Value key, cr_ubyte raw);
+cr_ubyte cr_ht_insert(VM *vm, HashTable *tab, Value k, Value v);
+cr_ubyte cr_ht_remove(VM *vm, HashTable *tab, Value k);
 
-cr_ubyte HashTable_get(VM *vm, HashTable *table, Value key, Value *out, cr_ubyte raw);
-Value HashTable_get_intern(HashTable *table, const char *str, size_t len, cr_hash hash);
-cr_ubyte HashTable_next(VM *vm, HashTable *table, Value *key);
+cr_ubyte cr_ht_get(VM *vm, HashTable *tab, Value k, Value *out);
 
+Value cr_ht_getinterned(HashTable *tab, const char *str, size_t len, unsigned int hash);
 
-void HashTable_into(VM *vm, HashTable *from, HashTable *to, cr_ubyte raw);
+cr_ubyte cr_ht_next(VM *vm, HashTable *tab, Value *k);
 
+void cr_ht_into(VM *vm, HashTable *from, HashTable *to);
 
-uint32_t resizetable(uint32_t wanted);
+unsigned int cr_ht_resize(unsigned int wanted);
 
-
-void internliteral(VM *vm, const char *string);
-void internfmt(VM *vm, const char *fmt, ...);
-
-
-// table access
-#define tableget(vm, table, key, out)	(HashTable_get(vm, table, key, out, 0))
-#define tableset(vm, table, key, value) (HashTable_insert(vm, table, key, value, 0))
-
-// Raw table access
-#define rawget(vm, table, key, out)   (HashTable_get(vm, table, key, out, 1))
-#define rawset(vm, table, key, value) (HashTable_insert(vm, table, key, value, 1))
+void cr_ht_interns(VM *vm, const char *string);
+void cr_ht_internfmt(VM *vm, const char *fmt, ...);
 
 
 #endif

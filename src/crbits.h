@@ -45,9 +45,9 @@
 #define getbyte(x, o) (((x) >> ((o) * 8)) & 0xff)
 
 
-/* get first 3 bytes (LE byte order) from 'p' casted to 'cr_uint' */
+/* get first 3 bytes (LE byte order) from 'p' casted to 'int' */
 #define get3bytes(p) \
-	(cast(cr_uint, 0) | ((*cast(cr_ubyte *, p) + 2) << 16) | \
+	(cast(int, 0) | ((*cast(cr_ubyte *, p) + 2) << 16) | \
 	 ((*cast(cr_ubyte *, p) + 1) << 8) | *cast(cr_ubyte *, p))
 
 

@@ -14,52 +14,65 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "skcommon.h"
-#include "skreader.h"
 
-void BuffReader_init(VM* vm, BuffReader* BR, cr_reader reader, void* userdata)
+#include "crreader.h"
+#include "crlimits.h"
+
+
+
+void cr_br_init(VM *vm, BuffReader *br, cr_reader reader, void *userdata)
 {
-    BR->n = 0;
-    BR->buff = NULL;
-    BR->vm = vm;
-    BR->reader = reader;
-    BR->userdata = userdata;
+	br->n = 0;
+	br->buff = NULL;
+	br->reader = reader;
+	br->userdata = userdata;
+	br->vm = vm;
 }
 
 
-/* Invoke 'cr_reader' returning the first character or SKEOF (-1).
+/* 
+ * Invoke 'cr_reader' returning the first character or CREOF (-1).
  * 'cr_reader' should set the 'size' to the amount of bytes
  * reader read and return the pointer to the start of that
- * buffer. */
-int32_t BuffReader_fill(BuffReader* BR)
+ * buffer. 
+ */
+int cr_br_fill(BuffReader *br)
 {
-    size_t size;
-    VM* vm = BR->vm;
-    cr_unlock(vm);
-    const char* buff = BR->reader(vm, BR->userdata, &size);
-    cr_lock(vm);
-    if(buff == NULL || size == 0) return SKEOF;
-    BR->buff = buff;
-    BR->n = size - 1;
-    return cast(cr_ubyte, *BR->buff++);
+	VM *vm;
+	size_t size;
+	const char *buff;
+
+	vm = br->vm;
+	cr_unlock(vm);
+	buff = br->reader(vm, br->userdata, &size);
+	cr_lock(vm);
+	if (buff == NULL || size == 0)
+		return CREOF;
+	br->buff = buff;
+	br->n = size - 1;
+	return *br->buff++;
 }
 
 
-/* Read 'n' bytes from 'BuffReader' returning
- * count of unread bytes or 0 if all bytes were read. */
-int8_t BuffReader_readn(BuffReader* BR, size_t n)
+/* 
+ * Read 'n' bytes from 'BuffReader' returning
+ * count of unread bytes or 0 if all bytes were read. 
+ */
+size_t cr_br_readn(BuffReader *br, size_t n)
 {
-    while(n) {
-        size_t min;
-        if(BR->n == 0) {
-            if(BuffReader_fill(BR) == SKEOF) return n;
-            BR->n++; // BR_fill decremented it
-            BR->buff--; // Restore that character
-        }
-        min = (BR->n <= n ? BR->n : n);
-        BR->n -= min;
-        BR->buff += min;
-        n -= min;
-    }
-    return 0;
+	size_t min;
+
+	while (n) {
+		if (br->n == 0) {
+			if (cr_br_fill(br) == CREOF)
+				return n;
+			br->n++; /* cr_br_fill decremented it */
+			br->buff--; /* restore that character */
+		}
+		min = (br->n <= n ? br->n : n);
+		br->n -= min;
+		br->buff += min;
+		n -= min;
+	}
+	return 0;
 }

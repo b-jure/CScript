@@ -23,32 +23,45 @@
 
 
 /* GC state bits */
-#define GCS_STOPPED 1
+#define GCS_STOPPED	0
+
+
+/* GC is running */
+#define gcrunning(gc)	(!testbit((gc).state, GCS_STOPPED))
+
+
+/* default GC parameters */
+#define CRI_GCSTEPMUL		100	/* 'stepmul' */
+#define CRI_GCSTEPSIZE		14	/* 'stepsize' */
+
 
 /* Configurable GC parameters. */
 typedef struct {
-	O *olist; /* GC list of allocated objects */
-	O **sweeppos; /* current position of sweep in 'olist' */
-	O **graystack; /* tricolor GC (stores marked objects) */
-	cr_umem heapmin; /* minimum GC threshold */
-	cr_umem nextgc; /* next byte threshold when GC triggers */
-	cr_umem allocated; /* number of allocated bytes */
-	double growfactor; /* GC grow factor */
+	GCObject *olist; /* GC list of allocated objects */
+	GCObject **sweeppos; /* current position of sweep in 'olist' */
+	GCObject **graystack; /* tricolor GC (stores marked objects) */
+	cr_mem next; /* next byte threshold when GC triggers */
+	cr_mem allocated; /* number of allocated bytes */
+	cr_mem debt; /* memory unaccounted for by the collector */
+	cr_ubyte stepmul; /* collector grow speed */
 	cr_ubyte stepsize; /* step size in bytes (log2) */
+	cr_ubyte stopem; /* stops emergency collection */
 	cr_ubyte state; /* GC state */
 } GC;
 
 
 
 /* run full incremental gc (sweep all) */
-size_t incfullgc(VM *vm);
+size_t crg_gcfull(VM *vm);
+
+size_t crg_gcstep(VM *vm);
 
 
 #define vmark(vm, v)   \
 	if (IS_OBJ(v)) \
-		omark(vm, AS_OBJ(v));
+		omark(vm, asobj(v));
 
-void omark(VM *vm, O *obj);
+void omark(VM *vm, GCObject *obj);
 
 
 

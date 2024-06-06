@@ -33,7 +33,7 @@
 #define ALLOC_OBJ(vm, object, type) ((object *)onew(vm, sizeof(object), type))
 
 #define ALLOC_NATIVE(vm, upvals) \
-	((ONative *)onew(vm, sizeof(ONative) + ((upvals) * sizeof(Value)), OBJ_NATIVE))
+	((ONative *)onew(vm, sizeof(ONative) + ((upvals) * sizeof(Value)), OBJ_CFUNCTION))
 
 
 
@@ -272,9 +272,9 @@ OString *concatenate(VM *vm, Value l, Value r)
 	OString *ls, *rs, *str;
 	cr_mem length;
 
-	cr_assert(vm, (IS_STRING(l) && IS_STRING(r)), "expect strings");
-	ls = AS_STRING(l);
-	rs = AS_STRING(r);
+	cr_assert(vm, (isstring(l) && isstring(r)), "expect strings");
+	ls = asstring(l);
+	rs = asstring(r);
 	length = ls->len + rs->len;
 	buf_init_cap(&buf, vm, length);
 	buf_push_str(&buf, ls->bytes, ls->len);
@@ -328,7 +328,7 @@ static force_inline void ObjFunction_free(VM *vm, OFunction *fn)
 
 static force_inline void fnprint(OFunction *fn, FILE *stream)
 {
-	if (unlikely(fn->p.name == NULL))
+	if (cr_unlikely(fn->p.name == NULL))
 		fprintf(stream, "<script-fn %s>: %p", fn->p.source->bytes, fn);
 	else
 		fprintf(stream, "<fn %s>: %p", fn->p.name->bytes, fn);
@@ -405,8 +405,8 @@ OInstance *OInstance_new(VM *vm, OClass *oclass)
  * is not an instance value or method is not overloaded. */
 static force_inline O *getomethod(VM *vm, Value val, cr_om om)
 {
-	if (IS_INSTANCE(val))
-		return AS_INSTANCE(val)->oclass->omethods[om];
+	if (isinstance(val))
+		return asinstance(val)->oclass->omethods[om];
 	return NULL;
 }
 
@@ -437,7 +437,7 @@ static force_inline void OBoundMethod_free(VM *vm, OBoundMethod *bound_method)
 
 
 /* Debug */
-sdebug void otypeprint(OType type)
+void otypeprint(OType type)
 {
 	switch (type) {
 	case OBJ_STRING:
@@ -449,8 +449,8 @@ sdebug void otypeprint(OType type)
 	case OBJ_CLOSURE:
 		printf("OBJ_CLOSURE");
 		break;
-	case OBJ_NATIVE:
-		printf("OBJ_NATIVE");
+	case OBJ_CFUNCTION:
+		printf("OBJ_CFUNCTION");
 		break;
 	case OBJ_UPVAL:
 		printf("OBJ_UPVAL");
@@ -465,28 +465,7 @@ sdebug void otypeprint(OType type)
 		printf("OBJ_BOUND_METHOD");
 		break;
 	default:
-		unreachable;
-	}
-}
-
-
-/* Hash object value */
-cr_hash ohash(VM *vm, Value value, cr_ubyte raw)
-{
-	switch (OBJ_TYPE(value)) {
-	case OBJ_STRING:
-		return AS_STRING(value)->hash;
-	default: {
-		cr_hash hash = 0;
-		if (!raw && calloverload(vm, value, OM_HASH)) {
-			Value result = *stkpeek(0);
-			if (!IS_NUMBER(result))
-				omreterror(vm, "number", OM_HASH);
-			hash = cr_floor(AS_NUMBER(*stkpeek(0)));
-		} else
-			hash = ptrhash(cast(const void *, AS_OBJ(value)));
-		return hash;
-	}
+		cr_unreachable;
 	}
 }
 
@@ -525,7 +504,7 @@ void ofree(VM *vm, O *object)
 			OClosure_free(vm, cast(OClosure *, object));
 			BREAK;
 		}
-		CASE(OBJ_NATIVE)
+		CASE(OBJ_CFUNCTION)
 		{
 			ONative_free(vm, cast(ONative *, object));
 			BREAK;
@@ -553,7 +532,7 @@ void ofree(VM *vm, O *object)
 			BREAK;
 		}
 	}
-	unreachable;
+	cr_unreachable;
 #ifdef SKJMPTABLE_H
 #undef SKJMPTABLE_H
 #endif
@@ -592,18 +571,18 @@ cr_ubyte rawindex(VM *vm, Value value, cr_ubyte get)
 	cr_ubyte res;
 
 	res = 0;
-	instance = AS_INSTANCE(value);
+	instance = asinstance(value);
 	if (!get) { /* set ? */
 		rhs = *stkpeek(0);
 		idx = *stkpeek(1);
-		if (unlikely(IS_NIL(idx)))
+		if (cr_unlikely(IS_NIL(idx)))
 			nilidxerror(vm);
 		rawsetproperty(vm, instance, idx, rhs, 0);
 		popn(vm, 2); // pop [index] and [rhs]
 		res = 1;
 	} else { /* otherwise get */
 		idxstk = stkpeek(0);
-		if (unlikely(IS_NIL(idx)))
+		if (cr_unlikely(IS_NIL(idx)))
 			nilidxerror(vm);
 		if (rawgetproperty(vm, instance, idx, &out, 0) ||
 		    rawgetproperty(vm, instance, idx, &out, 1)) {
@@ -625,7 +604,7 @@ cr_ubyte calloverload(VM *vm, Value instance, cr_om tag)
 {
 	O *const fn;
 	Value *const retstart;
-	cr_int retcnt, arity, i;
+	int retcnt, arity, i;
 
 	if (!(fn = getomethod(vm, instance, tag)))
 		return 0;
@@ -694,9 +673,9 @@ static force_inline int callbinop(VM *vm, Value lhs, Value rhs, cr_om op, Value 
 void otryop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
 {
 	if (!omisunop(op)) {
-		if (unlikely(!callbinop(vm, lhs, rhs, op, res)))
+		if (cr_unlikely(!callbinop(vm, lhs, rhs, op, res)))
 			binoperror(vm, lhs, rhs, op - OM_ADD);
-	} else if (unlikely(!callunop(vm, lhs, op, res)))
+	} else if (cr_unlikely(!callunop(vm, lhs, op, res)))
 		unoperror(vm, lhs, op - OM_ADD);
 }
 
@@ -717,7 +696,7 @@ static force_inline int omcallorder(VM *vm, Value lhs, Value rhs, cr_om ordop)
 	// Instances (and cript objects) can always have equality comparison.
 	// If their pointers are the same then the underlying objects are equal;
 	// otherwise they are not equal.
-	if (unlikely(ordop != OM_EQ && ordop != OM_NE))
+	if (cr_unlikely(ordop != OM_EQ && ordop != OM_NE))
 		ordererror(vm, lhs, rhs);
 	return 0;
 }
@@ -725,7 +704,7 @@ static force_inline int omcallorder(VM *vm, Value lhs, Value rhs, cr_om ordop)
 /* != */
 void one(VM *vm, Value lhs, Value rhs)
 {
-	if (IS_STRING(lhs) && IS_STRING(rhs))
+	if (isstring(lhs) && isstring(rhs))
 		push(vm, BOOL_VAL(lhs != rhs));
 	else if (!omcallorder(vm, lhs, rhs, OM_NE))
 		push(vm, BOOL_VAL(lhs != rhs));
@@ -734,7 +713,7 @@ void one(VM *vm, Value lhs, Value rhs)
 /* == */
 void oeq(VM *vm, Value lhs, Value rhs)
 {
-	if (IS_STRING(lhs) && IS_STRING(rhs))
+	if (isstring(lhs) && isstring(rhs))
 		push(vm, BOOL_VAL(lhs == rhs));
 	else if (!omcallorder(vm, lhs, rhs, OM_EQ))
 		push(vm, BOOL_VAL(lhs == rhs));
@@ -743,8 +722,8 @@ void oeq(VM *vm, Value lhs, Value rhs)
 /* < */
 void olt(VM *vm, Value lhs, Value rhs)
 {
-	if (IS_STRING(lhs) && IS_STRING(rhs))
-		push(vm, BOOL_VAL(strcmp(AS_CSTRING(lhs), AS_CSTRING(rhs)) < 0));
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) < 0));
 	else
 		omcallorder(vm, lhs, rhs, OM_LT);
 }
@@ -752,8 +731,8 @@ void olt(VM *vm, Value lhs, Value rhs)
 /* > */
 void ogt(VM *vm, Value lhs, Value rhs)
 {
-	if (IS_STRING(lhs) && IS_STRING(rhs))
-		push(vm, BOOL_VAL(strcmp(AS_CSTRING(lhs), AS_CSTRING(rhs)) > 0));
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) > 0));
 	else
 		omcallorder(vm, lhs, rhs, OM_GT);
 }
@@ -761,8 +740,8 @@ void ogt(VM *vm, Value lhs, Value rhs)
 /* <= */
 void ole(VM *vm, Value lhs, Value rhs)
 {
-	if (IS_STRING(lhs) && IS_STRING(rhs))
-		push(vm, BOOL_VAL(strcmp(AS_CSTRING(lhs), AS_CSTRING(rhs)) <= 0));
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) <= 0));
 	else
 		omcallorder(vm, lhs, rhs, OM_LE);
 }
@@ -770,8 +749,8 @@ void ole(VM *vm, Value lhs, Value rhs)
 /* >= */
 void oge(VM *vm, Value lhs, Value rhs)
 {
-	if (IS_STRING(lhs) && IS_STRING(rhs))
-		push(vm, BOOL_VAL(strcmp(AS_CSTRING(lhs), AS_CSTRING(rhs)) >= 0));
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) >= 0));
 	else
 		omcallorder(vm, lhs, rhs, OM_GE);
 }
@@ -799,7 +778,7 @@ OString *otostr(VM *vm, O *o, cr_ubyte raw)
 		return cast(OFunction *, o)->p.name;
 	case OBJ_CLOSURE:
 		return cast(OClosure *, o)->fn->p.name;
-	case OBJ_NATIVE:
+	case OBJ_CFUNCTION:
 		return cast(ONative *, o)->p->name;
 	case OBJ_UPVAL:
 		return vtostr(vm, *cast(OUpvalue *, o)->location, raw);
@@ -808,18 +787,18 @@ OString *otostr(VM *vm, O *o, cr_ubyte raw)
 	case OBJ_INSTANCE:
 		if (!raw && calloverload(vm, OBJ_VAL(o), SKOM_TOSTRING)) {
 			result = *stkpeek(0);
-			if (!IS_STRING(result))
+			if (!isstring(result))
 				omreterror(vm, "string", OM_TOSTRING);
 			*o = pop(vm);
-			return AS_STRING(result);
+			return asstring(result);
 		} else {
-			ins = AS_INSTANCE(oval);
+			ins = asinstance(oval);
 			key = OBJ_VAL(vm->faststatic[SS_DBG]);
-			if (rawget(vm, &ins->fields, key, &debug) && IS_STRING(debug)) {
+			if (rawget(vm, &ins->fields, key, &debug) && isstring(debug)) {
 				*o = debug;
-				return AS_STRING(debug); // have debug name
+				return asstring(debug); // have debug name
 			}
-			return AS_STRING(*o = OBJ_VAL(ins->oclass->name));
+			return asstring(*o = OBJ_VAL(ins->oclass->name));
 		}
 	case OBJ_BOUND_METHOD:
 		return cast(OBoundMethod *, o)->method->fn->p.name;
@@ -843,22 +822,22 @@ void oprint(VM *vm, Value value, cr_ubyte raw, FILE *stream)
 	{
 		CASE(OBJ_STRING)
 		{
-			fprintf(stream, "%s", AS_CSTRING(value));
+			fprintf(stream, "%s", ascstring(value));
 			BREAK;
 		}
 		CASE(OBJ_FUNCTION)
 		{
-			fnprint(AS_FUNCTION(value), stream);
+			fnprint(asfn(value), stream);
 			BREAK;
 		}
 		CASE(OBJ_CLOSURE)
 		{
-			fnprint(AS_CLOSURE(value)->fn, stream);
+			fnprint(asclosure(value)->fn, stream);
 			BREAK;
 		}
-		CASE(OBJ_NATIVE)
+		CASE(OBJ_CFUNCTION)
 		{
-			fprintf(stream, "<native-fn %s>", AS_NATIVE(value)->p.name->bytes);
+			fprintf(stream, "<native-fn %s>", ascfn(value)->p.name->bytes);
 			BREAK;
 		}
 		CASE(OBJ_UPVAL)
@@ -869,38 +848,38 @@ void oprint(VM *vm, Value value, cr_ubyte raw, FILE *stream)
 		}
 		CASE(OBJ_CLASS)
 		{
-			fprintf(stream, "%p-%s", AS_OBJ(value), AS_CLASS(value)->name->bytes);
+			fprintf(stream, "%p-%s", asobj(value), asclass(value)->name->bytes);
 			BREAK;
 		}
 		CASE(OBJ_INSTANCE)
 		{
 			if (!raw && calloverload(vm, value, OM_TOSTRING)) { // have '__tostring__' ?
 				Value result = *stkpeek(0);
-				if (!IS_STRING(result))
+				if (!isstring(result))
 					omreterror(vm, "string", OM_TOSTRING);
-				fprintf(stream, "%s", AS_CSTRING(*stkpeek(0)));
+				fprintf(stream, "%s", ascstring(*stkpeek(0)));
 				pop(vm); // pop result
 			} else { // no overload
-				OInstance *instance = AS_INSTANCE(value);
+				OInstance *instance = asinstance(value);
 				Value debug;
 				Value key = OBJ_VAL(vm->faststatic[SS_DBG]);
 				if (rawget(vm, &instance->fields, key, &debug) &&
-				    IS_STRING(debug)) {
-					fprintf(stream, "%s", AS_CSTRING(debug)); // __debug field
+				    isstring(debug)) {
+					fprintf(stream, "%s", ascstring(debug)); // __debug field
 				} else { // default print
-					fprintf(stream, "%p-%s instance", AS_OBJ(value),
-						AS_INSTANCE(value)->oclass->name->bytes);
+					fprintf(stream, "%p-%s instance", asobj(value),
+						asinstance(value)->oclass->name->bytes);
 				}
 			}
 			BREAK;
 		}
 		CASE(OBJ_BOUND_METHOD)
 		{
-			fnprint(AS_BOUND_METHOD(value)->method->fn, stream);
+			fnprint(asboundmethod(value)->method->fn, stream);
 			BREAK;
 		}
 	}
-	unreachable;
+	cr_unreachable;
 }
 
 

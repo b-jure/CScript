@@ -19,7 +19,17 @@
 
 #include "cript.h"
 
-#define SKEOF -1
+
+/* end of file */
+#define CREOF	(-1)
+
+
+/* Return next char and progress the buffer or try fill the buffer. */
+#define brgetc(br) ((br)->n-- > 0 ? cast(cr_ubyte, *(br)->buff++) : cr_br_fill(br))
+
+/* Go back one character (byte) */
+#define brungetc(br) ((br)->n++, (br)->buff--)
+
 
 typedef struct {
     size_t n; /* unread bytes */
@@ -29,15 +39,9 @@ typedef struct {
     VM* vm; /* 'VM' for 'cr_reader' */
 } BuffReader;
 
-/* Return next char and progress the buffer or try fill the buffer. */
-#define brgetc(br) ((br)->n-- > 0 ? cast(cr_ubyte, *(br)->buff++) : BuffReader_fill(br))
-/* Go back one character (byte) */
-#define brungetc(br) ((br)->n++, (br)->buff--)
 
-void BuffReader_init(VM* vm, BuffReader* br, cr_reader reader, void* userdata);
-
-int32_t BuffReader_fill(BuffReader* br);
-
-int8_t BuffReader_readn(BuffReader* br, size_t n);
+void cr_br_init(VM* vm, BuffReader* br, cr_reader reader, void* userdata);
+int cr_br_fill(BuffReader* br);
+size_t cr_br_readn(BuffReader* br, size_t n);
 
 #endif

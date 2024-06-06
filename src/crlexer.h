@@ -18,109 +18,72 @@
 #ifndef CRLEXER_H
 #define CRLEXER_H
 
-#include "crvm.h"
 #include "crcommon.h"
 #include "crmem.h"
 #include "crreader.h"
 #include "crvalue.h"
 #include "crvec.h"
+#include "crobject.h"
 
 #include <stdarg.h>
 
 
 typedef enum {
-    // Single character tokens.
-    TOK_LBRACK = 0,
-    TOK_RBRACK,
-    TOK_LPAREN,
-    TOK_RPAREN,
-    TOK_LBRACE,
-    TOK_RBRACE,
-    TOK_DOT,
-    TOK_DOT_DOT_DOT,
-    TOK_COMMA,
-    TOK_MINUS,
-    TOK_PLUS,
-    TOK_COLON,
-    TOK_SEMICOLON,
-    TOK_SLASH,
-    TOK_STAR,
-    TOK_PERCENT,
-    TOK_CARET,
-    TOK_QMARK,
-    // One or two character tokens.
-    TOK_BANG,
-    TOK_BANG_EQUAL,
-    TOK_EQUAL,
-    TOK_EQUAL_EQUAL,
-    TOK_GREATER,
-    TOK_GREATER_EQUAL,
-    TOK_LESS,
-    TOK_LESS_EQUAL,
-    // Literals.
-    TOK_IDENTIFIER,
-    TOK_STRING,
-    TOK_NUMBER,
-    // Keywords.
-    TOK_AND,
-    TOK_BREAK,
-    TOK_CASE,
-    TOK_CONTINUE,
-    TOK_CLASS,
-    TOK_DEFAULT,
-    TOK_ELSE,
-    TOK_FALSE,
-    TOK_FOR,
-    TOK_FOREACH,
-    TOK_FN,
-    TOK_IF,
-    TOK_IN,
-    TOK_IMPL,
-    TOK_NIL,
-    TOK_OR,
-    TOK_RETURN,
-    TOK_SUPER,
-    TOK_SELF,
-    TOK_SWITCH,
-    TOK_TRUE,
-    TOK_VAR,
-    TOK_WHILE,
-    TOK_LOOP,
-    TOK_FIXED,
+	/* single/double character tokens */
+	TOK_LBRACK = 0, TOK_RBRACK, TOK_LPAREN, TOK_RPAREN, TOK_LBRACE,
+	TOK_RBRACE, TOK_DOT, TOK_DOT_DOT_DOT, TOK_COMMA, TOK_MINUS,
+	TOK_PLUS, TOK_COLON, TOK_SEMICOLON, TOK_SLASH, TOK_STAR,
+	TOK_PERCENT, TOK_CARET, TOK_QMARK, TOK_BANG, TOK_BANG_EQUAL,
+	TOK_EQUAL, TOK_EQUAL_EQUAL, TOK_GREATER, TOK_GREATER_EQUAL,
+	TOK_LESS, TOK_LESS_EQUAL,
+	/* literals */
+	TOK_IDENTIFIER, TOK_STRING, TOK_NUMBER,
+	/* keywords */
+	TOK_AND, TOK_BREAK, TOK_CASE, TOK_CONTINUE, TOK_CLASS,
+	TOK_DEFAULT, TOK_ELSE, TOK_FALSE, TOK_FOR, TOK_FOREACH,
+	TOK_FN, TOK_IF, TOK_IN, TOK_IMPL, TOK_NIL, TOK_OR, TOK_RETURN,
+	TOK_SUPER, TOK_SELF, TOK_SWITCH, TOK_TRUE, TOK_VAR, TOK_WHILE,
+	TOK_LOOP, TOK_FIXED,
+	/* special */
+	TOK_ERROR, TOK_EOF
+} TType;
 
-    TOK_ERROR,
-    TOK_EOF
-} TokenType;
+
+typedef union {
+	cr_integer i;
+	cr_number n;
+	OString *str;
+} ConstantValue;
 
 
 typedef struct {
-    TokenType type;
-    const char* start; // slice start
-    cr_ubyte len; // slice length (LEX_TOKEN_LEN_LIMIT)
-    cr_uint line; // source file line
-    Value value; // constant value
+	TType type;
+	ConstantValue k;
 } Token;
 
 
+Vec(Buffer, char);
+
+
 typedef struct {
-    VM* vm; // virtual machine
-    BuffReader* br; // buffered reader
-    cr_ubyte c; // current char
-    ubyteVec buffer; // for tokens
-    Token previous;
-    Token current;
-    Value src; // current source name
-    cr_uint line; // source file line
-    cr_ubyte skip; // skip current token (LEX_TOKEN_LIMIT reached)
-    cr_ubyte panic; // sync flag
-    cr_ubyte error; // parse error flag
+	struct VM *vm;
+	struct FunctionState *fs;
+	BuffReader *br; /* buffered reader */
+	Buffer buf; /* buffer for tokens */
+	Token previous;
+	Token current;
+	OString *src; /* current source name */
+	int c; /* current char */
+	int currline; /* 'current' token line */
+	int prevline; /* 'previous' token line */
+	cr_ubyte skip; /* skip current token */
 } Lexer;
 
 
-void initlexer(Lexer* L, VM* vm, BuffReader* br, Value source);
-void freelexer(Lexer* L);
-Token scan(Lexer* lexer);
-Token syntoken(const char* name);
-void regcomperror(Lexer* lexer, const char* err, va_list args);
+void cr_lx_init(VM *vm, Lexer *lx, BuffReader *br, OString *source);
+void cr_lx_free(Lexer *lx);
+Token cr_lx_scan(Lexer *lx);
+Token cr_lx_syntoken(const char *name);
+void cr_lx_syntaxerror(Lexer *lx, const char *err, va_list args);
 
 #endif

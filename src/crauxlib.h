@@ -27,17 +27,17 @@ CR_LIBAPI VM* skaux_create(void);
 
 
 /* ================= debug ================= */
-CR_LIBAPI cr_int skaux_error(VM* vm, cr_status errcode, const char* fmt, ...);
-CR_LIBAPI cr_int skaux_typeerror(VM* vm, cr_int argidx, const char* tname);
-CR_LIBAPI cr_int skaux_argerror(VM* vm, cr_int argidx, const char* extra);
+CR_LIBAPI int skaux_error(VM* vm, cr_status errcode, const char* fmt, ...);
+CR_LIBAPI int skaux_typeerror(VM* vm, int argidx, const char* tname);
+CR_LIBAPI int skaux_argerror(VM* vm, int argidx, const char* extra);
 
-CR_LIBAPI cr_double skaux_checknumber(VM* vm, cr_int idx);
-CR_LIBAPI const char* skaux_checkstring(VM* vm, cr_int idx);
-CR_LIBAPI const char* skaux_optstring(VM* vm, cr_int idx);
-CR_LIBAPI cr_ubyte skaux_checkbool(VM* vm, cr_int idx);
-CR_LIBAPI void skaux_checktype(VM* vm, cr_int idx, cr_int type);
-CR_LIBAPI void skaux_checkstack(VM* vm, cr_int space, const char* msg);
-CR_LIBAPI void skaux_where(VM* vm, cr_uint level);
+CR_LIBAPI cr_double skaux_checknumber(VM* vm, int idx);
+CR_LIBAPI const char* skaux_checkstring(VM* vm, int idx);
+CR_LIBAPI const char* skaux_optstring(VM* vm, int idx);
+CR_LIBAPI cr_ubyte skaux_checkbool(VM* vm, int idx);
+CR_LIBAPI void skaux_checktype(VM* vm, int idx, int type);
+CR_LIBAPI void skaux_checkstack(VM* vm, int space, const char* msg);
+CR_LIBAPI void skaux_where(VM* vm, int level);
 /* ---------------------------------------------------------- */
 
 

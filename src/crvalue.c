@@ -50,7 +50,7 @@ static cr_floating fltarithm(VM *vm, cr_floating a, cr_floating b, cr_ar op)
 	case CR_AR_NOT:
 		return cast(cr_floating, 0); // never 'falsey'
 	default:
-		unreachable;
+		cr_unreachable;
 		return 0;
 	}
 }
@@ -64,7 +64,7 @@ int varith(VM *vm, Value a, Value b, cr_ar op, Value *res)
 	if (arisbin(op)) { // binary operation
 		if (IS_NUMBER(a) && IS_NUMBER(b))
 			goto l_unarynum;
-		else if (IS_STRING(a) && IS_STRING(b))
+		else if (isstring(a) && isstring(b))
 			*res = OBJ_VAL(concatenate(vm, a, b));
 		else
 			return 0;
@@ -76,7 +76,7 @@ l_unarynum:;
 		} else if (op == SKAR_NOT) {
 			if (IS_BOOL(a))
 				*res = !AS_BOOL(a);
-			else if (IS_STRING(a))
+			else if (isstring(a))
 				*res = FALSE_VAL;
 			else
 				return 0;
@@ -116,17 +116,17 @@ cr_tt val2type(Value value)
 		return TT_NIL;
 	else if (IS_NUMBER(value))
 		return TT_NUMBER;
-	else if (IS_STRING(value))
+	else if (isstring(value))
 		return TT_STRING;
 	else if (IS_BOOL(value))
 		return TT_BOOL;
-	else if (IS_CLASS(value))
+	else if (isclassobj(value))
 		return TT_CLASS;
-	else if (IS_INSTANCE(value))
+	else if (isinstance(value))
 		return TT_INSTANCE;
-	else if (IS_FUNCTION(value) || IS_CLOSURE(value) || IS_NATIVE(value) || IS_BOUND_METHOD(value))
+	else if (isfunction(value) || isclosureobj(value) || iscfunction(value) || isboundmethod(value))
 		return TT_FUNCTION;
-	unreachable;
+	cr_unreachable;
 
 #else
 
@@ -154,12 +154,12 @@ cr_tt val2type(Value value)
 		}
 		CASE(VAL_OBJ)
 		{
-			switch (otype(AS_OBJ(value))) {
+			switch (otype(asobj(value))) {
 			case OBJ_STRING:
 				return TT_STRING;
 			case OBJ_CLASS:
 				return TT_CLASS;
-			case OBJ_NATIVE:
+			case OBJ_CFUNCTION:
 			case OBJ_FUNCTION:
 			case OBJ_CLOSURE:
 			case OBJ_BOUND_METHOD:
@@ -167,7 +167,7 @@ cr_tt val2type(Value value)
 			case OBJ_INSTANCE:
 				return TT_INSTANCE;
 			default:
-				unreachable; // upvalue
+				cr_unreachable; // upvalue
 			}
 		}
 	}
@@ -299,10 +299,10 @@ cr_ubyte veq(VM *vm, Value l, Value r)
 		res = BOOL_VAL(AS_BOOL(l) == AS_BOOL(r));
 		break;
 	case VT_INTEGER:
-		res = BOOL_VAL(cr_flteq(AS_INT(l), AS_INT(r)));
+		res = BOOL_VAL(cr_flteq(asint(l), asint(r)));
 		break;
-	case VT_FLOAT:
-		res = BOOL_VAL(AS_FLOAT(l) == AS_FLOAT(r));
+	case VT_NUMBER:
+		res = BOOL_VAL(asnum(l) == asnum(r));
 		break;
 	case VT_LUDATA:
 		break;
@@ -433,9 +433,9 @@ Value vtostr(VM *vm, Value v, cr_ubyte raw)
 	case VT_BOOL:
 		return ssvbool(vm, AS_BOOL(v));
 	case VT_INTEGER:
-		return tostr_integer(vm, AS_INT(v));
-	case VT_FLOAT:
-		return tostr_flt(vm, AS_FLOAT(v));
+		return tostr_integer(vm, asint(v));
+	case VT_NUMBER:
+		return tostr_flt(vm, asnum(v));
 	case VT_NIL:
 		return ssv(vm, SS_NIL);
 	case VT_LUDATA:
@@ -443,78 +443,8 @@ Value vtostr(VM *vm, Value v, cr_ubyte raw)
 	case VT_CFUNC:
 		return tostr_ptr(vm, cast(void *, AS_CFUNC(v)));
 	case VT_OBJ:
-		return otostr(vm, AS_OBJ(v), raw);
+		return otostr(vm, asobj(v), raw);
 	default:
-		unreachable;
+		cr_unreachable;
 	}
-}
-
-
-/* Hash value */
-cr_hash vhash(VM *vm, Value value, cr_ubyte raw)
-{
-	cr_assert(vm, !IS_NIL(value), "Can't hash nil");
-#if defined(val2tbmacr_1)
-	static const void *jmptable[] = {
-		NULL, // nil can't be used for indexing
-		&&number,
-		&&boolean,
-		&&object,
-
-	};
-	goto *jmptable[val2tbmacr_1(value)];
-number:;
-	cr_floating num = AS_NUMBER(value);
-	if (num < 0 || cr_floor(num) != num)
-		return dblhash(num);
-	else
-		return num;
-boolean:
-	return AS_BOOL(value);
-object:
-	return ohash(vm, value, raw);
-#elif defined(CR_NAN_BOX)
-	if (IS_NUMBER(value)) {
-		cr_floating num = AS_NUMBER(value);
-		if (num < 0 || cr_floor(num) != num)
-			return dblhash(num);
-		else
-			return cast(Hash, num);
-	} else if (IS_BOOL(value))
-		return cast(Hash, AS_BOOL(value));
-	else
-		return ohash(value, raw);
-#else
-#ifdef CR_PRECOMPUTED_GOTO
-#define VAL_TABLE
-#include "jmptable.h"
-#undef VAL_TABLE
-#else
-#define DISPATCH(x) switch (x)
-#define CASE(label) case label:
-#endif
-	DISPATCH(value.type)
-	{
-		CASE(VAL_NIL) // only to avoid unused 'label' warning
-		{
-			unreachable;
-		}
-		CASE(SKVAL_BOOL)
-		{
-			return cast(Hash, AS_BOOL(value));
-		}
-		CASE(VAL_NUMBER)
-		{
-			double num = AS_NUMBER(value);
-			if (AS_NUMBER(value) < 0 || cr_floor(AS_NUMBER(value)) != AS_NUMBER(value))
-				return dblhash(num);
-			else
-				return cast(Hash, num);
-		}
-		CASE(VAL_OBJ)
-		{
-			return ohash(value, raw);
-		}
-	}
-#endif
 }

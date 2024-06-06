@@ -2,9 +2,9 @@
 
 #include <stdio.h>
 
-cr_int skcore_print(VM* vm)
+int skcore_print(VM* vm)
 {
-    cr_int args = cr_gettop(vm);
+    int args = cr_gettop(vm);
     while(args--) {
 
         fputc('\t', stdout);
@@ -12,62 +12,62 @@ cr_int skcore_print(VM* vm)
     return 0;
 }
 
-cr_int skcore_println(VM* vm)
+int skcore_println(VM* vm)
 {
     return 0;
 }
 
-cr_int skcore_tostring(VM* vm)
+int skcore_tostring(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_tonumber(VM* vm)
+int skcore_tonumber(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_error(VM* vm)
+int skcore_error(VM* vm)
 {
     return 0;
 }
 
-cr_int skcore_raweq(VM* vm)
+int skcore_raweq(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_rawget(VM* vm)
+int skcore_rawget(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_rawset(VM* vm)
+int skcore_rawset(VM* vm)
 {
     return 0;
 }
 
-cr_int skcore_gcollect(VM* vm)
+int skcore_gcollect(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_typeof(VM* vm)
+int skcore_typeof(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_next(VM* vm)
+int skcore_next(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_loadfile(VM* vm)
+int skcore_loadfile(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_loadstring(VM* vm)
+int skcore_loadstring(VM* vm)
 {
     return 1;
 }
@@ -79,32 +79,32 @@ static const char* genericreader(VM* vm, void* userdata, cr_umem* szread)
     return NULL;
 }
 
-cr_int skcore_load(VM* vm)
+int skcore_load(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_runfile(VM* vm)
+int skcore_runfile(VM* vm)
 {
     return cr_gettop(vm);
 }
 
-cr_int skcore_assert(VM* vm)
+int skcore_assert(VM* vm)
 {
     return cr_gettop(vm);
 }
 
-cr_int skcore_take(VM* vm)
+int skcore_take(VM* vm)
 {
     return 1 /* change */;
 }
 
-cr_int skcore_args(VM* vm)
+int skcore_args(VM* vm)
 {
     return 1;
 }
 
-cr_int skcore_pcall(VM* vm)
+int skcore_pcall(VM* vm)
 {
     return 1 /* change */;
 }
@@ -131,7 +131,7 @@ static const cr_entry corelib[] = {
     {NULL,       NULL,            0, 0}, // end
 };
 
-CR_LOADAPI cr_int skload_corelib(VM* vm)
+CR_LOADAPI int skload_corelib(VM* vm)
 {
     return 1;
 }

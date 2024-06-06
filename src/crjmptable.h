@@ -44,7 +44,7 @@ static const void *const optable[OPCODE_N] = {
 	&&L_OP_MOD,
 	&&L_OP_POW,
 	&&L_OP_NOT,
-	&&L_OP_VALIST,
+	&&L_OP_VARARG,
 	&&L_OP_NOT_EQUAL,
 	&&L_OP_EQUAL,
 	&&L_OP_EQ,

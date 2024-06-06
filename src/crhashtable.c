@@ -20,65 +20,103 @@
 #include "crobject.h"
 #include "crvalue.h"
 
-// Max table load factor before needing to expand.
-#define TABLE_MAX_LOAD 0.70
 
 
-// Tombstone is a sentinel value indicating there was a collision,
-// its key value is VAL_EMPTY and its value is SKVAL_BOOL 'true'.
-#define IS_TOMBSTONE(entry)    (IS_BOOL(entry->value) && AS_BOOL(entry->value))
-#define PLACE_TOMBSTONE(entry) (entry->value = BOOL_VAL(1))
+/* tombstone Node */
+static const Node tombstone = { EMPTY_VAL, BOOL_VAL(1) };
+
+/* check if 'node' value is tombstone value */
+#define valistombstone(node)	(IS_BOOL((node)->value) && AS_BOOL((node)->value))
+
+/* mark 'node' as tombstone */
+#define puttombstone(node)	(*(node) = tombstone)
 
 
-// Calculate and cache inserts until we need to expand the table.
-//
-// This saves us from needing to calculate loadfactor each time we insert.
-// Instead we check if 'table->left' integer is zero and then expand
-// recalculating the load factor only then.
-#define INSERTS_UNTIL_EXPAND(table) ((uint64_t)(((double)TABLE_MAX_LOAD - HashTable_lf(table)) * (table)->cap))
+/* get table load factor */
+#define loadfactor(t)	cr_numdiv(cast_num((t)->len),cast_num((t)->size))
 
 
-// Initial table size when we expand for the first time (on first insert)
-//
-// Keep this number '2^n >= 2'.
-#define TABLE_INITIAL_SIZE 8
+/* calculates how many inserts are left until we need to expand the table */
+#define insertsleft(t) \
+	cast_int((cast_num(MAXTABLOAD) - loadfactor(t)) * (t)->size)
 
 
-// Initialize the HashTable
-void HashTable_init(HashTable *table)
+
+#define tnode(t,i)	(&(t)->mem[(i)])
+
+#define hashslot(t,h)	tnode((t), (h)&((t)->size-1))
+
+
+
+/* initialize hash table */
+void cr_ht_init(HashTable *tab)
 {
-	table->cap = 0;
-	table->len = 0;
-	table->left = 0;
-	table->entries = NULL;
+	tab->size = 0;
+	tab->len = 0;
+	tab->left = 0;
+	tab->mem = NULL;
 }
 
-// Find entry by linear probing, size of the table is always '2^n >=
-// TABLE_INITIAL_SIZE'.
-//
-// In case of finding a 'tombstone' keep probing until the same 'key' was found
-// or empty spot.
-//
-// If the empty spot was found and there was a 'tombstone', then return
-// the tombstone, otherwise return the entry containing the same key.
-//
-// Safety: There can't be an infinite cycle, because load factor is being
-// tracked. Hashing: For info about how each 'Value' gets hashed refer to the
-// [value.c].
-static force_inline Entry *Entry_find(VM *vm, Entry *entries, uint32_t capacity, Value key, cr_ubyte raw)
+
+static Node *mainposition(HashTable *tab, const Value *k)
 {
-	cr_hash hash = vhash(vm, key, raw);
-	uint32_t mask = capacity - 1; // 'capacity' is 2^n
-	uint64_t index = hash & mask;
-	Entry *tombstone = NULL;
+	void *p;
+	cr_cfunc f;
+	O* o;
+
+	switch (vtt(k)) {
+	case VT_BOOL:
+		return hashslot(tab, hashboolean(asbool(k)));
+	case VT_INTEGER:
+		return hashslot(tab, hashinteger(asint(k)));
+	case VT_NUMBER:
+		return hashslot(tab, hashnumber(asnum(k)));
+	case VT_LUDATA:
+		p = asludata(k);
+		return hashslot(tab, hashpointer(p));
+	case VT_CFUNC:
+		f = ascfunc(k);
+		return hashslot(tab, hashpointer(f));
+	case VT_OBJ:
+		if (IS_STRING
+	default:
+		cr_assert(!isemptyval(k) && !isnilval(k) && isobjval(k));
+		o = asobj(k);
+		return hashslot(tab, hashpointer(o));
+	}
+}
+
+
+/* 
+ * Find entry by linear probing. 
+ * Size of the table is always power of 2.
+ * In case of finding a 'tombstone' keep probing until the
+ * same 'key' was found or empty spot.
+ * If the empty spot was found and there was a 'tombstone', then return
+ * the tombstone, otherwise return the entry containing the same key.
+ * Safety: There can't be an infinite cycle, because load factor is being
+ * tracked.
+ */
+cr_sinline Node *Entry_find(Node *entries, uint32_t size, Value key, cr_ubyte raw)
+{
+	unsigned int hash, mask, index;
+	Node *tombstone;
+
+	mask = size - 1;
+	for (;;) {
+
+	}
+	unsigned int mask = size - 1;
+	unsigned int index = hash & mask;
+	Node *tombstone = NULL;
 	while (1) {
-		Entry *entry = &entries[index];
+		Node *entry = &entries[index];
 		if (IS_EMPTY(entry->key)) {
-			if (!IS_TOMBSTONE(entry))
+			if (!valistombstone(entry))
 				return (tombstone ? tombstone : entry);
 			else if (tombstone == NULL)
 				tombstone = entry;
-		} else if (raweq(key, entry->key))
+		} else if (eqop_raw(key, entry->key))
 			return entry;
 		index = (index + 1) & mask;
 	};
@@ -90,11 +128,11 @@ static force_inline Entry *Entry_find(VM *vm, Entry *entries, uint32_t capacity,
  * Otherwise 0 is returned. */
 cr_ubyte HashTable_next(VM *vm, HashTable *table, Value *key)
 {
-	Entry *last = NULL;
-	Entry *e = Entry_find(vm, table->entries, table->cap, *key, 0);
+	Node *last = NULL;
+	Node *e = Entry_find(vm, table->mem, table->size, *key, 0);
 	if (e == NULL || IS_EMPTY(e->key))
 		return 0;
-	last = table->entries + table->cap;
+	last = table->mem + table->size;
 	for (; e < last; e++) {
 		if (!IS_EMPTY(e->key)) { // non-empty entry
 			*key = e->key;
@@ -108,17 +146,16 @@ cr_ubyte HashTable_next(VM *vm, HashTable *table, Value *key)
 // Rehash all the 'keys' from the 'src' table into the 'dest' table.
 void HashTable_into(VM *vm, HashTable *src, HashTable *dest, cr_ubyte raw)
 {
-	for (uint32_t i = 0; i < src->cap; i++) {
-		Entry *entry = &src->entries[i];
+	for (uint32_t i = 0; i < src->size; i++) {
+		Node *entry = &src->mem[i];
 		if (!IS_EMPTY(entry->key))
 			HashTable_insert(vm, dest, entry->key, entry->value, raw);
 	}
 }
 
 // Calculate HashTable 'load factor'.
-static force_inline double HashTable_lf(HashTable *table)
+static cr_inline double HashTable_lf(HashTable *table)
 {
-	return (double)table->len / (double)table->cap;
 }
 
 
@@ -165,25 +202,25 @@ void internfmt(VM *vm, const char *fmt, ...)
 
 
 // Expands the table by rehashing all the keys into a new bigger table array.
-static force_inline void HashTable_expand(VM *vm, HashTable *table, cr_ubyte raw)
+static cr_inline void HashTable_expand(VM *vm, HashTable *table, cr_ubyte raw)
 {
-	uint32_t new_cap = GROW_ARRAY_CAPACITY(table->cap, TABLE_INITIAL_SIZE);
-	Entry *entries = GC_MALLOC(vm, new_cap * sizeof(Entry));
+	uint32_t new_cap = GROW_ARRAY_CAPACITY(table->size, MINSTRTABSIZE);
+	Node *entries = GC_MALLOC(vm, new_cap * sizeof(Node));
 	for (uint32_t i = 0; i < new_cap; i++) {
 		entries[i].key = EMPTY_VAL;
 		entries[i].value = EMPTY_VAL;
 	}
-	for (uint32_t i = 0; i < table->cap; i++) {
-		Entry *entry = &table->entries[i];
+	for (uint32_t i = 0; i < table->size; i++) {
+		Node *entry = &table->mem[i];
 		if (IS_EMPTY(entry->key))
 			continue;
-		Entry *dest = Entry_find(vm, entries, new_cap, entry->key, raw);
-		memcpy(dest, entry, sizeof(Entry));
+		Node *dest = Entry_find(vm, entries, new_cap, entry->key, raw);
+		memcpy(dest, entry, sizeof(Node));
 	}
-	if (table->entries != NULL)
-		GC_FREE(vm, table->entries, table->cap * sizeof(Entry));
-	table->entries = entries;
-	table->cap = new_cap;
+	if (table->mem != NULL)
+		GC_FREE(vm, table->mem, table->size * sizeof(Node));
+	table->mem = entries;
+	table->size = new_cap;
 	table->left = INSERTS_UNTIL_EXPAND(table);
 }
 
@@ -194,10 +231,10 @@ cr_ubyte HashTable_insert(VM *vm, HashTable *table, Value key, Value val, cr_uby
 {
 	if (table->left == 0)
 		HashTable_expand(vm, table, raw);
-	Entry *entry = Entry_find(vm, table->entries, table->cap, key, raw);
+	Node *entry = Entry_find(vm, table->mem, table->size, key, raw);
 	cr_ubyte new_key = IS_EMPTY(entry->key);
 	if (new_key) {
-		if (!IS_TOMBSTONE(entry))
+		if (!valistombstone(entry))
 			// Only decrement if this entry was never inserted into
 			table->left--;
 		table->len++;
@@ -207,18 +244,19 @@ cr_ubyte HashTable_insert(VM *vm, HashTable *table, Value key, Value val, cr_uby
 	return new_key;
 }
 
-// Remove 'key' from the table.
-// If the 'key' was found (and removed) return true and place the tombstone.
-// If the 'key' was not found return false.
+/* 
+ * Remove 'key' from the table.
+ * If the 'key' was found (and removed) return non-zero and place the tombstone.
+ * Also tombstones count as nodes.
+ */
 cr_ubyte HashTable_remove(VM *vm, HashTable *table, Value key, cr_ubyte raw)
 {
-	Entry *entry = Entry_find(vm, table->entries, table->cap, key, raw);
+	Node *entry = Entry_find(vm, table->mem, table->size, key, raw);
 	if (IS_EMPTY(entry->key))
 		return 0;
-	entry->key = EMPTY_VAL;
-	PLACE_TOMBSTONE(entry);
-	// Don't increment table->left, we
-	// count tombstones as entries
+	puttombstone(entry);
+	/* Don't increment table->left, we
+	 * count tombstones as entries */
 	table->len--;
 	return 1;
 }
@@ -229,12 +267,12 @@ OString *HashTable_get_intern(HashTable *table, const char *str, size_t len, cr_
 {
 	if (table->len == 0)
 		return NULL;
-	uint64_t mask = table->cap - 1; // 'cap' is 2^n
+	uint64_t mask = table->size - 1; // 'cap' is 2^n
 	uint64_t index = hash & mask;
 	for (;;) {
-		Entry *entry = &table->entries[index];
+		Node *entry = &table->mem[index];
 		if (IS_EMPTY(entry->key)) {
-			if (!IS_TOMBSTONE(entry))
+			if (!valistombstone(entry))
 				return NULL;
 		} else {
 			OString *string = AS_STRING(entry->key);
@@ -252,7 +290,7 @@ cr_ubyte HashTable_get(VM *vm, HashTable *table, Value key, Value *out, cr_ubyte
 {
 	if (table->len == 0)
 		return 0;
-	Entry *entry = Entry_find(vm, table->entries, table->cap, key, raw);
+	Node *entry = Entry_find(vm, table->mem, table->size, key, raw);
 	if (IS_EMPTY(entry->key))
 		return 0;
 	*out = entry->value;
@@ -262,6 +300,6 @@ cr_ubyte HashTable_get(VM *vm, HashTable *table, Value key, Value *out, cr_ubyte
 // Free 'table' array and reinitialize the 'table'.
 void HashTable_free(VM *vm, HashTable *table)
 {
-	GC_FREE(vm, table->entries, table->cap * sizeof(Entry));
-	HashTable_init(table);
+	GC_FREE(vm, table->mem, table->size * sizeof(Node));
+	cr_ht_init(table);
 }

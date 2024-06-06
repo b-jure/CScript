@@ -29,7 +29,7 @@
  * the runtime error and invokes either a panic handler or aborts.
  * Error message is on top of the stack, or whatever value
  * was passed to cr_error. */
-cr_noret runerror(VM *vm, cr_int status)
+cr_noret runerror(VM *vm, int status)
 {
 	struct cr_longjmp *errjmp;
 
@@ -44,7 +44,7 @@ cr_noret runerror(VM *vm, cr_int status)
 	} else {
 		abort(); // gg
 	}
-	unreachable;
+	cr_unreachable;
 }
 
 
@@ -89,8 +89,8 @@ cr_noret binoperror(VM *vm, Value a, Value b, cr_om op)
 	push(vm, OBJ_VAL(vtostr(vm, a, 0)));
 	push(vm, OBJ_VAL(vtostr(vm, b, 0)));
 	const char *operation = vm->faststatic[op + SS_OPADD]->storage;
-	const char *left = AS_CSTRING(*stkpeek(1));
-	const char *right = AS_CSTRING(*stkpeek(0));
+	const char *left = ascstring(*stkpeek(1));
+	const char *right = ascstring(*stkpeek(0));
 	push(vm, OBJ_VAL(OString_fmt(vm, fmt, operation, left, right)));
 	runerror(vm, S_EARBIN);
 }
@@ -101,7 +101,7 @@ cr_noret unoperror(VM *vm, Value a, cr_om op)
 	static const char *fmt = "Attempt to perform unary '%s' on %s.";
 	push(vm, OBJ_VAL(vtostr(vm, a, 0)));
 	const char *operation = vm->faststatic[op + SS_OPADD]->storage;
-	const char *operand = AS_CSTRING(*stkpeek(0));
+	const char *operand = ascstring(*stkpeek(0));
 	push(vm, OBJ_VAL(OString_fmt(vm, fmt, operation, operand)));
 	runerror(vm, S_EARUN);
 }
@@ -120,7 +120,7 @@ cr_noret ofmterror(VM *vm, int8_t c, Value callee)
 {
 	static const char *fmt = "Invalid format specifier '%%%c' for '%s'";
 	push(vm, OBJ_VAL(vtostr(vm, callee, 0)));
-	const char *fn = AS_CSTRING(*stkpeek(0));
+	const char *fn = ascstring(*stkpeek(0));
 	push(vm, OBJ_VAL(OString_fmt(vm, fmt, c, fn)));
 	runerror(vm, S_ESTRFMT);
 }
@@ -138,7 +138,7 @@ cr_noret sovferror(VM *vm)
 cr_noret udproperror(VM *vm, Value property, OClass *oclass)
 {
 	static const char *fmt = "Property '%s' is not defined for <class '%s'>.";
-	const char *pname = AS_CSTRING(property);
+	const char *pname = ascstring(property);
 	const char *classname = oclass->name->storage;
 	push(vm, OBJ_VAL(OString_fmt(vm, pname, classname)));
 	runerror(vm, S_EUDPROPERTY);
@@ -175,7 +175,7 @@ cr_noret callerror(VM *vm, Value callee)
 {
 	static const char *fmt = "Tried calling non-callable value '%s'.";
 	push(vm, OBJ_VAL(vtostr(vm, callee, 0)));
-	push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stkpeek(0)))));
+	push(vm, OBJ_VAL(OString_fmt(vm, fmt, ascstring(*stkpeek(0)))));
 	runerror(vm, S_ECALL);
 }
 
@@ -184,7 +184,7 @@ cr_noret ipaerror(VM *vm, Value notinstance)
 {
 	static const char *fmt = "Invalid property access, tried accessing property on %s";
 	push(vm, OBJ_VAL(vtostr(vm, notinstance, 1)));
-	push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stkpeek(0)))));
+	push(vm, OBJ_VAL(OString_fmt(vm, fmt, ascstring(*stkpeek(0)))));
 	runerror(vm, S_EPACCESS);
 }
 
@@ -225,7 +225,7 @@ cr_noret inheriterror(VM *vm, Value notclass)
 	const char *fmt = "Can't inherit from '%s', value must be class object.";
 
 	push(vm, OBJ_VAL(vtostr(vm, notclass, 1)));
-	push(vm, OBJ_VAL(OString_fmt(vm, fmt, AS_CSTRING(*stkpeek(0)))));
+	push(vm, OBJ_VAL(OString_fmt(vm, fmt, ascstring(*stkpeek(0)))));
 	runerror(vm, S_EINHERIT);
 }
 

@@ -40,10 +40,10 @@ void omark(VM *vm, O *obj)
 }
 
 
-static force_inline void marktable(VM *vm, HashTable *table)
+static cr_inline void marktable(VM *vm, HashTable *table)
 {
-	for (uint32_t i = 0; i < table->cap; i++) {
-		Entry *entry = &table->entries[i];
+	for (uint32_t i = 0; i < table->size; i++) {
+		Node *entry = &table->mem[i];
 		if (!IS_EMPTY(entry->key)) {
 			vmark(vm, entry->key);
 			vmark(vm, entry->value);
@@ -55,15 +55,15 @@ static force_inline void marktable(VM *vm, HashTable *table)
 
 
 // Generic function signature for Mark and Sweep functions
-#define MS_FN(name) static force_inline void name(VM *vm)
+#define MS_FN(name) static cr_inline void name(VM *vm)
 
 MS_FN(markglobals)
 {
 	for (uint32_t i = 0; i < vm->globids.cap; i++) {
-		Entry *entry = &vm->globids.entries[i];
+		Node *entry = &vm->globids.entries[i];
 		if (!IS_EMPTY(entry->key)) {
 			// Mark identifier (ObjString)
-			omark(vm, AS_OBJ(entry->key));
+			omark(vm, asobj(entry->key));
 			// Mark value
 			uint32_t idx = cast_uint(AS_NUMBER(entry->value));
 			vmark(vm, vm->globvars.data[idx].value);
@@ -79,7 +79,7 @@ MS_FN(markstack)
 
 MS_FN(markframes)
 {
-	for (cr_int i = 0; i < vm->fc; i++)
+	for (int i = 0; i < vm->fc; i++)
 		omark(vm, cast(O *, vm->frames[i].closure));
 }
 
@@ -126,8 +126,8 @@ MS_FN(markroots)
 MS_FN(rmweakrefs)
 {
 	for (uint32_t i = 0; i < vm->weakrefs.cap; i++) {
-		Entry *entry = &vm->weakrefs.entries[i];
-		if (IS_OBJ(entry->key) && !oismarked(AS_OBJ(entry->key)))
+		Node *entry = &vm->weakrefs.entries[i];
+		if (IS_OBJ(entry->key) && !oismarked(asobj(entry->key)))
 			HashTable_remove(vm, &vm->weakrefs, entry->key, 0);
 	}
 }
@@ -230,7 +230,7 @@ void mark_black(VM *vm, O *obj)
 			BREAK;
 		}
 		CASE(OBJ_STRING)
-		unreachable;
+		cr_unreachable;
 	}
 }
 

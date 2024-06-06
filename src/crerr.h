@@ -31,7 +31,7 @@
 cr_noret printandpanic(VM* vm);
 
 /* Generic runtime error */
-cr_noret runerror(VM* vm, cr_int status);
+cr_noret runerror(VM* vm, int status);
 
 /* Memory allocation error */
 cr_noret memerror(VM* vm);
@@ -74,7 +74,7 @@ cr_noret udperror(VM* vm, Value property, Value oclass);
 cr_noret retovferror(VM* vm, const char* fn);
 
 /* Function invalid argument count error */
-cr_noret arityerror(VM* vm, cr_int expected, cr_int got);
+cr_noret arityerror(VM* vm, int expected, int got);
 
 /* Call stack overflow (frame count) */
 cr_noret fcovferror(VM* vm);

@@ -49,11 +49,11 @@ typedef void (*ProtectedFn)(VM *vm, void *userdata);
  * The whole structure lives on a stack right before calling
  * the C function.
  * Check 'protectedcall' in 'crvm.c' for a reference. */
-struct cr_longjmp {
+typedef struct cr_longjmp {
 	struct cr_longjmp *prev;
 	jmp_buf buf;
 	volatile int status;
-};
+} cr_longjmp;
 
 
 
@@ -63,53 +63,39 @@ struct cr_longjmp {
  * ---------
  */
 
-/* CallFrame info */
-typedef enum {
-	CFI_FRESH = 1, /* fresh vm loop execution */
-	CFI_CCALL = 2, /* call is in 'cr_cfunc' */
-} CFInfo;
+
+/* get Cript 'Function' */
+#define cffn(cf)	(ascrclosure((cf)->callee.sv)->fn)
 
 
-/* size of instruction */
-typedef cr_ubyte Instruction;
+/* active function is 'CClosure' */
+#define cfisccl(cf)	((cf) && iscclosure((cf)->callee))
+
+/* active function is 'CriptClosure' */
+#define cfiscl(cf)	((cf) && isclosure((cf)->callee))
+
+/* active function is 'cr_cfunc' */
+#define cfisc(cf)	((cf) && iscfunction((cf)->callee))
 
 
-/* common call frame fields */
-#define CommonFrameFields \
-	Value *callee; cr_int retcnt; cr_int vacnt; cr_ubyte cfinfo
+/* 'cfstatus' bits */
+#define CFcript		0 /* in Cript call */
+#define CFccall		1 /* in C call */
 
 
-/* script frame */
-typedef struct {
-	CommonFrameFields;
-	OClosure *closure;
-	Instruction *ip;
-} Frame;
-
-
-/* 'cr_cfunc' frame */
-typedef struct {
-	CommonFrameFields;
-} CFrame;
+/* 'CallFrame' function is Cript function */
+#define cfiscript(cf)	(!((cf)->cfstatus & CFccall))
 
 
 /* function CallFrame */
-typedef union CallFrame {
-	Frame frame; /* script */
-	CFrame cframe; /* 'cr_cfunc' */
+typedef struct CallFrame {
+	StkValue callee;
+	StkValue top;
+	const Instruction *pc;	/* only for non-C callee */
+	int nvarargs;		/* only for non-C callee */
+	int nreturns;
+	cr_ubyte cfstatus;
 } CallFrame;
-
-
-/* common frame fields */
-#define cffirst		cast(cr_ubyte*, cf->callee)
-#define cfcallee	cast(Value*, cf->callee)
-#define cfretcnt	cast(cr_int, cffirst + sizeof(Value*))
-#define cfvacnt		cast(cr_int, cffirst + sizeof(Value*) + sizeof(cr_int))
-#define cfinfo		cast(cr_ubyte, cffirst + sizeof(Value*) + 2 * sizeof(cr_int))
-
-
-/* 'Frame' function */
-#define FFN(cf)		((cf)->frame->closure->fn)
 
 
 
@@ -148,8 +134,8 @@ typedef struct {
 	cr_alloc reallocate; /* allocator */
 	void *userdata; /* userdata for allocator */
 	cr_reader reader; /* source file reader */
-	cr_panic panic; /* panic handler */
-} Hooks; /* configurable hooks */
+	cr_cfunc panic; /* panic handler */
+} Hooks; 
 
 
 
@@ -159,10 +145,11 @@ typedef struct {
  * ---------
  */
 
-VecGeneric(OPtrVec, O*);
-VecGeneric(RelStkValueVec, RelStkValue);
-VecGeneric(VariableVec, GlobalVar);
-VecGeneric(StrRefVec, OString*);
+Vec(GCObjectVec, GCObject*);
+Vec(SIndexVec, SIndex);
+Vec(GlobalVarVec, GlobalVar);
+Vec(OStringVec, OString*);
+Vec(CallFrameVec, CallFrame);
 
 
 
@@ -173,35 +160,47 @@ VecGeneric(StrRefVec, OString*);
  */
 
 
+/*
+ * Extra stack space used mostly when calling overload-able
+ * methods. Useful in avoiding stack checks (branching).
+ * Only VM stack uses this and nothing else.
+ */
+#define EXTRA_STACK	5
+
+
+/* initial stack size */
+#define STACKSIZE_INIT	(CR_MINSTACK*4)
+
+
 /* 
  * Virtual Machine (thread state).
  * Note: As of version 1.0.0 there is no separation
  * of global and thread state.
- * This means that cript does not have internal support
- * for asynchronous code or concurrency.
+ * This means that Cript does not have internal support
+ * for asynchronous or concurrent code execution.
  */
 struct VM {
-	cr_uint seed; /* initial seed for hashing */
-	cr_status status; /* status code */
-	cr_int fc; /* call frame count */
-	CallFrame frames[VM_CALLSTACK_LIMIT]; /* call stack */
-	Hooks hooks; /* hooks to extension code */
-	GC gc; /* garbage collector */
-	ValueVec stack; /* stack */
-	RelStkValue *sp; /* stack pointer */
-	RelStkValue *stackend; /* end of the stack */
-	RelStkValueVec callstart; /* start of call values */
-	RelStkValueVec retstart; /* start of return values */
+	int seed; /* initial seed for hashing */
+	int status; /* status code */
+	SIndex stacktop; /* first free slot in the stack */
+	SIndex stackend; /* slot beyond the last valid slot */
+	SIndex stack; /* stack base */
+	CallFrame *aframe; /* currently active frame in 'frames' */
+	CallFrameVec frames; /* nested function call frames */
+	SIndexVec callstart; /* start of call values */
+	SIndexVec retstart; /* start of return values */
 	HashTable gids; /* global variable names */
-	VariableVec gvars; /* global variable values */
-	ValueVec temp; /* temporary storage for return values */
-	struct cr_longjmp *errjmp; /* error recovery */
+	GlobalVarVec gvars; /* global variable values */
+	ValueVec temp; /* temporary storage for return values TODO*/
+	cr_longjmp *errjmp; /* error recovery */
 	HashTable weakrefs; /* interned strings (unmarked) */
-	StrRefVec interned; /* interned strings (marked) */
-	OUpvalue *open_upvals; /* closure values */
+	OStringVec interned; /* interned strings (marked) */
+	Hooks hooks; /* hooks to external code */
+	GC gc; /* garbage collector params */
+	UValue *openuv; /* unclosed closure values */
 	OString *faststatic[SS_N]; /* preallocated static strings */
 	OString *memerror; /* preallocated string object for memory errors */
-	Value init; /* init flag */
+	Value nil; /* nil value */
 	Value *gs; /* gray stack */
 	cr_umem gslen; /* gs length */
 	cr_umem gscap; /* gs capacity */
@@ -220,7 +219,7 @@ struct VM {
 
 
 /* 'init' member is set to nil 'Value' if VM is fully initialized */
-#define vminitialized(vm) (IS_NIL((vm)->init))
+#define vminitialized(vm) (isnil(&(vm)->nil))
 
 
 /* Fetch the last call frame (current) */
@@ -249,8 +248,9 @@ struct VM {
 #define incsp(vm)	((vm)->sp++)
 
 /* push value/s on the stack */
+
 void push(VM *vm, Value val);
-#define pushn(vm, n, val)  { cr_int cnt = (n); while (cnt-- > 0) push(vm, val); }
+#define pushn(vm, n, val)  { int cnt = (n); while (cnt-- > 0) push(vm, val); }
 
 
 
@@ -259,29 +259,25 @@ void push(VM *vm, Value val);
 	{ *stkpeek(1) = OBJ_VAL(vmconcat(vm, *stkpeek(1), *stkpeek(0))); decsp(vm); }
 
 
+void initvm(VM *vm);
+void resetvm(VM *vm, cr_status status);
 
+void vminterpret(VM *vm, const char *source, const char *filename);
+void vmrun(VM *vm);
+void vmcall(VM *vm, Value *retstart, Value fn, int retcnt);
+void vmpcall(VM *vm, ProtectedFn fn, void *userdata, cr_ptrdiff oldtop);
+cr_ubyte vmcompile(VM *vm, void *userdata, const char *name, cr_ubyte globalscope);
+void vmcloseupval(VM *vm, Value *last);
+cr_ubyte vmbindmethod(VM *vm, OClass *oclass, Value name, Value receiver);
 Value vmconcat(VM *vm, Value l, Value r);
 
-/* ordering */
-void equalop(VM *vm, StkValue l, StkValue r); /* OP_EQUAL */
-cr_ubyte eqop_raw(StkValue l, StkValue r); /* OP_EQ raw */
-void opeq(VM *vm, StkValue l, StkValue r); /* OP_EQ */
-void opne(VM *vm, StkValue l, StkValue r); /* OP_NE */
-void oplt(VM *vm, StkValue l, StkValue r); /* OP_LT */
-void opgt(VM *vm, StkValue l, StkValue r); /* OP_GT */
-void ople(VM *vm, StkValue l, StkValue r); /* OP_LE */
-void opge(VM *vm, StkValue l, StkValue r); /* OP_GE */
-
-
-void VM_init(VM *vm);
-void interpret(VM *vm, const char *source, const char *filename);
-OString *globalname(VM *vm, uint32_t idx);
-void run(VM *vm);
-void ncall(VM *vm, Value *retstart, Value fn, int32_t retcnt);
-int pcall(VM *vm, ProtectedFn fn, void *userdata, ptrdiff_t oldtop);
-cr_ubyte pcompile(VM* vm, void* userdata, const char* name, cr_ubyte isingscope);
-void closeupval(VM *vm, Value *last);
-cr_ubyte bindmethod(VM *vm, OClass *oclass, Value name, Value receiver);
-void resetvm(VM *vm, cr_status status);
+cr_ubyte vmequal(VM *vm, StkValue l, StkValue r);
+cr_ubyte vmeqraw(StkValue l, StkValue r);
+cr_ubyte vmeq(VM *vm, StkValue l, StkValue r);
+cr_ubyte vmne(VM *vm, StkValue l, StkValue r);
+cr_ubyte vmlt(VM *vm, StkValue l, StkValue r);
+cr_ubyte vmgt(VM *vm, StkValue l, StkValue r);
+cr_ubyte vmle(VM *vm, StkValue l, StkValue r);
+cr_ubyte vmge(VM *vm, StkValue l, StkValue r);
 
 #endif

@@ -22,9 +22,9 @@
 #include "crvm.h"
 
 
-sdebug void Chunk_debug(VM* vm, Chunk* chunk, const char* name);
-sdebug uint32_t Instruction_debug(VM* vm, Chunk* chunk, uint32_t offset);
-sdebug uint32_t Chunk_getline(Chunk* chunk, uint32_t index);
+void Chunk_debug(VM* vm, Chunk* chunk, const char* name);
+uint32_t Instruction_debug(VM* vm, Chunk* chunk, uint32_t offset);
+uint32_t Chunk_getline(Chunk* chunk, uint32_t index);
 void dumpstack(VM* vm, CallFrame* frame, cr_ubyte* ip);
 
 

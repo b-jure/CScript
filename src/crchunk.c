@@ -33,7 +33,7 @@
  * to retrieve it if 'Chunk_getline' gets called; it gets called only during
  * debug or run-time errors.
  */
-static void LineArray_write(Array_uint* lines, cr_uint line, cr_uint index)
+static void LineArray_write(Array_uint* lines, int line, int index)
 {
     if(lines->len <= 0 || *Array_uint_last(lines) < line) {
         Array_uint_push(lines, index);
@@ -41,10 +41,10 @@ static void LineArray_write(Array_uint* lines, cr_uint line, cr_uint index)
     }
 }
 
-cr_uint writechunk_constant(VM* vm, Chunk* chunk, Value value)
+int writechunk_constant(VM* vm, Chunk* chunk, Value value)
 {
     push(vm, value);
-    cr_uint idx = Array_Value_push(&chunk->constants, value);
+    int idx = Array_Value_push(&chunk->constants, value);
     pop(vm);
     return idx;
 }
@@ -58,9 +58,9 @@ void initchunk(Chunk* chunk, VM* vm)
 }
 
 /* Writes OpCodes that require no parameters */
-cr_uint writechunk(Chunk* chunk, cr_ubyte byte, cr_uint line)
+int writechunk(Chunk* chunk, cr_ubyte byte, int line)
 {
-    cr_uint idx = Array_ubyte_push(&chunk->code, byte);
+    int idx = Array_ubyte_push(&chunk->code, byte);
     LineArray_write(&chunk->lines, line, idx);
     return idx;
 }
@@ -75,7 +75,7 @@ void freechunk(Chunk* chunk)
 }
 
 /* Write long param (24-bit) */
-static force_inline void writechunk_param24(Chunk* chunk, cr_uint param, cr_uint line)
+static cr_inline void writechunk_param24(Chunk* chunk, int param, int line)
 {
     writechunk(chunk, BYTE(param, 0), line);
     writechunk(chunk, BYTE(param, 1), line);
@@ -85,17 +85,17 @@ static force_inline void writechunk_param24(Chunk* chunk, cr_uint param, cr_uint
         "Invalid write to chunk bytecode array.");
 }
 
-static force_inline cr_uint
-writechunk_op(Chunk* chunk, OpCode code, cr_ubyte islong, cr_uint idx, cr_uint line)
+static cr_inline int
+writechunk_op(Chunk* chunk, OpCode code, cr_ubyte islong, int idx, int line)
 {
-    cr_uint start = writechunk(chunk, code, line);
+    int start = writechunk(chunk, code, line);
     if(!islong) writechunk(chunk, idx, line);
     else writechunk_param24(chunk, idx, line);
     return start;
 }
 
 /* Write generic OpCode-s with parameters. */
-cr_uint writechunk_codewparam(Chunk* chunk, OpCode code, cr_uint param, cr_uint line)
+int writechunk_codewparam(Chunk* chunk, OpCode code, int param, int line)
 {
 #ifdef CR_PRECOMPUTED_GOTO
 #define OP_TABLE
@@ -142,7 +142,7 @@ cr_uint writechunk_codewparam(Chunk* chunk, OpCode code, cr_uint param, cr_uint 
         CASE(OP_RET1)
         CASE(OP_RET)
         {
-            unreachable;
+            cr_unreachable;
         }
         CASE(OP_POPN)
         CASE(OP_DEFINE_GLOBALL)
@@ -167,7 +167,7 @@ cr_uint writechunk_codewparam(Chunk* chunk, OpCode code, cr_uint param, cr_uint 
         CASE(OP_INVOKE0)
         CASE(OP_INVOKE1)
         CASE(OP_INVOKE)
-        CASE(OP_VALIST)
+        CASE(OP_VARARG)
         CASE(OP_GET_SUPER)
         CASE(OP_INVOKE_SUPER0)
         CASE(OP_INVOKE_SUPER1)
@@ -205,11 +205,11 @@ cr_uint writechunk_codewparam(Chunk* chunk, OpCode code, cr_uint param, cr_uint 
 
 // @TODO: Implement binary search
 /* Returns the line of the current instruction. */
-cr_uint Chunk_getline(Chunk* chunk, cr_uint index)
+int Chunk_getline(Chunk* chunk, int index)
 {
     Array_uint* line_array = &chunk->lines;
-    cr_uint idx = line_array->len - 1;
-    cr_uint instruction_idx = *Array_uint_index(line_array, --idx);
+    int idx = line_array->len - 1;
+    int instruction_idx = *Array_uint_index(line_array, --idx);
     while(instruction_idx > index) {
         idx -= 2;
         instruction_idx = *Array_uint_index(line_array, idx);
