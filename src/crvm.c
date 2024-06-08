@@ -1063,3 +1063,63 @@ void cleanvm(VM **vmp)
 	_cleanup_function((*vmp)->F);
 	cr_destroy(vmp);
 }
+
+
+/* statics (check 'crstatics.h') */
+CRI_DEF const StaticString SS[CR_SSNUM] = {
+	/* Value types */
+	{ "nil", SLL("nil") },
+	{ "number", SLL("number") },
+	{ "string", SLL("string") },
+	{ "bool", SLL("bool") },
+	{ "class", SLL("class") },
+	{ "instance", SLL("instance") },
+	{ "function", SLL("function") },
+	{ "closure", SLL("closure") },
+	{ "native", SLL("native") },
+	{ "upvalue", SLL("upvalue") },
+	{ "method", SLL("method") },
+	/* Boolean strings */
+	{ "true", SLL("true") },
+	{ "false", SLL("false") },
+	/* Class overload-able method names. */
+	{ "__init__", SLL("__init__") },
+	{ "__tostring__", SLL("__tostring__") },
+	{ "__getidx__", SLL("__getidx__") },
+	{ "__setidx__", SLL("__setidx__") },
+	{ "__hash__", SLL("__hash__") },
+	{ "__free__", SLL("__free__") },
+	/* Overload-able arithmetic operators */
+	{ "__add__", SLL("__add__") },
+	{ "__sub__", SLL("__sub__") },
+	{ "__mul__", SLL("__mul__") },
+	{ "__div__", SLL("__div__") },
+	{ "__mod__", SLL("__mod__") },
+	{ "__pow__", SLL("__pow__") },
+	{ "__not__", SLL("__not__") },
+	{ "__umin__", SLL("__umin__") },
+	/* Overload-able ordering operators */
+	{ "__ne__", SLL("__ne__") },
+	{ "__eq__", SLL("__eq__") },
+	{ "__lt__", SLL("__lt__") },
+	{ "__le__", SLL("__le__") },
+	{ "__gt__", SLL("__gt__") },
+	{ "__ge__", SLL("__ge__") },
+	/* Operator strings */
+	{ "addition [+]", SLL("addition [+]") },
+	{ "subtraction [-]", SLL("subtraction [-]") },
+	{ "multiplication [*]", SLL("multiplication [*]") },
+	{ "division [/]", SLL("division [/]") },
+	{ "modulo [%]", SLL("modulo [%]") },
+	{ "exponentiation [^]", SLL("exponentiation [^]") },
+	{ "not [!]", SLL("not [!]") },
+	{ "negation [-]", SLL("negation [-]") },
+	{ "ne [!=]", SLL("ne [!=]") },
+	{ "eq [==]", SLL("eq [==]") },
+	{ "lt [<]", SLL("lt [<]") },
+	{ "le [<=]", SLL("le [<=]") },
+	{ "gt [>]", SLL("gt [>]") },
+	{ "ge [>=]", SLL("ge [>=]") },
+	{ "and [and]", SLL("and [and]") },
+	{ "or [or]", SLL("or [or]") },
+};

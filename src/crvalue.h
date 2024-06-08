@@ -19,7 +19,6 @@
 #define CRVALUE_H
 
 
-#include "crcommon.h"
 #include "crhash.h"
 #include "crmem.h"
 
@@ -40,6 +39,18 @@
 #define CR_TOTALTYPES	(CR_TUVALUE + 2)
 
 
+/* Cript values */
+typedef union Value {
+	int boolean; /* boolean */
+	cr_integer i; /* integer */
+	cr_number n; /* float */
+	void *lud; /* light userdata */
+	cr_cfunc cfn; /* C function */
+	struct GCObject *o; /* collectable value */
+} Value;
+
+
+
 /*
  * Tagged value types.
  * Bits 0-4 are for value types (CR_T*).
@@ -47,39 +58,47 @@
  */
 
 /* set variant bytes for type 't' */
-#define makevariant(t, v)	((t) | ((b) << 5))
+#define makevariant(t, v)	((t) | ((v) << 5))
 
 
-/* 'mod' bits */
-#define CRMconst	0 /* value is constant */
 
-
-/* tagged union */
-typedef struct {
-	union {
-		int boolean; /* boolean */
-		cr_integer integer; /* integer */
-		cr_number number; /* float */
-		void *lud; /* light userdata */
-		cr_cfunc cfn; /* C function */
-		struct GCObject *o; /* collectable value */
-	} as;
-	unsigned char tt; /* type tag */
-	unsigned char mod; /* modifiers */
-} Value;
-
-
-Vec(ValueVec, Value);
-
-
+/* macros for 'tt' */
 #define vtt(v)		((v)->tt)
 #define isvtt(v,t)	(vtt(v) == (t))
 #define setvtt(v,t)	(vtt(v) = (t))
 
 
+
+/* 'mod' bits */
+#define CRMconst	0 /* value is constant */
+#define CRMcaptured	1 /* only for local variables */
+
+
+/* macros for 'mod' */
 #define vmod(v)		((v)->mod)
 #define ismod(v,m)	testbit(vmod(v), (m))
-#define isconst(v)	ismod(v, CRMconst)
+#define isconst(v)	ismod((v), CRMconst)
+#define iscaptured(v)	ismod((v), CRMcaptured)
+
+
+
+/* 'TValue' fields, defined for reuse (alignment) */
+#define TValueFields	Value val; unsigned char tt; unsigned char mod;
+
+
+
+/* 
+ * 'Value' with type and modifiers. 
+ * 'mod' might be unused but this memory would
+ * be padded by compiler anyway (hopefully).
+ */
+typedef struct TValue {
+	TValueFields;
+} TValue;
+
+
+
+Vec(TValueVec, TValue);
 
 
 
@@ -98,13 +117,16 @@ Vec(ValueVec, Value);
  * while on 4-byte alignement 'SValue' is 8 bytes.
  */
 typedef union {
-	Value sv;
-	unsigned short tbc;
+	TValue val_;
+	struct {
+		TValueFields;
+		unsigned short tbc;
+	} tbc;
 } SValue;
 
 
 /* stack value to value */
-#define s2v(s)		(&(s)->sv)
+#define s2v(s)		(&(s)->val_)
 
 
 
@@ -135,19 +157,19 @@ typedef struct {
 #define CR_VFALSE	makevariant(CR_TBOOL, 0)
 #define CR_VTRUE	makevariant(CR_TBOOL, 1)
 
-#define bvalue(v)	((v)->as.boolean)
+#define bvalue(v)	((v)->val.boolean)
 
 #define ttisboolean(v)		isvtt(v, CR_TBOOL)
 #define ttistrue(v)		isvtt(v, CR_VTRUE)
 #define ttisfalse(v)		isvtt(v, CR_VFALSE)
 
-#define setbfvalue(v)		setvtt(v, CR_VFALSE)
-#define setbtvalue(v)		setvtt(v, CR_VTRUE)
+#define setbfvalue(v)	setvtt(v, CR_VFALSE)
+#define setbtvalue(v)	setvtt(v, CR_VTRUE)
 
 #define ttisfalsey(v)	(ttisfalse(v) || ttisnil(v))
 
-#define booleanval(v) \
-	((Value){ .tt = makevariant(CR_TBOOL, (v)), { .boolean = (v) } })
+#define newbvalue(v) \
+	((TValue){.val = {.boolean = (v)}, .tt = makevariant(CR_TBOOL, (v)), .mod=0})
 
 
 
@@ -157,19 +179,19 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-#define CR_VNUMINT	makevariant(CR_NTYPESUMBER, 0)
-#define CR_VNUMFLT	makevariant(CR_NTYPESUMBER, 1)
+#define CR_VNUMINT	makevariant(CR_TNUMBER, 0)
+#define CR_VNUMFLT	makevariant(CR_TNUMBER, 1)
 
-#define ivalue(v)	((v)->as.integer)
-#define fvalue(v)	((v)->as.number)
+#define ivalue(v)	((v)->val.i)
+#define fvalue(v)	((v)->val.n)
 #define nvalue(v)	(isvtt(CR_VNUMINT) ? cast_num(ivalue(v)) : fvalue(v))
 
-#define ttisflt(v)	isvtt(v, CR_VNUMFLT)
-#define ttisint(v)	isvtt(v, CR_VNUMINT)
-#define ttisnum(v)	isvtt(v, CR_NTYPESUMBER)
+#define ttisflt(v)	isvtt((v), CR_VNUMFLT)
+#define ttisint(v)	isvtt((v), CR_VNUMINT)
+#define ttisnum(v)	isvtt((v), CR_TNUMBER)
 
-#define newfvalue(v)	((Value){.tt = CR_VNUMFLT, {.number = (v)}})
-#define newivalue(v)	((Value){.tt = CR_VNUMINT, {.integer = (v)}})
+#define newfvalue(v)	((TValue){.val = {.n = (v)}, .tt = CR_VNUMFLT, .mod=0})
+#define newivalue(v)	((TValue){.val = {.i = (v)}, .tt = CR_VNUMINT, .mod=0})
 
 
 
@@ -181,11 +203,11 @@ typedef struct {
 
 #define CR_VLUDATA	makevariant(CR_TLUDATA, 0)
 
-#define pvalue(v)	((v)->as.lud)
+#define pvalue(v)	((v)->val.lud)
 
 #define ttislud(v)	isvtt(v, CR_VLUDATA)
 
-#define newpvalue(v)	((Value){.tt = CR_VLUDATA, {.lud = (v)}})
+#define newpvalue(v)	((TValue){.val = {.lud = (v)}, .tt = CR_VLUDATA, .mod=0})
 
 
 
@@ -197,11 +219,11 @@ typedef struct {
 
 #define CR_VCFUNCTION	makevariant(CR_TFUNCTION, 0)
 
-#define cfvalue(v)	((v)->as.cfn)
+#define cfvalue(v)	((v)->val.cfn)
 
 #define ttiscfn(v)	isvtt(v, CR_VCFUNCTION)
 
-#define newcfnvalue(v)	((Value){.type = CR_VCFUNCTION, {.cfn = (v)}})
+#define newcfnvalue(v)	((TValue){.val = {.cfn = (v)}, .type = CR_VCFUNCTION, .mod=0})
 
 
 
@@ -215,11 +237,11 @@ typedef struct {
  * All collectable objects create variant from this type.
  *
  */
-#define ovalue(v)	((v)->as.o)
+#define ovalue(v)	((v)->val.o)
 
 #define ttiso(v)	isvtt(v, CR_TOBJECT)
 
-#define newovalue(v)	((Value){.tt = CR_TOBJECT, {.o = (GCObject *)(v)}})
+#define newovalue(v)	((TValue){.val = {.o = (GCObject*)(v)}, .tt = CR_TOBJECT, .mod = 0})
 
 
 
@@ -235,16 +257,16 @@ typedef struct {
 #define ttisnil(v)	isvtt((v), CR_VNIL)
 #define ttisempty(v)	isvtt((v), CR_VEMPTY)
 
-#define newnilvalue()	((Value){.type = CR_VNIL, {0}})
-#define newemptyvalue() ((Value){.type = CR_VEMPTY, {0}})
+#define newnilvalue()	((TValue){.val = {0}, .type = CR_VNIL, .mod=0})
+#define newemptyvalue() ((TValue){.val = {0}, .type = CR_VEMPTY, .mod=0})
 
 /* --------------------------------------------------------------------------- */
 
 
 
-int v2t(Value value);
-Value vtostr(VM *vm, Value value, cr_ubyte raw);
-void varith(VM *vm, Value a, Value b, int op, Value *res);
+int v2t(TValue value);
+TValue vtostr(VM *vm, TValue value, cr_ubyte raw);
+void varith(VM *vm, TValue a, TValue b, int op, TValue *res);
 
 
 #endif

@@ -18,7 +18,6 @@
 #ifndef CRLEXER_H
 #define CRLEXER_H
 
-#include "crcommon.h"
 #include "crmem.h"
 #include "crreader.h"
 #include "crvalue.h"
@@ -68,7 +67,7 @@ typedef struct {
 Vec(Buffer, char);
 
 
-typedef struct {
+typedef struct Lexer {
 	struct VM *vm;
 	struct FunctionState *fs;
 	BuffReader *br; /* buffered reader */

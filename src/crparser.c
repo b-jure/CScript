@@ -15,14 +15,9 @@
  * ----------------------------------------------------------------------------------------------*/
 
 #include "crparser.h"
-#include "crchunk.h"
-#include "crcommon.h"
 #include "crconf.h"
-#include "crdebug.h"
-#include "crerr.h"
 #include "crlexer.h"
 #include "crlimits.h"
-#include "crmem.h"
 #include "crobject.h"
 #include "crvalue.h"
 

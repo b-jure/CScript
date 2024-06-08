@@ -18,8 +18,6 @@
 #define CRPARSER_H
 
 
-#include "crcommon.h"
-#include "crchunk.h"
 #include "crobject.h"
 #include "crreader.h"
 #include "crvalue.h"
@@ -38,7 +36,6 @@
 
 /* check var flags */
 #define isconst(var)		testbit((var)->flags, VARconst)
-#define iscaptured(var)		testbit((var)->flags, VARcaptured)
 
 /* set var flags */
 #define varfset(var, flag)	setbit((var)->flags, (flag))

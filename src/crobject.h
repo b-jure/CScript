@@ -18,9 +18,8 @@
 #define CROBJECT_H
 
 
-#include "crchunk.h"
-#include "crcommon.h"
 #include "crhash.h"
+#include "crhashtable.h"
 #include "crmem.h"
 #include "cript.h"
 #include "crvalue.h"
@@ -55,8 +54,9 @@ typedef struct GCObject {
 #define setott(v,t)	(ott(v) = (t))
 #define isott(v,t)	(ott(v) == (t))
 
-/* mark collectable object */
-#define markobject(o)	((o)->omark = 1)
+/* mark/unmark collectable object */
+#define markgco(o)		((o)->marked = 1)
+#define unmarkgco(o)		((o)->marked = 0)
 
 
 
@@ -90,8 +90,8 @@ typedef struct {
 
 typedef struct UValue {
 	ObjectHeader;
-	Value closed; /* value */
-	Value *location; /* stack or 'closed' */
+	TValue closed; /* value T*/
+	TValue *location; /* stack or 'closed' */
 	struct UValue *nextuv; /* chain */
 } UValue;
 
@@ -127,7 +127,7 @@ typedef struct {
 	ObjectHeader;
 	OString *name; /* function name */
 	OString *source; /* source name */
-	ValueVec constants;
+	TValueVec constants;
 	LineInfoVec lineinfo;
 	InstructionVec code;
 	int arity; /* number of arguments */
@@ -152,9 +152,9 @@ typedef struct {
  */
 
 
-#define CR_VCL		makevariant(CR_TFUNCTION, 1) /* 'Closure' */
-#define CR_VCRCL	makevariant(CR_TFUNCTION, 2) /* 'CriptClosure' */
-#define CR_VCCL		makevariant(CR_TFUNCTION, 3) /* 'CClosure' */
+#define CR_VCRCL	makevariant(CR_TFUNCTION, 1) /* 'CriptClosure' */
+#define CR_VCCL		makevariant(CR_TFUNCTION, 2) /* 'CClosure' */
+
 
 
 /* common closure header */
@@ -175,7 +175,7 @@ typedef struct {
 typedef struct {
 	ClosureHeader;
 	cr_cfunc fn;
-	Value upvalue[1];
+	TValue upvalue[1];
 } CClosure;
 
 #define ttisccl(v)		isott((v), CR_VCCL)
@@ -191,8 +191,8 @@ typedef union {
 	CriptClosure crc;
 } Closure;
 
-#define ttiscl(v)		isott((v), CR_VCL)
-#define clvalue(v)		((Closure*)ovalue(v))
+#define ttiscl(v)	(ttisccl(v) || ttiscrcl(v))
+#define clvalue(v)	((Closure*)ovalue(v))
 
 
 
@@ -276,17 +276,17 @@ OString *cr_ob_concatenate(VM *vm, GCObject* a, GCObject* b);
 
 #define cr_ob_newstringlit(vm, lit)	OString_new((vm), (lit), SLL(lit))
 
-InstanceMethod *cr_ob_newinstancemethod(VM *vm, Value receiver, CriptClosure *method);
+InstanceMethod *cr_ob_newinstancemethod(VM *vm, TValue receiver, CriptClosure *method);
 Instance *cr_ob_newinstance(VM *vm, OClass *cclass);
 OClass *cr_ob_newclass(VM *vm, OString *name);
-UValue *cr_ob_newuvalue(VM *vm, Value *var_ref);
+UValue *cr_ob_newuvalue(VM *vm, TValue *var_ref);
 CriptClosure *cr_ob_newcrclosure(VM *vm, Function *fn);
 CClosure *cr_ob_newcclosure(VM *vm, OString *name, cr_cfunc fn, int32_t arity, cr_ubyte isvararg, int upvals);
 Function *cr_ob_newfunction(VM *vm);
 
 
 /* call ('()') overload-able method */
-cr_ubyte cr_ob_vtcall(VM *vm, Value instance, int tag);
+cr_ubyte cr_ob_vtcall(VM *vm, TValue instance, int tag);
 
 
 /* get 'OInstance' tables */
@@ -295,7 +295,7 @@ cr_ubyte cr_ob_vtcall(VM *vm, Value instance, int tag);
 
 
 /* raw index ('[]') access */
-cr_ubyte cr_ob_rawindex(VM *vm, Value instance, cr_ubyte get);
+cr_ubyte cr_ob_rawindex(VM *vm, TValue instance, cr_ubyte get);
 
 
 /* debug only, prints object type name */
@@ -306,19 +306,19 @@ OString *cr_ob_tostr(VM *vm, GCObject *o, cr_ubyte raw);
 
 
 /* Tries calling binary or unary operator overload method. */
-void cr_ob_tryop(VM *vm, Value a, Value b, int op, Value *res);
+void cr_ob_tryop(VM *vm, TValue a, TValue b, int op, TValue *res);
 
 
 /* Prints the object value; can call __display__ if 'raw' is 0. */
-void oprint(VM *vm, Value value, cr_ubyte raw, FILE *stream);
+void oprint(VM *vm, TValue value, cr_ubyte raw, FILE *stream);
 
 
-void oeq(VM *vm, Value l, Value r);
-void one(VM *vm, Value l, Value r);
-void olt(VM *vm, Value l, Value r);
-void ogt(VM *vm, Value l, Value r);
-void ole(VM *vm, Value l, Value r);
-void oge(VM *vm, Value l, Value r);
+void oeq(VM *vm, TValue l, TValue r);
+void one(VM *vm, TValue l, TValue r);
+void olt(VM *vm, TValue l, TValue r);
+void ogt(VM *vm, TValue l, TValue r);
+void ole(VM *vm, TValue l, TValue r);
+void oge(VM *vm, TValue l, TValue r);
 
 
 /* Free object memory */

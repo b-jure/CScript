@@ -1,24 +1,25 @@
 /* ----------------------------------------------------------------------------------------------
  * Copyright (C) 2023-2024 Jure Bagić
  *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
+ * This file is part of Cript.
+ * Cript is free software: you can redistribute it and/or modify it under the terms of the GNU
  * General Public License as published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * Cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
  * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with cript.
+ * You should have received a copy of the GNU General Public License along with Cript.
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
+
 
 #ifndef CRVM_H
 #define CRVM_H
 
 #include "crgc.h"
-#include "crchunk.h"
+#include "crstatics.h"
 #include "crcommon.h"
 #include "crhashtable.h"
 #include "crvalue.h"
@@ -27,27 +28,15 @@
 
 
 
-/*
- * --------------
- * Error recovery
- * --------------
- */
-
-/* protected function */
-typedef void (*ProtectedFn)(VM *vm, void *userdata);
-
-
-/* Wrapper around 'jmp_buf' with some additional
+/* 
+ * Wrapper around 'jmp_buf' with some additional
  * information, such as status code of the function that
  * was called and a previous cr_longjmp in order to handle
  * nested protected calls.
  * Additionally 'status' gets updated from the callee in
- * case of runtime error, this is the reason why
- * status is marked as volatile to assure the automatic
- * variable is updated and not only put in a register.
- * The whole structure lives on a stack right before calling
- * the C function.
- * Check 'protectedcall' in 'crvm.c' for a reference. */
+ * case of runtime error.
+ * Check 'protectedcall' in 'crvm.c' for a reference. 
+ */
 typedef struct cr_longjmp {
 	struct cr_longjmp *prev;
 	jmp_buf buf;
@@ -56,29 +45,17 @@ typedef struct cr_longjmp {
 
 
 
-/*
- * ---------
- * CallFrame
- * ---------
- */
+/* type for functions with error recovery (protected) */
+typedef void (*ProtectedFn)(VM *vm, void *userdata);
+
 
 
 /* get Cript 'Function' */
-#define cffn(cf)	(ascrclosure(s2v((cf)->callee.p))->fn)
-
-
-/* active function is 'CClosure' */
-#define cfisccl(cf)	((cf) && iscclosure((cf)->callee))
-
-/* active function is 'CriptClosure' */
-#define cfiscl(cf)	((cf) && isclosure((cf)->callee))
-
-/* active function is 'cr_cfunc' */
-#define cfisc(cf)	((cf) && iscfunction((cf)->callee))
+#define cffn(cf)	(crclvalue(s2v((cf)->callee.p))->fn)
 
 
 /* 'cfstatus' bits */
-#define CFcript		0 /* in Cript call */
+#define CFfresh		0 /* in top-level Cript function */
 #define CFccall		1 /* in C call */
 
 
@@ -86,42 +63,18 @@ typedef struct cr_longjmp {
 #define cfiscript(cf)	(!((cf)->cfstatus & CFccall))
 
 
-/* function CallFrame */
+
+/* call information */
 typedef struct CallFrame {
-	SIndex callee;
-	SIndex top;
-	const Instruction *pc;	/* only for non-C callee */
-	int nvarargs;		/* only for non-C callee */
-	int nreturns;
-	cr_ubyte cfstatus;
+	SIndex callee; /* function */
+	SIndex top; /* stack top for this call */
+	const Instruction *pc; /* only for non-C callee */
+	int nvarargs; /* only for non-C callee */
+	int nreturns; /* number of return values */
+	cr_ubyte cfstatus; /* call status */
 } CallFrame;
 
 
-
-/*
- * ---------
- * GlobalVar
- * ---------
- */
-
-
-/* 
- * This is a wrapper around 'Value' with additional 'constant' flag.
- * Local variables do not require this wrapper as they are resolved
- * during compilation. 
- */
-typedef struct {
-	Value value;
-	cr_ubyte constant;
-} GlobalVar;
-
-
-
-/*
- * -----
- * Hooks
- * -----
- */
 
 typedef struct {
 	cr_alloc reallocate; /* allocator */
@@ -133,28 +86,7 @@ typedef struct {
 
 
 /*
- * ---------
- * VM 'Vec's
- * ---------
- */
-
-Vec(GCObjectVec, GCObject*);
-Vec(SIndexVec, SIndex);
-Vec(GlobalVarVec, GlobalVar);
-Vec(OStringVec, OString*);
-Vec(CallFrameVec, CallFrame);
-
-
-
-/*
- * ---------------
- * Virtual Machine
- * ---------------
- */
-
-
-/*
- * Extra stack space used mostly when calling overload-able
+ * Extra stack space used mostly when calling vtable
  * methods. Useful in avoiding stack checks (branching).
  * Only VM stack uses this and nothing else.
  */
@@ -163,6 +95,13 @@ Vec(CallFrameVec, CallFrame);
 
 /* initial stack size */
 #define STACKSIZE_INIT	(CR_MINSTACK*4)
+
+
+
+Vec(GCObjectVec, GCObject*);
+Vec(SIndexVec, SIndex);
+Vec(OStringVec, OString*);
+Vec(CallFrameVec, CallFrame);
 
 
 /* 
@@ -183,8 +122,8 @@ struct VM {
 	SIndexVec callstart; /* start of call values */
 	SIndexVec retstart; /* start of return values */
 	HashTable gids; /* global variable names */
-	GlobalVarVec gvars; /* global variable values */
-	ValueVec temp; /* temporary storage for return values TODO*/
+	TValueVec gvars; /* global variable values */
+	TValueVec temp; /* temporary storage for return values TODO*/
 	cr_longjmp *errjmp; /* error recovery */
 	HashTable weakrefs; /* interned strings (unmarked) */
 	OStringVec interned; /* interned strings (marked) */
@@ -193,8 +132,8 @@ struct VM {
 	UValue *openuv; /* unclosed closure values */
 	OString *faststatic[SS_N]; /* preallocated static strings */
 	OString *memerror; /* preallocated string object for memory errors */
-	Value nil; /* nil value */
-	Value *gs; /* gray stack */
+	TValue nil; /* nil value */
+	TValue *gs; /* gray stack */
 	cr_umem gslen; /* gs length */
 	cr_umem gscap; /* gs capacity */
 };
@@ -212,7 +151,7 @@ struct VM {
 
 
 /* 'init' member is set to nil 'Value' if VM is fully initialized */
-#define vminitialized(vm) (isnil(&(vm)->nil))
+#define vminitialized(vm) (ttisnil(&(vm)->nil))
 
 
 /* Fetch the last call frame (current) */
@@ -250,6 +189,7 @@ void push(VM *vm, Value val);
 /* concatenate on stack */
 #define vmconcatstk(vm) \
 	{ *stkpeek(1) = OBJ_VAL(vmconcat(vm, *stkpeek(1), *stkpeek(0))); decsp(vm); }
+
 
 
 void initvm(VM *vm);

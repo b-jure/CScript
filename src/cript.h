@@ -64,7 +64,7 @@ typedef struct VM VM;
 #define CR_TNONE	(-1)
 
 #define CR_TBOOL	0 /* boolean */
-#define CR_NTYPESUMBER	1 /* 'cr_number' */
+#define CR_TNUMBER	1 /* 'cr_number' */
 #define CR_TLUDATA	2 /* light userdata */
 #define CR_TSTRING	3 /* string */
 #define CR_TFUNCTION	4 /* function */
@@ -305,39 +305,16 @@ CR_API int	cr_setuservalue(VM *vm, int idx, int n); // TODO
 /* 
  * error reporting 
  */
+
+/* thread status codes */
+#define CR_OK			0  /* ok */
+#define CR_ERRRUNTIME		1  /* runtime error */
+#define CR_ERRSYNTAX		3  /* syntax error (compiler) */
+#define CR_ERRMEM		4  /* memory related error (oom) */
+#define CR_ERRERROR		5  /* error while handling error */
+
 CR_API int cr_getstatus(VM *vm);
-
-/* thread status code */
-#define CR_SOK			0  /* ok */
-#define CR_SEERR		1  /* error while handling error */
-#define CR_SEMEM		2  /* memory allocation error */
-#define CR_SEARUN		3  /* unary arithmetic operation error */
-#define CR_SEARBIN		4  /* binary arithmetic operation error */
-#define CR_SEARG		5  /* invalid argument */
-#define CR_SECMP		6  /* invalid comparison */
-#define CR_SESOVERFLOW		7  /* stack overflow */
-#define CR_SEFOVERFLOW		8  /* call frame overflow */
-#define CR_SEARITY		9  /* function arity error */
-#define CR_SEBINOP		10 /* binary operator error */
-#define CR_SEUDPROPERTY		11 /* undefined property */
-#define CR_SEPACCESS		12 /* invalid property access */
-#define CR_SEINHERIT		13 /* inheriting from non-class value */
-#define CR_SEFIXEDASSIGN	14 /* assigning to fixed value */
-#define CR_SEUDGLOBAL		15 /* undefined global variable */
-#define CR_SEGLOBALREDEF	16 /* redefinition of global variable */
-#define CR_SEOMRET		17 /* overload-able method invalid return type */
-#define CR_SECALL		18 /* tried calling non-callable value */
-#define CR_SESTRFMT		19 /* string format error */
-#define CR_SECOMP		20 /* compile error */
-#define CR_SENILIDX		21 /* indexing with 'nil' error */
-#define CR_SEFILE		22 /* file related error */
-#define CR_SEBCLIMIT		23 /* bytecode limit exceeded error */
-#define CR_SGSLIMIT		24 /* gray stack limit exceeded error */
-
-/* number of status codes */
-#define CR_SN			25
-
-CR_API int cr_error(VM *vm, int code);
+CR_API int cr_error(VM *vm);
 
 
 

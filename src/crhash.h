@@ -17,7 +17,8 @@
 #ifndef CRHASH_H
 #define CRHASH_H
 
-#include "crcommon.h"
+#include "cript.h"
+
 
 unsigned int hashnumber(cr_number n);
 unsigned int hashstring(const char* str, size_t len, unsigned int seed);
@@ -25,5 +26,6 @@ unsigned int hashstring(const char* str, size_t len, unsigned int seed);
 #define hashinteger(i)		cast_uint(cr_castS2U((i)))
 #define hashboolean(b)		cast_uint((b) != 0)
 #define hashpointer(p)		pointer2uint((p))
+
 
 #endif

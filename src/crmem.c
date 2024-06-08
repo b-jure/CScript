@@ -44,6 +44,7 @@ cr_sinline void *tryagain(VM *vm, void *ptr, size_t osize, size_t nsize)
 	return NULL;
 }
 
+
 void *cr_mm_realloc(VM *vm, void *ptr, size_t osize, size_t nsize)
 {
 	void *memblock;
@@ -60,6 +61,7 @@ void *cr_mm_realloc(VM *vm, void *ptr, size_t osize, size_t nsize)
 	return memblock;
 }
 
+
 void *cr_mm_saferealloc(VM *vm, void *ptr, size_t osize, size_t nsize)
 {
 	void *memblock;
@@ -69,6 +71,7 @@ void *cr_mm_saferealloc(VM *vm, void *ptr, size_t osize, size_t nsize)
 		memerror(vm);
 	return memblock;
 }
+
 
 void *cr_mm_malloc(VM *vm, size_t size)
 {
@@ -85,6 +88,35 @@ void *cr_mm_malloc(VM *vm, size_t size)
 	vm->gc.allocated += size;
 	return memblock;
 }
+
+
+#define MINARRAYSIZE	8
+
+void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep,
+			int elemsize, int extra, int limit, const char *what) 
+{
+	int size;
+
+	size = *sizep;
+	if (len + extra <= size)
+		return ptr;
+	size += extra;
+	if (size >= limit / 2) {
+		if (cr_unlikely(size >= limit)) {
+			// runtime error
+		}
+		size = limit;
+		cr_assert(size >= MINARRAYSIZE);
+	} else {
+		size *= 2;
+		if (size < MINARRAYSIZE)
+			size = MINARRAYSIZE;
+	}
+	ptr = cr_mm_saferealloc(vm, ptr, *sizep * elemsize, size * elemsize);
+	*sizep = size;
+	return ptr;
+}
+
 
 void cr_mm_free(VM *vm, void *ptr, size_t osize)
 {

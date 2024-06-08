@@ -1,62 +1,55 @@
 #ifndef CRCODE_H
 #define CRCODE_H
 
-/* get instruction with correct length */
-#define getoptype(i, op, e) \
-	((i) <= VM_SHORTINS_MAX ? ((e)->ins.l = 0, op) : ((e)->ins.l = 1, op##L))
 
-
-/* get chunk */
-#define getchunk(f)	(&(f)->fn->chunk)
-
-/* get expression constant value */
-#define getconstant(f, e)	ValueVec_at(&getchunk(f)->constants, (e)->u.info)
-
-/* get current code length */
-#define codeoffset(f)	(getchunk(f)->code.len)
-
-#define constant(f, e)	ValueVec_at(&getchunk(f)->constants, (e)->info)
+#include "cript.h"
+#include "crparser.h"
 
 
 
-#define OP_N	(OP_RET + 1)
+/* get instruction 'op' size */
+#define opsize(i,op,e) \
+	(((e)->ins.l = (i) > CR_SHRTCODE) ? (op##L) : (op))
+
+
+/* get constant */
+#define constant(f,e)		(&(f)->fn->constants[(e)->info])
+
+
+/* get code current */
+#define codeoffset(f)		((f)->fn->code.len)
+
 
 /*
  * Instructions/operations (bytecode).
- *
- * All op codes are size of 1 byte.
- * Some operations are 'long' operations and they are
- * indicated by extra 'L' at the end of their name.
- *
- * Long instructions have total size of up to 4 bytes
- * (this is including their arguments).
- * 1 byte instruction + 3 bytes argument = long instruction
- *
- * Short instructions have total size of up to 2 bytes
- * (this is including their arguments).
- * 1 byte instruction + 1 byte argument = short instruction
+ * All instructions are size of 1 byte.
+ * Some but not all instructions have single/multiple 
+ * parameters that vary in size.
+ * There are two sizes that Cript uses for the instruction
+ * parameters, 3 byte parameters and single byte size parameters.
+ * Some instructions that have 3 byte size parameter also have
+ * extra 'L' in order to differentiate them from other single byte
+ * parameter instructions that do the same thing.
  */
 typedef enum {
-	/* push true/false */
-	OP_TRUE = 0, OP_FALSE,
-	/* push nil */
-	OP_NIL, OP_NILN,
-	/* unary ops */
+	/* push literals */
+	OP_TRUE = 0, OP_FALSE, OP_NIL, OP_NILN,
+	/* perform unary operation */
 	OP_NEG, OP_NOT,
-	/* binary ops */
+	/* perform binary operation */
 	OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD, OP_POW,
-	/* push varargs */
+	/* push all varargs */
 	OP_VARARG,
-	/* compare */
+	/* perform comparison */
 	OP_NEQ, OP_EQ, OP_EQUAL, OP_GT, OP_GE, OP_LT, OP_LE,
-	/* pop */
+	/* pop value/s */
 	OP_POP, OP_POPN,
-	/* load constant */
+	/* push constant */
 	OP_CONST,
-	/* global var ops */
+	/* global variable ops */
 	OP_DEFINE_GLOBAL, OP_DEFINE_GLOBALL, OP_GET_GLOBAL, OP_GET_GLOBALL,
 	OP_SET_GLOBAL, OP_SET_GLOBALL,
-	/* local var ops */
+	/* local variable ops */
 	OP_GET_LOCAL, OP_GET_LOCALL, OP_SET_LOCAL, OP_SET_LOCALL,
 	/* code jump ops */
 	OP_JMP_IF_FALSE, OP_JMP_IF_FALSE_POP, OP_JMP_IF_FALSE_OR_POP,
@@ -69,33 +62,39 @@ typedef enum {
 	OP_GET_UPVALUE, OP_SET_UPVALUE, OP_CLOSE_UPVAL, OP_CLOSE_UPVALN,
 	/* push class */
 	OP_CLASS,
-	/* dot '.' ops */
+	/* dot '.' property ops */
 	OP_SET_PROPERTY, OP_GET_PROPERTY,
-	/* index '[]' ops */
+	/* index '[]' property ops */
 	OP_INDEX, OP_SET_INDEX,
 	/* push method */
 	OP_METHOD,
-	/* optimized call ops */
+	/* combined property access + call ops */
 	OP_INVOKE0, OP_INVOKE1, OP_INVOKE,
-	/* overload vtable */
+	/* overload vtable method */
 	OP_OVERLOAD,
 	/* inherit from class */
 	OP_INHERIT,
 	/* 'super'(class) ops */
 	OP_GET_SUPER, OP_INVOKE_SUPER0, OP_INVOKE_SUPER1, OP_INVOKE_SUPER,
-	/* indicate start/end of args */
+	/* set start/end of params */
 	OP_CALLSTART, OP_RETSTART,
-	/* generic for-loop ops */
+	/* generic 'foreach' loop ops */
 	OP_FOREACH, OP_FOREACH_PREP,
-	/* return ops */
+	/* return value/s ops */
 	OP_RET0, OP_RET1, OP_RET,
 } OpCode;
 
-void initchunk(Chunk *chunk, VM *vm);
-int writechunk(Chunk *chunk, cr_ubyte byte, int line);
-int writechunk_codewparam(Chunk *chunk, OpCode code, int idx, int line);
-int writechunk_constant(VM *vm, Chunk *chunk, Value value);
-void freechunk(Chunk *chunk);
+
+/* number of 'OpCode's */
+#define CR_NOPC		(OP_RET + 1)
+
+
+
+int cr_ce_code(FunctionState *fs, Instruction i);
+int cr_ce_codewparam(FunctionState *fs, Instruction i, int idx);
+void cr_ce_fltconstant(FunctionState *fs, cr_number n);
+void cr_ce_intconstant(FunctionState *fs, cr_integer i);
+void cr_ce_strconstant(FunctionState *fs, OString *str);
 
 
 #endif
