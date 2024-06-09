@@ -5,6 +5,11 @@
 #include "cript.h"
 
 
+
+/* raise 2 to the power of 'x' */
+#define twoto(x)	(1<<(x))
+
+
 /* 
  * Max/Min value for integral type 't'. 
  * This assumes two-complement representation.

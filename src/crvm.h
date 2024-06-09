@@ -20,7 +20,6 @@
 
 #include "crgc.h"
 #include "crstatics.h"
-#include "crcommon.h"
 #include "crhashtable.h"
 #include "crvalue.h"
 
@@ -126,16 +125,13 @@ struct VM {
 	TValueVec temp; /* temporary storage for return values TODO*/
 	cr_longjmp *errjmp; /* error recovery */
 	HashTable weakrefs; /* interned strings (unmarked) */
-	OStringVec interned; /* interned strings (marked) */
+	OStringVec interned; /* user interned strings (marked) */
 	Hooks hooks; /* hooks to external code */
 	GC gc; /* garbage collector params */
 	UValue *openuv; /* unclosed closure values */
-	OString *faststatic[SS_N]; /* preallocated static strings */
+	OString *faststatic[CR_SSNUM]; /* preallocated static strings */
 	OString *memerror; /* preallocated string object for memory errors */
-	TValue nil; /* nil value */
-	TValue *gs; /* gray stack */
-	cr_umem gslen; /* gs length */
-	cr_umem gscap; /* gs capacity */
+	TValue nil; /* nil value (avoid copying and used as init flag) */
 };
 
 
@@ -168,7 +164,7 @@ struct VM {
 /* TODO: rewrite */
 #define restore_stack(vm, n) cast(Value *, (cast_charp((vm)->stack) + (n)))
 #define save_stack(vm, ptr)  (cast_charp(ptr) - cast_charp((vm)->stack))
-#define stkpeek(top)	     ((vm)->sp - ((top) + 1))
+#define speek(top)	     ((vm)->sp - ((top) + 1))
 
 
 /* decrement stack pointer */

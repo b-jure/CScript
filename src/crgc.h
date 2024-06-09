@@ -17,15 +17,22 @@
 #ifndef CRGC_H
 #define CRGC_H
 
-#include "crcommon.h"
 #include "crobject.h"
 
+
+
+/* set/remove long mark (mark that can't be removed) */
+#define lmarkgco(o)		((o)->mark |= 0x02)
+#define lunmarkgco(o)		((o)->mark &= 0xfd)
+
+/* set/remove short mark (GC removes this mark) */
+#define markgco(o)		((o)->mark |= 0x01)
+#define unmarkgco(o)		((o)->mark &= 0xfe)
 
 
 /* 'stopped' bits */
 #define GCstopped	0
 #define GCuserstopped	1
-
 
 /* garbage collector is not 'stopped' */
 #define gcrunning(gc)	((gc)->stopped == 0)
@@ -38,16 +45,19 @@
 
 /* Configurable GC parameters. */
 typedef struct {
-	GCObject *olist; /* GC list of allocated objects */
-	GCObject **sweeppos; /* current position of sweep in 'olist' */
-	GCObject **graystack; /* tricolor GC (stores marked objects) */
+	cr_mem sizegs; /* size of 'graystack' */
+	cr_mem lengs; /* number of elements in 'graystack' */
 	cr_mem next; /* next byte threshold when GC triggers */
 	cr_mem allocated; /* number of allocated bytes */
 	cr_mem debt; /* memory unaccounted for by the collector */
+	GCObject *list; /* GC list of allocated objects */
+	GCObject **sweeppos; /* current position of sweep in 'olist' */
+	GCObject **graystack; /* tricolor GC (stores marked objects) */
 	cr_ubyte stepmul; /* collector grow speed */
 	cr_ubyte stepsize; /* step size in bytes (log2) */
-	cr_ubyte stopem; /* stops emergency collection */
+	cr_ubyte stopem; /* stop emergency collection */
 	cr_ubyte stopped; /* collector is stopped */
+	cr_ubyte state; /* GC state bits */
 } GC;
 
 

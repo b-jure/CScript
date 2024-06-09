@@ -271,10 +271,10 @@ typedef cr_ubyte Instruction;
 #define cast_umem(e)	cast(cr_umem, (e))
 
 /* cast 'cr_integer' to 'cr_uinteger' */
-#define cr_castS2U(i)	((cr_uinteger)(i))
+#define cri_castS2U(i)	((cr_uinteger)(i))
 
 /* cast 'cr_uinteger' to 'cr_integer' */
-#define cr_castU2S(i)	((cr_integer)(i))
+#define cri_castU2S(i)	((cr_integer)(i))
 
 
 
@@ -283,59 +283,59 @@ typedef cr_ubyte Instruction;
 
 
 
-/* @cr_nummod - modulo 'a - floor(a/b)*b'. */
-#define cr_nummod(vm,a,b,m) { \
+/* @cri_nummod - modulo 'a - floor(a/b)*b'. */
+#define cri_nummod(vm,a,b,m) { \
 	(m)=fmod((a),(b)); \
 	if (((m) > 0) ? (b)<0 : ((m)<0 && (b)>0)) (m)+=(b); }
 
-/* @cr_numdiv - float division. */
-#ifndef cr_numdiv
-#define cr_numdiv(vm, a, b)	((a)/(b))
+/* @cri_numdiv - float division. */
+#ifndef cri_numdiv
+#define cri_numdiv(vm, a, b)	((a)/(b))
 #endif
 
-/* @cr_numidiv - floor division (or division between integers). */
-#ifndef cr_numidiv
-#define cr_numidiv(vm, a, b)	(floor(cr_numdiv(a, b))
+/* @cri_numidiv - floor division (or division between integers). */
+#ifndef cri_numidiv
+#define cri_numidiv(vm, a, b)	(floor(cri_numdiv(a, b))
 #endif
 
-/* @cr_numpow - exponentiation. */
-#ifndef cr_numpow
-#define cr_numpow(vm, a, b)	((b)==2 ? (a)*(a) : pow((a),(b)))
-#endif
-
-/* 
- * @cr_numadd - addition.
- * @cr_numsub - subtraction.
- * @cr_nummul - multiplication.
- * @cr_numunm - negation.
- */
-#ifndef cr_numadd
-#define cr_numadd(vm, a, b) 	((a)+(b))
-#define cr_numsub(vm, a, b) 	((a)-(b))
-#define cr_nummul(vm, a, b) 	((a)*(b))
-#define cr_numunm(vm, a)	(-(a))
+/* @cri_numpow - exponentiation. */
+#ifndef cri_numpow
+#define cri_numpow(vm, a, b)	((b)==2 ? (a)*(a) : pow((a),(b)))
 #endif
 
 /* 
- * @cr_numeq - ordering equal.
- * @cr_numne - ordering not equal.
- * @cr_numlt - ordering less than.
- * @cr_numle - ordering less equal.
- * @cr_numgt - ordering greater than.
- * @cr_numge - ordering greater equal.
+ * @cri_numadd - addition.
+ * @cri_numsub - subtraction.
+ * @cri_nummul - multiplication.
+ * @cri_numunm - negation.
  */
-#ifndef cr_numeq
-#define cr_numeq(a, b)		((a)==(b))
-#define cr_numne(a, b) 		(!cr_numeq(a,b))
-#define cr_numlt(a, b) 		((a)<(b))
-#define cr_numle(a, b) 		((a)<=(b))
-#define cr_numgt(a, b) 		((a)>(b))
-#define cr_numge(a, b) 		((a)>=(b))
+#ifndef cri_numadd
+#define cri_numadd(vm, a, b) 	((a)+(b))
+#define cri_numsub(vm, a, b) 	((a)-(b))
+#define cri_nummul(vm, a, b) 	((a)*(b))
+#define cri_numunm(vm, a)	(-(a))
 #endif
 
-/* @cr_numisnan - check if number is 'NaN'. */
-#ifndef cr_numisnan
-#define cr_numisnan(a)		(!cr_numeq(a,a))
+/* 
+ * @cri_numeq - ordering equal.
+ * @cri_numne - ordering not equal.
+ * @cri_numlt - ordering less than.
+ * @cri_numle - ordering less equal.
+ * @cri_numgt - ordering greater than.
+ * @cri_numge - ordering greater equal.
+ */
+#ifndef cri_numeq
+#define cri_numeq(a, b)		((a)==(b))
+#define cri_numne(a, b) 	(!cri_numeq(a,b))
+#define cri_numlt(a, b) 	((a)<(b))
+#define cri_numle(a, b) 	((a)<=(b))
+#define cri_numgt(a, b) 	((a)>(b))
+#define cri_numge(a, b) 	((a)>=(b))
+#endif
+
+/* @cri_numisnan - check if number is 'NaN'. */
+#ifndef cri_numisnan
+#define cri_numisnan(a)		(!cri_numeq(a,a))
 #endif
 
 

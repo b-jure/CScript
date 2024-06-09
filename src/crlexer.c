@@ -30,15 +30,9 @@
 
 /* errors */
 typedef enum {
-	LE_INCHEXESC,
-	LE_INVHEXESC,
-	LE_UNTSTR,
-	LE_LARGECONST,
-	LE_DIGOCTAL,
-	LE_HEXCONST,
-	LE_DECCONST,
-	LE_ESCSEQ,
-	LE_TOKENLIMIT,
+	LE_INCHEXESC, LE_INVHEXESC, LE_UNTSTR,
+	LE_LARGECONST, LE_DIGOCTAL, LE_HEXCONST,
+	LE_DECCONST, LE_ESCSEQ, LE_TOKENLIMIT,
 } LexErr;
 
 /* error description */
@@ -56,7 +50,7 @@ static const char *lexerrors[] = {
 
 
 
-void cr_lx_init(VM *vm, Lexer *lx, BuffReader *br, OString *source)
+void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *source)
 {
 	lx->vm = vm;
 	lx->fs = NULL;
@@ -66,12 +60,12 @@ void cr_lx_init(VM *vm, Lexer *lx, BuffReader *br, OString *source)
 	lx->currline = 1;
 	lx->prevline = 1;
 	lx->skip = 0;
-	createvec(vm, &lx->buf, MAXSIZE>>1, "chars");
-	reallocvec(vm, &lx->buf, CR_MINBUFFER);
+	cr_mm_createvec(vm, &lx->buf, MAXSIZE>>1, "chars");
+	cr_mm_reallocvec(vm, &lx->buf, CR_MINBUFFER);
 }
 
 
-void cr_lx_free(Lexer *lx)
+void cr_lr_free(Lexer *lx)
 {
 	freevec(lx->vm, &lx->buf);
 }
@@ -83,7 +77,7 @@ static cr_noret lexerror(Lexer *lexer, const char *err, va_list ap)
 }
 
 
-void cr_lx_syntaxerror(Lexer *L, const char *err, va_list args)
+void cr_lr_syntaxerror(Lexer *L, const char *err, va_list args)
 {
 	VM *vm;
 	OString *prefix;

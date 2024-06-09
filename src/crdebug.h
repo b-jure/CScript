@@ -22,6 +22,7 @@
 
 
 int cr_dg_getfuncline(const Function *fn, int pc);
+const char *cr_dg_info(VM *vm, const char *msg, OString *src, int line);
 
 
 #endif

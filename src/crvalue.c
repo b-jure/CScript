@@ -32,22 +32,22 @@
 static cr_floating fltarithm(VM *vm, cr_floating a, cr_floating b, cr_ar op)
 {
 	switch (op) {
-	case CR_AR_ADD:
+	case CR_OPADD:
 		return cr_numadd(vm, a, b);
-	case CR_AR_SUB:
+	case CR_OPSUB:
 		return cr_numsub(vm, a, b);
-	case CR_AR_MUL:
+	case CR_OPMUL:
 		return cr_nummul(vm, a, b);
-	case CR_AR_DIV:
+	case CR_OPDIV:
 		return cr_numdiv(vm, a, b);
-	case CR_AR_MOD:;
+	case CR_OPMOD:;
 		cr_nummod(vm, a, b, a);
 		return a;
-	case CR_AR_POW:
+	case CR_OPPOW:
 		return cr_numpow(vm, a, b);
-	case CR_AR_UMIN:
+	case CR_OPUMIN:
 		return cr_numunm(vm, a);
-	case CR_AR_NOT:
+	case CR_OPNOT:
 		return cast(cr_floating, 0); // never 'falsey'
 	default:
 		cr_unreachable;

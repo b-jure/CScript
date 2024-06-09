@@ -41,7 +41,7 @@ typedef enum {
 
 
 /* common header for objects */
-#define ObjectHeader	struct GCObject* next; cr_ubyte ott; cr_ubyte marked
+#define ObjectHeader	struct GCObject* next; cr_ubyte ott; cr_ubyte mark
 
 
 /* common type for collectable objects */
@@ -50,13 +50,14 @@ typedef struct GCObject {
 } GCObject;
 
 
-#define ott(v)		(ovalue(v)->ott)
+#define rawott(o)	((o)->ott)
+#define rawomark(o)	((o)->mark)
+
+#define ott(v)		(rawott(ovalue(v)))
+#define omark(v)	(rawomark(ovalue(v)))
+
 #define setott(v,t)	(ott(v) = (t))
 #define isott(v,t)	(ott(v) == (t))
-
-/* mark/unmark collectable object */
-#define markgco(o)		((o)->marked = 1)
-#define unmarkgco(o)		((o)->marked = 0)
 
 
 
@@ -69,6 +70,7 @@ typedef struct GCObject {
 typedef struct {
 	ObjectHeader;
 	int len; /* excluding null terminator */
+	cr_ubyte hashash;
 	unsigned int hash;
 	char bytes[];
 } OString;
@@ -266,27 +268,31 @@ typedef struct {
 /* --------------------------------------------------------------------------- */
 
 
-int32_t cr_ob_id2mtag(VM *vm, OString *id);
+
+int cr_ot_eqstring(OString *s1, OString *s2);
 
 
-OString *cr_ob_newstring(VM *vm, const char *chars, size_t len);
-OString *cr_ob_newvstringf(VM *vm, const char *fmt, va_list argp);
-OString *cr_ob_newstringf(VM *vm, const char *fmt, ...);
-OString *cr_ob_concatenate(VM *vm, GCObject* a, GCObject* b);
+int32_t cr_ot_id2mtag(VM *vm, OString *id);
 
-#define cr_ob_newstringlit(vm, lit)	OString_new((vm), (lit), SLL(lit))
 
-InstanceMethod *cr_ob_newinstancemethod(VM *vm, TValue receiver, CriptClosure *method);
-Instance *cr_ob_newinstance(VM *vm, OClass *cclass);
-OClass *cr_ob_newclass(VM *vm, OString *name);
-UValue *cr_ob_newuvalue(VM *vm, TValue *var_ref);
-CriptClosure *cr_ob_newcrclosure(VM *vm, Function *fn);
-CClosure *cr_ob_newcclosure(VM *vm, OString *name, cr_cfunc fn, int32_t arity, cr_ubyte isvararg, int upvals);
-Function *cr_ob_newfunction(VM *vm);
+OString *cr_ot_newstring(VM *vm, const char *chars, size_t len);
+OString *cr_ot_newvstringf(VM *vm, const char *fmt, va_list argp);
+OString *cr_ot_newstringf(VM *vm, const char *fmt, ...);
+OString *cr_ot_concatenate(VM *vm, GCObject* a, GCObject* b);
+
+#define cr_ot_newstringlit(vm, lit)	OString_new((vm), (lit), SLL(lit))
+
+InstanceMethod *cr_ot_newinstancemethod(VM *vm, TValue receiver, CriptClosure *method);
+Instance *cr_ot_newinstance(VM *vm, OClass *cclass);
+OClass *cr_ot_newclass(VM *vm, OString *name);
+UValue *cr_ot_newuvalue(VM *vm, TValue *var_ref);
+CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn);
+CClosure *cr_ot_newcclosure(VM *vm, OString *name, cr_cfunc fn, int32_t arity, cr_ubyte isvararg, int upvals);
+Function *cr_ot_newfunction(VM *vm);
 
 
 /* call ('()') overload-able method */
-cr_ubyte cr_ob_vtcall(VM *vm, TValue instance, int tag);
+cr_ubyte cr_ot_vtcall(VM *vm, TValue instance, int tag);
 
 
 /* get 'OInstance' tables */
@@ -295,18 +301,18 @@ cr_ubyte cr_ob_vtcall(VM *vm, TValue instance, int tag);
 
 
 /* raw index ('[]') access */
-cr_ubyte cr_ob_rawindex(VM *vm, TValue instance, cr_ubyte get);
+cr_ubyte cr_ot_rawindex(VM *vm, TValue instance, cr_ubyte get);
 
 
 /* debug only, prints object type name */
 void otypeprint(OType type);
 
 /* Convert object to string object. */
-OString *cr_ob_tostr(VM *vm, GCObject *o, cr_ubyte raw);
+OString *cr_ot_tostr(VM *vm, GCObject *o, cr_ubyte raw);
 
 
 /* Tries calling binary or unary operator overload method. */
-void cr_ob_tryop(VM *vm, TValue a, TValue b, int op, TValue *res);
+void cr_ot_tryop(VM *vm, TValue a, TValue b, int op, TValue *res);
 
 
 /* Prints the object value; can call __display__ if 'raw' is 0. */
@@ -322,20 +328,16 @@ void oge(VM *vm, TValue l, TValue r);
 
 
 /* Free object memory */
-void cr_ob_free(VM *vm, GCObject *object);
+void cr_ot_free(VM *vm, GCObject *object);
 
 /* ------------------------------------------------------ */ // object functions
 
 
 
 
-typedef struct {
-	int32_t arity;
-	int32_t retcnt;
-} Tuple;
 
 /* Array holding return count and arity for each overload-able method. */
-extern const Tuple ominfo[CR_MN];
+// extern const struct Tuple ominfo[];
 
 
 #endif

@@ -24,30 +24,6 @@
 
 
 
-/*
- * --------------
- * Local variable
- * --------------
- */
-
-/* Local variable flags */
-#define VARconst	0  /* var is 'const' */
-#define VARcaptured	1  /* var is captured (upvalue) */
-
-/* check var flags */
-#define isconst(var)		testbit((var)->flags, VARconst)
-
-/* set var flags */
-#define varfset(var, flag)	setbit((var)->flags, (flag))
-
-
-/* init local variable */
-#define initlocal(F, i) { \
-	Local *local__ = LocalVec_at(&(f)->locals, (f)->locals.len - ((i)+1)); \
-	local__->depth = (f)->S->depth; \
-	local__->flags = (f)->vflags; } \
-
-
 /* automatic (local) variable */
 typedef struct {
 	OString *name; /* variable name */
@@ -112,28 +88,18 @@ typedef struct {
 
 /* expression types */
 typedef enum {
-	EXP_NONE = 0,
-	EXP_FALSE,
-	EXP_NIL,
-	EXP_TRUE,
-	EXP_STRING,
-	EXP_INTEGER,
-	EXP_FLOAT,
-	EXP_UPVAL,
-	EXP_LOCAL,
-	EXP_GLOBAL,
-	EXP_INDEXED,
-	EXP_CALL,
-	EXP_INVOKE,
-	EXP_VARARG,
-	EXP_EXPR,
-	EXP_JMP,
+	EXP_NONE = 0, 
+	EXP_FALSE, EXP_NIL, EXP_TRUE,
+	EXP_STRING, EXP_INTEGER, EXP_FLOAT,
+	EXP_UPVAL, EXP_LOCAL, EXP_GLOBAL,
+	EXP_INDEXED, EXP_CALL, EXP_INVOKE,
+	EXP_VARARG, EXP_EXPR, EXP_JMP,
 } ExpType;
 
 
 /* expression description */
 typedef struct {
-	ExpType type;
+	ExpType et;
 	union {
 		cr_number n;
 		cr_integer i;
@@ -171,8 +137,8 @@ Vec(UpvalueVec, Upvalue);
 typedef struct FunctionState {
 	Function *fn; /* currently parsed function */
 	struct FunctionState *enclosing; /* list */
-	struct Lexer *lexer;
-	struct Scope *scope;
+	struct Lexer *l;
+	struct Scope *s;
 	// struct ClassDecl *cldecl;
 	int lastline; /* last saved line in array ('fn') */
 	int nlineinfo; /* length of 'line' array ('fn') */

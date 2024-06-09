@@ -19,10 +19,10 @@ static void addlineinfo(FunctionState *fs, Function *f, int line)
 
 	len = f->lineinfo.len;
 	if (len <= 0 || f->lineinfo.ptr[len - 1].line < line) {
-		cr_mm_growvec(fs->lexer->vm, &f->lineinfo);
+		cr_mm_growvec(fs->l->vm, &f->lineinfo);
 		f->lineinfo.ptr[len].pc = f->code.len - 1;
 		f->lineinfo.ptr[f->lineinfo.len++].line = line;
-		fs->lexer->prevline = line; // Maybe (prevline = currline) ?
+		fs->l->prevline = line; // Maybe (prevline = currline) ?
 	}
 }
 
@@ -32,9 +32,9 @@ int cr_ce_code(FunctionState *fs, Instruction i)
 {
 	Function *f = fs->fn;
 
-	cr_mm_growvec(fs->lexer->vm, &f->code);
+	cr_mm_growvec(fs->l->vm, &f->code);
 	f->code.ptr[f->code.len++] = i;
-	addlineinfo(fs, f, fs->lexer->currline);
+	addlineinfo(fs, f, fs->l->currline);
 	return f->code.len - 1;
 }
 
@@ -42,7 +42,7 @@ int cr_ce_code(FunctionState *fs, Instruction i)
 /* write short instruction parameter */
 static int shortparam(FunctionState *fs, Function *f, Instruction i, cr_ubyte idx)
 {
-	cr_mm_growvec(fs->lexer->vm, &f->code);
+	cr_mm_growvec(fs->l->vm, &f->code);
 	f->code.ptr[f->code.len++] = cast_ubyte(idx & 0xff);
 	return f->code.len - 1;
 }
@@ -63,7 +63,7 @@ static int shortcode(FunctionState *fs, Instruction i, int idx)
 /* write long instruction parameter */
 static int longparam(FunctionState *fs, Function *f, Instruction i, int idx)
 {
-	cr_mm_ensurevec(fs->lexer->vm, &f->code, 3);
+	cr_mm_ensurevec(fs->l->vm, &f->code, 3);
 	f->code.ptr[f->code.len++] = i;
 	setbytes(f->code.ptr, &idx, 3);
 	f->code.len += 3;
@@ -107,7 +107,7 @@ static int addconstant(FunctionState *fs, TValue *constant)
 		cr_assert(ttisstr(constant));
 		markgco(ovalue(constant));
 	}
-	cr_mm_growvec(fs->lexer->vm, &f->constants);
+	cr_mm_growvec(fs->l->vm, &f->constants);
 	f->constants.ptr[f->constants.len++] = *constant;
 	if (ttiso(constant))
 		unmarkgco(ovalue(constant));

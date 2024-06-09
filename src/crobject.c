@@ -14,14 +14,12 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "skcommon.h"
-#include "skconf.h"
-#include "skerr.h"
-#include "skhashtable.h"
-#include "skmath.h"
-#include "skmem.h"
-#include "skobject.h"
-#include "skvalue.h"
+#include "crconf.h"
+#include "crhashtable.h"
+#include "crmem.h"
+#include "crobject.h"
+#include "crvalue.h"
+#include "crvm.h"
 #include "stdarg.h"
 
 #include <stdio.h>
@@ -30,17 +28,18 @@
 
 
 
-#define ALLOC_OBJ(vm, object, type) ((object *)onew(vm, sizeof(object), type))
-
-#define ALLOC_NATIVE(vm, upvals) \
-	((ONative *)onew(vm, sizeof(ONative) + ((upvals) * sizeof(Value)), OBJ_CFUNCTION))
+/* allocate 'GCObject' */
+#define allocgco(vm,s,tt,t) \
+	((t *)(allocobject((vm), (s) + sizeof(t), (tt))))
 
 
 
 // @TODO: Update 'calloverload()'
-/* Call info for overload-able methods. */
-const Tuple ominfo[] = {
-	/* {arity, retcnt} */
+struct Tuple {
+	int arity;
+	int nreturns;
+} ominfo[] = {
+	/* {arity, nreturns} */
 	{ 0, 1 }, /* __init__		{ args: self             - return: instance }  */
 	{ 0, 1 }, /* __tostring__ 	{ args: self             - return: string   }  */
 	{ 1, 1 }, /* __getidx__   	{ args: self, idx        - return: value    }  */
@@ -65,46 +64,45 @@ const Tuple ominfo[] = {
 
 
 
-/* Create new unmarked 'GCObject' (object) and append it to GC list. */
-static force_inline GCObject *onew(VM *vm, size_t size, OType type)
-{
-	GCObject *object;
-
-	object = GC_MALLOC(vm, size);
-	object->header = cast(cr_uintptr, vm->objects) | (cast(cr_uintptr, type) << 56);
-	osetmark(object, 0);
-	vm->objects = object; /* add object to the GC list */
-#ifdef DEBUG_LOG_GC
-	printf("%p allocate %zu for ", (void *)object, size);
-	otypeprint(type);
-	printf("\n");
-#endif
-	return object;
-}
-
-
 /*
- * Convert 'id' (object string) into overloaded method tag.
- * Returns '-1' in case 'id' is not the name of overloadable method.
- * Otherwise it returns 'cr_om' tag.
+ * Convert string into 'cr_vtable' index.
+ * Returns '-1' in case string is not the name of any methods
+ * inside the 'cr_vtable'.
  */
-int32_t id2omtag(VM *vm, OString *id)
+int cr_ot_strtomt(VM *vm, OString *id)
 {
 	uintptr_t ptr, start, end;
 
 	ptr = cast(uintptr_t, id);
 	start = cast(uintptr_t, vm->faststatic[SS_INIT]);
-	end = cast(uintptr_t, vm->faststatic[SS_DBG]);
+	end = cast(uintptr_t, vm->faststatic[SS_GE + 1]);
 	return (ptr < start || ptr >= end ? -1 : ptr - start);
 }
 
 
-/* Auxiliary function for 'OString' constructors. */
-static force_inline OString *OString_alloc(VM *vm, uint32_t len)
+/* Create new unmarked 'GCObject' (object) and append it to GC list. */
+cr_sinline GCObject *allocobject(VM *vm, size_t size, cr_ubyte ott)
+{
+	GCObject *o;
+
+	o = cr_mm_malloc(vm, size);
+	o->ott = ott;
+	unmarkgco(o);
+	o->next = vm->gc.list;
+	vm->gc.list = o;
+#ifdef DEBUG_LOG_GC
+	printf("%p allocate %zu\n", (void *)object, size);
+#endif
+	return o;
+}
+
+
+/* auxiliary function for 'OString' constructors */
+cr_sinline OString *allocstring(VM *vm, uint32_t len)
 {
 	OString *string;
 
-	string = cast(OString *, onew(vm, sizeof(OString) + len + 1, OBJ_STRING));
+	string = allocgco(vm, len + 1, CR_VSTRING, OString);
 	string->len = len;
 	return string;
 }
@@ -113,23 +111,27 @@ static force_inline OString *OString_alloc(VM *vm, uint32_t len)
  * Create new string object.
  * Allocation is skipped in case string is already interned.
  */
-OString *OString_new(VM *vm, const char *chars, size_t len)
+OString *cr_ot_newstring(VM *vm, const char *chars, size_t len, unsigned int seed)
 {
-	cr_hash hash;
+	HashTable *wtab;
 	OString *interned;
 	OString *string;
+	unsigned int hash;
 
-	hash = stringhash(chars, len, vm->seed);
-	if ((interned = HashTable_get_intern(&vm->weakrefs, chars, len, hash)))
+	wtab = &vm->weakrefs;
+	hash = cr_hh_string(chars, len, seed);
+	interned = strvalue(cr_ht_getintern(wtab, chars, len, hash));
+	if (interned)
 		return interned;
-	string = OString_alloc(vm, len);
+	string = allocstring(vm, len);
 	if (len != 0)
 		memcpy(string->bytes, chars, len);
 	string->bytes[len] = '\0';
 	string->hash = hash;
-	push(vm, OBJ_VAL(string));
-	rawset(vm, &vm->weakrefs, OBJ_VAL(string), NIL_VAL);
-	pop(vm);
+	string->hashash = 1;
+	lmarkgco(string);
+	cr_ht_insert(vm, wtab, newovalue(string), newnilvalue());
+	lunmarkgco(string);
 	return string;
 }
 
@@ -260,7 +262,7 @@ OString *OString_fmt(VM *vm, const char *fmt, ...)
 	return str;
 }
 
-static force_inline void OString_free(VM *vm, OString *string)
+cr_sinline void OString_free(VM *vm, OString *string)
 {
 	GC_FREE(vm, string, sizeof(OString) + string->len + 1);
 }
@@ -285,7 +287,7 @@ OString *concatenate(VM *vm, Value l, Value r)
 }
 
 
-ONative *ONative_new(VM *vm, OString *name, cr_cfunc fn, int32_t arity, cr_ubyte isvararg,
+ONative *ONative_new(VM *vm, OString *name, cr_cfunc fn, int arity, cr_ubyte isvararg,
 		     uint32_t upvalc)
 {
 	ONative *native = ALLOC_NATIVE(vm, upvalc);
@@ -298,12 +300,12 @@ ONative *ONative_new(VM *vm, OString *name, cr_cfunc fn, int32_t arity, cr_ubyte
 	p->upvalc = upvalc;
 	p->defline = -1;
 	p->deflastline = -1;
-	for (int32_t i = 0; i < upvalc; i++)
+	for (int i = 0; i < upvalc; i++)
 		native->upvalue[i] = NIL_VAL;
 	return native;
 }
 
-static force_inline void ONative_free(VM *vm, ONative *native)
+cr_sinline void ONative_free(VM *vm, ONative *native)
 {
 	GC_FREE(vm, native, sizeof(ONative) + (native->p.upvalc * sizeof(Value)));
 }
@@ -320,13 +322,13 @@ OFunction *OFunction_new(VM *vm)
 	return fn;
 }
 
-static force_inline void ObjFunction_free(VM *vm, OFunction *fn)
+cr_sinline void ObjFunction_free(VM *vm, OFunction *fn)
 {
 	freechunk(&fn->chunk);
 	GC_FREE(vm, fn, sizeof(OFunction));
 }
 
-static force_inline void fnprint(OFunction *fn, FILE *stream)
+cr_sinline void fnprint(OFunction *fn, FILE *stream)
 {
 	if (cr_unlikely(fn->p.name == NULL))
 		fprintf(stream, "<script-fn %s>: %p", fn->p.source->bytes, fn);
@@ -349,7 +351,7 @@ OClosure *OClosure_new(VM *vm, OFunction *fn)
 	return closure;
 }
 
-static force_inline void OClosure_free(VM *vm, OClosure *closure)
+cr_sinline void OClosure_free(VM *vm, OClosure *closure)
 {
 	GC_FREE(vm, closure->upvalue, closure->fn->p.upvalc * sizeof(OUpvalue *));
 	GC_FREE(vm, closure, sizeof(OClosure));
@@ -367,7 +369,7 @@ OUpvalue *OUpvalue_new(VM *vm, Value *valp)
 	return upval;
 }
 
-static force_inline void OUpvalue_free(VM *vm, OUpvalue *upval)
+cr_sinline void OUpvalue_free(VM *vm, OUpvalue *upval)
 {
 	GC_FREE(vm, upval, sizeof(OUpvalue));
 }
@@ -384,7 +386,7 @@ OClass *OClass_new(VM *vm, OString *name)
 	return oclass;
 }
 
-static force_inline void OClass_free(VM *vm, OClass *oclass)
+cr_sinline void OClass_free(VM *vm, OClass *oclass)
 {
 	HashTable_free(vm, &oclass->methods);
 	GC_FREE(vm, oclass, sizeof(OClass));
@@ -403,7 +405,7 @@ OInstance *OInstance_new(VM *vm, OClass *oclass)
 
 /* Return overloaded method or NULL if value
  * is not an instance value or method is not overloaded. */
-static force_inline GCObject *getomethod(VM *vm, Value val, cr_om om)
+cr_sinline GCObject *getomethod(VM *vm, Value val, cr_om om)
 {
 	if (isinstance(val))
 		return asinstance(val)->oclass->omethods[om];
@@ -411,7 +413,7 @@ static force_inline GCObject *getomethod(VM *vm, Value val, cr_om om)
 }
 
 
-static force_inline void OInstance_free(VM *vm, OInstance *instance)
+cr_sinline void OInstance_free(VM *vm, OInstance *instance)
 {
 	HashTable_free(vm, &instance->fields);
 	GC_FREE(vm, instance, sizeof(OInstance));
@@ -428,46 +430,11 @@ OBoundMethod *OBoundMethod_new(VM *vm, Value receiver, OClosure *method)
 	return bound_method;
 }
 
-static force_inline void OBoundMethod_free(VM *vm, OBoundMethod *bound_method)
+cr_sinline void OBoundMethod_free(VM *vm, OBoundMethod *bound_method)
 {
 	GC_FREE(vm, bound_method, sizeof(OBoundMethod));
 }
 
-
-
-
-/* Debug */
-void otypeprint(OType type)
-{
-	switch (type) {
-	case OBJ_STRING:
-		printf("OBJ_STRING");
-		break;
-	case OBJ_FUNCTION:
-		printf("OBJ_FUNCTION");
-		break;
-	case OBJ_CLOSURE:
-		printf("OBJ_CLOSURE");
-		break;
-	case OBJ_CFUNCTION:
-		printf("OBJ_CFUNCTION");
-		break;
-	case OBJ_UPVAL:
-		printf("OBJ_UPVAL");
-		break;
-	case OBJ_CLASS:
-		printf("OBJ_CLASS");
-		break;
-	case OBJ_INSTANCE:
-		printf("OBJ_INSTANCE");
-		break;
-	case OBJ_BOUND_METHOD:
-		printf("OBJ_BOUND_METHOD");
-		break;
-	default:
-		cr_unreachable;
-	}
-}
 
 
 /* Free object memory, invokes '__free__' if defined. */
@@ -543,14 +510,14 @@ void ofree(VM *vm, GCObject *object)
 
 /* =============== raw access =============== */
 
-static force_inline cr_ubyte rawgetproperty(VM *vm, OInstance *instance, Value key, Value *out,
+cr_sinline cr_ubyte rawgetproperty(VM *vm, OInstance *instance, Value key, Value *out,
 					    cr_ubyte what)
 {
 	HashTable *table = rawgettable(vm, instance, what);
 	return rawget(vm, table, key, out);
 }
 
-static force_inline cr_ubyte rawsetproperty(VM *vm, OInstance *instance, Value key, Value value,
+cr_sinline cr_ubyte rawsetproperty(VM *vm, OInstance *instance, Value key, Value value,
 					    cr_ubyte what)
 {
 	HashTable *table = rawgettable(vm, instance, what);
@@ -631,7 +598,7 @@ cr_ubyte calloverload(VM *vm, Value instance, cr_om tag)
 /* Tries to call class overloaded unary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
  * 0 otherwise. */
-static force_inline int callunop(VM *vm, Value lhs, cr_om op, Value *res)
+cr_sinline int callunop(VM *vm, Value lhs, cr_om op, Value *res)
 {
 	GCObject *om = getomethod(vm, lhs, op);
 	if (om == NULL)
@@ -648,7 +615,7 @@ static force_inline int callunop(VM *vm, Value lhs, cr_om op, Value *res)
 /* Tries to call class overloaded binary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
  * 0 otherwise. */
-static force_inline int callbinop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
+cr_sinline int callbinop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
 {
 	Value instance;
 	GCObject *om = getomethod(vm, lhs, op);
@@ -686,7 +653,7 @@ void otryop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
 
 /* =============== ordering =============== */
 
-static force_inline int omcallorder(VM *vm, Value lhs, Value rhs, cr_om ordop)
+cr_sinline int omcallorder(VM *vm, Value lhs, Value rhs, cr_om ordop)
 {
 	cr_assert(vm, ordop >= OM_NE && ordop <= OM_GE, "invalid cr_om for order");
 	if (callbinop(vm, lhs, rhs, ordop, stkpeek(1))) { // try overload

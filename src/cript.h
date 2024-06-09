@@ -71,7 +71,7 @@ typedef struct VM VM;
 #define CR_TCLASS	5 /* class */
 #define CR_TINSTANCE	6 /* instance */
 #define CR_TUDATA	7 /* userdata */
-#define CR_NTYPESIL		8 /* nil */
+#define CR_TNIL		8 /* nil */
 
 #define CR_NTYPES		9
 

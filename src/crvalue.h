@@ -27,21 +27,20 @@
 
 
 /* additional types that are used only as markers internally */
-#define CR_TUVALUE	CR_NTYPES	/* upvalue */
-#define CR_TOBJECT	(CR_NTYPES + 1)	/* for marking object values */
-#define CR_TTOMBSTONE	(CR_NTYPES + 2)	/* for marking 'dead' keys in hashtable */
+#define CR_TUVALUE	CR_NTYPES	 /* upvalue */
+#define CR_TOBJECT	(CR_NTYPES + 1)	 /* for marking object values */
 
 
 /* 
- * Number of all types ('CR_T*') but excluding marker types
- * 'CR_TOBJECT' and 'CR_TTOMBSTONE', but including 'CR_TNONE'.
+ * Number of all types ('CR_T*') but excluding marker type
+ * 'CR_TOBJECT', but including 'CR_TNONE'.
  */
 #define CR_TOTALTYPES	(CR_TUVALUE + 2)
 
 
 /* Cript values */
 typedef union Value {
-	int boolean; /* boolean */
+	int b; /* boolean */
 	cr_integer i; /* integer */
 	cr_number n; /* float */
 	void *lud; /* light userdata */
@@ -49,6 +48,14 @@ typedef union Value {
 	struct GCObject *o; /* collectable value */
 } Value;
 
+
+/* get raw union values */
+#define rawbvalue(v)	((v).b)
+#define rawivalue(v)	((v).i)
+#define rawfvalue(v)	((v).n)
+#define rawpvalue(v)	((v).lud)
+#define rawcfvalue(v)	((v).cfn)
+#define rawovalue(v)	((v).o)
 
 
 /*
@@ -66,13 +73,11 @@ typedef union Value {
 #define vtt(v)		((v)->tt)
 #define isvtt(v,t)	(vtt(v) == (t))
 #define setvtt(v,t)	(vtt(v) = (t))
-
-
+	  
 
 /* 'mod' bits */
 #define CRMconst	0 /* value is constant */
 #define CRMcaptured	1 /* only for local variables */
-
 
 /* macros for 'mod' */
 #define vmod(v)		((v)->mod)
@@ -81,9 +86,20 @@ typedef union Value {
 #define iscaptured(v)	ismod((v), CRMcaptured)
 
 
+/* macros for 'val' */
+#define vval(v)		((v)->val)
 
-/* 'TValue' fields, defined for reuse (alignment) */
-#define TValueFields	Value val; unsigned char tt; unsigned char mod;
+
+/* copy values from 'v2' to 'v1' ('TValue') */
+#define settv(vm,v1,v2) \
+	{ TValue *v1_ = (v1); const TValue *v2_ = (v2); \
+	  setvtt(v1_, vtt(v2_)); vmod(v1_) = vmod(v2_); \
+	  v1_->val = v2_->val; }
+
+
+
+/* 'TValue' fields, defined for reuse and alignment purposes */
+#define TValueFields	Value val; cr_ubyte tt; cr_ubyte mod
 
 
 
@@ -251,14 +267,15 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-#define CR_VNIL		makevariant(CR_NTYPESIL, 0)
-#define CR_VEMPTY	makevariant(CR_NTYPESIL, 1)
+#define CR_VNIL		makevariant(CR_TNIL, 0)
+#define CR_VEMPTY	makevariant(CR_TNIL, 1)
+#define CR_VTOMB	makevariant(CR_TNIL, 2)
 
 #define ttisnil(v)	isvtt((v), CR_VNIL)
 #define ttisempty(v)	isvtt((v), CR_VEMPTY)
 
-#define newnilvalue()	((TValue){.val = {0}, .type = CR_VNIL, .mod=0})
-#define newemptyvalue() ((TValue){.val = {0}, .type = CR_VEMPTY, .mod=0})
+#define newnilvalue()	((TValue){.val = {0}, .tt = CR_VNIL, .mod=0})
+#define newemptyvalue() ((TValue){.val = {0}, .tt = CR_VEMPTY, .mod=0})
 
 /* --------------------------------------------------------------------------- */
 

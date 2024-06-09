@@ -15,7 +15,6 @@
  * ----------------------------------------------------------------------------------------------*/
 
 
-#include "crcommon.h"
 #include "crdebug.h"
 #include "crmem.h"
 #include "crobject.h"
@@ -199,6 +198,16 @@ CR_API int cr_getinfo(VM *vm, int dbmask, cr_debuginfo *di)
 	status = getinfo(vm, dbmask, cl, frame, di);
 	cr_unlock(vm);
 	return status;
+}
+
+
+const char *cr_dg_info(VM *vm, const char *msg, OString *src, int line)
+{
+	OString *s;
+
+	if (src)
+
+	else
 }
 
 // void dumpstack(VM *vm, CallFrame *frame, Byte *ip)

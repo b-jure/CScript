@@ -68,7 +68,16 @@
 
 /* increment stack pointer */
 #define api_incsp(vm) \
-	{ (vm)->sp++; checkapi(vm, vm->sp - vm->stack <= CR_MAXSTACK, "stack overflow."); }
+	{ (vm)->stacktop.p++; \
+	  checkapi(vm, vm->stacktop.p <= vm->aframe->top.p, \
+			  "stack overflow"); }
+
+
+/* decrement stack pointer */
+#define api_decsp(vm) \
+	{ (vm)->stacktop.p--; \
+	  checkapi(vm, vm->stacktop.p >= vm->aframe->callee.p, \
+			  "stack underflow"); }
 
 
 #endif

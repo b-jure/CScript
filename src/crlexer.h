@@ -82,10 +82,10 @@ typedef struct Lexer {
 } Lexer;
 
 
-void cr_lx_init(VM *vm, Lexer *lx, BuffReader *br, OString *source);
-void cr_lx_free(Lexer *lx);
-Token cr_lx_scan(Lexer *lx);
-Token cr_lx_syntoken(const char *name);
-void cr_lx_syntaxerror(Lexer *lx, const char *err, va_list args);
+void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *source);
+void cr_lr_free(Lexer *lx);
+Token cr_lr_scan(Lexer *lx);
+Token cr_lr_syntoken(const char *name);
+void cr_lr_syntaxerror(Lexer *lx, const char *err, va_list args);
 
 #endif
