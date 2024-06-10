@@ -113,7 +113,7 @@ cr_sinline OString *allocstring(VM *vm, uint32_t len)
  */
 OString *cr_ot_newstring(VM *vm, const char *chars, size_t len, unsigned int seed)
 {
-	HashTable *wtab;
+	HTable *wtab;
 	OString *interned;
 	OString *string;
 	unsigned int hash;
@@ -381,14 +381,14 @@ OClass *OClass_new(VM *vm, OString *name)
 {
 	OClass *oclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS);
 	oclass->name = name;
-	HashTable_init(&oclass->methods);
+	HTable_init(&oclass->methods);
 	memset(oclass->omethods, 0, sizeof(oclass->omethods) / sizeof(oclass->omethods[0]));
 	return oclass;
 }
 
 cr_sinline void OClass_free(VM *vm, OClass *oclass)
 {
-	HashTable_free(vm, &oclass->methods);
+	HTable_free(vm, &oclass->methods);
 	GC_FREE(vm, oclass, sizeof(OClass));
 }
 
@@ -399,7 +399,7 @@ OInstance *OInstance_new(VM *vm, OClass *oclass)
 {
 	OInstance *instance = ALLOC_OBJ(vm, OInstance, OBJ_INSTANCE);
 	instance->oclass = oclass;
-	HashTable_init(&instance->fields);
+	HTable_init(&instance->fields);
 	return instance;
 }
 
@@ -415,7 +415,7 @@ cr_sinline GCObject *getomethod(VM *vm, Value val, cr_om om)
 
 cr_sinline void OInstance_free(VM *vm, OInstance *instance)
 {
-	HashTable_free(vm, &instance->fields);
+	HTable_free(vm, &instance->fields);
 	GC_FREE(vm, instance, sizeof(OInstance));
 }
 
@@ -513,14 +513,14 @@ void ofree(VM *vm, GCObject *object)
 cr_sinline cr_ubyte rawgetproperty(VM *vm, OInstance *instance, Value key, Value *out,
 					    cr_ubyte what)
 {
-	HashTable *table = rawgettable(vm, instance, what);
+	HTable *table = rawgettable(vm, instance, what);
 	return rawget(vm, table, key, out);
 }
 
 cr_sinline cr_ubyte rawsetproperty(VM *vm, OInstance *instance, Value key, Value value,
 					    cr_ubyte what)
 {
-	HashTable *table = rawgettable(vm, instance, what);
+	HTable *table = rawgettable(vm, instance, what);
 	return rawset(vm, table, key, value);
 }
 

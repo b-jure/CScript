@@ -40,7 +40,7 @@ void omark(VM *vm, O *obj)
 }
 
 
-static cr_inline void marktable(VM *vm, HashTable *table)
+static cr_inline void marktable(VM *vm, HTable *table)
 {
 	for (uint32_t i = 0; i < table->size; i++) {
 		Node *entry = &table->mem[i];
@@ -128,7 +128,7 @@ MS_FN(rmweakrefs)
 	for (uint32_t i = 0; i < vm->weakrefs.cap; i++) {
 		Node *entry = &vm->weakrefs.entries[i];
 		if (IS_OBJ(entry->key) && !oismarked(asobj(entry->key)))
-			HashTable_remove(vm, &vm->weakrefs, entry->key, 0);
+			HTable_remove(vm, &vm->weakrefs, entry->key, 0);
 	}
 }
 

@@ -55,14 +55,13 @@
 #define nval(n)		(&(n)->val)
 
 /* get table slot */
-#define node(t,i)	(&(t)->mem[(i)])
+#define tslot(t,i)	(&(t)->mem[(i)])
 
 /*
  * Ordering of fields might seem weird but
- * this is to ensure storage efficiency due
- * to alignment.
+ * this is to ensure proper alignment.
  */
-typedef union {
+typedef union Node {
 	struct {
 		TValueFields; /* value fields */
 		cr_ubyte ttk;
@@ -81,28 +80,21 @@ typedef struct {
 	int left; /* free slots before array needs to grow */
 	int nnodes; /* number of nodes */
 	cr_ubyte size; /* 2^size */
-} HashTable;
+} HTable;
 
 
 
-void cr_ht_init(HashTable *tab);
-void cr_ht_free(VM *vm, HashTable *tab);
-
-cr_ubyte cr_ht_insert(VM *vm, HashTable *tab, TValue k, TValue v);
-cr_ubyte cr_ht_remove(VM *vm, HashTable *tab, TValue k);
-
-cr_ubyte cr_ht_get(VM *vm, HashTable *tab, TValue k, TValue *out);
-
-TValue *cr_ht_getintern(HashTable *tab, const char *str, size_t len, unsigned int hash);
-
-cr_ubyte cr_ht_next(VM *vm, HashTable *tab, SIndex *k);
-
-void cr_ht_into(VM *vm, HashTable *from, HashTable *to);
-
-unsigned int cr_ht_resize(unsigned int wanted);
-
-void cr_ht_intern(VM *vm, const char *string);
-void cr_ht_internf(VM *vm, const char *fmt, ...);
-
+CRI_FUNC void cr_ht_init(HTable *tab);
+CRI_FUNC void cr_ht_newstab(VM *vm, HTable *tab);
+CRI_FUNC int cr_ht_next(VM *vm, HTable *tab, SIndex *k);
+CRI_FUNC void cr_ht_copykeys(VM *vm, HTable *stab, HTable *dtab);
+CRI_FUNC void cr_ht_intern(VM *vm, const char *string);
+CRI_FUNC void cr_ht_internf(VM *vm, const char *fmt, ...);
+CRI_FUNC int cr_ht_set(VM *vm, HTable *tab, const TValue *key, const TValue *val);
+CRI_FUNC int cr_ht_remove(VM *vm, HTable *tab, const TValue *k);
+CRI_FUNC struct OString *cr_ht_getinterned(HTable *tab, const char *str, 
+					size_t len, unsigned int hash);
+CRI_FUNC int cr_ht_get(VM *vm, HTable *tab, TValue *k, TValue *o);
+CRI_FUNC void cr_ht_free(VM *vm, HTable *tab);
 
 #endif

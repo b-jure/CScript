@@ -67,7 +67,7 @@ typedef struct GCObject {
  * ---------------------------------------------------------------------------
  */
 
-typedef struct {
+typedef struct OString {
 	ObjectHeader;
 	int len; /* excluding null terminator */
 	cr_ubyte hashash;
@@ -81,6 +81,11 @@ typedef struct {
 #define ttisstr(v)	isott((v), CR_VSTRING)
 #define strvalue(v)	((OString*)ovalue(v))
 #define cstrvalue(v)	(strvalue(v)->bytes)
+
+/* string is equal to string literal */
+#define streqlit(s,lit,l,h) \
+	((s)->len == (l) && (s)->hash == (h) && \
+	 memcmp((s)->bytes, (lit), (l)) == 0)
 
 
 
@@ -112,7 +117,7 @@ typedef struct UValue {
  */
 
 /* line information and associated instruction */
-typedef struct {
+typedef struct LineInfo {
 	int pc;
 	int line;
 } LineInfo;
@@ -125,7 +130,7 @@ Vec(LineInfoVec, LineInfo);
 typedef ubyteVec InstructionVec;
 
 
-typedef struct {
+typedef struct Function {
 	ObjectHeader;
 	OString *name; /* function name */
 	OString *source; /* source name */
@@ -163,7 +168,7 @@ typedef struct {
 #define ClosureHeader	ObjectHeader; int nupvalues;
 
 
-typedef struct {
+typedef struct CriptClosure {
 	ClosureHeader;
 	Function *fn;
 	UValue *upvalue[1];
@@ -188,7 +193,7 @@ typedef struct {
 
 
 
-typedef union {
+typedef union Closure {
 	CClosure cc;
 	CriptClosure crc;
 } Closure;
@@ -205,10 +210,10 @@ typedef union {
  * ---------------------------------------------------------------------------
  */
 
-typedef struct {
+typedef struct OClass {
 	ObjectHeader;
 	OString *name; /* class name */
-	HashTable mtab; /* method table */
+	HTable mtab; /* method table */
 	GCObject *vtable[CR_MN]; /* overloadable methods */
 } OClass;
 
@@ -228,10 +233,10 @@ typedef struct {
 
 
 /* 'OClass' instance */
-typedef struct {
+typedef struct Instance {
 	ObjectHeader;
 	OClass *oclass; /* pointer to class */
-	HashTable fields; /* instance fields */
+	HTable fields; /* instance fields */
 } Instance;
 
 
@@ -252,7 +257,7 @@ typedef struct {
 
 
 /* method bound to 'receiver' (Instance) */
-typedef struct {
+typedef struct InstanceMethod {
 	ObjectHeader;
 	Instance *receiver;
 	GCObject *method;

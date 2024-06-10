@@ -886,7 +886,7 @@ l_set_local:;
 					saveip();
 					inheriterror(vm, superclass);
 				}
-				HashTable_into(vm, &asclass(superclass)->mtab, &subclass->mtab, 0);
+				HTable_into(vm, &asclass(superclass)->mtab, &subclass->mtab, 0);
 				memcpy(subclass->vtable, asclass(superclass)->vtable, sizeof(subclass->vtable));
 				pop(vm); // pop subclass
 				BREAK;
@@ -1019,14 +1019,14 @@ void VM_init(VM *vm)
 	vm->gs = NULL;
 	vm->gslen = 0;
 	vm->gscap = 0;
-	HashTable_init(&vm->loaded); // Loaded scripts and their functions
-	HashTable_init(&vm->globids); // Global variable identifiers
+	HTable_init(&vm->loaded); // Loaded scripts and their functions
+	HTable_init(&vm->globids); // Global variable identifiers
 	Array_Variable_init(&vm->globvars, vm);
 	Array_Value_init(&vm->temp, vm); // Temp values storage (return values)
 	Array_VRef_init(&vm->callstart, vm);
 	Array_VRef_init(&vm->retstart, vm);
 	Array_OSRef_init(&vm->interned, vm);
-	HashTable_init(&vm->weakrefs); // cr_interned strings table (Weak_refs)
+	HTable_init(&vm->weakrefs); // cr_interned strings table (Weak_refs)
 	memset(vm->faststatic, 0, sizeof(vm->faststatic));
 	for (cr_ubyte i = 0; i < SS_SIZE; i++)
 		vm->faststatic[i] = OString_new(vm, static_strings[i].name, static_strings[i].len);

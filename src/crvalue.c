@@ -16,20 +16,36 @@
 
 #include "crconf.h"
 #include "crlimits.h"
-#include "crmath.h"
 #include "crobject.h"
 #include "crvalue.h"
 #include "crvm.h"
 
 
 
-/* 
- * ===============================
- * primitive operations on numbers
- * ===============================
- */
+/* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
+int cr_ve_ceillog2 (unsigned int x) 
+{
+	static const cr_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
+	0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+	6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+	7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+	7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+	8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
+	8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
+	8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
+	8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8
+	};
+	int l = 0;
+	x--;
+	while (x >= 256) {
+		l += 8;
+		x >>= 8;
+	}
+	return l + log_2[x];
+}
 
-static cr_floating fltarithm(VM *vm, cr_floating a, cr_floating b, cr_ar op)
+
+static cr_number fltarithm(VM *vm, cr_floating a, cr_floating b, cr_ar op)
 {
 	switch (op) {
 	case CR_OPADD:

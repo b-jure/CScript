@@ -14,8 +14,6 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "crdebug.h"
-#include "crerr.h"
 #include "crhashtable.h"
 #include "crmem.h"
 #include "crobject.h"
@@ -68,7 +66,7 @@ void *cr_mm_saferealloc(VM *vm, void *ptr, size_t osize, size_t nsize)
 
 	memblock = cr_mm_realloc(vm, ptr, osize, nsize);
 	if (cr_unlikely(memblock == NULL && nsize != 0))
-		memerror(vm);
+		cr_assert(0 && "out of memory");
 	return memblock;
 }
 
@@ -83,14 +81,12 @@ void *cr_mm_malloc(VM *vm, size_t size)
 	if (cr_unlikely(memblock == NULL)) {
 		memblock = tryagain(vm, NULL, 0, size);
 		if (cr_unlikely(memblock == NULL))
-			memerror(vm);
+			cr_assert(0 && "out of memory");
 	}
 	vm->gc.allocated += size;
 	return memblock;
 }
 
-
-#define MINARRAYSIZE	8
 
 void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep,
 			int elemsize, int extra, int limit, const char *what) 
@@ -106,11 +102,11 @@ void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep,
 			// runtime error
 		}
 		size = limit;
-		cr_assert(size >= MINARRAYSIZE);
+		cr_assert(size >= CR_MINARRSIZE);
 	} else {
 		size *= 2;
-		if (size < MINARRAYSIZE)
-			size = MINARRAYSIZE;
+		if (size < CR_MINARRSIZE)
+			size = CR_MINARRSIZE;
 	}
 	ptr = cr_mm_saferealloc(vm, ptr, *sizep * elemsize, size * elemsize);
 	*sizep = size;

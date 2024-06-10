@@ -281,6 +281,7 @@ typedef struct {
 
 
 
+int cr_ve_ceillog2 (unsigned int x);
 int v2t(TValue value);
 TValue vtostr(VM *vm, TValue value, cr_ubyte raw);
 void varith(VM *vm, TValue a, TValue b, int op, TValue *res);

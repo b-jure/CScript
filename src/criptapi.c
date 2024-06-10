@@ -91,15 +91,15 @@ CR_API void cr_destroy(VM **vmp)
 		if (*vmp == NULL)
 			return;
 		vm = *vmp;
-		HashTable_free(vm, &vm->loaded);
-		HashTable_free(vm, &vm->globids);
+		HTable_free(vm, &vm->loaded);
+		HTable_free(vm, &vm->globids);
 		GSARRAY_FREE(vm);
 		Array_Variable_free(&vm->globvars, NULL);
 		Array_Value_free(&vm->temp, NULL);
 		Array_VRef_free(&vm->callstart, NULL);
 		Array_VRef_free(&vm->retstart, NULL);
 		Array_OSRef_free(&vm->interned, NULL);
-		HashTable_free(vm, &vm->weakrefs);
+		HTable_free(vm, &vm->weakrefs);
 		for (head = vm->objects; head != NULL; head = next) {
 			next = onext(head);
 			ofree(vm, head);
@@ -1134,7 +1134,7 @@ CR_API cr_ubyte cr_nextproperty(VM *vm, int idx, cr_ubyte what)
 {
 	cr_ubyte hasnext;
 	Instance *instance;
-	HashTable *tab;
+	HTable *tab;
 	TValue *key;
 
 	cr_lock(vm);

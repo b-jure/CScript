@@ -120,11 +120,11 @@ struct VM {
 	CallFrameVec frames; /* nested function call frames */
 	SIndexVec callstart; /* start of call values */
 	SIndexVec retstart; /* start of return values */
-	HashTable gids; /* global variable names */
+	HTable gids; /* global variable names */
 	TValueVec gvars; /* global variable values */
 	TValueVec temp; /* temporary storage for return values TODO*/
 	cr_longjmp *errjmp; /* error recovery */
-	HashTable weakrefs; /* interned strings (unmarked) */
+	HTable weakrefs; /* interned strings (unmarked) */
 	OStringVec interned; /* user interned strings (marked) */
 	Hooks hooks; /* hooks to external code */
 	GC gc; /* garbage collector params */

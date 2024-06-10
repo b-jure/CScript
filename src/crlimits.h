@@ -164,26 +164,53 @@ typedef cr_ubyte Instruction;
 
 
 /*
- * Initial size for the interned strings table.
+ * Initial size for the interned strings hash table.
  * It has to be power of 2, because of the implementation
  * of the table itself.
  */
 #if !defined(CR_MINSTRTABSIZE)
-#define CR_MINSTRTABSIZE	64
+#define CR_MINSTRHTABSIZE	64
 #endif
 
 
 
 /* minimum size for string buffer */
 #if !defined(CR_MINBUFFER)
-#define CR_MINBUFFER	32
+#define CR_MINBUFFER		32
 #endif
 
 
 
-/* maximum table load factor */
+/* 
+ * Maximum table load factor.
+ * v1.0.0 is using linear probing so 
+ * keep this load factor <= 0.70 to
+ * avoid excess collisions.
+ */
 #if !defined(CR_MAXTABLOAD)
-#define CR_MAXTABLOAD	0.70
+#define CR_MAXHTABLOAD		0.70
+#endif
+
+
+
+/* 
+ * Maximum size for 'HTable'.
+ * Make sure the value fits in 'INT_MAX'.
+ */
+#if !defined(CR_MAXTABSIZE)
+#define CR_MAXHTABSIZE		INT_MAX
+#endif
+
+
+
+/*
+ * Minimum internal array siz.
+ * This should be 2^n='CR_MINARRSIZE'.
+ * Make sure this value fits in 'INT_MAX'
+ * and is >= 4.
+ */
+#if !defined(CR_MINARRSIZE)
+#define CR_MINARRSIZE		8
 #endif
 
 
@@ -259,6 +286,7 @@ typedef cr_ubyte Instruction;
 /* @cast - cast expression 'e' as type 't'. */
 #define cast(t, e)	((t)(e))
 
+#define cast_node(e)	cast(Node*,(e))
 #define cast_ubyte(e)	cast(cr_ubyte,(e))
 #define cast_ubytep(e)  cast(cr_ubyte*,(e))
 #define cast_byte(e)	cast(cr_byte,(e))
