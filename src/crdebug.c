@@ -114,7 +114,6 @@ static void getfuncinfo(Closure *cl, cr_debuginfo *di)
 static void getsrcinfo(Closure *cl, cr_debuginfo *di)
 {
 	Function *fn;
-	size_t bufflen;
 
 	if (noCriptclosure(cl)) {
 		di->source = "[C]";
@@ -124,14 +123,7 @@ static void getsrcinfo(Closure *cl, cr_debuginfo *di)
 		di->source = fn->source->bytes;
 		di->srclen = fn->source->len;
 	}
-	bufflen = CR_MAXSRC - 1;
-	if (bufflen < di->srclen) {
-		memcpy(di->shortsrc, di->source, bufflen - SLL("..."));
-		memcpy(di->shortsrc, "...", SLL("..."));
-	} else {
-		memcpy(di->shortsrc, di->source, bufflen);
-	}
-	di->shortsrc[bufflen] = '\0';
+	cr_ot_sourceid(di->shortsrc, di->source, di->srclen);
 }
 
 
@@ -171,9 +163,11 @@ static int getinfo(VM *vm, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debug
 	return 1;
 }
 
-// Fill out 'cr_debuginfo' according to 'dbmask'.
-// Return 0 if any of the bits in 'dbmask' is invalid,
-// otherwise 1.
+
+/* 
+ * Fill out 'cr_debuginfo' according to 'dbmask'.
+ * Returns 0 if any of the bits in 'dbmask' are invalid.
+ */
 CR_API int cr_getinfo(VM *vm, int dbmask, cr_debuginfo *di)
 {
 	CallFrame *frame;
@@ -194,21 +188,26 @@ CR_API int cr_getinfo(VM *vm, int dbmask, cr_debuginfo *di)
 		cr_assert(ttisfn(fn));
 	}
 	cl = (ttiscl(fn) ? clvalue(fn) : NULL);
-	dbmask >>= 1; // skip DW_FNGET
+	dbmask >>= 1; /* skip CR_DBGFNGET bit */
 	status = getinfo(vm, dbmask, cl, frame, di);
 	cr_unlock(vm);
 	return status;
 }
 
 
-const char *cr_dg_info(VM *vm, const char *msg, OString *src, int line)
+const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 {
-	OString *s;
+	char buffer[CR_MAXSRC];
 
-	if (src)
-
-	else
+	if (src) {
+		cr_ot_sourceid(buffer, src->bytes, src->len);
+	} else {
+		buffer[0] = '?';
+		buffer[1] = '\0';
+	}
+	return cr_ot_pushfstring(vm, "%s:%d: %s", buffer, line, msg);
 }
+
 
 // void dumpstack(VM *vm, CallFrame *frame, Byte *ip)
 // {

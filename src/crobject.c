@@ -63,6 +63,24 @@ struct Tuple {
 };
 
 
+void cr_ot_sourceid(char *restrict dest, const char *src, size_t len)
+{
+	size_t bufflen;
+
+	bufflen = CR_MAXSRC - 1;
+	if (bufflen < len) {
+		memcpy(dest, src, bufflen - SLL("..."));
+		memcpy(dest, "...", SLL("..."));
+	} else {
+		memcpy(dest, src, bufflen);
+	}
+	dest[bufflen] = '\0';
+}
+
+const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...)
+{
+}
+
 
 /*
  * Convert string into 'cr_vtable' index.
@@ -111,16 +129,17 @@ cr_sinline OString *allocstring(VM *vm, uint32_t len)
  * Create new string object.
  * Allocation is skipped in case string is already interned.
  */
-OString *cr_ot_newstring(VM *vm, const char *chars, size_t len, unsigned int seed)
+OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
 {
 	HTable *wtab;
 	OString *interned;
 	OString *string;
 	unsigned int hash;
+	TValue key;
 
 	wtab = &vm->weakrefs;
-	hash = cr_hh_string(chars, len, seed);
-	interned = strvalue(cr_ht_getintern(wtab, chars, len, hash));
+	hash = cr_hh_string(chars, len, vm->seed);
+	interned = cr_ht_getinterned(wtab, chars, len, hash);
 	if (interned)
 		return interned;
 	string = allocstring(vm, len);
@@ -130,23 +149,75 @@ OString *cr_ot_newstring(VM *vm, const char *chars, size_t len, unsigned int see
 	string->hash = hash;
 	string->hashash = 1;
 	lmarkgco(string);
-	cr_ht_insert(vm, wtab, newovalue(string), newnilvalue());
+	key = newovalue(string);
+	cr_ht_set(vm, wtab, &key, &vm->nil);
 	lunmarkgco(string);
 	return string;
 }
 
-/* Create new string object from format 'fmt' and args in 'argp'. */
-OString *OString_fmt_from(VM *vm, const char *fmt, va_list argp)
-{
-	Array_char buff;
-	unsigned char c;
-	cr_double f;
-	cr_integer integer;
-	const char *fmttype, *end;
-	const void *p;
-	OString *fstr;
+/*
+ * Maximum conversion length of a number to a string.
+ * 'long double' (not supported currently) can be 33 digits
+ * + sign + decimal point + exponent sign + 5 exponent digits
+ * + null terminator (43 total).
+ * All other types require less space.
+ */
+#define MAXNUM2STR	44
 
-	Array_char_init_cap(&buff, vm, 8);
+
+/*
+ * Initial size of buffer used in 'cr_ot_newvstringf'
+ * to prevent allocations, instead the function
+ * will directly work on the buffer and will push
+ * strings on stack in case buffer exceeds this limit.
+ * This is all done because 'cr_ot_newvstringf' often
+ * gets called by 'cr_dg_getinfo'; the size should be
+ * at least 'CR_MAXSRC' + 'MAXNUM2STR' + size for message.
+ */
+#define BUFFVSFSIZ	(CR_MAXSRC + MAXNUM2STR + 100)
+
+/* buffer for 'cr_ot_newvstringf' */
+typedef struct BuffVSF {
+	VM *vm;
+	int pushed; /* true if 'space' was pushed on the stack */
+	int len; /* string length in 'space' */
+	char space[BUFFVSFSIZ];
+} BuffVSF;
+
+
+/* 
+ * Pushes 'str' to the stack and concatenates it with
+ * the previous pushed string (depending on buffer 'pushed').
+ */
+static void pushstring(BuffVSF *buff, const char *str, size_t len)
+{
+
+}
+
+
+/* pushes buffer 'space' on the stack. */
+static void pushbuff(BuffVSF *buff, const char *str, size_t len)
+{
+}
+
+
+static void ensurebuff(BuffVSF *buff, const char *str, size_t len)
+{
+	// TODO
+}
+
+
+/* Create new string object from format 'fmt' and args in 'argp'. */
+OString *cr_ot_newvstringf(VM *vm, const char *fmt, va_list argp)
+{
+	BuffVSF buff;
+	unsigned char c;
+	cr_number f;
+	cr_integer i;
+	const char *end;
+	const void *p;
+	OString *s;
+
 	while ((end = strchr(fmt, '%')) != NULL) {
 		Array_char_push_multiple(&buff, fmt, end - fmt);
 

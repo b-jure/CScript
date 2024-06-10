@@ -188,8 +188,9 @@ void push(VM *vm, Value val);
 
 
 
-void initvm(VM *vm);
+void cr_vm_init(VM *vm);
 void resetvm(VM *vm, int status);
+void cr_vm_concat(VM *vm, int n);
 
 void vminterpret(VM *vm, const char *source, const char *filename);
 void vmrun(VM *vm);

@@ -174,7 +174,11 @@ typedef cr_ubyte Instruction;
 
 
 
-/* minimum size for string buffer */
+/* 
+ * Minimum size for string buffer during
+ * lexing, this buffer memory will be freed
+ * after compilation.
+ */
 #if !defined(CR_MINBUFFER)
 #define CR_MINBUFFER		32
 #endif

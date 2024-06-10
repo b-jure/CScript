@@ -273,20 +273,20 @@ typedef struct InstanceMethod {
 /* --------------------------------------------------------------------------- */
 
 
+/* Array holding return count and arity for each overload-able method. */
+// extern const struct Tuple ominfo[];
 
+
+#define cr_ot_newstringlit(vm, lit)	OString_new((vm), (lit), SLL(lit))
+
+void cr_ot_sourceid(char *adest, const char *src, size_t len);
+const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...);
 int cr_ot_eqstring(OString *s1, OString *s2);
-
-
 int32_t cr_ot_id2mtag(VM *vm, OString *id);
-
-
 OString *cr_ot_newstring(VM *vm, const char *chars, size_t len);
 OString *cr_ot_newvstringf(VM *vm, const char *fmt, va_list argp);
 OString *cr_ot_newstringf(VM *vm, const char *fmt, ...);
 OString *cr_ot_concatenate(VM *vm, GCObject* a, GCObject* b);
-
-#define cr_ot_newstringlit(vm, lit)	OString_new((vm), (lit), SLL(lit))
-
 InstanceMethod *cr_ot_newinstancemethod(VM *vm, TValue receiver, CriptClosure *method);
 Instance *cr_ot_newinstance(VM *vm, OClass *cclass);
 OClass *cr_ot_newclass(VM *vm, OString *name);
@@ -294,55 +294,18 @@ UValue *cr_ot_newuvalue(VM *vm, TValue *var_ref);
 CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn);
 CClosure *cr_ot_newcclosure(VM *vm, OString *name, cr_cfunc fn, int32_t arity, cr_ubyte isvararg, int upvals);
 Function *cr_ot_newfunction(VM *vm);
-
-
-/* call ('()') overload-able method */
 cr_ubyte cr_ot_vtcall(VM *vm, TValue instance, int tag);
-
-
-/* get 'OInstance' tables */
-#define getfieldtable(ins)  (&(ins)->fields)
-#define getmethodtable(ins) (&(ins)->methods)
-
-
-/* raw index ('[]') access */
 cr_ubyte cr_ot_rawindex(VM *vm, TValue instance, cr_ubyte get);
-
-
-/* debug only, prints object type name */
 void otypeprint(OType type);
-
-/* Convert object to string object. */
 OString *cr_ot_tostr(VM *vm, GCObject *o, cr_ubyte raw);
-
-
-/* Tries calling binary or unary operator overload method. */
 void cr_ot_tryop(VM *vm, TValue a, TValue b, int op, TValue *res);
-
-
-/* Prints the object value; can call __display__ if 'raw' is 0. */
 void oprint(VM *vm, TValue value, cr_ubyte raw, FILE *stream);
-
-
 void oeq(VM *vm, TValue l, TValue r);
 void one(VM *vm, TValue l, TValue r);
 void olt(VM *vm, TValue l, TValue r);
 void ogt(VM *vm, TValue l, TValue r);
 void ole(VM *vm, TValue l, TValue r);
 void oge(VM *vm, TValue l, TValue r);
-
-
-/* Free object memory */
 void cr_ot_free(VM *vm, GCObject *object);
-
-/* ------------------------------------------------------ */ // object functions
-
-
-
-
-
-/* Array holding return count and arity for each overload-able method. */
-// extern const struct Tuple ominfo[];
-
 
 #endif
