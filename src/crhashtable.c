@@ -98,13 +98,15 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 			str = strvalue(k);
 			/* v1.0.0: all strings are interned so this
 			 * check doesn't make any sense, meaning all
-			 * strings require the has the moment they
+			 * strings require the hash the moment they
 			 * are created, so 'hashash' is always non zero. */
 #if CR_VERSION_NUMBER != 100
 			if (str->hashash == 0) {
 				str->hash = cr_hh_string(str->bytes, str->len, str->hash);
 				str->hashash = 1;
 			}
+#else
+			cr_assert(str->hashash && "string is missing hash");
 #endif
 			return cast_node(hashslot(mem, str->hash, size));
 		default:

@@ -263,11 +263,6 @@
 
 
 
-/* @CR_IS32INT - true if 'int' has (at least) 32 bits. */
-#define CR_IS32INT	((UINT_MAX >> 30) >= 3)
-
-
-
 /* @cr_xstr2number - converts hexadecimal string to 'cr_number'. */
 #define cr_xstr2number(s,p)	cr_str2number((s),(p))
 
@@ -295,24 +290,24 @@
 /* @CR_CHECKAPI - enables C API asserts. */
 #if defined(CR_CHECKAPI)
 #include <assert.h>
-#define cr_checkapi(vm, cond, msg)	assert((cond) && msg)
+#define cri_checkapi(vm, cond, msg)	assert((cond) && msg)
 #endif
 
 
 
 /* 
- * @CR_MAXSTACK - maximum stack size. 
- * Any value is fine as long as it fits in UINT_MAX/2.
+ * @CRI_MAXSTACK - maximum stack size. 
+ * Any positive value that can fit into INT_MAX.
  */
-#define CR_MAXSTACK	5000000
+#define CRI_MAXSTACK	5000000
 
 
 
 /* 
- * @CR_MAXSRC - maximum description size of function 
+ * @CRI_MAXSRC - maximum description size of function 
  * source (check debug API). 
  */
-#define CR_MAXSRC	70
+#define CRI_MAXSRC	70
 
 
 

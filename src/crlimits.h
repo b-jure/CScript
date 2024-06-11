@@ -145,21 +145,21 @@ typedef cr_ubyte Instruction;
  * This is the maximum unsigned value that fits in 3 bytes.
  * Transitively this defines various compiler limits. 
  */
-#define CR_MAXCODE	16777215U
+#define CRI_MAXCODE	16777215U
 
 
 
 /*
  * Size of long instruction parameter (24 bit).
  */
-#define CR_LONGPARAM	CR_MAXCODE
+#define CRI_LONGPARAM		CRI_MAXCODE
 
 
 
 /*
  * Size of short instruction parameter (8 bit).
  */
-#define CR_SHRTPARAM	255		
+#define CRI_SHRTPARAM		255		
 
 
 
@@ -168,8 +168,8 @@ typedef cr_ubyte Instruction;
  * It has to be power of 2, because of the implementation
  * of the table itself.
  */
-#if !defined(CR_MINSTRTABSIZE)
-#define CR_MINSTRHTABSIZE	64
+#if !defined(CRI_MINSTRTABSIZE)
+#define CRI_MINSTRHTABSIZE	64
 #endif
 
 
@@ -179,8 +179,8 @@ typedef cr_ubyte Instruction;
  * lexing, this buffer memory will be freed
  * after compilation.
  */
-#if !defined(CR_MINBUFFER)
-#define CR_MINBUFFER		32
+#if !defined(CRI_MINBUFFER)
+#define CRI_MINBUFFER		32
 #endif
 
 
@@ -191,8 +191,8 @@ typedef cr_ubyte Instruction;
  * keep this load factor <= 0.70 to
  * avoid excess collisions.
  */
-#if !defined(CR_MAXTABLOAD)
-#define CR_MAXHTABLOAD		0.70
+#if !defined(CRI_MAXTABLOAD)
+#define CRI_MAXHTABLOAD		0.70
 #endif
 
 
@@ -201,8 +201,8 @@ typedef cr_ubyte Instruction;
  * Maximum size for 'HTable'.
  * Make sure the value fits in 'INT_MAX'.
  */
-#if !defined(CR_MAXTABSIZE)
-#define CR_MAXHTABSIZE		INT_MAX
+#if !defined(CRI_MAXTABSIZE)
+#define CRI_MAXHTABSIZE		INT_MAX
 #endif
 
 
@@ -213,8 +213,8 @@ typedef cr_ubyte Instruction;
  * Make sure this value fits in 'INT_MAX'
  * and is >= 4.
  */
-#if !defined(CR_MINARRSIZE)
-#define CR_MINARRSIZE		8
+#if !defined(CRI_MINARRSIZE)
+#define CRI_MINARRSIZE		8
 #endif
 
 
@@ -227,7 +227,7 @@ typedef cr_ubyte Instruction;
  * By design smaller type (unsigned short) is chosen than the stack
  * size so you can't mess up.
  */
-#define CR_MAXCCALLS	4096
+#define CRI_MAXCCALLS	4096
 
 
 
@@ -246,12 +246,12 @@ typedef cr_ubyte Instruction;
  * These allow user-defined action to be taken each
  * time VM (thread) is created or deleted.
  */
-#if !defined(cri_threadcreated)
-#define cri_threadcreated(vm)	((void)(vm))
+#if !defined(cri_vmcreated)
+#define cri_vmcreated(vm)	((void)(vm))
 #endif
 
-#if !defined(cri_threaddelete)
-#define cri_threaddelete(vm)	((void)(vm))
+#if !defined(cri_vmdeleted)
+#define cri_vmdeleted(vm)	((void)(vm))
 #endif
 
 

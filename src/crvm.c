@@ -14,11 +14,9 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
+#include "crconf.h"
 #include "criptapi.h"
-#include "crchunk.h"
-#include "crcommon.h"
 #include "crdebug.h"
-#include "crerr.h"
 #include "crlimits.h"
 #include "crmem.h"
 #include "crobject.h"
@@ -32,18 +30,366 @@
 
 
 
-volatile cr_ubyte runtime = 0; // VM is running?
+/* get instance 'i' property table */
+#define proptab(i,f)	((f) != 0 ? &(i)->fields : &(i)->oclass->mtab)
+
+
+/*
+ * Stack size to grow the stack to when stack
+ * overflow occurs for error handling.
+ */
+#define OVERFLOWSTACKSIZE	(CRI_MAXSTACK + 200)
 
 
 
-/* Push the value on the stack */
-void push(VM *vm, Value val)
+/* convert stack pointers into stack offsets */
+static void savestackptrs(VM *vm)
 {
-	if (cr_likely(cast_int(vm->sp - vm->stack) < VM_STACK_LIMIT))
-		*vm->sp++ = val;
-	else
-		sovferror(vm);
+	SIndex *si;
+	UValue *uv;
+	CallFrame *cf;
+	int i;
+
+	vm->stacktop.offset = savestack(vm, vm->stacktop.p);
+	for (i = 0; i < vm->frames.len; i++) {
+		cf = &vm->frames.ptr[i];
+		cf->callee.offset = savestack(vm, cf->callee.p);
+		cf->top.offset = savestack(vm, cf->top.p);
+	}
+	for (i = 0; i < vm->callstart.len; i++) {
+		si = &vm->callstart.ptr[i];
+		si->offset = savestack(vm, si->p);
+	}
+	for (i = 0; i < vm->retstart.len; i++) {
+		si = &vm->retstart.ptr[i];
+		si->offset = savestack(vm, si->p);
+	}
+	for (uv = vm->openuv; uv != NULL; uv = uv->nextuv)
+		uv->v.offset = savestack(vm, uv->v.location);
+	vm->deferlist.offset = savestack(vm, vm->deferlist.p);
 }
+
+
+/* convert stack offsets back to stack pointers */
+static void restorestackptrs(VM *vm)
+{
+	SIndex *si;
+	UValue *uv;
+	CallFrame *cf;
+	int i;
+
+	vm->stacktop.p = restorestack(vm, vm->stacktop.offset);
+	for (i = 0; i < vm->frames.len; i++) {
+		cf = &vm->frames.ptr[i];
+		cf->callee.p = restorestack(vm, cf->callee.offset);
+		cf->top.p = restorestack(vm, cf->top.offset);
+	}
+	for (i = 0; i < vm->callstart.len; i++) {
+		si = &vm->callstart.ptr[i];
+		si->p = restorestack(vm, si->offset);
+	}
+	for (i = 0; i < vm->retstart.len; i++) {
+		si = &vm->retstart.ptr[i];
+		si->p = restorestack(vm, si->offset);
+	}
+	for (uv = vm->openuv; uv != NULL; uv = uv->nextuv)
+		uv->v.location = s2v(restorestack(vm, uv->v.offset));
+	vm->deferlist.p = restorestack(vm, vm->deferlist.offset);
+}
+
+
+/* reallocate stack to new size */
+int cr_vm_reallocstack(VM *vm, int size, int raiseerr)
+{
+	int oldstopem;
+	int osize;
+	SPtr newstack;
+	int i;
+
+	cr_assert(nsize <= CRI_MAXSTACK || nsize == OVERFLOWSTACKSIZE);
+	oldstopem = vm->gc.stopem;
+	osize = stacksize(vm);
+	savestackptrs(vm);
+	vm->gc.stopem = 1; /* no emergency collection when reallocating stack */
+	newstack = cr_mm_reallocarray(vm, vm->stack.p,
+			osize + EXTRA_STACK, size + EXTRA_STACK);
+	vm->gc.stopem = oldstopem;
+	if (cr_unlikely(newstack == NULL)) {
+		restorestackptrs(vm);
+		if (raiseerr)
+			cr_assert("memory error");
+		return 0;
+	}
+	restorestackptrs(vm);
+	vm->stack.p = newstack;
+	vm->stackend.p = newstack + size;
+	for (i = osize + EXTRA_STACK; i < size + EXTRA_STACK; i++)
+		setnilvalue(s2v(newstack + i));
+	return 1;
+}
+
+
+/* grow stack to accommodate 'n' values */
+int cr_vm_growstack(VM *vm, int n, int raiseerr)
+{
+	int size;
+	int nsize;
+	int needed;
+
+	size = stacksize(vm);
+	if (cr_unlikely(size > CRI_MAXSTACK)) { /* overflowed already ? */
+		cr_assert(size == OVERFLOWSTACKSIZE);
+		if (raiseerr)
+			cr_assert(0 && "errerror");
+		return 0;
+	}
+	if (cr_unlikely(n > CRI_MAXSTACK)) {
+		nsize = size << 1;
+		needed = topoffset(vm) + n;
+		if (nsize > CRI_MAXSTACK)
+			nsize = CRI_MAXSTACK;
+		if (nsize < needed)
+			nsize = needed;
+		if (cr_likely(nsize <= CRI_MAXSTACK))
+			return cr_vm_reallocstack(vm, nsize, raiseerr);
+	}
+	cr_vm_reallocstack(vm, OVERFLOWSTACKSIZE, raiseerr);
+	if (raiseerr)
+		cr_assert(0 && "stack overflow");
+	return 0;
+}
+
+
+/* increment stack top */
+void cr_vm_inctop(VM *vm)
+{
+	checkstack(vm, 1);
+	vm->stacktop.p++;
+}
+
+
+/* raw property get */
+cr_sinline int getproperty(VM *vm, Instance *ins, TValue *k, TValue *v, int field)
+{
+	return cr_ht_get(vm, proptab(ins, field), k, v);
+}
+
+
+/* raw property set */
+cr_sinline int setproperty(VM *vm, Instance *ins, TValue *k, TValue *v, int field)
+{
+	return cr_ht_set(vm, proptab(ins, field), k, v);
+}
+
+
+/* try get vtable method 'm' */
+cr_sinline GCObject *vtmethod(VM *vm, const TValue *v, int m)
+{
+	cr_assert(m >= 0 && m < CR_MNUM && "invalid method tag");
+	return (ttisins(v) ? insvalue(v)->oclass->vtable[m] : NULL);
+}
+
+
+/* sets up stack for vtable method before actual call */
+static void setvtmethodstack(VM *vm, SPtr callee, const TValue *ins,
+				const GCObject *m, int mt)
+{
+	const TValue *arg;
+	int arity;
+	int i;
+
+	arity = vtmi(mt)->arity;
+	cr_assert(arity <= 2);
+	setsv(vm, callee, &newovalue(m)); /* method */
+	setsv(vm, callee + 1, ins); /* 'self' */
+	for (i = 0; i < arity; i++) { /* args */
+		arg = s2v(callee - arity + i);
+		setsv(vm, callee + 2 + i, arg);
+	}
+	vm->stacktop.p = callee + arity + 2; /* assume 'EXTRA_STACK' */
+}
+
+
+/* try call vtable method 'm' */
+int callvtmethod(VM *vm, const TValue *ins, int mt)
+{
+	const TValue *arg;
+	const GCObject *m;
+	SPtr callee;
+
+	if ((m = vtmethod(vm, ins, mt)) == NULL)
+		return 0;
+	callee = vm->stacktop.p;
+	setvtmethodstack(vm, callee, ins, m, mt);
+	cr_vm_ncall(vm, callee, vtmi(mt)->nreturns);
+	return 1;
+}
+
+
+/* try calling unary vtmethod. */
+static int callunop(VM *vm, TValue *v, int mt, Value *res)
+{
+	GCObject *m;
+
+	m = vtmethod(vm, v, mt);
+	if (om == NULL)
+		return 0;
+	Value *retstart = vm->sp;
+	push(vm, lhs); // 'self'
+	push(vm, lhs);
+	ncall(vm, retstart, OBJ_VAL(om), ominfo[op].retcnt);
+	*res = pop(vm); // assign and pop the method result
+	return 1;
+}
+
+
+/* Tries to call class overloaded binary operator method 'op'.
+ * Returns 1 if it was called (class overloaded that method),
+ * 0 otherwise. */
+cr_sinline int callbinop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
+{
+	Value instance;
+	GCObject *om = getomethod(vm, lhs, op);
+	if (om == NULL) {
+		om = getomethod(vm, rhs, op);
+		if (om == NULL)
+			return 0;
+		instance = rhs;
+	} else
+		instance = lhs;
+	Value *retstart = vm->sp;
+	push(vm, instance); // 'self'
+	push(vm, lhs);
+	push(vm, rhs);
+	ncall(vm, retstart, OBJ_VAL(om), ominfo[op].retcnt);
+	*res = pop(vm); // assign and pop the method result
+	return 1;
+}
+
+
+/* Tries calling binary or unary overloaded operator method, errors on failure. */
+void otryop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
+{
+	if (!omisunop(op)) {
+		if (cr_unlikely(!callbinop(vm, lhs, rhs, op, res)))
+			binoperror(vm, lhs, rhs, op - OM_ADD);
+	} else if (cr_unlikely(!callunop(vm, lhs, op, res)))
+		unoperror(vm, lhs, op - OM_ADD);
+}
+
+cr_sinline int omcallorder(VM *vm, Value lhs, Value rhs, cr_om ordop)
+{
+	cr_assert(vm, ordop >= OM_NE && ordop <= OM_GE, "invalid cr_om for order");
+	if (callbinop(vm, lhs, rhs, ordop, stkpeek(1))) { // try overload
+		pop(vm); // remove second operand
+		return 1;
+	}
+	// Instances (and cript objects) can always have equality comparison.
+	// If their pointers are the same then the underlying objects are equal;
+	// otherwise they are not equal.
+	if (cr_unlikely(ordop != OM_EQ && ordop != OM_NE))
+		ordererror(vm, lhs, rhs);
+	return 0;
+}
+
+/* != */
+void one(VM *vm, Value lhs, Value rhs)
+{
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(lhs != rhs));
+	else if (!omcallorder(vm, lhs, rhs, OM_NE))
+		push(vm, BOOL_VAL(lhs != rhs));
+}
+
+/* == */
+void oeq(VM *vm, Value lhs, Value rhs)
+{
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(lhs == rhs));
+	else if (!omcallorder(vm, lhs, rhs, OM_EQ))
+		push(vm, BOOL_VAL(lhs == rhs));
+}
+
+/* < */
+void olt(VM *vm, Value lhs, Value rhs)
+{
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) < 0));
+	else
+		omcallorder(vm, lhs, rhs, OM_LT);
+}
+
+/* > */
+void ogt(VM *vm, Value lhs, Value rhs)
+{
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) > 0));
+	else
+		omcallorder(vm, lhs, rhs, OM_GT);
+}
+
+/* <= */
+void ole(VM *vm, Value lhs, Value rhs)
+{
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) <= 0));
+	else
+		omcallorder(vm, lhs, rhs, OM_LE);
+}
+
+/* >= */
+void oge(VM *vm, Value lhs, Value rhs)
+{
+	if (isstring(lhs) && isstring(rhs))
+		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) >= 0));
+	else
+		omcallorder(vm, lhs, rhs, OM_GE);
+}
+
+
+/* 
+ * Convert object to string.
+ * If 'raw' is not set then '__tostring__' can be called.
+ */
+OString *otostr(VM *vm, GCObject *o, cr_ubyte raw)
+{
+	Instance *ins;
+	Value debug, key, result;
+
+	switch (otype(o)) {
+		case OBJ_STRING:
+			return cast(OString *, o);
+		case OBJ_FUNCTION:
+			return cast(OFunction *, o)->p.name;
+		case OBJ_CLOSURE:
+			return cast(OClosure *, o)->fn->p.name;
+		case OBJ_CFUNCTION:
+			return cast(ONative *, o)->p->name;
+		case OBJ_UPVAL:
+			return vtostr(vm, *cast(OUpvalue *, o)->location, raw);
+		case OBJ_CLASS:
+			return cast(OClass *, o)->name;
+		case OBJ_INSTANCE:
+			if (!raw && calloverload(vm, OBJ_VAL(o), SKOM_TOSTRING)) {
+				result = *stkpeek(0);
+				if (!isstring(result))
+					omreterror(vm, "string", OM_TOSTRING);
+				*o = pop(vm);
+				return asstring(result);
+			} else {
+				ins = asinstance(oval);
+				key = OBJ_VAL(vm->faststatic[SS_DBG]);
+				if (rawget(vm, &ins->fields, key, &debug) && isstring(debug)) {
+					*o = debug;
+					return asstring(debug); // have debug name
+				}
+				return asstring(*o = OBJ_VAL(ins->oclass->name));
+			}
+		case OBJ_BOUND_METHOD:
+			return cast(OBoundMethod *, o)->method->fn->p.name;
+	}
+}
+
 
 /* Bind class method in order to preserve the receiver.
  * By doing so the interpreter can then push the receiver on the
@@ -166,7 +512,7 @@ static CallFrame *call(VM *vm, Value callee, int32_t argc, int32_t retcnt)
 	}
 	case OBJ_CLASS: {
 		OClass *oclass = asclass(callee);
-		Value instance = OBJ_VAL(OInstance_new(vm, oclass));
+		Value instance = OBJ_VAL(Instance_new(vm, oclass));
 		if (!calloverload(vm, instance, OM_INIT)) { // not overloaded ?
 			*stkpeek(argc) = instance; // 'self'
 			int32_t arity = ominfo[OM_INIT].arity; // default arity
@@ -184,10 +530,10 @@ static CallFrame *call(VM *vm, Value callee, int32_t argc, int32_t retcnt)
 	}
 }
 
-/* Public interface for normal call (unprotected). */
-void ncall(VM *vm, Value *retstart, Value fn, int32_t retcnt)
+/* call value (unprotected). */
+void cr_vm_ncall(VM *vm, SPtr callee, int nreturns)
 {
-	int32_t argc = vm->sp - retstart - 1;
+	int argc = vm->stacktop.p - callee - 1;
 	if (call(vm, fn, argc, retcnt) != NULL)
 		run(vm);
 }
@@ -1087,8 +1433,9 @@ CRI_DEF const StaticString SS[CR_SSNUM] = {
 	{ "__tostring__", SLL("__tostring__") },
 	{ "__getidx__", SLL("__getidx__") },
 	{ "__setidx__", SLL("__setidx__") },
+	{ "__gc__", SLL("__gc__") },
+	{ "__defer__", SLL("__defer__") },
 	{ "__hash__", SLL("__hash__") },
-	{ "__free__", SLL("__free__") },
 	/* Overload-able arithmetic operators */
 	{ "__add__", SLL("__add__") },
 	{ "__sub__", SLL("__sub__") },

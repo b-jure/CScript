@@ -36,8 +36,8 @@ typedef enum {
 	/* Boolean strings */
 	SS_TRUE, SS_FALSE,
 	/* Class overload-able method names. */
-	SS_INIT, SS_TOSTRING, SS_GETIDX, SS_SETIDX, SS_HASH,
-	SS_FREE, SS_ADD, SS_SUB, SS_MUL, SS_DIV, SS_MOD, SS_POW,
+	SS_INIT, SS_TOSTRING, SS_GETIDX, SS_SETIDX, SS_GC, 
+	SS_DEFER, SS_ADD, SS_SUB, SS_MUL, SS_DIV, SS_MOD, SS_POW,
 	SS_NOT, SS_UMIN, SS_NE, SS_EQ, SS_LT, SS_LE, SS_GT, SS_GE,
 	/* Operator strings */
 	SS_OPADD, SS_OPSUB, SS_OPMUL, SS_OPDIV, SS_OPMOD, SS_OPEXP,

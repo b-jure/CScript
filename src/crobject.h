@@ -118,9 +118,12 @@ typedef struct OString {
 
 typedef struct UValue {
 	ObjectHeader;
-	TValue closed; /* value T */
-	TValue *location; /* stack or 'closed' */
+	union {
+		TValue *location; /* stack or 'closed' */
+		ptrdiff_t offset; /* when reallocating stack */
+	} v;
 	struct UValue *nextuv; /* chain */
+	TValue closed; /* value T */
 } UValue;
 
 
@@ -366,8 +369,16 @@ typedef struct InstanceMethod {
 /* --------------------------------------------------------------------------- */
 
 
-/* Array holding return count and arity for each overload-able method. */
-// extern const struct Tuple ominfo[];
+/* get vtable method info */
+#define vtmi(mt)	(&vtmethodinfo[(mt)])
+
+typedef struct Tuple {
+	int arity;
+	int nreturns;
+} Tuple;
+
+/* array of tuples for vtable method */
+extern const Tuple vtmethodinfo[CR_MNUM];
 
 
 #define cr_ot_newstringlit(vm, lit)	OString_new((vm), (lit), SLL(lit))
@@ -388,9 +399,7 @@ CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn, int nupvalues);
 CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues);
 Function *cr_ot_newfunction(VM *vm);
 cr_ubyte cr_ot_vtcall(VM *vm, TValue instance, int tag);
-cr_ubyte cr_ot_rawindex(VM *vm, TValue instance, cr_ubyte get);
-void otypeprint(OType type);
-OString *cr_ot_tostr(VM *vm, GCObject *o, cr_ubyte raw);
+void cr_ot_free(VM *vm, GCObject *o);
 void cr_ot_tryop(VM *vm, TValue a, TValue b, int op, TValue *res);
 void oprint(VM *vm, TValue value, cr_ubyte raw, FILE *stream);
 void oeq(VM *vm, TValue l, TValue r);
@@ -399,6 +408,6 @@ void olt(VM *vm, TValue l, TValue r);
 void ogt(VM *vm, TValue l, TValue r);
 void ole(VM *vm, TValue l, TValue r);
 void oge(VM *vm, TValue l, TValue r);
-void cr_ot_free(VM *vm, GCObject *o);
+cr_ubyte cr_ot_rawindex(VM *vm, TValue instance, cr_ubyte get);
 
 #endif

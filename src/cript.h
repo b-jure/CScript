@@ -227,22 +227,23 @@ CR_API int cr_getuservalue(VM *vm, int idx, int n);
 #define CR_MGETIDX		3
 #define CR_MSETIDX		4
 #define CR_MGC			5
-#define CR_MADD			6
-#define CR_MSUB			7
-#define CR_MMUL			8
-#define CR_MDIV			9
-#define CR_MMOD			10
-#define CR_MPOW			11
-#define CR_MNOT			12
-#define CR_MUMIN		13
-#define CR_MNE			14
-#define CR_MEQ			15
-#define CR_MLT			16
-#define CR_MLE			17
-#define CR_MGT			18
-#define CR_MGE			19
+#define CR_MDEFER		6
+#define CR_MADD			7
+#define CR_MSUB			8
+#define CR_MMUL			9
+#define CR_MDIV			10
+#define CR_MMOD			11
+#define CR_MPOW			12
+#define CR_MNOT			13
+#define CR_MUMIN		14
+#define CR_MNE			15
+#define CR_MEQ			16
+#define CR_MLT			17
+#define CR_MLE			18
+#define CR_MGT			19
+#define CR_MGE			20
 
-#define CR_MNUM			20
+#define CR_MNUM			21
 
 
 /* type for class interface */
@@ -332,13 +333,13 @@ CR_API int cr_load(VM *vm, cr_reader reader, void *userdata, const char *source)
  */
 
 /* GC options */
-#define CR_GCSTOP		1 /* stop GC */
-#define CR_GCRESTART		2 /* restart GC (start if stopped) */
-#define CR_GCCOLLECT		3 /* perform full GC cycle */
-#define CR_GCSTEP		4 /* perform single gc step */
-#define CR_GCCOUNT		5 /* get number of bytes allocated */
-#define CR_GCISRUNNING		6 /* check whether GC is stopped */
-#define CR_GCNEXTGC		7 /* set bytes amount when the next GC will trigger */
+#define CR_GCSTOP		(1<<0) /* stop GC */
+#define CR_GCRESTART		(1<<1) /* restart GC (start if stopped) */
+#define CR_GCCOLLECT		(1<<2) /* perform full GC cycle */
+#define CR_GCSTEP		(1<<3) /* perform single gc step */
+#define CR_GCCOUNT		(1<<4) /* get number of bytes allocated */
+#define CR_GCISRUNNING		(1<<5) /* check whether GC is stopped */
+#define CR_GCNEXTGC		(1<<6) /* set bytes amount when the next GC will trigger */
 
 CR_API int cr_gc(VM *vm, int optmask, ...);
 
@@ -402,7 +403,7 @@ struct cr_debuginfo {
 	char isvararg; /* is function vararg ('...') */
 	int defline; /* line number where the function definition starts */
 	int deflastline; /* line number where the function definition ends */
-	char shortsrc[CR_MAXSRC];
+	char shortsrc[CRI_MAXSRC];
 	/* private */
 	struct CallFrame *frame; /* active function frame */
 };

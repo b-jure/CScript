@@ -27,15 +27,7 @@
 
 
 
-/* 
- * Wrapper around 'jmp_buf' with some additional
- * information, such as status code of the function that
- * was called and a previous cr_longjmp in order to handle
- * nested protected calls.
- * Additionally 'status' gets updated from the callee in
- * case of runtime error.
- * Check 'protectedcall' in 'crvm.c' for a reference. 
- */
+/* jmpbuf for jumping out of protected function */
 typedef struct cr_longjmp {
 	struct cr_longjmp *prev;
 	jmp_buf buf;
@@ -44,9 +36,20 @@ typedef struct cr_longjmp {
 
 
 
-/* type for functions with error recovery (protected) */
+/* type for functions with error recovery */
 typedef void (*ProtectedFn)(VM *vm, void *userdata);
 
+
+
+/* call information */
+typedef struct CallFrame {
+	SIndex callee; /* function */
+	SIndex top; /* stack top for this call */
+	const Instruction *pc; /* only for non-C callee */
+	int nvarargs; /* only for non-C callee */
+	int nreturns; /* number of return values */
+	cr_ubyte cfstatus; /* call status */
+} CallFrame;
 
 
 /* get Cript 'Function' */
@@ -63,18 +66,6 @@ typedef void (*ProtectedFn)(VM *vm, void *userdata);
 
 
 
-/* call information */
-typedef struct CallFrame {
-	SIndex callee; /* function */
-	SIndex top; /* stack top for this call */
-	const Instruction *pc; /* only for non-C callee */
-	int nvarargs; /* only for non-C callee */
-	int nreturns; /* number of return values */
-	cr_ubyte cfstatus; /* call status */
-} CallFrame;
-
-
-
 typedef struct {
 	cr_alloc reallocate; /* allocator */
 	void *userdata; /* userdata for allocator */
@@ -84,10 +75,17 @@ typedef struct {
 
 
 
+
+Vec(GCObjectVec, GCObject*);
+Vec(SIndexVec, SIndex);
+Vec(OStringVec, OString*);
+Vec(CallFrameVec, CallFrame);
+
+
+
 /*
  * Extra stack space used mostly when calling vtable
  * methods. Useful in avoiding stack checks (branching).
- * Only VM stack uses this and nothing else.
  */
 #define EXTRA_STACK	5
 
@@ -96,25 +94,44 @@ typedef struct {
 #define STACKSIZE_INIT	(CR_MINSTACK*4)
 
 
+/* stack size */
+#define stacksize(vm)		cast_int((vm)->stackend.p - (vm)->stack.p)
 
-Vec(GCObjectVec, GCObject*);
-Vec(SIndexVec, SIndex);
-Vec(OStringVec, OString*);
-Vec(CallFrameVec, CallFrame);
+/* current stack top offset */
+#define topoffset(vm)		cast_int((vm)->stacktop.p - (vm)->stack.p)
+
+
+/* save/restore stack position */
+#define savestack(vm,ptr)	(cast(char*, (ptr)) - cast(char*, (vm)->stack.p))
+#define restorestack(vm,o)	cast(SPtr, cast(char*, (vm)->stack.p) + (o))
+
+
+/* grow stack if needed */
+#define checkstack(vm,n) \
+	if (cr_unlikely((vm)->stackend.p - (vm)->stacktop.p <= (n))) \
+		cr_vm_growstack(vm, (n), 1);
+
+
+/* get static string */
+#define fstatic(vm,i)		(vm)->faststatic[(i)]
+
+
+#define vminitialized(vm) (ttisnil(&(vm)->nil))
+
 
 
 /* 
  * Virtual Machine (thread state).
  * Note: As of version 1.0.0 there is no separation
  * of global and thread state.
- * This means that Cript does not have internal support
- * for asynchronous or concurrent code execution.
+ * This means that Cript does not yet have internal
+ * support for asynchronous or concurrent code execution.
  */
 struct VM {
 	int seed; /* initial seed for hashing */
 	int status; /* status code */
 	SIndex stacktop; /* first free slot in the stack */
-	SIndex stackend; /* slot beyond the last valid slot */
+	SIndex stackend; /* end of stack */
 	SIndex stack; /* stack base */
 	CallFrame *aframe; /* currently active frame in 'frames' */
 	CallFrameVec frames; /* nested function call frames */
@@ -122,73 +139,25 @@ struct VM {
 	SIndexVec retstart; /* start of return values */
 	HTable gids; /* global variable names */
 	TValueVec gvars; /* global variable values */
-	TValueVec temp; /* temporary storage for return values TODO*/
 	cr_longjmp *errjmp; /* error recovery */
 	HTable weakrefs; /* interned strings (unmarked) */
 	OStringVec interned; /* user interned strings (marked) */
 	Hooks hooks; /* hooks to external code */
 	GC gc; /* garbage collector params */
 	UValue *openuv; /* unclosed closure values */
+	SIndex deferlist; /* TODO: list of variables to '__defer__' */
 	OString *faststatic[CR_SSNUM]; /* preallocated static strings */
 	OString *memerror; /* preallocated string object for memory errors */
 	TValue nil; /* nil value (avoid copying and used as init flag) */
 };
 
 
-/* boolean static string value */
-#define ssvbool(vm, b) \
-	OBJ_VAL((b) ? (vm)->faststatic[SS_TRUE] : (vm)->faststatic[SS_FALSE])
-
-
-/* get static string value with tag 't' */
-#ifndef ssv
-#define ssv(vm, t) OBJ_VAL((vm)->faststatic[(t)])
-#endif
-
-
-/* 'init' member is set to nil 'Value' if VM is fully initialized */
-#define vminitialized(vm) (ttisnil(&(vm)->nil))
-
-
-/* Fetch the last call frame (current) */
-#define last_frame(vm) ((vm)->frames[(vm)->fc - 1])
-
-
-/* ensure stack space for 'n' values */
-#define ensurestack(vm, n) ValueVec_ensure(&(vm)->stack, n)
-
-/* ensure 'EXTRASTACK' stack space */
-#define ensureminstack(vm) (ensurestack(vm, EXTRASTACK))
-
-
-/* TODO: rewrite */
-#define restore_stack(vm, n) cast(Value *, (cast_charp((vm)->stack) + (n)))
-#define save_stack(vm, ptr)  (cast_charp(ptr) - cast_charp((vm)->stack))
-#define speek(top)	     ((vm)->sp - ((top) + 1))
-
-
-/* decrement stack pointer */
-#define decsp(vm)	((vm)->sp--)
-#define pop(vm)		(*--(vm)->sp)
-#define popn(vm, n) 	((vm)->sp -= n)
-
-/* increment stack pointer */
-#define incsp(vm)	((vm)->sp++)
-
-/* push value/s on the stack */
-
-void push(VM *vm, Value val);
-#define pushn(vm, n, val)  { int cnt = (n); while (cnt-- > 0) push(vm, val); }
-
-
-
-/* concatenate on stack */
-#define vmconcatstk(vm) \
-	{ *stkpeek(1) = OBJ_VAL(vmconcat(vm, *stkpeek(1), *stkpeek(0))); decsp(vm); }
-
-
-
 void cr_vm_init(VM *vm);
+void cr_vm_inctop(VM *vm);
+int cr_vm_growstack(VM *vm, int n, int raiseerr);
+int cr_vm_reallocstack(VM *vm, int size, int raiseerr);
+void cr_vm_ncall(VM *vm, SPtr callee, int nreturns);
+
 void resetvm(VM *vm, int status);
 void cr_vm_concat(VM *vm, int n);
 

@@ -31,19 +31,12 @@
 /* allocate new gc object */
 #define newgco(vm,e,tt,t)	((t*)allocobject(vm, (e) + sizeof(t), tt))
 
-
-
-// @TODO: Update 'calloverload()'
-struct Tuple {
-	int arity;
-	int nreturns;
-} ominfo[] = {
-	/* {arity, nreturns} */
+const struct Tuple vtmethodinfo[CR_MNUM] = {
 	{ 0, 1 }, /* __init__		{ args: self             - return: instance }  */
 	{ 0, 1 }, /* __tostring__ 	{ args: self             - return: string   }  */
 	{ 1, 1 }, /* __getidx__   	{ args: self, idx        - return: value    }  */
 	{ 2, 0 }, /* __setidx__   	{ args: self, idx, value - return: none     }  */
-	{ 0, 1 }, /* __hash__     	{ args: self             - return: number   }  */
+	{ 1, 0 }, /* __gc__		{ args: self		 - return: none     }  */
 	{ 0, 0 }, /* __free__     	{ args: self             - return: none     }  */
 	{ 2, 1 }, /* __add__		{ args: self, lhs, rhs   - return: value    }  */
 	{ 2, 1 }, /* __sub__  		{ args: self, lhs, rhs   - return: value    }  */
@@ -66,7 +59,7 @@ void cr_ot_sourceid(char *restrict dest, const char *src, size_t len)
 {
 	size_t bufflen;
 
-	bufflen = CR_MAXSRC - 1;
+	bufflen = CRI_MAXSRC - 1;
 	if (bufflen < len) {
 		memcpy(dest, src, bufflen - SLL("..."));
 		memcpy(dest, "...", SLL("..."));
@@ -198,7 +191,7 @@ void cr_ot_numtostring(VM *vm, TValue *v)
  * gets called by 'cr_dg_getinfo'; the size should be
  * at least 'CR_MAXSRC' + 'MAXNUM2STR' + size for message.
  */
-#define BUFFVSFSIZ	(CR_MAXSRC + MAXNUM2STR + 100)
+#define BUFFVSFSIZ	(CRI_MAXSRC + MAXNUM2STR + 100)
 
 /* buffer for 'cr_ot_newvstringf' */
 typedef struct BuffVSF {
@@ -360,7 +353,7 @@ Function *cr_ot_newfunction(VM *vm)
 	Function *fn;
 
 	fn = newgco(vm, 0, CR_VFUNCTION, Function);
-	cr_mm_createvec(vm, &fn->constants, CR_MAXCODE, "constants");
+	cr_mm_createvec(vm, &fn->constants, CRI_MAXCODE, "constants");
 	cr_mm_createvec(vm, &fn->lineinfo, INT_MAX, "lines");
 	cr_mm_createvec(vm, &fn->code, INT_MAX, "code");
 	return fn;
@@ -386,7 +379,7 @@ UValue *cr_ot_newuvalue(VM *vm, TValue *vp)
 
 	uv = newgco(vm, 0, CR_VUVALUE, UValue);
 	uv->closed = newemptyvalue();
-	uv->location = vp;
+	uv->v.location = vp;
 	uv->nextuv = NULL;
 	return uv;
 }
@@ -466,270 +459,3 @@ void cr_ot_free(VM *vm, GCObject *o)
 }
 
 
-cr_sinline GCObject *vtablemethod(VM *vm, TValue *v, int m)
-{
-	cr_assert(m >= 0 && m < CR_MNUM);
-	return (ttisins(v) ? insvalue(v)->oclass->vtable[m] : NULL);
-}
-
-
-
-
-/* =============== raw access =============== */
-
-cr_sinline cr_ubyte rawgetproperty(VM *vm, OInstance *instance, Value key, Value *out,
-		cr_ubyte what)
-{
-	HTable *table = rawgettable(vm, instance, what);
-	return rawget(vm, table, key, out);
-}
-
-cr_sinline cr_ubyte rawsetproperty(VM *vm, OInstance *instance, Value key, Value value,
-		cr_ubyte what)
-{
-	HTable *table = rawgettable(vm, instance, what);
-	return rawset(vm, table, key, value);
-}
-
-
-/* 
- * Perform raw index access on instance object.
- * 'set' determines if we are getting or setting the indexed value.
- * Indexing with 'nil' value is runtime error.
- */
-cr_ubyte rawindex(VM *vm, Value value, cr_ubyte get)
-{
-	OInstance *instance;
-	Value idx, out, rhs;
-	Value *idxstk;
-	cr_ubyte res;
-
-	res = 0;
-	instance = asinstance(value);
-	if (!get) { /* set ? */
-		rhs = *stkpeek(0);
-		idx = *stkpeek(1);
-		if (cr_unlikely(IS_NIL(idx)))
-			nilidxerror(vm);
-		rawsetproperty(vm, instance, idx, rhs, 0);
-		popn(vm, 2); // pop [index] and [rhs]
-		res = 1;
-	} else { /* otherwise get */
-		idxstk = stkpeek(0);
-		if (cr_unlikely(IS_NIL(idx)))
-			nilidxerror(vm);
-		if (rawgetproperty(vm, instance, idx, &out, 0) ||
-				rawgetproperty(vm, instance, idx, &out, 1)) {
-			*idxstk = out; // replace [index] with property
-			res = 1;
-		}
-	}
-	return res;
-}
-
-/* ---------------------------------------------------- */
-
-
-
-
-/* =============== call overload-able methods =============== */
-
-cr_ubyte calloverload(VM *vm, Value instance, cr_om tag)
-{
-	GCObject *const fn;
-	Value *const retstart;
-	int retcnt, arity, i;
-
-	if (!(fn = getomethod(vm, instance, tag)))
-		return 0;
-	retstart = vm->sp;
-	retcnt = ominfo[tag].retcnt;
-	arity = ominfo[tag].arity;
-	push(vm, instance); // push 'self'
-	for (i = 0; i < arity; i++) // push args
-		push(vm, *stkpeek(arity - 1));
-	ncall(vm, retstart, OBJ_VAL(fn), retcnt);
-	return 1;
-}
-
-/* ---------------------------------------------------- */
-
-
-
-
-/* =============== operator overloading =============== */
-
-/* Tries to call class overloaded unary operator method 'op'.
- * Returns 1 if it was called (class overloaded that method),
- * 0 otherwise. */
-cr_sinline int callunop(VM *vm, Value lhs, cr_om op, Value *res)
-{
-	GCObject *om = getomethod(vm, lhs, op);
-	if (om == NULL)
-		return 0;
-	Value *retstart = vm->sp;
-	push(vm, lhs); // 'self'
-	push(vm, lhs);
-	ncall(vm, retstart, OBJ_VAL(om), ominfo[op].retcnt);
-	*res = pop(vm); // assign and pop the method result
-	return 1;
-}
-
-
-/* Tries to call class overloaded binary operator method 'op'.
- * Returns 1 if it was called (class overloaded that method),
- * 0 otherwise. */
-cr_sinline int callbinop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
-{
-	Value instance;
-	GCObject *om = getomethod(vm, lhs, op);
-	if (om == NULL) {
-		om = getomethod(vm, rhs, op);
-		if (om == NULL)
-			return 0;
-		instance = rhs;
-	} else
-		instance = lhs;
-	Value *retstart = vm->sp;
-	push(vm, instance); // 'self'
-	push(vm, lhs);
-	push(vm, rhs);
-	ncall(vm, retstart, OBJ_VAL(om), ominfo[op].retcnt);
-	*res = pop(vm); // assign and pop the method result
-	return 1;
-}
-
-
-/* Tries calling binary or unary overloaded operator method, errors on failure. */
-void otryop(VM *vm, Value lhs, Value rhs, cr_om op, Value *res)
-{
-	if (!omisunop(op)) {
-		if (cr_unlikely(!callbinop(vm, lhs, rhs, op, res)))
-			binoperror(vm, lhs, rhs, op - OM_ADD);
-	} else if (cr_unlikely(!callunop(vm, lhs, op, res)))
-		unoperror(vm, lhs, op - OM_ADD);
-}
-
-/* ---------------------------------------------------- */
-
-
-
-
-/* =============== ordering =============== */
-
-cr_sinline int omcallorder(VM *vm, Value lhs, Value rhs, cr_om ordop)
-{
-	cr_assert(vm, ordop >= OM_NE && ordop <= OM_GE, "invalid cr_om for order");
-	if (callbinop(vm, lhs, rhs, ordop, stkpeek(1))) { // try overload
-		pop(vm); // remove second operand
-		return 1;
-	}
-	// Instances (and cript objects) can always have equality comparison.
-	// If their pointers are the same then the underlying objects are equal;
-	// otherwise they are not equal.
-	if (cr_unlikely(ordop != OM_EQ && ordop != OM_NE))
-		ordererror(vm, lhs, rhs);
-	return 0;
-}
-
-/* != */
-void one(VM *vm, Value lhs, Value rhs)
-{
-	if (isstring(lhs) && isstring(rhs))
-		push(vm, BOOL_VAL(lhs != rhs));
-	else if (!omcallorder(vm, lhs, rhs, OM_NE))
-		push(vm, BOOL_VAL(lhs != rhs));
-}
-
-/* == */
-void oeq(VM *vm, Value lhs, Value rhs)
-{
-	if (isstring(lhs) && isstring(rhs))
-		push(vm, BOOL_VAL(lhs == rhs));
-	else if (!omcallorder(vm, lhs, rhs, OM_EQ))
-		push(vm, BOOL_VAL(lhs == rhs));
-}
-
-/* < */
-void olt(VM *vm, Value lhs, Value rhs)
-{
-	if (isstring(lhs) && isstring(rhs))
-		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) < 0));
-	else
-		omcallorder(vm, lhs, rhs, OM_LT);
-}
-
-/* > */
-void ogt(VM *vm, Value lhs, Value rhs)
-{
-	if (isstring(lhs) && isstring(rhs))
-		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) > 0));
-	else
-		omcallorder(vm, lhs, rhs, OM_GT);
-}
-
-/* <= */
-void ole(VM *vm, Value lhs, Value rhs)
-{
-	if (isstring(lhs) && isstring(rhs))
-		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) <= 0));
-	else
-		omcallorder(vm, lhs, rhs, OM_LE);
-}
-
-/* >= */
-void oge(VM *vm, Value lhs, Value rhs)
-{
-	if (isstring(lhs) && isstring(rhs))
-		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) >= 0));
-	else
-		omcallorder(vm, lhs, rhs, OM_GE);
-}
-
-/* ---------------------------------------------------- */
-
-
-
-
-/* 
- * Convert object to string.
- * If 'raw' is not set then '__tostring__' can be called.
- */
-OString *otostr(VM *vm, GCObject *o, cr_ubyte raw)
-{
-	Instance *ins;
-	Value debug, key, result;
-
-	switch (otype(o)) {
-		case OBJ_STRING:
-			return cast(OString *, o);
-		case OBJ_FUNCTION:
-			return cast(OFunction *, o)->p.name;
-		case OBJ_CLOSURE:
-			return cast(OClosure *, o)->fn->p.name;
-		case OBJ_CFUNCTION:
-			return cast(ONative *, o)->p->name;
-		case OBJ_UPVAL:
-			return vtostr(vm, *cast(OUpvalue *, o)->location, raw);
-		case OBJ_CLASS:
-			return cast(OClass *, o)->name;
-		case OBJ_INSTANCE:
-			if (!raw && calloverload(vm, OBJ_VAL(o), SKOM_TOSTRING)) {
-				result = *stkpeek(0);
-				if (!isstring(result))
-					omreterror(vm, "string", OM_TOSTRING);
-				*o = pop(vm);
-				return asstring(result);
-			} else {
-				ins = asinstance(oval);
-				key = OBJ_VAL(vm->faststatic[SS_DBG]);
-				if (rawget(vm, &ins->fields, key, &debug) && isstring(debug)) {
-					*o = debug;
-					return asstring(debug); // have debug name
-				}
-				return asstring(*o = OBJ_VAL(ins->oclass->name));
-			}
-		case OBJ_BOUND_METHOD:
-			return cast(OBoundMethod *, o)->method->fn->p.name;
-	}
-}

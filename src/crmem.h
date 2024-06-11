@@ -37,7 +37,11 @@ void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep, int elemsize,
 int cr_mm_reallocstack(VM *vm, int n);
 int cr_mm_growstack(VM *vm, int n);
 
+
 #define cr_mm_newarray(vm,s,t)		cr_mm_malloc(vm, (s) * sizeof(t))
+
+#define cr_mm_reallocarray(vm,p,os,ns) \
+	cr_mm_realloc(vm, (p), (os)*sizeof(*p), (ns)*sizeof(ns))
 
 #define cr_mm_freearray(vm,p,n)	\
 	cr_mm_free((vm), (p), cast_umem(n)*sizeof(*(p)))
