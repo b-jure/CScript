@@ -91,7 +91,7 @@ typedef union Value {
 
 
 /* copy values from 'v2' to 'v1' ('TValue') */
-#define settv(vm,v1,v2) \
+#define setv(vm,v1,v2) \
 	{ TValue *v1_ = (v1); const TValue *v2_ = (v2); \
 	  setvtt(v1_, vtt(v2_)); vmod(v1_) = vmod(v2_); \
 	  v1_->val = v2_->val; }
@@ -144,6 +144,9 @@ typedef union {
 /* stack value to value */
 #define s2v(s)		(&(s)->val_)
 
+/* set stack value 'sv' to value 'v' */
+#define setsv(vm,sv,v)		setv(vm, s2v(sv), v)
+
 
 
 /* pointer to the value on the stack */
@@ -175,14 +178,19 @@ typedef struct {
 
 #define bvalue(v)	((v)->val.boolean)
 
+/* set boolean false value */
+#define setbfvalue(v) \
+	{ TValue *v_=(v); bvalue(v_)=0; setvtt(v_, CR_VFALSE); }
+
+/* set boolean true value */
+#define setbtvalue(v) \
+	{ TValue *v_=(v); bvalue(v_)=1; setvtt(v_, CR_VTRUE); }
+
 #define ttisboolean(v)		isvtt(v, CR_TBOOL)
 #define ttistrue(v)		isvtt(v, CR_VTRUE)
 #define ttisfalse(v)		isvtt(v, CR_VFALSE)
 
-#define setbfvalue(v)	setvtt(v, CR_VFALSE)
-#define setbtvalue(v)	setvtt(v, CR_VTRUE)
-
-#define ttisfalsey(v)	(ttisfalse(v) || ttisnil(v))
+#define ttisfalsey(v)		(ttisfalse(v) || ttisnil(v))
 
 #define newbvalue(v) \
 	((TValue){.val = {.boolean = (v)}, .tt = makevariant(CR_TBOOL, (v)), .mod=0})
@@ -198,9 +206,17 @@ typedef struct {
 #define CR_VNUMINT	makevariant(CR_TNUMBER, 0)
 #define CR_VNUMFLT	makevariant(CR_TNUMBER, 1)
 
-#define ivalue(v)	((v)->val.i)
-#define fvalue(v)	((v)->val.n)
+#define ivalue(v)	(rawivalue((v)->val))
+#define fvalue(v)	(rawfvalue((v)->val))
 #define nvalue(v)	(isvtt(CR_VNUMINT) ? cast_num(ivalue(v)) : fvalue(v))
+
+/* set integer value */
+#define setivalue(v,i) \
+	{ TValue *v_=(v); ivalue(v_)=(i); setvtt(v_, CR_VNUMINT); }
+
+/* set float value */
+#define setfvalue(v,f) \
+	{ TValue *v_=(v); fvalue(v_)=(f); setvtt(v_, CR_VNUMFLT); }
 
 #define ttisflt(v)	isvtt((v), CR_VNUMFLT)
 #define ttisint(v)	isvtt((v), CR_VNUMINT)
@@ -221,6 +237,10 @@ typedef struct {
 
 #define pvalue(v)	((v)->val.lud)
 
+/* set pointer value */
+#define setpvalue(v,p) \
+	{ TValue *v_=(v); pvalue(v_)=(p); setvtt(v_, CR_VLUDATA); }
+
 #define ttislud(v)	isvtt(v, CR_VLUDATA)
 
 #define newpvalue(v)	((TValue){.val = {.lud = (v)}, .tt = CR_VLUDATA, .mod=0})
@@ -236,6 +256,10 @@ typedef struct {
 #define CR_VCFUNCTION	makevariant(CR_TFUNCTION, 0)
 
 #define cfvalue(v)	((v)->val.cfn)
+
+/* set C function value */
+#define setcfvalue(v,cf) \
+	{ TValue *v_=(v); cfvalue(v_)=(cf); setvtt(v_, CR_VCFUNCTION); }
 
 #define ttiscfn(v)	isvtt(v, CR_VCFUNCTION)
 
@@ -255,6 +279,10 @@ typedef struct {
  */
 #define ovalue(v)	((v)->val.o)
 
+/* set object value */
+#define setovalue(v,o) \
+	{ TValue *v_=(v); ovalue(v_)=(o); setvtt(v_, CR_TOBJECT); }
+
 #define ttiso(v)	isvtt(v, CR_TOBJECT)
 
 #define newovalue(v)	((TValue){.val = {.o = (GCObject*)(v)}, .tt = CR_TOBJECT, .mod = 0})
@@ -270,6 +298,14 @@ typedef struct {
 #define CR_VNIL		makevariant(CR_TNIL, 0)
 #define CR_VEMPTY	makevariant(CR_TNIL, 1)
 #define CR_VTOMB	makevariant(CR_TNIL, 2)
+
+/* set nil value */
+#define setnilvalue(v) \
+	{ TValue *v_=(v); setvtt(v_, CR_VNIL); }
+
+/* set nil value */
+#define setemptyvalue(v) \
+	{ TValue *v_=(v); setvtt(v_, CR_VEMPTY); }
 
 #define ttisnil(v)	isvtt((v), CR_VNIL)
 #define ttisempty(v)	isvtt((v), CR_VEMPTY)

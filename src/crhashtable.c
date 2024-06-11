@@ -80,36 +80,36 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 	OString *str;
 
 	switch (vtt(k)) {
-	case CR_VTRUE:
-		return cast_node(hashslot(mem, cr_hh_boolean(1), size));
-	case CR_VFALSE:
-		return cast_node(hashslot(mem, cr_hh_boolean(0), size));
-	case CR_VNUMINT:
-		return cast_node(hashslot(mem, cr_hh_integer(ivalue(k)), size));
-	case CR_VNUMFLT:
-		return cast_node(hashslot(mem, cr_hh_number(fvalue(k)), size));
-	case CR_VLUDATA:
-		p = pvalue(k);
-		return cast_node(hashslot(mem, cr_hh_pointer(p), size));
-	case CR_VCFUNCTION:
-		f = cfvalue(k);
-		return cast_node(hashslot(mem, cr_hh_pointer(p), size));
-	case CR_VSTRING:
-		str = strvalue(k);
-		/* v1.0.0: all strings are interned so this
-		 * check doesn't make any sense, meaning all
-		 * strings require the has the moment they
-		 * are created, so 'hashash' is always non zero. */
+		case CR_VTRUE:
+			return cast_node(hashslot(mem, cr_hh_boolean(1), size));
+		case CR_VFALSE:
+			return cast_node(hashslot(mem, cr_hh_boolean(0), size));
+		case CR_VNUMINT:
+			return cast_node(hashslot(mem, cr_hh_integer(ivalue(k)), size));
+		case CR_VNUMFLT:
+			return cast_node(hashslot(mem, cr_hh_number(fvalue(k)), size));
+		case CR_VLUDATA:
+			p = pvalue(k);
+			return cast_node(hashslot(mem, cr_hh_pointer(p), size));
+		case CR_VCFUNCTION:
+			f = cfvalue(k);
+			return cast_node(hashslot(mem, cr_hh_pointer(p), size));
+		case CR_VSTRING:
+			str = strvalue(k);
+			/* v1.0.0: all strings are interned so this
+			 * check doesn't make any sense, meaning all
+			 * strings require the has the moment they
+			 * are created, so 'hashash' is always non zero. */
 #if CR_VERSION_NUMBER != 100
-		if (str->hashash == 0) {
-			str->hash = cr_hh_string(str->bytes, str->len, str->hash);
-			str->hashash = 1;
-		}
+			if (str->hashash == 0) {
+				str->hash = cr_hh_string(str->bytes, str->len, str->hash);
+				str->hashash = 1;
+			}
 #endif
-		return cast_node(hashslot(mem, str->hash, size));
-	default:
-		cr_assert(!ttisnil(k) && ttiso(k));
-		return cast_node(hashslot(mem, cr_hh_pointer(ovalue(k)), size));
+			return cast_node(hashslot(mem, str->hash, size));
+		default:
+			cr_assert(!ttisnil(k) && ttiso(k));
+			return cast_node(hashslot(mem, cr_hh_pointer(ovalue(k)), size));
 	}
 }
 
@@ -121,20 +121,20 @@ static int eqkey(const TValue *k, const Node *n)
 	if (vtt(k) != keytt(n))
 		return 0;
 	switch (vtt(k)) {
-	case CR_VTRUE: case CR_VFALSE:
-		return 1;
-	case CR_VNUMINT:
-		return (ivalue(k) == keyivalue(n));
-	case CR_VNUMFLT:
-		return cri_numeq(fvalue(k), keyfvalue(n));
-	case CR_VLUDATA:
-		return (pvalue(k) == keypvalue(n));
-	case CR_VCFUNCTION:
-		return (cfvalue(k) == keycfvalue(n));
-	case CR_VSTRING:
-		return cr_ot_eqstring(strvalue(k), keystrvalue(n));
-	default:
-		return (ovalue(k) == keyovalue(n));
+		case CR_VTRUE: case CR_VFALSE:
+			return 1;
+		case CR_VNUMINT:
+			return (ivalue(k) == keyivalue(n));
+		case CR_VNUMFLT:
+			return cri_numeq(fvalue(k), keyfvalue(n));
+		case CR_VLUDATA:
+			return (pvalue(k) == keypvalue(n));
+		case CR_VCFUNCTION:
+			return (cfvalue(k) == keycfvalue(n));
+		case CR_VSTRING:
+			return cr_ot_eqstring(strvalue(k), keystrvalue(n));
+		default:
+			return (ovalue(k) == keyovalue(n));
 	}
 	return 0;
 }
@@ -197,7 +197,7 @@ int cr_ht_next(VM *vm, HTable *tab, SIndex *k)
 		if (!keyisempty(tslot(tab, i))) {
 			slot = tslot(tab, i);
 			getnodekey(vm, v, slot);
-			settv(vm, v+1, nval(slot));
+			setv(vm, v+1, nval(slot));
 			return 1;
 		}
 	}
@@ -319,9 +319,10 @@ static void expandmem(VM *vm, HTable *tab)
 int cr_ht_set(VM *vm, HTable *tab, const TValue *key, const TValue *val)
 {
 	Node *slot;
+	int newk;
 
 	slot = getslot(tab->mem, tsize(tab), key);
-	if (keyisempty(slot)) { /* new key */
+	if ((newk = keyisempty(slot))) { /* new key */
 		if (!istomb(slot)) tab->left--;
 		if (cr_unlikely(tab->left <= 0)) {
 			expandmem(vm, tab);
@@ -332,7 +333,7 @@ int cr_ht_set(VM *vm, HTable *tab, const TValue *key, const TValue *val)
 	}
 	setnodekey(vm, slot, key);
 	*nval(slot) = *val;
-	return 0;
+	return newk;
 }
 
 
@@ -389,7 +390,7 @@ int cr_ht_get(VM *vm, HTable *tab, TValue *key, TValue *o)
 	slot = getslot(tab->mem, tsize(tab), key);
 	if (keyisempty(slot))
 		return 0;
-	settv(vm, o, nval(slot));
+	setv(vm, o, nval(slot));
 	return 1;
 }
 

@@ -24,13 +24,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <locale.h>
 
 
 
-
-/* allocate 'GCObject' */
-#define allocgco(vm,s,tt,t) \
-	((t *)(allocobject((vm), (s) + sizeof(t), (tt))))
+/* allocate new gc object */
+#define newgco(vm,e,tt,t)	((t*)allocobject(vm, (e) + sizeof(t), tt))
 
 
 
@@ -77,10 +76,6 @@ void cr_ot_sourceid(char *restrict dest, const char *src, size_t len)
 	dest[bufflen] = '\0';
 }
 
-const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...)
-{
-}
-
 
 /*
  * Convert string into 'cr_vtable' index.
@@ -118,11 +113,11 @@ cr_sinline GCObject *allocobject(VM *vm, size_t size, cr_ubyte ott)
 /* auxiliary function for 'OString' constructors */
 cr_sinline OString *allocstring(VM *vm, uint32_t len)
 {
-	OString *string;
+	OString *s;
 
-	string = allocgco(vm, len + 1, CR_VSTRING, OString);
-	string->len = len;
-	return string;
+	s = newgco(vm, len + 1, CR_VSTRING, OString);
+	s->len = len;
+	return s;
 }
 
 /*
@@ -155,6 +150,7 @@ OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
 	return string;
 }
 
+
 /*
  * Maximum conversion length of a number to a string.
  * 'long double' (not supported currently) can be 33 digits
@@ -163,6 +159,34 @@ OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
  * All other types require less space.
  */
 #define MAXNUM2STR	44
+
+static int num2buff(const TValue *nv, char *buff)
+{
+	int len;
+
+	cr_assert(ttisnum(nv));
+	if (ttisint(nv)) {
+		len = cr_integer2str(buff, MAXNUM2STR, ivalue(nv));
+	} else {
+		len = cr_number2str(buff, MAXNUM2STR, fvalue(nv));
+		/* if it looks like integer add '.0' */
+		if (strspn(buff, "-0123456789") == len) {
+			buff[len++] = *localeconv()->decimal_point;
+			buff[len++] = '0';
+		}
+	}
+	return len;
+}
+
+
+void cr_ot_numtostring(VM *vm, TValue *v)
+{
+	char buff[MAXNUM2STR];
+	int len;
+
+	len = num2buff(v, buff);
+	setv2s(vm, v, cr_ot_newstring(vm, buff, len));
+}
 
 
 /*
@@ -187,393 +211,265 @@ typedef struct BuffVSF {
 
 /* 
  * Pushes 'str' to the stack and concatenates it with
- * the previous pushed string (depending on buffer 'pushed').
+ * other string on the stack if 'pushed' is set.
  */
-static void pushstring(BuffVSF *buff, const char *str, size_t len)
+static void auxpushstr(BuffVSF *buff, const char *str, size_t len)
 {
+	VM *vm;
+	OString *s;
 
+	vm = buff->vm;
+	s = cr_ot_newstring(vm, str, len);
+	setsv2s(vm, vm->stacktop.p, s); 
+	vm->stacktop.p++;
+	if (buff->pushed)
+		cr_vm_concat(vm, 2);
+	else
+		buff->pushed = 1;
 }
 
 
-/* pushes buffer 'space' on the stack. */
-static void pushbuff(BuffVSF *buff, const char *str, size_t len)
+/* pushes buffer 'space' on the stack */
+static void pushbuff(BuffVSF *buff)
 {
+	auxpushstr(buff, buff->space, buff->len);
+	buff->len = 0;
 }
 
 
-static void ensurebuff(BuffVSF *buff, const char *str, size_t len)
+/* ensure up to buffer space (up to 'BUFFVSFSIZ') */
+static char *getbuff(BuffVSF *buff, int n)
 {
-	// TODO
+	cr_assert(n <= BUFFVSFSIZ);
+	if (n > BUFFVSFSIZ - buff->len)
+		pushbuff(buff);
+	return buff->space + buff->len;
+}
+
+
+/* add string to buffer */
+static void buffaddstring(BuffVSF *buff, const char *str, size_t len)
+{
+	char *p;
+
+	if (len < BUFFVSFSIZ) {
+		p = getbuff(buff, len);
+		memcpy(p, str, len);
+		buff->len += cast_int(len);
+	} else {
+		pushbuff(buff);
+		auxpushstr(buff, str, len);
+	}
+}
+
+
+/* add number to buffer */
+static void buffaddnum(BuffVSF *buff, const TValue *nv)
+{
+	buff->len += num2buff(nv, getbuff(buff, MAXNUM2STR));
+}
+
+
+/* add pointer to buffer */
+static void buffaddptr(BuffVSF *buff, const void *p)
+{
+	const int psize = 3 * sizeof(void*) + 8;
+	buff->len += cr_pointer2str(getbuff(buff, psize), psize, p);
 }
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
 OString *cr_ot_newvstringf(VM *vm, const char *fmt, va_list argp)
 {
-	BuffVSF buff;
-	unsigned char c;
-	cr_number f;
-	cr_integer i;
 	const char *end;
-	const void *p;
-	OString *s;
+	const char *str;
+	BuffVSF buff;
+	TValue nv;
+	char c;
 
 	while ((end = strchr(fmt, '%')) != NULL) {
-		Array_char_push_multiple(&buff, fmt, end - fmt);
-
+		buffaddstring(&buff, fmt, end - fmt);
 		switch (*(end + 1)) {
-		case 'c': /* 'char' */
-			c = va_arg(argp, int);
-			Array_char_push(&buff, c);
-			break;
-		case 'n': /* 'cr_integer' */
-			integer = va_arg(argp, cr_ssize);
-			a_arr_char_push_number(buffer, n);
-			break;
-		case 'f': /* 'cr_floating' */
-			f = va_arg(argp, double);
-			a_arr_char_push_double(buffer, f);
-			break;
-		case 's': /* 'string' */
-			s = va_arg(argp, const char *);
-			a_arr_char_push_str(buffer, s, strlen(s));
-			break;
-		case 'p': /* 'ptr' */
-			p = va_arg(argp, const void *);
-			a_arr_char_push_ptr(buffer, p);
-			break;
-		case '%':
-			a_arr_char_push(buffer, '%');
-			break;
-		default:
-			c = *(end + 1);
-			ashe_panicf("invalid format specifier '%%%c'", c);
-			/* UNREACHED */
+			case 'c': /* 'char' */
+				c = cast(unsigned char, va_arg(argp, int));
+				buffaddstring(&buff, &c, sizeof(c));
+				break;
+			case 'd': /* 'int' */
+				setivalue(&nv, va_arg(argp, int));
+				buffaddnum(&buff, &nv);
+				break;
+			case 'I': /* 'cr_integer' */
+				setivalue(&nv, va_arg(argp, cr_integer));
+				buffaddnum(&buff, &nv);
+				break;
+			case 'N': /* 'cr_number' */
+				setivalue(&nv, va_arg(argp, cr_number));
+				buffaddnum(&buff, &nv);
+				break;
+			case 's': /* 'string' */
+				str = va_arg(argp, const char *);
+				if (str == NULL) str = "(null)";
+				buffaddstring(&buff, str, strlen(str));
+				break;
+			case 'p': /* 'ptr' */
+				buffaddptr(&buff, va_arg(argp, const void *));
+				break;
+			case '%':
+				buffaddstring(&buff, "%", 1);
+				break;
+			default:
+				c = cast(unsigned char, *(end + 1));
+				cr_assert(0 && "invalid format specifier '%%%c'");
 		}
-		fmt = end + 2; /* % + specifier */
+		fmt = end + 2; /* '%' + specifier */
 	}
-
-	a_arr_char_push_str(buffer, fmt, strlen(fmt));
-}
-	Array_char_init(&buff, vm);
-	for (;;) {
-		while ((c = *fmt++) != '%')
-			Array_char_push(&buff, c);
-		c = *fmt++;
-		switch (c) {
-		case '%': {
-			Array_char_push(&buff, '%');
-			break;
-		}
-		case 'd': /* cr_lint */
-		{
-			cr_lint n = va_arg(argp, cr_lint);
-			Array_char_ensure(&buff, CR_NDIGITS);
-			buff.len += snprintf((char *)&buff.data[buff.len], CR_NDIGITS, "%ld", n);
-			break;
-		}
-		case 'n': /* cr_double (as double) */
-		{
-			fmttype = "%g";
-			goto l_sknum;
-		}
-		case 'f': /* cr_double (as float) */
-		{
-			fmttype = "%f";
-			goto l_sknum;
-		}
-l_sknum: {
-	cr_double n = va_arg(argp, cr_double);
-	Array_char_ensure(&buff, CR_NDIGITS);
-	char *s = cast_charp(&buff.data[buff.len]);
-	buff.len += snprintf(s, CR_NDIGITS, fmttype, n);
-	break;
-}
-		case 's': { /* string */
-			const char *str = va_arg(argp, char *);
-			if (str == NULL)
-				str = "(null)";
-			size_t len = strlen(str);
-			Array_char_ensure(&buff, len);
-			memcpy(&buff.data[buff.len], str, len);
-			buff.len += len;
-			break;
-		}
-		case 'c': /* char */
-		{
-			int8_t c = va_arg(argp, int);
-			Array_char_push(&buff, c);
-			break;
-		}
-		case 'p': /* pointer */
-		{
-			Array_char_ensure(&buff, 11);
-			void *ptr = va_arg(argp, void *);
-			snprintf((char *)&buff.data[buff.len], 11, "%p", ptr);
-			break;
-		}
-		default: /* invalid format specifier */
-		{
-			Array_char_free(&buff, NULL);
-			ofmterror(vm, c, *last_frame(vm).callee);
-		}
-		}
-	}
-	fstr = OString_new(vm, (char *)buff.data, buff.len);
-	Array_char_free(&buff, NULL);
-	return fstr;
+	buffaddstring(&buff, fmt, strlen(fmt));
+	pushbuff(&buff);
+	return strvalue(s2v(vm->stacktop.p));
 }
 
-OString *OString_fmt(VM *vm, const char *fmt, ...)
+
+OString *cr_ot_newstringf(VM *vm, const char *fmt, ...)
 {
+	OString *s;
 	va_list argp;
+
 	va_start(argp, fmt);
-	OString *str = OString_fmt_from(vm, fmt, argp);
+	s = cr_ot_newvstringf(vm, fmt, argp);
 	va_end(argp);
-	return str;
-}
-
-cr_sinline void OString_free(VM *vm, OString *string)
-{
-	GC_FREE(vm, string, sizeof(OString) + string->len + 1);
+	return s;
 }
 
 
-OString *concatenate(VM *vm, Value l, Value r)
+CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues)
 {
-	Buffer buf;
-	OString *ls, *rs, *str;
-	cr_mem length;
+	CClosure *ccl;
+	int i;
 
-	cr_assert(vm, (isstring(l) && isstring(r)), "expect strings");
-	ls = asstring(l);
-	rs = asstring(r);
-	length = ls->len + rs->len;
-	buf_init_cap(&buf, vm, length);
-	buf_push_str(&buf, ls->bytes, ls->len);
-	buf_push_str(&buf, rs->bytes, rs->len);
-	str = OString_new(vm, buffer, length);
-	buf_free(&buf);
-	return str;
+	ccl = newgco(vm, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
+	ccl->nupvalues = nupvalues;
+	ccl->fn = fn;
+	for (i = 0; i < nupvalues; i++)
+		ccl->upvalue[i] = newnilvalue();
+	return ccl;
 }
 
 
-ONative *ONative_new(VM *vm, OString *name, cr_cfunc fn, int arity, cr_ubyte isvararg,
-		     uint32_t upvalc)
+Function *cr_ot_newfunction(VM *vm)
 {
-	ONative *native = ALLOC_NATIVE(vm, upvalc);
-	native->fn = fn;
-	FnInfo *p = &native->p;
-	p->name = (name ? name : vm->faststatic[SS_UNKNOWN]);
-	p->source = vm->faststatic[SS_CSRC];
-	p->arity = arity;
-	p->isvararg = isvararg;
-	p->upvalc = upvalc;
-	p->defline = -1;
-	p->deflastline = -1;
-	for (int i = 0; i < upvalc; i++)
-		native->upvalue[i] = NIL_VAL;
-	return native;
-}
+	Function *fn;
 
-cr_sinline void ONative_free(VM *vm, ONative *native)
-{
-	GC_FREE(vm, native, sizeof(ONative) + (native->p.upvalc * sizeof(Value)));
-}
-
-
-
-
-OFunction *OFunction_new(VM *vm)
-{
-	OFunction *fn = ALLOC_OBJ(vm, OFunction, OBJ_FUNCTION);
-	FnInfo *p = &fn->p;
-	memset(p, 0, sizeof(FnInfo));
-	initchunk(&fn->chunk, vm);
+	fn = newgco(vm, 0, CR_VFUNCTION, Function);
+	cr_mm_createvec(vm, &fn->constants, CR_MAXCODE, "constants");
+	cr_mm_createvec(vm, &fn->lineinfo, INT_MAX, "lines");
+	cr_mm_createvec(vm, &fn->code, INT_MAX, "code");
 	return fn;
 }
 
-cr_sinline void ObjFunction_free(VM *vm, OFunction *fn)
+
+CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn, int nupvalues)
 {
-	freechunk(&fn->chunk);
-	GC_FREE(vm, fn, sizeof(OFunction));
-}
+	CriptClosure *crcl;
+	int i;
 
-cr_sinline void fnprint(OFunction *fn, FILE *stream)
-{
-	if (cr_unlikely(fn->p.name == NULL))
-		fprintf(stream, "<script-fn %s>: %p", fn->p.source->bytes, fn);
-	else
-		fprintf(stream, "<fn %s>: %p", fn->p.name->bytes, fn);
-}
-
-
-
-
-OClosure *OClosure_new(VM *vm, OFunction *fn)
-{
-	FnInfo *p = &fn->p;
-	OUpvalue **upvals = GC_MALLOC(vm, sizeof(OUpvalue *) * p->upvalc);
-	for (uint32_t i = 0; i < p->upvalc; i++)
-		upvals[i] = NULL;
-	OClosure *closure = ALLOC_OBJ(vm, OClosure, OBJ_CLOSURE);
-	closure->fn = fn;
-	closure->upvalue = upvals;
-	return closure;
-}
-
-cr_sinline void OClosure_free(VM *vm, OClosure *closure)
-{
-	GC_FREE(vm, closure->upvalue, closure->fn->p.upvalc * sizeof(OUpvalue *));
-	GC_FREE(vm, closure, sizeof(OClosure));
+	crcl = newgco(vm, sizeof(UValue*) * nupvalues, CR_VCRCL, CriptClosure);
+	crcl->nupvalues = nupvalues;
+	crcl->fn = fn;
+	memset(crcl->upvalue, 0, nupvalues * sizeof(UValue*));
+	return crcl;
 }
 
 
-
-
-OUpvalue *OUpvalue_new(VM *vm, Value *valp)
+UValue *cr_ot_newuvalue(VM *vm, TValue *vp)
 {
-	OUpvalue *upval = ALLOC_OBJ(vm, OUpvalue, OBJ_UPVAL);
-	upval->closed = EMPTY_VAL;
-	upval->location = valp;
-	upval->next = NULL;
-	return upval;
-}
+	UValue *uv;
 
-cr_sinline void OUpvalue_free(VM *vm, OUpvalue *upval)
-{
-	GC_FREE(vm, upval, sizeof(OUpvalue));
+	uv = newgco(vm, 0, CR_VUVALUE, UValue);
+	uv->closed = newemptyvalue();
+	uv->location = vp;
+	uv->nextuv = NULL;
+	return uv;
 }
 
 
-
-
-OClass *OClass_new(VM *vm, OString *name)
+OClass *cr_ot_newclass(VM *vm, OString *id)
 {
-	OClass *oclass = ALLOC_OBJ(vm, OClass, OBJ_CLASS);
-	oclass->name = name;
-	HTable_init(&oclass->methods);
-	memset(oclass->omethods, 0, sizeof(oclass->omethods) / sizeof(oclass->omethods[0]));
-	return oclass;
-}
+	OClass *cls;
 
-cr_sinline void OClass_free(VM *vm, OClass *oclass)
-{
-	HTable_free(vm, &oclass->methods);
-	GC_FREE(vm, oclass, sizeof(OClass));
+	cls = newgco(vm, 0, CR_VCLASS, OClass);
+	cls->name = id;
+	cr_ht_init(&cls->mtab);
+	memset(cls->vtable, 0, sizeof(cls->vtable) / sizeof(cls->vtable[0]));
+	return cls;
 }
 
 
-
-
-OInstance *OInstance_new(VM *vm, OClass *oclass)
+Instance *cr_ot_newinstance(VM *vm, OClass *cls)
 {
-	OInstance *instance = ALLOC_OBJ(vm, OInstance, OBJ_INSTANCE);
-	instance->oclass = oclass;
-	HTable_init(&instance->fields);
-	return instance;
-}
+	Instance *ins;
 
-/* Return overloaded method or NULL if value
- * is not an instance value or method is not overloaded. */
-cr_sinline GCObject *getomethod(VM *vm, Value val, cr_om om)
-{
-	if (isinstance(val))
-		return asinstance(val)->oclass->omethods[om];
-	return NULL;
+	ins = newgco(vm, 0, CR_VINSTANCE, Instance);
+	ins->oclass = cls;
+	cr_ht_init(&ins->fields);
+	return ins;
 }
 
 
-cr_sinline void OInstance_free(VM *vm, OInstance *instance)
+InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure *method)
 {
-	HTable_free(vm, &instance->fields);
-	GC_FREE(vm, instance, sizeof(OInstance));
+	InstanceMethod *im;
+
+	im = newgco(vm, 0, CR_VMETHOD, InstanceMethod);
+	im->receiver = receiver;
+	im->method = cast(GCObject*, method);
+	return im;
 }
 
 
-
-
-OBoundMethod *OBoundMethod_new(VM *vm, Value receiver, OClosure *method)
-{
-	OBoundMethod *bound_method = ALLOC_OBJ(vm, OBoundMethod, OBJ_BOUND_METHOD);
-	bound_method->receiver = receiver;
-	bound_method->method = method;
-	return bound_method;
-}
-
-cr_sinline void OBoundMethod_free(VM *vm, OBoundMethod *bound_method)
-{
-	GC_FREE(vm, bound_method, sizeof(OBoundMethod));
-}
-
-
-
-/* Free object memory, invokes '__free__' if defined. */
-void ofree(VM *vm, GCObject *object)
+/*
+ * Performs raw deallocation of object memory it does
+ * not try to call '__free__'.
+ */
+void cr_ot_free(VM *vm, GCObject *o)
 {
 #ifdef DEBUG_LOG_GC
-	printf("%p free type ", (void *)object);
-	otypeprint(otype(object));
-	printf("\n");
+	printf("%p freed\n", (void *)o);
 #endif
-#ifdef CR_PRECOMPUTED_GOTO
-#define OBJ_TABLE
-#include "skjmptable.h"
-#undef OBJ_TABLE
-#else
-#define DISPATCH(x) switch (x)
-#define CASE(label) case label:
-#define BREAK	    return
-#endif
-	DISPATCH(otype(object))
-	{
-		CASE(OBJ_STRING)
-		{
-			OString_free(vm, cast(OString *, object));
-			BREAK;
-		}
-		CASE(OBJ_FUNCTION)
-		{
-			ObjFunction_free(vm, cast(OFunction *, object));
-			BREAK;
-		}
-		CASE(OBJ_CLOSURE)
-		{
-			OClosure_free(vm, cast(OClosure *, object));
-			BREAK;
-		}
-		CASE(OBJ_CFUNCTION)
-		{
-			ONative_free(vm, cast(ONative *, object));
-			BREAK;
-		}
-		CASE(OBJ_UPVAL)
-		{
-			OUpvalue_free(vm, cast(OUpvalue *, object));
-			BREAK;
-		}
-		CASE(OBJ_CLASS)
-		{
-			OClass_free(vm, cast(OClass *, object));
-			BREAK;
-		}
-		CASE(OBJ_INSTANCE)
-		{
-			OInstance *instance = cast(OInstance *, object);
-			calloverload(vm, OBJ_VAL(instance), OM_FREE); // try call '__free__'
-			OInstance_free(vm, instance);
-			BREAK;
-		}
-		CASE(OBJ_BOUND_METHOD)
-		{
-			OBoundMethod_free(vm, cast(OBoundMethod *, object));
-			BREAK;
-		}
+	switch (rawott(o)) {
+		case CR_VSTRING:
+			cr_mm_free(vm, o, sizes((OString*)o));
+			break;
+		case CR_VFUNCTION:
+			cr_mm_free(vm, o, sizefn());
+			break;
+		case CR_VUVALUE:
+			cr_mm_free(vm, o, sizeuv());
+			break;
+		case CR_VCRCL:
+			cr_mm_free(vm, o, sizecrcl((CriptClosure*)o));
+			break;
+		case CR_VCCL:
+			cr_mm_free(vm, o, sizeccl((CClosure*)o));
+			break;
+		case CR_VCLASS:
+			cr_mm_free(vm, o, sizecls());
+			break;
+		case CR_VINSTANCE:
+			cr_mm_free(vm, o, sizeins());
+			break;
+		case CR_VMETHOD:
+			cr_mm_free(vm, o, sizeim());
+			break;
+		default:
+			cr_unreachable();
 	}
-	cr_unreachable;
-#ifdef SKJMPTABLE_H
-#undef SKJMPTABLE_H
-#endif
+}
+
+
+cr_sinline GCObject *vtablemethod(VM *vm, TValue *v, int m)
+{
+	cr_assert(m >= 0 && m < CR_MNUM);
+	return (ttisins(v) ? insvalue(v)->oclass->vtable[m] : NULL);
 }
 
 
@@ -582,14 +478,14 @@ void ofree(VM *vm, GCObject *object)
 /* =============== raw access =============== */
 
 cr_sinline cr_ubyte rawgetproperty(VM *vm, OInstance *instance, Value key, Value *out,
-					    cr_ubyte what)
+		cr_ubyte what)
 {
 	HTable *table = rawgettable(vm, instance, what);
 	return rawget(vm, table, key, out);
 }
 
 cr_sinline cr_ubyte rawsetproperty(VM *vm, OInstance *instance, Value key, Value value,
-					    cr_ubyte what)
+		cr_ubyte what)
 {
 	HTable *table = rawgettable(vm, instance, what);
 	return rawset(vm, table, key, value);
@@ -623,7 +519,7 @@ cr_ubyte rawindex(VM *vm, Value value, cr_ubyte get)
 		if (cr_unlikely(IS_NIL(idx)))
 			nilidxerror(vm);
 		if (rawgetproperty(vm, instance, idx, &out, 0) ||
-		    rawgetproperty(vm, instance, idx, &out, 1)) {
+				rawgetproperty(vm, instance, idx, &out, 1)) {
 			*idxstk = out; // replace [index] with property
 			res = 1;
 		}
@@ -659,9 +555,6 @@ cr_ubyte calloverload(VM *vm, Value instance, cr_om tag)
 /* ---------------------------------------------------- */
 
 
-
-
-#if defined(CR_OVERLOAD_OPS)
 
 
 /* =============== operator overloading =============== */
@@ -795,130 +688,48 @@ void oge(VM *vm, Value lhs, Value rhs)
 
 /* ---------------------------------------------------- */
 
-#endif // if defined(CR_OVERLOAD_OPS)
-
 
 
 
 /* 
- * Get 'OString' from object 'o'. 
- * 'raw' indicates raw access in case the object type is 'OBJ_INSTANCE'.
+ * Convert object to string.
+ * If 'raw' is not set then '__tostring__' can be called.
  */
 OString *otostr(VM *vm, GCObject *o, cr_ubyte raw)
 {
-	OInstance *ins;
+	Instance *ins;
 	Value debug, key, result;
 
 	switch (otype(o)) {
-	case OBJ_STRING:
-		return cast(OString *, o);
-	case OBJ_FUNCTION:
-		return cast(OFunction *, o)->p.name;
-	case OBJ_CLOSURE:
-		return cast(OClosure *, o)->fn->p.name;
-	case OBJ_CFUNCTION:
-		return cast(ONative *, o)->p->name;
-	case OBJ_UPVAL:
-		return vtostr(vm, *cast(OUpvalue *, o)->location, raw);
-	case OBJ_CLASS:
-		return cast(OClass *, o)->name;
-	case OBJ_INSTANCE:
-		if (!raw && calloverload(vm, OBJ_VAL(o), SKOM_TOSTRING)) {
-			result = *stkpeek(0);
-			if (!isstring(result))
-				omreterror(vm, "string", OM_TOSTRING);
-			*o = pop(vm);
-			return asstring(result);
-		} else {
-			ins = asinstance(oval);
-			key = OBJ_VAL(vm->faststatic[SS_DBG]);
-			if (rawget(vm, &ins->fields, key, &debug) && isstring(debug)) {
-				*o = debug;
-				return asstring(debug); // have debug name
-			}
-			return asstring(*o = OBJ_VAL(ins->oclass->name));
-		}
-	case OBJ_BOUND_METHOD:
-		return cast(OBoundMethod *, o)->method->fn->p.name;
-	}
-}
-
-
-/* Print the object value */
-void oprint(VM *vm, Value value, cr_ubyte raw, FILE *stream)
-{
-#ifdef CR_PRECOMPUTED_GOTO
-#define OBJ_TABLE
-#include "skjmptable.h"
-#undef OBJ_TABLE
-#else
-#define DISPATCH(x) switch (x)
-#define CASE(label) case label:
-#define BREAK	    return
-#endif
-	DISPATCH(OBJ_TYPE(value))
-	{
-		CASE(OBJ_STRING)
-		{
-			fprintf(stream, "%s", ascstring(value));
-			BREAK;
-		}
-		CASE(OBJ_FUNCTION)
-		{
-			fnprint(asfn(value), stream);
-			BREAK;
-		}
-		CASE(OBJ_CLOSURE)
-		{
-			fnprint(asclosure(value)->fn, stream);
-			BREAK;
-		}
-		CASE(OBJ_CFUNCTION)
-		{
-			fprintf(stream, "<native-fn %s>", ascfn(value)->p.name->bytes);
-			BREAK;
-		}
-		CASE(OBJ_UPVAL)
-		{ // recursion
-			OUpvalue *upval = AS_UPVAL(value);
-			vprint(vm, *upval->location, raw, stream);
-			BREAK;
-		}
-		CASE(OBJ_CLASS)
-		{
-			fprintf(stream, "%p-%s", asobj(value), asclass(value)->name->bytes);
-			BREAK;
-		}
-		CASE(OBJ_INSTANCE)
-		{
-			if (!raw && calloverload(vm, value, OM_TOSTRING)) { // have '__tostring__' ?
-				Value result = *stkpeek(0);
+		case OBJ_STRING:
+			return cast(OString *, o);
+		case OBJ_FUNCTION:
+			return cast(OFunction *, o)->p.name;
+		case OBJ_CLOSURE:
+			return cast(OClosure *, o)->fn->p.name;
+		case OBJ_CFUNCTION:
+			return cast(ONative *, o)->p->name;
+		case OBJ_UPVAL:
+			return vtostr(vm, *cast(OUpvalue *, o)->location, raw);
+		case OBJ_CLASS:
+			return cast(OClass *, o)->name;
+		case OBJ_INSTANCE:
+			if (!raw && calloverload(vm, OBJ_VAL(o), SKOM_TOSTRING)) {
+				result = *stkpeek(0);
 				if (!isstring(result))
 					omreterror(vm, "string", OM_TOSTRING);
-				fprintf(stream, "%s", ascstring(*stkpeek(0)));
-				pop(vm); // pop result
-			} else { // no overload
-				OInstance *instance = asinstance(value);
-				Value debug;
-				Value key = OBJ_VAL(vm->faststatic[SS_DBG]);
-				if (rawget(vm, &instance->fields, key, &debug) &&
-				    isstring(debug)) {
-					fprintf(stream, "%s", ascstring(debug)); // __debug field
-				} else { // default print
-					fprintf(stream, "%p-%s instance", asobj(value),
-						asinstance(value)->oclass->name->bytes);
+				*o = pop(vm);
+				return asstring(result);
+			} else {
+				ins = asinstance(oval);
+				key = OBJ_VAL(vm->faststatic[SS_DBG]);
+				if (rawget(vm, &ins->fields, key, &debug) && isstring(debug)) {
+					*o = debug;
+					return asstring(debug); // have debug name
 				}
+				return asstring(*o = OBJ_VAL(ins->oclass->name));
 			}
-			BREAK;
-		}
-		CASE(OBJ_BOUND_METHOD)
-		{
-			fnprint(asboundmethod(value)->method->fn, stream);
-			BREAK;
-		}
+		case OBJ_BOUND_METHOD:
+			return cast(OBoundMethod *, o)->method->fn->p.name;
 	}
-	cr_unreachable;
 }
-
-
-

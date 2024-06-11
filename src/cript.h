@@ -73,7 +73,7 @@ typedef struct VM VM;
 #define CR_TUDATA	7 /* userdata */
 #define CR_TNIL		8 /* nil */
 
-#define CR_NTYPES		9
+#define CR_NTYPES	9
 
 
 
@@ -242,7 +242,7 @@ CR_API int cr_getuservalue(VM *vm, int idx, int n);
 #define CR_MGT			18
 #define CR_MGE			19
 
-#define CR_MN			20
+#define CR_MNUM			20
 
 
 /* type for class interface */
@@ -253,7 +253,7 @@ struct cr_vtable {
 			int stkidx; /* value on stack */
 		} method;
 		int mtt; /* method type tag */
-	} methods[CR_MN];
+	} methods[CR_MNUM];
 }; // TODO
 
 
