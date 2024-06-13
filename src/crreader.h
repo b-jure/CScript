@@ -14,8 +14,8 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#ifndef SKREADER_H
-#define SKREADER_H
+#ifndef CRREADER_H
+#define CRREADER_H
 
 #include "cript.h"
 
@@ -25,10 +25,11 @@
 
 
 /* Return next char and progress the buffer or try fill the buffer. */
-#define brgetc(br) ((br)->n-- > 0 ? cast(cr_ubyte, *(br)->buff++) : cr_br_fill(br))
+#define brgetc(br) \
+	((br)->n-- > 0 ? cast(cr_ubyte, *(br)->buff++) : cr_br_fill(br))
 
 /* Go back one character (byte) */
-#define brungetc(br) ((br)->n++, (br)->buff--)
+#define brungetc(br)	((br)->n++, (br)->buff--)
 
 
 typedef struct {

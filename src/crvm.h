@@ -44,7 +44,7 @@ typedef void (*ProtectedFn)(VM *vm, void *userdata);
 /* call information */
 typedef struct CallFrame {
 	SIndex callee; /* function */
-	SIndex top; /* stack top for this call */
+	SIndex stacktop; /* stack top for this call */
 	const Instruction *pc; /* only for non-C callee */
 	int nvarargs; /* only for non-C callee */
 	int nreturns; /* number of return values */
@@ -55,14 +55,13 @@ typedef struct CallFrame {
 /* get Cript 'Function' */
 #define cffn(cf)	(crclvalue(s2v((cf)->callee.p))->fn)
 
-
 /* 'cfstatus' bits */
 #define CFfresh		0 /* in top-level Cript function */
 #define CFccall		1 /* in C call */
 
-
 /* 'CallFrame' function is Cript function */
 #define cfiscript(cf)	(!((cf)->cfstatus & CFccall))
+
 
 
 
@@ -117,7 +116,6 @@ Vec(CallFrameVec, CallFrame);
 
 
 #define vminitialized(vm) (ttisnil(&(vm)->nil))
-
 
 
 /* 

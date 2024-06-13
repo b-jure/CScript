@@ -54,7 +54,7 @@ static void savestackptrs(VM *vm)
 	for (i = 0; i < vm->frames.len; i++) {
 		cf = &vm->frames.ptr[i];
 		cf->callee.offset = savestack(vm, cf->callee.p);
-		cf->top.offset = savestack(vm, cf->top.p);
+		cf->stacktop.offset = savestack(vm, cf->stacktop.p);
 	}
 	for (i = 0; i < vm->callstart.len; i++) {
 		si = &vm->callstart.ptr[i];
@@ -82,7 +82,7 @@ static void restorestackptrs(VM *vm)
 	for (i = 0; i < vm->frames.len; i++) {
 		cf = &vm->frames.ptr[i];
 		cf->callee.p = restorestack(vm, cf->callee.offset);
-		cf->top.p = restorestack(vm, cf->top.offset);
+		cf->stacktop.p = restorestack(vm, cf->stacktop.offset);
 	}
 	for (i = 0; i < vm->callstart.len; i++) {
 		si = &vm->callstart.ptr[i];
@@ -175,10 +175,10 @@ cr_sinline int getproperty(VM *vm, Instance *ins, TValue *k, TValue *v, int fiel
 }
 
 
-/* raw property set */
+/* raw property set (instance fields) */
 cr_sinline int setproperty(VM *vm, Instance *ins, TValue *k, TValue *v, int field)
 {
-	return cr_ht_set(vm, proptab(ins, field), k, v);
+	return cr_ht_set(vm, &ins->fields, k, v);
 }
 
 
@@ -226,13 +226,12 @@ int callvtmethod(VM *vm, const TValue *ins, int mt)
 }
 
 
-/* try calling unary vtmethod. */
+/* try calling unary vtable method */
 static int callunop(VM *vm, TValue *v, int mt, Value *res)
 {
 	GCObject *m;
 
-	m = vtmethod(vm, v, mt);
-	if (om == NULL)
+	if ((m = vtmethod(vm, v, mt)) == NULL)
 		return 0;
 	Value *retstart = vm->sp;
 	push(vm, lhs); // 'self'
@@ -344,50 +343,6 @@ void oge(VM *vm, Value lhs, Value rhs)
 		push(vm, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) >= 0));
 	else
 		omcallorder(vm, lhs, rhs, OM_GE);
-}
-
-
-/* 
- * Convert object to string.
- * If 'raw' is not set then '__tostring__' can be called.
- */
-OString *otostr(VM *vm, GCObject *o, cr_ubyte raw)
-{
-	Instance *ins;
-	Value debug, key, result;
-
-	switch (otype(o)) {
-		case OBJ_STRING:
-			return cast(OString *, o);
-		case OBJ_FUNCTION:
-			return cast(OFunction *, o)->p.name;
-		case OBJ_CLOSURE:
-			return cast(OClosure *, o)->fn->p.name;
-		case OBJ_CFUNCTION:
-			return cast(ONative *, o)->p->name;
-		case OBJ_UPVAL:
-			return vtostr(vm, *cast(OUpvalue *, o)->location, raw);
-		case OBJ_CLASS:
-			return cast(OClass *, o)->name;
-		case OBJ_INSTANCE:
-			if (!raw && calloverload(vm, OBJ_VAL(o), SKOM_TOSTRING)) {
-				result = *stkpeek(0);
-				if (!isstring(result))
-					omreterror(vm, "string", OM_TOSTRING);
-				*o = pop(vm);
-				return asstring(result);
-			} else {
-				ins = asinstance(oval);
-				key = OBJ_VAL(vm->faststatic[SS_DBG]);
-				if (rawget(vm, &ins->fields, key, &debug) && isstring(debug)) {
-					*o = debug;
-					return asstring(debug); // have debug name
-				}
-				return asstring(*o = OBJ_VAL(ins->oclass->name));
-			}
-		case OBJ_BOUND_METHOD:
-			return cast(OBoundMethod *, o)->method->fn->p.name;
-	}
 }
 
 
@@ -661,137 +616,135 @@ CRString *globalname(VM *vm, uint32_t idx)
 }
 
 
-void run(VM *vm)
-{
-#define saveip()	(frame->ip = ip)
-#define updatestate()	(frame = &last_frame(vm), ip = frame->ip)
-#define throwerr(vm)	runerror(vm, vtostr(vm, *stkpeek(0))->storage)
-#define READ_BYTE()	(*ip++)
-#define READ_BYTEL()	(ip += 3, GET_BYTES3(ip - 3))
-#define READ_CONSTANT() FFN(frame)->chunk.constants.data[READ_BYTEL()]
-#define READ_STRING()	asstring(READ_CONSTANT())
-#define bcstart()	(FFN(frame).chunk.code.data)
-#define ipinbounds()	(ip - bcstart() < VM_STACK_LIMIT && ip >= bcstart())
 #define BINARY_OP(vm, op)                \
 	do {                             \
-		saveip();                \
+		savepc();                \
 		Value *l = stkpeek(1);   \
 		Value r = *stkpeek(0);   \
 		arith(vm, *l, r, op, l); \
 	} while (0)
 #define UNARY_OP(vm, op)                       \
 	do {                                   \
-		saveip();                      \
+		savepc();                      \
 		Value *l = stkpeek(0);         \
 		arith(vm, *l, NIL_VAL, op, l); \
 	} while (0)
 #define ORDER_OP(vm, fnop)             \
 	do {                           \
-		saveip();              \
+		savepc();              \
 		Value l = *stkpeek(1); \
 		Value r = *stkpeek(0); \
 		fnop(vm, l, r);        \
 	} while (0)
 
 
-	last_frame(vm).cfinfo = CFI_FRESH; // mark as fresh execute of cript script
-	runtime = 1;
-	register CallFrame *frame = &vm->frames[vm->fc - 1];
-	register cr_ubyte *ip = frame->ip;
-#ifdef DEBUG_TRACE_EXECUTION
-	printf("\n=== VM - execution ===\n");
-#endif
+
+
+
+/* -------------------------------------------------------------------------
+ * Interpreter loop
+ * -------------------------------------------------------------------------- */
+
+
+/* save program counter */
+#define savepc()	((cf)->pc = pc)
+
+/* save program counter and stack top */
+#define savestate()	(savepc(), (vm)->stacktop.p = (cf)->stacktop.p)
+
+/* protect code that can raise errors or change the stack */
+#define protect(e)	(savestate(), (e))
+
+
+/* fetch an instruction */
+#define fetch()		(*(pc)++)
+
+/* fetch short instruction parameter */
+#define shortparam()	fetch()
+
+/* fetch long instruction parameter */
+#define longparam()	((ip) += 3, get3bytes((ip) - 3))
+
+
+/* get constant */
+#define GETK()		(cffn(cf)->constants.ptr[longparam(pc)])
+
+/* get string constant */
+#define GETSTRK()	(strvalue(GETK(cf, pc)))
+
+
+#define DISPATCH(x)	switch(x)
+#define CASE(l)		case l:
+#define BREAK		break
+
+
+void run(VM *vm)
+{
+	register CallFrame *cf;
+	register const Instruction *pc;
+	int codeparam1;
+	int codeparam2;
+	int codeparam3;
+
+	cf = vm->aframe;
+	pc = frame->pc;
 	for (;;) {
-#ifdef CR_PRECOMPUTED_GOTO
-#define OP_TABLE
-#include "skjmptable.h"
-#undef OP_TABLE
-#ifdef DEBUG_TRACE_EXECUTION
-#undef BREAK
-#define BREAK                     \
-	dumpstack(vm, frame, ip); \
-	DISPATCH(READ_BYTE())
+#ifdef PRECOMPUTED_GOTO
+#include "crjmptable.h"
 #endif
-#else
-#define DISPATCH(x) switch (x)
-#define CASE(label) case label:
-#ifdef DEBUG_TRACE_EXECUTION
-#define BREAK                     \
-	dumpstack(vm, frame, ip); \
-	break
-#else
-#define BREAK break
-#endif
-#endif
-		DISPATCH(READ_BYTE())
-		{
-			CASE(OP_TRUE)
-			{
-				saveip();
-				push(vm, BOOL_VAL(1));
+		DISPATCH(fetch(pc)) {
+			CASE(OP_TRUE) {
+				setbtvalue(s2v(vm->stacktop.p++));
 				BREAK;
 			}
-			CASE(OP_FALSE)
-			{
-				saveip();
-				push(vm, BOOL_VAL(0));
+			CASE(OP_FALSE) {
+				setbfvalue(s2v(vm->stacktop.p++));
 				BREAK;
 			}
-			CASE(OP_NIL)
-			{
-				saveip();
-				push(vm, NIL_VAL);
+			CASE(OP_NIL) {
+				setnilvalue(s2v(vm->stacktop.p++));
 				BREAK;
 			}
-			CASE(OP_NILN)
-			{
-				saveip();
-				pushn(vm, READ_BYTEL(), NIL_VAL);
+			CASE(OP_NILN) {
+				codeparam1 = longparam();
+				while (codeparam1--)
+					setnilvalue(s2v(vm->stacktop.p++));
 				BREAK;
-			}
-			CASE(OP_ADD)
-			{
+			} CASE(OP_ADD) {
 				BINARY_OP(vm, AR_ADD);
 				BREAK;
 			}
-			CASE(OP_SUB)
-			{
+			CASE(OP_SUB) {
 				BINARY_OP(vm, AR_SUB);
 				BREAK;
 			}
-			CASE(OP_MUL)
-			{
+			CASE(OP_MUL) {
 				BINARY_OP(vm, AR_MUL);
 				BREAK;
 			}
-			CASE(OP_MOD)
-			{
+			CASE(OP_MOD) {
 				BINARY_OP(vm, AR_MOD);
 				BREAK;
 			}
-			CASE(OP_POW)
-			{
+			CASE(OP_POW) {
 				BINARY_OP(vm, AR_POW);
 				BREAK;
 			}
-			CASE(OP_DIV)
-			{
+			CASE(OP_DIV) {
 				BINARY_OP(vm, AR_DIV);
 				BREAK;
 			}
-			CASE(OP_NEG)
-			{
+			CASE(OP_NEG) {
 				UNARY_OP(vm, AR_UMIN);
 				BREAK;
 			}
-			CASE(OP_NOT)
-			{
+			CASE(OP_NOT) {
 				UNARY_OP(vm, AR_NOT);
 				BREAK;
 			}
 			CASE(OP_VARARG)
 			{
-				saveip();
+				savepc();
 				Function *fn = FFN(frame);
 				uint32_t vacnt = READ_BYTEL();
 				if (vacnt == 0)
@@ -849,7 +802,7 @@ void run(VM *vm)
 			}
 			CASE(OP_CONST)
 			{
-				saveip();
+				savepc();
 				push(vm, READ_CONSTANT());
 				BREAK;
 			}
@@ -872,7 +825,7 @@ l_call:;
 					{
 						int32_t retcnt = READ_BYTEL();
 						Value callee = *stkpeek(argc);
-						saveip();
+						savepc();
 						call(vm, callee, argc, retcnt);
 						updatestate();
 						BREAK;
@@ -907,7 +860,7 @@ l_invoke:;
 					{
 						Value methodname = READ_CONSTANT();
 						int32_t retcnt = READ_BYTEL();
-						saveip();
+						savepc();
 						invoke(vm, methodname, argc, retcnt);
 						updatestate();
 						BREAK;
@@ -919,7 +872,7 @@ l_invoke:;
 				cr_assert(vm, isclassobj(*stkpeek(0)), "Expect OClass.");
 				Value methodname = READ_CONSTANT();
 				OClass *superclass = asclass(pop(vm));
-				saveip();
+				savepc();
 				if (cr_unlikely(!bindmethod(vm, superclass, methodname, *stkpeek(0))))
 					udperror(vm, methodname, superclass);
 				BREAK;
@@ -945,7 +898,7 @@ l_invoke_super:;
 						int32_t retcnt = READ_BYTEL();
 						cr_assert(vm, isclassobj(*stkpeek(0)), "superclass must be class.");
 						OClass *superclass = asclass(pop(vm));
-						saveip();
+						savepc();
 						invokefrom(vm, superclass, methodname, argc, retcnt);
 						updatestate();
 						BREAK;
@@ -958,7 +911,7 @@ l_invoke_super:;
 				Value property = *stkpeek(0);
 				Value receiver = *stkpeek(1);
 				if (cr_unlikely(!isinstance(receiver))) {
-					saveip();
+					savepc();
 					ipaerror(vm, receiver);
 				}
 				Instance *instance = asinstance(receiver);
@@ -971,7 +924,7 @@ l_invoke_super:;
 				Value property_name = READ_CONSTANT();
 				Value receiver = *stkpeek(0);
 				if (cr_unlikely(!isinstance(receiver))) {
-					saveip();
+					savepc();
 					ipaerror(vm, receiver);
 				}
 				Instance *instance = asinstance(receiver);
@@ -980,7 +933,7 @@ l_invoke_super:;
 					*stkpeek(0) = property;
 					BREAK;
 				}
-				saveip();
+				savepc();
 				if (cr_unlikely(!bindmethod(vm, instance->oclass, property_name, receiver)))
 					udperror(vm, property_name, instance->oclass);
 				BREAK;
@@ -1001,7 +954,7 @@ l_define_global:;
 				{
 					Value *gvalue = &vm->globvars.data[bytecode_param].value;
 					if (cr_unlikely(*gvalue != EMPTY_VAL)) {
-						saveip();
+						savepc();
 						redefgerror(vm, globalname(vm, bytecode_param)->storage);
 					}
 					*gvalue = pop(vm);
@@ -1021,7 +974,7 @@ l_get_global:;
 				{
 					Value *gvalue = &vm->globvars.data[bytecode_param].value;
 					if (cr_unlikely(*gvalue == EMPTY_VAL)) {
-						saveip();
+						savepc();
 						udgerror(vm, globalname(vm, bytecode_param)->storage);
 					}
 					push(vm, *gvalue);
@@ -1041,10 +994,10 @@ l_set_global:;
 				{
 					Variable *gvar = &vm->globvars.data[bytecode_param];
 					if (cr_unlikely(gvar->value == EMPTY_VAL)) {
-						saveip();
+						savepc();
 						udgerror(vm, globalname(vm, bytecode_param)->storage);
 					} else if (cr_unlikely(VISCONST(gvar))) {
-						saveip();
+						savepc();
 						fixederror(vm, globalname(vm, bytecode_param)->storage);
 					}
 					gvar->value = pop(vm);
@@ -1183,7 +1136,7 @@ l_set_local:;
 			{
 				Value receiver = *stkpeek(1);
 				Value key = *stkpeek(0);
-				saveip();
+				savepc();
 				checkindex(vm, receiver, key);
 				if (!calloverload(vm, receiver, OM_GETIDX)) { // not overloaded ?
 					Instance *instance = asinstance(receiver);
@@ -1205,7 +1158,7 @@ l_set_local:;
 				Value receiver = *stkpeek(2);
 				Value key = *stkpeek(1);
 				Value value = *stkpeek(0);
-				saveip();
+				savepc();
 				checkindex(vm, receiver, key);
 				Instance *instance = asinstance(receiver);
 				if (!calloverload(vm, receiver, OM_SETIDX)) { // not overloaded ?
@@ -1229,7 +1182,7 @@ l_set_local:;
 				OClass *subclass = asclass(*stkpeek(0));
 				Value superclass = *stkpeek(1);
 				if (cr_unlikely(!isclassobj(superclass))) {
-					saveip();
+					savepc();
 					inheriterror(vm, superclass);
 				}
 				HTable_into(vm, &asclass(superclass)->mtab, &subclass->mtab, 0);
@@ -1242,7 +1195,7 @@ l_set_local:;
 				int32_t vars = READ_BYTEL();
 				memcpy(vm->sp, stkpeek(2), 3 * sizeof(Value));
 				vm->sp += 3;
-				saveip();
+				savepc();
 				Value fn = *stkpeek(2);
 				call(vm, fn, 2, vars);
 				updatestate();
@@ -1302,7 +1255,7 @@ l_set_local:;
 				else
 					pushn(vm, unaccounted, NIL_VAL);
 l_ret:
-				saveip();
+				savepc();
 				cr_assert(vm, vm->temp.len == 0, "Temporary array not empty.");
 				for (int32_t returns = frame->retcnt; returns--;)
 					Array_Value_push(&vm->temp, *--vm->sp);

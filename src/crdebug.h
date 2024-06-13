@@ -21,6 +21,8 @@
 #include "crobject.h"
 
 
+cr_noret cr_dg_throw(VM *vm, int code);
+cr_noret cr_dg_runerror(VM *vm, const char *fmt, ...);
 int cr_dg_getfuncline(const Function *fn, int pc);
 const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line);
 

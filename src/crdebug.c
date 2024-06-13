@@ -197,7 +197,7 @@ CR_API int cr_getinfo(VM *vm, int dbmask, cr_debuginfo *di)
 
 const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 {
-	char buffer[CR_MAXSRC];
+	char buffer[CRI_MAXSRC];
 
 	if (src) {
 		cr_ot_sourceid(buffer, src->bytes, src->len);

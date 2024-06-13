@@ -15,6 +15,7 @@
  * ----------------------------------------------------------------------------------------------*/
 
 #include "crlexer.h"
+#include "crdebug.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -22,20 +23,59 @@
 
 
 
-/* Maximum size of error token string. */
+/* maximum size of error token string */
 #define MAXERR		CR_MAXSRC
 #define errlen(len)	(MIN(MAXERR, len))
 
 
+/* checks for end of stream */
+#define isend(c)	((c) == CREOF)
 
-/* errors */
-typedef enum {
-	LE_INCHEXESC, LE_INVHEXESC, LE_UNTSTR,
-	LE_LARGECONST, LE_DIGOCTAL, LE_HEXCONST,
-	LE_DECCONST, LE_ESCSEQ, LE_TOKENLIMIT,
-} LexErr;
 
-/* error description */
+/* increment line number if 'c' is newline character */
+#define incrline(lx, c) \
+	((c) == '\n' || (c) == '\r' ? ((lx)->currline++, (c)) : (c))
+
+
+/* 
+ * Fetch new character from BuffReader, also increment
+ * the line number if newline character was fetched. 
+ */
+#define nextchar(lx)	incrline(lx, brgetc((lx)->br))
+
+
+/* fetch the next character and store it as current char */
+#define advance(lx)	((lx)->c = nextchar(lx))
+
+
+/* go back one character */
+#define goback(lx, oldc)	(brungetc((lx)->br), (lx)->c = (oldc))
+
+
+/* push current character into lexer buffer */
+#define pushl(lx)	pushc(lx, (lx)->c)
+
+/* push the current character into lexer buffer and advance */
+#define advance_and_push(lx)	(pushl(lx), advance(lx))
+
+/* same as 'advance_and_push' except the character is 'c' */
+#define advance_and_pushc(lx, c)	(pushc(lx, c), advance(lx))
+
+
+/* pointer to start of lexer buffer */
+#define lbptr(lx)	((lx)->buff.ptr)
+
+/* length of lexer buffer */
+#define lblen(lx)	((lx)->buff.len)
+
+/* pop character from lexer buffer */
+#define popc(lx)	(lbptr(lx)[--lblen(lx)])
+
+
+
+
+
+
 static const char *lexerrors[] = {
 	"\tIncomplete hex escape sequence.\n",
 	"\tInvalid hexadecimal escape sequence.\n",
@@ -49,123 +89,53 @@ static const char *lexerrors[] = {
 };
 
 
+static const char *tkstr[] = {
+	"and", "break", "case", "continue", "class",
+	"default", "else", "false", "for", "foreach",
+	"fn", "if", "in", "inherits", "nil", "or",
+	"return", "super", "self", "switch", "true",
+	"let", "while", "loop", "const",
+	"!=", "==", ">=", "<=", "<<", ">>", "...", "<eof>",
+	"<number>", "<integer>", "<string>", "<identifier>"
+};
+
 
 void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *source)
 {
+	int i;
+
 	lx->vm = vm;
 	lx->fs = NULL;
 	lx->br = br;
 	lx->src = source;
-	lx->c = brgetc(lx->br);
+	lx->c = brgetc(lx->br); /* prime reader */
 	lx->currline = 1;
 	lx->prevline = 1;
 	lx->skip = 0;
-	cr_mm_createvec(vm, &lx->buf, MAXSIZE>>1, "chars");
-	cr_mm_reallocvec(vm, &lx->buf, CR_MINBUFFER);
+	cr_mm_createvec(vm, &lx->buff, CRMAXSIZE<<1, "token");
+	cr_mm_reallocvec(vm, &lx->buff, CRI_MINBUFFER);
+	/* intern keywords */
+	for (i = 0; i < NUM_KEYWORDS; i++)
+		cr_ht_intern(lx->vm, tkstr[i]);
 }
 
 
 void cr_lr_free(Lexer *lx)
 {
-	freevec(lx->vm, &lx->buf);
+	freevec(lx->vm, &lx->buff);
 }
 
 
-static cr_noret lexerror(Lexer *lexer, const char *err, va_list ap)
+/* pushes character into token buffer */
+cr_sinline void pushc(Lexer *lx, int c)
 {
-	// TODO
+	cr_mm_growvec(lx->vm, &lx->buff);
+	lbptr(lx)[lblen(lx)++] = c;
 }
 
 
-void cr_lr_syntaxerror(Lexer *L, const char *err, va_list args)
-{
-	VM *vm;
-	OString *prefix;
-	cr_ubyte preverr;
-	const Token *token;
-	const char *src;
-
-	L->error = 1;
-	vm = L->vm;
-	preverr = L->error;
-	token = &L->previous;
-	src = ascstring(L->src);
-	prefix = OString_fmt(vm, "[%s][line: %u] Error", src, token->line);
-	push(vm, OBJ_VAL(prefix));
-
-	if (token->tt == TOK_EOF) {
-		push(vm, OBJ_VAL(OString_fmt(vm, " at end of file: ")));
-	} else if (token->tt != TOK_ERROR) {
-		push(vm, OBJ_VAL(OString_fmt(vm, " at '%.*s': ", token->len, token->start)));
-	} else
-		goto pusherr;
-	concatonstack(vm);
-pusherr:
-	push(vm, OBJ_VAL(OString_fmt_from(vm, err, args)));
-	concatonstack(vm);
-	if (preverr)
-		concatonstack(vm);
-}
-
-
-/* ------------------------------------------------------------ */ // register error
-
-
-
-
-/* ================== Lexer buffer and auxiliary functions ================== */
-
-/* Checks for end of stream */
-#define isend(c) ((c) == CREOF)
-
-/* Increments line number if 'c' is newline character */
-#define incrline(l, c) ((c) == '\n' || (c) == '\r' ? ((l)->line++, c) : c)
-
-/* Fetches new character from BuffReader, also increments
- * the line number if newline character was fetched. */
-#define nextchar(l) incrline(l, brgetc((l)->br))
-
-/* Fetches the next character and stores it as current char */
-#define advance(l) ((l)->c = nextchar(l))
-
-/* Go back one character (byte) */
-#define fallback(l, oldc) (brungetc((l)->br), (l)->c = oldc)
-
-/* Push current character into lexer buffer */
-#define pushl(l) pushc(l, (l)->c)
-
-/* Pushes the current character into lexer buffer and
- * advances the lexer */
-#define advance_and_push(l) (pushl(l), advance(l))
-
-/* Same as 'advance_and_push' except the character is 'c' */
-#define advance_and_pushc(l, c) (pushc(l, c), advance(l))
-
-/* pointer to start of lexer buffer */
-#define lbptr(lexer) cast_charp((lexer)->buffer.data)
-
-/* length of lexer buffer */
-#define lblen(lexer) (lexer)->buffer.len
-
-/* Pop character from lexer buffer */
-#define lbpop(l) (Array_ubyte_pop(&lexer->buffer))
-
-
-
-/* Pushes 'c' into lexer buffer */
-static void pushc(Lexer *lexer, int32_t c)
-{
-	if (cr_unlikely(lblen(lexer) >= LEX_TOKEN_LEN_LIMIT)) {
-		lexerror(lexer, lexerrors[LE_TOKENLIMIT], LEX_TOKEN_LEN_LIMIT);
-		lexer->skip = 1;
-	}
-	Array_ubyte_push(&lexer->buffer, c);
-}
-
-
-/* Check if current character matches 'c', if so
- * return 1 and advance the lexer, otherwise return 0. */
-static cr_ubyte lmatch(Lexer *lexer, int32_t c)
+/* if current char matches 'c' advance */
+cr_sinline int lxmatch(Lexer *lexer, int c)
 {
 	if (isend(lexer->c) || c != lexer->c)
 		return 0;
@@ -174,218 +144,249 @@ static cr_ubyte lmatch(Lexer *lexer, int32_t c)
 }
 
 
-/* Skip white-space and comments. */
-static void skipws(Lexer *lexer)
+cr_sinline void skipcomment(Lexer *lx)
+{
+	while (!isend(lx->c) && lx->c != '\n')
+		advance(lx);
+}
+
+
+cr_sinline void skiplcomment(Lexer *lx) 
+{
+	while (!isend(lx->c)) {
+		advance(lx);
+		if (lxmatch(lx, '*') && lx->c == '/')
+			break;
+	}
+}
+
+
+/* skip spaces and comments */
+static void skipws(Lexer *lx)
 {
 read_more:
-	switch (lexer->c) {
+	switch (lx->c) {
 	case '\n':
 	case ' ':
 	case '\r':
 	case '\t':
-		advance(lexer);
+		advance(lx);
 		goto read_more;
 	case '#':
-		advance(lexer);
-		while (!isend(lexer->c) && lexer->c != '\n')
-			advance(lexer);
-		goto read_more;
+		advance(lx);
+		goto comment;
+	case '/':
+		advance(lx);
+		if (lxmatch(lx, '/')) {
+			goto comment;
+		} else if (lxmatch(lx, '*')) {
+			skiplcomment(lx);
+			goto read_more;
+		}
+		goback(lx, '/');
+		/* FALLTHRU */
 	default:
 		break;
+	comment:
+		skipcomment(lx);
+		goto read_more;
 	}
 }
 
-/* -------------------------------------------------- */ // Lexer buffer and aux functions
 
-
-
-
-/* =================== Tokens =================== */
-
-/* Create 'synthetic' token */
-Token syntoken(const char *name)
+const char *cr_lr_tok2str(Lexer *lx, int token)
 {
-	return (Token){
-		.type = 0,
-		.line = 0,
-		.start = name,
-		.len = cast(cr_ubyte, strlen(name)),
-	};
-}
+	const char *str;
 
-/* Create generic token */
-static Token token(Lexer *lexer, TType type, Value value)
-{
-	Token token;
-	token.tt = type;
-	token.value = value;
-	token.start = lbptr(lexer);
-	token.len = cast(cr_ubyte, lblen(lexer));
-	token.line = lexer->currentline;
-	return token;
-}
-
-/* Keyword tokens contain no values */
-#define keywordtoken(lexer, type) (advance(lexer), token(lexer, type, EMPTY_VAL))
-
-
-
-/* Create error token with 'err' message */
-static cr_inline Token errtoken(Lexer *lexer, const char *err)
-{
-	Token token;
-	token.tt = TOK_ERROR;
-	token.start = err;
-	token.len = cast(cr_ubyte, strlen(err));
-	token.line = lexer->currentline;
-	return token;
+	cr_assert(token <= TK_IDENTIFIER);
+	if (token >= FIRSTTK) {
+		str = tkstr[token - FIRSTTK];
+		if (token < TK_EOS) {
+			return cr_ot_pushfstring(lx->vm, "'%s'", str);
+		} else {
+			return str;
+		}
+	} else {
+		if (isprint(token))
+			return cr_ot_pushfstring(lx->vm, "'%c'", token);
+		else
+			return cr_ot_pushfstring(lx->vm, "'\\%d'", token);
+	}
 }
 
 
-/* Get new hex digit from current char */
-static int8_t hexdigit(Lexer *lexer)
+static const char *tokstr(Lexer *lx, int token)
 {
-	if (lexer->c >= '0' && lexer->c <= '9')
-		return lexer->c - '0';
-	else if (lexer->c >= 'a' && lexer->c <= 'f')
-		return (lexer->c - 'a') + 10;
-	else if (lexer->c >= 'A' && lexer->c <= 'F')
-		return (lexer->c - 'A') + 10;
+	switch (token) {
+		case TK_FLT: case TK_INT:
+		case TK_STRING: case TK_IDENTIFIER:
+			pushc(lx, '\0');
+			return cr_ot_pushfstring(lx->vm, "'%s'", lbptr(lx));
+		default:
+			return cr_lr_tok2str(lx, token);
+	}
+}
+
+
+static cr_noret lexerror(Lexer *lx, const char *err, int token)
+{
+	VM *vm;
+
+	vm = lx->vm;
+	err = cr_dg_info(vm, err, lx->src, lx->currline);
+	if (token)
+		cr_ot_pushfstring(vm, "%s near %s", err, tokstr(lx, token));
+	cr_dg_throw(vm, CR_ERRSYNTAX);
+}
+
+
+/* external interface for 'lexerror' */
+void cr_lr_syntaxerror(Lexer *lx, const char *err)
+{
+	lexerror(lx, err, lx->current.tk);
+}
+
+
+/* get new hex digit from current char */
+static int hexdigit(Lexer *lx)
+{
+	int c;
+
+	c = lx->c;
+	if (isxdigit(c))
+		return cr_ot_hexvalue(c);
 	return -1;
 }
 
 
-/* Parse hex escape sequence '\x' */
-static cr_ubyte eschex(Lexer *lexer)
+/* parse hex escape sequence '\x' */
+static int eschex(Lexer *lx)
 {
-	advance(lexer); // skip 'x'
-	cr_ubyte number = 0;
-	for (cr_ubyte i = 0; i < 2; i++) {
-		if (cr_unlikely(isend(lexer->c) || lexer->c == '"')) {
-			lexerror(lexer, lexerrors[LE_INCHEXESC]);
-			break;
-		}
-		int8_t digit = hexdigit(lexer);
-		if (digit == -1) {
-			lexerror(lexer, lexerrors[LE_INVHEXESC]);
-			break;
-		}
+	int i;
+	int number;
+	int digit;
+
+	advance(lx); /* skip 'x' */
+	number = 0;
+	for (i = 0; i < 2; i++) {
+		if (cr_unlikely(isend(lx->c) || lx->c == '"'))
+			cr_lr_syntaxerror(lx, "incomplete hex escape sequence");
+		digit = hexdigit(lx);
+		if (cr_unlikely(digit == -1))
+			cr_lr_syntaxerror(lx, "invalid hexadecimal escape sequence");
 		number = (number << 4) | digit;
-		advance(lexer);
+		advance(lx);
 	}
 	return number;
 }
 
 
-/* Create string token and escape the escape sequences if any */
-static cr_inline Token string(Lexer *lexer)
+/* create string token and handle the escape sequences */
+static void readstring(Lexer *lx)
 {
-	advance(lexer); // skip first '"'
-	while (1) {
-		if (cr_unlikely(isend(lexer->c) || lexer->c == '\n' || lexer->c == '\r')) {
-			lexerror(lexer, lexerrors[LE_UNTSTR]);
+	advance(lx); /* skip '"' */
+	for (;;) {
+		if (cr_unlikely(isend(lx->c) || lx->c == '\n' || lx->c == '\r'))
+			cr_lr_syntaxerror(lx, "string not terminated");
+		if (lx->c == '"')
 			break;
-		}
-		if (lexer->c == '"')
-			break;
-		if (lexer->c == '\\') {
-			advance(lexer);
-			switch (lexer->c) {
+		if (lx->c == '\\') {
+			advance(lx);
+			switch (lx->c) {
 			case '"':
 			case '\'':
 			case '%':
 			case '\\':
 			case '?':
-				advance_and_push(lexer);
+				advance_and_push(lx);
 				break;
 			case '0':
-				advance_and_pushc(lexer, '\0');
+				advance_and_pushc(lx, '\0');
 				break;
 			case 'a':
-				advance_and_pushc(lexer, '\a');
+				advance_and_pushc(lx, '\a');
 				break;
 			case 'b':
-				advance_and_pushc(lexer, '\b');
+				advance_and_pushc(lx, '\b');
 				break;
 			case 'e':
-				advance_and_pushc(lexer, '\33');
+				advance_and_pushc(lx, '\33');
 				break;
 			case 'f':
-				advance_and_pushc(lexer, '\f');
+				advance_and_pushc(lx, '\f');
 				break;
 			case 'n':
-				advance_and_pushc(lexer, '\n');
+				advance_and_pushc(lx, '\n');
 				break;
 			case 'r':
-				advance_and_pushc(lexer, '\r');
+				advance_and_pushc(lx, '\r');
 				break;
 			case 't':
-				advance_and_pushc(lexer, '\t');
+				advance_and_pushc(lx, '\t');
 				break;
 			case 'v':
-				advance_and_pushc(lexer, '\v');
+				advance_and_pushc(lx, '\v');
 				break;
 			case 'x': {
-				pushc(lexer, cast(int32_t, eschex(lexer)));
+				pushc(lx, cast_int(eschex(lx)));
 				break;
 			}
-			case CREOF: // raise error next iteration
+			case CREOF: /* raise error next iteration */
 				break;
 			default:
-				lexerror(lexer, lexerrors[LE_ESCSEQ], lexer->c);
-				break;
+				cr_lr_syntaxerror(lx, "unknown escape sequence");
 			}
-		} else
-			pushc(lexer, lexer->c);
+		} else {
+			pushc(lx, lx->c);
+		}
 	}
-	advance(lexer);
-	OString *string = OString_new(lexer->vm, lbptr(lexer), lblen(lexer));
-	Token tok = token(lexer, TOK_STRING, OBJ_VAL(string));
-	return tok;
+	advance(lx);
+	lx->current.k.str = cr_ot_newstring(lx->vm, lbptr(lx), lblen(lx));
 }
 
 
-/* Create number value from string in decimal format */
-static void decimal(Lexer *lexer, Value *res)
+/* auxiliary to 'readnumber()' */
+cr_sinline void readdigits(Lexer *lx)
 {
-	for (;; advance(lexer)) {
-		if (lexer->c == '_')
+	for (;; advance(lx)) {
+		if (lx->c == '_')
 			continue;
-		if (!isdigit(lexer->c))
+		if (!isdigit(lx->c))
 			break;
-		pushl(lexer);
+		pushl(lx);
 	}
-	if (lexer->c == '.') {
-		advance_and_push(lexer);
-		while (isdigit(lexer->c))
-			advance_and_push(lexer);
-		if (lexer->c == 'e' || lexer->c == 'E') {
-			advance_and_push(lexer);
-			if (lexer->c == '+' || lexer->c == '-')
-				advance_and_push(lexer);
-			if (cr_unlikely(!isdigit(lexer->c)))
-				lexerror(lexer, lexerrors[LE_DECCONST]);
+}
+
+
+/* read decimal number */
+static void readdecimal(Lexer *lx)
+{
+	readdigits(lx);
+	if (lx->c == '.') {
+		advance_and_push(lx);
+		while (isdigit(lx->c))
+			advance_and_push(lx);
+		if (lx->c == 'e' || lx->c == 'E') {
+			advance_and_push(lx);
+			if (lx->c == '+' || lx->c == '-')
+				advance_and_push(lx);
+			if (cr_unlikely(!isdigit(lx->c)))
+				cr_lr_syntaxerror(lx, "invalid decimal constant");
 			else {
-				advance_and_push(lexer);
-				for (;; advance(lexer)) {
-					if (lexer->c == '_')
-						continue;
-					if (!isdigit(lexer->c))
-						break;
-					pushl(lexer);
-				}
+				advance_and_push(lx);
+				readdigits(lx);
 			}
 		}
 	}
-	pushc(lexer, '\0');
+	pushc(lx, '\0');
 	errno = 0;
-	if (!lexer->skip)
-		*res = NUMBER_VAL(strtod(lbptr(lexer), NULL));
+	if (!lx->skip)
+		*res = NUMBER_VAL(strtod(lbptr(lx), NULL));
 	else {
-		lexer->skip = 0;
+		lx->skip = 0;
 		*res = NUMBER_VAL(0.0);
 	}
-	lbpop(lexer); // '\0'
+	popc(lx); // '\0'
 }
 
 
@@ -405,7 +406,7 @@ static void hex(Lexer *lexer, Value *res)
 		lexer->skip = 0;
 		*res = NUMBER_VAL(0.0);
 	}
-	lbpop(lexer); // '\0'
+	popc(lexer); // '\0'
 }
 
 
@@ -416,7 +417,7 @@ static cr_inline void octal(Lexer *lexer, Value *res)
 		advance_and_push(lexer);
 	pushc(lexer, '\0');
 	*res = NUMBER_VAL(strtoll(lbptr(lexer), NULL, 8));
-	lbpop(lexer); // '\0'
+	popc(lexer); // '\0'
 }
 
 
@@ -451,7 +452,7 @@ static Token number(Lexer *lexer)
  * return appropriate 'TokenType' otherwise return 'TOK_IDENTIFIER'.
  * Auxiliary to 'TokenType_identifier' */
 static cr_inline TType keyword(Lexer *lexer, uint32_t start, uint32_t length, const char *pattern,
-				      TType type)
+		TType type)
 {
 	advance(lexer); // skip past the keyword for the next scan
 	if (lblen(lexer) == start + length && memcmp(lbptr(lexer) + start, pattern, length) == 0)
@@ -490,14 +491,14 @@ b:
 c:
 	if (lblen(lexer) > 1) {
 		switch (lbptr(lexer)[1]) {
-		case 'a':
-			return keyword(lexer, 2, 2, "se", TOK_CASE);
-		case 'l':
-			return keyword(lexer, 2, 3, "ass", TOK_CLASS); // lmao
-		case 'o':
-			return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
-		default:
-			break;
+			case 'a':
+				return keyword(lexer, 2, 2, "se", TOK_CASE);
+			case 'l':
+				return keyword(lexer, 2, 3, "ass", TOK_CLASS); // lmao
+			case 'o':
+				return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
+			default:
+				break;
 		}
 	}
 	goto ret;
@@ -508,42 +509,42 @@ e:
 f:
 	if (lblen(lexer) > 1) {
 		switch (lbptr(lexer)[1]) {
-		case 'a':
-			return keyword(lexer, 2, 3, "lse", TOK_FALSE);
-		case 'i':
-			return keyword(lexer, 2, 3, "xed", TOK_FIXED);
-		case 'n':
-			if (lblen(lexer) == 2)
-				return TOK_FN;
-			else
-				return TOK_IDENTIFIER;
-		case 'o':
-			if (lblen(lexer) > 3)
-				return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
-			else
-				return keyword(lexer, 2, 1, "r", TOK_FOR);
-		default:
-			break;
+			case 'a':
+				return keyword(lexer, 2, 3, "lse", TOK_FALSE);
+			case 'i':
+				return keyword(lexer, 2, 3, "xed", TOK_FIXED);
+			case 'n':
+				if (lblen(lexer) == 2)
+					return TOK_FN;
+				else
+					return TOK_IDENTIFIER;
+			case 'o':
+				if (lblen(lexer) > 3)
+					return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
+				else
+					return keyword(lexer, 2, 1, "r", TOK_FOR);
+			default:
+				break;
 		}
 	}
 	goto ret;
 i:
 	if (lblen(lexer) > 1) {
 		switch (lbptr(lexer)[1]) {
-		case 'm':
-			return keyword(lexer, 2, 2, "pl", TOK_IMPL);
-		case 'n':
-			if (lblen(lexer) == 2)
-				return TOK_IN;
-			else
-				return TOK_IDENTIFIER;
-		case 'f':
-			if (lblen(lexer) == 2)
-				return TOK_IF;
-			else
-				return TOK_IDENTIFIER;
-		default:
-			break;
+			case 'm':
+				return keyword(lexer, 2, 2, "pl", TOK_IMPL);
+			case 'n':
+				if (lblen(lexer) == 2)
+					return TOK_IN;
+				else
+					return TOK_IDENTIFIER;
+			case 'f':
+				if (lblen(lexer) == 2)
+					return TOK_IF;
+				else
+					return TOK_IDENTIFIER;
+			default:
+				break;
 		}
 	}
 	goto ret;
@@ -558,14 +559,14 @@ r:
 s:
 	if (lblen(lexer) > 1) {
 		switch (lbptr(lexer)[1]) {
-		case 'u':
-			return keyword(lexer, 2, 3, "per", TOK_SUPER);
-		case 'e':
-			return keyword(lexer, 2, 2, "lf", TOK_SELF);
-		case 'w':
-			return keyword(lexer, 2, 4, "itch", TOK_SWITCH);
-		default:
-			break;
+			case 'u':
+				return keyword(lexer, 2, 3, "per", TOK_SUPER);
+			case 'e':
+				return keyword(lexer, 2, 2, "lf", TOK_SELF);
+			case 'w':
+				return keyword(lexer, 2, 4, "itch", TOK_SWITCH);
+			default:
+				break;
 		}
 	}
 	goto ret;
@@ -578,99 +579,99 @@ w:
 
 #else
 	switch (lexer->c) {
-	case 'a':
-		return keyword(lexer, 1, 2, "nd", TOK_AND);
-	case 'b':
-		return keyword(lexer, 1, 4, "reak", TOK_BREAK);
-	case 'c':
-		if (lblen(lexer) > 1) {
-			switch (lbptr(lexer)[1]) {
-			case 'a':
-				return keyword(lexer, 2, 2, "se", TOK_CASE);
-			case 'l':
-				return keyword(lexer, 2, 3, "ass", TOK_CLASS);
-			case 'o':
-				return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
-			default:
-				break;
+		case 'a':
+			return keyword(lexer, 1, 2, "nd", TOK_AND);
+		case 'b':
+			return keyword(lexer, 1, 4, "reak", TOK_BREAK);
+		case 'c':
+			if (lblen(lexer) > 1) {
+				switch (lbptr(lexer)[1]) {
+					case 'a':
+						return keyword(lexer, 2, 2, "se", TOK_CASE);
+					case 'l':
+						return keyword(lexer, 2, 3, "ass", TOK_CLASS);
+					case 'o':
+						return keyword(lexer, 2, 6, "ntinue", TOK_CONTINUE);
+					default:
+						break;
+				}
 			}
-		}
-		break;
-	case 'd':
-		return keyword(lexer, 1, 6, "efault", TOK_DEFAULT);
-	case 'e':
-		return keyword(lexer, 1, 3, "lse", TOK_ELSE);
-	case 'f':
-		if (lblen(lexer) > 1) {
-			switch (lbptr(lexer)[1]) {
-			case 'a':
-				return keyword(lexer, 2, 3, "lse", TOK_FALSE);
-			case 'i':
-				return keyword(lexer, 2, 3, "xed", TOK_FIXED);
-			case 'n':
-				if (lblen(lexer) == 2)
-					return TOK_FN;
-				else
-					return TOK_IDENTIFIER;
-				if (lblen(lexer) > 3)
-					return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
-				else
-					return keyword(lexer, 2, 1, "r", TOK_FOR);
-			default:
-				break;
+			break;
+		case 'd':
+			return keyword(lexer, 1, 6, "efault", TOK_DEFAULT);
+		case 'e':
+			return keyword(lexer, 1, 3, "lse", TOK_ELSE);
+		case 'f':
+			if (lblen(lexer) > 1) {
+				switch (lbptr(lexer)[1]) {
+					case 'a':
+						return keyword(lexer, 2, 3, "lse", TOK_FALSE);
+					case 'i':
+						return keyword(lexer, 2, 3, "xed", TOK_FIXED);
+					case 'n':
+						if (lblen(lexer) == 2)
+							return TOK_FN;
+						else
+							return TOK_IDENTIFIER;
+						if (lblen(lexer) > 3)
+							return keyword(lexer, 2, 5, "reach", TOK_FOREACH);
+						else
+							return keyword(lexer, 2, 1, "r", TOK_FOR);
+					default:
+						break;
+				}
 			}
-		}
-		break;
-	case 'i':
-		if (lblen(lexer) > 1) {
-			switch (lbptr(lexer)[1]) {
-			case 'm':
-				keyword(lexer, 2, 2, "pl", TOK_IMPL);
-			case 'n':
-				if (lblen(lexer) == 2)
-					return TOK_IN;
-				else
-					return TOK_IDENTIFIER;
-			case 'f':
-				if (lblen(lexer) == 2)
-					return TOK_IF;
-				else
-					return TOK_IDENTIFIER;
-			default:
-				break;
+			break;
+		case 'i':
+			if (lblen(lexer) > 1) {
+				switch (lbptr(lexer)[1]) {
+					case 'm':
+						keyword(lexer, 2, 2, "pl", TOK_IMPL);
+					case 'n':
+						if (lblen(lexer) == 2)
+							return TOK_IN;
+						else
+							return TOK_IDENTIFIER;
+					case 'f':
+						if (lblen(lexer) == 2)
+							return TOK_IF;
+						else
+							return TOK_IDENTIFIER;
+					default:
+						break;
+				}
 			}
-		}
-		break;
-	case 'l':
-		return keyword(lexer, 1, 3, "oop", TOK_LOOP);
-	case 'n':
-		return keyword(lexer, 1, 2, "il", TOK_NIL);
-	case 'o':
-		return keyword(lexer, 1, 1, "r", TOK_OR);
-	case 'r':
-		return keyword(lexer, 1, 5, "eturn", TOK_RETURN);
-	case 's':
-		if (lblen(lexer) > 1) {
-			switch (lbptr(lexer)[1]) {
-			case 'u':
-				return keyword(lexer, 2, 3, "per", TOK_SUPER);
-			case 'e':
-				return keyword(lexer, 2, 2, "lf", TOK_SELF);
-			case 'w':
-				return keyword(lexer, 2, 4, "itch", TOK_SWITCH);
-			default:
-				break;
+			break;
+		case 'l':
+			return keyword(lexer, 1, 3, "oop", TOK_LOOP);
+		case 'n':
+			return keyword(lexer, 1, 2, "il", TOK_NIL);
+		case 'o':
+			return keyword(lexer, 1, 1, "r", TOK_OR);
+		case 'r':
+			return keyword(lexer, 1, 5, "eturn", TOK_RETURN);
+		case 's':
+			if (lblen(lexer) > 1) {
+				switch (lbptr(lexer)[1]) {
+					case 'u':
+						return keyword(lexer, 2, 3, "per", TOK_SUPER);
+					case 'e':
+						return keyword(lexer, 2, 2, "lf", TOK_SELF);
+					case 'w':
+						return keyword(lexer, 2, 4, "itch", TOK_SWITCH);
+					default:
+						break;
+				}
 			}
-		}
-		break;
-	case 't':
-		return keyword(lexer, 1, 3, "rue", TOK_TRUE);
-	case 'v':
-		return keyword(lexer, 1, 2, "ar", TOK_VAR);
-	case 'w':
-		return keyword(lexer, 1, 4, "hile", TOK_WHILE);
-	default:
-		break;
+			break;
+		case 't':
+			return keyword(lexer, 1, 3, "rue", TOK_TRUE);
+		case 'v':
+			return keyword(lexer, 1, 2, "ar", TOK_VAR);
+		case 'w':
+			return keyword(lexer, 1, 4, "hile", TOK_WHILE);
+		default:
+			break;
 	}
 #endif
 ret:
@@ -755,7 +756,7 @@ dot:
 		if (lmatch(lexer, '.'))
 			return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
 		else
-			fallback(lexer, fallbackc);
+			goback(lexer, fallbackc);
 	}
 	return token(lexer, TOK_DOT, EMPTY_VAL);
 comma:
@@ -791,59 +792,59 @@ err:
 	return errtoken(lexer, "Unexpected character.");
 #else
 	switch (lexer->c) {
-	case '[':
-		return keywordtoken(lexer, TOK_LBRACK);
-	case ']':
-		return keywordtoken(lexer, TOK_RBRACK);
-	case '(':
-		return keywordtoken(lexer, TOK_LPAREN);
-	case ')':
-		return keywordtoken(lexer, TOK_RPAREN);
-	case '{':
-		return keywordtoken(lexer, TOK_LBRACE);
-	case '}':
-		return keywordtoken(lexer, TOK_RBRACE);
-	case '.':
-		advance(lexer);
-		int32_t fallbackc = lexer->c;
-		if (lmatch(lexer, '.')) { // is '...' ?
-			if (lmatch(lexer, '.'))
-				return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
-			else
-				fallback(lexer, fallbackc);
-		}
-		return token(lexer, TOK_DOT, EMPTY_VAL);
-	case ',':
-		return keywordtoken(lexer, TOK_COMMA);
-	case '-':
-		return keywordtoken(lexer, TOK_MINUS);
-	case '+':
-		return keywordtoken(lexer, TOK_PLUS);
-	case ';':
-		return keywordtoken(lexer, TOK_SEMICOLON);
-	case ':':
-		return keywordtoken(lexer, TOK_COLON);
-	case '?':
-		return keywordtoken(lexer, TOK_QMARK);
-	case '/':
-		return keywordtoken(lexer, TOK_SLASH);
-	case '*':
-		return keywordtoken(lexer, TOK_STAR);
-	case '%':
-		return keywordtoken(lexer, TOK_PERCENT);
-	case '!':
-		return token(lexer, lmatch(lexer, '=') ? TOK_BANG_EQUAL : (advance(lexer), TOK_BANG), EMPTY_VAL);
-	case '=':
-		return token(lexer, lmatch(lexer, '=') ? TOK_EQUAL_EQUAL : (advance(lexer), TOK_EQUAL), EMPTY_VAL);
-	case '>':
-		return token(lexer, lmatch(lexer, '=') ? TOK_GREATER_EQUAL : (advance(lexer), TOK_GREATER), EMPTY_VAL);
-	case '<':
-		return token(lexer, lmatch(lexer, '=') ? TOK_LESS_EQUAL : (advance(lexer), TOK_LESS), EMPTY_VAL);
-	case '"':
-		return string(lexer);
-	default:
-		advance(lexer);
-		return errtoken(lexer, "Unexpected character.");
+		case '[':
+			return keywordtoken(lexer, TOK_LBRACK);
+		case ']':
+			return keywordtoken(lexer, TOK_RBRACK);
+		case '(':
+			return keywordtoken(lexer, TOK_LPAREN);
+		case ')':
+			return keywordtoken(lexer, TOK_RPAREN);
+		case '{':
+			return keywordtoken(lexer, TOK_LBRACE);
+		case '}':
+			return keywordtoken(lexer, TOK_RBRACE);
+		case '.':
+			advance(lexer);
+			int32_t fallbackc = lexer->c;
+			if (lxmatch(lexer, '.')) { // is '...' ?
+				if (lxmatch(lexer, '.'))
+					return token(lexer, TOK_DOT_DOT_DOT, EMPTY_VAL);
+				else
+					goback(lexer, fallbackc);
+			}
+			return token(lexer, TOK_DOT, EMPTY_VAL);
+		case ',':
+			return keywordtoken(lexer, TOK_COMMA);
+		case '-':
+			return keywordtoken(lexer, TOK_MINUS);
+		case '+':
+			return keywordtoken(lexer, TOK_PLUS);
+		case ';':
+			return keywordtoken(lexer, TOK_SEMICOLON);
+		case ':':
+			return keywordtoken(lexer, TOK_COLON);
+		case '?':
+			return keywordtoken(lexer, TOK_QMARK);
+		case '/':
+			return keywordtoken(lexer, TOK_SLASH);
+		case '*':
+			return keywordtoken(lexer, TOK_STAR);
+		case '%':
+			return keywordtoken(lexer, TOK_PERCENT);
+		case '!':
+			return token(lexer, lmatch(lexer, '=') ? TOK_BANG_EQUAL : (advance(lexer), TOK_BANG), EMPTY_VAL);
+		case '=':
+			return token(lexer, lmatch(lexer, '=') ? TOK_EQUAL_EQUAL : (advance(lexer), TOK_EQUAL), EMPTY_VAL);
+		case '>':
+			return token(lexer, lmatch(lexer, '=') ? TOK_GREATER_EQUAL : (advance(lexer), TOK_GREATER), EMPTY_VAL);
+		case '<':
+			return token(lexer, lmatch(lexer, '=') ? TOK_LESS_EQUAL : (advance(lexer), TOK_LESS), EMPTY_VAL);
+		case '"':
+			return string(lexer);
+		default:
+			advance(lexer);
+			return errtoken(lexer, "Unexpected character.");
 	}
 #endif
 }

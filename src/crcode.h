@@ -32,61 +32,93 @@
  * parameter instructions that do the same thing.
  */
 typedef enum {
-	/* push literals */
-	OP_TRUE = 0, OP_FALSE, OP_NIL, OP_NILN,
-	/* perform unary operation */
-	OP_NEG, OP_NOT,
-	/* perform binary operation */
-	OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD, OP_POW,
-	/* push all varargs */
-	OP_VARARG,
-	/* perform comparison */
-	OP_NEQ, OP_EQ, OP_EQUAL, OP_GT, OP_GE, OP_LT, OP_LE,
-	/* pop value/s */
-	OP_POP, OP_POPN,
-	/* push constant */
-	OP_CONST,
-	/* global variable ops */
-	OP_DEFINE_GLOBAL, OP_DEFINE_GLOBALL, OP_GET_GLOBAL, OP_GET_GLOBALL,
-	OP_SET_GLOBAL, OP_SET_GLOBALL,
-	/* local variable ops */
-	OP_GET_LOCAL, OP_GET_LOCALL, OP_SET_LOCAL, OP_SET_LOCALL,
-	/* code jump ops */
-	OP_JMP_IF_FALSE, OP_JMP_IF_FALSE_POP, OP_JMP_IF_FALSE_OR_POP,
-	OP_JMP_IF_FALSE_AND_POP, OP_JMP, OP_JMP_AND_POP, OP_LOOP,
-	/* call '()' ops */
-	OP_CALL0, OP_CALL1, OP_CALL,
-	/* push closure */
-	OP_CLOSURE,
-	/* upvalue ops */
-	OP_GET_UPVALUE, OP_SET_UPVALUE, OP_CLOSE_UPVAL, OP_CLOSE_UPVALN,
-	/* push class */
-	OP_CLASS,
-	/* dot '.' property ops */
-	OP_SET_PROPERTY, OP_GET_PROPERTY,
-	/* index '[]' property ops */
-	OP_INDEX, OP_SET_INDEX,
-	/* push method */
-	OP_METHOD,
-	/* combined property access + call ops */
-	OP_INVOKE0, OP_INVOKE1, OP_INVOKE,
-	/* overload vtable method */
-	OP_OVERLOAD,
-	/* inherit from class */
-	OP_INHERIT,
-	/* 'super'(class) ops */
-	OP_GET_SUPER, OP_INVOKE_SUPER0, OP_INVOKE_SUPER1, OP_INVOKE_SUPER,
-	/* set start/end of params */
-	OP_CALLSTART, OP_RETSTART,
-	/* generic 'foreach' loop ops */
-	OP_FOREACH, OP_FOREACH_PREP,
-	/* return value/s ops */
-	OP_RET0, OP_RET1, OP_RET,
+	/* pop/push instructions */
+	OP_TRUE = 0, /* push 'true' literal */
+	OP_FALSE, /* push 'false' literal */
+	OP_NIL, /* push 'nil' literal */
+	OP_NILN, /* push 'n' 'nil' literals */
+	OP_CONST, /* push constant */
+	OP_VARARG, /* push all variable arguments */
+	OP_CLOSURE, /* create and push closure */
+	OP_CLASS, /* create and push class */
+	OP_METHOD, /* create and push method */
+	OP_POP, /* pop single value */
+	OP_POPN, /* pop 'n' values */
+	/* arithmetic instructions */
+	OP_NEG, /* negate (arithmetic) */
+	OP_NOT, /* negate (boolean) */
+	OP_ADD, /* add */
+	OP_SUB, /* subtract */
+	OP_MUL, /* multiply */
+	OP_DIV, /* divide */
+	OP_MOD, /* modulo */
+	OP_POW, /* raise value 'x' to power of 'y' */
+	/* ordering instructions */
+	OP_NEQ, /* !(equality) */
+	OP_EQ, /* equality */
+	OP_EQUAL, /* equality (preserve left operand) */
+	OP_GT, /* greater than */
+	OP_GE, /* greater or equal */
+	OP_LT, /* less than */
+	OP_LE, /* less or equal */
+	/* global variable instructions */
+	OP_DEFGVAR, /* define global variable */
+	OP_DEFGVARL, /* define global variable long */
+	OP_GETGVAR, /* get global variable */
+	OP_GETGVARL, /* get global variable long */
+	OP_SETGVAR, /* set global variable */
+	OP_SETGVARL, /* set global variable long */
+	/* local variable instructions */
+	OP_GETLVAR, /* get local variable */
+	OP_GETLVARL, /* get local variable long */
+	OP_SETLVAR, /* set local variable */
+	OP_SETLVARL, /* set local variable long */
+	/* jump instructions */
+	OP_JZ, /* jump if false */
+	OP_JZPOP, /* jump if false and pop unconditionally */
+	OP_JZORPOP, /* jump if false or pop */
+	OP_JZANDPOP, /* jump if false and pop */
+	OP_JMP, /* jump to specified location */
+	OP_JMPANDPOP, /* jump to specified location and pop */
+	OP_LOOP, /* jump back to specified location */
+	/* call instructions */
+	OP_CALL0, /* call value with no arguments */
+	OP_CALL1, /* call value with a single argument */
+	OP_CALL, /* call value with 2 or more arguments */
+	OP_CALLPROP0, /* call property with no arguments */
+	OP_CALLPROP1, /* call property with a single argument */
+	OP_CALLPROP, /* call property with 2 or more arguments */
+	OP_CALLSUPER0, /* call superclass method with no arguments */
+	OP_CALLSUPER1, /* call superclass method with a single argument */
+	OP_CALLSUPER, /* call superclass method with 2 or more arguments */
+	/* upvalue instructions */
+	OP_GETUVAL, /* get upvalue */
+	OP_SETUVAL, /* set upvalue */
+	OP_CLOSEUVAL, /* close upvalue */
+	OP_CLOSEUVALN, /* close 'n' upvalues */
+	/* property access instructions */
+	OP_SETPROP, /* set property ('.') */
+	OP_GETPROP, /* get property ('.') */
+	OP_GETPROPIDX, /* get property ('[k]') */
+	OP_SETPROPIDX, /* set property ('[k]') */
+	OP_GETSUP, /* get super class method ('.') */
+	OP_GETSUPIDX, /* get super class method ('[k]') */
+	/* other specific instructions */
+	OP_SETVTABLE, /* set vtable method */
+	OP_INHERIT, /* inherit from class */
+	OP_CALLSTART, /* mark start of call values */
+	OP_RETSTART, /* mark start of return values */
+	OP_FOREACH_PREP, /* prepare foreach loop */
+	OP_FOREACH, /* run foreach loop */
+	/* return instructions */
+	OP_RET0, /* return with no values */
+	OP_RET1, /* return with a single value */
+	OP_RET, /* return with 2 or more values */
 } OpCode;
 
 
 /* number of 'OpCode's */
-#define CR_NOPC		(OP_RET + 1)
+#define CR_NUMOPS	(OP_RET + 1)
 
 
 

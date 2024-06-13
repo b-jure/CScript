@@ -381,33 +381,20 @@ typedef struct Tuple {
 extern const Tuple vtmethodinfo[CR_MNUM];
 
 
-#define cr_ot_newstringlit(vm, lit)	OString_new((vm), (lit), SLL(lit))
-
 void cr_ot_sourceid(char *adest, const char *src, size_t len);
-const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...);
-int cr_ot_eqstring(OString *s1, OString *s2);
-int32_t cr_ot_id2mtag(VM *vm, OString *id);
+int cr_ot_strtomt(VM *vm, OString *id);
 OString *cr_ot_newstring(VM *vm, const char *chars, size_t len);
-OString *cr_ot_newvstringf(VM *vm, const char *fmt, va_list argp);
-OString *cr_ot_newstringf(VM *vm, const char *fmt, ...);
-OString *cr_ot_concatenate(VM *vm, GCObject* a, GCObject* b);
-InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure *method);
-Instance *cr_ot_newinstance(VM *vm, OClass *cclass);
-OClass *cr_ot_newclass(VM *vm, OString *name);
-UValue *cr_ot_newuvalue(VM *vm, TValue *vp);
-CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn, int nupvalues);
+int cr_ot_hexvalue(int c);
+void cr_ot_numtostring(VM *vm, TValue *v);
+const char *cr_ot_pushvfstring(VM *vm, const char *fmt, va_list argp);
+const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...);
 CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues);
-Function *cr_ot_newfunction(VM *vm);
-cr_ubyte cr_ot_vtcall(VM *vm, TValue instance, int tag);
+Function *cr_ot_newfunction(VM *vm);;
+CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn, int nupvalues);
+UValue *cr_ot_newuvalue(VM *vm, TValue *vp);
+OClass *cr_ot_newclass(VM *vm, OString *id);
+Instance *cr_ot_newinstance(VM *vm, OClass *cls);
+InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure *method);
 void cr_ot_free(VM *vm, GCObject *o);
-void cr_ot_tryop(VM *vm, TValue a, TValue b, int op, TValue *res);
-void oprint(VM *vm, TValue value, cr_ubyte raw, FILE *stream);
-void oeq(VM *vm, TValue l, TValue r);
-void one(VM *vm, TValue l, TValue r);
-void olt(VM *vm, TValue l, TValue r);
-void ogt(VM *vm, TValue l, TValue r);
-void ole(VM *vm, TValue l, TValue r);
-void oge(VM *vm, TValue l, TValue r);
-cr_ubyte cr_ot_rawindex(VM *vm, TValue instance, cr_ubyte get);
 
 #endif

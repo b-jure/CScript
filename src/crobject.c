@@ -22,6 +22,7 @@
 #include "crvm.h"
 #include "stdarg.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <locale.h>
@@ -103,7 +104,7 @@ cr_sinline GCObject *allocobject(VM *vm, size_t size, cr_ubyte ott)
 }
 
 
-/* auxiliary function for 'OString' constructors */
+/* auxiliary function for allocating string memory */
 cr_sinline OString *allocstring(VM *vm, uint32_t len)
 {
 	OString *s;
@@ -144,6 +145,119 @@ OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
 }
 
 
+
+/* --------------------------------------------------------------------------
+ * String conversion
+ * -------------------------------------------------------------------------- */
+
+/* maximum value for last integer digit */
+#define MAXINTLASTDIG		(CR_INTEGER_MAX % 10)
+
+/* 
+ * Check if integer 'i' overflows limit 'l' or in case
+ * 'i' is equal to 'l' check if digit 'd' would overflow.
+ */
+#define ioverflow(i,d,l) \
+	((i) >= (l) && ((i) > (l) || (d) > MAXINTLASTDIG))
+
+
+/* decimal overflow */
+#define decoverflow(i,d)	ioverflow(i, d, (CR_INTEGER_MAX / 10))
+
+/* octal overflow */
+#define octoverflow(i,d)	ioverflow(i, d, (CR_INTEGER_MAX / 8))
+
+/* hexadecimal overflow */
+#define hexoverflow(i,d)	ioverflow(i, d, (CR_INTEGER_MAX / 16))
+
+
+
+/* check if c is octal */
+#define isoctal(c)	(isdigit(c) && (c) < '8')
+
+
+
+/* convert hex character into digit */
+int cr_ot_hexvalue(int c)
+{
+	cr_assert(isxdigit(c));
+	if (isdigit(c)) return c - '0';
+	else return (tolower(c) - 'a') + 10;
+}
+
+
+/*
+ * Convert string to Cript integer.
+ * This function can convert hexadecimal, octal
+ * and decimal strings to 'cr_integer'.
+ */
+static const char *str2int(const char *s, cr_integer *i)
+{
+	cr_uinteger u;
+	int digit;
+	int neg;
+	int novalue;
+
+	while (isspace(*s)) s++; /* skip leading spaces */
+	novalue = 1;
+	if ((neg = *s == '-') || *s == '+') s++;
+	if (*s == '0' && (*s == 'x' || *s == 'X')) { /* hex ? */
+		s+=2; /* skip hex prefix */
+		for (; isxdigit(*s); s++) {
+			digit = cr_ot_hexvalue(*s);
+			if (hexoverflow(u, digit))
+				return NULL;
+			u = u * 16 + digit;
+			novalue = 0;
+		}
+	} else if (*s == '0' && isoctal(s[1])) { /* octal ? */
+		s++; /* skip '0' */
+		do {
+			digit = *s - '0';
+			if (octoverflow(u, digit))
+				return NULL;
+			u = u * 8 + digit;
+			novalue = 0;
+		} while (isoctal(*++s));
+	} else { /* decimal */
+		for (; isdigit(*s); s++) {
+			digit = *s - '0';
+			if (decoverflow(u, digit))
+				return NULL;
+			u = u * 10 + digit;
+			novalue = 0;
+		}
+	}
+	while (isspace(*s)) s++; /* skip trailing spaces */
+	if (novalue || *s != '\0') return NULL;
+	return s;
+}
+
+
+static const char *str2flt(const char *s, cr_number *n)
+{
+	// TODO
+}
+
+
+/* convert string to 'cr_number' or 'cr_integer' */
+size_t cr_ot_strtonum(const char *s, TValue *o)
+{
+	cr_integer i;
+	cr_number n;
+	const char *e;
+
+	if ((e = str2int(s, &i)) != NULL) {
+		setivalue(o, i);
+	} else if ((e = str2flt(s, &n)) != NULL) {
+		setfvalue(o, n);
+	} else {
+		return 0;
+	}
+	return (e - s) + 1;
+}
+
+
 /*
  * Maximum conversion length of a number to a string.
  * 'long double' (not supported currently) can be 33 digits
@@ -162,7 +276,7 @@ static int num2buff(const TValue *nv, char *buff)
 		len = cr_integer2str(buff, MAXNUM2STR, ivalue(nv));
 	} else {
 		len = cr_number2str(buff, MAXNUM2STR, fvalue(nv));
-		/* if it looks like integer add '.0' */
+		/* if it looks like integer append '.0' */
 		if (strspn(buff, "-0123456789") == len) {
 			buff[len++] = *localeconv()->decimal_point;
 			buff[len++] = '0';
@@ -182,6 +296,11 @@ void cr_ot_numtostring(VM *vm, TValue *v)
 }
 
 
+
+/* --------------------------------------------------------------------------
+ * String format
+ * -------------------------------------------------------------------------- */
+
 /*
  * Initial size of buffer used in 'cr_ot_newvstringf'
  * to prevent allocations, instead the function
@@ -191,22 +310,22 @@ void cr_ot_numtostring(VM *vm, TValue *v)
  * gets called by 'cr_dg_getinfo'; the size should be
  * at least 'CR_MAXSRC' + 'MAXNUM2STR' + size for message.
  */
-#define BUFFVSFSIZ	(CRI_MAXSRC + MAXNUM2STR + 100)
+#define BUFFVFSSIZ	(CRI_MAXSRC + MAXNUM2STR + 100)
 
 /* buffer for 'cr_ot_newvstringf' */
 typedef struct BuffVSF {
 	VM *vm;
 	int pushed; /* true if 'space' was pushed on the stack */
 	int len; /* string length in 'space' */
-	char space[BUFFVSFSIZ];
-} BuffVSF;
+	char space[BUFFVFSSIZ];
+} BuffVFS;
 
 
 /* 
  * Pushes 'str' to the stack and concatenates it with
  * other string on the stack if 'pushed' is set.
  */
-static void auxpushstr(BuffVSF *buff, const char *str, size_t len)
+static void auxpushstr(BuffVFS *buff, const char *str, size_t len)
 {
 	VM *vm;
 	OString *s;
@@ -223,7 +342,7 @@ static void auxpushstr(BuffVSF *buff, const char *str, size_t len)
 
 
 /* pushes buffer 'space' on the stack */
-static void pushbuff(BuffVSF *buff)
+static void pushbuff(BuffVFS *buff)
 {
 	auxpushstr(buff, buff->space, buff->len);
 	buff->len = 0;
@@ -231,21 +350,21 @@ static void pushbuff(BuffVSF *buff)
 
 
 /* ensure up to buffer space (up to 'BUFFVSFSIZ') */
-static char *getbuff(BuffVSF *buff, int n)
+static char *getbuff(BuffVFS *buff, int n)
 {
 	cr_assert(n <= BUFFVSFSIZ);
-	if (n > BUFFVSFSIZ - buff->len)
+	if (n > BUFFVFSSIZ - buff->len)
 		pushbuff(buff);
 	return buff->space + buff->len;
 }
 
 
 /* add string to buffer */
-static void buffaddstring(BuffVSF *buff, const char *str, size_t len)
+static void buffaddstring(BuffVFS *buff, const char *str, size_t len)
 {
 	char *p;
 
-	if (len < BUFFVSFSIZ) {
+	if (len < BUFFVFSSIZ) {
 		p = getbuff(buff, len);
 		memcpy(p, str, len);
 		buff->len += cast_int(len);
@@ -257,14 +376,14 @@ static void buffaddstring(BuffVSF *buff, const char *str, size_t len)
 
 
 /* add number to buffer */
-static void buffaddnum(BuffVSF *buff, const TValue *nv)
+cr_sinline void buffaddnum(BuffVFS *buff, const TValue *nv)
 {
 	buff->len += num2buff(nv, getbuff(buff, MAXNUM2STR));
 }
 
 
 /* add pointer to buffer */
-static void buffaddptr(BuffVSF *buff, const void *p)
+cr_sinline void buffaddptr(BuffVFS *buff, const void *p)
 {
 	const int psize = 3 * sizeof(void*) + 8;
 	buff->len += cr_pointer2str(getbuff(buff, psize), psize, p);
@@ -272,11 +391,11 @@ static void buffaddptr(BuffVSF *buff, const void *p)
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
-OString *cr_ot_newvstringf(VM *vm, const char *fmt, va_list argp)
+const char *cr_ot_pushvfstring(VM *vm, const char *fmt, va_list argp)
 {
 	const char *end;
 	const char *str;
-	BuffVSF buff;
+	BuffVFS buff;
 	TValue nv;
 	char c;
 
@@ -318,21 +437,26 @@ OString *cr_ot_newvstringf(VM *vm, const char *fmt, va_list argp)
 	}
 	buffaddstring(&buff, fmt, strlen(fmt));
 	pushbuff(&buff);
-	return strvalue(s2v(vm->stacktop.p));
+	return cstrvalue(s2v(vm->stacktop.p));
 }
 
 
-OString *cr_ot_newstringf(VM *vm, const char *fmt, ...)
+const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...)
 {
-	OString *s;
+	const char *str;
 	va_list argp;
 
 	va_start(argp, fmt);
-	s = cr_ot_newvstringf(vm, fmt, argp);
+	str = cr_ot_pushvfstring(vm, fmt, argp);
 	va_end(argp);
-	return s;
+	return str;
 }
 
+
+
+/* --------------------------------------------------------------------------
+ * Other object constructors
+ * -------------------------------------------------------------------------- */
 
 CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues)
 {
@@ -419,6 +543,11 @@ InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure
 }
 
 
+
+/* --------------------------------------------------------------------------
+ * Free objects
+ * -------------------------------------------------------------------------- */
+
 /*
  * Performs raw deallocation of object memory it does
  * not try to call '__free__'.
@@ -457,5 +586,3 @@ void cr_ot_free(VM *vm, GCObject *o)
 			cr_unreachable();
 	}
 }
-
-

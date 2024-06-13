@@ -14,6 +14,7 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
+#include "crdebug.h"
 #include "crhashtable.h"
 #include "crmem.h"
 #include "crobject.h"
@@ -98,15 +99,14 @@ void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep,
 		return ptr;
 	size += extra;
 	if (size >= limit / 2) {
-		if (cr_unlikely(size >= limit)) {
-			// runtime error
-		}
+		if (cr_unlikely(size >= limit))
+			cr_dg_runerror(vm, "%s size limit", what);
 		size = limit;
-		cr_assert(size >= CR_MINARRSIZE);
+		cr_assert(size >= CRI_MINARRSIZE);
 	} else {
 		size *= 2;
-		if (size < CR_MINARRSIZE)
-			size = CR_MINARRSIZE;
+		if (size < CRI_MINARRSIZE)
+			size = CRI_MINARRSIZE;
 	}
 	ptr = cr_mm_saferealloc(vm, ptr, *sizep * elemsize, size * elemsize);
 	*sizep = size;

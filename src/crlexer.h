@@ -26,25 +26,23 @@
 #include <stdarg.h>
 
 
-typedef enum {
-	/* single/double character tokens */
-	TOK_LBRACK = 0, TOK_RBRACK, TOK_LPAREN, TOK_RPAREN, TOK_LBRACE,
-	TOK_RBRACE, TOK_DOT, TOK_DOT_DOT_DOT, TOK_COMMA, TOK_MINUS,
-	TOK_PLUS, TOK_COLON, TOK_SEMICOLON, TOK_SLASH, TOK_STAR,
-	TOK_PERCENT, TOK_CARET, TOK_QMARK, TOK_BANG, TOK_BANG_EQUAL,
-	TOK_EQUAL, TOK_EQUAL_EQUAL, TOK_GREATER, TOK_GREATER_EQUAL,
-	TOK_LESS, TOK_LESS_EQUAL,
-	/* literals */
-	TOK_IDENTIFIER, TOK_STRING, TOK_NUMBER,
-	/* keywords */
-	TOK_AND, TOK_BREAK, TOK_CASE, TOK_CONTINUE, TOK_CLASS,
-	TOK_DEFAULT, TOK_ELSE, TOK_FALSE, TOK_FOR, TOK_FOREACH,
-	TOK_FN, TOK_IF, TOK_IN, TOK_IMPL, TOK_NIL, TOK_OR, TOK_RETURN,
-	TOK_SUPER, TOK_SELF, TOK_SWITCH, TOK_TRUE, TOK_VAR, TOK_WHILE,
-	TOK_LOOP, TOK_FIXED,
-	/* special */
-	TOK_ERROR, TOK_EOF
-} TType;
+/* multi-char tokens start at this numeric value */
+#define FIRSTTK		(UCHAR_MAX + 1)
+
+/* number of Cript keywords */
+#define NUM_KEYWORDS	((TK_CONST - (FIRSTTK)) + 1)
+
+
+enum TK {
+	TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE,
+	TK_CLASS, TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR,
+	TK_FOREACH, TK_FN, TK_IF, TK_IN, TK_INHERITS, TK_NIL,
+	TK_OR, TK_RETURN, TK_SUPER, TK_SELF, TK_SWITCH, TK_TRUE,
+	TK_LET, TK_WHILE, TK_LOOP, TK_CONST,
+	TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR,
+	TK_DOTS, TK_EOS,
+	TK_FLT, TK_INT, TK_STRING, TK_IDENTIFIER,
+};
 
 
 
@@ -56,9 +54,8 @@ typedef union {
 } KValue;
 
 
-
 typedef struct {
-	TType tt;
+	int tk;
 	KValue k;
 } Token;
 
@@ -71,7 +68,7 @@ typedef struct Lexer {
 	struct VM *vm;
 	struct FunctionState *fs;
 	BuffReader *br; /* buffered reader */
-	Buffer buf; /* buffer for tokens */
+	Buffer buff; /* buffer for tokens */
 	Token previous;
 	Token current;
 	OString *src; /* current source name */
@@ -81,11 +78,10 @@ typedef struct Lexer {
 	cr_ubyte skip; /* skip current token */
 } Lexer;
 
-
 void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *source);
-void cr_lr_free(Lexer *lx);
-Token cr_lr_scan(Lexer *lx);
+const char *cr_lx_tok2str(Lexer *lx, int token);
+void cr_lr_syntaxerror(Lexer *lx, const char *err);
 Token cr_lr_syntoken(const char *name);
-void cr_lr_syntaxerror(Lexer *lx, const char *err, va_list args);
+int cr_lr_scan(Lexer *lx);
 
 #endif

@@ -51,7 +51,7 @@ typedef signed char cr_byte;
  * Maximum size visible for cript.
  * It must be less than what is representable by 'cr_integer'. 
  */
-#define MAXSIZE		(sizeof(size_t) < sizeof(cr_integer) ? \
+#define CRMAXSIZE	(sizeof(size_t) < sizeof(cr_integer) ? \
 				(SIZE_MAX) : (size_t)(CR_INTEGER_MAX))
 
 
