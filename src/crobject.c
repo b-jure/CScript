@@ -230,6 +230,7 @@ static const char *str2int(const char *s, cr_integer *i)
 	}
 	while (isspace(*s)) s++; /* skip trailing spaces */
 	if (novalue || *s != '\0') return NULL;
+	*i = cri_castU2S(neg ? 0U - u : u);
 	return s;
 }
 
