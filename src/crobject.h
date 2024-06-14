@@ -78,8 +78,9 @@ typedef struct GCObject {
 
 typedef struct OString {
 	ObjectHeader;
+	cr_ubyte extra; /* extra information */
+	cr_ubyte bits; /* useful bits */
 	int len; /* excluding null terminator */
-	cr_ubyte hashash;
 	unsigned int hash;
 	char bytes[];
 } OString;
@@ -91,7 +92,6 @@ typedef struct OString {
 #define strvalue(v)	((OString*)ovalue(v))
 #define cstrvalue(v)	(strvalue(v)->bytes)
 
-
 /* set value to string */
 #define setv2s(vm,v,s)		setv2o(vm,v,s,OString)
 
@@ -99,7 +99,7 @@ typedef struct OString {
 #define setsv2s(vm,sv,s)	setv2s(vm,s2v(sv),s)
 
 
-/* string is equal to string literal */
+/* check equality between string and string literal */
 #define streqlit(s,lit,l,h) \
 	((s)->len == (l) && (s)->hash == (h) && \
 	 memcmp((s)->bytes, (lit), (l)) == 0)
@@ -107,6 +107,21 @@ typedef struct OString {
 
 /* size of string */
 #define sizes(s)	(sizeof(OString) + (s)->len + 1)
+
+
+/* bits for string 'bits' :) */
+#define SBhashash		(1 << 0) /* string has hash */
+#define SBusrinterned		(1 << 1) /* string is user interned */
+#define SBinterned		(1 << 2) /* string is interned */
+#define SBkeyword		(1 << 3) /* string is keyword */
+#define SBvtmethod		(1 << 4) /* string is vtable method */
+
+/* test 'bits' */
+#define hashash(s)		((s)->bits & SBhashash)
+#define isusrinterned(s)	((s)->bits & (SBusrinterned | SBhashash))
+#define isinterned(s)		((s)->bits & (SBinterned | SBhashash))
+#define iskeyword(s)		((s)->bits & (SBhashash | SBkeyword))
+#define isvtmethod(s)		((s)->bits & (SBhashash | SBvtmethod))
 
 
 
@@ -386,6 +401,7 @@ int cr_ot_strtomt(VM *vm, OString *id);
 OString *cr_ot_newstring(VM *vm, const char *chars, size_t len);
 int cr_ot_hexvalue(int c);
 void cr_ot_numtostring(VM *vm, TValue *v);
+size_t cr_ot_strtonum(const char *s, TValue *o, int *of);
 const char *cr_ot_pushvfstring(VM *vm, const char *fmt, va_list argp);
 const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...);
 CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues);

@@ -136,9 +136,10 @@ OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
 		memcpy(string->bytes, chars, len);
 	string->bytes[len] = '\0';
 	string->hash = hash;
-	string->hashash = 1;
+	string->extra = 0;
+	string->bits = SBhashash;
 	lmarkgco(string);
-	key = newovalue(string);
+	setv2s(vm, &key, string);
 	cr_ht_set(vm, wtab, &key, &vm->nil);
 	lunmarkgco(string);
 	return string;
@@ -172,11 +173,6 @@ OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
 
 
 
-/* check if c is octal */
-#define isoctal(c)	(isdigit(c) && (c) < '8')
-
-
-
 /* convert hex character into digit */
 int cr_ot_hexvalue(int c)
 {
@@ -191,68 +187,96 @@ int cr_ot_hexvalue(int c)
  * This function can convert hexadecimal, octal
  * and decimal strings to 'cr_integer'.
  */
-static const char *str2int(const char *s, cr_integer *i)
+static const char *str2int(const char *s, cr_integer *i, int *overflow)
 {
 	cr_uinteger u;
-	int digit;
-	int neg;
 	int novalue;
+	int digit;
+	int sign;
 
+	sign = novalue = 1;
 	while (isspace(*s)) s++; /* skip leading spaces */
-	novalue = 1;
-	if ((neg = *s == '-') || *s == '+') s++;
+	if (*s == '-' || *s == '+') {
+		sign -= 2 * (*s == '-'); 
+		s++;
+	}
 	if (*s == '0' && (*s == 'x' || *s == 'X')) { /* hex ? */
 		s+=2; /* skip hex prefix */
 		for (; isxdigit(*s); s++) {
 			digit = cr_ot_hexvalue(*s);
-			if (hexoverflow(u, digit))
+			if (hexoverflow(u, digit)) {
+				if (overflow)
+					*overflow = 1;
 				return NULL;
+			}
 			u = u * 16 + digit;
 			novalue = 0;
 		}
-	} else if (*s == '0' && isoctal(s[1])) { /* octal ? */
+	} else if (*s == '0' && isodigit(s[1])) { /* octal ? */
 		s++; /* skip '0' */
 		do {
 			digit = *s - '0';
-			if (octoverflow(u, digit))
+			if (octoverflow(u, digit)) {
+				if (overflow)
+					*overflow = 1;
 				return NULL;
+			}
 			u = u * 8 + digit;
 			novalue = 0;
-		} while (isoctal(*++s));
+		} while (isodigit(*++s));
 	} else { /* decimal */
 		for (; isdigit(*s); s++) {
 			digit = *s - '0';
-			if (decoverflow(u, digit))
+			if (decoverflow(u, digit)) {
+				if (overflow)
+					*overflow = 1;
 				return NULL;
+			}
 			u = u * 10 + digit;
 			novalue = 0;
 		}
 	}
 	while (isspace(*s)) s++; /* skip trailing spaces */
 	if (novalue || *s != '\0') return NULL;
-	*i = cri_castU2S(neg ? 0U - u : u);
+	*i = cri_castU2S(u*sign);
 	return s;
 }
 
 
-static const char *str2flt(const char *s, cr_number *n)
+static const char *str2flt(const char *s, cr_number *n, int *of)
 {
-	// TODO
+	char *eptr;
+
+	*of = 0;
+	if (*s == '0'  && (s[1] == 'x' || s[1] == 'X'))
+		*n = cr_xstr2number(s, &eptr);
+	else
+		*n = cr_str2number(s, &eptr);
+	if (of) { /* set underflow flag */
+		if (strx2numberovf(*n)) *n = 1;
+		else if (strx2numberunf(*n)) *n = -1;
+	}
+	if (eptr == s) return NULL;
+	while (isspace(*eptr)) eptr++;
+	return (*eptr == '\0' ? eptr : NULL);
 }
 
 
 /* convert string to 'cr_number' or 'cr_integer' */
-size_t cr_ot_strtonum(const char *s, TValue *o)
+size_t cr_ot_strtonum(const char *s, TValue *o, int *of)
 {
 	cr_integer i;
 	cr_number n;
 	const char *e;
+	int iof;
 
-	if ((e = str2int(s, &i)) != NULL) {
+	if (of) *of = iof = 0;
+	if ((e = str2int(s, &i, &iof)) != NULL) {
 		setivalue(o, i);
-	} else if ((e = str2flt(s, &n)) != NULL) {
+	} else if ((e = str2flt(s, &n, of)) != NULL) {
 		setfvalue(o, n);
-	} else {
+	} else { /* both conversions failed */
+		if (of && !*of) *of = iof;
 		return 0;
 	}
 	return (e - s) + 1;

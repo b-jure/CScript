@@ -30,11 +30,13 @@ typedef struct {
 
 /* indices into static strings array */
 typedef enum {
+	/* keywords */
+	SS_AND = 0, SS_BREAK, SS_CASE, SS_CONTINUE, SS_CLASS,
+	SS_DEFAULT, SS_ELSE, SS_FALSE, SS_FOR, SS_FOREACH,
+	SS_FN, SS_IF, SS_IN, SS_INHERITS, SS_NIL, SS_OR,
 	/* Value types */
-	SS_NIL = 0, SS_NUM, SS_STR, SS_BOOL, SS_CLASS,
-	SS_INS, SS_FUNC, SS_CLS, SS_NAT, SS_UPVAL, SS_METHOD,
-	/* Boolean strings */
-	SS_TRUE, SS_FALSE,
+	SS_NUM, SS_STR, SS_BOOL, SS_INS,
+	SS_FUNC, SS_CLS, SS_NAT, SS_UPVAL, SS_METHOD,
 	/* Class overload-able method names. */
 	SS_INIT, SS_TOSTRING, SS_GETIDX, SS_SETIDX, SS_GC, 
 	SS_DEFER, SS_ADD, SS_SUB, SS_MUL, SS_DIV, SS_MOD, SS_POW,
@@ -42,8 +44,8 @@ typedef enum {
 	/* Operator strings */
 	SS_OPADD, SS_OPSUB, SS_OPMUL, SS_OPDIV, SS_OPMOD, SS_OPEXP,
 	SS_OPNOT, SS_OPNEG, SS_OPNE, SS_OPEQ, SS_OPLT, SS_OPLE,
-	SS_OPGT, SS_OPGE, SS_OPAND, SS_OPOR,
-} cr_ss;
+	SS_OPGT, SS_OPGE, SS_OPAND, SS_OPOR, 
+} sstag;
 
 
 #define CR_SSNUM	(SS_OPOR + 1)

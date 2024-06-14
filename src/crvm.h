@@ -138,10 +138,11 @@ struct VM {
 	HTable gids; /* global variable names */
 	TValueVec gvars; /* global variable values */
 	cr_longjmp *errjmp; /* error recovery */
-	HTable weakrefs; /* interned strings (unmarked) */
-	OStringVec interned; /* user interned strings (marked) */
+	HTable weakrefs; /* string weak references */
+	OString *mnames[CR_MNUM]; /* vtable method names */
+	OStringVec interned; /* user interned strings */
 	Hooks hooks; /* hooks to external code */
-	GC gc; /* garbage collector params */
+	GC gc; /* garbage collector */
 	UValue *openuv; /* unclosed closure values */
 	SIndex deferlist; /* TODO: list of variables to '__defer__' */
 	OString *faststatic[CR_SSNUM]; /* preallocated static strings */

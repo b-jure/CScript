@@ -33,6 +33,7 @@
 #define NUM_KEYWORDS	((TK_CONST - (FIRSTTK)) + 1)
 
 
+
 enum TK {
 	TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE,
 	TK_CLASS, TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR,
@@ -46,7 +47,7 @@ enum TK {
 
 
 
-/* constant values for tokens */
+/* storage for literals */
 typedef union {
 	cr_integer i;
 	cr_number n;
@@ -75,13 +76,14 @@ typedef struct Lexer {
 	int c; /* current char */
 	int currline; /* 'current' token line */
 	int prevline; /* 'previous' token line */
-	cr_ubyte skip; /* skip current token */
 } Lexer;
 
-void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *source);
-const char *cr_lx_tok2str(Lexer *lx, int token);
+
+
+void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *src);
+const char *cr_lx_tok2str(Lexer *lx, int t);
 void cr_lr_syntaxerror(Lexer *lx, const char *err);
 Token cr_lr_syntoken(const char *name);
-int cr_lr_scan(Lexer *lx);
+void cr_lr_scan(Lexer *lx);
 
 #endif

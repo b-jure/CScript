@@ -88,8 +88,7 @@ CRI_FUNC void cr_ht_init(HTable *tab);
 CRI_FUNC void cr_ht_newstab(VM *vm, HTable *tab);
 CRI_FUNC int cr_ht_next(VM *vm, HTable *tab, SIndex *k);
 CRI_FUNC void cr_ht_copykeys(VM *vm, HTable *stab, HTable *dtab);
-CRI_FUNC void cr_ht_intern(VM *vm, const char *string);
-CRI_FUNC void cr_ht_internf(VM *vm, const char *fmt, ...);
+CRI_FUNC int cr_ht_intern(VM *vm, const char *string);
 CRI_FUNC int cr_ht_set(VM *vm, HTable *tab, const TValue *key, const TValue *val);
 CRI_FUNC int cr_ht_remove(VM *vm, HTable *tab, const TValue *k);
 CRI_FUNC struct OString *cr_ht_getinterned(HTable *tab, const char *str, 

@@ -75,4 +75,9 @@
 		*(cast_ubytep(dest) + i) = getbyte(src, i);
 
 
+
+/* check if 'c' is octal */
+#define isodigit(c)	(isdigit(c) && (c) < '8')
+
+
 #endif

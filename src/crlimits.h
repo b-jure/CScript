@@ -164,9 +164,10 @@ typedef cr_ubyte Instruction;
 
 
 /*
- * Initial size for the interned strings hash table.
- * It has to be power of 2, because of the implementation
- * of the table itself.
+ * Initial size for the weak hash table that stores
+ * interned strings.
+ * It has to be power of 2, because of the hash table
+ * implementation.
  */
 #if !defined(CRI_MINSTRTABSIZE)
 #define CRI_MINSTRHTABSIZE	64

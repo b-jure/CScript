@@ -36,7 +36,7 @@
 
 /* slots left until table needs to grow */
 #define slotsleft(vm,t) \
-	cast_int((cast_num(CR_MAXHTABLOAD) - loadfactor((vm),(t))) * tsize(t))
+	cast_int((cast_num(CRI_MAXHTABLOAD) - loadfactor((vm),(t))) * tsize(t))
 
 
 
@@ -62,10 +62,10 @@ void cr_ht_init(HTable *tab)
 /* create string hash table */
 void cr_ht_newstab(VM *vm, HTable *tab)
 {
-	tab->size = cr_ve_ceillog2(CR_MINSTRHTABSIZE);
+	tab->size = cr_ve_ceillog2(CRI_MINSTRHTABSIZE);
 	tab->nnodes = 0;
 	tab->left = slotsleft(vm, tab);
-	tab->mem = cr_mm_newarray(vm, CR_MINSTRHTABSIZE, Node);
+	tab->mem = cr_mm_newarray(vm, CRI_MINSTRHTABSIZE, Node);
 }
 
 
@@ -96,18 +96,7 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 			return cast_node(hashslot(mem, cr_hh_pointer(p), size));
 		case CR_VSTRING:
 			str = strvalue(k);
-			/* v1.0.0: all strings are interned so this
-			 * check doesn't make any sense, meaning all
-			 * strings require the hash the moment they
-			 * are created, so 'hashash' is always non zero. */
-#if CR_VERSION_NUMBER != 100
-			if (str->hashash == 0) {
-				str->hash = cr_hh_string(str->bytes, str->len, str->hash);
-				str->hashash = 1;
-			}
-#else
-			cr_assert(str->hashash && "string is missing hash");
-#endif
+			cr_assert(hashash(str));
 			return cast_node(hashslot(mem, str->hash, size));
 		default:
 			cr_assert(!ttisnil(k) && ttiso(k));
@@ -133,9 +122,8 @@ static int eqkey(const TValue *k, const Node *n)
 			return (pvalue(k) == keypvalue(n));
 		case CR_VCFUNCTION:
 			return (cfvalue(k) == keycfvalue(n));
-		case CR_VSTRING:
-			return cr_ot_eqstring(strvalue(k), keystrvalue(n));
-		default:
+		default: /* all equal objects have equal pointers */
+			cr_assert(vtt(k) == CR_TOBJECT);
 			return (ovalue(k) == keyovalue(n));
 	}
 	return 0;
@@ -225,35 +213,23 @@ void cr_ht_copykeys(VM *vm, HTable *stab, HTable *dtab)
 
 
 /* intern string object */
-static void internstring(VM *vm, OString *s)
+static int internstring(VM *vm, OString *s)
 {
-	lmarkgco(s);
+	lmarkgco(s); /* set permanent mark */
 	cr_mm_growvec(vm, &vm->interned); /* NOLINT(bugprone-sizeof-expression) */
-	lunmarkgco(s);
 	vm->interned.ptr[vm->interned.len++] = s;
+	s->extra = vm->interned.len - 1; /* set index */
+	return s->extra;
 }
 
 
 /* intern string literal */
-void cr_ht_intern(VM *vm, const char *string)
+int cr_ht_intern(VM *vm, const char *string)
 {
 	OString *s;
 
 	s = cr_ot_newstring(vm, string, strlen(string));
-	internstring(vm, s);
-}
-
-
-/* intern formatted string */
-void cr_ht_internf(VM *vm, const char *fmt, ...)
-{
-	OString *s;
-	va_list argp;
-
-	va_start(argp, fmt);
-	s = cr_ot_newstringf(vm, fmt, argp);
-	va_end(argp);
-	internstring(vm, s);
+	return internstring(vm, s);
 }
 
 
@@ -300,7 +276,7 @@ static void expandmem(VM *vm, HTable *tab)
 
 	osize = twoto(tab->size++);
 	nsize = twoto(tab->size);
-	if (cr_unlikely(nsize >= CR_MAXHTABSIZE))
+	if (cr_unlikely(nsize >= CRI_MAXHTABSIZE))
 		cr_assert(0 && "hashtable overflow");
 	newmem = cr_mm_newarray(vm, nsize, Node);
 	auxsetempty(newmem, nsize);

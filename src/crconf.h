@@ -20,7 +20,7 @@
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
 #include <float.h>
-
+#include <math.h>
 
 
 /* Lets not... */
@@ -210,6 +210,9 @@
 #define CR_FLOAT_FMT		"%.14g"
 #define cr_math(op)		op
 #define cr_str2number(s,p)	strtod((s),(p))
+#define CR_HUGEVAL		HUGE_VAL
+#define CR_NUMBER_MIN		DBL_MIN
+#define CR_NUMBER_MAX		DBL_MAX
 
 #elif CR_FLOAT_TYPE == CR_FLOAT_LONG_DOUBLE_TYPE /* 'long double' */
 #error 'long double' is not supported.
@@ -265,6 +268,21 @@
 
 /* @cr_xstr2number - converts hexadecimal string to 'cr_number'. */
 #define cr_xstr2number(s,p)	cr_str2number((s),(p))
+
+
+/* 
+ * @strx2numberovf - checks if 'n' (cr_number) would overflow
+ * during 'cr_xstr2number()' or 'cr_str2number()' conversion.
+ */
+#define strx2numberovf(n)	((n) == (CR_HUGEVAL) || (n) == -(CR_HUGEVAL))
+
+
+/* 
+ * @strx2numberovf - checks if 'n' (cr_number) would underflow
+ * during 'cr_xstr2number()' or 'cr_str2number()' conversion.
+ */
+#define strx2numberunf(n)	((n) == (CR_NUMBER_MIN))
+
 
 
 /* 
