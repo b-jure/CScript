@@ -51,12 +51,6 @@ typedef struct {
 
 
 /*
- * -------
- * Upvalue
- * -------
- */
-
-/*
  * UpValue is a local variable that is defined inside of the enclosing function.
  * Contains stack index of that variable inside of the function that encloses,
  * or the index of that upvalue in the enclosing function if the variable to be
@@ -71,11 +65,9 @@ typedef struct {
 
 
 
-/*
- * ----------------------
- * Expression description
- * ----------------------
- */
+/* --------------------------------------------------------------------------
+ * Expression info
+ * -------------------------------------------------------------------------- */
 
 /* check expression type */
 #define etisconst(exptype)	((exptype) >= EXP_FALSE && (exptype) <= EXP_NUMBER)
@@ -87,17 +79,27 @@ typedef struct {
 #define etisliteral(exptype) 	((exptype) >= EXP_FALSE && (exptype) <= EXP_TRUE)
 
 /* expression types */
-typedef enum {
-	EXP_NONE = 0, 
-	EXP_FALSE, EXP_NIL, EXP_TRUE,
-	EXP_STRING, EXP_INTEGER, EXP_FLOAT,
-	EXP_UPVAL, EXP_LOCAL, EXP_GLOBAL,
-	EXP_INDEXED, EXP_CALL, EXP_INVOKE,
-	EXP_VARARG, EXP_EXPR, EXP_JMP,
+typedef enum ExpType {
+	EXP_VOID = 0,  /* no expression */
+	EXP_NIL, /* 'nil' literal */
+	EXP_FALSE, /* 'false' literal */
+	EXP_TRUE, /* 'true' literal */
+	EXP_STRING,
+	EXP_INT,
+	EXP_FLT,
+	EXP_UVAL,
+	EXP_LOCAL,
+	EXP_GLOBAL,
+	EXP_INDEXED,
+	EXP_CALL,
+	EXP_INVOKE,
+	EXP_VARARG,
+	EXP_EXPR,
+	EXP_JMP,
 } ExpType;
 
 
-/* expression description */
+/* expression information */
 typedef struct {
 	ExpType et;
 	union {
@@ -111,19 +113,17 @@ typedef struct {
 		cr_ubyte l; /* is this long instruction */
 		cr_ubyte set; /* setter (or getter) */
 		cr_ubyte binop; /* is this simple binary operator */
-	} ins; /* instruction info */
-	int t; /* jmp to patch if true (1) */
-	int f; /* jmp to patch if false (0) */
-} Exp;
+	} ins; /* instruction details */
+	int t; /* jmp to patch if true */
+	int f; /* jmp to patch if false */
+} ExpInfo;
 
 
 
-/*
- * --------------
+
+/* --------------------------------------------------------------------------
  * Function state
- * --------------
- */
-
+ * -------------------------------------------------------------------------- */
 
 #define FNFUNCTION	0
 #define FNMETHOD	1

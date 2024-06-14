@@ -7,19 +7,6 @@
 
 
 
-/* get instruction 'op' size */
-#define opsize(i,op,e) \
-	(((e)->ins.l = (i) > CR_SHRTCODE) ? (op##L) : (op))
-
-
-/* get constant */
-#define constant(f,e)		(&(f)->fn->constants[(e)->info])
-
-
-/* get code current */
-#define codeoffset(f)		((f)->fn->code.len)
-
-
 /*
  * Instructions/operations (bytecode).
  * All instructions are size of 1 byte.
@@ -119,6 +106,20 @@ typedef enum {
 
 /* number of 'OpCode's */
 #define CR_NUMOPS	(OP_RET + 1)
+
+
+
+/* get instruction 'op' size */
+#define opsize(i,op,e) \
+	(((e)->ins.l = (i) > CR_SHRTCODE) ? (op##L) : (op))
+
+
+/* get constant */
+#define constant(f,e)		(&(f)->fn->constants[(e)->info])
+
+
+/* get code current */
+#define codeoffset(f)		((f)->fn->code.len)
 
 
 

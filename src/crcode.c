@@ -1,4 +1,5 @@
 #include "crcode.h"
+#include "crgc.h"
 #include "crlexer.h"
 #include "crbits.h"
 
@@ -22,7 +23,6 @@ static void addlineinfo(FunctionState *fs, Function *f, int line)
 		cr_mm_growvec(fs->l->vm, &f->lineinfo);
 		f->lineinfo.ptr[len].pc = f->code.len - 1;
 		f->lineinfo.ptr[f->lineinfo.len++].line = line;
-		fs->l->prevline = line; // Maybe (prevline = currline) ?
 	}
 }
 
@@ -34,7 +34,7 @@ int cr_ce_code(FunctionState *fs, Instruction i)
 
 	cr_mm_growvec(fs->l->vm, &f->code);
 	f->code.ptr[f->code.len++] = i;
-	addlineinfo(fs, f, fs->l->currline);
+	addlineinfo(fs, f, fs->l->line);
 	return f->code.len - 1;
 }
 
@@ -91,8 +91,10 @@ int cr_ce_codewparam(FunctionState *fs, Instruction i, int idx)
 
 	offset = cr_ce_code(fs, i);
 	cr_assert(idx >= 0);
-	if (idx <= CR_SHRTPARAM) shortparam(fs, f, i, cast_ubyte(idx));
-	else longparam(fs, f, i, idx);
+	if (idx <= CRI_SHRTPARAM)
+		shortparam(fs, f, i, cast_ubyte(idx));
+	else
+		longparam(fs, f, i, idx);
 	return offset;
 }
 
@@ -105,12 +107,12 @@ static int addconstant(FunctionState *fs, TValue *constant)
 	f = fs->fn;
 	if (ttiso(constant)) {
 		cr_assert(ttisstr(constant));
-		markgco(ovalue(constant));
+		lmarkgco(ovalue(constant));
 	}
 	cr_mm_growvec(fs->l->vm, &f->constants);
 	f->constants.ptr[f->constants.len++] = *constant;
 	if (ttiso(constant))
-		unmarkgco(ovalue(constant));
+		lunmarkgco(ovalue(constant));
 	return f->constants.len - 1;
 }
 

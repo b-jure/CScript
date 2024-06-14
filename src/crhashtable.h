@@ -93,7 +93,7 @@ CRI_FUNC int cr_ht_set(VM *vm, HTable *tab, const TValue *key, const TValue *val
 CRI_FUNC int cr_ht_remove(VM *vm, HTable *tab, const TValue *k);
 CRI_FUNC struct OString *cr_ht_getinterned(HTable *tab, const char *str, 
 					size_t len, unsigned int hash);
-CRI_FUNC int cr_ht_get(VM *vm, HTable *tab, TValue *k, TValue *o);
+CRI_FUNC int cr_ht_get(HTable *tab, const TValue *key, TValue *o);
 CRI_FUNC void cr_ht_free(VM *vm, HTable *tab);
 
 #endif

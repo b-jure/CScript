@@ -110,18 +110,18 @@ typedef struct OString {
 
 
 /* bits for string 'bits' :) */
-#define SBhashash		(1 << 0) /* string has hash */
-#define SBusrinterned		(1 << 1) /* string is user interned */
-#define SBinterned		(1 << 2) /* string is interned */
-#define SBkeyword		(1 << 3) /* string is keyword */
-#define SBvtmethod		(1 << 4) /* string is vtable method */
+#define STRhashash		(1 << 0) /* string has hash */
+#define STRusrinterned		(1 << 1) /* string is user interned */
+#define STRinterned		(1 << 2) /* string is interned */
+#define STRkeyword		(1 << 3) /* string is keyword */
+#define STRvtmethod		(1 << 4) /* string is vtable method */
 
 /* test 'bits' */
-#define hashash(s)		((s)->bits & SBhashash)
-#define isusrinterned(s)	((s)->bits & (SBusrinterned | SBhashash))
-#define isinterned(s)		((s)->bits & (SBinterned | SBhashash))
-#define iskeyword(s)		((s)->bits & (SBhashash | SBkeyword))
-#define isvtmethod(s)		((s)->bits & (SBhashash | SBvtmethod))
+#define hashash(s)		((s)->bits & STRhashash)
+#define isusrinterned(s)	((s)->bits & (STRusrinterned | STRhashash))
+#define isinterned(s)		((s)->bits & (STRinterned | STRhashash))
+#define iskeyword(s)		((s)->bits & (STRhashash | STRkeyword))
+#define isvtmethod(s)		((s)->bits & (STRhashash | STRvtmethod))
 
 
 

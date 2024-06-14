@@ -45,7 +45,10 @@
 
 
 /* empty node constant */
-const Node emptynode = {{0,CR_VEMPTY,0,CR_VEMPTY,0}};
+static const Node emptynode = {{0,CR_VEMPTY,0,CR_VEMPTY,0}};
+
+/* empty key constant */
+static const TValue emptykey = {{0},CR_VEMPTY,0};
 
 
 
@@ -355,20 +358,16 @@ OString *cr_ht_getinterned(HTable *tab, const char *str, size_t len, unsigned in
 }
 
 
-/* 
- * Get key value.
- * If key was found return non-zero and copy its value into 'o'.
- */
-int cr_ht_get(VM *vm, HTable *tab, TValue *key, TValue *o)
+/* get key value */
+int cr_ht_get(HTable *tab, const TValue *key, TValue *o)
 {
 	Node *slot;
 
-	if (tab->nnodes == 0)
-		return 0;
+	cr_assert(o != NULL);
+	if (tab->nnodes == 0) return 0;
 	slot = getslot(tab->mem, tsize(tab), key);
-	if (keyisempty(slot))
-		return 0;
-	setv(vm, o, nval(slot));
+	if (keyisempty(slot)) return 0;
+	setv(cast(VM*, NULL), o, nval(slot));
 	return 1;
 }
 

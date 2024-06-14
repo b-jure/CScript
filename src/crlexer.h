@@ -52,12 +52,12 @@ typedef union {
 	cr_integer i;
 	cr_number n;
 	OString *str;
-} KValue;
+} Literal;
 
 
 typedef struct {
 	int tk;
-	KValue k;
+	Literal k;
 } Token;
 
 
@@ -68,14 +68,15 @@ Vec(Buffer, char);
 typedef struct Lexer {
 	struct VM *vm;
 	struct FunctionState *fs;
+	HTable tab; /* prevent string literal collection */
 	BuffReader *br; /* buffered reader */
 	Buffer buff; /* buffer for tokens */
-	Token previous;
-	Token current;
+	Token t; /* current token */
+	Token tahead; /* lookahead token */
 	OString *src; /* current source name */
 	int c; /* current char */
-	int currline; /* 'current' token line */
-	int prevline; /* 'previous' token line */
+	int lastline; /* line of previous token */
+	int line; /* current line number */
 } Lexer;
 
 
@@ -85,5 +86,6 @@ const char *cr_lx_tok2str(Lexer *lx, int t);
 void cr_lr_syntaxerror(Lexer *lx, const char *err);
 Token cr_lr_syntoken(const char *name);
 void cr_lr_scan(Lexer *lx);
+int cr_lr_scanahead(Lexer *lx);
 
 #endif

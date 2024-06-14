@@ -16,10 +16,8 @@
 
 
 #include "crdebug.h"
-#include "crmem.h"
 #include "crobject.h"
 #include "crlimits.h"
-#include "criptapi.h"
 #include "crvm.h"
 
 #include <stdio.h>

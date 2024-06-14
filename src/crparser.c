@@ -79,17 +79,17 @@ const char *comperrors[CE_CNT] = {
 
 
 
-/* 'inwhat' bits */
-#define SCOPELOOP	1
-#define SCOPEGLOOP	2
-#define SCOPESWITCH	4
+/* bits for Scope 'bits' */
+#define SCOloop		(1 << 0)
+#define SCOforeach	(1 << 1)
+#define SCOswitch	(1 << 2)
 
 /* lexical scope information */
 typedef struct Scope {
 	struct Scope *prev; /* list */
 	int nlocals; /* count of locals up until this scope */
 	int depth; /* scope depth (index) */
-	cr_ubyte inwhat;
+	int bits;
 } Scope;
 
 
@@ -102,17 +102,8 @@ typedef struct ClassDecl {
 
 
 
-/* init local variable */
-#define initlocal(F, i) { \
-	Local *local__ = LocalVec_at(&(f)->locals, (f)->locals.len - ((i)+1)); \
-	local__->depth = (f)->s->depth; \
-	local__->flags = (f)->vflags; } \
-
-
-
-
 /* initialize expression */
-static cr_inline void initexp(Exp *e, ExpType et, int32_t code, int32_t info)
+static cr_inline void initexp(ExpInfo *e, ExpType et, int32_t code, int32_t info)
 {
 	e->et = et;
 	e->t = -1;
@@ -121,66 +112,6 @@ static cr_inline void initexp(Exp *e, ExpType et, int32_t code, int32_t info)
 	e->ins.binop = 0;
 	e->u.info = info;
 }
-
-// Get constant
-#define CONSTANT(F, E) Array_Value_index(&CHUNK(F)->constants, (E)->value)
-// Get instruction
-#define INSTRUCTION(F, E) byteptr(Array_ubyte_index(&CHUNK(F)->code, (E)->ins.code))
-
-// Expressions are constants and their Values are equal
-#define eareconstandeq(F, E1, E2) \
-	(etisconst((E1)->type) && etisconst((E2)->type) && raweq(*CONSTANT(F, E1), *CONSTANT(F, E2)))
-
-
-// Set first long parameter
-#define SET_LPARAM(F, E, val) PUT_BYTES3(INSTRUCTION(F, E) + 1, val)
-// Set second long parameter
-#define SET_LLPARAM(F, E, val) PUT_BYTES3(INSTRUCTION(F, E) + 4, val)
-// Set first short parameter
-#define SET_SPARAM(F, E, val) PUT_BYTE(INSTRUCTION(F, E) + 1, val)
-// Set instruction return count (first param)
-#define SET_RETCNT(F, E, cnt) SET_LPARAM(F, E, cnt)
-// Set instruction return count (second param)
-#define SET_RETCNTL(F, E, cnt) SET_LLPARAM(F, E, cnt)
-
-// Pop last instruction parameter (1 byte)
-#define PARAM_POP(F)                                                               \
-	do {                                                                       \
-		cr_assert((F)->vm, CHUNK(F)->code.len >= 1, "Invalid PARAM_POP."); \
-		CHUNK(F)->code.len--;                                              \
-	} while (0)
-// Pop last instruction long parameter (3 bytes)
-#define LPARAM_POP(F)                                                               \
-	do {                                                                        \
-		cr_assert((F)->vm, CHUNK(F)->code.len >= 3, "Invalid LPARAM_POP."); \
-		CHUNK(F)->code.len -= 3;                                            \
-	} while (0)
-// Pop last short/simple instruction (1 byte)
-#define SINSTRUCTION_POP(F)                                                               \
-	do {                                                                              \
-		cr_assert((F)->vm, CHUNK(F)->code.len >= 1, "Invalid SINSTRUCTION_POP."); \
-		CHUNK(F)->code.len--;                                                     \
-	} while (0)
-// Pop last instruction with parameter (2 bytes)
-#define INSTRUCTION_POP(F)                                                               \
-	do {                                                                             \
-		cr_assert((F)->vm, CHUNK(F)->code.len >= 2, "Invalid INSTRUCTION_POP."); \
-		CHUNK(F)->code.len -= 2;                                                 \
-	} while (0)
-// Pop last instruction with long parameter (4 bytes)
-#define LINSTRUCTION_POP(F)                                                               \
-	do {                                                                              \
-		cr_assert((F)->vm, CHUNK(F)->code.len >= 4, "Invalid LINSTRUCTION_POP."); \
-		CHUNK(F)->code.len -= 4;                                                  \
-	} while (0)
-
-// Pop last constant
-#define CONSTANT_POP(F)                                                                   \
-	do {                                                                              \
-		cr_assert((F)->vm, CHUNK(F)->constants.len > 0, "Invalid CONSTANT_POP."); \
-		Array_Value_pop(&CHUNK(F)->constants);                                    \
-	} while (0)
-
 
 
 /*
@@ -267,8 +198,8 @@ static cr_inline void restorecontext(FunctionState *F, Context *C)
 
 // Forward declare
 static void dec(FunctionState *F);
-static void expr(FunctionState *F, Exp *E);
-static void suffixedexp(FunctionState *F, Exp *E);
+static void expr(FunctionState *F, ExpInfo *E);
+static void suffixedexp(FunctionState *F, ExpInfo *E);
 static void stm(FunctionState *F);
 
 
@@ -443,7 +374,7 @@ static int globalvar(FunctionState *F, TValue identifier)
 		globalvar(F, identifier);                     \
 	})
 
-static int32_t codevar(FunctionState *F, Token name, Exp *E)
+static int32_t codevar(FunctionState *F, Token name, ExpInfo *E)
 {
 	OpCode getop;
 	int32_t idx = get_local(F, &name);
@@ -466,13 +397,13 @@ static int32_t codevar(FunctionState *F, Token name, Exp *E)
 		return (E->ins.code = -1); // this is assignment
 }
 
-static cr_inline int codevarprev(FunctionState *F, Exp *E)
+static cr_inline int codevarprev(FunctionState *F, ExpInfo *E)
 {
 	return codevar(F, PREVT(F), E);
 }
 
 // helper [rmlastins]
-static cr_inline void popvarins(FunctionState *F, Exp *E)
+static cr_inline void popvarins(FunctionState *F, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_UPVAL:
@@ -503,7 +434,7 @@ static cr_inline void popvarins(FunctionState *F, Exp *E)
 }
 
 // helper [rmlastins]
-static cr_inline void popcallins(FunctionState *F, Exp *E)
+static cr_inline void popcallins(FunctionState *F, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_CALL:
@@ -518,7 +449,7 @@ static cr_inline void popcallins(FunctionState *F, Exp *E)
 	}
 }
 
-static void rmlastins(FunctionState *F, Exp *E)
+static void rmlastins(FunctionState *F, ExpInfo *E)
 {
 	ExpType type = E->et;
 	if (etisliteral(type))
@@ -1086,7 +1017,7 @@ static cr_inline int vararg(FunctionState *F)
 	return CODEOP(F, OP_VARARG, 1);
 }
 
-static void setmulret(FunctionState *F, Exp *E)
+static void setmulret(FunctionState *F, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_CALL:
@@ -1102,7 +1033,7 @@ static void setmulret(FunctionState *F, Exp *E)
 }
 
 // Adjust assign expressions in case last expression is a function call
-static void adjustassign(FunctionState *F, Exp *E, int32_t left, int32_t right)
+static void adjustassign(FunctionState *F, ExpInfo *E, int32_t left, int32_t right)
 {
 	int32_t leftover = left - right; // Safety: left < right is a compile error
 	switch (E->et) {
@@ -1123,7 +1054,7 @@ static void adjustassign(FunctionState *F, Exp *E, int32_t left, int32_t right)
 
 // explist ::= expr
 //           | expr ',' explist
-static int32_t explist(FunctionState *F, int32_t limit, Exp *E)
+static int32_t explist(FunctionState *F, int32_t limit, ExpInfo *E)
 {
 	int32_t left = limit;
 	int32_t got = 0;
@@ -1157,7 +1088,7 @@ static LocalVar *upvalvar(FunctionState *F, int32_t idx)
 }
 
 // helper [exprstm]
-static void codeset(FunctionState *F, Exp *E)
+static void codeset(FunctionState *F, ExpInfo *E)
 {
 	static const char *errfmt = "Can't assign to variable '%.*s', it is declared as 'fixed'.";
 	switch (E->et) {
@@ -1194,7 +1125,7 @@ ARRAY_NEW(Array_Exp, Exp);
 static void codesetall(FunctionState *F, Array_Exp *Earr)
 {
 	for (int32_t i = 0; i < cast_int(Earr->len); i++) {
-		Exp *E = Array_Exp_index(Earr, i);
+		ExpInfo *E = Array_Exp_index(Earr, i);
 		codeset(F, E);
 	}
 }
@@ -1203,7 +1134,7 @@ static void codesetall(FunctionState *F, Array_Exp *Earr)
 ///           | varlist '=' explist
 static void exprstm(FunctionState *F, cr_ubyte lastclause)
 {
-	Exp E;
+	ExpInfo E;
 	E.ins.set = 0;
 	suffixedexp(F, &E);
 	TType next = CURRT(F).type;
@@ -1295,7 +1226,7 @@ static void codeassign(FunctionState *F, int32_t names, Array_cr_int *nameidx)
 	cr_assert(F->vm, names == cast_int(nameidx->len), "name count != indexes array len.");
 	while (nameidx->len > 0) {
 		int32_t idx = Array_cr_int_pop(nameidx);
-		Exp _; // dummy
+		ExpInfo _; // dummy
 		INIT_GLOBAL(F, idx, F->vflags, &_);
 	}
 }
@@ -1319,7 +1250,7 @@ static void vardec(FunctionState *F)
 	Array_cr_int_init(&nameidx, F->vm);
 	int32_t names = namelist(F, &nameidx);
 	int32_t expc = 0;
-	Exp E;
+	ExpInfo E;
 	E.ins.set = 0;
 	if (match(F, TOK_EQUAL))
 		expc = explist(F, names, &E);
@@ -1379,7 +1310,7 @@ static void fndec(FunctionState *F)
 	if (F->S->depth > 0)
 		initlocal(F, 0); // initialize to allow recursion
 	fn(F, FN_FUNCTION);
-	Exp _; // dummy
+	ExpInfo _; // dummy
 	if (F->S->depth == 0)
 		INIT_GLOBAL(F, idx, 0, &_);
 }
@@ -1407,7 +1338,7 @@ static void classdec(FunctionState *F)
 	Token class_name = PREVT(F);
 	TValue identifier = tokintostr(F->vm, &class_name);
 	int idx = make_constant(F, identifier);
-	Exp _; // dummy
+	ExpInfo _; // dummy
 	CODEOP(F, OP_CLASS, idx);
 	if (F->S->depth > 0) {
 		make_local(F, &class_name);
@@ -1445,7 +1376,7 @@ static void classdec(FunctionState *F)
 
 /// call ::= '(' ')'
 ///        | '(' explist ')'
-static OpCode call(FunctionState *F, Exp *E)
+static OpCode call(FunctionState *F, ExpInfo *E)
 {
 	OpCode op;
 	if (!check(F, TOK_RPAREN)) {
@@ -1466,7 +1397,7 @@ static OpCode call(FunctionState *F, Exp *E)
 	return op;
 }
 
-static void codecall(FunctionState *F, Exp *E)
+static void codecall(FunctionState *F, ExpInfo *E)
 {
 	OpCode callop = call(F, E);
 	E->et = EXP_CALL;
@@ -1476,7 +1407,7 @@ static void codecall(FunctionState *F, Exp *E)
 		E->ins.code = CODEOP(F, callop, 1);
 }
 
-static void codeinvoke(FunctionState *F, Exp *E, int32_t idx)
+static void codeinvoke(FunctionState *F, ExpInfo *E, int32_t idx)
 {
 	OpCode callop = call(F, E);
 	E->et = EXP_INVOKE;
@@ -1550,7 +1481,7 @@ static cr_inline void SwitchState_init(FunctionState *F, SwitchState *state)
  * already exists, but only if 'e' is constant expression.
  * TODO: Refactor a bit, logic can be compressed
  */
-static cr_inline void switchconstants(FunctionState *F, SwitchState *state, Exp *E)
+static cr_inline void switchconstants(FunctionState *F, SwitchState *state, ExpInfo *E)
 {
 	if (!etisconst(E->type))
 		return;
@@ -1598,7 +1529,7 @@ static void switchstm(FunctionState *F)
 	Scope S;
 	SwitchState swstate;
 	cr_ubyte inswitch = F->S->isswitch;
-	Exp E1;
+	ExpInfo E1;
 	Array_cr_int fts;
 	int32_t sdepth;
 	savecontext(F, &C);
@@ -1627,7 +1558,7 @@ static void switchstm(FunctionState *F)
 			}
 			swstate.casestate = CS_DFLT;
 			if (PREVT(F).type == TOK_CASE) {
-				Exp E2;
+				ExpInfo E2;
 				E2.ins.set = 0;
 				expr(F, &E2);
 				expect(F, TOK_COLON, expectstr("Expect ':' after 'case'."));
@@ -1670,7 +1601,7 @@ static void switchstm(FunctionState *F)
 
 static void ifstm(FunctionState *F)
 {
-	Exp E;
+	ExpInfo E;
 	Context C;
 	int32_t jmptoelse, jmptoend = -1;
 	savecontext(F, &C);
@@ -1724,7 +1655,7 @@ static void whilestm(FunctionState *F)
 {
 	Scope S;
 	Context C;
-	Exp E;
+	ExpInfo E;
 	int32_t lstart, ldepth;
 	int32_t jmptoend = -1;
 	cr_ubyte infinite = 0;
@@ -1767,7 +1698,7 @@ static void forstm(FunctionState *F)
 {
 	Scope S;
 	Context C;
-	Exp E;
+	ExpInfo E;
 	int32_t lstart, ldepth;
 	int32_t jmptoend = -1;
 	cr_ubyte remove = 0;
@@ -1855,7 +1786,7 @@ static void foreachstm(FunctionState *F)
 {
 	Scope S;
 	int32_t lstart, ldepth, vars, expc, endjmp;
-	Exp E;
+	ExpInfo E;
 	startscope(F, &S, 1, 0);
 	S.isgloop = 1; // set as generic loop
 	startbreaklist(F);
@@ -2006,7 +1937,7 @@ static void returnstm(FunctionState *F)
 			case OM_GE:
 #endif
 			{
-				Exp _; // dummy
+				ExpInfo _; // dummy
 				_.ins.set = 0;
 				explist(F, 1, &_);
 				expect(F, TOK_SEMICOLON, expectstr);
@@ -2021,7 +1952,7 @@ static void returnstm(FunctionState *F)
 		implicitreturn(F);
 	} else { // generic return
 		int idx = CODE(F, OP_RETSTART);
-		Exp E;
+		ExpInfo E;
 		E.ins.set = 0;
 		int32_t retcnt = explist(F, PARSER_RET_LIMIT, &E);
 		expect(F, TOK_SEMICOLON, expectstr);
@@ -2045,7 +1976,7 @@ static void returnstm(FunctionState *F)
 
 /// dot ::= '.' name
 ///       | '.' name call
-static void dot(FunctionState *F, Exp *E)
+static void dot(FunctionState *F, ExpInfo *E)
 {
 	expect(F, TOK_IDENTIFIER, expectstr("Expect property name after '.'."));
 	TValue identifier = tokintostr(F->vm, &PREVT(F));
@@ -2089,9 +2020,9 @@ static void stm(FunctionState *F)
 }
 
 // indexed ::= '[' expr ']'
-static cr_inline void indexed(FunctionState *F, Exp *E)
+static cr_inline void indexed(FunctionState *F, ExpInfo *E)
 {
-	Exp E2;
+	ExpInfo E2;
 	E2.ins.set = 0;
 	expr(F, &E2);
 	expect(F, TOK_RBRACK, expectstr("Expect ']'."));
@@ -2106,7 +2037,7 @@ static cr_inline void indexed(FunctionState *F, Exp *E)
 
 /*========================== EXPRESSION =========================*/
 
-static void _self(FunctionState *F, Exp *E)
+static void _self(FunctionState *F, ExpInfo *E)
 {
 	if (F->cclass == NULL) {
 		error(F, comperrors[CE_SELF]);
@@ -2116,7 +2047,7 @@ static void _self(FunctionState *F, Exp *E)
 	codevarprev(F, E);
 }
 
-static void _super(FunctionState *F, Exp *E)
+static void _super(FunctionState *F, ExpInfo *E)
 {
 	if (!F->cclass) {
 		error(F, comperrors[CE_SUPER]);
@@ -2131,7 +2062,7 @@ static void _super(FunctionState *F, Exp *E)
 	expect(F, TOK_IDENTIFIER, expectstr("Expect superclass method name after '.'."));
 	TValue methodname = tokintostr(F->vm, &PREVT(F));
 	int32_t idx = make_constant(F, methodname);
-	Exp _; // dummy
+	ExpInfo _; // dummy
 	_.ins.set = 0;
 	codevar(F, syntoken("self"), &_);
 	if (match(F, TOK_LPAREN)) {
@@ -2166,7 +2097,7 @@ static void _super(FunctionState *F, Exp *E)
 // primary_exp ::= '(' exp ')'
 //               | name
 //               | 'self'
-static void primaryexp(FunctionState *F, Exp *E)
+static void primaryexp(FunctionState *F, ExpInfo *E)
 {
 	switch (CURRT(F).type) {
 	case TOK_LPAREN:
@@ -2192,7 +2123,7 @@ static void primaryexp(FunctionState *F, Exp *E)
 
 // suffixedexp ::= primaryexp
 //               | primaryexp [dot|call|indexed...]
-static void suffixedexp(FunctionState *F, Exp *E)
+static void suffixedexp(FunctionState *F, ExpInfo *E)
 {
 	primaryexp(F, E);
 	while (1) {
@@ -2224,7 +2155,7 @@ static void suffixedexp(FunctionState *F, Exp *E)
 //             | '0'
 //             | '...'
 //             | suffixedexp
-static void simpleexp(FunctionState *F, Exp *E)
+static void simpleexp(FunctionState *F, ExpInfo *E)
 {
 	int constidx;
 	ExpType type;
@@ -2262,7 +2193,7 @@ constfin:
 
 // Try folding unary operation.
 // Example: OP_CONST (1), OP_NEG => OP_CONST (-1)
-static cr_ubyte foldunary(FunctionState *F, UnaryOpr opr, Exp *E)
+static cr_ubyte foldunary(FunctionState *F, UnaryOpr opr, ExpInfo *E)
 {
 	if (E->type == EXP_NUMBER && opr == OPR_NEGATE) {
 		double val = AS_NUMBER(*CONSTANT(F, E));
@@ -2275,7 +2206,7 @@ static cr_ubyte foldunary(FunctionState *F, UnaryOpr opr, Exp *E)
 }
 
 // Fold constant number expressions
-static void calcnum(FunctionState *F, BinaryOpr opr, const Exp *E1, const Exp *E2, TValue *result)
+static void calcnum(FunctionState *F, BinaryOpr opr, const ExpInfo *E1, const ExpInfo *E2, TValue *result)
 {
 #define BINOP(op, n1, n2) NUMBER_VAL((n1)op(n2))
 
@@ -2308,7 +2239,7 @@ static void calcnum(FunctionState *F, BinaryOpr opr, const Exp *E1, const Exp *E
 }
 
 // Check if the binary operation is valid
-static cr_ubyte validop(FunctionState *F, BinaryOpr opr, const Exp *E1, const Exp *E2)
+static cr_ubyte validop(FunctionState *F, BinaryOpr opr, const ExpInfo *E1, const ExpInfo *E2)
 {
 	double n1 = AS_NUMBER(*CONSTANT(F, E1));
 	double n2 = AS_NUMBER(*CONSTANT(F, E2));
@@ -2317,7 +2248,7 @@ static cr_ubyte validop(FunctionState *F, BinaryOpr opr, const Exp *E1, const Ex
 
 // Try folding binary operation
 // Example: OP_CONST (1), OP_CONST (2), OP_ADD => OP_CONST (3)
-static cr_ubyte foldbinary(FunctionState *F, BinaryOpr opr, Exp *E1, const Exp *E2)
+static cr_ubyte foldbinary(FunctionState *F, BinaryOpr opr, ExpInfo *E1, const ExpInfo *E2)
 {
 	if (E1->type != E2->type || E1->type != EXP_NUMBER || !validop(F, opr, E1, E2))
 		return 0;
@@ -2332,7 +2263,7 @@ static cr_ubyte foldbinary(FunctionState *F, BinaryOpr opr, Exp *E1, const Exp *
 }
 
 // Emit optimized 'and' instruction
-static void codeand(FunctionState *F, Exp *E)
+static void codeand(FunctionState *F, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_TRUE:
@@ -2355,7 +2286,7 @@ fin:
 }
 
 // Emit optimized 'or' instruction
-static void codeor(FunctionState *F, Exp *E)
+static void codeor(FunctionState *F, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_NIL:
@@ -2380,7 +2311,7 @@ static void codeor(FunctionState *F, Exp *E)
 }
 
 // Emit binary instruction
-static void postfix(FunctionState *F, BinaryOpr opr, Exp *E1, Exp *E2)
+static void postfix(FunctionState *F, BinaryOpr opr, ExpInfo *E1, ExpInfo *E2)
 {
 	if (FOLDABLE(opr) && foldbinary(F, opr, E1, E2))
 		return;
@@ -2426,7 +2357,7 @@ static void postfix(FunctionState *F, BinaryOpr opr, Exp *E1, Exp *E2)
 
 // cr_intermediate step that tries to optimize/process 'and' and 'or'
 // instructions before the second expression gets parsed.
-static void shortcircuit(FunctionState *F, BinaryOpr opr, Exp *E)
+static void shortcircuit(FunctionState *F, BinaryOpr opr, ExpInfo *E)
 {
 	switch (opr) {
 	case OPR_AND:
@@ -2441,7 +2372,7 @@ static void shortcircuit(FunctionState *F, BinaryOpr opr, Exp *E)
 }
 
 // Emit prefix instruction (only if folding didn't work)
-static cr_inline void prefix(FunctionState *F, UnaryOpr opr, Exp *E)
+static cr_inline void prefix(FunctionState *F, UnaryOpr opr, ExpInfo *E)
 {
 	if (!foldunary(F, opr, E))
 		CODE(F, unopr2op(opr));
@@ -2464,7 +2395,7 @@ static cr_inline void prefix(FunctionState *F, UnaryOpr opr, Exp *E)
 //           | simpleexp '>=' subexpr
 //           | simpleexp 'and' subexpr
 //           | simpleexp 'or' subexpr
-static BinaryOpr subexp(FunctionState *F, Exp *E1, int32_t limit)
+static BinaryOpr subexp(FunctionState *F, ExpInfo *E1, int32_t limit)
 {
 	UnaryOpr unaryop = getunaryopr(CURRT(F).type);
 	if (unaryop != OPR_NOUNARYOPR) {
@@ -2475,7 +2406,7 @@ static BinaryOpr subexp(FunctionState *F, Exp *E1, int32_t limit)
 		simpleexp(F, E1);
 	BinaryOpr binop = getbinaryopr(CURRT(F).type);
 	while (binop != OPR_NOBINOPR && priority[binop].left > limit) {
-		Exp E2;
+		ExpInfo E2;
 		E2.ins.set = 0;
 		advance(F); // skip binary operator
 		shortcircuit(F, binop, E1);
@@ -2487,7 +2418,7 @@ static BinaryOpr subexp(FunctionState *F, Exp *E1, int32_t limit)
 }
 
 // expr ::= subexpr
-static void expr(FunctionState *F, Exp *E)
+static void expr(FunctionState *F, ExpInfo *E)
 {
 	subexp(F, E, 0);
 }
