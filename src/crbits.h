@@ -51,13 +51,13 @@
 #define togglebit(x,b,t)	togglebits(x, bitmask(b), t)
 
 
-/* get byte at offset 'o' from int pointer 'p' */
-#define getbyte(p,o)	((*(p) >> ((o) * 8)) & 0xff)
+/* get byte at offset 'o' from 'v' */
+#define getbyte(v,o)	(((v) >> ((o) * 8)) & 0xff)
 
 
 /* 
  * Get first 3 bytes (LE byte order) from 'p' 
- * casted to 'int' 
+ * casted to 'int'
  */
 #define get3bytes(p) \
 	(cast_int(0) | \
@@ -71,8 +71,8 @@
  * (integer type) into 'dest' 
  */
 #define setbytes(dest,src,n) \
-	for (cr_ubyte i = 0; i < (n); i++) \
-		*(cast_ubytep(dest) + i) = getbyte(src, i);
+	{ for (cr_ubyte i = 0; i < (n); i++) \
+		*(cast_ubytep(dest) + i) = getbyte(src, i); }
 
 
 

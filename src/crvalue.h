@@ -75,15 +75,13 @@ typedef union Value {
 #define setvtt(v,t)	(vtt(v) = (t))
 	  
 
-/* 'mod' bits */
-#define CRMconst	0 /* value is constant */
-#define CRMcaptured	1 /* only for local variables */
+/* mod bit/s */
+#define MODconst	1 /* value is 'const' */
 
 /* macros for 'mod' */
 #define vmod(v)		((v)->mod)
 #define ismod(v,m)	testbit(vmod(v), (m))
-#define isconst(v)	ismod((v), CRMconst)
-#define iscaptured(v)	ismod((v), CRMcaptured)
+#define isconst(v)	ismod((v), MODconst)
 
 
 /* macros for 'val' */

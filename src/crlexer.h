@@ -41,7 +41,7 @@ enum TK {
 	TK_OR, TK_RETURN, TK_SUPER, TK_SELF, TK_SWITCH, TK_TRUE,
 	TK_LET, TK_WHILE, TK_LOOP, TK_CONST,
 	TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR,
-	TK_DOTS, TK_EOS,
+	TK_POW, TK_DOTS, TK_EOS,
 	TK_FLT, TK_INT, TK_STRING, TK_IDENTIFIER,
 };
 
@@ -57,7 +57,7 @@ typedef union {
 
 typedef struct {
 	int tk;
-	Literal k;
+	Literal lit;
 } Token;
 
 
@@ -68,6 +68,7 @@ Vec(Buffer, char);
 typedef struct Lexer {
 	struct VM *vm;
 	struct FunctionState *fs;
+	struct ParserState *ps; /* dynamic data used by parser */
 	HTable tab; /* prevent string literal collection */
 	BuffReader *br; /* buffered reader */
 	Buffer buff; /* buffer for tokens */
@@ -83,6 +84,7 @@ typedef struct Lexer {
 
 void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *src);
 const char *cr_lx_tok2str(Lexer *lx, int t);
+OString *cr_lr_newstring(Lexer *lx, const char *str, size_t len);
 void cr_lr_syntaxerror(Lexer *lx, const char *err);
 Token cr_lr_syntoken(const char *name);
 void cr_lr_scan(Lexer *lx);

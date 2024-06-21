@@ -81,7 +81,7 @@ int cr_mm_growstack(VM *vm, int n);
 		cast_umem((v)->size*sizeof(*(v)->ptr)), (ns)))
 
 
-#define freevec(vm,v) \
+#define cr_mm_freevec(vm,v) \
 	cr_mm_freearray((vm), (v)->ptr, (v)->size*sizeof(*(v)->ptr))
 
 

@@ -100,7 +100,7 @@ void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *source)
 	/* intern all keywords */
 	for (i = 0; i < NUM_KEYWORDS; i++) {
 		s = cr_ot_newstring(vm, tkstr[i], strlen(tkstr[i]));
-		lmarkgco(s); /* intern it */
+		gcbarrier(s); /* intern it */
 		s->bits = (STRkeyword | STRinterned);
 		s->extra = i;
 	}
@@ -109,7 +109,7 @@ void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *source)
 
 void cr_lr_free(Lexer *lx)
 {
-	freevec(lx->vm, &lx->buff);
+	cr_mm_freevec(lx->vm, &lx->buff);
 }
 
 
@@ -202,9 +202,8 @@ OString *cr_lr_newstring(Lexer *lx, const char *str, size_t len)
 	s = cr_ot_newstring(lx->vm, str, len);
 	setv2s(lx->vm, &k, s);
 	if (!cr_ht_get(&lx->tab, &k, o)) {
-		lmarkgco(s);
+		gcbarrier(s);
 		cr_ht_set(lx->vm, &lx->tab, &k, &k);
-		lunmarkgco(s);
 	}
 	return s;
 }
@@ -483,33 +482,14 @@ readmore:
 		advance(lx);
 		if (lxmatch(lx, '/')) readcomment(lx);
 		else if (lxmatch(lx, '*')) readlongcomment(lx);
-		else goback(lx, '/');
+		else return '/';
 		goto readmore;
-	case CREOF: return TK_EOS;
-	case '[': return '[';
-	case ']': return ']';
-	case '(': return '(';
-	case ')': return ')';
-	case '{': return '{';
-	case '}': return '}';
-	case ',': return ',';
-	case '-': return '-';
-	case '+': return '+';
-	case ';': return ';';
-	case ':': return ':';
-	case '?': return '?';
-	case '*': return '*';
-	case '%': return '%';
-	case '.':
-		  save_and_advance(lx);
-		  if (lxmatch(lx, '.')) {
-			  if (lxmatch(lx, '.'))
-				  return TK_DOTS;
-			  goback(lx, '.');
-			  return '.';
-		  } 
-		  if (!isdigit(lx->c)) return '.';
-		  else return readnumber(lx, k);
+	case '"': 
+		  readstring(lx, k); 
+		  return TK_STRING;
+	case '0': case '1': case '2': case '3': case '4':
+	case '5': case '6': case '7': case '8': case '9': 
+		  return readnumber(lx, k);
 	case '!': 
 		  advance(lx);
 		  if (lxmatch(lx, '=')) return TK_NE;
@@ -528,12 +508,22 @@ readmore:
 		  if (lxmatch(lx, '<')) return TK_SHL;
 		  else if (lxmatch(lx, '=')) return TK_LE;
 		  else return '<';
-	case '"':
-		  readstring(lx, k);
-		  return TK_STRING;
-	case '0': case '1': case '2': case '3': case '4':
-	case '5': case '6': case '7': case '8': case '9': 
-		  return readnumber(lx, k);
+	case '*':
+		  advance(lx);
+		  if (lxmatch(lx, '*')) return TK_POW;
+		  return '*';
+	case '.':
+		  save_and_advance(lx);
+		  if (lxmatch(lx, '.')) {
+			  if (lxmatch(lx, '.'))
+				  return TK_DOTS;
+			  goback(lx, '.');
+			  return '.';
+		  } 
+		  if (!isdigit(lx->c)) return '.';
+		  else return readnumber(lx, k);
+	case CREOF: 
+		  return TK_EOS;
 	default:
 		  if (isalpha(lx->c)) {
 			  do {
@@ -560,7 +550,7 @@ void cr_lr_scan(Lexer *lx)
 		lx->t = lx->tahead;
 		lx->tahead.tk = TK_EOS;
 	} else {
-		lx->t.tk = scan(lx, &lx->t.k);
+		lx->t.tk = scan(lx, &lx->t.lit);
 	}
 }
 
@@ -569,5 +559,5 @@ void cr_lr_scan(Lexer *lx)
 int cr_lr_scanahead(Lexer *lx)
 {
 	cr_assert(lx->t.tk != TK_EOS);
-	return (lx->t.tk = scan(lx, &lx->t.k));
+	return (lx->t.tk = scan(lx, &lx->t.lit));
 }

@@ -168,10 +168,54 @@ void cr_vm_inctop(VM *vm)
 }
 
 
+/* 
+ * Integer division; handles division by 0 and possible
+ * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
+ */
+cr_integer cr_vm_div(VM *vm, cr_integer x, cr_integer y)
+{
+	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* y == '0' or '-1' */
+		if (y == 0)
+			cr_dg_runerror(vm, "division by 0");
+		return cr_intop(-, 0, x);
+	}
+	return (x / y);
+}
+
+
+/*
+ * Integer modulus; handles modulo by 0 and overflow
+ * as explained in 'cr_vm_div()'.
+ */
+cr_integer cr_vm_mod(VM *vm, cr_integer x, cr_integer y) 
+{
+	cr_integer r;
+
+	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) {
+		if (y == 0)
+			cr_dg_runerror(vm, "attempt to x%%0");
+		return 0;
+	}
+	cri_nummod(vm, x, y, r);
+	return r;
+}
+
+
+/* floating point modulus */
+cr_number cr_vm_modnum(VM *vm, cr_number x, cr_number y)
+{
+	cr_number r;
+	cri_nummod(vm, x, y, r);
+	return r;
+}
+
+
+
+
 /* raw property get */
 cr_sinline int getproperty(VM *vm, Instance *ins, TValue *k, TValue *v, int field)
 {
-	return cr_ht_get(vm, proptab(ins, field), k, v);
+	return cr_ht_get(proptab(ins, field), k, v);
 }
 
 
@@ -657,20 +701,22 @@ CRString *globalname(VM *vm, uint32_t idx)
 
 
 /* fetch an instruction */
-#define fetch()		(*(pc)++)
+#define fetch()		(pc += INSTRSIZE, *(pc - INSTRSIZE))
 
 /* fetch short instruction parameter */
-#define shortparam()	fetch()
+#define fetchshort() \
+	(pc += SPARAMSIZE, GETSPARAMV(pc - SPARAMSIZE - INSTRSIZE, 0))
 
 /* fetch long instruction parameter */
-#define longparam()	((ip) += 3, get3bytes((ip) - 3))
+#define fetchlong() \
+	(pc += LPARAMSIZE, GETLPARAMV(pc - LPARAMSIZE - INSTRSIZE, 0))
 
 
 /* get constant */
-#define GETK()		(cffn(cf)->constants.ptr[longparam(pc)])
+#define fetchconstant()		(cffn(cf)->constants.ptr[fetchlong(pc)])
 
 /* get string constant */
-#define GETSTRK()	(strvalue(GETK(cf, pc)))
+#define fetchstring()		(strvalue(fetchconstant()))
 
 
 #define DISPATCH(x)	switch(x)

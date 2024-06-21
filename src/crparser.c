@@ -14,12 +14,14 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "crparser.h"
+#include "crcode.h"
 #include "crconf.h"
 #include "crlexer.h"
 #include "crlimits.h"
 #include "crobject.h"
+#include "crparser.h"
 #include "crvalue.h"
+#include "crvm.h"
 
 
 #include <stdarg.h>
@@ -28,89 +30,58 @@
 
 
 
+#define entercstack(lx)		(cr_vm_inccstack((lx)->vm))
 
-/* If 'cr_om' does not return values */
-#define omnoret(omtag) ((omtag) == OM_INIT || (omtag) == OM_SETIDX)
-
-/* If current function is overload-able 'method' and does not return values */
-#define tagisnoret(tag) ((tag) != -1 && omnoret((tag)-SS_INIT))
+#define leavecstack(lx)		((lx)->vm->nccalls--)
 
 
+/* check condition */
+#define expect_cond(lx, cond, err) \
+	{ if (!(cond)) cr_lr_syntaxerror(lx, err); }
 
 
-/* compile time error indices */
-typedef enum {
-	CE_JMPLIMIT, CE_LREAD, CE_GVARLIMIT, CE_LVARLIMIT, CE_LREDEF,
-	CE_SWDEF, CE_SWNOC, CE_SWRBR, CE_SWDUP, CE_CONT, CE_BREAK,
-	CE_EXPLIST, CE_VARLIST, CE_SCOPE, CE_UVALLIMIT, CE_INHERIT,
-	CE_VARARG, CE_NAMELIST, CE_CALLCONST, CE_SELF, CE_SUPER,
-	CE_NOSUPER, CE_OMSIG, CE_EXPSTM, CE_NORET, CE_CNT,
-} CompErr;
-
-
-/* compile time errors */
-const char *comperrors[CE_CNT] = {
-	"\tToo much code to jump over, limit is '%d'.\n",
-	"\tCan't read local variable %.*s in its own initializer.\n",
-	"\tToo many global values defined in script, limit is '%d'.\n",
-	"\tToo many local values defined in script, limit is '%d'.\n",
-	"\tRedefinition of local variable '%.*s'.\n",
-	"\tMultiple 'default' labels.\n",
-	"\tCan't have statements before first case.\n",
-	"\tExpect '}' at the end of 'switch'.\n",
-	"\tAlready have case with constant '%s'.\n",
-	"\t'continue' statement not in loop statement.\n",
-	"\t'break' statement not in loop or switch statement.\n",
-	"\tToo many expressions in explist, expected at most '%d'.\n",
-	"\tToo many variables in varlist, limit is '%d'.\n",
-	"\tScope nesting limit reached, limit is '%d'.\n",
-	"\tToo many upvalues in '%s', limit is '%d'.\n",
-	"\t<class '%s'> can't 'impl' itself.\n",
-	"\t'...' can only be used inside functions that accept variable number of arguments.\n",
-	"\tToo many names in namelist, limit is '%d'\n",
-	"\tAttempted to call a constant value.\n",
-	"\tCan't use 'self' outside of a class.\n",
-	"\tCan't use 'super' outside of a class.\n",
-	"\tCan't use 'super', class does not have a superclass.\n",
-	"\tOverload-able method %s expects %d parameters, instead defined %d.\n",
-	"\tInvalid statement, expect function call or assignment.\n",
-	"\tExpect ';' after explicit 'return' in '%s' (no return values).\n",
-};
-
-
-
-/* bits for Scope 'bits' */
-#define SCOloop		(1 << 0)
-#define SCOforeach	(1 << 1)
-#define SCOswitch	(1 << 2)
+/* Scope 'bits' */
+#define SCloop		(1 << 0)
+#define SCforeach	(1 << 1)
+#define SCswitch	(1 << 2)
 
 /* lexical scope information */
 typedef struct Scope {
-	struct Scope *prev; /* list */
-	int nlocals; /* count of locals up until this scope */
+	struct Scope *prev; /* chain */
 	int depth; /* scope depth (index) */
-	int bits;
+	int nlocals; /* number of locals outside of this scope */
+	cr_ubyte upval; /* set if scope contains upvalue variable */
+	cr_ubyte bits;
 } Scope;
 
 
 
 /* class declaration information */
-typedef struct ClassDecl {
-	struct ClassDecl *enclosing;
+typedef struct ClassState {
+	struct ClassState *enclosing;
 	cr_ubyte superclass;
-} ClassDecl;
+} ClassState;
 
 
 
-/* initialize expression */
-static cr_inline void initexp(ExpInfo *e, ExpType et, int32_t code, int32_t info)
+/* forward declare (recursive) */
+static void expr(FunctionState *fs, ExpInfo *E);
+
+
+
+static void initexp(ExpInfo *e, expt et, int info)
 {
+	e->t = e->f = -1;
 	e->et = et;
-	e->t = -1;
-	e->f = -1;
-	e->ins.code = code;
-	e->ins.binop = 0;
 	e->u.info = info;
+}
+
+
+static void initvar(FunctionState *fs, ExpInfo *e, int idx)
+{
+	e->t = e->f = -1;
+	e->et = EXP_LOCAL;
+	e->u.info = idx;
 }
 
 
@@ -118,7 +89,7 @@ static cr_inline void initexp(ExpInfo *e, ExpType et, int32_t code, int32_t info
  * Returns 1 if 'S' is in loop, 0 if inside of a switch
  * and -1 if outside.
  */
-static cr_inline int32_t inwhat(Scope *s, Scope **target)
+static cr_inline int inwhat(Scope *s, Scope **target)
 {
 	Scope *head;
 	int which;
@@ -145,9 +116,9 @@ static cr_inline int32_t inwhat(Scope *s, Scope **target)
 
 
 
-static cr_inline Scope *getscope(FunctionState *F, int32_t depth)
+static cr_inline Scope *getscope(FunctionState *fs, int depth)
 {
-	Scope *scope = F->S;
+	Scope *scope = fs->S;
 	while (scope != NULL) {
 		if (scope->depth == depth)
 			return scope;
@@ -157,50 +128,43 @@ static cr_inline Scope *getscope(FunctionState *F, int32_t depth)
 }
 
 
-/* default 'FunctionState' stack size */
-#define SHORT_STACK_SIZE UINT8_MAX
-
-/* tokens (previous and current) */
-#define PREVT(F) (F)->lexer->previous
-#define CURRT(F) (F)->lexer->current
-
 typedef struct {
-	int32_t codeoffset;
-	int32_t constlen;
-	int32_t localc;
-	int32_t upvalc;
+	int codeoffset;
+	int constlen;
+	int localc;
+	int upvalc;
 } Context;
 
-static cr_inline void savecontext(FunctionState *F, Context *C)
+static cr_inline void savecontext(FunctionState *fs, Context *C)
 {
-	C->codeoffset = codeoffset(F);
-	C->constlen = CHUNK(F)->constants.len;
-	C->localc = F->locals.len;
-	C->upvalc = F->upvalues->len;
+	C->codeoffset = codeoffset(fs);
+	C->constlen = CHUNK(fs)->constants.len;
+	C->localc = fs->locals.len;
+	C->upvalc = fs->upvalues->len;
 }
 
 // Trim/set length of code and/or constant array
-static cr_inline void concatcode(FunctionState *F, int32_t codeoffset, int32_t constoffset)
+static cr_inline void concatcode(FunctionState *fs, int codeoffset, int constoffset)
 {
-	CHUNK(F)->bcode.len = codeoffset;
-	CHUNK(F)->constants.len = constoffset;
+	CHUNK(fs)->bcode.len = codeoffset;
+	CHUNK(fs)->constants.len = constoffset;
 }
 
-static cr_inline void restorecontext(FunctionState *F, Context *C)
+static cr_inline void restorecontext(FunctionState *fs, Context *C)
 {
-	concatcode(F, C->codeoffset, C->constlen);
-	F->locals.len = C->localc;
-	F->upvalues->len = C->upvalc;
+	concatcode(fs, C->codeoffset, C->constlen);
+	fs->locals.len = C->localc;
+	fs->upvalues->len = C->upvalc;
 }
 
 
 
 
 // Forward declare
-static void dec(FunctionState *F);
-static void expr(FunctionState *F, ExpInfo *E);
-static void suffixedexp(FunctionState *F, ExpInfo *E);
-static void stm(FunctionState *F);
+static void dec(FunctionState *fs);
+static void expr(FunctionState *fs, ExpInfo *E);
+static void suffixedexp(FunctionState *fs, ExpInfo *E);
+static void stm(FunctionState *fs);
 
 
 
@@ -208,16 +172,16 @@ static void stm(FunctionState *F);
 /*========================== ERROR =========================*/
 
 // Compile-time error
-static void error(FunctionState *F, const char *error, ...)
+static void error(FunctionState *fs, const char *error, ...)
 {
-	Token *token = &PREVT(F);
+	Token *token = &PREVT(fs);
 	va_list args;
 	cr_assert(vm, token->type != TOK_ERROR, "Only lexer can register error tokens.");
 	// If panic bit is on, then sync the lexer before registering any new errors.
-	if (F->lexer->panic)
+	if (fs->lexer->panic)
 		return;
 	va_start(args, error);
-	regcomperror(F->lexer, error, args);
+	regcomperror(fs->lexer, error, args);
 	va_end(args);
 }
 
@@ -227,202 +191,93 @@ static void error(FunctionState *F, const char *error, ...)
 //======================= CODE =======================//
 
 // Multi-byte instruction (up to 4 bytes)
-#define CODEOP(F, code, param) writechunk_codewparam(CHUNK(F), code, param, PREVT(F).line)
+#define CODEOP(fs, code, param) writechunk_codewparam(CHUNK(fs), code, param, PREVT(fs).line)
 
 // Single byte instruction
-#define CODE(F, byte)                                       \
+#define CODE(fs, byte)                                       \
 	({                                                  \
-		(F)->fn->gotret = ((byte) == OP_RET);       \
-		writechunk(CHUNK(F), byte, PREVT(F).line); \
+		(fs)->fn->gotret = ((byte) == OP_RET);       \
+		writechunk(CHUNK(fs), byte, PREVT(fs).line); \
 	})
 
 // 3 byte parameter
-#define CODEL(F, bytes)                  \
+#define CODEL(fs, bytes)                  \
 	do {                             \
-		CODE(F, BYTE(bytes, 0)); \
-		CODE(F, BYTE(bytes, 1)); \
-		CODE(F, BYTE(bytes, 2)); \
+		CODE(fs, BYTE(bytes, 0)); \
+		CODE(fs, BYTE(bytes, 1)); \
+		CODE(fs, BYTE(bytes, 2)); \
 	} while (0)
 
 // Emit jump instruction
-#define CODEJMP(F, jmp)            \
+#define CODEJMP(fs, jmp)            \
 	({                         \
-		CODEOP(F, jmp, 0); \
-		codeoffset(F) - 3; \
+		CODEOP(fs, jmp, 0); \
+		codeoffset(fs) - 3; \
 	})
 
 // Emit pop instruction
-#define CODEPOP(F, n)                                  \
+#define CODEPOP(fs, n)                                  \
 	do {                                           \
 		if (n > 0) {                           \
 			if ((n) > 1)                   \
-				CODEOP(F, OP_POPN, n); \
+				CODEOP(fs, OP_POPN, n); \
 			else                           \
-				CODE(F, OP_POP);       \
+				CODE(fs, OP_POP);       \
 		}                                      \
 	} while (0)
 
 // Emit unary instruction
-#define CODEUN(F, opr) CODE(F, unopr2op(opr))
+#define CODEUN(fs, opr) CODE(fs, unopr2op(opr))
 
 // Emit binary instruction
-#define CODEBIN(F, opr) CODE(F, binopr2op(opr))
+#define CODEBIN(fs, opr) CODE(fs, binopr2op(opr))
 
 // Implicit return
-#define implicitreturn(F) (CODE(F, OP_NIL), CODE(F, OP_RET1))
+#define implicitreturn(fs) (CODE(fs, OP_NIL), CODE(fs, OP_RET1))
 
 // Class initializer return
-#define initreturn(F) (CODEOP(F, OP_GET_LOCAL, 0), CODE(F, OP_RET1))
+#define initreturn(fs) (CODEOP(fs, OP_GET_LOCAL, 0), CODE(fs, OP_RET1))
 
 // Emit loop instruction
-static cr_inline void codeloop(FunctionState *F, int start)
+static cr_inline void codeloop(FunctionState *fs, int start)
 {
-	CODE(F, OP_LOOP);
-	int offset = codeoffset(F) - start + 3;
+	CODE(fs, OP_LOOP);
+	int offset = codeoffset(fs) - start + 3;
 	if (cr_unlikely(offset >= PARSER_JMP_LIMIT))
-		error(F, comperrors[CE_JMPLIMIT], PARSER_JMP_LIMIT);
-	CODEL(F, offset);
+		error(fs, comperrors[CE_JMPLIMIT], PARSER_JMP_LIMIT);
+	CODEL(fs, offset);
 }
 
 // Initialize global variable
-#define INIT_GLOBAL(F, idx, vflags, E)                                 \
+#define INIT_GLOBAL(fs, idx, vflags, E)                                 \
 	do {                                                           \
-		(F)->vm->globvars.data[idx].flags = vflags;            \
-		CODEOP(F, GET_OP_TYPE(idx, OP_DEFINE_GLOBAL, E), idx); \
+		(fs)->vm->globvars.data[idx].flags = vflags;            \
+		CODEOP(fs, GET_OP_TYPE(idx, OP_DEFINE_GLOBAL, E), idx); \
 	} while (0)
 
 
-/* Check if token names are equal */
-#define nameeq(l, r) (((l)->len == (r)->len) && (memcmp((l)->start, (r)->start, (l)->len) == 0))
-
-
 // Get local variable
-static cr_inline int32_t get_local(FunctionState *F, Token *name)
-{
-	for (int32_t i = F->locals.len - 1; i >= 0; i--) {
-		LocalVar *local = Array_Local_index(&F->locals, i);
-		if (nameeq(name, &local->name)) {
-			if (cr_unlikely(local->depth == -1))
-				error(F, comperrors[CE_LREAD], name->len, name->start);
-			return i;
-		}
-	}
-	return -1;
-}
-
-static int add_upval(FunctionState *F, int idx, cr_ubyte flags, cr_ubyte local)
-{
-	int32_t upvalc = F->fn->p.upvalc;
-	cr_assert(F->vm, upvalc < cast_int(F->upvalues->len + 1), "Invalid upvalc.");
-	for (int32_t i = 0; i < upvalc; i++) {
-		Upvalue *upvalue = Array_Upvalue_index(F->upvalues, i);
-		if (upvalue->idx == idx && upvalue->local == local)
-			return i; // already exists
-	}
-	if (cr_unlikely(upvalc >= VM_STACK_LIMIT)) {
-		error(F, comperrors[CE_UVALLIMIT], VM_STACK_LIMIT, F->fn->p.name->storage);
-		return 0;
-	}
-	Upvalue upval = { idx, flags, local };
-	if (upvalc == cast_int(F->upvalues->len))
-		Array_Upvalue_push(F->upvalues, upval);
-	else
-		*Array_Upvalue_index(F->upvalues, upvalc) = upval;
-	return F->fn->p.upvalc++;
-}
-
-static int32_t get_upval(FunctionState *F, Token *name)
-{
-	if (F->enclosing == NULL)
-		return -1;
-	int32_t idx = get_local(F->enclosing, name);
-	if (idx != -1) {
-		LocalVar *l = Array_Local_index(&F->enclosing->locals, idx);
-		bset(l->flags, VCAPTURED_BIT);
-		return add_upval(F, cast_uint(idx), l->flags, 1);
-	}
-	idx = get_upval(F->enclosing, name);
-	if (idx != -1) {
-		LocalVar *l = Array_Local_index(&F->enclosing->locals, idx);
-		return add_upval(F, cast_uint(idx), l->flags, 0);
-	}
-	return -1;
-}
-
-static int globalvar(FunctionState *F, TValue identifier)
-{
-	TValue idx;
-	Variable glob = { undefval(), F->vflags };
-	VM *vm = F->vm;
-	if (!rawget(vm, &vm->globids, identifier, &idx)) {
-		if (cr_unlikely((vm)->globvars.len + 1 > PARSER_GVAR_LIMIT))
-			error(F, comperrors[CE_GVARLIMIT], PARSER_GVAR_LIMIT);
-		push(vm, identifier);
-		idx = NUMBER_VAL(Array_Variable_push(&vm->globvars, glob));
-		rawset(vm, &vm->globids, identifier, idx);
-		pop(vm);
-	}
-	return cast_uint(AS_NUMBER(idx));
-}
-
-#define tokintostr(vm, name) OBJ_VAL(OString_new(vm, (name)->start, (name)->len))
-
-// Make global variable
-#define MAKE_GLOBAL(F, name)                                  \
-	({                                                    \
-		TValue identifier = tokintostr((F)->vm, name); \
-		globalvar(F, identifier);                     \
-	})
-
-static int32_t codevar(FunctionState *F, Token name, ExpInfo *E)
-{
-	OpCode getop;
-	int32_t idx = get_local(F, &name);
-	if (idx != -1) {
-		E->et = EXP_LOCAL;
-		getop = GET_OP_TYPE(idx, OP_GET_LOCAL, E);
-	} else if ((idx = get_upval(F, &name)) != -1) {
-		E->et = EXP_UPVAL;
-		E->ins.l = 1;
-		getop = OP_GET_UPVALUE;
-	} else {
-		E->et = EXP_GLOBAL;
-		idx = MAKE_GLOBAL(F, &name);
-		getop = GET_OP_TYPE(idx, OP_GET_GLOBAL, E);
-	}
-	E->value = idx;
-	if (!E->ins.set)
-		return (E->ins.code = CODEOP(F, getop, idx));
-	else
-		return (E->ins.code = -1); // this is assignment
-}
-
-static cr_inline int codevarprev(FunctionState *F, ExpInfo *E)
-{
-	return codevar(F, PREVT(F), E);
-}
-
 // helper [rmlastins]
-static cr_inline void popvarins(FunctionState *F, ExpInfo *E)
+static cr_inline void popvarins(FunctionState *fs, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_UPVAL:
 	case EXP_LOCAL:
 	case EXP_GLOBAL:
 		if (E->ins.l)
-			LINSTRUCTION_POP(F);
+			LINSTRUCTION_POP(fs);
 		else
-			INSTRUCTION_POP(F);
+			INSTRUCTION_POP(fs);
 		break;
 	case EXP_INDEXED:
 		// @?: setters are not reachable ?
-		switch (*INSTRUCTION(F, E)) {
+		switch (*INSTRUCTION(fs, E)) {
 		case OP_INDEX:
-			SINSTRUCTION_POP(F);
+			SINSTRUCTION_POP(fs);
 			break;
 		case OP_GET_PROPERTY:
 		case OP_GET_SUPER:
-			LINSTRUCTION_POP(F);
+			LINSTRUCTION_POP(fs);
 			break;
 		default:
 			cr_unreachable;
@@ -434,39 +289,39 @@ static cr_inline void popvarins(FunctionState *F, ExpInfo *E)
 }
 
 // helper [rmlastins]
-static cr_inline void popcallins(FunctionState *F, ExpInfo *E)
+static cr_inline void popcallins(FunctionState *fs, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_CALL:
-		LINSTRUCTION_POP(F);
+		LINSTRUCTION_POP(fs);
 		break;
 	case EXP_INVOKE:
-		LINSTRUCTION_POP(F);
-		LPARAM_POP(F);
+		LINSTRUCTION_POP(fs);
+		LPARAM_POP(fs);
 		break;
 	default:
 		cr_unreachable;
 	}
 }
 
-static void rmlastins(FunctionState *F, ExpInfo *E)
+static void rmlastins(FunctionState *fs, ExpInfo *E)
 {
-	ExpType type = E->et;
+	exptt type = E->et;
 	if (etisliteral(type))
-		SINSTRUCTION_POP(F);
+		SINSTRUCTION_POP(fs);
 	else if (etisconst(type))
-		LINSTRUCTION_POP(F);
+		LINSTRUCTION_POP(fs);
 	else if (etisvar(type))
-		popvarins(F, E);
+		popvarins(fs, E);
 	else if (etiscall(type))
-		popcallins(F, E);
+		popcallins(fs, E);
 	else
 		switch (type) {
 		case EXP_JMP:
 			goto panic;
 		case EXP_EXPR:
 			if (E->ins.binop) {
-				LINSTRUCTION_POP(F);
+				LINSTRUCTION_POP(fs);
 				break;
 			} else {
 panic: // FALLTHRU
@@ -484,56 +339,56 @@ panic: // FALLTHRU
 //======================= SCOPE/C-FLOW =======================//
 
 // Start new 'Scope'
-static cr_inline void startscope(FunctionState *F, Scope *S, cr_ubyte isloop, cr_ubyte isswitch)
+static cr_inline void startscope(FunctionState *fs, Scope *S, cr_ubyte isloop, cr_ubyte isswitch)
 {
-	if (cr_unlikely(F->S->depth >= CR_BYTECODE_MAX))
-		error(F, comperrors[CE_SCOPE], CR_BYTECODE_MAX);
-	S->nlocals = F->locals.len;
+	if (cr_unlikely(fs->S->depth >= CR_BYTECODE_MAX))
+		error(fs, comperrors[CE_SCOPE], CR_BYTECODE_MAX);
+	S->nlocals = fs->locals.len;
 	S->isloop = isloop;
 	S->isswitch = isswitch;
-	S->depth = F->S->depth + 1;
-	S->prev = F->S;
-	F->S = S;
+	S->depth = fs->S->depth + 1;
+	S->prev = fs->S;
+	fs->S = S;
 }
 
 // End scope and pop locals and/or close captured locals
-static void endscope(FunctionState *F)
+static void endscope(FunctionState *fs)
 {
 #define LOCAL_IS_CAPTURED(local) (btest((local)->flags, VCAPTURED_BIT))
 
-	F->fn->gotret = 0;
-	int32_t pop = 0;
-	Scope *current = F->S;
-	F->S = current->prev;
-	while (F->locals.len > 0 && Array_Local_last(&F->locals)->depth > F->S->depth) {
-		if (LOCAL_IS_CAPTURED(Array_Local_last(&F->locals))) {
-			int32_t capture = 1;
-			F->locals.len--;
-			CODEPOP(F, pop);
+	fs->fn->gotret = 0;
+	int pop = 0;
+	Scope *current = fs->S;
+	fs->S = current->prev;
+	while (fs->locals.len > 0 && Array_Local_last(&fs->locals)->depth > fs->S->depth) {
+		if (LOCAL_IS_CAPTURED(Array_Local_last(&fs->locals))) {
+			int capture = 1;
+			fs->locals.len--;
+			CODEPOP(fs, pop);
 			pop = 0; // Reset pop count
 			do {
-				if (!LOCAL_IS_CAPTURED(Array_Local_last(&F->locals))) {
+				if (!LOCAL_IS_CAPTURED(Array_Local_last(&fs->locals))) {
 					if (capture == 1)
-						CODE(F, OP_CLOSE_UPVAL);
+						CODE(fs, OP_CLOSE_UPVAL);
 					else
-						CODEOP(F, OP_CLOSE_UPVALN, capture);
+						CODEOP(fs, OP_CLOSE_UPVALN, capture);
 					break;
 				}
 				capture++;
-				F->locals.len--;
-			} while (F->locals.len > 0 && Array_Local_last(&F->locals)->depth > F->S->depth);
+				fs->locals.len--;
+			} while (fs->locals.len > 0 && Array_Local_last(&fs->locals)->depth > fs->S->depth);
 		} else {
 			pop++;
-			F->locals.len--;
+			fs->locals.len--;
 		}
 	}
-	CODEPOP(F, pop);
+	CODEPOP(fs, pop);
 
 #undef LOCAL_IS_CAPTURED
 }
 
 
-static void ControlFlow_init(VM *vm, ControlFlow *cflow)
+static void ControlFlow_init(VM *vm, CFlow *cflow)
 {
 	cflow->innerlstart = -1;
 	cflow->innerldepth = 0;
@@ -541,7 +396,7 @@ static void ControlFlow_init(VM *vm, ControlFlow *cflow)
 	Array_Array_cr_int_init(&cflow->breaks, vm);
 }
 
-static void ControlFlow_free(ControlFlow *context)
+static void ControlFlow_free(CFlow *context)
 {
 	Array_Array_cr_int_free(&context->breaks, NULL);
 	context->innerlstart = -1;
@@ -554,33 +409,33 @@ static void ControlFlow_free(ControlFlow *context)
 
 /*========================== FUNCTION STATE =========================*/
 
-static void F_init(VM *vm, FunctionState *F, Scope *globscope, Class *cclass, FunctionType fn_type, FunctionState *enclosing)
+static void F_init(VM *vm, FunctionState *fs, Scope *globscope, Class *cclass, FunctionType fn_type, FunctionState *enclosing)
 {
 	// Initialize FunctionState state
-	F->vm = vm;
-	F->S = globscope;
-	F->enclosing = enclosing;
-	F->cclass = cclass;
-	vm->F = F;
-	F->fn = NULL; // Initialize to NULL so gc does not get confused
-	F->fn = OFunction_new(vm);
-	F->fn_type = fn_type;
-	F->vflags = 0;
-	ControlFlow_init(vm, &F->cflow);
+	fs->vm = vm;
+	fs->S = globscope;
+	fs->enclosing = enclosing;
+	fs->cclass = cclass;
+	vm->fs = fs;
+	fs->fn = NULL; // Initialize to NULL so gc does not get confused
+	fs->fn = OFunction_new(vm);
+	fs->fn_type = fn_type;
+	fs->vflags = 0;
+	ControlFlow_init(vm, &fs->cflow);
 	// Setup upvalues storage
 	if (enclosing == NULL) {
-		F->tag = -1;
-		F->upvalues = MALLOC(vm, sizeof(Array_Upvalue));
-		Array_Upvalue_init(F->upvalues, vm);
+		fs->tag = -1;
+		fs->upvalues = MALLOC(vm, sizeof(Array_Upvalue));
+		Array_Upvalue_init(fs->upvalues, vm);
 	} else {
-		F->tag = enclosing->tag;
-		F->upvalues = enclosing->upvalues;
+		fs->tag = enclosing->tag;
+		fs->upvalues = enclosing->upvalues;
 	}
 	// Setup local variables storage
-	Array_Local_init(&F->locals, vm);
-	Array_Local_init_cap(&F->locals, SHORT_STACK_SIZE);
-	F->locals.len++;
-	LocalVar *local = F->locals.data;
+	Array_Local_init(&fs->locals, vm);
+	Array_Local_init_cap(&fs->locals, SHORT_STACK_SIZE);
+	fs->locals.len++;
+	LocalVar *local = fs->locals.data;
 	local->depth = 0;
 	local->flags = 0;
 	if (fn_type == FN_METHOD) {
@@ -591,39 +446,39 @@ static void F_init(VM *vm, FunctionState *F, Scope *globscope, Class *cclass, Fu
 		local->name.len = 0;
 	}
 	if (fn_type != FN_SCRIPT) {
-		F->fn->p.defline = PREVT(F).line;
-		F->fn->p.name = OString_new(vm, PREVT(F).start, PREVT(F).len);
+		fs->fn->p.defline = PREVT(fs).line;
+		fs->fn->p.name = OString_new(vm, PREVT(fs).start, PREVT(fs).len);
 	}
 }
 
-void F_free(FunctionState *F)
+void F_free(FunctionState *fs)
 {
-	VM *vm = F->vm;
-	ControlFlow_free(&F->cflow);
-	if (F->enclosing == NULL) {
-		cr_assert(F->vm, F->fn_type == FN_SCRIPT, "FunctionState is top-level but the type is not 'FN_SCRIPT'.");
-		Array_Upvalue_free(F->upvalues, NULL);
-		FREE(vm, F->upvalues); // free the memory holding the pointer
+	VM *vm = fs->vm;
+	ControlFlow_free(&fs->cflow);
+	if (fs->enclosing == NULL) {
+		cr_assert(fs->vm, fs->fn_type == FN_SCRIPT, "FunctionState is top-level but the type is not 'FN_SCRIPT'.");
+		Array_Upvalue_free(fs->upvalues, NULL);
+		FREE(vm, fs->upvalues); // free the memory holding the pointer
 	}
-	Array_Local_free(&F->locals, NULL);
-	vm->F = F->enclosing;
-	FREE(vm, F);
+	Array_Local_free(&fs->locals, NULL);
+	vm->fs = fs->enclosing;
+	FREE(vm, fs);
 }
 
 // Cleanup the function stack in case of internal errors
-void _cleanup_function(FunctionState *F)
+void _cleanup_function(FunctionState *fs)
 {
-	if (F != NULL) {
-		L_free(F->lexer);
-		for (FunctionState *fn = F; fn != NULL; fn = fn->enclosing)
-			F_free(F);
+	if (fs != NULL) {
+		L_free(fs->lexer);
+		for (FunctionState *fn = fs; fn != NULL; fn = fn->enclosing)
+			F_free(fs);
 	}
 }
 
 void mark_function_roots(VM *vm)
 {
 	// Mark all functions and token values
-	for (FunctionState *current = vm->F; current != NULL; current = current->enclosing) {
+	for (FunctionState *current = vm->fs; current != NULL; current = current->enclosing) {
 		vmark(vm, PREVT(current).value);
 		vmark(vm, CURRT(current).value);
 		omark(vm, (GCObject *)current->fn);
@@ -633,96 +488,67 @@ void mark_function_roots(VM *vm)
 
 
 
-/*========================== PARSING =========================*/
-
-// Advance to the next token
-static void advance(FunctionState *F)
+/* check if 'tk' matches the current token */
+static void expect(Lexer *lx, int tk)
 {
-	PREVT(F) = CURRT(F);
-	while (1) {
-		CURRT(F) = scan(F->lexer);
-		if (CURRT(F).type != TOK_ERROR)
-			break;
-	}
-}
+	const char *err;
 
-// Advance and return 1 if 'type' matches the current token type
-static cr_inline cr_ubyte match(FunctionState *F, TType type)
-{
-	if (CURRT(F).type != type)
-		return 0;
-	advance(F);
-	return 1;
-}
-
-// Sync lexer to the next statement
-static void sync(FunctionState *F)
-{
-	F->lexer->panic = 0;
-	while (CURRT(F).type != TOK_EOF) {
-		if (PREVT(F).type == TOK_SEMICOLON)
-			return;
-		switch (CURRT(F).type) {
-		case TOK_FOR:
-		case TOK_FN:
-		case TOK_VAR:
-		case TOK_CLASS:
-		case TOK_IF:
-		case TOK_RETURN:
-		case TOK_CONTINUE:
-		case TOK_BREAK:
-		case TOK_WHILE:
-		case TOK_FOREACH:
-		case TOK_LOOP:
-		case TOK_SWITCH:
-			return;
-		default:
-			advance(F);
-			break;
-		}
-	}
-}
-
-// Check if the token type matches the current token type
-#define check(F, toktype) (CURRT(F).type == (toktype))
-
-// Invoke compile-time error if 'cond' is 0
-#define expect_cond(F, cond, err) \
-	if (!cond)                \
-		error(F, err);
-
-// Invoke compile-time error if 'type' does not match the current token type
-static cr_inline void expect(FunctionState *F, TType type, const char *err)
-{
-	if (CURRT(F).type == type) {
-		advance(F);
+	if (lx->t.tk == tk)
 		return;
-	}
-	error(F, err);
+	err = cr_ot_pushfstring(lx->vm, "expected %s", cr_lr_tok2str(lx, tk));
+	cr_lr_syntaxerror(lx, err);
 }
 
-// String literal as argument to 'expect()'
-#define expectstr(str) "\t" str "\n"
 
-// End compilation of the function and emit return instruction
-static cr_inline Function *compile_end(FunctionState *F)
+/* same as 'expect', scan for next token if no error */
+static void expectnext(Lexer *lx, int tk)
 {
-	if (!F->fn->gotret) { // last statement wasn't 'return' ?
-		if (isom(F) && tagisnoret(F->tag)) { // om that can't return values with 'return' ?
-			if (F->tag == SS_INIT) { // return 'self'
-				CODEOP(F, OP_GET_LOCAL, 0);
-				CODE(F, OP_RET1);
-			} else
-				CODE(F, OP_RET0); // no return
-		} else
-			implicitreturn(F); // otherwise implicit 'nil' return
+	expect(lx, tk);
+	cr_lr_scan(lx);
+}
+
+
+/* same as 'expectnext' but do not invoke syntax error */
+static int match(Lexer *lx, int tk)
+{
+	if (lx->t.tk == tk) {
+		cr_lr_scan(lx);
+		return 1;
 	}
-	F->fn->p.deflastline = PREVT(F).line;
+	return 0;
+}
+
+
+static OString *expect_id(Lexer *lx)
+{
+	OString *s;
+
+	expect(lx, TK_IDENTIFIER);
+	s = lx->t.lit.str;
+	cr_lr_scan(lx);
+	return s;
+}
+
+
+/* End compilation of the function and emit return instruction */
+static Function *parse_end(FunctionState *fs)
+{
+	if (!fs->fn->gotret) { // last statement wasn't 'return' ?
+		if (isom(fs) && tagisnoret(fs->tag)) { // om that can't return values with 'return' ?
+			if (fs->tag == SS_INIT) { // return 'self'
+				CODEOP(fs, OP_GET_LOCAL, 0);
+				CODE(fs, OP_RET1);
+			} else
+				CODE(fs, OP_RET0); // no return
+		} else
+			implicitreturn(fs); // otherwise implicit 'nil' return
+	}
+	fs->fn->p.deflastline = PREVT(fs).line;
 #ifdef CR_DEBUG_PRINT_CODE
-	if (!F->lexer->error)
-		Chunk_debug(F->vm, CHUNK(F), F->fn->name->storage);
+	if (!fs->lexer->error)
+		Chunk_debug(fs->vm, CHUNK(fs), fs->fn->name->storage);
 #endif
-	return F->fn;
+	return fs->fn;
 }
 
 
@@ -731,26 +557,27 @@ static cr_inline Function *compile_end(FunctionState *F)
 // Additionally parser only registers compile-time errors but it does not
 // call the usual 'runerror' [@err.h], this ensures that all of the
 // compile-time errors will be reported (exhaustive parser).
-CriptClosure *compile(VM *vm, BuffReader *br, const char *name, cr_ubyte isingscope)
+CriptClosure *parse(VM *vm, BuffReader *br, const char *name, int isingscope)
 {
-	Scope globalscope, local;
-	FunctionState F;
+	Scope gscope, lscope;
+	FunctionState fs;
 	Lexer L;
+
 	if (name == NULL)
 		name = "?";
-	F_init(vm, &F, &globalscope, NULL, FN_SCRIPT, vm->F);
-	F.fn->p.source = OString_new(vm, name, strlen(name));
-	L_init(&L, vm, br, F.fn->p.source);
-	startscope(&F, &globalscope, 0, 0);
+	F_init(vm, &fs, &globalscope, NULL, FN_SCRIPT, vm->fs);
+	fs.fn->p.source = OString_new(vm, name, strlen(name));
+	L_init(&L, vm, br, fs.fn->p.source);
+	startscope(&fs, &gscope, 0, 0);
 	if (!isingscope) // script not in global scope?
-		startscope(&F, &local, 0, 0);
-	advance(&F); // fetch first token
-	while (!match(&F, TOK_EOF))
-		dec(&F);
-	Function *fn = compile_end(&F);
-	cr_ubyte comperr = F.lexer->error;
+		startscope(&fs, &lscope, 0, 0);
+	advance(&fs); // fetch first token
+	while (!match(&fs, TOK_EOF))
+		dec(&fs);
+	Function *fn = parse_end(&fs);
+	cr_ubyte comperr = fs.lexer->error;
 	L_free(&L);
-	F_free(&F);
+	F_free(&fs);
 	if (cr_likely(!comperr)) {
 		push(vm, OBJ_VAL(fn)); // prevent 'fn' from getting collected
 		CriptClosure *closure = OClosure_new(vm, fn);
@@ -762,270 +589,722 @@ CriptClosure *compile(VM *vm, BuffReader *br, const char *name, cr_ubyte isingsc
 }
 
 // Create new local variable
-static cr_inline void local_new(FunctionState *F, Token name)
+static cr_inline void local_new(FunctionState *fs, Token name)
 {
-	if (cr_unlikely(cast_int(F->locals.len) >= PARSER_LVAR_LIMIT)) {
-		error(F, comperrors[CE_LVARLIMIT], PARSER_LVAR_LIMIT);
+	if (cr_unlikely(cast_int(fs->locals.len) >= PARSER_LVAR_LIMIT)) {
+		error(fs, comperrors[CE_LVARLIMIT], PARSER_LVAR_LIMIT);
 		return;
 	}
-	Array_Local_push(&F->locals, (LocalVar){ name, -1, F->vflags });
+	Array_Local_push(&fs->locals, (LocalVar){ name, -1, fs->vflags });
 }
 
 // Make local variable but check for redefinitions in local scope
-static void make_local(FunctionState *F, Token *name)
+static void make_local(FunctionState *fs, Token *name)
 {
-	for (int32_t i = F->locals.len - 1; i >= 0; i--) {
-		LocalVar *local = Array_Local_index(&F->locals, i);
-		if (local->depth != -1 && local->depth < F->S->depth)
+	for (int i = fs->locals.len - 1; i >= 0; i--) {
+		LocalVar *local = Array_Local_index(&fs->locals, i);
+		if (local->depth != -1 && local->depth < fs->S->depth)
 			break;
 		if (cr_unlikely(nameeq(name, &local->name)))
-			error(F, comperrors[CE_LREDEF], name->len, name->start);
+			error(fs, comperrors[CE_LREDEF], name->len, name->start);
 	}
-	local_new(F, *name);
+	local_new(fs, *name);
 }
 
 // Patch jump instruction
-static cr_inline void patchjmp(FunctionState *F, int32_t jmp_offset)
+static cr_inline void patchjmp(FunctionState *fs, int jmp_offset)
 {
-	int32_t offset = codeoffset(F) - jmp_offset - 3;
+	int offset = codeoffset(fs) - jmp_offset - 3;
 	if (cr_unlikely(offset >= PARSER_JMP_LIMIT))
-		error(F, comperrors[CE_JMPLIMIT], PARSER_JMP_LIMIT);
-	PUT_BYTES3(&CHUNK(F)->bcode.data[jmp_offset], offset);
+		error(fs, comperrors[CE_JMPLIMIT], PARSER_JMP_LIMIT);
+	PUT_BYTES3(&CHUNK(fs)->bcode.data[jmp_offset], offset);
 }
 
-static cr_inline void startbreaklist(FunctionState *F)
+static cr_inline void startbreaklist(FunctionState *fs)
 {
 	Array_cr_int patches;
-	Array_cr_int_init(&patches, F->vm);
-	Array_Array_cr_int_push(&F->cflow.breaks, patches);
+	Array_cr_int_init(&patches, fs->vm);
+	Array_Array_cr_int_push(&fs->cflow.breaks, patches);
 }
 
-static cr_inline void patchbreaklist(FunctionState *F)
+static cr_inline void patchbreaklist(FunctionState *fs)
 {
-	Array_cr_int *patches = Array_Array_cr_int_last(&F->cflow.breaks);
-	for (int32_t i = 0; i < cast_int(patches->len); i++)
-		patchjmp(F, patches->data[i]);
+	Array_cr_int *patches = Array_Array_cr_int_last(&fs->cflow.breaks);
+	for (int i = 0; i < cast_int(patches->len); i++)
+		patchjmp(fs, patches->data[i]);
 }
 
-static cr_inline void endbreaklist(FunctionState *F)
+static cr_inline void endbreaklist(FunctionState *fs)
 {
-	Array_cr_int last = Array_Array_cr_int_pop(&F->cflow.breaks);
+	Array_cr_int last = Array_Array_cr_int_pop(&fs->cflow.breaks);
 	Array_cr_int_free(&last, NULL);
 }
 
 
-static cr_inline int make_constant(FunctionState *F, TValue constant)
+static cr_inline int make_constant(FunctionState *fs, TValue constant)
 {
-	if (cr_unlikely(cast_int(CHUNK(F)->constants.len) > PARSER_CONST_LIMIT))
-		error(F, "Too many constants created in this chunk, limit is '%d'.\n", PARSER_CONST_LIMIT);
-	return writechunk_constant(F->vm, CHUNK(F), constant);
+	if (cr_unlikely(cast_int(CHUNK(fs)->constants.len) > PARSER_CONST_LIMIT))
+		error(fs, "Too many constants created in this chunk, limit is '%d'.\n", PARSER_CONST_LIMIT);
+	return writechunk_constant(fs->vm, CHUNK(fs), constant);
 }
 
 
-
-
-/* =================== protected 'compile' =================== */
-
-// Data for 'protectedcompile'
-typedef struct {
-	BuffReader *br;
-	const char *name;
-	cr_ubyte isingscope;
-} PCompile;
-
-// Wrapper around 'compile' to match 'ProtectedFn' signature
-static void protectedcompile(VM *vm, void *userdata)
+/* 
+ * exprstm ::= functioncall
+ *           | varlist '=' explist
+ */
+static void exprstm(Lexer *lx, int lastforclause)
 {
-	PCompile *pcompile = cast(PCompile *, userdata);
-	if (cr_unlikely(compile(vm, pcompile->br, pcompile->name, pcompile->isingscope) == NULL))
-		runerror(vm, S_ECOMP);
+	ExpInfo E;
+	E.ins.set = 0;
+	suffixedexp(fs, &E);
+	TType next = CURRT(fs).type;
+	if (next == TOK_EQUAL || next == TOK_COMMA) {
+		E.ins.set = 1;
+		Array_Exp Earr;
+		Array_Exp_init(&Earr, fs->vm);
+		expect_cond(fs, etisvar(E.et), expectstr("Expect variable."));
+		rmlastins(fs, &E); // remove 'OP_GET..'
+		Array_Exp_push(&Earr, E);
+		int vars = 1;
+		while (match(fs, TOK_COMMA)) {
+			if (cr_unlikely(vars >= CR_BYTECODE_MAX))
+				error(fs, comperrors[CE_VARLIST], CR_BYTECODE_MAX);
+			vars++;
+			suffixedexp(fs, &E);
+			expect_cond(fs, etisvar(E.et), expectstr("Expect variable."));
+			Array_Exp_push(&Earr, E);
+		}
+		expect(fs, TOK_EQUAL, expectstr("Expect '='."));
+		E.ins.set = 0;
+		int expc = explist(fs, vars, &E);
+		if (vars != expc)
+			adjustassign(fs, &E, vars, expc);
+		codesetall(fs, &Earr);
+		Array_Exp_free(&Earr, NULL);
+	} else if (etiscall(E.et))
+		CODE(fs, OP_POP);
+	else
+		error(fs, comperrors[CE_EXPSTM]);
+	if (!lastclause)
+		expect(fs, TOK_SEMICOLON, expectstr("Expect ';'."));
 }
 
-// External interface for 'protectedcompile'.
-// Runs compiler in protected mode and returns runtime 'status'.
-cr_ubyte pcompile(VM *vm, void *userdata, const char *name, cr_ubyte isingscope)
+
+cr_sinline LVarInfo *getlocal(FunctionState *fs, int idx)
 {
-	BuffReader br;
-	BuffReader_init(vm, &br, (vm)->hooks.reader, userdata);
-	PCompile pcompile = { &br, name, isingscope };
-	return pcall(vm, protectedcompile, &pcompile, save_stack(vm, vm->sp));
+	cr_assert(fs->firstlocal + idx < fs->l->ps->locals.len);
+	return &fs->l->ps->locals.ptr[fs->firstlocal + idx];
 }
 
-/* -------------------------------------------------------- */ // protected 'compile'
 
-
-
-
-/*========================== OPERATIONS/PRIORITY =========================*/
-
-typedef enum {
-	OPR_NOT = 0,
-	OPR_NEGATE,
-	OPR_NOUNARYOPR,
-} UnaryOpr;
-
-typedef enum {
-	OPR_ADD = 0,
-	OPR_SUB,
-	OPR_MUL,
-	OPR_DIV,
-	OPR_MOD,
-	OPR_POW,
-	OPR_NE,
-	OPR_EQ,
-	OPR_LT,
-	OPR_LE,
-	OPR_GT,
-	OPR_GE,
-	OPR_AND,
-	OPR_OR,
-	OPR_NOBINOPR,
-} BinaryOpr;
-
-#define FOLDABLE(opr) ((opr) <= OPR_POW)
-
-// Fetch unary operation
-static UnaryOpr getunaryopr(TType type)
+/* add local debug information into Function 'lvars' */
+static int registerlocal(Lexer *lx, FunctionState *fs, OString *name)
 {
-	switch (type) {
-	case TOK_BANG:
-		return OPR_NOT;
-	case TOK_MINUS:
-		return OPR_NEGATE;
-	default:
-		return OPR_NOUNARYOPR;
+	Function *fn;
+	LVar *local;
+
+	fn = fs->fn;
+	cr_mm_growvec(lx->vm, &fn->lvars);
+	local = fn->lvars.ptr[fn->lvars.len++];
+	local->name = name;
+	local->alivepc = fn->code.len;
+	return fn->lvars.len - 1;
+}
+
+
+/* 
+ * Adjust locals by increment 'nlocals' and registering them
+ * inside the 'lvars'.
+ */
+static void adjustlocals(Lexer *lx, int nvars)
+{
+	FunctionState *fs;
+	LVarInfo *lvinfo;
+	int idx;
+	int i;
+
+	fs = lx->fs;
+	for (i = 0; i < nvars; nvars--) {
+		idx = fs->nlocals++;
+		lvinfo = getlocal(fs, idx);
+		lvinfo->s.idx = registerlocal(lx, fs, lvinfo->s.name);
 	}
 }
 
-// Fetch binary operation
-static BinaryOpr getbinaryopr(TType type)
+
+/* sets 'upval' in scope that contains variable at 'vidx' */
+static void markscope(FunctionState *fs, int vidx)
 {
-	switch (type) {
-	case TOK_PLUS:
-		return OPR_ADD;
-	case TOK_MINUS:
-		return OPR_SUB;
-	case TOK_STAR:
-		return OPR_MUL;
-	case TOK_SLASH:
-		return OPR_DIV;
-	case TOK_PERCENT:
-		return OPR_MOD;
-	case TOK_CARET:
-		return OPR_POW;
-	case TOK_BANG_EQUAL:
-		return OPR_NE;
-	case TOK_EQUAL_EQUAL:
-		return OPR_EQ;
-	case TOK_LESS:
-		return OPR_LT;
-	case TOK_LESS_EQUAL:
-		return OPR_LE;
-	case TOK_GREATER:
-		return OPR_GT;
-	case TOK_GREATER_EQUAL:
-		return OPR_GE;
-	case TOK_AND:
-		return OPR_AND;
-	case TOK_OR:
-		return OPR_OR;
-	default:
-		return OPR_NOBINOPR;
+	Scope *s;
+
+	s = fs->s;
+	while(s->nlocals - 1 > vidx)
+		s = s->prev;
+	s->upval = 1;
+	fs->close = 1;
+}
+
+
+/* same as 'markscope' but it marks current scope */
+static void markcurrscope(FunctionState *fs)
+{
+	Scope *s;
+
+	s = fs->s;
+	s->upval = 1;
+	fs->close = 1;
+}
+
+
+/* adds local variable to the 'locals' */
+static int addlocal(Lexer *lx, OString *name)
+{
+	FunctionState *fs = lx->fs;
+	LVarVec *locals;
+	LVarInfo *lvinfo;
+
+	locals = &fs->l->ps->locals;
+	cr_mm_growvec(fs->l->vm, locals);
+	lvinfo = &locals->ptr[locals->len++];
+	lvinfo->s.name = name;
+	vmod(lvinfo->val) = VARREGULAR;
+	return locals->len - 1 - fs->firstlocal;
+}
+
+
+/* same as 'addlocal' but use string literal as name */
+#define addlocallit(lx,lit) \
+	addlocal(lx, cr_lr_newstring(lx, "" lit, SLL(lit)))
+
+
+/* 
+ * Searches for local variable 'name' taking in account name
+ * collisions in the same scope.
+ */
+static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
+{
+	int i;
+	LVarInfo *lvinfo;
+	Lexer *lx;
+
+	lx = fs->l;
+	for (i = fs->nlocals - 1; i >= 0; i--) {
+		lvinfo = getlocal(fs, i);
+		if (name == lvinfo->s.name) {
+			if (cr_unlikely(vmod(lvinfo->val) & VARUNINIT)) {
+				cr_lr_syntaxerror(lx, cr_ot_pushfstring(lx->vm, 
+					"can't read local variable '%s' in its "
+					"own initializer", name));
+			}
+			initvar(fs, e, i);
+			return e->et;
+		}
+	}
+	return -1;
+}
+
+
+/* get upvalue 'idx' from 'upvalues' */
+cr_sinline UVInfo *getupvalue(FunctionState *fs, int idx)
+{
+	return &fs->fn->upvalues.ptr[idx];
+}
+
+
+/* create new upvalue in 'upvalues' */
+static UVInfo *newupvalue(FunctionState *fs)
+{
+	UVInfoVec *uvals;
+
+	uvals = &fs->fn->upvalues;
+	cr_mm_growvec(fs->l->vm, uvals);
+	return &uvals->ptr[uvals->len++];
+}
+
+
+/* add new upvalue 'name' into 'upvalues' */
+static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e)
+{
+	UVInfo *uv;
+	FunctionState *enclosing;
+
+	uv = newupvalue(fs);
+	uv->name = name;
+	if (e->et == EXP_LOCAL) { /* local var ? */
+		uv->onstack = 1;
+		uv->idx = e->u.idx;
+		uv->mod = vmod(getlocal(fs, e->u.idx)->val);
+		cr_assert(name == getlocal(fs, e->u.idx)->s.name);
+	} else { /* must be another upvalue */
+		cr_assert(e->et == EXP_UVAL);
+		enclosing = fs->enclosing;
+		uv->onstack = 0;
+		uv->idx = e->u.info;
+		uv->mod = enclosing->fn->upvalues.ptr[e->u.info].mod;
+		cr_assert(name == enclosing->fn->upvalues.ptr[e->u.info].name);
+	}
+	return fs->fn->upvalues.len - 1;
+}
+
+
+/* searches for upvalue 'name' */
+static int searchupvalue(FunctionState *fs, OString *name)
+{
+	UVInfoVec *upvals;
+	int i;
+
+	upvals = &fs->fn->upvalues;
+	for (i = 0; i < upvals->len; i++)
+		if (upvals->ptr[i]->name == name) return i;
+	return -1;
+}
+
+
+/*
+ * Search for variable; if 'name' is not local variable
+ * try finding the upvalue.
+ */
+static void searchvar(FunctionState *fs, OString *name, ExpInfo *e, int base)
+{
+	int ret;
+
+	if (fs == NULL) { /* global ? */
+		initexp(e, EXP_VOID, 0);
+	} else {
+		ret = searchlocal(fs, name, e);
+		if (ret >= 0) { /* local ? */
+			if (ret == EXP_LOCAL && !base)
+				markscope(fs, e->u.vidx);
+		} else { /* try upvalue */
+			ret = searchupvalue(fs, name);
+			if (ret < 0) {
+				searchvar(fs->enclosing, name, e, 0);
+				if (e->et == EXP_LOCAL || e->et == EXP_UVAL)
+					ret = addupvalue(fs, name);
+				else return;
+			}
+			initexp(e, EXP_UVAL, ret);
+		}
 	}
 }
 
-// Fetch unary instruction
-static OpCode unopr2op(UnaryOpr opr)
+
+/* get global value 'idx' from 'gvars' */
+cr_sinline TValue *getglobal(FunctionState *fs, int idx)
 {
-	switch (opr) {
-	case OPR_NOT:
-		return OP_NOT;
-	case OPR_NEGATE:
-		return OP_NEG;
-	default:
-		cr_unreachable;
+	return &fs->l->vm->gvars.ptr[idx];
+}
+
+
+/* create new global in 'gvars' */
+static TValue *newglobal(VM *vm)
+{
+	cr_mm_growvec(vm, &vm->gvars);
+	return &vm->gvars.ptr[vm->gvars.len++];
+}
+
+
+/* 
+ * Add new global value into 'gvars' and store its
+ * name into 'gids'. 
+ */
+static int addglobal(VM *vm, OString *name)
+{
+	TValue idx;
+	TValue k;
+
+	setemptyvalue(newglobal(vm, name));
+	setivalue(&idx, vm->gvars.len - 1);
+	setv2s(vm, &k, name);
+	cr_ht_set(vm, &vm->gids, &k, &idx);
+	return ivalue(&idx);
+}
+
+
+/* get global variable 'name' or create undefined global */
+static void globalvar(VM *vm, OString *name, ExpInfo *e)
+{
+	TValue k;
+	TValue o;
+
+	setv2s(vm, &k, name);
+	if (!cr_ht_get(vm, &k, &o))
+		e->u.vidx = addglobal(vm, name);
+	else
+		e->u.vidx = ivalue(o);
+	e->et = EXP_GLOBAL;
+}
+
+
+/* find variable 'name' */
+static void varname(Lexer *lx, OString *name, ExpInfo *e)
+{
+	searchvar(lx->fs, name, e, 1);
+	if (e->et == EXP_VOID)
+		globalvar(lx->vm, name, e)
+}
+
+
+#define var(lx,e)	varname(lx, expect_id(lx), e)
+
+
+#define varlit(lx,l,e) \
+	varname(lx, cr_lr_newstring(lx, "" l, SLL(l), e)
+
+
+/* 
+ * self ::= 'self' 
+ */
+static void self_(Lexer *lx, ExpInfo *e)
+{
+	if (lx->fs->cs != NULL) {
+		varlit(lx, "self", e);
+		cr_lr_scan(lx);
+		return;
+	}
+	cr_lr_syntaxerror(lx, "can't use 'self' outside of class declaration");
+}
+
+
+static int explist(Lexer *lx, ExpInfo *e)
+{
+	int n;
+
+	n = 1;
+	expr(lx->fs, e);
+	while (match(lx, ',')) {
+		expr(lx->fs, e);
+	}
+	return n;
+}
+
+
+static void dotaccess(Lexer *lx, ExpInfo *e)
+{
+	cr_lr_scan(lx); /* skip '.' */
+	cr_ce_string(lx->fs, expect_id(lx));
+	e->et = EXP_INDEXRAW;
+}
+
+
+static void indexaccess(Lexer *lx, ExpInfo *e)
+{
+	expr(lx->fs, e);
+	expect(lx, ']');
+	if (eisliteral(e)) {
+		if (e->et == EXP_NIL)
+			cr_lr_syntaxerror(lx, "can't index with 'nil'");
+		e->et = EXP_INDEXK;
+	} else {
+		e->et = EXP_INDEXED;
 	}
 }
 
-// Fetch binary instruction
-static OpCode binopr2op(BinaryOpr opr)
+
+/* auxiliary function to 'super_' */
+static void supdotaccess(Lexer *lx, ExpInfo *e)
 {
-	switch (opr) {
-	case OPR_ADD:
-		return OP_ADD;
-	case OPR_SUB:
-		return OP_SUB;
-	case OPR_MUL:
-		return OP_MUL;
-	case OPR_DIV:
-		return OP_DIV;
-	case OPR_MOD:
-		return OP_MOD;
-	case OPR_POW:
-		return OP_POW;
-	case OPR_NE:
-		return OP_NOT_EQUAL;
-	case OPR_EQ:
-		return OP_EQUAL;
-	case OPR_LT:
-		return OP_LESS;
-	case OPR_LE:
-		return OP_LESS_EQUAL;
-	case OPR_GT:
-		return OP_GREATER;
-	case OPR_GE:
-		return OP_GREATER_EQUAL;
+	cr_lr_scan(lx); /* skip '.' */
+	cr_ce_string(lx->fs, expect_id(lx));
+	e->et = EXP_INDEXRAWSUP;
+}
+
+
+/* auxiliary function to 'super_' */
+static void supidxaccess(Lexer *lx, ExpInfo *e)
+{
+}
+
+
+static void super_(Lexer *lx, ExpInfo *e)
+{
+	FunctionState *fs;
+	ExpInfo e2;
+
+	fs = lx->fs;
+	if (fs->cs == NULL)
+		cr_lr_syntaxerror(lx, "can't use 'super' outside of class decl");
+	else if (!fs->cs->superclass)
+		cr_lr_syntaxerror(lx, "class has no superclass");
+	varlit(lx, "self", e);
+	cr_assert(e->et == EXP_LOCAL);
+	cr_ce_reservestack(fs, 1); /* instance */
+	cr_ce_dischargevar(fs, e);
+	cr_lr_scan(lx);
+	if (match(lx, '[')) supidxaccess(lx, e);
+	else if (match(lx, '.')) supdotaccess(lx, e);
+	else cr_lr_syntaxerror(lx, "missing method access after 'super'");
+	varlit(lx, "super", &e2);
+	cr_assert(e2->et == EXP_UVAL);
+	cr_ce_dischargevar(fs, &e2);
+	cr_ce_reservestack(fs, 1); /* superclass */
+	cr_ce_dischargevar(fs, e);
+}
+
+
+/* 
+ * primary_exp ::= '(' exp ')'
+ *               | identifier
+ *               | 'self'
+ */
+static void primaryexp(Lexer *lx, ExpInfo *e)
+{
+	switch (lx->t.tk) {
+	case '(':
+		cr_lr_scan(lx);
+		expr(lx, e);
+		expect(lx, ')');
+		break;
+	case TK_IDENTIFIER:
+		var(lx, e);
+		break;
+	case TK_SELF:
+		self_(lx, e);
+		break;
+	case TK_SUPER:
+		super_(lx, e);
+		break;
 	default:
-		/// OPR_AND and OPR_OR do not emit direct bytecode,
-		/// they are instead sets of OP_JMP and OP_JMP_IF_FALSE instructions
-		cr_unreachable;
+		cr_lr_syntaxerror(lx, "unexpected symbol");
+		break;
 	}
 }
 
+
+/* 
+ * suffixedexp ::= primaryexp
+ *               | primaryexp [dot|call|indexed...] 
+ */
+static void suffixedexp(Lexer *lx, ExpInfo *e)
+{
+	primaryexp(lx, e);
+	for (;;) {
+		switch (lx->t.tk) {
+		case '.':
+			dotaccess(lx, e);
+			break;
+		case '(':
+			if (etisconst(E->type))
+				error(fs, comperrors[CE_CALLCONST]);
+			advance(fs);
+			codecall(fs, e);
+			break;
+		case '[':
+			advance(fs);
+			indexed(fs, e);
+			break;
+		default:
+			return;
+		}
+	}
+}
+
+
+/* 
+ * simpleexp ::= int
+ *	       | flt
+ *             | string
+ *             | 'nil'
+ *             | 'true'
+ *             | 'false'
+ *             | '...'
+ *             | suffixedexp 
+ */
+static void simpleexp(Lexer *lx, ExpInfo *e)
+{
+	switch (lx->t.tk) {
+	case TK_INT:
+		initexp(e, EXP_INT, 0);
+		e->u.i = lx->t.lit.i;
+		break;
+	case TK_FLT:
+		initexp(e, EXP_FLT, 0);
+		e->u.n = lx->t.lit.n;
+		break;
+	case TK_STRING:
+		initexp(e, EXP_STRING, 0);
+		e->u.str = lx->t.lit.str;
+		break;
+	case TK_NIL:
+		initexp(e, EXP_NIL, 0);
+		break;
+	case TK_TRUE:
+		initexp(e, EXP_TRUE, 0);
+		break;
+	case TK_FALSE:
+		initexp(e, EXP_FALSE, 0);
+		break;
+	case TK_DOTS:
+		expect_cond(lx, lx->fs->fn.isvararg, 
+				"cannot use '...' outside of vararg function");
+		initexp(e, EXP_VARARG, cr_ce_vararg(lx->fs, 1));
+		break;
+	default:
+		suffixedexp(lx, e);
+		return;
+	}
+	cr_lr_scan(lx);
+}
+
+
+static Unopr getunopr(int token)
+{
+	switch (token) {
+	case '-': return OPR_MINUS;
+	case '~': return OPR_BNOT;
+	case '!': return OPR_NOT;
+	default: return OPR_NOUNOPR;
+	}
+}
+
+static Binopr getbinopr(int token)
+{
+	switch (token) {
+	case '+': return OPR_ADD;
+	case '-': return OPR_SUB;
+	case '*': return OPR_MUL;
+	case '/': return OPR_DIV;
+	case '%': return OPR_MOD;
+	case TK_POW: return OPR_POW;
+	case TK_SHR: return OPR_SHR;
+	case TK_SHL: return OPR_SHL;
+	case TK_BAND: return OPR_BAND;
+	case TK_BOR: return OPR_BOR;
+	case TK_NE: return OPR_NE;
+	case TK_EQ: return OPR_EQ;
+	case '<': return OPR_LT;
+	case TK_LE: return OPR_LE;
+	case '>': return OPR_GT;
+	case TK_GE: return OPR_GE;
+	case TK_AND: return OPR_AND;
+	case TK_OR: return OPR_OR;
+	default: return OPR_NOBINOPR;
+	}
+}
+
+
+/*
+ * Operators with higher 'left' priority are
+ * left associative while operators with higher
+ * 'right' priority are right associative.
+ */
 static const struct {
-	cr_ubyte left; // Left priority
-	cr_ubyte right; // Right priority
+	cr_ubyte left; /* left priority */
+	cr_ubyte right; /* right priority */
 } priority[] = {
-	[OPR_ADD] = { 4, 4 }, /* '+' */
-	[OPR_SUB] = { 4, 4 }, /* '-' */
-	[OPR_MUL] = { 5, 5 }, /* '*' */
-	[OPR_DIV] = { 5, 5 }, /* '/' */
-	[OPR_MOD] = { 5, 5 }, /* '%' */
-	[OPR_POW] = { 8, 7 }, /* '^' (right associative) */
-	[OPR_NE] = { 3, 3 }, /* '!=' */
-	[OPR_EQ] = { 3, 3 }, /* '==' */
-	[OPR_LT] = { 3, 3 }, /* '<' */
-	[OPR_LE] = { 3, 3 }, /* '<=' */
-	[OPR_GT] = { 3, 3 }, /* '>' */
-	[OPR_GE] = { 3, 3 }, /* '>=' */
-	[OPR_AND] = { 2, 2 }, /* 'and' */
-	[OPR_OR] = { 1, 1 }, /* 'or' */
+	/* unary operators priority */
+	[OPR_MINUS]	= { 12, 12 }, /* '-' */
+	[OPR_BNOT]	= { 12, 12 }, /* '~' */
+	[OPR_NOT]	= { 12, 12 }, /* '!' */
+	/* binary operators priority */
+	[OPR_POW]	= { 14, 13 }, /* '**' */
+	[OPR_MUL] 	= { 11, 11 }, /* '*' */
+	[OPR_DIV] 	= { 11, 11 }, /* '/' */
+	[OPR_MOD] 	= { 11, 11 }, /* '%' */
+	[OPR_ADD] 	= { 10, 10 },   /* '+' */
+	[OPR_SUB] 	= { 10, 10 },   /* '-' */
+	[OPR_SHR] 	= { 9, 9 },   /* '>>' */
+	[OPR_SHL]	= { 9, 9 },   /* '<<' */
+	[OPR_LT]	= { 8, 8 },   /* '<' */
+	[OPR_LE]	= { 8, 8 },   /* '<=' */
+	[OPR_GT] 	= { 8, 8 },   /* '>' */
+	[OPR_GE] 	= { 8, 8 },   /* '>=' */
+	[OPR_EQ] 	= { 7, 7 },   /* '==' */
+	[OPR_NE] 	= { 7, 7 },   /* '!=' */
+	[OPR_BAND]	= { 5, 5 },   /* '&' */
+	[OPR_BXOR] 	= { 4, 4 },   /* '^' */
+	[OPR_BOR]	= { 3, 3 },   /* '|' */
+	[OPR_AND] 	= { 2, 2 },   /* 'and' */
+	[OPR_OR]	= { 1, 1 },   /* 'or' */
 };
 
-#define UNARY_PRIORITY 6
 
-
-
-
-/*========================== STATEMENT/DECLARATION =========================*/
-
-// vararg ::= '...'
-static cr_inline int vararg(FunctionState *F)
+/* 
+ * subexpr ::= simpleexp
+ *           | '-' simpleexp
+ *           | '!' simpleexp
+ *           | '~' simpleexp
+ *           | simpleexp '+' subexpr
+ *           | simpleexp '-' subexpr
+ *           | simpleexp '*' subexpr
+ *           | simpleexp '/' subexpr
+ *           | simpleexp '%' subexpr
+ *           | simpleexp '**' subexpr
+ *           | simpleexp '>>' subexpr
+ *           | simpleexp '<<' subexpr
+ *           | simpleexp '==' subexpr
+ *           | simpleexp '<' subexpr
+ *           | simpleexp '<=' subexpr
+ *           | simpleexp '>' subexpr
+ *           | simpleexp '>=' subexpr
+ *           | simpleexp '&' subexpr
+ *           | simpleexp '^' subexpr
+ *           | simpleexp '|' subexpr
+ *           | simpleexp 'and' subexpr
+ *           | simpleexp 'or' subexpr
+ */
+static Binopr subexp(Lexer *lx, ExpInfo *e, int limit)
 {
-	if (!F->fn->p.isvararg)
-		error(F, comperrors[CE_VARARG]);
-	return CODEOP(F, OP_VARARG, 1);
+	Binopr op;
+	Unopr uop;
+	int line;
+
+	entercstack(lx);
+	uop = getunopr(lx->t.tk);
+	if (uop != OPR_NOUNOPR) {
+		line = lx->line; /* save line */
+		cr_lr_scan(lx);
+		subexp(lx, e, priority[uop].right);
+		cr_ce_unary(lx->fs, uop, e, line);
+	} else {
+		simpleexp(lx, e);
+	}
+	op = getbinaryopr(CURRT(fs).type);
+	while (op != OPR_NOBINOPR && priority[op].left > limit) {
+		ExpInfo E2;
+		E2.ins.set = 0;
+		advance(fs); // skip binary operator
+		shortcircuit(fs, op, E1);
+		op nextop = subexp(fs, &E2, priority[op].right);
+		postfix(fs, op, E1, &E2);
+		op = nextop;
+	}
+	leavecstack(lx);
+	return op;
 }
 
-static void setmulret(FunctionState *F, ExpInfo *E)
+
+/* expr ::= subexpr */
+static void expr(Lexer *lx, ExpInfo *e)
+{
+	subexp(lx, e, 0);
+}
+
+
+
+/* -------------------------------------------------------------------------
+ * Statements & Declarations
+ * ------------------------------------------------------------------------- */
+
+/* vararg ::= '...' */
+static int vararg(FunctionState *fs)
+{
+	if (!fs->fn->isvararg)
+		error(fs, comperrors[CE_VARARG]);
+	return CODEOP(fs, OP_VARARG, 1);
+}
+
+
+static void setmulret(FunctionState *fs, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_CALL:
 	case EXP_VARARG:
-		SET_RETCNT(F, E, MULRET);
+		SET_RETCNT(fs, E, MULRET);
 		break;
 	case EXP_INVOKE:
-		SET_RETCNTL(F, E, MULRET);
+		SET_RETCNTL(fs, E, MULRET);
 		break;
 	default:
 		cr_unreachable;
@@ -1033,87 +1312,87 @@ static void setmulret(FunctionState *F, ExpInfo *E)
 }
 
 // Adjust assign expressions in case last expression is a function call
-static void adjustassign(FunctionState *F, ExpInfo *E, int32_t left, int32_t right)
+static void adjustassign(FunctionState *fs, ExpInfo *E, int left, int right)
 {
-	int32_t leftover = left - right; // Safety: left < right is a compile error
+	int leftover = left - right; // Safety: left < right is a compile error
 	switch (E->et) {
 	case EXP_CALL:
-		SET_RETCNT(F, E, leftover + 1);
+		SET_RETCNT(fs, E, leftover + 1);
 		break;
 	case EXP_INVOKE:
-		SET_RETCNTL(F, E, leftover + 1);
+		SET_RETCNTL(fs, E, leftover + 1);
 		break;
 	default:
 		if (leftover > 1)
-			CODEOP(F, OP_NILN, leftover);
+			CODEOP(fs, OP_NILN, leftover);
 		else if (leftover == 1)
-			CODE(F, OP_NIL);
+			CODE(fs, OP_NIL);
 		break;
 	}
 }
 
 // explist ::= expr
 //           | expr ',' explist
-static int32_t explist(FunctionState *F, int32_t limit, ExpInfo *E)
+static int explist(FunctionState *fs, int limit, ExpInfo *E)
 {
-	int32_t left = limit;
-	int32_t got = 0;
+	int left = limit;
+	int got = 0;
 	do {
 		left--;
 		got++;
 		if (left < 0)
-			error(F, comperrors[CE_EXPLIST], limit);
-		expr(F, E);
-	} while (match(F, TOK_COMMA));
+			error(fs, comperrors[CE_EXPLIST], limit);
+		expr(fs, E);
+	} while (match(fs, TOK_COMMA));
 	return got;
 }
 
-static int32_t name(FunctionState *F, const char *errmsg)
+static int name(FunctionState *fs, const char *errmsg)
 {
-	expect(F, TOK_IDENTIFIER, errmsg);
-	Token *name = &PREVT(F);
-	if (F->S->depth > 0) { // If local scope make local variable
-		make_local(F, name);
+	expect(fs, TOK_IDENTIFIER, errmsg);
+	Token *name = &PREVT(fs);
+	if (fs->S->depth > 0) { // If local scope make local variable
+		make_local(fs, name);
 		return -1;
 	} // Otherwise make global variable
-	return MAKE_GLOBAL(F, name);
+	return MAKE_GLOBAL(fs, name);
 }
 
-static LocalVar *upvalvar(FunctionState *F, int32_t idx)
+static LocalVar *upvalvar(FunctionState *fs, int idx)
 {
-	Upvalue *upval = &F->upvalues->data[idx];
+	UpValue *upval = &fs->upvalues->data[idx];
 	if (!upval->local)
-		upvalvar(F->enclosing, idx);
-	return &F->locals.data[upval->idx];
+		upvalvar(fs->enclosing, idx);
+	return &fs->locals.data[upval->idx];
 }
 
 // helper [exprstm]
-static void codeset(FunctionState *F, ExpInfo *E)
+static void codeset(FunctionState *fs, ExpInfo *E)
 {
 	static const char *errfmt = "Can't assign to variable '%.*s', it is declared as 'fixed'.";
 	switch (E->et) {
 	case EXP_UPVAL: {
-		LocalVar *local = upvalvar(F, E->value);
+		LocalVar *local = upvalvar(fs, E->value);
 		if (cr_unlikely(btest(local->flags, VFIXED_BIT)))
-			error(F, errfmt, local->name.len, local->name.start);
-		CODEOP(F, OP_SET_UPVALUE, E->value);
+			error(fs, errfmt, local->name.len, local->name.start);
+		CODEOP(fs, OP_SET_UPVALUE, E->value);
 		break;
 	}
 	case EXP_LOCAL: {
-		LocalVar *local = &F->locals.data[E->value];
+		LocalVar *local = &fs->locals.data[E->value];
 		if (cr_unlikely(btest(local->flags, VFIXED_BIT)))
-			error(F, errfmt, local->name.len, local->name.start);
-		CODEOP(F, GET_OP_TYPE(E->value, OP_SET_LOCAL, E), E->value);
+			error(fs, errfmt, local->name.len, local->name.start);
+		CODEOP(fs, GET_OP_TYPE(E->value, OP_SET_LOCAL, E), E->value);
 		break;
 	}
 	case EXP_GLOBAL:
-		CODEOP(F, GET_OP_TYPE(E->value, OP_SET_GLOBAL, E), E->value);
+		CODEOP(fs, GET_OP_TYPE(E->value, OP_SET_GLOBAL, E), E->value);
 		break;
 	case EXP_INDEXED:
 		if (E->value == NO_VAL)
-			CODE(F, OP_SET_INDEX);
+			CODE(fs, OP_SET_INDEX);
 		else
-			CODEOP(F, OP_SET_PROPERTY, E->value);
+			CODEOP(fs, OP_SET_PROPERTY, E->value);
 		break;
 	default:
 		return;
@@ -1122,112 +1401,73 @@ static void codeset(FunctionState *F, ExpInfo *E)
 
 ARRAY_NEW(Array_Exp, Exp);
 // helper [exprstm]
-static void codesetall(FunctionState *F, Array_Exp *Earr)
+static void codesetall(FunctionState *fs, Array_Exp *Earr)
 {
-	for (int32_t i = 0; i < cast_int(Earr->len); i++) {
+	for (int i = 0; i < cast_int(Earr->len); i++) {
 		ExpInfo *E = Array_Exp_index(Earr, i);
-		codeset(F, E);
+		codeset(fs, E);
 	}
 }
 
-/// exprstm ::= functioncall
-///           | varlist '=' explist
-static void exprstm(FunctionState *F, cr_ubyte lastclause)
+static void block(FunctionState *fs)
 {
-	ExpInfo E;
-	E.ins.set = 0;
-	suffixedexp(F, &E);
-	TType next = CURRT(F).type;
-	if (next == TOK_EQUAL || next == TOK_COMMA) {
-		E.ins.set = 1;
-		Array_Exp Earr;
-		Array_Exp_init(&Earr, F->vm);
-		expect_cond(F, etisvar(E.et), expectstr("Expect variable."));
-		rmlastins(F, &E); // remove 'OP_GET..'
-		Array_Exp_push(&Earr, E);
-		int32_t vars = 1;
-		while (match(F, TOK_COMMA)) {
-			if (cr_unlikely(vars >= CR_BYTECODE_MAX))
-				error(F, comperrors[CE_VARLIST], CR_BYTECODE_MAX);
-			vars++;
-			suffixedexp(F, &E);
-			expect_cond(F, etisvar(E.et), expectstr("Expect variable."));
-			Array_Exp_push(&Earr, E);
-		}
-		expect(F, TOK_EQUAL, expectstr("Expect '='."));
-		E.ins.set = 0;
-		int32_t expc = explist(F, vars, &E);
-		if (vars != expc)
-			adjustassign(F, &E, vars, expc);
-		codesetall(F, &Earr);
-		Array_Exp_free(&Earr, NULL);
-	} else if (etiscall(E.et))
-		CODE(F, OP_POP);
-	else
-		error(F, comperrors[CE_EXPSTM]);
-	if (!lastclause)
-		expect(F, TOK_SEMICOLON, expectstr("Expect ';'."));
+	while (!check(fs, TOK_RBRACE) && !check(fs, TOK_EOF))
+		dec(fs);
+	expect(fs, TOK_RBRACE, expectstr("Expect '}' after block."));
 }
 
-static void block(FunctionState *F)
-{
-	while (!check(F, TOK_RBRACE) && !check(F, TOK_EOF))
-		dec(F);
-	expect(F, TOK_RBRACE, expectstr("Expect '}' after block."));
-}
-
-static cr_inline void blockstm(FunctionState *F)
+static cr_inline void blockstm(FunctionState *fs)
 {
 	Scope S;
-	startscope(F, &S, 0, 0);
-	block(F);
-	endscope(F);
+	startscope(fs, &S, 0, 0);
+	block(fs);
+	endscope(fs);
 }
 
 // arglist ::= name
 //           | '...'
 //           | name ',' arglist
-static void arglist(FunctionState *F)
+static void arglist(FunctionState *fs)
 {
 	do {
-		if (match(F, TOK_DOT_DOT_DOT)) {
-			F->fn->p.isvararg = 1;
+		if (match(fs, TOK_DOT_DOT_DOT)) {
+			fs->fn->p.isvararg = 1;
 			break;
 		}
-		F->fn->p.arity++;
-		name(F, expectstr("Expect parameter name."));
-		initlocal(F, 0);
-	} while (match(F, TOK_COMMA));
+		fs->fn->p.arity++;
+		name(fs, expectstr("Expect parameter name."));
+		initlocal(fs, 0);
+	} while (match(fs, TOK_COMMA));
 }
 
 // namelist ::= name
 //            | name ',' namelist
-static int namelist(FunctionState *F, Array_cr_int *nameidx)
+static int namelist(FunctionState *fs, Array_cr_int *nameidx)
 {
-	int32_t names = 0;
+	int names = 0;
 	do {
 		if (names >= CR_BYTECODE_MAX)
-			error(F, comperrors[CE_NAMELIST], CR_BYTECODE_MAX);
+			error(fs, comperrors[CE_NAMELIST], CR_BYTECODE_MAX);
 		names++;
-		int32_t idx = name(F, expectstr("Expect name.")); // initialize later
-		if (F->S->depth == 0)
+		int idx = name(fs, expectstr("Expect name.")); // initialize later
+		if (fs->S->depth == 0)
 			Array_cr_int_push(nameidx, idx);
-	} while (match(F, TOK_COMMA));
+	} while (match(fs, TOK_COMMA));
 	return names;
 }
 
-static void codeassign(FunctionState *F, int32_t names, Array_cr_int *nameidx)
+static void codeassign(FunctionState *fs, int names, Array_cr_int *nameidx)
 {
-	if (F->S->depth > 0) {
-		for (int32_t i = 0; i < names; i++)
-			initlocal(F, i);
+	if (fs->S->depth > 0) {
+		for (int i = 0; i < names; i++)
+			initlocal(fs, i);
 		return;
 	}
-	cr_assert(F->vm, names == cast_int(nameidx->len), "name count != indexes array len.");
+	cr_assert(fs->vm, names == cast_int(nameidx->len), "name count != indexes array len.");
 	while (nameidx->len > 0) {
-		int32_t idx = Array_cr_int_pop(nameidx);
+		int idx = Array_cr_int_pop(nameidx);
 		ExpInfo _; // dummy
-		INIT_GLOBAL(F, idx, F->vflags, &_);
+		INIT_GLOBAL(fs, idx, fs->vflags, &_);
 	}
 }
 
@@ -1239,44 +1479,44 @@ static void codeassign(FunctionState *F, int32_t names, Array_cr_int *nameidx)
 //          | 'fixed' 'var' namelist ';'
 //          | 'fixed' 'var' name '=' explist ';'
 //          | 'fixed' 'var' namelist '=' explist ';'
-static void vardec(FunctionState *F)
+static void vardec(FunctionState *fs)
 {
-	if (match(F, TOK_FIXED)) {
-		if (FIS(F, FFIXED))
-			error(F, expectstr("Expect variable name."));
-		FSET(F, FFIXED);
+	if (match(fs, TOK_FIXED)) {
+		if (FIS(fs, FFIXED))
+			error(fs, expectstr("Expect variable name."));
+		FSET(fs, FFIXED);
 	}
 	Array_cr_int nameidx;
-	Array_cr_int_init(&nameidx, F->vm);
-	int32_t names = namelist(F, &nameidx);
-	int32_t expc = 0;
+	Array_cr_int_init(&nameidx, fs->vm);
+	int names = namelist(fs, &nameidx);
+	int expc = 0;
 	ExpInfo E;
 	E.ins.set = 0;
-	if (match(F, TOK_EQUAL))
-		expc = explist(F, names, &E);
+	if (match(fs, TOK_EQUAL))
+		expc = explist(fs, names, &E);
 	if (names != expc)
-		adjustassign(F, &E, names, expc);
-	codeassign(F, names, &nameidx);
+		adjustassign(fs, &E, names, expc);
+	codeassign(fs, names, &nameidx);
 	Array_cr_int_free(&nameidx, NULL);
-	expect(F, TOK_SEMICOLON, expectstr("Expect ';'."));
+	expect(fs, TOK_SEMICOLON, expectstr("Expect ';'."));
 }
 
 // fvardec ::= 'fixed' vardec
-static cr_inline void fvardec(FunctionState *F)
+static cr_inline void fvardec(FunctionState *fs)
 {
-	FSET(F, FFIXED);
-	advance(F);
-	vardec(F);
+	FSET(fs, FFIXED);
+	advance(fs);
+	vardec(fs);
 }
 
 
 // Create and parse a new FunctionState
-static void fn(FunctionState *F, FunctionType type)
+static void fn(FunctionState *fs, FunctionType type)
 {
 	FunctionState Fnew;
 	Scope globscope, S;
-	F_init(F->vm, &Fnew, &globscope, F->cclass, type, F);
-	Fnew.fn->p.source = F->fn->p.source; // source is same
+	F_init(fs->vm, &Fnew, &globscope, fs->cclass, type, fs);
+	Fnew.fn->p.source = fs->fn->p.source; // source is same
 	startscope(&Fnew, &S, 0, 0); // no need to end this scope
 	expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
 	if (!check(&Fnew, TOK_RPAREN))
@@ -1285,131 +1525,131 @@ static void fn(FunctionState *F, FunctionType type)
 		expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
 	else
 		expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
-	int32_t arity = Fnew.fn->p.arity;
-	int32_t expected = ominfo[F->tag].arity;
-	if (cr_unlikely(isom(F) && expected != arity)) {
-		error(F, comperrors[CE_OMSIG], F->vm->faststatic[F->tag]->storage, expected, arity);
+	int arity = Fnew.fn->p.arity;
+	int expected = ominfo[fs->tag].arity;
+	if (cr_unlikely(isom(fs) && expected != arity)) {
+		error(fs, comperrors[CE_OMSIG], fs->vm->faststatic[fs->tag]->storage, expected, arity);
 		Fnew.lexer->panic = 0; // clear panic flag do not sync yet
 	}
 	expect(&Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
 	block(&Fnew); // body
-	Function *fn = compile_end(&Fnew);
-	CODEOP(F, OP_CLOSURE, make_constant(F, OBJ_VAL(fn)));
+	Function *fn = parse_end(&Fnew);
+	CODEOP(fs, OP_CLOSURE, make_constant(fs, OBJ_VAL(fn)));
 	for (int i = 0; i < fn->p.upvalc; i++) {
-		Upvalue *upval = Array_Upvalue_index(Fnew.upvalues, i);
-		CODE(F, upval->local ? 1 : 0);
-		CODEL(F, upval->idx);
+		UpValue *upval = Array_Upvalue_index(Fnew.upvalues, i);
+		CODE(fs, upval->local ? 1 : 0);
+		CODEL(fs, upval->idx);
 	}
 	F_free(&Fnew);
 }
 
 // fndec ::= 'fn' name '(' arglist ')' '{' block '}'
-static void fndec(FunctionState *F)
+static void fndec(FunctionState *fs)
 {
-	int idx = name(F, expectstr("Expect function name."));
-	if (F->S->depth > 0)
-		initlocal(F, 0); // initialize to allow recursion
-	fn(F, FN_FUNCTION);
+	int idx = name(fs, expectstr("Expect function name."));
+	if (fs->S->depth > 0)
+		initlocal(fs, 0); // initialize to allow recursion
+	fn(fs, FN_FUNCTION);
 	ExpInfo _; // dummy
-	if (F->S->depth == 0)
-		INIT_GLOBAL(F, idx, 0, &_);
+	if (fs->S->depth == 0)
+		INIT_GLOBAL(fs, idx, 0, &_);
 }
 
-static void method(FunctionState *F)
+static void method(FunctionState *fs)
 {
 	TValue identifier;
 	int idx;
 
-	expect(F, TOK_FN, expectstr("Expect 'fn'."));
-	expect(F, TOK_IDENTIFIER, expectstr("Expect method name."));
-	identifier = tokintostr(F->vm, &PREVT(F));
-	idx = make_constant(F, identifier);
-	F->tag = id2omtag(F->vm, asstring(identifier));
-	fn(F, FN_METHOD);
-	if (F->tag != -1)
-		CODEOP(F, OP_OVERLOAD, F->tag - SS_INIT);
+	expect(fs, TOK_FN, expectstr("Expect 'fn'."));
+	expect(fs, TOK_IDENTIFIER, expectstr("Expect method name."));
+	identifier = tokintostr(fs->vm, &PREVT(fs));
+	idx = make_constant(fs, identifier);
+	fs->tag = id2omtag(fs->vm, asstring(identifier));
+	fn(fs, FN_METHOD);
+	if (fs->tag != -1)
+		CODEOP(fs, OP_OVERLOAD, fs->tag - SS_INIT);
 	else
-		CODEOP(F, OP_METHOD, idx);
+		CODEOP(fs, OP_METHOD, idx);
 }
 
-static void classdec(FunctionState *F)
+static void classdec(FunctionState *fs)
 {
-	expect(F, TOK_IDENTIFIER, expectstr("Expect class name."));
-	Token class_name = PREVT(F);
-	TValue identifier = tokintostr(F->vm, &class_name);
-	int idx = make_constant(F, identifier);
+	expect(fs, TOK_IDENTIFIER, expectstr("Expect class name."));
+	Token class_name = PREVT(fs);
+	TValue identifier = tokintostr(fs->vm, &class_name);
+	int idx = make_constant(fs, identifier);
 	ExpInfo _; // dummy
-	CODEOP(F, OP_CLASS, idx);
-	if (F->S->depth > 0) {
-		make_local(F, &class_name);
-		initlocal(F, 0);
+	CODEOP(fs, OP_CLASS, idx);
+	if (fs->S->depth > 0) {
+		make_local(fs, &class_name);
+		initlocal(fs, 0);
 	} else
-		INIT_GLOBAL(F, MAKE_GLOBAL(F, &class_name), 0, &_);
+		INIT_GLOBAL(fs, MAKE_GLOBAL(fs, &class_name), 0, &_);
 	Class cclass;
-	cclass.enclosing = F->cclass;
+	cclass.enclosing = fs->cclass;
 	cclass.superclass = 0;
-	F->cclass = &cclass;
+	fs->cclass = &cclass;
 	_.ins.set = 0;
 	Scope S;
-	if (match(F, TOK_IMPL)) { // have superclass ?
-		expect(F, TOK_IDENTIFIER, expectstr("Expect superclass name."));
-		codevarprev(F, &_); // get superclass
-		if (nameeq(&PREVT(F), &class_name))
-			error(F, comperrors[CE_INHERIT], ascstring(identifier));
-		startscope(F, &S, 0, 0);
-		local_new(F, syntoken("super"));
-		initlocal(F, 0);
-		codevar(F, class_name, &_);
-		CODE(F, OP_INHERIT);
+	if (match(fs, TOK_IMPL)) { // have superclass ?
+		expect(fs, TOK_IDENTIFIER, expectstr("Expect superclass name."));
+		codevarprev(fs, &_); // get superclass
+		if (nameeq(&PREVT(fs), &class_name))
+			error(fs, comperrors[CE_INHERIT], ascstring(identifier));
+		startscope(fs, &S, 0, 0);
+		local_new(fs, syntoken("super"));
+		initlocal(fs, 0);
+		var(fs, class_name, &_);
+		CODE(fs, OP_INHERIT);
 		cclass.superclass = 1;
 	}
-	codevar(F, class_name, &_);
-	expect(F, TOK_LBRACE, expectstr("Expect '{' before class body."));
-	while (!check(F, TOK_RBRACE) && !check(F, TOK_EOF))
-		method(F);
-	expect(F, TOK_RBRACE, expectstr("Expect '}' after class body."));
-	CODE(F, OP_POP); // Pop the class
+	var(fs, class_name, &_);
+	expect(fs, TOK_LBRACE, expectstr("Expect '{' before class body."));
+	while (!check(fs, TOK_RBRACE) && !check(fs, TOK_EOF))
+		method(fs);
+	expect(fs, TOK_RBRACE, expectstr("Expect '}' after class body."));
+	CODE(fs, OP_POP); // Pop the class
 	if (cclass.superclass)
-		endscope(F);
-	F->cclass = cclass.enclosing;
+		endscope(fs);
+	fs->cclass = cclass.enclosing;
 }
 
 /// call ::= '(' ')'
 ///        | '(' explist ')'
-static OpCode call(FunctionState *F, ExpInfo *E)
+static OpCode call(FunctionState *fs, ExpInfo *E)
 {
 	OpCode op;
-	if (!check(F, TOK_RPAREN)) {
-		int32_t index = CODE(F, OP_CALLSTART);
-		int32_t argc = explist(F, PARSER_ARG_LIMIT, E);
+	if (!check(fs, TOK_RPAREN)) {
+		int index = CODE(fs, OP_CALLSTART);
+		int argc = explist(fs, PARSER_ARG_LIMIT, E);
 		if (argc == 1 && !ethasmulret(E->et)) {
-			Array_ubyte_remove(&CHUNK(F)->bcode, index); // remove 'OP_CALLSTART'
+			Array_ubyte_remove(&CHUNK(fs)->bcode, index); // remove 'OP_CALLSTART'
 			op = OP_CALL1;
 		} else {
-			setmulret(F, E);
+			setmulret(fs, E);
 			op = OP_CALL;
 		}
 	} else {
 		E->et = EXP_NONE;
 		op = OP_CALL0;
 	}
-	expect(F, TOK_RPAREN, expectstr("Expect ')'."));
+	expect(fs, TOK_RPAREN, expectstr("Expect ')'."));
 	return op;
 }
 
-static void codecall(FunctionState *F, ExpInfo *E)
+static void codecall(FunctionState *fs, ExpInfo *E)
 {
-	OpCode callop = call(F, E);
+	OpCode callop = call(fs, E);
 	E->et = EXP_CALL;
 	if (callop == OP_CALL0 || callop == OP_CALL1)
-		E->ins.code = CODE(F, callop);
+		E->ins.code = CODE(fs, callop);
 	else
-		E->ins.code = CODEOP(F, callop, 1);
+		E->ins.code = CODEOP(fs, callop, 1);
 }
 
-static void codeinvoke(FunctionState *F, ExpInfo *E, int32_t idx)
+static void codeinvoke(FunctionState *fs, ExpInfo *E, int idx)
 {
-	OpCode callop = call(F, E);
+	OpCode callop = call(fs, E);
 	E->et = EXP_INVOKE;
 	OpCode invokeop;
 	switch (callop) {
@@ -1425,31 +1665,31 @@ static void codeinvoke(FunctionState *F, ExpInfo *E, int32_t idx)
 	default:
 		cr_unreachable;
 	}
-	E->ins.code = CODEOP(F, invokeop, idx);
-	CODEL(F, 1); // retcnt
+	E->ins.code = CODEOP(fs, invokeop, idx);
+	CODEL(fs, 1); // retcnt
 }
 
-static void dec(FunctionState *F)
+static void dec(FunctionState *fs)
 {
-	F->vflags = 0;
-	if (match(F, TOK_VAR))
-		vardec(F);
-	else if (match(F, TOK_FIXED))
-		fvardec(F);
-	else if (match(F, TOK_FN))
-		fndec(F);
-	else if (match(F, TOK_CLASS))
-		classdec(F);
+	fs->vflags = 0;
+	if (match(fs, TOK_VAR))
+		vardec(fs);
+	else if (match(fs, TOK_FIXED))
+		fvardec(fs);
+	else if (match(fs, TOK_FN))
+		fndec(fs);
+	else if (match(fs, TOK_CLASS))
+		classdec(fs);
 	else
-		stm(F);
-	if (F->lexer->panic)
-		sync(F);
+		stm(fs);
+	if (fs->lexer->panic)
+		sync(fs);
 }
 
 
 // 'switch' statement state.
 typedef struct {
-	int32_t patch; // Jump to patch if case expression does not match
+	int patch; // Jump to patch if case expression does not match
 	enum {
 		CS_MATCH, // Case is constant expression match
 		CS_DFLT, // Case is 'default'
@@ -1463,7 +1703,7 @@ typedef struct {
 	cr_ubyte havefalse : 1; // if switch has '0' case
 } SwitchState;
 
-static cr_inline void SwitchState_init(FunctionState *F, SwitchState *state)
+static cr_inline void SwitchState_init(FunctionState *fs, SwitchState *state)
 {
 	state->patch = -1;
 	state->casestate = CS_NONE;
@@ -1471,7 +1711,7 @@ static cr_inline void SwitchState_init(FunctionState *F, SwitchState *state)
 	state->havenil = 0;
 	state->havetrue = 0;
 	state->havefalse = 0;
-	Array_Value_init(&state->constants, F->vm);
+	Array_Value_init(&state->constants, fs->vm);
 }
 
 #define SwitchState_free(state) Array_Value_free(&(state)->constants, NULL);
@@ -1481,38 +1721,38 @@ static cr_inline void SwitchState_init(FunctionState *F, SwitchState *state)
  * already exists, but only if 'e' is constant expression.
  * TODO: Refactor a bit, logic can be compressed
  */
-static cr_inline void switchconstants(FunctionState *F, SwitchState *state, ExpInfo *E)
+static cr_inline void switchconstants(FunctionState *fs, SwitchState *state, ExpInfo *E)
 {
 	if (!etisconst(E->type))
 		return;
 	switch (E->et) {
 	case EXP_FALSE:
 		if (cr_unlikely(state->havefalse))
-			error(F, comperrors[CE_SWDUP], "0");
+			error(fs, comperrors[CE_SWDUP], "0");
 		state->havefalse = 1;
 		break;
 	case EXP_TRUE:
 		if (cr_unlikely(state->havetrue))
-			error(F, comperrors[CE_SWDUP], "1");
+			error(fs, comperrors[CE_SWDUP], "1");
 		state->havetrue = 1;
 		break;
 	case EXP_NIL:
 		if (cr_unlikely(state->havenil))
-			error(F, comperrors[CE_SWDUP], "nil");
+			error(fs, comperrors[CE_SWDUP], "nil");
 		state->havenil = 1;
 		break;
 	case EXP_STRING:
 	case EXP_NUMBER:;
-		TValue caseval = *CONSTANT(F, E);
+		TValue caseval = *CONSTANT(fs, E);
 		cr_ubyte _; // dummy
-		for (int32_t i = 0; i < cast_int(state->constants.len); i++) {
+		for (int i = 0; i < cast_int(state->constants.len); i++) {
 			if (cr_unlikely(raweq(state->constants.data[i], caseval))) {
 				const char *casename = NULL;
 				if (E->et == EXP_STRING)
-					casename = vtostr(F->vm, caseval, 1)->storage;
+					casename = vtostr(fs->vm, caseval, 1)->storage;
 				else
 					casename = dtostr(AS_NUMBER(caseval), &_);
-				error(F, comperrors[CE_SWDUP], casename);
+				error(fs, comperrors[CE_SWDUP], casename);
 				return;
 			}
 		}
@@ -1523,320 +1763,320 @@ static cr_inline void switchconstants(FunctionState *F, SwitchState *state, ExpI
 	}
 }
 
-static void switchstm(FunctionState *F)
+static void switchstm(FunctionState *fs)
 {
 	Context C;
 	Scope S;
 	SwitchState swstate;
-	cr_ubyte inswitch = F->S->isswitch;
+	cr_ubyte inswitch = fs->S->isswitch;
 	ExpInfo E1;
 	Array_cr_int fts;
-	int32_t sdepth;
-	savecontext(F, &C);
-	SwitchState_init(F, &swstate);
-	Array_cr_int_init(&fts, F->vm);
-	startscope(F, &S, 0, 1); // implicit scope
-	startbreaklist(F);
-	expect(F, TOK_LPAREN, expectstr("Expect '(' after 'switch'."));
+	int sdepth;
+	savecontext(fs, &C);
+	SwitchState_init(fs, &swstate);
+	Array_cr_int_init(&fts, fs->vm);
+	startscope(fs, &S, 0, 1); // implicit scope
+	startbreaklist(fs);
+	expect(fs, TOK_LPAREN, expectstr("Expect '(' after 'switch'."));
 	E1.ins.set = 0;
-	expr(F, &E1);
-	expect(F, TOK_RPAREN, expectstr("Expect ')' after condition."));
-	expect(F, TOK_LBRACE, expectstr("Expect '{' after ')'."));
-	sdepth = F->cflow.innersdepth;
-	F->cflow.innersdepth = F->S->depth;
+	expr(fs, &E1);
+	expect(fs, TOK_RPAREN, expectstr("Expect ')' after condition."));
+	expect(fs, TOK_LBRACE, expectstr("Expect '{' after ')'."));
+	sdepth = fs->cflow.innersdepth;
+	fs->cflow.innersdepth = fs->S->depth;
 	// Switch must contain case or default before any statements
-	if (!check(F, TOK_RBRACE) && !check(F, TOK_EOF) && !check(F, TOK_CASE) && !check(F, TOK_DEFAULT))
-		error(F, comperrors[CE_SWNOC]);
+	if (!check(fs, TOK_RBRACE) && !check(fs, TOK_EOF) && !check(fs, TOK_CASE) && !check(fs, TOK_DEFAULT))
+		error(fs, comperrors[CE_SWNOC]);
 	// 'switch' body
-	while (!match(F, TOK_RBRACE) && !check(F, TOK_EOF)) {
-		if (match(F, TOK_CASE) || match(F, TOK_DEFAULT)) {
-			F->fn->gotret = 0;
+	while (!match(fs, TOK_RBRACE) && !check(fs, TOK_EOF)) {
+		if (match(fs, TOK_CASE) || match(fs, TOK_DEFAULT)) {
+			fs->fn->gotret = 0;
 			if (swstate.casestate != CS_NONE) {
-				Array_cr_int_push(&fts, CODEJMP(F, OP_JMP));
+				Array_cr_int_push(&fts, CODEJMP(fs, OP_JMP));
 				if (swstate.casestate != CS_DFLT && swstate.casestate != CS_MATCH)
-					patchjmp(F, swstate.patch);
+					patchjmp(fs, swstate.patch);
 			}
 			swstate.casestate = CS_DFLT;
-			if (PREVT(F).type == TOK_CASE) {
+			if (PREVT(fs).type == TOK_CASE) {
 				ExpInfo E2;
 				E2.ins.set = 0;
-				expr(F, &E2);
-				expect(F, TOK_COLON, expectstr("Expect ':' after 'case'."));
-				switchconstants(F, &swstate, &E2);
-				if (eareconstandeq(F, &E1, &E2)) {
-					restorecontext(F, &C);
+				expr(fs, &E2);
+				expect(fs, TOK_COLON, expectstr("Expect ':' after 'case'."));
+				switchconstants(fs, &swstate, &E2);
+				if (eareconstandeq(fs, &E1, &E2)) {
+					restorecontext(fs, &C);
 					swstate.casestate = CS_MATCH;
 				} else {
-					CODE(F, OP_EQ);
+					CODE(fs, OP_EQ);
 					swstate.casestate = CS_CASE;
-					swstate.patch = CODEJMP(F, OP_JMP_IF_FALSE_POP);
+					swstate.patch = CODEJMP(fs, OP_JMP_IF_FALSE_POP);
 				}
 			} else if (!swstate.dflt) {
 				swstate.dflt = 1;
 				swstate.casestate = CS_DFLT;
-				expect(F, TOK_COLON, expectstr("Expect ':' after 'default'."));
+				expect(fs, TOK_COLON, expectstr("Expect ':' after 'default'."));
 			} else
-				error(F, comperrors[CE_SWDEF]);
+				error(fs, comperrors[CE_SWDEF]);
 			if (fts.len > 0)
-				patchjmp(F, Array_cr_int_pop(&fts));
+				patchjmp(fs, Array_cr_int_pop(&fts));
 		} else {
-			stm(F);
-			if (swstate.casestate == CS_MATCH && F->fn->gotret) {
+			stm(fs);
+			if (swstate.casestate == CS_MATCH && fs->fn->gotret) {
 				// @TODO: Implement optimizations.
 				// Also check if last 'stm' was 'breakstm' (same effect)
 			}
 		}
 	}
-	if (PREVT(F).type == TOK_EOF)
-		error(F, comperrors[CE_SWRBR]);
+	if (PREVT(fs).type == TOK_EOF)
+		error(fs, comperrors[CE_SWRBR]);
 	Array_cr_int_free(&fts, NULL);
 	SwitchState_free(&swstate);
-	endscope(F);
-	CODE(F, OP_POP); // pop switch expression
-	patchbreaklist(F);
-	endbreaklist(F);
-	F->cflow.innersdepth = sdepth;
-	F->S->isswitch = inswitch;
+	endscope(fs);
+	CODE(fs, OP_POP); // pop switch expression
+	patchbreaklist(fs);
+	endbreaklist(fs);
+	fs->cflow.innersdepth = sdepth;
+	fs->S->isswitch = inswitch;
 }
 
-static void ifstm(FunctionState *F)
+static void ifstm(FunctionState *fs)
 {
 	ExpInfo E;
 	Context C;
-	int32_t jmptoelse, jmptoend = -1;
-	savecontext(F, &C);
-	expect(F, TOK_LPAREN, expectstr("Expect '(' after 'if'."));
+	int jmptoelse, jmptoend = -1;
+	savecontext(fs, &C);
+	expect(fs, TOK_LPAREN, expectstr("Expect '(' after 'if'."));
 	E.ins.set = 0;
-	expr(F, &E); // condition
-	expect(F, TOK_RPAREN, expectstr("Expect ')' after condition."));
+	expr(fs, &E); // condition
+	expect(fs, TOK_RPAREN, expectstr("Expect ')' after condition."));
 	cr_ubyte remove = 0;
 	cr_ubyte istrue = 0;
 	if (etisconst(E.type)) {
-		rmlastins(F, &E);
+		rmlastins(fs, &E);
 		if (etisfalse(E.et))
 			remove = 1;
 		else
 			istrue = 1;
 	} else
-		jmptoelse = CODEJMP(F, OP_JMP_IF_FALSE_POP);
-	stm(F);
+		jmptoelse = CODEJMP(fs, OP_JMP_IF_FALSE_POP);
+	stm(fs);
 	if (!remove) {
-		jmptoend = CODEJMP(F, OP_JMP);
+		jmptoend = CODEJMP(fs, OP_JMP);
 		if (!istrue)
-			patchjmp(F, jmptoelse);
-		else if (F->fn->gotret) { // condition is 1 and 'stm' was a 'returnstm'
+			patchjmp(fs, jmptoelse);
+		else if (fs->fn->gotret) { // condition is 1 and 'stm' was a 'returnstm'
 			// @TODO: Implement optimization.
 		}
 	} else
-		restorecontext(F, &C);
-	F->fn->gotret = 0;
-	if (match(F, TOK_ELSE)) { // there is 'else' branch?
-		stm(F);
+		restorecontext(fs, &C);
+	fs->fn->gotret = 0;
+	if (match(fs, TOK_ELSE)) { // there is 'else' branch?
+		stm(fs);
 		if (!remove)
-			patchjmp(F, jmptoend);
+			patchjmp(fs, jmptoend);
 	}
 }
 
-static cr_inline void startloop(FunctionState *F, int32_t *lstart, int32_t *ldepth)
+static cr_inline void startloop(FunctionState *fs, int *lstart, int *ldepth)
 {
-	*lstart = (F)->cflow.innerlstart;
-	*ldepth = (F)->cflow.innerldepth;
-	(F)->cflow.innerlstart = codeoffset(F);
-	(F)->cflow.innerldepth = F->S->depth;
+	*lstart = (fs)->cflow.innerlstart;
+	*ldepth = (fs)->cflow.innerldepth;
+	(fs)->cflow.innerlstart = codeoffset(fs);
+	(fs)->cflow.innerldepth = fs->S->depth;
 }
 
-static cr_inline void endloop(FunctionState *F, int32_t lstart, int32_t ldepth)
+static cr_inline void endloop(FunctionState *fs, int lstart, int ldepth)
 {
-	(F)->cflow.innerlstart = lstart;
-	(F)->cflow.innerldepth = ldepth;
+	(fs)->cflow.innerlstart = lstart;
+	(fs)->cflow.innerldepth = ldepth;
 }
 
-static void whilestm(FunctionState *F)
+static void whilestm(FunctionState *fs)
 {
 	Scope S;
 	Context C;
 	ExpInfo E;
-	int32_t lstart, ldepth;
-	int32_t jmptoend = -1;
+	int lstart, ldepth;
+	int jmptoend = -1;
 	cr_ubyte infinite = 0;
 	cr_ubyte remove = 0;
-	savecontext(F, &C);
-	startscope(F, &S, 1, 0);
-	startloop(F, &lstart, &ldepth);
-	startbreaklist(F);
-	expect(F, TOK_LPAREN, expectstr("Expect '(' after 'while'."));
+	savecontext(fs, &C);
+	startscope(fs, &S, 1, 0);
+	startloop(fs, &lstart, &ldepth);
+	startbreaklist(fs);
+	expect(fs, TOK_LPAREN, expectstr("Expect '(' after 'while'."));
 	E.ins.set = 0;
-	expr(F, &E); // conditional
+	expr(fs, &E); // conditional
 	if (etisconst(E.type)) {
-		rmlastins(F, &E);
+		rmlastins(fs, &E);
 		if (etisfalse(E.et))
 			remove = 1;
 		else
 			infinite = 1;
 	} else
-		jmptoend = CODEJMP(F, OP_JMP_IF_FALSE_POP);
-	expect(F, TOK_RPAREN, expectstr("Expect ')' after condition."));
-	stm(F); // body
-	cr_ubyte gotret = F->fn->gotret;
-	endscope(F);
+		jmptoend = CODEJMP(fs, OP_JMP_IF_FALSE_POP);
+	expect(fs, TOK_RPAREN, expectstr("Expect ')' after condition."));
+	stm(fs); // body
+	cr_ubyte gotret = fs->fn->gotret;
+	endscope(fs);
 	if (!remove) {
-		codeloop(F, (F)->cflow.innerlstart);
+		codeloop(fs, (fs)->cflow.innerlstart);
 		if (!infinite) {
-			cr_assert(F->vm, jmptoend != -1, "end jmp invalid but flag is 0.");
-			patchjmp(F, jmptoend);
+			cr_assert(fs->vm, jmptoend != -1, "end jmp invalid but flag is 0.");
+			patchjmp(fs, jmptoend);
 		} else if (gotret) { // cond 1 and 'stm' was 'returnstm'
 			// @TODO: Implement optimizations
 		}
-		patchbreaklist(F);
+		patchbreaklist(fs);
 	} else
-		restorecontext(F, &C);
-	endloop(F, lstart, ldepth);
-	endbreaklist(F);
+		restorecontext(fs, &C);
+	endloop(fs, lstart, ldepth);
+	endbreaklist(fs);
 }
 
-static void forstm(FunctionState *F)
+static void forstm(FunctionState *fs)
 {
 	Scope S;
 	Context C;
 	ExpInfo E;
-	int32_t lstart, ldepth;
-	int32_t jmptoend = -1;
+	int lstart, ldepth;
+	int jmptoend = -1;
 	cr_ubyte remove = 0;
 	cr_ubyte infinite = 0;
-	startscope(F, &S, 1, 0);
-	startbreaklist(F);
-	expect(F, TOK_LPAREN, expectstr("Expect '(' after 'for'."));
-	if (match(F, TOK_SEMICOLON)) // Initializer for-clause
+	startscope(fs, &S, 1, 0);
+	startbreaklist(fs);
+	expect(fs, TOK_LPAREN, expectstr("Expect '(' after 'for'."));
+	if (match(fs, TOK_SEMICOLON)) // Initializer for-clause
 		; // no initializer
-	else if (match(F, TOK_VAR))
-		vardec(F);
-	else if (match(F, TOK_FIXED))
-		fvardec(F);
+	else if (match(fs, TOK_VAR))
+		vardec(fs);
+	else if (match(fs, TOK_FIXED))
+		fvardec(fs);
 	else
-		exprstm(F, 0);
-	savecontext(F, &C);
-	startloop(F, &lstart, &ldepth);
-	if (!match(F, TOK_SEMICOLON)) { // conditional
+		exprstm(fs, 0);
+	savecontext(fs, &C);
+	startloop(fs, &lstart, &ldepth);
+	if (!match(fs, TOK_SEMICOLON)) { // conditional
 		E.ins.set = 0;
-		expr(F, &E);
+		expr(fs, &E);
 		if (etisconst(E.type)) {
-			rmlastins(F, &E);
+			rmlastins(fs, &E);
 			if (etistrue(E.type))
 				infinite = 1;
 			else
 				remove = 1;
 		} else
-			jmptoend = CODEJMP(F, OP_JMP_IF_FALSE_POP);
-		expect(F, TOK_SEMICOLON, expectstr("Expect ';' after for-loop condition clause."));
+			jmptoend = CODEJMP(fs, OP_JMP_IF_FALSE_POP);
+		expect(fs, TOK_SEMICOLON, expectstr("Expect ';' after for-loop condition clause."));
 	} else
 		infinite = 1;
-	if (!match(F, TOK_RPAREN)) { // last for-clause
-		int32_t jmptobody = -1;
-		int32_t jmptoincr = -1;
+	if (!match(fs, TOK_RPAREN)) { // last for-clause
+		int jmptobody = -1;
+		int jmptoincr = -1;
 		if (!infinite && !remove)
-			jmptobody = CODEJMP(F, OP_JMP);
+			jmptobody = CODEJMP(fs, OP_JMP);
 		if (!remove)
-			jmptoincr = codeoffset(F);
-		exprstm(F, 1);
+			jmptoincr = codeoffset(fs);
+		exprstm(fs, 1);
 		if (!infinite && !remove) {
-			codeloop(F, (F)->cflow.innerlstart);
-			patchjmp(F, jmptobody);
-			(F)->cflow.innerlstart = jmptoincr;
+			codeloop(fs, (fs)->cflow.innerlstart);
+			patchjmp(fs, jmptobody);
+			(fs)->cflow.innerlstart = jmptoincr;
 		}
-		expect(F, TOK_RPAREN, expectstr("Expect ')' after last for-loop clause."));
+		expect(fs, TOK_RPAREN, expectstr("Expect ')' after last for-loop clause."));
 	}
-	stm(F); // Loop body
+	stm(fs); // Loop body
 	if (!remove) {
-		codeloop(F, (F)->cflow.innerlstart);
+		codeloop(fs, (fs)->cflow.innerlstart);
 		if (!infinite)
-			patchjmp(F, jmptoend);
-		else if (F->fn->gotret) { // 'stm' was 'returnstm' and conditional is 1
+			patchjmp(fs, jmptoend);
+		else if (fs->fn->gotret) { // 'stm' was 'returnstm' and conditional is 1
 			// @TODO: Implement optimizations
 		}
-		patchbreaklist(F);
+		patchbreaklist(fs);
 	} else
-		restorecontext(F, &C);
-	endscope(F);
-	endloop(F, lstart, ldepth);
-	endbreaklist(F);
+		restorecontext(fs, &C);
+	endscope(fs);
+	endloop(fs, lstart, ldepth);
+	endbreaklist(fs);
 }
 
-static int32_t foreachvars(FunctionState *F)
+static int foreachvars(FunctionState *fs)
 {
-	int32_t vars = 0;
+	int vars = 0;
 	do {
 		if (vars >= CR_BYTECODE_MAX)
-			error(F, comperrors[CE_VARLIST], CR_BYTECODE_MAX);
+			error(fs, comperrors[CE_VARLIST], CR_BYTECODE_MAX);
 		vars++;
-		expect(F, TOK_IDENTIFIER, expectstr("Expect varname."));
-		make_local(F, &PREVT(F));
-		initlocal(F, 0);
-	} while (match(F, TOK_COMMA));
+		expect(fs, TOK_IDENTIFIER, expectstr("Expect varname."));
+		make_local(fs, &PREVT(fs));
+		initlocal(fs, 0);
+	} while (match(fs, TOK_COMMA));
 	return vars;
 }
 
-static void newlocalliteral(FunctionState *F, const char *name)
+static void newlocalliteral(FunctionState *fs, const char *name)
 {
 	Token syntok = syntoken(name);
-	local_new(F, syntok);
-	initlocal(F, 0);
+	local_new(fs, syntok);
+	initlocal(fs, 0);
 }
 
-static void foreachstm(FunctionState *F)
+static void foreachstm(FunctionState *fs)
 {
 	Scope S;
-	int32_t lstart, ldepth, vars, expc, endjmp;
+	int lstart, ldepth, vars, expc, endjmp;
 	ExpInfo E;
-	startscope(F, &S, 1, 0);
+	startscope(fs, &S, 1, 0);
 	S.isgloop = 1; // set as generic loop
-	startbreaklist(F);
-	newlocalliteral(F, "(for iterator)"); // iterator function
-	newlocalliteral(F, "(for invstate)"); // invariant state
-	newlocalliteral(F, "(for cntlvar)"); // control variable
-	vars = foreachvars(F); // declared vars
-	expect(F, TOK_IN, expectstr("Expect 'in'."));
+	startbreaklist(fs);
+	newlocalliteral(fs, "(for iterator)"); // iterator function
+	newlocalliteral(fs, "(for invstate)"); // invariant state
+	newlocalliteral(fs, "(for cntlvar)"); // control variable
+	vars = foreachvars(fs); // declared vars
+	expect(fs, TOK_IN, expectstr("Expect 'in'."));
 	E.ins.set = 0;
-	expr(F, &E); // iterator factory
-	expect_cond(F, !etisconst(E.type), "Can't call constant expression.");
+	expr(fs, &E); // iterator factory
+	expect_cond(fs, !etisconst(E.type), "Can't call constant expression.");
 	expc = 1;
-	if (match(F, TOK_COMMA))
-		expc += explist(F, 2, &E);
-	adjustassign(F, &E, 3, expc);
-	startloop(F, &lstart, &ldepth);
-	CODEOP(F, OP_FOREACH_PREP, vars);
-	CODEOP(F, OP_FOREACH, vars);
-	endjmp = CODEJMP(F, OP_JMP);
-	stm(F);
-	CODEPOP(F, vars);
-	codeloop(F, (F)->cflow.innerlstart);
-	patchjmp(F, endjmp);
-	endscope(F);
-	patchbreaklist(F);
-	endbreaklist(F);
-	endloop(F, lstart, ldepth);
+	if (match(fs, TOK_COMMA))
+		expc += explist(fs, 2, &E);
+	adjustassign(fs, &E, 3, expc);
+	startloop(fs, &lstart, &ldepth);
+	CODEOP(fs, OP_FOREACH_PREP, vars);
+	CODEOP(fs, OP_FOREACH, vars);
+	endjmp = CODEJMP(fs, OP_JMP);
+	stm(fs);
+	CODEPOP(fs, vars);
+	codeloop(fs, (fs)->cflow.innerlstart);
+	patchjmp(fs, endjmp);
+	endscope(fs);
+	patchbreaklist(fs);
+	endbreaklist(fs);
+	endloop(fs, lstart, ldepth);
 }
 
-static void loopstm(FunctionState *F)
+static void loopstm(FunctionState *fs)
 {
 	Scope S;
-	int32_t lstart, ldepth;
-	startscope(F, &S, 1, 0);
-	startbreaklist(F);
-	startloop(F, &lstart, &ldepth);
-	stm(F);
-	if (F->fn->gotret) {
+	int lstart, ldepth;
+	startscope(fs, &S, 1, 0);
+	startbreaklist(fs);
+	startloop(fs, &lstart, &ldepth);
+	stm(fs);
+	if (fs->fn->gotret) {
 		// @TODO: Implement optimizations
 	}
-	codeloop(F, (F)->cflow.innerlstart);
-	endscope(F);
-	patchbreaklist(F);
-	endbreaklist(F);
-	endloop(F, lstart, ldepth);
+	codeloop(fs, (fs)->cflow.innerlstart);
+	endscope(fs);
+	patchbreaklist(fs);
+	endbreaklist(fs);
+	endloop(fs, lstart, ldepth);
 }
 
-static cr_inline Scope *loopscope(FunctionState *F)
+static cr_inline Scope *loopscope(FunctionState *fs)
 {
-	Scope *S = F->S;
+	Scope *S = fs->S;
 	while (S != NULL) {
 		if (S->isloop)
 			return S;
@@ -1847,11 +2087,11 @@ static cr_inline Scope *loopscope(FunctionState *F)
 
 // Return count of switch statements until the first loop 'Scope'
 // or the top-level code counting from the current 'Scope' in the 'FunctionState'.
-static cr_inline int32_t switchcnt(FunctionState *F)
+static cr_inline int switchcnt(FunctionState *fs)
 {
-	Scope *S = F->S;
-	int32_t count = 0;
-	while (S != NULL && S->depth > F->cflow.innerldepth) {
+	Scope *S = fs->S;
+	int count = 0;
+	while (S != NULL && S->depth > fs->cflow.innerldepth) {
 		if (S->isswitch)
 			count++;
 		S = S->prev;
@@ -1859,68 +2099,67 @@ static cr_inline int32_t switchcnt(FunctionState *F)
 	return count;
 }
 
-static void continuestm(FunctionState *F)
+static void continuestm(FunctionState *fs)
 {
-	expect(F, TOK_SEMICOLON, expectstr("Expect ';' after 'continue'."));
-	if (cr_unlikely(F->cflow.innerlstart == -1))
-		error(F, comperrors[CE_CONT]);
+	expect(fs, TOK_SEMICOLON, expectstr("Expect ';' after 'continue'."));
+	if (cr_unlikely(fs->cflow.innerlstart == -1))
+		error(fs, comperrors[CE_CONT]);
 	else {
-		Scope *S = loopscope(F);
-		cr_assert(F->vm, S != NULL, "Loop scope not found but cflow offset is set.");
-		int32_t popn = F->locals.len - (S->isgloop * 3) - S->nlocals + switchcnt(F);
-		CODEPOP(F, popn);
-		codeloop(F, F->cflow.innerlstart);
+		Scope *S = loopscope(fs);
+		cr_assert(fs->vm, S != NULL, "Loop scope not found but cflow offset is set.");
+		int popn = fs->locals.len - (S->isgloop * 3) - S->nlocals + switchcnt(fs);
+		CODEPOP(fs, popn);
+		codeloop(fs, fs->cflow.innerlstart);
 	}
 }
 
-static void breakstm(FunctionState *F)
+static void breakstm(FunctionState *fs)
 {
-	expect(F, TOK_SEMICOLON, expectstr("Expect ';' after 'break'."));
-	Array_Array_cr_int *arr = &F->cflow.breaks;
-	int32_t popn = 0;
+	expect(fs, TOK_SEMICOLON, expectstr("Expect ';' after 'break'."));
+	Array_Array_cr_int *arr = &fs->cflow.breaks;
+	int popn = 0;
 	Scope *scope = NULL;
-	switch (inwhat(F->S, &scope)) {
+	switch (inwhat(fs->S, &scope)) {
 	case 0: // in switch
 		popn++; // switch expression
 	case 1: // FALLTHRU (in loop)
 		break;
 	case -1: // outside
-		error(F, comperrors[CE_BREAK]);
+		error(fs, comperrors[CE_BREAK]);
 		return;
 	default:
 		cr_unreachable;
 	}
-	popn += F->locals.len - scope->nlocals;
-	CODEPOP(F, popn);
+	popn += fs->locals.len - scope->nlocals;
+	CODEPOP(fs, popn);
 	Array_cr_int *last = Array_Array_cr_int_last(arr);
-	Array_cr_int_push(last, CODEJMP(F, OP_JMP));
+	Array_cr_int_push(last, CODEJMP(fs, OP_JMP));
 }
 
 /// return ::= 'return' ';'
 ///          | 'return' explist ';'
-static void returnstm(FunctionState *F)
+static void returnstm(FunctionState *fs)
 {
 	/* @TODO: Optimize even further by removing all of the cr_unreachable code. */
 	static const char *expectstr = expectstr("Expect ';' after return statement values.");
-	cr_ubyte gotret = F->fn->gotret;
+	cr_ubyte gotret = fs->fn->gotret;
 	Context C;
-	savecontext(F, &C);
-	if (F->tag != -1) { // overload-able method ?
-		const char *method = F->vm->faststatic[F->tag]->storage;
-		if (tagisnoret(F->tag)) {
-			if (F->tag == SS_INIT) { // init is a function call in cript syntax
-				CODEOP(F, OP_GET_LOCAL, 0);
-				CODE(F, OP_RET1);
+	savecontext(fs, &C);
+	if (fs->tag != -1) { // overload-able method ?
+		const char *method = fs->vm->faststatic[fs->tag]->storage;
+		if (tagisnoret(fs->tag)) {
+			if (fs->tag == SS_INIT) { // init is a function call in cript syntax
+				CODEOP(fs, OP_GET_LOCAL, 0);
+				CODE(fs, OP_RET1);
 			} else
-				CODE(F, OP_RET0);
-			if (!match(F, TOK_SEMICOLON))
-				error(F, comperrors[CE_NORET], method);
+				CODE(fs, OP_RET0);
+			if (!match(fs, TOK_SEMICOLON))
+				error(fs, comperrors[CE_NORET], method);
 		} else { // has return values
-			cr_om tag = F->tag - SS_INIT;
+			cr_om tag = fs->tag - SS_INIT;
 			switch (tag) {
 			case OM_DISPLAY:
 			case OM_GETIDX:
-#if defined(CR_OVERLOAD_OPS)
 			case OM_ADD:
 			case OM_SUB:
 			case OM_MUL:
@@ -1935,101 +2174,100 @@ static void returnstm(FunctionState *F)
 			case OM_LE:
 			case OM_GT:
 			case OM_GE:
-#endif
 			{
 				ExpInfo _; // dummy
 				_.ins.set = 0;
-				explist(F, 1, &_);
-				expect(F, TOK_SEMICOLON, expectstr);
-				CODE(F, OP_RET1);
+				explist(fs, 1, &_);
+				expect(fs, TOK_SEMICOLON, expectstr);
+				CODE(fs, OP_RET1);
 				break;
 			}
 			default:
 				cr_unreachable;
 			}
 		}
-	} else if (match(F, TOK_SEMICOLON)) { // implicit 'nil' return
-		implicitreturn(F);
+	} else if (match(fs, TOK_SEMICOLON)) { // implicit 'nil' return
+		implicitreturn(fs);
 	} else { // generic return
-		int idx = CODE(F, OP_RETSTART);
+		int idx = CODE(fs, OP_RETSTART);
 		ExpInfo E;
 		E.ins.set = 0;
-		int32_t retcnt = explist(F, PARSER_RET_LIMIT, &E);
-		expect(F, TOK_SEMICOLON, expectstr);
+		int retcnt = explist(fs, PARSER_RET_LIMIT, &E);
+		expect(fs, TOK_SEMICOLON, expectstr);
 		cr_ubyte singleret = (retcnt == 1);
 		if (ethasmulret(E.et)) {
 			singleret = 0;
-			setmulret(F, &E);
+			setmulret(fs, &E);
 		}
 		if (singleret) { // single return value ?
-			Array_ubyte_remove(&CHUNK(F)->bcode, idx); // remove 'OP_RETSTART'
-			CODE(F, OP_RET1);
+			Array_ubyte_remove(&CHUNK(fs)->bcode, idx); // remove 'OP_RETSTART'
+			CODE(fs, OP_RET1);
 		} else
-			CODE(F, OP_RET);
+			CODE(fs, OP_RET);
 	}
 	if (gotret) { // last statement was 'return' ?
-		F->fn->gotret = 1; // this is also a 'return' statement
-		restorecontext(F, &C);
+		fs->fn->gotret = 1; // this is also a 'return' statement
+		restorecontext(fs, &C);
 	}
 }
 
 
 /// dot ::= '.' name
 ///       | '.' name call
-static void dot(FunctionState *F, ExpInfo *E)
+static void dot(FunctionState *fs, ExpInfo *E)
 {
-	expect(F, TOK_IDENTIFIER, expectstr("Expect property name after '.'."));
-	TValue identifier = tokintostr(F->vm, &PREVT(F));
-	int idx = make_constant(F, identifier);
-	if (match(F, TOK_LPAREN))
-		codeinvoke(F, E, idx);
+	expect(fs, TOK_IDENTIFIER, expectstr("Expect property name after '.'."));
+	TValue identifier = tokintostr(fs->vm, &PREVT(fs));
+	int idx = make_constant(fs, identifier);
+	if (match(fs, TOK_LPAREN))
+		codeinvoke(fs, E, idx);
 	else {
 		E->et = EXP_INDEXED;
 		E->value = idx;
 		if (!E->ins.set)
-			E->ins.code = CODEOP(F, OP_GET_PROPERTY, idx);
+			E->ins.code = CODEOP(fs, OP_GET_PROPERTY, idx);
 	}
 }
 
-static void stm(FunctionState *F)
+static void stm(FunctionState *fs)
 {
-	if (match(F, TOK_WHILE))
-		whilestm(F);
-	else if (match(F, TOK_FOR))
-		forstm(F);
-	else if (match(F, TOK_FOREACH))
-		foreachstm(F);
-	else if (match(F, TOK_IF))
-		ifstm(F);
-	else if (match(F, TOK_SWITCH))
-		switchstm(F);
-	else if (match(F, TOK_LBRACE))
-		blockstm(F);
-	else if (match(F, TOK_CONTINUE))
-		continuestm(F);
-	else if (match(F, TOK_BREAK))
-		breakstm(F);
-	else if (match(F, TOK_RETURN))
-		returnstm(F);
-	else if (match(F, TOK_LOOP))
-		loopstm(F);
-	else if (match(F, TOK_SEMICOLON))
+	if (match(fs, TOK_WHILE))
+		whilestm(fs);
+	else if (match(fs, TOK_FOR))
+		forstm(fs);
+	else if (match(fs, TOK_FOREACH))
+		foreachstm(fs);
+	else if (match(fs, TOK_IF))
+		ifstm(fs);
+	else if (match(fs, TOK_SWITCH))
+		switchstm(fs);
+	else if (match(fs, TOK_LBRACE))
+		blockstm(fs);
+	else if (match(fs, TOK_CONTINUE))
+		continuestm(fs);
+	else if (match(fs, TOK_BREAK))
+		breakstm(fs);
+	else if (match(fs, TOK_RETURN))
+		returnstm(fs);
+	else if (match(fs, TOK_LOOP))
+		loopstm(fs);
+	else if (match(fs, TOK_SEMICOLON))
 		; // empty statement
 	else
-		exprstm(F, 0);
+		exprstm(fs, 0);
 }
 
 // indexed ::= '[' expr ']'
-static cr_inline void indexed(FunctionState *F, ExpInfo *E)
+static cr_inline void indexed(FunctionState *fs, ExpInfo *E)
 {
 	ExpInfo E2;
 	E2.ins.set = 0;
-	expr(F, &E2);
-	expect(F, TOK_RBRACK, expectstr("Expect ']'."));
+	expr(fs, &E2);
+	expect(fs, TOK_RBRACK, expectstr("Expect ']'."));
 	E->et = EXP_INDEXED;
 	E->value = NO_VAL;
 	if (!E->ins.set)
-		E->ins.code = CODE(F, OP_INDEX);
+		E->ins.code = CODE(fs, OP_INDEX);
 }
 
 
@@ -2037,181 +2275,28 @@ static cr_inline void indexed(FunctionState *F, ExpInfo *E)
 
 /*========================== EXPRESSION =========================*/
 
-static void _self(FunctionState *F, ExpInfo *E)
-{
-	if (F->cclass == NULL) {
-		error(F, comperrors[CE_SELF]);
-		return;
-	}
-	advance(F);
-	codevarprev(F, E);
-}
-
-static void _super(FunctionState *F, ExpInfo *E)
-{
-	if (!F->cclass) {
-		error(F, comperrors[CE_SUPER]);
-		return;
-	}
-	if (!F->cclass->superclass) {
-		error(F, comperrors[CE_NOSUPER]);
-		return;
-	}
-	advance(F);
-	expect(F, TOK_DOT, expectstr("Expect '.' after 'super'."));
-	expect(F, TOK_IDENTIFIER, expectstr("Expect superclass method name after '.'."));
-	TValue methodname = tokintostr(F->vm, &PREVT(F));
-	int32_t idx = make_constant(F, methodname);
-	ExpInfo _; // dummy
-	_.ins.set = 0;
-	codevar(F, syntoken("self"), &_);
-	if (match(F, TOK_LPAREN)) {
-		OpCode opcall = call(F, E);
-		codevar(F, syntoken("super"), &_);
-		OpCode invokesuperop;
-		switch (opcall) {
-		case OP_CALL0:
-			invokesuperop = OP_INVOKE_SUPER0;
-			break;
-		case OP_CALL1:
-			invokesuperop = OP_INVOKE_SUPER1;
-			break;
-		case OP_CALL:
-			invokesuperop = OP_INVOKE_SUPER;
-			break;
-		default:
-			cr_unreachable;
-		}
-		E->ins.code = CODEOP(F, invokesuperop, idx);
-		CODEL(F, 1); // retcnt
-		E->et = EXP_INVOKE;
-	} else {
-		codevar(F, syntoken("super"), &_);
-		if (E->ins.set)
-			error(F, "Can't assign to methods from superclass.\n");
-		E->ins.code = CODEOP(F, OP_GET_SUPER, idx);
-		E->et = EXP_INDEXED; // superclass method
-	}
-}
-
-// primary_exp ::= '(' exp ')'
-//               | name
-//               | 'self'
-static void primaryexp(FunctionState *F, ExpInfo *E)
-{
-	switch (CURRT(F).type) {
-	case TOK_LPAREN:
-		advance(F);
-		expr(F, E);
-		expect(F, TOK_RPAREN, "Expect ')'.\n");
-		break;
-	case TOK_IDENTIFIER:
-		advance(F);
-		codevarprev(F, E);
-		break;
-	case TOK_SELF:
-		_self(F, E);
-		break;
-	case TOK_SUPER:
-		_super(F, E);
-		break;
-	default:
-		error(F, "Unexpected symbol.\n");
-		return;
-	}
-}
-
-// suffixedexp ::= primaryexp
-//               | primaryexp [dot|call|indexed...]
-static void suffixedexp(FunctionState *F, ExpInfo *E)
-{
-	primaryexp(F, E);
-	while (1) {
-		switch (CURRT(F).type) {
-		case TOK_DOT:
-			advance(F);
-			dot(F, E);
-			break;
-		case TOK_LPAREN:
-			if (etisconst(E->type))
-				error(F, comperrors[CE_CALLCONST]);
-			advance(F);
-			codecall(F, E);
-			break;
-		case TOK_LBRACK:
-			advance(F);
-			indexed(F, E);
-			break;
-		default:
-			return;
-		}
-	}
-}
-
-// simpleexp ::= number
-//             | string
-//             | 'nil'
-//             | '1'
-//             | '0'
-//             | '...'
-//             | suffixedexp
-static void simpleexp(FunctionState *F, ExpInfo *E)
-{
-	int constidx;
-	ExpType type;
-	switch (CURRT(F).type) {
-	case TOK_NUMBER:
-		type = EXP_NUMBER;
-		cr_assert(F->vm, IS_NUMBER(CURRT(F).value), "Expect number.");
-		goto constfin;
-	case TOK_STRING:
-		type = EXP_STRING;
-		cr_assert(F->vm, isstring(CURRT(F).value), "Expect string.");
-constfin:
-		constidx = make_constant(F, CURRT(F).value);
-		initexp(E, type, CODEOP(F, OP_CONST, constidx), constidx);
-		break;
-	case TOK_NIL:
-		initexp(E, EXP_NIL, CODE(F, OP_NIL), 0);
-		break;
-	case TOK_TRUE:
-		initexp(E, EXP_TRUE, CODE(F, OP_TRUE), 0);
-		break;
-	case TOK_FALSE:
-		initexp(E, EXP_FALSE, CODE(F, OP_FALSE), 0);
-		break;
-	case TOK_DOT_DOT_DOT:
-		initexp(E, EXP_VARARG, vararg(F), 0);
-		break;
-	default:
-		suffixedexp(F, E);
-		return;
-	}
-	advance(F);
-}
-
 
 // Try folding unary operation.
 // Example: OP_CONST (1), OP_NEG => OP_CONST (-1)
-static cr_ubyte foldunary(FunctionState *F, UnaryOpr opr, ExpInfo *E)
+static cr_ubyte foldunary(FunctionState *fs, unop opr, ExpInfo *E)
 {
 	if (E->type == EXP_NUMBER && opr == OPR_NEGATE) {
-		double val = AS_NUMBER(*CONSTANT(F, E));
+		double val = AS_NUMBER(*CONSTANT(fs, E));
 		if (cr_isnan(val) || val == 0.0)
 			return 0;
-		*CONSTANT(F, E) = NUMBER_VAL(-val);
+		*CONSTANT(fs, E) = NUMBER_VAL(-val);
 		return 1;
 	}
 	return 0;
 }
 
 // Fold constant number expressions
-static void calcnum(FunctionState *F, BinaryOpr opr, const ExpInfo *E1, const ExpInfo *E2, TValue *result)
+static void calcnum(FunctionState *fs, binop opr, const ExpInfo *E1, const ExpInfo *E2, TValue *result)
 {
 #define BINOP(op, n1, n2) NUMBER_VAL((n1)op(n2))
 
-	double n1 = AS_NUMBER(*CONSTANT(F, E1));
-	double n2 = AS_NUMBER(*CONSTANT(F, E2));
+	double n1 = AS_NUMBER(*CONSTANT(fs, E1));
+	double n2 = AS_NUMBER(*CONSTANT(fs, E2));
 	switch (opr) {
 	case OPR_ADD:
 		*result = BINOP(+, n1, n2);
@@ -2239,46 +2324,46 @@ static void calcnum(FunctionState *F, BinaryOpr opr, const ExpInfo *E1, const Ex
 }
 
 // Check if the binary operation is valid
-static cr_ubyte validop(FunctionState *F, BinaryOpr opr, const ExpInfo *E1, const ExpInfo *E2)
+static cr_ubyte validop(FunctionState *fs, binop opr, const ExpInfo *E1, const ExpInfo *E2)
 {
-	double n1 = AS_NUMBER(*CONSTANT(F, E1));
-	double n2 = AS_NUMBER(*CONSTANT(F, E2));
+	double n1 = AS_NUMBER(*CONSTANT(fs, E1));
+	double n2 = AS_NUMBER(*CONSTANT(fs, E2));
 	return !(opr == OPR_MOD && (cr_floor(n1) != n1 || cr_floor(n2) != n2));
 }
 
 // Try folding binary operation
 // Example: OP_CONST (1), OP_CONST (2), OP_ADD => OP_CONST (3)
-static cr_ubyte foldbinary(FunctionState *F, BinaryOpr opr, ExpInfo *E1, const ExpInfo *E2)
+static cr_ubyte foldbinary(FunctionState *fs, binop opr, ExpInfo *E1, const ExpInfo *E2)
 {
-	if (E1->type != E2->type || E1->type != EXP_NUMBER || !validop(F, opr, E1, E2))
+	if (E1->type != E2->type || E1->type != EXP_NUMBER || !validop(fs, opr, E1, E2))
 		return 0;
 	TValue result;
-	calcnum(F, opr, E1, E2, &result);
+	calcnum(fs, opr, E1, E2, &result);
 	if (cr_isnan(AS_NUMBER(result)))
 		return 0;
-	CONSTANT_POP(F); // Pop constant (E2)
-	*CONSTANT(F, E1) = result; // Set new constant value (E1)
-	LINSTRUCTION_POP(F); // Pop off the last OP_CONST instruction
+	CONSTANT_POP(fs); // Pop constant (E2)
+	*CONSTANT(fs, E1) = result; // Set new constant value (E1)
+	LINSTRUCTION_POP(fs); // Pop off the last OP_CONST instruction
 	return 1;
 }
 
 // Emit optimized 'and' instruction
-static void codeand(FunctionState *F, ExpInfo *E)
+static void codeand(FunctionState *fs, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_TRUE:
-		INSTRUCTION_POP(F);
+		INSTRUCTION_POP(fs);
 		goto fin;
 	case EXP_STRING:
 	case EXP_NUMBER:
-		LINSTRUCTION_POP(F);
-		CONSTANT_POP(F);
+		LINSTRUCTION_POP(fs);
+		CONSTANT_POP(fs);
 fin:
 		E->jmp.f = NO_JMP;
 		break;
 	default:
-		E->jmp.f = CODEJMP(F, OP_JMP_IF_FALSE_OR_POP);
-		E->ins.code = codeoffset(F) - 4; // Index of jump instruction
+		E->jmp.f = CODEJMP(fs, OP_JMP_IF_FALSE_OR_POP);
+		E->ins.code = codeoffset(fs) - 4; // Index of jump instruction
 		break;
 	}
 	E->jmp.t = NO_JMP;
@@ -2286,24 +2371,24 @@ fin:
 }
 
 // Emit optimized 'or' instruction
-static void codeor(FunctionState *F, ExpInfo *E)
+static void codeor(FunctionState *fs, ExpInfo *E)
 {
 	switch (E->et) {
 	case EXP_NIL:
 	case EXP_FALSE:
-		INSTRUCTION_POP(F);
+		INSTRUCTION_POP(fs);
 		E->jmp.t = NO_JMP;
 		break;
 	case EXP_STRING:
 	case EXP_NUMBER:
 	case EXP_TRUE:
-		E->jmp.t = codeoffset(F);
-		E->jmp.f = CHUNK(F)->constants.len;
+		E->jmp.t = codeoffset(fs);
+		E->jmp.f = CHUNK(fs)->constants.len;
 		return;
 	default:
-		E->jmp.f = CODEJMP(F, OP_JMP_IF_FALSE_AND_POP);
-		E->jmp.t = CODEJMP(F, OP_JMP);
-		patchjmp(F, E->jmp.f);
+		E->jmp.f = CODEJMP(fs, OP_JMP_IF_FALSE_AND_POP);
+		E->jmp.t = CODEJMP(fs, OP_JMP);
+		patchjmp(fs, E->jmp.f);
 		break;
 	}
 	E->jmp.f = NO_JMP;
@@ -2311,9 +2396,9 @@ static void codeor(FunctionState *F, ExpInfo *E)
 }
 
 // Emit binary instruction
-static void postfix(FunctionState *F, BinaryOpr opr, ExpInfo *E1, ExpInfo *E2)
+static void postfix(FunctionState *fs, binop opr, ExpInfo *E1, ExpInfo *E2)
 {
-	if (FOLDABLE(opr) && foldbinary(F, opr, E1, E2))
+	if (FOLDABLE(opr) && foldbinary(fs, opr, E1, E2))
 		return;
 	switch (opr) {
 	case OPR_ADD:
@@ -2328,16 +2413,16 @@ static void postfix(FunctionState *F, BinaryOpr opr, ExpInfo *E1, ExpInfo *E2)
 	case OPR_LE:
 	case OPR_GT:
 	case OPR_GE:
-		E1->ins.code = CODEBIN(F, opr);
+		E1->ins.code = CODEBIN(fs, opr);
 		E1->et = EXP_EXPR;
 		E1->ins.binop = 1;
 		break;
 	case OPR_OR:
 		if (E1->et != EXP_JMP) {
-			concatcode(F, E1->jmp.t + 3, E1->jmp.f);
+			concatcode(fs, E1->jmp.t + 3, E1->jmp.f);
 			*E1 = *E2;
 		} else if (E1->jmp.t != NO_JMP) {
-			patchjmp(F, E1->jmp.t);
+			patchjmp(fs, E1->jmp.t);
 			*E1 = *E2;
 		} else
 			E1->et = EXP_EXPR;
@@ -2346,7 +2431,7 @@ static void postfix(FunctionState *F, BinaryOpr opr, ExpInfo *E1, ExpInfo *E2)
 		if (E1->jmp.f == NO_JMP)
 			*E1 = *E2;
 		else {
-			patchjmp(F, E1->jmp.f);
+			patchjmp(fs, E1->jmp.f);
 			E1->et = EXP_EXPR;
 		}
 		break;
@@ -2357,14 +2442,14 @@ static void postfix(FunctionState *F, BinaryOpr opr, ExpInfo *E1, ExpInfo *E2)
 
 // cr_intermediate step that tries to optimize/process 'and' and 'or'
 // instructions before the second expression gets parsed.
-static void shortcircuit(FunctionState *F, BinaryOpr opr, ExpInfo *E)
+static void shortcircuit(FunctionState *fs, binop opr, ExpInfo *E)
 {
 	switch (opr) {
 	case OPR_AND:
-		codeand(F, E);
+		codeand(fs, E);
 		break;
 	case OPR_OR:
-		codeor(F, E);
+		codeor(fs, E);
 		break;
 	default:
 		return;
@@ -2372,53 +2457,43 @@ static void shortcircuit(FunctionState *F, BinaryOpr opr, ExpInfo *E)
 }
 
 // Emit prefix instruction (only if folding didn't work)
-static cr_inline void prefix(FunctionState *F, UnaryOpr opr, ExpInfo *E)
+static cr_inline void prefix(FunctionState *fs, unop opr, ExpInfo *E)
 {
-	if (!foldunary(F, opr, E))
-		CODE(F, unopr2op(opr));
+	if (!foldunary(fs, opr, E))
+		CODE(fs, unopr2op(opr));
 }
 
-// subexpr ::= simpleexp
-//           | '-' simpleexp
-//           | '!' simpleexp
-//           | simpleexp '+' subexpr
-//           | simpleexp '-' subexpr
-//           | simpleexp '*' subexpr
-//           | simpleexp '/' subexpr
-//           | simpleexp '^' subexpr
-//           | simpleexp '%' subexpr
-//           | simpleexp '!=' subexpr
-//           | simpleexp '==' subexpr
-//           | simpleexp '<' subexpr
-//           | simpleexp '<=' subexpr
-//           | simpleexp '>' subexpr
-//           | simpleexp '>=' subexpr
-//           | simpleexp 'and' subexpr
-//           | simpleexp 'or' subexpr
-static BinaryOpr subexp(FunctionState *F, ExpInfo *E1, int32_t limit)
+
+/* -------------------------------------------------------------------------
+ * Protected parser
+ * ------------------------------------------------------------------------- */
+
+/* data for 'protectedcompile' */
+typedef struct PParseData {
+	BuffReader *br;
+	const char *name;
+	cr_ubyte gscope;
+} PParseData;
+
+
+/* protected parser entry */
+static void pparse(VM *vm, void *userdata)
 {
-	UnaryOpr unaryop = getunaryopr(CURRT(F).type);
-	if (unaryop != OPR_NOUNARYOPR) {
-		advance(F);
-		subexp(F, E1, UNARY_PRIORITY);
-		prefix(F, unaryop, E1);
-	} else
-		simpleexp(F, E1);
-	BinaryOpr binop = getbinaryopr(CURRT(F).type);
-	while (binop != OPR_NOBINOPR && priority[binop].left > limit) {
-		ExpInfo E2;
-		E2.ins.set = 0;
-		advance(F); // skip binary operator
-		shortcircuit(F, binop, E1);
-		BinaryOpr nextop = subexp(F, &E2, priority[binop].right);
-		postfix(F, binop, E1, &E2);
-		binop = nextop;
-	}
-	return binop;
+	PParseData *pcompile;
+
+	pcompile = cast(PParseData *, userdata);
+	if (cr_unlikely(compile(vm, pcompile->br, pcompile->name, pcompile->isingscope) == NULL))
+		runerror(vm, S_ECOMP);
 }
 
-// expr ::= subexpr
-static void expr(FunctionState *F, ExpInfo *E)
+
+/* external interface for 'protectedparser' */
+int cr_pr_pparse(VM *vm, void *userdata, const char *name, cr_ubyte gscope)
 {
-	subexp(F, E, 0);
+	BuffReader br;
+	PParseData ppdata;
+
+	cr_br_init(vm, &br, (vm)->hooks.reader, userdata);
+	ppdata = { &br, name, gscope };
+	return pcall(vm, pparse, &ppdata, save_stack(vm, vm->sp));
 }

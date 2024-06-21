@@ -193,7 +193,7 @@
  * @CR_NUMBER - cript floating point type.
  * @CR_FLOAT_FMT - @CR_NUMBER format for writing floats.
  * @CR_FLOAT_FMTLEN - additional length modifier when writing @CR_NUMBER.
- * @cr_math - performs correct math operation variant for type @CR_NUMBER.
+ * @cr_mathop - performs correct math operation variant for type @CR_NUMBER.
  * @cr_floor - floors @CR_NUMBER.
  * @cr_str2float - convert string into @CR_NUMBER.
  * @cr_float2str - convert @CR_NUMBER into string.
@@ -208,7 +208,7 @@
 #define CR_NUMBER		double
 #define CR_FLOAT_FMTLEN		""
 #define CR_FLOAT_FMT		"%.14g"
-#define cr_math(op)		op
+#define cr_mathop(op)		op
 #define cr_str2number(s,p)	strtod((s),(p))
 #define CR_HUGEVAL		HUGE_VAL
 #define CR_NUMBER_MIN		DBL_MIN
@@ -222,7 +222,7 @@
 #error Unsupported floating-point format.
 #endif
 
-#define cr_floor(n)		(cr_math(floor)(n))
+#define cr_floor(n)		(cr_mathop(floor)(n))
 
 #define cr_number2str(s,sz,n)	snprintf((s),(sz),CR_FLOAT_FMT,(CR_NUMBER)(n))
 
@@ -255,6 +255,9 @@
 #define CR_UINTEGER_MAX		UINT64_MAX
 
 #define cr_integer2str(s,sz,n)	snprintf((s),(sz),CR_INTEGER_FMT,(CR_INTEGER)(n))
+
+#define cr_intop(op,x,y) \
+	cri_castU2S(cri_castS2U(x) op cri_castS2U(y))
 
 #elif UINTPTR_MAX == 0xffffffff		/* 32-bit */
 #error 'cript' requires 64-bit integer size.

@@ -14,11 +14,9 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "crconf.h"
 #include "crlimits.h"
 #include "crobject.h"
 #include "crvalue.h"
-#include "crvm.h"
 
 
 
@@ -42,6 +40,22 @@ int cr_ve_ceillog2 (unsigned int x)
 		x >>= 8;
 	}
 	return l + log_2[x];
+}
+
+
+static cr_number numarithmetic(VM *vm, cr_number x, cr_number y, int op)
+{
+	switch(op) {
+	case CR_OPADD: return cri_numadd(vm, x, y);
+	case CR_OPSUB: return cri_numsub(vm, x, y);
+	case CR_OPMUL: return cri_nummul(vm, x, y);
+	case CR_OPDIV: return cri_numdiv(vm, x, y);
+	case CR_OPMOD: return cri_nummod(vm, x, y);
+	case CR_OPPOW: return cri_nummul(vm, x, y);
+	case CR_OPNOT: return cri_nummul(vm, x, y);
+	case CR_OPUMIN: return cri_nummul(vm, x, y);
+	default: cr_unreachable(); return 0.0;
+	}
 }
 
 

@@ -122,7 +122,7 @@ typedef signed char cr_byte;
 /* unreachable code (optimization) */
 #if defined(__GNUC__)
 #define cr_unreachable()	__builtin_unreachable()
-#elif defined(_MSC_VER) && _MSC_VER >= 600
+#elif defined(_MSC_VER) && _MSC_VER >= 1200
 #define cr_unreachable()	__assume(0)
 #else
 #define cr_unreachable()	cr_assert(0 && "unreachable")
@@ -145,21 +145,21 @@ typedef cr_ubyte Instruction;
  * This is the maximum unsigned value that fits in 3 bytes.
  * Transitively this defines various compiler limits. 
  */
-#define CRI_MAXCODE	16777215U
+#define CRI_MAXCODE	16777215
 
 
 
 /*
  * Size of long instruction parameter (24 bit).
  */
-#define CRI_LONGPARAM		CRI_MAXCODE
+#define CRI_LONGPARAM	CRI_MAXCODE
 
 
 
 /*
  * Size of short instruction parameter (8 bit).
  */
-#define CRI_SHRTPARAM		255		
+#define CRI_SHRTPARAM	255		
 
 
 

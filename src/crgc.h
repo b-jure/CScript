@@ -20,27 +20,51 @@
 #include "crobject.h"
 
 
+/* GCObject 'marked' bits */
+#define BLACK		0 /* marks object black (temporary barrier) */
+#define BARRIER		1 /* collector barrier (permanent) */
 
-/* set/remove long mark (mark that can't be removed) */
-#define lmarkgco(o)		((o)->mark |= 0x02)
-#define lunmarkgco(o)		((o)->mark &= 0xfd)
 
-/* set/remove short mark (GC removes this mark) */
-#define markgco(o)		((o)->mark |= 0x01)
-#define unmarkgco(o)		((o)->mark &= 0xfe)
+/* bit mask of mark bits */
+#define MARKMASK	bit2mask(BLACK, BARRIER)
+
+
+/* blackens object */
+#define gcblack(o)	setbit(rawomark(o), BLACK)
+
+/* sets gc barrier */
+#define gcbarrier(o)	setbit(rawomark(o), BARRIER)
+
+/* clears BLACK bit */
+#define gcwhite(o)	clearbit(rawomark(o), BLACK)
+
+/* clears BARRIER bit */
+#define gcnobarrier(o)		clearbit(rawomark(o), BARRIER)
+
 
 
 /* 'stopped' bits */
-#define GCstopped	0
-#define GCuserstopped	1
+#define GCSTOPPED	0
+#define GCUSRSTOPPED	1
 
 /* garbage collector is not 'stopped' */
 #define gcrunning(gc)	((gc)->stopped == 0)
 
 
+
+/*
+ * Performs a single step of collection when collector
+ * dept becomes positive.
+ */
+#define gccheck(vm) \
+	{ if ((vm)->gc.dept > 0) cr_gc_step(vm); }
+
+
+
 /* default GC parameters */
 #define CRI_GCSTEPMUL		100	/* 'stepmul' */
 #define CRI_GCSTEPSIZE		14	/* 'stepsize' */
+
 
 
 /* Configurable GC parameters. */

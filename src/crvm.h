@@ -128,6 +128,7 @@ Vec(CallFrameVec, CallFrame);
 struct VM {
 	int seed; /* initial seed for hashing */
 	int status; /* status code */
+	unsigned int nccalls; /* number of nested C calls */
 	SIndex stacktop; /* first free slot in the stack */
 	SIndex stackend; /* end of stack */
 	SIndex stack; /* stack base */
@@ -156,6 +157,8 @@ void cr_vm_inctop(VM *vm);
 int cr_vm_growstack(VM *vm, int n, int raiseerr);
 int cr_vm_reallocstack(VM *vm, int size, int raiseerr);
 void cr_vm_ncall(VM *vm, SPtr callee, int nreturns);
+cr_number cr_vm_modnum(VM *vm, cr_number x, cr_number y);
+void cr_vm_incccalls(VM *vm);
 
 void resetvm(VM *vm, int status);
 void cr_vm_concat(VM *vm, int n);

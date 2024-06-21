@@ -27,12 +27,12 @@ unsigned int cr_hh_number(cr_number n)
 	cr_integer ni;
 	int exp;
 	
-	n = cr_math(frexp(n, &exp)) * -cast_num(INT_MIN);
+	n = cr_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
 	if (cr_likely(cr_number2integer(n,&ni))) {
 		ui = cast_uint(exp) + cast_uint(ni);
 		return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
 	}
-	cr_assert(cr_numisnan(n) || cr_math(fabs)(n) == cast_num(HUGE_VAL));
+	cr_assert(cr_numisnan(n) || cr_mathop(fabs)(n) == cast_num(HUGE_VAL));
 	return 0;
 }
 

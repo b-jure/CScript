@@ -24,44 +24,44 @@
 
 
 
+
+/* variable kind (stored in 'mod') */
+#define VARREGULAR	0 /* regular variable */
+#define VARCONST	1 /* 'const' variable */
+#define VARCLOSE	2 /* variable to be closed */
+#define VARUNINIT	3 /* uninitialized */
+
 /* automatic (local) variable */
-typedef struct {
-	OString *name; /* variable name */
-	int depth; /* definition scope (-1 if uninitialized) */
-	cr_ubyte flags; /* variable flags */
-} LocalVar;
+typedef union LVarInfo {
+	struct {
+		TValueFields;
+		int idx; /* index into Function 'lvars' */
+		OString *name;
+	} s;
+	TValue val; /* constant value */
+} LVarInfo;
 
 
 
-/*
- * ----------------------
- * Control flow structure
- * ----------------------
- */
-
+/* ParserState vecs */
+Vec(LVarInfoVec, LVarInfo);
 Vec(intVecVec, intVec);
 
-typedef struct {
-	intVecVec breaks; /* break statement offsets */
-	int32_t innerlstart; /* innermost loop start offset */
-	int32_t innerldepth; /* innermost loop scope depth */
-	int32_t innersdepth; /* innermost switch scope depth */
-} ControlFlow;
-
-
-
-/*
- * UpValue is a local variable that is defined inside of the enclosing function.
- * Contains stack index of that variable inside of the function that encloses,
- * or the index of that upvalue in the enclosing function if the variable to be
- * captured is located outside of the enclosing function (either global scope or
- * another function).
+/* 
+ * Dynamic data used by parser.
+ * It is stored inside 'Lexer' because there is
+ * only one lexer for all 'FunctionState's.
+ * This makes bookkeeping easier when creating
+ * new function states.
  */
-typedef struct {
-	int idx; /* stack index */
-	cr_ubyte flags; /* variable flags */
-	cr_ubyte local; /* captured in enclosing function */
-} Upvalue;
+typedef struct ParserState {
+	struct ClassState *cs; /* chain */
+	LVarInfoVec locals; /* local variables stack */
+	intVecVec breaks; /* break statement offsets */
+	int innerlstart; /* innermost loop start offset */
+	int innerldepth; /* innermost loop scope depth */
+	int innersdepth; /* innermost switch scope depth */
+} ParserState;
 
 
 
@@ -70,54 +70,82 @@ typedef struct {
  * -------------------------------------------------------------------------- */
 
 /* check expression type */
-#define etisconst(exptype)	((exptype) >= EXP_FALSE && (exptype) <= EXP_NUMBER)
-#define etisfalse(exptype)   	((exptype) >= EXP_FALSE && (exptype) <= EXP_NIL)
-#define etistrue(exptype)    	((exptype) >= EXP_TRUE && (exptype) <= EXP_NUMBER)
-#define etisvar(exptype)     	((exptype) >= EXP_UPVAL && (exptype) <= EXP_INDEXED)
-#define etiscall(exptype)    	((exptype) >= EXP_CALL || (exptype) <= EXP_INVOKE)
-#define ethasmulret(exptype) 	((exptype) >= EXP_CALL && (exptype) <= EXP_VARARG)
-#define etisliteral(exptype) 	((exptype) >= EXP_FALSE && (exptype) <= EXP_TRUE)
+#define eisvar(e)		((e)->et >= EXP_UVAL && (e)->et <= EXP_INDEXED)
+#define eisliteral(e)		((e)->et >= EXP_NIL && (e)->et <= EXP_FLT)
+#define eiscall(e)		((e)->et >= EXP_CALL && (e)->et <= EXP_INVOKE)
+#define eismulret(e)		(eiscall(e) && (e)->et <= EXP_VARARG)
+
 
 /* expression types */
-typedef enum ExpType {
-	EXP_VOID = 0,  /* no expression */
-	EXP_NIL, /* 'nil' literal */
-	EXP_FALSE, /* 'false' literal */
-	EXP_TRUE, /* 'true' literal */
-	EXP_STRING,
+typedef enum expt {
+	 /* no expression; */
+	EXP_VOID,
+	 /* 'nil' constant; */
+	EXP_NIL,
+	 /* 'false' constant; */
+	EXP_FALSE,
+	 /* 'true' constant; */
+	EXP_TRUE,
+	/* string constant;
+	 * 'str' = string value; */
+	EXP_STRING, 	
+	/* integer constant;
+	 * 'i' = integer value; */
 	EXP_INT,
+	/* floating constant;
+	 * 'n' = floating value; */
 	EXP_FLT,
-	EXP_UVAL,
-	EXP_LOCAL,
-	EXP_GLOBAL,
+	/* upvalue variable;
+	 * 'info' = index of upvalue in 'upvalues' */
+	EXP_UVAL, 
+	/* local variable;
+	 * 'idx' = relative index of variable in 'locals'; */
+	EXP_LOCAL, 
+	/* global variable; 
+	 * 'idx' = index in 'gvars' (VM) */
+	EXP_GLOBAL, 
+	/* constant indexed variable ('[kk]');
+	 * 'idx' = index in 'constants'; */
+	EXP_INDEXK,
+	/* indexed variable ('.k');
+	 * 'idx' = index of constant string in 'constants'; */
+	EXP_INDEXRAW,
+	/* raw indexed 'super' variable ('super.k');
+	 * 'idx' = index of constant string in 'constants'; */
+	EXP_INDEXRAWSUP,
+	/* indexed 'super' variable ('super[k]');
+	 * 'idx' = index of constant string in 'constants'; */
+	EXP_INDEXSUP,
+	/* indexed variable ('[k=expr]'); */
 	EXP_INDEXED,
-	EXP_CALL,
-	EXP_INVOKE,
-	EXP_VARARG,
-	EXP_EXPR,
+	/* function call; 
+	 * 'info' = pc (in 'code'); */
+	EXP_CALL, 
+	/* vararg expression ('...'); 
+	 * 'info' = pc (in 'code'); */
+	EXP_VARARG, 
+	/* expression is a test/comparison; 
+	 * 'info' = pc (in 'code') */
 	EXP_JMP,
-} ExpType;
+	 /* finalized expression */
+	EXP_FINEXPR,
+} expt;
 
 
 /* expression information */
-typedef struct {
-	ExpType et;
+typedef struct ExpInfo {
+	expt et;
 	union {
-		cr_number n;
-		cr_integer i;
-		OString *str;
-		int info; /* expression value or index */
+		cr_number n; /* floating constant */
+		cr_integer i; /* integer constant  */
+		OString *str; /* string literal */
+		int info; /* pc or some other generic information */
+		int idx; /* index in 'locals' or 'constants' */
 	} u;
-	struct {
-		int code; /* instruction index */
-		cr_ubyte l; /* is this long instruction */
-		cr_ubyte set; /* setter (or getter) */
-		cr_ubyte binop; /* is this simple binary operator */
-	} ins; /* instruction details */
 	int t; /* jmp to patch if true */
 	int f; /* jmp to patch if false */
+	cr_ubyte set; /* true if this is 'OP_SET..' instruction */
 } ExpInfo;
-
 
 
 
@@ -125,36 +153,26 @@ typedef struct {
  * Function state
  * -------------------------------------------------------------------------- */
 
-#define FNFUNCTION	0
-#define FNMETHOD	1
-#define FNSCRIPT	2
-
-/* 'Vec's for 'FunctionState' */
-Vec(LocalVec, LocalVar);
-Vec(UpvalueVec, Upvalue);
+/* these are defined in 'crparser.c' */
+struct ClassState;
+struct Scope;
 
 /* currently parsed function state */
 typedef struct FunctionState {
 	Function *fn; /* currently parsed function */
-	struct FunctionState *enclosing; /* list */
 	struct Lexer *l;
-	struct Scope *s;
-	// struct ClassDecl *cldecl;
-	int lastline; /* last saved line in array ('fn') */
-	int nlineinfo; /* length of 'line' array ('fn') */
-	ControlFlow cflow;
-	UpvalueVec *upvalues; /* captured variables */
-	LocalVec locals; /* local variables stack */
-	cr_byte tag; /* tag for overload-able methods */
-	cr_ubyte vflags; /* variable flags */
-	cr_ubyte fntype;
+	struct Scope *s; /* scope information */
+	struct FunctionState *enclosing; /* chain */
+	struct ClassState *cs; /* chain */
+	int sp; /* first free stack index */
+	int nlocals; /* number of local variables in this function */
+	int firstlocal; /* index of first local in 'ParserState' */
+	cr_ubyte close; /* true if needs to close upvalues before returning */
+	cr_byte vtm; /* vtable method tag */
 } FunctionState;
 
 
-/* check if current function is overloadable method */
-#define isom(F) ((F)->tag != -1)
-
-
+int cr_pr_nstackvars(FunctionState *fs);
 void _cleanup_function(FunctionState* F);
 void F_free(FunctionState* F);
 void mark_function_roots(FunctionState *F);

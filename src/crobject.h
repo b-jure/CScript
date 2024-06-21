@@ -92,6 +92,7 @@ typedef struct OString {
 #define strvalue(v)	((OString*)ovalue(v))
 #define cstrvalue(v)	(strvalue(v)->bytes)
 
+
 /* set value to string */
 #define setv2s(vm,v,s)		setv2o(vm,v,s,OString)
 
@@ -127,7 +128,7 @@ typedef struct OString {
 
 /* 
  * ---------------------------------------------------------------------------
- * UValue 
+ * UValue  (upvalue)
  * ---------------------------------------------------------------------------
  */
 
@@ -137,8 +138,13 @@ typedef struct UValue {
 		TValue *location; /* stack or 'closed' */
 		ptrdiff_t offset; /* when reallocating stack */
 	} v;
-	struct UValue *nextuv; /* chain */
-	TValue closed; /* value T */
+	union {
+		struct { /* when open (parsing) */
+			struct UValue *nextuv;
+			struct UValue *prevuv;
+		} open;
+		TValue value; /* value stored here when closed */
+	} u;
 } UValue;
 
 
@@ -166,6 +172,30 @@ typedef struct UValue {
  * ---------------------------------------------------------------------------
  */
 
+
+/* upvalue variable debug information */
+typedef struct UVInfo {
+	OString *name;
+	int idx; /* index in stack or outer function local var list */
+	cr_ubyte onstack; /* is it on stack */
+	cr_ubyte mod; /* type of corresponding variable */
+} UVInfo;
+
+Vec(UVInfoVec, UVInfo);
+
+
+
+/* Local variable debug information */
+typedef struct LVar {
+	OString *name;
+	int alivepc; /* point where variable is in scope */
+	int deadpc; /* point where variable is out of scope */
+} LVar;
+
+Vec(LVarVec, LVar);
+
+
+
 /* line information and associated instruction */
 typedef struct LineInfo {
 	int pc;
@@ -183,15 +213,18 @@ typedef ubyteVec InstructionVec;
 /* Cript chunk */
 typedef struct Function {
 	ObjectHeader;
+	int maxstack; /* max stack size for this function */
 	OString *name; /* function name */
 	OString *source; /* source name */
-	TValueVec constants;
-	LineInfoVec lineinfo;
-	InstructionVec code;
+	TValueVec constants; /* constant values */
+	InstructionVec code; /* bytecode */
+	LineInfoVec lineinfo; /* line info for instructions */
+	LVarVec lvars; /* debug information for local variables */
+	UVInfoVec upvalues; /* debug information for upvalues */
 	int arity; /* number of arguments */
 	int defline; /* function definition line */
 	int deflastline; /* function definition end line */
-	cr_ubyte isvararg; /* set if contains '...' */
+	cr_ubyte isvararg; /* true if function takes vararg */
 } Function;
 
 

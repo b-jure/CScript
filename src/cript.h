@@ -19,8 +19,8 @@
  * Basically reimplementation of 'Lua' core API.
  * (check end of the file for copyright)
  */
-#ifndef CR_H
-#define CR_H
+#ifndef CRIPT_H
+#define CRIPT_H
 
 #include <stddef.h>
 #include <stdarg.h>

@@ -16,6 +16,7 @@
 
 #include "crconf.h"
 #include "crhashtable.h"
+#include "crlimits.h"
 #include "crmem.h"
 #include "crobject.h"
 #include "crvalue.h"
@@ -30,7 +31,8 @@
 
 
 /* allocate new gc object */
-#define newgco(vm,e,tt,t)	((t*)allocobject(vm, (e) + sizeof(t), tt))
+#define otnewgco(vm,e,tt,t)	((t*)otallocate(vm, (e) + sizeof(t), tt))
+
 
 const struct Tuple vtmethodinfo[CR_MNUM] = {
 	{ 0, 1 }, /* __init__		{ args: self             - return: instance }  */
@@ -88,7 +90,7 @@ int cr_ot_strtomt(VM *vm, OString *id)
 
 
 /* Create new unmarked 'GCObject' (object) and append it to GC list. */
-cr_sinline GCObject *allocobject(VM *vm, size_t size, cr_ubyte ott)
+static GCObject *otallocate(VM *vm, size_t size, cr_ubyte ott)
 {
 	GCObject *o;
 
@@ -109,7 +111,7 @@ cr_sinline OString *allocstring(VM *vm, uint32_t len)
 {
 	OString *s;
 
-	s = newgco(vm, len + 1, CR_VSTRING, OString);
+	s = otnewgco(vm, len + 1, CR_VSTRING, OString);
 	s->len = len;
 	return s;
 }
@@ -137,7 +139,7 @@ OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
 	string->bytes[len] = '\0';
 	string->hash = hash;
 	string->extra = 0;
-	string->bits = SBhashash;
+	string->bits = STRhashash;
 	lmarkgco(string);
 	setv2s(vm, &key, string);
 	cr_ht_set(vm, wtab, &key, &vm->nil);
@@ -187,7 +189,7 @@ int cr_ot_hexvalue(int c)
  * This function can convert hexadecimal, octal
  * and decimal strings to 'cr_integer'.
  */
-static const char *str2int(const char *s, cr_integer *i, int *overflow)
+static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
 {
 	cr_uinteger u;
 	int novalue;
@@ -243,7 +245,7 @@ static const char *str2int(const char *s, cr_integer *i, int *overflow)
 }
 
 
-static const char *str2flt(const char *s, cr_number *n, int *of)
+static const char *otstr2flt(const char *s, cr_number *n, int *of)
 {
 	char *eptr;
 
@@ -271,9 +273,9 @@ size_t cr_ot_strtonum(const char *s, TValue *o, int *of)
 	int iof;
 
 	if (of) *of = iof = 0;
-	if ((e = str2int(s, &i, &iof)) != NULL) {
+	if ((e = otstr2int(s, &i, &iof)) != NULL) {
 		setivalue(o, i);
-	} else if ((e = str2flt(s, &n, of)) != NULL) {
+	} else if ((e = otstr2flt(s, &n, of)) != NULL) {
 		setfvalue(o, n);
 	} else { /* both conversions failed */
 		if (of && !*of) *of = iof;
@@ -292,7 +294,7 @@ size_t cr_ot_strtonum(const char *s, TValue *o, int *of)
  */
 #define MAXNUM2STR	44
 
-static int num2buff(const TValue *nv, char *buff)
+static int otnum2buff(const TValue *nv, char *buff)
 {
 	int len;
 
@@ -316,7 +318,7 @@ void cr_ot_numtostring(VM *vm, TValue *v)
 	char buff[MAXNUM2STR];
 	int len;
 
-	len = num2buff(v, buff);
+	len = otnum2buff(v, buff);
 	setv2s(vm, v, cr_ot_newstring(vm, buff, len));
 }
 
@@ -350,7 +352,7 @@ typedef struct BuffVSF {
  * Pushes 'str' to the stack and concatenates it with
  * other string on the stack if 'pushed' is set.
  */
-static void auxpushstr(BuffVFS *buff, const char *str, size_t len)
+static void pushstr(BuffVFS *buff, const char *str, size_t len)
 {
 	VM *vm;
 	OString *s;
@@ -369,7 +371,7 @@ static void auxpushstr(BuffVFS *buff, const char *str, size_t len)
 /* pushes buffer 'space' on the stack */
 static void pushbuff(BuffVFS *buff)
 {
-	auxpushstr(buff, buff->space, buff->len);
+	pushstr(buff, buff->space, buff->len);
 	buff->len = 0;
 }
 
@@ -395,20 +397,20 @@ static void buffaddstring(BuffVFS *buff, const char *str, size_t len)
 		buff->len += cast_int(len);
 	} else {
 		pushbuff(buff);
-		auxpushstr(buff, str, len);
+		pushstr(buff, str, len);
 	}
 }
 
 
 /* add number to buffer */
-cr_sinline void buffaddnum(BuffVFS *buff, const TValue *nv)
+static void buffaddnum(BuffVFS *buff, const TValue *nv)
 {
-	buff->len += num2buff(nv, getbuff(buff, MAXNUM2STR));
+	buff->len += otnum2buff(nv, getbuff(buff, MAXNUM2STR));
 }
 
 
 /* add pointer to buffer */
-cr_sinline void buffaddptr(BuffVFS *buff, const void *p)
+static void buffaddptr(BuffVFS *buff, const void *p)
 {
 	const int psize = 3 * sizeof(void*) + 8;
 	buff->len += cr_pointer2str(getbuff(buff, psize), psize, p);
@@ -488,7 +490,7 @@ CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues)
 	CClosure *ccl;
 	int i;
 
-	ccl = newgco(vm, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
+	ccl = otnewgco(vm, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
 	ccl->nupvalues = nupvalues;
 	ccl->fn = fn;
 	for (i = 0; i < nupvalues; i++)
@@ -501,10 +503,11 @@ Function *cr_ot_newfunction(VM *vm)
 {
 	Function *fn;
 
-	fn = newgco(vm, 0, CR_VFUNCTION, Function);
+	fn = otnewgco(vm, 0, CR_VFUNCTION, Function);
 	cr_mm_createvec(vm, &fn->constants, CRI_MAXCODE, "constants");
-	cr_mm_createvec(vm, &fn->lineinfo, INT_MAX, "lines");
 	cr_mm_createvec(vm, &fn->code, INT_MAX, "code");
+	cr_mm_createvec(vm, &fn->lineinfo, INT_MAX, "lines");
+	cr_mm_createvec(vm, &fn->lvars, CRI_MAXCODE, "local variables");
 	return fn;
 }
 
@@ -514,7 +517,7 @@ CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn, int nupvalues)
 	CriptClosure *crcl;
 	int i;
 
-	crcl = newgco(vm, sizeof(UValue*) * nupvalues, CR_VCRCL, CriptClosure);
+	crcl = otnewgco(vm, sizeof(UValue*) * nupvalues, CR_VCRCL, CriptClosure);
 	crcl->nupvalues = nupvalues;
 	crcl->fn = fn;
 	memset(crcl->upvalue, 0, nupvalues * sizeof(UValue*));
@@ -526,7 +529,7 @@ UValue *cr_ot_newuvalue(VM *vm, TValue *vp)
 {
 	UValue *uv;
 
-	uv = newgco(vm, 0, CR_VUVALUE, UValue);
+	uv = otnewgco(vm, 0, CR_VUVALUE, UValue);
 	uv->closed = newemptyvalue();
 	uv->v.location = vp;
 	uv->nextuv = NULL;
@@ -538,7 +541,7 @@ OClass *cr_ot_newclass(VM *vm, OString *id)
 {
 	OClass *cls;
 
-	cls = newgco(vm, 0, CR_VCLASS, OClass);
+	cls = otnewgco(vm, 0, CR_VCLASS, OClass);
 	cls->name = id;
 	cr_ht_init(&cls->mtab);
 	memset(cls->vtable, 0, sizeof(cls->vtable) / sizeof(cls->vtable[0]));
@@ -550,7 +553,7 @@ Instance *cr_ot_newinstance(VM *vm, OClass *cls)
 {
 	Instance *ins;
 
-	ins = newgco(vm, 0, CR_VINSTANCE, Instance);
+	ins = otnewgco(vm, 0, CR_VINSTANCE, Instance);
 	ins->oclass = cls;
 	cr_ht_init(&ins->fields);
 	return ins;
@@ -561,7 +564,7 @@ InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure
 {
 	InstanceMethod *im;
 
-	im = newgco(vm, 0, CR_VMETHOD, InstanceMethod);
+	im = otnewgco(vm, 0, CR_VMETHOD, InstanceMethod);
 	im->receiver = receiver;
 	im->method = cast(GCObject*, method);
 	return im;
@@ -579,6 +582,7 @@ InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure
  */
 void cr_ot_free(VM *vm, GCObject *o)
 {
+	Function *fn; OClass *cls; Instance *ins;
 #ifdef DEBUG_LOG_GC
 	printf("%p freed\n", (void *)o);
 #endif
@@ -587,21 +591,30 @@ void cr_ot_free(VM *vm, GCObject *o)
 			cr_mm_free(vm, o, sizes((OString*)o));
 			break;
 		case CR_VFUNCTION:
+			fn = cast(Function*, o);
+			cr_mm_freevec(vm, &fn->constants);
+			cr_mm_freevec(vm, &fn->code);
+			cr_mm_freevec(vm, &fn->lineinfo);
+			cr_mm_freevec(vm, &fn->lvars);
 			cr_mm_free(vm, o, sizefn());
 			break;
 		case CR_VUVALUE:
 			cr_mm_free(vm, o, sizeuv());
 			break;
 		case CR_VCRCL:
-			cr_mm_free(vm, o, sizecrcl((CriptClosure*)o));
+			cr_mm_free(vm, o, sizecrcl(cast(CriptClosure*, o)));
 			break;
 		case CR_VCCL:
-			cr_mm_free(vm, o, sizeccl((CClosure*)o));
+			cr_mm_free(vm, o, sizeccl(cast(CClosure*, o)));
 			break;
 		case CR_VCLASS:
+			cls = cast(OClass*, o);
+			cr_ht_free(vm, &cls->mtab);
 			cr_mm_free(vm, o, sizecls());
 			break;
 		case CR_VINSTANCE:
+			ins = cast(Instance*, o);
+			cr_ht_free(vm, &ins->fields);
 			cr_mm_free(vm, o, sizeins());
 			break;
 		case CR_VMETHOD:

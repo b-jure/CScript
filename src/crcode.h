@@ -7,6 +7,72 @@
 
 
 
+/* get current pc */
+#define codeoffset(fs)		((fs)->fn->code.len)
+
+
+
+/* get constant of 'ExpInfo' */
+#define getconstant(fs,e)	(&(fs)->fn->constants.ptr[(e)->u.idx])
+
+
+
+/* get pointer to instruction of 'ExpInfo' */
+#define getinstruction(fs,e)	(&(fs)->fn->code.ptr[(e)->u.info])
+
+
+/* instruction and parameter sizes in bytes */
+#define INSTRSIZE	1
+#define SPARAMSIZE	INSTRSIZE
+#define LPARAMSIZE	3
+
+
+/* gets first parameter */
+#define GETPARAM(ip)		((ip) + INSTRSIZE)
+
+
+/* get/set short parameter */
+#define GETSPARAM(ip,o)		(GETPARAM(ip) + ((o)*SPARAMSIZE))
+#define GETSPARAMV(ip,o)	(*(GETSPARAM(ip,o)))
+#define SETSPARAM(ip,v)		setbytes(GETSPARAM(ip,0), v, SPARAMSIZE);
+
+
+/* get/set long parameter */
+#define GETLPARAM(ip,o)		(GETPARAM(ip) + ((o)*LPARAMSIZE))
+#define GETLPARAMV(ip,o)	get3bytes(GETLPARAM(ip, o))
+#define SETLPARAM(ip,v)		setbytes(GETLPARAM(ip,0), v, LPARAMSIZE)
+
+
+
+
+/* unary operators */
+typedef enum {
+	OPR_MINUS, OPR_BNOT, OPR_NOT,
+	OPR_NOUNOPR,
+} Unopr;
+
+
+/* binary operators */
+typedef enum {
+	/* arithmetic operators */
+	OPR_ADD, OPR_SUB, OPR_MUL,
+	OPR_DIV, OPR_MOD, OPR_POW,
+	/* bitwise operators */
+	OPR_SHR, OPR_SHL, OPR_BAND,
+	OPR_BOR, OPR_BXOR,
+	/* comparison operators */
+	OPR_NE, OPR_EQ, OPR_LT,
+	OPR_LE, OPR_GT, OPR_GE,
+	/* logical operators */
+	OPR_AND, OPR_OR,
+	OPR_NOBINOPR,
+} Binopr;
+
+
+/* binary operator 'op' is foldable */
+#define boprisfoldable(op) ((op) <= OPR_POW)
+
+
 /*
  * Instructions/operations (bytecode).
  * All instructions are size of 1 byte.
@@ -72,24 +138,20 @@ typedef enum {
 	OP_CALL0, /* call value with no arguments */
 	OP_CALL1, /* call value with a single argument */
 	OP_CALL, /* call value with 2 or more arguments */
-	OP_CALLPROP0, /* call property with no arguments */
-	OP_CALLPROP1, /* call property with a single argument */
-	OP_CALLPROP, /* call property with 2 or more arguments */
-	OP_CALLSUPER0, /* call superclass method with no arguments */
-	OP_CALLSUPER1, /* call superclass method with a single argument */
-	OP_CALLSUPER, /* call superclass method with 2 or more arguments */
 	/* upvalue instructions */
 	OP_GETUVAL, /* get upvalue */
 	OP_SETUVAL, /* set upvalue */
 	OP_CLOSEUVAL, /* close upvalue */
 	OP_CLOSEUVALN, /* close 'n' upvalues */
 	/* property access instructions */
-	OP_SETPROP, /* set property ('.') */
-	OP_GETPROP, /* get property ('.') */
-	OP_GETPROPIDX, /* get property ('[k]') */
-	OP_SETPROPIDX, /* set property ('[k]') */
-	OP_GETSUP, /* get super class method ('.') */
-	OP_GETSUPIDX, /* get super class method ('[k]') */
+	OP_SETPROPERTY, /* set property ('v.str') */
+	OP_GETPROPERTY, /* get property ('v.str') */
+	OP_GETINDEX, /* get index ('v[k]') */
+	OP_SETINDEX, /* set index ('v[k]') */
+	OP_GETINDEXK, /* get index ('v[kk]') */
+	OP_SETINDEXK, /* set index ('v[kk]') */
+	OP_GETSUP, /* get super class method ('super.k') */
+	OP_GETSUPIDX, /* get super class method ('super[k or str]') */
 	/* other specific instructions */
 	OP_SETVTABLE, /* set vtable method */
 	OP_INHERIT, /* inherit from class */
@@ -109,25 +171,15 @@ typedef enum {
 
 
 
-/* get instruction 'op' size */
-#define opsize(i,op,e) \
-	(((e)->ins.l = (i) > CR_SHRTCODE) ? (op##L) : (op))
-
-
-/* get constant */
-#define constant(f,e)		(&(f)->fn->constants[(e)->info])
-
-
-/* get code current */
-#define codeoffset(f)		((f)->fn->code.len)
-
-
-
 int cr_ce_code(FunctionState *fs, Instruction i);
-int cr_ce_codewparam(FunctionState *fs, Instruction i, int idx);
-void cr_ce_fltconstant(FunctionState *fs, cr_number n);
-void cr_ce_intconstant(FunctionState *fs, cr_integer i);
-void cr_ce_strconstant(FunctionState *fs, OString *str);
+int cr_ce_flt(FunctionState *fs, cr_number n);
+int cr_ce_int(FunctionState *fs, cr_integer i);
+int cr_ce_string(FunctionState *fs, OString *str);
+void cr_ce_reservestack(FunctionState *fs, int n);
+void cr_ce_checkstack(FunctionState *fs, int n);
+void cr_ce_setoneret(FunctionState *fs, ExpInfo *e);
+void cr_ce_dischargevar(FunctionState *fs, ExpInfo *e);
+void cr_ce_storevar(FunctionState *fs, ExpInfo *e);
 
 
 #endif
