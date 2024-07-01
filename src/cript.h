@@ -1,16 +1,16 @@
 /* ----------------------------------------------------------------------------------------------
  * Copyright (C) 2023-2024 Jure Bagić
  *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
+ * This file is part of Cript.
+ * Cript is free software: you can redistribute it and/or modify it under the terms of the GNU
  * General Public License as published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * Cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
  * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  * See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along with cript.
+ * You should have received a copy of the GNU General Public License along with Cript.
  * If not, see <https://www.gnu.org/licenses/>.
  * ---------------------------------------------------------------------------------------------- */
 
@@ -38,7 +38,7 @@
 #define CR_VERSION_NUMBER	100
 #define CR_VERSION_RELEASE_NUM	(CR_VERSION_NUMBER * 100);
 
-#define CR_VERSION	"cript " CR_VERSION_MAJOR "." CR_VERSION_MINOR
+#define CR_VERSION	"Cript " CR_VERSION_MAJOR "." CR_VERSION_MINOR
 #define CR_RELEASE   	CR_VERSION "." CR_VERSION_RELEASE
 #define CR_COPYRIGHT 	CR_RELEASE " Copyright (C) 2023-2024 Jure Bagić"
 #define CR_AUTHORS   	"Jure Bagić"
@@ -55,8 +55,8 @@
 
 
 
-/* Cript thread */
-typedef struct VM VM;
+/* Cript thread state */
+typedef struct TState TState;
 
 
 
@@ -72,8 +72,9 @@ typedef struct VM VM;
 #define CR_TINSTANCE	6 /* instance */
 #define CR_TUDATA	7 /* userdata */
 #define CR_TNIL		8 /* nil */
+#define CR_TTHREAD	9 /* thread */
 
-#define CR_NTYPES	9
+#define CR_NUMTYPES	10	
 
 
 
@@ -88,13 +89,13 @@ typedef CR_NUMBER cr_number;
 
 
 /* type for registered (with Cript) C function */
-typedef int (*cr_cfunc)(VM *vm);
+typedef int (*cr_cfunc)(TState *ts);
 
 /* type for memory allocators */
 typedef void *(*cr_alloc)(void *ptr, size_t newsize, void *userdata);
 
 /* type for functions that read blocks when loading Cript chunks */
-typedef const char *(*cr_reader)(VM *vm, void *userdata, size_t *szread);
+typedef const char *(*cr_reader)(TState *ts, void *userdata, size_t *szread);
 
 /* type for class interface */
 typedef struct cr_vtable cr_vtable;
@@ -104,54 +105,54 @@ typedef struct cr_debuginfo cr_debuginfo;
 
 
 
-/* 
- * state manipulation 
- */
-CR_API VM              *cr_create(cr_alloc allocator, void *ud);
-CR_API void		cr_destroy(VM *vm);
-CR_API cr_number	cr_version(VM *vm);
+/* -------------------------------------------------------------------------
+ * State manipulation
+ * ------------------------------------------------------------------------- */
+CR_API TState          *cr_newstate(cr_alloc allocator, void *ud);
+CR_API void		cr_closestate(TState *ts);
+CR_API cr_number	cr_version(TState *ts);
 
 
 
-/* 
- * stack manipulation 
- */
-CR_API void		cr_settop(VM *vm, int idx);
-CR_API int		cr_gettop(const VM *vm);
-CR_API int		cr_absidx(VM *vm, int idx);
-CR_API void		cr_rotate(VM *vm, int idx, int n);
-CR_API void		cr_copy(VM *vm, int src, int dest);
-CR_API int		cr_checkstack(VM *vm, int n);
-CR_API const char      *cr_tostring(VM *vm, int idx, size_t *len);
-CR_API void 		cr_push(VM *vm, int idx);
+/* -------------------------------------------------------------------------
+ * Stack manipulation
+ * ------------------------------------------------------------------------- */
+CR_API void		cr_settop(TState *ts, int idx);
+CR_API int		cr_gettop(const TState *ts);
+CR_API int		cr_absidx(TState *ts, int idx);
+CR_API void		cr_rotate(TState *ts, int idx, int n);
+CR_API void		cr_copy(TState *ts, int src, int dest);
+CR_API int		cr_checkstack(TState *ts, int n);
+CR_API const char      *cr_tostring(TState *ts, int idx, size_t *len);
+CR_API void 		cr_push(TState *ts, int idx);
 
 
 
-/* 
- * access functions, stack -> C
- */
-CR_API int 		cr_isnumber(VM *vm, int idx);
-CR_API int		cr_isinteger(VM *vm, int idx); // TODO
-CR_API int 		cr_isstring(VM *vm, int idx);
-CR_API int		cr_iscfunc(VM *vm, int idx);
-CR_API int		cr_isuserdata(VM *vm, int idx);
-CR_API int 		cr_type(VM *vm, int idx);// TODO
-CR_API const char      *cr_typename(VM *vm, int type);// TODO
+/* -------------------------------------------------------------------------
+ * Access functions (Stack -> C)
+ * ------------------------------------------------------------------------- */
+CR_API int 		cr_isnumber(TState *ts, int idx);
+CR_API int		cr_isinteger(TState *ts, int idx); // TODO
+CR_API int 		cr_isstring(TState *ts, int idx);
+CR_API int		cr_iscfunc(TState *ts, int idx);
+CR_API int		cr_isuserdata(TState *ts, int idx);
+CR_API int 		cr_type(TState *ts, int idx);// TODO
+CR_API const char      *cr_typename(TState *ts, int type);// TODO
 
-CR_API cr_number	cr_getnumber(VM *vm, int idx, int *isnum);
-CR_API cr_integer	cr_getinteger(VM *vm, int idx, int *isnum);// TODO
-CR_API int		cr_getbool(VM *vm, int idx);
-CR_API const char      *cr_getstring(VM *vm, int idx);
-CR_API cr_uinteger	cr_strlen(VM *vm, int idx);
-CR_API cr_cfunc		cr_getcfunction(VM *vm, int idx);
-CR_API void            *cr_getuserdata(VM *vm, int idx);// TODO
-CR_API const void      *cr_getpointer(VM *vm, int idx); // TODO
+CR_API cr_number	cr_getnumber(TState *ts, int idx, int *isnum);
+CR_API cr_integer	cr_getinteger(TState *ts, int idx, int *isnum);// TODO
+CR_API int		cr_getbool(TState *ts, int idx);
+CR_API const char      *cr_getstring(TState *ts, int idx);
+CR_API cr_uinteger	cr_strlen(TState *ts, int idx);
+CR_API cr_cfunc		cr_getcfunction(TState *ts, int idx);
+CR_API void            *cr_getuserdata(TState *ts, int idx);// TODO
+CR_API const void      *cr_getpointer(TState *ts, int idx); // TODO
 
 
 
-/* 
- * ordering and arithmetic functions 
- */
+/* -------------------------------------------------------------------------
+ * Ordering & Arithmetic functions
+ * ------------------------------------------------------------------------- */
 #define CR_OPADD	0
 #define CR_OPSUB	1
 #define CR_OPMUL	2
@@ -161,9 +162,10 @@ CR_API const void      *cr_getpointer(VM *vm, int idx); // TODO
 #define CR_OPNOT	6
 #define CR_OPUMIN	7
 
-#define CR_ARN		8
+#define CR_NUMARITH	8
 
-CR_API void	cr_arith(VM *vm, int op);
+CR_API void	cr_arith(TState *ts, int op);
+
 
 #define CR_OPEQ		0
 #define CR_OPNE		1
@@ -172,78 +174,77 @@ CR_API void	cr_arith(VM *vm, int op);
 #define CR_OPLE		4
 #define CR_OPGE		5
 
-#define CR_CMPN		6
+#define CR_NUMCMP	6
 
-CR_API int 	cr_rawequal(VM *vm, int idx1, int idx2);
-CR_API int	cr_compare(VM *vm, int idx1, int idx2, int op);
-
-
-
-/* 
- * push functions, C -> stack 
- */
-CR_API void		cr_pushnil(VM *vm);
-CR_API void 		cr_pushnumber(VM *vm, cr_number n); // TODO
-CR_API void 		cr_pushinteger(VM *vm, cr_integer n); // TODO
-CR_API void 		cr_pushstring(VM *vm, const char *str, size_t len);
-CR_API void 		cr_pushcstring(VM *vm, const char *str);
-CR_API const char      *cr_pushvfstring(VM *vm, const char *fmt, va_list argp);
-CR_API const char      *cr_pushfstring(VM *vm, const char *fmt, ...);
-CR_API void		cr_pushcclosure(VM *vm, cr_cfunc fn, int upvals); // TODO
-CR_API void		cr_pushbool(VM *vm, int b);
-CR_API void		cr_pushlightuserdata(VM *vm, void *p);
+CR_API int 	cr_rawequal(TState *ts, int idx1, int idx2);
+CR_API int	cr_compare(TState *ts, int idx1, int idx2, int op);
 
 
 
-/* 
- * get functions, Cript -> stack 
- */
-CR_API int cr_getglobal(VM *vm, const char *name);
-CR_API int cr_getfield(VM *vm, int idx, const char *field);
-CR_API int cr_getmethod(VM *vm, int idx, const char *method);
-CR_API int cr_getindex(VM *vm, int idx);
-CR_API int cr_rawget(VM *vm, int idx);
-CR_API int cr_rawgeti(VM *vm, int idx, cr_integer n);
-CR_API int cr_rawgetp(VM *vm, int idx, const void *p);
-
-CR_API int cr_createarray(VM *vm, int nelems); // TODO
-CR_API int cr_createuserdata(VM *vm, size_t sz, int nuvalues); // TODO
-CR_API int cr_getuservalue(VM *vm, int idx, int n);
-
+/* -------------------------------------------------------------------------
+ * Push functions (C -> stack)
+ * ------------------------------------------------------------------------- */
+CR_API void		cr_pushnil(TState *ts);
+CR_API void 		cr_pushnumber(TState *ts, cr_number n); // TODO
+CR_API void 		cr_pushinteger(TState *ts, cr_integer n); // TODO
+CR_API void 		cr_pushstring(TState *ts, const char *str, size_t len);
+CR_API void 		cr_pushcstring(TState *ts, const char *str);
+CR_API const char      *cr_pushvfstring(TState *ts, const char *fmt, va_list argp);
+CR_API const char      *cr_pushfstring(TState *ts, const char *fmt, ...);
+CR_API void		cr_pushcclosure(TState *ts, cr_cfunc fn, int upvals); // TODO
+CR_API void		cr_pushbool(TState *ts, int b);
+CR_API void		cr_pushlightuserdata(TState *ts, void *p);
 
 
-/* 
- * class interface 
- */
 
+/* -------------------------------------------------------------------------
+ * Get functions (Cript -> stack)
+ * ------------------------------------------------------------------------- */
+CR_API int cr_getglobal(TState *ts, const char *name);
+CR_API int cr_getfield(TState *ts, int idx, const char *field);
+CR_API int cr_getmethod(TState *ts, int idx, const char *method);
+CR_API int cr_getindex(TState *ts, int idx);
+CR_API int cr_rawget(TState *ts, int idx);
+CR_API int cr_rawgeti(TState *ts, int idx, cr_integer n);
+CR_API int cr_rawgetp(TState *ts, int idx, const void *p);
+
+CR_API int cr_createarray(TState *ts, int nelems); // TODO
+CR_API int cr_createuserdata(TState *ts, size_t sz, int nuvalues); // TODO
+CR_API int cr_getuservalue(TState *ts, int idx, int n);
+
+
+
+/* -------------------------------------------------------------------------
+ * Class interface (type system)
+ * ------------------------------------------------------------------------- */
 /* types of methods for 'cr_vtable' */
-#define CR_MTCFUNCTION		0
-#define CR_MTINDEX		1
+#define CR_MT_CFUNCTION		0
+#define CR_MT_INDEX		1
 
 /* 'cr_vtable' methods */
-#define CR_MINIT		0
-#define CR_MDISPLAY		1
-#define CR_MTOSTRING		2
-#define CR_MGETIDX		3
-#define CR_MSETIDX		4
-#define CR_MGC			5
-#define CR_MDEFER		6
-#define CR_MADD			7
-#define CR_MSUB			8
-#define CR_MMUL			9
-#define CR_MDIV			10
-#define CR_MMOD			11
-#define CR_MPOW			12
-#define CR_MNOT			13
-#define CR_MUMIN		14
-#define CR_MNE			15
-#define CR_MEQ			16
-#define CR_MLT			17
-#define CR_MLE			18
-#define CR_MGT			19
-#define CR_MGE			20
+#define CR_M_INIT		0
+#define CR_M_DISPLAY		1
+#define CR_M_TOSTRING		2
+#define CR_M_GETIDX		3
+#define CR_M_SETIDX		4
+#define CR_M_GC			5
+#define CR_M_DEFER		6
+#define CR_M_ADD		7
+#define CR_M_SUB		8
+#define CR_M_MUL		9
+#define CR_M_DIV		10
+#define CR_M_MOD		11
+#define CR_M_POW		12
+#define CR_M_NOT		13
+#define CR_M_UMIN		14
+#define CR_M_NE			15
+#define CR_M_EQ			16
+#define CR_M_LT			17
+#define CR_M_LE			18
+#define CR_M_GT			19
+#define CR_M_GE			20
 
-#define CR_MNUM			21
+#define CR_NUMM			21
 
 
 /* type for class interface */
@@ -254,8 +255,8 @@ struct cr_vtable {
 			int stkidx; /* value on stack */
 		} method;
 		int mtt; /* method type tag */
-	} methods[CR_MNUM];
-}; // TODO
+	} methods[CR_NUMM];
+};
 
 
 /* 
@@ -285,27 +286,27 @@ struct cr_vtable {
 	case CR_VTNONE: case default: break; }}
 
 
-CR_API void cr_createclass(VM *vm, cr_vtable *vt); // TODO
+CR_API void cr_createclass(TState *ts, cr_vtable *vt);
 
 
 
-/*
- * set functions stack -> Cript 
- */
-CR_API int	cr_setglobal(VM *vm, const char *name, int isconst);
-CR_API int 	cr_setfield(VM *vm, int idx, const char *field);
-CR_API int 	cr_setindex(VM *vm, int idx);
-CR_API int	cr_seti(VM *vm, int idx, cr_integer n); // TODO
-CR_API int	cr_rawset(VM *vm, int idx); // TODO
-CR_API int	cr_rawseti(VM *vm, int idx, cr_integer n); // TODO
-CR_API int	cr_rawsetp(VM *vm, int idx, void *p); // TODO
-CR_API int	cr_setuservalue(VM *vm, int idx, int n); // TODO
+/* -------------------------------------------------------------------------
+ * Set functions (stack -> Cript)
+ * ------------------------------------------------------------------------- */
+CR_API int	cr_setglobal(TState *ts, const char *name, int isconst);
+CR_API int 	cr_setfield(TState *ts, int idx, const char *field);
+CR_API int 	cr_setindex(TState *ts, int idx);
+CR_API int	cr_seti(TState *ts, int idx, cr_integer n); // TODO
+CR_API int	cr_rawset(TState *ts, int idx); // TODO
+CR_API int	cr_rawseti(TState *ts, int idx, cr_integer n); // TODO
+CR_API int	cr_rawsetp(TState *ts, int idx, void *p); // TODO
+CR_API int	cr_setuservalue(TState *ts, int idx, int n); // TODO
 
 
 
-/* 
- * error reporting 
- */
+/* -------------------------------------------------------------------------
+ * Error reporting
+ * ------------------------------------------------------------------------- */
 
 /* thread status codes */
 #define CR_OK			0  /* ok */
@@ -314,23 +315,23 @@ CR_API int	cr_setuservalue(VM *vm, int idx, int n); // TODO
 #define CR_ERRMEM		4  /* memory related error (oom) */
 #define CR_ERRERROR		5  /* error while handling error */
 
-CR_API int cr_getstatus(VM *vm);
-CR_API int cr_error(VM *vm);
+CR_API int cr_getstatus(TState *ts);
+CR_API int cr_error(TState *ts);
 
 
 
-/* 
- * call/load cript code 
- */
-CR_API int cr_pcall(VM *vm, int argc, int retcnt);
-CR_API void cr_call(VM *vm, int argc, int retcnt);
-CR_API int cr_load(VM *vm, cr_reader reader, void *userdata, const char *source);
+/* -------------------------------------------------------------------------
+ * Call/Load Cript code
+ * ------------------------------------------------------------------------- */
+CR_API int cr_pcall(TState *ts, int argc, int retcnt);
+CR_API void cr_call(TState *ts, int argc, int retcnt);
+CR_API int cr_load(TState *ts, cr_reader reader, void *userdata, const char *source);
 
 
 
-/* 
- * garbage-collection 
- */
+/* -------------------------------------------------------------------------
+ * Garbage collector
+ * ------------------------------------------------------------------------- */
 
 /* GC options */
 #define CR_GCSTOP		(1<<0) /* stop GC */
@@ -341,56 +342,51 @@ CR_API int cr_load(VM *vm, cr_reader reader, void *userdata, const char *source)
 #define CR_GCISRUNNING		(1<<5) /* check whether GC is stopped */
 #define CR_GCNEXTGC		(1<<6) /* set bytes amount when the next GC will trigger */
 
-CR_API int cr_gc(VM *vm, int optmask, ...);
+CR_API int cr_gc(TState *ts, int optmask, ...);
 
 
 
-/* 
- * miscellaneous functions/macros 
- */
-CR_API const char      *cr_stringify(VM *vm, int idx); // TODO ?
+/* -------------------------------------------------------------------------
+ * Miscellaneous functions/macros
+ * ------------------------------------------------------------------------- */
+CR_API const char      *cr_stringify(TState *ts, int idx); // TODO ?
+CR_API int		cr_getupvalue(TState *ts, int fidx, int idx);
+CR_API int		cr_setupvalue(TState *ts, int fidx, int idx);
+CR_API const char      *cr_concat(TState *ts);
+CR_API int		cr_nextproperty(TState *ts, int idx, int nextfield);
+CR_API cr_cfunc		cr_setpanic(TState *ts, cr_cfunc panicfn);
+CR_API cr_cfunc		cr_getpanic(TState *ts);
+CR_API cr_cfunc		cr_setalloc(TState *ts, cr_alloc allocfn, void *ud);
+CR_API cr_alloc		cr_getalloc(TState *ts, void **ud);
 
-CR_API int		cr_getupvalue(VM *vm, int fidx, int idx);
-CR_API int		cr_setupvalue(VM *vm, int fidx, int idx);
+#define cr_nextfield(ts,idx)		cr_nextproperty((ts),(idx),0)
+#define cr_nextmethod(ts,idx)		cr_nextproperty((ts),(idx),1)
 
-CR_API const char      *cr_concat(VM *vm);
+#define cr_pushcfunction(ts,fn)		cr_pushcclosure((ts),(fn),0)
 
-CR_API int		cr_nextproperty(VM *vm, int idx, int nextfield);
+#define cr_registerfunction(ts,fn,name) \
+	(cr_pushcfunction((ts),(fn)), cr_setglobal((ts),(name),1))
 
-CR_API cr_cfunc		cr_setpanic(VM *vm, cr_cfunc panicfn);
-CR_API cr_cfunc		cr_getpanic(VM *vm);
-CR_API cr_cfunc		cr_setalloc(VM *vm, cr_alloc allocfn, void *ud);
-CR_API cr_alloc		cr_getalloc(VM *vm, void **ud);
-
-#define cr_nextfield(vm,idx)		cr_nextproperty((vm),(idx),0)
-#define cr_nextmethod(vm,idx)		cr_nextproperty((vm),(idx),1)
-
-#define cr_pushcfunction(vm,fn)		cr_pushcclosure((vm),(fn),0)
-
-#define cr_registerfunction(vm,fn,name) \
-	(cr_pushcfunction((vm),(fn)), cr_setglobal((vm),(name),1))
-
-#define cr_pop(vm,n)		cr_settop((vm),-(n)-1)
-#define cr_replace(vm,idx)	(cr_copy((vm),-1,(idx)), cr_pop((vm),1))
-#define cr_remove(vm,idx)	(cr_rotate((vm),(idx),-1), cr_pop((vm),1))
-#define cr_insert(vm,idx)	cr_rotate((vm),(idx),1)
+#define cr_pop(ts,n)		cr_settop((ts),-(n)-1)
+#define cr_replace(ts,idx)	(cr_copy((ts),-1,(idx)), cr_pop((ts),1))
+#define cr_remove(ts,idx)	(cr_rotate((ts),(idx),-1), cr_pop((ts),1))
+#define cr_insert(ts,idx)	cr_rotate((ts),(idx),1)
 
 
 
-/* 
- * Debug API 
- */
+/* -------------------------------------------------------------------------
+ * Debug interface
+ * ------------------------------------------------------------------------- */
 
-CR_API int cr_getstack(VM *vm, int level, cr_debuginfo *di);
-
-/* bits for debug mask */
+/* bits for 'dbgmask' */
 #define CR_DBGFNGET 	 (1<<0) /* load the function on top of the stack (processed first) */
 #define CR_DBGLINE 	 (1<<1) /* fill 'line' */
 #define CR_DBGFNINFO 	 (1<<2) /* fill all function info in 'cr_debuginfo' */
 #define CR_DBGFNSRC 	 (1<<3) /* fill function source information */
 #define CR_DBGFNPUSH 	 (1<<4) /* push current function on the stack (processed last) */
 
-CR_API int cr_getinfo(VM *vm, int dbgmask, cr_debuginfo *di);
+CR_API int cr_getstack(TState *ts, int level, cr_debuginfo *di);
+CR_API int cr_getinfo(TState *ts, int dbgmask, cr_debuginfo *di);
 
 struct cr_debuginfo {
 	const char *name; /* function name (declaration name in cript script) */
@@ -405,15 +401,15 @@ struct cr_debuginfo {
 	int deflastline; /* line number where the function definition ends */
 	char shortsrc[CRI_MAXSRC];
 	/* private */
-	struct CallFrame *frame; /* active function frame */
+	struct CallFrame *cf; /* active function frame */
 };
 
 
 
-/* 
+/*************************************************************
  * Because Cript C API is almost identical to Lua,
- * we include the below copyright (thank you Lua developers). 
- */
+ * we include the below copyright (THANK YOU LUA DEVELOPERS). 
+ *************************************************************/
 
 /* ----------------------------------------------------------------------------------------------
  * Copyright (C) 1994-2024 Lua.org, PUC-Rio.

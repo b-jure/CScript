@@ -16,7 +16,7 @@
 
 #include "crlexer.h"
 #include "crdebug.h"
-#include "crgc.h"
+#include "crstate.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -83,40 +83,40 @@ typedef enum Dig {
 
 
 
-void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *source)
+void cr_lr_init(TState *ts, Lexer *lx, BuffReader *br, OString *source)
 {
 	int i;
 	OString *s;
 
-	lx->vm = vm;
+	lx->ts = ts;
 	lx->fs = NULL;
 	lx->br = br;
 	lx->src = source;
 	lx->c = brgetc(lx->br); /* prime reader */
 	lx->line = 1;
 	lx->lastline = 0;
-	cr_mm_createvec(vm, &lx->buff, CRMAXSIZE<<1, "token");
-	cr_mm_reallocvec(vm, &lx->buff, CRI_MINBUFFER);
+	cr_mm_createvec(ts, &lx->buff, CRMAXSIZE<<1, "token");
+	cr_mm_reallocvec(ts, &lx->buff, CRI_MINBUFFER);
 	/* intern all keywords */
 	for (i = 0; i < NUM_KEYWORDS; i++) {
-		s = cr_ot_newstring(vm, tkstr[i], strlen(tkstr[i]));
-		gcbarrier(s); /* intern it */
-		s->bits = (STRkeyword | STRinterned);
+		s = cr_ob_newstring(ts, tkstr[i], strlen(tkstr[i]));
+		s->bits = (STRKEYWORD | STRINTERNED);
 		s->extra = i;
+		cr_gc_fix(ts, objtogco(s));
 	}
 }
 
 
 void cr_lr_free(Lexer *lx)
 {
-	cr_mm_freevec(lx->vm, &lx->buff);
+	cr_mm_freevec(lx->ts, &lx->buff);
 }
 
 
 static void inclinenr(Lexer *lx)
 {
 	if (cr_unlikely(lx->line >= INT_MAX))
-		cr_dg_runerror(lx->vm, "too many lines in a chunk");
+		cr_dg_runerror(lx->ts, "too many lines in a chunk");
 	lx->line++;
 }
 
@@ -124,7 +124,7 @@ static void inclinenr(Lexer *lx)
 /* pushes character into token buffer */
 cr_sinline void savec(Lexer *lx, int c)
 {
-	cr_mm_growvec(lx->vm, &lx->buff);
+	cr_mm_growvec(lx->ts, &lx->buff);
 	lbptr(lx)[lblen(lx)++] = c;
 }
 
@@ -147,15 +147,15 @@ const char *cr_lr_tok2str(Lexer *lx, int t)
 	if (t >= FIRSTTK) {
 		str = tkstr[t - FIRSTTK];
 		if (t < TK_EOS) {
-			return cr_ot_pushfstring(lx->vm, "'%s'", str);
+			return cr_ob_pushfstring(lx->ts, "'%s'", str);
 		} else {
 			return str;
 		}
 	} else {
 		if (isprint(t))
-			return cr_ot_pushfstring(lx->vm, "'%c'", t);
+			return cr_ob_pushfstring(lx->ts, "'%c'", t);
 		else
-			return cr_ot_pushfstring(lx->vm, "'\\%d'", t);
+			return cr_ob_pushfstring(lx->ts, "'\\%d'", t);
 	}
 }
 
@@ -166,7 +166,7 @@ static const char *lxtok2str(Lexer *lx, int t)
 		case TK_FLT: case TK_INT:
 		case TK_STRING: case TK_IDENTIFIER:
 			savec(lx, '\0');
-			return cr_ot_pushfstring(lx->vm, "'%s'", lbptr(lx));
+			return cr_ob_pushfstring(lx->ts, "'%s'", lbptr(lx));
 		default:
 			return cr_lr_tok2str(lx, t);
 	}
@@ -175,13 +175,13 @@ static const char *lxtok2str(Lexer *lx, int t)
 
 static cr_noret lxerror(Lexer *lx, const char *err, int token)
 {
-	VM *vm;
+	TState *ts;
 
-	vm = lx->vm;
-	err = cr_dg_info(vm, err, lx->src, lx->line);
+	ts = lx->ts;
+	err = cr_dg_info(ts, err, lx->src, lx->line);
 	if (token)
-		cr_ot_pushfstring(vm, "%s near %s", err, lxtok2str(lx, token));
-	cr_dg_throw(vm, CR_ERRSYNTAX);
+		cr_ob_pushfstring(ts, "%s near %s", err, lxtok2str(lx, token));
+	cr_dg_throw(ts, CR_ERRSYNTAX);
 }
 
 
@@ -195,16 +195,16 @@ void cr_lr_syntaxerror(Lexer *lx, const char *err)
 /* create new string and fix it inside of lexer table */
 OString *cr_lr_newstring(Lexer *lx, const char *str, size_t len)
 {
-	TValue k;
-	TValue *o;
+	TValue *stks;
 	OString *s;
+	TState *ts;
 
-	s = cr_ot_newstring(lx->vm, str, len);
-	setv2s(lx->vm, &k, s);
-	if (!cr_ht_get(&lx->tab, &k, o)) {
-		gcbarrier(s);
-		cr_ht_set(lx->vm, &lx->tab, &k, &k);
-	}
+	ts = lx->ts;
+	s = cr_ob_newstring(ts, str, len);
+	stks = s2v(ts->stacktop.p++);
+	setv2s(ts, stks, s);
+	cr_ht_set(lx->ts, &lx->tab, stks, stks);
+	ts->stacktop.p--;
 	return s;
 }
 
@@ -253,7 +253,7 @@ static int hexdigit(Lexer *lx)
 
 	c = lx->c;
 	if (isxdigit(c))
-		return cr_ot_hexvalue(c);
+		return cr_ob_hexvalue(c);
 	return -1;
 }
 
@@ -329,7 +329,7 @@ static int lxstr2num(Lexer *lx, Literal *k)
 	int of;
 	TValue o;
 
-	if (cr_ot_strtonum(lbptr(lx), &o, &of) == 0)
+	if (cr_ob_strtonum(lbptr(lx), &o, &of) == 0)
 		lxerror(lx, "invalid number literal", TK_FLT);
 	else if (of > 0) 
 		lxerror(lx, "number literal overflows", TK_FLT);

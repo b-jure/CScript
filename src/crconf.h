@@ -84,10 +84,10 @@
 		CR_CRDIR"?.cri;"  CR_CRDIR"?/init.cri;" \
 		CR_CDIR"?.cri;"  CR_CDIR"?/init.cri;" \
 		"./?.cri;" "./?/init.cri"
-#endif // #if !defined(CR_DFL_PATH)
+#endif
 #if !defined(CR_DFL_CPATH)
 #define CR_DFL_CPATH	CR_CDIR"?.so;" CR_CDIR"loadall.so;" "./?.so"
-#endif // #if !defined(CR_DFL_CPATH)
+#endif
 
 #endif
 
@@ -311,14 +311,14 @@
 /* @CR_CHECKAPI - enables C API asserts. */
 #if defined(CR_CHECKAPI)
 #include <assert.h>
-#define cri_checkapi(vm, cond, msg)	assert((cond) && msg)
+#define cri_checkapi(ts, cond, msg)	assert((cond) && msg)
 #endif
 
 
 
 /* 
  * @CRI_MAXSTACK - maximum stack size. 
- * Any positive value that can fit into INT_MAX.
+ * Any positive value that can fit into INT_MAX/2.
  */
 #define CRI_MAXSTACK	5000000
 

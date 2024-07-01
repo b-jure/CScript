@@ -16,37 +16,57 @@
 
 #include "crgc.h"
 #include "crobject.h"
+#include "crstate.h"
 
 
-void omark(VM *vm, O *obj)
+
+void cr_gc_init(GC *gc)
+{
+	gc->sizegs = 0;
+	gc->ngs = 0;
+	gc->next = 0;
+	gc->allocated = 0;
+	gc->list = NULL;
+	gc->sweeppos = NULL;
+	gc->graystack = NULL;
+	gc->fixed = NULL;
+	gc->stepmul = GCSTEPMUL;
+	gc->stepsize = GCSTEPSIZE;
+	gc->stopem = 0;
+	gc->stopped = 0;
+	gc->state = 0;
+}
+
+
+void cr_gc_setdebt(GState *gs, cr_mem debt)
+{
+	GC *gc;
+
+	gc = &gs->gc;
+}
+
+
+
+
+void omark(TState *ts, O *obj)
 {
 	if (obj == NULL || oismarked(obj))
 		return;
 	osetmark(obj, 1);
 	if (otype(obj) == OBJ_STRING) {
-#ifdef DEBUG_LOG_GC
-		printf("%p blacken ", (void *)obj);
-		vprint(OBJ_VAL(obj));
-		printf("\n");
-#endif
 		return;
 	}
-#ifdef DEBUG_LOG_GC
-	printf("%p mark ", (void *)obj);
-	vprint(OBJ_VAL(obj));
-	printf("\n");
-#endif
-	GSARRAY_PUSH(vm, obj);
+	GSARRAY_PUSH(ts, obj);
 }
 
 
-static cr_inline void marktable(VM *vm, HTable *table)
+static cr_inline void marktable(TState *ts, HTable *table)
 {
 	for (uint32_t i = 0; i < table->size; i++) {
 		Node *entry = &table->mem[i];
 		if (!IS_EMPTY(entry->key)) {
-			vmark(vm, entry->key);
-			vmark(vm, entry->value);
+			tsark(ts, entry->key);
+			tsark(ts, entry->value);
 		}
 	}
 }
@@ -55,87 +75,87 @@ static cr_inline void marktable(VM *vm, HTable *table)
 
 
 // Generic function signature for Mark and Sweep functions
-#define MS_FN(name) static cr_inline void name(VM *vm)
+#define MS_FN(name) static cr_inline void name(TState *ts)
 
 MS_FN(markglobals)
 {
-	for (uint32_t i = 0; i < vm->globids.cap; i++) {
-		Node *entry = &vm->globids.entries[i];
+	for (uint32_t i = 0; i < ts->globids.cap; i++) {
+		Node *entry = &ts->globids.entries[i];
 		if (!IS_EMPTY(entry->key)) {
 			// Mark identifier (ObjString)
-			omark(vm, asobj(entry->key));
+			omark(ts, asobj(entry->key));
 			// Mark value
 			uint32_t idx = cast_uint(AS_NUMBER(entry->value));
-			vmark(vm, vm->globvars.data[idx].value);
+			tsark(ts, ts->globvars.data[idx].value);
 		}
 	}
 }
 
 MS_FN(markstack)
 {
-	for (Value *local = vm->stack; local < vm->sp; local++)
-		vmark(vm, *local);
+	for (Value *local = ts->stack; local < ts->sp; local++)
+		tsark(ts, *local);
 }
 
 MS_FN(markframes)
 {
-	for (int i = 0; i < vm->fc; i++)
-		omark(vm, cast(GCObject *, vm->frames[i].closure));
+	for (int i = 0; i < ts->fc; i++)
+		omark(ts, cast(GCObject *, ts->frames[i].closure));
 }
 
 MS_FN(markupvalues)
 {
-	for (OUpvalue *upval = vm->open_upvals; upval != NULL; upval = upval->next)
-		omark(vm, cast(GCObject *, upval));
+	for (OUpvalue *upval = ts->open_upvals; upval != NULL; upval = upval->next)
+		omark(ts, cast(GCObject *, upval));
 }
 
 MS_FN(markstatics)
 {
 	for (uint32_t i = 0; i < SS_N; i++)
-		omark(vm, cast(GCObject *, vm->faststatic[i]));
+		omark(ts, cast(GCObject *, ts->faststatic[i]));
 }
 
 MS_FN(markinterned)
 {
-	for (uint32_t i = 0; i < vm->interned.len; i++)
-		omark(vm, cast(GCObject *, vm->interned.data[i]));
+	for (uint32_t i = 0; i < ts->interned.len; i++)
+		omark(ts, cast(GCObject *, ts->interned.data[i]));
 }
 
 MS_FN(markloaded)
 {
-	marktable(vm, &vm->loaded);
+	marktable(ts, &ts->loaded);
 }
 
 MS_FN(marktemp)
 {
-	for (uint32_t i = 0; i < vm->temp.len; i++)
-		vmark(vm, vm->temp.data[i]);
+	for (uint32_t i = 0; i < ts->temp.len; i++)
+		tsark(ts, ts->temp.data[i]);
 }
 
 MS_FN(markroots)
 {
-	markstack(vm); // VM stack
-	markframes(vm); // VM call stack
-	markupvalues(vm); // VM open upvalues (to be closed)
-	markglobals(vm); // global values and identifiers
-	markstatics(vm); // fast statics (interned strings)
-	markinterned(vm); // normal statics (interned strings)
-	markloaded(vm); // mark loaded script names table
+	markstack(ts); // TState stack
+	markframes(ts); // TState call stack
+	markupvalues(ts); // TState open upvalues (to be closed)
+	markglobals(ts); // global values and identifiers
+	markstatics(ts); // fast statics (interned strings)
+	markinterned(ts); // normal statics (interned strings)
+	markloaded(ts); // mark loaded script names table
 }
 
 MS_FN(rmweakrefs)
 {
-	for (uint32_t i = 0; i < vm->weakrefs.cap; i++) {
-		Node *entry = &vm->weakrefs.entries[i];
+	for (uint32_t i = 0; i < ts->weakrefs.cap; i++) {
+		Node *entry = &ts->weakrefs.entries[i];
 		if (IS_OBJ(entry->key) && !oismarked(asobj(entry->key)))
-			HTable_remove(vm, &vm->weakrefs, entry->key, 0);
+			HTable_remove(ts, &ts->weakrefs, entry->key, 0);
 	}
 }
 
 MS_FN(sweep)
 {
 	GCObject *previous = NULL;
-	GCObject *current = vm->objects;
+	GCObject *current = ts->objects;
 	while (current != NULL) {
 		if (oismarked(current)) {
 			osetmark(current, 0);
@@ -147,8 +167,8 @@ MS_FN(sweep)
 			if (previous != NULL)
 				osetnext(previous, current);
 			else
-				vm->objects = current;
-			ofree(vm, unreached);
+				ts->objects = current;
+			ofree(ts, unreached);
 		}
 	}
 }
@@ -156,7 +176,7 @@ MS_FN(sweep)
 
 
 
-void mark_black(VM *vm, GCObject *obj)
+void mark_black(TState *ts, GCObject *obj)
 {
 #ifdef DEBUG_LOG_GC
 	printf("%p blacken ", (void *)obj);
@@ -177,56 +197,56 @@ void mark_black(VM *vm, GCObject *obj)
 	{
 		CASE(OBJ_UVAL)
 		{
-			vmark(vm, cast(OUpvalue *, obj)->closed);
+			tsark(ts, cast(OUpvalue *, obj)->closed);
 			BREAK;
 		}
 		CASE(OBJ_FUNCTION)
 		{
 			Function *fn = cast(Function *, obj);
-			omark(vm, cast(GCObject *, fn->p.name));
-			omark(vm, cast(GCObject *, fn->p.source));
+			omark(ts, cast(GCObject *, fn->p.name));
+			omark(ts, cast(GCObject *, fn->p.source));
 			for (uint32_t i = 0; i < fn->chunk.constants.len; i++)
-				vmark(vm, fn->chunk.constants.data[i]);
+				tsark(ts, fn->chunk.constants.data[i]);
 			BREAK;
 		}
 		CASE(OBJ_CLOSURE)
 		{
 			CriptClosure *closure = (CriptClosure *)obj;
-			omark(vm, (GCObject *)closure->fn);
+			omark(ts, (GCObject *)closure->fn);
 			for (uint32_t i = 0; i < closure->fn->p.upvalc; i++)
-				omark(vm, cast(GCObject *, closure->upvalue[i]));
+				omark(ts, cast(GCObject *, closure->upvalue[i]));
 			BREAK;
 		}
 		CASE(OBJ_CLASS)
 		{
 			OClass *oclass = cast(OClass *, obj);
-			omark(vm, cast(GCObject *, oclass->name));
-			marktable(vm, &oclass->mtab);
+			omark(ts, cast(GCObject *, oclass->name));
+			marktable(ts, &oclass->mtab);
 			for (cr_ubyte i = 0; i < OM_CNT; i++)
-				omark(vm, cast(GCObject *, oclass->omethods[i]));
+				omark(ts, cast(GCObject *, oclass->omethods[i]));
 			BREAK;
 		}
 		CASE(OBJ_INSTANCE)
 		{
 			Instance *instance = cast(Instance *, obj);
-			omark(vm, cast(GCObject *, instance->oclass));
-			marktable(vm, &instance->fields);
+			omark(ts, cast(GCObject *, instance->oclass));
+			marktable(ts, &instance->fields);
 			BREAK;
 		}
 		CASE(OBJ_BOUND_METHOD)
 		{
 			InstanceMethod *bound_method = cast(InstanceMethod *, obj);
-			omark(vm, cast(GCObject *, bound_method));
-			vmark(vm, bound_method->receiver);
-			omark(vm, cast(GCObject *, bound_method->method));
+			omark(ts, cast(GCObject *, bound_method));
+			tsark(ts, bound_method->receiver);
+			omark(ts, cast(GCObject *, bound_method->method));
 			BREAK;
 		}
 		CASE(OBJ_CFUNCTION)
 		{
 			CClosure *native = cast(CClosure *, obj);
-			omark(vm, cast(GCObject *, native->p.name));
+			omark(ts, cast(GCObject *, native->p.name));
 			for (uint32_t i = 0; i < native->p.upvalc; i++)
-				vmark(vm, native->upvalue[i]);
+				tsark(ts, native->upvalue[i]);
 			BREAK;
 		}
 		CASE(OBJ_STRING)
@@ -236,34 +256,34 @@ void mark_black(VM *vm, GCObject *obj)
 
 
 
-cr_umem incgc(VM *vm)
+cr_umem incgc(TState *ts)
 {
 #ifdef DEBUG_LOG_GC
 	printf("--> GC start\n");
 #endif
-	cr_umem old_allocation = vm->gc.allocated;
-	markroots(vm);
+	cr_umem old_allocation = ts->gc.allocated;
+	markroots(ts);
 #ifdef CR_PRECOMPUTED_GOTO
 	static const void *jmptable[] = { &&mark, &&skip };
 	goto *jmptable[runtime];
 mark:
-	mark_function_roots(vm);
+	mark_function_roots(ts);
 skip:
 #else
-	mark_function_roots(vm);
+	mark_function_roots(ts);
 #endif
-	while (vm->gslen > 0)
-		mark_black(vm, GSARRAY_POP(vm));
-	rmweakrefs(vm);
-	sweep(vm);
-	cr_umem nextgc = cast(cr_umem, cast(double, vm->gc.allocated) * vm->gc.growfactor);
-	vm->gc.nextgc = MAX(nextgc, vm->gc.heapmin);
+	while (ts->gslen > 0)
+		mark_black(ts, GSARRAY_POP(ts));
+	rmweakrefs(ts);
+	sweep(ts);
+	cr_umem nextgc = cast(cr_umem, cast(double, ts->gc.allocated) * ts->gc.growfactor);
+	ts->gc.nextgc = MAX(nextgc, ts->gc.heapmin);
 #ifdef DEBUG_LOG_GC
 	printf("--> GC end\n");
-	printf("    collected %lu bytes (from %lu to %lu) next collection at %lu\n", old_allocation - vm->gc.allocated,
-	       old_allocation, vm->gc.allocated, (cr_umem)vm->gc.nextgc);
+	printf("    collected %lu bytes (from %lu to %lu) next collection at %lu\n", old_allocation - ts->gc.allocated,
+	       old_allocation, ts->gc.allocated, (cr_umem)ts->gc.nextgc);
 #endif
-	return old_allocation - vm->gc.allocated;
+	return old_allocation - ts->gc.allocated;
 }
 
 

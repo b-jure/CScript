@@ -30,9 +30,9 @@
 
 
 
-#define entercstack(lx)		(cr_vm_inccstack((lx)->vm))
+#define entercstack(lx)		(cr_ts_inccstack((lx)->ts))
 
-#define leavecstack(lx)		((lx)->vm->nccalls--)
+#define leavecstack(lx)		((lx)->ts->nccalls--)
 
 
 /* check condition */
@@ -40,19 +40,29 @@
 	{ if (!(cond)) cr_lr_syntaxerror(lx, err); }
 
 
+
 /* Scope 'bits' */
-#define SCloop		(1 << 0)
-#define SCforeach	(1 << 1)
-#define SCswitch	(1 << 2)
+#define SCLOOP		(1 << 0)
+#define SCFOREACH	(1 << 1)
+#define SCSWITCH	(1 << 2)
 
 /* lexical scope information */
 typedef struct Scope {
 	struct Scope *prev; /* chain */
-	int depth; /* scope depth (index) */
 	int nlocals; /* number of locals outside of this scope */
-	cr_ubyte upval; /* set if scope contains upvalue variable */
-	cr_ubyte bits;
+	int bits; /* flags */
+	cr_ubyte intbc; /* set if scope contains tbc variable */
 } Scope;
+
+
+
+/* control flow info */
+typedef struct CFInfo {
+	intVecVec breaks; /* break statement offsets */
+	int innerlstart; /* innermost loop start offset */
+	int innerldepth; /* innermost loop scope depth */
+	int innersdepth; /* innermost switch scope depth */
+} ControlFlow;
 
 
 
@@ -64,8 +74,40 @@ typedef struct ClassState {
 
 
 
-/* forward declare (recursive) */
-static void expr(FunctionState *fs, ExpInfo *E);
+/* stores current state for use in optimizations */
+typedef struct Context {
+	int coffset;
+	int nconstants;
+	int nupvalues;
+	int nlocals;
+} Context;
+
+
+
+static void savecontext(FunctionState *fs, Context *ctx)
+{
+	ctx->coffset = codeoffset(fs);
+	ctx->nconstants = fs->fn->constants.len;
+	ctx->nupvalues = fs->fn->upvalues.len;
+	ctx->nlocals = fs->nlocals;
+}
+
+
+static void loadcontext(FunctionState *fs, Context *ctx)
+{
+	Function *fn;
+
+	fn = fs->fn;
+	cr_assert(ctx->coffset >= fn->code.len);
+	cr_assert(ctx->nconstants >= fn->constants.len);
+	cr_assert(ctx->nupvalues >= fn->upvalues.len);
+	cr_assert(ctx->nlocals >= fs->lx->ps->locals.len);
+	fn->code.len = ctx->coffset;
+	fn->constants.len = ctx->nconstants;
+	fn->upvalues.len = ctx->nupvalues;
+	fs->lx->ps->locals.len -= ctx->nlocals - fs->nlocals;
+	fs->nlocals = ctx->nlocals;
+}
 
 
 
@@ -85,128 +127,28 @@ static void initvar(FunctionState *fs, ExpInfo *e, int idx)
 }
 
 
-/*
- * Returns 1 if 'S' is in loop, 0 if inside of a switch
- * and -1 if outside.
- */
-static cr_inline int inwhat(Scope *s, Scope **target)
+static Scope *getscope(FunctionState *fs, int idx)
 {
-	Scope *head;
-	int which;
+	Scope *scope;
 
-	which = -1;
-	head = s;
-	for (; head != NULL; head = head->prev) {
-		if (head->isswitch) {
-			which = 0;
-			break;
-		}
-		if (head->isloop) {
-			which = 1;
-			break;
-		}
-	}
-	*target = head;
-	return which;
-}
-
-#define inswitch(S) (inwhat(S) == 0)
-#define inloop(S)   (inwhat(S) == 1)
-
-
-
-
-static cr_inline Scope *getscope(FunctionState *fs, int depth)
-{
-	Scope *scope = fs->S;
+	scope = fs->s;
 	while (scope != NULL) {
-		if (scope->depth == depth)
-			return scope;
+		if (scope->nlocals >= idx)
+			break;
 		scope = scope->prev;
 	}
-	return NULL;
-}
-
-
-typedef struct {
-	int codeoffset;
-	int constlen;
-	int localc;
-	int upvalc;
-} Context;
-
-static cr_inline void savecontext(FunctionState *fs, Context *C)
-{
-	C->codeoffset = codeoffset(fs);
-	C->constlen = CHUNK(fs)->constants.len;
-	C->localc = fs->locals.len;
-	C->upvalc = fs->upvalues->len;
-}
-
-// Trim/set length of code and/or constant array
-static cr_inline void concatcode(FunctionState *fs, int codeoffset, int constoffset)
-{
-	CHUNK(fs)->bcode.len = codeoffset;
-	CHUNK(fs)->constants.len = constoffset;
-}
-
-static cr_inline void restorecontext(FunctionState *fs, Context *C)
-{
-	concatcode(fs, C->codeoffset, C->constlen);
-	fs->locals.len = C->localc;
-	fs->upvalues->len = C->upvalc;
+	return scope;
 }
 
 
 
-
-// Forward declare
+/* forward declare recursive non-terminals */
 static void dec(FunctionState *fs);
-static void expr(FunctionState *fs, ExpInfo *E);
-static void suffixedexp(FunctionState *fs, ExpInfo *E);
 static void stm(FunctionState *fs);
+static void expr(FunctionState *fs, ExpInfo *e);
 
 
 
-
-/*========================== ERROR =========================*/
-
-// Compile-time error
-static void error(FunctionState *fs, const char *error, ...)
-{
-	Token *token = &PREVT(fs);
-	va_list args;
-	cr_assert(vm, token->type != TOK_ERROR, "Only lexer can register error tokens.");
-	// If panic bit is on, then sync the lexer before registering any new errors.
-	if (fs->lexer->panic)
-		return;
-	va_start(args, error);
-	regcomperror(fs->lexer, error, args);
-	va_end(args);
-}
-
-
-
-
-//======================= CODE =======================//
-
-// Multi-byte instruction (up to 4 bytes)
-#define CODEOP(fs, code, param) writechunk_codewparam(CHUNK(fs), code, param, PREVT(fs).line)
-
-// Single byte instruction
-#define CODE(fs, byte)                                       \
-	({                                                  \
-		(fs)->fn->gotret = ((byte) == OP_RET);       \
-		writechunk(CHUNK(fs), byte, PREVT(fs).line); \
-	})
-
-// 3 byte parameter
-#define CODEL(fs, bytes)                  \
-	do {                             \
-		CODE(fs, BYTE(bytes, 0)); \
-		CODE(fs, BYTE(bytes, 1)); \
-		CODE(fs, BYTE(bytes, 2)); \
-	} while (0)
 
 // Emit jump instruction
 #define CODEJMP(fs, jmp)            \
@@ -251,149 +193,18 @@ static cr_inline void codeloop(FunctionState *fs, int start)
 // Initialize global variable
 #define INIT_GLOBAL(fs, idx, vflags, E)                                 \
 	do {                                                           \
-		(fs)->vm->globvars.data[idx].flags = vflags;            \
+		(fs)->ts->globvars.data[idx].flags = vflags;            \
 		CODEOP(fs, GET_OP_TYPE(idx, OP_DEFINE_GLOBAL, E), idx); \
 	} while (0)
 
 
-// Get local variable
-// helper [rmlastins]
-static cr_inline void popvarins(FunctionState *fs, ExpInfo *E)
-{
-	switch (E->et) {
-	case EXP_UPVAL:
-	case EXP_LOCAL:
-	case EXP_GLOBAL:
-		if (E->ins.l)
-			LINSTRUCTION_POP(fs);
-		else
-			INSTRUCTION_POP(fs);
-		break;
-	case EXP_INDEXED:
-		// @?: setters are not reachable ?
-		switch (*INSTRUCTION(fs, E)) {
-		case OP_INDEX:
-			SINSTRUCTION_POP(fs);
-			break;
-		case OP_GET_PROPERTY:
-		case OP_GET_SUPER:
-			LINSTRUCTION_POP(fs);
-			break;
-		default:
-			cr_unreachable;
-		}
-		break;
-	default:
-		cr_unreachable;
-	}
-}
 
-// helper [rmlastins]
-static cr_inline void popcallins(FunctionState *fs, ExpInfo *E)
-{
-	switch (E->et) {
-	case EXP_CALL:
-		LINSTRUCTION_POP(fs);
-		break;
-	case EXP_INVOKE:
-		LINSTRUCTION_POP(fs);
-		LPARAM_POP(fs);
-		break;
-	default:
-		cr_unreachable;
-	}
-}
-
-static void rmlastins(FunctionState *fs, ExpInfo *E)
-{
-	exptt type = E->et;
-	if (etisliteral(type))
-		SINSTRUCTION_POP(fs);
-	else if (etisconst(type))
-		LINSTRUCTION_POP(fs);
-	else if (etisvar(type))
-		popvarins(fs, E);
-	else if (etiscall(type))
-		popcallins(fs, E);
-	else
-		switch (type) {
-		case EXP_JMP:
-			goto panic;
-		case EXP_EXPR:
-			if (E->ins.binop) {
-				LINSTRUCTION_POP(fs);
-				break;
-			} else {
-panic: // FALLTHRU
-				PANIC("Tried removing 'and'/'or' expression.");
-				cr_unreachable;
-			}
-		default:
-			cr_unreachable;
-		}
-}
-
-
-
-
-//======================= SCOPE/C-FLOW =======================//
-
-// Start new 'Scope'
-static cr_inline void startscope(FunctionState *fs, Scope *S, cr_ubyte isloop, cr_ubyte isswitch)
-{
-	if (cr_unlikely(fs->S->depth >= CR_BYTECODE_MAX))
-		error(fs, comperrors[CE_SCOPE], CR_BYTECODE_MAX);
-	S->nlocals = fs->locals.len;
-	S->isloop = isloop;
-	S->isswitch = isswitch;
-	S->depth = fs->S->depth + 1;
-	S->prev = fs->S;
-	fs->S = S;
-}
-
-// End scope and pop locals and/or close captured locals
-static void endscope(FunctionState *fs)
-{
-#define LOCAL_IS_CAPTURED(local) (btest((local)->flags, VCAPTURED_BIT))
-
-	fs->fn->gotret = 0;
-	int pop = 0;
-	Scope *current = fs->S;
-	fs->S = current->prev;
-	while (fs->locals.len > 0 && Array_Local_last(&fs->locals)->depth > fs->S->depth) {
-		if (LOCAL_IS_CAPTURED(Array_Local_last(&fs->locals))) {
-			int capture = 1;
-			fs->locals.len--;
-			CODEPOP(fs, pop);
-			pop = 0; // Reset pop count
-			do {
-				if (!LOCAL_IS_CAPTURED(Array_Local_last(&fs->locals))) {
-					if (capture == 1)
-						CODE(fs, OP_CLOSE_UPVAL);
-					else
-						CODEOP(fs, OP_CLOSE_UPVALN, capture);
-					break;
-				}
-				capture++;
-				fs->locals.len--;
-			} while (fs->locals.len > 0 && Array_Local_last(&fs->locals)->depth > fs->S->depth);
-		} else {
-			pop++;
-			fs->locals.len--;
-		}
-	}
-	CODEPOP(fs, pop);
-
-#undef LOCAL_IS_CAPTURED
-}
-
-
-static void ControlFlow_init(VM *vm, CFlow *cflow)
+static void ControlFlow_init(TState *ts, CFlow *cflow)
 {
 	cflow->innerlstart = -1;
 	cflow->innerldepth = 0;
 	cflow->innersdepth = 0;
-	Array_Array_cr_int_init(&cflow->breaks, vm);
+	Array_Array_cr_int_init(&cflow->breaks, ts);
 }
 
 static void ControlFlow_free(CFlow *context)
@@ -405,34 +216,53 @@ static void ControlFlow_free(CFlow *context)
 }
 
 
-
-
-/*========================== FUNCTION STATE =========================*/
-
-static void F_init(VM *vm, FunctionState *fs, Scope *globscope, Class *cclass, FunctionType fn_type, FunctionState *enclosing)
+static void leavescope(FunctionState *fs)
 {
-	// Initialize FunctionState state
-	fs->vm = vm;
-	fs->S = globscope;
-	fs->enclosing = enclosing;
-	fs->cclass = cclass;
-	vm->fs = fs;
-	fs->fn = NULL; // Initialize to NULL so gc does not get confused
-	fs->fn = OFunction_new(vm);
+}
+
+
+static void enterscope(FunctionState *fs, Scope *s, int mask)
+{
+	s->bits = mask;
+	s->nlocals = fs->nlocals;
+	s->intbc = 0;
+	s->prev = fs->s;
+	fs->s = s;
+}
+
+static void initfs(FunctionState *fs, Lexer *lx, Scope *s)
+{
+	ParserState ps;
+	Function *fn;
+
+	ps = lx->ps;
+	fn = fs->fn;
+	lx->fs = fs;
+	fs->enclosing = lx->fs;
+	fs->lx = lx;
+	fs->sp = 0;
+	fs->nlocals = 0;
+	fs->firstlocal = ps->locals.len;
+	fs->close = 0;
+	fs->isvtm = isvtmethod(lx->src);
+	fn->source = lx->src;
+	gcbarrier(fn->source);
+	enterscope(fs, s);
+	fs->fn = OFunction_new(ts);
 	fs->fn_type = fn_type;
 	fs->vflags = 0;
-	ControlFlow_init(vm, &fs->cflow);
+	ControlFlow_init(ts, &fs->cflow);
 	// Setup upvalues storage
 	if (enclosing == NULL) {
 		fs->tag = -1;
-		fs->upvalues = MALLOC(vm, sizeof(Array_Upvalue));
-		Array_Upvalue_init(fs->upvalues, vm);
+		fs->upvalues = MALLOC(ts, sizeof(Array_Upvalue));
+		Array_Upvalue_init(fs->upvalues, ts);
 	} else {
 		fs->tag = enclosing->tag;
 		fs->upvalues = enclosing->upvalues;
 	}
 	// Setup local variables storage
-	Array_Local_init(&fs->locals, vm);
+	Array_Local_init(&fs->locals, ts);
 	Array_Local_init_cap(&fs->locals, SHORT_STACK_SIZE);
 	fs->locals.len++;
 	LocalVar *local = fs->locals.data;
@@ -447,42 +277,24 @@ static void F_init(VM *vm, FunctionState *fs, Scope *globscope, Class *cclass, F
 	}
 	if (fn_type != FN_SCRIPT) {
 		fs->fn->p.defline = PREVT(fs).line;
-		fs->fn->p.name = OString_new(vm, PREVT(fs).start, PREVT(fs).len);
+		fs->fn->p.name = OString_new(ts, PREVT(fs).start, PREVT(fs).len);
 	}
 }
 
-void F_free(FunctionState *fs)
+CriptClosure *freefs(FunctionState *fs)
 {
-	VM *vm = fs->vm;
+	TState *ts;
+
+	ts = fs->lx->ts;
 	ControlFlow_free(&fs->cflow);
 	if (fs->enclosing == NULL) {
-		cr_assert(fs->vm, fs->fn_type == FN_SCRIPT, "FunctionState is top-level but the type is not 'FN_SCRIPT'.");
+		cr_assert(fs->ts, fs->fn_type == FN_SCRIPT, "FunctionState is top-level but the type is not 'FN_SCRIPT'.");
 		Array_Upvalue_free(fs->upvalues, NULL);
-		FREE(vm, fs->upvalues); // free the memory holding the pointer
+		FREE(ts, fs->upvalues); // free the memory holding the pointer
 	}
 	Array_Local_free(&fs->locals, NULL);
-	vm->fs = fs->enclosing;
-	FREE(vm, fs);
-}
-
-// Cleanup the function stack in case of internal errors
-void _cleanup_function(FunctionState *fs)
-{
-	if (fs != NULL) {
-		L_free(fs->lexer);
-		for (FunctionState *fn = fs; fn != NULL; fn = fn->enclosing)
-			F_free(fs);
-	}
-}
-
-void mark_function_roots(VM *vm)
-{
-	// Mark all functions and token values
-	for (FunctionState *current = vm->fs; current != NULL; current = current->enclosing) {
-		vmark(vm, PREVT(current).value);
-		vmark(vm, CURRT(current).value);
-		omark(vm, (GCObject *)current->fn);
-	}
+	ts->fs = fs->enclosing;
+	FREE(ts, fs);
 }
 
 
@@ -495,7 +307,7 @@ static void expect(Lexer *lx, int tk)
 
 	if (lx->t.tk == tk)
 		return;
-	err = cr_ot_pushfstring(lx->vm, "expected %s", cr_lr_tok2str(lx, tk));
+	err = cr_ob_pushfstring(lx->ts, "expected %s", cr_lr_tok2str(lx, tk));
 	cr_lr_syntaxerror(lx, err);
 }
 
@@ -546,7 +358,7 @@ static Function *parse_end(FunctionState *fs)
 	fs->fn->p.deflastline = PREVT(fs).line;
 #ifdef CR_DEBUG_PRINT_CODE
 	if (!fs->lexer->error)
-		Chunk_debug(fs->vm, CHUNK(fs), fs->fn->name->storage);
+		Chunk_debug(fs->ts, CHUNK(fs), fs->fn->name->storage);
 #endif
 	return fs->fn;
 }
@@ -557,7 +369,7 @@ static Function *parse_end(FunctionState *fs)
 // Additionally parser only registers compile-time errors but it does not
 // call the usual 'runerror' [@err.h], this ensures that all of the
 // compile-time errors will be reported (exhaustive parser).
-CriptClosure *parse(VM *vm, BuffReader *br, const char *name, int isingscope)
+CriptClosure *parse(TState *ts, BuffReader *br, const char *name, int isingscope)
 {
 	Scope gscope, lscope;
 	FunctionState fs;
@@ -565,9 +377,9 @@ CriptClosure *parse(VM *vm, BuffReader *br, const char *name, int isingscope)
 
 	if (name == NULL)
 		name = "?";
-	F_init(vm, &fs, &globalscope, NULL, FN_SCRIPT, vm->fs);
-	fs.fn->p.source = OString_new(vm, name, strlen(name));
-	L_init(&L, vm, br, fs.fn->p.source);
+	F_init(ts, &fs, &globalscope, NULL, FN_SCRIPT, ts->fs);
+	fs.fn->p.source = OString_new(ts, name, strlen(name));
+	L_init(&L, ts, br, fs.fn->p.source);
 	startscope(&fs, &gscope, 0, 0);
 	if (!isingscope) // script not in global scope?
 		startscope(&fs, &lscope, 0, 0);
@@ -577,38 +389,15 @@ CriptClosure *parse(VM *vm, BuffReader *br, const char *name, int isingscope)
 	Function *fn = parse_end(&fs);
 	cr_ubyte comperr = fs.lexer->error;
 	L_free(&L);
-	F_free(&fs);
+	freefs(&fs);
 	if (cr_likely(!comperr)) {
-		push(vm, OBJ_VAL(fn)); // prevent 'fn' from getting collected
-		CriptClosure *closure = OClosure_new(vm, fn);
-		pop(vm); // 'fn'
-		push(vm, OBJ_VAL(closure));
+		push(ts, OBJ_VAL(fn)); // prevent 'fn' from getting collected
+		CriptClosure *closure = OClosure_new(ts, fn);
+		pop(ts); // 'fn'
+		push(ts, OBJ_VAL(closure));
 		return closure;
 	}
 	return NULL;
-}
-
-// Create new local variable
-static cr_inline void local_new(FunctionState *fs, Token name)
-{
-	if (cr_unlikely(cast_int(fs->locals.len) >= PARSER_LVAR_LIMIT)) {
-		error(fs, comperrors[CE_LVARLIMIT], PARSER_LVAR_LIMIT);
-		return;
-	}
-	Array_Local_push(&fs->locals, (LocalVar){ name, -1, fs->vflags });
-}
-
-// Make local variable but check for redefinitions in local scope
-static void make_local(FunctionState *fs, Token *name)
-{
-	for (int i = fs->locals.len - 1; i >= 0; i--) {
-		LocalVar *local = Array_Local_index(&fs->locals, i);
-		if (local->depth != -1 && local->depth < fs->S->depth)
-			break;
-		if (cr_unlikely(nameeq(name, &local->name)))
-			error(fs, comperrors[CE_LREDEF], name->len, name->start);
-	}
-	local_new(fs, *name);
 }
 
 // Patch jump instruction
@@ -623,7 +412,7 @@ static cr_inline void patchjmp(FunctionState *fs, int jmp_offset)
 static cr_inline void startbreaklist(FunctionState *fs)
 {
 	Array_cr_int patches;
-	Array_cr_int_init(&patches, fs->vm);
+	Array_cr_int_init(&patches, fs->ts);
 	Array_Array_cr_int_push(&fs->cflow.breaks, patches);
 }
 
@@ -641,11 +430,23 @@ static cr_inline void endbreaklist(FunctionState *fs)
 }
 
 
-static cr_inline int make_constant(FunctionState *fs, TValue constant)
+
+/* -------------------------------------------------------------------------
+ * Statements
+ * ------------------------------------------------------------------------- */
+
+/* 
+ * Used to chain variables on the left side of 
+ * the assignment.
+ */
+typedef struct LHS {
+	struct LHS *prev;
+	ExpInfo *e;
+} LHS;
+
+
+static void assignmore(Lexer *lx, LHS *lhs, ExpInfo *e)
 {
-	if (cr_unlikely(cast_int(CHUNK(fs)->constants.len) > PARSER_CONST_LIMIT))
-		error(fs, "Too many constants created in this chunk, limit is '%d'.\n", PARSER_CONST_LIMIT);
-	return writechunk_constant(fs->vm, CHUNK(fs), constant);
 }
 
 
@@ -655,14 +456,14 @@ static cr_inline int make_constant(FunctionState *fs, TValue constant)
  */
 static void exprstm(Lexer *lx, int lastforclause)
 {
-	ExpInfo E;
-	E.ins.set = 0;
+	ExpInfo e;
+	e.ins.set = 0;
 	suffixedexp(fs, &E);
 	TType next = CURRT(fs).type;
 	if (next == TOK_EQUAL || next == TOK_COMMA) {
-		E.ins.set = 1;
+		e.ins.set = 1;
 		Array_Exp Earr;
-		Array_Exp_init(&Earr, fs->vm);
+		Array_Exp_init(&Earr, fs->ts);
 		expect_cond(fs, etisvar(E.et), expectstr("Expect variable."));
 		rmlastins(fs, &E); // remove 'OP_GET..'
 		Array_Exp_push(&Earr, E);
@@ -676,13 +477,13 @@ static void exprstm(Lexer *lx, int lastforclause)
 			Array_Exp_push(&Earr, E);
 		}
 		expect(fs, TOK_EQUAL, expectstr("Expect '='."));
-		E.ins.set = 0;
+		e.ins.set = 0;
 		int expc = explist(fs, vars, &E);
 		if (vars != expc)
 			adjustassign(fs, &E, vars, expc);
 		codesetall(fs, &Earr);
 		Array_Exp_free(&Earr, NULL);
-	} else if (etiscall(E.et))
+	} else if (etiscall(e.et))
 		CODE(fs, OP_POP);
 	else
 		error(fs, comperrors[CE_EXPSTM]);
@@ -694,7 +495,7 @@ static void exprstm(Lexer *lx, int lastforclause)
 cr_sinline LVarInfo *getlocal(FunctionState *fs, int idx)
 {
 	cr_assert(fs->firstlocal + idx < fs->l->ps->locals.len);
-	return &fs->l->ps->locals.ptr[fs->firstlocal + idx];
+	return &fs->lx->ps->locals.ptr[fs->firstlocal + idx];
 }
 
 
@@ -705,7 +506,7 @@ static int registerlocal(Lexer *lx, FunctionState *fs, OString *name)
 	LVar *local;
 
 	fn = fs->fn;
-	cr_mm_growvec(lx->vm, &fn->lvars);
+	cr_mm_growvec(lx->ts, &fn->lvars);
 	local = fn->lvars.ptr[fn->lvars.len++];
 	local->name = name;
 	local->alivepc = fn->code.len;
@@ -741,7 +542,7 @@ static void markscope(FunctionState *fs, int vidx)
 	s = fs->s;
 	while(s->nlocals - 1 > vidx)
 		s = s->prev;
-	s->upval = 1;
+	s->intbc = 1;
 	fs->close = 1;
 }
 
@@ -752,7 +553,7 @@ static void markcurrscope(FunctionState *fs)
 	Scope *s;
 
 	s = fs->s;
-	s->upval = 1;
+	s->intbc = 1;
 	fs->close = 1;
 }
 
@@ -764,8 +565,8 @@ static int addlocal(Lexer *lx, OString *name)
 	LVarVec *locals;
 	LVarInfo *lvinfo;
 
-	locals = &fs->l->ps->locals;
-	cr_mm_growvec(fs->l->vm, locals);
+	locals = &fs->lx->ps->locals;
+	cr_mm_growvec(fs->lx->ts, locals);
 	lvinfo = &locals->ptr[locals->len++];
 	lvinfo->s.name = name;
 	vmod(lvinfo->val) = VARREGULAR;
@@ -788,12 +589,12 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 	LVarInfo *lvinfo;
 	Lexer *lx;
 
-	lx = fs->l;
+	lx = fs->lx;
 	for (i = fs->nlocals - 1; i >= 0; i--) {
 		lvinfo = getlocal(fs, i);
 		if (name == lvinfo->s.name) {
 			if (cr_unlikely(vmod(lvinfo->val) & VARUNINIT)) {
-				cr_lr_syntaxerror(lx, cr_ot_pushfstring(lx->vm, 
+				cr_lr_syntaxerror(lx, cr_ob_pushfstring(lx->ts, 
 					"can't read local variable '%s' in its "
 					"own initializer", name));
 			}
@@ -818,7 +619,7 @@ static UVInfo *newupvalue(FunctionState *fs)
 	UVInfoVec *uvals;
 
 	uvals = &fs->fn->upvalues;
-	cr_mm_growvec(fs->l->vm, uvals);
+	cr_mm_growvec(fs->lx->ts, uvals);
 	return &uvals->ptr[uvals->len++];
 }
 
@@ -893,15 +694,15 @@ static void searchvar(FunctionState *fs, OString *name, ExpInfo *e, int base)
 /* get global value 'idx' from 'gvars' */
 cr_sinline TValue *getglobal(FunctionState *fs, int idx)
 {
-	return &fs->l->vm->gvars.ptr[idx];
+	return &fs->lx->ts->gvars.ptr[idx];
 }
 
 
 /* create new global in 'gvars' */
-static TValue *newglobal(VM *vm)
+static TValue *newglobal(TState *ts)
 {
-	cr_mm_growvec(vm, &vm->gvars);
-	return &vm->gvars.ptr[vm->gvars.len++];
+	cr_mm_growvec(ts, &ts->gvars);
+	return &ts->gvars.ptr[ts->gvars.len++];
 }
 
 
@@ -909,30 +710,30 @@ static TValue *newglobal(VM *vm)
  * Add new global value into 'gvars' and store its
  * name into 'gids'. 
  */
-static int addglobal(VM *vm, OString *name)
+static int addglobal(TState *ts, OString *name)
 {
 	TValue idx;
 	TValue k;
 
-	setemptyvalue(newglobal(vm, name));
-	setivalue(&idx, vm->gvars.len - 1);
-	setv2s(vm, &k, name);
-	cr_ht_set(vm, &vm->gids, &k, &idx);
+	setemptyvalue(newglobal(ts, name));
+	setivalue(&idx, ts->gvars.len - 1);
+	setv2s(ts, &k, name);
+	cr_ht_set(ts, &ts->gids, &k, &idx);
 	return ivalue(&idx);
 }
 
 
 /* get global variable 'name' or create undefined global */
-static void globalvar(VM *vm, OString *name, ExpInfo *e)
+static void globalvar(TState *ts, OString *name, ExpInfo *e)
 {
 	TValue k;
 	TValue o;
 
-	setv2s(vm, &k, name);
-	if (!cr_ht_get(vm, &k, &o))
-		e->u.vidx = addglobal(vm, name);
+	setv2s(ts, &k, name);
+	if (!cr_ht_get(ts, &k, &o))
+		e->u.idx = addglobal(ts, name);
 	else
-		e->u.vidx = ivalue(o);
+		e->u.idx = ivalue(o);
 	e->et = EXP_GLOBAL;
 }
 
@@ -942,15 +743,18 @@ static void varname(Lexer *lx, OString *name, ExpInfo *e)
 {
 	searchvar(lx->fs, name, e, 1);
 	if (e->et == EXP_VOID)
-		globalvar(lx->vm, name, e)
+		globalvar(lx->ts, name, e)
 }
 
 
-#define var(lx,e)	varname(lx, expect_id(lx), e)
+#define var(lx,e) \
+	{ varname(lx, expect_id(lx), e); \
+	  cr_ce_reservestack((lx)->fs, 1); }
 
 
 #define varlit(lx,l,e) \
-	varname(lx, cr_lr_newstring(lx, "" l, SLL(l), e)
+	{ varname(lx, cr_lr_newstring(lx, "" l, SLL(l), e); \
+	  cr_ce_reservestack((lx)->fs, 1); }
 
 
 /* 
@@ -973,9 +777,8 @@ static int explist(Lexer *lx, ExpInfo *e)
 
 	n = 1;
 	expr(lx->fs, e);
-	while (match(lx, ',')) {
+	while (match(lx, ','))
 		expr(lx->fs, e);
-	}
 	return n;
 }
 
@@ -983,7 +786,7 @@ static int explist(Lexer *lx, ExpInfo *e)
 static void dotaccess(Lexer *lx, ExpInfo *e)
 {
 	cr_lr_scan(lx); /* skip '.' */
-	cr_ce_string(lx->fs, expect_id(lx));
+	e->u.idx = cr_ce_string(lx->fs, expect_id(lx));
 	e->et = EXP_INDEXRAW;
 }
 
@@ -1006,7 +809,7 @@ static void indexaccess(Lexer *lx, ExpInfo *e)
 static void supdotaccess(Lexer *lx, ExpInfo *e)
 {
 	cr_lr_scan(lx); /* skip '.' */
-	cr_ce_string(lx->fs, expect_id(lx));
+	e->u.idx = cr_ce_string(lx->fs, expect_id(lx));
 	e->et = EXP_INDEXRAWSUP;
 }
 
@@ -1014,6 +817,14 @@ static void supdotaccess(Lexer *lx, ExpInfo *e)
 /* auxiliary function to 'super_' */
 static void supidxaccess(Lexer *lx, ExpInfo *e)
 {
+	OString *id;
+
+	id = lx->t.lit.str;
+	if (match(lx, TK_IDENTIFIER)) e->et = EXP_INDEXSUP;
+	else if (match(lx, TK_STRING)) e->et = EXP_INDEXRAWSUP;
+	else cr_lr_syntaxerror(lx, "invalid index value for 'super'");
+	e->u.idx = cr_ce_string(lx->fs, id);
+	expect(lx, ']');
 }
 
 
@@ -1029,7 +840,6 @@ static void super_(Lexer *lx, ExpInfo *e)
 		cr_lr_syntaxerror(lx, "class has no superclass");
 	varlit(lx, "self", e);
 	cr_assert(e->et == EXP_LOCAL);
-	cr_ce_reservestack(fs, 1); /* instance */
 	cr_ce_dischargevar(fs, e);
 	cr_lr_scan(lx);
 	if (match(lx, '[')) supidxaccess(lx, e);
@@ -1038,7 +848,6 @@ static void super_(Lexer *lx, ExpInfo *e)
 	varlit(lx, "super", &e2);
 	cr_assert(e2->et == EXP_UVAL);
 	cr_ce_dischargevar(fs, &e2);
-	cr_ce_reservestack(fs, 1); /* superclass */
 	cr_ce_dischargevar(fs, e);
 }
 
@@ -1047,6 +856,9 @@ static void super_(Lexer *lx, ExpInfo *e)
  * primary_exp ::= '(' exp ')'
  *               | identifier
  *               | 'self'
+ *               | 'super' '.' id
+ *               | 'super' '[' id ']'
+ *               | 'super' '[' string ']'
  */
 static void primaryexp(Lexer *lx, ExpInfo *e)
 {
@@ -1421,7 +1233,7 @@ static cr_inline void blockstm(FunctionState *fs)
 	Scope S;
 	startscope(fs, &S, 0, 0);
 	block(fs);
-	endscope(fs);
+	leavescope(fs);
 }
 
 // arglist ::= name
@@ -1463,7 +1275,7 @@ static void codeassign(FunctionState *fs, int names, Array_cr_int *nameidx)
 			initlocal(fs, i);
 		return;
 	}
-	cr_assert(fs->vm, names == cast_int(nameidx->len), "name count != indexes array len.");
+	cr_assert(fs->ts, names == cast_int(nameidx->len), "name count != indexes array len.");
 	while (nameidx->len > 0) {
 		int idx = Array_cr_int_pop(nameidx);
 		ExpInfo _; // dummy
@@ -1487,7 +1299,7 @@ static void vardec(FunctionState *fs)
 		FSET(fs, FFIXED);
 	}
 	Array_cr_int nameidx;
-	Array_cr_int_init(&nameidx, fs->vm);
+	Array_cr_int_init(&nameidx, fs->ts);
 	int names = namelist(fs, &nameidx);
 	int expc = 0;
 	ExpInfo E;
@@ -1515,7 +1327,7 @@ static void fn(FunctionState *fs, FunctionType type)
 {
 	FunctionState Fnew;
 	Scope globscope, S;
-	F_init(fs->vm, &Fnew, &globscope, fs->cclass, type, fs);
+	initfs(fs->ts, &Fnew, &globscope, fs->cclass, type, fs);
 	Fnew.fn->p.source = fs->fn->p.source; // source is same
 	startscope(&Fnew, &S, 0, 0); // no need to end this scope
 	expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
@@ -1528,7 +1340,7 @@ static void fn(FunctionState *fs, FunctionType type)
 	int arity = Fnew.fn->p.arity;
 	int expected = ominfo[fs->tag].arity;
 	if (cr_unlikely(isom(fs) && expected != arity)) {
-		error(fs, comperrors[CE_OMSIG], fs->vm->faststatic[fs->tag]->storage, expected, arity);
+		error(fs, comperrors[CE_OMSIG], fs->ts->faststatic[fs->tag]->storage, expected, arity);
 		Fnew.lexer->panic = 0; // clear panic flag do not sync yet
 	}
 	expect(&Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
@@ -1540,7 +1352,7 @@ static void fn(FunctionState *fs, FunctionType type)
 		CODE(fs, upval->local ? 1 : 0);
 		CODEL(fs, upval->idx);
 	}
-	F_free(&Fnew);
+	freefs(&Fnew);
 }
 
 // fndec ::= 'fn' name '(' arglist ')' '{' block '}'
@@ -1562,9 +1374,9 @@ static void method(FunctionState *fs)
 
 	expect(fs, TOK_FN, expectstr("Expect 'fn'."));
 	expect(fs, TOK_IDENTIFIER, expectstr("Expect method name."));
-	identifier = tokintostr(fs->vm, &PREVT(fs));
+	identifier = tokintostr(fs->ts, &PREVT(fs));
 	idx = make_constant(fs, identifier);
-	fs->tag = id2omtag(fs->vm, asstring(identifier));
+	fs->tag = id2omtag(fs->ts, asstring(identifier));
 	fn(fs, FN_METHOD);
 	if (fs->tag != -1)
 		CODEOP(fs, OP_OVERLOAD, fs->tag - SS_INIT);
@@ -1576,7 +1388,7 @@ static void classdec(FunctionState *fs)
 {
 	expect(fs, TOK_IDENTIFIER, expectstr("Expect class name."));
 	Token class_name = PREVT(fs);
-	TValue identifier = tokintostr(fs->vm, &class_name);
+	TValue identifier = tokintostr(fs->ts, &class_name);
 	int idx = make_constant(fs, identifier);
 	ExpInfo _; // dummy
 	CODEOP(fs, OP_CLASS, idx);
@@ -1610,7 +1422,7 @@ static void classdec(FunctionState *fs)
 	expect(fs, TOK_RBRACE, expectstr("Expect '}' after class body."));
 	CODE(fs, OP_POP); // Pop the class
 	if (cclass.superclass)
-		endscope(fs);
+		leavescope(fs);
 	fs->cclass = cclass.enclosing;
 }
 
@@ -1711,7 +1523,7 @@ static cr_inline void SwitchState_init(FunctionState *fs, SwitchState *state)
 	state->havenil = 0;
 	state->havetrue = 0;
 	state->havefalse = 0;
-	Array_Value_init(&state->constants, fs->vm);
+	Array_Value_init(&state->constants, fs->ts);
 }
 
 #define SwitchState_free(state) Array_Value_free(&(state)->constants, NULL);
@@ -1749,7 +1561,7 @@ static cr_inline void switchconstants(FunctionState *fs, SwitchState *state, Exp
 			if (cr_unlikely(raweq(state->constants.data[i], caseval))) {
 				const char *casename = NULL;
 				if (E->et == EXP_STRING)
-					casename = vtostr(fs->vm, caseval, 1)->storage;
+					casename = vtostr(fs->ts, caseval, 1)->storage;
 				else
 					casename = dtostr(AS_NUMBER(caseval), &_);
 				error(fs, comperrors[CE_SWDUP], casename);
@@ -1774,7 +1586,7 @@ static void switchstm(FunctionState *fs)
 	int sdepth;
 	savecontext(fs, &C);
 	SwitchState_init(fs, &swstate);
-	Array_cr_int_init(&fts, fs->vm);
+	Array_cr_int_init(&fts, fs->ts);
 	startscope(fs, &S, 0, 1); // implicit scope
 	startbreaklist(fs);
 	expect(fs, TOK_LPAREN, expectstr("Expect '(' after 'switch'."));
@@ -1831,7 +1643,7 @@ static void switchstm(FunctionState *fs)
 		error(fs, comperrors[CE_SWRBR]);
 	Array_cr_int_free(&fts, NULL);
 	SwitchState_free(&swstate);
-	endscope(fs);
+	leavescope(fs);
 	CODE(fs, OP_POP); // pop switch expression
 	patchbreaklist(fs);
 	endbreaklist(fs);
@@ -1918,11 +1730,11 @@ static void whilestm(FunctionState *fs)
 	expect(fs, TOK_RPAREN, expectstr("Expect ')' after condition."));
 	stm(fs); // body
 	cr_ubyte gotret = fs->fn->gotret;
-	endscope(fs);
+	leavescope(fs);
 	if (!remove) {
 		codeloop(fs, (fs)->cflow.innerlstart);
 		if (!infinite) {
-			cr_assert(fs->vm, jmptoend != -1, "end jmp invalid but flag is 0.");
+			cr_assert(fs->ts, jmptoend != -1, "end jmp invalid but flag is 0.");
 			patchjmp(fs, jmptoend);
 		} else if (gotret) { // cond 1 and 'stm' was 'returnstm'
 			// @TODO: Implement optimizations
@@ -1996,7 +1808,7 @@ static void forstm(FunctionState *fs)
 		patchbreaklist(fs);
 	} else
 		restorecontext(fs, &C);
-	endscope(fs);
+	leavescope(fs);
 	endloop(fs, lstart, ldepth);
 	endbreaklist(fs);
 }
@@ -2050,7 +1862,7 @@ static void foreachstm(FunctionState *fs)
 	CODEPOP(fs, vars);
 	codeloop(fs, (fs)->cflow.innerlstart);
 	patchjmp(fs, endjmp);
-	endscope(fs);
+	leavescope(fs);
 	patchbreaklist(fs);
 	endbreaklist(fs);
 	endloop(fs, lstart, ldepth);
@@ -2068,7 +1880,7 @@ static void loopstm(FunctionState *fs)
 		// @TODO: Implement optimizations
 	}
 	codeloop(fs, (fs)->cflow.innerlstart);
-	endscope(fs);
+	leavescope(fs);
 	patchbreaklist(fs);
 	endbreaklist(fs);
 	endloop(fs, lstart, ldepth);
@@ -2106,7 +1918,7 @@ static void continuestm(FunctionState *fs)
 		error(fs, comperrors[CE_CONT]);
 	else {
 		Scope *S = loopscope(fs);
-		cr_assert(fs->vm, S != NULL, "Loop scope not found but cflow offset is set.");
+		cr_assert(fs->ts, S != NULL, "Loop scope not found but cflow offset is set.");
 		int popn = fs->locals.len - (S->isgloop * 3) - S->nlocals + switchcnt(fs);
 		CODEPOP(fs, popn);
 		codeloop(fs, fs->cflow.innerlstart);
@@ -2146,7 +1958,7 @@ static void returnstm(FunctionState *fs)
 	Context C;
 	savecontext(fs, &C);
 	if (fs->tag != -1) { // overload-able method ?
-		const char *method = fs->vm->faststatic[fs->tag]->storage;
+		const char *method = fs->ts->faststatic[fs->tag]->storage;
 		if (tagisnoret(fs->tag)) {
 			if (fs->tag == SS_INIT) { // init is a function call in cript syntax
 				CODEOP(fs, OP_GET_LOCAL, 0);
@@ -2217,7 +2029,7 @@ static void returnstm(FunctionState *fs)
 static void dot(FunctionState *fs, ExpInfo *E)
 {
 	expect(fs, TOK_IDENTIFIER, expectstr("Expect property name after '.'."));
-	TValue identifier = tokintostr(fs->vm, &PREVT(fs));
+	TValue identifier = tokintostr(fs->ts, &PREVT(fs));
 	int idx = make_constant(fs, identifier);
 	if (match(fs, TOK_LPAREN))
 		codeinvoke(fs, E, idx);
@@ -2477,23 +2289,23 @@ typedef struct PParseData {
 
 
 /* protected parser entry */
-static void pparse(VM *vm, void *userdata)
+static void pparse(TState *ts, void *userdata)
 {
 	PParseData *pcompile;
 
 	pcompile = cast(PParseData *, userdata);
-	if (cr_unlikely(compile(vm, pcompile->br, pcompile->name, pcompile->isingscope) == NULL))
-		runerror(vm, S_ECOMP);
+	if (cr_unlikely(compile(ts, pcompile->br, pcompile->name, pcompile->isingscope) == NULL))
+		runerror(ts, S_ECOMP);
 }
 
 
 /* external interface for 'protectedparser' */
-int cr_pr_pparse(VM *vm, void *userdata, const char *name, cr_ubyte gscope)
+int cr_pr_pparse(TState *ts, void *userdata, const char *name, cr_ubyte gscope)
 {
 	BuffReader br;
 	PParseData ppdata;
 
-	cr_br_init(vm, &br, (vm)->hooks.reader, userdata);
+	cr_br_init(ts, &br, (ts)->hooks.reader, userdata);
 	ppdata = { &br, name, gscope };
-	return pcall(vm, pparse, &ppdata, save_stack(vm, vm->sp));
+	return pcall(ts, pparse, &ppdata, save_stack(ts, ts->sp));
 }

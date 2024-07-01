@@ -66,7 +66,7 @@ Vec(Buffer, char);
 
 
 typedef struct Lexer {
-	struct VM *vm;
+	struct TState *ts;
 	struct FunctionState *fs;
 	struct ParserState *ps; /* dynamic data used by parser */
 	HTable tab; /* prevent string literal collection */
@@ -82,7 +82,7 @@ typedef struct Lexer {
 
 
 
-void cr_lr_init(VM *vm, Lexer *lx, BuffReader *br, OString *src);
+void cr_lr_init(TState *ts, Lexer *lx, BuffReader *br, OString *src);
 const char *cr_lx_tok2str(Lexer *lx, int t);
 OString *cr_lr_newstring(Lexer *lx, const char *str, size_t len);
 void cr_lr_syntaxerror(Lexer *lx, const char *err);

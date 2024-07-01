@@ -38,13 +38,13 @@
 
 
 /* copy values from node 'n' key to 'v' */
-#define setnodekey(vm,n,v) \
+#define setnodekey(ts,n,v) \
 	{ Node *n_ = (n); const TValue *v_ = (v); \
 	  keytt(n_) = vtt(v_); keyval(n_) = vval(v_); }
 
 
 /* copy values from node 'n' key to 'v' */
-#define getnodekey(vm,v,n) \
+#define getnodekey(ts,v,n) \
 	{ TValue *v_ = (v); const Node *n_ = (n); \
 	  vtt(v_) = keytt(n_); vmod(v_) = 0; \
 	  vval(v_) = keyval(n_); }
@@ -85,15 +85,15 @@ typedef struct {
 
 
 CRI_FUNC void cr_ht_init(HTable *tab);
-CRI_FUNC void cr_ht_newstab(VM *vm, HTable *tab);
-CRI_FUNC int cr_ht_next(VM *vm, HTable *tab, SIndex *k);
-CRI_FUNC void cr_ht_copykeys(VM *vm, HTable *stab, HTable *dtab);
-CRI_FUNC int cr_ht_intern(VM *vm, const char *string);
-CRI_FUNC int cr_ht_set(VM *vm, HTable *tab, const TValue *key, const TValue *val);
-CRI_FUNC int cr_ht_remove(VM *vm, HTable *tab, const TValue *k);
+CRI_FUNC void cr_ht_newstab(TState *ts, HTable *tab);
+CRI_FUNC int cr_ht_next(TState *ts, HTable *tab, SIndex *k);
+CRI_FUNC void cr_ht_copykeys(TState *ts, HTable *stab, HTable *dtab);
+CRI_FUNC int cr_ht_intern(TState *ts, const char *string);
+CRI_FUNC int cr_ht_set(TState *ts, HTable *tab, const TValue *key, const TValue *val);
+CRI_FUNC int cr_ht_remove(TState *ts, HTable *tab, const TValue *k);
 CRI_FUNC struct OString *cr_ht_getinterned(HTable *tab, const char *str, 
 					size_t len, unsigned int hash);
 CRI_FUNC int cr_ht_get(HTable *tab, const TValue *key, TValue *o);
-CRI_FUNC void cr_ht_free(VM *vm, HTable *tab);
+CRI_FUNC void cr_ht_free(TState *ts, HTable *tab);
 
 #endif

@@ -57,10 +57,6 @@ Vec(intVecVec, intVec);
 typedef struct ParserState {
 	struct ClassState *cs; /* chain */
 	LVarInfoVec locals; /* local variables stack */
-	intVecVec breaks; /* break statement offsets */
-	int innerlstart; /* innermost loop start offset */
-	int innerldepth; /* innermost loop scope depth */
-	int innersdepth; /* innermost switch scope depth */
 } ParserState;
 
 
@@ -74,6 +70,7 @@ typedef struct ParserState {
 #define eisliteral(e)		((e)->et >= EXP_NIL && (e)->et <= EXP_FLT)
 #define eiscall(e)		((e)->et >= EXP_CALL && (e)->et <= EXP_INVOKE)
 #define eismulret(e)		(eiscall(e) && (e)->et <= EXP_VARARG)
+#define eissuper(e)		((e)->et == EXP_INDEXRAWSUP || (e)->et == EXP_INDEXSUP)
 
 
 /* expression types */
@@ -102,7 +99,7 @@ typedef enum expt {
 	 * 'idx' = relative index of variable in 'locals'; */
 	EXP_LOCAL, 
 	/* global variable; 
-	 * 'idx' = index in 'gvars' (VM) */
+	 * 'idx' = index in 'gvars' (TState) */
 	EXP_GLOBAL, 
 	/* constant indexed variable ('[kk]');
 	 * 'idx' = index in 'constants'; */
@@ -144,7 +141,7 @@ typedef struct ExpInfo {
 	} u;
 	int t; /* jmp to patch if true */
 	int f; /* jmp to patch if false */
-	cr_ubyte set; /* true if this is 'OP_SET..' instruction */
+	cr_ubyte set; /* true if setting expression */
 } ExpInfo;
 
 
@@ -153,22 +150,18 @@ typedef struct ExpInfo {
  * Function state
  * -------------------------------------------------------------------------- */
 
-/* these are defined in 'crparser.c' */
-struct ClassState;
-struct Scope;
-
 /* currently parsed function state */
 typedef struct FunctionState {
 	Function *fn; /* currently parsed function */
-	struct Lexer *l;
-	struct Scope *s; /* scope information */
 	struct FunctionState *enclosing; /* chain */
-	struct ClassState *cs; /* chain */
+	struct Lexer *lx; /* lexer */
+	struct Scope *s; /* scope information */
+	struct ControlFlow *cflow; /* control flow information */
 	int sp; /* first free stack index */
 	int nlocals; /* number of local variables in this function */
 	int firstlocal; /* index of first local in 'ParserState' */
 	cr_ubyte close; /* true if needs to close upvalues before returning */
-	cr_byte vtm; /* vtable method tag */
+	cr_ubyte isvtm; /* true if this is vtable method */
 } FunctionState;
 
 

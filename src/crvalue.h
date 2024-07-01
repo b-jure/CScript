@@ -27,8 +27,8 @@
 
 
 /* additional types that are used only as markers internally */
-#define CR_TUVALUE	CR_NTYPES	 /* upvalue */
-#define CR_TOBJECT	(CR_NTYPES + 1)	 /* for marking object values */
+#define CR_TUVALUE	CR_NUMTYPES		/* upvalue */
+#define CR_TOBJECT	(CR_NUMTYPES + 1)	/* for marking object values */
 
 
 /* 
@@ -89,7 +89,7 @@ typedef union Value {
 
 
 /* copy values from 'v2' to 'v1' ('TValue') */
-#define setv(vm,v1,v2) \
+#define setv(ts,v1,v2) \
 	{ TValue *v1_ = (v1); const TValue *v2_ = (v2); \
 	  setvtt(v1_, vtt(v2_)); vmod(v1_) = vmod(v2_); \
 	  v1_->val = v2_->val; }
@@ -143,7 +143,7 @@ typedef union {
 #define s2v(s)		(&(s)->val_)
 
 /* set stack value 'sv' to value 'v' */
-#define setsv(vm,sv,v)		setv(vm, s2v(sv), v)
+#define setsv(ts,sv,v)		setv(ts, s2v(sv), v)
 
 
 
@@ -317,8 +317,8 @@ typedef struct {
 
 int cr_ve_ceillog2 (unsigned int x);
 int v2t(TValue value);
-TValue vtostr(VM *vm, TValue value, cr_ubyte raw);
-void varith(VM *vm, TValue a, TValue b, int op, TValue *res);
+TValue vtostr(TState *ts, TValue value, cr_ubyte raw);
+void varith(TState *ts, TValue a, TValue b, int op, TValue *res);
 
 
 #endif

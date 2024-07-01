@@ -180,6 +180,7 @@ void cr_ce_checkstack(FunctionState *fs, int n);
 void cr_ce_setoneret(FunctionState *fs, ExpInfo *e);
 void cr_ce_dischargevar(FunctionState *fs, ExpInfo *e);
 void cr_ce_storevar(FunctionState *fs, ExpInfo *e);
+void cr_ce_rmlastins(FunctionState *fs, ExpInfo *e);
 
 
 #endif

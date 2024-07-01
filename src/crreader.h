@@ -37,11 +37,11 @@ typedef struct {
     const char* buff; /* position in buffer */
     cr_reader reader; /* reader function */
     void* userdata; /* user data for 'cr_reader' */
-    VM* vm; /* 'VM' for 'cr_reader' */
+    TState* ts; /* 'TState' for 'cr_reader' */
 } BuffReader;
 
 
-void cr_br_init(VM* vm, BuffReader* br, cr_reader reader, void* userdata);
+void cr_br_init(TState* ts, BuffReader* br, cr_reader reader, void* userdata);
 int cr_br_fill(BuffReader* br);
 size_t cr_br_readn(BuffReader* br, size_t n);
 

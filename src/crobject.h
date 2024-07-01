@@ -61,12 +61,16 @@ typedef struct GCObject {
 
 
 /* set value to GC object */
-#define setv2o(vm,v,o,t) \
+#define setv2o(ts,v,o,t) \
 	{ TValue *v_=(v); t *o_=o; ovalue(v_) = cast(GCObject*,o_); }
 
 
 /* set stack value to GC object */
-#define setsv2o(vm,sv,o,t)	setv2o(vm,s2v(sv),o,t)
+#define setsv2o(ts,sv,o,t)	setv2o(ts,s2v(sv),o,t)
+
+
+/* cast object to gc object */
+#define objtogco(o)	cast(GCObject*, o)
 
 
 
@@ -94,10 +98,10 @@ typedef struct OString {
 
 
 /* set value to string */
-#define setv2s(vm,v,s)		setv2o(vm,v,s,OString)
+#define setv2s(ts,v,s)		setv2o(ts,v,s,OString)
 
 /* set stack value to string */
-#define setsv2s(vm,sv,s)	setv2s(vm,s2v(sv),s)
+#define setsv2s(ts,sv,s)	setv2s(ts,s2v(sv),s)
 
 
 /* check equality between string and string literal */
@@ -111,18 +115,18 @@ typedef struct OString {
 
 
 /* bits for string 'bits' :) */
-#define STRhashash		(1 << 0) /* string has hash */
-#define STRusrinterned		(1 << 1) /* string is user interned */
-#define STRinterned		(1 << 2) /* string is interned */
-#define STRkeyword		(1 << 3) /* string is keyword */
-#define STRvtmethod		(1 << 4) /* string is vtable method */
+#define STRHASHASH		(1 << 0) /* string has hash */
+#define STRUSRINTERNED		(1 << 1) /* string is user interned */
+#define STRINTERNED		(1 << 2) /* string is interned */
+#define STRKEYWORD		(1 << 3) /* string is keyword */
+#define STRVTMETHOD		(1 << 4) /* string is vtable method */
 
 /* test 'bits' */
-#define hashash(s)		((s)->bits & STRhashash)
-#define isusrinterned(s)	((s)->bits & (STRusrinterned | STRhashash))
-#define isinterned(s)		((s)->bits & (STRinterned | STRhashash))
-#define iskeyword(s)		((s)->bits & (STRhashash | STRkeyword))
-#define isvtmethod(s)		((s)->bits & (STRhashash | STRvtmethod))
+#define hashash(s)		((s) && ((s)->bits & STRHASHASH))
+#define isusrinterned(s)	((s) && ((s)->bits & (STRUSRINTERNED | STRHASHASH)))
+#define isinterned(s)		((s) && ((s)->bits & (STRINTERNED | STRHASHASH)))
+#define iskeyword(s)		((s) && ((s)->bits & (STRHASHASH | STRKEYWORD)))
+#define isvtmethod(s)		((s) && ((s)->bits & (STRHASHASH | STRVTMETHOD)))
 
 
 
@@ -155,10 +159,10 @@ typedef struct UValue {
 
 
 /* set value to upvalue */
-#define setv2uv(vm,v,uv)	setv2o(vm,v,uv,UValue)
+#define setv2uv(ts,v,uv)	setv2o(ts,v,uv,UValue)
 
 /* set stack value to upvalue */
-#define setsv2uv(vm,sv,uv)	setv2uv(vm,s2v(sv),uv)
+#define setsv2uv(ts,sv,uv)	setv2uv(ts,s2v(sv),uv)
 
 
 /* size of upvalue */
@@ -235,10 +239,10 @@ typedef struct Function {
 
 
 /* set value to function */
-#define setv2fn(vm,v,fn)	setv2o(vm,v,fn,Function)
+#define setv2fn(ts,v,fn)	setv2o(ts,v,fn,Function)
 
 /* set stack value to upvalue */
-#define setsv2fn(vm,sv,fn)	setv2fn(vm,s2v(sv),fn)
+#define setsv2fn(ts,sv,fn)	setv2fn(ts,s2v(sv),fn)
 
 /* size of function */
 #define sizefn()	sizeof(Function)
@@ -271,10 +275,10 @@ typedef struct CriptClosure {
 #define crclvalue(v)		((CriptClosure*)ovalue(v))
 
 /* set value to cript closure */
-#define setv2crcl(vm,v,crcl)		setv2o(vm,v,crcl,CriptClosure)
+#define setv2crcl(ts,v,crcl)		setv2o(ts,v,crcl,CriptClosure)
 
 /* set stack value to cript closure */
-#define setsv2crcl(vm,sv,crcl)		setv2crcl(vm,s2v(sv),crcl)
+#define setsv2crcl(ts,sv,crcl)		setv2crcl(ts,s2v(sv),crcl)
 
 /* size of cript closure */
 #define sizecrcl(crcl) \
@@ -292,10 +296,10 @@ typedef struct {
 #define cclvalue(v)		((CClosure*)ovalue(v))
 
 /* set value to C closure */
-#define setv2ccl(vm,v,ccl)	setv2o(vm,v,ccl,CClosure)
+#define setv2ccl(ts,v,ccl)	setv2o(ts,v,ccl,CClosure)
 
 /* set stack value to C closure */
-#define setsv2ccl(vm,sv,ccl)	setv2ccl(vm,s2v(sv),ccl)
+#define setsv2ccl(ts,sv,ccl)	setv2ccl(ts,s2v(sv),ccl)
 
 /* size of C closure */
 #define sizeccl(ccl) \
@@ -312,10 +316,10 @@ typedef union Closure {
 } Closure;
 
 /* set value to closure */
-#define setv2cl(vm,v,cl)	setv2o(vm,v,cl,Closure)
+#define setv2cl(ts,v,cl)	setv2o(ts,v,cl,Closure)
 
 /* set stack value to closure */
-#define setsv2cl(vm,sv,cl)	setv2cl(vm,s2v(sv),cl)
+#define setsv2cl(ts,sv,cl)	setv2cl(ts,s2v(sv),cl)
 
 #define ttiscl(v)	(ttisccl(v) || ttiscrcl(v))
 #define clvalue(v)	((Closure*)ovalue(v))
@@ -333,7 +337,7 @@ typedef struct OClass {
 	ObjectHeader;
 	OString *name; /* class name */
 	HTable mtab; /* method table */
-	GCObject *vtable[CR_MNUM]; /* overloadable methods */
+	GCObject *vtable[CR_NUMM]; /* overloadable methods */
 } OClass;
 
 
@@ -344,10 +348,10 @@ typedef struct OClass {
 
 
 /* set value to class */
-#define setv2cls(vm,v,cls)	setv2o(vm,v,cls,OClass)
+#define setv2cls(ts,v,cls)	setv2o(ts,v,cls,OClass)
 
 /* set stack value to class */
-#define setsv2cls(vm,sv,cls)	setv2cls(vm,s2v(sv),cls)
+#define setsv2cls(ts,sv,cls)	setv2cls(ts,s2v(sv),cls)
 
 /* size of class */
 #define sizecls()	sizeof(OClass)
@@ -376,10 +380,10 @@ typedef struct Instance {
 
 
 /* set value to instance */
-#define setv2ins(vm,v,ins)	setv2o(vm,v,ins,Instance)
+#define setv2ins(ts,v,ins)	setv2o(ts,v,ins,Instance)
 
 /* set stack value to instance */
-#define setsv2ins(vm,sv,ins)	setv2ins(vm,s2v(sv),ins)
+#define setsv2ins(ts,sv,ins)	setv2ins(ts,s2v(sv),ins)
 
 /* size of instance */
 #define sizeins()	sizeof(Instance)
@@ -406,10 +410,10 @@ typedef struct InstanceMethod {
 
 
 /* set value to instance method */
-#define setv2im(vm,v,im)		setv2o(vm,v,im,InstanceMethod)
+#define setv2im(ts,v,im)		setv2o(ts,v,im,InstanceMethod)
 
 /* set stack value to instance method */
-#define setsv2im(vm,sv,im)		setv2im(vm,s2v(sv),im)
+#define setsv2im(ts,sv,im)		setv2im(ts,s2v(sv),im)
 
 /* size of instance method */
 #define sizeim()	sizeof(InstanceMethod)
@@ -426,24 +430,24 @@ typedef struct Tuple {
 } Tuple;
 
 /* array of tuples for vtable method */
-extern const Tuple vtmethodinfo[CR_MNUM];
+extern const Tuple vtmethodinfo[CR_NUMM];
 
 
-void cr_ot_sourceid(char *adest, const char *src, size_t len);
-int cr_ot_strtomt(VM *vm, OString *id);
-OString *cr_ot_newstring(VM *vm, const char *chars, size_t len);
-int cr_ot_hexvalue(int c);
-void cr_ot_numtostring(VM *vm, TValue *v);
-size_t cr_ot_strtonum(const char *s, TValue *o, int *of);
-const char *cr_ot_pushvfstring(VM *vm, const char *fmt, va_list argp);
-const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...);
-CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues);
-Function *cr_ot_newfunction(VM *vm);;
-CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn, int nupvalues);
-UValue *cr_ot_newuvalue(VM *vm, TValue *vp);
-OClass *cr_ot_newclass(VM *vm, OString *id);
-Instance *cr_ot_newinstance(VM *vm, OClass *cls);
-InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure *method);
-void cr_ot_free(VM *vm, GCObject *o);
+void cr_ob_sourceid(char *adest, const char *src, size_t len);
+int cr_ob_strtomt(TState *ts, OString *id);
+OString *cr_ob_newstring(TState *ts, const char *chars, size_t len);
+int cr_ob_hexvalue(int c);
+void cr_ob_numtostring(TState *ts, TValue *v);
+size_t cr_ob_strtonum(const char *s, TValue *o, int *of);
+const char *cr_ob_pushvfstring(TState *ts, const char *fmt, va_list argp);
+const char *cr_ob_pushfstring(TState *ts, const char *fmt, ...);
+CClosure *cr_ob_newcclosure(TState *ts, cr_cfunc fn, int nupvalues);
+Function *cr_ob_newfunction(TState *ts);;
+CriptClosure *cr_ob_newcrclosure(TState *ts, Function *fn, int nupvalues);
+UValue *cr_ob_newuvalue(TState *ts, TValue *vp);
+OClass *cr_ob_newclass(TState *ts, OString *id);
+Instance *cr_ob_newinstance(TState *ts, OClass *cls);
+InstanceMethod *cr_ob_newinstancemethod(TState *ts, Instance *receiver, CriptClosure *method);
+void cr_ob_free(TState *ts, GCObject *o);
 
 #endif

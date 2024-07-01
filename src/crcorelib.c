@@ -2,9 +2,9 @@
 
 #include <stdio.h>
 
-int skcore_print(VM* vm)
+int skcore_print(TState* ts)
 {
-    int args = cr_gettop(vm);
+    int args = cr_gettop(ts);
     while(args--) {
 
         fputc('\t', stdout);
@@ -12,99 +12,99 @@ int skcore_print(VM* vm)
     return 0;
 }
 
-int skcore_println(VM* vm)
+int skcore_println(TState* ts)
 {
     return 0;
 }
 
-int skcore_tostring(VM* vm)
+int skcore_tostring(TState* ts)
 {
     return 1;
 }
 
-int skcore_tonumber(VM* vm)
+int skcore_tonumber(TState* ts)
 {
     return 1;
 }
 
-int skcore_error(VM* vm)
+int skcore_error(TState* ts)
 {
     return 0;
 }
 
-int skcore_raweq(VM* vm)
+int skcore_raweq(TState* ts)
 {
     return 1;
 }
 
-int skcore_rawget(VM* vm)
+int skcore_rawget(TState* ts)
 {
     return 1;
 }
 
-int skcore_rawset(VM* vm)
+int skcore_rawset(TState* ts)
 {
     return 0;
 }
 
-int skcore_gcollect(VM* vm)
+int skcore_gcollect(TState* ts)
 {
     return 1;
 }
 
-int skcore_typeof(VM* vm)
+int skcore_typeof(TState* ts)
 {
     return 1;
 }
 
-int skcore_next(VM* vm)
+int skcore_next(TState* ts)
 {
     return 1;
 }
 
-int skcore_loadfile(VM* vm)
+int skcore_loadfile(TState* ts)
 {
     return 1;
 }
 
-int skcore_loadstring(VM* vm)
+int skcore_loadstring(TState* ts)
 {
     return 1;
 }
 
 
 /* Generic reader */
-static const char* genericreader(VM* vm, void* userdata, cr_umem* szread)
+static const char* genericreader(TState* ts, void* userdata, cr_umem* szread)
 {
     return NULL;
 }
 
-int skcore_load(VM* vm)
+int skcore_load(TState* ts)
 {
     return 1;
 }
 
-int skcore_runfile(VM* vm)
+int skcore_runfile(TState* ts)
 {
-    return cr_gettop(vm);
+    return cr_gettop(ts);
 }
 
-int skcore_assert(VM* vm)
+int skcore_assert(TState* ts)
 {
-    return cr_gettop(vm);
+    return cr_gettop(ts);
 }
 
-int skcore_take(VM* vm)
+int skcore_take(TState* ts)
 {
     return 1 /* change */;
 }
 
-int skcore_args(VM* vm)
+int skcore_args(TState* ts)
 {
     return 1;
 }
 
-int skcore_pcall(VM* vm)
+int skcore_pcall(TState* ts)
 {
     return 1 /* change */;
 }
@@ -131,7 +131,7 @@ static const cr_entry corelib[] = {
     {NULL,       NULL,            0, 0}, // end
 };
 
-CR_LOADAPI int skload_corelib(VM* vm)
+CR_LOADAPI int skload_corelib(TState* ts)
 {
     return 1;
 }

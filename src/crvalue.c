@@ -43,40 +43,45 @@ int cr_ve_ceillog2 (unsigned int x)
 }
 
 
-static cr_number numarithmetic(VM *vm, cr_number x, cr_number y, int op)
+static cr_number numarithmetic(TState *ts, cr_number x, cr_number y, int op)
 {
+	cr_number m;
+
 	switch(op) {
-	case CR_OPADD: return cri_numadd(vm, x, y);
-	case CR_OPSUB: return cri_numsub(vm, x, y);
-	case CR_OPMUL: return cri_nummul(vm, x, y);
-	case CR_OPDIV: return cri_numdiv(vm, x, y);
-	case CR_OPMOD: return cri_nummod(vm, x, y);
-	case CR_OPPOW: return cri_nummul(vm, x, y);
-	case CR_OPNOT: return cri_nummul(vm, x, y);
-	case CR_OPUMIN: return cri_nummul(vm, x, y);
+	case CR_OPADD: return cri_numadd(ts, x, y);
+	case CR_OPSUB: return cri_numsub(ts, x, y);
+	case CR_OPMUL: return cri_nummul(ts, x, y);
+	case CR_OPDIV: return cri_numdiv(ts, x, y);
+	case CR_OPMOD: { 
+		cri_nummod(ts, x, y, m);
+		return m;
+	}
+	case CR_OPPOW: return cri_nummul(ts, x, y);
+	case CR_OPNOT: return cri_nummul(ts, x, y);
+	case CR_OPUMIN: return cri_nummul(ts, x, y);
 	default: cr_unreachable(); return 0.0;
 	}
 }
 
 
-static cr_number fltarithm(VM *vm, cr_floating a, cr_floating b, cr_ar op)
+static cr_number fltarithm(TState *ts, cr_floating a, cr_floating b, cr_ar op)
 {
 	switch (op) {
 	case CR_OPADD:
-		return cr_numadd(vm, a, b);
+		return cr_numadd(ts, a, b);
 	case CR_OPSUB:
-		return cr_numsub(vm, a, b);
+		return cr_numsub(ts, a, b);
 	case CR_OPMUL:
-		return cr_nummul(vm, a, b);
+		return cr_nummul(ts, a, b);
 	case CR_OPDIV:
-		return cr_numdiv(vm, a, b);
+		return cr_numdiv(ts, a, b);
 	case CR_OPMOD:;
-		cr_nummod(vm, a, b, a);
+		cr_nummod(ts, a, b, a);
 		return a;
 	case CR_OPPOW:
-		return cr_numpow(vm, a, b);
+		return cr_numpow(ts, a, b);
 	case CR_OPUMIN:
-		return cr_numunm(vm, a);
+		return cr_numunm(ts, a);
 	case CR_OPNOT:
 		return cast(cr_floating, 0); // never 'falsey'
 	default:
@@ -89,19 +94,19 @@ static cr_number fltarithm(VM *vm, cr_floating a, cr_floating b, cr_ar op)
 /* Perform arithmetic operation 'op' on cript values.
  * If arithmetic operation was executed successfully then this
  * returns 1, otherwise 0. */
-int varith(VM *vm, Value a, Value b, cr_ar op, Value *res)
+int varith(TState *ts, Value a, Value b, cr_ar op, Value *res)
 {
 	if (arisbin(op)) { // binary operation
 		if (IS_NUMBER(a) && IS_NUMBER(b))
 			goto l_unarynum;
 		else if (isstring(a) && isstring(b))
-			*res = OBJ_VAL(concatenate(vm, a, b));
+			*res = OBJ_VAL(concatenate(ts, a, b));
 		else
 			return 0;
 	} else { // unary operation
 		if (IS_NUMBER(a)) {
 l_unarynum:;
-			cr_floating ret = narith(vm, AS_NUMBER(a), AS_NUMBER(b), op);
+			cr_floating ret = narith(ts, AS_NUMBER(a), AS_NUMBER(b), op);
 			*res = (op != SKAR_NOT ? NUMBER_VAL(ret) : FALSE_VAL);
 		} else if (op == SKAR_NOT) {
 			if (IS_BOOL(a))
@@ -117,13 +122,13 @@ l_unarynum:;
 }
 
 /* Perform binary/unary operation on values. */
-void arith(VM *vm, Value a, Value b, cr_ar op, Value *res)
+void arith(TState *ts, Value a, Value b, cr_ar op, Value *res)
 {
-	if (!varith(vm, a, b, op, res)) {
+	if (!varith(ts, a, b, op, res)) {
 #if defined(CR_OVERLOAD_OPS)
-		otryop(vm, a, b, (op - AR_ADD) + OM_ADD, res);
+		otryop(ts, a, b, (op - AR_ADD) + OM_ADD, res);
 #else
-		operror(vm, a, b, op);
+		operror(ts, a, b, op);
 #endif
 	}
 }
@@ -212,11 +217,11 @@ cr_tt val2type(Value value)
 
 
 /* Special equality ordering that preserves left operand ('switch' statement) */
-void eq_preserveL(VM *vm, Value l, Value r)
+void eq_preserveL(TState *ts, Value l, Value r)
 {
-	push(vm, r);
+	push(ts, r);
 	*stkpeek(1) = l;
-	veq(vm, l, r);
+	veq(ts, l, r);
 }
 
 /* Raw equality.
@@ -266,16 +271,16 @@ cr_ubyte raweq(Value l, Value r)
 
 
 /* != */
-void vne(VM *vm, Value l, Value r)
+void vne(TState *ts, Value l, Value r)
 {
 #if defined(CR_NAN_BOX)
 	if (IS_NUMBER(l) && IS_NUMBER(r))
-		push(vm, BOOL_VAL(AS_NUMBER(l) != AS_NUMBER(r)));
+		push(ts, BOOL_VAL(AS_NUMBER(l) != AS_NUMBER(r)));
 	else
-		one(vm, l, r);
+		one(ts, l, r);
 #else
 	if (l.type != r.type)
-		push(vm, TRUE_VAL);
+		push(ts, TRUE_VAL);
 #if defined(CR_PRECOMPUTED_GOTO)
 #define VAL_TABLE
 #include "jmptable.h"
@@ -291,22 +296,22 @@ void vne(VM *vm, Value l, Value r)
 	{
 		CASE(SKVAL_BOOL)
 		{
-			push(vm, BOOL_VAL(AS_BOOL(l) != AS_BOOL(r)));
+			push(ts, BOOL_VAL(AS_BOOL(l) != AS_BOOL(r)));
 			BREAK;
 		}
 		CASE(VAL_NUMBER)
 		{
-			push(vm, BOOL_VAL(AS_NUMBER(l) != AS_NUMBER(r)));
+			push(ts, BOOL_VAL(AS_NUMBER(l) != AS_NUMBER(r)));
 			BREAK;
 		}
 		CASE(VAL_NIL)
 		{
-			push(vm, FALSE_VAL);
+			push(ts, FALSE_VAL);
 			BREAK;
 		}
 		CASE(VAL_OBJ)
 		{
-			one(vm, l, r);
+			one(ts, l, r);
 			BREAK;
 		}
 	}
@@ -315,12 +320,12 @@ void vne(VM *vm, Value l, Value r)
 
 
 /* == */
-cr_ubyte veq(VM *vm, Value l, Value r)
+cr_ubyte veq(TState *ts, Value l, Value r)
 {
 	cr_ubyte res;
 
 	if (l.type != r.type) {
-		push(vm, FALSE_VAL);
+		push(ts, FALSE_VAL);
 		return 0;
 	}
 
@@ -349,22 +354,22 @@ cr_ubyte veq(VM *vm, Value l, Value r)
 	{
 		CASE(SKVAL_BOOL)
 		{
-			push(vm, BOOL_VAL(AS_BOOL(l) == AS_BOOL(r)));
+			push(ts, BOOL_VAL(AS_BOOL(l) == AS_BOOL(r)));
 			BREAK;
 		}
 		CASE(VAL_NUMBER)
 		{
-			push(vm, BOOL_VAL(AS_NUMBER(l) == AS_NUMBER(r)));
+			push(ts, BOOL_VAL(AS_NUMBER(l) == AS_NUMBER(r)));
 			BREAK;
 		}
 		CASE(VAL_NIL)
 		{
-			push(vm, TRUE_VAL);
+			push(ts, TRUE_VAL);
 			BREAK;
 		}
 		CASE(VAL_OBJ)
 		{
-			oeq(vm, l, r);
+			oeq(ts, l, r);
 			BREAK;
 		}
 	}
@@ -372,42 +377,42 @@ cr_ubyte veq(VM *vm, Value l, Value r)
 }
 
 /* Value less than */
-void vlt(VM *vm, Value l, Value r)
+void vlt(TState *ts, Value l, Value r)
 {
 	if (IS_NUMBER(l) && IS_NUMBER(r))
-		push(vm, BOOL_VAL(AS_NUMBER(l) < AS_NUMBER(r)));
+		push(ts, BOOL_VAL(AS_NUMBER(l) < AS_NUMBER(r)));
 	else
-		olt(vm, l, r);
+		olt(ts, l, r);
 }
 
 
 /* greater than */
-void vgt(VM *vm, Value l, Value r)
+void vgt(TState *ts, Value l, Value r)
 {
 	if (IS_NUMBER(l) && IS_NUMBER(r))
-		push(vm, BOOL_VAL(AS_NUMBER(l) > AS_NUMBER(r)));
+		push(ts, BOOL_VAL(AS_NUMBER(l) > AS_NUMBER(r)));
 	else
-		ogt(vm, l, r);
+		ogt(ts, l, r);
 }
 
 
 /* less equal */
-void vle(VM *vm, Value l, Value r)
+void vle(TState *ts, Value l, Value r)
 {
 	if (IS_NUMBER(l) && IS_NUMBER(r))
-		push(vm, BOOL_VAL(AS_NUMBER(l) <= AS_NUMBER(r)));
+		push(ts, BOOL_VAL(AS_NUMBER(l) <= AS_NUMBER(r)));
 	else
-		ole(vm, l, r);
+		ole(ts, l, r);
 }
 
 
 /* greater equal */
-void vge(VM *vm, Value l, Value r)
+void vge(TState *ts, Value l, Value r)
 {
 	if (IS_NUMBER(l) && IS_NUMBER(r))
-		push(vm, BOOL_VAL(AS_NUMBER(l) >= AS_NUMBER(r)));
+		push(ts, BOOL_VAL(AS_NUMBER(l) >= AS_NUMBER(r)));
 	else
-		oge(vm, l, r);
+		oge(ts, l, r);
 }
 
 
@@ -419,36 +424,36 @@ void vge(VM *vm, Value l, Value r)
  */
 
 /* convert 'cr_integer' to string */
-Value tostr_integer(VM *vm, cr_integer n)
+Value tostr_integer(TState *ts, cr_integer n)
 {
 	static char buff[MAXINT2STR];
 	CRString *str;
 	cr_ubyte len;
 
 	len = snprintf(buff, sizeof(buff), INTEGERFMT, n);
-	return OBJ_VAL(OString_new(vm, buff, len));
+	return OBJ_VAL(OString_new(ts, buff, len));
 }
 
 /* convert 'cr_floating' to string */
-Value tostr_floating(VM *vm, cr_floating n)
+Value tostr_floating(TState *ts, cr_floating n)
 {
 	static char buff[MAXFLT2STR];
 	CRString *str;
 	cr_ubyte len;
 
 	len = snprintf(buff, sizeof(buff), FLTFMT, n);
-	return OBJ_VAL(OString_new(vm, buff, len));
+	return OBJ_VAL(OString_new(ts, buff, len));
 }
 
 /* convert void pointer to string */
-Value tostr_ptr(VM *vm, void *ptr)
+Value tostr_ptr(TState *ts, void *ptr)
 {
 	static char buff[MAXVOIDP2STR];
 	CRString *str;
 	cr_ubyte len;
 
 	len = snprintf(buff, sizeof(buff), PTRFMT, ptr);
-	return OBJ_VAL(OString_new(vm, buff, len));
+	return OBJ_VAL(OString_new(ts, buff, len));
 }
 
 /*
@@ -457,23 +462,23 @@ Value tostr_ptr(VM *vm, void *ptr)
  * the existing one depending on the 'v' type.
  * If 'raw' is set then the raw conversion is performed.
  */
-Value vtostr(VM *vm, Value v, cr_ubyte raw)
+Value vtostr(TState *ts, Value v, cr_ubyte raw)
 {
 	switch (VT(v)) {
 	case VTBOOL:
-		return ssvbool(vm, AS_BOOL(v));
+		return ssvbool(ts, AS_BOOL(v));
 	case VTINTEGER:
-		return tostr_integer(vm, asint(v));
+		return tostr_integer(ts, asint(v));
 	case VTNUMBER:
-		return tostr_flt(vm, asnum(v));
+		return tostr_flt(ts, asnum(v));
 	case VTNIL:
-		return ssv(vm, SS_NIL);
+		return ssv(ts, SS_NIL);
 	case VTLUDATA:
-		return tostr_ptr(vm, AS_LUDATA(v));
+		return tostr_ptr(ts, AS_LUDATA(v));
 	case VTCFUNC:
-		return tostr_ptr(vm, cast(void *, AS_CFUNC(v)));
+		return tostr_ptr(ts, cast(void *, AS_CFUNC(v)));
 	case VTOBJ:
-		return otostr(vm, asobj(v), raw);
+		return otostr(ts, asobj(v), raw);
 	default:
 		cr_unreachable;
 	}

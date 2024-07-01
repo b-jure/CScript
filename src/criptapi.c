@@ -23,110 +23,110 @@
 #include "crparser.h"
 #include "crreader.h"
 #include "crvalue.h"
-#include "crvm.h"
+#include "crts.h"
 #include "stdarg.h"
 
 
 /* Get stack value at 'idx'. */
-static cr_inline TValue *i2val(const VM *vm, int idx)
+static cr_inline TValue *i2val(const TState *ts, int idx)
 {
-	TValue *fn = last_frame(vm).callee;
+	TValue *fn = last_frame(ts).callee;
 	if (idx >= 0) {
-		cr_checkapi(vm, idx < vm->sp - 1 - fn, "index too big.");
+		cr_checkapi(ts, idx < ts->sp - 1 - fn, "index too big.");
 		return (fn + 1 + idx);
 	} else { // idx is negative
-		cr_checkapi(vm, -idx <= (vm->sp - fn), "Invalid index.");
-		return (vm->sp + idx);
+		cr_checkapi(ts, -idx <= (ts->sp - fn), "Invalid index.");
+		return (ts->sp + idx);
 	}
 }
 
 
 
 /* Ensure the stack has enough space. */
-CR_API cr_ubyte cr_checkstack(VM *vm, int n)
+CR_API cr_ubyte cr_checkstack(TState *ts, int n)
 {
-	cr_checkapi(vm, n >= 0, "negative 'n'.");
-	return (((vm->sp - vm->stack) + n) <= VM_STACK_LIMIT);
+	cr_checkapi(ts, n >= 0, "negative 'n'.");
+	return (((ts->sp - ts->stack) + n) <= ts_STACK_LIMIT);
 }
 
 
 
 /* 
- * Create and allocate VM by providing your own 'allocator'.
+ * Create and allocate TState by providing your own 'allocator'.
  * In case the NULL pointer is provided as 'allocator' and/or
  * allocation fails NULL is returned. 
  */
-CR_API VM *cr_create(cr_alloc allocator, void *ud)
+CR_API TState *cr_create(cr_alloc allocator, void *ud)
 {
-	VM *vm;
+	TState *ts;
 
-	if (allocator == NULL || cr_unlikely((vm = allocator(NULL, sizeof(VM), ud)) == NULL))
+	if (allocator == NULL || cr_unlikely((ts = allocator(NULL, sizeof(TState), ud)) == NULL))
 		return NULL;
-	memset(&vm->hooks, 0, sizeof(Hooks));
-	vm->hooks.reallocate = allocator;
-	vm->hooks.userdata = ud;
-	vm->gc.gc_stopped = 1; // wait until 'vm' is initialized
-	VM_init(vm);
-	vm->gc.gc_stopped = 0;
-	return vm;
+	memset(&ts->hooks, 0, sizeof(Hooks));
+	ts->hooks.reallocate = allocator;
+	ts->hooks.userdata = ud;
+	ts->gc.gc_stopped = 1; // wait until 'ts' is initialized
+	ts_init(ts);
+	ts->gc.gc_stopped = 0;
+	return ts;
 }
 
 
-/* Resets 'VM' clearing its call stack and closing all
+/* Resets 'TState' clearing its call stack and closing all
  * to be closed variables. */
-CR_API void cr_resetvm(VM *vm)
+CR_API void cr_resetts(TState *ts)
 {
-	resetvm(vm, vm->status);
+	resetts(ts, ts->status);
 }
 
 
-/* Free the VM allocation, the pointer to VM will be nulled out. */
-CR_API void cr_destroy(VM **vmp)
+/* Free the TState allocation, the pointer to TState will be nulled out. */
+CR_API void cr_destroy(TState **tsp)
 {
-	VM *vm;
+	TState *ts;
 	GCObject *head, *next;
 
-	if (cr_likely(vmp != NULL)) { // non-null pointer ?
-		cr_lock(*vmp);
-		if (*vmp == NULL)
+	if (cr_likely(tsp != NULL)) { // non-null pointer ?
+		cr_lock(*tsp);
+		if (*tsp == NULL)
 			return;
-		vm = *vmp;
-		HTable_free(vm, &vm->loaded);
-		HTable_free(vm, &vm->globids);
-		GSARRAY_FREE(vm);
-		Array_Variable_free(&vm->globvars, NULL);
-		Array_Value_free(&vm->temp, NULL);
-		Array_VRef_free(&vm->callstart, NULL);
-		Array_VRef_free(&vm->retstart, NULL);
-		Array_OSRef_free(&vm->interned, NULL);
-		HTable_free(vm, &vm->weakrefs);
-		for (head = vm->objects; head != NULL; head = next) {
+		ts = *tsp;
+		HTable_free(ts, &ts->loaded);
+		HTable_free(ts, &ts->globids);
+		GSARRAY_FREE(ts);
+		Array_Variable_free(&ts->globvars, NULL);
+		Array_Value_free(&ts->temp, NULL);
+		Array_VRef_free(&ts->callstart, NULL);
+		Array_VRef_free(&ts->retstart, NULL);
+		Array_OSRef_free(&ts->interned, NULL);
+		HTable_free(ts, &ts->weakrefs);
+		for (head = ts->objects; head != NULL; head = next) {
 			next = onext(head);
-			ofree(vm, head);
+			ofree(ts, head);
 		}
-		FREE(vm, vm);
-		*vmp = NULL;
+		FREE(ts, ts);
+		*tsp = NULL;
 	}
 }
 
 
 /* Set panic handler and return old one */
-CR_API cr_panic cr_setpanic(VM *vm, cr_panic panicfn)
+CR_API cr_panic cr_setpanic(TState *ts, cr_panic panicfn)
 {
 	cr_panic old_panic;
 
-	cr_lock(vm);
-	old_panic = vm->hooks.panic;
-	vm->hooks.panic = panicfn;
-	cr_unlock(vm);
+	cr_lock(ts);
+	old_panic = ts->hooks.panic;
+	ts->hooks.panic = panicfn;
+	cr_unlock(ts);
 	return old_panic;
 }
 
 
 /* Return current version. */
-CR_API cr_umem cr_version(VM *vm)
+CR_API cr_umem cr_version(TState *ts)
 {
-	UNUSED(vm);
+	UNUSED(ts);
 	return cast(cr_umem, CR_VERSION_NUMBER);
 }
 
@@ -140,22 +140,22 @@ CR_API cr_umem cr_version(VM *vm)
  * is popped off.
  * Returned value of 1 means ordering applied is true, otherwise 0 is returned.
  */
-CR_API cr_ubyte cr_compare(VM *vm, int idx1, int idx2, cr_ord ord)
+CR_API cr_ubyte cr_compare(TState *ts, int idx1, int idx2, cr_ord ord)
 {
-	static void (*ordfuncs[])(VM *, Value, Value) = { veq, vne, vlt, vgt, vle, vge };
+	static void (*ordfuncs[])(TState *, Value, Value) = { veq, vne, vlt, vgt, vle, vge };
 	Value l, r;
 	cr_ubyte res;
 
-	cr_lock(vm);
-	criptapi_checkordop(vm, ord);
-	criptapi_checkstack(vm, 2);
-	l = *i2val(vm, idx1);
-	r = *i2val(vm, idx2);
-	*vm->sp++ = l; // push left operand
-	*vm->sp++ = r; // push right operand
-	ordfuncs[ord](vm, l, r);
+	cr_lock(ts);
+	criptapi_checkordop(ts, ord);
+	criptapi_checkstack(ts, 2);
+	l = *i2val(ts, idx1);
+	r = *i2val(ts, idx2);
+	*ts->sp++ = l; // push left operand
+	*ts->sp++ = r; // push right operand
+	ordfuncs[ord](ts, l, r);
 	res = !ISFALSE(*stkpeek(0));
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return res;
 }
 
@@ -166,16 +166,16 @@ CR_API cr_ubyte cr_compare(VM *vm, int idx1, int idx2, cr_ord ord)
  * Result is returned directly without storing it on the stack.
  * Returned value of 1 means values are equal, otherwise 0 is returned. 
  */
-CR_API cr_ubyte cr_rawequal(VM *vm, int idx1, int idx2)
+CR_API cr_ubyte cr_rawequal(TState *ts, int idx1, int idx2)
 {
 	Value l, r;
 	cr_ubyte res;
 
-	cr_lock(vm);
-	l = *i2val(vm, idx1);
-	r = *i2val(vm, idx2);
+	cr_lock(ts);
+	l = *i2val(ts, idx1);
+	r = *i2val(ts, idx2);
 	res = raweq(l, r);
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return res;
 }
 
@@ -191,120 +191,120 @@ CR_API cr_ubyte cr_rawequal(VM *vm, int idx1, int idx2)
  * Result is pushed on top of the stack in place of the
  * first operand and second operand is popped of. 
  */
-CR_API void cr_arith(VM *vm, cr_ar op)
+CR_API void cr_arith(TState *ts, cr_ar op)
 {
 	Value *res;
 	int adjust;
 
-	cr_lock(vm);
-	criptapi_checkarop(vm, op);
+	cr_lock(ts);
+	criptapi_checkarop(ts, op);
 	adjust = 0;
 	if (arisbin(op)) {
-		criptapi_checkelems(vm, 2);
+		criptapi_checkelems(ts, 2);
 		adjust = 1;
 	} else {
-		criptapi_checkelems(vm, 1);
+		criptapi_checkelems(ts, 1);
 	}
 	res = stkpeek(1);
-	arith(vm, *res, *stkpeek(0), op, res);
-	vm->sp -= adjust; // result is where the first operand was
-	cr_unlock(vm);
+	arith(ts, *res, *stkpeek(0), op, res);
+	ts->sp -= adjust; // result is where the first operand was
+	cr_unlock(ts);
 }
 
 
 /* Push nil on the stack */
-CR_API void cr_pushnil(VM *vm)
+CR_API void cr_pushnil(TState *ts)
 {
-	cr_lock(vm);
-	criptapi_pushnil(vm);
-	cr_unlock(vm);
+	cr_lock(ts);
+	criptapi_pushnil(ts);
+	cr_unlock(ts);
 }
 
 
 /* Push number on the stack */
-CR_API void cr_pushinteger(VM *vm, cr_lint number)
+CR_API void cr_pushinteger(TState *ts, cr_lint number)
 {
-	cr_lock(vm);
-	criptapi_pushinteger(vm, number);
-	cr_unlock(vm);
+	cr_lock(ts);
+	criptapi_pushinteger(ts, number);
+	cr_unlock(ts);
 }
 
 
 /* Push number on the stack */
-CR_API void cr_pushfloat(VM *vm, cr_double number)
+CR_API void cr_pushfloat(TState *ts, cr_double number)
 {
-	cr_lock(vm);
-	criptapi_pushfloat(vm, number);
-	cr_unlock(vm);
+	cr_lock(ts);
+	criptapi_pushfloat(ts, number);
+	cr_unlock(ts);
 }
 
 
 /* Push string on the stack */
-CR_API void cr_pushstring(VM *vm, const char *str, cr_umem len)
+CR_API void cr_pushstring(TState *ts, const char *str, cr_umem len)
 {
-	cr_lock(vm);
-	criptapi_pushstr(vm, str, len);
-	cr_unlock(vm);
+	cr_lock(ts);
+	criptapi_pushstr(ts, str, len);
+	cr_unlock(ts);
 }
 
 
 /* Push cstring on the stack */
-CR_API void cr_pushcstring(VM *vm, const char *str)
+CR_API void cr_pushcstring(TState *ts, const char *str)
 {
-	cr_lock(vm);
-	criptapi_pushstr(vm, str, strlen(str));
-	cr_unlock(vm);
+	cr_lock(ts);
+	criptapi_pushstr(ts, str, strlen(str));
+	cr_unlock(ts);
 }
 
 
 /* Push formatted cstring on the stack, format arguments
  * start from 'argp'. */
-CR_API const char *cr_pushvfstring(VM *vm, const char *fmt, va_list argp)
+CR_API const char *cr_pushvfstring(TState *ts, const char *fmt, va_list argp)
 {
 	const char *str = NULL;
-	cr_lock(vm);
-	criptapi_pushfstr(vm, fmt, argp);
+	cr_lock(ts);
+	criptapi_pushfstr(ts, fmt, argp);
 	str = ascstring(*stkpeek(0));
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return str;
 }
 
 
 /* Push formatted cstring on the stack */
-CR_API const char *cr_pushfstring(VM *vm, const char *fmt, ...)
+CR_API const char *cr_pushfstring(TState *ts, const char *fmt, ...)
 {
 	const char *str = NULL;
 	va_list argp;
-	cr_lock(vm);
+	cr_lock(ts);
 	va_start(argp, fmt);
-	criptapi_pushfstr(vm, fmt, argp);
+	criptapi_pushfstr(ts, fmt, argp);
 	va_end(argp);
 	str = ascstring(*stkpeek(0));
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return str;
 }
 
 
 /* Push boolean on the stack */
-CR_API void cr_pushbool(VM *vm, int boolean)
+CR_API void cr_pushbool(TState *ts, int boolean)
 {
-	cr_lock(vm);
-	cr_checkapi(vm, boolean == 0 || boolean == 1, "invalid boolean.");
-	criptapi_pushbool(vm, boolean);
-	cr_unlock(vm);
+	cr_lock(ts);
+	cr_checkapi(ts, boolean == 0 || boolean == 1, "invalid boolean.");
+	criptapi_pushbool(ts, boolean);
+	cr_unlock(ts);
 }
 
 
 /* Auxiliary to 'cr_pushcclosure' and 'cr_pushclass' */
-static CClosure *auxpushcclosure(VM *vm, cr_cfunc fn, int args, cr_ubyte isvararg,
+static CClosure *auxpushcclosure(TState *ts, cr_cfunc fn, int args, cr_ubyte isvararg,
 				int upvals)
 {
 	CRString *name = asstring(*stkpeek(0));
-	CClosure *native = ONative_new(vm, name, fn, args, isvararg, upvals);
-	pop(vm); // name
-	vm->sp -= upvals;
+	CClosure *native = ONative_new(ts, name, fn, args, isvararg, upvals);
+	pop(ts); // name
+	ts->sp -= upvals;
 	while (upvals--)
-		native->upvalue[upvals] = *(vm->sp + upvals);
+		native->upvalue[upvals] = *(ts->sp + upvals);
 	return native;
 }
 
@@ -318,29 +318,29 @@ static CClosure *auxpushcclosure(VM *vm, cr_cfunc fn, int args, cr_ubyte isvarar
  * be accessed with the provided API in this header file.
  * This function will remove 'upvals' amount of values from the stack
  * and store them in C closure. */
-CR_API void cr_pushcclosure(VM *vm, const char *name, cr_cfunc fn, int args, cr_ubyte isvararg,
+CR_API void cr_pushcclosure(TState *ts, const char *name, cr_cfunc fn, int args, cr_ubyte isvararg,
 			    int upvals)
 {
-	cr_lock(vm);
-	criptapi_checkelems(vm, upvals);
-	criptapi_checkptr(vm, fn);
-	CRString *fname = vm->faststatic[SS_CSRC];
+	cr_lock(ts);
+	criptapi_checkelems(ts, upvals);
+	criptapi_checkptr(ts, fn);
+	CRString *fname = ts->faststatic[SS_CSRC];
 	if (name)
-		fname = OString_new(vm, name, strlen(name));
-	criptapi_pusho(vm, fname);
-	CClosure *native = auxpushcclosure(vm, fn, args, isvararg, upvals);
-	criptapi_pushonative(vm, native);
-	cr_unlock(vm);
+		fname = OString_new(ts, name, strlen(name));
+	criptapi_pusho(ts, fname);
+	CClosure *native = auxpushcclosure(ts, fn, args, isvararg, upvals);
+	criptapi_pushonative(ts, native);
+	cr_unlock(ts);
 }
 
 
 /* Push value from the stack located at 'idx', on top of the stack */
-CR_API void cr_push(VM *vm, int idx)
+CR_API void cr_push(TState *ts, int idx)
 {
-	cr_lock(vm);
-	Value *val = i2val(vm, idx);
-	criptapi_pushval(vm, *val);
-	cr_unlock(vm);
+	cr_lock(ts);
+	Value *val = i2val(ts, idx);
+	criptapi_pushval(ts, *val);
+	cr_unlock(ts);
 }
 
 
@@ -362,37 +362,37 @@ CR_API void cr_push(VM *vm, int idx)
  * the appropriate values are used.
  * After the function returns upvalues will be popped together with
  * the class name; top of the stack will contain newly created class. */
-CR_API void cr_pushclass(VM *vm, cr_entry entries[], int nup)
+CR_API void cr_pushclass(TState *ts, cr_entry entries[], int nup)
 {
-	cr_lock(vm);
-	criptapi_checkelems(vm, nup + 1); // upvalues + class name
+	cr_lock(ts);
+	criptapi_checkelems(ts, nup + 1); // upvalues + class name
 	Value classname = *stkpeek(0);
-	cr_checkapi(vm, isstring(classname), "Expect string");
-	OClass *oclass = OClass_new(vm, asstring(classname));
-	pop(vm); // class name
-	criptapi_pusho(vm, oclass);
+	cr_checkapi(ts, isstring(classname), "Expect string");
+	OClass *oclass = OClass_new(ts, asstring(classname));
+	pop(ts); // class name
+	criptapi_pusho(ts, oclass);
 	cr_entry *entry = entries;
 	while (entry->name && entry->fn) { // while valid entry
 		for (int i = 0; i < nup; i++)
-			criptapi_pushval(vm, *stkpeek(nup - 1));
-		CRString *name = OString_new(vm, entry->name, strlen(entry->name));
-		criptapi_pusho(vm, name);
-		int tag = id2omtag(vm, name);
+			criptapi_pushval(ts, *stkpeek(nup - 1));
+		CRString *name = OString_new(ts, entry->name, strlen(entry->name));
+		criptapi_pusho(ts, name);
+		int tag = id2omtag(ts, name);
 		if (tag == -1) { // not overload ?
 			CClosure *native =
-				auxpushcclosure(vm, entry->fn, entry->args, entry->isvararg, nup);
+				auxpushcclosure(ts, entry->fn, entry->args, entry->isvararg, nup);
 			*stkpeek(0) = OBJ_VAL(native);
-			rawset(vm, &oclass->mtab, OBJ_VAL(name), OBJ_VAL(native));
-			pop(vm); // native
+			rawset(ts, &oclass->mtab, OBJ_VAL(name), OBJ_VAL(native));
+			pop(ts); // native
 		} else { // overloaded, override 'arity' and 'isvararg'
-			CClosure *native = auxpushcclosure(vm, entry->fn, ominfo[tag].arity, 0, nup);
+			CClosure *native = auxpushcclosure(ts, entry->fn, ominfo[tag].arity, 0, nup);
 			oclass->vtable[tag] = cast(GCObject *, native);
 		}
 		entry = ++entries;
 	}
-	*(vm->sp - nup) = pop(vm); // move class to first upvalue
-	popn(vm, nup - 1); // pop the rest of the upvalues
-	cr_unlock(vm);
+	*(ts->sp - nup) = pop(ts); // move class to first upvalue
+	popn(ts, nup - 1); // pop the rest of the upvalues
+	cr_unlock(ts);
 }
 
 
@@ -403,17 +403,17 @@ CR_API void cr_pushclass(VM *vm, cr_entry entries[], int nup)
  * For example: if there are 5 values on the stack after the
  * callee then -1 would be index 4. 
  */
-CR_API int cr_absidx(VM *vm, int idx)
+CR_API int cr_absidx(TState *ts, int idx)
 {
-	return (idx >= 0) ? idx : cast_int(vm->sp - last_frame(vm).callee - 1) + idx;
+	return (idx >= 0) ? idx : cast_int(ts->sp - last_frame(ts).callee - 1) + idx;
 }
 
 
 
 /* Return type of the value on the stack at 'idx'. */
-CR_API cr_tt cr_type(const VM *vm, int idx)
+CR_API cr_tt cr_type(const TState *ts, int idx)
 {
-	Value *value = i2val(vm, idx);
+	Value *value = i2val(ts, idx);
 	return val2type(*value);
 }
 
@@ -422,91 +422,91 @@ CR_API cr_tt cr_type(const VM *vm, int idx)
 /* Return type name of the value on the stack at 'idx'.
  * This returned pointer is 'const' indicating the
  * memory it points to should not be modified. */
-CR_API const char *cr_typename(const VM *vm, int idx)
+CR_API const char *cr_typename(const TState *ts, int idx)
 {
-	Value *value = i2val(vm, idx);
+	Value *value = i2val(ts, idx);
 	int type = val2type(*value);
-	return vm->faststatic[type]->bytes;
+	return ts->faststatic[type]->bytes;
 }
 
 
 
 /* Convert type tag into name */
-CR_API const char *cr_tagname(const VM *vm, cr_tt type)
+CR_API const char *cr_tagname(const TState *ts, cr_tt type)
 {
-	return vm->faststatic[type]->bytes;
+	return ts->faststatic[type]->bytes;
 }
 
 
 
 /* Check if the value on the stack at 'idx' is nil. */
-CR_API cr_ubyte cr_isnil(const VM *vm, int idx)
+CR_API cr_ubyte cr_isnil(const TState *ts, int idx)
 {
-	return IS_NIL(*i2val(vm, idx));
+	return IS_NIL(*i2val(ts, idx));
 }
 
 
 
 /* Check if the value on the stack at 'idx' is number. */
-CR_API cr_ubyte cr_isnumber(const VM *vm, int idx)
+CR_API cr_ubyte cr_isnumber(const TState *ts, int idx)
 {
-	return IS_NUMBER(*i2val(vm, idx));
+	return IS_NUMBER(*i2val(ts, idx));
 }
 
 
 
 /* Check if the value on the stack at 'idx' is string. */
-CR_API cr_ubyte cr_isstring(const VM *vm, int idx)
+CR_API cr_ubyte cr_isstring(const TState *ts, int idx)
 {
-	return isstring(*i2val(vm, idx));
+	return isstring(*i2val(ts, idx));
 }
 
 
 
 /* Check if the value on the stack at 'idx' is bool. */
-CR_API cr_ubyte cr_isbool(const VM *vm, int idx)
+CR_API cr_ubyte cr_isbool(const TState *ts, int idx)
 {
-	return IS_BOOL(*i2val(vm, idx));
+	return IS_BOOL(*i2val(ts, idx));
 }
 
 
 
 /* Check if the value on the stack at 'idx' is class. */
-CR_API cr_ubyte cr_isclass(const VM *vm, int idx)
+CR_API cr_ubyte cr_isclass(const TState *ts, int idx)
 {
-	return isclassobj(*i2val(vm, idx));
+	return isclassobj(*i2val(ts, idx));
 }
 
 
 
 /* Check if the value on the stack at 'idx' is instance. */
-CR_API cr_ubyte cr_isinstance(const VM *vm, int idx)
+CR_API cr_ubyte cr_isinstance(const TState *ts, int idx)
 {
-	return isinstance(*i2val(vm, idx));
+	return isinstance(*i2val(ts, idx));
 }
 
 
 
 /* Check if the value on the stack at 'idx' is native C function. */
-CR_API cr_ubyte cr_isnative(const VM *vm, int idx)
+CR_API cr_ubyte cr_isnative(const TState *ts, int idx)
 {
-	return iscfunction(*i2val(vm, idx));
+	return iscfunction(*i2val(ts, idx));
 }
 
 
 
 /* Check if the value on the stack at 'idx' is bound method (instance method). */
-CR_API cr_ubyte cr_ismethod(const VM *vm, int idx)
+CR_API cr_ubyte cr_ismethod(const TState *ts, int idx)
 {
-	return isboundmethod(*i2val(vm, idx));
+	return isboundmethod(*i2val(ts, idx));
 }
 
 
 
 /* Check if the value on the stack at 'idx' is cript closure. */
-CR_API cr_ubyte cr_isclosure(const VM *vm, int idx)
+CR_API cr_ubyte cr_isclosure(const TState *ts, int idx)
 {
-	return isclosureobj(*i2val(vm, idx));
+	return isclosureobj(*i2val(ts, idx));
 }
 
 
@@ -516,16 +516,16 @@ CR_API cr_ubyte cr_isclosure(const VM *vm, int idx)
  * Pops the string on top of the stack and replaces the first
  * one with the concatenated string.
  * They are concatenated in the order they were pushed on the stack. */
-CR_API const char *cr_concat(VM *vm)
+CR_API const char *cr_concat(TState *ts)
 {
-	cr_lock(vm);
-	criptapi_checkelems(vm, 2);
+	cr_lock(ts);
+	criptapi_checkelems(ts, 2);
 	Value right = *stkpeek(0);
 	Value left = *stkpeek(1);
-	cr_checkapi(vm, isstring(right) && isstring(left), "expect strings");
-	concatonstack(vm);
+	cr_checkapi(ts, isstring(right) && isstring(left), "expect strings");
+	concatonstack(ts);
 	const char *concated = ascstring(*stkpeek(0));
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return concated;
 }
 
@@ -533,16 +533,16 @@ CR_API const char *cr_concat(VM *vm)
 /* Push class method of an instance at idx on top of the stack.
  * If method doesn't exist this function returns 0 otherwise 1.
  * Note: Class instance methods are all cript closures. */
-CR_API cr_ubyte cr_getmethod(VM *vm, int idx, const char *method)
+CR_API cr_ubyte cr_getmethod(TState *ts, int idx, const char *method)
 {
-	cr_lock(vm);
-	criptapi_checkptr(vm, method);
-	Value val = *i2val(vm, idx);
+	cr_lock(ts);
+	criptapi_checkptr(ts, method);
+	Value val = *i2val(ts, idx);
 	if (!isinstance(val))
 		return 0;
-	criptapi_pushstr(vm, method, strlen(method));
-	cr_ubyte haveit = bindmethod(vm, asinstance(val)->oclass, *stkpeek(0), val);
-	cr_unlock(vm);
+	criptapi_pushstr(ts, method, strlen(method));
+	cr_ubyte haveit = bindmethod(ts, asinstance(val)->oclass, *stkpeek(0), val);
+	cr_unlock(ts);
 	return haveit;
 }
 
@@ -552,20 +552,20 @@ CR_API cr_ubyte cr_getmethod(VM *vm, int idx, const char *method)
  * of the stack.
  * If field value was not found or the value at 'idx' is not
  * class instance return 0, otherwise 1. */
-CR_API cr_ubyte cr_getfield(VM *vm, int idx, const char *field)
+CR_API cr_ubyte cr_getfield(TState *ts, int idx, const char *field)
 {
 	cr_ubyte res = 0;
-	cr_lock(vm);
-	criptapi_checkptr(vm, field);
-	Value insval = *i2val(vm, idx);
+	cr_lock(ts);
+	criptapi_checkptr(ts, field);
+	Value insval = *i2val(ts, idx);
 	if (isinstance(insval)) {
 		Instance *instance = asinstance(insval);
-		Value key = OBJ_VAL(OString_new(vm, field, strlen(field)));
+		Value key = OBJ_VAL(OString_new(ts, field, strlen(field)));
 		Value fieldval;
-		if ((res = rawget(vm, &instance->fields, key, &fieldval)))
-			criptapi_pushval(vm, fieldval);
+		if ((res = rawget(ts, &instance->fields, key, &fieldval)))
+			criptapi_pushval(ts, fieldval);
 	}
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return res;
 }
 
@@ -578,16 +578,16 @@ CR_API cr_ubyte cr_getfield(VM *vm, int idx, const char *field)
  * '__getidx__' is not overloaded, this function
  * returns 0, otherwise 1 and the value will
  * be on top of the stack. */
-CR_API cr_ubyte cr_getindex(VM *vm, int idx)
+CR_API cr_ubyte cr_getindex(TState *ts, int idx)
 {
 	cr_ubyte res = 0;
-	cr_lock(vm);
-	criptapi_checkelems(vm, 1); // [index]
+	cr_lock(ts);
+	criptapi_checkelems(ts, 1); // [index]
 	Value *index = stkpeek(0);
-	Value value = *i2val(vm, idx);
-	res = calloverload(vm, value, OM_GETIDX);
-	*index = pop(vm); // replace [index] with result
-	cr_unlock(vm);
+	Value value = *i2val(ts, idx);
+	res = calloverload(ts, value, OM_GETIDX);
+	*index = pop(ts); // replace [index] with result
+	cr_unlock(ts);
 	return res;
 }
 
@@ -599,15 +599,15 @@ CR_API cr_ubyte cr_getindex(VM *vm, int idx)
  * while the value getting assigned is on top of the stack.
  * If the value is not an instance or '__setidx__' is not
  * overloaded, this function returns 0, otherwise 1. */
-CR_API cr_ubyte cr_setindex(VM *vm, int idx)
+CR_API cr_ubyte cr_setindex(TState *ts, int idx)
 {
 	cr_ubyte res = 0;
-	cr_lock(vm);
-	criptapi_checkelems(vm, 2); // [index][expr]
-	Value value = *i2val(vm, idx);
-	res = calloverload(vm, value, OM_SETIDX);
-	popn(vm, 2); // pop [index] and [expr]
-	cr_unlock(vm);
+	cr_lock(ts);
+	criptapi_checkelems(ts, 2); // [index][expr]
+	Value value = *i2val(ts, idx);
+	res = calloverload(ts, value, OM_SETIDX);
+	popn(ts, 2); // pop [index] and [expr]
+	cr_unlock(ts);
 	return res;
 }
 
@@ -623,15 +623,15 @@ CR_API cr_ubyte cr_setindex(VM *vm, int idx)
  * of the stack.
  * If the operation was successful then 1 is returned; otherwise 0.
  * @ERR: if value we are indexing with is 'nil'. */
-CR_API cr_ubyte cr_rawindex(VM *vm, int idx, cr_ubyte what)
+CR_API cr_ubyte cr_rawindex(TState *ts, int idx, cr_ubyte what)
 {
 	cr_ubyte res = 0;
-	cr_lock(vm);
-	criptapi_checkelems(vm, what == CR_RAWSET ? 2 : 1);
-	Value value = *i2val(vm, idx);
+	cr_lock(ts);
+	criptapi_checkelems(ts, what == CR_RAWSET ? 2 : 1);
+	Value value = *i2val(ts, idx);
 	if (!isinstance(value))
 		return res;
-	res = rawindex(vm, value, what);
+	res = rawindex(ts, value, what);
 	cr_unlock(v);
 	return res;
 }
@@ -642,44 +642,44 @@ CR_API cr_ubyte cr_rawindex(VM *vm, int idx, cr_ubyte what)
  * In case global value was found, it will be on top of the stack,
  * and this function will return 1, otherwise nothing will be pushed
  * on the stack and the function will return 0. */
-CR_API cr_ubyte cr_getglobal(VM *vm, const char *name)
+CR_API cr_ubyte cr_getglobal(TState *ts, const char *name)
 {
-	cr_lock(vm);
-	criptapi_checkptr(vm, name);
+	cr_lock(ts);
+	criptapi_checkptr(ts, name);
 	int res = 0;
 	Value gval;
-	criptapi_checkptr(vm, name);
-	CRString *str = OString_new(vm, name, strlen(name));
-	if (rawget(vm, &vm->globids, OBJ_VAL(str), &gval)) {
+	criptapi_checkptr(ts, name);
+	CRString *str = OString_new(ts, name, strlen(name));
+	if (rawget(ts, &ts->globids, OBJ_VAL(str), &gval)) {
 		int idx = (int)AS_NUMBER(gval);
-		criptapi_pushval(vm, vm->globvars.data[idx].value);
+		criptapi_pushval(ts, ts->globvars.data[idx].value);
 		res = 1;
 	}
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return res;
 }
 
 
 
 /* Get panic handler */
-CR_API cr_panic cr_getpanic(VM *vm)
+CR_API cr_panic cr_getpanic(TState *ts)
 {
-	cr_lock(vm);
-	cr_panic panic_handler = vm->hooks.panic;
-	cr_unlock(vm);
+	cr_lock(ts);
+	cr_panic panic_handler = ts->hooks.panic;
+	cr_unlock(ts);
 	return panic_handler;
 }
 
 
 
 /* Get allocator function */
-CR_API cr_alloc cr_getalloc(VM *vm, void **ud)
+CR_API cr_alloc cr_getalloc(TState *ts, void **ud)
 {
-	cr_lock(vm);
-	cr_alloc alloc = vm->hooks.reallocate;
+	cr_lock(ts);
+	cr_alloc alloc = ts->hooks.reallocate;
 	if (ud)
-		*ud = vm->hooks.userdata;
-	cr_unlock(vm);
+		*ud = ts->hooks.userdata;
+	cr_unlock(ts);
 	return alloc;
 }
 
@@ -688,10 +688,10 @@ CR_API cr_alloc cr_getalloc(VM *vm, void **ud)
 /* Get boolean value (int 1/0) from the stack at 'idx'.
  * If the value at 'idx' is not a boolean, then the flag
  * if provided 'isbool' is set as 0, otherwise flag is set to 1. */
-CR_API cr_ubyte cr_getbool(const VM *vm, int idx, cr_ubyte *isbool)
+CR_API cr_ubyte cr_getbool(const TState *ts, int idx, cr_ubyte *isbool)
 {
 	cr_ubyte bval;
-	Value val = *i2val(vm, idx);
+	Value val = *i2val(ts, idx);
 	cr_ubyte is = tobool(val, &bval);
 	if (isbool)
 		*isbool = is;
@@ -703,10 +703,10 @@ CR_API cr_ubyte cr_getbool(const VM *vm, int idx, cr_ubyte *isbool)
 /* Get number value (cr_double) from the stack at 'idx'.
  * If the value at 'idx' is not a number, then the flag
  * if provided 'isnum' is set as 0, otherwise flag is set to 1. */
-CR_API cr_double cr_getnumber(const VM *vm, int idx, cr_ubyte *isnum)
+CR_API cr_double cr_getnumber(const TState *ts, int idx, cr_ubyte *isnum)
 {
 	cr_double nval = 0.0;
-	Value val = *i2val(vm, idx);
+	Value val = *i2val(ts, idx);
 	cr_ubyte is = tonumber(val, &nval);
 	if (isnum)
 		*isnum = is;
@@ -720,9 +720,9 @@ CR_API cr_double cr_getnumber(const VM *vm, int idx, cr_ubyte *isnum)
  * Otherwise it returns pointer to the start of the string.
  * Returned pointer is 'const' indicating that user should not
  * modify the contents the pointer points to. */
-CR_API const char *cr_getstring(const VM *vm, int idx)
+CR_API const char *cr_getstring(const TState *ts, int idx)
 {
-	Value val = *i2val(vm, idx);
+	Value val = *i2val(ts, idx);
 	return isstring(val) ? ascstring(val) : NULL;
 }
 
@@ -730,9 +730,9 @@ CR_API const char *cr_getstring(const VM *vm, int idx)
 
 /* Get native C function from the stack at 'idx'.
  * Return NULL if the value is not a 'cr_cfunc'. */
-CR_API cr_cfunc cr_getcfunction(const VM *vm, int idx)
+CR_API cr_cfunc cr_getcfunction(const TState *ts, int idx)
 {
-	Value val = *i2val(vm, idx);
+	Value val = *i2val(ts, idx);
 	return iscfunction(val) ? ascfn(val)->fn : NULL;
 }
 
@@ -740,22 +740,22 @@ CR_API cr_cfunc cr_getcfunction(const VM *vm, int idx)
 
 /* Return the number of values currently on the stack
  * relative to the current function */
-CR_API int cr_gettop(const VM *vm)
+CR_API int cr_gettop(const TState *ts)
 {
-	return cast_int(vm->sp - (last_frame(vm).callee + 1));
+	return cast_int(ts->sp - (last_frame(ts).callee + 1));
 }
 
 
 
 /* Copy value on the stack located at index 'src'
  * to value on the stack located at index 'dest'. */
-CR_API void cr_copy(VM *vm, int src, int dest)
+CR_API void cr_copy(TState *ts, int src, int dest)
 {
-	cr_lock(vm);
-	Value *from = i2val(vm, src);
-	Value *to = i2val(vm, dest);
+	cr_lock(ts);
+	Value *from = i2val(ts, src);
+	Value *to = i2val(ts, dest);
 	*to = *from;
-	cr_unlock(vm);
+	cr_unlock(ts);
 }
 
 
@@ -784,7 +784,7 @@ static cr_inline void reverse(Value *from, Value *to)
  * - Before rotation:
  * [callee][0][1][2][3][4][sp]
  * - Do the rotation:
- * cr_rotate(vm, 2, 2);
+ * cr_rotate(ts, 2, 2);
  * - After right-rotation:
  * [callee][0][1][3][4][2][sp]
  *
@@ -793,36 +793,36 @@ static cr_inline void reverse(Value *from, Value *to)
  * - Before rotation:
  * [callee][0][1][2][3][4][sp]
  * - Do the rotation:
- * cr_rotate(vm, 2, -2);
+ * cr_rotate(ts, 2, -2);
  * -After left-rotation:
  * [callee][0][1][4][3][2][sp]
  */
-CR_API void cr_rotate(VM *vm, int idx, int n)
+CR_API void cr_rotate(TState *ts, int idx, int n)
 {
-	cr_lock(vm);
+	cr_lock(ts);
 	Value *end = stkpeek(0);
-	Value *start = i2val(vm, idx);
-	cr_checkapi(vm, (n >= 0 ? n : -n) <= end - start + 1, "invalid 'n'");
+	Value *start = i2val(ts, idx);
+	cr_checkapi(ts, (n >= 0 ? n : -n) <= end - start + 1, "invalid 'n'");
 	Value *pivot = (n >= 0 ? end - n : end - n - 1);
 	reverse(pivot, start);
 	reverse(pivot + 1, end);
 	reverse(start, end);
-	cr_unlock(vm);
+	cr_unlock(ts);
 }
 
 
 
 
 /* Call the value on the stack with 'argc' arguments. */
-CR_API void cr_call(VM *vm, int argc, int retcnt)
+CR_API void cr_call(TState *ts, int argc, int retcnt)
 {
-	cr_lock(vm);
-	cr_checkapi(vm, retcnt >= CR_MULRET, "invalid return count");
-	criptapi_checkelems(vm, argc + 1);
-	criptapi_checkresults(vm, argc, retcnt);
-	Value *fn = vm->sp - (argc + 1);
-	ncall(vm, fn, *fn, retcnt);
-	cr_unlock(vm);
+	cr_lock(ts);
+	cr_checkapi(ts, retcnt >= CR_MULRET, "invalid return count");
+	criptapi_checkelems(ts, argc + 1);
+	criptapi_checkresults(ts, argc, retcnt);
+	Value *fn = ts->sp - (argc + 1);
+	ncall(ts, fn, *fn, retcnt);
+	cr_unlock(ts);
 }
 
 
@@ -835,10 +835,10 @@ struct CallData {
 
 
 /* Wrapper function */
-static void fcall(VM *vm, void *userdata)
+static void fcall(TState *ts, void *userdata)
 {
 	struct CallData *cd = cast(struct CallData *, userdata);
-	ncall(vm, cd->callee, *cd->callee, cd->retcnt);
+	ncall(ts, cd->callee, *cd->callee, cd->retcnt);
 }
 
 
@@ -849,17 +849,17 @@ static void fcall(VM *vm, void *userdata)
  * Instead it restores the old call frame and pushes the error object
  * on top of the stack.
  * This function returns 'cr_status' [defined @cript.h] code. */
-CR_API cr_status cr_pcall(VM *vm, int argc, int retcnt)
+CR_API cr_status cr_pcall(TState *ts, int argc, int retcnt)
 {
-	cr_lock(vm);
-	cr_checkapi(vm, retcnt >= CR_MULRET, "invalid return count");
-	criptapi_checkelems(vm, argc + 1);
-	criptapi_checkresults(vm, argc, retcnt);
+	cr_lock(ts);
+	cr_checkapi(ts, retcnt >= CR_MULRET, "invalid return count");
+	criptapi_checkelems(ts, argc + 1);
+	criptapi_checkresults(ts, argc, retcnt);
 	struct CallData cd;
 	cd.retcnt = retcnt;
-	cd.callee = vm->sp - (argc + 1);
-	int status = pcall(vm, fcall, &cd, save_stack(vm, cd.callee));
-	cr_unlock(vm);
+	cd.callee = ts->sp - (argc + 1);
+	int status = pcall(ts, fcall, &cd, save_stack(ts, cd.callee));
+	cr_unlock(ts);
 	return status;
 }
 
@@ -880,13 +880,13 @@ CR_API cr_status cr_pcall(VM *vm, int argc, int retcnt)
  * 'userdata' - user provided data for 'reader'.
  * 'source' - name of the cript script you are loading.
  */
-CR_API cr_status cr_load(VM *vm, cr_reader reader, void *userdata, const char *source)
+CR_API cr_status cr_load(TState *ts, cr_reader reader, void *userdata, const char *source)
 {
 	BuffReader br;
-	cr_lock(vm);
-	BuffReader_init(vm, &br, reader, userdata);
-	cr_status status = pcompile(vm, &br, source, 0);
-	cr_unlock(vm);
+	cr_lock(ts);
+	BuffReader_init(ts, &br, reader, userdata);
+	cr_status status = pcompile(ts, &br, source, 0);
+	cr_unlock(ts);
 	return status;
 }
 
@@ -894,36 +894,36 @@ CR_API cr_status cr_load(VM *vm, cr_reader reader, void *userdata, const char *s
 
 /* Garbage collection API.
  * Refer to the @cript.h and 'cr_gco' enum defined in the same header. */
-CR_API cr_umem cr_incgc(VM *vm, cr_incgco option, ...)
+CR_API cr_umem cr_incgc(TState *ts, cr_incgco option, ...)
 {
 	va_list argp;
 	cr_umem res = 0;
-	cr_lock(vm);
+	cr_lock(ts);
 	va_start(argp, option);
 	switch (option) {
 	case GCO_STOP:
-		res = vm->gc.gc_stopped;
-		vm->gc.gc_stopped = 1;
+		res = ts->gc.gc_stopped;
+		ts->gc.gc_stopped = 1;
 		break;
 	case GCO_RESTART:
-		res = vm->gc.gc_stopped;
-		vm->gc.gc_stopped = 0;
+		res = ts->gc.gc_stopped;
+		ts->gc.gc_stopped = 0;
 		break;
 	case GCO_COLLECT:
-		res = incgc(vm);
+		res = incgc(ts);
 		break;
 	case GCO_COUNT:
-		res = vm->gc.gc_allocated;
+		res = ts->gc.gc_allocated;
 		break;
 	case GCO_ISRUNNING:
-		res = (vm->gc.gc_stopped == 0);
+		res = (ts->gc.gc_stopped == 0);
 		break;
 	case GCO_NEXTGC:
-		res = vm->gc.gc_nextgc;
+		res = ts->gc.gc_nextgc;
 		break;
 	}
 	va_end(argp);
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return res;
 }
 
@@ -931,7 +931,7 @@ CR_API cr_umem cr_incgc(VM *vm, cr_incgco option, ...)
 
 
 // TODO: Implement
-CR_API void cr_dumpstack(VM *vm)
+CR_API void cr_dumpstack(TState *ts)
 {
 	(void)(0);
 }
@@ -942,43 +942,43 @@ CR_API void cr_dumpstack(VM *vm)
  * Additionally if the 'len' and/or 'hash' are non-NULL then
  * it also fills them.
  * This can call overload-able method '__tostring__'. */
-CR_API const char *cr_tostring(VM *vm, int idx, cr_umem *len, cr_hash *hash)
+CR_API const char *cr_tostring(TState *ts, int idx, cr_umem *len, cr_hash *hash)
 {
 	const char *str = NULL;
-	cr_lock(vm);
-	Value *v = i2val(vm, idx);
-	CRString *ostr = vtostr(vm, v, *v, 0);
+	cr_lock(ts);
+	Value *v = i2val(ts, idx);
+	CRString *ostr = vtostr(ts, v, *v, 0);
 	str = ostr->bytes;
 	if (len)
 		*len = ostr->len;
 	if (hash)
 		*hash = ostr->hash;
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return str;
 }
 
 
 
 /* Sets the new stack top relative to the current function */
-CR_API void cr_settop(VM *vm, int idx)
+CR_API void cr_settop(TState *ts, int idx)
 {
-	cr_lock(vm);
+	cr_lock(ts);
 	Value *newtop;
-	Value *fn = vm->frames[vm->fc - 1].callee;
+	Value *fn = ts->frames[ts->fc - 1].callee;
 	ptrdiff_t diff;
 	if (idx >= 0) {
-		cr_checkapi(vm, idx < ((Value *)stklast(vm) - fn), "index too big.");
-		diff = ((fn + 1) + idx) - vm->sp;
+		cr_checkapi(ts, idx < ((Value *)stklast(ts) - fn), "index too big.");
+		diff = ((fn + 1) + idx) - ts->sp;
 		for (; diff > 0; diff--)
-			*vm->sp++ = NIL_VAL;
+			*ts->sp++ = NIL_VAL;
 	} else { // index negative
-		cr_checkapi(vm, -idx <= (vm->sp - fn), "invalid index.");
+		cr_checkapi(ts, -idx <= (ts->sp - fn), "invalid index.");
 		diff = idx + 1;
 	}
-	vm->sp += diff; // set new top
+	ts->sp += diff; // set new top
 	if (diff < 0)
-		closeupval(vm, vm->sp);
-	cr_unlock(vm);
+		closeupval(ts, ts->sp);
+	cr_unlock(ts);
 }
 
 
@@ -990,30 +990,30 @@ CR_API void cr_settop(VM *vm, int idx)
  * Otherwise 'isconst' modifier is ignored and the global
  * variable is set to the new value UNLESS the variable is
  * set as 'fixed'; in that case runtime error is invoked. */
-CR_API cr_ubyte cr_setglobal(VM *vm, const char *name, int isconst)
+CR_API cr_ubyte cr_setglobal(TState *ts, const char *name, int isconst)
 {
-	cr_lock(vm);
-	criptapi_checkelems(vm, 1); // value must be present
-	criptapi_checkptr(vm, name);
+	cr_lock(ts);
+	criptapi_checkelems(ts, 1); // value must be present
+	criptapi_checkptr(ts, name);
 	Value newval = *stkpeek(0);
-	Value key = OBJ_VAL(OString_new(vm, name, strlen(name)));
+	Value key = OBJ_VAL(OString_new(ts, name, strlen(name)));
 	cr_ubyte isnew = 0;
 	Value gidx;
-	if ((isnew = !rawget(vm, &vm->globids, key, &gidx))) {
-		criptapi_pushval(vm, key);
+	if ((isnew = !rawget(ts, &ts->globids, key, &gidx))) {
+		criptapi_pushval(ts, key);
 		Variable gvar = { newval, 0x01 & isconst };
-		Value idx = NUMBER_VAL(Array_Variable_push(&vm->globvars, gvar));
-		rawset(vm, &vm->globids, key, idx);
-		popn(vm, 2); // value and key
+		Value idx = NUMBER_VAL(Array_Variable_push(&ts->globvars, gvar));
+		rawset(ts, &ts->globids, key, idx);
+		popn(ts, 2); // value and key
 	} else {
-		Variable *gvar = Array_Variable_index(&vm->globvars, AS_NUMBER(gidx));
+		Variable *gvar = Array_Variable_index(&ts->globvars, AS_NUMBER(gidx));
 		if (cr_unlikely(VISCONST(gvar))) {
-			fixederror(vm, globalname(vm, AS_NUMBER(gidx))->bytes);
+			fixederror(ts, globalname(ts, AS_NUMBER(gidx))->bytes);
 		}
 		gvar->value = newval;
-		pop(vm); // value
+		pop(ts); // value
 	}
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return isnew;
 }
 
@@ -1024,18 +1024,18 @@ CR_API cr_ubyte cr_setglobal(VM *vm, const char *name, int isconst)
  * This sets the field to that value and pops it off the top of the stack.
  * Returns 1 if the field didn't exist before or false if the value
  * of the field got overwritten. */
-CR_API cr_ubyte cr_setfield(VM *vm, int idx, const char *field)
+CR_API cr_ubyte cr_setfield(TState *ts, int idx, const char *field)
 {
-	cr_lock(vm);
-	criptapi_checkelems(vm, 1);
-	criptapi_checkptr(vm, field);
-	Value insval = *i2val(vm, idx);
-	cr_checkapi(vm, isinstance(insval), "expect class instance");
+	cr_lock(ts);
+	criptapi_checkelems(ts, 1);
+	criptapi_checkptr(ts, field);
+	Value insval = *i2val(ts, idx);
+	cr_checkapi(ts, isinstance(insval), "expect class instance");
 	Instance *instance = asinstance(insval);
-	criptapi_pushcstr(vm, field);
-	cr_ubyte res = rawset(vm, &instance->fields, *stkpeek(0), *stkpeek(1));
-	vm->sp -= 2; // pop value and key
-	cr_unlock(vm);
+	criptapi_pushcstr(ts, field);
+	cr_ubyte res = rawset(ts, &instance->fields, *stkpeek(0), *stkpeek(1));
+	ts->sp -= 2; // pop value and key
+	cr_unlock(ts);
 	return res;
 }
 
@@ -1067,17 +1067,17 @@ static cr_inline Value *getupval(Value fn, int n)
  * If the upvalue was not found or the function at 'fidx' is not
  * a cript or C closure then nothing will be pushed on the stack and
  * 0 is returned. */
-CR_API cr_ubyte cr_getupvalue(VM *vm, int fidx, int idx)
+CR_API cr_ubyte cr_getupvalue(TState *ts, int fidx, int idx)
 {
-	cr_lock(vm);
+	cr_lock(ts);
 	cr_ubyte ret = 0;
-	Value fn = *i2val(vm, fidx);
+	Value fn = *i2val(ts, fidx);
 	Value *upval = getupval(fn, idx);
 	if (upval) {
-		criptapi_pushval(vm, *upval);
+		criptapi_pushval(ts, *upval);
 		ret = 1;
 	}
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return ret;
 }
 
@@ -1090,28 +1090,28 @@ CR_API cr_ubyte cr_getupvalue(VM *vm, int fidx, int idx)
  * If the upvalue doesn't exist and/or 'fidx' is not a
  * closure or native C function, then the function returns 0
  * indicating the upvalue was not set, otherwise it returns 1. */
-CR_API int cr_setupvalue(VM *vm, int fidx, int idx)
+CR_API int cr_setupvalue(TState *ts, int fidx, int idx)
 {
-	cr_lock(vm);
-	criptapi_checkelems(vm, 1);
+	cr_lock(ts);
+	criptapi_checkelems(ts, 1);
 	int changed = 0;
-	Value fn = *i2val(vm, fidx);
+	Value fn = *i2val(ts, fidx);
 	Value *upval = getupval(fn, idx);
 	if (upval) {
 		*upval = *stkpeek(0);
-		vm->sp--;
+		ts->sp--;
 		changed = 1;
 	}
-	cr_unlock(vm);
+	cr_unlock(ts);
 	return changed;
 }
 
 
-static Instance *getinstance(VM *vm, int idx)
+static Instance *getinstance(TState *ts, int idx)
 {
 	TValue *v;
-	v = i2val(vm, idx);
-	checkapi(vm, ttisins(v), "expect instance");
+	v = i2val(ts, idx);
+	checkapi(ts, ttisins(v), "expect instance");
 	return insvalue(v);
 }
 
@@ -1130,29 +1130,29 @@ static Instance *getinstance(VM *vm, int idx)
  * In case user provided 'key' that the instance method/field
  * table does not contain then runtime error is invoked.
  */
-CR_API cr_ubyte cr_nextproperty(VM *vm, int idx, cr_ubyte what)
+CR_API cr_ubyte cr_nextproperty(TState *ts, int idx, cr_ubyte what)
 {
 	cr_ubyte hasnext;
 	Instance *instance;
 	HTable *tab;
 	TValue *key;
 
-	cr_lock(vm);
+	cr_lock(ts);
 	hasnext = 0;
-	checkapi_values(vm, 2); /* key + instance */
-	checkapi_stack(vm, 1); /* value */
-	instance = getinstance(vm, idx);
+	checkapi_values(ts, 2); /* key + instance */
+	checkapi_stack(ts, 1); /* value */
+	instance = getinstance(ts, idx);
 	key = speek(0);
 	if (what == 0)
 		tab = &instance->fields;
 	else
 		tab = &instance->oclass->mtab;
-	hasnext = cr_ht_next(vm, tab, key);
+	hasnext = cr_ht_next(ts, tab, key);
 	if (hasnext)
-		api_incsp(vm); /* push value */
+		api_incsp(ts); /* push value */
 	else
-		api_decsp(vm); /* pop key */
-	cr_unlock(vm);
+		api_decsp(ts); /* pop key */
+	cr_unlock(ts);
 	return hasnext;
 }
 
@@ -1160,28 +1160,28 @@ CR_API cr_ubyte cr_nextproperty(VM *vm, int idx, cr_ubyte what)
 
 /* Return the length of the string at 'idx'.
  * If the value is not a string then return 0. */
-CR_API cr_umem cr_strlen(const VM *vm, int idx)
+CR_API cr_umem cr_strlen(const TState *ts, int idx)
 {
-	Value val = *i2val(vm, idx);
+	Value val = *i2val(ts, idx);
 	return (isstring(val) ? asstring(val)->len : 0);
 }
 
 
-/* Return 'VM' 'cr_status' code. */
-CR_API cr_status cr_getstatus(VM *vm)
+/* Return 'TState' 'cr_status' code. */
+CR_API cr_status cr_getstatus(TState *ts)
 {
-	UNUSED(vm);
-	return vm->status;
+	UNUSED(ts);
+	return ts->status;
 }
 
 
 /* Invoke a runetime error with errcode */
-CR_API int cr_error(VM *vm, cr_status errcode)
+CR_API int cr_error(TState *ts, cr_status errcode)
 {
-	cr_lock(vm);
+	cr_lock(ts);
 	Value *errobj = stkpeek(0);
-	criptapi_checkelems(vm, 1);
-	criptapi_checkerrcode(vm, errcode);
-	runerror(vm, errcode); // cr_unlock in here
+	criptapi_checkelems(ts, 1);
+	criptapi_checkerrcode(ts, errcode);
+	runerror(ts, errcode); // cr_unlock in here
 	return 0; // to avoid compiler warnings
 }

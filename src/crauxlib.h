@@ -21,29 +21,29 @@
 #include "cript.h"
 
 
-/* ================= create VM (auxlib allocator) ================= */
-CR_LIBAPI VM* skaux_create(void);
+/* ================= create TState (auxlib allocator) ================= */
+CR_LIBAPI TState* skaux_create(void);
 /* ---------------------------------------------------------- */
 
 
 /* ================= debug ================= */
-CR_LIBAPI int skaux_error(VM* vm, cr_status errcode, const char* fmt, ...);
-CR_LIBAPI int skaux_typeerror(VM* vm, int argidx, const char* tname);
-CR_LIBAPI int skaux_argerror(VM* vm, int argidx, const char* extra);
+CR_LIBAPI int skaux_error(TState* ts, cr_status errcode, const char* fmt, ...);
+CR_LIBAPI int skaux_typeerror(TState* ts, int argidx, const char* tname);
+CR_LIBAPI int skaux_argerror(TState* ts, int argidx, const char* extra);
 
-CR_LIBAPI cr_double skaux_checknumber(VM* vm, int idx);
-CR_LIBAPI const char* skaux_checkstring(VM* vm, int idx);
-CR_LIBAPI const char* skaux_optstring(VM* vm, int idx);
-CR_LIBAPI cr_ubyte skaux_checkbool(VM* vm, int idx);
-CR_LIBAPI void skaux_checktype(VM* vm, int idx, int type);
-CR_LIBAPI void skaux_checkstack(VM* vm, int space, const char* msg);
-CR_LIBAPI void skaux_where(VM* vm, int level);
+CR_LIBAPI cr_double skaux_checknumber(TState* ts, int idx);
+CR_LIBAPI const char* skaux_checkstring(TState* ts, int idx);
+CR_LIBAPI const char* skaux_optstring(TState* ts, int idx);
+CR_LIBAPI cr_ubyte skaux_checkbool(TState* ts, int idx);
+CR_LIBAPI void skaux_checktype(TState* ts, int idx, int type);
+CR_LIBAPI void skaux_checkstack(TState* ts, int space, const char* msg);
+CR_LIBAPI void skaux_where(TState* ts, int level);
 /* ---------------------------------------------------------- */
 
 
 /* ================= load functions (protected) ================= */
-CR_LIBAPI cr_status skaux_loadfile(VM* vm, const char* filename);
-CR_LIBAPI cr_status skaux_loadstring(VM* vm, const char* string);
+CR_LIBAPI cr_status skaux_loadfile(TState* ts, const char* filename);
+CR_LIBAPI cr_status skaux_loadstring(TState* ts, const char* string);
 /* ---------------------------------------------------------- */
 
 

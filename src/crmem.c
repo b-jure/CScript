@@ -29,67 +29,67 @@
 
 
 /* can try to allocate second time */
-#define cantryagain(vm)		(vminitialized(vm) && !(vm)->gc.stopem)
+#define cantryagain(ts)		(tsinitialized(ts) && !(ts)->gc.stopem)
 
 
 
 /* Auxiliary to 'cr_mm_realloc' and 'cr_malloc'. */
-cr_sinline void *tryagain(VM *vm, void *ptr, size_t osize, size_t nsize)
+cr_sinline void *tryagain(TState *ts, void *ptr, size_t osize, size_t nsize)
 {
-	if (cantryagain(vm)) {
-		cr_gc_full(vm);
-		return cr_mm_rawrealloc(vm, ptr, nsize);
+	if (cantryagain(ts)) {
+		cr_gc_full(ts);
+		return cr_mm_rawrealloc(ts, ptr, nsize);
 	}
 	return NULL;
 }
 
 
-void *cr_mm_realloc(VM *vm, void *ptr, size_t osize, size_t nsize)
+void *cr_mm_realloc(TState *ts, void *ptr, size_t osize, size_t nsize)
 {
 	void *memblock;
 
 	cr_assert((osize == 0) == (ptr == NULL));
-	memblock = cr_mm_rawrealloc(vm, ptr, nsize);
+	memblock = cr_mm_rawrealloc(ts, ptr, nsize);
 	if (cr_unlikely(!memblock && nsize != 0)) {
-		memblock = tryagain(vm, ptr, osize, nsize);
+		memblock = tryagain(ts, ptr, osize, nsize);
 		if (cr_unlikely(memblock == NULL))
 			return NULL;
 	}
 	cr_assert((nsize == 0) == (memblock == NULL));
-	vm->gc.allocated += nsize - osize;
+	ts->gc.allocated += nsize - osize;
 	return memblock;
 }
 
 
-void *cr_mm_saferealloc(VM *vm, void *ptr, size_t osize, size_t nsize)
+void *cr_mm_saferealloc(TState *ts, void *ptr, size_t osize, size_t nsize)
 {
 	void *memblock;
 
-	memblock = cr_mm_realloc(vm, ptr, osize, nsize);
+	memblock = cr_mm_realloc(ts, ptr, osize, nsize);
 	if (cr_unlikely(memblock == NULL && nsize != 0))
 		cr_assert(0 && "out of memory");
 	return memblock;
 }
 
 
-void *cr_mm_malloc(VM *vm, size_t size)
+void *cr_mm_malloc(TState *ts, size_t size)
 {
 	void *memblock;
 
 	if (size == 0)
 		return NULL;
-	memblock = cr_mm_rawmalloc(vm, size);
+	memblock = cr_mm_rawmalloc(ts, size);
 	if (cr_unlikely(memblock == NULL)) {
-		memblock = tryagain(vm, NULL, 0, size);
+		memblock = tryagain(ts, NULL, 0, size);
 		if (cr_unlikely(memblock == NULL))
 			cr_assert(0 && "out of memory");
 	}
-	vm->gc.allocated += size;
+	ts->gc.allocated += size;
 	return memblock;
 }
 
 
-void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep,
+void *cr_mm_growarr(TState *ts, void *ptr, int len, int *sizep,
 			int elemsize, int extra, int limit, const char *what) 
 {
 	int size;
@@ -100,7 +100,7 @@ void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep,
 	size += extra;
 	if (size >= limit / 2) {
 		if (cr_unlikely(size >= limit))
-			cr_dg_runerror(vm, "%s size limit", what);
+			cr_dg_runerror(ts, "%s size limit", what);
 		size = limit;
 		cr_assert(size >= CRI_MINARRSIZE);
 	} else {
@@ -108,15 +108,15 @@ void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep,
 		if (size < CRI_MINARRSIZE)
 			size = CRI_MINARRSIZE;
 	}
-	ptr = cr_mm_saferealloc(vm, ptr, *sizep * elemsize, size * elemsize);
+	ptr = cr_mm_saferealloc(ts, ptr, *sizep * elemsize, size * elemsize);
 	*sizep = size;
 	return ptr;
 }
 
 
-void cr_mm_free(VM *vm, void *ptr, size_t osize)
+void cr_mm_free(TState *ts, void *ptr, size_t osize)
 {
 	cr_assert((osize == 0) == (ptr == NULL));
-	cr_mm_rawfree(vm, ptr);
-	vm->gc.allocated -= osize;
+	cr_mm_rawfree(ts, ptr);
+	ts->gc.allocated -= osize;
 }

@@ -65,15 +65,15 @@ cr_sinline int currentline(CallFrame *cf)
  * should be 0.
  * If 'level' is invalid, this function returns 0. 
  */
-CR_API int cr_getstack(VM *vm, int level, cr_debuginfo *di)
+CR_API int cr_getstack(TState *ts, int level, cr_debuginfo *di)
 {
-	cr_lock(vm);
-	if (level > vm->frames.len || level < 0) {
-		cr_unlock(vm);
+	cr_lock(ts);
+	if (level > ts->frames.len || level < 0) {
+		cr_unlock(ts);
 		return 0;
 	}
-	di->frame = &vm->frames.ptr[vm->frames.len - 1 - level];
-	cr_unlock(vm);
+	di->frame = &ts->frames.ptr[ts->frames.len - 1 - level];
+	cr_unlock(ts);
 	return 1;
 }
 
@@ -121,7 +121,7 @@ static void getsrcinfo(Closure *cl, cr_debuginfo *di)
 		di->source = fn->source->bytes;
 		di->srclen = fn->source->len;
 	}
-	cr_ot_sourceid(di->shortsrc, di->source, di->srclen);
+	cr_ob_sourceid(di->shortsrc, di->source, di->srclen);
 }
 
 
@@ -132,7 +132,7 @@ static void getsrcinfo(Closure *cl, cr_debuginfo *di)
  * If any invalid bit/option is inside the 'dbmask' this
  * function returns 0, otherwise 1. 
  */
-static int getinfo(VM *vm, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debuginfo *di)
+static int getinfo(TState *ts, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debuginfo *di)
 {
 	cr_ubyte status, bit;
 
@@ -148,7 +148,7 @@ static int getinfo(VM *vm, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debug
 			getsrcinfo(cl, di);
 			break;
 		case 5: /* DW_FNPUSH */
-			// criptapi_pushval(vm, *di->frame->callee);
+			// criptapi_pushval(ts, *di->frame->callee);
 			break;
 		case 6: /* unused */
 		case 7: /* unused */
@@ -166,65 +166,65 @@ static int getinfo(VM *vm, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debug
  * Fill out 'cr_debuginfo' according to 'dbmask'.
  * Returns 0 if any of the bits in 'dbmask' are invalid.
  */
-CR_API int cr_getinfo(VM *vm, int dbmask, cr_debuginfo *di)
+CR_API int cr_getinfo(TState *ts, int dbmask, cr_debuginfo *di)
 {
 	CallFrame *frame;
 	Closure *cl;
 	TValue *fn;
 	int status;
 
-	cr_lock(vm);
+	cr_lock(ts);
 	status = 1;
 	if (dbmask & CR_DBGFNGET) { /* use function on top of the stack ? */
 		frame = NULL;
-		fn = s2v(vm->stacktop.p - 1);
-		checkapi(vm, ttisfn(fn), "expect function");
-		vm->stacktop.p--;
+		fn = s2v(ts->stacktop.p - 1);
+		checkapi(ts, ttisfn(fn), "expect function");
+		ts->stacktop.p--;
 	} else { /* use current function */
-		frame = vm->aframe;
+		frame = ts->aframe;
 		fn = s2v(frame->callee.p);
 		cr_assert(ttisfn(fn));
 	}
 	cl = (ttiscl(fn) ? clvalue(fn) : NULL);
 	dbmask >>= 1; /* skip CR_DBGFNGET bit */
-	status = getinfo(vm, dbmask, cl, frame, di);
-	cr_unlock(vm);
+	status = getinfo(ts, dbmask, cl, frame, di);
+	cr_unlock(ts);
 	return status;
 }
 
 
-const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
+const char *cr_dg_info(TState *ts, const char *msg, const OString *src, int line)
 {
 	char buffer[CRI_MAXSRC];
 
 	if (src) {
-		cr_ot_sourceid(buffer, src->bytes, src->len);
+		cr_ob_sourceid(buffer, src->bytes, src->len);
 	} else {
 		buffer[0] = '?';
 		buffer[1] = '\0';
 	}
-	return cr_ot_pushfstring(vm, "%s:%d: %s", buffer, line, msg);
+	return cr_ob_pushfstring(ts, "%s:%d: %s", buffer, line, msg);
 }
 
 
-// void dumpstack(VM *vm, CallFrame *frame, Byte *ip)
+// void dumpstack(TState *ts, CallFrame *frame, Byte *ip)
 // {
 // 	printf("           ");
-// 	for (Value *ptr = vm->stack; ptr < vm->sp; ptr++) {
+// 	for (Value *ptr = ts->stack; ptr < ts->sp; ptr++) {
 // 		printf("[");
-// 		vprint(vm, *ptr, stderr);
+// 		vprint(ts, *ptr, stderr);
 // 		printf("]");
 // 	}
 // 	printf("\n");
-// 	Instruction_debug(vm, &FFN(frame)->chunk, (uint32_t)(ip - FFN(frame)->chunk.code.data));
+// 	Instruction_debug(ts, &FFN(frame)->chunk, (uint32_t)(ip - FFN(frame)->chunk.code.data));
 // }
 
 
-// void Chunk_debug(VM *vm, Chunk *chunk, const char *name)
+// void Chunk_debug(TState *ts, Chunk *chunk, const char *name)
 // {
 // 	printf("=== %s ===\n", name);
 // 	for (uint32_t offset = 0; offset < chunk->code.len;)
-// 		offset = Instruction_debug(vm, chunk, offset);
+// 		offset = Instruction_debug(ts, chunk, offset);
 // }
 // 
 // static int32_t simpleins(const char *name, uint32_t offset)
@@ -240,17 +240,17 @@ const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 // 	return offset + 4;
 // }
 // 
-// static void constant(VM *vm, Chunk *chunk, uint32_t param)
+// static void constant(TState *ts, Chunk *chunk, uint32_t param)
 // {
 // 	printf("'");
-// 	vprint(vm, *Array_Value_index(&chunk->constants, param), stderr);
+// 	vprint(ts, *Array_Value_index(&chunk->constants, param), stderr);
 // 	printf("'");
 // }
 // 
-// static uint32_t closure(VM *vm, Chunk *chunk, uint32_t param, uint32_t offset)
+// static uint32_t closure(TState *ts, Chunk *chunk, uint32_t param, uint32_t offset)
 // {
 // 	Value value = *Array_Value_index(&chunk->constants, param);
-// 	vprint(vm, value, stderr);
+// 	vprint(ts, value, stderr);
 // 	printf("\n");
 // 	OFunction *fn = asfn(value);
 // 	for (uint32_t i = 0; i < fn->p.upvalc; i++) {
@@ -263,7 +263,7 @@ const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 // 	return offset;
 // }
 // 
-// static int32_t shorinst(VM *vm, const char *name, Chunk *chunk, OpCode code, uint32_t offset)
+// static int32_t shorinst(TState *ts, const char *name, Chunk *chunk, OpCode code, uint32_t offset)
 // {
 // 	Byte param = *Array_ubyte_index(&chunk->code, offset + 1);
 // 	printf("%-25s %5u ", name, param);
@@ -274,7 +274,7 @@ const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 // 	case OP_GET_PROPERTY:
 // 	case OP_METHOD:
 // 	case OP_GET_SUPER:
-// 		constant(vm, chunk, param);
+// 		constant(ts, chunk, param);
 // 		break;
 // 	case OP_OVERLOAD:
 // 		printf("'%s'", static_strings[param].name);
@@ -287,20 +287,20 @@ const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 // 	return offset + 2; /* OpCode + param(8-bit/1-byte) */
 // }
 // 
-// static int32_t longins(VM *vm, const char *name, Chunk *chunk, OpCode code, uint32_t offset)
+// static int32_t longins(TState *ts, const char *name, Chunk *chunk, OpCode code, uint32_t offset)
 // {
 // 	uint32_t param = GET_BYTES3(&chunk->code.data[offset + 1]);
 // 	printf("%-25s %5u ", name, param);
 // 	switch (code) {
 // 	case OP_CLOSURE:
-// 		return closure(vm, chunk, param, offset + 4);
+// 		return closure(ts, chunk, param, offset + 4);
 // 	case OP_CONST:
 // 	case OP_CLASS:
 // 	case OP_SET_PROPERTY:
 // 	case OP_GET_PROPERTY:
 // 	case OP_METHOD:
 // 	case OP_GET_SUPER:
-// 		constant(vm, chunk, param);
+// 		constant(ts, chunk, param);
 // 		break;
 // 	default:
 // 		// do nothing
@@ -310,18 +310,18 @@ const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 // 	return offset + 4; /* OpCode(8-bit/1-byte) + param(24-bit/3-bytes) */
 // }
 // 
-// static int32_t invoke(VM *vm, const char *name, Chunk *chunk, int32_t offset)
+// static int32_t invoke(TState *ts, const char *name, Chunk *chunk, int32_t offset)
 // {
 // 	uint32_t key = GET_BYTES3(&chunk->code.data[offset + 1]);
 // 	offset += 4;
 // 	int32_t retcnt = GET_BYTES3(&chunk->code.data[offset]);
 // 	printf("%-25s (retcnt %d) %5d ", name, retcnt, key);
-// 	constant(vm, chunk, key);
+// 	constant(ts, chunk, key);
 // 	printf("\n");
 // 	return offset + 3;
 // }
 // 
-// uint32_t Instruction_debug(VM *vm, Chunk *chunk, uint32_t offset)
+// uint32_t Instruction_debug(TState *ts, Chunk *chunk, uint32_t offset)
 // {
 // 	printf("%04d ", offset);
 // 	uint32_t line = Chunk_getline(chunk, offset);
@@ -338,9 +338,9 @@ const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 // 	case OP_NIL:
 // 		return simpleins("OP_NIL", offset);
 // 	case OP_NILN:
-// 		return longins(vm, "OP_NILN", chunk, OP_NILN, offset);
+// 		return longins(ts, "OP_NILN", chunk, OP_NILN, offset);
 // 	case OP_VARARG:
-// 		return longins(vm, "OP_VARARG", chunk, OP_VARARG, offset);
+// 		return longins(ts, "OP_VARARG", chunk, OP_VARARG, offset);
 // 	case OP_NEG:
 // 		return simpleins("OP_NEG", offset);
 // 	case OP_ADD:
@@ -374,29 +374,29 @@ const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 // 	case OP_POP:
 // 		return simpleins("OP_POP", offset);
 // 	case OP_POPN:
-// 		return longins(vm, "OP_POPN", chunk, OP_POPN, offset);
+// 		return longins(ts, "OP_POPN", chunk, OP_POPN, offset);
 // 	case OP_CONST:
-// 		return longins(vm, "OP_CONST", chunk, OP_CONST, offset);
+// 		return longins(ts, "OP_CONST", chunk, OP_CONST, offset);
 // 	case OP_DEFINE_GLOBAL:
-// 		return shorinst(vm, "OP_DEFINE_GLOBAL", chunk, OP_DEFINE_GLOBAL, offset);
+// 		return shorinst(ts, "OP_DEFINE_GLOBAL", chunk, OP_DEFINE_GLOBAL, offset);
 // 	case OP_DEFINE_GLOBALL:
-// 		return longins(vm, "OP_DEFINE_GLOBALL", chunk, OP_DEFINE_GLOBALL, offset);
+// 		return longins(ts, "OP_DEFINE_GLOBALL", chunk, OP_DEFINE_GLOBALL, offset);
 // 	case OP_GET_GLOBAL:
-// 		return shorinst(vm, "OP_GET_GLOBAL", chunk, OP_GET_GLOBAL, offset);
+// 		return shorinst(ts, "OP_GET_GLOBAL", chunk, OP_GET_GLOBAL, offset);
 // 	case OP_GET_GLOBALL:
-// 		return longins(vm, "OP_GET_GLOBALL", chunk, OP_GET_GLOBALL, offset);
+// 		return longins(ts, "OP_GET_GLOBALL", chunk, OP_GET_GLOBALL, offset);
 // 	case OP_SET_GLOBAL:
-// 		return shorinst(vm, "OP_SET_GLOBAL", chunk, OP_SET_GLOBAL, offset);
+// 		return shorinst(ts, "OP_SET_GLOBAL", chunk, OP_SET_GLOBAL, offset);
 // 	case OP_SET_GLOBALL:
-// 		return longins(vm, "OP_SET_GLOBALL", chunk, OP_SET_GLOBALL, offset);
+// 		return longins(ts, "OP_SET_GLOBALL", chunk, OP_SET_GLOBALL, offset);
 // 	case OP_GET_LOCAL:
-// 		return shorinst(vm, "OP_GET_LOCAL", chunk, OP_GET_LOCAL, offset);
+// 		return shorinst(ts, "OP_GET_LOCAL", chunk, OP_GET_LOCAL, offset);
 // 	case OP_GET_LOCALL:
-// 		return longins(vm, "OP_GET_LOCALL", chunk, OP_GET_LOCALL, offset);
+// 		return longins(ts, "OP_GET_LOCALL", chunk, OP_GET_LOCALL, offset);
 // 	case OP_SET_LOCAL:
-// 		return shorinst(vm, "OP_SET_LOCAL", chunk, OP_SET_LOCAL, offset);
+// 		return shorinst(ts, "OP_SET_LOCAL", chunk, OP_SET_LOCAL, offset);
 // 	case OP_SET_LOCALL:
-// 		return longins(vm, "OP_SET_LOCALL", chunk, OP_SET_LOCALL, offset);
+// 		return longins(ts, "OP_SET_LOCALL", chunk, OP_SET_LOCALL, offset);
 // 	case OP_JMP_IF_FALSE:
 // 		return jmpins("OP_JMP_IF_FALSE", 1, chunk, offset);
 // 	case OP_JMP_IF_FALSE_POP:
@@ -416,55 +416,55 @@ const char *cr_dg_info(VM *vm, const char *msg, const OString *src, int line)
 // 	case OP_CALL1:
 // 		return simpleins("OP_CALL1", offset);
 // 	case OP_CALL:
-// 		return longins(vm, "OP_CALL", chunk, OP_CALL, offset);
+// 		return longins(ts, "OP_CALL", chunk, OP_CALL, offset);
 // 	case OP_CLOSURE:
-// 		return longins(vm, "OP_CLOSURE", chunk, OP_CLOSURE, offset);
+// 		return longins(ts, "OP_CLOSURE", chunk, OP_CLOSURE, offset);
 // 	case OP_GET_UPVALUE:
-// 		return longins(vm, "OP_GET_UPVALUE", chunk, OP_GET_UPVALUE, offset);
+// 		return longins(ts, "OP_GET_UPVALUE", chunk, OP_GET_UPVALUE, offset);
 // 	case OP_SET_UPVALUE:
-// 		return longins(vm, "OP_SET_UPVALUE", chunk, OP_SET_UPVALUE, offset);
+// 		return longins(ts, "OP_SET_UPVALUE", chunk, OP_SET_UPVALUE, offset);
 // 	case OP_CLOSE_UPVAL:
 // 		return simpleins("OP_CLOSE_UPVAL", offset);
 // 	case OP_CLOSE_UPVALN:
-// 		return longins(vm, "OP_CLOSE_UPVALN", chunk, OP_CLOSE_UPVALN, offset);
+// 		return longins(ts, "OP_CLOSE_UPVALN", chunk, OP_CLOSE_UPVALN, offset);
 // 	case OP_CLASS:
-// 		return longins(vm, "OP_CLASS", chunk, OP_CLASS, offset);
+// 		return longins(ts, "OP_CLASS", chunk, OP_CLASS, offset);
 // 	case OP_SET_PROPERTY:
-// 		return longins(vm, "OP_SET_PROPERTY", chunk, OP_SET_PROPERTY, offset);
+// 		return longins(ts, "OP_SET_PROPERTY", chunk, OP_SET_PROPERTY, offset);
 // 	case OP_GET_PROPERTY:
-// 		return longins(vm, "OP_GET_PROPERTY", chunk, OP_GET_PROPERTY, offset);
+// 		return longins(ts, "OP_GET_PROPERTY", chunk, OP_GET_PROPERTY, offset);
 // 	case OP_INDEX:
 // 		return simpleins("OP_INDEX", offset);
 // 	case OP_SET_INDEX:
 // 		return simpleins("OP_SET_INDEX", offset);
 // 	case OP_METHOD:
-// 		return longins(vm, "OP_METHOD", chunk, OP_METHOD, offset);
+// 		return longins(ts, "OP_METHOD", chunk, OP_METHOD, offset);
 // 	case OP_INVOKE0:
-// 		return invoke(vm, "OP_INVOKE0", chunk, offset);
+// 		return invoke(ts, "OP_INVOKE0", chunk, offset);
 // 	case OP_INVOKE1:
-// 		return invoke(vm, "OP_INVOKE1", chunk, offset);
+// 		return invoke(ts, "OP_INVOKE1", chunk, offset);
 // 	case OP_INVOKE:
-// 		return invoke(vm, "OP_INVOKE", chunk, offset);
+// 		return invoke(ts, "OP_INVOKE", chunk, offset);
 // 	case OP_OVERLOAD:
-// 		return shorinst(vm, "OP_OVERLOAD", chunk, OP_OVERLOAD, offset);
+// 		return shorinst(ts, "OP_OVERLOAD", chunk, OP_OVERLOAD, offset);
 // 	case OP_INHERIT:
 // 		return simpleins("OP_INHERIT", offset);
 // 	case OP_GET_SUPER:
-// 		return longins(vm, "OP_GET_SUPER", chunk, OP_GET_SUPER, offset);
+// 		return longins(ts, "OP_GET_SUPER", chunk, OP_GET_SUPER, offset);
 // 	case OP_INVOKE_SUPER0:
-// 		return invoke(vm, "OP_INVOKE_SUPER0", chunk, offset);
+// 		return invoke(ts, "OP_INVOKE_SUPER0", chunk, offset);
 // 	case OP_INVOKE_SUPER1:
-// 		return invoke(vm, "OP_INVOKE_SUPER1", chunk, offset);
+// 		return invoke(ts, "OP_INVOKE_SUPER1", chunk, offset);
 // 	case OP_INVOKE_SUPER:
-// 		return invoke(vm, "OP_INVOKE_SUPER", chunk, offset);
+// 		return invoke(ts, "OP_INVOKE_SUPER", chunk, offset);
 // 	case OP_CALLSTART:
 // 		return simpleins("OP_CALLSTART", offset);
 // 	case OP_RETSTART:
 // 		return simpleins("OP_RETSTART", offset);
 // 	case OP_FOREACH:
-// 		return longins(vm, "OP_FOREACH", chunk, OP_FOREACH, offset);
+// 		return longins(ts, "OP_FOREACH", chunk, OP_FOREACH, offset);
 // 	case OP_FOREACH_PREP:
-// 		return longins(vm, "OP_FOREACH_PREP", chunk, OP_FOREACH_PREP, offset);
+// 		return longins(ts, "OP_FOREACH_PREP", chunk, OP_FOREACH_PREP, offset);
 // 	case OP_RET0:
 // 		return simpleins("OP_RET0", offset);
 // 	case OP_RET1:

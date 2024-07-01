@@ -20,13 +20,13 @@
 
 
 
-void cr_br_init(VM *vm, BuffReader *br, cr_reader reader, void *userdata)
+void cr_br_init(TState *ts, BuffReader *br, cr_reader reader, void *userdata)
 {
 	br->n = 0;
 	br->buff = NULL;
 	br->reader = reader;
 	br->userdata = userdata;
-	br->vm = vm;
+	br->ts = ts;
 }
 
 
@@ -38,14 +38,14 @@ void cr_br_init(VM *vm, BuffReader *br, cr_reader reader, void *userdata)
  */
 int cr_br_fill(BuffReader *br)
 {
-	VM *vm;
+	TState *ts;
 	size_t size;
 	const char *buff;
 
-	vm = br->vm;
-	cr_unlock(vm);
-	buff = br->reader(vm, br->userdata, &size);
-	cr_lock(vm);
+	ts = br->ts;
+	cr_unlock(ts);
+	buff = br->reader(ts, br->userdata, &size);
+	cr_lock(ts);
 	if (buff == NULL || size == 0)
 		return CREOF;
 	br->buff = buff;

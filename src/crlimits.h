@@ -77,10 +77,10 @@ typedef signed char cr_byte;
 
 /* C API assertions */
 #if !defined(cri_checkapi)
-#define cri_checkapi(vm,e)	((void)vm, cr_assert(e))
+#define cri_checkapi(ts,e)	((void)ts, cr_assert(e))
 #endif
 
-#define checkapi(vm,e,err)	cri_checkapi(vm,(e) && err)
+#define checkapi(ts,e,err)	cri_checkapi(ts,(e) && err)
 
 
 
@@ -237,22 +237,22 @@ typedef cr_ubyte Instruction;
  * leaves ('cr_unlock') cript core (C API).
  */
 #if !defined(cr_lock)
-#define	cr_lock(vm)	((void)0)
-#define	cr_unlock(vm)	((void)0)
+#define	cr_lock(ts)	((void)0)
+#define	cr_unlock(ts)	((void)0)
 #endif
 
 
 
 /*
  * These allow user-defined action to be taken each
- * time VM (thread) is created or deleted.
+ * time TState (thread) is created or deleted.
  */
 #if !defined(cri_vmcreated)
-#define cri_vmcreated(vm)	((void)(vm))
+#define cri_tscreated(ts)	((void)(ts))
 #endif
 
 #if !defined(cri_vmdeleted)
-#define cri_vmdeleted(vm)	((void)(vm))
+#define cri_tsdeleted(ts)	((void)(ts))
 #endif
 
 
@@ -317,23 +317,23 @@ typedef cr_ubyte Instruction;
 
 
 /* @cri_nummod - modulo 'a - floor(a/b)*b'. */
-#define cri_nummod(vm,a,b,m) { \
-	(m)=fmod((a),(b)); \
-	if (((m) > 0) ? (b)<0 : ((m)<0 && (b)>0)) (m)+=(b); }
+#define cri_nummod(ts,a,b,m) \
+	{ (m)=fmod((a),(b)); \
+	  if (((m) > 0) ? (b)<0 : ((m)<0 && (b)>0)) (m)+=(b); }
 
 /* @cri_numdiv - float division. */
 #ifndef cri_numdiv
-#define cri_numdiv(vm, a, b)	((a)/(b))
+#define cri_numdiv(ts, a, b)	((a)/(b))
 #endif
 
 /* @cri_numidiv - floor division (or division between integers). */
 #ifndef cri_numidiv
-#define cri_numidiv(vm, a, b)	(floor(cri_numdiv(a, b))
+#define cri_numidiv(ts, a, b)	(floor(cri_numdiv(a, b))
 #endif
 
 /* @cri_numpow - exponentiation. */
 #ifndef cri_numpow
-#define cri_numpow(vm, a, b)	((b)==2 ? (a)*(a) : pow((a),(b)))
+#define cri_numpow(ts, a, b)	((b)==2 ? (a)*(a) : pow((a),(b)))
 #endif
 
 /* 
@@ -343,10 +343,10 @@ typedef cr_ubyte Instruction;
  * @cri_numunm - negation.
  */
 #ifndef cri_numadd
-#define cri_numadd(vm, a, b) 	((a)+(b))
-#define cri_numsub(vm, a, b) 	((a)-(b))
-#define cri_nummul(vm, a, b) 	((a)*(b))
-#define cri_numunm(vm, a)	(-(a))
+#define cri_numadd(ts, a, b) 	((a)+(b))
+#define cri_numsub(ts, a, b) 	((a)-(b))
+#define cri_nummul(ts, a, b) 	((a)*(b))
+#define cri_numunm(ts, a)	(-(a))
 #endif
 
 /* 
@@ -369,6 +369,20 @@ typedef cr_ubyte Instruction;
 /* @cri_numisnan - check if number is 'NaN'. */
 #ifndef cri_numisnan
 #define cri_numisnan(a)		(!cri_numeq(a,a))
+#endif
+
+
+
+/*
+ * @CR_DEBUG_STRESS_GC - enables stress test for garbage
+ * collector, on each tracked memory change it performs
+ * full garbage collection.
+ */
+#if defined(CR_DEBUG_STRESS_GC)
+#define gcmemchange(ts,pre,pos)	\
+	{ if (gcrunning(GS(ts)->gc)) { pre; cr_gc_full(ts, 0); pos; } }
+#else
+#define gcmemchange(ts,pre,pos)		((void)0)
 #endif
 
 

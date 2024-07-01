@@ -31,10 +31,10 @@
 
 
 /* allocate new gc object */
-#define otnewgco(vm,e,tt,t)	((t*)otallocate(vm, (e) + sizeof(t), tt))
+#define newgco(ts,e,tt,t)	((t*)newobject(ts, (e) + sizeof(t), tt))
 
 
-const struct Tuple vtmethodinfo[CR_MNUM] = {
+const struct Tuple vtmethodinfo[CR_NUMM] = {
 	{ 0, 1 }, /* __init__		{ args: self             - return: instance }  */
 	{ 0, 1 }, /* __tostring__ 	{ args: self             - return: string   }  */
 	{ 1, 1 }, /* __getidx__   	{ args: self, idx        - return: value    }  */
@@ -58,7 +58,7 @@ const struct Tuple vtmethodinfo[CR_MNUM] = {
 };
 
 
-void cr_ot_sourceid(char *restrict dest, const char *src, size_t len)
+void cr_ob_sourceid(char *restrict dest, const char *src, size_t len)
 {
 	size_t bufflen;
 
@@ -78,40 +78,40 @@ void cr_ot_sourceid(char *restrict dest, const char *src, size_t len)
  * Returns '-1' in case string is not the name of any methods
  * inside the 'cr_vtable'.
  */
-int cr_ot_strtomt(VM *vm, OString *id)
+int cr_ob_strtomt(TState *ts, OString *id)
 {
-	uintptr_t ptr, start, end;
+	OString **names;
+	uintptr_t ptr, start;
 
+	names = GS(ts)->vtmnames;
 	ptr = cast(uintptr_t, id);
-	start = cast(uintptr_t, vm->faststatic[SS_INIT]);
-	end = cast(uintptr_t, vm->faststatic[SS_GE + 1]);
-	return (ptr < start || ptr >= end ? -1 : ptr - start);
+	start = cast(uintptr_t, names);
+	return (ptr < start || ptr > start + CR_NUMM ? -1 : ptr - start);
 }
 
 
-/* Create new unmarked 'GCObject' (object) and append it to GC list. */
-static GCObject *otallocate(VM *vm, size_t size, cr_ubyte ott)
+/* create new unmarked 'GCObject' (object) and append it to GC list */
+static GCObject *newobject(TState *ts, size_t size, cr_ubyte ott)
 {
 	GCObject *o;
+	GState *gs;
 
-	o = cr_mm_malloc(vm, size);
+	o = cr_mm_malloc(ts, size);
 	o->ott = ott;
-	unmarkgco(o);
-	o->next = vm->gc.list;
-	vm->gc.list = o;
-#ifdef DEBUG_LOG_GC
-	printf("%p allocate %zu\n", (void *)object, size);
-#endif
+	o->mark = 0;
+	gs = GS(ts);
+	o->next = gs->gc.list;
+	gs->gc.list = o;
 	return o;
 }
 
 
 /* auxiliary function for allocating string memory */
-cr_sinline OString *allocstring(VM *vm, uint32_t len)
+cr_sinline OString *allocstring(TState *ts, uint32_t len)
 {
 	OString *s;
 
-	s = otnewgco(vm, len + 1, CR_VSTRING, OString);
+	s = newgco(ts, len + 1, CR_VSTRING, OString);
 	s->len = len;
 	return s;
 }
@@ -120,30 +120,30 @@ cr_sinline OString *allocstring(VM *vm, uint32_t len)
  * Create new string object.
  * Allocation is skipped in case string is already interned.
  */
-OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
+OString *cr_ob_newstring(TState *ts, const char *chars, size_t len)
 {
-	HTable *wtab;
+	HTable *strtab;
 	OString *interned;
 	OString *string;
 	unsigned int hash;
 	TValue key;
 
-	wtab = &vm->weakrefs;
-	hash = cr_hh_string(chars, len, vm->seed);
-	interned = cr_ht_getinterned(wtab, chars, len, hash);
+	strtab = &GS(ts)->strings;
+	hash = cr_hh_string(chars, len, GS(ts)->seed);
+	interned = cr_ht_getinterned(strtab, chars, len, hash);
 	if (interned)
 		return interned;
-	string = allocstring(vm, len);
+	string = allocstring(ts, len);
 	if (len != 0)
 		memcpy(string->bytes, chars, len);
 	string->bytes[len] = '\0';
 	string->hash = hash;
 	string->extra = 0;
-	string->bits = STRhashash;
-	lmarkgco(string);
-	setv2s(vm, &key, string);
-	cr_ht_set(vm, wtab, &key, &vm->nil);
-	lunmarkgco(string);
+	string->bits = STRHASHASH;
+	setv2s(ts, &key, string);
+	setsv2s(ts, ts->stacktop.p++, string);
+	cr_ht_set(ts, strtab, &key, &GS(ts)->nil);
+	ts->stacktop.p--;
 	return string;
 }
 
@@ -176,7 +176,7 @@ OString *cr_ot_newstring(VM *vm, const char *chars, size_t len)
 
 
 /* convert hex character into digit */
-int cr_ot_hexvalue(int c)
+int cr_ob_hexvalue(int c)
 {
 	cr_assert(isxdigit(c));
 	if (isdigit(c)) return c - '0';
@@ -205,7 +205,7 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
 	if (*s == '0' && (*s == 'x' || *s == 'X')) { /* hex ? */
 		s+=2; /* skip hex prefix */
 		for (; isxdigit(*s); s++) {
-			digit = cr_ot_hexvalue(*s);
+			digit = cr_ob_hexvalue(*s);
 			if (hexoverflow(u, digit)) {
 				if (overflow)
 					*overflow = 1;
@@ -265,7 +265,7 @@ static const char *otstr2flt(const char *s, cr_number *n, int *of)
 
 
 /* convert string to 'cr_number' or 'cr_integer' */
-size_t cr_ot_strtonum(const char *s, TValue *o, int *of)
+size_t cr_ob_strtonum(const char *s, TValue *o, int *of)
 {
 	cr_integer i;
 	cr_number n;
@@ -313,13 +313,13 @@ static int otnum2buff(const TValue *nv, char *buff)
 }
 
 
-void cr_ot_numtostring(VM *vm, TValue *v)
+void cr_ob_numtostring(TState *ts, TValue *v)
 {
 	char buff[MAXNUM2STR];
 	int len;
 
 	len = otnum2buff(v, buff);
-	setv2s(vm, v, cr_ot_newstring(vm, buff, len));
+	setv2s(ts, v, cr_ob_newstring(ts, buff, len));
 }
 
 
@@ -329,19 +329,19 @@ void cr_ot_numtostring(VM *vm, TValue *v)
  * -------------------------------------------------------------------------- */
 
 /*
- * Initial size of buffer used in 'cr_ot_newvstringf'
+ * Initial size of buffer used in 'cr_ob_newvstringf'
  * to prevent allocations, instead the function
  * will directly work on the buffer and will push
  * strings on stack in case buffer exceeds this limit.
- * This is all done because 'cr_ot_newvstringf' often
+ * This is all done because 'cr_ob_newvstringf' often
  * gets called by 'cr_dg_getinfo'; the size should be
  * at least 'CR_MAXSRC' + 'MAXNUM2STR' + size for message.
  */
 #define BUFFVFSSIZ	(CRI_MAXSRC + MAXNUM2STR + 100)
 
-/* buffer for 'cr_ot_newvstringf' */
+/* buffer for 'cr_ob_newvstringf' */
 typedef struct BuffVSF {
-	VM *vm;
+	TState *ts;
 	int pushed; /* true if 'space' was pushed on the stack */
 	int len; /* string length in 'space' */
 	char space[BUFFVFSSIZ];
@@ -354,15 +354,15 @@ typedef struct BuffVSF {
  */
 static void pushstr(BuffVFS *buff, const char *str, size_t len)
 {
-	VM *vm;
+	TState *ts;
 	OString *s;
 
-	vm = buff->vm;
-	s = cr_ot_newstring(vm, str, len);
-	setsv2s(vm, vm->stacktop.p, s); 
-	vm->stacktop.p++;
+	ts = buff->ts;
+	s = cr_ob_newstring(ts, str, len);
+	setsv2s(ts, ts->stacktop.p, s); 
+	ts->stacktop.p++;
 	if (buff->pushed)
-		cr_vm_concat(vm, 2);
+		cr_vm_concat(ts, 2);
 	else
 		buff->pushed = 1;
 }
@@ -418,7 +418,7 @@ static void buffaddptr(BuffVFS *buff, const void *p)
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
-const char *cr_ot_pushvfstring(VM *vm, const char *fmt, va_list argp)
+const char *cr_ob_pushvfstring(TState *ts, const char *fmt, va_list argp)
 {
 	const char *end;
 	const char *str;
@@ -464,17 +464,17 @@ const char *cr_ot_pushvfstring(VM *vm, const char *fmt, va_list argp)
 	}
 	buffaddstring(&buff, fmt, strlen(fmt));
 	pushbuff(&buff);
-	return cstrvalue(s2v(vm->stacktop.p));
+	return cstrvalue(s2v(ts->stacktop.p));
 }
 
 
-const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...)
+const char *cr_ob_pushfstring(TState *ts, const char *fmt, ...)
 {
 	const char *str;
 	va_list argp;
 
 	va_start(argp, fmt);
-	str = cr_ot_pushvfstring(vm, fmt, argp);
+	str = cr_ob_pushvfstring(ts, fmt, argp);
 	va_end(argp);
 	return str;
 }
@@ -485,12 +485,12 @@ const char *cr_ot_pushfstring(VM *vm, const char *fmt, ...)
  * Other object constructors
  * -------------------------------------------------------------------------- */
 
-CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues)
+CClosure *cr_ob_newcclosure(TState *ts, cr_cfunc fn, int nupvalues)
 {
 	CClosure *ccl;
 	int i;
 
-	ccl = otnewgco(vm, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
+	ccl = newgco(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
 	ccl->nupvalues = nupvalues;
 	ccl->fn = fn;
 	for (i = 0; i < nupvalues; i++)
@@ -499,25 +499,25 @@ CClosure *cr_ot_newcclosure(VM *vm, cr_cfunc fn, int nupvalues)
 }
 
 
-Function *cr_ot_newfunction(VM *vm)
+Function *cr_ob_newfunction(TState *ts)
 {
 	Function *fn;
 
-	fn = otnewgco(vm, 0, CR_VFUNCTION, Function);
-	cr_mm_createvec(vm, &fn->constants, CRI_MAXCODE, "constants");
-	cr_mm_createvec(vm, &fn->code, INT_MAX, "code");
-	cr_mm_createvec(vm, &fn->lineinfo, INT_MAX, "lines");
-	cr_mm_createvec(vm, &fn->lvars, CRI_MAXCODE, "local variables");
+	fn = newgco(ts, 0, CR_VFUNCTION, Function);
+	cr_mm_createvec(ts, &fn->constants, CRI_MAXCODE, "constants");
+	cr_mm_createvec(ts, &fn->code, INT_MAX, "code");
+	cr_mm_createvec(ts, &fn->lineinfo, INT_MAX, "lines");
+	cr_mm_createvec(ts, &fn->lvars, CRI_MAXCODE, "local variables");
 	return fn;
 }
 
 
-CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn, int nupvalues)
+CriptClosure *cr_ob_newcrclosure(TState *ts, Function *fn, int nupvalues)
 {
 	CriptClosure *crcl;
 	int i;
 
-	crcl = otnewgco(vm, sizeof(UValue*) * nupvalues, CR_VCRCL, CriptClosure);
+	crcl = newgco(ts, sizeof(UValue*) * nupvalues, CR_VCRCL, CriptClosure);
 	crcl->nupvalues = nupvalues;
 	crcl->fn = fn;
 	memset(crcl->upvalue, 0, nupvalues * sizeof(UValue*));
@@ -525,23 +525,21 @@ CriptClosure *cr_ot_newcrclosure(VM *vm, Function *fn, int nupvalues)
 }
 
 
-UValue *cr_ot_newuvalue(VM *vm, TValue *vp)
+UValue *cr_ob_newuvalue(TState *ts, TValue *vp)
 {
 	UValue *uv;
 
-	uv = otnewgco(vm, 0, CR_VUVALUE, UValue);
-	uv->closed = newemptyvalue();
+	uv = newgco(ts, 0, CR_VUVALUE, UValue);
 	uv->v.location = vp;
-	uv->nextuv = NULL;
 	return uv;
 }
 
 
-OClass *cr_ot_newclass(VM *vm, OString *id)
+OClass *cr_ob_newclass(TState *ts, OString *id)
 {
 	OClass *cls;
 
-	cls = otnewgco(vm, 0, CR_VCLASS, OClass);
+	cls = newgco(ts, 0, CR_VCLASS, OClass);
 	cls->name = id;
 	cr_ht_init(&cls->mtab);
 	memset(cls->vtable, 0, sizeof(cls->vtable) / sizeof(cls->vtable[0]));
@@ -549,22 +547,22 @@ OClass *cr_ot_newclass(VM *vm, OString *id)
 }
 
 
-Instance *cr_ot_newinstance(VM *vm, OClass *cls)
+Instance *cr_ob_newinstance(TState *ts, OClass *cls)
 {
 	Instance *ins;
 
-	ins = otnewgco(vm, 0, CR_VINSTANCE, Instance);
+	ins = newgco(ts, 0, CR_VINSTANCE, Instance);
 	ins->oclass = cls;
 	cr_ht_init(&ins->fields);
 	return ins;
 }
 
 
-InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure *method)
+InstanceMethod *cr_ob_newinstancemethod(TState *ts, Instance *receiver, CriptClosure *method)
 {
 	InstanceMethod *im;
 
-	im = otnewgco(vm, 0, CR_VMETHOD, InstanceMethod);
+	im = newgco(ts, 0, CR_VMETHOD, InstanceMethod);
 	im->receiver = receiver;
 	im->method = cast(GCObject*, method);
 	return im;
@@ -580,45 +578,45 @@ InstanceMethod *cr_ot_newinstancemethod(VM *vm, Instance *receiver, CriptClosure
  * Performs raw deallocation of object memory it does
  * not try to call '__free__'.
  */
-void cr_ot_free(VM *vm, GCObject *o)
+void cr_ob_free(TState *ts, GCObject *o)
 {
-	Function *fn; OClass *cls; Instance *ins;
-#ifdef DEBUG_LOG_GC
-	printf("%p freed\n", (void *)o);
-#endif
+	Instance *ins;
+	Function *fn;
+	OClass *cls;
+
 	switch (rawott(o)) {
 		case CR_VSTRING:
-			cr_mm_free(vm, o, sizes((OString*)o));
+			cr_mm_free(ts, o, sizes((OString*)o));
 			break;
 		case CR_VFUNCTION:
 			fn = cast(Function*, o);
-			cr_mm_freevec(vm, &fn->constants);
-			cr_mm_freevec(vm, &fn->code);
-			cr_mm_freevec(vm, &fn->lineinfo);
-			cr_mm_freevec(vm, &fn->lvars);
-			cr_mm_free(vm, o, sizefn());
+			cr_mm_freevec(ts, &fn->constants);
+			cr_mm_freevec(ts, &fn->code);
+			cr_mm_freevec(ts, &fn->lineinfo);
+			cr_mm_freevec(ts, &fn->lvars);
+			cr_mm_free(ts, o, sizefn());
 			break;
 		case CR_VUVALUE:
-			cr_mm_free(vm, o, sizeuv());
+			cr_mm_free(ts, o, sizeuv());
 			break;
 		case CR_VCRCL:
-			cr_mm_free(vm, o, sizecrcl(cast(CriptClosure*, o)));
+			cr_mm_free(ts, o, sizecrcl(cast(CriptClosure*, o)));
 			break;
 		case CR_VCCL:
-			cr_mm_free(vm, o, sizeccl(cast(CClosure*, o)));
+			cr_mm_free(ts, o, sizeccl(cast(CClosure*, o)));
 			break;
 		case CR_VCLASS:
 			cls = cast(OClass*, o);
-			cr_ht_free(vm, &cls->mtab);
-			cr_mm_free(vm, o, sizecls());
+			cr_ht_free(ts, &cls->mtab);
+			cr_mm_free(ts, o, sizecls());
 			break;
 		case CR_VINSTANCE:
 			ins = cast(Instance*, o);
-			cr_ht_free(vm, &ins->fields);
-			cr_mm_free(vm, o, sizeins());
+			cr_ht_free(ts, &ins->fields);
+			cr_mm_free(ts, o, sizeins());
 			break;
 		case CR_VMETHOD:
-			cr_mm_free(vm, o, sizeim());
+			cr_mm_free(ts, o, sizeim());
 			break;
 		default:
 			cr_unreachable();

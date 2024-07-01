@@ -21,30 +21,30 @@
 #include "crlimits.h"
 
 
-#define cr_mm_rawmalloc(vm, s)		(vm)->hooks.reallocate(NULL, s, (vm)->hooks.userdata)
-#define cr_mm_rawrealloc(vm, p, s)   	(vm)->hooks.reallocate(p, s, (vm)->hooks.userdata)
-#define cr_mm_rawfree(vm, p)	   	(vm)->hooks.reallocate(p, 0, (vm)->hooks.userdata)
+#define cr_mm_rawmalloc(ts, s)		(ts)->hooks.reallocate(NULL, s, (ts)->hooks.userdata)
+#define cr_mm_rawrealloc(ts, p, s)   	(ts)->hooks.reallocate(p, s, (ts)->hooks.userdata)
+#define cr_mm_rawfree(ts, p)	   	(ts)->hooks.reallocate(p, 0, (ts)->hooks.userdata)
 
-void *cr_mm_realloc(VM *vm, void *ptr, cr_umem osize, cr_umem nsize);
+void *cr_mm_realloc(TState *ts, void *ptr, cr_umem osize, cr_umem nsize);
 
-void *cr_mm_malloc(VM *vm, cr_umem size);
-void *cr_mm_saferealloc(VM *vm, void *ptr, cr_umem osize, cr_umem nsize);
-void cr_mm_free(VM *vm, void *ptr, cr_umem osize);
+void *cr_mm_malloc(TState *ts, cr_umem size);
+void *cr_mm_saferealloc(TState *ts, void *ptr, cr_umem osize, cr_umem nsize);
+void cr_mm_free(TState *ts, void *ptr, cr_umem osize);
 
-void *cr_mm_growarr(VM *vm, void *ptr, int len, int *sizep, int elemsize,
+void *cr_mm_growarr(TState *ts, void *ptr, int len, int *sizep, int elemsize,
 		int ensure, int limit, const char *what);
 
-int cr_mm_reallocstack(VM *vm, int n);
-int cr_mm_growstack(VM *vm, int n);
+int cr_mm_reallocstack(TState *ts, int n);
+int cr_mm_growstack(TState *ts, int n);
 
 
-#define cr_mm_newarray(vm,s,t)		cr_mm_malloc(vm, (s) * sizeof(t))
+#define cr_mm_newarray(ts,s,t)		cr_mm_malloc(ts, (s) * sizeof(t))
 
-#define cr_mm_reallocarray(vm,p,os,ns) \
-	cr_mm_realloc(vm, (p), (os)*sizeof(*p), (ns)*sizeof(ns))
+#define cr_mm_reallocarray(ts,p,os,ns) \
+	cr_mm_realloc(ts, (p), (os)*sizeof(*p), (ns)*sizeof(ns))
 
-#define cr_mm_freearray(vm,p,n)	\
-	cr_mm_free((vm), (p), cast_umem(n)*sizeof(*(p)))
+#define cr_mm_freearray(ts,p,n)	\
+	cr_mm_free((ts), (p), cast_umem(n)*sizeof(*(p)))
 
 
 
@@ -60,29 +60,29 @@ int cr_mm_growstack(VM *vm, int n);
 
 
 /* should be called only once */
-#define cr_mm_createvec(vm,v,l,w) \
-	({ (void)(vm); cr_mm_initvec(vm,v); (v)->limit = (l); (v)->what = (w); })
+#define cr_mm_createvec(ts,v,l,w) \
+	({ (void)(ts); cr_mm_initvec(ts,v); (v)->limit = (l); (v)->what = (w); })
 
 
-#define cr_mm_initvec(vm,v) \
-	({ (void)(vm); (v)->ptr = NULL; (v)->len = (v)->size = 0; })
+#define cr_mm_initvec(ts,v) \
+	({ (void)(ts); (v)->ptr = NULL; (v)->len = (v)->size = 0; })
 
 
-#define cr_mm_ensurevec(vm,v,n) \
-	((v)->ptr = cr_mm_growarr((vm), (v)->ptr, (v)->len, &(v)->size, \
+#define cr_mm_ensurevec(ts,v,n) \
+	((v)->ptr = cr_mm_growarr((ts), (v)->ptr, (v)->len, &(v)->size, \
 		sizeof(*(v)->ptr), (n), (v)->limit, (v)->what))
 
 
-#define cr_mm_growvec(vm,v)	cr_mm_ensurevec((vm), (v), 0)
+#define cr_mm_growvec(ts,v)	cr_mm_ensurevec((ts), (v), 0)
 
 
-#define cr_mm_reallocvec(vm,v,ns) \
-	((v)->ptr = cr_mm_realloc((vm), (v)->ptr, \
+#define cr_mm_reallocvec(ts,v,ns) \
+	((v)->ptr = cr_mm_realloc((ts), (v)->ptr, \
 		cast_umem((v)->size*sizeof(*(v)->ptr)), (ns)))
 
 
-#define cr_mm_freevec(vm,v) \
-	cr_mm_freearray((vm), (v)->ptr, (v)->size*sizeof(*(v)->ptr))
+#define cr_mm_freevec(ts,v) \
+	cr_mm_freearray((ts), (v)->ptr, (v)->size*sizeof(*(v)->ptr))
 
 
 
