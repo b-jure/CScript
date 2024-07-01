@@ -26,7 +26,7 @@ void cr_gc_init(GC *gc)
 	gc->ngs = 0;
 	gc->next = 0;
 	gc->allocated = 0;
-	gc->list = NULL;
+	gc->objects = NULL;
 	gc->sweeppos = NULL;
 	gc->graystack = NULL;
 	gc->fixed = NULL;

@@ -50,13 +50,13 @@
 
 /* GC states */
 #define GCSpropagate		0 /* propagating gray object to black */
-#define GCSenteratomic		1 /* prepare for atomic state (propagate all) */
-#define GCSatomic		2 /* everything is propagated and ready for sweep */
+#define GCSenteratomic		1 /* enters atomic state and then moves to sweep phase */
+#define GCSatomic		2 /* propagates and remarks necessary objects */
 #define GCSsweepall		3 /* sweep all regular objects */
-#define GCSsweepfin		4 /* sweep all objects with '__defer__' */
-#define GCSsweeptofin		5 /* sweep all objects with finalizer */
-#define GCSsweepend		6 /* end of sweep phase */
-#define GCScallfin		7 /* call objects with finalizer */
+#define GCSsweepfin		4 /* sweep all objects in 'fin' */
+#define GCSsweeptofin		5 /* sweep all objects in 'tobefin' */
+#define GCSsweepend		6 /* state after sweeping */
+#define GCScallfin		7 /* call objects in 'tobefin' */
 #define GCSpause		8 /* starting state (marking roots) */
 
 

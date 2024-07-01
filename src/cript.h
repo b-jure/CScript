@@ -109,7 +109,8 @@ typedef struct cr_debuginfo cr_debuginfo;
  * State manipulation
  * ------------------------------------------------------------------------- */
 CR_API TState          *cr_newstate(cr_alloc allocator, void *ud);
-CR_API void		cr_closestate(TState *ts);
+CR_API TState	       *cr_newthread(TState *ts);
+CR_API void		cr_freethread(TState *ts);
 CR_API cr_number	cr_version(TState *ts);
 
 

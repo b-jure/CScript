@@ -100,8 +100,8 @@ static GCObject *newobject(TState *ts, size_t size, cr_ubyte ott)
 	o->ott = ott;
 	o->mark = 0;
 	gs = GS(ts);
-	o->next = gs->gc.list;
-	gs->gc.list = o;
+	o->next = gs->gc.objects;
+	gs->gc.objects = o;
 	return o;
 }
 

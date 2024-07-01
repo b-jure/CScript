@@ -7,7 +7,7 @@ static const char udataname[] = "userdata";
 
 CRI_DEF const char *const cr_vt_typenames[CR_TOTALTYPES] = {
 	"no value", "boolean", "number", udataname, "string",
-	"functions", "class", "instance", udataname, "nil",
+	"function", "class", "instance", udataname, "nil",
 	"thread", "upvalue"
 };
 
@@ -21,8 +21,8 @@ void cr_vt_init(TState *ts)
 		"__umin__", "__ne__", "__eq__", "__lt__", "__le__",
 		"__gt__", "__ge__",
 	};
-	int i;
 	const char *str;
+	int i;
 
 	for (i = 0; i < CR_NUMM; i++) {
 		str = vtmnames[i];
