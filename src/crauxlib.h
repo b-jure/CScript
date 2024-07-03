@@ -21,29 +21,29 @@
 #include "cript.h"
 
 
-/* ================= create TState (auxlib allocator) ================= */
-CR_LIBAPI TState* skaux_create(void);
+/* ================= create cr_State (auxlib allocator) ================= */
+CR_LIBAPI cr_State* skaux_create(void);
 /* ---------------------------------------------------------- */
 
 
 /* ================= debug ================= */
-CR_LIBAPI int skaux_error(TState* ts, cr_status errcode, const char* fmt, ...);
-CR_LIBAPI int skaux_typeerror(TState* ts, int argidx, const char* tname);
-CR_LIBAPI int skaux_argerror(TState* ts, int argidx, const char* extra);
+CR_LIBAPI int skaux_error(cr_State* ts, cr_status errcode, const char* fmt, ...);
+CR_LIBAPI int skaux_typeerror(cr_State* ts, int argidx, const char* tname);
+CR_LIBAPI int skaux_argerror(cr_State* ts, int argidx, const char* extra);
 
-CR_LIBAPI cr_double skaux_checknumber(TState* ts, int idx);
-CR_LIBAPI const char* skaux_checkstring(TState* ts, int idx);
-CR_LIBAPI const char* skaux_optstring(TState* ts, int idx);
-CR_LIBAPI cr_ubyte skaux_checkbool(TState* ts, int idx);
-CR_LIBAPI void skaux_checktype(TState* ts, int idx, int type);
-CR_LIBAPI void skaux_checkstack(TState* ts, int space, const char* msg);
-CR_LIBAPI void skaux_where(TState* ts, int level);
+CR_LIBAPI cr_double skaux_checknumber(cr_State* ts, int idx);
+CR_LIBAPI const char* skaux_checkstring(cr_State* ts, int idx);
+CR_LIBAPI const char* skaux_optstring(cr_State* ts, int idx);
+CR_LIBAPI cr_ubyte skaux_checkbool(cr_State* ts, int idx);
+CR_LIBAPI void skaux_checktype(cr_State* ts, int idx, int type);
+CR_LIBAPI void skaux_checkstack(cr_State* ts, int space, const char* msg);
+CR_LIBAPI void skaux_where(cr_State* ts, int level);
 /* ---------------------------------------------------------- */
 
 
 /* ================= load functions (protected) ================= */
-CR_LIBAPI cr_status skaux_loadfile(TState* ts, const char* filename);
-CR_LIBAPI cr_status skaux_loadstring(TState* ts, const char* string);
+CR_LIBAPI cr_status skaux_loadfile(cr_State* ts, const char* filename);
+CR_LIBAPI cr_status skaux_loadstring(cr_State* ts, const char* string);
 /* ---------------------------------------------------------- */
 
 

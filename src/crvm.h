@@ -25,7 +25,7 @@
 
 
 /* type for functions with error recovery */
-typedef void (*ProtectedFn)(TState *ts, void *userdata);
+typedef void (*ProtectedFn)(cr_State *ts, void *userdata);
 
 
 /*
@@ -61,38 +61,35 @@ typedef void (*ProtectedFn)(TState *ts, void *userdata);
 #define fstatic(ts,i)		(ts)->faststatic[(i)]
 
 
-#define vminitialized(ts) (ttisnil(&(ts)->nil))
+void cr_vm_inctop(cr_State *ts);
+int cr_vm_growstack(cr_State *ts, int n, int raiseerr);
+int cr_vm_reallocstack(cr_State *ts, int size, int raiseerr);
+void cr_vm_ncall(cr_State *ts, SPtr callee, int nreturns);
+cr_number cr_vm_modnum(cr_State *ts, cr_number x, cr_number y);
+void cr_vm_incccalls(cr_State *ts);
 
+void resetvm(cr_State *ts, int status);
+void cr_vm_concat(cr_State *ts, int n);
 
-void cr_vm_inctop(TState *ts);
-int cr_vm_growstack(TState *ts, int n, int raiseerr);
-int cr_vm_reallocstack(TState *ts, int size, int raiseerr);
-void cr_vm_ncall(TState *ts, SPtr callee, int nreturns);
-cr_number cr_vm_modnum(TState *ts, cr_number x, cr_number y);
-void cr_vm_incccalls(TState *ts);
+void vminterpret(cr_State *ts, const char *source, const char *filename);
+void vmrun(cr_State *ts);
+void vmcall(cr_State *ts, SIndex *retstart, SIndex fn, int nreturns);
+void vmpcall(cr_State *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop);
+cr_ubyte vmcompile(cr_State *ts, void *userdata, const char *name, int gscope);
 
-void resetvm(TState *ts, int status);
-void cr_vm_concat(TState *ts, int n);
+void vmcloseupval(cr_State *ts, SIndex *last);
 
-void vminterpret(TState *ts, const char *source, const char *filename);
-void vmrun(TState *ts);
-void vmcall(TState *ts, SIndex *retstart, SIndex fn, int nreturns);
-void vmpcall(TState *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop);
-cr_ubyte vmcompile(TState *ts, void *userdata, const char *name, int gscope);
+cr_ubyte vmbindmethod(cr_State *ts, OClass *oclass, SIndex name, SIndex receiver);
 
-void vmcloseupval(TState *ts, SIndex *last);
+Value vmconcat(cr_State *ts, SIndex l, SIndex r);
 
-cr_ubyte vmbindmethod(TState *ts, OClass *oclass, SIndex name, SIndex receiver);
-
-Value vmconcat(TState *ts, SIndex l, SIndex r);
-
-cr_ubyte vmequal(TState *ts, SIndex l, SIndex r);
+cr_ubyte vmequal(cr_State *ts, SIndex l, SIndex r);
 cr_ubyte vmeqraw(SIndex l, SIndex r);
-cr_ubyte vmeq(TState *ts, SIndex l, SIndex r);
-cr_ubyte vmne(TState *ts, SIndex l, SIndex r);
-cr_ubyte vmlt(TState *ts, SIndex l, SIndex r);
-cr_ubyte vmgt(TState *ts, SIndex l, SIndex r);
-cr_ubyte vmle(TState *ts, SIndex l, SIndex r);
-cr_ubyte vmge(TState *ts, SIndex l, SIndex r);
+cr_ubyte vmeq(cr_State *ts, SIndex l, SIndex r);
+cr_ubyte vmne(cr_State *ts, SIndex l, SIndex r);
+cr_ubyte vmlt(cr_State *ts, SIndex l, SIndex r);
+cr_ubyte vmgt(cr_State *ts, SIndex l, SIndex r);
+cr_ubyte vmle(cr_State *ts, SIndex l, SIndex r);
+cr_ubyte vmge(cr_State *ts, SIndex l, SIndex r);
 
 #endif

@@ -43,7 +43,7 @@ int cr_ve_ceillog2 (unsigned int x)
 }
 
 
-static cr_number numarithmetic(TState *ts, cr_number x, cr_number y, int op)
+static cr_number numarithmetic(cr_State *ts, cr_number x, cr_number y, int op)
 {
 	cr_number m;
 
@@ -64,7 +64,7 @@ static cr_number numarithmetic(TState *ts, cr_number x, cr_number y, int op)
 }
 
 
-static cr_number fltarithm(TState *ts, cr_floating a, cr_floating b, cr_ar op)
+static cr_number fltarithm(cr_State *ts, cr_floating a, cr_floating b, cr_ar op)
 {
 	switch (op) {
 	case CR_OPADD:
@@ -94,7 +94,7 @@ static cr_number fltarithm(TState *ts, cr_floating a, cr_floating b, cr_ar op)
 /* Perform arithmetic operation 'op' on cript values.
  * If arithmetic operation was executed successfully then this
  * returns 1, otherwise 0. */
-int varith(TState *ts, Value a, Value b, cr_ar op, Value *res)
+int varith(cr_State *ts, Value a, Value b, cr_ar op, Value *res)
 {
 	if (arisbin(op)) { // binary operation
 		if (IS_NUMBER(a) && IS_NUMBER(b))
@@ -122,7 +122,7 @@ l_unarynum:;
 }
 
 /* Perform binary/unary operation on values. */
-void arith(TState *ts, Value a, Value b, cr_ar op, Value *res)
+void arith(cr_State *ts, Value a, Value b, cr_ar op, Value *res)
 {
 	if (!varith(ts, a, b, op, res)) {
 #if defined(CR_OVERLOAD_OPS)
@@ -217,7 +217,7 @@ cr_tt val2type(Value value)
 
 
 /* Special equality ordering that preserves left operand ('switch' statement) */
-void eq_preserveL(TState *ts, Value l, Value r)
+void eq_preserveL(cr_State *ts, Value l, Value r)
 {
 	push(ts, r);
 	*stkpeek(1) = l;
@@ -271,7 +271,7 @@ cr_ubyte raweq(Value l, Value r)
 
 
 /* != */
-void vne(TState *ts, Value l, Value r)
+void vne(cr_State *ts, Value l, Value r)
 {
 #if defined(CR_NAN_BOX)
 	if (IS_NUMBER(l) && IS_NUMBER(r))
@@ -320,7 +320,7 @@ void vne(TState *ts, Value l, Value r)
 
 
 /* == */
-cr_ubyte veq(TState *ts, Value l, Value r)
+cr_ubyte veq(cr_State *ts, Value l, Value r)
 {
 	cr_ubyte res;
 
@@ -377,7 +377,7 @@ cr_ubyte veq(TState *ts, Value l, Value r)
 }
 
 /* Value less than */
-void vlt(TState *ts, Value l, Value r)
+void vlt(cr_State *ts, Value l, Value r)
 {
 	if (IS_NUMBER(l) && IS_NUMBER(r))
 		push(ts, BOOL_VAL(AS_NUMBER(l) < AS_NUMBER(r)));
@@ -387,7 +387,7 @@ void vlt(TState *ts, Value l, Value r)
 
 
 /* greater than */
-void vgt(TState *ts, Value l, Value r)
+void vgt(cr_State *ts, Value l, Value r)
 {
 	if (IS_NUMBER(l) && IS_NUMBER(r))
 		push(ts, BOOL_VAL(AS_NUMBER(l) > AS_NUMBER(r)));
@@ -397,7 +397,7 @@ void vgt(TState *ts, Value l, Value r)
 
 
 /* less equal */
-void vle(TState *ts, Value l, Value r)
+void vle(cr_State *ts, Value l, Value r)
 {
 	if (IS_NUMBER(l) && IS_NUMBER(r))
 		push(ts, BOOL_VAL(AS_NUMBER(l) <= AS_NUMBER(r)));
@@ -407,7 +407,7 @@ void vle(TState *ts, Value l, Value r)
 
 
 /* greater equal */
-void vge(TState *ts, Value l, Value r)
+void vge(cr_State *ts, Value l, Value r)
 {
 	if (IS_NUMBER(l) && IS_NUMBER(r))
 		push(ts, BOOL_VAL(AS_NUMBER(l) >= AS_NUMBER(r)));
@@ -424,7 +424,7 @@ void vge(TState *ts, Value l, Value r)
  */
 
 /* convert 'cr_integer' to string */
-Value tostr_integer(TState *ts, cr_integer n)
+Value tostr_integer(cr_State *ts, cr_integer n)
 {
 	static char buff[MAXINT2STR];
 	CRString *str;
@@ -435,7 +435,7 @@ Value tostr_integer(TState *ts, cr_integer n)
 }
 
 /* convert 'cr_floating' to string */
-Value tostr_floating(TState *ts, cr_floating n)
+Value tostr_floating(cr_State *ts, cr_floating n)
 {
 	static char buff[MAXFLT2STR];
 	CRString *str;
@@ -446,7 +446,7 @@ Value tostr_floating(TState *ts, cr_floating n)
 }
 
 /* convert void pointer to string */
-Value tostr_ptr(TState *ts, void *ptr)
+Value tostr_ptr(cr_State *ts, void *ptr)
 {
 	static char buff[MAXVOIDP2STR];
 	CRString *str;
@@ -462,7 +462,7 @@ Value tostr_ptr(TState *ts, void *ptr)
  * the existing one depending on the 'v' type.
  * If 'raw' is set then the raw conversion is performed.
  */
-Value vtostr(TState *ts, Value v, cr_ubyte raw)
+Value vtostr(cr_State *ts, Value v, cr_ubyte raw)
 {
 	switch (VT(v)) {
 	case VTBOOL:

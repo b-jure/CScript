@@ -17,35 +17,44 @@
 #ifndef CRGC_H
 #define CRGC_H
 
+#include "crbits.h"
 #include "crobject.h"
 
 
-/* GCObject 'marked' bits */
-#define BLACK		0 /* object and its children are reachable */
-#define FIXED		1 /* object is always reachable */
-#define FIN		2 /* object is to be finalized */
+/* object 'mark' bits (GC colors) */
+#define WHITEBIT	0
+#define BLACKBIT	1
+#define FIXEDBIT	2
+#define FINBIT		3
+
+/* set 'mark' bits */
+#define markwhite(o)	setbit(rawomark(o), WHITEBIT)
+#define markgray(o)	resetbits(rawomark(o), (WHITEBIT | BLACKBIT))
+#define markblack(o)	setbit(rawomark(o), BLACKBIT)
+#define markfixed(o)	setbit(rawomark(o), FIXEDBIT)
+#define markfin(o)	setbit(rawomark(o), FINBIT)
+
+/* test 'mark' bits */
+#define iswhite(o)	testbit(rawomark(o), WHITEBIT)
+#define isgray(o)	testbits(rawomark(o), ~(WHITEBIT | BLACKBIT))
+#define isblack(o)	testbit(rawomark(o), BLACKBIT)
+#define isfixed(o)	testbit(rawomark(o), FIXEDBIT)
+#define isfin(o)	testbit(rawomark(o), FINBIT)
 
 
-/* bit mask of 'marked' bits */
-#define MMARKED		bit2mask(FIXED, bit2mask(BLACK, FIN))
 
+/* GC 'stopped' bits */
+#define GCSTP			(1<<0) /* GC stopped by itself */
+#define GCSTPUSR		(1<<1) /* GC stopped by user */
+#define GCSTPCLS		(1<<2) /* GC stopped while closing 'cr_State' */
+#define gcrunning(gc)		((gc)->stopped == 0)
 
-/* set 'marked' bits */
-#define markwhite(o)		resetbits(rawomark(o), (BLACK | FIXED))
-#define markblack(o)		setbit(rawomark(o), BLACK)
-#define markfixed(o)		setbit(rawomark(o), FIXED)
-
-
-/* 'stopped' bits */
-#define GCSTP		(1<<0) /* GC stopped by itself */
-#define GCSTPUSR	(1<<1) /* GC stopped by user */
-#define GCSTPCLS	(1<<2) /* GC stopped while closing 'TState' */
-#define gcrunning(gc)	((gc)->stopped == 0)
 
 
 /* default GC parameters */
-#define GCSTEPMUL		100	/* 'stepmul' */
-#define GCSTEPSIZE		14	/* 'stepsize' (log2) */
+#define GCSTEPMUL		100 /* 'stepmul' */
+#define GCSTEPSIZE		14  /* 'stepsize' (log2) */
+
 
 
 /* GC states */
@@ -59,6 +68,17 @@
 #define GCScallfin		7 /* call objects in 'tobefin' */
 #define GCSpause		8 /* starting state (marking roots) */
 
+/* 
+ * Check if GC is in a state that holds the invariant 
+ * that white objects cannot point to black objects.
+ * States that break this invariant are sweep states.
+ */
+#define invariantstate(gc)	((gc).state <= GCSatomic)
+
+/* check if GC is in a sweep state */
+#define sweepstate(gc)		(GCSsweepall <= (gc).state && (gc).state <= GCSsweepend)
+
+
 
 /*
  * Performs a single step of collection if collector
@@ -69,7 +89,17 @@
 	  gcmemchange(ts, pre, pos); }
 
 
+/* 'checkgc' but without 'pre' and 'pos' */
 #define cr_gc_check(ts)		checkgc(ts, (void)0, (void)0)
+
+
+/* 
+ * 'cr_gc_barrier_' but ensures that it is only called
+ * when 'r' (root) is a black object and 'o' is white.
+ */
+#define cr_gc_barrier(ts,r,o) \
+	(isblack(r) && iswhite(o) ? \
+	cr_gc_barrier(ts, objtogco(r), objtogco(o)) : (void)(0))
 
 
 
@@ -78,7 +108,7 @@ typedef struct GC {
 	cr_mem sizegs; /* size of 'graystack' */
 	cr_mem ngs; /* number of elements in 'graystack' */
 	cr_mem next; /* next byte threshold when GC triggers */
-	cr_mem allocated; /* number of allocated bytes */
+	cr_mem allocated; /* number of allocated bytes ? REMOVE */
 	cr_mem debt; /* memory unaccounted by collector */
 	cr_mem total; /* total memory in use in bytes - 'debt' */
 	cr_umem estimate; /* estimate of non-garbage memory in use */
@@ -97,10 +127,12 @@ typedef struct GC {
 } GC;
 
 
-void cr_gc_init(GC *gcs);
-size_t cr_gc_full(TState *ts);
-size_t cf_gc_step(TState *ts);
-void cr_gc_fix(TState *ts, GCObject *o);
-void cr_gc_mark(TState *ts, Value *v);
+
+void cr_gc_init(GC *gc);
+size_t cr_gc_full(cr_State *ts, int isemergency);
+size_t cf_gc_step(cr_State *ts);
+void cr_gc_fix(cr_State *ts, GCObject *o);
+void cr_gc_mark(cr_State *ts, Value *v);
+void cr_gc_barrier_(cr_State *ts, GCObject *r, GCObject *o);
 
 #endif

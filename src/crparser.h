@@ -26,12 +26,13 @@
 
 
 /* variable kind (stored in 'mod') */
-#define VARREGULAR	0 /* regular variable */
-#define VARCONST	1 /* 'const' variable */
-#define VARCLOSE	2 /* variable to be closed */
-#define VARUNINIT	3 /* uninitialized */
+#define VARREGULAR	0 /* regular */
+#define VARCONST	1 /* constant */
+#define VARTBC		2 /* to-be-closed */
+#define VARCTC		3 /* compile-time constant */
+#define VARUNINIT	4 /* uninitialized */
 
-/* automatic (local) variable */
+/* active local variable compiler information */
 typedef union LVarInfo {
 	struct {
 		TValueFields;
@@ -43,20 +44,16 @@ typedef union LVarInfo {
 
 
 
-/* ParserState vecs */
 Vec(LVarInfoVec, LVarInfo);
-Vec(intVecVec, intVec);
 
 /* 
  * Dynamic data used by parser.
  * It is stored inside 'Lexer' because there is
- * only one lexer for all 'FunctionState's.
- * This makes bookkeeping easier when creating
- * new function states.
+ * only one lexer for every 'FunctionState'.
  */
 typedef struct ParserState {
-	struct ClassState *cs; /* chain */
-	LVarInfoVec locals; /* local variables stack */
+	struct ClassState *cs; /* linked-list */
+	LVarInfoVec locals; /* compiler locals stack */
 } ParserState;
 
 
@@ -99,7 +96,7 @@ typedef enum expt {
 	 * 'idx' = relative index of variable in 'locals'; */
 	EXP_LOCAL, 
 	/* global variable; 
-	 * 'idx' = index in 'gvars' (TState) */
+	 * 'idx' = index in 'gvars' (cr_State) */
 	EXP_GLOBAL, 
 	/* constant indexed variable ('[kk]');
 	 * 'idx' = index in 'constants'; */
@@ -129,7 +126,13 @@ typedef enum expt {
 } expt;
 
 
-/* expression information */
+/* 
+ * Expression information.
+ * Parser builds up the expression information and feeds it into
+ * functions that generate bytecode.
+ * Then those functions also fill the 'ExpInfo' accordingly.
+ * So the codegen functions are essentially consumers of 'ExpInfo'.
+ */
 typedef struct ExpInfo {
 	expt et;
 	union {
@@ -150,19 +153,27 @@ typedef struct ExpInfo {
  * Function state
  * -------------------------------------------------------------------------- */
 
-/* currently parsed function state */
+/* 
+ * Represents all the information the parser has
+ * on the currently parsed function.
+ * So 'FunctionState' is a state for currently compiled 'Function'.
+ * Keep in mind that most of the informations are filled in
+ * during compilation and not only at the end, this
+ * is because Cript compiler is a single pass compiler.
+ */
 typedef struct FunctionState {
 	Function *fn; /* currently parsed function */
-	struct FunctionState *enclosing; /* chain */
+	struct FunctionState *prev; /* implicit linked-list */
 	struct Lexer *lx; /* lexer */
 	struct Scope *s; /* scope information */
-	struct ControlFlow *cflow; /* control flow information */
-	int sp; /* first free stack index */
-	int nlocals; /* number of local variables in this function */
+	struct CFInfo *cflow; /* control flow information */
+	int stkidx; /* first free stack index */
+	int nlocals; /* number of active local variables */
 	int firstlocal; /* index of first local in 'ParserState' */
 	cr_ubyte close; /* true if needs to close upvalues before returning */
 	cr_ubyte isvtm; /* true if this is vtable method */
 } FunctionState;
+
 
 
 int cr_pr_nstackvars(FunctionState *fs);

@@ -5,13 +5,31 @@
 #include "crvalue.h"
 
 
+
+/* get type name */
 #define typename(t)	cr_vt_typenames[(t) + 1]
 
+CRI_DEC(const char *const cr_vt_typenames[CR_TOTALTYPES]);
 
-CRI_DEC(const char *const cr_vt_typenames[CR_TOTALTYPES];);
 
 
-void cr_vt_init(TState *ts);
+typedef struct Tuple {
+	int arity;
+	int nreturns;
+} Tuple;
 
+/* get vtable method 'Tuple' */
+#define vtmi(mt)	(&vtmethodinfo[(mt)])
+
+CRI_DEC(const Tuple vtmethodinfo[CR_NUMM]);
+
+
+
+/* virtual method table type */
+typedef struct GCObject *VMT[CR_NUMM];
+
+
+
+void cr_vt_init(cr_State *ts);
 
 #endif

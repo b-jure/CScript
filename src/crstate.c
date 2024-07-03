@@ -2,16 +2,16 @@
 #include "crgc.h"
 
 
-static void preinitstate(TState *ts)
+static void preinitstate(cr_State *ts)
 {
 
 }
 
 
-CR_API TState *cr_newstate(cr_alloc allocator, void *ud)
+CR_API cr_State *cr_newstate(cr_alloc allocator, void *ud)
 {
 	GState *gs;
-	TState *ts;
+	cr_State *ts;
 
 	gs->realloc = allocator;
 	cr_gc_init(&gs->gc);

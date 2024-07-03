@@ -66,8 +66,8 @@ typedef struct GState {
 	TValue nil; /* nil value (init flag) */
 	GC gc; /* garbage collector */
 	HTable strings; /* strings table (weak refs) */
-	struct TState *mainthread; /* thread that also created global state */
-	struct TState **tsopenuv; /* threads with open upvalues */
+	struct cr_State *mainthread; /* thread that also created global state */
+	struct cr_State **tsopenuv; /* threads with open upvalues */
 	OString *memerror; /* error message for memory errors */
 	OString *vtmnames[CR_NUMM]; /* vtable method names */
 } GState;
@@ -75,7 +75,7 @@ typedef struct GState {
 
 
 /* -------------------------------------------------------------------------
- * TState (per-thread state)
+ * cr_State (per-thread state)
  * ------------------------------------------------------------------------- */
 Vec(GCObjectVec, GCObject*);
 Vec(SIndexVec, SIndex);
@@ -83,12 +83,8 @@ Vec(OStringVec, OString*);
 Vec(CallFrameVec, CallFrame);
 
 
-/* thread global state */
-#define GS(ts)		(ts)->gstate
-
-
 /* Cript thread state */
-typedef struct TState {
+typedef struct cr_State {
 	ObjectHeader;
 	GState *gstate; /* shared global state */
 	int status; /* status code */
@@ -105,8 +101,45 @@ typedef struct TState {
 	TValueVec gvars; /* global variable values */
 	UValue *openuv; /* open upvalues */
 	SIndex tbclist; /* list of to-be-closed variables */
-} TState;
+} cr_State;
 
 
+/* thread global state */
+#define GS(ts)		(ts)->gstate
+
+/* check if thread is initialized */
+#define tsinitialized(ts) (ttisnil(&(ts)->nil))
+
+
+
+/* union for conversions */
+union GCUnion {
+	struct GCObject gc; /* object header */
+	struct HTable tab;
+	struct OString str;
+	struct UValue uv;
+	struct Function fn;
+	union Closure cl;
+	struct OClass cls;
+	struct Instance ins;
+	struct InstanceMethod im;
+	struct UserData ud;
+	struct cr_State th;
+};
+
+#define cast_gcu(o)	cast(union GCUnion *, (o))
+
+#define gco2tab(o)	(&(cast_gcu(o)->tab))
+#define gco2str(o)	(&(cast_gcu(o)->str))
+#define gco2uv(o)	(&(cast_gcu(o)->uv))
+#define gco2fn(o)	(&(cast_gcu(o)->fn))
+#define gco2cl(o)	(&(cast_gcu(o)->cl))
+#define gco2cls(o)	(&(cast_gcu(o)->cls))
+#define gco2ins(o)	(&(cast_gcu(o)->ins))
+#define gco2im(o)	(&(cast_gcu(o)->im))
+#define gco2ud(o)	(&(cast_gcu(o)->ud))
+#define gco2th(o)	(&(cast_gcu(o)->th))
+
+#define obj2gco(o)	(&(cast_gcu(o)->gc))
 
 #endif

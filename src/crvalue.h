@@ -26,16 +26,20 @@
 #include <string.h>
 
 
-/* additional types that are used only as markers internally */
+/* 
+ * Additional types that are used only internally
+ * or as markers.
+ */
 #define CR_TUVALUE	CR_NUMTYPES		/* upvalue */
-#define CR_TOBJECT	(CR_NUMTYPES + 1)	/* for marking object values */
+#define CR_THTABLE	(CR_NUMTYPES + 1)	/* hashtable */
+#define CR_TOBJECT	(CR_NUMTYPES + 2)	/* for marking object values */
 
 
 /* 
- * Number of all types ('CR_T*') but excluding marker type
+ * Number of all types ('CR_T*') excluding marker type
  * 'CR_TOBJECT', but including 'CR_TNONE'.
  */
-#define CR_TOTALTYPES	(CR_TUVALUE + 2)
+#define CR_TOTALTYPES	(CR_THTABLE + 2)
 
 
 /* Cript values */
@@ -58,6 +62,7 @@ typedef union Value {
 #define rawovalue(v)	((v).o)
 
 
+
 /*
  * Tagged value types.
  * Bits 0-4 are for value types (CR_T*).
@@ -67,15 +72,15 @@ typedef union Value {
 /* set variant bytes for type 't' */
 #define makevariant(t, v)	((t) | ((v) << 5))
 
-
-
 /* macros for 'tt' */
 #define vtt(v)		((v)->tt)
 #define isvtt(v,t)	(vtt(v) == (t))
 #define setvtt(v,t)	(vtt(v) = (t))
+
 	  
 
-/* mod bit/s */
+/* 'mod' bits */
+#define MODnone		0 /* no modifiers */
 #define MODconst	1 /* value is 'const' */
 
 /* macros for 'mod' */
@@ -84,7 +89,8 @@ typedef union Value {
 #define isconst(v)	ismod((v), MODconst)
 
 
-/* macros for 'val' */
+
+/* macro for 'val' */
 #define vval(v)		((v)->val)
 
 
@@ -174,7 +180,7 @@ typedef struct {
 #define CR_VFALSE	makevariant(CR_TBOOL, 0)
 #define CR_VTRUE	makevariant(CR_TBOOL, 1)
 
-#define bvalue(v)	((v)->val.boolean)
+#define bvalue(v)	rawbvalue(vval(v))
 
 /* set boolean false value */
 #define setbfvalue(v) \
@@ -190,9 +196,6 @@ typedef struct {
 
 #define ttisfalsey(v)		(ttisfalse(v) || ttisnil(v))
 
-#define newbvalue(v) \
-	((TValue){.val = {.boolean = (v)}, .tt = makevariant(CR_TBOOL, (v)), .mod=0})
-
 
 
 /* 
@@ -204,8 +207,8 @@ typedef struct {
 #define CR_VNUMINT	makevariant(CR_TNUMBER, 0)
 #define CR_VNUMFLT	makevariant(CR_TNUMBER, 1)
 
-#define ivalue(v)	(rawivalue((v)->val))
-#define fvalue(v)	(rawfvalue((v)->val))
+#define ivalue(v)	rawivalue(vval(v))
+#define fvalue(v)	rawfvalue(vval(v))
 #define nvalue(v)	(isvtt(CR_VNUMINT) ? cast_num(ivalue(v)) : fvalue(v))
 
 /* set integer value */
@@ -220,9 +223,6 @@ typedef struct {
 #define ttisint(v)	isvtt((v), CR_VNUMINT)
 #define ttisnum(v)	isvtt((v), CR_TNUMBER)
 
-#define newfvalue(v)	((TValue){.val = {.n = (v)}, .tt = CR_VNUMFLT, .mod=0})
-#define newivalue(v)	((TValue){.val = {.i = (v)}, .tt = CR_VNUMINT, .mod=0})
-
 
 
 /* 
@@ -233,15 +233,13 @@ typedef struct {
 
 #define CR_VLUDATA	makevariant(CR_TLUDATA, 0)
 
-#define pvalue(v)	((v)->val.lud)
+#define pvalue(v)	rawpvalue(vval(v))
 
 /* set pointer value */
 #define setpvalue(v,p) \
 	{ TValue *v_=(v); pvalue(v_)=(p); setvtt(v_, CR_VLUDATA); }
 
 #define ttislud(v)	isvtt(v, CR_VLUDATA)
-
-#define newpvalue(v)	((TValue){.val = {.lud = (v)}, .tt = CR_VLUDATA, .mod=0})
 
 
 
@@ -253,15 +251,13 @@ typedef struct {
 
 #define CR_VCFUNCTION	makevariant(CR_TFUNCTION, 0)
 
-#define cfvalue(v)	((v)->val.cfn)
+#define cfvalue(v)	rawcfvalue(vval(v))
 
 /* set C function value */
 #define setcfvalue(v,cf) \
 	{ TValue *v_=(v); cfvalue(v_)=(cf); setvtt(v_, CR_VCFUNCTION); }
 
 #define ttiscfn(v)	isvtt(v, CR_VCFUNCTION)
-
-#define newcfnvalue(v)	((TValue){.val = {.cfn = (v)}, .type = CR_VCFUNCTION, .mod=0})
 
 
 
@@ -271,19 +267,13 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-/*
- * All collectable objects create variant from this type.
- *
- */
-#define ovalue(v)	((v)->val.o)
+#define ovalue(v)	rawovalue(vval(v))
 
 /* set object value */
 #define setovalue(v,o) \
 	{ TValue *v_=(v); ovalue(v_)=(o); setvtt(v_, CR_TOBJECT); }
 
 #define ttiso(v)	isvtt(v, CR_TOBJECT)
-
-#define newovalue(v)	((TValue){.val = {.o = (GCObject*)(v)}, .tt = CR_TOBJECT, .mod = 0})
 
 
 
@@ -308,17 +298,12 @@ typedef struct {
 #define ttisnil(v)	isvtt((v), CR_VNIL)
 #define ttisempty(v)	isvtt((v), CR_VEMPTY)
 
-#define newnilvalue()	((TValue){.val = {0}, .tt = CR_VNIL, .mod=0})
-#define newemptyvalue() ((TValue){.val = {0}, .tt = CR_VEMPTY, .mod=0})
-
 /* --------------------------------------------------------------------------- */
 
 
-
-int cr_ve_ceillog2 (unsigned int x);
+CRI_FUNC int cr_value_ceillog2 (unsigned int x);
 int v2t(TValue value);
-TValue vtostr(TState *ts, TValue value, cr_ubyte raw);
-void varith(TState *ts, TValue a, TValue b, int op, TValue *res);
-
+TValue vtostr(cr_State *ts, TValue value, cr_ubyte raw);
+void varith(cr_State *ts, TValue a, TValue b, int op, TValue *res);
 
 #endif

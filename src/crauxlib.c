@@ -25,7 +25,7 @@
 
 /* Auxiliary to 'panic' handler, prints error message
  * located on top of the stack */
-static cr_inline void printerror(TState* ts)
+static cr_inline void printerror(cr_State* ts)
 {
     const char* errmsg = cr_getstring(ts, -1);
     if(errmsg == NULL) errmsg = "error object is not a string";
@@ -35,7 +35,7 @@ static cr_inline void printerror(TState* ts)
 }
 
 /* Auxiliary to 'panic', prints stack trace-back */
-static void stacktraceback(TState* ts)
+static void stacktraceback(cr_State* ts)
 {
     cr_debuginfo di;
     int level = 0;
@@ -53,7 +53,7 @@ static void stacktraceback(TState* ts)
 }
 
 /* Panic handler */
-static int panic(TState* ts)
+static int panic(cr_State* ts)
 {
     printerror(ts);
     stacktraceback(ts);
@@ -71,11 +71,11 @@ static void* allocator(void* ptr, cr_umem size, void* _)
     return realloc(ptr, size);
 }
 
-/* Create and allocate TState using 'alloc' from this library.
+/* Create and allocate cr_State using 'alloc' from this library.
  * Additionally set 'panic' as the default panic handler. */
-CR_LIBAPI TState* skaux_create(void)
+CR_LIBAPI cr_State* skaux_create(void)
 {
-    TState* ts = cr_create(allocator, NULL);
+    cr_State* ts = cr_create(allocator, NULL);
     if(cr_likely(ts != NULL)) cr_setpanic(ts, panic);
     return ts;
 }
@@ -84,7 +84,7 @@ CR_LIBAPI TState* skaux_create(void)
 /* Invokes runtime error 'invalid argument' at 'argidx'.
  * 'extra' is additional information user wants to display in the
  * error message. */
-CR_LIBAPI int skaux_argerror(TState* ts, int argidx, const char* extra)
+CR_LIBAPI int skaux_argerror(cr_State* ts, int argidx, const char* extra)
 {
     cr_pushfstring(ts, "Invalid argument '%d' %s", argidx, extra);
     return cr_error(ts, S_EARG);
@@ -94,7 +94,7 @@ CR_LIBAPI int skaux_argerror(TState* ts, int argidx, const char* extra)
 /* Invokes runtime error due to invalid type provided.
  * 'argidx' is the index of the invalid argument on the stack.
  * 'tname' is the cstring of the type that was expected instead. */
-CR_LIBAPI int skaux_typeerror(TState* ts, int argidx, const char* tname)
+CR_LIBAPI int skaux_typeerror(cr_State* ts, int argidx, const char* tname)
 {
     const char* argmsg = NULL;
     const char* argtype = NULL;
@@ -115,7 +115,7 @@ CR_LIBAPI int skaux_typeerror(TState* ts, int argidx, const char* tname)
 /* Checks if the value on the stack at 'idx' is number,
  * if not runtime error is invoked.
  * Otherwise the number value is returned. */
-CR_LIBAPI cr_double skaux_checknumber(TState* ts, int idx)
+CR_LIBAPI cr_double skaux_checknumber(cr_State* ts, int idx)
 {
     cr_ubyte isnum = 0;
     cr_double n = cr_getnumber(ts, idx, &isnum);
@@ -128,7 +128,7 @@ CR_LIBAPI cr_double skaux_checknumber(TState* ts, int idx)
 /* Checks if the value on the stack at 'idx' is string,
  * if not runtime error is invoked.
  * Otherwise the string value is returned. */
-CR_LIBAPI const char* skaux_checkstring(TState* ts, int idx)
+CR_LIBAPI const char* skaux_checkstring(cr_State* ts, int idx)
 {
     const char* str = cr_getstring(ts, idx);
     if(cr_unlikely(str == NULL)) tagerror(ts, idx, TT_STRING);
@@ -140,7 +140,7 @@ CR_LIBAPI const char* skaux_checkstring(TState* ts, int idx)
 /* Checks if the value on the stack at 'idx' is boolean,
  * if not runtime error is invoked.
  * Otherwise the boolean value is returned. */
-CR_LIBAPI cr_ubyte skaux_checkbool(TState* ts, int idx)
+CR_LIBAPI cr_ubyte skaux_checkbool(cr_State* ts, int idx)
 {
     cr_ubyte isbool = 0;
     cr_ubyte b = cr_getbool(ts, idx, &isbool);
@@ -152,14 +152,14 @@ CR_LIBAPI cr_ubyte skaux_checkbool(TState* ts, int idx)
 
 /* Checks if the value on the stack at 'idx' is 'type'.
  * If not then runtime error is invoked. */
-CR_LIBAPI void skaux_checktype(TState* ts, int idx, int type)
+CR_LIBAPI void skaux_checktype(cr_State* ts, int idx, int type)
 {
     if(cr_unlikely(cr_type(ts, idx) != type)) tagerror(ts, idx, type);
 }
 
 
 /* @TODO: add description */
-CR_LIBAPI void skaux_where(TState* ts, int level)
+CR_LIBAPI void skaux_where(cr_State* ts, int level)
 {
     cr_debuginfo di;
     if(cr_getstack(ts, level, &di)) {
@@ -174,7 +174,7 @@ CR_LIBAPI void skaux_where(TState* ts, int level)
 
 
 /* @TODO: add description */
-CR_LIBAPI int skaux_error(TState* ts, cr_status errcode, const char* fmt, ...)
+CR_LIBAPI int skaux_error(cr_State* ts, cr_status errcode, const char* fmt, ...)
 {
     va_list argp;
     va_start(argp, fmt);
@@ -187,7 +187,7 @@ CR_LIBAPI int skaux_error(TState* ts, cr_status errcode, const char* fmt, ...)
 
 
 /* @TODO: add description */
-CR_LIBAPI void skaux_checkstack(TState* ts, int space, const char* msg)
+CR_LIBAPI void skaux_checkstack(cr_State* ts, int space, const char* msg)
 {
     if(cr_unlikely(!cr_checkstack(ts, space))) {
         if(msg) skaux_error(ts, S_ESOVERFLOW, "stack overflow, %s", msg);
@@ -208,7 +208,7 @@ typedef struct {
 } FileReader;
 
 /* File manipulation related error */
-static int fileerror(TState* ts, const char* action, int idx)
+static int fileerror(cr_State* ts, const char* action, int idx)
 {
     const char* ferr = strerror(errno);
     const char* filename = cr_getstring(ts, idx);
@@ -218,7 +218,7 @@ static int fileerror(TState* ts, const char* action, int idx)
     return 0; // cr_unreachable
 }
 
-static const char* filereader(TState* ts, void* userdata, cr_umem* szread)
+static const char* filereader(cr_State* ts, void* userdata, cr_umem* szread)
 {
     (void)(ts); // unused
     FileReader* reader = (FileReader*)userdata;
@@ -233,7 +233,7 @@ static const char* filereader(TState* ts, void* userdata, cr_umem* szread)
 }
 
 /* @TODO: add description */
-CR_LIBAPI cr_status skaux_loadfile(TState* ts, const char* filename)
+CR_LIBAPI cr_status skaux_loadfile(cr_State* ts, const char* filename)
 {
     FileReader reader = {0};
     int fnameidx = cr_gettop(ts) + 1; // '+1' we will push it in case of errors
@@ -270,7 +270,7 @@ typedef struct {
 } StringReader;
 
 
-const char* stringreader(TState* ts, void* userdata, cr_umem* szread)
+const char* stringreader(cr_State* ts, void* userdata, cr_umem* szread)
 {
     (void)(ts); // unused
     StringReader* reader = (StringReader*)userdata;
@@ -281,7 +281,7 @@ const char* stringreader(TState* ts, void* userdata, cr_umem* szread)
 }
 
 /* @TODO: add description */
-CR_LIBAPI cr_status skaux_loadstring(TState* ts, const char* string)
+CR_LIBAPI cr_status skaux_loadstring(cr_State* ts, const char* string)
 {
     StringReader reader = {0};
     reader.str = string;

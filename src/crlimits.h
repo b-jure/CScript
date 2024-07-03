@@ -245,7 +245,7 @@ typedef cr_ubyte Instruction;
 
 /*
  * These allow user-defined action to be taken each
- * time TState (thread) is created or deleted.
+ * time cr_State (thread) is created or deleted.
  */
 #if !defined(cri_vmcreated)
 #define cri_tscreated(ts)	((void)(ts))

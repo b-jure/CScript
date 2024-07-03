@@ -29,7 +29,7 @@
  * the runtime error and invokes either a panic handler or aborts.
  * Error message is on top of the stack, or whatever value
  * was passed to cr_error. */
-cr_noret runerror(TState *ts, int status)
+cr_noret runerror(cr_State *ts, int status)
 {
 	struct cr_longjmp *errjmp;
 
@@ -48,13 +48,13 @@ cr_noret runerror(TState *ts, int status)
 }
 
 
-cr_noret memerror(TState *ts)
+cr_noret memerror(cr_State *ts)
 {
 	push(ts, OBJ_VAL(ts->memerror));
 	runerror(ts, S_EMEM);
 }
 
-cr_noret bclimiterror(TState *ts, const char *extra, ...)
+cr_noret bclimiterror(cr_State *ts, const char *extra, ...)
 {
 	va_list ap;
 
@@ -64,13 +64,13 @@ cr_noret bclimiterror(TState *ts, const char *extra, ...)
 	runerror(ts, S_EBCLIMIT);
 }
 
-cr_noret gslimiterror(TState *ts)
+cr_noret gslimiterror(cr_State *ts)
 {
 	cr_pushfstring(ts, "gray stack limit reached %zu", ts_GRAYSTACK_LIMIT >> 1);
 	runerror(ts, S_GSLIMIT);
 }
 
-cr_noret ordererror(TState *ts, Value a, Value b)
+cr_noret ordererror(cr_State *ts, Value a, Value b)
 {
 	const char *t1 = ts->faststatic[val2type(a)]->bytes;
 	const char *t2 = ts->faststatic[val2type(a)]->bytes;
@@ -83,7 +83,7 @@ cr_noret ordererror(TState *ts, Value a, Value b)
 }
 
 
-cr_noret binoperror(TState *ts, Value a, Value b, cr_om op)
+cr_noret binoperror(cr_State *ts, Value a, Value b, cr_om op)
 {
 	static const char *fmt = "Attempt to perform binary %s on %s (left) and %s (right).";
 	push(ts, OBJ_VAL(vtostr(ts, a, 0)));
@@ -96,7 +96,7 @@ cr_noret binoperror(TState *ts, Value a, Value b, cr_om op)
 }
 
 
-cr_noret unoperror(TState *ts, Value a, cr_om op)
+cr_noret unoperror(cr_State *ts, Value a, cr_om op)
 {
 	static const char *fmt = "Attempt to perform unary '%s' on %s.";
 	push(ts, OBJ_VAL(vtostr(ts, a, 0)));
@@ -107,7 +107,7 @@ cr_noret unoperror(TState *ts, Value a, cr_om op)
 }
 
 
-cr_noret omreterror(TState *ts, const char *what, cr_om tag)
+cr_noret omreterror(cr_State *ts, const char *what, cr_om tag)
 {
 	static const char *fmt = "%s method must return value of type %s.";
 	const char *method = ts->faststatic[tag + SS_INIT]->storage;
@@ -116,7 +116,7 @@ cr_noret omreterror(TState *ts, const char *what, cr_om tag)
 }
 
 
-cr_noret ofmterror(TState *ts, int8_t c, Value callee)
+cr_noret ofmterror(cr_State *ts, int8_t c, Value callee)
 {
 	static const char *fmt = "Invalid format specifier '%%%c' for '%s'";
 	push(ts, OBJ_VAL(vtostr(ts, callee, 0)));
@@ -126,7 +126,7 @@ cr_noret ofmterror(TState *ts, int8_t c, Value callee)
 }
 
 
-cr_noret sovferror(TState *ts)
+cr_noret sovferror(cr_State *ts)
 {
 	static const char *fmt = "Stack overflow, limit overflown -> %d.";
 	ts->sp--; // make some space
@@ -135,7 +135,7 @@ cr_noret sovferror(TState *ts)
 }
 
 
-cr_noret udproperror(TState *ts, Value property, OClass *oclass)
+cr_noret udproperror(cr_State *ts, Value property, OClass *oclass)
 {
 	static const char *fmt = "Property '%s' is not defined for <class '%s'>.";
 	const char *pname = ascstring(property);
@@ -145,7 +145,7 @@ cr_noret udproperror(TState *ts, Value property, OClass *oclass)
 }
 
 
-cr_noret retovferror(TState *ts, const char *fn)
+cr_noret retovferror(cr_State *ts, const char *fn)
 {
 	static const char *fmt = "Called function '%s' return count overflows the stack.";
 	if (ts->sp - ts->stack >= ts_STACK_LIMIT)
@@ -155,7 +155,7 @@ cr_noret retovferror(TState *ts, const char *fn)
 }
 
 
-cr_noret arityerror(TState *ts, int expected, int got)
+cr_noret arityerror(cr_State *ts, int expected, int got)
 {
 	static const char *fmt = "Expected %d arguments instead got %d.";
 	push(ts, OBJ_VAL(OString_fmt(ts, fmt, expected, got)));
@@ -163,7 +163,7 @@ cr_noret arityerror(TState *ts, int expected, int got)
 }
 
 
-cr_noret fcovferror(TState *ts)
+cr_noret fcovferror(cr_State *ts)
 {
 	static const char *fmt = "Callstack overflow, limit overflown -> %lu.";
 	push(ts, OBJ_VAL(OString_fmt(ts, fmt, ts_CALLSTACK_LIMIT)));
@@ -171,7 +171,7 @@ cr_noret fcovferror(TState *ts)
 }
 
 
-cr_noret callerror(TState *ts, Value callee)
+cr_noret callerror(cr_State *ts, Value callee)
 {
 	static const char *fmt = "Tried calling non-callable value '%s'.";
 	push(ts, OBJ_VAL(vtostr(ts, callee, 0)));
@@ -180,7 +180,7 @@ cr_noret callerror(TState *ts, Value callee)
 }
 
 
-cr_noret ipaerror(TState *ts, Value notinstance)
+cr_noret ipaerror(cr_State *ts, Value notinstance)
 {
 	static const char *fmt = "Invalid property access, tried accessing property on %s";
 	push(ts, OBJ_VAL(vtostr(ts, notinstance, 1)));
@@ -189,7 +189,7 @@ cr_noret ipaerror(TState *ts, Value notinstance)
 }
 
 
-cr_noret redefgerror(TState *ts, const char *gname)
+cr_noret redefgerror(cr_State *ts, const char *gname)
 {
 	static const char *fmt = "Redefinition of global variable '%s'.";
 	push(ts, OBJ_VAL(OString_fmt(ts, fmt, gname)));
@@ -197,7 +197,7 @@ cr_noret redefgerror(TState *ts, const char *gname)
 }
 
 
-cr_noret udgerror(TState *ts, const char *gname)
+cr_noret udgerror(cr_State *ts, const char *gname)
 {
 	static const char *fmt = "Undefined global variable '%s'.";
 	push(ts, OBJ_VAL(OString_fmt(ts, fmt, gname)));
@@ -205,7 +205,7 @@ cr_noret udgerror(TState *ts, const char *gname)
 }
 
 
-cr_noret fixederror(TState *ts, const char *var)
+cr_noret fixederror(cr_State *ts, const char *var)
 {
 	static const char *fmt = "Can't assign to variable '%s', it is declared as 'fixed'.";
 	push(ts, OBJ_VAL(OString_fmt(ts, fmt, var)));
@@ -213,14 +213,14 @@ cr_noret fixederror(TState *ts, const char *var)
 }
 
 
-cr_noret nilidxerror(TState *ts)
+cr_noret nilidxerror(cr_State *ts)
 {
 	push(ts, OBJ_VAL(OString_newlit(ts, "Can't index with 'nil'.")));
 	runerror(ts, S_ENILIDX);
 }
 
 
-cr_noret inheriterror(TState *ts, Value notclass)
+cr_noret inheriterror(cr_State *ts, Value notclass)
 {
 	const char *fmt = "Can't inherit from '%s', value must be class object.";
 

@@ -20,7 +20,7 @@
 
 
 
-void cr_br_init(TState *ts, BuffReader *br, cr_reader reader, void *userdata)
+void cr_br_init(cr_State *ts, BuffReader *br, cr_reader reader, void *userdata)
 {
 	br->n = 0;
 	br->buff = NULL;
@@ -38,7 +38,7 @@ void cr_br_init(TState *ts, BuffReader *br, cr_reader reader, void *userdata)
  */
 int cr_br_fill(BuffReader *br)
 {
-	TState *ts;
+	cr_State *ts;
 	size_t size;
 	const char *buff;
 

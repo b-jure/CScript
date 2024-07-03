@@ -65,7 +65,7 @@ cr_sinline int currentline(CallFrame *cf)
  * should be 0.
  * If 'level' is invalid, this function returns 0. 
  */
-CR_API int cr_getstack(TState *ts, int level, cr_debuginfo *di)
+CR_API int cr_getstack(cr_State *ts, int level, cr_debuginfo *di)
 {
 	cr_lock(ts);
 	if (level > ts->frames.len || level < 0) {
@@ -121,7 +121,7 @@ static void getsrcinfo(Closure *cl, cr_debuginfo *di)
 		di->source = fn->source->bytes;
 		di->srclen = fn->source->len;
 	}
-	cr_ob_sourceid(di->shortsrc, di->source, di->srclen);
+	cr_object_sourceid(di->shortsrc, di->source, di->srclen);
 }
 
 
@@ -132,7 +132,7 @@ static void getsrcinfo(Closure *cl, cr_debuginfo *di)
  * If any invalid bit/option is inside the 'dbmask' this
  * function returns 0, otherwise 1. 
  */
-static int getinfo(TState *ts, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debuginfo *di)
+static int getinfo(cr_State *ts, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debuginfo *di)
 {
 	cr_ubyte status, bit;
 
@@ -166,7 +166,7 @@ static int getinfo(TState *ts, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_d
  * Fill out 'cr_debuginfo' according to 'dbmask'.
  * Returns 0 if any of the bits in 'dbmask' are invalid.
  */
-CR_API int cr_getinfo(TState *ts, int dbmask, cr_debuginfo *di)
+CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_debuginfo *di)
 {
 	CallFrame *frame;
 	Closure *cl;
@@ -193,21 +193,21 @@ CR_API int cr_getinfo(TState *ts, int dbmask, cr_debuginfo *di)
 }
 
 
-const char *cr_dg_info(TState *ts, const char *msg, const OString *src, int line)
+const char *cr_dg_info(cr_State *ts, const char *msg, const OString *src, int line)
 {
 	char buffer[CRI_MAXSRC];
 
 	if (src) {
-		cr_ob_sourceid(buffer, src->bytes, src->len);
+		cr_object_sourceid(buffer, src->bytes, src->len);
 	} else {
 		buffer[0] = '?';
 		buffer[1] = '\0';
 	}
-	return cr_ob_pushfstring(ts, "%s:%d: %s", buffer, line, msg);
+	return cr_object_pushfstring(ts, "%s:%d: %s", buffer, line, msg);
 }
 
 
-// void dumpstack(TState *ts, CallFrame *frame, Byte *ip)
+// void dumpstack(cr_State *ts, CallFrame *frame, Byte *ip)
 // {
 // 	printf("           ");
 // 	for (Value *ptr = ts->stack; ptr < ts->sp; ptr++) {
@@ -220,7 +220,7 @@ const char *cr_dg_info(TState *ts, const char *msg, const OString *src, int line
 // }
 
 
-// void Chunk_debug(TState *ts, Chunk *chunk, const char *name)
+// void Chunk_debug(cr_State *ts, Chunk *chunk, const char *name)
 // {
 // 	printf("=== %s ===\n", name);
 // 	for (uint32_t offset = 0; offset < chunk->code.len;)
@@ -240,14 +240,14 @@ const char *cr_dg_info(TState *ts, const char *msg, const OString *src, int line
 // 	return offset + 4;
 // }
 // 
-// static void constant(TState *ts, Chunk *chunk, uint32_t param)
+// static void constant(cr_State *ts, Chunk *chunk, uint32_t param)
 // {
 // 	printf("'");
 // 	vprint(ts, *Array_Value_index(&chunk->constants, param), stderr);
 // 	printf("'");
 // }
 // 
-// static uint32_t closure(TState *ts, Chunk *chunk, uint32_t param, uint32_t offset)
+// static uint32_t closure(cr_State *ts, Chunk *chunk, uint32_t param, uint32_t offset)
 // {
 // 	Value value = *Array_Value_index(&chunk->constants, param);
 // 	vprint(ts, value, stderr);
@@ -263,7 +263,7 @@ const char *cr_dg_info(TState *ts, const char *msg, const OString *src, int line
 // 	return offset;
 // }
 // 
-// static int32_t shorinst(TState *ts, const char *name, Chunk *chunk, OpCode code, uint32_t offset)
+// static int32_t shorinst(cr_State *ts, const char *name, Chunk *chunk, OpCode code, uint32_t offset)
 // {
 // 	Byte param = *Array_ubyte_index(&chunk->code, offset + 1);
 // 	printf("%-25s %5u ", name, param);
@@ -287,7 +287,7 @@ const char *cr_dg_info(TState *ts, const char *msg, const OString *src, int line
 // 	return offset + 2; /* OpCode + param(8-bit/1-byte) */
 // }
 // 
-// static int32_t longins(TState *ts, const char *name, Chunk *chunk, OpCode code, uint32_t offset)
+// static int32_t longins(cr_State *ts, const char *name, Chunk *chunk, OpCode code, uint32_t offset)
 // {
 // 	uint32_t param = GET_BYTES3(&chunk->code.data[offset + 1]);
 // 	printf("%-25s %5u ", name, param);
@@ -310,7 +310,7 @@ const char *cr_dg_info(TState *ts, const char *msg, const OString *src, int line
 // 	return offset + 4; /* OpCode(8-bit/1-byte) + param(24-bit/3-bytes) */
 // }
 // 
-// static int32_t invoke(TState *ts, const char *name, Chunk *chunk, int32_t offset)
+// static int32_t invoke(cr_State *ts, const char *name, Chunk *chunk, int32_t offset)
 // {
 // 	uint32_t key = GET_BYTES3(&chunk->code.data[offset + 1]);
 // 	offset += 4;
@@ -321,7 +321,7 @@ const char *cr_dg_info(TState *ts, const char *msg, const OString *src, int line
 // 	return offset + 3;
 // }
 // 
-// uint32_t Instruction_debug(TState *ts, Chunk *chunk, uint32_t offset)
+// uint32_t Instruction_debug(cr_State *ts, Chunk *chunk, uint32_t offset)
 // {
 // 	printf("%04d ", offset);
 // 	uint32_t line = Chunk_getline(chunk, offset);

@@ -46,9 +46,44 @@ void cr_gc_setdebt(GState *gs, cr_mem debt)
 }
 
 
+/*
+ * Marks object 'o'.
+ * Some objects are directly marked as black, these objects
+ * are objects that do not point to other objects.
+ * Other objects are marked gray instead.
+ * Some objects can call this function recursively.
+ * However this recursion can occur at most for two levels.
+ */
+void markobject(cr_State *ts, GCObject *o)
+{
+	UValue *uv;
+
+	switch(rawott(o)) {
+	case CR_VSTRING:
+		markblack(o);
+		break;
+	case CR_VUVALUE:
+		uv = gco2uv(o);
+		break;
+	}
+}
 
 
-void omark(TState *ts, O *obj)
+void cr_gc_barrier_(cr_State *ts, GCObject *r, GCObject *o)
+{
+	GState *gs;
+
+	gs = GS(ts);
+	if (invariantstate(gs->gc)) { /* invariant holds ? */
+		cr_assert(isblack(r) && iswhite(o));
+		markgray(o);
+	} else { /* sweep phase */
+		cr_assert(sweepstate(gs->gc));
+	}
+}
+
+
+void omark(cr_State *ts, O *obj)
 {
 	if (obj == NULL || oismarked(obj))
 		return;
@@ -60,7 +95,7 @@ void omark(TState *ts, O *obj)
 }
 
 
-static cr_inline void marktable(TState *ts, HTable *table)
+static cr_inline void marktable(cr_State *ts, HTable *table)
 {
 	for (uint32_t i = 0; i < table->size; i++) {
 		Node *entry = &table->mem[i];
@@ -75,7 +110,7 @@ static cr_inline void marktable(TState *ts, HTable *table)
 
 
 // Generic function signature for Mark and Sweep functions
-#define MS_FN(name) static cr_inline void name(TState *ts)
+#define MS_FN(name) static cr_inline void name(cr_State *ts)
 
 MS_FN(markglobals)
 {
@@ -134,9 +169,9 @@ MS_FN(marktemp)
 
 MS_FN(markroots)
 {
-	markstack(ts); // TState stack
-	markframes(ts); // TState call stack
-	markupvalues(ts); // TState open upvalues (to be closed)
+	markstack(ts); // cr_State stack
+	markframes(ts); // cr_State call stack
+	markupvalues(ts); // cr_State open upvalues (to be closed)
 	markglobals(ts); // global values and identifiers
 	markstatics(ts); // fast statics (interned strings)
 	markinterned(ts); // normal statics (interned strings)
@@ -176,7 +211,7 @@ MS_FN(sweep)
 
 
 
-void mark_black(TState *ts, GCObject *obj)
+void mark_black(cr_State *ts, GCObject *obj)
 {
 #ifdef DEBUG_LOG_GC
 	printf("%p blacken ", (void *)obj);
@@ -221,7 +256,7 @@ void mark_black(TState *ts, GCObject *obj)
 		{
 			OClass *oclass = cast(OClass *, obj);
 			omark(ts, cast(GCObject *, oclass->name));
-			marktable(ts, &oclass->mtab);
+			marktable(ts, &oclass->methods);
 			for (cr_ubyte i = 0; i < OM_CNT; i++)
 				omark(ts, cast(GCObject *, oclass->omethods[i]));
 			BREAK;
@@ -256,7 +291,7 @@ void mark_black(TState *ts, GCObject *obj)
 
 
 
-cr_umem incgc(TState *ts)
+cr_umem incgc(cr_State *ts)
 {
 #ifdef DEBUG_LOG_GC
 	printf("--> GC start\n");

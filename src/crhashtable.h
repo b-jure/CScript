@@ -18,38 +18,12 @@
 #define SKHASHTABLE_H
 
 
+#include "crobject.h"
 #include "crvalue.h"
 #include "crbits.h"
 
 
-
-#define keytt(n)	((n)->s.ttk)
 #define keyisempty(n)	(keytt(n) == CR_VEMPTY)
-
-
-#define keyval(n)	((n)->s.keyval)
-#define keybvalue(n)	rawbvalue(keyval(n))
-#define keyivalue(n)	rawivalue(keyval(n))
-#define keyfvalue(n)	rawfvalue(keyval(n))
-#define keypvalue(n)	rawpvalue(keyval(n))
-#define keycfvalue(n)	rawcfvalue(keyval(n))
-#define keyovalue(n)	rawovalue(keyval(n))
-#define keystrvalue(n)	((OString*)rawovalue(keyval(n)))
-
-
-/* copy values from node 'n' key to 'v' */
-#define setnodekey(ts,n,v) \
-	{ Node *n_ = (n); const TValue *v_ = (v); \
-	  keytt(n_) = vtt(v_); keyval(n_) = vval(v_); }
-
-
-/* copy values from node 'n' key to 'v' */
-#define getnodekey(ts,v,n) \
-	{ TValue *v_ = (v); const Node *n_ = (n); \
-	  vtt(v_) = keytt(n_); vmod(v_) = 0; \
-	  vval(v_) = keyval(n_); }
-
-
 
 /* node val */
 #define nval(n)		(&(n)->val)
@@ -57,43 +31,20 @@
 /* get table slot */
 #define tslot(t,i)	(&(t)->mem[(i)])
 
-/*
- * Ordering of fields might seem weird but
- * this is to ensure proper alignment.
- */
-typedef union Node {
-	struct {
-		TValueFields; /* value fields */
-		cr_ubyte ttk;
-		Value keyval;
-	} s;
-	TValue val;
-} Node;
-
-
-
-
+/* get table size */
 #define tsize(t)	(twoto((t)->size))
 
-typedef struct {
-	Node *mem; /* memory block */
-	int left; /* free slots before array needs to grow */
-	int nnodes; /* number of nodes */
-	cr_ubyte size; /* 2^size */
-} HTable;
 
 
-
-CRI_FUNC void cr_ht_init(HTable *tab);
-CRI_FUNC void cr_ht_newstab(TState *ts, HTable *tab);
-CRI_FUNC int cr_ht_next(TState *ts, HTable *tab, SIndex *k);
-CRI_FUNC void cr_ht_copykeys(TState *ts, HTable *stab, HTable *dtab);
-CRI_FUNC int cr_ht_intern(TState *ts, const char *string);
-CRI_FUNC int cr_ht_set(TState *ts, HTable *tab, const TValue *key, const TValue *val);
-CRI_FUNC int cr_ht_remove(TState *ts, HTable *tab, const TValue *k);
-CRI_FUNC struct OString *cr_ht_getinterned(HTable *tab, const char *str, 
-					size_t len, unsigned int hash);
-CRI_FUNC int cr_ht_get(HTable *tab, const TValue *key, TValue *o);
-CRI_FUNC void cr_ht_free(TState *ts, HTable *tab);
+CRI_FUNC HTable *cr_htable_new(cr_State *ts);
+CRI_FUNC void cr_htable_newstrtab(cr_State *ts, HTable *tab);
+CRI_FUNC int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k);
+CRI_FUNC void cr_htable_copykeys(cr_State *ts, HTable *stab, HTable *dtab);
+CRI_FUNC int cr_htable_intern(cr_State *ts, const char *string);
+CRI_FUNC int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *val);
+CRI_FUNC int cr_htable_remove(cr_State *ts, HTable *tab, const TValue *k);
+CRI_FUNC OString *cr_htable_getraw(HTable *tab, const char *str, size_t len, unsigned int hash);
+CRI_FUNC int cr_htable_get(HTable *tab, const TValue *key, TValue *o);
+CRI_FUNC void cr_htable_free(cr_State *ts, HTable *ht);
 
 #endif

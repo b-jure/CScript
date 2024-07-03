@@ -35,13 +35,16 @@
 
 
 enum TK {
+	/* keyword tokens */
 	TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE,
 	TK_CLASS, TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR,
 	TK_FOREACH, TK_FN, TK_IF, TK_IN, TK_INHERITS, TK_NIL,
 	TK_OR, TK_RETURN, TK_SUPER, TK_SELF, TK_SWITCH, TK_TRUE,
 	TK_LET, TK_WHILE, TK_LOOP, TK_CONST,
+	/* other multi-char tokens */
 	TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR,
 	TK_POW, TK_DOTS, TK_EOS,
+	/* literal tokens */
 	TK_FLT, TK_INT, TK_STRING, TK_IDENTIFIER,
 };
 
@@ -66,7 +69,7 @@ Vec(Buffer, char);
 
 
 typedef struct Lexer {
-	struct TState *ts;
+	struct cr_State *ts;
 	struct FunctionState *fs;
 	struct ParserState *ps; /* dynamic data used by parser */
 	HTable tab; /* prevent string literal collection */
@@ -81,13 +84,12 @@ typedef struct Lexer {
 } Lexer;
 
 
-
-void cr_lr_init(TState *ts, Lexer *lx, BuffReader *br, OString *src);
-const char *cr_lx_tok2str(Lexer *lx, int t);
-OString *cr_lr_newstring(Lexer *lx, const char *str, size_t len);
-void cr_lr_syntaxerror(Lexer *lx, const char *err);
-Token cr_lr_syntoken(const char *name);
-void cr_lr_scan(Lexer *lx);
-int cr_lr_scanahead(Lexer *lx);
+void cr_lex_init(cr_State *ts, Lexer *lx, BuffReader *br, OString *src);
+const char *cr_lex_tok2str(Lexer *lx, int t);
+OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len);
+void cr_lex_syntaxerror(Lexer *lx, const char *err);
+Token cr_lex_syntoken(const char *name);
+void cr_lex_scan(Lexer *lx);
+int cr_lex_scanahead(Lexer *lx);
 
 #endif

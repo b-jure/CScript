@@ -43,7 +43,7 @@
 
 
 /* convert stack pointers into stack offsets */
-static void savestackptrs(TState *ts)
+static void savestackptrs(cr_State *ts)
 {
 	SIndex *si;
 	UValue *uv;
@@ -71,7 +71,7 @@ static void savestackptrs(TState *ts)
 
 
 /* convert stack offsets back to stack pointers */
-static void restorestackptrs(TState *ts)
+static void restorestackptrs(cr_State *ts)
 {
 	SIndex *si;
 	UValue *uv;
@@ -99,7 +99,7 @@ static void restorestackptrs(TState *ts)
 
 
 /* reallocate stack to new size */
-int cr_ts_reallocstack(TState *ts, int size, int raiseerr)
+int cr_ts_reallocstack(cr_State *ts, int size, int raiseerr)
 {
 	int oldstopem;
 	int osize;
@@ -111,7 +111,7 @@ int cr_ts_reallocstack(TState *ts, int size, int raiseerr)
 	osize = stacksize(ts);
 	savestackptrs(ts);
 	ts->gc.stopem = 1; /* no emergency collection when reallocating stack */
-	newstack = cr_mm_reallocarray(ts, ts->stack.p,
+	newstack = cr_mem_reallocarray(ts, ts->stack.p,
 			osize + EXTRA_STACK, size + EXTRA_STACK);
 	ts->gc.stopem = oldstopem;
 	if (cr_unlikely(newstack == NULL)) {
@@ -130,7 +130,7 @@ int cr_ts_reallocstack(TState *ts, int size, int raiseerr)
 
 
 /* grow stack to accommodate 'n' values */
-int cr_ts_growstack(TState *ts, int n, int raiseerr)
+int cr_ts_growstack(cr_State *ts, int n, int raiseerr)
 {
 	int size;
 	int nsize;
@@ -161,7 +161,7 @@ int cr_ts_growstack(TState *ts, int n, int raiseerr)
 
 
 /* increment stack top */
-void cr_ts_inctop(TState *ts)
+void cr_ts_inctop(cr_State *ts)
 {
 	checkstack(ts, 1);
 	ts->stacktop.p++;
@@ -172,7 +172,7 @@ void cr_ts_inctop(TState *ts)
  * Integer division; handles division by 0 and possible
  * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
  */
-cr_integer cr_ts_div(TState *ts, cr_integer x, cr_integer y)
+cr_integer cr_ts_div(cr_State *ts, cr_integer x, cr_integer y)
 {
 	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* y == '0' or '-1' */
 		if (y == 0)
@@ -187,7 +187,7 @@ cr_integer cr_ts_div(TState *ts, cr_integer x, cr_integer y)
  * Integer modulus; handles modulo by 0 and overflow
  * as explained in 'cr_vm_div()'.
  */
-cr_integer cr_ts_mod(TState *ts, cr_integer x, cr_integer y) 
+cr_integer cr_ts_mod(cr_State *ts, cr_integer x, cr_integer y) 
 {
 	cr_integer r;
 
@@ -202,7 +202,7 @@ cr_integer cr_ts_mod(TState *ts, cr_integer x, cr_integer y)
 
 
 /* floating point modulus */
-cr_number cr_ts_modnum(TState *ts, cr_number x, cr_number y)
+cr_number cr_ts_modnum(cr_State *ts, cr_number x, cr_number y)
 {
 	cr_number r;
 	cri_nummod(ts, x, y, r);
@@ -213,21 +213,21 @@ cr_number cr_ts_modnum(TState *ts, cr_number x, cr_number y)
 
 
 /* raw property get */
-cr_sinline int getproperty(TState *ts, Instance *ins, TValue *k, TValue *v, int field)
+cr_sinline int getproperty(cr_State *ts, Instance *ins, TValue *k, TValue *v, int field)
 {
-	return cr_ht_get(proptab(ins, field), k, v);
+	return cr_htable_get(proptab(ins, field), k, v);
 }
 
 
 /* raw property set (instance fields) */
-cr_sinline int setproperty(TState *ts, Instance *ins, TValue *k, TValue *v, int field)
+cr_sinline int setproperty(cr_State *ts, Instance *ins, TValue *k, TValue *v, int field)
 {
-	return cr_ht_set(ts, &ins->fields, k, v);
+	return cr_htable_set(ts, &ins->fields, k, v);
 }
 
 
 /* try get vtable method 'm' */
-cr_sinline GCObject *vtmethod(TState *ts, const TValue *v, int m)
+cr_sinline GCObject *vtmethod(cr_State *ts, const TValue *v, int m)
 {
 	cr_assert(m >= 0 && m < CR_MNUM && "invalid method tag");
 	return (ttisins(v) ? insvalue(v)->oclass->vtable[m] : NULL);
@@ -235,7 +235,7 @@ cr_sinline GCObject *vtmethod(TState *ts, const TValue *v, int m)
 
 
 /* sets up stack for vtable method before actual call */
-static void setvtmethodstack(TState *ts, SPtr callee, const TValue *ins,
+static void setvtmethodstack(cr_State *ts, SPtr callee, const TValue *ins,
 				const GCObject *m, int mt)
 {
 	const TValue *arg;
@@ -255,7 +255,7 @@ static void setvtmethodstack(TState *ts, SPtr callee, const TValue *ins,
 
 
 /* try call vtable method 'm' */
-int callvtmethod(TState *ts, const TValue *ins, int mt)
+int callvtmethod(cr_State *ts, const TValue *ins, int mt)
 {
 	const TValue *arg;
 	const GCObject *m;
@@ -271,7 +271,7 @@ int callvtmethod(TState *ts, const TValue *ins, int mt)
 
 
 /* try calling unary vtable method */
-static int callunop(TState *ts, TValue *v, int mt, Value *res)
+static int callunop(cr_State *ts, TValue *v, int mt, Value *res)
 {
 	GCObject *m;
 
@@ -289,7 +289,7 @@ static int callunop(TState *ts, TValue *v, int mt, Value *res)
 /* Tries to call class overloaded binary operator method 'op'.
  * Returns 1 if it was called (class overloaded that method),
  * 0 otherwise. */
-cr_sinline int callbinop(TState *ts, Value lhs, Value rhs, cr_om op, Value *res)
+cr_sinline int callbinop(cr_State *ts, Value lhs, Value rhs, cr_om op, Value *res)
 {
 	Value instance;
 	GCObject *om = getomethod(ts, lhs, op);
@@ -311,7 +311,7 @@ cr_sinline int callbinop(TState *ts, Value lhs, Value rhs, cr_om op, Value *res)
 
 
 /* Tries calling binary or unary overloaded operator method, errors on failure. */
-void otryop(TState *ts, Value lhs, Value rhs, cr_om op, Value *res)
+void otryop(cr_State *ts, Value lhs, Value rhs, cr_om op, Value *res)
 {
 	if (!omisunop(op)) {
 		if (cr_unlikely(!callbinop(ts, lhs, rhs, op, res)))
@@ -320,7 +320,7 @@ void otryop(TState *ts, Value lhs, Value rhs, cr_om op, Value *res)
 		unoperror(ts, lhs, op - OM_ADD);
 }
 
-cr_sinline int omcallorder(TState *ts, Value lhs, Value rhs, cr_om ordop)
+cr_sinline int omcallorder(cr_State *ts, Value lhs, Value rhs, cr_om ordop)
 {
 	cr_assert(ts, ordop >= OM_NE && ordop <= OM_GE, "invalid cr_om for order");
 	if (callbinop(ts, lhs, rhs, ordop, stkpeek(1))) { // try overload
@@ -336,7 +336,7 @@ cr_sinline int omcallorder(TState *ts, Value lhs, Value rhs, cr_om ordop)
 }
 
 /* != */
-void one(TState *ts, Value lhs, Value rhs)
+void one(cr_State *ts, Value lhs, Value rhs)
 {
 	if (isstring(lhs) && isstring(rhs))
 		push(ts, BOOL_VAL(lhs != rhs));
@@ -345,7 +345,7 @@ void one(TState *ts, Value lhs, Value rhs)
 }
 
 /* == */
-void oeq(TState *ts, Value lhs, Value rhs)
+void oeq(cr_State *ts, Value lhs, Value rhs)
 {
 	if (isstring(lhs) && isstring(rhs))
 		push(ts, BOOL_VAL(lhs == rhs));
@@ -354,7 +354,7 @@ void oeq(TState *ts, Value lhs, Value rhs)
 }
 
 /* < */
-void olt(TState *ts, Value lhs, Value rhs)
+void olt(cr_State *ts, Value lhs, Value rhs)
 {
 	if (isstring(lhs) && isstring(rhs))
 		push(ts, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) < 0));
@@ -363,7 +363,7 @@ void olt(TState *ts, Value lhs, Value rhs)
 }
 
 /* > */
-void ogt(TState *ts, Value lhs, Value rhs)
+void ogt(cr_State *ts, Value lhs, Value rhs)
 {
 	if (isstring(lhs) && isstring(rhs))
 		push(ts, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) > 0));
@@ -372,7 +372,7 @@ void ogt(TState *ts, Value lhs, Value rhs)
 }
 
 /* <= */
-void ole(TState *ts, Value lhs, Value rhs)
+void ole(cr_State *ts, Value lhs, Value rhs)
 {
 	if (isstring(lhs) && isstring(rhs))
 		push(ts, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) <= 0));
@@ -381,7 +381,7 @@ void ole(TState *ts, Value lhs, Value rhs)
 }
 
 /* >= */
-void oge(TState *ts, Value lhs, Value rhs)
+void oge(cr_State *ts, Value lhs, Value rhs)
 {
 	if (isstring(lhs) && isstring(rhs))
 		push(ts, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) >= 0));
@@ -395,10 +395,10 @@ void oge(TState *ts, Value lhs, Value rhs)
  * stack before running the function.
  * This is needed because class methods expect the receiver to be
  * the first argument ('self' automatic var). */
-cr_ubyte bindmethod(TState *ts, OClass *oclass, Value name, Value receiver)
+cr_ubyte bindmethod(cr_State *ts, OClass *oclass, Value name, Value receiver)
 {
 	Value method;
-	if (!tableget(ts, &oclass->mtab, name, &method))
+	if (!tableget(ts, &oclass->methods, name, &method))
 		return 0;
 	*stkpeek(0) = OBJ_VAL(OBoundMethod_new(ts, receiver, asclosure(method)));
 	return 1;
@@ -406,7 +406,7 @@ cr_ubyte bindmethod(TState *ts, OClass *oclass, Value name, Value receiver)
 
 
 /* Adjust return values after native call finishes. */
-static cr_inline void moveresults(TState *ts, Value *fn, int32_t got, int32_t expect)
+static cr_inline void moveresults(cr_State *ts, Value *fn, int32_t got, int32_t expect)
 {
 	Value *retstart = ts->sp - got; // start of return values
 	if (expect == 0)
@@ -421,7 +421,7 @@ static cr_inline void moveresults(TState *ts, Value *fn, int32_t got, int32_t ex
 
 
 /* Call native function. */
-static cr_inline int32_t callnative(TState *ts, Value fn)
+static cr_inline int32_t callnative(cr_State *ts, Value fn)
 {
 	cr_unlock(ts);
 	int32_t n = ascfn(fn)->fn(ts);
@@ -441,7 +441,7 @@ static cr_inline int32_t callnative(TState *ts, Value fn)
  * provide less arguments than the function arity.
  * In case 'callee' is a cript closure then just return the new 'CallFrame',
  * otherwise run the C closure and return NULL. */
-static CallFrame *precall(TState *ts, Value callee, int32_t argc, int32_t retcnt)
+static CallFrame *precall(cr_State *ts, Value callee, int32_t argc, int32_t retcnt)
 {
 	FnInfo *p = NULL;
 	CallFrame *frame = &ts->frames[ts->fc];
@@ -499,7 +499,7 @@ l_ok:
 }
 
 /* Call '()' a value (closure, method, class). */
-static CallFrame *call(TState *ts, Value callee, int32_t argc, int32_t retcnt)
+static CallFrame *call(cr_State *ts, Value callee, int32_t argc, int32_t retcnt)
 {
 	if (cr_unlikely(!IS_OBJ(callee)))
 		callerror(ts, callee);
@@ -531,7 +531,7 @@ static CallFrame *call(TState *ts, Value callee, int32_t argc, int32_t retcnt)
 
 
 /* call value (unprotected). */
-void cr_ts_ncall(TState *ts, SPtr callee, int nreturns)
+void cr_ts_ncall(cr_State *ts, SPtr callee, int nreturns)
 {
 	int argc = ts->stacktop.p - callee - 1;
 	if (call(ts, fn, argc, retcnt) != NULL)
@@ -546,7 +546,7 @@ void cr_ts_ncall(TState *ts, SPtr callee, int nreturns)
  * by function that errors and performs the long jump or it
  * stays unchanged and the wrapper function just returns and
  * execution continues. */
-static cr_inline int32_t protectedcall(TState *ts, ProtectedFn fn, void *userdata)
+static cr_inline int32_t protectedcall(cr_State *ts, ProtectedFn fn, void *userdata)
 {
 	int32_t oldfc = ts->fc;
 	struct cr_longjmp lj;
@@ -565,7 +565,7 @@ static cr_inline int32_t protectedcall(TState *ts, ProtectedFn fn, void *userdat
  * In case of errors it performs a recovery by closing all
  * open upvalues (values to be closed) and restoring the
  * old stack pointer (oldtop). */
-int32_t pcall(TState *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop)
+int32_t pcall(cr_State *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop)
 {
 	int8_t status = protectedcall(ts, fn, userdata);
 	if (cr_unlikely(status != S_OK)) {
@@ -579,7 +579,7 @@ int32_t pcall(TState *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop)
 
 
 /* Check if receiver and key are valid for indexing. */
-static cr_inline void checkindex(TState *ts, Value receiver, Value key)
+static cr_inline void checkindex(cr_State *ts, Value receiver, Value key)
 {
 	if (cr_unlikely(!isinstance(receiver)))
 		ipaerror(ts, receiver);
@@ -590,7 +590,7 @@ static cr_inline void checkindex(TState *ts, Value receiver, Value key)
 
 /* Private to interpreter.
  * Used when creating a cript closure. */
-static cr_inline OUpvalue *captureupval(TState *ts, Value *valp)
+static cr_inline OUpvalue *captureupval(cr_State *ts, Value *valp)
 {
 	OUpvalue **upvalpp = &ts->open_upvals;
 	while (*upvalpp != NULL && (*upvalpp)->location > valp)
@@ -606,7 +606,7 @@ static cr_inline OUpvalue *captureupval(TState *ts, Value *valp)
 /* Closes all of the captured variables moving
  * them from the stack onto the heap (open_upvals array),
  * making them reachable for gc. */
-void closeupval(TState *ts, Value *last)
+void closeupval(cr_State *ts, Value *last)
 {
 	while (ts->openuvals != NULL && ts->openuvals->location >= last) {
 		OUpvalue *upvalp = ts->open_upvals;
@@ -620,7 +620,7 @@ void closeupval(TState *ts, Value *last)
  * Searches the entire table for the matching index in order to
  * provide more descriptive runtime error.
  **/
-CRString *globalname(TState *ts, uint32_t idx)
+CRString *globalname(cr_State *ts, uint32_t idx)
 {
 	for (uint32_t i = 0; i < ts->globids.cap; i++) {
 		Entry *entry = &ts->globids.entries[i];
@@ -671,7 +671,7 @@ CRString *globalname(TState *ts, uint32_t idx)
 #define BREAK		break
 
 
-void run(TState *ts)
+void run(cr_State *ts)
 {
 	register CallFrame *cf;
 	register const Instruction *pc;
@@ -830,7 +830,7 @@ l_call:;
 				Value methodname = READ_CONSTANT();
 				Value method = *stkpeek(0); // OClosure or ONative
 				OClass *oclass = asclass(*stkpeek(1));
-				rawset(ts, &oclass->mtab, methodname, method);
+				rawset(ts, &oclass->methods, methodname, method);
 				pop(ts); // pop method
 				BREAK;
 			}
@@ -1178,7 +1178,7 @@ l_set_local:;
 					savepc();
 					inheriterror(ts, superclass);
 				}
-				HTable_into(ts, &asclass(superclass)->mtab, &subclass->mtab, 0);
+				HTable_into(ts, &asclass(superclass)->mtab, &subclass->methods, 0);
 				memcpy(subclass->vtable, asclass(superclass)->vtable, sizeof(subclass->vtable));
 				pop(ts); // pop subclass
 				BREAK;
@@ -1283,7 +1283,7 @@ l_ret:
 
 
 /* cr_interprets (compiles and runs) the 'source'. */
-void interpret(TState *ts, const char *source, const char *path)
+void interpret(cr_State *ts, const char *source, const char *path)
 {
 	TODO("Refactor")
 	Value name = OBJ_VAL(OString_new(ts, path, strlen(path)));
@@ -1294,8 +1294,8 @@ void interpret(TState *ts, const char *source, const char *path)
 }
 
 
-/* Initialize the allocated TState */
-void TState_init(TState *ts)
+/* Initialize the allocated cr_State */
+void cr_State_init(cr_State *ts)
 {
 	srand(time(0));
 	ts->seed = rand();
@@ -1331,7 +1331,7 @@ void TState_init(TState *ts)
  * Additionally set the error object on top of the stack
  * if the 'status' is error code.
  */
-void resetts(TState *ts, cr_status status)
+void resetts(cr_State *ts, cr_status status)
 {
 	Value *top = ts->stack;
 	closeupval(ts, top + 1); // close all open upvalues
@@ -1348,9 +1348,9 @@ void resetts(TState *ts, cr_status status)
 
 
 /*
- * Frees the TState and nulls out its pointer.
+ * Frees the cr_State and nulls out its pointer.
  */
-void cleanvm(TState **vmp)
+void cleanvm(cr_State **vmp)
 {
 	_cleanup_function((*vmp)->F);
 	cr_destroy(vmp);

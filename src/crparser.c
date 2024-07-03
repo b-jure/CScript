@@ -20,9 +20,8 @@
 #include "crlimits.h"
 #include "crobject.h"
 #include "crparser.h"
+#include "crstate.h"
 #include "crvalue.h"
-#include "crvm.h"
-
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -35,26 +34,31 @@
 #define leavecstack(lx)		((lx)->ts->nccalls--)
 
 
-/* check condition */
 #define expect_cond(lx, cond, err) \
-	{ if (!(cond)) cr_lr_syntaxerror(lx, err); }
+	{ if (!(cond)) cr_lex_syntaxerror(lx, err); }
 
 
 
-/* Scope 'bits' */
-#define SCLOOP		(1 << 0)
-#define SCFOREACH	(1 << 1)
-#define SCSWITCH	(1 << 2)
+
+/* Scope 'cflow' bits */
+#define CFLOWLOOP	(1<<0)
+#define CFLOWFOREACH	(1<<1)
+#define CFLOWSWITCH	(1<<2)
+
 
 /* lexical scope information */
 typedef struct Scope {
-	struct Scope *prev; /* chain */
+	struct Scope *prev; /* implicit linked-list */
 	int nlocals; /* number of locals outside of this scope */
-	int bits; /* flags */
-	cr_ubyte intbc; /* set if scope contains tbc variable */
+	int cflow; /* control flow information */
+	cr_ubyte haveupval; /* set if scope contains upvalue variable */
+	cr_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
 } Scope;
 
 
+
+/* two dimensional vec (for control flow) */
+Vec(intVecVec, intVec);
 
 /* control flow info */
 typedef struct CFInfo {
@@ -62,14 +66,14 @@ typedef struct CFInfo {
 	int innerlstart; /* innermost loop start offset */
 	int innerldepth; /* innermost loop scope depth */
 	int innersdepth; /* innermost switch scope depth */
-} ControlFlow;
+} CFInfo;
 
 
 
 /* class declaration information */
 typedef struct ClassState {
-	struct ClassState *enclosing;
-	cr_ubyte superclass;
+	struct ClassState *enclosing; /* implicit linked-list */
+	cr_ubyte superclass; /* true if class declaration inherits */
 } ClassState;
 
 
@@ -148,72 +152,38 @@ static void stm(FunctionState *fs);
 static void expr(FunctionState *fs, ExpInfo *e);
 
 
-
-
-// Emit jump instruction
-#define CODEJMP(fs, jmp)            \
-	({                         \
-		CODEOP(fs, jmp, 0); \
-		codeoffset(fs) - 3; \
-	})
-
-// Emit pop instruction
-#define CODEPOP(fs, n)                                  \
-	do {                                           \
-		if (n > 0) {                           \
-			if ((n) > 1)                   \
-				CODEOP(fs, OP_POPN, n); \
-			else                           \
-				CODE(fs, OP_POP);       \
-		}                                      \
-	} while (0)
-
-// Emit unary instruction
-#define CODEUN(fs, opr) CODE(fs, unopr2op(opr))
-
-// Emit binary instruction
-#define CODEBIN(fs, opr) CODE(fs, binopr2op(opr))
-
 // Implicit return
 #define implicitreturn(fs) (CODE(fs, OP_NIL), CODE(fs, OP_RET1))
 
 // Class initializer return
 #define initreturn(fs) (CODEOP(fs, OP_GET_LOCAL, 0), CODE(fs, OP_RET1))
 
+
 // Emit loop instruction
-static cr_inline void codeloop(FunctionState *fs, int start)
-{
-	CODE(fs, OP_LOOP);
-	int offset = codeoffset(fs) - start + 3;
-	if (cr_unlikely(offset >= PARSER_JMP_LIMIT))
-		error(fs, comperrors[CE_JMPLIMIT], PARSER_JMP_LIMIT);
-	CODEL(fs, offset);
-}
-
-// Initialize global variable
-#define INIT_GLOBAL(fs, idx, vflags, E)                                 \
-	do {                                                           \
-		(fs)->ts->globvars.data[idx].flags = vflags;            \
-		CODEOP(fs, GET_OP_TYPE(idx, OP_DEFINE_GLOBAL, E), idx); \
-	} while (0)
-
-
-
-static void ControlFlow_init(TState *ts, CFlow *cflow)
-{
-	cflow->innerlstart = -1;
-	cflow->innerldepth = 0;
-	cflow->innersdepth = 0;
-	Array_Array_cr_int_init(&cflow->breaks, ts);
-}
-
-static void ControlFlow_free(CFlow *context)
-{
-	Array_Array_cr_int_free(&context->breaks, NULL);
-	context->innerlstart = -1;
-	context->innerldepth = 0;
-	context->innersdepth = 0;
-}
+// static cr_inline void codeloop(FunctionState *fs, int start)
+// {
+// 	CODE(fs, OP_LOOP);
+// 	int offset = codeoffset(fs) - start + 3;
+// 	if (cr_unlikely(offset >= PARSER_JMP_LIMIT))
+// 		error(fs, comperrors[CE_JMPLIMIT], PARSER_JMP_LIMIT);
+// 	CODEL(fs, offset);
+// }
+// 
+// static void ControlFlow_init(cr_State *ts, CFlow *cflow)
+// {
+// 	cflow->innerlstart = -1;
+// 	cflow->innerldepth = 0;
+// 	cflow->innersdepth = 0;
+// 	Array_Array_cr_int_init(&cflow->breaks, ts);
+// }
+// 
+// static void ControlFlow_free(CFlow *context)
+// {
+// 	Array_Array_cr_int_free(&context->breaks, NULL);
+// 	context->innerlstart = -1;
+// 	context->innerldepth = 0;
+// 	context->innersdepth = 0;
+// }
 
 
 static void leavescope(FunctionState *fs)
@@ -221,26 +191,28 @@ static void leavescope(FunctionState *fs)
 }
 
 
-static void enterscope(FunctionState *fs, Scope *s, int mask)
+static void enterscope(FunctionState *fs, Scope *s, int cflow)
 {
-	s->bits = mask;
+	s->cflow = cflow;
 	s->nlocals = fs->nlocals;
-	s->intbc = 0;
+	s->havetbcvar = 0;
 	s->prev = fs->s;
 	fs->s = s;
 }
 
-static void initfs(FunctionState *fs, Lexer *lx, Scope *s)
+static void initfs(FunctionState *fs, Lexer *lx, CFInfo *cflow, Scope *s)
 {
-	ParserState ps;
+	ParserState *ps;
 	Function *fn;
 
 	ps = lx->ps;
 	fn = fs->fn;
-	lx->fs = fs;
-	fs->enclosing = lx->fs;
+	fs->prev = lx->fs;
 	fs->lx = lx;
-	fs->sp = 0;
+	lx->fs = fs;
+	fs->s = NULL;
+	fs->cflow = cflow;
+	fs->stkidx = 0;
 	fs->nlocals = 0;
 	fs->firstlocal = ps->locals.len;
 	fs->close = 0;
@@ -283,17 +255,17 @@ static void initfs(FunctionState *fs, Lexer *lx, Scope *s)
 
 CriptClosure *freefs(FunctionState *fs)
 {
-	TState *ts;
+	cr_State *ts;
 
 	ts = fs->lx->ts;
 	ControlFlow_free(&fs->cflow);
-	if (fs->enclosing == NULL) {
+	if (fs->prev == NULL) {
 		cr_assert(fs->ts, fs->fn_type == FN_SCRIPT, "FunctionState is top-level but the type is not 'FN_SCRIPT'.");
 		Array_Upvalue_free(fs->upvalues, NULL);
 		FREE(ts, fs->upvalues); // free the memory holding the pointer
 	}
 	Array_Local_free(&fs->locals, NULL);
-	ts->fs = fs->enclosing;
+	ts->fs = fs->prev;
 	FREE(ts, fs);
 }
 
@@ -307,8 +279,8 @@ static void expect(Lexer *lx, int tk)
 
 	if (lx->t.tk == tk)
 		return;
-	err = cr_ob_pushfstring(lx->ts, "expected %s", cr_lr_tok2str(lx, tk));
-	cr_lr_syntaxerror(lx, err);
+	err = cr_object_pushfstring(lx->ts, "expected %s", cr_lex_tok2str(lx, tk));
+	cr_lex_syntaxerror(lx, err);
 }
 
 
@@ -316,7 +288,7 @@ static void expect(Lexer *lx, int tk)
 static void expectnext(Lexer *lx, int tk)
 {
 	expect(lx, tk);
-	cr_lr_scan(lx);
+	cr_lex_scan(lx);
 }
 
 
@@ -324,7 +296,7 @@ static void expectnext(Lexer *lx, int tk)
 static int match(Lexer *lx, int tk)
 {
 	if (lx->t.tk == tk) {
-		cr_lr_scan(lx);
+		cr_lex_scan(lx);
 		return 1;
 	}
 	return 0;
@@ -337,7 +309,7 @@ static OString *expect_id(Lexer *lx)
 
 	expect(lx, TK_IDENTIFIER);
 	s = lx->t.lit.str;
-	cr_lr_scan(lx);
+	cr_lex_scan(lx);
 	return s;
 }
 
@@ -369,7 +341,7 @@ static Function *parse_end(FunctionState *fs)
 // Additionally parser only registers compile-time errors but it does not
 // call the usual 'runerror' [@err.h], this ensures that all of the
 // compile-time errors will be reported (exhaustive parser).
-CriptClosure *parse(TState *ts, BuffReader *br, const char *name, int isingscope)
+CriptClosure *parse(cr_State *ts, BuffReader *br, const char *name, int isingscope)
 {
 	Scope gscope, lscope;
 	FunctionState fs;
@@ -506,7 +478,7 @@ static int registerlocal(Lexer *lx, FunctionState *fs, OString *name)
 	LVar *local;
 
 	fn = fs->fn;
-	cr_mm_growvec(lx->ts, &fn->lvars);
+	cr_mem_growvec(lx->ts, &fn->lvars);
 	local = fn->lvars.ptr[fn->lvars.len++];
 	local->name = name;
 	local->alivepc = fn->code.len;
@@ -566,7 +538,7 @@ static int addlocal(Lexer *lx, OString *name)
 	LVarInfo *lvinfo;
 
 	locals = &fs->lx->ps->locals;
-	cr_mm_growvec(fs->lx->ts, locals);
+	cr_mem_growvec(fs->lx->ts, locals);
 	lvinfo = &locals->ptr[locals->len++];
 	lvinfo->s.name = name;
 	vmod(lvinfo->val) = VARREGULAR;
@@ -576,7 +548,7 @@ static int addlocal(Lexer *lx, OString *name)
 
 /* same as 'addlocal' but use string literal as name */
 #define addlocallit(lx,lit) \
-	addlocal(lx, cr_lr_newstring(lx, "" lit, SLL(lit)))
+	addlocal(lx, cr_lex_newstring(lx, "" lit, SLL(lit)))
 
 
 /* 
@@ -594,7 +566,7 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 		lvinfo = getlocal(fs, i);
 		if (name == lvinfo->s.name) {
 			if (cr_unlikely(vmod(lvinfo->val) & VARUNINIT)) {
-				cr_lr_syntaxerror(lx, cr_ob_pushfstring(lx->ts, 
+				cr_lex_syntaxerror(lx, cr_object_pushfstring(lx->ts, 
 					"can't read local variable '%s' in its "
 					"own initializer", name));
 			}
@@ -619,7 +591,7 @@ static UVInfo *newupvalue(FunctionState *fs)
 	UVInfoVec *uvals;
 
 	uvals = &fs->fn->upvalues;
-	cr_mm_growvec(fs->lx->ts, uvals);
+	cr_mem_growvec(fs->lx->ts, uvals);
 	return &uvals->ptr[uvals->len++];
 }
 
@@ -639,7 +611,7 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e)
 		cr_assert(name == getlocal(fs, e->u.idx)->s.name);
 	} else { /* must be another upvalue */
 		cr_assert(e->et == EXP_UVAL);
-		enclosing = fs->enclosing;
+		enclosing = fs->prev;
 		uv->onstack = 0;
 		uv->idx = e->u.info;
 		uv->mod = enclosing->fn->upvalues.ptr[e->u.info].mod;
@@ -680,7 +652,7 @@ static void searchvar(FunctionState *fs, OString *name, ExpInfo *e, int base)
 		} else { /* try upvalue */
 			ret = searchupvalue(fs, name);
 			if (ret < 0) {
-				searchvar(fs->enclosing, name, e, 0);
+				searchvar(fs->prev, name, e, 0);
 				if (e->et == EXP_LOCAL || e->et == EXP_UVAL)
 					ret = addupvalue(fs, name);
 				else return;
@@ -699,9 +671,9 @@ cr_sinline TValue *getglobal(FunctionState *fs, int idx)
 
 
 /* create new global in 'gvars' */
-static TValue *newglobal(TState *ts)
+static TValue *newglobal(cr_State *ts)
 {
-	cr_mm_growvec(ts, &ts->gvars);
+	cr_mem_growvec(ts, &ts->gvars);
 	return &ts->gvars.ptr[ts->gvars.len++];
 }
 
@@ -710,7 +682,7 @@ static TValue *newglobal(TState *ts)
  * Add new global value into 'gvars' and store its
  * name into 'gids'. 
  */
-static int addglobal(TState *ts, OString *name)
+static int addglobal(cr_State *ts, OString *name)
 {
 	TValue idx;
 	TValue k;
@@ -718,19 +690,19 @@ static int addglobal(TState *ts, OString *name)
 	setemptyvalue(newglobal(ts, name));
 	setivalue(&idx, ts->gvars.len - 1);
 	setv2s(ts, &k, name);
-	cr_ht_set(ts, &ts->gids, &k, &idx);
+	cr_htable_set(ts, &ts->gids, &k, &idx);
 	return ivalue(&idx);
 }
 
 
 /* get global variable 'name' or create undefined global */
-static void globalvar(TState *ts, OString *name, ExpInfo *e)
+static void globalvar(cr_State *ts, OString *name, ExpInfo *e)
 {
 	TValue k;
 	TValue o;
 
 	setv2s(ts, &k, name);
-	if (!cr_ht_get(ts, &k, &o))
+	if (!cr_htable_get(ts, &k, &o))
 		e->u.idx = addglobal(ts, name);
 	else
 		e->u.idx = ivalue(o);
@@ -753,7 +725,7 @@ static void varname(Lexer *lx, OString *name, ExpInfo *e)
 
 
 #define varlit(lx,l,e) \
-	{ varname(lx, cr_lr_newstring(lx, "" l, SLL(l), e); \
+	{ varname(lx, cr_lex_newstring(lx, "" l, SLL(l), e); \
 	  cr_ce_reservestack((lx)->fs, 1); }
 
 
@@ -764,10 +736,10 @@ static void self_(Lexer *lx, ExpInfo *e)
 {
 	if (lx->fs->cs != NULL) {
 		varlit(lx, "self", e);
-		cr_lr_scan(lx);
+		cr_lex_scan(lx);
 		return;
 	}
-	cr_lr_syntaxerror(lx, "can't use 'self' outside of class declaration");
+	cr_lex_syntaxerror(lx, "can't use 'self' outside of class declaration");
 }
 
 
@@ -785,7 +757,7 @@ static int explist(Lexer *lx, ExpInfo *e)
 
 static void dotaccess(Lexer *lx, ExpInfo *e)
 {
-	cr_lr_scan(lx); /* skip '.' */
+	cr_lex_scan(lx); /* skip '.' */
 	e->u.idx = cr_ce_string(lx->fs, expect_id(lx));
 	e->et = EXP_INDEXRAW;
 }
@@ -797,7 +769,7 @@ static void indexaccess(Lexer *lx, ExpInfo *e)
 	expect(lx, ']');
 	if (eisliteral(e)) {
 		if (e->et == EXP_NIL)
-			cr_lr_syntaxerror(lx, "can't index with 'nil'");
+			cr_lex_syntaxerror(lx, "can't index with 'nil'");
 		e->et = EXP_INDEXK;
 	} else {
 		e->et = EXP_INDEXED;
@@ -808,7 +780,7 @@ static void indexaccess(Lexer *lx, ExpInfo *e)
 /* auxiliary function to 'super_' */
 static void supdotaccess(Lexer *lx, ExpInfo *e)
 {
-	cr_lr_scan(lx); /* skip '.' */
+	cr_lex_scan(lx); /* skip '.' */
 	e->u.idx = cr_ce_string(lx->fs, expect_id(lx));
 	e->et = EXP_INDEXRAWSUP;
 }
@@ -822,7 +794,7 @@ static void supidxaccess(Lexer *lx, ExpInfo *e)
 	id = lx->t.lit.str;
 	if (match(lx, TK_IDENTIFIER)) e->et = EXP_INDEXSUP;
 	else if (match(lx, TK_STRING)) e->et = EXP_INDEXRAWSUP;
-	else cr_lr_syntaxerror(lx, "invalid index value for 'super'");
+	else cr_lex_syntaxerror(lx, "invalid index value for 'super'");
 	e->u.idx = cr_ce_string(lx->fs, id);
 	expect(lx, ']');
 }
@@ -835,16 +807,16 @@ static void super_(Lexer *lx, ExpInfo *e)
 
 	fs = lx->fs;
 	if (fs->cs == NULL)
-		cr_lr_syntaxerror(lx, "can't use 'super' outside of class decl");
+		cr_lex_syntaxerror(lx, "can't use 'super' outside of class decl");
 	else if (!fs->cs->superclass)
-		cr_lr_syntaxerror(lx, "class has no superclass");
+		cr_lex_syntaxerror(lx, "class has no superclass");
 	varlit(lx, "self", e);
 	cr_assert(e->et == EXP_LOCAL);
 	cr_ce_dischargevar(fs, e);
-	cr_lr_scan(lx);
+	cr_lex_scan(lx);
 	if (match(lx, '[')) supidxaccess(lx, e);
 	else if (match(lx, '.')) supdotaccess(lx, e);
-	else cr_lr_syntaxerror(lx, "missing method access after 'super'");
+	else cr_lex_syntaxerror(lx, "missing method access after 'super'");
 	varlit(lx, "super", &e2);
 	cr_assert(e2->et == EXP_UVAL);
 	cr_ce_dischargevar(fs, &e2);
@@ -864,7 +836,7 @@ static void primaryexp(Lexer *lx, ExpInfo *e)
 {
 	switch (lx->t.tk) {
 	case '(':
-		cr_lr_scan(lx);
+		cr_lex_scan(lx);
 		expr(lx, e);
 		expect(lx, ')');
 		break;
@@ -878,7 +850,7 @@ static void primaryexp(Lexer *lx, ExpInfo *e)
 		super_(lx, e);
 		break;
 	default:
-		cr_lr_syntaxerror(lx, "unexpected symbol");
+		cr_lex_syntaxerror(lx, "unexpected symbol");
 		break;
 	}
 }
@@ -956,7 +928,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e)
 		suffixedexp(lx, e);
 		return;
 	}
-	cr_lr_scan(lx);
+	cr_lex_scan(lx);
 }
 
 
@@ -1066,7 +1038,7 @@ static Binopr subexp(Lexer *lx, ExpInfo *e, int limit)
 	uop = getunopr(lx->t.tk);
 	if (uop != OPR_NOUNOPR) {
 		line = lx->line; /* save line */
-		cr_lr_scan(lx);
+		cr_lex_scan(lx);
 		subexp(lx, e, priority[uop].right);
 		cr_ce_unary(lx->fs, uop, e, line);
 	} else {
@@ -1174,7 +1146,7 @@ static LocalVar *upvalvar(FunctionState *fs, int idx)
 {
 	UpValue *upval = &fs->upvalues->data[idx];
 	if (!upval->local)
-		upvalvar(fs->enclosing, idx);
+		upvalvar(fs->prev, idx);
 	return &fs->locals.data[upval->idx];
 }
 
@@ -2289,7 +2261,7 @@ typedef struct PParseData {
 
 
 /* protected parser entry */
-static void pparse(TState *ts, void *userdata)
+static void pparse(cr_State *ts, void *userdata)
 {
 	PParseData *pcompile;
 
@@ -2300,7 +2272,7 @@ static void pparse(TState *ts, void *userdata)
 
 
 /* external interface for 'protectedparser' */
-int cr_pr_pparse(TState *ts, void *userdata, const char *name, cr_ubyte gscope)
+int cr_pr_pparse(cr_State *ts, void *userdata, const char *name, cr_ubyte gscope)
 {
 	BuffReader br;
 	PParseData ppdata;

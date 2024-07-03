@@ -26,7 +26,7 @@ static void addlineinfo(FunctionState *fs, Function *f, int line)
 
 	len = f->lineinfo.len;
 	if (len <= 0 || f->lineinfo.ptr[len - 1].line < line) {
-		cr_mm_growvec(fs->l->ts, &f->lineinfo);
+		cr_mem_growvec(fs->l->ts, &f->lineinfo);
 		f->lineinfo.ptr[len].pc = f->code.len - 1;
 		f->lineinfo.ptr[f->lineinfo.len++].line = line;
 	}
@@ -38,7 +38,7 @@ int cr_ce_code(FunctionState *fs, Instruction i)
 {
 	Function *f = fs->fn;
 
-	cr_mm_growvec(fs->l->ts, &f->code);
+	cr_mem_growvec(fs->l->ts, &f->code);
 	f->code.ptr[f->code.len++] = i;
 	addlineinfo(fs, f, fs->l->line);
 	return f->code.len - 1;
@@ -48,7 +48,7 @@ int cr_ce_code(FunctionState *fs, Instruction i)
 /* write short instruction parameter */
 static int shortparam(FunctionState *fs, Function *f, Instruction i, cr_ubyte idx)
 {
-	cr_mm_growvec(fs->l->ts, &f->code);
+	cr_mem_growvec(fs->l->ts, &f->code);
 	f->code.ptr[f->code.len++] = cast_ubyte(idx & 0xff);
 	return f->code.len - 1;
 }
@@ -69,7 +69,7 @@ static int shortcode(FunctionState *fs, Instruction i, int idx)
 /* write long instruction parameter */
 static int longparam(FunctionState *fs, Function *f, Instruction i, int idx)
 {
-	cr_mm_ensurevec(fs->l->ts, &f->code, 3);
+	cr_mem_ensurevec(fs->l->ts, &f->code, 3);
 	f->code.ptr[f->code.len++] = i;
 	setbytes(f->code.ptr, idx, 3);
 	f->code.len += 3;
@@ -115,7 +115,7 @@ static int addconstant(FunctionState *fs, TValue *constant)
 		cr_assert(ttisstr(constant));
 		gcbarrier(ovalue(constant)); /* always marked */
 	}
-	cr_mm_growvec(fs->l->ts, &f->constants);
+	cr_mem_growvec(fs->l->ts, &f->constants);
 	f->constants.ptr[f->constants.len++] = *constant;
 	return f->constants.len - 1;
 }
@@ -175,7 +175,7 @@ void cr_ce_checkstack(FunctionState *fs, int n)
 	newstack = fs->sp + n;
 	if (fs->fn->maxstack > newstack) {
 		if (cr_unlikely(newstack >= CRI_LONGPARAM))
-			cr_lr_syntaxerror(fs->l,
+			cr_lex_syntaxerror(fs->l,
 				"function requires too much stack space");
 		fs->fn->maxstack = newstack;
 	}
