@@ -13,20 +13,20 @@ CRI_DEC(const char *const cr_vt_typenames[CR_TOTALTYPES]);
 
 
 
+/* get vtable method 'Tuple' */
+#define vtmi(mt)	(&vtmethodinfo[(mt)])
+
 typedef struct Tuple {
 	int arity;
 	int nreturns;
 } Tuple;
-
-/* get vtable method 'Tuple' */
-#define vtmi(mt)	(&vtmethodinfo[(mt)])
 
 CRI_DEC(const Tuple vtmethodinfo[CR_NUMM]);
 
 
 
 /* virtual method table type */
-typedef struct GCObject *VMT[CR_NUMM];
+typedef TValue *VMT[CR_NUMM];
 
 
 

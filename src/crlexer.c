@@ -84,26 +84,33 @@ typedef enum Dig {
 
 
 
-void cr_lex_init(cr_State *ts, Lexer *lx, BuffReader *br, OString *source)
+void cr_lex_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source)
 {
-	int i;
-	OString *s;
-
 	lx->ts = ts;
 	lx->fs = NULL;
+	lx->ps = NULL;
+	lx->tab = NULL;
 	lx->br = br;
 	lx->src = source;
-	lx->c = brgetc(lx->br); /* prime reader */
+	lx->c = brgetc(lx->br); /* fetch first char */
 	lx->line = 1;
 	lx->lastline = 0;
 	cr_mem_createvec(ts, &lx->buff, CRMAXSIZE<<1, "token");
 	cr_mem_reallocvec(ts, &lx->buff, CRI_MINBUFFER);
+}
+
+
+void cr_lex_init(cr_State *ts)
+{
+	int i;
+	OString *s;
+
 	/* intern all keywords */
 	for (i = 0; i < NUM_KEYWORDS; i++) {
-		s = cr_object_newstring(ts, tkstr[i], strlen(tkstr[i]));
+		s = cr_object_newcstring(ts, tkstr[i]);
 		s->bits = (STRKEYWORD | STRINTERNED);
 		s->extra = i;
-		cr_gc_fix(ts, objtogco(s));
+		cr_gc_fix(ts, obj2gco(s));
 	}
 }
 
@@ -199,7 +206,7 @@ OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len)
 	s = cr_object_newstring(ts, str, len);
 	stks = s2v(ts->stacktop.p++);
 	setv2s(ts, stks, s); /* anchor temporarily */
-	cr_htable_set(lx->ts, &lx->tab, stks, stks);
+	cr_htable_set(lx->ts, lx->tab, stks, stks);
 	ts->stacktop.p--; /* pop */
 	return s;
 }

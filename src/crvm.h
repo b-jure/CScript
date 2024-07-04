@@ -47,7 +47,7 @@ typedef void (*ProtectedFn)(cr_State *ts, void *userdata);
 
 
 /* save/restore stack position */
-#define savestack(ts,ptr)	(cast(char*, (ptr)) - cast(char*, (ts)->stack.p))
+#define savestack(ts,ptr)	(cast(char*,(ptr)) - cast(char*,(ts)->stack.p))
 #define restorestack(ts,o)	cast(SPtr, cast(char*, (ts)->stack.p) + (o))
 
 
@@ -61,9 +61,11 @@ typedef void (*ProtectedFn)(cr_State *ts, void *userdata);
 #define fstatic(ts,i)		(ts)->faststatic[(i)]
 
 
-void cr_vm_inctop(cr_State *ts);
 int cr_vm_growstack(cr_State *ts, int n, int raiseerr);
 int cr_vm_reallocstack(cr_State *ts, int size, int raiseerr);
+void cr_vm_shrinkstack(cr_State *ts);
+void cr_vm_inctop(cr_State *ts);
+
 void cr_vm_ncall(cr_State *ts, SPtr callee, int nreturns);
 cr_number cr_vm_modnum(cr_State *ts, cr_number x, cr_number y);
 void cr_vm_incccalls(cr_State *ts);

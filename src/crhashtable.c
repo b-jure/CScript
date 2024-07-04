@@ -30,12 +30,12 @@
 
 /* get table load factor */
 #define loadfactor(ts,t) \
-	cri_numdiv((ts), cast_num((t)->nnodes), cast_num(tsize(t)))
+	cri_numdiv((ts), cast_num((t)->nnodes), cast_num(htsize(t)))
 
 
 /* slots left until table needs to grow */
 #define slotsleft(ts,t) \
-	cast_int((cast_num(CRI_MAXHTABLOAD) - loadfactor((ts),(t))) * tsize(t))
+	cast_int((cast_num(CRI_MAXHTABLOAD) - loadfactor((ts),(t))) * htsize(t))
 
 
 
@@ -140,7 +140,7 @@ static int eqkey(const TValue *k, const Node *n)
  * return the tomb, otherwise return the entry containing the
  * same key. 'slot' won't overflow because load factor is tracked.
  */
-cr_sinline Node *getslot(const Node *mem, int size, const TValue *k)
+cr_sinline Node *gehtslot(const Node *mem, int size, const TValue *k)
 {
 	Node *tomb;
 	Node *slot;
@@ -164,10 +164,10 @@ static unsigned int getindex(cr_State *ts, HTable *tab, const TValue *k)
 {
 	Node *slot;
 
-	slot = getslot(tab->mem, tsize(tab), k);
+	slot = gehtslot(tab->mem, htsize(tab), k);
 	if (cr_unlikely(keyisempty(slot)))
 		cr_assert(0 && "invalid key passed to 'next'");
-	return cast_int(slot - tslot(tab, 0));
+	return cast_int(slot - htslot(tab, 0));
 }
 
 
@@ -184,11 +184,11 @@ int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k)
 
 	v = s2v(k->p);
 	i = getindex(ts, tab, v);
-	for (; i < tsize(tab); i++) {
-		if (!keyisempty(tslot(tab, i))) {
-			slot = tslot(tab, i);
+	for (; i < htsize(tab); i++) {
+		if (!keyisempty(htslot(tab, i))) {
+			slot = htslot(tab, i);
 			getnodekey(ts, v, slot);
-			setv(ts, v+1, nval(slot));
+			setv(ts, v+1, htnodevalue(slot));
 			return 1;
 		}
 	}
@@ -203,11 +203,11 @@ void cr_htable_copykeys(cr_State *ts, HTable *stab, HTable *dtab)
 	TValue k;
 	int i;
 
-	for (i = 0; i < tsize(stab); i++) {
-		slot = tslot(stab, i);
+	for (i = 0; i < htsize(stab); i++) {
+		slot = htslot(stab, i);
 		if (!keyisempty(slot)) {
 			getnodekey(ts, &k, slot);
-			cr_htable_set(ts, dtab, &k, nval(slot));
+			cr_htable_set(ts, dtab, &k, htnodevalue(slot));
 		}
 	}
 }
@@ -225,7 +225,7 @@ static void rehash(cr_State *ts, const Node *omem, int osize, Node *nmem, int ns
 		if (keyisempty(slot))
 			continue;
 		getnodekey(ts, k, slot);
-		dest = getslot(nmem, nsize, k);
+		dest = gehtslot(nmem, nsize, k);
 		*dest = *slot;
 	}
 }
@@ -280,7 +280,7 @@ int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *va
 	Node *slot;
 	int newk;
 
-	slot = getslot(tab->mem, tsize(tab), key);
+	slot = gehtslot(tab->mem, htsize(tab), key);
 	if ((newk = keyisempty(slot))) { /* new key */
 		if (!istomb(slot)) tab->left--;
 		if (cr_unlikely(tab->left <= 0)) {
@@ -291,7 +291,7 @@ int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *va
 		tab->nnodes++;
 	}
 	setnodekey(ts, slot, key);
-	*nval(slot) = *val;
+	*htnodevalue(slot) = *val;
 	return newk;
 }
 
@@ -305,7 +305,7 @@ int cr_htable_remove(cr_State *ts, HTable *tab, const TValue *key)
 {
 	Node *slot;
 
-	slot = getslot(tab->mem, tsize(tab), key);
+	slot = gehtslot(tab->mem, htsize(tab), key);
 	if (keyisempty(slot))
 		return 0;
 	puttomb(slot);
@@ -323,7 +323,7 @@ OString *cr_htable_getraw(HTable *tab, const char *str, size_t len, unsigned int
 
 	if (tab->nnodes == 0)
 		return NULL;
-	size = tsize(tab);
+	size = htsize(tab);
 	for (slot = hashslot(tab->mem, hash, size);;slot++) {
 		if (keyisempty(slot)) {
 			if (!istomb(slot)) return NULL;
@@ -343,9 +343,9 @@ int cr_htable_get(HTable *tab, const TValue *key, TValue *o)
 
 	cr_assert(o != NULL);
 	if (tab->nnodes == 0) return 0;
-	slot = getslot(tab->mem, tsize(tab), key);
+	slot = gehtslot(tab->mem, htsize(tab), key);
 	if (keyisempty(slot)) return 0;
-	setv(cast(cr_State*, NULL), o, nval(slot));
+	setv(cast(cr_State*, NULL), o, htnodevalue(slot));
 	return 1;
 }
 

@@ -40,13 +40,13 @@ typedef struct cr_ljmp {
 
 
 /* 'CallFrame' function is Cript function */
-#define cfiscript(cf)	(!((cf)->cfstatus & CFccall))
+#define cfiscript(cf)	(!((cf)->cfstatus & CFST_CCALL))
 
 
 /* call information */
 typedef struct CallFrame {
 	SIndex callee; /* function */
-	SIndex stacktop; /* stack top for this call */
+	SIndex top; /* top for this call (function) */
 	const Instruction *pc; /* only for non-C callee */
 	int nvarargs; /* only for non-C callee */
 	int nreturns; /* number of return values */
@@ -66,8 +66,10 @@ typedef struct GState {
 	TValue nil; /* nil value (init flag) */
 	GC gc; /* garbage collector */
 	HTable strings; /* strings table (weak refs) */
+	HTable *gids; /* global variable names + index into 'gvars' */
+	TValueVec gvars; /* global variable values */
 	struct cr_State *mainthread; /* thread that also created global state */
-	struct cr_State **tsopenuv; /* threads with open upvalues */
+	struct cr_State *thwouv; /* thread with open upvalues */
 	OString *memerror; /* error message for memory errors */
 	OString *vtmnames[CR_NUMM]; /* vtable method names */
 } GState;
@@ -83,9 +85,17 @@ Vec(OStringVec, OString*);
 Vec(CallFrameVec, CallFrame);
 
 
+typedef struct DeferList {
+	struct DeferList *next;
+	SIndex *fn; /* function on stack */
+} DeferList;
+
+
 /* Cript thread state */
 typedef struct cr_State {
 	ObjectHeader;
+	GCObject *gclist;
+	struct cr_State *thwouv; /* next thread with open upvalues */
 	GState *gstate; /* shared global state */
 	int status; /* status code */
 	cr_ljmp *errjmp; /* error recovery */
@@ -95,11 +105,8 @@ typedef struct cr_State {
 	SIndex stack; /* stack base */
 	CallFrame *aframe; /* currently active frame in 'frames' */
 	CallFrameVec frames; /* call stack */
-	SIndexVec callstart; /* start of call values */
-	SIndexVec retstart; /* start of return values */
-	HTable gids; /* global variable names + index into 'gvars' */
-	TValueVec gvars; /* global variable values */
 	UValue *openuv; /* open upvalues */
+	TValue *deferlist;
 	SIndex tbclist; /* list of to-be-closed variables */
 } cr_State;
 
@@ -110,12 +117,15 @@ typedef struct cr_State {
 /* check if thread is initialized */
 #define tsinitialized(ts) (ttisnil(&(ts)->nil))
 
+/* check if thread is in 'thwouv' list */
+#define isinthwouv(ts)		((ts)->thwouv != (ts))
+
 
 
 /* union for conversions */
 union GCUnion {
 	struct GCObject gc; /* object header */
-	struct HTable tab;
+	struct HTable ht;
 	struct OString str;
 	struct UValue uv;
 	struct Function fn;
@@ -129,10 +139,12 @@ union GCUnion {
 
 #define cast_gcu(o)	cast(union GCUnion *, (o))
 
-#define gco2tab(o)	(&(cast_gcu(o)->tab))
+#define gco2ht(o)	(&(cast_gcu(o)->ht))
 #define gco2str(o)	(&(cast_gcu(o)->str))
 #define gco2uv(o)	(&(cast_gcu(o)->uv))
 #define gco2fn(o)	(&(cast_gcu(o)->fn))
+#define gco2ccl(o)	(&((cast_gcu(o)->cl).cc))
+#define gco2crcl(o)	(&((cast_gcu(o)->cl).crc))
 #define gco2cl(o)	(&(cast_gcu(o)->cl))
 #define gco2cls(o)	(&(cast_gcu(o)->cls))
 #define gco2ins(o)	(&(cast_gcu(o)->ins))

@@ -72,7 +72,7 @@ typedef struct Lexer {
 	struct cr_State *ts;
 	struct FunctionState *fs;
 	struct ParserState *ps; /* dynamic data used by parser */
-	HTable tab; /* prevent string literal collection */
+	HTable *tab; /* prevent string literal collection */
 	BuffReader *br; /* buffered reader */
 	Buffer buff; /* buffer for tokens */
 	Token t; /* current token */
@@ -84,7 +84,8 @@ typedef struct Lexer {
 } Lexer;
 
 
-void cr_lex_init(cr_State *ts, Lexer *lx, BuffReader *br, OString *src);
+void cr_lex_init(cr_State *ts);
+void cr_lex_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source);
 const char *cr_lex_tok2str(Lexer *lx, int t);
 OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len);
 void cr_lex_syntaxerror(Lexer *lx, const char *err);

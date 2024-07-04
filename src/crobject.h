@@ -56,7 +56,7 @@ typedef struct GCObject {
 
 /* set value to GC object */
 #define setv2o(ts,v,o,t) \
-	{ TValue *v_=(v); t *o_=o; ovalue(v_) = cast(GCObject*,o_); }
+	{ TValue *v_=(v); t *o_=o; ovalue(v_) = obj2gco(o_); }
 
 
 /* set stack value to GC object */
@@ -64,22 +64,27 @@ typedef struct GCObject {
 
 
 
-/* 
- * ---------------------------------------------------------------------------
- * HTable (Hash Table) 
- * ---------------------------------------------------------------------------
- */
+/* -------------------------------------------------------------------------
+ * Thread (cr_State) 
+ * ------------------------------------------------------------------------- */
 
-#define keyval(n)	((n)->s.keyval)
-#define keybvalue(n)	rawbvalue(keyval(n))
-#define keyivalue(n)	rawivalue(keyval(n))
-#define keyfvalue(n)	rawfvalue(keyval(n))
-#define keypvalue(n)	rawpvalue(keyval(n))
-#define keycfvalue(n)	rawcfvalue(keyval(n))
-#define keyovalue(n)	rawovalue(keyval(n))
-#define keystrvalue(n)	((OString*)rawovalue(keyval(n)))
+#define CR_VTHREAD		makevariant(CR_TTHREAD, 0)
 
-#define keytt(n)	((n)->s.ttk)
+#define ttisthread(v)		isott(v, CR_VTHREAD)
+
+#define threadvalue(v)		gco2th(ovalue(v))
+
+/* set value to thread */
+#define setv2th(ts,v,th)	setv2o(ts, v, th, cr_State)
+
+/* set stack value to string */
+#define setsv2th(ts,sv,th)	setv2s(ts, s2v(sv), th)
+
+
+
+/* -------------------------------------------------------------------------
+ * HTable (hashtable) 
+ * ------------------------------------------------------------------------- */
 
 /*
  * Ordering of fields might seem weird but
@@ -93,6 +98,20 @@ typedef union Node {
 	} s;
 	TValue val;
 } Node;
+
+
+#define keyval(n)	((n)->s.keyval)
+#define keybvalue(n)	rawbvalue(keyval(n))
+#define keyivalue(n)	rawivalue(keyval(n))
+#define keyfvalue(n)	rawfvalue(keyval(n))
+#define keypvalue(n)	rawpvalue(keyval(n))
+#define keycfvalue(n)	rawcfvalue(keyval(n))
+#define keyovalue(n)	rawovalue(keyval(n))
+#define keystrvalue(n)	gco2str(rawovalue(keyval(n)))
+
+#define keytt(n)	((n)->s.ttk)
+
+#define keyisobj(n)	(keytt(n) == CR_TOBJECT)
 
 
 /* copy values from node 'n' key to 'v' */
@@ -112,6 +131,7 @@ typedef union Node {
 typedef struct HTable {
 	ObjectHeader; /* internal only object */
 	cr_ubyte size; /* 2^size */
+	cr_ubyte isweak; /* true if holds weak keys/values */
 	int left; /* free slots before array needs to grow */
 	int nnodes; /* number of nodes */
 	Node *mem; /* memory block */
@@ -202,8 +222,8 @@ typedef struct UValue {
 	} v;
 	union {
 		struct { /* when open (parsing) */
-			struct UValue *nextuv;
-			struct UValue *prevuv;
+			struct UValue *next;
+			struct UValue *prev;
 		} open;
 		TValue value; /* value stored here when closed */
 	} u;
@@ -221,6 +241,10 @@ typedef struct UValue {
 
 /* set stack value to upvalue */
 #define setsv2uv(ts,sv,uv)	setv2uv(ts,s2v(sv),uv)
+
+
+/* check if upvalue is open */
+#define uvisopen(uv)	((uv)->v.location != &(uv)->u.value)
 
 
 
@@ -267,13 +291,15 @@ Vec(LineInfoVec, LineInfo);
 /* 'code' array */
 typedef ubyteVec InstructionVec;
 
+Vec(FunctionVec, struct Function);
 
-/* Cript chunk */
+/* Cript function */
 typedef struct Function {
 	ObjectHeader;
 	GCObject *gclist;
 	OString *name; /* function name */
 	OString *source; /* source name */
+	FunctionVec fns; /* functions declared in this function */
 	TValueVec constants; /* constant values */
 	InstructionVec code; /* bytecode */
 	LineInfoVec lineinfo; /* line info for instructions */
@@ -423,7 +449,6 @@ typedef struct Instance {
 	ObjectHeader;
 	OClass *oclass; /* pointer to class */
 	HTable *fields;
-	GCObject *gclist;
 } Instance;
 
 
@@ -452,7 +477,6 @@ typedef struct InstanceMethod {
 	ObjectHeader;
 	Instance *receiver;
 	GCObject *method;
-	GCObject *gclist;
 } InstanceMethod;
 
 #define CR_VMETHOD	makevariant(3, CR_TFUNCTION)
@@ -471,13 +495,14 @@ typedef struct InstanceMethod {
 
 /*
  * ---------------------------------------------------------------------------
- *  InstanceMethod
+ *  UserData
  * ---------------------------------------------------------------------------
  */
 
 /* userdata */
 typedef struct UserData {
 	ObjectHeader;
+	cr_ubyte vmtempty; /* true if 'vtable' is empty */
 	int nuv; /* number of 'uservalues' */
 	size_t size; /* size of 'UserData' memory in bytes */
 	VMT vtable;

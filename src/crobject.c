@@ -457,7 +457,7 @@ CClosure *cr_object_newcclosure(cr_State *ts, cr_cfunc fn, int nupvalues)
 	ccl->nupvalues = nupvalues;
 	ccl->fn = fn;
 	for (i = 0; i < nupvalues; i++)
-		ccl->upvalue[i] = newnilvalue();
+		setnilvalue(&ccl->upvalue[i]);
 	return ccl;
 }
 
@@ -527,7 +527,8 @@ Instance *cr_object_newinstance(cr_State *ts, OClass *cls)
 }
 
 
-InstanceMethod *cr_object_newinstancemethod(cr_State *ts, Instance *receiver, CriptClosure *method)
+InstanceMethod *cr_object_newinstancemethod(cr_State *ts, Instance *receiver,
+						CriptClosure *method)
 {
 	InstanceMethod *im;
 

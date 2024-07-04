@@ -15,6 +15,7 @@
  * ----------------------------------------------------------------------------------------------*/
 
 #include "crconf.h"
+#include "cript.h"
 #include "criptapi.h"
 #include "crdebug.h"
 #include "crlimits.h"
@@ -54,7 +55,7 @@ static void savestackptrs(cr_State *ts)
 	for (i = 0; i < ts->frames.len; i++) {
 		cf = &ts->frames.ptr[i];
 		cf->callee.offset = savestack(ts, cf->callee.p);
-		cf->stacktop.offset = savestack(ts, cf->stacktop.p);
+		cf->top.offset = savestack(ts, cf->top.p);
 	}
 	for (i = 0; i < ts->callstart.len; i++) {
 		si = &ts->callstart.ptr[i];
@@ -64,7 +65,7 @@ static void savestackptrs(cr_State *ts)
 		si = &ts->retstart.ptr[i];
 		si->offset = savestack(ts, si->p);
 	}
-	for (uv = ts->openuv; uv != NULL; uv = uv->nextuv)
+	for (uv = ts->openuv; uv != NULL; uv = uv->u.open.nextuv)
 		uv->v.offset = savestack(ts, uv->v.location);
 	ts->tbclist.offset = savestack(ts, ts->tbclist.p);
 }
@@ -82,7 +83,7 @@ static void restorestackptrs(cr_State *ts)
 	for (i = 0; i < ts->frames.len; i++) {
 		cf = &ts->frames.ptr[i];
 		cf->callee.p = restorestack(ts, cf->callee.offset);
-		cf->stacktop.p = restorestack(ts, cf->stacktop.offset);
+		cf->top.p = restorestack(ts, cf->top.offset);
 	}
 	for (i = 0; i < ts->callstart.len; i++) {
 		si = &ts->callstart.ptr[i];
@@ -92,28 +93,30 @@ static void restorestackptrs(cr_State *ts)
 		si = &ts->retstart.ptr[i];
 		si->p = restorestack(ts, si->offset);
 	}
-	for (uv = ts->openuv; uv != NULL; uv = uv->nextuv)
+	for (uv = ts->openuv; uv != NULL; uv = uv->u.open.nextuv)
 		uv->v.location = s2v(restorestack(ts, uv->v.offset));
 	ts->tbclist.p = restorestack(ts, ts->tbclist.offset);
 }
 
 
 /* reallocate stack to new size */
-int cr_ts_reallocstack(cr_State *ts, int size, int raiseerr)
+int cr_vm_reallocstack(cr_State *ts, int size, int raiseerr)
 {
+	GState *gs;
 	int oldstopem;
 	int osize;
 	SPtr newstack;
 	int i;
 
 	cr_assert(nsize <= CRI_MAXSTACK || nsize == OVERFLOWSTACKSIZE);
-	oldstopem = ts->gc.stopem;
+	gs = GS(ts);
+	oldstopem = gs->gc.stopem;
 	osize = stacksize(ts);
 	savestackptrs(ts);
-	ts->gc.stopem = 1; /* no emergency collection when reallocating stack */
+	gs->gc.stopem = 1; /* no emergency collection when reallocating stack */
 	newstack = cr_mem_reallocarray(ts, ts->stack.p,
 			osize + EXTRA_STACK, size + EXTRA_STACK);
-	ts->gc.stopem = oldstopem;
+	gs->gc.stopem = oldstopem;
 	if (cr_unlikely(newstack == NULL)) {
 		restorestackptrs(ts);
 		if (raiseerr)
@@ -151,12 +154,54 @@ int cr_ts_growstack(cr_State *ts, int n, int raiseerr)
 		if (nsize < needed)
 			nsize = needed;
 		if (cr_likely(nsize <= CRI_MAXSTACK))
-			return cr_ts_reallocstack(ts, nsize, raiseerr);
+			return cr_vm_reallocstack(ts, nsize, raiseerr);
 	}
-	cr_ts_reallocstack(ts, OVERFLOWSTACKSIZE, raiseerr);
+	cr_vm_reallocstack(ts, OVERFLOWSTACKSIZE, raiseerr);
 	if (raiseerr)
 		cr_assert(0 && "stack overflow");
 	return 0;
+}
+
+
+static int stackinuse(cr_State *ts)
+{
+	CallFrame *cf;
+	SPtr maxtop;
+	int n;
+	int i;
+
+	maxtop = ts->aframe->top.p;
+	for (i = 0; i < ts->frames.len; i++) {
+		cf = &ts->frames.ptr[i];
+		if (maxtop < cf->top.p)
+			maxtop = cf->top.p;
+	}
+	cr_assert(maxtop <= ts->stackend.p + EXTRA_STACK);
+	n = savestack(ts, maxtop);
+	if (n < CR_MINSTACK)
+		n = CR_MINSTACK;
+	return n;
+}
+
+/*
+ * Shrink stack if the current stack size is more
+ * than 3 times the current use.
+ * This also rolls back the stack to its original maximum
+ * size 'CRI_MAXSTACK' in case the stack was previously
+ * handling stack overflow.
+ */
+void cr_vm_shrinkstack(cr_State *ts)
+{
+	int inuse;
+	int limit;
+	int nsize;
+
+	inuse = stackinuse(ts);
+	limit = (inuse >= CRI_MAXSTACK / 3 ? CRI_MAXSTACK : inuse * 3);
+	if (inuse <= CRI_MAXSTACK && stacksize(ts) > limit) {
+		nsize = (inuse < (CRI_MAXSTACK>>1) ? (inuse<<1) : CRI_MAXSTACK);
+		cr_vm_reallocstack(ts, nsize, 0); /* fine if it fails */
+	}
 }
 
 

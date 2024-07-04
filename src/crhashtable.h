@@ -23,16 +23,19 @@
 #include "crbits.h"
 
 
-#define keyisempty(n)	(keytt(n) == CR_VEMPTY)
+#define keyisempty(n)		(keytt(n) == CR_VEMPTY)
 
-/* node val */
-#define nval(n)		(&(n)->val)
+/* node value */
+#define htnodevalue(n)		(&(n)->val)
 
 /* get table slot */
-#define tslot(t,i)	(&(t)->mem[(i)])
+#define htslot(ht,i)		(&(ht)->mem[(i)])
 
 /* get table size */
-#define tsize(t)	(twoto((t)->size))
+#define htsize(ht)		(twoto((ht)->size))
+
+#define htfirstnode(ht)		htslot(ht, 0)
+#define htlastnode(ht)		htslot(ht, htsize(ht) - 1)
 
 
 
