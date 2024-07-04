@@ -1,9 +1,9 @@
 #include "crcode.h"
-#include "crgc.h"
 #include "crlexer.h"
 #include "crbits.h"
 #include "crlimits.h"
 #include "crparser.h"
+#include "crstate.h"
 
 
 
@@ -26,7 +26,7 @@ static void addlineinfo(FunctionState *fs, Function *f, int line)
 
 	len = f->lineinfo.len;
 	if (len <= 0 || f->lineinfo.ptr[len - 1].line < line) {
-		cr_mem_growvec(fs->l->ts, &f->lineinfo);
+		cr_mem_growvec(fs->lx->ts, &f->lineinfo);
 		f->lineinfo.ptr[len].pc = f->code.len - 1;
 		f->lineinfo.ptr[f->lineinfo.len++].line = line;
 	}
@@ -38,9 +38,9 @@ int cr_ce_code(FunctionState *fs, Instruction i)
 {
 	Function *f = fs->fn;
 
-	cr_mem_growvec(fs->l->ts, &f->code);
+	cr_mem_growvec(fs->lx->ts, &f->code);
 	f->code.ptr[f->code.len++] = i;
-	addlineinfo(fs, f, fs->l->line);
+	addlineinfo(fs, f, fs->lx->line);
 	return f->code.len - 1;
 }
 
@@ -48,7 +48,7 @@ int cr_ce_code(FunctionState *fs, Instruction i)
 /* write short instruction parameter */
 static int shortparam(FunctionState *fs, Function *f, Instruction i, cr_ubyte idx)
 {
-	cr_mem_growvec(fs->l->ts, &f->code);
+	cr_mem_growvec(fs->lx->ts, &f->code);
 	f->code.ptr[f->code.len++] = cast_ubyte(idx & 0xff);
 	return f->code.len - 1;
 }
@@ -69,7 +69,7 @@ static int shortcode(FunctionState *fs, Instruction i, int idx)
 /* write long instruction parameter */
 static int longparam(FunctionState *fs, Function *f, Instruction i, int idx)
 {
-	cr_mem_ensurevec(fs->l->ts, &f->code, 3);
+	cr_mem_ensurevec(fs->lx->ts, &f->code, 3);
 	f->code.ptr[f->code.len++] = i;
 	setbytes(f->code.ptr, idx, 3);
 	f->code.len += 3;
@@ -111,11 +111,7 @@ static int addconstant(FunctionState *fs, TValue *constant)
 	Function *f;
 
 	f = fs->fn;
-	if (ttiso(constant)) {
-		cr_assert(ttisstr(constant));
-		gcbarrier(ovalue(constant)); /* always marked */
-	}
-	cr_mem_growvec(fs->l->ts, &f->constants);
+	cr_mem_growvec(fs->lx->ts, &f->constants);
 	f->constants.ptr[f->constants.len++] = *constant;
 	return f->constants.len - 1;
 }
@@ -127,7 +123,7 @@ int cr_ce_flt(FunctionState *fs, cr_number n)
 	TValue vn;
 	int idx;
 
-	vn = newfvalue(n);
+	setfvalue(&vn, n);
 	idx = addconstant(fs, &vn);
 	longcode(fs, OP_CONST, idx);
 	return idx;
@@ -140,7 +136,7 @@ int cr_ce_int(FunctionState *fs, cr_integer i)
 	TValue vi;
 	int idx;
 
-	vi = newivalue(i);
+	setivalue(&vi, i);
 	idx = addconstant(fs, &vi);
 	longcode(fs, OP_CONST, idx);
 	return idx;
@@ -153,7 +149,7 @@ int cr_ce_string(FunctionState *fs, OString *str)
 	TValue vs;
 	int idx;
 
-	vs = newovalue(str);
+	setovalue(&vs, obj2gco(str));
 	idx = addconstant(fs, &vs);
 	longcode(fs, OP_CONST, idx);
 	return idx;
@@ -164,7 +160,7 @@ int cr_ce_string(FunctionState *fs, OString *str)
 cr_sinline void freestack(FunctionState *fs, int n)
 {
 	cr_assert(fs->sp - n >= 0);
-	fs->sp -= n;
+	fs->stkidx -= n;
 }
 
 
@@ -172,10 +168,10 @@ void cr_ce_checkstack(FunctionState *fs, int n)
 {
 	int newstack;
 
-	newstack = fs->sp + n;
+	newstack = fs->stkidx + n;
 	if (fs->fn->maxstack > newstack) {
 		if (cr_unlikely(newstack >= CRI_LONGPARAM))
-			cr_lex_syntaxerror(fs->l,
+			cr_lex_syntaxerror(fs->lx,
 				"function requires too much stack space");
 		fs->fn->maxstack = newstack;
 	}
@@ -185,7 +181,7 @@ void cr_ce_checkstack(FunctionState *fs, int n)
 void cr_ce_reservestack(FunctionState *fs, int n)
 {
 	cr_ce_checkstack(fs, n);
-	fs->sp += n;
+	fs->stkidx += n;
 }
 
 

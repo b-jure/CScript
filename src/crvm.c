@@ -65,7 +65,7 @@ static void savestackptrs(cr_State *ts)
 		si = &ts->retstart.ptr[i];
 		si->offset = savestack(ts, si->p);
 	}
-	for (uv = ts->openuv; uv != NULL; uv = uv->u.open.nextuv)
+	for (uv = ts->openuv; uv != NULL; uv = uv->u.open.next)
 		uv->v.offset = savestack(ts, uv->v.location);
 	ts->tbclist.offset = savestack(ts, ts->tbclist.p);
 }
@@ -93,7 +93,7 @@ static void restorestackptrs(cr_State *ts)
 		si = &ts->retstart.ptr[i];
 		si->p = restorestack(ts, si->offset);
 	}
-	for (uv = ts->openuv; uv != NULL; uv = uv->u.open.nextuv)
+	for (uv = ts->openuv; uv != NULL; uv = uv->u.open.next)
 		uv->v.location = s2v(restorestack(ts, uv->v.offset));
 	ts->tbclist.p = restorestack(ts, ts->tbclist.offset);
 }
@@ -182,6 +182,7 @@ static int stackinuse(cr_State *ts)
 		n = CR_MINSTACK;
 	return n;
 }
+
 
 /*
  * Shrink stack if the current stack size is more
