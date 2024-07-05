@@ -57,16 +57,15 @@ typedef void (*ProtectedFn)(cr_State *ts, void *userdata);
 		cr_vm_growstack(ts, (n), 1);
 
 
-/* get static string */
-#define fstatic(ts,i)		(ts)->faststatic[(i)]
-
 
 int cr_vm_growstack(cr_State *ts, int n, int raiseerr);
 int cr_vm_reallocstack(cr_State *ts, int size, int raiseerr);
 void cr_vm_shrinkstack(cr_State *ts);
 void cr_vm_inctop(cr_State *ts);
 
-void cr_vm_ncall(cr_State *ts, SPtr callee, int nreturns);
+int cr_vm_pcall(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t oldtop);
+int cr_vm_call(cr_State *ts, SPtr fn, int nreturns);
+
 cr_number cr_vm_modnum(cr_State *ts, cr_number x, cr_number y);
 void cr_vm_incccalls(cr_State *ts);
 

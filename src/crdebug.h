@@ -25,6 +25,7 @@ cr_noret cr_dg_throw(cr_State *ts, int code);
 cr_noret cr_dg_runerror(cr_State *ts, const char *fmt, ...);
 int cr_dg_getfuncline(const Function *fn, int pc);
 const char *cr_dg_info(cr_State *ts, const char *msg, const OString *src, int line);
+void cr_debug_warnerror(cr_State *ts, const char *str);
 
 
 #endif

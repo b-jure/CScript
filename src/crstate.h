@@ -37,6 +37,7 @@ typedef struct cr_ljmp {
 /* 'cfstatus' bits */
 #define CFST_FRESH		(1<<0) /* in top-level Cript function */
 #define CFST_CCALL		(1<<1) /* in C call */
+#define CFST_FIN		(1<<2) /* in finalizer */
 
 
 /* 'CallFrame' function is Cript function */
@@ -58,6 +59,7 @@ typedef struct CallFrame {
 /* -------------------------------------------------------------------------
  * Global state
  * ------------------------------------------------------------------------- */
+
 typedef struct GState {
 	cr_alloc realloc; /* allocator */
 	void *udrealloc; /* userdata for 'realloc' */
@@ -65,7 +67,7 @@ typedef struct GState {
 	unsigned int seed; /* initial seed for hashing */
 	TValue nil; /* nil value (init flag) */
 	GC gc; /* garbage collector */
-	HTable strings; /* strings table (weak refs) */
+	HTable strings; /* weak 'HTable' (weak references) */
 	HTable *gids; /* global variable names + index into 'gvars' */
 	TValueVec gvars; /* global variable values */
 	struct cr_State *mainthread; /* thread that also created global state */
@@ -77,8 +79,9 @@ typedef struct GState {
 
 
 /* -------------------------------------------------------------------------
- * cr_State (per-thread state)
+ * Thread (per-thread-state)
  * ------------------------------------------------------------------------- */
+
 Vec(GCObjectVec, GCObject*);
 Vec(SIndexVec, SIndex);
 Vec(OStringVec, OString*);
@@ -122,7 +125,7 @@ typedef struct cr_State {
 
 
 
-/* union for conversions */
+/* union for conversions (casting) */
 union GCUnion {
 	struct GCObject gc; /* object header */
 	struct HTable ht;

@@ -54,9 +54,16 @@ typedef struct GCObject {
 #define newgco(ts,e,tt,t)	((t*)cr_object_new(ts, (e) + sizeof(t), tt))
 
 
+/* set value to a generic object */
+#define setv2gco(ts,v,o) \
+	{ TValue *v_=(v); GCObject *o_=o; \
+	  ovalue(v_) = obj2gco(o_); vtt(v_) = CR_TOBJECT; }
+
+
 /* set value to GC object */
 #define setv2o(ts,v,o,t) \
-	{ TValue *v_=(v); t *o_=o; ovalue(v_) = obj2gco(o_); }
+	{ TValue *v_=(v); t *o_=o; ovalue(v_) = obj2gco(o_); \
+	  vtt(v_) = CR_TOBJECT; }
 
 
 /* set stack value to GC object */
@@ -141,7 +148,7 @@ typedef struct HTable {
 #define CR_VHTABLE	makevariant(CR_THTABLE, 1)
 
 #define ttishtab(v)	isott((v), CR_VHTABLE)
-#define htabvalue(v)	gco2htab(ovalue(v))
+#define htabvalue(v)	gco2ht(ovalue(v))
 
 
 /* set value to hashtable */
@@ -546,6 +553,5 @@ UValue *cr_object_newuvalue(cr_State *ts, TValue *vp);
 OClass *cr_object_newclass(cr_State *ts, OString *id);
 Instance *cr_object_newinstance(cr_State *ts, OClass *cls);
 InstanceMethod *cr_object_newinstancemethod(cr_State *ts, Instance *receiver, CriptClosure *method);
-void cr_object_free(cr_State *ts, GCObject *o);
 
 #endif

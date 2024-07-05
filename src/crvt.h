@@ -26,10 +26,10 @@ CRI_DEC(const Tuple vtmethodinfo[CR_NUMM]);
 
 
 /* virtual method table type */
-typedef TValue *VMT[CR_NUMM];
+typedef TValue VMT[CR_NUMM];
 
 
-
-void cr_vt_init(cr_State *ts);
+void cr_vmt_init(cr_State *ts);
+const TValue *cr_vmt_get(cr_State *ts, const TValue *v, int mt);
 
 #endif

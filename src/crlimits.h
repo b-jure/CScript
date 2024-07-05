@@ -299,9 +299,8 @@ typedef cr_ubyte Instruction;
 #define cast_int(e)	cast(int,(e))
 #define cast_uint(e)	cast(unsigned int,(e))
 
-
-/* @cast_umem - cast expression 'e' as 'cr_umem'. */
 #define cast_umem(e)	cast(cr_umem, (e))
+#define cast_mem(e)	cast(cr_mem, (e))
 
 /* cast 'cr_integer' to 'cr_uinteger' */
 #define cri_castS2U(i)	((cr_uinteger)(i))

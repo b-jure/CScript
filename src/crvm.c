@@ -544,9 +544,18 @@ l_ok:
 		return &last_frame(ts);
 }
 
-/* Call '()' a value (closure, method, class). */
-static CallFrame *call(cr_State *ts, Value callee, int32_t argc, int32_t retcnt)
+
+static CallFrame *precall(cr_State *ts, SPtr fn, int retcnt)
 {
+}
+
+
+/* Call '()' a value (closure, method, class). */
+cr_sinline void call(cr_State *ts, SPtr fn, int retcnt)
+{
+	int argc;
+
+	argc = ts->stacktop.p - fn - 1;
 	if (cr_unlikely(!IS_OBJ(callee)))
 		callerror(ts, callee);
 	switch (OBJ_TYPE(callee)) {
@@ -576,12 +585,10 @@ static CallFrame *call(cr_State *ts, Value callee, int32_t argc, int32_t retcnt)
 }
 
 
-/* call value (unprotected). */
-void cr_ts_ncall(cr_State *ts, SPtr callee, int nreturns)
+/* external interface for 'call'. */
+int cr_vm_call(cr_State *ts, SPtr fn, int nreturns)
 {
-	int argc = ts->stacktop.p - callee - 1;
-	if (call(ts, fn, argc, retcnt) != NULL)
-		run(ts);
+	call(ts, fn, nreturns);
 }
 
 
@@ -611,12 +618,15 @@ static cr_inline int32_t protectedcall(cr_State *ts, ProtectedFn fn, void *userd
  * In case of errors it performs a recovery by closing all
  * open upvalues (values to be closed) and restoring the
  * old stack pointer (oldtop). */
-int32_t pcall(cr_State *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop)
+int32_t cr_vm_pcall(cr_State *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop)
 {
-	int8_t status = protectedcall(ts, fn, userdata);
-	if (cr_unlikely(status != S_OK)) {
+	int status;
+	SPtr oldsp;
+
+	status = protectedcall(ts, fn, userdata);
+	if (cr_unlikely(status != CR_OK)) {
 		closeupval(ts, ts->sp);
-		Value *oldsp = restore_stack(ts, oldtop);
+		oldsp = restorestack(ts, oldtop);
 		*oldsp = ts->sp[-1];
 		ts->sp = oldsp + 1;
 	}

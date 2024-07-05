@@ -52,3 +52,15 @@ void cr_vt_init(cr_State *ts)
 		cr_gc_fix(ts, obj2gco(GS(ts)->vtmnames[i]));
 	}
 }
+
+
+const TValue *cr_vmt_get(cr_State *ts, const TValue *v, int mt)
+{
+	cr_assert(CR_M_INIT <= mt && mt < CR_NUMM);
+	if (!ttiso(v)) return NULL;
+	switch (ott(v)) {
+		case CR_VCLASS: return &gco2cls(v)->vtable[mt];
+		case CR_VUDATA: return &gco2ud(v)->vtable[mt];
+		default: return NULL;
+	}
+}

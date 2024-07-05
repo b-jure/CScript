@@ -15,6 +15,8 @@
  * ----------------------------------------------------------------------------------------------*/
 
 #include "crgc.h"
+#include "crconf.h"
+#include "crdebug.h"
 #include "crlimits.h"
 #include "crobject.h"
 #include "crstate.h"
@@ -44,18 +46,18 @@
 
 
 /* 'markobject_' but only if 'v' is object and white */
-#define markvalue(gs,v) \
-	(valiswhite(v) ? markobject_(gs, ovalue(v)) : (void)0)
+#define markvalue(gc,v) \
+	(valiswhite(v) ? markobject_(gc, ovalue(v)) : (void)0)
 
 /* 'markobject_' but only if 'o' is non-NULL */
-#define markobjectcheck(gs,o)	((o) ? markobject_(gs, obj2gco(o)) : (void)0)
+#define markobjectcheck(gc,o)	((o) ? markobject_(gc, obj2gco(o)) : (void)0)
 
 /* 'markobject_' but only if object is white */
-#define markobject(gs,o)	(iswhite(o) ? markobject_(gs, obj2gco(o)) : (void)0)
+#define markobject(gc,o)	(iswhite(o) ? markobject_(gc, obj2gco(o)) : (void)0)
 
 /* 'markobject' but only if key value is object and white */
-#define markkey(gs, n) \
-	(keyiswhite(n) ? markobject_(gs, keyovalue(n)) : (void)0)
+#define markkey(gc, n) \
+	(keyiswhite(n) ? markobject_(gc, keyovalue(n)) : (void)0)
 
 
 
@@ -68,7 +70,7 @@
 
 
 /* forward declare */
-static void markobject_(GState *gs, GCObject *o);
+static void markobject_(GC *gc, GCObject *o);
 
 
 
@@ -133,15 +135,15 @@ static GCObject **getgclist(GCObject *o)
  */
 void cr_gc_barrierforward_(cr_State *ts, GCObject *r, GCObject *o)
 {
-	GState *gs;
+	GC *gc;
 
-	gs = GS(ts);
-	if (invariantstate(gs->gc)) { /* invariant holds ? */
+	gc = &GS(ts)->gc;
+	if (invariantstate(gc)) { /* invariant holds ? */
 		cr_assert(isblack(r) && iswhite(o));
-		markobject_(gs, o);
+		markobject_(gc, o);
 	} else { /* in sweep phase */
-		cr_assert(sweepstate(gs->gc));
-		markwhite(gs->gc, r);
+		cr_assert(sweepstate(gc));
+		markwhite(gc, r);
 	}
 }
 
@@ -153,11 +155,11 @@ void cr_gc_barrierforward_(cr_State *ts, GCObject *r, GCObject *o)
  */
 void cr_gc_barrierback_(cr_State *ts, GCObject *r)
 {
-	GState *gs;
+	GC *gc;
 
-	gs = GS(ts);
+	gc = &GS(ts)->gc;
 	cr_assert(isblack(r));
-	linkobjgclist(r, gs->gc.grayagain);
+	linkobjgclist(r, gc->grayagain);
 }
 
 
@@ -176,7 +178,7 @@ void cr_gc_barrierback_(cr_State *ts, GCObject *r)
  * Other objects are marked gray, more precisely they are
  * first moved into 'gray' list and then marked as gray.
  */
-static void markobject_(GState *gs, GCObject *o)
+static void markobject_(GC *gc, GCObject *o)
 {
 	UValue *uv;
 	UserData *ud;
@@ -192,19 +194,19 @@ static void markobject_(GState *gs, GCObject *o)
 		uv = gco2uv(o);
 		if (uvisopen(uv)) markgray(uv);
 		else markblack(uv);
-		markvalue(gs, uv->v.location);
+		markvalue(gc, uv->v.location);
 		break;
 	case CR_VINSTANCE:
 		ins = gco2ins(o);
 		markblack(ins);
-		markobject(gs, ins->oclass);
-		markobjectcheck(gs, ins->fields);
+		markobject(gc, ins->oclass);
+		markobjectcheck(gc, ins->fields);
 		break;
 	case CR_VMETHOD:
 		im = gco2im(o);
 		markblack(im);
-		markobject(gs, im->receiver);
-		markobject(gs, im->method);
+		markobject(gc, im->receiver);
+		markobject(gc, im->method);
 		break;
 	case CR_VUDATA: 
 		ud = gco2ud(o);
@@ -214,7 +216,7 @@ static void markobject_(GState *gs, GCObject *o)
 		} /* FALLTHRU */
 	case CR_VHTABLE: case CR_VFUNCTION: case CR_VCRCL:
 	case CR_VCCL: case CR_VCLASS: case CR_VTHREAD:
-		linkobjgclist(o, gs->gc.graylist);
+		linkobjgclist(o, gc->graylist);
 		break;
 	default: cr_unreachable(); break;
 	}
@@ -222,16 +224,17 @@ static void markobject_(GState *gs, GCObject *o)
 
 
 /* mark 'VMT' */
-cr_sinline cr_mem markvmt(GState *gs, VMT vmt)
+cr_sinline cr_mem markvmt(GC *gc, VMT vmt)
 {
 	for (int i = 0; i < CR_NUMM; i++)
-		if (vmt[i]) markvalue(gs, vmt[i]);
+		if (!ttisnil(&vmt[i])) 
+			markvalue(gc, &vmt[i]);
 	return CR_NUMM;
 }
 
 
 /* mark strong 'HTable' */
-static void markstronght(GState *gs, HTable *ht)
+static void markstronght(GC *gc, HTable *ht)
 {
 	Node *n;
 	Node *last;
@@ -239,24 +242,24 @@ static void markstronght(GState *gs, HTable *ht)
 	last = htlastnode(ht);
 	for (n = htfirstnode(ht); n <= last; n++) {
 		if (!keyisempty(n)) {
-			markkey(gs, n);
-			markvalue(gs, htnodevalue(n));
+			markkey(gc, n);
+			markvalue(gc, htnodevalue(n));
 		}
 	}
 }
 
 
 /* mark 'HTable' slots */
-static cr_mem markht(GState *gs, HTable *ht)
+static cr_mem markht(GC *gc, HTable *ht)
 {
-	if (ht->isweak) linkgclist(ht, gs->gc.weakhtab);
-	else markstronght(gs, ht);
+	if (ht->isweak) linkgclist(ht, gc->weakhtab);
+	else markstronght(gc, ht);
 	return 1 + (htsize(ht) << 1);
 }
 
 
 /* mark 'Function' */
-static cr_mem markfunction(GState *gs, Function *fn)
+static cr_mem markfunction(GC *gs, Function *fn)
 {
 	int i;
 
@@ -276,48 +279,48 @@ static cr_mem markfunction(GState *gs, Function *fn)
 
 
 /* mark 'CClosure' */
-static cr_mem markcclosure(GState *gs, CClosure *ccl)
+static cr_mem markcclosure(GC *gc, CClosure *ccl)
 {
 	int i;
 
 	for (i = 0; i < ccl->nupvalues; i++)
-		markvalue(gs, &ccl->upvalue[i]);
+		markvalue(gc, &ccl->upvalue[i]);
 	return 1 + ccl->nupvalues;
 }
 
 
 /* mark 'CriptClosure' */
-static cr_mem markcriptclosure(GState *gs, CriptClosure *crcl)
+static cr_mem markcriptclosure(GC *gc, CriptClosure *crcl)
 {
 	int i;
 
-	markobjectcheck(gs, crcl->fn);
+	markobjectcheck(gc, crcl->fn);
 	for (i = 0; i < crcl->nupvalues; i++)
-		markobjectcheck(gs, &crcl->upvalue[i]);
+		markobjectcheck(gc, &crcl->upvalue[i]);
 	return 1 + crcl->nupvalues;
 }
 
 
 /* mark 'OClass' */
-static cr_mem markclass(GState *gs, OClass *cls)
+static cr_mem markclass(GC *gc, OClass *cls)
 {
-	markobjectcheck(gs, cls->name);
-	markobjectcheck(gs, cls->methods);
-	return 1 + markvmt(gs, cls->vtable);
+	markobjectcheck(gc, cls->name);
+	markobjectcheck(gc, cls->methods);
+	return 1 + markvmt(gc, cls->vtable);
 }
 
 
 /* mark 'UserData' */
-static cr_mem markuserdata(GState *gs, UserData *ud)
+static cr_mem markuserdata(GC *gc, UserData *ud)
 {
 	int i;
 	cr_mem extra;
 
 	extra = 0;
 	if (!ud->vmtempty)
-		extra = markvmt(gs, ud->vtable);
+		extra = markvmt(gc, ud->vtable);
 	for (i = 0; i < ud->nuv; i++)
-		markobjectcheck(gs, &ud->uv[i]);
+		markobjectcheck(gc, &ud->uv[i]);
 	return 1 + ud->nuv + extra;
 }
 
@@ -350,16 +353,16 @@ static cr_mem markthread(GState *gs, cr_State *ts)
 	int i;
 
 	gc = &gs->gc;
-	cr_assert(gc->state == GCSpropagate || gc->state ==  GCSatomic);
+	cr_assert(gc->state & (GCSpropagate | GCSatomic));
 	sp = ts->stack.p;
 	if (gc->state == GCSpropagate)
 		linkgclist(ts, gc->grayagain);
 	if (sp == NULL) /* thread not fully initialized ? */
 		return 1;
 	for (; sp < ts->stacktop.p; sp++)
-		markvalue(gs, s2v(sp));
+		markvalue(gc, s2v(sp));
 	for (uv = ts->openuv; uv; uv = ts->openuv->u.open.next)
-		markobject(gs, uv);
+		markobject(gc, uv);
 	/* 'markopenupvalues' might of removed thread from 'thwouv' list */
 	if (gc->state == GCSatomic && !isinthwouv(ts) && ts->openuv != NULL) {
 		ts->thwouv = gs->thwouv;
@@ -400,7 +403,7 @@ static cr_mem markopenupvalues(GState *gs)
 				/* if visited then keep values alive */
 				if (!iswhite(uv)) {
 					cr_assert(uvisopen(uv) && isgray(uv));
-					markvalue(gs, uv->v.location);
+					markvalue(&gs->gc, uv->v.location);
 				}
 			}
 		} else {
@@ -420,12 +423,12 @@ static cr_mem propagate(GState *gs)
 	markblack(o);
 	gs->gc.graylist = *getgclist(o);
 	switch(rawott(o)) {
-	case CR_VUDATA: return markuserdata(gs, gco2ud(o));
-	case CR_VHTABLE: return markht(gs, gco2ht(o));
-	case CR_VFUNCTION: return markfunction(gs, gco2fn(o));
-	case CR_VCRCL: return markcriptclosure(gs, gco2crcl(o));
-	case CR_VCCL: return markcclosure(gs, gco2ccl(o));
-	case CR_VCLASS: return markclass(gs, gco2cls(o));
+	case CR_VUDATA: return markuserdata(&gs->gc, gco2ud(o));
+	case CR_VHTABLE: return markht(&gs->gc, gco2ht(o));
+	case CR_VFUNCTION: return markfunction(&gs->gc, gco2fn(o));
+	case CR_VCRCL: return markcriptclosure(&gs->gc, gco2crcl(o));
+	case CR_VCCL: return markcclosure(&gs->gc, gco2ccl(o));
+	case CR_VCLASS: return markclass(&gs->gc, gco2cls(o));
 	case CR_VTHREAD: return markthread(gs, gco2th(o));
 	default: cr_unreachable(); return 0;
 	}
@@ -437,10 +440,63 @@ static cr_mem propagateall(GState *gs)
 {
 	cr_mem work;
 
-	work = 0;
-	while (gs->gc.graylist)
-		work += propagate(gs);
+	for (work = 0; gs->gc.graylist; work += propagate(gs));
 	return work;
+}
+
+
+
+/* --------------------------------------------------------------------------
+ * Free objects
+ * -------------------------------------------------------------------------- */
+
+/*
+ * Performs raw deallocation of object memory it does
+ * not try to call '__free__'.
+ */
+static void freeobject(cr_State *ts, GCObject *o)
+{
+	Instance *ins;
+	Function *fn;
+	OClass *cls;
+
+	switch (rawott(o)) {
+		case CR_VSTRING:
+			cr_mem_free(ts, o, sizes((OString*)o));
+			break;
+		case CR_VFUNCTION:
+			fn = cast(Function*, o);
+			cr_mem_freevec(ts, &fn->constants);
+			cr_mem_freevec(ts, &fn->code);
+			cr_mem_freevec(ts, &fn->lineinfo);
+			cr_mem_freevec(ts, &fn->lvars);
+			cr_mem_free(ts, o, sizeof(Function));
+			break;
+		case CR_VUVALUE:
+			cr_mem_free(ts, o, sizeof(UValue));
+			break;
+		case CR_VCRCL:
+			cr_mem_free(ts, o, sizecrcl(cast(CriptClosure*, o)));
+			break;
+		case CR_VCCL:
+			cr_mem_free(ts, o, sizeccl(cast(CClosure*, o)));
+			break;
+		case CR_VCLASS:
+			cls = cast(OClass*, o);
+			cr_htable_free(ts, cls->methods);
+			cr_mem_free(ts, o, sizeof(OClass));
+			break;
+		case CR_VINSTANCE:
+			ins = cast(Instance*, o);
+			cr_htable_free(ts, ins->fields);
+			cr_mem_free(ts, o, sizeof(Instance));
+			break;
+		case CR_VMETHOD:
+			cr_mem_free(ts, o, sizeof(InstanceMethod));
+			break;
+		default:
+			cr_unreachable();
+	}
 }
 
 
@@ -449,4 +505,252 @@ static cr_mem propagateall(GState *gs)
  * Sweep functions
  * ------------------------------------------------------------------------- */
 
-// TODO
+
+static GCObject **sweeplist(cr_State *ts, GCObject **l, int nobjects, int *nsweeped)
+{
+	GCObject *o;
+	GState *gs;
+	int whitexor;
+	int white; /* current white */
+	int i;
+	cr_ubyte mark;
+
+	cr_assert(nobjects > 0);
+	gs = GS(ts);
+	white = cr_gc_white(&gs->gc);
+	whitexor = whitexor(&gs->gc);
+	for (i = 0; i < nobjects && *l; i++) {
+		o = *l;
+		mark = rawomark(o);
+		if (whitexor & mark) { /* collect ? */
+			*l = o->next;
+			freeobject(ts, o);
+		} else { /* mark white */
+			rawomark(o) = cast_ubyte((mark & ~COLORBITS) | white);
+			l = &o->next;
+		}
+	}
+	if (nsweeped) *nsweeped = i;
+	return (*l ? l : NULL);
+}
+
+
+/* do a single sweep step limited by 'GCSWEEPMAX' */
+static int sweepstep(cr_State *ts, GCObject **nextlist, int nextstate)
+{
+	GC *gc;
+	int cnt;
+
+	gc = &GS(ts)->gc;
+	if (gc->sweeppos) {
+		gc->sweeppos = sweeplist(ts, gc->sweeppos, GCSWEEPMAX, &cnt);
+		gc->estimate += gc->debt;
+		return cnt;
+	} else {
+		gc->sweeppos = nextlist;
+		gc->state = nextstate;
+		return 0;
+	}
+}
+
+
+/*
+ * Sweep objects in 'list' until alive (marked) object
+ * or the end of the list.
+ */
+static GCObject **sweepuntilalive(cr_State *ts, GCObject **list)
+{
+	GCObject **pp;
+
+	pp = list;
+	do {
+		list = sweeplist(ts, list, 1, NULL);
+	} while (pp == list);
+	return list;
+}
+
+
+
+/* -------------------------------------------------------------------------
+ * Finalization (__gc__)
+ * ------------------------------------------------------------------------- */
+
+/*
+ * Get object from 'tobefin' list and link it back
+ * to the 'objects' list.
+ */
+static GCObject *gettobefin(GC *gc)
+{
+	GCObject *o;
+
+	o = gc->tobefin;
+	cr_assert(o && isfin(o));
+	gc->tobefin = o->next;
+	o->next = gc->objects;
+	gc->objects = o;
+	if (sweepstate(gc))
+		markwhite(gc, o);
+	return o;
+}
+
+
+/* protected finalizer */
+static void protectedfinalizer(cr_State *ts, void *userdata)
+{
+	UNUSED(userdata);
+	cr_vm_call(ts, ts->stacktop.p - 2, 0);
+}
+
+
+/* call a finalizer */
+static void callfin(cr_State *ts)
+{
+	GC *gc;
+	TValue v;
+	const TValue *m;
+	ptrdiff_t oldtop;
+	int status;
+	cr_ubyte oldstopped;
+
+	cr_assert(amount > 0);
+	gc = &GS(ts)->gc;
+	setv2gco(ts, &v, gettobefin(gc));
+	if ((m = cr_vmt_get(ts, &v, CR_M_GC))) {
+		oldstopped = gc->stopped;
+		gc->stopped = GCSTP; /* prevent recursive GC calls */
+		setsv(ts, ts->stacktop.p++, m);
+		setsv(ts, ts->stacktop.p++, &v);
+		oldtop = savestack(ts, ts->stacktop.p - 2);
+		ts->aframe->cfstatus |= CFST_FIN;
+		status = cr_vm_pcall(ts, protectedfinalizer, NULL, oldtop);
+		ts->aframe->cfstatus &= ~CFST_FIN;
+		gc->stopped = oldstopped;
+		if (cr_unlikely(status != CR_OK)) {
+			cr_debug_warnerror(ts, "__gc__");
+			ts->stacktop.p--; /* pop err object */
+		}
+	}
+}
+
+
+/* call objects with finalizer in 'tobefin' */
+static int callfinalizers(cr_State *ts, int cnt)
+{
+	GC *gc;
+	int i;
+	
+	gc = &GS(ts)->gc;
+	for (i = 0; i < cnt && gc->tobefin; i++)
+		callfin(ts);
+	return i;
+}
+
+
+
+/* -------------------------------------------------------------------------
+ * GC control
+ * ------------------------------------------------------------------------- */
+
+
+static void restartgc(GState *gs)
+{
+	// TODO
+}
+
+
+static cr_mem atomic(cr_State *ts)
+{
+	cr_mem work;
+	
+	// TODO
+	return work;
+}
+
+
+/*
+ * Garbage collector state machine.
+ * GCSpause marks all the roots.
+ * GCSpropagate propagates gray objects into black
+ * or links them into 'grayagain' for atomic phase.
+ * GCSenteratomic enters the atomic state and
+ * marks main thread, globals, etc... and propagates
+ * all of them. Finally it clears the strings table
+ * (dead weak references) and changes white bit.
+ * GCSsweepall sweeps all the objects in 'objects'.
+ * GCSsweepfin sweeps all the objects in 'fin'.
+ * GCSsweeptofin sweeps all the object sin 'tobefin'.
+ * GCSsweepend (as of this version) does nothing
+ * but provide clarity that sweep phase is over.
+ * GCScallfin calls finalizers of all the objects 
+ * in 'tobefin' and puts them back into 'objects'
+ * list after the call.
+ */
+static cr_mem singlestep(cr_State *ts)
+{
+	GState *gs;
+	GC *gc;
+	cr_mem work;
+
+	gs = GS(ts);
+	gc = &gs->gc;
+	gc->stopem = 1;
+	switch (gc->state) {
+	case GCSpause: /* mark roots */
+		restartgc(gs);
+		gc->state = GCSpropagate;
+		work = 1;
+		break;
+	case GCSpropagate: /* gray -> black */
+		if (gc->graylist) {
+			work = propagate(gs);
+		} else {
+			gc->state = GCSenteratomic;
+			work = 0;
+		}
+		break;
+	case GCSenteratomic: /* remark */
+		work = atomic(ts);
+		cr_assert(gs->sweeppos == NULL);
+		gc->state = GCSsweepall;
+		gc->sweeppos = sweepuntilalive(ts, &gc->objects);
+		break;
+	case GCSsweepall:
+		work = sweepstep(ts, &gc->fin, GCSsweepfin);
+		break;
+	case GCSsweepfin:
+		work = sweepstep(ts, &gc->tobefin, GCSsweeptofin);
+		break;
+	case GCSsweeptofin:
+		work = sweepstep(ts, NULL, GCSsweepend);
+		break;
+	case GCSsweepend:
+		/* Not used for anything but clarity */
+		gc->state = GCScallfin;
+		work = 0;
+		break;
+	case GCScallfin: /* call finalizers */
+		if (gc->tobefin && !gc->isem) {
+			gc->stopem = 0; /* can collect in finalizer */
+			work = callfinalizers(ts, GCFINMAX) * GCFINCOST;
+		} else {
+			gc->state = GCSpause;
+			work = 0;
+		}
+		break;
+	default: cr_unreachable(); break;
+	}
+	return work;
+}
+
+
+static cr_mem sweepuntilstate(cr_State *ts, int statemask)
+{
+	GC *gc;
+	cr_mem work;
+
+	gc = &GS(ts)->gc;
+	while (!testbits(gc->state, statemask)) {
+		// TODO
+	}
+	return work;
+}

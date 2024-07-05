@@ -45,10 +45,10 @@
 #define isfin(o)	testbit(rawomark(o), FINBIT)
 
 /* get the current white bit */
-#define cr_gc_white(gc)		((gc).whitebit & WHITEBITS)
+#define cr_gc_white(gc)		((gc)->whitebit & WHITEBITS)
 
 /* get the other white bit (not the current one) */
-#define whitexor(gc)		((gc).whitebit ^ WHITEBITS)
+#define whitexor(gc)		((gc)->whitebit ^ WHITEBITS)
 
 /* mark object to be finalized */
 #define markfin(o)	setbit(rawomark(o), FINBIT)
@@ -76,10 +76,10 @@
  * that white objects cannot point to black objects.
  * States that break this invariant are sweep states.
  */
-#define invariantstate(gc)	((gc).state <= GCSatomic)
+#define invariantstate(gc)	((gc)->state <= GCSatomic)
 
 /* check if GC is in a sweep state */
-#define sweepstate(gc)		(GCSsweepall <= (gc).state && (gc).state <= GCSsweepend)
+#define sweepstate(gc)		(GCSsweepall <= (gc)->state && (gc)->state <= GCSsweepend)
 
 
 /* GC 'stopped' bits */
@@ -90,8 +90,17 @@
 
 
 /* default GC parameters */
-#define GCSTEPMUL		100 /* 'stepmul' */
-#define GCSTEPSIZE		14  /* 'stepsize' (log2) */
+#define GCSTEPMUL	100 /* 'stepmul' */
+#define GCSTEPSIZE	14  /* 'stepsize' (log2) */
+
+/* maximum amount of objects to sweep in a single 'sweepstep' */
+#define GCSWEEPMAX	100
+
+/* maximum number of finalizers to call in each 'singlestep' */
+#define GCFINMAX	10
+
+/* cost of calling one finalizer */
+#define GCFINCOST	50
 
 
 
