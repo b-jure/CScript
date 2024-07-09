@@ -678,7 +678,7 @@ static cr_mem atomic(cr_State *ts)
  * (dead weak references) and changes white bit.
  * GCSsweepall sweeps all the objects in 'objects'.
  * GCSsweepfin sweeps all the objects in 'fin'.
- * GCSsweeptofin sweeps all the object sin 'tobefin'.
+ * GCSsweeptofin sweeps all the objects in 'tobefin'.
  * GCSsweepend (as of this version) does nothing
  * but provide clarity that sweep phase is over.
  * GCScallfin calls finalizers of all the objects 
@@ -749,8 +749,6 @@ static cr_mem sweepuntilstate(cr_State *ts, int statemask)
 	cr_mem work;
 
 	gc = &GS(ts)->gc;
-	while (!testbits(gc->state, statemask)) {
-		// TODO
-	}
+	for (work = 0; !testbits(gc->state, statemask); work += singlestep(ts));
 	return work;
 }
