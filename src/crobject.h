@@ -120,6 +120,12 @@ typedef union Node {
 
 #define keyisobj(n)	(keytt(n) == CR_TOBJECT)
 
+#define keyobj(n)	rawovalue(keyval(n))
+#define keyobjN(n)	(keyisobj(n) ? keyobj(n) : NULL)
+
+
+#define setemptykey(n)		(keytt(n) = CR_VEMPTY)
+
 
 /* copy values from node 'n' key to 'v' */
 #define setnodekey(ts,n,v) \

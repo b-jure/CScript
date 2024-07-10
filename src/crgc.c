@@ -233,27 +233,23 @@ cr_sinline cr_mem markvmt(GC *gc, VMT vmt)
 }
 
 
-/* mark strong 'HTable' */
-static void markstronght(GC *gc, HTable *ht)
+/* mark 'HTable' slots */
+static cr_mem markhtable(GC *gc, HTable *ht)
 {
 	Node *n;
 	Node *last;
 
-	last = htlastnode(ht);
-	for (n = htfirstnode(ht); n <= last; n++) {
-		if (!keyisempty(n)) {
-			markkey(gc, n);
-			markvalue(gc, htnodevalue(n));
+	if (ht->isweak) { /* weak table ? */
+		linkgclist(ht, gc->weak);
+	} else { /* otherwise strong */
+		last = htlastnode(ht);
+		for (n = htfirstnode(ht); n <= last; n++) {
+			if (!keyisempty(n)) {
+				markkey(gc, n);
+				markvalue(gc, htnodevalue(n));
+			}
 		}
 	}
-}
-
-
-/* mark 'HTable' slots */
-static cr_mem markht(GC *gc, HTable *ht)
-{
-	if (ht->isweak) linkgclist(ht, gc->weakhtab);
-	else markstronght(gc, ht);
 	return 1 + (htsize(ht) << 1);
 }
 
@@ -424,7 +420,7 @@ static cr_mem propagate(GState *gs)
 	gs->gc.graylist = *getgclist(o);
 	switch(rawott(o)) {
 	case CR_VUDATA: return markuserdata(&gs->gc, gco2ud(o));
-	case CR_VHTABLE: return markht(&gs->gc, gco2ht(o));
+	case CR_VHTABLE: return markhtable(&gs->gc, gco2ht(o));
 	case CR_VFUNCTION: return markfunction(&gs->gc, gco2fn(o));
 	case CR_VCRCL: return markcriptclosure(&gs->gc, gco2crcl(o));
 	case CR_VCCL: return markcclosure(&gs->gc, gco2ccl(o));
@@ -634,13 +630,13 @@ static void callfin(cr_State *ts)
 
 
 /* call objects with finalizer in 'tobefin' */
-static int callfinalizers(cr_State *ts, int cnt)
+static int callNfinalizers(cr_State *ts, int n)
 {
 	GC *gc;
 	int i;
 	
 	gc = &GS(ts)->gc;
-	for (i = 0; i < cnt && gc->tobefin; i++)
+	for (i = 0; i < n && gc->tobefin; i++)
 		callfin(ts);
 	return i;
 }
@@ -652,18 +648,148 @@ static int callfinalizers(cr_State *ts, int cnt)
  * ------------------------------------------------------------------------- */
 
 
-static void restartgc(GState *gs)
+/* auxiliary to 'clearkeys' */
+cr_sinline int keyisunmarked(GState *gs, GCObject *o)
 {
-	// TODO
+	if (o == NULL) return 0;
+	return iswhite(o);
+}
+
+
+/* clear all unmarked keys in weak table list 'l' */
+static void clearkeys(GState *gs, GCObject *l)
+{
+	HTable *ht;
+	Node *n;
+	Node *limit;
+
+	for (; l != NULL; l = gco2ht(l)->gclist) {
+		ht = gco2ht(l);
+		limit = htlastnode(ht);
+		for (n = htfirstnode(ht); n <= limit; n++) {
+			if (keyisunmarked(gs, keyobjN(n)))
+				cr_htable_removedirect(ht, n);
+		}
+	}
+}
+
+
+/* 
+ * Get the last 'next' object in list 'l' 
+ * Useful used when trying to link objects
+ * at the end of the list.
+ */
+cr_sinline GCObject **getlastnext(GCObject **l)
+{
+	while (*l)
+		l = &(*l)->next;
+	return l;
+}
+
+
+/*
+ * Separate all unreachable objects with a finalizer
+ * in 'fin' list into the 'tobefin' list.
+ * In case 'force' is true then every object in the
+ * 'fin' list will moved.
+ */
+static void separatetobefin(GState *gs, int force)
+{
+	GC *gc;
+	GCObject *curr;
+	GCObject **finlp;
+	GCObject **lastnext;
+
+	gc = &gs->gc;
+	finlp = &gc->fin;
+	lastnext = getlastnext(&gc->tobefin);
+	while ((curr = *finlp) != NULL) {
+		if (!(iswhite(curr) || force)) { /* marked and force is false ? */
+			finlp = &curr->next;
+		} else { /* unreachable, move it into 'tobefin' */
+			*finlp = curr->next; /* unlink 'curr' from 'fin' */
+			curr->next = *lastnext;
+			*lastnext = curr; /* link 'curr' into 'tobefin' */
+			lastnext = &curr->next; /* advance 'lastnext' */
+		}
+	}
+}
+
+
+static cr_mem marktobefin(GState *gs)
+{
+	GCObject *o;
+	cr_mem cnt;
+
+	for (o = gs->gc.tobefin; o != NULL; o = o->next) {
+		markobject(&gs->gc, o);
+		cnt++;
+	}
+	return cnt;
 }
 
 
 static cr_mem atomic(cr_State *ts)
 {
+	GState *gs;
+	GC *gc;
+	GCObject *grayagain;
 	cr_mem work;
+	int i;
 	
-	// TODO
+	gs = GS(ts);
+	gc = &gs->gc;
+	work = 0;
+	grayagain = gc->grayagain;
+	gc->grayagain = NULL;
+	cr_assert(gc->weakhtab == NULL);
+	gc->state = GCSatomic;
+	markobject(gc, ts); /* mark running thread */
+	markobject(gc, gs->gids); /* mark global id table */
+	for (i = 0; i < gs->gvars.len; i++) /* mark global values */
+		markvalue(gc, &gs->gvars.ptr[i]);
+	work += i;
+	work += propagateall(gs);
+	/* mark open upvalues */
+	work += markopenupvalues(gs);
+	work += propagateall(gs);
+	cr_assert(gc->graylist == NULL);
+	gc->graylist = grayagain;
+	work += propagateall(gs);
+	/* all accessible objects are marked,
+	 * safely clear weak tables */
+	clearkeys(gs, gc->weak);
+	/* separate and 'resurrect' unreachable
+	 * objects with the finalizer */
+	separatetobefin(gs, 0);
+	work += marktobefin(gs);
+	work += propagateall(gs);
+	/* all 'resurrected' objects are marked,
+	 * so clear weak tables safely again */
+	clearkeys(gs, gc->weak); 
+	gc->whitebit = whitexor(gc); /* flip white bit */
+	cr_assert(gc->gray == NULL); /* all must be propagated */
 	return work;
+}
+
+
+/* restart GC, mark roots and leftover 'tobefin' objects */
+static void restartgc(GState *gs)
+{
+	GC *gc;
+	int i;
+
+	gc = &gs->gc;
+	gc->graylist = gc->grayagain = gc->weak = NULL;
+	markobject(gc, gs->mainthread);
+	markobject(gc, gs->gids);
+	for (i = 0; i < gs->gvars.len; i++)
+		markvalue(gc, &gs->gvars.ptr[i]);
+	markopenupvalues(gs);
+	/* there could be leftover unreachable objects
+	 * with a finalizer from the previous cycle, in
+	 * case of emergency collection, so mark them */
+	marktobefin(gs);
 }
 
 
@@ -693,7 +819,7 @@ static cr_mem singlestep(cr_State *ts)
 
 	gs = GS(ts);
 	gc = &gs->gc;
-	gc->stopem = 1;
+	gc->stopem = 1; /* prevent emergency collections */
 	switch (gc->state) {
 	case GCSpause: /* mark roots */
 		restartgc(gs);
@@ -724,21 +850,24 @@ static cr_mem singlestep(cr_State *ts)
 		work = sweepstep(ts, NULL, GCSsweepend);
 		break;
 	case GCSsweepend:
-		/* Not used for anything but clarity */
+		/* state not used for anything but clarity */
 		gc->state = GCScallfin;
 		work = 0;
 		break;
 	case GCScallfin: /* call finalizers */
 		if (gc->tobefin && !gc->isem) {
 			gc->stopem = 0; /* can collect in finalizer */
-			work = callfinalizers(ts, GCFINMAX) * GCFINCOST;
+			work = callNfinalizers(ts, GCFINMAX) * GCFINCOST;
 		} else {
 			gc->state = GCSpause;
 			work = 0;
 		}
 		break;
-	default: cr_unreachable(); break;
+	default: 
+		cr_unreachable(); 
+		break;
 	}
+	gc->stopem = 0;
 	return work;
 }
 
@@ -749,6 +878,8 @@ static cr_mem sweepuntilstate(cr_State *ts, int statemask)
 	cr_mem work;
 
 	gc = &GS(ts)->gc;
-	for (work = 0; !testbits(gc->state, statemask); work += singlestep(ts));
+	work = 0;
+	while (!testbits(gc->state, statemask))
+		work += singlestep(ts);
 	return work;
 }

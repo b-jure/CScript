@@ -29,13 +29,13 @@
 #define htnodevalue(n)		(&(n)->val)
 
 /* get table slot */
-#define htslot(ht,i)		(&(ht)->mem[(i)])
+#define htnode(ht,i)		(&(ht)->mem[(i)])
 
 /* get table size */
 #define htsize(ht)		(twoto((ht)->size))
 
-#define htfirstnode(ht)		htslot(ht, 0)
-#define htlastnode(ht)		htslot(ht, htsize(ht) - 1)
+#define htfirstnode(ht)		htnode(ht, 0)
+#define htlastnode(ht)		htnode(ht, htsize(ht) - 1)
 
 
 
@@ -45,7 +45,8 @@ CRI_FUNC int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k);
 CRI_FUNC void cr_htable_copykeys(cr_State *ts, HTable *stab, HTable *dtab);
 CRI_FUNC int cr_htable_intern(cr_State *ts, const char *string);
 CRI_FUNC int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *val);
-CRI_FUNC int cr_htable_remove(cr_State *ts, HTable *tab, const TValue *k);
+CRI_FUNC int cr_htable_remove(HTable *tab, const TValue *k);
+CRI_FUNC void cr_htable_removedirect(HTable *tab, Node *slot);
 CRI_FUNC OString *cr_htable_getraw(HTable *tab, const char *str, size_t len, unsigned int hash);
 CRI_FUNC int cr_htable_get(HTable *tab, const TValue *key, TValue *o);
 CRI_FUNC void cr_htable_free(cr_State *ts, HTable *ht);

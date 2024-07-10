@@ -173,7 +173,7 @@ typedef struct GC {
 	GCObject *fixed; /* list of fixed objects (not to be collected) */
 	GCObject *fin; /* list of objects that have finalizer */
 	GCObject *tobefin; /* list of objects to be finalized (pending) */
-	GCObject *weakhtab; /* list of all weak hashtables */
+	GCObject *weak; /* list of all weak hashtables (key & value) */
 	cr_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
 	cr_ubyte isem; /* true if this is emergency collection */
 	cr_ubyte stopem; /* stop emergency collection */
