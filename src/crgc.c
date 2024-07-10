@@ -68,6 +68,30 @@
 #define linkobjgclist(o,l)	linkgclist_(obj2gco(o), getgclist(o), &(l))
 
 
+/* maximum amount of objects to sweep in a single 'sweepstep' */
+#define GCSWEEPMAX	100
+
+
+/* maximum number of finalizers to call in each 'singlestep' */
+#define GCFINMAX	10
+
+
+/* cost of calling one finalizer */
+#define GCFINCOST	50
+
+
+/* 
+ * Action of visiting a slot or sweeping an object converted
+ * into bytes.
+ */
+#define WORK2MEM	sizeof(TValue)
+
+
+/* adjust 'pause' (same as in Lua) */
+#define PAUSEADJ	100
+
+
+
 
 /* forward declare */
 static void markobject_(GC *gc, GCObject *o);
@@ -76,18 +100,50 @@ static void markobject_(GC *gc, GCObject *o);
 
 void cr_gc_init(GC *gc)
 {
-	// TODO
 	gc->next = 0;
 	gc->allocated = 0;
+	gc->debt = 0;
+	/* 'total' is set when creating state */
+	/* 'estimate' set on each cycle */
 	gc->objects = NULL;
 	gc->sweeppos = NULL;
-	gc->graylist = NULL;
-	gc->fixed = NULL;
-	gc->stepmul = GCSTEPMUL;
-	gc->stepsize = GCSTEPSIZE;
+	gc->graylist = gc->grayagain = gc->weak = NULL;
+	gc->fixed = gc->fin = gc->tobefin = NULL;
+	setgcparam(gc->pause, CRI_GCPAUSE);
+	setgcparam(gc->stepmul, CRI_GCSTEPMUL);
+	setgcparam(gc->stepsize, CRI_GCSTEPSIZE);
+	gc->state = GCSpause;
 	gc->stopem = 0;
-	gc->stopped = 0;
-	gc->state = 0;
+	gc->stopped = GCSTP; /* disable while initializing */
+	gc->whitebit = bitmask(WHITEBIT0);
+	gc->isem = 0;
+	gc->stopem = 0;
+}
+
+
+void cr_gc_fix(cr_State *ts, GCObject *o)
+{
+	GC *gc;
+
+	gc = &GS(ts)->gc;
+	cr_assert(o == gc->objects); /* first in the list */
+	markgray(o);
+	gc->objects = o->next;
+	o->next = gc->fixed;
+	gc->fixed = o;
+}
+
+
+/* set collector debt */
+void cr_gc_setdebt(GC *gc, cr_mem debt)
+{
+	cr_mem total;
+
+	total = totalbytes(gc);
+	if (debt < total - CRMEM_MAX) /* 'total' will underflow ? */
+		debt = total - CRMEM_MAX;
+	gc->total = total - debt;
+	gc->debt = debt;
 }
 
 
@@ -455,27 +511,33 @@ static void freeobject(cr_State *ts, GCObject *o)
 	Instance *ins;
 	Function *fn;
 	OClass *cls;
+	UValue *upval;
 
 	switch (rawott(o)) {
 		case CR_VSTRING:
 			cr_mem_free(ts, o, sizes((OString*)o));
 			break;
 		case CR_VFUNCTION:
-			fn = cast(Function*, o);
+			fn = gco2fn(o);
+			cr_mem_freevec(ts, &fn->fns);
 			cr_mem_freevec(ts, &fn->constants);
 			cr_mem_freevec(ts, &fn->code);
 			cr_mem_freevec(ts, &fn->lineinfo);
 			cr_mem_freevec(ts, &fn->lvars);
+			cr_mem_freevec(ts, &fn->upvalues);
 			cr_mem_free(ts, o, sizeof(Function));
 			break;
 		case CR_VUVALUE:
+			upval = gco2uv(o);
+			if (uvisopen(upval))
+				cr_vm_unlinkupval(upval);
 			cr_mem_free(ts, o, sizeof(UValue));
 			break;
 		case CR_VCRCL:
-			cr_mem_free(ts, o, sizecrcl(cast(CriptClosure*, o)));
+			cr_mem_free(ts, o, sizecrcl(gco2crcl(o)));
 			break;
 		case CR_VCCL:
-			cr_mem_free(ts, o, sizeccl(cast(CClosure*, o)));
+			cr_mem_free(ts, o, sizeccl(gco2ccl(o)));
 			break;
 		case CR_VCLASS:
 			cls = cast(OClass*, o);
@@ -566,6 +628,17 @@ static GCObject **sweepuntilalive(cr_State *ts, GCObject **list)
 }
 
 
+static void entersweep(cr_State *ts)
+{
+	GC *gc;
+
+	gc = &GS(ts)->gc;
+	gc->state = GCSsweepall;
+	cr_assert(gc->sweeppos == NULL);
+	gc->sweeppos = sweepuntilalive(ts, &gc->objects);
+}
+
+
 
 /* -------------------------------------------------------------------------
  * Finalization (__gc__)
@@ -611,7 +684,7 @@ static void callfin(cr_State *ts)
 	cr_assert(amount > 0);
 	gc = &GS(ts)->gc;
 	setv2gco(ts, &v, gettobefin(gc));
-	if ((m = cr_vmt_get(ts, &v, CR_M_GC))) {
+	if ((m = cr_vmt_get(ts, &v, CR_MGC))) {
 		oldstopped = gc->stopped;
 		gc->stopped = GCSTP; /* prevent recursive GC calls */
 		setsv(ts, ts->stacktop.p++, m);
@@ -639,6 +712,33 @@ static int callNfinalizers(cr_State *ts, int n)
 	for (i = 0; i < n && gc->tobefin; i++)
 		callfin(ts);
 	return i;
+}
+
+
+/* 
+ * Check if object has a finalizer and move it into 'fin'
+ * list but only if it wasn't moved already indicated by
+ * 'FINBIT' being set, additionally don't move it in case
+ * state is closing.
+ */
+void cr_gc_checkfin(cr_State *ts, GCObject *o, VMT vtable) 
+{
+	GC *gc;
+	GCObject **pp;
+
+	gc = &GS(ts)->gc;
+	if (isfin(o) || ttisnil(&vtable[CR_MGC]) || (gc->stopped & GCSTPCLS))
+		return;
+	if (sweepstate(gc)) {
+		markwhite(gc, o);
+		if (gc->sweeppos == &o->next)
+			gc->sweeppos = sweepuntilalive(ts, gc->sweeppos);
+	}
+	for (pp = &gc->objects; *pp != o; pp = &(*pp)->next);
+	*pp = o->next;
+	o->next = gc->fin;
+	gc->fin = o;
+	setbit(o->mark, FINBIT);
 }
 
 
@@ -773,6 +873,31 @@ static cr_mem atomic(cr_State *ts)
 }
 
 
+/* Set collector pause; basically called after
+ * end of each full GC cycle. The new threshold
+ * is calculated as 'estimate' / 'pause'.
+ * 'PAUSEADJ' is there to provide more precise
+ * control over when collection occurs, the value
+ * is chosen by testing (Lua developers effort). */
+static void setpause(GC *gc)
+{
+	cr_mem threshold;
+	cr_mem estimate;
+	cr_mem debt;
+	int pause;
+
+	pause = getgcparam(gc->pause);
+	estimate = gc->estimate / PAUSEADJ;
+	cr_assert(estimate > 0);
+	threshold = (pause < CRMEM_MAX / estimate)  /* overflow ? */
+			? estimate * pause  /* no overflow */
+			: CRMEM_MAX;  /* overflow; use maximum */
+	debt = totalbytes(gc) - threshold;
+	if (debt > 0) debt = 0;
+	cr_gc_setdebt(gc, debt);
+}
+
+
 /* restart GC, mark roots and leftover 'tobefin' objects */
 static void restartgc(GState *gs)
 {
@@ -836,9 +961,7 @@ static cr_mem singlestep(cr_State *ts)
 		break;
 	case GCSenteratomic: /* remark */
 		work = atomic(ts);
-		cr_assert(gs->sweeppos == NULL);
-		gc->state = GCSsweepall;
-		gc->sweeppos = sweepuntilalive(ts, &gc->objects);
+		entersweep(ts);
 		break;
 	case GCSsweepall:
 		work = sweepstep(ts, &gc->fin, GCSsweepfin);
@@ -872,14 +995,115 @@ static cr_mem singlestep(cr_State *ts)
 }
 
 
-static cr_mem sweepuntilstate(cr_State *ts, int statemask)
+/* free list 'l' objects until 'limit' */
+cr_sinline void freelist(cr_State *ts, GCObject *l, GCObject *limit)
+{
+	GCObject *next;
+
+	while (l != limit) {
+		next = l->next;
+		freeobject(ts, l);
+		l = next;
+	}
+}
+
+
+static void runallfinalizers(cr_State *ts)
 {
 	GC *gc;
-	cr_mem work;
 
 	gc = &GS(ts)->gc;
-	work = 0;
+	while (gc->tobefin)
+		callfin(ts);
+}
+
+
+/* 
+ * Free all objects except main thread, additionally
+ * call all finalizers.
+ */
+void cr_gc_freeallobjects(cr_State *ts)
+{
+	GState *gs;
+	GC *gc;
+
+	gs = GS(ts);
+	gc = &gs->gc;
+	gc->stopped = GCSTPCLS; /* paused by state closing */
+	separatetobefin(gs, 1);
+	cr_assert(gc->fin == NULL);
+	runallfinalizers(ts);
+	freelist(ts, gc->objects, obj2gco(gs->mainthread));
+	cr_assert(gc->fin == NULL);
+	freelist(ts, gc->fixed, NULL);
+}
+
+
+/* run GC steps until 'state' is in any of the states of 'statemask' */
+void cr_gc_rununtilstate(cr_State *ts, int statemask)
+{
+	GC *gc;
+
+	gc = &GS(ts)->gc;
 	while (!testbits(gc->state, statemask))
-		work += singlestep(ts);
-	return work;
+		singlestep(ts);
+}
+
+
+/*
+ * Run collector until debt is less than a stepsize
+ * or the full cycle was done (GC state is GCSpause).
+ * Both the debt and stepsize are converted to 'work',
+ */
+static void step(cr_State *ts, GState *gs)
+{
+	GC *gc;
+	cr_mem debt;
+	cr_mem stepsize;
+	int stepmul;
+
+	gc = &gs->gc;
+	stepmul = getgcparam(gc->stepmul) | 1;
+	debt = (gc->debt / WORK2MEM) * stepmul;
+	stepsize = (gc->stepsize <= sizeof(cr_mem) * 8 - 2 /* can fit in 'cr_mem' ? */
+			? (cast_mem(1) << gc->stepsize) / WORK2MEM /* it can fit */
+			: CRMEM_MAX); /* overflowed; return maximum possible value */
+	do {
+		debt -= singlestep(ts);
+	} while (debt > -stepsize && gc->state != GCSpause);
+	if (gc->state == GCSpause) {
+		setpause(gc);
+	} else {
+		debt = (debt / stepmul) * WORK2MEM; /* convert back to bytes */
+		cr_gc_setdebt(gc, debt);
+	}
+}
+
+
+void cr_gc_step(cr_State *ts)
+{
+	GState *gs;
+	GC *gc;
+
+	gs = GS(ts);
+	gc = &gs->gc;
+	if (!gcrunning(gc)) /* stopped ? */
+		cr_gc_setdebt(gc, -2000);
+	else
+		step(ts, gs);
+}
+
+
+void cr_gc_full(cr_State *ts)
+{
+	GC *gc;
+
+	gc = &GS(ts)->gc;
+	if (invariantstate(gc)) /* already have black objects ? */
+		entersweep(ts); /* if so sweep them first */
+	cr_gc_rununtilstate(ts, bitmask(GCSpause)); /* restart collector */
+	cr_gc_rununtilstate(ts, bitmask(GCScallfin)); /* run until finalizers */
+	cr_assert(gc->estimate == totalbytes(gc)); /* end of cycle, check estimate */
+	cr_gc_rununtilstate(ts, bitmask(GCSpause)); /* finish collection */
+	setpause(gc);
 }

@@ -223,27 +223,27 @@ CR_API int cr_getuservalue(cr_State *ts, int idx, int n);
 #define CR_MT_INDEX		1
 
 /* 'cr_vtable' methods */
-#define CR_M_INIT		0
-#define CR_M_DISPLAY		1
-#define CR_M_TOSTRING		2
-#define CR_M_GETIDX		3
-#define CR_M_SETIDX		4
-#define CR_M_GC			5
-#define CR_M_DEFER		6
-#define CR_M_ADD		7
-#define CR_M_SUB		8
-#define CR_M_MUL		9
-#define CR_M_DIV		10
-#define CR_M_MOD		11
-#define CR_M_POW		12
-#define CR_M_NOT		13
-#define CR_M_UMIN		14
-#define CR_M_NE			15
-#define CR_M_EQ			16
-#define CR_M_LT			17
-#define CR_M_LE			18
-#define CR_M_GT			19
-#define CR_M_GE			20
+#define CR_MINIT		0
+#define CR_MDISPLAY		1
+#define CR_MTOSTRING		2
+#define CR_MGETIDX		3
+#define CR_MSETIDX		4
+#define CR_MGC			5
+#define CR_MDEFER		6
+#define CR_MADD			7
+#define CR_MSUB			8
+#define CR_MMUL			9
+#define CR_MDIV			10
+#define CR_MMOD			11
+#define CR_MPOW			12
+#define CR_MNOT			13
+#define CR_MUMIN		14
+#define CR_MNE			15
+#define CR_MEQ			16
+#define CR_MLT			17
+#define CR_MLE			18
+#define CR_MGT			19
+#define CR_MGE			20
 
 #define CR_NUMM			21
 

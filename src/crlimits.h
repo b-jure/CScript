@@ -32,7 +32,7 @@ typedef size_t cr_umem;
 typedef ptrdiff_t cr_mem;
 
 #define CRUMEM_MAX	((cr_umem)(~(cr_umem)(0)))
-#define CRMEM_MAX	((cr_mem)(CR_UMEM_MAX >> 1))
+#define CRMEM_MAX	((cr_mem)(CRUMEM_MAX >> 1))
 
 
 /*
@@ -379,7 +379,7 @@ typedef cr_ubyte Instruction;
  */
 #if defined(CR_DEBUG_STRESS_GC)
 #define gcmemchange(ts,pre,pos)	\
-	{ if (gcrunning(GS(ts)->gc)) { pre; cr_gc_full(ts, 0); pos; } }
+	{ if (gcrunning(GS(ts)->gc)) { pre; cr_gc_full(ts); pos; } }
 #else
 #define gcmemchange(ts,pre,pos)		((void)0)
 #endif

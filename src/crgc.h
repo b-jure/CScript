@@ -90,17 +90,9 @@
 
 
 /* default GC parameters */
-#define GCSTEPMUL	100 /* 'stepmul' */
-#define GCSTEPSIZE	14  /* 'stepsize' (log2) */
-
-/* maximum amount of objects to sweep in a single 'sweepstep' */
-#define GCSWEEPMAX	100
-
-/* maximum number of finalizers to call in each 'singlestep' */
-#define GCFINMAX	10
-
-/* cost of calling one finalizer */
-#define GCFINCOST	50
+#define CRI_GCSTEPMUL		100 /* 'stepmul' */
+#define CRI_GCSTEPSIZE		14  /* 'stepsize' (log2) */
+#define CRI_GCPAUSE		200 /* after memory doubles begin cycle */
 
 
 
@@ -119,6 +111,11 @@
 
 /* 'checkgc' but without 'pre' and 'pos' */
 #define cr_gc_check(ts)		checkgc(ts,(void)0,(void)0)
+
+
+
+/* get total bytes allocated (by accounting for 'debt') */
+#define totalbytes(gc)		cast(cr_umem, ((gc)->total - (gc)->debt))
 
 
 
@@ -157,6 +154,9 @@
 	(ttiso(v) ? cr_gc_objbarrierback(ts,r,ovalue(v)) : (void)(0))
 
 
+/* to allow a maximum value of up to 1023 in a 'cr_ubyte' */
+#define getgcparam(p)		((p) << 2)
+#define setgcparam(p,v)		((p) = (v) >> 2)
 
 
 /* garbage collector parameters and state */
@@ -170,26 +170,30 @@ typedef struct GC {
 	GCObject **sweeppos; /* current position of sweep in list */
 	GCObject *graylist; /* list of gray objects */
 	GCObject *grayagain; /* list of objects to be traversed atomically */
+	GCObject *weak; /* list of all weak hashtables (key & value) */
 	GCObject *fixed; /* list of fixed objects (not to be collected) */
 	GCObject *fin; /* list of objects that have finalizer */
 	GCObject *tobefin; /* list of objects to be finalized (pending) */
-	GCObject *weak; /* list of all weak hashtables (key & value) */
+	cr_ubyte pause; /* how long to wait until next cycle */
+	cr_ubyte stepmul; /* GC heap grow speed */
+	cr_ubyte stepsize; /* step size in bytes (log2) */
+	cr_ubyte state; /* GC state bits */
+	cr_ubyte stopped; /* collector is stopped bits */
 	cr_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
 	cr_ubyte isem; /* true if this is emergency collection */
 	cr_ubyte stopem; /* stop emergency collection */
-	cr_ubyte stopped; /* collector is stopped bits */
-	cr_ubyte state; /* GC state bits */
-	cr_ubyte stepmul; /* GC heap grow speed */
-	cr_ubyte stepsize; /* step size in bytes (log2) */
 } GC;
 
 
-
 void cr_gc_init(GC *gc);
-size_t cr_gc_full(cr_State *ts, int isemergency);
-size_t cf_gc_step(cr_State *ts);
+void cf_gc_step(cr_State *ts);
+void cr_gc_full(cr_State *ts);
+void cr_gc_rununtilstate(cr_State *ts, int statemask);
+void cr_gc_freeallobjects(cr_State *ts);
+void cr_gc_checkfin(cr_State *ts, GCObject *o, VMT vtable);
 void cr_gc_fix(cr_State *ts, GCObject *o);
-void cr_gc_mark(cr_State *ts, Value *v);
 void cr_gc_barrier_(cr_State *ts, GCObject *r, GCObject *o);
+void cr_gc_barrierback_(cr_State *ts, GCObject *r);
+void cr_gc_setdebt(GC *gc, cr_mem debt);
 
 #endif
