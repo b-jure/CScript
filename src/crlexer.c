@@ -124,7 +124,7 @@ void cr_lex_free(Lexer *lx)
 static void inclinenr(Lexer *lx)
 {
 	if (cr_unlikely(lx->line >= INT_MAX))
-		cr_dg_runerror(lx->ts, "too many lines in a chunk");
+		cr_debug_runerror(lx->ts, "too many lines in a chunk");
 	lx->line++;
 }
 
@@ -181,10 +181,10 @@ static cr_noret lexerror(Lexer *lx, const char *err, int token)
 	cr_State *ts;
 
 	ts = lx->ts;
-	err = cr_dg_info(ts, err, lx->src, lx->line);
+	err = cr_debug_info(ts, err, lx->src, lx->line);
 	if (token)
 		cr_object_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
-	cr_dg_throw(ts, CR_ERRSYNTAX);
+	cr_debug_throw(ts, CR_ERRSYNTAX);
 }
 
 

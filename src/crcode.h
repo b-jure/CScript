@@ -171,16 +171,16 @@ typedef enum {
 
 
 
-int cr_ce_code(FunctionState *fs, Instruction i);
-int cr_ce_flt(FunctionState *fs, cr_number n);
-int cr_ce_int(FunctionState *fs, cr_integer i);
-int cr_ce_string(FunctionState *fs, OString *str);
-void cr_ce_reservestack(FunctionState *fs, int n);
-void cr_ce_checkstack(FunctionState *fs, int n);
-void cr_ce_setoneret(FunctionState *fs, ExpInfo *e);
-void cr_ce_dischargevar(FunctionState *fs, ExpInfo *e);
-void cr_ce_storevar(FunctionState *fs, ExpInfo *e);
-void cr_ce_rmlastins(FunctionState *fs, ExpInfo *e);
+int cr_code_code(FunctionState *fs, Instruction i);
+int cr_code_flt(FunctionState *fs, cr_number n);
+int cr_code_int(FunctionState *fs, cr_integer i);
+int cr_code_string(FunctionState *fs, OString *str);
+void cr_code_reservestack(FunctionState *fs, int n);
+void cr_code_checkstack(FunctionState *fs, int n);
+void cr_code_setoneret(FunctionState *fs, ExpInfo *e);
+void cr_code_dischargevar(FunctionState *fs, ExpInfo *e);
+void cr_code_storevar(FunctionState *fs, ExpInfo *e);
+void cr_code_rmlastins(FunctionState *fs, ExpInfo *e);
 
 
 #endif

@@ -721,12 +721,12 @@ static void varname(Lexer *lx, OString *name, ExpInfo *e)
 
 #define var(lx,e) \
 	{ varname(lx, expect_id(lx), e); \
-	  cr_ce_reservestack((lx)->fs, 1); }
+	  cr_code_reservestack((lx)->fs, 1); }
 
 
 #define varlit(lx,l,e) \
 	{ varname(lx, cr_lex_newstring(lx, "" l, SLL(l), e); \
-	  cr_ce_reservestack((lx)->fs, 1); }
+	  cr_code_reservestack((lx)->fs, 1); }
 
 
 /* 
@@ -758,7 +758,7 @@ static int explist(Lexer *lx, ExpInfo *e)
 static void dotaccess(Lexer *lx, ExpInfo *e)
 {
 	cr_lex_scan(lx); /* skip '.' */
-	e->u.idx = cr_ce_string(lx->fs, expect_id(lx));
+	e->u.idx = cr_code_string(lx->fs, expect_id(lx));
 	e->et = EXP_INDEXRAW;
 }
 
@@ -781,7 +781,7 @@ static void indexaccess(Lexer *lx, ExpInfo *e)
 static void supdotaccess(Lexer *lx, ExpInfo *e)
 {
 	cr_lex_scan(lx); /* skip '.' */
-	e->u.idx = cr_ce_string(lx->fs, expect_id(lx));
+	e->u.idx = cr_code_string(lx->fs, expect_id(lx));
 	e->et = EXP_INDEXRAWSUP;
 }
 
@@ -795,7 +795,7 @@ static void supidxaccess(Lexer *lx, ExpInfo *e)
 	if (match(lx, TK_IDENTIFIER)) e->et = EXP_INDEXSUP;
 	else if (match(lx, TK_STRING)) e->et = EXP_INDEXRAWSUP;
 	else cr_lex_syntaxerror(lx, "invalid index value for 'super'");
-	e->u.idx = cr_ce_string(lx->fs, id);
+	e->u.idx = cr_code_string(lx->fs, id);
 	expect(lx, ']');
 }
 
@@ -812,15 +812,15 @@ static void super_(Lexer *lx, ExpInfo *e)
 		cr_lex_syntaxerror(lx, "class has no superclass");
 	varlit(lx, "self", e);
 	cr_assert(e->et == EXP_LOCAL);
-	cr_ce_dischargevar(fs, e);
+	cr_code_dischargevar(fs, e);
 	cr_lex_scan(lx);
 	if (match(lx, '[')) supidxaccess(lx, e);
 	else if (match(lx, '.')) supdotaccess(lx, e);
 	else cr_lex_syntaxerror(lx, "missing method access after 'super'");
 	varlit(lx, "super", &e2);
 	cr_assert(e2->et == EXP_UVAL);
-	cr_ce_dischargevar(fs, &e2);
-	cr_ce_dischargevar(fs, e);
+	cr_code_dischargevar(fs, &e2);
+	cr_code_dischargevar(fs, e);
 }
 
 
@@ -922,7 +922,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e)
 	case TK_DOTS:
 		expect_cond(lx, lx->fs->fn.isvararg, 
 				"cannot use '...' outside of vararg function");
-		initexp(e, EXP_VARARG, cr_ce_vararg(lx->fs, 1));
+		initexp(e, EXP_VARARG, cr_code_vararg(lx->fs, 1));
 		break;
 	default:
 		suffixedexp(lx, e);
@@ -1040,7 +1040,7 @@ static Binopr subexp(Lexer *lx, ExpInfo *e, int limit)
 		line = lx->line; /* save line */
 		cr_lex_scan(lx);
 		subexp(lx, e, priority[uop].right);
-		cr_ce_unary(lx->fs, uop, e, line);
+		cr_code_unary(lx->fs, uop, e, line);
 	} else {
 		simpleexp(lx, e);
 	}

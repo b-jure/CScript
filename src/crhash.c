@@ -14,14 +14,12 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include <math.h>
-
 #include "crhash.h"
 #include "crlimits.h"
 
 
 /* hash 'cr_number' */
-unsigned int cr_hh_number(cr_number n)
+unsigned int cr_hash_number(cr_number n)
 {
 	unsigned int ui;
 	cr_integer ni;
@@ -41,7 +39,7 @@ unsigned int cr_hh_number(cr_number n)
  * One-byte-at-a-time hash based on Murmur's mix
  * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp 
  */
-unsigned int cr_hh_string(const char *str, size_t len, unsigned int seed)
+unsigned int cr_hash_string(const char *str, size_t len, unsigned int seed)
 {
 	const cr_ubyte *data = cast(const cr_ubyte *, str);
 	unsigned int h = seed;

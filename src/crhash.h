@@ -20,8 +20,8 @@
 #include "cript.h"
 
 
-unsigned int cr_hh_number(cr_number n);
-unsigned int cr_hh_string(const char* str, size_t len, unsigned int seed);
+unsigned int cr_hash_number(cr_number n);
+unsigned int cr_hash_string(const char* str, size_t len, unsigned int seed);
 
 #define cr_hh_integer(i)	cast_uint(cri_castS2U((i)))
 #define cr_hh_boolean(b)	cast_uint((b) != 0)

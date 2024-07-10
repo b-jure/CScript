@@ -34,7 +34,7 @@ static void addlineinfo(FunctionState *fs, Function *f, int line)
 
 
 /* write instruction */
-int cr_ce_code(FunctionState *fs, Instruction i)
+int cr_code_code(FunctionState *fs, Instruction i)
 {
 	Function *f = fs->fn;
 
@@ -60,7 +60,7 @@ static int shortcode(FunctionState *fs, Instruction i, int idx)
 	Function *f = fs->fn;
 	int offset;
 
-	offset = cr_ce_code(fs, i);
+	offset = cr_code_code(fs, i);
 	shortparam(fs, f, i, idx);
 	return offset;
 }
@@ -83,19 +83,19 @@ static int longcode(FunctionState *fs, Instruction i, int idx)
 	Function *f = fs->fn;
 	int offset;
 
-	offset = cr_ce_code(fs, i);
+	offset = cr_code_code(fs, i);
 	longparam(fs, f, i, idx);
 	return offset;
 }
 
 
 /* write instruction and its parameter depending on the parameter size */
-int cr_ce_codewparam(FunctionState *fs, Instruction i, int idx)
+int cr_code_codewparam(FunctionState *fs, Instruction i, int idx)
 {
 	Function *f = fs->fn;
 	int offset;
 
-	offset = cr_ce_code(fs, i);
+	offset = cr_code_code(fs, i);
 	cr_assert(idx >= 0);
 	if (idx <= CRI_SHRTPARAM)
 		shortparam(fs, f, i, cast_ubyte(idx));
@@ -118,7 +118,7 @@ static int addconstant(FunctionState *fs, TValue *constant)
 
 
 /* write OP_CONST instruction with float parameter */
-int cr_ce_flt(FunctionState *fs, cr_number n)
+int cr_code_flt(FunctionState *fs, cr_number n)
 {
 	TValue vn;
 	int idx;
@@ -131,7 +131,7 @@ int cr_ce_flt(FunctionState *fs, cr_number n)
 
 
 /* write OP_CONST instruction with integer parameter */
-int cr_ce_int(FunctionState *fs, cr_integer i)
+int cr_code_int(FunctionState *fs, cr_integer i)
 {
 	TValue vi;
 	int idx;
@@ -144,7 +144,7 @@ int cr_ce_int(FunctionState *fs, cr_integer i)
 
 
 /* write OP_CONST instruction with string parameter */
-int cr_ce_string(FunctionState *fs, OString *str)
+int cr_code_string(FunctionState *fs, OString *str)
 {
 	TValue vs;
 	int idx;
@@ -164,7 +164,7 @@ cr_sinline void freestack(FunctionState *fs, int n)
 }
 
 
-void cr_ce_checkstack(FunctionState *fs, int n)
+void cr_code_checkstack(FunctionState *fs, int n)
 {
 	int newstack;
 
@@ -178,9 +178,9 @@ void cr_ce_checkstack(FunctionState *fs, int n)
 }
 
 
-void cr_ce_reservestack(FunctionState *fs, int n)
+void cr_code_reservestack(FunctionState *fs, int n)
 {
-	cr_ce_checkstack(fs, n);
+	cr_code_checkstack(fs, n);
 	fs->stkidx += n;
 }
 
@@ -195,7 +195,7 @@ static int getvar(FunctionState *fs, OpCode op, ExpInfo *e)
 }
 
 
-void cr_ce_setoneret(FunctionState *fs, ExpInfo *e)
+void cr_code_setoneret(FunctionState *fs, ExpInfo *e)
 {
 	if (e->et == EXP_CALL) {
 		/* already returns a single value */
@@ -210,7 +210,7 @@ void cr_ce_setoneret(FunctionState *fs, ExpInfo *e)
 
 
 /* emit 'OP_SET' family of instructions */
-void cr_ce_storevar(FunctionState *fs, ExpInfo *e)
+void cr_code_storevar(FunctionState *fs, ExpInfo *e)
 {
 	switch (e->et) {
 	case EXP_LOCAL: 
@@ -234,7 +234,7 @@ void cr_ce_storevar(FunctionState *fs, ExpInfo *e)
 		break;
 	case EXP_INDEXED:
 		freestack(fs, 1);
-		e->u.info = cr_ce_code(fs, OP_SETINDEX);
+		e->u.info = cr_code_code(fs, OP_SETINDEX);
 		e->et = EXP_FINEXPR;
 		break;
 	default: 
@@ -246,7 +246,7 @@ void cr_ce_storevar(FunctionState *fs, ExpInfo *e)
 
 
 /* emit 'OP_GET' family of instructions */
-void cr_ce_dischargevar(FunctionState *fs, ExpInfo *e)
+void cr_code_dischargevar(FunctionState *fs, ExpInfo *e)
 {
 	switch (e->et) {
 	case EXP_LOCAL: 
@@ -282,11 +282,11 @@ void cr_ce_dischargevar(FunctionState *fs, ExpInfo *e)
 		break;
 	case EXP_INDEXED:
 		freestack(fs, 2);
-		e->u.info = cr_ce_code(fs, OP_GETINDEX);
+		e->u.info = cr_code_code(fs, OP_GETINDEX);
 		e->et = EXP_FINEXPR;
 		break;
 	case EXP_CALL: case EXP_VARARG:
-		cr_ce_setoneret(fs, e);
+		cr_code_setoneret(fs, e);
 		break;
 	default: 
 		cr_unreachable();

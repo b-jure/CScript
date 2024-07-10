@@ -91,7 +91,7 @@ OString *cr_object_newstring(cr_State *ts, const char *chars, size_t len)
 	TValue key;
 
 	strtab = &GS(ts)->strings;
-	hash = cr_hh_string(chars, len, GS(ts)->seed);
+	hash = cr_hash_string(chars, len, GS(ts)->seed);
 	weakref = cr_htable_getraw(strtab, chars, len, hash);
 	if (weakref)
 		return weakref;
@@ -297,7 +297,7 @@ void cr_object_numtostring(cr_State *ts, TValue *v)
  * will directly work on the buffer and will push
  * strings on stack in case buffer exceeds this limit.
  * This is all done because 'cr_object_newvstringf' often
- * gets called by 'cr_dg_getinfo'; the size should be
+ * gets called by 'cr_debug_getinfo'; the size should be
  * at least 'CR_MAXSRC' + 'MAXNUM2STR' + size for message.
  */
 #define BUFFVFSSIZ	(CRI_MAXSRC + MAXNUM2STR + 100)

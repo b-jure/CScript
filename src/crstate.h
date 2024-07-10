@@ -31,7 +31,7 @@ typedef struct cr_ljmp {
  * ------------------------------------------------------------------------- */
 
 /* get Cript 'Function' */
-#define cffn(cf)	(crclvalue(s2v((cf)->callee.p))->fn)
+#define cffn(cf)	(crclvalue(s2v((cf)->callee.p)).fn)
 
 
 /* 'cfstatus' bits */
@@ -47,7 +47,7 @@ typedef struct cr_ljmp {
 /* call information */
 typedef struct CallFrame {
 	SIndex callee; /* function */
-	SIndex top; /* top for this call (function) */
+	SIndex top; /* top for this call */
 	const Instruction *pc; /* only for non-C callee */
 	int nvarargs; /* only for non-C callee */
 	int nreturns; /* number of return values */

@@ -103,7 +103,7 @@ void *cr_mem_growarr(cr_State *ts, void *ptr, int len, int *sizep,
 	size += extra;
 	if (size >= limit / 2) {
 		if (cr_unlikely(size >= limit))
-			cr_dg_runerror(ts, "%s size limit", what);
+			cr_debug_runerror(ts, "%s size limit", what);
 		size = limit;
 		cr_assert(size >= CRI_MINARRSIZE);
 	} else {

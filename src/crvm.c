@@ -222,7 +222,7 @@ cr_integer cr_ts_div(cr_State *ts, cr_integer x, cr_integer y)
 {
 	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* y == '0' or '-1' */
 		if (y == 0)
-			cr_dg_runerror(ts, "division by 0");
+			cr_debug_runerror(ts, "division by 0");
 		return cr_intop(-, 0, x);
 	}
 	return (x / y);
@@ -239,7 +239,7 @@ cr_integer cr_ts_mod(cr_State *ts, cr_integer x, cr_integer y)
 
 	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) {
 		if (y == 0)
-			cr_dg_runerror(ts, "attempt to x%%0");
+			cr_debug_runerror(ts, "attempt to x%%0");
 		return 0;
 	}
 	cri_nummod(ts, x, y, r);

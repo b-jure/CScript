@@ -1,4 +1,4 @@
-#include "crvt.h"
+#include "crvtable.h"
 #include "crobject.h"
 #include "crstate.h"
 
@@ -54,7 +54,7 @@ void cr_vt_init(cr_State *ts)
 }
 
 
-const TValue *cr_vmt_get(cr_State *ts, const TValue *v, int mt)
+const TValue *cr_vtable_get(cr_State *ts, const TValue *v, int mt)
 {
 	cr_assert(CR_M_INIT <= mt && mt < CR_NUMM);
 	if (!ttiso(v)) return NULL;

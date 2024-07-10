@@ -22,7 +22,7 @@
 #include "crmem.h"
 #include "cript.h"
 #include "crvalue.h"
-#include "crvt.h"
+#include "crvtable.h"
 
 
 
@@ -366,7 +366,7 @@ typedef struct CriptClosure {
 } CriptClosure;
 
 #define ttiscrcl(v)		isott((v), CR_VCRCL)
-#define crclvalue(v)		clvalue(v).crc
+#define crclvalue(v)		(clvalue(v)->crc)
 
 /* set value to cript closure */
 #define setv2crcl(ts,v,crcl)		setv2o(ts,v,crcl,CriptClosure)
@@ -387,7 +387,7 @@ typedef struct {
 } CClosure;
 
 #define ttisccl(v)		isott((v), CR_VCCL)
-#define cclvalue(v)		clvalue(v).cc
+#define cclvalue(v)		(clvalue(v)->cc)
 
 /* set value to C closure */
 #define setv2ccl(ts,v,ccl)	setv2o(ts,v,ccl,CClosure)

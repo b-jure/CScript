@@ -684,7 +684,7 @@ static void callfin(cr_State *ts)
 	cr_assert(amount > 0);
 	gc = &GS(ts)->gc;
 	setv2gco(ts, &v, gettobefin(gc));
-	if ((m = cr_vmt_get(ts, &v, CR_MGC))) {
+	if ((m = cr_vtable_get(ts, &v, CR_MGC))) {
 		oldstopped = gc->stopped;
 		gc->stopped = GCSTP; /* prevent recursive GC calls */
 		setsv(ts, ts->stacktop.p++, m);
@@ -1094,7 +1094,7 @@ void cr_gc_step(cr_State *ts)
 }
 
 
-void cr_gc_full(cr_State *ts)
+static void fullcycle(cr_State *ts)
 {
 	GC *gc;
 
@@ -1106,4 +1106,16 @@ void cr_gc_full(cr_State *ts)
 	cr_assert(gc->estimate == totalbytes(gc)); /* end of cycle, check estimate */
 	cr_gc_rununtilstate(ts, bitmask(GCSpause)); /* finish collection */
 	setpause(gc);
+}
+
+
+void cr_gc_full(cr_State *ts, int isemergency)
+{
+	GC *gc;
+
+	gc = &GS(ts)->gc;
+	cr_assert(!gc->isem);
+	gc->isem = isemergency;
+	fullcycle(ts);
+	gc->isem = 0;
 }

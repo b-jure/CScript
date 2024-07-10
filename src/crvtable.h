@@ -29,7 +29,7 @@ CRI_DEC(const Tuple vtmethodinfo[CR_NUMM]);
 typedef TValue VMT[CR_NUMM];
 
 
-void cr_vmt_init(cr_State *ts);
-const TValue *cr_vmt_get(cr_State *ts, const TValue *v, int mt);
+void cr_vtable_init(cr_State *ts);
+const TValue *cr_vtable_get(cr_State *ts, const TValue *v, int mt);
 
 #endif

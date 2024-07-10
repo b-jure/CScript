@@ -187,7 +187,7 @@ typedef struct GC {
 
 void cr_gc_init(GC *gc);
 void cf_gc_step(cr_State *ts);
-void cr_gc_full(cr_State *ts);
+void cr_gc_full(cr_State *ts, int isemergency);
 void cr_gc_rununtilstate(cr_State *ts, int statemask);
 void cr_gc_freeallobjects(cr_State *ts);
 void cr_gc_checkfin(cr_State *ts, GCObject *o, VMT vtable);

@@ -88,7 +88,7 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 		case CR_VNUMINT:
 			return cast_node(hashslot(mem, cr_hh_integer(ivalue(k)), size));
 		case CR_VNUMFLT:
-			return cast_node(hashslot(mem, cr_hh_number(fvalue(k)), size));
+			return cast_node(hashslot(mem, cr_hash_number(fvalue(k)), size));
 		case CR_VLUDATA:
 			p = pvalue(k);
 			return cast_node(hashslot(mem, cr_hh_pointer(p), size));
