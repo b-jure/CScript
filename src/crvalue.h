@@ -47,19 +47,19 @@ typedef union Value {
 	int b; /* boolean */
 	cr_integer i; /* integer */
 	cr_number n; /* float */
-	void *lud; /* light userdata */
+	void *p; /* light userdata */
 	cr_cfunc cfn; /* C function */
 	struct GCObject *o; /* collectable value */
 } Value;
 
 
 /* get raw union values */
-#define rawbvalue(v)	((v).b)
-#define rawivalue(v)	((v).i)
-#define rawfvalue(v)	((v).n)
-#define rawpvalue(v)	((v).lud)
-#define rawcfvalue(v)	((v).cfn)
-#define rawovalue(v)	((v).o)
+#define rawbval(v)	((v).b)
+#define rawival(v)	((v).i)
+#define rawfval(v)	((v).n)
+#define rawpval(v)	((v).p)
+#define rawcfval(v)	((v).cfn)
+#define rawoval(v)	((v).o)
 
 
 
@@ -71,6 +71,7 @@ typedef union Value {
 
 /* set variant bytes for type 't' */
 #define makevariant(t, v)	((t) | ((v) << 5))
+
 
 /* macros for 'tt' */
 #define vtt(v)		((v)->tt)
@@ -95,7 +96,7 @@ typedef union Value {
 
 
 /* copy values from 'v2' to 'v1' ('TValue') */
-#define setv(ts,v1,v2) \
+#define setval(ts,v1,v2) \
 	{ TValue *v1_ = (v1); const TValue *v2_ = (v2); \
 	  setvtt(v1_, vtt(v2_)); vmod(v1_) = vmod(v2_); \
 	  v1_->val = v2_->val; }
@@ -149,7 +150,7 @@ typedef union {
 #define s2v(s)		(&(s)->val_)
 
 /* set stack value 'sv' to value 'v' */
-#define setsv(ts,sv,v)		setv(ts, s2v(sv), v)
+#define setsval(ts,sv,v)		setval(ts, s2v(sv), v)
 
 
 
@@ -180,17 +181,17 @@ typedef struct {
 #define CR_VFALSE	makevariant(CR_TBOOL, 0)
 #define CR_VTRUE	makevariant(CR_TBOOL, 1)
 
-#define bvalue(v)	rawbvalue(vval(v))
+#define bval(v)		rawbval(vval(v))
 
 /* set boolean false value */
-#define setbfvalue(v) \
-	{ TValue *v_=(v); bvalue(v_)=0; setvtt(v_, CR_VFALSE); }
+#define setbfval(v) \
+	{ TValue *v_=(v); bval(v_)=0; setvtt(v_, CR_VFALSE); }
 
 /* set boolean true value */
-#define setbtvalue(v) \
-	{ TValue *v_=(v); bvalue(v_)=1; setvtt(v_, CR_VTRUE); }
+#define setbtval(v) \
+	{ TValue *v_=(v); bval(v_)=1; setvtt(v_, CR_VTRUE); }
 
-#define ttisboolean(v)		isvtt(v, CR_TBOOL)
+#define ttisbool(v)		isvtt(v, CR_TBOOL)
 #define ttistrue(v)		isvtt(v, CR_VTRUE)
 #define ttisfalse(v)		isvtt(v, CR_VFALSE)
 
@@ -204,24 +205,24 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-#define CR_VNUMINT	makevariant(CR_TNUMBER, 0)
-#define CR_VNUMFLT	makevariant(CR_TNUMBER, 1)
+#define CR_VNUMINT		makevariant(CR_TNUMBER, 0)
+#define CR_VNUMFLT		makevariant(CR_TNUMBER, 1)
 
-#define ivalue(v)	rawivalue(vval(v))
-#define fvalue(v)	rawfvalue(vval(v))
-#define nvalue(v)	(isvtt(CR_VNUMINT) ? cast_num(ivalue(v)) : fvalue(v))
+#define ival(v)		rawival(vval(v))
+#define fval(v)		rawfval(vval(v))
+#define nval(v)		(isvtt(CR_VNUMINT) ? cast_num(ival(v)) : fval(v))
 
 /* set integer value */
-#define setivalue(v,i) \
-	{ TValue *v_=(v); ivalue(v_)=(i); setvtt(v_, CR_VNUMINT); }
+#define setival(v,i) \
+	{ TValue *v_=(v); ival(v_)=(i); setvtt(v_, CR_VNUMINT); }
 
 /* set float value */
-#define setfvalue(v,f) \
-	{ TValue *v_=(v); fvalue(v_)=(f); setvtt(v_, CR_VNUMFLT); }
+#define setfval(v,f) \
+	{ TValue *v_=(v); fval(v_)=(f); setvtt(v_, CR_VNUMFLT); }
 
-#define ttisflt(v)	isvtt((v), CR_VNUMFLT)
-#define ttisint(v)	isvtt((v), CR_VNUMINT)
-#define ttisnum(v)	isvtt((v), CR_TNUMBER)
+#define ttisflt(v)		isvtt((v), CR_VNUMFLT)
+#define ttisint(v)		isvtt((v), CR_VNUMINT)
+#define ttisnum(v)		isvtt((v), CR_TNUMBER)
 
 
 
@@ -231,15 +232,15 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-#define CR_VLUDATA	makevariant(CR_TLUDATA, 0)
+#define CR_VLUDATA		makevariant(CR_TLUDATA, 0)
 
-#define pvalue(v)	rawpvalue(vval(v))
+#define pval(v)			rawpval(vval(v))
 
 /* set pointer value */
-#define setpvalue(v,p) \
-	{ TValue *v_=(v); pvalue(v_)=(p); setvtt(v_, CR_VLUDATA); }
+#define setpval(v,p) \
+	{ TValue *v_=(v); pval(v_)=(p); setvtt(v_, CR_VLUDATA); }
 
-#define ttislud(v)	isvtt(v, CR_VLUDATA)
+#define ttislud(v)		isvtt(v, CR_VLUDATA)
 
 
 
@@ -249,15 +250,15 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-#define CR_VCFUNCTION	makevariant(CR_TFUNCTION, 0)
+#define CR_VCFUNCTION		makevariant(CR_TFUNCTION, 0)
 
-#define cfvalue(v)	rawcfvalue(vval(v))
+#define cfval(v)		rawcfval(vval(v))
 
 /* set C function value */
-#define setcfvalue(v,cf) \
-	{ TValue *v_=(v); cfvalue(v_)=(cf); setvtt(v_, CR_VCFUNCTION); }
+#define setcfval(v,cf) \
+	{ TValue *v_=(v); cfval(v_)=(cf); setvtt(v_, CR_VCFUNCTION); }
 
-#define ttiscfn(v)	isvtt(v, CR_VCFUNCTION)
+#define ttiscfn(v)		isvtt(v, CR_VCFUNCTION)
 
 
 
@@ -267,11 +268,11 @@ typedef struct {
  * ---------------------------------------------------------------------------
  */
 
-#define ovalue(v)	rawovalue(vval(v))
+#define oval(v)		rawoval(vval(v))
 
 /* set object value */
-#define setovalue(v,o) \
-	{ TValue *v_=(v); ovalue(v_)=(o); setvtt(v_, CR_TOBJECT); }
+#define setoval(v,o) \
+	{ TValue *v_=(v); oval(v_)=(o); setvtt(v_, CR_TOBJECT); }
 
 #define ttiso(v)	isvtt(v, CR_TOBJECT)
 
@@ -288,11 +289,11 @@ typedef struct {
 #define CR_VTOMB	makevariant(CR_TNIL, 2)
 
 /* set nil value */
-#define setnilvalue(v) \
+#define setnilval(v) \
 	{ TValue *v_=(v); setvtt(v_, CR_VNIL); }
 
 /* set nil value */
-#define setemptyvalue(v) \
+#define setemptyval(v) \
 	{ TValue *v_=(v); setvtt(v_, CR_VEMPTY); }
 
 #define ttisnil(v)	isvtt((v), CR_VNIL)
@@ -301,9 +302,42 @@ typedef struct {
 /* --------------------------------------------------------------------------- */
 
 
-CRI_FUNC int cr_value_ceillog2 (unsigned int x);
-int v2t(TValue value);
-TValue vtostr(cr_State *ts, TValue value, cr_ubyte raw);
-void varith(cr_State *ts, TValue a, TValue b, int op, TValue *res);
+/*
+ * Conversion modes when converting 'cr_integer'
+ * into 'cr_number'.
+ */
+typedef enum N2IMode {
+	CR_N2IFLOOR,
+	CR_N2ICEIL,
+	CR_N2IEXACT,
+} N2IMode;
+
+
+/* convert value to 'cr_integer' */
+#define tointeger(v, i) \
+	(cr_likely(ttisint(v)) \
+		? (*(i) = ival(v), 1) \
+		: cr_value_tointeger(v, i, N2I_floor))
+
+
+/* convert value to 'cr_number' */
+#define tonumber(v, n) \
+	(cr_likely(ttisflt(v)) \
+		? (*(n) = fval(v), 1) \
+		: cr_likely(ttisint(v)) ? (*(n) = ival(v), 1) : 0)
+
+
+/* same as right shift but indicate left by making 'y' negative */
+#define cr_value_shiftl(x,y)	cr_value_shiftr(x, -y)
+
+
+
+CRI_FUNC int cr_value_ceillog2(unsigned int x);
+CRI_FUNC int cr_value_n2i(cr_number n, cr_integer *i, N2IMode mode);
+CRI_FUNC int cr_value_tointeger(const TValue *v, cr_integer *i, int mode);
+CRI_FUNC cr_integer cr_value_div(cr_State *ts, cr_integer x, cr_integer y);
+CRI_FUNC cr_integer cr_value_modint(cr_State *ts, cr_integer x, cr_integer y);
+CRI_FUNC cr_number cr_value_modnum(cr_State *ts, cr_number x, cr_number y);
+CRI_FUNC cr_integer cr_value_shiftr(cr_integer x, cr_integer y);
 
 #endif

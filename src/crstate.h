@@ -108,7 +108,7 @@ typedef struct cr_State {
 	SIndex stack; /* stack base */
 	CallFrame *aframe; /* currently active frame in 'frames' */
 	CallFrameVec frames; /* call stack */
-	UValue *openuv; /* open upvalues */
+	UpVal *openupval; /* list of open upvalues */
 	TValue *deferlist;
 	SIndex tbclist; /* list of to-be-closed variables */
 } cr_State;
@@ -130,7 +130,7 @@ union GCUnion {
 	struct GCObject gc; /* object header */
 	struct HTable ht;
 	struct OString str;
-	struct UValue uv;
+	struct UpVal uv;
 	struct Function fn;
 	union Closure cl;
 	struct OClass cls;

@@ -18,6 +18,7 @@
 #define CRCONFIG_H
 
 #define __STDC_LIMIT_MACROS
+#include <stdlib.h>
 #include <stdint.h>
 #include <float.h>
 #include <math.h>
@@ -256,7 +257,7 @@
 
 #define cr_integer2str(s,sz,n)	snprintf((s),(sz),CR_INTEGER_FMT,(CR_INTEGER)(n))
 
-#define cr_intop(op,x,y) \
+#define cri_intop(op,x,y) \
 	cri_castU2S(cri_castS2U(x) op cri_castS2U(y))
 
 #elif UINTPTR_MAX == 0xffffffff		/* 32-bit */
@@ -299,6 +300,13 @@
 /* @cr_pointer2str - converts a pointer to a string. */
 #define cr_pointer2str(b,sz,p)	snprintf((b),(sz),"%p",(p))
 
+
+
+/*
+ * @CRI_MAXALIGN - values that ensure maximum alignment of
+ * other values when used inside of union.
+ */
+#define CRI_MAXALIGN	long l; cr_integer i; double d; cr_number n; void *p;
 
 
 

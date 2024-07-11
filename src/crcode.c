@@ -149,7 +149,7 @@ int cr_code_string(FunctionState *fs, OString *str)
 	TValue vs;
 	int idx;
 
-	setovalue(&vs, obj2gco(str));
+	setoval(&vs, obj2gco(str));
 	idx = addconstant(fs, &vs);
 	longcode(fs, OP_CONST, idx);
 	return idx;

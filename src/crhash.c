@@ -33,22 +33,3 @@ unsigned int cr_hash_number(cr_number n)
 	cr_assert(cr_numisnan(n) || cr_mathop(fabs)(n) == cast_num(HUGE_VAL));
 	return 0;
 }
-
-/* 
- * Hash string.
- * One-byte-at-a-time hash based on Murmur's mix
- * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp 
- */
-unsigned int cr_hash_string(const char *str, size_t len, unsigned int seed)
-{
-	const cr_ubyte *data = cast(const cr_ubyte *, str);
-	unsigned int h = seed;
-	int i;
-
-	for (i = 0; i < len; i++) {
-		h ^= data[i];
-		h *= 0x5bd1e995;
-		h ^= h >> 15;
-	}
-	return h;
-}

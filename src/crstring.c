@@ -1,36 +1,82 @@
-/* ----------------------------------------------------------------------------------------------
- * Copyright (C) 2023-2024 Jure Bagić
- *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
- * General Public License as published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with cript.
- * If not, see <https://www.gnu.org/licenses/>.
- * ----------------------------------------------------------------------------------------------*/
-
-#include "crconf.h"
-#include "crhashtable.h"
-#include "crlimits.h"
-#include "crmem.h"
+#include "cript.h"
+#include "crstring.h"
 #include "crobject.h"
-#include "crvalue.h"
+#include "crstate.h"
+#include "crhashtable.h"
+#include "crgc.h"
 #include "crvm.h"
-#include "stdarg.h"
+#include "crdebug.h"
 
 #include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <locale.h>
 
 
 
-void cr_object_sourceid(char *restrict dest, const char *src, size_t len)
+
+/* 
+ * Hash string.
+ * One-byte-at-a-time hash based on Murmur's mix
+ * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp 
+ */
+unsigned int cr_hash_string(const char *str, size_t len, unsigned int seed)
+{
+	const cr_ubyte *data = cast(const cr_ubyte *, str);
+	unsigned int h;
+	int i;
+
+	h = seed;
+	for (i = 0; i < len; i++) {
+		h ^= data[i];
+		h *= 0x5bd1e995;
+		h ^= h >> 15;
+	}
+	return h;
+}
+
+
+/*
+   Create new string object of size 'len'.
+ * Allocation is skipped in case string is already interned.
+ */
+OString *cr_string_newl(cr_State *ts, const char *chars, size_t len)
+{
+	HTable *strtab;
+	OString *weakref;
+ 	OString *string;
+	unsigned int hash;
+	TValue key;
+
+	strtab = &GS(ts)->strings;
+	hash = cr_string_hash(chars, len, GS(ts)->seed);
+	weakref = cr_htable_getstring(strtab, chars, len, hash);
+	if (weakref) 
+		return weakref;
+	string = cr_gc_new(ts, sizeofstring(len), CR_VSTRING, OString);
+	string->len = len;
+	if (cr_likely(len != 0))
+		memcpy(string->bytes, chars, len);
+	string->bytes[len] = '\0';
+	string->hash = hash;
+	string->extra = 0;
+	setbit(string->bits, STRHASHASH);
+	setv2s(ts, &key, string);
+	setsv2s(ts, ts->stacktop.p++, string);
+	cr_htable_set(ts, strtab, &key, &key);
+	ts->stacktop.p--;
+	return string;
+}
+
+
+/*
+ * Create new string object.
+ */
+OString *cr_string_new(cr_State *ts, const char *chars)
+{
+	return cr_string_newl(ts, chars, strlen(chars));
+}
+
+
+void cr_string_sourceid(char *restrict dest, const char *src, size_t len)
 {
 	size_t bufflen;
 
@@ -50,7 +96,7 @@ void cr_object_sourceid(char *restrict dest, const char *src, size_t len)
  * Returns '-1' in case string is not the name of any methods
  * inside the 'cr_vtable'.
  */
-int cr_object_strtomt(cr_State *ts, OString *id)
+int cr_string_strtomt(cr_State *ts, OString *id)
 {
 	OString **names;
 	uintptr_t ptr, start;
@@ -59,55 +105,6 @@ int cr_object_strtomt(cr_State *ts, OString *id)
 	ptr = cast(uintptr_t, id);
 	start = cast(uintptr_t, names);
 	return (ptr < start || ptr > start + CR_NUMM ? -1 : ptr - start);
-}
-
-
-/* create new unmarked 'GCObject' (object) and append it to GC list */
-GCObject *cr_object_new(cr_State *ts, size_t size, cr_ubyte ott)
-{
-	GCObject *o;
-	GState *gs;
-
-	o = cr_mem_malloc(ts, size);
-	o->ott = ott;
-	o->mark = 0;
-	gs = GS(ts);
-	o->next = gs->gc.objects;
-	gs->gc.objects = o;
-	return o;
-}
-
-
-/*
- * Create new string object.
- * Allocation is skipped in case string is already interned.
- */
-OString *cr_object_newstring(cr_State *ts, const char *chars, size_t len)
-{
-	HTable *strtab;
-	OString *weakref;
-	OString *string;
-	unsigned int hash;
-	TValue key;
-
-	strtab = &GS(ts)->strings;
-	hash = cr_hash_string(chars, len, GS(ts)->seed);
-	weakref = cr_htable_getraw(strtab, chars, len, hash);
-	if (weakref)
-		return weakref;
-	string = newgco(ts, len + 1, CR_VSTRING, OString);
-	string->len = len;
-	if (len != 0)
-		memcpy(string->bytes, chars, len);
-	string->bytes[len] = '\0';
-	string->hash = hash;
-	string->extra = 0;
-	string->bits = STRHASHASH;
-	setv2s(ts, &key, string);
-	setsv2s(ts, ts->stacktop.p++, string);
-	cr_htable_set(ts, strtab, &key, &GS(ts)->nil);
-	ts->stacktop.p--;
-	return string;
 }
 
 
@@ -139,7 +136,7 @@ OString *cr_object_newstring(cr_State *ts, const char *chars, size_t len)
 
 
 /* convert hex character into digit */
-int cr_object_hexvalue(int c)
+int cr_string_hexvalue(int c)
 {
 	cr_assert(isxdigit(c));
 	if (isdigit(c)) return c - '0';
@@ -155,11 +152,11 @@ int cr_object_hexvalue(int c)
 static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
 {
 	cr_uinteger u;
-	int novalue;
+	int noval;
 	int digit;
 	int sign;
 
-	sign = novalue = 1;
+	sign = noval = 1;
 	while (isspace(*s)) s++; /* skip leading spaces */
 	if (*s == '-' || *s == '+') {
 		sign -= 2 * (*s == '-'); 
@@ -168,14 +165,14 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
 	if (*s == '0' && (*s == 'x' || *s == 'X')) { /* hex ? */
 		s+=2; /* skip hex prefix */
 		for (; isxdigit(*s); s++) {
-			digit = cr_object_hexvalue(*s);
+			digit = cr_string_hexvalue(*s);
 			if (hexoverflow(u, digit)) {
 				if (overflow)
 					*overflow = 1;
 				return NULL;
 			}
 			u = u * 16 + digit;
-			novalue = 0;
+			noval = 0;
 		}
 	} else if (*s == '0' && isodigit(s[1])) { /* octal ? */
 		s++; /* skip '0' */
@@ -187,7 +184,7 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
 				return NULL;
 			}
 			u = u * 8 + digit;
-			novalue = 0;
+			noval = 0;
 		} while (isodigit(*++s));
 	} else { /* decimal */
 		for (; isdigit(*s); s++) {
@@ -198,11 +195,11 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
 				return NULL;
 			}
 			u = u * 10 + digit;
-			novalue = 0;
+			noval = 0;
 		}
 	}
 	while (isspace(*s)) s++; /* skip trailing spaces */
-	if (novalue || *s != '\0') return NULL;
+	if (noval || *s != '\0') return NULL;
 	*i = cri_castU2S(u*sign);
 	return s;
 }
@@ -228,7 +225,7 @@ static const char *otstr2flt(const char *s, cr_number *n, int *of)
 
 
 /* convert string to 'cr_number' or 'cr_integer' */
-size_t cr_object_strtonum(const char *s, TValue *o, int *of)
+size_t cr_string_tonum(const char *s, TValue *o, int *of)
 {
 	cr_integer i;
 	cr_number n;
@@ -263,9 +260,9 @@ static int otnum2buff(const TValue *nv, char *buff)
 
 	cr_assert(ttisnum(nv));
 	if (ttisint(nv)) {
-		len = cr_integer2str(buff, MAXNUM2STR, ivalue(nv));
+		len = cr_integer2str(buff, MAXNUM2STR, ival(nv));
 	} else {
-		len = cr_number2str(buff, MAXNUM2STR, fvalue(nv));
+		len = cr_number2str(buff, MAXNUM2STR, fval(nv));
 		/* if it looks like integer append '.0' */
 		if (strspn(buff, "-0123456789") == len) {
 			buff[len++] = *localeconv()->decimal_point;
@@ -276,13 +273,13 @@ static int otnum2buff(const TValue *nv, char *buff)
 }
 
 
-void cr_object_numtostring(cr_State *ts, TValue *v)
+void cr_string_numtostring(cr_State *ts, TValue *v)
 {
 	char buff[MAXNUM2STR];
 	int len;
 
 	len = otnum2buff(v, buff);
-	setv2s(ts, v, cr_object_newstring(ts, buff, len));
+	setv2s(ts, v, cr_string_newl(ts, buff, len));
 }
 
 
@@ -292,17 +289,17 @@ void cr_object_numtostring(cr_State *ts, TValue *v)
  * -------------------------------------------------------------------------- */
 
 /*
- * Initial size of buffer used in 'cr_object_newvstringf'
+ * Initial size of buffer used in 'cr_string_newvstringf'
  * to prevent allocations, instead the function
  * will directly work on the buffer and will push
  * strings on stack in case buffer exceeds this limit.
- * This is all done because 'cr_object_newvstringf' often
+ * This is all done because 'cr_string_newvstringf' often
  * gets called by 'cr_debug_getinfo'; the size should be
  * at least 'CR_MAXSRC' + 'MAXNUM2STR' + size for message.
  */
 #define BUFFVFSSIZ	(CRI_MAXSRC + MAXNUM2STR + 100)
 
-/* buffer for 'cr_object_newvstringf' */
+/* buffer for 'cr_string_newvstringf' */
 typedef struct BuffVSF {
 	cr_State *ts;
 	int pushed; /* true if 'space' was pushed on the stack */
@@ -321,7 +318,7 @@ static void pushstr(BuffVFS *buff, const char *str, size_t len)
 	OString *s;
 
 	ts = buff->ts;
-	s = cr_object_newstring(ts, str, len);
+	s = cr_string_newl(ts, str, len);
 	setsv2s(ts, ts->stacktop.p, s); 
 	ts->stacktop.p++;
 	if (buff->pushed)
@@ -381,7 +378,7 @@ static void buffaddptr(BuffVFS *buff, const void *p)
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
-const char *cr_object_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
+const char *cr_string_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
 {
 	const char *end;
 	const char *str;
@@ -392,36 +389,38 @@ const char *cr_object_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
 	while ((end = strchr(fmt, '%')) != NULL) {
 		buffaddstring(&buff, fmt, end - fmt);
 		switch (*(end + 1)) {
-			case 'c': /* 'char' */
-				c = cast(unsigned char, va_arg(argp, int));
-				buffaddstring(&buff, &c, sizeof(c));
-				break;
-			case 'd': /* 'int' */
-				setivalue(&nv, va_arg(argp, int));
-				buffaddnum(&buff, &nv);
-				break;
-			case 'I': /* 'cr_integer' */
-				setivalue(&nv, va_arg(argp, cr_integer));
-				buffaddnum(&buff, &nv);
-				break;
-			case 'N': /* 'cr_number' */
-				setivalue(&nv, va_arg(argp, cr_number));
-				buffaddnum(&buff, &nv);
-				break;
-			case 's': /* 'string' */
-				str = va_arg(argp, const char *);
-				if (str == NULL) str = "(null)";
-				buffaddstring(&buff, str, strlen(str));
-				break;
-			case 'p': /* 'ptr' */
-				buffaddptr(&buff, va_arg(argp, const void *));
-				break;
-			case '%':
-				buffaddstring(&buff, "%", 1);
-				break;
-			default:
-				c = cast(unsigned char, *(end + 1));
-				cr_assert(0 && "invalid format specifier '%%%c'");
+		case 'c': /* 'char' */
+			c = cast(unsigned char, va_arg(argp, int));
+			buffaddstring(&buff, &c, sizeof(c));
+			break;
+		case 'd': /* 'int' */
+			setivalue(&nv, va_arg(argp, int));
+			buffaddnum(&buff, &nv);
+			break;
+		case 'I': /* 'cr_integer' */
+			setivalue(&nv, va_arg(argp, cr_integer));
+			buffaddnum(&buff, &nv);
+			break;
+		case 'N': /* 'cr_number' */
+			setivalue(&nv, va_arg(argp, cr_number));
+			buffaddnum(&buff, &nv);
+			break;
+		case 's': /* 'string' */
+			str = va_arg(argp, const char *);
+			if (str == NULL) str = "(null)";
+			buffaddstring(&buff, str, strlen(str));
+			break;
+		case 'p': /* 'ptr' */
+			buffaddptr(&buff, va_arg(argp, const void *));
+			break;
+		case '%':
+			buffaddstring(&buff, "%", 1);
+			break;
+		default:
+			c = cast(unsigned char, *(end + 1));
+			cr_debug_runerror(ts, "invalid format specifier '%%%c'", c);
+			/* UNREACHED */
+			return NULL;
 		}
 		fmt = end + 2; /* '%' + specifier */
 	}
@@ -431,109 +430,13 @@ const char *cr_object_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
 }
 
 
-const char *cr_object_pushfstring(cr_State *ts, const char *fmt, ...)
+const char *cr_string_pushfstring(cr_State *ts, const char *fmt, ...)
 {
 	const char *str;
 	va_list argp;
 
 	va_start(argp, fmt);
-	str = cr_object_pushvfstring(ts, fmt, argp);
+	str = cr_string_pushvfstring(ts, fmt, argp);
 	va_end(argp);
 	return str;
-}
-
-
-
-/* --------------------------------------------------------------------------
- * Other object constructors
- * -------------------------------------------------------------------------- */
-
-CClosure *cr_object_newcclosure(cr_State *ts, cr_cfunc fn, int nupvalues)
-{
-	CClosure *ccl;
-	int i;
-
-	ccl = newgco(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
-	ccl->nupvalues = nupvalues;
-	ccl->fn = fn;
-	for (i = 0; i < nupvalues; i++)
-		setnilvalue(&ccl->upvalue[i]);
-	return ccl;
-}
-
-
-Function *cr_object_newfunction(cr_State *ts)
-{
-	Function *fn;
-
-	fn = newgco(ts, 0, CR_VFUNCTION, Function);
-	cr_mem_createvec(ts, &fn->constants, CRI_MAXCODE, "constants");
-	cr_mem_createvec(ts, &fn->code, INT_MAX, "code");
-	cr_mem_createvec(ts, &fn->lineinfo, INT_MAX, "lines");
-	cr_mem_createvec(ts, &fn->lvars, CRI_MAXCODE, "local variables");
-	return fn;
-}
-
-
-CriptClosure *cr_object_newcrclosure(cr_State *ts, Function *fn, int nupvalues)
-{
-	CriptClosure *crcl;
-	int i;
-
-	crcl = newgco(ts, sizeof(UValue*) * nupvalues, CR_VCRCL, CriptClosure);
-	crcl->nupvalues = nupvalues;
-	crcl->fn = fn;
-	memset(crcl->upvalue, 0, nupvalues * sizeof(UValue*));
-	return crcl;
-}
-
-
-UValue *cr_object_newuvalue(cr_State *ts, TValue *vp)
-{
-	UValue *uv;
-
-	uv = newgco(ts, 0, CR_VUVALUE, UValue);
-	uv->v.location = vp;
-	return uv;
-}
-
-
-OClass *cr_object_newclass(cr_State *ts, OString *id)
-{
-	OClass *cls;
-
-	cls = newgco(ts, 0, CR_VCLASS, OClass);
-	cls->methods = NULL;
-	cls->name = id;
-	memset(cls->vtable, 0, sizeof(cls->vtable) / sizeof(cls->vtable[0]));
-	setsv2cls(ts, ts->stacktop.p++, cls);
-	cls->methods = cr_htable_new(ts);
-	ts->stacktop.p--;
-	return cls;
-}
-
-
-Instance *cr_object_newinstance(cr_State *ts, OClass *cls)
-{
-	Instance *ins;
-
-	ins = newgco(ts, 0, CR_VINSTANCE, Instance);
-	ins->oclass = cls;
-	ins->fields = NULL;
-	setsv2ins(ts, ts->stacktop.p++, ins);
-	ins->fields = cr_htable_new(ts);
-	ts->stacktop.p--;
-	return ins;
-}
-
-
-InstanceMethod *cr_object_newinstancemethod(cr_State *ts, Instance *receiver,
-						CriptClosure *method)
-{
-	InstanceMethod *im;
-
-	im = newgco(ts, 0, CR_VMETHOD, InstanceMethod);
-	im->receiver = receiver;
-	im->method = cast(GCObject*, method);
-	return im;
 }

@@ -1,5 +1,5 @@
 #include "crvtable.h"
-#include "crobject.h"
+#include "crstring.h"
 #include "crstate.h"
 
 
@@ -48,7 +48,7 @@ void cr_vt_init(cr_State *ts)
 	int i;
 
 	for (i = 0; i < CR_NUMM; i++) {
-		GS(ts)->vtmnames[i] = cr_object_newcstring(ts, vtmnames[i]);
+		GS(ts)->vtmnames[i] = cr_string_new(ts, vtmnames[i]);
 		cr_gc_fix(ts, obj2gco(GS(ts)->vtmnames[i]));
 	}
 }

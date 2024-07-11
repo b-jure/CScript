@@ -15,7 +15,7 @@
  * ----------------------------------------------------------------------------------------------*/
 
 #include "crlimits.h"
-#include "crobject.h"
+#include "crdebug.h"
 #include "crvalue.h"
 
 
@@ -43,20 +43,75 @@ int cr_ve_ceillog2 (unsigned int x)
 }
 
 
-static cr_number numarithmetic(cr_State *ts, cr_number x, cr_number y, int op)
+/* 
+ * Integer division; handles division by 0 and possible
+ * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
+ */
+cr_integer cr_value_div(cr_State *ts, cr_integer x, cr_integer y)
 {
-	cr_number m;
+	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* y == '0' or '-1' */
+		if (y == 0)
+			cr_debug_runerror(ts, "division by 0");
+		return cri_intop(-, 0, x);
+	}
+	return (x / y);
+}
 
+
+/*
+ * Integer modulus; handles modulo by 0 and overflow
+ * as explained in 'cr_value_div()'.
+ */
+cr_integer cr_value_modint(cr_State *ts, cr_integer x, cr_integer y) 
+{
+	cr_integer r;
+
+	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) {
+		if (y == 0)
+			cr_debug_runerror(ts, "attempt to x%%0");
+		return 0;
+	}
+	cri_nummod(ts, x, y, r);
+	return r;
+}
+
+
+/* floating point modulus */
+cr_number cr_value_modnum(cr_State *ts, cr_number x, cr_number y)
+{
+	cr_number r;
+	cri_nummod(ts, x, y, r);
+	return r;
+}
+
+
+
+/* number of bits in 'cr_integer' */
+#define INTBITS		(sizeof(cr_integer)*8)
+
+
+/* shift 'x', 'y' times, in case of overflow return 0 */
+cr_integer cr_value_shiftr(cr_integer x, cr_integer y)
+{
+	if (y < 0) {
+		if (y <= -INTBITS) return 0;
+		return (x << y);
+	} else {
+		if (y >= INTBITS) return 0;
+		return (x >> y);
+	}
+}
+
+
+static cr_number numarithm(cr_State *ts, cr_number x, cr_number y, int op)
+{
 	switch(op) {
 	case CR_OPADD: return cri_numadd(ts, x, y);
 	case CR_OPSUB: return cri_numsub(ts, x, y);
 	case CR_OPMUL: return cri_nummul(ts, x, y);
 	case CR_OPDIV: return cri_numdiv(ts, x, y);
-	case CR_OPMOD: { 
-		cri_nummod(ts, x, y, m);
-		return m;
-	}
-	case CR_OPPOW: return cri_nummul(ts, x, y);
+	case CR_OPMOD: return cr_value_modnum(ts, x, y);
+	case CR_OPPOW: return cri_numpow(ts, x, y);
 	case CR_OPNOT: return cri_nummul(ts, x, y);
 	case CR_OPUMIN: return cri_nummul(ts, x, y);
 	default: cr_unreachable(); return 0.0;
@@ -64,62 +119,98 @@ static cr_number numarithmetic(cr_State *ts, cr_number x, cr_number y, int op)
 }
 
 
-static cr_number fltarithm(cr_State *ts, cr_floating a, cr_floating b, cr_ar op)
+static cr_integer intarithm(cr_State *ts, cr_integer x, cr_integer y, int op)
 {
-	switch (op) {
-	case CR_OPADD:
-		return cr_numadd(ts, a, b);
-	case CR_OPSUB:
-		return cr_numsub(ts, a, b);
-	case CR_OPMUL:
-		return cr_nummul(ts, a, b);
-	case CR_OPDIV:
-		return cr_numdiv(ts, a, b);
-	case CR_OPMOD:;
-		cr_nummod(ts, a, b, a);
-		return a;
-	case CR_OPPOW:
-		return cr_numpow(ts, a, b);
-	case CR_OPUMIN:
-		return cr_numunm(ts, a);
-	case CR_OPNOT:
-		return cast(cr_floating, 0); // never 'falsey'
-	default:
-		cr_unreachable;
-		return 0;
+	cr_integer i;
+
+	switch(op) {
+	case CR_OPADD: return cri_intop(+, x, y);
+	case CR_OPSUB: return cri_intop(-, x, y);
+	case CR_OPMUL: return cri_intop(*, x, y);
+	case CR_OPDIV: return cr_value_div(ts, x, y);
+	case CR_OPMOD: return cr_value_modint(ts, x, y);
+	case CR_OPPOW: return cri_intop(^, x, y);
+	case CR_OPNOT: return cri_numnot(ts, x);
+	case CR_OPUMIN: return cri_intop(-, 0, x);
+	case CR_OPBSHL: return cr_value_shiftl(x, y);
+	case CR_OPBSHR: return cr_value_shiftr(x, y);
+	case CR_OPBNOT: return cri_intop(^, ~cri_castS2U(0), x);
+	case CR_OPBAND: return cri_intop(&, x, y);
+	case CR_OPBOR: return cri_intop(|, x, y);
+	case CR_OPBXOR: return cri_intop(^, x, y);
+	default: cr_unreachable(); return 0.0;
 	}
 }
 
 
-/* Perform arithmetic operation 'op' on cript values.
- * If arithmetic operation was executed successfully then this
- * returns 1, otherwise 0. */
-int varith(cr_State *ts, Value a, Value b, cr_ar op, Value *res)
+/* convert number 'n' to integer according to 'mode' */
+int cr_value_n2i(cr_number n, cr_integer *i, N2IMode mode)
 {
-	if (arisbin(op)) { // binary operation
-		if (IS_NUMBER(a) && IS_NUMBER(b))
-			goto l_unarynum;
-		else if (isstring(a) && isstring(b))
-			*res = OBJ_VAL(concatenate(ts, a, b));
-		else
-			return 0;
-	} else { // unary operation
-		if (IS_NUMBER(a)) {
-l_unarynum:;
-			cr_floating ret = narith(ts, AS_NUMBER(a), AS_NUMBER(b), op);
-			*res = (op != SKAR_NOT ? NUMBER_VAL(ret) : FALSE_VAL);
-		} else if (op == SKAR_NOT) {
-			if (IS_BOOL(a))
-				*res = !AS_BOOL(a);
-			else if (isstring(a))
-				*res = FALSE_VAL;
-			else
-				return 0;
-		} else
-			return 0;
+	cr_number floored;
+
+	floored = cr_floor(n);
+	if (floored != n) {
+		if (mode == CR_N2IEXACT) return 0;
+		else if (mode == CR_N2ICEIL) floored++;
+	}
+	return cr_number2integer(n, i);
+}
+
+
+/* try to convert value to 'cr_integer' */
+int cr_value_tointeger(const TValue *v, cr_integer *i, int mode)
+{
+	if (ttisnum(v)) {
+		return cr_value_n2i(fval(v), i, mode);
+	} else if (ttisint(v)) {
+		*i = ival(v);
+		return 1;
+	}
+	return 0;
+}
+
+
+/*
+ * Perform raw arithmetic operations on numbers, what this means
+ * is that no vtable methods will be invoked and the operation
+ * itself can't invoke runtime error.
+ * Very useful during parsing when folding number values.
+ */
+int cr_value_arithmraw(cr_State *ts, int op, const TValue *a, const TValue *b,
+			   TValue *res)
+{
+	cr_integer i1, i2;
+	cr_number n1, n2;
+
+	switch (op) {
+	case CR_OPBNOT: case CR_OPBXOR:
+	case CR_OPBSHL: case CR_OPBSHR:
+	case CR_OPBOR: case CR_OPBAND:
+		if (ttisint(a) && ttisint(b)) {
+			setival(res, intarithm(ts, ival(a), ival(b), op));
+			return 1;
+		}
+		return 0;
+	case CR_OPDIV: case CR_OPMOD:
+		if (tonumber(a, &n1) && tonumber(b, &n2)) {
+			setfval(res, numarithm(ts, n1, n2, op));
+			return 1;
+		}
+		return 0;
+	default:
+		return 0;
+	}
+		
+	if (!ttisnum(a) || !ttisnum(b)) /* have a non-number value? */
+		return 0;
+	if (ttisint(a) && ttisint(b)) {
+		setival(res, intarithmetic(ts, ival(a), ival(b), op));
+	} else {
+		setfval(res, numarithmetic(ts, fval(a), fval(b), op));
 	}
 	return 1;
 }
+
 
 /* Perform binary/unary operation on values. */
 void arith(cr_State *ts, Value a, Value b, cr_ar op, Value *res)

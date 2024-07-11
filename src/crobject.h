@@ -26,12 +26,12 @@
 
 
 
-/* 'ObjectHeader' size */
-#define OBJHEADERSIZE		(sizeof(struct GCObject*) + 2)
-
-
 /* common header for objects */
 #define ObjectHeader	struct GCObject* next; cr_ubyte ott; cr_ubyte mark
+
+
+/* size of 'ObjectHeader' fields */
+#define OBJHEADERSIZE	(sizeof(GCObject*) + 2)
 
 
 /* common type for collectable objects */
@@ -40,29 +40,26 @@ typedef struct GCObject {
 } GCObject;
 
 
-#define rawott(o)	((o)->ott)
-#define rawomark(o)	((o)->mark)
+#define ott_(o)		((o)->ott)
+#define omark_(o)	((o)->mark)
+#define onext_(o)	((o)->next)
 
-#define ott(v)		(rawott(ovalue(v)))
-#define omark(v)	(rawomark(ovalue(v)))
+#define ott(v)		(ott_(oval(v)))
+#define omark(v)	(omark_(oval(v)))
+#define onext(v)	(onext_(oval(v)))
 
-#define setott(v,t)	(ott(v) = (t))
 #define isott(v,t)	(ott(v) == (t))
-
-
-/* allocate new GC object */
-#define newgco(ts,e,tt,t)	((t*)cr_object_new(ts, (e) + sizeof(t), tt))
 
 
 /* set value to a generic object */
 #define setv2gco(ts,v,o) \
 	{ TValue *v_=(v); GCObject *o_=o; \
-	  ovalue(v_) = obj2gco(o_); vtt(v_) = CR_TOBJECT; }
+	  oval(v_) = obj2gco(o_); vtt(v_) = CR_TOBJECT; }
 
 
 /* set value to GC object */
 #define setv2o(ts,v,o,t) \
-	{ TValue *v_=(v); t *o_=o; ovalue(v_) = obj2gco(o_); \
+	{ TValue *v_=(v); t *o_=o; oval(v_) = obj2gco(o_); \
 	  vtt(v_) = CR_TOBJECT; }
 
 
@@ -79,7 +76,7 @@ typedef struct GCObject {
 
 #define ttisthread(v)		isott(v, CR_VTHREAD)
 
-#define threadvalue(v)		gco2th(ovalue(v))
+#define threadvalue(v)		gco2th(oval(v))
 
 /* set value to thread */
 #define setv2th(ts,v,th)	setv2o(ts, v, th, cr_State)
@@ -93,34 +90,33 @@ typedef struct GCObject {
  * HTable (hashtable) 
  * ------------------------------------------------------------------------- */
 
-/*
- * Ordering of fields might seem weird but
- * this is to ensure optimal alignment.
- */
-typedef union Node {
-	struct {
-		TValueFields; /* value fields */
-		cr_ubyte ttk; /* type tag for key */
-		Value keyval; /* key value */
-	} s;
-	TValue val;
-} Node;
+#define CR_VHTABLE	makevariant(CR_THTABLE, 1)
+
+#define ttishtab(v)	isott((v), CR_VHTABLE)
+#define htabval(v)	gco2ht(oval(v))
+
+
+/* set value to hashtable */
+#define setv2ht(ts,v,ht)	setv2o(ts,v,ht,HTable)
+
+/* set stack value to hashtable */
+#define setsv2ht(ts,sv,ht)	setv2s(ts,s2v(sv),ht)
 
 
 #define keyval(n)	((n)->s.keyval)
-#define keybvalue(n)	rawbvalue(keyval(n))
-#define keyivalue(n)	rawivalue(keyval(n))
-#define keyfvalue(n)	rawfvalue(keyval(n))
-#define keypvalue(n)	rawpvalue(keyval(n))
-#define keycfvalue(n)	rawcfvalue(keyval(n))
-#define keyovalue(n)	rawovalue(keyval(n))
-#define keystrvalue(n)	gco2str(rawovalue(keyval(n)))
+#define keybval(n)	rawbval(keyval(n))
+#define keyival(n)	rawival(keyval(n))
+#define keyfval(n)	rawfval(keyval(n))
+#define keypval(n)	rawpval(keyval(n))
+#define keycfval(n)	rawcfval(keyval(n))
+#define keyoval(n)	rawoval(keyval(n))
+#define keystrval(n)	gco2str(rawoval(keyval(n)))
 
 #define keytt(n)	((n)->s.ttk)
 
 #define keyisobj(n)	(keytt(n) == CR_TOBJECT)
 
-#define keyobj(n)	rawovalue(keyval(n))
+#define keyobj(n)	rawoval(keyval(n))
 #define keyobjN(n)	(keyisobj(n) ? keyobj(n) : NULL)
 
 
@@ -140,6 +136,21 @@ typedef union Node {
 	  vval(v_) = keyval(n_); }
 
 
+/*
+ * Ordering of fields might seem weird but
+ * this is to ensure optimal alignment.
+ */
+typedef union Node {
+	struct {
+		TValueFields; /* value fields */
+		cr_ubyte ttk; /* type tag for key */
+		Value keyval; /* key value */
+	} s;
+	TValue val;
+} Node;
+
+
+
 /* hash table */
 typedef struct HTable {
 	ObjectHeader; /* internal only object */
@@ -151,25 +162,31 @@ typedef struct HTable {
 	GCObject *gclist;
 } HTable;
 
-#define CR_VHTABLE	makevariant(CR_THTABLE, 1)
-
-#define ttishtab(v)	isott((v), CR_VHTABLE)
-#define htabvalue(v)	gco2ht(ovalue(v))
 
 
-/* set value to hashtable */
-#define setv2ht(ts,v,ht)	setv2o(ts,v,ht,HTable)
-
-/* set stack value to hashtable */
-#define setsv2ht(ts,sv,ht)	setv2s(ts,s2v(sv),ht)
-
-
-
-/* 
- * ---------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
  * OString 
- * ---------------------------------------------------------------------------
- */
+ * -------------------------------------------------------------------------- */
+
+#define CR_VSTRING	makevariant(CR_TSTRING, 0)
+
+#define ttisstr(v)	isott((v), CR_VSTRING)
+#define strvalue(v)	gco2str(oval(v))
+#define cstrvalue(v)	(strvalue(v)->bytes)
+
+
+/* set value to string */
+#define setv2s(ts,v,s)		setv2o(ts,v,s,OString)
+
+/* set stack value to string */
+#define setsv2s(ts,sv,s)	setv2s(ts,s2v(sv),s)
+
+
+/* bits for string 'bits' :) */
+#define STRHASHASH		(1<<0) /* string has hash */
+#define STRKEYWORD		(1<<1) /* string is keyword */
+#define STRVTABMETHOD		(1<<2) /* string is vtable method */
+
 
 typedef struct OString {
 	ObjectHeader;
@@ -181,76 +198,19 @@ typedef struct OString {
 } OString;
 
 
-#define CR_VSTRING	makevariant(CR_TSTRING, 0)
 
-#define ttisstr(v)	isott((v), CR_VSTRING)
-#define strvalue(v)	gco2str(ovalue(v))
-#define cstrvalue(v)	(strvalue(v)->bytes)
-
-
-/* set value to string */
-#define setv2s(ts,v,s)		setv2o(ts,v,s,OString)
-
-/* set stack value to string */
-#define setsv2s(ts,sv,s)	setv2s(ts,s2v(sv),s)
-
-
-/* check equality between string and string literal */
-#define streqlit(s,lit,l,h) \
-	((s)->len == (l) && (s)->hash == (h) && \
-	 memcmp((s)->bytes, (lit), (l)) == 0)
-
-
-/* size of string */
-#define sizes(s)	(sizeof(OString) + (s)->len + 1)
-
-
-/* bits for string 'bits' :) */
-#define STRHASHASH		(1<<0) /* string has hash */
-#define STRUSRINTERNED		(1<<1) /* string is user interned */
-#define STRINTERNED		(1<<2) /* string is interned */
-#define STRKEYWORD		(1<<3) /* string is keyword */
-#define STRVTMETHOD		(1<<4) /* string is vtable method */
-
-/* test 'bits' */
-#define hashash(s)		((s) && ((s)->bits & STRHASHASH))
-#define isusrinterned(s)	((s) && ((s)->bits & (STRUSRINTERNED | STRHASHASH)))
-#define isinterned(s)		((s) && ((s)->bits & (STRINTERNED | STRHASHASH)))
-#define iskeyword(s)		((s) && ((s)->bits & (STRHASHASH | STRKEYWORD)))
-#define isvtmethod(s)		((s) && ((s)->bits & (STRHASHASH | STRVTMETHOD)))
-
-
-
-/* 
- * ---------------------------------------------------------------------------
- * UValue  (upvalue)
- * ---------------------------------------------------------------------------
- */
-
-typedef struct UValue {
-	ObjectHeader;
-	union {
-		TValue *location; /* stack or 'closed' */
-		ptrdiff_t offset; /* when reallocating stack */
-	} v;
-	union {
-		struct { /* when open (parsing) */
-			struct UValue *next;
-			struct UValue *prev;
-		} open;
-		TValue value; /* value stored here when closed */
-	} u;
-} UValue;
-
+/* -------------------------------------------------------------------------
+ * UpVal
+ * -------------------------------------------------------------------------- */
 
 #define CR_VUVALUE	makevariant(CR_TUVALUE, 0)
 
 #define ttisuval(o)	isott((v), CR_VUVALUE)
-#define uvvalue(v)	gco2uv(ovalue(v))
+#define uvvalue(v)	gco2uv(oval(v))
 
 
 /* set value to upvalue */
-#define setv2uv(ts,v,uv)	setv2o(ts,v,uv,UValue)
+#define setv2uv(ts,v,uv)	setv2o(ts,v,uv,UpVal)
 
 /* set stack value to upvalue */
 #define setsv2uv(ts,sv,uv)	setv2uv(ts,s2v(sv),uv)
@@ -260,12 +220,46 @@ typedef struct UValue {
 #define uvisopen(uv)	((uv)->v.location != &(uv)->u.value)
 
 
+typedef struct UpVal {
+	ObjectHeader;
+	union {
+		TValue *location; /* stack or 'closed' */
+		ptrdiff_t offset; /* when reallocating stack */
+	} v;
+	union {
+		struct {
+			/* This is still a singly linked list,
+			 * the role of '**prev' is to easily
+			 * update the previous 'UpVal' 'next'
+			 * pointer when unlinking the open upvalue;
+			 * meaning that 'prev' points not to the 
+			 * previous 'UpVal' but to the previous 
+			 * 'UpVal' 'next' field. It avoids branching
+			 * as much as possible */
+			struct UpVal *next;
+			struct UpVal **prev;
+		} open;
+		TValue value; /* value stored here when closed */
+	} u;
+} UpVal;
 
-/*
- * ---------------------------------------------------------------------------
+
+
+/* -------------------------------------------------------------------------
  * Function
- * ---------------------------------------------------------------------------
- */
+ * -------------------------------------------------------------------------- */
+
+#define CR_VFUNCTION	makevariant(CR_TFUNCTION, 0)
+
+#define ttisfn(v)	isott((v), CR_VFUNCTION)
+#define fnval(v)	gco2fn(oval(v))
+
+
+/* set value to function */
+#define setv2fn(ts,v,fn)	setv2o(ts,v,fn,Function)
+
+/* set stack value to upvalue */
+#define setsv2fn(ts,sv,fn)	setv2fn(ts,s2v(sv),fn)
 
 
 /* upvalue variable debug information */
@@ -297,14 +291,16 @@ typedef struct LineInfo {
 	int line;
 } LineInfo;
 
-
 Vec(LineInfoVec, LineInfo);
 
 
 /* 'code' array */
 typedef ubyteVec InstructionVec;
 
+
+/* for nested function declarations */
 Vec(FunctionVec, struct Function);
+
 
 /* Cript function */
 typedef struct Function {
@@ -326,65 +322,42 @@ typedef struct Function {
 } Function;
 
 
-#define CR_VFUNCTION	makevariant(CR_TFUNCTION, 0)
 
-#define ttisfn(v)	isott((v), CR_VFUNCTION)
-#define fnvalue(v)	gco2fn(ovalue(v))
-
-
-/* set value to function */
-#define setv2fn(ts,v,fn)	setv2o(ts,v,fn,Function)
-
-/* set stack value to upvalue */
-#define setsv2fn(ts,sv,fn)	setv2fn(ts,s2v(sv),fn)
-
-
-
-/* 
- * ---------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
  * Closures
- * ---------------------------------------------------------------------------
- */
+ * -------------------------------------------------------------------------- */
 
-
-#define CR_VCRCL	makevariant(CR_TFUNCTION, 1) /* 'CriptClosure' */
+#define CR_VCRCL	makevariant(CR_TFUNCTION, 1) /* 'CrClosure' */
 #define CR_VCCL		makevariant(CR_TFUNCTION, 2) /* 'CClosure' */
 
 
-/* 'ClosureHeader' size */
-#define CLHEADERSIZE	(OBJHEADERSIZE + sizeof(int) + sizeof(GCObject*))
+#define ttiscrcl(v)		isott((v), CR_VCRCL)
+#define crclvalue(v)		(clvalue(v)->crc)
+
+/* set value to cript closure */
+#define setv2crcl(ts,v,crcl)		setv2o(ts,v,crcl,CrClosure)
+
+/* set stack value to cript closure */
+#define setsv2crcl(ts,sv,crcl)		setv2crcl(ts,s2v(sv),crcl)
 
 
 /* common closure header */
 #define ClosureHeader	ObjectHeader; int nupvalues; GCObject *gclist;
 
 
-typedef struct CriptClosure {
+typedef struct CrClosure {
 	ClosureHeader;
 	Function *fn;
-	UValue upvalue[];
-} CriptClosure;
+	UpVal upvalue[];
+} CrClosure;
 
-#define ttiscrcl(v)		isott((v), CR_VCRCL)
-#define crclvalue(v)		(clvalue(v)->crc)
 
-/* set value to cript closure */
-#define setv2crcl(ts,v,crcl)		setv2o(ts,v,crcl,CriptClosure)
-
-/* set stack value to cript closure */
-#define setsv2crcl(ts,sv,crcl)		setv2crcl(ts,s2v(sv),crcl)
-
-/* size of cript closure */
-#define sizecrcl(crcl) \
-	(sizeof(CriptClosure) + (crcl)->nupvalues * sizeof(UValue*))
+/* size of 'CrClosure' */
+#define sizeofcrcl(nup) \
+	(offsetof(CrClosure, upvalue) + ((nup) * sizeof(UpVal)))
 
 
 
-typedef struct {
-	ClosureHeader;
-	cr_cfunc fn;
-	TValue upvalue[];
-} CClosure;
 
 #define ttisccl(v)		isott((v), CR_VCCL)
 #define cclvalue(v)		(clvalue(v)->cc)
@@ -395,19 +368,23 @@ typedef struct {
 /* set stack value to C closure */
 #define setsv2ccl(ts,sv,ccl)	setv2ccl(ts,s2v(sv),ccl)
 
-/* size of C closure */
-#define sizeccl(ccl) \
-	(sizeof(CClosure) + (ccl)->nupvalues * sizeof(TValue))
-
-/* 'cl' is not a 'CriptClosure' */
+/* 'cl' is not a 'CrClosure' */
 #define noCriptclosure(cl)	((cl) == NULL || (cl)->cc.ott != CR_VCRCL)
 
 
+typedef struct {
+	ClosureHeader;
+	cr_cfunc fn;
+	TValue upvalue[];
+} CClosure;
 
-typedef union Closure {
-	CClosure cc;
-	CriptClosure crc;
-} Closure;
+
+/* size of 'CClosure' */
+#define sizeofccl(nup) \
+	(offsetof(CClosure, upvalue) + ((nup) * sizeof(TValue)))
+
+
+
 
 /* set value to closure */
 #define setv2cl(ts,v,cl)	setv2o(ts,v,cl,Closure)
@@ -416,16 +393,32 @@ typedef union Closure {
 #define setsv2cl(ts,sv,cl)	setv2cl(ts,s2v(sv),cl)
 
 #define ttiscl(v)	(ttisccl(v) || ttiscrcl(v))
-#define clvalue(v)	gco2cl(ovalue(v))
+#define clvalue(v)	gco2cl(oval(v))
+
+
+typedef union Closure {
+	CClosure cc;
+	CrClosure crc;
+} Closure;
 
 
 
-
-/* 
- * ---------------------------------------------------------------------------
+/* --------------------------------------------------------------------------
  * OClass 
- * ---------------------------------------------------------------------------
- */
+ * -------------------------------------------------------------------------- */
+
+#define CR_VCLASS	makevariant(CR_TCLASS, 0)
+
+#define ttiscls(v)	isott((v), CR_VCLASS)
+#define clsvalue(v)	gco2cls(oval(v))
+
+
+/* set value to class */
+#define setv2cls(ts,v,cls)	setv2o(ts,v,cls,OClass)
+
+/* set stack value to class */
+#define setsv2cls(ts,sv,cls)	setv2cls(ts,s2v(sv),cls)
+
 
 typedef struct OClass {
 	ObjectHeader;
@@ -436,25 +429,22 @@ typedef struct OClass {
 } OClass;
 
 
-#define CR_VCLASS	makevariant(CR_TCLASS, 0)
 
-#define ttiscls(v)	isott((v), CR_VCLASS)
-#define clsvalue(v)	gco2cls(ovalue(v))
-
-
-/* set value to class */
-#define setv2cls(ts,v,cls)	setv2o(ts,v,cls,OClass)
-
-/* set stack value to class */
-#define setsv2cls(ts,sv,cls)	setv2cls(ts,s2v(sv),cls)
-
-
-
-/*
- * ---------------------------------------------------------------------------
+/* --------------------------------------------------------------------------
  *  Instance
- * ---------------------------------------------------------------------------
- */
+ * -------------------------------------------------------------------------- */
+
+#define CR_VINSTANCE	makevariant(CR_TINSTANCE, 0)
+
+#define ttisins(v)	isott((v), CR_VINSTANCE)
+#define insvalue(v)	gco2ins(oval(v))
+
+
+/* set value to instance */
+#define setv2ins(ts,v,ins)	setv2o(ts,v,ins,Instance)
+
+/* set stack value to instance */
+#define setsv2ins(ts,sv,ins)	setv2ins(ts,s2v(sv),ins)
 
 
 /* 'OClass' instance */
@@ -465,37 +455,15 @@ typedef struct Instance {
 } Instance;
 
 
-#define CR_VINSTANCE	makevariant(CR_TINSTANCE, 0)
 
-#define ttisins(v)	isott((v), CR_VINSTANCE)
-#define insvalue(v)	gco2ins(ovalue(v))
-
-
-/* set value to instance */
-#define setv2ins(ts,v,ins)	setv2o(ts,v,ins,Instance)
-
-/* set stack value to instance */
-#define setsv2ins(ts,sv,ins)	setv2ins(ts,s2v(sv),ins)
-
-
-
-/*
- * ---------------------------------------------------------------------------
+/* --------------------------------------------------------------------------
  *  InstanceMethod
- * ---------------------------------------------------------------------------
- */
-
-/* method bound to 'receiver' (Instance) */
-typedef struct InstanceMethod {
-	ObjectHeader;
-	Instance *receiver;
-	GCObject *method;
-} InstanceMethod;
+ * --------------------------------------------------------------------------- */
 
 #define CR_VMETHOD	makevariant(3, CR_TFUNCTION)
 
 #define ttisim(v)	isott((v), CR_VMETHOD)
-#define imvalue(v)	gco2im(ovalue(v))
+#define imvalue(v)	gco2im(oval(v))
 
 
 /* set value to instance method */
@@ -506,11 +474,31 @@ typedef struct InstanceMethod {
 
 
 
-/*
- * ---------------------------------------------------------------------------
+/* method bound to 'receiver' (Instance) */
+typedef struct InstanceMethod {
+	ObjectHeader;
+	Instance *receiver;
+	GCObject *method;
+} InstanceMethod;
+
+
+
+/* --------------------------------------------------------------------------
  *  UserData
- * ---------------------------------------------------------------------------
- */
+ * -------------------------------------------------------------------------- */
+
+#define CR_VUDATA	makevariant(CR_TUDATA, 0)
+
+#define ttisud(v)	isott(v, CR_VUDATA)
+#define udvalue(v)	gco2ud(oval(v))
+
+
+/* set value to instance method */
+#define setv2ud(ts,v,im)		setv2o(ts,v,im,InstanceMethod)
+
+/* set stack value to instance method */
+#define setsv2im(ts,sv,im)		setv2im(ts,s2v(sv),im)
+
 
 /* userdata */
 typedef struct UserData {
@@ -521,29 +509,46 @@ typedef struct UserData {
 	VMT vtable;
 	GCObject *gclist;
 	TValue uv[]; /* user values */
-	/* 'UserData' memory is here, after 'uv' */
+	/* 'UserData' memory starts here */
 } UserData;
 
-#define CR_VUDATA	makevariant(CR_TUDATA, 0)
 
-#define ttisud(v)	isott(v, CR_VUDATA)
-#define udvalue(v)	gco2ud(ovalue(v))
+/*
+ * 'UserData' without user values, meaning 'uv' is empty
+ * ('nuv' == 0). This is used when allocating 'UserData'
+ * to properly calculate offset of user memory because
+ * 'uv' is a flexible array member.
+ * Internally Cript only uses 'UserData' to access
+ * fields and it takes care to avoid using 'uv' and
+ * 'gclist' fields when 'nuv' is 0.
+ * Additionally GC marks 'UserData' black in case 'nuv'
+ * is 0, to avoid using the 'gclist' field.
+ */
+typedef struct EmptyUserData {
+	ObjectHeader;
+	cr_ubyte vmtempty; /* true if 'vtable' is empty */
+	int nuv; /* number of 'uservalues' */
+	size_t size; /* size of 'UserData' memory in bytes */
+	VMT vtable;
+	union {CRI_MAXALIGN} usermem;
+	/* 'UserData' memory starts here */
+} EmptyUserData;
 
 
-/* set value to instance method */
-#define setv2ud(ts,v,im)		setv2o(ts,v,im,InstanceMethod)
+/* offset in 'UserData' where user memory begins */ 
+#define udmemoffset(nuv) \
+	((nuv) == 0 \
+		? offsetof(EmptyUserData, usermem) \
+		: offsetof(UserData, uv) + ((nuv) * sizeof(TValue)))
 
-/* set stack value to instance method */
-#define setsv2im(ts,sv,im)		setv2im(ts,s2v(sv),im)
+
+/* size of 'UserData' */
+#define sizeofud(nuv, size)	(udmemoffset(nuv) + (size))
 
  /* ------------------------------------------------------------------------ */
 
 
 
-#define cr_object_newcstring(ts,str) \
-	cr_object_newstring(ts, str, strlen(str))
-
-GCObject *cr_object_new(cr_State *ts, size_t size, cr_ubyte ott);
 void cr_object_sourceid(char *adest, const char *src, size_t len);
 int cr_object_strtomt(cr_State *ts, OString *id);
 OString *cr_object_newstring(cr_State *ts, const char *chars, size_t len);
@@ -554,10 +559,10 @@ const char *cr_object_pushvfstring(cr_State *ts, const char *fmt, va_list argp);
 const char *cr_object_pushfstring(cr_State *ts, const char *fmt, ...);
 CClosure *cr_object_newcclosure(cr_State *ts, cr_cfunc fn, int nupvalues);
 Function *cr_object_newfunction(cr_State *ts);;
-CriptClosure *cr_object_newcrclosure(cr_State *ts, Function *fn, int nupvalues);
-UValue *cr_object_newuvalue(cr_State *ts, TValue *vp);
+CrClosure *cr_object_newcrclosure(cr_State *ts, Function *fn, int nupvalues);
+UpVal *cr_object_newuvalue(cr_State *ts, TValue *vp);
 OClass *cr_object_newclass(cr_State *ts, OString *id);
 Instance *cr_object_newinstance(cr_State *ts, OClass *cls);
-InstanceMethod *cr_object_newinstancemethod(cr_State *ts, Instance *receiver, CriptClosure *method);
+InstanceMethod *cr_object_newinstancemethod(cr_State *ts, Instance *receiver, CrClosure *method);
 
 #endif

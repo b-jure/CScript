@@ -63,8 +63,6 @@ int cr_vm_reallocstack(cr_State *ts, int size, int raiseerr);
 void cr_vm_shrinkstack(cr_State *ts);
 void cr_vm_inctop(cr_State *ts);
 
-void cr_vm_unlinkupval(UValue *uv);
-
 int cr_vm_pcall(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t oldtop);
 int cr_vm_call(cr_State *ts, SPtr fn, int nreturns);
 

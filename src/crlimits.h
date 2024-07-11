@@ -317,22 +317,22 @@ typedef cr_ubyte Instruction;
 
 /* @cri_nummod - modulo 'a - floor(a/b)*b'. */
 #define cri_nummod(ts,a,b,m) \
-	{ (m)=fmod((a),(b)); \
-	  if (((m) > 0) ? (b)<0 : ((m)<0 && (b)>0)) (m)+=(b); }
+	{ (m) = cr_mathop(fmod)(a, b); \
+	  if (((m) > 0) ? (b)<0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
 /* @cri_numdiv - float division. */
 #ifndef cri_numdiv
-#define cri_numdiv(ts, a, b)	((a)/(b))
+#define cri_numdiv(ts, a, b)	((a) / (b))
 #endif
 
 /* @cri_numidiv - floor division (or division between integers). */
 #ifndef cri_numidiv
-#define cri_numidiv(ts, a, b)	(floor(cri_numdiv(a, b))
+#define cri_numidiv(ts, a, b)	(cr_mathop(floor)(cri_numdiv(a, b)))
 #endif
 
 /* @cri_numpow - exponentiation. */
 #ifndef cri_numpow
-#define cri_numpow(ts, a, b)	((b)==2 ? (a)*(a) : pow((a),(b)))
+#define cri_numpow(ts, a, b)	((b) == 2 ? (a)*(a) : cr_mathop(pow)(a, b))
 #endif
 
 /* 
@@ -342,9 +342,9 @@ typedef cr_ubyte Instruction;
  * @cri_numunm - negation.
  */
 #ifndef cri_numadd
-#define cri_numadd(ts, a, b) 	((a)+(b))
-#define cri_numsub(ts, a, b) 	((a)-(b))
-#define cri_nummul(ts, a, b) 	((a)*(b))
+#define cri_numadd(ts, a, b) 	((a) + (b))
+#define cri_numsub(ts, a, b) 	((a) - (b))
+#define cri_nummul(ts, a, b) 	((a) * (b))
 #define cri_numunm(ts, a)	(-(a))
 #endif
 
@@ -357,17 +357,23 @@ typedef cr_ubyte Instruction;
  * @cri_numge - ordering greater equal.
  */
 #ifndef cri_numeq
-#define cri_numeq(a, b)		((a)==(b))
-#define cri_numne(a, b) 	(!cri_numeq(a,b))
-#define cri_numlt(a, b) 	((a)<(b))
-#define cri_numle(a, b) 	((a)<=(b))
-#define cri_numgt(a, b) 	((a)>(b))
-#define cri_numge(a, b) 	((a)>=(b))
+#define cri_numeq(a, b)		((a) == (b))
+#define cri_numne(a, b) 	(!cri_numeq(a, b))
+#define cri_numlt(a, b) 	((a) < (b))
+#define cri_numle(a, b) 	((a) <= (b))
+#define cri_numgt(a, b) 	((a) > (b))
+#define cri_numge(a, b) 	((a) >= (b))
 #endif
 
 /* @cri_numisnan - check if number is 'NaN'. */
 #ifndef cri_numisnan
-#define cri_numisnan(a)		(!cri_numeq(a,a))
+#define cri_numisnan(a)		(!cri_numeq(a, a))
+#endif
+
+
+/* @cri_numnot - logical complement. */
+#ifndef cri_numnot
+#define cri_numnot(ts, a)	(!(a))
 #endif
 
 

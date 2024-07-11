@@ -253,7 +253,7 @@ static void initfs(FunctionState *fs, Lexer *lx, CFInfo *cflow, Scope *s)
 	}
 }
 
-CriptClosure *freefs(FunctionState *fs)
+CrClosure *freefs(FunctionState *fs)
 {
 	cr_State *ts;
 
@@ -341,7 +341,7 @@ static Function *parse_end(FunctionState *fs)
 // Additionally parser only registers compile-time errors but it does not
 // call the usual 'runerror' [@err.h], this ensures that all of the
 // compile-time errors will be reported (exhaustive parser).
-CriptClosure *parse(cr_State *ts, BuffReader *br, const char *name, int isingscope)
+CrClosure *parse(cr_State *ts, BuffReader *br, const char *name, int isingscope)
 {
 	Scope gscope, lscope;
 	FunctionState fs;
@@ -364,7 +364,7 @@ CriptClosure *parse(cr_State *ts, BuffReader *br, const char *name, int isingsco
 	freefs(&fs);
 	if (cr_likely(!comperr)) {
 		push(ts, OBJ_VAL(fn)); // prevent 'fn' from getting collected
-		CriptClosure *closure = OClosure_new(ts, fn);
+		CrClosure *closure = OClosure_new(ts, fn);
 		pop(ts); // 'fn'
 		push(ts, OBJ_VAL(closure));
 		return closure;

@@ -39,10 +39,10 @@
 #define COLORBITS	bit2mask(WHITEBITS, BLACKBIT)
 
 /* test 'mark' bits */
-#define iswhite(o)	testbits(rawomark(o), WHITEBITS)
-#define isgray(o)	(!testbits(rawomark(o), COLORBITS))
-#define isblack(o)	testbit(rawomark(o), BLACKBIT)
-#define isfin(o)	testbit(rawomark(o), FINBIT)
+#define iswhite(o)	testbits(omark_(o), WHITEBITS)
+#define isgray(o)	(!testbits(omark_(o), COLORBITS))
+#define isblack(o)	testbit(omark_(o), BLACKBIT)
+#define isfin(o)	testbit(omark_(o), FINBIT)
 
 /* get the current white bit */
 #define cr_gc_white(gc)		((gc)->whitebit & WHITEBITS)
@@ -51,7 +51,11 @@
 #define whitexor(gc)		((gc)->whitebit ^ WHITEBITS)
 
 /* mark object to be finalized */
-#define markfin(o)	setbit(rawomark(o), FINBIT)
+#define markfin(o)		setbit(omark_(o), FINBIT)
+
+
+/* object is dead if xor (flipped) white bit is set */
+#define isdead(gc, o)		testbits(whitexor(gc), omark_(o))
 
 
 
@@ -136,7 +140,7 @@
  * 'v' (pointed to value) is object.
  */
 #define cr_gc_barrierforward(ts,r,v) \
-	(ttiso(v) ? cr_gc_objbarrierforward(ts,r,ovalue(v)) : (void)(0))
+	(ttiso(v) ? cr_gc_objbarrierforward(ts,r,oval(v)) : (void)(0))
 
 /*
  * Same as 'cr_gc_barrierback_' but ensures that it is only
@@ -151,12 +155,18 @@
  * 'v' (pointed to value) is object.
  */
 #define cr_gc_barrierback(ts,r,v) \
-	(ttiso(v) ? cr_gc_objbarrierback(ts,r,ovalue(v)) : (void)(0))
+	(ttiso(v) ? cr_gc_objbarrierback(ts,r,oval(v)) : (void)(0))
+
 
 
 /* to allow a maximum value of up to 1023 in a 'cr_ubyte' */
 #define getgcparam(p)		((p) << 2)
 #define setgcparam(p,v)		((p) = (v) >> 2)
+
+
+/* allocate new GC object */
+#define cr_gc_new(ts,s,tt,t)	cast(t *, cr_gc_new_(ts, s, tt))
+
 
 
 /* garbage collector parameters and state */
@@ -186,6 +196,7 @@ typedef struct GC {
 
 
 void cr_gc_init(GC *gc);
+GCObject *cr_gc_new_(cr_State *ts, size_t size, cr_ubyte ott);
 void cf_gc_step(cr_State *ts);
 void cr_gc_full(cr_State *ts, int isemergency);
 void cr_gc_rununtilstate(cr_State *ts, int statemask);

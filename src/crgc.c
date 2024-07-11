@@ -21,33 +21,34 @@
 #include "crobject.h"
 #include "crstate.h"
 #include "crhashtable.h"
+#include "crstring.h"
 #include "crvm.h"
 
 
 /* mark object as current white */
 #define markwhite(gc,o) \
-	(rawomark(o) = (rawomark(o) & ~COLORBITS) | cr_gc_white(gc))
+	(omark_(o) = (omark_(o) & ~COLORBITS) | cr_gc_white(gc))
 
 /* mark object as black */
 #define markblack(o) \
-	(rawomark(o) = (rawomark(o) & ~COLORBITS) | BLACKBIT)
+	(omark_(o) = (omark_(o) & ~COLORBITS) | BLACKBIT)
 
 /* mark object as gray */
-#define markgray(o)	resetbits(rawomark(o), COLORBITS)
+#define markgray(o)	resetbits(omark_(o), COLORBITS)
 
 
 
 /* check if 'TValue' is object and white */
-#define valiswhite(v)		(ttiso(v) && iswhite(ovalue(v)))
+#define valiswhite(v)		(ttiso(v) && iswhite(oval(v)))
 
 /* check if 'HTable' key is object and white */
-#define keyiswhite(n)		(keyisobj(n) && iswhite(keyovalue(n)))
+#define keyiswhite(n)		(keyisobj(n) && iswhite(keyoval(n)))
 
 
 
 /* 'markobject_' but only if 'v' is object and white */
 #define markvalue(gc,v) \
-	(valiswhite(v) ? markobject_(gc, ovalue(v)) : (void)0)
+	(valiswhite(v) ? markobject_(gc, oval(v)) : (void)0)
 
 /* 'markobject_' but only if 'o' is non-NULL */
 #define markobjectcheck(gc,o)	((o) ? markobject_(gc, obj2gco(o)) : (void)0)
@@ -57,7 +58,7 @@
 
 /* 'markobject' but only if key value is object and white */
 #define markkey(gc, n) \
-	(keyiswhite(n) ? markobject_(gc, keyovalue(n)) : (void)0)
+	(keyiswhite(n) ? markobject_(gc, keyoval(n)) : (void)0)
 
 
 
@@ -121,6 +122,22 @@ void cr_gc_init(GC *gc)
 }
 
 
+/* create new white object and append it to 'objects' */
+GCObject *cr_gc_new(cr_State *ts, size_t size, cr_ubyte ott)
+{
+	GCObject *o;
+	GC *gc;
+
+	gc = &GS(ts)->gc;
+	o = cast(GCObject*, cr_mem_malloc(ts, size));
+	ott_(o) = ott;
+	omark_(o) = cr_gc_white(gc);
+	onext_(o) = gc->objects;
+	gc->objects = o;
+	return o;
+}
+
+
 void cr_gc_fix(cr_State *ts, GCObject *o)
 {
 	GC *gc;
@@ -160,7 +177,7 @@ static GCObject **getgclist(GCObject *o)
 {
 	UserData *ud;
 
-	switch (rawott(o)) {
+	switch (ott_(o)) {
 	case CR_VFUNCTION: return &gco2fn(o)->gclist;
 	case CR_VCRCL: return &gco2crcl(o)->gclist;
 	case CR_VCCL: return &gco2ccl(o)->gclist;
@@ -236,13 +253,13 @@ void cr_gc_barrierback_(cr_State *ts, GCObject *r)
  */
 static void markobject_(GC *gc, GCObject *o)
 {
-	UValue *uv;
+	UpVal *uv;
 	UserData *ud;
 	Instance *ins;
 	InstanceMethod *im;
 
 	cr_assert(iswhite(o));
-	switch(rawott(o)) {
+	switch(ott_(o)) {
 	case CR_VSTRING:
 		markblack(o);
 		break;
@@ -341,8 +358,8 @@ static cr_mem markcclosure(GC *gc, CClosure *ccl)
 }
 
 
-/* mark 'CriptClosure' */
-static cr_mem markcriptclosure(GC *gc, CriptClosure *crcl)
+/* mark 'CrClosure' */
+static cr_mem markcriptclosure(GC *gc, CrClosure *crcl)
 {
 	int i;
 
@@ -399,7 +416,7 @@ static cr_mem markuserdata(GC *gc, UserData *ud)
  */
 static cr_mem markthread(GState *gs, cr_State *ts)
 {
-	UValue *uv;
+	UpVal *uv;
 	SPtr sp;
 	GC *gc;
 	int i;
@@ -413,10 +430,10 @@ static cr_mem markthread(GState *gs, cr_State *ts)
 		return 1;
 	for (; sp < ts->stacktop.p; sp++)
 		markvalue(gc, s2v(sp));
-	for (uv = ts->openuv; uv; uv = ts->openuv->u.open.next)
+	for (uv = ts->openupval; uv; uv = ts->openupval->u.open.next)
 		markobject(gc, uv);
 	/* 'markopenupvalues' might of removed thread from 'thwouv' list */
-	if (gc->state == GCSatomic && !isinthwouv(ts) && ts->openuv != NULL) {
+	if (gc->state == GCSatomic && !isinthwouv(ts) && ts->openupval != NULL) {
 		ts->thwouv = gs->thwouv;
 		gs->thwouv = ts;
 	}
@@ -439,17 +456,17 @@ static cr_mem markopenupvalues(GState *gs)
 {
 	cr_State *th;
 	cr_State **pp;
-	UValue *uv;
+	UpVal *uv;
 	int work;
 
 	work = 0;
 	pp = &gs->thwouv;
 	while ((th = *pp) != NULL) {
 		work++;
-		if (iswhite(th) || th->openuv == NULL) {
+		if (iswhite(th) || th->openupval == NULL) {
 			*pp = th->thwouv;
 			th->thwouv = th;
-			uv = th->openuv;
+			uv = th->openupval;
 			for (; uv; uv = uv->u.open.next) {
 				work++;
 				/* if visited then keep values alive */
@@ -474,7 +491,7 @@ static cr_mem propagate(GState *gs)
 	o = gs->gc.graylist;
 	markblack(o);
 	gs->gc.graylist = *getgclist(o);
-	switch(rawott(o)) {
+	switch(ott_(o)) {
 	case CR_VUDATA: return markuserdata(&gs->gc, gco2ud(o));
 	case CR_VHTABLE: return markhtable(&gs->gc, gco2ht(o));
 	case CR_VFUNCTION: return markfunction(&gs->gc, gco2fn(o));
@@ -511,11 +528,11 @@ static void freeobject(cr_State *ts, GCObject *o)
 	Instance *ins;
 	Function *fn;
 	OClass *cls;
-	UValue *upval;
+	UpVal *upval;
 
-	switch (rawott(o)) {
+	switch (ott_(o)) {
 		case CR_VSTRING:
-			cr_mem_free(ts, o, sizes((OString*)o));
+			cr_mem_free(ts, o, sizeofstring(gco2str(o)));
 			break;
 		case CR_VFUNCTION:
 			fn = gco2fn(o);
@@ -531,7 +548,7 @@ static void freeobject(cr_State *ts, GCObject *o)
 			upval = gco2uv(o);
 			if (uvisopen(upval))
 				cr_vm_unlinkupval(upval);
-			cr_mem_free(ts, o, sizeof(UValue));
+			cr_mem_free(ts, o, sizeof(UpVal));
 			break;
 		case CR_VCRCL:
 			cr_mem_free(ts, o, sizecrcl(gco2crcl(o)));
@@ -579,12 +596,12 @@ static GCObject **sweeplist(cr_State *ts, GCObject **l, int nobjects, int *nswee
 	whitexor = whitexor(&gs->gc);
 	for (i = 0; i < nobjects && *l; i++) {
 		o = *l;
-		mark = rawomark(o);
+		mark = omark_(o);
 		if (whitexor & mark) { /* collect ? */
 			*l = o->next;
 			freeobject(ts, o);
 		} else { /* mark white */
-			rawomark(o) = cast_ubyte((mark & ~COLORBITS) | white);
+			omark_(o) = cast_ubyte((mark & ~COLORBITS) | white);
 			l = &o->next;
 		}
 	}
@@ -687,8 +704,8 @@ static void callfin(cr_State *ts)
 	if ((m = cr_vtable_get(ts, &v, CR_MGC))) {
 		oldstopped = gc->stopped;
 		gc->stopped = GCSTP; /* prevent recursive GC calls */
-		setsv(ts, ts->stacktop.p++, m);
-		setsv(ts, ts->stacktop.p++, &v);
+		setsval(ts, ts->stacktop.p++, m);
+		setsval(ts, ts->stacktop.p++, &v);
 		oldtop = savestack(ts, ts->stacktop.p - 2);
 		ts->aframe->cfstatus |= CFST_FIN;
 		status = cr_vm_pcall(ts, protectedfinalizer, NULL, oldtop);

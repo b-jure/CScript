@@ -47,7 +47,7 @@ CRI_FUNC int cr_htable_intern(cr_State *ts, const char *string);
 CRI_FUNC int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *val);
 CRI_FUNC int cr_htable_remove(HTable *tab, const TValue *k);
 CRI_FUNC void cr_htable_removedirect(HTable *tab, Node *slot);
-CRI_FUNC OString *cr_htable_getraw(HTable *tab, const char *str, size_t len, unsigned int hash);
+CRI_FUNC OString *cr_htable_getstring(HTable *tab, const char *str, size_t len, unsigned int hash);
 CRI_FUNC int cr_htable_get(HTable *tab, const TValue *key, TValue *o);
 CRI_FUNC void cr_htable_free(cr_State *ts, HTable *ht);
 

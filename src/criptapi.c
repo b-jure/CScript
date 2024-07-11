@@ -1046,7 +1046,7 @@ CR_API cr_ubyte cr_setfield(cr_State *ts, int idx, const char *field)
 static cr_inline Value *getupval(Value fn, int n)
 {
 	if (isclosureobj(fn)) { // cript closure ?
-		CriptClosure *closure = asclosure(fn);
+		CrClosure *closure = asclosure(fn);
 		if (cast_uint(n) > closure->fn->p.upvalc - 1)
 			return NULL;
 		return closure->upvalue[n]->location;

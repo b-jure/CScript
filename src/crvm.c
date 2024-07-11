@@ -47,7 +47,7 @@
 static void savestackptrs(cr_State *ts)
 {
 	SIndex *si;
-	UValue *uv;
+	UpVal *uv;
 	CallFrame *cf;
 	int i;
 
@@ -57,15 +57,7 @@ static void savestackptrs(cr_State *ts)
 		cf->callee.offset = savestack(ts, cf->callee.p);
 		cf->top.offset = savestack(ts, cf->top.p);
 	}
-	for (i = 0; i < ts->callstart.len; i++) {
-		si = &ts->callstart.ptr[i];
-		si->offset = savestack(ts, si->p);
-	}
-	for (i = 0; i < ts->retstart.len; i++) {
-		si = &ts->retstart.ptr[i];
-		si->offset = savestack(ts, si->p);
-	}
-	for (uv = ts->openuv; uv != NULL; uv = uv->u.open.next)
+	for (uv = ts->openupval; uv != NULL; uv = uv->u.open.next)
 		uv->v.offset = savestack(ts, uv->v.location);
 	ts->tbclist.offset = savestack(ts, ts->tbclist.p);
 }
@@ -75,7 +67,7 @@ static void savestackptrs(cr_State *ts)
 static void restorestackptrs(cr_State *ts)
 {
 	SIndex *si;
-	UValue *uv;
+	UpVal *uv;
 	CallFrame *cf;
 	int i;
 
@@ -85,15 +77,7 @@ static void restorestackptrs(cr_State *ts)
 		cf->callee.p = restorestack(ts, cf->callee.offset);
 		cf->top.p = restorestack(ts, cf->top.offset);
 	}
-	for (i = 0; i < ts->callstart.len; i++) {
-		si = &ts->callstart.ptr[i];
-		si->p = restorestack(ts, si->offset);
-	}
-	for (i = 0; i < ts->retstart.len; i++) {
-		si = &ts->retstart.ptr[i];
-		si->p = restorestack(ts, si->offset);
-	}
-	for (uv = ts->openuv; uv != NULL; uv = uv->u.open.next)
+	for (uv = ts->openupval; uv != NULL; uv = uv->u.open.next)
 		uv->v.location = s2v(restorestack(ts, uv->v.offset));
 	ts->tbclist.p = restorestack(ts, ts->tbclist.offset);
 }
@@ -120,14 +104,14 @@ int cr_vm_reallocstack(cr_State *ts, int size, int raiseerr)
 	if (cr_unlikely(newstack == NULL)) {
 		restorestackptrs(ts);
 		if (raiseerr)
-			cr_assert("memory error");
+			cr_debug_throw(ts, CR_ERRMEM);
 		return 0;
 	}
 	restorestackptrs(ts);
 	ts->stack.p = newstack;
 	ts->stackend.p = newstack + size;
 	for (i = osize + EXTRA_STACK; i < size + EXTRA_STACK; i++)
-		setnilvalue(s2v(newstack + i));
+		setnilval(s2v(newstack + i));
 	return 1;
 }
 
@@ -143,7 +127,7 @@ int cr_ts_growstack(cr_State *ts, int n, int raiseerr)
 	if (cr_unlikely(size > CRI_MAXSTACK)) { /* overflowed already ? */
 		cr_assert(size == OVERFLOWSTACKSIZE);
 		if (raiseerr)
-			cr_assert(0 && "errerror");
+			cr_debug_throw(ts, CR_ERRERROR);
 		return 0;
 	}
 	if (cr_unlikely(n > CRI_MAXSTACK)) {
@@ -158,7 +142,7 @@ int cr_ts_growstack(cr_State *ts, int n, int raiseerr)
 	}
 	cr_vm_reallocstack(ts, OVERFLOWSTACKSIZE, raiseerr);
 	if (raiseerr)
-		cr_assert(0 && "stack overflow");
+		cr_debug_runerror(ts, "stack overflow");
 	return 0;
 }
 
@@ -214,50 +198,6 @@ void cr_ts_inctop(cr_State *ts)
 }
 
 
-/* 
- * Integer division; handles division by 0 and possible
- * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
- */
-cr_integer cr_ts_div(cr_State *ts, cr_integer x, cr_integer y)
-{
-	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* y == '0' or '-1' */
-		if (y == 0)
-			cr_debug_runerror(ts, "division by 0");
-		return cr_intop(-, 0, x);
-	}
-	return (x / y);
-}
-
-
-/*
- * Integer modulus; handles modulo by 0 and overflow
- * as explained in 'cr_vm_div()'.
- */
-cr_integer cr_ts_mod(cr_State *ts, cr_integer x, cr_integer y) 
-{
-	cr_integer r;
-
-	if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) {
-		if (y == 0)
-			cr_debug_runerror(ts, "attempt to x%%0");
-		return 0;
-	}
-	cri_nummod(ts, x, y, r);
-	return r;
-}
-
-
-/* floating point modulus */
-cr_number cr_ts_modnum(cr_State *ts, cr_number x, cr_number y)
-{
-	cr_number r;
-	cri_nummod(ts, x, y, r);
-	return r;
-}
-
-
-
-
 /* raw property get */
 cr_sinline int getproperty(cr_State *ts, Instance *ins, TValue *k, TValue *v, int field)
 {
@@ -290,11 +230,11 @@ static void setvtmethodstack(cr_State *ts, SPtr callee, const TValue *ins,
 
 	arity = vtmi(mt)->arity;
 	cr_assert(arity <= 2);
-	setsv(ts, callee, &newovalue(m)); /* method */
-	setsv(ts, callee + 1, ins); /* 'self' */
+	setsval(ts, callee, &newoval(m)); /* method */
+	setsval(ts, callee + 1, ins); /* 'self' */
 	for (i = 0; i < arity; i++) { /* args */
 		arg = s2v(callee - arity + i);
-		setsv(ts, callee + 2 + i, arg);
+		setsval(ts, callee + 2 + i, arg);
 	}
 	ts->stacktop.p = callee + arity + 2; /* assume 'EXTRA_STACK' */
 }
@@ -492,7 +432,7 @@ static CallFrame *precall(cr_State *ts, Value callee, int32_t argc, int32_t retc
 	FnInfo *p = NULL;
 	CallFrame *frame = &ts->frames[ts->fc];
 	if (!iscfunction(callee)) {
-		CriptClosure *closure = asclosure(callee);
+		CrClosure *closure = asclosure(callee);
 		Function *fn = closure->fn;
 		p = &fn->p;
 		frame->closure = closure;
@@ -1139,7 +1079,7 @@ l_set_local:;
 			CASE(OP_CLOSURE)
 			{
 				Function *fn = asfn(READ_CONSTANT());
-				CriptClosure *closure = OClosure_new(ts, fn);
+				CrClosure *closure = OClosure_new(ts, fn);
 				push(ts, OBJ_VAL(closure));
 				for (uint32_t i = 0; i < closure->fn->p.upvalc; i++) {
 					cr_ubyte local = READ_BYTE();
@@ -1343,7 +1283,7 @@ void interpret(cr_State *ts, const char *source, const char *path)
 {
 	TODO("Refactor")
 	Value name = OBJ_VAL(OString_new(ts, path, strlen(path)));
-	CriptClosure *closure = NULL; // TODO: compile(ts, source, name, true);
+	CrClosure *closure = NULL; // TODO: compile(ts, source, name, true);
 	if (closure == NULL)
 		printandpanic(ts);
 	cr_pcall(ts, 0, 0);

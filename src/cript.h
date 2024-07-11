@@ -162,8 +162,14 @@ CR_API const void      *cr_getpointer(cr_State *ts, int idx); // TODO
 #define CR_OPPOW	5
 #define CR_OPNOT	6
 #define CR_OPUMIN	7
+#define CR_OPBSHL	8
+#define CR_OPBSHR	9
+#define CR_OPBNOT	10
+#define CR_OPBAND	11
+#define CR_OPBOR	12
+#define CR_OPBXOR	13
 
-#define CR_NUMARITH	8
+#define CR_NUMARITH	14
 
 CR_API void	cr_arith(cr_State *ts, int op);
 

@@ -54,7 +54,7 @@ HTable *cr_htable_new(cr_State *ts)
 {
 	HTable *ht;
 
-	ht = newgco(ts, 0, CR_VHTABLE, HTable);
+	ht = cr_gc_new(ts, sizeof(HTable), CR_VHTABLE, HTable);
 	memset(ht + OBJHEADERSIZE, 0, sizeof(HTable) - OBJHEADERSIZE);
 	return ht;
 }
@@ -86,14 +86,14 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 		case CR_VFALSE:
 			return cast_node(hashslot(mem, cr_hh_boolean(0), size));
 		case CR_VNUMINT:
-			return cast_node(hashslot(mem, cr_hh_integer(ivalue(k)), size));
+			return cast_node(hashslot(mem, cr_hh_integer(ival(k)), size));
 		case CR_VNUMFLT:
-			return cast_node(hashslot(mem, cr_hash_number(fvalue(k)), size));
+			return cast_node(hashslot(mem, cr_hash_number(fval(k)), size));
 		case CR_VLUDATA:
-			p = pvalue(k);
+			p = pval(k);
 			return cast_node(hashslot(mem, cr_hh_pointer(p), size));
 		case CR_VCFUNCTION:
-			f = cfvalue(k);
+			f = cfval(k);
 			return cast_node(hashslot(mem, cr_hh_pointer(p), size));
 		case CR_VSTRING:
 			str = strvalue(k);
@@ -101,7 +101,7 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 			return cast_node(hashslot(mem, str->hash, size));
 		default:
 			cr_assert(!ttisnil(k) && ttiso(k));
-			return cast_node(hashslot(mem, cr_hh_pointer(ovalue(k)), size));
+			return cast_node(hashslot(mem, cr_hh_pointer(oval(k)), size));
 	}
 }
 
@@ -116,16 +116,16 @@ static int eqkey(const TValue *k, const Node *n)
 		case CR_VTRUE: case CR_VFALSE:
 			return 1;
 		case CR_VNUMINT:
-			return (ivalue(k) == keyivalue(n));
+			return (ival(k) == keyival(n));
 		case CR_VNUMFLT:
-			return cri_numeq(fvalue(k), keyfvalue(n));
+			return cri_numeq(fval(k), keyfval(n));
 		case CR_VLUDATA:
-			return (pvalue(k) == keypvalue(n));
+			return (pval(k) == keypval(n));
 		case CR_VCFUNCTION:
-			return (cfvalue(k) == keycfvalue(n));
+			return (cfval(k) == keycfval(n));
 		default: /* all equal objects have equal pointers */
 			cr_assert(vtt(k) == CR_TOBJECT);
-			return (ovalue(k) == keyovalue(n));
+			return (oval(k) == keyoval(n));
 	}
 	return 0;
 }
@@ -188,7 +188,7 @@ int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k)
 		if (!keyisempty(htnode(tab, i))) {
 			slot = htnode(tab, i);
 			getnodekey(ts, v, slot);
-			setv(ts, v+1, htnodevalue(slot));
+			setval(ts, v+1, htnodevalue(slot));
 			return 1;
 		}
 	}
@@ -328,7 +328,7 @@ int cr_htable_remove(HTable *tab, const TValue *key)
 
 
 /* try to get interned string */
-OString *cr_htable_getraw(HTable *tab, const char *str, size_t len, unsigned int hash)
+OString *cr_htable_getstring(HTable *tab, const char *str, size_t len, unsigned int hash)
 {
 	int size;
 	Node *slot;
@@ -341,8 +341,9 @@ OString *cr_htable_getraw(HTable *tab, const char *str, size_t len, unsigned int
 		if (keyisempty(slot)) {
 			if (!istomb(slot)) return NULL;
 		} else {
-			s = keystrvalue(slot);
-			if (streqlit(s, str, len, hash))
+			s = keystrval(slot);
+			if (s->hash == hash && s->len == len &&
+				memcmp(s->bytes, str, len) == 0)
 				return s;
 		}
 	};
@@ -358,7 +359,7 @@ int cr_htable_get(HTable *tab, const TValue *key, TValue *o)
 	if (tab->nnodes == 0) return 0;
 	slot = gehtnode(tab->mem, htsize(tab), key);
 	if (keyisempty(slot)) return 0;
-	setv(cast(cr_State*, NULL), o, htnodevalue(slot));
+	setval(cast(cr_State*, NULL), o, htnodevalue(slot));
 	return 1;
 }
 
