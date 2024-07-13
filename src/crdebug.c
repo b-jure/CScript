@@ -17,10 +17,13 @@
 
 #include "crdebug.h"
 #include "crobject.h"
+#include "crstring.h"
 #include "crlimits.h"
 #include "crstate.h"
+#include "crvalue.h"
 
 #include <stdio.h>
+
 
 
 
@@ -45,6 +48,7 @@ int cr_debug_getfuncline(const Function *fn, int pc)
 }
 
 
+/* current instruction in 'CrClosure' ('Function') */
 cr_sinline int currentpc(const CallFrame *cf)
 {
 	cr_assert(cfiscript(cf));
@@ -52,18 +56,19 @@ cr_sinline int currentpc(const CallFrame *cf)
 }
 
 
-cr_sinline int currentline(CallFrame *cf) 
+/* current line number */
+cr_sinline int currentline(CallFrame *cf)
 {
 	return cr_debug_getfuncline(cffn(cf), currentpc(cf));
 }
 
 
-/* 
+/*
  * Sets 'frame' in 'cr_debuginfo'.
  * Level defines which call stack 'CallFrame' to use.
  * If you wish for currently active 'CallFrame' then 'level'
  * should be 0.
- * If 'level' is invalid, this function returns 0. 
+ * If 'level' is invalid, this function returns 0.
  */
 CR_API int cr_getstack(cr_State *ts, int level, cr_debuginfo *di)
 {
@@ -79,7 +84,7 @@ CR_API int cr_getstack(cr_State *ts, int level, cr_debuginfo *di)
 
 
 
-/* 
+/*
  * Sets 'name', 'type', 'nups', 'nparams', 'isvararg', 'defline',
  * 'deflastline' in 'cr_debuginfo'.
  */
@@ -121,16 +126,16 @@ static void getsrcinfo(Closure *cl, cr_debuginfo *di)
 		di->source = fn->source->bytes;
 		di->srclen = fn->source->len;
 	}
-	cr_object_sourceid(di->shortsrc, di->source, di->srclen);
+	cr_string_sourceid(di->shortsrc, di->source, di->srclen);
 }
 
 
 
-/* 
+/*
  * Auxiliary to 'cr_getinfo', parses debug bit mask and
  * fills out the 'cr_debuginfo' accordingly.
  * If any invalid bit/option is inside the 'dbmask' this
- * function returns 0, otherwise 1. 
+ * function returns 0, otherwise 1.
  */
 static int getinfo(cr_State *ts, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr_debuginfo *di)
 {
@@ -162,7 +167,7 @@ static int getinfo(cr_State *ts, cr_ubyte dbmask, Closure *cl, CallFrame *cf, cr
 }
 
 
-/* 
+/*
  * Fill out 'cr_debuginfo' according to 'dbmask'.
  * Returns 0 if any of the bits in 'dbmask' are invalid.
  */
@@ -185,7 +190,7 @@ CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_debuginfo *di)
 		fn = s2v(frame->callee.p);
 		cr_assert(ttisfn(fn));
 	}
-	cl = (ttiscl(fn) ? clvalue(fn) : NULL);
+	cl = (ttiscl(fn) ? clval(fn) : NULL);
 	dbmask >>= 1; /* skip CR_DBGFNGET bit */
 	status = getinfo(ts, dbmask, cl, frame, di);
 	cr_unlock(ts);
@@ -193,15 +198,73 @@ CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_debuginfo *di)
 }
 
 
-const char *cr_debug_info(cr_State *ts, const char *msg, const OString *src, int line)
+/* add usual debug information to 'msg' (source id and line) */
+const char *cr_debug_addinfo(cr_State *ts, const char *msg, const OString *src, int line)
 {
 	char buffer[CRI_MAXSRC];
 
 	if (src) {
-		cr_object_sourceid(buffer, src->bytes, src->len);
+		cr_string_sourceid(buffer, src->bytes, src->len);
 	} else {
 		buffer[0] = '?';
 		buffer[1] = '\0';
 	}
-	return cr_object_pushfstring(ts, "%s:%d: %s", buffer, line, msg);
+	return cr_string_pushfstring(ts, "%s:%d: %s", buffer, line, msg);
+}
+
+
+/* operation on invalid type error */
+cr_noret cr_debug_typeerror(cr_State *ts, const TValue *v, const char *op)
+{
+	cr_debug_runerror(ts, "tried to %s a %s value", op, typename(tt(v)));
+}
+
+
+/* arithmetic operation error */
+cr_noret cr_debug_operror(cr_State *ts, const TValue *v1, const TValue *v2,
+			     const char *op)
+{
+	if (ttisnum(v1))
+		v1 = v2;  /* correct error value */
+	cr_debug_typeerror(ts, v1, op);
+}
+
+
+/* ordering error */
+cr_noret cr_debug_ordererror(cr_State *ts, const TValue *v1, const TValue *v2)
+{
+	const char *name1;
+	const char *name2;
+
+	name1 = typename(tt(v1));
+	name2 = typename(tt(v2));
+	if (name1 == name2) /* point to same entry ? */
+		cr_debug_runerror(ts, "tried to compare two %s values", name1);
+	else
+		cr_debug_runerror(ts, "tried to compare %s with %s", name1, name2);
+}
+
+
+/* generic runtime error */
+cr_noret cr_debug_runerror(cr_State *ts, const char *fmt, ...)
+{
+	va_list ap;
+	const char *err;
+
+	va_start(ap, fmt);
+	err = cr_string_pushvfstring(ts, fmt, ap);
+	va_end(ap);
+	if (cfiscript(ts->aframe)) { /* in Cript function (closure) ? */
+		cr_debug_addinfo(ts, err, cffn(ts->aframe)->source, currentline(ts->aframe));
+		setsval(ts, ts->stacktop.p - 2, s2v(ts->stacktop.p - 1));
+		ts->stacktop.p--;
+	}
+	cr_state_throw(ts, CR_ERRRUNTIME);
+}
+
+
+/* emit warning */
+void cr_debug_warn(cr_State *ts, const char *str)
+{
+	// TODO: implement this + add warning function hook in API and 'GState'
 }

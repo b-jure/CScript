@@ -70,7 +70,7 @@ void cr_htable_newstab(cr_State *ts, HTable *tab)
 }
 
 
-/* 
+/*
  * Find the main position (slot) for key 'k' inside
  * the table array.
  */
@@ -82,26 +82,26 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 
 	switch (vtt(k)) {
 		case CR_VTRUE:
-			return cast_node(hashslot(mem, cr_hh_boolean(1), size));
+			return cast_node(hashslot(mem, cr_value_hashbool(1), size));
 		case CR_VFALSE:
-			return cast_node(hashslot(mem, cr_hh_boolean(0), size));
+			return cast_node(hashslot(mem, cr_value_hashbool(0), size));
 		case CR_VNUMINT:
-			return cast_node(hashslot(mem, cr_hh_integer(ival(k)), size));
+			return cast_node(hashslot(mem, cr_value_hashint(ival(k)), size));
 		case CR_VNUMFLT:
-			return cast_node(hashslot(mem, cr_hash_number(fval(k)), size));
+			return cast_node(hashslot(mem, cr_value_hashnum(fval(k)), size));
 		case CR_VLUDATA:
 			p = pval(k);
-			return cast_node(hashslot(mem, cr_hh_pointer(p), size));
+			return cast_node(hashslot(mem, cr_value_hashp(p), size));
 		case CR_VCFUNCTION:
 			f = cfval(k);
-			return cast_node(hashslot(mem, cr_hh_pointer(p), size));
+			return cast_node(hashslot(mem, cr_value_hashp(p), size));
 		case CR_VSTRING:
-			str = strvalue(k);
+			str = strval(k);
 			cr_assert(hashash(str));
 			return cast_node(hashslot(mem, str->hash, size));
 		default:
 			cr_assert(!ttisnil(k) && ttiso(k));
-			return cast_node(hashslot(mem, cr_hh_pointer(oval(k)), size));
+			return cast_node(hashslot(mem, cr_value_hashp(oval(k)), size));
 	}
 }
 
@@ -131,8 +131,8 @@ static int eqkey(const TValue *k, const Node *n)
 }
 
 
-/* 
- * Find slot by linear probing. 
+/*
+ * Find slot by linear probing.
  * Size of the table 'mem' array is always power of 2.
  * In case of finding a 'tomb' node keep probing until the
  * same 'key' was found or empty spot.
@@ -171,7 +171,7 @@ static unsigned int getindex(cr_State *ts, HTable *tab, const TValue *k)
 }
 
 
-/* 
+/*
  * Find next table entry after 'key' entry.
  * If table had next entry then top of the stack will contain
  * key of that entry and its value (in that order).
@@ -270,10 +270,10 @@ static void expandmem(cr_State *ts, HTable *tab)
 }
 
 
-/* 
+/*
  * Set value for the given key.
  * If the 'key' was not found insert it together with the 'value'.
- * If the 'key' already exists set its 'value'. 
+ * If the 'key' already exists set its 'value'.
  */
 int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *val)
 {
@@ -296,7 +296,7 @@ int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *va
 }
 
 
-/* 
+/*
  * Removes the slot belonging to the table 'tab' directly
  * without probing for it.
  */
@@ -309,7 +309,7 @@ void cr_htable_removedirect(HTable *tab, Node *slot)
 }
 
 
-/* 
+/*
  * Remove 'key' from the table.
  * If the 'key' was found (and removed) return non-zero and place the tombstone.
  * Tombstones count as entries so this will not decrement 'left'.

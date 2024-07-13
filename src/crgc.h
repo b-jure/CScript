@@ -75,8 +75,8 @@
 #define GCSpause		8 /* starting state (marking roots) */
 
 
-/* 
- * Check if GC is in a state that holds the invariant 
+/*
+ * Check if GC is in a state that holds the invariant
  * that white objects cannot point to black objects.
  * States that break this invariant are sweep states.
  */
@@ -127,7 +127,7 @@
  * Write barriers
  * ------------------------------------------------------------------------- */
 
-/* 
+/*
  * Same as 'cr_gc_barrierforward_' but ensures that it is only
  * called when 'r' (root) is a black object and 'o' is white.
  */

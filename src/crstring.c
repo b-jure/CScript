@@ -13,10 +13,10 @@
 
 
 
-/* 
+/*
  * Hash string.
  * One-byte-at-a-time hash based on Murmur's mix
- * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp 
+ * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
  */
 unsigned int cr_hash_string(const char *str, size_t len, unsigned int seed)
 {
@@ -49,7 +49,7 @@ OString *cr_string_newl(cr_State *ts, const char *chars, size_t len)
 	strtab = &GS(ts)->strings;
 	hash = cr_string_hash(chars, len, GS(ts)->seed);
 	weakref = cr_htable_getstring(strtab, chars, len, hash);
-	if (weakref) 
+	if (weakref)
 		return weakref;
 	string = cr_gc_new(ts, sizeofstring(len), CR_VSTRING, OString);
 	string->len = len;
@@ -67,12 +67,58 @@ OString *cr_string_newl(cr_State *ts, const char *chars, size_t len)
 }
 
 
-/*
- * Create new string object.
- */
+/* create new string object */
 OString *cr_string_new(cr_State *ts, const char *chars)
 {
 	return cr_string_newl(ts, chars, strlen(chars));
+}
+
+
+/* free string object */
+void cr_string_free(cr_State *ts, OString *s)
+{
+	cr_mem_free(ts, s, sizeofstring(s->len));
+}
+
+
+/*
+ * Comparison similar to 'strcmp' but this works on
+ * strings that might have null terminator in between
+ * of their contents.
+ */
+int cr_string_cmp(const OString *s1, const OString *s2)
+{
+	const char *p1;
+	const char *p2;
+	size_t s1l;
+	size_t s2l;
+	size_t len;
+	int res;
+
+	p1 = s1->bytes;
+	s1l = s1->len;
+	p2 = s2->bytes;
+	s2l = s2->len;
+	for (;;) {
+		res = strcoll(p1, p2);
+		if (res != 0)
+			return res;
+		len = strlen(p1);
+		if (len == s2l)
+			return !(s1l == s2l);
+		else if (len == s1l)
+			return -1;
+		len++; /* skip '\0' */
+		p1 += len; s1l -= len;
+		p2 += len; s2l -= len;
+	}
+}
+
+
+int cr_string_eq(const OString *s1, const OString *s2)
+{
+	return ((s1 == s2) || (s1->hash == s2->hash && s1->len == s2->len &&
+			      memcmp(s1->bytes, s2->bytes, s1->len)));
 }
 
 
@@ -96,7 +142,7 @@ void cr_string_sourceid(char *restrict dest, const char *src, size_t len)
  * Returns '-1' in case string is not the name of any methods
  * inside the 'cr_vtable'.
  */
-int cr_string_strtomt(cr_State *ts, OString *id)
+int cr_string_tomt(cr_State *ts, OString *id)
 {
 	OString **names;
 	uintptr_t ptr, start;
@@ -116,7 +162,7 @@ int cr_string_strtomt(cr_State *ts, OString *id)
 /* maximum value for last integer digit */
 #define MAXINTLASTDIG		(CR_INTEGER_MAX % 10)
 
-/* 
+/*
  * Check if integer 'i' overflows limit 'l' or in case
  * 'i' is equal to 'l' check if digit 'd' would overflow.
  */
@@ -159,7 +205,7 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
 	sign = noval = 1;
 	while (isspace(*s)) s++; /* skip leading spaces */
 	if (*s == '-' || *s == '+') {
-		sign -= 2 * (*s == '-'); 
+		sign -= 2 * (*s == '-');
 		s++;
 	}
 	if (*s == '0' && (*s == 'x' || *s == 'X')) { /* hex ? */
@@ -234,9 +280,9 @@ size_t cr_string_tonum(const char *s, TValue *o, int *of)
 
 	if (of) *of = iof = 0;
 	if ((e = otstr2int(s, &i, &iof)) != NULL) {
-		setivalue(o, i);
+		setival(o, i);
 	} else if ((e = otstr2flt(s, &n, of)) != NULL) {
-		setfvalue(o, n);
+		setfval(o, n);
 	} else { /* both conversions failed */
 		if (of && !*of) *of = iof;
 		return 0;
@@ -308,7 +354,7 @@ typedef struct BuffVSF {
 } BuffVFS;
 
 
-/* 
+/*
  * Pushes 'str' to the stack and concatenates it with
  * other string on the stack if 'pushed' is set.
  */
@@ -319,7 +365,7 @@ static void pushstr(BuffVFS *buff, const char *str, size_t len)
 
 	ts = buff->ts;
 	s = cr_string_newl(ts, str, len);
-	setsv2s(ts, ts->stacktop.p, s); 
+	setsv2s(ts, ts->stacktop.p, s);
 	ts->stacktop.p++;
 	if (buff->pushed)
 		cr_vm_concat(ts, 2);
@@ -394,15 +440,15 @@ const char *cr_string_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
 			buffaddstring(&buff, &c, sizeof(c));
 			break;
 		case 'd': /* 'int' */
-			setivalue(&nv, va_arg(argp, int));
+			setival(&nv, va_arg(argp, int));
 			buffaddnum(&buff, &nv);
 			break;
 		case 'I': /* 'cr_integer' */
-			setivalue(&nv, va_arg(argp, cr_integer));
+			setival(&nv, va_arg(argp, cr_integer));
 			buffaddnum(&buff, &nv);
 			break;
 		case 'N': /* 'cr_number' */
-			setivalue(&nv, va_arg(argp, cr_number));
+			setival(&nv, va_arg(argp, cr_number));
 			buffaddnum(&buff, &nv);
 			break;
 		case 's': /* 'string' */
@@ -426,7 +472,7 @@ const char *cr_string_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
 	}
 	buffaddstring(&buff, fmt, strlen(fmt));
 	pushbuff(&buff);
-	return cstrvalue(s2v(ts->stacktop.p));
+	return cstrval(s2v(ts->stacktop.p));
 }
 
 

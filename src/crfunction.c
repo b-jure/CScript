@@ -98,3 +98,25 @@ static void unlinkupval(UpVal *upval)
 	if (upval->u.open.next)
 		upval->u.open.next->u.open.prev = upval->u.open.prev;
 }
+
+
+/* free 'UpVal' */
+void cr_function_freeupval(cr_State *ts, UpVal *upval)
+{
+	if (uvisopen(upval))
+		unlinkupval(upval);
+	cr_mem_free(ts, upval, sizeof(UpVal));
+}
+
+
+/* free 'Function' */
+void cr_function_free(cr_State *ts, Function *fn)
+{
+	cr_mem_freevec(ts, &fn->fns);
+	cr_mem_freevec(ts, &fn->constants);
+	cr_mem_freevec(ts, &fn->code);
+	cr_mem_freevec(ts, &fn->lineinfo);
+	cr_mem_freevec(ts, &fn->lvars);
+	cr_mem_freevec(ts, &fn->upvalues);
+	cr_mem_free(ts, fn, sizeof(Function));
+}

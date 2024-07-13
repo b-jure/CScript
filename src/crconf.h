@@ -31,11 +31,11 @@
 
 
 
-/* 
+/*
  * Branch prediction builtin functions that reorder
  * code during compilation or hint the branch predictor
  * somehow in non-direct way.
- * @cr_likely - likely branch to be taken. 
+ * @cr_likely - likely branch to be taken.
  * @cr_unlikely - unlikely branch to be taken.
  */
 #if defined(__GNUC__) && !defined(CR_NOBUILTIN)
@@ -48,7 +48,7 @@
 
 
 
-/* 
+/*
  * @CR_DIRSEP - directory separator; for Windows machines
  * backslash is used, for any other POSIX is assumed
  * (forward slash).
@@ -99,7 +99,7 @@
 #define CR_API		extern
 
 
-	
+
 /*
  * @CRLIB_API - signature for all auxiliary library functions;
  * functions that are not part of core API but are using it.
@@ -135,58 +135,18 @@
 
 
 
-/* 
- * @CR_FLOAT_UNSUPPORTED - used if floating-point format is not supported.
+/*
  * @CR_FLOAT_FLOAT_TYPE - single precision floating point ('float').
- * @CR_FLOAT_LONG_DOUBLE_TYPE - 'long double' precision floating point.
- * @CR_FLOAT_DOUBLE_TYPE - 'double' precision floating point.
- *
+ * @CR_FLOAT_DOUBLE_TYPE - 'double' floating point.
+ * @CR_FLOAT_LONG_DOUBLE_TYPE - 'long double' floating point.
  */
-#define CR_FLOAT_UNSUPPORTED		0
-#define CR_FLOAT_FLOAT_TYPE		CR_FLOAT_UNSUPPORTED
-#define CR_FLOAT_DOUBLE_TYPE		2
-#define CR_FLOAT_LONG_DOUBLE_TYPE	CR_FLOAT_UNSUPPORTED
-
-/* @CR_FLOAT_IS_SUPPORTED - check if float type is supported. */
-#define CR_FLOAT_IS_SUPPORTED(type)	((type) != CR_FLOAT_UNSUPPORTED)
+#define CR_FLOAT_FLOAT_TYPE		0
+#define CR_FLOAT_DOUBLE_TYPE		1
+#define CR_FLOAT_LONG_DOUBLE_TYPE	2
 
 
-
-/* @CR_FLOAT_HAVE_FLOAT - indicates support for 'float'. */
-#if defined(FLT_MANT_DIG) && defined(FLT_MAX) && defined(FLT_MIN) && \
-	FLT_MANT_DIG == 24 && FLT_MAX_EXP == 128 && FLT_MIN_EXP == -125
-#define CR_FLOAT_HAVE_FLOAT
-#endif
-
-/* @CR_FLOAT_HAVE_DOUBLE - indicates support for 'double'. */
-#if defined(DBL_MANT_DIG) && defined(DBL_MAX) && defined(DBL_MIN) && \
-	DBL_MANT_DIG == 53 && DBL_MAX_EXP == 1024 && DBL_MIN_EXP == -1021
-#define CR_FLOAT_HAVE_DOUBLE
-#endif
-
-/* @CR_FLOAT_HAVE_LONG_DOUBLE - indicates support for 'long double'. */
-#if defined(LDBL_MANT_DIG) && defined(LDBL_MAX) && defined(LDBL_MIN) && \
-	LDBL_MANT_DIG == 64 && LDBL_MAX_EXP == 16384 && LDBL_MIN_EXP == -16381
-#define CR_FLOAT_HAVE_LONG_DOUBLE
-#endif
-
-/* 
- * CR_FLOAT_DFL_TYPE - default floating point type.
- * @CR_FLOAT_TYPE - cript floating point type. 
- */
-#define CR_FLOAT_DFL_TYPE	CR_FLOAT_DOUBLE_TYPE
-#define CR_FLOAT_TYPE		CR_FLOAT_DFL_TYPE
-#ifndef CR_FLOAT_TYPE
-#if defined(CR_FLOAT_HAVE_FLOAT) && CR_FLOAT_IS_SUPPORTED(CR_FLOAT_FLOAT_TYPE)
-#define CR_FLOAT_TYPE		CR_FLOAT_FLOAT_TYPE
-#elif defined(CR_FLOAT_HAVE_DOUBLE) && CR_FLOAT_IS_SUPPORTED(CR_FLOAT_DOUBLE_TYPE)
+/* @CR_FLOAT_TYPE - Cript floating point type. */
 #define CR_FLOAT_TYPE		CR_FLOAT_DOUBLE_TYPE
-#elif defined(CR_FLOAT_HAVE_LONG_DOUBLE) && CR_FLOAT_IS_SUPPORTED(CR_FLOAT_LONG_DOUBLE_TYPE)
-#define CR_FLOAT_TYPE		CR_FLOAT_LONG_DOUBLE_TYPE
-#else
-#define CR_FLOAT_TYPE		CR_FLOAT_UNSUPPORTED
-#endif
-#endif
 
 
 
@@ -199,12 +159,10 @@
  * @cr_str2float - convert string into @CR_NUMBER.
  * @cr_float2str - convert @CR_NUMBER into string.
  * @cr_float2integer - converts @CR_NUMBER to @CR_INTEGER or
- * returns 0 if 'cr_number' is not within the range of 'cr_integer'. 
+ * returns 0 if 'cr_number' is not within the range of 'cr_integer'.
  */
-#if CR_FLOAT_IS_SUPPORTED(CR_FLOAT_TYPE)
 #if CR_FLOAT_TYPE == CR_FLOAT_FLOAT_TYPE	 /* 'float' */
 #error 'float' is not supported.
-
 #elif CR_FLOAT_TYPE == CR_FLOAT_DOUBLE_TYPE	 /* 'double' */
 #define CR_NUMBER		double
 #define CR_FLOAT_FMTLEN		""
@@ -214,14 +172,11 @@
 #define CR_HUGEVAL		HUGE_VAL
 #define CR_NUMBER_MIN		DBL_MIN
 #define CR_NUMBER_MAX		DBL_MAX
-
 #elif CR_FLOAT_TYPE == CR_FLOAT_LONG_DOUBLE_TYPE /* 'long double' */
 #error 'long double' is not supported.
-#endif
-
 #else
 #error Unsupported floating-point format.
-#endif
+#endif /* CR_FLOAT_TYPE */
 
 #define cr_floor(n)		(cr_mathop(floor)(n))
 
@@ -274,14 +229,14 @@
 #define cr_xstr2number(s,p)	cr_str2number((s),(p))
 
 
-/* 
+/*
  * @strx2numberovf - checks if 'n' (cr_number) would overflow
  * during 'cr_xstr2number()' or 'cr_str2number()' conversion.
  */
 #define strx2numberovf(n)	((n) == (CR_HUGEVAL) || (n) == -(CR_HUGEVAL))
 
 
-/* 
+/*
  * @strx2numberovf - checks if 'n' (cr_number) would underflow
  * during 'cr_xstr2number()' or 'cr_str2number()' conversion.
  */
@@ -289,9 +244,9 @@
 
 
 
-/* 
+/*
  * @cr_number2xstr - converts 'cr_number' into hexadecimal
- * string; 'u' flag indicates uppercase/lowercase. 
+ * string; 'u' flag indicates uppercase/lowercase.
  */
 #define cr_number2xstr(b,sz,u,n) \
 		snprintf((b),(sz),((u)?"%A":"%a"),(CR_NUMBER)(n))
@@ -310,7 +265,7 @@
 
 
 
-/* 
+/*
  * -------------------------------
  * Language specific configuration
  * -------------------------------
@@ -324,17 +279,17 @@
 
 
 
-/* 
- * @CRI_MAXSTACK - maximum stack size. 
+/*
+ * @CRI_MAXSTACK - maximum stack size.
  * Any positive value that can fit into INT_MAX/2.
  */
 #define CRI_MAXSTACK	5000000
 
 
 
-/* 
- * @CRI_MAXSRC - maximum description size of function 
- * source (check debug API). 
+/*
+ * @CRI_MAXSRC - maximum description size of function
+ * source (check debug API).
  */
 #define CRI_MAXSRC	70
 

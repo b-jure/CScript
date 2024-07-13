@@ -1,7 +1,7 @@
 /* ----------------------------------------------------------------------------------------------
  * Copyright (C) 2023-2024 Jure Bagić
  *
- * This file is part of cript.
+  == )* This file is part of cript.
  * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
  * General Public License as published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
@@ -17,7 +17,9 @@
 #include "crgc.h"
 #include "crconf.h"
 #include "crdebug.h"
+#include "crfunction.h"
 #include "crlimits.h"
+#include "crmeta.h"
 #include "crobject.h"
 #include "crstate.h"
 #include "crhashtable.h"
@@ -81,7 +83,7 @@
 #define GCFINCOST	50
 
 
-/* 
+/*
  * Action of visiting a slot or sweeping an object converted
  * into bytes.
  */
@@ -123,14 +125,14 @@ void cr_gc_init(GC *gc)
 
 
 /* create new white object and append it to 'objects' */
-GCObject *cr_gc_new(cr_State *ts, size_t size, cr_ubyte ott)
+GCObject *cr_gc_new_(cr_State *ts, size_t size, cr_ubyte ott)
 {
 	GCObject *o;
 	GC *gc;
 
 	gc = &GS(ts)->gc;
 	o = cast(GCObject*, cr_mem_malloc(ts, size));
-	ott_(o) = ott;
+	rawtt_(o) = ott;
 	omark_(o) = cr_gc_white(gc);
 	onext_(o) = gc->objects;
 	gc->objects = o;
@@ -184,7 +186,7 @@ static GCObject **getgclist(GCObject *o)
 	case CR_VCLASS: return &gco2cls(o)->gclist;
 	case CR_VHTABLE: return &gco2ht(o)->gclist;
 	case CR_VTHREAD: return &gco2th(o)->gclist;
-	case CR_VUDATA: 
+	case CR_VUDATA:
 		ud = gco2ud(o);
 		cr_assert(ud->nuv > 0 || !ud->vtempty);
 		return &gco2ud(o)->gclist;
@@ -281,7 +283,7 @@ static void markobject_(GC *gc, GCObject *o)
 		markobject(gc, im->receiver);
 		markobject(gc, im->method);
 		break;
-	case CR_VUDATA: 
+	case CR_VUDATA:
 		ud = gco2ud(o);
 		if (ud->nuv == 0 && ud->vmtempty) {
 			markblack(ud);
@@ -300,7 +302,7 @@ static void markobject_(GC *gc, GCObject *o)
 cr_sinline cr_mem markvmt(GC *gc, VMT vmt)
 {
 	for (int i = 0; i < CR_NUMM; i++)
-		if (!ttisnil(&vmt[i])) 
+		if (!ttisnil(&vmt[i]))
 			markvalue(gc, &vmt[i]);
 	return CR_NUMM;
 }
@@ -399,7 +401,7 @@ static cr_mem markuserdata(GC *gc, UserData *ud)
  * Threads do not use write barriers, because using
  * a write barrier correctly on each thread modification
  * would introduce a lot of overhead and complexity.
- * Using no write barriers for such a huge object also 
+ * Using no write barriers for such a huge object also
  * improves robustness and consistency.
  * And the way we deal with properly remarking the
  * thread is by linking it into the 'grayagain', a list
@@ -519,58 +521,39 @@ static cr_mem propagateall(GState *gs)
  * Free objects
  * -------------------------------------------------------------------------- */
 
-/*
- * Performs raw deallocation of object memory it does
- * not try to call '__free__'.
- */
+/* free objectc 'o' */
 static void freeobject(cr_State *ts, GCObject *o)
 {
 	Instance *ins;
-	Function *fn;
 	OClass *cls;
-	UpVal *upval;
 
 	switch (ott_(o)) {
-		case CR_VSTRING:
-			cr_mem_free(ts, o, sizeofstring(gco2str(o)));
-			break;
-		case CR_VFUNCTION:
-			fn = gco2fn(o);
-			cr_mem_freevec(ts, &fn->fns);
-			cr_mem_freevec(ts, &fn->constants);
-			cr_mem_freevec(ts, &fn->code);
-			cr_mem_freevec(ts, &fn->lineinfo);
-			cr_mem_freevec(ts, &fn->lvars);
-			cr_mem_freevec(ts, &fn->upvalues);
-			cr_mem_free(ts, o, sizeof(Function));
-			break;
-		case CR_VUVALUE:
-			upval = gco2uv(o);
-			if (uvisopen(upval))
-				cr_vm_unlinkupval(upval);
-			cr_mem_free(ts, o, sizeof(UpVal));
-			break;
-		case CR_VCRCL:
-			cr_mem_free(ts, o, sizecrcl(gco2crcl(o)));
-			break;
-		case CR_VCCL:
-			cr_mem_free(ts, o, sizeccl(gco2ccl(o)));
-			break;
-		case CR_VCLASS:
-			cls = cast(OClass*, o);
-			cr_htable_free(ts, cls->methods);
-			cr_mem_free(ts, o, sizeof(OClass));
-			break;
-		case CR_VINSTANCE:
-			ins = cast(Instance*, o);
-			cr_htable_free(ts, ins->fields);
-			cr_mem_free(ts, o, sizeof(Instance));
-			break;
-		case CR_VMETHOD:
-			cr_mem_free(ts, o, sizeof(InstanceMethod));
-			break;
-		default:
-			cr_unreachable();
+	case CR_VSTRING:
+		cr_string_free(ts, gco2str(o));
+		break;
+	case CR_VFUNCTION:
+		cr_function_free(ts, gco2fn(o));
+		break;
+	case CR_VUVALUE:
+		cr_function_freeupval(ts, gco2uv(o));
+		break;
+	case CR_VCRCL:
+		cr_mem_free(ts, o, sizeofcrcl(gco2crcl(o)->nupvalues));
+		break;
+	case CR_VCCL:
+		cr_mem_free(ts, o, sizeofccl(gco2ccl(o)->nupvalues));
+		break;
+	case CR_VCLASS:
+		cr_meta_freeclass(ts, gco2cls(o));
+		break;
+	case CR_VINSTANCE:
+		cr_meta_freeinstance(ts, gco2ins(o));
+		break;
+	case CR_VMETHOD:
+		cr_mem_free(ts, o, sizeof(*gco2im(o)));
+		break;
+	default:
+		cr_unreachable();
 	}
 }
 
@@ -579,7 +562,6 @@ static void freeobject(cr_State *ts, GCObject *o)
 /* ------------------------------------------------------------------------
  * Sweep functions
  * ------------------------------------------------------------------------- */
-
 
 static GCObject **sweeplist(cr_State *ts, GCObject **l, int nobjects, int *nsweeped)
 {
@@ -701,7 +683,7 @@ static void callfin(cr_State *ts)
 	cr_assert(amount > 0);
 	gc = &GS(ts)->gc;
 	setv2gco(ts, &v, gettobefin(gc));
-	if ((m = cr_vtable_get(ts, &v, CR_MGC))) {
+	if ((m = cr_meta_vgetvtable(ts, &v, CR_MGC))) {
 		oldstopped = gc->stopped;
 		gc->stopped = GCSTP; /* prevent recursive GC calls */
 		setsval(ts, ts->stacktop.p++, m);
@@ -724,7 +706,7 @@ static int callNfinalizers(cr_State *ts, int n)
 {
 	GC *gc;
 	int i;
-	
+
 	gc = &GS(ts)->gc;
 	for (i = 0; i < n && gc->tobefin; i++)
 		callfin(ts);
@@ -732,13 +714,13 @@ static int callNfinalizers(cr_State *ts, int n)
 }
 
 
-/* 
+/*
  * Check if object has a finalizer and move it into 'fin'
  * list but only if it wasn't moved already indicated by
  * 'FINBIT' being set, additionally don't move it in case
  * state is closing.
  */
-void cr_gc_checkfin(cr_State *ts, GCObject *o, VMT vtable) 
+void cr_gc_checkfin(cr_State *ts, GCObject *o, VMT vtable)
 {
 	GC *gc;
 	GCObject **pp;
@@ -791,8 +773,8 @@ static void clearkeys(GState *gs, GCObject *l)
 }
 
 
-/* 
- * Get the last 'next' object in list 'l' 
+/*
+ * Get the last 'next' object in list 'l'
  * Useful used when trying to link objects
  * at the end of the list.
  */
@@ -853,7 +835,7 @@ static cr_mem atomic(cr_State *ts)
 	GCObject *grayagain;
 	cr_mem work;
 	int i;
-	
+
 	gs = GS(ts);
 	gc = &gs->gc;
 	work = 0;
@@ -883,7 +865,7 @@ static cr_mem atomic(cr_State *ts)
 	work += propagateall(gs);
 	/* all 'resurrected' objects are marked,
 	 * so clear weak tables safely again */
-	clearkeys(gs, gc->weak); 
+	clearkeys(gs, gc->weak);
 	gc->whitebit = whitexor(gc); /* flip white bit */
 	cr_assert(gc->gray == NULL); /* all must be propagated */
 	return work;
@@ -949,7 +931,7 @@ static void restartgc(GState *gs)
  * GCSsweeptofin sweeps all the objects in 'tobefin'.
  * GCSsweepend (as of this version) does nothing
  * but provide clarity that sweep phase is over.
- * GCScallfin calls finalizers of all the objects 
+ * GCScallfin calls finalizers of all the objects
  * in 'tobefin' and puts them back into 'objects'
  * list after the call.
  */
@@ -1003,8 +985,8 @@ static cr_mem singlestep(cr_State *ts)
 			work = 0;
 		}
 		break;
-	default: 
-		cr_unreachable(); 
+	default:
+		cr_unreachable();
 		break;
 	}
 	gc->stopem = 0;
@@ -1035,7 +1017,7 @@ static void runallfinalizers(cr_State *ts)
 }
 
 
-/* 
+/*
  * Free all objects except main thread, additionally
  * call all finalizers.
  */

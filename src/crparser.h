@@ -46,7 +46,7 @@ typedef union LVarInfo {
 
 Vec(LVarInfoVec, LVarInfo);
 
-/* 
+/*
  * Dynamic data used by parser.
  * It is stored inside 'Lexer' because there is
  * only one lexer for every 'FunctionState'.
@@ -82,7 +82,7 @@ typedef enum expt {
 	EXP_TRUE,
 	/* string constant;
 	 * 'str' = string value; */
-	EXP_STRING, 	
+	EXP_STRING,
 	/* integer constant;
 	 * 'i' = integer value; */
 	EXP_INT,
@@ -91,13 +91,13 @@ typedef enum expt {
 	EXP_FLT,
 	/* upvalue variable;
 	 * 'info' = index of upvalue in 'upvalues' */
-	EXP_UVAL, 
+	EXP_UVAL,
 	/* local variable;
 	 * 'idx' = relative index of variable in 'locals'; */
-	EXP_LOCAL, 
-	/* global variable; 
+	EXP_LOCAL,
+	/* global variable;
 	 * 'idx' = index in 'gvars' (cr_State) */
-	EXP_GLOBAL, 
+	EXP_GLOBAL,
 	/* constant indexed variable ('[kk]');
 	 * 'idx' = index in 'constants'; */
 	EXP_INDEXK,
@@ -112,13 +112,13 @@ typedef enum expt {
 	EXP_INDEXSUP,
 	/* indexed variable ('[k=expr]'); */
 	EXP_INDEXED,
-	/* function call; 
+	/* function call;
 	 * 'info' = pc (in 'code'); */
-	EXP_CALL, 
-	/* vararg expression ('...'); 
+	EXP_CALL,
+	/* vararg expression ('...');
 	 * 'info' = pc (in 'code'); */
-	EXP_VARARG, 
-	/* expression is a test/comparison; 
+	EXP_VARARG,
+	/* expression is a test/comparison;
 	 * 'info' = pc (in 'code') */
 	EXP_JMP,
 	 /* finalized expression */
@@ -126,7 +126,7 @@ typedef enum expt {
 } expt;
 
 
-/* 
+/*
  * Expression information.
  * Parser builds up the expression information and feeds it into
  * functions that generate bytecode.
@@ -153,7 +153,7 @@ typedef struct ExpInfo {
  * Function state
  * -------------------------------------------------------------------------- */
 
-/* 
+/*
  * Represents all the information the parser has
  * on the currently parsed function.
  * So 'FunctionState' is a state for currently compiled 'Function'.

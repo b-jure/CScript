@@ -74,7 +74,7 @@ typedef struct cr_State cr_State;
 #define CR_TNIL		8 /* nil */
 #define CR_TTHREAD	9 /* thread */
 
-#define CR_NUMTYPES	10	
+#define CR_NUMTYPES	10
 
 
 
@@ -162,26 +162,26 @@ CR_API const void      *cr_getpointer(cr_State *ts, int idx); // TODO
 #define CR_OPPOW	5
 #define CR_OPNOT	6
 #define CR_OPUMIN	7
-#define CR_OPBSHL	8
-#define CR_OPBSHR	9
-#define CR_OPBNOT	10
+#define CR_OPBNOT	8
+#define CR_OPBSHL	9
+#define CR_OPBSHR	10
 #define CR_OPBAND	11
 #define CR_OPBOR	12
 #define CR_OPBXOR	13
 
 #define CR_NUMARITH	14
 
+/* check if CR_OP* is unary operation */
+#define cr_isunaryop(op) 	(CR_OPNOT <= (op) && (op) <= CR_OPBNOT)
+
 CR_API void	cr_arith(cr_State *ts, int op);
 
 
 #define CR_OPEQ		0
-#define CR_OPNE		1
-#define CR_OPLT		2
-#define CR_OPGT		3
-#define CR_OPLE		4
-#define CR_OPGE		5
+#define CR_OPLT		1
+#define CR_OPLE		2
 
-#define CR_NUMCMP	6
+#define CR_NUMCMP	3
 
 CR_API int 	cr_rawequal(cr_State *ts, int idx1, int idx2);
 CR_API int	cr_compare(cr_State *ts, int idx1, int idx2, int op);
@@ -230,28 +230,30 @@ CR_API int cr_getuservalue(cr_State *ts, int idx, int n);
 
 /* 'cr_vtable' methods */
 #define CR_MINIT		0
-#define CR_MDISPLAY		1
-#define CR_MTOSTRING		2
-#define CR_MGETIDX		3
-#define CR_MSETIDX		4
-#define CR_MGC			5
-#define CR_MDEFER		6
-#define CR_MADD			7
-#define CR_MSUB			8
-#define CR_MMUL			9
-#define CR_MDIV			10
-#define CR_MMOD			11
-#define CR_MPOW			12
-#define CR_MNOT			13
-#define CR_MUMIN		14
-#define CR_MNE			15
-#define CR_MEQ			16
-#define CR_MLT			17
-#define CR_MLE			18
-#define CR_MGT			19
-#define CR_MGE			20
+#define CR_MTOSTRING		1
+#define CR_MGETIDX		2
+#define CR_MSETIDX		3
+#define CR_MGC			4
+#define CR_MDEFER		5
+#define CR_MADD			6
+#define CR_MSUB			7
+#define CR_MMUL			8
+#define CR_MDIV			9
+#define CR_MMOD			10
+#define CR_MPOW			11
+#define CR_MNOT			12
+#define CR_MUMIN		13
+#define CR_MBNOT		14
+#define CR_MBSHL		15
+#define CR_MBSHR		16
+#define CR_MBAND		17
+#define CR_MBOR			18
+#define CR_MBXOR		19
+#define CR_MEQ			20
+#define CR_MLT			21
+#define CR_MLE			22
 
-#define CR_NUMM			21
+#define CR_NUMM			23
 
 
 /* type for class interface */
@@ -266,8 +268,8 @@ struct cr_vtable {
 };
 
 
-/* 
- * Helpers for setting 'cr_vtable'. 
+/*
+ * Helpers for setting 'cr_vtable'.
  * @vt - pointer to 'cr_vtable'
  * @m - method ('CR_M*')
  * @mt - type of method ('CR_MT*')
@@ -415,7 +417,7 @@ struct cr_debuginfo {
 
 /*************************************************************
  * Because Cript C API is almost identical to Lua,
- * we include the below copyright (THANK YOU LUA DEVELOPERS). 
+ * we include the below copyright (THANK YOU LUA DEVELOPERS).
  *************************************************************/
 
 /* ----------------------------------------------------------------------------------------------

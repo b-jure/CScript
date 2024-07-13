@@ -19,27 +19,30 @@
 #define CRVALUE_H
 
 
-#include "crhash.h"
-#include "crmem.h"
-
 #include <stdio.h>
 #include <string.h>
 
+#include "cript.h"
+#include "crlimits.h"
+#include "crmem.h"
 
-/* 
+
+
+/*
  * Additional types that are used only internally
  * or as markers.
  */
 #define CR_TUVALUE	CR_NUMTYPES		/* upvalue */
 #define CR_THTABLE	(CR_NUMTYPES + 1)	/* hashtable */
-#define CR_TOBJECT	(CR_NUMTYPES + 2)	/* for marking object values */
 
 
-/* 
- * Number of all types ('CR_T*') excluding marker type
- * 'CR_TOBJECT', but including 'CR_TNONE'.
- */
+/* number of all types ('CR_T*') including 'CR_TNONE' */
 #define CR_TOTALTYPES	(CR_THTABLE + 2)
+
+
+CRI_DEC(const char *const cr_value_typenames[CR_TOTALTYPES]);
+
+#define typename(t)	cr_value_typenames[(t) + 1]
 
 
 /* Cript values */
@@ -65,20 +68,28 @@ typedef union Value {
 
 /*
  * Tagged value types.
- * Bits 0-4 are for value types (CR_T*).
- * Bits 5-7 are for variant types (CR_V*).
+ * Bits 0-3 are for value types (CR_T*).
+ * Bits 4-6 are for variant types (CR_V*).
  */
 
 /* set variant bytes for type 't' */
-#define makevariant(t, v)	((t) | ((v) << 5))
+#define makevariant(t, v)	((t) | ((v) << 4))
+
+
+/* tag bits (0-3) + variant bits (4-6) */
+#define withvariant(t) 	((t) & 0x3F)
+
+/* tag bits only (0-3) */
+#define novariant(t) 	((t) & 0x0F)
 
 
 /* macros for 'tt' */
-#define vtt(v)		((v)->tt)
+#define rawtt(v) 	((v)->tt)
+#define tt(v) 		novariant(rawtt(v))
+#define vtt(v)		withvariant(rawtt(v))
 #define isvtt(v,t)	(vtt(v) == (t))
-#define setvtt(v,t)	(vtt(v) = (t))
 
-	  
+
 
 /* 'mod' bits */
 #define MODnone		0 /* no modifiers */
@@ -98,7 +109,7 @@ typedef union Value {
 /* copy values from 'v2' to 'v1' ('TValue') */
 #define setval(ts,v1,v2) \
 	{ TValue *v1_ = (v1); const TValue *v2_ = (v2); \
-	  setvtt(v1_, vtt(v2_)); vmod(v1_) = vmod(v2_); \
+	  rawtt(v1_) = rawtt(v2_); vmod(v1_) = vmod(v2_); \
 	  v1_->val = v2_->val; }
 
 
@@ -108,8 +119,8 @@ typedef union Value {
 
 
 
-/* 
- * 'Value' with type and modifiers. 
+/*
+ * 'Value' with type and modifiers.
  * 'mod' might be unused but this memory would
  * be padded by compiler anyway (hopefully).
  */
@@ -159,7 +170,7 @@ typedef SValue *SPtr;
 
 
 
-/* 
+/*
  * Value that acts as index into the stack.
  * Before reallocation occurs 'offset' is filled
  * accordingly in case 'p' becomes invalid,
@@ -172,7 +183,7 @@ typedef struct {
 
 
 
-/* 
+/*
  * ---------------------------------------------------------------------------
  * Boolean
  * ---------------------------------------------------------------------------
@@ -185,11 +196,11 @@ typedef struct {
 
 /* set boolean false value */
 #define setbfval(v) \
-	{ TValue *v_=(v); bval(v_)=0; setvtt(v_, CR_VFALSE); }
+	{ TValue *v_=(v); bval(v_)=0; rawtt(v_) = CR_VFALSE; }
 
 /* set boolean true value */
 #define setbtval(v) \
-	{ TValue *v_=(v); bval(v_)=1; setvtt(v_, CR_VTRUE); }
+	{ TValue *v_=(v); bval(v_)=1; rawtt(v_) = CR_VTRUE; }
 
 #define ttisbool(v)		isvtt(v, CR_TBOOL)
 #define ttistrue(v)		isvtt(v, CR_VTRUE)
@@ -199,7 +210,7 @@ typedef struct {
 
 
 
-/* 
+/*
  * ---------------------------------------------------------------------------
  * Numbers
  * ---------------------------------------------------------------------------
@@ -214,11 +225,11 @@ typedef struct {
 
 /* set integer value */
 #define setival(v,i) \
-	{ TValue *v_=(v); ival(v_)=(i); setvtt(v_, CR_VNUMINT); }
+	{ TValue *v_=(v); ival(v_)=(i); rawtt(v_) = CR_VNUMINT; }
 
 /* set float value */
 #define setfval(v,f) \
-	{ TValue *v_=(v); fval(v_)=(f); setvtt(v_, CR_VNUMFLT); }
+	{ TValue *v_=(v); fval(v_)=(f); rawtt(v_) = CR_VNUMFLT; }
 
 #define ttisflt(v)		isvtt((v), CR_VNUMFLT)
 #define ttisint(v)		isvtt((v), CR_VNUMINT)
@@ -226,7 +237,7 @@ typedef struct {
 
 
 
-/* 
+/*
  * ---------------------------------------------------------------------------
  * Light userdata
  * ---------------------------------------------------------------------------
@@ -238,13 +249,13 @@ typedef struct {
 
 /* set pointer value */
 #define setpval(v,p) \
-	{ TValue *v_=(v); pval(v_)=(p); setvtt(v_, CR_VLUDATA); }
+	{ TValue *v_=(v); pval(v_)=(p); rawtt(v_) = CR_VLUDATA; }
 
 #define ttislud(v)		isvtt(v, CR_VLUDATA)
 
 
 
-/* 
+/*
  * ---------------------------------------------------------------------------
  * C function
  * ---------------------------------------------------------------------------
@@ -256,13 +267,13 @@ typedef struct {
 
 /* set C function value */
 #define setcfval(v,cf) \
-	{ TValue *v_=(v); cfval(v_)=(cf); setvtt(v_, CR_VCFUNCTION); }
+	{ TValue *v_=(v); cfval(v_)=(cf); rawtt(v_) = CR_VCFUNCTION; }
 
 #define ttiscfn(v)		isvtt(v, CR_VCFUNCTION)
 
 
 
-/* 
+/*
  * ---------------------------------------------------------------------------
  * Object
  * ---------------------------------------------------------------------------
@@ -272,13 +283,14 @@ typedef struct {
 
 /* set object value */
 #define setoval(v,o) \
-	{ TValue *v_=(v); oval(v_)=(o); setvtt(v_, CR_TOBJECT); }
+	{ TValue *v_=(v); oval(v_)=(o); rawtt(v_) = OBJECTTAG; }
 
-#define ttiso(v)	isvtt(v, CR_TOBJECT)
+/* check if value is collectable object */
+#define ttiso(v)	(rawtt(v) == OBJECTTAG)
 
 
 
-/* 
+/*
  * ---------------------------------------------------------------------------
  * Nil
  * ---------------------------------------------------------------------------
@@ -290,11 +302,11 @@ typedef struct {
 
 /* set nil value */
 #define setnilval(v) \
-	{ TValue *v_=(v); setvtt(v_, CR_VNIL); }
+	{ TValue *v_=(v); rawtt(v_) = CR_VNIL; }
 
 /* set nil value */
 #define setemptyval(v) \
-	{ TValue *v_=(v); setvtt(v_, CR_VEMPTY); }
+	{ TValue *v_=(v); rawtt(v_) = CR_VEMPTY; }
 
 #define ttisnil(v)	isvtt((v), CR_VNIL)
 #define ttisempty(v)	isvtt((v), CR_VEMPTY)
@@ -317,7 +329,7 @@ typedef enum N2IMode {
 #define tointeger(v, i) \
 	(cr_likely(ttisint(v)) \
 		? (*(i) = ival(v), 1) \
-		: cr_value_tointeger(v, i, N2I_floor))
+		: cr_value_tointeger(v, i, CR_N2IFLOOR))
 
 
 /* convert value to 'cr_number' */
@@ -331,13 +343,29 @@ typedef enum N2IMode {
 #define cr_value_shiftl(x,y)	cr_value_shiftr(x, -y)
 
 
+/* hash primitives */
+#define cr_value_hashint(i)	cast_uint(cri_castS2U((i)))
+#define cr_value_hashbool(b)	cast_uint((b) != 0)
+#define cr_value_hashp(p)	pointer2uint((p))
 
+
+CRI_FUNC unsigned int cr_value_hashnum(cr_number n);
 CRI_FUNC int cr_value_ceillog2(unsigned int x);
 CRI_FUNC int cr_value_n2i(cr_number n, cr_integer *i, N2IMode mode);
 CRI_FUNC int cr_value_tointeger(const TValue *v, cr_integer *i, int mode);
+
 CRI_FUNC cr_integer cr_value_div(cr_State *ts, cr_integer x, cr_integer y);
 CRI_FUNC cr_integer cr_value_modint(cr_State *ts, cr_integer x, cr_integer y);
 CRI_FUNC cr_number cr_value_modnum(cr_State *ts, cr_number x, cr_number y);
 CRI_FUNC cr_integer cr_value_shiftr(cr_integer x, cr_integer y);
+
+CRI_FUNC void cr_value_arithm(cr_State *ts, const TValue *a, const TValue *b,
+			      SPtr res, int op);
+CRI_FUNC int cr_value_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
+				TValue *res, int op);
+
+CRI_FUNC int cr_value_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2);
+CRI_FUNC int cr_value_orderLT(cr_State *ts, const TValue *v1, const TValue *v2);
+CRI_FUNC int cr_value_orderLE(cr_State *ts, const TValue *v1, const TValue *v2);
 
 #endif

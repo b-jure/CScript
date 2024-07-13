@@ -64,7 +64,7 @@ void cr_vm_shrinkstack(cr_State *ts);
 void cr_vm_inctop(cr_State *ts);
 
 int cr_vm_pcall(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t oldtop);
-int cr_vm_call(cr_State *ts, SPtr fn, int nreturns);
+void cr_vm_call(cr_State *ts, SPtr fn, int nreturns);
 
 cr_number cr_vm_modnum(cr_State *ts, cr_number x, cr_number y);
 void cr_vm_incccalls(cr_State *ts);

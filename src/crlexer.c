@@ -18,6 +18,7 @@
 #include "crdebug.h"
 #include "crstate.h"
 #include "crhashtable.h"
+#include "crstring.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -107,8 +108,8 @@ void cr_lex_init(cr_State *ts)
 
 	/* intern all keywords */
 	for (i = 0; i < NUM_KEYWORDS; i++) {
-		s = cr_object_newcstring(ts, tkstr[i]);
-		s->bits = (STRKEYWORD | STRINTERNED);
+		s = cr_string_new(ts, tkstr[i]);
+		s->bits = STRKEYWORD;
 		s->extra = i;
 		cr_gc_fix(ts, obj2gco(s));
 	}
@@ -154,11 +155,11 @@ const char *cr_lex_tok2str(Lexer *lx, int t)
 	cr_assert(token <= TK_IDENTIFIER);
 	if (t >= FIRSTTK) {
 		str = tkstr[t - FIRSTTK];
-		if (t < TK_EOS) return cr_object_pushfstring(lx->ts, "'%s'", str);
+		if (t < TK_EOS) return cr_string_pushfstring(lx->ts, "'%s'", str);
 		return str;
 	} else {
-		if (isprint(t)) return cr_object_pushfstring(lx->ts, "'%c'", t);
-		return cr_object_pushfstring(lx->ts, "'\\%d'", t);
+		if (isprint(t)) return cr_string_pushfstring(lx->ts, "'%c'", t);
+		return cr_string_pushfstring(lx->ts, "'\\%d'", t);
 	}
 }
 
@@ -169,7 +170,7 @@ static const char *lextok2str(Lexer *lx, int t)
 		case TK_FLT: case TK_INT:
 		case TK_STRING: case TK_IDENTIFIER:
 			savec(lx, '\0');
-			return cr_object_pushfstring(lx->ts, "'%s'", lbptr(lx));
+			return cr_string_pushfstring(lx->ts, "'%s'", lbptr(lx));
 		default:
 			return cr_lex_tok2str(lx, t);
 	}
@@ -183,8 +184,8 @@ static cr_noret lexerror(Lexer *lx, const char *err, int token)
 	ts = lx->ts;
 	err = cr_debug_info(ts, err, lx->src, lx->line);
 	if (token)
-		cr_object_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
-	cr_debug_throw(ts, CR_ERRSYNTAX);
+		cr_string_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
+	cr_state_throw(ts, CR_ERRSYNTAX);
 }
 
 
@@ -203,7 +204,7 @@ OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len)
 	cr_State *ts;
 
 	ts = lx->ts;
-	s = cr_object_newstring(ts, str, len);
+	s = cr_string_newl(ts, str, len);
 	stks = s2v(ts->stacktop.p++);
 	setv2s(ts, stks, s); /* anchor temporarily */
 	cr_htable_set(lx->ts, lx->tab, stks, stks);
@@ -223,7 +224,7 @@ static void readcomment(Lexer *lx)
 }
 
 
-static void readlongcomment(Lexer *lx) 
+static void readlongcomment(Lexer *lx)
 {
 readmore:
 	switch (lx->c) {
@@ -256,7 +257,7 @@ static int hexdigit(Lexer *lx)
 
 	c = lx->c;
 	if (isxdigit(c))
-		return cr_object_hexvalue(c);
+		return cr_string_hexvalue(c);
 	return -1;
 }
 
@@ -332,24 +333,24 @@ static int lexstr2num(Lexer *lx, Literal *k)
 	int of;
 	TValue o;
 
-	if (cr_object_strtonum(lbptr(lx), &o, &of) == 0)
+	if (cr_string_tonum(lbptr(lx), &o, &of) == 0)
 		lexerror(lx, "invalid number literal", TK_FLT);
-	else if (of > 0) 
+	else if (of > 0)
 		lexerror(lx, "number literal overflows", TK_FLT);
-	else if (of < 0) 
+	else if (of < 0)
 		lexerror(lx, "number literal underflows", TK_FLT);
 	if (ttisint(&o)) {
-		k->i = ivalue(&o);
+		k->i = ival(&o);
 		return TK_INT;
 	} else {
 		cr_assert(ttisflt(&o));
-		k->n = fvalue(&o);
+		k->n = fval(&o);
 		return TK_FLT;
 	}
 }
 
 
-/* 
+/*
  * Read digits, additionally allow '_' separators
  * if these are not mantissa digits denoted by 'fp'.
  */
@@ -372,7 +373,7 @@ static int auxreaddigs(Lexer *lx, Dig d, int fp)
 }
 
 
-/* 
+/*
  * Read exponent digits.
  * Exponent must have at least 1 decimal digit.
  */
@@ -487,17 +488,17 @@ readmore:
 		else if (lxmatch(lx, '*')) readlongcomment(lx);
 		else return '/';
 		goto readmore;
-	case '"': 
-		  readstring(lx, k); 
+	case '"':
+		  readstring(lx, k);
 		  return TK_STRING;
 	case '0': case '1': case '2': case '3': case '4':
-	case '5': case '6': case '7': case '8': case '9': 
+	case '5': case '6': case '7': case '8': case '9':
 		  return readnumber(lx, k);
-	case '!': 
+	case '!':
 		  advance(lx);
 		  if (lxmatch(lx, '=')) return TK_NE;
 		  return '!';
-	case '=': 
+	case '=':
 		  advance(lx);
 		  if (lxmatch(lx, '=')) return TK_EQ;
 		  return '=';
@@ -522,10 +523,10 @@ readmore:
 				  return TK_DOTS;
 			  goback(lx, '.');
 			  return '.';
-		  } 
+		  }
 		  if (!isdigit(lx->c)) return '.';
 		  else return readnumber(lx, k);
-	case CREOF: 
+	case CREOF:
 		  return TK_EOS;
 	default:
 		  if (isalpha(lx->c)) {

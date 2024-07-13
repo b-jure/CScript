@@ -93,7 +93,7 @@ void *cr_mem_malloc(cr_State *ts, size_t size)
 
 
 void *cr_mem_growarr(cr_State *ts, void *ptr, int len, int *sizep,
-			int elemsize, int extra, int limit, const char *what) 
+			int elemsize, int extra, int limit, const char *what)
 {
 	int size;
 

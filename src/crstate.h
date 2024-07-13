@@ -31,7 +31,7 @@ typedef struct cr_ljmp {
  * ------------------------------------------------------------------------- */
 
 /* get Cript 'Function' */
-#define cffn(cf)	(crclvalue(s2v((cf)->callee.p)).fn)
+#define cffn(cf)	(crclval(s2v((cf)->callee.p)).fn)
 
 
 /* 'cfstatus' bits */
@@ -156,5 +156,8 @@ union GCUnion {
 #define gco2th(o)	(&(cast_gcu(o)->th))
 
 #define obj2gco(o)	(&(cast_gcu(o)->gc))
+
+
+cr_noret cr_state_throw(cr_State *ts, int code);
 
 #endif

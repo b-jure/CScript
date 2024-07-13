@@ -526,7 +526,7 @@ cr_sinline void call(cr_State *ts, SPtr fn, int retcnt)
 
 
 /* external interface for 'call'. */
-int cr_vm_call(cr_State *ts, SPtr fn, int nreturns)
+void cr_vm_call(cr_State *ts, SPtr fn, int nreturns)
 {
 	call(ts, fn, nreturns);
 }
