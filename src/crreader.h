@@ -41,8 +41,32 @@ typedef struct {
 } BuffReader;
 
 
-void cr_br_init(cr_State* ts, BuffReader* br, cr_reader reader, void* userdata);
-int cr_br_fill(BuffReader* br);
-size_t cr_br_readn(BuffReader* br, size_t n);
+CRI_FUNC void cr_br_init(cr_State* ts, BuffReader* br, cr_reader reader,
+                         void* userdata);
+CRI_FUNC int cr_br_fill(BuffReader* br);
+CRI_FUNC size_t cr_br_readn(BuffReader* br, size_t n);
+
+
+
+#define cr_reader_buffinit(b)     {(b)->str = NULL; (b)->len = (b)->size = 0;}
+
+#define cr_reader_buff(b)       ((b)->str)
+#define cr_reader_bufflen(b)    ((b)->len)
+#define cr_reader_buffsize(b)   ((b)->size)
+
+#define cr_reader_buffpop(b)        ((b)->len -= 1)
+#define cr_reader_buffreset(b)      ((b)->len = 0)
+
+#define cr_reader_buffresize(ts,b,s) \
+    { (b)->str = cr_mem_saferealloc(ts, (b)->str, (b)->size, s); \
+      (b)->size = s; }
+
+
+/* string buffer for lexer */
+typedef struct Buffer {
+  char *str;
+  size_t len;
+  size_t size;
+} Buffer;
 
 #endif

@@ -333,19 +333,17 @@ static cr_mem markhtable(GC *gc, HTable *ht)
 static cr_mem markfunction(GC *gs, Function *fn)
 {
 	int i;
-
 	markobjectcheck(gs, fn->name);
 	markobjectcheck(gs, fn->source);
-	for (i = 0; i < fn->fns.len; i++)
-		markobject(gs, &fn->fns.ptr[i]);
-	for (i = 0; i < fn->constants.len; i++)
-		markvalue(gs, &fn->constants.ptr[i]);
-	for (i = 0; i < fn->lvars.len; i++)
-		markobjectcheck(gs, fn->lvars.ptr[i].name);
-	for (i = 0; i < fn->upvalues.len; i++)
-		markobjectcheck(gs, fn->upvalues.ptr[i].name);
-	return 1 + fn->fns.len + fn->constants.len + fn->lvars.len +
-			fn->upvalues.len;
+	for (i = 0; i < fn->nfn; i++)
+		markobject(gs, fn->fn[i]);
+	for (i = 0; i < fn->nconst; i++)
+		markvalue(gs, &fn->constants[i]);
+	for (i = 0; i < fn->nlocals; i++)
+		markobjectcheck(gs, fn->locals[i].name);
+	for (i = 0; i < fn->nupvals; i++)
+		markobjectcheck(gs, fn->upvals[i].name);
+	return 1 + fn->nfn + fn->nconst + fn->nlocals + fn->nupvals;
 }
 
 
@@ -844,9 +842,7 @@ static cr_mem atomic(cr_State *ts)
 	cr_assert(gc->weakhtab == NULL);
 	gc->state = GCSatomic;
 	markobject(gc, ts); /* mark running thread */
-	markobject(gc, gs->gids); /* mark global id table */
-	for (i = 0; i < gs->gvars.len; i++) /* mark global values */
-		markvalue(gc, &gs->gvars.ptr[i]);
+	markobject(gc, gs->globals); /* mark global variables table */
 	work += i;
 	work += propagateall(gs);
 	/* mark open upvalues */
@@ -906,9 +902,7 @@ static void restartgc(GState *gs)
 	gc = &gs->gc;
 	gc->graylist = gc->grayagain = gc->weak = NULL;
 	markobject(gc, gs->mainthread);
-	markobject(gc, gs->gids);
-	for (i = 0; i < gs->gvars.len; i++)
-		markvalue(gc, &gs->gvars.ptr[i]);
+	markobject(gc, gs->globals);
 	markopenupvalues(gs);
 	/* there could be leftover unreachable objects
 	 * with a finalizer from the previous cycle, in

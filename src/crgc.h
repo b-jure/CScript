@@ -131,16 +131,16 @@
  * Same as 'cr_gc_barrierforward_' but ensures that it is only
  * called when 'r' (root) is a black object and 'o' is white.
  */
-#define cr_gc_objbarrierforward(ts,r,o) \
+#define cr_gc_objbarrier(ts,r,o) \
 	(isblack(r) && iswhite(o) ? \
-	cr_gc_barrierforward_(ts,obj2gco(r),obj2gco(o)) : (void)(0))
+	cr_gc_barrier_(ts,obj2gco(r),obj2gco(o)) : (void)(0))
 
 /*
  * Wrapper around 'cr_gc_objbarrierforward' that ensures
  * 'v' (pointed to value) is object.
  */
-#define cr_gc_barrierforward(ts,r,v) \
-	(ttiso(v) ? cr_gc_objbarrierforward(ts,r,oval(v)) : (void)(0))
+#define cr_gc_barrier(ts,r,v) \
+	(ttiso(v) ? cr_gc_objbarrier(ts,r,oval(v)) : (void)(0))
 
 /*
  * Same as 'cr_gc_barrierback_' but ensures that it is only

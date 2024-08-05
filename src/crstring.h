@@ -24,19 +24,23 @@
 	(offsetof(OString, bytes) + (((l) + 1) * sizeof(char)))
 
 
+/* create new string from literal 'lit' */
+#define cr_string_newlit(ts, lit) \
+    cr_string_newl(ts, "" lit, (sizeof(lit)/sizeof(char)) - 1)
+
 
 CRI_FUNC OString *cr_string_new(cr_State *ts, const char *str);
 CRI_FUNC OString *cr_string_newl(cr_State *ts, const char *str, size_t len);
 CRI_FUNC void cr_string_free(cr_State *ts, OString *s);
 
-CRI_FUNC unsigned int cr_string_hash(const char *str, size_t len,
-				     unsigned int seed);
+CRI_FUNC uint cr_string_hash(const char *str, size_t len,
+				             unsigned int seed);
 
 CRI_FUNC int cr_string_cmp(const OString *s1, const OString *s2);
 CRI_FUNC int cr_string_eq(const OString *s1, const OString *s2);
 
 CRI_FUNC const char *cr_string_pushvfstring(cr_State *ts, const char *fmt,
-					    va_list argp);
+					                        va_list argp);
 CRI_FUNC const char *cr_string_pushfstring(cr_State *ts, const char *fmt, ...);
 
 CRI_FUNC size_t cr_string_tonum(const char *s, TValue *o, int *of);

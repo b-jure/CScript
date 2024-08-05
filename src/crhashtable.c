@@ -160,7 +160,7 @@ cr_sinline Node *gehtnode(const Node *mem, int size, const TValue *k)
 
 
 /* auxliary function to 'cr_htable_next' */
-static unsigned int getindex(cr_State *ts, HTable *tab, const TValue *k)
+static uint getindex(cr_State *ts, HTable *tab, const TValue *k)
 {
 	Node *slot;
 
@@ -180,7 +180,7 @@ int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k)
 {
 	Node *slot;
 	TValue *v;
-	unsigned int i;
+	uint i;
 
 	v = s2v(k->p);
 	i = getindex(ts, tab, v);
@@ -232,7 +232,7 @@ static void rehash(cr_State *ts, const Node *omem, int osize, Node *nmem, int ns
 
 
 /* sets table array slots to 'emptynode' */
-cr_sinline void auxsetempty(Node * restrict mem, unsigned int size)
+cr_sinline void auxsetempty(Node * restrict mem, uint size)
 {
 	Node *slot;
 	int i;
@@ -252,7 +252,7 @@ cr_sinline void auxsetempty(Node * restrict mem, unsigned int size)
 static void expandmem(cr_State *ts, HTable *tab)
 {
 	Node *newmem;
-	unsigned int nsize;
+	uint nsize;
 	int osize;
 
 	osize = twoto(tab->size++);
@@ -328,7 +328,7 @@ int cr_htable_remove(HTable *tab, const TValue *key)
 
 
 /* try to get interned string */
-OString *cr_htable_getstring(HTable *tab, const char *str, size_t len, unsigned int hash)
+OString *cr_htable_getstring(HTable *tab, const char *str, size_t len, uint hash)
 {
 	int size;
 	Node *slot;

@@ -23,7 +23,6 @@
 #include "crvalue.h"
 #include "crobject.h"
 
-#include <stdarg.h>
 
 
 /* multi-char tokens start at this numeric value */
@@ -64,34 +63,29 @@ typedef struct {
 } Token;
 
 
-/* buffer for strings */
-Vec(Buffer, char);
-
-
 typedef struct Lexer {
-	struct cr_State *ts;
-	struct FunctionState *fs;
-	struct ParserState *ps; /* dynamic data used by parser */
-	HTable *tab; /* prevent string literal collection */
-	BuffReader *br; /* buffered reader */
-	Buffer buff; /* buffer for tokens */
-	Token t; /* current token */
-	Token tahead; /* lookahead token */
-	OString *src; /* current source name */
 	int c; /* current char */
 	int lastline; /* line of previous token */
 	int line; /* current line number */
+	Token t; /* current token */
+	Token tahead; /* lookahead token */
+	HTable *tab; /* scanner table */
+	struct cr_State *ts;
+	struct FunctionState *fs;
+	BuffReader *br; /* buffered reader */
+    Buffer *buff; /* string buffer */
+	struct ParserState *ps; /* dynamic data used by parser */
+	OString *src; /* current source name */
+    OString *env; /* name of environment variable */
 } Lexer;
 
 
-CRI_FUNC void cr_lex_init(cr_State *ts);
 CRI_FUNC void cr_lex_setsource(cr_State *ts, Lexer *lx, BuffReader *br,
-			       OString *source);
-
+			                   OString *source);
+CRI_FUNC void cr_lex_init(cr_State *ts);
 CRI_FUNC const char *cr_lex_tok2str(Lexer *lx, int t);
 CRI_FUNC OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len);
-CRI_FUNC void cr_lex_syntaxerror(Lexer *lx, const char *err);
-
+CRI_FUNC cr_noret cr_lex_syntaxerror(Lexer *lx, const char *err);
 CRI_FUNC void cr_lex_scan(Lexer *lx);
 CRI_FUNC int cr_lex_scanahead(Lexer *lx);
 

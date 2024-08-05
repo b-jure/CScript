@@ -130,10 +130,6 @@ typedef struct TValue {
 
 
 
-Vec(TValueVec, TValue);
-
-
-
 
 /*
  * Represents value on the stack.
@@ -349,8 +345,8 @@ typedef enum N2IMode {
 #define cr_value_hashp(p)	pointer2uint((p))
 
 
-CRI_FUNC unsigned int cr_value_hashnum(cr_number n);
-CRI_FUNC int cr_value_ceillog2(unsigned int x);
+CRI_FUNC uint cr_value_hashnum(cr_number n);
+CRI_FUNC int cr_value_ceillog2(uint x);
 CRI_FUNC int cr_value_n2i(cr_number n, cr_integer *i, N2IMode mode);
 CRI_FUNC int cr_value_tointeger(const TValue *v, cr_integer *i, int mode);
 
@@ -360,9 +356,9 @@ CRI_FUNC cr_number cr_value_modnum(cr_State *ts, cr_number x, cr_number y);
 CRI_FUNC cr_integer cr_value_shiftr(cr_integer x, cr_integer y);
 
 CRI_FUNC void cr_value_arithm(cr_State *ts, const TValue *a, const TValue *b,
-			      SPtr res, int op);
+			                  SPtr res, int op);
 CRI_FUNC int cr_value_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
-				TValue *res, int op);
+				                TValue *res, int op);
 
 CRI_FUNC int cr_value_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2);
 CRI_FUNC int cr_value_orderLT(cr_State *ts, const TValue *v1, const TValue *v2);

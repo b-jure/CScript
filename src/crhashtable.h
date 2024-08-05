@@ -50,6 +50,6 @@ CRI_FUNC void cr_htable_removedirect(HTable *tab, Node *slot);
 CRI_FUNC int cr_htable_get(HTable *tab, const TValue *key, TValue *o);
 CRI_FUNC void cr_htable_free(cr_State *ts, HTable *ht);
 CRI_FUNC OString *cr_htable_getstring(HTable *tab, const char *str, size_t len,
-				      unsigned int hash);
+				                      uint hash);
 
 #endif

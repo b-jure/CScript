@@ -16,12 +16,16 @@
 
 #include "crcode.h"
 #include "crconf.h"
+#include "crgc.h"
 #include "crlexer.h"
 #include "crlimits.h"
 #include "crobject.h"
 #include "crparser.h"
 #include "crstate.h"
 #include "crvalue.h"
+#include "crstring.h"
+#include "crfunction.h"
+#include "crvm.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -39,248 +43,70 @@
 
 
 
-
 /* Scope 'cflow' bits */
-#define CFLOWLOOP	(1<<0)
-#define CFLOWFOREACH	(1<<1)
-#define CFLOWSWITCH	(1<<2)
+#define CFLOOP	    1
+#define CFGLOOP	    2
+#define CFSWITCH	4
 
+/* test 'cflow' bits */
+#define scopeisloop(s)      testbit((s)->cflow, CFLOOP)
+#define scopeisgloop(s)     testbit((s)->cflow, CFGLOOP)
+#define scopeisswitch(s)    testbit((s)->cflow, CFSWITCH)
 
 /* lexical scope information */
 typedef struct Scope {
 	struct Scope *prev; /* implicit linked-list */
 	int nlocals; /* number of locals outside of this scope */
-	int cflow; /* control flow information */
+    cr_ubyte cflow; /* control flow context */
 	cr_ubyte haveupval; /* set if scope contains upvalue variable */
 	cr_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
 } Scope;
 
 
 
-/* two dimensional vec (for control flow) */
-Vec(intVecVec, intVec);
-
-/* control flow info */
-typedef struct CFInfo {
-	intVecVec breaks; /* break statement offsets */
-	int innerlstart; /* innermost loop start offset */
-	int innerldepth; /* innermost loop scope depth */
-	int innersdepth; /* innermost switch scope depth */
-} CFInfo;
-
-
-
-/* class declaration information */
-typedef struct ClassState {
-	struct ClassState *enclosing; /* implicit linked-list */
-	cr_ubyte superclass; /* true if class declaration inherits */
-} ClassState;
-
-
-
-/* stores current state for use in optimizations */
-typedef struct Context {
-	int coffset;
-	int nconstants;
-	int nupvalues;
-	int nlocals;
-} Context;
-
-
-
-static void savecontext(FunctionState *fs, Context *ctx)
-{
-	ctx->coffset = codeoffset(fs);
-	ctx->nconstants = fs->fn->constants.len;
-	ctx->nupvalues = fs->fn->upvalues.len;
-	ctx->nlocals = fs->nlocals;
-}
-
-
-static void loadcontext(FunctionState *fs, Context *ctx)
-{
-	Function *fn;
-
-	fn = fs->fn;
-	cr_assert(ctx->coffset >= fn->code.len);
-	cr_assert(ctx->nconstants >= fn->constants.len);
-	cr_assert(ctx->nupvalues >= fn->upvalues.len);
-	cr_assert(ctx->nlocals >= fs->lx->ps->locals.len);
-	fn->code.len = ctx->coffset;
-	fn->constants.len = ctx->nconstants;
-	fn->upvalues.len = ctx->nupvalues;
-	fs->lx->ps->locals.len -= ctx->nlocals - fs->nlocals;
-	fs->nlocals = ctx->nlocals;
-}
-
-
-
-static void initexp(ExpInfo *e, expt et, int info)
-{
-	e->t = e->f = -1;
-	e->et = et;
-	e->u.info = info;
-}
-
-
-static void initvar(FunctionState *fs, ExpInfo *e, int idx)
-{
-	e->t = e->f = -1;
-	e->et = EXP_LOCAL;
-	e->u.info = idx;
-}
-
-
-static Scope *getscope(FunctionState *fs, int idx)
-{
-	Scope *scope;
-
-	scope = fs->s;
-	while (scope != NULL) {
-		if (scope->nlocals >= idx)
-			break;
-		scope = scope->prev;
-	}
-	return scope;
-}
-
-
-
 /* forward declare recursive non-terminals */
-static void dec(FunctionState *fs);
 static void stm(FunctionState *fs);
 static void expr(FunctionState *fs, ExpInfo *e);
 
 
-// Implicit return
-#define implicitreturn(fs) (CODE(fs, OP_NIL), CODE(fs, OP_RET1))
 
-// Class initializer return
-#define initreturn(fs) (CODEOP(fs, OP_GET_LOCAL, 0), CODE(fs, OP_RET1))
-
-
-// Emit loop instruction
-// static cr_inline void codeloop(FunctionState *fs, int start)
-// {
-// 	CODE(fs, OP_LOOP);
-// 	int offset = codeoffset(fs) - start + 3;
-// 	if (cr_unlikely(offset >= PARSER_JMP_LIMIT))
-// 		error(fs, comperrors[CE_JMPLIMIT], PARSER_JMP_LIMIT);
-// 	CODEL(fs, offset);
-// }
-// 
-// static void ControlFlow_init(cr_State *ts, CFlow *cflow)
-// {
-// 	cflow->innerlstart = -1;
-// 	cflow->innerldepth = 0;
-// 	cflow->innersdepth = 0;
-// 	Array_Array_cr_int_init(&cflow->breaks, ts);
-// }
-// 
-// static void ControlFlow_free(CFlow *context)
-// {
-// 	Array_Array_cr_int_free(&context->breaks, NULL);
-// 	context->innerlstart = -1;
-// 	context->innerldepth = 0;
-// 	context->innersdepth = 0;
-// }
-
-
-static void leavescope(FunctionState *fs)
+static cr_noret expecterror(Lexer *lx, int tk)
 {
+	const char *err = cr_string_pushfstring(lx->ts, "expected %s",
+                                            cr_lex_tok2str(lx, tk));
+	cr_lex_syntaxerror(lx, err);
 }
 
 
-static void enterscope(FunctionState *fs, Scope *s, int cflow)
+static cr_noret limiterror(FunctionState *fs, const char *what, int limit)
 {
-	s->cflow = cflow;
-	s->nlocals = fs->nlocals;
-	s->havetbcvar = 0;
-	s->prev = fs->s;
-	fs->s = s;
-}
-
-static void initfs(FunctionState *fs, Lexer *lx, CFInfo *cflow, Scope *s)
-{
-	ParserState *ps;
-	Function *fn;
-
-	ps = lx->ps;
-	fn = fs->fn;
-	fs->prev = lx->fs;
-	fs->lx = lx;
-	lx->fs = fs;
-	fs->s = NULL;
-	fs->cflow = cflow;
-	fs->stkidx = 0;
-	fs->nlocals = 0;
-	fs->firstlocal = ps->locals.len;
-	fs->close = 0;
-	fs->isvtm = isvtmethod(lx->src);
-	fn->source = lx->src;
-	gcbarrier(fn->source);
-	enterscope(fs, s);
-	fs->fn = OFunction_new(ts);
-	fs->fn_type = fn_type;
-	fs->vflags = 0;
-	ControlFlow_init(ts, &fs->cflow);
-	// Setup upvalues storage
-	if (enclosing == NULL) {
-		fs->tag = -1;
-		fs->upvalues = MALLOC(ts, sizeof(Array_Upvalue));
-		Array_Upvalue_init(fs->upvalues, ts);
-	} else {
-		fs->tag = enclosing->tag;
-		fs->upvalues = enclosing->upvalues;
-	}
-	// Setup local variables storage
-	Array_Local_init(&fs->locals, ts);
-	Array_Local_init_cap(&fs->locals, SHORT_STACK_SIZE);
-	fs->locals.len++;
-	LocalVar *local = fs->locals.data;
-	local->depth = 0;
-	local->flags = 0;
-	if (fn_type == FN_METHOD) {
-		local->name.start = "self";
-		local->name.len = 4;
-	} else {
-		local->name.start = "";
-		local->name.len = 0;
-	}
-	if (fn_type != FN_SCRIPT) {
-		fs->fn->p.defline = PREVT(fs).line;
-		fs->fn->p.name = OString_new(ts, PREVT(fs).start, PREVT(fs).len);
-	}
-}
-
-CrClosure *freefs(FunctionState *fs)
-{
-	cr_State *ts;
-
-	ts = fs->lx->ts;
-	ControlFlow_free(&fs->cflow);
-	if (fs->prev == NULL) {
-		cr_assert(fs->ts, fs->fn_type == FN_SCRIPT, "FunctionState is top-level but the type is not 'FN_SCRIPT'.");
-		Array_Upvalue_free(fs->upvalues, NULL);
-		FREE(ts, fs->upvalues); // free the memory holding the pointer
-	}
-	Array_Local_free(&fs->locals, NULL);
-	ts->fs = fs->prev;
-	FREE(ts, fs);
+    cr_State *ts = fs->lx->ts;
+    const char *err;
+    const char *where;
+    int line = fs->fn->defline;
+    if (line == 0)
+        where = "main function";
+    else
+        where = cr_string_pushfstring(ts, "function at line %d", line);
+    err = cr_string_pushfstring(ts, "too many %s (limit is %d) in %s",
+                                what, limit, where);
+    cr_lex_syntaxerror(fs->lx, err);
 }
 
 
+static void checklimit(FunctionState *fs, int n, int limit, const char *what)
+{
+    if (n >= limit)
+        limiterror(fs, what, limit);
+}
 
 
 /* check if 'tk' matches the current token */
 static void expect(Lexer *lx, int tk)
 {
-	const char *err;
-
 	if (lx->t.tk == tk)
 		return;
-	err = cr_object_pushfstring(lx->ts, "expected %s", cr_lex_tok2str(lx, tk));
-	cr_lex_syntaxerror(lx, err);
+    expecterror(lx, tk);
 }
 
 
@@ -311,65 +137,6 @@ static OString *expect_id(Lexer *lx)
 	s = lx->t.lit.str;
 	cr_lex_scan(lx);
 	return s;
-}
-
-
-/* End compilation of the function and emit return instruction */
-static Function *parse_end(FunctionState *fs)
-{
-	if (!fs->fn->gotret) { // last statement wasn't 'return' ?
-		if (isom(fs) && tagisnoret(fs->tag)) { // om that can't return values with 'return' ?
-			if (fs->tag == SS_INIT) { // return 'self'
-				CODEOP(fs, OP_GET_LOCAL, 0);
-				CODE(fs, OP_RET1);
-			} else
-				CODE(fs, OP_RET0); // no return
-		} else
-			implicitreturn(fs); // otherwise implicit 'nil' return
-	}
-	fs->fn->p.deflastline = PREVT(fs).line;
-#ifdef CR_DEBUG_PRINT_CODE
-	if (!fs->lexer->error)
-		Chunk_debug(fs->ts, CHUNK(fs), fs->fn->name->storage);
-#endif
-	return fs->fn;
-}
-
-
-// Compiles source code, 'isingscope' determines if the script getting
-// compiled is in global or local scope.
-// Additionally parser only registers compile-time errors but it does not
-// call the usual 'runerror' [@err.h], this ensures that all of the
-// compile-time errors will be reported (exhaustive parser).
-CrClosure *parse(cr_State *ts, BuffReader *br, const char *name, int isingscope)
-{
-	Scope gscope, lscope;
-	FunctionState fs;
-	Lexer L;
-
-	if (name == NULL)
-		name = "?";
-	F_init(ts, &fs, &globalscope, NULL, FN_SCRIPT, ts->fs);
-	fs.fn->p.source = OString_new(ts, name, strlen(name));
-	L_init(&L, ts, br, fs.fn->p.source);
-	startscope(&fs, &gscope, 0, 0);
-	if (!isingscope) // script not in global scope?
-		startscope(&fs, &lscope, 0, 0);
-	advance(&fs); // fetch first token
-	while (!match(&fs, TOK_EOF))
-		dec(&fs);
-	Function *fn = parse_end(&fs);
-	cr_ubyte comperr = fs.lexer->error;
-	L_free(&L);
-	freefs(&fs);
-	if (cr_likely(!comperr)) {
-		push(ts, OBJ_VAL(fn)); // prevent 'fn' from getting collected
-		CrClosure *closure = OClosure_new(ts, fn);
-		pop(ts); // 'fn'
-		push(ts, OBJ_VAL(closure));
-		return closure;
-	}
-	return NULL;
 }
 
 // Patch jump instruction
@@ -407,8 +174,8 @@ static cr_inline void endbreaklist(FunctionState *fs)
  * Statements
  * ------------------------------------------------------------------------- */
 
-/* 
- * Used to chain variables on the left side of 
+/*
+ * Used to chain variables on the left side of
  * the assignment.
  */
 typedef struct LHS {
@@ -422,7 +189,7 @@ static void assignmore(Lexer *lx, LHS *lhs, ExpInfo *e)
 }
 
 
-/* 
+/*
  * exprstm ::= functioncall
  *           | varlist '=' explist
  */
@@ -464,7 +231,7 @@ static void exprstm(Lexer *lx, int lastforclause)
 }
 
 
-cr_sinline LVarInfo *getlocal(FunctionState *fs, int idx)
+cr_sinline LocalVar *getlocal(FunctionState *fs, int idx)
 {
 	cr_assert(fs->firstlocal + idx < fs->l->ps->locals.len);
 	return &fs->lx->ps->locals.ptr[fs->firstlocal + idx];
@@ -478,22 +245,22 @@ static int registerlocal(Lexer *lx, FunctionState *fs, OString *name)
 	LVar *local;
 
 	fn = fs->fn;
-	cr_mem_growvec(lx->ts, &fn->lvars);
+	cr_mem_growvec(lx->ts, &fn->autovars);
 	local = fn->lvars.ptr[fn->lvars.len++];
 	local->name = name;
 	local->alivepc = fn->code.len;
-	return fn->lvars.len - 1;
+	return fn->autovars.len - 1;
 }
 
 
-/* 
+/*
  * Adjust locals by increment 'nlocals' and registering them
  * inside the 'lvars'.
  */
 static void adjustlocals(Lexer *lx, int nvars)
 {
 	FunctionState *fs;
-	LVarInfo *lvinfo;
+	LocalVar *lvinfo;
 	int idx;
 	int i;
 
@@ -511,7 +278,7 @@ static void markscope(FunctionState *fs, int vidx)
 {
 	Scope *s;
 
-	s = fs->s;
+	s = fs->scope;
 	while(s->nlocals - 1 > vidx)
 		s = s->prev;
 	s->intbc = 1;
@@ -524,7 +291,7 @@ static void markcurrscope(FunctionState *fs)
 {
 	Scope *s;
 
-	s = fs->s;
+	s = fs->scope;
 	s->intbc = 1;
 	fs->close = 1;
 }
@@ -534,8 +301,8 @@ static void markcurrscope(FunctionState *fs)
 static int addlocal(Lexer *lx, OString *name)
 {
 	FunctionState *fs = lx->fs;
-	LVarVec *locals;
-	LVarInfo *lvinfo;
+	AutoVarVec *locals;
+	LocalVar *lvinfo;
 
 	locals = &fs->lx->ps->locals;
 	cr_mem_growvec(fs->lx->ts, locals);
@@ -551,14 +318,14 @@ static int addlocal(Lexer *lx, OString *name)
 	addlocal(lx, cr_lex_newstring(lx, "" lit, SLL(lit)))
 
 
-/* 
+/*
  * Searches for local variable 'name' taking in account name
  * collisions in the same scope.
  */
 static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 {
 	int i;
-	LVarInfo *lvinfo;
+	LocalVar *lvinfo;
 	Lexer *lx;
 
 	lx = fs->lx;
@@ -566,7 +333,7 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 		lvinfo = getlocal(fs, i);
 		if (name == lvinfo->s.name) {
 			if (cr_unlikely(vmod(lvinfo->val) & VARUNINIT)) {
-				cr_lex_syntaxerror(lx, cr_object_pushfstring(lx->ts, 
+				cr_lex_syntaxerror(lx, cr_object_pushfstring(lx->ts,
 					"can't read local variable '%s' in its "
 					"own initializer", name));
 			}
@@ -579,18 +346,18 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 
 
 /* get upvalue 'idx' from 'upvalues' */
-cr_sinline UVInfo *getupvalue(FunctionState *fs, int idx)
+cr_sinline UpValInfo *getupvalue(FunctionState *fs, int idx)
 {
-	return &fs->fn->upvalues.ptr[idx];
+	return &fs->fn->upvals.ptr[idx];
 }
 
 
 /* create new upvalue in 'upvalues' */
-static UVInfo *newupvalue(FunctionState *fs)
+static UpValInfo *newupvalue(FunctionState *fs)
 {
 	UVInfoVec *uvals;
 
-	uvals = &fs->fn->upvalues;
+	uvals = &fs->fn->upvals;
 	cr_mem_growvec(fs->lx->ts, uvals);
 	return &uvals->ptr[uvals->len++];
 }
@@ -599,7 +366,7 @@ static UVInfo *newupvalue(FunctionState *fs)
 /* add new upvalue 'name' into 'upvalues' */
 static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e)
 {
-	UVInfo *uv;
+	UpValInfo *uv;
 	FunctionState *enclosing;
 
 	uv = newupvalue(fs);
@@ -614,10 +381,10 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e)
 		enclosing = fs->prev;
 		uv->onstack = 0;
 		uv->idx = e->u.info;
-		uv->mod = enclosing->fn->upvalues.ptr[e->u.info].mod;
+		uv->mod = enclosing->fn->upvals.ptr[e->u.info].mod;
 		cr_assert(name == enclosing->fn->upvalues.ptr[e->u.info].name);
 	}
-	return fs->fn->upvalues.len - 1;
+	return fs->fn->upvals.len - 1;
 }
 
 
@@ -627,7 +394,7 @@ static int searchupvalue(FunctionState *fs, OString *name)
 	UVInfoVec *upvals;
 	int i;
 
-	upvals = &fs->fn->upvalues;
+	upvals = &fs->fn->upvals;
 	for (i = 0; i < upvals->len; i++)
 		if (upvals->ptr[i]->name == name) return i;
 	return -1;
@@ -678,9 +445,9 @@ static TValue *newglobal(cr_State *ts)
 }
 
 
-/* 
+/*
  * Add new global value into 'gvars' and store its
- * name into 'gids'. 
+ * name into 'gids'.
  */
 static int addglobal(cr_State *ts, OString *name)
 {
@@ -729,8 +496,8 @@ static void varname(Lexer *lx, OString *name, ExpInfo *e)
 	  cr_code_reservestack((lx)->fs, 1); }
 
 
-/* 
- * self ::= 'self' 
+/*
+ * self ::= 'self'
  */
 static void self_(Lexer *lx, ExpInfo *e)
 {
@@ -824,7 +591,7 @@ static void super_(Lexer *lx, ExpInfo *e)
 }
 
 
-/* 
+/*
  * primary_exp ::= '(' exp ')'
  *               | identifier
  *               | 'self'
@@ -856,9 +623,9 @@ static void primaryexp(Lexer *lx, ExpInfo *e)
 }
 
 
-/* 
+/*
  * suffixedexp ::= primaryexp
- *               | primaryexp [dot|call|indexed...] 
+ *               | primaryexp [dot|call|indexed...]
  */
 static void suffixedexp(Lexer *lx, ExpInfo *e)
 {
@@ -885,7 +652,7 @@ static void suffixedexp(Lexer *lx, ExpInfo *e)
 }
 
 
-/* 
+/*
  * simpleexp ::= int
  *	       | flt
  *             | string
@@ -893,7 +660,7 @@ static void suffixedexp(Lexer *lx, ExpInfo *e)
  *             | 'true'
  *             | 'false'
  *             | '...'
- *             | suffixedexp 
+ *             | suffixedexp
  */
 static void simpleexp(Lexer *lx, ExpInfo *e)
 {
@@ -920,7 +687,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e)
 		initexp(e, EXP_FALSE, 0);
 		break;
 	case TK_DOTS:
-		expect_cond(lx, lx->fs->fn.isvararg, 
+		expect_cond(lx, lx->fs->fn.isvararg,
 				"cannot use '...' outside of vararg function");
 		initexp(e, EXP_VARARG, cr_code_vararg(lx->fs, 1));
 		break;
@@ -1004,7 +771,7 @@ static const struct {
 };
 
 
-/* 
+/*
  * subexpr ::= simpleexp
  *           | '-' simpleexp
  *           | '!' simpleexp
@@ -1193,10 +960,10 @@ static void codesetall(FunctionState *fs, Array_Exp *Earr)
 	}
 }
 
-static void block(FunctionState *fs)
+static void block(Lexer *lx)
 {
 	while (!check(fs, TOK_RBRACE) && !check(fs, TOK_EOF))
-		dec(fs);
+		stm(lx);
 	expect(fs, TOK_RBRACE, expectstr("Expect '}' after block."));
 }
 
@@ -1263,7 +1030,7 @@ static void codeassign(FunctionState *fs, int names, Array_cr_int *nameidx)
 //          | 'fixed' 'var' namelist ';'
 //          | 'fixed' 'var' name '=' explist ';'
 //          | 'fixed' 'var' namelist '=' explist ';'
-static void vardec(FunctionState *fs)
+static void vardec(Lexer *lx, int haveconst)
 {
 	if (match(fs, TOK_FIXED)) {
 		if (FIS(fs, FFIXED))
@@ -1285,21 +1052,13 @@ static void vardec(FunctionState *fs)
 	expect(fs, TOK_SEMICOLON, expectstr("Expect ';'."));
 }
 
-// fvardec ::= 'fixed' vardec
-static cr_inline void fvardec(FunctionState *fs)
-{
-	FSET(fs, FFIXED);
-	advance(fs);
-	vardec(fs);
-}
-
 
 // Create and parse a new FunctionState
 static void fn(FunctionState *fs, FunctionType type)
 {
 	FunctionState Fnew;
 	Scope globscope, S;
-	initfs(fs->ts, &Fnew, &globscope, fs->cclass, type, fs);
+	startfs(fs->ts, &Fnew, &globscope, fs->cclass, type, fs);
 	Fnew.fn->p.source = fs->fn->p.source; // source is same
 	startscope(&Fnew, &S, 0, 0); // no need to end this scope
 	expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
@@ -1324,11 +1083,11 @@ static void fn(FunctionState *fs, FunctionType type)
 		CODE(fs, upval->local ? 1 : 0);
 		CODEL(fs, upval->idx);
 	}
-	freefs(&Fnew);
+	endfs(&Fnew);
 }
 
 // fndec ::= 'fn' name '(' arglist ')' '{' block '}'
-static void fndec(FunctionState *fs)
+static void fndec(Lexer *lx)
 {
 	int idx = name(fs, expectstr("Expect function name."));
 	if (fs->S->depth > 0)
@@ -1356,7 +1115,7 @@ static void method(FunctionState *fs)
 		CODEOP(fs, OP_METHOD, idx);
 }
 
-static void classdec(FunctionState *fs)
+static void classdec(Lexer *lx)
 {
 	expect(fs, TOK_IDENTIFIER, expectstr("Expect class name."));
 	Token class_name = PREVT(fs);
@@ -1451,23 +1210,6 @@ static void codeinvoke(FunctionState *fs, ExpInfo *E, int idx)
 	}
 	E->ins.code = CODEOP(fs, invokeop, idx);
 	CODEL(fs, 1); // retcnt
-}
-
-static void dec(FunctionState *fs)
-{
-	fs->vflags = 0;
-	if (match(fs, TOK_VAR))
-		vardec(fs);
-	else if (match(fs, TOK_FIXED))
-		fvardec(fs);
-	else if (match(fs, TOK_FN))
-		fndec(fs);
-	else if (match(fs, TOK_CLASS))
-		classdec(fs);
-	else
-		stm(fs);
-	if (fs->lexer->panic)
-		sync(fs);
 }
 
 
@@ -1675,7 +1417,7 @@ static cr_inline void endloop(FunctionState *fs, int lstart, int ldepth)
 	(fs)->cflow.innerldepth = ldepth;
 }
 
-static void whilestm(FunctionState *fs)
+static void whilestm(Lexer *lx)
 {
 	Scope S;
 	Context C;
@@ -1718,7 +1460,7 @@ static void whilestm(FunctionState *fs)
 	endbreaklist(fs);
 }
 
-static void forstm(FunctionState *fs)
+static void forstm(Lexer *lx)
 {
 	Scope S;
 	Context C;
@@ -1735,7 +1477,7 @@ static void forstm(FunctionState *fs)
 	else if (match(fs, TOK_VAR))
 		vardec(fs);
 	else if (match(fs, TOK_FIXED))
-		fvardec(fs);
+		constvardec(fs);
 	else
 		exprstm(fs, 0);
 	savecontext(fs, &C);
@@ -2013,33 +1755,91 @@ static void dot(FunctionState *fs, ExpInfo *E)
 	}
 }
 
-static void stm(FunctionState *fs)
+static void stm(Lexer *lx)
 {
-	if (match(fs, TOK_WHILE))
-		whilestm(fs);
-	else if (match(fs, TOK_FOR))
-		forstm(fs);
-	else if (match(fs, TOK_FOREACH))
-		foreachstm(fs);
-	else if (match(fs, TOK_IF))
-		ifstm(fs);
-	else if (match(fs, TOK_SWITCH))
-		switchstm(fs);
-	else if (match(fs, TOK_LBRACE))
-		blockstm(fs);
-	else if (match(fs, TOK_CONTINUE))
-		continuestm(fs);
-	else if (match(fs, TOK_BREAK))
-		breakstm(fs);
-	else if (match(fs, TOK_RETURN))
-		returnstm(fs);
-	else if (match(fs, TOK_LOOP))
-		loopstm(fs);
-	else if (match(fs, TOK_SEMICOLON))
-		; // empty statement
-	else
-		exprstm(fs, 0);
+    switch (lx->t.tk) {
+    case TK_WHILE:
+        cr_lex_scan(lx);
+		whilestm(lx);
+        break;
+	case TK_FOR:
+        cr_lex_scan(lx);
+		forstm(lx);
+        break;
+	case TK_FOREACH:
+        cr_lex_scan(lx);
+		foreachstm(lx);
+        break;
+	case TK_IF:
+        cr_lex_scan(lx);
+		ifstm(lx);
+        break;
+	case TK_SWITCH:
+        cr_lex_scan(lx);
+		switchstm(lx);
+        break;
+	case '{':
+        cr_lex_scan(lx);
+		blockstm(lx);
+        break;
+	case TK_CONTINUE:
+        cr_lex_scan(lx);
+		continuestm(lx);
+        break;
+	case TK_BREAK:
+        cr_lex_scan(lx);
+		breakstm(lx);
+        break;
+	case TK_RETURN:
+        cr_lex_scan(lx);
+		returnstm(lx);
+        break;
+	case TK_LOOP:
+        cr_lex_scan(lx);
+		loopstm(lx);
+        break;
+	case ';': /* empty statement */
+        break;
+    default:
+        cr_lex_scan(lx);
+		exprstm(lx, 0);
+        break;
+    }
 }
+
+
+static void dec(Lexer *lx)
+{
+    int isconst = 0;
+
+    switch (lx->t.tk) {
+	case TK_CONST:
+        isconst = 1;
+        /* FALLTHRU */
+    case TK_LET:
+        cr_lex_scan(lx);
+		vardec(lx, isconst);
+        break;
+	case TK_FN:
+        cr_lex_scan(lx);
+		fndec(lx);
+        break;
+	case TK_CLASS:
+        cr_lex_scan(lx);
+		classdec(lx);
+        break;
+    default:
+        stm(lx);
+        break;
+    }
+}
+
+
+static inline void parseuntileos(Lexer *lx) {
+    while (!lx->t.tk != TK_EOS)
+        dec(lx);
+}
+
 
 // indexed ::= '[' expr ']'
 static cr_inline void indexed(FunctionState *fs, ExpInfo *E)
@@ -2248,36 +2048,198 @@ static cr_inline void prefix(FunctionState *fs, unop opr, ExpInfo *E)
 }
 
 
-/* -------------------------------------------------------------------------
- * Protected parser
- * ------------------------------------------------------------------------- */
-
-/* data for 'protectedcompile' */
-typedef struct PParseData {
-	BuffReader *br;
-	const char *name;
-	cr_ubyte gscope;
-} PParseData;
-
-
-/* protected parser entry */
-static void pparse(cr_State *ts, void *userdata)
+static void initexp(ExpInfo *e, expt et, int info)
 {
-	PParseData *pcompile;
-
-	pcompile = cast(PParseData *, userdata);
-	if (cr_unlikely(compile(ts, pcompile->br, pcompile->name, pcompile->isingscope) == NULL))
-		runerror(ts, S_ECOMP);
+	e->t = e->f = -1;
+	e->et = et;
+	e->u.info = info;
 }
 
 
-/* external interface for 'protectedparser' */
-int cr_pr_pparse(cr_State *ts, void *userdata, const char *name, cr_ubyte gscope)
+static void initvar(FunctionState *fs, ExpInfo *e, int idx)
 {
-	BuffReader br;
-	PParseData ppdata;
+	e->t = e->f = -1;
+	e->et = EXP_LOCAL;
+	e->u.info = idx;
+}
 
-	cr_br_init(ts, &br, (ts)->hooks.reader, userdata);
-	ppdata = { &br, name, gscope };
-	return pcall(ts, pparse, &ppdata, save_stack(ts, ts->sp));
+
+static Scope *getscope(FunctionState *fs, int idx)
+{
+	Scope *scope = fs->scope;
+
+	while (scope != NULL) {
+		if (scope->nlocals >= idx)
+			break;
+		scope = scope->prev;
+	}
+	return scope;
+}
+
+
+
+static void enterscope(FunctionState *fs, Scope *s, int cflow)
+{
+	s->nlocals = fs->nlocals;
+	s->cflow = cflow;
+    s->haveupval = 0;
+	s->havetbcvar = (fs->scope != NULL && fs->scope->havetbcvar);
+	s->prev = fs->scope;
+	fs->scope = s;
+}
+
+
+static void leavescope(FunctionState *fs)
+{
+    Scope *s = fs->scope;
+    fs->scope = s->prev;
+    /* TODO */
+}
+
+
+static void startfs(FunctionState *fs, Lexer *lx, Scope *s)
+{
+    cr_assert(fs->fn != NULL);
+	fs->prev = lx->fs;
+	fs->lx = lx;
+	lx->fs = fs;
+	fs->scope = NULL;
+	fs->sp = 0;
+	fs->nlocals = 0;
+	fs->firstlocal = lx->ps->lvars.len;
+    fs->firstbreak = lx->ps->breaks.len;
+    fs->innerloopstart = -1;
+    fs->innerloopdepth = 0;
+    fs->innerswitchdepth = 0;
+	fs->close = 0;
+	fs->fn->source = lx->src;
+	cr_gc_objbarrier(lx->ts, fs->fn, fs->fn->source);
+    fs->fn->maxstack = 1; /* for the function itself */
+	enterscope(fs, s, 0);
+}
+
+static void endfs(FunctionState *fs)
+{
+	cr_State *ts = fs->lx->ts;
+    Function *fn = fs->fn;
+    Lexer *lx = fs->lx;
+    cr_code_ret(fs, fs->nlocals - 1, 0);
+    leavescope(fs);
+    cr_assert(fs->scope == NULL); /* last scope */
+    cr_mem_shrinkvec(ts, fn->fn, fn->sizefn, fs->nfn);
+    cr_mem_shrinkvec(ts, fn->constants, fn->sizeconst, fn->nconst);
+    cr_mem_shrinkvec(ts, fn->code, fn->sizecode, fn->ncode);
+    cr_mem_shrinkvec(ts, fn->linfo, fn->sizelinfo, fn->nlinfo);
+    cr_mem_shrinkvec(ts, fn->locals, fn->sizelocals, fn->nlocals);
+    cr_mem_shrinkvec(ts, fn->upvals, fn->sizeupvals, fn->nupvals);
+    lx->fs = fs->prev;
+    cr_gc_check(ts);
+}
+
+
+static Function *addfunction(Lexer *lx)
+{
+    Function *new;
+    cr_State *ts = lx->ts;
+    FunctionState *fs = lx->fs;
+    Function *fn = fs->fn;
+    checklimit(fs, fn->nfn + 1, INT_MAX, "function");
+    cr_mem_growvec(ts, fn->fn, fn->sizefn, fn->nfn, INT_MAX, "functions");
+    fn->fn[fn->nfn++] = new = cr_function_new(ts);
+    cr_gc_objbarrier(ts, fn, new);
+    return new;
+}
+
+
+/* set current function as vararg */
+static void setvararg(FunctionState *fs, int arity) {
+    fs->fn->isvararg = 1;
+    cr_code_codelarg(fs, OP_SETVARARG, arity);
+}
+
+
+/* allocate space for new 'UpValInfo' */
+static UpValInfo *newupvalinfo(FunctionState *fs)
+{
+    Function *fn = fs->fn;
+    cr_State *ts = fs->lx->ts;
+    checklimit(fs, fn->nupvals + 1, INT_MAX, "upvalues");
+    cr_mem_growvec(ts, fn->upvals, fn->sizeupvals, fn->nupvals, INT_MAX,
+                   "upvalues");
+    return &fn->upvals[fn->nupvals++];
+}
+
+
+/* compile main function */
+static void criptmain(FunctionState *fs, Lexer *lx)
+{
+    Scope gscope;
+    startfs(fs, lx, &gscope);
+    setvararg(fs, 0); /* main is always vararg */
+    cr_lex_scan(lx); /* scan first token */
+    parseuntileos(lx);
+    cr_assert(lx->t.tk == TK_EOS);
+    endfs(fs);
+}
+
+
+CrClosure *parse(cr_State *ts, BuffReader *br, Buffer *buff, ParserState *ps,
+                 const char *source)
+{
+    Lexer lx;
+	FunctionState fs;
+    CrClosure *cl = cr_function_newcrclosure(ts, 0);
+    setsv2crcl(ts, ts->stacktop.p, cl); /* anchor main function closure */
+    cr_vm_inctop(ts);
+    lx.tab = cr_htable_new(ts);
+    setsv2ht(ts, ts->stacktop.p, lx.tab); /* anchor scanner htable */
+    cr_vm_inctop(ts);
+    fs.fn = cl->fn = cr_function_new(ts);
+    cr_gc_objbarrier(ts, cl, cl->fn);
+    fs.fn->source = cr_string_new(ts, source);
+    cr_gc_objbarrier(ts, fs.fn, fs.fn->source);
+    lx.ps = ps;
+    lx.buff = buff;
+    cr_lex_setsource(ts, &lx, br, fs.fn->source);
+    criptmain(&fs, &lx); /* Cript main function */
+    ts->stacktop.p--; /* pop scanner htable */
+    return cl;
+}
+
+
+
+/* -------------------------------------------------------------------------
+ * Protected parsing
+ * ------------------------------------------------------------------------- */
+
+/* data for 'pparse' */
+typedef struct PPData {
+	BuffReader *br;
+    Buffer buff;
+    ParserState ps;
+	const char *source;
+} PPData;
+
+
+/* protected 'parse' */
+static void pparse(cr_State *ts, void *userdata)
+{
+	PPData *pcompile = cast(PPData *, userdata);
+    CrClosure *cl = parse(ts, pcompile->br, &pcompile->buff, &pcompile->ps,
+                          pcompile->source);
+    cr_assert(cl->nupvals <= cl->sizeupvals);
+    cr_function_initupvals(ts, cl);
+}
+
+
+/* external interface for 'pparse' */
+void cr_parser_pparse(cr_State *ts, BuffReader *br, const char *source)
+{
+	PPData ppdata;
+
+    ppdata.br = br;
+    cr_reader_buffinit(&ppdata.buff);
+    memset(&ppdata.ps, 0, sizeof(ppdata.ps));
+    ppdata.source = source;
+	cr_vm_pcall(ts, pparse, &ppdata, savestack(ts, ts->stacktop.p));
 }

@@ -6,24 +6,17 @@
 
 Function *cr_function_newfunction(cr_State *ts)
 {
-	Function *fn;
-
-	fn = cr_gc_new(ts, sizeof(Function), CR_VFUNCTION, Function);
-	cr_mem_createvec(ts, &fn->constants, CRI_MAXCODE, "constants");
-	cr_mem_createvec(ts, &fn->code, INT_MAX, "code");
-	cr_mem_createvec(ts, &fn->lineinfo, INT_MAX, "lines");
-	cr_mem_createvec(ts, &fn->lvars, CRI_MAXCODE, "local variables");
+	Function *fn = cr_gc_new(ts, sizeof(Function), CR_VFUNCTION, Function);
+    memset(fn + OBJHEADERSIZE, 0, sizeof(Function) - OBJHEADERSIZE);
 	return fn;
 }
 
 
-CrClosure *cr_function_newcrclosure(cr_State *ts, Function *fn, int nup)
+CrClosure *cr_function_newcrclosure(cr_State *ts, int nup)
 {
-	CrClosure *crcl;
-
-	crcl = cr_gc_new(ts, sizeofcrcl(nup), CR_VCRCL, CrClosure);
+	CrClosure *crcl = cr_gc_new(ts, sizeofcrcl(nup), CR_VCRCL, CrClosure);
 	crcl->nupvalues = nup;
-	crcl->fn = fn;
+	crcl->fn = NULL;
 	memset(crcl->upvalue, 0, nup * sizeof(UpVal*));
 	return crcl;
 }
@@ -31,15 +24,27 @@ CrClosure *cr_function_newcrclosure(cr_State *ts, Function *fn, int nup)
 
 CClosure *cr_object_newcclosure(cr_State *ts, cr_cfunc fn, int nupvalues)
 {
-	CClosure *ccl;
-	int i;
-
-	ccl = cr_gc_new(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
+	CClosure *ccl = cr_gc_new(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
 	ccl->nupvalues = nupvalues;
 	ccl->fn = fn;
-	for (i = 0; i < nupvalues; i++)
+	for (int i = 0; i < nupvalues; i++)
 		setnilval(&ccl->upvalue[i]);
 	return ccl;
+}
+
+
+/*
+ * Create and initialize all the upvalues in 'cl'.
+ */
+void cr_function_initupvals(cr_State *ts, CrClosure *cl)
+{
+    for (int i = 0; i < cl->nupvalues; i++) {
+        UpVal *uv = cr_gc_new(ts, sizeof(UpVal), CR_VUVALUE, UpVal);
+        uv->v.location = &uv->u.value; /* close it */
+        setnilval(uv->v.location);
+        cl->upvalue[i] = uv;
+        cr_gc_objbarrier(ts, cl, uv);
+    }
 }
 
 
@@ -49,12 +54,8 @@ CClosure *cr_object_newcclosure(cr_State *ts, cr_cfunc fn, int nupvalues)
  */
 static UpVal *newupval(cr_State *ts, SPtr val, UpVal **prev)
 {
-	GState *gs;
-	UpVal *uv;
-	UpVal *previous;
-
-	uv = cr_gc_new(ts, sizeof(*uv), CR_VUVALUE, UpVal);
-	previous = *prev;
+	UpVal *uv = cr_gc_new(ts, sizeof(*uv), CR_VUVALUE, UpVal);
+	UpVal *previous = *prev;
 	uv->v.location = s2v(val);
 	uv->u.open.next = previous;
 	if (previous) /* have previous upval ? */
@@ -62,6 +63,7 @@ static UpVal *newupval(cr_State *ts, SPtr val, UpVal **prev)
 	*prev = uv; /* adjust list head or 'previous.u.open.next' */
 	cr_assert(prev == &ts->openupval);
 	if (!isinthwouv(ts)) {
+        GState *gs = GS(ts);
 		ts->thwouv = gs->thwouv;
 		gs->thwouv = ts;
 	}
@@ -75,12 +77,10 @@ static UpVal *newupval(cr_State *ts, SPtr val, UpVal **prev)
  */
 UpVal *cr_function_findupval(cr_State *ts, SPtr sval)
 {
-	UpVal **pp;
 	UpVal *upval;
 	SPtr sp;
-
 	cr_assert(isinthwouv(ts) || ts->openupval == NULL);
-	pp = &ts->openupval;
+	UpVal **pp = &ts->openupval;
 	while ((upval = *pp) != NULL && (sp = upvaltostk(upval)) > sval) {
 		cr_assert(!isdead(&GS(ts)->gc, upval));
 		if (sp == sval)
@@ -112,11 +112,11 @@ void cr_function_freeupval(cr_State *ts, UpVal *upval)
 /* free 'Function' */
 void cr_function_free(cr_State *ts, Function *fn)
 {
-	cr_mem_freevec(ts, &fn->fns);
-	cr_mem_freevec(ts, &fn->constants);
-	cr_mem_freevec(ts, &fn->code);
-	cr_mem_freevec(ts, &fn->lineinfo);
-	cr_mem_freevec(ts, &fn->lvars);
-	cr_mem_freevec(ts, &fn->upvalues);
+    cr_mem_freearray(ts, fn->fn, fn->sizefn);
+    cr_mem_freearray(ts, fn->constants, fn->sizeconst);
+    cr_mem_freearray(ts, fn->code, fn->sizecode);
+    cr_mem_freearray(ts, fn->linfo, fn->sizelinfo);
+    cr_mem_freearray(ts, fn->locals, fn->sizelocals);
+    cr_mem_freearray(ts, fn->upvals, fn->sizeupvals);
 	cr_mem_free(ts, fn, sizeof(Function));
 }

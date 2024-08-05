@@ -18,10 +18,10 @@
  * One-byte-at-a-time hash based on Murmur's mix
  * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
  */
-unsigned int cr_hash_string(const char *str, size_t len, unsigned int seed)
+uint cr_hash_string(const char *str, size_t len, unsigned int seed)
 {
 	const cr_ubyte *data = cast(const cr_ubyte *, str);
-	unsigned int h;
+	uint h;
 	int i;
 
 	h = seed;
@@ -43,7 +43,7 @@ OString *cr_string_newl(cr_State *ts, const char *chars, size_t len)
 	HTable *strtab;
 	OString *weakref;
  	OString *string;
-	unsigned int hash;
+	uint hash;
 	TValue key;
 
 	strtab = &GS(ts)->strings;

@@ -8,39 +8,35 @@
 
 
 /* get current pc */
-#define codeoffset(fs)		((fs)->fn->code.len)
-
+#define codeoffset(fs)		((fs)->fn->ncode)
 
 
 /* get constant of 'ExpInfo' */
-#define getconstant(fs,e)	(&(fs)->fn->constants.ptr[(e)->u.idx])
-
+#define getconstant(fs,e)	(&(fs)->fn->constants[(e)->u.idx])
 
 
 /* get pointer to instruction of 'ExpInfo' */
-#define getinstruction(fs,e)	(&(fs)->fn->code.ptr[(e)->u.info])
+#define getinstruction(fs,e)	(&(fs)->fn->code[(e)->u.info])
 
 
 /* instruction and parameter sizes in bytes */
-#define INSTRSIZE	1
-#define SPARAMSIZE	INSTRSIZE
+#define INSSIZE	    1
+#define SPARAMSIZE	INSSIZE
 #define LPARAMSIZE	3
 
 
 /* gets first parameter */
-#define GETPARAM(ip)		((ip) + INSTRSIZE)
+#define getparam(ip)		    ((ip) + INSSIZE)
 
 
 /* get/set short parameter */
-#define GETSPARAM(ip,o)		(GETPARAM(ip) + ((o)*SPARAMSIZE))
-#define GETSPARAMV(ip,o)	(*(GETSPARAM(ip,o)))
-#define SETSPARAM(ip,v)		setbytes(GETSPARAM(ip,0), v, SPARAMSIZE);
+#define getshrtparam(ip,o)		(getparam(ip) + ((o)*SPARAMSIZE))
+#define setshrtparam(ip,v)		setbytes(getshrtparam(ip,0), v, SPARAMSIZE);
 
 
 /* get/set long parameter */
-#define GETLPARAM(ip,o)		(GETPARAM(ip) + ((o)*LPARAMSIZE))
-#define GETLPARAMV(ip,o)	get3bytes(GETLPARAM(ip, o))
-#define SETLPARAM(ip,v)		setbytes(GETLPARAM(ip,0), v, LPARAMSIZE)
+#define getlongparam(ip,o)		(getparam(ip) + ((o)*LPARAMSIZE))
+#define setlongparam(ip,v)		setbytes(getlongparam(ip,0), v, LPARAMSIZE)
 
 
 
@@ -76,7 +72,7 @@ typedef enum {
 /*
  * Instructions/operations (bytecode).
  * All instructions are size of 1 byte.
- * Some but not all instructions have single/multiple 
+ * Some but not all instructions have single/multiple
  * parameters that vary in size.
  * There are two sizes that Cript uses for the instruction
  * parameters, 3 byte parameters and single byte size parameters.
@@ -85,84 +81,84 @@ typedef enum {
  * parameter instructions that do the same thing.
  */
 typedef enum {
-	/* pop/push instructions */
-	OP_TRUE = 0, /* push 'true' literal */
-	OP_FALSE, /* push 'false' literal */
-	OP_NIL, /* push 'nil' literal */
-	OP_NILN, /* push 'n' 'nil' literals */
-	OP_CONST, /* push constant */
-	OP_VARARG, /* push all variable arguments */
-	OP_CLOSURE, /* create and push closure */
-	OP_CLASS, /* create and push class */
-	OP_METHOD, /* create and push method */
-	OP_POP, /* pop single value */
-	OP_POPN, /* pop 'n' values */
+	OP_TRUE = 0,     /* push 'true' literal */
+	OP_FALSE,        /* push 'false' literal */
+	OP_NIL,          /* push 'nil' literal */
+	OP_NILN,         /* push 'n' 'nil' literals; larg = quantity */
+	OP_CONST,        /* push constant; larg = index into 'constants' array */
+	OP_SETVARARG,    /* set function varargs; larg = function arity */
+	OP_VARARG,       /* push all extra arguments */
+	OP_CLOSURE,      /* create and push closure */
+	OP_CLASS,        /* create and push class */
+	OP_METHOD,       /* create and push method */
+	OP_POP,          /* pop single value */
+	OP_POPN,         /* pop 'n' values */
 	/* arithmetic instructions */
-	OP_NEG, /* negate (arithmetic) */
-	OP_NOT, /* negate (boolean) */
-	OP_ADD, /* add */
-	OP_SUB, /* subtract */
-	OP_MUL, /* multiply */
-	OP_DIV, /* divide */
-	OP_MOD, /* modulo */
-	OP_POW, /* raise value 'x' to power of 'y' */
+	OP_NEG,          /* negate (arithmetic) */
+	OP_NOT,          /* negate (boolean) */
+	OP_ADD,          /* add */
+	OP_SUB,          /* subtract */
+	OP_MUL,          /* multiply */
+	OP_DIV,          /* divide */
+	OP_MOD,          /* modulo */
+	OP_POW,          /* raise value 'x' to power of 'y' */
 	/* ordering instructions */
-	OP_NEQ, /* !(equality) */
-	OP_EQ, /* equality */
-	OP_EQUAL, /* equality (preserve left operand) */
-	OP_GT, /* greater than */
-	OP_GE, /* greater or equal */
-	OP_LT, /* less than */
-	OP_LE, /* less or equal */
+	OP_NEQ,          /* !(equality) */
+	OP_EQ,           /* equality */
+	OP_EQUAL,        /* equality (preserve left operand) */
+	OP_GT,           /* greater than */
+	OP_GE,           /* greater or equal */
+	OP_LT,           /* less than */
+	OP_LE,           /* less or equal */
 	/* global variable instructions */
-	OP_DEFGVAR, /* define global variable */
-	OP_DEFGVARL, /* define global variable long */
-	OP_GETGVAR, /* get global variable */
-	OP_GETGVARL, /* get global variable long */
-	OP_SETGVAR, /* set global variable */
-	OP_SETGVARL, /* set global variable long */
+	OP_DEFGVAR,      /* define global variable */
+	OP_DEFGVARL,     /* define global variable long */
+	OP_GETGVAR,      /* get global variable */
+	OP_GETGVARL,     /* get global variable long */
+	OP_SETGVAR,      /* set global variable */
+	OP_SETGVARL,     /* set global variable long */
 	/* local variable instructions */
-	OP_GETLVAR, /* get local variable */
-	OP_GETLVARL, /* get local variable long */
-	OP_SETLVAR, /* set local variable */
-	OP_SETLVARL, /* set local variable long */
+	OP_GETLVAR,      /* get local variable */
+	OP_GETLVARL,     /* get local variable long */
+	OP_SETLVAR,      /* set local variable */
+	OP_SETLVARL,     /* set local variable long */
 	/* jump instructions */
-	OP_JZ, /* jump if false */
-	OP_JZPOP, /* jump if false and pop unconditionally */
-	OP_JZORPOP, /* jump if false or pop */
-	OP_JZANDPOP, /* jump if false and pop */
-	OP_JMP, /* jump to specified location */
-	OP_JMPANDPOP, /* jump to specified location and pop */
-	OP_LOOP, /* jump back to specified location */
+	OP_JZ,           /* jump if false */
+	OP_JZPOP,        /* jump if false and pop unconditionally */
+	OP_JZORPOP,      /* jump if false or pop */
+	OP_JZANDPOP,     /* jump if false and pop */
+	OP_JMP,          /* jump to specified location */
+	OP_JMPANDPOP,    /* jump to specified location and pop */
+	OP_LOOP,         /* jump back to specified location */
 	/* call instructions */
-	OP_CALL0, /* call value with no arguments */
-	OP_CALL1, /* call value with a single argument */
-	OP_CALL, /* call value with 2 or more arguments */
+	OP_CALL0,        /* call value with no arguments */
+	OP_CALL1,        /* call value with a single argument */
+	OP_CALL,         /* call value with 2 or more arguments */
 	/* upvalue instructions */
-	OP_GETUVAL, /* get upvalue */
-	OP_SETUVAL, /* set upvalue */
-	OP_CLOSEUVAL, /* close upvalue */
-	OP_CLOSEUVALN, /* close 'n' upvalues */
+	OP_GETUVAL,      /* get upvalue */
+	OP_SETUVAL,      /* set upvalue */
+	OP_CLOSEUVAL,    /* close upvalue */
+	OP_CLOSEUVALN,   /* close 'n' upvalues */
 	/* property access instructions */
-	OP_SETPROPERTY, /* set property ('v.str') */
-	OP_GETPROPERTY, /* get property ('v.str') */
-	OP_GETINDEX, /* get index ('v[k]') */
-	OP_SETINDEX, /* set index ('v[k]') */
-	OP_GETINDEXK, /* get index ('v[kk]') */
-	OP_SETINDEXK, /* set index ('v[kk]') */
-	OP_GETSUP, /* get super class method ('super.k') */
-	OP_GETSUPIDX, /* get super class method ('super[k or str]') */
+	OP_SETPROPERTY,  /* set property ('v.str') */
+	OP_GETPROPERTY,  /* get property ('v.str') */
+	OP_GETINDEX,     /* get index ('v[k]') */
+	OP_SETINDEX,     /* set index ('v[k]') */
+	OP_GETINDEXK,    /* get index ('v[kk]') */
+	OP_SETINDEXK,    /* set index ('v[kk]') */
+	OP_GETSUP,       /* get super class method ('super.k') */
+	OP_GETSUPIDX,    /* get super class method ('super[k or str]') */
 	/* other specific instructions */
-	OP_SETVTABLE, /* set vtable method */
-	OP_INHERIT, /* inherit from class */
-	OP_CALLSTART, /* mark start of call values */
-	OP_RETSTART, /* mark start of return values */
+	OP_SETVTABLE,    /* set vtable method */
+	OP_INHERIT,      /* inherit from class */
+	OP_CALLSTART,    /* mark start of call values */
+	OP_RETSTART,     /* mark start of return values */
 	OP_FOREACH_PREP, /* prepare foreach loop */
-	OP_FOREACH, /* run foreach loop */
+	OP_FOREACH,      /* run foreach loop */
 	/* return instructions */
-	OP_RET0, /* return with no values */
-	OP_RET1, /* return with a single value */
-	OP_RET, /* return with 2 or more values */
+	OP_RET0,         /* return with no values */
+	OP_RET1,         /* return with a single value */
+	OP_RET,          /* return with 2 or more values */
 } OpCode;
 
 
@@ -172,6 +168,9 @@ typedef enum {
 
 
 int cr_code_code(FunctionState *fs, Instruction i);
+int cr_code_codesarg(FunctionState *fs, Instruction i, int arg);
+int cr_code_codelarg(FunctionState *fs, Instruction i, int arg);
+int cr_code_codearg(FunctionState *fs, Instruction i, int arg);
 int cr_code_flt(FunctionState *fs, cr_number n);
 int cr_code_int(FunctionState *fs, cr_integer i);
 int cr_code_string(FunctionState *fs, OString *str);

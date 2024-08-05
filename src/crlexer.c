@@ -52,14 +52,10 @@
 #define savec_and_advance(lx, c)	(savec(lx, c), advance(lx))
 
 
-/* pointer to start of lexer buffer */
-#define lbptr(lx)	((lx)->buff.ptr)
-
-/* length of lexer buffer */
-#define lblen(lx)	((lx)->buff.len)
-
-/* pop character from lexer buffer */
-#define popc(lx)	(lbptr(lx)[--lblen(lx)])
+#define lbptr(lx)	cr_reader_buff((lx)->buff)
+#define lblen(lx)	cr_reader_bufflen((lx)->buff)
+#define lbsize(lx)  cr_reader_buffsize((lx)->buff)
+#define popc(lx)	cr_reader_buffpop((lx)->buff)
 
 
 
@@ -87,17 +83,16 @@ typedef enum Dig {
 
 void cr_lex_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source)
 {
+    cr_assert(lx->ps != NULL);
+	lx->c = brgetc(br); /* fetch first char */
+	lx->line = 1;
+	lx->lastline = 1;
 	lx->ts = ts;
 	lx->fs = NULL;
-	lx->ps = NULL;
 	lx->tab = NULL;
 	lx->br = br;
 	lx->src = source;
-	lx->c = brgetc(lx->br); /* fetch first char */
-	lx->line = 1;
-	lx->lastline = 0;
-	cr_mem_createvec(ts, &lx->buff, CRMAXSIZE<<1, "token");
-	cr_mem_reallocvec(ts, &lx->buff, CRI_MINBUFFER);
+    cr_reader_buffresize(ts, lx->buff, CRI_MINBUFFER);
 }
 
 
@@ -116,12 +111,6 @@ void cr_lex_init(cr_State *ts)
 }
 
 
-void cr_lex_free(Lexer *lx)
-{
-	cr_mem_freevec(lx->ts, &lx->buff);
-}
-
-
 static void inclinenr(Lexer *lx)
 {
 	if (cr_unlikely(lx->line >= INT_MAX))
@@ -130,11 +119,20 @@ static void inclinenr(Lexer *lx)
 }
 
 
+/* forward declare for 'savec' */
+static cr_noret lexerror(Lexer *lx, const char *err, int token);
+
+
 /* pushes character into token buffer */
 cr_sinline void savec(Lexer *lx, int c)
 {
-	cr_mem_growvec(lx->ts, &lx->buff);
-	lbptr(lx)[lblen(lx)++] = c;
+    if (lblen(lx) >= lbsize(lx)) {
+        if (lbsize(lx) >= CRMAXSIZE >> 1)
+            lexerror(lx, "lexical element too long", 0);
+        size_t newsize = lbsize(lx) << 1;
+        cr_reader_buffresize(lx->ts, lx->buff, newsize);
+    }
+    lbptr(lx)[lblen(lx)++] = c;
 }
 
 
@@ -150,15 +148,15 @@ cr_sinline int lxmatch(Lexer *lexer, int c)
 
 const char *cr_lex_tok2str(Lexer *lx, int t)
 {
-	const char *str;
-
 	cr_assert(token <= TK_IDENTIFIER);
 	if (t >= FIRSTTK) {
-		str = tkstr[t - FIRSTTK];
-		if (t < TK_EOS) return cr_string_pushfstring(lx->ts, "'%s'", str);
+		const char *str = tkstr[t - FIRSTTK];
+		if (t < TK_EOS)
+            return cr_string_pushfstring(lx->ts, "'%s'", str);
 		return str;
 	} else {
-		if (isprint(t)) return cr_string_pushfstring(lx->ts, "'%c'", t);
+		if (isprint(t))
+            return cr_string_pushfstring(lx->ts, "'%c'", t);
 		return cr_string_pushfstring(lx->ts, "'\\%d'", t);
 	}
 }
@@ -190,7 +188,7 @@ static cr_noret lexerror(Lexer *lx, const char *err, int token)
 
 
 /* external interface for 'lexerror' */
-void cr_lex_syntaxerror(Lexer *lx, const char *err)
+cr_noret cr_lex_syntaxerror(Lexer *lx, const char *err)
 {
 	lexerror(lx, err, lx->t.tk);
 }
@@ -199,14 +197,10 @@ void cr_lex_syntaxerror(Lexer *lx, const char *err)
 /* create new string and fix it inside of lexer htable */
 OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len)
 {
-	TValue *stks;
-	OString *s;
-	cr_State *ts;
-
-	ts = lx->ts;
-	s = cr_string_newl(ts, str, len);
-	stks = s2v(ts->stacktop.p++);
-	setv2s(ts, stks, s); /* anchor temporarily */
+	cr_State *ts = lx->ts;
+	OString *s = cr_string_newl(ts, str, len);
+	TValue *stks = s2v(ts->stacktop.p++);
+	setv2s(ts, stks, s); /* temp anchor */
 	cr_htable_set(lx->ts, lx->tab, stks, stks);
 	ts->stacktop.p--; /* pop */
 	return s;
@@ -253,9 +247,7 @@ readmore:
 /* get new hex digit from current char */
 static int hexdigit(Lexer *lx)
 {
-	int c;
-
-	c = lx->c;
+	int c = lx->c;
 	if (isxdigit(c))
 		return cr_string_hexvalue(c);
 	return -1;
@@ -265,13 +257,10 @@ static int hexdigit(Lexer *lx)
 /* parse hex escape sequence '\xyy' */
 static int eschex(Lexer *lx)
 {
-	int i;
-	int number;
-	int digit;
-
 	advance(lx); /* skip 'x' */
-	number = 0;
-	for (i = 0; i < 2; i++) {
+	int number = 0;
+	for (int i = 0; i < 2; i++) {
+        int digit;
 		if (cr_unlikely(isend(lx->c) || lx->c == '"'))
 			lexerror(lx, "incomplete hexadecimal escape sequence", TK_STRING);
 		if (cr_unlikely((digit = hexdigit(lx)) == -1))
@@ -356,16 +345,14 @@ static int lexstr2num(Lexer *lx, Literal *k)
  */
 static int auxreaddigs(Lexer *lx, Dig d, int fp)
 {
-	int digits;
-
-	digits = 0;
+	int digits = 0;
 	for (;; advance(lx)) {
 		if (!fp && lx->c == '_') continue;
 		switch (d) {
-		case DigDec: if (!isdigit(lx->c)) return digits;
-		case DigHex: if (!isxdigit(lx->c)) return digits;
-		case DigOct: if (!isodigit(lx->c)) return digits;
-		default: break;
+		case DigDec: if (!isdigit(lx->c)) return digits; break;
+		case DigHex: if (!isxdigit(lx->c)) return digits; break;
+		case DigOct: if (!isodigit(lx->c)) return digits; break;
+		default: cr_unreachable(); break;
 		}
 		save(lx);
 		digits++;
@@ -445,9 +432,7 @@ static int readoctnum(Lexer *lx, Literal *k)
 /* read number */
 static int readnumber(Lexer *lx, Literal *k)
 {
-	char c;
-
-	c = lx->c; /* cache previous digit */
+	cr_ubyte c = lx->c; /* cache previous digit */
 	save_and_advance(lx);
 	if (c == '0' && (lx->c == 'x' || lx->c == 'X'))
 		return readhexnum(lx, k);
@@ -469,7 +454,7 @@ static int scan(Lexer *lx, Literal *k)
 	int c;
 	OString *s;
 
-	lblen(lx) = 0; /* reset buffer */
+	cr_reader_buffreset(lx->buff);
 readmore:
 	switch (lx->c) {
 	case ' ': case '\r': case '\t':

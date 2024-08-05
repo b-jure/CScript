@@ -34,6 +34,7 @@ static const void *const optable[CR_NUMOPS] = {
 	&&L_OP_NIL,
 	&&L_OP_NILN,
 	&&L_OP_CONST,
+	&&L_OP_SETVARARG,
 	&&L_OP_VARARG,
 	&&L_OP_CLOSURE,
 	&&L_OP_CLASS,

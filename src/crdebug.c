@@ -35,10 +35,10 @@ int cr_debug_getfuncline(const Function *fn, int pc)
 
 	cr_assert(fn->lineinfo.len > 0);
 	l = 0;
-	h = fn->lineinfo.len - 1;
+	h = fn->nlinfo - 1;
 	m = (h + l) << 1;
 	while (l < h) {
-		li = &fn->lineinfo.ptr[m];
+		li = &fn->linfo[m];
 		if (li->pc < pc) l = m;
 		else if (li->pc > pc) h = m;
 		else break;
@@ -52,7 +52,7 @@ int cr_debug_getfuncline(const Function *fn, int pc)
 cr_sinline int currentpc(const CallFrame *cf)
 {
 	cr_assert(cfiscript(cf));
-	return cast_int(cf->pc - cffn(cf)->code.ptr) - 1;
+	return cast_int(cf->pc - cffn(cf)->code) - 1;
 }
 
 
@@ -73,11 +73,11 @@ cr_sinline int currentline(CallFrame *cf)
 CR_API int cr_getstack(cr_State *ts, int level, cr_debuginfo *di)
 {
 	cr_lock(ts);
-	if (level > ts->frames.len || level < 0) {
+	if (level > ts->nframes || level < 0) {
 		cr_unlock(ts);
 		return 0;
 	}
-	di->cf = &ts->frames.ptr[ts->frames.len - 1 - level];
+	di->cf = &ts->frames[ts->nframes - 1 - level];
 	cr_unlock(ts);
 	return 1;
 }

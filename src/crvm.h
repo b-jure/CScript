@@ -47,8 +47,8 @@ typedef void (*ProtectedFn)(cr_State *ts, void *userdata);
 
 
 /* save/restore stack position */
-#define savestack(ts,ptr)	(cast(char*,(ptr)) - cast(char*,(ts)->stack.p))
-#define restorestack(ts,o)	cast(SPtr, cast(char*, (ts)->stack.p) + (o))
+#define savestack(ts,ptr)	(cast_charp(ptr) - cast_charp((ts)->stack.p))
+#define restorestack(ts,o)	cast(SPtr, cast_charp((ts)->stack.p) + (o))
 
 
 /* grow stack if needed */

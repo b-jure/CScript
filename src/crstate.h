@@ -64,12 +64,11 @@ typedef struct GState {
 	cr_alloc realloc; /* allocator */
 	void *udrealloc; /* userdata for 'realloc' */
 	cr_cfunc panic; /* panic handler (unprotected calls) */
-	unsigned int seed; /* initial seed for hashing */
+	uint seed; /* initial seed for hashing */
 	TValue nil; /* nil value (init flag) */
-	GC gc; /* garbage collector */
+	GC gc; /* garbage collection managed values and parameters */
 	HTable strings; /* weak 'HTable' (weak references) */
-	HTable *gids; /* global variable names + index into 'gvars' */
-	TValueVec gvars; /* global variable values */
+    HTable *globals; /* global variables */
 	struct cr_State *mainthread; /* thread that also created global state */
 	struct cr_State *thwouv; /* thread with open upvalues */
 	OString *memerror; /* error message for memory errors */
@@ -81,12 +80,6 @@ typedef struct GState {
 /* -------------------------------------------------------------------------
  * Thread (per-thread-state)
  * ------------------------------------------------------------------------- */
-
-Vec(GCObjectVec, GCObject*);
-Vec(SIndexVec, SIndex);
-Vec(OStringVec, OString*);
-Vec(CallFrameVec, CallFrame);
-
 
 typedef struct DeferList {
 	struct DeferList *next;
@@ -102,15 +95,17 @@ typedef struct cr_State {
 	GState *gstate; /* shared global state */
 	int status; /* status code */
 	cr_ljmp *errjmp; /* error recovery */
-	unsigned int ncalls; /* number of nested calls */
 	SIndex stacktop; /* first free slot in the stack */
 	SIndex stackend; /* end of stack */
 	SIndex stack; /* stack base */
 	CallFrame *aframe; /* currently active frame in 'frames' */
-	CallFrameVec frames; /* call stack */
+    CallFrame *frames; /* call stack */
 	UpVal *openupval; /* list of open upvalues */
 	TValue *deferlist;
 	SIndex tbclist; /* list of to-be-closed variables */
+	uint ncalls; /* number of nested calls */
+    int nframes; /* number of elements in 'frames' */
+    int sizeframes; /* size of 'frames' */
 } cr_State;
 
 

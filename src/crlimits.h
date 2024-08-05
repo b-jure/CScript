@@ -25,7 +25,7 @@
 
 
 /*
- * Signed and unsigned types that represent count 
+ * Signed and unsigned types that represent count
  * in bytes of total memory used by cript.
  */
 typedef size_t cr_umem;
@@ -46,18 +46,22 @@ typedef signed char cr_byte;
 #define CRBYTE_MAX	((cr_ubyte)(CR_UBYTE_MAX >> 1))
 
 
+/* nice to have */
+typedef unsigned int uint;
 
-/* 
+
+/*
  * Maximum size visible for cript.
- * It must be less than what is representable by 'cr_integer'. 
+ * It must be less than what is representable by 'cr_integer'.
  */
-#define CRMAXSIZE	(sizeof(size_t) < sizeof(cr_integer) ? \
-				(SIZE_MAX) : (size_t)(CR_INTEGER_MAX))
+#define CRMAXSIZE \
+    (sizeof(size_t) < sizeof(cr_integer) ? \
+	(SIZE_MAX) : (size_t)(CR_INTEGER_MAX))
 
 
 
 /* convert pointer 'p' to 'unsigned int' */
-#define pointer2uint(p)		((unsigned int)((uintptr_t)(p)&(UINT_MAX)))
+#define pointer2uint(p)		((uint)((uintptr_t)(p)&(UINT_MAX)))
 
 
 
@@ -84,7 +88,7 @@ typedef signed char cr_byte;
 
 
 
-/* 
+/*
  * Allow threaded code by default on GNU C compilers.
  * What this allows is usage of jump table aka using
  * local labels inside arrays making O(1) jumps to
@@ -130,8 +134,8 @@ typedef signed char cr_byte;
 
 
 
-/* 
- * Type for virtual-machine instructions 
+/*
+ * Type for virtual-machine instructions
  * Instructions (opcodes) are 1 byte in size not including
  * the arguments; arguments vary in size (short/long) and
  * more on that in 'cropcode.h'.
@@ -140,10 +144,10 @@ typedef cr_ubyte Instruction;
 
 
 
-/* 
+/*
  * Maximum instruction parameter size.
  * This is the maximum unsigned value that fits in 3 bytes.
- * Transitively this defines various compiler limits. 
+ * Transitively this defines various compiler limits.
  */
 #define CRI_MAXCODE	16777215
 
@@ -159,7 +163,7 @@ typedef cr_ubyte Instruction;
 /*
  * Size of short instruction parameter (8 bit).
  */
-#define CRI_SHRTPARAM	255		
+#define CRI_SHRTPARAM	255
 
 
 
@@ -175,7 +179,7 @@ typedef cr_ubyte Instruction;
 
 
 
-/* 
+/*
  * Minimum size for string buffer during
  * lexing, this buffer memory will be freed
  * after compilation.
@@ -186,9 +190,9 @@ typedef cr_ubyte Instruction;
 
 
 
-/* 
+/*
  * Maximum table load factor.
- * v1.0.0 is using linear probing so 
+ * v1.0.0 is using linear probing so
  * keep this load factor <= 0.70 to
  * avoid excess collisions.
  */
@@ -198,7 +202,7 @@ typedef cr_ubyte Instruction;
 
 
 
-/* 
+/*
  * Maximum size for 'HTable'.
  * Make sure the value fits in 'INT_MAX'.
  */
@@ -220,7 +224,7 @@ typedef cr_ubyte Instruction;
 
 
 
-/* 
+/*
  * Maximum call depth for nested C calls including the
  * parser limit for syntactically nested non-terminals and
  * other features implemented through recursion in C.
@@ -232,7 +236,7 @@ typedef cr_ubyte Instruction;
 
 
 
-/* 
+/*
  * Runs each time program enters ('cr_lock') and
  * leaves ('cr_unlock') cript core (C API).
  */
@@ -257,7 +261,7 @@ typedef cr_ubyte Instruction;
 
 
 
-/* 
+/*
  * @MAX - return maximum value.
  * @MIN - return minimum value.
  */
@@ -278,9 +282,9 @@ typedef cr_ubyte Instruction;
 
 
 
-/* 
+/*
  * @UNUSED - marks variable unused to avoid compiler
- * warnings. 
+ * warnings.
  */
 #ifndef UNUSED
 #define UNUSED(x) ((void)(x))
@@ -295,12 +299,13 @@ typedef cr_ubyte Instruction;
 #define cast_ubyte(e)	cast(cr_ubyte,(e))
 #define cast_ubytep(e)  cast(cr_ubyte*,(e))
 #define cast_byte(e)	cast(cr_byte,(e))
-#define cast_num(e)	cast(cr_number,(e))
-#define cast_int(e)	cast(int,(e))
-#define cast_uint(e)	cast(unsigned int,(e))
-
-#define cast_umem(e)	cast(cr_umem, (e))
-#define cast_mem(e)	cast(cr_mem, (e))
+#define cast_num(e)	    cast(cr_number,(e))
+#define cast_int(e)	    cast(int,(e))
+#define cast_uint(e)	cast(uint,(e))
+#define cast_umem(e)	cast(cr_umem,(e))
+#define cast_mem(e)	    cast(cr_mem,(e))
+#define cast_charp(e)   cast(char *,(e))
+#define cast_sizet(e)   cast(size_t,(e))
 
 /* cast 'cr_integer' to 'cr_uinteger' */
 #define cri_castS2U(i)	((cr_uinteger)(i))
@@ -335,7 +340,7 @@ typedef cr_ubyte Instruction;
 #define cri_numpow(ts, a, b)	((b) == 2 ? (a)*(a) : cr_mathop(pow)(a, b))
 #endif
 
-/* 
+/*
  * @cri_numadd - addition.
  * @cri_numsub - subtraction.
  * @cri_nummul - multiplication.
@@ -348,7 +353,7 @@ typedef cr_ubyte Instruction;
 #define cri_numunm(ts, a)	(-(a))
 #endif
 
-/* 
+/*
  * @cri_numeq - ordering equal.
  * @cri_numne - ordering not equal.
  * @cri_numlt - ordering less than.

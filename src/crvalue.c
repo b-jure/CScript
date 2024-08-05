@@ -33,9 +33,9 @@ CRI_DEF const char *const cr_value_typenames[CR_TOTALTYPES] = {
 
 
 /* hash 'cr_number' */
-unsigned int cr_hash_number(cr_number n)
+uint cr_hash_number(cr_number n)
 {
-	unsigned int ui;
+	uint ui;
 	cr_integer ni;
 	int exp;
 
@@ -50,7 +50,7 @@ unsigned int cr_hash_number(cr_number n)
 
 
 /* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
-int cr_ve_ceillog2 (unsigned int x)
+int cr_ve_ceillog2 (uint x)
 {
 	static const cr_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
 	0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
