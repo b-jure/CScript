@@ -49,12 +49,9 @@ cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 
 void *cr_mem_realloc(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 {
-    GState *gs;
-    void *memblock;
-
-    gs = GS(ts);
+    GState *gs = GS(ts);
     cr_assert((osize == 0) == (ptr == NULL));
-    memblock = cr_mem_rawrealloc(gs, ptr, nsize);
+    void *memblock = cr_mem_rawrealloc(gs, ptr, nsize);
     if (cr_unlikely(!memblock && nsize != 0)) {
         memblock = tryagain(ts, ptr, osize, nsize);
         if (cr_unlikely(memblock == NULL))
@@ -68,9 +65,7 @@ void *cr_mem_realloc(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 
 void *cr_mem_saferealloc(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 {
-    void *memblock;
-
-    memblock = cr_mem_realloc(ts, ptr, osize, nsize);
+    void *memblock = cr_mem_realloc(ts, ptr, osize, nsize);
     if (cr_unlikely(memblock == NULL && nsize != 0))
         cr_assert(0 && "out of memory");
     return memblock;
@@ -79,13 +74,10 @@ void *cr_mem_saferealloc(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 
 void *cr_mem_malloc(cr_State *ts, size_t size)
 {
-    GState *gs;
-    void *memblock;
-
     if (size == 0)
         return NULL;
-    gs = GS(ts);
-    memblock = cr_mem_rawmalloc(gs, size);
+    GState *gs = GS(ts);
+    void *memblock = cr_mem_rawmalloc(gs, size);
     if (cr_unlikely(memblock == NULL)) {
         memblock = tryagain(ts, NULL, 0, size);
         if (cr_unlikely(memblock == NULL))
@@ -97,11 +89,9 @@ void *cr_mem_malloc(cr_State *ts, size_t size)
 
 
 void *cr_mem_growarr(cr_State *ts, void *ptr, int len, int *sizep,
-                     int elemsize, int extra, int limit, const char *what)
+        int elemsize, int extra, int limit, const char *what)
 {
-    int size;
-
-    size = *sizep;
+    int size = *sizep;
     if (len + extra <= size)
         return ptr;
     size += extra;
@@ -122,7 +112,7 @@ void *cr_mem_growarr(cr_State *ts, void *ptr, int len, int *sizep,
 
 
 void *cr_mem_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
-                       int elemsize)
+        int elemsize)
 {
     size_t oldsize = cast_sizet(*sizep * elemsize);
     size_t newsize = cast_sizet(final * elemsize);
@@ -135,10 +125,8 @@ void *cr_mem_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
 
 void cr_mem_free(cr_State *ts, void *ptr, size_t osize)
 {
-    GState *gs;
-
+    GState *gs = GS(ts);
     cr_assert((osize == 0) == (ptr == NULL));
-    gs = GS(ts);
     cr_mem_rawfree(gs, ptr);
     gs->gc.debt -= osize;
 }

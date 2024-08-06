@@ -21,18 +21,18 @@
 #include "crlimits.h"
 
 
-#define cr_mem_newarray(ts,s,t)		cr_mem_malloc(ts, (s) * sizeof(t))
+#define cr_mem_newarray(ts,s,t)     cr_mem_malloc(ts, (s) * sizeof(t))
 
 #define cr_mem_reallocarray(ts,p,os,ns) \
-	((p) = cr_mem_realloc(ts, (p), (os)*sizeof(*p), (ns)*sizeof(ns)))
+    ((p) = cr_mem_realloc(ts, (p), (os)*sizeof(*p), (ns)*sizeof(ns)))
 
 #define cr_mem_freearray(ts,p,n) \
-	cr_mem_free((ts), (p), cast_umem(n)*sizeof(*(p)))
+    cr_mem_free((ts), (p), cast_umem(n)*sizeof(*(p)))
 
 
 
 #define cr_mem_ensurevec(ts,p,s,n,e,l,w) \
-	((p) = cr_mem_growarr_(ts, p, n, &(s), sizeof(*(p)), e, l, w))
+    ((p) = cr_mem_growarr_(ts, p, n, &(s), sizeof(*(p)), e, l, w))
 
 #define cr_mem_growvec(ts,p,s,n,l,w) \
     ((p) = cr_mem_ensurevec((ts), p, s, n, 0, l, w))

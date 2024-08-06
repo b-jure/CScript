@@ -30,22 +30,22 @@
  * -------------------------------------------------------------------------- */
 
 /* check expression type */
-#define eisvar(e)       ((e)->et >= EXP_UVAL && (e)->et <= EXP_INDEXED)
+#define eisvar(e)           ((e)->et >= EXP_UVAL && (e)->et <= EXP_INDEXED)
 #define eisliteral(e)       ((e)->et >= EXP_NIL && (e)->et <= EXP_FLT)
-#define eiscall(e)      ((e)->et >= EXP_CALL && (e)->et <= EXP_INVOKE)
+#define eiscall(e)          ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
 #define eismulret(e)        (eiscall(e) && (e)->et <= EXP_VARARG)
-#define eissuper(e)     ((e)->et == EXP_INDEXRAWSUP || (e)->et == EXP_INDEXSUP)
+#define eissuper(e)         ((e)->et == EXP_INDEXRAWSUP || (e)->et == EXP_INDEXSUP)
 
 
 /* expression types */
 typedef enum expt {
-     /* no expression; */
+    /* no expression; */
     EXP_VOID,
-     /* 'nil' constant; */
+    /* 'nil' constant; */
     EXP_NIL,
-     /* 'false' constant; */
+    /* 'false' constant; */
     EXP_FALSE,
-     /* 'true' constant; */
+    /* 'true' constant; */
     EXP_TRUE,
     /* string constant;
      * 'str' = string value; */
@@ -88,7 +88,7 @@ typedef enum expt {
     /* expression is a test/comparison;
      * 'info' = pc (in 'code') */
     EXP_JMP,
-     /* finalized expression */
+    /* finalized expression */
     EXP_FINEXPR,
 } expt;
 
@@ -107,11 +107,17 @@ typedef struct ExpInfo {
         cr_integer i; /* integer constant  */
         OString *str; /* string literal */
         int info; /* pc or some other generic information */
-        int idx; /* index in 'locals' or 'constants' */
+        union {
+            int sidx; /* stack index */
+            int vidx; /* compiler index in 'lvars.arr' */
+        } var; /* local variable */
+        union {
+            int idx; /* index (constant or stack) */
+            int tidx; /* indexed var (stack index or upvalue) */
+        } ind; /* indexed variables */
     } u;
     int t; /* jmp to patch if true */
     int f; /* jmp to patch if false */
-    cr_ubyte set; /* true if setting expression */
 } ExpInfo;
 
 
@@ -122,18 +128,17 @@ typedef struct ExpInfo {
 
 
 /* variable kind (stored in 'mod') */
-#define VARREGULAR  0 /* regular */
-#define VARCONST    1 /* constant */
-#define VARTBC      2 /* to-be-closed */
-#define VARCTC      3 /* compile-time constant */
-#define VARUNINIT   4 /* uninitialized */
+#define VARREGULAR      0 /* regular */
+#define VARCONST        1 /* constant */
+#define VARTBC          2 /* to-be-closed */
+#define VARCTC          3 /* compile-time constant */
 
 
 /* active local variable compiler information */
 typedef union LVar {
     struct {
         TValueFields;
-        int idx; /* index into Function 'lvars' */
+        int idx; /* index into 'locals' */
         OString *name;
     } s;
     TValue val; /* constant value */
@@ -179,20 +184,15 @@ typedef struct ParserState {
 
 
 
-/*
- * Represents all the information the parser has
- * on the currently parsed function.
- * So 'FunctionState' is a state for currently compiled
- * 'Function'.
- */
+/* state for currently compiled 'Function' */
 typedef struct FunctionState {
-    Function *fn; /* currently parsed function */
+    Function *fn; /* current function */
     struct FunctionState *prev; /* implicit linked-list */
     struct Lexer *lx; /* lexer */
     struct Scope *scope; /* scope information */
     int sp; /* first free compiler stack index */
-    int nlocals; /* number of active local variables */
-    int firstlocal; /* index of first local in 'ParserState' */
+    int activelocals; /* number of active local variables */
+    int firstlocal; /* index of first local in 'lvars' ('ParserState') */
     int firstbreak; /* index of first break in 'CFInfo' ('ParserState') */
     int innerloopstart; /* innermost loop start offset */
     int innerloopdepth; /* innermost loop scope depth */
@@ -202,8 +202,8 @@ typedef struct FunctionState {
 
 
 
-CRI_FUNC void cr_parser_run(cr_State *ts, cr_reader fn, void *userdata,
-                            const char *name);
+CRI_FUNC void cr_parser_pparse(cr_State *ts, cr_reader fn, void *userdata,
+                               const char *name);
 CRI_FUNC int cr_pr_nstackvars(FunctionState *fs);
 CRI_FUNC void _cleanup_function(FunctionState* F);
 CRI_FUNC void F_free(FunctionState* F);

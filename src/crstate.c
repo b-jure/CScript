@@ -1,9 +1,9 @@
 #include "crstate.h"
+#include "crdebug.h"
 #include "crgc.h"
 
 
 #define CRI_THROW(ts, b) 	longjmp((b)->buf, 1)
-
 
 
 static void preinitstate(cr_State *ts)
@@ -41,3 +41,17 @@ cr_noret cr_state_throw(cr_State *ts, int code)
 	}
 	abort();
 }
+
+
+void cr_state_inccalls(cr_State *ts)
+{
+    ts->ncalls++;
+    if (ts->ncalls >= CRI_MAXCCALLS) {
+        if (ts->ncalls == CRI_MAXCCALLS) /* not handling erorr ? */
+            cr_debug_runerror(ts, "C stack overflow");
+        else if (ts->ncalls >= CRI_MAXCCALLS / 10 * 11)
+            cr_state_throw(ts, CR_ERRERROR);
+    }
+}
+
+

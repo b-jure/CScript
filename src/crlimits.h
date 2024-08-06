@@ -229,8 +229,6 @@ typedef cr_ubyte Instruction;
  * parser limit for syntactically nested non-terminals and
  * other features implemented through recursion in C.
  * Any value will suffice as long as it fits in 'unsigned short'.
- * By design smaller type (unsigned short) is chosen than the stack
- * size so you can't mess up.
  */
 #define CRI_MAXCCALLS	4096
 

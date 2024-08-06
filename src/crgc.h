@@ -109,7 +109,7 @@
  * debt is positive.
  */
 #define checkgc(ts,pre,pos) \
-	{ pre; if ((ts)->gc.debt > 0) { cr_gc_step(ts); pos; } \
+	{ pre; if (GS(ts)->gc.debt > 0) { cr_gc_step(ts); pos; } \
 	  gcmemchange(ts,pre,pos); }
 
 
@@ -197,7 +197,7 @@ typedef struct GC {
 
 void cr_gc_init(GC *gc);
 GCObject *cr_gc_new_(cr_State *ts, size_t size, cr_ubyte ott);
-void cf_gc_step(cr_State *ts);
+void cr_gc_step(cr_State *ts);
 void cr_gc_full(cr_State *ts, int isemergency);
 void cr_gc_rununtilstate(cr_State *ts, int statemask);
 void cr_gc_freeallobjects(cr_State *ts);

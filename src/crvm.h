@@ -29,14 +29,14 @@ typedef void (*ProtectedFn)(cr_State *ts, void *userdata);
 
 
 /*
- * Extra stack space used mostly when calling vtable
- * methods. Useful in avoiding stack checks (branching).
+ * Extra stack space that is used mostly when calling vtable
+ * methods. Helps in avoiding stack checks (branching).
  */
 #define EXTRA_STACK	5
 
 
 /* initial stack size */
-#define STACKSIZE_INIT	(CR_MINSTACK*4)
+#define STACKSIZE_INIT		(CR_MINSTACK * 4)
 
 
 /* stack size */
@@ -51,7 +51,7 @@ typedef void (*ProtectedFn)(cr_State *ts, void *userdata);
 #define restorestack(ts,o)	cast(SPtr, cast_charp((ts)->stack.p) + (o))
 
 
-/* grow stack if needed */
+/* check if stack needs to grow */
 #define checkstack(ts,n) \
 	if (cr_unlikely((ts)->stackend.p - (ts)->stacktop.p <= (n))) \
 		cr_vm_growstack(ts, (n), 1);
