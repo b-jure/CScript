@@ -113,6 +113,14 @@ static void initvar(FunctionState *fs, ExpInfo *e, int idx)
 }
 
 
+static void initstring(ExpInfo *e, OString *s)
+{
+    e->f = e->t = NOJMP;
+    e->u.str = s;
+    e->et = EXP_STRING;
+}
+
+
 static Scope *getscope(FunctionState *fs, int idx)
 {
     Scope *scope = fs->scope;
@@ -232,7 +240,7 @@ static Function *addfunction(Lexer *lx)
 /* set current function as vararg */
 static void setvararg(FunctionState *fs, int arity) {
     fs->fn->isvararg = 1;
-    cr_code_codelarg(fs, OP_SETVARARG, arity);
+    cr_code_LA(fs, OP_SETVARARG, arity);
 }
 
 
@@ -245,17 +253,11 @@ static void expr(Lexer *lx, ExpInfo *e);
 /* check if 'tk' matches the current token */
 static void expect(Lexer *lx, int tk)
 {
-    if (lx->t.tk == tk)
+    if (lx->t.tk == tk) {
+        cr_lex_scan(lx);
         return;
+    }
     expecterror(lx, tk);
-}
-
-
-/* same as 'expect', scan for next token if no error */
-static void expectnext(Lexer *lx, int tk)
-{
-    expect(lx, tk);
-    cr_lex_scan(lx);
 }
 
 
@@ -270,12 +272,17 @@ static int match(Lexer *lx, int tk)
 }
 
 
+/* same as 'match' but do not advance scanner */
+cr_sinline int check(Lexer *lx, int tk)
+{
+    return (lx->t.tk == tk);
+}
+
+
 static OString *expect_id(Lexer *lx)
 {
     expect(lx, TK_IDENTIFIER);
-    OString *s = lx->t.lit.str;
-    cr_lex_scan(lx);
-    return s;
+    return lx->t.lit.str;
 }
 
 
@@ -397,8 +404,8 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e)
     uv->name = name;
     if (e->et == EXP_LOCAL) { /* local var ? */
         uv->onstack = 1;
-        uv->idx = e->u.idx;
-        uv->mod = vmod(&getlocal(fs, e->u.idx)->val);
+        uv->idx = e->u.var.sidx;
+        uv->mod = vmod(&getlocal(fs, e->u.var.vidx)->val);
         cr_assert(name == getlocal(fs, e->u.idx)->s.name);
     } else { /* must be another upvalue */
         cr_assert(e->et == EXP_UVAL);
@@ -435,7 +442,7 @@ static void searchvar(FunctionState *fs, OString *name, ExpInfo *e, int base)
         int ret = searchlocal(fs, name, e);
         if (ret >= 0) { /* local ? */
             if (ret == EXP_LOCAL && !base)
-                scopemarkupval(fs, e->u.idx);
+                scopemarkupval(fs, e->u.info);
         } else { /* try upvalue */
             ret = searchupvalue(fs, name);
             if (ret < 0) {
@@ -472,20 +479,20 @@ static void varname(Lexer *lx, OString *name, ExpInfo *e)
 }
 
 
-#define var(lx,e) \
-    { varname(lx, expect_id(lx), e); \
-      cr_code_reservestack((lx)->fs, 1); }
+#define varlit(lx,l,e)      varname(lx, cr_lex_newstring(lx, "" l, SLL(l)), e)
 
 
-#define varlit(lx,l,e) \
-    { varname(lx, cr_lex_newstring(lx, "" l, SLL(l)), e); \
-      cr_code_reservestack((lx)->fs, 1); }
+static void expid(Lexer *lx, ExpInfo *e)
+{
+    initstring(e, expect_id(lx));
+}
+
 
 
 /*
  * self ::= 'self'
  */
-static void self_(Lexer *lx, ExpInfo *e)
+static void selfkw(Lexer *lx, ExpInfo *e)
 {
     if (lx->ps->cs != NULL) {
         varlit(lx, "self", e);
@@ -497,108 +504,83 @@ static void self_(Lexer *lx, ExpInfo *e)
 
 
 /*
- * explist ::= expr
- *           | expr ',' explist
+ * exprlist ::= expr
+ *            | expr ',' exprlist
  */
-static int explist(Lexer *lx, ExpInfo *e)
+static int exprlist(Lexer *lx, ExpInfo *e)
 {
     int n = 1;
-    do {
+    expr(lx, e);
+    while (match(lx, ',')) {
+        cr_code_dischargetostack(lx->fs, e);
         expr(lx, e);
         n++;
-    } while (lx->t.tk == ',');
+    }
     return n;
 }
 
 
-/* indexaccess ::= '[' expr ']' */
-static void indexaccess(Lexer *lx, ExpInfo *e)
-{
-    ExpInfo e2;
-    expr(lx, &e2);
-    expect(lx, ']');
-    e->et = EXP_INDEXED;
-    if (eisliteral(e)) {
-        if (e->et != EXP_NIL)
-            e->et = EXP_INDEXK;
-        else
-            cr_lex_syntaxerror(lx, "can't index with 'nil'");
-    } else {
-        e->et = EXP_INDEXED;
-    }
-    cr_code_dischargevar(lx->fs, e);
-}
-
-
-/* dotaccess ::= '.' identifier */
-static void dotaccess(Lexer *lx, ExpInfo *e)
-{
-    e->u.idx = cr_code_string(lx->fs, expect_id(lx));
-    e->et = EXP_INDEXRAW;
-}
-
-
-/* auxiliary to 'super_' */
-static void superdotaccess(Lexer *lx, ExpInfo *e)
-{
-    dotaccess(lx, e);
-    e->et = EXP_INDEXRAWSUP;
-}
-
-
-/* auxiliary function to 'super_' */
-static void superidxaccess(Lexer *lx, ExpInfo *e)
+/* indexed ::= '[' expr ']' */
+static void indexed(Lexer *lx, ExpInfo *var, int super)
 {
     cr_lex_scan(lx); /* skip '[' */
-    OString *id = lx->t.lit.str;
-    if (match(lx, TK_IDENTIFIER)) 
-        e->et = EXP_INDEXSUP;
-    else if (match(lx, TK_STRING)) 
-        e->et = EXP_INDEXRAWSUP;
-    else 
-        cr_lex_syntaxerror(lx, "invalid index value for 'super'");
-    e->u.idx = cr_code_string(lx->fs, id);
+    cr_code_dischargetostack(lx->fs, var);
+    ExpInfo key;
+    expr(lx, &key);
+    cr_code_indexed(lx->fs, var, &key, super);
+    cr_code_dischargetostack(lx->fs, var);
     expect(lx, ']');
+}
+
+
+/* getfield ::= '.' id */
+static void getfield(Lexer *lx, ExpInfo *var, int super)
+{
+    cr_lex_scan(lx); /* skip '.' */
+    cr_code_dischargetostack(lx->fs, var);
+    ExpInfo key;
+    expid(lx, &key);
+    cr_code_getproperty(lx->fs, var, &key, super);
+    cr_code_dischargetostack(lx->fs, var);
+    cr_lex_scan(lx);
 }
 
 
 /* 
- * super_ ::= 'super' '.' identifier 
- *          | 'super' '[' identifier ']'
- *          | 'super' '[' string ']' 
+ * superkw ::= 'super' '.' id 
+ *           | 'super' '[' id ']'
+ *           | 'super' '[' string ']' 
  */
-static void super_(Lexer *lx, ExpInfo *e)
+static void superkw(Lexer *lx, ExpInfo *e)
 {
     if (lx->ps->cs == NULL) {
-        cr_lex_syntaxerror(lx, "can't use 'super' outside of class decl");
+        cr_lex_syntaxerror(lx, "can't use 'super' outside of class declaration");
     } else if (!lx->ps->cs->super) {
         cr_lex_syntaxerror(lx, "class has no superclass");
     } else {
         FunctionState *fs = lx->fs;
-        varlit(lx, "self", e);
+        varlit(lx, "self", e); /* fetch 'self' */
         cr_assert(e->et == EXP_LOCAL);
-        cr_code_dischargevar(fs, e);
-        cr_lex_scan(lx);
-        if (match(lx, '['))
-            superidxaccess(lx, e);
-        else if (match(lx, '.')) 
-            superdotaccess(lx, e);
+        cr_code_dischargetostack(fs, e); /* push 'self' */
+        cr_assert(e->et == EXP_FINEXPR);
+        varlit(lx, "super", e); /* fetch 'super' */
+        cr_assert(e->et == EXP_UVAL);
+        cr_lex_scan(lx); /* advance */
+        if (check(lx, '['))
+            indexed(lx, e, 1);
+        else if (check(lx, '.')) 
+            getfield(lx, e, 1);
         else 
             cr_lex_syntaxerror(lx, "missing method access after 'super'");
-        ExpInfo e2;
-        varlit(lx, "super", &e2);
-        cr_assert(e2->et == EXP_UVAL);
-        cr_code_dischargevar(fs, &e2); /* get super var */
-        cr_code_dischargevar(fs, e); /* get key var */
     }
 }
 
 
 /*
- * primary_exp ::= '(' exp ')'
- *               | identifier
- *               | self_
- *               | super_
+ * primaryexp ::= '(' expr ')'
+ *              | id
+ *              | selfkw
+ *              | superkw
  */
 static void primaryexp(Lexer *lx, ExpInfo *e)
 {
@@ -609,13 +591,14 @@ static void primaryexp(Lexer *lx, ExpInfo *e)
         expect(lx, ')');
         break;
     case TK_IDENTIFIER:
-        var(lx, e);
+        varname(lx, e->u.str, e);
+        cr_lex_scan(lx);
         break;
     case TK_SELF:
-        self_(lx, e);
+        selfkw(lx, e);
         break;
     case TK_SUPER:
-        super_(lx, e);
+        superkw(lx, e);
         break;
     default:
         cr_lex_syntaxerror(lx, "unexpected symbol");
@@ -631,54 +614,44 @@ static void primaryexp(Lexer *lx, ExpInfo *e)
 static void call(Lexer *lx, ExpInfo *e)
 {
     FunctionState *fs = lx->fs;
-    int args;
     int base = fs->sp;
+    cr_lex_scan(lx); /* skip '(' */
     if (lx->t.tk != ')') { /* have args ? */
-        int argstart = lx->fs->sp;
-        expr(lx, e);
-        if (lx->t.tk == ',') {
-            cr_lex_scan(lx); /* skip ',' */
-            explist(lx, e);
-        }
+        int argstart = fs->sp;
+        exprlist(lx, e);
         if (eismulret(e))
-            cr_code_setreturns(lx->fs, e, CR_MULRET);
+            cr_code_setreturns(fs, e, CR_MULRET);
     } else {
         e->et = EXP_VOID;
     }
     expect(lx, ')');
-    if (eismulret(e))
-        args = CR_MULRET;
-    else
-        args = fs->sp - base;
-    initexp(e, EXP_CALL, cr_code_call(lx->fs, base, args, 1));
+    int nparams = (eismulret(e) ? CR_MULRET : fs->sp - base);
+    initexp(e, EXP_CALL, cr_code_call(fs, base, nparams, 1));
     fs->sp = base + 1;
 }
 
 
 /*
- * suffixedexp ::= primaryexp
+ * suffixedexpr ::= primaryexp
  *               | primaryexp dotaccess
  *               | primaryexp call
  *               | primaryexp indexed
  */
-static void suffixedexp(Lexer *lx, ExpInfo *e)
+static void suffixedexpr(Lexer *lx, ExpInfo *e)
 {
     primaryexp(lx, e);
     for (;;) {
         switch (lx->t.tk) {
         case '.':
-            cr_lex_scan(lx); /* skip '.' */
-            dotaccess(lx, e);
-            break;
-        case '(':
-            if (!eisliteral(e))
-                cr_lex_syntaxerror(lx, "can't use '()' on literal values");
-            cr_lex_scan(lx); /* skip '(' */
-            call(lx, e);
+            getfield(lx, e, 0);
             break;
         case '[':
-            cr_lex_scan(lx); /* skip '[' */
-            indexaccess(lx, e);
+            indexed(lx, e, 0);
+            break;
+        case '(':
+            if (!eisconstant(e))
+                cr_lex_syntaxerror(lx, "can't use '()' on constant values");
+            call(lx, e);
             break;
         default:
             return;
@@ -695,7 +668,7 @@ static void suffixedexp(Lexer *lx, ExpInfo *e)
  *             | true
  *             | false
  *             | '...'
- *             | suffixedexp
+ *             | suffixedexpr
  */
 static void simpleexp(Lexer *lx, ExpInfo *e)
 {
@@ -724,10 +697,10 @@ static void simpleexp(Lexer *lx, ExpInfo *e)
     case TK_DOTS:
         expect_cond(lx, lx->fs->fn->isvararg,
                     "cannot use '...' outside of vararg function");
-        initexp(e, EXP_VARARG, cr_code_codelarg(lx->fs, OP_VARARG, 2));
+        initexp(e, EXP_VARARG, cr_code_LA(lx->fs, OP_VARARG, 2));
         break;
     default:
-        suffixedexp(lx, e);
+        suffixedexpr(lx, e);
         return;
     }
     cr_lex_scan(lx);
@@ -760,6 +733,8 @@ static Binopr getbinopr(int token)
     case TK_SHL: return OPR_SHL;
     case '&': return OPR_BAND;
     case '|': return OPR_BOR;
+    case '^': return OPR_BXOR;
+    case TK_RANGE: return OPR_RANGE;
     case TK_NE: return OPR_NE;
     case TK_EQ: return OPR_EQ;
     case '<': return OPR_LT;
@@ -774,38 +749,40 @@ static Binopr getbinopr(int token)
 
 
 /*
- * Operators with higher 'left' priority are
- * left associative while operators with higher
- * 'right' priority are right associative.
+ * If 'left' == 'right' then operator is associative;
+ * if 'left' < 'right' then operator is left associative;
+ * if 'left' > 'right' then operator is right associative.
  */
 static const struct {
     cr_ubyte left; /* left priority */
     cr_ubyte right; /* right priority */
 } priority[] = {
     /* unary operators priority */
-    [OPR_UMIN]     = { 12, 12 },   /* '-' */
-    [OPR_BNOT]      = { 12, 12 },   /* '~' */
-    [OPR_NOT]       = { 12, 12 },   /* '!' */
+    [OPR_UMIN]      = { 14, 14 },   /* '-' */
+    [OPR_BNOT]      = { 14, 14 },   /* '~' */
+    [OPR_NOT]       = { 14, 14 },   /* '!' */
     /* binary operators priority */
-    [OPR_POW]       = { 14, 13 },   /* '**' */
-    [OPR_MUL]       = { 11, 11 },   /* '*' */
-    [OPR_DIV]       = { 11, 11 },   /* '/' */
-    [OPR_MOD]       = { 11, 11 },   /* '%' */
-    [OPR_ADD]       = { 10, 10 },   /* '+' */
-    [OPR_SUB]       = { 10, 10 },   /* '-' */
-    [OPR_SHR]       = { 9, 9 },     /* '>>' */
-    [OPR_SHL]       = { 9, 9 },     /* '<<' */
-    [OPR_LT]        = { 8, 8 },     /* '<' */
-    [OPR_LE]        = { 8, 8 },     /* '<=' */
-    [OPR_GT]        = { 8, 8 },     /* '>' */
-    [OPR_GE]        = { 8, 8 },     /* '>=' */
-    [OPR_EQ]        = { 7, 7 },     /* '==' */
-    [OPR_NE]        = { 7, 7 },     /* '!=' */
-    [OPR_BAND]      = { 5, 5 },     /* '&' */
-    [OPR_BXOR]      = { 4, 4 },     /* '^' */
-    [OPR_BOR]       = { 3, 3 },     /* '|' */
-    [OPR_AND]       = { 2, 2 },     /* 'and' */
-    [OPR_OR]        = { 1, 1 },     /* 'or' */
+    [OPR_POW]       = { 16, 15 },   /* '**' */
+    [OPR_MUL]       = { 13, 13 },   /* '*' */
+    [OPR_DIV]       = { 13, 13 },   /* '/' */
+    [OPR_MOD]       = { 13, 13 },   /* '%' */
+    [OPR_ADD]       = { 12, 12 },   /* '+' */
+    [OPR_SUB]       = { 12, 12 },   /* '-' */
+    [OPR_SHR]       = { 11, 11 },   /* '>>' */
+    [OPR_SHL]       = { 11, 11 },   /* '<<' */
+    [OPR_LT]        = { 10, 10 },   /* '<' */
+    [OPR_LE]        = { 10, 10 },   /* '<=' */
+    [OPR_GT]        = { 10, 10 },   /* '>' */
+    [OPR_GE]        = { 10, 10 },   /* '>=' */
+    [OPR_EQ]        = {  9,  9 },   /* '==' */
+    [OPR_NE]        = {  9,  9 },   /* '!=' */
+    [OPR_BAND]      = {  7,  7 },   /* '&' */
+    [OPR_BXOR]      = {  6,  6 },   /* '^' */
+    [OPR_BOR]       = {  5,  5 },   /* '|' */
+    [OPR_AND]       = {  4,  4 },   /* 'and' */
+    [OPR_OR]        = {  3,  3 },   /* 'or' */
+    [OPR_RANGE]     = {  2,  1 },   /* '..' */
+    /* 0 is '=', which is non-associatve (can't chain '=') */
 };
 
 
@@ -832,29 +809,30 @@ static const struct {
  *           | simpleexp '|' subexpr
  *           | simpleexp 'and' subexpr
  *           | simpleexp 'or' subexpr
+ *           | simpleexp '..' subexpr
  */
 static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit)
 {
     entercstack(lx);
-    Unopr uop = getunopr(lx->t.tk);
-    if (uop != OPR_NOUNOPR) {
-        cr_lex_scan(lx);
-        subexpr(lx, e, priority[uop].right);
-        cr_code_unary(lx->fs, e, uop);
+    Unopr uopr = getunopr(lx->t.tk);
+    if (uopr != OPR_NOUNOPR) {
+        cr_lex_scan(lx); /* skip operator */
+        subexpr(lx, e, priority[uopr].right);
+        cr_code_unary(lx->fs, e, uopr);
     } else {
         simpleexp(lx, e);
     }
-    Binopr op = getbinopr(lx->t.tk);
-    while (op != OPR_NOBINOPR && priority[op].left > limit) {
+    Binopr opr = getbinopr(lx->t.tk);
+    while (opr != OPR_NOBINOPR && priority[opr].left > limit) {
         ExpInfo e2;
-        cr_lex_scan(lx); /* skip binary operator */
-        shortcircuit(fs, op, E1);
-        op nextop = subexp(fs, &E2, priority[op].right);
-        postfix(fs, op, E1, &E2);
-        op = nextop;
+        cr_lex_scan(lx); /* skip operator */
+        cr_code_prebinary(lx->fs, &e2, opr);
+        Binopr next = subexpr(lx, &e2, priority[opr].right);
+        cr_code_binary(lx->fs, e, &e2, opr);
+        opr = next;
     }
     leavecstack(lx);
-    return op;
+    return opr;
 }
 
 
@@ -1624,7 +1602,7 @@ static void foreachstm(FunctionState *fs)
     expect_cond(fs, !etisconst(E.type), "Can't call constant expression.");
     expc = 1;
     if (match(fs, TOK_COMMA))
-        expc += explist(fs, 2, &E);
+        expc += exprlist(fs, 2, &E);
     adjustassign(fs, &E, 3, expc);
     startloop(fs, &lstart, &ldepth);
     CODEOP(fs, OP_FOREACH_PREP, vars);

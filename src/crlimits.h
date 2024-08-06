@@ -145,29 +145,6 @@ typedef cr_ubyte Instruction;
 
 
 /*
- * Maximum instruction parameter size.
- * This is the maximum unsigned value that fits in 3 bytes.
- * Transitively this defines various compiler limits.
- */
-#define CRI_MAXCODE	16777215
-
-
-
-/*
- * Size of long instruction parameter (24 bit).
- */
-#define CRI_LONGPARAM	CRI_MAXCODE
-
-
-
-/*
- * Size of short instruction parameter (8 bit).
- */
-#define CRI_SHRTPARAM	255
-
-
-
-/*
  * Initial size for the weak hash table that stores
  * interned strings.
  * It has to be power of 2, because of the hash table

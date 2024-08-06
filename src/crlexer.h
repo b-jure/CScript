@@ -42,7 +42,7 @@ enum TK {
 	TK_LET, TK_WHILE, TK_LOOP, TK_CONST,
 	/* other multi-char tokens */
 	TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR,
-	TK_POW, TK_DOTS, TK_EOS,
+	TK_POW, TK_RANGE, TK_DOTS, TK_EOS,
 	/* literal tokens */
 	TK_FLT, TK_INT, TK_STRING, TK_IDENTIFIER,
 };
