@@ -409,7 +409,7 @@ typedef union Closure {
  * -------------------------------------------------------------------------- */
 
 /* virtual method table */
-typedef TValue VMT[CR_NUMM];
+typedef TValue VMT[CR_NUM_META];
 
 
 #define CR_VCLASS   makevariant(CR_TCLASS, 0)

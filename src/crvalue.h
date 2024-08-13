@@ -322,14 +322,14 @@ typedef enum N2IMode {
 
 
 /* convert value to 'cr_integer' */
-#define tointeger(v, i) \
+#define tointeger(v,i) \
     (cr_likely(ttisint(v)) \
      ? (*(i) = ival(v), 1) \
      : cr_value_tointeger(v, i, CR_N2IFLOOR))
 
 
 /* convert value to 'cr_number' */
-#define tonumber(v, n) \
+#define tonumber(v,n) \
     (cr_likely(ttisflt(v)) \
      ? (*(n) = fval(v), 1) \
      : cr_likely(ttisint(v)) ? (*(n) = ival(v), 1) : 0)

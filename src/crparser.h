@@ -30,8 +30,8 @@
  * -------------------------------------------------------------------------- */
 
 /* check expression type */
-#define eisvar(e)           ((e)->et >= EXP_UVAL && (e)->et <= EXP_INDEXED)
-#define eisliteral(e)       ((e)->et >= EXP_NIL && (e)->et <= EXP_FLT)
+#define eisvar(e)           ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
+#define eisconstant(e)      ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
 #define eiscall(e)          ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
 #define eismulret(e)        (eiscall(e) && (e)->et <= EXP_VARARG)
 #define eissuper(e)         ((e)->et == EXP_INDEXRAWSUP || (e)->et == EXP_INDEXSUP)
@@ -39,13 +39,13 @@
 
 /* expression types */
 typedef enum expt {
-    /* no expression; */
+    /* no expression */
     EXP_VOID,
-    /* 'nil' constant; */
+    /* expression is nil constant */
     EXP_NIL,
-    /* 'false' constant; */
+    /* expression is false constant */
     EXP_FALSE,
-    /* 'true' constant; */
+    /* expression is true constant */
     EXP_TRUE,
     /* string constant;
      * 'str' = string value; */
@@ -56,37 +56,44 @@ typedef enum expt {
     /* floating constant;
      * 'n' = floating value; */
     EXP_FLT,
+    /* registered constant value;
+     * 'info' = index in 'constants'; */
+    EXP_K,
     /* upvalue variable;
-     * 'info' = index of upvalue in 'upvalues' */
+     * 'info' = index of upvalue in 'upvals'; */
     EXP_UVAL,
     /* local variable;
-     * 'idx' = relative index of variable in 'locals'; */
+     * 'info' = stack index; */
     EXP_LOCAL,
     /* global variable;
-     * 'idx' = index in 'gvars' (cr_State) */
+     * 'str' = global identifier; */
     EXP_GLOBAL,
-    /* constant indexed variable ('[kk]');
-     * 'idx' = index in 'constants'; */
-    EXP_INDEXK,
-    /* indexed variable ('.k');
-     * 'idx' = index of constant string in 'constants'; */
-    EXP_INDEXRAW,
-    /* raw indexed 'super' variable ('super.k');
-     * 'idx' = index of constant string in 'constants'; */
-    EXP_INDEXRAWSUP,
-    /* indexed 'super' variable ('super[k]');
-     * 'idx' = index of constant string in 'constants'; */
-    EXP_INDEXSUP,
-    /* indexed variable ('[k=expr]'); */
+    /* indexed variable; */
     EXP_INDEXED,
+    /* variable indexed with literal string;
+     * 'info' = index in 'constants'; */
+    EXP_INDEXSTR,
+    /* variable indexed with constant integer;
+     * 'info' = index in 'constants'; */
+    EXP_INDEXINT,
+    /* indexed 'super'; */
+    EXP_INDEXSUPER,
+    /* indexed 'super' with literal string;
+     * 'info' = index in 'constants'; */
+    EXP_INDEXSUPERSTR,
+    /* indexed variable with '.';
+     * 'info' = index in 'constants'; */
+    EXP_DOT,
+    /* indexed 'super' with '.'; */
+    EXP_DOTSUPER,
     /* function call;
-     * 'info' = pc (in 'code'); */
+     * 'info' = pc; */
     EXP_CALL,
-    /* vararg expression ('...');
-     * 'info' = pc (in 'code'); */
+    /* vararg expression '...';
+     * 'info' = pc; */
     EXP_VARARG,
-    /* expression is a test/comparison;
-     * 'info' = pc (in 'code') */
+    /* expression is a jump test;
+     * 'info' = pc; */
     EXP_JMP,
     /* finalized expression */
     EXP_FINEXPR,
@@ -107,14 +114,6 @@ typedef struct ExpInfo {
         cr_integer i; /* integer constant  */
         OString *str; /* string literal */
         int info; /* pc or some other generic information */
-        union {
-            int sidx; /* stack index */
-            int vidx; /* compiler index in 'lvars.arr' */
-        } var; /* local variable */
-        union {
-            int idx; /* index (constant or stack) */
-            int tidx; /* indexed var (stack index or upvalue) */
-        } ind; /* indexed variables */
     } u;
     int t; /* jmp to patch if true */
     int f; /* jmp to patch if false */

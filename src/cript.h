@@ -246,35 +246,36 @@ CR_API int cr_getuservalue(cr_State *ts, int idx, int n);
  * Class interface (type system)
  * ------------------------------------------------------------------------- */
 /* types of methods for 'cr_vtable' */
-#define CR_MT_CFUNCTION         0
-#define CR_MT_INDEX             1
+#define CR_METAT_NONE               (-1)
+#define CR_METAT_CFUNCTION             0
+#define CR_METAT_INDEX                 1
 
 /* 'cr_vtable' methods */
-#define CR_MINIT                0
-#define CR_MTOSTRING            1
-#define CR_MGETIDX              2
-#define CR_MSETIDX              3
-#define CR_MGC                  4
-#define CR_MDEFER               5
-#define CR_MADD                 6
-#define CR_MSUB                 7
-#define CR_MMUL                 8
-#define CR_MDIV                 9
-#define CR_MMOD                 10
-#define CR_MPOW                 11
-#define CR_MNOT                 12
-#define CR_MUMIN                13
-#define CR_MBNOT                14
-#define CR_MBSHL                15
-#define CR_MBSHR                16
-#define CR_MBAND                17
-#define CR_MBOR                 18
-#define CR_MBXOR                19
-#define CR_MEQ                  20
-#define CR_MLT                  21
-#define CR_MLE                  22
+#define CR_META_INIT                0
+#define CR_META_TOSTRING            1
+#define CR_META_GETIDX              2
+#define CR_META_SETIDX              3
+#define CR_META_GC                  4
+#define CR_META_DEFER               5
+#define CR_META_ADD                 6
+#define CR_META_SUB                 7
+#define CR_META_MUL                 8
+#define CR_META_DIV                 9
+#define CR_META_MOD                 10
+#define CR_META_POW                 11
+#define CR_META_NOT                 12
+#define CR_META_UMIN                13
+#define CR_META_BNOT                14
+#define CR_META_BSHL                15
+#define CR_META_BSHR                16
+#define CR_META_BAND                17
+#define CR_META_BOR                 18
+#define CR_META_BXOR                19
+#define CR_META_EQ                  20
+#define CR_META_LT                  21
+#define CR_META_LE                  22
 
-#define CR_NUMM                 23
+#define CR_NUM_META                 23
 
 
 /* type for class interface */
@@ -285,7 +286,7 @@ struct cr_vtable {
             int stkidx; /* value on stack */
         } method;
         int mtt; /* method type tag */
-    } methods[CR_NUMM];
+    } methods[CR_NUM_META];
 };
 
 
@@ -299,21 +300,21 @@ struct cr_vtable {
 
 /* set index value for method 'm' */
 #define cr_vtablesetidx(vt,m,idx) \
-{ (vt)->methods[(m)].mtt = CR_MTINDEX; \
-    (vt)->methods[(m)].method.stkidx = (idx); }
+    { (vt)->methods[m].mtt = CR_METAT_INDEX; \
+      (vt)->methods[m].method.stkidx = (idx); }
 
 /* set function value for method 'm' */
 #define cr_vtablesetfunc(vt,m,fn) \
-{ (vt)->methods[(m)].mtt = CR_MTCFUNCTION; \
-    (vt)->methods[(m)].method.cfunction = (fn); }
+    { (vt)->methods[m].mtt = CR_METAT_CFUNCTION; \
+      (vt)->methods[m].method.cfunction = (fn); }
 
 /* set value 'v' for method 'm' (bit slower but generic) */
-#define cr_vtableset(vt,m,mt,v) { \
-    (vt)->methods[(m)].mtt = (mt); \
-    switch ((mt)) { \
-    case CR_VTECFUNCTION: (vt).methods[(m)].method.cfunction = (v); break; \
-    case CR_VTEINDEX: (vt).methods[(m)].method.stkidx = (v); break; \
-    case CR_VTNONE: case default: break; }}
+#define cr_vtableset(vt,m,mt,v) \
+    { (vt)->methods[m].mtt = (mt); \
+      switch (mt) { \
+      case CR_METAT_CFUNCTION: (vt).methods[m].method.cfunction = (v); break; \
+      case CR_METAT_INDEX: (vt).methods[m].method.stkidx = (v); break; \
+      case CR_METAT_NONE: case default: break; }}
 
 
 CR_API void cr_createclass(cr_State *ts, cr_vtable *vt);

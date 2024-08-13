@@ -42,7 +42,7 @@ enum TK {
 	TK_LET, TK_WHILE, TK_LOOP, TK_CONST,
 	/* other multi-char tokens */
 	TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR,
-	TK_POW, TK_DOTS, TK_EOS,
+	TK_POW, TK_RANGE, TK_DOTS, TK_EOS,
 	/* literal tokens */
 	TK_FLT, TK_INT, TK_STRING, TK_IDENTIFIER,
 };
@@ -73,7 +73,7 @@ typedef struct Lexer {
 	struct cr_State *ts;
 	struct FunctionState *fs;
 	BuffReader *br; /* buffered reader */
-    Buffer *buff; /* string buffer */
+        Buffer *buff; /* string buffer */
 	struct ParserState *ps; /* dynamic data used by parser */
 	OString *src; /* current source name */
     OString *env; /* name of environment variable */
