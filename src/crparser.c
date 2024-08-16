@@ -38,15 +38,18 @@
 #define leavecstack(lx)         ((lx)->ts->ncalls--)
 
 
+#define streq(s1,s2)        ((s1) == (s2))
+
+
 #define expect_cond(lx, cond, err) \
-{ if (!(cond)) cr_lex_syntaxerror(lx, err); }
+    { if (!(cond)) cr_lex_syntaxerror(lx, err); }
 
 
 
 /* Scope 'cflow' bits */
 #define CFLOOP      1
 #define CFGLOOP     2
-#define CFSWITCH        4
+#define CFSWITCH    4
 
 /* test 'cflow' bits */
 #define scopeisloop(s)      testbit((s)->cflow, CFLOOP)
@@ -310,9 +313,9 @@ static void assignmore(Lexer *lx, LHS *lhs, ExpInfo *e)
 static int registerlocal(Lexer *lx, FunctionState *fs, OString *name)
 {
     Function *fn = fs->fn;
-    checklimit(fs, fn->nlocals, CRI_MAXCODE, "locals");
-    cr_mem_growvec(lx->ts, fn->locals, fn->sizelocals, fn->nlocals, CRI_MAXCODE,
-                   "locals");
+    checklimit(fs, fn->nlocals, MAXLONGARGSIZE, "locals");
+    cr_mem_growvec(lx->ts, fn->locals, fn->sizelocals, fn->nlocals,
+                   MAXLONGARGSIZE, "locals");
     LVarInfo *lvarinfo = &fn->locals[fn->nlocals++];
     lvarinfo->name = name;
     lvarinfo->alivepc = fn->ncode;
@@ -340,9 +343,9 @@ static int addlocal(Lexer *lx, OString *name)
 {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
-    checklimit(fs, ps->lvars.len, CRI_MAXCODE, "locals");
+    checklimit(fs, ps->lvars.len, MAXLONGARGSIZE, "locals");
     cr_mem_growvec(lx->ts, ps->lvars.arr, ps->lvars.size, ps->lvars.len,
-                   CRI_MAXCODE, "locals");
+                   MAXLONGARGSIZE, "locals");
     LVar *local = &ps->lvars.arr[ps->lvars.len++];
     local->s.name = name;
     local->s.idx = -1;
@@ -363,14 +366,14 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 {
     Scope *s = fs->scope;
     Lexer *lx = fs->lx;
-    for (int last = fs->activelocals - 1; s->nlocals <= last; last--) {
-        LVar *local = getlocal(fs, last);
-        if (name == local->s.name) {
+    for (int i = fs->activelocals - 1; i >= 0; i--) {
+        LVar *local = getlocal(fs, i);
+        if (streq(name, local->s.name)) {
             if (cr_unlikely(local->s.idx == -1))
                 cr_lex_syntaxerror(lx, cr_string_pushfstring(lx->ts,
-                                       "can't read local variable '%s' in its "
-                                       "own initializer", name));
-            initvar(fs, e, last);
+                            "can't read local variable '%s' in its "
+                            "own initializer", name));
+            initvar(fs, e, i);
             return e->et;
         }
     }
@@ -402,18 +405,18 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e)
 {
     UpValInfo *uv = newupvalue(fs);
     uv->name = name;
-    if (e->et == EXP_LOCAL) { /* local var ? */
+    if (e->et == EXP_LOCAL) { /* local ? */
         uv->onstack = 1;
-        uv->idx = e->u.var.sidx;
-        uv->mod = vmod(&getlocal(fs, e->u.var.vidx)->val);
-        cr_assert(name == getlocal(fs, e->u.idx)->s.name);
-    } else { /* must be another upvalue */
+        uv->idx = e->u.info;
+        uv->mod = vmod(&getlocal(fs, e->u.info)->val);
+        cr_assert(streq(name, getlocal(fs, e->u.info)->s.name));
+    } else { /* must be upvalue */
         cr_assert(e->et == EXP_UVAL);
         FunctionState *enclosing = fs->prev;
         uv->onstack = 0;
         uv->idx = e->u.info;
         uv->mod = enclosing->fn->upvals[e->u.info].mod;
-        cr_assert(name == enclosing->fn->upvalues[e->u.info].name);
+        cr_assert(streq(name, enclosing->fn->upvalues[e->u.info].name));
     }
     return fs->fn->nupvals - 1;
 }
@@ -424,7 +427,7 @@ static int searchupvalue(FunctionState *fs, OString *name)
 {
     Function *fn = fs->fn;
     for (int i = 0; i < fn->nupvals; i++)
-        if (fn->upvals[i].name == name) 
+        if (streq(fn->upvals[i].name, name)) 
             return i;
     return -1;
 }
@@ -446,10 +449,11 @@ static void searchvar(FunctionState *fs, OString *name, ExpInfo *e, int base)
         } else { /* try upvalue */
             ret = searchupvalue(fs, name);
             if (ret < 0) {
-                searchvar(fs->prev, name, e, 0);
+                searchvar(fs->prev, name, e, 0); /* try enclosing 'fs' */
                 if (e->et == EXP_LOCAL || e->et == EXP_UVAL)
                     ret = addupvalue(fs, name, e);
-                else return;
+                else 
+                    return;
             }
             initexp(e, EXP_UVAL, ret);
         }
@@ -585,24 +589,24 @@ static void superkw(Lexer *lx, ExpInfo *e)
 static void primaryexp(Lexer *lx, ExpInfo *e)
 {
     switch (lx->t.tk) {
-    case '(':
-        cr_lex_scan(lx); /* skip ')' */
-        expr(lx, e);
-        expect(lx, ')');
-        break;
-    case TK_IDENTIFIER:
-        varname(lx, e->u.str, e);
-        cr_lex_scan(lx);
-        break;
-    case TK_SELF:
-        selfkw(lx, e);
-        break;
-    case TK_SUPER:
-        superkw(lx, e);
-        break;
-    default:
-        cr_lex_syntaxerror(lx, "unexpected symbol");
-        break;
+        case '(':
+            cr_lex_scan(lx); /* skip ')' */
+            expr(lx, e);
+            expect(lx, ')');
+            break;
+        case TK_IDENTIFIER:
+            varname(lx, e->u.str, e);
+            cr_lex_scan(lx);
+            break;
+        case TK_SELF:
+            selfkw(lx, e);
+            break;
+        case TK_SUPER:
+            superkw(lx, e);
+            break;
+        default:
+            cr_lex_syntaxerror(lx, "unexpected symbol");
+            break;
     }
 }
 
@@ -642,19 +646,19 @@ static void suffixedexpr(Lexer *lx, ExpInfo *e)
     primaryexp(lx, e);
     for (;;) {
         switch (lx->t.tk) {
-        case '.':
-            getfield(lx, e, 0);
-            break;
-        case '[':
-            indexed(lx, e, 0);
-            break;
-        case '(':
-            if (!eisconstant(e))
-                cr_lex_syntaxerror(lx, "can't use '()' on constant values");
-            call(lx, e);
-            break;
-        default:
-            return;
+            case '.':
+                getfield(lx, e, 0);
+                break;
+            case '[':
+                indexed(lx, e, 0);
+                break;
+            case '(':
+                if (!eisconstant(e))
+                    cr_lex_syntaxerror(lx, "can't use '()' on constant values");
+                call(lx, e);
+                break;
+            default:
+                return;
         }
     }
 }
@@ -673,35 +677,35 @@ static void suffixedexpr(Lexer *lx, ExpInfo *e)
 static void simpleexp(Lexer *lx, ExpInfo *e)
 {
     switch (lx->t.tk) {
-    case TK_INT:
-        initexp(e, EXP_INT, 0);
-        e->u.i = lx->t.lit.i;
-        break;
-    case TK_FLT:
-        initexp(e, EXP_FLT, 0);
-        e->u.n = lx->t.lit.n;
-        break;
-    case TK_STRING:
-        initexp(e, EXP_STRING, 0);
-        e->u.str = lx->t.lit.str;
-        break;
-    case TK_NIL:
-        initexp(e, EXP_NIL, 0);
-        break;
-    case TK_TRUE:
-        initexp(e, EXP_TRUE, 0);
-        break;
-    case TK_FALSE:
-        initexp(e, EXP_FALSE, 0);
-        break;
-    case TK_DOTS:
-        expect_cond(lx, lx->fs->fn->isvararg,
+        case TK_INT:
+            initexp(e, EXP_INT, 0);
+            e->u.i = lx->t.lit.i;
+            break;
+        case TK_FLT:
+            initexp(e, EXP_FLT, 0);
+            e->u.n = lx->t.lit.n;
+            break;
+        case TK_STRING:
+            initexp(e, EXP_STRING, 0);
+            e->u.str = lx->t.lit.str;
+            break;
+        case TK_NIL:
+            initexp(e, EXP_NIL, 0);
+            break;
+        case TK_TRUE:
+            initexp(e, EXP_TRUE, 0);
+            break;
+        case TK_FALSE:
+            initexp(e, EXP_FALSE, 0);
+            break;
+        case TK_DOTS:
+            expect_cond(lx, lx->fs->fn->isvararg,
                     "cannot use '...' outside of vararg function");
-        initexp(e, EXP_VARARG, cr_code_L(lx->fs, OP_VARARG, 2));
-        break;
-    default:
-        suffixedexpr(lx, e);
-        return;
+            initexp(e, EXP_VARARG, cr_code_L(lx->fs, OP_VARARG, 2));
+            break;
+        default:
+            suffixedexpr(lx, e);
+            return;
     }
     cr_lex_scan(lx);
 }
@@ -711,10 +715,10 @@ static void simpleexp(Lexer *lx, ExpInfo *e)
 static Unopr getunopr(int token)
 {
     switch (token) {
-    case '-': return OPR_UMIN;
-    case '~': return OPR_BNOT;
-    case '!': return OPR_NOT;
-    default: return OPR_NOUNOPR;
+        case '-': return OPR_UMIN;
+        case '~': return OPR_BNOT;
+        case '!': return OPR_NOT;
+        default: return OPR_NOUNOPR;
     }
 }
 
@@ -723,27 +727,27 @@ static Unopr getunopr(int token)
 static Binopr getbinopr(int token)
 {
     switch (token) {
-    case '+': return OPR_ADD;
-    case '-': return OPR_SUB;
-    case '*': return OPR_MUL;
-    case '/': return OPR_DIV;
-    case '%': return OPR_MOD;
-    case TK_POW: return OPR_POW;
-    case TK_SHR: return OPR_SHR;
-    case TK_SHL: return OPR_SHL;
-    case '&': return OPR_BAND;
-    case '|': return OPR_BOR;
-    case '^': return OPR_BXOR;
-    case TK_RANGE: return OPR_RANGE;
-    case TK_NE: return OPR_NE;
-    case TK_EQ: return OPR_EQ;
-    case '<': return OPR_LT;
-    case TK_LE: return OPR_LE;
-    case '>': return OPR_GT;
-    case TK_GE: return OPR_GE;
-    case TK_AND: return OPR_AND;
-    case TK_OR: return OPR_OR;
-    default: return OPR_NOBINOPR;
+        case '+': return OPR_ADD;
+        case '-': return OPR_SUB;
+        case '*': return OPR_MUL;
+        case '/': return OPR_DIV;
+        case '%': return OPR_MOD;
+        case TK_POW: return OPR_POW;
+        case TK_SHR: return OPR_SHR;
+        case TK_SHL: return OPR_SHL;
+        case '&': return OPR_BAND;
+        case '|': return OPR_BOR;
+        case '^': return OPR_BXOR;
+        case TK_RANGE: return OPR_RANGE;
+        case TK_NE: return OPR_NE;
+        case TK_EQ: return OPR_EQ;
+        case '<': return OPR_LT;
+        case TK_LE: return OPR_LE;
+        case '>': return OPR_GT;
+        case TK_GE: return OPR_GE;
+        case TK_AND: return OPR_AND;
+        case TK_OR: return OPR_OR;
+        default: return OPR_NOBINOPR;
     }
 }
 

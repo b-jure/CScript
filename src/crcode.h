@@ -193,14 +193,12 @@ OP_SETGVAR,      /* set global variable */
 OP_GETLVAR,      /* get local variable */
 OP_SETLVAR,      /* set local variable */
 
-OP_JZ,           /* jump if false */
-OP_JZPOP,        /* jump if false and pop unconditionally */
-OP_JZORPOP,      /* jump if false or pop */
-OP_JZANDPOP,     /* jump if false and pop */
-OP_JMP,          /* jump to specified location */
-OP_JMPORPOP,
-OP_JMPANDPOP,    /* jump to specified location and pop */
-OP_LOOP,         /* jump back to specified location */
+OP_JMP,          /* L        'pc += L' */
+OP_JMPS,         /* L        'pc -= L' */
+OP_JF,           /* V L      'if (ttisfalsey(V)) pc += L' */
+OP_JFORPOP,      /* V L      'if (ttisfalsey(V)) pc += L; else pop V' */
+OP_JT,           /* V L      'if (!ttisfalsey(V)) pc += L' */
+OP_JTORPOP,      /* V L      'if (!ttisfalsey(V)) pc += L; else pop V' */
 
 OP_CALL0,        /* call value with no arguments */
 OP_CALL1,        /* call value with a single argument */
@@ -240,28 +238,30 @@ OP_RET,          /* return with 2 or more values */
 #define CR_NUMOPS	(OP_RET + 1)
 
 
-CRI_FUNC int cr_code_SA(FunctionState *fs, Instruction i, int a);
-CRI_FUNC int cr_code_LA(FunctionState *fs, Instruction i, int a);
-CRI_FUNC void cr_code_reserveslots(FunctionState *fs, int n);
+CRI_FUNC int cr_code_S(FunctionState *fs, Instruction i, int a);
+CRI_FUNC int cr_code_L(FunctionState *fs, Instruction i, int a);
 CRI_FUNC void cr_code_checkstack(FunctionState *fs, int n);
+CRI_FUNC void cr_code_reserveslots(FunctionState *fs, int n);
 CRI_FUNC void cr_code_setoneret(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
 CRI_FUNC int cr_code_nil(FunctionState *fs, int n);
 CRI_FUNC int cr_code_ret(FunctionState *fs, int base, int nreturns);
-CRI_FUNC int cr_code_call(FunctionState *fs, int base, int args, int nreturns);
+CRI_FUNC int cr_code_call(FunctionState *fs, int base, int nparams, 
+                          int nreturns);
+CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var, ExpInfo *exp);
 CRI_FUNC void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_exp2stack(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
-                              int super);
 CRI_FUNC void cr_code_getproperty(FunctionState *fs, ExpInfo *var,
                                   ExpInfo *keystr, int super);
-CRI_FUNC int cr_code_call(FunctionState *fs, int base, int args, int nreturns);
-CRI_FUNC void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr op);
+CRI_FUNC void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
+                              int super);
+CRI_FUNC void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
+CRI_FUNC void cr_code_concatjmp(FunctionState *fs, int *l1, int l2);
+CRI_FUNC void cr_code_patchjmp(FunctionState *fs, int pc);
+CRI_FUNC void cr_code_jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop);
+CRI_FUNC void cr_code_jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop);
 CRI_FUNC void cr_code_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
-CRI_FUNC void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, 
-                             Binopr op);
-
-CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var, ExpInfo *exp);
-CRI_FUNC void cr_code_rmlastins(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
+                             Binopr opr);
 
 #endif

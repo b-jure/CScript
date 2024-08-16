@@ -265,7 +265,7 @@ typedef struct UpVal {
 
 
 /* upvalue variable debug information */
-typedef struct UVInfo {
+typedef struct UpValInfo {
     OString *name;
     int idx; /* index in stack or outer function local var list */
     cr_ubyte onstack; /* is it on stack */

@@ -270,8 +270,8 @@ cr_sinline void freeslots(FunctionState *fs, int n)
 
 
 /* emit 'OP_SET' family of instructions */
-// void cr_code_storevar(FunctionState *fs, ExpInfo *var, ExpInfo *exp)
-// {
+void cr_code_storevar(FunctionState *fs, ExpInfo *var, ExpInfo *exp)
+{
 //     switch (var->et) {
 //     case EXP_LOCAL:
 //         freeexp(fs, exp);
@@ -306,7 +306,7 @@ cr_sinline void freeslots(FunctionState *fs, int n)
 //         break;
 //     }
 //     freestackslot(fs, 1);
-// }
+}
 
 
 /* ensure variable is on stack */
@@ -530,6 +530,7 @@ void cr_code_exp2stack(FunctionState *fs, ExpInfo *e)
 }
 
 
+/* initialize dot indexed expression */
 void cr_code_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
                          int super)
 {
@@ -539,6 +540,7 @@ void cr_code_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
 }
 
 
+/* initialize indexed expression */
 void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super)
 {
     cr_assert(var->et == EXP_FINEXPR && var->u.info == fs->sp - 1);
@@ -584,6 +586,7 @@ static int validop(TValue *v1, TValue *v2, int op)
 }
 
 
+/* check if expression is numeral constant */
 static int tonumeral(const ExpInfo *e1, TValue *res)
 {
     switch (e1->et) {
@@ -594,6 +597,7 @@ static int tonumeral(const ExpInfo *e1, TValue *res)
 }
 
 
+/* fold constant expressions */
 static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2, int opr)
 {
     TValue v1, v2, res;
@@ -614,6 +618,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2, int opr)
 }
 
 
+/* emit unary instruction; except logical not '!' */
 static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op)
 {
     cr_code_exp2stack(fs, e);
@@ -622,6 +627,7 @@ static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op)
 }
 
 
+/* emit logical not instruction */
 static void codenot(FunctionState *fs, ExpInfo *e)
 {
     cr_assert(!eisvar(e)); /* vars are already finalized */
@@ -630,20 +636,8 @@ static void codenot(FunctionState *fs, ExpInfo *e)
         e->et = EXP_TRUE;
         break;
     }
-    case EXP_TRUE: case EXP_STRING: case EXP_K: {
+    case EXP_TRUE: case EXP_INT: case EXP_FLT: case EXP_STRING: case EXP_K: {
         e->et = EXP_FALSE;
-        break;
-    }
-    case EXP_INT: {
-        e->et = (e->u.i == 0 ? EXP_TRUE : EXP_FALSE);
-        break;
-    }
-    case EXP_FLT: {
-        e->et = (e->u.n == 0.0 ? EXP_TRUE : EXP_FALSE);
-        break;
-    }
-    case EXP_JMP: {
-        // TODO: negate condition
         break;
     }
     case EXP_FINEXPR: { /* 'e' already on stack */
@@ -655,6 +649,7 @@ static void codenot(FunctionState *fs, ExpInfo *e)
 }
 
 
+/* emit unary instruction */
 void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr opr)
 {
     static const ExpInfo dummy = {EXP_INT, 0, -1, -1};
@@ -684,18 +679,6 @@ static int codejmp(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 }
 
 
-/* concatenate jmp label 'l2' into jmp label 'l1' */
-void cr_code_concatjmp(FunctionState *fs, int *l1, int l2)
-{
-    if (l2 == NOJMP) return;
-    if (*l1 == NOJMP) {
-        *l1 = l2;
-    } else {
-
-    }
-}
-
-
 /* get 'pc' of jmp instruction destination */
 static int getjmp(FunctionState *fs, int pc)
 {
@@ -718,6 +701,22 @@ static void fixjmp(FunctionState *fs, int pc, int destpc)
 }
 
 
+/* concatenate jmp label 'l2' into jmp label 'l1' */
+void cr_code_concatjmp(FunctionState *fs, int *l1, int l2)
+{
+    if (l2 == NOJMP) return;
+    if (*l1 == NOJMP) {
+        *l1 = l2;
+    } else {
+        int curr = *l1;
+        int next;
+        while ((next = getjmp(fs, curr)) != NOJMP) /* get last jmp pc */
+            curr = next;
+        fixjmp(fs, curr, l2); /* last jmp jumps to 'l2' */
+    }
+}
+
+
 /* backpatch jump instruction at 'pc' */
 void cr_code_patchjmp(FunctionState *fs, int pc)
 {
@@ -733,32 +732,16 @@ void cr_code_patchjmp(FunctionState *fs, int pc)
 /* jump if expression is false */
 void cr_code_jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 {
-    int pc = 0;
     cr_code_varexp2stack(fs, e);
     switch (e->et) {
-    case EXP_TRUE: case EXP_STRING: {
-        pc = NOJMP;
+    case EXP_TRUE: case EXP_STRING: case EXP_INT: case EXP_FLT: {
+        e->f = NOJMP;
         break;
     }
-    case EXP_INT: {
-        if (e->u.i != 0) {
-            pc = NOJMP;
-            break;
-        }
-        goto dfl;
-    }
-    case EXP_FLT: {
-        if (e->u.n != 0.0) {
-            pc = NOJMP;
-            break;
-        }
-    } /* FALLTHRU */
-    dfl: default: 
-        pc = codejmp(fs, e, jmpop);
+    default: 
+        e->f = codejmp(fs, e, jmpop);
         break;
     }
-    cr_code_concatjmp(fs, &e->f, pc);
-    cr_code_patchjmp(fs, e->t);
     e->t = NOJMP;
 }
 
@@ -766,32 +749,16 @@ void cr_code_jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 /* jump if expression is true */
 void cr_code_jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 {
-    int pc;
     cr_code_varexp2stack(fs, e);
     switch (e->et) {
     case EXP_NIL: case EXP_FALSE: {
-        pc = NOJMP;
+        e->t = NOJMP;
         break;
     }
-    case EXP_INT: {
-        if (e->u.i == 0) {
-            pc = NOJMP;
-            break;
-        }
-        goto dfl;
-    }
-    case EXP_FLT: {
-        if (e->u.n == 0.0) {
-            pc = NOJMP;
-            break;
-        }
-    } /* FALLTHRU */
-    dfl: default:
-        pc = codejmp(fs, e, jmpop);
+    default:
+        e->t = codejmp(fs, e, jmpop);
         break;
     }
-    cr_code_concatjmp(fs, &e->t, pc);
-    cr_code_patchjmp(fs, e->f);
     e->f = NOJMP;
 }
 
@@ -827,11 +794,11 @@ void cr_code_prebinary(FunctionState *fs, ExpInfo *e, Binopr op)
         break;
     }
     case OPR_AND: {
-        cr_code_jmpiffalse(fs, e, OP_JZORPOP);
+        cr_code_jmpiffalse(fs, e, OP_JFORPOP);
         break;
     }
     case OPR_OR: {
-        cr_code_jmpiftrue(fs, e, OP_JMPORPOP);
+        cr_code_jmpiftrue(fs, e, OP_JTORPOP);
         break;
     }
     default: cr_unreachable();
@@ -862,9 +829,7 @@ static int exp2K(FunctionState *fs, ExpInfo *e)
 /* swap expressions */
 cr_sinline void swapexp(ExpInfo *e1, ExpInfo *e2)
 {
-    const ExpInfo temp = *e1;
-    *e1 = *e2;
-    *e2 = temp;
+    const ExpInfo temp = *e1; *e1 = *e2; *e2 = temp;
 }
 
 
@@ -1026,7 +991,7 @@ void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
         break;
     }
     case OPR_GT: case OPR_GE: {
-        /* convert 'a > b' to 'a < b' and 'a >= b' to 'a <= b' */
+        /* 'a > b' <==> 'a < b', 'a >= b' <==> 'a <= b' */
         swapexp(e1, e2);
         opr = (opr - OPR_GT) + OPR_LT;
     } /* FALLTHRU */
@@ -1035,9 +1000,15 @@ void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
         break;
     }
     case OPR_AND: {
+        cr_assert(e1->t == NOJMP);
+        cr_code_concatjmp(fs, &e2->f, e1->f);
+        *e1 = *e2;
         break;
     }
     case OPR_OR: {
+        cr_assert(e1->f == NOJMP);
+        cr_code_concatjmp(fs, &e2->t, e1->t);
+        *e1 = *e2;
         break;
     }
     default: cr_unreachable();
