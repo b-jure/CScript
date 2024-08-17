@@ -72,7 +72,7 @@ UserData *cr_meta_newuserdata(cr_State *ts, size_t size, int nuv)
 
 
 /* get 'vtable' method */
-const TValue *cr_meta_getvtable(cr_State *ts, const GCObject *o, int mt)
+const TValue *cr_meta_get(cr_State *ts, const GCObject *o, int mt)
 {
     cr_assert(CR_META_INIT <= mt && mt < CR_NUM_META);
     switch (ott_(o)) {
@@ -138,7 +138,7 @@ int cr_meta_order(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
 {
     cr_assert(CR_META_EQ <= mt && mt < CR_NUM_META);
     if (cr_likely(callbinres(ts, v1, v2, res, mt)))
-        return ttisfalsey(s2v(ts->stacktop.p - 1));
+        return cr_isfalse(s2v(ts->stacktop.p - 1));
     cr_debug_ordererror(ts, v1, v2);
     /* UNREACHED */
     return 0;

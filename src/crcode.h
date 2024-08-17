@@ -186,19 +186,12 @@ OP_EQL,          /* equality (preserve left operand) */
 
 OP_RANGEINT,     /* integer range; TODO */
 
-OP_DEFGVAR,      /* define global variable */
-OP_GETGVAR,      /* get global variable */
-OP_SETGVAR,      /* set global variable */
-
-OP_GETLVAR,      /* get local variable */
-OP_SETLVAR,      /* set local variable */
-
 OP_JMP,          /* L        'pc += L' */
 OP_JMPS,         /* L        'pc -= L' */
-OP_JF,           /* V L      'if (ttisfalsey(V)) pc += L' */
-OP_JFORPOP,      /* V L      'if (ttisfalsey(V)) pc += L; else pop V' */
-OP_JT,           /* V L      'if (!ttisfalsey(V)) pc += L' */
-OP_JTORPOP,      /* V L      'if (!ttisfalsey(V)) pc += L; else pop V' */
+OP_JF,           /* V L      'if (cr_isfalse(V)) pc += L' */
+OP_JFORPOP,      /* V L      'if (cr_isfalse(V)) pc += L; else pop V' */
+OP_JT,           /* V L      'if (!cr_isfalse(V)) pc += L' */
+OP_JTORPOP,      /* V L      'if (!cr_isfalse(V)) pc += L; else pop V' */
 
 OP_CALL0,        /* call value with no arguments */
 OP_CALL1,        /* call value with a single argument */
@@ -206,17 +199,29 @@ OP_CALL,         /* call value with 2 or more arguments */
 
 OP_GETUVAL,      /* get upvalue */
 OP_SETUVAL,      /* set upvalue */
-OP_CLOSEUVAL,    /* close upvalue */
-OP_CLOSEUVALN,   /* close 'n' upvalues */
+
+OP_CLOSE,        /* L        'close all upvalues >= L (stack ptr) */
+OP_TBC,          /* V        'create new to-be-closed upvalue from variable V */
+
+OP_DEFGVAR,      /* define global variable */
+OP_GETGVAR,      /* get global variable */
+OP_SETGVAR,      /* set global variable */
+
+OP_GETLVAR,      /* get local variable */
+OP_SETLVAR,      /* set local variable */
 
 OP_SETPROPERTY,  /* set property ('v.str') */
 OP_GETPROPERTY,  /* get property ('v.str = ..') */
+
 OP_GETINDEX,     /* get index ('v[k]') */
 OP_SETINDEX,     /* set index ('v[k] = ..') */
+
 OP_GETINDEXSTR,  /* get string index ('v[str]') */
 OP_SETINDEXSTR,  /* set string index ('v[str] = ..') */
+
 OP_GETINDEXINT,  /* get integer index ('v[int]') */
 OP_SETINDEXINT,  /* set integer index ('v[int] = ..') */
+
 OP_GETSUP,       /* get super class method ('super.k') */
 OP_GETSUPIDX,    /* get super class method ('super[k | str]') */
 OP_GETSUPIDXSTR, /* get super class method ('super[k | str]') */
@@ -245,10 +250,11 @@ CRI_FUNC void cr_code_reserveslots(FunctionState *fs, int n);
 CRI_FUNC void cr_code_setoneret(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
 CRI_FUNC int cr_code_nil(FunctionState *fs, int n);
+CRI_FUNC int cr_code_pop(FunctionState *fs, int n);
 CRI_FUNC int cr_code_ret(FunctionState *fs, int base, int nreturns);
 CRI_FUNC int cr_code_call(FunctionState *fs, int base, int nparams, 
                           int nreturns);
-CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var, ExpInfo *exp);
+CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var);
 CRI_FUNC void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_exp2stack(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_getproperty(FunctionState *fs, ExpInfo *var,

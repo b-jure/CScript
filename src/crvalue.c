@@ -160,7 +160,7 @@ static cr_integer intarithm(cr_State *ts, cr_integer x, cr_integer y, int op)
     case CR_OPBAND: return cri_intop(&, x, y);
     case CR_OPBOR: return cri_intop(|, x, y);
     case CR_OPBXOR: return cri_intop(^, x, y);
-    default: cr_unreachable(); return 0.0;
+    default: cr_unreachable();
     }
 }
 
@@ -197,33 +197,44 @@ int cr_value_tointeger(const TValue *v, cr_integer *i, int mode)
  * done then return 0.
  */
 int cr_value_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
-        TValue *res, int op)
+                       TValue *res, int op)
 {
     cr_number n1, n2;
     switch (op) {
-    case CR_OPBNOT: case CR_OPBXOR:
-    case CR_OPBSHL: case CR_OPBSHR:
-    case CR_OPBOR: case CR_OPBAND:
+    case CR_OPBNOT: case CR_OPBXOR: case CR_OPBSHL:
+    case CR_OPBSHR: case CR_OPBOR: case CR_OPBAND: {
+        cr_integer i1, i2;
+        if (tointeger(a, &i1) && tointeger(b, &i2)) {
+            setival(res, intarithm(ts, i1, i2, op));
+            return 1;
+        }
+        return 0;
+    }
+    case CR_OPDIV: case CR_OPMOD: {
+        if (tonumber(a, &n1) && tonumber(b, &n2)) {
+            setfval(res, numarithm(ts, n1, n2, op));
+            return 1;
+        }
+        return 0;
+    }
+    case CR_OPADD: case CR_OPSUB: case CR_OPMUL:
+    case CR_OPNOT: case CR_OPUMIN: {
+        if (tonumber(a, &n1) && tonumber(b, &n2)) {
+            setfval(res, numarithm(ts, n1, n2, op));
+            return 1;
+        }
+        return 0;
+    }
+    default:
         if (ttisint(a) && ttisint(b)) {
             setival(res, intarithm(ts, ival(a), ival(b), op));
             return 1;
-        }
-        return 0;
-    case CR_OPDIV: case CR_OPMOD:
-        if (tonumber(a, &n1) && tonumber(b, &n2)) {
+        } else if (tonumber(a, &n1) && tonumber(b, &n2)) {
             setfval(res, numarithm(ts, n1, n2, op));
             return 1;
+        } else {
+            return 0;
         }
-        return 0;
-    case CR_OPADD: case CR_OPSUB:
-    case CR_OPMUL: case CR_OPNOT:
-    case CR_OPUMIN:
-        if (tonumber(a, &n1) && tonumber(b, &n2)) {
-            setfval(res, numarithm(ts, n1, n2, op));
-            return 1;
-        }
-        /* FALLTHRU */
-    default: return 0;
     }
 }
 
@@ -236,7 +247,7 @@ int cr_value_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
 void cr_value_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res, int op)
 {
     if (!cr_value_arithmraw(ts, v1, v2, s2v(res), op))
-        cr_meta_arithm(ts, v1, v2, res, (op - CR_OPADD) + CR_MADD);
+        cr_meta_arithm(ts, v1, v2, res, (op - CR_OPADD) + CR_META_ADD);
 }
 
 
@@ -252,7 +263,7 @@ cr_sinline int intLEnum(cr_State *ts, const TValue *v1, const TValue *v2)
 }
 
 
-/* check comment on function above ('intLEnum') */
+/* check 'intLEnum' */
 cr_sinline int numLEint(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     return cri_numle(fval(v1), cast_num(ival(v2)));
@@ -281,11 +292,11 @@ cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2)
     if (ttisstr(v1) && ttisstr(v2))
         return (cr_string_cmp(strval(v1), strval(v2)) <= 0);
     else
-        return cr_meta_order(ts, v1, v2, ts->stacktop.p, CR_MLE);
+        return cr_meta_order(ts, v1, v2, ts->stacktop.p, CR_META_LE);
 }
 
 
-/* less or equal ordering '<=' */
+/* 'less or equal' ordering '<=' */
 int cr_value_orderLE(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     if (ttisnum(v1) && ttisnum(v2))
@@ -294,21 +305,21 @@ int cr_value_orderLE(cr_State *ts, const TValue *v1, const TValue *v2)
 }
 
 
-/* check 'intLEnum' for conversion explanation */
+/* check 'intLEnum' */
 cr_sinline int intLTnum(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     return cri_numlt(cast_num(ival(v1)), fval(v2));
 }
 
 
-/* check 'intLEnum' for conversion explanation */
+/* check 'intLEnum' */
 cr_sinline int numLTint(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     return cri_numlt(fval(v1), cast_num(ival(v2)));
 }
 
 
-/* less than ordering on number values */
+/* 'less than' ordering '<' on number values */
 cr_sinline int numLT(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     cr_assert(ttisnum(v1) && ttisnum(v2));
@@ -324,17 +335,17 @@ cr_sinline int numLT(cr_State *ts, const TValue *v1, const TValue *v2)
 }
 
 
-/* less than ordering on non-number values */
+/* 'less than' ordering '<' on non-number values */
 cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     if (ttisstr(v1) && ttisstr(v2))
         return (cr_string_cmp(strval(v1), strval(v2)) < 0);
     else
-        return cr_meta_order(ts, v1, v2, ts->stacktop.p, CR_MLT);
+        return cr_meta_order(ts, v1, v2, ts->stacktop.p, CR_META_LT);
 }
 
 
-/* less than ordering '<' */
+/* 'less than' ordering '<' */
 int cr_value_orderLT(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     if (ttisnum(v1) && ttisnum(v2))
@@ -343,7 +354,7 @@ int cr_value_orderLT(cr_State *ts, const TValue *v1, const TValue *v2)
 }
 
 
-/* equality ordering '==' */
+/* 'equality' ordering '==' */
 int cr_value_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     cr_integer i1, i2;
@@ -364,24 +375,24 @@ int cr_value_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2)
     case CR_VUDATA:
         if (udval(v1) == udval(v2)) return 1;
         selfarg = v1;
-        method = cr_meta_getvtable(ts, obj2gco(v1), CR_MEQ);
+        method = cr_meta_get(ts, obj2gco(v1), CR_META_EQ);
         if (!method) {
             selfarg = v2;
-            method = cr_meta_getvtable(ts, obj2gco(v2), CR_MEQ);
+            method = cr_meta_get(ts, obj2gco(v2), CR_META_EQ);
         }
         break;
     case CR_VINSTANCE:
         if (insval(v1) == insval(v2)) return 1;
         selfarg = v1;
-        method = cr_meta_getvtable(ts, obj2gco(v1), CR_MEQ);
+        method = cr_meta_get(ts, obj2gco(v1), CR_META_EQ);
         if (!method) {
             selfarg = v2;
-            method = cr_meta_getvtable(ts, obj2gco(v2), CR_MEQ);
+            method = cr_meta_get(ts, obj2gco(v2), CR_META_EQ);
         }
         break;
     default: return (oval(v1) == oval(v2));
     }
     if (!method) return 0;
     cr_meta_callres(ts, selfarg, method, v1, v2, ts->stacktop.p);
-    return !ttisfalsey(s2v(ts->stacktop.p - 1));
+    return !cr_isfalse(s2v(ts->stacktop.p - 1));
 }

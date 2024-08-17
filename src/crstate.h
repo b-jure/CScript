@@ -81,12 +81,6 @@ typedef struct GState {
  * Thread (per-thread-state)
  * ------------------------------------------------------------------------- */
 
-typedef struct DeferList {
-    struct DeferList *next;
-    SIndex *fn; /* function on stack */
-} DeferList;
-
-
 /* Cript thread state */
 typedef struct cr_State {
     ObjectHeader;

@@ -179,6 +179,9 @@ typedef struct HTable {
 #define cstrval(v)  (strval(v)->bytes)
 
 
+#define getstrbytes(s)   ((s)->bytes)
+
+
 /* set value to string */
 #define setv2s(ts,v,s)      setv2o(ts,v,s,OString)
 

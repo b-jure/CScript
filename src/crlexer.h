@@ -18,9 +18,7 @@
 #ifndef CRLEXER_H
 #define CRLEXER_H
 
-#include "crmem.h"
 #include "crreader.h"
-#include "crvalue.h"
 #include "crobject.h"
 
 
@@ -39,7 +37,7 @@ enum TK {
 	TK_CLASS, TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR,
 	TK_FOREACH, TK_FN, TK_IF, TK_IN, TK_INHERITS, TK_NIL,
 	TK_OR, TK_RETURN, TK_SUPER, TK_SELF, TK_SWITCH, TK_TRUE,
-	TK_LET, TK_WHILE, TK_LOOP, TK_CONST,
+	TK_LET, TK_WHILE, TK_LOOP, TK_CONST, TK_STATIC,
 	/* other multi-char tokens */
 	TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR,
 	TK_POW, TK_RANGE, TK_DOTS, TK_EOS,
@@ -81,7 +79,7 @@ typedef struct Lexer {
 
 
 CRI_FUNC void cr_lex_setsource(cr_State *ts, Lexer *lx, BuffReader *br,
-			                   OString *source);
+			       OString *source);
 CRI_FUNC void cr_lex_init(cr_State *ts);
 CRI_FUNC const char *cr_lex_tok2str(Lexer *lx, int t);
 CRI_FUNC OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len);

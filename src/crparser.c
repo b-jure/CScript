@@ -77,6 +77,14 @@ static cr_noret limiterror(FunctionState *fs, const char *what, int limit)
 }
 
 
+/* semantic error; variant of syntax error without 'near <token>' */
+cr_noret cr_parser_semerror(Lexer *lx, const char *err)
+{
+    lx->t.tk = 0;
+    cr_lex_syntaxerror(lx, err);
+}
+
+
 static void checklimit(FunctionState *fs, int n, int limit, const char *what)
 {
     if (n >= limit)
@@ -110,6 +118,7 @@ static void initexp(ExpInfo *e, expt et, int info)
 
 static void initvar(FunctionState *fs, ExpInfo *e, int idx)
 {
+    UNUSED(fs);
     e->t = e->f = -1;
     e->et = EXP_LOCAL;
     e->u.info = idx;
@@ -181,6 +190,7 @@ static void scopemarkupval(FunctionState *fs, int vidx)
 static void scopemarktbc(FunctionState *fs)
 {
     Scope *s = fs->scope;
+    s->haveupval = 1;
     s->havetbcvar = 1;
     fs->close = 1;
 }
@@ -294,20 +304,6 @@ static OString *expect_id(Lexer *lx)
  * Statements
  * ------------------------------------------------------------------------- */
 
-/*
- * Used to chain variables on the left side of
- * the assignment.
- */
-typedef struct LHS {
-    struct LHS *prev;
-    ExpInfo *e;
-} LHS;
-
-
-static void assignmore(Lexer *lx, LHS *lhs, ExpInfo *e)
-{
-}
-
 
 /* add local debug information into 'locals' */
 static int registerlocal(Lexer *lx, FunctionState *fs, OString *name)
@@ -339,7 +335,7 @@ static void adjustlocals(Lexer *lx, int nvars)
 
 
 /* adds local variable to the 'lvars' */
-static int addlocal(Lexer *lx, OString *name)
+static int newlocal(Lexer *lx, OString *name)
 {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
@@ -349,14 +345,13 @@ static int addlocal(Lexer *lx, OString *name)
     LVar *local = &ps->lvars.arr[ps->lvars.len++];
     local->s.name = name;
     local->s.idx = -1;
-    vmod(&local->val) = VARREGULAR;
     return ps->lvars.len - fs->firstlocal - 1;
 }
 
 
 /* same as 'addlocal' but use string literal as name */
-#define addlocallit(lx,lit) \
-    addlocal(lx, cr_lex_newstring(lx, "" lit, SLL(lit)))
+#define newlocallit(lx,lit) \
+    newlocal(lx, cr_lex_newstring(lx, "" lit, SLL(lit)))
 
 
 /*
@@ -364,7 +359,6 @@ static int addlocal(Lexer *lx, OString *name)
  */
 static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 {
-    Scope *s = fs->scope;
     Lexer *lx = fs->lx;
     for (int i = fs->activelocals - 1; i >= 0; i--) {
         LVar *local = getlocal(fs, i);
@@ -528,11 +522,12 @@ static int exprlist(Lexer *lx, ExpInfo *e)
 static void indexed(Lexer *lx, ExpInfo *var, int super)
 {
     cr_lex_scan(lx); /* skip '[' */
+    if (cr_unlikely(eisconstant(var)))
+        cr_lex_syntaxerror(lx, "can't index literal constant values");
     cr_code_exp2stack(lx->fs, var);
     ExpInfo key;
     expr(lx, &key);
     cr_code_indexed(lx->fs, var, &key, super);
-    cr_code_exp2stack(lx->fs, var);
     expect(lx, ']');
 }
 
@@ -545,7 +540,6 @@ static void getfield(Lexer *lx, ExpInfo *var, int super)
     ExpInfo key;
     expid(lx, &key);
     cr_code_getproperty(lx->fs, var, &key, super);
-    cr_code_exp2stack(lx->fs, var);
     cr_lex_scan(lx);
 }
 
@@ -563,13 +557,13 @@ static void superkw(Lexer *lx, ExpInfo *e)
         cr_lex_syntaxerror(lx, "class has no superclass");
     } else {
         FunctionState *fs = lx->fs;
-        varlit(lx, "self", e); /* fetch 'self' */
+        varlit(lx, "self", e);
         cr_assert(e->et == EXP_LOCAL);
-        cr_code_exp2stack(fs, e); /* push 'self' */
+        cr_code_exp2stack(fs, e);
         cr_assert(e->et == EXP_FINEXPR);
-        varlit(lx, "super", e); /* fetch 'super' */
+        varlit(lx, "super", e);
         cr_assert(e->et == EXP_UVAL);
-        cr_lex_scan(lx); /* advance */
+        cr_lex_scan(lx);
         if (check(lx, '['))
             indexed(lx, e, 1);
         else if (check(lx, '.')) 
@@ -589,24 +583,24 @@ static void superkw(Lexer *lx, ExpInfo *e)
 static void primaryexp(Lexer *lx, ExpInfo *e)
 {
     switch (lx->t.tk) {
-        case '(':
-            cr_lex_scan(lx); /* skip ')' */
-            expr(lx, e);
-            expect(lx, ')');
-            break;
-        case TK_IDENTIFIER:
-            varname(lx, e->u.str, e);
-            cr_lex_scan(lx);
-            break;
-        case TK_SELF:
-            selfkw(lx, e);
-            break;
-        case TK_SUPER:
-            superkw(lx, e);
-            break;
-        default:
-            cr_lex_syntaxerror(lx, "unexpected symbol");
-            break;
+    case '(':
+        cr_lex_scan(lx); /* skip ')' */
+        expr(lx, e);
+        expect(lx, ')');
+        break;
+    case TK_IDENTIFIER:
+        varname(lx, e->u.str, e);
+        cr_lex_scan(lx);
+        break;
+    case TK_SELF:
+        selfkw(lx, e);
+        break;
+    case TK_SUPER:
+        superkw(lx, e);
+        break;
+    default:
+        cr_lex_syntaxerror(lx, "unexpected symbol");
+        break;
     }
 }
 
@@ -621,7 +615,6 @@ static void call(Lexer *lx, ExpInfo *e)
     int base = fs->sp;
     cr_lex_scan(lx); /* skip '(' */
     if (lx->t.tk != ')') { /* have args ? */
-        int argstart = fs->sp;
         exprlist(lx, e);
         if (eismulret(e))
             cr_code_setreturns(fs, e, CR_MULRET);
@@ -629,7 +622,14 @@ static void call(Lexer *lx, ExpInfo *e)
         e->et = EXP_VOID;
     }
     expect(lx, ')');
-    int nparams = (eismulret(e) ? CR_MULRET : fs->sp - base);
+    int nparams;
+    if (eismulret(e)) {
+        nparams = CR_MULRET;
+    } else {
+        if (e->et != EXP_VOID)
+            cr_code_exp2stack(lx->fs, e);
+        nparams = fs->sp - base;
+    }
     initexp(e, EXP_CALL, cr_code_call(fs, base, nparams, 1));
     fs->sp = base + 1;
 }
@@ -646,19 +646,19 @@ static void suffixedexpr(Lexer *lx, ExpInfo *e)
     primaryexp(lx, e);
     for (;;) {
         switch (lx->t.tk) {
-            case '.':
-                getfield(lx, e, 0);
-                break;
-            case '[':
-                indexed(lx, e, 0);
-                break;
-            case '(':
-                if (!eisconstant(e))
-                    cr_lex_syntaxerror(lx, "can't use '()' on constant values");
-                call(lx, e);
-                break;
-            default:
-                return;
+        case '.':
+            getfield(lx, e, 0);
+            break;
+        case '[':
+            indexed(lx, e, 0);
+            break;
+        case '(':
+            if (!eisconstant(e))
+                cr_lex_syntaxerror(lx, "can't use '()' on constant values");
+            call(lx, e);
+            break;
+        default:
+            return;
         }
     }
 }
@@ -677,35 +677,35 @@ static void suffixedexpr(Lexer *lx, ExpInfo *e)
 static void simpleexp(Lexer *lx, ExpInfo *e)
 {
     switch (lx->t.tk) {
-        case TK_INT:
-            initexp(e, EXP_INT, 0);
-            e->u.i = lx->t.lit.i;
-            break;
-        case TK_FLT:
-            initexp(e, EXP_FLT, 0);
-            e->u.n = lx->t.lit.n;
-            break;
-        case TK_STRING:
-            initexp(e, EXP_STRING, 0);
-            e->u.str = lx->t.lit.str;
-            break;
-        case TK_NIL:
-            initexp(e, EXP_NIL, 0);
-            break;
-        case TK_TRUE:
-            initexp(e, EXP_TRUE, 0);
-            break;
-        case TK_FALSE:
-            initexp(e, EXP_FALSE, 0);
-            break;
-        case TK_DOTS:
-            expect_cond(lx, lx->fs->fn->isvararg,
+    case TK_INT:
+        initexp(e, EXP_INT, 0);
+        e->u.i = lx->t.lit.i;
+        break;
+    case TK_FLT:
+        initexp(e, EXP_FLT, 0);
+        e->u.n = lx->t.lit.n;
+        break;
+    case TK_STRING:
+        initexp(e, EXP_STRING, 0);
+        e->u.str = lx->t.lit.str;
+        break;
+    case TK_NIL:
+        initexp(e, EXP_NIL, 0);
+        break;
+    case TK_TRUE:
+        initexp(e, EXP_TRUE, 0);
+        break;
+    case TK_FALSE:
+        initexp(e, EXP_FALSE, 0);
+        break;
+    case TK_DOTS:
+        expect_cond(lx, lx->fs->fn->isvararg,
                     "cannot use '...' outside of vararg function");
-            initexp(e, EXP_VARARG, cr_code_L(lx->fs, OP_VARARG, 2));
-            break;
-        default:
-            suffixedexpr(lx, e);
-            return;
+        initexp(e, EXP_VARARG, cr_code_L(lx->fs, OP_VARARG, 2));
+        break;
+    default:
+        suffixedexpr(lx, e);
+        return;
     }
     cr_lex_scan(lx);
 }
@@ -715,10 +715,10 @@ static void simpleexp(Lexer *lx, ExpInfo *e)
 static Unopr getunopr(int token)
 {
     switch (token) {
-        case '-': return OPR_UMIN;
-        case '~': return OPR_BNOT;
-        case '!': return OPR_NOT;
-        default: return OPR_NOUNOPR;
+    case '-': return OPR_UMIN;
+    case '~': return OPR_BNOT;
+    case '!': return OPR_NOT;
+    default: return OPR_NOUNOPR;
     }
 }
 
@@ -727,27 +727,27 @@ static Unopr getunopr(int token)
 static Binopr getbinopr(int token)
 {
     switch (token) {
-        case '+': return OPR_ADD;
-        case '-': return OPR_SUB;
-        case '*': return OPR_MUL;
-        case '/': return OPR_DIV;
-        case '%': return OPR_MOD;
-        case TK_POW: return OPR_POW;
-        case TK_SHR: return OPR_SHR;
-        case TK_SHL: return OPR_SHL;
-        case '&': return OPR_BAND;
-        case '|': return OPR_BOR;
-        case '^': return OPR_BXOR;
-        case TK_RANGE: return OPR_RANGE;
-        case TK_NE: return OPR_NE;
-        case TK_EQ: return OPR_EQ;
-        case '<': return OPR_LT;
-        case TK_LE: return OPR_LE;
-        case '>': return OPR_GT;
-        case TK_GE: return OPR_GE;
-        case TK_AND: return OPR_AND;
-        case TK_OR: return OPR_OR;
-        default: return OPR_NOBINOPR;
+    case '+': return OPR_ADD;
+    case '-': return OPR_SUB;
+    case '*': return OPR_MUL;
+    case '/': return OPR_DIV;
+    case '%': return OPR_MOD;
+    case TK_POW: return OPR_POW;
+    case TK_SHR: return OPR_SHR;
+    case TK_SHL: return OPR_SHL;
+    case '&': return OPR_BAND;
+    case '|': return OPR_BOR;
+    case '^': return OPR_BXOR;
+    case TK_RANGE: return OPR_RANGE;
+    case TK_NE: return OPR_NE;
+    case TK_EQ: return OPR_EQ;
+    case '<': return OPR_LT;
+    case TK_LE: return OPR_LE;
+    case '>': return OPR_GT;
+    case TK_GE: return OPR_GE;
+    case TK_AND: return OPR_AND;
+    case TK_OR: return OPR_OR;
+    default: return OPR_NOBINOPR;
     }
 }
 
@@ -828,9 +828,9 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit)
     }
     Binopr opr = getbinopr(lx->t.tk);
     while (opr != OPR_NOBINOPR && priority[opr].left > limit) {
-        ExpInfo e2;
         cr_lex_scan(lx); /* skip operator */
-        cr_code_prebinary(lx->fs, &e2, opr);
+        cr_code_prebinary(lx->fs, e, opr);
+        ExpInfo e2;
         Binopr next = subexpr(lx, &e2, priority[opr].right);
         cr_code_binary(lx->fs, e, &e2, opr);
         opr = next;
@@ -852,262 +852,252 @@ static void expr(Lexer *lx, ExpInfo *e)
  * Statements & Declarations
  * ------------------------------------------------------------------------- */
 
+/* check if 'var' is const (read-only) */
+static void checkconst(Lexer *lx, ExpInfo *var)
+{
+    FunctionState *fs = lx->fs;
+    OString *id = NULL;
+    switch (var->et) {
+    case EXP_UVAL: {
+        UpValInfo *uv = getupvalue(fs, var->u.info);
+        if (uv->mod & VARCONST)
+            id = uv->name;
+        break;
+    }
+    case EXP_LOCAL: {
+        LVar *lv = getlocal(fs, var->u.info);
+        if (vmod(&lv->val) & VARCONST)
+            id = lv->s.name;
+        break;
+    }
+    case EXP_GLOBAL: {
+        TValue key, res;
+        setv2s(lx->ts, &key, var->u.str);
+        if (cr_htable_get(GS(lx->ts)->globals, &key, &res)) {
+            if (!ttisempty(&res) && vmod(&res) & VARCONST)
+                id = var->u.str;
+        }
+        break;
+    }
+    default: return; /* only runtime knows :( */
+    }
+    if (id) {
+        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+                          "attempt to assign to const variable '%s'", id));
+    }
+}
+
+
+/*
+ * Used to chain variables on the left side of
+ * the assignment.
+ */
+typedef struct LHS {
+    struct LHS *prev;
+    ExpInfo e;
+} LHS;
+
+
+/* adjust left and right side of assignment */
+static void adjustassign(Lexer *lx, int left, int right, ExpInfo *e)
+{
+    FunctionState *fs = lx->fs;
+    int need = left - right;
+    if (eismulret(e)) {
+        int extra = need + 1;
+        if (extra < 0)
+            extra = 0;
+        cr_code_setreturns(fs, e, extra);
+    } else {
+        if (e->et != EXP_VOID)
+            cr_code_exp2stack(fs, e);
+        if (need > 0)
+            cr_code_nil(fs, need);
+    }
+    if (need > 0) /* need to reserve stack slots ? */
+        cr_code_reserveslots(fs, need);
+    else
+        fs->sp += need;
+}
+
+
+/* auxiliary function for multiple variable assignment */
+static void assignLHS(Lexer *lx, LHS *lhs, int nvars)
+{
+    expect_cond(lx, eisvar(&lhs->e), "expect variable");
+    checkconst(lx, &lhs->e);
+    if (match(lx, ',')) { /* more vars ? */
+        LHS var;
+        var.prev = lhs;
+        suffixedexpr(lx, &var.e);
+        entercstack(lx);
+        assignLHS(lx, &var, nvars + 1);
+        leavecstack(lx);
+    } else { /* right side of assignment '=' */
+        ExpInfo e;
+        expect(lx, '=');
+        int nexps = exprlist(lx, &e);
+        if (nexps != nvars)
+            adjustassign(lx, nexps, nvars, &e);
+        else
+            cr_code_setoneret(lx->fs, &e);
+    }
+    cr_code_storevar(lx->fs, &lhs->e);
+}
+
 
 /*
  * exprstm ::= functioncall
  *           | varlist '=' explist
  */
-static void exprstm(Lexer *lx, int lastforclause)
+static void exprstm(Lexer *lx)
 {
-    ExpInfo e;
-    e.ins.set = 0;
-    suffixedexp(fs, &E);
-    TType next = CURRT(fs).type;
-    if (next == TOK_EQUAL || next == TOK_COMMA) {
-        e.ins.set = 1;
-        Array_Exp Earr;
-        Array_Exp_init(&Earr, fs->ts);
-        expect_cond(fs, etisvar(E.et), expectstr("Expect variable."));
-        rmlastins(fs, &E); // remove 'OP_GET..'
-        Array_Exp_push(&Earr, E);
-        int vars = 1;
-        while (match(fs, TOK_COMMA)) {
-            if (cr_unlikely(vars >= CR_BYTECODE_MAX))
-                error(fs, comperrors[CE_VARLIST], CR_BYTECODE_MAX);
-            vars++;
-            suffixedexp(fs, &E);
-            expect_cond(fs, etisvar(E.et), expectstr("Expect variable."));
-            Array_Exp_push(&Earr, E);
-        }
-        expect(fs, TOK_EQUAL, expectstr("Expect '='."));
-        e.ins.set = 0;
-        int expc = explist(fs, vars, &E);
-        if (vars != expc)
-            adjustassign(fs, &E, vars, expc);
-        codesetall(fs, &Earr);
-        Array_Exp_free(&Earr, NULL);
-    } else if (etiscall(e.et))
-        CODE(fs, OP_POP);
-    else
-        error(fs, comperrors[CE_EXPSTM]);
-    if (!lastclause)
-        expect(fs, TOK_SEMICOLON, expectstr("Expect ';'."));
-}
-
-
-
-/* vararg ::= '...' */
-static int vararg(FunctionState *fs)
-{
-    if (!fs->fn->isvararg)
-        error(fs, comperrors[CE_VARARG]);
-    return CODEOP(fs, OP_VARARG, 1);
-}
-
-
-static void setmulret(FunctionState *fs, ExpInfo *E)
-{
-    switch (E->et) {
-        case EXP_CALL:
-        case EXP_VARARG:
-            SET_RETCNT(fs, E, MULRET);
-            break;
-        case EXP_INVOKE:
-            SET_RETCNTL(fs, E, MULRET);
-            break;
-        default:
-            cr_unreachable;
+    LHS var;
+    suffixedexpr(lx, &var.e);
+    if (check(lx, '=') || check(lx, ',')) {
+        var.prev = NULL;
+        assignLHS(lx, &var, 1);
+    } else {
+        expect_cond(lx, var.e.et == EXP_CALL, "syntax error");
+        setlarg0(getinstruction(lx->fs, &var.e), 1);
     }
 }
 
-// Adjust assign expressions in case last expression is a function call
-static void adjustassign(FunctionState *fs, ExpInfo *E, int left, int right)
-{
-    int leftover = left - right; // Safety: left < right is a compile error
-    switch (E->et) {
-        case EXP_CALL:
-            SET_RETCNT(fs, E, leftover + 1);
-            break;
-        case EXP_INVOKE:
-            SET_RETCNTL(fs, E, leftover + 1);
-            break;
-        default:
-            if (leftover > 1)
-                CODEOP(fs, OP_NILN, leftover);
-            else if (leftover == 1)
-                CODE(fs, OP_NIL);
-            break;
-    }
-}
 
-// explist ::= expr
-//           | expr ',' explist
-static int explist(FunctionState *fs, int limit, ExpInfo *E)
-{
-    int left = limit;
-    int got = 0;
-    do {
-        left--;
-        got++;
-        if (left < 0)
-            error(fs, comperrors[CE_EXPLIST], limit);
-        expr(fs, E);
-    } while (match(fs, TOK_COMMA));
-    return got;
-}
-
-static int name(FunctionState *fs, const char *errmsg)
-{
-    expect(fs, TOK_IDENTIFIER, errmsg);
-    Token *name = &PREVT(fs);
-    if (fs->S->depth > 0) { // If local scope make local variable
-        make_local(fs, name);
-        return -1;
-    } // Otherwise make global variable
-    return MAKE_GLOBAL(fs, name);
-}
-
-static LocalVar *upvalvar(FunctionState *fs, int idx)
-{
-    UpValue *upval = &fs->upvalues->data[idx];
-    if (!upval->local)
-        upvalvar(fs->prev, idx);
-    return &fs->locals.data[upval->idx];
-}
-
-// helper [exprstm]
-static void codeset(FunctionState *fs, ExpInfo *E)
-{
-    static const char *errfmt = "Can't assign to variable '%.*s', it is declared as 'fixed'.";
-    switch (E->et) {
-        case EXP_UPVAL: {
-            LocalVar *local = upvalvar(fs, E->value);
-            if (cr_unlikely(btest(local->flags, VFIXED_BIT)))
-                error(fs, errfmt, local->name.len, local->name.start);
-            CODEOP(fs, OP_SET_UPVALUE, E->value);
-            break;
-        }
-        case EXP_LOCAL: {
-            LocalVar *local = &fs->locals.data[E->value];
-            if (cr_unlikely(btest(local->flags, VFIXED_BIT)))
-                error(fs, errfmt, local->name.len, local->name.start);
-            CODEOP(fs, GET_OP_TYPE(E->value, OP_SET_LOCAL, E), E->value);
-            break;
-        }
-        case EXP_GLOBAL:
-            CODEOP(fs, GET_OP_TYPE(E->value, OP_SET_GLOBAL, E), E->value);
-            break;
-        case EXP_INDEXED:
-            if (E->value == NO_VAL)
-                CODE(fs, OP_SET_INDEX);
-            else
-                CODEOP(fs, OP_SET_PROPERTY, E->value);
-            break;
-        default:
-            return;
-    }
-}
-
-ARRAY_NEW(Array_Exp, Exp);
-// helper [exprstm]
-static void codesetall(FunctionState *fs, Array_Exp *Earr)
-{
-    for (int i = 0; i < cast_int(Earr->len); i++) {
-        ExpInfo *E = Array_Exp_index(Earr, i);
-        codeset(fs, E);
-    }
-}
-
+/*
+ * block ::= stm
+ *         | stm block 
+ */
 static void block(Lexer *lx)
 {
-    while (!check(fs, TOK_RBRACE) && !check(fs, TOK_EOF))
+    while (!check(lx, '}') && !check(lx, TK_EOS))
         stm(lx);
-    expect(fs, TOK_RBRACE, expectstr("Expect '}' after block."));
+    expect(lx, '}');
 }
 
-static cr_inline void blockstm(FunctionState *fs)
+
+/* blockstm ::= '{' block '}' */
+static void blockstm(Lexer *lx)
 {
-    Scope S;
-    startscope(fs, &S, 0, 0);
-    block(fs);
-    leavescope(fs);
+    Scope s;
+    enterscope(lx->fs, &s, 0);
+    block(lx);
+    leavescope(lx->fs);
 }
+
 
 // arglist ::= name
 //           | '...'
 //           | name ',' arglist
-static void arglist(FunctionState *fs)
+// static void fnargs(Lexer *lx)
+// {
+//     do {
+//         if (match(fs, TOK_DOT_DOT_DOT)) {
+//             fs->fn->p.isvararg = 1;
+//             break;
+//         }
+//         fs->fn->p.arity++;
+//         name(fs, expectstr("Expect parameter name."));
+//         initlocal(fs, 0);
+//     } while (match(fs, TOK_COMMA));
+// }
+// 
+// // namelist ::= name
+// //            | name ',' namelist
+// static int idlist(Lexer *lx)
+// {
+//     int names = 0;
+//     do {
+//         if (names >= CR_BYTECODE_MAX)
+//             error(fs, comperrors[CE_NAMELIST], CR_BYTECODE_MAX);
+//         names++;
+//         int idx = name(fs, expectstr("Expect name.")); // initialize later
+//         if (fs->S->depth == 0)
+//             Array_cr_int_push(nameidx, idx);
+//     } while (match(fs, TOK_COMMA));
+//     return names;
+// }
+
+
+/* get type modifier */
+static int getmod(Lexer *lx)
 {
+    const char *mod = getstrbytes(expect_id(lx));
+    if (strcmp(mod, "const") == 0) {
+        return VARCONST;
+    } else if (strcmp(mod, "static") == 0) {
+        return VARSTATIC;
+    } else if (strcmp(mod, "close") == 0) {
+        return VARTBC;
+    } else {
+        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+                               "unknown modifier '%s'", mod));
+    }
+}
+
+
+/* get all type modifier */
+static int getmodifiers(Lexer *lx, const char *type, const char *name)
+{
+    int bmask = 0;
+    if (match(lx, '<')) {
+        do {
+            int bit = getmod(lx);
+            if (testbit(bmask, bit))
+                cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+                                       "%s '%s' has duplicate '%s' modifier",
+                                       type, name, lx->t.lit.str));
+            bmask = bit2mask(bmask, bit);
+        } while (match(lx, ','));
+        expect(lx, '>');
+    }
+    return bmask;
+}
+
+
+static void tryclose(FunctionState *fs, int idx)
+{
+    if (idx != -1) {
+        scopemarktbc(fs);
+        cr_code_L(fs, OP_TBC, idx);
+    }
+}
+
+
+/* 
+ * vardecl ::= 'let' idlist ';'
+ *           | 'let' idlist '=' explist ';'
+ */
+static void vardecl(Lexer *lx)
+{
+    FunctionState *fs = lx->fs;
+    ExpInfo e;
+    int nvars = 0;
+    int nexps;
+    int tbc = -1; /* -1 indicates there are no tbc variables */
     do {
-        if (match(fs, TOK_DOT_DOT_DOT)) {
-            fs->fn->p.isvararg = 1;
-            break;
+        OString *name = expect_id(lx);
+        int vidx = newlocal(lx, name);
+        int mods = getmodifiers(lx, "variable", getstrbytes(name));
+        vmod(&getlocal(fs, vidx)->val) = mods;
+        if (mods & VARTBC) { /* have to-be-closed var? */
+            if (tbc == -1)
+                cr_parser_semerror(lx,
+                    "multiple to-be-closed variables in a single declaration");
+            tbc = fs->activelocals + nvars;
         }
-        fs->fn->p.arity++;
-        name(fs, expectstr("Expect parameter name."));
-        initlocal(fs, 0);
-    } while (match(fs, TOK_COMMA));
-}
-
-// namelist ::= name
-//            | name ',' namelist
-static int namelist(FunctionState *fs, Array_cr_int *nameidx)
-{
-    int names = 0;
-    do {
-        if (names >= CR_BYTECODE_MAX)
-            error(fs, comperrors[CE_NAMELIST], CR_BYTECODE_MAX);
-        names++;
-        int idx = name(fs, expectstr("Expect name.")); // initialize later
-        if (fs->S->depth == 0)
-            Array_cr_int_push(nameidx, idx);
-    } while (match(fs, TOK_COMMA));
-    return names;
-}
-
-static void codeassign(FunctionState *fs, int names, Array_cr_int *nameidx)
-{
-    if (fs->S->depth > 0) {
-        for (int i = 0; i < names; i++)
-            initlocal(fs, i);
-        return;
+        nvars++;
+    } while (match(lx, ','));
+    if (match(lx, '=')) {
+        nexps = exprlist(lx, &e);
+    } else {
+        e.et = EXP_VOID;
+        nexps = 0;
     }
-    cr_assert(fs->ts, names == cast_int(nameidx->len), "name count != indexes array len.");
-    while (nameidx->len > 0) {
-        int idx = Array_cr_int_pop(nameidx);
-        ExpInfo _; // dummy
-        INIT_GLOBAL(fs, idx, fs->vflags, &_);
-    }
-}
-
-// vardec ::= 'var' name ';'
-//          | 'var' namelist ';'
-//          | 'var' name '=' explist ';'
-//          | 'var' namelist '=' explist ';'
-//          | 'fixed' 'var' name ';'
-//          | 'fixed' 'var' namelist ';'
-//          | 'fixed' 'var' name '=' explist ';'
-//          | 'fixed' 'var' namelist '=' explist ';'
-static void vardec(Lexer *lx, int haveconst)
-{
-    if (match(fs, TOK_FIXED)) {
-        if (FIS(fs, FFIXED))
-            error(fs, expectstr("Expect variable name."));
-        FSET(fs, FFIXED);
-    }
-    Array_cr_int nameidx;
-    Array_cr_int_init(&nameidx, fs->ts);
-    int names = namelist(fs, &nameidx);
-    int expc = 0;
-    ExpInfo E;
-    E.ins.set = 0;
-    if (match(fs, TOK_EQUAL))
-        expc = explist(fs, names, &E);
-    if (names != expc)
-        adjustassign(fs, &E, names, expc);
-    codeassign(fs, names, &nameidx);
-    Array_cr_int_free(&nameidx, NULL);
-    expect(fs, TOK_SEMICOLON, expectstr("Expect ';'."));
+    adjustassign(lx, nvars, nexps, &e);
+    adjustlocals(lx, nvars);
+    tryclose(fs, tbc);
+    expect(lx, ';');
 }
 
 
@@ -1121,7 +1111,7 @@ static void fn(FunctionState *fs, FunctionType type)
     startscope(&Fnew, &S, 0, 0); // no need to end this scope
     expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
     if (!check(&Fnew, TOK_RPAREN))
-        arglist(&Fnew);
+        fnargs(&Fnew);
     if (Fnew.fn->p.isvararg)
         expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
     else
@@ -1144,7 +1134,7 @@ static void fn(FunctionState *fs, FunctionType type)
     endfs(&Fnew);
 }
 
-// fndec ::= 'fn' name '(' arglist ')' '{' block '}'
+/* fndec ::= 'fn' id '(' fnargs ')' '{' block '}' */
 static void fndec(Lexer *lx)
 {
     int idx = name(fs, expectstr("Expect function name."));
@@ -1773,23 +1763,19 @@ static void stm(Lexer *lx)
             break;
         default:
             cr_lex_scan(lx);
-            exprstm(lx, 0);
+            exprstm(lx);
+            expect(lx, ';');
             break;
     }
 }
 
 
-static void dec(Lexer *lx)
+static void decl(Lexer *lx)
 {
-    int isconst = 0;
-
     switch (lx->t.tk) {
-        case TK_CONST:
-            isconst = 1;
-            /* FALLTHRU */
         case TK_LET:
             cr_lex_scan(lx);
-            vardec(lx, isconst);
+            vardecl(lx);
             break;
         case TK_FN:
             cr_lex_scan(lx);
@@ -1806,9 +1792,9 @@ static void dec(Lexer *lx)
 }
 
 
-static inline void parseuntileos(Lexer *lx) {
+static inline void parseuntilEOS(Lexer *lx) {
     while (!lx->t.tk != TK_EOS)
-        dec(lx);
+        decl(lx);
 }
 
 
@@ -2013,7 +1999,7 @@ static void criptmain(FunctionState *fs, Lexer *lx)
     startfs(fs, lx, &gscope);
     setvararg(fs, 0); /* main is always vararg */
     cr_lex_scan(lx); /* scan first token */
-    parseuntileos(lx);
+    parseuntilEOS(lx);
     cr_assert(lx->t.tk == TK_EOS);
     endfs(fs);
 }

@@ -29,13 +29,13 @@
  * (https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2Float) 
  */
 #define topow2(x) { \
-	(x)--; \
-	(x) |= (x) >> 1; \
-	(x) |= (x) >> 2; \
-	(x) |= (x) >> 4; \
-	(x) |= (x) >> 8; \
-	(x) |= (x) >> 16; \
-	(x)++; }
+    (x)--; \
+    (x) |= (x) >> 1; \
+    (x) |= (x) >> 2; \
+    (x) |= (x) >> 4; \
+    (x) |= (x) >> 8; \
+    (x) |= (x) >> 16; \
+    (x)++; }
 
 
 /* bit manipulation */
@@ -60,10 +60,10 @@
  * casted to 'int'
  */
 #define get3bytes(p) \
-	(cast_int(0) | \
-	((*(cast_ubytep(p) + 2)) << 16) | \
-	((*(cast_ubytep(p) + 1)) << 8) | \
-	(*cast_ubytep(p)))
+    (cast_int(0) | \
+    ((*(cast_ubytep(p) + 2)) << 16) | \
+    ((*(cast_ubytep(p) + 1)) << 8) | \
+    (*cast_ubytep(p)))
 
 
 /* 
@@ -71,8 +71,8 @@
  * (integer type) into 'dest' 
  */
 #define setbytes(dest,src,n) \
-	{ for (cr_ubyte i = 0; i < (n); i++) \
-		*(cast_ubytep(dest) + i) = getbyte(src, i); }
+    { for (cr_ubyte i_ = 0; i_ < (n); i_++) \
+        *(cast_ubytep(dest) + i_) = getbyte(src, i_); }
 
 
 

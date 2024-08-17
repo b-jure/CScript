@@ -95,7 +95,7 @@ typedef union Value {
 #define MODnone         0 /* no modifiers */
 #define MODconst        1 /* value is 'const' */
 
-/* macros for 'mod' */
+/* macros for 'mod' (modifiers) */
 #define vmod(v)         ((v)->mod)
 #define ismod(v,m)      testbit(vmod(v), (m))
 #define isconst(v)      ismod((v), MODconst)
@@ -202,7 +202,7 @@ typedef struct {
 #define ttistrue(v)             isvtt(v, CR_VTRUE)
 #define ttisfalse(v)            isvtt(v, CR_VFALSE)
 
-#define ttisfalsey(v)           (ttisfalse(v) || ttisnil(v))
+#define cr_isfalse(v)           (ttisfalse(v) || ttisnil(v))
 
 
 

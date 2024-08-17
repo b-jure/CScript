@@ -19,7 +19,7 @@
 
 
 #include "crobject.h"
-#include "crreader.h"
+#include "crlexer.h"
 #include "crvalue.h"
 
 
@@ -32,8 +32,7 @@
 /* check expression type */
 #define eisvar(e)           ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
 #define eisconstant(e)      ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
-#define eiscall(e)          ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
-#define eismulret(e)        (eiscall(e) && (e)->et <= EXP_VARARG)
+#define eismulret(e)        ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
 #define eissuper(e)         ((e)->et == EXP_INDEXRAWSUP || (e)->et == EXP_INDEXSUP)
 
 
@@ -66,7 +65,7 @@ typedef enum expt {
      * 'info' = stack index; */
     EXP_LOCAL,
     /* global variable;
-     * 'str' = global identifier; */
+     * 'str' = global id; */
     EXP_GLOBAL,
     /* indexed variable; */
     EXP_INDEXED,
@@ -129,8 +128,8 @@ typedef struct ExpInfo {
 /* variable kind (stored in 'mod') */
 #define VARREGULAR      0 /* regular */
 #define VARCONST        1 /* constant */
-#define VARTBC          2 /* to-be-closed */
-#define VARCTC          3 /* compile-time constant */
+#define VARSTATIC       2 /* static */
+#define VARTBC          3 /* to-be-closed */
 
 
 /* active local variable compiler information */
@@ -201,11 +200,8 @@ typedef struct FunctionState {
 
 
 
+CRI_FUNC cr_noret cr_parser_semerror(Lexer *lx, const char *err);
 CRI_FUNC void cr_parser_pparse(cr_State *ts, cr_reader fn, void *userdata,
                                const char *name);
-CRI_FUNC int cr_pr_nstackvars(FunctionState *fs);
-CRI_FUNC void _cleanup_function(FunctionState* F);
-CRI_FUNC void F_free(FunctionState* F);
-CRI_FUNC void mark_function_roots(FunctionState *F);
 
 #endif

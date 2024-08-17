@@ -238,6 +238,15 @@ int cr_code_nil(FunctionState *fs, int n)
 }
 
 
+int cr_code_pop(FunctionState *fs, int n)
+{
+    if (n == 1)
+        return code(fs, OP_POP);
+    else
+        return cr_code_L(fs, OP_POPN, n);
+}
+
+
 int cr_code_ret(FunctionState *fs, int base, int nreturns)
 {
     OpCode op;
@@ -269,43 +278,100 @@ cr_sinline void freeslots(FunctionState *fs, int n)
 }
 
 
-/* emit 'OP_SET' family of instructions */
-void cr_code_storevar(FunctionState *fs, ExpInfo *var, ExpInfo *exp)
+static void string2K(FunctionState *fs, ExpInfo *e)
 {
-//     switch (var->et) {
-//     case EXP_LOCAL:
-//         freeexp(fs, exp);
-//         var->u.info = cr_code_code(fs, OP_SETLVAR);
-//         var->et = EXP_FINEXPR;
-//         break;
-//     case EXP_UVAL:
-//         cr_code_varexp2stack(fs, exp);
-//         freeexp(fs, exp);
-//         var->u.info = codelarg(fs, OP_SETUVAL, var->u.info);
-//         var->et = EXP_FINEXPR;
-//         break;
-//     case EXP_GLOBAL:
-//         cr_code_varexp2stack(fs, exp);
-//         var->u.info = codelarg(fs, OP_SETGVAR, e->u.var.);
-//         var->et = EXP_FINEXPR;
-//         break;
-//     case EXP_INDEXK:
-//         var->u.info = codelarg(fs, OP_SETINDEXK, var->u.idx);
-//         break;
-//     case EXP_INDEXRAW:
-//         var->u.info = codelarg(fs, OP_SETPROPERTY, var->u.idx);
-//         var->et = EXP_FINEXPR;
-//         break;
-//     case EXP_INDEXED:
-//         freestackslot(fs, 1);
-//         var->u.info = cr_code_code(fs, OP_SETINDEX);
-//         var->et = EXP_FINEXPR;
-//         break;
-//     default:
-//         cr_unreachable();
-//         break;
-//     }
-//     freestackslot(fs, 1);
+    cr_assert(e->et == EXP_STRING);
+    e->u.info = stringK(fs, e->u.str);
+    e->et = EXP_K;
+}
+
+
+
+/* check if expression is a integer constant */
+static int isintK(ExpInfo *e)
+{
+    return (e->et == EXP_INT && !hasjumps(e));
+}
+
+
+/* check if 'isintK' and it fits in long arg */
+static int isintKL(ExpInfo *e)
+{
+    return (isintK(e) && fitsLA(e->u.i));
+}
+
+
+/* check if 'e' is numeral constant and fits inside of large arg */
+static int isnumKL(ExpInfo *e, int *immediate, int *isflt)
+{
+    cr_integer i;
+    if (e->et == EXP_INT)
+        i = e->u.i;
+    else if (e->et == EXP_FLT && cr_value_n2i(e->u.n, &i, CR_N2IFLOOR))
+        *isflt = 1;
+    else
+        return 0;
+    if (!hasjumps(e) && fitsLA(i)) {
+        *immediate = cast_int(i);
+        return 1;
+    }
+    return 0;
+}
+
+
+/* emit generic load constant instruction */
+static int codeK(FunctionState *fs, int idx)
+{
+    cr_assert(idx >= 0 && fitsLA(idx));
+    return (fitsSA(idx) 
+            ? cr_code_S(fs, OP_CONST, idx) 
+            : cr_code_L(fs, OP_CONSTL, idx));
+}
+
+
+/* emit 'OP_SET' family of instructions */
+void cr_code_storevar(FunctionState *fs, ExpInfo *var)
+{
+    switch (var->et) {
+    case EXP_UVAL: {
+        var->u.info = cr_code_L(fs, OP_SETUVAL, var->u.info);
+        break;
+    }
+    case EXP_LOCAL: {
+        var->u.info = cr_code_L(fs, OP_SETLVAR, var->u.info);
+        break;
+    }
+    case EXP_GLOBAL: {
+        var->u.info = cr_code_L(fs, OP_SETGVAR, stringK(fs, var->u.str));
+        break;
+    }
+    case EXP_INDEXED: {
+        freeslots(fs, 1); /* key */
+        var->u.info = code(fs, OP_SETINDEX);
+        break;
+    }
+    case EXP_INDEXSTR: {
+        var->u.info = cr_code_L(fs, OP_SETINDEXSTR, var->u.info);
+        break;
+    }
+    case EXP_INDEXINT: {
+        var->u.info = cr_code_L(fs, OP_SETINDEXINT, var->u.info);
+        break;
+    }
+    case EXP_DOT: {
+        var->u.info = cr_code_L(fs, OP_SETPROPERTY, var->u.info);
+        break;
+    }
+    case EXP_INDEXSUPER:
+    case EXP_INDEXSUPERSTR:
+    case EXP_DOTSUPER: {
+        cr_parser_semerror(fs->lx, "attempt to assign to 'super' property");
+        break;
+    }
+    default: cr_unreachable();
+    }
+    var->et = EXP_FINEXPR;
+    freeslots(fs, 1); /* expression we are assigning to */
 }
 
 
@@ -322,7 +388,7 @@ static int dischargevars(FunctionState *fs, ExpInfo *e)
         break;
     }
     case EXP_GLOBAL: {
-        e->u.info = cr_code_L(fs, OP_GETGVAR, e->u.info);
+        e->u.info = cr_code_L(fs, OP_GETGVAR, stringK(fs, e->u.str));
         break;
     }
     case EXP_INDEXED: {
@@ -379,65 +445,6 @@ void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e)
 {
     if (e->et != EXP_FINEXPR && dischargevars(fs, e))
         cr_code_reserveslots(fs, 1);
-}
-
-
-static void string2K(FunctionState *fs, ExpInfo *e)
-{
-    cr_assert(e->et == EXP_STRING);
-    e->u.info = stringK(fs, e->u.str);
-    e->et = EXP_K;
-}
-
-
-
-/* get value from constant expression */
-cr_sinline TValue *K2value(FunctionState *fs, const ExpInfo *e)
-{
-    cr_assert(e->et == EXP_CONSTANT);
-    return &fs->fn->constants[e->u.info];
-}
-
-
-/* check if expression is a integer constant */
-static int isintK(ExpInfo *e)
-{
-    return (e->et == EXP_INT && !hasjumps(e));
-}
-
-
-/* check if 'isintK' and it fits in long arg */
-static int isintKL(ExpInfo *e)
-{
-    return (isintK(e) && fitsLA(e->u.i));
-}
-
-
-/* check if 'e' is numeral constant and fits inside of large arg */
-static int isnumKL(ExpInfo *e, int *immediate, int *isflt)
-{
-    cr_integer i;
-    if (e->et == EXP_INT)
-        i = e->u.i;
-    else if (e->et == EXP_FLT && cr_value_n2i(e->u.n, &i, CR_N2IFLOOR))
-        *isflt = 1;
-    else
-        return 0;
-    if (!hasjumps(e) && fitsLA(i)) {
-        *immediate = cast_int(i);
-        return 1;
-    }
-    return 0;
-}
-
-
-/* emit generic load constant instruction */
-static int codeK(FunctionState *fs, int idx)
-{
-    cr_assert(idx >= 0 && fitsLA(idx));
-    return (fitsSA(idx) 
-            ? cr_code_S(fs, OP_CONST, idx) 
-            : cr_code_L(fs, OP_CONSTL, idx));
 }
 
 
@@ -545,7 +552,7 @@ void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super)
 {
     cr_assert(var->et == EXP_FINEXPR && var->u.info == fs->sp - 1);
     if (cr_unlikely(key->et == EXP_NIL))
-        cr_lex_syntaxerror(fs->lx, "can't use 'nil' as index");
+        cr_lex_syntaxerror(fs->lx, "'nil' can't be index value");
     if (key->et == EXP_STRING)
         string2K(fs, key);
     if (super) {
@@ -559,8 +566,11 @@ void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super)
         }
     } else if (key->et == EXP_INT && fitsLA(key->u.info)) {
         cr_assert(key->et != EXP_INDEXSUPER);
-        key->u.info = cast_int(var->u.i);
-        key->et = EXP_INDEXINT;
+        var->u.info = cast_int(var->u.i);
+        var->et = EXP_INDEXINT;
+    } else if (key->et == EXP_K) {
+        var->u.info = key->u.info;
+        var->et = EXP_INDEXSTR;
     } else {
         cr_code_exp2stack(fs, key);
         var->u.info = key->u.info;
@@ -652,7 +662,7 @@ static void codenot(FunctionState *fs, ExpInfo *e)
 /* emit unary instruction */
 void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr opr)
 {
-    static const ExpInfo dummy = {EXP_INT, 0, -1, -1};
+    static const ExpInfo dummy = {EXP_INT, {0}, -1, -1};
     cr_assert(OPR_NOT <= op && op < OPR_NOUNOPR);
     cr_code_varexp2stack(fs, e);
     switch (opr) {
@@ -729,7 +739,7 @@ void cr_code_patchjmp(FunctionState *fs, int pc)
 }
 
 
-/* jump if expression is false */
+/* jump if expression is false, 'jmpop' must be 'OP_JF' variant */
 void cr_code_jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 {
     cr_code_varexp2stack(fs, e);
@@ -746,7 +756,7 @@ void cr_code_jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 }
 
 
-/* jump if expression is true */
+/* jump if expression is true, 'jmpop' must be 'OP_JT' variant */
 void cr_code_jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 {
     cr_code_varexp2stack(fs, e);
@@ -917,7 +927,6 @@ static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 /* emit equality binary instruction */
 static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
 {
-    OpCode op;
     int immediate;
     int isflt = 0;
     int iseq = (opr == OP_EQ);
@@ -947,7 +956,7 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
     int isflt = 0;
     int immediate;
     OpCode op;
-    cr_assert(OPR_LT >= opr && opr < OPR_GT); /* should already be swapped */
+    cr_assert(OPR_LT == opr || opr == OPR_LE); /* should already be swapped */
     if (isnumKL(e2, &immediate, &isflt)) {
         cr_code_exp2stack(fs, e1); /* ensure 'e1' is on stack */
         op = binopr2op(opr, OPR_LT, OP_LTI);
@@ -958,6 +967,7 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
 emit:
         e1->u.info = codeLS(fs, op, immediate, isflt);
     } else {
+        op = binopr2op(opr, OPR_LT, OP_LT);
         e1->u.info = code(fs, op);
         freeslots(fs, 1);
     }
@@ -967,8 +977,7 @@ emit:
 
 void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
 {
-    cr_assert(OPR_ADD <= op && op < OPR_NOBINOPR);
-    cr_code_varexp2stack(fs, e2);
+    cr_code_varexp2stack(fs, e1);
     if (boprisfoldable(opr) && constfold(fs, e1, e2, opr + CR_OPADD))
         return; /* folded */
     switch (opr) {

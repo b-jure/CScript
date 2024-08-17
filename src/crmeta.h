@@ -5,13 +5,13 @@
 #include "crobject.h"
 
 
-#define cr_meta_vgetvtable(ts,v,mt) \
-	(ttiso(v) ? cr_meta_getvtable(ts, oval(v), mt) : NULL)
+#define cr_meta_vgetv(ts,v,mt) \
+	(ttiso(v) ? cr_meta_get(ts, oval(v), mt) : NULL)
 
 
 
 CRI_FUNC void cr_meta_init(cr_State *ts);
-CRI_FUNC const TValue *cr_meta_getvtable(cr_State *ts, const GCObject *o, int mt);
+CRI_FUNC const TValue *cr_meta_get(cr_State *ts, const GCObject *o, int mt);
 CRI_FUNC OClass *cr_meta_newclass(cr_State *ts, OString *id);
 CRI_FUNC Instance *cr_meta_newinstance(cr_State *ts, OClass *cls);
 CRI_FUNC UserData *cr_meta_newuserdata(cr_State *ts, size_t size, int nuv);

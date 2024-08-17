@@ -62,7 +62,7 @@ static const char *tkstr[] = {
     "default", "else", "false", "for", "foreach",
     "fn", "if", "in", "inherits", "nil", "or",
     "return", "super", "self", "switch", "true",
-    "let", "while", "loop", "const",
+    "let", "while", "loop", "const", "static",
     "!=", "==", ">=", "<=", "<<", ">>", "..", "...", "<eof>",
     "<number>", "<integer>", "<string>", "<identifier>"
 };
