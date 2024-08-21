@@ -350,19 +350,22 @@ void cr_code_storevar(FunctionState *fs, ExpInfo *var)
         break;
     }
     case EXP_INDEXED: {
-        freeslots(fs, 1); /* key */
+        freeslots(fs, 2); /* receivier + key */
         var->u.info = code(fs, OP_SETINDEX);
         break;
     }
     case EXP_INDEXSTR: {
+        freeslots(fs, 1); /* receiver */
         var->u.info = cr_code_L(fs, OP_SETINDEXSTR, var->u.info);
         break;
     }
     case EXP_INDEXINT: {
+        freeslots(fs, 1); /* receiver */
         var->u.info = cr_code_L(fs, OP_SETINDEXINT, var->u.info);
         break;
     }
     case EXP_DOT: {
+        freeslots(fs, 1); /* receiver */
         var->u.info = cr_code_L(fs, OP_SETPROPERTY, var->u.info);
         break;
     }
@@ -375,7 +378,16 @@ void cr_code_storevar(FunctionState *fs, ExpInfo *var)
     default: cr_unreachable();
     }
     var->et = EXP_FINEXPR;
-    freeslots(fs, 1); /* expression we are assigning to */
+    freeslots(fs, 1); /* rhs (expr) */
+}
+
+
+/* define global variable */
+void cr_code_defineglobal(FunctionState *fs, ExpInfo *e)
+{
+    e->et = EXP_FINEXPR;
+    e->u.info = cr_code_L(fs, OP_DEFGVAR, stringK(fs, e->u.str));
+    freeslots(fs, 1); /* rhs (expr) */
 }
 
 
@@ -560,7 +572,7 @@ void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super)
 {
     cr_assert(var->et == EXP_FINEXPR && var->u.info == fs->sp - 1);
     if (cr_unlikely(key->et == EXP_NIL))
-        cr_lex_syntaxerror(fs->lx, "'nil' can't be index value");
+        cr_parser_semerror(fs->lx, "'nil' can't be index value");
     if (key->et == EXP_STRING)
         string2K(fs, key);
     if (super) {
@@ -572,8 +584,7 @@ void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super)
             var->u.info = key->u.info;
             var->et = EXP_INDEXSUPER;
         }
-    } else if (key->et == EXP_INT && fitsLA(key->u.info)) {
-        cr_assert(key->et != EXP_INDEXSUPER);
+    } else if (isintKL(key)) {
         var->u.info = cast_int(var->u.i);
         var->et = EXP_INDEXINT;
     } else if (key->et == EXP_K) {
@@ -1030,12 +1041,4 @@ void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
     }
     default: cr_unreachable();
     }
-}
-
-
-void cr_code_store2define(FunctionState *fs, ExpInfo *e)
-{
-    cr_assert(e->et == EXP_FINEXPR);
-    cr_assert(*getinstruction(fs,e) == OP_SETGVAR);
-    *getinstruction(fs, e) = OP_DEFGVAR;
 }

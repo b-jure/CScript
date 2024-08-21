@@ -542,7 +542,7 @@ readmore:
 
 
 /* fetch next token into 't' */
-void cr_lex_scan(Lexer *lx)
+void varstatic(Lexer *lx)
 {
     lx->lastline = lx->line;
     if (lx->tahead.tk != TK_EOS) {

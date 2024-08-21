@@ -257,6 +257,7 @@ CRI_FUNC int cr_code_ret(FunctionState *fs, int base, int nreturns);
 CRI_FUNC int cr_code_call(FunctionState *fs, int base, int nparams, 
                           int nreturns);
 CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var);
+CRI_FUNC void cr_code_defineglobal(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_exp2stack(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_getproperty(FunctionState *fs, ExpInfo *var,
@@ -271,6 +272,5 @@ CRI_FUNC void cr_code_jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop);
 CRI_FUNC void cr_code_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
 CRI_FUNC void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                              Binopr opr);
-CRI_FUNC void cr_code_store2define(FunctionState *fs, ExpInfo *e);
 
 #endif

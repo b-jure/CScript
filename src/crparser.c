@@ -121,13 +121,13 @@ static cr_noret variniterror(Lexer *lx, const char *vartype, const char *name)
 
 
 /* check for variable collision */
-static void checkvarcollision(FunctionState *fs, OString *name, const char *vt,
+static void checkvarcollision(FunctionState *fs, OString *name, const char *vk,
                               int (*fn)(FunctionState *, OString *, ExpInfo *))
 {
     ExpInfo dummy;
     if (cr_unlikely(fn == NULL || fn(fs, name, &dummy) >= 0))
         cr_parser_semerror(fs->lx, cr_string_pushfstring(fs->lx->ts,
-                           "redefinition of %s variable '%s'", vt, name));
+                           "redefinition of %s variable '%s'", vk, name));
 }
 
 
@@ -173,29 +173,11 @@ static void initexp(ExpInfo *e, expt et, int info)
 }
 
 
-/* init static variable expression */
-static void initstatic(ExpInfo *e, int idx)
-{
-    e->t = e->f = -1;
-    e->et = EXP_STATIC;
-    e->u.info = idx;
-}
-
-
-/* init local variable expression */
-static void initlocal(ExpInfo *e, int idx)
-{
-    e->t = e->f = -1;
-    e->et = EXP_LOCAL;
-    e->u.info = idx;
-}
-
-
 /* init global variable expression */
 static void initglobal(ExpInfo *e, OString *name)
 {
-    e->t = e->f = -1;
-    e->et = EXP_LOCAL;
+    e->t = e->f = NOJMP;
+    e->et = EXP_GLOBAL;
     e->u.str = name;
 }
 
@@ -203,8 +185,8 @@ static void initglobal(ExpInfo *e, OString *name)
 static void initstring(ExpInfo *e, OString *s)
 {
     e->f = e->t = NOJMP;
-    e->u.str = s;
     e->et = EXP_STRING;
+    e->u.str = s;
 }
 
 
@@ -431,17 +413,17 @@ static int newlocal(Lexer *lx, OString *name)
 
 
 /*
- * Searches for local variable 'name' in the current scope.
+ * Searches for local variable 'name'.
  */
 static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 {
     Lexer *lx = fs->lx;
-    for (int i = fs->activelocals - 1; 0 <= i && i <= fs->scope->nlocals; i--) {
+    for (int i = fs->activelocals - 1; 0 <= i; i--) {
         LVar *local = getlocal(fs, i);
         if (streq(name, local->s.name)) {
             if (cr_unlikely(local->s.idx == -1))
                 variniterror(lx, "local", getstrbytes(name));
-            initlocal(e, i);
+            initexp(e, EXP_LOCAL, i);
             return e->et;
         }
     }
@@ -450,17 +432,17 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 
 
 /*
- * Searches for static variable 'name' in the current scope.
+ * Searches for static variable 'name'.
  */
 static int searchstatic(FunctionState *fs, OString *name, ExpInfo *e)
 {
     Lexer *lx = fs->lx;
-    for (int i = fs->activestatics - 1; i >= 0 && i <= fs->scope->nstatics; i--) {
+    for (int i = fs->activestatics - 1; i >= 0; i--) {
         SVar *svar = getstatic(fs, i);
         if (streq(name, svar->s.name)) {
             if (cr_unlikely(svar->s.idx == -1))
                 variniterror(lx, "static", getstrbytes(name));
-            initstatic(e, i);
+            initexp(e, EXP_STATIC, i);
             return e->et;
         }
     }
@@ -617,8 +599,16 @@ static void varname(Lexer *lx, OString *name, ExpInfo *e)
 static void staticvar(Lexer *lx, OString *name, ExpInfo *e)
 {
     FunctionState *fs = lx->fs;
-    int idx = searchstatic(fs, name, e);
-    if (cr_unlikely(idx < 0))
+    while (fs) {
+        int idx = searchstatic(fs, name, e);
+        if (idx < 0) {
+            fs = fs->prev;
+        } else {
+            initexp(e, EXP_STATIC, idx);
+            break;
+        }
+    }
+    if (cr_unlikely(fs == NULL))
         cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
                                "undeclared static variable '%s'", name));
 }
@@ -666,7 +656,7 @@ static void indexed(Lexer *lx, ExpInfo *var, int super)
 {
     cr_lex_scan(lx); /* skip '[' */
     if (cr_unlikely(eisconstant(var)))
-        cr_lex_syntaxerror(lx, "can't index literal constant values");
+        cr_parser_semerror(lx, "can't index literal constant values");
     cr_code_exp2stack(lx->fs, var);
     ExpInfo key;
     expr(lx, &key);
@@ -730,6 +720,7 @@ static void primaryexp(Lexer *lx, ExpInfo *e)
         cr_lex_scan(lx); /* skip ')' */
         expr(lx, e);
         expect(lx, ')');
+        cr_code_varexp2stack(lx->fs, e);
         break;
     case '@':
         cr_lex_scan(lx); /* skip '@' */
@@ -813,16 +804,16 @@ static void suffixedexpr(Lexer *lx, ExpInfo *e)
 
 
 /*
- * simpleexp ::= int
- *             | flt
- *             | string
- *             | nil
- *             | true
- *             | false
- *             | '...'
- *             | suffixedexpr
+ * simpleexpr ::= int
+ *              | flt
+ *              | string
+ *              | nil
+ *              | true
+ *              | false
+ *              | '...'
+ *              | suffixedexpr
  */
-static void simpleexp(Lexer *lx, ExpInfo *e)
+static void simpleexpr(Lexer *lx, ExpInfo *e)
 {
     switch (lx->t.tk) {
     case TK_INT:
@@ -972,7 +963,7 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit)
         subexpr(lx, e, priority[uopr].right);
         cr_code_unary(lx->fs, e, uopr);
     } else {
-        simpleexp(lx, e);
+        simpleexpr(lx, e);
     }
     Binopr opr = getbinopr(lx->t.tk);
     while (opr != OPR_NOBINOPR && priority[opr].left > limit) {
@@ -1094,7 +1085,7 @@ static void assign(Lexer *lx, LHS *lhs, int nvars)
         if (nexps != nvars)
             adjustassign(lx, nexps, nvars, &e);
         else
-            cr_code_setoneret(lx->fs, &e);
+            cr_code_exp2stack(lx->fs, &e);
     }
     cr_code_storevar(lx->fs, &lhs->e);
 }
@@ -1167,12 +1158,12 @@ static int declarevar(FunctionState *fs, OString *name, ExpInfo *e, int mods)
         checkvarcollision(fs, name, "static", searchstatic);
         vidx = newstatic(fs, name);
         vmod(&getstatic(fs, vidx)->val) = cast_ubyte(mods);
-        initstatic(e, vidx);
+        initexp(e, EXP_STATIC, vidx);
     } else if (fs->scope->prev) { /* local ? */
         checkvarcollision(fs, name, "local", searchlocal);
         vidx = newlocal(fs->lx, name);
         vmod(&getlocal(fs, vidx)->val) = cast_ubyte(mods);
-        initlocal(e, vidx);
+        initexp(e, EXP_LOCAL, vidx);
     } else { /* global */
         cr_assert(vidx == -1);
         defineglobal(fs->lx, name, mods);
@@ -1210,9 +1201,8 @@ static void closedecl(FunctionState *fs, int nvars, int *tbc, int vidx,
 
 
 /* auxiliary for assignment of multiple variable declarations */
-static int assigndecl(Lexer *lx, LHS *lhs, int *tbc, int nvars)
+static void assigndecl(Lexer *lx, LHS *lhs, int *tbc, int nvars)
 {
-    int nvarstotal = nvars;
     FunctionState *fs = lx->fs;
     if (match(lx, ',')) { /* more ids ? */
         LHS var;
@@ -1222,8 +1212,7 @@ static int assigndecl(Lexer *lx, LHS *lhs, int *tbc, int nvars)
         int vidx = declarevar(fs, name, &var.e, mods);
         closedecl(fs, nvars, tbc, vidx, mods);
         entercstack(lx);
-        int ret = assigndecl(lx, &var, tbc, nvars + 1);
-        nvarstotal = MAX(ret, nvars);
+        assigndecl(lx, &var, tbc, nvars + 1);
         leavecstack(lx);
     } else { /* right side of declaration */
         ExpInfo e;
@@ -1232,12 +1221,37 @@ static int assigndecl(Lexer *lx, LHS *lhs, int *tbc, int nvars)
         if (nexps != nvars)
             adjustassign(lx, nexps, nvars, &e);
         else
-            cr_code_setoneret(fs, &e);
+            cr_code_exp2stack(fs, &e);
     }
-    cr_code_storevar(fs, &lhs->e);
-    if (lhs->e.et == EXP_GLOBAL) /* declarations define globals */
-        cr_code_store2define(fs, &lhs->e);
-    return nvarstotal;
+    if (lhs->e.et == EXP_GLOBAL) /* declaration defines global var */
+        cr_code_defineglobal(fs, &lhs->e);
+    else
+        cr_code_storevar(fs, &lhs->e);
+}
+
+
+/* 
+ * letstm ::= 'let' idlist ';'
+ *          | 'let' idlist '=' exprlist ';'
+ */
+static void letstm(Lexer *lx)
+{
+    FunctionState *fs = lx->fs;
+    int tbc = -1; /* -1 indicates there are no tbc variables */
+    LHS var;
+    OString *name = expect_id(lx);
+    int mods = getmodifiers(lx, "variable", getstrbytes(name));
+    int vidx = declarevar(fs, name, &var.e, mods);
+    closedecl(fs, 0, &tbc, vidx, mods);
+    if (check(lx, ',') || check(lx, '=')) { /* id list ? */
+        var.prev = NULL;
+        assigndecl(lx, &var, &tbc, 1);
+    } else { /* otherwise assign implicit nil */
+        cr_code_nil(lx->fs, 1);
+        cr_code_reserveslots(fs, 1);
+        cr_code_storevar(fs, &var.e);
+    }
+    expect(lx, ';');
 }
 
 
@@ -1250,16 +1264,6 @@ static void block(Lexer *lx)
     while (!check(lx, '}') && !check(lx, TK_EOS))
         stm(lx);
     expect(lx, '}');
-}
-
-
-/* blockstm ::= '{' block '}' */
-static void blockstm(Lexer *lx)
-{
-    Scope s;
-    enterscope(lx->fs, &s, 0);
-    block(lx);
-    leavescope(lx->fs);
 }
 
 
@@ -1280,27 +1284,13 @@ static void blockstm(Lexer *lx)
 // }
 
 
-/* 
- * vardecl ::= 'let' idlist ';'
- *           | 'let' idlist '=' exprlist ';'
- */
-static void vardecl(Lexer *lx)
+/* blockstm ::= '{' block '}' */
+static void blockstm(Lexer *lx)
 {
-    FunctionState *fs = lx->fs;
-    int tbc = -1; /* -1 indicates there are no tbc variables */
-    LHS var;
-    OString *name = expect_id(lx);
-    int mods = getmodifiers(lx, "variable", getstrbytes(name));
-    int vidx = declarevar(fs, name, &var.e, mods);
-    closedecl(fs, 0, &tbc, vidx, mods);
-    if (check(lx, ',') || check(lx, '=')) { /* multiple declarations ? */
-        var.prev = NULL;
-        assigndecl(lx, &var, &tbc, 1);
-    } else { /* otherwise assign implicit nil */
-        cr_code_nil(lx->fs, 1);
-        cr_code_reserveslots(fs, 1);
-    }
-    expect(lx, ';');
+    Scope s;
+    enterscope(lx->fs, &s, 0);
+    block(lx);
+    leavescope(lx->fs);
 }
 
 
@@ -1338,8 +1328,8 @@ static void vardecl(Lexer *lx)
 // }
 
 
-/* fndec ::= 'fn' id '(' fnargs ')' '{' block '}' */
-static void fndec(Lexer *lx)
+/* fnstm ::= 'fn' id '(' fnargs ')' blockstm */
+static void fnstm(Lexer *lx)
 {
     OString *id = expect_id(lx);
     int idx = name(fs, expectstr("Expect function name."));
@@ -1369,7 +1359,7 @@ static void method(FunctionState *fs)
         CODEOP(fs, OP_METHOD, idx);
 }
 
-static void classdec(Lexer *lx)
+static void classstm(Lexer *lx)
 {
     expect(fs, TOK_IDENTIFIER, expectstr("Expect class name."));
     Token class_name = PREVT(fs);
@@ -1922,53 +1912,83 @@ static void dot(FunctionState *fs, ExpInfo *E)
     }
 }
 
+
+/* 
+ * stm ::= letstm
+ *       | fnstm
+ *       | classstm
+ *       | whilestm
+ *       | forstm
+ *       | foreachstm
+ *       | ifstm
+ *       | switchstm
+ *       | blockstm
+ *       | continuestm
+ *       | breakstm
+ *       | returnstm
+ *       | loopstm
+ *       | ';'
+ *       | exprstm
+ */
 static void stm(Lexer *lx)
 {
     switch (lx->t.tk) {
+        case TK_LET:
+            cr_lex_scan(lx); /* skip 'let' */
+            letstm(lx);
+            break;
+        case TK_FN:
+            cr_lex_scan(lx); /* skip 'fn' */
+            fnstm(lx);
+            break;
+        case TK_CLASS:
+            cr_lex_scan(lx); /* skip 'class' */
+            classstm(lx);
+            break;
         case TK_WHILE:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'while' */
             whilestm(lx);
             break;
         case TK_FOR:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'for' */
             forstm(lx);
             break;
         case TK_FOREACH:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'foreach' */
             foreachstm(lx);
             break;
         case TK_IF:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'if' */
             ifstm(lx);
             break;
         case TK_SWITCH:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'switch' */
             switchstm(lx);
             break;
         case '{':
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip '{' */
             blockstm(lx);
             break;
         case TK_CONTINUE:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'continue' */
             continuestm(lx);
             break;
         case TK_BREAK:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'break' */
             breakstm(lx);
             break;
         case TK_RETURN:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'return' */
             returnstm(lx);
             break;
         case TK_LOOP:
-            cr_lex_scan(lx);
+            cr_lex_scan(lx); /* skip 'loop' */
             loopstm(lx);
             break;
-        case ';': /* empty statement */
+        case ';':
+            cr_lex_scan(lx); /* skip ';' */
             break;
         default:
-            cr_lex_scan(lx);
             exprstm(lx);
             expect(lx, ';');
             break;
@@ -1976,225 +1996,11 @@ static void stm(Lexer *lx)
 }
 
 
-static void decl(Lexer *lx)
-{
-    switch (lx->t.tk) {
-        case TK_LET:
-            cr_lex_scan(lx);
-            vardecl(lx);
-            break;
-        case TK_FN:
-            cr_lex_scan(lx);
-            fndec(lx);
-            break;
-        case TK_CLASS:
-            cr_lex_scan(lx);
-            classdec(lx);
-            break;
-        default:
-            stm(lx);
-            break;
-    }
-}
-
-
-static inline void parseuntilEOS(Lexer *lx) {
+/* parse current input until end of stream */
+static void parseuntilEOS(Lexer *lx) {
     while (!lx->t.tk != TK_EOS)
-        decl(lx);
+        stm(lx);
 }
-
-
-
-/*========================== EXPRESSION =========================*/
-
-
-// Try folding unary operation.
-// Example: OP_CONST (1), OP_NEG => OP_CONST (-1)
-static cr_ubyte foldunary(FunctionState *fs, unop opr, ExpInfo *E)
-{
-    if (E->type == EXP_NUMBER && opr == OPR_NEGATE) {
-        double val = AS_NUMBER(*CONSTANT(fs, E));
-        if (cr_isnan(val) || val == 0.0)
-            return 0;
-        *CONSTANT(fs, E) = NUMBER_VAL(-val);
-        return 1;
-    }
-    return 0;
-}
-
-// Fold constant number expressions
-static void calcnum(FunctionState *fs, binop opr, const ExpInfo *E1, const ExpInfo *E2, TValue *result)
-{
-#define BINOP(op, n1, n2) NUMBER_VAL((n1)op(n2))
-
-    double n1 = AS_NUMBER(*CONSTANT(fs, E1));
-    double n2 = AS_NUMBER(*CONSTANT(fs, E2));
-    switch (opr) {
-        case OPR_ADD:
-            *result = BINOP(+, n1, n2);
-            break;
-        case OPR_SUB:
-            *result = BINOP(-, n1, n2);
-            break;
-        case OPR_MUL:
-            *result = BINOP(*, n1, n2);
-            break;
-        case OPR_DIV:
-            *result = BINOP(/, n1, n2);
-            break;
-        case OPR_MOD:
-            *result = BINOP(%, (long int)n1, (long int)n2);
-            break;
-        case OPR_POW:
-            *result = NUMBER_VAL((cr_powl(n1, n2)));
-            break;
-        default:
-            cr_unreachable;
-    }
-
-#undef BINOP
-}
-
-// Check if the binary operation is valid
-static cr_ubyte validop(FunctionState *fs, binop opr, const ExpInfo *E1, const ExpInfo *E2)
-{
-    double n1 = AS_NUMBER(*CONSTANT(fs, E1));
-    double n2 = AS_NUMBER(*CONSTANT(fs, E2));
-    return !(opr == OPR_MOD && (cr_floor(n1) != n1 || cr_floor(n2) != n2));
-}
-
-// Try folding binary operation
-// Example: OP_CONST (1), OP_CONST (2), OP_ADD => OP_CONST (3)
-static cr_ubyte foldbinary(FunctionState *fs, binop opr, ExpInfo *E1, const ExpInfo *E2)
-{
-    if (E1->type != E2->type || E1->type != EXP_NUMBER || !validop(fs, opr, E1, E2))
-        return 0;
-    TValue result;
-    calcnum(fs, opr, E1, E2, &result);
-    if (cr_isnan(AS_NUMBER(result)))
-        return 0;
-    CONSTANT_POP(fs); // Pop constant (E2)
-    *CONSTANT(fs, E1) = result; // Set new constant value (E1)
-    LINSTRUCTION_POP(fs); // Pop off the last OP_CONST instruction
-    return 1;
-}
-
-// Emit optimized 'and' instruction
-static void codeand(FunctionState *fs, ExpInfo *E)
-{
-    switch (E->et) {
-        case EXP_TRUE:
-            INSTRUCTION_POP(fs);
-            goto fin;
-        case EXP_STRING:
-        case EXP_NUMBER:
-            LINSTRUCTION_POP(fs);
-            CONSTANT_POP(fs);
-fin:
-            E->jmp.f = NO_JMP;
-            break;
-        default:
-            E->jmp.f = CODEJMP(fs, OP_JMP_IF_FALSE_OR_POP);
-            E->ins.code = codeoffset(fs) - 4; // Index of jump instruction
-            break;
-    }
-    E->jmp.t = NO_JMP;
-    E->et = EXP_JMP;
-}
-
-// Emit optimized 'or' instruction
-static void codeor(FunctionState *fs, ExpInfo *E)
-{
-    switch (E->et) {
-        case EXP_NIL:
-        case EXP_FALSE:
-            INSTRUCTION_POP(fs);
-            E->jmp.t = NO_JMP;
-            break;
-        case EXP_STRING:
-        case EXP_NUMBER:
-        case EXP_TRUE:
-            E->jmp.t = codeoffset(fs);
-            E->jmp.f = CHUNK(fs)->constants.len;
-            return;
-        default:
-            E->jmp.f = CODEJMP(fs, OP_JMP_IF_FALSE_AND_POP);
-            E->jmp.t = CODEJMP(fs, OP_JMP);
-            patchjmp(fs, E->jmp.f);
-            break;
-    }
-    E->jmp.f = NO_JMP;
-    E->jmp.t = EXP_JMP;
-}
-
-// Emit binary instruction
-static void postfix(FunctionState *fs, binop opr, ExpInfo *E1, ExpInfo *E2)
-{
-    if (FOLDABLE(opr) && foldbinary(fs, opr, E1, E2))
-        return;
-    switch (opr) {
-        case OPR_ADD:
-        case OPR_SUB:
-        case OPR_MUL:
-        case OPR_DIV:
-        case OPR_MOD:
-        case OPR_POW:
-        case OPR_NE:
-        case OPR_EQ:
-        case OPR_LT:
-        case OPR_LE:
-        case OPR_GT:
-        case OPR_GE:
-            E1->ins.code = CODEBIN(fs, opr);
-            E1->et = EXP_EXPR;
-            E1->ins.binop = 1;
-            break;
-        case OPR_OR:
-            if (E1->et != EXP_JMP) {
-                concatcode(fs, E1->jmp.t + 3, E1->jmp.f);
-                *E1 = *E2;
-            } else if (E1->jmp.t != NO_JMP) {
-                patchjmp(fs, E1->jmp.t);
-                *E1 = *E2;
-            } else
-                E1->et = EXP_EXPR;
-            break;
-        case OPR_AND:
-            if (E1->jmp.f == NO_JMP)
-                *E1 = *E2;
-            else {
-                patchjmp(fs, E1->jmp.f);
-                E1->et = EXP_EXPR;
-            }
-            break;
-        default:
-            cr_unreachable;
-    }
-}
-
-// cr_intermediate step that tries to optimize/process 'and' and 'or'
-// instructions before the second expression gets parsed.
-static void shortcircuit(FunctionState *fs, binop opr, ExpInfo *E)
-{
-    switch (opr) {
-        case OPR_AND:
-            codeand(fs, E);
-            break;
-        case OPR_OR:
-            codeor(fs, E);
-            break;
-        default:
-            return;
-    }
-}
-
-// Emit prefix instruction (only if folding didn't work)
-static cr_inline void prefix(FunctionState *fs, unop opr, ExpInfo *E)
-{
-    if (!foldunary(fs, opr, E))
-        CODE(fs, unopr2op(opr));
-}
-
 
 
 
