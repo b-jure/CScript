@@ -2,7 +2,6 @@
 #define CRCODE_H
 
 
-#include "cript.h"
 #include "crparser.h"
 
 
@@ -210,6 +209,9 @@ OP_SETGVAR,      /* set global variable */
 OP_GETLVAR,      /* get local variable */
 OP_SETLVAR,      /* set local variable */
 
+OP_GETSVAR,      /* get static variable */
+OP_SETSVAR,      /* set static variable */
+
 OP_SETPROPERTY,  /* set property ('v.str') */
 OP_GETPROPERTY,  /* get property ('v.str = ..') */
 
@@ -269,5 +271,6 @@ CRI_FUNC void cr_code_jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop);
 CRI_FUNC void cr_code_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
 CRI_FUNC void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                              Binopr opr);
+CRI_FUNC void cr_code_store2define(FunctionState *fs, ExpInfo *e);
 
 #endif

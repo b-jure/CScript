@@ -18,7 +18,6 @@
 #define CROBJECT_H
 
 
-#include "crmem.h"
 #include "cript.h"
 #include "crvalue.h"
 
@@ -267,6 +266,18 @@ typedef struct UpVal {
 
 
 
+/* static function variable */
+typedef union SVar {
+    struct {
+        TValueFields;
+        int idx; /* 'svars' index */
+        OString *name; /* debug information */
+    } s;
+    TValue val;
+} SVar;
+
+
+
 /* upvalue variable debug information */
 typedef struct UpValInfo {
     OString *name;
@@ -303,18 +314,21 @@ typedef struct Function {
     OString *source; /* source name */
     struct Function **fn; /* functions defined inside of this function */
     TValue *constants; /* constant values */
+    SVar *svars; /* static (private) variables */
     Instruction *code; /* bytecode */
     LineInfo *linfo; /* lines information for instructions */
     LVarInfo *locals; /* debug information for local variables */
     UpValInfo *upvals; /* debug information for upvalues */
     int nfn; /* number of elements in 'fn' */
     int nconst; /* number of elements in 'constants' */
+    int nsvars; /* number of elements in 'svars' */
     int ncode; /* number of elements in 'code' */
     int nlinfo; /* number of elements in 'linfo' */
     int nlocals; /* number of elements in 'locals' */
     int nupvals; /* number of elements in 'upvals' */
     int sizefn; /* size of 'fn' */
     int sizeconst; /* size of 'constants' */
+    int sizesvars; /* size of 'svars' */
     int sizecode; /* size of 'code' */
     int sizelinfo; /* size of 'linfo' */
     int sizelocals; /* size of 'locals' */
@@ -346,7 +360,7 @@ typedef struct Function {
 
 
 /* common closure header */
-#define ClosureHeader   ObjectHeader; int nupvalues; GCObject *gclist;
+#define ClosureHeader   ObjectHeader; int nupvalues; GCObject *gclist
 
 
 typedef struct CrClosure {

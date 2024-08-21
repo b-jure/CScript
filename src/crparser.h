@@ -64,6 +64,9 @@ typedef enum expt {
     /* local variable;
      * 'info' = stack index; */
     EXP_LOCAL,
+    /* static variable;
+     * 'info' = 'svars' index; */
+    EXP_STATIC,
     /* global variable;
      * 'str' = global id; */
     EXP_GLOBAL,
@@ -145,11 +148,11 @@ typedef union LVar {
 
 
 /* vec for 'break' statements */
-typedef struct Breaks {
+typedef struct BreakList {
     int len;
     int size;
     int *arr;
-} Breaks;
+} BreakList;
 
 
 
@@ -175,7 +178,7 @@ typedef struct ParserState {
     struct {
         int len;
         int size;
-        Breaks *arr;
+        BreakList *list;
     } breaks;
     struct ClassState *cs;
 } ParserState;
@@ -189,6 +192,8 @@ typedef struct FunctionState {
     struct Lexer *lx; /* lexer */
     struct Scope *scope; /* scope information */
     int sp; /* first free compiler stack index */
+    int activestatics; /* number of active static variables */
+    int firststatic; /* index of first static in 'svars' ('Function') */
     int activelocals; /* number of active local variables */
     int firstlocal; /* index of first local in 'lvars' ('ParserState') */
     int firstbreak; /* index of first break in 'CFInfo' ('ParserState') */

@@ -341,6 +341,10 @@ void cr_code_storevar(FunctionState *fs, ExpInfo *var)
         var->u.info = cr_code_L(fs, OP_SETLVAR, var->u.info);
         break;
     }
+    case EXP_STATIC: {
+        var->u.info = cr_code_L(fs, OP_SETSVAR, var->u.info);
+        break;
+    }
     case EXP_GLOBAL: {
         var->u.info = cr_code_L(fs, OP_SETGVAR, stringK(fs, var->u.str));
         break;
@@ -381,6 +385,10 @@ static int dischargevars(FunctionState *fs, ExpInfo *e)
     switch (e->et) {
     case EXP_LOCAL: {
         e->u.info = cr_code_L(fs, OP_GETLVAR, e->u.info);
+        break;
+    }
+    case EXP_STATIC: {
+        e->u.info = cr_code_L(fs, OP_GETSVAR, e->u.info);
         break;
     }
     case EXP_UVAL: {
@@ -1022,4 +1030,12 @@ void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
     }
     default: cr_unreachable();
     }
+}
+
+
+void cr_code_store2define(FunctionState *fs, ExpInfo *e)
+{
+    cr_assert(e->et == EXP_FINEXPR);
+    cr_assert(*getinstruction(fs,e) == OP_SETGVAR);
+    *getinstruction(fs, e) = OP_DEFGVAR;
 }

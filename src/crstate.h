@@ -82,7 +82,7 @@ typedef struct GState {
  * ------------------------------------------------------------------------- */
 
 /* Cript thread state */
-typedef struct cr_State {
+struct cr_State {
     ObjectHeader;
     GCObject *gclist;
     struct cr_State *thwouv; /* next thread with open upvalues */
@@ -100,7 +100,7 @@ typedef struct cr_State {
     uint ncalls; /* number of nested calls */
     int nframes; /* number of elements in 'frames' */
     int sizeframes; /* size of 'frames' */
-} cr_State;
+};
 
 
 /* thread global state */

@@ -33,28 +33,47 @@
 
 
 
+/* enter C function frame */
 #define entercstack(lx)         cr_state_inccalls((lx)->ts)
 
+/* pop C function frame */
 #define leavecstack(lx)         ((lx)->ts->ncalls--)
 
 
+/* compare 'OString' pointers for equality */
 #define streq(s1,s2)        ((s1) == (s2))
 
 
+/* expect 'cond' to be true or invoke error */
 #define expect_cond(lx, cond, err) \
     { if (!(cond)) cr_lex_syntaxerror(lx, err); }
 
 
+/* special value for 'mod', describing undefined global vars */
+#define UNDEFMOD        ((1 << (VMODSIZE * 8)) - 1)
 
-/* Scope 'cflow' bits */
+
+/* 'cfbits' */
 #define CFLOOP      1
 #define CFGLOOP     2
 #define CFSWITCH    4
 
-/* test 'cflow' bits */
-#define scopeisloop(s)      testbit((s)->cflow, CFLOOP)
-#define scopeisgloop(s)     testbit((s)->cflow, CFGLOOP)
-#define scopeisswitch(s)    testbit((s)->cflow, CFSWITCH)
+/* test 'cfbits' */
+#define scopeisloop(s)      testbit((s)->cfbits, CFLOOP)
+#define scopeisgloop(s)     testbit((s)->cfbits, CFGLOOP)
+#define scopeisswitch(s)    testbit((s)->cfbits, CFSWITCH)
+
+
+/* lexical scope information */
+typedef struct Scope {
+    struct Scope *prev; /* implicit linked-list */
+    int nlocals; /* number of locals outside of this scope */
+    int nstatics; /* number of statics outside of this scope */
+    cr_ubyte cfbits; /* control flow bits */
+    cr_ubyte haveupval; /* set if scope contains upvalue variable */
+    cr_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
+} Scope;
+
 
 
 static cr_noret expecterror(Lexer *lx, int tk)
@@ -91,23 +110,61 @@ static void checklimit(FunctionState *fs, int n, int limit, const char *what)
         limiterror(fs, what, limit);
 }
 
-/* lexical scope information */
-typedef struct Scope {
-    struct Scope *prev; /* implicit linked-list */
-    int nlocals; /* number of locals outside of this scope */
-    cr_ubyte cflow; /* control flow context */
-    cr_ubyte haveupval; /* set if scope contains upvalue variable */
-    cr_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
-} Scope;
+
+/* variable initialization error */
+static cr_noret variniterror(Lexer *lx, const char *vartype, const char *name)
+{
+    cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+                           "can't read %s variable '%s' in its own initializer",
+                           vartype, name));
+}
 
 
+/* check for variable collision */
+static void checkvarcollision(FunctionState *fs, OString *name, const char *vt,
+                              int (*fn)(FunctionState *, OString *, ExpInfo *))
+{
+    ExpInfo dummy;
+    if (cr_unlikely(fn == NULL || fn(fs, name, &dummy) >= 0))
+        cr_parser_semerror(fs->lx, cr_string_pushfstring(fs->lx->ts,
+                           "redefinition of %s variable '%s'", vt, name));
+}
+
+
+/* get local variable */
 cr_sinline LVar *getlocal(FunctionState *fs, int idx)
 {
-    cr_assert(fs->firstlocal + idx < fs->l->ps->lvars.len);
+    cr_assert(fs->firstlocal + idx < fs->lx->ps->lvars.len);
     return &fs->lx->ps->lvars.arr[fs->firstlocal + idx];
 }
 
 
+/* get global variable value */
+cr_sinline void getglobal(cr_State *ts, OString *name, TValue *out)
+{
+    TValue k;
+    setv2s(lx->ts, &k, name);
+    cr_htable_get(GS(ts)->globals, &k, out);
+}
+
+
+/* get static variable */
+cr_sinline SVar *getstatic(FunctionState *fs, int idx)
+{
+    cr_assert(fs->firststatic + idx < fs->fn->nsvars);
+    return &fs->fn->svars[idx];
+}
+
+
+/* get upvalue variable */
+cr_sinline UpValInfo *getupvalue(FunctionState *fs, int idx)
+{
+    cr_assert(idx < fs->fn->nupvals);
+    return &fs->fn->upvals[idx];
+}
+
+
+/* init expression with generic information */
 static void initexp(ExpInfo *e, expt et, int info)
 {
     e->t = e->f = -1;
@@ -116,12 +173,30 @@ static void initexp(ExpInfo *e, expt et, int info)
 }
 
 
-static void initvar(FunctionState *fs, ExpInfo *e, int idx)
+/* init static variable expression */
+static void initstatic(ExpInfo *e, int idx)
 {
-    UNUSED(fs);
+    e->t = e->f = -1;
+    e->et = EXP_STATIC;
+    e->u.info = idx;
+}
+
+
+/* init local variable expression */
+static void initlocal(ExpInfo *e, int idx)
+{
     e->t = e->f = -1;
     e->et = EXP_LOCAL;
     e->u.info = idx;
+}
+
+
+/* init global variable expression */
+static void initglobal(ExpInfo *e, OString *name)
+{
+    e->t = e->f = -1;
+    e->et = EXP_LOCAL;
+    e->u.str = name;
 }
 
 
@@ -147,11 +222,12 @@ static Scope *getscope(FunctionState *fs, int idx)
 
 
 
-static void enterscope(FunctionState *fs, Scope *s, int cflow)
+static void enterscope(FunctionState *fs, Scope *s, int cfbits)
 {
     entercstack(fs->lx);
     s->nlocals = fs->activelocals;
-    s->cflow = cflow;
+    s->nstatics = fs->activestatics;
+    s->cfbits = cfbits;
     s->haveupval = 0;
     s->havetbcvar = (fs->scope != NULL && fs->scope->havetbcvar);
     s->prev = fs->scope;
@@ -360,14 +436,12 @@ static int newlocal(Lexer *lx, OString *name)
 static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 {
     Lexer *lx = fs->lx;
-    for (int i = fs->activelocals - 1; i >= 0; i--) {
+    for (int i = fs->activelocals - 1; 0 <= i && i <= fs->scope->nlocals; i--) {
         LVar *local = getlocal(fs, i);
         if (streq(name, local->s.name)) {
             if (cr_unlikely(local->s.idx == -1))
-                cr_lex_syntaxerror(lx, cr_string_pushfstring(lx->ts,
-                            "can't read local variable '%s' in its "
-                            "own initializer", name));
-            initvar(fs, e, i);
+                variniterror(lx, "local", getstrbytes(name));
+            initlocal(e, i);
             return e->et;
         }
     }
@@ -375,10 +449,22 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 }
 
 
-/* get upvalue 'idx' from 'upvalues' */
-cr_sinline UpValInfo *getupvalue(FunctionState *fs, int idx)
+/*
+ * Searches for static variable 'name' in the current scope.
+ */
+static int searchstatic(FunctionState *fs, OString *name, ExpInfo *e)
 {
-    return &fs->fn->upvals[idx];
+    Lexer *lx = fs->lx;
+    for (int i = fs->activestatics - 1; i >= 0 && i <= fs->scope->nstatics; i--) {
+        SVar *svar = getstatic(fs, i);
+        if (streq(name, svar->s.name)) {
+            if (cr_unlikely(svar->s.idx == -1))
+                variniterror(lx, "static", getstrbytes(name));
+            initstatic(e, i);
+            return e->et;
+        }
+    }
+    return -1;
 }
 
 
@@ -387,8 +473,8 @@ static UpValInfo *newupvalue(FunctionState *fs)
 {
     Function *fn = fs->fn;
     cr_State *ts = fs->lx->ts;
-    checklimit(fs, fn->nupvals + 1, INT_MAX, "upvalues");
-    cr_mem_growvec(ts, fn->upvals, fn->sizeupvals, fn->nupvals, INT_MAX,
+    checklimit(fs, fn->nupvals + 1, MAXLONGARGSIZE, "upvalues");
+    cr_mem_growvec(ts, fn->upvals, fn->sizeupvals, fn->nupvals, MAXLONGARGSIZE,
                    "upvalues");
     return &fn->upvals[fn->nupvals++];
 }
@@ -455,16 +541,63 @@ static void searchvar(FunctionState *fs, OString *name, ExpInfo *e, int base)
 }
 
 
-/* get global variable 'name' or create undefined global */
-static void globalvar(cr_State *ts, OString *name, ExpInfo *e)
+/* create new global variable */
+static void newglobal(Lexer *lx, OString *name, int mod)
 {
+    TValue k, val;
+    setv2s(lx->ts, &k, name);
+    setemptyval(&val);
+    vmod(&val) = mod;
+    cr_htable_set(lx->ts, GS(lx->ts)->globals, &k, &val);
+}
+
+
+/* 
+ * Create new global variable; check for redefinition;
+ * check for invalid initialization.
+ */
+static void defineglobal(Lexer *lx, OString *name, int mod)
+{
+    TValue k, out;
+    setv2s(lx->ts, &k, name);
+    if (cr_unlikely(cr_htable_get(GS(lx->ts)->globals, &k, &out))) {
+        if (vmod(&out) == UNDEFMOD) /* declaration of undefined global ? */
+            cr_parser_semerror(lx, cr_string_pushfstring(lx->ts, 
+                                   "declaring already present global variable "
+                                   "'%s'", name));
+        else /* redeclaration/redefinition of defined global variable */
+            checkvarcollision(lx->fs, name, "global", NULL);
+    }
+    newglobal(lx, name, mod);
+}
+
+
+/* get global variable 'name' or create undefined global */
+static void globalvar(FunctionState *fs, OString *name, ExpInfo *e)
+{
+    Lexer *lx = fs->lx;
     TValue k, dummy;
-    setv2s(ts, &k, name);
+    setv2s(lx->ts, &k, name);
     setemptyval(&dummy); /* set as undefined */
-    if (!cr_htable_get(GS(ts)->globals, &k, &dummy))
-        cr_htable_set(ts, GS(ts)->globals, &k, &dummy);
+    if (!cr_htable_get(GS(lx->ts)->globals, &k, &dummy))
+        newglobal(lx, name, UNDEFMOD);
     e->u.str = name;
     e->et = EXP_GLOBAL;
+}
+
+
+/* create new static variable */
+static int newstatic(FunctionState *fs, OString *name)
+{
+    Function *fn = fs->fn;
+    cr_State *ts = fs->lx->ts;
+    checklimit(fs, fn->nsvars + 1, MAXLONGARGSIZE, "statics");
+    cr_mem_growvec(ts, fn->svars, fn->sizesvars, fn->nsvars, MAXLONGARGSIZE,
+                   "statics");
+    SVar *svar = &fn->svars[fn->nsvars++];
+    svar->s.name = name;
+    svar->s.idx = -1;
+    return fn->nsvars - 1;
 }
 
 
@@ -473,18 +606,28 @@ static void varname(Lexer *lx, OString *name, ExpInfo *e)
 {
     searchvar(lx->fs, name, e, 1);
     if (e->et == EXP_VOID)
-        globalvar(lx->ts, name, e);
+        globalvar(lx->fs, name, e);
 }
 
 
 #define varlit(lx,l,e)      varname(lx, cr_lex_newstring(lx, "" l, SLL(l)), e)
 
 
+/* find static variable 'name' */
+static void staticvar(Lexer *lx, OString *name, ExpInfo *e)
+{
+    FunctionState *fs = lx->fs;
+    int idx = searchstatic(fs, name, e);
+    if (cr_unlikely(idx < 0))
+        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+                               "undeclared static variable '%s'", name));
+}
+
+
 static void expid(Lexer *lx, ExpInfo *e)
 {
     initstring(e, expect_id(lx));
 }
-
 
 
 /*
@@ -587,6 +730,11 @@ static void primaryexp(Lexer *lx, ExpInfo *e)
         cr_lex_scan(lx); /* skip ')' */
         expr(lx, e);
         expect(lx, ')');
+        break;
+    case '@':
+        cr_lex_scan(lx); /* skip '@' */
+        staticvar(lx, e->u.str, e);
+        cr_lex_scan(lx);
         break;
     case TK_IDENTIFIER:
         varname(lx, e->u.str, e);
@@ -860,7 +1008,7 @@ static void checkconst(Lexer *lx, ExpInfo *var)
     switch (var->et) {
     case EXP_UVAL: {
         UpValInfo *uv = getupvalue(fs, var->u.info);
-        if (uv->mod & VARCONST)
+        if (vmod(uv) & VARCONST)
             id = uv->name;
         break;
     }
@@ -868,6 +1016,12 @@ static void checkconst(Lexer *lx, ExpInfo *var)
         LVar *lv = getlocal(fs, var->u.info);
         if (vmod(&lv->val) & VARCONST)
             id = lv->s.name;
+        break;
+    }
+    case EXP_STATIC: {
+        SVar *sv = getstatic(fs, var->u.info);
+        if (vmod(&sv->val) & VARCONST)
+            id = sv->s.name;
         break;
     }
     case EXP_GLOBAL: {
@@ -883,7 +1037,7 @@ static void checkconst(Lexer *lx, ExpInfo *var)
     }
     if (id) {
         cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
-                          "attempt to assign to const variable '%s'", id));
+                           "attempt to assign to const variable '%s'", id));
     }
 }
 
@@ -922,7 +1076,7 @@ static void adjustassign(Lexer *lx, int left, int right, ExpInfo *e)
 
 
 /* auxiliary function for multiple variable assignment */
-static void assignLHS(Lexer *lx, LHS *lhs, int nvars)
+static void assign(Lexer *lx, LHS *lhs, int nvars)
 {
     expect_cond(lx, eisvar(&lhs->e), "expect variable");
     checkconst(lx, &lhs->e);
@@ -931,7 +1085,7 @@ static void assignLHS(Lexer *lx, LHS *lhs, int nvars)
         var.prev = lhs;
         suffixedexpr(lx, &var.e);
         entercstack(lx);
-        assignLHS(lx, &var, nvars + 1);
+        assign(lx, &var, nvars + 1);
         leavecstack(lx);
     } else { /* right side of assignment '=' */
         ExpInfo e;
@@ -956,11 +1110,134 @@ static void exprstm(Lexer *lx)
     suffixedexpr(lx, &var.e);
     if (check(lx, '=') || check(lx, ',')) {
         var.prev = NULL;
-        assignLHS(lx, &var, 1);
+        assign(lx, &var, 1);
     } else {
         expect_cond(lx, var.e.et == EXP_CALL, "syntax error");
         setlarg0(getinstruction(lx->fs, &var.e), 1);
     }
+}
+
+
+/* get type modifier */
+static int getmod(Lexer *lx)
+{
+    const char *mod = getstrbytes(expect_id(lx));
+    if (strcmp(mod, "const") == 0)
+        return VARCONST;
+    else if (strcmp(mod, "static") == 0)
+        return VARSTATIC;
+    else if (strcmp(mod, "close") == 0)
+        return VARTBC;
+    else
+        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+                               "unknown modifier '%s'", mod));
+}
+
+
+/* get all type modifier */
+static int getmodifiers(Lexer *lx, const char *type, const char *name)
+{
+    int bmask = 0;
+    if (match(lx, '<')) {
+        do {
+            int bit = getmod(lx);
+            if (testbit(bmask, bit)) { /* duplicate modifier ? */
+                cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+                                       "%s '%s' has duplicate '%s' modifier",
+                                       type, name, lx->t.lit.str));
+            } else if (testbit(bmask, VARSTATIC) && bit == VARSTATIC) {
+                cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+                                       "%s '%s' can't have both static and "
+                                       "close modifiers"));
+            }
+            bmask = bit2mask(bmask, bit);
+        } while (match(lx, ','));
+        expect(lx, '>');
+    }
+    return bmask;
+}
+
+
+/* declare variable 'name' */
+static int declarevar(FunctionState *fs, OString *name, ExpInfo *e, int mods)
+{
+    int vidx = -1;
+    if (mods & VARSTATIC) { /* static ? */
+        cr_assert(!testbit(mods, VARTBC)); /* can't have close */
+        checkvarcollision(fs, name, "static", searchstatic);
+        vidx = newstatic(fs, name);
+        vmod(&getstatic(fs, vidx)->val) = cast_ubyte(mods);
+        initstatic(e, vidx);
+    } else if (fs->scope->prev) { /* local ? */
+        checkvarcollision(fs, name, "local", searchlocal);
+        vidx = newlocal(fs->lx, name);
+        vmod(&getlocal(fs, vidx)->val) = cast_ubyte(mods);
+        initlocal(e, vidx);
+    } else { /* global */
+        cr_assert(vidx == -1);
+        defineglobal(fs->lx, name, mods);
+        initglobal(e, name);
+    }
+    return vidx;
+}
+
+
+/* mark local variable at 'idx' as tbc */
+static void closelocal(FunctionState *fs, int idx)
+{
+    cr_assert(idx >= 0);
+    scopemarktbc(fs);
+    cr_code_L(fs, OP_TBC, idx);
+}
+
+
+/* try to mark variable declared as tbc */
+static void closedecl(FunctionState *fs, int nvars, int *tbc, int vidx,
+                         int mods)
+{
+    if (mods & VARTBC) { /* have tbc var? */
+        cr_assert(!testbit(mods, VARSTATIC)); /* can't be static */
+        if (cr_unlikely(*tbc == -1)) /* already have tbc variable ? */
+            cr_parser_semerror(fs->lx,
+                    "multiple to-be-closed variables in a single declaration");
+        if (cr_unlikely(vidx == -1)) /* global to-be-closed ? */
+            cr_parser_semerror(fs->lx, "global variables can't be closed");
+        *tbc = fs->activelocals + nvars;
+        cr_assert(tbc >= 0);
+        closelocal(fs, *tbc);
+    }
+}
+
+
+/* auxiliary for assignment of multiple variable declarations */
+static int assigndecl(Lexer *lx, LHS *lhs, int *tbc, int nvars)
+{
+    int nvarstotal = nvars;
+    FunctionState *fs = lx->fs;
+    if (match(lx, ',')) { /* more ids ? */
+        LHS var;
+        var.prev = lhs;
+        OString *name = expect_id(lx);
+        int mods = getmodifiers(lx, "variable", getstrbytes(name));
+        int vidx = declarevar(fs, name, &var.e, mods);
+        closedecl(fs, nvars, tbc, vidx, mods);
+        entercstack(lx);
+        int ret = assigndecl(lx, &var, tbc, nvars + 1);
+        nvarstotal = MAX(ret, nvars);
+        leavecstack(lx);
+    } else { /* right side of declaration */
+        ExpInfo e;
+        expect(lx, '=');
+        int nexps = exprlist(lx, &e);
+        if (nexps != nvars)
+            adjustassign(lx, nexps, nvars, &e);
+        else
+            cr_code_setoneret(fs, &e);
+    }
+    cr_code_storevar(fs, &lhs->e);
+    if (lhs->e.et == EXP_GLOBAL) /* declarations define globals */
+        cr_code_store2define(fs, &lhs->e);
+    return nvarstotal;
 }
 
 
@@ -1001,142 +1278,70 @@ static void blockstm(Lexer *lx)
 //         initlocal(fs, 0);
 //     } while (match(fs, TOK_COMMA));
 // }
-// 
-// // namelist ::= name
-// //            | name ',' namelist
-// static int idlist(Lexer *lx)
-// {
-//     int names = 0;
-//     do {
-//         if (names >= CR_BYTECODE_MAX)
-//             error(fs, comperrors[CE_NAMELIST], CR_BYTECODE_MAX);
-//         names++;
-//         int idx = name(fs, expectstr("Expect name.")); // initialize later
-//         if (fs->S->depth == 0)
-//             Array_cr_int_push(nameidx, idx);
-//     } while (match(fs, TOK_COMMA));
-//     return names;
-// }
-
-
-/* get type modifier */
-static int getmod(Lexer *lx)
-{
-    const char *mod = getstrbytes(expect_id(lx));
-    if (strcmp(mod, "const") == 0) {
-        return VARCONST;
-    } else if (strcmp(mod, "static") == 0) {
-        return VARSTATIC;
-    } else if (strcmp(mod, "close") == 0) {
-        return VARTBC;
-    } else {
-        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
-                               "unknown modifier '%s'", mod));
-    }
-}
-
-
-/* get all type modifier */
-static int getmodifiers(Lexer *lx, const char *type, const char *name)
-{
-    int bmask = 0;
-    if (match(lx, '<')) {
-        do {
-            int bit = getmod(lx);
-            if (testbit(bmask, bit))
-                cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
-                                       "%s '%s' has duplicate '%s' modifier",
-                                       type, name, lx->t.lit.str));
-            bmask = bit2mask(bmask, bit);
-        } while (match(lx, ','));
-        expect(lx, '>');
-    }
-    return bmask;
-}
-
-
-static void tryclose(FunctionState *fs, int idx)
-{
-    if (idx != -1) {
-        scopemarktbc(fs);
-        cr_code_L(fs, OP_TBC, idx);
-    }
-}
 
 
 /* 
  * vardecl ::= 'let' idlist ';'
- *           | 'let' idlist '=' explist ';'
+ *           | 'let' idlist '=' exprlist ';'
  */
 static void vardecl(Lexer *lx)
 {
     FunctionState *fs = lx->fs;
-    ExpInfo e;
-    int nvars = 0;
-    int nexps;
     int tbc = -1; /* -1 indicates there are no tbc variables */
-    do {
-        OString *name = expect_id(lx);
-        int vidx = newlocal(lx, name);
-        int mods = getmodifiers(lx, "variable", getstrbytes(name));
-        vmod(&getlocal(fs, vidx)->val) = mods;
-        if (mods & VARTBC) { /* have to-be-closed var? */
-            if (tbc == -1)
-                cr_parser_semerror(lx,
-                    "multiple to-be-closed variables in a single declaration");
-            tbc = fs->activelocals + nvars;
-        }
-        nvars++;
-    } while (match(lx, ','));
-    if (match(lx, '=')) {
-        nexps = exprlist(lx, &e);
-    } else {
-        e.et = EXP_VOID;
-        nexps = 0;
+    LHS var;
+    OString *name = expect_id(lx);
+    int mods = getmodifiers(lx, "variable", getstrbytes(name));
+    int vidx = declarevar(fs, name, &var.e, mods);
+    closedecl(fs, 0, &tbc, vidx, mods);
+    if (check(lx, ',') || check(lx, '=')) { /* multiple declarations ? */
+        var.prev = NULL;
+        assigndecl(lx, &var, &tbc, 1);
+    } else { /* otherwise assign implicit nil */
+        cr_code_nil(lx->fs, 1);
+        cr_code_reserveslots(fs, 1);
     }
-    adjustassign(lx, nvars, nexps, &e);
-    adjustlocals(lx, nvars);
-    tryclose(fs, tbc);
     expect(lx, ';');
 }
 
 
 // Create and parse a new FunctionState
-static void fn(FunctionState *fs, FunctionType type)
-{
-    FunctionState Fnew;
-    Scope globscope, S;
-    startfs(fs->ts, &Fnew, &globscope, fs->cclass, type, fs);
-    Fnew.fn->p.source = fs->fn->p.source; // source is same
-    startscope(&Fnew, &S, 0, 0); // no need to end this scope
-    expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
-    if (!check(&Fnew, TOK_RPAREN))
-        fnargs(&Fnew);
-    if (Fnew.fn->p.isvararg)
-        expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
-    else
-        expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
-    int arity = Fnew.fn->p.arity;
-    int expected = ominfo[fs->tag].arity;
-    if (cr_unlikely(isom(fs) && expected != arity)) {
-        error(fs, comperrors[CE_OMSIG], fs->ts->faststatic[fs->tag]->storage, expected, arity);
-        Fnew.lexer->panic = 0; // clear panic flag do not sync yet
-    }
-    expect(&Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
-    block(&Fnew); // body
-    Function *fn = parse_end(&Fnew);
-    CODEOP(fs, OP_CLOSURE, make_constant(fs, OBJ_VAL(fn)));
-    for (int i = 0; i < fn->p.upvalc; i++) {
-        UpValue *upval = Array_Upvalue_index(Fnew.upvalues, i);
-        CODE(fs, upval->local ? 1 : 0);
-        CODEL(fs, upval->idx);
-    }
-    endfs(&Fnew);
-}
+// static void fn(FunctionState *fs, FunctionType type)
+// {
+//     FunctionState Fnew;
+//     Scope globscope, S;
+//     startfs(fs->ts, &Fnew, &globscope, fs->cclass, type, fs);
+//     Fnew.fn->p.source = fs->fn->p.source; // source is same
+//     startscope(&Fnew, &S, 0, 0); // no need to end this scope
+//     expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
+//     if (!check(&Fnew, TOK_RPAREN))
+//         fnargs(&Fnew);
+//     if (Fnew.fn->p.isvararg)
+//         expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
+//     else
+//         expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
+//     int arity = Fnew.fn->p.arity;
+//     int expected = ominfo[fs->tag].arity;
+//     if (cr_unlikely(isom(fs) && expected != arity)) {
+//         error(fs, comperrors[CE_OMSIG], fs->ts->faststatic[fs->tag]->storage, expected, arity);
+//         Fnew.lexer->panic = 0; // clear panic flag do not sync yet
+//     }
+//     expect(&Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
+//     block(&Fnew); // body
+//     Function *fn = parse_end(&Fnew);
+//     CODEOP(fs, OP_CLOSURE, make_constant(fs, OBJ_VAL(fn)));
+//     for (int i = 0; i < fn->p.upvalc; i++) {
+//         UpValue *upval = Array_Upvalue_index(Fnew.upvalues, i);
+//         CODE(fs, upval->local ? 1 : 0);
+//         CODEL(fs, upval->idx);
+//     }
+//     endfs(&Fnew);
+// }
+
 
 /* fndec ::= 'fn' id '(' fnargs ')' '{' block '}' */
 static void fndec(Lexer *lx)
 {
+    OString *id = expect_id(lx);
     int idx = name(fs, expectstr("Expect function name."));
     if (fs->S->depth > 0)
         initlocal(fs, 0); // initialize to allow recursion
@@ -1145,6 +1350,7 @@ static void fndec(Lexer *lx)
     if (fs->S->depth == 0)
         INIT_GLOBAL(fs, idx, 0, &_);
 }
+
 
 static void method(FunctionState *fs)
 {

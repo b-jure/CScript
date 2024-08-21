@@ -90,7 +90,6 @@ typedef union Value {
 #define isvtt(v,t)      (vtt(v) == (t))
 
 
-
 /* 'mod' bits */
 #define MODnone         0 /* no modifiers */
 #define MODconst        1 /* value is 'const' */
@@ -99,7 +98,6 @@ typedef union Value {
 #define vmod(v)         ((v)->mod)
 #define ismod(v,m)      testbit(vmod(v), (m))
 #define isconst(v)      ismod((v), MODconst)
-
 
 
 /* macro for 'val' */
@@ -129,11 +127,14 @@ typedef struct TValue {
 } TValue;
 
 
+/* size of 'mod' field in bytes */
+#define VMODSIZE        sizeof(vmod(cast(TValue *, NULL)))
+
 
 
 /*
  * Represents value on the stack.
- * It contains 'tbc' fields which represents
+ * It contains 'tbc' field which represents
  * offset from the current stack value to the
  * next value on the stack that needs to-be-closed.
  * 'tbc' being 0 indicates that the distance value
