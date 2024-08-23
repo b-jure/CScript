@@ -256,6 +256,7 @@ CRI_FUNC int cr_code_pop(FunctionState *fs, int n);
 CRI_FUNC int cr_code_ret(FunctionState *fs, int base, int nreturns);
 CRI_FUNC int cr_code_call(FunctionState *fs, int base, int nparams, 
                           int nreturns);
+CRI_FUNC int cr_code_class(FunctionState *fs, OString *name);
 CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var);
 CRI_FUNC void cr_code_defineglobal(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e);

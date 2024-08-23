@@ -38,12 +38,12 @@
  */
 static void addlineinfo(FunctionState *fs, Function *f, int line)
 {
-    int len = f->nlinfo;
+    int len = fs->nlinfo;
     if (len <= 0 || f->linfo[len - 1].line < line) {
-        cr_mem_growvec(fs->lx->ts, f->linfo, f->sizelinfo, f->nlinfo, INT_MAX,
+        cr_mem_growvec(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, INT_MAX,
                        "lines");
-        f->linfo[len].pc = f->ncode - 1;
-        f->linfo[f->nlinfo++].line = line;
+        f->linfo[len].pc = fs->pc - 1;
+        f->linfo[fs->nlinfo++].line = line;
     }
 }
 
@@ -52,19 +52,19 @@ static void addlineinfo(FunctionState *fs, Function *f, int line)
 static inline int code(FunctionState *fs, Instruction i)
 {
     Function *fn = fs->fn;
-    cr_mem_growvec(fs->lx->ts, fn->code, fn->sizecode, fn->ncode, INT_MAX, "code");
-    fn->code[fn->ncode++] = i;
+    cr_mem_growvec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, INT_MAX, "code");
+    fn->code[fs->pc++] = i;
     addlineinfo(fs, fn, fs->lx->line);
-    return fn->ncode - 1;
+    return fs->pc - 1;
 }
 
 
 /* emit short arg */
 static int Sarg(FunctionState *fs, Function *f, int arg)
 {
-    cr_mem_growvec(fs->lx->ts, f->code, f->sizecode, f->ncode, INT_MAX, "code");
-    f->code[f->ncode++] = cast_ubyte(arg & 0xff);
-    return f->ncode - 1;
+    cr_mem_growvec(fs->lx->ts, f->code, f->sizecode, fs->pc, INT_MAX, "code");
+    f->code[fs->pc++] = cast_ubyte(arg & 0xff);
+    return fs->pc - 1;
 }
 
 
@@ -81,11 +81,11 @@ int cr_code_S(FunctionState *fs, Instruction i, int a)
 /* emit long arg */
 static int Larg(FunctionState *fs, Function *f, int idx)
 {
-    cr_mem_ensurevec(fs->lx->ts, f->code, f->sizecode, f->ncode, 3, INT_MAX,
+    cr_mem_ensurevec(fs->lx->ts, f->code, f->sizecode, fs->pc, 3, INT_MAX,
                      "code");
     setbytes(f->code, idx, 3);
-    f->ncode += 3;
-    return f->ncode - 3;
+    fs->pc += 3;
+    return fs->pc - 3;
 }
 
 
@@ -121,10 +121,9 @@ static int codeLLL(FunctionState *fs, Instruction i, int a, int b, int c)
 static int addK(FunctionState *fs, TValue *constant)
 {
     Function *f = fs->fn;
-    cr_mem_growvec(fs->lx->ts, f->constants, f->sizeconst, f->nconst, INT_MAX,
-                   "constants");
-    f->constants[f->nconst++] = *constant;
-    return f->nconst - 1;
+    cr_mem_growvec(fs->lx->ts, f->k, f->sizek, fs->nk, INT_MAX, "constants");
+    f->k[fs->nk++] = *constant;
+    return fs->nk - 1;
 }
 
 
@@ -269,6 +268,12 @@ int cr_code_call(FunctionState *fs, int base, int nparams, int nreturns)
     default: op = OP_CALL; break;
     }
     return codeLLL(fs, op, base, nparams + 1, nreturns + 1);
+}
+
+
+int cr_code_class(FunctionState *fs, OString *name)
+{
+    return cr_code_L(fs, OP_CLASS, stringK(fs, name));
 }
 
 
@@ -749,7 +754,7 @@ void cr_code_concatjmp(FunctionState *fs, int *l1, int l2)
 /* backpatch jump instruction at 'pc' */
 void cr_code_patchjmp(FunctionState *fs, int pc)
 {
-    int target = fs->fn->ncode; /* current 'pc' */
+    int target = fs->pc; /* current 'pc' */
     while (pc != NOJMP) {
         int next = getjmp(fs, pc);
         fixjmp(fs, pc, target);

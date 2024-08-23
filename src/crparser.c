@@ -49,8 +49,11 @@
     { if (!(cond)) cr_lex_syntaxerror(lx, err); }
 
 
-/* special value for 'mod', describing undefined global vars */
-#define UNDEFMOD        ((1 << (VMODSIZE * 8)) - 1)
+/* 
+ * Mask for marking undefined or not fully initialized
+ * variables (statics and globals).
+ */
+#define UNDEFMODMASK     0x80 /* 0b10000000 */
 
 
 /* 'cfbits' */
@@ -68,7 +71,6 @@
 typedef struct Scope {
     struct Scope *prev; /* implicit linked-list */
     int nlocals; /* number of locals outside of this scope */
-    int nstatics; /* number of statics outside of this scope */
     cr_ubyte cfbits; /* control flow bits */
     cr_ubyte haveupval; /* set if scope contains upvalue variable */
     cr_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
@@ -143,7 +145,7 @@ cr_sinline LVar *getlocal(FunctionState *fs, int idx)
 cr_sinline void getglobal(cr_State *ts, OString *name, TValue *out)
 {
     TValue k;
-    setv2s(lx->ts, &k, name);
+    setv2s(fs->lx->ts, &k, name);
     cr_htable_get(GS(ts)->globals, &k, out);
 }
 
@@ -151,8 +153,8 @@ cr_sinline void getglobal(cr_State *ts, OString *name, TValue *out)
 /* get static variable */
 cr_sinline SVar *getstatic(FunctionState *fs, int idx)
 {
-    cr_assert(fs->firststatic + idx < fs->fn->nsvars);
-    return &fs->fn->svars[idx];
+    cr_assert(0 <= idx && idx < fs->fn->nstatics);
+    return &fs->fn->statics[idx];
 }
 
 
@@ -190,6 +192,71 @@ static void initstring(ExpInfo *e, OString *s)
 }
 
 
+/* add local debug information into 'locals' */
+static int registerlocal(Lexer *lx, FunctionState *fs, OString *name)
+{
+    Function *fn = fs->fn;
+    checklimit(fs, fs->nlocals, MAXLONGARGSIZE, "locals");
+    cr_mem_growvec(lx->ts, fn->locals, fn->sizelocals, fs->nlocals,
+                   MAXLONGARGSIZE, "locals");
+    LVarInfo *lvarinfo = &fn->locals[fs->nlocals++];
+    lvarinfo->name = name;
+    lvarinfo->alivepc = fs->pc;
+    return fs->nlocals - 1;
+}
+
+
+/*
+ * Adjust locals by increment 'nlocals' and registering them
+ * inside 'locals'.
+ */
+static void adjustlocals(Lexer *lx, int nvars)
+{
+    FunctionState *fs = lx->fs;
+    for (int i = 0; i < nvars; nvars--) {
+        int idx = fs->activelocals++;
+        LVar *local = getlocal(fs, idx);
+        local->s.idx = registerlocal(lx, fs, local->s.name);
+    }
+}
+
+
+/* 
+ * Define static variable by removing UNDEFMODMASK.
+ * This mask is not contained in VARBITMASK. 
+ */ 
+static void definestatic(FunctionState *fs, int vidx)
+{
+    SVar *svar = getstatic(fs, vidx);
+    vmod(&svar->val) &= VARBITMASK;
+}
+
+
+/* define variable */
+static void codedefine(FunctionState *fs, ExpInfo *var)
+{
+    cr_assert(var->et != EXP_UPVAL); /* can't define upvalue */
+    switch (var->et) {
+    case EXP_LOCAL: {
+        adjustlocals(fs->lx, 1); /* register it into 'locals' */
+        break;
+    }
+    case EXP_STATIC: {
+        /* fully initialize static variable */
+        definestatic(fs, var->u.info);
+        break;
+    }
+    case EXP_GLOBAL: {
+        /* emit define rather than emitting store instruction */
+        cr_code_defineglobal(fs, var);
+        return;
+    }
+    default: cr_unreachable();
+    }
+    cr_code_storevar(fs, var);
+}
+
+
 static Scope *getscope(FunctionState *fs, int idx)
 {
     Scope *scope = fs->scope;
@@ -203,12 +270,11 @@ static Scope *getscope(FunctionState *fs, int idx)
 }
 
 
-
-static void enterscope(FunctionState *fs, Scope *s, int cfbits)
+/* start lexical scope */
+static void startscope(FunctionState *fs, Scope *s, int cfbits)
 {
     entercstack(fs->lx);
     s->nlocals = fs->activelocals;
-    s->nstatics = fs->activestatics;
     s->cfbits = cfbits;
     s->haveupval = 0;
     s->havetbcvar = (fs->scope != NULL && fs->scope->havetbcvar);
@@ -217,7 +283,8 @@ static void enterscope(FunctionState *fs, Scope *s, int cfbits)
 }
 
 
-static void leavescope(FunctionState *fs)
+/* end lexical scope */
+static void endscope(FunctionState *fs)
 {
     Scope *s = fs->scope;
     fs->scope = s->prev;
@@ -237,7 +304,7 @@ static void scopemarkupval(FunctionState *fs, int vidx)
     while(s->nlocals - 1 > vidx)
         s = s->prev;
     s->haveupval = 1;
-    fs->close = 1;
+    fs->needclose = 1;
 }
 
 
@@ -250,59 +317,64 @@ static void scopemarktbc(FunctionState *fs)
     Scope *s = fs->scope;
     s->haveupval = 1;
     s->havetbcvar = 1;
-    fs->close = 1;
+    fs->needclose = 1;
 }
 
 
+/* initialize function state */
 static void startfs(FunctionState *fs, Lexer *lx, Scope *s)
 {
     cr_assert(fs->fn != NULL);
     fs->prev = lx->fs;
     fs->lx = lx;
     lx->fs = fs;
-    fs->scope = NULL;
+    fs->scope = fs->loopscope = fs->switchscope = NULL;
+    fs->loopstart = -1;
     fs->sp = 0;
     fs->activelocals = 0;
     fs->firstlocal = lx->ps->lvars.len;
-    fs->firstbreak = lx->ps->breaks.len;
-    fs->innerloopstart = -1;
-    fs->innerloopdepth = 0;
-    fs->innerswitchdepth = 0;
-    fs->close = 0;
+    { fs->brks.len = fs->brks.size = 0; fs->brks.list = NULL; } /* 'brks' */
+    fs->needclose = 0;
     fs->fn->source = lx->src;
     cr_gc_objbarrier(lx->ts, fs->fn, fs->fn->source);
-    fs->fn->maxstack = 1; /* for the function itself */
-    enterscope(fs, s, 0);
+    fs->fn->maxstack = 1; /* for 'self' */
+    startscope(fs, s, 0);
 }
 
+
+/* cleanup function state */
 static void endfs(FunctionState *fs)
 {
-    cr_State *ts = fs->lx->ts;
-    Function *fn = fs->fn;
     Lexer *lx = fs->lx;
+    Function *fn = fs->fn;
+    cr_State *ts = lx->ts;
     cr_code_ret(fs, fs->activelocals - 1, 0);
-    leavescope(fs);
+    endscope(fs);
     cr_assert(fs->scope == NULL); /* last scope */
-    cr_mem_shrinkvec(ts, fn->fn, fn->sizefn, fn->nfn);
-    cr_mem_shrinkvec(ts, fn->constants, fn->sizeconst, fn->nconst);
-    cr_mem_shrinkvec(ts, fn->code, fn->sizecode, fn->ncode);
-    cr_mem_shrinkvec(ts, fn->linfo, fn->sizelinfo, fn->nlinfo);
-    cr_mem_shrinkvec(ts, fn->locals, fn->sizelocals, fn->nlocals);
-    cr_mem_shrinkvec(ts, fn->upvals, fn->sizeupvals, fn->nupvals);
+    /* preserve memory; shrink unused space */
+    /* using counters in 'fs' as final size */
+    cr_mem_shrinkvec(ts, fn->funcs, fn->sizefn, fs->nfuncs);
+    cr_mem_shrinkvec(ts, fn->k, fn->sizek, fs->nk);
+    cr_mem_shrinkvec(ts, fn->statics, fn->sizestatics, fs->nstatics);
+    cr_mem_shrinkvec(ts, fn->code, fn->sizecode, fs->pc);
+    cr_mem_shrinkvec(ts, fn->linfo, fn->sizelinfo, fs->nlinfo);
+    cr_mem_shrinkvec(ts, fn->locals, fn->sizelocals, fs->nlocals);
+    cr_mem_shrinkvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals);
     lx->fs = fs->prev;
     cr_gc_check(ts);
 }
 
 
+/* add function */
 static Function *addfunction(Lexer *lx)
 {
     Function *new;
     cr_State *ts = lx->ts;
     FunctionState *fs = lx->fs;
     Function *fn = fs->fn;
-    checklimit(fs, fn->nfn + 1, INT_MAX, "function");
-    cr_mem_growvec(ts, fn->fn, fn->sizefn, fn->nfn, INT_MAX, "functions");
-    fn->fn[fn->nfn++] = new = cr_function_new(ts);
+    checklimit(fs, fs->nfuncs + 1, INT_MAX, "function");
+    cr_mem_growvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, INT_MAX, "functions");
+    fn->funcs[fs->nfuncs++] = new = cr_function_new(ts);
     cr_gc_objbarrier(ts, fn, new);
     return new;
 }
@@ -320,22 +392,20 @@ static void stm(Lexer *lx);
 static void expr(Lexer *lx, ExpInfo *e);
 
 
-
-/* check if 'tk' matches the current token */
-static void expect(Lexer *lx, int tk)
+/* check if current token matches 'tk' */
+cr_sinline int check(Lexer *lx, int tk)
 {
-    if (lx->t.tk == tk) {
-        cr_lex_scan(lx);
-        return;
-    }
-    expecterror(lx, tk);
+    return (lx->t.tk == tk);
 }
 
 
-/* same as 'expectnext' but do not invoke syntax error */
+/* 
+ * Advance scanner if 'tk' matches the current token,
+ * otherwise return 0. 
+ */
 static int match(Lexer *lx, int tk)
 {
-    if (lx->t.tk == tk) {
+    if (check(lx, tk)) {
         cr_lex_scan(lx);
         return 1;
     }
@@ -343,10 +413,33 @@ static int match(Lexer *lx, int tk)
 }
 
 
-/* same as 'match' but do not advance scanner */
-cr_sinline int check(Lexer *lx, int tk)
+/* check if 'tk' matches the current token */
+static void expect(Lexer *lx, int tk)
 {
-    return (lx->t.tk == tk);
+    if (check(lx, tk)) {
+        cr_lex_scan(lx);
+        return;
+    }
+    expecterror(lx, tk);
+}
+
+
+/*
+ * Check that next token is 'what'. 
+ * Otherwise raise an error that the expected 'what' should 
+ * match a 'who' in line 'linenum'.
+ */
+static void expectmatch(Lexer *lx, int what, int who, int linenum)
+{
+    if (cr_unlikely(!match(lx, what))) {
+        if (lx->line == linenum) { /* same line ? */
+            expecterror(lx, what); /* emit usual error message */
+        } else {
+            cr_lex_syntaxerror(lx, cr_string_pushfstring(lx->ts,
+            "%s expected (to close %s at line %d)",
+            cr_lex_tok2str(lx, what), cr_lex_tok2str(lx, who), linenum));
+        }
+    }
 }
 
 
@@ -363,37 +456,8 @@ static OString *expect_id(Lexer *lx)
  * ------------------------------------------------------------------------- */
 
 
-/* add local debug information into 'locals' */
-static int registerlocal(Lexer *lx, FunctionState *fs, OString *name)
-{
-    Function *fn = fs->fn;
-    checklimit(fs, fn->nlocals, MAXLONGARGSIZE, "locals");
-    cr_mem_growvec(lx->ts, fn->locals, fn->sizelocals, fn->nlocals,
-                   MAXLONGARGSIZE, "locals");
-    LVarInfo *lvarinfo = &fn->locals[fn->nlocals++];
-    lvarinfo->name = name;
-    lvarinfo->alivepc = fn->ncode;
-    return fn->nlocals - 1;
-}
-
-
-/*
- * Adjust locals by increment 'nlocals' and registering them
- * inside 'locals'.
- */
-static void adjustlocals(Lexer *lx, int nvars)
-{
-    FunctionState *fs = lx->fs;
-    for (int i = 0; i < nvars; nvars--) {
-        int idx = fs->activelocals++;
-        LVar *local = getlocal(fs, idx);
-        local->s.idx = registerlocal(lx, fs, local->s.name);
-    }
-}
-
-
 /* adds local variable to the 'lvars' */
-static int newlocal(Lexer *lx, OString *name)
+static int newlocal(Lexer *lx, OString *name, int mods)
 {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
@@ -401,15 +465,15 @@ static int newlocal(Lexer *lx, OString *name)
     cr_mem_growvec(lx->ts, ps->lvars.arr, ps->lvars.size, ps->lvars.len,
                    MAXLONGARGSIZE, "locals");
     LVar *local = &ps->lvars.arr[ps->lvars.len++];
+    vmod(&local->val) = mods;
     local->s.name = name;
     local->s.idx = -1;
     return ps->lvars.len - fs->firstlocal - 1;
 }
 
 
-/* same as 'addlocal' but use string literal as name */
 #define newlocallit(lx,lit) \
-    newlocal(lx, cr_lex_newstring(lx, "" lit, SLL(lit)))
+    newlocal(lx, cr_lex_newstring(lx, "" lit, SLL(lit)), 0)
 
 
 /*
@@ -437,10 +501,10 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e)
 static int searchstatic(FunctionState *fs, OString *name, ExpInfo *e)
 {
     Lexer *lx = fs->lx;
-    for (int i = fs->activestatics - 1; i >= 0; i--) {
+    for (int i = fs->nstatics - 1; i >= 0; i++) {
         SVar *svar = getstatic(fs, i);
         if (streq(name, svar->s.name)) {
-            if (cr_unlikely(svar->s.idx == -1))
+            if (cr_unlikely(testbits(vmod(&svar->val), UNDEFMODMASK)))
                 variniterror(lx, "static", getstrbytes(name));
             initexp(e, EXP_STATIC, i);
             return e->et;
@@ -455,10 +519,10 @@ static UpValInfo *newupvalue(FunctionState *fs)
 {
     Function *fn = fs->fn;
     cr_State *ts = fs->lx->ts;
-    checklimit(fs, fn->nupvals + 1, MAXLONGARGSIZE, "upvalues");
-    cr_mem_growvec(ts, fn->upvals, fn->sizeupvals, fn->nupvals, MAXLONGARGSIZE,
+    checklimit(fs, fs->nupvals + 1, MAXLONGARGSIZE, "upvalues");
+    cr_mem_growvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals, MAXLONGARGSIZE,
                    "upvalues");
-    return &fn->upvals[fn->nupvals++];
+    return &fn->upvals[fs->nupvals++];
 }
 
 
@@ -478,9 +542,9 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e)
         uv->onstack = 0;
         uv->idx = e->u.info;
         uv->mod = enclosing->fn->upvals[e->u.info].mod;
-        cr_assert(streq(name, enclosing->fn->upvalues[e->u.info].name));
+        cr_assert(streq(name, enclosing->fn->upvals[e->u.info].name));
     }
-    return fs->fn->nupvals - 1;
+    return fs->nupvals - 1;
 }
 
 
@@ -488,7 +552,7 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e)
 static int searchupvalue(FunctionState *fs, OString *name)
 {
     Function *fn = fs->fn;
-    for (int i = 0; i < fn->nupvals; i++)
+    for (int i = 0; i < fs->nupvals; i++)
         if (streq(fn->upvals[i].name, name)) 
             return i;
     return -1;
@@ -543,12 +607,12 @@ static void defineglobal(Lexer *lx, OString *name, int mod)
     TValue k, out;
     setv2s(lx->ts, &k, name);
     if (cr_unlikely(cr_htable_get(GS(lx->ts)->globals, &k, &out))) {
-        if (vmod(&out) == UNDEFMOD) /* declaration of undefined global ? */
+        if (testbits(vmod(&out), UNDEFMODMASK)) { /* assign before definition */
             cr_parser_semerror(lx, cr_string_pushfstring(lx->ts, 
-                                   "declaring already present global variable "
-                                   "'%s'", name));
-        else /* redeclaration/redefinition of defined global variable */
+            "definition of already present global variable '%s'", name));
+        } else { /* redefinition of defined global variable */
             checkvarcollision(lx->fs, name, "global", NULL);
+        }
     }
     newglobal(lx, name, mod);
 }
@@ -562,29 +626,29 @@ static void globalvar(FunctionState *fs, OString *name, ExpInfo *e)
     setv2s(lx->ts, &k, name);
     setemptyval(&dummy); /* set as undefined */
     if (!cr_htable_get(GS(lx->ts)->globals, &k, &dummy))
-        newglobal(lx, name, UNDEFMOD);
+        newglobal(lx, name, UNDEFMODMASK >> (fs->prev != NULL));
     e->u.str = name;
     e->et = EXP_GLOBAL;
 }
 
 
 /* create new static variable */
-static int newstatic(FunctionState *fs, OString *name)
+static int newstatic(FunctionState *fs, OString *name, int mods)
 {
     Function *fn = fs->fn;
     cr_State *ts = fs->lx->ts;
-    checklimit(fs, fn->nsvars + 1, MAXLONGARGSIZE, "statics");
-    cr_mem_growvec(ts, fn->svars, fn->sizesvars, fn->nsvars, MAXLONGARGSIZE,
-                   "statics");
-    SVar *svar = &fn->svars[fn->nsvars++];
+    checklimit(fs, fs->nstatics, MAXLONGARGSIZE, "statics");
+    cr_mem_growvec(ts, fn->statics, fn->sizestatics, fs->nstatics,
+                   MAXLONGARGSIZE, "statics");
+    SVar *svar = &fn->statics[fs->nstatics++];
     svar->s.name = name;
-    svar->s.idx = -1;
-    return fn->nsvars - 1;
+    vmod(&svar->val) = (UNDEFMODMASK | mods);
+    return fs->nstatics - 1;
 }
 
 
 /* find variable 'name' */
-static void varname(Lexer *lx, OString *name, ExpInfo *e)
+static void var(Lexer *lx, OString *name, ExpInfo *e)
 {
     searchvar(lx->fs, name, e, 1);
     if (e->et == EXP_VOID)
@@ -592,25 +656,19 @@ static void varname(Lexer *lx, OString *name, ExpInfo *e)
 }
 
 
-#define varlit(lx,l,e)      varname(lx, cr_lex_newstring(lx, "" l, SLL(l)), e)
+#define varlit(lx,l,e)      var(lx, cr_lex_newstring(lx, "" l, SLL(l)), e)
 
 
-/* find static variable 'name' */
-static void staticvar(Lexer *lx, OString *name, ExpInfo *e)
+/* varstatic ::= '@' name */
+static void varstatic(Lexer *lx, ExpInfo *e)
 {
-    FunctionState *fs = lx->fs;
-    while (fs) {
-        int idx = searchstatic(fs, name, e);
-        if (idx < 0) {
-            fs = fs->prev;
-        } else {
-            initexp(e, EXP_STATIC, idx);
-            break;
-        }
-    }
-    if (cr_unlikely(fs == NULL))
-        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
-                               "undeclared static variable '%s'", name));
+    cr_lex_scan(lx); /* skip '@' */
+    OString *name = expect_id(lx);
+    int vidx = searchstatic(lx->fs, name, e);
+    if (cr_unlikely(vidx < 0))
+        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts, 
+                               "undefined static variable '%s'", name));
+    initexp(e, EXP_STATIC, vidx);
 }
 
 
@@ -723,12 +781,11 @@ static void primaryexp(Lexer *lx, ExpInfo *e)
         cr_code_varexp2stack(lx->fs, e);
         break;
     case '@':
-        cr_lex_scan(lx); /* skip '@' */
-        staticvar(lx, e->u.str, e);
+        varstatic(lx, e);
         cr_lex_scan(lx);
         break;
     case TK_IDENTIFIER:
-        varname(lx, e->u.str, e);
+        var(lx, e->u.str, e);
         cr_lex_scan(lx);
         break;
     case TK_SELF:
@@ -1087,7 +1144,10 @@ static void assign(Lexer *lx, LHS *lhs, int nvars)
         else
             cr_code_exp2stack(lx->fs, &e);
     }
-    cr_code_storevar(lx->fs, &lhs->e);
+    if (lhs->e.et == EXP_GLOBAL)
+        cr_code_defineglobal(lx->fs, &lhs->e);
+    else
+        cr_code_storevar(lx->fs, &lhs->e);
 }
 
 
@@ -1128,46 +1188,45 @@ static int getmod(Lexer *lx)
 /* get all type modifier */
 static int getmodifiers(Lexer *lx, const char *type, const char *name)
 {
+    if (!match(lx, '<')) return 0;
     int bmask = 0;
-    if (match(lx, '<')) {
-        do {
-            int bit = getmod(lx);
-            if (testbit(bmask, bit)) { /* duplicate modifier ? */
-                cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
-                                       "%s '%s' has duplicate '%s' modifier",
-                                       type, name, lx->t.lit.str));
-            } else if (testbit(bmask, VARSTATIC) && bit == VARSTATIC) {
-                cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
-                                       "%s '%s' can't have both static and "
-                                       "close modifiers"));
-            }
-            bmask = bit2mask(bmask, bit);
-        } while (match(lx, ','));
-        expect(lx, '>');
-    }
+    do {
+        int bit = getmod(lx);
+        if (testbit(bmask, bit)) { /* duplicate modifier ? */
+            cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+            "%s '%s' has duplicate '%s' modifier", type, name, lx->t.lit.str));
+        } else if (testbit(bmask, VARSTATIC) && bit == VARSTATIC) {
+            cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+            "%s '%s' can't have both static and close modifiers", type, name));
+        }
+        bmask = bit2mask(bmask, bit);
+    } while (match(lx, ','));
+    expect(lx, '>');
     return bmask;
 }
 
 
-/* declare variable 'name' */
-static int declarevar(FunctionState *fs, OString *name, ExpInfo *e, int mods)
+/* create new variable 'name' */
+static int newvar(FunctionState *fs, OString *name, ExpInfo *e, int mods)
 {
     int vidx = -1;
-    if (mods & VARSTATIC) { /* static ? */
-        cr_assert(!testbit(mods, VARTBC)); /* can't have close */
-        checkvarcollision(fs, name, "static", searchstatic);
-        vidx = newstatic(fs, name);
-        vmod(&getstatic(fs, vidx)->val) = cast_ubyte(mods);
-        initexp(e, EXP_STATIC, vidx);
-    } else if (fs->scope->prev) { /* local ? */
+    if (fs->scope->prev) { /* local ? */
+        if (cr_unlikely(testbit(mods, VARSTATIC)))
+            cr_parser_semerror(fs->lx, cr_string_pushfstring(fs->lx->ts,
+            "can't define local variables ('%s') as static", name));
         checkvarcollision(fs, name, "local", searchlocal);
-        vidx = newlocal(fs->lx, name);
-        vmod(&getlocal(fs, vidx)->val) = cast_ubyte(mods);
+        vidx = newlocal(fs->lx, name, mods);
         initexp(e, EXP_LOCAL, vidx);
     } else { /* global */
-        cr_assert(vidx == -1);
-        defineglobal(fs->lx, name, mods);
-        initglobal(e, name);
+        cr_assert(!testbit(mods, VARTBC)); /* can't have close */
+        if (mods & VARSTATIC) {
+            checkvarcollision(fs, name, "static", searchstatic);
+            vidx = newstatic(fs, name, mods);
+            initexp(e, EXP_STATIC, vidx);
+        } else {
+            defineglobal(fs->lx, name, mods);
+            initglobal(e, name);
+        }
     }
     return vidx;
 }
@@ -1182,17 +1241,18 @@ static void closelocal(FunctionState *fs, int idx)
 }
 
 
-/* try to mark variable declared as tbc */
+/* try to mark variable defined as tbc */
 static void closedecl(FunctionState *fs, int nvars, int *tbc, int vidx,
-                         int mods)
+                      int mods)
 {
-    if (mods & VARTBC) { /* have tbc var? */
+    if (mods & VARTBC) { /* have tbc var ? */
         cr_assert(!testbit(mods, VARSTATIC)); /* can't be static */
-        if (cr_unlikely(*tbc == -1)) /* already have tbc variable ? */
+        if (cr_unlikely(*tbc == -1)) { /* already have tbc variable ? */
             cr_parser_semerror(fs->lx,
-                    "multiple to-be-closed variables in a single declaration");
-        if (cr_unlikely(vidx == -1)) /* global to-be-closed ? */
+            "multiple to-be-closed variables in a single declaration");
+        } else if (cr_unlikely(vidx == -1)) { /* global to-be-closed ? */
             cr_parser_semerror(fs->lx, "global variables can't be closed");
+        }
         *tbc = fs->activelocals + nvars;
         cr_assert(tbc >= 0);
         closelocal(fs, *tbc);
@@ -1200,8 +1260,8 @@ static void closedecl(FunctionState *fs, int nvars, int *tbc, int vidx,
 }
 
 
-/* auxiliary for assignment of multiple variable declarations */
-static void assigndecl(Lexer *lx, LHS *lhs, int *tbc, int nvars)
+/* auxiliary for assignment of multiple variable definitions */
+static void assigndefine(Lexer *lx, LHS *lhs, int *tbc, int nvars)
 {
     FunctionState *fs = lx->fs;
     if (match(lx, ',')) { /* more ids ? */
@@ -1209,10 +1269,10 @@ static void assigndecl(Lexer *lx, LHS *lhs, int *tbc, int nvars)
         var.prev = lhs;
         OString *name = expect_id(lx);
         int mods = getmodifiers(lx, "variable", getstrbytes(name));
-        int vidx = declarevar(fs, name, &var.e, mods);
+        int vidx = newvar(fs, name, &var.e, mods);
         closedecl(fs, nvars, tbc, vidx, mods);
         entercstack(lx);
-        assigndecl(lx, &var, tbc, nvars + 1);
+        assigndefine(lx, &var, tbc, nvars + 1);
         leavecstack(lx);
     } else { /* right side of declaration */
         ExpInfo e;
@@ -1223,10 +1283,7 @@ static void assigndecl(Lexer *lx, LHS *lhs, int *tbc, int nvars)
         else
             cr_code_exp2stack(fs, &e);
     }
-    if (lhs->e.et == EXP_GLOBAL) /* declaration defines global var */
-        cr_code_defineglobal(fs, &lhs->e);
-    else
-        cr_code_storevar(fs, &lhs->e);
+    codedefine(fs, &lhs->e);
 }
 
 
@@ -1241,15 +1298,15 @@ static void letstm(Lexer *lx)
     LHS var;
     OString *name = expect_id(lx);
     int mods = getmodifiers(lx, "variable", getstrbytes(name));
-    int vidx = declarevar(fs, name, &var.e, mods);
+    int vidx = newvar(fs, name, &var.e, mods);
     closedecl(fs, 0, &tbc, vidx, mods);
     if (check(lx, ',') || check(lx, '=')) { /* id list ? */
         var.prev = NULL;
-        assigndecl(lx, &var, &tbc, 1);
+        assigndefine(lx, &var, &tbc, 1);
     } else { /* otherwise assign implicit nil */
         cr_code_nil(lx->fs, 1);
         cr_code_reserveslots(fs, 1);
-        cr_code_storevar(fs, &var.e);
+        codedefine(lx->fs, &var.e);
     }
     expect(lx, ';');
 }
@@ -1257,110 +1314,167 @@ static void letstm(Lexer *lx)
 
 /*
  * block ::= stm
- *         | stm block 
+ *         | block 
  */
 static void block(Lexer *lx)
 {
     while (!check(lx, '}') && !check(lx, TK_EOS))
         stm(lx);
-    expect(lx, '}');
 }
-
-
-// arglist ::= name
-//           | '...'
-//           | name ',' arglist
-// static void fnargs(Lexer *lx)
-// {
-//     do {
-//         if (match(fs, TOK_DOT_DOT_DOT)) {
-//             fs->fn->p.isvararg = 1;
-//             break;
-//         }
-//         fs->fn->p.arity++;
-//         name(fs, expectstr("Expect parameter name."));
-//         initlocal(fs, 0);
-//     } while (match(fs, TOK_COMMA));
-// }
 
 
 /* blockstm ::= '{' block '}' */
-static void blockstm(Lexer *lx)
+static void blockstm(Lexer *lx, int linenum)
 {
-    Scope s;
-    enterscope(lx->fs, &s, 0);
+    cr_lex_scan(lx); /* skip '{' */
+    Scope news;
+    startscope(lx->fs, &news, 0);
     block(lx);
-    leavescope(lx->fs);
+    endscope(lx->fs);
+    expectmatch(lx, '}', '{', linenum);
 }
 
 
-// Create and parse a new FunctionState
-// static void fn(FunctionState *fs, FunctionType type)
+/* 
+ * argslist ::= id
+ *            | '...'
+ *            | id ',' argslist
+ */
+static void argslist(Lexer *lx)
+{
+    FunctionState *fs = lx->fs;
+    Function *fn = fs->fn;
+    int nargs = 0;
+    int isvararg = 0;
+    if (!check(lx, ')')) { /* have args ? */
+        do {
+            switch (lx->t.tk) {
+            case TK_IDENTIFIER: {
+                newlocal(lx, expect_id(lx), 0);
+                nargs++;
+                break;
+            }
+            case TK_DOTS: {
+                cr_lex_scan(lx);
+                isvararg = 1;
+                break;
+            }
+            default: cr_lex_syntaxerror(lx, "<identifier> or '...' expected");
+            }
+        } while (!isvararg && match(lx, ','));
+    }
+    adjustlocals(lx, nargs);
+    fn->arity = nargs;
+    if (isvararg)
+        setvararg(fs, nargs);
+    cr_code_reserveslots(fs, nargs);
+}
+
+
+/* emit closure instruction */
+static void codeclosure(Lexer *lx)
+{
+    FunctionState *fs = lx->fs;
+    cr_code_L(fs, OP_CLOSURE, fs->nfuncs);
+}
+
+
+/* funcbody ::= '(' arglist ')' block */
+static void funcbody(Lexer *lx, int linenum, int ismethod)
+{
+    FunctionState newfs;
+    Scope scope;
+    newfs.fn = cr_function_new(lx->ts);
+    newfs.fn->defline = linenum;
+    startfs(lx->fs, lx, &scope);
+    int matchline = lx->line; /* line where '(' is located */
+    expect(lx, '(');
+    if (ismethod) { /* is this class method ? */
+        newlocallit(lx, "self"); /* create 'self' */
+        adjustlocals(lx, 1); /* and initialize it */
+    }
+    argslist(lx);
+    expectmatch(lx, ')', '(', matchline);
+    expect(lx, ')');
+    matchline = lx->line; /* line where '{' is located */
+    expect(lx, '{');
+    block(lx);
+    expectmatch(lx, '}', '{', matchline);
+    codeclosure(lx);
+    endfs(&newfs);
+}
+
+
+/* 
+ * declname ::= '@' id
+ *            | id
+ */
+static OString *defname(Lexer *lx, ExpInfo *e)
+{
+    int mods = match(lx, '@') * bitmask(VARSTATIC);
+    OString *name = expect_id(lx);
+    int vidx = newvar(lx->fs, name, e, mods);
+    if (e->et == EXP_LOCAL) {
+        getlocal(lx->fs, vidx)->s.idx = vidx;
+        adjustlocals(lx, 1);
+    } else if (e->et == EXP_STATIC) {
+        definestatic(lx->fs, vidx);
+    }
+    return name;
+}
+
+
+/* fnstm ::= 'fn' funcname funcbody */
+static void fnstm(Lexer *lx, int linenum)
+{
+    ExpInfo var;
+    cr_lex_scan(lx); /* skip 'fn' */
+    defname(lx, &var);
+    funcbody(lx, linenum, 0);
+    codedefine(lx->fs, &var);
+}
+
+
+// static void method(FunctionState *fs)
 // {
-//     FunctionState Fnew;
-//     Scope globscope, S;
-//     startfs(fs->ts, &Fnew, &globscope, fs->cclass, type, fs);
-//     Fnew.fn->p.source = fs->fn->p.source; // source is same
-//     startscope(&Fnew, &S, 0, 0); // no need to end this scope
-//     expect(&Fnew, TOK_LPAREN, expectstr("Expect '(' after function name."));
-//     if (!check(&Fnew, TOK_RPAREN))
-//         fnargs(&Fnew);
-//     if (Fnew.fn->p.isvararg)
-//         expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after '...'."));
+//     TValue identifier;
+//     int idx;
+// 
+//     expect(fs, TOK_FN, expectstr("Expect 'fn'."));
+//     expect(fs, TOK_IDENTIFIER, expectstr("Expect method name."));
+//     identifier = tokintostr(fs->ts, &PREVT(fs));
+//     idx = make_constant(fs, identifier);
+//     fs->tag = id2omtag(fs->ts, asstring(identifier));
+//     funcbody(fs, FN_METHOD);
+//     if (fs->tag != -1)
+//         CODEOP(fs, OP_OVERLOAD, fs->tag - SS_INIT);
 //     else
-//         expect(&Fnew, TOK_RPAREN, expectstr("Expect ')' after parameters."));
-//     int arity = Fnew.fn->p.arity;
-//     int expected = ominfo[fs->tag].arity;
-//     if (cr_unlikely(isom(fs) && expected != arity)) {
-//         error(fs, comperrors[CE_OMSIG], fs->ts->faststatic[fs->tag]->storage, expected, arity);
-//         Fnew.lexer->panic = 0; // clear panic flag do not sync yet
-//     }
-//     expect(&Fnew, TOK_LBRACE, expectstr("Expect '{' before function body."));
-//     block(&Fnew); // body
-//     Function *fn = parse_end(&Fnew);
-//     CODEOP(fs, OP_CLOSURE, make_constant(fs, OBJ_VAL(fn)));
-//     for (int i = 0; i < fn->p.upvalc; i++) {
-//         UpValue *upval = Array_Upvalue_index(Fnew.upvalues, i);
-//         CODE(fs, upval->local ? 1 : 0);
-//         CODEL(fs, upval->idx);
-//     }
-//     endfs(&Fnew);
+//         CODEOP(fs, OP_METHOD, idx);
 // }
 
 
-/* fnstm ::= 'fn' id '(' fnargs ')' blockstm */
-static void fnstm(Lexer *lx)
+static void classbody(Lexer *lx, OString *name)
 {
-    OString *id = expect_id(lx);
-    int idx = name(fs, expectstr("Expect function name."));
-    if (fs->S->depth > 0)
-        initlocal(fs, 0); // initialize to allow recursion
-    fn(fs, FN_FUNCTION);
-    ExpInfo _; // dummy
-    if (fs->S->depth == 0)
-        INIT_GLOBAL(fs, idx, 0, &_);
+    ClassState cs;
+    ParserState *ps = lx->ps;
+    { cs.prev = ps->cs; cs.super = 0; ps->cs = &cs; } /* cs */
+    cr_code_class(lx->fs, name);
+    if (match(lx, '<')) { /* class inherits ? */
+    }
+    int matchline = lx->line;
+    expect(lx, '{');
+    expectmatch(lx, '}', '{', matchline);
 }
 
-
-static void method(FunctionState *fs)
-{
-    TValue identifier;
-    int idx;
-
-    expect(fs, TOK_FN, expectstr("Expect 'fn'."));
-    expect(fs, TOK_IDENTIFIER, expectstr("Expect method name."));
-    identifier = tokintostr(fs->ts, &PREVT(fs));
-    idx = make_constant(fs, identifier);
-    fs->tag = id2omtag(fs->ts, asstring(identifier));
-    fn(fs, FN_METHOD);
-    if (fs->tag != -1)
-        CODEOP(fs, OP_OVERLOAD, fs->tag - SS_INIT);
-    else
-        CODEOP(fs, OP_METHOD, idx);
-}
 
 static void classstm(Lexer *lx)
 {
+    ExpInfo var;
+    cr_lex_scan(lx); /* skip 'class' */
+    OString *name = defname(lx, &var);
+    classbody(lx, name);
+    codedefine(lx->fs, &var);
+    /**/
     expect(fs, TOK_IDENTIFIER, expectstr("Expect class name."));
     Token class_name = PREVT(fs);
     TValue identifier = tokintostr(fs->ts, &class_name);
@@ -1583,7 +1697,7 @@ static void switchstm(FunctionState *fs)
         error(fs, comperrors[CE_SWRBR]);
     Array_cr_int_free(&fts, NULL);
     SwitchState_free(&swstate);
-    leavescope(fs);
+    endscope(fs);
     CODE(fs, OP_POP); // pop switch expression
     patchbreaklist(fs);
     endbreaklist(fs);
@@ -1802,7 +1916,7 @@ static void foreachstm(FunctionState *fs)
     CODEPOP(fs, vars);
     codeloop(fs, (fs)->cflow.innerlstart);
     patchjmp(fs, endjmp);
-    leavescope(fs);
+    endscope(fs);
     patchbreaklist(fs);
     endbreaklist(fs);
     endloop(fs, lstart, ldepth);
@@ -1820,7 +1934,7 @@ static void loopstm(FunctionState *fs)
         // @TODO: Implement optimizations
     }
     codeloop(fs, (fs)->cflow.innerlstart);
-    leavescope(fs);
+    endscope(fs);
     patchbreaklist(fs);
     endbreaklist(fs);
     endloop(fs, lstart, ldepth);
@@ -1932,6 +2046,7 @@ static void dot(FunctionState *fs, ExpInfo *E)
  */
 static void stm(Lexer *lx)
 {
+    int linenum = lx->line;
     switch (lx->t.tk) {
         case TK_LET:
             cr_lex_scan(lx); /* skip 'let' */
@@ -1939,7 +2054,7 @@ static void stm(Lexer *lx)
             break;
         case TK_FN:
             cr_lex_scan(lx); /* skip 'fn' */
-            fnstm(lx);
+            fnstm(lx, linenum);
             break;
         case TK_CLASS:
             cr_lex_scan(lx); /* skip 'class' */

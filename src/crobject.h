@@ -266,12 +266,14 @@ typedef struct UpVal {
 
 
 
-/* static function variable */
+/* 
+ * Static variable; 
+ * top-level function private global variable. 
+ */
 typedef union SVar {
     struct {
         TValueFields;
-        int idx; /* 'svars' index */
-        OString *name; /* debug information */
+        OString *name;
     } s;
     TValue val;
 } SVar;
@@ -312,29 +314,22 @@ typedef struct Function {
     GCObject *gclist;
     OString *name; /* function name */
     OString *source; /* source name */
-    struct Function **fn; /* functions defined inside of this function */
-    TValue *constants; /* constant values */
-    SVar *svars; /* static (private) variables */
+    struct Function **funcs; /* functions defined inside of this function */
+    TValue *k; /* constant values */
+    SVar *statics;
     Instruction *code; /* bytecode */
     LineInfo *linfo; /* lines information for instructions */
     LVarInfo *locals; /* debug information for local variables */
     UpValInfo *upvals; /* debug information for upvalues */
-    int nfn; /* number of elements in 'fn' */
-    int nconst; /* number of elements in 'constants' */
-    int nsvars; /* number of elements in 'svars' */
-    int ncode; /* number of elements in 'code' */
-    int nlinfo; /* number of elements in 'linfo' */
-    int nlocals; /* number of elements in 'locals' */
-    int nupvals; /* number of elements in 'upvals' */
     int sizefn; /* size of 'fn' */
-    int sizeconst; /* size of 'constants' */
-    int sizesvars; /* size of 'svars' */
+    int sizek; /* size of 'constants' */
+    int sizestatics; /* size of 'statics' */
     int sizecode; /* size of 'code' */
     int sizelinfo; /* size of 'linfo' */
     int sizelocals; /* size of 'locals' */
     int sizeupvals; /* size of 'upvals' */
     int maxstack; /* max stack size for this function */
-    int arity;
+    int arity; /* function argument count */
     int defline; /* function definition line */
     int deflastline; /* function definition end line */
 } Function;

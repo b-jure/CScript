@@ -129,10 +129,12 @@ typedef struct ExpInfo {
 
 
 /* variable kind (stored in 'mod') */
-#define VARREGULAR      0 /* regular */
-#define VARCONST        1 /* constant */
-#define VARSTATIC       2 /* static */
-#define VARTBC          3 /* to-be-closed */
+#define VARCONST        0 /* constant */
+#define VARSTATIC       1 /* static */
+#define VARTBC          2 /* to-be-closed */
+
+/* bit mask of all valid modifiers in 'mod' */
+#define VARBITMASK      (bit2mask(VARCONST, VARSTATIC) | bitmask(VARTBC))
 
 
 /* active local variable compiler information */
@@ -174,12 +176,7 @@ typedef struct ParserState {
         int len;
         int size;
         LVar *arr;
-    } lvars;
-    struct {
-        int len;
-        int size;
-        BreakList *list;
-    } breaks;
+    } lvars; /* local vars */
     struct ClassState *cs;
 } ParserState;
 
@@ -191,16 +188,25 @@ typedef struct FunctionState {
     struct FunctionState *prev; /* implicit linked-list */
     struct Lexer *lx; /* lexer */
     struct Scope *scope; /* scope information */
+    struct Scope *loopscope; /* innermost loop scope */
+    struct Scope *switchscope; /* innermost switch scope */
+    int loopstart; /* innermost loop start offset */
     int sp; /* first free compiler stack index */
-    int activestatics; /* number of active static variables */
-    int firststatic; /* index of first static in 'svars' ('Function') */
     int activelocals; /* number of active local variables */
-    int firstlocal; /* index of first local in 'lvars' ('ParserState') */
-    int firstbreak; /* index of first break in 'CFInfo' ('ParserState') */
-    int innerloopstart; /* innermost loop start offset */
-    int innerloopdepth; /* innermost loop scope depth */
-    int innerswitchdepth; /* innermost switch scope depth */
-    cr_ubyte close; /* true if needs to close upvalues before returning */
+    int firstlocal; /* index of first local in 'lvars' */
+    int nfuncs; /* number of elements in 'funcs' */
+    int nk; /* number of elements in 'k' */
+    int nstatics; /* number of elements in 'statics' */
+    int pc; /* number of elements in 'code' (equialent to 'ncode') */
+    int nlinfo; /* number of elements in 'linfo' */
+    int nlocals; /* number of elements in 'locals' */
+    int nupvals; /* number of elements in 'upvals' */
+    struct {
+        int len; /* number of elements in 'list' */
+        int size; /* size of 'list' */
+        BreakList *list; /* list of break offsets for backpatching */
+    } brks; /* 'break' statement 2D list */
+    cr_ubyte needclose; /* true if needs to close upvalues before returning */
 } FunctionState;
 
 
