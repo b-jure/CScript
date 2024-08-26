@@ -47,7 +47,7 @@
 /* get the current white bit */
 #define cr_gc_white(gc)		((gc)->whitebit & WHITEBITS)
 
-/* get the other white bit (not the current one) */
+/* get the other white bit */
 #define whitexor(gc)		((gc)->whitebit ^ WHITEBITS)
 
 /* mark object to be finalized */

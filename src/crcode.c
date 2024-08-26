@@ -49,7 +49,7 @@ static void addlineinfo(FunctionState *fs, Function *f, int line)
 
 
 /* emit instruction 'i' */
-static inline int code(FunctionState *fs, Instruction i)
+int cr_code(FunctionState *fs, Instruction i)
 {
     Function *fn = fs->fn;
     cr_mem_growvec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, INT_MAX, "code");
@@ -72,7 +72,7 @@ static int Sarg(FunctionState *fs, Function *f, int arg)
 int cr_code_S(FunctionState *fs, Instruction i, int a)
 {
     cr_assert(arg <= MAXSHRTARGSIZE);
-    int offset = code(fs, i);
+    int offset = cr_code(fs, i);
     Sarg(fs, fs->fn, a);
     return offset;
 }
@@ -83,7 +83,7 @@ static int Larg(FunctionState *fs, Function *f, int idx)
 {
     cr_mem_ensurevec(fs->lx->ts, f->code, f->sizecode, fs->pc, 3, INT_MAX,
                      "code");
-    setbytes(f->code, idx, 3);
+    set3bytes(f->code, idx);
     fs->pc += 3;
     return fs->pc - 3;
 }
@@ -93,7 +93,7 @@ static int Larg(FunctionState *fs, Function *f, int idx)
 int cr_code_L(FunctionState *fs, Instruction i, int a)
 {
     cr_assert(a <= MAXLONGARGSIZE);
-    int offset = code(fs, i);
+    int offset = cr_code(fs, i);
     Larg(fs, fs->fn, a);
     return offset;
 }
@@ -231,7 +231,7 @@ void cr_code_setreturns(FunctionState *fs, ExpInfo *e, int nreturns)
 int cr_code_nil(FunctionState *fs, int n)
 {
     if (n == 1)
-        return code(fs, OP_NIL);
+        return cr_code(fs, OP_NIL);
     else
         return cr_code_L(fs, OP_NILN, n);
 }
@@ -240,7 +240,7 @@ int cr_code_nil(FunctionState *fs, int n)
 int cr_code_pop(FunctionState *fs, int n)
 {
     if (n == 1)
-        return code(fs, OP_POP);
+        return cr_code(fs, OP_POP);
     else
         return cr_code_L(fs, OP_POPN, n);
 }
@@ -271,9 +271,19 @@ int cr_code_call(FunctionState *fs, int base, int nparams, int nreturns)
 }
 
 
-int cr_code_class(FunctionState *fs, OString *name)
+void cr_code_class(FunctionState *fs, ExpInfo *e)
 {
-    return cr_code_L(fs, OP_CLASS, stringK(fs, name));
+    cr_assert(e->et == EXP_STRING);
+    e->u.info = cr_code_L(fs, OP_CLASS, stringK(fs, e->u.str));
+    e->et = EXP_FINEXPR;
+}
+
+
+void cr_code_method(FunctionState *fs, ExpInfo *e)
+{
+    cr_assert(e->et == EXP_STRING);
+    e->u.info = cr_code_L(fs, OP_METHOD, stringK(fs, e->u.str));
+    e->et = EXP_FINEXPR;
 }
 
 
@@ -356,7 +366,7 @@ void cr_code_storevar(FunctionState *fs, ExpInfo *var)
     }
     case EXP_INDEXED: {
         freeslots(fs, 2); /* receivier + key */
-        var->u.info = code(fs, OP_SETINDEX);
+        var->u.info = cr_code(fs, OP_SETINDEX);
         break;
     }
     case EXP_INDEXSTR: {
@@ -418,7 +428,7 @@ static int dischargevars(FunctionState *fs, ExpInfo *e)
     }
     case EXP_INDEXED: {
         freeslots(fs, 2); /* receiver, key */
-        e->u.info = code(fs, OP_GETINDEX);
+        e->u.info = cr_code(fs, OP_GETINDEX);
         break;
     }
     case EXP_INDEXSTR: {
@@ -433,7 +443,7 @@ static int dischargevars(FunctionState *fs, ExpInfo *e)
     }
     case EXP_INDEXSUPER: {
         freeslots(fs, 3); /* 'self', 'super', key */
-        e->u.info = code(fs, OP_GETSUPIDX);
+        e->u.info = cr_code(fs, OP_GETSUPIDX);
         break;
     }
     case EXP_INDEXSUPERSTR: {
@@ -522,11 +532,11 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e)
         break;
     }
     case EXP_FALSE: {
-        e->u.info = code(fs, OP_FALSE);
+        e->u.info = cr_code(fs, OP_FALSE);
         break;
     }
     case EXP_TRUE: {
-        e->u.info = code(fs, OP_TRUE);
+        e->u.info = cr_code(fs, OP_TRUE);
         break;
     }
     case EXP_INT: {
@@ -657,7 +667,7 @@ static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op)
 {
     cr_code_exp2stack(fs, e);
     cr_assert(e->et == EXP_FINEXPR);
-    e->u.info = code(fs, op);
+    e->u.info = cr_code(fs, op);
 }
 
 
@@ -675,7 +685,7 @@ static void codenot(FunctionState *fs, ExpInfo *e)
         break;
     }
     case EXP_FINEXPR: { /* 'e' already on stack */
-        e->u.info = code(fs, OP_NOT);
+        e->u.info = cr_code(fs, OP_NOT);
         break;
     }
     default: cr_unreachable();
@@ -705,7 +715,7 @@ void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr opr)
 }
 
 
-/* emit code jmp instruction */
+/* emit cr_code jmp instruction */
 static int codejmp(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 {
     cr_code_exp2stack(fs, e); /* ensure that condition 'e' is on stack */
@@ -713,10 +723,26 @@ static int codejmp(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 }
 
 
+/* emit unconditional jump instruction */
+void cr_code_jmp(FunctionState *fs, ExpInfo *e)
+{
+    e->u.info = codejmp(fs, e, OP_JMP);
+    e->et = EXP_JMP;
+}
+
+
+/* emit jump if false instructioon */
+void cr_code_jmpf(FunctionState *fs, ExpInfo *e, OpCode jfop)
+{
+    e->f = codejmp(fs, e, jfop);
+    e->et = EXP_JMP;
+}
+
+
 /* get 'pc' of jmp instruction destination */
 static int getjmp(FunctionState *fs, int pc)
 {
-    int offset = *getlarg0(&fs->fn->code[pc]);
+    int offset = getlarg0(&fs->fn->code[pc]);
     if (offset == NOJMP)
         return NOJMP;
     else
@@ -727,18 +753,19 @@ static int getjmp(FunctionState *fs, int pc)
 /* fix jmp instruction at 'pc' to jump to 'dest' */
 static void fixjmp(FunctionState *fs, int pc, int destpc)
 {
-    Instruction *jmp = &fs->fn->code[pc];
-    int offset = destpc - (pc + 1);
+    Instruction *pcjmp = &fs->fn->code[pc];
+    int offset = destpc - (pc + ARGLSIZE);
     if (cr_unlikely(!(0 <= offset && offset <= MAXLONGARGSIZE)))
-        cr_lex_syntaxerror(fs->lx, "control structure too long");
-    setlarg0(jmp, offset);
+        cr_parser_semerror(fs->lx, "control structure too long");
+    setlarg0(pcjmp, offset); /* patch it */
 }
 
 
 /* concatenate jmp label 'l2' into jmp label 'l1' */
 void cr_code_concatjmp(FunctionState *fs, int *l1, int l2)
 {
-    if (l2 == NOJMP) return;
+    if (l2 == NOJMP) 
+        return;
     if (*l1 == NOJMP) {
         *l1 = l2;
     } else {
@@ -751,10 +778,10 @@ void cr_code_concatjmp(FunctionState *fs, int *l1, int l2)
 }
 
 
-/* backpatch jump instruction at 'pc' */
+/* backpatch jump list at 'pc' */
 void cr_code_patchjmp(FunctionState *fs, int pc)
 {
-    int target = fs->pc; /* current 'pc' */
+    int target = currentPC(fs);
     while (pc != NOJMP) {
         int next = getjmp(fs, pc);
         fixjmp(fs, pc, target);
@@ -875,7 +902,7 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr)
     cr_assert(OP_ADD <= op && op <= OP_BXOR);
     cr_code_exp2stack(fs, e2); /* ensure e2 is on stack */
     freeslots(fs, 1); /* binary expression produces a single value */
-    e1->u.info = code(fs, op);
+    e1->u.info = cr_code(fs, op);
     e1->et = EXP_FINEXPR;
     cr_code_S(fs, OP_MBIN, op);
 }
@@ -992,7 +1019,7 @@ emit:
         e1->u.info = codeLS(fs, op, immediate, isflt);
     } else {
         op = binopr2op(opr, OPR_LT, OP_LT);
-        e1->u.info = code(fs, op);
+        e1->u.info = cr_code(fs, op);
         freeslots(fs, 1);
     }
     e1->et = EXP_FINEXPR;

@@ -10,13 +10,13 @@
 
 
 /* check if string has hash */
-#define hashash(s)              testbit((s)->bits, STRHASHASH)
+#define shashash(s)              testbit((s)->bits, STRHASHBIT)
 
 /* check if string is reserved keyword */
-#define iskeyword(s)            testbit((s)->bits, STRKEYWORD)
+#define siskeyword(s)            testbit((s)->bits, STRKWBIT)
 
 /* check if string is vtable method */
-#define isvtabmethod(s)         testbit((s)->bits, STRVTABMETHOD)
+#define sisvmtmethod(s)         testbit((s)->bits, STRVMTBIT)
 
 
 /* size of 'OString' object */

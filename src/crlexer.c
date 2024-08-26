@@ -101,7 +101,7 @@ void cr_lex_init(cr_State *ts)
     /* intern all keywords */
     for (i = 0; i < NUM_KEYWORDS; i++) {
         s = cr_string_new(ts, tkstr[i]);
-        s->bits = STRKEYWORD;
+        s->bits = bitmask(STRKWBIT);
         s->extra = i;
         cr_gc_fix(ts, obj2gco(s));
     }
@@ -530,7 +530,7 @@ readmore:
             } while (isalnum(lx->c));
             s = cr_lex_newstring(lx, lbptr(lx), lblen(lx));
             k->str = s;
-            if (iskeyword(s))
+            if (siskeyword(s))
                 return s->extra + FIRSTTK;
             return TK_IDENTIFIER;
         }

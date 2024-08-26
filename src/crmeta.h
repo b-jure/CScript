@@ -5,9 +5,8 @@
 #include "crobject.h"
 
 
-#define cr_meta_vgetv(ts,v,mt) \
+#define cr_meta_vget(ts,v,mt) \
 	(ttiso(v) ? cr_meta_get(ts, oval(v), mt) : NULL)
-
 
 
 CRI_FUNC void cr_meta_init(cr_State *ts);

@@ -19,9 +19,6 @@
 #include "crconf.h"
 #include "crstate.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
 
 #define cr_mem_rawmalloc(gs, s)		    (gs)->realloc(NULL, s, (gs)->udrealloc)
 #define cr_mem_rawrealloc(gs, p, s)   	(gs)->realloc(p, s, (gs)->udrealloc)
@@ -36,9 +33,8 @@
 /* Auxiliary to 'cr_mem_realloc' and 'cr_malloc'. */
 cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 {
-    GState *gs;
-
-    gs = GS(ts);
+    GState *gs = GS(ts);
+    UNUSED(osize);
     if (cantryagain(gs)) {
         cr_gc_full(ts, 1);
         return cr_mem_rawrealloc(gs, ptr, nsize);

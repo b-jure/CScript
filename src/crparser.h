@@ -34,6 +34,8 @@
 #define eisconstant(e)      ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
 #define eismulret(e)        ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
 #define eissuper(e)         ((e)->et == EXP_INDEXRAWSUP || (e)->et == EXP_INDEXSUP)
+#define eistrue(e)          ((e)->et >= EXP_TRUE && (e)->et <= EXP_K)
+#define eisfalse(e)         ((e)->et == EXP_NIL || (e)->et == EXP_FALSE)
 
 
 /* expression types */
@@ -149,12 +151,12 @@ typedef union LVar {
 
 
 
-/* vec for 'break' statements */
+/* list of jump instructions to patch */
 typedef struct BreakList {
     int len;
     int size;
     int *arr;
-} BreakList;
+} PatchList;
 
 
 
@@ -204,9 +206,10 @@ typedef struct FunctionState {
     struct {
         int len; /* number of elements in 'list' */
         int size; /* size of 'list' */
-        BreakList *list; /* list of break offsets for backpatching */
-    } brks; /* 'break' statement 2D list */
+        PatchList **list; /* list of patch lists */
+    } patches; /* 2Dlist */
     cr_ubyte needclose; /* true if needs to close upvalues before returning */
+    cr_ubyte laststmisret; /* last statement is 'return' */
 } FunctionState;
 
 

@@ -52,28 +52,32 @@
 
 
 /* get byte at offset 'o' from 'v' */
-#define getbyte(v,o)	(((v) >> ((o) * 8)) & 0xff)
+#define getbyte(v,o)	    (((v) >> ((o) * 8)) & 0xff)
+
+
+/* set 'src' byte at offset 'o' to 'v' */
+#define setbyte(src,o,v)      (*(cast_ubytep(src) + (o)) = (v))
 
 
 /* 
  * Get first 3 bytes (LE byte order) from 'p' 
- * casted to 'int'
+ * casted to 'int'.
  */
 #define get3bytes(p) \
     (cast_int(0) | \
-    ((*(cast_ubytep(p) + 2)) << 16) | \
-    ((*(cast_ubytep(p) + 1)) << 8) | \
-    (*cast_ubytep(p)))
+     ((*(cast_ubytep(p) + 2)) << 16) | \
+     ((*(cast_ubytep(p) + 1)) << 8) | \
+     (*cast_ubytep(p)))
 
 
 /* 
- * Set first 'n' (LE byte order) bytes from 'src'
- * (integer type) into 'dest' 
+ * Set first 3 (LE byte order) bytes from 'src'
+ * (integer type) into 'dest'.
  */
-#define setbytes(dest,src,n) \
-    { for (cr_ubyte i_ = 0; i_ < (n); i_++) \
-        *(cast_ubytep(dest) + i_) = getbyte(src, i_); }
-
+#define set3bytes(dest,src) \
+    { setbyte(dest, 0, getbyte(src, 0)); \
+      setbyte(dest, 1, getbyte(src, 1)); \
+      setbyte(dest, 2, getbyte(src, 2)); }
 
 
 /* check if 'c' is octal */

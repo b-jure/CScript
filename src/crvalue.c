@@ -108,9 +108,8 @@ cr_number cr_value_modnum(cr_State *ts, cr_number x, cr_number y)
 }
 
 
-
 /* number of bits in 'cr_integer' */
-#define INTBITS         (sizeof(cr_integer)*8)
+#define INTBITS         cast_int((sizeof(cr_integer)*8))
 
 
 /* shift 'x', 'y' times, in case of overflow return 0 */
@@ -144,7 +143,6 @@ static cr_number numarithm(cr_State *ts, cr_number x, cr_number y, int op)
 
 static cr_integer intarithm(cr_State *ts, cr_integer x, cr_integer y, int op)
 {
-    cr_integer i;
     switch(op) {
     case CR_OPADD: return cri_intop(+, x, y);
     case CR_OPSUB: return cri_intop(-, x, y);
@@ -259,6 +257,7 @@ void cr_value_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
  */
 cr_sinline int intLEnum(cr_State *ts, const TValue *v1, const TValue *v2)
 {
+    UNUSED(ts);
     return cri_numle(cast_num(ival(v1)), fval(v2));
 }
 
@@ -266,6 +265,7 @@ cr_sinline int intLEnum(cr_State *ts, const TValue *v1, const TValue *v2)
 /* check 'intLEnum' */
 cr_sinline int numLEint(cr_State *ts, const TValue *v1, const TValue *v2)
 {
+    UNUSED(ts);
     return cri_numle(fval(v1), cast_num(ival(v2)));
 }
 
@@ -306,30 +306,30 @@ int cr_value_orderLE(cr_State *ts, const TValue *v1, const TValue *v2)
 
 
 /* check 'intLEnum' */
-cr_sinline int intLTnum(cr_State *ts, const TValue *v1, const TValue *v2)
+cr_sinline int intLTnum(const TValue *v1, const TValue *v2)
 {
     return cri_numlt(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
-cr_sinline int numLTint(cr_State *ts, const TValue *v1, const TValue *v2)
+cr_sinline int numLTint(const TValue *v1, const TValue *v2)
 {
     return cri_numlt(fval(v1), cast_num(ival(v2)));
 }
 
 
 /* 'less than' ordering '<' on number values */
-cr_sinline int numLT(cr_State *ts, const TValue *v1, const TValue *v2)
+cr_sinline int numLT(const TValue *v1, const TValue *v2)
 {
     cr_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
         cr_integer i1 = ival(v1);
         if (ttisint(v2)) return (i1 <= ival(v2));
-        else return intLTnum(ts, v1, v2);
+        else return intLTnum(v1, v2);
     } else {
         cr_number n1 = fval(v1);
-        if (ttisint(v2)) return numLTint(ts, v1, v2);
+        if (ttisint(v2)) return numLTint(v1, v2);
         else return cri_numlt(n1, fval(v2));
     }
 }
@@ -349,7 +349,7 @@ cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2)
 int cr_value_orderLT(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     if (ttisnum(v1) && ttisnum(v2))
-        return numLT(ts, v1, v2);
+        return numLT(v1, v2);
     return otherLT(ts, v1, v2);
 }
 

@@ -7,11 +7,11 @@
 
 
 /* get current pc */
-#define codeoffset(fs)		((fs)->fn->ncode)
+#define currentPC(fs)		((fs)->pc)
 
 
 /* get constant of 'ExpInfo' */
-#define getconstant(fs,e)	(&(fs)->fn->constants[(e)->u.idx])
+#define getconstant(fs,e)	(&(fs)->fn->k[(e)->u.info])
 
 
 /* get pointer to instruction of 'ExpInfo' */
@@ -35,13 +35,17 @@
 #define MAXCODESIZE         MAXLONGARGSIZE
 
 
-/* gets first parameter */
+/* gets first arg pc */
 #define getarg(ip)		((ip) + INSTSIZE)
+
+/* get short/long argument pc */
+#define getspc(ip,o)            (getarg(ip) + ((o)*ARGSSIZE))
+#define getlpc(ip,o)            (getarg(ip) + ((o)*ARGLSIZE))
 
 
 /* get/set short parameter */
-#define getsarg(ip,o)		(getarg(ip) + ((o)*ARGSSIZE))
-#define setsarg(ip,o,v)		setbytes(getsarg(ip,o), v, ARGSSIZE);
+#define getsarg(ip,o)		cast_ubyte(*getspc(ip,o))
+#define setsarg(ip,o,v)		setbyte(getspc(ip,0), o, v);
 #define getsarg0(ip)            getsarg(ip,0)
 #define setsarg0(ip,v)          setsarg(ip,0,v)
 #define getsarg1(ip)            getsarg(ip,1)
@@ -51,8 +55,8 @@
 
 
 /* get/set long arg */
-#define getlarg(ip,o)		(getarg(ip) + ((o)*ARGLSIZE))
-#define setlarg(ip,o,v)		setbytes(getlarg(ip,o), v, ARGLSIZE)
+#define getlarg(ip,o)		get3bytes(getarg(ip) + ((o)*ARGLSIZE))
+#define setlarg(ip,o,v)		set3bytes(getlpc(ip,o), v)
 #define getlarg0(ip)            getlarg(ip,0)
 #define setlarg0(ip,v)          setlarg(ip,0,v)
 #define getlarg1(ip)            getlarg(ip,1)
@@ -118,6 +122,7 @@ OP_VARARG,      /* L    'load L-1 varargs' */
 OP_CLOSURE,     /* TODO */
 OP_CLASS,       /* TODO */
 OP_METHOD,      /* TODO */
+OP_OVERLOAD,    /* TODO */
 OP_POP,         /*      'pop value off the stack' */
 OP_POPN,        /* L    'pop L values off the stack' */
 
@@ -181,7 +186,7 @@ OP_NOT,          /* V       '!V' */
 OP_UNM,          /* V       '-V' */
 OP_BNOT,         /* V       '~V' */
 
-OP_EQL,          /* equality (preserve left operand) */
+OP_EQPRESERVE,   /* equality (preserve left operand) */
 
 OP_RANGEINT,     /* integer range; TODO */
 
@@ -189,8 +194,10 @@ OP_JMP,          /* L        'pc += L' */
 OP_JMPS,         /* L        'pc -= L' */
 OP_JF,           /* V L      'if (cr_isfalse(V)) pc += L' */
 OP_JFORPOP,      /* V L      'if (cr_isfalse(V)) pc += L; else pop V' */
+OP_JFPOP,        /* V L      'if (cr_isfalse(V)) pc += L; pop V' */
 OP_JT,           /* V L      'if (!cr_isfalse(V)) pc += L' */
 OP_JTORPOP,      /* V L      'if (!cr_isfalse(V)) pc += L; else pop V' */
+OP_JTPOP,        /* V L      'if (!cr_isfalse(V)) pc += L; pop V' */
 
 OP_CALL0,        /* call value with no arguments */
 OP_CALL1,        /* call value with a single argument */
@@ -245,6 +252,7 @@ OP_RET,          /* return with 2 or more values */
 #define CR_NUMOPS	(OP_RET + 1)
 
 
+CRI_FUNC int cr_code(FunctionState *fs, Instruction i);
 CRI_FUNC int cr_code_S(FunctionState *fs, Instruction i, int a);
 CRI_FUNC int cr_code_L(FunctionState *fs, Instruction i, int a);
 CRI_FUNC void cr_code_checkstack(FunctionState *fs, int n);
@@ -256,7 +264,8 @@ CRI_FUNC int cr_code_pop(FunctionState *fs, int n);
 CRI_FUNC int cr_code_ret(FunctionState *fs, int base, int nreturns);
 CRI_FUNC int cr_code_call(FunctionState *fs, int base, int nparams, 
                           int nreturns);
-CRI_FUNC int cr_code_class(FunctionState *fs, OString *name);
+CRI_FUNC void cr_code_class(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void cr_code_method(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var);
 CRI_FUNC void cr_code_defineglobal(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e);
@@ -266,6 +275,8 @@ CRI_FUNC void cr_code_getproperty(FunctionState *fs, ExpInfo *var,
 CRI_FUNC void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                               int super);
 CRI_FUNC void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
+CRI_FUNC void cr_code_jmp(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void cr_code_jmpf(FunctionState *fs, ExpInfo *e, OpCode jfop);
 CRI_FUNC void cr_code_concatjmp(FunctionState *fs, int *l1, int l2);
 CRI_FUNC void cr_code_patchjmp(FunctionState *fs, int pc);
 CRI_FUNC void cr_code_jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop);

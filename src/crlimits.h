@@ -150,8 +150,20 @@ typedef cr_ubyte Instruction;
  * It has to be power of 2, because of the hash table
  * implementation.
  */
-#if !defined(CRI_MINSTRTABSIZE)
+#if !defined(CRI_MINSTRHTABSIZE)
 #define CRI_MINSTRHTABSIZE	64
+#endif
+
+
+
+/*
+ * Initial size for hash tables excluding weak
+ * strings hash table.
+ * It has to be power of 2, because of the hash table
+ * implementation.
+ */
+#if !defined(CRI_MINHTABSIZE)
+#define CRI_MINHTABSIZE         8
 #endif
 
 
@@ -183,7 +195,7 @@ typedef cr_ubyte Instruction;
  * Maximum size for 'HTable'.
  * Make sure the value fits in 'INT_MAX'.
  */
-#if !defined(CRI_MAXTABSIZE)
+#if !defined(CRI_MAXHTABSIZE)
 #define CRI_MAXHTABSIZE		INT_MAX
 #endif
 
@@ -277,25 +289,25 @@ typedef cr_ubyte Instruction;
 
 
 /* @cast - cast expression 'e' as type 't'. */
-#define cast(t, e)	((t)(e))
+#define cast(t, e)	    ((t)(e))
 
-#define cast_node(e)	cast(Node*,(e))
-#define cast_ubyte(e)	cast(cr_ubyte,(e))
-#define cast_ubytep(e)  cast(cr_ubyte*,(e))
-#define cast_byte(e)	cast(cr_byte,(e))
-#define cast_num(e)	cast(cr_number,(e))
-#define cast_int(e)	cast(int,(e))
-#define cast_uint(e)	cast(uint,(e))
-#define cast_umem(e)	cast(cr_umem,(e))
-#define cast_mem(e)	cast(cr_mem,(e))
-#define cast_charp(e)   cast(char *,(e))
-#define cast_sizet(e)   cast(size_t,(e))
+#define cast_node(e)	    cast(Node*,(e))
+#define cast_ubyte(e)	    cast(cr_ubyte,(e))
+#define cast_ubytep(e)      cast(cr_ubyte*,(e))
+#define cast_byte(e)	    cast(cr_byte,(e))
+#define cast_num(e)	    cast(cr_number,(e))
+#define cast_int(e)	    cast(int,(e))
+#define cast_uint(e)	    cast(uint,(e))
+#define cast_umem(e)	    cast(cr_umem,(e))
+#define cast_mem(e)	    cast(cr_mem,(e))
+#define cast_charp(e)       cast(char *,(e))
+#define cast_sizet(e)       cast(size_t,(e))
 
 /* cast 'cr_integer' to 'cr_uinteger' */
-#define cri_castS2U(i)	((cr_uinteger)(i))
+#define cri_castS2U(i)	    ((cr_uinteger)(i))
 
 /* cast 'cr_uinteger' to 'cr_integer' */
-#define cri_castU2S(i)	((cr_integer)(i))
+#define cri_castU2S(i)	    ((cr_integer)(i))
 
 
 
@@ -306,22 +318,23 @@ typedef cr_ubyte Instruction;
 
 /* @cri_nummod - modulo 'a - floor(a/b)*b'. */
 #define cri_nummod(ts,a,b,m) \
-	{ (m) = cr_mathop(fmod)(a, b); \
+	{ (void)(ts); (m) = cr_mathop(fmod)(a, b); \
 	  if (((m) > 0) ? (b)<0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
 /* @cri_numdiv - float division. */
 #ifndef cri_numdiv
-#define cri_numdiv(ts, a, b)	((a) / (b))
+#define cri_numdiv(ts, a, b)	((void)(ts), (a)/(b))
 #endif
 
 /* @cri_numidiv - floor division (or division between integers). */
 #ifndef cri_numidiv
-#define cri_numidiv(ts, a, b)	(cr_mathop(floor)(cri_numdiv(a, b)))
+#define cri_numidiv(ts, a, b)	((void)(ts), cr_mathop(floor)(cri_numdiv(a, b)))
 #endif
 
 /* @cri_numpow - exponentiation. */
 #ifndef cri_numpow
-#define cri_numpow(ts, a, b)	((b) == 2 ? (a)*(a) : cr_mathop(pow)(a, b))
+#define cri_numpow(ts, a, b) \
+    ((void)(ts), (b) == 2 ? (a)*(a) : cr_mathop(pow)(a, b))
 #endif
 
 /*
@@ -331,10 +344,10 @@ typedef cr_ubyte Instruction;
  * @cri_numunm - negation.
  */
 #ifndef cri_numadd
-#define cri_numadd(ts, a, b) 	((a) + (b))
-#define cri_numsub(ts, a, b) 	((a) - (b))
-#define cri_nummul(ts, a, b) 	((a) * (b))
-#define cri_numunm(ts, a)	(-(a))
+#define cri_numadd(ts, a, b) 	((void)(ts), (a) + (b))
+#define cri_numsub(ts, a, b) 	((void)(ts), (a) - (b))
+#define cri_nummul(ts, a, b) 	(void)(ts), ((a) * (b))
+#define cri_numunm(ts, a)	((void)(ts), -(a))
 #endif
 
 /*
@@ -362,7 +375,7 @@ typedef cr_ubyte Instruction;
 
 /* @cri_numnot - logical complement. */
 #ifndef cri_numnot
-#define cri_numnot(ts, a)	(!(a))
+#define cri_numnot(ts, a)	((void)(ts), !(a))
 #endif
 
 

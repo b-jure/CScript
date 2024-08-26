@@ -28,12 +28,13 @@
 
 
 /* get line number of instruction ('pc') */
+// TODO
 int cr_debug_getfuncline(const Function *fn, int pc)
 {
     LineInfo *li;
     cr_assert(fn->lineinfo.len > 0);
     int l = 0;
-    int h = fn->nlinfo - 1;
+    int h = fn->sizelinfo - 1;
     int m = (h + l) << 1;
     while (l <= h) {
         li = &fn->linfo[m];
@@ -97,7 +98,6 @@ static void getfuncinfo(Closure *cl, cr_debuginfo *di)
         di->deflastline = -1;
         di->nparams = 0;
         di->isvararg = 1;
-        di->name = "?";
         di->type = "C";
     } else {
         di->nups = cl->crc.nupvalues;
@@ -106,8 +106,7 @@ static void getfuncinfo(Closure *cl, cr_debuginfo *di)
         di->deflastline = fn->deflastline;
         di->nparams = fn->arity;
         di->isvararg = fn->isvararg;
-        di->name = fn->name->bytes;
-        di->type = (fn->defline == 0) ? "main" : "Cript";
+        di->type = (fn->defline == 0) ? "main" : "Cscript";
     }
 }
 
@@ -136,6 +135,7 @@ static void getsrcinfo(Closure *cl, cr_debuginfo *di)
  */
 static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf, cr_debuginfo *di)
 {
+    UNUSED(ts); // TODO: remove this after DW_FNPUSH
     int bit;
     for (bit = 2; dbmask > 0; bit++) {
         switch (bit) {
@@ -256,5 +256,6 @@ cr_noret cr_debug_runerror(cr_State *ts, const char *fmt, ...)
 /* emit warning */
 void cr_debug_warn(cr_State *ts, const char *str)
 {
+    UNUSED(ts); UNUSED(str);
     // TODO: implement this + add warning function hook in API and 'GState'
 }

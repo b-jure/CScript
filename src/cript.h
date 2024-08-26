@@ -420,7 +420,6 @@ CR_API int cr_getstack(cr_State *ts, int level, cr_debuginfo *di);
 CR_API int cr_getinfo(cr_State *ts, int dbgmask, cr_debuginfo *di);
 
 struct cr_debuginfo {
-    const char *name; /* function name (declaration name in cript script) */
     const char *type; /* function type ('cript', 'main' or 'C') */
     const char *source; /* function source */
     size_t srclen; /* length of 'source' */

@@ -189,16 +189,16 @@ typedef struct HTable {
 
 
 /* bits for string 'bits' :) */
-#define STRHASHASH      (1<<0) /* string has hash */
-#define STRKEYWORD      (1<<1) /* string is keyword */
-#define STRVTABMETHOD       (1<<2) /* string is vtable method */
+#define STRHASHBIT      0 /* string has hash */
+#define STRKWBIT        1 /* keyword string */
+#define STRVMTBIT       2 /* string is a name of method in VMT */
 
 
 typedef struct OString {
     ObjectHeader;
-    cr_ubyte extra; /* extra information */
-    cr_ubyte bits; /* useful bits */
-    int len; /* excluding null terminator */
+    cr_ubyte extra; /* extra information (for bits) */
+    cr_ubyte bits; /* context bits */
+    size_t len; /* excluding null terminator */
     uint hash;
     char bytes[];
 } OString;
@@ -312,7 +312,6 @@ typedef struct Function {
     ObjectHeader;
     cr_ubyte isvararg;
     GCObject *gclist;
-    OString *name; /* function name */
     OString *source; /* source name */
     struct Function **funcs; /* functions defined inside of this function */
     TValue *k; /* constant values */
@@ -422,6 +421,9 @@ typedef union Closure {
 
 /* virtual method table */
 typedef TValue VMT[CR_NUM_META];
+
+/* number of elements in VMT */
+#define VMTELEMS     (sizeof(VMT)/sizeof(TValue))
 
 
 #define CR_VCLASS   makevariant(CR_TCLASS, 0)

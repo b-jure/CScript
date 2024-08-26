@@ -10,7 +10,7 @@
 
 void cr_meta_init(cr_State *ts)
 {
-    static const char *vtmnames[CR_NUM_META] = {
+    static const char *vmtnames[CR_NUM_META] = {
         "__init__", "__tostring__", "__getidx__", "__setidx__",
         "__gc__", "__defer__", "__add__", "__sub__", "__mul__",
         "__div__", "__mod__", "__pow__", "__not__", "__umin__",
@@ -18,8 +18,11 @@ void cr_meta_init(cr_State *ts)
         "__xor__", "__eq__", "__lt__", "__le__",
     };
     for (int i = 0; i < CR_NUM_META; i++) {
-        GS(ts)->vtmnames[i] = cr_string_new(ts, vtmnames[i]);
-        cr_gc_fix(ts, obj2gco(GS(ts)->vtmnames[i]));
+        OString *s = cr_string_new(ts, vmtnames[i]);
+        s->bits = bitmask(STRVMTBIT);
+        s->extra = i;
+        GS(ts)->vmtnames[i] = s;
+        cr_gc_fix(ts, obj2gco(GS(ts)->vmtnames[i]));
     }
 }
 
@@ -29,7 +32,8 @@ OClass *cr_meta_newclass(cr_State *ts, OString *id)
     OClass *cls = cr_gc_new(ts, sizeof(OClass), CR_VCLASS, OClass);
     cls->methods = NULL;
     cls->name = id;
-    memset(cls->vtable, 0, sizeof(cls->vtable) / sizeof(cls->vtable[0]));
+    for (uint i = 0; i < VMTELEMS; i++)
+        setnilval(&cls->vtable[i]);
     setsv2cls(ts, ts->stacktop.p++, cls);
     cls->methods = cr_htable_new(ts);
     ts->stacktop.p--;
@@ -74,6 +78,7 @@ UserData *cr_meta_newuserdata(cr_State *ts, size_t size, int nuv)
 /* get 'vtable' method */
 const TValue *cr_meta_get(cr_State *ts, const GCObject *o, int mt)
 {
+    UNUSED(ts);
     cr_assert(CR_META_INIT <= mt && mt < CR_NUM_META);
     switch (ott_(o)) {
     case CR_VCLASS: return &gco2cls(o)->vtable[mt];
@@ -102,10 +107,10 @@ static int callbinres(cr_State *ts, const TValue *v1, const TValue *v2,
                       SPtr res, int mt)
 {
     const TValue *selfarg = v1;
-    const TValue *method = cr_meta_vgetvtable(ts, v1, mt);
+    const TValue *method = cr_meta_vget(ts, v1, mt);
     if (!method) {
         selfarg = v2;
-        method = cr_meta_vgetvtable(ts, v2, mt);
+        method = cr_meta_vget(ts, v2, mt);
         if (!method) return 0;
     }
     cr_meta_callres(ts, selfarg, method, v1, v2, res);

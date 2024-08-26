@@ -341,9 +341,9 @@ typedef enum N2IMode {
 
 
 /* hash primitives */
-#define cr_value_hashint(i)     cast_uint(cri_castS2U((i)))
+#define cr_value_hashint(i)     cast_uint(cri_castS2U(i))
 #define cr_value_hashbool(b)    cast_uint((b) != 0)
-#define cr_value_hashp(p)       pointer2uint((p))
+#define cr_value_hashp(p)       pointer2uint(p)
 
 
 CRI_FUNC uint cr_value_hashnum(cr_number n);
