@@ -59,7 +59,7 @@
 /* token string literals (static strings) */
 static const char *tkstr[] = {
     "and", "break", "case", "continue", "class",
-    "default", "else", "false", "for", "foreach",
+    "default", "else", "false", "for", "each",
     "fn", "if", "in", "inherits", "nil", "or",
     "return", "super", "self", "switch", "true",
     "let", "while", "loop", "const", "static",

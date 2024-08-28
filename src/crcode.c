@@ -724,9 +724,9 @@ static int codejmp(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 
 
 /* emit unconditional jump instruction */
-void cr_code_jmp(FunctionState *fs, ExpInfo *e)
+void cr_code_jmp(FunctionState *fs, ExpInfo *e, OpCode jop)
 {
-    e->u.info = codejmp(fs, e, OP_JMP);
+    e->u.info = codejmp(fs, e, jop);
     e->et = EXP_JMP;
 }
 
@@ -779,14 +779,19 @@ void cr_code_concatjmp(FunctionState *fs, int *l1, int l2)
 
 
 /* backpatch jump list at 'pc' */
-void cr_code_patchjmp(FunctionState *fs, int pc)
+void cr_code_patch(FunctionState *fs, int pc, int target)
 {
-    int target = currentPC(fs);
     while (pc != NOJMP) {
         int next = getjmp(fs, pc);
         fixjmp(fs, pc, target);
         pc = next;
     }
+}
+
+
+void cr_code_patchtohere(FunctionState *fs, int pc)
+{
+    cr_code_patch(fs, pc, currentPC(fs));
 }
 
 

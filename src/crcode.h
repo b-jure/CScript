@@ -193,6 +193,7 @@ OP_RANGEINT,     /* integer range; TODO */
 OP_JMP,          /* L        'pc += L' */
 OP_JMPS,         /* L        'pc -= L' */
 OP_JF,           /* V L      'if (cr_isfalse(V)) pc += L' */
+OP_JFANDPOP,     /* V L      'if (cr_isfalse(V)) { pc += L; pop V }' */
 OP_JFORPOP,      /* V L      'if (cr_isfalse(V)) pc += L; else pop V' */
 OP_JFPOP,        /* V L      'if (cr_isfalse(V)) pc += L; pop V' */
 OP_JT,           /* V L      'if (!cr_isfalse(V)) pc += L' */
@@ -275,10 +276,11 @@ CRI_FUNC void cr_code_getproperty(FunctionState *fs, ExpInfo *var,
 CRI_FUNC void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                               int super);
 CRI_FUNC void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
-CRI_FUNC void cr_code_jmp(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void cr_code_jmp(FunctionState *fs, ExpInfo *e, OpCode jop);
 CRI_FUNC void cr_code_jmpf(FunctionState *fs, ExpInfo *e, OpCode jfop);
 CRI_FUNC void cr_code_concatjmp(FunctionState *fs, int *l1, int l2);
-CRI_FUNC void cr_code_patchjmp(FunctionState *fs, int pc);
+CRI_FUNC void cr_code_patch(FunctionState *fs, int pc, int target);
+CRI_FUNC void cr_code_patchtohere(FunctionState *fs, int pc);
 CRI_FUNC void cr_code_jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop);
 CRI_FUNC void cr_code_jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop);
 CRI_FUNC void cr_code_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);

@@ -206,7 +206,7 @@ typedef struct FunctionState {
     struct {
         int len; /* number of elements in 'list' */
         int size; /* size of 'list' */
-        PatchList **list; /* list of patch lists */
+        PatchList *list; /* list of patch lists */
     } patches; /* 2Dlist */
     cr_ubyte needclose; /* true if needs to close upvalues before returning */
     cr_ubyte laststmisret; /* last statement is 'return' */
