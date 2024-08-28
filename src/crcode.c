@@ -779,8 +779,7 @@ void cr_code_concatjmp(FunctionState *fs, int *l1, int l2)
 
 
 /* backpatch jump list at 'pc' */
-void cr_code_patch(FunctionState *fs, int pc, int target)
-{
+void cr_code_patch(FunctionState *fs, int pc, int target) {
     while (pc != NOJMP) {
         int next = getjmp(fs, pc);
         fixjmp(fs, pc, target);
@@ -789,8 +788,7 @@ void cr_code_patch(FunctionState *fs, int pc, int target)
 }
 
 
-void cr_code_patchtohere(FunctionState *fs, int pc)
-{
+void cr_code_patchtohere(FunctionState *fs, int pc) {
     cr_code_patch(fs, pc, currentPC(fs));
 }
 

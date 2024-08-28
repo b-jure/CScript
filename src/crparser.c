@@ -1859,7 +1859,7 @@ static void switchstm(Lexer *lx) {
 
 /* condition statement body for 'ifstm' and 'whilestm' */
 static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
-                     OpCode jfop, OpCode jop, int condpc, int clausepc)
+                     OpCode jfop, OpCode jop, int condpc, int endclausepc)
 {
     FunctionState *fs = lx->fs;
     DynContext endctx;
@@ -1870,7 +1870,7 @@ static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
     int isloop = scopeisloop(fs->scope);
     cr_assert(isloop == (jop == OP_JMPS));
     optaway = condistrue = 0;
-    endctx.pc = -1;
+    endctx.pc = NOJMP;
     if (condisctc && !(condistrue = eistrue(cond)))
         optaway = 1;
     else
@@ -1883,10 +1883,14 @@ static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
     } else {
         cr_code_jmp(fs, &jmp, jop);
         if (isloop) {
-            if (condistrue) /* infinite loop ? */
-                cr_code_patch(fs, jmp.u.info, bodypc);
-            else /* otherwise check expression again */
+            if (condistrue) { /* infinite loop ? */
+                if (endclausepc != NOJMP) /* 'for' loop ? */
+                    cr_code_patch(fs, jmp.u.info, endclausepc);
+                else /* must be while loop */
+                    cr_code_patch(fs, jmp.u.info, bodypc);
+            } else { /* otherwise check expression again */
                 cr_code_patch(fs, jmp.u.info, condpc);
+            }
         }
     }
     if (!condisctc)
@@ -1896,7 +1900,7 @@ static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
         if (!optaway && !condisctc)
             cr_code_patchtohere(fs, jmp.u.info);
     }
-    if (endctx.pc >= 0)
+    if (endctx.pc != NOJMP)
         loadctx(fs, &endctx);
 }
 
@@ -1912,7 +1916,7 @@ static void ifstm(Lexer *lx) {
     expect(lx, '(');
     expr(lx, &e);
     expect(lx, ')');
-    condbody(lx, &ctx, &e, OP_JFPOP, OP_JMP, NOJMP);
+    condbody(lx, &ctx, &e, OP_JFPOP, OP_JMP, NOJMP, NOJMP);
 }
 
 
@@ -1922,15 +1926,15 @@ static void ifstm(Lexer *lx) {
  * ------------------------------------------------------------------------- */
 
 
-typedef struct LSC { /* loop context */
-    struct LSC *prev;
+typedef struct LCTX { /* loop context */
+    struct LCTX *prev;
     Scope *loopscope;
     int loopstart;
-} LoopCtx;
+} LCTX;
 
 
 /* set loop scope context to current values */
-static void setloopctx(FunctionState *fs, LoopCtx *ctx) {
+static void initloopctx(FunctionState *fs, LCTX *ctx) {
     ctx->prev = NULL;
     ctx->loopscope = fs->loopscope;
     ctx->loopstart = fs->loopstart;
@@ -1938,8 +1942,8 @@ static void setloopctx(FunctionState *fs, LoopCtx *ctx) {
 
 
 /* store 'ctx' or load 'currctx' */
-static void handleloopctx(FunctionState *fs, LoopCtx *ctx, int store) {
-    static LoopCtx *currctx = { 0 };
+static void handleloopctx(FunctionState *fs, LCTX *ctx, int store) {
+    static LCTX *currctx = { 0 };
     if (store) { /* store 'ctx' */
         ctx->prev = currctx;
         currctx = ctx;
@@ -1952,9 +1956,10 @@ static void handleloopctx(FunctionState *fs, LoopCtx *ctx, int store) {
 }
 
 
-static void startloop(FunctionState *fs, Scope *s, LoopCtx *ctx) {
+/* start loop scope */
+static void startloop(FunctionState *fs, Scope *s, LCTX *ctx) {
     startscope(fs, s, CFLOOP);
-    setloopctx(fs, ctx);
+    initloopctx(fs, ctx);
     patchliststart(fs); /* for 'break' statement jumps */
     handleloopctx(fs, ctx, 1);
     fs->loopstart = currentPC(fs);
@@ -1962,6 +1967,7 @@ static void startloop(FunctionState *fs, Scope *s, LoopCtx *ctx) {
 }
 
 
+/* end loop scope */
 static void endloop(FunctionState *fs) {
     cr_assert(scopeisloop(fs->scope));
     handleloopctx(fs, NULL, 0);
@@ -1973,7 +1979,7 @@ static void endloop(FunctionState *fs) {
 static void whilestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     DynContext startctx;
-    LoopCtx lctx;
+    LCTX lctx;
     Scope s; /* new 'loopscope' */
     ExpInfo cond;
     cr_lex_scan(lx); /* skip 'while' */
@@ -1984,7 +1990,7 @@ static void whilestm(Lexer *lx) {
     expect(lx, '(');
     expr(lx, &cond);
     expectmatch(lx, ')', '(', matchline);
-    condbody(lx, &startctx, &cond, OP_JFANDPOP, OP_JMPS, pcexpr);
+    condbody(lx, &startctx, &cond, OP_JFANDPOP, OP_JMPS, pcexpr, NOJMP);
     endloop(fs);
 }
 
@@ -1995,7 +2001,8 @@ static void foreachloop(Lexer *lx) {
 }
 
 
-void forclause1(Lexer *lx) {
+/* 'for' loop initializer */
+void forinit(Lexer *lx) {
     if (!match(lx, ';')) {
         if (check(lx, TK_LET)) {
             letdecl(lx);
@@ -2007,7 +2014,8 @@ void forclause1(Lexer *lx) {
 }
 
 
-void forclause2(Lexer *lx, ExpInfo *e) {
+/* 'for' loop condition */
+void forcond(Lexer *lx, ExpInfo *e) {
     if (!match(lx, ';')) {
         expr(lx, e);
         codepresexp(lx->fs, e);
@@ -2016,7 +2024,8 @@ void forclause2(Lexer *lx, ExpInfo *e) {
 }
 
 
-void forclause3(Lexer *lx) {
+/* 'for' loop last clause */
+void forendclause(Lexer *lx) {
     if (!check(lx, ')'))
         exprstm(lx);
 }
@@ -2025,23 +2034,24 @@ void forclause3(Lexer *lx) {
 static void forloop(Lexer *lx) {
     FunctionState *fs = lx->fs;
     DynContext startctx;
-    LoopCtx lctx;
+    LCTX lctx;
     Scope s; /* new 'loopscope' */
     ExpInfo cond, jmp;
     cr_lex_scan(lx);
     startloop(fs, &s, &lctx);
     int matchline = lx->line;
     expect(lx, '(');
-    forclause1(lx); /* initializer */
+    forinit(lx);
     storectx(fs, &startctx);
     int condpc = currentPC(fs);
-    forclause2(lx, &cond); /* condition */
-    int clausepc = currentPC(fs);
+    forcond(lx, &cond);
     cr_code_jmp(fs, &jmp, OP_JMP);
-    forclause3(lx); /* last clause */
+    int endclausepc = currentPC(fs);
+    forendclause(lx);
     cr_code_patchtohere(fs, jmp.u.info);
     expectmatch(lx, ')', '(', matchline);
-    condbody(lx, &startctx, &cond, OP_JFPOP, OP_JMPS, condpc, clausepc);
+    condbody(lx, &startctx, &cond, OP_JFPOP, OP_JMPS, condpc, endclausepc);
+    endloop(fs);
 }
 
 
