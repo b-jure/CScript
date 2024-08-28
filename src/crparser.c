@@ -90,7 +90,6 @@ typedef struct DynContext {
     int nupvals;
     int nbrks;
     int needclose;
-    // TODO: scope stuff ?
 } DynContext;
 
 
@@ -124,19 +123,6 @@ static void loadctx(FunctionState *fs, DynContext *ctx) {
 }
 
 
-static void patchliststart(FunctionState *fs) {
-    cr_mem_growvec(fs->lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
-                   MAXLONGARGSIZE, "patch lists");
-    fs->patches.list[fs->patches.len++] = (PatchList){0};
-}
-
-
-static void patchlistend(FunctionState *fs) {
-    PatchList *list = &fs->patches.list[--fs->patches.len];
-    cr_mem_freearray(fs->lx->ts, list->arr, list->size);
-}
-
-
 static int patchlistpop(FunctionState *fs) {
     cr_assert(fs->patches.len > 0);
     PatchList *list = &fs->patches.list[fs->patches.len - 1];
@@ -159,6 +145,23 @@ static void patchlistaddjmp(FunctionState *fs, int jmp) {
 cr_sinline void resetpatchlist(FunctionState *fs) {
     cr_assert(fs->patches.len > 0);
     fs->patches.list[fs->patches.len - 1].len = 0;
+}
+
+
+static void patchliststart(FunctionState *fs) {
+    cr_mem_growvec(fs->lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
+                   MAXLONGARGSIZE, "patch lists");
+    fs->patches.list[fs->patches.len++] = (PatchList){0};
+}
+
+
+static void patchlistend(FunctionState *fs) {
+    PatchList *list = &fs->patches.list[--fs->patches.len];
+    int jmp; /* 'break' jmp */
+    while ((jmp = patchlistpop(fs)) != NOJMP)
+        cr_code_patchtohere(fs, jmp);
+    cr_assert(list->len == 0);
+    cr_mem_freearray(fs->lx->ts, list->arr, list->size);
 }
 
 
@@ -1753,15 +1756,12 @@ static void addfallthrujmp(FunctionState *fs) {
  * it, in order to enable more optimizations.
  */
 static int codepresexp(FunctionState *fs, ExpInfo *e) {
-    if (eisconstant(e)) {
-        ExpInfo pres = *e;
-        cr_code_exp2stack(fs, e);
+    ExpInfo pres = *e;
+    int isctc = eisconstant(e);
+    cr_code_exp2stack(fs, e);
+    if (isctc)
         *e = pres;
-        return 1;
-    } else {
-        cr_code_exp2stack(fs, e);
-        return 0;
-    }
+    return isctc;
 }
 
 
@@ -1857,7 +1857,7 @@ static void switchstm(Lexer *lx) {
  * IF statement
  * ------------------------------------------------------------------------- */
 
-/* condition statement body for 'ifstm' and 'whilestm' */
+/* condition statement body; magnum-opus of parsing loops and conditions */
 static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
                      OpCode jfop, OpCode jop, int condpc, int endclausepc)
 {
@@ -1865,7 +1865,7 @@ static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
     DynContext endctx;
     ExpInfo fjmp, jmp;
     int optaway, condistrue;
-    int condisctc = codepresexp(fs, cond);
+    int condisctc = eisconstant(cond);
     int bodypc = currentPC(fs);
     int isloop = scopeisloop(fs->scope);
     cr_assert(isloop == (jop == OP_JMPS));
@@ -1878,22 +1878,24 @@ static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
     stm(lx);
     if (optaway) {
         loadctx(fs, startctx);
+        resetpatchlist(fs);
     } else if (condisctc && fs->laststmisret) {
+        cr_assert(condistrue);
         storectx(fs, &endctx);
     } else {
         cr_code_jmp(fs, &jmp, jop);
-        if (isloop) {
-            if (condistrue) { /* infinite loop ? */
-                if (endclausepc != NOJMP) /* 'for' loop ? */
-                    cr_code_patch(fs, jmp.u.info, endclausepc);
-                else /* must be while loop */
-                    cr_code_patch(fs, jmp.u.info, bodypc);
-            } else { /* otherwise check expression again */
+        if (isloop) { /* loop body ? */
+            if (endclausepc != NOJMP) { /* 'for' loop ? */
+                cr_code_patch(fs, jmp.u.info, endclausepc);
+            } else if (condistrue) { /* 'while' loop with true ctcond ? */
+                cr_code_patch(fs, jmp.u.info, bodypc);
+                fs->loopstart = bodypc;
+            } else { /* else 'while' loop with unknown non-ctcond ? */
                 cr_code_patch(fs, jmp.u.info, condpc);
             }
         }
     }
-    if (!condisctc)
+    if (!optaway)
         cr_code_patchtohere(fs, fjmp.f);
     if (!isloop && match(lx, TK_ELSE)) {
         stm(lx);
@@ -1913,9 +1915,11 @@ static void ifstm(Lexer *lx) {
     ExpInfo e;
     cr_lex_scan(lx); /* skip 'if' */
     storectx(lx->fs, &ctx);
+    int matchline = lx->line;
     expect(lx, '(');
     expr(lx, &e);
-    expect(lx, ')');
+    codepresexp(lx->fs, &e);
+    expectmatch(lx, ')', '(', matchline);
     condbody(lx, &ctx, &e, OP_JFPOP, OP_JMP, NOJMP, NOJMP);
 }
 
@@ -1924,7 +1928,6 @@ static void ifstm(Lexer *lx) {
 /* -------------------------------------------------------------------------
  * WHILE statement
  * ------------------------------------------------------------------------- */
-
 
 typedef struct LCTX { /* loop context */
     struct LCTX *prev;
@@ -1943,7 +1946,7 @@ static void initloopctx(FunctionState *fs, LCTX *ctx) {
 
 /* store 'ctx' or load 'currctx' */
 static void handleloopctx(FunctionState *fs, LCTX *ctx, int store) {
-    static LCTX *currctx = { 0 };
+    static LCTX *currctx = NULL;
     if (store) { /* store 'ctx' */
         ctx->prev = currctx;
         currctx = ctx;
@@ -1962,14 +1965,15 @@ static void startloop(FunctionState *fs, Scope *s, LCTX *ctx) {
     initloopctx(fs, ctx);
     patchliststart(fs); /* for 'break' statement jumps */
     handleloopctx(fs, ctx, 1);
-    fs->loopstart = currentPC(fs);
     fs->loopscope = fs->scope;
+    fs->loopstart = currentPC(fs);
 }
 
 
 /* end loop scope */
 static void endloop(FunctionState *fs) {
     cr_assert(scopeisloop(fs->scope));
+    patchlistend(fs);
     handleloopctx(fs, NULL, 0);
     endscope(fs);
 }
@@ -1985,21 +1989,31 @@ static void whilestm(Lexer *lx) {
     cr_lex_scan(lx); /* skip 'while' */
     storectx(fs, &startctx);
     startloop(fs, &s, &lctx);
-    int matchline = lx->line;
     int pcexpr = currentPC(fs);
+    int matchline = lx->line;
     expect(lx, '(');
     expr(lx, &cond);
+    codepresexp(fs, &cond);
     expectmatch(lx, ')', '(', matchline);
     condbody(lx, &startctx, &cond, OP_JFANDPOP, OP_JMPS, pcexpr, NOJMP);
     endloop(fs);
 }
 
 
+/* -------------------------------------------------------------------------
+ * FOR EACH statement
+ * ------------------------------------------------------------------------- */
+
 static void foreachloop(Lexer *lx) {
-    UNUSED(lx);
-    // TODO
+    FunctionState *fs = lx->fs;
+    DynContext startctx;
+    LCTX lctx;
 }
 
+
+/* -------------------------------------------------------------------------
+ * FOR statement
+ * ------------------------------------------------------------------------- */
 
 /* 'for' loop initializer */
 void forinit(Lexer *lx) {
@@ -2025,9 +2039,25 @@ void forcond(Lexer *lx, ExpInfo *e) {
 
 
 /* 'for' loop last clause */
-void forendclause(Lexer *lx) {
-    if (!check(lx, ')'))
+void forendclause(Lexer *lx, ExpInfo *cond, int *clausepc) {
+    FunctionState *fs = lx->fs;
+    ExpInfo bodyjmp, loopjmp;
+    cr_assert(*clausepc == NOJMP);
+    if (check(lx, ')')) { /* no end clause ? */
+        return; /* convert to 'while' loop */
+    } else {
+        int infloop = eistrue(cond);
+        if (!infloop)
+            cr_code_jmp(fs, &bodyjmp, OP_JMP);
+        *clausepc = currentPC(fs);
         exprstm(lx);
+        if (!infloop) {
+            cr_code_jmp(fs, &loopjmp, OP_JMPS);
+            cr_code_patch(fs, loopjmp.u.info, fs->loopstart);
+            cr_code_patchtohere(fs, bodyjmp.u.info);
+        }
+        fs->loopstart = *clausepc;
+    }
 }
 
 
@@ -2036,8 +2066,7 @@ static void forloop(Lexer *lx) {
     DynContext startctx;
     LCTX lctx;
     Scope s; /* new 'loopscope' */
-    ExpInfo cond, jmp;
-    cr_lex_scan(lx);
+    ExpInfo cond;
     startloop(fs, &s, &lctx);
     int matchline = lx->line;
     expect(lx, '(');
@@ -2045,10 +2074,8 @@ static void forloop(Lexer *lx) {
     storectx(fs, &startctx);
     int condpc = currentPC(fs);
     forcond(lx, &cond);
-    cr_code_jmp(fs, &jmp, OP_JMP);
-    int endclausepc = currentPC(fs);
-    forendclause(lx);
-    cr_code_patchtohere(fs, jmp.u.info);
+    int endclausepc = NOJMP;
+    forendclause(lx, &cond, &endclausepc);
     expectmatch(lx, ')', '(', matchline);
     condbody(lx, &startctx, &cond, OP_JFPOP, OP_JMPS, condpc, endclausepc);
     endloop(fs);
