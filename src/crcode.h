@@ -18,7 +18,7 @@
 #define getinstruction(fs,e)	(&(fs)->fn->code[(e)->u.info])
 
 
-/* instruction and arg sizes (bytes) */
+/* instruction and argument sizes (bytes) */
 #define INSTSIZE	    1
 #define ARGSSIZE	    INSTSIZE
 #define ARGLSIZE	    3
@@ -36,33 +36,21 @@
 
 
 /* gets first arg pc */
-#define getarg(ip)		((ip) + INSTSIZE)
+#define GETARG(ip)		((ip) + INSTSIZE)
 
 /* get short/long argument pc */
-#define getspc(ip,o)            (getarg(ip) + ((o)*ARGSSIZE))
-#define getlpc(ip,o)            (getarg(ip) + ((o)*ARGLSIZE))
+#define GETPC_S(ip,o)            (GETARG(ip) + ((o)*ARGSSIZE))
+#define GETPC_L(ip,o)            (GETARG(ip) + ((o)*ARGLSIZE))
 
 
 /* get/set short parameter */
-#define getsarg(ip,o)		cast_ubyte(*getspc(ip,o))
-#define setsarg(ip,o,v)		setbyte(getspc(ip,0), o, v);
-#define getsarg0(ip)            getsarg(ip,0)
-#define setsarg0(ip,v)          setsarg(ip,0,v)
-#define getsarg1(ip)            getsarg(ip,1)
-#define setsarg1(ip,v)          setsarg(ip,1,v)
-#define getsarg2(ip)            getsarg(ip,2)
-#define setsarg2(ip,v)          setsarg(ip,2,v)
+#define GETARG_S(ip,o)		cast_ubyte(*GETPC_S(ip,o))
+#define SETARG_S(ip,o,v)	setbyte(GETPC_S(ip,0), o, v);
 
 
 /* get/set long arg */
-#define getlarg(ip,o)		get3bytes(getarg(ip) + ((o)*ARGLSIZE))
-#define setlarg(ip,o,v)		set3bytes(getlpc(ip,o), v)
-#define getlarg0(ip)            getlarg(ip,0)
-#define setlarg0(ip,v)          setlarg(ip,0,v)
-#define getlarg1(ip)            getlarg(ip,1)
-#define setlarg1(ip,v)          setlarg(ip,1,v)
-#define getlarg2(ip)            getlarg(ip,2)
-#define setlarg2(ip,v)          setlarg(ip,2,v)
+#define GETARG_L(ip,o)		get3bytes(GETARG(ip) + ((o)*ARGLSIZE))
+#define SETARG_L(ip,o,v)	set3bytes(GETPC_L(ip,o), v)
 
 
 /* value indicating there is no jmp label */
@@ -240,8 +228,8 @@ OP_SETVTABLE,    /* set vtable method */
 OP_INHERIT,      /* inherit from class */
 OP_CALLSTART,    /* mark start of call values */
 OP_RETSTART,     /* mark start of return values */
-OP_FOREACH_PREP, /* prepare foreach loop */
-OP_FOREACH,      /* run foreach loop */
+OP_FORPREP,     /* prepare foreach loop */
+OP_FORLOOP,      /* run foreach loop */
 
 OP_RET0,         /* return with no values */
 OP_RET1,         /* return with a single value */

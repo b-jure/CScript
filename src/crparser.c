@@ -57,9 +57,9 @@
 
 
 /* 'cfbits' */
-#define CFLOOP      1
-#define CFGLOOP     2
-#define CFSWITCH    4
+#define CFLOOP      1 /* 'for' loop */
+#define CFGLOOP     2 /* 'for each' (generic) loop */
+#define CFSWITCH    4 /* 'switch' */
 
 /* test 'cfbits' */
 #define scopeisloop(s)      testbit((s)->cfbits, CFLOOP)
@@ -78,7 +78,7 @@ typedef struct Scope {
 
 
 /* dynamic data context (for optimizations) */
-typedef struct DynContext {
+struct DynCtx {
     int loopstart;
     int sp;
     int nfuncs;
@@ -90,10 +90,10 @@ typedef struct DynContext {
     int nupvals;
     int nbrks;
     int needclose;
-} DynContext;
+};
 
 
-static void storectx(FunctionState *fs, DynContext *ctx) {
+static void storectx(FunctionState *fs, struct DynCtx *ctx) {
     ctx->loopstart = fs->loopstart;
     ctx->sp = fs->sp;
     ctx->nfuncs = fs->nfuncs;
@@ -108,7 +108,7 @@ static void storectx(FunctionState *fs, DynContext *ctx) {
 }
 
 
-static void loadctx(FunctionState *fs, DynContext *ctx) {
+static void loadctx(FunctionState *fs, struct DynCtx *ctx) {
     fs->loopstart = ctx->loopstart;
     fs->sp = ctx->sp;
     fs->nfuncs = ctx->nfuncs;
@@ -1139,10 +1139,10 @@ static void checkconst(Lexer *lx, ExpInfo *var) {
  * Used to chain variables on the left side of
  * the assignment.
  */
-typedef struct LHS {
+struct LHS {
     struct LHS *prev;
     ExpInfo e;
-} LHS;
+};
 
 
 /* adjust left and right side of assignment */
@@ -1168,11 +1168,11 @@ static void adjustassign(Lexer *lx, int left, int right, ExpInfo *e) {
 
 
 /* auxiliary function for multiple variable assignment */
-static void assign(Lexer *lx, LHS *lhs, int nvars) {
+static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
     expect_cond(lx, eisvar(&lhs->e), "expect variable");
     checkconst(lx, &lhs->e);
     if (match(lx, ',')) { /* more vars ? */
-        LHS var;
+        struct LHS var;
         var.prev = lhs;
         suffixedexpr(lx, &var.e);
         entercstack(lx);
@@ -1199,14 +1199,15 @@ static void assign(Lexer *lx, LHS *lhs, int nvars) {
  *           | varlist '=' explist
  */
 static void exprstm(Lexer *lx) {
-    LHS var;
+    struct LHS var;
     suffixedexpr(lx, &var.e);
     if (check(lx, '=') || check(lx, ',')) {
         var.prev = NULL;
         assign(lx, &var, 1);
     } else {
         expect_cond(lx, var.e.et == EXP_CALL, "syntax error");
-        setlarg0(getinstruction(lx->fs, &var.e), 1);
+        Instruction *call = getinstruction(lx->fs, &var.e);
+        SETARG_L(call, 0, 1);
     }
 }
 
@@ -1233,7 +1234,8 @@ static int getmod(Lexer *lx) {
 
 /* get all type modifier */
 static int getmodifiers(Lexer *lx, const char *type, const char *name) {
-    if (!match(lx, '<')) return 0;
+    if (!match(lx, '<')) 
+        return 0;
     int bmask = 0;
     do {
         int bit = getmod(lx);
@@ -1304,10 +1306,10 @@ static void closedecl(FunctionState *fs, int nvars, int *tbc, int vidx,
 
 
 /* auxiliary for assignment of multiple variable definitions */
-static void assigndefine(Lexer *lx, LHS *lhs, int *tbc, int nvars) {
+static void assigndefine(Lexer *lx, struct LHS *lhs, int *tbc, int nvars) {
     FunctionState *fs = lx->fs;
     if (match(lx, ',')) { /* more ids ? */
-        LHS var;
+        struct LHS var;
         var.prev = lhs;
         OString *name = expect_id(lx);
         int mods = getmodifiers(lx, "variable", getstrbytes(name));
@@ -1336,7 +1338,7 @@ static void assigndefine(Lexer *lx, LHS *lhs, int *tbc, int nvars) {
 static void letdecl(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int tbc = -1; /* -1 indicates there are no tbc variables */
-    LHS var;
+    struct LHS var;
     cr_lex_scan(lx); /* skip 'let' */
     OString *name = expect_id(lx);
     int mods = getmodifiers(lx, "variable", getstrbytes(name));
@@ -1771,8 +1773,8 @@ static int codepresexp(FunctionState *fs, ExpInfo *e) {
  *              | stm switchbody
  *              | empty
  */
-static void switchbody(Lexer *lx, SwitchState *ss, DynContext *ctx) {
-    DynContext endctx;
+static void switchbody(Lexer *lx, SwitchState *ss, struct DynCtx *ctx) {
+    struct DynCtx endctx;
     FunctionState *fs = lx->fs;
     int jmp = NOJMP;
     endctx.pc = ctx->pc;
@@ -1828,7 +1830,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, DynContext *ctx) {
 static void switchstm(Lexer *lx) {
     SwitchState ss;
     FunctionState *fs = lx->fs;
-    DynContext ctx;
+    struct DynCtx ctx;
     Scope *oldswitchscope = fs->switchscope;
     Scope s; /* switch scope */
     initss(&ss);
@@ -1858,11 +1860,11 @@ static void switchstm(Lexer *lx) {
  * ------------------------------------------------------------------------- */
 
 /* condition statement body; magnum-opus of parsing loops and conditions */
-static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
+static void condbody(Lexer *lx, struct DynCtx *startctx, ExpInfo *cond,
                      OpCode jfop, OpCode jop, int condpc, int endclausepc)
 {
     FunctionState *fs = lx->fs;
-    DynContext endctx;
+    struct DynCtx endctx;
     ExpInfo fjmp, jmp;
     int optaway, condistrue;
     int condisctc = eisconstant(cond);
@@ -1911,7 +1913,7 @@ static void condbody(Lexer *lx, DynContext *startctx, ExpInfo *cond,
  * ifstm ::= 'if' '(' expr ')' condbody
  */
 static void ifstm(Lexer *lx) {
-    DynContext ctx;
+    struct DynCtx ctx;
     ExpInfo e;
     cr_lex_scan(lx); /* skip 'if' */
     storectx(lx->fs, &ctx);
@@ -1929,15 +1931,15 @@ static void ifstm(Lexer *lx) {
  * WHILE statement
  * ------------------------------------------------------------------------- */
 
-typedef struct LCTX { /* loop context */
-    struct LCTX *prev;
+struct LoopCtx { /* loop context */
+    struct LoopCtx *prev;
     Scope *loopscope;
     int loopstart;
-} LCTX;
+};
 
 
 /* set loop scope context to current values */
-static void initloopctx(FunctionState *fs, LCTX *ctx) {
+static void initloopctx(FunctionState *fs, struct LoopCtx *ctx) {
     ctx->prev = NULL;
     ctx->loopscope = fs->loopscope;
     ctx->loopstart = fs->loopstart;
@@ -1945,8 +1947,8 @@ static void initloopctx(FunctionState *fs, LCTX *ctx) {
 
 
 /* store 'ctx' or load 'currctx' */
-static void handleloopctx(FunctionState *fs, LCTX *ctx, int store) {
-    static LCTX *currctx = NULL;
+static void handleloopctx(FunctionState *fs, struct LoopCtx *ctx, int store) {
+    static struct LoopCtx *currctx = NULL;
     if (store) { /* store 'ctx' */
         ctx->prev = currctx;
         currctx = ctx;
@@ -1960,8 +1962,10 @@ static void handleloopctx(FunctionState *fs, LCTX *ctx, int store) {
 
 
 /* start loop scope */
-static void startloop(FunctionState *fs, Scope *s, LCTX *ctx) {
-    startscope(fs, s, CFLOOP);
+static void startloop(FunctionState *fs, Scope *s, struct LoopCtx *ctx,
+                      int cfbits) 
+{
+    startscope(fs, s, cfbits);
     initloopctx(fs, ctx);
     patchliststart(fs); /* for 'break' statement jumps */
     handleloopctx(fs, ctx, 1);
@@ -1974,21 +1978,21 @@ static void startloop(FunctionState *fs, Scope *s, LCTX *ctx) {
 static void endloop(FunctionState *fs) {
     cr_assert(scopeisloop(fs->scope));
     patchlistend(fs);
-    handleloopctx(fs, NULL, 0);
     endscope(fs);
+    handleloopctx(fs, NULL, 0); /* load old loop ctx values */
 }
 
 
 /* whilestm ::= 'while' '(' expr ')' condbody */
 static void whilestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    DynContext startctx;
-    LCTX lctx;
+    struct DynCtx startctx;
+    struct LoopCtx lctx;
     Scope s; /* new 'loopscope' */
     ExpInfo cond;
     cr_lex_scan(lx); /* skip 'while' */
     storectx(fs, &startctx);
-    startloop(fs, &s, &lctx);
+    startloop(fs, &s, &lctx, CFLOOP);
     int pcexpr = currentPC(fs);
     int matchline = lx->line;
     expect(lx, '(');
@@ -2004,10 +2008,94 @@ static void whilestm(Lexer *lx) {
  * FOR EACH statement
  * ------------------------------------------------------------------------- */
 
+
+/* number of state variables for generic for loop */
+#define NUMSTATEVARS    4
+
+
+static void foreachvar(Lexer *lx)
+{
+    OString *name = expect_id(lx);
+    int mods = getmodifiers(lx, "variable", getstrbytes(name));
+    if (cr_unlikely(testbits(mods, bit2mask(VARSTATIC, VARTBC)))) {
+        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+        "local 'for each' loop variable '%s' can only have 'const' modifier",
+        name));
+    }
+    newlocal(lx, expect_id(lx), mods);
+}
+
+
+/* patch for loop jump(back) */
+static void patchforjmp(FunctionState *fs, int pc, int target)
+{
+    Instruction *jmp = &fs->fn->code[pc];
+    int offset = pc - target;
+    if (cr_unlikely(offset > MAXLONGARGSIZE))
+        cr_lex_syntaxerror(fs->lx, "control structure (for loop) too long");
+    SETARG_L(jmp, 1, offset);
+}
+
+
+/* generic for loop expressions */
+static int forexprlist(Lexer *lx, ExpInfo *e, int limit)
+{
+    int nexpr = 1;
+    expr(lx, e);
+    if (cr_unlikely(eisconstant(e))) {
+        cr_parser_semerror(lx, cr_string_pushfstring(lx->ts,
+        "'%s' is invalid iterator function (for loop)",
+        cr_lex_tok2str(lx, lx->t.tk)));
+    }
+    while (match(lx, ',')) {
+        cr_code_exp2stack(lx->fs, e);
+        expr(lx, e);
+        nexpr++;
+    }
+    if (cr_unlikely(nexpr > limit))
+        limiterror(lx->fs, "expressions", limit);
+    return nexpr;
+}
+
+
+/*
+ * foreachloop ::= 'for' 'each' idlist 'in' forexprlist '{' block '}'
+ */
 static void foreachloop(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    DynContext startctx;
-    LCTX lctx;
+    struct DynCtx startctx;
+    struct LoopCtx lctx;
+    ExpInfo e;
+    Scope s;
+    int nvars = 1; /* iter func result */
+    int base = fs->sp;
+    storectx(fs, &startctx);
+    newlocallit(lx, "(for state)"); /* iter func */
+    newlocallit(lx, "(for state)"); /* invariant state */
+    newlocallit(lx, "(for state)"); /* control var */
+    newlocallit(lx, "(for state)"); /* to-be-closed var */
+    foreachvar(lx); /* iter func result var */
+    while (match(lx, ',')) {
+        foreachvar(lx);
+        nvars++;
+    }
+    expect(lx, TK_IN);
+    adjustassign(lx, NUMSTATEVARS, forexprlist(lx, &e, NUMSTATEVARS), &e);
+    adjustlocals(lx, NUMSTATEVARS); /* register state vars */
+    scopemarktbc(fs);
+    /* runtime space for call (iter func), inv. state, control var */
+    cr_code_checkstack(fs, NUMSTATEVARS - 1);
+    int prep = cr_code_S(fs, OP_FORPREP, base);
+    startloop(fs, &s, &lctx, CFGLOOP); /* scope for declared vars */
+    adjustlocals(lx, nvars);
+    cr_code_reserveslots(fs, nvars); /* locals */
+    int matchline = lx->line;
+    expect(lx, '{');
+    block(lx);
+    expectmatch(lx, '}', '{', matchline);
+    endloop(fs); /* end scope for declared vars */
+    int forend = cr_code_S(fs, OP_FORLOOP, base);
+    patchforjmp(fs, forend, prep + INSTSIZE + ARGLSIZE);
 }
 
 
@@ -2063,11 +2151,11 @@ void forendclause(Lexer *lx, ExpInfo *cond, int *clausepc) {
 
 static void forloop(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    DynContext startctx;
-    LCTX lctx;
+    struct DynCtx startctx;
+    struct LoopCtx lctx;
     Scope s; /* new 'loopscope' */
     ExpInfo cond;
-    startloop(fs, &s, &lctx);
+    startloop(fs, &s, &lctx, CFLOOP);
     int matchline = lx->line;
     expect(lx, '(');
     forinit(lx);

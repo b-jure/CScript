@@ -209,7 +209,8 @@ void cr_code_setoneret(FunctionState *fs, ExpInfo *e)
         cr_assert(*getlarg0(getinstruction(fs, e), 0) == 2);
         e->et = EXP_FINEXPR;
     } else if (e->et == EXP_VARARG) {
-        setlarg0(getinstruction(fs, e), 2);
+        Instruction *vararg = getinstruction(fs, e);
+        SETARG_L(vararg, 0, 2);
         e->et = EXP_FINEXPR;
     }
 }
@@ -220,10 +221,10 @@ void cr_code_setreturns(FunctionState *fs, ExpInfo *e, int nreturns)
 {
     Instruction *pc = getinstruction(fs, e);
     if (e->et == EXP_CALL) {
-        setlarg1(pc, nreturns + 1);
+        SETARG_L(pc, 1, nreturns + 1);
     } else {
         cr_assert(e->et == EXP_VARARG);
-        setlarg0(pc, nreturns + 1);
+        SETARG_L(pc, 0, nreturns + 1);
     }
 }
 
@@ -742,7 +743,7 @@ void cr_code_jmpf(FunctionState *fs, ExpInfo *e, OpCode jfop)
 /* get 'pc' of jmp instruction destination */
 static int getjmp(FunctionState *fs, int pc)
 {
-    int offset = getlarg0(&fs->fn->code[pc]);
+    int offset = GETARG_L(&fs->fn->code[pc], 0);
     if (offset == NOJMP)
         return NOJMP;
     else
@@ -757,7 +758,7 @@ static void fixjmp(FunctionState *fs, int pc, int destpc)
     int offset = destpc - (pc + ARGLSIZE);
     if (cr_unlikely(!(0 <= offset && offset <= MAXLONGARGSIZE)))
         cr_parser_semerror(fs->lx, "control structure too long");
-    setlarg0(pcjmp, offset); /* patch it */
+    SETARG_L(pcjmp, 0, offset); /* patch it */
 }
 
 
