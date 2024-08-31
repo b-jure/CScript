@@ -293,8 +293,8 @@ typedef struct UpValInfo {
 /* Automatic (local) variable debug information */
 typedef struct LVarInfo {
     OString *name;
-    int alivepc; /* point where variable is in scope */
-    int deadpc; /* point where variable is out of scope */
+    int startpc; /* point where variable is in scope */
+    int endpc; /* point where variable is out of scope */
 } LVarInfo;
 
 

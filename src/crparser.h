@@ -129,7 +129,6 @@ typedef struct ExpInfo {
  * Function state
  * -------------------------------------------------------------------------- */
 
-
 /* variable kind (stored in 'mod') */
 #define VARCONST        0 /* constant */
 #define VARSTATIC       1 /* static */
@@ -203,6 +202,7 @@ typedef struct FunctionState {
     int nlinfo; /* number of elements in 'linfo' */
     int nlocals; /* number of elements in 'locals' */
     int nupvals; /* number of elements in 'upvals' */
+    int nswscopes; /* number of 'switch' scopes */
     struct {
         int len; /* number of elements in 'list' */
         int size; /* size of 'list' */

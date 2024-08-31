@@ -264,8 +264,8 @@ CRI_FUNC void cr_code_getproperty(FunctionState *fs, ExpInfo *var,
 CRI_FUNC void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                               int super);
 CRI_FUNC void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
-CRI_FUNC void cr_code_jmp(FunctionState *fs, ExpInfo *e, OpCode jop);
-CRI_FUNC void cr_code_jmpf(FunctionState *fs, ExpInfo *e, OpCode jfop);
+CRI_FUNC int cr_code_jmp(FunctionState *fs, OpCode jop);
+CRI_FUNC int cr_code_jmpf(FunctionState *fs, OpCode jfop);
 CRI_FUNC void cr_code_concatjmp(FunctionState *fs, int *l1, int l2);
 CRI_FUNC void cr_code_patch(FunctionState *fs, int pc, int target);
 CRI_FUNC void cr_code_patchtohere(FunctionState *fs, int pc);

@@ -725,18 +725,16 @@ static int codejmp(FunctionState *fs, ExpInfo *e, OpCode jmpop)
 
 
 /* emit unconditional jump instruction */
-void cr_code_jmp(FunctionState *fs, ExpInfo *e, OpCode jop)
+int cr_code_jmp(FunctionState *fs, OpCode jop)
 {
-    e->u.info = codejmp(fs, e, jop);
-    e->et = EXP_JMP;
+    return cr_code_L(fs, jop, NOJMP);
 }
 
 
 /* emit jump if false instructioon */
-void cr_code_jmpf(FunctionState *fs, ExpInfo *e, OpCode jfop)
+int cr_code_jmpf(FunctionState *fs, OpCode jfop)
 {
-    e->f = codejmp(fs, e, jfop);
-    e->et = EXP_JMP;
+    return cr_code_L(fs, jfop, NOJMP);
 }
 
 
