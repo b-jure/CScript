@@ -253,14 +253,6 @@ static void removevars(FunctionState *fs, int tolevel) {
 }
 
 
-/* get global variable value */
-cr_sinline void getglobal(cr_State *ts, OString *name, TValue *out) {
-    TValue k;
-    setv2s(fs->lx->ts, &k, name);
-    cr_htable_get(GS(ts)->globals, &k, out);
-}
-
-
 /* get static variable */
 cr_sinline SVar *getstatic(FunctionState *fs, int idx) {
     cr_assert(0 <= idx && idx < fs->fn->nstatics);
@@ -371,17 +363,6 @@ static void codedefine(FunctionState *fs, ExpInfo *var) {
     default: cr_unreachable();
     }
     cr_code_storevar(fs, var);
-}
-
-
-static Scope *getscope(FunctionState *fs, int idx) {
-    Scope *scope = fs->scope;
-    while (scope != NULL) {
-        if (scope->nlocals >= idx)
-            break;
-        scope = scope->prev;
-    }
-    return scope;
 }
 
 
@@ -517,9 +498,7 @@ static void expr(Lexer *lx, ExpInfo *e);
 
 
 /* check if current token matches 'tk' */
-cr_sinline int check(Lexer *lx, int tk) {
-    return (lx->t.tk == tk);
-}
+#define check(lx, tok)       ((lx)->t.tk == (tok))
 
 
 /* 
@@ -2274,8 +2253,7 @@ cr_sinline Scope *getcfscope(FunctionState *fs) {
 /*
  * breakstm ::= 'break' ';'
  */
-static void breakstm(Lexer *lx)
-{
+static void breakstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     const Scope *s = getcfscope(fs);
     cr_lex_scan(lx); /* skip 'break' */
@@ -2299,9 +2277,9 @@ static void breakstm(Lexer *lx)
  * returnstm ::= 'return' ';' 
  *             | 'return' exprlist ';'
  */
-static void returnstm(Lexer *lx)
-{
+static void returnstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
+    // TODO
     fs->laststmisret = 1;
 }
 
@@ -2319,8 +2297,7 @@ static void returnstm(Lexer *lx)
  *       | ';'
  *       | exprstm
  */
-static void stm(Lexer *lx)
-{
+static void stm(Lexer *lx) {
     switch (lx->t.tk) {
     case TK_WHILE: whilestm(lx); break;
     case TK_FOR: forstm(lx); break;
@@ -2343,8 +2320,7 @@ static void stm(Lexer *lx)
  *        | fndecl
  *        | classdecl
  */
-static void decl(Lexer *lx)
-{
+static void decl(Lexer *lx) {
     int line = lx->line;
     switch (lx->t.tk) {
     case TK_LET: letdecl(lx); break;
@@ -2357,17 +2333,17 @@ static void decl(Lexer *lx)
 
 /* parse current input until end of stream */
 static void parseuntilEOS(Lexer *lx) {
-    while (!lx->t.tk != TK_EOS)
+    while (!check(lx, TK_EOS))
         decl(lx);
 }
 
 
 
 /* compile main function */
-static void criptmain(FunctionState *fs, Lexer *lx)
+static void mainfunc(FunctionState *fs, Lexer *lx)
 {
-    Scope gscope;
-    startfs(fs, lx, &gscope);
+    Scope s;
+    startfs(fs, lx, &s);
     setvararg(fs, 0); /* main is always vararg */
     cr_lex_scan(lx); /* scan first token */
     parseuntilEOS(lx);
@@ -2376,6 +2352,7 @@ static void criptmain(FunctionState *fs, Lexer *lx)
 }
 
 
+/* parse source code */
 CrClosure *parse(cr_State *ts, BuffReader *br, Buffer *buff, ParserState *ps,
                  const char *source)
 {
@@ -2394,7 +2371,7 @@ CrClosure *parse(cr_State *ts, BuffReader *br, Buffer *buff, ParserState *ps,
     lx.ps = ps;
     lx.buff = buff;
     cr_lex_setsource(ts, &lx, br, fs.fn->source);
-    criptmain(&fs, &lx); /* Cript main function */
+    mainfunc(&fs, &lx); /* Cript main function */
     ts->stacktop.p--; /* pop scanner htable */
     return cl;
 }
@@ -2407,7 +2384,7 @@ CrClosure *parse(cr_State *ts, BuffReader *br, Buffer *buff, ParserState *ps,
 
 /* data for 'pparse' */
 typedef struct PPData {
-    BuffReader *br;
+    BuffReader br;
     Buffer buff;
     ParserState ps;
     const char *source;
@@ -2417,23 +2394,24 @@ typedef struct PPData {
 /* protected 'parse' */
 static void pparse(cr_State *ts, void *userdata)
 {
-    PPData *pcompile = cast(PPData *, userdata);
-    CrClosure *cl = parse(ts, pcompile->br, &pcompile->buff, &pcompile->ps,
-            pcompile->source);
+    PPData *parsedata = cast(PPData *, userdata);
+    CrClosure *cl = parse(ts, &parsedata->br, &parsedata->buff, &parsedata->ps,
+                          parsedata->source);
     cr_assert(cl->nupvals <= cl->sizeupvals);
     cr_function_initupvals(ts, cl);
 }
 
 
 /* external interface for 'pparse' */
-void cr_parser_pparse(cr_State *ts, BuffReader *br, const char *source)
+void cr_parser_pparse(cr_State *ts, cr_reader freader, void *userdata,
+                      const char *name)
 {
-    PPData ppdata;
-    ppdata.br = br; /* BuffReader */
-    cr_reader_buffinit(&ppdata.buff); /* Buffer */
-    ParserState *ps = &ppdata.ps;
-    { ps->cs.prev = NULL; ps->cs.super = 0; } /* cs */
-    { ps->lvars.len = ps->lvars.size = 0; ps->lvars.arr = NULL; } /* lvars */
-    ppdata.source = source; /* source */
-    cr_vm_pcall(ts, pparse, &ppdata, savestack(ts, ts->stacktop.p));
+    PPData parsedata;
+    ParserState *ps = &parsedata.ps;
+    cr_br_init(ts, &parsedata.br, freader, userdata); /* 'br' */
+    cr_reader_buffinit(&parsedata.buff); /* 'buff' */
+    { ps->lvars.len = ps->lvars.size = 0; ps->lvars.arr = NULL; } /* 'lvars' */
+    ps->cs = NULL; /* 'cs' */
+    parsedata.source = name; /* 'source' */
+    cr_vm_pcall(ts, pparse, &parsedata, savestack(ts, ts->stacktop.p));
 }
