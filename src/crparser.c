@@ -390,8 +390,11 @@ static void endscope(FunctionState *fs) {
     int stklevel = getstacklevel(fs, s->nlocals);
     removevars(fs, s->nlocals);
     cr_assert(s->nlocals == fs->activelocals);
-    if (scopeisloop(s) || scopeisswitch(s)) /* has a patch list ? */
+    if (scopeisloop(s) || scopeisswitch(s)) { /* has a patch list ? */
         patchlistend(fs);
+        fs->nswscopes -= scopeisswitch(s);
+        cr_assert(fs->nswscopes >= 0);
+    }
     if (s->prev && s->haveupval) /* need to close upvalues ? */
         cr_code_S(fs, OP_CLOSE, stklevel);
     cr_code_pop(fs, scopeisswitch(s) + activelocalsrel(s->nlocals));
