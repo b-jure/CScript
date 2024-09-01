@@ -60,10 +60,11 @@ int cr_code(FunctionState *fs, Instruction i)
 
 
 /* emit short arg */
-static int Sarg(FunctionState *fs, Function *f, int arg)
+static int Sarg(FunctionState *fs, int arg)
 {
-    cr_mem_growvec(fs->lx->ts, f->code, f->sizecode, fs->pc, INT_MAX, "code");
-    f->code[fs->pc++] = cast_ubyte(arg & 0xff);
+    Function *fn = fs->fn;
+    cr_mem_growvec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, INT_MAX, "code");
+    fn->code[fs->pc++] = cast_ubyte(arg & 0xff);
     return fs->pc - 1;
 }
 
@@ -73,17 +74,18 @@ int cr_code_S(FunctionState *fs, Instruction i, int a)
 {
     cr_assert(arg <= MAXSHRTARGSIZE);
     int offset = cr_code(fs, i);
-    Sarg(fs, fs->fn, a);
+    Sarg(fs, a);
     return offset;
 }
 
 
 /* emit long arg */
-static int Larg(FunctionState *fs, Function *f, int idx)
+static int Larg(FunctionState *fs, int idx)
 {
-    cr_mem_ensurevec(fs->lx->ts, f->code, f->sizecode, fs->pc, 3, INT_MAX,
+    Function *fn = fs->fn;
+    cr_mem_ensurevec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, 3, INT_MAX,
                      "code");
-    set3bytes(f->code, idx);
+    set3bytes(fn->code, idx);
     fs->pc += 3;
     return fs->pc - 3;
 }
@@ -94,7 +96,7 @@ int cr_code_L(FunctionState *fs, Instruction i, int a)
 {
     cr_assert(a <= MAXLONGARGSIZE);
     int offset = cr_code(fs, i);
-    Larg(fs, fs->fn, a);
+    Larg(fs, a);
     return offset;
 }
 
@@ -103,7 +105,7 @@ int cr_code_L(FunctionState *fs, Instruction i, int a)
 static int codeLL(FunctionState *fs, Instruction i, int a, int b)
 {
     int offset = cr_code_L(fs, i, a);
-    Larg(fs, fs->fn, b);
+    Larg(fs, b);
     return offset;
 }
 
@@ -112,7 +114,7 @@ static int codeLL(FunctionState *fs, Instruction i, int a, int b)
 static int codeLLL(FunctionState *fs, Instruction i, int a, int b, int c)
 {
     int offset = codeLL(fs, i, a, b);
-    Larg(fs, fs->fn, c);
+    Larg(fs, c);
     return offset;
 }
 
@@ -256,7 +258,9 @@ int cr_code_ret(FunctionState *fs, int base, int nreturns)
     case 1: op = OP_RET1; break;
     default: op = OP_RET; break;
     }
-    return codeLL(fs, op, base, nreturns + 1);
+    int offset = codeLLL(fs, op, base, nreturns + 1, 0);
+    Sarg(fs, 0); /* close flag */
+    return offset;
 }
 
 
@@ -272,24 +276,26 @@ int cr_code_call(FunctionState *fs, int base, int nparams, int nreturns)
 }
 
 
-void cr_code_class(FunctionState *fs, ExpInfo *e)
-{
-    cr_assert(e->et == EXP_STRING);
-    e->u.info = cr_code_L(fs, OP_CLASS, stringK(fs, e->u.str));
-    e->et = EXP_FINEXPR;
-}
-
-
-void cr_code_method(FunctionState *fs, ExpInfo *e)
-{
+void cr_code_method(FunctionState *fs, ExpInfo *e) {
     cr_assert(e->et == EXP_STRING);
     e->u.info = cr_code_L(fs, OP_METHOD, stringK(fs, e->u.str));
     e->et = EXP_FINEXPR;
 }
 
 
-cr_sinline void freeslots(FunctionState *fs, int n) 
-{
+/* Generic for loop instructions */
+int cr_code_forprep(FunctionState *fs, int base) {
+    return codeLL(fs, OP_FORPREP, base, 0);
+}
+int cr_code_forcall(FunctionState *fs, int base, int nvars) {
+    return codeLL(fs, OP_FORCALL, base, nvars);
+}
+int cr_code_forloop(FunctionState *fs, int base) {
+    return codeLL(fs, OP_FORLOOP, base, 0);
+}
+
+
+cr_sinline void freeslots(FunctionState *fs, int n) {
     fs->sp -= n;
 }
 
@@ -488,7 +494,7 @@ void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e)
 static int codeLS(FunctionState *fs, Instruction op, int a, int b)
 {
     int offset = cr_code_L(fs, op, a);
-    Sarg(fs, fs->fn, b);
+    Sarg(fs, b);
     return offset;
 }
 
@@ -497,7 +503,7 @@ static int codeLS(FunctionState *fs, Instruction op, int a, int b)
 static int codeLSS(FunctionState *fs, Instruction op, int a, int b, int c)
 {
     int offset = codeLS(fs, op, a, b);
-    Sarg(fs, fs->fn, c);
+    Sarg(fs, c);
     return offset;
 }
 
@@ -588,7 +594,7 @@ void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super)
 {
     cr_assert(var->et == EXP_FINEXPR && var->u.info == fs->sp - 1);
     if (cr_unlikely(key->et == EXP_NIL))
-        cr_parser_semerror(fs->lx, "'nil' can't be index value");
+        cr_parser_semerror(fs->lx, "nil index");
     if (key->et == EXP_STRING)
         string2K(fs, key);
     if (super) {

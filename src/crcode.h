@@ -53,8 +53,11 @@
 #define SETARG_L(ip,o,v)	set3bytes(GETPC_L(ip,o), v)
 
 
-/* value indicating there is no jmp label */
+/* value indicating there is no jump */
 #define NOJMP       (-1)
+
+/* max code jump offset */
+#define MAXJMP      MAXLONGARGSIZE
 
 
 /* binary operators */
@@ -88,35 +91,34 @@ typedef enum {
 
 
 
-/* 
- * OpCode legend:
- * S - short instruction arg (8-bit)
- * L - long instruction arg (24-bit)
- * K(i) - constant at index 'i'
- * I(v) - format that indicates v is immediate operand
- * '...' - short description on what the instruction does
- */
 typedef enum {
-OP_TRUE = 0,    /*      'load true constant' */
-OP_FALSE,       /*      'load false constant' */
-OP_NIL,         /*      'load nil constant' */
-OP_NILN,        /* L    'load L nils' */
-OP_CONST,       /* S    'load constant at index S' */
-OP_CONSTL,      /* L    'load constant at index L' */
-OP_CONSTI,      /* L S  'load integer L (S signedness) */
-OP_CONSTF,      /* L S  'load integer L as float (S signedness) */
-OP_SETVARARG,   /* L    'adjust function varargs (L function arity)' */
-OP_VARARG,      /* L    'load L-1 varargs' */
-OP_CLOSURE,     /* TODO */
-OP_CLASS,       /* TODO */
-OP_METHOD,      /* TODO */
-OP_OVERLOAD,    /* TODO */
+/* -------------------------------------------------------------------------
+ * S - short arg (8-bit)
+ * L - long arg (24-bit)
+ * V - stack value
+ * K(x) - constant at index 'x'
+ *
+ * operation     args           description
+ * ------------------------------------------------------------------------- */
+OP_TRUE = 0,    /*             'load true constant' */
+OP_FALSE,       /*             'load false constant' */
+OP_NIL,         /*             'load nil constant' */
+OP_NILN,        /* L           'load L nils' */
+OP_CONST,       /* L           'load K(L)' */
+OP_CONSTI,      /* L S         'load integer L (S signedness) */
+OP_CONSTF,      /* L S         'load integer L as float (S signedness) */
+OP_SETVARARG,   /* L           'adjust function varargs (L function arity)' */
+OP_VARARG,      /* L           'load L-1 varargs' */
+OP_CLOSURE,     /*             'create and load new closure */
+OP_CLASS,       /*             'create and load new class */
+OP_METHOD,      /* L V1 V2  'define method V2 for class V1 under key K(L)' */
+OP_OVERLOAD,    /* S V1 V2     'define meta -||- at VMT index S' */
 OP_POP,         /*      'pop value off the stack' */
 OP_POPN,        /* L    'pop L values off the stack' */
 
-OP_MBIN,        /* V V1 S    'V S V1 (S is binop)' */
-OP_MBINI,       /* V L S S1  'V mbinop I(L) (S is signedness, S1 is flip)' */
-OP_MBINK,       /* V L S     'V mbinop K(L) (S is flip)' */
+OP_MBIN,        /* V1 V2 S    'V1 S V2 (S is binop)' */
+OP_MBINI,       /* V L S1 S2  'V mbinop I(L) (S is signedness, S1 is flip)' */
+OP_MBINK,       /* V L S      'V mbinop K(L) (S is flip)' */
 
 OP_ADDK,         /* V L S     'V + (S * K(L))' */
 OP_SUBK,         /* V L S     'V - (S * K(L))' */
@@ -225,15 +227,16 @@ OP_GETSUPIDX,    /* get super class method ('super[k | str]') */
 OP_GETSUPIDXSTR, /* get super class method ('super[k | str]') */
 
 OP_SETVTABLE,    /* set vtable method */
-OP_INHERIT,      /* inherit from class */
+OP_INHERIT,      /* V1 V2         'V2 inherits from superclass V1' */
 OP_CALLSTART,    /* mark start of call values */
 OP_RETSTART,     /* mark start of return values */
-OP_FORPREP,     /* prepare foreach loop */
+OP_FORPREP,      /* prepare foreach loop */
+OP_FORCALL,      /* V1 V2 V3    'call V1 with V2 and V3 as args' */
 OP_FORLOOP,      /* run foreach loop */
 
 OP_RET0,         /* return with no values */
 OP_RET1,         /* return with a single value */
-OP_RET,          /* return with 2 or more values */
+OP_RET,          /* L */
 } OpCode;
 
 
@@ -253,8 +256,10 @@ CRI_FUNC int cr_code_pop(FunctionState *fs, int n);
 CRI_FUNC int cr_code_ret(FunctionState *fs, int base, int nreturns);
 CRI_FUNC int cr_code_call(FunctionState *fs, int base, int nparams, 
                           int nreturns);
-CRI_FUNC void cr_code_class(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_method(FunctionState *fs, ExpInfo *e);
+CRI_FUNC int cr_code_forprep(FunctionState *fs, int base);
+CRI_FUNC int cr_code_forcall(FunctionState *fs, int base, int nvars);
+CRI_FUNC int cr_code_forloop(FunctionState *fs, int base);
 CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var);
 CRI_FUNC void cr_code_defineglobal(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e);

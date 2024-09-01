@@ -182,6 +182,21 @@ typedef struct ParserState {
 } ParserState;
 
 
+/* dynamic data context (for optimizations) */
+typedef struct DynCtx {
+    int loopstart;
+    int sp;
+    int nfuncs;
+    int nk;
+    int nstatics;
+    int pc;
+    int nlinfo;
+    int nlocals;
+    int nupvals;
+    int nbrks;
+    int needclose;
+} DynCtx;
+
 
 /* state for currently compiled 'Function' */
 typedef struct FunctionState {
@@ -203,13 +218,14 @@ typedef struct FunctionState {
     int nlocals; /* number of elements in 'locals' */
     int nupvals; /* number of elements in 'upvals' */
     int nswscopes; /* number of 'switch' scopes */
+    DynCtx deadcode; /* context before "dead" (unreachable) code */
     struct {
         int len; /* number of elements in 'list' */
         int size; /* size of 'list' */
         PatchList *list; /* list of patch lists */
     } patches; /* 2Dlist */
     cr_ubyte needclose; /* true if needs to close upvalues before returning */
-    cr_ubyte laststmisret; /* last statement is 'return' */
+    cr_ubyte lastwasret; /* last statement is 'return' */
 } FunctionState;
 
 
