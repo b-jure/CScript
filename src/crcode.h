@@ -104,17 +104,18 @@ OP_TRUE = 0,    /*             'load true constant' */
 OP_FALSE,       /*             'load false constant' */
 OP_NIL,         /*             'load nil constant' */
 OP_NILN,        /* L           'load L nils' */
-OP_CONST,       /* L           'load K(L)' */
+OP_CONST,       /* S           'load K(S)' */
+OP_CONSTL,      /* L           'load K(L)' */
 OP_CONSTI,      /* L S         'load integer L (S signedness) */
 OP_CONSTF,      /* L S         'load integer L as float (S signedness) */
 OP_SETVARARG,   /* L           'adjust function varargs (L function arity)' */
 OP_VARARG,      /* L           'load L-1 varargs' */
 OP_CLOSURE,     /*             'create and load new closure */
 OP_CLASS,       /*             'create and load new class */
-OP_METHOD,      /* L V1 V2  'define method V2 for class V1 under key K(L)' */
-OP_OVERLOAD,    /* S V1 V2     'define meta -||- at VMT index S' */
-OP_POP,         /*      'pop value off the stack' */
-OP_POPN,        /* L    'pop L values off the stack' */
+OP_METHOD,      /* L V1 V2     'define method V2 for class V1 under key K(L)' */
+OP_SETVMT,      /* S V1 V2     'define Mmethod V2 for obj V1 at index S' */
+OP_POP,         /*             'pop value off the stack' */
+OP_POPN,        /* L           'pop L values off the stack' */
 
 OP_MBIN,        /* V1 V2 S    'V1 S V2 (S is binop)' */
 OP_MBINI,       /* V L S1 S2  'V mbinop I(L) (S is signedness, S1 is flip)' */
@@ -200,15 +201,15 @@ OP_SETUVAL,      /* set upvalue */
 OP_CLOSE,        /* L        'close all upvalues >= L (stack ptr) */
 OP_TBC,          /* V        'create new to-be-closed upvalue from variable V */
 
-OP_DEFGVAR,      /* define global variable */
-OP_GETGVAR,      /* get global variable */
-OP_SETGVAR,      /* set global variable */
+OP_DEFGLOBAL,    /* V1 V2    'define global variable V1 with value V2' */
+OP_GETGLOBAL,    /* V        'get global variable of name V' */
+OP_SETGLOBAL,    /* V1 V2    'set global variable V1 with value V2' */
 
-OP_GETLVAR,      /* get local variable */
-OP_SETLVAR,      /* set local variable */
+OP_GETLOCAL,     /* get local variable */
+OP_SETLOCAL,     /* set local variable */
 
-OP_GETSVAR,      /* get static variable */
-OP_SETSVAR,      /* set static variable */
+OP_GETPRIVATE,   /* get private variable */
+OP_SETPRIVATE,   /* set private variable */
 
 OP_SETPROPERTY,  /* set property ('v.str') */
 OP_GETPROPERTY,  /* get property ('v.str = ..') */
@@ -247,6 +248,7 @@ OP_RET,          /* L */
 CRI_FUNC int cr_code(FunctionState *fs, Instruction i);
 CRI_FUNC int cr_code_S(FunctionState *fs, Instruction i, int a);
 CRI_FUNC int cr_code_L(FunctionState *fs, Instruction i, int a);
+CRI_FUNC int cr_code_LL(FunctionState *fs, Instruction i, int a, int b);
 CRI_FUNC void cr_code_checkstack(FunctionState *fs, int n);
 CRI_FUNC void cr_code_reserveslots(FunctionState *fs, int n);
 CRI_FUNC void cr_code_setoneret(FunctionState *fs, ExpInfo *e);
@@ -257,9 +259,6 @@ CRI_FUNC int cr_code_ret(FunctionState *fs, int base, int nreturns);
 CRI_FUNC int cr_code_call(FunctionState *fs, int base, int nparams, 
                           int nreturns);
 CRI_FUNC void cr_code_method(FunctionState *fs, ExpInfo *e);
-CRI_FUNC int cr_code_forprep(FunctionState *fs, int base);
-CRI_FUNC int cr_code_forcall(FunctionState *fs, int base, int nvars);
-CRI_FUNC int cr_code_forloop(FunctionState *fs, int base);
 CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var);
 CRI_FUNC void cr_code_defineglobal(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e);

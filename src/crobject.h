@@ -315,14 +315,14 @@ typedef struct Function {
     OString *source; /* source name */
     struct Function **funcs; /* functions defined inside of this function */
     TValue *k; /* constant values */
-    SVar *statics;
+    SVar *private;
     Instruction *code; /* bytecode */
     LineInfo *linfo; /* lines information for instructions */
     LVarInfo *locals; /* debug information for local variables */
     UpValInfo *upvals; /* debug information for upvalues */
     int sizefn; /* size of 'fn' */
     int sizek; /* size of 'constants' */
-    int sizestatics; /* size of 'statics' */
+    int sizeprivate; /* size of 'private' */
     int sizecode; /* size of 'code' */
     int sizelinfo; /* size of 'linfo' */
     int sizelocals; /* size of 'locals' */

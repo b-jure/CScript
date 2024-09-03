@@ -66,9 +66,9 @@ typedef enum expt {
     /* local variable;
      * 'info' = stack index; */
     EXP_LOCAL,
-    /* static variable;
-     * 'info' = 'svars' index; */
-    EXP_STATIC,
+    /* private variable;
+     * 'info' = 'private' index; */
+    EXP_PRIVATE,
     /* global variable;
      * 'str' = global id; */
     EXP_GLOBAL,
@@ -130,12 +130,12 @@ typedef struct ExpInfo {
  * -------------------------------------------------------------------------- */
 
 /* variable kind (stored in 'mod') */
-#define VARCONST        0 /* constant */
-#define VARSTATIC       1 /* static */
+#define VARFINAL        0 /* final (immutable) */
+#define VARPRIVATE      1 /* static */
 #define VARTBC          2 /* to-be-closed */
 
 /* bit mask of all valid modifiers in 'mod' */
-#define VARBITMASK      (bit2mask(VARCONST, VARSTATIC) | bitmask(VARTBC))
+#define VARBITMASK      (bit2mask(VARFINAL, VARPRIVATE) | bitmask(VARTBC))
 
 
 /* active local variable compiler information */
@@ -188,7 +188,7 @@ typedef struct DynCtx {
     int sp;
     int nfuncs;
     int nk;
-    int nstatics;
+    int nprivate;
     int pc;
     int nlinfo;
     int nlocals;
@@ -212,7 +212,7 @@ typedef struct FunctionState {
     int firstlocal; /* index of first local in 'lvars' */
     int nfuncs; /* number of elements in 'funcs' */
     int nk; /* number of elements in 'k' */
-    int nstatics; /* number of elements in 'statics' */
+    int nprivate; /* number of elements in 'private' */
     int pc; /* number of elements in 'code' (equialent to 'ncode') */
     int nlinfo; /* number of elements in 'linfo' */
     int nlocals; /* number of elements in 'locals' */

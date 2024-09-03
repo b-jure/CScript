@@ -102,9 +102,10 @@ int cr_code_L(FunctionState *fs, Instruction i, int a)
 
 
 /* emit instruction with 2 long args */
-static int codeLL(FunctionState *fs, Instruction i, int a, int b)
+int cr_code_LL(FunctionState *fs, Instruction i, int a, int b)
 {
-    int offset = cr_code_L(fs, i, a);
+    int offset = cr_code(fs, i);
+    Larg(fs, a);
     Larg(fs, b);
     return offset;
 }
@@ -113,7 +114,9 @@ static int codeLL(FunctionState *fs, Instruction i, int a, int b)
 /* emit instruction with 3 long args */
 static int codeLLL(FunctionState *fs, Instruction i, int a, int b, int c)
 {
-    int offset = codeLL(fs, i, a, b);
+    int offset = cr_code(fs, i);
+    Larg(fs, a);
+    Larg(fs, b);
     Larg(fs, c);
     return offset;
 }
@@ -283,18 +286,6 @@ void cr_code_method(FunctionState *fs, ExpInfo *e) {
 }
 
 
-/* Generic for loop instructions */
-int cr_code_forprep(FunctionState *fs, int base) {
-    return codeLL(fs, OP_FORPREP, base, 0);
-}
-int cr_code_forcall(FunctionState *fs, int base, int nvars) {
-    return codeLL(fs, OP_FORCALL, base, nvars);
-}
-int cr_code_forloop(FunctionState *fs, int base) {
-    return codeLL(fs, OP_FORLOOP, base, 0);
-}
-
-
 cr_sinline void freeslots(FunctionState *fs, int n) {
     fs->sp -= n;
 }
@@ -360,15 +351,15 @@ void cr_code_storevar(FunctionState *fs, ExpInfo *var)
         break;
     }
     case EXP_LOCAL: {
-        var->u.info = cr_code_L(fs, OP_SETLVAR, var->u.info);
+        var->u.info = cr_code_L(fs, OP_SETLOCAL, var->u.info);
         break;
     }
-    case EXP_STATIC: {
-        var->u.info = cr_code_L(fs, OP_SETSVAR, var->u.info);
+    case EXP_PRIVATE: {
+        var->u.info = cr_code_L(fs, OP_SETPRIVATE, var->u.info);
         break;
     }
     case EXP_GLOBAL: {
-        var->u.info = cr_code_L(fs, OP_SETGVAR, stringK(fs, var->u.str));
+        var->u.info = cr_code_L(fs, OP_SETGLOBAL, stringK(fs, var->u.str));
         break;
     }
     case EXP_INDEXED: {
@@ -408,7 +399,7 @@ void cr_code_storevar(FunctionState *fs, ExpInfo *var)
 void cr_code_defineglobal(FunctionState *fs, ExpInfo *e)
 {
     e->et = EXP_FINEXPR;
-    e->u.info = cr_code_L(fs, OP_DEFGVAR, stringK(fs, e->u.str));
+    e->u.info = cr_code_L(fs, OP_DEFGLOBAL, stringK(fs, e->u.str));
     freeslots(fs, 1); /* rhs (expr) */
 }
 
@@ -418,11 +409,11 @@ static int dischargevars(FunctionState *fs, ExpInfo *e)
 {
     switch (e->et) {
     case EXP_LOCAL: {
-        e->u.info = cr_code_L(fs, OP_GETLVAR, e->u.info);
+        e->u.info = cr_code_L(fs, OP_GETLOCAL, e->u.info);
         break;
     }
-    case EXP_STATIC: {
-        e->u.info = cr_code_L(fs, OP_GETSVAR, e->u.info);
+    case EXP_PRIVATE: {
+        e->u.info = cr_code_L(fs, OP_GETPRIVATE, e->u.info);
         break;
     }
     case EXP_UVAL: {
@@ -430,7 +421,7 @@ static int dischargevars(FunctionState *fs, ExpInfo *e)
         break;
     }
     case EXP_GLOBAL: {
-        e->u.info = cr_code_L(fs, OP_GETGVAR, stringK(fs, e->u.str));
+        e->u.info = cr_code_L(fs, OP_GETGLOBAL, stringK(fs, e->u.str));
         break;
     }
     case EXP_INDEXED: {
