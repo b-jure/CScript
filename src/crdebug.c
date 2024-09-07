@@ -29,7 +29,7 @@
 
 /* get line number of instruction ('pc') */
 // TODO
-int cr_debug_getfuncline(const Function *fn, int pc)
+int crD_getfuncline(const Function *fn, int pc)
 {
     LineInfo *li;
     cr_assert(fn->lineinfo.len > 0);
@@ -61,18 +61,18 @@ cr_sinline int currentpc(const CallFrame *cf)
 /* current line number */
 cr_sinline int currentline(CallFrame *cf)
 {
-    return cr_debug_getfuncline(cffn(cf), currentpc(cf));
+    return crD_getfuncline(cffn(cf), currentpc(cf));
 }
 
 
 /*
- * Sets 'frame' in 'cr_debuginfo'.
+ * Sets 'frame' in 'cr_DebugInfo'.
  * Level defines which call stack 'CallFrame' to use.
  * If you wish for currently active 'CallFrame' then 'level'
  * should be 0.
  * If 'level' is invalid, this function returns 0.
  */
-CR_API int cr_getstack(cr_State *ts, int level, cr_debuginfo *di)
+CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di)
 {
     cr_lock(ts);
     if (level > ts->nframes || level < 0) {
@@ -88,9 +88,9 @@ CR_API int cr_getstack(cr_State *ts, int level, cr_debuginfo *di)
 
 /*
  * Sets 'name', 'type', 'nups', 'nparams', 'isvararg', 'defline',
- * 'deflastline' in 'cr_debuginfo'.
+ * 'deflastline' in 'cr_DebugInfo'.
  */
-static void getfuncinfo(Closure *cl, cr_debuginfo *di)
+static void getfuncinfo(Closure *cl, cr_DebugInfo *di)
 {
     if (noCriptclosure(cl)) {
         di->nups = (cl == NULL ? 0 : cl->cc.nupvalues);
@@ -111,8 +111,8 @@ static void getfuncinfo(Closure *cl, cr_debuginfo *di)
 }
 
 
-/* sets 'source', 'srclen' and 'shortsrc' in 'cr_debuginfo' */
-static void getsrcinfo(Closure *cl, cr_debuginfo *di)
+/* sets 'source', 'srclen' and 'shortsrc' in 'cr_DebugInfo' */
+static void getsrcinfo(Closure *cl, cr_DebugInfo *di)
 {
     if (noCriptclosure(cl)) {
         di->source = "[C]";
@@ -122,18 +122,18 @@ static void getsrcinfo(Closure *cl, cr_debuginfo *di)
         di->source = fn->source->bytes;
         di->srclen = fn->source->len;
     }
-    cr_string_sourceid(di->shortsrc, di->source, di->srclen);
+    crS_sourceid(di->shortsrc, di->source, di->srclen);
 }
 
 
 
 /*
  * Auxiliary to 'cr_getinfo', parses debug bit mask and
- * fills out the 'cr_debuginfo' accordingly.
+ * fills out the 'cr_DebugInfo' accordingly.
  * If any invalid bit/option is inside the 'dbmask' this
  * function returns 0, otherwise 1.
  */
-static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf, cr_debuginfo *di)
+static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf, cr_DebugInfo *di)
 {
     UNUSED(ts); // TODO: remove this after DW_FNPUSH
     int bit;
@@ -164,10 +164,10 @@ static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf, cr_debu
 
 
 /*
- * Fill out 'cr_debuginfo' according to 'dbmask'.
+ * Fill out 'cr_DebugInfo' according to 'dbmask'.
  * Returns 0 if any of the bits in 'dbmask' are invalid.
  */
-CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_debuginfo *di)
+CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_DebugInfo *di)
 {
     CallFrame *frame;
     Closure *cl;
@@ -195,57 +195,57 @@ CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_debuginfo *di)
 
 
 /* add usual debug information to 'msg' (source id and line) */
-const char *cr_debug_addinfo(cr_State *ts, const char *msg, const OString *src, int line)
+const char *crD_addinfo(cr_State *ts, const char *msg, const OString *src, int line)
 {
     char buffer[CRI_MAXSRC];
     if (src) {
-        cr_string_sourceid(buffer, src->bytes, src->len);
+        crS_sourceid(buffer, src->bytes, src->len);
     } else {
         buffer[0] = '?';
         buffer[1] = '\0';
     }
-    return cr_string_pushfstring(ts, "%s:%d: %s", buffer, line, msg);
+    return crS_pushfstring(ts, "%s:%d: %s", buffer, line, msg);
 }
 
 
 /* operation on invalid type error */
-cr_noret cr_debug_typeerror(cr_State *ts, const TValue *v, const char *op)
+cr_noret crD_typeerror(cr_State *ts, const TValue *v, const char *op)
 {
-    cr_debug_runerror(ts, "tried to %s a %s value", op, typename(tt(v)));
+    crD_runerror(ts, "tried to %s a %s value", op, typename(tt(v)));
 }
 
 
 /* arithmetic operation error */
-cr_noret cr_debug_operror(cr_State *ts, const TValue *v1, const TValue *v2,
+cr_noret crD_operror(cr_State *ts, const TValue *v1, const TValue *v2,
                           const char *op)
 {
     if (ttisnum(v1))
         v1 = v2;  /* correct error value */
-    cr_debug_typeerror(ts, v1, op);
+    crD_typeerror(ts, v1, op);
 }
 
 
 /* ordering error */
-cr_noret cr_debug_ordererror(cr_State *ts, const TValue *v1, const TValue *v2)
+cr_noret crD_ordererror(cr_State *ts, const TValue *v1, const TValue *v2)
 {
     const char *name1 = typename(tt(v1));
     const char *name2 = typename(tt(v2));
     if (name1 == name2) /* point to same entry ? */
-        cr_debug_runerror(ts, "tried to compare two %s values", name1);
+        crD_runerror(ts, "tried to compare two %s values", name1);
     else
-        cr_debug_runerror(ts, "tried to compare %s with %s", name1, name2);
+        crD_runerror(ts, "tried to compare %s with %s", name1, name2);
 }
 
 
 /* generic runtime error */
-cr_noret cr_debug_runerror(cr_State *ts, const char *fmt, ...)
+cr_noret crD_runerror(cr_State *ts, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    const char *err = cr_string_pushvfstring(ts, fmt, ap);
+    const char *err = crS_pushvfstring(ts, fmt, ap);
     va_end(ap);
     if (cfiscript(ts->aframe)) { /* in Cript function (closure) ? */
-        cr_debug_addinfo(ts, err, cffn(ts->aframe)->source, currentline(ts->aframe));
+        crD_addinfo(ts, err, cffn(ts->aframe)->source, currentline(ts->aframe));
         setsval(ts, ts->stacktop.p - 2, s2v(ts->stacktop.p - 1));
         ts->stacktop.p--;
     }
@@ -254,7 +254,7 @@ cr_noret cr_debug_runerror(cr_State *ts, const char *fmt, ...)
 
 
 /* emit warning */
-void cr_debug_warn(cr_State *ts, const char *str)
+void crD_warn(cr_State *ts, const char *str)
 {
     UNUSED(ts); UNUSED(str);
     // TODO: implement this + add warning function hook in API and 'GState'

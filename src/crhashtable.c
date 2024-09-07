@@ -68,10 +68,10 @@ HTable *cr_htable_new(cr_State *ts)
 /* create string hash table */
 void cr_htable_newstab(cr_State *ts, HTable *tab)
 {
-    tab->size = cr_value_ceillog2(CRI_MINSTRHTABSIZE);
+    tab->size = crV_ceillog2(CRI_MINSTRHTABSIZE);
     tab->nnodes = 0;
     tab->left = slotsleft(ts, tab);
-    tab->mem = cr_mem_newarray(ts, CRI_MINSTRHTABSIZE, Node);
+    tab->mem = crM_newarray(ts, CRI_MINSTRHTABSIZE, Node);
 }
 
 
@@ -83,24 +83,24 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 {
     switch (vtt(k)) {
     case CR_VTRUE: {
-        return cast_node(hashslot(mem, cr_value_hashbool(1), size));
+        return cast_node(hashslot(mem, crV_hashbool(1), size));
     }
     case CR_VFALSE: {
-        return cast_node(hashslot(mem, cr_value_hashbool(0), size));
+        return cast_node(hashslot(mem, crV_hashbool(0), size));
     }
     case CR_VNUMINT: {
-        return cast_node(hashslot(mem, cr_value_hashint(ival(k)), size));
+        return cast_node(hashslot(mem, crV_hashint(ival(k)), size));
     }
     case CR_VNUMFLT: {
-        return cast_node(hashslot(mem, cr_value_hashnum(fval(k)), size));
+        return cast_node(hashslot(mem, crV_hashnum(fval(k)), size));
     }
     case CR_VLUDATA: {
         void *p = pval(k);
-        return cast_node(hashslot(mem, cr_value_hashp(p), size));
+        return cast_node(hashslot(mem, crV_hashp(p), size));
     }
     case CR_VCFUNCTION: {
         cr_cfunc f = cfval(k);
-        return cast_node(hashslot(mem, cr_value_hashp(f), size));
+        return cast_node(hashslot(mem, crV_hashp(f), size));
     }
     case CR_VSTRING: {
         OString *str = strval(k);
@@ -109,7 +109,7 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
     }
     default:
         cr_assert(!ttisnil(k) && ttiso(k));
-        return cast_node(hashslot(mem, cr_value_hashp(oval(k)), size));
+        return cast_node(hashslot(mem, crV_hashp(oval(k)), size));
     }
 }
 
@@ -171,7 +171,7 @@ static uint getindex(cr_State *ts, HTable *tab, const TValue *k)
 {
     Node *slot = gehtnode(tab->mem, htsize(tab), k);
     if (cr_unlikely(keyisempty(slot)))
-        cr_debug_runerror(ts, "invalid key passed to 'next'");
+        crD_runerror(ts, "invalid key passed to 'next'");
     return cast_int(slot - htnode(tab, 0));
 }
 
@@ -252,12 +252,12 @@ static void expandmem(cr_State *ts, HTable *tab)
         nsize = CRI_MINHTABSIZE;
     }
     if (cr_unlikely(nsize >= CRI_MAXHTABSIZE))
-        cr_debug_runerror(ts, "hashtable overflow");
-    Node *newmem = cr_mem_newarray(ts, nsize, Node);
+        crD_runerror(ts, "hashtable overflow");
+    Node *newmem = crM_newarray(ts, nsize, Node);
     auxsetempty(newmem, nsize);
     rehash(tab->mem, osize, newmem, cast_int(nsize));
     if (tab->mem != NULL)
-        cr_mem_freearray(ts, tab->mem, osize);
+        crM_freearray(ts, tab->mem, osize);
     tab->mem = newmem;
     tab->size = nsize;
     tab->left = slotsleft(ts, tab);
@@ -353,6 +353,6 @@ int cr_htable_get(HTable *tab, const TValue *key, TValue *o)
 void cr_htable_free(cr_State *ts, HTable *ht)
 {
     if (ht->mem != NULL)
-        cr_mem_free(ts, ht->mem, twoto(ht->size) * sizeof(Node));
-    cr_mem_free(ts, ht, sizeof(HTable));
+        crM_free(ts, ht->mem, twoto(ht->size) * sizeof(Node));
+    crM_free(ts, ht, sizeof(HTable));
 }

@@ -21,16 +21,16 @@
 #include "crobject.h"
 
 
-CRI_FUNC int cr_debug_getfuncline(const Function *fn, int pc);
-CRI_FUNC const char *cr_debug_info(cr_State *ts, const char *msg,
+CRI_FUNC int crD_getfuncline(const Function *fn, int pc);
+CRI_FUNC const char *crD_info(cr_State *ts, const char *msg,
                                    const OString *src, int line);
-CRI_FUNC void cr_debug_warnerror(cr_State *ts, const char *str);
-CRI_FUNC cr_noret cr_debug_runerror(cr_State *ts, const char *fmt, ...);
-CRI_FUNC cr_noret cr_debug_typeerror(cr_State *ts, const TValue *v,
+CRI_FUNC void crD_warnerror(cr_State *ts, const char *str);
+CRI_FUNC cr_noret crD_runerror(cr_State *ts, const char *fmt, ...);
+CRI_FUNC cr_noret crD_typeerror(cr_State *ts, const TValue *v,
                                      const char *op);
-CRI_FUNC cr_noret cr_debug_ordererror(cr_State *ts, const TValue *v1,
+CRI_FUNC cr_noret crD_ordererror(cr_State *ts, const TValue *v1,
                                       const TValue *v2);
-CRI_FUNC cr_noret cr_debug_operror(cr_State *ts, const TValue *v1,
+CRI_FUNC cr_noret crD_operror(cr_State *ts, const TValue *v1,
                                    const TValue *v2, const char *op);
 
 #endif

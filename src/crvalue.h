@@ -40,9 +40,9 @@
 #define CR_TOTALTYPES   (CR_THTABLE + 2)
 
 
-CRI_DEC(const char *const cr_value_typenames[CR_TOTALTYPES]);
+CRI_DEC(const char *const crV_typenames[CR_TOTALTYPES]);
 
-#define typename(t)     cr_value_typenames[(t) + 1]
+#define typename(t)     crV_typenames[(t) + 1]
 
 
 /* Cript values */
@@ -326,7 +326,7 @@ typedef enum N2IMode {
 #define tointeger(v,i) \
     (cr_likely(ttisint(v)) \
      ? (*(i) = ival(v), 1) \
-     : cr_value_tointeger(v, i, CR_N2IFLOOR))
+     : crV_tointeger(v, i, CR_N2IFLOOR))
 
 
 /* convert value to 'cr_number' */
@@ -337,32 +337,32 @@ typedef enum N2IMode {
 
 
 /* same as right shift but indicate left by making 'y' negative */
-#define cr_value_shiftl(x,y)    cr_value_shiftr(x, -y)
+#define crV_shiftl(x,y)    crV_shiftr(x, -y)
 
 
 /* hash primitives */
-#define cr_value_hashint(i)     cast_uint(cri_castS2U(i))
-#define cr_value_hashbool(b)    cast_uint((b) != 0)
-#define cr_value_hashp(p)       pointer2uint(p)
+#define crV_hashint(i)     cast_uint(cri_castS2U(i))
+#define crV_hashbool(b)    cast_uint((b) != 0)
+#define crV_hashp(p)       pointer2uint(p)
 
 
-CRI_FUNC uint cr_value_hashnum(cr_number n);
-CRI_FUNC int cr_value_ceillog2(uint x);
-CRI_FUNC int cr_value_n2i(cr_number n, cr_integer *i, N2IMode mode);
-CRI_FUNC int cr_value_tointeger(const TValue *v, cr_integer *i, int mode);
+CRI_FUNC uint crV_hashnum(cr_number n);
+CRI_FUNC int crV_ceillog2(uint x);
+CRI_FUNC int crV_n2i(cr_number n, cr_integer *i, N2IMode mode);
+CRI_FUNC int crV_tointeger(const TValue *v, cr_integer *i, int mode);
 
-CRI_FUNC cr_integer cr_value_div(cr_State *ts, cr_integer x, cr_integer y);
-CRI_FUNC cr_integer cr_value_modint(cr_State *ts, cr_integer x, cr_integer y);
-CRI_FUNC cr_number cr_value_modnum(cr_State *ts, cr_number x, cr_number y);
-CRI_FUNC cr_integer cr_value_shiftr(cr_integer x, cr_integer y);
+CRI_FUNC cr_integer crV_div(cr_State *ts, cr_integer x, cr_integer y);
+CRI_FUNC cr_integer crV_modint(cr_State *ts, cr_integer x, cr_integer y);
+CRI_FUNC cr_number crV_modnum(cr_State *ts, cr_number x, cr_number y);
+CRI_FUNC cr_integer crV_shiftr(cr_integer x, cr_integer y);
 
-CRI_FUNC void cr_value_arithm(cr_State *ts, const TValue *a, const TValue *b,
+CRI_FUNC void crV_arithm(cr_State *ts, const TValue *a, const TValue *b,
                               SPtr res, int op);
-CRI_FUNC int cr_value_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
+CRI_FUNC int crV_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
                                 TValue *res, int op);
 
-CRI_FUNC int cr_value_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2);
-CRI_FUNC int cr_value_orderLT(cr_State *ts, const TValue *v1, const TValue *v2);
-CRI_FUNC int cr_value_orderLE(cr_State *ts, const TValue *v1, const TValue *v2);
+CRI_FUNC int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2);
+CRI_FUNC int crV_orderLT(cr_State *ts, const TValue *v1, const TValue *v2);
+CRI_FUNC int crV_orderLE(cr_State *ts, const TValue *v1, const TValue *v2);
 
 #endif

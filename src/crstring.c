@@ -35,11 +35,11 @@ uint cr_hash_string(const char *str, size_t len, unsigned int seed)
    Create new string object of size 'len'.
  * Allocation is skipped in case string is already interned.
  */
-OString *cr_string_newl(cr_State *ts, const char *chars, size_t len)
+OString *crS_newl(cr_State *ts, const char *chars, size_t len)
 {
     TValue key;
     HTable *strtab = &GS(ts)->strings;
-    uint hash = cr_string_hash(chars, len, GS(ts)->seed);
+    uint hash = crS_hash(chars, len, GS(ts)->seed);
     OString *weakref = cr_htable_getstring(strtab, chars, len, hash);
     if (weakref)
         return weakref;
@@ -60,16 +60,15 @@ OString *cr_string_newl(cr_State *ts, const char *chars, size_t len)
 
 
 /* create new string object */
-OString *cr_string_new(cr_State *ts, const char *chars)
-{
-    return cr_string_newl(ts, chars, strlen(chars));
+OString *crS_new(cr_State *ts, const char *chars) {
+    return crS_newl(ts, chars, strlen(chars));
 }
 
 
 /* free string object */
-void cr_string_free(cr_State *ts, OString *s)
+void crS_free(cr_State *ts, OString *s)
 {
-    cr_mem_free(ts, s, sizeofstring(s->len));
+    crM_free(ts, s, sizeofstring(s->len));
 }
 
 
@@ -78,7 +77,7 @@ void cr_string_free(cr_State *ts, OString *s)
  * strings that might have null terminator in between
  * of their contents.
  */
-int cr_string_cmp(const OString *s1, const OString *s2)
+int crS_cmp(const OString *s1, const OString *s2)
 {
     const char *p1 = s1->bytes;
     size_t s1l = s1->len;
@@ -100,7 +99,7 @@ int cr_string_cmp(const OString *s1, const OString *s2)
 }
 
 
-int cr_string_eq(const OString *s1, const OString *s2)
+int crS_eq(const OString *s1, const OString *s2)
 {
     return ((s1 == s2) || (s1->hash == s2->hash /* pointers match or hash */
                 && s1->len == s2->len /* and length */
@@ -108,7 +107,7 @@ int cr_string_eq(const OString *s1, const OString *s2)
 }
 
 
-void cr_string_sourceid(char *restrict dest, const char *src, size_t len)
+void crS_sourceid(char *restrict dest, const char *src, size_t len)
 {
     size_t bufflen = CRI_MAXSRC - 1;
     if (bufflen < len) {
@@ -148,7 +147,7 @@ void cr_string_sourceid(char *restrict dest, const char *src, size_t len)
 
 
 /* convert hex character into digit */
-int cr_string_hexvalue(int c)
+int crS_hexvalue(int c)
 {
     cr_assert(isxdigit(c));
     if (isdigit(c)) 
@@ -176,7 +175,7 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
     if (*s == '0' && (*s == 'x' || *s == 'X')) { /* hex ? */
         s+=2; /* skip hex prefix */
         for (; isxdigit(*s); s++) {
-            digit = cr_string_hexvalue(*s);
+            digit = crS_hexvalue(*s);
             if (hexoverflow(u, digit)) {
                 if (overflow)
                     *overflow = 1;
@@ -236,7 +235,7 @@ static const char *otstr2flt(const char *s, cr_number *n, int *of)
 
 
 /* convert string to 'cr_number' or 'cr_integer' */
-size_t cr_string_tonum(const char *s, TValue *o, int *of)
+size_t crS_tonum(const char *s, TValue *o, int *of)
 {
     cr_integer i;
     cr_number n;
@@ -283,11 +282,11 @@ static int otnum2buff(const TValue *nv, char *buff)
 }
 
 
-void cr_string_numtostring(cr_State *ts, TValue *v)
+void crS_numtostring(cr_State *ts, TValue *v)
 {
     char buff[MAXNUM2STR];
     int len = otnum2buff(v, buff);
-    setv2s(ts, v, cr_string_newl(ts, buff, len));
+    setv2s(ts, v, crS_newl(ts, buff, len));
 }
 
 
@@ -297,17 +296,17 @@ void cr_string_numtostring(cr_State *ts, TValue *v)
  * -------------------------------------------------------------------------- */
 
 /*
- * Initial size of buffer used in 'cr_string_newvstringf'
+ * Initial size of buffer used in 'crS_newvstringf'
  * to prevent allocations, instead the function
  * will directly work on the buffer and will push
  * strings on stack in case buffer exceeds this limit.
- * This is all done because 'cr_string_newvstringf' often
- * gets called by 'cr_debug_getinfo'; the size should be
+ * This is all done because 'crS_newvstringf' often
+ * gets called by 'crD_getinfo'; the size should be
  * at least 'CR_MAXSRC' + 'MAXNUM2STR' + size for message.
  */
 #define BUFFVFSSIZ	(CRI_MAXSRC + MAXNUM2STR + 100)
 
-/* buffer for 'cr_string_newvstringf' */
+/* buffer for 'crS_newvstringf' */
 typedef struct BuffVSF {
     cr_State *ts;
     int pushed; /* true if 'space' was pushed on the stack */
@@ -323,7 +322,7 @@ typedef struct BuffVSF {
 static void pushstr(BuffVFS *buff, const char *str, size_t len)
 {
     cr_State *ts = buff->ts;
-    OString *s = cr_string_newl(ts, str, len);
+    OString *s = crS_newl(ts, str, len);
     setsv2s(ts, ts->stacktop.p, s);
     ts->stacktop.p++;
     if (buff->pushed)
@@ -381,7 +380,7 @@ static void buffaddptr(BuffVFS *buff, const void *p)
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
-const char *cr_string_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
+const char *crS_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
 {
     const char *end;
     TValue nv;
@@ -425,7 +424,7 @@ const char *cr_string_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
         }
         default:;
             cr_ubyte c = cast(unsigned char, *(end + 1));
-            cr_debug_runerror(ts, "invalid format specifier '%%%c'", c);
+            crD_runerror(ts, "invalid format specifier '%%%c'", c);
             /* UNREACHED */
             return NULL;
         }
@@ -437,11 +436,11 @@ const char *cr_string_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
 }
 
 
-const char *cr_string_pushfstring(cr_State *ts, const char *fmt, ...)
+const char *crS_pushfstring(cr_State *ts, const char *fmt, ...)
 {
     va_list argp;
     va_start(argp, fmt);
-    const char *str = cr_string_pushvfstring(ts, fmt, argp);
+    const char *str = crS_pushvfstring(ts, fmt, argp);
     va_end(argp);
     return str;
 }

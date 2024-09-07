@@ -29,10 +29,10 @@
  * in bytes of total memory used by cript.
  */
 typedef size_t cr_umem;
-typedef ptrdiff_t cr_mem;
+typedef ptrdiff_t crM;
 
 #define CRUMEM_MAX	((cr_umem)(~(cr_umem)(0)))
-#define CRMEM_MAX	((cr_mem)(CRUMEM_MAX >> 1))
+#define CRMEM_MAX	((crM)(CRUMEM_MAX >> 1))
 
 
 /*
@@ -299,7 +299,7 @@ typedef cr_ubyte Instruction;
 #define cast_int(e)	    cast(int,(e))
 #define cast_uint(e)	    cast(uint,(e))
 #define cast_umem(e)	    cast(cr_umem,(e))
-#define cast_mem(e)	    cast(cr_mem,(e))
+#define cast_mem(e)	    cast(crM,(e))
 #define cast_charp(e)       cast(char *,(e))
 #define cast_sizet(e)       cast(size_t,(e))
 
@@ -381,11 +381,11 @@ typedef cr_ubyte Instruction;
 
 
 /*
- * @CR_DEBUG_STRESS_GC - enables stress test for garbage
+ * @crD_STRESS_GC - enables stress test for garbage
  * collector, on each tracked memory change it performs
  * full garbage collection.
  */
-#if defined(CR_DEBUG_STRESS_GC)
+#if defined(crD_STRESS_GC)
 #define gcmemchange(ts,pre,pos)	\
 	{ if (gcrunning(GS(ts)->gc)) { pre; cr_gc_full(ts); pos; } }
 #else

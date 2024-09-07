@@ -82,7 +82,7 @@ int cr_vm_reallocstack(cr_State *ts, int size, int raiseerr)
     int osize = stacksize(ts);
     savestackptrs(ts);
     gs->gc.stopem = 1; /* no emergency collection when reallocating stack */
-    SPtr newstack = cr_mem_reallocarray(ts, ts->stack.p,
+    SPtr newstack = crM_reallocarray(ts, ts->stack.p,
             osize + EXTRA_STACK, size + EXTRA_STACK);
     gs->gc.stopem = oldstopem;
     if (cr_unlikely(newstack == NULL)) {
@@ -122,7 +122,7 @@ int cr_ts_growstack(cr_State *ts, int n, int raiseerr)
     }
     cr_vm_reallocstack(ts, OVERFLOWSTACKSIZE, raiseerr);
     if (raiseerr)
-        cr_debug_runerror(ts, "stack overflow");
+        crD_runerror(ts, "stack overflow");
     return 0;
 }
 

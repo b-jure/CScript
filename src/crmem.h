@@ -21,39 +21,39 @@
 #include "crlimits.h"
 
 
-#define cr_mem_newarray(ts,s,t)     cr_mem_malloc(ts, (s) * sizeof(t))
+#define crM_newarray(ts,s,t)     crM_malloc(ts, (s) * sizeof(t))
 
-#define cr_mem_reallocarray(ts,p,os,ns) \
-    ((p) = cr_mem_realloc(ts, (p), (os)*sizeof(*p), (ns)*sizeof(ns)))
+#define crM_reallocarray(ts,p,os,ns) \
+    ((p) = crM_realloc(ts, (p), (os)*sizeof(*p), (ns)*sizeof(ns)))
 
-#define cr_mem_freearray(ts,p,n) \
-    cr_mem_free((ts), (p), cast_umem(n)*sizeof(*(p)))
-
-
-
-#define cr_mem_ensurevec(ts,p,s,n,e,l,w) \
-    ((p) = cr_mem_growarr_(ts, p, n, &(s), sizeof(*(p)), e, l, w))
-
-#define cr_mem_growvec(ts,p,s,n,l,w) \
-    ((p) = cr_mem_ensurevec((ts), p, s, n, 0, l, w))
-
-#define cr_mem_shrinkvec(ts,p,s,f) \
-    ((p) = cr_mem_shrinkarr_(ts, p, &(s), f, sizeof(*(p))))
+#define crM_freearray(ts,p,n) \
+    crM_free((ts), (p), cast_umem(n)*sizeof(*(p)))
 
 
 
-CRI_FUNC void *cr_mem_malloc(cr_State *ts, cr_umem size);
-CRI_FUNC void *cr_mem_realloc(cr_State *ts, void *ptr, cr_umem osize,
+#define crM_ensurevec(ts,p,s,n,e,l,w) \
+    ((p) = crM_growarr_(ts, p, n, &(s), sizeof(*(p)), e, l, w))
+
+#define crM_growvec(ts,p,s,n,l,w) \
+    ((p) = crM_ensurevec((ts), p, s, n, 0, l, w))
+
+#define crM_shrinkvec(ts,p,s,f) \
+    ((p) = crM_shrinkarr_(ts, p, &(s), f, sizeof(*(p))))
+
+
+
+CRI_FUNC void *crM_malloc(cr_State *ts, cr_umem size);
+CRI_FUNC void *crM_realloc(cr_State *ts, void *ptr, cr_umem osize,
                               cr_umem nsize);
-CRI_FUNC void *cr_mem_saferealloc(cr_State *ts, void *ptr, cr_umem osize,
+CRI_FUNC void *crM_saferealloc(cr_State *ts, void *ptr, cr_umem osize,
                                   cr_umem nsize);
-CRI_FUNC void cr_mem_free(cr_State *ts, void *ptr, cr_umem osize);
-CRI_FUNC void *cr_mem_growarr_(cr_State *ts, void *ptr, int len, int *sizep,
+CRI_FUNC void crM_free(cr_State *ts, void *ptr, cr_umem osize);
+CRI_FUNC void *crM_growarr_(cr_State *ts, void *ptr, int len, int *sizep,
                                int elemsize, int ensure, int limit,
                                const char *what);
-CRI_FUNC void *cr_mem_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
+CRI_FUNC void *crM_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
                                  int elemsize);
-CRI_FUNC int cr_mem_reallocstack(cr_State *ts, int n);
-CRI_FUNC int cr_mem_growstack(cr_State *ts, int n);
+CRI_FUNC int crM_reallocstack(cr_State *ts, int n);
+CRI_FUNC int crM_growstack(cr_State *ts, int n);
 
 #endif

@@ -128,7 +128,7 @@ void cr_gc_init(GC *gc)
 GCObject *cr_gc_new_(cr_State *ts, size_t size, cr_ubyte ott)
 {
     GC *gc = &GS(ts)->gc;
-    GCObject *o = cast(GCObject*, cr_mem_malloc(ts, size));
+    GCObject *o = cast(GCObject*, crM_malloc(ts, size));
     rawtt_(o) = ott;
     omark_(o) = cr_gc_white(gc);
     onext_(o) = gc->objects;
@@ -149,9 +149,9 @@ void cr_gc_fix(cr_State *ts, GCObject *o)
 
 
 /* set collector debt */
-void cr_gc_setdebt(GC *gc, cr_mem debt)
+void cr_gc_setdebt(GC *gc, crM debt)
 {
-    cr_mem total = totalbytes(gc);
+    crM total = totalbytes(gc);
     if (debt < total - CRMEM_MAX) /* 'total' will underflow ? */
         debt = total - CRMEM_MAX;
     gc->total = total - debt;
@@ -289,7 +289,7 @@ static void markobject_(GC *gc, GCObject *o)
 
 
 /* mark 'VMT' */
-cr_sinline cr_mem markvmt(GC *gc, VMT vmt)
+cr_sinline crM markvmt(GC *gc, VMT vmt)
 {
     for (int i = 0; i < CR_NUM_META; i++)
         if (!ttisnil(&vmt[i]))
@@ -299,7 +299,7 @@ cr_sinline cr_mem markvmt(GC *gc, VMT vmt)
 
 
 /* mark 'HTable' slots */
-static cr_mem markhtable(GC *gc, HTable *ht)
+static crM markhtable(GC *gc, HTable *ht)
 {
     if (ht->isweak) { /* weak table ? */
         linkgclist(ht, gc->weak);
@@ -317,7 +317,7 @@ static cr_mem markhtable(GC *gc, HTable *ht)
 
 
 /* mark 'Function' */
-static cr_mem markfunction(GC *gs, Function *fn)
+static crM markfunction(GC *gs, Function *fn)
 {
     int i;
     markobjectcheck(gs, fn->source);
@@ -325,8 +325,8 @@ static cr_mem markfunction(GC *gs, Function *fn)
         markobject(gs, fn->funcs[i]);
     for (i = 0; i < fn->sizek; i++)
         markvalue(gs, &fn->k[i]);
-    for (i = 0; i < fn->sizestatics; i++)
-        markobjectcheck(gs, fn->statics[i].s.name);
+    for (i = 0; i < fn->sizeprivate; i++)
+        markobjectcheck(gs, fn->private[i].s.name);
     for (i = 0; i < fn->sizelocals; i++)
         markobjectcheck(gs, fn->locals[i].name);
     for (i = 0; i < fn->sizeupvals; i++)
@@ -336,7 +336,7 @@ static cr_mem markfunction(GC *gs, Function *fn)
 
 
 /* mark 'CClosure' */
-static cr_mem markcclosure(GC *gc, CClosure *ccl)
+static crM markcclosure(GC *gc, CClosure *ccl)
 {
     for (int i = 0; i < ccl->nupvalues; i++)
         markvalue(gc, &ccl->upvalue[i]);
@@ -345,7 +345,7 @@ static cr_mem markcclosure(GC *gc, CClosure *ccl)
 
 
 /* mark 'CrClosure' */
-static cr_mem markcriptclosure(GC *gc, CrClosure *crcl)
+static crM markcriptclosure(GC *gc, CrClosure *crcl)
 {
     markobjectcheck(gc, crcl->fn);
     for (int i = 0; i < crcl->nupvalues; i++)
@@ -355,7 +355,7 @@ static cr_mem markcriptclosure(GC *gc, CrClosure *crcl)
 
 
 /* mark 'OClass' */
-static cr_mem markclass(GC *gc, OClass *cls)
+static crM markclass(GC *gc, OClass *cls)
 {
     markobjectcheck(gc, cls->name);
     markobjectcheck(gc, cls->methods);
@@ -364,9 +364,9 @@ static cr_mem markclass(GC *gc, OClass *cls)
 
 
 /* mark 'UserData' */
-static cr_mem markuserdata(GC *gc, UserData *ud)
+static crM markuserdata(GC *gc, UserData *ud)
 {
-    cr_mem extra = 0;
+    crM extra = 0;
     if (!ud->vmtempty)
         extra = markvmt(gc, ud->vtable);
     for (int i = 0; i < ud->nuv; i++)
@@ -395,7 +395,7 @@ static cr_mem markuserdata(GC *gc, UserData *ud)
  * really did get modified after we marked it black) without
  * using write barriers.
  */
-static cr_mem markthread(GState *gs, cr_State *ts)
+static crM markthread(GState *gs, cr_State *ts)
 {
     GC *gc = &gs->gc;
     cr_assert(gc->state & (GCSpropagate | GCSatomic));
@@ -428,7 +428,7 @@ static cr_mem markthread(GState *gs, cr_State *ts)
  * marked and upvalue itself is not marked (or if
  * thread doesn't contain any open upvalues).
  */
-static cr_mem markopenupvalues(GState *gs)
+static crM markopenupvalues(GState *gs)
 {
     int work = 0;
     cr_State *th;
@@ -455,7 +455,7 @@ static cr_mem markopenupvalues(GState *gs)
 
 
 /* traverse a single gray object turning it black */
-static cr_mem propagate(GState *gs)
+static crM propagate(GState *gs)
 {
     GCObject *o = gs->gc.graylist;
     markblack(o);
@@ -474,9 +474,9 @@ static cr_mem propagate(GState *gs)
 
 
 /* propagates all gray objects */
-static cr_mem propagateall(GState *gs)
+static crM propagateall(GState *gs)
 {
-    cr_mem work;
+    crM work;
     for (work = 0; gs->gc.graylist; work += propagate(gs));
     return work;
 }
@@ -491,14 +491,14 @@ static cr_mem propagateall(GState *gs)
 static void freeobject(cr_State *ts, GCObject *o)
 {
     switch (ott_(o)) {
-    case CR_VSTRING: cr_string_free(ts, gco2str(o)); break;
+    case CR_VSTRING: crS_free(ts, gco2str(o)); break;
     case CR_VFUNCTION: cr_function_free(ts, gco2fn(o)); break;
     case CR_VUVALUE: cr_function_freeupval(ts, gco2uv(o)); break;
-    case CR_VCRCL: cr_mem_free(ts, o, sizeofcrcl(gco2crcl(o)->nupvalues)); break;
-    case CR_VCCL: cr_mem_free(ts, o, sizeofccl(gco2ccl(o)->nupvalues)); break;
-    case CR_VCLASS: cr_meta_freeclass(ts, gco2cls(o)); break;
-    case CR_VINSTANCE: cr_meta_freeinstance(ts, gco2ins(o)); break;
-    case CR_VMETHOD: cr_mem_free(ts, o, sizeof(*gco2im(o))); break;
+    case CR_VCRCL: crM_free(ts, o, sizeofcrcl(gco2crcl(o)->nupvalues)); break;
+    case CR_VCCL: crM_free(ts, o, sizeofccl(gco2ccl(o)->nupvalues)); break;
+    case CR_VCLASS: crMM_freeclass(ts, gco2cls(o)); break;
+    case CR_VINSTANCE: crMM_freeinstance(ts, gco2ins(o)); break;
+    case CR_VMETHOD: crM_free(ts, o, sizeof(*gco2im(o))); break;
     default: cr_unreachable();
     }
 }
@@ -610,7 +610,7 @@ static void callfin(cr_State *ts)
     const TValue *m;
     GC *gc = &GS(ts)->gc;
     setv2gco(ts, &v, gettobefin(gc));
-    if ((m = cr_meta_vget(ts, &v, CR_META_GC))) {
+    if ((m = crMM_vget(ts, &v, CR_META_GC))) {
         int oldstopped = gc->stopped;
         gc->stopped = GCSTP; /* prevent recursive GC calls */
         setsval(ts, ts->stacktop.p++, m);
@@ -621,7 +621,7 @@ static void callfin(cr_State *ts)
         ts->aframe->cfstatus &= ~CFST_FIN; /* finalizer returned */
         gc->stopped = oldstopped;
         if (cr_unlikely(status != CR_OK)) {
-            cr_debug_warnerror(ts, "__gc__");
+            crD_warnerror(ts, "__gc__");
             ts->stacktop.p--; /* pop err object */
         }
     }
@@ -729,9 +729,9 @@ static void separatetobefin(GState *gs, int force)
 }
 
 
-static cr_mem marktobefin(GState *gs)
+static crM marktobefin(GState *gs)
 {
-    cr_mem cnt = 0;
+    crM cnt = 0;
     for (GCObject *o = gs->gc.tobefin; o != NULL; o = o->next) {
         markobject(&gs->gc, o);
         cnt++;
@@ -740,11 +740,11 @@ static cr_mem marktobefin(GState *gs)
 }
 
 
-static cr_mem atomic(cr_State *ts)
+static crM atomic(cr_State *ts)
 {
     GState *gs = GS(ts);
     GC *gc = &gs->gc;
-    cr_mem work = 0;
+    crM work = 0;
     GCObject *grayagain = gc->grayagain;
     gc->grayagain = NULL;
     cr_assert(gc->weakhtab == NULL);
@@ -786,12 +786,12 @@ static cr_mem atomic(cr_State *ts)
 static void setpause(GC *gc)
 {
     int pause = getgcparam(gc->pause);
-    cr_mem estimate = gc->estimate / PAUSEADJ;
+    crM estimate = gc->estimate / PAUSEADJ;
     cr_assert(estimate > 0);
-    cr_mem threshold = (pause < CRMEM_MAX / estimate)  /* overflow ? */
+    crM threshold = (pause < CRMEM_MAX / estimate)  /* overflow ? */
         ? estimate * pause  /* no overflow */
         : CRMEM_MAX;  /* overflow; use maximum */
-    cr_mem debt = totalbytes(gc) - threshold;
+    crM debt = totalbytes(gc) - threshold;
     if (debt > 0) debt = 0;
     cr_gc_setdebt(gc, debt);
 }
@@ -830,9 +830,9 @@ static void restartgc(GState *gs)
  * in 'tobefin' and puts them back into 'objects'
  * list after the call.
  */
-static cr_mem singlestep(cr_State *ts)
+static crM singlestep(cr_State *ts)
 {
-    cr_mem work;
+    crM work;
     GState *gs = GS(ts);
     GC *gc = &gs->gc;
     gc->stopem = 1; /* prevent emergency collections */
@@ -947,8 +947,8 @@ static void step(cr_State *ts, GState *gs)
 {
     GC *gc = &gs->gc;
     int stepmul = getgcparam(gc->stepmul) | 1;
-    cr_mem debt = (gc->debt / WORK2MEM) * stepmul;
-    cr_mem stepsize = (gc->stepsize <= sizeof(cr_mem) * 8 - 2 /* can fit in 'cr_mem' ? */
+    crM debt = (gc->debt / WORK2MEM) * stepmul;
+    crM stepsize = (gc->stepsize <= sizeof(crM) * 8 - 2 /* can fit in 'crM' ? */
             ? (cast_mem(1) << gc->stepsize) / WORK2MEM /* it can fit */
             : CRMEM_MAX); /* overflowed; return maximum possible value */
     do {

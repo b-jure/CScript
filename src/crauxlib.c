@@ -37,7 +37,7 @@ static cr_inline void printerror(cr_State* ts)
 /* Auxiliary to 'panic', prints stack trace-back */
 static void stacktraceback(cr_State* ts)
 {
-    cr_debuginfo di;
+    crD_info di;
     int level = 0;
     if(!cr_getstack(ts, level, &di)) return;
     skaux_writetoerr("Stack traceback:\n");
@@ -161,7 +161,7 @@ CR_LIBAPI void skaux_checktype(cr_State* ts, int idx, int type)
 /* @TODO: add description */
 CR_LIBAPI void skaux_where(cr_State* ts, int level)
 {
-    cr_debuginfo di;
+    crD_info di;
     if(cr_getstack(ts, level, &di)) {
         cr_getinfo(ts, DW_LINE | DW_FNSRC, &di);
         if(di.line > 0) {

@@ -20,37 +20,32 @@
 
 
 
-void cr_br_init(cr_State *ts, BuffReader *br, cr_reader reader, void *userdata)
-{
-	br->n = 0;
-	br->buff = NULL;
-	br->reader = reader;
-	br->userdata = userdata;
-	br->ts = ts;
+void crR_init(cr_State *ts, BuffReader *br, crR reader, void *userdata) {
+    br->n = 0;
+    br->buff = NULL;
+    br->reader = reader;
+    br->userdata = userdata;
+    br->ts = ts;
 }
 
 
 /* 
- * Invoke 'cr_reader' returning the first character or CREOF (-1).
- * 'cr_reader' should set the 'size' to the amount of bytes
+ * Invoke reader returning the first character or CREOF (-1).
+ * 'crR' should set the 'size' to the amount of bytes
  * reader read and return the pointer to the start of that
  * buffer. 
  */
-int cr_br_fill(BuffReader *br)
-{
-	cr_State *ts;
-	size_t size;
-	const char *buff;
-
-	ts = br->ts;
-	cr_unlock(ts);
-	buff = br->reader(ts, br->userdata, &size);
-	cr_lock(ts);
-	if (buff == NULL || size == 0)
-		return CREOF;
-	br->buff = buff;
-	br->n = size - 1;
-	return *br->buff++;
+int crR_fill(BuffReader *br) {
+    cr_State *ts = br->ts;
+    size_t size;
+    cr_unlock(ts);
+    const char *buff = br->reader(ts, br->userdata, &size);
+    cr_lock(ts);
+    if (buff == NULL || size == 0)
+        return CREOF;
+    br->buff = buff;
+    br->n = size - 1;
+    return *br->buff++;
 }
 
 
@@ -58,21 +53,18 @@ int cr_br_fill(BuffReader *br)
  * Read 'n' bytes from 'BuffReader' returning
  * count of unread bytes or 0 if all bytes were read. 
  */
-size_t cr_br_readn(BuffReader *br, size_t n)
-{
-	size_t min;
-
-	while (n) {
-		if (br->n == 0) {
-			if (cr_br_fill(br) == CREOF)
-				return n;
-			br->n++; /* cr_br_fill decremented it */
-			br->buff--; /* restore that character */
-		}
-		min = (br->n <= n ? br->n : n);
-		br->n -= min;
-		br->buff += min;
-		n -= min;
-	}
-	return 0;
+size_t crR_readn(BuffReader *br, size_t n) {
+    while (n) {
+        if (br->n == 0) {
+            if (crR_fill(br) == CREOF)
+                return n;
+            br->n++; /* crR_fill decremented it */
+            br->buff--; /* restore that character */
+        }
+        size_t min = (br->n <= n ? br->n : n);
+        br->n -= min;
+        br->buff += min;
+        n -= min;
+    }
+    return 0;
 }

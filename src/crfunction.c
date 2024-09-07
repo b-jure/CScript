@@ -12,7 +12,7 @@ Function *cr_function_newfunction(cr_State *ts)
     fn->source = NULL;
     { fn->funcs = NULL; fn->sizefn = 0; } /* functions */
     { fn->k = NULL; fn->sizek = 0; } /* constants */
-    { fn->statics = NULL; fn->sizestatics = 0; } /* statics */
+    { fn->private = NULL; fn->sizeprivate = 0; } /* privates */
     { fn->code = NULL; fn->sizecode = 0; } /* code */
     { fn->linfo = NULL; fn->sizelinfo = 0; } /* line information */
     { fn->locals = NULL; fn->sizelocals = 0; } /* locals */
@@ -119,18 +119,18 @@ void cr_function_freeupval(cr_State *ts, UpVal *upval)
 {
     if (uvisopen(upval))
         unlinkupval(upval);
-    cr_mem_free(ts, upval, sizeof(UpVal));
+    crM_free(ts, upval, sizeof(UpVal));
 }
 
 
 /* free 'Function' */
 void cr_function_free(cr_State *ts, Function *fn)
 {
-    cr_mem_freearray(ts, fn->funcs, fn->sizefn);
-    cr_mem_freearray(ts, fn->k, fn->sizek);
-    cr_mem_freearray(ts, fn->code, fn->sizecode);
-    cr_mem_freearray(ts, fn->linfo, fn->sizelinfo);
-    cr_mem_freearray(ts, fn->locals, fn->sizelocals);
-    cr_mem_freearray(ts, fn->upvals, fn->sizeupvals);
-    cr_mem_free(ts, fn, sizeof(Function));
+    crM_freearray(ts, fn->funcs, fn->sizefn);
+    crM_freearray(ts, fn->k, fn->sizek);
+    crM_freearray(ts, fn->code, fn->sizecode);
+    crM_freearray(ts, fn->linfo, fn->sizelinfo);
+    crM_freearray(ts, fn->locals, fn->sizelocals);
+    crM_freearray(ts, fn->upvals, fn->sizeupvals);
+    crM_free(ts, fn, sizeof(Function));
 }

@@ -21,6 +21,7 @@
 #include "crobject.h"
 #include "crlexer.h"
 #include "crvalue.h"
+#include "crbits.h"
 
 
 
@@ -135,7 +136,7 @@ typedef struct ExpInfo {
 #define VARTBC          2 /* to-be-closed */
 
 /* bit mask of all valid modifiers in 'mod' */
-#define VARBITMASK      (bit2mask(VARFINAL, VARPRIVATE) | bitmask(VARTBC))
+#define VARBITMASK      (bit2mask(VARFINAL, VARPRIVATE), bitmask(VARTBC))
 
 
 /* active local variable compiler information */
@@ -151,7 +152,7 @@ typedef union LVar {
 
 
 /* list of jump instructions to patch */
-typedef struct BreakList {
+typedef struct PatchList {
     int len;
     int size;
     int *arr;
@@ -169,8 +170,8 @@ typedef struct ClassState {
 
 /*
  * Dynamic data used by parser.
- * It is stored inside 'Lexer' because there is
- * only one lexer for every 'FunctionState'.
+ * It is stored inside 'Lexer' because each
+ * 'FunctionState' shares the same 'Lexer'.
  */
 typedef struct ParserState {
     struct {
@@ -217,21 +218,20 @@ typedef struct FunctionState {
     int nlinfo; /* number of elements in 'linfo' */
     int nlocals; /* number of elements in 'locals' */
     int nupvals; /* number of elements in 'upvals' */
-    int nswscopes; /* number of 'switch' scopes */
     DynCtx deadcode; /* context before "dead" (unreachable) code */
     struct {
         int len; /* number of elements in 'list' */
         int size; /* size of 'list' */
         PatchList *list; /* list of patch lists */
-    } patches; /* 2Dlist */
+    } patches; /* 2Dvec */
     cr_ubyte needclose; /* true if needs to close upvalues before returning */
     cr_ubyte lastwasret; /* last statement is 'return' */
 } FunctionState;
 
 
 
-CRI_FUNC cr_noret cr_parser_semerror(Lexer *lx, const char *err);
-CRI_FUNC void cr_parser_pparse(cr_State *ts, cr_reader fn, void *userdata,
+CRI_FUNC cr_noret crP_semerror(Lexer *lx, const char *err);
+CRI_FUNC void crP_pparse(cr_State *ts, crR fn, void *userdata,
                                const char *name);
 
 #endif

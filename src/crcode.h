@@ -19,28 +19,28 @@
 
 
 /* instruction and argument sizes (bytes) */
-#define INSTSIZE	    1
-#define ARGSSIZE	    INSTSIZE
-#define ARGLSIZE	    3
+#define SIZEINSTR	    1
+#define SIZEARGS	    SIZEINSTR
+#define SIZEARGL	    3
 
-/* instruction and arg sizes (bits) */
-#define INSTBSIZE           (INSTSIZE << 3)
-#define ARGSBSIZE           (ARGSSIZE << 3)
-#define ARGLBSIZE           (ARGLSIZE << 3)
+/* instruction and args width */
+#define WIDTHINSTR          (SIZEINSTR << 3)
+#define WIDTHARGS           (SIZEARGS << 3)
+#define WIDTHARGL           (SIZEARGL << 3)
 
 /* maximum instruction and arg sizes */
-#define MAXINSTSIZE         ((1 << INSTBSIZE) - 1)
-#define MAXSHRTARGSIZE      ((1 << ARGSBSIZE) - 1)
-#define MAXLONGARGSIZE      ((1 << ARGLBSIZE) - 1)
+#define MAXSIZEINSTR        ((1 << WIDTHINSTR) - 1)
+#define MAXSHRTARGSIZE      MAXSIZEINSTR
+#define MAXLONGARGSIZE      ((1 << WIDTHARGL) - 1)
 #define MAXCODESIZE         MAXLONGARGSIZE
 
 
 /* gets first arg pc */
-#define GETARG(ip)		((ip) + INSTSIZE)
+#define GETARG(ip)		((ip) + SIZEINSTR)
 
 /* get short/long argument pc */
-#define GETPC_S(ip,o)            (GETARG(ip) + ((o)*ARGSSIZE))
-#define GETPC_L(ip,o)            (GETARG(ip) + ((o)*ARGLSIZE))
+#define GETPC_S(ip,o)            (GETARG(ip) + ((o)*SIZEARGS))
+#define GETPC_L(ip,o)            (GETARG(ip) + ((o)*SIZEARGL))
 
 
 /* get/set short parameter */
@@ -49,15 +49,18 @@
 
 
 /* get/set long arg */
-#define GETARG_L(ip,o)		get3bytes(GETARG(ip) + ((o)*ARGLSIZE))
+#define GETARG_L(ip,o)		get3bytes(GETARG(ip) + ((o)*SIZEARGL))
 #define SETARG_L(ip,o,v)	set3bytes(GETPC_L(ip,o), v)
 
 
-/* value indicating there is no jump */
-#define NOJMP       (-1)
+/* size of instruction jump argument in bytes */
+#define JMPARGSIZE      SIZEARGL
 
-/* max code jump offset */
-#define MAXJMP      MAXLONGARGSIZE
+/* max code jump offset value */
+#define MAXJMP          MAXLONGARGSIZE
+
+/* value indicating there is no jump */
+#define NOJMP           (-1)
 
 
 /* binary operators */
@@ -96,187 +99,238 @@ typedef enum {
  * S - short arg (8-bit)
  * L - long arg (24-bit)
  * V - stack value
- * K(x) - constant at index 'x'
+ * V{x} - stack value at index 'x'
+ * K{x} - constant at index 'x'
+ * I(x) - 'x' is immediate operand
+ * U{x} - upvalue at index 'x'
+ * OU{x} - open upvalue at index 'x'
+ * P{x} - private variable in 'fn->private[x]'
+ * G(x) - global variable with 'get 'x' from 'gs->globals' htable
+ * L{x} - local variable in 'fn->locals[x]'
  *
  * operation     args           description
  * ------------------------------------------------------------------------- */
-OP_TRUE = 0,    /*             'load true constant' */
-OP_FALSE,       /*             'load false constant' */
-OP_NIL,         /*             'load nil constant' */
-OP_NILN,        /* L           'load L nils' */
-OP_CONST,       /* S           'load K(S)' */
-OP_CONSTL,      /* L           'load K(L)' */
-OP_CONSTI,      /* L S         'load integer L (S signedness) */
-OP_CONSTF,      /* L S         'load integer L as float (S signedness) */
-OP_SETVARARG,   /* L           'adjust function varargs (L function arity)' */
-OP_VARARG,      /* L           'load L-1 varargs' */
-OP_CLOSURE,     /*             'create and load new closure */
-OP_CLASS,       /*             'create and load new class */
-OP_METHOD,      /* L V1 V2     'define method V2 for class V1 under key K(L)' */
-OP_SETVMT,      /* S V1 V2     'define Mmethod V2 for obj V1 at index S' */
-OP_POP,         /*             'pop value off the stack' */
-OP_POPN,        /* L           'pop L values off the stack' */
+OP_TRUE = 0,    /*            'load true constant' */
+OP_FALSE,       /*            'load false constant' */
+OP_NIL,         /*            'load nil constant' */
+OP_NILN,        /* L          'load L nils' */
+OP_CONST,       /* S          'load K{S}' */
+OP_CONSTL,      /* L          'load K{L}' */
+OP_CONSTI,      /* L S        'load integer L (S signedness)' */
+OP_CONSTF,      /* L S        'load integer L as float (S signedness)' */
+OP_VARARGPREP,  /* L          'adjust function varargs (L function arity)' */
+OP_VARARG,      /* L          'load L-1 varargs' */
+OP_CLOSURE,     /*            'create and load new closure' */
+OP_CLASS,       /*            'create and load new class' */
+OP_METHOD,      /* L V1 V2    'define method V2 for class V1 under key K{L}' */
+OP_SETVMT,      /* S V1 V2    'define Mmethod V2 for obj V1 at index S' */
+OP_POP,         /*            'pop value off the stack' */
+OP_POPN,        /* L          'pop L values off the stack' */
 
-OP_MBIN,        /* V1 V2 S    'V1 S V2 (S is binop)' */
-OP_MBINI,       /* V L S1 S2  'V mbinop I(L) (S is signedness, S1 is flip)' */
-OP_MBINK,       /* V L S      'V mbinop K(L) (S is flip)' */
+OP_MBIN,        /* V1 V2 S      'V1 S V2 (S is binop)' */
+OP_MBINI,       /* V L S1 S2    'V mbinop I(L) (S1 is signedness, S2 is flip)' */
+OP_MBINK,       /* V L S        'V mbinop K{L} (S is flip)' */
 
-OP_ADDK,         /* V L S     'V + (S * K(L))' */
-OP_SUBK,         /* V L S     'V - (S * K(L))' */
-OP_MULK,         /* V L S     'V * (S * K(L))' */
-OP_DIVK,         /* V L S     'V / (S * K(L))' */
-OP_MODK,         /* V L S     'V % (S * K(L))' */
-OP_POWK,         /* V L S     'V ** (S * K(L))' */
-OP_BSHLK,        /* V L S     'V << (S * K(L))' */
-OP_BSHRK,        /* V L S     'V >> (S * K(L))' */
-OP_BANDK,        /* V L S     'V & (S * K(L))' */
-OP_BORK,         /* V L S     'V | (S * K(L))' */
-OP_BXORK,        /* V L S     'V ^ (S * K(L))' */
+OP_ADDK,         /* V L S   'V + (S * K{L})' */
+OP_SUBK,         /* V L S   'V - (S * K{L})' */
+OP_MULK,         /* V L S   'V * (S * K{L})' */
+OP_DIVK,         /* V L S   'V / (S * K{L})' */
+OP_MODK,         /* V L S   'V % (S * K{L})' */
+OP_POWK,         /* V L S   'V ** (S * K{L})' */
+OP_BSHLK,        /* V L S   'V << (S * K{L})' */
+OP_BSHRK,        /* V L S   'V >> (S * K{L})' */
+OP_BANDK,        /* V L S   'V & (S * K{L})' */
+OP_BORK,         /* V L S   'V | (S * K{L})' */
+OP_BXORK,        /* V L S   'V ^ (S * K{L})' */
 
-OP_ADDI,         /* V L S     'V + (S * I(L))' */
-OP_SUBI,         /* V L S     'V - (S * I(L))' */
-OP_MULI,         /* V L S     'V * (S * I(L))' */
-OP_DIVI,         /* V L S     'V / (S * I(L))' */
-OP_MODI,         /* V L S     'V % (S * I(L))' */
-OP_POWI,         /* V L S     'V ** (S * I(L))' */
-OP_BSHLI,        /* V L S     'V << (S * I(L))' */
-OP_BSHRI,        /* V L S     'V >> (S * I(L))' */
-OP_BANDI,        /* V L S     'V & (S * I(L))' */
-OP_BORI,         /* V L S     'V | (S * I(L))' */
-OP_BXORI,        /* V L S     'V ^ (S * I(L))' */
+OP_ADDI,         /* V L S   'V + (S * I(L))' */
+OP_SUBI,         /* V L S   'V - (S * I(L))' */
+OP_MULI,         /* V L S   'V * (S * I(L))' */
+OP_DIVI,         /* V L S   'V / (S * I(L))' */
+OP_MODI,         /* V L S   'V % (S * I(L))' */
+OP_POWI,         /* V L S   'V ** (S * I(L))' */
+OP_BSHLI,        /* V L S   'V << (S * I(L))' */
+OP_BSHRI,        /* V L S   'V >> (S * I(L))' */
+OP_BANDI,        /* V L S   'V & (S * I(L))' */
+OP_BORI,         /* V L S   'V | (S * I(L))' */
+OP_BXORI,        /* V L S   'V ^ (S * I(L))' */
 
-OP_IRANGEI,     /* V L     'V..I(L); V is also integer' */
-
-OP_ADD,          /* V V1    'V + V1' */
-OP_SUB,          /* V V1    'V - V1' */
-OP_MUL,          /* V V1    'V * V1' */
-OP_DIV,          /* V V1    'V / V1' */
-OP_MOD,          /* V V1    'V % V1' */
-OP_POW,          /* V V1    'V ** V1' */
-OP_BSHL,         /* V V1    'V << V1' */
-OP_BSHR,         /* V V1    'V >> V1' */
-OP_BAND,         /* V V1    'V & V1' */
-OP_BOR,          /* V V1    'V | V1' */
-OP_BXOR,         /* V V1    'V ^ V1' */
+OP_ADD,          /* V1 V2   'V1 + V2' */
+OP_SUB,          /* V1 V2   'V1 - V2' */
+OP_MUL,          /* V1 V2   'V1 * V2' */
+OP_DIV,          /* V1 V2   'V1 / V2' */
+OP_MOD,          /* V1 V2   'V1 % V2' */
+OP_POW,          /* V1 V2   'V1 ** V2' */
+OP_BSHL,         /* V1 V2   'V1 << V2' */
+OP_BSHR,         /* V1 V2   'V1 >> V2' */
+OP_BAND,         /* V1 V2   'V1 & V2' */
+OP_BOR,          /* V1 V2   'V1 | V2' */
+OP_BXOR,         /* V1 V2   'V1 ^ V2' */
 
 OP_RANGE,        /* V V1    'V..V1' */
 
-OP_EQK,          /* V L S   '(V == K(L)) == S' */
+OP_EQK,          /* V L S   '(V == K{L}) == S' */
 
-OP_EQI,          /* V L S S1   '(V == I(L)) == S1 (S true if I(L) is float)' */
-OP_LTI,          
-OP_LEI,
-OP_GTI,
-OP_GEI,
+OP_EQI,          /* V L S1 S2   '(V == I(L)) == S1 (S2 true if I(L) is flt)' */
+OP_LTI,          /* V L S       'V < I(L)          (S true if I(L) is flt)' */
+OP_LEI,          /* V L S       'V <= I(L)         (S true if I(L) is flt)' */
+OP_GTI,          /* V L S       'V > I(L)          (S true if I(L) is flt)' */
+OP_GEI,          /* V L S       'V >= I(L)         (S true if I(L) is flt)' */ 
 
-OP_EQ,           /* V V1 S   '(V == V1) == S' */
-OP_LT,
-OP_LE,
+OP_EQ,           /* V1 V2 S     '(V1 == V2) == S' */
+OP_LT,           /* V1 V2       '(V1 < V2)' */
+OP_LE,           /* V1 V2       '(V1 <= V2)' */
 
 OP_NOT,          /* V       '!V' */
 OP_UNM,          /* V       '-V' */
 OP_BNOT,         /* V       '~V' */
 
-OP_EQPRESERVE,   /* equality (preserve left operand) */
+OP_EQPRESERVE,   /* V1 V2   'V1 == V2 (preserves V1 operand)' */
 
-OP_RANGEINT,     /* integer range; TODO */
+OP_JMP,          /* L       'pc += L' */
+OP_JMPS,         /* L       'pc -= L' */
 
-OP_JMP,          /* L        'pc += L' */
-OP_JMPS,         /* L        'pc -= L' */
-OP_JF,           /* V L      'if (cr_isfalse(V)) pc += L' */
-OP_JFANDPOP,     /* V L      'if (cr_isfalse(V)) { pc += L; pop V }' */
-OP_JFORPOP,      /* V L      'if (cr_isfalse(V)) pc += L; else pop V' */
-OP_JFPOP,        /* V L      'if (cr_isfalse(V)) pc += L; pop V' */
-OP_JT,           /* V L      'if (!cr_isfalse(V)) pc += L' */
-OP_JTORPOP,      /* V L      'if (!cr_isfalse(V)) pc += L; else pop V' */
-OP_JTPOP,        /* V L      'if (!cr_isfalse(V)) pc += L; pop V' */
+OP_TEST,         /* V L S   'if (!cr_isfalse(V) == S) pc += L' */
+OP_TESTORPOP,    /* V L S   'if (!cr_isfalse(V) == S) pc += L; else pop V;' */
+OP_TESTANDPOP,   /* V L S   'if (!cr_isfalse(V) == S) { pc += L; pop V; }' */
+OP_TESTPOP,      /* V L S   'if (!cr_isfalse(V) == S) { pc += L; } pop V;' */
 
-OP_CALL0,        /* call value with no arguments */
-OP_CALL1,        /* call value with a single argument */
-OP_CALL,         /* call value with 2 or more arguments */
+OP_CALL,    /* L1 L2 L3  'V{L1},...,V{L1+L3-2} = V{L1}(V{L1+1},...,V{L1+L2-1})'
+               (check info) */
 
-OP_GETUVAL,      /* get upvalue */
-OP_SETUVAL,      /* set upvalue */
+OP_CLOSE,        /* L           'close all upvalues >= OU{L} */
+OP_TBC,          /* L           'mark L{L} as to-be-closed' */
 
-OP_CLOSE,        /* L        'close all upvalues >= L (stack ptr) */
-OP_TBC,          /* V        'create new to-be-closed upvalue from variable V */
+OP_GETLOCAL,     /* L           'L{L}' */
+OP_SETLOCAL,     /* V L         'L{L} = V' */
 
-OP_DEFGLOBAL,    /* V1 V2    'define global variable V1 with value V2' */
-OP_GETGLOBAL,    /* V        'get global variable of name V' */
-OP_SETGLOBAL,    /* V1 V2    'set global variable V1 with value V2' */
+OP_GETPRIVATE,   /* L           'P{L}' */
+OP_SETPRIVATE,   /* V L         'P{L} = V' */
 
-OP_GETLOCAL,     /* get local variable */
-OP_SETLOCAL,     /* set local variable */
+OP_GETUVAL,      /* L           'U{L}' */
+OP_SETUVAL,      /* V L         'U{L} = V'*/
 
-OP_GETPRIVATE,   /* get private variable */
-OP_SETPRIVATE,   /* set private variable */
+OP_DEFGLOBAL,    /* V L         'G(L) = V' (check notes) */
+OP_GETGLOBAL,    /* L           'G(L)' */
+OP_SETGLOBAL,    /* V L         'G(L) = V' */
 
-OP_SETPROPERTY,  /* set property ('v.str') */
-OP_GETPROPERTY,  /* get property ('v.str = ..') */
+OP_SETPROPERTY,  /* V1 V2 L     'V1.K{L} = V2' */
+OP_GETPROPERTY,  /* V  L        'V.K{L}' */
 
-OP_GETINDEX,     /* get index ('v[k]') */
-OP_SETINDEX,     /* set index ('v[k] = ..') */
+OP_GETINDEX,     /* V1 V2       'V1[V2]' */
+OP_SETINDEX,     /* V1 V2 V3    'V1[V2] = V3' */
 
-OP_GETINDEXSTR,  /* get string index ('v[str]') */
-OP_SETINDEXSTR,  /* set string index ('v[str] = ..') */
+OP_GETINDEXSTR,  /* V L         'V[K{L}:string]' */
+OP_SETINDEXSTR,  /* V1 V2 L     'V1[K{L}:string] = V2' */
 
-OP_GETINDEXINT,  /* get integer index ('v[int]') */
-OP_SETINDEXINT,  /* set integer index ('v[int] = ..') */
+OP_GETINDEXINT,  /* V L         'V[I(L):integer]' */
+OP_SETINDEXINT,  /* V1 V2 L     'V[I(L):integer] = V2' */
 
-OP_GETSUP,       /* get super class method ('super.k') */
-OP_GETSUPIDX,    /* get super class method ('super[k | str]') */
-OP_GETSUPIDXSTR, /* get super class method ('super[k | str]') */
+OP_GETSUP,       /* V L         'V:super.K{L}:string' */
+OP_GETSUPIDX,    /* V1 V2       'V1:super[V2]' */
+OP_GETSUPIDXSTR, /* V L         'V:super[K{L}:string]' */
 
-OP_SETVTABLE,    /* set vtable method */
-OP_INHERIT,      /* V1 V2         'V2 inherits from superclass V1' */
-OP_CALLSTART,    /* mark start of call values */
-OP_RETSTART,     /* mark start of return values */
-OP_FORPREP,      /* prepare foreach loop */
-OP_FORCALL,      /* V1 V2 V3    'call V1 with V2 and V3 as args' */
-OP_FORLOOP,      /* run foreach loop */
+OP_INHERIT,      /* V1 V2       'V2 inherits from superclass V1' */
+OP_FORPREP,      /* L1 L2       'create upvalue V{L1+3}; pc += L2' */
+OP_FORCALL,    /* L1 L2  'V{L1+4},...,V{L1+3+L2} = V{L1}(V{L1+1}, V{L1+2});' */
+OP_FORLOOP,    /* L1 L2  'if V{L1+2} != nil { V{L1} = V{L1+2}; pc -= L2 }' */
 
-OP_RET0,         /* return with no values */
-OP_RET1,         /* return with a single value */
-OP_RET,          /* L */
+OP_RET0,        /*             'return;' */
+OP_RET1,        /* L           'return V{L};' */
+OP_RET,         /* L1 L2 L3 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
 } OpCode;
 
 
+/*
+** Notes:
+**
+** [OP_CALL]
+** L1 is the base stack offset where the value being called is located.
+** L2 is the number of arguments biased with +1. L3 is the number of
+** expected returns also biased with +1. If (L2-1 == 0) then, L2 = top - L1 
+** (the actual number of arguments on stack). If (L3-1 == 0), then top is set
+** to last return_result+1.
+** 
+** [OP_DEFGLOBAL]
+** This instruction reffers to global variable declaration but behaves
+** exactly as a simple assignment. It does some additional work to
+** ensure global variable is semantically defined.
+**
+** [OP_RET]
+** L2 is biased with +1, in order to represent multiple returns when the
+** number of results is only known during runtime. For example (L2 == 0)
+** represents CR_MULRET, in this case we would return all values up to the
+** top; additionally check 'crC_ret' and you will see that 'nreturns' is
+** positive biased with +1 (in generic return case). In case L3 > 0 it
+** indicates this function is vararg function and represents number of
+** vararg parameters. S indicates if current function needs to close upvalues
+** or tbc variables before returning.
+*/
+
+
 /* number of 'OpCode's */
-#define CR_NUMOPS	(OP_RET + 1)
+#define NUM_OPCODES	(OP_RET + 1)
+
+
+/* OpCode format */
+enum OpFormat { 
+    FormatI,
+    FormatIS,
+    FormatISS,
+    FormatIL,
+    FormatILS,
+    FormatILSS,
+    FormatILL,
+    FormatILLL,
+};
+
+
+/*
+** bits 0-2: format ('OpFormat')
+** bit 3: instruction is a test (TProp)
+** bit 4: instruction is a jump (JProp)
+** bit 5: instruction is metamethod call (MProp)
+** bit 6-7: unused
+*/
+CRI_DEC(const cr_ubyte crC_opProp[NUM_OPCODES];)
+
+#define getOpFormat(p)      (crC_opProp[p] & 0x07)
+#define testTProp(p)        (crC_opProp[p] & (1 << 3))
+#define testJProp(p)        (crC_opProp[p] & (1 << 4))
+#define testMProp(p)        (crC_opProp[p] & (1 << 5))
+
+#define opProp(mm,j,t,f)    (((mm) << 5) | ((j) << 4) | ((t) << 3) | (f))
 
 
 CRI_FUNC int cr_code(FunctionState *fs, Instruction i);
-CRI_FUNC int cr_code_S(FunctionState *fs, Instruction i, int a);
-CRI_FUNC int cr_code_L(FunctionState *fs, Instruction i, int a);
-CRI_FUNC int cr_code_LL(FunctionState *fs, Instruction i, int a, int b);
-CRI_FUNC void cr_code_checkstack(FunctionState *fs, int n);
-CRI_FUNC void cr_code_reserveslots(FunctionState *fs, int n);
-CRI_FUNC void cr_code_setoneret(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void cr_code_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
-CRI_FUNC int cr_code_nil(FunctionState *fs, int n);
-CRI_FUNC int cr_code_pop(FunctionState *fs, int n);
-CRI_FUNC int cr_code_ret(FunctionState *fs, int base, int nreturns);
-CRI_FUNC int cr_code_call(FunctionState *fs, int base, int nparams, 
-                          int nreturns);
-CRI_FUNC void cr_code_method(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void cr_code_storevar(FunctionState *fs, ExpInfo *var);
-CRI_FUNC void cr_code_defineglobal(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void cr_code_varexp2stack(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void cr_code_exp2stack(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void cr_code_getproperty(FunctionState *fs, ExpInfo *var,
-                                  ExpInfo *keystr, int super);
-CRI_FUNC void cr_code_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
-                              int super);
-CRI_FUNC void cr_code_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
-CRI_FUNC int cr_code_jmp(FunctionState *fs, OpCode jop);
-CRI_FUNC int cr_code_jmpf(FunctionState *fs, OpCode jfop);
-CRI_FUNC void cr_code_concatjmp(FunctionState *fs, int *l1, int l2);
-CRI_FUNC void cr_code_patch(FunctionState *fs, int pc, int target);
-CRI_FUNC void cr_code_patchtohere(FunctionState *fs, int pc);
-CRI_FUNC void cr_code_jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop);
-CRI_FUNC void cr_code_jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop);
-CRI_FUNC void cr_code_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
-CRI_FUNC void cr_code_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                             Binopr opr);
+CRI_FUNC int crC_S(FunctionState *fs, Instruction i, int a);
+CRI_FUNC int crC_L(FunctionState *fs, Instruction i, int a);
+CRI_FUNC int crC_LL(FunctionState *fs, Instruction i, int a, int b);
+CRI_FUNC void crC_checkstack(FunctionState *fs, int n);
+CRI_FUNC void crC_reserveslots(FunctionState *fs, int n);
+CRI_FUNC void crC_setoneret(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void crC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
+CRI_FUNC int crC_nil(FunctionState *fs, int n);
+CRI_FUNC int crC_pop(FunctionState *fs, int n);
+CRI_FUNC int crC_ret(FunctionState *fs, int base, int nreturns);
+CRI_FUNC int crC_call(FunctionState *fs, int base, int nparams); 
+CRI_FUNC void crC_method(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void crC_storevar(FunctionState *fs, ExpInfo *var);
+CRI_FUNC void crC_defineglobal(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void crC_varexp2stack(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void crC_exp2stack(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void crC_getproperty(FunctionState *fs, ExpInfo *var,
+                              ExpInfo *keystr, int super);
+CRI_FUNC void crC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
+                          int super);
+CRI_FUNC void crC_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
+CRI_FUNC int crC_jmp(FunctionState *fs, OpCode jop);
+CRI_FUNC void crC_concatjmp(FunctionState *fs, int *l1, int l2);
+CRI_FUNC void crC_patch(FunctionState *fs, int pc, int target);
+CRI_FUNC void crC_patchtohere(FunctionState *fs, int pc);
+CRI_FUNC int crC_test(FunctionState *fs, OpCode testop, int cond);
+CRI_FUNC void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
+CRI_FUNC void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
+                         Binopr opr);
 
 #endif

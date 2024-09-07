@@ -49,10 +49,10 @@
 #define savec_and_advance(lx, c)        (savec(lx, c), advance(lx))
 
 
-#define lbptr(lx)       cr_reader_buff((lx)->buff)
-#define lblen(lx)       cr_reader_bufflen((lx)->buff)
-#define lbsize(lx)  cr_reader_buffsize((lx)->buff)
-#define popc(lx)        cr_reader_buffpop((lx)->buff)
+#define lbptr(lx)       crR_buff((lx)->buff)
+#define lblen(lx)       crR_bufflen((lx)->buff)
+#define lbsize(lx)  crR_buffsize((lx)->buff)
+#define popc(lx)        crR_buffpop((lx)->buff)
 
 
 
@@ -78,8 +78,7 @@ typedef enum Dig {
 
 
 
-void cr_lex_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source)
-{
+void crL_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source) {
     cr_assert(lx->ps != NULL);
     lx->c = brgetc(br); /* fetch first char */
     lx->line = 1;
@@ -89,18 +88,14 @@ void cr_lex_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source)
     lx->tab = NULL;
     lx->br = br;
     lx->src = source;
-    cr_reader_buffresize(ts, lx->buff, CRI_MINBUFFER);
+    crR_buffresize(ts, lx->buff, CRI_MINBUFFER);
 }
 
 
-void cr_lex_init(cr_State *ts)
-{
-    int i;
-    OString *s;
-
+void crL_init(cr_State *ts) {
     /* intern all keywords */
-    for (i = 0; i < NUM_KEYWORDS; i++) {
-        s = cr_string_new(ts, tkstr[i]);
+    for (int i = 0; i < NUM_KEYWORDS; i++) {
+        OString *s = crS_new(ts, tkstr[i]);
         s->bits = bitmask(STRKWBIT);
         s->extra = i;
         cr_gc_fix(ts, obj2gco(s));
@@ -108,10 +103,9 @@ void cr_lex_init(cr_State *ts)
 }
 
 
-static void inclinenr(Lexer *lx)
-{
+static void inclinenr(Lexer *lx) {
     if (cr_unlikely(lx->line >= INT_MAX))
-        cr_debug_runerror(lx->ts, "too many lines in a chunk");
+        crD_runerror(lx->ts, "too many lines in a chunk");
     lx->line++;
 }
 
@@ -121,21 +115,19 @@ static cr_noret lexerror(Lexer *lx, const char *err, int token);
 
 
 /* pushes character into token buffer */
-cr_sinline void savec(Lexer *lx, int c)
-{
+cr_sinline void savec(Lexer *lx, int c) {
     if (lblen(lx) >= lbsize(lx)) {
         if (lbsize(lx) >= CRMAXSIZE >> 1)
             lexerror(lx, "lexical element too long", 0);
         size_t newsize = lbsize(lx) << 1;
-        cr_reader_buffresize(lx->ts, lx->buff, newsize);
+        crR_buffresize(lx->ts, lx->buff, newsize);
     }
     lbptr(lx)[lblen(lx)++] = c;
 }
 
 
 /* if current char matches 'c' advance */
-cr_sinline int lxmatch(Lexer *lexer, int c)
-{
+cr_sinline int lxmatch(Lexer *lexer, int c) {
     if (isend(lexer->c) || c != lexer->c)
         return 0;
     advance(lexer);
@@ -143,59 +135,54 @@ cr_sinline int lxmatch(Lexer *lexer, int c)
 }
 
 
-const char *cr_lex_tok2str(Lexer *lx, int t)
-{
+const char *crL_tok2str(Lexer *lx, int t) {
     cr_assert(token <= TK_IDENTIFIER);
     if (t >= FIRSTTK) {
         const char *str = tkstr[t - FIRSTTK];
         if (t < TK_EOS)
-            return cr_string_pushfstring(lx->ts, "'%s'", str);
+            return crS_pushfstring(lx->ts, "'%s'", str);
         return str;
     } else {
         if (isprint(t))
-            return cr_string_pushfstring(lx->ts, "'%c'", t);
-        return cr_string_pushfstring(lx->ts, "'\\%d'", t);
+            return crS_pushfstring(lx->ts, "'%c'", t);
+        return crS_pushfstring(lx->ts, "'\\%d'", t);
     }
 }
 
 
-static const char *lextok2str(Lexer *lx, int t)
-{
+static const char *lextok2str(Lexer *lx, int t) {
     switch (t) {
     case TK_FLT: case TK_INT:
     case TK_STRING: case TK_IDENTIFIER:
         savec(lx, '\0');
-        return cr_string_pushfstring(lx->ts, "'%s'", lbptr(lx));
+        return crS_pushfstring(lx->ts, "'%s'", lbptr(lx));
     default:
-        return cr_lex_tok2str(lx, t);
+        return crL_tok2str(lx, t);
     }
 }
 
 
-static cr_noret lexerror(Lexer *lx, const char *err, int token)
-{
+static cr_noret lexerror(Lexer *lx, const char *err, int token) {
     cr_State *ts;
 
     ts = lx->ts;
-    err = cr_debug_info(ts, err, lx->src, lx->line);
+    err = crD_info(ts, err, lx->src, lx->line);
     if (token)
-        cr_string_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
+        crS_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
     cr_state_throw(ts, CR_ERRSYNTAX);
 }
 
 
 /* external interface for 'lexerror' */
-cr_noret cr_lex_syntaxerror(Lexer *lx, const char *err)
-{
+cr_noret crL_syntaxerror(Lexer *lx, const char *err) {
     lexerror(lx, err, lx->t.tk);
 }
 
 
 /* create new string and fix it inside of lexer htable */
-OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len)
-{
+OString *crL_newstring(Lexer *lx, const char *str, size_t len) {
     cr_State *ts = lx->ts;
-    OString *s = cr_string_newl(ts, str, len);
+    OString *s = crS_newl(ts, str, len);
     TValue *stks = s2v(ts->stacktop.p++);
     setv2s(ts, stks, s); /* temp anchor */
     cr_htable_set(lx->ts, lx->tab, stks, stks);
@@ -208,15 +195,13 @@ OString *cr_lex_newstring(Lexer *lx, const char *str, size_t len)
  * Read comments
  * -------------------------------------------------------------------------- */
 
-static void readcomment(Lexer *lx)
-{
+static void readcomment(Lexer *lx) {
     while (!isend(lx->c) && lx->c != '\n')
         advance(lx);
 }
 
 
-static void readlongcomment(Lexer *lx)
-{
+static void readlongcomment(Lexer *lx) {
 readmore:
     switch (lx->c) {
     case CREOF:
@@ -242,18 +227,16 @@ readmore:
  * -------------------------------------------------------------------------- */
 
 /* get new hex digit from current char */
-static int hexdigit(Lexer *lx)
-{
+static int hexdigit(Lexer *lx) {
     int c = lx->c;
     if (isxdigit(c))
-        return cr_string_hexvalue(c);
+        return crS_hexvalue(c);
     return -1;
 }
 
 
 /* parse hex escape sequence '\xyy' */
-static int eschex(Lexer *lx)
-{
+static int eschex(Lexer *lx) {
     advance(lx); /* skip 'x' */
     int number = 0;
     for (int i = 0; i < 2; i++) {
@@ -270,8 +253,7 @@ static int eschex(Lexer *lx)
 
 
 /* create string token and handle the escape sequences */
-static void readstring(Lexer *lx, Literal *k)
-{
+static void readstring(Lexer *lx, Literal *k) {
     advance(lx); /* skip '"' */
     while (lx->c != '"') {
         switch (lx->c) {
@@ -304,7 +286,7 @@ static void readstring(Lexer *lx, Literal *k)
         }
     }
     advance(lx); /* skip '"' */
-    k->str = cr_lex_newstring(lx, lbptr(lx), lblen(lx));
+    k->str = crL_newstring(lx, lbptr(lx), lblen(lx));
 }
 
 
@@ -314,12 +296,10 @@ static void readstring(Lexer *lx, Literal *k)
 
 
 /* convert lexer buffer bytes into number constant */
-static int lexstr2num(Lexer *lx, Literal *k)
-{
+static int lexstr2num(Lexer *lx, Literal *k) {
     int of;
     TValue o;
-
-    if (cr_string_tonum(lbptr(lx), &o, &of) == 0)
+    if (crS_tonum(lbptr(lx), &o, &of) == 0)
         lexerror(lx, "invalid number literal", TK_FLT);
     else if (of > 0)
         lexerror(lx, "number literal overflows", TK_FLT);
@@ -340,8 +320,7 @@ static int lexstr2num(Lexer *lx, Literal *k)
  * Read digits, additionally allow '_' separators
  * if these are not mantissa digits denoted by 'fp'.
  */
-static int auxreaddigs(Lexer *lx, Dig d, int fp)
-{
+static int auxreaddigs(Lexer *lx, Dig d, int fp) {
     int digits = 0;
     for (;; advance(lx)) {
         if (!fp && lx->c == '_') continue;
@@ -361,10 +340,8 @@ static int auxreaddigs(Lexer *lx, Dig d, int fp)
  * Read exponent digits.
  * Exponent must have at least 1 decimal digit.
  */
-static int auxreadexp(Lexer *lx)
-{
+static int auxreadexp(Lexer *lx) {
     int digits;
-
     if (lx->c == '-' || lx->c == '+')
         save_and_advance(lx);
     if ((digits = auxreaddigs(lx, DigDec, 0) == 0))
@@ -374,8 +351,7 @@ static int auxreadexp(Lexer *lx)
 
 
 /* read decimal number */
-static int readdecnum(Lexer *lx, Literal *k)
-{
+static int readdecnum(Lexer *lx, Literal *k) {
     cr_assert(isdigit(lx->c) || lx->c == '.');
     auxreaddigs(lx, DigDec, 0);
     if (lx->c == '.') {
@@ -392,12 +368,10 @@ static int readdecnum(Lexer *lx, Literal *k)
 
 
 /* read hexadecimal number */
-static int readhexnum(Lexer *lx, Literal *k)
-{
-    int fp, exp, digits;
-
+static int readhexnum(Lexer *lx, Literal *k) {
+    int fp, exp;
     advance(lx); /* skip 'x'/'X' */
-    digits = auxreaddigs(lx, DigHex, 0);
+    int digits = auxreaddigs(lx, DigHex, 0);
     if ((fp = lx->c == '.')) {
         save_and_advance(lx);
         if (auxreaddigs(lx, DigHex, 1) == 0 && !digits)
@@ -417,8 +391,7 @@ static int readhexnum(Lexer *lx, Literal *k)
 
 
 /* read octal number */
-static int readoctnum(Lexer *lx, Literal *k)
-{
+static int readoctnum(Lexer *lx, Literal *k) {
     cr_assert(isodigit(lx->c));
     auxreaddigs(lx, DigOct, 0);
     savec(lx, '\0');
@@ -427,8 +400,7 @@ static int readoctnum(Lexer *lx, Literal *k)
 
 
 /* read number */
-static int readnumber(Lexer *lx, Literal *k)
-{
+static int readnumber(Lexer *lx, Literal *k) {
     cr_ubyte c = lx->c; /* cache previous digit */
     save_and_advance(lx);
     if (c == '0' && (lx->c == 'x' || lx->c == 'X'))
@@ -446,12 +418,8 @@ static int readnumber(Lexer *lx, Literal *k)
  * -------------------------------------------------------------------------- */
 
 /* scan for tokens */
-static int scan(Lexer *lx, Literal *k)
-{
-    int c;
-    OString *s;
-
-    cr_reader_buffreset(lx->buff);
+static int scan(Lexer *lx, Literal *k) {
+    crR_buffreset(lx->buff);
 readmore:
     switch (lx->c) {
     case ' ': case '\r': case '\t':
@@ -528,13 +496,13 @@ readmore:
             do {
                 save_and_advance(lx);
             } while (isalnum(lx->c));
-            s = cr_lex_newstring(lx, lbptr(lx), lblen(lx));
+            OString *s = crL_newstring(lx, lbptr(lx), lblen(lx));
             k->str = s;
             if (siskeyword(s))
                 return s->extra + FIRSTTK;
             return TK_IDENTIFIER;
         }
-        c = lx->c;
+        int c = lx->c;
         advance(lx);
         return c;
     }
@@ -542,8 +510,7 @@ readmore:
 
 
 /* fetch next token into 't' */
-void varstatic(Lexer *lx)
-{
+void varstatic(Lexer *lx) {
     lx->lastline = lx->line;
     if (lx->tahead.tk != TK_EOS) {
         lx->t = lx->tahead;
@@ -555,8 +522,7 @@ void varstatic(Lexer *lx)
 
 
 /* fetch next token into 'tahead' */
-int cr_lex_scanahead(Lexer *lx)
-{
+int crL_scanahead(Lexer *lx) {
     cr_assert(lx->t.tk != TK_EOS);
     return (lx->t.tk = scan(lx, &lx->t.lit));
 }

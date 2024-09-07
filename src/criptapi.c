@@ -873,14 +873,14 @@ CR_API cr_status cr_pcall(cr_State *ts, int argc, int retcnt)
  * In case there were any compile errors, then the error object
  * gets pushed on top of the stack (error message).
  *
- * 'reader' - user provided 'cr_reader' responsible for reading
+ * 'reader' - user provided 'crR' responsible for reading
  *            the '.sk' source file.
- *            Refer to 'cr_reader' in [@cript.h] for more
+ *            Refer to 'crR' in [@cript.h] for more
  *            information on how this reader should 'behave'.
  * 'userdata' - user provided data for 'reader'.
  * 'source' - name of the cript script you are loading.
  */
-CR_API cr_status cr_load(cr_State *ts, cr_reader reader, void *userdata, const char *source)
+CR_API cr_status cr_load(cr_State *ts, crR reader, void *userdata, const char *source)
 {
 	BuffReader br;
 	cr_lock(ts);

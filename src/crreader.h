@@ -26,7 +26,7 @@
 
 /* Return next char and progress the buffer or try fill the buffer. */
 #define brgetc(br) \
-	((br)->n-- > 0 ? cast(cr_ubyte, *(br)->buff++) : cr_br_fill(br))
+	((br)->n-- > 0 ? cast(cr_ubyte, *(br)->buff++) : crR_fill(br))
 
 /* Go back one character (byte) */
 #define brungetc(br)	((br)->n++, (br)->buff--)
@@ -35,30 +35,30 @@
 typedef struct {
     size_t n; /* unread bytes */
     const char* buff; /* position in buffer */
-    cr_reader reader; /* reader function */
-    void* userdata; /* user data for 'cr_reader' */
-    cr_State* ts; /* 'cr_State' for 'cr_reader' */
+    crR reader; /* reader function */
+    void* userdata; /* user data for 'crR' */
+    cr_State* ts; /* 'cr_State' for 'crR' */
 } BuffReader;
 
 
-CRI_FUNC void cr_br_init(cr_State* ts, BuffReader* br, cr_reader reader,
+CRI_FUNC void crR_init(cr_State* ts, BuffReader* br, crR reader,
                          void* userdata);
-CRI_FUNC int cr_br_fill(BuffReader* br);
-CRI_FUNC size_t cr_br_readn(BuffReader* br, size_t n);
+CRI_FUNC int crR_fill(BuffReader* br);
+CRI_FUNC size_t crR_readn(BuffReader* br, size_t n);
 
 
 
-#define cr_reader_buffinit(b)     {(b)->str = NULL; (b)->len = (b)->size = 0;}
+#define crR_buffinit(b)     {(b)->str = NULL; (b)->len = (b)->size = 0;}
 
-#define cr_reader_buff(b)       ((b)->str)
-#define cr_reader_bufflen(b)    ((b)->len)
-#define cr_reader_buffsize(b)   ((b)->size)
+#define crR_buff(b)       ((b)->str)
+#define crR_bufflen(b)    ((b)->len)
+#define crR_buffsize(b)   ((b)->size)
 
-#define cr_reader_buffpop(b)        ((b)->len -= 1)
-#define cr_reader_buffreset(b)      ((b)->len = 0)
+#define crR_buffpop(b)        ((b)->len -= 1)
+#define crR_buffreset(b)      ((b)->len = 0)
 
-#define cr_reader_buffresize(ts,b,s) \
-    { (b)->str = cr_mem_saferealloc(ts, (b)->str, (b)->size, s); \
+#define crR_buffresize(ts,b,s) \
+    { (b)->str = crM_saferealloc(ts, (b)->str, (b)->size, s); \
       (b)->size = s; }
 
 

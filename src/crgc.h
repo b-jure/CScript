@@ -171,10 +171,10 @@
 
 /* garbage collector parameters and state */
 typedef struct GC {
-	cr_mem next; /* next byte threshold when GC triggers */
-	cr_mem allocated; /* number of allocated bytes ? REMOVE */
-	cr_mem debt; /* memory unaccounted by collector */
-	cr_mem total; /* total memory in use in bytes - 'debt' */
+	crM next; /* next byte threshold when GC triggers */
+	crM allocated; /* number of allocated bytes ? REMOVE */
+	crM debt; /* memory unaccounted by collector */
+	crM total; /* total memory in use in bytes - 'debt' */
 	cr_umem estimate; /* estimate of non-garbage memory in use */
 	GCObject *objects; /* list of all GC objects */
 	GCObject **sweeppos; /* current position of sweep in list */
@@ -195,16 +195,16 @@ typedef struct GC {
 } GC;
 
 
-void cr_gc_init(GC *gc);
-GCObject *cr_gc_new_(cr_State *ts, size_t size, cr_ubyte ott);
-void cr_gc_step(cr_State *ts);
-void cr_gc_full(cr_State *ts, int isemergency);
-void cr_gc_rununtilstate(cr_State *ts, int statemask);
-void cr_gc_freeallobjects(cr_State *ts);
-void cr_gc_checkfin(cr_State *ts, GCObject *o, VMT vtable);
-void cr_gc_fix(cr_State *ts, GCObject *o);
-void cr_gc_barrier_(cr_State *ts, GCObject *r, GCObject *o);
-void cr_gc_barrierback_(cr_State *ts, GCObject *r);
-void cr_gc_setdebt(GC *gc, cr_mem debt);
+CRI_FUNC void cr_gc_init(GC *gc);
+CRI_FUNC GCObject *cr_gc_new_(cr_State *ts, size_t size, cr_ubyte ott);
+CRI_FUNC void cr_gc_step(cr_State *ts);
+CRI_FUNC void cr_gc_full(cr_State *ts, int isemergency);
+CRI_FUNC void cr_gc_rununtilstate(cr_State *ts, int statemask);
+CRI_FUNC void cr_gc_freeallobjects(cr_State *ts);
+CRI_FUNC void cr_gc_checkfin(cr_State *ts, GCObject *o, VMT vtable);
+CRI_FUNC void cr_gc_fix(cr_State *ts, GCObject *o);
+CRI_FUNC void cr_gc_barrier_(cr_State *ts, GCObject *r, GCObject *o);
+CRI_FUNC void cr_gc_barrierback_(cr_State *ts, GCObject *r);
+CRI_FUNC void cr_gc_setdebt(GC *gc, crM debt);
 
 #endif

@@ -1,45 +1,3 @@
-/* ----------------------------------------------------------------------------------------------
- * Because Cript core C API is almost identical to Lua,
- * we include the below copyright (thank you Lua developers).
- *
- * Copyright (C) 1994-2024 Lua.org, PUC-Rio.
- *
- * Permission is hereby granted, free of charge, to any person obtaining
- * a copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
- * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
- * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
- * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * ---------------------------------------------------------------------------------------------- */
-
-/* ----------------------------------------------------------------------------------------------
- * Copyright (C) 2023-2024 Jure Bagić
- *
- * This file is part of Cript.
- * Cript is free software: you can redistribute it and/or modify it under the terms of the GNU
- * General Public License as published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * Cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with Cript.
- * If not, see <https://www.gnu.org/licenses/>.
- * ---------------------------------------------------------------------------------------------- */
-
 #ifndef CRIPT_H
 #define CRIPT_H
 
@@ -116,13 +74,13 @@ typedef int (*cr_cfunc)(cr_State *ts);
 typedef void *(*cr_alloc)(void *ptr, size_t newsize, void *userdata);
 
 /* type for functions that read blocks when loading Cript chunks */
-typedef const char *(*cr_reader)(cr_State *ts, void *userdata, size_t *szread);
+typedef const char *(*crR)(cr_State *ts, void *userdata, size_t *szread);
 
 /* type for class interface */
 typedef struct cr_vtable cr_vtable;
 
 /* type for debugging */
-typedef struct cr_debuginfo cr_debuginfo;
+typedef struct cr_DebugInfo cr_DebugInfo;
 
 
 
@@ -356,7 +314,7 @@ CR_API int cr_error(cr_State *ts);
  * ------------------------------------------------------------------------- */
 CR_API int cr_pcall(cr_State *ts, int argc, int retcnt);
 CR_API void cr_call(cr_State *ts, int argc, int retcnt);
-CR_API int cr_load(cr_State *ts, cr_reader reader, void *userdata, const char *source);
+CR_API int cr_load(cr_State *ts, crR reader, void *userdata, const char *source);
 
 
 
@@ -412,14 +370,14 @@ CR_API cr_alloc         cr_getalloc(cr_State *ts, void **ud);
 /* bits for 'dbgmask' */
 #define CR_DBGFNGET      (1<<0) /* load the function on top of the stack (processed first) */
 #define CR_DBGLINE       (1<<1) /* fill 'line' */
-#define CR_DBGFNINFO     (1<<2) /* fill all function info in 'cr_debuginfo' */
+#define CR_DBGFNINFO     (1<<2) /* fill all function info in 'crD_info' */
 #define CR_DBGFNSRC      (1<<3) /* fill function source information */
 #define CR_DBGFNPUSH     (1<<4) /* push current function on the stack (processed last) */
 
-CR_API int cr_getstack(cr_State *ts, int level, cr_debuginfo *di);
-CR_API int cr_getinfo(cr_State *ts, int dbgmask, cr_debuginfo *di);
+CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di);
+CR_API int cr_getinfo(cr_State *ts, int dbgmask, cr_DebugInfo *di);
 
-struct cr_debuginfo {
+struct cr_DebugInfo {
     const char *type; /* function type ('cript', 'main' or 'C') */
     const char *source; /* function source */
     size_t srclen; /* length of 'source' */
@@ -437,3 +395,30 @@ struct cr_debuginfo {
 
 
 #endif
+
+/* ----------------------------------------------------------------------------------------------
+ * Because Cript core C API is almost identical to Lua,
+ * we also include the below copyright (thank you Lua developers).
+ *
+ * Copyright (C) 1994-2024 Lua.org, PUC-Rio.
+ * Copyright (C) 2023-2024 Jure Bagić
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * ---------------------------------------------------------------------------------------------- */

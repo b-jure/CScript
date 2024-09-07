@@ -25,23 +25,23 @@
 
 
 /* create new string from literal 'lit' */
-#define cr_string_newlit(ts, lit) \
-    cr_string_newl(ts, "" lit, (sizeof(lit)/sizeof(char)) - 1)
+#define crS_newlit(ts, lit) \
+    crS_newl(ts, "" lit, (sizeof(lit)/sizeof(char)) - 1)
 
 
-CRI_FUNC OString *cr_string_new(cr_State *ts, const char *str);
-CRI_FUNC OString *cr_string_newl(cr_State *ts, const char *str, size_t len);
-CRI_FUNC void cr_string_free(cr_State *ts, OString *s);
-CRI_FUNC uint cr_string_hash(const char *str, size_t len, uint seed);
-CRI_FUNC int cr_string_cmp(const OString *s1, const OString *s2);
-CRI_FUNC int cr_string_eq(const OString *s1, const OString *s2);
-CRI_FUNC const char *cr_string_pushvfstring(cr_State *ts, const char *fmt,
+CRI_FUNC OString *crS_new(cr_State *ts, const char *str);
+CRI_FUNC OString *crS_newl(cr_State *ts, const char *str, size_t len);
+CRI_FUNC void crS_free(cr_State *ts, OString *s);
+CRI_FUNC uint crS_hash(const char *str, size_t len, uint seed);
+CRI_FUNC int crS_cmp(const OString *s1, const OString *s2);
+CRI_FUNC int crS_eq(const OString *s1, const OString *s2);
+CRI_FUNC const char *crS_pushvfstring(cr_State *ts, const char *fmt,
                                             va_list argp);
-CRI_FUNC const char *cr_string_pushfstring(cr_State *ts, const char *fmt, ...);
-CRI_FUNC size_t cr_string_tonum(const char *s, TValue *o, int *of);
-CRI_FUNC int cr_string_tomt(cr_State *ts, OString *id);
-CRI_FUNC void cr_string_numtostring(cr_State *ts, TValue *v);
-CRI_FUNC int cr_string_hexvalue(int c);
-CRI_FUNC void cr_string_sourceid(char *adest, const char *src, size_t len);
+CRI_FUNC const char *crS_pushfstring(cr_State *ts, const char *fmt, ...);
+CRI_FUNC size_t crS_tonum(const char *s, TValue *o, int *of);
+CRI_FUNC int crS_tomt(cr_State *ts, OString *id);
+CRI_FUNC void crS_numtostring(cr_State *ts, TValue *v);
+CRI_FUNC int crS_hexvalue(int c);
+CRI_FUNC void crS_sourceid(char *adest, const char *src, size_t len);
 
 #endif

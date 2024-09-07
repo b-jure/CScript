@@ -5,7 +5,6 @@
 #include "cript.h"
 
 
-
 /* raise 2 to the power of 'x' */
 #define twoto(x)	(1<<(x))
 
