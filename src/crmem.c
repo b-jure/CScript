@@ -20,9 +20,9 @@
 #include "crstate.h"
 
 
-#define crM_rawmalloc(gs, s)		    (gs)->realloc(NULL, s, (gs)->udrealloc)
-#define crM_rawrealloc(gs, p, s)   	(gs)->realloc(p, s, (gs)->udrealloc)
-#define crM_rawfree(gs, p)	   	    (gs)->realloc(p, 0, (gs)->udrealloc)
+#define crM_rawmalloc(gs,s)         (gs)->falloc(NULL, s, (gs)->udrealloc)
+#define crM_rawrealloc(gs,p,s)      (gs)->falloc(p, s, (gs)->udrealloc)
+#define crM_rawfree(gs,p)           (gs)->falloc(p, 0, (gs)->udrealloc)
 
 
 /* can try to allocate second time */
@@ -33,7 +33,7 @@
 /* Auxiliary to 'crM_realloc' and 'cr_malloc'. */
 cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 {
-    GState *gs = GS(ts);
+    GState *gs = G_(ts);
     UNUSED(osize);
     if (cantryagain(gs)) {
         cr_gc_full(ts, 1);
@@ -43,9 +43,8 @@ cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 }
 
 
-void *crM_realloc(cr_State *ts, void *ptr, size_t osize, size_t nsize)
-{
-    GState *gs = GS(ts);
+void *crM_realloc(cr_State *ts, void *ptr, size_t osize, size_t nsize) {
+    GState *gs = G_(ts);
     cr_assert((osize == 0) == (ptr == NULL));
     void *memblock = crM_rawrealloc(gs, ptr, nsize);
     if (cr_unlikely(!memblock && nsize != 0)) {
@@ -59,8 +58,7 @@ void *crM_realloc(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 }
 
 
-void *crM_saferealloc(cr_State *ts, void *ptr, size_t osize, size_t nsize)
-{
+void *crM_saferealloc(cr_State *ts, void *ptr, size_t osize, size_t nsize) {
     void *memblock = crM_realloc(ts, ptr, osize, nsize);
     if (cr_unlikely(memblock == NULL && nsize != 0))
         cr_assert(0 && "out of memory");
@@ -68,11 +66,10 @@ void *crM_saferealloc(cr_State *ts, void *ptr, size_t osize, size_t nsize)
 }
 
 
-void *crM_malloc(cr_State *ts, size_t size)
-{
+void *crM_malloc(cr_State *ts, size_t size) {
     if (size == 0)
         return NULL;
-    GState *gs = GS(ts);
+    GState *gs = G_(ts);
     void *memblock = crM_rawmalloc(gs, size);
     if (cr_unlikely(memblock == NULL)) {
         memblock = tryagain(ts, NULL, 0, size);
@@ -85,7 +82,7 @@ void *crM_malloc(cr_State *ts, size_t size)
 
 
 void *crM_growarr(cr_State *ts, void *ptr, int len, int *sizep,
-        int elemsize, int extra, int limit, const char *what)
+                  int elemsize, int extra, int limit, const char *what)
 {
     int size = *sizep;
     if (len + extra <= size)
@@ -108,7 +105,7 @@ void *crM_growarr(cr_State *ts, void *ptr, int len, int *sizep,
 
 
 void *crM_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
-        int elemsize)
+                     int elemsize)
 {
     size_t oldsize = cast_sizet(*sizep * elemsize);
     size_t newsize = cast_sizet(final * elemsize);
@@ -119,9 +116,8 @@ void *crM_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
 }
 
 
-void crM_free(cr_State *ts, void *ptr, size_t osize)
-{
-    GState *gs = GS(ts);
+void crM_free(cr_State *ts, void *ptr, size_t osize) {
+    GState *gs = G_(ts);
     cr_assert((osize == 0) == (ptr == NULL));
     crM_rawfree(gs, ptr);
     gs->gc.debt -= osize;

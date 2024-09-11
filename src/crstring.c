@@ -4,10 +4,12 @@
 #include "crstate.h"
 #include "crhashtable.h"
 #include "crgc.h"
-#include "crvm.h"
 #include "crdebug.h"
+#include "crmem.h"
+#include "crvm.h"
 
 #include <ctype.h>
+#include <stdlib.h>
 #include <locale.h>
 
 
@@ -18,8 +20,7 @@
  * One-byte-at-a-time hash based on Murmur's mix
  * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
  */
-uint cr_hash_string(const char *str, size_t len, unsigned int seed)
-{
+uint cr_hash_string(const char *str, size_t len, unsigned int seed) {
     const cr_ubyte *data = cast(const cr_ubyte *, str);
     uint h = seed;
     for (uint i = 0; i < len; i++) {
@@ -35,11 +36,10 @@ uint cr_hash_string(const char *str, size_t len, unsigned int seed)
    Create new string object of size 'len'.
  * Allocation is skipped in case string is already interned.
  */
-OString *crS_newl(cr_State *ts, const char *chars, size_t len)
-{
+OString *crS_newl(cr_State *ts, const char *chars, size_t len) {
     TValue key;
-    HTable *strtab = &GS(ts)->strings;
-    uint hash = crS_hash(chars, len, GS(ts)->seed);
+    HTable *strtab = &G_(ts)->strings;
+    uint hash = crS_hash(chars, len, G_(ts)->seed);
     OString *weakref = cr_htable_getstring(strtab, chars, len, hash);
     if (weakref)
         return weakref;
@@ -52,9 +52,9 @@ OString *crS_newl(cr_State *ts, const char *chars, size_t len)
     string->extra = 0;
     setbit(string->bits, STRHASHBIT);
     setv2s(ts, &key, string);
-    setsv2s(ts, ts->stacktop.p++, string);
+    setsv2s(ts, ts->sp.p++, string);
     cr_htable_set(ts, strtab, &key, &key);
-    ts->stacktop.p--;
+    ts->sp.p--;
     return string;
 }
 
@@ -66,8 +66,7 @@ OString *crS_new(cr_State *ts, const char *chars) {
 
 
 /* free string object */
-void crS_free(cr_State *ts, OString *s)
-{
+void crS_free(cr_State *ts, OString *s) {
     crM_free(ts, s, sizeofstring(s->len));
 }
 
@@ -77,8 +76,7 @@ void crS_free(cr_State *ts, OString *s)
  * strings that might have null terminator in between
  * of their contents.
  */
-int crS_cmp(const OString *s1, const OString *s2)
-{
+int crS_cmp(const OString *s1, const OString *s2) {
     const char *p1 = s1->bytes;
     size_t s1l = s1->len;
     const char *p2 = s2->bytes;
@@ -99,16 +97,14 @@ int crS_cmp(const OString *s1, const OString *s2)
 }
 
 
-int crS_eq(const OString *s1, const OString *s2)
-{
+int crS_eq(const OString *s1, const OString *s2) {
     return ((s1 == s2) || (s1->hash == s2->hash /* pointers match or hash */
                 && s1->len == s2->len /* and length */
                 && memcmp(s1->bytes, s2->bytes, s1->len))); /* and contents */
 }
 
 
-void crS_sourceid(char *restrict dest, const char *src, size_t len)
-{
+void crS_sourceid(char *restrict dest, const char *src, size_t len) {
     size_t bufflen = CRI_MAXSRC - 1;
     if (bufflen < len) {
         memcpy(dest, src, bufflen - SLL("..."));
@@ -147,8 +143,7 @@ void crS_sourceid(char *restrict dest, const char *src, size_t len)
 
 
 /* convert hex character into digit */
-int crS_hexvalue(int c)
-{
+int crS_hexvalue(int c) {
     cr_assert(isxdigit(c));
     if (isdigit(c)) 
         return c - '0';
@@ -162,8 +157,7 @@ int crS_hexvalue(int c)
  * This function can convert hexadecimal, octal
  * and decimal strings to 'cr_integer'.
  */
-static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
-{
+static const char *otstr2int(const char *s, cr_integer *i, int *overflow) {
     cr_uinteger u = 0;
     int noval, digit, sign;
     sign = noval = 1;
@@ -215,8 +209,7 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow)
 }
 
 
-static const char *otstr2flt(const char *s, cr_number *n, int *of)
-{
+static const char *otstr2flt(const char *s, cr_number *n, int *of) {
     char *eptr;
 
     *of = 0;
@@ -225,18 +218,21 @@ static const char *otstr2flt(const char *s, cr_number *n, int *of)
     else
         *n = cr_str2number(s, &eptr);
     if (of) { /* set underflow flag */
-        if (strx2numberovf(*n)) *n = 1;
-        else if (strx2numberunf(*n)) *n = -1;
+        if (strx2numberovf(*n)) 
+            *n = 1;
+        else if (strx2numberunf(*n)) 
+            *n = -1;
     }
-    if (eptr == s) return NULL;
-    while (isspace(*eptr)) eptr++;
+    if (eptr == s) 
+        return NULL;
+    while (isspace(*eptr)) 
+        eptr++;
     return (*eptr == '\0' ? eptr : NULL);
 }
 
 
 /* convert string to 'cr_number' or 'cr_integer' */
-size_t crS_tonum(const char *s, TValue *o, int *of)
-{
+size_t crS_tonum(const char *s, TValue *o, int *of) {
     cr_integer i;
     cr_number n;
     const char *e;
@@ -264,8 +260,7 @@ size_t crS_tonum(const char *s, TValue *o, int *of)
  */
 #define MAXNUM2STR	44
 
-static int otnum2buff(const TValue *nv, char *buff)
-{
+static int otnum2buff(const TValue *nv, char *buff) {
     size_t len;
     cr_assert(ttisnum(nv));
     if (ttisint(nv)) {
@@ -282,8 +277,7 @@ static int otnum2buff(const TValue *nv, char *buff)
 }
 
 
-void crS_numtostring(cr_State *ts, TValue *v)
-{
+void crS_numtostring(cr_State *ts, TValue *v) {
     char buff[MAXNUM2STR];
     int len = otnum2buff(v, buff);
     setv2s(ts, v, crS_newl(ts, buff, len));
@@ -319,30 +313,27 @@ typedef struct BuffVSF {
  * Pushes 'str' to the stack and concatenates it with
  * other string on the stack if 'pushed' is set.
  */
-static void pushstr(BuffVFS *buff, const char *str, size_t len)
-{
+static void pushstr(BuffVFS *buff, const char *str, size_t len) {
     cr_State *ts = buff->ts;
     OString *s = crS_newl(ts, str, len);
-    setsv2s(ts, ts->stacktop.p, s);
-    ts->stacktop.p++;
+    setsv2s(ts, ts->sp.p, s);
+    ts->sp.p++;
     if (buff->pushed)
-        cr_vm_concat(ts, 2);
+        crVm_concat(ts, 2);
     else
         buff->pushed = 1;
 }
 
 
 /* pushes buffer 'space' on the stack */
-static void pushbuff(BuffVFS *buff)
-{
+static void pushbuff(BuffVFS *buff) {
     pushstr(buff, buff->space, buff->len);
     buff->len = 0;
 }
 
 
 /* ensure up to buffer space (up to 'BUFFVSFSIZ') */
-static char *getbuff(BuffVFS *buff, int n)
-{
+static char *getbuff(BuffVFS *buff, int n) {
     cr_assert(n <= BUFFVSFSIZ);
     if (n > BUFFVFSSIZ - buff->len)
         pushbuff(buff);
@@ -351,8 +342,7 @@ static char *getbuff(BuffVFS *buff, int n)
 
 
 /* add string to buffer */
-static void buffaddstring(BuffVFS *buff, const char *str, size_t len)
-{
+static void buffaddstring(BuffVFS *buff, const char *str, size_t len) {
     if (len < BUFFVFSSIZ) {
         char *p = getbuff(buff, len);
         memcpy(p, str, len);
@@ -365,23 +355,20 @@ static void buffaddstring(BuffVFS *buff, const char *str, size_t len)
 
 
 /* add number to buffer */
-static void buffaddnum(BuffVFS *buff, const TValue *nv)
-{
+static void buffaddnum(BuffVFS *buff, const TValue *nv) {
     buff->len += otnum2buff(nv, getbuff(buff, MAXNUM2STR));
 }
 
 
 /* add pointer to buffer */
-static void buffaddptr(BuffVFS *buff, const void *p)
-{
+static void buffaddptr(BuffVFS *buff, const void *p) {
     const int psize = 3 * sizeof(void*) + 8;
     buff->len += cr_pointer2str(getbuff(buff, psize), psize, p);
 }
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
-const char *crS_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
-{
+const char *crS_pushvfstring(cr_State *ts, const char *fmt, va_list argp) {
     const char *end;
     TValue nv;
     BuffVFS buff;
@@ -432,12 +419,11 @@ const char *crS_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
     }
     buffaddstring(&buff, fmt, strlen(fmt));
     pushbuff(&buff);
-    return cstrval(s2v(ts->stacktop.p));
+    return cstrval(s2v(ts->sp.p));
 }
 
 
-const char *crS_pushfstring(cr_State *ts, const char *fmt, ...)
-{
+const char *crS_pushfstring(cr_State *ts, const char *fmt, ...) {
     va_list argp;
     va_start(argp, fmt);
     const char *str = crS_pushvfstring(ts, fmt, argp);

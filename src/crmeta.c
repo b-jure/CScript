@@ -6,10 +6,10 @@
 #include "crvalue.h"
 #include "crgc.h"
 #include "crvm.h"
+#include "crmem.h"
 
 
-void crMM_init(cr_State *ts)
-{
+void crMM_init(cr_State *ts) {
     static const char *vmtnames[CR_NUM_META] = {
         "__init__", "__tostring__", "__getidx__", "__setidx__",
         "__gc__", "__defer__", "__add__", "__sub__", "__mul__",
@@ -21,40 +21,38 @@ void crMM_init(cr_State *ts)
         OString *s = crS_new(ts, vmtnames[i]);
         s->bits = bitmask(STRVMTBIT);
         s->extra = i;
-        GS(ts)->vmtnames[i] = s;
-        cr_gc_fix(ts, obj2gco(GS(ts)->vmtnames[i]));
+        G_(ts)->vmtnames[i] = s;
+        cr_gc_fix(ts, obj2gco(G_(ts)->vmtnames[i]));
     }
 }
 
 
-OClass *crMM_newclass(cr_State *ts, OString *id)
-{
+OClass *crMM_newclass(cr_State *ts, OString *id) {
     OClass *cls = cr_gc_new(ts, sizeof(OClass), CR_VCLASS, OClass);
     cls->methods = NULL;
     cls->name = id;
     for (uint i = 0; i < VMTELEMS; i++)
         setnilval(&cls->vtable[i]);
-    setsv2cls(ts, ts->stacktop.p++, cls);
+    setsv2cls(ts, ts->sp.p++, cls);
     cls->methods = cr_htable_new(ts);
-    ts->stacktop.p--;
+    ts->sp.p--;
     return cls;
 }
 
 
-Instance *crMM_newinstance(cr_State *ts, OClass *cls)
-{
+Instance *crMM_newinstance(cr_State *ts, OClass *cls) {
     Instance *ins = cr_gc_new(ts, sizeof(Instance), CR_VINSTANCE, Instance);
     ins->oclass = cls;
     ins->fields = NULL;
-    setsv2ins(ts, ts->stacktop.p++, ins);
+    setsv2ins(ts, ts->sp.p++, ins);
     ins->fields = cr_htable_new(ts);
-    ts->stacktop.p--;
+    ts->sp.p--;
     return ins;
 }
 
 
 InstanceMethod *crMM_newinstancemethod(cr_State *ts, Instance *receiver,
-        CrClosure *method)
+                                       CrClosure *method)
 {
     InstanceMethod *im = cr_gc_new(ts, sizeof(InstanceMethod), CR_VMETHOD,
                                    InstanceMethod);
@@ -64,8 +62,7 @@ InstanceMethod *crMM_newinstancemethod(cr_State *ts, Instance *receiver,
 }
 
 
-UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv)
-{
+UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv) {
     UserData *ud = cr_gc_new(ts, sizeofud(nuv, size), CR_VUDATA, UserData);
     ud->nuv = nuv;
     ud->size = size;
@@ -76,8 +73,7 @@ UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv)
 
 
 /* get 'vtable' method */
-const TValue *crMM_get(cr_State *ts, const GCObject *o, int mt)
-{
+const TValue *crMM_get(cr_State *ts, const GCObject *o, int mt) {
     UNUSED(ts);
     cr_assert(CR_META_INIT <= mt && mt < CR_NUM_META);
     switch (ott_(o)) {
@@ -90,15 +86,15 @@ const TValue *crMM_get(cr_State *ts, const GCObject *o, int mt)
 
 /* perform the overloaded method call */
 void crMM_callres(cr_State *ts, const TValue *selfarg, const TValue *fn,
-                     const TValue *v1, const TValue *v2, SPtr res)
+                  const TValue *v1, const TValue *v2, SPtr res)
 {
     /* assuming EXTRA_STACK */
-    setsval(ts, ts->stacktop.p++, selfarg); /* self */
-    setsval(ts, ts->stacktop.p++, fn);
-    setsval(ts, ts->stacktop.p++, v1);
-    setsval(ts, ts->stacktop.p++, v2);
-    cr_vm_call(ts, ts->stacktop.p - 3, 1);
-    setsval(ts, res, s2v(--ts->stacktop.p));
+    setsval(ts, ts->sp.p++, selfarg); /* self */
+    setsval(ts, ts->sp.p++, fn);
+    setsval(ts, ts->sp.p++, v1);
+    setsval(ts, ts->sp.p++, v2);
+    crVm_call(ts, ts->sp.p - 3, 1);
+    setsval(ts, res, s2v(--ts->sp.p));
 }
 
 
@@ -120,7 +116,7 @@ static int callbinres(cr_State *ts, const TValue *v1, const TValue *v2,
 
 /* try to call overloaded binary arithmetic method */
 void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
-                    int mt)
+                 int mt)
 {
     cr_assert(CR_META_ADD <= mt && mt <= CR_META_BXOR);
     if (cr_unlikely(!callbinres(ts, v1, v2, res, mt))) {
@@ -139,28 +135,24 @@ void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
 
 /* try to call overloaded ordering vtable method */
 int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
-                  int mt)
+               int mt)
 {
     cr_assert(CR_META_EQ <= mt && mt < CR_NUM_META);
     if (cr_likely(callbinres(ts, v1, v2, res, mt)))
-        return cr_isfalse(s2v(ts->stacktop.p - 1));
+        return cri_isfalse(s2v(ts->sp.p - 1));
     crD_ordererror(ts, v1, v2);
     /* UNREACHED */
     return 0;
 }
 
 
-/* free 'OClass' */
-void crMM_freeclass(cr_State *ts, OClass *cls)
-{
+void crMM_freeclass(cr_State *ts, OClass *cls) {
     cr_htable_free(ts, cls->methods);
     crM_free(ts, cls, sizeof(*cls));
 }
 
 
-/* free 'Instance' */
-void crMM_freeinstance(cr_State *ts, Instance *ins)
-{
+void crMM_freeinstance(cr_State *ts, Instance *ins) {
     cr_htable_free(ts, ins->fields);
     crM_free(ts, ins, sizeof(*ins));
 }

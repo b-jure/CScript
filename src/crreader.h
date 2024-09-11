@@ -35,14 +35,14 @@
 typedef struct {
     size_t n; /* unread bytes */
     const char* buff; /* position in buffer */
-    crR reader; /* reader function */
+    cr_fReader reader; /* reader function */
     void* userdata; /* user data for 'crR' */
     cr_State* ts; /* 'cr_State' for 'crR' */
 } BuffReader;
 
 
-CRI_FUNC void crR_init(cr_State* ts, BuffReader* br, crR reader,
-                         void* userdata);
+CRI_FUNC void crR_init(cr_State* ts, BuffReader* br, cr_fReader freader,
+                       void* userdata);
 CRI_FUNC int crR_fill(BuffReader* br);
 CRI_FUNC size_t crR_readn(BuffReader* br, size_t n);
 

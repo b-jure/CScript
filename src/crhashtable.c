@@ -52,8 +52,7 @@ static const Node emptynode = {{{0},CR_VEMPTY,0,CR_VEMPTY,{0}}};
 
 
 /* initialize hash table */
-HTable *cr_htable_new(cr_State *ts)
-{
+HTable *cr_htable_new(cr_State *ts) {
     HTable *ht = cr_gc_new(ts, sizeof(HTable), CR_VHTABLE, HTable);
     ht->size = 0;
     ht->isweak = 0;
@@ -66,8 +65,7 @@ HTable *cr_htable_new(cr_State *ts)
 
 
 /* create string hash table */
-void cr_htable_newstab(cr_State *ts, HTable *tab)
-{
+void cr_htable_newstab(cr_State *ts, HTable *tab) {
     tab->size = crV_ceillog2(CRI_MINSTRHTABSIZE);
     tab->nnodes = 0;
     tab->left = slotsleft(ts, tab);
@@ -79,8 +77,7 @@ void cr_htable_newstab(cr_State *ts, HTable *tab)
  * Find the main position (slot) for key 'k' inside
  * the table array.
  */
-static Node *mainposition(const Node *mem, int size, const TValue *k)
-{
+static Node *mainposition(const Node *mem, int size, const TValue *k) {
     switch (vtt(k)) {
     case CR_VTRUE: {
         return cast_node(hashslot(mem, crV_hashbool(1), size));
@@ -99,7 +96,7 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
         return cast_node(hashslot(mem, crV_hashp(p), size));
     }
     case CR_VCFUNCTION: {
-        cr_cfunc f = cfval(k);
+        cr_CFunction f = cfval(k);
         return cast_node(hashslot(mem, crV_hashp(f), size));
     }
     case CR_VSTRING: {
@@ -115,8 +112,7 @@ static Node *mainposition(const Node *mem, int size, const TValue *k)
 
 
 /* raw equality without calling vtable methods */
-static int eqkey(const TValue *k, const Node *n)
-{
+static int eqkey(const TValue *k, const Node *n) {
     cr_assert(!ttisempty(k));
     if (vtt(k) != keytt(n))
         return 0;
@@ -148,8 +144,7 @@ static int eqkey(const TValue *k, const Node *n)
  * return the tomb, otherwise return the entry containing the
  * same key. 'slot' won't overflow because load factor is tracked.
  */
-cr_sinline Node *gehtnode(const Node *mem, int size, const TValue *k)
-{
+cr_sinline Node *gehtnode(const Node *mem, int size, const TValue *k) {
     Node *tomb = NULL;
     Node *slot = mainposition(mem, size, k);
     for (;;) { /* linear probing */
@@ -167,8 +162,7 @@ cr_sinline Node *gehtnode(const Node *mem, int size, const TValue *k)
 
 
 /* auxliary function to 'cr_htable_next' */
-static uint getindex(cr_State *ts, HTable *tab, const TValue *k)
-{
+static uint getindex(cr_State *ts, HTable *tab, const TValue *k) {
     Node *slot = gehtnode(tab->mem, htsize(tab), k);
     if (cr_unlikely(keyisempty(slot)))
         crD_runerror(ts, "invalid key passed to 'next'");
@@ -181,8 +175,7 @@ static uint getindex(cr_State *ts, HTable *tab, const TValue *k)
  * If table had next entry then top of the stack will contain
  * key of that entry and its value (in that order).
  */
-int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k)
-{
+int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k) {
     TValue *v = s2v(k->p);
     uint i = getindex(ts, tab, v);
     for (; i < htsize(tab); i++) {
@@ -198,8 +191,7 @@ int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k)
 
 
 /* insert all the 'keys' from 'stab' into 'dtab' */
-void cr_htable_copykeys(cr_State *ts, HTable *stab, HTable *dtab)
-{
+void cr_htable_copykeys(cr_State *ts, HTable *stab, HTable *dtab) {
     TValue k;
     for (int i = 0; i < htsize(stab); i++) {
         Node *slot = htnode(stab, i);
@@ -211,8 +203,7 @@ void cr_htable_copykeys(cr_State *ts, HTable *stab, HTable *dtab)
 }
 
 
-static void rehash(const Node *omem, int osize, Node *nmem, int nsize)
-{
+static void rehash(const Node *omem, int osize, Node *nmem, int nsize) {
     const Node *slot;
     TValue k;
     for (int i = 0; i < osize; i++) {
@@ -227,8 +218,7 @@ static void rehash(const Node *omem, int osize, Node *nmem, int nsize)
 
 
 /* sets table array slots to 'emptynode' */
-cr_sinline void auxsetempty(Node * restrict mem, uint size)
-{
+cr_sinline void auxsetempty(Node * restrict mem, uint size) {
     cr_assert(ispow2(size) && size >= 4);
     Node *slot = mem;
     for (uint i = 0; i < size; i+=4) { /* unroll */
@@ -241,8 +231,7 @@ cr_sinline void auxsetempty(Node * restrict mem, uint size)
 
 
 /* expand hash table array */
-static void expandmem(cr_State *ts, HTable *tab)
-{
+static void expandmem(cr_State *ts, HTable *tab) {
     int osize = twoto(tab->size++);
     uint nsize = twoto(tab->size);
     if (nsize < CRI_MINHTABSIZE) {
@@ -269,7 +258,8 @@ static void expandmem(cr_State *ts, HTable *tab)
  * If the 'key' was not found insert it together with the 'value'.
  * If the 'key' already exists set its 'value'.
  */
-int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *val)
+int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key,
+                  const TValue *val)
 {
     Node *slot = gehtnode(tab->mem, htsize(tab), key);
     int newk = keyisempty(slot);
@@ -292,8 +282,7 @@ int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key, const TValue *va
  * Removes the slot belonging to the table 'tab' directly
  * without probing for it.
  */
-void cr_htable_removedirect(HTable *tab, Node *slot)
-{
+void cr_htable_removedirect(HTable *tab, Node *slot) {
     cr_assert(!istomb(n) && !keyisempty(n));
     cr_assert(htfirstnode(tab) <= slot && slot <= htlastnode(tab));
     puttomb(slot);
@@ -306,8 +295,7 @@ void cr_htable_removedirect(HTable *tab, Node *slot)
  * If the 'key' was found (and removed) return non-zero and place the tombstone.
  * Tombstones count as entries so this will not decrement 'left'.
  */
-int cr_htable_remove(HTable *tab, const TValue *key)
-{
+int cr_htable_remove(HTable *tab, const TValue *key) {
     Node *slot = gehtnode(tab->mem, htsize(tab), key);
     if (keyisempty(slot))
         return 0;
@@ -318,7 +306,8 @@ int cr_htable_remove(HTable *tab, const TValue *key)
 
 
 /* try to get interned string */
-OString *cr_htable_getstring(HTable *tab, const char *str, size_t len, uint hash)
+OString *cr_htable_getstring(HTable *tab, const char *str, size_t len,
+                             uint hash)
 {
     if (tab->nnodes == 0)
         return NULL;
@@ -339,8 +328,7 @@ OString *cr_htable_getstring(HTable *tab, const char *str, size_t len, uint hash
 
 
 /* get key value */
-int cr_htable_get(HTable *tab, const TValue *key, TValue *o)
-{
+int cr_htable_get(HTable *tab, const TValue *key, TValue *o) {
     cr_assert(o != NULL);
     if (tab->nnodes == 0) return 0;
     Node *slot = gehtnode(tab->mem, htsize(tab), key);
@@ -350,8 +338,7 @@ int cr_htable_get(HTable *tab, const TValue *key, TValue *o)
 }
 
 
-void cr_htable_free(cr_State *ts, HTable *ht)
-{
+void cr_htable_free(cr_State *ts, HTable *ht) {
     if (ht->mem != NULL)
         crM_free(ts, ht->mem, twoto(ht->size) * sizeof(Node));
     crM_free(ts, ht, sizeof(HTable));

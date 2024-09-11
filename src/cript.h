@@ -67,19 +67,19 @@ typedef CR_UINTEGER cr_uinteger;
 typedef CR_NUMBER cr_number;
 
 
-/* type for registered (with Cript) C function */
-typedef int (*cr_cfunc)(cr_State *ts);
+/* C function registered with Cript */
+typedef int (*cr_CFunction)(cr_State *ts);
 
-/* type for memory allocators */
-typedef void *(*cr_alloc)(void *ptr, size_t newsize, void *userdata);
+/* function for memory de/allocation */
+typedef void *(*cr_fAlloc)(void *ptr, size_t newsize, void *userdata);
 
-/* type for functions that read blocks when loading Cript chunks */
-typedef const char *(*crR)(cr_State *ts, void *userdata, size_t *szread);
+/* function that reads blocks when loading Cript chunks */
+typedef const char *(*cr_fReader)(cr_State *ts, void *userdata, size_t *szread);
 
-/* type for class interface */
-typedef struct cr_vtable cr_vtable;
+/* type for class API (Virtual Method Table) */
+typedef struct cr_VMT cr_VMT;
 
-/* type for debugging */
+/* type for debug API */
 typedef struct cr_DebugInfo cr_DebugInfo;
 
 
@@ -87,7 +87,7 @@ typedef struct cr_DebugInfo cr_DebugInfo;
 /* -------------------------------------------------------------------------
  * State manipulation
  * ------------------------------------------------------------------------- */
-CR_API cr_State        *cr_newstate(cr_alloc allocator, void *ud);
+CR_API cr_State        *cr_newstate(cr_fAlloc allocator, void *ud);
 CR_API cr_State        *cr_newthread(cr_State *ts);
 CR_API void             cr_freethread(cr_State *ts);
 CR_API cr_number        cr_version(cr_State *ts);
@@ -124,7 +124,7 @@ CR_API cr_integer       cr_getinteger(cr_State *ts, int idx, int *isnum);// TODO
 CR_API int              cr_getbool(cr_State *ts, int idx);
 CR_API const char      *cr_getstring(cr_State *ts, int idx);
 CR_API cr_uinteger      cr_strlen(cr_State *ts, int idx);
-CR_API cr_cfunc         cr_getcfunction(cr_State *ts, int idx);
+CR_API cr_CFunction         cr_getcfunction(cr_State *ts, int idx);
 CR_API void            *cr_getuserdata(cr_State *ts, int idx);// TODO
 CR_API const void      *cr_getpointer(cr_State *ts, int idx); // TODO
 
@@ -177,7 +177,7 @@ CR_API void             cr_pushstring(cr_State *ts, const char *str, size_t len)
 CR_API void             cr_pushcstring(cr_State *ts, const char *str);
 CR_API const char      *cr_pushvfstring(cr_State *ts, const char *fmt, va_list argp);
 CR_API const char      *cr_pushfstring(cr_State *ts, const char *fmt, ...);
-CR_API void             cr_pushcclosure(cr_State *ts, cr_cfunc fn, int upvals); // TODO
+CR_API void             cr_pushcclosure(cr_State *ts, cr_CFunction fn, int upvals); // TODO
 CR_API void             cr_pushbool(cr_State *ts, int b);
 CR_API void             cr_pushlightuserdata(cr_State *ts, void *p);
 
@@ -201,14 +201,14 @@ CR_API int cr_getuservalue(cr_State *ts, int idx, int n);
 
 
 /* -------------------------------------------------------------------------
- * Class interface (type system)
+ * Class API
  * ------------------------------------------------------------------------- */
-/* types of methods for 'cr_vtable' */
+/* types of methods for 'cr_VMT' */
 #define CR_METAT_NONE               (-1)
 #define CR_METAT_CFUNCTION             0
 #define CR_METAT_INDEX                 1
 
-/* 'cr_vtable' methods */
+/* 'cr_VMT' methods */
 #define CR_META_INIT                0
 #define CR_META_TOSTRING            1
 #define CR_META_GETIDX              2
@@ -236,11 +236,11 @@ CR_API int cr_getuservalue(cr_State *ts, int idx, int n);
 #define CR_NUM_META                 23
 
 
-/* type for class interface */
-struct cr_vtable {
+/* Virtual Method Table */
+struct cr_VMT {
     struct {
         union {
-            cr_cfunc cfunction; /* C function */
+            cr_CFunction cfunction; /* C function */
             int stkidx; /* value on stack */
         } method;
         int mtt; /* method type tag */
@@ -249,33 +249,33 @@ struct cr_vtable {
 
 
 /*
- * Helpers for setting 'cr_vtable'.
- * @vt - pointer to 'cr_vtable'
+ * Helpers for setting 'cr_VMT'.
+ * @vmt - pointer to 'cr_VMT'
  * @m - method ('CR_M*')
  * @mt - type of method ('CR_MT*')
- * @v - method value ('cr_cfunc' or 'int')
+ * @v - method value ('cr_CFunction' or 'int')
  */
 
 /* set index value for method 'm' */
-#define cr_vtablesetidx(vt,m,idx) \
-    { (vt)->methods[m].mtt = CR_METAT_INDEX; \
-      (vt)->methods[m].method.stkidx = (idx); }
+#define cr_vtablesetidx(vmt,m,idx) \
+    { (vmt)->methods[m].mtt = CR_METAT_INDEX; \
+      (vmt)->methods[m].method.stkidx = (idx); }
 
 /* set function value for method 'm' */
-#define cr_vtablesetfunc(vt,m,fn) \
-    { (vt)->methods[m].mtt = CR_METAT_CFUNCTION; \
-      (vt)->methods[m].method.cfunction = (fn); }
+#define cr_vtablesetfunc(vmt,m,fn) \
+    { (vmt)->methods[m].mtt = CR_METAT_CFUNCTION; \
+      (vmt)->methods[m].method.cfunction = (fn); }
 
 /* set value 'v' for method 'm' (bit slower but generic) */
-#define cr_vtableset(vt,m,mt,v) \
-    { (vt)->methods[m].mtt = (mt); \
+#define cr_vtableset(vmt,m,mt,v) \
+    { (vmt)->methods[m].mtt = (mt); \
       switch (mt) { \
-      case CR_METAT_CFUNCTION: (vt).methods[m].method.cfunction = (v); break; \
-      case CR_METAT_INDEX: (vt).methods[m].method.stkidx = (v); break; \
+      case CR_METAT_CFUNCTION: (vmt).methods[m].method.cfunction = (v); break; \
+      case CR_METAT_INDEX: (vmt).methods[m].method.stkidx = (v); break; \
       case CR_METAT_NONE: case default: break; }}
 
 
-CR_API void cr_createclass(cr_State *ts, cr_vtable *vt);
+CR_API void cr_createclass(cr_State *ts, cr_VMT *vmt, int superidx);
 
 
 
@@ -314,7 +314,7 @@ CR_API int cr_error(cr_State *ts);
  * ------------------------------------------------------------------------- */
 CR_API int cr_pcall(cr_State *ts, int argc, int retcnt);
 CR_API void cr_call(cr_State *ts, int argc, int retcnt);
-CR_API int cr_load(cr_State *ts, crR reader, void *userdata, const char *source);
+CR_API int cr_load(cr_State *ts, cr_fReader reader, void *userdata, const char *source);
 
 
 
@@ -343,10 +343,10 @@ CR_API int              cr_getupvalue(cr_State *ts, int fidx, int idx);
 CR_API int              cr_setupvalue(cr_State *ts, int fidx, int idx);
 CR_API const char      *cr_concat(cr_State *ts);
 CR_API int              cr_nextproperty(cr_State *ts, int idx, int nextfield);
-CR_API cr_cfunc         cr_setpanic(cr_State *ts, cr_cfunc panicfn);
-CR_API cr_cfunc         cr_getpanic(cr_State *ts);
-CR_API cr_cfunc         cr_setalloc(cr_State *ts, cr_alloc allocfn, void *ud);
-CR_API cr_alloc         cr_getalloc(cr_State *ts, void **ud);
+CR_API cr_CFunction         cr_setpanic(cr_State *ts, cr_CFunction panicfn);
+CR_API cr_CFunction         cr_getpanic(cr_State *ts);
+CR_API cr_CFunction         cr_setalloc(cr_State *ts, cr_fAlloc allocfn, void *ud);
+CR_API cr_fAlloc         cr_getalloc(cr_State *ts, void **ud);
 
 #define cr_nextfield(ts,idx)            cr_nextproperty((ts),(idx),0)
 #define cr_nextmethod(ts,idx)           cr_nextproperty((ts),(idx),1)

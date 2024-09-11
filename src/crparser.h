@@ -26,17 +26,15 @@
 
 
 
-/* --------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
  * Expression info
- * -------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------- */
 
 /* check expression type */
 #define eisvar(e)           ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
 #define eisconstant(e)      ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
 #define eismulret(e)        ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
-#define eissuper(e)         ((e)->et == EXP_INDEXRAWSUP || (e)->et == EXP_INDEXSUP)
 #define eistrue(e)          ((e)->et >= EXP_TRUE && (e)->et <= EXP_K)
-#define eisfalse(e)         ((e)->et == EXP_NIL || (e)->et == EXP_FALSE)
 
 
 /* expression types */
@@ -126,9 +124,9 @@ typedef struct ExpInfo {
 
 
 
-/* --------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
  * Function state
- * -------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------- */
 
 /* variable kind (stored in 'mod') */
 #define VARFINAL        0 /* final (immutable) */
@@ -229,9 +227,8 @@ typedef struct FunctionState {
 } FunctionState;
 
 
-
 CRI_FUNC cr_noret crP_semerror(Lexer *lx, const char *err);
-CRI_FUNC void crP_pparse(cr_State *ts, crR fn, void *userdata,
-                               const char *name);
+CRI_FUNC CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
+                              ParserState *ps, const char *source);
 
 #endif

@@ -24,7 +24,6 @@
 
 #include "cript.h"
 #include "crlimits.h"
-#include "crmem.h"
 
 
 
@@ -51,7 +50,7 @@ typedef union Value {
     cr_integer i; /* integer */
     cr_number n; /* float */
     void *p; /* light userdata */
-    cr_cfunc cfn; /* C function */
+    cr_CFunction cfn; /* C function */
     struct GCObject *o; /* collectable value */
 } Value;
 
@@ -203,7 +202,7 @@ typedef struct {
 #define ttistrue(v)             isvtt(v, CR_VTRUE)
 #define ttisfalse(v)            isvtt(v, CR_VFALSE)
 
-#define cr_isfalse(v)           (ttisfalse(v) || ttisnil(v))
+#define cri_isfalse(v)           (ttisfalse(v) || ttisnil(v))
 
 
 

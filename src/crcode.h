@@ -123,7 +123,7 @@ OP_VARARG,      /* L          'load L-1 varargs' */
 OP_CLOSURE,     /*            'create and load new closure' */
 OP_CLASS,       /*            'create and load new class' */
 OP_METHOD,      /* L V1 V2    'define method V2 for class V1 under key K{L}' */
-OP_SETVMT,      /* S V1 V2    'define Mmethod V2 for obj V1 at index S' */
+OP_SETMM,       /* S V1 V2    'V1->vmt[S] = V2' (see notes) */
 OP_POP,         /*            'pop value off the stack' */
 OP_POPN,        /* L          'pop L values off the stack' */
 
@@ -190,10 +190,10 @@ OP_EQPRESERVE,   /* V1 V2   'V1 == V2 (preserves V1 operand)' */
 OP_JMP,          /* L       'pc += L' */
 OP_JMPS,         /* L       'pc -= L' */
 
-OP_TEST,         /* V L S   'if (!cr_isfalse(V) == S) pc += L' */
-OP_TESTORPOP,    /* V L S   'if (!cr_isfalse(V) == S) pc += L; else pop V;' */
-OP_TESTANDPOP,   /* V L S   'if (!cr_isfalse(V) == S) { pc += L; pop V; }' */
-OP_TESTPOP,      /* V L S   'if (!cr_isfalse(V) == S) { pc += L; } pop V;' */
+OP_TEST,         /* V L S   'if (!cri_isfalse(V) == S) pc += L' */
+OP_TESTORPOP,    /* V L S   'if (!cri_isfalse(V) == S) pc += L; else pop V;' */
+OP_TESTANDPOP,   /* V L S   'if (!cri_isfalse(V) == S) { pc += L; pop V; }' */
+OP_TESTPOP,      /* V L S   'if (!cri_isfalse(V) == S) { pc += L; } pop V;' */
 
 OP_CALL,    /* L1 L2 L3  'V{L1},...,V{L1+L3-2} = V{L1}(V{L1+1},...,V{L1+L2-1})'
                (check info) */
@@ -230,19 +230,21 @@ OP_GETSUP,       /* V L         'V:super.K{L}:string' */
 OP_GETSUPIDX,    /* V1 V2       'V1:super[V2]' */
 OP_GETSUPIDXSTR, /* V L         'V:super[K{L}:string]' */
 
-OP_INHERIT,      /* V1 V2       'V2 inherits from superclass V1' */
-OP_FORPREP,      /* L1 L2       'create upvalue V{L1+3}; pc += L2' */
+OP_INHERIT,    /* V1 V2  'V2 inherits from superclass V1' */
+OP_FORPREP,    /* L1 L2  'create upvalue V{L1+3}; pc += L2' */
 OP_FORCALL,    /* L1 L2  'V{L1+4},...,V{L1+3+L2} = V{L1}(V{L1+1}, V{L1+2});' */
 OP_FORLOOP,    /* L1 L2  'if V{L1+2} != nil { V{L1} = V{L1+2}; pc -= L2 }' */
 
-OP_RET0,        /*             'return;' */
-OP_RET1,        /* L           'return V{L};' */
+OP_RET0,        /* L1 L2 L3 S  'return;' (L1 L2 L3 S are unused) */
+OP_RET1,        /* L1 L2 L3 S  'return V{L1};' (L2 L3 S are unused) */
 OP_RET,         /* L1 L2 L3 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
 } OpCode;
 
 
 /*
 ** Notes:
+** [OP_SETMM]
+** Sets virtual method table entry value at index S.
 **
 ** [OP_CALL]
 ** L1 is the base stack offset where the value being called is located.
@@ -302,10 +304,10 @@ CRI_DEC(const cr_ubyte crC_opProp[NUM_OPCODES];)
 #define opProp(mm,j,t,f)    (((mm) << 5) | ((j) << 4) | ((t) << 3) | (f))
 
 
-CRI_FUNC int cr_code(FunctionState *fs, Instruction i);
-CRI_FUNC int crC_S(FunctionState *fs, Instruction i, int a);
-CRI_FUNC int crC_L(FunctionState *fs, Instruction i, int a);
-CRI_FUNC int crC_LL(FunctionState *fs, Instruction i, int a, int b);
+CRI_FUNC int crC_emitI(FunctionState *fs, Instruction i);
+CRI_FUNC int crC_emitIS(FunctionState *fs, Instruction i, int a);
+CRI_FUNC int crC_emitIL(FunctionState *fs, Instruction i, int a);
+CRI_FUNC int crC_emitILL(FunctionState *fs, Instruction i, int a, int b);
 CRI_FUNC void crC_checkstack(FunctionState *fs, int n);
 CRI_FUNC void crC_reserveslots(FunctionState *fs, int n);
 CRI_FUNC void crC_setoneret(FunctionState *fs, ExpInfo *e);

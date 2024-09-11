@@ -10,17 +10,70 @@
 
 
 
+/*
+ * Extra stack space that is used mostly when calling vtable
+ * methods. Helps in avoiding stack checks (branching).
+ */
+#define EXTRA_STACK	5
+
+
+/* initial stack size */
+#define STACKSIZE_INIT		(CR_MINSTACK * 4)
+
+
+/* stack size */
+#define stacksize(ts)		cast_int((ts)->stackend.p - (ts)->stack.p)
+
+/* current stack top offset */
+#define topoffset(ts)		cast_int((ts)->sp.p - (ts)->stack.p)
+
+
+/* save/restore stack position */
+#define savestack(ts,ptr)	(cast_charp(ptr) - cast_charp((ts)->stack.p))
+#define restorestack(ts,o)	cast(SPtr, cast_charp((ts)->stack.p) + (o))
+
+
+/* check if stack needs to grow */
+#define checkstack(ts,n) \
+    if (cr_unlikely((ts)->stackend.p - (ts)->sp.p <= (n))) \
+            crT_growstack(ts, (n), 1);
+
+
+/* 
+** Increment number of nested Cript calls.
+** The counter is located in the upper 2 bytes of 'nCC'.
+*/
+#define incn_C(ts)       ((ts)->nCC += 0x10000)
+
+/* Decrement number of nested Cript calls. */
+#define decn_C(ts)       ((ts)->nCC -= 0x10000)
+
+
+/*
+** Get number of nested C calls.
+** This counter is located in the lower 2 bytes of 'nCC'.
+*/
+#define getnC_(ts)       ((ts)->nCC & 0xffff)
+
+
+/* Increment value for both the nested C and Cript calls. */
+#define nCCi    (0x10000 | 1)
+
+
+
 /* -------------------------------------------------------------------------
  * Long jump (for protected calls)
  * ------------------------------------------------------------------------- */
 
-#define cr_jmpbuf       jmp_buf
+#define CRI_THROW(ts,b)     longjmp((b)->buf, 1)
+#define CRI_TRY(ts,b,fn)    if (setjmp((b)->buf) == 0) { fn }
 
+#define cri_jmpbuf          jmp_buf
 
 /* jmpbuf for jumping out of protected function */
 typedef struct cr_ljmp {
     struct cr_ljmp *prev;
-    cr_jmpbuf buf;
+    cri_jmpbuf buf;
     volatile int status;
 } cr_ljmp;
 
@@ -35,7 +88,7 @@ typedef struct cr_ljmp {
 
 
 /* 'cfstatus' bits */
-#define CFST_FRESH          (1<<0) /* in top-level Cript function */
+#define CFST_FRESH          (1<<0) /* fresh execute of Cript functon */
 #define CFST_CCALL          (1<<1) /* in C call */
 #define CFST_FIN            (1<<2) /* in finalizer */
 
@@ -46,6 +99,7 @@ typedef struct cr_ljmp {
 
 /* call information */
 typedef struct CallFrame {
+    struct CallFrame *prev, *next; /* linked-list */
     SIndex callee; /* function */
     SIndex top; /* top for this call */
     const Instruction *pc; /* only for non-C callee */
@@ -61,9 +115,9 @@ typedef struct CallFrame {
  * ------------------------------------------------------------------------- */
 
 typedef struct GState {
-    cr_alloc realloc; /* allocator */
+    cr_fAlloc falloc; /* allocator */
     void *udrealloc; /* userdata for 'realloc' */
-    cr_cfunc panic; /* panic handler (unprotected calls) */
+    cr_CFunction panic; /* panic handler (unprotected calls) */
     uint seed; /* initial seed for hashing */
     TValue nil; /* nil value (init flag) */
     GC gc; /* garbage collection managed values and parameters */
@@ -71,8 +125,8 @@ typedef struct GState {
     HTable *globals; /* global variables */
     struct cr_State *mainthread; /* thread that also created global state */
     struct cr_State *thwouv; /* thread with open upvalues */
-    OString *memerror; /* error message for memory errors */
-    OString *vmtnames[CR_NUM_META]; /* vtable method names */
+    OString *memerror; /* preallocated message for memory errors */
+    OString *vmtnames[CR_NUM_META]; /* method names */
 } GState;
 
 
@@ -84,30 +138,27 @@ typedef struct GState {
 /* Cript thread state */
 struct cr_State {
     ObjectHeader;
+    ushrt ncf; /* number of call frames in 'cf' list */
+    int status; /* status code */
+    cr_uint32 nCC; /* number of calls (C | Cript) */
     GCObject *gclist;
     struct cr_State *thwouv; /* next thread with open upvalues */
     GState *gstate; /* shared global state */
-    int status; /* status code */
     cr_ljmp *errjmp; /* error recovery */
-    SIndex stacktop; /* first free slot in the stack */
-    SIndex stackend; /* end of stack */
     SIndex stack; /* stack base */
-    CallFrame *aframe; /* currently active frame in 'frames' */
-    CallFrame *frames; /* call stack */
+    SIndex sp; /* first free slot in the 'stack' */
+    SIndex stackend; /* end of 'stack' + 1 */
+    CallFrame *cf; /* active frame */
     UpVal *openupval; /* list of open upvalues */
-    TValue *deferlist;
     SIndex tbclist; /* list of to-be-closed variables */
-    uint ncalls; /* number of nested calls */
-    int nframes; /* number of elements in 'frames' */
-    int sizeframes; /* size of 'frames' */
 };
 
 
 /* thread global state */
-#define GS(ts)          (ts)->gstate
+#define G_(ts)          (ts)->gstate
 
 /* check if thread is initialized */
-#define tsinitialized(ts) (ttisnil(&(ts)->nil))
+#define tsinitialized(ts)       (ttisnil(&(ts)->nil))
 
 /* check if thread is in 'thwouv' list */
 #define isinthwouv(ts)          ((ts)->thwouv != (ts))
@@ -147,7 +198,13 @@ union GCUnion {
 #define obj2gco(o)      (&(cast_gcu(o)->gc))
 
 
-CRI_FUNC cr_noret cr_state_throw(cr_State *ts, int code);
-CRI_FUNC void cr_state_inccalls(cr_State *ts);
+CRI_FUNC CallFrame *crT_newcf(cr_State *ts);
+CRI_FUNC int crT_reallocstack(cr_State *ts, int size, int raiseerr);
+CRI_FUNC int crT_growstack(cr_State *ts, int n, int raiseerr);
+CRI_FUNC void crT_shrinkstack(cr_State *ts);
+CRI_FUNC void crT_incsp(cr_State *ts);
+CRI_FUNC void crT_incC_(cr_State *ts);
+CRI_FUNC void crT_checkCstack(cr_State *ts);
+CRI_FUNC cr_noret crT_throw(cr_State *ts, int code);
 
 #endif

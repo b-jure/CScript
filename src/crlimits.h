@@ -46,8 +46,17 @@ typedef signed char cr_byte;
 #define CRBYTE_MAX	((cr_ubyte)(CR_UBYTE_MAX >> 1))
 
 
+/* 
+** Unsigned 32-bit integer; for 'nCcalls'.
+** This value must have 16 bits for counting nested
+** Cript function calls and 16 bits for nested C calls.
+*/
+typedef uint32_t cr_uint32;
+
+
 /* nice to have */
 typedef unsigned int uint;
+typedef unsigned short ushrt;
 
 
 /*
@@ -387,7 +396,7 @@ typedef cr_ubyte Instruction;
  */
 #if defined(crD_STRESS_GC)
 #define gcmemchange(ts,pre,pos)	\
-	{ if (gcrunning(GS(ts)->gc)) { pre; cr_gc_full(ts); pos; } }
+	{ if (gcrunning(G_(ts)->gc)) { pre; cr_gc_full(ts); pos; } }
 #else
 #define gcmemchange(ts,pre,pos)		((void)0)
 #endif

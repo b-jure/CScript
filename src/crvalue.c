@@ -292,7 +292,7 @@ cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2)
     if (ttisstr(v1) && ttisstr(v2))
         return (crS_cmp(strval(v1), strval(v2)) <= 0);
     else
-        return crMM_order(ts, v1, v2, ts->stacktop.p, CR_META_LE);
+        return crMM_order(ts, v1, v2, ts->sp.p, CR_META_LE);
 }
 
 
@@ -341,7 +341,7 @@ cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2)
     if (ttisstr(v1) && ttisstr(v2))
         return (crS_cmp(strval(v1), strval(v2)) < 0);
     else
-        return crMM_order(ts, v1, v2, ts->stacktop.p, CR_META_LT);
+        return crMM_order(ts, v1, v2, ts->sp.p, CR_META_LT);
 }
 
 
@@ -393,6 +393,6 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2)
     default: return (oval(v1) == oval(v2));
     }
     if (!method) return 0;
-    crMM_callres(ts, selfarg, method, v1, v2, ts->stacktop.p);
-    return !cr_isfalse(s2v(ts->stacktop.p - 1));
+    crMM_callres(ts, selfarg, method, v1, v2, ts->sp.p);
+    return !cri_isfalse(s2v(ts->sp.p - 1));
 }

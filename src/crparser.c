@@ -25,7 +25,8 @@
 #include "crvalue.h"
 #include "crstring.h"
 #include "crfunction.h"
-#include "crvm.h"
+#include "crhashtable.h"
+#include "crmem.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -34,10 +35,10 @@
 
 
 /* enter C function frame */
-#define entercstack(lx)         cr_state_inccalls((lx)->ts)
+#define enterCstack(lx)         crT_incC_((lx)->ts)
 
 /* pop C function frame */
-#define leavecstack(lx)         ((lx)->ts->ncalls--)
+#define leaveCstack(lx)         ((lx)->ts->nCC--)
 
 
 /* compare 'OString' pointers for equality */
@@ -51,7 +52,7 @@
 
 /* 
  * Mask for marking undefined or not fully initialized
- * variables (statics and globals).
+ * variables (private globals).
  */
 #define UNDEFMODMASK     0x80 /* 0b10000000 */
 
@@ -140,7 +141,7 @@ static void patchlistaddjmp(FunctionState *fs, int jmp) {
     cr_assert(fs->patches.len > 0);
     PatchList *list = &fs->patches.list[fs->patches.len - 1];
     crM_growvec(fs->lx->ts, list->arr, list->size, list->len,
-                   INT_MAX, "code jumps");
+                INT_MAX, "code jumps");
     list->arr[list->len++] = jmp;
 }
 
@@ -155,7 +156,7 @@ static void resetpatchlist(FunctionState *fs) {
 /* create new patch list */
 static void patchliststart(FunctionState *fs) {
     crM_growvec(fs->lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
-                   INT_MAX, "patch lists");
+                INT_MAX, "patch lists");
     fs->patches.list[fs->patches.len++] = (PatchList){0};
 }
 
@@ -185,7 +186,7 @@ static cr_noret limiterror(FunctionState *fs, const char *what, int limit) {
     const char *where = (line == 0 ? "main function" :
                         crS_pushfstring(ts, "function at line %d", line));
     const char *err = crS_pushfstring(ts, "too many %s (limit is %d) in %s",
-                                            what, limit, where);
+                                          what, limit, where);
     crL_syntaxerror(fs->lx, err);
 }
 
@@ -206,8 +207,8 @@ static void checklimit(FunctionState *fs, int n, int limit, const char *what) {
 /* variable initialization error */
 static cr_noret variniterror(Lexer *lx, const char *kind, const char *name) {
     crP_semerror(lx, crS_pushfstring(lx->ts,
-                           "can't read %s variable '%s' in its own initializer",
-                           kind, name));
+                     "can't read %s variable '%s' in its own initializer",
+                     kind, name));
 }
 
 
@@ -216,9 +217,9 @@ static void checkvarcollision(FunctionState *fs, OString *name, const char *vk,
                               int (*fn)(FunctionState *, OString *, ExpInfo *))
 {
     ExpInfo dummy;
-    if (cr_unlikely(fn == NULL || fn(fs, name, &dummy) >= 0))
+    if (cr_unlikely(fn(fs, name, &dummy) >= 0))
         crP_semerror(fs->lx, crS_pushfstring(fs->lx->ts,
-                           "redefinition of %s variable '%s'", vk, name));
+                             "redefinition of %s variable '%s'", vk, name));
 }
 
 
@@ -247,9 +248,9 @@ static int getstacklevel(FunctionState *fs, int nvar) {
 
 
 /* 
- * Pop local variables to stack level 'tolevel'; 'extra'
+ * Pop local variables up to stack level 'tolevel'; 'extra'
  * values to pop are usually remaining switch statement
- * expressions or any other values left on stack besides
+ * values or any other values left on stack besides
  * local variables.
  */
 static void poplocals(FunctionState *fs, int tolevel, int extra) {
@@ -275,7 +276,7 @@ static void removelocals(FunctionState *fs, int tolevel, int popextra) {
 
 
 /* get private variable */
-cr_sinline SVar *getprivate(FunctionState *fs, int idx) {
+cr_sinline PrivateVar *getprivate(FunctionState *fs, int idx) {
     cr_assert(0 <= idx && idx < fs->fn->nstatics);
     return &fs->fn->private[idx];
 }
@@ -331,7 +332,7 @@ static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
     Function *fn = fs->fn;
     checklimit(fs, fs->nlocals, MAXLONGARGSIZE, "locals");
     crM_growvec(lx->ts, fn->locals, fn->sizelocals, fs->nlocals,
-                   MAXLONGARGSIZE, "locals");
+                MAXLONGARGSIZE, "locals");
     LVarInfo *lvarinfo = &fn->locals[fs->nlocals++];
     lvarinfo->name = name;
     lvarinfo->startpc = fs->pc;
@@ -358,32 +359,31 @@ static void adjustlocals(Lexer *lx, int nvars) {
  * UNDEFMODMASK is not contained in VARBITMASK. 
  */ 
 static void defineprivate(FunctionState *fs, int vidx) {
-    SVar *svar = getprivate(fs, vidx);
-    vmod(&svar->val) &= VARBITMASK;
+    PrivateVar *pv = getprivate(fs, vidx);
+    vmod(&pv->val) &= VARBITMASK;
 }
 
 
-/* define variable */
-static void codedefine(FunctionState *fs, ExpInfo *var) {
-    cr_assert(var->et != EXP_UPVAL); /* can't define upvalue */
+/* define global variable */
+static void defineglobal(FunctionState *fs, ExpInfo *var) {
+    cr_assert(var->et == EXP_GLOBAL);
+    crC_defineglobal(fs, var);
+}
+
+
+/* initialize non-global variable */
+static void initvariable(FunctionState *fs, ExpInfo *var) {
     switch (var->et) {
     case EXP_LOCAL: {
-        adjustlocals(fs->lx, 1); /* register it into 'locals' */
+        adjustlocals(fs->lx, 1);
         break;
     }
     case EXP_PRIVATE: {
-        /* fully initialize static variable */
         defineprivate(fs, var->u.info);
         break;
     }
-    case EXP_GLOBAL: {
-        /* emit define rather than emitting store instruction */
-        crC_defineglobal(fs, var);
-        return;
+    default: break;
     }
-    default: cr_unreachable();
-    }
-    crC_storevar(fs, var);
 }
 
 
@@ -411,7 +411,7 @@ static void endscope(FunctionState *fs) {
     if (scopeisloop(s) || scopeisswitch(s)) /* has a patch list ? */
         patchlistend(fs);
     if (s->prev && s->haveupval) /* need to close upvalues ? */
-        crC_S(fs, OP_CLOSE, stklevel);
+        crC_emitIS(fs, OP_CLOSE, stklevel);
     fs->sp = stklevel; /* free stack slots */
     fs->scope = s->prev;
 }
@@ -504,8 +504,8 @@ static Function *addfunction(Lexer *lx) {
     Function *fn = fs->fn;
     checklimit(fs, fs->nfuncs + 1, MAXLONGARGSIZE, "functions");
     crM_growvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, MAXLONGARGSIZE,
-                   "functions");
-    fn->funcs[fs->nfuncs++] = new = cr_function_new(ts);
+                "functions");
+    fn->funcs[fs->nfuncs++] = new = crF_new(ts);
     cr_gc_objbarrier(ts, fn, new);
     return new;
 }
@@ -514,7 +514,7 @@ static Function *addfunction(Lexer *lx) {
 /* set current function as vararg */
 static void setvararg(FunctionState *fs, int arity) {
     fs->fn->isvararg = 1;
-    crC_L(fs, OP_VARARGPREP, arity);
+    crC_emitIL(fs, OP_VARARGPREP, arity);
 }
 
 
@@ -581,7 +581,7 @@ static int newlocal(Lexer *lx, OString *name, int mods) {
     ParserState *ps = lx->ps;
     checklimit(fs, ps->lvars.len, MAXLONGARGSIZE, "locals");
     crM_growvec(lx->ts, ps->lvars.arr, ps->lvars.size, ps->lvars.len,
-                   MAXLONGARGSIZE, "locals");
+                MAXLONGARGSIZE, "locals");
     LVar *local = &ps->lvars.arr[ps->lvars.len++];
     vmod(&local->val) = mods;
     local->s.name = name;
@@ -618,9 +618,9 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e) {
 static int searchprivate(FunctionState *fs, OString *name, ExpInfo *e) {
     Lexer *lx = fs->lx;
     for (int i = fs->nprivate - 1; i >= 0; i--) {
-        SVar *svar = getprivate(fs, i);
-        if (streq(name, svar->s.name)) {
-            if (cr_unlikely(testbits(vmod(&svar->val), UNDEFMODMASK)))
+        PrivateVar *pv = getprivate(fs, i);
+        if (streq(name, pv->s.name)) {
+            if (cr_unlikely(testbits(vmod(&pv->val), UNDEFMODMASK)))
                 variniterror(lx, "private", getstrbytes(name));
             initexp(e, EXP_PRIVATE, i);
             return e->et;
@@ -636,7 +636,7 @@ static UpValInfo *newupvalue(FunctionState *fs) {
     cr_State *ts = fs->lx->ts;
     checklimit(fs, fs->nupvals + 1, MAXLONGARGSIZE, "upvalues");
     crM_growvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals, MAXLONGARGSIZE,
-                   "upvalues");
+                "upvalues");
     return &fn->upvals[fs->nupvals++];
 }
 
@@ -700,31 +700,12 @@ static void searchvar(FunctionState *fs, OString *name, ExpInfo *e, int base) {
 
 
 /* create new global variable */
-static void newglobal(Lexer *lx, OString *name, int mod) {
+static void newglobal(Lexer *lx, OString *name, int mods) {
     TValue k, val;
     setv2s(lx->ts, &k, name);
     setemptyval(&val);
-    vmod(&val) = mod;
-    cr_htable_set(lx->ts, GS(lx->ts)->globals, &k, &val);
-}
-
-
-/* 
- * Create new global variable; check for redefinition;
- * check for invalid initialization.
- */
-static void defineglobal(Lexer *lx, OString *name, int mod) {
-    TValue k, out;
-    setv2s(lx->ts, &k, name);
-    if (cr_unlikely(cr_htable_get(GS(lx->ts)->globals, &k, &out))) {
-        if (testbits(vmod(&out), UNDEFMODMASK)) { /* assign before definition */
-            crP_semerror(lx, crS_pushfstring(lx->ts, 
-            "definition of already present global variable '%s'", name));
-        } else { /* redefinition of defined global variable */
-            checkvarcollision(lx->fs, name, "global", NULL);
-        }
-    }
-    newglobal(lx, name, mod);
+    vmod(&val) = mods;
+    cr_htable_set(lx->ts, G_(lx->ts)->globals, &k, &val);
 }
 
 
@@ -734,7 +715,7 @@ static void globalvar(FunctionState *fs, OString *name, ExpInfo *e) {
     TValue k, dummy;
     setv2s(lx->ts, &k, name);
     setemptyval(&dummy); /* set as undefined */
-    if (!cr_htable_get(GS(lx->ts)->globals, &k, &dummy))
+    if (!cr_htable_get(G_(lx->ts)->globals, &k, &dummy))
         newglobal(lx, name, UNDEFMODMASK >> (fs->prev != NULL));
     e->u.str = name;
     e->et = EXP_GLOBAL;
@@ -748,9 +729,9 @@ static int newprivate(FunctionState *fs, OString *name, int mods) {
     checklimit(fs, fs->nprivate, MAXLONGARGSIZE, "private variables");
     crM_growvec(ts, fn->private, fn->sizeprivate, fs->nprivate,
                    MAXLONGARGSIZE, "private variables");
-    SVar *svar = &fn->private[fs->nprivate++];
-    svar->s.name = name;
-    vmod(&svar->val) = (UNDEFMODMASK | mods);
+    PrivateVar *pv = &fn->private[fs->nprivate++];
+    pv->s.name = name;
+    vmod(&pv->val) = (UNDEFMODMASK | mods);
     return fs->nprivate - 1;
 }
 
@@ -771,14 +752,14 @@ static void var(Lexer *lx, OString *name, ExpInfo *e) {
  *                              EXPRESSIONS
  * ------------------------------------------------------------------------- */
 
-/* varstatic ::= '@' name */
-static void varstatic(Lexer *lx, ExpInfo *e) {
+/* varprivate ::= '@' name */
+static void varprivate(Lexer *lx, ExpInfo *e) {
     crL_scan(lx); /* skip '@' */
     OString *name = expect_id(lx);
     int vidx = searchprivate(lx->fs, name, e);
     if (cr_unlikely(vidx < 0))
         crP_semerror(lx, crS_pushfstring(lx->ts, 
-                               "undefined static variable '%s'", name));
+                         "undefined static variable '%s'", name));
     initexp(e, EXP_PRIVATE, vidx);
 }
 
@@ -884,7 +865,7 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
         crC_varexp2stack(lx->fs, e);
         break;
     case '@':
-        varstatic(lx, e);
+        varprivate(lx, e);
         crL_scan(lx);
         break;
     case TK_IDENTIFIER:
@@ -998,7 +979,7 @@ static void simpleexpr(Lexer *lx, ExpInfo *e) {
     case TK_DOTS:
         expect_cond(lx, lx->fs->fn->isvararg,
                     "cannot use '...' outside of vararg function");
-        initexp(e, EXP_VARARG, crC_L(lx->fs, OP_VARARG, 2));
+        initexp(e, EXP_VARARG, crC_emitIL(lx->fs, OP_VARARG, 2));
         break;
     default:
         suffixedexpr(lx, e);
@@ -1111,7 +1092,7 @@ static const struct {
  *           | simpleexp '..' subexpr
  */
 static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
-    entercstack(lx);
+    enterCstack(lx);
     Unopr uopr = getunopr(lx->t.tk);
     if (uopr != OPR_NOUNOPR) {
         crL_scan(lx); /* skip operator */
@@ -1129,7 +1110,7 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
         crC_binary(lx->fs, e, &e2, opr);
         opr = next;
     }
-    leavecstack(lx);
+    leaveCstack(lx);
     return opr;
 }
 
@@ -1163,7 +1144,7 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
         break;
     }
     case EXP_PRIVATE: {
-        SVar *sv = getprivate(fs, var->u.info);
+        PrivateVar *sv = getprivate(fs, var->u.info);
         if (vmod(&sv->val) & VARFINAL)
             id = sv->s.name;
         break;
@@ -1171,7 +1152,7 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
     case EXP_GLOBAL: {
         TValue key, res;
         setv2s(lx->ts, &key, var->u.str);
-        if (cr_htable_get(GS(lx->ts)->globals, &key, &res)) {
+        if (cr_htable_get(G_(lx->ts)->globals, &key, &res)) {
             if (!ttisempty(&res) && vmod(&res) & VARFINAL)
                 id = var->u.str;
         }
@@ -1226,9 +1207,9 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
         struct LHS var;
         var.prev = lhs;
         suffixedexpr(lx, &var.e);
-        entercstack(lx);
+        enterCstack(lx);
         assign(lx, &var, nvars + 1);
-        leavecstack(lx);
+        leaveCstack(lx);
     } else { /* right side of assignment '=' */
         ExpInfo e;
         expect(lx, '=');
@@ -1303,14 +1284,15 @@ static int getmodifiers(Lexer *lx, const char *name) {
 
 /* create new variable 'name' */
 static int newvar(FunctionState *fs, OString *name, ExpInfo *e, int mods) {
+    Lexer *lx = fs->lx;
     int vidx = -1;
     if (fs->scope->prev) { /* local ? */
         if (cr_unlikely(testbit(mods, VARPRIVATE))) {
-            crP_semerror(fs->lx, crS_pushfstring(fs->lx->ts,
+            crP_semerror(lx, crS_pushfstring(lx->ts,
                         "local variables '%s' is already private", name));
         }
         checkvarcollision(fs, name, "local", searchlocal);
-        vidx = newlocal(fs->lx, name, mods);
+        vidx = newlocal(lx, name, mods);
         initexp(e, EXP_LOCAL, vidx);
     } else { /* global */
         cr_assert(!testbit(mods, VARTBC)); /* can't have close */
@@ -1319,7 +1301,7 @@ static int newvar(FunctionState *fs, OString *name, ExpInfo *e, int mods) {
             vidx = newprivate(fs, name, mods);
             initexp(e, EXP_PRIVATE, vidx);
         } else { /* regular global */
-            defineglobal(fs->lx, name, mods);
+            newglobal(lx, name, mods);
             initglobal(e, name);
         }
     }
@@ -1328,25 +1310,65 @@ static int newvar(FunctionState *fs, OString *name, ExpInfo *e, int mods) {
 
 
 /* mark local variable at 'idx' as tbc and close it */
-static void closelocal(FunctionState *fs, int idx) {
+static void marktbc(FunctionState *fs, int idx) {
     if (idx >= 0) {
         scopemarktbc(fs);
-        crC_L(fs, OP_TBC, idx);
+        crC_emitIL(fs, OP_TBC, idx);
     }
 }
 
 
+static int closedecl(FunctionState *fs, int vidx) {
+    if (cr_unlikely(vidx == -1)) /* closing global ? */
+        crP_semerror(fs->lx, "can't close global variables");
+    return fs->activelocals;
+}
+
+
 /* check if decl at 'vidx' needs to be closed and return the index */
-static int tbcdecl(FunctionState *fs, int nvars, int vidx) {
-    static int havetbc = 0; /* initial value */
-    if (cr_unlikely(havetbc)) { /* already have close ? */
+static void closeletdecl(FunctionState *fs, int nvars, int vidx, int *tbc) {
+    if (cr_unlikely(*tbc != -1)) { /* already have close ? */
         crP_semerror(fs->lx, 
                 "multiple to-be-closed variables in a single declaration");
-    } else if (cr_unlikely(vidx == -1)) { /* global with close ? */
-        crP_semerror(fs->lx, "global variables can't be closed");
+    } else {
+        *tbc = closedecl(fs, vidx) + nvars;
     }
-    havetbc = 1;
-    return fs->activelocals + nvars;
+}
+
+
+static OString *declname(Lexer *lx, int *mods) {
+    cr_assert(mods != NULL);
+    OString *name = expect_id(lx);
+    *mods = getmodifiers(lx, getstrbytes(name));
+    return name;
+}
+
+
+static OString *newdecl(FunctionState *fs, ExpInfo *var, int *mods, int *vidx) {
+    cr_assert(vidx != NULL);
+    OString *name = declname(fs->lx, mods);
+    *vidx = newvar(fs, name, var, *mods);
+    return name;
+}
+
+
+/* declare variable list */
+static OString *declarevarlist(FunctionState *fs, ExpInfo *var, int nvars,
+                               int *tbc)
+{
+    int mods, vidx;
+    OString *name = newdecl(fs, var, &mods, &vidx);
+    if (mods & VARTBC)
+        closeletdecl(fs, nvars, vidx, tbc);
+    return name;
+}
+
+
+/* declare single variable */
+static OString *declarevar(FunctionState *fs, ExpInfo *var, int *tbc) {
+    *tbc = -1;
+    OString *name = declarevarlist(fs, var, 0, tbc);
+    return name;
 }
 
 
@@ -1356,14 +1378,10 @@ static void assigndefine(Lexer *lx, struct LHS *lhs, int *tbc, int nvars) {
     if (match(lx, ',')) { /* more ids ? */
         struct LHS var;
         var.prev = lhs;
-        OString *name = expect_id(lx);
-        int mods = getmodifiers(lx, getstrbytes(name));
-        int vidx = newvar(fs, name, &var.e, mods);
-        if (mods & VARTBC) /* variable needs to be closed ? */
-            *tbc = tbcdecl(fs, nvars, vidx);
-        entercstack(lx);
+        declarevarlist(fs, &var.e, nvars, tbc);
+        enterCstack(lx);
         assigndefine(lx, &var, tbc, nvars + 1);
-        leavecstack(lx);
+        leaveCstack(lx);
     } else { /* right side of declaration */
         ExpInfo e;
         expect(lx, '=');
@@ -1373,7 +1391,12 @@ static void assigndefine(Lexer *lx, struct LHS *lhs, int *tbc, int nvars) {
         else
             crC_exp2stack(fs, &e);
     }
-    codedefine(fs, &lhs->e);
+    if (lhs->e.et != EXP_GLOBAL) {
+        initvariable(fs, &lhs->e);
+        crC_storevar(fs, &lhs->e);
+    } else {
+        defineglobal(fs, &lhs->e);
+    }
 }
 
 
@@ -1383,22 +1406,24 @@ static void assigndefine(Lexer *lx, struct LHS *lhs, int *tbc, int nvars) {
  */
 static void letdecl(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    int tbcidx = -1;
+    int tbc = -1;
     struct LHS var;
     crL_scan(lx); /* skip 'let' */
-    OString *name = expect_id(lx);
-    int mods = getmodifiers(lx, getstrbytes(name));
-    int vidx = newvar(fs, name, &var.e, mods);
-    tbcdecl(fs, 0, vidx);
+    declarevarlist(fs, &var.e, 0, &tbc);
     if (check(lx, ',') || check(lx, '=')) { /* id list ? */
         var.prev = NULL;
-        assigndefine(lx, &var, &tbcidx, 1);
+        assigndefine(lx, &var, &tbc, 1);
     } else { /* otherwise assign implicit nil */
         crC_nil(lx->fs, 1);
         crC_reserveslots(fs, 1);
-        codedefine(lx->fs, &var.e);
+        if (var.e.et != EXP_GLOBAL) {
+            initvariable(fs, &var.e);
+            crC_storevar(fs, &var.e);
+        } else {
+            defineglobal(fs, &var.e);
+        }
     }
-    closelocal(fs, tbcidx);
+    marktbc(fs, tbc);
     expect(lx, ';');
 }
 
@@ -1463,7 +1488,7 @@ static void argslist(Lexer *lx) {
 /* emit closure instruction */
 static void codeclosure(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    crC_L(fs, OP_CLOSURE, fs->nfuncs);
+    crC_emitIL(fs, OP_CLOSURE, fs->nfuncs);
 }
 
 
@@ -1492,50 +1517,46 @@ static void funcbody(Lexer *lx, int linenum, int ismethod) {
 }
 
 
-/* 
- * classname ::= '@' id
- *             | id
- */
-static OString *declname(Lexer *lx, ExpInfo *e) {
-    int mods = match(lx, '@') * bitmask(VARPRIVATE);
-    OString *name = expect_id(lx);
-    int vidx = newvar(lx->fs, name, e, mods);
-    if (e->et == EXP_LOCAL) {
-        getlocal(lx->fs, vidx)->s.idx = vidx;
-        adjustlocals(lx, 1);
-    } else if (e->et == EXP_PRIVATE) {
-        defineprivate(lx->fs, vidx);
-    }
-    return name;
-}
-
-
-/* fndecl ::= 'fn' declname funcbody */
+/* fndecl ::= 'fn' id funcbody */
 static void fndecl(Lexer *lx, int linenum) {
+    FunctionState *fs = lx->fs;
     ExpInfo var;
+    int tbc;
     crL_scan(lx); /* skip 'fn' */
-    declname(lx, &var);
+    declarevar(fs, &var, &tbc);
+    initvariable(fs, &var);
     funcbody(lx, linenum, 0);
-    codedefine(lx->fs, &var);
+    if (var.et == EXP_GLOBAL)
+        defineglobal(fs, &var);
+    else
+        crC_storevar(fs, &var);
+    marktbc(fs, tbc);
 }
 
 
 /* inherit from superclass */
 static void codeinherit(Lexer *lx, OString *name, Scope *s, ExpInfo *var) {
     FunctionState *fs = lx->fs;
+    int private = match(lx, '@');
     OString *supname = expect_id(lx);
-    if (cr_unlikely(streq(name, supname))) {
+    if (private) { /* superclass is private global ? */
+        /* assert: class is not private */
+        searchprivate(fs, supname, var);
+    } else if (cr_unlikely(streq(name, supname))) { /* name collision ? */
         crP_semerror(lx, crS_pushfstring(lx->ts,
-            "class variable '%s' attempt to inherit from itself", name));
+        "variable '%s' attempt to inherit itself", name));
+    } else { /* superclass is local, upvalue or global */
+        searchvar(fs, supname, var, 1); /* find superclass */
     }
-    searchvar(fs, supname, var, 1); /* find superclass */
-    crC_exp2stack(fs, var); /* put superclass on the stack */
+    crC_varexp2stack(fs, var); /* put superclass on the stack */
+    cr_assert(var->et == EXP_FINEXPR);
     startscope(fs, s, 0); /* scope for 'super' */
-    newlocallit(lx, "super"); /* local var for superclass */
+    newlocallit(lx, "super"); /* local var for 'super' */
     adjustlocals(lx, 1);
-    searchvar(fs, name, var, 1); /* search for class */
-    crC_exp2stack(fs, var); /* put class on the stack */
-    cr_code(fs, OP_INHERIT);
+    searchvar(fs, name, var, 1); /* search class variable */
+    crC_varexp2stack(fs, var); /* put class on the stack */
+    cr_assert(var->et == EXP_FINEXPR);
+    crC_emitI(fs, OP_INHERIT);
     lx->ps->cs->super = 1;
 }
 
@@ -1561,7 +1582,7 @@ static void endcs(Lexer *lx) {
 static void codemethod(FunctionState *fs, ExpInfo *var) {
     cr_assert(var->et == EXP_STRING);
     if (sisvmtmethod(var->u.str)) {
-        crC_L(fs, OP_SETVMT, var->u.str->extra);
+        crC_emitIL(fs, OP_SETMM, var->u.str->extra);
     } else {
         crC_exp2stack(fs, var);
         crC_method(fs, var);
@@ -1595,22 +1616,23 @@ static void classdecl(Lexer *lx) {
     Scope s; /* scope for 'super' */
     ClassState cs;
     ExpInfo var, e;
+    int tbc;
     crL_scan(lx); /* skip 'class' */
-    OString *name = declname(lx, &var);
+    OString *name = declarevar(fs, &var, &tbc);
+    initvariable(fs, &var);
     startcs(lx, &cs);
-    initstring(&e, name);
-    cr_code(fs, OP_CLASS);
+    crC_emitI(fs, OP_CLASS);
     if (match(lx, TK_INHERITS)) /* class object inherits ? */
         codeinherit(lx, name, &s, &e);
-    searchvar(fs, name, &e, 1); /* find class var */
-    cr_assert(var.et == EXP_LOCAL); /* 'name' must be local */
-    crC_exp2stack(fs, &e); /* put class var on stack */
+    searchvar(fs, name, &e, 1); /* find class variable */
+    crC_varexp2stack(fs, &e); /* put class variable on stack */
+    cr_assert(e.et == EXP_FINEXPR);
     int matchline = lx->line;
     expect(lx, '{');
     classbody(lx);
     expectmatch(lx, '}', '{', matchline);
     endcs(lx);
-    codedefine(fs, &var);
+    marktbc(fs, tbc);
 }
 
 
@@ -1825,9 +1847,9 @@ static void switchbody(Lexer *lx, SwitchState *ss, DynCtx *ctx) {
                     ss->label = LABELMATCH;
                     loadctx(fs, ctx); /* load 'ctx' */
                     resetpatchlist(fs);
-                } else if (ss->label != LABELMATCH) { /* don't have ctmatch ? */
+                } else if (ss->label != LABELMATCH) { /* don't have match? */
                     ss->label = LABELCASE;
-                    cr_code(fs, OP_EQPRESERVE);
+                    crC_emitI(fs, OP_EQPRESERVE);
                     ss->jmp = crC_test(fs, OP_TESTPOP, 0);
                 }
             } else if (!ss->havedefault) { /* first 'default' case ? */
@@ -2095,15 +2117,15 @@ static void foreachloop(Lexer *lx) {
     scopemarktbc(fs);
     /* runtime space for call (iter func), inv. state, control var */
     crC_checkstack(fs, NUMSTATEVARS - 1);
-    int prep = crC_LL(fs, OP_FORPREP, base, 0);
+    int prep = crC_emitILL(fs, OP_FORPREP, base, 0);
     startloop(fs, &s, &lctx, CFLOOP); /* scope for declared vars */
     adjustlocals(lx, nvars);
     crC_reserveslots(fs, nvars); /* locals */
     stm(lx);
     endloop(fs); /* end scope for declared vars */
     patchforjmp(fs, prep, currentPC(fs), 0);
-    crC_LL(fs, OP_FORCALL, base, nvars);
-    int forend = crC_LL(fs, OP_FORLOOP, base, 0);
+    crC_emitILL(fs, OP_FORCALL, base, nvars);
+    int forend = crC_emitILL(fs, OP_FORLOOP, base, 0);
     patchforjmp(fs, forend, prep + forprepsz, 1);
 }
 
@@ -2326,8 +2348,7 @@ static void parseuntilEOS(Lexer *lx) {
 
 
 /* compile main function */
-static void mainfunc(FunctionState *fs, Lexer *lx)
-{
+static void mainfunc(FunctionState *fs, Lexer *lx) {
     Scope s;
     startfs(fs, lx, &s);
     setvararg(fs, 0); /* main is always vararg */
@@ -2339,18 +2360,18 @@ static void mainfunc(FunctionState *fs, Lexer *lx)
 
 
 /* parse source code */
-CrClosure *parse(cr_State *ts, BuffReader *br, Buffer *buff, ParserState *ps,
-                 const char *source)
+CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
+                     ParserState *ps, const char *source)
 {
     Lexer lx;
     FunctionState fs;
-    CrClosure *cl = cr_function_newcrclosure(ts, 0);
-    setsv2crcl(ts, ts->stacktop.p, cl); /* anchor main function closure */
-    cr_vm_inctop(ts);
+    CrClosure *cl = crF_newcrclosure(ts, 0);
+    setsv2crcl(ts, ts->sp.p, cl); /* anchor main function closure */
+    crT_incsp(ts);
     lx.tab = cr_htable_new(ts);
-    setsv2ht(ts, ts->stacktop.p, lx.tab); /* anchor scanner htable */
-    cr_vm_inctop(ts);
-    fs.fn = cl->fn = cr_function_new(ts);
+    setsv2ht(ts, ts->sp.p, lx.tab); /* anchor scanner htable */
+    crT_incsp(ts);
+    fs.fn = cl->fn = crF_new(ts);
     cr_gc_objbarrier(ts, cl, cl->fn);
     fs.fn->source = crS_new(ts, source);
     cr_gc_objbarrier(ts, fs.fn, fs.fn->source);
@@ -2358,46 +2379,6 @@ CrClosure *parse(cr_State *ts, BuffReader *br, Buffer *buff, ParserState *ps,
     lx.buff = buff;
     crL_setsource(ts, &lx, br, fs.fn->source);
     mainfunc(&fs, &lx); /* Cript main function */
-    ts->stacktop.p--; /* pop scanner htable */
+    ts->sp.p--; /* pop scanner htable */
     return cl;
-}
-
-
-
-/* -------------------------------------------------------------------------
- * Protected parsing
- * ------------------------------------------------------------------------- */
-
-/* data for 'pparse' */
-typedef struct PPData {
-    BuffReader br;
-    Buffer buff;
-    ParserState ps;
-    const char *source;
-} PPData;
-
-
-/* protected 'parse' */
-static void pparse(cr_State *ts, void *userdata)
-{
-    PPData *parsedata = cast(PPData *, userdata);
-    CrClosure *cl = parse(ts, &parsedata->br, &parsedata->buff, &parsedata->ps,
-                          parsedata->source);
-    cr_assert(cl->nupvals <= cl->sizeupvals);
-    cr_function_initupvals(ts, cl);
-}
-
-
-/* external interface for 'pparse' */
-void crP_pparse(cr_State *ts, crR freader, void *userdata,
-                      const char *name)
-{
-    PPData parsedata;
-    ParserState *ps = &parsedata.ps;
-    crR_init(ts, &parsedata.br, freader, userdata); /* 'br' */
-    crR_buffinit(&parsedata.buff); /* 'buff' */
-    { ps->lvars.len = ps->lvars.size = 0; ps->lvars.arr = NULL; } /* 'lvars' */
-    ps->cs = NULL; /* 'cs' */
-    parsedata.source = name; /* 'source' */
-    cr_vm_pcall(ts, pparse, &parsedata, savestack(ts, ts->stacktop.p));
 }

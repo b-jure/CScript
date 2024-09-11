@@ -20,11 +20,11 @@
 
 
 
-void crR_init(cr_State *ts, BuffReader *br, crR reader, void *userdata) {
+void crR_init(cr_State *ts, BuffReader *br, cr_fReader freader, void *ud) {
     br->n = 0;
     br->buff = NULL;
-    br->reader = reader;
-    br->userdata = userdata;
+    br->reader = freader;
+    br->userdata = ud;
     br->ts = ts;
 }
 
@@ -58,7 +58,7 @@ size_t crR_readn(BuffReader *br, size_t n) {
         if (br->n == 0) {
             if (crR_fill(br) == CREOF)
                 return n;
-            br->n++; /* crR_fill decremented it */
+            br->n++; /* 'crR_fill' decremented it */
             br->buff--; /* restore that character */
         }
         size_t min = (br->n <= n ? br->n : n);

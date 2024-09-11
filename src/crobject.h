@@ -266,17 +266,14 @@ typedef struct UpVal {
 
 
 
-/* 
- * Static variable; 
- * top-level function private global variable. 
- */
-typedef union SVar {
+/* private global variable */
+typedef union PrivateVar {
     struct {
         TValueFields;
         OString *name;
     } s;
     TValue val;
-} SVar;
+} PrivateVar;
 
 
 
@@ -315,7 +312,7 @@ typedef struct Function {
     OString *source; /* source name */
     struct Function **funcs; /* functions defined inside of this function */
     TValue *k; /* constant values */
-    SVar *private;
+    PrivateVar *private;
     Instruction *code; /* bytecode */
     LineInfo *linfo; /* lines information for instructions */
     LVarInfo *locals; /* debug information for local variables */
@@ -386,7 +383,7 @@ typedef struct CrClosure {
 
 typedef struct {
     ClosureHeader;
-    cr_cfunc fn;
+    cr_CFunction fn;
     TValue upvalue[];
 } CClosure;
 

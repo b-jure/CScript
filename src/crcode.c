@@ -4,6 +4,7 @@
 #include "crlimits.h"
 #include "crparser.h"
 #include "crstate.h"
+#include "crmem.h"
 
 
 
@@ -32,7 +33,7 @@
 
 
 
-/* metamethod, jump, test, format */
+/* OpCode properties table */
 CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     /*     m  j  t  f      */
     opProp(0, 0, 0, FormatI), /* OP_TRUE */
@@ -48,7 +49,7 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatI), /* OP_CLOSURE */
     opProp(0, 0, 0, FormatI), /* OP_CLASS */
     opProp(0, 0, 0, FormatIL), /* OP_METHOD */
-    opProp(0, 0, 0, FormatIS), /* OP_SETVMT */
+    opProp(0, 0, 0, FormatIS), /* OP_SETMM */
     opProp(0, 0, 0, FormatI), /* OP_POP */
     opProp(0, 0, 0, FormatIL), /* OP_POPN */
     opProp(1, 0, 0, FormatIS), /* OP_MBIN */
@@ -149,7 +150,7 @@ static void addlineinfo(FunctionState *fs, Function *f, int line) {
     int len = fs->nlinfo;
     if (len <= 0 || f->linfo[len - 1].line < line) {
         crM_growvec(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, INT_MAX,
-                       "lines");
+                    "lines");
         f->linfo[len].pc = fs->pc - 1;
         f->linfo[fs->nlinfo++].line = line;
     }
@@ -157,7 +158,7 @@ static void addlineinfo(FunctionState *fs, Function *f, int line) {
 
 
 /* emit instruction 'i' */
-int cr_code(FunctionState *fs, Instruction i) {
+int crC_emitI(FunctionState *fs, Instruction i) {
     Function *fn = fs->fn;
     crM_growvec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, INT_MAX, "code");
     fn->code[fs->pc++] = i;
@@ -167,7 +168,7 @@ int cr_code(FunctionState *fs, Instruction i) {
 
 
 /* emit short arg */
-static int Sarg(FunctionState *fs, int arg) {
+static int emitS(FunctionState *fs, int arg) {
     Function *fn = fs->fn;
     crM_growvec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, INT_MAX, "code");
     fn->code[fs->pc++] = cast_ubyte(arg & 0xff);
@@ -176,16 +177,16 @@ static int Sarg(FunctionState *fs, int arg) {
 
 
 /* emit instruction with short arg */
-int crC_S(FunctionState *fs, Instruction i, int a) {
+int crC_emitIS(FunctionState *fs, Instruction i, int a) {
     cr_assert(arg <= MAXSHRTARGSIZE);
-    int offset = cr_code(fs, i);
-    Sarg(fs, a);
+    int offset = crC_emitI(fs, i);
+    emitS(fs, a);
     return offset;
 }
 
 
 /* emit long arg */
-static int Larg(FunctionState *fs, int idx) {
+static int emitL(FunctionState *fs, int idx) {
     Function *fn = fs->fn;
     crM_ensurevec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, 3, INT_MAX,
                      "code");
@@ -196,29 +197,29 @@ static int Larg(FunctionState *fs, int idx) {
 
 
 /* emit instruction 'i' with long arg 'a' */
-int crC_L(FunctionState *fs, Instruction i, int a) {
+int crC_emitIL(FunctionState *fs, Instruction i, int a) {
     cr_assert(a <= MAXLONGARGSIZE);
-    int offset = cr_code(fs, i);
-    Larg(fs, a);
+    int offset = crC_emitI(fs, i);
+    emitL(fs, a);
     return offset;
 }
 
 
 /* emit instruction with 2 long args */
-int crC_LL(FunctionState *fs, Instruction i, int a, int b) {
-    int offset = cr_code(fs, i);
-    Larg(fs, a);
-    Larg(fs, b);
+int crC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
+    int offset = crC_emitI(fs, i);
+    emitL(fs, a);
+    emitL(fs, b);
     return offset;
 }
 
 
 /* emit instruction with 3 long args */
-static int codeLLL(FunctionState *fs, Instruction i, int a, int b, int c) {
-    int offset = cr_code(fs, i);
-    Larg(fs, a);
-    Larg(fs, b);
-    Larg(fs, c);
+static int emitLLL(FunctionState *fs, Instruction i, int a, int b, int c) {
+    int offset = crC_emitI(fs, i);
+    emitL(fs, a);
+    emitL(fs, b);
+    emitL(fs, c);
     return offset;
 }
 
@@ -326,17 +327,17 @@ void crC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
 
 int crC_nil(FunctionState *fs, int n) {
     if (n == 1)
-        return cr_code(fs, OP_NIL);
+        return crC_emitI(fs, OP_NIL);
     else
-        return crC_L(fs, OP_NILN, n);
+        return crC_emitIL(fs, OP_NILN, n);
 }
 
 
 int crC_pop(FunctionState *fs, int n) {
     if (n == 1)
-        return cr_code(fs, OP_POP);
+        return crC_emitI(fs, OP_POP);
     else
-        return crC_L(fs, OP_POPN, n);
+        return crC_emitIL(fs, OP_POPN, n);
 }
 
 
@@ -347,21 +348,21 @@ int crC_ret(FunctionState *fs, int base, int nreturns) {
     case 1: op = OP_RET1;
     default: op = OP_RET;
     }
-    int offset = crC_LL(fs, op, base, nreturns + 1);
-    Larg(fs, 0); /* vararg nparams */
-    Sarg(fs, 0); /* close flag */
+    int offset = crC_emitILL(fs, op, base, nreturns + 1);
+    emitL(fs, 0); /* vararg nparams */
+    emitS(fs, 0); /* close flag */
     return offset;
 }
 
 
 int crC_call(FunctionState *fs, int base, int nparams) {
-    return codeLLL(fs, OP_CALL, base, nparams + 1, 2);
+    return emitLLL(fs, OP_CALL, base, nparams + 1, 2);
 }
 
 
 void crC_method(FunctionState *fs, ExpInfo *e) {
     cr_assert(e->et == EXP_STRING);
-    e->u.info = crC_L(fs, OP_METHOD, stringK(fs, e->u.str));
+    e->u.info = crC_emitIL(fs, OP_METHOD, stringK(fs, e->u.str));
     e->et = EXP_FINEXPR;
 }
 
@@ -412,8 +413,8 @@ static int isnumKL(ExpInfo *e, int *immediate, int *isflt) {
 static int codeK(FunctionState *fs, int idx) {
     cr_assert(idx >= 0 && fitsLA(idx));
     return (fitsSA(idx) 
-            ? crC_S(fs, OP_CONST, idx) 
-            : crC_L(fs, OP_CONSTL, idx));
+            ? crC_emitIS(fs, OP_CONST, idx) 
+            : crC_emitIL(fs, OP_CONSTL, idx));
 }
 
 
@@ -421,39 +422,39 @@ static int codeK(FunctionState *fs, int idx) {
 void crC_storevar(FunctionState *fs, ExpInfo *var) {
     switch (var->et) {
     case EXP_UVAL: {
-        var->u.info = crC_L(fs, OP_SETUVAL, var->u.info);
+        var->u.info = crC_emitIL(fs, OP_SETUVAL, var->u.info);
         break;
     }
     case EXP_LOCAL: {
-        var->u.info = crC_L(fs, OP_SETLOCAL, var->u.info);
+        var->u.info = crC_emitIL(fs, OP_SETLOCAL, var->u.info);
         break;
     }
     case EXP_PRIVATE: {
-        var->u.info = crC_L(fs, OP_SETPRIVATE, var->u.info);
+        var->u.info = crC_emitIL(fs, OP_SETPRIVATE, var->u.info);
         break;
     }
     case EXP_GLOBAL: {
-        var->u.info = crC_L(fs, OP_SETGLOBAL, stringK(fs, var->u.str));
+        var->u.info = crC_emitIL(fs, OP_SETGLOBAL, stringK(fs, var->u.str));
         break;
     }
     case EXP_INDEXED: {
         freeslots(fs, 2); /* receivier + key */
-        var->u.info = cr_code(fs, OP_SETINDEX);
+        var->u.info = crC_emitI(fs, OP_SETINDEX);
         break;
     }
     case EXP_INDEXSTR: {
         freeslots(fs, 1); /* receiver */
-        var->u.info = crC_L(fs, OP_SETINDEXSTR, var->u.info);
+        var->u.info = crC_emitIL(fs, OP_SETINDEXSTR, var->u.info);
         break;
     }
     case EXP_INDEXINT: {
         freeslots(fs, 1); /* receiver */
-        var->u.info = crC_L(fs, OP_SETINDEXINT, var->u.info);
+        var->u.info = crC_emitIL(fs, OP_SETINDEXINT, var->u.info);
         break;
     }
     case EXP_DOT: {
         freeslots(fs, 1); /* receiver */
-        var->u.info = crC_L(fs, OP_SETPROPERTY, var->u.info);
+        var->u.info = crC_emitIL(fs, OP_SETPROPERTY, var->u.info);
         break;
     }
     case EXP_INDEXSUPER:
@@ -472,7 +473,7 @@ void crC_storevar(FunctionState *fs, ExpInfo *var) {
 /* define global variable */
 void crC_defineglobal(FunctionState *fs, ExpInfo *e) {
     e->et = EXP_FINEXPR;
-    e->u.info = crC_L(fs, OP_DEFGLOBAL, stringK(fs, e->u.str));
+    e->u.info = crC_emitIL(fs, OP_DEFGLOBAL, stringK(fs, e->u.str));
     freeslots(fs, 1); /* rhs (expr) */
 }
 
@@ -481,54 +482,54 @@ void crC_defineglobal(FunctionState *fs, ExpInfo *e) {
 static int dischargevars(FunctionState *fs, ExpInfo *e) {
     switch (e->et) {
     case EXP_LOCAL: {
-        e->u.info = crC_L(fs, OP_GETLOCAL, e->u.info);
+        e->u.info = crC_emitIL(fs, OP_GETLOCAL, e->u.info);
         break;
     }
     case EXP_PRIVATE: {
-        e->u.info = crC_L(fs, OP_GETPRIVATE, e->u.info);
+        e->u.info = crC_emitIL(fs, OP_GETPRIVATE, e->u.info);
         break;
     }
     case EXP_UVAL: {
-        e->u.info = crC_L(fs, OP_GETUVAL, e->u.info);
+        e->u.info = crC_emitIL(fs, OP_GETUVAL, e->u.info);
         break;
     }
     case EXP_GLOBAL: {
-        e->u.info = crC_L(fs, OP_GETGLOBAL, stringK(fs, e->u.str));
+        e->u.info = crC_emitIL(fs, OP_GETGLOBAL, stringK(fs, e->u.str));
         break;
     }
     case EXP_INDEXED: {
         freeslots(fs, 2); /* receiver, key */
-        e->u.info = cr_code(fs, OP_GETINDEX);
+        e->u.info = crC_emitI(fs, OP_GETINDEX);
         break;
     }
     case EXP_INDEXSTR: {
         freeslots(fs, 1); /* receiver */
-        e->u.info = crC_L(fs, OP_GETINDEXSTR, e->u.info);
+        e->u.info = crC_emitIL(fs, OP_GETINDEXSTR, e->u.info);
         break;
     }
     case EXP_INDEXINT: {
         freeslots(fs, 1); /* receiver */
-        e->u.info = crC_L(fs, OP_GETINDEXINT, e->u.info);
+        e->u.info = crC_emitIL(fs, OP_GETINDEXINT, e->u.info);
         break;
     }
     case EXP_INDEXSUPER: {
         freeslots(fs, 3); /* 'self', 'super', key */
-        e->u.info = cr_code(fs, OP_GETSUPIDX);
+        e->u.info = crC_emitI(fs, OP_GETSUPIDX);
         break;
     }
     case EXP_INDEXSUPERSTR: {
         freeslots(fs, 2); /* 'self', 'super' */
-        e->u.info = crC_L(fs, OP_GETSUPIDXSTR, e->u.info);
+        e->u.info = crC_emitIL(fs, OP_GETSUPIDXSTR, e->u.info);
         break;
     }
     case EXP_DOT: {
         freeslots(fs, 1); /* receiver */
-        e->u.info = crC_L(fs, OP_GETPROPERTY, e->u.info);
+        e->u.info = crC_emitIL(fs, OP_GETPROPERTY, e->u.info);
         break;
     }
     case EXP_DOTSUPER: {
         freeslots(fs, 2); /* 'self', 'super' */
-        e->u.info = crC_L(fs, OP_GETSUP, e->u.info);
+        e->u.info = crC_emitIL(fs, OP_GETSUP, e->u.info);
         break;
     }
     case EXP_JMP: {
@@ -553,17 +554,17 @@ void crC_varexp2stack(FunctionState *fs, ExpInfo *e) {
 
 
 /* emit op with long and short args */
-static int codeLS(FunctionState *fs, Instruction op, int a, int b) {
-    int offset = crC_L(fs, op, a);
-    Sarg(fs, b);
+static int emitILS(FunctionState *fs, Instruction op, int a, int b) {
+    int offset = crC_emitIL(fs, op, a);
+    emitS(fs, b);
     return offset;
 }
 
 
 /* emit op with long and 2 short args */
-static int codeLSS(FunctionState *fs, Instruction op, int a, int b, int c) {
-    int offset = codeLS(fs, op, a, b);
-    Sarg(fs, c);
+static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
+    int offset = emitILS(fs, op, a, b);
+    emitS(fs, c);
     return offset;
 }
 
@@ -571,7 +572,7 @@ static int codeLSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 /* emit integer constant */
 static int codeintK(FunctionState *fs, cr_integer i) {
     if (fitsLA(i))
-        return codeLS(fs, OP_CONSTI, cri_abs(i), i < 0);
+        return emitILS(fs, OP_CONSTI, cri_abs(i), i < 0);
     else
         return codeK(fs, intK(fs, i));
 }
@@ -581,7 +582,7 @@ static int codeintK(FunctionState *fs, cr_integer i) {
 static int codefltK(FunctionState *fs, cr_number n) {
     cr_integer i;
     if (crV_n2i(n, &i, CR_N2IFLOOR) && fitsLA(i))
-        return codeLS(fs, OP_CONSTF, cri_abs(i), i < 0);
+        return emitILS(fs, OP_CONSTF, cri_abs(i), i < 0);
     else
         return codeK(fs, fltK(fs, n));
 }
@@ -596,11 +597,11 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e) {
         break;
     }
     case EXP_FALSE: {
-        e->u.info = cr_code(fs, OP_FALSE);
+        e->u.info = crC_emitI(fs, OP_FALSE);
         break;
     }
     case EXP_TRUE: {
-        e->u.info = cr_code(fs, OP_TRUE);
+        e->u.info = crC_emitI(fs, OP_TRUE);
         break;
     }
     case EXP_INT: {
@@ -637,7 +638,7 @@ void crC_exp2stack(FunctionState *fs, ExpInfo *e) {
 
 /* initialize dot indexed expression */
 void crC_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
-                         int super)
+                     int super)
 {
     cr_assert(keystr->et == EXP_STRING);
     var->u.info = stringK(fs, keystr->u.str);
@@ -647,7 +648,7 @@ void crC_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
 
 /* initialize indexed expression */
 void crC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
-    cr_assert(var->et == EXP_FINEXPR && var->u.info == fs->sp - 1);
+    cr_assert(var->et == EXP_FINEXPR);
     if (cr_unlikely(key->et == EXP_NIL))
         crP_semerror(fs->lx, "nil index");
     if (key->et == EXP_STRING)
@@ -702,7 +703,8 @@ static int tonumeral(const ExpInfo *e1, TValue *res) {
 
 
 /* fold constant expressions */
-static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2, int opr)
+static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
+                     int opr)
 {
     TValue v1, v2, res;
     if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || validop(&v1, &v2, opr))
@@ -726,7 +728,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2, int opr)
 static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op) {
     crC_exp2stack(fs, e);
     cr_assert(e->et == EXP_FINEXPR);
-    e->u.info = cr_code(fs, op);
+    e->u.info = crC_emitI(fs, op);
 }
 
 
@@ -743,7 +745,7 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
         break;
     }
     case EXP_FINEXPR: { /* 'e' already on stack */
-        e->u.info = cr_code(fs, OP_NOT);
+        e->u.info = crC_emitI(fs, OP_NOT);
         break;
     }
     default: cr_unreachable();
@@ -775,13 +777,13 @@ void crC_unary(FunctionState *fs, ExpInfo *e, Unopr opr) {
 /* emit test jump instruction */
 static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
     crC_exp2stack(fs, e); /* ensure test operand is on stack */
-    return codeLS(fs, testop, NOJMP, cond);
+    return emitILS(fs, testop, NOJMP, cond);
 }
 
 
 /* emit 'OP_JMP' family of instructions */
 int crC_jmp(FunctionState *fs, OpCode jop) {
-    return crC_L(fs, jop, NOJMP);
+    return crC_emitIL(fs, jop, NOJMP);
 }
 
 
@@ -800,7 +802,7 @@ static int getjmp(FunctionState *fs, int pc) {
 static void fixjmp(FunctionState *fs, int pc, int destpc) {
     Instruction *pcjmp = &fs->fn->code[pc];
     int offset = destpc - (pc + SIZEARGL);
-    if (cr_unlikely(!(0 <= offset && offset <= MAXLONGARGSIZE)))
+    if (cr_unlikely(offset > MAXLONGARGSIZE))
         crP_semerror(fs->lx, "control structure too long");
     SETARG_L(pcjmp, 0, offset); /* patch it */
 }
@@ -841,7 +843,7 @@ void crC_patchtohere(FunctionState *fs, int pc) {
 /* emit 'OP_TEST' family of instructions */
 int crC_test(FunctionState *fs, OpCode testop, int cond) {
     int offset = crC_jmp(fs, testop);
-    Sarg(fs, cond);
+    emitS(fs, cond);
     return offset;
 }
 
@@ -947,9 +949,9 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     cr_assert(OP_ADD <= op && op <= OP_BXOR);
     crC_exp2stack(fs, e2); /* ensure e2 is on stack */
     freeslots(fs, 1); /* binary expression produces a single value */
-    e1->u.info = cr_code(fs, op);
+    e1->u.info = crC_emitI(fs, op);
     e1->et = EXP_FINEXPR;
-    crC_S(fs, OP_MBIN, op);
+    crC_emitIS(fs, OP_MBIN, op);
 }
 
 
@@ -961,9 +963,9 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     int idxK = e2->u.info; /* index into 'constants' */
     cr_assert(e2->et == EXP_K);
     cr_assert(OP_ADD <= op && op <= OP_RANGE);
-    e1->u.info = crC_L(fs, op, idxK);
+    e1->u.info = crC_emitIL(fs, op, idxK);
     e1->et = EXP_FINEXPR;
-    codeLS(fs, OP_MBINK, idxK, flip);
+    emitILS(fs, OP_MBINK, idxK, flip);
 }
 
 
@@ -990,9 +992,9 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     int rhsabs = cri_abs(rhs);
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
     cr_assert(e2->et == EXP_INT);
-    e1->u.info = codeLS(fs, op, rhsabs, neg);
+    e1->u.info = emitILS(fs, op, rhsabs, neg);
     e1->et = EXP_FINEXPR;
-    codeLSS(fs, OP_MBINI, rhsabs, neg, flip);
+    emitILSS(fs, OP_MBINI, rhsabs, neg, flip);
 }
 
 
@@ -1034,11 +1036,11 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     crC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
     if (isintK(e2)) {
         if (isnumKL(e2, &immediate, &isflt))
-            e1->u.info = codeLSS(fs, OP_EQI, immediate, iseq, isflt);
+            e1->u.info = emitILSS(fs, OP_EQI, immediate, iseq, isflt);
         else
-            e1->u.info = codeLS(fs, OP_EQK, e2->u.info, iseq);
+            e1->u.info = emitILS(fs, OP_EQK, e2->u.info, iseq);
     } else {
-        e1->u.info = crC_S(fs, OP_EQ, iseq);
+        e1->u.info = crC_emitIS(fs, OP_EQ, iseq);
         freeslots(fs, 1);
     }
     e1->et = EXP_FINEXPR;
@@ -1059,10 +1061,10 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
         crC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
         op = binopr2op(opr, OPR_LT, OP_GTI);
 emit:
-        e1->u.info = codeLS(fs, op, immediate, isflt);
+        e1->u.info = emitILS(fs, op, immediate, isflt);
     } else {
         op = binopr2op(opr, OPR_LT, OP_LT);
-        e1->u.info = cr_code(fs, op);
+        e1->u.info = crC_emitI(fs, op);
         freeslots(fs, 1);
     }
     e1->et = EXP_FINEXPR;

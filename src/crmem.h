@@ -44,15 +44,15 @@
 
 CRI_FUNC void *crM_malloc(cr_State *ts, cr_umem size);
 CRI_FUNC void *crM_realloc(cr_State *ts, void *ptr, cr_umem osize,
-                              cr_umem nsize);
+                           cr_umem nsize);
 CRI_FUNC void *crM_saferealloc(cr_State *ts, void *ptr, cr_umem osize,
-                                  cr_umem nsize);
+                               cr_umem nsize);
 CRI_FUNC void crM_free(cr_State *ts, void *ptr, cr_umem osize);
 CRI_FUNC void *crM_growarr_(cr_State *ts, void *ptr, int len, int *sizep,
-                               int elemsize, int ensure, int limit,
+                            int elemsize, int ensure, int limit,
                                const char *what);
 CRI_FUNC void *crM_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
-                                 int elemsize);
+                              int elemsize);
 CRI_FUNC int crM_reallocstack(cr_State *ts, int n);
 CRI_FUNC int crM_growstack(cr_State *ts, int n);
 

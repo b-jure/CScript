@@ -19,6 +19,7 @@
 #include "crstate.h"
 #include "crhashtable.h"
 #include "crstring.h"
+#include "crmem.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -169,7 +170,7 @@ static cr_noret lexerror(Lexer *lx, const char *err, int token) {
     err = crD_info(ts, err, lx->src, lx->line);
     if (token)
         crS_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
-    cr_state_throw(ts, CR_ERRSYNTAX);
+    crT_throw(ts, CR_ERRSYNTAX);
 }
 
 
@@ -183,10 +184,10 @@ cr_noret crL_syntaxerror(Lexer *lx, const char *err) {
 OString *crL_newstring(Lexer *lx, const char *str, size_t len) {
     cr_State *ts = lx->ts;
     OString *s = crS_newl(ts, str, len);
-    TValue *stks = s2v(ts->stacktop.p++);
+    TValue *stks = s2v(ts->sp.p++);
     setv2s(ts, stks, s); /* temp anchor */
     cr_htable_set(lx->ts, lx->tab, stks, stks);
-    ts->stacktop.p--; /* pop */
+    ts->sp.p--; /* pop */
     return s;
 }
 
@@ -297,13 +298,13 @@ static void readstring(Lexer *lx, Literal *k) {
 
 /* convert lexer buffer bytes into number constant */
 static int lexstr2num(Lexer *lx, Literal *k) {
-    int of;
+    int ovf;
     TValue o;
-    if (crS_tonum(lbptr(lx), &o, &of) == 0)
+    if (crS_tonum(lbptr(lx), &o, &ovf) == 0)
         lexerror(lx, "invalid number literal", TK_FLT);
-    else if (of > 0)
+    else if (ovf > 0)
         lexerror(lx, "number literal overflows", TK_FLT);
-    else if (of < 0)
+    else if (ovf < 0)
         lexerror(lx, "number literal underflows", TK_FLT);
     if (ttisint(&o)) {
         k->i = ival(&o);

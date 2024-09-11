@@ -109,7 +109,7 @@
  * debt is positive.
  */
 #define checkgc(ts,pre,pos) \
-	{ pre; if (GS(ts)->gc.debt > 0) { cr_gc_step(ts); pos; } \
+	{ pre; if (G_(ts)->gc.debt > 0) { cr_gc_step(ts); pos; } \
 	  gcmemchange(ts,pre,pos); }
 
 

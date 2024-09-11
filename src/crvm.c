@@ -31,337 +31,6 @@
 
 
 
-/* get instance 'i' property table */
-#define proptab(i,f)    ((f) != 0 ? &(i)->fields : &(i)->oclass->mtab)
-
-
-/*
- * Stack size to grow the stack to when stack
- * overflow occurs for error handling.
- */
-#define OVERFLOWSTACKSIZE       (CRI_MAXSTACK + 200)
-
-
-
-/* convert stack pointers into stack offsets */
-static void savestackptrs(cr_State *ts)
-{
-    ts->stacktop.offset = savestack(ts, ts->stacktop.p);
-    for (int i = 0; i < ts->nframes; i++) {
-        CallFrame *cf = &ts->frames[i];
-        cf->callee.offset = savestack(ts, cf->callee.p);
-        cf->top.offset = savestack(ts, cf->top.p);
-    }
-    for (UpVal *uv = ts->openupval; uv != NULL; uv = uv->u.open.next)
-        uv->v.offset = savestack(ts, uv->v.location);
-    ts->tbclist.offset = savestack(ts, ts->tbclist.p);
-}
-
-
-/* convert stack offsets back to stack pointers */
-static void restorestackptrs(cr_State *ts)
-{
-    ts->stacktop.p = restorestack(ts, ts->stacktop.offset);
-    for (int i = 0; i < ts->nframes; i++) {
-        CallFrame *cf = &ts->frames[i];
-        cf->callee.p = restorestack(ts, cf->callee.offset);
-        cf->top.p = restorestack(ts, cf->top.offset);
-    }
-    for (UpVal *uv = ts->openupval; uv != NULL; uv = uv->u.open.next)
-        uv->v.location = s2v(restorestack(ts, uv->v.offset));
-    ts->tbclist.p = restorestack(ts, ts->tbclist.offset);
-}
-
-
-/* reallocate stack to new size */
-int cr_vm_reallocstack(cr_State *ts, int size, int raiseerr)
-{
-    cr_assert(nsize <= CRI_MAXSTACK || nsize == OVERFLOWSTACKSIZE);
-    GState *gs = GS(ts);
-    int oldstopem = gs->gc.stopem;
-    int osize = stacksize(ts);
-    savestackptrs(ts);
-    gs->gc.stopem = 1; /* no emergency collection when reallocating stack */
-    SPtr newstack = crM_reallocarray(ts, ts->stack.p,
-            osize + EXTRA_STACK, size + EXTRA_STACK);
-    gs->gc.stopem = oldstopem;
-    if (cr_unlikely(newstack == NULL)) {
-        restorestackptrs(ts);
-        if (raiseerr)
-            cr_state_throw(ts, CR_ERRMEM);
-        return 0;
-    }
-    restorestackptrs(ts);
-    ts->stack.p = newstack;
-    ts->stackend.p = newstack + size;
-    for (int i = osize + EXTRA_STACK; i < size + EXTRA_STACK; i++)
-        setnilval(s2v(newstack + i));
-    return 1;
-}
-
-
-/* grow stack to accommodate 'n' values */
-int cr_ts_growstack(cr_State *ts, int n, int raiseerr)
-{
-    int size = stacksize(ts);
-    if (cr_unlikely(size > CRI_MAXSTACK)) { /* overflowed already ? */
-        cr_assert(size == OVERFLOWSTACKSIZE);
-        if (raiseerr)
-            cr_state_throw(ts, CR_ERRERROR);
-        return 0;
-    }
-    if (cr_unlikely(n > CRI_MAXSTACK)) {
-        int nsize = size << 1;
-        int needed = topoffset(ts) + n;
-        if (nsize > CRI_MAXSTACK)
-            nsize = CRI_MAXSTACK;
-        if (nsize < needed)
-            nsize = needed;
-        if (cr_likely(nsize <= CRI_MAXSTACK))
-            return cr_vm_reallocstack(ts, nsize, raiseerr);
-    }
-    cr_vm_reallocstack(ts, OVERFLOWSTACKSIZE, raiseerr);
-    if (raiseerr)
-        crD_runerror(ts, "stack overflow");
-    return 0;
-}
-
-
-static int stackinuse(cr_State *ts)
-{
-    SPtr maxtop = ts->aframe->top.p;
-    for (int i = 0; i < ts->nframes; i++) {
-        CallFrame *cf = &ts->frames[i];
-        if (maxtop < cf->top.p)
-            maxtop = cf->top.p;
-    }
-    cr_assert(maxtop <= ts->stackend.p + EXTRA_STACK);
-    int n = savestack(ts, maxtop);
-    if (n < CR_MINSTACK)
-        n = CR_MINSTACK;
-    return n;
-}
-
-
-/*
- * Shrink stack if the current stack size is more
- * than 3 times the current use.
- * This also rolls back the stack to its original maximum
- * size 'CRI_MAXSTACK' in case the stack was previously
- * handling stack overflow.
- */
-void cr_vm_shrinkstack(cr_State *ts)
-{
-    int inuse = stackinuse(ts);
-    int limit = (inuse >= CRI_MAXSTACK / 3 ? CRI_MAXSTACK : inuse * 3);
-    if (inuse <= CRI_MAXSTACK && stacksize(ts) > limit) {
-        int nsize = (inuse < (CRI_MAXSTACK>>1) ? (inuse<<1) : CRI_MAXSTACK);
-        cr_vm_reallocstack(ts, nsize, 0); /* fine if it fails */
-    }
-}
-
-
-/* increment stack top */
-void cr_ts_inctop(cr_State *ts)
-{
-    checkstack(ts, 1);
-    ts->stacktop.p++;
-}
-
-
-/* raw property get */
-cr_sinline int getproperty(cr_State *ts, Instance *ins, TValue *k, TValue *v, int field)
-{
-    return cr_htable_get(proptab(ins, field), k, v);
-}
-
-
-/* raw property set (instance fields) */
-cr_sinline int setproperty(cr_State *ts, Instance *ins, TValue *k, TValue *v, int field)
-{
-    return cr_htable_set(ts, &ins->fields, k, v);
-}
-
-
-/* try get vtable method 'm' */
-cr_sinline GCObject *vtmethod(cr_State *ts, const TValue *v, int m)
-{
-    cr_assert(m >= 0 && m < CR_MNUM && "invalid method tag");
-    return (ttisins(v) ? insvalue(v)->oclass->vtable[m] : NULL);
-}
-
-
-/* sets up stack for vtable method before actual call */
-static void setvtmethodstack(cr_State *ts, SPtr callee, const TValue *ins,
-        const GCObject *m, int mt)
-{
-    const TValue *arg;
-    int arity;
-    int i;
-
-    arity = vtmi(mt)->arity;
-    cr_assert(arity <= 2);
-    setsval(ts, callee, &newoval(m)); /* method */
-    setsval(ts, callee + 1, ins); /* 'self' */
-    for (i = 0; i < arity; i++) { /* args */
-        arg = s2v(callee - arity + i);
-        setsval(ts, callee + 2 + i, arg);
-    }
-    ts->stacktop.p = callee + arity + 2; /* assume 'EXTRA_STACK' */
-}
-
-
-/* try call vtable method 'm' */
-int callvtmethod(cr_State *ts, const TValue *ins, int mt)
-{
-    const TValue *arg;
-    const GCObject *m;
-    SPtr callee;
-
-    if ((m = vtmethod(ts, ins, mt)) == NULL)
-        return 0;
-    callee = ts->stacktop.p;
-    setvtmethodstack(ts, callee, ins, m, mt);
-    cr_ts_ncall(ts, callee, vtmi(mt)->nreturns);
-    return 1;
-}
-
-
-/* try calling unary vtable method */
-static int callunop(cr_State *ts, TValue *v, int mt, Value *res)
-{
-    GCObject *m;
-
-    if ((m = vtmethod(ts, v, mt)) == NULL)
-        return 0;
-    Value *retstart = ts->sp;
-    push(ts, lhs); // 'self'
-    push(ts, lhs);
-    ncall(ts, retstart, OBJ_VAL(om), ominfo[op].retcnt);
-    *res = pop(ts); // assign and pop the method result
-    return 1;
-}
-
-
-/* Tries to call class overloaded binary operator method 'op'.
- * Returns 1 if it was called (class overloaded that method),
- * 0 otherwise. */
-cr_sinline int callbinop(cr_State *ts, Value lhs, Value rhs, cr_om op, Value *res)
-{
-    Value instance;
-    GCObject *om = getomethod(ts, lhs, op);
-    if (om == NULL) {
-        om = getomethod(ts, rhs, op);
-        if (om == NULL)
-            return 0;
-        instance = rhs;
-    } else
-        instance = lhs;
-    Value *retstart = ts->sp;
-    push(ts, instance); // 'self'
-    push(ts, lhs);
-    push(ts, rhs);
-    ncall(ts, retstart, OBJ_VAL(om), ominfo[op].retcnt);
-    *res = pop(ts); // assign and pop the method result
-    return 1;
-}
-
-
-/* Tries calling binary or unary overloaded operator method, errors on failure. */
-void otryop(cr_State *ts, Value lhs, Value rhs, cr_om op, Value *res)
-{
-    if (!omisunop(op)) {
-        if (cr_unlikely(!callbinop(ts, lhs, rhs, op, res)))
-            binoperror(ts, lhs, rhs, op - OM_ADD);
-    } else if (cr_unlikely(!callunop(ts, lhs, op, res)))
-        unoperror(ts, lhs, op - OM_ADD);
-}
-
-cr_sinline int omcallorder(cr_State *ts, Value lhs, Value rhs, cr_om ordop)
-{
-    cr_assert(ts, ordop >= OM_NE && ordop <= OM_GE, "invalid cr_om for order");
-    if (callbinop(ts, lhs, rhs, ordop, stkpeek(1))) { // try overload
-        pop(ts); // remove second operand
-        return 1;
-    }
-    // Instances (and cript objects) can always have equality comparison.
-    // If their pointers are the same then the underlying objects are equal;
-    // otherwise they are not equal.
-    if (cr_unlikely(ordop != OM_EQ && ordop != OM_NE))
-        ordererror(ts, lhs, rhs);
-    return 0;
-}
-
-/* != */
-void one(cr_State *ts, Value lhs, Value rhs)
-{
-    if (isstring(lhs) && isstring(rhs))
-        push(ts, BOOL_VAL(lhs != rhs));
-    else if (!omcallorder(ts, lhs, rhs, OM_NE))
-        push(ts, BOOL_VAL(lhs != rhs));
-}
-
-/* == */
-void oeq(cr_State *ts, Value lhs, Value rhs)
-{
-    if (isstring(lhs) && isstring(rhs))
-        push(ts, BOOL_VAL(lhs == rhs));
-    else if (!omcallorder(ts, lhs, rhs, OM_EQ))
-        push(ts, BOOL_VAL(lhs == rhs));
-}
-
-/* < */
-void olt(cr_State *ts, Value lhs, Value rhs)
-{
-    if (isstring(lhs) && isstring(rhs))
-        push(ts, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) < 0));
-    else
-        omcallorder(ts, lhs, rhs, OM_LT);
-}
-
-/* > */
-void ogt(cr_State *ts, Value lhs, Value rhs)
-{
-    if (isstring(lhs) && isstring(rhs))
-        push(ts, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) > 0));
-    else
-        omcallorder(ts, lhs, rhs, OM_GT);
-}
-
-/* <= */
-void ole(cr_State *ts, Value lhs, Value rhs)
-{
-    if (isstring(lhs) && isstring(rhs))
-        push(ts, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) <= 0));
-    else
-        omcallorder(ts, lhs, rhs, OM_LE);
-}
-
-/* >= */
-void oge(cr_State *ts, Value lhs, Value rhs)
-{
-    if (isstring(lhs) && isstring(rhs))
-        push(ts, BOOL_VAL(strcmp(ascstring(lhs), ascstring(rhs)) >= 0));
-    else
-        omcallorder(ts, lhs, rhs, OM_GE);
-}
-
-
-/* Bind class method in order to preserve the receiver.
- * By doing so the interpreter can then push the receiver on the
- * stack before running the function.
- * This is needed because class methods expect the receiver to be
- * the first argument ('self' automatic var). */
-cr_ubyte bindmethod(cr_State *ts, OClass *oclass, Value name, Value receiver)
-{
-    Value method;
-    if (!tableget(ts, &oclass->methods, name, &method))
-        return 0;
-    *stkpeek(0) = OBJ_VAL(OBoundMethod_new(ts, receiver, asclosure(method)));
-    return 1;
-}
-
-
 /* Adjust return values after native call finishes. */
 static cr_inline void moveresults(cr_State *ts, Value *fn, int32_t got, int32_t expect)
 {
@@ -466,7 +135,7 @@ cr_sinline void call(cr_State *ts, SPtr fn, int retcnt)
 {
     int argc;
 
-    argc = ts->stacktop.p - fn - 1;
+    argc = ts->sp.p - fn - 1;
     if (cr_unlikely(!IS_OBJ(callee)))
         callerror(ts, callee);
     switch (OBJ_TYPE(callee)) {
@@ -497,8 +166,7 @@ cr_sinline void call(cr_State *ts, SPtr fn, int retcnt)
 
 
 /* external interface for 'call'. */
-void cr_vm_call(cr_State *ts, SPtr fn, int nreturns)
-{
+void crVm_call(cr_State *ts, SPtr fn, int nreturns) {
     call(ts, fn, nreturns);
 }
 
@@ -510,15 +178,14 @@ void cr_vm_call(cr_State *ts, SPtr fn, int nreturns)
  * by function that errors and performs the long jump or it
  * stays unchanged and the wrapper function just returns and
  * execution continues. */
-static cr_inline int32_t protectedcall(cr_State *ts, ProtectedFn fn, void *userdata)
-{
+cr_sinline int32_t protectedcall(cr_State *ts, ProtectedFn fn, void *userdata) {
     int32_t oldfc = ts->fc;
     struct cr_longjmp lj;
     lj.status = S_OK;
     lj.prev = ts->errjmp;
     ts->errjmp = &lj;
-    if (setjmp(lj.buf) == 0) // setter ?
-        (*fn)(ts, userdata); // perform the call
+    if (setjmp(lj.buf) == 0)
+        (*fn)(ts, userdata);
     ts->errjmp = lj.prev;
     ts->fc = oldfc;
     return lj.status;
@@ -529,7 +196,7 @@ static cr_inline int32_t protectedcall(cr_State *ts, ProtectedFn fn, void *userd
  * In case of errors it performs a recovery by closing all
  * open upvalues (values to be closed) and restoring the
  * old stack pointer (oldtop). */
-int32_t cr_vm_pcall(cr_State *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop)
+int32_t crVm_pcall(cr_State *ts, ProtectedFn fn, void *userdata, ptrdiff_t oldtop)
 {
     int status;
     SPtr oldsp;
@@ -646,7 +313,7 @@ void run(cr_State *ts)
     int codeparam2;
     int codeparam3;
 
-    cf = ts->aframe;
+    cf = ts->frame;
     pc = frame->pc;
     for (;;) {
 #ifdef PRECOMPUTED_GOTO
@@ -654,21 +321,21 @@ void run(cr_State *ts)
 #endif
         DISPATCH(fetch(pc)) {
             CASE(OP_TRUE) {
-                setbtvalue(s2v(ts->stacktop.p++));
+                setbtvalue(s2v(ts->sp.p++));
                 BREAK;
             }
             CASE(OP_FALSE) {
-                setbfvalue(s2v(ts->stacktop.p++));
+                setbfvalue(s2v(ts->sp.p++));
                 BREAK;
             }
             CASE(OP_NIL) {
-                setnilvalue(s2v(ts->stacktop.p++));
+                setnilvalue(s2v(ts->sp.p++));
                 BREAK;
             }
             CASE(OP_NILN) {
                 codeparam1 = longparam();
                 while (codeparam1--)
-                    setnilvalue(s2v(ts->stacktop.p++));
+                    setnilvalue(s2v(ts->sp.p++));
                 BREAK;
             } CASE(OP_ADD) {
                 BINARY_OP(ts, AR_ADD);
@@ -1235,117 +902,4 @@ l_ret:
     }
 
     cr_unreachable;
-
-#undef READ_BYTE
-#undef READ_BYTEL
-#undef READ_CONSTANT
-#undef READ_CONSTANTL
-#undef READ_STRING
-#undef READ_STRINGL
-#undef DISPATCH
-#undef CASE
-#undef BREAK
-#undef VM_BINARY_OP
 }
-
-
-/* cr_interprets (compiles and runs) the 'source'. */
-void interpret(cr_State *ts, const char *source, const char *path)
-{
-    TODO("Refactor")
-        Value name = OBJ_VAL(OString_new(ts, path, strlen(path)));
-    CrClosure *closure = NULL; // TODO: compile(ts, source, name, true);
-    if (closure == NULL)
-        printandpanic(ts);
-    cr_pcall(ts, 0, 0);
-}
-
-
-/* Initialize the allocated cr_State */
-void cr_State_init(cr_State *ts)
-{
-    srand(time(0));
-    ts->seed = rand();
-    ts->fc = 0;
-    ts->objects = NULL;
-    ts->openuvals = NULL;
-    ts->gc.heapmin = GC_HEAP_MIN;
-    ts->gc.nextgc = GC_HEAP_INIT; // 1 MiB
-    ts->gc.allocated = 0;
-    ts->gc.growfactor = GC_HEAP_GROW_FACTOR;
-    ts->gc.stopped = 0;
-    ts->sp = ts->stack;
-    ts->gs = NULL;
-    ts->gslen = 0;
-    ts->gscap = 0;
-    HTable_init(&ts->loaded); // Loaded scripts and their functions
-    HTable_init(&ts->globids); // Global variable identifiers
-    Array_Variable_init(&ts->globvars, ts);
-    Array_Value_init(&ts->temp, ts); // Temp values storage (return values)
-    Array_VRef_init(&ts->callstart, ts);
-    Array_VRef_init(&ts->retstart, ts);
-    Array_OSRef_init(&ts->interned, ts);
-    HTable_init(&ts->weakrefs); // cr_interned strings table (Weak_refs)
-    memset(ts->faststatic, 0, sizeof(ts->faststatic));
-    for (cr_ubyte i = 0; i < SS_SIZE; i++)
-        ts->faststatic[i] = OString_new(ts, static_strings[i].name, static_strings[i].len);
-}
-
-
-
-/*
- * Reset virtual machine call stack and close all upvalues.
- * Additionally set the error object on top of the stack
- * if the 'status' is error code.
- */
-void resetts(cr_State *ts, cr_status status)
-{
-    Value *top = ts->stack;
-    closeupval(ts, top + 1); // close all open upvalues
-    ts->fc = 0; // reset call stack
-    if (status != S_OK) {
-        if (status == S_EMEM)
-            *top = OBJ_VAL(ts->memerror);
-        else
-            *top = *stkpeek(0); // err obj on top
-        ts->sp = top + 1;
-    } else
-        ts->sp = top;
-}
-
-
-/*
- * Frees the cr_State and nulls out its pointer.
- */
-void cleanvm(cr_State **vmp)
-{
-    _cleanup_function((*vmp)->F);
-    cr_destroy(vmp);
-}
-
-
-/* statics (check 'crstatics.h') */
-CRI_DEF const StaticString SS[CR_SSNUM] = {
-    /* method names */
-    { "__init__", SLL("__init__") },
-    { "__tostring__", SLL("__tostring__") },
-    { "__getidx__", SLL("__getidx__") },
-    { "__setidx__", SLL("__setidx__") },
-    { "__gc__", SLL("__gc__") },
-    { "__defer__", SLL("__defer__") },
-    { "__hash__", SLL("__hash__") },
-    { "__add__", SLL("__add__") },
-    { "__sub__", SLL("__sub__") },
-    { "__mul__", SLL("__mul__") },
-    { "__div__", SLL("__div__") },
-    { "__mod__", SLL("__mod__") },
-    { "__pow__", SLL("__pow__") },
-    { "__not__", SLL("__not__") },
-    { "__umin__", SLL("__umin__") },
-    { "__ne__", SLL("__ne__") },
-    { "__eq__", SLL("__eq__") },
-    { "__lt__", SLL("__lt__") },
-    { "__le__", SLL("__le__") },
-    { "__gt__", SLL("__gt__") },
-    { "__ge__", SLL("__ge__") },
-};

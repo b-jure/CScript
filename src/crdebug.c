@@ -249,7 +249,7 @@ cr_noret crD_runerror(cr_State *ts, const char *fmt, ...)
         setsval(ts, ts->stacktop.p - 2, s2v(ts->stacktop.p - 1));
         ts->stacktop.p--;
     }
-    cr_state_throw(ts, CR_ERRRUNTIME);
+    crT_throw(ts, CR_ERRRUNTIME);
 }
 
 

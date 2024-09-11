@@ -56,7 +56,7 @@ CR_API cr_ubyte cr_checkstack(cr_State *ts, int n)
  * In case the NULL pointer is provided as 'allocator' and/or
  * allocation fails NULL is returned. 
  */
-CR_API cr_State *cr_create(cr_alloc allocator, void *ud)
+CR_API cr_State *cr_create(cr_fAlloc allocator, void *ud)
 {
 	cr_State *ts;
 
@@ -296,7 +296,7 @@ CR_API void cr_pushbool(cr_State *ts, int boolean)
 
 
 /* Auxiliary to 'cr_pushcclosure' and 'cr_pushclass' */
-static CClosure *auxpushcclosure(cr_State *ts, cr_cfunc fn, int args, cr_ubyte isvararg,
+static CClosure *auxpushcclosure(cr_State *ts, cr_CFunction fn, int args, cr_ubyte isvararg,
 				int upvals)
 {
 	CRString *name = asstring(*stkpeek(0));
@@ -318,7 +318,7 @@ static CClosure *auxpushcclosure(cr_State *ts, cr_cfunc fn, int args, cr_ubyte i
  * be accessed with the provided API in this header file.
  * This function will remove 'upvals' amount of values from the stack
  * and store them in C closure. */
-CR_API void cr_pushcclosure(cr_State *ts, const char *name, cr_cfunc fn, int args, cr_ubyte isvararg,
+CR_API void cr_pushcclosure(cr_State *ts, const char *name, cr_CFunction fn, int args, cr_ubyte isvararg,
 			    int upvals)
 {
 	cr_lock(ts);
@@ -346,7 +346,7 @@ CR_API void cr_push(cr_State *ts, int idx)
 
 
 /* Push class on the stack.
- * Stack will contain 'nup' upvalues that the 'cr_cfunc' located in
+ * Stack will contain 'nup' upvalues that the 'cr_CFunction' located in
  * array of 'cr_entry' will have.
  * Top of the stack shall contain the name of the class.
  * Each 'cr_entry' contains the 'name' of the C function,
@@ -673,10 +673,10 @@ CR_API cr_panic cr_getpanic(cr_State *ts)
 
 
 /* Get allocator function */
-CR_API cr_alloc cr_getalloc(cr_State *ts, void **ud)
+CR_API cr_fAlloc cr_getalloc(cr_State *ts, void **ud)
 {
 	cr_lock(ts);
-	cr_alloc alloc = ts->hooks.reallocate;
+	cr_fAlloc alloc = ts->hooks.reallocate;
 	if (ud)
 		*ud = ts->hooks.userdata;
 	cr_unlock(ts);
@@ -729,8 +729,8 @@ CR_API const char *cr_getstring(const cr_State *ts, int idx)
 
 
 /* Get native C function from the stack at 'idx'.
- * Return NULL if the value is not a 'cr_cfunc'. */
-CR_API cr_cfunc cr_getcfunction(const cr_State *ts, int idx)
+ * Return NULL if the value is not a 'cr_CFunction'. */
+CR_API cr_CFunction cr_getcfunction(const cr_State *ts, int idx)
 {
 	Value val = *i2val(ts, idx);
 	return iscfunction(val) ? ascfn(val)->fn : NULL;
