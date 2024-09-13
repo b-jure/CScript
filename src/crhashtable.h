@@ -19,7 +19,7 @@
 
 
 #include "crobject.h"
-#include "crvalue.h"
+#include "crobject.h"
 #include "crbits.h"
 
 
@@ -39,18 +39,19 @@
 
 
 
-CRI_FUNC HTable *cr_htable_new(cr_State *ts);
-CRI_FUNC void cr_htable_newstrtab(cr_State *ts, HTable *tab);
-CRI_FUNC int cr_htable_next(cr_State *ts, HTable *tab, SIndex *k);
-CRI_FUNC void cr_htable_copykeys(cr_State *ts, HTable *stab, HTable *dtab);
-CRI_FUNC int cr_htable_intern(cr_State *ts, const char *string);
-CRI_FUNC int cr_htable_set(cr_State *ts, HTable *tab, const TValue *key,
-                           const TValue *val);
-CRI_FUNC int cr_htable_remove(HTable *tab, const TValue *k);
-CRI_FUNC void cr_htable_removedirect(HTable *tab, Node *slot);
-CRI_FUNC int cr_htable_get(HTable *tab, const TValue *key, TValue *o);
-CRI_FUNC void cr_htable_free(cr_State *ts, HTable *ht);
-CRI_FUNC OString *cr_htable_getstring(HTable *tab, const char *str, size_t len,
-				      uint hash);
+CRI_FUNC HTable *crH_new(cr_State *ts);
+CRI_FUNC void crH_newstrtab(cr_State *ts, HTable *tab);
+CRI_FUNC int crH_next(cr_State *ts, HTable *tab, SIndex *k);
+CRI_FUNC void crH_copykeys(cr_State *ts, HTable *stab, HTable *dtab);
+CRI_FUNC int crH_intern(cr_State *ts, const char *string);
+CRI_FUNC int crH_set(cr_State *ts, HTable *tab, const TValue *key,
+                     const TValue *val);
+CRI_FUNC int crH_remove(HTable *tab, const TValue *k);
+CRI_FUNC void crH_removedirect(HTable *tab, Node *slot);
+CRI_FUNC const TValue *crH_getp(HTable *ht, OString *str);
+CRI_FUNC int crH_get(HTable *tab, const TValue *key, TValue *o);
+CRI_FUNC void crH_free(cr_State *ts, HTable *ht);
+CRI_FUNC OString *crH_getstring(HTable *tab, const char *str, size_t len,
+				uint hash);
 
 #endif

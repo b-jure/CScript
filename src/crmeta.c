@@ -3,13 +3,13 @@
 #include "crdebug.h"
 #include "crstate.h"
 #include "crhashtable.h"
-#include "crvalue.h"
+#include "crobject.h"
 #include "crgc.h"
 #include "crvm.h"
 #include "crmem.h"
 
 
-void crMM_init(cr_State *ts) {
+void crMm_init(cr_State *ts) {
     static const char *vmtnames[CR_NUM_META] = {
         "__init__", "__tostring__", "__getidx__", "__setidx__",
         "__gc__", "__defer__", "__add__", "__sub__", "__mul__",
@@ -22,39 +22,39 @@ void crMM_init(cr_State *ts) {
         s->bits = bitmask(STRVMTBIT);
         s->extra = i;
         G_(ts)->vmtnames[i] = s;
-        cr_gc_fix(ts, obj2gco(G_(ts)->vmtnames[i]));
+        crG_fix(ts, obj2gco(G_(ts)->vmtnames[i]));
     }
 }
 
 
-OClass *crMM_newclass(cr_State *ts, OString *id) {
-    OClass *cls = cr_gc_new(ts, sizeof(OClass), CR_VCLASS, OClass);
+OClass *crMm_newclass(cr_State *ts, OString *id) {
+    OClass *cls = crG_new(ts, sizeof(OClass), CR_VCLASS, OClass);
     cls->methods = NULL;
     cls->name = id;
     for (uint i = 0; i < VMTELEMS; i++)
         setnilval(&cls->vtable[i]);
-    setsv2cls(ts, ts->sp.p++, cls);
-    cls->methods = cr_htable_new(ts);
+    setcls2s(ts, ts->sp.p++, cls);
+    cls->methods = crH_new(ts);
     ts->sp.p--;
     return cls;
 }
 
 
-Instance *crMM_newinstance(cr_State *ts, OClass *cls) {
-    Instance *ins = cr_gc_new(ts, sizeof(Instance), CR_VINSTANCE, Instance);
+Instance *crMm_newinstance(cr_State *ts, OClass *cls) {
+    Instance *ins = crG_new(ts, sizeof(Instance), CR_VINSTANCE, Instance);
     ins->oclass = cls;
     ins->fields = NULL;
-    setsv2ins(ts, ts->sp.p++, ins);
-    ins->fields = cr_htable_new(ts);
+    setins2s(ts, ts->sp.p++, ins);
+    ins->fields = crH_new(ts);
     ts->sp.p--;
     return ins;
 }
 
 
-InstanceMethod *crMM_newinstancemethod(cr_State *ts, Instance *receiver,
+InstanceMethod *crMm_newinstancemethod(cr_State *ts, Instance *receiver,
                                        CrClosure *method)
 {
-    InstanceMethod *im = cr_gc_new(ts, sizeof(InstanceMethod), CR_VMETHOD,
+    InstanceMethod *im = crG_new(ts, sizeof(InstanceMethod), CR_VMETHOD,
                                    InstanceMethod);
     im->receiver = receiver;
     im->method = obj2gco(method);
@@ -62,8 +62,8 @@ InstanceMethod *crMM_newinstancemethod(cr_State *ts, Instance *receiver,
 }
 
 
-UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv) {
-    UserData *ud = cr_gc_new(ts, sizeofud(nuv, size), CR_VUDATA, UserData);
+UserData *crMm_newuserdata(cr_State *ts, size_t size, int nuv) {
+    UserData *ud = crG_new(ts, sizeofud(nuv, size), CR_VUDATA, UserData);
     ud->nuv = nuv;
     ud->size = size;
     for (int i = 0; i < CR_NUM_META; i++)
@@ -72,29 +72,32 @@ UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv) {
 }
 
 
-/* get 'vtable' method */
-const TValue *crMM_get(cr_State *ts, const GCObject *o, int mt) {
+/* get VMT method */
+const TValue *crMm_get(cr_State *ts, const TValue *v, int mt) {
     UNUSED(ts);
     cr_assert(CR_META_INIT <= mt && mt < CR_NUM_META);
-    switch (ott_(o)) {
-    case CR_VCLASS: return &gco2cls(o)->vtable[mt];
-    case CR_VUDATA: return &gco2ud(o)->vtable[mt];
-    default: return NULL;
-    }
+    switch (ttypetag(v)) {
+    case CR_VCLASS: return &gco2cls(v)->vtable[mt];
+    case CR_VUDATA: return &gco2ud(v)->vtable[mt];
+    default: break; /* try basic type */
+    } /* FALLTHRU */
+    HTable *ht = G_(ts)->vmt[ttype(v)];
+    return (ht ? crH_getp(ht, G_(ts)->vmtnames[mt]) : &G_(ts)->nil);
 }
 
 
 /* perform the overloaded method call */
-void crMM_callres(cr_State *ts, const TValue *selfarg, const TValue *fn,
+void crMm_callres(cr_State *ts, const TValue *selfarg, const TValue *fn,
                   const TValue *v1, const TValue *v2, SPtr res)
 {
     /* assuming EXTRA_STACK */
-    setsval(ts, ts->sp.p++, selfarg); /* self */
-    setsval(ts, ts->sp.p++, fn);
-    setsval(ts, ts->sp.p++, v1);
-    setsval(ts, ts->sp.p++, v2);
-    crVm_call(ts, ts->sp.p - 3, 1);
-    setsval(ts, res, s2v(--ts->sp.p));
+    // func = sp[0], self, fn, v1, v2, sphere
+    setobj2s(ts, ts->sp.p++, selfarg); /* self */
+    setobj2s(ts, ts->sp.p++, fn);
+    setobj2s(ts, ts->sp.p++, v1);
+    setobj2s(ts, ts->sp.p++, v2);
+    crV_call(ts, ts->sp.p - 3, 1);
+    setobj2s(ts, res, s2v(--ts->sp.p));
 }
 
 
@@ -103,19 +106,20 @@ static int callbinres(cr_State *ts, const TValue *v1, const TValue *v2,
                       SPtr res, int mt)
 {
     const TValue *selfarg = v1;
-    const TValue *method = crMM_vget(ts, v1, mt);
-    if (!method) {
+    const TValue *method = crMm_get(ts, v1, mt);
+    if (ttisnil(method)) {
         selfarg = v2;
-        method = crMM_vget(ts, v2, mt);
-        if (!method) return 0;
+        method = crMm_get(ts, v2, mt);
+        if (ttisnil(method))
+            return 0;
     }
-    crMM_callres(ts, selfarg, method, v1, v2, res);
+    crMm_callres(ts, selfarg, method, v1, v2, res);
     return 1;
 }
 
 
 /* try to call overloaded binary arithmetic method */
-void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
+void crMm_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
                  int mt)
 {
     cr_assert(CR_META_ADD <= mt && mt <= CR_META_BXOR);
@@ -134,7 +138,7 @@ void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
 
 
 /* try to call overloaded ordering vtable method */
-int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
+int crMm_order(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
                int mt)
 {
     cr_assert(CR_META_EQ <= mt && mt < CR_NUM_META);
@@ -146,13 +150,13 @@ int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
 }
 
 
-void crMM_freeclass(cr_State *ts, OClass *cls) {
-    cr_htable_free(ts, cls->methods);
+void crMm_freeclass(cr_State *ts, OClass *cls) {
+    crH_free(ts, cls->methods);
     crM_free(ts, cls, sizeof(*cls));
 }
 
 
-void crMM_freeinstance(cr_State *ts, Instance *ins) {
-    cr_htable_free(ts, ins->fields);
+void crMm_freeinstance(cr_State *ts, Instance *ins) {
+    crH_free(ts, ins->fields);
     crM_free(ts, ins, sizeof(*ins));
 }

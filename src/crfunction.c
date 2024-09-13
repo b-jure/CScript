@@ -6,7 +6,7 @@
 
 Function *crF_newfunction(cr_State *ts)
 {
-    Function *fn = cr_gc_new(ts, sizeof(Function), CR_VFUNCTION, Function);
+    Function *fn = crG_new(ts, sizeof(Function), CR_VFUNCTION, Function);
     fn->isvararg = 0;
     fn->gclist = NULL;
     fn->source = NULL;
@@ -27,7 +27,7 @@ Function *crF_newfunction(cr_State *ts)
 
 CrClosure *crF_newcrclosure(cr_State *ts, int nup)
 {
-    CrClosure *crcl = cr_gc_new(ts, sizeofcrcl(nup), CR_VCRCL, CrClosure);
+    CrClosure *crcl = crG_new(ts, sizeofcrcl(nup), CR_VCRCL, CrClosure);
     crcl->nupvalues = nup;
     crcl->fn = NULL;
     for (int i = 0; i < nup; i++)
@@ -38,7 +38,7 @@ CrClosure *crF_newcrclosure(cr_State *ts, int nup)
 
 CClosure *cr_object_newcclosure(cr_State *ts, cr_CFunction fn, int nupvalues)
 {
-    CClosure *ccl = cr_gc_new(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
+    CClosure *ccl = crG_new(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
     ccl->nupvalues = nupvalues;
     ccl->fn = fn;
     for (int i = 0; i < nupvalues; i++)
@@ -53,11 +53,11 @@ CClosure *cr_object_newcclosure(cr_State *ts, cr_CFunction fn, int nupvalues)
 void crF_initupvals(cr_State *ts, CrClosure *cl)
 {
     for (int i = 0; i < cl->nupvalues; i++) {
-        UpVal *uv = cr_gc_new(ts, sizeof(UpVal), CR_VUVALUE, UpVal);
+        UpVal *uv = crG_new(ts, sizeof(UpVal), CR_VUVALUE, UpVal);
         uv->v.location = &uv->u.value; /* close it */
         setnilval(uv->v.location);
         cl->upvalue[i] = uv;
-        cr_gc_objbarrier(ts, cl, uv);
+        crG_objbarrier(ts, cl, uv);
     }
 }
 
@@ -68,7 +68,7 @@ void crF_initupvals(cr_State *ts, CrClosure *cl)
  */
 static UpVal *newupval(cr_State *ts, SPtr val, UpVal **prev)
 {
-    UpVal *uv = cr_gc_new(ts, sizeof(*uv), CR_VUVALUE, UpVal);
+    UpVal *uv = crG_new(ts, sizeof(*uv), CR_VUVALUE, UpVal);
     UpVal *previous = *prev;
     uv->v.location = s2v(val);
     uv->u.open.next = previous;

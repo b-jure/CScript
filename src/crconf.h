@@ -30,7 +30,6 @@
 #endif                      /* } */
 
 
-
 /*
  * Branch prediction builtin functions that reorder
  * code during compilation or hint the branch predictor
@@ -211,7 +210,8 @@
 #define CR_UINTEGER             uint64_t
 #define CR_UINTEGER_MAX         UINT64_MAX
 
-#define cr_integer2str(s,sz,n)  snprintf((s),(sz),CR_INTEGER_FMT,(CR_INTEGER)(n))
+#define cr_integer2str(s,sz,n) \
+    snprintf((s),(sz),CR_INTEGER_FMT,(CR_INTEGER)(n))
 
 #define cri_intop(op,x,y) \
         cri_castU2S(cri_castS2U(x) op cri_castS2U(y))
@@ -255,7 +255,6 @@
 
 /* @cr_pointer2str - converts a pointer to a string. */
 #define cr_pointer2str(b,sz,p)  snprintf((b),(sz),"%p",(p))
-
 
 
 /*

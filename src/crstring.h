@@ -29,6 +29,7 @@
     crS_newl(ts, "" lit, (sizeof(lit)/sizeof(char)) - 1)
 
 
+
 CRI_FUNC OString *crS_new(cr_State *ts, const char *str);
 CRI_FUNC OString *crS_newl(cr_State *ts, const char *str, size_t len);
 CRI_FUNC void crS_free(cr_State *ts, OString *s);

@@ -22,16 +22,13 @@
 #include "crobject.h"
 #include "crparser.h"
 #include "crstate.h"
-#include "crvalue.h"
+#include "crobject.h"
 #include "crstring.h"
 #include "crfunction.h"
 #include "crhashtable.h"
 #include "crmem.h"
 
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-
+#include <string.h>
 
 
 /* enter C function frame */
@@ -295,7 +292,7 @@ static void movexp2v(FunctionState *fs, ExpInfo *e, TValue *v) {
     case EXP_NIL: setnilval(v); break;
     case EXP_FALSE: setbfval(v); break;
     case EXP_TRUE: setbtval(v); break;
-    case EXP_STRING: setv2s(NULL, v, e->u.str); break;
+    case EXP_STRING: setstrval(NULL, v, e->u.str); break;
     case EXP_INT: setival(v, e->u.i); break;
     case EXP_FLT: setfval(v, e->u.n); break;
     case EXP_K: *v = *getconstant(fs, e); break;
@@ -360,7 +357,7 @@ static void adjustlocals(Lexer *lx, int nvars) {
  */ 
 static void defineprivate(FunctionState *fs, int vidx) {
     PrivateVar *pv = getprivate(fs, vidx);
-    vmod(&pv->val) &= VARBITMASK;
+    pv->val.mod &= VARBITMASK;
 }
 
 
@@ -465,7 +462,7 @@ static void startfs(FunctionState *fs, Lexer *lx, Scope *s) {
     fs->patches.len = fs->patches.size = 0; fs->patches.list = NULL;
     fs->needclose = fs->lastwasret = 0;
     fs->fn->source = lx->src;
-    cr_gc_objbarrier(lx->ts, fs->fn, fs->fn->source);
+    crG_objbarrier(lx->ts, fs->fn, fs->fn->source);
     fs->fn->maxstack = 1; /* for 'self' */
     startscope(fs, s, 0); /* start global scope */
 }
@@ -492,7 +489,7 @@ static void endfs(FunctionState *fs) {
     crM_shrinkvec(ts, fn->locals, fn->sizelocals, fs->nlocals);
     crM_shrinkvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals);
     lx->fs = fs->prev;
-    cr_gc_check(ts);
+    crG_check(ts);
 }
 
 
@@ -506,7 +503,7 @@ static Function *addfunction(Lexer *lx) {
     crM_growvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, MAXLONGARGSIZE,
                 "functions");
     fn->funcs[fs->nfuncs++] = new = crF_new(ts);
-    cr_gc_objbarrier(ts, fn, new);
+    crG_objbarrier(ts, fn, new);
     return new;
 }
 
@@ -583,7 +580,7 @@ static int newlocal(Lexer *lx, OString *name, int mods) {
     crM_growvec(lx->ts, ps->lvars.arr, ps->lvars.size, ps->lvars.len,
                 MAXLONGARGSIZE, "locals");
     LVar *local = &ps->lvars.arr[ps->lvars.len++];
-    vmod(&local->val) = mods;
+    local->val.mod = mods;
     local->s.name = name;
     local->s.idx = -1;
     return ps->lvars.len - fs->firstlocal - 1;
@@ -620,7 +617,7 @@ static int searchprivate(FunctionState *fs, OString *name, ExpInfo *e) {
     for (int i = fs->nprivate - 1; i >= 0; i--) {
         PrivateVar *pv = getprivate(fs, i);
         if (streq(name, pv->s.name)) {
-            if (cr_unlikely(testbits(vmod(&pv->val), UNDEFMODMASK)))
+            if (cr_unlikely(testbits(pv->val.mod, UNDEFMODMASK)))
                 variniterror(lx, "private", getstrbytes(name));
             initexp(e, EXP_PRIVATE, i);
             return e->et;
@@ -648,7 +645,7 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e) {
     if (e->et == EXP_LOCAL) { /* local ? */
         uv->onstack = 1;
         uv->idx = e->u.info;
-        uv->mod = vmod(&getlocal(fs, e->u.info)->val);
+        uv->mod = getlocal(fs, e->u.info)->val.mod;
         cr_assert(streq(name, getlocal(fs, e->u.info)->s.name));
     } else { /* must be upvalue */
         cr_assert(e->et == EXP_UVAL);
@@ -702,10 +699,10 @@ static void searchvar(FunctionState *fs, OString *name, ExpInfo *e, int base) {
 /* create new global variable */
 static void newglobal(Lexer *lx, OString *name, int mods) {
     TValue k, val;
-    setv2s(lx->ts, &k, name);
+    setstrval(lx->ts, &k, name);
     setemptyval(&val);
-    vmod(&val) = mods;
-    cr_htable_set(lx->ts, G_(lx->ts)->globals, &k, &val);
+    val.mod = mods;
+    crH_set(lx->ts, G_(lx->ts)->globals, &k, &val);
 }
 
 
@@ -713,9 +710,9 @@ static void newglobal(Lexer *lx, OString *name, int mods) {
 static void globalvar(FunctionState *fs, OString *name, ExpInfo *e) {
     Lexer *lx = fs->lx;
     TValue k, dummy;
-    setv2s(lx->ts, &k, name);
+    setstrval(lx->ts, &k, name);
     setemptyval(&dummy); /* set as undefined */
-    if (!cr_htable_get(G_(lx->ts)->globals, &k, &dummy))
+    if (!crH_get(G_(lx->ts)->globals, &k, &dummy))
         newglobal(lx, name, UNDEFMODMASK >> (fs->prev != NULL));
     e->u.str = name;
     e->et = EXP_GLOBAL;
@@ -731,7 +728,7 @@ static int newprivate(FunctionState *fs, OString *name, int mods) {
                    MAXLONGARGSIZE, "private variables");
     PrivateVar *pv = &fn->private[fs->nprivate++];
     pv->s.name = name;
-    vmod(&pv->val) = (UNDEFMODMASK | mods);
+    pv->val.mod = (UNDEFMODMASK | mods);
     return fs->nprivate - 1;
 }
 
@@ -1133,27 +1130,27 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
     switch (var->et) {
     case EXP_UVAL: {
         UpValInfo *uv = getupvalue(fs, var->u.info);
-        if (vmod(uv) & VARFINAL)
+        if (uv->mod & VARFINAL)
             id = uv->name;
         break;
     }
     case EXP_LOCAL: {
         LVar *lv = getlocal(fs, var->u.info);
-        if (vmod(&lv->val) & VARFINAL)
+        if (ismod(&lv->val, VARFINAL))
             id = lv->s.name;
         break;
     }
     case EXP_PRIVATE: {
         PrivateVar *sv = getprivate(fs, var->u.info);
-        if (vmod(&sv->val) & VARFINAL)
+        if (ismod(&sv->val, VARFINAL))
             id = sv->s.name;
         break;
     }
     case EXP_GLOBAL: {
         TValue key, res;
-        setv2s(lx->ts, &key, var->u.str);
-        if (cr_htable_get(G_(lx->ts)->globals, &key, &res)) {
-            if (!ttisempty(&res) && vmod(&res) & VARFINAL)
+        setstrval(lx->ts, &key, var->u.str);
+        if (crH_get(G_(lx->ts)->globals, &key, &res)) {
+            if (!ttisempty(&res) && ismod(&res, VARFINAL))
                 id = var->u.str;
         }
         break;
@@ -1792,7 +1789,7 @@ static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
             TValue v1, v2;
             movexp2v(lx->fs, &ss->e, &v1);
             movexp2v(lx->fs, caseexp, &v2);
-            return crV_orderEQ(lx->ts, &v1, &v2);
+            return crO_orderEQ(lx->ts, &v1, &v2);
         }
     }
     return 0;
@@ -2366,15 +2363,15 @@ CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
     Lexer lx;
     FunctionState fs;
     CrClosure *cl = crF_newcrclosure(ts, 0);
-    setsv2crcl(ts, ts->sp.p, cl); /* anchor main function closure */
+    setcrcl2s(ts, ts->sp.p, cl); /* anchor main function closure */
     crT_incsp(ts);
-    lx.tab = cr_htable_new(ts);
+    lx.tab = crH_new(ts);
     setsv2ht(ts, ts->sp.p, lx.tab); /* anchor scanner htable */
     crT_incsp(ts);
     fs.fn = cl->fn = crF_new(ts);
-    cr_gc_objbarrier(ts, cl, cl->fn);
+    crG_objbarrier(ts, cl, cl->fn);
     fs.fn->source = crS_new(ts, source);
-    cr_gc_objbarrier(ts, fs.fn, fs.fn->source);
+    crG_objbarrier(ts, fs.fn, fs.fn->source);
     lx.ps = ps;
     lx.buff = buff;
     crL_setsource(ts, &lx, br, fs.fn->source);

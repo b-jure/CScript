@@ -28,10 +28,8 @@
 #define CR_MULRET       (-1)
 
 
-
 /* minimum stack space available to a C function */
 #define CR_MINSTACK     20
-
 
 
 /* Cript thread state */
@@ -71,10 +69,10 @@ typedef CR_NUMBER cr_number;
 typedef int (*cr_CFunction)(cr_State *ts);
 
 /* function for memory de/allocation */
-typedef void *(*cr_fAlloc)(void *ptr, size_t newsize, void *userdata);
+typedef void *(*cr_fAlloc)(void *ptr, size_t osz, size_t nsz, void *userdata);
 
 /* function that reads blocks when loading Cript chunks */
-typedef const char *(*cr_fReader)(cr_State *ts, void *userdata, size_t *szread);
+typedef const char *(*cr_fReader)(cr_State *ts, void *data, size_t *szread);
 
 /* type for class API (Virtual Method Table) */
 typedef struct cr_VMT cr_VMT;
@@ -88,6 +86,7 @@ typedef struct cr_DebugInfo cr_DebugInfo;
  * State manipulation
  * ------------------------------------------------------------------------- */
 CR_API cr_State        *cr_newstate(cr_fAlloc allocator, void *ud);
+CR_API void             cr_freestate(cr_State *ts);
 CR_API cr_State        *cr_newthread(cr_State *ts);
 CR_API void             cr_freethread(cr_State *ts);
 CR_API cr_number        cr_version(cr_State *ts);

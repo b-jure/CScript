@@ -20,9 +20,9 @@
 #include "crstate.h"
 
 
-#define crM_rawmalloc(gs,s)         (gs)->falloc(NULL, s, (gs)->udrealloc)
-#define crM_rawrealloc(gs,p,s)      (gs)->falloc(p, s, (gs)->udrealloc)
-#define crM_rawfree(gs,p)           (gs)->falloc(p, 0, (gs)->udrealloc)
+#define crM_rawmalloc(gs,s)         (gs)->falloc(NULL, 0, s, (gs)->udrealloc)
+#define crM_rawrealloc(gs,p,os,ns)  (gs)->falloc(p, os, ns, (gs)->udrealloc)
+#define crM_rawfree(gs,p,osz)       (gs)->falloc(p, osz, 0, (gs)->udrealloc)
 
 
 /* can try to allocate second time */
@@ -31,36 +31,35 @@
 
 
 /* Auxiliary to 'crM_realloc' and 'cr_malloc'. */
-cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osize, size_t nsize)
-{
+cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
-    UNUSED(osize);
+    UNUSED(osz);
     if (cantryagain(gs)) {
-        cr_gc_full(ts, 1);
-        return crM_rawrealloc(gs, ptr, nsize);
+        crG_full(ts, 1);
+        return crM_rawrealloc(gs, ptr, osz, nsz);
     }
     return NULL;
 }
 
 
-void *crM_realloc(cr_State *ts, void *ptr, size_t osize, size_t nsize) {
+void *crM_realloc(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
     cr_assert((osize == 0) == (ptr == NULL));
-    void *memblock = crM_rawrealloc(gs, ptr, nsize);
-    if (cr_unlikely(!memblock && nsize != 0)) {
-        memblock = tryagain(ts, ptr, osize, nsize);
+    void *memblock = crM_rawrealloc(gs, ptr, osz, nsz);
+    if (cr_unlikely(!memblock && nsz != 0)) {
+        memblock = tryagain(ts, ptr, osz, nsz);
         if (cr_unlikely(memblock == NULL))
             return NULL;
     }
     cr_assert((nsize == 0) == (memblock == NULL));
-    gs->gc.debt += nsize - osize;
+    gs->gc.debt += nsz - osz;
     return memblock;
 }
 
 
-void *crM_saferealloc(cr_State *ts, void *ptr, size_t osize, size_t nsize) {
-    void *memblock = crM_realloc(ts, ptr, osize, nsize);
-    if (cr_unlikely(memblock == NULL && nsize != 0))
+void *crM_saferealloc(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
+    void *memblock = crM_realloc(ts, ptr, osz, nsz);
+    if (cr_unlikely(memblock == NULL && nsz != 0))
         cr_assert(0 && "out of memory");
     return memblock;
 }
@@ -116,9 +115,9 @@ void *crM_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
 }
 
 
-void crM_free(cr_State *ts, void *ptr, size_t osize) {
+void crM_free(cr_State *ts, void *ptr, size_t osz) {
     GState *gs = G_(ts);
     cr_assert((osize == 0) == (ptr == NULL));
-    crM_rawfree(gs, ptr);
-    gs->gc.debt -= osize;
+    crM_rawfree(gs, ptr, osz);
+    gs->gc.debt -= osz;
 }

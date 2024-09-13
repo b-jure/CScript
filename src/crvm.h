@@ -18,9 +18,9 @@
 #ifndef CRVM_H
 #define CRVM_H
 
-#include "crvalue.h"
+#include "crobject.h"
 
-CRI_FUNC void crVm_call(cr_State *ts, SPtr fn, int nreturns);
-CRI_FUNC void crVm_concat(cr_State *ts, int n);
+CRI_FUNC void crV_call(cr_State *ts, SPtr fn, int nreturns);
+CRI_FUNC void crV_concat(cr_State *ts, int n);
 
 #endif

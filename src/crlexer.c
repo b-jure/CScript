@@ -94,12 +94,12 @@ void crL_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source) {
 
 
 void crL_init(cr_State *ts) {
-    /* intern all keywords */
+    /* intern and fix all keywords */
     for (int i = 0; i < NUM_KEYWORDS; i++) {
         OString *s = crS_new(ts, tkstr[i]);
         s->bits = bitmask(STRKWBIT);
         s->extra = i;
-        cr_gc_fix(ts, obj2gco(s));
+        crG_fix(ts, obj2gco(s));
     }
 }
 
@@ -185,8 +185,8 @@ OString *crL_newstring(Lexer *lx, const char *str, size_t len) {
     cr_State *ts = lx->ts;
     OString *s = crS_newl(ts, str, len);
     TValue *stks = s2v(ts->sp.p++);
-    setv2s(ts, stks, s); /* temp anchor */
-    cr_htable_set(lx->ts, lx->tab, stks, stks);
+    setobj2s(ts, stks, s); /* temp anchor */
+    crH_set(lx->ts, lx->tab, stks, stks);
     ts->sp.p--; /* pop */
     return s;
 }

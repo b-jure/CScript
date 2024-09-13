@@ -260,7 +260,7 @@ static int falseK(FunctionState *fs) {
 /* add string constant to 'constants' */
 static int stringK(FunctionState *fs, OString *s) {
     TValue vs;
-    setoval(&vs, obj2gco(s));
+    setgcoval(&vs, obj2gco(s));
     return addK(fs, &vs);
 }
 
@@ -397,7 +397,7 @@ static int isnumKL(ExpInfo *e, int *immediate, int *isflt) {
     cr_integer i;
     if (e->et == EXP_INT)
         i = e->u.i;
-    else if (e->et == EXP_FLT && crV_n2i(e->u.n, &i, CR_N2IFLOOR))
+    else if (e->et == EXP_FLT && crO_n2i(e->u.n, &i, CR_N2IFLOOR))
         *isflt = 1;
     else
         return 0;
@@ -581,7 +581,7 @@ static int codeintK(FunctionState *fs, cr_integer i) {
 /* emit float constant */
 static int codefltK(FunctionState *fs, cr_number n) {
     cr_integer i;
-    if (crV_n2i(n, &i, CR_N2IFLOOR) && fitsLA(i))
+    if (crO_n2i(n, &i, CR_N2IFLOOR) && fitsLA(i))
         return emitILS(fs, OP_CONSTF, cri_abs(i), i < 0);
     else
         return codeK(fs, fltK(fs, n));
@@ -709,7 +709,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
     TValue v1, v2, res;
     if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || validop(&v1, &v2, opr))
         return 0;
-    crV_arithmraw(fs->lx->ts, &v1, &v2, &res, opr);
+    crO_arithmraw(fs->lx->ts, &v1, &v2, &res, opr);
     if (ttisint(&res)) {
         e1->et = EXP_INT;
         e1->u.i = ival(&res);

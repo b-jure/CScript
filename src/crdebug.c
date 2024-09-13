@@ -20,7 +20,7 @@
 #include "crstring.h"
 #include "crlimits.h"
 #include "crstate.h"
-#include "crvalue.h"
+#include "crobject.h"
 
 #include <stdio.h>
 
@@ -54,14 +54,14 @@ int crD_getfuncline(const Function *fn, int pc)
 cr_sinline int currentpc(const CallFrame *cf)
 {
     cr_assert(cfiscript(cf));
-    return cast_int(cf->pc - cffn(cf)->code) - 1;
+    return cast_int(cf->pc - cfFn(cf)->code) - 1;
 }
 
 
 /* current line number */
 cr_sinline int currentline(CallFrame *cf)
 {
-    return crD_getfuncline(cffn(cf), currentpc(cf));
+    return crD_getfuncline(cfFn(cf), currentpc(cf));
 }
 
 
@@ -245,8 +245,8 @@ cr_noret crD_runerror(cr_State *ts, const char *fmt, ...)
     const char *err = crS_pushvfstring(ts, fmt, ap);
     va_end(ap);
     if (cfiscript(ts->aframe)) { /* in Cript function (closure) ? */
-        crD_addinfo(ts, err, cffn(ts->aframe)->source, currentline(ts->aframe));
-        setsval(ts, ts->stacktop.p - 2, s2v(ts->stacktop.p - 1));
+        crD_addinfo(ts, err, cfFn(ts->aframe)->source, currentline(ts->aframe));
+        setobj2s(ts, ts->stacktop.p - 2, s2v(ts->stacktop.p - 1));
         ts->stacktop.p--;
     }
     crT_throw(ts, CR_ERRRUNTIME);

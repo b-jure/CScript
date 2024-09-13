@@ -20,7 +20,7 @@
 
 #include "crobject.h"
 #include "crlexer.h"
-#include "crvalue.h"
+#include "crobject.h"
 #include "crbits.h"
 
 

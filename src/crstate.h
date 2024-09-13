@@ -4,7 +4,7 @@
 
 #include "crgc.h"
 #include "crobject.h"
-#include "crvalue.h"
+#include "crobject.h"
 
 #include <setjmp.h>
 
@@ -18,7 +18,7 @@
 
 
 /* initial stack size */
-#define STACKSIZE_INIT		(CR_MINSTACK * 4)
+#define INIT_STACKSIZE		(CR_MINSTACK * 4)
 
 
 /* stack size */
@@ -65,10 +65,9 @@
  * Long jump (for protected calls)
  * ------------------------------------------------------------------------- */
 
+#define cri_jmpbuf          jmp_buf
 #define CRI_THROW(ts,b)     longjmp((b)->buf, 1)
 #define CRI_TRY(ts,b,fn)    if (setjmp((b)->buf) == 0) { fn }
-
-#define cri_jmpbuf          jmp_buf
 
 /* jmpbuf for jumping out of protected function */
 typedef struct cr_ljmp {
@@ -84,13 +83,13 @@ typedef struct cr_ljmp {
  * ------------------------------------------------------------------------- */
 
 /* get Cript 'Function' */
-#define cffn(cf)        (crclval(s2v((cf)->callee.p)).fn)
+#define cfFn(cf)        (crclval(s2v((cf)->callee.p)).fn)
 
 
 /* 'cfstatus' bits */
 #define CFST_FRESH          (1<<0) /* fresh execute of Cript functon */
-#define CFST_CCALL          (1<<1) /* in C call */
-#define CFST_FIN            (1<<2) /* in finalizer */
+#define CFST_C              (1<<1) /* call is running C function */
+#define CFST_FIN            (1<<2) /* function called finalizer */
 
 
 /* 'CallFrame' function is Cript function */
@@ -116,17 +115,18 @@ typedef struct CallFrame {
 
 typedef struct GState {
     cr_fAlloc falloc; /* allocator */
-    void *udrealloc; /* userdata for 'realloc' */
+    void *udalloc; /* userdata for 'falloc' */
     cr_CFunction panic; /* panic handler (unprotected calls) */
     uint seed; /* initial seed for hashing */
     TValue nil; /* nil value (init flag) */
     GC gc; /* garbage collection managed values and parameters */
-    HTable strings; /* weak 'HTable' (weak references) */
+    HTable *strings; /* weak 'HTable' (weak references) */
     HTable *globals; /* global variables */
     struct cr_State *mainthread; /* thread that also created global state */
     struct cr_State *thwouv; /* thread with open upvalues */
     OString *memerror; /* preallocated message for memory errors */
     OString *vmtnames[CR_NUM_META]; /* method names */
+    HTable *vmt[CR_NUMTYPES]; /* vmt's for basic types */
 } GState;
 
 
@@ -148,6 +148,7 @@ struct cr_State {
     SIndex stack; /* stack base */
     SIndex sp; /* first free slot in the 'stack' */
     SIndex stackend; /* end of 'stack' + 1 */
+    CallFrame basecf; /* base frame, C's entry point to Cript */
     CallFrame *cf; /* active frame */
     UpVal *openupval; /* list of open upvalues */
     SIndex tbclist; /* list of to-be-closed variables */
@@ -205,6 +206,5 @@ CRI_FUNC void crT_shrinkstack(cr_State *ts);
 CRI_FUNC void crT_incsp(cr_State *ts);
 CRI_FUNC void crT_incC_(cr_State *ts);
 CRI_FUNC void crT_checkCstack(cr_State *ts);
-CRI_FUNC cr_noret crT_throw(cr_State *ts, int code);
 
 #endif

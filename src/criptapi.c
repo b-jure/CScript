@@ -22,7 +22,7 @@
 #include "cript.h"
 #include "crparser.h"
 #include "crreader.h"
-#include "crvalue.h"
+#include "crobject.h"
 #include "crts.h"
 #include "stdarg.h"
 
@@ -101,7 +101,7 @@ CR_API void cr_destroy(cr_State **tsp)
 		Array_OSRef_free(&ts->interned, NULL);
 		HTable_free(ts, &ts->weakrefs);
 		for (head = ts->objects; head != NULL; head = next) {
-			next = onext(head);
+			next = gconext(head);
 			ofree(ts, head);
 		}
 		FREE(ts, ts);
@@ -1147,7 +1147,7 @@ CR_API cr_ubyte cr_nextproperty(cr_State *ts, int idx, cr_ubyte what)
 		tab = &instance->fields;
 	else
 		tab = &instance->oclass->methods;
-	hasnext = cr_htable_next(ts, tab, key);
+	hasnext = crH_next(ts, tab, key);
 	if (hasnext)
 		api_incsp(ts); /* push value */
 	else

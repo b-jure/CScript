@@ -8,19 +8,20 @@
 #include "crmem.h"
 #include "crvm.h"
 
+#include <stdio.h>
 #include <ctype.h>
+#include <string.h>
 #include <stdlib.h>
 #include <locale.h>
 
 
 
-
 /*
- * Hash string.
- * One-byte-at-a-time hash based on Murmur's mix
- * Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
- */
-uint cr_hash_string(const char *str, size_t len, unsigned int seed) {
+** Hash string.
+** One-byte-at-a-time hash based on Murmur's mix
+** Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
+*/
+uint crS_hash(const char *str, size_t len, unsigned int seed) {
     const cr_ubyte *data = cast(const cr_ubyte *, str);
     uint h = seed;
     for (uint i = 0; i < len; i++) {
@@ -33,17 +34,17 @@ uint cr_hash_string(const char *str, size_t len, unsigned int seed) {
 
 
 /*
-   Create new string object of size 'len'.
- * Allocation is skipped in case string is already interned.
- */
+** Create new string object of size 'len'.
+** Allocation is skipped in case string is already interned.
+*/
 OString *crS_newl(cr_State *ts, const char *chars, size_t len) {
     TValue key;
-    HTable *strtab = &G_(ts)->strings;
+    HTable *strtab = G_(ts)->strings;
     uint hash = crS_hash(chars, len, G_(ts)->seed);
-    OString *weakref = cr_htable_getstring(strtab, chars, len, hash);
+    OString *weakref = crH_getstring(strtab, chars, len, hash);
     if (weakref)
         return weakref;
-    OString *string = cr_gc_new(ts, sizeofstring(len), CR_VSTRING, OString);
+    OString *string = crG_new(ts, sizeofstring(len), CR_VSTRING, OString);
     string->len = len;
     if (cr_likely(len != 0))
         memcpy(string->bytes, chars, len);
@@ -51,9 +52,9 @@ OString *crS_newl(cr_State *ts, const char *chars, size_t len) {
     string->hash = hash;
     string->extra = 0;
     setbit(string->bits, STRHASHBIT);
-    setv2s(ts, &key, string);
-    setsv2s(ts, ts->sp.p++, string);
-    cr_htable_set(ts, strtab, &key, &key);
+    setstrval(ts, &key, string);
+    setstrval2s(ts, ts->sp.p++, string);
+    crH_set(ts, strtab, &key, &key);
     ts->sp.p--;
     return string;
 }
@@ -72,10 +73,10 @@ void crS_free(cr_State *ts, OString *s) {
 
 
 /*
- * Comparison similar to 'strcmp' but this works on
- * strings that might have null terminator in between
- * of their contents.
- */
+** Comparison similar to 'strcmp' but this works on
+** strings that might have null terminator in between
+** of their contents.
+*/
 int crS_cmp(const OString *s1, const OString *s2) {
     const char *p1 = s1->bytes;
     size_t s1l = s1->len;
@@ -116,9 +117,9 @@ void crS_sourceid(char *restrict dest, const char *src, size_t len) {
 }
 
 
-/* --------------------------------------------------------------------------
+/* -------------------------------------------------------------------------
  * String conversion
- * -------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------- */
 
 /* maximum value for last integer digit */
 #define MAXINTLASTDIG		(CR_INTEGER_MAX % 10)
@@ -159,8 +160,8 @@ int crS_hexvalue(int c) {
  */
 static const char *otstr2int(const char *s, cr_integer *i, int *overflow) {
     cr_uinteger u = 0;
-    int noval, digit, sign;
-    sign = noval = 1;
+    int ngcoval, digit, sign;
+    sign = ngcoval = 1;
     while (isspace(*s)) s++; /* skip leading spaces */
     if (*s == '-' || *s == '+') {
         sign -= 2 * (*s == '-');
@@ -176,7 +177,7 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow) {
                 return NULL;
             }
             u = u * 16 + digit;
-            noval = 0;
+            ngcoval = 0;
         }
     } else if (*s == '0' && isodigit(s[1])) { /* octal ? */
         s++; /* skip '0' */
@@ -188,7 +189,7 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow) {
                 return NULL;
             }
             u = u * 8 + digit;
-            noval = 0;
+            ngcoval = 0;
         } while (isodigit(*++s));
     } else { /* decimal */
         for (; isdigit(*s); s++) {
@@ -199,11 +200,11 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow) {
                 return NULL;
             }
             u = u * 10 + digit;
-            noval = 0;
+            ngcoval = 0;
         }
     }
     while (isspace(*s)) s++; /* skip trailing spaces */
-    if (noval || *s != '\0') return NULL;
+    if (ngcoval || *s != '\0') return NULL;
     *i = cri_castU2S(u*sign);
     return s;
 }
@@ -280,7 +281,7 @@ static int otnum2buff(const TValue *nv, char *buff) {
 void crS_numtostring(cr_State *ts, TValue *v) {
     char buff[MAXNUM2STR];
     int len = otnum2buff(v, buff);
-    setv2s(ts, v, crS_newl(ts, buff, len));
+    setstrval(ts, v, crS_newl(ts, buff, len));
 }
 
 
@@ -316,10 +317,10 @@ typedef struct BuffVSF {
 static void pushstr(BuffVFS *buff, const char *str, size_t len) {
     cr_State *ts = buff->ts;
     OString *s = crS_newl(ts, str, len);
-    setsv2s(ts, ts->sp.p, s);
+    setstrval2s(ts, ts->sp.p, s);
     ts->sp.p++;
     if (buff->pushed)
-        crVm_concat(ts, 2);
+        crV_concat(ts, 2);
     else
         buff->pushed = 1;
 }

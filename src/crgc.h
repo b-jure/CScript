@@ -27,35 +27,35 @@
  * ------------------------------------------------------------------------- */
 
 /* object 'mark' bits (GC colors) */
-#define WHITEBIT0	0 /* object is white v0 */
-#define WHITEBIT1	1 /* object is white v1 */
-#define BLACKBIT	2 /* object is black */
-#define FINBIT		3 /* object has finalizer */
+#define WHITEBIT0       0 /* object is white v0 */
+#define WHITEBIT1       1 /* object is white v1 */
+#define BLACKBIT        2 /* object is black */
+#define FINBIT          3 /* object has finalizer */
 
 /* white bits */
-#define WHITEBITS	bit2mask(WHITEBIT0, WHITEBIT1)
+#define WHITEBITS       bit2mask(WHITEBIT0, WHITEBIT1)
 
 /* bits used for coloring */
-#define COLORBITS	bit2mask(WHITEBITS, BLACKBIT)
+#define COLORBITS       bit2mask(WHITEBITS, BLACKBIT)
 
 /* test 'mark' bits */
-#define iswhite(o)	testbits(omark_(o), WHITEBITS)
-#define isgray(o)	(!testbits(omark_(o), COLORBITS))
-#define isblack(o)	testbit(omark_(o), BLACKBIT)
-#define isfin(o)	testbit(omark_(o), FINBIT)
+#define iswhite(o)      testbits(gcomark_(o), WHITEBITS)
+#define isgray(o)       (!testbits(gcomark_(o), COLORBITS))
+#define isblack(o)      testbit(gcomark_(o), BLACKBIT)
+#define isfin(o)        testbit(gcomark_(o), FINBIT)
 
 /* get the current white bit */
-#define cr_gc_white(gc)		((gc)->whitebit & WHITEBITS)
+#define crG_white(gc)           ((gc)->whitebit & WHITEBITS)
 
 /* get the other white bit */
-#define whitexor(gc)		((gc)->whitebit ^ WHITEBITS)
+#define whitexor(gc)            ((gc)->whitebit ^ WHITEBITS)
 
 /* mark object to be finalized */
-#define markfin(o)		setbit(omark_(o), FINBIT)
+#define markfin(o)              setbit(gcomark_(o), FINBIT)
 
 
 /* object is dead if xor (flipped) white bit is set */
-#define isdead(gc, o)		testbits(whitexor(gc), omark_(o))
+#define isdead(gc, o)           testbits(whitexor(gc), gcomark_(o))
 
 
 
@@ -64,15 +64,15 @@
  * ------------------------------------------------------------------------- */
 
 /* GC 'state' */
-#define GCSpropagate		0 /* propagating gray object to black */
-#define GCSenteratomic		1 /* enters atomic state and then moves to sweep phase */
-#define GCSatomic		2 /* propagates and remarks necessary objects */
-#define GCSsweepall		3 /* sweep all regular objects */
-#define GCSsweepfin		4 /* sweep all objects in 'fin' */
-#define GCSsweeptofin		5 /* sweep all objects in 'tobefin' */
-#define GCSsweepend		6 /* state after sweeping */
-#define GCScallfin		7 /* call objects in 'tobefin' */
-#define GCSpause		8 /* starting state (marking roots) */
+#define GCSpropagate            0 /* propagating gray object to black */
+#define GCSenteratomic          1 /* enters atomic and then sweep state */
+#define GCSatomic               2 /* propagates and re-marks objects */
+#define GCSsweepall             3 /* sweep all regular objects */
+#define GCSsweepfin             4 /* sweep all objects in 'fin' */
+#define GCSsweeptofin           5 /* sweep all objects in 'tobefin' */
+#define GCSsweepend             6 /* state after sweeping (unused) */
+#define GCScallfin              7 /* call objects in 'tobefin' */
+#define GCSpause                8 /* starting state (marking roots) */
 
 
 /*
@@ -80,23 +80,24 @@
  * that white objects cannot point to black objects.
  * States that break this invariant are sweep states.
  */
-#define invariantstate(gc)	((gc)->state <= GCSatomic)
+#define invariantstate(gc)      ((gc)->state <= GCSatomic)
 
 /* check if GC is in a sweep state */
-#define sweepstate(gc)		(GCSsweepall <= (gc)->state && (gc)->state <= GCSsweepend)
+#define sweepstate(gc) \
+    (GCSsweepall <= (gc)->state && (gc)->state <= GCSsweepend)
 
 
 /* GC 'stopped' bits */
-#define GCSTP			(1<<0) /* GC stopped by itself */
-#define GCSTPUSR		(1<<1) /* GC stopped by user */
-#define GCSTPCLS		(1<<2) /* GC stopped while closing 'cr_State' */
-#define gcrunning(gc)		((gc)->stopped == 0)
+#define GCSTP                   (1<<0) /* GC stopped by itself */
+#define GCSTPUSR                (1<<1) /* GC stopped by user */
+#define GCSTPCLS                (1<<2) /* GC stopped while freeing 'cr_State' */
+#define gcrunning(gc)           ((gc)->stopped == 0)
 
 
 /* default GC parameters */
-#define CRI_GCSTEPMUL		100 /* 'stepmul' */
-#define CRI_GCSTEPSIZE		14  /* 'stepsize' (log2) */
-#define CRI_GCPAUSE		200 /* after memory doubles begin cycle */
+#define CRI_GCSTEPMUL           100 /* 'stepmul' */
+#define CRI_GCSTEPSIZE          14  /* 'stepsize' (log2) */
+#define CRI_GCPAUSE             200 /* after memory doubles begin cycle */
 
 
 
@@ -109,17 +110,17 @@
  * debt is positive.
  */
 #define checkgc(ts,pre,pos) \
-	{ pre; if (G_(ts)->gc.debt > 0) { cr_gc_step(ts); pos; } \
-	  gcmemchange(ts,pre,pos); }
+        { pre; if (G_(ts)->gc.debt > 0) { crG_step(ts); pos; } \
+          gcmemchange(ts,pre,pos); }
 
 
 /* 'checkgc' but without 'pre' and 'pos' */
-#define cr_gc_check(ts)		checkgc(ts,(void)0,(void)0)
+#define crG_check(ts)           checkgc(ts,(void)0,(void)0)
 
 
 
 /* get total bytes allocated (by accounting for 'debt') */
-#define totalbytes(gc)		cast(cr_umem, ((gc)->total - (gc)->debt))
+#define totalbytes(gc)          cast(cr_umem, ((gc)->total - (gc)->debt))
 
 
 
@@ -128,83 +129,83 @@
  * ------------------------------------------------------------------------- */
 
 /*
- * Same as 'cr_gc_barrierforward_' but ensures that it is only
+ * Same as 'crG_barrierforward_' but ensures that it is only
  * called when 'r' (root) is a black object and 'o' is white.
  */
-#define cr_gc_objbarrier(ts,r,o) \
-	(isblack(r) && iswhite(o) ? \
-	cr_gc_barrier_(ts,obj2gco(r),obj2gco(o)) : (void)(0))
+#define crG_objbarrier(ts,r,o) \
+        (isblack(r) && iswhite(o) ? \
+        crG_barrier_(ts,obj2gco(r),obj2gco(o)) : (void)(0))
 
 /*
- * Wrapper around 'cr_gc_objbarrierforward' that ensures
+ * Wrapper around 'crG_objbarrierforward' that ensures
  * 'v' (pointed to value) is object.
  */
-#define cr_gc_barrier(ts,r,v) \
-	(ttiso(v) ? cr_gc_objbarrier(ts,r,oval(v)) : (void)(0))
+#define crG_barrier(ts,r,v) \
+        (ttiso(v) ? crG_objbarrier(ts,r,gcoval(v)) : (void)(0))
 
 /*
- * Same as 'cr_gc_barrierback_' but ensures that it is only
+ * Same as 'crG_barrierback_' but ensures that it is only
  * called when 'r' (root) is a black object and 'o' is white.
  */
-#define cr_gc_objbarrierback(ts,r,o) \
-	(isblack(r) && iswhite(o) ? \
-	cr_gc_barrierback_(ts,objtogco(r)) : (void)(0))
+#define crG_objbarrierback(ts,r,o) \
+        (isblack(r) && iswhite(o) ? \
+        crG_barrierback_(ts,objtogco(r)) : (void)(0))
 
 /*
- * Wrapper around 'cr_gc_objbarrierback' that ensures
+ * Wrapper around 'crG_objbarrierback' that ensures
  * 'v' (pointed to value) is object.
  */
-#define cr_gc_barrierback(ts,r,v) \
-	(ttiso(v) ? cr_gc_objbarrierback(ts,r,oval(v)) : (void)(0))
+#define crG_barrierback(ts,r,v) \
+        (ttiso(v) ? crG_objbarrierback(ts,r,gcoval(v)) : (void)(0))
 
 
 
 /* to allow a maximum value of up to 1023 in a 'cr_ubyte' */
-#define getgcparam(p)		((p) << 2)
-#define setgcparam(p,v)		((p) = (v) >> 2)
+#define getgcparam(p)           ((p) * 4)
+#define setgcparam(p,v)         ((p) = (v) / 4)
 
 
 /* allocate new GC object */
-#define cr_gc_new(ts,s,tt,t)	cast(t *, cr_gc_new_(ts, s, tt))
+#define crG_new(ts,s,tt,t)      cast(t *, crG_new_(ts, s, tt))
 
 
 
 /* garbage collector parameters and state */
 typedef struct GC {
-	crM next; /* next byte threshold when GC triggers */
-	crM allocated; /* number of allocated bytes ? REMOVE */
-	crM debt; /* memory unaccounted by collector */
-	crM total; /* total memory in use in bytes - 'debt' */
-	cr_umem estimate; /* estimate of non-garbage memory in use */
-	GCObject *objects; /* list of all GC objects */
-	GCObject **sweeppos; /* current position of sweep in list */
-	GCObject *graylist; /* list of gray objects */
-	GCObject *grayagain; /* list of objects to be traversed atomically */
-	GCObject *weak; /* list of all weak hashtables (key & value) */
-	GCObject *fixed; /* list of fixed objects (not to be collected) */
-	GCObject *fin; /* list of objects that have finalizer */
-	GCObject *tobefin; /* list of objects to be finalized (pending) */
-	cr_ubyte pause; /* how long to wait until next cycle */
-	cr_ubyte stepmul; /* GC heap grow speed */
-	cr_ubyte stepsize; /* step size in bytes (log2) */
-	cr_ubyte state; /* GC state bits */
-	cr_ubyte stopped; /* collector is stopped bits */
-	cr_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
-	cr_ubyte isem; /* true if this is emergency collection */
-	cr_ubyte stopem; /* stop emergency collection */
+        cr_mem next; /* next byte threshold when GC triggers */
+        cr_mem allocated; /* number of allocated bytes ? REMOVE */
+        cr_mem debt; /* memory unaccounted by collector */
+        cr_mem total; /* total memory in use in bytes - 'debt' */
+        cr_umem estimate; /* estimate of non-garbage memory in use */
+        GCObject *objects; /* list of all GC objects */
+        GCObject **sweeppos; /* current position of sweep in list */
+        GCObject *graylist; /* list of gray objects */
+        GCObject *grayagain; /* list of objects to be traversed atomically */
+        GCObject *weak; /* list of all weak hashtables (key & value) */
+        GCObject *fixed; /* list of fixed objects (not to be collected) */
+        GCObject *fin; /* list of objects that have finalizer */
+        GCObject *tobefin; /* list of objects to be finalized (pending) */
+        cr_ubyte pause; /* how long to wait until next cycle */
+        cr_ubyte stepmul; /* GC heap grow speed */
+        cr_ubyte stepsize; /* step size in bytes (log2) */
+        cr_ubyte state; /* GC state bits */
+        cr_ubyte stopped; /* collector is stopped bits */
+        cr_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
+        cr_ubyte isem; /* true if this is emergency collection */
+        cr_ubyte stopem; /* stop emergency collection */
 } GC;
 
 
-CRI_FUNC void cr_gc_init(GC *gc);
-CRI_FUNC GCObject *cr_gc_new_(cr_State *ts, size_t size, cr_ubyte ott);
-CRI_FUNC void cr_gc_step(cr_State *ts);
-CRI_FUNC void cr_gc_full(cr_State *ts, int isemergency);
-CRI_FUNC void cr_gc_rununtilstate(cr_State *ts, int statemask);
-CRI_FUNC void cr_gc_freeallobjects(cr_State *ts);
-CRI_FUNC void cr_gc_checkfin(cr_State *ts, GCObject *o, VMT vtable);
-CRI_FUNC void cr_gc_fix(cr_State *ts, GCObject *o);
-CRI_FUNC void cr_gc_barrier_(cr_State *ts, GCObject *r, GCObject *o);
-CRI_FUNC void cr_gc_barrierback_(cr_State *ts, GCObject *r);
-CRI_FUNC void cr_gc_setdebt(GC *gc, crM debt);
+CRI_FUNC void crG_init(GC *gc, cr_State *ts, size_t LGsize);
+CRI_FUNC GCObject *crG_new_(cr_State *ts, size_t size, cr_ubyte ott);
+CRI_FUNC void crG_step(cr_State *ts);
+CRI_FUNC void crG_full(cr_State *ts, int isemergency);
+CRI_FUNC void crG_rununtilstate(cr_State *ts, int statemask);
+CRI_FUNC void crG_freeallobjects(cr_State *ts);
+CRI_FUNC void crG_checkfin(cr_State *ts, GCObject *o, VMT vtable);
+CRI_FUNC void crG_fix(cr_State *ts, GCObject *o);
+CRI_FUNC void crG_barrier_(cr_State *ts, GCObject *r, GCObject *o);
+CRI_FUNC void crG_barrierback_(cr_State *ts, GCObject *r);
+CRI_FUNC void crG_setdebt(GC *gc, cr_mem debt);
 
 #endif
