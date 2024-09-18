@@ -20,9 +20,9 @@
 #include "crstate.h"
 
 
-#define crM_rawmalloc(gs,s)         (gs)->falloc(NULL, 0, s, (gs)->udrealloc)
-#define crM_rawrealloc(gs,p,os,ns)  (gs)->falloc(p, os, ns, (gs)->udrealloc)
-#define crM_rawfree(gs,p,osz)       (gs)->falloc(p, osz, 0, (gs)->udrealloc)
+#define crM_rawmalloc(gs,s)         (gs)->falloc(NULL, 0, s, (gs)->udalloc)
+#define crM_rawrealloc(gs,p,os,ns)  (gs)->falloc(p, os, ns, (gs)->udalloc)
+#define crM_rawfree(gs,p,osz)       (gs)->falloc(p, osz, 0, (gs)->udalloc)
 
 
 /* can try to allocate second time */

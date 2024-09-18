@@ -156,9 +156,9 @@ int crS_hexvalue(int c) {
 /*
  * Convert string to Cript integer.
  * This function can convert hexadecimal, octal
- * and decimal strings to 'cr_integer'.
+ * and decimal strings to 'cr_Integer'.
  */
-static const char *otstr2int(const char *s, cr_integer *i, int *overflow) {
+static const char *otstr2int(const char *s, cr_Integer *i, int *overflow) {
     cr_uinteger u = 0;
     int ngcoval, digit, sign;
     sign = ngcoval = 1;
@@ -210,7 +210,7 @@ static const char *otstr2int(const char *s, cr_integer *i, int *overflow) {
 }
 
 
-static const char *otstr2flt(const char *s, cr_number *n, int *of) {
+static const char *otstr2flt(const char *s, cr_Number *n, int *of) {
     char *eptr;
 
     *of = 0;
@@ -232,10 +232,10 @@ static const char *otstr2flt(const char *s, cr_number *n, int *of) {
 }
 
 
-/* convert string to 'cr_number' or 'cr_integer' */
+/* convert string to 'cr_Number' or 'cr_Integer' */
 size_t crS_tonum(const char *s, TValue *o, int *of) {
-    cr_integer i;
-    cr_number n;
+    cr_Integer i;
+    cr_Number n;
     const char *e;
     int iof;
 
@@ -265,9 +265,9 @@ static int otnum2buff(const TValue *nv, char *buff) {
     size_t len;
     cr_assert(ttisnum(nv));
     if (ttisint(nv)) {
-        len = cr_integer2str(buff, MAXNUM2STR, ival(nv));
+        len = cr_Integer2str(buff, MAXNUM2STR, ival(nv));
     } else {
-        len = cr_number2str(buff, MAXNUM2STR, fval(nv));
+        len = cr_Number2str(buff, MAXNUM2STR, fval(nv));
         /* if it looks like integer append '.0' */
         if (strspn(buff, "-0123456789") == len) {
             buff[len++] = *localeconv()->decimal_point;
@@ -386,13 +386,13 @@ const char *crS_pushvfstring(cr_State *ts, const char *fmt, va_list argp) {
             buffaddnum(&buff, &nv);
             break;
         }
-        case 'I': { /* 'cr_integer' */
-            setival(&nv, va_arg(argp, cr_integer));
+        case 'I': { /* 'cr_Integer' */
+            setival(&nv, va_arg(argp, cr_Integer));
             buffaddnum(&buff, &nv);
             break;
         }
-        case 'N': { /* 'cr_number' */
-            setival(&nv, va_arg(argp, cr_number));
+        case 'N': { /* 'cr_Number' */
+            setival(&nv, va_arg(argp, cr_Number));
             buffaddnum(&buff, &nv);
             break;
         }

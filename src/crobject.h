@@ -26,8 +26,8 @@
  * Additional types that are used only internally
  * or as markers.
  */
-#define CR_TUVALUE      CR_NUMTYPES             /* upvalue */
-#define CR_THTABLE      (CR_NUMTYPES + 1)       /* hashtable */
+#define CR_TUVALUE      CR_NUM_TYPES            /* upvalue */
+#define CR_THTABLE      (CR_NUM_TYPES + 1)      /* hashtable */
 
 
 /* number of all types ('CR_T*') including 'CR_TNONE' */
@@ -53,8 +53,8 @@ CRI_DEC(const char *const crO_typenames[CR_TOTALTYPES]);
 /* Cript values */
 typedef union Value {
     int b; /* boolean */
-    cr_integer i; /* integer */
-    cr_number n; /* float */
+    cr_Integer i; /* integer */
+    cr_Number n; /* float */
     void *p; /* light userdata */
     cr_CFunction cfn; /* C function */
     struct GCObject *obj; /* collectable value */
@@ -569,13 +569,13 @@ typedef struct Function {
 typedef struct CrClosure {
     ClosureHeader;
     Function *fn;
-    UpVal *upvalue[];
+    UpVal *upvals[];
 } CrClosure;
 
 
 /* size of 'CrClosure' */
 #define sizeofcrcl(nup) \
-    (offsetof(CrClosure, upvalue) + ((nup) * sizeof(UpVal)))
+    (offsetof(CrClosure, upvals) + ((nup) * sizeof(UpVal)))
 
 
 
@@ -593,12 +593,12 @@ typedef struct CrClosure {
 typedef struct {
     ClosureHeader;
     cr_CFunction fn;
-    TValue upvalue[];
+    TValue upvals[];
 } CClosure;
 
 
 #define sizeofccl(nup) \
-    (offsetof(CClosure, upvalue) + ((nup) * sizeof(TValue)))
+    (offsetof(CClosure, upvals) + ((nup) * sizeof(TValue)))
 
 
 
@@ -620,11 +620,8 @@ typedef union Closure {
  * OClass
  * -------------------------------------------------------------------------- */
 
-/* virtual method table */
-typedef TValue VMT[CR_NUM_META];
-
 /* number of elements in VMT */
-#define VMTELEMS     (sizeof(VMT)/sizeof(TValue))
+#define SIZEVMT     (sizeof(TValue)*CR_NUM_META)
 
 
 #define CR_VCLASS       makevariant(CR_TCLASS, 0)
@@ -638,9 +635,8 @@ typedef TValue VMT[CR_NUM_META];
 
 typedef struct OClass {
     ObjectHeader;
-    OString *name;
+    TValue *vmt;
     HTable *methods;
-    VMT vtable;
     GCObject *gclist;
 } OClass;
 
@@ -703,10 +699,9 @@ typedef struct InstanceMethod {
 
 typedef struct UserData {
     ObjectHeader;
-    cr_ubyte vmtempty; /* true if 'vtable' is empty */
+    TValue *vmt;
     int nuv; /* number of 'uservalues' */
     size_t size; /* size of 'UserData' memory in bytes */
-    VMT vtable;
     GCObject *gclist;
     TValue uv[]; /* user values */
     /* 'UserData' memory starts here */
@@ -729,7 +724,7 @@ typedef struct EmptyUserData {
     cr_ubyte vmtempty; /* true if 'vtable' is empty */
     int nuv; /* number of 'uservalues' */
     size_t size; /* size of 'UserData' memory in bytes */
-    VMT vtable;
+    TValue *vmt;
     union {CRI_MAXALIGN} usermem;
     /* 'UserData' memory starts here */
 } EmptyUserData;
@@ -748,8 +743,8 @@ typedef struct EmptyUserData {
 
 
 /*
- * Conversion modes when converting 'cr_integer'
- * into 'cr_number'.
+ * Conversion modes when converting 'cr_Integer'
+ * into 'cr_Number'.
  */
 typedef enum N2IMode {
     CR_N2IFLOOR,
@@ -758,22 +753,22 @@ typedef enum N2IMode {
 } N2IMode;
 
 
-/* convert value to 'cr_integer' */
+/* convert value to 'cr_Integer' */
 #define tointeger(v,i) \
     (cr_likely(ttisint(v)) \
      ? (*(i) = ival(v), 1) \
      : crO_tointeger(v, i, CR_N2IFLOOR))
 
 
-/* convert value to 'cr_number' */
+/* convert value to 'cr_Number' */
 #define tonumber(v,n) \
     (cr_likely(ttisflt(v)) \
      ? (*(n) = fval(v), 1) \
-     : cr_likely(ttisint(v)) ? (*(n) = ival(v), 1) : 0)
+     : (ttisint(v)) ? (*(n) = ival(v), 1) : 0)
 
 
 /* same as right shift but indicate left by making 'y' negative */
-#define crO_shiftl(x,y)    crO_shiftr(x, -y)
+#define crO_shiftl(x,y)    crO_shiftr(x, -(y))
 
 
 /* hash primitives */
@@ -782,15 +777,15 @@ typedef enum N2IMode {
 #define crO_hashp(p)       pointer2uint(p)
 
 
-CRI_FUNC uint crO_hashnum(cr_number n);
+CRI_FUNC uint crO_hashnum(cr_Number n);
 CRI_FUNC int crO_ceillog2(uint x);
-CRI_FUNC int crO_n2i(cr_number n, cr_integer *i, N2IMode mode);
-CRI_FUNC int crO_tointeger(const TValue *v, cr_integer *i, int mode);
+CRI_FUNC int crO_n2i(cr_Number n, cr_Integer *i, N2IMode mode);
+CRI_FUNC int crO_tointeger(const TValue *v, cr_Integer *i, int mode);
 
-CRI_FUNC cr_integer crO_div(cr_State *ts, cr_integer x, cr_integer y);
-CRI_FUNC cr_integer crO_modint(cr_State *ts, cr_integer x, cr_integer y);
-CRI_FUNC cr_number crO_modnum(cr_State *ts, cr_number x, cr_number y);
-CRI_FUNC cr_integer crO_shiftr(cr_integer x, cr_integer y);
+CRI_FUNC cr_Integer crO_div(cr_State *ts, cr_Integer x, cr_Integer y);
+CRI_FUNC cr_Integer crO_modint(cr_State *ts, cr_Integer x, cr_Integer y);
+CRI_FUNC cr_Number crO_modnum(cr_State *ts, cr_Number x, cr_Number y);
+CRI_FUNC cr_Integer crO_shiftr(cr_Integer x, cr_Integer y);
 
 CRI_FUNC void crO_arithm(cr_State *ts, const TValue *a, const TValue *b,
                               SPtr res, int op);

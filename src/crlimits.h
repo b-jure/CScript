@@ -61,10 +61,10 @@ typedef unsigned short ushrt;
 
 /*
  * Maximum size visible for cript.
- * It must be less than what is representable by 'cr_integer'.
+ * It must be less than what is representable by 'cr_Integer'.
  */
 #define CRMAXSIZE \
-    (sizeof(size_t) < sizeof(cr_integer) ? \
+    (sizeof(size_t) < sizeof(cr_Integer) ? \
         (SIZE_MAX) : (size_t)(CR_INTEGER_MAX))
 
 
@@ -301,7 +301,7 @@ typedef cr_ubyte Instruction;
 #define cast_ubyte(e)       cast(cr_ubyte,(e))
 #define cast_ubytep(e)      cast(cr_ubyte*,(e))
 #define cast_byte(e)        cast(cr_byte,(e))
-#define cast_num(e)         cast(cr_number,(e))
+#define cast_num(e)         cast(cr_Number,(e))
 #define cast_int(e)         cast(int,(e))
 #define cast_uint(e)        cast(uint,(e))
 #define cast_umem(e)        cast(cr_umem,(e))
@@ -309,11 +309,11 @@ typedef cr_ubyte Instruction;
 #define cast_charp(e)       cast(char *,(e))
 #define cast_sizet(e)       cast(size_t,(e))
 
-/* cast 'cr_integer' to 'cr_uinteger' */
+/* cast 'cr_Integer' to 'cr_uinteger' */
 #define cri_castS2U(i)      ((cr_uinteger)(i))
 
-/* cast 'cr_uinteger' to 'cr_integer' */
-#define cri_castU2S(i)      ((cr_integer)(i))
+/* cast 'cr_uinteger' to 'cr_Integer' */
+#define cri_castU2S(i)      ((cr_Integer)(i))
 
 
 
@@ -387,16 +387,15 @@ typedef cr_ubyte Instruction;
 
 
 /*
- * @crD_STRESS_GC - enables stress test for garbage
- * collector, on each tracked memory change it performs
- * full garbage collection.
- */
-#if defined(crD_STRESS_GC)
+** @CR_STRESS_GC - enables stress test for garbage
+** collector, on each tracked memory change it performs
+** full garbage collection.
+*/
+#if defined(CR_STRESS_GC)
 #define gcmemchange(ts,pre,pos) \
-        { if (gcrunning(G_(ts)->gc)) { pre; crG_full(ts); pos; } }
+    { if (gcrunning(G_(ts)->gc)) { pre; crG_full(ts); pos; } }
 #else
 #define gcmemchange(ts,pre,pos)         ((void)0)
 #endif
-
 
 #endif

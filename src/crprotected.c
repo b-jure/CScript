@@ -12,14 +12,14 @@
 ** error handler or invoke panic if hook for it is present.
 ** In case none of the above occurs, program is aborted.
 */
-cr_noret crT_throw(cr_State *ts, int code) {
+cr_noret crPr_throw(cr_State *ts, int code) {
     if (ts->errjmp) /* thread has error recovery jump ? */
         CRI_THROW(ts, ts->errjmp);
     GState *gs = G_(ts);
     if (gs->mainthread->errjmp) {
         /* copy over error object */
         setobj2s(ts, gs->mainthread->sp.p++, s2v(ts->sp.p));
-        crT_throw(ts, code);
+        crPr_throw(ts, code);
     } else if (gs->panic) {
         cr_unlock(ts);
         gs->panic(ts);

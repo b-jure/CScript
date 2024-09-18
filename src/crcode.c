@@ -35,7 +35,7 @@
 
 /* OpCode properties table */
 CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
-    /*     m  j  t  f      */
+    /*     M  J  T  F      */
     opProp(0, 0, 0, FormatI), /* OP_TRUE */
     opProp(0, 0, 0, FormatI), /* OP_FALSE */
     opProp(0, 0, 0, FormatI), /* OP_NIL */
@@ -138,6 +138,19 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatI), /* OP_RET0 */
     opProp(0, 0, 0, FormatIL), /* OP_RET1 */
     opProp(0, 0, 0, FormatILLL), /* OP_RET */
+};
+
+
+/* OpFormat size table */
+CRI_DEF const cr_ubyte crC_opSize[FormatN] = {
+    1,  /* FormatI */
+    2,  /* FormatIS */
+    3,  /* FormatISS */
+    4,  /* FormatIL */
+    5,  /* FormatILS */
+    6,  /* FormatILSS */
+    7,  /* FormatILL */
+    10, /* FormatILLL */
 };
 
 
@@ -260,13 +273,13 @@ static int falseK(FunctionState *fs) {
 /* add string constant to 'constants' */
 static int stringK(FunctionState *fs, OString *s) {
     TValue vs;
-    setgcoval(&vs, obj2gco(s));
+    setstrval(fs->ts, &vs, s);
     return addK(fs, &vs);
 }
 
 
 /* add integer constant to 'constants' */
-static int intK(FunctionState *fs, cr_integer i) {
+static int intK(FunctionState *fs, cr_Integer i) {
     TValue vi;
     setival(&vi, i);
     return addK(fs, &vi);
@@ -274,7 +287,7 @@ static int intK(FunctionState *fs, cr_integer i) {
 
 
 /* add float constant to 'constants' */
-static int fltK(FunctionState *fs, cr_number n) {
+static int fltK(FunctionState *fs, cr_Number n) {
     TValue vn;
     setfval(&vn, n);
     return addK(fs, &vn);
@@ -394,7 +407,7 @@ static int isintKL(ExpInfo *e) {
 
 /* check if 'e' is numeral constant and fits inside of large arg */
 static int isnumKL(ExpInfo *e, int *immediate, int *isflt) {
-    cr_integer i;
+    cr_Integer i;
     if (e->et == EXP_INT)
         i = e->u.i;
     else if (e->et == EXP_FLT && crO_n2i(e->u.n, &i, CR_N2IFLOOR))
@@ -570,7 +583,7 @@ static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 
 
 /* emit integer constant */
-static int codeintK(FunctionState *fs, cr_integer i) {
+static int codeintK(FunctionState *fs, cr_Integer i) {
     if (fitsLA(i))
         return emitILS(fs, OP_CONSTI, cri_abs(i), i < 0);
     else
@@ -579,8 +592,8 @@ static int codeintK(FunctionState *fs, cr_integer i) {
 
 
 /* emit float constant */
-static int codefltK(FunctionState *fs, cr_number n) {
-    cr_integer i;
+static int codefltK(FunctionState *fs, cr_Number n) {
+    cr_Integer i;
     if (crO_n2i(n, &i, CR_N2IFLOOR) && fitsLA(i))
         return emitILS(fs, OP_CONSTF, cri_abs(i), i < 0);
     else
@@ -681,7 +694,7 @@ static int validop(TValue *v1, TValue *v2, int op) {
     switch (op) {
     case CR_OPBSHR: case CR_OPBSHL: case CR_OPBAND:
     case CR_OPBOR: case CR_OPBXOR: case CR_OPBNOT: { /* conversion */
-        cr_integer i;
+        cr_Integer i;
         return (tointeger(v1, &i) && tointeger(v2, &i));
     }
     case CR_OPDIV: case CR_OPMOD: { /* division by 0 */
@@ -714,7 +727,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
         e1->et = EXP_INT;
         e1->u.i = ival(&res);
     } else {
-        cr_number n = fval(&res);
+        cr_Number n = fval(&res);
         if (n == 0 || cri_numisnan(n))
             return 0;
         e1->et = EXP_FLT;
@@ -959,7 +972,7 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                      int flip)
 {
-    OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
+    OpCode op = binopr2op(opr, OPR_ADD, OP_ADDK);
     int idxK = e2->u.info; /* index into 'constants' */
     cr_assert(e2->et == EXP_K);
     cr_assert(OP_ADD <= op && op <= OP_RANGE);

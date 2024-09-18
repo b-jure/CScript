@@ -140,7 +140,7 @@ CR_API cr_State *cr_newstate(cr_fAlloc falloc, void *ud) {
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
     gs->mainthread = ts;
     gs->thwouv = NULL;
-    for (int i = 0; i < CR_NUMTYPES; i++)
+    for (int i = 0; i < CR_NUM_TYPES; i++)
         gs->vmt[i] = NULL;
     if (crPr_rawcall(ts, fnewstate, NULL) != CR_OK) {
         cr_freestate(ts);
@@ -208,7 +208,7 @@ int crT_reallocstack(cr_State *ts, int size, int raiseerr) {
     if (cr_unlikely(newstack == NULL)) {
         offsets2stackptrs(ts);
         if (raiseerr)
-            crT_throw(ts, CR_ERRMEM);
+            crPr_throw(ts, CR_ERRMEM);
         return 0;
     }
     offsets2stackptrs(ts);
@@ -226,7 +226,7 @@ int crT_growstack(cr_State *ts, int n, int raiseerr) {
     if (cr_unlikely(size > CRI_MAXSTACK)) { /* overflowed already ? */
         cr_assert(size == OVERFLOWSTACKSIZE);
         if (raiseerr)
-            crT_throw(ts, CR_ERRERROR);
+            crPr_throw(ts, CR_ERRERROR);
         return 0;
     }
     if (cr_unlikely(n > CRI_MAXSTACK)) {
@@ -279,7 +279,7 @@ void crT_shrinkstack(cr_State *ts) {
 
 /* increment stack pointer */
 void crT_incsp(cr_State *ts) {
-    checkstack(ts, 1);
+    crT_checkstack(ts, 1);
     ts->sp.p++;
 }
 
@@ -295,7 +295,7 @@ void crT_checkCstack(cr_State *ts) {
     if (getnC_(ts) == CRI_MAXCCALLS) /* not handling erorr ? */
         crD_runerror(ts, "C stack overflow");
     else if (getnC_(ts) >= (CRI_MAXCCALLS / 10 * 11))
-        crT_throw(ts, CR_ERRERROR);
+        crPr_throw(ts, CR_ERRERROR);
 }
 
 

@@ -32,13 +32,12 @@ CRI_DEF const char *const crO_typenames[CR_TOTALTYPES] = {
 };
 
 
-/* hash 'cr_number' */
-uint crO_hashnum(cr_number n)
-{
-    cr_integer ni;
+/* hash 'cr_Number' */
+uint crO_hashnum(cr_Number n) {
+    cr_Integer ni;
     int exp;
     n = cr_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
-    if (cr_likely(cr_number2integer(n,&ni))) {
+    if (cr_likely(cr_Number2integer(n,&ni))) {
         uint ui = cast_uint(exp) + cast_uint(ni);
         return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
     }
@@ -48,8 +47,7 @@ uint crO_hashnum(cr_number n)
 
 
 /* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
-int cr_ve_ceillog2 (uint x)
-{
+int cr_ve_ceillog2 (uint x) {
     static const cr_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
         0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
         6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
@@ -71,9 +69,8 @@ int cr_ve_ceillog2 (uint x)
  * Integer division; handles division by 0 and possible
  * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
  */
-cr_integer crO_div(cr_State *ts, cr_integer x, cr_integer y)
-{
-    if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* y == '0' or '-1' */
+cr_Integer crO_div(cr_State *ts, cr_Integer x, cr_Integer y) {
+    if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
             crD_runerror(ts, "division by 0");
         return cri_intop(-, 0, x);
@@ -86,9 +83,8 @@ cr_integer crO_div(cr_State *ts, cr_integer x, cr_integer y)
  * Integer modulus; handles modulo by 0 and overflow
  * as explained in 'crO_div()'.
  */
-cr_integer crO_modint(cr_State *ts, cr_integer x, cr_integer y)
-{
-    cr_integer r;
+cr_Integer crO_modint(cr_State *ts, cr_Integer x, cr_Integer y) {
+    cr_Integer r;
     if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) {
         if (y == 0)
             crD_runerror(ts, "attempt to x%%0");
@@ -100,21 +96,19 @@ cr_integer crO_modint(cr_State *ts, cr_integer x, cr_integer y)
 
 
 /* floating point modulus */
-cr_number crO_modnum(cr_State *ts, cr_number x, cr_number y)
-{
-    cr_number r;
+cr_Number crO_modnum(cr_State *ts, cr_Number x, cr_Number y) {
+    cr_Number r;
     cri_nummod(ts, x, y, r);
     return r;
 }
 
 
-/* number of bits in 'cr_integer' */
-#define INTBITS         cast_int((sizeof(cr_integer)*8))
+/* number of bits in 'cr_Integer' */
+#define INTBITS         cast_int((sizeof(cr_Integer)*8))
 
 
 /* shift 'x', 'y' times, in case of overflow return 0 */
-cr_integer crO_shiftr(cr_integer x, cr_integer y)
-{
+cr_Integer crO_shiftr(cr_Integer x, cr_Integer y) {
     if (y < 0) {
         if (y <= -INTBITS) return 0;
         return (x << y);
@@ -125,8 +119,7 @@ cr_integer crO_shiftr(cr_integer x, cr_integer y)
 }
 
 
-static cr_number numarithm(cr_State *ts, cr_number x, cr_number y, int op)
-{
+static cr_Number numarithm(cr_State *ts, cr_Number x, cr_Number y, int op) {
     switch(op) {
     case CR_OPADD: return cri_numadd(ts, x, y);
     case CR_OPSUB: return cri_numsub(ts, x, y);
@@ -141,8 +134,7 @@ static cr_number numarithm(cr_State *ts, cr_number x, cr_number y, int op)
 }
 
 
-static cr_integer intarithm(cr_State *ts, cr_integer x, cr_integer y, int op)
-{
+static cr_Integer intarithm(cr_State *ts, cr_Integer x, cr_Integer y, int op) {
     switch(op) {
     case CR_OPADD: return cri_intop(+, x, y);
     case CR_OPSUB: return cri_intop(-, x, y);
@@ -164,20 +156,18 @@ static cr_integer intarithm(cr_State *ts, cr_integer x, cr_integer y, int op)
 
 
 /* convert number 'n' to integer according to 'mode' */
-int crO_n2i(cr_number n, cr_integer *i, N2IMode mode)
-{
-    cr_number floored = cr_floor(n);
+int crO_n2i(cr_Number n, cr_Integer *i, N2IMode mode) {
+    cr_Number floored = cr_floor(n);
     if (floored != n) {
         if (mode == CR_N2IEXACT) return 0;
         else if (mode == CR_N2ICEIL) floored++;
     }
-    return cr_number2integer(n, i);
+    return cr_Number2integer(n, i);
 }
 
 
-/* try to convert value to 'cr_integer' */
-int crO_tointeger(const TValue *v, cr_integer *i, int mode)
-{
+/* try to convert value to 'cr_Integer' */
+int crO_tointeger(const TValue *v, cr_Integer *i, int mode) {
     if (ttisnum(v)) {
         return crO_n2i(fval(v), i, mode);
     } else if (ttisint(v)) {
@@ -195,13 +185,13 @@ int crO_tointeger(const TValue *v, cr_integer *i, int mode)
  * done then return 0.
  */
 int crO_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
-                       TValue *res, int op)
+                  TValue *res, int op)
 {
-    cr_number n1, n2;
+    cr_Number n1, n2;
     switch (op) {
     case CR_OPBNOT: case CR_OPBXOR: case CR_OPBSHL:
     case CR_OPBSHR: case CR_OPBOR: case CR_OPBAND: {
-        cr_integer i1, i2;
+        cr_Integer i1, i2;
         if (tointeger(a, &i1) && tointeger(b, &i2)) {
             setival(res, intarithm(ts, i1, i2, op));
             return 1;
@@ -242,7 +232,8 @@ int crO_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
  * to call overloaded methods such as '__add__', '__umin__', etc...,
  * in case raw arithmetic fails.
  */
-void crO_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res, int op)
+void crO_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
+                int op)
 {
     if (!crO_arithmraw(ts, v1, v2, s2v(res), op))
         crMm_arithm(ts, v1, v2, res, (op - CR_OPADD) + CR_META_ADD);
@@ -255,31 +246,28 @@ void crO_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res, int 
  * operand is converted, without change of type domain, to a type whose
  * corresponding real type is double."
  */
-cr_sinline int intLEnum(cr_State *ts, const TValue *v1, const TValue *v2)
-{
+cr_sinline int intLEnum(cr_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
     return cri_numle(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
-cr_sinline int numLEint(cr_State *ts, const TValue *v1, const TValue *v2)
-{
+cr_sinline int numLEint(cr_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
     return cri_numle(fval(v1), cast_num(ival(v2)));
 }
 
 
 /* less equal ordering on numbers */
-cr_sinline int numLE(cr_State *ts, const TValue *v1, const TValue *v2)
-{
+cr_sinline int numLE(cr_State *ts, const TValue *v1, const TValue *v2) {
     cr_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
-        cr_integer i1 = ival(v1);
+        cr_Integer i1 = ival(v1);
         if (ttisint(v2)) return (i1 <= ival(v2));
         else return intLEnum(ts, v1, v2);
     } else {
-        cr_number n1 = fval(v1);
+        cr_Number n1 = fval(v1);
         if (ttisint(v2)) return numLEint(ts, v1, v2);
         else return cri_numlt(n1, fval(v2));
     }
@@ -287,8 +275,7 @@ cr_sinline int numLE(cr_State *ts, const TValue *v1, const TValue *v2)
 
 
 /* less equal ordering on non-number values */
-cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2)
-{
+cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
         return (crS_cmp(strval(v1), strval(v2)) <= 0);
     else
@@ -297,8 +284,7 @@ cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2)
 
 
 /* 'less or equal' ordering '<=' */
-int crO_orderLE(cr_State *ts, const TValue *v1, const TValue *v2)
-{
+int crO_orderLE(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
         return numLE(ts, v1, v2);
     return otherLE(ts, v1, v2);
@@ -306,29 +292,26 @@ int crO_orderLE(cr_State *ts, const TValue *v1, const TValue *v2)
 
 
 /* check 'intLEnum' */
-cr_sinline int intLTnum(const TValue *v1, const TValue *v2)
-{
+cr_sinline int intLTnum(const TValue *v1, const TValue *v2) {
     return cri_numlt(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
-cr_sinline int numLTint(const TValue *v1, const TValue *v2)
-{
+cr_sinline int numLTint(const TValue *v1, const TValue *v2) {
     return cri_numlt(fval(v1), cast_num(ival(v2)));
 }
 
 
 /* 'less than' ordering '<' on number values */
-cr_sinline int numLT(const TValue *v1, const TValue *v2)
-{
+cr_sinline int numLT(const TValue *v1, const TValue *v2) {
     cr_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
-        cr_integer i1 = ival(v1);
+        cr_Integer i1 = ival(v1);
         if (ttisint(v2)) return (i1 <= ival(v2));
         else return intLTnum(v1, v2);
     } else {
-        cr_number n1 = fval(v1);
+        cr_Number n1 = fval(v1);
         if (ttisint(v2)) return numLTint(v1, v2);
         else return cri_numlt(n1, fval(v2));
     }
@@ -336,8 +319,7 @@ cr_sinline int numLT(const TValue *v1, const TValue *v2)
 
 
 /* 'less than' ordering '<' on non-number values */
-cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2)
-{
+cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
         return (crS_cmp(strval(v1), strval(v2)) < 0);
     else
@@ -346,8 +328,7 @@ cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2)
 
 
 /* 'less than' ordering '<' */
-int crO_orderLT(cr_State *ts, const TValue *v1, const TValue *v2)
-{
+int crO_orderLT(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
         return numLT(v1, v2);
     return otherLT(ts, v1, v2);
@@ -355,9 +336,8 @@ int crO_orderLT(cr_State *ts, const TValue *v1, const TValue *v2)
 
 
 /* 'equality' ordering '==' */
-int crO_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2)
-{
-    cr_integer i1, i2;
+int crO_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
+    cr_Integer i1, i2;
     const TValue *method;
     const TValue *selfarg;
     if (ttypetag(v1) != ttypetag(v2)) {

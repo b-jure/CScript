@@ -266,7 +266,7 @@ static void markobject_(GC *gc, GCObject *o) {
     }
     case CR_VUDATA: {
         UserData *ud = gco2ud(o);
-        if (ud->nuv == 0 && ud->vmtempty) {
+        if (ud->nuv == 0 && !ud->vmt) {
             markblack(ud);
             break;
         }
@@ -282,7 +282,8 @@ static void markobject_(GC *gc, GCObject *o) {
 
 
 /* mark 'VMT' */
-cr_sinline cr_mem markvmt(GC *gc, VMT vmt) {
+cr_sinline cr_mem markvmt(GC *gc, TValue *vmt) {
+    cr_assert(vmt != NULL);
     for (int i = 0; i < CR_NUM_META; i++)
         if (!ttisnil(&vmt[i]))
             markvalue(gc, &vmt[i]);
@@ -328,7 +329,7 @@ static cr_mem markfunction(GC *gs, Function *fn) {
 /* mark 'CClosure' */
 static cr_mem markcclosure(GC *gc, CClosure *ccl) {
     for (int i = 0; i < ccl->nupvalues; i++)
-        markvalue(gc, &ccl->upvalue[i]);
+        markvalue(gc, &ccl->upvals[i]);
     return 1 + ccl->nupvalues;
 }
 
@@ -337,24 +338,23 @@ static cr_mem markcclosure(GC *gc, CClosure *ccl) {
 static cr_mem markcriptclosure(GC *gc, CrClosure *crcl) {
     markobjectcheck(gc, crcl->fn);
     for (int i = 0; i < crcl->nupvalues; i++)
-        markobjectcheck(gc, &crcl->upvalue[i]);
+        markobjectcheck(gc, &crcl->upvals[i]);
     return 1 + crcl->nupvalues;
 }
 
 
 /* mark 'OClass' */
 static cr_mem markclass(GC *gc, OClass *cls) {
-    markobjectcheck(gc, cls->name);
     markobjectcheck(gc, cls->methods);
-    return 1 + markvmt(gc, cls->vtable);
+    return 1 + (cls->vmt ? markvmt(gc, cls->vmt) : 0);
 }
 
 
 /* mark 'UserData' */
 static cr_mem markuserdata(GC *gc, UserData *ud) {
     cr_mem extra = 0;
-    if (!ud->vmtempty)
-        extra = markvmt(gc, ud->vtable);
+    if (ud->vmt)
+        extra = markvmt(gc, ud->vmt);
     for (int i = 0; i < ud->nuv; i++)
         markobjectcheck(gc, &ud->uv[i]);
     return 1 + ud->nuv + extra;
@@ -480,6 +480,7 @@ static void freeobject(cr_State *ts, GCObject *o) {
     case CR_VCLASS: crMm_freeclass(ts, gco2cls(o)); break;
     case CR_VINSTANCE: crMm_freeinstance(ts, gco2ins(o)); break;
     case CR_VMETHOD: crM_free(ts, o, sizeof(*gco2im(o))); break;
+    case CR_VUDATA: crMm_freeuserdata(ts, gco2ud(o)); break;
     default: cr_unreachable();
     }
 }
@@ -620,10 +621,10 @@ static int callNfinalizers(cr_State *ts, int n) {
  * 'FINBIT' being set, additionally don't move it in case
  * state is closing.
  */
-void crG_checkfin(cr_State *ts, GCObject *o, VMT vtable) {
+void crG_checkfin(cr_State *ts, GCObject *o, TValue *vmt) {
     GCObject **pp;
     GC *gc = &G_(ts)->gc;
-    if (isfin(o) || ttisnil(&vtable[CR_META_GC]) || (gc->stopped & GCSTPCLS))
+    if (isfin(o) || ttisnil(&vmt[CR_META_GC]) || (gc->stopped & GCSTPCLS))
         return;
     if (sweepstate(gc)) {
         markwhite(gc, o);

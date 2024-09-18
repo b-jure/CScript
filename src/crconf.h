@@ -159,7 +159,7 @@
  * @cr_str2float - convert string into @CR_NUMBER.
  * @cr_float2str - convert @CR_NUMBER into string.
  * @cr_float2integer - converts @CR_NUMBER to @CR_INTEGER or
- * returns 0 if 'cr_number' is not within the range of 'cr_integer'.
+ * returns 0 if 'cr_Number' is not within the range of 'cr_Integer'.
  */
 #if CR_FLOAT_TYPE == CR_FLOAT_FLOAT_TYPE        /* { */
 #error 'float' as 'cr_Number' is not supported.
@@ -180,9 +180,9 @@
 
 #define cr_floor(n)             (cr_mathop(floor)(n))
 
-#define cr_number2str(s,sz,n)   snprintf((s),(sz),CR_FLOAT_FMT,(CR_NUMBER)(n))
+#define cr_Number2str(s,sz,n)   snprintf((s),(sz),CR_FLOAT_FMT,(cr_Number)(n))
 
-#define cr_number2integer(n,p) \
+#define cr_Number2integer(n,p) \
         ((n) >= (CR_NUMBER)(CR_INTEGER_MIN) && \
          (n) < (CR_NUMBER)(CR_INTEGER_MAX) && \
          (*(p) = (CR_INTEGER)(n), 1))
@@ -195,7 +195,7 @@
  * @CR_INTEGER_MAX - maximum size of @CR_INTEGER.
  * @CR_INTEGER_MIN - minimum size of @CR_INTEGER.
  * @CR_INTEGER_FMTLEN - additional length of modifier when writing @CR_INTEGER.
- * @cr_integer2str - converts @CR_INTEGER to string.
+ * @cr_Integer2str - converts @cr_Integer to string.
  */
 #if !defined(UINTPTR_MAX)       /* { */
 #error Missing 'UINTPTR_MAX' macro.
@@ -210,7 +210,7 @@
 #define CR_UINTEGER             uint64_t
 #define CR_UINTEGER_MAX         UINT64_MAX
 
-#define cr_integer2str(s,sz,n) \
+#define cr_Integer2str(s,sz,n) \
     snprintf((s),(sz),CR_INTEGER_FMT,(CR_INTEGER)(n))
 
 #define cri_intop(op,x,y) \
@@ -226,19 +226,19 @@
 
 
 
-/* @cr_xstr2number - converts hexadecimal string to 'cr_number'. */
+/* @cr_xstr2number - converts hexadecimal string to 'cr_Number'. */
 #define cr_xstr2number(s,p)     cr_str2number((s),(p))
 
 
 /*
- * @strx2numberovf - checks if 'n' (cr_number) would overflow
+ * @strx2numberovf - checks if 'n' (cr_Number) would overflow
  * during 'cr_xstr2number()' or 'cr_str2number()' conversion.
  */
 #define strx2numberovf(n)       ((n) == (CR_HUGEVAL) || (n) == -(CR_HUGEVAL))
 
 
 /*
- * @strx2numberovf - checks if 'n' (cr_number) would underflow
+ * @strx2numberovf - checks if 'n' (cr_Number) would underflow
  * during 'cr_xstr2number()' or 'cr_str2number()' conversion.
  */
 #define strx2numberunf(n)       ((n) == (CR_NUMBER_MIN))
@@ -246,10 +246,10 @@
 
 
 /*
- * @cr_number2xstr - converts 'cr_number' into hexadecimal
+ * @cr_Number2xstr - converts 'cr_Number' into hexadecimal
  * string; 'u' flag indicates uppercase/lowercase.
  */
-#define cr_number2xstr(b,sz,u,n) \
+#define cr_Number2xstr(b,sz,u,n) \
                 snprintf((b),(sz),((u)?"%A":"%a"),(CR_NUMBER)(n))
 
 
@@ -261,7 +261,7 @@
  * @CRI_MAXALIGN - values that ensure maximum alignment of
  * other values when used inside of union.
  */
-#define CRI_MAXALIGN    long l; cr_integer i; double d; cr_number n; void *p;
+#define CRI_MAXALIGN    long l; cr_Integer i; double d; cr_Number n; void *p;
 
 
 /*

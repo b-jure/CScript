@@ -18,6 +18,7 @@
 #define CRREADER_H
 
 #include "cript.h"
+#include "crmem.h"
 
 
 /* end of file */

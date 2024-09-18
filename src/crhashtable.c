@@ -14,6 +14,8 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
+#include <string.h>
+
 #include "crhashtable.h"
 #include "crconf.h"
 #include "crgc.h"
@@ -22,7 +24,6 @@
 #include "crobject.h"
 #include "crobject.h"
 #include "crstate.h"
-
 
 
 /* set/check tombstone node */
@@ -256,9 +257,7 @@ static void expandmem(cr_State *ts, HTable *ht) {
  * If the 'key' was not found insert it together with the 'value'.
  * If the 'key' already exists set its 'value'.
  */
-int crH_set(cr_State *ts, HTable *ht, const TValue *key,
-                  const TValue *val)
-{
+int crH_set(cr_State *ts, HTable *ht, const TValue *key, const TValue *val) {
     Node *slot = gethtnode(ht->mem, htsize(ht), key);
     int newk = keyisempty(slot);
     if (newk) { /* new key */

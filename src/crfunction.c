@@ -1,8 +1,6 @@
 #include "crfunction.h"
 #include "crgc.h"
-#include "crstate.h"
-
-
+#include "crmem.h"
 
 Function *crF_newfunction(cr_State *ts)
 {
@@ -25,47 +23,84 @@ Function *crF_newfunction(cr_State *ts)
 }
 
 
-CrClosure *crF_newcrclosure(cr_State *ts, int nup)
+CrClosure *crF_newCrClosure(cr_State *ts, int nup)
 {
     CrClosure *crcl = crG_new(ts, sizeofcrcl(nup), CR_VCRCL, CrClosure);
     crcl->nupvalues = nup;
     crcl->fn = NULL;
     for (int i = 0; i < nup; i++)
-        crcl->upvalue[i] = NULL;
+        crcl->upvals[i] = NULL;
     return crcl;
 }
 
 
-CClosure *cr_object_newcclosure(cr_State *ts, cr_CFunction fn, int nupvalues)
+CClosure *crF_newCClosure(cr_State *ts, cr_CFunction fn, int nupvalues)
 {
     CClosure *ccl = crG_new(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
     ccl->nupvalues = nupvalues;
     ccl->fn = fn;
     for (int i = 0; i < nupvalues; i++)
-        setnilval(&ccl->upvalue[i]);
+        setnilval(&ccl->upvals[i]);
     return ccl;
 }
 
 
 /*
- * Create and initialize all the upvalues in 'cl'.
- */
+** Adjusts function varargs by moving the named parameters
+** and the function in front of the varargs.
+** Additionally adjust new top for 'cf' and invalidates
+** old named parameters (after they get moved).
+*/
+void crF_adjustvarargs(cr_State *ts, int arity, CallFrame *cf,
+                       const Function *fn)
+{
+    int i;
+    int actual = cast_int(ts->sp.p - cf->callee.p) - 1;
+    int extra = actual - arity; /* number of varargs */
+    cf->nvarargs = extra;
+    crT_checkstack(ts, fn->maxstack + 1);
+    setobjs2s(ts, ts->sp.p++, cf->callee.p); /* move function */
+    for (i = 0; i < arity; i++) {
+        setobjs2s(ts, ts->sp.p++, cf->callee.p + i); /* move param */
+        setnilval(s2v(cf->callee.p + i)); /* invalidate old */
+    }
+    cf->callee.p += actual + 1;
+    cf->top.p += actual + 1;
+    cr_assert(cf->sp.p <= cf->top.p && cf->top.p <= ts->stackend.p);
+}
+
+
+/* Get 'wanted' varargs starting at the current stack pointer. */
+void crF_getvarargs(cr_State *ts, CallFrame *cf, int wanted) {
+    int have = cf->nvarargs;
+    if (wanted < 0) { /* CR_MULRET ? */
+        wanted = have;
+        checkstackGC(ts, wanted); /* check stack, maybe 'wanted > have' */
+    }
+    for (int i = 0; wanted-- && i < have; i++)
+        setobjs2s(ts, ts->sp.p++, cf->callee.p - have + i);
+    while (wanted--)
+        setnilval(s2v(ts->sp.p++));
+}
+
+
+/* Create and initialize all the upvalues in 'cl'. */
 void crF_initupvals(cr_State *ts, CrClosure *cl)
 {
     for (int i = 0; i < cl->nupvalues; i++) {
         UpVal *uv = crG_new(ts, sizeof(UpVal), CR_VUVALUE, UpVal);
         uv->v.location = &uv->u.value; /* close it */
         setnilval(uv->v.location);
-        cl->upvalue[i] = uv;
+        cl->upvals[i] = uv;
         crG_objbarrier(ts, cl, uv);
     }
 }
 
 
 /*
- * Create a new upvalue and link it into 'openupval' list
- * right after 'prev'.
- */
+** Create a new upvalue and link it into 'openupval' list
+** right after 'prev'.
+*/
 static UpVal *newupval(cr_State *ts, SPtr val, UpVal **prev)
 {
     UpVal *uv = crG_new(ts, sizeof(*uv), CR_VUVALUE, UpVal);
@@ -86,9 +121,9 @@ static UpVal *newupval(cr_State *ts, SPtr val, UpVal **prev)
 
 
 /*
- * Find and return already existing upvalue or create
- * and return a new one.
- */
+** Find and return already existing upvalue or create
+** and return a new one.
+*/
 UpVal *crF_findupval(cr_State *ts, SPtr sval)
 {
     UpVal *upval;

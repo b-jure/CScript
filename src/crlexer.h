@@ -49,8 +49,8 @@ enum TK {
 
 /* storage for literals */
 typedef union {
-    cr_integer i;
-    cr_number n;
+    cr_Integer i;
+    cr_Number n;
     OString *str;
 } Literal;
 

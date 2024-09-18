@@ -515,10 +515,15 @@ static void setvararg(FunctionState *fs, int arity) {
 }
 
 
+
+/* forward declare, can be both part of stm and expr */
+static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod);
+
 /* forward declare recursive non-terminals */
 static void decl(Lexer *lx);
 static void stm(Lexer *lx);
 static void expr(Lexer *lx, ExpInfo *e);
+
 
 
 /* check if current token matches 'tk' */
@@ -952,32 +957,44 @@ static void suffixedexpr(Lexer *lx, ExpInfo *e) {
  */
 static void simpleexpr(Lexer *lx, ExpInfo *e) {
     switch (lx->t.tk) {
-    case TK_INT:
+    case TK_INT: {
         initexp(e, EXP_INT, 0);
         e->u.i = lx->t.lit.i;
         break;
-    case TK_FLT:
+    }
+    case TK_FLT: {
         initexp(e, EXP_FLT, 0);
         e->u.n = lx->t.lit.n;
         break;
-    case TK_STRING:
+    }
+    case TK_STRING: {
         initexp(e, EXP_STRING, 0);
         e->u.str = lx->t.lit.str;
         break;
-    case TK_NIL:
+    }
+    case TK_NIL: {
         initexp(e, EXP_NIL, 0);
         break;
-    case TK_TRUE:
+    }
+    case TK_TRUE: {
         initexp(e, EXP_TRUE, 0);
         break;
-    case TK_FALSE:
+    }
+    case TK_FALSE: {
         initexp(e, EXP_FALSE, 0);
         break;
-    case TK_DOTS:
+    }
+    case TK_DOTS: {
         expect_cond(lx, lx->fs->fn->isvararg,
                     "cannot use '...' outside of vararg function");
         initexp(e, EXP_VARARG, crC_emitIL(lx->fs, OP_VARARG, 2));
         break;
+    }
+    case TK_FN: {
+        crL_scan(lx); /* skip 'fn' */
+        funcbody(lx, e, lx->line, 0);
+        return;
+    }
     default:
         suffixedexpr(lx, e);
         return;
@@ -1242,7 +1259,7 @@ static void exprstm(Lexer *lx) {
 
 
 /* get variable modifier */
-static int getmod(Lexer *lx) {
+static int attribute(Lexer *lx) {
     const char *mod = getstrbytes(expect_id(lx));
     if (strcmp(mod, "final") == 0) {
         return VARFINAL;
@@ -1256,13 +1273,17 @@ static int getmod(Lexer *lx) {
 }
 
 
-/* get all variable modifier */
-static int getmodifiers(Lexer *lx, const char *name) {
+/* 
+** modifiers ::= empty
+**             | '<' attribute '>'
+**             | '<' attribute, ... '>'
+*/
+static int modifiers(Lexer *lx, const char *name) {
     if (!match(lx, '<')) 
         return 0;
     int bmask = 0;
     do {
-        int bit = getmod(lx);
+        int bit = attribute(lx);
         if (testbit(bmask, bit)) { /* duplicate modifier ? */
             crP_semerror(lx, crS_pushfstring(lx->ts,
                         "variable '%s' has duplicate '%s' modifier",
@@ -1336,7 +1357,7 @@ static void closeletdecl(FunctionState *fs, int nvars, int vidx, int *tbc) {
 static OString *declname(Lexer *lx, int *mods) {
     cr_assert(mods != NULL);
     OString *name = expect_id(lx);
-    *mods = getmodifiers(lx, getstrbytes(name));
+    *mods = modifiers(lx, getstrbytes(name));
     return name;
 }
 
@@ -1483,14 +1504,15 @@ static void argslist(Lexer *lx) {
 
 
 /* emit closure instruction */
-static void codeclosure(Lexer *lx) {
-    FunctionState *fs = lx->fs;
-    crC_emitIL(fs, OP_CLOSURE, fs->nfuncs);
+static void codeclosure(Lexer *lx, ExpInfo *e) {
+    FunctionState *fs = lx->fs->prev;
+    e->u.info = crC_emitIL(fs, OP_CLOSURE, fs->nfuncs - 1);
+    e->et = EXP_FINEXPR;
 }
 
 
 /* funcbody ::= '(' arglist ')' stmlist */
-static void funcbody(Lexer *lx, int linenum, int ismethod) {
+static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod) {
     FunctionState newfs;
     Scope scope;
     newfs.fn = addfunction(lx);
@@ -1509,7 +1531,7 @@ static void funcbody(Lexer *lx, int linenum, int ismethod) {
     expect(lx, '{');
     stmlist(lx);
     expectmatch(lx, '}', '{', matchline);
-    codeclosure(lx);
+    codeclosure(lx, v);
     endfs(&newfs);
 }
 
@@ -1517,12 +1539,12 @@ static void funcbody(Lexer *lx, int linenum, int ismethod) {
 /* fndecl ::= 'fn' id funcbody */
 static void fndecl(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
-    ExpInfo var;
+    ExpInfo var, e;
     int tbc;
     crL_scan(lx); /* skip 'fn' */
     declarevar(fs, &var, &tbc);
     initvariable(fs, &var);
-    funcbody(lx, linenum, 0);
+    funcbody(lx, &e, linenum, 0);
     if (var.et == EXP_GLOBAL)
         defineglobal(fs, &var);
     else
@@ -1589,11 +1611,11 @@ static void codemethod(FunctionState *fs, ExpInfo *var) {
 
 /* class method */
 static void method(Lexer *lx) {
-    ExpInfo var;
+    ExpInfo var, dummy;
     int defline = lx->line; /* method definition start line */
     expect(lx, TK_FN);
     expid(lx, &var);
-    funcbody(lx, defline, 1);
+    funcbody(lx, &dummy, defline, 1);
     codemethod(lx->fs, &var);
 }
 
@@ -2042,7 +2064,7 @@ static void whilestm(Lexer *lx) {
 
 static void foreachvar(Lexer *lx) {
     OString *name = expect_id(lx);
-    int mods = getmodifiers(lx, getstrbytes(name));
+    int mods = modifiers(lx, getstrbytes(name));
     if (cr_unlikely(testbits(mods, bit2mask(VARPRIVATE, VARTBC)))) {
         crP_semerror(lx, crS_pushfstring(lx->ts,
         "local 'for each' loop variable '%s' can only have 'const' modifier",
@@ -2362,7 +2384,7 @@ CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
 {
     Lexer lx;
     FunctionState fs;
-    CrClosure *cl = crF_newcrclosure(ts, 0);
+    CrClosure *cl = crF_newCrClosure(ts, 0);
     setcrcl2s(ts, ts->sp.p, cl); /* anchor main function closure */
     crT_incsp(ts);
     lx.tab = crH_new(ts);

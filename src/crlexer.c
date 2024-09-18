@@ -16,10 +16,11 @@
 
 #include "crlexer.h"
 #include "crdebug.h"
+#include "crprotected.h"
 #include "crstate.h"
 #include "crhashtable.h"
 #include "crstring.h"
-#include "crmem.h"
+#include "crreader.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -170,7 +171,7 @@ static cr_noret lexerror(Lexer *lx, const char *err, int token) {
     err = crD_info(ts, err, lx->src, lx->line);
     if (token)
         crS_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
-    crT_throw(ts, CR_ERRSYNTAX);
+    crPr_throw(ts, CR_ERRSYNTAX);
 }
 
 
@@ -185,7 +186,7 @@ OString *crL_newstring(Lexer *lx, const char *str, size_t len) {
     cr_State *ts = lx->ts;
     OString *s = crS_newl(ts, str, len);
     TValue *stks = s2v(ts->sp.p++);
-    setobj2s(ts, stks, s); /* temp anchor */
+    setstrval(ts, stks, s); /* temp anchor */
     crH_set(lx->ts, lx->tab, stks, stks);
     ts->sp.p--; /* pop */
     return s;

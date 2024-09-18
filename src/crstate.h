@@ -33,10 +33,31 @@
 #define restorestack(ts,o)	cast(SPtr, cast_charp((ts)->stack.p) + (o))
 
 
-/* check if stack needs to grow */
-#define checkstack(ts,n) \
+/* 
+** Check if stack nees to grow if so, do 'pre' then grow and
+** then do 'pos'.
+*/
+#define crT_checkstackaux(ts,n,pre,pos) \
     if (cr_unlikely((ts)->stackend.p - (ts)->sp.p <= (n))) \
-            crT_growstack(ts, (n), 1);
+        { pre; crT_growstack(ts, (n), 1); pos; }
+
+
+/* check if stack needs to grow */
+#define crT_checkstack(ts,n)    crT_checkstackaux(ts,n,(void)0,(void)0)
+
+
+/* preserve 'p' then check GC then check stack */
+#define checkstackGCp(ts,n,p) \
+    crT_checkstackaux(ts,n, \
+            ptrdiff_t p_ = savestack(ts,p); \
+            crG_check(ts), \
+            p = restorestack(ts, p_))
+
+
+/* check GC then check stack */
+#define checkstackGC(ts,n) \
+    crT_checkstackaux(ts,n,crG_check(ts),(void)0)
+    
 
 
 /* 
@@ -83,7 +104,7 @@ typedef struct cr_ljmp {
  * ------------------------------------------------------------------------- */
 
 /* get Cript 'Function' */
-#define cfFn(cf)        (crclval(s2v((cf)->callee.p)).fn)
+#define cfFn(cf)        (crclval(s2v((cf)->callee.p))->fn)
 
 
 /* 'cfstatus' bits */
@@ -98,11 +119,11 @@ typedef struct cr_ljmp {
 
 /* call information */
 typedef struct CallFrame {
-    struct CallFrame *prev, *next; /* linked-list */
     SIndex callee; /* function */
     SIndex top; /* top for this call */
-    const Instruction *pc; /* only for non-C callee */
-    int nvarargs; /* only for non-C callee */
+    struct CallFrame *prev, *next; /* linked-list */
+    const Instruction *pc; /* only for Cript functions */
+    int nvarargs; /* only for Cript functions */
     int nreturns; /* number of return values */
     cr_ubyte cfstatus; /* call status */
 } CallFrame;
@@ -126,7 +147,7 @@ typedef struct GState {
     struct cr_State *thwouv; /* thread with open upvalues */
     OString *memerror; /* preallocated message for memory errors */
     OString *vmtnames[CR_NUM_META]; /* method names */
-    HTable *vmt[CR_NUMTYPES]; /* vmt's for basic types */
+    HTable *vmt[CR_NUM_TYPES]; /* vmt's for basic types */
 } GState;
 
 

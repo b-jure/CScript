@@ -95,7 +95,7 @@ typedef enum {
 
 
 typedef enum {
-/* -------------------------------------------------------------------------
+/* ------------------------------------------------------------------------
  * S - short arg (8-bit)
  * L - long arg (24-bit)
  * V - stack value
@@ -109,7 +109,7 @@ typedef enum {
  * L{x} - local variable in 'fn->locals[x]'
  *
  * operation     args           description
- * ------------------------------------------------------------------------- */
+ * ------------------------------------------------------------------------ */
 OP_TRUE = 0,    /*            'load true constant' */
 OP_FALSE,       /*            'load false constant' */
 OP_NIL,         /*            'load nil constant' */
@@ -120,28 +120,28 @@ OP_CONSTI,      /* L S        'load integer L (S signedness)' */
 OP_CONSTF,      /* L S        'load integer L as float (S signedness)' */
 OP_VARARGPREP,  /* L          'adjust function varargs (L function arity)' */
 OP_VARARG,      /* L          'load L-1 varargs' */
-OP_CLOSURE,     /*            'create and load new closure' */
+OP_CLOSURE,     /* L          'load closure(Enclosing->fns[L])' */
 OP_CLASS,       /*            'create and load new class' */
-OP_METHOD,      /* L V1 V2    'define method V2 for class V1 under key K{L}' */
+OP_METHOD,   /* L V1 V2    'define method V2 for class V1 under key K{L}' */
 OP_SETMM,       /* S V1 V2    'V1->vmt[S] = V2' (see notes) */
 OP_POP,         /*            'pop value off the stack' */
 OP_POPN,        /* L          'pop L values off the stack' */
 
 OP_MBIN,        /* V1 V2 S      'V1 S V2 (S is binop)' */
-OP_MBINI,       /* V L S1 S2    'V mbinop I(L) (S1 is signedness, S2 is flip)' */
-OP_MBINK,       /* V L S        'V mbinop K{L} (S is flip)' */
+OP_MBINI,    /* V L S1 S2    'V mbinop I(L) (S1 is signedness, S2 is flip)' */
+OP_MBINK,       /* V L S        'V mbinop K{L}:number (S is flip)' */
 
-OP_ADDK,         /* V L S   'V + (S * K{L})' */
-OP_SUBK,         /* V L S   'V - (S * K{L})' */
-OP_MULK,         /* V L S   'V * (S * K{L})' */
-OP_DIVK,         /* V L S   'V / (S * K{L})' */
-OP_MODK,         /* V L S   'V % (S * K{L})' */
-OP_POWK,         /* V L S   'V ** (S * K{L})' */
-OP_BSHLK,        /* V L S   'V << (S * K{L})' */
-OP_BSHRK,        /* V L S   'V >> (S * K{L})' */
-OP_BANDK,        /* V L S   'V & (S * K{L})' */
-OP_BORK,         /* V L S   'V | (S * K{L})' */
-OP_BXORK,        /* V L S   'V ^ (S * K{L})' */
+OP_ADDK,         /* V L S   'V + K{L}:number' */
+OP_SUBK,         /* V L S   'V - K{L}:number' */
+OP_MULK,         /* V L S   'V * K{L}:number' */
+OP_DIVK,         /* V L S   'V / K{L}:number' */
+OP_MODK,         /* V L S   'V % K{L}:number' */
+OP_POWK,         /* V L S   'V ** K{L}:number' */
+OP_BSHLK,        /* V L S   'V << K{L}:number' */
+OP_BSHRK,        /* V L S   'V >> K{L}:number' */
+OP_BANDK,        /* V L S   'V & K{L}:number' */
+OP_BORK,         /* V L S   'V | K{L}:number' */
+OP_BXORK,        /* V L S   'V ^ K{L}:number' */
 
 OP_ADDI,         /* V L S   'V + (S * I(L))' */
 OP_SUBI,         /* V L S   'V - (S * I(L))' */
@@ -284,6 +284,7 @@ enum OpFormat {
     FormatILSS,
     FormatILL,
     FormatILLL,
+    FormatN,
 };
 
 
@@ -302,6 +303,12 @@ CRI_DEC(const cr_ubyte crC_opProp[NUM_OPCODES];)
 #define testMProp(p)        (crC_opProp[p] & (1 << 5))
 
 #define opProp(mm,j,t,f)    (((mm) << 5) | ((j) << 4) | ((t) << 3) | (f))
+
+
+/* Instruction format sizes in bytes (aka as bytecode) */
+CRI_DEC(const cr_ubyte crC_opSize[FormatN];)
+
+#define getOpSize(p)        crC_opSize[getOpFormat(p)]
 
 
 CRI_FUNC int crC_emitI(FunctionState *fs, Instruction i);

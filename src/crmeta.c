@@ -27,15 +27,11 @@ void crMm_init(cr_State *ts) {
 }
 
 
-OClass *crMm_newclass(cr_State *ts, OString *id) {
+OClass *crMm_newclass(cr_State *ts) {
     OClass *cls = crG_new(ts, sizeof(OClass), CR_VCLASS, OClass);
     cls->methods = NULL;
-    cls->name = id;
-    for (uint i = 0; i < VMTELEMS; i++)
-        setnilval(&cls->vtable[i]);
-    setcls2s(ts, ts->sp.p++, cls);
-    cls->methods = crH_new(ts);
-    ts->sp.p--;
+    cls->vmt = NULL;
+    cls->methods = NULL;
     return cls;
 }
 
@@ -62,12 +58,29 @@ InstanceMethod *crMm_newinstancemethod(cr_State *ts, Instance *receiver,
 }
 
 
+/* TODO: move to 'crapi' */
+// static void parsevmt(cr_State *ts, TValue *actual, cr_VMT *vmt) {
+//     for (int i = 0; i < CR_NUM_META; i++) {
+//         switch (vmt->methods[i].mtt) {
+//         case CR_METAT_CFUNCTION: {
+//             // TODO
+//         }
+//         case CR_METAT_INDEX: {
+//             // TODO
+//         }
+//         case CR_METAT_NONE: default:
+//             setnilval(&actual[i]);
+//             break;
+//         }
+//     }
+// }
+
+
 UserData *crMm_newuserdata(cr_State *ts, size_t size, int nuv) {
     UserData *ud = crG_new(ts, sizeofud(nuv, size), CR_VUDATA, UserData);
+    ud->vmt = NULL;
     ud->nuv = nuv;
     ud->size = size;
-    for (int i = 0; i < CR_NUM_META; i++)
-        setnilval(&ud->vtable[i]);
     return ud;
 }
 
@@ -77,8 +90,8 @@ const TValue *crMm_get(cr_State *ts, const TValue *v, int mt) {
     UNUSED(ts);
     cr_assert(CR_META_INIT <= mt && mt < CR_NUM_META);
     switch (ttypetag(v)) {
-    case CR_VCLASS: return &gco2cls(v)->vtable[mt];
-    case CR_VUDATA: return &gco2ud(v)->vtable[mt];
+    case CR_VCLASS: return &gco2cls(v)->vmt[mt];
+    case CR_VUDATA: return &gco2ud(v)->vmt[mt];
     default: break; /* try basic type */
     } /* FALLTHRU */
     HTable *ht = G_(ts)->vmt[ttype(v)];
@@ -91,7 +104,7 @@ void crMm_callres(cr_State *ts, const TValue *selfarg, const TValue *fn,
                   const TValue *v1, const TValue *v2, SPtr res)
 {
     /* assuming EXTRA_STACK */
-    // func = sp[0], self, fn, v1, v2, sphere
+    // func = sp[0], self, fn, v1, v2, sp_here
     setobj2s(ts, ts->sp.p++, selfarg); /* self */
     setobj2s(ts, ts->sp.p++, fn);
     setobj2s(ts, ts->sp.p++, v1);
@@ -151,6 +164,8 @@ int crMm_order(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
 
 
 void crMm_freeclass(cr_State *ts, OClass *cls) {
+    if (cls->vmt)
+        crM_free(ts, cls->vmt, SIZEVMT);
     crH_free(ts, cls->methods);
     crM_free(ts, cls, sizeof(*cls));
 }
@@ -159,4 +174,11 @@ void crMm_freeclass(cr_State *ts, OClass *cls) {
 void crMm_freeinstance(cr_State *ts, Instance *ins) {
     crH_free(ts, ins->fields);
     crM_free(ts, ins, sizeof(*ins));
+}
+
+
+void crMm_freeuserdata(cr_State *ts, UserData *ud) {
+    if (ud->vmt)
+        crM_free(ts, ud->vmt, SIZEVMT);
+    crM_free(ts, ud, sizeofud(ud->nuv, ud->size));
 }

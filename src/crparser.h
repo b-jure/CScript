@@ -113,8 +113,8 @@ typedef enum expt {
 typedef struct ExpInfo {
     expt et;
     union {
-        cr_number n; /* floating constant */
-        cr_integer i; /* integer constant  */
+        cr_Number n; /* floating constant */
+        cr_Integer i; /* integer constant  */
         OString *str; /* string literal */
         int info; /* pc or some other generic information */
     } u;
