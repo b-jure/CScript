@@ -582,6 +582,15 @@ static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 }
 
 
+static int emitILSSS(FunctionState *fs, Instruction op, int a, int b, int c,
+                     int d)
+{
+    int offset = emitILSS(fs, op, a, b, c);
+    emitS(fs, d);
+    return offset;
+}
+
+
 /* emit integer constant */
 static int codeintK(FunctionState *fs, cr_Integer i) {
     if (fitsLA(i))
@@ -958,9 +967,8 @@ cr_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
 /* emit generic binary instruction */
 static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
-    cr_assert(e2->et != EXP_K);
-    cr_assert(OP_ADD <= op && op <= OP_BXOR);
-    crC_exp2stack(fs, e2); /* ensure e2 is on stack */
+    crC_exp2stack(fs, e1);
+    crC_exp2stack(fs, e2);
     freeslots(fs, 1); /* binary expression produces a single value */
     e1->u.info = crC_emitI(fs, op);
     e1->et = EXP_FINEXPR;
@@ -976,6 +984,7 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     int idxK = e2->u.info; /* index into 'constants' */
     cr_assert(e2->et == EXP_K);
     cr_assert(OP_ADD <= op && op <= OP_RANGE);
+    crC_exp2stack(fs, e1);
     e1->u.info = crC_emitIL(fs, op, idxK);
     e1->et = EXP_FINEXPR;
     emitILS(fs, OP_MBINK, idxK, flip);
@@ -1001,13 +1010,15 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                      int flip)
 {
     int rhs = e2->u.i;
-    int neg = rhs < 0;
+    int sign = (rhs < 0 ? 0 : 2);
     int rhsabs = cri_abs(rhs);
+    cr_assert(!flip == !opriscommutative(opr));
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
     cr_assert(e2->et == EXP_INT);
-    e1->u.info = emitILS(fs, op, rhsabs, neg);
+    crC_exp2stack(fs, e1);
+    e1->u.info = emitILS(fs, op, rhsabs, sign);
     e1->et = EXP_FINEXPR;
-    emitILSS(fs, OP_MBINI, rhsabs, neg, flip);
+    emitILSS(fs, OP_MBINI, rhsabs, sign, flip);
 }
 
 
@@ -1037,7 +1048,7 @@ static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 
 /* emit equality binary instruction */
 static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
-    int immediate;
+    int imm; /* immediate */
     int isflt = 0;
     int iseq = (opr == OP_EQ);
     cr_assert(opr == OPR_NE || opr == OPR_EQ);
@@ -1048,10 +1059,12 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     }
     crC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
     if (isintK(e2)) {
-        if (isnumKL(e2, &immediate, &isflt))
-            e1->u.info = emitILSS(fs, OP_EQI, immediate, iseq, isflt);
-        else
+        if (isnumKL(e2, &imm, &isflt)) {
+            int sign = (imm < 0 ? 0 : 2);
+            e1->u.info = emitILSSS(fs, OP_EQI, imm, sign, iseq, isflt);
+        } else {
             e1->u.info = emitILS(fs, OP_EQK, e2->u.info, iseq);
+        }
     } else {
         e1->u.info = crC_emitIS(fs, OP_EQ, iseq);
         freeslots(fs, 1);
@@ -1065,6 +1078,7 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int isflt = 0;
     int immediate;
     OpCode op;
+    int sign;
     cr_assert(OPR_LT == opr || opr == OPR_LE); /* should already be swapped */
     if (isnumKL(e2, &immediate, &isflt)) {
         crC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
@@ -1073,13 +1087,23 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     } else if (isnumKL(e1, &immediate, &isflt)) {
         crC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
         op = binopr2op(opr, OPR_LT, OP_GTI);
-emit:
-        e1->u.info = emitILS(fs, op, immediate, isflt);
+    emit:
+        sign = (immediate < 0 ? 0 : 2);
+        e1->u.info = emitILSS(fs, op, immediate, sign, isflt);
     } else {
         op = binopr2op(opr, OPR_LT, OP_LT);
         e1->u.info = crC_emitI(fs, op);
         freeslots(fs, 1);
     }
+    e1->et = EXP_FINEXPR;
+}
+
+
+static void coderange(FunctionState *fs, ExpInfo *e1, ExpInfo *e2) {
+    crC_exp2stack(fs, e1);
+    crC_exp2stack(fs, e2);
+    // TODO
+    e1->u.info = crC_emitI(fs, OP_RANGE);
     e1->et = EXP_FINEXPR;
 }
 
@@ -1094,13 +1118,16 @@ void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
         codecommutative(fs, e1, e2, opr);
         break;
     }
-    case OPR_SUB: case OPR_DIV: case OPR_MOD: case OPR_POW:
+    case OPR_SUB: case OPR_DIV: case OPR_MOD: case OPR_POW: {
+        codebinarithm(fs, e1, e2, opr, 0);
+        break;
+    }
     case OPR_SHL: case OPR_SHR:  {
         codebinIK(fs, e1, e2, opr, 0);
         break;
     }
     case OPR_RANGE: {
-        /* avoid unreachable */
+        coderange(fs, e1, e2);
         break;
     }
     case OPR_NE: case OPR_EQ: {

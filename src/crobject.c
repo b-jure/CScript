@@ -1,26 +1,14 @@
-/* ----------------------------------------------------------------------------------------------
- * Copyright (C) 2023-2024 Jure Bagić
- *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
- * General Public License as published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with cript.
- * If not, see <https://www.gnu.org/licenses/>.
- * ----------------------------------------------------------------------------------------------*/
+/*
+** $Name: crobject.c
+** $Description: Generic functions over Cript objects that do not invoke errors.
+** $Copyright: Copyright Notice in cript.h.
+*/
+
+#define CR_CORE
 
 #include "crlimits.h"
-#include "crdebug.h"
-#include "crmeta.h"
-#include "crstring.h"
 #include "crobject.h"
-#include "crstate.h"
-
+#include "crvm.h"
 
 
 static const char udataname[] = "userdata";
@@ -37,7 +25,7 @@ uint crO_hashnum(cr_Number n) {
     cr_Integer ni;
     int exp;
     n = cr_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
-    if (cr_likely(cr_Number2integer(n,&ni))) {
+    if (cr_likely(cr_number2integer(n, &ni))) {
         uint ui = cast_uint(exp) + cast_uint(ni);
         return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
     }
@@ -47,7 +35,7 @@ uint crO_hashnum(cr_Number n) {
 
 
 /* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
-int cr_ve_ceillog2 (uint x) {
+int crO_ceillog2 (uint x) {
     static const cr_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
         0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
         6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
@@ -62,44 +50,6 @@ int cr_ve_ceillog2 (uint x) {
     x--;
     while (x >= 256) { l += 8; x >>= 8; }
     return l + log_2[x];
-}
-
-
-/*
- * Integer division; handles division by 0 and possible
- * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
- */
-cr_Integer crO_div(cr_State *ts, cr_Integer x, cr_Integer y) {
-    if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
-        if (y == 0)
-            crD_runerror(ts, "division by 0");
-        return cri_intop(-, 0, x);
-    }
-    return (x / y);
-}
-
-
-/*
- * Integer modulus; handles modulo by 0 and overflow
- * as explained in 'crO_div()'.
- */
-cr_Integer crO_modint(cr_State *ts, cr_Integer x, cr_Integer y) {
-    cr_Integer r;
-    if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) {
-        if (y == 0)
-            crD_runerror(ts, "attempt to x%%0");
-        return 0;
-    }
-    cri_nummod(ts, x, y, r);
-    return r;
-}
-
-
-/* floating point modulus */
-cr_Number crO_modnum(cr_State *ts, cr_Number x, cr_Number y) {
-    cr_Number r;
-    cri_nummod(ts, x, y, r);
-    return r;
 }
 
 
@@ -125,7 +75,7 @@ static cr_Number numarithm(cr_State *ts, cr_Number x, cr_Number y, int op) {
     case CR_OPSUB: return cri_numsub(ts, x, y);
     case CR_OPMUL: return cri_nummul(ts, x, y);
     case CR_OPDIV: return cri_numdiv(ts, x, y);
-    case CR_OPMOD: return crO_modnum(ts, x, y);
+    case CR_OPMOD: return crV_modnum(ts, x, y);
     case CR_OPPOW: return cri_numpow(ts, x, y);
     case CR_OPNOT: return cri_nummul(ts, x, y);
     case CR_OPUMIN: return cri_nummul(ts, x, y);
@@ -139,8 +89,8 @@ static cr_Integer intarithm(cr_State *ts, cr_Integer x, cr_Integer y, int op) {
     case CR_OPADD: return cri_intop(+, x, y);
     case CR_OPSUB: return cri_intop(-, x, y);
     case CR_OPMUL: return cri_intop(*, x, y);
-    case CR_OPDIV: return crO_div(ts, x, y);
-    case CR_OPMOD: return crO_modint(ts, x, y);
+    case CR_OPDIV: return crV_div(ts, x, y);
+    case CR_OPMOD: return crV_modint(ts, x, y);
     case CR_OPPOW: return cri_intop(^, x, y);
     case CR_OPNOT: return cri_numnot(ts, x);
     case CR_OPUMIN: return cri_intop(-, 0, x);
@@ -150,7 +100,7 @@ static cr_Integer intarithm(cr_State *ts, cr_Integer x, cr_Integer y, int op) {
     case CR_OPBAND: return cri_intop(&, x, y);
     case CR_OPBOR: return cri_intop(|, x, y);
     case CR_OPBXOR: return cri_intop(^, x, y);
-    default: cr_unreachable();
+    default: cr_unreachable(); return 0;
     }
 }
 
@@ -162,7 +112,7 @@ int crO_n2i(cr_Number n, cr_Integer *i, N2IMode mode) {
         if (mode == CR_N2IEXACT) return 0;
         else if (mode == CR_N2ICEIL) floored++;
     }
-    return cr_Number2integer(n, i);
+    return cr_number2integer(n, i);
 }
 
 
@@ -179,11 +129,11 @@ int crO_tointeger(const TValue *v, cr_Integer *i, int mode) {
 
 
 /*
- * Perform raw arithmetic operations on numbers, what this means
- * is that no vtable methods will be invoked and the operation
- * itself can't invoke runtime error, if the operation can't be
- * done then return 0.
- */
+** Perform raw arithmetic operations on numbers, what this means
+** is that no vtable methods will be invoked and the operation
+** itself can't invoke runtime error, if the operation can't be
+** done then return 0.
+*/
 int crO_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
                   TValue *res, int op)
 {
@@ -223,159 +173,5 @@ int crO_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
         } else {
             return 0;
         }
-    }
-}
-
-
-/*
- * Perform arithmetic operations on values, this function is free
- * to call overloaded methods such as '__add__', '__umin__', etc...,
- * in case raw arithmetic fails.
- */
-void crO_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
-                int op)
-{
-    if (!crO_arithmraw(ts, v1, v2, s2v(res), op))
-        crMm_arithm(ts, v1, v2, res, (op - CR_OPADD) + CR_META_ADD);
-}
-
-
-/*
- * According to C99 6.3.1.8 page 45:
- * "...if the corresponding real type of either operand is double, the other
- * operand is converted, without change of type domain, to a type whose
- * corresponding real type is double."
- */
-cr_sinline int intLEnum(cr_State *ts, const TValue *v1, const TValue *v2) {
-    UNUSED(ts);
-    return cri_numle(cast_num(ival(v1)), fval(v2));
-}
-
-
-/* check 'intLEnum' */
-cr_sinline int numLEint(cr_State *ts, const TValue *v1, const TValue *v2) {
-    UNUSED(ts);
-    return cri_numle(fval(v1), cast_num(ival(v2)));
-}
-
-
-/* less equal ordering on numbers */
-cr_sinline int numLE(cr_State *ts, const TValue *v1, const TValue *v2) {
-    cr_assert(ttisnum(v1) && ttisnum(v2));
-    if (ttisint(v1)) {
-        cr_Integer i1 = ival(v1);
-        if (ttisint(v2)) return (i1 <= ival(v2));
-        else return intLEnum(ts, v1, v2);
-    } else {
-        cr_Number n1 = fval(v1);
-        if (ttisint(v2)) return numLEint(ts, v1, v2);
-        else return cri_numlt(n1, fval(v2));
-    }
-}
-
-
-/* less equal ordering on non-number values */
-cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2) {
-    if (ttisstr(v1) && ttisstr(v2))
-        return (crS_cmp(strval(v1), strval(v2)) <= 0);
-    else
-        return crMm_order(ts, v1, v2, ts->sp.p, CR_META_LE);
-}
-
-
-/* 'less or equal' ordering '<=' */
-int crO_orderLE(cr_State *ts, const TValue *v1, const TValue *v2) {
-    if (ttisnum(v1) && ttisnum(v2))
-        return numLE(ts, v1, v2);
-    return otherLE(ts, v1, v2);
-}
-
-
-/* check 'intLEnum' */
-cr_sinline int intLTnum(const TValue *v1, const TValue *v2) {
-    return cri_numlt(cast_num(ival(v1)), fval(v2));
-}
-
-
-/* check 'intLEnum' */
-cr_sinline int numLTint(const TValue *v1, const TValue *v2) {
-    return cri_numlt(fval(v1), cast_num(ival(v2)));
-}
-
-
-/* 'less than' ordering '<' on number values */
-cr_sinline int numLT(const TValue *v1, const TValue *v2) {
-    cr_assert(ttisnum(v1) && ttisnum(v2));
-    if (ttisint(v1)) {
-        cr_Integer i1 = ival(v1);
-        if (ttisint(v2)) return (i1 <= ival(v2));
-        else return intLTnum(v1, v2);
-    } else {
-        cr_Number n1 = fval(v1);
-        if (ttisint(v2)) return numLTint(v1, v2);
-        else return cri_numlt(n1, fval(v2));
-    }
-}
-
-
-/* 'less than' ordering '<' on non-number values */
-cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2) {
-    if (ttisstr(v1) && ttisstr(v2))
-        return (crS_cmp(strval(v1), strval(v2)) < 0);
-    else
-        return crMm_order(ts, v1, v2, ts->sp.p, CR_META_LT);
-}
-
-
-/* 'less than' ordering '<' */
-int crO_orderLT(cr_State *ts, const TValue *v1, const TValue *v2) {
-    if (ttisnum(v1) && ttisnum(v2))
-        return numLT(v1, v2);
-    return otherLT(ts, v1, v2);
-}
-
-
-/* 'equality' ordering '==' */
-int crO_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
-    cr_Integer i1, i2;
-    const TValue *method;
-    const TValue *selfarg;
-    if (ttypetag(v1) != ttypetag(v2)) {
-        if (ttype(v1) != ttype(v2) || ttype(v1) != CR_TNUMBER)
-            return 0;
-        return (crO_tointeger(v1, &i1, CR_N2IEXACT) &&
-                crO_tointeger(v2, &i2, CR_N2IEXACT) && i1 == i2);
-    }
-    switch (ttypetag(v1)) {
-    case CR_VNIL: case CR_VFALSE: case CR_VTRUE: return 1;
-    case CR_VNUMINT: return (ival(v1) == ival(v2));
-    case CR_VNUMFLT: return cri_numeq(fval(v1), fval(v2));
-    case CR_VLUDATA: return (pval(v1) == pval(v2));
-    case CR_VSTRING: return crS_eq(strval(v1), strval(v2));
-    case CR_VUDATA:
-        if (udval(v1) == udval(v2)) return 1;
-        selfarg = v1;
-        method = crMm_get(ts, v1, CR_META_EQ);
-        if (ttisnil(method)) {
-            selfarg = v2;
-            method = crMm_get(ts, v2, CR_META_EQ);
-        }
-        break;
-    case CR_VINSTANCE:
-        if (insval(v1) == insval(v2)) return 1;
-        selfarg = v1;
-        method = crMm_get(ts, v1, CR_META_EQ);
-        if (ttisnil(method)) {
-            selfarg = v2;
-            method = crMm_get(ts, v2, CR_META_EQ);
-        }
-        break;
-    default: return (gcoval(v1) == gcoval(v2));
-    }
-    if (ttisnil(method)) 
-        return 0;
-    else {
-        crMm_callres(ts, selfarg, method, v1, v2, ts->sp.p);
-        return !cri_isfalse(s2v(ts->sp.p - 1));
     }
 }

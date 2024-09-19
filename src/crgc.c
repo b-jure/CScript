@@ -284,10 +284,10 @@ static void markobject_(GC *gc, GCObject *o) {
 /* mark 'VMT' */
 cr_sinline cr_mem markvmt(GC *gc, TValue *vmt) {
     cr_assert(vmt != NULL);
-    for (int i = 0; i < CR_NUM_META; i++)
+    for (int i = 0; i < CR_NUM_MM; i++)
         if (!ttisnil(&vmt[i]))
             markvalue(gc, &vmt[i]);
-    return CR_NUM_META;
+    return CR_NUM_MM;
 }
 
 
@@ -477,10 +477,10 @@ static void freeobject(cr_State *ts, GCObject *o) {
     case CR_VUVALUE: crF_freeupval(ts, gco2uv(o)); break;
     case CR_VCRCL: crM_free(ts, o, sizeofcrcl(gco2crcl(o)->nupvalues)); break;
     case CR_VCCL: crM_free(ts, o, sizeofccl(gco2ccl(o)->nupvalues)); break;
-    case CR_VCLASS: crMm_freeclass(ts, gco2cls(o)); break;
-    case CR_VINSTANCE: crMm_freeinstance(ts, gco2ins(o)); break;
+    case CR_VCLASS: crMM_freeclass(ts, gco2cls(o)); break;
+    case CR_VINSTANCE: crMM_freeinstance(ts, gco2ins(o)); break;
     case CR_VMETHOD: crM_free(ts, o, sizeof(*gco2im(o))); break;
-    case CR_VUDATA: crMm_freeuserdata(ts, gco2ud(o)); break;
+    case CR_VUDATA: crMM_freeuserdata(ts, gco2ud(o)); break;
     default: cr_unreachable();
     }
 }
@@ -587,7 +587,7 @@ static void callfin(cr_State *ts) {
     const TValue *m;
     GC *gc = &G_(ts)->gc;
     setgcoval(ts, &v, gettobefin(gc));
-    if (!ttisnil(m = crMm_get(ts, &v, CR_META_GC))) { /* have __gc ? */
+    if (!ttisnil(m = crMM_get(ts, &v, CR_MM_GC))) { /* have __gc ? */
         int oldstopped = gc->stopped;
         gc->stopped = GCSTP; /* prevent recursive GC calls */
         setobj2s(ts, ts->sp.p++, m);
@@ -624,7 +624,7 @@ static int callNfinalizers(cr_State *ts, int n) {
 void crG_checkfin(cr_State *ts, GCObject *o, TValue *vmt) {
     GCObject **pp;
     GC *gc = &G_(ts)->gc;
-    if (isfin(o) || ttisnil(&vmt[CR_META_GC]) || (gc->stopped & GCSTPCLS))
+    if (isfin(o) || ttisnil(&vmt[CR_MM_GC]) || (gc->stopped & GCSTPCLS))
         return;
     if (sweepstate(gc)) {
         markwhite(gc, o);

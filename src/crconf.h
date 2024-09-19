@@ -79,9 +79,9 @@
 
 #if !defined(CR_DFL_PATH)
 #define CR_DFL_PATH  \
-                CR_CRDIR"?.cri;"  CR_CRDIR"?/init.cri;" \
-                CR_CDIR"?.cri;"  CR_CDIR"?/init.cri;" \
-                "./?.cri;" "./?/init.cri"
+    CR_CRDIR"?.cri;"  CR_CRDIR"?/init.cri;" \
+    CR_CDIR"?.cri;"  CR_CDIR"?/init.cri;" \
+    "./?.cri;" "./?/init.cri"
 #endif
 #if !defined(CR_DFL_CPATH)
 #define CR_DFL_CPATH    CR_CDIR"?.so;" CR_CDIR"loadall.so;" "./?.so"
@@ -118,7 +118,7 @@
  * will ever access the function.
  */
 #if defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 302) \
-        && defined(__ELF__)         /* { */
+                                                               && defined(__ELF__)         /* { */
 #define CRI_FUNC        __attribute__((visibility("internal"))) extern
 #else                               /* }{ */
 #define CRI_FUNC        extern
@@ -180,12 +180,12 @@
 
 #define cr_floor(n)             (cr_mathop(floor)(n))
 
-#define cr_Number2str(s,sz,n)   snprintf((s),(sz),CR_FLOAT_FMT,(cr_Number)(n))
+#define cr_number2str(s,sz,n)   snprintf((s),(sz),CR_FLOAT_FMT,(cr_number)(n))
 
-#define cr_Number2integer(n,p) \
-        ((n) >= (CR_NUMBER)(CR_INTEGER_MIN) && \
-         (n) < (CR_NUMBER)(CR_INTEGER_MAX) && \
-         (*(p) = (CR_INTEGER)(n), 1))
+#define cr_number2integer(n,p) \
+    ((n) >= (CR_NUMBER)(CR_INTEGER_MIN) && \
+     (n) < (CR_NUMBER)(CR_INTEGER_MAX) && \
+     (*(p) = (CR_INTEGER)(n), 1))
 
 
 
@@ -210,11 +210,11 @@
 #define CR_UINTEGER             uint64_t
 #define CR_UINTEGER_MAX         UINT64_MAX
 
-#define cr_Integer2str(s,sz,n) \
+#define cr_integer2str(s,sz,n) \
     snprintf((s),(sz),CR_INTEGER_FMT,(CR_INTEGER)(n))
 
 #define cri_intop(op,x,y) \
-        cri_castU2S(cri_castS2U(x) op cri_castS2U(y))
+    cri_castU2S(cri_castS2U(x) op cri_castS2U(y))
 
 #elif UINTPTR_MAX == 0xffffffff             /* }{ */
 #error 'cript' requires 64-bit integer size.
@@ -249,8 +249,8 @@
  * @cr_Number2xstr - converts 'cr_Number' into hexadecimal
  * string; 'u' flag indicates uppercase/lowercase.
  */
-#define cr_Number2xstr(b,sz,u,n) \
-                snprintf((b),(sz),((u)?"%A":"%a"),(CR_NUMBER)(n))
+#define cr_number2xstr(b,sz,u,n) \
+    snprintf((b),(sz),((u)?"%A":"%a"),(CR_NUMBER)(n))
 
 
 /* @cr_pointer2str - converts a pointer to a string. */
@@ -265,9 +265,9 @@
 
 
 /*
-** @CR_EXTRASPACE - defines the size of a raw memory associated with
-** a Cript state with very fast access (memory chunk before state).
-*/
+ ** @CR_EXTRASPACE - defines the size of a raw memory associated with
+ ** a Cript state with very fast access (memory chunk before state).
+ */
 #define CR_EXTRASPACE       (sizeof(void *))
 
 

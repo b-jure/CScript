@@ -86,6 +86,11 @@ typedef enum {
 #define boprisfoldable(op)      ((op) <= OPR_BXOR)
 
 
+/* only for checking in asserts */
+#define opriscommutative(opr) \
+    (opr == OPR_ADD || opr == OPR_MUL || (opr >= OPR_BAND && opr <= OPR_BXOR))
+
+
 
 /* unary operators */
 typedef enum {
@@ -96,20 +101,20 @@ typedef enum {
 
 typedef enum {
 /* ------------------------------------------------------------------------
- * S - short arg (8-bit)
- * L - long arg (24-bit)
- * V - stack value
- * V{x} - stack value at index 'x'
- * K{x} - constant at index 'x'
- * I(x) - 'x' is immediate operand
- * U{x} - upvalue at index 'x'
- * OU{x} - open upvalue at index 'x'
- * P{x} - private variable in 'fn->private[x]'
- * G(x) - global variable with 'get 'x' from 'gs->globals' htable
- * L{x} - local variable in 'fn->locals[x]'
- *
- * operation     args           description
- * ------------------------------------------------------------------------ */
+** S - short arg (8-bit)
+** L - long arg (24-bit)
+** V - stack value
+** V{x} - stack value at index 'x'
+** K{x} - constant at index 'x'
+** I(x) - 'x' is immediate operand
+** U{x} - upvalue at index 'x'
+** OU{x} - open upvalue at index 'x'
+** P{x} - private variable in 'fn->private[x]'
+** G(x) - global variable with 'get 'x' from 'gs->globals' htable
+** L{x} - local variable in 'fn->locals[x]'
+**
+** operation     args           description
+** ------------------------------------------------------------------------ */
 OP_TRUE = 0,    /*            'load true constant' */
 OP_FALSE,       /*            'load false constant' */
 OP_NIL,         /*            'load nil constant' */
@@ -143,17 +148,17 @@ OP_BANDK,        /* V L S   'V & K{L}:number' */
 OP_BORK,         /* V L S   'V | K{L}:number' */
 OP_BXORK,        /* V L S   'V ^ K{L}:number' */
 
-OP_ADDI,         /* V L S   'V + (S * I(L))' */
-OP_SUBI,         /* V L S   'V - (S * I(L))' */
-OP_MULI,         /* V L S   'V * (S * I(L))' */
-OP_DIVI,         /* V L S   'V / (S * I(L))' */
-OP_MODI,         /* V L S   'V % (S * I(L))' */
-OP_POWI,         /* V L S   'V ** (S * I(L))' */
-OP_BSHLI,        /* V L S   'V << (S * I(L))' */
-OP_BSHRI,        /* V L S   'V >> (S * I(L))' */
-OP_BANDI,        /* V L S   'V & (S * I(L))' */
-OP_BORI,         /* V L S   'V | (S * I(L))' */
-OP_BXORI,        /* V L S   'V ^ (S * I(L))' */
+OP_ADDI,         /* V L S   'V + ((S - 1) * I(L))' */
+OP_SUBI,         /* V L S   'V - ((S - 1) * I(L))' */
+OP_MULI,         /* V L S   'V * ((S - 1) * I(L))' */
+OP_DIVI,         /* V L S   'V / ((S - 1) * I(L))' */
+OP_MODI,         /* V L S   'V % ((S - 1) * I(L))' */
+OP_POWI,         /* V L S   'V ** ((S - 1) * I(L))' */
+OP_BSHLI,        /* V L S   'V << ((S - 1) * I(L))' */
+OP_BSHRI,        /* V L S   'V >> ((S - 1) * I(L))' */
+OP_BANDI,        /* V L S   'V & ((S - 1) * I(L))' */
+OP_BORI,         /* V L S   'V | ((S - 1) * I(L))' */
+OP_BXORI,        /* V L S   'V ^ ((S - 1) * I(L))' */
 
 OP_ADD,          /* V1 V2   'V1 + V2' */
 OP_SUB,          /* V1 V2   'V1 - V2' */
@@ -171,11 +176,11 @@ OP_RANGE,        /* V V1    'V..V1' */
 
 OP_EQK,          /* V L S   '(V == K{L}) == S' */
 
-OP_EQI,          /* V L S1 S2   '(V == I(L)) == S1 (S2 true if I(L) is flt)' */
-OP_LTI,          /* V L S       'V < I(L)          (S true if I(L) is flt)' */
-OP_LEI,          /* V L S       'V <= I(L)         (S true if I(L) is flt)' */
-OP_GTI,          /* V L S       'V > I(L)          (S true if I(L) is flt)' */
-OP_GEI,          /* V L S       'V >= I(L)         (S true if I(L) is flt)' */ 
+OP_EQI,       /* V L S1 S2 S3  '(V == I(L) * (S1 - 1)) == S2' (check notes) */
+OP_LTI,       /* V L S1 S2     'V < (S1 - 1) * I(L)' */
+OP_LEI,       /* V L S1 S2     'V <= (S1 - 1) * I(L)' */
+OP_GTI,       /* V L S1 S2     'V > (S1 - 1) * I(L)' */
+OP_GEI,       /* V L S1 S2     'V >= (S1 - 1) * I(L)' */ 
 
 OP_EQ,           /* V1 V2 S     '(V1 == V2) == S' */
 OP_LT,           /* V1 V2       '(V1 < V2)' */
@@ -190,10 +195,10 @@ OP_EQPRESERVE,   /* V1 V2   'V1 == V2 (preserves V1 operand)' */
 OP_JMP,          /* L       'pc += L' */
 OP_JMPS,         /* L       'pc -= L' */
 
-OP_TEST,         /* V L S   'if (!cri_isfalse(V) == S) pc += L' */
-OP_TESTORPOP,    /* V L S   'if (!cri_isfalse(V) == S) pc += L; else pop V;' */
-OP_TESTANDPOP,   /* V L S   'if (!cri_isfalse(V) == S) { pc += L; pop V; }' */
-OP_TESTPOP,      /* V L S   'if (!cri_isfalse(V) == S) { pc += L; } pop V;' */
+OP_TEST,        /* V L S   'if (!cri_isfalse(V) == S) pc += L' */
+OP_TESTORPOP,   /* V L S   'if (!cri_isfalse(V) == S) pc += L; else pop V;' */
+OP_TESTANDPOP,  /* V L S   'if (!cri_isfalse(V) == S) { pc += L; pop V; }' */
+OP_TESTPOP,     /* V L S   'if (!cri_isfalse(V) == S) { pc += L; } pop V;' */
 
 OP_CALL,    /* L1 L2 L3  'V{L1},...,V{L1+L3-2} = V{L1}(V{L1+1},...,V{L1+L2-1})'
                (check info) */
@@ -245,6 +250,9 @@ OP_RET,         /* L1 L2 L3 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
 ** Notes:
 ** [OP_SETMM]
 ** Sets virtual method table entry value at index S.
+**
+** [OP_EQI]
+** 
 **
 ** [OP_CALL]
 ** L1 is the base stack offset where the value being called is located.

@@ -106,7 +106,7 @@ static void fnewstate(cr_State *ts, void *ud) {
     gs->globals = crH_new(ts); /* new global table */
     gs->memerror = crS_newlit(ts, MEMERRMSG);
     crG_fix(ts, obj2gco(gs->memerror));
-    crMm_init(ts);
+    crMM_init(ts);
     crL_init(ts);
     gs->gc.stopped = 0;
     setnilval(&gs->nil); /* signal that state is fully built */

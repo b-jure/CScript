@@ -1,18 +1,8 @@
-/* ----------------------------------------------------------------------------------------------
- * Copyright (C) 2023-2024 Jure Bagić
- *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
- * General Public License as published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with cript.
- * If not, see <https://www.gnu.org/licenses/>.
- * ----------------------------------------------------------------------------------------------*/
+/*
+** $Name: crobject.h
+** $Description: Type definitions for Cript objects.
+** $Copyright: Copyright Notice in cript.h.
+*/
 
 #ifndef CROBJECT_H
 #define CROBJECT_H
@@ -621,7 +611,7 @@ typedef union Closure {
  * -------------------------------------------------------------------------- */
 
 /* number of elements in VMT */
-#define SIZEVMT     (sizeof(TValue)*CR_NUM_META)
+#define SIZEVMT     (sizeof(TValue)*CR_NUM_MM)
 
 
 #define CR_VCLASS       makevariant(CR_TCLASS, 0)
@@ -770,7 +760,6 @@ typedef enum N2IMode {
 /* same as right shift but indicate left by making 'y' negative */
 #define crO_shiftl(x,y)    crO_shiftr(x, -(y))
 
-
 /* hash primitives */
 #define crO_hashint(i)     cast_uint(cri_castS2U(i))
 #define crO_hashbool(b)    cast_uint((b) != 0)
@@ -781,20 +770,8 @@ CRI_FUNC uint crO_hashnum(cr_Number n);
 CRI_FUNC int crO_ceillog2(uint x);
 CRI_FUNC int crO_n2i(cr_Number n, cr_Integer *i, N2IMode mode);
 CRI_FUNC int crO_tointeger(const TValue *v, cr_Integer *i, int mode);
-
-CRI_FUNC cr_Integer crO_div(cr_State *ts, cr_Integer x, cr_Integer y);
-CRI_FUNC cr_Integer crO_modint(cr_State *ts, cr_Integer x, cr_Integer y);
-CRI_FUNC cr_Number crO_modnum(cr_State *ts, cr_Number x, cr_Number y);
 CRI_FUNC cr_Integer crO_shiftr(cr_Integer x, cr_Integer y);
-
-CRI_FUNC void crO_arithm(cr_State *ts, const TValue *a, const TValue *b,
-                              SPtr res, int op);
 CRI_FUNC int crO_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
-                                TValue *res, int op);
-
-CRI_FUNC int crO_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2);
-CRI_FUNC int crO_orderLT(cr_State *ts, const TValue *v1, const TValue *v2);
-CRI_FUNC int crO_orderLE(cr_State *ts, const TValue *v1, const TValue *v2);
-
+                           TValue *res, int op);
 
 #endif

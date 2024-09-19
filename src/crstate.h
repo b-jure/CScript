@@ -146,7 +146,7 @@ typedef struct GState {
     struct cr_State *mainthread; /* thread that also created global state */
     struct cr_State *thwouv; /* thread with open upvalues */
     OString *memerror; /* preallocated message for memory errors */
-    OString *vmtnames[CR_NUM_META]; /* method names */
+    OString *vmtnames[CR_NUM_MM]; /* method names */
     HTable *vmt[CR_NUM_TYPES]; /* vmt's for basic types */
 } GState;
 

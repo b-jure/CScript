@@ -267,7 +267,7 @@ static int otnum2buff(const TValue *nv, char *buff) {
     if (ttisint(nv)) {
         len = cr_Integer2str(buff, MAXNUM2STR, ival(nv));
     } else {
-        len = cr_Number2str(buff, MAXNUM2STR, fval(nv));
+        len = cr_number2str(buff, MAXNUM2STR, fval(nv));
         /* if it looks like integer append '.0' */
         if (strspn(buff, "-0123456789") == len) {
             buff[len++] = *localeconv()->decimal_point;

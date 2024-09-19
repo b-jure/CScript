@@ -21,11 +21,13 @@
 #include "crlimits.h"
 #include "crmem.h"
 #include "crobject.h"
+#include "crdebug.h"
 #include "crobject.h"
 #include "crstate.h"
 #include "crcode.h"
 #include "crvm.h"
 #include "crmeta.h"
+#include "crstring.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +69,7 @@ static void pushclosure(cr_State *ts, Function *fn, UpVal **enc, SPtr base) {
 
 /* allocate new class and push it on stack */
 static void pushclass(cr_State *ts) {
-    OClass *cls = crMm_newclass(ts);
+    OClass *cls = crMM_newclass(ts);
     setcls2s(ts, ts->sp.p++, cls); /* anchor to stack */
 }
 
@@ -78,14 +80,212 @@ void crV_settable(cr_State *ts, HTable *ht, TValue *val, TValue *key) {
 }
 
 
+/*
+ * Integer division; handles division by 0 and possible
+ * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
+ */
+cr_Integer crV_div(cr_State *ts, cr_Integer x, cr_Integer y) {
+    if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
+        if (y == 0)
+            crD_runerror(ts, "division by 0");
+        return cri_intop(-, 0, x);
+    }
+    return (x / y);
+}
+
+
+/*
+ * Integer modulus; handles modulo by 0 and overflow
+ * as explained in 'crV_div()'.
+ */
+cr_Integer crV_modint(cr_State *ts, cr_Integer x, cr_Integer y) {
+    cr_Integer r;
+    if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) {
+        if (y == 0)
+            crD_runerror(ts, "attempt to x%%0");
+        return 0;
+    }
+    cri_nummod(ts, x, y, r);
+    return r;
+}
+
+
+/* floating point modulus */
+cr_Number crV_modnum(cr_State *ts, cr_Number x, cr_Number y) {
+    cr_Number r;
+    cri_nummod(ts, x, y, r);
+    return r;
+}
+
+
+/*
+ * Perform arithmetic operations on objects, this function is free
+ * to call overloaded methods such as '__add', '__umin', etc...,
+ * in cases where raw arithmetics are not possible.
+ */
+void crV_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
+                int op)
+{
+    if (!crO_arithmraw(ts, v1, v2, s2v(res), op))
+        crMM_arithm(ts, v1, v2, res, (op - CR_OPADD) + CR_MM_ADD);
+}
+
+
 /* set 'vmt' entry */
 static void setmm(cr_State *ts, TValue **vmt, TValue *fn, int vmtt) {
-    cr_assert(0 <= vmtt && vmtt < CR_NUM_META);
+    cr_assert(0 <= vmtt && vmtt < CR_NUM_MM);
     if (cr_unlikely(!(*vmt))) /* empty 'vmt' */
-        *vmt = crM_malloc(ts, SIZEVMT); /* this can fail, 'protect' needed */
+        *vmt = crM_malloc(ts, SIZEVMT);
     (*vmt)[vmtt] = *fn; /* set the entry */
 }
 
+
+/*
+ * According to C99 6.3.1.8 page 45:
+ * "...if the corresponding real type of either operand is double, the other
+ * operand is converted, without change of type domain, to a type whose
+ * corresponding real type is double."
+ */
+cr_sinline int intLEnum(cr_State *ts, const TValue *v1, const TValue *v2) {
+    UNUSED(ts);
+    return cri_numle(cast_num(ival(v1)), fval(v2));
+}
+
+
+/* check 'intLEnum' */
+cr_sinline int numLEint(cr_State *ts, const TValue *v1, const TValue *v2) {
+    UNUSED(ts);
+    return cri_numle(fval(v1), cast_num(ival(v2)));
+}
+
+
+/* less equal ordering on numbers */
+cr_sinline int numLE(cr_State *ts, const TValue *v1, const TValue *v2) {
+    cr_assert(ttisnum(v1) && ttisnum(v2));
+    if (ttisint(v1)) {
+        cr_Integer i1 = ival(v1);
+        if (ttisint(v2)) return (i1 <= ival(v2));
+        else return intLEnum(ts, v1, v2);
+    } else {
+        cr_Number n1 = fval(v1);
+        if (ttisint(v2)) return numLEint(ts, v1, v2);
+        else return cri_numlt(n1, fval(v2));
+    }
+}
+
+
+/* less equal ordering on non-number values */
+cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2) {
+    if (ttisstr(v1) && ttisstr(v2))
+        return (crS_cmp(strval(v1), strval(v2)) <= 0);
+    else
+        return crMM_order(ts, v1, v2, CR_MM_LE);
+}
+
+
+/* 'less or equal' ordering '<=' */
+int crV_orderLE(cr_State *ts, const TValue *v1, const TValue *v2) {
+    if (ttisnum(v1) && ttisnum(v2))
+        return numLE(ts, v1, v2);
+    return otherLE(ts, v1, v2);
+}
+
+
+/* check 'intLEnum' */
+cr_sinline int intLTnum(const TValue *v1, const TValue *v2) {
+    return cri_numlt(cast_num(ival(v1)), fval(v2));
+}
+
+
+/* check 'intLEnum' */
+cr_sinline int numLTint(const TValue *v1, const TValue *v2) {
+    return cri_numlt(fval(v1), cast_num(ival(v2)));
+}
+
+
+/* 'less than' ordering '<' on number values */
+cr_sinline int numLT(const TValue *v1, const TValue *v2) {
+    cr_assert(ttisnum(v1) && ttisnum(v2));
+    if (ttisint(v1)) {
+        cr_Integer i1 = ival(v1);
+        if (ttisint(v2)) return (i1 <= ival(v2));
+        else return intLTnum(v1, v2);
+    } else {
+        cr_Number n1 = fval(v1);
+        if (ttisint(v2)) return numLTint(v1, v2);
+        else return cri_numlt(n1, fval(v2));
+    }
+}
+
+
+/* 'less than' ordering '<' on non-number values */
+cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2) {
+    if (ttisstr(v1) && ttisstr(v2))
+        return (crS_cmp(strval(v1), strval(v2)) < 0);
+    else
+        return crMM_order(ts, v1, v2, CR_MM_LT);
+}
+
+
+/* 'less than' ordering '<' */
+int crV_orderLT(cr_State *ts, const TValue *v1, const TValue *v2) {
+    if (ttisnum(v1) && ttisnum(v2))
+        return numLT(v1, v2);
+    return otherLT(ts, v1, v2);
+}
+
+
+/* 
+** Equality ordering '=='.
+** In case 'ts' is NULL perform raw equality (without invoking '__eq').
+*/
+int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
+    cr_Integer i1, i2;
+    const TValue *method;
+    const TValue *selfarg;
+    if (ttypetag(v1) != ttypetag(v2)) {
+        if (ttype(v1) != ttype(v2) || ttype(v1) != CR_TNUMBER)
+            return 0;
+        return (crO_tointeger(v1, &i1, CR_N2IEXACT) &&
+                crO_tointeger(v2, &i2, CR_N2IEXACT) && i1 == i2);
+    }
+    switch (ttypetag(v1)) {
+    case CR_VNIL: case CR_VFALSE: case CR_VTRUE: return 1;
+    case CR_VNUMINT: return (ival(v1) == ival(v2));
+    case CR_VNUMFLT: return cri_numeq(fval(v1), fval(v2));
+    case CR_VLUDATA: return (pval(v1) == pval(v2));
+    case CR_VSTRING: return crS_eq(strval(v1), strval(v2));
+    case CR_VUDATA: {
+        if (udval(v1) == udval(v2)) return 1;
+        else if (ts == NULL) return 0;
+        selfarg = v1;
+        method = crMM_get(ts, v1, CR_MM_EQ);
+        if (ttisnil(method)) {
+            selfarg = v2;
+            method = crMM_get(ts, v2, CR_MM_EQ);
+        }
+        break;
+    }
+    case CR_VINSTANCE: {
+        if (insval(v1) == insval(v2)) return 1;
+        else if (ts == NULL) return 0;
+        selfarg = v1;
+        method = crMM_get(ts, v1, CR_MM_EQ);
+        if (ttisnil(method)) {
+            selfarg = v2;
+            method = crMM_get(ts, v2, CR_MM_EQ);
+        }
+        break;
+    }
+    default: return (gcoval(v1) == gcoval(v2));
+    }
+    if (ttisnil(method))  {
+        return 0;
+    } else {
+        crMM_callres(ts, selfarg, method, v1, v2, ts->sp.p);
+        return !cri_isfalse(s2v(ts->sp.p - 1));
+    }
+}
 
 
 /* ------------------------------------------------------------------------
@@ -252,6 +452,51 @@ static void setmm(cr_State *ts, TValue **vmt, TValue *fn, int vmtt) {
 #define ige(a,b)        (a >= b)
 
 
+/* assign ordering result */
+#define setcondres(v,cond) \
+    { cr_assert(cond >= 0); if (cond) setbtval(v1); else setbfval(v1); }
+
+
+/*
+** Order operations with stack operands.
+*/
+#define op_order(ts,iop,fop,other) { \
+    TValue *v1 = peek(1); \
+    TValue *v2 = peek(0); \
+    int cond = -1; \
+    if (ttisint(v1) && ttisint(v2)) { \
+        cr_Integer i1 = ival(v1); \
+        cr_Integer i2 = ival(v2); \
+        cond = iop(i1, i2); \
+    } else if (ttisnum(v1) && ttisnum(v2)) { \
+        cond = fop(v1, v2); \
+    } else { \
+        protect(cond = other(ts, v1, v2)); \
+    } \
+    setcondres(v1, cond); }
+
+
+/*
+** Order operations with I (immediate) operand.
+*/
+#define op_orderI(ts,iop,fop,inv,mm) { \
+    int imm = fetchl(); \
+    imm *= getsign(); \
+    int isflt = fetchs(); \
+    TValue *v = peek(0); \
+    int cond = -1; \
+    if (ttisint(v)) { \
+        cond = iop(ival(v), imm); \
+    } else if (ttisflt(v)) { \
+        cr_Number n1 = fval(v); \
+        cr_Number n2 = cast_num(imm); \
+        cond = fop(n1, n2); \
+    } else { \
+        protect(cond = crMM_orderI(ts, v, imm, inv, isflt, mm)); \
+    } \
+    setcondres(v, cond); }
+
+
 /* ------------------------------------------------------------------------
  * Interpreter loop
  * ------------------------------------------------------------------------ */
@@ -281,8 +526,8 @@ static void setmm(cr_State *ts, TValue **vmt, TValue *fn, int vmtt) {
 /* get sign value */
 #define getsign()       (fetchs() - 1)
 
-/* peek stack */
-#define peek(n)         s2v(ts->sp.p - n)
+/* peek stack (from (sp - 1) - n) */
+#define peek(n)         s2v((ts->sp.p - 1) - n)
 /* pop stack */
 #define pop(n)          (ts->sp.p -= (n))
 
@@ -432,12 +677,12 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
             }
             vm_case(OP_DIVK) {
                 storepc(ts); /* in case of division by 0 */
-                op_arithK(ts, crO_div, cri_numdiv);
+                op_arithK(ts, crV_div, cri_numdiv);
                 vm_break;
             }
             vm_case(OP_MODK) {
                 storepc(ts); /* in case of division by 0 */
-                op_arithK(ts, crO_modint, crO_modnum);
+                op_arithK(ts, crV_modint, crV_modnum);
                 vm_break;
             }
             vm_case(OP_POWK) {
@@ -478,12 +723,12 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
             }
             vm_case(OP_DIVI) {
                 storepc(ts); /* in case of division by 0 */
-                op_arithI(ts, crO_div, cri_numdiv);
+                op_arithI(ts, crV_div, cri_numdiv);
                 vm_break;
             }
             vm_case(OP_MODI) {
                 storepc(ts); /* in case of division by 0 */
-                op_arithI(ts, crO_modint, crO_modnum);
+                op_arithI(ts, crV_modint, crV_modnum);
                 vm_break;
             }
             vm_case(OP_POWI) {
@@ -524,16 +769,16 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
             }
             vm_case(OP_DIV) {
                 storepc(ts); /* in case of division by 0 */
-                op_arith(ts, crO_div, cri_numdiv);
+                op_arith(ts, crV_div, cri_numdiv);
                 vm_break;
             }
             vm_case(OP_MOD) {
                 storepc(ts); /* in case of division by 0 */
-                op_arith(ts, crO_modint, crO_modnum);
+                op_arith(ts, crV_modint, crV_modnum);
                 vm_break;
             }
             vm_case(OP_POW) {
-                op_arithf(ts, crO_modnum);
+                op_arithf(ts, crV_modnum);
                 vm_break;
             }
             vm_case(OP_BSHL) {
@@ -561,9 +806,24 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 vm_break;
             }
             vm_case(OP_EQK) {
+                TValue *v1 = peek(0);
+                const TValue *v2 = getlK();
+                int cond = crV_rawEQ(v1, v2);
+                setcondres(v1, cond);
                 vm_break;
             }
             vm_case(OP_EQI) {
+                TValue *v1 = peek(0);
+                int cond = -1;
+                int imm = fetchl();
+                imm *= getsign();
+                if (ttisint(v1)) {
+                    cond = (ival(v1) == imm);
+                } else if (ttisflt(v1)) {
+                    cond = cri_numeq(fval(v1), cast_num(imm));
+                } else {
+                    protect(cond = 
+                }
                 vm_break;
             }
             vm_case(OP_LTI) {

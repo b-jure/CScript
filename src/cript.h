@@ -20,11 +20,10 @@
 #define CR_VERSION      "Cript " CR_VERSION_MAJOR "." CR_VERSION_MINOR
 #define CR_RELEASE      CR_VERSION "." CR_VERSION_RELEASE
 #define CR_COPYRIGHT    CR_RELEASE " Copyright (C) 2023-2024 Jure Bagić"
-#define CR_AUTHORS      "Jure Bagić"
 
 
 
-/* multiple return count option for 'cr_call' and 'cr_pcall' */
+/* unfixed amount of 'retcnt' values for 'cr_call' and 'cr_pcall' */
 #define CR_MULRET       (-1)
 
 
@@ -202,50 +201,52 @@ CR_API int cr_getuservalue(cr_State *ts, int idx, int n);
 /* -------------------------------------------------------------------------
  * Class interface
  * ------------------------------------------------------------------------- */
-/* types of methods for 'cr_VMT' */
-#define CR_METAT_NONE               (-1)
-#define CR_METAT_CFUNCTION             0
-#define CR_METAT_INDEX                 1
+/* meta method type ('mmt') */
+#define CR_MMT_NONE     (-1)
+#define CR_MMT_CFN      0
+#define CR_MMT_IDX      1
 
-/* 'cr_VMT' methods */
-#define CR_META_INIT                0
-#define CR_META_TOSTRING            1
-#define CR_META_GETIDX              2
-#define CR_META_SETIDX              3
-#define CR_META_GC                  4
-#define CR_META_DEFER               5
-#define CR_META_ADD                 6
-#define CR_META_SUB                 7
-#define CR_META_MUL                 8
-#define CR_META_DIV                 9
-#define CR_META_MOD                 10
-#define CR_META_POW                 11
-#define CR_META_NOT                 12
-#define CR_META_UMIN                13
-#define CR_META_BNOT                14
-#define CR_META_BSHL                15
-#define CR_META_BSHR                16
-#define CR_META_BAND                17
-#define CR_META_BOR                 18
-#define CR_META_BXOR                19
-#define CR_META_EQ                  20
-#define CR_META_LT                  21
-#define CR_META_LE                  22
+/* meta methods ('mm') */
+typedef enum cr_MM {
+    CR_MM_INIT = 0,
+    CR_MM_TOSTRING,
+    CR_MM_GETIDX,
+    CR_MM_SETIDX,
+    CR_MM_GC,
+    CR_MM_DEFER,
+    CR_MM_ADD,
+    CR_MM_SUB,
+    CR_MM_MUL,
+    CR_MM_DIV,
+    CR_MM_MOD,
+    CR_MM_POW,
+    CR_MM_NOT,
+    CR_MM_UMIN,
+    CR_MM_BNOT,
+    CR_MM_BSHL,
+    CR_MM_BSHR,
+    CR_MM_BAND,
+    CR_MM_BOR,
+    CR_MM_BXOR,
+    CR_MM_EQ,
+    CR_MM_LT,
+    CR_MM_LE,
+} cr_MM;
 
-#define CR_NUM_META                 23
+#define CR_NUM_MM     (CR_MM_LE + 1)
 
 /* Virtual Method Table */
 struct cr_VMT {
     struct {
         union {
-            cr_CFunction cfunction; /* C function */
-            int stkidx; /* value on stack */
-        } method;
-        int mtt; /* method type tag */
-    } methods[CR_NUM_META];
+            cr_CFunction cfn; /* C function */
+            int idx; /* value on stack */
+        } m; /* method */
+        int mmt; /* 'mmt' */
+    } mm[CR_NUM_MM];
 };
 
-CR_API void cr_createclass(cr_State *ts, cr_VMT *vmt, int superidx);
+CR_API void cr_createclass(cr_State *ts, cr_VMT *vmt, int supidx);
 
 
 
@@ -299,7 +300,8 @@ CR_API int  cr_load(cr_State *ts, cr_fReader reader, void *userdata, const char 
 #define CR_GCSTEP               (1<<3) /* perform single gc step */
 #define CR_GCCOUNT              (1<<4) /* get number of bytes allocated */
 #define CR_GCISRUNNING          (1<<5) /* check whether GC is stopped */
-#define CR_GCNEXTGC             (1<<6) /* set bytes amount when the next GC will trigger */
+#define CR_GCNEXTGC             (1<<6) /* set bytes amount when the next GC 
+                                          will trigger */
 
 CR_API int cr_gc(cr_State *ts, int optmask, ...);
 
@@ -338,11 +340,11 @@ CR_API cr_fAlloc        cr_getalloc(cr_State *ts, void **ud);
  * ------------------------------------------------------------------------- */
 
 /* bits for 'dbgmask' */
-#define CR_DBG_FNGET    (1<<0) /* load the function on top of the stack (processed first) */
+#define CR_DBG_FNGET    (1<<0) /* push func on stack (processed first) */
 #define CR_DBG_LINE     (1<<1) /* fill 'line' */
 #define CR_DBG_FNINFO   (1<<2) /* fill all function info in 'crD_info' */
 #define CR_DBG_FNSRC    (1<<3) /* fill function source information */
-#define CR_DBG_FNPUSH   (1<<4) /* push current function on the stack (processed last) */
+#define CR_DBG_FNPUSH   (1<<4) /* push current func (processed last) */
 
 CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di);
 CR_API int cr_getinfo(cr_State *ts, int dbgmask, cr_DebugInfo *di);
