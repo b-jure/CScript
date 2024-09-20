@@ -12,14 +12,14 @@
 ** error handler or invoke panic if hook for it is present.
 ** In case none of the above occurs, program is aborted.
 */
-cr_noret crPr_throw(cr_State *ts, int code) {
+cr_noret crPR_throw(cr_State *ts, int code) {
     if (ts->errjmp) /* thread has error recovery jump ? */
         CRI_THROW(ts, ts->errjmp);
     GState *gs = G_(ts);
     if (gs->mainthread->errjmp) {
         /* copy over error object */
         setobj2s(ts, gs->mainthread->sp.p++, s2v(ts->sp.p));
-        crPr_throw(ts, code);
+        crPR_throw(ts, code);
     } else if (gs->panic) {
         cr_unlock(ts);
         gs->panic(ts);
@@ -33,7 +33,7 @@ cr_noret crPr_throw(cr_State *ts, int code) {
  * Protected call
  * ------------------------------------------------------------------------- */
 
-int crPr_rawcall(cr_State *ts, ProtectedFn fn, void *ud) {
+int crPR_rawcall(cr_State *ts, ProtectedFn fn, void *ud) {
     cr_uint32 oldnCC = ts->nCC;
     struct cr_ljmp lj;
     lj.status = CR_OK;
@@ -48,8 +48,8 @@ int crPr_rawcall(cr_State *ts, ProtectedFn fn, void *ud) {
 }
 
 
-int crPr_call(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t top) {
-    int status = crPr_rawcall(ts, fn, ud);
+int crPR_call(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t top) {
+    int status = crPR_rawcall(ts, fn, ud);
     if (cr_unlikely(status != CR_OK)) {
         ts->sp.p = restorestack(ts, top);
     }
@@ -93,5 +93,5 @@ void crP_pparse(cr_State *ts, cr_fReader freader, void *userdata,
     { ps->lvars.len = ps->lvars.size = 0; ps->lvars.arr = NULL; } /* 'lvars' */
     ps->cs = NULL; /* 'cs' */
     parsedata.source = name; /* 'source' */
-    crPr_call(ts, pparse, &parsedata, savestack(ts, ts->sp.p));
+    crPR_call(ts, pparse, &parsedata, savestack(ts, ts->sp.p));
 }

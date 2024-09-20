@@ -132,9 +132,7 @@ OP_SETMM,       /* S V1 V2    'V1->vmt[S] = V2' (see notes) */
 OP_POP,         /*            'pop value off the stack' */
 OP_POPN,        /* L          'pop L values off the stack' */
 
-OP_MBIN,        /* V1 V2 S      'V1 S V2 (S is binop)' */
-OP_MBINI,    /* V L S1 S2    'V mbinop I(L) (S1 is signedness, S2 is flip)' */
-OP_MBINK,       /* V L S        'V mbinop K{L}:number (S is flip)' */
+OP_MBIN,        /* V1 V2 S    'V1 S V2'  (S is binop) */
 
 OP_ADDK,         /* V L S   'V + K{L}:number' */
 OP_SUBK,         /* V L S   'V - K{L}:number' */
@@ -176,11 +174,11 @@ OP_RANGE,        /* V V1    'V..V1' */
 
 OP_EQK,          /* V L S   '(V == K{L}) == S' */
 
-OP_EQI,       /* V L S1 S2 S3  '(V == I(L) * (S1 - 1)) == S2' (check notes) */
-OP_LTI,       /* V L S1 S2     'V < (S1 - 1) * I(L)' */
-OP_LEI,       /* V L S1 S2     'V <= (S1 - 1) * I(L)' */
-OP_GTI,       /* V L S1 S2     'V > (S1 - 1) * I(L)' */
-OP_GEI,       /* V L S1 S2     'V >= (S1 - 1) * I(L)' */ 
+OP_EQI,       /* V L S1 S2 S3  '(V == I(L) * (S1 - 1)) == S2' (S3 if float) */
+OP_LTI,       /* V L S1 S2     'V < (S1 - 1) * I(L)'    (S2 if float) */
+OP_LEI,       /* V L S1 S2     'V <= (S1 - 1) * I(L)'   (S2 if float) */
+OP_GTI,       /* V L S1 S2     'V > (S1 - 1) * I(L)'    (S2 if float) */
+OP_GEI,       /* V L S1 S2     'V >= (S1 - 1) * I(L)'   (S2 if float) */ 
 
 OP_EQ,           /* V1 V2 S     '(V1 == V2) == S' */
 OP_LT,           /* V1 V2       '(V1 < V2)' */
@@ -313,10 +311,29 @@ CRI_DEC(const cr_ubyte crC_opProp[NUM_OPCODES];)
 #define opProp(mm,j,t,f)    (((mm) << 5) | ((j) << 4) | ((t) << 3) | (f))
 
 
+
 /* Instruction format sizes in bytes (aka as bytecode) */
 CRI_DEC(const cr_ubyte crC_opSize[FormatN];)
 
 #define getOpSize(p)        crC_opSize[getOpFormat(p)]
+
+
+
+/* OpCode names table */ 
+CRI_DEC(const char *crC_opName[NUM_OPCODES];)
+
+#define getOpName(p)        crC_opName[p]
+
+
+
+/* number of symbols in 'crC_opBinsym' */
+#define NUM_BINSYM      (OP_BXOR - OP_ADD + 1)
+
+/* OpCode binary op symbols */
+CRI_DEC(const char *crC_opBinsym[NUM_BINSYM];)
+
+#define getOpBinsym(p)       crC_opBinsym[(p) - OP_ADD]
+
 
 
 CRI_FUNC int crC_emitI(FunctionState *fs, Instruction i);

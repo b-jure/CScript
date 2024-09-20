@@ -153,8 +153,26 @@ int crS_hexvalue(int c) {
 }
 
 
+
+#define TOLOWERBUFFSZ   200
+
+/* 
+** Convert all characters in 's' to lower case.
+** This function is not reentrant and 's' must be null terminated.
+** Upon each call to this function static buffer is overwritten.
+** Up to 'TOLOWERBUFFSZ' characters in 's' will be converted.
+*/
+const char *crS_tolowerall(const char *s) {
+    static char buff[TOLOWERBUFFSZ];
+    int c;
+    for (int i = 0; (c = *s++) && i < TOLOWERBUFFSZ; i++)
+        buff[i] = tolower(c);
+    return buff;
+}
+
+
 /*
- * Convert string to Cript integer.
+ * Convert string to 'cr_Integer'.
  * This function can convert hexadecimal, octal
  * and decimal strings to 'cr_Integer'.
  */
@@ -265,7 +283,7 @@ static int otnum2buff(const TValue *nv, char *buff) {
     size_t len;
     cr_assert(ttisnum(nv));
     if (ttisint(nv)) {
-        len = cr_Integer2str(buff, MAXNUM2STR, ival(nv));
+        len = cr_integer2str(buff, MAXNUM2STR, ival(nv));
     } else {
         len = cr_number2str(buff, MAXNUM2STR, fval(nv));
         /* if it looks like integer append '.0' */

@@ -14,6 +14,10 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
 #include "crconf.h"
 #include "crfunction.h"
 #include "crhashtable.h"
@@ -29,10 +33,6 @@
 #include "crmeta.h"
 #include "crstring.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-
 
 /*
 ** By default, use goto jump table in the interpreter loop
@@ -45,6 +45,9 @@
 #define CR_USE_JUMPTABLE	0
 #endif
 #endif
+
+
+static int booleans[2] = { CR_VFALSE, CR_VTRUE };
 
 
 /*
@@ -289,34 +292,115 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
 
 
 /* ------------------------------------------------------------------------
-** Macros for arithmetic/bitwise/comparison opcodes on integers.
+** Macros for arithmetic/bitwise/comparison instructions on integers.
 **------------------------------------------------------------------------- */
 
-
-/* integer arithmetic operations */
+/* 'cr_Integer' arithmetic operations */
 #define iadd(ts,a,b)    (cri_intop(+, a, b))
 #define isub(ts,a,b)    (cri_intop(-, a, b))
 #define imul(ts,a,b)    (cri_intop(*, a, b))
 
+/* integer bitwise operations */
+#define iband(a,b)      (cri_intop(&, a, b))
+#define ibor(a,b)       (cri_intop(|, a, b))
+#define ibxor(a,b)      (cri_intop(^, a, b))
 
-/*
-** Auxiliary to 'op_arith_aux'.
+/* integer ordering operations */
+#define ilt(a,b)        (a < b)
+#define ile(a,b)        (a <= b)
+#define igt(a,b)        (a > b)
+#define ige(a,b)        (a >= b)
+
+
+/* 
+** Arithmetic operations
 */
+
+#define op_arithKf_aux(ts,v1,v2,fop) { \
+    cr_Number n1, n2; \
+    if (tonumber(v1, &n1) && tonumber(v2, &n2)) { \
+        setfval(v1, fop(ts, n1, n2)); \
+    } else { \
+        crD_aritherror(ts, v1, v2); \
+    }}
+
+
+/* arithmetic operations with constant operand for floats */
+#define op_arithKf(ts,fop) { \
+    TValue *v = peek(0); \
+    TValue *lk = getlK(); \
+    op_arithKf_aux(ts, v, lk, fop); }
+
+
+/* arithmetic operations with constant operand */
+#define op_arithK(ts,iop,fop) { \
+    TValue *v = peek(0); \
+    TValue *lk = getlK(); \
+    if (ttisint(v) && ttisint(lk)) { \
+        cr_Integer i1 = ival(v); \
+        cr_Integer i2 = ival(lk); \
+        setival(v, iop(ts, i1, i2)); \
+    } else { \
+        op_arithKf_aux(ts, v, lk, fop); \
+    }}
+
+
+/* arithmetic operation error with immediate operand */
+#define op_arithI_error(ts,v,imm) \
+    { TValue v2; setival(&v2, imm); crD_aritherror(ts, v, &v2); }
+
+
+/* arithmetic operations with immediate operand for floats */
+#define op_arithIf(ts,fop) { \
+    TValue *v = peek(0); \
+    int imm = fetchl(); /* L */\
+    imm *= getsign(); /* S */\
+    cr_Number n; \
+    if (tonumber(v, &n)) { \
+        cr_Number fimm = cast_num(imm); \
+        setfval(v, fop(ts, n, fimm)); \
+    } else { \
+        op_arithI_error(ts, v, fimm, realop); \
+    }}
+
+
+/* arithmetic operations with immediate operand */
+#define op_arithI(ts,iop,fop,realop) { \
+    TValue *v = peek(0); \
+    int imm = fetchl(); /* L */\
+    imm *= getsign(); /* S */\
+    if (ttisint(v)) { \
+        cr_Integer i = ival(v); \
+        setival(v, iop(ts, i, imm)); \
+    } else if (ttisflt(v)) { \
+        cr_Number n = fval(v); \
+        cr_Number fimm = cast_num(imm); \
+        setfval(v, fop(ts, n, fimm)); \
+    } else { \
+        op_arithI_error(ts, v, imm, realop); \
+    }}
+
+
 #define op_arithf_aux(ts,v1,v2,fop,op,popn) { \
     cr_Number n1; cr_Number n2; \
     if (tonumber(v1, &n1) && tonumber(v2, &n2)) { \
         setfval(v1, fop(ts, n1, n2)); \
         pc += getOpSize(op); \
         pop(popn); \
-    }}
+    }/* else try 'OP_MBIN' */}
 
 
-/*
-** Arithmetic operations over integers and floats.
-** Result is placed into 'v1', 'popn' values are popped
-** off the stack and 'op' is skipped.
-*/
-#define op_arith_aux(ts,v1,v2,iop,fop,op,popn) { \
+/* arithmetic operations with stack operands for floats */
+#define op_arithf(ts,fop) { \
+    TValue *v1 = peek(1); \
+    TValue *v2 = peek(0); \
+    op_arithf_aux(ts, v1, v2, fop, OP_MBIN, 1); }
+
+
+/* arithmetic operations with stack operands */
+#define op_arith(ts,iop,fop) { \
+    TValue *v1 = peek(1); \
+    TValue *v2 = peek(0); \
     if (ttisint(v1) && ttisint(v2)) { \
         cr_Integer i1 = ival(v1); cr_Integer i2 = ival(v2); \
         setival(v1, iop(ts, i1, i2)); \
@@ -327,113 +411,38 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     }}
 
 
-/*
-** Arithmetic operations with K (constant) operand for floats.
-*/
-#define op_arithKf(ts,fop) { \
-    TValue *v = peek(0); \
-    TValue *lk = getlK(); ttisnum(lk); \
-    op_arithf_aux(ts, v, lk, fop, OP_MBINK, 0); }
-
 
 /*
-** Arithmetic operations with K (constant) operand.
+** Bitwise operations
 */
-#define op_arithK(ts,iop,fop) { \
-    TValue *v = peek(0); \
-    TValue *lk = getlK(); \
-    op_arith_aux(ts, v, lk, iop, fop, OP_MBINK, 0); }
 
-
-/*
-** Arithmetic operations with I (immediate) operand for floats.
-*/
-#define op_arithIf(ts,fop) { \
-    TValue *v = peek(0); \
-    int L = fetchl(); \
-    L *= getsign(); \
-    cr_Number n; \
-    if (tonumber(v, &n)) { \
-        cr_Number imm = cast_num(L); \
-        setfval(v, fop(ts, n, imm)); \
-        pc += getOpSize(OP_MBINI); \
-    }}
-
-
-/* 
-** Arithmetic operations with I (immediate) operand.
-*/
-#define op_arithI(ts,iop,fop) { \
-    TValue *v = peek(0); \
-    int imm = fetchl(); \
-    imm *= getsign(); \
-    if (ttisint(v)) { \
-        cr_Integer i = ival(v); \
-        setival(v, iop(ts, i, imm)); \
-        pc += getOpSize(OP_MBINI); \
-    } else if (ttisflt(v)) { \
-        cr_Number n = fval(v); \
-        cr_Number fimm = cast_num(imm); \
-        setfval(v, fop(ts, n, fimm)); \
-        pc += getOpSize(OP_MBINI); \
-    }}
-
-
-/*
-** Arithmetic operations with stack operands for floats.
-*/
-#define op_arithf(ts,fop) { \
-    TValue *v1 = peek(1); \
-    TValue *v2 = peek(0); \
-    op_arithf_aux(ts, v1, v2, fop, OP_MBIN, 1); }
-
-
-/*
-** Arithmetic operations with stack operands.
-*/
-#define op_arith(ts,iop,fop) { \
-    TValue *v1 = peek(1); \
-    TValue *v2 = peek(0); \
-    op_arith_aux(ts, v1, v2, iop, fop, OP_MBIN, 1) }
-
-
-
-/* integer bitwise operations */
-#define iband(a,b)      (cri_intop(&, a, b))
-#define ibor(a,b)       (cri_intop(|, a, b))
-#define ibxor(a,b)      (cri_intop(^, a, b))
-
-
-/*
-** Bitwise operations with K (constant) operand.
-*/
+/* bitwise operations with constant operand */
 #define op_bitwiseK(ts,op) { \
     TValue *v = peek(0); \
-    TValue *lk = getlK(); \
+    TValue *lk = getlK(); /* L */\
     cr_Integer i1; cr_Integer i2 = ival(lk);  \
-    if (tointeger(v, &i1)) { \
+    if (cr_likely(tointeger(v, &i1))) { \
         setival(v, op(i1, i2)); \
-        pc += getOpSize(OP_MBINK); \
+    } else { \
+        crD_bitwerror(ts, v, lk); \
     }}
 
 
-/*
-** Bitwise operations with I (immediate) operand.
-*/
-#define op_bitwiseI(ts,op) { \
+/* bitwise operations with immediate operand */
+#define op_bitwiseI(ts,op,realop) { \
     TValue *v = peek(0); \
-    int imm = fetchl(); \
-    imm *= getsign(); \
+    int imm = fetchl(); /* L */\
+    imm *= getsign(); /* S */\
     cr_Integer i; \
-    if (tointeger(v, &i)) { \
+    if (cr_likely(tointeger(v, &i))) { \
         setival(v, op(i, imm)); \
-        pc += getOpSize(OP_MBINI); \
+    } else { \
+        TValue vimm; setival(&vimm, imm); \
+        crD_bitwerror(ts, v, &vimm); \
     }}
 
 
-/*
-** Bitwise operations with stack operands.
-*/
+/* bitwise operations with stack operands */
 #define op_bitwise(ts,op) { \
     TValue *v1 = peek(1); \
     TValue *v2 = peek(0); \
@@ -441,25 +450,20 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (tointeger(v1, &i1) && tointeger(v2, &i2)) { \
         setival(v1, op(i1, i2)); \
         pc += getOpSize(OP_MBIN); \
-    }}
+    }/* else try 'OP_MBIN' */}
 
-
-
-/* integer ordering operations */
-#define ilt(a,b)        (a < b)
-#define ile(a,b)        (a <= b)
-#define igt(a,b)        (a > b)
-#define ige(a,b)        (a >= b)
-
-
-/* assign ordering result */
-#define setcondres(v,cond) \
-    { cr_assert(cond >= 0); if (cond) setbtval(v1); else setbfval(v1); }
 
 
 /*
-** Order operations with stack operands.
+** Ordering operations
 */
+
+/* set ordering result */
+#define setorderres(v,cond) \
+    { cr_assert(0 <= cond && cond <= 1); settt(v, booleans[cond]) }
+
+
+/* order operations with stack operands */
 #define op_order(ts,iop,fop,other) { \
     TValue *v1 = peek(1); \
     TValue *v2 = peek(0); \
@@ -473,18 +477,26 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     } else { \
         protect(cond = other(ts, v1, v2)); \
     } \
-    setcondres(v1, cond); }
+    setorderres(v1, cond); }
 
 
-/*
-** Order operations with I (immediate) operand.
-*/
-#define op_orderI(ts,iop,fop,inv,mm) { \
-    int imm = fetchl(); \
-    imm *= getsign(); \
-    int isflt = fetchs(); \
+/* swap comparison values before invoking error */
+#define op_order_error(ts,v1,v2,flip) { \
+    TValue *vp = v1; \
+    if (flip) { \
+        vp = v2; \
+        v2 = v1; \
+    } \
+    crD_ordererror(ts, vp, v2); }
+
+
+/* order operations with immediate operand */
+#define op_orderI(ts,iop,fop,inv) { \
+    int imm = fetchl(); /* L */\
+    imm *= getsign(); /* S */\
+    int isflt = fetchs(); /* S */\
     TValue *v = peek(0); \
-    int cond = -1; \
+    int cond; \
     if (ttisint(v)) { \
         cond = iop(ival(v), imm); \
     } else if (ttisflt(v)) { \
@@ -492,9 +504,13 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
         cr_Number n2 = cast_num(imm); \
         cond = fop(n1, n2); \
     } else { \
-        protect(cond = crMM_orderI(ts, v, imm, inv, isflt, mm)); \
+        TValue vimm; \
+        if (isflt) setfval(&vimm, cast_num(imm)); \
+        else setival(&vimm, imm); \
+        correctisflt(ts, &vimm, imm, isflt); \
+        op_order_error(ts, v, &vimm, inv); \
     } \
-    setcondres(v, cond); }
+    setorderres(v, cond); }
 
 
 /* ------------------------------------------------------------------------
@@ -645,21 +661,6 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 int S = fetchs(); /* op */
-                // TODO
-                vm_break;
-            }
-            vm_case(OP_MBINI) {
-                TValue *v = peek(0);
-                int L = fetchl();
-                int S1 = fetchs(); /* sign */
-                int S2 = fetchs(); /* flip */
-                // TODO
-                vm_break;
-            }
-            vm_case(OP_MBINK) {
-                TValue *v = peek(0);
-                TValue *lk = getlK();
-                int S = fetchs(); /* flip */
                 // TODO
                 vm_break;
             }
@@ -822,8 +823,9 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 } else if (ttisflt(v1)) {
                     cond = cri_numeq(fval(v1), cast_num(imm));
                 } else {
-                    protect(cond = 
+                    cond = 0;
                 }
+                setcondres(v1, cond);
                 vm_break;
             }
             vm_case(OP_LTI) {

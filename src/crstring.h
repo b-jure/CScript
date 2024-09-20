@@ -43,6 +43,7 @@ CRI_FUNC size_t crS_tonum(const char *s, TValue *o, int *of);
 CRI_FUNC int crS_tomt(cr_State *ts, OString *id);
 CRI_FUNC void crS_numtostring(cr_State *ts, TValue *v);
 CRI_FUNC int crS_hexvalue(int c);
+CRI_FUNC const char *crS_tolowerall(const char *s);
 CRI_FUNC void crS_sourceid(char *adest, const char *src, size_t len);
 
 #endif

@@ -180,7 +180,7 @@
 
 #define cr_floor(n)             (cr_mathop(floor)(n))
 
-#define cr_number2str(s,sz,n)   snprintf((s),(sz),CR_FLOAT_FMT,(cr_number)(n))
+#define cr_number2str(s,sz,n)   snprintf((s),(sz),CR_FLOAT_FMT,(cr_Number)(n))
 
 #define cr_number2integer(n,p) \
     ((n) >= (CR_NUMBER)(CR_INTEGER_MIN) && \

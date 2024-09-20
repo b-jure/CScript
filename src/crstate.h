@@ -114,7 +114,7 @@ typedef struct cr_ljmp {
 
 
 /* 'CallFrame' function is Cript function */
-#define cfiscript(cf)   (!((cf)->cfstatus & CFST_CCALL))
+#define cfisCript(cf)   (!((cf)->cfstatus & CFST_C))
 
 
 /* call information */
@@ -147,7 +147,7 @@ typedef struct GState {
     struct cr_State *thwouv; /* thread with open upvalues */
     OString *memerror; /* preallocated message for memory errors */
     OString *vmtnames[CR_NUM_MM]; /* method names */
-    HTable *vmt[CR_NUM_TYPES]; /* vmt's for basic types */
+    TValue *vmt[CR_NUM_TYPES]; /* vmt's for basic types */
 } GState;
 
 

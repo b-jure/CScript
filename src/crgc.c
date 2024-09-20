@@ -594,7 +594,7 @@ static void callfin(cr_State *ts) {
         setobj2s(ts, ts->sp.p++, &v);
         ptrdiff_t oldtop = savestack(ts, ts->sp.p - 2);
         ts->cf->cfstatus |= CFST_FIN; /* running a finalizer */
-        int status = crPr_call(ts, protectedfinalizer, NULL, oldtop);
+        int status = crPR_call(ts, protectedfinalizer, NULL, oldtop);
         ts->cf->cfstatus &= ~CFST_FIN; /* finalizer returned */
         gc->stopped = oldstopped;
         if (cr_unlikely(status != CR_OK)) {

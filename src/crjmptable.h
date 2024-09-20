@@ -46,8 +46,6 @@ static const void *const jmptable[NUM_OPCODES] = {
     &&L_OP_POP,
     &&L_OP_POPN,
     &&L_OP_MBIN,
-    &&L_OP_MBINI,
-    &&L_OP_MBINK,
     &&L_OP_ADDK,
     &&L_OP_SUBK,
     &&L_OP_MULK,

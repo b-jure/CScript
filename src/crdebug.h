@@ -21,6 +21,13 @@
 #include "crobject.h"
 
 
+#define crD_aritherror(ts,v1,v2) \
+    crD_operror(ts, v1, v2, "perform arithmetic operation on")
+
+#define crD_bitwerror(ts,v1,v2) \
+    crD_operror(ts, v1, v2, "perform bitwise operation on")
+
+
 CRI_FUNC int crD_getfuncline(const Function *fn, int pc);
 CRI_FUNC const char *crD_info(cr_State *ts, const char *msg,
                               const OString *src, int line);

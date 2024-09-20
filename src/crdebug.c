@@ -21,6 +21,7 @@
 #include "crlimits.h"
 #include "crstate.h"
 #include "crobject.h"
+#include "crprotected.h"
 
 #include <stdio.h>
 
@@ -75,13 +76,20 @@ cr_sinline int currentline(CallFrame *cf)
 CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di)
 {
     cr_lock(ts);
-    if (level > ts->nframes || level < 0) {
+    int status = 0;
+    CallFrame *cf;
+    if (level > ts->ncf || level < 0) {
         cr_unlock(ts);
-        return 0;
+        return status;
     }
-    di->cf = &ts->frames[ts->nframes - 1 - level];
+    for (cf = ts->cf; level > 0 && cf != &ts->basecf; cf = cf->prev)
+        level--;
+    if (level == 0) { /* found ? */
+        di->cf = cf;
+        status = 1;
+    }
     cr_unlock(ts);
-    return 1;
+    return status;
 }
 
 
@@ -140,7 +148,7 @@ static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf, cr_Debu
     for (bit = 2; dbmask > 0; bit++) {
         switch (bit) {
             case 2: /* DW_LINE */
-                di->line = (cfiscript(cf) ? currentline(cf) : -1);
+                di->line = (cfisCript(cf) ? currentline(cf) : -1);
                 break;
             case 3: /* DW_FNINFO */
                 getfuncinfo(cl, di);
@@ -169,26 +177,26 @@ static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf, cr_Debu
  */
 CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_DebugInfo *di)
 {
-    CallFrame *frame;
+    CallFrame *cf;
     Closure *cl;
     TValue *fn;
     int status;
 
     cr_lock(ts);
     status = 1;
-    if (dbmask & CR_DBGFNGET) { /* use function on top of the stack ? */
-        frame = NULL;
-        fn = s2v(ts->stacktop.p - 1);
+    if (dbmask & CR_DBG_FNGET) { /* use function on top of the stack ? */
+        cf = NULL;
+        fn = s2v(ts->sp.p - 1);
         checkapi(ts, ttisfn(fn), "expect function");
-        ts->stacktop.p--;
+        ts->sp.p--;
     } else { /* use current function */
-        frame = ts->aframe;
-        fn = s2v(frame->callee.p);
+        cf = ts->cf;
+        fn = s2v(cf->callee.p);
         cr_assert(ttisfn(fn));
     }
     cl = (ttiscl(fn) ? clval(fn) : NULL);
     dbmask >>= 1; /* skip CR_DBGFNGET bit */
-    status = getinfo(ts, dbmask, cl, frame, di);
+    status = getinfo(ts, dbmask, cl, cf, di);
     cr_unlock(ts);
     return status;
 }
@@ -209,15 +217,14 @@ const char *crD_addinfo(cr_State *ts, const char *msg, const OString *src, int l
 
 
 /* operation on invalid type error */
-cr_noret crD_typeerror(cr_State *ts, const TValue *v, const char *op)
-{
-    crD_runerror(ts, "tried to %s a %s value", op, typename(tt(v)));
+cr_noret crD_typeerror(cr_State *ts, const TValue *v, const char *op) {
+    crD_runerror(ts, "tried to %s a %s value", op, typename(ttypetag(v)));
 }
 
 
 /* arithmetic operation error */
 cr_noret crD_operror(cr_State *ts, const TValue *v1, const TValue *v2,
-                          const char *op)
+                     const char *op)
 {
     if (ttisnum(v1))
         v1 = v2;  /* correct error value */
@@ -228,8 +235,8 @@ cr_noret crD_operror(cr_State *ts, const TValue *v1, const TValue *v2,
 /* ordering error */
 cr_noret crD_ordererror(cr_State *ts, const TValue *v1, const TValue *v2)
 {
-    const char *name1 = typename(tt(v1));
-    const char *name2 = typename(tt(v2));
+    const char *name1 = typename(ttypetag(v1));
+    const char *name2 = typename(ttypetag(v2));
     if (name1 == name2) /* point to same entry ? */
         crD_runerror(ts, "tried to compare two %s values", name1);
     else
@@ -244,12 +251,12 @@ cr_noret crD_runerror(cr_State *ts, const char *fmt, ...)
     va_start(ap, fmt);
     const char *err = crS_pushvfstring(ts, fmt, ap);
     va_end(ap);
-    if (cfiscript(ts->aframe)) { /* in Cript function (closure) ? */
-        crD_addinfo(ts, err, cfFn(ts->aframe)->source, currentline(ts->aframe));
-        setobj2s(ts, ts->stacktop.p - 2, s2v(ts->stacktop.p - 1));
-        ts->stacktop.p--;
+    if (cfisCript(ts->cf)) { /* in Cript function (closure) ? */
+        crD_addinfo(ts, err, cfFn(ts->cf)->source, currentline(ts->cf));
+        setobj2s(ts, ts->sp.p - 2, s2v(ts->sp.p - 1));
+        ts->sp.p--;
     }
-    crPr_throw(ts, CR_ERRRUNTIME);
+    crPR_throw(ts, CR_ERRRUNTIME);
 }
 
 

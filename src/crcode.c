@@ -33,7 +33,10 @@
 
 
 
-/* OpCode properties table */
+/* 
+** OpCode properties table.
+** (order 'OpCode')
+*/
 CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     /*     M  J  T  F      */
     opProp(0, 0, 0, FormatI), /* OP_TRUE */
@@ -53,8 +56,6 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatI), /* OP_POP */
     opProp(0, 0, 0, FormatIL), /* OP_POPN */
     opProp(1, 0, 0, FormatIS), /* OP_MBIN */
-    opProp(1, 0, 0, FormatISS), /* OP_MBINI */
-    opProp(1, 0, 0, FormatILS), /* OP_MBINK */
     opProp(0, 0, 0, FormatILS), /* OP_ADDK */
     opProp(0, 0, 0, FormatILS), /* OP_SUBK */
     opProp(0, 0, 0, FormatILS), /* OP_MULK */
@@ -141,7 +142,10 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
 };
 
 
-/* OpFormat size table */
+/* 
+** OpFormat size table.
+** (order 'OpFormat')
+*/
 CRI_DEF const cr_ubyte crC_opSize[FormatN] = {
     1,  /* FormatI */
     2,  /* FormatIS */
@@ -151,6 +155,47 @@ CRI_DEF const cr_ubyte crC_opSize[FormatN] = {
     6,  /* FormatILSS */
     7,  /* FormatILL */
     10, /* FormatILLL */
+};
+
+
+/* 
+** Names of all instructions.
+** (order 'OpCode')
+*/
+CRI_DEF const char *crC_opName[NUM_OPCODES] = {
+    "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
+    "VARARGPREP", "VARARG", "CLOSURE", "CLASS", "METHOD", "SETMM", "POP",
+    "POPN", "MBIN", "ADDK", "SUBK", "MULK", "DIVK", "MODK", "POWK", "BSHLK",
+    "BSHRK", "BANDK", "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "MODI",
+    "POWI", "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL",
+    "DIV", "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "RANGE",
+    "EQK", "EQI", "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM",
+    "BNOT", "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
+    "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL", "GETPRIVATE",
+    "SETPRIVATE", "GETUVAL", "SETUVAL", "DEFGLOBAL", "GETGLOBAL", "SETGLOBAL",
+    "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
+    "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT", "GETSUP", "GETSUPIDX",
+    "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET0",
+    "RET1", "RET",
+};
+
+
+/* 
+** Table of symbols for binary operators.
+** (order 'OpCode' OP_ADD - OP_BXOR)
+*/
+CRI_DEF const char *crC_opBinsym[] = {
+    "+",    /* OP_ADD */
+    "-",    /* OP_SUB */
+    "*",    /* OP_MUL */
+    "/",    /* OP_DIV */
+    "%",    /* OP_MOD */
+    "**",   /* OP_POW */
+    "<<",   /* OP_SHL */
+    ">>",   /* OP_SHR */
+    "&",    /* OP_BAND */
+    "|",    /* OP_BOR */
+    "^",    /* OP_BXOR */
 };
 
 
@@ -406,7 +451,7 @@ static int isintKL(ExpInfo *e) {
 
 
 /* check if 'e' is numeral constant and fits inside of large arg */
-static int isnumKL(ExpInfo *e, int *immediate, int *isflt) {
+static int isnumKL(ExpInfo *e, int *imm, int *isflt) {
     cr_Integer i;
     if (e->et == EXP_INT)
         i = e->u.i;
@@ -415,7 +460,7 @@ static int isnumKL(ExpInfo *e, int *immediate, int *isflt) {
     else
         return 0;
     if (!hasjumps(e) && fitsLA(i)) {
-        *immediate = cast_int(i);
+        *imm = cast_int(i);
         return 1;
     }
     return 0;
@@ -977,9 +1022,7 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 
 
 /* emit binary instruction variant where second operator is constant */
-static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
-                     int flip)
-{
+static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDK);
     int idxK = e2->u.info; /* index into 'constants' */
     cr_assert(e2->et == EXP_K);
@@ -987,16 +1030,15 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     crC_exp2stack(fs, e1);
     e1->u.info = crC_emitIL(fs, op, idxK);
     e1->et = EXP_FINEXPR;
-    emitILS(fs, OP_MBINK, idxK, flip);
 }
 
 
 /* emit arithmetic binary op */
 static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                          Binopr opr, int flip)
+                          int flip, Binopr opr)
 {
     if (tonumeral(e2, NULL) && exp2K(fs, e2)) {
-        codebinK(fs, e1, e2, opr, flip);
+        codebinK(fs, e1, e2, opr);
     } else {
         if (flip)
             swapexp(e1, e2);
@@ -1006,9 +1048,7 @@ static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 
 
 /* emit binary instruction variant where second operand is immediate value */
-static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
-                     int flip)
-{
+static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int rhs = e2->u.i;
     int sign = (rhs < 0 ? 0 : 2);
     int rhsabs = cri_abs(rhs);
@@ -1018,7 +1058,6 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     crC_exp2stack(fs, e1);
     e1->u.info = emitILS(fs, op, rhsabs, sign);
     e1->et = EXP_FINEXPR;
-    emitILSS(fs, OP_MBINI, rhsabs, sign, flip);
 }
 
 
@@ -1027,9 +1066,9 @@ static void codebinIK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                       int flip)
 {
     if (isintKL(e2))
-        codebinI(fs, e1, e2, opr, flip);
+        codebinI(fs, e1, e2, opr);
     else
-        codebinarithm(fs, e1, e2, opr, flip);
+        codebinarithm(fs, e1, e2, flip, opr);
 }
 
 
@@ -1053,7 +1092,7 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int iseq = (opr == OP_EQ);
     cr_assert(opr == OPR_NE || opr == OPR_EQ);
     if (e1->et != EXP_FINEXPR) {
-        /* 'e1' is either a stored string constant or numeral */
+        /* 'e1' is either a stored string constant or numeric value */
         cr_assert(e1->et == EXP_K || e1->et == EXP_INT || e1->et == EXP_FLT);
         swapexp(e1, e2);
     }
@@ -1066,6 +1105,7 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
             e1->u.info = emitILS(fs, OP_EQK, e2->u.info, iseq);
         }
     } else {
+        crC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
         e1->u.info = crC_emitIS(fs, OP_EQ, iseq);
         freeslots(fs, 1);
     }

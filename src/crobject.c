@@ -13,7 +13,7 @@
 
 static const char udataname[] = "userdata";
 
-CRI_DEF const char *const crO_typenames[CR_TOTALTYPES] = {
+CRI_DEF const char *const crO_typenames[CRI_TOTALTYPES] = {
     "no value", "boolean", "number", udataname, "string",
     "function", "class", "instance", udataname, "nil",
     "thread", "upvalue"

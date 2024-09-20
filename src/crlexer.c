@@ -171,7 +171,7 @@ static cr_noret lexerror(Lexer *lx, const char *err, int token) {
     err = crD_info(ts, err, lx->src, lx->line);
     if (token)
         crS_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
-    crPr_throw(ts, CR_ERRSYNTAX);
+    crPR_throw(ts, CR_ERRSYNTAX);
 }
 
 

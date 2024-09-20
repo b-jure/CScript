@@ -21,10 +21,10 @@
 
 
 /* number of all types ('CR_T*') including 'CR_TNONE' */
-#define CR_TOTALTYPES   (CR_THTABLE + 2)
+#define CRI_TOTALTYPES      (CR_THTABLE + 2)
 
 
-CRI_DEC(const char *const crO_typenames[CR_TOTALTYPES]);
+CRI_DEC(const char *const crO_typenames[CRI_TOTALTYPES]);
 
 #define typename(t)     crO_typenames[(t) + 1]
 

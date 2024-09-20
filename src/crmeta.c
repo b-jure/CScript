@@ -139,10 +139,10 @@ void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
         switch (mm) {
         case CR_MM_BNOT: case CR_MM_BSHL: case CR_MM_BSHR:
         case CR_MM_BAND: case CR_MM_BOR: case CR_MM_BXOR:
-            crD_operror(ts, v1, v2, "perform bitwise operation on");
+            crD_aritherror(ts, v1, v2);
             /* UNREACHED */
         default:
-            crD_operror(ts, v1, v2, "perform arithmetic operation on");
+            crD_bitwerror(ts, v1, v2);
             /* UNREACHED */
         }
     }

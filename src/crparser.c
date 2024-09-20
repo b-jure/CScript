@@ -24,6 +24,7 @@
 #include "crstate.h"
 #include "crobject.h"
 #include "crstring.h"
+#include "crvm.h"
 #include "crfunction.h"
 #include "crhashtable.h"
 #include "crmem.h"
@@ -1811,7 +1812,7 @@ static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
             TValue v1, v2;
             movexp2v(lx->fs, &ss->e, &v1);
             movexp2v(lx->fs, caseexp, &v2);
-            return crO_orderEQ(lx->ts, &v1, &v2);
+            return crV_rawEQ(&v1, &v2);
         }
     }
     return 0;
