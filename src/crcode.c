@@ -627,15 +627,6 @@ static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 }
 
 
-static int emitILSSS(FunctionState *fs, Instruction op, int a, int b, int c,
-                     int d)
-{
-    int offset = emitILSS(fs, op, a, b, c);
-    emitS(fs, d);
-    return offset;
-}
-
-
 /* emit integer constant */
 static int codeintK(FunctionState *fs, cr_Integer i) {
     if (fitsLA(i))
@@ -1100,7 +1091,7 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     if (isintK(e2)) {
         if (isnumKL(e2, &imm, &isflt)) {
             int sign = (imm < 0 ? 0 : 2);
-            e1->u.info = emitILSSS(fs, OP_EQI, imm, sign, iseq, isflt);
+            e1->u.info = emitILSS(fs, OP_EQI, imm, sign, iseq);
         } else {
             e1->u.info = emitILS(fs, OP_EQK, e2->u.info, iseq);
         }
@@ -1115,7 +1106,7 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 
 /* emit binary ordering instruction */
 static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
-    int isflt = 0;
+    int isflt; /* unused */
     int immediate;
     OpCode op;
     int sign;
@@ -1129,7 +1120,7 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
         op = binopr2op(opr, OPR_LT, OP_GTI);
     emit:
         sign = (immediate < 0 ? 0 : 2);
-        e1->u.info = emitILSS(fs, op, immediate, sign, isflt);
+        e1->u.info = emitILS(fs, op, immediate, sign);
     } else {
         op = binopr2op(opr, OPR_LT, OP_LT);
         e1->u.info = crC_emitI(fs, op);

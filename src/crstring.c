@@ -98,6 +98,7 @@ int crS_cmp(const OString *s1, const OString *s2) {
 }
 
 
+/* string equality */
 int crS_eq(const OString *s1, const OString *s2) {
     return ((s1 == s2) || (s1->hash == s2->hash /* pointers match or hash */
                 && s1->len == s2->len /* and length */

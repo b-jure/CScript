@@ -1009,7 +1009,7 @@ static Unopr getunopr(int token) {
     switch (token) {
     case '-': return OPR_UMIN;
     case '~': return OPR_BNOT;
-    case '!': return OPR_NOT;
+    case TK_NOT: return OPR_NOT;
     default: return OPR_NOUNOPR;
     }
 }
@@ -1055,7 +1055,7 @@ static const struct {
     /* unary operators priority */
     [OPR_UMIN]      = { 14, 14 },   /* '-' */
     [OPR_BNOT]      = { 14, 14 },   /* '~' */
-    [OPR_NOT]       = { 14, 14 },   /* '!' */
+    [OPR_NOT]       = { 14, 14 },   /* 'not' */
     /* binary operators priority */
     [OPR_POW]       = { 16, 15 },   /* '**' */
     [OPR_MUL]       = { 13, 13 },   /* '*' */

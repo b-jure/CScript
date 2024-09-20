@@ -220,7 +220,6 @@ typedef enum cr_MM {
     CR_MM_DIV,
     CR_MM_MOD,
     CR_MM_POW,
-    CR_MM_NOT,
     CR_MM_UMIN,
     CR_MM_BNOT,
     CR_MM_BSHL,

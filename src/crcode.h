@@ -174,21 +174,21 @@ OP_RANGE,        /* V V1    'V..V1' */
 
 OP_EQK,          /* V L S   '(V == K{L}) == S' */
 
-OP_EQI,       /* V L S1 S2 S3  '(V == I(L) * (S1 - 1)) == S2' (S3 if float) */
-OP_LTI,       /* V L S1 S2     'V < (S1 - 1) * I(L)'    (S2 if float) */
-OP_LEI,       /* V L S1 S2     'V <= (S1 - 1) * I(L)'   (S2 if float) */
-OP_GTI,       /* V L S1 S2     'V > (S1 - 1) * I(L)'    (S2 if float) */
-OP_GEI,       /* V L S1 S2     'V >= (S1 - 1) * I(L)'   (S2 if float) */ 
+OP_EQI,       /* V L S1 S2      '(V == I(L) * (S1 - 1)) == S2' */
+OP_LTI,       /* V L S1         'V < (S1 - 1) * I(L)' */
+OP_LEI,       /* V L S1         'V <= (S1 - 1) * I(L)' */
+OP_GTI,       /* V L S1         'V > (S1 - 1) * I(L)' */
+OP_GEI,       /* V L S1         'V >= (S1 - 1) * I(L)' */ 
 
 OP_EQ,           /* V1 V2 S     '(V1 == V2) == S' */
 OP_LT,           /* V1 V2       '(V1 < V2)' */
 OP_LE,           /* V1 V2       '(V1 <= V2)' */
 
-OP_NOT,          /* V       '!V' */
+OP_EQPRESERVE,   /* V1 V2   'V1 == V2 (preserves V1 operand)' */
+
+OP_NOT,          /* V       'not V' */
 OP_UNM,          /* V       '-V' */
 OP_BNOT,         /* V       '~V' */
-
-OP_EQPRESERVE,   /* V1 V2   'V1 == V2 (preserves V1 operand)' */
 
 OP_JMP,          /* L       'pc += L' */
 OP_JMPS,         /* L       'pc -= L' */

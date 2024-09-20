@@ -104,12 +104,15 @@ void crMM_callres(cr_State *ts, const TValue *selfarg, const TValue *fn,
                   const TValue *v1, const TValue *v2, SPtr res)
 {
     /* assuming EXTRA_STACK */
-    // func = sp[0], self, fn, v1, v2, sp_here
-    setobj2s(ts, ts->sp.p++, selfarg); /* self */
-    setobj2s(ts, ts->sp.p++, fn);
-    setobj2s(ts, ts->sp.p++, v1);
-    setobj2s(ts, ts->sp.p++, v2);
-    crV_call(ts, ts->sp.p - 3, 1);
+    ptrdiff_t result = savestack(ts, res);
+    SPtr func = ts->sp.p;
+    setobj2s(ts, func, fn); /* push function */
+    setobj2s(ts, func + 1, selfarg); /* 'self' arg */
+    setobj2s(ts, func + 2, v1); /* 1st arg */
+    setobj2s(ts, func + 3, v2); /* 2nd arg */
+    ts->sp.p += 4;
+    crV_call(ts, func, 1);
+    res = restorestack(ts, result);
     setobj2s(ts, res, s2v(--ts->sp.p));
 }
 
@@ -149,13 +152,11 @@ void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
 }
 
 
-/*
-** Calls order method.
-*/
+/* call order method */
 int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2, cr_MM mm) {
-    cr_assert(CR_MM_EQ <= mt && mt < CR_NUM_MM);
+    cr_assert(CR_MM_EQ <= mt && mt <= CR_NUM_LE);
     if (cr_likely(callbinres(ts, v1, v2, ts->sp.p, mm)))
-        return cri_isfalse(s2v(ts->sp.p - 1));
+        return cri_isfalse(s2v(ts->sp.p));
     crD_ordererror(ts, v1, v2);
     /* UNREACHED */
     return 0;

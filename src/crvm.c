@@ -224,7 +224,7 @@ cr_sinline int numLT(const TValue *v1, const TValue *v2) {
 /* 'less than' ordering '<' on non-number values */
 cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
-        return (crS_cmp(strval(v1), strval(v2)) < 0);
+        return crS_cmp(strval(v1), strval(v2));
     else
         return crMM_order(ts, v1, v2, CR_MM_LT);
 }
@@ -286,7 +286,7 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
         return 0;
     } else {
         crMM_callres(ts, selfarg, method, v1, v2, ts->sp.p);
-        return !cri_isfalse(s2v(ts->sp.p - 1));
+        return !cri_isfalse(s2v(ts->sp.p));
     }
 }
 
@@ -360,12 +360,12 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
         cr_Number fimm = cast_num(imm); \
         setfval(v, fop(ts, n, fimm)); \
     } else { \
-        op_arithI_error(ts, v, fimm, realop); \
+        op_arithI_error(ts, v, imm); \
     }}
 
 
 /* arithmetic operations with immediate operand */
-#define op_arithI(ts,iop,fop,realop) { \
+#define op_arithI(ts,iop,fop) { \
     TValue *v = peek(0); \
     int imm = fetchl(); /* L */\
     imm *= getsign(); /* S */\
@@ -377,16 +377,16 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
         cr_Number fimm = cast_num(imm); \
         setfval(v, fop(ts, n, fimm)); \
     } else { \
-        op_arithI_error(ts, v, imm, realop); \
+        op_arithI_error(ts, v, imm); \
     }}
 
 
-#define op_arithf_aux(ts,v1,v2,fop,op,popn) { \
+#define op_arithf_aux(ts,v1,v2,fop) { \
     cr_Number n1; cr_Number n2; \
     if (tonumber(v1, &n1) && tonumber(v2, &n2)) { \
         setfval(v1, fop(ts, n1, n2)); \
-        pc += getOpSize(op); \
-        pop(popn); \
+        pc += getOpSize(OP_MBIN); \
+        pop(1); \
     }/* else try 'OP_MBIN' */}
 
 
@@ -394,7 +394,7 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
 #define op_arithf(ts,fop) { \
     TValue *v1 = peek(1); \
     TValue *v2 = peek(0); \
-    op_arithf_aux(ts, v1, v2, fop, OP_MBIN, 1); }
+    op_arithf_aux(ts, v1, v2, fop); }
 
 
 /* arithmetic operations with stack operands */
@@ -404,10 +404,10 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisint(v1) && ttisint(v2)) { \
         cr_Integer i1 = ival(v1); cr_Integer i2 = ival(v2); \
         setival(v1, iop(ts, i1, i2)); \
-        pc += getOpSize(op); \
-        pop(popn); \
+        pc += getOpSize(OP_MBIN); \
+        pop(1); \
     } else { \
-        op_arithf_aux(ts, v1, v2, fop, op, popn); \
+        op_arithf_aux(ts, v1, v2, fop); \
     }}
 
 
@@ -429,7 +429,7 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
 
 
 /* bitwise operations with immediate operand */
-#define op_bitwiseI(ts,op,realop) { \
+#define op_bitwiseI(ts,op) { \
     TValue *v = peek(0); \
     int imm = fetchl(); /* L */\
     imm *= getsign(); /* S */\
@@ -459,15 +459,16 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
 */
 
 /* set ordering result */
-#define setorderres(v,cond) \
-    { cr_assert(0 <= cond && cond <= 1); settt(v, booleans[cond]) }
+#define setorderres(v,cond,eq) \
+    { cr_assert(0 <= cond && cond <= 1); settt(v, booleans[cond == eq]); }
 
 
 /* order operations with stack operands */
 #define op_order(ts,iop,fop,other) { \
     TValue *v1 = peek(1); \
     TValue *v2 = peek(0); \
-    int cond = -1; \
+    int iseq = fetchs(); /* S */\
+    int cond; \
     if (ttisint(v1) && ttisint(v2)) { \
         cr_Integer i1 = ival(v1); \
         cr_Integer i2 = ival(v2); \
@@ -477,26 +478,15 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     } else { \
         protect(cond = other(ts, v1, v2)); \
     } \
-    setorderres(v1, cond); }
-
-
-/* swap comparison values before invoking error */
-#define op_order_error(ts,v1,v2,flip) { \
-    TValue *vp = v1; \
-    if (flip) { \
-        vp = v2; \
-        v2 = v1; \
-    } \
-    crD_ordererror(ts, vp, v2); }
+    setorderres(v1, cond, iseq); }
 
 
 /* order operations with immediate operand */
-#define op_orderI(ts,iop,fop,inv) { \
+#define op_orderI(ts,iop,fop) { \
     int imm = fetchl(); /* L */\
     imm *= getsign(); /* S */\
-    int isflt = fetchs(); /* S */\
-    TValue *v = peek(0); \
     int cond; \
+    TValue *v = peek(0); \
     if (ttisint(v)) { \
         cond = iop(ival(v), imm); \
     } else if (ttisflt(v)) { \
@@ -504,13 +494,9 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
         cr_Number n2 = cast_num(imm); \
         cond = fop(n1, n2); \
     } else { \
-        TValue vimm; \
-        if (isflt) setfval(&vimm, cast_num(imm)); \
-        else setival(&vimm, imm); \
-        correctisflt(ts, &vimm, imm, isflt); \
-        op_order_error(ts, v, &vimm, inv); \
+        cond = 0; \
     } \
-    setorderres(v, cond); }
+    setorderres(v, cond, 1); }
 
 
 /* ------------------------------------------------------------------------
@@ -657,6 +643,8 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 pop(L);
                 vm_break;
             }
+            /* } BINARY_OPS { */
+            /* ARITHMETIC_OPS { */
             vm_case(OP_MBIN) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
@@ -802,63 +790,85 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 op_bitwise(ts, ibxor);
                 vm_break;
             }
+            /* } RANGE_OPS { */
             vm_case(OP_RANGE) {
                 // TODO
                 vm_break;
             }
+            /* } ORDERING_OPS { */
             vm_case(OP_EQK) {
                 TValue *v1 = peek(0);
-                const TValue *v2 = getlK();
-                int cond = crV_rawEQ(v1, v2);
-                setcondres(v1, cond);
+                const TValue *v2 = getlK(); /* L */
+                int S = fetchs(); /* iseq */
+                setorderres(v1, crV_rawEQ(v1, v2), S);
                 vm_break;
             }
             vm_case(OP_EQI) {
                 TValue *v1 = peek(0);
-                int cond = -1;
-                int imm = fetchl();
-                imm *= getsign();
-                if (ttisint(v1)) {
-                    cond = (ival(v1) == imm);
-                } else if (ttisflt(v1)) {
-                    cond = cri_numeq(fval(v1), cast_num(imm));
-                } else {
+                int cond;
+                int L = fetchl(); /* imm */
+                int S1 = getsign(); /* sign */
+                int S2 = fetchs(); /* iseq */
+                L *= S1;
+                if (ttisint(v1))
+                    cond = (ival(v1) == L);
+                else if (ttisflt(v1))
+                    cond = cri_numeq(fval(v1), cast_num(L));
+                else
                     cond = 0;
-                }
-                setcondres(v1, cond);
+                setorderres(v1, cond, S2);
                 vm_break;
             }
             vm_case(OP_LTI) {
+                op_orderI(ts, ilt, cri_numlt);
                 vm_break;
             }
             vm_case(OP_LEI) {
+                op_orderI(ts, ile, cri_numle);
                 vm_break;
             }
             vm_case(OP_GTI) {
+                op_orderI(ts, igt, cri_numgt);
                 vm_break;
             }
             vm_case(OP_GEI) {
+                op_orderI(ts, ige, cri_numge);
                 vm_break;
             }
             vm_case(OP_EQ) {
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                int S = fetchs(); /* iseq */
+                int cond;
+                protect(cond = crV_orderEQ(ts, v1, v2));
+                setorderres(v1, cond, S);
+                pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_LT) {
+                op_order(ts, ilt, cri_numlt, otherLT);
                 vm_break;
             }
             vm_case(OP_LE) {
+                op_order(ts, ile, cri_numle, otherLE);
                 vm_break;
             }
+            vm_case(OP_EQPRESERVE) {
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                protect(crV_orderEQ(ts, v1, v2));
+                setobj(ts, v2, s2v(ts->sp.p));
+                vm_break;
+            }
+            /* }} UNARY_OPS { */
             vm_case(OP_NOT) {
+
                 vm_break;
             }
             vm_case(OP_UNM) {
                 vm_break;
             }
             vm_case(OP_BNOT) {
-                vm_break;
-            }
-            vm_case(OP_EQPRESERVE) {
                 vm_break;
             }
             vm_case(OP_JMP) {
