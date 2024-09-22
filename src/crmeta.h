@@ -13,15 +13,19 @@ CRI_FUNC UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv);
 CRI_FUNC InstanceMethod *crMM_newinstancemethod(cr_State *ts, 
                                                 Instance *receiver,
 						CrClosure *method);
-CRI_FUNC void crMM_callres(cr_State *ts, const TValue *selfarg,
+CRI_FUNC void crMM_callbinres(cr_State *ts, const TValue *selfarg,
                            const TValue *fn, const TValue *v1,
                            const TValue *v2, SPtr res);
+CRI_FUNC void crMM_callunaryres(cr_State *ts, const TValue *fn,
+                                const TValue *v, SPtr res);
 CRI_FUNC int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2,
 		  	cr_MM mm);
 CRI_FUNC int crMM_orderI(cr_State *ts, const TValue *v1, int v2, int flip,
                          int isflt, cr_MM mm);
-CRI_FUNC void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2,
+CRI_FUNC void crMM_trybin(cr_State *ts, const TValue *v1, const TValue *v2,
 		    	  SPtr res, cr_MM mm);
+CRI_FUNC void crMM_tryunary(cr_State *ts, const TValue *v, SPtr res,
+                             cr_MM mm);
 CRI_FUNC void crMM_freeclass(cr_State *ts, OClass *cls);
 CRI_FUNC void crMM_freeinstance(cr_State *ts, Instance *ins);
 CRI_FUNC void crMM_freeuserdata(cr_State *ts, UserData *ud);

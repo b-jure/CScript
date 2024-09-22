@@ -198,8 +198,8 @@ OP_TESTORPOP,   /* V L S   'if (!cri_isfalse(V) == S) pc += L; else pop V;' */
 OP_TESTANDPOP,  /* V L S   'if (!cri_isfalse(V) == S) { pc += L; pop V; }' */
 OP_TESTPOP,     /* V L S   'if (!cri_isfalse(V) == S) { pc += L; } pop V;' */
 
-OP_CALL,    /* L1 L2 L3  'V{L1},...,V{L1+L3-2} = V{L1}(V{L1+1},...,V{L1+L2-1})'
-               (check info) */
+OP_CALL,   /* L1 L2 L3  'V{L1},...,V{L1+L3-2} = V{L1}(V{L1+1},...,V{L1+L2-1})'
+            (check info) */
 
 OP_CLOSE,        /* L           'close all upvalues >= OU{L} */
 OP_TBC,          /* L           'mark L{L} as to-be-closed' */

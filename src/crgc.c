@@ -58,7 +58,8 @@
 #define markobjectcheck(gc,o)	((o) ? markobject_(gc, obj2gco(o)) : (void)0)
 
 /* 'markobject_' but only if object is white */
-#define markobject(gc,o)	(iswhite(o) ? markobject_(gc, obj2gco(o)) : (void)0)
+#define markobject(gc,o) \
+    (iswhite(o) ? markobject_(gc, obj2gco(o)) : (void)0)
 
 /* 'markobject' but only if key value is object and white */
 #define markkey(gc, n) \
@@ -197,7 +198,7 @@ static GCObject **getgclist(GCObject *o) {
  * around, so marking 'r' white won't make it collectable until
  * the next cycle.
  */
-void crG_barrierforward_(cr_State *ts, GCObject *r, GCObject *o) {
+void crG_barrier_(cr_State *ts, GCObject *r, GCObject *o) {
     GC *gc = &G_(ts)->gc;
     if (invariantstate(gc)) { /* invariant holds ? */
         cr_assert(isblack(r) && iswhite(o));
@@ -240,26 +241,28 @@ static void markobject_(GC *gc, GCObject *o) {
     cr_assert(iswhite(o));
     switch(o->tt_) {
     case CR_VSTRING: {
-        markblack(o);
+        notw2black(o);
         break;
     }
     case CR_VUVALUE: {
         UpVal *uv = gco2uv(o);
-        if (uvisopen(uv)) markgray(uv);
-        else markblack(uv);
+        if (uvisopen(uv)) 
+            markgray(uv);
+        else 
+            notw2black(uv);
         markvalue(gc, uv->v.location);
         break;
     }
     case CR_VINSTANCE: {
         Instance *ins = gco2ins(o);
-        markblack(ins);
+        notw2black(ins);
         markobject(gc, ins->oclass);
         markobjectcheck(gc, ins->fields);
         break;
     }
     case CR_VMETHOD: {
         InstanceMethod *im = gco2im(o);
-        markblack(im);
+        notw2black(im);
         markobject(gc, im->receiver);
         markobject(gc, im->method);
         break;
@@ -267,7 +270,7 @@ static void markobject_(GC *gc, GCObject *o) {
     case CR_VUDATA: {
         UserData *ud = gco2ud(o);
         if (ud->nuv == 0 && !ud->vmt) {
-            markblack(ud);
+            notw2black(ud);
             break;
         }
     } /* FALLTHRU */

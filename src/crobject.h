@@ -126,23 +126,23 @@ typedef struct TValue {
 
 
 /*
- * Represents value on the stack.
- * It contains 'tbc' field which represents
- * offset from the current stack value to the
- * next value on the stack that needs to-be-closed.
- * 'tbc' being 0 indicates that the distance value
- * doesn't fit in 'unsigned short' and then it is
- * assumed that the actual value is USHRT_MAX.
- * This way we can represent larger distances
- * without using larger data type.
- * On 8-byte alignment 'SValue' is 16 bytes,
- * while on 4-byte alignement 'SValue' is 8 bytes.
- */
+** Stack value.
+** It contains 'delta' field which represents
+** offset from the current stack value to the
+** next value on the stack that needs to-be-closed.
+** 'delta' being 0 indicates that the distance value
+** doesn't fit in 'delta' and then it is ** assumed that
+** the actual value is MAXDELTA. 
+** This way we can represent larger distances without using
+** larger data type.
+** Note: On 8-byte alignment 'SValue' should be 16 
+** bytes, while on 4-byte alignement 8 bytes.
+*/
 typedef union {
     TValue val_;
     struct {
         TValueFields;
-        unsigned short tbc;
+        unsigned short delta;
     } tbc;
 } SValue;
 
@@ -449,7 +449,8 @@ typedef struct UpVal {
              * is to easily update the previous 'UpVal' 'next' pointer
              * when unlinking the open upvalue; meaning that 'prev' points
              * not to the previous 'UpVal' but to the previous 'UpVal' 'next'
-             * field. This avoids branching as much as possible */
+             * field. This avoids branching as much as possible when
+             * unlinking the upvalue. */
             struct UpVal *next;
             struct UpVal **prev;
         } open;

@@ -1,6 +1,7 @@
 #include "crfunction.h"
 #include "crgc.h"
 #include "crmem.h"
+#include "crmeta.h"
 
 Function *crF_newfunction(cr_State *ts)
 {
@@ -129,8 +130,8 @@ UpVal *crF_findupval(cr_State *ts, SPtr sval)
     UpVal *upval;
     SPtr sp;
     cr_assert(isinthwouv(ts) || ts->openupval == NULL);
-    UpVal **pp = &ts->openupval;
-    while ((upval = *pp) != NULL && (sp = upvaltostk(upval)) > sval) {
+    UpVal **pp = &ts->openupval; /* good ol' pp */
+    while ((upval = *pp) != NULL && (sp = uvlevel(upval)) > sval) {
         cr_assert(!isdead(&G_(ts)->gc, upval));
         if (sp == sval)
             return upval;
@@ -140,12 +141,76 @@ UpVal *crF_findupval(cr_State *ts, SPtr sval)
 }
 
 
+/* 
+** Check if object at stack 'level' has a '__close' method,
+** raise error if not.
+*/
+static void checkclosem(cr_State *ts, SPtr level) {
+    const TValue *fn = crMM_get(ts, s2v(level), CR_MM_CLOSE);
+    if (cr_unlikely(ttisnil(fn))) {
+        int vidx = level - ts->cf->callee.p;
+        // TODO
+    }
+}
+
+
+/* 
+** Maximum value for 'delta', dependant on the data type
+** of 'delta'.
+*/
+#define MAXDELTA \
+    ((256UL << ((sizeof(ts->stack.p->tbc.delta) - 1) * 8)) - 1)
+
+
+/* insert variable into the list of to-be-closed variables */
+void crF_newtbcvar(cr_State *ts, SPtr level) {
+    if (cri_isfalse(s2v(level)))
+        return;
+    checkclosem(ts, level);
+    while (cast_uint(level - ts->tbclist.p) > MAXDELTA) {
+        ts->tbclist.p += MAXDELTA;
+        ts->tbclist.p->tbc.delta = 0;
+    }
+    level->tbc.delta = level - ts->tbclist.p;
+    ts->tbclist.p = level;
+}
+
+
 /* unlinks upvalue from the list */
-static void unlinkupval(UpVal *upval)
-{
+static void unlinkupval(UpVal *upval) {
     *upval->u.open.prev = upval->u.open.next;
     if (upval->u.open.next)
         upval->u.open.next->u.open.prev = upval->u.open.prev;
+}
+
+
+/* close any open upvalues up to the 'level' */
+void crF_closeupval(cr_State *ts, SPtr level) {
+    UpVal *uv = ts->openupval;
+    while (uv != NULL && uvlevel(uv) <= level) {
+        TValue *slot = &uv->u.value;
+        unlinkupval(uv);
+        setobj(ts, slot, uv->v.location);
+        uv->v.location = slot;
+        if (!iswhite(uv)) { /* not white but maybe gray ? */
+            notw2black(uv); /* closed upvalue can't be gray */
+            crG_barrier(ts, uv, slot); /* noop, 'slot' (uv) is black */
+        }
+    }
+}
+
+
+/*
+** Close all up-values and to-be-closed variables up to stack 'level'.
+** Returns restored (stack) 'level'.
+*/
+SPtr crF_close(cr_State *ts, SPtr level, int status) {
+    ptrdiff_t relativelevel = savestack(ts, level);
+    crF_closeupval(ts, level);
+    while (ts->tbclist.p >= level) {
+        level = restorestack(ts, relativelevel);
+    }
+    return level;
 }
 
 

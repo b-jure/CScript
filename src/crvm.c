@@ -130,7 +130,7 @@ void crV_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
                 int op)
 {
     if (!crO_arithmraw(ts, v1, v2, s2v(res), op))
-        crMM_arithm(ts, v1, v2, res, (op - CR_OPADD) + CR_MM_ADD);
+        crMM_trybin(ts, v1, v2, res, (op - CR_OPADD) + CR_MM_ADD);
 }
 
 
@@ -285,7 +285,7 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnil(method))  {
         return 0;
     } else {
-        crMM_callres(ts, selfarg, method, v1, v2, ts->sp.p);
+        crMM_callbinres(ts, selfarg, method, v1, v2, ts->sp.p);
         return !cri_isfalse(s2v(ts->sp.p));
     }
 }
@@ -792,7 +792,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
             }
             /* } RANGE_OPS { */
             vm_case(OP_RANGE) {
-                // TODO
+                /* TODO */
                 vm_break;
             }
             /* } ORDERING_OPS { */
@@ -854,48 +854,110 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 vm_break;
             }
             vm_case(OP_EQPRESERVE) {
+                SPtr res = ts->sp.p - 1;
                 TValue *v1 = peek(1);
-                TValue *v2 = peek(0);
+                TValue *v2 = s2v(res);
                 protect(crV_orderEQ(ts, v1, v2));
-                setobj(ts, v2, s2v(ts->sp.p));
+                setobj2s(ts, res, s2v(ts->sp.p));
                 vm_break;
             }
             /* }} UNARY_OPS { */
             vm_case(OP_NOT) {
-
+                TValue *v = peek(0);
+                if (cri_isfalse(v))
+                    setbtval(v);
+                else
+                    setbfval(v);
                 vm_break;
             }
             vm_case(OP_UNM) {
+                SPtr res = ts->sp.p - 1;
+                TValue *v = s2v(res);
+                if (ttisint(v)) {
+                    cr_Integer i = ival(v);
+                    setival(v, cri_intop(-, 0, i));
+                } else if (ttisflt(v)) {
+                    cr_Number n = fval(v);
+                    setfval(v, cri_numunm(ts, n));
+                } else {
+                    protect(crMM_tryunary(ts, v, res, CR_MM_UNM));
+                }
                 vm_break;
             }
             vm_case(OP_BNOT) {
+                SPtr res = ts->sp.p - 1;
+                TValue *v = s2v(res);
+                if (ttisint(v)) {
+                    cr_Integer i = ival(v);
+                    setival(v, cri_intop(^, ~cri_castS2U(0), i));
+                } else
+                    protect(crMM_tryunary(ts, v, res, CR_MM_BNOT));
+                }
                 vm_break;
             }
+            /* } JMP_OPS { */
             vm_case(OP_JMP) {
+                int L = fetchl();
+                pc += L;
                 vm_break;
             }
             vm_case(OP_JMPS) {
+                int L = fetchl();
+                pc -= L;
                 vm_break;
             }
+            /* } TEST_OPS { */
             vm_case(OP_TEST) {
+                TValue *v = peek(0);
+                int L = fetchl(); /* offset */
+                int S = fetchs(); /* cond */
+                if (!cri_isfalse(v) == S)
+                    pc += L;
                 vm_break;
             }
             vm_case(OP_TESTORPOP) {
+                TValue *v = peek(0);
+                int L = fetchl(); /* offset */
+                int S = fetchs(); /* cond */
+                if (!cri_isfalse(v) == S)
+                    pc += L;
+                else
+                    pop(1); /* v */
                 vm_break;
             }
             vm_case(OP_TESTANDPOP) {
+                TValue *v = peek(0);
+                int L = fetchl(); /* offset */
+                int S = fetchs(); /* cond */
+                if (!cri_isfalse(v) == S) {
+                    pc += L;
+                    pop(1); /* v */
+                }
                 vm_break;
             }
             vm_case(OP_TESTPOP) {
+                TValue *v = peek(0);
+                int L = fetchl(); /* offset */
+                int S = fetchs(); /* cond */
+                if (!cri_isfalse(v) == S)
+                    pc += L;
+                pop(1); /* v */
                 vm_break;
             }
             vm_case(OP_CALL) {
+                int L1 = fetchl();
+                int L2 = fetchl();
+                int L3 = fetchl();
+                // TODO
                 vm_break;
             }
             vm_case(OP_CLOSE) {
+                SPtr level = base + fetchl();
+                crF_close(ts, level, CR_OK);
                 vm_break;
             }
             vm_case(OP_TBC) {
+                SPtr level = base + fetchl();
                 vm_break;
             }
             vm_case(OP_GETLOCAL) {

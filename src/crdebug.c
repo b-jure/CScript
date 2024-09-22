@@ -66,6 +66,41 @@ cr_sinline int currentline(CallFrame *cf)
 }
 
 
+static const char *findvararg(CallFrame *cf, int n, SPtr *pos) {
+    if (clLvalue(s2v(cf->func.p))->p->is_vararg) {
+        int nextra = cf->u.l.nextraargs;
+        if (n >= -nextra) {
+            *pos = cf->func.p - nextra - (n + 1);
+            return "(vararg)";
+        }
+    }
+    return NULL;  /* no such vararg */
+}
+
+
+const char *crD_findlocal(cr_State *ts, CallFrame *cf, int n, SPtr *pos) {
+    SPtr base = cf->callee.p + 1;
+    const char *name = NULL;
+    if (cfisCript(cf)) {
+        if (n < 0) /* vararg ? */
+            return findvararg(cf, n, pos);
+        else /* regular local variable */
+            name = luaF_getlocalname(cfFn(cf), n, currentpc(cf));
+    }
+    if (name == NULL) {
+        SPtr limit = (cf == ts->cf) ? ts->sp.p : cf->next->callee.p;
+        if (limit - base >= n && n > 0) {
+            name = cfisCript(cf) ? "(auto)" : "(C auto)";
+        }
+        else
+            return NULL;
+    }
+    if (pos)
+        *pos = base + (n - 1);
+    return name;
+}
+
+
 /*
  * Sets 'frame' in 'cr_DebugInfo'.
  * Level defines which call stack 'CallFrame' to use.
@@ -235,8 +270,8 @@ cr_noret crD_operror(cr_State *ts, const TValue *v1, const TValue *v2,
 /* ordering error */
 cr_noret crD_ordererror(cr_State *ts, const TValue *v1, const TValue *v2)
 {
-    const char *name1 = typename(ttypetag(v1));
-    const char *name2 = typename(ttypetag(v2));
+    const char *name1 = typename(ttype(v1));
+    const char *name2 = typename(ttype(v2));
     if (name1 == name2) /* point to same entry ? */
         crD_runerror(ts, "tried to compare two %s values", name1);
     else

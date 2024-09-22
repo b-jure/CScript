@@ -11,11 +11,11 @@
 
 void crMM_init(cr_State *ts) {
     static const char *vmtnames[CR_NUM_MM] = {
-        "__init__", "__tostring__", "__getidx__", "__setidx__",
-        "__gc__", "__defer__", "__add__", "__sub__", "__mul__",
-        "__div__", "__mod__", "__pow__", "__not__", "__umin__",
-        "__bnot__", "__shl__", "__shr__", "__band__", "__bor__",
-        "__xor__", "__eq__", "__lt__", "__le__",
+        "__init", "__tostring", "__getidx", "__setidx",
+        "__gc", "__close", "__add", "__sub", "__mul",
+        "__div", "__mod", "__pow", "__not", "__bnot",
+        "__shl", "__shr", "__band", "__bor", "__xor",
+        "__eq", "__lt", "__le",
     };
     for (int i = 0; i < CR_NUM_MM; i++) {
         OString *s = crS_new(ts, vmtnames[i]);
@@ -85,7 +85,7 @@ UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv) {
 }
 
 
-/* get VMT method */
+/* get method 'mm' */
 const TValue *crMM_get(cr_State *ts, const TValue *v, cr_MM mm) {
     UNUSED(ts);
     cr_assert(CR_MM_INIT <= mt && mt < CR_NUM_MM);
@@ -94,20 +94,20 @@ const TValue *crMM_get(cr_State *ts, const TValue *v, cr_MM mm) {
     case CR_VUDATA: return &gco2ud(v)->vmt[mm];
     default: break; /* try basic type */
     } /* FALLTHRU */
-    HTable *ht = G_(ts)->vmt[ttype(v)];
-    return (ht ? crH_getp(ht, G_(ts)->vmtnames[mm]) : &G_(ts)->nil);
+    TValue *ht = G_(ts)->vmt[ttype(v)];
+    return (ht ? &ht[mm] : &G_(ts)->nil);
 }
 
 
-/* perform the overloaded method call */
-void crMM_callres(cr_State *ts, const TValue *selfarg, const TValue *fn,
-                  const TValue *v1, const TValue *v2, SPtr res)
+/* call binary method and store the result in 'res' */
+void crMM_callbinres(cr_State *ts, const TValue *fn, const TValue *selfarg,
+                     const TValue *v1, const TValue *v2, SPtr res)
 {
     /* assuming EXTRA_STACK */
     ptrdiff_t result = savestack(ts, res);
     SPtr func = ts->sp.p;
     setobj2s(ts, func, fn); /* push function */
-    setobj2s(ts, func + 1, selfarg); /* 'self' arg */
+    setobj2s(ts, func + 1, selfarg); /* 'self' */
     setobj2s(ts, func + 2, v1); /* 1st arg */
     setobj2s(ts, func + 3, v2); /* 2nd arg */
     ts->sp.p += 4;
@@ -117,28 +117,28 @@ void crMM_callres(cr_State *ts, const TValue *selfarg, const TValue *fn,
 }
 
 
-/* try to call overloaded binary op and store the result in 'res' */
-static int callbinres(cr_State *ts, const TValue *v1, const TValue *v2,
+static int callbinaux(cr_State *ts, const TValue *v1, const TValue *v2,
                       SPtr res, int mt)
 {
     const TValue *selfarg = v1;
-    const TValue *method = crMM_get(ts, v1, mt);
-    if (ttisnil(method)) {
+    const TValue *fn = crMM_get(ts, v1, mt);
+    if (ttisnil(fn)) {
         selfarg = v2;
-        method = crMM_get(ts, v2, mt);
-        if (ttisnil(method))
+        fn = crMM_get(ts, v2, mt);
+        if (cr_unlikely(ttisnil(fn)))
             return 0;
     }
-    crMM_callres(ts, selfarg, method, v1, v2, res);
+    crMM_callbinres(ts, fn, selfarg, v1, v2, res);
     return 1;
 }
 
 
-/* try to call overloaded binary arithmetic method */
-void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
-                 cr_MM mm)
+/* try to call binary method */
+void crMM_trybin(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
+                  cr_MM mm)
 {
-    if (cr_unlikely(!callbinres(ts, v1, v2, res, mm))) {
+    if (cr_unlikely(ttypetag(v1) != ttypetag(v2) /* types don't match */
+                || !callbinaux(ts, v1, v2, res, mm))) { /* or no method ? */
         switch (mm) {
         case CR_MM_BNOT: case CR_MM_BSHL: case CR_MM_BSHR:
         case CR_MM_BAND: case CR_MM_BOR: case CR_MM_BXOR:
@@ -152,10 +152,50 @@ void crMM_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
 }
 
 
+/* call unary method and store result in 'res' */
+void crMM_callunaryres(cr_State *ts, const TValue *fn, const TValue *v,
+                       SPtr res)
+{
+    ptrdiff_t result = savestack(ts, res);
+    SPtr func = ts->sp.p;
+    setobj2s(ts, func, fn); /* push function */
+    setobj2s(ts, func + 1, v); /* 'self' */
+    res = restorestack(ts, result);
+    setobj2s(ts, res, s2v(--ts->sp.p));
+}
+
+
+static int callunaryaux(cr_State *ts, const TValue *v, SPtr res, int mt)
+{
+    const TValue *fn = crMM_get(ts, v, mt);
+    if (ttisnil(fn)) return 0;
+    crMM_callunaryres(ts, fn, v, res);
+    return 1;
+}
+
+
+/* try to call unary method */
+void crMM_tryunary(cr_State *ts, const TValue *v, SPtr res, cr_MM mm) {
+    if (cr_unlikely(!callunaryaux(ts, v, res, mm))) {
+        switch (mm) {
+        case CR_MM_BNOT: {
+            crD_bitwerror(ts, v, v);
+            break; /* UNREACHED */
+        }
+        case CR_MM_UNM: {
+            crD_aritherror(ts, v, v);
+            break; /* UNREACHED */
+        }
+        default: cr_unreachable(); break;
+        }
+    }
+}
+
+
 /* call order method */
 int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2, cr_MM mm) {
     cr_assert(CR_MM_EQ <= mt && mt <= CR_NUM_LE);
-    if (cr_likely(callbinres(ts, v1, v2, ts->sp.p, mm)))
+    if (cr_likely(callbinaux(ts, v1, v2, ts->sp.p, mm)))
         return cri_isfalse(s2v(ts->sp.p));
     crD_ordererror(ts, v1, v2);
     /* UNREACHED */

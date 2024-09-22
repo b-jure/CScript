@@ -53,6 +53,9 @@
 /* mark object to be finalized */
 #define markfin(o)              setbit(gcomark_(o), FINBIT)
 
+/* mark non-white object as black */
+#define notw2black(o)           setbit(gcomark_(o), BLACKBIT)
+
 
 /* object is dead if xor (flipped) white bit is set */
 #define isdead(gc, o)           testbits(whitexor(gc), gcomark_(o))
@@ -134,12 +137,12 @@
  */
 #define crG_objbarrier(ts,r,o) \
     (isblack(r) && iswhite(o) \
-     ? crG_barrier_(ts,obj2gco(r),obj2gco(o)) \
+     ? crG_barrier_(ts, obj2gco(r), obj2gco(o)) \
      : (void)(0))
 
 /* wrapper around 'crG_objbarrier' that check if ** 'v' is object */
 #define crG_barrier(ts,r,v) \
-    (iscollectable(v) ? crG_objbarrier(ts,r,gcoval(v)) : (void)(0))
+    (iscollectable(v) ? crG_objbarrier(ts, r, gcoval(v)) : (void)(0))
 
 /*
 ** Same as 'crG_barrierback_' but ensures that it is only
