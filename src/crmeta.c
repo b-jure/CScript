@@ -7,18 +7,21 @@
 #include "crgc.h"
 #include "crvm.h"
 #include "crmem.h"
+#include <stddef.h>
+
+
+const char *mmnames[CR_NUM_MM] = {
+    "__init", "__tostring", "__getidx", "__setidx",
+    "__getfield", "__setfield", "__gc", "__close",
+    "__add", "__sub", "__mul", "__div", "__mod",
+    "__pow", "__not", "__bnot", "__shl", "__shr",
+    "__band", "__bor", "__xor", "__eq", "__lt", "__le",
+};
 
 
 void crMM_init(cr_State *ts) {
-    static const char *vmtnames[CR_NUM_MM] = {
-        "__init", "__tostring", "__getidx", "__setidx",
-        "__gc", "__close", "__add", "__sub", "__mul",
-        "__div", "__mod", "__pow", "__not", "__bnot",
-        "__shl", "__shr", "__band", "__bor", "__xor",
-        "__eq", "__lt", "__le",
-    };
     for (int i = 0; i < CR_NUM_MM; i++) {
-        OString *s = crS_new(ts, vmtnames[i]);
+        OString *s = crS_new(ts, mmnames[i]);
         s->bits = bitmask(STRVMTBIT);
         s->extra = i;
         G_(ts)->vmtnames[i] = s;
@@ -87,15 +90,44 @@ UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv) {
 
 /* get method 'mm' */
 const TValue *crMM_get(cr_State *ts, const TValue *v, cr_MM mm) {
+    TValue *ht;
+    cr_assert(0 <= mm && mm < CR_NUM_MM);
     UNUSED(ts);
-    cr_assert(CR_MM_INIT <= mt && mt < CR_NUM_MM);
     switch (ttypetag(v)) {
-    case CR_VCLASS: return &gco2cls(v)->vmt[mm];
-    case CR_VUDATA: return &gco2ud(v)->vmt[mm];
-    default: break; /* try basic type */
-    } /* FALLTHRU */
-    TValue *ht = G_(ts)->vmt[ttype(v)];
+    case CR_VINSTANCE: ht = gco2ins(v)->oclass->vmt; break;
+    case CR_VCLASS: cr_assert(0); ht = gco2cls(v)->vmt; break;
+    case CR_VUDATA: ht = gco2ud(v)->vmt; break;
+    default: ht = G_(ts)->vmt[ttype(v)]; break;
+    }
     return (ht ? &ht[mm] : &G_(ts)->nil);
+}
+
+
+/* call hashtable method that doesn't return value/result */
+void crMM_callhtm(cr_State *ts, const TValue *fn, const TValue *p1,
+                  const TValue *p2, const TValue *p3) {
+    SPtr func = ts->sp.p;
+    setobj2s(ts, func, fn);
+    setobj2s(ts, func + 1, p1);
+    setobj2s(ts, func + 2, p2);
+    setobj2s(ts, func + 3, p3);
+    ts->sp.p = func + 4;
+    crV_call(ts, func, 0);
+}
+
+
+/* call hashtable method that returns a value/result */
+void crMM_callhtmres(cr_State *ts, const TValue *fn, const TValue *p1,
+                     const TValue *p2, SPtr res) {
+    ptrdiff_t result = savestack(ts, res);
+    SPtr func = ts->sp.p;
+    setobj2s(ts, func, fn);
+    setobj2s(ts, func + 1, p1);
+    setobj2s(ts, func + 2, p2);
+    ts->sp.p = func + 3;
+    crV_call(ts, func, 1);
+    res = restorestack(ts, result);
+    setobjs2s(ts, res, --ts->sp.p);
 }
 
 
@@ -194,7 +226,7 @@ void crMM_tryunary(cr_State *ts, const TValue *v, SPtr res, cr_MM mm) {
 
 /* call order method */
 int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2, cr_MM mm) {
-    cr_assert(CR_MM_EQ <= mt && mt <= CR_NUM_LE);
+    cr_assert(CR_MM_EQ <= mm && mm <= CR_NUM_MM);
     if (cr_likely(callbinaux(ts, v1, v2, ts->sp.p, mm)))
         return cri_isfalse(s2v(ts->sp.p));
     crD_ordererror(ts, v1, v2);

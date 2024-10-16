@@ -23,22 +23,22 @@
 
 #define crM_newarray(ts,s,t)     crM_malloc(ts, (s) * sizeof(t))
 
-#define crM_reallocarray(ts,p,os,ns) \
-    ((p) = crM_realloc(ts, (p), (os)*sizeof(*p), (ns)*sizeof(ns)))
+#define crM_reallocarray(ts,p,os,ns,t) \
+    ((p) = crM_realloc(ts, (p), (os)*sizeof(t), (ns)*sizeof(t)))
 
-#define crM_freearray(ts,p,n) \
+#define crM_freearray(ts,p,n,t) \
     crM_free((ts), (p), cast_umem(n)*sizeof(*(p)))
 
 
 
-#define crM_ensurevec(ts,p,s,n,e,l,w) \
-    ((p) = crM_growarr_(ts, p, n, &(s), sizeof(*(p)), e, l, w))
+#define crM_ensurevec(ts,p,s,n,e,l,w,t) \
+    ((p) = crM_growarr_(ts, p, n, &(s), sizeof(t), e, l, w))
 
-#define crM_growvec(ts,p,s,n,l,w) \
-    ((p) = crM_ensurevec((ts), p, s, n, 0, l, w))
+#define crM_growvec(ts,p,s,n,l,w,t) \
+    ((p) = crM_ensurevec((ts), p, s, n, 0, l, w, t))
 
-#define crM_shrinkvec(ts,p,s,f) \
-    ((p) = crM_shrinkarr_(ts, p, &(s), f, sizeof(*(p))))
+#define crM_shrinkvec(ts,p,s,f,t) \
+    ((p) = crM_shrinkarr_(ts, p, &(s), f, sizeof(t)))
 
 
 

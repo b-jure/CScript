@@ -15,7 +15,6 @@
 #include <locale.h>
 
 
-
 /*
 ** Hash string.
 ** One-byte-at-a-time hash based on Murmur's mix
@@ -33,6 +32,15 @@ uint crS_hash(const char *str, size_t len, unsigned int seed) {
 }
 
 
+void crS_init(cr_State *ts) {
+    GState *gs = G_(ts);
+    gs->strings = crH_newsize(ts, CRI_MINSTRHTABSIZE);
+    gs->strings->isweak = 1;
+    gs->memerror = crS_newlit(ts, MEMERRMSG);
+    crG_fix(ts, obj2gco(gs->memerror));
+}
+
+
 /*
 ** Create new string object of size 'len'.
 ** Allocation is skipped in case string is already interned.
@@ -41,22 +49,24 @@ OString *crS_newl(cr_State *ts, const char *chars, size_t len) {
     TValue key;
     HTable *strtab = G_(ts)->strings;
     uint hash = crS_hash(chars, len, G_(ts)->seed);
-    OString *weakref = crH_getstring(strtab, chars, len, hash);
-    if (weakref)
-        return weakref;
-    OString *string = crG_new(ts, sizeofstring(len), CR_VSTRING, OString);
-    string->len = len;
-    if (cr_likely(len != 0))
-        memcpy(string->bytes, chars, len);
-    string->bytes[len] = '\0';
-    string->hash = hash;
-    string->extra = 0;
-    setbit(string->bits, STRHASHBIT);
-    setstrval(ts, &key, string);
-    setstrval2s(ts, ts->sp.p++, string);
-    crH_set(ts, strtab, &key, &key);
-    ts->sp.p--;
-    return string;
+    OString *str = crH_getinterned(ts, strtab, chars, len, hash);
+    if (str) { /* is interned or weak reference ? */
+        return str;
+    } else {
+        str = crG_new(ts, sizeofstring(len), CR_VSTRING, OString);
+        str->len = len;
+        if (cr_likely(len != 0))
+            memcpy(str->bytes, chars, len);
+        str->bytes[len] = '\0';
+        str->hash = hash;
+        str->extra = 0;
+        setbit(str->bits, STRHASHBIT);
+        setstrval(ts, &key, str);
+        setstrval2s(ts, ts->sp.p++, str);
+        crH_set(ts, strtab, &key, &key);
+        ts->sp.p--;
+        return str;
+    }
 }
 
 
@@ -352,9 +362,9 @@ static void pushbuff(BuffVFS *buff) {
 }
 
 
-/* ensure up to buffer space (up to 'BUFFVSFSIZ') */
+/* ensure up to buffer space (up to 'BUFFVFSSIZ') */
 static char *getbuff(BuffVFS *buff, int n) {
-    cr_assert(n <= BUFFVSFSIZ);
+    cr_assert(n <= BUFFVFSSIZ);
     if (n > BUFFVFSSIZ - buff->len)
         pushbuff(buff);
     return buff->space + buff->len;

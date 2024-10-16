@@ -138,7 +138,7 @@ cr_sinline int lxmatch(Lexer *lexer, int c) {
 
 
 const char *crL_tok2str(Lexer *lx, int t) {
-    cr_assert(token <= TK_IDENTIFIER);
+    cr_assert(t <= TK_IDENTIFIER);
     if (t >= FIRSTTK) {
         const char *str = tkstr[t - FIRSTTK];
         if (t < TK_EOS)

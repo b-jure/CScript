@@ -19,6 +19,7 @@
 
 
 #include "crobject.h"
+#include "crstate.h"
 
 
 #define crD_aritherror(ts,v1,v2) \
@@ -29,10 +30,13 @@
 
 
 CRI_FUNC int crD_getfuncline(const Function *fn, int pc);
+CRI_FUNC const char *crD_findlocal(cr_State *ts, CallFrame *cf, int n,
+                                   SPtr *pos);
 CRI_FUNC const char *crD_info(cr_State *ts, const char *msg,
                               const OString *src, int line);
 CRI_FUNC void crD_warnerror(cr_State *ts, const char *str);
 CRI_FUNC cr_noret crD_runerror(cr_State *ts, const char *fmt, ...);
+CRI_FUNC cr_noret crD_globalerror(cr_State *ts, const char *err, OString *name);
 CRI_FUNC cr_noret crD_typeerror(cr_State *ts, const TValue *v,
                                 const char *op);
 CRI_FUNC cr_noret crD_ordererror(cr_State *ts, const TValue *v1,

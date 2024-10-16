@@ -60,6 +60,9 @@
 /* object is dead if xor (flipped) white bit is set */
 #define isdead(gc, o)           testbits(whitexor(gc), gcomark_(o))
 
+/* flip object white bit */
+#define changewhite(o)          ((o)->mark ^= WHITEBITS)
+
 
 
 /* -------------------------------------------------------------------------
@@ -150,7 +153,7 @@
 */
 #define crG_objbarrierback(ts,r,o) \
     (isblack(r) && iswhite(o) \
-     ? crG_barrierback_(ts, objtogco(r)) \
+     ? crG_barrierback_(ts, r) \
      : (void)(0))
 
 /* wrapper around 'crG_objbarrierback' that checks if 'v' is object */

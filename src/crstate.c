@@ -6,6 +6,7 @@
 #include "crlexer.h"
 #include "crmem.h"
 #include "crmeta.h"
+#include "crobject.h"
 #include "crprotected.h"
 #include "crstring.h"
 #include "crhashtable.h"
@@ -150,6 +151,30 @@ CR_API cr_State *cr_newstate(cr_fAlloc falloc, void *ud) {
 }
 
 
+void crT_seterrorobj(cr_State *ts, int errcode, SPtr oldtop) {
+    switch (errcode) {
+        case CR_ERRMEM: { /* memory error? */
+            setstrval2s(ts, oldtop, G_(ts)->memerror);
+            break;
+        }
+        case CR_ERRERROR: { /* error while handling error? */
+            setstrval2s(ts, oldtop, crS_newlit(ts, "error in error handling"));
+            break;
+        }
+        case CR_OK: { /* closing upvalue? */
+            setnilval(s2v(oldtop)); /* no error message */
+            break;
+        }
+        default: { /* real error? */
+            cr_assert(errcode > CR_OK);
+            setobjs2s(L, oldtop, ts->sp.p - 1); /* error message on current top */
+            break;
+        }
+    }
+    ts->sp.p = oldtop + 1;
+}
+
+
 /*
  * Stack size to grow the stack to when stack
  * overflow occurs for error handling.
@@ -159,7 +184,7 @@ CR_API cr_State *cr_newstate(cr_fAlloc falloc, void *ud) {
 
 CallFrame *crT_newcf(cr_State *ts) {
     CallFrame *cf = crM_malloc(ts, sizeof(*cf));
-    cr_assert(ts->frame->next == NULL);
+    cr_assert(ts->cf->next == NULL);
     ts->cf->next = cf;
     cf->prev = ts->cf;
     cf->next = NULL;
@@ -176,7 +201,7 @@ static void stackptrs2offsets(cr_State *ts) {
         cf->top.offset = savestack(ts, cf->top.p);
     }
     for (UpVal *uv = ts->openupval; uv != NULL; uv = uv->u.open.next)
-        uv->v.offset = savestack(ts, uv->v.location);
+        uv->v.offset = savestack(ts, uv->v.p);
     ts->tbclist.offset = savestack(ts, ts->tbclist.p);
 }
 
@@ -189,21 +214,21 @@ static void offsets2stackptrs(cr_State *ts) {
         cf->top.p = restorestack(ts, cf->top.offset);
     }
     for (UpVal *uv = ts->openupval; uv != NULL; uv = uv->u.open.next)
-        uv->v.location = s2v(restorestack(ts, uv->v.offset));
+        uv->v.p = s2v(restorestack(ts, uv->v.offset));
     ts->tbclist.p = restorestack(ts, ts->tbclist.offset);
 }
 
 
 /* reallocate stack to new size */
 int crT_reallocstack(cr_State *ts, int size, int raiseerr) {
-    cr_assert(nsize <= CRI_MAXSTACK || nsize == OVERFLOWSTACKSIZE);
     GState *gs = G_(ts);
     int oldstopem = gs->gc.stopem;
     int osize = stacksize(ts);
+    cr_assert(size <= CRI_MAXSTACK || size == OVERFLOWSTACKSIZE);
     stackptrs2offsets(ts);
     gs->gc.stopem = 1; /* no emergency collection when reallocating stack */
     SPtr newstack = crM_reallocarray(ts, ts->stack.p,
-            osize + EXTRA_STACK, size + EXTRA_STACK);
+            osize + EXTRA_STACK, size + EXTRA_STACK, SValue);
     gs->gc.stopem = oldstopem;
     if (cr_unlikely(newstack == NULL)) {
         offsets2stackptrs(ts);

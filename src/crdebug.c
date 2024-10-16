@@ -16,6 +16,7 @@
 
 
 #include "crdebug.h"
+#include "crfunction.h"
 #include "crobject.h"
 #include "crstring.h"
 #include "crlimits.h"
@@ -23,20 +24,15 @@
 #include "crobject.h"
 #include "crprotected.h"
 
-#include <stdio.h>
-
-
-
 
 /* get line number of instruction ('pc') */
 // TODO
-int crD_getfuncline(const Function *fn, int pc)
-{
+int crD_getfuncline(const Function *fn, int pc) {
     LineInfo *li;
-    cr_assert(fn->lineinfo.len > 0);
     int l = 0;
     int h = fn->sizelinfo - 1;
     int m = (h + l) << 1;
+    cr_assert(fn->sizelinfo > 0);
     while (l <= h) {
         li = &fn->linfo[m];
         if (li->pc < pc) 
@@ -52,46 +48,48 @@ int crD_getfuncline(const Function *fn, int pc)
 
 
 /* current instruction in 'CrClosure' ('Function') */
-cr_sinline int currentpc(const CallFrame *cf)
-{
-    cr_assert(cfiscript(cf));
+cr_sinline int currentpc(const CallFrame *cf) {
+    cr_assert(cfisCript(cf));
     return cast_int(cf->pc - cfFn(cf)->code) - 1;
 }
 
 
 /* current line number */
-cr_sinline int currentline(CallFrame *cf)
-{
+cr_sinline int currentline(CallFrame *cf) {
     return crD_getfuncline(cfFn(cf), currentpc(cf));
 }
 
 
-static const char *findvararg(CallFrame *cf, int n, SPtr *pos) {
-    if (clLvalue(s2v(cf->func.p))->p->is_vararg) {
-        int nextra = cf->u.l.nextraargs;
+static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
+    cr_assert(n < 0);
+    if (crclval(s2v(cf->callee.p))->fn->isvararg) {
+        int nextra = cf->nvarargs;
         if (n >= -nextra) {
-            *pos = cf->func.p - nextra - (n + 1);
+            *pos = cf->callee.p - nextra - (n + 1);
             return "(vararg)";
         }
     }
-    return NULL;  /* no such vararg */
+    return NULL;
 }
 
 
+/*
+** Find local variable at index 'n', store it in 'pos' and
+** returns its name. If variable is not found return NULL.
+*/
 const char *crD_findlocal(cr_State *ts, CallFrame *cf, int n, SPtr *pos) {
     SPtr base = cf->callee.p + 1;
     const char *name = NULL;
     if (cfisCript(cf)) {
         if (n < 0) /* vararg ? */
-            return findvararg(cf, n, pos);
-        else /* regular local variable */
-            name = luaF_getlocalname(cfFn(cf), n, currentpc(cf));
+            return findvararg(cf, pos, n);
+        else /* otherwise local variable */
+            name = crF_getlocalname(cfFn(cf), n, currentpc(cf));
     }
     if (name == NULL) {
         SPtr limit = (cf == ts->cf) ? ts->sp.p : cf->next->callee.p;
-        if (limit - base >= n && n > 0) {
+        if (limit - base >= n && n > 0) /* 'n' is in stack range ? */
             name = cfisCript(cf) ? "(auto)" : "(C auto)";
-        }
         else
             return NULL;
     }
@@ -108,8 +106,7 @@ const char *crD_findlocal(cr_State *ts, CallFrame *cf, int n, SPtr *pos) {
  * should be 0.
  * If 'level' is invalid, this function returns 0.
  */
-CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di)
-{
+CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di) {
     cr_lock(ts);
     int status = 0;
     CallFrame *cf;
@@ -133,8 +130,7 @@ CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di)
  * Sets 'name', 'type', 'nups', 'nparams', 'isvararg', 'defline',
  * 'deflastline' in 'cr_DebugInfo'.
  */
-static void getfuncinfo(Closure *cl, cr_DebugInfo *di)
-{
+static void getfuncinfo(Closure *cl, cr_DebugInfo *di) {
     if (noCriptclosure(cl)) {
         di->nups = (cl == NULL ? 0 : cl->cc.nupvalues);
         di->defline = -1;
@@ -155,8 +151,7 @@ static void getfuncinfo(Closure *cl, cr_DebugInfo *di)
 
 
 /* sets 'source', 'srclen' and 'shortsrc' in 'cr_DebugInfo' */
-static void getsrcinfo(Closure *cl, cr_DebugInfo *di)
-{
+static void getsrcinfo(Closure *cl, cr_DebugInfo *di) {
     if (noCriptclosure(cl)) {
         di->source = "[C]";
         di->srclen = SLL("[C]");
@@ -176,8 +171,8 @@ static void getsrcinfo(Closure *cl, cr_DebugInfo *di)
  * If any invalid bit/option is inside the 'dbmask' this
  * function returns 0, otherwise 1.
  */
-static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf, cr_DebugInfo *di)
-{
+static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf,
+                   cr_DebugInfo *di) {
     UNUSED(ts); // TODO: remove this after DW_FNPUSH
     int bit;
     for (bit = 2; dbmask > 0; bit++) {
@@ -210,8 +205,7 @@ static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf, cr_Debu
  * Fill out 'cr_DebugInfo' according to 'dbmask'.
  * Returns 0 if any of the bits in 'dbmask' are invalid.
  */
-CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_DebugInfo *di)
-{
+CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_DebugInfo *di) {
     CallFrame *cf;
     Closure *cl;
     TValue *fn;
@@ -238,8 +232,8 @@ CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_DebugInfo *di)
 
 
 /* add usual debug information to 'msg' (source id and line) */
-const char *crD_addinfo(cr_State *ts, const char *msg, const OString *src, int line)
-{
+const char *crD_addinfo(cr_State *ts, const char *msg, const OString *src,
+                        int line) {
     char buffer[CRI_MAXSRC];
     if (src) {
         crS_sourceid(buffer, src->bytes, src->len);
@@ -251,6 +245,12 @@ const char *crD_addinfo(cr_State *ts, const char *msg, const OString *src, int l
 }
 
 
+/* global variable related error */
+cr_noret crD_globalerror(cr_State *ts, const char *err, OString *name) {
+    crD_runerror(ts, "%s global variable '%s'", err, getstrbytes(name));
+}
+
+
 /* operation on invalid type error */
 cr_noret crD_typeerror(cr_State *ts, const TValue *v, const char *op) {
     crD_runerror(ts, "tried to %s a %s value", op, typename(ttypetag(v)));
@@ -259,8 +259,7 @@ cr_noret crD_typeerror(cr_State *ts, const TValue *v, const char *op) {
 
 /* arithmetic operation error */
 cr_noret crD_operror(cr_State *ts, const TValue *v1, const TValue *v2,
-                     const char *op)
-{
+                     const char *op) {
     if (ttisnum(v1))
         v1 = v2;  /* correct error value */
     crD_typeerror(ts, v1, op);
@@ -268,8 +267,7 @@ cr_noret crD_operror(cr_State *ts, const TValue *v1, const TValue *v2,
 
 
 /* ordering error */
-cr_noret crD_ordererror(cr_State *ts, const TValue *v1, const TValue *v2)
-{
+cr_noret crD_ordererror(cr_State *ts, const TValue *v1, const TValue *v2) {
     const char *name1 = typename(ttype(v1));
     const char *name2 = typename(ttype(v2));
     if (name1 == name2) /* point to same entry ? */
@@ -280,8 +278,7 @@ cr_noret crD_ordererror(cr_State *ts, const TValue *v1, const TValue *v2)
 
 
 /* generic runtime error */
-cr_noret crD_runerror(cr_State *ts, const char *fmt, ...)
-{
+cr_noret crD_runerror(cr_State *ts, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     const char *err = crS_pushvfstring(ts, fmt, ap);
@@ -296,8 +293,7 @@ cr_noret crD_runerror(cr_State *ts, const char *fmt, ...)
 
 
 /* emit warning */
-void crD_warn(cr_State *ts, const char *str)
-{
+void crD_warn(cr_State *ts, const char *str) {
     UNUSED(ts); UNUSED(str);
     // TODO: implement this + add warning function hook in API and 'GState'
 }

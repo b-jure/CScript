@@ -16,11 +16,14 @@
  * Additional types that are used only internally
  * or as markers.
  */
-#define CR_TUVALUE      CR_NUM_TYPES            /* upvalue */
-#define CR_THTABLE      (CR_NUM_TYPES + 1)      /* hashtable */
+#define CR_TUVALUE      CR_NUM_TYPES        /* upvalue */
+#define CR_THTABLE      (CR_NUM_TYPES + 1)  /* hashtable */
+#define CR_TDEADKEY     (CR_NUM_TYPES + 2)  /* mark for dead htable keys */
 
 
-/* number of all types ('CR_T*') including 'CR_TNONE' */
+/* 
+** Number of all types ('CR_T*') (including 'CR_TNONE' but excluding DEADKEY).
+*/
 #define CRI_TOTALTYPES      (CR_THTABLE + 2)
 
 
@@ -42,12 +45,12 @@ CRI_DEC(const char *const crO_typenames[CRI_TOTALTYPES]);
 
 /* Cript values */
 typedef union Value {
+    struct GCObject *obj; /* collectable value */
+    void *p; /* light userdata */
     int b; /* boolean */
     cr_Integer i; /* integer */
     cr_Number n; /* float */
-    void *p; /* light userdata */
     cr_CFunction cfn; /* C function */
-    struct GCObject *obj; /* collectable value */
 } Value;
 
 
@@ -74,7 +77,7 @@ typedef union Value {
 
 
 /* type of a TValue */
-#define ttype(o)        novariant(o->tt)
+#define ttype(o)            novariant(o->tt)
 
 
 /* Macros to test type */
@@ -246,13 +249,17 @@ typedef struct {
 
 #define CR_VNIL         makevariant(CR_TNIL, 0)
 #define CR_VEMPTY       makevariant(CR_TNIL, 1)
-#define CR_VTOMB        makevariant(CR_TNIL, 2)
+#define CR_VABSTKEY     makevariant(CR_TNIL, 2)
 
 #define setnilval(o)    settt(o, CR_VNIL)
 #define setemptyval(o)  settt(o, CR_VEMPTY)
 
 #define ttisnil(o)      checktype((o), CR_VNIL)
 #define ttisempty(o)    checktag((o), CR_VEMPTY)
+
+#define isabstkey(v)    checktag((v), CR_VABSTKEY)
+
+#define ABSTKEYCONSTANT     {NULL}, CR_VABSTKEY, 0
 
 
 
@@ -335,7 +342,7 @@ typedef struct GCObject {
 #define setv2ht(ts,v,ht)        setgcotval(ts,v,ht,HTable)
 #define setsv2ht(ts,sv,ht)      setv2ht(ts,s2v(sv),ht)
 
-#define keyval(n)       ((n)->s.keyval)
+#define keyval(n)       ((n)->s.key_val)
 #define keyival(n)      rawival(keyval(n))
 #define keyfval(n)      rawfval(keyval(n))
 #define keypval(n)      rawpval(keyval(n))
@@ -343,7 +350,7 @@ typedef struct GCObject {
 #define keygcoval(n)    rawgcoval(keyval(n))
 #define keystrval(n)    gco2str(rawgcoval(keyval(n)))
 
-#define keytt(n)        ((n)->s.ttk)
+#define keytt(n)        ((n)->s.key_tt_)
 
 #define keyisobj(n)     (keytt(n) & BIT_COLLECTABLE)
 
@@ -370,26 +377,29 @@ typedef struct GCObject {
 ** this is to ensure optimal alignment.
 */
 typedef union Node {
-    struct {
-        TValueFields; /* value fields */
-        cr_ubyte ttk; /* type tag for key */
-        Value keyval; /* key value */
+    struct NodeKey {
+        TValueFields; /* fields for value */
+        cr_ubyte key_tt_; /* key type tag */
+        int next; /* offset for next node */
+        Value key_val; /* key value */
     } s;
-    TValue val;
+    TValue i_val; /* direct node value access as a proper 'TValue' */
 } Node;
 
 
-/* hash table */
+/* Hash Table */
 typedef struct HTable {
     ObjectHeader; /* internal only object */
     cr_ubyte size; /* 2^size */
     cr_ubyte isweak; /* true if holds weak keys/values */
-    int left; /* free slots before array needs to grow */
-    int nnodes; /* number of nodes */
-    Node *mem; /* memory block */
+    Node *node; /* memory block */
+    Node *lastfree; /* any free position is before this position */
     GCObject *gclist;
 } HTable;
 
+
+#define setdeadkey(node)    (keytt(node) = CR_TDEADKEY)
+#define keyisdead(n)	    (keytt(n) == CR_TDEADKEY)
 
 
 /* -------------------------------------------------------------------------
@@ -429,18 +439,18 @@ typedef struct OString {
 
 #define CR_VUVALUE      makevariant(CR_TUVALUE, 0)
 
-#define ttisuval(o)     testtag(o, ctb(CR_VUVALUE))
+#define ttisuval(o)     checktag(o, ctb(CR_VUVALUE))
 #define upval(o)        gco2uv(gcoval(o))
 
 #define setv2uv(ts,obj,uv)      setgcotval(ts,obj,uv,UpVal)
 #define setsv2uv(ts,sobj,uv)    setv2uv(ts,s2v(sobj),uv)
 
-#define uvisopen(uv)    ((uv)->v.location != &(uv)->u.value)
+#define uvisopen(uv)    ((uv)->v.p != &(uv)->u.value)
 
 typedef struct UpVal {
     ObjectHeader;
     union {
-        TValue *location; /* stack or 'closed' */
+        TValue *p; /* stack or 'closed' */
         ptrdiff_t offset; /* when reallocating stack */
     } v;
     union {
@@ -466,7 +476,7 @@ typedef struct UpVal {
 
 #define CR_VFUNCTION    makevariant(CR_TFUNCTION, 0)
 
-#define ttisfn(v)       testtag((v), ctb(CR_VFUNCTION))
+#define ttisfn(v)       checktag((v), ctb(CR_VFUNCTION))
 
 #define fnval(v)        gco2fn(gcoval(v))
 
@@ -518,7 +528,7 @@ typedef struct Function {
     OString *source; /* source name */
     struct Function **funcs; /* functions defined inside of this function */
     TValue *k; /* constant values */
-    PrivateVar *private;
+    PrivateVar *private; /* private variables (static globals) */
     Instruction *code; /* bytecode */
     LineInfo *linfo; /* lines information for instructions */
     LVarInfo *locals; /* debug information for local variables */
@@ -641,7 +651,7 @@ typedef struct OClass {
 
 #define ttisins(o)      checktag(o, ctb(CR_VINSTANCE))
 
-#define insval(o)       gco2ins(gcoval(o))
+#define insval(o)       (cr_assert(ttisins(o)), gco2ins(gcoval(o)))
 
 #define setinsval(ts,obj,ins)       setgcotval(ts,obj,ins,Instance)
 #define setins2s(ts,sobj,ins)       setinsval(ts,s2v(sobj),ins)
@@ -649,7 +659,7 @@ typedef struct OClass {
 typedef struct Instance {
     ObjectHeader;
     OClass *oclass; /* pointer to class */
-    HTable *fields;
+    HTable fields;
 } Instance;
 
 
@@ -660,7 +670,7 @@ typedef struct Instance {
 
 #define CR_VMETHOD      makevariant(3, CR_TFUNCTION)
 
-#define ttisim(o)       testtag(o, ctb(CR_VMETHOD))
+#define ttisim(o)       checktag(o, ctb(CR_VMETHOD))
 
 #define imval(o)        gco2im(gcoval(o))
 
@@ -690,9 +700,10 @@ typedef struct InstanceMethod {
 
 typedef struct UserData {
     ObjectHeader;
-    TValue *vmt;
     int nuv; /* number of 'uservalues' */
+    TValue *vmt;
     size_t size; /* size of 'UserData' memory in bytes */
+    HTable fields;
     GCObject *gclist;
     TValue uv[]; /* user values */
     /* 'UserData' memory starts here */
@@ -712,10 +723,10 @@ typedef struct UserData {
 */
 typedef struct EmptyUserData {
     ObjectHeader;
-    cr_ubyte vmtempty; /* true if 'vtable' is empty */
     int nuv; /* number of 'uservalues' */
-    size_t size; /* size of 'UserData' memory in bytes */
     TValue *vmt;
+    size_t size; /* size of 'UserData' memory in bytes */
+    HTable fields;
     union {CRI_MAXALIGN} usermem;
     /* 'UserData' memory starts here */
 } EmptyUserData;
@@ -738,9 +749,9 @@ typedef struct EmptyUserData {
  * into 'cr_Number'.
  */
 typedef enum N2IMode {
-    CR_N2IFLOOR,
-    CR_N2ICEIL,
-    CR_N2IEXACT,
+    N2IFLOOR,
+    N2ICEIL,
+    N2IEXACT,
 } N2IMode;
 
 
@@ -748,7 +759,7 @@ typedef enum N2IMode {
 #define tointeger(v,i) \
     (cr_likely(ttisint(v)) \
      ? (*(i) = ival(v), 1) \
-     : crO_tointeger(v, i, CR_N2IFLOOR))
+     : crO_tointeger(v, i, N2IFLOOR))
 
 
 /* convert value to 'cr_Number' */

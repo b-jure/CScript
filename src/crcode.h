@@ -110,7 +110,7 @@ typedef enum {
 ** U{x} - upvalue at index 'x'
 ** OU{x} - open upvalue at index 'x'
 ** P{x} - private variable in 'fn->private[x]'
-** G(x) - global variable with 'get 'x' from 'gs->globals' htable
+** G(x) - global variable from 'globals', key is K{x}:string.
 ** L{x} - local variable in 'fn->locals[x]'
 **
 ** operation     args           description
@@ -262,7 +262,7 @@ OP_RET,         /* L1 L2 L3 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
 ** [OP_DEFGLOBAL]
 ** This instruction reffers to global variable declaration but behaves
 ** exactly as a simple assignment. It does some additional work to
-** ensure global variable is semantically defined.
+** ensure global variable is defined.
 **
 ** [OP_RET]
 ** L2 is biased with +1, in order to represent multiple returns when the

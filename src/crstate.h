@@ -141,7 +141,7 @@ typedef struct GState {
     uint seed; /* initial seed for hashing */
     TValue nil; /* nil value (init flag) */
     GC gc; /* garbage collection managed values and parameters */
-    HTable *strings; /* weak 'HTable' (weak references) */
+    HTable *strings; /* interned strings and weak refs */
     HTable *globals; /* global variables */
     struct cr_State *mainthread; /* thread that also created global state */
     struct cr_State *thwouv; /* thread with open upvalues */
@@ -221,6 +221,7 @@ union GCUnion {
 
 
 CRI_FUNC CallFrame *crT_newcf(cr_State *ts);
+CRI_FUNC void crT_seterrorobj(cr_State *ts, int errcode, SPtr oldtop);
 CRI_FUNC int crT_reallocstack(cr_State *ts, int size, int raiseerr);
 CRI_FUNC int crT_growstack(cr_State *ts, int n, int raiseerr);
 CRI_FUNC void crT_shrinkstack(cr_State *ts);

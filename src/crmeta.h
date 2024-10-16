@@ -1,8 +1,12 @@
 #ifndef CRMETA_H
 #define CRMETA_H
 
+#include "crconf.h"
 #include "cript.h"
 #include "crobject.h"
+
+
+CRI_DEC(const char *mmnames[CR_NUM_MM]);
 
 
 CRI_FUNC void crMM_init(cr_State *ts);
@@ -13,6 +17,10 @@ CRI_FUNC UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv);
 CRI_FUNC InstanceMethod *crMM_newinstancemethod(cr_State *ts, 
                                                 Instance *receiver,
 						CrClosure *method);
+CRI_FUNC void crMM_callhtm(cr_State *ts, const TValue *fn, const TValue *p1,
+                           const TValue *p2, const TValue *p3);
+CRI_FUNC void crMM_callhtmres(cr_State *ts, const TValue *fn, const TValue *p1,
+                              const TValue *p2, SPtr res);
 CRI_FUNC void crMM_callbinres(cr_State *ts, const TValue *selfarg,
                            const TValue *fn, const TValue *v1,
                            const TValue *v2, SPtr res);

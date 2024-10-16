@@ -177,7 +177,7 @@ static GCObject **getgclist(GCObject *o) {
     case CR_VUDATA: {
          UserData *ud = gco2ud(o);
          UNUSED(ud);
-         cr_assert(ud->nuv > 0 || !ud->vtempty);
+         cr_assert(ud->nuv > 0 || ud->vmt);
          return &gco2ud(o)->gclist;
     }
     default: cr_unreachable();
@@ -250,14 +250,13 @@ static void markobject_(GC *gc, GCObject *o) {
             markgray(uv);
         else 
             notw2black(uv);
-        markvalue(gc, uv->v.location);
+        markvalue(gc, uv->v.p);
         break;
     }
     case CR_VINSTANCE: {
         Instance *ins = gco2ins(o);
         notw2black(ins);
         markobject(gc, ins->oclass);
-        markobjectcheck(gc, ins->fields);
         break;
     }
     case CR_VMETHOD: {
@@ -299,11 +298,11 @@ static cr_mem markhtable(GC *gc, HTable *ht) {
     if (ht->isweak) { /* weak table ? */
         linkgclist(ht, gc->weak);
     } else { /* otherwise strong */
-        Node *last = htlastnode(ht);
-        for (Node *n = htfirstnode(ht); n <= last; n++) {
+        Node *last = htnodelast(ht);
+        for (Node *n = htnode(ht, 0); n < last; n++) {
             if (!keyisempty(n)) {
                 markkey(gc, n);
-                markvalue(gc, htnodevalue(n));
+                markvalue(gc, nodeval(n));
             }
         }
     }
@@ -368,16 +367,13 @@ static cr_mem markuserdata(GC *gc, UserData *ud) {
  * Marks thread (per-thread-state).
  * Threads do not use write barriers, because using
  * a write barrier correctly on each thread modification
- * would introduce a lot of overhead and complexity.
- * Using no write barriers for such a huge object also
- * improves robustness and consistency.
+ * would introduce a lot of complexity.
  * And the way we deal with properly remarking the
  * thread is by linking it into the 'grayagain', a list
  * which is again traversed in 'GCSatomic' state.
  * Marking (traversing) the thread black only occurs in
  * either 'GCSpropagate' or 'GCSatomic' state and between
- * those two states only in 'GCSpropagate' can the objects
- * get modified.
+ * those two states only in 'GCSpropagate' can the objects get modified.
  * So if we are in 'GCSpropagate' we link the object into
  * 'grayagain' and 'GCSatomic' state remarks our thread,
  * restoring the invariant state (in cases where the thread
@@ -430,7 +426,7 @@ static cr_mem markopenupvalues(GState *gs) {
                 /* if visited then keep values alive */
                 if (!iswhite(uv)) {
                     cr_assert(uvisopen(uv) && isgray(uv));
-                    markvalue(&gs->gc, uv->v.location);
+                    markvalue(&gs->gc, uv->v.p);
                 }
             }
         } else {
@@ -648,21 +644,14 @@ void crG_checkfin(cr_State *ts, GCObject *o, TValue *vmt) {
  * ------------------------------------------------------------------------- */
 
 
-/* auxiliary to 'clearkeys' */
-cr_sinline int keyisunmarked(GCObject *o) {
-    if (o == NULL) return 0;
-    return iswhite(o);
-}
-
-
-/* clear all unmarked keys in weak table list 'l' */
-static void clearkeys(GCObject *l) {
-    for (; l != NULL; l = gco2ht(l)->gclist) {
-        HTable *ht = gco2ht(l);
-        Node *limit = htlastnode(ht);
-        for (Node *n = htfirstnode(ht); n <= limit; n++) {
-            if (keyisunmarked(keyobjN(n)))
-                crH_removedirect(ht, n);
+/* clear all unmarked keys in global strings table */
+static void refclear(GState *gs) {
+    HTable *ht = gs->strings;
+    Node *limit = htnodelast(ht);
+    for (Node *n = htnode(ht, 0); n < limit; n++) {
+        if (!ttisempty(nodeval(n))) { /* (key: string, value: string) */
+            setemptykey(n);
+            setemptyval(nodeval(n));
         }
     }
 }
@@ -719,7 +708,7 @@ static cr_mem atomic(cr_State *ts) {
     cr_mem work = 0;
     GCObject *grayagain = gc->grayagain;
     gc->grayagain = NULL;
-    cr_assert(gc->weakhtab == NULL);
+    cr_assert(gc->weak == NULL);
     gc->state = GCSatomic;
     markobject(gc, ts); /* mark running thread */
     markobject(gc, gs->globals); /* mark global variables table */
@@ -732,7 +721,11 @@ static cr_mem atomic(cr_State *ts) {
     work += propagateall(gs);
     /* all accessible objects are marked,
      * safely clear weak tables */
-    clearkeys(gc->weak);
+    refclear(gs);
+    /* Note: as of version 1.0.0 'gc->weak' is equal
+     * to strings table because weak tables are not
+     * accessible via core API. */
+    cr_assert(gc->weak == obj2gco(gs->strings));
     /* separate and 'resurrect' unreachable
      * objects with the finalizer */
     separatetobefin(gs, 0);
@@ -740,9 +733,9 @@ static cr_mem atomic(cr_State *ts) {
     work += propagateall(gs);
     /* all 'resurrected' objects are marked,
      * so clear weak tables safely again */
-    clearkeys(gc->weak);
+    refclear(gs);
     gc->whitebit = whitexor(gc); /* flip white bit */
-    cr_assert(gc->gray == NULL); /* all must be propagated */
+    cr_assert(gc->graylist == NULL); /* all must be propagated */
     return work;
 }
 

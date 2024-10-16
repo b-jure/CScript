@@ -22,7 +22,7 @@
 #include "crstate.h"
 
 
-#define crV_rawEQ(v1,v2)    crV_orderEQ(NULL, v1, v2)
+#define crV_raweq(v1,v2)    crV_ordereq(NULL, v1, v2)
 
 
 CRI_FUNC void crV_call(cr_State *ts, SPtr fn, int nreturns);
@@ -32,9 +32,13 @@ CRI_FUNC cr_Integer crV_modint(cr_State *ts, cr_Integer x, cr_Integer y);
 CRI_FUNC cr_Number crV_modnum(cr_State *ts, cr_Number x, cr_Number y);
 CRI_FUNC void crV_arithm(cr_State *ts, const TValue *a, const TValue *b,
                          SPtr res, int op);
-CRI_FUNC int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2);
-CRI_FUNC int crV_orderLT(cr_State *ts, const TValue *v1, const TValue *v2);
-CRI_FUNC int crV_orderLE(cr_State *ts, const TValue *v1, const TValue *v2);
+CRI_FUNC int crV_ordereq(cr_State *ts, const TValue *v1, const TValue *v2);
+CRI_FUNC int crV_orderlt(cr_State *ts, const TValue *v1, const TValue *v2);
+CRI_FUNC int crV_orderle(cr_State *ts, const TValue *v1, const TValue *v2);
 CRI_FUNC void crV_execute(cr_State *ts, CallFrame *cf);
+CRI_FUNC void crV_setfield(cr_State *ts, TValue *obj, const TValue *key,
+                           const TValue *val, cr_MM mm);
+CRI_FUNC void crV_getfield(cr_State *ts, TValue *obj, TValue *key, SPtr res,
+                           cr_MM mm);
 
 #endif

@@ -29,7 +29,7 @@ uint crO_hashnum(cr_Number n) {
         uint ui = cast_uint(exp) + cast_uint(ni);
         return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
     }
-    cr_assert(cr_numisnan(n) || cr_mathop(fabs)(n) == cast_num(HUGE_VAL));
+    cr_assert(cri_numisnan(n) || cr_mathop(fabs)(n) == cast_num(HUGE_VAL));
     return 0;
 }
 
@@ -109,8 +109,8 @@ static cr_Integer intarithm(cr_State *ts, cr_Integer x, cr_Integer y, int op) {
 int crO_n2i(cr_Number n, cr_Integer *i, N2IMode mode) {
     cr_Number floored = cr_floor(n);
     if (floored != n) {
-        if (mode == CR_N2IEXACT) return 0;
-        else if (mode == CR_N2ICEIL) floored++;
+        if (mode == N2IEXACT) return 0;
+        else if (mode == N2ICEIL) floored++;
     }
     return cr_number2integer(n, i);
 }

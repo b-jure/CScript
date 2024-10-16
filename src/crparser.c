@@ -139,7 +139,7 @@ static void patchlistaddjmp(FunctionState *fs, int jmp) {
     cr_assert(fs->patches.len > 0);
     PatchList *list = &fs->patches.list[fs->patches.len - 1];
     crM_growvec(fs->lx->ts, list->arr, list->size, list->len,
-                INT_MAX, "code jumps");
+                INT_MAX, "code jumps", int);
     list->arr[list->len++] = jmp;
 }
 
@@ -154,7 +154,7 @@ static void resetpatchlist(FunctionState *fs) {
 /* create new patch list */
 static void patchliststart(FunctionState *fs) {
     crM_growvec(fs->lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
-                INT_MAX, "patch lists");
+                INT_MAX, "patch lists", PatchList);
     fs->patches.list[fs->patches.len++] = (PatchList){0};
 }
 
@@ -167,7 +167,7 @@ static void patchlistend(FunctionState *fs) {
     while ((jmp = patchlistpop(fs)) != NOJMP)
         crC_patchtohere(fs, jmp);
     cr_assert(list->len == 0);
-    crM_freearray(fs->lx->ts, list->arr, list->size);
+    crM_freearray(fs->lx->ts, list->arr, list->size, int);
 }
 
 
@@ -275,14 +275,14 @@ static void removelocals(FunctionState *fs, int tolevel, int popextra) {
 
 /* get private variable */
 cr_sinline PrivateVar *getprivate(FunctionState *fs, int idx) {
-    cr_assert(0 <= idx && idx < fs->fn->nstatics);
+    cr_assert(0 <= idx && idx < fs->nprivate);
     return &fs->fn->private[idx];
 }
 
 
 /* get upvalue variable */
 cr_sinline UpValInfo *getupvalue(FunctionState *fs, int idx) {
-    cr_assert(idx < fs->fn->nupvals);
+    cr_assert(idx < fs->nupvals);
     return &fs->fn->upvals[idx];
 }
 
@@ -304,7 +304,7 @@ static void movexp2v(FunctionState *fs, ExpInfo *e, TValue *v) {
 
 /* init expression with generic information */
 static void initexp(ExpInfo *e, expt et, int info) {
-    e->t = e->f = -1;
+    e->t = e->f = NOJMP;
     e->et = et;
     e->u.info = info;
 }
@@ -330,7 +330,7 @@ static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
     Function *fn = fs->fn;
     checklimit(fs, fs->nlocals, MAXLONGARGSIZE, "locals");
     crM_growvec(lx->ts, fn->locals, fn->sizelocals, fs->nlocals,
-                MAXLONGARGSIZE, "locals");
+                MAXLONGARGSIZE, "locals", LVarInfo);
     LVarInfo *lvarinfo = &fn->locals[fs->nlocals++];
     lvarinfo->name = name;
     lvarinfo->startpc = fs->pc;
@@ -405,7 +405,7 @@ static void endscope(FunctionState *fs) {
     Scope *s = fs->scope;
     int stklevel = getstacklevel(fs, s->activelocals);
     removelocals(fs, s->activelocals, scopeisswitch(s));
-    cr_assert(s->nlocals == fs->activelocals);
+    cr_assert(s->activelocals == fs->activelocals);
     if (scopeisloop(s) || scopeisswitch(s)) /* has a patch list ? */
         patchlistend(fs);
     if (s->prev && s->haveupval) /* need to close upvalues ? */
@@ -482,13 +482,13 @@ static void endfs(FunctionState *fs) {
         loadreachablectx(fs);
     /* preserve memory; shrink unused space */
     /* by using counters in 'fs' as final size */
-    crM_shrinkvec(ts, fn->funcs, fn->sizefn, fs->nfuncs);
-    crM_shrinkvec(ts, fn->k, fn->sizek, fs->nk);
-    crM_shrinkvec(ts, fn->private, fn->sizeprivate, fs->nprivate);
-    crM_shrinkvec(ts, fn->code, fn->sizecode, fs->pc);
-    crM_shrinkvec(ts, fn->linfo, fn->sizelinfo, fs->nlinfo);
-    crM_shrinkvec(ts, fn->locals, fn->sizelocals, fs->nlocals);
-    crM_shrinkvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals);
+    crM_shrinkvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, Function);
+    crM_shrinkvec(ts, fn->k, fn->sizek, fs->nk, TValue);
+    crM_shrinkvec(ts, fn->private, fn->sizeprivate, fs->nprivate, PrivateVar);
+    crM_shrinkvec(ts, fn->code, fn->sizecode, fs->pc, Instruction);
+    crM_shrinkvec(ts, fn->linfo, fn->sizelinfo, fs->nlinfo, LineInfo);
+    crM_shrinkvec(ts, fn->locals, fn->sizelocals, fs->nlocals, LVarInfo);
+    crM_shrinkvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev;
     crG_check(ts);
 }
@@ -502,7 +502,7 @@ static Function *addfunction(Lexer *lx) {
     Function *fn = fs->fn;
     checklimit(fs, fs->nfuncs + 1, MAXLONGARGSIZE, "functions");
     crM_growvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, MAXLONGARGSIZE,
-                "functions");
+                "functions", Function);
     fn->funcs[fs->nfuncs++] = new = crF_new(ts);
     crG_objbarrier(ts, fn, new);
     return new;
@@ -584,7 +584,7 @@ static int newlocal(Lexer *lx, OString *name, int mods) {
     ParserState *ps = lx->ps;
     checklimit(fs, ps->lvars.len, MAXLONGARGSIZE, "locals");
     crM_growvec(lx->ts, ps->lvars.arr, ps->lvars.size, ps->lvars.len,
-                MAXLONGARGSIZE, "locals");
+                MAXLONGARGSIZE, "locals", LVar);
     LVar *local = &ps->lvars.arr[ps->lvars.len++];
     local->val.mod = mods;
     local->s.name = name;
@@ -639,7 +639,7 @@ static UpValInfo *newupvalue(FunctionState *fs) {
     cr_State *ts = fs->lx->ts;
     checklimit(fs, fs->nupvals + 1, MAXLONGARGSIZE, "upvalues");
     crM_growvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals, MAXLONGARGSIZE,
-                "upvalues");
+                "upvalues", UpValInfo);
     return &fn->upvals[fs->nupvals++];
 }
 
@@ -714,11 +714,10 @@ static void newglobal(Lexer *lx, OString *name, int mods) {
 
 /* get global variable 'name' or create undefined global */
 static void globalvar(FunctionState *fs, OString *name, ExpInfo *e) {
+    TValue k;
     Lexer *lx = fs->lx;
-    TValue k, dummy;
     setstrval(lx->ts, &k, name);
-    setemptyval(&dummy); /* set as undefined */
-    if (!crH_get(G_(lx->ts)->globals, &k, &dummy))
+    if (isabstkey(crH_get(G_(lx->ts)->globals, &k)))
         newglobal(lx, name, UNDEFMODMASK >> (fs->prev != NULL));
     e->u.str = name;
     e->et = EXP_GLOBAL;
@@ -731,7 +730,7 @@ static int newprivate(FunctionState *fs, OString *name, int mods) {
     cr_State *ts = fs->lx->ts;
     checklimit(fs, fs->nprivate, MAXLONGARGSIZE, "private variables");
     crM_growvec(ts, fn->private, fn->sizeprivate, fs->nprivate,
-                   MAXLONGARGSIZE, "private variables");
+                MAXLONGARGSIZE, "private variables", PrivateVar);
     PrivateVar *pv = &fn->private[fs->nprivate++];
     pv->s.name = name;
     pv->val.mod = (UNDEFMODMASK | mods);
@@ -1165,20 +1164,19 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
         break;
     }
     case EXP_GLOBAL: {
-        TValue key, res;
+        TValue key;
+        const TValue *res;
         setstrval(lx->ts, &key, var->u.str);
-        if (crH_get(G_(lx->ts)->globals, &key, &res)) {
-            if (!ttisempty(&res) && ismod(&res, VARFINAL))
-                id = var->u.str;
-        }
+        res = crH_get(G_(lx->ts)->globals, &key);
+        if (!ttisempty(res) && ismod(res, VARFINAL))
+            id = var->u.str;
         break;
     }
     default: return; /* only runtime knows :( */
     }
-    if (id) {
+    if (id)
         crP_semerror(lx, crS_pushfstring(lx->ts, 
-                    "attempt to assign to final variable '%s'", id));
-    }
+                         "attempt to assign to final variable '%s'", id));
 }
 
 
@@ -1806,13 +1804,14 @@ static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
     if (eisconstant(caseexp)) {
         LiteralInfo li = checkduplicate(lx, ss, caseexp);
         crM_growvec(lx->ts, ss->literals.arr, ss->literals.size,
-                       ss->literals.len, MAXLONGARGSIZE, "switch literals");
+                    ss->literals.len, MAXLONGARGSIZE,
+                    "switch literals", LiteralInfo);
         ss->literals.arr[ss->literals.len++] = li;
         if (eisconstant(&ss->e)) { /* both are constant expressions ? */
             TValue v1, v2;
             movexp2v(lx->fs, &ss->e, &v1);
             movexp2v(lx->fs, caseexp, &v2);
-            return crV_rawEQ(&v1, &v2);
+            return crV_raweq(&v1, &v2);
         }
     }
     return 0;
@@ -1925,8 +1924,8 @@ static void switchstm(Lexer *lx) {
 
 
 /* condition statement body; for 'forloop', 'whilestm' & 'ifstm' */
-static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond,
-                     OpCode testop, OpCode jmpop, int condpc, int endclausepc)
+static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
+                     OpCode jmpop, int condpc, int endclausepc)
 {
     FunctionState *fs = lx->fs;
     DynCtx endctx;
@@ -1935,7 +1934,7 @@ static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond,
     int condisctc = eisconstant(cond);
     int bodypc = currentPC(fs);
     int isloop = scopeisloop(fs->scope);
-    cr_assert(isloop == (jop == OP_JMPS));
+    cr_assert(isloop == (jmpop == OP_JMPS));
     optaway = condistrue = 0;
     endctx.pc = NOJMP;
     if (condisctc && !(condistrue = eistrue(cond)))

@@ -212,6 +212,8 @@ typedef enum cr_MM {
     CR_MM_TOSTRING,
     CR_MM_GETIDX,
     CR_MM_SETIDX,
+    CR_MM_GETFIELD,
+    CR_MM_SETFIELD,
     CR_MM_GC,
     CR_MM_CLOSE,
     CR_MM_ADD,

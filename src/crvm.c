@@ -77,12 +77,6 @@ static void pushclass(cr_State *ts) {
 }
 
 
-/* set value or insert key/value pair into table 'ht' */
-void crV_settable(cr_State *ts, HTable *ht, TValue *val, TValue *key) {
-
-}
-
-
 /*
  * Integer division; handles division by 0 and possible
  * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
@@ -249,8 +243,8 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttypetag(v1) != ttypetag(v2)) {
         if (ttype(v1) != ttype(v2) || ttype(v1) != CR_TNUMBER)
             return 0;
-        return (crO_tointeger(v1, &i1, CR_N2IEXACT) &&
-                crO_tointeger(v2, &i2, CR_N2IEXACT) && i1 == i2);
+        return (crO_tointeger(v1, &i1, N2IEXACT) &&
+                crO_tointeger(v2, &i2, N2IEXACT) && i1 == i2);
     }
     switch (ttypetag(v1)) {
     case CR_VNIL: case CR_VFALSE: case CR_VTRUE: return 1;
@@ -287,6 +281,107 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     } else {
         crMM_callbinres(ts, selfarg, method, v1, v2, ts->sp.p);
         return !cri_isfalse(s2v(ts->sp.p));
+    }
+}
+
+
+/* 
+** Check if global exists and return it, othwerwise invoke
+** undefined global variable error.
+*/
+cr_sinline const TValue *checkglobal(cr_State *ts, TValue *key) {
+    const TValue *out = crH_get(G_(ts)->globals, key);
+    if (cr_unlikely(isabstkey(out)))
+        crD_globalerror(ts, "undefined", strval(key));
+    return out;
+}
+
+
+cr_sinline void defineglobal(cr_State *ts, TValue *key, TValue *val) {
+    cr_assert(ttisstr(key));
+    const TValue *slot = crH_get(G_(ts)->globals, key);
+    if (cr_unlikely(!isabstkey(slot)))
+        crD_runerror(ts, "global variable '%s' redefinition", cstrval(key));
+    else
+        crH_set(ts, G_(ts)->globals, key, val);
+}
+
+
+/* get global variable value */
+cr_sinline void getglobal(cr_State *ts, TValue *key, TValue *out) {
+    cr_assert(ttisstr(key));
+    setobj(ts, out, checkglobal(ts, key));
+}
+
+
+/* set global variable value */
+cr_sinline void setglobal(cr_State *ts, TValue *key, TValue *newval) {
+    if (cr_unlikely(isconst(checkglobal(ts, key))))
+        crD_globalerror(ts, "read-only", strval(key));
+    crH_set(ts, G_(ts)->globals, key, newval);
+}
+
+
+void crV_setfield(cr_State *ts, TValue *obj, const TValue *key,
+                  const TValue *val, cr_MM mm) {
+    HTable *ht;
+    const TValue *fmm;
+    switch (ttypetag(obj)) {
+        case CR_VINSTANCE: {
+            ht = &insval(obj)->fields;
+            break;
+        }
+        case CR_VUDATA: {
+            ht = &insval(obj)->fields;
+            break;
+        }
+        default: {
+            fmm = crMM_get(ts, obj, mm);
+            if (cr_unlikely(fmm == NULL))
+                crD_typeerror(ts, obj, "index");
+            goto callfmm;
+        }
+    }
+    fmm = crMM_get(ts, obj, mm);
+    if (fmm) {
+        callfmm:
+        crMM_callhtm(ts, fmm, obj, key, val);
+    } else  {
+        crH_set(ts, ht, key, val);
+    }
+}
+
+
+void crV_getfield(cr_State *ts, TValue *obj, TValue *key, SPtr res,
+                  cr_MM mm) {
+    HTable *ht;
+    const TValue *fmm, *v;
+    switch (ttypetag(obj)) {
+        case CR_VINSTANCE: {
+            ht = &insval(obj)->fields;
+            break;
+        }
+        case CR_VUDATA: {
+            ht = &udval(obj)->fields;
+            break;
+        }
+        default: {
+            fmm = crMM_get(ts, obj, mm);
+            if (cr_unlikely(fmm == NULL))
+                crD_typeerror(ts, obj, "index");
+            goto callfmm;
+        }
+    }
+    fmm = crMM_get(ts, obj, mm);
+    if (fmm) {
+        callfmm:
+        crMM_callhtmres(ts, fmm, obj, key, res);
+    } else {
+        v = crH_get(ht, key);
+        if (isabstkey(v)) \
+            setnilval(s2v(res));
+        else
+            setobj2s(ts, res, v);
     }
 }
 
@@ -532,6 +627,11 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
 #define peek(n)         s2v((ts->sp.p - 1) - n)
 /* pop stack */
 #define pop(n)          (ts->sp.p -= (n))
+
+/* get local variable */
+#define LVAR(i)     (base + (i))
+/* get private variable */
+#define PVAR(i)     (&cl->fn->private[i].val)
 
 
 /* In case 'PRECOMPUTED_GOTO' not available. */
@@ -800,7 +900,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(0);
                 const TValue *v2 = getlK(); /* L */
                 int S = fetchs(); /* iseq */
-                setorderres(v1, crV_rawEQ(v1, v2), S);
+                setorderres(v1, crV_raweq(v1, v2), S);
                 vm_break;
             }
             vm_case(OP_EQI) {
@@ -953,62 +1053,119 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
             }
             vm_case(OP_CLOSE) {
                 SPtr level = base + fetchl();
-                crF_close(ts, level, CR_OK);
+                protect(crF_close(ts, level, CR_OK));
                 vm_break;
             }
             vm_case(OP_TBC) {
                 SPtr level = base + fetchl();
+                protect(crF_newtbcvar(ts, level));
                 vm_break;
             }
             vm_case(OP_GETLOCAL) {
+                int L = fetchl();
+                setobjs2s(ts, ts->sp.p++, LVAR(L));
                 vm_break;
             }
             vm_case(OP_SETLOCAL) {
+                int L = fetchl();
+                setobjs2s(ts, LVAR(L), pop(1));
                 vm_break;
             }
             vm_case(OP_GETPRIVATE) {
+                int L = fetchl();
+                setobj2s(ts, ts->sp.p++, PVAR(L));
                 vm_break;
             }
             vm_case(OP_SETPRIVATE) {
+                int L = fetchl();
+                setobj(ts, PVAR(L), s2v(pop(1)));
                 vm_break;
             }
             vm_case(OP_GETUVAL) {
+                int L = fetchl();
+                setobj2s(ts, ts->sp.p++, cl->upvals[L]->v.p);
                 vm_break;
             }
             vm_case(OP_SETUVAL) {
+                int L = fetchl();
+                setobj(ts, cl->upvals[L]->v.p, s2v(pop(1)));
                 vm_break;
             }
             vm_case(OP_DEFGLOBAL) {
+                TValue* s = getlK();
+                protect(defineglobal(ts, s, peek(0)));
+                pop(1);
                 vm_break;
             }
             vm_case(OP_GETGLOBAL) {
+                TValue *s = getlK();
+                protect(getglobal(ts, s, s2v(ts->sp.p)));
+                ts->sp.p++;
                 vm_break;
             }
             vm_case(OP_SETGLOBAL) {
+                TValue *s = getlK();
+                protect(setglobal(ts, s, peek(0)));
+                pop(1);
                 vm_break;
             }
             vm_case(OP_SETPROPERTY) {
+                TValue *s = getlK();
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                cr_assert(ttisstr(s));
+                crV_setfield(ts, v1, s, v2, CR_MM_SETFIELD);
+                pop(2); /* v1,v2 */
                 vm_break;
             }
             vm_case(OP_GETPROPERTY) {
+                TValue *s = getlK();
+                TValue *v = peek(0);
+                cr_assert(ttisstr(s));
+                crV_getfield(ts, v, s, ts->sp.p - 1, CR_MM_GETFIELD);
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                crV_getfield(ts, v1, v2, ts->sp.p - 2, CR_MM_GETIDX);
+                pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_SETINDEX) {
+                TValue *v1 = peek(2);
+                TValue *v2 = peek(1);
+                TValue *v3 = peek(0);
+                crV_setfield(ts, v1, v2, v3, CR_MM_SETIDX);
+                pop(3); /* v1,v2,v3 */
                 vm_break;
             }
-            vm_case(OP_GETINDEXSTR) {
+            vm_case(OP_GETINDEXSTR) { /* TODO: optimize */
+                TValue *s = getlK();
+                TValue *v = peek(0);
+                crV_getfield(ts, v, s, ts->sp.p - 1, CR_MM_GETIDX);
                 vm_break;
             }
-            vm_case(OP_SETINDEXSTR) {
+            vm_case(OP_SETINDEXSTR) { /* TODO: optimize */
+                TValue *s = getlK();
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                crV_setfield(ts, v1, s, v2, CR_MM_SETIDX);
                 vm_break;
             }
-            vm_case(OP_GETINDEXINT) {
+            vm_case(OP_GETINDEXINT) { /* TODO: optimize */
+                TValue aux;
+                TValue *v = peek(0);
+                setival(&aux, fetchl());
+                crV_getfield(ts, v, &aux, ts->sp.p - 1, CR_MM_GETIDX);
                 vm_break;
             }
-            vm_case(OP_SETINDEXINT) {
+            vm_case(OP_SETINDEXINT) { /* TODO: optimize */
+                TValue aux;
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                setival(&aux, fetchl());
+                crV_setfield(ts, v1, &aux, v2, CR_MM_SETIDX);
                 vm_break;
             }
             vm_case(OP_GETSUP) {
