@@ -289,7 +289,7 @@ typedef cr_ubyte Instruction;
  * warnings.
  */
 #ifndef UNUSED
-#define UNUSED(x) ((void)(x))
+#define UNUSED(x)   ((void)(x))
 #endif
 
 

@@ -229,11 +229,11 @@ OP_SETINDEXSTR,  /* V1 V2 L     'V1[K{L}:string] = V2' */
 OP_GETINDEXINT,  /* V L         'V[I(L):integer]' */
 OP_SETINDEXINT,  /* V1 V2 L     'V[I(L):integer] = V2' */
 
-OP_GETSUP,       /* V L         'V:super.K{L}:string' */
-OP_GETSUPIDX,    /* V1 V2       'V1:super[V2]' */
-OP_GETSUPIDXSTR, /* V L         'V:super[K{L}:string]' */
+OP_GETSUP,       /* V1 V2 L     'V2:super.K{L}:string' (V1 is instance) */
+OP_GETSUPIDX,    /* V1 V2 V3    'V2:super[V3]' (V1 is instance) */
+OP_GETSUPIDXSTR, /* V1 V2 L     'V2:super[K{L}:string]' (V1 is instance) */
 
-OP_INHERIT,    /* V1 V2  'V2 inherits from superclass V1' */
+OP_INHERIT,    /* V1 V2  'V2:class inherit V1 */
 OP_FORPREP,    /* L1 L2  'create upvalue V{L1+3}; pc += L2' */
 OP_FORCALL,    /* L1 L2  'V{L1+4},...,V{L1+3+L2} = V{L1}(V{L1+1}, V{L1+2});' */
 OP_FORLOOP,    /* L1 L2  'if V{L1+2} != nil { V{L1} = V{L1+2}; pc -= L2 }' */

@@ -20,6 +20,7 @@
 
 #include "crconf.h"
 #include "crfunction.h"
+#include "crgc.h"
 #include "crhashtable.h"
 #include "cript.h"
 #include "crlimits.h"
@@ -352,36 +353,73 @@ void crV_setfield(cr_State *ts, TValue *obj, const TValue *key,
 }
 
 
-void crV_getfield(cr_State *ts, TValue *obj, TValue *key, SPtr res,
-                  cr_MM mm) {
-    HTable *ht;
+/* bind method to instance and set it at 'res' */
+#define bindmethod(ts,ins,fn,res) \
+    setim2s(ts, res, crMM_newinsmethod(ts, ins, v))
+
+
+void crV_getproperty(cr_State *ts, TValue *obj, TValue *key, SPtr res,
+                     cr_MM mm) {
+    Instance *ins;
+    HTable *fht, *mht;
     const TValue *fmm, *v;
+    fmm = crMM_get(ts, obj, mm);
+    if (fmm) { /* have metamethod ? */
+        crMM_callhtmres(ts, fmm, obj, key, res);
+        return;
+    }
     switch (ttypetag(obj)) {
         case CR_VINSTANCE: {
-            ht = &insval(obj)->fields;
-            break;
+            ins = insval(obj);
+            fht = &ins->fields;
+            mht = ins->oclass->methods;
         }
         case CR_VUDATA: {
-            ht = &udval(obj)->fields;
+            fht = &udval(obj)->fields;
+            mht = NULL;
             break;
         }
-        default: {
-            fmm = crMM_get(ts, obj, mm);
-            if (cr_unlikely(fmm == NULL))
-                crD_typeerror(ts, obj, "index");
-            goto callfmm;
+        default: crD_typeerror(ts, obj, "index");
+    }
+    cr_assert(fht != NULL);
+    v = crH_get(fht, key);
+    if (!isabstkey(v)) { /* have field ? */
+        setobj2s(ts, res, v);
+        return;
+    }
+    if (mht) { /* have method table ? */
+        cr_assert(ttisins(obj));
+        v = crH_get(mht, key);
+        if (!isabstkey(v)) { /* have method ? */
+            /* bind it to instance and set 'res'  */
+            bindmethod(ts, ins, v, res)
+            return;
         }
     }
-    fmm = crMM_get(ts, obj, mm);
-    if (fmm) {
-        callfmm:
-        crMM_callhtmres(ts, fmm, obj, key, res);
-    } else {
-        v = crH_get(ht, key);
-        if (isabstkey(v)) \
-            setnilval(s2v(res));
-        else
-            setobj2s(ts, res, v);
+    setemptyval(s2v(res));
+}
+
+
+void crV_getsuper(cr_State *ts, Instance *ins, OClass *cls, const TValue *s,
+                  SPtr res) {
+    if (cls->methods) { /* superclass has methods ? */
+        const TValue *v = crH_get(cls->methods, s);
+        if (!isabstkey(v))
+            bindmethod(ts, ins, v, res)
+    }
+    setnilval(s2v(res));
+}
+
+
+cr_sinline void inherit(cr_State *ts, const TValue *obj, OClass *dest) {
+    OClass *src;
+    if (cr_unlikely(!ttiscls(obj)))
+        crD_runerror(ts, "inherit a non-class value");
+    src = clsval(obj);
+    if (cr_likely(src->methods)) { /* 'src' has methods ? */
+        cr_assert(dest->methods == NULL);
+        dest->methods = crH_new(ts);
+        crH_copykeys(ts, src->methods, dest->methods);
     }
 }
 
@@ -743,8 +781,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 pop(L);
                 vm_break;
             }
-            /* } BINARY_OPS { */
-            /* ARITHMETIC_OPS { */
+            /* } BINARY_OPS { ARITHMETIC_OPS { */
             vm_case(OP_MBIN) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
@@ -990,7 +1027,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 if (ttisint(v)) {
                     cr_Integer i = ival(v);
                     setival(v, cri_intop(^, ~cri_castS2U(0), i));
-                } else
+                } else {
                     protect(crMM_tryunary(ts, v, res, CR_MM_BNOT));
                 }
                 vm_break;
@@ -1044,6 +1081,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 pop(1); /* v */
                 vm_break;
             }
+            /* } */
             vm_case(OP_CALL) {
                 int L1 = fetchl();
                 int L2 = fetchl();
@@ -1114,7 +1152,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cr_assert(ttisstr(s));
-                crV_setfield(ts, v1, s, v2, CR_MM_SETFIELD);
+                protect(crV_setfield(ts, v1, s, v2, CR_MM_SETFIELD));
                 pop(2); /* v1,v2 */
                 vm_break;
             }
@@ -1122,13 +1160,13 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *s = getlK();
                 TValue *v = peek(0);
                 cr_assert(ttisstr(s));
-                crV_getfield(ts, v, s, ts->sp.p - 1, CR_MM_GETFIELD);
+                protect(crV_getproperty(ts, v, s, ts->sp.p-1, CR_MM_GETFIELD));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                crV_getfield(ts, v1, v2, ts->sp.p - 2, CR_MM_GETIDX);
+                protect(crV_getproperty(ts, v1, v2, ts->sp.p-2, CR_MM_GETIDX));
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1136,28 +1174,30 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(2);
                 TValue *v2 = peek(1);
                 TValue *v3 = peek(0);
-                crV_setfield(ts, v1, v2, v3, CR_MM_SETIDX);
+                protect(crV_setfield(ts, v1, v2, v3, CR_MM_SETIDX));
                 pop(3); /* v1,v2,v3 */
                 vm_break;
             }
             vm_case(OP_GETINDEXSTR) { /* TODO: optimize */
                 TValue *s = getlK();
                 TValue *v = peek(0);
-                crV_getfield(ts, v, s, ts->sp.p - 1, CR_MM_GETIDX);
+                cr_assert(ttisstr(s));
+                protect(crV_getproperty(ts, v, s, ts->sp.p-1, CR_MM_GETIDX));
                 vm_break;
             }
             vm_case(OP_SETINDEXSTR) { /* TODO: optimize */
                 TValue *s = getlK();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                crV_setfield(ts, v1, s, v2, CR_MM_SETIDX);
+                cr_assert(ttisstr(s));
+                protect(crV_setfield(ts, v1, s, v2, CR_MM_SETIDX));
                 vm_break;
             }
             vm_case(OP_GETINDEXINT) { /* TODO: optimize */
                 TValue aux;
                 TValue *v = peek(0);
                 setival(&aux, fetchl());
-                crV_getfield(ts, v, &aux, ts->sp.p - 1, CR_MM_GETIDX);
+                protect(crV_getproperty(ts, v, &aux, ts->sp.p-1, CR_MM_GETIDX));
                 vm_break;
             }
             vm_case(OP_SETINDEXINT) { /* TODO: optimize */
@@ -1165,19 +1205,40 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 setival(&aux, fetchl());
-                crV_setfield(ts, v1, &aux, v2, CR_MM_SETIDX);
+                protect(crV_setfield(ts, v1, &aux, v2, CR_MM_SETIDX));
                 vm_break;
             }
             vm_case(OP_GETSUP) {
+                TValue *s = getlK();
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                cr_assert(ttisstr(s));
+                protect(crV_getsuper(ts, insval(v1), clsval(v2), s, ts->sp.p-2));
+                pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_GETSUPIDX) {
+                TValue *v1 = peek(2);
+                TValue *v2 = peek(1);
+                TValue *v3 = peek(0);
+                protect(crV_getsuper(ts, insval(v1), clsval(v2), v3, ts->sp.p-3));
+                pop(2); /* v2,v3 */
                 vm_break;
             }
-            vm_case(OP_GETSUPIDXSTR) {
+            vm_case(OP_GETSUPIDXSTR) { /* TODO: optimize */
+                TValue *s = getlK();
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                cr_assert(ttisstr(s));
+                protect(crV_getsuper(ts, insval(v1), clsval(v2), s, ts->sp.p-2));
+                pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_INHERIT) {
+                TValue *v1 = peek(1);
+                TValue *v2 = peek(0);
+                protect(inherit(ts, v1, clsval(v2)));
+                pop(2); /* v1,v2 */
                 vm_break;
             }
             vm_case(OP_FORPREP) {

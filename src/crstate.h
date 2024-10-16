@@ -197,7 +197,7 @@ union GCUnion {
     union Closure cl;
     struct OClass cls;
     struct Instance ins;
-    struct InstanceMethod im;
+    struct IMethod im;
     struct UserData ud;
     struct cr_State th;
 };

@@ -118,27 +118,27 @@ void crH_free(cr_State *ts, HTable *ht) {
  */
 static Node *mainposition(const HTable *ht, const TValue *k) {
     switch (ttypetag(k)) {
-    case CR_VTRUE: return cast_node(hashslot(ht, crO_hashbool(1)));
-    case CR_VFALSE: return cast_node(hashslot(ht, crO_hashbool(0)));
+    case CR_VTRUE: return hashslot(ht, crO_hashbool(1));
+    case CR_VFALSE: return hashslot(ht, crO_hashbool(0));
     case CR_VNUMINT:
-        return cast_node(hashslot(ht, crO_hashint(ival(k))));
+        return hashslot(ht, crO_hashint(ival(k)));
     case CR_VNUMFLT:
-        return cast_node(hashslot(ht, crO_hashnum(fval(k))));
+        return hashslot(ht, crO_hashnum(fval(k)));
     case CR_VLUDATA: {
         void *p = pval(k);
-        return cast_node(hashslot(ht, crO_hashp(p)));
+        return hashslot(ht, crO_hashp(p));
     }
     case CR_VCFUNCTION: {
         cr_CFunction f = cfval(k);
-        return cast_node(hashslot(ht, crO_hashp(f)));
+        return hashslot(ht, crO_hashp(f));
     }
     case CR_VSTRING: {
         OString *str = strval(k);
-        return cast_node(hashstr(ht, str));
+        return hashstr(ht, str);
     }
     default:
         cr_assert(!ttisnil(k) && iscollectable(k));
-        return cast_node(hashslot(ht, crO_hashp(gcoval(k))));
+        return hashslot(ht, crO_hashp(gcoval(k)));
     }
 }
 
@@ -298,13 +298,13 @@ static int eqkey(const TValue *k, const Node *n, int deadok) {
 static const TValue *getgeneric(HTable *ht, const TValue *key, int deadok) {
     Node *n = mainposition(ht, key);
     for (;;) {
-        if (eqkey(key, n, deadok))
+        if (eqkey(key, n, deadok)) {
             return nodeval(n);
-        else {
-            int nx = nodenext(n);
-            if (nx == 0)
+        } else {
+            int next = nodenext(n);
+            if (next == 0) /* end of node list ? */
                 return &absentkey;
-            n += nx;
+            n += next;
         }
     }
 }

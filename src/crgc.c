@@ -260,7 +260,7 @@ static void markobject_(GC *gc, GCObject *o) {
         break;
     }
     case CR_VMETHOD: {
-        InstanceMethod *im = gco2im(o);
+        IMethod *im = gco2im(o);
         notw2black(im);
         markobject(gc, im->receiver);
         markobject(gc, im->method);

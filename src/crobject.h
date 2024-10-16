@@ -629,7 +629,7 @@ typedef union Closure {
 
 #define ttiscls(o)      checktag(o, ctb(CR_VCLASS))
 
-#define clsval(o)       gco2cls(gcoval(o))
+#define clsval(o)       (cr_assert(ttiscls(o)), gco2cls(gcoval(o)))
 
 #define setclsval(ts,obj,cls)   setgcotval(ts,obj,cls,OClass)
 #define setcls2s(ts,sv,cls)     setclsval(ts,s2v(sv),cls)
@@ -665,7 +665,7 @@ typedef struct Instance {
 
 
 /* --------------------------------------------------------------------------
- *  InstanceMethod
+ *  IMethod (method binded to instance)
  * --------------------------------------------------------------------------- */
 
 #define CR_VMETHOD      makevariant(3, CR_TFUNCTION)
@@ -674,14 +674,14 @@ typedef struct Instance {
 
 #define imval(o)        gco2im(gcoval(o))
 
-#define setv2im(ts,obj,im)      setgcotval(ts,obj,im,InstanceMethod)
-#define setsv2im(ts,sobj,im)    setv2im(ts,s2v(sobj),im)
+#define setimval(ts,obj,im)     setgcotval(ts,obj,im,IMethod)
+#define setim2s(ts,sobj,im)     setimval(ts,s2v(sobj),im)
 
-typedef struct InstanceMethod {
+typedef struct IMethod {
     ObjectHeader;
     Instance *receiver;
-    GCObject *method;
-} InstanceMethod;
+    TValue method;
+} IMethod;
 
 
 
@@ -695,8 +695,8 @@ typedef struct InstanceMethod {
 
 #define udval(o)        gco2ud(gcoval(o))
 
-#define setudval(ts,obj,im)     setgcotval(ts,obj,im,InstanceMethod)
-#define setud2s(ts,sobj,im)     setudval(ts,s2v(sobj),im)
+#define setudval(ts,obj,ud)     setgcotval(ts,obj,ud,UserData)
+#define setud2s(ts,sobj,ud)     setudval(ts,s2v(sobj),ud)
 
 typedef struct UserData {
     ObjectHeader;
@@ -739,7 +739,7 @@ typedef struct EmptyUserData {
         : offsetof(UserData, uv) + ((nuv) * sizeof(TValue)))
 
 /* size of 'UserData' */
-#define sizeofud(nuv, size) (udmemoffset(nuv) + (size))
+#define sizeofud(nuv, size)     (udmemoffset(nuv) + (size))
 
 
 

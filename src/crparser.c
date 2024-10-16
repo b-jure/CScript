@@ -831,7 +831,7 @@ static void getprop(Lexer *lx, ExpInfo *var, int super) {
  */
 static void superkw(Lexer *lx, ExpInfo *e) {
     if (cr_unlikely(lx->ps->cs == NULL)) {
-        crP_semerror(lx, "'super' outside of method");
+        crP_semerror(lx, "usage of 'super' outside of method");
     } else if (cr_unlikely(!lx->ps->cs->super)) {
         crL_syntaxerror(lx, "use of 'super' but class does not inherit");
     } else {
@@ -1257,18 +1257,21 @@ static void exprstm(Lexer *lx) {
 }
 
 
-/* get variable modifier */
+/* 
+** attribute ::= "final"
+**             | "private"
+**             | "close"
+*/
 static int attribute(Lexer *lx) {
     const char *mod = getstrbytes(expect_id(lx));
-    if (strcmp(mod, "final") == 0) {
+    if (strcmp(mod, "final") == 0)
         return VARFINAL;
-    } else if (strcmp(mod, "private") == 0) {
+    else if (strcmp(mod, "private") == 0)
         return VARPRIVATE;
-    } else if (strcmp(mod, "close") == 0) {
+    else if (strcmp(mod, "close") == 0)
         return VARTBC;
-    } else {
+    else
         crP_semerror(lx, crS_pushfstring(lx->ts, "unknown modifier '%s'", mod));
-    }
 }
 
 
@@ -1285,12 +1288,11 @@ static int modifiers(Lexer *lx, const char *name) {
         int bit = attribute(lx);
         if (testbit(bmask, bit)) { /* duplicate modifier ? */
             crP_semerror(lx, crS_pushfstring(lx->ts,
-                        "variable '%s' has duplicate '%s' modifier",
-                        name, lx->t.lit.str));
+                             "variable '%s' has duplicate '%s' modifier",
+                             name, lx->t.lit.str));
         } else if (testbit(bmask, VARTBC) && bit == VARPRIVATE) {
             crP_semerror(lx, crS_pushfstring(lx->ts,
-                        "variable '%s' can't have both private and close modifiers",
-                        name));
+            "variable '%s' can't have both private and close modifiers", name));
         }
         bmask = bit2mask(bmask, bit);
     } while (match(lx, ','));
@@ -1306,7 +1308,7 @@ static int newvar(FunctionState *fs, OString *name, ExpInfo *e, int mods) {
     if (fs->scope->prev) { /* local ? */
         if (cr_unlikely(testbit(mods, VARPRIVATE))) {
             crP_semerror(lx, crS_pushfstring(lx->ts,
-                        "local variables '%s' is already private", name));
+            "local variable '%s' is already private", name));
         }
         checkvarcollision(fs, name, "local", searchlocal);
         vidx = newlocal(lx, name, mods);
@@ -1383,9 +1385,7 @@ static OString *declarevarlist(FunctionState *fs, ExpInfo *var, int nvars,
 
 /* declare single variable */
 static OString *declarevar(FunctionState *fs, ExpInfo *var, int *tbc) {
-    *tbc = -1;
-    OString *name = declarevarlist(fs, var, 0, tbc);
-    return name;
+    return declarevarlist(fs, var, 0, tbc);
 }
 
 
@@ -1539,7 +1539,7 @@ static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod) {
 static void fndecl(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
     ExpInfo var, e;
-    int tbc;
+    int tbc = -1;
     crL_scan(lx); /* skip 'fn' */
     declarevar(fs, &var, &tbc);
     initvariable(fs, &var);
@@ -1558,13 +1558,13 @@ static void codeinherit(Lexer *lx, OString *name, Scope *s, ExpInfo *var) {
     int private = match(lx, '@');
     OString *supname = expect_id(lx);
     if (private) { /* superclass is private global ? */
-        /* assert: class is not private */
+        /* assertion: 'name' (class) is not private global (no collision) */
         searchprivate(fs, supname, var);
     } else if (cr_unlikely(streq(name, supname))) { /* name collision ? */
         crP_semerror(lx, crS_pushfstring(lx->ts,
-        "variable '%s' attempt to inherit itself", name));
+            "variable '%s' attempt to inherit itself", name));
     } else { /* superclass is local, upvalue or global */
-        searchvar(fs, supname, var, 1); /* find superclass */
+        searchvar(fs, supname, var, 1);
     }
     crC_varexp2stack(fs, var); /* put superclass on the stack */
     cr_assert(var->et == EXP_FINEXPR);
@@ -1575,6 +1575,7 @@ static void codeinherit(Lexer *lx, OString *name, Scope *s, ExpInfo *var) {
     crC_varexp2stack(fs, var); /* put class on the stack */
     cr_assert(var->et == EXP_FINEXPR);
     crC_emitI(fs, OP_INHERIT);
+    fs->sp -= 2; /* after inherit both classes are popped */
     lx->ps->cs->super = 1;
 }
 
@@ -1608,7 +1609,7 @@ static void codemethod(FunctionState *fs, ExpInfo *var) {
 }
 
 
-/* class method */
+/* method ::= fn id funcbody */
 static void method(Lexer *lx) {
     ExpInfo var, dummy;
     int defline = lx->line; /* method definition start line */
@@ -1619,6 +1620,10 @@ static void method(Lexer *lx) {
 }
 
 
+/* 
+** classbody ::= '{' '}'
+**             | '{' method ... '}'
+*/
 static void classbody(Lexer *lx) {
     while (!check(lx, '}') && !check(lx, TK_EOS))
         method(lx);
@@ -1634,7 +1639,7 @@ static void classdecl(Lexer *lx) {
     Scope s; /* scope for 'super' */
     ClassState cs;
     ExpInfo var, e;
-    int tbc;
+    int tbc = -1;
     crL_scan(lx); /* skip 'class' */
     OString *name = declarevar(fs, &var, &tbc);
     initvariable(fs, &var);

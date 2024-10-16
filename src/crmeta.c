@@ -8,6 +8,7 @@
 #include "crvm.h"
 #include "crmem.h"
 #include <stddef.h>
+#include <string.h>
 
 
 const char *mmnames[CR_NUM_MM] = {
@@ -42,21 +43,15 @@ OClass *crMM_newclass(cr_State *ts) {
 Instance *crMM_newinstance(cr_State *ts, OClass *cls) {
     Instance *ins = crG_new(ts, sizeof(Instance), CR_VINSTANCE, Instance);
     ins->oclass = cls;
-    ins->fields = NULL;
-    setins2s(ts, ts->sp.p++, ins);
-    ins->fields = crH_new(ts);
-    ts->sp.p--;
+    memset(&ins->fields, 0, sizeof(ins->fields));
     return ins;
 }
 
 
-InstanceMethod *crMM_newinstancemethod(cr_State *ts, Instance *receiver,
-                                       CrClosure *method)
-{
-    InstanceMethod *im = crG_new(ts, sizeof(InstanceMethod), CR_VMETHOD,
-                                   InstanceMethod);
-    im->receiver = receiver;
-    im->method = obj2gco(method);
+IMethod *crMM_newinsmethod(cr_State *ts, Instance *ins, const TValue *method) {
+    IMethod *im = crG_new(ts, sizeof(IMethod), CR_VMETHOD, IMethod);
+    im->receiver = ins;
+    setobj(ts, &im->method, method);
     return im;
 }
 
@@ -262,7 +257,7 @@ void crMM_freeclass(cr_State *ts, OClass *cls) {
 
 
 void crMM_freeinstance(cr_State *ts, Instance *ins) {
-    crH_free(ts, ins->fields);
+    crM_freearray(ts, ins->fields.node, htsize(&ins->fields), Node);
     crM_free(ts, ins, sizeof(*ins));
 }
 
@@ -270,5 +265,6 @@ void crMM_freeinstance(cr_State *ts, Instance *ins) {
 void crMM_freeuserdata(cr_State *ts, UserData *ud) {
     if (ud->vmt)
         crM_free(ts, ud->vmt, SIZEVMT);
+    crM_freearray(ts, ud->fields.node, htsize(&ud->fields), Node);
     crM_free(ts, ud, sizeofud(ud->nuv, ud->size));
 }

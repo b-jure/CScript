@@ -702,8 +702,7 @@ void crC_exp2stack(FunctionState *fs, ExpInfo *e) {
 
 /* initialize dot indexed expression */
 void crC_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
-                     int super)
-{
+                     int super) {
     cr_assert(keystr->et == EXP_STRING);
     var->u.info = stringK(fs, keystr->u.str);
     var->et = (super ? EXP_DOTSUPER : EXP_DOT);
