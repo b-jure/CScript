@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #include "crconf.h"
@@ -144,36 +145,36 @@ static void setmm(cr_State *ts, TValue **vmt, TValue *fn, int vmtt) {
  * operand is converted, without change of type domain, to a type whose
  * corresponding real type is double."
  */
-cr_sinline int intLEnum(cr_State *ts, const TValue *v1, const TValue *v2) {
+cr_sinline int intlenum(cr_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
     return cri_numle(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
-cr_sinline int numLEint(cr_State *ts, const TValue *v1, const TValue *v2) {
+cr_sinline int numleint(cr_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
     return cri_numle(fval(v1), cast_num(ival(v2)));
 }
 
 
 /* less equal ordering on numbers */
-cr_sinline int numLE(cr_State *ts, const TValue *v1, const TValue *v2) {
+cr_sinline int numle(cr_State *ts, const TValue *v1, const TValue *v2) {
     cr_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
         cr_Integer i1 = ival(v1);
         if (ttisint(v2)) return (i1 <= ival(v2));
-        else return intLEnum(ts, v1, v2);
+        else return intlenum(ts, v1, v2);
     } else {
         cr_Number n1 = fval(v1);
-        if (ttisint(v2)) return numLEint(ts, v1, v2);
+        if (ttisint(v2)) return numleint(ts, v1, v2);
         else return cri_numlt(n1, fval(v2));
     }
 }
 
 
 /* less equal ordering on non-number values */
-cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2) {
+cr_sinline int otherle(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
         return (crS_cmp(strval(v1), strval(v2)) <= 0);
     else
@@ -182,42 +183,42 @@ cr_sinline int otherLE(cr_State *ts, const TValue *v1, const TValue *v2) {
 
 
 /* 'less or equal' ordering '<=' */
-int crV_orderLE(cr_State *ts, const TValue *v1, const TValue *v2) {
+int crV_orderle(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
-        return numLE(ts, v1, v2);
-    return otherLE(ts, v1, v2);
+        return numle(ts, v1, v2);
+    return otherle(ts, v1, v2);
 }
 
 
 /* check 'intLEnum' */
-cr_sinline int intLTnum(const TValue *v1, const TValue *v2) {
+cr_sinline int intltnum(const TValue *v1, const TValue *v2) {
     return cri_numlt(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
-cr_sinline int numLTint(const TValue *v1, const TValue *v2) {
+cr_sinline int numltint(const TValue *v1, const TValue *v2) {
     return cri_numlt(fval(v1), cast_num(ival(v2)));
 }
 
 
 /* 'less than' ordering '<' on number values */
-cr_sinline int numLT(const TValue *v1, const TValue *v2) {
+cr_sinline int numlt(const TValue *v1, const TValue *v2) {
     cr_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
         cr_Integer i1 = ival(v1);
         if (ttisint(v2)) return (i1 <= ival(v2));
-        else return intLTnum(v1, v2);
+        else return intltnum(v1, v2);
     } else {
         cr_Number n1 = fval(v1);
-        if (ttisint(v2)) return numLTint(v1, v2);
+        if (ttisint(v2)) return numltint(v1, v2);
         else return cri_numlt(n1, fval(v2));
     }
 }
 
 
 /* 'less than' ordering '<' on non-number values */
-cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2) {
+cr_sinline int otherlt(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
         return crS_cmp(strval(v1), strval(v2));
     else
@@ -226,10 +227,10 @@ cr_sinline int otherLT(cr_State *ts, const TValue *v1, const TValue *v2) {
 
 
 /* 'less than' ordering '<' */
-int crV_orderLT(cr_State *ts, const TValue *v1, const TValue *v2) {
+int crV_orderlt(cr_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
-        return numLT(v1, v2);
-    return otherLT(ts, v1, v2);
+        return numlt(v1, v2);
+    return otherlt(ts, v1, v2);
 }
 
 
@@ -237,10 +238,9 @@ int crV_orderLT(cr_State *ts, const TValue *v1, const TValue *v2) {
 ** Equality ordering '=='.
 ** In case 'ts' is NULL perform raw equality (without invoking '__eq').
 */
-int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
+int crV_ordereq(cr_State *ts, const TValue *v1, const TValue *v2) {
     cr_Integer i1, i2;
     const TValue *method;
-    const TValue *selfarg;
     if (ttypetag(v1) != ttypetag(v2)) {
         if (ttype(v1) != ttype(v2) || ttype(v1) != CR_TNUMBER)
             return 0;
@@ -256,31 +256,25 @@ int crV_orderEQ(cr_State *ts, const TValue *v1, const TValue *v2) {
     case CR_VUDATA: {
         if (udval(v1) == udval(v2)) return 1;
         else if (ts == NULL) return 0;
-        selfarg = v1;
         method = crMM_get(ts, v1, CR_MM_EQ);
-        if (ttisnil(method)) {
-            selfarg = v2;
+        if (isabstkey(method))
             method = crMM_get(ts, v2, CR_MM_EQ);
-        }
         break;
     }
     case CR_VINSTANCE: {
         if (insval(v1) == insval(v2)) return 1;
         else if (ts == NULL) return 0;
-        selfarg = v1;
         method = crMM_get(ts, v1, CR_MM_EQ);
-        if (ttisnil(method)) {
-            selfarg = v2;
+        if (isabstkey(method))
             method = crMM_get(ts, v2, CR_MM_EQ);
-        }
         break;
     }
     default: return (gcoval(v1) == gcoval(v2));
     }
-    if (ttisnil(method))  {
+    if (isabstkey(method))  {
         return 0;
     } else {
-        crMM_callbinres(ts, selfarg, method, v1, v2, ts->sp.p);
+        crMM_callbinres(ts, method, v1, v2, ts->sp.p);
         return !cri_isfalse(s2v(ts->sp.p));
     }
 }
@@ -406,11 +400,13 @@ void crV_getsuper(cr_State *ts, Instance *ins, OClass *cls, const TValue *s,
         const TValue *v = crH_get(cls->methods, s);
         if (!isabstkey(v))
             bindmethod(ts, ins, v, res)
+    } else { /* no methods; set nil */
+        setnilval(s2v(res));
     }
-    setnilval(s2v(res));
 }
 
 
+/* 'dest' inherits methods from 'obj' (if any) */
 cr_sinline void inherit(cr_State *ts, const TValue *obj, OClass *dest) {
     OClass *src;
     if (cr_unlikely(!ttiscls(obj)))
@@ -423,6 +419,21 @@ cr_sinline void inherit(cr_State *ts, const TValue *obj, OClass *dest) {
     }
 }
 
+
+/*
+** Try to call binary meta method, but perform a quick check and
+** invoke error if the values are instances that belong to different
+** classes.
+*/
+cr_sinline void precalltrybin(cr_State *ts, const TValue *v1, const TValue *v2,
+                            cr_MM op, SPtr res) {
+    if (cr_unlikely(ttisins(v1) && ttisins(v2)
+                && insval(v1)->oclass != insval(v2)->oclass)) {
+        crD_runerror(ts, "tried to %s instances of different class", mmnames[op]);
+    } else {
+        crMM_trybin(ts, v1, v2, res, op);
+    }
+}
 
 /* ------------------------------------------------------------------------
 ** Macros for arithmetic/bitwise/comparison instructions on integers.
@@ -520,7 +531,7 @@ cr_sinline void inherit(cr_State *ts, const TValue *obj, OClass *dest) {
         setfval(v1, fop(ts, n1, n2)); \
         pc += getOpSize(OP_MBIN); \
         pop(1); \
-    }/* else try 'OP_MBIN' */}
+    }/* FALLTHRU to 'OP_MBIN' */}
 
 
 /* arithmetic operations with stack operands for floats */
@@ -671,6 +682,11 @@ cr_sinline void inherit(cr_State *ts, const TValue *obj, OClass *dest) {
 /* get private variable */
 #define PVAR(i)     (&cl->fn->private[i].val)
 
+/* get stack slot (starting from top) */
+#define SPTR(i)     (ts->sp.p - (i) - 1)
+/* get stack top - 1 */
+#define TOPS()      SPTR(0)
+
 
 /* In case 'PRECOMPUTED_GOTO' not available. */
 #define vm_dispatch(x)      switch(x)
@@ -786,7 +802,8 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 int S = fetchs(); /* op */
-                // TODO
+                protect(precalltrybin(ts, v1, v2, S, SPTR(1)));
+                pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_ADDK) {
@@ -977,24 +994,24 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v2 = peek(0);
                 int S = fetchs(); /* iseq */
                 int cond;
-                protect(cond = crV_orderEQ(ts, v1, v2));
+                protect(cond = crV_ordereq(ts, v1, v2));
                 setorderres(v1, cond, S);
                 pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_LT) {
-                op_order(ts, ilt, cri_numlt, otherLT);
+                op_order(ts, ilt, cri_numlt, otherlt);
                 vm_break;
             }
             vm_case(OP_LE) {
-                op_order(ts, ile, cri_numle, otherLE);
+                op_order(ts, ile, cri_numle, otherle);
                 vm_break;
             }
             vm_case(OP_EQPRESERVE) {
-                SPtr res = ts->sp.p - 1;
+                SPtr res = TOPS();
                 TValue *v1 = peek(1);
                 TValue *v2 = s2v(res);
-                protect(crV_orderEQ(ts, v1, v2));
+                protect(crV_ordereq(ts, v1, v2));
                 setobj2s(ts, res, s2v(ts->sp.p));
                 vm_break;
             }
@@ -1008,7 +1025,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 vm_break;
             }
             vm_case(OP_UNM) {
-                SPtr res = ts->sp.p - 1;
+                SPtr res = TOPS();
                 TValue *v = s2v(res);
                 if (ttisint(v)) {
                     cr_Integer i = ival(v);
@@ -1022,7 +1039,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 vm_break;
             }
             vm_case(OP_BNOT) {
-                SPtr res = ts->sp.p - 1;
+                SPtr res = TOPS();
                 TValue *v = s2v(res);
                 if (ttisint(v)) {
                     cr_Integer i = ival(v);
@@ -1160,13 +1177,13 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *s = getlK();
                 TValue *v = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_getproperty(ts, v, s, ts->sp.p-1, CR_MM_GETFIELD));
+                protect(crV_getproperty(ts, v, s, TOPS(), CR_MM_GETFIELD));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                protect(crV_getproperty(ts, v1, v2, ts->sp.p-2, CR_MM_GETIDX));
+                protect(crV_getproperty(ts, v1, v2, SPTR(1), CR_MM_GETIDX));
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1182,7 +1199,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *s = getlK();
                 TValue *v = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_getproperty(ts, v, s, ts->sp.p-1, CR_MM_GETIDX));
+                protect(crV_getproperty(ts, v, s, TOPS(), CR_MM_GETIDX));
                 vm_break;
             }
             vm_case(OP_SETINDEXSTR) { /* TODO: optimize */
@@ -1197,7 +1214,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue aux;
                 TValue *v = peek(0);
                 setival(&aux, fetchl());
-                protect(crV_getproperty(ts, v, &aux, ts->sp.p-1, CR_MM_GETIDX));
+                protect(crV_getproperty(ts, v, &aux, TOPS(), CR_MM_GETIDX));
                 vm_break;
             }
             vm_case(OP_SETINDEXINT) { /* TODO: optimize */
@@ -1213,7 +1230,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_getsuper(ts, insval(v1), clsval(v2), s, ts->sp.p-2));
+                protect(crV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1221,7 +1238,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(2);
                 TValue *v2 = peek(1);
                 TValue *v3 = peek(0);
-                protect(crV_getsuper(ts, insval(v1), clsval(v2), v3, ts->sp.p-3));
+                protect(crV_getsuper(ts, insval(v1), clsval(v2), v3, SPTR(2)));
                 pop(2); /* v2,v3 */
                 vm_break;
             }
@@ -1230,7 +1247,7 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_getsuper(ts, insval(v1), clsval(v2), s, ts->sp.p-2));
+                protect(crV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
                 pop(1); /* v2 */
                 vm_break;
             }

@@ -127,17 +127,16 @@ void crMM_callhtmres(cr_State *ts, const TValue *fn, const TValue *p1,
 
 
 /* call binary method and store the result in 'res' */
-void crMM_callbinres(cr_State *ts, const TValue *fn, const TValue *selfarg,
-                     const TValue *v1, const TValue *v2, SPtr res)
+void crMM_callbinres(cr_State *ts, const TValue *fn, const TValue *v1,
+                     const TValue *v2, SPtr res)
 {
     /* assuming EXTRA_STACK */
     ptrdiff_t result = savestack(ts, res);
     SPtr func = ts->sp.p;
     setobj2s(ts, func, fn); /* push function */
-    setobj2s(ts, func + 1, selfarg); /* 'self' */
-    setobj2s(ts, func + 2, v1); /* 1st arg */
-    setobj2s(ts, func + 3, v2); /* 2nd arg */
-    ts->sp.p += 4;
+    setobj2s(ts, func + 1, v1); /* lhs arg (self) */
+    setobj2s(ts, func + 2, v2); /* rhs arg */
+    ts->sp.p += 3;
     crV_call(ts, func, 1);
     res = restorestack(ts, result);
     setobj2s(ts, res, s2v(--ts->sp.p));
@@ -147,20 +146,18 @@ void crMM_callbinres(cr_State *ts, const TValue *fn, const TValue *selfarg,
 static int callbinaux(cr_State *ts, const TValue *v1, const TValue *v2,
                       SPtr res, int mt)
 {
-    const TValue *selfarg = v1;
     const TValue *fn = crMM_get(ts, v1, mt);
     if (ttisnil(fn)) {
-        selfarg = v2;
         fn = crMM_get(ts, v2, mt);
         if (cr_unlikely(ttisnil(fn)))
             return 0;
     }
-    crMM_callbinres(ts, fn, selfarg, v1, v2, res);
+    crMM_callbinres(ts, fn, v1, v2, res);
     return 1;
 }
 
 
-/* try to call binary method */
+/* try to call binary arithmetic or bitwise method */
 void crMM_trybin(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
                   cr_MM mm)
 {

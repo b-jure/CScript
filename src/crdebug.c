@@ -17,6 +17,7 @@
 
 #include "crdebug.h"
 #include "crfunction.h"
+#include "crmeta.h"
 #include "crobject.h"
 #include "crstring.h"
 #include "crlimits.h"
@@ -254,6 +255,13 @@ cr_noret crD_globalerror(cr_State *ts, const char *err, OString *name) {
 /* operation on invalid type error */
 cr_noret crD_typeerror(cr_State *ts, const TValue *v, const char *op) {
     crD_runerror(ts, "tried to %s a %s value", op, typename(ttypetag(v)));
+}
+
+
+cr_noret crD_typeerrormeta(cr_State *ts, const TValue *v1, const TValue *v2,
+                           const char * mop) {
+    crD_runerror(ts, "tried to %s %s and %s values",
+                     mop, typename(ttypetag(v1)), typename(ttypetag(v2)));
 }
 
 

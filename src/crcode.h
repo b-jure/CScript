@@ -134,64 +134,64 @@ OP_POPN,        /* L          'pop L values off the stack' */
 
 OP_MBIN,        /* V1 V2 S    'V1 S V2'  (S is binop) */
 
-OP_ADDK,         /* V L S   'V + K{L}:number' */
-OP_SUBK,         /* V L S   'V - K{L}:number' */
-OP_MULK,         /* V L S   'V * K{L}:number' */
-OP_DIVK,         /* V L S   'V / K{L}:number' */
-OP_MODK,         /* V L S   'V % K{L}:number' */
-OP_POWK,         /* V L S   'V ** K{L}:number' */
-OP_BSHLK,        /* V L S   'V << K{L}:number' */
-OP_BSHRK,        /* V L S   'V >> K{L}:number' */
-OP_BANDK,        /* V L S   'V & K{L}:number' */
-OP_BORK,         /* V L S   'V | K{L}:number' */
-OP_BXORK,        /* V L S   'V ^ K{L}:number' */
+OP_ADDK,        /* V L S   'V + K{L}:number' */
+OP_SUBK,        /* V L S   'V - K{L}:number' */
+OP_MULK,        /* V L S   'V * K{L}:number' */
+OP_DIVK,        /* V L S   'V / K{L}:number' */
+OP_MODK,        /* V L S   'V % K{L}:number' */
+OP_POWK,        /* V L S   'V ** K{L}:number' */
+OP_BSHLK,       /* V L S   'V << K{L}:number' */
+OP_BSHRK,       /* V L S   'V >> K{L}:number' */
+OP_BANDK,       /* V L S   'V & K{L}:number' */
+OP_BORK,        /* V L S   'V | K{L}:number' */
+OP_BXORK,       /* V L S   'V ^ K{L}:number' */
 
-OP_ADDI,         /* V L S   'V + ((S - 1) * I(L))' */
-OP_SUBI,         /* V L S   'V - ((S - 1) * I(L))' */
-OP_MULI,         /* V L S   'V * ((S - 1) * I(L))' */
-OP_DIVI,         /* V L S   'V / ((S - 1) * I(L))' */
-OP_MODI,         /* V L S   'V % ((S - 1) * I(L))' */
-OP_POWI,         /* V L S   'V ** ((S - 1) * I(L))' */
-OP_BSHLI,        /* V L S   'V << ((S - 1) * I(L))' */
-OP_BSHRI,        /* V L S   'V >> ((S - 1) * I(L))' */
-OP_BANDI,        /* V L S   'V & ((S - 1) * I(L))' */
-OP_BORI,         /* V L S   'V | ((S - 1) * I(L))' */
-OP_BXORI,        /* V L S   'V ^ ((S - 1) * I(L))' */
+OP_ADDI,        /* V L S   'V + ((S - 1) * I(L))' */
+OP_SUBI,        /* V L S   'V - ((S - 1) * I(L))' */
+OP_MULI,        /* V L S   'V * ((S - 1) * I(L))' */
+OP_DIVI,        /* V L S   'V / ((S - 1) * I(L))' */
+OP_MODI,        /* V L S   'V % ((S - 1) * I(L))' */
+OP_POWI,        /* V L S   'V ** ((S - 1) * I(L))' */
+OP_BSHLI,       /* V L S   'V << ((S - 1) * I(L))' */
+OP_BSHRI,       /* V L S   'V >> ((S - 1) * I(L))' */
+OP_BANDI,       /* V L S   'V & ((S - 1) * I(L))' */
+OP_BORI,        /* V L S   'V | ((S - 1) * I(L))' */
+OP_BXORI,       /* V L S   'V ^ ((S - 1) * I(L))' */
 
-OP_ADD,          /* V1 V2   'V1 + V2' */
-OP_SUB,          /* V1 V2   'V1 - V2' */
-OP_MUL,          /* V1 V2   'V1 * V2' */
-OP_DIV,          /* V1 V2   'V1 / V2' */
-OP_MOD,          /* V1 V2   'V1 % V2' */
-OP_POW,          /* V1 V2   'V1 ** V2' */
-OP_BSHL,         /* V1 V2   'V1 << V2' */
-OP_BSHR,         /* V1 V2   'V1 >> V2' */
-OP_BAND,         /* V1 V2   'V1 & V2' */
-OP_BOR,          /* V1 V2   'V1 | V2' */
-OP_BXOR,         /* V1 V2   'V1 ^ V2' */
+OP_ADD,         /* V1 V2   'V1 + V2' */
+OP_SUB,         /* V1 V2   'V1 - V2' */
+OP_MUL,         /* V1 V2   'V1 * V2' */
+OP_DIV,         /* V1 V2   'V1 / V2' */
+OP_MOD,         /* V1 V2   'V1 % V2' */
+OP_POW,         /* V1 V2   'V1 ** V2' */
+OP_BSHL,        /* V1 V2   'V1 << V2' */
+OP_BSHR,        /* V1 V2   'V1 >> V2' */
+OP_BAND,        /* V1 V2   'V1 & V2' */
+OP_BOR,         /* V1 V2   'V1 | V2' */
+OP_BXOR,        /* V1 V2   'V1 ^ V2' */
 
-OP_RANGE,        /* V V1    'V..V1' */
+OP_RANGE,       /* V V1    'V..V1' */
 
-OP_EQK,          /* V L S   '(V == K{L}) == S' */
+OP_EQK,         /* V L S   '(V == K{L}) == S' */
 
-OP_EQI,       /* V L S1 S2      '(V == I(L) * (S1 - 1)) == S2' */
-OP_LTI,       /* V L S1         'V < (S1 - 1) * I(L)' */
-OP_LEI,       /* V L S1         'V <= (S1 - 1) * I(L)' */
-OP_GTI,       /* V L S1         'V > (S1 - 1) * I(L)' */
-OP_GEI,       /* V L S1         'V >= (S1 - 1) * I(L)' */ 
+OP_EQI,         /* V L S1 S2      '(V == I(L) * (S1 - 1)) == S2' */
+OP_LTI,         /* V L S1         'V < (S1 - 1) * I(L)' */
+OP_LEI,         /* V L S1         'V <= (S1 - 1) * I(L)' */
+OP_GTI,         /* V L S1         'V > (S1 - 1) * I(L)' */
+OP_GEI,         /* V L S1         'V >= (S1 - 1) * I(L)' */ 
 
-OP_EQ,           /* V1 V2 S     '(V1 == V2) == S' */
-OP_LT,           /* V1 V2       '(V1 < V2)' */
-OP_LE,           /* V1 V2       '(V1 <= V2)' */
+OP_EQ,          /* V1 V2 S     '(V1 == V2) == S' */
+OP_LT,          /* V1 V2       '(V1 < V2)' */
+OP_LE,          /* V1 V2       '(V1 <= V2)' */
 
-OP_EQPRESERVE,   /* V1 V2   'V1 == V2 (preserves V1 operand)' */
+OP_EQPRESERVE,  /* V1 V2   'V1 == V2 (preserves V1 operand)' */
 
-OP_NOT,          /* V       'not V' */
-OP_UNM,          /* V       '-V' */
-OP_BNOT,         /* V       '~V' */
+OP_NOT,         /* V       'not V' */
+OP_UNM,         /* V       '-V' */
+OP_BNOT,        /* V       '~V' */
 
-OP_JMP,          /* L       'pc += L' */
-OP_JMPS,         /* L       'pc -= L' */
+OP_JMP,         /* L       'pc += L' */
+OP_JMPS,        /* L       'pc -= L' */
 
 OP_TEST,        /* V L S   'if (!cri_isfalse(V) == S) pc += L' */
 OP_TESTORPOP,   /* V L S   'if (!cri_isfalse(V) == S) pc += L; else pop V;' */
@@ -201,37 +201,37 @@ OP_TESTPOP,     /* V L S   'if (!cri_isfalse(V) == S) { pc += L; } pop V;' */
 OP_CALL,   /* L1 L2 L3  'V{L1},...,V{L1+L3-2} = V{L1}(V{L1+1},...,V{L1+L2-1})'
             (check info) */
 
-OP_CLOSE,        /* L           'close all upvalues >= OU{L} */
-OP_TBC,          /* L           'mark L{L} as to-be-closed' */
+OP_CLOSE,       /* L           'close all upvalues >= OU{L} */
+OP_TBC,         /* L           'mark L{L} as to-be-closed' */
 
-OP_GETLOCAL,     /* L           'L{L}' */
-OP_SETLOCAL,     /* V L         'L{L} = V' */
+OP_GETLOCAL,    /* L           'L{L}' */
+OP_SETLOCAL,    /* V L         'L{L} = V' */
 
-OP_GETPRIVATE,   /* L           'P{L}' */
-OP_SETPRIVATE,   /* V L         'P{L} = V' */
+OP_GETPRIVATE,  /* L           'P{L}' */
+OP_SETPRIVATE,  /* V L         'P{L} = V' */
 
-OP_GETUVAL,      /* L           'U{L}' */
-OP_SETUVAL,      /* V L         'U{L} = V'*/
+OP_GETUVAL,     /* L           'U{L}' */
+OP_SETUVAL,     /* V L         'U{L} = V'*/
 
-OP_DEFGLOBAL,    /* V L         'G(L) = V' (check notes) */
-OP_GETGLOBAL,    /* L           'G(L)' */
-OP_SETGLOBAL,    /* V L         'G(L) = V' */
+OP_DEFGLOBAL,   /* V L         'G(L) = V' (check notes) */
+OP_GETGLOBAL,   /* L           'G(L)' */
+OP_SETGLOBAL,   /* V L         'G(L) = V' */
 
-OP_SETPROPERTY,  /* V1 V2 L     'V1.K{L} = V2' */
-OP_GETPROPERTY,  /* V  L        'V.K{L}' */
+OP_SETPROPERTY, /* V1 V2 L     'V1.K{L} = V2' */
+OP_GETPROPERTY, /* V  L        'V.K{L}' */
 
-OP_GETINDEX,     /* V1 V2       'V1[V2]' */
-OP_SETINDEX,     /* V1 V2 V3    'V1[V2] = V3' */
+OP_GETINDEX,    /* V1 V2       'V1[V2]' */
+OP_SETINDEX,    /* V1 V2 V3    'V1[V2] = V3' */
 
-OP_GETINDEXSTR,  /* V L         'V[K{L}:string]' */
-OP_SETINDEXSTR,  /* V1 V2 L     'V1[K{L}:string] = V2' */
+OP_GETINDEXSTR, /* V L         'V[K{L}:string]' */
+OP_SETINDEXSTR, /* V1 V2 L     'V1[K{L}:string] = V2' */
 
-OP_GETINDEXINT,  /* V L         'V[I(L):integer]' */
-OP_SETINDEXINT,  /* V1 V2 L     'V[I(L):integer] = V2' */
+OP_GETINDEXINT, /* V L         'V[I(L):integer]' */
+OP_SETINDEXINT, /* V1 V2 L     'V[I(L):integer] = V2' */
 
-OP_GETSUP,       /* V1 V2 L     'V2:super.K{L}:string' (V1 is instance) */
-OP_GETSUPIDX,    /* V1 V2 V3    'V2:super[V3]' (V1 is instance) */
-OP_GETSUPIDXSTR, /* V1 V2 L     'V2:super[K{L}:string]' (V1 is instance) */
+OP_GETSUP,      /* V1 V2 L     'V2:super.K{L}:string' (V1 is instance) */
+OP_GETSUPIDX,   /* V1 V2 V3    'V2:super[V3]' (V1 is instance) */
+OP_GETSUPIDXSTR,/* V1 V2 L     'V2:super[K{L}:string]' (V1 is instance) */
 
 OP_INHERIT,    /* V1 V2  'V2:class inherit V1 */
 OP_FORPREP,    /* L1 L2  'create upvalue V{L1+3}; pc += L2' */

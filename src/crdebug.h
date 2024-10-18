@@ -41,6 +41,8 @@ CRI_FUNC cr_noret crD_typeerror(cr_State *ts, const TValue *v,
                                 const char *op);
 CRI_FUNC cr_noret crD_ordererror(cr_State *ts, const TValue *v1,
                                  const TValue *v2);
+CRI_FUNC cr_noret crD_typeerrormeta(cr_State *ts, const TValue *v1,
+                                    const TValue *v2, const char * mop);
 CRI_FUNC cr_noret crD_operror(cr_State *ts, const TValue *v1,
                               const TValue *v2, const char *op);
 

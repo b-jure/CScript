@@ -20,9 +20,8 @@ CRI_FUNC void crMM_callhtm(cr_State *ts, const TValue *fn, const TValue *p1,
                            const TValue *p2, const TValue *p3);
 CRI_FUNC void crMM_callhtmres(cr_State *ts, const TValue *fn, const TValue *p1,
                               const TValue *p2, SPtr res);
-CRI_FUNC void crMM_callbinres(cr_State *ts, const TValue *selfarg,
-                           const TValue *fn, const TValue *v1,
-                           const TValue *v2, SPtr res);
+CRI_FUNC void crMM_callbinres(cr_State *ts, const TValue *fn, const TValue *v1,
+                              const TValue *v2, SPtr res);
 CRI_FUNC void crMM_callunaryres(cr_State *ts, const TValue *fn,
                                 const TValue *v, SPtr res);
 CRI_FUNC int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2,
