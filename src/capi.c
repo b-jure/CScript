@@ -14,12 +14,12 @@
  * If not, see <https://www.gnu.org/licenses/>.
  * ----------------------------------------------------------------------------------------------*/
 
-#include "ciptapi.h"
+#include "cscriptapi.h"
 #include "cconf.h"
 #include "cerr.h"
 #include "chashtable.h"
 #include "cobject.h"
-#include "cipt.h"
+#include "cscript.h"
 #include "cparser.h"
 #include "creader.h"
 #include "cobject.h"
@@ -893,7 +893,7 @@ CR_API cr_status cr_load(cr_State *ts, crR reader, void *userdata, const char *s
 
 
 /* Garbage collection API.
- * Refer to the @cipt.h and 'cr_gco' enum defined in the same header. */
+ * Refer to the @cscript.h and 'cr_gco' enum defined in the same header. */
 CR_API cr_umem cr_incgc(cr_State *ts, cr_incgco option, ...)
 {
 	va_list argp;

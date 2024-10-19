@@ -24,7 +24,7 @@
 #include "cfunction.h"
 #include "cgc.h"
 #include "chashtable.h"
-#include "cipt.h"
+#include "cscript.h"
 #include "climits.h"
 #include "cmem.h"
 #include "cobject.h"

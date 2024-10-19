@@ -19,7 +19,7 @@
 #include "chashtable.h"
 #include "cconf.h"
 #include "cgc.h"
-#include "cipt.h"
+#include "cscript.h"
 #include "climits.h"
 #include "cmem.h"
 #include "cdebug.h"

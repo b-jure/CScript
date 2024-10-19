@@ -1,7 +1,7 @@
 /*
 ** $Name: crobject.c
 ** $Description: Generic functions over Cript objects that do not invoke errors.
-** $Copyright: Copyright Notice in cipt.h.
+** $Copyright: Copyright Notice in cscript.h.
 */
 
 #define CR_CORE

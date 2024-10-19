@@ -18,7 +18,7 @@
 #define CRSKAUXLIB_H
 
 
-#include "cipt.h"
+#include "cscript.h"
 
 
 /* ================= create cr_State (auxlib allocator) ================= */

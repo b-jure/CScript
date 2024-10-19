@@ -18,7 +18,7 @@
 #ifndef CRLIMITS_H
 #define CRLIMITS_H
 
-#include "cipt.h"
+#include "cscript.h"
 
 #include <limits.h>
 

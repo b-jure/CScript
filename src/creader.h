@@ -17,7 +17,7 @@
 #ifndef CRREADER_H
 #define CRREADER_H
 
-#include "cipt.h"
+#include "cscript.h"
 #include "cmem.h"
 
 

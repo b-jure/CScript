@@ -1,11 +1,10 @@
-#ifndef CRIPT_H
-#define CRIPT_H
+#ifndef CSCRIPT_H
+#define CSCRIPT_H
 
 #include <stddef.h>
 #include <stdarg.h>
 
 #include "cconf.h"
-
 
 
 
@@ -17,7 +16,7 @@
 #define CR_VERSION_NUMBER               100
 #define CR_VERSION_RELEASE_NUM          (CR_VERSION_NUMBER * 100);
 
-#define CR_VERSION      "Cript " CR_VERSION_MAJOR "." CR_VERSION_MINOR
+#define CR_VERSION      "CScript " CR_VERSION_MAJOR "." CR_VERSION_MINOR
 #define CR_RELEASE      CR_VERSION "." CR_VERSION_RELEASE
 #define CR_COPYRIGHT    CR_RELEASE " Copyright (C) 2023-2024 Jure Bagić"
 
@@ -31,7 +30,7 @@
 #define CR_MINSTACK     20
 
 
-/* Cript thread state */
+/* CScript thread state */
 typedef struct cr_State cr_State;
 
 
@@ -60,17 +59,17 @@ typedef CR_INTEGER cr_Integer;
 /* type for unsigned integers */
 typedef CR_UINTEGER cr_uinteger;
 
-/* type for floating point numbers (Cript numbers) */
+/* type for floating point numbers (CScript numbers) */
 typedef CR_NUMBER cr_Number;
 
 
-/* C function registered with Cript */
+/* C function registered with CScript */
 typedef int (*cr_CFunction)(cr_State *ts);
 
 /* function for memory de/allocation */
 typedef void *(*cr_fAlloc)(void *ptr, size_t osz, size_t nsz, void *userdata);
 
-/* function that reads blocks when loading Cript chunks */
+/* function that reads blocks when loading CScript chunks */
 typedef const char *(*cr_fReader)(cr_State *ts, void *data, size_t *szread);
 
 /* type for class API (Virtual Method Table) */
@@ -182,7 +181,7 @@ CR_API void             cr_pushlightuserdata(cr_State *ts, void *p);
 
 
 /* -------------------------------------------------------------------------
- * Get functions (Cript -> stack)
+ * Get functions (CScript -> stack)
  * ------------------------------------------------------------------------- */
 CR_API int cr_getglobal(cr_State *ts, const char *name);
 CR_API int cr_getfield(cr_State *ts, int idx, const char *field);
@@ -252,7 +251,7 @@ CR_API void cr_createclass(cr_State *ts, cr_VMT *vmt, int supidx);
 
 
 /* -------------------------------------------------------------------------
- * Set functions (stack -> Cript)
+ * Set functions (stack -> CScript)
  * ------------------------------------------------------------------------- */
 CR_API int  cr_setglobal(cr_State *ts, const char *name, int isconst);
 CR_API int  cr_setfield(cr_State *ts, int idx, const char *field);
@@ -282,7 +281,7 @@ CR_API int  cr_error(cr_State *ts);
 
 
 /* -------------------------------------------------------------------------
- * Call/Load Cript code
+ * Call/Load CScript code
  * ------------------------------------------------------------------------- */
 CR_API int  cr_pcall(cr_State *ts, int argc, int retcnt);
 CR_API void cr_call(cr_State *ts, int argc, int retcnt);

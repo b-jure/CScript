@@ -15,7 +15,7 @@
  * ----------------------------------------------------------------------------------------------*/
 
 #include "cauxlib.h"
-#include "cipt.h"
+#include "cscript.h"
 
 #include <errno.h>
 #include <stdio.h>

@@ -1,7 +1,7 @@
 #ifndef CRPROTECTED_H
 #define CRPROTECTED_H
 
-#include "cipt.h"
+#include "cscript.h"
 #include "climits.h"
 
 

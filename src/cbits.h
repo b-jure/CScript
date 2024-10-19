@@ -2,7 +2,7 @@
 #define CRBITS_H
 
 
-#include "cipt.h"
+#include "cscript.h"
 
 
 /* raise 2 to the power of 'x' */
