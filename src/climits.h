@@ -20,8 +20,6 @@
 
 #include "cscript.h"
 
-#include <limits.h>
-
 
 
 /*

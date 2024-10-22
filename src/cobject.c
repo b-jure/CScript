@@ -135,8 +135,7 @@ int crO_tointeger(const TValue *v, cr_Integer *i, int mode) {
 ** done then return 0.
 */
 int crO_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
-                  TValue *res, int op)
-{
+                  TValue *res, int op) {
     cr_Number n1, n2;
     switch (op) {
     case CR_OPBNOT: case CR_OPBXOR: case CR_OPBSHL:

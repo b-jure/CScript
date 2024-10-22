@@ -18,6 +18,7 @@
 #define CRCONFIG_H
 
 #define __STDC_LIMIT_MACROS
+#include <limits.h>
 #include <stdint.h>
 #include <float.h>
 #include <math.h>
