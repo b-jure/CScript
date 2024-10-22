@@ -81,8 +81,7 @@ void *crM_malloc(cr_State *ts, size_t size) {
 
 
 void *crM_growarr(cr_State *ts, void *ptr, int len, int *sizep,
-                  int elemsize, int extra, int limit, const char *what)
-{
+                  int elemsize, int extra, int limit, const char *what) {
     int size = *sizep;
     if (len + extra <= size)
         return ptr;
@@ -104,8 +103,7 @@ void *crM_growarr(cr_State *ts, void *ptr, int len, int *sizep,
 
 
 void *crM_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
-                     int elemsize)
-{
+                     int elemsize) {
     size_t oldsize = cast_sizet(*sizep * elemsize);
     size_t newsize = cast_sizet(final * elemsize);
     cr_assert(newsize <= oldsize);

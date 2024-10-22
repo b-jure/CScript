@@ -137,7 +137,7 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatILL), /* OP_FORPREP */
     opProp(0, 0, 0, FormatI), /* OP_FORCALL */
     opProp(0, 1, 0, FormatI), /* OP_FORLOOP */
-    opProp(0, 0, 0, FormatILLL), /* OP_RET */
+    opProp(0, 0, 0, FormatILLS), /* OP_RET */
 };
 
 
@@ -153,7 +153,7 @@ CRI_DEF const cr_ubyte crC_opSize[FormatN] = {
     5,  /* FormatILS */
     6,  /* FormatILSS */
     7,  /* FormatILL */
-    10, /* FormatILLL */
+    8,  /* FormatILLS */
 };
 
 
@@ -174,8 +174,7 @@ CRI_DEF const char *crC_opName[NUM_OPCODES] = {
     "SETPRIVATE", "GETUVAL", "SETUVAL", "DEFGLOBAL", "GETGLOBAL", "SETGLOBAL",
     "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
     "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT", "GETSUP", "GETSUPIDX",
-    "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET0",
-    "RET1", "RET",
+    "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
 };
 
 
@@ -269,16 +268,6 @@ int crC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
     int offset = crC_emitI(fs, i);
     emitL(fs, a);
     emitL(fs, b);
-    return offset;
-}
-
-
-/* emit instruction with 3 long args */
-static int emitLLL(FunctionState *fs, Instruction i, int a, int b, int c) {
-    int offset = crC_emitI(fs, i);
-    emitL(fs, a);
-    emitL(fs, b);
-    emitL(fs, c);
     return offset;
 }
 
@@ -403,7 +392,6 @@ int crC_pop(FunctionState *fs, int n) {
 
 int crC_ret(FunctionState *fs, int base, int nreturns) {
     int offset = crC_emitILL(fs, OP_RET, base, nreturns + 1);
-    emitL(fs, 0); /* vararg nparams */
     emitS(fs, 0); /* close flag */
     return offset;
 }

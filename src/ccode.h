@@ -236,9 +236,9 @@ OP_GETSUPIDXSTR,/* V1 V2 L     'V2:super[K{L}:string]' (V1 is instance) */
 OP_INHERIT,    /* V1 V2  'V2:class inherit V1 */
 OP_FORPREP,    /* L1 L2  'create upvalue V{L1+3}; pc += L2' */
 OP_FORCALL,    /* L1 L2  'V{L1+4},...,V{L1+3+L2} = V{L1}(V{L1+1}, V{L1+2});' */
-OP_FORLOOP,    /* L1 L2  'if V{L1+2} != nil { V{L1} = V{L1+2}; pc -= L2 }' */
+OP_FORLOOP,    /* L1 L2  'if V{L1+4} != nil { V{L1} = V{L1+2}; pc -= L2 }' */
 
-OP_RET,         /* L1 L2 L3 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
+OP_RET,   /* L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
 } OpCode;
 
 
@@ -262,10 +262,8 @@ OP_RET,         /* L1 L2 L3 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
 ** number of results is only known during runtime. For example (L2 == 0)
 ** represents CR_MULRET, in this case we would return all values up to the
 ** top; additionally check 'crC_ret' and you will see that 'nreturns' is
-** positive biased with +1 (in generic return case). In case L3 > 0 it
-** indicates this function is vararg function and represents number of
-** vararg parameters. S indicates if current function needs to close upvalues
-** or tbc variables before returning.
+** positive biased with +1 (in generic return case). S indicates if current
+** function needs to close upvalues or tbc variables before returning.
 */
 
 
@@ -282,7 +280,7 @@ enum OpFormat {
     FormatILS,
     FormatILSS,
     FormatILL,
-    FormatILLL,
+    FormatILLS,
     FormatN,
 };
 

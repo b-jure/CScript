@@ -2074,7 +2074,7 @@ static void foreachvar(Lexer *lx) {
 }
 
 
-/* patch for loop jump(back) */
+/* patch for loop jump */
 static void patchforjmp(FunctionState *fs, int pc, int target, int back) {
     Instruction *jmp = &fs->fn->code[pc];
     int offset = target - pc;
@@ -2106,10 +2106,6 @@ static int forexprlist(Lexer *lx, ExpInfo *e, int limit) {
 }
 
 
-/* number of state variables for generic for loop */
-#define NUMSTATEVARS    4
-
-
 /* foreachloop ::= 'for' 'each' idlist 'in' forexprlist '{' stmlist '}' */
 static void foreachloop(Lexer *lx) {
     FunctionState *fs = lx->fs;
@@ -2119,7 +2115,6 @@ static void foreachloop(Lexer *lx) {
     Scope s;
     int nvars = 1; /* iter func result */
     int base = fs->sp;
-    const int forprepsz = SIZEINSTR + (SIZEARGL << 1);
     storectx(fs, &startctx);
     newlocallit(lx, "(for state)"); /* iter func (base) */
     newlocallit(lx, "(for state)"); /* invariant state (base+1) */
@@ -2131,11 +2126,11 @@ static void foreachloop(Lexer *lx) {
         nvars++;
     }
     expect(lx, TK_IN);
-    adjustassign(lx, NUMSTATEVARS, forexprlist(lx, &e, NUMSTATEVARS), &e);
-    adjustlocals(lx, NUMSTATEVARS); /* register state vars */
+    adjustassign(lx, NSTATEVARS, forexprlist(lx, &e, NSTATEVARS), &e);
+    adjustlocals(lx, NSTATEVARS); /* register state vars */
     scopemarktbc(fs);
     /* runtime space for call (iter func), inv. state, control var */
-    crC_checkstack(fs, NUMSTATEVARS - 1);
+    crC_checkstack(fs, 3);
     int prep = crC_emitILL(fs, OP_FORPREP, base, 0);
     startloop(fs, &s, &lctx, CFLOOP); /* scope for declared vars */
     adjustlocals(lx, nvars);
@@ -2145,7 +2140,7 @@ static void foreachloop(Lexer *lx) {
     patchforjmp(fs, prep, currentPC(fs), 0);
     crC_emitILL(fs, OP_FORCALL, base, nvars);
     int forend = crC_emitILL(fs, OP_FORLOOP, base, 0);
-    patchforjmp(fs, forend, prep + forprepsz, 1);
+    patchforjmp(fs, forend, prep + getOpSize(OP_FORPREP), 1);
 }
 
 

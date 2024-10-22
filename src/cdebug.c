@@ -31,7 +31,7 @@ int crD_getfuncline(const Function *fn, int pc) {
     LineInfo *li;
     int l = 0;
     int h = fn->sizelinfo - 1;
-    int m = (h + l) << 1;
+    int m = l + ((h - l) / 2);
     cr_assert(fn->sizelinfo > 0);
     while (l <= h) {
         li = &fn->linfo[m];
@@ -41,7 +41,7 @@ int crD_getfuncline(const Function *fn, int pc) {
             h = m - 1;
         else 
             break;
-        m = l + ((h - l) >> 1);
+        m = l + ((h - l) / 1);
     }
     return li->line;
 }

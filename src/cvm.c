@@ -486,7 +486,7 @@ cr_sinline void moveresults(cr_State *ts, SPtr res, int nres, int wanted) {
 
 
 /* move the results into correct place and return to caller */
-cr_sinline void poscallC(cr_State *ts, CallFrame *cf, int nres) {
+cr_sinline void poscall(cr_State *ts, CallFrame *cf, int nres) {
     moveresults(ts, cf->func.p, nres, cf->nresults);
     ts->cf = cf->prev; /* back to caller */
 }
@@ -512,7 +512,7 @@ cr_sinline int precallC(cr_State *ts, SPtr func, int nres, cr_CFunction f) {
     n = (*f)(ts);
     cr_lock(ts);
     api_checknelems(ts, n);
-    poscallC(ts, cf, n);
+    poscall(ts, cf, n);
     return n;
 }
 
@@ -823,9 +823,9 @@ retry:
 #define pop(n)          (ts->sp.p -= (n))
 
 /* get stack slot (starting from 'base') */
-#define STK(i)      (base + (i))
+#define STK(i)      (base+(i))
 /* get stack slot (starting from top) */
-#define SPTR(i)     (ts->sp.p - (i) - 1)
+#define SPTR(i)     (ts->sp.p-(i)-1)
 /* get stack top - 1 */
 #define TOPS()      SPTR(0)
 /* get private variable */
@@ -850,9 +850,9 @@ void crV_execute(cr_State *ts, CallFrame *cf) {
 startfunc:
 returning:
     cl = crclval(s2v(cf->func.p));
-    base = cf->func.p + 1;
-    pc = cl->fn->code;
     k = cl->fn->k;
+    pc = cl->fn->code;
+    base = cf->func.p + 1;
     for (;;) {
         vm_dispatch(fetch()) {
             vm_case(OP_TRUE) {
@@ -1093,6 +1093,7 @@ returning:
             /* } RANGE_OPS { */
             vm_case(OP_RANGE) {
                 /* TODO */
+                cr_assert(0 && "instruction not implemented");
                 vm_break;
             }
             /* } ORDERING_OPS { */
@@ -1409,17 +1410,59 @@ returning:
                 vm_break;
             }
             vm_case(OP_FORPREP) {
-                vm_break;
+                SPtr stk = STK(fetchl());
+                int offset = fetchl();
+                protect(crF_newtbcvar(ts, stk + FORTBCVAR));
+                pc += offset;
+                cr_assert(*pc == OP_FORCALL);
+                goto l_forcall;
             }
             vm_case(OP_FORCALL) {
-                vm_break;
-            }
+            l_forcall: {
+                SPtr nbase = STK(fetchl());
+                /* 'nbase' slot is iterator function, 'nbase + 1' is the
+                 * invariant state 'nbase + 2' is the control variable, and
+                 * 'nbase + 3' is the to-be-closed variable. Call uses stack
+                 * after these values (starting at 'nbase + 4'). */
+                memcpy(nbase+NSTATEVARS, nbase, FORTBCVAR*sizeof(nbase));
+                ts->sp.p = nbase + NSTATEVARS + FORTBCVAR;
+                protect(crV_call(ts, nbase + NSTATEVARS, fetchl()));
+                updatebase(cf);
+                cr_assert(*pc == OP_FORLOOP);
+                goto l_forloop;
+            }}
             vm_case(OP_FORLOOP) {
+            l_forloop: {
+                SPtr nbase = STK(fetchl());
+                int offset = fetchl();
+                if (!ttisnil(s2v(nbase + NSTATEVARS))) { /* continue loop? */
+                    /* save control variable */
+                    setobjs2s(ts, nbase + FORCNTLVAR, nbase + NSTATEVARS);
+                    pc -= offset; /* jump back */
+                }
                 vm_break;
-            }
+            }}
             vm_case(OP_RET) {
-                goto returning;
-                vm_break;
+                SPtr nbase = STK(fetchl());
+                int n = fetchl() - 1; /* number of results */
+                cr_assert(nvarargs >= 0);
+                if (n < 0) /* not fixed ? */
+                    n = ts->sp.p - nbase;
+                storepc(ts);
+                if (fetchs()) { /* have open upvalues? */
+                    crF_close(ts, base, CLOSEKTOP);
+                    updatebase(cf);
+                }
+                if (cl->fn->isvararg) /* vararg function ? */
+                    cf->func.p -= cf->nvarargs + cl->fn->arity + 1;
+                ts->sp.p = nbase + n;
+                poscall(ts, cf, n);
+                if (cf->status & CFST_FRESH) { /* top-level function? */
+                    return; /* end this frame */
+                } else {
+                    cf = cf->prev; /* return to caller */
+                    goto returning; /* continue running in this frame */
+                }
             }
         }
     }

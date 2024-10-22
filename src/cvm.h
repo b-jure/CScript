@@ -22,6 +22,17 @@
 #include "cstate.h"
 
 
+
+/* forloop private variable offsets */
+#define FORITERATOR     0 /* iterator offset */
+#define FORINVSTATE     1 /* invariant state offset */
+#define FORCNTLVAR      2 /* control variable offset */
+#define FORTBCVAR       3 /* to-be-closed variable offset */
+
+/* number of state variables for generic forloop */
+#define NSTATEVARS      4
+
+
 #define crV_raweq(v1,v2)    crV_ordereq(NULL, v1, v2)
 
 
