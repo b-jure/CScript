@@ -377,6 +377,20 @@ void crH_set(cr_State *ts, HTable *ht, const TValue *key, const TValue *val) {
 }
 
 
+int crH_len(const HTable *ht) {
+    int len = 0;
+    Node *n = htnode(ht, 0);
+    cr_assert(htsize(ht) % 4 == 0);
+    while (n != htnodelast(ht)) {
+        len += !keyisempty(n++);
+        len += !keyisempty(n++);
+        len += !keyisempty(n++);
+        len += !keyisempty(n++);
+    }
+    return len;
+}
+
+
 OString *crH_getinterned(cr_State *ts, HTable *ht, const char *str, size_t len,
                          uint hash) {
     for (Node *n = hashslot(ht, hash); n < htnodelast(ht); n++) {
@@ -384,7 +398,7 @@ OString *crH_getinterned(cr_State *ts, HTable *ht, const char *str, size_t len,
             OString *s = keystrval(n);
             if (s->hash == hash && s->len == len /* if same hash, length */
                     && memcmp(s->bytes, str, len) == 0) { /* and contents */
-                if (isdead(&G_(ts)->gc, s)) /* ressurect if dead */
+                if (isdead(&G_(ts)->gc, s)) /* resurrect if dead */
                     changewhite(s);
                 return s;
             }

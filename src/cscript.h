@@ -65,7 +65,7 @@ typedef struct cr_State cr_State;
 typedef CR_INTEGER cr_Integer;
 
 /* type for unsigned integers */
-typedef CR_UINTEGER cr_uinteger;
+typedef CR_UNSIGNED cr_Unsigned;
 
 /* type for floating point numbers (CScript numbers) */
 typedef CR_NUMBER cr_Number;
@@ -114,23 +114,26 @@ CR_API void             cr_xmove(cr_State *src, cr_State *dest, int n); /* DONE 
 /* -------------------------------------------------------------------------
  * Access functions (Stack -> C)
  * ------------------------------------------------------------------------- */
-CR_API int              cr_isnumber(cr_State *ts, int idx);
-CR_API int              cr_isinteger(cr_State *ts, int idx); // TODO
-CR_API int              cr_isstring(cr_State *ts, int idx);
-CR_API int              cr_iscfunc(cr_State *ts, int idx);
-CR_API int              cr_isuserdata(cr_State *ts, int idx);
-CR_API int              cr_type(cr_State *ts, int idx);// TODO
-CR_API const char      *cr_typename(cr_State *ts, int type);// TODO
+CR_API int              cr_isnumber(cr_State *ts, int index); /* DONE */
+CR_API int              cr_isinteger(cr_State *ts, int index); /* DONE */
+CR_API int              cr_isstring(cr_State *ts, int index); /* DONE */
+CR_API int              cr_iscfunction(cr_State *ts, int index); /* DONE */
+CR_API int              cr_isuserdata(cr_State *ts, int index); /* DONE */
+CR_API int              cr_type(cr_State *ts, int index); /* DONE */
+CR_API const char      *cr_typename(cr_State *ts, int type); /* DONE */
 
-CR_API const char      *cr_tostring(cr_State *ts, int idx, size_t *len);
-CR_API cr_Number        cr_getnumber(cr_State *ts, int idx, int *isnum);
-CR_API cr_Integer       cr_getinteger(cr_State *ts, int idx, int *isnum);// TODO
-CR_API int              cr_getbool(cr_State *ts, int idx);
-CR_API const char      *cr_getstring(cr_State *ts, int idx);
-CR_API cr_uinteger      cr_strlen(cr_State *ts, int idx);
-CR_API cr_CFunction         cr_getcfunction(cr_State *ts, int idx);
-CR_API void            *cr_getuserdata(cr_State *ts, int idx);// TODO
-CR_API const void      *cr_getpointer(cr_State *ts, int idx); // TODO
+CR_API cr_Number        cr_getnumber(cr_State *ts, int index, int *isnum); /* DONE */
+CR_API cr_Integer       cr_getinteger(cr_State *ts, int index, int *isnum); /* DONE */
+CR_API int              cr_getbool(cr_State *ts, int index); /* DONE */
+CR_API const char      *cr_getstring(cr_State *ts, int index, size_t *plen); /* DONE */
+CR_API cr_CFunction     cr_getcfunction(cr_State *ts, int index); /* DONE */
+CR_API void            *cr_getuserdata(cr_State *ts, int index); /* DONE */
+CR_API const void      *cr_getpointer(cr_State *ts, int index); /* DONE */
+CR_API cr_State        *cr_getthread(cr_State *ts, int index); /* DONE */
+CR_API cr_Unsigned      cr_len(cr_State *ts, int index); /* DONE */
+
+/* TODO */
+CR_API const char      *cr_tostring(cr_State *ts, int index, size_t *len);
 
 
 /* -------------------------------------------------------------------------

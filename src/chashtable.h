@@ -54,6 +54,7 @@ CRI_FUNC void crH_finishset(cr_State *ts, HTable *ht, const TValue *slot,
 CRI_FUNC void crH_set(cr_State *ts, HTable *tab, const TValue *key,
                       const TValue *val);
 CRI_FUNC void crH_free(cr_State *ts, HTable *ht);
+CRI_FUNC int crH_len(const HTable *ht);
 CRI_FUNC OString *crH_getinterned(cr_State *ts, HTable *tab, const char *str,
                                   size_t len, uint hash);
 

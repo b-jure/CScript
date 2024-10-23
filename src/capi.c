@@ -1,19 +1,3 @@
-/* ----------------------------------------------------------------------------------------------
- * Copyright (C) 2023-2024 Jure Bagić
- *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
- * General Public License as published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with cript.
- * If not, see <https://www.gnu.org/licenses/>.
- * ----------------------------------------------------------------------------------------------*/
-
 #include "cfunction.h"
 #include "cgc.h"
 #include "cmem.h"
@@ -432,7 +416,7 @@ CR_API void cr_rotate(cr_State *ts, int index, int n) {
     SPtr start, end, pivot;
     cr_lock(ts);
     end = ts->sp.p - 1; /* end of segment */
-    start = index2stack(ts, index); /* start of segemnt */
+    start = index2stack(ts, index); /* start of segment */
     api_check(ts, (n >= 0 ? n : -n) <= (end - start + 1), "invalid 'n'");
     pivot = (n >= 0 ? end - n : start - n - 1); /* end of prefix */
     reverse(ts, start, pivot);
@@ -510,6 +494,209 @@ CR_API void cr_xmove(cr_State *src, cr_State *dest, int n) {
     cr_unlock(dest);
 }
 
+
+/* Check if the value at index is a number. */
+CR_API int cr_isnumber(cr_State *ts, int index) {
+    cr_Number n;
+    const TValue *o = index2value(ts, index);
+    return tonumber(o, &n);
+}
+
+
+/* Check if the value at index is an integer. */
+CR_API int cr_isinteger(cr_State *ts, int index) {
+    cr_Integer i;
+    const TValue *o = index2value(ts, index);
+    return tointeger(o, &i);
+}
+
+
+/* Check if the value at index is a string. */
+CR_API int cr_isstring(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    return ttisstr(o);
+}
+
+
+/* Check if the value at index is a C function. */
+CR_API int cr_iscfunction(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    return (ttiscfn(o) || ttisccl(o));
+}
+
+
+/* Check if the value at index is a userdata. */
+CR_API int cr_isuserdata(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    return (ttislud(o) || ttisud(o));
+}
+
+
+/* 
+** Return the type of the value at valid index or CR_TNONE
+** if index is invalid.
+** The types returned are defined in 'cscript.h' (CR_T*).
+*/
+CR_API int cr_type(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    return (isvalid(ts, o) ? ttype(o) : CR_TNONE);
+}
+
+
+/*
+** Return text representation of the given type.
+** The returned string has a static lifetime and should not be modified
+** directly.
+*/
+CR_API const char *cr_typename(cr_State *ts, int type) {
+    UNUSED(ts);
+    api_check(ts, 0 <= type && type < CR_NUM_TYPES, "invalid type");
+    return typename(type);
+}
+
+
+/*
+** Returns the number value of the value at index.
+** The fact whether the value was a number is stored in 'pisnum' if
+** provided, the default value returned when index is not a number is 0.0.
+*/
+CR_API cr_Number cr_getnumber(cr_State *ts, int index, int *pisnum) {
+    cr_Number n = 0.0;
+    const TValue *o = index2value(ts, index);
+    int isnum = tonumber(o, &n);
+    if (pisnum)
+        *pisnum = isnum;
+    return n;
+}
+
+
+/*
+** Returns the integer value of the value at index.
+** The fact whether the value was an integer is stored in 'pisint' if
+** provided, the default value returned when index is not an integer is 0.
+*/
+CR_API cr_Integer cr_getinteger(cr_State *ts, int index, int *pisint) {
+    cr_Integer i = 0;
+    const TValue *o = index2value(ts, index);
+    int isint = tointeger(o, &i);
+    if (pisint)
+        *pisint = isint;
+    return i;
+}
+
+
+/*
+** Returns 0 or 1 whether the value at index is false or true respectively.
+** All values in CScript are considered true except `nil` and `false`.
+*/
+CR_API int cr_getbool(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    return !cri_isfalse(o);
+}
+
+
+/*
+** Return string value from value at index and if 'plen' is provided
+** set it to match the length of the string.
+** If the value is not a string return NULL (in this case if 'plen' is
+** provided it is ignored).
+*/
+CR_API const char *cr_getstring(cr_State *ts, int index, size_t *plen) {
+    const TValue *o;
+    cr_lock(ts);
+    o = index2value(ts, index);
+    if (!ttisstr(o)) /* not a string? */
+        return NULL;
+    if (plen)
+        *plen = lenstr(o); 
+    cr_unlock(ts);
+    return cstrval(o);
+}
+
+
+/*
+** Return 'cr_CFunction' from the value at index.
+** If the value is not a C closure or light C function, then this returns NULL.
+*/
+CR_API cr_CFunction cr_getcfunction(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    if (ttiscfn(o)) 
+        return cfval(o);
+    else if (ttisccl(o))
+        return cclval(o)->fn;
+    else
+        return NULL;
+}
+
+
+cr_sinline void *touserdata(const TValue *o) {
+    switch (ttype(o)) {
+        case CR_TLUDATA: return pval(o);
+        case CR_TUDATA: return getudmem(udval(o));
+        default: return NULL;
+    }
+}
+
+
+/*
+** Return pointer to userdata memory from the value at index.
+** If the value is not userdata return NULL.
+*/
+CR_API void *cr_getuserdata(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    return touserdata(o);
+}
+
+
+/*
+** Return the pointer to the object at index.
+** If the object is not userdata, C function or collectable, then this
+** returns NULL. Note that returned pointer shouldn't be modified.
+*/
+CR_API const void *cr_getpointer(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    switch (ttypetag(o)) {
+        case CR_VCFUNCTION:
+            return cast(void *, cast_sizet(cfval(o)));
+        case CR_VUDATA: case CR_VLUDATA:
+            return touserdata(o);
+        default: {
+            if (iscollectable(o))
+                return gcoval(o);
+            else
+                return NULL;
+        }
+    }
+}
+
+
+/*
+** Return the thread value at index.
+** If the value is not a thread, then this returns NULL.
+*/
+CR_API cr_State *cr_getthread(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    return (ttisthread(o) ? thval(o) : NULL);
+}
+
+
+/*
+** Return the length of the value at index.
+** Length means different things depending on the type of the value at index.
+** For strings, this is the string length; for classes, this is the number
+** of methods; for instances, this is the number of fields; for userdata, this
+** is the size of the block of memory allocated for userdata.
+*/
+CR_API cr_Unsigned cr_len(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    switch (ttypetag(o)) {
+        case CR_VSTRING: return lenstr(o);
+        case CR_VCLASS: return crH_len(htval(o));
+        case CR_VINSTANCE: return crH_len(&insval(o)->fields);
+        case CR_VUDATA: return udval(o)->size;
+        default: return 0;
+    }
+}
 
 /* 
  * Create and allocate cr_State by providing your own 'allocator'.
@@ -887,14 +1074,6 @@ CR_API const char *cr_tagname(const cr_State *ts, cr_tt type)
 CR_API cr_ubyte cr_isnil(const cr_State *ts, int idx)
 {
     return IS_NIL(*index2value(ts, idx));
-}
-
-
-
-/* Check if the value on the stack at 'idx' is number. */
-CR_API cr_ubyte cr_isnumber(const cr_State *ts, int idx)
-{
-    return IS_NUMBER(*index2value(ts, idx));
 }
 
 

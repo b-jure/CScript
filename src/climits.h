@@ -314,10 +314,10 @@ typedef cr_ubyte Instruction;
 #define cast_charp(e)       cast(char *,(e))
 #define cast_sizet(e)       cast(size_t,(e))
 
-/* cast 'cr_Integer' to 'cr_uinteger' */
-#define cri_castS2U(i)      ((cr_uinteger)(i))
+/* cast 'cr_Integer' to 'cr_Unsigned' */
+#define cri_castS2U(i)      ((cr_Unsigned)(i))
 
-/* cast 'cr_uinteger' to 'cr_Integer' */
+/* cast 'cr_Unsigned' to 'cr_Integer' */
 #define cri_castU2S(i)      ((cr_Integer)(i))
 
 

@@ -410,7 +410,9 @@ typedef struct HTable {
 
 #define ttisstr(o)      checktag(o, ctb(CR_VSTRING))
 #define strval(o)       gco2str(gcoval(o))
+
 #define cstrval(o)      (strval(o)->bytes)
+#define lenstr(o)       (strval(o)->len)
 
 #define getstrbytes(s)      ((s)->bytes)
 
@@ -706,7 +708,7 @@ typedef struct UserData {
     HTable fields;
     GCObject *gclist;
     TValue uv[]; /* user values */
-    /* 'UserData' memory starts here */
+    /* 'UserData' memory starts here; after 'uv' elements */
 } UserData;
 
 
@@ -738,9 +740,11 @@ typedef struct EmptyUserData {
         ? offsetof(EmptyUserData, usermem) \
         : offsetof(UserData, uv) + ((nuv) * sizeof(TValue)))
 
+/* get the address of the memory block inside 'UserData' */
+#define getudmem(u)	(cast_charp(u) + udmemoffset((u)->nuv))
+
 /* size of 'UserData' */
 #define sizeofud(nuv, size)     (udmemoffset(nuv) + (size))
-
 
 
 

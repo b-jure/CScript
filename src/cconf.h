@@ -192,7 +192,7 @@
 
 /*
  * @CR_INTEGER - cript integer type.
- * @CR_UINTEGER - unsigned @CR_INTEGER.
+ * @CR_UNSIGNED - unsigned @CR_INTEGER.
  * @CR_INTEGER_MAX - maximum size of @CR_INTEGER.
  * @CR_INTEGER_MIN - minimum size of @CR_INTEGER.
  * @CR_INTEGER_FMTLEN - additional length of modifier when writing @CR_INTEGER.
@@ -208,8 +208,8 @@
 
 #define CR_INTEGER_FMTLEN       "l"
 
-#define CR_UINTEGER             uint64_t
-#define CR_UINTEGER_MAX         UINT64_MAX
+#define CR_UNSIGNED             uint64_t
+#define CR_UNSIGNED_MAX         UINT64_MAX
 
 #define cr_integer2str(s,sz,n) \
     snprintf((s),(sz),CR_INTEGER_FMT,(CR_INTEGER)(n))
