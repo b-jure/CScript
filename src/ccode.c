@@ -8,21 +8,18 @@
 #include "cstate.h"
 
 
-
 /* check if 'ExpInfo' has jumps */
 #define hasjumps(e)     ((e)->t != (e)->f)
 
 
-
 /* unary 'opr' to opcode */
 #define unopr2op(opr) \
-    cast(OpCode, cast_int(opr) - OPR_UMIN + OP_NOT)
+    cast(OpCode, cast_int(opr) - OPR_UNM + OP_NOT)
 
 
 /* binary operation to OpCode; 'a' anchor, 'b' base */
 #define binopr2op(opr,a,b) \
     cast(OpCode, (cast_int(opr) - cast_int(a)) + cast_int(b))
-
 
 
 
@@ -458,49 +455,49 @@ static int codeK(FunctionState *fs, int idx) {
 /* emit 'OP_SET' family of instructions */
 void crC_storevar(FunctionState *fs, ExpInfo *var) {
     switch (var->et) {
-    case EXP_UVAL: {
-        var->u.info = crC_emitIL(fs, OP_SETUVAL, var->u.info);
-        break;
-    }
-    case EXP_LOCAL: {
-        var->u.info = crC_emitIL(fs, OP_SETLOCAL, var->u.info);
-        break;
-    }
-    case EXP_PRIVATE: {
-        var->u.info = crC_emitIL(fs, OP_SETPRIVATE, var->u.info);
-        break;
-    }
-    case EXP_GLOBAL: {
-        var->u.info = crC_emitIL(fs, OP_SETGLOBAL, stringK(fs, var->u.str));
-        break;
-    }
-    case EXP_INDEXED: {
-        freeslots(fs, 2); /* receivier + key */
-        var->u.info = crC_emitI(fs, OP_SETINDEX);
-        break;
-    }
-    case EXP_INDEXSTR: {
-        freeslots(fs, 1); /* receiver */
-        var->u.info = crC_emitIL(fs, OP_SETINDEXSTR, var->u.info);
-        break;
-    }
-    case EXP_INDEXINT: {
-        freeslots(fs, 1); /* receiver */
-        var->u.info = crC_emitIL(fs, OP_SETINDEXINT, var->u.info);
-        break;
-    }
-    case EXP_DOT: {
-        freeslots(fs, 1); /* receiver */
-        var->u.info = crC_emitIL(fs, OP_SETPROPERTY, var->u.info);
-        break;
-    }
-    case EXP_INDEXSUPER:
-    case EXP_INDEXSUPERSTR:
-    case EXP_DOTSUPER: {
-        crP_semerror(fs->lx, "attempt to assign to 'super' property");
-        break;
-    }
-    default: return; /* must be something else */
+        case EXP_UVAL: {
+            var->u.info = crC_emitIL(fs, OP_SETUVAL, var->u.info);
+            break;
+        }
+        case EXP_LOCAL: {
+            var->u.info = crC_emitIL(fs, OP_SETLOCAL, var->u.info);
+            break;
+        }
+        case EXP_PRIVATE: {
+            var->u.info = crC_emitIL(fs, OP_SETPRIVATE, var->u.info);
+            break;
+        }
+        case EXP_GLOBAL: {
+            var->u.info = crC_emitIL(fs, OP_SETGLOBAL, stringK(fs, var->u.str));
+            break;
+        }
+        case EXP_INDEXED: {
+            freeslots(fs, 2); /* receivier + key */
+            var->u.info = crC_emitI(fs, OP_SETINDEX);
+            break;
+        }
+        case EXP_INDEXSTR: {
+            freeslots(fs, 1); /* receiver */
+            var->u.info = crC_emitIL(fs, OP_SETINDEXSTR, var->u.info);
+            break;
+        }
+        case EXP_INDEXINT: {
+            freeslots(fs, 1); /* receiver */
+            var->u.info = crC_emitIL(fs, OP_SETINDEXINT, var->u.info);
+            break;
+        }
+        case EXP_DOT: {
+            freeslots(fs, 1); /* receiver */
+            var->u.info = crC_emitIL(fs, OP_SETPROPERTY, var->u.info);
+            break;
+        }
+        case EXP_INDEXSUPER:
+        case EXP_INDEXSUPERSTR:
+        case EXP_DOTSUPER: {
+            crP_semerror(fs->lx, "attempt to assign to 'super' property");
+            break;
+        }
+        default: return; /* must be something else */
     }
     var->et = EXP_FINEXPR;
     freeslots(fs, 1); /* rhs (expr) */
@@ -622,9 +619,9 @@ static int codefltK(FunctionState *fs, cr_Number n) {
 
 
 /* 
-** Ensure expression is not a variable, unregistered constant
-** or a jump.
-*/
+ ** Ensure expression is not a variable, unregistered constant
+ ** or a jump.
+ */
 static void dischargetostack(FunctionState *fs, ExpInfo *e) {
     if (!dischargevars(fs, e)) {
         switch (e->et) {
@@ -677,7 +674,7 @@ void crC_exp2stack(FunctionState *fs, ExpInfo *e) {
 
 /* initialize dot indexed expression */
 void crC_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
-                     int super) {
+        int super) {
     cr_assert(keystr->et == EXP_STRING);
     var->u.info = stringK(fs, keystr->u.str);
     var->et = (super ? EXP_DOTSUPER : EXP_DOT);
@@ -717,15 +714,15 @@ void crC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
 /* return 1 if folding for 'op' can raise errors */
 static int validop(TValue *v1, TValue *v2, int op) {
     switch (op) {
-    case CR_OPBSHR: case CR_OPBSHL: case CR_OPBAND:
-    case CR_OPBOR: case CR_OPBXOR: case CR_OPBNOT: { /* conversion */
-        cr_Integer i;
-        return (tointeger(v1, &i) && tointeger(v2, &i));
-    }
-    case CR_OPDIV: case CR_OPMOD: { /* division by 0 */
-        return (nval(v2) != 0);
-    }
-    default: return 1;
+        case CR_OPBSHR: case CR_OPBSHL: case CR_OPBAND:
+        case CR_OPBOR: case CR_OPBXOR: case CR_OPBNOT: { /* conversion */
+            cr_Integer i;
+            return (tointeger(v1, &i) && tointeger(v2, &i));
+        }
+        case CR_OPDIV: case CR_OPMOD: { /* division by 0 */
+            return (nval(v2) != 0);
+        }
+        default: return 1;
     }
 }
 
@@ -733,16 +730,16 @@ static int validop(TValue *v1, TValue *v2, int op) {
 /* check if expression is numeral constant */
 static int tonumeral(const ExpInfo *e1, TValue *res) {
     switch (e1->et) {
-    case EXP_FLT: if (res) setfval(res, e1->u.n); return 1;
-    case EXP_INT: if (res) setival(res, e1->u.i); return 1;
-    default: return 0;
+        case EXP_FLT: if (res) setfval(res, e1->u.n); return 1;
+        case EXP_INT: if (res) setival(res, e1->u.i); return 1;
+        default: return 0;
     }
 }
 
 
 /* fold constant expressions */
 static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
-                     int opr)
+        int opr)
 {
     TValue v1, v2, res;
     if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || validop(&v1, &v2, opr))
@@ -774,19 +771,19 @@ static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op) {
 static void codenot(FunctionState *fs, ExpInfo *e) {
     cr_assert(!eisvar(e)); /* vars are already finalized */
     switch (e->et) {
-    case EXP_NIL: case EXP_FALSE: {
-        e->et = EXP_TRUE;
-        break;
-    }
-    case EXP_TRUE: case EXP_INT: case EXP_FLT: case EXP_STRING: case EXP_K: {
-        e->et = EXP_FALSE;
-        break;
-    }
-    case EXP_FINEXPR: { /* 'e' already on stack */
-        e->u.info = crC_emitI(fs, OP_NOT);
-        break;
-    }
-    default: cr_unreachable();
+        case EXP_NIL: case EXP_FALSE: {
+            e->et = EXP_TRUE;
+            break;
+        }
+        case EXP_TRUE: case EXP_INT: case EXP_FLT: case EXP_STRING: case EXP_K: {
+            e->et = EXP_FALSE;
+            break;
+        }
+        case EXP_FINEXPR: { /* 'e' already on stack */
+            e->u.info = crC_emitI(fs, OP_NOT);
+            break;
+        }
+        default: cr_unreachable();
     }
 }
 
@@ -797,17 +794,17 @@ void crC_unary(FunctionState *fs, ExpInfo *e, Unopr opr) {
     cr_assert(OPR_NOT <= opr && opr < OPR_NOUNOPR);
     crC_varexp2stack(fs, e);
     switch (opr) {
-    case OPR_UMIN: case OPR_BNOT: {
-        if (constfold(fs, e, &dummy, (opr - OPR_NOT) + CR_OPNOT))
-            break; /* folded */
-        codeunary(fs, e, unopr2op(opr));
-        break;
-    }
-    case OPR_NOT:  {
-        codenot(fs, e); 
-        break;
-    }
-    default: cr_unreachable();
+        case OPR_UNM: case OPR_BNOT: {
+            if (constfold(fs, e, &dummy, (opr - OPR_UNM) + CR_OPUNM))
+                break; /* folded */
+            codeunary(fs, e, unopr2op(opr));
+            break;
+        }
+        case OPR_NOT:  {
+            codenot(fs, e); 
+            break;
+        }
+        default: cr_unreachable();
     }
 }
 
@@ -890,17 +887,17 @@ void jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop) {
     int pc;
     crC_varexp2stack(fs, e);
     switch (e->et) {
-    case EXP_JMP: {
-        pc = e->u.info;
-        break;
-    }
-    case EXP_TRUE: case EXP_STRING: case EXP_INT: case EXP_FLT: case EXP_K: {
-        pc = NOJMP; /* don't jump, always true */
-        break;
-    }
-    default: 
-        pc = codetest(fs, e, jmpop, 0); /* jump if false */
-        break;
+        case EXP_JMP: {
+            pc = e->u.info;
+            break;
+        }
+        case EXP_TRUE: case EXP_STRING: case EXP_INT: case EXP_FLT: case EXP_K: {
+            pc = NOJMP; /* don't jump, always true */
+            break;
+        }
+        default: 
+            pc = codetest(fs, e, jmpop, 0); /* jump if false */
+            break;
     }
     crC_concatjmp(fs, &e->f, pc); /* insert new jump in false list */
     crC_patchtohere(fs, e->t); /* true list jumps to here (after false test) */
@@ -912,17 +909,17 @@ void jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop) {
     int pc;
     crC_varexp2stack(fs, e);
     switch (e->et) {
-    case EXP_JMP: {
-        pc = e->u.info; /* already jump if true */
-        break;
-    }
-    case EXP_NIL: case EXP_FALSE: {
-        pc = NOJMP; /* don't jump, always false */
-        break;
-    }
-    default:
-        pc = codetest(fs, e, jmpop, 1); /* jump if true */
-        break;
+        case EXP_JMP: {
+            pc = e->u.info; /* already jump if true */
+            break;
+        }
+        case EXP_NIL: case EXP_FALSE: {
+            pc = NOJMP; /* don't jump, always false */
+            break;
+        }
+        default:
+            pc = codetest(fs, e, jmpop, 1); /* jump if true */
+            break;
     }
     crC_concatjmp(fs, &e->t, pc); /* insert new jump in true list */
     crC_patchtohere(fs, e->f); /* false list jump to here (after true test) */
@@ -933,38 +930,38 @@ void jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop) {
 void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
     crC_varexp2stack(fs, e);
     switch (op) {
-    case OPR_ADD: case OPR_SUB: case OPR_MUL:
-    case OPR_DIV: case OPR_MOD: case OPR_POW:
-    case OPR_SHL: case OPR_SHR: case OPR_BAND:
-    case OPR_BOR: case OPR_BXOR: case OPR_NE:
-    case OPR_EQ: {
-        if (!tonumeral(e, NULL))
-            crC_exp2stack(fs, e);
-        /* otherwise keep numeral for constant
-         * or immediate operand variant instruction */
-        break;
-    }
-    case OPR_LT: case OPR_LE: case OPR_GT: case OPR_GE: {
-        int dummy, dummy2;
-        if (!isnumKL(e, &dummy, &dummy2))
-            crC_exp2stack(fs, e);
-        /* otherwise keep numeral for immediate
-         * operand variant instruction */
-        break;
-    }
-    case OPR_RANGE: { 
-        /* such empty; avoid unreachable */
-        break;
-    }
-    case OPR_AND: {
-        jmpiffalse(fs, e, OP_TESTORPOP);
-        break;
-    }
-    case OPR_OR: {
-        jmpiftrue(fs, e, OP_TESTORPOP);
-        break;
-    }
-    default: cr_unreachable();
+        case OPR_ADD: case OPR_SUB: case OPR_MUL:
+        case OPR_DIV: case OPR_MOD: case OPR_POW:
+        case OPR_SHL: case OPR_SHR: case OPR_BAND:
+        case OPR_BOR: case OPR_BXOR: case OPR_NE:
+        case OPR_EQ: {
+            if (!tonumeral(e, NULL))
+                crC_exp2stack(fs, e);
+            /* otherwise keep numeral for constant
+             * or immediate operand variant instruction */
+            break;
+        }
+        case OPR_LT: case OPR_LE: case OPR_GT: case OPR_GE: {
+            int dummy, dummy2;
+            if (!isnumKL(e, &dummy, &dummy2))
+                crC_exp2stack(fs, e);
+            /* otherwise keep numeral for immediate
+             * operand variant instruction */
+            break;
+        }
+        case OPR_RANGE: { 
+            /* such empty; avoid unreachable */
+            break;
+        }
+        case OPR_AND: {
+            jmpiffalse(fs, e, OP_TESTORPOP);
+            break;
+        }
+        case OPR_OR: {
+            jmpiftrue(fs, e, OP_TESTORPOP);
+            break;
+        }
+        default: cr_unreachable();
     }
 }
 
@@ -973,13 +970,13 @@ void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
 static int exp2K(FunctionState *fs, ExpInfo *e) {
     if (!hasjumps(e)) {
         switch (e->et) {
-        case EXP_NIL: e->u.info = nilK(fs); break;
-        case EXP_FALSE: e->u.info = falseK(fs); break;
-        case EXP_TRUE: e->u.info = trueK(fs); break;
-        case EXP_STRING: e->u.info = stringK(fs, e->u.str); break;
-        case EXP_INT: e->u.info = intK(fs, e->u.i); break;
-        case EXP_FLT: e->u.info = fltK(fs, e->u.n); break;
-        default: return 0;
+            case EXP_NIL: e->u.info = nilK(fs); break;
+            case EXP_FALSE: e->u.info = falseK(fs); break;
+            case EXP_TRUE: e->u.info = trueK(fs); break;
+            case EXP_STRING: e->u.info = stringK(fs, e->u.str); break;
+            case EXP_INT: e->u.info = intK(fs, e->u.i); break;
+            case EXP_FLT: e->u.info = fltK(fs, e->u.n); break;
+            default: return 0;
         }
         e->et = EXP_K;
         return 1;
@@ -1020,8 +1017,7 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 
 /* emit arithmetic binary op */
 static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                          int flip, Binopr opr)
-{
+                          int flip, Binopr opr) {
     if (tonumeral(e2, NULL) && exp2K(fs, e2)) {
         codebinK(fs, e1, e2, opr);
     } else {
@@ -1047,8 +1043,7 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 
 /* emit binary instruction trying both the immediate and constant variants */
 static void codebinIK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
-                      int flip)
-{
+                      int flip) {
     if (isintKL(e2))
         codebinI(fs, e1, e2, opr);
     else
@@ -1058,8 +1053,7 @@ static void codebinIK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 
 /* emit commutative binary instruction */
 static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                            Binopr opr)
-{
+                            Binopr opr) {
     int flip = 0;
     if (tonumeral(e1, NULL)) {
         swapexp(e1, e2);
@@ -1111,7 +1105,7 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     } else if (isnumKL(e1, &immediate, &isflt)) {
         crC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
         op = binopr2op(opr, OPR_LT, OP_GTI);
-    emit:
+emit:
         sign = (immediate < 0 ? 0 : 2);
         e1->u.info = emitILS(fs, op, immediate, sign);
     } else {
@@ -1185,9 +1179,9 @@ void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 
 
 /*
-** Perform a final pass performing small adjustments
-** and optimizations.
-*/
+ ** Perform a final pass performing small adjustments
+ ** and optimizations.
+ */
 void crC_finish(FunctionState *fs) {
     Function *fn = fs->fn;
     for (int i = 0; i < fs->pc; i++) {

@@ -384,13 +384,6 @@ typedef cr_ubyte Instruction;
 #endif
 
 
-/* @cri_numnot - logical complement. */
-#ifndef cri_numnot
-#define cri_numnot(ts, a)       ((void)(ts), !(a))
-#endif
-
-
-
 /*
 ** @CR_STRESS_GC - enables stress test for garbage
 ** collector, on each tracked memory change it performs

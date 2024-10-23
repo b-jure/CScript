@@ -119,15 +119,25 @@ cr_Number crV_modnum(cr_State *ts, cr_Number x, cr_Number y) {
 
 
 /*
- * Perform arithmetic operations on objects, this function is free
- * to call overloaded methods such as '__add', '__umin', etc...,
- * in cases where raw arithmetics are not possible.
+ * Perform binary arithmetic operations on objects, this function is free
+ * to call overloaded methods in cases where raw arithmetics are not possible.
  */
-void crV_arithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
-                int op)
-{
+void crV_binarithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
+                   int op) {
     if (!crO_arithmraw(ts, v1, v2, s2v(res), op))
         crMM_trybin(ts, v1, v2, res, (op - CR_OPADD) + CR_MM_ADD);
+}
+
+
+/*
+ * Perform unary arithmetic operations on objects, this function is free
+ * to call overloaded methods in cases where raw arithmetics are not possible.
+ */
+void crV_unarithm(cr_State *ts, const TValue *v, SPtr res, int op) {
+    TValue aux;
+    setival(&aux, 0);
+    if (!crO_arithmraw(ts, v, &aux, s2v(res), op))
+        crMM_tryunary(ts, v, res, (op - CR_OPUNM) + CR_MM_UNM);
 }
 
 
@@ -1445,7 +1455,6 @@ returning:
             vm_case(OP_RET) {
                 SPtr nbase = STK(fetchl());
                 int n = fetchl() - 1; /* number of results */
-                cr_assert(nvarargs >= 0);
                 if (n < 0) /* not fixed ? */
                     n = ts->sp.p - nbase;
                 storepc(ts);

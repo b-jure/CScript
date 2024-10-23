@@ -94,7 +94,7 @@ typedef enum {
 
 /* unary operators */
 typedef enum {
-	OPR_NOT = OPR_NOBINOPR, OPR_UMIN, OPR_BNOT, OPR_NOUNOPR,
+	OPR_NOT = OPR_NOBINOPR, OPR_UNM, OPR_BNOT, OPR_NOUNOPR,
 } Unopr;
 
 

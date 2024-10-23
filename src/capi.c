@@ -15,6 +15,7 @@
 #include "cobject.h"
 #include "cstate.h"
 #include "cstring.h"
+#include "cvm.h"
 #include "stdarg.h"
 
 #include <string.h>
@@ -698,59 +699,60 @@ CR_API cr_Unsigned cr_len(cr_State *ts, int index) {
     }
 }
 
-/* 
- * Create and allocate cr_State by providing your own 'allocator'.
- * In case the NULL pointer is provided as 'allocator' and/or
- * allocation fails NULL is returned. 
- */
-CR_API cr_State *cr_create(cr_fAlloc allocator, void *ud) {
-    cr_State *ts;
 
-    if (allocator == NULL || cr_unlikely((ts = allocator(NULL, sizeof(cr_State), ud)) == NULL))
-        return NULL;
-    memset(&ts->hooks, 0, sizeof(Hooks));
-    ts->hooks.reallocate = allocator;
-    ts->hooks.userdata = ud;
-    ts->gc.gc_stopped = 1; // wait until 'ts' is initialized
-    ts_init(ts);
-    ts->gc.gc_stopped = 0;
-    return ts;
-}
-
-
-/* Resets 'cr_State' clearing its call stack and closing all
- * to be closed variables. */
-CR_API void cr_resetts(cr_State *ts) {
-    resetts(ts, ts->status);
-}
-
-
-/* Free the cr_State allocation, the pointer to cr_State will be nulled out. */
-CR_API void cr_destroy(cr_State **tsp) {
-    cr_State *ts;
-    GCObject *head, *next;
-
-    if (cr_likely(tsp != NULL)) { // non-null pointer ?
-        cr_lock(*tsp);
-        if (*tsp == NULL)
-            return;
-        ts = *tsp;
-        HTable_free(ts, &ts->loaded);
-        HTable_free(ts, &ts->globids);
-        GSARRAY_FREE(ts);
-        Array_Variable_free(&ts->globvars, NULL);
-        Array_Value_free(&ts->temp, NULL);
-        Array_VRef_free(&ts->callstart, NULL);
-        Array_VRef_free(&ts->retstart, NULL);
-        Array_OSRef_free(&ts->interned, NULL);
-        HTable_free(ts, &ts->weakrefs);
-        for (head = ts->objects; head != NULL; head = next) {
-            next = gconext(head);
-            ofree(ts, head);
-        }
-        FREE(ts, ts);
-        *tsp = NULL;
+/*
+** Perform arithmetic operation 'op'; the valid arithmetic operations are
+** located in 'cscript.h'.
+** This functions is free to call overloadable methods.
+*/
+CR_API void cr_arith(cr_State *ts, int op) {
+    cr_lock(ts);
+    if (op != CR_OPUNM && op != CR_OPBNOT) { /* binary op? */
+        api_checknelems(ts, 2);
+        crV_binarithm(ts, s2v(ts->sp.p-2), s2v(ts->sp.p-1), ts->sp.p-2, op);
+        ts->sp.p--; /* pop second operand */
+    } else { /* unary op */
+        api_checknelems(ts, 1);
+        crV_unarithm(ts, s2v(ts->sp.p-1), ts->sp.p-1, op);
     }
+    cr_unlock(ts);
+}
+
+
+/*
+** Perform raw equality between values at 'index1' and 'index2'.
+** "Raw" meaning this function won't call overloaded methods.
+** In cases where either of the indexes is not valid this always returns 0.
+*/
+CR_API int cr_rawequal(cr_State *ts, int index1, int index2) {
+    const TValue *lhs = index2value(ts, index1);
+    const TValue *rhs = index2value(ts, index2);
+    return (isvalid(ts, lhs) && isvalid(ts, rhs) ? crV_raweq(lhs, rhs) : 0);
+}
+
+
+/*
+** Compares values at 'index1' and 'index2'.
+** This function is free to call overloded methods.
+** In case either index is invalid this then always returns 0.
+*/
+CR_API int cr_compare(cr_State *ts, int index1, int index2, int op) {
+    const TValue *lhs;
+    const TValue *rhs;
+    int res = 0;
+    cr_lock(ts); /* might call overloaded method */
+    lhs = index2value(ts, index1);
+    rhs = index2value(ts, index2);
+    if (isvalid(ts, lhs) && isvalid(ts, rhs)) {
+        switch (op) {
+            case CR_OPEQ: res = crV_ordereq(ts, lhs, rhs);
+            case CR_OPLT: res = crV_orderlt(ts, lhs, rhs);
+            case CR_OPLE: res = crV_orderle(ts, lhs, rhs);
+            default: api_check(ts, 0, "invalid 'op'");
+        }
+    }
+    cr_unlock(ts);
+    return res;
 }
 
 

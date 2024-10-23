@@ -150,16 +150,12 @@ CR_API const char      *cr_tostring(cr_State *ts, int index, size_t *len);
 #define CR_OPBAND       8
 #define CR_OPBOR        9
 #define CR_OPBXOR       10
-#define CR_OPNOT        11
-#define CR_OPUMIN       12
-#define CR_OPBNOT       13
+#define CR_OPUNM        11
+#define CR_OPBNOT       12
 
-#define CR_NUM_ARITH    14
+#define CR_NUM_ARITH    13
 
-/* check if CR_OP* is unary operation */
-#define cr_isunaryop(op)        (CR_OPNOT <= (op) && (op) <= CR_OPBNOT)
-
-CR_API void     cr_arith(cr_State *ts, int op);
+CR_API void     cr_arith(cr_State *ts, int op); /* DONE */
 
 
 #define CR_OPEQ         0
@@ -168,8 +164,8 @@ CR_API void     cr_arith(cr_State *ts, int op);
 
 #define CR_NUM_CMP      3
 
-CR_API int      cr_rawequal(cr_State *ts, int idx1, int idx2);
-CR_API int      cr_compare(cr_State *ts, int idx1, int idx2, int op);
+CR_API int      cr_rawequal(cr_State *ts, int idx1, int idx2); /* DONE */
+CR_API int      cr_compare(cr_State *ts, int idx1, int idx2, int op); /* DONE */
 
 
 /* -------------------------------------------------------------------------
@@ -227,13 +223,13 @@ typedef enum cr_MM {
     CR_MM_DIV,
     CR_MM_MOD,
     CR_MM_POW,
-    CR_MM_UNM,
-    CR_MM_BNOT,
     CR_MM_BSHL,
     CR_MM_BSHR,
     CR_MM_BAND,
     CR_MM_BOR,
     CR_MM_BXOR,
+    CR_MM_UNM,
+    CR_MM_BNOT,
     CR_MM_EQ,
     CR_MM_LT,
     CR_MM_LE,

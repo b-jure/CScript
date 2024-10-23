@@ -41,8 +41,9 @@ CRI_FUNC void crV_concat(cr_State *ts, int n);
 CRI_FUNC cr_Integer crV_div(cr_State *ts, cr_Integer x, cr_Integer y);
 CRI_FUNC cr_Integer crV_modint(cr_State *ts, cr_Integer x, cr_Integer y);
 CRI_FUNC cr_Number crV_modnum(cr_State *ts, cr_Number x, cr_Number y);
-CRI_FUNC void crV_arithm(cr_State *ts, const TValue *a, const TValue *b,
-                         SPtr res, int op);
+CRI_FUNC void crV_binarithm(cr_State *ts, const TValue *a, const TValue *b,
+                            SPtr res, int op);
+CRI_FUNC void crV_unarithm(cr_State *ts, const TValue *v, SPtr res, int op);
 CRI_FUNC int crV_ordereq(cr_State *ts, const TValue *v1, const TValue *v2);
 CRI_FUNC int crV_orderlt(cr_State *ts, const TValue *v1, const TValue *v2);
 CRI_FUNC int crV_orderle(cr_State *ts, const TValue *v1, const TValue *v2);

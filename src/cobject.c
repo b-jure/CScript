@@ -77,8 +77,7 @@ static cr_Number numarithm(cr_State *ts, cr_Number x, cr_Number y, int op) {
     case CR_OPDIV: return cri_numdiv(ts, x, y);
     case CR_OPMOD: return crV_modnum(ts, x, y);
     case CR_OPPOW: return cri_numpow(ts, x, y);
-    case CR_OPNOT: return cri_nummul(ts, x, y);
-    case CR_OPUMIN: return cri_nummul(ts, x, y);
+    case CR_OPUNM: return cri_nummul(ts, x, y);
     default: cr_unreachable(); return 0.0;
     }
 }
@@ -92,8 +91,7 @@ static cr_Integer intarithm(cr_State *ts, cr_Integer x, cr_Integer y, int op) {
     case CR_OPDIV: return crV_div(ts, x, y);
     case CR_OPMOD: return crV_modint(ts, x, y);
     case CR_OPPOW: return cri_intop(^, x, y);
-    case CR_OPNOT: return cri_numnot(ts, x);
-    case CR_OPUMIN: return cri_intop(-, 0, x);
+    case CR_OPUNM: return cri_intop(-, 0, x);
     case CR_OPBSHL: return crO_shiftl(x, y);
     case CR_OPBSHR: return crO_shiftr(x, y);
     case CR_OPBNOT: return cri_intop(^, ~cri_castS2U(0), x);
@@ -154,8 +152,8 @@ int crO_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
         }
         return 0;
     }
-    case CR_OPADD: case CR_OPSUB: case CR_OPMUL:
-    case CR_OPNOT: case CR_OPUMIN: {
+    case CR_OPADD: case CR_OPSUB:
+    case CR_OPMUL: case CR_OPUNM: {
         if (tonumber(a, &n1) && tonumber(b, &n2)) {
             setfval(res, numarithm(ts, n1, n2, op));
             return 1;

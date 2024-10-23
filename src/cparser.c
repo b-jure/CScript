@@ -1001,7 +1001,7 @@ static void simpleexpr(Lexer *lx, ExpInfo *e) {
 /* get unary operation matching 'token' */
 static Unopr getunopr(int token) {
     switch (token) {
-    case '-': return OPR_UMIN;
+    case '-': return OPR_UNM;
     case '~': return OPR_BNOT;
     case TK_NOT: return OPR_NOT;
     default: return OPR_NOUNOPR;
@@ -1047,7 +1047,7 @@ static const struct {
     cr_ubyte right; /* right priority */
 } priority[] = {
     /* unary operators priority */
-    [OPR_UMIN]      = { 14, 14 },   /* '-' */
+    [OPR_UNM]      = { 14, 14 },   /* '-' */
     [OPR_BNOT]      = { 14, 14 },   /* '~' */
     [OPR_NOT]       = { 14, 14 },   /* 'not' */
     /* binary operators priority */
