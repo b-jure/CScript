@@ -91,7 +91,7 @@ typedef unsigned short ushrt;
 #define cri_checkapi(ts,e)      ((void)ts, cr_assert(e))
 #endif
 
-#define checkapi(ts,e,err)      cri_checkapi(ts,(e) && err)
+#define api_check(ts,e,err)     cri_checkapi(ts,(e) && err)
 
 
 
@@ -242,12 +242,19 @@ typedef cr_ubyte Instruction;
 
 
 /*
- * These allow user-defined action to be taken each
+ * These macros allow user-defined action to be taken each
  * time cr_State (thread) is created or deleted.
  */
 #if !defined(cri_userstatecreated)
-#define cri_userstatecreated(ts)    ((void)(ts))
-#define cri_userstatefree(ts)       ((void)(ts))
+#define cri_userstatecreated(ts)            ((void)(ts))
+#endif
+
+#if !defined(cri_userstatethread)
+#define cri_userstatethread(ts,newts)       ((void)ts)
+#endif
+
+#if !defined(cri_userstatefree)
+#define cri_userstatefree(ts)               ((void)(ts))
 #endif
 
 

@@ -637,8 +637,8 @@ static int searchprivate(FunctionState *fs, OString *name, ExpInfo *e) {
 static UpValInfo *newupvalue(FunctionState *fs) {
     Function *fn = fs->fn;
     cr_State *ts = fs->lx->ts;
-    checklimit(fs, fs->nupvals + 1, MAXLONGARGSIZE, "upvalues");
-    crM_growvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals, MAXLONGARGSIZE,
+    checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
+    crM_growvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals, MAXUPVAL,
                 "upvalues", UpValInfo);
     return &fn->upvals[fs->nupvals++];
 }
@@ -708,7 +708,7 @@ static void newglobal(Lexer *lx, OString *name, int mods) {
     setstrval(lx->ts, &k, name);
     setemptyval(&val);
     val.mod = mods;
-    crH_set(lx->ts, G_(lx->ts)->globals, &k, &val);
+    crH_set(lx->ts, htval(&G_(lx->ts)->globals), &k, &val);
 }
 
 
@@ -717,7 +717,7 @@ static void globalvar(FunctionState *fs, OString *name, ExpInfo *e) {
     TValue k;
     Lexer *lx = fs->lx;
     setstrval(lx->ts, &k, name);
-    if (isabstkey(crH_get(G_(lx->ts)->globals, &k)))
+    if (isabstkey(crH_get(htval(&G_(lx->ts)->globals), &k)))
         newglobal(lx, name, UNDEFMODMASK >> (fs->prev != NULL));
     e->u.str = name;
     e->et = EXP_GLOBAL;
@@ -1162,7 +1162,7 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
         TValue key;
         const TValue *res;
         setstrval(lx->ts, &key, var->u.str);
-        res = crH_get(G_(lx->ts)->globals, &key);
+        res = crH_get(htval(&G_(lx->ts)->globals), &key);
         if (!ttisempty(res) && ismod(res, VARFINAL))
             id = var->u.str;
         break;

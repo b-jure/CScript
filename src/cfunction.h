@@ -1,11 +1,21 @@
 #ifndef CRFUNCTION_H
 #define CRFUNCTION_H
 
+#include "ccode.h"
 #include "cobject.h"
 #include "cstate.h"
 
 
-#define uvlevel(u)		cast(SPtr, (u)->v.p)
+/* get upvalue stack level */
+#define uvlevel(u)	cast(SPtr, (u)->v.p)
+
+/* 
+** Maximum amount of upvalues in a closure (both C and CScript).
+** Value must fit in 'MAXLONGARGSIZE' subtracted by 'CR_REGISTRYINDEX'.
+** This is because of the nature C API functions 'index' argument works.
+*/
+#define MAXUPVAL        (MAXLONGARGSIZE + CR_REGISTRYINDEX)
+
 
 /* special status to close upvalues preserving the top of the stack */
 #define CLOSEKTOP       (-1)

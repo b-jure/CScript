@@ -1,154 +1,10 @@
-#include <string.h>
-
 #include "cstate.h"
 #include "cdebug.h"
 #include "cgc.h"
-#include "clexer.h"
 #include "cmem.h"
-#include "cmeta.h"
 #include "cobject.h"
 #include "cprotected.h"
 #include "cstring.h"
-#include "chashtable.h"
-
-
-
-/* thread state + CR_EXTRASPACE */
-typedef struct XS {
-    cr_ubyte extra_[CR_EXTRASPACE];
-    cr_State ts;
-} XS;
-
-
-/* Main thread + global state */
-typedef struct SG {
-    XS xs;
-    GState gs;
-} SG;
-
-
-/*
-** -- Lua 5.4.7 [lstate.c]:58
-** Macro for creating "random" seed when a state is created;
-** seed is used for randomizing string hashes.
-*/
-#if !defined(cri_makeseed)
-#include <time.h>
-
-#define buffadd(b,p,e) \
-    { size_t t = cast_sizet(e); \
-      memcpy((b) + (p), &t, sizeof(t)); (p) += sizeof(t); }
-
-static uint cri_makeseed(cr_State *ts) {
-    char str[3 * sizeof(size_t)];
-    uint seed = time(NULL); /* seed with current time */
-    int n = 0;
-    buffadd(str, n, ts); /* heap variable */
-    buffadd(str, n, &seed); /* local variable */
-    buffadd(str, n, &cr_newstate); /* public function */
-    cr_assert(n == sizeof(str));
-    return crS_hash(str, n, seed);
-}
-#endif
-
-
-/*
-** Preinitialize all thread fields to avoid collector
-** errors.
-*/
-static void preinitstate(cr_State *ts, GState *gs) {
-    ts->ncf = 0;
-    ts->status = CR_OK;
-    ts->nCC = 0;
-    ts->gclist = NULL;
-    ts->thwouv = ts; /* if ('ts->thwouv' == 'ts') then no upvalues */
-    G_(ts) = gs;
-    ts->errjmp = NULL;
-    ts->cf = NULL;
-    ts->openupval = NULL;
-}
-
-
-/*
-** Initialize stack and base call frame for 'newts'.
-** 'mts' is main thread state; 'newts' == 'mts' only when
-** creating new state.
-*/
-static void init_stack(cr_State *newts, cr_State *mts) {
-    newts->stack.p = crM_newarray(mts, INIT_STACKSIZE + EXTRA_STACK, SValue);
-    newts->tbclist.p = newts->stack.p;
-    for (int i = 0; i < INIT_STACKSIZE + EXTRA_STACK; i++)
-        setnilval(s2v(newts->stack.p + i));
-    newts->sp.p = newts->stack.p;
-    newts->stackend.p = newts->stack.p + INIT_STACKSIZE;
-    CallFrame *cf = &newts->basecf;
-    cf->next = cf->prev = NULL;
-    cf->func.p = newts->sp.p;
-    cf->top.p = mts->stack.p + CR_MINSTACK;
-    cf->pc = NULL;
-    cf->nvarargs = 0;
-    cf->nresults = 0;
-    cf->status = CFST_CCALL;
-    setnilval(s2v(mts->sp.p)); /* 'cf' entry function */
-    mts->sp.p++;
-    mts->cf = cf;
-}
-
-
-/*
-** Initialize parts of state that may cause memory
-** allocation errors.
-*/
-static void fnewstate(cr_State *ts, void *ud) {
-    GState *gs = G_(ts);
-    UNUSED(ud);
-    init_stack(ts, ts); /* initialize 'ts' stack */
-    gs->strings = crH_new(ts); /* new weak strings table */
-    gs->globals = crH_new(ts); /* new global table */
-    gs->memerror = crS_newlit(ts, MEMERRMSG);
-    crG_fix(ts, obj2gco(gs->memerror));
-    crMM_init(ts);
-    crL_init(ts);
-    gs->gc.stopped = 0;
-    setnilval(&gs->nil); /* signal that state is fully built */
-    cri_userstatecreated(ts);
-}
-
-
-/*
-** Allocate new thread and global state with 'falloc' and
-** userdata 'ud', from here on 'falloc' will be the allocator.
-** The returned thread state is mainthread.
-** In case of errors NULL is returned.
-*/
-CR_API cr_State *cr_newstate(cr_fAlloc falloc, void *ud) {
-    GState *gs;
-    cr_State *ts;
-    SG *sg = falloc(NULL, 0, sizeof(SG), ud);
-    if (cr_unlikely(sg == NULL))
-        return NULL;
-    gs = &sg->gs;
-    ts = &sg->xs.ts;
-    ts->next = NULL;
-    ts->tt_ = CR_VTHREAD;
-    crG_init(&gs->gc, ts, sizeof(SG)); /* initialize collector */
-    ts->mark = crG_white(&gs->gc);
-    preinitstate(ts, gs);
-    gs->falloc = falloc;
-    gs->udalloc = ud;
-    gs->panic = NULL; /* no panic handler by default */
-    gs->seed = cri_makeseed(ts); /* initial seed for hashing */
-    setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
-    gs->mainthread = ts;
-    gs->thwouv = NULL;
-    for (int i = 0; i < CR_NUM_TYPES; i++)
-        gs->vmt[i] = NULL;
-    if (crPR_rawcall(ts, fnewstate, NULL) != CR_OK) {
-        cr_freestate(ts);
-        ts = NULL;
-    }
-    return ts;
-}
 
 
 void crT_seterrorobj(cr_State *ts, int errcode, SPtr oldtop) {
@@ -331,4 +187,9 @@ void crT_incC_(cr_State *ts) {
     ts->nCC++;
     if (getnC_(ts) >= CRI_MAXCCALLS)
         crT_checkCstack(ts);
+}
+
+
+void crT_free(cr_State *ts, cr_State *thread) {
+    
 }

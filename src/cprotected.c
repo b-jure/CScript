@@ -57,12 +57,37 @@ int crPR_call(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t top) {
 }
 
 
+/* auxiliary structure to call 'crF_close' in protected mode */
+struct CloseData {
+    SPtr level;
+    int status;
+};
 
-/* -------------------------------------------------------------------------
- * Protected parser
- * ------------------------------------------------------------------------- */
 
-/* data for 'pparse' */
+/* auxiliary function to call 'crF_close' in protected mode */
+static void closepaux(cr_State *ts, void *ud) {
+    struct CloseData *cd = (struct CloseData*)ud;
+    crF_close(ts, cd->level, cd->status);
+}
+
+
+/* call 'crF_close' in protected mode */
+int crPR_close(cr_State *ts, ptrdiff_t level, int status) {
+    CallFrame *oldcf = ts->cf;
+    for (;;) {
+        struct CloseData cd;
+        cd.level = restorestack(ts, level); cd.status = status;
+        status = crPR_rawcall(ts, closepaux, &cd);
+        if (cr_likely(status == CR_OK))
+            return  cd.status;
+        else
+            ts->cf = oldcf;
+    }
+}
+
+
+
+/* auxiliary structure to call 'crP_parse' in protected mode */
 typedef struct PPData {
     BuffReader br;
     Buffer buff;
@@ -71,8 +96,8 @@ typedef struct PPData {
 } PPData;
 
 
-/* protected 'parse' */
-static void pparse(cr_State *ts, void *userdata)
+/* auxiliary function to call 'crP_pparse' in protected mode */
+static void parsepaux(cr_State *ts, void *userdata)
 {
     PPData *pd = cast(PPData *, userdata);
     CrClosure *cl = crP_parse(ts, &pd->br, &pd->buff, &pd->ps, pd->source);
@@ -80,8 +105,8 @@ static void pparse(cr_State *ts, void *userdata)
 }
 
 
-/* external interface for 'pparse' */
-void crP_pparse(cr_State *ts, cr_fReader freader, void *userdata,
+/* call 'crP_parse' in protected mode */
+void crPR_parse(cr_State *ts, cr_fReader freader, void *userdata,
                       const char *name)
 {
     PPData parsedata;
@@ -91,5 +116,5 @@ void crP_pparse(cr_State *ts, cr_fReader freader, void *userdata,
     { ps->lvars.len = ps->lvars.size = 0; ps->lvars.arr = NULL; } /* 'lvars' */
     ps->cs = NULL; /* 'cs' */
     parsedata.source = name; /* 'source' */
-    crPR_call(ts, pparse, &parsedata, savestack(ts, ts->sp.p));
+    crPR_call(ts, parsepaux, &parsedata, savestack(ts, ts->sp.p));
 }

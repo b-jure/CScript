@@ -103,7 +103,7 @@ typedef union Value {
 
 /* set object 'o1' to 'o2' */
 #define setobj(ts,o1,o2) \
-    { TValue *o1_ = (o1); const TValue *o2_ = (o2); \
+    { UNUSED(ts); TValue *o1_ = (o1); const TValue *o2_ = (o2); \
       o1_->val = o2_->val; settt(o1_, rawtt(o2_)); o1_->mod = o2_->mod; }
 
 /* from stack to stack */
@@ -325,7 +325,7 @@ typedef struct GCObject {
 
 #define setthval(ts,obj,th)     setgcotval(ts,obj,th,cr_State)
 
-#define setsv2th(ts,sv,th)      setobj2s(ts,s2v(sv),th)
+#define setsv2th(ts,sv,th)      setthval(ts,s2v(sv),th)
 
 
 
@@ -339,8 +339,8 @@ typedef struct GCObject {
 
 #define htval(v)        gco2ht(gcoval(v))
 
-#define setv2ht(ts,v,ht)        setgcotval(ts,v,ht,HTable)
-#define setsv2ht(ts,sv,ht)      setv2ht(ts,s2v(sv),ht)
+#define sethtval(ts,v,ht)       setgcotval(ts,v,ht,HTable)
+#define setsv2ht(ts,sv,ht)      sethtval(ts,s2v(sv),ht)
 
 #define keyval(n)       ((n)->s.key_val)
 #define keyival(n)      rawival(keyval(n))

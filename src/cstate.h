@@ -142,7 +142,7 @@ typedef struct GState {
     TValue nil; /* nil value (init flag) */
     GC gc; /* garbage collection managed values and parameters */
     HTable *strings; /* interned strings and weak refs */
-    HTable *globals; /* global variables */
+    TValue globals; /* global variables */
     struct cr_State *mainthread; /* thread that also created global state */
     struct cr_State *thwouv; /* thread with open upvalues */
     OString *memerror; /* preallocated message for memory errors */
@@ -179,8 +179,8 @@ struct cr_State {
 /* thread global state */
 #define G_(ts)          (ts)->gstate
 
-/* check if thread is initialized */
-#define tsinitialized(ts)       (ttisnil(&(ts)->nil))
+/* check if global state is initialized */
+#define gsinitialized(g)        ttisnil(&(g)->nil)
 
 /* check if thread is in 'thwouv' list */
 #define isinthwouv(ts)          ((ts)->thwouv != (ts))
@@ -228,5 +228,6 @@ CRI_FUNC void crT_shrinkstack(cr_State *ts);
 CRI_FUNC void crT_incsp(cr_State *ts);
 CRI_FUNC void crT_incC_(cr_State *ts);
 CRI_FUNC void crT_checkCstack(cr_State *ts);
+CRI_FUNC void crT_free(cr_State *ts, cr_State *thread);
 
 #endif

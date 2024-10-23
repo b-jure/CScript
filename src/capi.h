@@ -23,8 +23,14 @@
 
 /* Ensure the stack has at least 'n' elements. */
 #define api_checknelems(ts, n) \
-    checkapi(ts, (n) < (ts)->sp.p - (ts)->cf->func.p, \
+    api_check(ts, (n) < (ts)->sp.p - (ts)->cf->func.p, \
                  "not enough elements in the stack")
+
+
+/* increments 'ts->sp.p', checking for stack overflows */
+#define api_inctop(ts) \
+    { (ts)->sp.p++; \
+      api_check(ts, (ts)->sp.p <= (ts)->cf->top.p, "stack overflow"); }
 
 
 #define hastocloseCfunc(n)	((n) < CR_MULRET)

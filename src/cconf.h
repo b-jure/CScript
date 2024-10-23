@@ -275,7 +275,7 @@
 /* @CR_CHECKAPI - enables C API asserts. */
 #if defined(CR_CHECKAPI)    /* { */
 #include <assert.h>
-#define cri_checkapi(ts, cond, msg)     assert((cond) && msg)
+#define cri_checkapi(ts,e)      assert(e)
 #endif                      /* } */
 
 

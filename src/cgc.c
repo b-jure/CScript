@@ -126,15 +126,21 @@ void crG_init(GC *gc, cr_State *ts, size_t LGsize) {
 }
 
 
-/* create new white object and append it to 'objects' */
-GCObject *crG_new_(cr_State *ts, size_t size, cr_ubyte tt_) {
+/* create new object and append it to 'objects' */
+GCObject *crG_newoff(cr_State *ts, size_t sz, int tt_, size_t offset) {
     GC *gc = &G_(ts)->gc;
-    GCObject *o = cast(GCObject*, crM_malloc(ts, size));
+    char *p = cast_charp(crM_malloc(ts, sz));
+    GCObject *o = cast(GCObject*, p + offset);
+    o->mark = crG_white(gc);
     o->tt_ = tt_;
-    gcomark_(o) = crG_white(gc);
-    gconext_(o) = gc->objects;
+    o->next = gc->objects;
     gc->objects = o;
     return o;
+}
+
+
+GCObject *crG_new_(cr_State *ts, size_t size, int tt_) {
+    return crG_newoff(ts, size, tt_, 0);
 }
 
 
@@ -263,7 +269,7 @@ static void markobject_(GC *gc, GCObject *o) {
         IMethod *im = gco2im(o);
         notw2black(im);
         markobject(gc, im->receiver);
-        markobject(gc, im->method);
+        markvalue(gc, &im->method);
         break;
     }
     case CR_VUDATA: {
@@ -471,16 +477,17 @@ static cr_mem propagateall(GState *gs) {
 /* free objectc 'o' */
 static void freeobject(cr_State *ts, GCObject *o) {
     switch (o->tt_) {
-    case CR_VSTRING: crS_free(ts, gco2str(o)); break;
-    case CR_VFUNCTION: crF_free(ts, gco2fn(o)); break;
-    case CR_VUVALUE: crF_freeupval(ts, gco2uv(o)); break;
-    case CR_VCRCL: crM_free(ts, o, sizeofcrcl(gco2crcl(o)->nupvalues)); break;
-    case CR_VCCL: crM_free(ts, o, sizeofccl(gco2ccl(o)->nupvalues)); break;
-    case CR_VCLASS: crMM_freeclass(ts, gco2cls(o)); break;
-    case CR_VINSTANCE: crMM_freeinstance(ts, gco2ins(o)); break;
-    case CR_VMETHOD: crM_free(ts, o, sizeof(*gco2im(o))); break;
-    case CR_VUDATA: crMM_freeuserdata(ts, gco2ud(o)); break;
-    default: cr_unreachable();
+        case CR_VSTRING: crS_free(ts, gco2str(o)); break;
+        case CR_VFUNCTION: crF_free(ts, gco2fn(o)); break;
+        case CR_VUVALUE: crF_freeupval(ts, gco2uv(o)); break;
+        case CR_VCRCL: crM_free(ts, o, sizeofcrcl(gco2crcl(o)->nupvalues)); break;
+        case CR_VCCL: crM_free(ts, o, sizeofccl(gco2ccl(o)->nupvalues)); break;
+        case CR_VCLASS: crMM_freeclass(ts, gco2cls(o)); break;
+        case CR_VINSTANCE: crMM_freeinstance(ts, gco2ins(o)); break;
+        case CR_VMETHOD: crM_free(ts, o, sizeof(*gco2im(o))); break;
+        case CR_VTHREAD: crT_free(ts, gco2th(o));
+        case CR_VUDATA: crMM_freeuserdata(ts, gco2ud(o)); break;
+        default: cr_unreachable();
     }
 }
 
@@ -592,9 +599,9 @@ static void callfin(cr_State *ts) {
         setobj2s(ts, ts->sp.p++, m);
         setobj2s(ts, ts->sp.p++, &v);
         ptrdiff_t oldtop = savestack(ts, ts->sp.p - 2);
-        ts->cf->cfstatus |= CFST_FIN; /* running a finalizer */
+        ts->cf->status |= CFST_FIN; /* running a finalizer */
         int status = crPR_call(ts, protectedfinalizer, NULL, oldtop);
-        ts->cf->cfstatus &= ~CFST_FIN; /* finalizer returned */
+        ts->cf->status &= ~CFST_FIN; /* finalizer returned */
         gc->stopped = oldstopped;
         if (cr_unlikely(status != CR_OK)) {
             crD_warnerror(ts, "__gc__");
@@ -711,7 +718,7 @@ static cr_mem atomic(cr_State *ts) {
     cr_assert(gc->weak == NULL);
     gc->state = GCSatomic;
     markobject(gc, ts); /* mark running thread */
-    markobject(gc, gs->globals); /* mark global variables table */
+    markvalue(gc, &gs->globals); /* mark global variables table */
     work += propagateall(gs);
     /* mark open upvalues */
     work += markopenupvalues(gs);
@@ -766,10 +773,10 @@ static void restartgc(GState *gs) {
     GC *gc = &gs->gc;
     gc->graylist = gc->grayagain = gc->weak = NULL;
     markobject(gc, gs->mainthread);
-    markobject(gc, gs->globals);
+    markvalue(gc, &gs->globals);
     markopenupvalues(gs);
     /* there could be leftover unreachable objects
-     * with a finalizer from the previous cycle, in
+     * with a finalizer from the previous cycle in
      * case of emergency collection, so mark them */
     marktobefin(gs);
 }
@@ -799,55 +806,55 @@ static cr_mem singlestep(cr_State *ts) {
     GC *gc = &gs->gc;
     gc->stopem = 1; /* prevent emergency collections */
     switch (gc->state) {
-    case GCSpause: { /* mark roots */
-        restartgc(gs);
-        gc->state = GCSpropagate;
-        work = 1;
-        break;
-    }
-    case GCSpropagate: { /* gray -> black */
-        if (gc->graylist) {
-            work = propagate(gs);
-        } else {
-            gc->state = GCSenteratomic;
-            work = 0;
+        case GCSpause: { /* mark roots */
+            restartgc(gs);
+            gc->state = GCSpropagate;
+            work = 1;
+            break;
         }
-        break;
-    }
-    case GCSenteratomic: { /* remark */
-        work = atomic(ts);
-        entersweep(ts);
-        break;
-    }
-    case GCSsweepall: {
-        work = sweepstep(ts, &gc->fin, GCSsweepfin);
-        break;
-    }
-    case GCSsweepfin: {
-        work = sweepstep(ts, &gc->tobefin, GCSsweeptofin);
-        break;
-    }
-    case GCSsweeptofin: {
-        work = sweepstep(ts, NULL, GCSsweepend);
-        break;
-    }
-    case GCSsweepend: {
-        /* state not used for anything but clarity */
-        gc->state = GCScallfin;
-        work = 0;
-        break;
-    }
-    case GCScallfin: { /* call finalizers */
-        if (gc->tobefin && !gc->isem) {
-            gc->stopem = 0; /* can collect in finalizer */
-            work = callNfinalizers(ts, GCFINMAX) * GCFINCOST;
-        } else {
-            gc->state = GCSpause;
-            work = 0;
+        case GCSpropagate: { /* gray -> black */
+            if (gc->graylist) {
+                work = propagate(gs);
+            } else {
+                gc->state = GCSenteratomic;
+                work = 0;
+            }
+            break;
         }
-        break;
-    }
-    default: cr_unreachable();
+        case GCSenteratomic: { /* remark */
+            work = atomic(ts);
+            entersweep(ts);
+            break;
+        }
+        case GCSsweepall: {
+            work = sweepstep(ts, &gc->fin, GCSsweepfin);
+            break;
+        }
+        case GCSsweepfin: {
+            work = sweepstep(ts, &gc->tobefin, GCSsweeptofin);
+            break;
+        }
+        case GCSsweeptofin: {
+            work = sweepstep(ts, NULL, GCSsweepend);
+            break;
+        }
+        case GCSsweepend: {
+            /* state not used for anything but clarity */
+            gc->state = GCScallfin;
+            work = 0;
+            break;
+        }
+        case GCScallfin: { /* call finalizers */
+            if (gc->tobefin && !gc->isem) {
+                gc->stopem = 0; /* can collect in finalizer */
+                work = callNfinalizers(ts, GCFINMAX) * GCFINCOST;
+            } else {
+                gc->state = GCSpause;
+                work = 0;
+            }
+            break;
+        }
+        default: cr_unreachable();
     }
     gc->stopem = 0;
     return work;

@@ -197,7 +197,8 @@ typedef struct GC {
 
 
 CRI_FUNC void crG_init(GC *gc, cr_State *ts, size_t LGsize);
-CRI_FUNC GCObject *crG_new_(cr_State *ts, size_t size, cr_ubyte ott);
+CRI_FUNC GCObject *crG_new_(cr_State *ts, size_t size, int tt_);
+CRI_FUNC GCObject *crG_newoff(cr_State *ts, size_t sz, int tt_, size_t offset);
 CRI_FUNC void crG_step(cr_State *ts);
 CRI_FUNC void crG_full(cr_State *ts, int isemergency);
 CRI_FUNC void crG_rununtilstate(cr_State *ts, int statemask);

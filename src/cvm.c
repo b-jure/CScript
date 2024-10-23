@@ -286,7 +286,7 @@ int crV_ordereq(cr_State *ts, const TValue *v1, const TValue *v2) {
 ** undefined global variable error.
 */
 cr_sinline const TValue *checkglobal(cr_State *ts, TValue *key) {
-    const TValue *out = crH_get(G_(ts)->globals, key);
+    const TValue *out = crH_get(htval(&G_(ts)->globals), key);
     if (cr_unlikely(isabstkey(out)))
         crD_globalerror(ts, "undefined", strval(key));
     return out;
@@ -295,11 +295,11 @@ cr_sinline const TValue *checkglobal(cr_State *ts, TValue *key) {
 
 cr_sinline void defineglobal(cr_State *ts, TValue *key, TValue *val) {
     cr_assert(ttisstr(key));
-    const TValue *slot = crH_get(G_(ts)->globals, key);
+    const TValue *slot = crH_get(htval(&G_(ts)->globals), key);
     if (cr_unlikely(!isabstkey(slot)))
         crD_runerror(ts, "global variable '%s' redefinition", cstrval(key));
     else
-        crH_set(ts, G_(ts)->globals, key, val);
+        crH_set(ts, htval(&G_(ts)->globals), key, val);
 }
 
 
@@ -314,7 +314,7 @@ cr_sinline void getglobal(cr_State *ts, TValue *key, TValue *out) {
 cr_sinline void setglobal(cr_State *ts, TValue *key, TValue *newval) {
     if (cr_unlikely(isconst(checkglobal(ts, key))))
         crD_globalerror(ts, "read-only", strval(key));
-    crH_set(ts, G_(ts)->globals, key, newval);
+    crH_set(ts, htval(&G_(ts)->globals), key, newval);
 }
 
 
