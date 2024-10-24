@@ -756,6 +756,163 @@ CR_API int cr_compare(cr_State *ts, int index1, int index2, int op) {
 }
 
 
+/* Push nil value on top of the stack. */
+CR_API void cr_pushnil(cr_State *ts) {
+    cr_lock(ts);
+    setnilval(s2v(ts->sp.p));
+    api_inctop(ts);
+    cr_unlock(ts);
+}
+
+
+/* Push 'cr_Number' value on top of the stack. */
+CR_API void cr_pushnumber(cr_State *ts, cr_Number n) {
+    cr_lock(ts);
+    setfval(s2v(ts->sp.p), n);
+    api_inctop(ts);
+    cr_unlock(ts);
+}
+
+
+/* Push 'cr_Integer' value on top of the stack. */
+CR_API void cr_pushinteger(cr_State *ts, cr_Integer i) {
+    cr_lock(ts);
+    setival(s2v(ts->sp.p), i);
+    api_inctop(ts);
+    cr_unlock(ts);
+}
+
+
+/* Push string value of length 'len' on top of the stack. */
+CR_API const char *cr_pushstring(cr_State *ts, const char *str, size_t len) {
+    OString *s;
+    cr_lock(ts);
+    s = (len == 0 ? crS_new(ts, "") : crS_newl(ts, str, len));
+    setstrval2s(ts, ts->sp.p, s);
+    api_inctop(ts);
+    crG_check(ts);
+    cr_unlock(ts);
+    return getstrbytes(s);
+}
+
+
+/* Push null terminated string value on top of the stack. */
+CR_API const char *cr_pushcstring(cr_State *ts, const char *str) {
+    cr_lock(ts);
+    if (str == NULL) {
+        setnilval(s2v(ts->sp.p));
+    } else {
+        OString *s = crS_new(ts, str);
+        setstrval2s(ts, ts->sp.p, s);
+        str = getstrbytes(s);
+    }
+    api_inctop(ts);
+    crG_check(ts);
+    cr_unlock(ts);
+    return str;
+}
+
+
+/* 
+** Push formatted string with format values in a 'va_list' on top of the stack.
+** Valid format values are c (char), d (int), I (cr_Integer), N (cr_Number),
+** s (string), p (pointer) and % ('%'). Note that each format specifier is
+** preceeded by '%' (so %I...).
+*/
+CR_API const char *cr_pushvfstring(cr_State *ts, const char *fmt, va_list argp) {
+    const char *str;
+    cr_lock(ts);
+    str = crS_pushvfstring(ts, fmt, argp);
+    crG_check(ts);
+    cr_unlock(ts);
+    return str;
+}
+
+
+/* 
+** Push formatted string with variable amount of format values on top of the
+** stack. Valid format specifiers are the same as in 'cr_pushvfstring'.
+*/
+CR_API const char *cr_pushfstring(cr_State *ts, const char *fmt, ...) {
+    const char *str;
+    va_list argp;
+    cr_lock(ts);
+    va_start(argp, fmt);
+    str = crS_pushvfstring(ts, fmt, argp);
+    va_end(argp);
+    crG_check(ts);
+    cr_unlock(ts);
+    return str;
+}
+
+
+/*
+** Push C closure value on top of the stack.
+** This closure will have 'nupvals' upvalues, these values will be popped
+** of the stack and inserted into the closure.
+** If 'nupvals' is 0 then this does not create a C closure, rather it only
+** pushes the 'cr_CFunction' on top of the stack.
+*/
+CR_API void cr_pushcclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
+    cr_lock(ts);
+    if (nupvals == 0) {
+        setcfval(s2v(ts->sp.p), fn);
+        api_inctop(ts);
+    } else {
+        CClosure *ccl;
+        api_checknelems(ts, nupvals);
+        ccl = crF_newCClosure(ts, nupvals);
+        ccl->fn = fn;
+        ts->sp.p -= nupvals;
+        while (nupvals--) {
+            setobj(ts, &ccl->upvals[nupvals], s2v(ts->sp.p + nupvals));
+            cr_assert(iswhite(ccl));
+        }
+        setccl2s(ts, ts->sp.p, ccl);
+        api_inctop(ts);
+        crG_check(ts);
+    }
+    cr_unlock(ts);
+}
+
+
+/*
+** Push boolean value on top of the stack.
+** If 'b' is 0 then `false` is pushed, otherwise `true`.
+*/
+CR_API void cr_pushbool(cr_State *ts, int b) {
+    cr_lock(ts);
+    if (b)
+        setbtval(s2v(ts->sp.p));
+    else
+        setbfval(s2v(ts->sp.p));
+    api_inctop(ts);
+    cr_unlock(ts);
+}
+
+
+/* Push light userdata on top of the stack. */
+CR_API void cr_pushlightuserdata(cr_State *ts, void *p) {
+    cr_lock(ts);
+    setpval(s2v(ts->sp.p), p);
+    api_inctop(ts);
+    cr_unlock(ts);
+}
+
+
+/*
+** Push thread 'ts' on top of the stack.
+** Returns non-zero if the pushed thread is main thread.
+*/
+CR_API int cr_pushthread(cr_State *ts) {
+    cr_lock(ts);
+    setsv2th(ts, ts->sp.p, ts);
+    api_inctop(ts);
+    cr_unlock(ts);
+    return (G_(ts)->mainthread == ts);
+}
+
+
 /* Set panic handler and return old one */
 CR_API cr_panic cr_setpanic(cr_State *ts, cr_panic panicfn)
 {

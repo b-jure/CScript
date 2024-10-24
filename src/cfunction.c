@@ -37,12 +37,9 @@ CrClosure *crF_newCrClosure(cr_State *ts, int nup) {
 }
 
 
-CClosure *crF_newCClosure(cr_State *ts, cr_CFunction fn, int nupvalues) {
+CClosure *crF_newCClosure(cr_State *ts, int nupvalues) {
     CClosure *ccl = crG_new(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
     ccl->nupvalues = nupvalues;
-    ccl->fn = fn;
-    for (int i = 0; i < nupvalues; i++)
-        setnilval(&ccl->upvals[i]);
     return ccl;
 }
 

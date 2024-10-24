@@ -188,7 +188,7 @@ const char *crS_tolowerall(const char *s) {
  * and decimal strings to 'cr_Integer'.
  */
 static const char *otstr2int(const char *s, cr_Integer *i, int *overflow) {
-    cr_uinteger u = 0;
+    cr_Unsigned u = 0;
     int ngcoval, digit, sign;
     sign = ngcoval = 1;
     while (isspace(*s)) s++; /* skip leading spaces */

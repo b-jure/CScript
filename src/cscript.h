@@ -171,16 +171,17 @@ CR_API int      cr_compare(cr_State *ts, int idx1, int idx2, int op); /* DONE */
 /* -------------------------------------------------------------------------
  * Push functions (C -> stack)
  * ------------------------------------------------------------------------- */
-CR_API void             cr_pushnil(cr_State *ts);
-CR_API void             cr_pushnumber(cr_State *ts, cr_Number n); // TODO
-CR_API void             cr_pushinteger(cr_State *ts, cr_Integer n); // TODO
-CR_API void             cr_pushstring(cr_State *ts, const char *str, size_t len);
-CR_API void             cr_pushcstring(cr_State *ts, const char *str);
-CR_API const char      *cr_pushvfstring(cr_State *ts, const char *fmt, va_list argp);
-CR_API const char      *cr_pushfstring(cr_State *ts, const char *fmt, ...);
-CR_API void             cr_pushcclosure(cr_State *ts, cr_CFunction fn, int upvals); // TODO
-CR_API void             cr_pushbool(cr_State *ts, int b);
-CR_API void             cr_pushlightuserdata(cr_State *ts, void *p);
+CR_API void             cr_pushnil(cr_State *ts); /* DONE */
+CR_API void             cr_pushnumber(cr_State *ts, cr_Number n); /* DONE */
+CR_API void             cr_pushinteger(cr_State *ts, cr_Integer n); /* DONE */
+CR_API const char      *cr_pushstring(cr_State *ts, const char *str, size_t len); /* DONE */
+CR_API const char      *cr_pushcstring(cr_State *ts, const char *str); /* DONE */
+CR_API const char      *cr_pushvfstring(cr_State *ts, const char *fmt, va_list argp); /* DONE */
+CR_API const char      *cr_pushfstring(cr_State *ts, const char *fmt, ...); /* DONE */
+CR_API void             cr_pushcclosure(cr_State *ts, cr_CFunction fn, int upvals); /* DONE */
+CR_API void             cr_pushbool(cr_State *ts, int b); /* DONE */
+CR_API void             cr_pushlightuserdata(cr_State *ts, void *p); /* DONE */
+CR_API int              cr_pushthread(cr_State *ts); /* DONE */
 
 
 /* -------------------------------------------------------------------------
