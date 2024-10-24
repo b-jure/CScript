@@ -693,6 +693,11 @@ CR_API cr_State *cr_getthread(cr_State *ts, int index) {
 }
 
 
+CR_API cr_VMT cr_getclass(cr_State *ts, int index) {
+    // TODO
+}
+
+
 /*
 ** Return the length of the value at index.
 ** Length means different things depending on the type of the value at index.
@@ -925,6 +930,11 @@ CR_API int cr_pushthread(cr_State *ts) {
 }
 
 
+CR_API void cr_pushclass(cr_State *ts, cr_VMT *vmt, int supidx) {
+    // TODO
+}
+
+
 /* auxiliary function for raw getting the value of the string key */
 cr_sinline int auxrawgetstr(cr_State *ts, HTable *ht, const char *k) {
     OString *key = crS_new(ts, k);
@@ -1020,13 +1030,29 @@ CR_API int cr_rawgetproperty(cr_State *ts, int index, const char *prop) {
     o = index2value(ts, index);
     api_check(ts, hasprop(ttype(o), 1), "expect type with properties");
     ht = auxgetht(o, 1);
-    if (cr_likely(ht))
+    cr_assert(ht);
+    if (!isemptyht(ht))
         return auxrawgetstr(ts, ht, prop);
     /* else class without methods */
     setnilval(s2v(ts->sp.p));
     api_inctop(ts);
     cr_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
+}
+
+
+CR_API int cr_rawgeti(cr_State *ts, int index, cr_Integer i) {
+    // TODO
+}
+
+
+CR_API int cr_rawgetf(cr_State *ts, int index, cr_Number n) {
+    // TODO
+}
+
+
+CR_API int cr_rawgetp(cr_State *ts, int index, const void *p) {
+    // TODO
 }
 
 

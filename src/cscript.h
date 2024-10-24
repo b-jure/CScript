@@ -88,6 +88,53 @@ typedef struct cr_DebugInfo cr_DebugInfo;
 
 
 
+/* meta method type ('mmt') */
+#define CR_MMT_NONE     (-1)
+#define CR_MMT_CFN      0
+#define CR_MMT_IDX      1
+
+/* meta methods ('mm') */
+typedef enum cr_MM {
+    CR_MM_INIT = 0,
+    CR_MM_GETIDX,
+    CR_MM_SETIDX,
+    CR_MM_GETFIELD,
+    CR_MM_SETFIELD,
+    CR_MM_GC,
+    CR_MM_CLOSE,
+    CR_MM_CALL,
+    CR_MM_ADD,
+    CR_MM_SUB,
+    CR_MM_MUL,
+    CR_MM_DIV,
+    CR_MM_MOD,
+    CR_MM_POW,
+    CR_MM_BSHL,
+    CR_MM_BSHR,
+    CR_MM_BAND,
+    CR_MM_BOR,
+    CR_MM_BXOR,
+    CR_MM_UNM,
+    CR_MM_BNOT,
+    CR_MM_EQ,
+    CR_MM_LT,
+    CR_MM_LE,
+} cr_MM;
+
+#define CR_NUM_MM     (CR_MM_LE + 1)
+
+/* Virtual Method Table */
+struct cr_VMT {
+    struct {
+        union {
+            cr_CFunction cfn; /* C function */
+            int idx; /* value on stack */
+        } m; /* method */
+        int mmt; /* 'mmt' */
+    } mm[CR_NUM_MM];
+};
+
+
 /* -------------------------------------------------------------------------
  * State manipulation
  * ------------------------------------------------------------------------- */
@@ -130,6 +177,7 @@ CR_API cr_CFunction     cr_getcfunction(cr_State *ts, int index); /* DONE */
 CR_API void            *cr_getuserdata(cr_State *ts, int index); /* DONE */
 CR_API const void      *cr_getpointer(cr_State *ts, int index); /* DONE */
 CR_API cr_State        *cr_getthread(cr_State *ts, int index); /* DONE */
+CR_API cr_VMT           cr_getclass(cr_State *ts, int index); /* TODO */
 CR_API cr_Unsigned      cr_len(cr_State *ts, int index); /* DONE */
 
 /* TODO */
@@ -182,54 +230,7 @@ CR_API void             cr_pushcclosure(cr_State *ts, cr_CFunction fn, int upval
 CR_API void             cr_pushbool(cr_State *ts, int b); /* DONE */
 CR_API void             cr_pushlightuserdata(cr_State *ts, void *p); /* DONE */
 CR_API int              cr_pushthread(cr_State *ts); /* DONE */
-
-/* meta method type ('mmt') */
-#define CR_MMT_NONE     (-1)
-#define CR_MMT_CFN      0
-#define CR_MMT_IDX      1
-
-/* meta methods ('mm') */
-typedef enum cr_MM {
-    CR_MM_INIT = 0,
-    CR_MM_GETIDX,
-    CR_MM_SETIDX,
-    CR_MM_GETFIELD,
-    CR_MM_SETFIELD,
-    CR_MM_GC,
-    CR_MM_CLOSE,
-    CR_MM_CALL,
-    CR_MM_ADD,
-    CR_MM_SUB,
-    CR_MM_MUL,
-    CR_MM_DIV,
-    CR_MM_MOD,
-    CR_MM_POW,
-    CR_MM_BSHL,
-    CR_MM_BSHR,
-    CR_MM_BAND,
-    CR_MM_BOR,
-    CR_MM_BXOR,
-    CR_MM_UNM,
-    CR_MM_BNOT,
-    CR_MM_EQ,
-    CR_MM_LT,
-    CR_MM_LE,
-} cr_MM;
-
-#define CR_NUM_MM     (CR_MM_LE + 1)
-
-/* Virtual Method Table */
-struct cr_VMT {
-    struct {
-        union {
-            cr_CFunction cfn; /* C function */
-            int idx; /* value on stack */
-        } m; /* method */
-        int mmt; /* 'mmt' */
-    } mm[CR_NUM_MM];
-};
-
-CR_API void cr_pushclass(cr_State *ts, cr_VMT *vmt, int supidx);
+CR_API void             cr_pushclass(cr_State *ts, cr_VMT *vmt, int supidx); /* TODO */
 
 
 /* -------------------------------------------------------------------------
@@ -243,10 +244,8 @@ CR_API int cr_rawgetf(cr_State *ts, int index, cr_Number n);
 CR_API int cr_rawgetp(cr_State *ts, int index, const void *p);
 CR_API int cr_getmeta(cr_State *ts, int index, cr_MM mm);
 
-CR_API int cr_getclass(cr_State *ts, int index);
-CR_API int cr_createarray(cr_State *ts, int nelems); // TODO
 CR_API int cr_createuserdata(cr_State *ts, size_t sz, int nuvalues); // TODO
-CR_API int cr_getuservalue(cr_State *ts, int index, int n);
+CR_API int cr_getiuservalue(cr_State *ts, int index, int n);
 
 LUA_API int (lua_gettable) (lua_State *L, int idx);
 LUA_API int (lua_getfield) (lua_State *L, int idx, const char *k);
