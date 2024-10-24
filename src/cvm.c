@@ -363,7 +363,7 @@ void crV_setfield(cr_State *ts, TValue *obj, const TValue *key,
     setim2s(ts, res, crMM_newinsmethod(ts, ins, v))
 
 
-void crV_getproperty(cr_State *ts, TValue *obj, TValue *key, SPtr res,
+void crV_getproperty(cr_State *ts, const TValue *obj, TValue *key, SPtr res,
                      cr_MM mm) {
     Instance *ins;
     HTable *fht, *mht;

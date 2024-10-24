@@ -28,7 +28,19 @@
 #define isupvalue(i)		((i) < CR_REGISTRYINDEX)
 
 /* test for valid index */
-#define isvalid(ts, o)          (!ttisnil(o) || (o) != &G_(ts)->nil)
+#define isvalid(ts,o)           (!ttisnil(o) || (o) != &G_(ts)->nil)
+
+
+/* test if type 't' can have property */
+#define hasprop(t,clsok) \
+    ((t) == CR_TINSTANCE || (t) == CR_TUDATA || ((t) == CR_TCLASS) && (clsok))
+
+
+/* empty hashtable */
+static HTable emptyht = { .tt_ = CR_VEMPTY };
+
+/* test for empty hashtable */
+#define isemptyht(ht)       ((ht) == &emptyht)
 
 
 /* 
@@ -913,6 +925,120 @@ CR_API int cr_pushthread(cr_State *ts) {
 }
 
 
+/* auxiliary function for raw getting the value of the string key */
+cr_sinline int auxrawgetstr(cr_State *ts, HTable *ht, const char *k) {
+    OString *key = crS_new(ts, k);
+    const TValue *slot = crH_getstr(ht, key);
+    if (!isabstkey(slot)) {
+        setobj2s(ts, ts->sp.p, slot);
+    } else
+        setnilval(s2v(ts->sp.p));
+    api_inctop(ts);
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
+}
+
+
+/*
+** Gets the global variable 'name' value and pushes it on top of the stack.
+** This function returns the value type.
+*/
+CR_API int cr_getglobal(cr_State *ts, const char *name) {
+    HTable *G_ht;
+    cr_lock(ts);
+    G_ht = htval(&G_(ts)->globals);
+    return auxrawgetstr(ts, G_ht, name);
+}
+
+
+cr_sinline int auxgetprop(cr_State *ts, const TValue *o, OString *prop) {
+    TValue key;
+    setstrval2s(ts, ts->sp.p, prop);
+    api_inctop(ts);
+    setstrval(ts, &key, prop);
+    if (ttiscls(o)) { /* class? */
+        const TValue *res;
+        OClass *cls = clsval(o);
+        if (!cls->methods &&!isabstkey(res = crH_getstr(cls->methods, prop))) {
+            setobj2s(ts, ts->sp.p - 1, res);
+        } else
+            setnilval(s2v(ts->sp.p - 1));
+    } else {
+        crV_getproperty(ts, o, &key, ts->sp.p - 1, CR_MM_GETFIELD);
+    }
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
+}
+
+
+/*
+** Get property of the value at index and push it on top of the stack.
+** If the value is class, then property reffers to methods of that class
+** excluding metamethods; if the value is instance or regular userdata, then
+** property refers to the field of that value.
+** This function can invoke error if value at index can't be indexed and the
+** error object is placed on top of the stack.
+** If no errors occur this function returns the property type.
+*/
+CR_API int cr_getproperty(cr_State *ts, int index, const char *prop) {
+    OString *s;
+    const TValue *o;
+    cr_lock(ts);
+    o = index2value(ts, index);
+    s = crS_new(ts, prop);
+    return auxgetprop(ts, o, s);
+}
+
+
+cr_sinline HTable *auxgetht(const TValue *o, int clsok) {
+    switch (ttypetag(o)) {
+        case CR_VCLASS: {
+            if (clsok) {
+                HTable *ht = clsval(o)->methods;
+                return (ht ? ht : &emptyht);
+            }
+            break;
+        }
+        case CR_VINSTANCE: return &insval(o)->fields;
+        case CR_VUDATA: return &insval(o)->fields;
+        default: cr_unreachable();
+    }
+    return NULL;
+}
+
+
+/*
+** Exactly the same as `cr_getproperty` except this function performs
+** raw access only (it doesn't call metamethods) and it doesn't invoke
+** errors, but it is expected that the caller will pass type of value
+** that can have properties.
+*/
+CR_API int cr_rawgetproperty(cr_State *ts, int index, const char *prop) {
+    HTable *ht;
+    const TValue *o;
+    cr_lock(ts);
+    o = index2value(ts, index);
+    api_check(ts, hasprop(ttype(o), 1), "expect type with properties");
+    ht = auxgetht(o, 1);
+    if (cr_likely(ht))
+        return auxrawgetstr(ts, ht, prop);
+    /* else class without methods */
+    setnilval(s2v(ts->sp.p));
+    api_inctop(ts);
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
+}
+
+
+/*
+** Get metamethod of the value at index and push it on top of the stack.
+** This function returns the type of the metamethod.
+*/
+CR_API int cr_getmeta(cr_State *ts, int index, cr_MM mm) {
+    // TODO
+}
+
+
 /* Set panic handler and return old one */
 CR_API cr_panic cr_setpanic(cr_State *ts, cr_panic panicfn)
 {
@@ -1334,7 +1460,7 @@ CR_API cr_ubyte cr_getmethod(cr_State *ts, int idx, const char *method)
  * of the stack.
  * If field value was not found or the value at 'idx' is not
  * class instance return 0, otherwise 1. */
-CR_API cr_ubyte cr_getfield(cr_State *ts, int idx, const char *field)
+CR_API cr_ubyte cr_getproperty(cr_State *ts, int idx, const char *field)
 {
     cr_ubyte res = 0;
     cr_lock(ts);

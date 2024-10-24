@@ -48,6 +48,8 @@ CRI_FUNC void crH_copykeys(cr_State *ts, HTable *stab, HTable *dtab);
 CRI_FUNC int crH_intern(cr_State *ts, const char *string);
 CRI_FUNC void crH_newkey(cr_State *ts, HTable *ht, const TValue *key,
                          const TValue *val);
+CRI_FUNC const TValue *crH_getstr(HTable *ht, OString *key);
+CRI_FUNC const TValue *crH_getint(HTable *ht, cr_Integer key);
 CRI_FUNC const TValue *crH_get(HTable *tab, const TValue *key);
 CRI_FUNC void crH_finishset(cr_State *ts, HTable *ht, const TValue *slot,
                             const TValue *key, const TValue *val);

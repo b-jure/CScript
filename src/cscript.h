@@ -183,26 +183,6 @@ CR_API void             cr_pushbool(cr_State *ts, int b); /* DONE */
 CR_API void             cr_pushlightuserdata(cr_State *ts, void *p); /* DONE */
 CR_API int              cr_pushthread(cr_State *ts); /* DONE */
 
-
-/* -------------------------------------------------------------------------
- * Get functions (CScript -> stack)
- * ------------------------------------------------------------------------- */
-CR_API int cr_getglobal(cr_State *ts, const char *name);
-CR_API int cr_getfield(cr_State *ts, int idx, const char *field);
-CR_API int cr_getmethod(cr_State *ts, int idx, const char *method);
-CR_API int cr_getindex(cr_State *ts, int idx);
-CR_API int cr_rawget(cr_State *ts, int idx);
-CR_API int cr_rawgeti(cr_State *ts, int idx, cr_Integer n);
-CR_API int cr_rawgetp(cr_State *ts, int idx, const void *p);
-
-CR_API int cr_createarray(cr_State *ts, int nelems); // TODO
-CR_API int cr_createuserdata(cr_State *ts, size_t sz, int nuvalues); // TODO
-CR_API int cr_getuservalue(cr_State *ts, int idx, int n);
-
-
-/* -------------------------------------------------------------------------
- * Class interface
- * ------------------------------------------------------------------------- */
 /* meta method type ('mmt') */
 #define CR_MMT_NONE     (-1)
 #define CR_MMT_CFN      0
@@ -249,7 +229,42 @@ struct cr_VMT {
     } mm[CR_NUM_MM];
 };
 
-CR_API void cr_createclass(cr_State *ts, cr_VMT *vmt, int supidx);
+CR_API void cr_pushclass(cr_State *ts, cr_VMT *vmt, int supidx);
+
+
+/* -------------------------------------------------------------------------
+ * Get functions (CScript -> stack)
+ * ------------------------------------------------------------------------- */
+CR_API int cr_getglobal(cr_State *ts, const char *name); /* DONE */
+CR_API int cr_getproperty(cr_State *ts, int index, const char *prop); /* DONE */
+CR_API int cr_rawgetproperty(cr_State *ts, int index, const char *prop); /* DONE */
+CR_API int cr_rawgeti(cr_State *ts, int index, cr_Integer i);
+CR_API int cr_rawgetf(cr_State *ts, int index, cr_Number n);
+CR_API int cr_rawgetp(cr_State *ts, int index, const void *p);
+CR_API int cr_getmeta(cr_State *ts, int index, cr_MM mm);
+
+CR_API int cr_getclass(cr_State *ts, int index);
+CR_API int cr_createarray(cr_State *ts, int nelems); // TODO
+CR_API int cr_createuserdata(cr_State *ts, size_t sz, int nuvalues); // TODO
+CR_API int cr_getuservalue(cr_State *ts, int index, int n);
+
+LUA_API int (lua_gettable) (lua_State *L, int idx);
+LUA_API int (lua_getfield) (lua_State *L, int idx, const char *k);
+LUA_API int (lua_geti) (lua_State *L, int idx, lua_Integer n);
+LUA_API int (lua_rawget) (lua_State *L, int idx);
+LUA_API int (lua_rawgeti) (lua_State *L, int idx, lua_Integer n);
+LUA_API int (lua_rawgetp) (lua_State *L, int idx, const void *p);
+
+LUA_API void  (lua_createtable) (lua_State *L, int narr, int nrec);
+LUA_API void *(lua_newuserdatauv) (lua_State *L, size_t sz, int nuvalue);
+LUA_API int   (lua_getmetatable) (lua_State *L, int objindex);
+LUA_API int  (lua_getiuservalue) (lua_State *L, int idx, int n);
+
+
+/* -------------------------------------------------------------------------
+ * Class interface
+ * ------------------------------------------------------------------------- */
+
 
 
 /* -------------------------------------------------------------------------

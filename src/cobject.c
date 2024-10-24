@@ -20,20 +20,6 @@ CRI_DEF const char *const crO_typenames[CRI_TOTALTYPES] = {
 };
 
 
-/* hash 'cr_Number' */
-uint crO_hashnum(cr_Number n) {
-    cr_Integer ni;
-    int exp;
-    n = cr_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
-    if (cr_likely(cr_number2integer(n, &ni))) {
-        uint ui = cast_uint(exp) + cast_uint(ni);
-        return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
-    }
-    cr_assert(cri_numisnan(n) || cr_mathop(fabs)(n) == cast_num(HUGE_VAL));
-    return 0;
-}
-
-
 /* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
 int crO_ceillog2 (uint x) {
     static const cr_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */

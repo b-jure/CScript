@@ -400,6 +400,7 @@ typedef struct HTable {
 
 #define setdeadkey(node)    (keytt(node) = CR_TDEADKEY)
 #define keyisdead(n)	    (keytt(n) == CR_TDEADKEY)
+#define keyisinteger(n)     (keytt(n) == CR_VNUMINT)
 
 
 /* -------------------------------------------------------------------------
@@ -776,13 +777,7 @@ typedef enum N2IMode {
 /* same as right shift but indicate left by making 'y' negative */
 #define crO_shiftl(x,y)    crO_shiftr(x, -(y))
 
-/* hash primitives */
-#define crO_hashint(i)     cast_uint(cri_castS2U(i))
-#define crO_hashbool(b)    cast_uint((b) != 0)
-#define crO_hashp(p)       pointer2uint(p)
 
-
-CRI_FUNC uint crO_hashnum(cr_Number n);
 CRI_FUNC int crO_ceillog2(uint x);
 CRI_FUNC int crO_n2i(cr_Number n, cr_Integer *i, N2IMode mode);
 CRI_FUNC int crO_tointeger(const TValue *v, cr_Integer *i, int mode);

@@ -49,12 +49,35 @@
 
 
 #define hashstr(ht,s)       hashslot(ht, (s)->hash)
+#define hashboolean(ht,b)   hashslot(ht, b)
+#define hashpointer(ht,p)   hashslot(ht, pointer2uint(p))
 
 
 
 /* empty key constant */
 static const TValue absentkey = {ABSTKEYCONSTANT};
 
+
+static uint hashflt(cr_Number n) {
+    cr_Integer ni;
+    int exp;
+    n = cr_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
+    if (cr_likely(cr_number2integer(n, &ni))) {
+        uint ui = cast_uint(exp) + cast_uint(ni);
+        return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
+    }
+    cr_assert(cri_numisnan(n) || cr_mathop(fabs)(n) == cast_num(HUGE_VAL));
+    return 0;
+}
+
+
+static Node *hashint(const HTable *ht, cr_Integer i) {
+    cr_Unsigned ui = cri_castS2U(i);
+    if (ui <= cast_uint(INT_MAX))
+        return hashslot(ht, cast_int(ui));
+    else
+        return hashslot(ht, ui);
+}
 
 
 /* allocate hash array */
@@ -118,27 +141,17 @@ void crH_free(cr_State *ts, HTable *ht) {
  */
 static Node *mainposition(const HTable *ht, const TValue *k) {
     switch (ttypetag(k)) {
-    case CR_VTRUE: return hashslot(ht, crO_hashbool(1));
-    case CR_VFALSE: return hashslot(ht, crO_hashbool(0));
-    case CR_VNUMINT:
-        return hashslot(ht, crO_hashint(ival(k)));
-    case CR_VNUMFLT:
-        return hashslot(ht, crO_hashnum(fval(k)));
-    case CR_VLUDATA: {
-        void *p = pval(k);
-        return hashslot(ht, crO_hashp(p));
-    }
-    case CR_VCFUNCTION: {
-        cr_CFunction f = cfval(k);
-        return hashslot(ht, crO_hashp(f));
-    }
-    case CR_VSTRING: {
-        OString *str = strval(k);
-        return hashstr(ht, str);
-    }
-    default:
-        cr_assert(!ttisnil(k) && iscollectable(k));
-        return hashslot(ht, crO_hashp(gcoval(k)));
+        case CR_VTRUE: return hashboolean(ht, 1);
+        case CR_VFALSE: return hashboolean(ht, 0);
+        case CR_VNUMINT: return hashint(ht, ival(k));
+        case CR_VNUMFLT: return hashslot(ht, hashflt(fval(k)));
+        case CR_VLUDATA: return hashpointer(ht, pval(k));
+        case CR_VCFUNCTION: return hashpointer(ht, cfval(k));
+        case CR_VSTRING: return hashstr(ht, strval(k));
+        default: {
+            cr_assert(!ttisnil(k) && iscollectable(k));
+            return hashpointer(ht, gcoval(k));
+        }
     }
 }
 
@@ -353,12 +366,42 @@ void crH_copykeys(cr_State *ts, HTable *stab, HTable *dtab) {
 }
 
 
-/* get key value */
+const TValue *crH_getstr(HTable *ht, OString *key) {
+    TValue aux;
+    setstrval(cast(cr_State *, NULL), &aux, key);
+    return getgeneric(ht, &aux, 0);
+}
+
+
+const TValue *crH_getint(HTable *ht, cr_Integer key) {
+    Node *n = hashint(ht, key);
+    for (;;) {
+        if (keyisinteger(n) && keyival(n) == key) {
+            return nodeval(n);
+        } else {
+            int next = nodenext(n);
+            if (next == 0)
+                return &absentkey;
+            n += next;
+        }
+    }
+}
+
+
 const TValue *crH_get(HTable *ht, const TValue *key) {
-    if (ttisnil(key)) 
-        return &absentkey;
-    else
-        return getgeneric(ht, key, 0);
+    switch (ttypetag(key)) {
+        case CR_VSTRING: return crH_getstr(ht, strval(key));
+        case CR_VNUMINT: return crH_getint(ht, ival(key));
+        case CR_VNUMFLT: {
+            cr_Integer i;
+            if (crO_tointeger(key, &i, N2IEXACT))
+                return crH_getint(ht, i);
+        } /* FALLTHRU */
+        default:  {
+            cr_assert(!ttisnil(key));
+            return getgeneric(ht, key, 0);
+        }
+    }
 }
 
 
