@@ -36,12 +36,6 @@
     ((t) == CR_TINSTANCE || (t) == CR_TUDATA || ((t) == CR_TCLASS) && (clsok))
 
 
-/* empty hashtable */
-static HTable emptyht = { .tt_ = CR_VEMPTY };
-
-/* test for empty hashtable */
-#define isemptyht(ht)       ((ht) == &emptyht)
-
 
 /* 
 ** Convert index to a pointer to its value.
@@ -573,7 +567,7 @@ CR_API const char *cr_typename(cr_State *ts, int type) {
 ** The fact whether the value was a number is stored in 'pisnum' if
 ** provided, the default value returned when index is not a number is 0.0.
 */
-CR_API cr_Number cr_getnumber(cr_State *ts, int index, int *pisnum) {
+CR_API cr_Number cr_tonumber(cr_State *ts, int index, int *pisnum) {
     cr_Number n = 0.0;
     const TValue *o = index2value(ts, index);
     int isnum = tonumber(o, &n);
@@ -588,7 +582,7 @@ CR_API cr_Number cr_getnumber(cr_State *ts, int index, int *pisnum) {
 ** The fact whether the value was an integer is stored in 'pisint' if
 ** provided, the default value returned when index is not an integer is 0.
 */
-CR_API cr_Integer cr_getinteger(cr_State *ts, int index, int *pisint) {
+CR_API cr_Integer cr_tointeger(cr_State *ts, int index, int *pisint) {
     cr_Integer i = 0;
     const TValue *o = index2value(ts, index);
     int isint = tointeger(o, &i);
@@ -602,7 +596,7 @@ CR_API cr_Integer cr_getinteger(cr_State *ts, int index, int *pisint) {
 ** Returns 0 or 1 whether the value at index is false or true respectively.
 ** All values in CScript are considered true except `nil` and `false`.
 */
-CR_API int cr_getbool(cr_State *ts, int index) {
+CR_API int cr_tobool(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return !cri_isfalse(o);
 }
@@ -614,7 +608,7 @@ CR_API int cr_getbool(cr_State *ts, int index) {
 ** If the value is not a string return NULL (in this case if 'plen' is
 ** provided it is ignored).
 */
-CR_API const char *cr_getstring(cr_State *ts, int index, size_t *plen) {
+CR_API const char *cr_tostring(cr_State *ts, int index, size_t *plen) {
     const TValue *o;
     cr_lock(ts);
     o = index2value(ts, index);
@@ -631,7 +625,7 @@ CR_API const char *cr_getstring(cr_State *ts, int index, size_t *plen) {
 ** Return 'cr_CFunction' from the value at index.
 ** If the value is not a C closure or light C function, then this returns NULL.
 */
-CR_API cr_CFunction cr_getcfunction(cr_State *ts, int index) {
+CR_API cr_CFunction cr_tocfunction(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     if (ttiscfn(o)) 
         return cfval(o);
@@ -655,7 +649,7 @@ cr_sinline void *touserdata(const TValue *o) {
 ** Return pointer to userdata memory from the value at index.
 ** If the value is not userdata return NULL.
 */
-CR_API void *cr_getuserdata(cr_State *ts, int index) {
+CR_API void *cr_touserdata(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return touserdata(o);
 }
@@ -666,7 +660,7 @@ CR_API void *cr_getuserdata(cr_State *ts, int index) {
 ** If the object is not userdata, C function or collectable, then this
 ** returns NULL. Note that returned pointer shouldn't be modified.
 */
-CR_API const void *cr_getpointer(cr_State *ts, int index) {
+CR_API const void *cr_topointer(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     switch (ttypetag(o)) {
         case CR_VCFUNCTION:
@@ -687,14 +681,9 @@ CR_API const void *cr_getpointer(cr_State *ts, int index) {
 ** Return the thread value at index.
 ** If the value is not a thread, then this returns NULL.
 */
-CR_API cr_State *cr_getthread(cr_State *ts, int index) {
+CR_API cr_State *cr_tothread(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return (ttisthread(o) ? thval(o) : NULL);
-}
-
-
-CR_API cr_VMT cr_getclass(cr_State *ts, int index) {
-    // TODO
 }
 
 
@@ -930,22 +919,62 @@ CR_API int cr_pushthread(cr_State *ts) {
 }
 
 
-CR_API void cr_pushclass(cr_State *ts, cr_VMT *vmt, int supidx) {
-    // TODO
+CR_API void cr_pushclass(cr_State *ts, cr_VMT *vmt, int sindex, int nm) {
+    cr_lock(ts);
+    api_check(ts, vmt->nstack >= 0, "invalid 'nstack'");
+    api_checknelems(ts, vmt->nstack);
+    OClass *cls = crMM_newclass(ts);
+    if (sindex) {
+        const TValue *osup = index2value(ts, sindex);
+        api_check(ts, ttiscls(osup), "expect class");
+        if (clsval(osup)->methods) /* have methods? */
+            crH_copykeys(ts, clsval(osup)->methods, cls->methods);
+    }
+    if (vmt->nstack)
+        cls->vmt = crM_malloc(ts, SIZEVMT);
+    ts->sp.p -= nm;
+    for (int i = 0; i < CR_NUM_MM; i++) {
+        switch (vmt->mm[i].mmt) {
+            case CR_MMT_STK:
+                setobj(ts, &cls->vmt[i], s2v(ts->sp.p + --nm));
+                break;
+            case CR_MMT_CFN:
+                setcfval(&cls->vmt[i], vmt->mm[i].cfn);
+                break;
+            case CR_MMT_NONE:
+                setnilval(&cls->vmt[i]);
+                break;
+            default: api_check(ts, 0, "invalid 'mmt'");
+        }
+    }
+    api_check(ts, nm > -1, "too many stack values popped");
+    api_check(ts, nm < 1, "too many values left on stack");
+    setcls2s(ts, ts->sp.p, cls);
+    api_inctop(ts);
+    cr_unlock(ts);
 }
 
 
-/* auxiliary function for raw getting the value of the string key */
-cr_sinline int auxrawgetstr(cr_State *ts, HTable *ht, const char *k) {
-    OString *key = crS_new(ts, k);
-    const TValue *slot = crH_getstr(ht, key);
-    if (!isabstkey(slot)) {
-        setobj2s(ts, ts->sp.p, slot);
-    } else
-        setnilval(s2v(ts->sp.p));
+#define setslot2stack(ts,slot,sptr) \
+    { if (!isabstkey(slot)) { setobj2s(ts, sptr, slot); } \
+      else { setnilval(s2v(sptr)); }}
+
+
+#define setslot2stacktop(ts,slot)   setslot2stack(ts,slot,(ts)->sp.p - 1)
+
+
+cr_sinline int finishrawget(cr_State *ts, const TValue *slot) {
+    setslot2stack(ts, slot, ts->sp.p);
     api_inctop(ts);
     cr_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
+}
+
+
+/* auxiliary raw function for getting the value of the string 'k' */
+cr_sinline int auxrawgetstr(cr_State *ts, HTable *ht, const char *k) {
+    OString *key = crS_new(ts, k);
+    return finishrawget(ts, crH_getstr(ht, key));
 }
 
 
@@ -953,7 +982,7 @@ cr_sinline int auxrawgetstr(cr_State *ts, HTable *ht, const char *k) {
 ** Gets the global variable 'name' value and pushes it on top of the stack.
 ** This function returns the value type.
 */
-CR_API int cr_getglobal(cr_State *ts, const char *name) {
+CR_API int cr_get_global(cr_State *ts, const char *name) {
     HTable *G_ht;
     cr_lock(ts);
     G_ht = htval(&G_(ts)->globals);
@@ -961,108 +990,172 @@ CR_API int cr_getglobal(cr_State *ts, const char *name) {
 }
 
 
-cr_sinline int auxgetprop(cr_State *ts, const TValue *o, OString *prop) {
-    TValue key;
-    setstrval2s(ts, ts->sp.p, prop);
-    api_inctop(ts);
-    setstrval(ts, &key, prop);
-    if (ttiscls(o)) { /* class? */
-        const TValue *res;
-        OClass *cls = clsval(o);
-        if (!cls->methods &&!isabstkey(res = crH_getstr(cls->methods, prop))) {
-            setobj2s(ts, ts->sp.p - 1, res);
-        } else
-            setnilval(s2v(ts->sp.p - 1));
-    } else {
-        crV_getproperty(ts, o, &key, ts->sp.p - 1, CR_MM_GETFIELD);
-    }
+cr_sinline const TValue *getinstance(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    api_check(ts, ttisins(o), "expect instance");
+    return o;
+}
+
+
+cr_sinline const TValue *getuserdata(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    api_check(ts, ttisud(o), "expect userdata");
+    return o;
+}
+
+
+cr_sinline int auxgetprop(cr_State *ts, const TValue *ins, const TValue *prop) {
+    crV_getproperty(ts, ins, prop, ts->sp.p - 1, CR_MM_GETIDX);
     cr_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
 
 
-/*
-** Get property of the value at index and push it on top of the stack.
-** If the value is class, then property reffers to methods of that class
-** excluding metamethods; if the value is instance or regular userdata, then
-** property refers to the field of that value.
-** This function can invoke error if value at index can't be indexed and the
-** error object is placed on top of the stack.
-** If no errors occur this function returns the property type.
-*/
-CR_API int cr_getproperty(cr_State *ts, int index, const char *prop) {
+CR_API int cr_get_prop(cr_State *ts, int index) {
+    const TValue *o;
+    cr_lock(ts);
+    api_checknelems(ts, 1); /* key */
+    o = getinstance(ts, index);
+    return auxgetprop(ts, o, s2v(ts->sp.p - 1));
+}
+
+
+cr_sinline int auxgetpropstr(cr_State *ts, const TValue *ins, OString *prop) {
+    setstrval2s(ts, ts->sp.p, prop);
+    api_inctop(ts);
+    return auxgetprop(ts, ins, s2v(ts->sp.p - 1));
+}
+
+
+CR_API int cr_get_propstr(cr_State *ts, int index, const char *prop) {
     OString *s;
     const TValue *o;
     cr_lock(ts);
-    o = index2value(ts, index);
+    o = getinstance(ts, index);
+    api_check(ts, ttisins(o), "expect instance");
     s = crS_new(ts, prop);
-    return auxgetprop(ts, o, s);
+    return auxgetpropstr(ts, o, s);
 }
 
 
-cr_sinline HTable *auxgetht(const TValue *o, int clsok) {
-    switch (ttypetag(o)) {
-        case CR_VCLASS: {
-            if (clsok) {
-                HTable *ht = clsval(o)->methods;
-                return (ht ? ht : &emptyht);
-            }
-            break;
-        }
-        case CR_VINSTANCE: return &insval(o)->fields;
-        case CR_VUDATA: return &insval(o)->fields;
-        default: cr_unreachable();
-    }
-    return NULL;
-}
-
-
-/*
-** Exactly the same as `cr_getproperty` except this function performs
-** raw access only (it doesn't call metamethods) and it doesn't invoke
-** errors, but it is expected that the caller will pass type of value
-** that can have properties.
-*/
-CR_API int cr_rawgetproperty(cr_State *ts, int index, const char *prop) {
-    HTable *ht;
+cr_sinline int auxtrymetaget(cr_State *ts, Instance *ins, const TValue *vins,
+                             const TValue *key) {
     const TValue *o;
-    cr_lock(ts);
-    o = index2value(ts, index);
-    api_check(ts, hasprop(ttype(o), 1), "expect type with properties");
-    ht = auxgetht(o, 1);
-    cr_assert(ht);
-    if (!isemptyht(ht))
-        return auxrawgetstr(ts, ht, prop);
-    /* else class without methods */
-    setnilval(s2v(ts->sp.p));
-    api_inctop(ts);
+    if (ins->oclass->vmt && /* have metamethods? */
+            !ttisnil((o = &ins->oclass->vmt[CR_MM_GETIDX]))) { /* and mm? */
+        crMM_callhtmres(ts, o, vins, key, ts->sp.p - 1);
+        return 1;
+    }
+    return 0;
+}
+
+
+#define rawget(ts,ht,k,f) \
+    { const TValue *slot_ = f(ht, k); \
+      setslot2stacktop(ts, slot_); }
+
+
+cr_sinline int auxgetfield(cr_State *ts, const TValue *vins, const TValue *key) {
+    if (!auxtrymetaget(ts, insval(vins), vins, key))
+        rawget(ts, &insval(vins)->fields, key, crH_get);
     cr_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
 
 
-CR_API int cr_rawgeti(cr_State *ts, int index, cr_Integer i) {
-    // TODO
+CR_API int cr_get_field(cr_State *ts, int index) {
+    const TValue *ins;
+    cr_lock(ts);
+    api_checknelems(ts, 1); /* key */
+    ins = getinstance(ts, index);
+    return auxgetfield(ts, ins, s2v(ts->sp.p - 1));
 }
 
 
-CR_API int cr_rawgetf(cr_State *ts, int index, cr_Number n) {
-    // TODO
+cr_sinline int auxgetfieldstr(cr_State *ts, const TValue *vins, OString *field) {
+    setstrval2s(ts, ts->sp.p, field); /* anchor */
+    api_inctop(ts);
+    if (!auxtrymetaget(ts, insval(vins), vins, s2v(ts->sp.p - 1)))
+        rawget(ts, &insval(vins)->fields, field, crH_getstr);
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
 }
 
 
-CR_API int cr_rawgetp(cr_State *ts, int index, const void *p) {
-    // TODO
+CR_API int cr_get_fieldstr(cr_State *ts, int index, const char *field) {
+    OString *s;
+    const TValue *ins;
+    cr_lock(ts);
+    ins = getinstance(ts, index);
+    s = crS_new(ts, field);
+    return auxgetfieldstr(ts, ins, s);
 }
 
 
-/*
-** Get metamethod of the value at index and push it on top of the stack.
-** This function returns the type of the metamethod.
-*/
-CR_API int cr_getmeta(cr_State *ts, int index, cr_MM mm) {
-    // TODO
+cr_sinline int auxrawgetprop(cr_State *ts, Instance *ins, const TValue *key) {
+    const TValue *slot = crH_get(&ins->fields, key);
+    if (isabstkey(slot) && ins->oclass->methods)
+        slot = crH_get(ins->oclass->methods, key);
+    setslot2stacktop(ts, slot);
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
 }
+
+
+CR_API int cr_rawget_prop(cr_State *ts, int index) {
+    const TValue *o;
+    cr_lock(ts);
+    api_checknelems(ts, 1); /* key */
+    o = getinstance(ts, index);
+    return auxrawgetprop(ts, insval(o), s2v(ts->sp.p - 1));
+}
+
+
+cr_sinline int auxrawgetpropstr(cr_State *ts, Instance *ins, OString *key) {
+    const TValue *slot;
+    setstrval2s(ts, ts->sp.p, key); /* anchor */
+    api_inctop(ts);
+    slot = crH_getstr(&ins->fields, key);
+    if (isabstkey(slot) && ins->oclass->methods)
+        crH_getstr(ins->oclass->methods, key);
+    setslot2stacktop(ts, slot);
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
+}
+
+
+CR_API int cr_rawget_propstr(cr_State *ts, int index, const char *prop) {
+    const TValue *o;
+    OString *s;
+    cr_lock(ts);
+    o = getinstance(ts, index);
+    s = crS_new(ts, prop);
+    return auxrawgetpropstr(ts, insval(o), s);
+}
+
+
+/* auxiliary raw function for getting the value of the 'key' */
+cr_sinline int auxrawget(cr_State *ts, HTable *ht, const TValue *key) {
+    return finishrawget(ts, crH_get(ht, key));
+}
+
+
+CR_API int cr_rawget_field(cr_State *ts, int index) {
+    HTable *fields;
+    cr_lock(ts);
+    api_checknelems(ts, 1); /* key */
+    fields = &insval(getinstance(ts, index))->fields;
+    return auxrawget(ts, fields, s2v(--ts->sp.p));
+}
+
+
+CR_API int cr_rawget_fieldstr(cr_State *ts, int index,const char *field) {
+    HTable *fields;
+    cr_lock(ts);
+    fields = &insval(getinstance(ts, index))->fields;
+    return auxrawgetstr(ts, fields, field);
+}
+
 
 
 /* Set panic handler and return old one */

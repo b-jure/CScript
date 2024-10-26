@@ -706,7 +706,6 @@ typedef struct UserData {
     int nuv; /* number of 'uservalues' */
     TValue *vmt;
     size_t size; /* size of 'UserData' memory in bytes */
-    HTable fields;
     GCObject *gclist;
     TValue uv[]; /* user values */
     /* 'UserData' memory starts here; after 'uv' elements */
@@ -729,7 +728,6 @@ typedef struct EmptyUserData {
     int nuv; /* number of 'uservalues' */
     TValue *vmt;
     size_t size; /* size of 'UserData' memory in bytes */
-    HTable fields;
     union {CRI_MAXALIGN} usermem;
     /* 'UserData' memory starts here */
 } EmptyUserData;

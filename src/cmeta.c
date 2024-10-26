@@ -255,6 +255,5 @@ void crMM_freeinstance(cr_State *ts, Instance *ins) {
 void crMM_freeuserdata(cr_State *ts, UserData *ud) {
     if (ud->vmt)
         crM_free(ts, ud->vmt, SIZEVMT);
-    crM_freearray(ts, ud->fields.node, htsize(&ud->fields), Node);
     crM_free(ts, ud, sizeofud(ud->nuv, ud->size));
 }

@@ -363,45 +363,31 @@ void crV_setfield(cr_State *ts, TValue *obj, const TValue *key,
     setim2s(ts, res, crMM_newinsmethod(ts, ins, v))
 
 
-void crV_getproperty(cr_State *ts, const TValue *obj, TValue *key, SPtr res,
-                     cr_MM mm) {
+void crV_getproperty(cr_State *ts, const TValue *obj, const TValue *key,
+                     SPtr res, cr_MM mm) {
     Instance *ins;
-    HTable *fht, *mht;
     const TValue *fmm, *v;
     fmm = crMM_get(ts, obj, mm);
     if (!ttisnil(fmm)) { /* have metamethod ? */
         crMM_callhtmres(ts, fmm, obj, key, res);
-        return;
-    }
-    switch (ttypetag(obj)) {
-        case CR_VINSTANCE: {
-            ins = insval(obj);
-            fht = &ins->fields;
-            mht = ins->oclass->methods;
-        }
-        case CR_VUDATA: {
-            fht = &udval(obj)->fields;
-            mht = NULL;
-            break;
-        }
-        default: crD_typeerror(ts, obj, "index");
-    }
-    cr_assert(fht != NULL);
-    v = crH_get(fht, key);
-    if (!isabstkey(v)) { /* have field ? */
-        setobj2s(ts, res, v);
-        return;
-    }
-    if (mht) { /* have method table ? */
-        cr_assert(ttisins(obj));
-        v = crH_get(mht, key);
-        if (!isabstkey(v)) { /* have method ? */
-            /* bind it to instance and set 'res'  */
-            bindmethod(ts, ins, v, res)
+    } else { /* otherwise perform raw access */
+        if (cr_unlikely(ttypetag(obj) != CR_VINSTANCE))
+            crD_typeerror(ts, obj, "index");
+        ins = insval(obj);
+        v = crH_get(&ins->fields, key);
+        if (!isabstkey(v)) { /* have field ? */
+            setobj2s(ts, res, v);
             return;
+        } else if (ins->oclass->methods) { /* have methods table? */
+            v = crH_get(ins->oclass->methods, key);
+            if (!isabstkey(v)) { /* have method ? */
+                /* bind it to instance and set 'res'  */
+                bindmethod(ts, ins, v, res)
+                return;
+            } /* else fallthrough */
         }
+        setnilval(s2v(res));
     }
-    setemptyval(s2v(res));
 }
 
 
@@ -1325,20 +1311,20 @@ returning:
                 pop(1);
                 vm_break;
             }
-            vm_case(OP_SETPROPERTY) {
+            vm_case(OP_SETPROPERTY) { /* optimize ? */
                 TValue *s = getlK();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_setfield(ts, v1, s, v2, CR_MM_SETFIELD));
+                protect(crV_setfield(ts, v1, s, v2, CR_MM_SETIDX));
                 pop(2); /* v1,v2 */
                 vm_break;
             }
-            vm_case(OP_GETPROPERTY) {
+            vm_case(OP_GETPROPERTY) { /* optimize ? */
                 TValue *s = getlK();
                 TValue *v = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_getproperty(ts, v, s, TOPS(), CR_MM_GETFIELD));
+                protect(crV_getproperty(ts, v, s, TOPS(), CR_MM_GETIDX));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
