@@ -1,3 +1,9 @@
+/*
+** cmeta.h
+** Functions for metamethods and meta types
+** See Copyright Notice in cscript.h
+*/
+
 #include "cmeta.h"
 #include "cstring.h"
 #include "cdebug.h"
@@ -12,11 +18,10 @@
 
 void crMM_init(cr_State *ts) {
     const char *mmnames[CR_NUM_MM] = {
-        "__init", "__getidx", "__setidx", "__getfield",
-        "__setfield", "__gc", "__close", "__add", "__sub",
-        "__mul", "__div", "__mod", "__pow", "__not", "__bnot",
-        "__shl", "__shr", "__band", "__bor", "__xor", "__eq",
-        "__lt", "__le",
+        "__init", "__getidx", "__setidx", "__gc", "__close",
+        "__add", "__sub", "__mul", "__div", "__mod", "__pow",
+        "__not", "__bnot", "__shl", "__shr", "__band", "__bor",
+        "__xor", "__eq", "__lt", "__le",
     };
     for (int i = 0; i < CR_NUM_MM; i++) {
         OString *s = crS_new(ts, mmnames[i]);

@@ -1,3 +1,9 @@
+/*
+** ccode.c
+** Bytecode emiting functions
+** See Copyright Notice in cscript.h
+*/
+
 #include "ccode.h"
 #include "clexer.h"
 #include "cbits.h"

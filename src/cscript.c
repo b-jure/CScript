@@ -1,4 +1,4 @@
-// @TODO: Implement entry point
+// TODO: Implement
 int main(int argc, char* argv[])
 {
 }

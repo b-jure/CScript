@@ -1,3 +1,9 @@
+/*
+** cstring.h
+** Functions for CScript string objects
+** See Copyright Notice in cscript.h
+*/
+
 #ifndef CRSTRING_H
 #define CRSTRING_H
 

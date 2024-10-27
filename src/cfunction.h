@@ -1,3 +1,9 @@
+/*
+** cfunction.h
+** Functions for CScript functions and closures
+** See Copyright Notice in cscript.h
+*/
+
 #ifndef CRFUNCTION_H
 #define CRFUNCTION_H
 

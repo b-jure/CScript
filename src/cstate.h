@@ -1,3 +1,9 @@
+/*
+** cstate.h
+** Global and Thread state
+** See Copyright Notice in cscript.h
+*/
+
 #ifndef CRSTATE_H
 #define CRSTATE_H
 
@@ -141,7 +147,7 @@ typedef struct CallFrame {
  * ------------------------------------------------------------------------- */
 
 typedef struct GState {
-    cr_fAlloc falloc; /* allocator */
+    cr_Alloc falloc; /* allocator */
     void *udalloc; /* userdata for 'falloc' */
     cr_CFunction panic; /* panic handler (unprotected calls) */
     uint seed; /* initial seed for hashing */
@@ -154,6 +160,8 @@ typedef struct GState {
     OString *memerror; /* preallocated message for memory errors */
     OString *mmnames[CR_NUM_MM]; /* method names */
     TValue *vmt[CR_NUM_TYPES]; /* vmt's for basic types */
+    cr_WarnFunction fwarn; /* warning function */
+    void *ud_warn; /* userdata for 'fwarn' */
 } GState;
 
 
@@ -253,6 +261,8 @@ CRI_FUNC void crT_shrinkstack(cr_State *ts);
 CRI_FUNC void crT_incsp(cr_State *ts);
 CRI_FUNC void crT_incCstack(cr_State *ts);
 CRI_FUNC void crT_checkCstack(cr_State *ts);
+CRI_FUNC void crT_warning(cr_State *ts, const char *msg, int cont);
+CRI_FUNC void crT_warnerror(cr_State *ts, const char *where);
 CRI_FUNC void crT_free(cr_State *ts, cr_State *thread);
 
 #endif

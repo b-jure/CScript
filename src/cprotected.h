@@ -1,3 +1,9 @@
+/*
+** cprotected.h
+** Functions for calling functions in protected mode
+** See Copyright Notice in cscript.h
+*/
+
 #ifndef CRPROTECTED_H
 #define CRPROTECTED_H
 

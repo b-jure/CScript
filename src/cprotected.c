@@ -1,3 +1,9 @@
+/*
+** cprotected.c
+** Functions for calling functions in protected mode
+** See Copyright Notice in cscript.h
+*/
+
 #include <stdlib.h> /* for 'abort()' */
 
 #include "cprotected.h"

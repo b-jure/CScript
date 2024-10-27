@@ -1,3 +1,9 @@
+/*
+** cmeta.h
+** Functions for metamethods and meta types
+** See Copyright Notice in cscript.h
+*/
+
 #ifndef CRMETA_H
 #define CRMETA_H
 

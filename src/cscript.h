@@ -1,3 +1,9 @@
+/*
+** cscript.h
+** CScript (inspired by Lua and C)
+** See Copyright Notice at the end of this file
+*/
+
 #ifndef CSCRIPT_H
 #define CSCRIPT_H
 
@@ -29,8 +35,8 @@
 ** (-CRI_MAXSTACK is the minimum valid index; we keep some free empty
 ** space after that to help overflow detection)
 */
-#define CR_REGISTRYINDEX	    (-CRI_MAXSTACK - 1000)
-#define cr_upvalueindex(i)	    (CR_REGISTRYINDEX - (i))
+#define CR_REGISTRYINDEX            (-CRI_MAXSTACK - 1000)
+#define cr_upvalueindex(i)          (CR_REGISTRYINDEX - (i))
 
 
 /* minimum stack space available to a C function */
@@ -45,15 +51,15 @@ typedef struct cr_State cr_State;
 /* types of values */
 #define CR_TNONE        (-1)
 
-#define CR_TBOOL        0 /* boolean */
-#define CR_TNUMBER      1 /* number */
-#define CR_TLUDATA      2 /* light userdata */
-#define CR_TSTRING      3 /* string */
-#define CR_TFUNCTION    4 /* function */
-#define CR_TCLASS       5 /* class */
-#define CR_TINSTANCE    6 /* instance */
-#define CR_TUDATA       7 /* userdata */
-#define CR_TNIL         8 /* nil */
+#define CR_TNIL         0 /* nil */
+#define CR_TBOOL        1 /* boolean */
+#define CR_TNUMBER      2 /* number */
+#define CR_TLUDATA      3 /* light userdata */
+#define CR_TSTRING      4 /* string */
+#define CR_TFUNCTION    5 /* function */
+#define CR_TCLASS       6 /* class */
+#define CR_TINSTANCE    7 /* instance */
+#define CR_TUDATA       8 /* userdata */
 #define CR_TTHREAD      9 /* thread */
 
 #define CR_NUM_TYPES    10
@@ -74,10 +80,13 @@ typedef CR_NUMBER cr_Number;
 typedef int (*cr_CFunction)(cr_State *ts);
 
 /* function for memory de/allocation */
-typedef void *(*cr_fAlloc)(void *ptr, size_t osz, size_t nsz, void *userdata);
+typedef void *(*cr_Alloc)(void *ptr, size_t osz, size_t nsz, void *ud);
 
 /* function that reads blocks when loading CScript chunks */
-typedef const char *(*cr_fReader)(cr_State *ts, void *data, size_t *szread);
+typedef const char *(*cr_Reader)(cr_State *ts, void *data, size_t *szread);
+
+/* type for warning functions */
+typedef void (*cr_WarnFunction)(void *ud, const char *msg, int tocont);
 
 /* Virtual Method Table (for metamethods) */
 typedef struct cr_VMT cr_VMT;
@@ -130,7 +139,7 @@ struct cr_ClassEntry {
 /* -------------------------------------------------------------------------
  * State manipulation
  * ------------------------------------------------------------------------- */
-CR_API cr_State        *cr_newstate(cr_fAlloc allocator, void *ud); /* DONE */
+CR_API cr_State        *cr_newstate(cr_Alloc allocator, void *ud); /* DONE */
 CR_API void             cr_freestate(cr_State *ts);/* DONE */
 CR_API cr_State        *cr_newthread(cr_State *ts);/* DONE */
 CR_API int              cr_resetthread(cr_State *ts);/* DONE */
@@ -153,26 +162,22 @@ CR_API void             cr_xmove(cr_State *src, cr_State *dest, int n); /* DONE 
 /* -------------------------------------------------------------------------
  * Access functions (Stack -> C)
  * ------------------------------------------------------------------------- */
-CR_API int              cr_isnumber(cr_State *ts, int index); /* DONE */
-CR_API int              cr_isinteger(cr_State *ts, int index); /* DONE */
-CR_API int              cr_isstring(cr_State *ts, int index); /* DONE */
-CR_API int              cr_iscfunction(cr_State *ts, int index); /* DONE */
-CR_API int              cr_isuserdata(cr_State *ts, int index); /* DONE */
+CR_API int              cr_is_number(cr_State *ts, int index); /* DONE */
+CR_API int              cr_is_integer(cr_State *ts, int index); /* DONE */
+CR_API int              cr_is_string(cr_State *ts, int index); /* DONE */
+CR_API int              cr_is_cfunction(cr_State *ts, int index); /* DONE */
+CR_API int              cr_is_userdata(cr_State *ts, int index); /* DONE */
 CR_API int              cr_type(cr_State *ts, int index); /* DONE */
 CR_API const char      *cr_typename(cr_State *ts, int type); /* DONE */
 
-CR_API cr_Number        cr_tonumber(cr_State *ts, int index, int *isnum); /* DONE */
-CR_API cr_Integer       cr_tointeger(cr_State *ts, int index, int *isnum); /* DONE */
-CR_API int              cr_tobool(cr_State *ts, int index); /* DONE */
-CR_API const char      *cr_tostring(cr_State *ts, int index, size_t *plen); /* DONE */
-CR_API cr_CFunction     cr_tocfunction(cr_State *ts, int index); /* DONE */
-CR_API void            *cr_touserdata(cr_State *ts, int index); /* DONE */
-CR_API const void      *cr_topointer(cr_State *ts, int index); /* DONE */
-CR_API cr_State        *cr_tothread(cr_State *ts, int index); /* DONE */
-CR_API cr_Unsigned      cr_len(cr_State *ts, int index); /* DONE */
-
-/* TODO */
-CR_API const char      *cr_tostring(cr_State *ts, int index, size_t *len);
+CR_API cr_Number        cr_to_numberx(cr_State *ts, int index, int *isnum); /* DONE */
+CR_API cr_Integer       cr_to_integerx(cr_State *ts, int index, int *isnum); /* DONE */
+CR_API int              cr_to_bool(cr_State *ts, int index); /* DONE */
+CR_API const char      *cr_to_lstring(cr_State *ts, int index, size_t *plen); /* DONE */
+CR_API cr_CFunction     cr_to_cfunction(cr_State *ts, int index); /* DONE */
+CR_API void            *cr_to_userdata(cr_State *ts, int index); /* DONE */
+CR_API const void      *cr_to_pointer(cr_State *ts, int index); /* DONE */
+CR_API cr_State        *cr_to_thread(cr_State *ts, int index); /* DONE */
 
 
 /* -------------------------------------------------------------------------
@@ -215,8 +220,8 @@ CR_API int      cr_compare(cr_State *ts, int idx1, int idx2, int op); /* DONE */
 CR_API void        cr_push_nil(cr_State *ts); /* DONE */
 CR_API void        cr_push_number(cr_State *ts, cr_Number n); /* DONE */
 CR_API void        cr_push_integer(cr_State *ts, cr_Integer n); /* DONE */
-CR_API const char *cr_push_string(cr_State *ts, const char *str, size_t len); /* DONE */
-CR_API const char *cr_push_cstring(cr_State *ts, const char *str); /* DONE */
+CR_API const char *cr_push_lstring(cr_State *ts, const char *str, size_t len); /* DONE */
+CR_API const char *cr_push_string(cr_State *ts, const char *str); /* DONE */
 CR_API const char *cr_push_vfstring(cr_State *ts, const char *fmt, va_list argp); /* DONE */
 CR_API const char *cr_push_fstring(cr_State *ts, const char *fmt, ...); /* DONE */
 CR_API void        cr_push_cclosure(cr_State *ts, cr_CFunction fn, int upvals); /* DONE */
@@ -268,10 +273,10 @@ CR_API int cr_error(cr_State *ts); /* DONE */
 /* -------------------------------------------------------------------------
  * Call/Load CScript code
  * ------------------------------------------------------------------------- */
-CR_API void cr_call(cr_State *ts, int nargs, int nresults);
-CR_API int  cr_pcall(cr_State *ts, int nargs, int nresults);
-CR_API int  cr_load(cr_State *ts, cr_fReader reader, void *userdata,
-                    const char *source);
+CR_API void cr_call(cr_State *ts, int nargs, int nresults); /* DONE */
+CR_API int  cr_pcall(cr_State *ts, int nargs, int nresults); /* DONE */
+CR_API int  cr_load(cr_State *ts, cr_Reader reader, void *userdata,
+                    const char *source); /* DONE */
 
 
 /* -------------------------------------------------------------------------
@@ -289,56 +294,82 @@ CR_API int  cr_load(cr_State *ts, cr_fReader reader, void *userdata,
 #define CR_GCSETSTEPMUL         7 /* set GC step multiplier (as percentage) */
 #define CR_GCISRUNNING          8 /* test whether GC is running */
 
-CR_API int cr_gc(cr_State *ts, int option, ...);
+/* Limits for 'data' parameter for GC options. */
+#define CR_MAXPAUSE         1023
+#define CR_MAXSTEPMUL       1023
+
+CR_API int cr_gc(cr_State *ts, int option, ...); /* DONE */
+
+
+/* -------------------------------------------------------------------------
+ * Warning-related functions
+ * ------------------------------------------------------------------------- */
+CR_API void cr_setwarnf(cr_State *ts, cr_WarnFunction fwarn, void *ud); /* DONE */
+CR_API void cr_warning(cr_State *ts, const char *msg, int cont); /* DONE */
 
 
 /* -------------------------------------------------------------------------
  * Miscellaneous functions/macros
  * ------------------------------------------------------------------------- */
 CR_API int              cr_hasvmt(cr_State *ts, int index); /* DONE */
-CR_API int              cr_hasmetamethod(cr_State *ts, int index, cr_MM mm); /* TODO */
-CR_API const char      *cr_stringify(cr_State *ts, int idx); // TODO ?
-CR_API int              cr_getupvalue(cr_State *ts, int fidx, int idx);
-CR_API int              cr_setupvalue(cr_State *ts, int fidx, int idx);
-CR_API const char      *cr_concat(cr_State *ts);
-CR_API int              cr_nextproperty(cr_State *ts, int idx, int nextfield);
-CR_API cr_CFunction     cr_setpanic(cr_State *ts, cr_CFunction panicfn);
-CR_API cr_CFunction     cr_getpanic(cr_State *ts);
-CR_API cr_CFunction     cr_setalloc(cr_State *ts, cr_fAlloc allocfn, void *ud);
-CR_API cr_fAlloc        cr_getalloc(cr_State *ts, void **ud);
+CR_API int              cr_hasmetamethod(cr_State *ts, int index, cr_MM mm); /* DONE */
+CR_API cr_Unsigned      cr_len(cr_State *ts, int index); /* DONE */
+CR_API int              cr_next(cr_State *ts, int index); /* TODO */
+CR_API void             cr_concat(cr_State *ts, int n); /* TODO */
+CR_API size_t           cr_stringtonumber(cr_State *ts, const char *s); /* TODO */
+CR_API cr_Alloc         cr_getallocf(cr_State *ts, void **ud); /* TODO */
+CR_API void             cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud); /* TODO */
+CR_API void             cr_toclose(cr_State *ts, int index);
+CR_API void             cr_closeslot(cr_State *ts, int index);
 
-#define cr_getextraspace(ts)    ((void *)((char *)(ts) - CR_EXTRASPACE))
 
-#define cr_nextfield(ts,idx)            cr_nextproperty((ts),(idx),0)
-#define cr_nextmethod(ts,idx)           cr_nextproperty((ts),(idx),1)
+#define cr_getextraspace(ts)        ((void *)((char *)(ts) - CR_EXTRASPACE))
 
-#define cr_pushcfunction(ts,fn)         cr_pushcclosure((ts),(fn),0)
+#define cr_tonumber(ts,i)           cr_tonumberx(ts,(i),NULL)
+#define cr_tointeger(ts,i)          cr_tointegerx(ts,(i),NULL)
 
-#define cr_registerfunction(ts,fn,name) \
-    (cr_pushcfunction((ts),(fn)), cr_setglobal((ts),(name),1))
+#define cr_pop(ts,n)                cr_settop(ts, -(n)-1)
 
-#define cr_pop(ts,n)            cr_settop((ts),-(n)-1)
-#define cr_replace(ts,idx)      (cr_copy((ts),-1,(idx)), cr_pop((ts),1))
-#define cr_remove(ts,idx)       (cr_rotate((ts),(idx),-1), cr_pop((ts),1))
-#define cr_insert(ts,idx)       cr_rotate((ts),(idx),1)
+#define cr_push_cfunction(ts,f)     cr_push_cclosure(ts,f,0)
+
+#define cr_register(ts,n,f)  (cr_push_cfunction(ts,(f)), cr_set_global(ts,(n)))
+
+#define cr_is_function(ts, n)       (cr_type(ts, (n)) == CR_TFUNCTION)
+#define cr_is_class(ts, n)          (cr_type(ts, (n)) == CR_TCLASS)
+#define cr_is_lightuserdata(ts, n)  (cr_type(ts, (n)) == CR_TLUDATA)
+#define cr_is_nil(ts, n)            (cr_type(ts, (n)) == CR_TNIL)
+#define cr_is_boolean(ts, n)        (cr_type(ts, (n)) == CR_TBOOL)
+#define cr_is_thread(ts, n)         (cr_type(ts, (n)) == CR_TTHREAD)
+#define cr_is_none(ts, n)           (cr_type(ts, (n)) == CR_TNONE)
+#define cr_is_noneornil(ts, n)      (cr_type(ts, (n)) <= 0)
+
+#define cr_pushliteral(ts, s)       cr_push_string(ts, "" s)
+
+#define cr_to_string(ts, i)         cr_to_lstring(ts, i, NULL)
+
+#define cr_insert(ts,index)	    cr_rotate(ts, (index), 1)
+
+#define cr_remove(ts,index)	    (cr_rotate(ts, (index), -1), cr_pop(ts, 1))
+
+#define cr_replace(ts,index)	    (cr_copy(ts, -1, (index)), cr_pop(ts, 1))
 
 
 /* -------------------------------------------------------------------------
- * Debug interface
+ * Debug API
  * ------------------------------------------------------------------------- */
 
 /* bits for 'dbgmask' */
-#define CR_DBG_FNGET    (1<<0) /* push func on stack (processed first) */
-#define CR_DBG_LINE     (1<<1) /* fill 'line' */
-#define CR_DBG_FNINFO   (1<<2) /* fill all function info in 'crD_info' */
-#define CR_DBG_FNSRC    (1<<3) /* fill function source information */
-#define CR_DBG_FNPUSH   (1<<4) /* push current func (processed last) */
+#define CR_DBGFNGET    (1<<0) /* push func on stack (processed first) */
+#define CR_DBGLINE     (1<<1) /* fill 'line' */
+#define CR_DBGFNINFO   (1<<2) /* fill all function info in 'crD_info' */
+#define CR_DBGFNSRC    (1<<3) /* fill function source information */
+#define CR_DBGFNPUSH   (1<<4) /* push current func (processed last) */
 
-CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di);
-CR_API int cr_getinfo(cr_State *ts, int dbgmask, cr_DebugInfo *di);
+CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di); /* TODO */
+CR_API int cr_getinfo(cr_State *ts, int dbgmask, cr_DebugInfo *di); /* TODO */
 
-struct cr_DebugInfo {
-    const char *type; /* function type ('cript', 'main' or 'C') */
+struct cr_DebugInfo { /* TODO */
+    const char *type; /* function type ('cscript', 'main' or 'C') */
     const char *source; /* function source */
     size_t srclen; /* length of 'source' */
     int line; /* current line in cript script */
@@ -353,9 +384,10 @@ struct cr_DebugInfo {
 };
 
 
-#endif
+/* 
+** Big 'Thank You' to Lua Developers!
+*/
 
-/* Big Thank You to Lua Developers! */
 /* ----------------------------------------------------------------------------------------------
  * Copyright (C) 1994-2024 Lua.org, PUC-Rio.
  * Copyright (C) 2023-2024 Jure Bagić
@@ -379,3 +411,6 @@ struct cr_DebugInfo {
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ---------------------------------------------------------------------------------------------- */
+
+
+#endif

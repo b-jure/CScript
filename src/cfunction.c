@@ -1,3 +1,9 @@
+/*
+** cfunction.c
+** Functions for CScript functions and closures
+** See Copyright Notice in cscript.h
+*/
+
 #include "cfunction.h"
 #include "cdebug.h"
 #include "cgc.h"
@@ -6,6 +12,7 @@
 #include "cobject.h"
 #include "cstate.h"
 #include "cvm.h"
+
 
 Function *crF_newfunction(cr_State *ts) {
     Function *fn = crG_new(ts, sizeof(Function), CR_VFUNCTION, Function);

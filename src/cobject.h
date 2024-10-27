@@ -1,7 +1,7 @@
 /*
-** $Name: cobject.h
-** $Description: Type definitions for Cript objects.
-** $Copyright: Copyright Notice in cscript.h.
+** cobject.h
+** Types definitions for CScript objects
+** See Copyright Notice in cscript.h
 */
 
 #ifndef CROBJECT_H

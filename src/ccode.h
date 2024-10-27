@@ -1,3 +1,9 @@
+/*
+** ccode.h
+** CScript bytecode and auxiliary functions
+** See Copyright Notice in cscript.h
+*/
+
 #ifndef CRCODE_H
 #define CRCODE_H
 

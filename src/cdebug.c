@@ -1,19 +1,8 @@
-/* ----------------------------------------------------------------------------------------------
- * Copyright (C) 2023-2024 Jure Bagić
- *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
- * General Public License as published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with cript.
- * If not, see <https://www.gnu.org/licenses/>.
- * ----------------------------------------------------------------------------------------------*/
-
+/*
+** cdebug.c
+** Debug and error reporting functions
+** See Copyright Notice in cscript.h
+*/
 
 #include "cdebug.h"
 #include "cfunction.h"
@@ -214,7 +203,7 @@ CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_DebugInfo *di) {
     if (dbmask & CR_DBG_FNGET) { /* use function on top of the stack ? */
         cf = NULL;
         fn = s2v(ts->sp.p - 1);
-        checkapi(ts, ttisfn(fn), "expect function");
+        api_check(ts, ttisfn(fn), "expect function");
         ts->sp.p--;
     } else { /* use current function */
         cf = ts->cf;
@@ -299,11 +288,4 @@ cr_noret crD_ordererror(cr_State *ts, const TValue *v1, const TValue *v2) {
 
 cr_noret crD_callerror(cr_State *ts, const TValue *o) {
     crD_typeerror(ts, o, "call");
-}
-
-
-/* emit warning */
-void crD_warn(cr_State *ts, const char *str) {
-    UNUSED(ts); UNUSED(str);
-    // TODO: implement this + add warning function hook in API and 'GState'
 }

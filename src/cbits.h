@@ -1,3 +1,9 @@
+/*
+** cbits.h
+** Bit manipulation functions
+** See Copyright Notice in cscript.h
+*/
+
 #ifndef CRBITS_H
 #define CRBITS_H
 

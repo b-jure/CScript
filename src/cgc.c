@@ -1,22 +1,11 @@
-/* ----------------------------------------------------------------------------------------------
- * Copyright (C) 2023-2024 Jure Bagić
- *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
- * General Public License as published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with cript.
- * If not, see <https://www.gnu.org/licenses/>.
- * ----------------------------------------------------------------------------------------------*/
+/*
+** cgc.c
+** Garbage Collector
+** See Copyright Notice in cscript.h
+*/
 
 #include "cgc.h"
 #include "cconf.h"
-#include "cdebug.h"
 #include "cfunction.h"
 #include "climits.h"
 #include "cmeta.h"
@@ -587,7 +576,7 @@ static void protectedfinalizer(cr_State *ts, void *userdata) {
 }
 
 
-/* call a finalizer */
+/* call a finalizer "__gc" */
 static void callfin(cr_State *ts) {
     TValue v;
     const TValue *m;
@@ -604,7 +593,7 @@ static void callfin(cr_State *ts) {
         ts->cf->status &= ~CFST_FIN; /* finalizer returned */
         gc->stopped = oldstopped;
         if (cr_unlikely(status != CR_OK)) {
-            crD_warnerror(ts, "__gc__");
+            crT_warnerror(ts, "__gc");
             ts->sp.p--; /* pop err object */
         }
     }

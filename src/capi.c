@@ -1,3 +1,9 @@
+/*
+** capi.c
+** CScript API
+** See Copyright Notice in cscript.h
+*/
+
 #include "cfunction.h"
 #include "cgc.h"
 #include "cmem.h"
@@ -17,8 +23,6 @@
 #include "cvm.h"
 #include "stdarg.h"
 #include "capi.h"
-
-#include <string.h>
 
 
 /* test for pseudo index */
@@ -264,7 +268,7 @@ CR_API void cr_xmove(cr_State *src, cr_State *dest, int n) {
 
 
 /* Check if the value at index is a number. */
-CR_API int cr_isnumber(cr_State *ts, int index) {
+CR_API int cr_is_number(cr_State *ts, int index) {
     cr_Number n;
     const TValue *o = index2value(ts, index);
     return tonumber(o, &n);
@@ -272,7 +276,7 @@ CR_API int cr_isnumber(cr_State *ts, int index) {
 
 
 /* Check if the value at index is an integer. */
-CR_API int cr_isinteger(cr_State *ts, int index) {
+CR_API int cr_is_integer(cr_State *ts, int index) {
     cr_Integer i;
     const TValue *o = index2value(ts, index);
     return tointeger(o, &i);
@@ -280,21 +284,21 @@ CR_API int cr_isinteger(cr_State *ts, int index) {
 
 
 /* Check if the value at index is a string. */
-CR_API int cr_isstring(cr_State *ts, int index) {
+CR_API int cr_is_string(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return ttisstr(o);
 }
 
 
 /* Check if the value at index is a C function. */
-CR_API int cr_iscfunction(cr_State *ts, int index) {
+CR_API int cr_is_cfunction(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return (ttiscfn(o) || ttisccl(o));
 }
 
 
 /* Check if the value at index is a userdata. */
-CR_API int cr_isuserdata(cr_State *ts, int index) {
+CR_API int cr_is_userdata(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return (ttislud(o) || ttisud(o));
 }
@@ -344,7 +348,7 @@ CR_API const char *cr_typename(cr_State *ts, int type) {
 ** The fact whether the value was a number is stored in 'pisnum' if
 ** provided, the default value returned when index is not a number is 0.0.
 */
-CR_API cr_Number cr_tonumber(cr_State *ts, int index, int *pisnum) {
+CR_API cr_Number cr_to_numberx(cr_State *ts, int index, int *pisnum) {
     cr_Number n = 0.0;
     const TValue *o = index2value(ts, index);
     int isnum = tonumber(o, &n);
@@ -359,7 +363,7 @@ CR_API cr_Number cr_tonumber(cr_State *ts, int index, int *pisnum) {
 ** The fact whether the value was an integer is stored in 'pisint' if
 ** provided, the default value returned when index is not an integer is 0.
 */
-CR_API cr_Integer cr_tointeger(cr_State *ts, int index, int *pisint) {
+CR_API cr_Integer cr_to_integerx(cr_State *ts, int index, int *pisint) {
     cr_Integer i = 0;
     const TValue *o = index2value(ts, index);
     int isint = tointeger(o, &i);
@@ -373,7 +377,7 @@ CR_API cr_Integer cr_tointeger(cr_State *ts, int index, int *pisint) {
 ** Returns 0 or 1 whether the value at index is false or true respectively.
 ** All values in CScript are considered true except `nil` and `false`.
 */
-CR_API int cr_tobool(cr_State *ts, int index) {
+CR_API int cr_to_bool(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return !cri_isfalse(o);
 }
@@ -385,7 +389,7 @@ CR_API int cr_tobool(cr_State *ts, int index) {
 ** If the value is not a string return NULL (in this case if 'plen' is
 ** provided it is ignored).
 */
-CR_API const char *cr_tostring(cr_State *ts, int index, size_t *plen) {
+CR_API const char *cr_to_lstring(cr_State *ts, int index, size_t *plen) {
     const TValue *o;
     cr_lock(ts);
     o = index2value(ts, index);
@@ -402,7 +406,7 @@ CR_API const char *cr_tostring(cr_State *ts, int index, size_t *plen) {
 ** Return 'cr_CFunction' from the value at index.
 ** If the value is not a C closure or light C function, then this returns NULL.
 */
-CR_API cr_CFunction cr_tocfunction(cr_State *ts, int index) {
+CR_API cr_CFunction cr_to_cfunction(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     if (ttiscfn(o)) 
         return cfval(o);
@@ -426,7 +430,7 @@ cr_sinline void *touserdata(const TValue *o) {
 ** Return pointer to userdata memory from the value at index.
 ** If the value is not userdata return NULL.
 */
-CR_API void *cr_touserdata(cr_State *ts, int index) {
+CR_API void *cr_to_userdata(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return touserdata(o);
 }
@@ -437,7 +441,7 @@ CR_API void *cr_touserdata(cr_State *ts, int index) {
 ** If the object is not userdata, C function or collectable, then this
 ** returns NULL. Note that returned pointer shouldn't be modified.
 */
-CR_API const void *cr_topointer(cr_State *ts, int index) {
+CR_API const void *cr_to_pointer(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     switch (ttypetag(o)) {
         case CR_VCFUNCTION:
@@ -458,28 +462,9 @@ CR_API const void *cr_topointer(cr_State *ts, int index) {
 ** Return the thread value at index.
 ** If the value is not a thread, then this returns NULL.
 */
-CR_API cr_State *cr_tothread(cr_State *ts, int index) {
+CR_API cr_State *cr_to_thread(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return (ttisthread(o) ? thval(o) : NULL);
-}
-
-
-/*
-** Return the length of the value at index.
-** Length means different things depending on the type of the value at index.
-** For strings, this is the string length; for classes, this is the number
-** of methods; for instances, this is the number of fields; for userdata, this
-** is the size of the block of memory allocated for userdata.
-*/
-CR_API cr_Unsigned cr_len(cr_State *ts, int index) {
-    const TValue *o = index2value(ts, index);
-    switch (ttypetag(o)) {
-        case CR_VSTRING: return lenstr(o);
-        case CR_VCLASS: return crH_len(htval(o));
-        case CR_VINSTANCE: return crH_len(&insval(o)->fields);
-        case CR_VUDATA: return udval(o)->size;
-        default: return 0;
-    }
 }
 
 
@@ -567,7 +552,7 @@ CR_API void cr_push_integer(cr_State *ts, cr_Integer i) {
 
 
 /* Push string value of length 'len' on top of the stack. */
-CR_API const char *cr_push_string(cr_State *ts, const char *str, size_t len) {
+CR_API const char *cr_push_lstring(cr_State *ts, const char *str, size_t len) {
     OString *s;
     cr_lock(ts);
     s = (len == 0 ? crS_new(ts, "") : crS_newl(ts, str, len));
@@ -580,7 +565,7 @@ CR_API const char *cr_push_string(cr_State *ts, const char *str, size_t len) {
 
 
 /* Push null terminated string value on top of the stack. */
-CR_API const char *cr_push_cstring(cr_State *ts, const char *str) {
+CR_API const char *cr_push_string(cr_State *ts, const char *str) {
     cr_lock(ts);
     if (str == NULL) {
         setnilval(s2v(ts->sp.p));
@@ -1119,7 +1104,7 @@ CR_API int cr_pcall(cr_State *ts, int nargs, int nresults) {
 }
 
 
-CR_API int cr_load(cr_State *ts, cr_fReader reader, void *userdata,
+CR_API int cr_load(cr_State *ts, cr_Reader reader, void *userdata,
                     const char *source) {
     BuffReader br;
     int status;
@@ -1168,7 +1153,7 @@ CR_API int cr_gc(cr_State *ts, int option, ...) {
                 crG_setdebt(gc, 0);
                 crG_step(ts);
             } else { /* add 'data' to total debt */
-                /* 'data' is treated as kibibytes (2^10*data) */
+                /* convert 'data' to bytes (data = bytes/2^10) */
                 debt = (data * 1024) + gc->debt;
                 crG_setdebt(gc, debt);
                 crG_check(ts);
@@ -1180,12 +1165,14 @@ CR_API int cr_gc(cr_State *ts, int option, ...) {
         }
         case CR_GCSETPAUSE: { /* set GC pause */
             int data = va_arg(ap, int); /* percentage */
+            api_check(ts, data <= CR_MAXPAUSE, "GC pause overflow");
             res = getgcparam(gc->pause);
             setgcparam(gc->pause, data);
             break;
         }
         case CR_GCSETSTEPMUL: { /* set GC step multiplier */
             int data = va_arg(ap, int); /* percentage */
+            api_check(ts, data <= CR_MAXPAUSE, "GC step multiplier overflow");
             res = getgcparam(gc->stepmul);
             setgcparam(gc->stepmul, data);
             break;
@@ -1202,6 +1189,21 @@ CR_API int cr_gc(cr_State *ts, int option, ...) {
 }
 
 
+CR_API void cr_setwarnf(cr_State *ts, cr_WarnFunction fwarn, void *ud) {
+    cr_lock(ts);
+    G_(ts)->fwarn = fwarn;
+    G_(ts)->ud_warn = ud;
+    cr_unlock(ts);
+}
+
+
+CR_API void cr_warning(cr_State *ts, const char *msg, int cont) {
+    cr_lock(ts);
+    crT_warning(ts, msg, cont);
+    cr_unlock(ts);
+}
+
+
 /* Check if the value at the index has virtual method table. */
 CR_API int cr_hasvmt(cr_State *ts, int index) {
     return getvmt(ts, index) != NULL;
@@ -1215,956 +1217,55 @@ CR_API int cr_hasmetamethod(cr_State *ts, int index, cr_MM mm) {
 }
 
 
-/* Set panic handler and return old one */
-CR_API cr_panic cr_setpanic(cr_State *ts, cr_panic panicfn)
-{
-    cr_panic old_panic;
-
-    cr_lock(ts);
-    old_panic = ts->hooks.panic;
-    ts->hooks.panic = panicfn;
-    cr_unlock(ts);
-    return old_panic;
-}
-
-
-/* Return current version. */
-CR_API cr_umem cr_version(cr_State *ts)
-{
-    UNUSED(ts);
-    return cast(cr_umem, CR_VERSION_NUMBER);
-}
-
-
-/* 
- * Apply ordering on 2 values on the stack.
- * First both values are pushed on top of the stack (idx1 then idx2)
- * and ordering is applied.
- * This functions is free to call overloaded operator methods.
- * Result in placed in place of first operand and the second operand
- * is popped off.
- * Returned value of 1 means ordering applied is true, otherwise 0 is returned.
- */
-CR_API cr_ubyte cr_compare(cr_State *ts, int idx1, int idx2, cr_ord ord)
-{
-    static void (*ordfuncs[])(cr_State *, Value, Value) = { veq, vne, vlt, vgt, vle, vge };
-    Value l, r;
-    cr_ubyte res;
-
-    cr_lock(ts);
-    criptapi_checkordop(ts, ord);
-    criptapi_checkstack(ts, 2);
-    l = *index2value(ts, idx1);
-    r = *index2value(ts, idx2);
-    *ts->sp++ = l; // push left operand
-    *ts->sp++ = r; // push right operand
-    ordfuncs[ord](ts, l, r);
-    res = !ISFALSE(*stkpeek(0));
-    cr_unlock(ts);
-    return res;
-}
-
-
-/* 
- * Perform equality ordering on values at stack index 'idx1' and 'idx2'.
- * This function will not call overload-able operator methods (__eq__).
- * Result is returned directly without storing it on the stack.
- * Returned value of 1 means values are equal, otherwise 0 is returned. 
- */
-CR_API cr_ubyte cr_rawequal(cr_State *ts, int idx1, int idx2)
-{
-    Value l, r;
-    cr_ubyte res;
-
-    cr_lock(ts);
-    l = *index2value(ts, idx1);
-    r = *index2value(ts, idx2);
-    res = raweq(l, r);
-    cr_unlock(ts);
-    return res;
-}
-
-
-/* 
- * Perform arithmetic 'op' on values on
- * top of the stack.
- * If 'op' is unary operation then the value on top
- * of the stack is considered as operand.
- * If 'op' is binary operation then the 2 values
- * on top of the stack are considered as operands.
- * This function is free to call overload-able operator methods.
- * Result is pushed on top of the stack in place of the
- * first operand and second operand is popped of. 
- */
-CR_API void cr_arith(cr_State *ts, cr_ar op)
-{
-    Value *res;
-    int adjust;
-
-    cr_lock(ts);
-    criptapi_checkarop(ts, op);
-    adjust = 0;
-    if (arisbin(op)) {
-        criptapi_checkelems(ts, 2);
-        adjust = 1;
-    } else {
-        criptapi_checkelems(ts, 1);
-    }
-    res = stkpeek(1);
-    arith(ts, *res, *stkpeek(0), op, res);
-    ts->sp -= adjust; // result is where the first operand was
-    cr_unlock(ts);
-}
-
-
-/* Push nil on the stack */
-CR_API void cr_pushnil(cr_State *ts)
-{
-    cr_lock(ts);
-    criptapi_pushnil(ts);
-    cr_unlock(ts);
-}
-
-
-/* Push number on the stack */
-CR_API void cr_pushinteger(cr_State *ts, cr_lint number)
-{
-    cr_lock(ts);
-    criptapi_pushinteger(ts, number);
-    cr_unlock(ts);
-}
-
-
-/* Push number on the stack */
-CR_API void cr_pushfloat(cr_State *ts, cr_double number)
-{
-    cr_lock(ts);
-    criptapi_pushfloat(ts, number);
-    cr_unlock(ts);
-}
-
-
-/* Push string on the stack */
-CR_API void cr_pushstring(cr_State *ts, const char *str, cr_umem len)
-{
-    cr_lock(ts);
-    criptapi_pushstr(ts, str, len);
-    cr_unlock(ts);
-}
-
-
-/* Push cstring on the stack */
-CR_API void cr_pushcstring(cr_State *ts, const char *str)
-{
-    cr_lock(ts);
-    criptapi_pushstr(ts, str, strlen(str));
-    cr_unlock(ts);
-}
-
-
-/* Push formatted cstring on the stack, format arguments
- * start from 'argp'. */
-CR_API const char *cr_pushvfstring(cr_State *ts, const char *fmt, va_list argp)
-{
-    const char *str = NULL;
-    cr_lock(ts);
-    criptapi_pushfstr(ts, fmt, argp);
-    str = ascstring(*stkpeek(0));
-    cr_unlock(ts);
-    return str;
-}
-
-
-/* Push formatted cstring on the stack */
-CR_API const char *cr_pushfstring(cr_State *ts, const char *fmt, ...)
-{
-    const char *str = NULL;
-    va_list argp;
-    cr_lock(ts);
-    va_start(argp, fmt);
-    criptapi_pushfstr(ts, fmt, argp);
-    va_end(argp);
-    str = ascstring(*stkpeek(0));
-    cr_unlock(ts);
-    return str;
-}
-
-
-/* Push boolean on the stack */
-CR_API void cr_pushbool(cr_State *ts, int boolean)
-{
-    cr_lock(ts);
-    cr_checkapi(ts, boolean == 0 || boolean == 1, "invalid boolean.");
-    criptapi_pushbool(ts, boolean);
-    cr_unlock(ts);
-}
-
-
-/* Auxiliary to 'cr_pushcclosure' and 'cr_pushclass' */
-static CClosure *auxpushcclosure(cr_State *ts, cr_CFunction fn, int args, cr_ubyte isvararg,
-        int upvals)
-{
-    CRString *name = asstring(*stkpeek(0));
-    CClosure *native = ONative_new(ts, name, fn, args, isvararg, upvals);
-    pop(ts); // name
-    ts->sp -= upvals;
-    while (upvals--)
-        native->upvalue[upvals] = *(ts->sp + upvals);
-    return native;
-}
-
-
-/* Push C closure on to the stack.
- * The 'args' is how many arguments this function expects (minimum),
- * 'isvararg' is a boolean value indicating if this function takes in
- * variable amount of arguments, 'upvals' is the number of
- * upvalues this C closure has.
- * These upvalues are stored directly in this function and can
- * be accessed with the provided API in this header file.
- * This function will remove 'upvals' amount of values from the stack
- * and store them in C closure. */
-CR_API void cr_pushcclosure(cr_State *ts, const char *name, cr_CFunction fn, int args, cr_ubyte isvararg,
-        int upvals)
-{
-    cr_lock(ts);
-    criptapi_checkelems(ts, upvals);
-    criptapi_checkptr(ts, fn);
-    CRString *fname = ts->faststatic[SS_CSRC];
-    if (name)
-        fname = OString_new(ts, name, strlen(name));
-    criptapi_pusho(ts, fname);
-    CClosure *native = auxpushcclosure(ts, fn, args, isvararg, upvals);
-    criptapi_pushonative(ts, native);
-    cr_unlock(ts);
-}
-
-
-/* Push value from the stack located at 'idx', on top of the stack */
-CR_API void cr_push(cr_State *ts, int idx) {
-    cr_lock(ts);
-    Value *val = index2value(ts, idx);
-    criptapi_pushval(ts, *val);
-    cr_unlock(ts);
-}
-
-
-
-/* Push class on the stack.
- * Stack will contain 'nup' upvalues that the 'cr_CFunction' located in
- * array of 'cr_entry' will have.
- * Top of the stack shall contain the name of the class.
- * Each 'cr_entry' contains the 'name' of the C function,
- * its argument count (arity) and if the function accepts variable
- * number of arguments (isvararg).
- * This is all what the C function needs to become a C closure inside
- * of cript, with the exception of 'nup'.
- * The reason why each entry does not contain 'nup' is because
- * all of the functions in entries array share the same upvalues.
- * This is in order to simplify the implementation.
- * In case the function name is overload-able method (such as __init__),
- * then 'args' and 'isvararg' in that 'cr_entry' are ignored and
- * the appropriate values are used.
- * After the function returns upvalues will be popped together with
- * the class name; top of the stack will contain newly created class. */
-CR_API void cr_pushclass(cr_State *ts, cr_entry entries[], int nup)
-{
-    cr_lock(ts);
-    criptapi_checkelems(ts, nup + 1); // upvalues + class name
-    Value classname = *stkpeek(0);
-    cr_checkapi(ts, isstring(classname), "Expect string");
-    OClass *oclass = OClass_new(ts, asstring(classname));
-    pop(ts); // class name
-    criptapi_pusho(ts, oclass);
-    cr_entry *entry = entries;
-    while (entry->name && entry->fn) { // while valid entry
-        for (int i = 0; i < nup; i++)
-            criptapi_pushval(ts, *stkpeek(nup - 1));
-        CRString *name = OString_new(ts, entry->name, strlen(entry->name));
-        criptapi_pusho(ts, name);
-        int tag = id2omtag(ts, name);
-        if (tag == -1) { // not overload ?
-            CClosure *native =
-                auxpushcclosure(ts, entry->fn, entry->args, entry->isvararg, nup);
-            *stkpeek(0) = OBJ_VAL(native);
-            rawset(ts, &oclass->mtab, OBJ_VAL(name), OBJ_VAL(native));
-            pop(ts); // native
-        } else { // overloaded, override 'arity' and 'isvararg'
-            CClosure *native = auxpushcclosure(ts, entry->fn, ominfo[tag].arity, 0, nup);
-            oclass->vtable[tag] = cast(GCObject *, native);
-        }
-        entry = ++entries;
-    }
-    *(ts->sp - nup) = pop(ts); // move class to first upvalue
-    popn(ts, nup - 1); // pop the rest of the upvalues
-    cr_unlock(ts);
-}
-
-
-
-/* Return type of the value on the stack at 'idx'. */
-CR_API cr_tt cr_type(const cr_State *ts, int idx)
-{
-    Value *value = index2value(ts, idx);
-    return val2type(*value);
-}
-
-
-
-/* Return type name of the value on the stack at 'idx'.
- * This returned pointer is 'const' indicating the
- * memory it points to should not be modified. */
-CR_API const char *cr_typename(const cr_State *ts, int idx)
-{
-    Value *value = index2value(ts, idx);
-    int type = val2type(*value);
-    return ts->faststatic[type]->bytes;
-}
-
-
-
-/* Convert type tag into name */
-CR_API const char *cr_tagname(const cr_State *ts, cr_tt type)
-{
-    return ts->faststatic[type]->bytes;
-}
-
-
-
-/* Check if the value on the stack at 'idx' is nil. */
-CR_API cr_ubyte cr_isnil(const cr_State *ts, int idx)
-{
-    return IS_NIL(*index2value(ts, idx));
-}
-
-
-
-/* Check if the value on the stack at 'idx' is string. */
-CR_API cr_ubyte cr_isstring(const cr_State *ts, int idx)
-{
-    return isstring(*index2value(ts, idx));
-}
-
-
-
-/* Check if the value on the stack at 'idx' is bool. */
-CR_API cr_ubyte cr_isbool(const cr_State *ts, int idx)
-{
-    return IS_BOOL(*index2value(ts, idx));
-}
-
-
-
-/* Check if the value on the stack at 'idx' is class. */
-CR_API cr_ubyte cr_isclass(const cr_State *ts, int idx)
-{
-    return isclassobj(*index2value(ts, idx));
-}
-
-
-
-/* Check if the value on the stack at 'idx' is instance. */
-CR_API cr_ubyte cr_isinstance(const cr_State *ts, int idx)
-{
-    return isinstance(*index2value(ts, idx));
-}
-
-
-
-/* Check if the value on the stack at 'idx' is native C function. */
-CR_API cr_ubyte cr_isnative(const cr_State *ts, int idx)
-{
-    return iscfunction(*index2value(ts, idx));
-}
-
-
-
-/* Check if the value on the stack at 'idx' is bound method (instance method). */
-CR_API cr_ubyte cr_ismethod(const cr_State *ts, int idx)
-{
-    return isboundmethod(*index2value(ts, idx));
-}
-
-
-
-/* Check if the value on the stack at 'idx' is cript closure. */
-CR_API cr_ubyte cr_isclosure(const cr_State *ts, int idx)
-{
-    return isclosureobj(*index2value(ts, idx));
-}
-
-
-
-
-/* Concatenate 2 strings on top of the stack.
- * Pops the string on top of the stack and replaces the first
- * one with the concatenated string.
- * They are concatenated in the order they were pushed on the stack. */
-CR_API const char *cr_concat(cr_State *ts)
-{
-    cr_lock(ts);
-    criptapi_checkelems(ts, 2);
-    Value right = *stkpeek(0);
-    Value left = *stkpeek(1);
-    cr_checkapi(ts, isstring(right) && isstring(left), "expect strings");
-    concatonstack(ts);
-    const char *concated = ascstring(*stkpeek(0));
-    cr_unlock(ts);
-    return concated;
-}
-
-
-/* Push class method of an instance at idx on top of the stack.
- * If method doesn't exist this function returns 0 otherwise 1.
- * Note: Class instance methods are all cript closures. */
-CR_API cr_ubyte cr_getmethod(cr_State *ts, int idx, const char *method)
-{
-    cr_lock(ts);
-    criptapi_checkptr(ts, method);
-    Value val = *index2value(ts, idx);
-    if (!isinstance(val))
-        return 0;
-    criptapi_pushstr(ts, method, strlen(method));
-    cr_ubyte haveit = bindmethod(ts, asinstance(val)->oclass, *stkpeek(0), val);
-    cr_unlock(ts);
-    return haveit;
-}
-
-
-
-/* Pushes the field value of the class instance at 'idx' on top
- * of the stack.
- * If field value was not found or the value at 'idx' is not
- * class instance return 0, otherwise 1. */
-CR_API cr_ubyte cr_getproperty(cr_State *ts, int idx, const char *field)
-{
-    cr_ubyte res = 0;
-    cr_lock(ts);
-    criptapi_checkptr(ts, field);
-    Value insval = *index2value(ts, idx);
-    if (isinstance(insval)) {
-        Instance *instance = asinstance(insval);
-        Value key = OBJ_VAL(OString_new(ts, field, strlen(field)));
-        Value fieldval;
-        if ((res = rawget(ts, &instance->fields, key, &fieldval)))
-            criptapi_pushval(ts, fieldval);
-    }
-    cr_unlock(ts);
-    return res;
-}
-
-
-
-/* Get value on the stack at 'idx' and use index
- * operator '[]' (__getidx__) on it using the
- * value on top of the stack as index value.
- * If the value is not an instance or the
- * '__getidx__' is not overloaded, this function
- * returns 0, otherwise 1 and the value will
- * be on top of the stack. */
-CR_API cr_ubyte cr_getindex(cr_State *ts, int idx)
-{
-    cr_ubyte res = 0;
-    cr_lock(ts);
-    criptapi_checkelems(ts, 1); // [index]
-    Value *index = stkpeek(0);
-    Value value = *index2value(ts, idx);
-    res = calloverload(ts, value, OM_GETIDX);
-    *index = pop(ts); // replace [index] with result
-    cr_unlock(ts);
-    return res;
-}
-
-
-
-/* Get value on the stack at 'idx' and use index
- * operator '[]' (__setidx__) on it, index value
- * is located one place before the top of the stack
- * while the value getting assigned is on top of the stack.
- * If the value is not an instance or '__setidx__' is not
- * overloaded, this function returns 0, otherwise 1. */
-CR_API cr_ubyte cr_setindex(cr_State *ts, int idx)
-{
-    cr_ubyte res = 0;
-    cr_lock(ts);
-    criptapi_checkelems(ts, 2); // [index][expr]
-    Value value = *index2value(ts, idx);
-    res = calloverload(ts, value, OM_SETIDX);
-    popn(ts, 2); // pop [index] and [expr]
-    cr_unlock(ts);
-    return res;
-}
-
-
-
-/* Performs 'raw' index operation, meaning it doesn't invoke
- * overloaded methods when getting/setting the instance property.
- * 'what' parameter if it is a zero means we are setting and
- * non-zero 'what' means we are getting the value at that index.
- * In case we are setting the indexed value then the 'value' we are
- * assigning will be on top of the stack and the 'index' value right
- * below it; if we are getting the value then the 'key' will be on top
- * of the stack.
- * If the operation was successful then 1 is returned; otherwise 0.
- * @ERR: if value we are indexing with is 'nil'. */
-CR_API cr_ubyte cr_rawindex(cr_State *ts, int idx, cr_ubyte what)
-{
-    cr_ubyte res = 0;
-    cr_lock(ts);
-    criptapi_checkelems(ts, what == CR_RAWSET ? 2 : 1);
-    Value value = *index2value(ts, idx);
-    if (!isinstance(value))
-        return res;
-    res = rawindex(ts, value, what);
-    cr_unlock(v);
-    return res;
-}
-
-
-
-/* Push global value on top of the stack.
- * In case global value was found, it will be on top of the stack,
- * and this function will return 1, otherwise nothing will be pushed
- * on the stack and the function will return 0. */
-CR_API cr_ubyte cr_get_global(cr_State *ts, const char *name)
-{
-    cr_lock(ts);
-    criptapi_checkptr(ts, name);
-    int res = 0;
-    Value gval;
-    criptapi_checkptr(ts, name);
-    CRString *str = OString_new(ts, name, strlen(name));
-    if (rawget(ts, &ts->globids, OBJ_VAL(str), &gval)) {
-        int idx = (int)AS_NUMBER(gval);
-        criptapi_pushval(ts, ts->globvars.data[idx].value);
-        res = 1;
-    }
-    cr_unlock(ts);
-    return res;
-}
-
-
-
-/* Get panic handler */
-CR_API cr_panic cr_getpanic(cr_State *ts)
-{
-    cr_lock(ts);
-    cr_panic panic_handler = ts->hooks.panic;
-    cr_unlock(ts);
-    return panic_handler;
-}
-
-
-
-/* Get allocator function */
-CR_API cr_fAlloc cr_getalloc(cr_State *ts, void **ud)
-{
-    cr_lock(ts);
-    cr_fAlloc alloc = ts->hooks.reallocate;
-    if (ud)
-        *ud = ts->hooks.userdata;
-    cr_unlock(ts);
-    return alloc;
-}
-
-
-
-/* Get boolean value (int 1/0) from the stack at 'idx'.
- * If the value at 'idx' is not a boolean, then the flag
- * if provided 'isbool' is set as 0, otherwise flag is set to 1. */
-CR_API cr_ubyte cr_getbool(const cr_State *ts, int idx, cr_ubyte *isbool)
-{
-    cr_ubyte bval;
-    Value val = *index2value(ts, idx);
-    cr_ubyte is = tobool(val, &bval);
-    if (isbool)
-        *isbool = is;
-    return bval;
-}
-
-
-
-/* Get number value (cr_double) from the stack at 'idx'.
- * If the value at 'idx' is not a number, then the flag
- * if provided 'isnum' is set as 0, otherwise flag is set to 1. */
-CR_API cr_double cr_getnumber(const cr_State *ts, int idx, cr_ubyte *isnum)
-{
-    cr_double nval = 0.0;
-    Value val = *index2value(ts, idx);
-    cr_ubyte is = tonumber(val, &nval);
-    if (isnum)
-        *isnum = is;
-    return nval;
-}
-
-
-
-/* Get string value from the stack at 'idx'.
- * Returns NULL (0) if the value is not a string.
- * Otherwise it returns pointer to the start of the string.
- * Returned pointer is 'const' indicating that user should not
- * modify the contents the pointer points to. */
-CR_API const char *cr_getstring(const cr_State *ts, int idx)
-{
-    Value val = *index2value(ts, idx);
-    return isstring(val) ? ascstring(val) : NULL;
-}
-
-
-
-/* Get native C function from the stack at 'idx'.
- * Return NULL if the value is not a 'cr_CFunction'. */
-CR_API cr_CFunction cr_getcfunction(const cr_State *ts, int idx)
-{
-    Value val = *index2value(ts, idx);
-    return iscfunction(val) ? ascfn(val)->fn : NULL;
-}
-
-
-/* Call the value on the stack with 'argc' arguments. */
-CR_API void cr_call(cr_State *ts, int argc, int retcnt)
-{
-    cr_lock(ts);
-    cr_checkapi(ts, retcnt >= CR_MULRET, "invalid return count");
-    criptapi_checkelems(ts, argc + 1);
-    criptapi_checkresults(ts, argc, retcnt);
-    Value *fn = ts->sp - (argc + 1);
-    ncall(ts, fn, *fn, retcnt);
-    cr_unlock(ts);
-}
-
-
-
-/* Data used for 'fcall' */
-struct CallData {
-    Value *callee;
-    int retcnt;
-};
-
-
-/* Wrapper function */
-static void fcall(cr_State *ts, void *userdata)
-{
-    struct CallData *cd = cast(struct CallData *, userdata);
-    ncall(ts, cd->callee, *cd->callee, cd->retcnt);
-}
-
-
-/* Protected call.
- * Same as cr_call except this runs the function in protected
- * mode, meaning that in case the function errors it won't print
- * invoke panic handler.
- * Instead it restores the old call frame and pushes the error object
- * on top of the stack.
- * This function returns 'c_status' [defined @cript.h] code. */
-CR_API cr_status cr_pcall(cr_State *ts, int argc, int retcnt)
-{
-    cr_lock(ts);
-    cr_checkapi(ts, retcnt >= CR_MULRET, "invalid return count");
-    criptapi_checkelems(ts, argc + 1);
-    criptapi_checkresults(ts, argc, retcnt);
-    struct CallData cd;
-    cd.retcnt = retcnt;
-    cd.callee = ts->sp - (argc + 1);
-    int status = pcall(ts, fcall, &cd, save_stack(ts, cd.callee));
-    cr_unlock(ts);
-    return status;
-}
-
-
-
 /*
- * Loads (compiles) cript script using provided 'reader'.
- * Returns 'c_status' [defined @cript.h] code.
- * If the script compiled without any errors then the compiled
- * function (cript closure) gets pushed on top of the stack.
- * In case there were any compile errors, then the error object
- * gets pushed on top of the stack (error message).
- *
- * 'reader' - user provided 'crR' responsible for reading
- *            the '.sk' source file.
- *            Refer to 'cR' in [@cript.h] for more
- *            information on how this reader should 'behave'.
- * 'userdata' - user provided data for 'reader'.
- * 'source' - name of the cript script you are loading.
- */
-CR_API cr_status cr_load(cr_State *ts, crR reader, void *userdata, const char *source)
-{
-    BuffReader br;
-    cr_lock(ts);
-    BuffReader_init(ts, &br, reader, userdata);
-    cr_status status = pcompile(ts, &br, source, 0);
-    cr_unlock(ts);
-    return status;
-}
-
-
-
-/* Garbage collection API.
- * Refer to the @cscript.h and 'cr_gco' enum defined in the same header. */
-CR_API cr_umem cr_incgc(cr_State *ts, cr_incgco option, ...)
-{
-    va_list argp;
-    cr_umem res = 0;
-    cr_lock(ts);
-    va_start(argp, option);
-    switch (option) {
-        case GCO_STOP:
-            res = ts->gc.gc_stopped;
-            ts->gc.gc_stopped = 1;
-            break;
-        case GCO_RESTART:
-            res = ts->gc.gc_stopped;
-            ts->gc.gc_stopped = 0;
-            break;
-        case GCO_COLLECT:
-            res = incgc(ts);
-            break;
-        case GCO_COUNT:
-            res = ts->gc.gc_allocated;
-            break;
-        case GCO_ISRUNNING:
-            res = (ts->gc.gc_stopped == 0);
-            break;
-        case GCO_NEXTGC:
-            res = ts->gc.gc_nextgc;
-            break;
+** Return the length of the value at index.
+** Length means different things depending on the type of the value at index.
+** For strings, this is the string length; for classes, this is the number
+** of methods; for instances, this is the number of fields; for userdata, this
+** is the size of the block of memory allocated for userdata.
+*/
+CR_API cr_Unsigned cr_len(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    switch (ttypetag(o)) {
+        case CR_VSTRING: return lenstr(o);
+        case CR_VCLASS: return crH_len(htval(o));
+        case CR_VINSTANCE: return crH_len(&insval(o)->fields);
+        case CR_VUDATA: return udval(o)->size;
+        default: return 0;
     }
-    va_end(argp);
-    cr_unlock(ts);
-    return res;
 }
 
 
-
-
-// TODO: Implement
-CR_API void cr_dumpstack(cr_State *ts)
-{
-    (void)(0);
+CR_API int cr_next(cr_State *ts, int index) {
+    // TODO
 }
 
 
-
-/* Converts value on the stack at the 'idx' into string.
- * Additionally if the 'len' and/or 'hash' are non-NULL then
- * it also fills them.
- * This can call overload-able method '__tostring__'. */
-CR_API const char *cr_tostring(cr_State *ts, int idx, cr_umem *len, cr_hash *hash)
-{
-    const char *str = NULL;
-    cr_lock(ts);
-    Value *v = index2value(ts, idx);
-    CRString *ostr = vtostr(ts, v, *v, 0);
-    str = ostr->bytes;
-    if (len)
-        *len = ostr->len;
-    if (hash)
-        *hash = ostr->hash;
-    cr_unlock(ts);
-    return str;
+CR_API void cr_concat(cr_State *ts, int n) {
+    // TODO
 }
 
 
-
-/* Set global value 'name' to the value on top of the stack.
- * In case the global variable 'name' does not exist, then
- * the new one is declared and 'isconst' modifier is considered
- * when creating it.
- * Otherwise 'isconst' modifier is ignored and the global
- * variable is set to the new value UNLESS the variable is
- * set as 'fixed'; in that case runtime error is invoked. */
-CR_API cr_ubyte cr_setglobal(cr_State *ts, const char *name, int isconst)
-{
-    cr_lock(ts);
-    criptapi_checkelems(ts, 1); // value must be present
-    criptapi_checkptr(ts, name);
-    Value newval = *stkpeek(0);
-    Value key = OBJ_VAL(OString_new(ts, name, strlen(name)));
-    cr_ubyte isnew = 0;
-    Value gidx;
-    if ((isnew = !rawget(ts, &ts->globids, key, &gidx))) {
-        criptapi_pushval(ts, key);
-        Variable gvar = { newval, 0x01 & isconst };
-        Value idx = NUMBER_VAL(Array_Variable_push(&ts->globvars, gvar));
-        rawset(ts, &ts->globids, key, idx);
-        popn(ts, 2); // value and key
-    } else {
-        Variable *gvar = Array_Variable_index(&ts->globvars, AS_NUMBER(gidx));
-        if (cr_unlikely(VISCONST(gvar))) {
-            fixederror(ts, globalname(ts, AS_NUMBER(gidx))->bytes);
-        }
-        gvar->value = newval;
-        pop(ts); // value
-    }
-    cr_unlock(ts);
-    return isnew;
+CR_API size_t cr_stringtonumber(cr_State *ts, const char *s) {
+    // TODO
 }
 
 
-
-/* Set the field of the class instance to the value on top of the stack.
- * Class should be located at 'idx' and the name of the field to be set is 'field'.
- * This sets the field to that value and pops it off the top of the stack.
- * Returns 1 if the field didn't exist before or false if the value
- * of the field got overwritten. */
-CR_API cr_ubyte cr_setfield(cr_State *ts, int idx, const char *field)
-{
-    cr_lock(ts);
-    criptapi_checkelems(ts, 1);
-    criptapi_checkptr(ts, field);
-    Value insval = *index2value(ts, idx);
-    cr_checkapi(ts, isinstance(insval), "expect class instance");
-    Instance *instance = asinstance(insval);
-    criptapi_pushcstr(ts, field);
-    cr_ubyte res = rawset(ts, &instance->fields, *stkpeek(0), *stkpeek(1));
-    ts->sp -= 2; // pop value and key
-    cr_unlock(ts);
-    return res;
+CR_API cr_Alloc cr_getallocf(cr_State *ts, void **ud) {
+    // TODO
 }
 
 
-
-/* Auxiliary function for 'cr_getupval' and 'cr_setupval'.
- * Returns pointer to the upvalue. */
-static cr_inline Value *getupval(Value fn, int n)
-{
-    if (isclosureobj(fn)) { // cript closure ?
-        CrClosure *closure = asclosure(fn);
-        if (cast_uint(n) > closure->fn->p.upvalc - 1)
-            return NULL;
-        return closure->upvalue[n]->location;
-    } else if (iscfunction(fn)) { // native C function ?
-        CClosure *native = ascfn(fn);
-        if (cast_uint(n) > native->p.upvalc - 1)
-            return NULL;
-        return &native->upvalue[n];
-    } else
-        return NULL;
+CR_API void cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud) {
+    // TODO
 }
 
 
-
-/* Get upvalue belonging to the function at 'fidx'.
- * 'idx' is the index of the upvalue.
- * Function pushes the upvalue on top of the stack and returns 1.
- * If the upvalue was not found or the function at 'fidx' is not
- * a cript or C closure then nothing will be pushed on the stack and
- * 0 is returned. */
-CR_API cr_ubyte cr_getupvalue(cr_State *ts, int fidx, int idx)
-{
-    cr_lock(ts);
-    cr_ubyte ret = 0;
-    Value fn = *index2value(ts, fidx);
-    Value *upval = getupval(fn, idx);
-    if (upval) {
-        criptapi_pushval(ts, *upval);
-        ret = 1;
-    }
-    cr_unlock(ts);
-    return ret;
+CR_API void cr_toclose(cr_State *ts, int index) {
+    // TODO
 }
 
 
-
-/* Sets the upvalue belonging to the function at 'fidx'.
- * 'idx' is the index of the upvalue.
- * Function pops the top value on the stack and sets
- * it as the new value of the upvalue.
- * If the upvalue doesn't exist and/or 'fidx' is not a
- * closure or native C function, then the function returns 0
- * indicating the upvalue was not set, otherwise it returns 1. */
-CR_API int cr_setupvalue(cr_State *ts, int fidx, int idx)
-{
-    cr_lock(ts);
-    criptapi_checkelems(ts, 1);
-    int changed = 0;
-    Value fn = *index2value(ts, fidx);
-    Value *upval = getupval(fn, idx);
-    if (upval) {
-        *upval = *stkpeek(0);
-        ts->sp--;
-        changed = 1;
-    }
-    cr_unlock(ts);
-    return changed;
-}
-
-
-static Instance *getinstance(cr_State *ts, int idx)
-{
-    TValue *v;
-    v = index2value(ts, idx);
-    checkapi(ts, ttisins(v), "expect instance");
-    return insvalue(v);
-}
-
-
-/* 
- * Get the next property of the instance located at 'idx' on the stack.
- * The 'key' value used for lookup is on top of the stack.
- * 'what' if set to 0 fetches next field, otherwise it
- * gets method.
- * This function returns 1 if there is next property and
- * the value on top of the stack (key) is replaced with the
- * next key; additionally value associated with that key is
- * also pushed on top of the stack.
- * If there is no next property 0 is returned and stack
- * remains unchanged. 
- * In case user provided 'key' that the instance method/field
- * table does not contain then runtime error is invoked.
- */
-CR_API cr_ubyte cr_nextproperty(cr_State *ts, int idx, cr_ubyte what)
-{
-    cr_ubyte hasnext;
-    Instance *instance;
-    HTable *tab;
-    TValue *key;
-
-    cr_lock(ts);
-    hasnext = 0;
-    checkapi_values(ts, 2); /* key + instance */
-    checkapi_stack(ts, 1); /* value */
-    instance = getinstance(ts, idx);
-    key = speek(0);
-    if (what == 0)
-        tab = &instance->fields;
-    else
-        tab = &instance->oclass->methods;
-    hasnext = crH_next(ts, tab, key);
-    if (hasnext)
-        api_incsp(ts); /* push value */
-    else
-        api_decsp(ts); /* pop key */
-    cr_unlock(ts);
-    return hasnext;
-}
-
-
-
-/* Return the length of the string at 'idx'.
- * If the value is not a string then return 0. */
-CR_API cr_umem cr_strlen(const cr_State *ts, int idx)
-{
-    Value val = *index2value(ts, idx);
-    return (isstring(val) ? asstring(val)->len : 0);
-}
-
-
-/* Return 'cr_State' 'cr_status' code. */
-CR_API cr_status cr_getstatus(cr_State *ts)
-{
-    UNUSED(ts);
-    return ts->status;
-}
-
-
-/* Invoke a runetime error with errcode */
-CR_API int cr_error(cr_State *ts, cr_status errcode)
-{
-    cr_lock(ts);
-    Value *errobj = stkpeek(0);
-    criptapi_checkelems(ts, 1);
-    criptapi_checkerrcode(ts, errcode);
-    runerror(ts, errcode); // cr_unlock in here
-    return 0; // to avoid compiler warnings
+CR_API void cr_closeslot(cr_State *ts, int index) {
+    // TODO
 }

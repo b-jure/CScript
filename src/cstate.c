@@ -1,3 +1,9 @@
+/*
+** cstate.c
+** Global and Thread state
+** See Copyright Notice in cscript.h
+*/
+
 #include "cstate.h"
 #include "capi.h"
 #include "cdebug.h"
@@ -8,6 +14,7 @@
 #include "cmeta.h"
 #include "cobject.h"
 #include "cprotected.h"
+#include "cscript.h"
 #include "cstring.h"
 
 
@@ -149,7 +156,7 @@ static void freestate(cr_State *mt) {
 ** The returned thread state is mainthread.
 ** In case of errors NULL is returned.
 */
-CR_API cr_State *cr_newstate(cr_fAlloc falloc, void *ud) {
+CR_API cr_State *cr_newstate(cr_Alloc falloc, void *ud) {
     GState *gs;
     cr_State *ts;
     SG *sg = falloc(NULL, 0, sizeof(SG), ud);
@@ -163,13 +170,13 @@ CR_API cr_State *cr_newstate(cr_fAlloc falloc, void *ud) {
     ts->mark = crG_white(&gs->gc);
     preinit_thread(ts, gs);
     setnilval(&gs->globals);
-    gs->falloc = falloc;
-    gs->udalloc = ud;
+    gs->falloc = falloc; gs->udalloc = ud;
     gs->panic = NULL; /* no panic handler by default */
     gs->seed = cri_makeseed(ts); /* initial seed for hashing */
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
     gs->mainthread = ts;
     gs->thwouv = NULL;
+    gs->fwarn = NULL; gs->ud_warn = NULL;
     for (int i = 0; i < CR_NUM_TYPES; i++)
         gs->vmt[i] = NULL;
     if (crPR_rawcall(ts, fnewstate, NULL) != CR_OK) {
@@ -416,6 +423,26 @@ void crT_incCstack(cr_State *ts) {
     ts->nCcalls++;
     if (getCcalls(ts) >= CRI_MAXCCALLS)
         crT_checkCstack(ts);
+}
+
+
+void crT_warning(cr_State *ts, const char *msg, int cont) {
+    cr_WarnFunction fwarn = G_(ts)->fwarn;
+    if (fwarn)
+        fwarn(G_(ts)->ud_warn, msg, cont);
+}
+
+/* generate a warning from an error message */
+void crT_warnerror(cr_State *ts, const char *where) {
+    TValue *errobj = s2v(ts->sp.p - 1);
+    const char *msg = (ttisstr(errobj))
+        ? getstrbytes(strval(errobj))
+        : "error object is not a string";
+    crT_warning(ts, "error in ", 1);
+    crT_warning(ts, where, 1);
+    crT_warning(ts, " (", 1);
+    crT_warning(ts, msg, 1);
+    crT_warning(ts, ")", 0);
 }
 
 

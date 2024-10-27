@@ -1,18 +1,8 @@
-/* ----------------------------------------------------------------------------------------------
- * Copyright (C) 2023-2024 Jure Bagić
- *
- * This file is part of cript.
- * cript is free software: you can redistribute it and/or modify it under the terms of the GNU
- * General Public License as published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * cript is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with cript.
- * If not, see <https://www.gnu.org/licenses/>.
- * ----------------------------------------------------------------------------------------------*/
+/*
+** creader.h
+** Buffered reader
+** See Copyright Notice in cscript.h
+*/
 
 #ifndef CRREADER_H
 #define CRREADER_H
@@ -36,13 +26,13 @@
 typedef struct {
     size_t n; /* unread bytes */
     const char* buff; /* position in buffer */
-    cr_fReader reader; /* reader function */
+    cr_Reader reader; /* reader function */
     void* userdata; /* user data for 'crR' */
     cr_State* ts; /* 'cr_State' for 'crR' */
 } BuffReader;
 
 
-CRI_FUNC void crR_init(cr_State* ts, BuffReader* br, cr_fReader freader,
+CRI_FUNC void crR_init(cr_State* ts, BuffReader* br, cr_Reader freader,
                        void* userdata);
 CRI_FUNC int crR_fill(BuffReader* br);
 CRI_FUNC size_t crR_readn(BuffReader* br, size_t n);

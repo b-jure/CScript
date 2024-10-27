@@ -1,3 +1,9 @@
+/*
+** cstring.c
+** Functions for CScript string objects
+** See Copyright Notice in cscript.h
+*/
+
 #include "cscript.h"
 #include "cstring.h"
 #include "cobject.h"
