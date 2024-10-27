@@ -21,6 +21,10 @@
 #include "climits.h"
 
 
+/* memory error */
+#define crM_error(ts)   crPR_throw(ts, CR_ERRMEM);
+
+
 #define crM_newarray(ts,s,t)     crM_malloc(ts, (s) * sizeof(t))
 
 #define crM_reallocarray(ts,p,os,ns,t) \
@@ -28,7 +32,6 @@
 
 #define crM_freearray(ts,p,n,t) \
     crM_free((ts), (p), cast_umem(n)*sizeof(*(p)))
-
 
 
 #define crM_ensurevec(ts,p,s,n,e,l,w,t) \

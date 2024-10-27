@@ -261,8 +261,8 @@ CR_API void  cr_set_userdatamm(cr_State *ts, int index, cr_MM mm); /* DONE */
 #define CR_ERRMEM               4  /* memory related error (oom) */
 #define CR_ERRERROR             5  /* error while handling error */
 
-CR_API int  cr_getstatus(cr_State *ts);
-CR_API int  cr_error(cr_State *ts);
+CR_API int cr_status(cr_State *ts); /* DONE */
+CR_API int cr_error(cr_State *ts); /* DONE */
 
 
 /* -------------------------------------------------------------------------

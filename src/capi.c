@@ -1039,6 +1039,29 @@ CR_API void cr_set_userdatamm(cr_State *ts, int index, cr_MM mm) {
 }
 
 
+
+/* Error reporting */
+
+
+CR_API int cr_status(cr_State *ts) {
+    return ts->status;
+}
+
+
+CR_API int cr_error(cr_State *ts) {
+    TValue *errobj;
+    cr_lock(ts);
+    api_checknelems(ts, 1); /* errobj */
+    errobj = s2v(ts->sp.p - 1);
+    if (ttisstr(errobj) && strval(errobj) == G_(ts)->memerror) {
+        crM_error(ts); /* raise a memory error */
+    } else
+        crPR_throw(ts, CR_ERRRUNTIME); /* raise a regular runtime error */
+    /* cr_unlock() is called when control leaves the core */
+    cr_unreachable();
+}
+
+
 /* Check if the value at the index has virtual method table. */
 CR_API int cr_hasvmt(cr_State *ts, int index) {
     return getvmt(ts, index) != NULL;
