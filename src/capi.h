@@ -18,7 +18,14 @@
 #define CRIPTAPI_H
 
 
-#include "cconf.h"
+/*
+** If a call returns too many multiple returns, the callee may not have
+** stack space to accommodate all results. In this case, this macro
+** increases its stack space ('ts->cf->top.p').
+*/
+#define adjustresults(ts,nres) \
+    { if ((nres) <= CR_MULRET && (ts)->cf->top.p < (ts)->sp.p) \
+	(ts)->cf->top.p = (ts)->sp.p; }
 
 
 /* Ensure the stack has at least 'n' elements. */
@@ -27,7 +34,7 @@
                  "not enough elements in the stack")
 
 
-/* increments 'ts->sp.p', checking for stack overflows */
+/* increments 'ts->sp.p', checking for stack overflow */
 #define api_inctop(ts) \
     { (ts)->sp.p++; \
       api_check(ts, (ts)->sp.p <= (ts)->cf->top.p, "stack overflow"); }

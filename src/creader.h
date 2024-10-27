@@ -62,6 +62,8 @@ CRI_FUNC size_t crR_readn(BuffReader* br, size_t n);
     { (b)->str = crM_saferealloc(ts, (b)->str, (b)->size, s); \
       (b)->size = s; }
 
+#define crR_freebuffer(ts,b)    crR_buffresize(ts, b, 0)
+
 
 /* string buffer for lexer */
 typedef struct Buffer {

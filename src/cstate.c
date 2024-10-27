@@ -236,7 +236,6 @@ CR_API int cr_resetthread(cr_State *ts) {
 }
 
 
-
 void crT_seterrorobj(cr_State *ts, int errcode, SPtr oldtop) {
     switch (errcode) {
         case CR_ERRMEM: { /* memory error? */
@@ -412,8 +411,8 @@ void crT_checkCstack(cr_State *ts) {
 }
 
 
-/* Increment number of nested C calls and check for overflow. */
-void crT_incC_(cr_State *ts) {
+/* Increment number of C calls and check for overflow. */
+void crT_incCstack(cr_State *ts) {
     ts->nCcalls++;
     if (getCcalls(ts) >= CRI_MAXCCALLS)
         crT_checkCstack(ts);

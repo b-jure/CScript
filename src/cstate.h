@@ -251,7 +251,7 @@ CRI_FUNC int crT_reallocstack(cr_State *ts, int size, int raiseerr);
 CRI_FUNC int crT_growstack(cr_State *ts, int n, int raiseerr);
 CRI_FUNC void crT_shrinkstack(cr_State *ts);
 CRI_FUNC void crT_incsp(cr_State *ts);
-CRI_FUNC void crT_incC_(cr_State *ts);
+CRI_FUNC void crT_incCstack(cr_State *ts);
 CRI_FUNC void crT_checkCstack(cr_State *ts);
 CRI_FUNC void crT_free(cr_State *ts, cr_State *thread);
 

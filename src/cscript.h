@@ -244,8 +244,8 @@ CR_API int   cr_get_uservalue(cr_State *ts, int index, int n); /* DONE */
  * Set functions (stack -> CScript)
  * ------------------------------------------------------------------------- */
 CR_API void  cr_set_global(cr_State *ts, const char *name); /* DONE */
-CR_API int   cr_set(cr_State *ts, int index); /* DONE */
-CR_API int   cr_set_field(cr_State *ts, int index, const char *field); /* DONE */
+CR_API void  cr_set(cr_State *ts, int index); /* DONE */
+CR_API void  cr_set_field(cr_State *ts, int index, const char *field); /* DONE */
 CR_API void  cr_setuserdatavmt(cr_State *ts, int index, cr_VMT *vmt); /* DONE */
 CR_API int   cr_setuservalue(cr_State *ts, int index, int n); /* DONE */
 CR_API void  cr_set_userdatamm(cr_State *ts, int index, cr_MM mm); /* DONE */
@@ -268,9 +268,10 @@ CR_API int cr_error(cr_State *ts); /* DONE */
 /* -------------------------------------------------------------------------
  * Call/Load CScript code
  * ------------------------------------------------------------------------- */
-CR_API int  cr_pcall(cr_State *ts, int argc, int retcnt);
-CR_API void cr_call(cr_State *ts, int argc, int retcnt);
-CR_API int  cr_load(cr_State *ts, cr_fReader reader, void *userdata, const char *source);
+CR_API void cr_call(cr_State *ts, int nargs, int nresults);
+CR_API int  cr_pcall(cr_State *ts, int nargs, int nresults);
+CR_API int  cr_load(cr_State *ts, cr_fReader reader, void *userdata,
+                    const char *source);
 
 
 /* -------------------------------------------------------------------------

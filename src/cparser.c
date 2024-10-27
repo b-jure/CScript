@@ -33,10 +33,10 @@
 
 
 /* enter C function frame */
-#define enterCstack(lx)         crT_incC_((lx)->ts)
+#define enterCstack(lx)         crT_incCstack((lx)->ts)
 
 /* pop C function frame */
-#define leaveCstack(lx)         ((lx)->ts->nCC--)
+#define leaveCstack(lx)         ((lx)->ts->nCcalls--)
 
 
 /* compare 'OString' pointers for equality */
@@ -212,8 +212,7 @@ static cr_noret variniterror(Lexer *lx, const char *kind, const char *name) {
 
 /* check for variable collision */
 static void checkvarcollision(FunctionState *fs, OString *name, const char *vk,
-                              int (*fn)(FunctionState *, OString *, ExpInfo *))
-{
+                    int (*fn)(FunctionState *, OString *, ExpInfo *)) {
     ExpInfo dummy;
     if (cr_unlikely(fn(fs, name, &dummy) >= 0))
         crP_semerror(fs->lx, crS_pushfstring(fs->lx->ts,
@@ -480,7 +479,7 @@ static void endfs(FunctionState *fs) {
     cr_assert(!fs->scope);
     if (fs->deadcode.pc != NOJMP) /* have dead code ? */
         loadreachablectx(fs);
-    /* preserve memory; shrink unused space */
+    /* preserve memory; shrink unused space; */
     /* by using counters in 'fs' as final size */
     crM_shrinkvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, Function);
     crM_shrinkvec(ts, fn->k, fn->sizek, fs->nk, TValue);
@@ -1368,8 +1367,7 @@ static OString *newdecl(FunctionState *fs, ExpInfo *var, int *mods, int *vidx) {
 
 /* declare variable list */
 static OString *declarevarlist(FunctionState *fs, ExpInfo *var, int nvars,
-                               int *tbc)
-{
+                               int *tbc) {
     int mods, vidx;
     OString *name = newdecl(fs, var, &mods, &vidx);
     if (mods & VARTBC)
@@ -1925,8 +1923,7 @@ static void switchstm(Lexer *lx) {
 
 /* condition statement body; for 'forloop', 'whilestm' & 'ifstm' */
 static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
-                     OpCode jmpop, int condpc, int endclausepc)
-{
+                     OpCode jmpop, int condpc, int endclausepc) {
     FunctionState *fs = lx->fs;
     DynCtx endctx;
     int test, jmp;
@@ -2023,8 +2020,7 @@ static void handleloopctx(FunctionState *fs, struct LoopCtx *ctx, int store) {
 
 /* start loop scope */
 static void startloop(FunctionState *fs, Scope *s, struct LoopCtx *ctx,
-                      int cfbits) 
-{
+                      int cfbits) {
     startscope(fs, s, cfbits);
     initloopctx(fs, ctx);
     handleloopctx(fs, ctx, 1);
@@ -2367,7 +2363,7 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
     startfs(fs, lx, &s);
     setvararg(fs, 0); /* main is always vararg */
     crL_scan(lx); /* scan first token */
-    parseuntilEOS(lx); /* start parsing */
+    parseuntilEOS(lx); /* parse */
     cr_assert(lx->t.tk == TK_EOS);
     endfs(fs);
 }
@@ -2375,15 +2371,14 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
 
 /* parse source code */
 CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
-                     ParserState *ps, const char *source)
-{
+                     ParserState *ps, const char *source) {
     Lexer lx;
     FunctionState fs;
     CrClosure *cl = crF_newCrClosure(ts, 0);
     setcrcl2s(ts, ts->sp.p, cl); /* anchor main function closure */
     crT_incsp(ts);
     lx.tab = crH_new(ts);
-    setsv2ht(ts, ts->sp.p, lx.tab); /* anchor scanner htable */
+    setsv2ht(ts, ts->sp.p, lx.tab); /* anchor scanner hashtable */
     crT_incsp(ts);
     fs.fn = cl->fn = crF_new(ts);
     crG_objbarrier(ts, cl, cl->fn);
@@ -2392,7 +2387,8 @@ CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
     lx.ps = ps;
     lx.buff = buff;
     crL_setsource(ts, &lx, br, fs.fn->source);
-    mainfunc(&fs, &lx); /* Cript main function */
-    ts->sp.p--; /* pop scanner htable */
+    mainfunc(&fs, &lx);
+    cr_assert(ps->lvars.len == 0); /* all scopes should be finished */
+    ts->sp.p--; /* remove scanner hashtable */
     return cl;
 }

@@ -6,7 +6,6 @@
 #include "cscript.h"
 #include "cconf.h"
 #include "cdebug.h"
-#include "capi.h"
 #include "climits.h"
 #include "chashtable.h"
 #include "cobject.h"
@@ -17,6 +16,7 @@
 #include "cstring.h"
 #include "cvm.h"
 #include "stdarg.h"
+#include "capi.h"
 
 #include <string.h>
 
@@ -302,6 +302,7 @@ CR_API int cr_isuserdata(cr_State *ts, int index) {
 
 cr_sinline TValue *getvvmt(cr_State *ts, const TValue *o) {
     switch (ttype(o)) {
+        case CR_VINSTANCE: return insval(o)->oclass->vmt;
         case CR_TCLASS: return clsval(o)->vmt;
         case CR_TUDATA: return udval(o)->vmt;
         default: return G_(ts)->vmt[ttype(o)];
@@ -880,19 +881,23 @@ CR_API int cr_get_class(cr_State *ts, int index) {
 
 
 CR_API int cr_get_method(cr_State *ts, int index, const char *name) {
-    OClass *cls;
+    Instance *ins;
     OString *key;
     cr_lock(ts);
-    cls = getclass(ts, index);
+    ins = getinstance(ts, index);
     key = crS_new(ts, name);
-    setstrval2s(ts, ts->sp.p, key);
+    setstrval2s(ts, ts->sp.p, key); /* anchor */
     api_inctop(ts);
-    if (cls->methods) {
-        const TValue *slot = crH_getstr(cls->methods, key);
-        setslot2stacktop(ts, slot);
-    } else {
-        setnilval(s2v(ts->sp.p - 1));
+    if (ins->oclass->methods) { /* have methods ? */
+        const TValue *slot = crH_getstr(ins->oclass->methods, key);
+        if (!isabstkey(slot)) { /* have 'name' ? */
+            IMethod *im = crMM_newinsmethod(ts, ins, slot);
+            setim2s(ts, ts->sp.p - 1, im);
+            goto unlock;
+        } /* else fallthrough */
     }
+    setnilval(s2v(ts->sp.p - 1));
+unlock:
     cr_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
@@ -966,7 +971,7 @@ CR_API void cr_set_global(cr_State *ts, const char *name) {
 }
 
 
-CR_API int cr_set(cr_State *ts, int index) {
+CR_API void cr_set(cr_State *ts, int index) {
     TValue *o;
     cr_lock(ts);
     api_checknelems(ts, 2); /* value and key */
@@ -977,7 +982,7 @@ CR_API int cr_set(cr_State *ts, int index) {
 }
 
 
-CR_API int cr_set_field(cr_State *ts, int index, const char *field) {
+CR_API void cr_set_field(cr_State *ts, int index, const char *field) {
     Instance *ins;
     cr_lock(ts);
     api_checknelems(ts, 1);
@@ -1059,6 +1064,71 @@ CR_API int cr_error(cr_State *ts) {
         crPR_throw(ts, CR_ERRRUNTIME); /* raise a regular runtime error */
     /* cr_unlock() is called when control leaves the core */
     cr_unreachable();
+}
+
+
+
+/* Call/Load CScript code */
+
+
+#define checkresults(ts,nargs,nres) \
+     api_check(ts, (nres) == CR_MULRET \
+               || (ts->cf->top.p - ts->sp.p >= (nres) - (nargs)), \
+	"results from function overflow current stack size")
+
+
+CR_API void cr_call(cr_State *ts, int nargs, int nresults) {
+    SPtr func;
+    cr_lock(ts);
+    api_checknelems(ts, nargs + 1); /* args + func */
+    api_check(ts, ts->status == CR_OK, "can't do calls on non-normal thread");
+    checkresults(ts, nargs, nresults);
+    func = ts->sp.p - nargs - 1;
+    crV_call(ts, func, nresults);
+    adjustresults(ts, nresults);
+    cr_unlock(ts);
+}
+
+
+struct PCallData {
+    SPtr func;
+    int nresults;
+};
+
+
+static void fcall(cr_State *ts, void *ud) {
+    struct PCallData *pcd = cast(struct PCallData*, ud);
+    crV_call(ts, pcd->func, pcd->nresults);
+}
+
+
+CR_API int cr_pcall(cr_State *ts, int nargs, int nresults) {
+    SPtr func;
+    struct PCallData pcd;
+    int status;
+    cr_lock(ts);
+    api_checknelems(ts, nargs + 1);
+    api_check(ts, ts->status == CR_OK, "can't do calls on non-normal thread");
+    checkresults(ts, nargs, nresults);
+    pcd.func = ts->sp.p - nargs - 1;
+    pcd.nresults = nresults;
+    status = crPR_call(ts, fcall, &pcd, savestack(ts, pcd.func));
+    adjustresults(ts, nresults);
+    cr_unlock(ts);
+    return status;
+}
+
+
+CR_API int cr_load(cr_State *ts, cr_fReader reader, void *userdata,
+                    const char *source) {
+    BuffReader br;
+    int status;
+    cr_lock(ts);
+    if (!source) source = "?";
+    crR_init(ts, &br, reader, userdata);
+    status = crPR_parse(ts, reader, userdata, source);
+    cr_unlock(ts);
+    return status;
 }
 
 
