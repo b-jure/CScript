@@ -46,11 +46,17 @@
 #define crT_checkstack(ts,n)    crT_checkstackaux(ts,n,(void)0,(void)0)
 
 
+/* check if stack needs to grow and preserve 'p' */
+#define checkstackp(ts,n,p) \
+    crT_checkstackaux(ts, n, \
+            ptrdiff_t p_ = savestack(ts, p), \
+            p = restorestack(ts, p_))
+
+
 /* check GC then check stack preserving 'p' */
 #define checkstackGCp(ts,n,p) \
     crT_checkstackaux(ts,n, \
-            ptrdiff_t p_ = savestack(ts,p); \
-            crG_check(ts), \
+            ptrdiff_t p_ = savestack(ts,p); crG_check(ts), \
             p = restorestack(ts, p_))
 
 
@@ -61,24 +67,24 @@
 
 
 /* 
-** Increment number of nested Cript calls.
-** The counter is located in the upper 2 bytes of 'nCC'.
+** Increment number of non-yieldable calls.
+** The counter is located in the upper 2 bytes of 'nCcalls'.
 */
-#define incn_C(ts)       ((ts)->nCC += 0x10000)
+#define incnnyc(ts)       ((ts)->nCcalls += 0x10000)
 
-/* Decrement number of nested Cript calls. */
-#define decn_C(ts)       ((ts)->nCC -= 0x10000)
+/* Decrement number of nested non-yieldable calls. */
+#define decnnyc(ts)       ((ts)->nCcalls -= 0x10000)
 
 
 /*
-** Get number of nested C calls.
-** This counter is located in the lower 2 bytes of 'nCC'.
+** Get total number of C calls.
+** This counter is located in the lower 2 bytes of 'nCcalls'.
 */
-#define getnC_(ts)       ((ts)->nCC & 0xffff)
+#define getCcalls(ts)       ((ts)->nCcalls & 0xffff)
 
 
-/* Increment value for both the nested C and Cript calls. */
-#define nCCi    (0x10000 | 1)
+/* non-yieldable and C calls increment */
+#define nyci        (0x10000 | 1)
 
 
 
@@ -161,7 +167,7 @@ struct cr_State {
     ObjectHeader;
     ushrt ncf; /* number of call frames in 'cf' list */
     int status; /* status code */
-    cr_uint32 nCC; /* number of calls (C | Cript) */
+    cr_uint32 nCcalls; /* number of C calls */
     GCObject *gclist;
     struct cr_State *thwouv; /* next thread with open upvalues */
     GState *gstate; /* shared global state */
@@ -184,6 +190,25 @@ struct cr_State {
 
 /* check if thread is in 'thwouv' list */
 #define isinthwouv(ts)          ((ts)->thwouv != (ts))
+
+
+
+/* thread state + CR_EXTRASPACE */
+typedef struct XS {
+    cr_ubyte extra_[CR_EXTRASPACE];
+    cr_State ts;
+} XS;
+
+
+/* Main thread + global state */
+typedef struct SG {
+    XS xs;
+    GState gs;
+} SG;
+
+
+/* cast 'cr_State' back to start of 'XS' */
+#define fromstate(th)   cast(XS *, cast(cr_ubyte *, th) - offsetof(XS, ts))
 
 
 

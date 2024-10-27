@@ -28,6 +28,14 @@ void crMM_init(cr_State *ts) {
 }
 
 
+TValue *crMM_newvmt(cr_State *ts) {
+    TValue *vmt = crM_malloc(ts, SIZEVMT);
+    for (int i = 0; i < CR_NUM_MM; i++)
+        setnilval(&vmt[i]);
+    return vmt;
+}
+
+
 OClass *crMM_newclass(cr_State *ts) {
     OClass *cls = crG_new(ts, sizeof(OClass), CR_VCLASS, OClass);
     cls->methods = NULL;

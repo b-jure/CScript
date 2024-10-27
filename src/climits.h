@@ -250,7 +250,11 @@ typedef cr_ubyte Instruction;
 #endif
 
 #if !defined(cri_userstatethread)
-#define cri_userstatethread(ts,newts)       ((void)ts)
+#define cri_userstatethread(ts,thread)      ((void)ts)
+#endif
+
+#if !defined(cri_userthreadfree)
+#define cri_userthreadfree(ts,thread)       ((void)ts)
 #endif
 
 #if !defined(cri_userstatefree)

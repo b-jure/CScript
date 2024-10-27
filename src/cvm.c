@@ -145,7 +145,7 @@ void crV_unarithm(cr_State *ts, const TValue *v, SPtr res, int op) {
 static void setmm(cr_State *ts, TValue **vmt, TValue *fn, int vmtt) {
     cr_assert(0 <= vmtt && vmtt < CR_NUM_MM);
     if (cr_unlikely(!(*vmt))) /* empty 'vmt' */
-        *vmt = crM_malloc(ts, SIZEVMT);
+        *vmt = crMM_newvmt(ts);
     (*vmt)[vmtt] = *fn; /* set the entry */
 }
 
@@ -328,33 +328,14 @@ cr_sinline void setglobal(cr_State *ts, TValue *key, TValue *newval) {
 }
 
 
-void crV_setfield(cr_State *ts, TValue *obj, const TValue *key,
-                  const TValue *val, cr_MM mm) {
-    HTable *ht;
-    const TValue *fmm;
-    switch (ttypetag(obj)) {
-        case CR_VINSTANCE: {
-            ht = &insval(obj)->fields;
-            break;
-        }
-        case CR_VUDATA: {
-            ht = &insval(obj)->fields;
-            break;
-        }
-        default: {
-            fmm = crMM_get(ts, obj, mm);
-            if (ttisnil(fmm))
-                crD_typeerror(ts, obj, "index");
-            goto callfmm;
-        }
-    }
-    fmm = crMM_get(ts, obj, mm);
-    if (!ttisnil(fmm)) {
-        callfmm:
+void crV_set(cr_State *ts, TValue *obj, const TValue *key, const TValue *val) {
+    const TValue *fmm = crMM_get(ts, obj, CR_MM_SETIDX);
+    if (!ttisnil(fmm)) /* have metamethod ? */
         crMM_callhtm(ts, fmm, obj, key, val);
-    } else  {
-        crH_set(ts, ht, key, val);
-    }
+    else if (ttisins(obj)) /* object is instance ? */
+        crH_set(ts, &insval(obj)->fields, key, val);
+    else /* error */
+        crD_typeerror(ts, obj, "index");
 }
 
 
@@ -363,11 +344,10 @@ void crV_setfield(cr_State *ts, TValue *obj, const TValue *key,
     setim2s(ts, res, crMM_newinsmethod(ts, ins, v))
 
 
-void crV_getproperty(cr_State *ts, const TValue *obj, const TValue *key,
-                     SPtr res, cr_MM mm) {
+void crV_get(cr_State *ts, const TValue *obj, const TValue *key, SPtr res) {
     Instance *ins;
     const TValue *fmm, *v;
-    fmm = crMM_get(ts, obj, mm);
+    fmm = crMM_get(ts, obj, CR_MM_GETIDX);
     if (!ttisnil(fmm)) { /* have metamethod ? */
         crMM_callhtmres(ts, fmm, obj, key, res);
     } else { /* otherwise perform raw access */
@@ -544,12 +524,12 @@ retry:
             return NULL;
         }
         case CR_VCLASS: { /* Class */
-            const TValue *f;
+            const TValue *fmm;
             Instance *ins = crMM_newinstance(ts, clsval(s2v(func)));
             setins2s(ts, func, ins); /* replace class with its instance */
-            f = crMM_get(ts, s2v(func), CR_MM_INIT);
-            if (!ttisnil(f)) { /* have '__init' ? */
-                func = adjustffunc(ts, func, f);
+            fmm = crMM_get(ts, s2v(func), CR_MM_INIT);
+            if (!ttisnil(fmm)) { /* have '__init' ? */
+                func = adjustffunc(ts, func, fmm);
                 cr_assert(ttiscl(s2v(func)) || ttiscfn(s2v(func)));
                 goto retry; /* call '__init' */
             } else {
@@ -573,6 +553,27 @@ retry:
             goto retry;
         }
     }
+}
+
+
+cr_sinline void ccall(cr_State *ts, SPtr func, int nresults, cr_uint32 inc) {
+  CallFrame *cf;
+  ts->nCcalls += inc;
+  if (cr_unlikely(getCcalls(ts) >= CRI_MAXCCALLS)) {
+    checkstackp(ts, 0, func);  /* free any use of EXTRA_STACK */
+    crT_checkCstack(ts);
+  }
+  if ((cf = precall(ts, func, nresults)) != NULL) {  /* CScript function? */
+    cf->status = CFST_FRESH;
+    crV_execute(ts, cf);
+  }
+  ts->nCcalls -= inc;
+}
+
+
+/* external interface for 'ccall' */
+void crV_call(cr_State *ts, SPtr func, int nresults) {
+    ccall(ts, func, nresults, nyci);
 }
 
 
@@ -1316,7 +1317,7 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_setfield(ts, v1, s, v2, CR_MM_SETIDX));
+                protect(crV_set(ts, v1, s, v2));
                 pop(2); /* v1,v2 */
                 vm_break;
             }
@@ -1324,13 +1325,13 @@ returning:
                 TValue *s = getlK();
                 TValue *v = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_getproperty(ts, v, s, TOPS(), CR_MM_GETIDX));
+                protect(crV_get(ts, v, s, TOPS()));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                protect(crV_getproperty(ts, v1, v2, SPTR(1), CR_MM_GETIDX));
+                protect(crV_get(ts, v1, v2, SPTR(1)));
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1338,7 +1339,7 @@ returning:
                 TValue *v1 = peek(2);
                 TValue *v2 = peek(1);
                 TValue *v3 = peek(0);
-                protect(crV_setfield(ts, v1, v2, v3, CR_MM_SETIDX));
+                protect(crV_set(ts, v1, v2, v3));
                 pop(3); /* v1,v2,v3 */
                 vm_break;
             }
@@ -1346,7 +1347,7 @@ returning:
                 TValue *s = getlK();
                 TValue *v = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_getproperty(ts, v, s, TOPS(), CR_MM_GETIDX));
+                protect(crV_get(ts, v, s, TOPS()));
                 vm_break;
             }
             vm_case(OP_SETINDEXSTR) { /* TODO: optimize */
@@ -1354,14 +1355,14 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cr_assert(ttisstr(s));
-                protect(crV_setfield(ts, v1, s, v2, CR_MM_SETIDX));
+                protect(crV_set(ts, v1, s, v2));
                 vm_break;
             }
             vm_case(OP_GETINDEXINT) { /* TODO: optimize */
                 TValue aux;
                 TValue *v = peek(0);
                 setival(&aux, fetchl());
-                protect(crV_getproperty(ts, v, &aux, TOPS(), CR_MM_GETIDX));
+                protect(crV_get(ts, v, &aux, TOPS()));
                 vm_break;
             }
             vm_case(OP_SETINDEXINT) { /* TODO: optimize */
@@ -1369,7 +1370,7 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 setival(&aux, fetchl());
-                protect(crV_setfield(ts, v1, &aux, v2, CR_MM_SETIDX));
+                protect(crV_set(ts, v1, &aux, v2));
                 vm_break;
             }
             vm_case(OP_GETSUP) {

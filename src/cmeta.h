@@ -7,6 +7,7 @@
 
 
 CRI_FUNC void crMM_init(cr_State *ts);
+CRI_FUNC TValue *crMM_newvmt(cr_State *ts);
 CRI_FUNC const TValue *crMM_get(cr_State *ts, const TValue *v, cr_MM mm);
 CRI_FUNC OClass *crMM_newclass(cr_State *ts);
 CRI_FUNC Instance *crMM_newinstance(cr_State *ts, OClass *cls);

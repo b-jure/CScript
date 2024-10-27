@@ -31,12 +31,6 @@
 #define isvalid(ts,o)           (!ttisnil(o) || (o) != &G_(ts)->nil)
 
 
-/* test if type 't' can have property */
-#define hasprop(t,clsok) \
-    ((t) == CR_TINSTANCE || (t) == CR_TUDATA || ((t) == CR_TCLASS) && (clsok))
-
-
-
 /* 
 ** Convert index to a pointer to its value.
 ** Invalid indices (using upvalue index for CScript functions) return
@@ -80,271 +74,19 @@ static SPtr index2stack(const cr_State *ts, int index) {
 }
 
 
-
-/* thread state + CR_EXTRASPACE */
-typedef struct XS {
-    cr_ubyte extra_[CR_EXTRASPACE];
-    cr_State ts;
-} XS;
-
-
-/* Main thread + global state */
-typedef struct SG {
-    XS xs;
-    GState gs;
-} SG;
-
-
-/* cast 'cr_State' back to start of 'XS' */
-#define fromstate(th)   cast(XS *, cast(cr_ubyte *, th) - offsetof(XS, ts))
-
-
-/*
-** -- Lua 5.4.7 [lstate.c]:58
-** Macro for creating "random" seed when a state is created;
-** seed is used for randomizing string hashes.
-*/
-#if !defined(cri_makeseed)
-#include <time.h>
-
-#define buffadd(b,p,e) \
-    { size_t t = cast_sizet(e); \
-      memcpy((b) + (p), &t, sizeof(t)); (p) += sizeof(t); }
-
-static uint cri_makeseed(cr_State *ts) {
-    char str[3 * sizeof(size_t)];
-    uint seed = time(NULL); /* seed with current time */
-    int n = 0;
-    buffadd(str, n, ts); /* heap variable */
-    buffadd(str, n, &seed); /* local variable */
-    buffadd(str, n, &cr_newstate); /* public function */
-    cr_assert(n == sizeof(str));
-    return crS_hash(str, n, seed);
-}
-#endif
-
-
-/*
-** Preinitialize all thread fields to avoid collector
-** errors.
-*/
-static void preinit_thread(cr_State *ts, GState *gs) {
-    ts->ncf = 0;
-    ts->status = CR_OK;
-    ts->nCC = 0;
-    ts->gclist = NULL;
-    ts->thwouv = ts; /* if ('ts->thwouv' == 'ts') then no upvalues */
-    G_(ts) = gs;
-    ts->errjmp = NULL;
-    ts->stack.p = NULL;
-    ts->cf = NULL;
-    ts->openupval = NULL;
-}
-
-
-/*
-** Initialize stack and base call frame for 'newts'.
-** 'mts' is main thread state; 'newts' == 'mts' only when
-** creating new state.
-*/
-static void init_stack(cr_State *newts, cr_State *mts) {
-    newts->stack.p = crM_newarray(mts, INIT_STACKSIZE + EXTRA_STACK, SValue);
-    newts->tbclist.p = newts->stack.p;
-    for (int i = 0; i < INIT_STACKSIZE + EXTRA_STACK; i++)
-        setnilval(s2v(newts->stack.p + i));
-    newts->sp.p = newts->stack.p;
-    newts->stackend.p = newts->stack.p + INIT_STACKSIZE;
-    CallFrame *cf = &newts->basecf;
-    cf->next = cf->prev = NULL;
-    cf->func.p = newts->sp.p;
-    cf->top.p = mts->stack.p + CR_MINSTACK;
-    cf->pc = NULL;
-    cf->nvarargs = 0;
-    cf->nresults = 0;
-    cf->status = CFST_CCALL;
-    setnilval(s2v(mts->sp.p)); /* 'cf' entry function */
-    mts->sp.p++;
-    mts->cf = cf;
-}
-
-
-/*
-** Initialize parts of state that may cause memory
-** allocation errors.
-*/
-static void fnewstate(cr_State *ts, void *ud) {
-    GState *gs = G_(ts);
-    UNUSED(ud);
-    init_stack(ts, ts); /* initialize 'ts' stack */
-    gs->strings = crH_new(ts); /* new weak strings table */
-    sethtval(ts, &gs->globals, crH_new(ts));
-    gs->memerror = crS_newlit(ts, MEMERRMSG);
-    crG_fix(ts, obj2gco(gs->memerror));
-    crMM_init(ts);
-    crL_init(ts);
-    gs->gc.stopped = 0;
-    setnilval(&gs->nil); /* signal that state is fully built */
-    cri_userstatecreated(ts);
-}
-
-
-/* free all 'CallFrame' structures NOT in use by thread */
-static void freecallframes(cr_State *ts) {
-    CallFrame *cf = ts->cf;
-    CallFrame *next = cf->next;
-    cf->next = NULL;
-    while ((cf = next) != NULL) {
-        next = cf->next;
-        crM_free(ts, cf, sizeof(cf));
-        ts->ncf--;
-    }
-}
-
-
-/* free thread stack and call frames */
-static void freestack(cr_State *ts) {
-    if (ts->stack.p == NULL)
-        return;
-    ts->cf = &ts->basecf;
-    freecallframes(ts);
-    cr_assert(ts->ncf == 0);
-    crM_freearray(ts, s2v(ts->stack.p), stacksize(ts), TValue);
-}
-
-
-/* free global and mainthread state */
-static void freestate(cr_State *mt) {
-    GState *gs = G_(mt);
-    cr_assert(mt == G_(mt)->mainthread);
-    if (!gsinitialized(gs)) { /* partially built state? */
-        crG_freeallobjects(mt);
-    } else {
-        mt->cf = &mt->basecf; /* undwind call frame list */
-        crPR_close(mt, 1, CR_OK);
-        crG_freeallobjects(mt);
-        cri_userstatefree(mt);
-    }
-    freestack(mt);
-    cr_assert(totalbytes(&gs->gc) == sizeof(XS));
-    gs->falloc(fromstate(mt), sizeof(XS), 0, gs->udalloc);
-}
-
-
-/*
-** Allocate new thread and global state with 'falloc' and
-** userdata 'ud', from here on 'falloc' will be the allocator.
-** The returned thread state is mainthread.
-** In case of errors NULL is returned.
-*/
-CR_API cr_State *cr_newstate(cr_fAlloc falloc, void *ud) {
-    GState *gs;
-    cr_State *ts;
-    SG *sg = falloc(NULL, 0, sizeof(SG), ud);
-    if (cr_unlikely(sg == NULL))
-        return NULL;
-    gs = &sg->gs;
-    ts = &sg->xs.ts;
-    ts->next = NULL;
-    ts->tt_ = CR_VTHREAD;
-    crG_init(&gs->gc, ts, sizeof(SG)); /* initialize collector */
-    ts->mark = crG_white(&gs->gc);
-    preinit_thread(ts, gs);
-    setnilval(&gs->globals);
-    gs->falloc = falloc;
-    gs->udalloc = ud;
-    gs->panic = NULL; /* no panic handler by default */
-    gs->seed = cri_makeseed(ts); /* initial seed for hashing */
-    setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
-    gs->mainthread = ts;
-    gs->thwouv = NULL;
-    for (int i = 0; i < CR_NUM_TYPES; i++)
-        gs->vmt[i] = NULL;
-    if (crPR_rawcall(ts, fnewstate, NULL) != CR_OK) {
-        freestate(ts);
-        ts = NULL;
-    }
-    return ts;
-}
-
-
-/* free state (global state + mainthread) */
-CR_API void cr_freestate(cr_State *mts) {
-    cr_lock(ts);
-    cr_State *mt = G_(mts)->mainthread;
-    freestate(mt);
-}
-
-
-/*
-** Create new thread state.
-** Argument 'mts' is the main thread created by 'cr_newstate'.
-*/
-CR_API cr_State *cr_newthread(cr_State *mts) {
-    GState *gs = G_(mts);
-    cr_State *newts;
-    GCObject *o;
-    cr_lock(mts);
-    o = crG_newoff(mts, sizeof(XS), CR_VTHREAD, offsetof(XS, ts));
-    newts = gco2th(o);
-    setsv2th(mt, mts->sp.p, newts);
-    api_inctop(mts);
-    preinit_thread(newts, gs);
-    init_stack(newts, mts);
-    memcpy(cr_getextraspace(newts), cr_getextraspace(gs->mainthread),
-           CR_EXTRASPACE);
-    cri_userstatethread(mts, newts);
-    cr_unlock(mts);
-    return newts;
-}
-
-
-/*
-** Reset thread state 'ts' by unwinding `CallFrame` list,
-** closing all upvalues (and to-be-closed variables) and
-** reseting the stack.
-** In case of errors, error object is placed on top of the
-** stack and the function returns relevant status code.
-** If no errors occured `CR_OK` status is returned.
-*/
-CR_API int cr_resetthread(cr_State *ts) {
-    CallFrame *cf = ts->cf = &ts->basecf;
-    int status = ts->status;
-    cr_lock(ts);
-    ts->status = CR_OK; /* so we can run '__close' */
-    status = crPR_close(ts, 1, status);
-    if (status != CR_OK) /* error? */
-        crT_seterrorobj(ts, status, ts->stack.p + 1);
-    else
-        ts->sp.p = ts->stack.p + 1;
-    cf->top.p = ts->sp.p + CR_MINSTACK;
-    crT_reallocstack(ts, cf->top.p - ts->sp.p, 0);
-    cr_unlock(ts);
-    return status;
-}
-
-
 CR_API cr_Number cr_version(cr_State *ts) {
     UNUSED(ts);
     return CR_VERSION_NUMBER;
 }
 
 
-/* 
-** Sets the stack top to 'index'.
-** Index can be any value.
-** If new top is greater than the previous one, new values are elements
-** are filled with 'nil'.
-** If index is 0, then all stack elements are removed.
-** This function can run '__close' if it removes an index from the stack
-** marked as to-be-closed.
-*/
-CR_API void cr_settop(cr_State *ts, int index) {
+/* auxiliary function that sets the stack top without locking */
+cr_inline void auxsettop(cr_State *ts, int index) {
     CallFrame *cf;
     SPtr func, newtop;
     ptrdiff_t diff;
     cf = ts->cf;
     func = cf->func.p;
-    cr_lock(ts);
     if (index >= 0) {
         api_check(ts, index <= (cf->top.p - func + 1), "new top too large");
         diff = (func + 1 + index) - ts->sp.p;
@@ -360,6 +102,21 @@ CR_API void cr_settop(cr_State *ts, int index) {
         crF_close(ts, newtop, CLOSEKTOP);
     }
     ts->sp.p = newtop; /* set new top */
+}
+
+
+/* 
+** Sets the stack top to 'index'.
+** Index can be any value.
+** If new top is greater than the previous one, new values are elements
+** are filled with 'nil'.
+** If index is 0, then all stack elements are removed.
+** This function can run '__close' if it removes an index from the stack
+** marked as to-be-closed.
+*/
+CR_API void cr_settop(cr_State *ts, int index) {
+    cr_lock(ts);
+    auxsettop(ts, index);
     cr_unlock(ts);
 }
 
@@ -471,13 +228,17 @@ CR_API int cr_checkstack(cr_State *ts, int n) {
 }
 
 
+/* push without lock */
+#define pushvalue(ts, index) \
+    { setobj2s(ts, ts->sp.p, index2value(ts, index)); api_inctop(ts); }
+
+
 /*
 ** Push value at the index on to the top of the stack.
 */
 CR_API void cr_push(cr_State *ts, int index) {
     cr_lock(ts);
-    setobj2s(ts, ts->sp.p, index2value(ts, index));
-    api_inctop(ts);
+    pushvalue(ts, index);
     cr_unlock(ts);
 }
 
@@ -536,6 +297,21 @@ CR_API int cr_iscfunction(cr_State *ts, int index) {
 CR_API int cr_isuserdata(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return (ttislud(o) || ttisud(o));
+}
+
+
+cr_sinline TValue *getvvmt(cr_State *ts, const TValue *o) {
+    switch (ttype(o)) {
+        case CR_TCLASS: return clsval(o)->vmt;
+        case CR_TUDATA: return udval(o)->vmt;
+        default: return G_(ts)->vmt[ttype(o)];
+    }
+}
+
+
+cr_sinline TValue *getvmt(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    return getvvmt(ts, o);
 }
 
 
@@ -763,7 +539,7 @@ CR_API int cr_compare(cr_State *ts, int index1, int index2, int op) {
 
 
 /* Push nil value on top of the stack. */
-CR_API void cr_pushnil(cr_State *ts) {
+CR_API void cr_push_nil(cr_State *ts) {
     cr_lock(ts);
     setnilval(s2v(ts->sp.p));
     api_inctop(ts);
@@ -772,7 +548,7 @@ CR_API void cr_pushnil(cr_State *ts) {
 
 
 /* Push 'cr_Number' value on top of the stack. */
-CR_API void cr_pushnumber(cr_State *ts, cr_Number n) {
+CR_API void cr_push_number(cr_State *ts, cr_Number n) {
     cr_lock(ts);
     setfval(s2v(ts->sp.p), n);
     api_inctop(ts);
@@ -781,7 +557,7 @@ CR_API void cr_pushnumber(cr_State *ts, cr_Number n) {
 
 
 /* Push 'cr_Integer' value on top of the stack. */
-CR_API void cr_pushinteger(cr_State *ts, cr_Integer i) {
+CR_API void cr_push_integer(cr_State *ts, cr_Integer i) {
     cr_lock(ts);
     setival(s2v(ts->sp.p), i);
     api_inctop(ts);
@@ -790,7 +566,7 @@ CR_API void cr_pushinteger(cr_State *ts, cr_Integer i) {
 
 
 /* Push string value of length 'len' on top of the stack. */
-CR_API const char *cr_pushstring(cr_State *ts, const char *str, size_t len) {
+CR_API const char *cr_push_string(cr_State *ts, const char *str, size_t len) {
     OString *s;
     cr_lock(ts);
     s = (len == 0 ? crS_new(ts, "") : crS_newl(ts, str, len));
@@ -803,7 +579,7 @@ CR_API const char *cr_pushstring(cr_State *ts, const char *str, size_t len) {
 
 
 /* Push null terminated string value on top of the stack. */
-CR_API const char *cr_pushcstring(cr_State *ts, const char *str) {
+CR_API const char *cr_push_cstring(cr_State *ts, const char *str) {
     cr_lock(ts);
     if (str == NULL) {
         setnilval(s2v(ts->sp.p));
@@ -825,7 +601,7 @@ CR_API const char *cr_pushcstring(cr_State *ts, const char *str) {
 ** s (string), p (pointer) and % ('%'). Note that each format specifier is
 ** preceeded by '%' (so %I...).
 */
-CR_API const char *cr_pushvfstring(cr_State *ts, const char *fmt, va_list argp) {
+CR_API const char *cr_push_vfstring(cr_State *ts, const char *fmt, va_list argp) {
     const char *str;
     cr_lock(ts);
     str = crS_pushvfstring(ts, fmt, argp);
@@ -839,7 +615,7 @@ CR_API const char *cr_pushvfstring(cr_State *ts, const char *fmt, va_list argp) 
 ** Push formatted string with variable amount of format values on top of the
 ** stack. Valid format specifiers are the same as in 'cr_pushvfstring'.
 */
-CR_API const char *cr_pushfstring(cr_State *ts, const char *fmt, ...) {
+CR_API const char *cr_push_fstring(cr_State *ts, const char *fmt, ...) {
     const char *str;
     va_list argp;
     cr_lock(ts);
@@ -852,15 +628,8 @@ CR_API const char *cr_pushfstring(cr_State *ts, const char *fmt, ...) {
 }
 
 
-/*
-** Push C closure value on top of the stack.
-** This closure will have 'nupvals' upvalues, these values will be popped
-** of the stack and inserted into the closure.
-** If 'nupvals' is 0 then this does not create a C closure, rather it only
-** pushes the 'cr_CFunction' on top of the stack.
-*/
-CR_API void cr_pushcclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
-    cr_lock(ts);
+/* auxiliary function, pushes C closure without locking */
+cr_sinline void auxpushcclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
     if (nupvals == 0) {
         setcfval(s2v(ts->sp.p), fn);
         api_inctop(ts);
@@ -878,6 +647,19 @@ CR_API void cr_pushcclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
         api_inctop(ts);
         crG_check(ts);
     }
+}
+
+
+/*
+** Push C closure value on top of the stack.
+** This closure will have 'nupvals' upvalues, these values will be popped
+** of the stack and inserted into the closure.
+** If 'nupvals' is 0 then this does not create a C closure, rather it only
+** pushes the 'cr_CFunction' on top of the stack.
+*/
+CR_API void cr_push_cclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
+    cr_lock(ts);
+    auxpushcclosure(ts, fn, nupvals);
     cr_unlock(ts);
 }
 
@@ -886,7 +668,7 @@ CR_API void cr_pushcclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
 ** Push boolean value on top of the stack.
 ** If 'b' is 0 then `false` is pushed, otherwise `true`.
 */
-CR_API void cr_pushbool(cr_State *ts, int b) {
+CR_API void cr_push_bool(cr_State *ts, int b) {
     cr_lock(ts);
     if (b)
         setbtval(s2v(ts->sp.p));
@@ -898,7 +680,7 @@ CR_API void cr_pushbool(cr_State *ts, int b) {
 
 
 /* Push light userdata on top of the stack. */
-CR_API void cr_pushlightuserdata(cr_State *ts, void *p) {
+CR_API void cr_push_lightuserdata(cr_State *ts, void *p) {
     cr_lock(ts);
     setpval(s2v(ts->sp.p), p);
     api_inctop(ts);
@@ -910,7 +692,7 @@ CR_API void cr_pushlightuserdata(cr_State *ts, void *p) {
 ** Push thread 'ts' on top of the stack.
 ** Returns non-zero if the pushed thread is main thread.
 */
-CR_API int cr_pushthread(cr_State *ts) {
+CR_API int cr_push_thread(cr_State *ts) {
     cr_lock(ts);
     setsv2th(ts, ts->sp.p, ts);
     api_inctop(ts);
@@ -919,38 +701,77 @@ CR_API int cr_pushthread(cr_State *ts) {
 }
 
 
-CR_API void cr_pushclass(cr_State *ts, cr_VMT *vmt, int sindex, int nm) {
+cr_sinline void auxsetvmt(TValue *dest, cr_VMT *vmt) {
+    for (int i = 0; i < CR_NUM_MM; i++)
+        setcfval(&dest[i], vmt->func[i]);
+}
+
+
+#define fastget(ts,ht,k,slot,f)     ((slot = f(ht, k)), !isabstkey(slot))
+
+#define finishfastset(ts,ht,slot,v) \
+    { setobj(ts, cast(TValue *, slot), v); \
+      crG_barrierback(ts, obj2gco(ht), v); }
+
+
+cr_sinline void auxrawsetstr(cr_State *ts, HTable *ht, const char *str) {
+    const TValue *slot;
+    OString *s = crS_new(ts, str);
+    if (fastget(ts, ht, s, slot, crH_getstr)) {
+        finishfastset(ts, ht, slot, s2v(ts->sp.p - 1));
+        ts->sp.p--; /* pop value */
+    } else {
+        setstrval2s(ts, ts->sp.p, s);
+        api_inctop(ts);
+        crH_set(ts, ht, s2v(ts->sp.p - 1), s2v(ts->sp.p - 2));
+        ts->sp.p -= 2; /* pop key and value */
+    }
+}
+
+
+cr_sinline void auxsetentrylist(cr_State *ts, OClass *cls, cr_ClassEntry *list,
+                                int nup) {
+    /* TODO: implement cr_checkstack */
+    if (list->name && !cls->methods) { /* have entry and no method table? */
+        cls->methods = crH_new(ts);
+        crG_check(ts);
+    }
+    for (; list->name; list++) {
+        api_check(ts, list->func, "entry 'func' is NULL");
+        for (int i = 0; i < nup; i++) /* push upvalues to the top */
+            pushvalue(ts, -nup);
+        auxpushcclosure(ts, list->func, nup);
+        auxrawsetstr(ts, cls->methods, list->name);
+    }
+    auxsettop(ts, -(nup - 1)); /* pop upvalues */
+}
+
+
+CR_API void cr_push_class(cr_State *ts, cr_VMT *vmt, int sindex, int nup,
+                         cr_ClassEntry *entries) {
+    OClass *cls;
     cr_lock(ts);
-    api_check(ts, vmt->nstack >= 0, "invalid 'nstack'");
-    api_checknelems(ts, vmt->nstack);
-    OClass *cls = crMM_newclass(ts);
-    if (sindex) {
-        const TValue *osup = index2value(ts, sindex);
-        api_check(ts, ttiscls(osup), "expect class");
-        if (clsval(osup)->methods) /* have methods? */
-            crH_copykeys(ts, clsval(osup)->methods, cls->methods);
-    }
-    if (vmt->nstack)
-        cls->vmt = crM_malloc(ts, SIZEVMT);
-    ts->sp.p -= nm;
-    for (int i = 0; i < CR_NUM_MM; i++) {
-        switch (vmt->mm[i].mmt) {
-            case CR_MMT_STK:
-                setobj(ts, &cls->vmt[i], s2v(ts->sp.p + --nm));
-                break;
-            case CR_MMT_CFN:
-                setcfval(&cls->vmt[i], vmt->mm[i].cfn);
-                break;
-            case CR_MMT_NONE:
-                setnilval(&cls->vmt[i]);
-                break;
-            default: api_check(ts, 0, "invalid 'mmt'");
-        }
-    }
-    api_check(ts, nm > -1, "too many stack values popped");
-    api_check(ts, nm < 1, "too many values left on stack");
+    cls = crMM_newclass(ts);
+    crG_check(ts);
     setcls2s(ts, ts->sp.p, cls);
     api_inctop(ts);
+    if (sindex) { /* have superclass? */
+        const TValue *osup = index2value(ts, sindex);
+        api_check(ts, ttiscls(osup), "expect class");
+        if (clsval(osup)->methods) { /* have methods? */
+            cls->methods = crH_new(ts);
+            crH_copykeys(ts, clsval(osup)->methods, cls->methods);
+        }
+    }
+    if (vmt) { /* have Virtual Method Table? */
+        cls->vmt = crMM_newvmt(ts);
+        crG_check(ts);
+        auxsetvmt(cls->vmt, vmt);
+    }
+    if (entries) /* have methods? */
+        auxsetentrylist(ts, cls, entries, nup);
+    else /* otherwise there should be no upvalues */
+        api_check(ts, nup == 0, "'nup' non-zero but 'entries' NULL");
     cr_unlock(ts);
 }
 
@@ -978,17 +799,7 @@ cr_sinline int auxrawgetstr(cr_State *ts, HTable *ht, const char *k) {
 }
 
 
-/*
-** Gets the global variable 'name' value and pushes it on top of the stack.
-** This function returns the value type.
-*/
-CR_API int cr_get_global(cr_State *ts, const char *name) {
-    HTable *G_ht;
-    cr_lock(ts);
-    G_ht = htval(&G_(ts)->globals);
-    return auxrawgetstr(ts, G_ht, name);
-}
-
+/* Get -> Instance */
 
 cr_sinline const TValue *getinstance(cr_State *ts, int index) {
     const TValue *o = index2value(ts, index);
@@ -997,15 +808,8 @@ cr_sinline const TValue *getinstance(cr_State *ts, int index) {
 }
 
 
-cr_sinline const TValue *getuserdata(cr_State *ts, int index) {
-    const TValue *o = index2value(ts, index);
-    api_check(ts, ttisud(o), "expect userdata");
-    return o;
-}
-
-
 cr_sinline int auxgetprop(cr_State *ts, const TValue *ins, const TValue *prop) {
-    crV_getproperty(ts, ins, prop, ts->sp.p - 1, CR_MM_GETIDX);
+    crV_get(ts, ins, prop, ts->sp.p - 1);
     cr_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
@@ -1038,12 +842,11 @@ CR_API int cr_get_propstr(cr_State *ts, int index, const char *prop) {
 }
 
 
-cr_sinline int auxtrymetaget(cr_State *ts, Instance *ins, const TValue *vins,
-                             const TValue *key) {
-    const TValue *o;
-    if (ins->oclass->vmt && /* have metamethods? */
-            !ttisnil((o = &ins->oclass->vmt[CR_MM_GETIDX]))) { /* and mm? */
-        crMM_callhtmres(ts, o, vins, key, ts->sp.p - 1);
+cr_sinline int auxtrymetaget(cr_State *ts, const TValue *o, const TValue *key) {
+    const TValue *fmm;
+    TValue *vmt = getvvmt(ts, o);
+    if (vmt && !ttisnil((fmm = &vmt[CR_MM_GETIDX]))) {
+        crMM_callhtmres(ts, fmm, o, key, ts->sp.p - 1);
         return 1;
     }
     return 0;
@@ -1056,7 +859,7 @@ cr_sinline int auxtrymetaget(cr_State *ts, Instance *ins, const TValue *vins,
 
 
 cr_sinline int auxgetfield(cr_State *ts, const TValue *vins, const TValue *key) {
-    if (!auxtrymetaget(ts, insval(vins), vins, key))
+    if (!auxtrymetaget(ts, vins, key))
         rawget(ts, &insval(vins)->fields, key, crH_get);
     cr_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
@@ -1075,7 +878,7 @@ CR_API int cr_get_field(cr_State *ts, int index) {
 cr_sinline int auxgetfieldstr(cr_State *ts, const TValue *vins, OString *field) {
     setstrval2s(ts, ts->sp.p, field); /* anchor */
     api_inctop(ts);
-    if (!auxtrymetaget(ts, insval(vins), vins, s2v(ts->sp.p - 1)))
+    if (!auxtrymetaget(ts, vins, s2v(ts->sp.p - 1)))
         rawget(ts, &insval(vins)->fields, field, crH_getstr);
     cr_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
@@ -1156,6 +959,142 @@ CR_API int cr_rawget_fieldstr(cr_State *ts, int index,const char *field) {
     return auxrawgetstr(ts, fields, field);
 }
 
+
+/* Get -> Class */
+
+cr_sinline OClass *getclass(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    api_check(ts, ttiscls(o), "expect class");
+    return clsval(o);
+}
+
+
+CR_API int cr_get_method(cr_State *ts, int index) {
+    OClass *cls;
+    cr_lock(ts);
+    api_checknelems(ts, 1); /* key */
+    cls = getclass(ts, index);
+    if (cls->methods) {
+        const TValue *slot = crH_get(cls->methods, s2v(ts->sp.p - 1));
+        setslot2stacktop(ts, slot);
+    } else {
+        setnilval(s2v(ts->sp.p - 1));
+    }
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
+}
+
+
+CR_API int cr_get_methodstr(cr_State *ts, int index, const char *name) {
+    OClass *cls;
+    OString *key;
+    cr_lock(ts);
+    cls = getclass(ts, index);
+    key = crS_new(ts, name);
+    setstrval2s(ts, ts->sp.p, key);
+    api_inctop(ts);
+    if (cls->methods) {
+        const TValue *slot = crH_getstr(cls->methods, key);
+        setslot2stacktop(ts, slot);
+    } else {
+        setnilval(s2v(ts->sp.p - 1));
+    }
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
+}
+
+
+CR_API int cr_get_metamethod(cr_State *ts, int index, cr_MM mm) {
+    TValue *vmt;
+    int tt;
+    cr_lock(ts);
+    vmt = getvmt(ts, index);
+    if (vmt) {
+        setobj2s(ts, ts->sp.p, &vmt[mm]);
+        api_inctop(ts);
+        tt = ttype(s2v(ts->sp.p - 1)); 
+    } else {
+        tt = CR_TNONE;
+    }
+    cr_unlock(ts);
+    return tt;
+}
+
+
+CR_API int cr_get(cr_State *ts) {
+    cr_lock(ts);
+    api_checknelems(ts, 2); /* value being indexed + key */
+    crV_get(ts, s2v(ts->sp.p - 2), s2v(ts->sp.p - 1), ts->sp.p - 2);
+    ts->sp.p--; /* pop key */
+    cr_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
+}
+
+
+/*
+** Gets the global variable 'name' value and pushes it on top of the stack.
+** This function returns the value type.
+*/
+CR_API int cr_get_global(cr_State *ts, const char *name) {
+    HTable *G_ht;
+    cr_lock(ts);
+    G_ht = htval(&G_(ts)->globals);
+    return auxrawgetstr(ts, G_ht, name);
+}
+
+
+CR_API void *cr_newuserdata(cr_State *ts, size_t sz, int nuv) {
+    UserData *ud;
+    cr_lock(ts);
+    api_checknelems(ts, nuv);
+    ud = crMM_newuserdata(ts, sz, nuv);
+    ts->sp.p -= nuv;
+    while (nuv--)
+        setobj(ts, &ud->uv[nuv], s2v(ts->sp.p + nuv));
+    ud->nuv = nuv;
+    setud2s(ts, ts->sp.p, ud);
+    api_inctop(ts);
+    cr_unlock(ts);
+    return getudmem(ud);
+}
+
+
+cr_sinline UserData *getuserdata(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    api_check(ts, ttisud(o), "expect userdata");
+    return udval(o);
+}
+
+
+CR_API int cr_get_uservalue(cr_State *ts, int index, int n) {
+    UserData *ud;
+    int tt;
+    cr_lock(ts);
+    ud = getuserdata(ts, index);
+    if (0 < n || ud->nuv < n) {
+        setnilval(s2v(ts->sp.p));
+        tt = CR_TNONE;
+    } else {
+        setobj2s(ts, ts->sp.p, &ud->uv[n]);
+        tt = ttype(s2v(ts->sp.p - 1));
+    }
+    api_inctop(ts);
+    cr_unlock(ts);
+    return tt;
+}
+
+
+/* Check if the value at the index has virtual method table. */
+CR_API int cr_hasvmt(cr_State *ts, int index) {
+    return getvmt(ts, index) != NULL;
+}
+
+
+/* Check if the value at the index has meta method. */
+CR_API int cr_hasmetamethod(cr_State *ts, int index, cr_MM mm) {
+    TValue *vmt = getvmt(ts, index);
+    return (vmt ? !ttisnil(&vmt[mm]) : 0);
+}
 
 
 /* Set panic handler and return old one */
@@ -1383,8 +1322,7 @@ CR_API void cr_pushcclosure(cr_State *ts, const char *name, cr_CFunction fn, int
 
 
 /* Push value from the stack located at 'idx', on top of the stack */
-CR_API void cr_push(cr_State *ts, int idx)
-{
+CR_API void cr_push(cr_State *ts, int idx) {
     cr_lock(ts);
     Value *val = index2value(ts, idx);
     criptapi_pushval(ts, *val);
