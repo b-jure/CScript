@@ -7,7 +7,6 @@
 #include "cconf.h"
 
 
-/* version info and copyright */
 #define CR_VERSION_MAJOR        "1"
 #define CR_VERSION_MINOR        "0"
 #define CR_VERSION_RELEASE      "0"
@@ -67,7 +66,7 @@ typedef CR_INTEGER cr_Integer;
 /* type for unsigned integers */
 typedef CR_UNSIGNED cr_Unsigned;
 
-/* type for floating point numbers (CScript numbers) */
+/* type for floating point numbers */
 typedef CR_NUMBER cr_Number;
 
 
@@ -80,7 +79,7 @@ typedef void *(*cr_fAlloc)(void *ptr, size_t osz, size_t nsz, void *userdata);
 /* function that reads blocks when loading CScript chunks */
 typedef const char *(*cr_fReader)(cr_State *ts, void *data, size_t *szread);
 
-/* Virtual Method Table, for use when constructing userdata and classes */
+/* Virtual Method Table (for metamethods) */
 typedef struct cr_VMT cr_VMT;
 
 /* Class method entry */
@@ -118,15 +117,13 @@ typedef enum cr_MM {
 
 #define CR_NUM_MM     (CR_MM_LE + 1)
 
-/* Virtual Method Table */
 struct cr_VMT {
     cr_CFunction func[CR_NUM_MM]; /* metamethods */
 };
 
-/* Class method entry */
 struct cr_ClassEntry {
     const char *name; /* name of the method */
-    cr_CFunction func; /* method; can't be NULL if 'name' is present */
+    cr_CFunction func; /* method */
 };
 
 
@@ -181,6 +178,7 @@ CR_API const char      *cr_tostring(cr_State *ts, int index, size_t *len);
 /* -------------------------------------------------------------------------
  * Ordering & Arithmetic functions
  * ------------------------------------------------------------------------- */
+/* Arithmetic operations */
 #define CR_OPADD        0
 #define CR_OPSUB        1
 #define CR_OPMUL        2
@@ -200,6 +198,7 @@ CR_API const char      *cr_tostring(cr_State *ts, int index, size_t *len);
 CR_API void     cr_arith(cr_State *ts, int op); /* DONE */
 
 
+/* Ordering operations */
 #define CR_OPEQ         0
 #define CR_OPLT         1
 #define CR_OPLE         2
@@ -231,21 +230,12 @@ CR_API void        cr_push_class(cr_State *ts, cr_VMT *vmt, int sindex,
 /* -------------------------------------------------------------------------
  * Get functions (CScript -> stack)
  * ------------------------------------------------------------------------- */
-CR_API int   cr_get_prop(cr_State *ts, int index); /* DONE */
-CR_API int   cr_get_propstr(cr_State *ts, int index, const char *prop); /* DONE */
-CR_API int   cr_get_field(cr_State *ts, int index); /* DONE */
-CR_API int   cr_get_fieldstr(cr_State *ts, int index, const char *field); /* DONE */
-CR_API int   cr_rawget_prop(cr_State *ts, int index); /* DONE */
-CR_API int   cr_rawget_propstr(cr_State *ts, int index, const char *prop); /* DONE */
-CR_API int   cr_rawget_field(cr_State *ts, int index); /* DONE */
-CR_API int   cr_rawget_fieldstr(cr_State *ts, int index, const char *field); /* DONE */
-
-CR_API int   cr_get_method(cr_State *ts, int index); /* DONE */
-CR_API int   cr_get_methodstr(cr_State *ts, int index, const char *name); /* DONE */
-CR_API int   cr_get_metamethod(cr_State *ts, int index, cr_MM mm); /* DONE */
-
-CR_API int   cr_get(cr_State *ts); /* DONE */
 CR_API int   cr_get_global(cr_State *ts, const char *name); /* DONE */
+CR_API int   cr_get(cr_State *ts, int index); /* DONE */
+CR_API int   cr_get_field(cr_State *ts, int index); /* DONE */
+CR_API int   cr_get_class(cr_State *ts, int index); /* DONE */
+CR_API int   cr_get_method(cr_State *ts, int index, const char *name); /* DONE */
+CR_API int   cr_get_metamethod(cr_State *ts, int index, cr_MM mm); /* DONE */
 CR_API void *cr_newuserdata(cr_State *ts, size_t sz, int nuv); /* DONE */
 CR_API int   cr_get_uservalue(cr_State *ts, int index, int n); /* DONE */
 
@@ -253,21 +243,17 @@ CR_API int   cr_get_uservalue(cr_State *ts, int index, int n); /* DONE */
 /* -------------------------------------------------------------------------
  * Set functions (stack -> CScript)
  * ------------------------------------------------------------------------- */
-CR_API int  cr_setglobal(cr_State *ts, const char *name, int isconst);
-CR_API int  cr_setfield(cr_State *ts, int idx, const char *field);
-CR_API int  cr_setindex(cr_State *ts, int idx);
-CR_API int  cr_seti(cr_State *ts, int idx, cr_Integer n); // TODO
-CR_API int  cr_rawset(cr_State *ts, int idx); // TODO
-CR_API int  cr_rawseti(cr_State *ts, int idx, cr_Integer n); // TODO
-CR_API int  cr_rawsetp(cr_State *ts, int idx, void *p); // TODO
+CR_API void  cr_set_global(cr_State *ts, const char *name); /* DONE */
+CR_API int   cr_set(cr_State *ts, int index); /* DONE */
+CR_API int   cr_set_field(cr_State *ts, int index, const char *field); /* DONE */
+CR_API void  cr_setuserdatavmt(cr_State *ts, int index, cr_VMT *vmt); /* DONE */
+CR_API int   cr_setuservalue(cr_State *ts, int index, int n); /* DONE */
+CR_API void  cr_set_userdatamm(cr_State *ts, int index, cr_MM mm); /* DONE */
 
-CR_API int cr_setuserdatavmt(cr_State *ts, cr_VMT *vmt);
-CR_API int  cr_setuservalue(cr_State *ts, int idx, int n); // TODO
 
 /* -------------------------------------------------------------------------
  * Error reporting
  * ------------------------------------------------------------------------- */
-
 /* thread status codes */
 #define CR_OK                   0  /* ok */
 #define CR_ERRRUNTIME           1  /* runtime error */
