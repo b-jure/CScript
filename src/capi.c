@@ -1126,9 +1126,79 @@ CR_API int cr_load(cr_State *ts, cr_fReader reader, void *userdata,
     cr_lock(ts);
     if (!source) source = "?";
     crR_init(ts, &br, reader, userdata);
-    status = crPR_parse(ts, reader, userdata, source);
+    status = crPR_parse(ts, &br, source);
     cr_unlock(ts);
     return status;
+}
+
+
+CR_API int cr_gc(cr_State *ts, int option, ...) {
+    va_list ap;
+    int res = 0;
+    GC *gc = &G_(ts)->gc;
+    cr_lock(ts);
+    va_start(ap, option);
+    switch (option) {
+	case CR_GCSTOP: { /* stop garbage collector */
+            gc->stopped = GCSTPUSR; /* stopped by user */
+            break;
+        }
+	case CR_GCRESTART: { /* restart GC */
+            crG_setdebt(gc, 0);
+            gc->stopped = 0;
+            break;
+        }
+	case CR_GCCOLLECT: { /* start GC cycle */
+            crG_full(ts, 0);
+            break;
+        }
+	case CR_GCCOUNT: { /* total GC memory count in Kibibytes */
+            res = totalbytes(gc) >> 10;
+            break;
+        }
+	case CR_GCCOUNTBYTES: { /* remainder bytes of total memory / 1024 */
+            res = totalbytes(gc) & 0x3ff; /* all bits before 10th bit */
+            break;
+        }
+	case CR_GCSTEP: { /* perform GC step */
+            int data = va_arg(ap, int); /* kibibytes */
+            cr_mem debt = 69; /* >0 to signal that it did an actual step */
+            cr_ubyte old_stopped = gc->stopped;
+            if (data == 0) { /* do a regular step ? */
+                crG_setdebt(gc, 0);
+                crG_step(ts);
+            } else { /* add 'data' to total debt */
+                /* 'data' is treated as kibibytes (2^10*data) */
+                debt = (data * 1024) + gc->debt;
+                crG_setdebt(gc, debt);
+                crG_check(ts);
+            }
+            gc->stopped = old_stopped;
+            if (debt > 0 && gc->state == GCSpause) /* end of cycle? */
+                res = 1; /* signal it */
+            break;
+        }
+        case CR_GCSETPAUSE: { /* set GC pause */
+            int data = va_arg(ap, int); /* percentage */
+            res = getgcparam(gc->pause);
+            setgcparam(gc->pause, data);
+            break;
+        }
+        case CR_GCSETSTEPMUL: { /* set GC step multiplier */
+            int data = va_arg(ap, int); /* percentage */
+            res = getgcparam(gc->stepmul);
+            setgcparam(gc->stepmul, data);
+            break;
+        }
+	case CR_GCISRUNNING: { /* check if GC is running */
+            res = gcrunning(gc);
+            break;
+        }
+        default: res = -1; /* invalid option */
+    }
+    va_end(ap);
+    cr_unlock(ts);
+    return res;
 }
 
 

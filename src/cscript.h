@@ -279,16 +279,17 @@ CR_API int  cr_load(cr_State *ts, cr_fReader reader, void *userdata,
  * ------------------------------------------------------------------------- */
 
 /* GC options */
-#define CR_GCSTOP               (1<<0) /* stop GC */
-#define CR_GCRESTART            (1<<1) /* restart GC (start if stopped) */
-#define CR_GCCOLLECT            (1<<2) /* perform full GC cycle */
-#define CR_GCSTEP               (1<<3) /* perform single gc step */
-#define CR_GCCOUNT              (1<<4) /* get number of bytes allocated */
-#define CR_GCISRUNNING          (1<<5) /* check whether GC is stopped */
-#define CR_GCNEXTGC             (1<<6) /* set bytes amount when the next GC 
-                                          will trigger */
+#define CR_GCSTOP               0 /* stop GC */
+#define CR_GCRESTART            1 /* restart GC (start if stopped) */
+#define CR_GCCOLLECT            2 /* perform full GC cycle */
+#define CR_GCCOUNT              3 /* get number of (bytes_allocated/1024) */
+#define CR_GCCOUNTBYTES         4 /* get remainder of (bytes_allocated/1024) */
+#define CR_GCSTEP               5 /* perform single GC step and or set debt */
+#define CR_GCSETPAUSE           6 /* set GC pause (as percentage) */
+#define CR_GCSETSTEPMUL         7 /* set GC step multiplier (as percentage) */
+#define CR_GCISRUNNING          8 /* test whether GC is running */
 
-CR_API int cr_gc(cr_State *ts, int optmask, ...);
+CR_API int cr_gc(cr_State *ts, int option, ...);
 
 
 /* -------------------------------------------------------------------------

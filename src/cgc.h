@@ -161,7 +161,10 @@
     (iscollectable(v) ? crG_objbarrierback(ts,r,gcoval(v)) : (void)(0))
 
 
-/* to allow a maximum value of up to 1023 in a 'cr_ubyte' */
+/* 
+** Some GC parameters are stored divided by 4 to allow a
+** maximum value of up to 1023 in a 'cr_ubyte'.
+*/
 #define getgcparam(p)           ((p) * 4)
 #define setgcparam(p,v)         ((p) = (v) / 4)
 

@@ -96,7 +96,7 @@ int crPR_close(cr_State *ts, ptrdiff_t level, int status) {
 
 /* auxiliary structure to call 'crP_parse' in protected mode */
 struct PParseData {
-    BuffReader br;
+    BuffReader *br;
     Buffer buff;
     ParserState ps;
     const char *source;
@@ -105,22 +105,21 @@ struct PParseData {
 
 /* auxiliary function to call 'crP_pparse' in protected mode */
 static void parsepaux(cr_State *ts, void *userdata) {
+    CrClosure *cl;
     struct PParseData *ppd = cast(struct PParseData *, userdata);
-    CrClosure *cl = crP_parse(ts, &ppd->br, &ppd->buff, &ppd->ps, ppd->source);
+    cl = crP_parse(ts, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
     crF_initupvals(ts, cl);
 }
 
 
 /* call 'crP_parse' in protected mode */
-int crPR_parse(cr_State *ts, cr_fReader freader, void *userdata,
-               const char *name) {
+int crPR_parse(cr_State *ts, BuffReader *br, const char *name) {
     struct PParseData ppd;
     int status;
-    ParserState *ps = &ppd.ps;
-    crR_init(ts, &ppd.br, freader, userdata); /* 'br' */
+    ppd.br = br;
     crR_buffinit(&ppd.buff); /* 'buff' */
-    ps->lvars.len = ps->lvars.size = 0; ps->lvars.arr = NULL; /* 'lvars' */
-    ps->cs = NULL; /* 'cs' */
+    ppd.ps.lvars.len = ppd.ps.lvars.size = 0; ppd.ps.lvars.arr = NULL;
+    ppd.ps.cs = NULL; /* 'cs' */
     ppd.source = name; /* 'source' */
     status = crPR_call(ts, parsepaux, &ppd, savestack(ts, ts->sp.p));
     crR_freebuffer(ts, &ppd.buff);

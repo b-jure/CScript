@@ -93,7 +93,7 @@
 #define WORK2MEM	sizeof(TValue)
 
 
-/* adjust 'pause' (same as in Lua) */
+/* adjust 'pause' (same as in Lua, percentage of the 'pause') */
 #define PAUSEADJ	100
 
 
@@ -748,20 +748,22 @@ static cr_mem atomic(cr_State *ts) {
 
 
 /* 
- * Set collector pause; basically called after
- * end of each full GC cycle. The new threshold
- * is calculated as 'estimate' / 'pause'.
- * 'PAUSEADJ' is there to provide more precise
- * control over when collection occurs, the value
- * is chosen by testing (Lua developers effort). 
- */
+** Set collector pause; called after end of each full GC cycle.
+** The new threshold is calculated as 'estimate' / 'pause'.
+** 'PAUSEADJ' is there to provide more precise control over
+** when collection occurs (the value is chosen by testing from
+** the side of Lua developers). 
+** One could think of 'gc->pause' to be the percentage as
+** it is divided by 'PAUSEADJ' which is 100.
+*/
 static void setpause(GC *gc) {
     int pause = getgcparam(gc->pause);
     cr_mem estimate = gc->estimate / PAUSEADJ;
-    cr_assert(estimate > 0);
-    cr_mem threshold = (pause < CRMEM_MAX / estimate)  /* overflow ? */
-        ? estimate * pause  /* no overflow */
-        : CRMEM_MAX;  /* overflow; use maximum */
+    cr_assert(estimate > 0); /* CScript state memory >= PAUSEADJ */
+    cr_mem threshold = (pause < (CRMEM_MAX / estimate)) /* can fit ? */
+                        ? (estimate * pause) /* yes */
+                        : CRMEM_MAX; /* no; use maximum */
+    /* debt = totalbytes - ((estimate/100)*pause) */
     cr_mem debt = totalbytes(gc) - threshold;
     if (debt > 0) debt = 0;
     crG_setdebt(gc, debt);
