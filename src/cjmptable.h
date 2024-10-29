@@ -69,7 +69,7 @@ static const void *const jmptable[NUM_OPCODES] = {
     &&L_OP_BAND,
     &&L_OP_BOR,
     &&L_OP_BXOR,
-    &&L_OP_RANGE,
+    &&L_OP_CONCAT,
     &&L_OP_EQK,
     &&L_OP_EQI,
     &&L_OP_LTI,

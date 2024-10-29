@@ -563,6 +563,11 @@ void crV_call(cr_State *ts, SPtr func, int nresults) {
 }
 
 
+void crV_concat(cr_State *ts, int n) {
+    // TODO: impelement this, then start writing binary
+}
+
+
 /* ------------------------------------------------------------------------
 ** Macros for arithmetic/bitwise/comparison instructions on integers.
 **------------------------------------------------------------------------- */
@@ -1073,10 +1078,10 @@ returning:
                 op_bitwise(ts, ibxor);
                 vm_break;
             }
-            /* } RANGE_OPS { */
-            vm_case(OP_RANGE) {
-                /* TODO */
-                cr_assert(0 && "instruction not implemented");
+            /* } CONCAT_OP { */
+            vm_case(OP_CONCAT) { /* TODO: concat more than 2 at a time */
+                protect(crV_concat(ts, 2)); /* crV_concat handles stack ptr */
+                crG_check(ts);
                 vm_break;
             }
             /* } ORDERING_OPS { */
