@@ -10,9 +10,9 @@
 #include "cstate.h"
 
 
-#define crM_rawmalloc(gs,s)         (gs)->falloc(NULL, 0, s, (gs)->udalloc)
-#define crM_rawrealloc(gs,p,os,ns)  (gs)->falloc(p, os, ns, (gs)->udalloc)
-#define crM_rawfree(gs,p,osz)       (gs)->falloc(p, osz, 0, (gs)->udalloc)
+#define crM_rawmalloc(gs,s)         (gs)->falloc(NULL, 0, s, (gs)->ud_alloc)
+#define crM_rawrealloc(gs,p,os,ns)  (gs)->falloc(p, os, ns, (gs)->ud_alloc)
+#define crM_rawfree(gs,p,osz)       (gs)->falloc(p, osz, 0, (gs)->ud_alloc)
 
 
 /* can try to allocate second time */

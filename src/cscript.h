@@ -106,6 +106,7 @@ typedef enum cr_MM {
     CR_MM_GC,
     CR_MM_CLOSE,
     CR_MM_CALL,
+    CR_MM_CONCAT,
     CR_MM_ADD,
     CR_MM_SUB,
     CR_MM_MUL,
@@ -314,13 +315,13 @@ CR_API void cr_warning(cr_State *ts, const char *msg, int cont); /* DONE */
 CR_API int              cr_hasvmt(cr_State *ts, int index); /* DONE */
 CR_API int              cr_hasmetamethod(cr_State *ts, int index, cr_MM mm); /* DONE */
 CR_API cr_Unsigned      cr_len(cr_State *ts, int index); /* DONE */
-CR_API int              cr_next(cr_State *ts, int index); /* TODO */
-CR_API void             cr_concat(cr_State *ts, int n); /* TODO */
-CR_API size_t           cr_stringtonumber(cr_State *ts, const char *s); /* TODO */
-CR_API cr_Alloc         cr_getallocf(cr_State *ts, void **ud); /* TODO */
-CR_API void             cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud); /* TODO */
-CR_API void             cr_toclose(cr_State *ts, int index);
-CR_API void             cr_closeslot(cr_State *ts, int index);
+CR_API int              cr_next(cr_State *ts, int index); /* DONE */
+CR_API void             cr_concat(cr_State *ts, int n); /* DONE */
+CR_API size_t           cr_stringtonumber(cr_State *ts, const char *s, int *povf); /* DONE */
+CR_API cr_Alloc         cr_getallocf(cr_State *ts, void **ud); /* DONE */
+CR_API void             cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud); /* DONE */
+CR_API void             cr_toclose(cr_State *ts, int index); /* DONE */
+CR_API void             cr_closeslot(cr_State *ts, int index); /* DONE */
 
 
 #define cr_getextraspace(ts)        ((void *)((char *)(ts) - CR_EXTRASPACE))
@@ -347,40 +348,43 @@ CR_API void             cr_closeslot(cr_State *ts, int index);
 
 #define cr_to_string(ts, i)         cr_to_lstring(ts, i, NULL)
 
-#define cr_insert(ts,index)	    cr_rotate(ts, (index), 1)
+#define cr_insert(ts,index)         cr_rotate(ts, (index), 1)
 
-#define cr_remove(ts,index)	    (cr_rotate(ts, (index), -1), cr_pop(ts, 1))
+#define cr_remove(ts,index)         (cr_rotate(ts, (index), -1), cr_pop(ts, 1))
 
-#define cr_replace(ts,index)	    (cr_copy(ts, -1, (index)), cr_pop(ts, 1))
+#define cr_replace(ts,index)        (cr_copy(ts, -1, (index)), cr_pop(ts, 1))
 
 
 /* -------------------------------------------------------------------------
  * Debug API
  * ------------------------------------------------------------------------- */
 
-/* bits for 'dbgmask' */
-#define CR_DBGFNGET    (1<<0) /* push func on stack (processed first) */
-#define CR_DBGLINE     (1<<1) /* fill 'line' */
-#define CR_DBGFNINFO   (1<<2) /* fill all function info in 'crD_info' */
-#define CR_DBGFNSRC    (1<<3) /* fill function source information */
-#define CR_DBGFNPUSH   (1<<4) /* push current func (processed last) */
+CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di); /* DONE */
+CR_API int cr_getinfo(cr_State *ts, const char *options, cr_DebugInfo *di); /* DONE */
 
-CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di); /* TODO */
-CR_API int cr_getinfo(cr_State *ts, int dbgmask, cr_DebugInfo *di); /* TODO */
+CR_API const char *cr_getlocal(cr_State *ts, const cr_DebugInfo *di, int n); /* DONE */
+CR_API const char *cr_setlocal (cr_State *ts, const cr_DebugInfo *ar, int n); /* DONE */
 
-struct cr_DebugInfo { /* TODO */
-    const char *type; /* function type ('cscript', 'main' or 'C') */
-    const char *source; /* function source */
-    size_t srclen; /* length of 'source' */
-    int line; /* current line in cript script */
-    int nups; /* number of function upvalues */
-    int nparams; /* number of function parameters */
-    char isvararg; /* is function vararg ('...') */
-    int defline; /* line number where the function definition starts */
-    int deflastline; /* line number where the function definition ends */
-    char shortsrc[CRI_MAXSRC];
+CR_API const char *cr_getupvalue(cr_State *ts, int index, int n); /* DONE */
+CR_API const char *cr_setupvalue(cr_State *ts, int index, int n); /* DONE */
+
+struct cr_DebugInfo {
+    /* (>) pop the function on top of the stack and load it into 'cf' */
+    const char *name;       /* (n) */
+    const char *namewhat;   /* (n) 'global', 'local', 'field', 'method' */
+    const char *what;       /* (s) 'CScript', 'C', 'main' */
+    const char *source;     /* (s) */
+    size_t srclen;          /* (s) */
+    int line_current;       /* (l) */
+    int line_defined;       /* (s) */
+    int line_definedlast;   /* (s) */
+    int nupvalues;          /* (u) */
+    int nparameters;        /* (u) */
+    char isvararg;          /* (u) */
+    char short_source[CRI_MAXSRC]; /* (s) */
+    /* (f) pushes onto stack the function that is running at the given level */
     /* private */
-    struct CallFrame *cf; /* active function frame */
+    struct CallFrame *cf; /* active function */
 };
 
 

@@ -416,6 +416,7 @@ typedef struct HTable {
 #define lenstr(o)       (strval(o)->len)
 
 #define getstrbytes(s)      ((s)->bytes)
+#define getstrlen(s)        ((s)->len)
 
 #define setstrval(ts,obj,s)     setgcotval(ts,obj,s,OString)
 #define setstrval2s(ts,sobj,s)    setstrval(ts,s2v(sobj),s)
@@ -479,9 +480,10 @@ typedef struct UpVal {
 
 #define CR_VFUNCTION    makevariant(CR_TFUNCTION, 0)
 
-#define ttisfn(v)       checktag((v), ctb(CR_VFUNCTION))
+#define ttisfunction(o)     checktype((o), CR_TFUNCTION)
+#define ttisfn(o)           checktag((o), ctb(CR_VFUNCTION))
 
-#define fnval(v)        gco2fn(gcoval(v))
+#define fnval(o)        gco2fn(gcoval(o))
 
 #define setfnval(ts,obj,fn)         setgcotval(ts,obj,fn,Function)
 #define setfnval2s(ts,sobj,fn)      setfnval(ts,s2v(sobj),fn)
@@ -590,8 +592,7 @@ typedef struct CrClosure {
 #define setcclval(ts,obj,ccl)   setgcotval(ts,obj,ccl,CClosure)
 #define setccl2s(ts,sobj,ccl)   setcclval(ts,s2v(sobj),ccl)
 
-#define noCriptclosure(cl) \
-    ((cl) == NULL || (cl)->cc.tt_ != ctb(CR_VCRCL))
+#define CScriptclosure(cl)      ((cl) != NULL && (cl)->crc.tt_ == CR_VCRCL)
 
 
 typedef struct {

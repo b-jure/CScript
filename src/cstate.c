@@ -146,7 +146,7 @@ static void freestate(cr_State *mt) {
     }
     freestack(mt);
     cr_assert(totalbytes(&gs->gc) == sizeof(XS));
-    gs->falloc(fromstate(mt), sizeof(XS), 0, gs->udalloc);
+    gs->falloc(fromstate(mt), sizeof(XS), 0, gs->ud_alloc);
 }
 
 
@@ -170,7 +170,7 @@ CR_API cr_State *cr_newstate(cr_Alloc falloc, void *ud) {
     ts->mark = crG_white(&gs->gc);
     preinit_thread(ts, gs);
     setnilval(&gs->globals);
-    gs->falloc = falloc; gs->udalloc = ud;
+    gs->falloc = falloc; gs->ud_alloc = ud;
     gs->panic = NULL; /* no panic handler by default */
     gs->seed = cri_makeseed(ts); /* initial seed for hashing */
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
@@ -288,7 +288,7 @@ CallFrame *crT_newcf(cr_State *ts) {
 
 
 /* convert stack pointers into relative stack offsets */
-static void stackptrs2offsets(cr_State *ts) {
+static void sptr2rel(cr_State *ts) {
     ts->sp.offset = savestack(ts, ts->sp.p);
     for (CallFrame *cf = ts->cf; cf != NULL; cf = cf->prev) {
         cf->func.offset = savestack(ts, cf->func.p);
@@ -301,7 +301,7 @@ static void stackptrs2offsets(cr_State *ts) {
 
 
 /* convert relative stack offsets into stack pointers */
-static void offsets2stackptrs(cr_State *ts) {
+static void rel2sptr(cr_State *ts) {
     ts->sp.p = restorestack(ts, ts->sp.offset);
     for (CallFrame *cf = ts->cf; cf != NULL; cf = cf->prev) {
         cf->func.p = restorestack(ts, cf->func.offset);
@@ -315,22 +315,23 @@ static void offsets2stackptrs(cr_State *ts) {
 
 /* reallocate stack to new size */
 int crT_reallocstack(cr_State *ts, int size, int raiseerr) {
+    SPtr newstack;
     GState *gs = G_(ts);
-    int oldstopem = gs->gc.stopem;
+    int old_stopem = gs->gc.stopem;
     int osz = stacksize(ts);
     cr_assert(size <= CRI_MAXSTACK || size == OVERFLOWSTACKSIZE);
-    stackptrs2offsets(ts);
+    sptr2rel(ts);
     gs->gc.stopem = 1; /* no emergency collection when reallocating stack */
-    SPtr newstack = crM_reallocarray(ts, ts->stack.p, osz + EXTRA_STACK,
-                                     size + EXTRA_STACK, SValue);
-    gs->gc.stopem = oldstopem;
+    newstack = crM_reallocarray(ts, ts->stack.p, osz + EXTRA_STACK,
+                                size + EXTRA_STACK, SValue);
+    gs->gc.stopem = old_stopem;
     if (cr_unlikely(newstack == NULL)) {
-        offsets2stackptrs(ts);
+        rel2sptr(ts);
         if (raiseerr)
             crPR_throw(ts, CR_ERRMEM);
         return 0;
     }
-    offsets2stackptrs(ts);
+    rel2sptr(ts);
     ts->stack.p = newstack;
     ts->stackend.p = newstack + size;
     for (int i = osz + EXTRA_STACK; i < size + EXTRA_STACK; i++)
@@ -349,7 +350,7 @@ int crT_growstack(cr_State *ts, int n, int raiseerr) {
         return 0;
     }
     if (cr_unlikely(n > CRI_MAXSTACK)) {
-        int nsize = size << 1;
+        int nsize = size * 2;
         int needed = topoffset(ts) + n;
         if (nsize > CRI_MAXSTACK)
             nsize = CRI_MAXSTACK;
@@ -447,10 +448,10 @@ void crT_warnerror(cr_State *ts, const char *where) {
 
 
 void crT_free(cr_State *ts, cr_State *thread) {
-  XS *xs = fromstate(thread);
-  crF_closeupval(thread, thread->stack.p);  /* close all upvalues */
-  cr_assert(thread->openupval == NULL);
-  cri_userthreadfree(ts, thread);
-  freestack(thread);
-  crM_free(ts, xs, sizeof(*xs));
+    XS *xs = fromstate(thread);
+    crF_closeupval(thread, thread->stack.p);  /* close all upvalues */
+    cr_assert(thread->openupval == NULL);
+    cri_userthreadfree(ts, thread);
+    freestack(thread);
+    crM_free(ts, xs, sizeof(*xs));
 }

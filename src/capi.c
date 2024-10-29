@@ -11,7 +11,6 @@
 #include "cprotected.h"
 #include "cscript.h"
 #include "cconf.h"
-#include "cdebug.h"
 #include "climits.h"
 #include "chashtable.h"
 #include "cobject.h"
@@ -841,13 +840,6 @@ CR_API int cr_get_field(cr_State *ts, int index) {
 }
 
 
-cr_sinline OClass *getclass(cr_State *ts, int index) {
-    const TValue *o = index2value(ts, index);
-    api_check(ts, ttiscls(o), "expect class");
-    return clsval(o);
-}
-
-
 CR_API int cr_get_class(cr_State *ts, int index) {
     const TValue *o;
     int tt;
@@ -1088,7 +1080,6 @@ static void fcall(cr_State *ts, void *ud) {
 
 
 CR_API int cr_pcall(cr_State *ts, int nargs, int nresults) {
-    SPtr func;
     struct PCallData pcd;
     int status;
     cr_lock(ts);
@@ -1236,36 +1227,194 @@ CR_API cr_Unsigned cr_len(cr_State *ts, int index) {
 }
 
 
+cr_sinline HTable *getnextht(cr_State *ts, int index) {
+    const TValue *o = index2value(ts, index);
+    switch (ttype(o)) {
+        case CR_TINSTANCE: return &insval(o)->fields;
+        case CR_TCLASS: return clsval(o)->methods;
+        default: {
+            api_check(ts, 0, "expected instance or class");
+            return NULL;
+        }
+    }
+}
+
+
 CR_API int cr_next(cr_State *ts, int index) {
-    // TODO
+    HTable *ht;
+    int more;
+    cr_lock(ts);
+    api_checknelems(ts, 1); /* key */
+    ht = getnextht(ts, index);
+    if (ht) {
+        more = crH_next(ts, ht, ts->sp.p - 1);
+        if (more) {
+            api_inctop(ts);
+            goto unlock;
+        }
+    } else {
+        more = 0;
+    }
+    ts->sp.p--; /* remove key */
+unlock:
+    cr_unlock(ts);
+    return more;
 }
 
 
 CR_API void cr_concat(cr_State *ts, int n) {
-    // TODO
+    cr_lock(ts);
+    api_checknelems(ts, n);
+    if (n > 0)
+        crV_concat(ts, n);
+    else { /* nothing to concatenate */
+        setstrval2s(ts, ts->sp.p, crS_newl(ts, "", 0));
+        api_inctop(ts);
+    }
+    crG_check(ts);
+    cr_unlock(ts);
 }
 
 
-CR_API size_t cr_stringtonumber(cr_State *ts, const char *s) {
-    // TODO
+CR_API size_t cr_stringtonumber(cr_State *ts, const char *s, int *povf) {
+    size_t sz = crS_tonum(s, s2v(ts->sp.p), povf);
+    if (sz != 0) /* no conversion errors? */
+        api_inctop(ts);
+    return sz;
 }
 
 
 CR_API cr_Alloc cr_getallocf(cr_State *ts, void **ud) {
-    // TODO
+    cr_Alloc falloc;
+    cr_lock(ts);
+    if (ud) *ud = G_(ts)->ud_alloc;
+    falloc = G_(ts)->falloc;
+    cr_unlock(ts);
+    return falloc;
 }
 
 
 CR_API void cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud) {
-    // TODO
+    cr_lock(ts);
+    G_(ts)->falloc = falloc;
+    G_(ts)->ud_alloc = ud;
+    cr_unlock(ts);
 }
 
 
 CR_API void cr_toclose(cr_State *ts, int index) {
-    // TODO
+    SPtr o;
+    int nresults;
+    cr_lock(ts);
+    o = index2stack(ts, index);
+    api_check(ts, ts->tbclist.p < o,
+                  "given index below or equal to the last marked slot");
+    crF_newtbcvar(ts, o); /* create new to-be-closed upvalue */
+    nresults = ts->cf->nresults;
+    if (!hastocloseCfunc(nresults)) /* function not yet marked? */
+        ts->cf->nresults = codeNresults(nresults); /* mark it */
+    cr_assert(hastocloseCfunc(ts->cf->nresults)); /* must be marked */
+    cr_unlock(ts);
 }
 
 
 CR_API void cr_closeslot(cr_State *ts, int index) {
-    // TODO
+    SPtr level;
+    cr_lock(ts);
+    level = index2stack(ts, index);
+    api_check(ts, hastocloseCfunc(ts->cf->nresults) && ts->tbclist.p == level,
+                  "no variable to close at the given level");
+    crF_close(ts, level, CLOSEKTOP);
+    setnilval(s2v(level)); /* closed */
+    cr_unlock(ts);
+}
+
+
+/*
+** Sets 'frame' in 'cr_DebugInfo'; 'level' is 'CallFrame' level.
+** To traverse the call stack backwards (up), then level should be
+** greater than 0. For example if you wish for currently active 'CallFrame',
+** then 'level' should be 0, if 'level' is 1 then the 'CallFrame' of the
+** function that called the current function is considered.
+** If 'level' is found, therefore 'cf' is set, then this function returns 1,
+** otherwise 0.
+*/
+CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di) {
+    cr_lock(ts);
+    int status = 0;
+    CallFrame *cf;
+    if (level > ts->ncf || level < 0) {
+        cr_unlock(ts);
+        return status;
+    }
+    for (cf = ts->cf; level > 0 && cf != &ts->basecf; cf = cf->prev)
+        level--;
+    if (level == 0) { /* found ? */
+        di->cf = cf;
+        status = 1;
+    }
+    cr_unlock(ts);
+    return status;
+}
+
+
+static const char *auxupvalue(TValue *func, int n, TValue **val,
+                               GCObject **owner) {
+    switch (ttypetag(func)) {
+        case CR_VCCL: { /* C closure */
+            CClosure *ccl = cclval(func);
+            if (!(cast_uint(n) < cast_uint(ccl->nupvalues)))
+                return NULL;  /* 'n' not in [0, cl->nupvalues) */
+            *val = &ccl->upvals[n];
+            if (owner)
+                *owner = obj2gco(ccl);
+            return "";
+        }
+        case CR_VCRCL: { /* CScript closure */
+            OString *name;
+            CrClosure *crcl = crclval(func);
+            Function *fn = crcl->fn;
+            if (!(cast_uint(n) < cast_uint(fn->sizeupvals)))
+                return NULL;  /* 'n' not in [0, fn->sizeupvals) */
+            *val = crcl->upvals[n]->v.p;
+            if (owner)
+                *owner = obj2gco(crcl->upvals[n]);
+            name = fn->upvals[n].name;
+            cr_assert(name != NULL);
+            return getstrbytes(name);
+        }
+        default: return NULL; /* not a closure */
+    }
+}
+
+
+CR_API const char *cr_getupvalue(cr_State *ts, int index, int n) {
+    const char *name;
+    TValue *upval = NULL;
+    cr_lock(ts);
+    name = auxupvalue(index2value(ts, index), n, &upval, NULL);
+    if (name) { /* have upvalue ? */
+        setobj2s(ts, ts->sp.p, upval);
+        api_inctop(ts);
+    }
+    cr_unlock(ts);
+    return name;
+}
+
+
+CR_API const char *cr_setupvalue(cr_State *ts, int index, int n) {
+    const char *name;
+    TValue *upval = NULL;
+    GCObject *owner = NULL;
+    TValue *func;
+    cr_lock(L);
+    api_checknelems(ts, 1); /* value */
+    func = index2value(ts, index);
+    name = auxupvalue(func, n, &upval, &owner);
+    if (name) { /* found upvalue ? */
+        setobj(ts, upval, s2v(--ts->sp.p));
+        crG_barrier(ts, owner, upval);
+    }
+    cr_unlock(L);
+    return name;
 }

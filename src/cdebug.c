@@ -5,6 +5,8 @@
 */
 
 #include "cdebug.h"
+#include "capi.h"
+#include "ccode.h"
 #include "cfunction.h"
 #include "cobject.h"
 #include "cstring.h"
@@ -12,25 +14,25 @@
 #include "cstate.h"
 #include "cobject.h"
 #include "cprotected.h"
+#include <string.h>
 
 
 /* get line number of instruction ('pc') */
-// TODO
 int crD_getfuncline(const Function *fn, int pc) {
     LineInfo *li;
-    int l = 0;
-    int h = fn->sizelinfo - 1;
-    int m = l + ((h - l) / 2);
+    int low = 0;
+    int high = fn->sizelinfo - 1;
+    int mid = low + ((high - low)/2);
     cr_assert(fn->sizelinfo > 0);
-    while (l <= h) {
-        li = &fn->linfo[m];
+    while (low <= high) {
+        li = &fn->linfo[mid];
         if (li->pc < pc) 
-            l = m + 1;
+            low = mid + 1;
         else if (li->pc > pc) 
-            h = m - 1;
+            high = mid - 1;
         else 
             break;
-        m = l + ((h - l) / 1);
+        mid = low + ((high - low)/2);
     }
     return li->line;
 }
@@ -38,20 +40,19 @@ int crD_getfuncline(const Function *fn, int pc) {
 
 /* current instruction in 'CrClosure' ('Function') */
 cr_sinline int currentpc(const CallFrame *cf) {
-    cr_assert(cfisCript(cf));
-    return cast_int(cf->pc - cfFn(cf)->code) - 1;
+    cr_assert(cfisCScript(cf));
+    return cast_int(cf->pc - cfFunction(cf)->code) - 1;
 }
 
 
 /* current line number */
 cr_sinline int currentline(CallFrame *cf) {
-    return crD_getfuncline(cfFn(cf), currentpc(cf));
+    return crD_getfuncline(cfFunction(cf), currentpc(cf));
 }
 
 
 static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
-    cr_assert(n < 0);
-    if (crclval(s2v(cf->func.p))->fn->isvararg) {
+    if (cfFunction(cf)->isvararg) {
         int nextra = cf->nvarargs;
         if (n >= -nextra) {
             *pos = cf->func.p - nextra - (n + 1);
@@ -69,16 +70,16 @@ static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
 const char *crD_findlocal(cr_State *ts, CallFrame *cf, int n, SPtr *pos) {
     SPtr base = cf->func.p + 1;
     const char *name = NULL;
-    if (cfisCript(cf)) {
+    if (cfisCScript(cf)) {
         if (n < 0) /* vararg ? */
             return findvararg(cf, pos, n);
         else /* otherwise local variable */
-            name = crF_getlocalname(cfFn(cf), n, currentpc(cf));
+            name = crF_getlocalname(cfFunction(cf), n, currentpc(cf));
     }
     if (name == NULL) {
         SPtr limit = (cf == ts->cf) ? ts->sp.p : cf->next->func.p;
         if (limit - base >= n && n > 0) /* 'n' is in stack range ? */
-            name = cfisCript(cf) ? "(auto)" : "(C auto)";
+            name = cfisCScript(cf) ? "(auto)" : "(C auto)";
         else
             return NULL;
     }
@@ -88,131 +89,221 @@ const char *crD_findlocal(cr_State *ts, CallFrame *cf, int n, SPtr *pos) {
 }
 
 
-/*
- * Sets 'frame' in 'cr_DebugInfo'.
- * Level defines which call stack 'CallFrame' to use.
- * If you wish for currently active 'CallFrame' then 'level'
- * should be 0.
- * If 'level' is invalid, this function returns 0.
- */
-CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di) {
-    cr_lock(ts);
-    int status = 0;
-    CallFrame *cf;
-    if (level > ts->ncf || level < 0) {
-        cr_unlock(ts);
-        return status;
+CR_API const char *cr_getlocal(cr_State *ts, const cr_DebugInfo *di, int n) {
+    const char *name;
+    cr_lock(L);
+    if (di == NULL) {
+        if (!ttiscrcl(s2v(ts->sp.p - 1)))
+            name = NULL;
+        else
+            name = crF_getlocalname(crclval(s2v(ts->sp.p - 1))->fn, n, 0);
     }
-    for (cf = ts->cf; level > 0 && cf != &ts->basecf; cf = cf->prev)
-        level--;
-    if (level == 0) { /* found ? */
-        di->cf = cf;
-        status = 1;
+    else {
+        SPtr pos = NULL;
+        name = crD_findlocal(ts, di->cf, n, &pos);
+        if (name) { /* found ? */
+            setobjs2s(ts, ts->sp.p, pos);
+            api_inctop(ts);
+        }
+    }
+    cr_unlock(L);
+    return name;
+}
+
+
+CR_API const char *cr_setlocal (cr_State *ts, const cr_DebugInfo *ar, int n) {
+    SPtr pos = NULL;
+    const char *name;
+    cr_lock(ts);
+    name = crD_findlocal(ts, ar->cf, n, &pos);
+    if (name) { /* found ? */
+        setobjs2s(ts, pos, ts->sp.p - 1); /* set the value */
+        ts->sp.p--; /* remove value */
     }
     cr_unlock(ts);
+    return name;
+}
+
+
+static void getfuncinfo(Closure *cl, cr_DebugInfo *di) {
+    if (!CScriptclosure(cl)) {
+        di->source = "[C]";
+        di->srclen = SLL("[C]");
+        di->line_defined = -1;
+        di->line_definedlast = -1;
+        di->what = "C";
+    } else {
+        const Function *fn = cl->crc.fn;
+        if (fn->source) { /* have source? */
+          di->source = getstrbytes(fn->source);
+          di->srclen = getstrlen(fn->source);
+        }
+        else {
+          di->source = "?";
+          di->srclen = SLL("?");
+        }
+        di->line_defined = fn->defline;
+        di->line_definedlast = fn->deflastline;
+        di->what = (di->line_definedlast == 0) ? "main" : "CScript";
+    }
+    crS_sourceid(di->short_source, di->source, di->srclen);
+}
+
+
+static const char *funcnamefromcode(cr_State *ts, const Function *fn, int pc,
+                                    const char **name) {
+    cr_MM mm;
+    Instruction *i = &fn->code[pc];
+    switch (*i) {
+        case OP_CALL: {
+            /* TODO: how do we know if it is local, global, field, ... ?
+            ** We are missing the stack slot of the current holder of the
+            ** function. */
+            *name = "function";
+            return "function"; 
+        }
+        case OP_FORCALL: {
+            *name = "for iterator";
+            return "for iterator";
+        }
+        case OP_GETPROPERTY: case OP_GETINDEX:
+        case OP_GETINDEXSTR: case OP_GETINDEXINT: {
+            mm = CR_MM_GETIDX;
+            break;
+        }
+        case OP_SETPROPERTY: case OP_SETINDEX:
+        case OP_SETINDEXSTR: case OP_SETINDEXINT: {
+            mm = CR_MM_SETIDX;
+            break;
+        }
+        case OP_MBIN: {
+            mm = GETARG_S(i, 1);
+            break;
+        }
+        case OP_UNM: mm = CR_MM_UNM; break;
+        case OP_BNOT: mm = CR_MM_BNOT; break;
+        case OP_CONCAT: mm = CR_MM_CONCAT; break;
+        case OP_EQ: mm = CR_MM_EQ; break;
+        case OP_LT: case OP_LTI: case OP_GTI: mm = CR_MM_LT; break;
+        case OP_LE: case OP_LEI: case OP_GEI: mm = CR_MM_LE; break;
+        case OP_CLOSE: case OP_RET: mm = CR_MM_CLOSE; break;
+        default: return NULL;
+    }
+    *name = getstrbytes(G_(ts)->mmnames[mm]) /* and skip '__' */ + 2;
+    return "metamethod";
+}
+
+
+/* try to find a name for a function based on how it was called */
+static const char *funcnamefromcall(cr_State *ts, CallFrame *cf,
+                                    const char **name) {
+    if (cf->status & CFST_FIN) { /* called as finalizer? */
+        *name = "__gc";
+        return "metamethod";
+    }
+    else if (cfisCScript(cf))
+        return funcnamefromcode(ts, cfFunction(cf), currentpc(cf), name);
+    else
+        return NULL;
+}
+
+
+static const char *getfuncname(cr_State *ts, CallFrame *cf, const char **name) {
+    if (cf != NULL)
+        return funcnamefromcall(ts, cf->prev, name);
+    else
+        return NULL;
+}
+
+
+/*
+** Auxiliary to 'cr_getinfo', parses 'options' and fills out the
+** 'cr_DebugInfo' accordingly. If any invalid options is specified this
+** returns 0.
+*/
+static int getinfo(cr_State *ts, const char *options, Closure *cl,
+                   CallFrame *cf, cr_DebugInfo *di) {
+    int status = 1;
+    for (; *options; options++) {
+        switch (*options) {
+            case 'n': {
+                di->namewhat = getfuncname(ts, cf, &di->name);
+                if (di->namewhat == NULL) { /* not found ? */
+                    di->namewhat = "";
+                    di->name = NULL;
+                }
+                break;
+            }
+            case 's': {
+                getfuncinfo(cl, di);
+                break;
+            }
+            case 'l': {
+                di->line_current = (cfisCScript(cf) ? currentline(cf) : -1);
+                break;
+            }
+            case 'u': {
+                di->nupvalues = (cl ? cl->cc.nupvalues : 0);
+                if (cfisCScript(cf)) {
+                    di->nparameters = cl->crc.fn->arity;
+                    di->isvararg = cl->crc.fn->isvararg;
+                } else {
+                    di->nparameters = 0;
+                    di->isvararg = 1;
+                }
+                break;
+            }
+            case 'f': /* resolved in 'cr_getinfo' */
+                break;
+            default: { /* invalid option */
+                status = 0;
+                break;
+            }
+        }
+    }
     return status;
 }
 
 
-
 /*
- * Sets 'name', 'type', 'nups', 'nparams', 'isvararg', 'defline',
- * 'deflastline' in 'cr_DebugInfo'.
- */
-static void getfuncinfo(Closure *cl, cr_DebugInfo *di) {
-    if (noCriptclosure(cl)) {
-        di->nups = (cl == NULL ? 0 : cl->cc.nupvalues);
-        di->defline = -1;
-        di->deflastline = -1;
-        di->nparams = 0;
-        di->isvararg = 1;
-        di->type = "C";
-    } else {
-        di->nups = cl->crc.nupvalues;
-        const Function *fn = cl->crc.fn;;
-        di->defline = fn->defline;
-        di->deflastline = fn->deflastline;
-        di->nparams = fn->arity;
-        di->isvararg = fn->isvararg;
-        di->type = (fn->defline == 0) ? "main" : "Cscript";
-    }
-}
-
-
-/* sets 'source', 'srclen' and 'shortsrc' in 'cr_DebugInfo' */
-static void getsrcinfo(Closure *cl, cr_DebugInfo *di) {
-    if (noCriptclosure(cl)) {
-        di->source = "[C]";
-        di->srclen = SLL("[C]");
-    } else {
-        const Function *fn = cl->crc.fn;
-        di->source = fn->source->bytes;
-        di->srclen = fn->source->len;
-    }
-    crS_sourceid(di->shortsrc, di->source, di->srclen);
-}
-
-
-
-/*
- * Auxiliary to 'cr_getinfo', parses debug bit mask and
- * fills out the 'cr_DebugInfo' accordingly.
- * If any invalid bit/option is inside the 'dbmask' this
- * function returns 0, otherwise 1.
- */
-static int getinfo(cr_State *ts, int dbmask, Closure *cl, CallFrame *cf,
-                   cr_DebugInfo *di) {
-    UNUSED(ts); // TODO: remove this after DW_FNPUSH
-    int bit;
-    for (bit = 2; dbmask > 0; bit++) {
-        switch (bit) {
-            case 2: /* DW_LINE */
-                di->line = (cfisCript(cf) ? currentline(cf) : -1);
-                break;
-            case 3: /* DW_FNINFO */
-                getfuncinfo(cl, di);
-                break;
-            case 4: /* DW_FNSRC */
-                getsrcinfo(cl, di);
-                break;
-            case 5: /* DW_FNPUSH */
-                // criptapi_pushval(ts, *di->frame->func);
-                break;
-            case 6: /* unused */
-            case 7: /* unused */
-                return 0;
-            default:
-                cr_unreachable();
-        }
-        dbmask >>= 1;
-    }
-    return 1;
-}
-
-
-/*
- * Fill out 'cr_DebugInfo' according to 'dbmask'.
- * Returns 0 if any of the bits in 'dbmask' are invalid.
- */
-CR_API int cr_getinfo(cr_State *ts, int dbmask, cr_DebugInfo *di) {
+** Fill out 'cr_DebugInfo' according to 'options'.
+**
+** '>' - Pops the function on top of the stack and loads it into 'cf'.
+** 'n' - Fills in the field `name` and `namewhat`.
+** 's' - Fills in the fields `source`, `short_source`, `line_defined`,
+**       `line_definedlast`, and `what`.
+** 'l' - Fills in the field `currentline`.
+** 'u' - Fills in the field `nupvalues`.
+** 'f' - Pushes onto the stack the function that is running at the
+**       given level.
+**
+** This function returns 0 on error (for instance if any option in 'options'
+** is invalid).
+*/
+CR_API int cr_getinfo(cr_State *ts, const char *options, cr_DebugInfo *di) {
     CallFrame *cf;
     Closure *cl;
-    TValue *fn;
+    TValue *func;
     int status = 1;
     cr_lock(ts);
-    if (dbmask & CR_DBG_FNGET) { /* use function on top of the stack ? */
-        cf = NULL;
-        fn = s2v(ts->sp.p - 1);
-        api_check(ts, ttisfn(fn), "expect function");
+    api_check(ts, options, "'options' is NULL");
+    if (*options == '>') {
+        cf = NULL; /* not currently running */
+        func = s2v(ts->sp.p - 1);
+        api_check(ts, ttisfunction(func), "expect function");
+        options++; /* skip '>' */
         ts->sp.p--;
-    } else { /* use current function */
+    } else {
         cf = ts->cf;
-        fn = s2v(cf->func.p);
-        cr_assert(ttisfn(fn));
+        func = s2v(cf->func.p);
+        cr_assert(ttisfunction(func));
     }
-    cl = (ttiscl(fn) ? clval(fn) : NULL);
-    dbmask >>= 1; /* skip CR_DBGFNGET bit */
-    status = getinfo(ts, dbmask, cl, cf, di);
+    cl = (ttiscrcl(func) ? clval(func) : NULL);
+    status = getinfo(ts, options, cl, cf, di);
+    if (strchr(options, 'f')) {
+        setobj2s(ts, ts->sp.p, func);
+        api_inctop(ts);
+    }
     cr_unlock(ts);
     return status;
 }
@@ -238,8 +329,8 @@ cr_noret crD_runerror(cr_State *ts, const char *fmt, ...) {
     va_start(ap, fmt);
     const char *err = crS_pushvfstring(ts, fmt, ap);
     va_end(ap);
-    if (cfisCript(ts->cf)) { /* in Cript function (closure) ? */
-        crD_addinfo(ts, err, cfFn(ts->cf)->source, currentline(ts->cf));
+    if (cfisCScript(ts->cf)) { /* in Cscript function (closure) ? */
+        crD_addinfo(ts, err, cfFunction(ts->cf)->source, currentline(ts->cf));
         setobj2s(ts, ts->sp.p - 2, s2v(ts->sp.p - 1));
         ts->sp.p--;
     }

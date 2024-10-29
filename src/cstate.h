@@ -115,8 +115,8 @@ typedef struct cr_ljmp {
  * CallFrame (function frame/stack)
  * ------------------------------------------------------------------------- */
 
-/* get Cript 'Function' */
-#define cfFn(cf)        (crclval(s2v((cf)->func.p))->fn)
+/* get CSript 'Function' */
+#define cfFunction(cf)      (crclval(s2v((cf)->func.p))->fn)
 
 
 /* 'cfstatus' bits */
@@ -125,8 +125,8 @@ typedef struct cr_ljmp {
 #define CFST_FIN            (1<<2) /* function called finalizer */
 
 
-/* 'CallFrame' function is Cript function */
-#define cfisCript(cf)   (!((cf)->status & CFST_CCALL))
+/* 'CallFrame' function is CSript function */
+#define cfisCScript(cf)     (!((cf)->status & CFST_CCALL))
 
 
 /* call information */
@@ -148,7 +148,7 @@ typedef struct CallFrame {
 
 typedef struct GState {
     cr_Alloc falloc; /* allocator */
-    void *udalloc; /* userdata for 'falloc' */
+    void *ud_alloc; /* userdata for 'falloc' */
     cr_CFunction panic; /* panic handler (unprotected calls) */
     uint seed; /* initial seed for hashing */
     TValue nil; /* nil value (init flag) */

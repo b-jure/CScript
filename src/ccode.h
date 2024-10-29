@@ -77,8 +77,8 @@ typedef enum {
 	/* bitwise operators */
 	OPR_SHL, OPR_SHR, OPR_BAND,
 	OPR_BOR, OPR_BXOR,
-        /* range operator */
-        OPR_RANGE,
+        /* concat operator */
+        OPR_CONCAT,
 	/* comparison operators */
 	OPR_NE, OPR_EQ, OPR_LT,
 	OPR_LE, OPR_GT, OPR_GE,
@@ -176,7 +176,7 @@ OP_BAND,        /* V1 V2   'V1 & V2' */
 OP_BOR,         /* V1 V2   'V1 | V2' */
 OP_BXOR,        /* V1 V2   'V1 ^ V2' */
 
-OP_RANGE,       /* V V1    'V..V1' */
+OP_CONCAT,      /* V V1    'V..V1' */
 
 OP_EQK,         /* V L S   '(V == K{L}) == S' */
 

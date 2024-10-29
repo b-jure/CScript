@@ -189,11 +189,11 @@ const char *crS_tolowerall(const char *s) {
 
 
 /*
- * Convert string to 'cr_Integer'.
- * This function can convert hexadecimal, octal
- * and decimal strings to 'cr_Integer'.
- */
-static const char *otstr2int(const char *s, cr_Integer *i, int *overflow) {
+** Convert string to 'cr_Integer'.
+** This function can convert hexadecimal, octal and decimal strings
+** to 'cr_Integer'.
+*/
+static const char *str2int(const char *s, cr_Integer *i, int *overflow) {
     cr_Unsigned u = 0;
     int ngcoval, digit, sign;
     sign = ngcoval = 1;
@@ -245,9 +245,8 @@ static const char *otstr2int(const char *s, cr_Integer *i, int *overflow) {
 }
 
 
-static const char *otstr2flt(const char *s, cr_Number *n, int *of) {
+static const char *str2flt(const char *s, cr_Number *n, int *of) {
     char *eptr;
-
     *of = 0;
     if (*s == '0'  && (s[1] == 'x' || s[1] == 'X'))
         *n = cr_xstr2number(s, &eptr);
@@ -275,9 +274,9 @@ size_t crS_tonum(const char *s, TValue *o, int *of) {
     int iof;
 
     if (of) *of = iof = 0;
-    if ((e = otstr2int(s, &i, &iof)) != NULL) {
+    if ((e = str2int(s, &i, &iof)) != NULL) {
         setival(o, i);
-    } else if ((e = otstr2flt(s, &n, of)) != NULL) {
+    } else if ((e = str2flt(s, &n, of)) != NULL) {
         setfval(o, n);
     } else { /* both conversions failed */
         if (of && !*of) *of = iof;
@@ -296,7 +295,7 @@ size_t crS_tonum(const char *s, TValue *o, int *of) {
  */
 #define MAXNUM2STR	44
 
-static int otnum2buff(const TValue *nv, char *buff) {
+static int num2buff(const TValue *nv, char *buff) {
     size_t len;
     cr_assert(ttisnum(nv));
     if (ttisint(nv)) {
@@ -315,7 +314,7 @@ static int otnum2buff(const TValue *nv, char *buff) {
 
 void crS_numtostring(cr_State *ts, TValue *v) {
     char buff[MAXNUM2STR];
-    int len = otnum2buff(v, buff);
+    int len = num2buff(v, buff);
     setstrval(ts, v, crS_newl(ts, buff, len));
 }
 
@@ -392,7 +391,7 @@ static void buffaddstring(BuffVFS *buff, const char *str, size_t len) {
 
 /* add number to buffer */
 static void buffaddnum(BuffVFS *buff, const TValue *nv) {
-    buff->len += otnum2buff(nv, getbuff(buff, MAXNUM2STR));
+    buff->len += num2buff(nv, getbuff(buff, MAXNUM2STR));
 }
 
 
