@@ -53,7 +53,7 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatIL), /* OP_CONSTF */
     opProp(0, 0, 0, FormatIL), /* OP_VARARGPREP */
     opProp(0, 0, 0, FormatIL), /* OP_VARARG */
-    opProp(0, 0, 0, FormatI), /* OP_CLOSURE */
+    opProp(0, 0, 0, FormatIL), /* OP_CLOSURE */
     opProp(0, 0, 0, FormatI), /* OP_CLASS */
     opProp(0, 0, 0, FormatIL), /* OP_METHOD */
     opProp(0, 0, 0, FormatIS), /* OP_SETMM */
@@ -93,7 +93,7 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatI), /* OP_BAND */
     opProp(0, 0, 0, FormatI), /* OP_BOR */
     opProp(0, 0, 0, FormatI), /* OP_BXOR */
-    opProp(0, 0, 0, FormatI), /* OP_RANGE */
+    opProp(0, 0, 0, FormatI), /* OP_CONCAT */
     opProp(0, 0, 0, FormatILS), /* OP_EQK */
     opProp(0, 0, 0, FormatILSS), /* OP_EQI */
     opProp(0, 0, 0, FormatILS), /* OP_LTI */
@@ -160,6 +160,18 @@ CRI_DEF const cr_ubyte crC_opSize[FormatN] = {
 };
 
 
+CRI_DEF const char *crC_opSizeFormat[FormatN] = {
+    "FormatI",
+    "FormatIS",
+    "FormatISS",
+    "FormatIL",
+    "FormatILS",
+    "FormatILSS",
+    "FormatILL",
+    "FormatILLS",
+};
+
+
 /* 
 ** Names of all instructions.
 ** (order 'OpCode')
@@ -170,7 +182,7 @@ CRI_DEF const char *crC_opName[NUM_OPCODES] = {
     "POPN", "MBIN", "ADDK", "SUBK", "MULK", "DIVK", "MODK", "POWK", "BSHLK",
     "BSHRK", "BANDK", "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "MODI",
     "POWI", "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL",
-    "DIV", "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "RANGE",
+    "DIV", "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT",
     "EQK", "EQI", "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM",
     "BNOT", "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
     "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL", "GETPRIVATE",
@@ -179,26 +191,6 @@ CRI_DEF const char *crC_opName[NUM_OPCODES] = {
     "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT", "GETSUP", "GETSUPIDX",
     "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
 };
-
-
-/* 
-** Table of symbols for binary operators.
-** (order 'OpCode' OP_ADD - OP_BXOR)
-*/
-CRI_DEF const char *crC_opBinsym[] = {
-    "+",    /* OP_ADD */
-    "-",    /* OP_SUB */
-    "*",    /* OP_MUL */
-    "/",    /* OP_DIV */
-    "%",    /* OP_MOD */
-    "**",   /* OP_POW */
-    "<<",   /* OP_SHL */
-    ">>",   /* OP_SHR */
-    "&",    /* OP_BAND */
-    "|",    /* OP_BOR */
-    "^",    /* OP_BXOR */
-};
-
 
 
 /*

@@ -5,6 +5,7 @@
 */
 
 #include <string.h>
+#include <stdio.h>
 
 #include "capi.h"
 #include "cconf.h"
@@ -21,6 +22,7 @@
 #include "cvm.h"
 #include "cmeta.h"
 #include "cstring.h"
+#include "ctrace.h"
 
 
 /*
@@ -843,8 +845,14 @@ void crV_concat(cr_State *ts, int total) {
 /* protect code that can raise errors or change the stack */
 #define protect(e)          (storepc(ts), (e))
 
+#if 0
+/* fetch and trace the instruction */
+#define fetch()         crTR_tracepc(cl->fn, pc)
+#else
 /* fetch instruction */
 #define fetch()         (*pc++)
+#endif
+
 /* fetch short instruction parameter */
 #define fetchs()        fetch()
 /* fetch long instruction parameter */

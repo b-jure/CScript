@@ -19,6 +19,9 @@
     crD_operror(ts, v1, v2, "perform bitwise operation on")
 
 
+#define pcrel(pc,fn)    ((pc) - (fn)->code)
+
+
 CRI_FUNC int crD_getfuncline(const Function *fn, int pc);
 CRI_FUNC const char *crD_findlocal(cr_State *ts, CallFrame *cf, int n,
                                    SPtr *pos);

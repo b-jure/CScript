@@ -14,6 +14,7 @@
 #include "cstate.h"
 #include "cobject.h"
 #include "cstring.h"
+#include "ctrace.h"
 #include "cvm.h"
 #include "cfunction.h"
 #include "chashtable.h"
@@ -2357,6 +2358,10 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
     parseuntilEOS(lx); /* parse */
     cr_assert(lx->t.tk == TK_EOS);
     endfs(fs);
+#if 1
+    /* low-level full bytecode disassembly */
+    crTR_disassemble(fs->lx->ts, fs->fn);
+#endif
 }
 
 

@@ -133,15 +133,21 @@ int crS_eq(const OString *s1, const OString *s2) {
 }
 
 
-void crS_sourceid(char *restrict dest, const char *src, size_t len) {
-    size_t bufflen = CRI_MAXSRC - 1;
-    if (bufflen < len) {
-        memcpy(dest, src, bufflen - SLL("..."));
+void crS_strlimit(char *dest, const char *src, size_t len, size_t limit) {
+    limit--;
+    if (limit < len) {
+        memcpy(dest, src, limit - SLL("..."));
         memcpy(dest, "...", SLL("..."));
+        len = limit;
     } else {
-        memcpy(dest, src, bufflen);
+        memcpy(dest, src, len);
     }
-    dest[bufflen] = '\0';
+    dest[len] = '\0';
+}
+
+
+void crS_sourceid(char *restrict dest, const char *src, size_t len) {
+    crS_strlimit(dest, src, len, CRI_MAXSRC - 1);
 }
 
 
@@ -323,10 +329,12 @@ static int num2buff(const TValue *nv, char *buff) {
 }
 
 
-void crS_numtostring(cr_State *ts, TValue *v) {
-    char buff[MAXNUM2STR];
-    int len = num2buff(v, buff);
-    setstrval(ts, v, crS_newl(ts, buff, len));
+const char *crS_numtostr(const TValue *v, size_t *plen) {
+    static char buff[MAXNUM2STR];
+    size_t len = num2buff(v, buff);
+    if (plen)
+        *plen = len;
+    return buff;
 }
 
 

@@ -11,7 +11,6 @@
 #include "cparser.h"
 
 
-
 /* get current pc */
 #define currentPC(fs)		((fs)->pc)
 
@@ -272,9 +271,8 @@ OP_RET,   /* L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
 ** L2 is biased with +1, in order to represent multiple returns when the
 ** number of results is only known during runtime. For example (L2 == 0)
 ** represents CR_MULRET, in this case we would return all values up to the
-** top; additionally check 'crC_ret' and you will see that 'nreturns' is
-** positive biased with +1 (in generic return case). S indicates if current
-** function needs to close upvalues or tbc variables before returning.
+** top. S indicates if current function needs to close upvalues or tbc
+** variables before returning.
 */
 
 
@@ -319,22 +317,15 @@ CRI_DEC(const cr_ubyte crC_opSize[FormatN];)
 
 #define getOpSize(p)        crC_opSize[getOpFormat(p)]
 
+CRI_DEC(const char *crC_opSizeFormat[FormatN];)
+
+#define getOpSizeFormat(p)  crC_opSizeFormat[getOpFormat(p)]
 
 
 /* OpCode names table */ 
 CRI_DEC(const char *crC_opName[NUM_OPCODES];)
 
 #define getOpName(p)        crC_opName[p]
-
-
-
-/* number of symbols in 'crC_opBinsym' */
-#define NUM_BINSYM      (OP_BXOR - OP_ADD + 1)
-
-/* OpCode binary op symbols */
-CRI_DEC(const char *crC_opBinsym[NUM_BINSYM];)
-
-#define getOpBinsym(p)       crC_opBinsym[(p) - OP_ADD]
 
 
 
