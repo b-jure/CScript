@@ -563,8 +563,62 @@ void crV_call(cr_State *ts, SPtr func, int nresults) {
 }
 
 
-void crV_concat(cr_State *ts, int n) {
-    // TODO: impelement this, then start writing binary
+#define isemptystr(v)   (ttisstr(v) && lenstr(v) == 0)
+
+
+#define MAXSHRSTRLEN    95
+
+
+static void copy2buff(SPtr top, int n, char *buff) {
+    size_t done = 0;
+    do {
+        OString *s = strval(s2v(top - n));
+        size_t len = getstrlen(s);
+        memcpy(&buff[done], getstrbytes(s), len * sizeof(char));
+        done += len;
+    } while (--n > 0);
+}
+
+
+void crV_concat(cr_State *ts, int total) {
+    if (total == 1)
+        return; /* done */
+    do {
+        SPtr top = ts->sp.p;
+        int n = 2; /* number of elements (minimum 2) */
+        if (!(ttisstr(s2v(top - 2)) && ttisstr(s2v(top - 1))))
+            crMM_tryconcat(ts);
+        else if (isemptystr(s2v(top - 1))) /* second operand is empty string? */
+            ; /* result already in the first operand */
+        else if (isemptystr(s2v(top - 2))) { /* first operand is empty string? */
+            setobjs2s(ts, top - 2, top - 1); /* result is second operand */
+        }
+        else { /* at least 2 non-empty strings */
+            cr_assert(ttisstr(s2v(top - 2)) && ttisstr(s2v(top - 1)));
+            size_t ltotal = lenstr(s2v(top - 1));
+            /* collect total length and number of strings */
+            for (n = 1; n < total && ttisstr(s2v(top - n - 1)); n++) {
+                size_t len = lenstr(s2v(top - n - 1));
+                if (cr_unlikely(len >= SIZE_MAX - sizeof(OString) - ltotal)) {
+                    ts->sp.p = top - total; /* pop strings */
+                    crD_runerror(ts, "string length overflow");
+                }
+                ltotal += len;
+            }
+            OString *s;
+            if (ltotal <= MAXSHRSTRLEN) {
+                char buff[MAXSHRSTRLEN];
+                copy2buff(top, n, buff);
+                s = crS_newl(ts, buff, ltotal);
+            } else {
+                s = crS_newlobj(ts, ltotal);
+                copy2buff(top, n, getstrbytes(s));
+            }
+            setstrval2s(ts, top - n, s);
+        }
+        total -= n - 1; /* got 'n' strings to create one new */
+        ts->sp.p -= n - 1; /* popped 'n' strings and pushed one */
+    } while (total > 1);
 }
 
 

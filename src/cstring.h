@@ -39,12 +39,13 @@
 CRI_FUNC void crS_init(cr_State *ts);
 CRI_FUNC OString *crS_new(cr_State *ts, const char *str);
 CRI_FUNC OString *crS_newl(cr_State *ts, const char *str, size_t len);
+CRI_FUNC OString *crS_newlobj(cr_State *ts, size_t len);
 CRI_FUNC void crS_free(cr_State *ts, OString *s);
 CRI_FUNC uint crS_hash(const char *str, size_t len, uint seed);
 CRI_FUNC int crS_cmp(const OString *s1, const OString *s2);
 CRI_FUNC int crS_eq(const OString *s1, const OString *s2);
 CRI_FUNC const char *crS_pushvfstring(cr_State *ts, const char *fmt,
-                                            va_list argp);
+                                      va_list argp);
 CRI_FUNC const char *crS_pushfstring(cr_State *ts, const char *fmt, ...);
 CRI_FUNC size_t crS_tonum(const char *s, TValue *o, int *of);
 CRI_FUNC int crS_tomt(cr_State *ts, OString *id);

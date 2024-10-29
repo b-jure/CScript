@@ -377,6 +377,12 @@ cr_noret crD_ordererror(cr_State *ts, const TValue *v1, const TValue *v2) {
 }
 
 
+cr_noret crD_concaterror(cr_State *ts, const TValue *v1, const TValue *v2) {
+    if (ttisstr(v1)) v1 = v2;
+    crD_typeerror(ts, v1, "concatenate");
+}
+
+
 cr_noret crD_callerror(cr_State *ts, const TValue *o) {
     crD_typeerror(ts, o, "call");
 }

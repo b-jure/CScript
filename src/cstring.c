@@ -47,6 +47,16 @@ void crS_init(cr_State *ts) {
 }
 
 
+static OString *createstrobj(cr_State *ts, size_t l, uint h) {
+    OString *s = crG_new(ts, sizeofstring(l), CR_VSTRING, OString);
+    s->len = l;
+    s->hash = h;
+    s->extra = 0;
+    getstrbytes(s)[l] = '\0';
+    return s;
+}
+
+
 /*
 ** Create new string object of size 'len'.
 ** Allocation is skipped in case string is already interned.
@@ -59,13 +69,9 @@ OString *crS_newl(cr_State *ts, const char *chars, size_t len) {
     if (str) { /* is interned or weak reference ? */
         return str;
     } else {
-        str = crG_new(ts, sizeofstring(len), CR_VSTRING, OString);
-        str->len = len;
+        str = createstrobj(ts, len, hash);
         if (cr_likely(len != 0))
             memcpy(str->bytes, chars, len);
-        str->bytes[len] = '\0';
-        str->hash = hash;
-        str->extra = 0;
         setbit(str->bits, STRHASHBIT);
         setstrval(ts, &key, str);
         setstrval2s(ts, ts->sp.p++, str);
@@ -76,9 +82,14 @@ OString *crS_newl(cr_State *ts, const char *chars, size_t len) {
 }
 
 
-/* create new string object */
+/* create new string object from null terminated bytes */
 OString *crS_new(cr_State *ts, const char *chars) {
     return crS_newl(ts, chars, strlen(chars));
+}
+
+
+OString *crS_newlobj(cr_State *ts, size_t len) {
+    return createstrobj(ts, len, G_(ts)->seed);
 }
 
 

@@ -36,6 +36,7 @@ CRI_FUNC void crMM_trybin(cr_State *ts, const TValue *v1, const TValue *v2,
 		    	  SPtr res, cr_MM mm);
 CRI_FUNC void crMM_tryunary(cr_State *ts, const TValue *v, SPtr res,
                              cr_MM mm);
+CRI_FUNC void crMM_tryconcat(cr_State *ts);
 CRI_FUNC void crMM_freeclass(cr_State *ts, OClass *cls);
 CRI_FUNC void crMM_freeinstance(cr_State *ts, Instance *ins);
 CRI_FUNC void crMM_freeuserdata(cr_State *ts, UserData *ud);

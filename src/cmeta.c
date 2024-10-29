@@ -5,6 +5,7 @@
 */
 
 #include "cmeta.h"
+#include "cconf.h"
 #include "cstring.h"
 #include "cdebug.h"
 #include "cstate.h"
@@ -137,14 +138,14 @@ void crMM_callhtmres(cr_State *ts, const TValue *fn, const TValue *p1,
 
 
 /* call binary method and store the result in 'res' */
-void crMM_callbinres(cr_State *ts, const TValue *fn, const TValue *v1,
-                     const TValue *v2, SPtr res) {
+void crMM_callbinres(cr_State *ts, const TValue *fn, const TValue *self,
+                     const TValue *rhs, SPtr res) {
     /* assuming EXTRA_STACK */
     ptrdiff_t result = savestack(ts, res);
     SPtr func = ts->sp.p;
     setobj2s(ts, func, fn); /* push function */
-    setobj2s(ts, func + 1, v1); /* lhs arg (self) */
-    setobj2s(ts, func + 2, v2); /* rhs arg */
+    setobj2s(ts, func + 1, self); /* lhs arg */
+    setobj2s(ts, func + 2, rhs); /* rhs arg */
     ts->sp.p += 3;
     crV_call(ts, func, 1);
     res = restorestack(ts, result);
@@ -219,6 +220,17 @@ void crMM_tryunary(cr_State *ts, const TValue *v, SPtr res, cr_MM mm) {
         }
         default: cr_unreachable(); break;
         }
+    }
+}
+
+
+void crMM_tryconcat(cr_State *ts) {
+    SPtr top = ts->sp.p;
+    const TValue *self = s2v(top - 2);
+    const TValue *rhs = s2v(top - 1);
+    if (cr_unlikely(ttypetag(self) != ttypetag(rhs) || /* types not matching */
+                !callbinaux(ts, self, rhs, top - 2, CR_MM_CONCAT))) {
+        crD_concaterror(ts, self, rhs);
     }
 }
 
