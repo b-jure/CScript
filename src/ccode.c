@@ -955,10 +955,6 @@ void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
              * operand variant instruction */
             break;
         }
-        case OPR_RANGE: { 
-            /* such empty; avoid unreachable */
-            break;
-        }
         case OPR_AND: {
             jmpiffalse(fs, e, OP_TESTORPOP);
             break;
@@ -1014,7 +1010,7 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDK);
     int idxK = e2->u.info; /* index into 'constants' */
     cr_assert(e2->et == EXP_K);
-    cr_assert(OP_ADD <= op && op <= OP_RANGE);
+    cr_assert(OP_ADD <= op && op < OP_CONCAT);
     crC_exp2stack(fs, e1);
     e1->u.info = crC_emitIL(fs, op, idxK);
     e1->et = EXP_FINEXPR;
@@ -1126,8 +1122,7 @@ emit:
 static void coderange(FunctionState *fs, ExpInfo *e1, ExpInfo *e2) {
     crC_exp2stack(fs, e1);
     crC_exp2stack(fs, e2);
-    // TODO
-    e1->u.info = crC_emitI(fs, OP_RANGE);
+    e1->u.info = crC_emitI(fs, OP_CONCAT);
     e1->et = EXP_FINEXPR;
 }
 
@@ -1150,7 +1145,7 @@ void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
             codebinIK(fs, e1, e2, opr, 0);
             break;
         }
-        case OPR_RANGE: {
+        case OPR_CONCAT: {
             coderange(fs, e1, e2);
             break;
         }
@@ -1184,6 +1179,22 @@ void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 }
 
 
+/* return the final target of a jump (skipping jumps to jumps) */
+static int finaltarget(Instruction *code, int i) {
+  int count;
+  for (count = 0; count < 100; count++) { /* avoid infinite loops */
+      Instruction *pc = &code[i];
+      if (*pc == OP_JMP)
+          i += GETARG_L(pc, 0);
+      else if (*pc == OP_JMPS)
+          i -= GETARG_L(pc, 0);
+      else
+          break;
+  }
+  return i;
+}
+
+
 /*
  ** Perform a final pass performing small adjustments
  ** and optimizations.
@@ -1194,9 +1205,16 @@ void crC_finish(FunctionState *fs) {
         Instruction *pc = &fn->code[i];
         switch (*pc) {
             case OP_RET: { /* check if need to close variables */
+                if (fs->needclose)
+                    SETARG_LLS(pc, 1);
+                break;
             }
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */
+                int target = finaltarget(fn->code, i);
+                fixjmp(fs, i, target);
+                break;
             }
+            default: break;
         }
     }
 }

@@ -45,8 +45,8 @@
 #define GETARG(ip)		((ip) + SIZEINSTR)
 
 /* get short/long argument pc */
-#define GETPC_S(ip,o)            (GETARG(ip) + ((o)*SIZEARGS))
-#define GETPC_L(ip,o)            (GETARG(ip) + ((o)*SIZEARGL))
+#define GETPC_S(ip,o)           (GETARG(ip) + ((o)*SIZEARGS))
+#define GETPC_L(ip,o)           (GETARG(ip) + ((o)*SIZEARGL))
 
 
 /* get/set short parameter */
@@ -57,6 +57,11 @@
 /* get/set long arg */
 #define GETARG_L(ip,o)		get3bytes(GETARG(ip) + ((o)*SIZEARGL))
 #define SETARG_L(ip,o,v)	set3bytes(GETPC_L(ip,o), v)
+
+
+/* set short arg for LLS instruction */
+#define GETPC_LLS(ip)           (GETARG(ip) + 2*SIZEARGL)
+#define SETARG_LLS(ip,v)        set3bytes(GETPC_LLS(ip), v)
 
 
 /* size of instruction jump argument in bytes */
@@ -176,7 +181,7 @@ OP_BAND,        /* V1 V2   'V1 & V2' */
 OP_BOR,         /* V1 V2   'V1 | V2' */
 OP_BXOR,        /* V1 V2   'V1 ^ V2' */
 
-OP_CONCAT,      /* V V1    'V..V1' */
+OP_CONCAT,      /* V V1    'V .. V1' */
 
 OP_EQK,         /* V L S   '(V == K{L}) == S' */
 
@@ -362,5 +367,6 @@ CRI_FUNC int crC_test(FunctionState *fs, OpCode testop, int cond);
 CRI_FUNC void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
 CRI_FUNC void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                          Binopr opr);
+CRI_FUNC void crC_finish(FunctionState *fs);
 
 #endif

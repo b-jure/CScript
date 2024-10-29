@@ -466,9 +466,10 @@ static void endfs(FunctionState *fs) {
     crC_ret(fs, fs->activelocals - 1, 0);
     cr_assert(fs->scope && !fs->scope->prev);
     endscope(fs); /* end global scope */
-    cr_assert(!fs->scope);
+    cr_assert(fs->scope == NULL);
     if (fs->deadcode.pc != NOJMP) /* have dead code ? */
         loadreachablectx(fs);
+    crC_finish(fs);
     /* preserve memory; shrink unused space; */
     /* by using counters in 'fs' as final size */
     crM_shrinkvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, Function);
@@ -1012,7 +1013,7 @@ static Binopr getbinopr(int token) {
     case '&': return OPR_BAND;
     case '|': return OPR_BOR;
     case '^': return OPR_BXOR;
-    case TK_RANGE: return OPR_RANGE;
+    case TK_CONCAT: return OPR_CONCAT;
     case TK_NE: return OPR_NE;
     case TK_EQ: return OPR_EQ;
     case '<': return OPR_LT;
@@ -1059,7 +1060,7 @@ static const struct {
     [OPR_BOR]       = {  5,  5 },   /* '|' */
     [OPR_AND]       = {  4,  4 },   /* 'and' */
     [OPR_OR]        = {  3,  3 },   /* 'or' */
-    [OPR_RANGE]     = {  2,  1 },   /* '..' */
+    [OPR_CONCAT]    = {  2,  1 },   /* '..' */
     /* 0 is '=', which is non-associatve (can't chain '=') */
 };
 

@@ -474,7 +474,7 @@ readmore:
         if (lxmatch(lx, '.')) {
             if (lxmatch(lx, '.'))
                 return TK_DOTS;
-            return TK_RANGE;
+            return TK_CONCAT;
         }
         if (!isdigit(lx->c)) 
             return '.';

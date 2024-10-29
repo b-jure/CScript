@@ -177,7 +177,7 @@ static const char *funcnamefromcode(cr_State *ts, const Function *fn, int pc,
             break;
         }
         case OP_MBIN: {
-            mm = GETARG_S(i, 1);
+            mm = GETARG_S(i, 0);
             break;
         }
         case OP_UNM: mm = CR_MM_UNM; break;
