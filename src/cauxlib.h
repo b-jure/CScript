@@ -72,6 +72,7 @@ CRLIB_API const char *crL_to_lstring(cr_State *ts, int index, size_t *plen);
 CRLIB_API void        crL_where(cr_State *ts, int level);
 CRLIB_API int         crL_fileresult(cr_State *ts, int ok, const char *fname);
 CRLIB_API cr_State   *crL_newstate(void);
+CRLIB_API int         crL_callmeta(cr_State *ts, int index, cr_MM mm);
 
 CRLIB_API void *crL_test_userdata(cr_State *ts, int index, const char *name);
 CRLIB_API void  crL_traceback(cr_State *ts, cr_State *at, int level,

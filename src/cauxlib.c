@@ -387,6 +387,16 @@ CRLIB_API cr_State *crL_newstate(void) {
 }
 
 
+CRLIB_API int crL_callmeta(cr_State *ts, int index, cr_MM mm) {
+    index = cr_absindex(ts, index);
+    if (cr_get_metamethod(ts, index, mm) == CR_TNONE)
+        return 0;
+    cr_push(ts, index); /* push 'self' */
+    cr_call(ts, 1, 1);
+    return 1;
+}
+
+
 CRLIB_API void *crL_test_userdata(cr_State *ts, int index, const char *name) {
     void *p = cr_to_userdata(ts, index);
     if (p != NULL) { /* 'index' is userdata? */
