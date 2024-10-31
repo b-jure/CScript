@@ -338,6 +338,7 @@ CR_API void             cr_closeslot(cr_State *ts, int index);
 
 #define cr_is_function(ts, n)       (cr_type(ts, (n)) == CR_TFUNCTION)
 #define cr_is_class(ts, n)          (cr_type(ts, (n)) == CR_TCLASS)
+#define cr_is_instance(ts, n)       (cr_type(ts, (n)) == CR_TINSTANCE)
 #define cr_is_lightuserdata(ts, n)  (cr_type(ts, (n)) == CR_TLUDATA)
 #define cr_is_nil(ts, n)            (cr_type(ts, (n)) == CR_TNIL)
 #define cr_is_boolean(ts, n)        (cr_type(ts, (n)) == CR_TBOOL)
@@ -376,13 +377,13 @@ struct cr_DebugInfo {
     const char *what;       /* (s) 'CScript', 'C', 'main' */
     const char *source;     /* (s) */
     size_t srclen;          /* (s) */
-    int line_current;       /* (l) */
-    int line_defined;       /* (s) */
-    int line_definedlast;   /* (s) */
-    int nupvalues;          /* (u) */
-    int nparameters;        /* (u) */
+    int currline;           /* (l) */
+    int defline;            /* (s) */
+    int lastdefline;        /* (s) */
+    int nupvals;            /* (u) */
+    int nparams;            /* (u) */
     char isvararg;          /* (u) */
-    char short_source[CRI_MAXSRC]; /* (s) */
+    char shortsrc[CRI_MAXSRC]; /* (s) */
     /* (f) pushes onto stack the function that is running at the given level */
     /* private */
     struct CallFrame *cf; /* active function */

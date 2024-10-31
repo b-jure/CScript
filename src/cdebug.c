@@ -129,8 +129,8 @@ static void getfuncinfo(Closure *cl, cr_DebugInfo *di) {
     if (!CScriptclosure(cl)) {
         di->source = "[C]";
         di->srclen = SLL("[C]");
-        di->line_defined = -1;
-        di->line_definedlast = -1;
+        di->defline = -1;
+        di->lastdefline = -1;
         di->what = "C";
     } else {
         const Function *fn = cl->crc.fn;
@@ -142,11 +142,11 @@ static void getfuncinfo(Closure *cl, cr_DebugInfo *di) {
           di->source = "?";
           di->srclen = SLL("?");
         }
-        di->line_defined = fn->defline;
-        di->line_definedlast = fn->deflastline;
-        di->what = (di->line_definedlast == 0) ? "main" : "CScript";
+        di->defline = fn->defline;
+        di->lastdefline = fn->deflastline;
+        di->what = (di->lastdefline == 0) ? "main" : "CScript";
     }
-    crS_sourceid(di->short_source, di->source, di->srclen);
+    crS_sourceid(di->shortsrc, di->source, di->srclen);
 }
 
 
@@ -239,16 +239,16 @@ static int getinfo(cr_State *ts, const char *options, Closure *cl,
                 break;
             }
             case 'l': {
-                di->line_current = (cfisCScript(cf) ? currentline(cf) : -1);
+                di->currline = (cfisCScript(cf) ? currentline(cf) : -1);
                 break;
             }
             case 'u': {
-                di->nupvalues = (cl ? cl->cc.nupvalues : 0);
+                di->nupvals = (cl ? cl->cc.nupvalues : 0);
                 if (cfisCScript(cf)) {
-                    di->nparameters = cl->crc.fn->arity;
+                    di->nparams = cl->crc.fn->arity;
                     di->isvararg = cl->crc.fn->isvararg;
                 } else {
-                    di->nparameters = 0;
+                    di->nparams = 0;
                     di->isvararg = 1;
                 }
                 break;
@@ -270,10 +270,10 @@ static int getinfo(cr_State *ts, const char *options, Closure *cl,
 **
 ** '>' - Pops the function on top of the stack and loads it into 'cf'.
 ** 'n' - Fills in the field `name` and `namewhat`.
-** 's' - Fills in the fields `source`, `short_source`, `line_defined`,
-**       `line_definedlast`, and `what`.
+** 's' - Fills in the fields `source`, `shortsrc`, `defline`,
+**       `lastdefline`, and `what`.
 ** 'l' - Fills in the field `currentline`.
-** 'u' - Fills in the field `nupvalues`.
+** 'u' - Fills in the field `nupvals`.
 ** 'f' - Pushes onto the stack the function that is running at the
 **       given level.
 **

@@ -289,8 +289,8 @@ CRLIB_API void crL_where(cr_State *ts, int level) {
     cr_DebugInfo di;
     if (cr_getstack(ts, level, &di)) {
         cr_getinfo(ts, "sl", &di);
-        if (di.line_defined > 0) { /* have info? */
-            cr_push_fstring(ts, "%s:%d", di.short_source, di.line_current);
+        if (di.defline > 0) { /* have info? */
+            cr_push_fstring(ts, "%s:%d", di.shortsrc, di.currline);
             return;
         }
     }
@@ -450,7 +450,7 @@ static void newbox(cr_State *ts) {
 ** Initializes the buffer 'B' and pushes it's placeholder onto
 ** the top of the stack as light userdata.
 */
-CRLIB_API void crL_buffinit(cr_State *ts, crL_Buffer *B) {
+CRLIB_API void crL_buff_init(cr_State *ts, crL_Buffer *B) {
     B->ts = ts;
     B->n = 0;
     B->b = B->init.b;
@@ -520,8 +520,8 @@ static char *buffensure(crL_Buffer *B, size_t sz, int boxindex) {
 ** Initializes buffer 'B' to the size 'sz' bytes and returns the pointer
 ** to that memory block.
 */
-CRLIB_API char *crL_buffinitsz(cr_State *ts, crL_Buffer *B, size_t sz) {
-    crL_buffinit(ts, B);
+CRLIB_API char *crL_buff_initsz(cr_State *ts, crL_Buffer *B, size_t sz) {
+    crL_buff_init(ts, B);
     return buffensure(B, sz, -1);
 }
 
@@ -531,7 +531,7 @@ CRLIB_API char *crL_buffinitsz(cr_State *ts, crL_Buffer *B, size_t sz) {
 ** This function expects buffer placeholder or its 'UserBox' to be on
 ** top of the stack.
 */
-CRLIB_API char *crL_buffensure(crL_Buffer *B, size_t sz) {
+CRLIB_API char *crL_buff_ensure(crL_Buffer *B, size_t sz) {
     return buffensure(B, sz, -1);
 }
 
@@ -541,7 +541,7 @@ CRLIB_API char *crL_buffensure(crL_Buffer *B, size_t sz) {
 ** This function expects buffer placeholder or its 'UserBox' to be on
 ** top of the stack.
 */
-CRLIB_API void crL_buffpush_lstring(crL_Buffer *B, const char *s, size_t l) {
+CRLIB_API void crL_buff_push_lstring(crL_Buffer *B, const char *s, size_t l) {
     if (l > 0) {
         char *b = buffensure(B, l, -1);
         memcpy(b, s, l * sizeof(char));
@@ -551,13 +551,13 @@ CRLIB_API void crL_buffpush_lstring(crL_Buffer *B, const char *s, size_t l) {
 
 
 /*
-** Similar to 'crL_buffpush_lstring', the only difference is that this
+** Similar to 'crL_buff_push_lstring', the only difference is that this
 ** function measures the length of 's'.
 ** This function expects buffer placeholder or its 'UserBox' to be on
 ** top of the stack.
 */
-CRLIB_API void crL_buffpush_string(crL_Buffer *B, const char *s) {
-    crL_buffpush_lstring(B, s, strlen(s));
+CRLIB_API void crL_buff_push_string(crL_Buffer *B, const char *s) {
+    crL_buff_push_lstring(B, s, strlen(s));
 }
 
 
@@ -566,7 +566,7 @@ CRLIB_API void crL_buffpush_string(crL_Buffer *B, const char *s) {
 ** This function expects buffer placeholder or its 'UserBox' to be on
 ** the stack below the string value being pushed, which is on top of the stack.
 */
-CRLIB_API void crL_buffpush_value(crL_Buffer *B) {
+CRLIB_API void crL_buff_push_value(crL_Buffer *B) {
     size_t len;
     const char *str = cr_to_lstring(B->ts, -1, &len);
     char *p = buffensure(B, len, -2);
@@ -580,7 +580,7 @@ CRLIB_API void crL_buffpush_value(crL_Buffer *B) {
 ** Finish the use of buffer 'B' leaving the final string on top of
 ** the stack.
 */
-CRLIB_API void crL_buffend(crL_Buffer *B) {
+CRLIB_API void crL_buff_end(crL_Buffer *B) {
     cr_State *ts = B->ts;
     checkbufflevel(B, -1);
     cr_push_lstring(ts, B->b, B->n);
@@ -611,36 +611,108 @@ static int lastlevel(cr_State *ts) {
 }
 
 
-static void pushfuncname(cr_State *ts, cr_DebugInfo *di) {
+/*
+** Find field in instance at index -1. If field value is found
+** meaning the object at 'index' is equal to the field value, then
+** this function returns 1. Only string keys are considered and
+** limit is the limit of recursive calls in case instance field
+** contains instance value.
+*/
+static int findfield(cr_State *ts, int index, int limit) {
+    if (limit == 0 || !cr_is_instance(ts, -1))
+        return 0; /* not found */
+    cr_push_nil(ts); /* start 'next' loop */
+    while (cr_next(ts, -2)) { /* for each field in instance */
+        if (cr_type(ts, -2) == CR_TSTRING) { /* ignore non-string keys */
+            if (cr_rawequal(ts, index, -1)) { /* found object? */
+                cr_pop(ts, 1); /* remove value (but keep name) */
+                return 1;
+            }
+            else if (findfield(ts, index, limit - 1)) { /* try recursively */
+                /* stack: lib_name, lib_instance, field_name (top) */
+                cr_push_literal(ts, "."); /* place '.' between the two names */
+                cr_replace(ts, -3); /* (in the slot occupied by instance) */
+                cr_concat(ts, 3); /* lib_name.field_name */
+                return 1;
+            }
+        }
+        cr_pop(ts, 1); /* remove value */
+    }
+    return 0; /* not found */
 }
 
 
-#define STACKLEVELS     10
+/*
+** Try and push name of the currently active func in 'di'.
+** If func is global function, then the its name is pushed on the top of
+** the stack.
+*/
+static int pushglobalfuncname(cr_State *ts, cr_DebugInfo *di) {
+    int top = cr_gettop(ts);
+    cr_getinfo(ts, "f", di); /* push func */
+    cr_get_global(ts, CR_LOADED_LIBS); /* get global lib instance */
+    crL_check_stack(ts, 6, "not enough stack space"); /* for 'findfield' */
+    if (findfield(ts, top + 1, 2)) { /* found? */
+        cr_copy(ts, -1, top + 1); /* copy name to proper place */
+        cr_settop(ts, top + 1); /* remove lib instance and name copy */
+        return 1;
+    } else { /* not a global */
+        cr_settop(ts, top); /* remove func and lib instance */
+        return 0;
+    }
+}
+
+
+static void pushfuncname(cr_State *ts, cr_DebugInfo *di) {
+    if (pushglobalfuncname(ts, di)) { /* try first a global name */
+        cr_push_fstring(ts, "function '%s'", cr_to_string(ts, -1));
+        cr_remove(ts, -2); /* remove name */
+    }
+    else if (*di->namewhat != '\0') /* name from code? */
+        cr_push_fstring(ts, "%s '%s'", di->namewhat, di->name);
+    else if (*di->what == 'm') /* main? */
+        cr_push_literal(ts, "main chunk");
+    else if (*di->what != 'C') /* CScript functions? */
+        cr_push_fstring(ts, "function <%s:%d>", di->shortsrc, di->defline);
+    else /* unknown */
+        cr_push_literal(ts, "?");
+}
+
+
+/* '0' is a valid stack level (top-level) */
+#define tostacklevel(x)     ((x)-1)
+
+#define STACKLEVELS         tostacklevel(11)
 
 CRLIB_API void crL_traceback(cr_State *ts, cr_State *at, int level,
                              const char *msg) {
     crL_Buffer B;
     cr_DebugInfo di;
     int last = lastlevel(at);
-    int levelsleft = (last - level > STACKLEVELS ? STACKLEVELS : -1);
-    crL_buffinit(ts, &B);
+    int levelsleft = (last - level > (STACKLEVELS*2) ? STACKLEVELS : -1);
+    crL_buff_init(ts, &B);
     if (msg) {
-        crL_buffpush_string(&B, msg);
-        crL_buffpush(&B, '\n');
+        crL_buff_push_string(&B, msg);
+        crL_buff_push(&B, '\n');
     }
-    crL_buffpush_string(&B, "stack traceback:");
+    crL_buff_push_string(&B, "stack traceback:");
     while (cr_getstack(at, level++, &di)) { /* tracing back... */
-        if (levelsleft-- == 0) { /* too many frames? */
+        if (levelsleft-- == 0) { /* too many levels? */
+            int n = last - level - STACKLEVELS + 1;
+            cr_push_fstring(ts, "\n\t(skipping %d levels)", n);
+            crL_buff_push_value(&B);
+            level += n;
         } else {
             /* source, name, line info */
             cr_getinfo(at, "snl", &di);
-            if (di.line_defined <= 0)
-                cr_push_fstring(ts, "\n\t%s in ", di.short_source);
+            if (di.defline <= 0)
+                cr_push_fstring(ts, "\n\t%s in ", di.shortsrc);
             else
-                cr_push_fstring(ts, "\n\t%s:%d in ", di.short_source,
-                                    di.line_current);
-            crL_buffpush_value(&B);
+                cr_push_fstring(ts, "\n\t%s:%d in ", di.shortsrc, di.currline);
+            crL_buff_push_value(&B);
             pushfuncname(ts, &di);
+            crL_buff_push_value(&B);
         }
     }
+    crL_buff_end(&B);
 }

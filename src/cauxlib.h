@@ -14,9 +14,8 @@
 
 
 /* 
-** Name of the field in global table where the library instance
-** is located. All loaded libraries are set as fields of this
-** instance.
+** Name of the field in global table where the lib instance is located.
+** All loaded libraries are set as fields of this instance.
 */
 #define CR_LOADED_LIBS      "LOADED_LIBS"
 
@@ -126,17 +125,17 @@ struct crL_Buffer {
 #define crL_buffadd(B, sz)      ((B)->n += (sz))
 #define crL_buffsub(B, sz)      ((B)->n -= (sz))
 
-#define crL_buffpush(B, c) \
-    ((void)((B)->n < (B)->sz || crL_buffensure((B), 1)), \
+#define crL_buff_push(B, c) \
+    ((void)((B)->n < (B)->sz || crL_buff_ensure((B), 1)), \
      ((B)->b[(B)->n++] = (c)))
 
-CRLIB_API void  crL_buffinit(cr_State *ts, crL_Buffer *B);
-CRLIB_API char *crL_buffinitsz(cr_State *ts, crL_Buffer *B, size_t sz);
-CRLIB_API char *crL_buffensure(crL_Buffer *B, size_t sz);
-CRLIB_API void  crL_buffpush_lstring(crL_Buffer *B, const char *s, size_t l);
-CRLIB_API void  crL_buffpush_string(crL_Buffer *B, const char *s);
-CRLIB_API void  crL_buffpush_value(crL_Buffer *B);
-CRLIB_API void crL_buffend(crL_Buffer *B);
+CRLIB_API void  crL_buff_init(cr_State *ts, crL_Buffer *B);
+CRLIB_API char *crL_buff_initsz(cr_State *ts, crL_Buffer *B, size_t sz);
+CRLIB_API char *crL_buff_ensure(crL_Buffer *B, size_t sz);
+CRLIB_API void  crL_buff_push_lstring(crL_Buffer *B, const char *s, size_t l);
+CRLIB_API void  crL_buff_push_string(crL_Buffer *B, const char *s);
+CRLIB_API void  crL_buff_push_value(crL_Buffer *B);
+CRLIB_API void crL_buff_end(crL_Buffer *B);
 
 
 /* ------------------------------------------------------------------------ 
