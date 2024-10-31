@@ -149,7 +149,7 @@ typedef struct CallFrame {
 typedef struct GState {
     cr_Alloc falloc; /* allocator */
     void *ud_alloc; /* userdata for 'falloc' */
-    cr_CFunction panic; /* panic handler (unprotected calls) */
+    cr_CFunction fpanic; /* panic handler (unprotected calls) */
     uint seed; /* initial seed for hashing */
     TValue nil; /* nil value (init flag) */
     GC gc; /* garbage collection managed values and parameters */

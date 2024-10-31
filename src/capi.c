@@ -77,6 +77,16 @@ static SPtr index2stack(const cr_State *ts, int index) {
 }
 
 
+CR_API cr_CFunction cr_atpanic(cr_State *ts, cr_CFunction fpanic) {
+    cr_CFunction old_panic;
+    cr_lock(ts);
+    old_panic = G_(ts)->fpanic;
+    G_(ts)->fpanic = fpanic;
+    cr_unlock(ts);
+    return old_panic;
+}
+
+
 CR_API cr_Number cr_version(cr_State *ts) {
     UNUSED(ts);
     return CR_VERSION_NUMBER;
@@ -686,7 +696,7 @@ CR_API int cr_push_thread(cr_State *ts) {
 }
 
 
-cr_sinline void auxsetvmt(TValue *dest, cr_VMT *vmt) {
+cr_sinline void auxsetvmt(TValue *dest, const cr_VMT *vmt) {
     for (int i = 0; i < CR_NUM_MM; i++)
         setcfval(&dest[i], vmt->func[i]);
 }
@@ -721,7 +731,7 @@ cr_sinline void auxrawsetstr(cr_State *ts, HTable *ht, const char *str,
 }
 
 
-cr_sinline void auxsetentrylist(cr_State *ts, OClass *cls, cr_ClassEntry *list,
+cr_sinline void auxsetentrylist(cr_State *ts, OClass *cls, cr_Entry *list,
                                 int nup) {
     /* TODO: implement cr_checkstack */
     if (list->name && !cls->methods) { /* have entry and no method table? */
@@ -740,7 +750,7 @@ cr_sinline void auxsetentrylist(cr_State *ts, OClass *cls, cr_ClassEntry *list,
 
 
 CR_API void cr_push_class(cr_State *ts, cr_VMT *vmt, int sindex, int nup,
-                         cr_ClassEntry *entries) {
+                         cr_Entry *entries) {
     OClass *cls;
     cr_lock(ts);
     cls = crMM_newclass(ts);
@@ -969,7 +979,7 @@ CR_API void cr_set_field(cr_State *ts, int index, const char *field) {
 }
 
 
-CR_API void cr_setuserdatavmt(cr_State *ts, int index, cr_VMT *vmt) {
+CR_API void cr_setuserdatavmt(cr_State *ts, int index, const cr_VMT *vmt) {
     UserData *ud;
     cr_lock(ts);
     ud = getuserdata(ts, index);

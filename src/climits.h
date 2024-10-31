@@ -62,7 +62,7 @@ typedef unsigned short ushrt;
 
 
 /* internal assertions for debugging */
-#if defined(CRI_DEBUG_ASSERT)
+#if defined(CRI_ASSERT)
 #undef NDEBUG
 #include <assert.h>
 #define cr_assert(e)            assert(e)

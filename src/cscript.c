@@ -5,8 +5,10 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "cscript.h"
+#include "cauxlib.h"
 
 
 #define CR_PROGNAME     "CScript"
@@ -16,23 +18,6 @@ static cr_State *gstate = NULL;
 
 static const char *progname = CR_PROGNAME;
 
-
-#if !defined(cst_writestring)
-#define cst_writestring(s, l)   fwrite((s), sizeof(char), (l), stdout)
-#endif
-
-#if !defined(cst_writeline)
-#define cst_writeline()         (cst_writestring("\n", 1), fflush(stdout))
-#endif
-
-#if !defined(cst_writeerror)
-#define cst_writeerror(msg)     (fprintf(stderr, msg), fflush(stderr))
-#endif
-
-#if !defined(cst_writeferror)
-#define cst_writeferror(msg, ...) \
-    (fprintf(stderr, msg, __VA_ARGS__), fflush(stderr))
-#endif
 
 
 static void printusage(void) {
@@ -48,6 +33,9 @@ static void printusage(void) {
 }
 
 
-int main(int argc, char* argv[])
-{
+static void fwarn(void *ud, const char *msg, int tocont) {
+}
+
+
+int main(int argc, char* argv[]) {
 }

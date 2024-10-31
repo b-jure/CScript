@@ -22,7 +22,6 @@
 #include "cvm.h"
 #include "cmeta.h"
 #include "cstring.h"
-#include "ctrace.h"
 
 
 /*
@@ -565,11 +564,9 @@ void crV_call(cr_State *ts, SPtr func, int nresults) {
 }
 
 
-#define isemptystr(v)   (ttisstr(v) && lenstr(v) == 0)
-
+#define isemptystr(v)   (cr_assert(ttisstr(v)), lenstr(v) == 0)
 
 #define MAXSHRSTRLEN    95
-
 
 static void copy2buff(SPtr top, int n, char *buff) {
     size_t done = 0;
@@ -594,8 +591,7 @@ void crV_concat(cr_State *ts, int total) {
             ; /* result already in the first operand */
         else if (isemptystr(s2v(top - 2))) { /* first operand is empty string? */
             setobjs2s(ts, top - 2, top - 1); /* result is second operand */
-        }
-        else { /* at least 2 non-empty strings */
+        } else { /* at least 2 non-empty strings */
             cr_assert(ttisstr(s2v(top - 2)) && ttisstr(s2v(top - 1)));
             size_t ltotal = lenstr(s2v(top - 1));
             /* collect total length and number of strings */
@@ -890,8 +886,8 @@ void crV_concat(cr_State *ts, int total) {
 
 
 void crV_execute(cr_State *ts, CallFrame *cf) {
-    register CrClosure *cl; /* closure being executed */
     register const Instruction *pc; /* program counter */
+    register CrClosure *cl; /* closure being executed */
     register TValue *k; /* array of constants */
     register SPtr base; /* function base stack index */
 #if CR_USE_JUMPTABLE

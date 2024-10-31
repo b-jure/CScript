@@ -92,7 +92,7 @@ typedef void (*cr_WarnFunction)(void *ud, const char *msg, int tocont);
 typedef struct cr_VMT cr_VMT;
 
 /* Class method entry */
-typedef struct cr_ClassEntry cr_ClassEntry;
+typedef struct cr_Entry cr_Entry;
 
 /* type for debug API */
 typedef struct cr_DebugInfo cr_DebugInfo;
@@ -131,54 +131,55 @@ struct cr_VMT {
     cr_CFunction func[CR_NUM_MM]; /* metamethods */
 };
 
-struct cr_ClassEntry {
-    const char *name; /* name of the method */
-    cr_CFunction func; /* method */
+struct cr_Entry {
+    const char *name;
+    cr_CFunction func;
 };
 
 
 /* -------------------------------------------------------------------------
  * State manipulation
  * ------------------------------------------------------------------------- */
-CR_API cr_State        *cr_newstate(cr_Alloc allocator, void *ud); /* DONE */
-CR_API void             cr_freestate(cr_State *ts);/* DONE */
-CR_API cr_State        *cr_newthread(cr_State *ts);/* DONE */
-CR_API int              cr_resetthread(cr_State *ts);/* DONE */
-CR_API cr_Number        cr_version(cr_State *ts);/* DONE */
+CR_API cr_State        *cr_newstate(cr_Alloc allocator, void *ud); 
+CR_API void             cr_freestate(cr_State *ts);
+CR_API cr_State        *cr_newthread(cr_State *ts);
+CR_API int              cr_resetthread(cr_State *ts);
+CR_API cr_CFunction     cr_atpanic(cr_State *ts, cr_CFunction fn);
+CR_API cr_Number        cr_version(cr_State *ts);
 
 
 /* -------------------------------------------------------------------------
  * Stack manipulation
  * ------------------------------------------------------------------------- */
-CR_API void             cr_settop(cr_State *ts, int index); /* DONE */
-CR_API int              cr_gettop(const cr_State *ts); /* DONE */
-CR_API int              cr_absindex(cr_State *ts, int index); /* DONE */
-CR_API void             cr_rotate(cr_State *ts, int index, int n); /* DONE */
-CR_API void             cr_copy(cr_State *ts, int src, int dest); /* DONE */
-CR_API int              cr_checkstack(cr_State *ts, int n); /* DONE */
-CR_API void             cr_push(cr_State *ts, int index); /* DONE */
-CR_API void             cr_xmove(cr_State *src, cr_State *dest, int n); /* DONE */
+CR_API void             cr_settop(cr_State *ts, int index); 
+CR_API int              cr_gettop(const cr_State *ts); 
+CR_API int              cr_absindex(cr_State *ts, int index); 
+CR_API void             cr_rotate(cr_State *ts, int index, int n); 
+CR_API void             cr_copy(cr_State *ts, int src, int dest); 
+CR_API int              cr_checkstack(cr_State *ts, int n); 
+CR_API void             cr_push(cr_State *ts, int index); 
+CR_API void             cr_xmove(cr_State *src, cr_State *dest, int n); 
 
 
 /* -------------------------------------------------------------------------
  * Access functions (Stack -> C)
  * ------------------------------------------------------------------------- */
-CR_API int              cr_is_number(cr_State *ts, int index); /* DONE */
-CR_API int              cr_is_integer(cr_State *ts, int index); /* DONE */
-CR_API int              cr_is_string(cr_State *ts, int index); /* DONE */
-CR_API int              cr_is_cfunction(cr_State *ts, int index); /* DONE */
-CR_API int              cr_is_userdata(cr_State *ts, int index); /* DONE */
-CR_API int              cr_type(cr_State *ts, int index); /* DONE */
-CR_API const char      *cr_typename(cr_State *ts, int type); /* DONE */
+CR_API int              cr_is_number(cr_State *ts, int index); 
+CR_API int              cr_is_integer(cr_State *ts, int index); 
+CR_API int              cr_is_string(cr_State *ts, int index); 
+CR_API int              cr_is_cfunction(cr_State *ts, int index); 
+CR_API int              cr_is_userdata(cr_State *ts, int index); 
+CR_API int              cr_type(cr_State *ts, int index); 
+CR_API const char      *cr_typename(cr_State *ts, int type); 
 
-CR_API cr_Number        cr_to_numberx(cr_State *ts, int index, int *isnum); /* DONE */
-CR_API cr_Integer       cr_to_integerx(cr_State *ts, int index, int *isnum); /* DONE */
-CR_API int              cr_to_bool(cr_State *ts, int index); /* DONE */
-CR_API const char      *cr_to_lstring(cr_State *ts, int index, size_t *plen); /* DONE */
-CR_API cr_CFunction     cr_to_cfunction(cr_State *ts, int index); /* DONE */
-CR_API void            *cr_to_userdata(cr_State *ts, int index); /* DONE */
-CR_API const void      *cr_to_pointer(cr_State *ts, int index); /* DONE */
-CR_API cr_State        *cr_to_thread(cr_State *ts, int index); /* DONE */
+CR_API cr_Number        cr_to_numberx(cr_State *ts, int index, int *isnum); 
+CR_API cr_Integer       cr_to_integerx(cr_State *ts, int index, int *isnum); 
+CR_API int              cr_to_bool(cr_State *ts, int index); 
+CR_API const char      *cr_to_lstring(cr_State *ts, int index, size_t *plen); 
+CR_API cr_CFunction     cr_to_cfunction(cr_State *ts, int index); 
+CR_API void            *cr_to_userdata(cr_State *ts, int index); 
+CR_API const void      *cr_to_pointer(cr_State *ts, int index); 
+CR_API cr_State        *cr_to_thread(cr_State *ts, int index); 
 
 
 /* -------------------------------------------------------------------------
@@ -201,7 +202,7 @@ CR_API cr_State        *cr_to_thread(cr_State *ts, int index); /* DONE */
 
 #define CR_NUM_ARITH    13
 
-CR_API void     cr_arith(cr_State *ts, int op); /* DONE */
+CR_API void     cr_arith(cr_State *ts, int op); 
 
 
 /* Ordering operations */
@@ -211,50 +212,50 @@ CR_API void     cr_arith(cr_State *ts, int op); /* DONE */
 
 #define CR_NUM_CMP      3
 
-CR_API int      cr_rawequal(cr_State *ts, int idx1, int idx2); /* DONE */
-CR_API int      cr_compare(cr_State *ts, int idx1, int idx2, int op); /* DONE */
+CR_API int      cr_rawequal(cr_State *ts, int idx1, int idx2); 
+CR_API int      cr_compare(cr_State *ts, int idx1, int idx2, int op); 
 
 
 /* -------------------------------------------------------------------------
  * Push functions (C -> stack)
  * ------------------------------------------------------------------------- */
-CR_API void        cr_push_nil(cr_State *ts); /* DONE */
-CR_API void        cr_push_number(cr_State *ts, cr_Number n); /* DONE */
-CR_API void        cr_push_integer(cr_State *ts, cr_Integer n); /* DONE */
-CR_API const char *cr_push_lstring(cr_State *ts, const char *str, size_t len); /* DONE */
-CR_API const char *cr_push_string(cr_State *ts, const char *str); /* DONE */
-CR_API const char *cr_push_vfstring(cr_State *ts, const char *fmt, va_list argp); /* DONE */
-CR_API const char *cr_push_fstring(cr_State *ts, const char *fmt, ...); /* DONE */
-CR_API void        cr_push_cclosure(cr_State *ts, cr_CFunction fn, int upvals); /* DONE */
-CR_API void        cr_push_bool(cr_State *ts, int b); /* DONE */
-CR_API void        cr_push_lightuserdata(cr_State *ts, void *p); /* DONE */
-CR_API int         cr_push_thread(cr_State *ts); /* DONE */
+CR_API void        cr_push_nil(cr_State *ts); 
+CR_API void        cr_push_number(cr_State *ts, cr_Number n); 
+CR_API void        cr_push_integer(cr_State *ts, cr_Integer n); 
+CR_API const char *cr_push_lstring(cr_State *ts, const char *str, size_t len); 
+CR_API const char *cr_push_string(cr_State *ts, const char *str); 
+CR_API const char *cr_push_vfstring(cr_State *ts, const char *fmt, va_list argp); 
+CR_API const char *cr_push_fstring(cr_State *ts, const char *fmt, ...); 
+CR_API void        cr_push_cclosure(cr_State *ts, cr_CFunction fn, int upvals); 
+CR_API void        cr_push_bool(cr_State *ts, int b); 
+CR_API void        cr_push_lightuserdata(cr_State *ts, void *p); 
+CR_API int         cr_push_thread(cr_State *ts); 
 CR_API void        cr_push_class(cr_State *ts, cr_VMT *vmt, int sindex,
-                                 int nup, cr_ClassEntry *list); /* DONE */
+                                 int nup, cr_Entry *list); 
 
 
 /* -------------------------------------------------------------------------
  * Get functions (CScript -> stack)
  * ------------------------------------------------------------------------- */
-CR_API int   cr_get_global(cr_State *ts, const char *name); /* DONE */
-CR_API int   cr_get(cr_State *ts, int index); /* DONE */
-CR_API int   cr_get_field(cr_State *ts, int index); /* DONE */
-CR_API int   cr_get_class(cr_State *ts, int index); /* DONE */
-CR_API int   cr_get_method(cr_State *ts, int index, const char *name); /* DONE */
-CR_API int   cr_get_metamethod(cr_State *ts, int index, cr_MM mm); /* DONE */
-CR_API void *cr_newuserdata(cr_State *ts, size_t sz, int nuv); /* DONE */
-CR_API int   cr_get_uservalue(cr_State *ts, int index, int n); /* DONE */
+CR_API int   cr_get_global(cr_State *ts, const char *name); 
+CR_API int   cr_get(cr_State *ts, int index); 
+CR_API int   cr_get_field(cr_State *ts, int index); 
+CR_API int   cr_get_class(cr_State *ts, int index); 
+CR_API int   cr_get_method(cr_State *ts, int index, const char *name); 
+CR_API int   cr_get_metamethod(cr_State *ts, int index, cr_MM mm); 
+CR_API void *cr_newuserdata(cr_State *ts, size_t sz, int nuv); 
+CR_API int   cr_get_uservalue(cr_State *ts, int index, int n); 
 
 
 /* -------------------------------------------------------------------------
  * Set functions (stack -> CScript)
  * ------------------------------------------------------------------------- */
-CR_API void  cr_set_global(cr_State *ts, const char *name); /* DONE */
-CR_API void  cr_set(cr_State *ts, int index); /* DONE */
-CR_API void  cr_set_field(cr_State *ts, int index, const char *field); /* DONE */
-CR_API void  cr_setuserdatavmt(cr_State *ts, int index, cr_VMT *vmt); /* DONE */
-CR_API int   cr_setuservalue(cr_State *ts, int index, int n); /* DONE */
-CR_API void  cr_set_userdatamm(cr_State *ts, int index, cr_MM mm); /* DONE */
+CR_API void  cr_set_global(cr_State *ts, const char *name); 
+CR_API void  cr_set(cr_State *ts, int index); 
+CR_API void  cr_set_field(cr_State *ts, int index, const char *field); 
+CR_API void  cr_setuserdatavmt(cr_State *ts, int index, const cr_VMT *vmt); 
+CR_API int   cr_setuservalue(cr_State *ts, int index, int n); 
+CR_API void  cr_set_userdatamm(cr_State *ts, int index, cr_MM mm); 
 
 
 /* -------------------------------------------------------------------------
@@ -267,17 +268,17 @@ CR_API void  cr_set_userdatamm(cr_State *ts, int index, cr_MM mm); /* DONE */
 #define CR_ERRMEM               4  /* memory related error (oom) */
 #define CR_ERRERROR             5  /* error while handling error */
 
-CR_API int cr_status(cr_State *ts); /* DONE */
-CR_API int cr_error(cr_State *ts); /* DONE */
+CR_API int cr_status(cr_State *ts); 
+CR_API int cr_error(cr_State *ts); 
 
 
 /* -------------------------------------------------------------------------
  * Call/Load CScript code
  * ------------------------------------------------------------------------- */
-CR_API void cr_call(cr_State *ts, int nargs, int nresults); /* DONE */
-CR_API int  cr_pcall(cr_State *ts, int nargs, int nresults); /* DONE */
+CR_API void cr_call(cr_State *ts, int nargs, int nresults); 
+CR_API int  cr_pcall(cr_State *ts, int nargs, int nresults); 
 CR_API int  cr_load(cr_State *ts, cr_Reader reader, void *userdata,
-                    const char *source); /* DONE */
+                    const char *source); 
 
 
 /* -------------------------------------------------------------------------
@@ -299,35 +300,35 @@ CR_API int  cr_load(cr_State *ts, cr_Reader reader, void *userdata,
 #define CR_MAXPAUSE         1023
 #define CR_MAXSTEPMUL       1023
 
-CR_API int cr_gc(cr_State *ts, int option, ...); /* DONE */
+CR_API int cr_gc(cr_State *ts, int option, ...); 
 
 
 /* -------------------------------------------------------------------------
  * Warning-related functions
  * ------------------------------------------------------------------------- */
-CR_API void cr_setwarnf(cr_State *ts, cr_WarnFunction fwarn, void *ud); /* DONE */
-CR_API void cr_warning(cr_State *ts, const char *msg, int cont); /* DONE */
+CR_API void cr_setwarnf(cr_State *ts, cr_WarnFunction fwarn, void *ud); 
+CR_API void cr_warning(cr_State *ts, const char *msg, int cont); 
 
 
 /* -------------------------------------------------------------------------
  * Miscellaneous functions/macros
  * ------------------------------------------------------------------------- */
-CR_API int              cr_hasvmt(cr_State *ts, int index); /* DONE */
-CR_API int              cr_hasmetamethod(cr_State *ts, int index, cr_MM mm); /* DONE */
-CR_API cr_Unsigned      cr_len(cr_State *ts, int index); /* DONE */
-CR_API int              cr_next(cr_State *ts, int index); /* DONE */
-CR_API void             cr_concat(cr_State *ts, int n); /* DONE */
-CR_API size_t           cr_stringtonumber(cr_State *ts, const char *s, int *povf); /* DONE */
-CR_API cr_Alloc         cr_getallocf(cr_State *ts, void **ud); /* DONE */
-CR_API void             cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud); /* DONE */
-CR_API void             cr_toclose(cr_State *ts, int index); /* DONE */
-CR_API void             cr_closeslot(cr_State *ts, int index); /* DONE */
+CR_API int              cr_hasvmt(cr_State *ts, int index); 
+CR_API int              cr_hasmetamethod(cr_State *ts, int index, cr_MM mm); 
+CR_API cr_Unsigned      cr_len(cr_State *ts, int index); 
+CR_API int              cr_next(cr_State *ts, int index); 
+CR_API void             cr_concat(cr_State *ts, int n); 
+CR_API size_t           cr_stringtonumber(cr_State *ts, const char *s, int *povf); 
+CR_API cr_Alloc         cr_getallocf(cr_State *ts, void **ud); 
+CR_API void             cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud); 
+CR_API void             cr_toclose(cr_State *ts, int index); 
+CR_API void             cr_closeslot(cr_State *ts, int index); 
 
 
 #define cr_getextraspace(ts)        ((void *)((char *)(ts) - CR_EXTRASPACE))
 
-#define cr_tonumber(ts,i)           cr_tonumberx(ts,(i),NULL)
-#define cr_tointeger(ts,i)          cr_tointegerx(ts,(i),NULL)
+#define cr_to_number(ts,i)          cr_to_numberx(ts,(i),NULL)
+#define cr_to_integer(ts,i)         cr_to_integerx(ts,(i),NULL)
 
 #define cr_pop(ts,n)                cr_settop(ts, -(n)-1)
 
@@ -344,7 +345,7 @@ CR_API void             cr_closeslot(cr_State *ts, int index); /* DONE */
 #define cr_is_none(ts, n)           (cr_type(ts, (n)) == CR_TNONE)
 #define cr_is_noneornil(ts, n)      (cr_type(ts, (n)) <= 0)
 
-#define cr_pushliteral(ts, s)       cr_push_string(ts, "" s)
+#define cr_push_literal(ts, s)      cr_push_string(ts, "" s)
 
 #define cr_to_string(ts, i)         cr_to_lstring(ts, i, NULL)
 
@@ -359,14 +360,14 @@ CR_API void             cr_closeslot(cr_State *ts, int index); /* DONE */
  * Debug API
  * ------------------------------------------------------------------------- */
 
-CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di); /* DONE */
-CR_API int cr_getinfo(cr_State *ts, const char *options, cr_DebugInfo *di); /* DONE */
+CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di); 
+CR_API int cr_getinfo(cr_State *ts, const char *options, cr_DebugInfo *di); 
 
-CR_API const char *cr_getlocal(cr_State *ts, const cr_DebugInfo *di, int n); /* DONE */
-CR_API const char *cr_setlocal (cr_State *ts, const cr_DebugInfo *ar, int n); /* DONE */
+CR_API const char *cr_getlocal(cr_State *ts, const cr_DebugInfo *di, int n); 
+CR_API const char *cr_setlocal (cr_State *ts, const cr_DebugInfo *ar, int n); 
 
-CR_API const char *cr_getupvalue(cr_State *ts, int index, int n); /* DONE */
-CR_API const char *cr_setupvalue(cr_State *ts, int index, int n); /* DONE */
+CR_API const char *cr_getupvalue(cr_State *ts, int index, int n); 
+CR_API const char *cr_setupvalue(cr_State *ts, int index, int n); 
 
 struct cr_DebugInfo {
     /* (>) pop the function on top of the stack and load it into 'cf' */

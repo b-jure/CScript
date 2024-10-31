@@ -248,11 +248,19 @@
 #define cr_pointer2str(b,sz,p)  snprintf((b),(sz),"%p",(p))
 
 
+
+/*
+** @CRL_BUFFERSIZE is the initial buffer size used by the cauxlib
+** buffer system.
+*/
+#define CRL_BUFFERSIZE      1024
+
+
 /*
  * @CRI_MAXALIGN - values that ensure maximum alignment of
  * other values when used inside of union.
  */
-#define CRI_MAXALIGN    long l; cr_Integer i; double d; cr_Number n; void *p;
+#define CRI_MAXALIGN    long l; cr_Integer i; double d; cr_Number n; void *p
 
 
 /*
