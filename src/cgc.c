@@ -947,3 +947,31 @@ void crG_full(cr_State *ts, int isemergency) {
     fullcycle(ts);
     gc->isem = 0;
 }
+
+
+/* traverse a list making all its elements white */
+static void whitelist (GC *gc, GCObject *l) {
+    int white = crG_white(gc);
+    for (; l != NULL; l = l->next)
+        l->mark = cast_byte((l->mark & ~maskgcbits) | white);
+}
+
+
+/*
+** Enter incremental mode. Turn all objects white, make all
+** intermediate lists point to NULL (to avoid invalid pointers),
+** and go to the pause state.
+*/
+static void enterinc (GC *gc) {
+    whitelist(gc, gc->objects);
+    whitelist(gc, gc->fin);
+    whitelist(gc, gc->tobefin);
+    gc->state = GCSpause;
+}
+
+
+/* enter incremental mode */
+void crG_incmode(cr_State *ts) {
+    GC *gc = &G_(ts)->gc;
+    enterinc(gc);
+}

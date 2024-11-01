@@ -286,15 +286,16 @@ CR_API int  cr_load(cr_State *ts, cr_Reader reader, void *userdata,
  * ------------------------------------------------------------------------- */
 
 /* GC options */
-#define CR_GCSTOP               0 /* stop GC */
-#define CR_GCRESTART            1 /* restart GC (start if stopped) */
-#define CR_GCCOLLECT            2 /* perform full GC cycle */
-#define CR_GCCOUNT              3 /* get number of (bytes_allocated/1024) */
-#define CR_GCCOUNTBYTES         4 /* get remainder of (bytes_allocated/1024) */
-#define CR_GCSTEP               5 /* perform single GC step and or set debt */
-#define CR_GCSETPAUSE           6 /* set GC pause (as percentage) */
-#define CR_GCSETSTEPMUL         7 /* set GC step multiplier (as percentage) */
-#define CR_GCISRUNNING          8 /* test whether GC is running */
+#define CR_GCSTOP               0  /* stop GC */
+#define CR_GCRESTART            1  /* restart GC (start if stopped) */
+#define CR_GCCOLLECT            2  /* perform full GC cycle */
+#define CR_GCCOUNT              3  /* get number of (bytes_allocated/1024) */
+#define CR_GCCOUNTBYTES         4  /* get remainder of (bytes_allocated/1024) */
+#define CR_GCSTEP               5  /* perform single GC step and or set debt */
+#define CR_GCSETPAUSE           6  /* set GC pause (as percentage) */
+#define CR_GCSETSTEPMUL         7  /* set GC step multiplier (as percentage) */
+#define CR_GCISRUNNING          8  /* test whether GC is running */
+#define CR_GCINC                10 /* set GC in incremental mode */
 
 /* Limits for 'data' parameter for GC options. */
 #define CR_MAXPAUSE         1023

@@ -22,23 +22,29 @@
 #define BLACKBIT        2 /* object is black */
 #define FINBIT          3 /* object has finalizer */
 
-/* white bits */
-#define WHITEBITS       bit2mask(WHITEBIT0, WHITEBIT1)
 
-/* bits used for coloring */
-#define COLORBITS       bit2mask(WHITEBITS, BLACKBIT)
+/* mask of white bits */
+#define maskwhitebits   bit2mask(WHITEBIT0, WHITEBIT1)
+
+/* mask of bits used for coloring */
+#define maskcolorbits   (maskwhitebits | BLACKBIT)
+
+/* mask of all GC bits */
+#define maskgcbits      (maskcolorbits | maskwhitebits)
+
 
 /* test 'mark' bits */
-#define iswhite(o)      testbits(gcomark_(o), WHITEBITS)
-#define isgray(o)       (!testbits(gcomark_(o), COLORBITS))
+#define iswhite(o)      testbits(gcomark_(o), maskwhitebits)
+#define isgray(o)       (!testbits(gcomark_(o), maskcolorbits))
 #define isblack(o)      testbit(gcomark_(o), BLACKBIT)
 #define isfin(o)        testbit(gcomark_(o), FINBIT)
 
+
 /* get the current white bit */
-#define crG_white(gc)           ((gc)->whitebit & WHITEBITS)
+#define crG_white(gc)           ((gc)->whitebit & maskwhitebits)
 
 /* get the other white bit */
-#define whitexor(gc)            ((gc)->whitebit ^ WHITEBITS)
+#define whitexor(gc)            ((gc)->whitebit ^ maskwhitebits)
 
 /* mark object to be finalized */
 #define markfin(o)              setbit(gcomark_(o), FINBIT)
@@ -46,12 +52,11 @@
 /* mark non-white object as black */
 #define notw2black(o)           setbit(gcomark_(o), BLACKBIT)
 
-
 /* object is dead if xor (flipped) white bit is set */
 #define isdead(gc, o)           testbits(whitexor(gc), gcomark_(o))
 
 /* flip object white bit */
-#define changewhite(o)          ((o)->mark ^= WHITEBITS)
+#define changewhite(o)          ((o)->mark ^= maskwhitebits)
 
 
 
@@ -201,5 +206,6 @@ CRI_FUNC void crG_fix(cr_State *ts, GCObject *o);
 CRI_FUNC void crG_barrier_(cr_State *ts, GCObject *r, GCObject *o);
 CRI_FUNC void crG_barrierback_(cr_State *ts, GCObject *r);
 CRI_FUNC void crG_setdebt(GC *gc, cr_mem debt);
+CRI_FUNC void crG_incmode(cr_State *ts);
 
 #endif

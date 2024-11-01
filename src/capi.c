@@ -120,7 +120,6 @@ cr_inline void auxsettop(cr_State *ts, int index) {
 
 /* 
 ** Sets the stack top to 'index'.
-** Index can be any value.
 ** If new top is greater than the previous one, new values are elements
 ** are filled with 'nil'.
 ** If index is 0, then all stack elements are removed.
@@ -1180,6 +1179,20 @@ CR_API int cr_gc(cr_State *ts, int option, ...) {
         }
 	case CR_GCISRUNNING: { /* check if GC is running */
             res = gcrunning(gc);
+            break;
+        }
+        case CR_GCINC: {
+            int pause = va_arg(ap, int);
+            int stepmul = va_arg(ap, int);
+            int stepsize = va_arg(ap, int);
+            res = CR_GCINC;
+            if (pause != 0)
+                setgcparam(gc->pause, pause);
+            if (stepmul != 0)
+                setgcparam(gc->stepmul, stepmul);
+            if (stepsize != 0)
+                gc->stepsize = stepsize;
+            crG_incmode(ts);
             break;
         }
         default: res = -1; /* invalid option */

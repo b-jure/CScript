@@ -140,25 +140,24 @@ CRLIB_API void crL_buff_end(crL_Buffer *B);
 
 
 /* ------------------------------------------------------------------------ 
-** basic report of messages and errors
+** basic message reporting
 ** ------------------------------------------------------------------------ */
-/* write a message (stdout) */
-#if !defined(cst_writestring)
-#define cst_writestring(s, l)   fwrite((s), sizeof(char), (l), stdout)
+/* write a message to 'fp' stream */
+#if !defined(cst_writelen)
+#define cst_writelen(fp,s,l)    fwrite((s), sizeof(char), (l), fp)
 #endif
 
-/* write a newline and flush the output (stdout) */
+/* write a newline to 'fp' and flush it */
 #if !defined(cst_writeline)
-#define cst_writeline()         (cst_writestring("\n", 1), fflush(stdout))
+#define cst_writeline(fp)       (cst_writelen(fp, "\n", 1), fflush(fp))
 #endif
 
-/* write error message (stderr) */
-#if !defined(cst_writeerror)
-#define cst_writeerror(msg)     (fputs(msg, stderr), fflush(stderr))
+/* write formatted message to 'fp' and flush it */
+#if !defined(cst_writefmt)
+#define cst_writefmt(fp, msg, ...)  (fprintf(fp, msg, __VA_ARGS__), fflush(fp))
 #endif
 
-/* write formatted error message (stderr) */
-#if !defined(cst_writeferror)
-#define cst_writeferror(msg, ...) \
-    (fprintf(stderr, msg, __VA_ARGS__), fflush(stderr))
+/* write formatted message to 'fp' ('ap' is va_list) and flush it */
+#if !defined(cst_writevfmt)
+#define cst_writevfmt(fp,msg,ap)    (vfprintf(fp, msg, ap), fflush(fp))
 #endif
