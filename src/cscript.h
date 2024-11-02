@@ -276,7 +276,7 @@ CR_API int cr_error(cr_State *ts);
  * Call/Load CScript code
  * ------------------------------------------------------------------------- */
 CR_API void cr_call(cr_State *ts, int nargs, int nresults); 
-CR_API int  cr_pcall(cr_State *ts, int nargs, int nresults); 
+CR_API int  cr_pcall(cr_State *ts, int nargs, int nresults, int errfunc); 
 CR_API int  cr_load(cr_State *ts, cr_Reader reader, void *userdata,
                     const char *source); 
 

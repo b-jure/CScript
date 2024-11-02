@@ -17,6 +17,7 @@
 #include <string.h>
 
 
+
 /* get line number of instruction ('pc') */
 int crD_getfuncline(const Function *fn, int pc) {
     LineInfo *li;
@@ -310,7 +311,7 @@ CR_API int cr_getinfo(cr_State *ts, const char *options, cr_DebugInfo *di) {
 
 
 /* add usual debug information to 'msg' (source id and line) */
-const char *crD_addinfo(cr_State *ts, const char *msg, const OString *src,
+const char *crD_addinfo(cr_State *ts, const char *msg, OString *src,
                         int line) {
     char buffer[CRI_MAXSRC];
     if (src) {

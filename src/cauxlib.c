@@ -331,8 +331,8 @@ static int panic(cr_State *ts) {
     const char *msg = (cr_type(ts, -1) == CR_TSTRING
                        ? cr_to_string(ts, -1)
                        : "error object is not a string");
-    cst_writeferror("PANIC: unprotected error in call to CScript API: %s\n",
-                     msg);
+    cst_writefmt(stderr, "PANIC: unprotected error in call to CScript API: %s\n",
+                         msg);
     return 0; /* return to abort */
 }
 
@@ -354,11 +354,11 @@ static int warning_checkmessage(cr_State *ts, const char *msg, int tocont) {
 
 static void fwarncont(void *ud, const char *msg, int tocont) {
     cr_State *ts = (cr_State *)ud;
-    cst_writeferror("%s", msg);
+    cst_writefmt(stderr, "%s", msg);
     if (tocont) { /* to be continued? */
         cr_setwarnf(ts, fwarncont, ud);
     } else { /* this is the end of the warning */
-        cst_writeerror("\n");
+        cst_writefmt(stderr, "%s", "\n");
         cr_setwarnf(ts, fwarnon, ts);
     }
 }
@@ -367,7 +367,7 @@ static void fwarncont(void *ud, const char *msg, int tocont) {
 static void fwarnon(void *ud, const char *msg, int tocont) {
     if (warning_checkmessage((cr_State *)ud, msg, tocont))
         return; /* it was a control message */
-    cst_writeerror("CScript warning: ");
+    cst_writefmt(stderr, "%s", "CScript warning: ");
     fwarncont(ud, msg, tocont);
 }
 

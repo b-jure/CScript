@@ -175,6 +175,7 @@ struct cr_State {
     ObjectHeader;
     ushrt ncf; /* number of call frames in 'cf' list */
     int status; /* status code */
+    ptrdiff_t errfunc; /* error handling function (on stack) */
     cr_uint32 nCcalls; /* number of C calls */
     GCObject *gclist;
     struct cr_State *thwouv; /* next thread with open upvalues */

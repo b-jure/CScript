@@ -20,14 +20,14 @@
 
 /* mark object as current white */
 #define markwhite(gc,o) \
-    (gcomark_(o) = (gcomark_(o) & ~COLORBITS) | crG_white(gc))
+    (gcomark_(o) = (gcomark_(o) & ~maskcolorbits) | crG_white(gc))
 
 /* mark object as black */
 #define markblack(o) \
-    (gcomark_(o) = (gcomark_(o) & ~COLORBITS) | BLACKBIT)
+    (gcomark_(o) = (gcomark_(o) & ~maskcolorbits) | BLACKBIT)
 
 /* mark object as gray */
-#define markgray(o)	resetbits(gcomark_(o), COLORBITS)
+#define markgray(o)	resetbits(gcomark_(o), maskcolorbits)
 
 
 
@@ -501,7 +501,7 @@ static GCObject **sweeplist(cr_State *ts, GCObject **l, int nobjects,
             *l = o->next;
             freeobject(ts, o);
         } else { /* mark white */
-            gcomark_(o) = cast_ubyte((mark & ~COLORBITS) | white);
+            gcomark_(o) = cast_ubyte((mark & ~maskcolorbits) | white);
             l = &o->next;
         }
     }
@@ -582,20 +582,20 @@ static void callfin(cr_State *ts) {
     const TValue *m;
     GC *gc = &G_(ts)->gc;
     setgcoval(ts, &v, gettobefin(gc));
-    if (!ttisnil(m = crMM_get(ts, &v, CR_MM_GC))) { /* have __gc ? */
-        int oldstopped = gc->stopped;
-        gc->stopped = GCSTP; /* prevent recursive GC calls */
-        setobj2s(ts, ts->sp.p++, m);
-        setobj2s(ts, ts->sp.p++, &v);
-        ptrdiff_t oldtop = savestack(ts, ts->sp.p - 2);
-        ts->cf->status |= CFST_FIN; /* running a finalizer */
-        int status = crPR_call(ts, protectedfinalizer, NULL, oldtop);
-        ts->cf->status &= ~CFST_FIN; /* finalizer returned */
-        gc->stopped = oldstopped;
-        if (cr_unlikely(status != CR_OK)) {
-            crT_warnerror(ts, "__gc");
-            ts->sp.p--; /* pop err object */
-        }
+    if (ttisnil(m = crMM_get(ts, &v, CR_MM_GC))) /* __gc is nil ? */
+        return; /* done; no finalizer */
+    int oldstopped = gc->stopped;
+    gc->stopped = GCSTP; /* prevent recursive GC calls */
+    setobj2s(ts, ts->sp.p++, m);
+    setobj2s(ts, ts->sp.p++, &v);
+    ptrdiff_t oldtop = savestack(ts, ts->sp.p - 2);
+    ts->cf->status |= CFST_FIN; /* running a finalizer */
+    int status = crPR_call(ts, protectedfinalizer, NULL, oldtop, ts->errfunc);
+    ts->cf->status &= ~CFST_FIN; /* finalizer returned */
+    gc->stopped = oldstopped;
+    if (cr_unlikely(status != CR_OK)) {
+        crT_warnerror(ts, "__gc");
+        ts->sp.p--; /* pop err object */
     }
 }
 

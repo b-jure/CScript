@@ -135,28 +135,27 @@ const char *crL_tok2str(Lexer *lx, int t) {
     } else {
         if (isprint(t))
             return crS_pushfstring(lx->ts, "'%c'", t);
-        return crS_pushfstring(lx->ts, "'\\%d'", t);
+        else
+            return crS_pushfstring(lx->ts, "'\\%d'", t);
     }
 }
 
 
 static const char *lextok2str(Lexer *lx, int t) {
     switch (t) {
-    case TK_FLT: case TK_INT:
-    case TK_STRING: case TK_IDENTIFIER:
-        savec(lx, '\0');
-        return crS_pushfstring(lx->ts, "'%s'", lbptr(lx));
-    default:
-        return crL_tok2str(lx, t);
+        case TK_FLT: case TK_INT:
+        case TK_STRING: case TK_IDENTIFIER: {
+            savec(lx, '\0');
+            return crS_pushfstring(lx->ts, "'%s'", lbptr(lx));
+        }
+        default: return crL_tok2str(lx, t);
     }
 }
 
 
 static cr_noret lexerror(Lexer *lx, const char *err, int token) {
-    cr_State *ts;
-
-    ts = lx->ts;
-    err = crD_info(ts, err, lx->src, lx->line);
+    cr_State *ts = lx->ts;
+    err = crD_addinfo(ts, err, lx->src, lx->line);
     if (token)
         crS_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
     crPR_throw(ts, CR_ERRSYNTAX);

@@ -28,9 +28,9 @@ cr_noret crPR_throw(cr_State *ts, int code) {
         /* copy over error object */
         setobj2s(ts, gs->mainthread->sp.p++, s2v(ts->sp.p));
         crPR_throw(ts, code);
-    } else if (gs->panic) {
+    } else if (gs->fpanic) {
         cr_unlock(ts);
-        gs->panic(ts);
+        gs->fpanic(ts);
     }
     abort();
 }
@@ -56,16 +56,20 @@ int crPR_rawcall(cr_State *ts, ProtectedFn fn, void *ud) {
 }
 
 
-int crPR_call(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t old_top) {
+int crPR_call(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t old_top,
+              ptrdiff_t errfunc) {
     int status;
     CallFrame *old_cf = ts->cf;
+    ptrdiff_t old_errfunc = errfunc;
+    ts->errfunc = errfunc;
     status = crPR_rawcall(ts, fn, ud);
     if (cr_unlikely(status != CR_OK)) {
         ts->cf = old_cf;
         status = crPR_close(ts, old_top, status);
         crT_seterrorobj(ts, status, restorestack(ts, old_top));
-        crT_shrinkstack(ts);
+        crT_shrinkstack(ts); /* restore stack (overflow might of happened) */
     }
+    ts->errfunc = old_errfunc;
     return status;
 }
 
@@ -99,7 +103,6 @@ int crPR_close(cr_State *ts, ptrdiff_t level, int status) {
 }
 
 
-
 /* auxiliary structure to call 'crP_parse' in protected mode */
 struct PParseData {
     BuffReader *br;
@@ -111,9 +114,8 @@ struct PParseData {
 
 /* auxiliary function to call 'crP_pparse' in protected mode */
 static void parsepaux(cr_State *ts, void *userdata) {
-    CrClosure *cl;
     struct PParseData *ppd = cast(struct PParseData *, userdata);
-    cl = crP_parse(ts, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
+    CrClosure *cl = crP_parse(ts, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
     crF_initupvals(ts, cl);
 }
 
@@ -127,7 +129,7 @@ int crPR_parse(cr_State *ts, BuffReader *br, const char *name) {
     ppd.ps.lvars.len = ppd.ps.lvars.size = 0; ppd.ps.lvars.arr = NULL;
     ppd.ps.cs = NULL; /* 'cs' */
     ppd.source = name; /* 'source' */
-    status = crPR_call(ts, parsepaux, &ppd, savestack(ts, ts->sp.p));
+    status = crPR_call(ts, parsepaux, &ppd, savestack(ts, ts->sp.p), ts->errfunc);
     crR_freebuffer(ts, &ppd.buff);
     crM_freearray(ts, ppd.ps.lvars.arr, ppd.ps.lvars.size, LVar);
     decnnyc(ts);

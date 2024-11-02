@@ -171,7 +171,7 @@ CR_API cr_State *cr_newstate(cr_Alloc falloc, void *ud) {
     preinit_thread(ts, gs);
     setnilval(&gs->globals);
     gs->falloc = falloc; gs->ud_alloc = ud;
-    gs->panic = NULL; /* no panic handler by default */
+    gs->fpanic = NULL; /* no panic handler by default */
     gs->seed = cri_makeseed(ts); /* initial seed for hashing */
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
     gs->mainthread = ts;

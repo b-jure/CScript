@@ -139,7 +139,7 @@ CR_API void cr_settop(cr_State *ts, int index) {
 ** Negative value (-1) means an empty stack.
 */
 CR_API int cr_gettop(const cr_State *ts) {
-    return cast_int(ts->sp.p - (ts->cf->func.p + 1));
+    return cast_int(ts->sp.p - (ts->cf->func.p + 1) - 1);
 }
 
 
@@ -1088,7 +1088,7 @@ static void fcall(cr_State *ts, void *ud) {
 }
 
 
-CR_API int cr_pcall(cr_State *ts, int nargs, int nresults) {
+CR_API int cr_pcall(cr_State *ts, int nargs, int nresults, int errfunc) {
     struct PCallData pcd;
     int status;
     cr_lock(ts);
