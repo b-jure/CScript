@@ -101,7 +101,7 @@ static void fnewstate(cr_State *ts, void *ud) {
     gs->memerror = crS_newlit(ts, MEMERRMSG);
     crG_fix(ts, obj2gco(gs->memerror));
     crMM_init(ts);
-    crL_init(ts);
+    crY_init(ts);
     gs->gc.stopped = 0;
     setnilval(&gs->nil); /* signal that state is fully built */
     cri_userstatecreated(ts);

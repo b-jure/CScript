@@ -8,10 +8,12 @@
 #include <stdio.h>
 
 #include "capi.h"
+#include "carray.h"
 #include "cconf.h"
 #include "cfunction.h"
 #include "cgc.h"
 #include "chashtable.h"
+#include "cmem.h"
 #include "cscript.h"
 #include "climits.h"
 #include "cobject.h"
@@ -57,6 +59,28 @@ static void pushclosure(cr_State *ts, Function *fn, UpVal **enc, SPtr base) {
             cl->upvals[i] = enc[uv->idx];
         crG_objbarrier(ts, cl, cl->upvals[i]);
     }
+}
+
+
+/*
+** Allocate new array, push it on stack and pop 'elems' values off the
+** stack into the array.
+*/
+static void pusharray(cr_State *ts, int size, int elems) {
+    Array *arr = crA_new(ts);
+    if (size < 0) /* unbounded ? */
+        arr->sz = elems; /* equal to number of elements */
+    else /* fixed size */
+        arr->sz = size;
+    if (arr->sz > 0) {
+        setarr2s(ts, ts->sp.p++, arr); /* anchor array */
+        arr->b = crM_newarray(ts, arr->sz, TValue);
+        ts->sp.p--; /* pop array */
+        while (elems--) /* set all elements from stack into array */
+            setobj(ts, &arr->b[elems], s2v(ts->sp.p - elems - 1));
+    }
+    ts->sp.p -= elems - 1; /* remove all elems but one slot for array */
+    setarr2s(ts, ts->sp.p - 1, arr); /* push array onto stack top */
 }
 
 
@@ -315,14 +339,32 @@ cr_sinline void setglobal(cr_State *ts, TValue *key, TValue *newval) {
 }
 
 
+cr_sinline void setarray(cr_State *ts, Array *arr, const TValue *key,
+                         const TValue *val) {
+    if (cr_unlikely(!ttisint(key))) {
+        crD_runerror(ts, "invalid array index value (%s)",
+                         typename(ttypetag(key)));
+    } else {
+        cr_Integer i = ival(key);
+        if (cr_likely(0 <= i && i <= arr->n)) {
+            // TODO
+        }
+    }
+}
+
+
 void crV_set(cr_State *ts, TValue *obj, const TValue *key, const TValue *val) {
-    const TValue *fmm = crMM_get(ts, obj, CR_MM_SETIDX);
-    if (!ttisnil(fmm)) /* have metamethod ? */
-        crMM_callhtm(ts, fmm, obj, key, val);
-    else if (ttisins(obj)) /* object is instance ? */
-        crH_set(ts, &insval(obj)->fields, key, val);
-    else /* error */
-        crD_typeerror(ts, obj, "index");
+    if (ttisarr(obj)) { /* array object? */
+        setarray(ts, arrval(obj), key, val);
+    } else {
+        const TValue *fmm = crMM_get(ts, obj, CR_MM_SETIDX);
+        if (!ttisnil(fmm)) /* have metamethod ? */
+            crMM_callhtm(ts, fmm, obj, key, val);
+        else if (ttisins(obj)) /* object is instance ? */
+            crH_set(ts, &insval(obj)->fields, key, val);
+        else /* error */
+            crD_typeerror(ts, obj, "index");
+    }
 }
 
 
@@ -959,6 +1001,13 @@ returning:
                 int L = fetchl();
                 Function *fn = cl->fn->funcs[L];
                 protect(pushclosure(ts, fn, cl->upvals, base));
+                vm_break;
+            }
+            vm_case(OP_ARRAY) {
+                int size = fetchl() - 1;
+                int elems = fetchl();
+                cr_assert((0 <= size) == (elems <= size));
+                protect(pusharray(ts, size, elems));
                 vm_break;
             }
             vm_case(OP_CLASS) {

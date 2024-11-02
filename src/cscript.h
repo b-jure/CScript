@@ -51,18 +51,19 @@ typedef struct cr_State cr_State;
 /* types of values */
 #define CR_TNONE        (-1)
 
-#define CR_TNIL         0 /* nil */
-#define CR_TBOOL        1 /* boolean */
-#define CR_TNUMBER      2 /* number */
-#define CR_TLUDATA      3 /* light userdata */
-#define CR_TSTRING      4 /* string */
-#define CR_TFUNCTION    5 /* function */
-#define CR_TCLASS       6 /* class */
-#define CR_TINSTANCE    7 /* instance */
-#define CR_TUDATA       8 /* userdata */
-#define CR_TTHREAD      9 /* thread */
+#define CR_TNIL         0   /* nil */
+#define CR_TBOOL        1   /* boolean */
+#define CR_TNUMBER      2   /* number */
+#define CR_TLUDATA      3   /* light userdata */
+#define CR_TSTRING      4   /* string */
+#define CR_TARRAY       5   /* string */
+#define CR_TFUNCTION    6   /* function */
+#define CR_TCLASS       7   /* class */
+#define CR_TINSTANCE    8   /* instance */
+#define CR_TUDATA       9   /* userdata */
+#define CR_TTHREAD      10  /* thread */
 
-#define CR_NUM_TYPES    10
+#define CR_NUM_TYPES    11
 
 
 

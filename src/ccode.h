@@ -136,6 +136,7 @@ OP_CONSTF,      /* L S        'load integer L as float (S signedness)' */
 OP_VARARGPREP,  /* L          'adjust function varargs (L function arity)' */
 OP_VARARG,      /* L          'load L-1 varargs' */
 OP_CLOSURE,     /* L          'load closure(Enclosing->fns[L])' */
+OP_ARRAY,       /* L1 L2      'array[L1] = { V{offsp-L2}, ..., V{offsp} }' */
 OP_CLASS,       /*            'create and load new class' */
 OP_METHOD,   /* L V1 V2    'define method V2 for class V1 under key K{L}' */
 OP_SETMM,       /* S V1 V2    'V1->vmt[S] = V2' (see notes) */
@@ -343,6 +344,7 @@ CRI_FUNC int crC_ret(FunctionState *fs, int base, int nreturns);
 CRI_FUNC void crC_method(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void crC_storevar(FunctionState *fs, ExpInfo *var);
 CRI_FUNC void crC_defineglobal(FunctionState *fs, ExpInfo *e);
+CRI_FUNC void crC_array(FunctionState *fs, ExpInfo *e, int size, int elems);
 CRI_FUNC void crC_varexp2stack(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void crC_exp2stack(FunctionState *fs, ExpInfo *e);
 CRI_FUNC void crC_getproperty(FunctionState *fs, ExpInfo *var,

@@ -68,24 +68,6 @@ IMethod *crMM_newinsmethod(cr_State *ts, Instance *ins, const TValue *method) {
 }
 
 
-/* TODO: move to 'crapi' */
-// static void parsevmt(cr_State *ts, TValue *actual, cr_VMT *vmt) {
-//     for (int i = 0; i < CR_NUM_MM; i++) {
-//         switch (vmt->methods[i].mtt) {
-//         case CR_METAT_CFUNCTION: {
-//             // TODO
-//         }
-//         case CR_METAT_INDEX: {
-//             // TODO
-//         }
-//         case CR_METAT_NONE: default:
-//             setnilval(&actual[i]);
-//             break;
-//         }
-//     }
-// }
-
-
 UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv) {
     UserData *ud = crG_new(ts, sizeofud(nuv, size), CR_VUDATA, UserData);
     ud->vmt = NULL;
@@ -99,11 +81,10 @@ UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv) {
 const TValue *crMM_get(cr_State *ts, const TValue *v, cr_MM mm) {
     TValue *vmt;
     cr_assert(0 <= mm && mm < CR_NUM_MM);
-    UNUSED(ts);
     switch (ttypetag(v)) {
-    case CR_VINSTANCE: vmt = gco2ins(v)->oclass->vmt; break;
-    case CR_VUDATA: vmt = gco2ud(v)->vmt; break;
-    default: vmt = G_(ts)->vmt[ttype(v)]; break;
+        case CR_VINSTANCE: vmt = gco2ins(v)->oclass->vmt; break;
+        case CR_VUDATA: vmt = gco2ud(v)->vmt; break;
+        default: vmt = G_(ts)->vmt[ttype(v)]; break;
     }
     return (vmt ? &vmt[mm] : &G_(ts)->nil);
 }

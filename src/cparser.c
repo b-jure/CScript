@@ -36,7 +36,7 @@
 
 /* expect 'cond' to be true or invoke error */
 #define expect_cond(lx, cond, err) \
-    { if (!(cond)) crL_syntaxerror(lx, err); }
+    { if (!(cond)) crY_syntaxerror(lx, err); }
 
 
 /* 
@@ -164,8 +164,8 @@ static void patchlistend(FunctionState *fs) {
 
 static cr_noret expecterror(Lexer *lx, int tk) {
     const char *err = crS_pushfstring(lx->ts, "expected %s",
-                                            crL_tok2str(lx, tk));
-    crL_syntaxerror(lx, err);
+                                            crY_tok2str(lx, tk));
+    crY_syntaxerror(lx, err);
 }
 
 
@@ -176,14 +176,14 @@ static cr_noret limiterror(FunctionState *fs, const char *what, int limit) {
                         crS_pushfstring(ts, "function at line %d", line));
     const char *err = crS_pushfstring(ts, "too many %s (limit is %d) in %s",
                                           what, limit, where);
-    crL_syntaxerror(fs->lx, err);
+    crY_syntaxerror(fs->lx, err);
 }
 
 
 /* semantic error; variant of syntax error without 'near <token>' */
 cr_noret crP_semerror(Lexer *lx, const char *err) {
     lx->t.tk = 0;
-    crL_syntaxerror(lx, err);
+    crY_syntaxerror(lx, err);
 }
 
 
@@ -528,7 +528,7 @@ static void expr(Lexer *lx, ExpInfo *e);
  */
 static int match(Lexer *lx, int tk) {
     if (check(lx, tk)) {
-        crL_scan(lx);
+        crY_scan(lx);
         return 1;
     }
     return 0;
@@ -538,7 +538,7 @@ static int match(Lexer *lx, int tk) {
 /* check if 'tk' matches the current token */
 static void expect(Lexer *lx, int tk) {
     if (check(lx, tk)) {
-        crL_scan(lx);
+        crY_scan(lx);
         return;
     }
     expecterror(lx, tk);
@@ -555,9 +555,9 @@ static void expectmatch(Lexer *lx, int what, int who, int linenum) {
         if (lx->line == linenum) { /* same line ? */
             expecterror(lx, what); /* emit usual error message */
         } else {
-            crL_syntaxerror(lx, crS_pushfstring(lx->ts,
+            crY_syntaxerror(lx, crS_pushfstring(lx->ts,
             "%s expected (to close %s at line %d)",
-            crL_tok2str(lx, what), crL_tok2str(lx, who), linenum));
+            crY_tok2str(lx, what), crY_tok2str(lx, who), linenum));
         }
     }
 }
@@ -585,7 +585,7 @@ static int newlocal(Lexer *lx, OString *name, int mods) {
 
 
 #define newlocallit(lx,lit) \
-    newlocal(lx, crL_newstring(lx, "" lit, SLL(lit)), 0)
+    newlocal(lx, crY_newstring(lx, "" lit, SLL(lit)), 0)
 
 
 /*
@@ -737,7 +737,7 @@ static void var(Lexer *lx, OString *name, ExpInfo *e) {
 }
 
 
-#define varlit(lx,l,e)      var(lx, crL_newstring(lx, "" l, SLL(l)), e)
+#define varlit(lx,l,e)      var(lx, crY_newstring(lx, "" l, SLL(l)), e)
 
 
 
@@ -747,7 +747,7 @@ static void var(Lexer *lx, OString *name, ExpInfo *e) {
 
 /* varprivate ::= '@' name */
 static void varprivate(Lexer *lx, ExpInfo *e) {
-    crL_scan(lx); /* skip '@' */
+    crY_scan(lx); /* skip '@' */
     OString *name = expect_id(lx);
     int vidx = searchprivate(lx->fs, name, e);
     if (cr_unlikely(vidx < 0))
@@ -768,10 +768,10 @@ static void expid(Lexer *lx, ExpInfo *e) {
 static void selfkw(Lexer *lx, ExpInfo *e) {
     if (lx->ps->cs != NULL) {
         varlit(lx, "self", e);
-        crL_scan(lx);
+        crY_scan(lx);
         return;
     }
-    crL_syntaxerror(lx, "can't use 'self' outside of class declaration");
+    crY_syntaxerror(lx, "can't use 'self' outside of class declaration");
 }
 
 
@@ -793,7 +793,7 @@ static int exprlist(Lexer *lx, ExpInfo *e) {
 
 /* indexed ::= '[' expr ']' */
 static void indexed(Lexer *lx, ExpInfo *var, int super) {
-    crL_scan(lx); /* skip '[' */
+    crY_scan(lx); /* skip '[' */
     if (cr_unlikely(eisconstant(var)))
         crP_semerror(lx, "can't index literal constant values");
     crC_exp2stack(lx->fs, var);
@@ -806,12 +806,12 @@ static void indexed(Lexer *lx, ExpInfo *var, int super) {
 
 /* getprop ::= '.' id */
 static void getprop(Lexer *lx, ExpInfo *var, int super) {
-    crL_scan(lx); /* skip '.' */
+    crY_scan(lx); /* skip '.' */
     crC_exp2stack(lx->fs, var);
     ExpInfo key;
     expid(lx, &key);
     crC_getproperty(lx->fs, var, &key, super);
-    crL_scan(lx);
+    crY_scan(lx);
 }
 
 
@@ -824,7 +824,7 @@ static void superkw(Lexer *lx, ExpInfo *e) {
     if (cr_unlikely(lx->ps->cs == NULL)) {
         crP_semerror(lx, "usage of 'super' outside of method");
     } else if (cr_unlikely(!lx->ps->cs->super)) {
-        crL_syntaxerror(lx, "use of 'super' but class does not inherit");
+        crY_syntaxerror(lx, "use of 'super' but class does not inherit");
     } else {
         FunctionState *fs = lx->fs;
         varlit(lx, "self", e);
@@ -832,13 +832,13 @@ static void superkw(Lexer *lx, ExpInfo *e) {
         crC_exp2stack(fs, e);
         varlit(lx, "super", e);
         cr_assert(e->et == EXP_UVAL);
-        crL_scan(lx); /* skip 'super' */
+        crY_scan(lx); /* skip 'super' */
         if (check(lx, '['))
             indexed(lx, e, 1);
         else if (check(lx, '.')) 
             getprop(lx, e, 1);
         else 
-            crL_syntaxerror(lx, "'super' expects '.' or '['");
+            crY_syntaxerror(lx, "'super' expects '.' or '['");
     }
 }
 
@@ -852,18 +852,18 @@ static void superkw(Lexer *lx, ExpInfo *e) {
 static void primaryexp(Lexer *lx, ExpInfo *e) {
     switch (lx->t.tk) {
     case '(':
-        crL_scan(lx); /* skip ')' */
+        crY_scan(lx); /* skip ')' */
         expr(lx, e);
         expect(lx, ')');
         crC_varexp2stack(lx->fs, e);
         break;
     case '@':
         varprivate(lx, e);
-        crL_scan(lx);
+        crY_scan(lx);
         break;
     case TK_IDENTIFIER:
         var(lx, e->u.str, e);
-        crL_scan(lx);
+        crY_scan(lx);
         break;
     case TK_SELF:
         selfkw(lx, e);
@@ -872,7 +872,7 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
         superkw(lx, e);
         break;
     default:
-        crL_syntaxerror(lx, "unexpected symbol");
+        crY_syntaxerror(lx, "unexpected symbol");
         break;
     }
 }
@@ -887,7 +887,7 @@ static void call(Lexer *lx, ExpInfo *e) {
     int base;
     crC_exp2stack(fs, e);
     base = fs->sp - 1;
-    crL_scan(lx); /* skip '(' */
+    crY_scan(lx); /* skip '(' */
     if (lx->t.tk != ')') { /* have args ? */
         exprlist(lx, e);
         if (eismulret(e))
@@ -904,12 +904,12 @@ static void call(Lexer *lx, ExpInfo *e) {
 
 
 /*
- * suffixedexpr ::= primaryexp
- *               | primaryexp dotaccess
- *               | primaryexp call
- *               | primaryexp indexed
- */
-static void suffixedexpr(Lexer *lx, ExpInfo *e) {
+** suffixedexpr ::= primaryexp
+**               | primaryexp dotaccess
+**               | primaryexp call
+**               | primaryexp indexed
+*/
+static void suffixedexp(Lexer *lx, ExpInfo *e) {
     primaryexp(lx, e);
     for (;;) {
         switch (lx->t.tk) {
@@ -921,7 +921,7 @@ static void suffixedexpr(Lexer *lx, ExpInfo *e) {
             break;
         case '(':
             if (!eisconstant(e))
-                crL_syntaxerror(lx, "tried calling constant value");
+                crY_syntaxerror(lx, "tried calling constant value");
             call(lx, e);
             break;
         default:
@@ -932,70 +932,151 @@ static void suffixedexpr(Lexer *lx, ExpInfo *e) {
 
 
 /*
- * simpleexpr ::= int
- *              | flt
- *              | string
- *              | nil
- *              | true
- *              | false
- *              | '...'
- *              | suffixedexpr
- */
+** Check array size and return it. If 'sz' is integer or float convertible
+** to integer, then this returns the actual size. If the size overflows the
+** 'int' or size is negative then error is invoked. If the 'sz' is a variable
+** then -1 is returned. Finally if none of the above is true, then syntax error
+** is invoked as the array size is invalid.
+*/
+static int checkarraysize(Lexer *lx, ExpInfo *sz) {
+    if (eisconstant(sz)) {
+        cr_Integer size;
+        int isvalid = 0;
+        if ((isvalid = (sz->et == EXP_INT))) {
+            size = sz->u.i;
+        } else if (sz->et == EXP_FLT) {
+            cr_Integer temp = cr_floor(sz->u.n);
+            if ((isvalid = (cast_num(temp) == sz->u.n)))
+                size = temp;
+        }
+        if (isvalid) {
+            if (size < 0)
+                crP_semerror(lx, "array size can't be negative");
+            else if (size > INT_MAX - 1)
+                crP_semerror(lx, crS_pushfstring(lx->ts,
+                        "array size too large, limits is '%d'", INT_MAX - 1));
+            else
+                return size;
+        }
+    } else if (eisvar(sz)) {
+        return -1;
+    }
+    crY_syntaxerror(lx, "invalid array size, expected number or variable");
+}
+
+
+static int arrayconstructor(Lexer *lx, ExpInfo *e, int size) {
+    int elems = 0;
+    initexp(e, EXP_FINEXPR, 0);
+    if (!check(lx, '}')) {
+        do {
+            crC_exp2stack(lx->fs, e);
+            expr(lx, e);
+            elems++;
+        } while (match(lx, ','));
+        if (eismulret(e))
+            crC_setreturns(lx->fs, e, CR_MULRET);
+        else
+            crC_exp2stack(lx->fs, e);
+    }
+    expect(lx, '}');
+    if (size >= 0 && size < elems) {
+        crP_semerror(lx, crS_pushfstring(lx->ts,
+        "%d array elements overflow array size [%d]", elems, size));
+    }
+    return elems;
+}
+
+
+static void arrayexp(Lexer *lx, ExpInfo *e) {
+    ExpInfo sz;
+    int size = -1, elems = 0;
+    crY_scan(lx); /* skip '*' */
+    expect(lx, '[');
+    if (!check(lx, ']')) { /* have size? */
+        expr(lx, &sz);
+        size = checkarraysize(lx, &sz);
+        crC_exp2stack(lx->fs, &sz);
+        cr_assert(size >= 0);
+    }
+    expect(lx, ']');
+    if (match(lx, '{')) /* have constructor? */
+        elems = arrayconstructor(lx, e, size);
+    cr_assert(elems <= size);
+    crC_array(lx->fs, e, size, elems);
+}
+
+
+/*
+** simpleexpr ::= int
+**              | flt
+**              | string
+**              | nil
+**              | true
+**              | false
+**              | '...'
+**              | arrayexp
+**              | suffixedexp
+*/
 static void simpleexpr(Lexer *lx, ExpInfo *e) {
     switch (lx->t.tk) {
-    case TK_INT: {
-        initexp(e, EXP_INT, 0);
-        e->u.i = lx->t.lit.i;
-        break;
-    }
-    case TK_FLT: {
-        initexp(e, EXP_FLT, 0);
-        e->u.n = lx->t.lit.n;
-        break;
-    }
-    case TK_STRING: {
-        initexp(e, EXP_STRING, 0);
-        e->u.str = lx->t.lit.str;
-        break;
-    }
-    case TK_NIL: {
-        initexp(e, EXP_NIL, 0);
-        break;
-    }
-    case TK_TRUE: {
-        initexp(e, EXP_TRUE, 0);
-        break;
-    }
-    case TK_FALSE: {
-        initexp(e, EXP_FALSE, 0);
-        break;
-    }
-    case TK_DOTS: {
-        expect_cond(lx, lx->fs->fn->isvararg,
-                    "cannot use '...' outside of vararg function");
-        initexp(e, EXP_VARARG, crC_emitIL(lx->fs, OP_VARARG, 2));
-        break;
-    }
-    case TK_FN: {
-        crL_scan(lx); /* skip 'fn' */
-        funcbody(lx, e, lx->line, 0);
-        return;
-    }
-    default:
-        suffixedexpr(lx, e);
-        return;
-    }
-    crL_scan(lx);
+        case TK_INT: {
+            initexp(e, EXP_INT, 0);
+            e->u.i = lx->t.lit.i;
+            break;
+        }
+        case TK_FLT: {
+            initexp(e, EXP_FLT, 0);
+            e->u.n = lx->t.lit.n;
+            break;
+        }
+        case TK_STRING: {
+            initexp(e, EXP_STRING, 0);
+            e->u.str = lx->t.lit.str;
+            break;
+        }
+        case TK_NIL: {
+            initexp(e, EXP_NIL, 0);
+            break;
+        }
+        case TK_TRUE: {
+            initexp(e, EXP_TRUE, 0);
+            break;
+        }
+        case TK_FALSE: {
+            initexp(e, EXP_FALSE, 0);
+            break;
+        }
+        case TK_DOTS: {
+            expect_cond(lx, lx->fs->fn->isvararg,
+                        "cannot use '...' outside of vararg function");
+            initexp(e, EXP_VARARG, crC_emitIL(lx->fs, OP_VARARG, 2));
+            break;
+        }
+        case '[': {
+            arrayexp(lx, e);
+            break;
+        }
+        case TK_FN: {
+            crY_scan(lx); /* skip 'fn' */
+            funcbody(lx, e, lx->line, 0);
+            return;
+        }
+        default:
+            suffixedexp(lx, e);
+            return;
+        }
+    crY_scan(lx);
 }
 
 
 /* get unary operation matching 'token' */
 static Unopr getunopr(int token) {
     switch (token) {
-    case '-': return OPR_UNM;
-    case '~': return OPR_BNOT;
-    case TK_NOT: return OPR_NOT;
-    default: return OPR_NOUNOPR;
+        case '-': return OPR_UNM;
+        case '~': return OPR_BNOT;
+        case TK_NOT: return OPR_NOT;
+        default: return OPR_NOUNOPR;
     }
 }
 
@@ -1003,27 +1084,27 @@ static Unopr getunopr(int token) {
 /* get binary operation matching 'token' */
 static Binopr getbinopr(int token) {
     switch (token) {
-    case '+': return OPR_ADD;
-    case '-': return OPR_SUB;
-    case '*': return OPR_MUL;
-    case '/': return OPR_DIV;
-    case '%': return OPR_MOD;
-    case TK_POW: return OPR_POW;
-    case TK_SHR: return OPR_SHR;
-    case TK_SHL: return OPR_SHL;
-    case '&': return OPR_BAND;
-    case '|': return OPR_BOR;
-    case '^': return OPR_BXOR;
-    case TK_CONCAT: return OPR_CONCAT;
-    case TK_NE: return OPR_NE;
-    case TK_EQ: return OPR_EQ;
-    case '<': return OPR_LT;
-    case TK_LE: return OPR_LE;
-    case '>': return OPR_GT;
-    case TK_GE: return OPR_GE;
-    case TK_AND: return OPR_AND;
-    case TK_OR: return OPR_OR;
-    default: return OPR_NOBINOPR;
+        case '+': return OPR_ADD;
+        case '-': return OPR_SUB;
+        case '*': return OPR_MUL;
+        case '/': return OPR_DIV;
+        case '%': return OPR_MOD;
+        case TK_POW: return OPR_POW;
+        case TK_SHR: return OPR_SHR;
+        case TK_SHL: return OPR_SHL;
+        case '&': return OPR_BAND;
+        case '|': return OPR_BOR;
+        case '^': return OPR_BXOR;
+        case TK_CONCAT: return OPR_CONCAT;
+        case TK_NE: return OPR_NE;
+        case TK_EQ: return OPR_EQ;
+        case '<': return OPR_LT;
+        case TK_LE: return OPR_LE;
+        case '>': return OPR_GT;
+        case TK_GE: return OPR_GE;
+        case TK_AND: return OPR_AND;
+        case TK_OR: return OPR_OR;
+        default: return OPR_NOBINOPR;
     }
 }
 
@@ -1095,7 +1176,7 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
     enterCstack(lx);
     Unopr uopr = getunopr(lx->t.tk);
     if (uopr != OPR_NOUNOPR) {
-        crL_scan(lx); /* skip operator */
+        crY_scan(lx); /* skip operator */
         subexpr(lx, e, priority[uopr].right);
         crC_unary(lx->fs, e, uopr);
     } else {
@@ -1103,7 +1184,7 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
     }
     Binopr opr = getbinopr(lx->t.tk);
     while (opr != OPR_NOBINOPR && priority[opr].left > limit) {
-        crL_scan(lx); /* skip operator */
+        crY_scan(lx); /* skip operator */
         crC_prebinary(lx->fs, e, opr);
         ExpInfo e2;
         Binopr next = subexpr(lx, &e2, priority[opr].right);
@@ -1205,7 +1286,7 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
     if (match(lx, ',')) { /* more vars ? */
         struct LHS var;
         var.prev = lhs;
-        suffixedexpr(lx, &var.e);
+        suffixedexp(lx, &var.e);
         enterCstack(lx);
         assign(lx, &var, nvars + 1);
         leaveCstack(lx);
@@ -1231,7 +1312,7 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
  */
 static void exprstm(Lexer *lx) {
     struct LHS var;
-    suffixedexpr(lx, &var.e);
+    suffixedexp(lx, &var.e);
     if (check(lx, '=') || check(lx, ',')) {
         var.prev = NULL;
         assign(lx, &var, 1);
@@ -1410,7 +1491,7 @@ static void letdecl(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int tbc = -1;
     struct LHS var;
-    crL_scan(lx); /* skip 'let' */
+    crY_scan(lx); /* skip 'let' */
     declarevarlist(fs, &var.e, 0, &tbc);
     if (check(lx, ',') || check(lx, '=')) { /* id list ? */
         var.prev = NULL;
@@ -1444,7 +1525,7 @@ static void stmlist(Lexer *lx) {
 static void blockstm(Lexer *lx) {
     Scope s;
     int matchline = lx->line;
-    crL_scan(lx); /* skip '{' */
+    crY_scan(lx); /* skip '{' */
     startscope(lx->fs, &s, 0);
     stmlist(lx);
     endscope(lx->fs);
@@ -1465,17 +1546,17 @@ static void argslist(Lexer *lx) {
     if (!check(lx, ')')) { /* have args ? */
         do {
             switch (lx->t.tk) {
-            case TK_IDENTIFIER: {
-                newlocal(lx, expect_id(lx), 0);
-                nargs++;
-                break;
-            }
-            case TK_DOTS: {
-                crL_scan(lx);
-                isvararg = 1;
-                break;
-            }
-            default: crL_syntaxerror(lx, "<identifier> or '...' expected");
+                case TK_IDENTIFIER: {
+                    newlocal(lx, expect_id(lx), 0);
+                    nargs++;
+                    break;
+                }
+                case TK_DOTS: {
+                    crY_scan(lx);
+                    isvararg = 1;
+                    break;
+                }
+                default: crY_syntaxerror(lx, "<identifier> or '...' expected");
             }
         } while (!isvararg && match(lx, ','));
     }
@@ -1525,7 +1606,7 @@ static void fndecl(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
     ExpInfo var, e;
     int tbc = -1;
-    crL_scan(lx); /* skip 'fn' */
+    crY_scan(lx); /* skip 'fn' */
     declarevar(fs, &var, &tbc);
     initvariable(fs, &var);
     funcbody(lx, &e, linenum, 0);
@@ -1625,7 +1706,7 @@ static void classdecl(Lexer *lx) {
     ClassState cs;
     ExpInfo var, e;
     int tbc = -1;
-    crL_scan(lx); /* skip 'class' */
+    crY_scan(lx); /* skip 'class' */
     OString *name = declarevar(fs, &var, &tbc);
     initvariable(fs, &var);
     startcs(lx, &cs);
@@ -1897,7 +1978,7 @@ static void switchstm(Lexer *lx) {
     initss(&ss);
     startscope(fs, &s, CFSWITCH);
     fs->switchscope = &s;
-    crL_scan(lx); /* skip 'switch' */
+    crY_scan(lx); /* skip 'switch' */
     int matchline = lx->line;
     expect(lx, '(');
     expr(lx, &ss.e);
@@ -1969,7 +2050,7 @@ static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
 static void ifstm(Lexer *lx) {
     DynCtx ctx;
     ExpInfo e;
-    crL_scan(lx); /* skip 'if' */
+    crY_scan(lx); /* skip 'if' */
     storectx(lx->fs, &ctx);
     int matchline = lx->line;
     expect(lx, '(');
@@ -2036,7 +2117,7 @@ static void whilestm(Lexer *lx) {
     struct LoopCtx lctx;
     Scope s; /* new 'loopscope' */
     ExpInfo cond;
-    crL_scan(lx); /* skip 'while' */
+    crY_scan(lx); /* skip 'while' */
     storectx(fs, &startctx);
     startloop(fs, &s, &lctx, CFLOOP);
     int pcexpr = currentPC(fs);
@@ -2069,7 +2150,7 @@ static void patchforjmp(FunctionState *fs, int pc, int target, int back) {
     if (back)
         offset = -offset;
     if (cr_unlikely(offset > MAXJMP))
-        crL_syntaxerror(fs->lx, "control structure (for loop) too long");
+        crY_syntaxerror(fs->lx, "control structure (for loop) too long");
     SETARG_L(jmp, 1, offset);
 }
 
@@ -2081,7 +2162,7 @@ static int forexprlist(Lexer *lx, ExpInfo *e, int limit) {
     if (cr_unlikely(eisconstant(e))) {
         crP_semerror(lx, crS_pushfstring(lx->ts,
         "'%s' is invalid iterator function (for loop)",
-        crL_tok2str(lx, lx->t.tk)));
+        crY_tok2str(lx, lx->t.tk)));
     }
     while (match(lx, ',')) {
         crC_exp2stack(lx->fs, e);
@@ -2204,7 +2285,7 @@ static void forloop(Lexer *lx) {
  *          | forloop
  */
 static void forstm(Lexer *lx) {
-    crL_scan(lx); /* skip 'for' */
+    crY_scan(lx); /* skip 'for' */
     if (match(lx, TK_EACH))
         foreachloop(lx);
     else
@@ -2217,7 +2298,7 @@ static void loopstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     struct LoopCtx ctx;
     Scope s;
-    crL_scan(lx); /* skip 'loop' */
+    crY_scan(lx); /* skip 'loop' */
     startloop(fs, &s, &ctx, CFLOOP);
     stm(lx);
     endloop(fs);
@@ -2227,7 +2308,7 @@ static void loopstm(Lexer *lx) {
 /* continuestm ::= 'continue' ';' */
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    crL_scan(lx); /* skip 'continue' */
+    crY_scan(lx); /* skip 'continue' */
     if (cr_unlikely(fs->loopstart == NOJMP)) { /* no loop ? */
         cr_assert(fs->loopscope == NULL);
         crP_semerror(lx, "'continue' not in loop statement");
@@ -2257,7 +2338,7 @@ static const Scope *getcfscope(const FunctionState *fs) {
 static void breakstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     const Scope *s = getcfscope(fs);
-    crL_scan(lx); /* skip 'break' */
+    crY_scan(lx); /* skip 'break' */
     if (cr_unlikely(s == NULL)) { /* error ? */
         cr_assert(fs->loopscope == NULL && fs->switchscope == NULL);
         crP_semerror(lx, "'break' not in loop or switch statement");
@@ -2278,7 +2359,7 @@ static void returnstm(Lexer *lx) {
     ExpInfo e;
     int base = fs->sp;
     int nreturns = 0;
-    crL_scan(lx); /* skip 'return' */
+    crY_scan(lx); /* skip 'return' */
     if (!check(lx, ';')) { /* have return values ? */
         nreturns = exprlist(lx, &e);
         if (eismulret(&e)) {
@@ -2318,7 +2399,7 @@ static void stm(Lexer *lx) {
     case TK_BREAK: breakstm(lx); break;
     case TK_RETURN: returnstm(lx); return;
     case TK_LOOP: loopstm(lx); break;
-    case ';': crL_scan(lx); break;
+    case ';': crY_scan(lx); break;
     default: exprstm(lx); expect(lx, ';'); break;
     }
     lx->fs->lastwasret = 0;
@@ -2354,7 +2435,7 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
     Scope s;
     startfs(fs, lx, &s);
     setvararg(fs, 0); /* main is always vararg */
-    crL_scan(lx); /* scan first token */
+    crY_scan(lx); /* scan first token */
     parseuntilEOS(lx); /* parse */
     cr_assert(lx->t.tk == TK_EOS);
     endfs(fs);
@@ -2374,7 +2455,7 @@ CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
     setcrcl2s(ts, ts->sp.p, cl); /* anchor main function closure */
     crT_incsp(ts);
     lx.tab = crH_new(ts);
-    setsv2ht(ts, ts->sp.p, lx.tab); /* anchor scanner hashtable */
+    setht2s(ts, ts->sp.p, lx.tab); /* anchor scanner hashtable */
     crT_incsp(ts);
     fs.fn = cl->fn = crF_new(ts);
     crG_objbarrier(ts, cl, cl->fn);
@@ -2382,7 +2463,7 @@ CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
     crG_objbarrier(ts, fs.fn, fs.fn->source);
     lx.ps = ps;
     lx.buff = buff;
-    crL_setsource(ts, &lx, br, fs.fn->source);
+    crY_setsource(ts, &lx, br, fs.fn->source);
     mainfunc(&fs, &lx);
     cr_assert(ps->lvars.len == 0); /* all scopes should be finished */
     ts->sp.p--; /* remove scanner hashtable */

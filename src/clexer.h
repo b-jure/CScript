@@ -67,13 +67,13 @@ typedef struct Lexer {
 } Lexer;
 
 
-CRI_FUNC void crL_setsource(cr_State *ts, Lexer *lx, BuffReader *br,
+CRI_FUNC void crY_setsource(cr_State *ts, Lexer *lx, BuffReader *br,
                             OString *source);
-CRI_FUNC void crL_init(cr_State *ts);
-CRI_FUNC const char *crL_tok2str(Lexer *lx, int t);
-CRI_FUNC OString *crL_newstring(Lexer *lx, const char *str, size_t len);
-CRI_FUNC cr_noret crL_syntaxerror(Lexer *lx, const char *err);
-CRI_FUNC void crL_scan(Lexer *lx);
-CRI_FUNC int crL_scanahead(Lexer *lx);
+CRI_FUNC void crY_init(cr_State *ts);
+CRI_FUNC const char *crY_tok2str(Lexer *lx, int t);
+CRI_FUNC OString *crY_newstring(Lexer *lx, const char *str, size_t len);
+CRI_FUNC cr_noret crY_syntaxerror(Lexer *lx, const char *err);
+CRI_FUNC void crY_scan(Lexer *lx);
+CRI_FUNC int crY_scanahead(Lexer *lx);
 
 #endif

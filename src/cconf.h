@@ -16,7 +16,7 @@
 
 /* Lets not... */
 #if SIZE_MAX < UINT_MAX     /* { */
-#error Cript doesn't handle implementations where 'size_t' is smaller than \
+#error CScript doesn't handle implementations where 'size_t' is smaller than \
     'unsigned int'.
 #endif                      /* } */
 
@@ -57,16 +57,16 @@
 
 /*
  * TODO: Finish this
- * @CR_DFL_PATH - default path that cript uses to find cript libraries.
- * @CR_DFL_CPATH - default path that cript uses to find C libraries.
+ * @CR_DFL_PATH - default path that CScript uses to find CScript libraries.
+ * @CR_DFL_CPATH - default path that CScript uses to find C libraries.
  */
 #define CR_VERDIR       CR_VERSION_MAJOR "." CR_VERSION_MINOR
 #if defined(_WIN32)
 // TODO: Windows support
 #else
 #define CR_ROOT         "/usr/local/"
-#define CR_CRDIR        CR_ROOT "share/cript/" CR_VERDIR "/"
-#define CR_CDIR         CR_ROOT "lib/cript/" CR_VERDIR "/"
+#define CR_CRDIR        CR_ROOT "share/cscript/" CR_VERDIR "/"
+#define CR_CDIR         CR_ROOT "lib/cscript/" CR_VERDIR "/"
 
 #if !defined(CR_DFL_PATH)
 #define CR_DFL_PATH  \
@@ -136,13 +136,13 @@
 #define CR_FLOAT_LONG_DOUBLE_TYPE       2
 
 
-/* @CR_FLOAT_TYPE - Cript floating point type. */
+/* @CR_FLOAT_TYPE - CScript floating point type. */
 #define CR_FLOAT_TYPE           CR_FLOAT_DOUBLE_TYPE
 
 
 
 /*
- * @CR_NUMBER - cript floating point type.
+ * @CR_NUMBER - CScript floating point type.
  * @CR_FLOAT_FMT - @CR_NUMBER format for writing floats.
  * @CR_FLOAT_FMTLEN - additional length modifier when writing @CR_NUMBER.
  * @cr_mathop - performs correct math operation variant for type @CR_NUMBER.
@@ -181,7 +181,7 @@
 
 
 /*
- * @CR_INTEGER - cript integer type.
+ * @CR_INTEGER - CScript integer type.
  * @CR_UNSIGNED - unsigned @CR_INTEGER.
  * @CR_INTEGER_MAX - maximum size of @CR_INTEGER.
  * @CR_INTEGER_MIN - minimum size of @CR_INTEGER.
@@ -208,7 +208,7 @@
     cri_castU2S(cri_castS2U(x) op cri_castS2U(y))
 
 #elif UINTPTR_MAX == 0xffffffff             /* }{ */
-#error 'cript' requires 64-bit integer size.
+#error 'CScript' requires 64-bit integer size.
 #else                                       /* }{ */
 #error Unknown pointer size or missing macro definition.
 #endif                                      /* } */
@@ -265,7 +265,7 @@
 
 /*
  ** @CR_EXTRASPACE - defines the size of a raw memory associated with
- ** a Cript state with very fast access (memory chunk before state).
+ ** a CScript state with very fast access (memory chunk before state).
  */
 #define CR_EXTRASPACE       (sizeof(void *))
 

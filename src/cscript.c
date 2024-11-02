@@ -371,6 +371,7 @@ static int pmain(cr_State *ts) {
     if (args & arg_v)
         printversion();
     /* TODO: load libs here ('lib' class and instance) */
+    /* TODO: make sure to load core lib */
     /* TODO: args instance here ('args' class and instance) */
     cr_gc(ts, CR_GCRESTART);
     cr_gc(ts, CR_GCINC, 0, 0, 0);

@@ -732,7 +732,7 @@ cr_sinline void auxrawsetstr(cr_State *ts, HTable *ht, const char *str,
 
 cr_sinline void auxsetentrylist(cr_State *ts, OClass *cls, cr_Entry *list,
                                 int nup) {
-    /* TODO: implement cr_checkstack */
+    cr_checkstack(ts, nup);
     if (list->name && !cls->methods) { /* have entry and no method table? */
         cls->methods = crH_new(ts);
         crG_check(ts);
@@ -1079,6 +1079,7 @@ CR_API void cr_call(cr_State *ts, int nargs, int nresults) {
 struct PCallData {
     SPtr func;
     int nresults;
+    ptrdiff_t errfunc;
 };
 
 
@@ -1097,7 +1098,7 @@ CR_API int cr_pcall(cr_State *ts, int nargs, int nresults, int errfunc) {
     checkresults(ts, nargs, nresults);
     pcd.func = ts->sp.p - nargs - 1;
     pcd.nresults = nresults;
-    status = crPR_call(ts, fcall, &pcd, savestack(ts, pcd.func));
+    status = crPR_call(ts, fcall, &pcd, savestack(ts, pcd.func), errfunc);
     adjustresults(ts, nresults);
     cr_unlock(ts);
     return status;

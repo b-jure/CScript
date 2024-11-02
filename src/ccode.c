@@ -54,6 +54,7 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatIL), /* OP_VARARGPREP */
     opProp(0, 0, 0, FormatIL), /* OP_VARARG */
     opProp(0, 0, 0, FormatIL), /* OP_CLOSURE */
+    opProp(0, 0, 0, FormatILL), /* OP_ARRAY */
     opProp(0, 0, 0, FormatI), /* OP_CLASS */
     opProp(0, 0, 0, FormatIL), /* OP_METHOD */
     opProp(0, 0, 0, FormatIS), /* OP_SETMM */
@@ -178,18 +179,19 @@ CRI_DEF const char *crC_opSizeFormat[FormatN] = {
 */
 CRI_DEF const char *crC_opName[NUM_OPCODES] = {
     "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
-    "VARARGPREP", "VARARG", "CLOSURE", "CLASS", "METHOD", "SETMM", "POP",
-    "POPN", "MBIN", "ADDK", "SUBK", "MULK", "DIVK", "MODK", "POWK", "BSHLK",
-    "BSHRK", "BANDK", "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "MODI",
-    "POWI", "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL",
-    "DIV", "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT",
-    "EQK", "EQI", "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM",
-    "BNOT", "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
-    "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL", "GETPRIVATE",
-    "SETPRIVATE", "GETUVAL", "SETUVAL", "DEFGLOBAL", "GETGLOBAL", "SETGLOBAL",
-    "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
-    "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT", "GETSUP", "GETSUPIDX",
-    "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
+    "VARARGPREP", "VARARG", "CLOSURE", "ARRAY", "CLASS", "METHOD", "SETMM",
+    "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK", "DIVK", "MODK", "POWK",
+    "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI",
+    "MODI", "POWI", "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB",
+    "MUL", "DIV", "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR",
+    "CONCAT", "EQK", "EQI", "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE",
+    "NOT", "UNM", "BNOT", "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP",
+    "TESTANDPOP", "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL",
+    "GETPRIVATE", "SETPRIVATE", "GETUVAL", "SETUVAL", "DEFGLOBAL", "GETGLOBAL",
+    "SETGLOBAL", "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX",
+    "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT", "GETSUP",
+    "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP",
+    "RET",
 };
 
 
@@ -328,9 +330,10 @@ static int fltK(FunctionState *fs, cr_Number n) {
 /* adjust 'maxstack' */
 void crC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
+    cr_assert(newstack >= 0);
     if (fs->fn->maxstack > newstack) {
         if (cr_unlikely(newstack >= MAXLONGARGSIZE))
-            crL_syntaxerror(fs->lx, "function requires too much stack space");
+            crY_syntaxerror(fs->lx, "function requires too much stack space");
         fs->fn->maxstack = newstack;
     }
 }
@@ -340,6 +343,7 @@ void crC_checkstack(FunctionState *fs, int n) {
 void crC_reserveslots(FunctionState *fs, int n) {
     crC_checkstack(fs, n);
     fs->sp += n;
+    cr_assert(fs->sp >= 0);
 }
 
 
@@ -613,6 +617,14 @@ static int codefltK(FunctionState *fs, cr_Number n) {
         return emitILS(fs, OP_CONSTF, cri_abs(i), i < 0);
     else
         return codeK(fs, fltK(fs, n));
+}
+
+
+void crC_array(FunctionState *fs, ExpInfo *e, int size, int elems) {
+    cr_assert((size >= 0) == (size >= elems));
+    crC_reserveslots(fs, -elems + 1); /* +1 for array */
+    e->u.info = crC_emitILL(fs, OP_ARRAY, size + 1, elems);
+    e->et = EXP_FINEXPR;
 }
 
 

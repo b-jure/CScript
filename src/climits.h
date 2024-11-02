@@ -47,7 +47,7 @@ typedef unsigned short ushrt;
 
 
 /*
- * Maximum size visible for cript.
+ * Maximum size visible for CSript.
  * It must be less than what is representable by 'cr_Integer'.
  */
 #define CRMAXSIZE \
@@ -221,7 +221,7 @@ typedef cr_ubyte Instruction;
 
 /*
  * Runs each time program enters ('cr_lock') and
- * leaves ('cr_unlock') cript core (C API).
+ * leaves ('cr_unlock') CSript core (C API).
  */
 #if !defined(cr_lock)
 #define cr_lock(ts)         ((void)0)

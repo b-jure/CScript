@@ -30,6 +30,7 @@ static const void *const jmptable[NUM_OPCODES] = {
     &&L_OP_VARARGPREP,
     &&L_OP_VARARG,
     &&L_OP_CLOSURE,
+    &&L_OP_ARRAY,
     &&L_OP_CLASS,
     &&L_OP_METHOD,
     &&L_OP_SETMM,

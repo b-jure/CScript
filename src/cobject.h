@@ -340,7 +340,7 @@ typedef struct GCObject {
 #define htval(v)        gco2ht(gcoval(v))
 
 #define sethtval(ts,v,ht)       setgcotval(ts,v,ht,HTable)
-#define setsv2ht(ts,sv,ht)      sethtval(ts,s2v(sv),ht)
+#define setht2s(ts,sv,ht)       sethtval(ts,s2v(sv),ht)
 
 #define keyval(n)       ((n)->s.key_val)
 #define keyival(n)      rawival(keyval(n))
@@ -401,6 +401,29 @@ typedef struct HTable {
 #define setdeadkey(node)    (keytt(node) = CR_TDEADKEY)
 #define keyisdead(n)	    (keytt(n) == CR_TDEADKEY)
 #define keyisinteger(n)     (keytt(n) == CR_VNUMINT)
+
+
+/* -------------------------------------------------------------------------
+ * Array
+ * -------------------------------------------------------------------------- */
+
+#define CR_VARRAY       makevariant(CR_TARRAY, 0)
+
+#define ttisarr(v)      checktag((v), ctb(CR_VARRAY))
+
+#define arrval(v)       gco2arr(gcoval(v))
+
+#define setarrval(ts,v,arr)     setgcotval(ts,v,arr,Array)
+#define setarr2s(ts,sv,arr)     setarrval(ts,s2v(sv),arr)
+
+typedef struct Array {
+    ObjectHeader;
+    GCObject *gclist;
+    TValue *b; /* memory block */
+    int n; /* number of elements in 'b' */
+    int sz; /* size of 'b' */
+} Array;
+
 
 
 /* -------------------------------------------------------------------------
@@ -664,6 +687,7 @@ typedef struct Instance {
     ObjectHeader;
     OClass *oclass; /* pointer to class */
     HTable fields;
+    GCObject *gclist;
 } Instance;
 
 

@@ -225,6 +225,7 @@ typedef struct SG {
 union GCUnion {
     struct GCObject gc; /* object header */
     struct HTable ht;
+    struct Array arr;
     struct OString str;
     struct UpVal uv;
     struct Function fn;
@@ -239,6 +240,7 @@ union GCUnion {
 #define cast_gcu(o)     cast(union GCUnion *, (o))
 
 #define gco2ht(o)       (&(cast_gcu(o)->ht))
+#define gco2arr(o)      (&(cast_gcu(o)->arr))
 #define gco2str(o)      (&(cast_gcu(o)->str))
 #define gco2uv(o)       (&(cast_gcu(o)->uv))
 #define gco2fn(o)       (&(cast_gcu(o)->fn))
