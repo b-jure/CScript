@@ -68,7 +68,7 @@ typedef enum Dig {
 
 
 
-void crL_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source) {
+void crY_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source) {
     cr_assert(lx->ps != NULL);
     lx->c = brgetc(br); /* fetch first char */
     lx->line = 1;
@@ -82,7 +82,7 @@ void crL_setsource(cr_State *ts, Lexer *lx, BuffReader *br, OString *source) {
 }
 
 
-void crL_init(cr_State *ts) {
+void crY_init(cr_State *ts) {
     /* intern and fix all keywords */
     for (int i = 0; i < NUM_KEYWORDS; i++) {
         OString *s = crS_new(ts, tkstr[i]);
@@ -125,7 +125,7 @@ cr_sinline int lxmatch(Lexer *lexer, int c) {
 }
 
 
-const char *crL_tok2str(Lexer *lx, int t) {
+const char *crY_tok2str(Lexer *lx, int t) {
     cr_assert(t <= TK_IDENTIFIER);
     if (t >= FIRSTTK) {
         const char *str = tkstr[t - FIRSTTK];
@@ -148,7 +148,7 @@ static const char *lextok2str(Lexer *lx, int t) {
             savec(lx, '\0');
             return crS_pushfstring(lx->ts, "'%s'", lbptr(lx));
         }
-        default: return crL_tok2str(lx, t);
+        default: return crY_tok2str(lx, t);
     }
 }
 
@@ -163,13 +163,13 @@ static cr_noret lexerror(Lexer *lx, const char *err, int token) {
 
 
 /* external interface for 'lexerror' */
-cr_noret crL_syntaxerror(Lexer *lx, const char *err) {
+cr_noret crY_syntaxerror(Lexer *lx, const char *err) {
     lexerror(lx, err, lx->t.tk);
 }
 
 
 /* create new string and fix it inside of lexer htable */
-OString *crL_newstring(Lexer *lx, const char *str, size_t len) {
+OString *crY_newstring(Lexer *lx, const char *str, size_t len) {
     cr_State *ts = lx->ts;
     OString *s = crS_newl(ts, str, len);
     TValue *stks = s2v(ts->sp.p++);
@@ -275,7 +275,7 @@ static void readstring(Lexer *lx, Literal *k) {
         }
     }
     advance(lx); /* skip '"' */
-    k->str = crL_newstring(lx, lbptr(lx), lblen(lx));
+    k->str = crY_newstring(lx, lbptr(lx), lblen(lx));
 }
 
 
@@ -485,7 +485,7 @@ readmore:
             do {
                 save_and_advance(lx);
             } while (isalnum(lx->c));
-            OString *s = crL_newstring(lx, lbptr(lx), lblen(lx));
+            OString *s = crY_newstring(lx, lbptr(lx), lblen(lx));
             k->str = s;
             if (siskeyword(s))
                 return s->extra + FIRSTTK;
@@ -511,7 +511,7 @@ void varstatic(Lexer *lx) {
 
 
 /* fetch next token into 'tahead' */
-int crL_scanahead(Lexer *lx) {
+int crY_scanahead(Lexer *lx) {
     cr_assert(lx->t.tk != TK_EOS);
     return (lx->t.tk = scan(lx, &lx->t.lit));
 }
