@@ -387,13 +387,47 @@ CRLIB_API cr_State *crL_newstate(void) {
 }
 
 
-CRLIB_API int crL_callmeta(cr_State *ts, int index, cr_MM mm) {
-    index = cr_absindex(ts, index);
-    if (cr_get_metamethod(ts, index, mm) == CR_TNONE)
-        return 0;
-    cr_push(ts, index); /* push 'self' */
-    cr_call(ts, 1, 1);
-    return 1;
+CRLIB_API void crL_push_hashtable(cr_State *ts) {
+    if (cr_get_global(ts, CR_HASHTABLE) == CR_TNIL) {
+        cr_pop(ts, 1); /* pop nil value */
+        cr_push_class(ts, NULL, -1, 0, NULL);
+        cr_push(ts, -1);                    /* push class again... */
+        cr_set_global(ts, CR_HASHTABLE);    /* ...and set it as global */
+    }
+    cr_assert(cr_is_class(ts, -1));
+    cr_push_instance(ts, -1);
+}
+
+
+/* get global 'lib' instance (hashtable) */
+static inline void getGlib(cr_State *ts) {
+    if (cr_get_global(ts, CR_LOADED_LIBS) == CR_TNIL) {
+        crL_push_hashtable(ts);
+        cr_push(ts, -1); /* push instance of hashtable again... */
+        cr_set_global(ts, CR_LOADED_LIBS); /* ...and set it as global */
+    }
+    cr_assert(cr_is_instance(ts, -1));
+}
+
+
+CRLIB_API void crL_include(cr_State *ts, const char *libname,
+                           cr_CFunction openf, int global) {
+    getGlib(ts); /* get 'lib' (hashtable) */
+    cr_push_string(ts, libname);
+    cr_get_field(ts, -2); /* get lib[libname] */
+    if (!cr_to_bool(ts, -1)) { /* library not already loaded? */
+        cr_pop(ts, 1); /* pop field */
+        cr_push_cfunction(ts, openf); /* function that opens the library */
+        cr_push_string(ts, libname); /* argument to 'openf' */
+        cr_call(ts, 1, 1); /* call 'openf' */
+        cr_push(ts, -1); /* copy the library (call result) */
+        cr_set_field(ts, -3, libname); /* lib[libname] = library */
+    }
+    cr_remove(ts, -2); /* remove 'lib' */
+    if (global) {
+        cr_push(ts, -1); /* copy of library */
+        cr_set_global(ts, libname); /* set it as global variable */
+    }
 }
 
 

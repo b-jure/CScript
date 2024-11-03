@@ -13,11 +13,17 @@
 #define CR_ERRFILE      (CR_ERRERROR + 1)
 
 
-/* 
-** Name of the field in global table where the lib instance is located.
-** All loaded libraries are set as fields of this instance.
+/*
+** Name of the global hashtable class.
 */
-#define CR_LOADED_LIBS      "LOADED_LIBS"
+#define CR_HASHTABLE        "Hashtable"
+
+
+/* 
+** Name of the field in global table where the 'lib' instance is located.
+** All loaded libraries are set as fields of this instance (hashtable).
+*/
+#define CR_LOADED_LIBS      "lib"
 
 
 typedef struct crL_Buffer crL_Buffer;
@@ -72,11 +78,12 @@ CRLIB_API const char *crL_to_lstring(cr_State *ts, int index, size_t *plen);
 CRLIB_API void        crL_where(cr_State *ts, int level);
 CRLIB_API int         crL_fileresult(cr_State *ts, int ok, const char *fname);
 CRLIB_API cr_State   *crL_newstate(void);
-CRLIB_API int         crL_callmeta(cr_State *ts, int index, cr_MM mm);
-
-CRLIB_API void *crL_test_userdata(cr_State *ts, int index, const char *name);
-CRLIB_API void  crL_traceback(cr_State *ts, cr_State *at, int level,
-                              const char *msg);
+CRLIB_API void        crL_include(cr_State *ts, const char *lib,
+                                  cr_CFunction openf, int global);
+CRLIB_API void       *crL_test_userdata(cr_State *ts, int index,
+                                        const char *name);
+CRLIB_API void        crL_traceback(cr_State *ts, cr_State *at, int level,
+                                    const char *msg);
 
 
 /* ------------------------------------------------------------------------ 

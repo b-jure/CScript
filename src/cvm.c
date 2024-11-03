@@ -616,17 +616,17 @@ retry:
 
 
 cr_sinline void ccall(cr_State *ts, SPtr func, int nresults, cr_uint32 inc) {
-  CallFrame *cf;
-  ts->nCcalls += inc;
-  if (cr_unlikely(getCcalls(ts) >= CRI_MAXCCALLS)) {
-    checkstackp(ts, 0, func);  /* free any use of EXTRA_STACK */
-    crT_checkCstack(ts);
-  }
-  if ((cf = precall(ts, func, nresults)) != NULL) {  /* CScript function? */
-    cf->status = CFST_FRESH;
-    crV_execute(ts, cf);
-  }
-  ts->nCcalls -= inc;
+    CallFrame *cf;
+    ts->nCcalls += inc;
+    if (cr_unlikely(getCcalls(ts) >= CRI_MAXCCALLS)) {
+        checkstackp(ts, 0, func);  /* free any use of EXTRA_STACK */
+        crT_checkCstack(ts);
+    }
+    if ((cf = precall(ts, func, nresults)) != NULL) {  /* CScript function? */
+        cf->status = CFST_FRESH;
+        crV_execute(ts, cf);
+    }
+    ts->nCcalls -= inc;
 }
 
 

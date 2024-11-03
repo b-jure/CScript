@@ -707,6 +707,21 @@ CR_API int cr_push_thread(cr_State *ts) {
 }
 
 
+CR_API void cr_push_instance(cr_State *ts, int clsobj) {
+    const TValue *o;
+    SPtr func;
+    cr_lock(ts);
+    o = index2value(ts, clsobj);
+    api_check(ts, ttiscls(o), "expect class");
+    func = ts->sp.p;
+    setcls2s(ts, func, clsval(o));
+    api_inctop(ts);
+    crV_call(ts, func, 1);
+    cr_assert(ttisins(s2v(ts->sp.p))); /* result is the instance */
+    cr_unlock(ts);
+}
+
+
 cr_sinline void auxsetvmt(TValue *dest, const cr_VMT *vmt) {
     for (int i = 0; i < CR_NUM_MM; i++)
         setcfval(&dest[i], vmt->func[i]);
@@ -760,16 +775,16 @@ cr_sinline void auxsetentrylist(cr_State *ts, OClass *cls, cr_Entry *list,
 }
 
 
-CR_API void cr_push_class(cr_State *ts, cr_VMT *vmt, int sindex, int nup,
-                         cr_Entry *entries) {
+CR_API void cr_push_class(cr_State *ts, cr_VMT *vmt, int clsobjabs, int nup,
+                          cr_Entry *entries) {
     OClass *cls;
     cr_lock(ts);
     cls = crMM_newclass(ts);
     crG_check(ts);
     setcls2s(ts, ts->sp.p, cls);
     api_inctop(ts);
-    if (sindex) { /* have superclass? */
-        const TValue *osup = index2value(ts, sindex);
+    if (clsobjabs >= 0) { /* have superclass? */
+        const TValue *osup = index2value(ts, clsobjabs);
         api_check(ts, ttiscls(osup), "expect class");
         if (clsval(osup)->methods) { /* have methods? */
             cls->methods = crH_new(ts);

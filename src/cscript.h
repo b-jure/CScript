@@ -232,7 +232,8 @@ CR_API void        cr_push_bool(cr_State *ts, int b);
 CR_API void        cr_push_lightuserdata(cr_State *ts, void *p); 
 CR_API void        cr_push_array(cr_State *ts);
 CR_API int         cr_push_thread(cr_State *ts); 
-CR_API void        cr_push_class(cr_State *ts, cr_VMT *vmt, int sindex,
+CR_API void        cr_push_instance(cr_State *ts, int clsobj);
+CR_API void        cr_push_class(cr_State *ts, cr_VMT *vmt, int clsobj,
                                  int nup, cr_Entry *list); 
 
 
