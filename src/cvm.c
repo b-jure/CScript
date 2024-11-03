@@ -76,11 +76,13 @@ static void pusharray(cr_State *ts, int size, int elems) {
         setarr2s(ts, ts->sp.p++, arr); /* anchor array */
         arr->b = crM_newarray(ts, arr->sz, TValue);
         ts->sp.p--; /* pop array */
-        while (elems--) /* set all elements from stack into array */
+        while (elems) { /* set all elements from stack into array */
+            elems--;
             setobj(ts, &arr->b[elems], s2v(ts->sp.p - elems - 1));
+        }
     }
     ts->sp.p -= elems - 1; /* remove all elems but one slot for array */
-    setarr2s(ts, ts->sp.p - 1, arr); /* push array onto stack top */
+    setarr2s(ts, ts->sp.p - 1, arr); /* push array to stack */
 }
 
 
@@ -339,23 +341,28 @@ cr_sinline void setglobal(cr_State *ts, TValue *key, TValue *newval) {
 }
 
 
-cr_sinline void setarray(cr_State *ts, Array *arr, const TValue *key,
-                         const TValue *val) {
-    if (cr_unlikely(!ttisint(key))) {
-        crD_runerror(ts, "invalid array index value (%s)",
-                         typename(ttypetag(key)));
-    } else {
-        cr_Integer i = ival(key);
-        if (cr_likely(0 <= i && i <= arr->n)) {
-            // TODO
+static void arrayseti(cr_State *ts, Array *arr, const TValue *index,
+                      const TValue *val) {
+    cr_Integer i;
+    if (cr_likely(tointeger(index, &i))) { /* index is integer? */
+        if (cr_likely(0 <= i)) { /* non-negative index */
+            if (cr_unlikely(i >= ARRAYLIMIT)) /* too large 'index'? */
+                crD_indexerror(ts, i, "too large");
+            crA_ensure(ts, arr, i); /* expand block */
+            setobj(ts, &arr->b[i], val); /* set the value at index */
+        } else { /* negative index (error) */
+            crD_indexerror(ts, i, "negative");
         }
+    } else {
+        crD_indextypeerror(ts, index);
     }
 }
 
 
-void crV_set(cr_State *ts, TValue *obj, const TValue *key, const TValue *val) {
+void crV_set(cr_State *ts, const TValue *obj, const TValue *key,
+             const TValue *val) {
     if (ttisarr(obj)) { /* array object? */
-        setarray(ts, arrval(obj), key, val);
+        arrayseti(ts, arrval(obj), key, val);
     } else {
         const TValue *fmm = crMM_get(ts, obj, CR_MM_SETIDX);
         if (!ttisnil(fmm)) /* have metamethod ? */
@@ -368,34 +375,57 @@ void crV_set(cr_State *ts, TValue *obj, const TValue *key, const TValue *val) {
 }
 
 
+static void arraygeti(cr_State *ts, Array *arr, const TValue *index, SPtr res) {
+    cr_Integer i;
+    if (cr_likely(tointeger(index, &i))) { /* index is integer? */
+        if (i >= 0) { /* positive index? */
+            if (cr_unlikely(i >= ARRAYLIMIT)) { /* too large index? */
+                crD_indexerror(ts, i, "too large");
+            } else if (i < arr->sz) { /* index in array block? */
+                setobj2s(ts, res, &arr->b[i]);
+            } else /* out of bounds */
+                setnilval(s2v(res));
+        } else { /* negative index (error) */
+            crD_indexerror(ts, i, "negative");
+        }
+    } else {
+        crD_indextypeerror(ts, index);
+    }
+}
+
+
 /* bind method to instance and set it at 'res' */
 #define bindmethod(ts,ins,fn,res) \
     setim2s(ts, res, crMM_newinsmethod(ts, ins, v))
 
 
 void crV_get(cr_State *ts, const TValue *obj, const TValue *key, SPtr res) {
-    Instance *ins;
-    const TValue *fmm, *v;
-    fmm = crMM_get(ts, obj, CR_MM_GETIDX);
-    if (!ttisnil(fmm)) { /* have metamethod ? */
-        crMM_callhtmres(ts, fmm, obj, key, res);
-    } else { /* otherwise perform raw access */
-        if (cr_unlikely(ttypetag(obj) != CR_VINSTANCE))
-            crD_typeerror(ts, obj, "index");
-        ins = insval(obj);
-        v = crH_get(&ins->fields, key);
-        if (!isabstkey(v)) { /* have field ? */
-            setobj2s(ts, res, v);
-            return;
-        } else if (ins->oclass->methods) { /* have methods table? */
-            v = crH_get(ins->oclass->methods, key);
-            if (!isabstkey(v)) { /* have method ? */
-                /* bind it to instance and set 'res'  */
-                bindmethod(ts, ins, v, res)
+    if (ttisarr(obj)) { /* array object? */
+        arraygeti(ts, arrval(obj), key, res);
+    } else {
+        Instance *ins;
+        const TValue *fmm, *v;
+        fmm = crMM_get(ts, obj, CR_MM_GETIDX);
+        if (!ttisnil(fmm)) { /* have metamethod ? */
+            crMM_callhtmres(ts, fmm, obj, key, res);
+        } else { /* otherwise perform raw access */
+            if (cr_unlikely(ttypetag(obj) != CR_VINSTANCE))
+                crD_typeerror(ts, obj, "index");
+            ins = insval(obj);
+            v = crH_get(&ins->fields, key);
+            if (!isabstkey(v)) { /* have field ? */
+                setobj2s(ts, res, v);
                 return;
-            } /* else fallthrough */
+            } else if (ins->oclass->methods) { /* have methods table? */
+                v = crH_get(ins->oclass->methods, key);
+                if (!isabstkey(v)) { /* have method ? */
+                    /* bind it to instance and set 'res'  */
+                    bindmethod(ts, ins, v, res)
+                    return;
+                } /* else fallthrough */
+            }
+            setnilval(s2v(res));
         }
-        setnilval(s2v(res));
     }
 }
 
@@ -1005,7 +1035,12 @@ returning:
             }
             vm_case(OP_ARRAY) {
                 int size = fetchl() - 1;
-                int elems = fetchl();
+                protect(pusharray(ts, size, 0));
+                vm_break;
+            }
+            vm_case(OP_ARRAYELEMS) {
+                int size = fetchl() - 1;
+                int elems = ts->sp.p - STK(fetchl());
                 cr_assert((0 <= size) == (elems <= size));
                 protect(pusharray(ts, size, elems));
                 vm_break;
@@ -1514,34 +1549,35 @@ returning:
             }
             vm_case(OP_FORCALL) {
             l_forcall: {
-                SPtr nbase = STK(fetchl());
-                /* 'nbase' slot is iterator function, 'nbase + 1' is the
-                 * invariant state 'nbase + 2' is the control variable, and
-                 * 'nbase + 3' is the to-be-closed variable. Call uses stack
-                 * after these values (starting at 'nbase + 4'). */
-                memcpy(nbase+NSTATEVARS, nbase, FORTBCVAR*sizeof(nbase));
-                ts->sp.p = nbase + NSTATEVARS + FORTBCVAR;
-                protect(crV_call(ts, nbase + NSTATEVARS, fetchl()));
+                SPtr stk = STK(fetchl());
+                int nres = fetchl();
+                /* 'stk' slot is iterator function, 'stk + 1' is the
+                 * invariant state 'stk + 2' is the control variable, and
+                 * 'stk + 3' is the to-be-closed variable. Call uses stack
+                 * after these values (starting at 'stk + 4'). */
+                memcpy(stk+NSTATEVARS, stk, FORTBCVAR*sizeof(stk));
+                ts->sp.p = stk + NSTATEVARS + FORTBCVAR;
+                protect(crV_call(ts, stk + NSTATEVARS, nres));
                 updatebase(cf);
                 cr_assert(*pc == OP_FORLOOP);
                 goto l_forloop;
             }}
             vm_case(OP_FORLOOP) {
             l_forloop: {
-                SPtr nbase = STK(fetchl());
+                SPtr stk = STK(fetchl());
                 int offset = fetchl();
-                if (!ttisnil(s2v(nbase + NSTATEVARS))) { /* continue loop? */
+                if (!ttisnil(s2v(stk + NSTATEVARS))) { /* continue loop? */
                     /* save control variable */
-                    setobjs2s(ts, nbase + FORCNTLVAR, nbase + NSTATEVARS);
+                    setobjs2s(ts, stk + FORCNTLVAR, stk + NSTATEVARS);
                     pc -= offset; /* jump back */
                 }
                 vm_break;
             }}
             vm_case(OP_RET) {
-                SPtr nbase = STK(fetchl());
+                SPtr stk = STK(fetchl());
                 int n = fetchl() - 1; /* number of results */
                 if (n < 0) /* not fixed ? */
-                    n = ts->sp.p - nbase;
+                    n = ts->sp.p - stk;
                 storepc(ts);
                 if (fetchs()) { /* have open upvalues? */
                     crF_close(ts, base, CLOSEKTOP);
@@ -1549,7 +1585,7 @@ returning:
                 }
                 if (cl->fn->isvararg) /* vararg function ? */
                     cf->func.p -= cf->nvarargs + cl->fn->arity + 1;
-                ts->sp.p = nbase + n;
+                ts->sp.p = stk + n;
                 poscall(ts, cf, n);
                 if (cf->status & CFST_FRESH) { /* top-level function? */
                     return; /* end this frame */

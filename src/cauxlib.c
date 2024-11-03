@@ -452,7 +452,7 @@ static void newbox(cr_State *ts) {
     UserBox *box = cr_newuserdata(ts, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
-    cr_setuserdatavmt(ts, -1, &boxvmt);
+    cr_set_userdatavmt(ts, -1, &boxvmt);
 }
 
 

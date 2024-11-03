@@ -40,5 +40,8 @@ CRI_FUNC cr_noret crD_operror(cr_State *ts, const TValue *v1,
 CRI_FUNC cr_noret crD_callerror(cr_State *ts, const TValue *obj);
 CRI_FUNC cr_noret crD_concaterror(cr_State *ts, const TValue *v1,
                                   const TValue *v2);
+CRI_FUNC cr_noret crD_indexerror(cr_State *ts, cr_Integer index,
+                                 const char *what);
+CRI_FUNC cr_noret crD_indextypeerror(cr_State *ts, const TValue *index);
 
 #endif

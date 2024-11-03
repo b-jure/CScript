@@ -4,6 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
+#include "carray.h"
 #include "ccode.h"
 #include "cconf.h"
 #include "cgc.h"
@@ -952,9 +953,9 @@ static int checkarraysize(Lexer *lx, ExpInfo *sz) {
         if (isvalid) {
             if (size < 0)
                 crP_semerror(lx, "array size can't be negative");
-            else if (size > INT_MAX - 1)
+            else if (size > ARRAYLIMIT)
                 crP_semerror(lx, crS_pushfstring(lx->ts,
-                        "array size too large, limits is '%d'", INT_MAX - 1));
+                        "array size too large, limit is '%d'", ARRAYLIMIT));
             else
                 return size;
         }
@@ -965,45 +966,40 @@ static int checkarraysize(Lexer *lx, ExpInfo *sz) {
 }
 
 
-static int arrayconstructor(Lexer *lx, ExpInfo *e, int size) {
-    int elems = 0;
-    initexp(e, EXP_FINEXPR, 0);
-    if (!check(lx, '}')) {
-        do {
-            crC_exp2stack(lx->fs, e);
-            expr(lx, e);
-            elems++;
-        } while (match(lx, ','));
-        if (eismulret(e))
-            crC_setreturns(lx->fs, e, CR_MULRET);
-        else
-            crC_exp2stack(lx->fs, e);
-    }
-    expect(lx, '}');
-    if (size >= 0 && size < elems) {
-        crP_semerror(lx, crS_pushfstring(lx->ts,
-        "%d array elements overflow array size [%d]", elems, size));
-    }
-    return elems;
-}
-
-
+/*
+** arrayexp ::= '[' expr ']'
+**            | '[' expr ']' '{' exprlist '}'
+**            | '[' ']'
+**            | '[' ']' '{' exprlist '}'
+*/
 static void arrayexp(Lexer *lx, ExpInfo *e) {
+    FunctionState *fs = lx->fs;
     ExpInfo sz;
-    int size = -1, elems = 0;
-    crY_scan(lx); /* skip '*' */
-    expect(lx, '[');
+    int base = -1, size = -1, elems = 0;
+    crY_scan(lx); /* skip '[' */
     if (!check(lx, ']')) { /* have size? */
         expr(lx, &sz);
         size = checkarraysize(lx, &sz);
-        crC_exp2stack(lx->fs, &sz);
+        crC_exp2stack(fs, &sz);
         cr_assert(size >= 0);
     }
     expect(lx, ']');
-    if (match(lx, '{')) /* have constructor? */
-        elems = arrayconstructor(lx, e, size);
-    cr_assert(elems <= size);
-    crC_array(lx->fs, e, size, elems);
+    if (match(lx, '{')) {
+        if (!check(lx, '}')) {
+            base = fs->sp;
+            elems = exprlist(lx, e);
+            if (cr_unlikely(size >= 0 && size < elems))
+                crP_semerror(lx, crS_pushfstring(lx->ts,
+                    "array elements %d overflow array size %d", elems, size));
+            if (eismulret(e))
+                crC_setreturns(fs, e, CR_MULRET);
+            else
+                crC_exp2stack(fs, e);
+            cr_assert(elems <= size);
+        }
+        expect(lx, '}');
+    }
+    crC_array(fs, e, base, size, elems);
 }
 
 

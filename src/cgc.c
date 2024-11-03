@@ -461,7 +461,7 @@ static cr_mem markinstance(GC *gc, Instance *ins) {
 
 static cr_mem markarray(GC *gc, Array *arr) {
     cr_assert(arr->n > 0);
-    for (int i = 0; i < arr->n; i++)
+    for (uint i = 0; i < arr->n; i++)
         markvalue(gc, &arr->b[i]);
     return 1 + arr->n; /* array + elements */
 }

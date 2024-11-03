@@ -420,8 +420,8 @@ typedef struct Array {
     ObjectHeader;
     GCObject *gclist;
     TValue *b; /* memory block */
-    int n; /* number of elements in 'b' */
-    int sz; /* size of 'b' */
+    uint n; /* number of elements in 'b' */
+    uint sz; /* size of 'b' */
 } Array;
 
 
@@ -753,7 +753,7 @@ typedef struct EmptyUserData {
     int nuv; /* number of 'uservalues' */
     TValue *vmt;
     size_t size; /* size of 'UserData' memory in bytes */
-    union {CRI_MAXALIGN} usermem;
+    union {CRI_MAXALIGN;} usermem;
     /* 'UserData' memory starts here */
 } EmptyUserData;
 

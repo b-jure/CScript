@@ -32,7 +32,7 @@ cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
 }
 
 
-void *crM_realloc(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
+void *crM_realloc_(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
     cr_assert((osz == 0) == (ptr == NULL));
     void *memblock = crM_rawrealloc(gs, ptr, osz, nsz);
@@ -48,7 +48,7 @@ void *crM_realloc(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
 
 
 void *crM_saferealloc(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
-    void *memblock = crM_realloc(ts, ptr, osz, nsz);
+    void *memblock = crM_realloc_(ts, ptr, osz, nsz);
     if (cr_unlikely(memblock == NULL && nsz != 0))
         cr_assert(0 && "out of memory");
     return memblock;
@@ -70,8 +70,8 @@ void *crM_malloc(cr_State *ts, size_t size) {
 }
 
 
-void *crM_growarr(cr_State *ts, void *ptr, int len, int *sizep,
-                  int elemsize, int extra, int limit, const char *what) {
+void *crM_growarr(cr_State *ts, void *ptr, int *sizep, int len, int elemsize,
+                  int extra, int limit, const char *what) {
     int size = *sizep;
     if (len + extra <= size)
         return ptr;
@@ -92,8 +92,8 @@ void *crM_growarr(cr_State *ts, void *ptr, int len, int *sizep,
 }
 
 
-void *crM_shrinkarr_(cr_State *ts, void *ptr, int *sizep, int final,
-                     int elemsize) {
+void *crM_shrinkarr(cr_State *ts, void *ptr, int *sizep, int final,
+                    int elemsize) {
     size_t oldsize = cast_sizet(*sizep * elemsize);
     size_t newsize = cast_sizet(final * elemsize);
     cr_assert(newsize <= oldsize);

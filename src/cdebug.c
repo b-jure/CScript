@@ -387,3 +387,15 @@ cr_noret crD_concaterror(cr_State *ts, const TValue *v1, const TValue *v2) {
 cr_noret crD_callerror(cr_State *ts, const TValue *o) {
     crD_typeerror(ts, o, "call");
 }
+
+
+cr_noret crD_indexerror(cr_State *ts, cr_Integer index, const char *what) {
+    crD_runerror(ts, "array index '%I' is %s", index, what);
+}
+
+
+cr_noret crD_iindexerror(cr_State *ts, const TValue *index) {
+    cr_assert(ttypetag(index) != CR_VNUMINT);
+    crD_runerror(ts, "invalid array index type (%s), expected integer",
+                     typename(ttypetag(index)));
+}

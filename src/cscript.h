@@ -230,6 +230,7 @@ CR_API const char *cr_push_fstring(cr_State *ts, const char *fmt, ...);
 CR_API void        cr_push_cclosure(cr_State *ts, cr_CFunction fn, int upvals); 
 CR_API void        cr_push_bool(cr_State *ts, int b); 
 CR_API void        cr_push_lightuserdata(cr_State *ts, void *p); 
+CR_API void        cr_push_array(cr_State *ts);
 CR_API int         cr_push_thread(cr_State *ts); 
 CR_API void        cr_push_class(cr_State *ts, cr_VMT *vmt, int sindex,
                                  int nup, cr_Entry *list); 
@@ -239,23 +240,26 @@ CR_API void        cr_push_class(cr_State *ts, cr_VMT *vmt, int sindex,
  * Get functions (CScript -> stack)
  * ------------------------------------------------------------------------- */
 CR_API int   cr_get_global(cr_State *ts, const char *name); 
-CR_API int   cr_get(cr_State *ts, int index); 
-CR_API int   cr_get_field(cr_State *ts, int index); 
-CR_API int   cr_get_class(cr_State *ts, int index); 
-CR_API int   cr_get_method(cr_State *ts, int index, const char *name); 
-CR_API int   cr_get_metamethod(cr_State *ts, int index, cr_MM mm); 
+CR_API int   cr_get(cr_State *ts, int obj); 
+CR_API int   cr_get_index(cr_State *ts, int arrobj, cr_Integer index);
+CR_API int   cr_get_field(cr_State *ts, int insobj); 
+CR_API int   cr_get_class(cr_State *ts, int insobj); 
+CR_API int   cr_get_method(cr_State *ts, int insobj, const char *name); 
+CR_API int   cr_get_metamethod(cr_State *ts, int obj, cr_MM mm); 
+
 CR_API void *cr_newuserdata(cr_State *ts, size_t sz, int nuv); 
-CR_API int   cr_get_uservalue(cr_State *ts, int index, int n); 
+CR_API int   cr_get_uservalue(cr_State *ts, int udobj, int n); 
 
 
 /* -------------------------------------------------------------------------
  * Set functions (stack -> CScript)
  * ------------------------------------------------------------------------- */
 CR_API void  cr_set_global(cr_State *ts, const char *name); 
-CR_API void  cr_set(cr_State *ts, int index); 
+CR_API void  cr_set(cr_State *ts, int obj); 
+CR_API void  cr_set_index(cr_State *ts, int arrobj, cr_Integer index);
 CR_API void  cr_set_field(cr_State *ts, int index, const char *field); 
-CR_API void  cr_setuserdatavmt(cr_State *ts, int index, const cr_VMT *vmt); 
-CR_API int   cr_setuservalue(cr_State *ts, int index, int n); 
+CR_API void  cr_set_userdatavmt(cr_State *ts, int index, const cr_VMT *vmt); 
+CR_API int   cr_set_uservalue(cr_State *ts, int index, int n); 
 CR_API void  cr_set_userdatamm(cr_State *ts, int index, cr_MM mm); 
 
 
@@ -339,6 +343,7 @@ CR_API void             cr_closeslot(cr_State *ts, int index);
 #define cr_register(ts,n,f)  (cr_push_cfunction(ts,(f)), cr_set_global(ts,(n)))
 
 #define cr_is_function(ts, n)       (cr_type(ts, (n)) == CR_TFUNCTION)
+#define cr_is_array(ts, n)          (cr_type(ts, (n)) == CR_TARRAY)
 #define cr_is_class(ts, n)          (cr_type(ts, (n)) == CR_TCLASS)
 #define cr_is_instance(ts, n)       (cr_type(ts, (n)) == CR_TINSTANCE)
 #define cr_is_lightuserdata(ts, n)  (cr_type(ts, (n)) == CR_TLUDATA)
@@ -397,7 +402,7 @@ struct cr_DebugInfo {
 */
 
 /* ----------------------------------------------------------------------------------------------
- * Copyright (C) 1994-2024 Lua.org, PUC-Rio.
+ * Copyright (C) 1994-2023 Lua.org, PUC-Rio.
  * Copyright (C) 2023-2024 Jure Bagić
  *
  * Permission is hereby granted, free of charge, to any person obtaining

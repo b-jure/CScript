@@ -54,7 +54,8 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatIL), /* OP_VARARGPREP */
     opProp(0, 0, 0, FormatIL), /* OP_VARARG */
     opProp(0, 0, 0, FormatIL), /* OP_CLOSURE */
-    opProp(0, 0, 0, FormatILL), /* OP_ARRAY */
+    opProp(0, 0, 0, FormatIL), /* OP_ARRAY */
+    opProp(0, 0, 0, FormatILL), /* OP_ARRAYELEMS */
     opProp(0, 0, 0, FormatI), /* OP_CLASS */
     opProp(0, 0, 0, FormatIL), /* OP_METHOD */
     opProp(0, 0, 0, FormatIS), /* OP_SETMM */
@@ -179,19 +180,20 @@ CRI_DEF const char *crC_opSizeFormat[FormatN] = {
 */
 CRI_DEF const char *crC_opName[NUM_OPCODES] = {
     "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
-    "VARARGPREP", "VARARG", "CLOSURE", "ARRAY", "CLASS", "METHOD", "SETMM",
-    "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK", "DIVK", "MODK", "POWK",
-    "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI",
-    "MODI", "POWI", "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB",
-    "MUL", "DIV", "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR",
-    "CONCAT", "EQK", "EQI", "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE",
-    "NOT", "UNM", "BNOT", "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP",
-    "TESTANDPOP", "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL",
-    "GETPRIVATE", "SETPRIVATE", "GETUVAL", "SETUVAL", "DEFGLOBAL", "GETGLOBAL",
-    "SETGLOBAL", "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX",
-    "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT", "GETSUP",
-    "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP",
-    "RET",
+    "VARARGPREP", "VARARG", "CLOSURE", "ARRAY", "ARRAYELEMS", "CLASS",
+    "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
+    "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK",
+    "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
+    "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
+    "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
+    "LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM", "BNOT",
+    "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
+    "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL",
+    "GETPRIVATE", "SETPRIVATE", "GETUVAL", "SETUVAL", "DEFGLOBAL",
+    "GETGLOBAL", "SETGLOBAL", "SETPROPERTY", "GETPROPERTY", "GETINDEX",
+    "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT",
+    "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL",
+    "FORLOOP", "RET",
 };
 
 
@@ -620,10 +622,16 @@ static int codefltK(FunctionState *fs, cr_Number n) {
 }
 
 
-void crC_array(FunctionState *fs, ExpInfo *e, int size, int elems) {
+void crC_array(FunctionState *fs, ExpInfo *e, int base, int size, int elems) {
     cr_assert((size >= 0) == (size >= elems));
     crC_reserveslots(fs, -elems + 1); /* +1 for array */
-    e->u.info = crC_emitILL(fs, OP_ARRAY, size + 1, elems);
+    if (elems == 0) {
+        cr_assert(base == -1);
+        e->u.info = crC_emitIL(fs, OP_ARRAY, size + 1);
+    } else {
+        cr_assert(base >= 0);
+        e->u.info = crC_emitILL(fs, OP_ARRAYELEMS, size + 1, base);
+    }
     e->et = EXP_FINEXPR;
 }
 

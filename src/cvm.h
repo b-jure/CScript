@@ -37,7 +37,7 @@ CRI_FUNC int crV_ordereq(cr_State *ts, const TValue *v1, const TValue *v2);
 CRI_FUNC int crV_orderlt(cr_State *ts, const TValue *v1, const TValue *v2);
 CRI_FUNC int crV_orderle(cr_State *ts, const TValue *v1, const TValue *v2);
 CRI_FUNC void crV_execute(cr_State *ts, CallFrame *cf);
-CRI_FUNC void crV_set(cr_State *ts, TValue *obj, const TValue *key,
+CRI_FUNC void crV_set(cr_State *ts, const TValue *obj, const TValue *key,
                       const TValue *val);
 CRI_FUNC void crV_get(cr_State *ts, const TValue *obj, const TValue *key,
                       SPtr res);

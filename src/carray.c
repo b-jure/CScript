@@ -6,6 +6,7 @@
 
 #include "carray.h"
 #include "cgc.h"
+#include "climits.h"
 #include "cmem.h"
 #include "cobject.h"
 
@@ -22,6 +23,18 @@ Array *crA_new(cr_State *ts) {
 void crA_shrink(cr_State *ts, Array *arr) {
     if (arr->b && arr->sz > arr->n)
         crM_shrinkvec(ts, arr->b, arr->sz, arr->n, TValue);
+}
+
+
+/* ensure that 'index' can fit into array memory block */
+void crA_ensure(cr_State *ts, Array *arr, cr_Integer index) {
+    if (cri_castS2U(index) >= arr->sz) {
+        crM_ensurevec(ts, arr->b, arr->sz, arr->n, index - arr->n + 1, ARRAYLIMIT,
+                      "array elements", TValue);
+        for (uint i = arr->n; i < arr->sz; i++)
+            setnilval(&arr->b[i]);
+        arr->n = index + 1; /* adjust new length */
+    }
 }
 
 
