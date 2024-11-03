@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+#ifndef CRAUXLIB_H
+#define CRAUXLIB_H
+
+
 #include <stdio.h>
 
 #include "cscript.h"
@@ -167,4 +171,7 @@ CRLIB_API void crL_buff_end(crL_Buffer *B);
 /* write formatted message to 'fp' ('ap' is va_list) and flush it */
 #if !defined(cst_writevfmt)
 #define cst_writevfmt(fp,msg,ap)    (vfprintf(fp, msg, ap), fflush(fp))
+#endif
+
+
 #endif

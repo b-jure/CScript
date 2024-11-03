@@ -437,7 +437,7 @@ void crTR_disassemble(cr_State *ts, const Function *fn) {
             case OP_NILN: case OP_VARARGPREP: case OP_VARARG:
             case OP_CLOSURE: case OP_POPN: case OP_JMP:
             case OP_JMPS: case OP_CLOSE: case OP_TBC:
-            case OP_GETINDEXINT: case OP_SETINDEXINT: {
+            case OP_GETINDEXINT: case OP_SETINDEXINT: case OP_ARRAY: {
                 unasmL(ts, fn, pc);
                 break;
             }
@@ -458,13 +458,13 @@ void crTR_disassemble(cr_State *ts, const Function *fn) {
                 unasmIMMint(ts, fn, pc);
                 break;
             }
-            case OP_LTI: case OP_LEI: case OP_GTI: case OP_GEI: {
-                unasmIMMord(ts, fn, pc);
+            case OP_TEST: case OP_TESTORPOP: case OP_TESTANDPOP:
+            case OP_TESTPOP: {
+                unasmS(ts, fn, pc);
                 break;
             }
-            case OP_TEST: case OP_TESTORPOP:
-            case OP_TESTANDPOP: case OP_TESTPOP: {
-                unasmS(ts, fn, pc);
+            case OP_LTI: case OP_LEI: case OP_GTI: case OP_GEI: {
+                unasmIMMord(ts, fn, pc);
                 break;
             }
             case OP_GETLOCAL: case OP_SETLOCAL: {
@@ -479,6 +479,10 @@ void crTR_disassemble(cr_State *ts, const Function *fn) {
                 unasmUpvalue(ts, fn, pc);
                 break;
             }
+            case OP_FORPREP: case OP_ARRAYELEMS: {
+                unasmLL(ts, fn, pc);
+                break;
+            }
             case OP_CONST: unasmK(ts, fn, pc); break;
             case OP_CONSTI: unasmIMMint(ts, fn, pc); break;
             case OP_CONSTF: unasmIMMflt(ts, fn, pc); break;
@@ -488,7 +492,6 @@ void crTR_disassemble(cr_State *ts, const Function *fn) {
             case OP_EQI: unasmEQI(ts, fn, pc); break;
             case OP_EQ: unasmS(ts, fn, pc); break;
             case OP_CALL: unasmCall(ts, fn, pc); break;
-            case OP_FORPREP: unasmLL(ts, fn, pc); break;
             case OP_RET: unasmRet(ts, fn, pc); break;
             default: {
                 cr_unreachable();
