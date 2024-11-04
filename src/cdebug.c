@@ -14,6 +14,7 @@
 #include "cstate.h"
 #include "cobject.h"
 #include "cprotected.h"
+#include "cvm.h"
 #include <string.h>
 
 
@@ -327,12 +328,13 @@ const char *crD_addinfo(cr_State *ts, const char *msg, OString *src,
 /* generic runtime error */
 cr_noret crD_runerror(cr_State *ts, const char *fmt, ...) {
     va_list ap;
+    const char *err;
     va_start(ap, fmt);
-    const char *err = crS_pushvfstring(ts, fmt, ap);
+    err = crS_pushvfstring(ts, fmt, ap);
     va_end(ap);
     if (cfisCScript(ts->cf)) { /* in Cscript function (closure) ? */
         crD_addinfo(ts, err, cfFunction(ts->cf)->source, currentline(ts->cf));
-        setobj2s(ts, ts->sp.p - 2, s2v(ts->sp.p - 1));
+        setobj2s(ts, ts->sp.p - 2, s2v(ts->sp.p - 1)); /* remove 'err' */
         ts->sp.p--;
     }
     crPR_throw(ts, CR_ERRRUNTIME);
@@ -398,4 +400,17 @@ cr_noret crD_iindexerror(cr_State *ts, const TValue *index) {
     cr_assert(ttypetag(index) != CR_VNUMINT);
     crD_runerror(ts, "invalid array index type (%s), expected integer",
                      typename(ttypetag(index)));
+}
+
+
+cr_noret crD_errormsg(cr_State *ts) {
+    if (ts->errfunc != 0) { /* have error func? */
+        SPtr errfunc = restorestack(ts, ts->errfunc); /* get it */
+        cr_assert(ttisfunction(s2v(errfunc))); /* must be a function */
+        setobjs2s(ts, ts->sp.p, ts->sp.p - 1); /* move argument */
+        setobjs2s(ts, ts->sp.p - 1, errfunc); /* push function */
+        ts->sp.p++; /* assume EXTRA_STACK */
+        crV_call(ts, ts->sp.p - 2, 1);
+    }
+    crPR_throw(ts, CR_ERRRUNTIME); /* raise a regular runtime error */
 }

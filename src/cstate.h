@@ -264,6 +264,7 @@ CRI_FUNC void crT_shrinkstack(cr_State *ts);
 CRI_FUNC void crT_incsp(cr_State *ts);
 CRI_FUNC void crT_incCstack(cr_State *ts);
 CRI_FUNC void crT_checkCstack(cr_State *ts);
+CRI_FUNC int crT_resetthread(cr_State *ts, int status);
 CRI_FUNC void crT_warning(cr_State *ts, const char *msg, int cont);
 CRI_FUNC void crT_warnerror(cr_State *ts, const char *where);
 CRI_FUNC void crT_free(cr_State *ts, cr_State *thread);

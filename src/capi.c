@@ -5,6 +5,7 @@
 */
 
 #include "carray.h"
+#include "cdebug.h"
 #include "cfunction.h"
 #include "cgc.h"
 #include "cmem.h"
@@ -95,20 +96,20 @@ CR_API cr_Number cr_version(cr_State *ts) {
 
 
 /* auxiliary function that sets the stack top without locking */
-cr_inline void auxsettop(cr_State *ts, int index) {
+cr_inline void auxsettop(cr_State *ts, int n) {
     CallFrame *cf;
     SPtr func, newtop;
     ptrdiff_t diff;
     cf = ts->cf;
     func = cf->func.p;
-    if (index >= 0) {
-        api_check(ts, index <= (cf->top.p - func + 1), "new top too large");
-        diff = (func + 1 + index) - ts->sp.p;
+    if (n >= 0) {
+        api_check(ts, n <= (cf->top.p - func + 1), "new top too large");
+        diff = (func + 1 + n) - ts->sp.p;
         for (; diff > 0; diff--)
             setnilval(s2v(ts->sp.p++));
     } else { /* negative index */
-        api_check(ts, -(index+1) <= (ts->sp.p-(func+1)), "new top underflow");
-        diff = index + 1;
+        api_check(ts, -(n+1) <= (ts->sp.p-(func+1)), "new top underflow");
+        diff = n + 1;
     }
     newtop = ts->sp.p + diff;
     if (diff < 0 && ts->tbclist.p >= newtop) {
@@ -127,9 +128,9 @@ cr_inline void auxsettop(cr_State *ts, int index) {
 ** This function can run '__close' if it removes an index from the stack
 ** marked as to-be-closed.
 */
-CR_API void cr_settop(cr_State *ts, int index) {
+CR_API void cr_setntop(cr_State *ts, int n) {
     cr_lock(ts);
-    auxsettop(ts, index);
+    auxsettop(ts, n);
     cr_unlock(ts);
 }
 
@@ -1109,7 +1110,7 @@ CR_API int cr_error(cr_State *ts) {
     if (ttisstr(errobj) && strval(errobj) == G_(ts)->memerror) {
         crM_error(ts); /* raise a memory error */
     } else
-        crPR_throw(ts, CR_ERRRUNTIME); /* raise a regular runtime error */
+        crD_errormsg(ts);
     /* cr_unlock() is called when control leaves the core */
     cr_unreachable();
 }
@@ -1141,7 +1142,6 @@ CR_API void cr_call(cr_State *ts, int nargs, int nresults) {
 struct PCallData {
     SPtr func;
     int nresults;
-    ptrdiff_t errfunc;
 };
 
 
@@ -1154,13 +1154,21 @@ static void fcall(cr_State *ts, void *ud) {
 CR_API int cr_pcall(cr_State *ts, int nargs, int nresults, int errfunc) {
     struct PCallData pcd;
     int status;
+    ptrdiff_t func;
     cr_lock(ts);
     api_checknelems(ts, nargs + 1);
     api_check(ts, ts->status == CR_OK, "can't do calls on non-normal thread");
     checkresults(ts, nargs, nresults);
+    if (errfunc == 0) {
+        func = 0;
+    } else {
+        SPtr o = index2stack(ts, errfunc);
+        api_check(ts, ttisfunction(s2v(o)), "error handler must be a function");
+        func = savestack(ts, o);
+    }
     pcd.func = ts->sp.p - nargs - 1;
     pcd.nresults = nresults;
-    status = crPR_call(ts, fcall, &pcd, savestack(ts, pcd.func), errfunc);
+    status = crPR_call(ts, fcall, &pcd, savestack(ts, pcd.func), func);
     adjustresults(ts, nresults);
     cr_unlock(ts);
     return status;
@@ -1314,36 +1322,17 @@ CR_API cr_Unsigned cr_len(cr_State *ts, int index) {
 }
 
 
-cr_sinline HTable *getnextht(cr_State *ts, int index) {
-    const TValue *o = index2value(ts, index);
-    switch (ttype(o)) {
-        case CR_TINSTANCE: return &insval(o)->fields;
-        case CR_TCLASS: return clsval(o)->methods;
-        default: {
-            api_check(ts, 0, "expected instance or class");
-            return NULL;
-        }
-    }
-}
-
-
-CR_API int cr_next(cr_State *ts, int index) {
-    HTable *ht;
+CR_API int cr_next(cr_State *ts, int insobj) {
+    Instance *ins;
     int more;
     cr_lock(ts);
     api_checknelems(ts, 1); /* key */
-    ht = getnextht(ts, index);
-    if (ht) {
-        more = crH_next(ts, ht, ts->sp.p - 1);
-        if (more) {
-            api_inctop(ts);
-            goto unlock;
-        }
-    } else {
-        more = 0;
-    }
-    ts->sp.p--; /* remove key */
-unlock:
+    ins = getinstance(ts, insobj);
+    more = crH_next(ts, &ins->fields, ts->sp.p - 1);
+    if (more) {
+        api_inctop(ts);
+    } else
+        ts->sp.p--; /* remove key */
     cr_unlock(ts);
     return more;
 }

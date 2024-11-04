@@ -20,19 +20,25 @@
 ** error handler or invoke panic if hook for it is present.
 ** In case none of the above occurs, program is aborted.
 */
-cr_noret crPR_throw(cr_State *ts, int code) {
-    if (ts->errjmp) /* thread has error recovery jump ? */
-        CRI_THROW(ts, ts->errjmp);
-    GState *gs = G_(ts);
-    if (gs->mainthread->errjmp) {
-        /* copy over error object */
-        setobj2s(ts, gs->mainthread->sp.p++, s2v(ts->sp.p));
-        crPR_throw(ts, code);
-    } else if (gs->fpanic) {
-        cr_unlock(ts);
-        gs->fpanic(ts);
+cr_noret crPR_throw(cr_State *ts, int errcode) {
+    if (ts->errjmp) { /* thread has error handler? */
+        ts->errjmp->status = errcode; /* set status */
+        CRI_THROW(ts, ts->errjmp); /* jump to it */
+    } else { /* thread has no error handler */
+        GState *gs = G_(ts);
+        crT_resetthread(ts, errcode); /* close all */
+        if (gs->mainthread->errjmp) { /* mainthread has error handler? */
+            /* copy over error object */
+            setobj2s(ts, gs->mainthread->sp.p++, s2v(ts->sp.p));
+            crPR_throw(ts, errcode); /* re-throw in main thread */
+        } else { /* no error handlers, abort */
+            if (gs->fpanic) { /* state has panic handler? */
+                cr_unlock(ts); /* release the lock... */
+                gs->fpanic(ts); /* ...and call it */
+            }
+            abort();
+        }
     }
-    abort();
 }
 
 

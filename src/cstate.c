@@ -218,6 +218,23 @@ CR_API cr_State *cr_newthread(cr_State *mts) {
 }
 
 
+int crT_resetthread(cr_State *ts, int status) {
+    CallFrame *cf = ts->cf = &ts->basecf;
+    setnilval(s2v(ts->stack.p)); /* 'basecf' func */
+    cf->func.p = ts->stack.p;
+    cf->status = CFST_CCALL;
+    ts->status = CR_OK; /* so we can run '__close' */
+    status = crPR_close(ts, 1, status);
+    if (status != CR_OK) /* error? */
+        crT_seterrorobj(ts, status, ts->stack.p + 1);
+    else
+        ts->sp.p = ts->stack.p + 1;
+    cf->top.p = ts->sp.p + CR_MINSTACK;
+    crT_reallocstack(ts, cf->top.p - ts->sp.p, 0);
+    return status;
+}
+
+
 /*
 ** Reset thread state 'ts' by unwinding `CallFrame` list,
 ** closing all upvalues (and to-be-closed variables) and
@@ -227,17 +244,9 @@ CR_API cr_State *cr_newthread(cr_State *mts) {
 ** If no errors occured `CR_OK` status is returned.
 */
 CR_API int cr_resetthread(cr_State *ts) {
-    CallFrame *cf = ts->cf = &ts->basecf;
-    int status = ts->status;
+    int status;
     cr_lock(ts);
-    ts->status = CR_OK; /* so we can run '__close' */
-    status = crPR_close(ts, 1, status);
-    if (status != CR_OK) /* error? */
-        crT_seterrorobj(ts, status, ts->stack.p + 1);
-    else
-        ts->sp.p = ts->stack.p + 1;
-    cf->top.p = ts->sp.p + CR_MINSTACK;
-    crT_reallocstack(ts, cf->top.p - ts->sp.p, 0);
+    status = crT_resetthread(ts, ts->status);
     cr_unlock(ts);
     return status;
 }

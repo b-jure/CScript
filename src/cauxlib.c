@@ -212,7 +212,7 @@ CRLIB_API int crL_loadfile(cr_State *ts, const char *filename) {
     if (filename) /* real file ? */
         fclose(lf.fp); /* close it */
     if (readstatus) { /* error while reading */
-        cr_settop(ts, filename_index); /* remove any results */
+        cr_setntop(ts, filename_index); /* remove any results */
         return errorfile(ts, "read", filename_index);
     }
     cr_remove(ts, filename_index);
@@ -698,10 +698,10 @@ static int pushglobalfuncname(cr_State *ts, cr_DebugInfo *di) {
     crL_check_stack(ts, 6, "not enough stack space"); /* for 'findfield' */
     if (findfield(ts, top + 1, 2)) { /* found? */
         cr_copy(ts, -1, top + 1); /* copy name to proper place */
-        cr_settop(ts, top + 1); /* remove lib instance and name copy */
+        cr_setntop(ts, top + 1); /* remove lib instance and name copy */
         return 1;
     } else { /* not a global */
-        cr_settop(ts, top); /* remove func and lib instance */
+        cr_setntop(ts, top); /* remove func and lib instance */
         return 0;
     }
 }

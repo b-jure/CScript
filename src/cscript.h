@@ -152,7 +152,7 @@ CR_API cr_Number        cr_version(cr_State *ts);
 /* -------------------------------------------------------------------------
  * Stack manipulation
  * ------------------------------------------------------------------------- */
-CR_API void             cr_settop(cr_State *ts, int index); 
+CR_API void             cr_setntop(cr_State *ts, int index); 
 CR_API int              cr_gettop(const cr_State *ts); 
 CR_API int              cr_absindex(cr_State *ts, int index); 
 CR_API void             cr_rotate(cr_State *ts, int index, int n); 
@@ -292,16 +292,16 @@ CR_API int  cr_load(cr_State *ts, cr_Reader reader, void *userdata,
  * ------------------------------------------------------------------------- */
 
 /* GC options */
-#define CR_GCSTOP               0  /* stop GC */
-#define CR_GCRESTART            1  /* restart GC (start if stopped) */
-#define CR_GCCOLLECT            2  /* perform full GC cycle */
-#define CR_GCCOUNT              3  /* get number of (bytes_allocated/1024) */
-#define CR_GCCOUNTBYTES         4  /* get remainder of (bytes_allocated/1024) */
-#define CR_GCSTEP               5  /* perform single GC step and or set debt */
-#define CR_GCSETPAUSE           6  /* set GC pause (as percentage) */
-#define CR_GCSETSTEPMUL         7  /* set GC step multiplier (as percentage) */
-#define CR_GCISRUNNING          8  /* test whether GC is running */
-#define CR_GCINC                10 /* set GC in incremental mode */
+#define CR_GCSTOP               0 /* stop GC */
+#define CR_GCRESTART            1 /* restart GC (start if stopped) */
+#define CR_GCCOLLECT            2 /* perform full GC cycle */
+#define CR_GCCOUNT              3 /* get number of (bytes_allocated/1024) */
+#define CR_GCCOUNTBYTES         4 /* get remainder of (bytes_allocated/1024) */
+#define CR_GCSTEP               5 /* perform single GC step and or set debt */
+#define CR_GCSETPAUSE           6 /* set GC pause (as percentage) */
+#define CR_GCSETSTEPMUL         7 /* set GC step multiplier (as percentage) */
+#define CR_GCISRUNNING          8 /* test whether GC is running */
+#define CR_GCINC                9 /* set GC in incremental mode */
 
 /* Limits for 'data' parameter for GC options. */
 #define CR_MAXPAUSE         1023
@@ -323,7 +323,7 @@ CR_API void cr_warning(cr_State *ts, const char *msg, int cont);
 CR_API int              cr_hasvmt(cr_State *ts, int index); 
 CR_API int              cr_hasmetamethod(cr_State *ts, int index, cr_MM mm); 
 CR_API cr_Unsigned      cr_len(cr_State *ts, int index); 
-CR_API int              cr_next(cr_State *ts, int index); 
+CR_API int              cr_next(cr_State *ts, int insobj); 
 CR_API void             cr_concat(cr_State *ts, int n); 
 CR_API size_t           cr_stringtonumber(cr_State *ts, const char *s, int *povf); 
 CR_API cr_Alloc         cr_getallocf(cr_State *ts, void **ud); 
@@ -334,10 +334,12 @@ CR_API void             cr_closeslot(cr_State *ts, int index);
 
 #define cr_getextraspace(ts)        ((void *)((char *)(ts) - CR_EXTRASPACE))
 
+#define cr_nvalues(ts)              (cr_gettop(ts) + 1)
+
 #define cr_to_number(ts,i)          cr_to_numberx(ts,(i),NULL)
 #define cr_to_integer(ts,i)         cr_to_integerx(ts,(i),NULL)
 
-#define cr_pop(ts,n)                cr_settop(ts, -(n)-1)
+#define cr_pop(ts,n)                cr_setntop(ts, -(n)-1)
 
 #define cr_push_cfunction(ts,f)     cr_push_cclosure(ts,f,0)
 
@@ -363,6 +365,7 @@ CR_API void             cr_closeslot(cr_State *ts, int index);
 #define cr_remove(ts,index)         (cr_rotate(ts, (index), -1), cr_pop(ts, 1))
 
 #define cr_replace(ts,index)        (cr_copy(ts, -1, (index)), cr_pop(ts, 1))
+
 
 
 /* -------------------------------------------------------------------------

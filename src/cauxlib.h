@@ -82,6 +82,7 @@ CRLIB_API const char *crL_to_lstring(cr_State *ts, int index, size_t *plen);
 CRLIB_API void        crL_where(cr_State *ts, int level);
 CRLIB_API int         crL_fileresult(cr_State *ts, int ok, const char *fname);
 CRLIB_API cr_State   *crL_newstate(void);
+CRLIB_API void        crL_push_hashtable(cr_State *ts);
 CRLIB_API void        crL_include(cr_State *ts, const char *lib,
                                   cr_CFunction openf, int global);
 CRLIB_API void       *crL_test_userdata(cr_State *ts, int index,
