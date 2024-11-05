@@ -916,17 +916,14 @@ CR_API int cr_get_class(cr_State *ts, int insobj) {
 }
 
 
-CR_API int cr_get_method(cr_State *ts, int insobj, const char *name) {
+CR_API int cr_get_method(cr_State *ts, int insobj) {
     Instance *ins;
-    OString *key;
     cr_lock(ts);
+    api_checknelems(ts, 1); /* key */
     ins = getinstance(ts, insobj);
-    key = crS_new(ts, name);
-    setstrval2s(ts, ts->sp.p, key); /* anchor */
-    api_inctop(ts);
     if (ins->oclass->methods) { /* have methods ? */
-        const TValue *slot = crH_getstr(ins->oclass->methods, key);
-        if (!isabstkey(slot)) { /* have 'name' ? */
+        const TValue *slot = crH_get(ins->oclass->methods, s2v(ts->sp.p - 1));
+        if (!isabstkey(slot)) { /* found? */
             IMethod *im = crMM_newinsmethod(ts, ins, slot);
             setim2s(ts, ts->sp.p - 1, im);
             goto unlock;
@@ -1031,12 +1028,25 @@ CR_API void cr_set_index(cr_State *ts, int arrobj, cr_Integer index) {
 }
 
 
-CR_API void cr_set_field(cr_State *ts, int index, const char *field) {
+CR_API void cr_set_field(cr_State *ts, int insobj) {
     Instance *ins;
     cr_lock(ts);
-    api_checknelems(ts, 1);
-    ins = getinstance(ts, index);
+    api_checknelems(ts, 2); /* key + value */
+    ins = getinstance(ts, insobj);
+    crH_set(ts, &ins->fields, s2v(ts->sp.p - 2), s2v(ts->sp.p - 1));
+    crG_barrierback(ts, obj2gco(ins), s2v(ts->sp.p - 1));
+    ts->sp.p -= 2; /* remove key + value */
+    cr_unlock(ts);
+}
+
+
+CR_API void cr_set_fieldstr(cr_State *ts, int insobj, const char *field) {
+    Instance *ins;
+    cr_lock(ts);
+    api_checknelems(ts, 1); /* value */
+    ins = getinstance(ts, insobj);
     auxrawsetstr(ts, &ins->fields, field, s2v(ts->sp.p - 1));
+    ts->sp.p--; /* remove value */
     cr_unlock(ts);
 }
 

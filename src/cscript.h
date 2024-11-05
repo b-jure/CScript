@@ -152,7 +152,7 @@ CR_API cr_Number        cr_version(cr_State *ts);
 /* -------------------------------------------------------------------------
  * Stack manipulation
  * ------------------------------------------------------------------------- */
-CR_API void             cr_setntop(cr_State *ts, int index); 
+CR_API void             cr_setntop(cr_State *ts, int nvals); 
 CR_API int              cr_gettop(const cr_State *ts); 
 CR_API int              cr_absindex(cr_State *ts, int index); 
 CR_API void             cr_rotate(cr_State *ts, int index, int n); 
@@ -245,7 +245,7 @@ CR_API int   cr_get(cr_State *ts, int obj);
 CR_API int   cr_get_index(cr_State *ts, int arrobj, cr_Integer index);
 CR_API int   cr_get_field(cr_State *ts, int insobj); 
 CR_API int   cr_get_class(cr_State *ts, int insobj); 
-CR_API int   cr_get_method(cr_State *ts, int insobj, const char *name); 
+CR_API int   cr_get_method(cr_State *ts, int insobj); 
 CR_API int   cr_get_metamethod(cr_State *ts, int obj, cr_MM mm); 
 
 CR_API void *cr_newuserdata(cr_State *ts, size_t sz, int nuv); 
@@ -258,7 +258,8 @@ CR_API int   cr_get_uservalue(cr_State *ts, int udobj, int n);
 CR_API void  cr_set_global(cr_State *ts, const char *name); 
 CR_API void  cr_set(cr_State *ts, int obj); 
 CR_API void  cr_set_index(cr_State *ts, int arrobj, cr_Integer index);
-CR_API void  cr_set_field(cr_State *ts, int index, const char *field); 
+CR_API void  cr_set_field(cr_State *ts, int insobj); 
+CR_API void  cr_set_fieldstr(cr_State *ts, int insobj, const char *field); 
 CR_API void  cr_set_userdatavmt(cr_State *ts, int index, const cr_VMT *vmt); 
 CR_API int   cr_set_uservalue(cr_State *ts, int index, int n); 
 CR_API void  cr_set_userdatamm(cr_State *ts, int index, cr_MM mm); 
@@ -325,11 +326,12 @@ CR_API int              cr_hasmetamethod(cr_State *ts, int index, cr_MM mm);
 CR_API cr_Unsigned      cr_len(cr_State *ts, int index); 
 CR_API int              cr_next(cr_State *ts, int insobj); 
 CR_API void             cr_concat(cr_State *ts, int n); 
-CR_API size_t           cr_stringtonumber(cr_State *ts, const char *s, int *povf); 
 CR_API cr_Alloc         cr_getallocf(cr_State *ts, void **ud); 
 CR_API void             cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud); 
 CR_API void             cr_toclose(cr_State *ts, int index); 
 CR_API void             cr_closeslot(cr_State *ts, int index); 
+CR_API size_t           cr_stringtonumber(cr_State *ts, const char *s,
+                                          int *povf); 
 
 
 #define cr_getextraspace(ts)        ((void *)((char *)(ts) - CR_EXTRASPACE))

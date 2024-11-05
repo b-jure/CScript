@@ -30,6 +30,13 @@
 #define CR_LOADED_LIBS      "lib"
 
 
+/*
+** This is maximum value of index when indexing the array.
+*/
+#define CR_ARRAYMAX     (INT_MAX - 1)
+
+
+/* buffer */
 typedef struct crL_Buffer crL_Buffer;
 
 
@@ -81,6 +88,8 @@ CRLIB_API int crL_loadbuffer(cr_State *ts, const char *buff, size_t sz,
 CRLIB_API const char *crL_to_lstring(cr_State *ts, int index, size_t *plen);
 CRLIB_API void        crL_where(cr_State *ts, int level);
 CRLIB_API int         crL_fileresult(cr_State *ts, int ok, const char *fname);
+CRLIB_API int         crL_get_property(cr_State *ts, int insobj);
+CRLIB_API void        crL_set_cindex(cr_State *ts, int arrobj, cr_Integer i);
 CRLIB_API cr_State   *crL_newstate(void);
 CRLIB_API void        crL_push_hashtable(cr_State *ts);
 CRLIB_API void        crL_include(cr_State *ts, const char *lib,
@@ -101,6 +110,9 @@ CRLIB_API void        crL_traceback(cr_State *ts, cr_State *at, int level,
 
 #define crL_opt(ts, fn, index, dfl) \
     (cr_is_noneornil(ts, index) ? (dfl) : fn(ts, index))
+
+#define crL_check_arg(ts, cond, arg, extramsg) \
+    ((void)(cr_likely(cond) || crL_arg_error(ts, (arg), (extramsg))))
 
 /* push value representing failure or error */
 #define crL_push_fail(ts)       cr_push_nil(ts)

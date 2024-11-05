@@ -317,6 +317,23 @@ CRLIB_API int crL_fileresult(cr_State *ts, int ok, const char *fname) {
 }
 
 
+CRLIB_API int crL_get_property(cr_State *ts, int insobj) {
+    if (cr_get_field(ts, insobj) == CR_TNIL) {
+        cr_pop(ts, 1); /* remove nil */
+        cr_get_class(ts, insobj);
+        cr_get_method(ts, insobj);
+    }
+    return cr_type(ts, -1);
+}
+
+
+CRLIB_API void crL_set_cindex(cr_State *ts, int arrobj, cr_Integer i) {
+    if (cr_unlikely(i < 0 || i > CR_ARRAYMAX))
+        crL_error(ts, "array index too large %I, limit is %d", i, CR_ARRAYMAX);
+    cr_set_index(ts, arrobj, i);
+}
+
+
 static void *allocator(void *ptr, size_t osz, size_t nsz, void *ud) {
     (void)osz; (void)ud; /* unused */
     if (nsz == 0) {
@@ -421,7 +438,7 @@ CRLIB_API void crL_include(cr_State *ts, const char *libname,
         cr_push_string(ts, libname); /* argument to 'openf' */
         cr_call(ts, 1, 1); /* call 'openf' */
         cr_push(ts, -1); /* copy the library (call result) */
-        cr_set_field(ts, -3, libname); /* lib[libname] = library */
+        cr_set_fieldstr(ts, -3, libname); /* lib[libname] = library */
     }
     cr_remove(ts, -2); /* remove 'lib' */
     if (global) {

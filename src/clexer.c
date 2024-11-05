@@ -306,9 +306,9 @@ static int lexstr2num(Lexer *lx, Literal *k) {
 
 
 /*
- * Read digits, additionally allow '_' separators
- * if these are not mantissa digits denoted by 'fp'.
- */
+** Read digits, additionally allow '_' separators
+** if these are not mantissa digits denoted by 'fp'.
+*/
 static int auxreaddigs(Lexer *lx, Dig d, int fp) {
     int digits = 0;
     for (;; advance(lx)) {
