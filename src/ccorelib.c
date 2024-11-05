@@ -359,6 +359,8 @@ static const char *strtoint(const char *s, int base, cr_Integer *pn, int *of) {
         } else if (base == 0) { /* must be octal */
             base = 8; /* set octal base */
         }
+    } else if (val[c] >= base) {
+        return NULL;
     }
     if (base == 10) { /* decimal base? */
         for (;isdigit(c) && n <= lim/10 && 10*n <= lim-(c-'0'); c = *s++)
@@ -375,16 +377,21 @@ static const char *strtoint(const char *s, int base, cr_Integer *pn, int *of) {
             n = n * base + val[c];
     }
     if (isalnum(c) && val[c] < base) { /* overflow? */
-        while (isalnum(c) && val[c] < base) c = *s++; /* skip numerals */
+        *of = 1; /* signal it */
+        do {c = *s++;} while(isalnum(c) && val[c] < base); /* skip numerals */
         n = lowlim;
     }
 done:
     s--; s += strspn(s, SPACECHARS); /* skip trailing whitespace */
     if (n >= lowlim) { /* potential overflow? */
         if (!neg) { /* overflow */
-            *of = 1; n = lim;
+            *of = 1;
+            *pn = lim;
+            return s;
         } else if (n > lowlim) { /* underflow? */
-            *of = -1; n = lowlim;
+            *of = -1;
+            *pn = lowlim;
+            return s;
         }
     }
     *pn = (cr_Integer)((n^neg) - neg); /* resolve sign and store the result */
