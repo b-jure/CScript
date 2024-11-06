@@ -11,8 +11,8 @@
 #include "cobject.h"
 
 
-Array *crA_new(cr_State *ts) {
-    Array *arr = crG_new(ts, sizeof(Array), CR_VARRAY, Array);
+Array *crA_new(cs_State *ts) {
+    Array *arr = crG_new(ts, sizeof(Array), CS_VARRAY, Array);
     arr->sz = arr->n = 0;
     arr->b = NULL;
     return arr;
@@ -20,14 +20,14 @@ Array *crA_new(cr_State *ts) {
 
 
 /* shrinks array size to the actual size being used */
-void crA_shrink(cr_State *ts, Array *arr) {
+void crA_shrink(cs_State *ts, Array *arr) {
     if (arr->b && arr->sz > arr->n)
         crM_shrinkvec(ts, arr->b, arr->sz, arr->n, TValue);
 }
 
 
 /* ensure that 'index' can fit into array memory block */
-void crA_ensure(cr_State *ts, Array *arr, cr_Integer index) {
+void crA_ensure(cs_State *ts, Array *arr, cs_Integer index) {
     if (cri_castS2U(index) >= arr->sz) {
         crM_ensurevec(ts, arr->b, arr->sz, arr->n, index - arr->n + 1, ARRAYLIMIT,
                       "array elements", TValue);
@@ -38,7 +38,7 @@ void crA_ensure(cr_State *ts, Array *arr, cr_Integer index) {
 }
 
 
-void crA_free(cr_State *ts, Array *arr) {
+void crA_free(cs_State *ts, Array *arr) {
     crM_freearray(ts, arr->b, arr->sz, TValue);
     crM_free(ts, arr, sizeof(*arr));
 }

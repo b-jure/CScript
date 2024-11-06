@@ -62,9 +62,9 @@ typedef struct Scope {
     int activelocals; /* number of locals outside of this scope */
     int nswscope; /* number of switch scopes before this scope */
     int depth; /* NOTE(jure): might remove, only used for O(1) in 'breakstm'  */
-    cr_ubyte cfbits; /* control flow bits */
-    cr_ubyte haveupval; /* set if scope contains upvalue variable */
-    cr_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
+    cs_ubyte cfbits; /* control flow bits */
+    cs_ubyte haveupval; /* set if scope contains upvalue variable */
+    cs_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
 } Scope;
 
 
@@ -110,14 +110,14 @@ static void storereachablectx(FunctionState *fs) {
 
 /* load context right before dead code */
 static void loadreachablectx(FunctionState *fs) {
-    cr_assert(fs->deadcode.pc >= 0);
+    cs_assert(fs->deadcode.pc >= 0);
     loadctx(fs, &fs->deadcode);
 }
 
 
 /* pop last pending jump from currently active patch list */
 static int patchlistpop(FunctionState *fs) {
-    cr_assert(fs->patches.len > 0);
+    cs_assert(fs->patches.len > 0);
     PatchList *list = &fs->patches.list[fs->patches.len - 1];
     if (list->len)
         return list->arr[--list->len];
@@ -128,7 +128,7 @@ static int patchlistpop(FunctionState *fs) {
 
 /* add jump to patch list (for backpatching) */
 static void patchlistaddjmp(FunctionState *fs, int jmp) {
-    cr_assert(fs->patches.len > 0);
+    cs_assert(fs->patches.len > 0);
     PatchList *list = &fs->patches.list[fs->patches.len - 1];
     crM_growvec(fs->lx->ts, list->arr, list->size, list->len,
                 INT_MAX, "code jumps", int);
@@ -138,7 +138,7 @@ static void patchlistaddjmp(FunctionState *fs, int jmp) {
 
 /* reset patch list length */
 static void resetpatchlist(FunctionState *fs) {
-    cr_assert(fs->patches.len > 0);
+    cs_assert(fs->patches.len > 0);
     fs->patches.list[fs->patches.len - 1].len = 0;
 }
 
@@ -153,25 +153,25 @@ static void patchliststart(FunctionState *fs) {
 
 /* end patch list by patching all pending jumps */
 static void patchlistend(FunctionState *fs) {
-    cr_assert(fs->patches.len > 0);
+    cs_assert(fs->patches.len > 0);
     PatchList *list = &fs->patches.list[--fs->patches.len];
     int jmp; /* 'break' jmp */
     while ((jmp = patchlistpop(fs)) != NOJMP)
         crC_patchtohere(fs, jmp);
-    cr_assert(list->len == 0);
+    cs_assert(list->len == 0);
     crM_freearray(fs->lx->ts, list->arr, list->size, int);
 }
 
 
-static cr_noret expecterror(Lexer *lx, int tk) {
+static cs_noret expecterror(Lexer *lx, int tk) {
     const char *err = crS_pushfstring(lx->ts, "expected %s",
                                             crY_tok2str(lx, tk));
     crY_syntaxerror(lx, err);
 }
 
 
-static cr_noret limiterror(FunctionState *fs, const char *what, int limit) {
-    cr_State *ts = fs->lx->ts;
+static cs_noret limiterror(FunctionState *fs, const char *what, int limit) {
+    cs_State *ts = fs->lx->ts;
     int line = fs->fn->defline;
     const char *where = (line == 0 ? "main function" :
                         crS_pushfstring(ts, "function at line %d", line));
@@ -182,7 +182,7 @@ static cr_noret limiterror(FunctionState *fs, const char *what, int limit) {
 
 
 /* semantic error; variant of syntax error without 'near <token>' */
-cr_noret crP_semerror(Lexer *lx, const char *err) {
+cs_noret crP_semerror(Lexer *lx, const char *err) {
     lx->t.tk = 0;
     crY_syntaxerror(lx, err);
 }
@@ -195,7 +195,7 @@ static void checklimit(FunctionState *fs, int n, int limit, const char *what) {
 
 
 /* variable initialization error */
-static cr_noret variniterror(Lexer *lx, const char *kind, const char *name) {
+static cs_noret variniterror(Lexer *lx, const char *kind, const char *name) {
     crP_semerror(lx, crS_pushfstring(lx->ts,
                      "can't read %s variable '%s' in its own initializer",
                      kind, name));
@@ -206,7 +206,7 @@ static cr_noret variniterror(Lexer *lx, const char *kind, const char *name) {
 static void checkvarcollision(FunctionState *fs, OString *name, const char *vk,
                     int (*fn)(FunctionState *, OString *, ExpInfo *)) {
     ExpInfo dummy;
-    if (cr_unlikely(fn(fs, name, &dummy) >= 0))
+    if (cs_unlikely(fn(fs, name, &dummy) >= 0))
         crP_semerror(fs->lx, crS_pushfstring(fs->lx->ts,
                              "redefinition of %s variable '%s'", vk, name));
 }
@@ -214,14 +214,14 @@ static void checkvarcollision(FunctionState *fs, OString *name, const char *vk,
 
 /* get local variable */
 static LVar *getlocal(FunctionState *fs, int idx) {
-    cr_assert(fs->firstlocal + idx < fs->lx->ps->lvars.len);
+    cs_assert(fs->firstlocal + idx < fs->lx->ps->lvars.len);
     return &fs->lx->ps->lvars.arr[fs->firstlocal + idx];
 }
 
 
 /* get local variable debug information */
 static LVarInfo *getlocalinfo(FunctionState *fs, int vidx) {
-    cr_assert(0 <= vidx && vidx <= fs->activelocals);
+    cs_assert(0 <= vidx && vidx <= fs->activelocals);
     LVar *local = getlocal(fs, vidx);
     return &fs->fn->locals[local->s.idx];
 }
@@ -265,15 +265,15 @@ static void removelocals(FunctionState *fs, int tolevel, int popextra) {
 
 
 /* get private variable */
-cr_sinline PrivateVar *getprivate(FunctionState *fs, int idx) {
-    cr_assert(0 <= idx && idx < fs->nprivate);
+cs_sinline PrivateVar *getprivate(FunctionState *fs, int idx) {
+    cs_assert(0 <= idx && idx < fs->nprivate);
     return &fs->fn->private[idx];
 }
 
 
 /* get upvalue variable */
-cr_sinline UpValInfo *getupvalue(FunctionState *fs, int idx) {
-    cr_assert(idx < fs->nupvals);
+cs_sinline UpValInfo *getupvalue(FunctionState *fs, int idx) {
+    cs_assert(idx < fs->nupvals);
     return &fs->fn->upvals[idx];
 }
 
@@ -288,7 +288,7 @@ static void movexp2v(FunctionState *fs, ExpInfo *e, TValue *v) {
     case EXP_INT: setival(v, e->u.i); break;
     case EXP_FLT: setfval(v, e->u.n); break;
     case EXP_K: *v = *getconstant(fs, e); break;
-    default: cr_unreachable();
+    default: cs_unreachable();
     }
 }
 
@@ -355,7 +355,7 @@ static void defineprivate(FunctionState *fs, int vidx) {
 
 /* define global variable */
 static void defineglobal(FunctionState *fs, ExpInfo *var) {
-    cr_assert(var->et == EXP_GLOBAL);
+    cs_assert(var->et == EXP_GLOBAL);
     crC_defineglobal(fs, var);
 }
 
@@ -396,7 +396,7 @@ static void endscope(FunctionState *fs) {
     Scope *s = fs->scope;
     int stklevel = getstacklevel(fs, s->activelocals);
     removelocals(fs, s->activelocals, scopeisswitch(s));
-    cr_assert(s->activelocals == fs->activelocals);
+    cs_assert(s->activelocals == fs->activelocals);
     if (scopeisloop(s) || scopeisswitch(s)) /* has a patch list ? */
         patchlistend(fs);
     if (s->prev && s->haveupval) /* need to close upvalues ? */
@@ -434,7 +434,7 @@ static void scopemarktbc(FunctionState *fs) {
 
 /* initialize function state */
 static void startfs(FunctionState *fs, Lexer *lx, Scope *s) {
-    cr_assert(fs->fn != NULL);
+    cs_assert(fs->fn != NULL);
     fs->prev = lx->fs;
     fs->lx = lx;
     lx->fs = fs;
@@ -464,11 +464,11 @@ static void startfs(FunctionState *fs, Lexer *lx, Scope *s) {
 static void endfs(FunctionState *fs) {
     Lexer *lx = fs->lx;
     Function *fn = fs->fn;
-    cr_State *ts = lx->ts;
+    cs_State *ts = lx->ts;
     crC_ret(fs, fs->activelocals - 1, 0);
-    cr_assert(fs->scope && !fs->scope->prev);
+    cs_assert(fs->scope && !fs->scope->prev);
     endscope(fs); /* end global scope */
-    cr_assert(fs->scope == NULL);
+    cs_assert(fs->scope == NULL);
     if (fs->deadcode.pc != NOJMP) /* have dead code ? */
         loadreachablectx(fs);
     crC_finish(fs);
@@ -489,7 +489,7 @@ static void endfs(FunctionState *fs) {
 /* add function */
 static Function *addfunction(Lexer *lx) {
     Function *new;
-    cr_State *ts = lx->ts;
+    cs_State *ts = lx->ts;
     FunctionState *fs = lx->fs;
     Function *fn = fs->fn;
     checklimit(fs, fs->nfuncs + 1, MAXLONGARGSIZE, "functions");
@@ -552,7 +552,7 @@ static void expect(Lexer *lx, int tk) {
  * match a 'who' in line 'linenum'.
  */
 static void expectmatch(Lexer *lx, int what, int who, int linenum) {
-    if (cr_unlikely(!match(lx, what))) {
+    if (cs_unlikely(!match(lx, what))) {
         if (lx->line == linenum) { /* same line ? */
             expecterror(lx, what); /* emit usual error message */
         } else {
@@ -597,7 +597,7 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e) {
     for (int i = fs->activelocals - 1; 0 <= i; i--) {
         LVar *local = getlocal(fs, i);
         if (streq(name, local->s.name)) {
-            if (cr_unlikely(local->s.idx == -1))
+            if (cs_unlikely(local->s.idx == -1))
                 variniterror(lx, "local", getstrbytes(name));
             initexp(e, EXP_LOCAL, i);
             return e->et;
@@ -615,7 +615,7 @@ static int searchprivate(FunctionState *fs, OString *name, ExpInfo *e) {
     for (int i = fs->nprivate - 1; i >= 0; i--) {
         PrivateVar *pv = getprivate(fs, i);
         if (streq(name, pv->s.name)) {
-            if (cr_unlikely(testbits(pv->val.mod, UNDEFMODMASK)))
+            if (cs_unlikely(testbits(pv->val.mod, UNDEFMODMASK)))
                 variniterror(lx, "private", getstrbytes(name));
             initexp(e, EXP_PRIVATE, i);
             return e->et;
@@ -628,7 +628,7 @@ static int searchprivate(FunctionState *fs, OString *name, ExpInfo *e) {
 /* allocate space for new 'UpValInfo' */
 static UpValInfo *newupvalue(FunctionState *fs) {
     Function *fn = fs->fn;
-    cr_State *ts = fs->lx->ts;
+    cs_State *ts = fs->lx->ts;
     checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
     crM_growvec(ts, fn->upvals, fn->sizeupvals, fs->nupvals, MAXUPVAL,
                 "upvalues", UpValInfo);
@@ -644,14 +644,14 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e) {
         uv->onstack = 1;
         uv->idx = e->u.info;
         uv->mod = getlocal(fs, e->u.info)->val.mod;
-        cr_assert(streq(name, getlocal(fs, e->u.info)->s.name));
+        cs_assert(streq(name, getlocal(fs, e->u.info)->s.name));
     } else { /* must be upvalue */
-        cr_assert(e->et == EXP_UVAL);
+        cs_assert(e->et == EXP_UVAL);
         FunctionState *enclosing = fs->prev;
         uv->onstack = 0;
         uv->idx = e->u.info;
         uv->mod = enclosing->fn->upvals[e->u.info].mod;
-        cr_assert(streq(name, enclosing->fn->upvals[e->u.info].name));
+        cs_assert(streq(name, enclosing->fn->upvals[e->u.info].name));
     }
     return fs->nupvals - 1;
 }
@@ -700,7 +700,7 @@ static void newglobal(Lexer *lx, OString *name, int mods) {
     setstrval(lx->ts, &k, name);
     setemptyval(&val);
     val.mod = mods;
-    crH_set(lx->ts, htval(&G_(lx->ts)->globals), &k, &val);
+    crH_set(lx->ts, &GI(lx->ts)->fields, &k, &val);
 }
 
 
@@ -709,7 +709,7 @@ static void globalvar(FunctionState *fs, OString *name, ExpInfo *e) {
     TValue k;
     Lexer *lx = fs->lx;
     setstrval(lx->ts, &k, name);
-    if (isabstkey(crH_get(htval(&G_(lx->ts)->globals), &k)))
+    if (isabstkey(crH_get(&GI(lx->ts)->fields, &k)))
         newglobal(lx, name, UNDEFMODMASK >> (fs->prev != NULL));
     e->u.str = name;
     e->et = EXP_GLOBAL;
@@ -719,7 +719,7 @@ static void globalvar(FunctionState *fs, OString *name, ExpInfo *e) {
 /* create new static variable */
 static int newprivate(FunctionState *fs, OString *name, int mods) {
     Function *fn = fs->fn;
-    cr_State *ts = fs->lx->ts;
+    cs_State *ts = fs->lx->ts;
     checklimit(fs, fs->nprivate, MAXLONGARGSIZE, "private variables");
     crM_growvec(ts, fn->private, fn->sizeprivate, fs->nprivate,
                 MAXLONGARGSIZE, "private variables", PrivateVar);
@@ -751,7 +751,7 @@ static void varprivate(Lexer *lx, ExpInfo *e) {
     crY_scan(lx); /* skip '@' */
     OString *name = expect_id(lx);
     int vidx = searchprivate(lx->fs, name, e);
-    if (cr_unlikely(vidx < 0))
+    if (cs_unlikely(vidx < 0))
         crP_semerror(lx, crS_pushfstring(lx->ts, 
                          "undefined static variable '%s'", name));
     initexp(e, EXP_PRIVATE, vidx);
@@ -795,7 +795,7 @@ static int exprlist(Lexer *lx, ExpInfo *e) {
 /* indexed ::= '[' expr ']' */
 static void indexed(Lexer *lx, ExpInfo *var, int super) {
     crY_scan(lx); /* skip '[' */
-    if (cr_unlikely(eisconstant(var)))
+    if (cs_unlikely(eisconstant(var)))
         crP_semerror(lx, "can't index literal constant values");
     crC_exp2stack(lx->fs, var);
     ExpInfo key;
@@ -822,17 +822,17 @@ static void getprop(Lexer *lx, ExpInfo *var, int super) {
  *           | 'super' '[' string ']' 
  */
 static void superkw(Lexer *lx, ExpInfo *e) {
-    if (cr_unlikely(lx->ps->cs == NULL)) {
+    if (cs_unlikely(lx->ps->cs == NULL)) {
         crP_semerror(lx, "usage of 'super' outside of method");
-    } else if (cr_unlikely(!lx->ps->cs->super)) {
+    } else if (cs_unlikely(!lx->ps->cs->super)) {
         crY_syntaxerror(lx, "use of 'super' but class does not inherit");
     } else {
         FunctionState *fs = lx->fs;
         varlit(lx, "self", e);
-        cr_assert(e->et == EXP_LOCAL);
+        cs_assert(e->et == EXP_LOCAL);
         crC_exp2stack(fs, e);
         varlit(lx, "super", e);
-        cr_assert(e->et == EXP_UVAL);
+        cs_assert(e->et == EXP_UVAL);
         crY_scan(lx); /* skip 'super' */
         if (check(lx, '['))
             indexed(lx, e, 1);
@@ -892,7 +892,7 @@ static void call(Lexer *lx, ExpInfo *e) {
     if (lx->t.tk != ')') { /* have args ? */
         exprlist(lx, e);
         if (eismulret(e))
-            crC_setreturns(fs, e, CR_MULRET);
+            crC_setreturns(fs, e, CS_MULRET);
     } else {
         e->et = EXP_VOID;
     }
@@ -941,12 +941,12 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
 */
 static int checkarraysize(Lexer *lx, ExpInfo *sz) {
     if (eisconstant(sz)) {
-        cr_Integer size;
+        cs_Integer size;
         int isvalid = 0;
         if ((isvalid = (sz->et == EXP_INT))) {
             size = sz->u.i;
         } else if (sz->et == EXP_FLT) {
-            cr_Integer temp = cr_floor(sz->u.n);
+            cs_Integer temp = cs_floor(sz->u.n);
             if ((isvalid = (cast_num(temp) == sz->u.n)))
                 size = temp;
         }
@@ -981,21 +981,21 @@ static void arrayexp(Lexer *lx, ExpInfo *e) {
         expr(lx, &sz);
         size = checkarraysize(lx, &sz);
         crC_exp2stack(fs, &sz);
-        cr_assert(size >= 0);
+        cs_assert(size >= 0);
     }
     expect(lx, ']');
     if (match(lx, '{')) {
         if (!check(lx, '}')) {
             base = fs->sp;
             elems = exprlist(lx, e);
-            if (cr_unlikely(size >= 0 && size < elems))
+            if (cs_unlikely(size >= 0 && size < elems))
                 crP_semerror(lx, crS_pushfstring(lx->ts,
                     "array elements %d overflow array size %d", elems, size));
             if (eismulret(e))
-                crC_setreturns(fs, e, CR_MULRET);
+                crC_setreturns(fs, e, CS_MULRET);
             else
                 crC_exp2stack(fs, e);
-            cr_assert(elems <= size);
+            cs_assert(elems <= size);
         }
         expect(lx, '}');
     }
@@ -1111,8 +1111,8 @@ static Binopr getbinopr(int token) {
  * if 'left' > 'right' then operator is right associative.
  */
 static const struct {
-    cr_ubyte left; /* left priority */
-    cr_ubyte right; /* right priority */
+    cs_ubyte left; /* left priority */
+    cs_ubyte right; /* right priority */
 } priority[] = {
     /* unary operators priority */
     [OPR_UNM]      = { 14, 14 },   /* '-' */
@@ -1230,7 +1230,7 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
         TValue key;
         const TValue *res;
         setstrval(lx->ts, &key, var->u.str);
-        res = crH_get(htval(&G_(lx->ts)->globals), &key);
+        res = crH_get(&GI(lx->ts)->fields, &key);
         if (!ttisempty(res) && ismod(res, VARFINAL))
             id = var->u.str;
         break;
@@ -1369,7 +1369,7 @@ static int newvar(FunctionState *fs, OString *name, ExpInfo *e, int mods) {
     Lexer *lx = fs->lx;
     int vidx = -1;
     if (fs->scope->prev) { /* local ? */
-        if (cr_unlikely(testbit(mods, VARPRIVATE))) {
+        if (cs_unlikely(testbit(mods, VARPRIVATE))) {
             crP_semerror(lx, crS_pushfstring(lx->ts,
             "local variable '%s' is already private", name));
         }
@@ -1377,7 +1377,7 @@ static int newvar(FunctionState *fs, OString *name, ExpInfo *e, int mods) {
         vidx = newlocal(lx, name, mods);
         initexp(e, EXP_LOCAL, vidx);
     } else { /* global */
-        cr_assert(!testbit(mods, VARTBC)); /* can't have close */
+        cs_assert(!testbit(mods, VARTBC)); /* can't have close */
         if (mods & VARPRIVATE) { /* private global ? */
             checkvarcollision(fs, name, "private", searchprivate);
             vidx = newprivate(fs, name, mods);
@@ -1401,7 +1401,7 @@ static void marktbc(FunctionState *fs, int idx) {
 
 
 static int closedecl(FunctionState *fs, int vidx) {
-    if (cr_unlikely(vidx == -1)) /* closing global ? */
+    if (cs_unlikely(vidx == -1)) /* closing global ? */
         crP_semerror(fs->lx, "can't close global variables");
     return fs->activelocals;
 }
@@ -1409,7 +1409,7 @@ static int closedecl(FunctionState *fs, int vidx) {
 
 /* check if decl at 'vidx' needs to be closed and return the index */
 static void closeletdecl(FunctionState *fs, int nvars, int vidx, int *tbc) {
-    if (cr_unlikely(*tbc != -1)) { /* already have close ? */
+    if (cs_unlikely(*tbc != -1)) { /* already have close ? */
         crP_semerror(fs->lx, 
                 "multiple to-be-closed variables in a single declaration");
     } else {
@@ -1419,7 +1419,7 @@ static void closeletdecl(FunctionState *fs, int nvars, int vidx, int *tbc) {
 
 
 static OString *declname(Lexer *lx, int *mods) {
-    cr_assert(mods != NULL);
+    cs_assert(mods != NULL);
     OString *name = expect_id(lx);
     *mods = modifiers(lx, getstrbytes(name));
     return name;
@@ -1427,7 +1427,7 @@ static OString *declname(Lexer *lx, int *mods) {
 
 
 static OString *newdecl(FunctionState *fs, ExpInfo *var, int *mods, int *vidx) {
-    cr_assert(vidx != NULL);
+    cs_assert(vidx != NULL);
     OString *name = declname(fs->lx, mods);
     *vidx = newvar(fs, name, var, *mods);
     return name;
@@ -1622,20 +1622,20 @@ static void codeinherit(Lexer *lx, OString *name, Scope *s, ExpInfo *var) {
     if (private) { /* superclass is private global ? */
         /* assertion: 'name' (class) is not private global (no collision) */
         searchprivate(fs, supname, var);
-    } else if (cr_unlikely(streq(name, supname))) { /* name collision ? */
+    } else if (cs_unlikely(streq(name, supname))) { /* name collision ? */
         crP_semerror(lx, crS_pushfstring(lx->ts,
             "variable '%s' attempt to inherit itself", name));
     } else { /* superclass is local, upvalue or global */
         searchvar(fs, supname, var, 1);
     }
     crC_varexp2stack(fs, var); /* put superclass on the stack */
-    cr_assert(var->et == EXP_FINEXPR);
+    cs_assert(var->et == EXP_FINEXPR);
     startscope(fs, s, 0); /* scope for 'super' */
     newlocallit(lx, "super"); /* local var for 'super' */
     adjustlocals(lx, 1);
     searchvar(fs, name, var, 1); /* search class variable */
     crC_varexp2stack(fs, var); /* put class on the stack */
-    cr_assert(var->et == EXP_FINEXPR);
+    cs_assert(var->et == EXP_FINEXPR);
     crC_emitI(fs, OP_INHERIT);
     fs->sp -= 2; /* after inherit both classes are popped */
     lx->ps->cs->super = 1;
@@ -1653,7 +1653,7 @@ static void startcs(Lexer *lx, ClassState *cs) {
 /* end current 'ClassState' */
 static void endcs(Lexer *lx) {
     ParserState *ps = lx->ps;
-    cr_assert(ps->cs != NULL);
+    cs_assert(ps->cs != NULL);
     if (ps->cs->super)
         endscope(lx->fs);
     ps->cs = ps->cs->prev;
@@ -1661,7 +1661,7 @@ static void endcs(Lexer *lx) {
 
 
 static void codemethod(FunctionState *fs, ExpInfo *var) {
-    cr_assert(var->et == EXP_STRING);
+    cs_assert(var->et == EXP_STRING);
     if (sisvmtmethod(var->u.str)) {
         crC_emitIL(fs, OP_SETMM, var->u.str->extra);
     } else {
@@ -1711,7 +1711,7 @@ static void classdecl(Lexer *lx) {
         codeinherit(lx, name, &s, &e);
     searchvar(fs, name, &e, 1); /* find class variable */
     crC_varexp2stack(fs, &e); /* put class variable on stack */
-    cr_assert(e.et == EXP_FINEXPR);
+    cs_assert(e.et == EXP_FINEXPR);
     int matchline = lx->line;
     expect(lx, '{');
     classbody(lx);
@@ -1737,10 +1737,10 @@ typedef struct {
         int len; /* number of elements in 'literals' */
         int size; /* size of 'literals' */
     } literals; /* literal information */
-    cr_ubyte havedefault; /* if switch has 'default' case */
-    cr_ubyte havenil; /* if switch has 'nil' case */
-    cr_ubyte havetrue; /* if switch has '1' case */
-    cr_ubyte havefalse; /* if switch has '0' case */
+    cs_ubyte havedefault; /* if switch has 'default' case */
+    cs_ubyte havenil; /* if switch has 'nil' case */
+    cs_ubyte havetrue; /* if switch has '1' case */
+    cs_ubyte havefalse; /* if switch has '0' case */
     int jmp; /* code jmp to patch if 'label' expression is not 'CASEMATCH' */
     enum {
         LABELNONE, /* no labels */
@@ -1763,13 +1763,13 @@ static void initss(SwitchState *ss) {
 
 
 /* convert literal information into text */
-static const char *li2text(cr_State *ts, LiteralInfo *li) {
+static const char *li2text(cs_State *ts, LiteralInfo *li) {
     switch (li->tt) {
-    case CR_VSTRING:
+    case CS_VSTRING:
         return crS_pushfstring(ts, " (%s)", getstrbytes(li->lit.str));
-    case CR_VNUMINT: return crS_pushfstring(ts, " (%I)", li->lit.i);
-    case CR_VNUMFLT: return crS_pushfstring(ts, " (%N)", li->lit.n);
-    default: cr_unreachable();
+    case CS_VNUMINT: return crS_pushfstring(ts, " (%I)", li->lit.i);
+    case CS_VNUMFLT: return crS_pushfstring(ts, " (%N)", li->lit.n);
+    default: cs_unreachable();
     }
 }
 
@@ -1781,22 +1781,22 @@ static int findli(SwitchState *ss, LiteralInfo *tlit) {
         if (tlit->tt != curr->tt) /* skip if types don't match */
             continue;
         switch (tlit->tt) {
-        case CR_VSTRING: {
+        case CS_VSTRING: {
             if (streq(tlit->lit.str, curr->lit.str))
                 return i;
             break;
         }
-        case CR_VNUMINT: {
+        case CS_VNUMINT: {
             if (cri_numeq(tlit->lit.i, curr->lit.i))
                 return i;
             break;
         }
-        case CR_VNUMFLT: {
+        case CS_VNUMFLT: {
             if (cri_numeq(tlit->lit.n, curr->lit.n))
                 return i;
             break;
         }
-        default: cr_unreachable();
+        default: cs_unreachable();
         }
     }
     return -1;
@@ -1808,22 +1808,22 @@ static LiteralInfo checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     LiteralInfo li;
     int extra = 0;
     const char *what = NULL;
-    cr_assert(eisconstant(e));
+    cs_assert(eisconstant(e));
     switch (e->et) {
     case EXP_FALSE: {
-        if (cr_unlikely(ss->havefalse))
+        if (cs_unlikely(ss->havefalse))
             what = "false";
         ss->havefalse = 1;
         break;
     }
     case EXP_TRUE: {
-        if (cr_unlikely(ss->havetrue))
+        if (cs_unlikely(ss->havetrue))
             what = "true";
         ss->havetrue = 1;
         break;
     }
     case EXP_NIL: {
-        if (cr_unlikely(ss->havenil))
+        if (cs_unlikely(ss->havenil))
             what = "nil";
         ss->havenil = 1;
         break;
@@ -1831,30 +1831,30 @@ static LiteralInfo checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     case EXP_STRING: {
         what = "string";
         li.lit.str = e->u.str;
-        li.tt = CR_VSTRING;
+        li.tt = CS_VSTRING;
         goto findliteral;
     }
     case EXP_INT: {
         what = "integer";
         li.lit.i = e->u.i;
-        li.tt = CR_VNUMINT;
+        li.tt = CS_VNUMINT;
         goto findliteral;
     }
     case EXP_FLT: {
         what = "number";
         li.lit.n = e->u.n;
-        li.tt = CR_VNUMFLT;
+        li.tt = CS_VNUMFLT;
 findliteral:;
         int idx = findli(ss, &li);
-        if (cr_likely(idx < 0)) 
+        if (cs_likely(idx < 0)) 
             what = NULL;
         else
             extra = 1;
         break;
     }
-    default: cr_unreachable();
+    default: cs_unreachable();
     }
-    if (cr_unlikely(what)) {
+    if (cs_unlikely(what)) {
         crP_semerror(lx, crS_pushfstring(lx->ts,
         "duplicate %s literal%s in switch statement", 
         what, (extra ? li2text(lx->ts, &li) : "")));
@@ -1958,7 +1958,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, DynCtx *ctx) {
         }
     }
     if (ss->label == LABELMATCH) { /* have ctmatch */
-        cr_assert(endctx.pc > ctx->pc); /* must have valid 'endctx' */
+        cs_assert(endctx.pc > ctx->pc); /* must have valid 'endctx' */
         loadctx(fs, &endctx); /* load it */
     }
 }
@@ -2000,7 +2000,7 @@ static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
     int condisctc = eisconstant(cond);
     int bodypc = currentPC(fs);
     int isloop = scopeisloop(fs->scope);
-    cr_assert(isloop == (jmpop == OP_JMPS));
+    cs_assert(isloop == (jmpop == OP_JMPS));
     optaway = condistrue = 0;
     endctx.pc = NOJMP;
     if (condisctc && !(condistrue = eistrue(cond)))
@@ -2012,7 +2012,7 @@ static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
         loadctx(fs, startctx);
         resetpatchlist(fs);
     } else if (condisctc && fs->lastwasret) {
-        cr_assert(condistrue);
+        cs_assert(condistrue);
         storectx(fs, &endctx);
         storereachablectx(fs);
     } else {
@@ -2079,7 +2079,7 @@ static void handleloopctx(FunctionState *fs, struct LoopCtx *ctx, int store) {
         ctx->prev = currctx;
         currctx = ctx;
     } else { /* load 'currctx' */
-        cr_assert(ctx == NULL); /* please provide NULL for clarity */
+        cs_assert(ctx == NULL); /* please provide NULL for clarity */
         fs->loopscope = currctx->loopscope;
         fs->loopstart = currctx->loopstart;
         currctx = currctx->prev;
@@ -2100,7 +2100,7 @@ static void startloop(FunctionState *fs, Scope *s, struct LoopCtx *ctx,
 
 /* end loop scope */
 static void endloop(FunctionState *fs) {
-    cr_assert(scopeisloop(fs->scope));
+    cs_assert(scopeisloop(fs->scope));
     endscope(fs);
     handleloopctx(fs, NULL, 0); /* load old loop ctx values */
 }
@@ -2130,7 +2130,7 @@ static void whilestm(Lexer *lx) {
 static void foreachvar(Lexer *lx) {
     OString *name = expect_id(lx);
     int mods = modifiers(lx, getstrbytes(name));
-    if (cr_unlikely(testbits(mods, bit2mask(VARPRIVATE, VARTBC)))) {
+    if (cs_unlikely(testbits(mods, bit2mask(VARPRIVATE, VARTBC)))) {
         crP_semerror(lx, crS_pushfstring(lx->ts,
         "local 'for each' loop variable '%s' can only have 'const' modifier",
         name));
@@ -2145,7 +2145,7 @@ static void patchforjmp(FunctionState *fs, int pc, int target, int back) {
     int offset = target - pc;
     if (back)
         offset = -offset;
-    if (cr_unlikely(offset > MAXJMP))
+    if (cs_unlikely(offset > MAXJMP))
         crY_syntaxerror(fs->lx, "control structure (for loop) too long");
     SETARG_L(jmp, 1, offset);
 }
@@ -2155,7 +2155,7 @@ static void patchforjmp(FunctionState *fs, int pc, int target, int back) {
 static int forexprlist(Lexer *lx, ExpInfo *e, int limit) {
     int nexpr = 1;
     expr(lx, e);
-    if (cr_unlikely(eisconstant(e))) {
+    if (cs_unlikely(eisconstant(e))) {
         crP_semerror(lx, crS_pushfstring(lx->ts,
         "'%s' is invalid iterator function (for loop)",
         crY_tok2str(lx, lx->t.tk)));
@@ -2165,7 +2165,7 @@ static int forexprlist(Lexer *lx, ExpInfo *e, int limit) {
         expr(lx, e);
         nexpr++;
     }
-    if (cr_unlikely(nexpr > limit))
+    if (cs_unlikely(nexpr > limit))
         limiterror(lx->fs, "expressions", limit);
     return nexpr;
 }
@@ -2236,7 +2236,7 @@ void forcond(Lexer *lx, ExpInfo *e) {
 void forendclause(Lexer *lx, ExpInfo *cond, int *clausepc) {
     FunctionState *fs = lx->fs;
     int bodyjmp, loopjmp;
-    cr_assert(*clausepc == NOJMP);
+    cs_assert(*clausepc == NOJMP);
     if (check(lx, ')')) { /* no end clause ? */
         return; /* convert to 'while' loop */
     } else {
@@ -2305,11 +2305,11 @@ static void loopstm(Lexer *lx) {
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     crY_scan(lx); /* skip 'continue' */
-    if (cr_unlikely(fs->loopstart == NOJMP)) { /* no loop ? */
-        cr_assert(fs->loopscope == NULL);
+    if (cs_unlikely(fs->loopstart == NOJMP)) { /* no loop ? */
+        cs_assert(fs->loopscope == NULL);
         crP_semerror(lx, "'continue' not in loop statement");
     } else {
-        cr_assert(fs->loopscope != NULL);
+        cs_assert(fs->loopscope != NULL);
         int extra = fs->scope->nswscope - fs->loopscope->nswscope;
         poplocals(fs, fs->loopscope->activelocals, extra);
         int jmp = crC_jmp(fs, OP_JMPS);
@@ -2335,8 +2335,8 @@ static void breakstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     const Scope *s = getcfscope(fs);
     crY_scan(lx); /* skip 'break' */
-    if (cr_unlikely(s == NULL)) { /* error ? */
-        cr_assert(fs->loopscope == NULL && fs->switchscope == NULL);
+    if (cs_unlikely(s == NULL)) { /* error ? */
+        cs_assert(fs->loopscope == NULL && fs->switchscope == NULL);
         crP_semerror(lx, "'break' not in loop or switch statement");
     } else { /* otherwise add the jmp to patch list */
         poplocals(fs, s->activelocals, scopeisswitch(s));
@@ -2359,8 +2359,8 @@ static void returnstm(Lexer *lx) {
     if (!check(lx, ';')) { /* have return values ? */
         nreturns = exprlist(lx, &e);
         if (eismulret(&e)) {
-            crC_setreturns(fs, &e, CR_MULRET);
-            nreturns = CR_MULRET;
+            crC_setreturns(fs, &e, CS_MULRET);
+            nreturns = CS_MULRET;
         } else {
             crC_exp2stack(fs, &e);
         }
@@ -2433,7 +2433,7 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
     setvararg(fs, 0); /* main is always vararg */
     crY_scan(lx); /* scan first token */
     parseuntilEOS(lx); /* parse */
-    cr_assert(lx->t.tk == TK_EOS);
+    cs_assert(lx->t.tk == TK_EOS);
     endfs(fs);
 #if 1
     /* low-level full bytecode disassembly */
@@ -2443,7 +2443,7 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
 
 
 /* parse source code */
-CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
+CrClosure *crP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
                      ParserState *ps, const char *source) {
     Lexer lx;
     FunctionState fs;
@@ -2461,7 +2461,7 @@ CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
     lx.buff = buff;
     crY_setsource(ts, &lx, br, fs.fn->source);
     mainfunc(&fs, &lx);
-    cr_assert(ps->lvars.len == 0); /* all scopes should be finished */
+    cs_assert(ps->lvars.len == 0); /* all scopes should be finished */
     ts->sp.p--; /* remove scanner hashtable */
     return cl;
 }

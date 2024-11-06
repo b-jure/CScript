@@ -27,10 +27,10 @@
 
 
 /* test for pseudo index */
-#define ispseudo(i)		((i) <= CR_REGISTRYINDEX)
+#define ispseudo(i)		((i) <= CS_GINSTANCEINDEX)
 
 /* test for upvalue */
-#define isupvalue(i)		((i) < CR_REGISTRYINDEX)
+#define isupvalue(i)		((i) < CS_GINSTANCEINDEX)
 
 /* test for valid index */
 #define isvalid(ts,o)           (!ttisnil(o) || (o) != &G_(ts)->nil)
@@ -41,7 +41,7 @@
 ** Invalid indices (using upvalue index for CScript functions) return
 ** special nil value '&G_(ts)->nil'.
 */
-static TValue *index2value(const cr_State *ts, int index) {
+static TValue *index2value(const cs_State *ts, int index) {
     CallFrame *cf = ts->cf;
     if (index >= 0) {
         api_check(ts, index < (ts->sp.p - cf->func.p - 1), "index too large");
@@ -49,12 +49,12 @@ static TValue *index2value(const cr_State *ts, int index) {
     } else if (!ispseudo(index)) { /* negative index? */
         api_check(ts, -index <= ts->sp.p - cf->func.p, "index too small");
         return s2v(ts->sp.p + index);
-    } else if (index == CR_REGISTRYINDEX) { /* global variables table? */
-        return &G_(ts)->globals;
+    } else if (index == CS_GINSTANCEINDEX) { /* global instance? */
+        return &G_(ts)->ginstance;
     } else { /* upvalues */
-        index = CR_REGISTRYINDEX - index;
+        index = CS_GINSTANCEINDEX - index;
         api_check(ts, index < MAXUPVAL, "upvalue index too large");
-        if (cr_likely(ttisccl(s2v(cf->func.p)))) { /* C closure? */
+        if (cs_likely(ttisccl(s2v(cf->func.p)))) { /* C closure? */
             CClosure *ccl = cclval(s2v(cf->func.p));
             return &ccl->upvals[index];
         } else { /* CScript function (invalid) */
@@ -65,7 +65,7 @@ static TValue *index2value(const cr_State *ts, int index) {
 }
 
 
-static SPtr index2stack(const cr_State *ts, int index) {
+static SPtr index2stack(const cs_State *ts, int index) {
     CallFrame *cf = ts->cf;
     if (index >= 0) {
         SPtr p = cf->func.p + index;
@@ -79,24 +79,24 @@ static SPtr index2stack(const cr_State *ts, int index) {
 }
 
 
-CR_API cr_CFunction cr_atpanic(cr_State *ts, cr_CFunction fpanic) {
-    cr_CFunction old_panic;
-    cr_lock(ts);
+CS_API cs_CFunction cs_atpanic(cs_State *ts, cs_CFunction fpanic) {
+    cs_CFunction old_panic;
+    cs_lock(ts);
     old_panic = G_(ts)->fpanic;
     G_(ts)->fpanic = fpanic;
-    cr_unlock(ts);
+    cs_unlock(ts);
     return old_panic;
 }
 
 
-CR_API cr_Number cr_version(cr_State *ts) {
+CS_API cs_Number cs_version(cs_State *ts) {
     UNUSED(ts);
-    return CR_VERSION_NUMBER;
+    return CS_VERSION_NUMBER;
 }
 
 
 /* auxiliary function that sets the stack top without locking */
-cr_inline void auxsettop(cr_State *ts, int n) {
+cs_inline void auxsettop(cs_State *ts, int n) {
     CallFrame *cf;
     SPtr func, newtop;
     ptrdiff_t diff;
@@ -113,7 +113,7 @@ cr_inline void auxsettop(cr_State *ts, int n) {
     }
     newtop = ts->sp.p + diff;
     if (diff < 0 && ts->tbclist.p >= newtop) {
-        cr_assert(hastocloseCfunc(cf->nresults));
+        cs_assert(hastocloseCfunc(cf->nresults));
         crF_close(ts, newtop, CLOSEKTOP);
     }
     ts->sp.p = newtop; /* set new top */
@@ -128,10 +128,10 @@ cr_inline void auxsettop(cr_State *ts, int n) {
 ** This function can run '__close' if it removes an index from the stack
 ** marked as to-be-closed.
 */
-CR_API void cr_setntop(cr_State *ts, int n) {
-    cr_lock(ts);
+CS_API void cs_setntop(cs_State *ts, int n) {
+    cs_lock(ts);
     auxsettop(ts, n);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -140,7 +140,7 @@ CR_API void cr_setntop(cr_State *ts, int n) {
 ** This result is equal to the number of elements on the stack - 1.
 ** Negative value (-1) means an empty stack.
 */
-CR_API int cr_gettop(const cr_State *ts) {
+CS_API int cs_gettop(const cs_State *ts) {
     return cast_int(ts->sp.p - (ts->cf->func.p + 1) - 1);
 }
 
@@ -150,7 +150,7 @@ CR_API int cr_gettop(const cr_State *ts) {
 ** For example, if there are 5 values on the stack then passing
 ** -1 as the value of 'index' would be return 4. 
 */
-CR_API int cr_absindex(cr_State *ts, int index)
+CS_API int cs_absindex(cs_State *ts, int index)
 {
     return (index >= 0 || ispseudo(index))
             ? index
@@ -159,10 +159,10 @@ CR_API int cr_absindex(cr_State *ts, int index)
 
 
 /* 
-** Auxiliary to 'cr_rotate', reverses stack values 'from' until 'to'.
+** Auxiliary to 'cs_rotate', reverses stack values 'from' until 'to'.
 ** Note that this does not perform a deep copy.
 */
-cr_sinline void reverse(cr_State *ts, SPtr from, SPtr to) {
+cs_sinline void reverse(cs_State *ts, SPtr from, SPtr to) {
     while (from < to) {
         TValue aux;
         setobj(ts, &aux, s2v(from));
@@ -182,17 +182,17 @@ cr_sinline void reverse(cr_State *ts, SPtr from, SPtr to) {
 **
 ** Example right-rotation:
 ** [func][0][1][2][3][4]
-** cr_rotate(ts, 2, 2);
+** cs_rotate(ts, 2, 2);
 ** [func][0][1][3][4][2]
 **
 ** Example left-rotation:
 ** [func][0][1][2][3][4]
-** cr_rotate(ts, 2, -2);
+** cs_rotate(ts, 2, -2);
 ** [func][0][1][4][3][2]
 */
-CR_API void cr_rotate(cr_State *ts, int index, int n) {
+CS_API void cs_rotate(cs_State *ts, int index, int n) {
     SPtr start, end, pivot;
-    cr_lock(ts);
+    cs_lock(ts);
     end = ts->sp.p - 1; /* end of segment */
     start = index2stack(ts, index); /* start of segment */
     api_check(ts, (n >= 0 ? n : -n) <= (end - start + 1), "invalid 'n'");
@@ -200,7 +200,7 @@ CR_API void cr_rotate(cr_State *ts, int index, int n) {
     reverse(ts, start, pivot);
     reverse(ts, pivot + 1, end);
     reverse(ts, start, end);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -208,16 +208,16 @@ CR_API void cr_rotate(cr_State *ts, int index, int n) {
 ** Copy value at index 'src' to stack slot at index 'dest'.
 ** Note that 'dest' must be stack index.
 */
-CR_API void cr_copy(cr_State *ts, int src, int dest) {
+CS_API void cs_copy(cs_State *ts, int src, int dest) {
     TValue *from, *to;
-    cr_lock(ts);
+    cs_lock(ts);
     from = index2value(ts, src);
     to = index2value(ts, dest);
     api_check(ts, isvalid(ts, to), "invalid index");
     setobj(ts, to, from);
     if (isupvalue(dest)) /* C closure upvalue? */
         crG_barrier(ts, crclval(s2v(ts->cf->func.p)), from);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -225,10 +225,10 @@ CR_API void cr_copy(cr_State *ts, int src, int dest) {
 ** Check if stack has enough space for 'n' elements,
 ** if not ensure it does.
 */
-CR_API int cr_checkstack(cr_State *ts, int n) {
+CS_API int cs_checkstack(cs_State *ts, int n) {
     CallFrame *cf;
     int res;
-    cr_lock(ts);
+    cs_lock(ts);
     cf = ts->cf;
     api_check(ts, n >= 0, "negative 'n'");
     if (cf->top.p - ts->sp.p >= n) /* stack large enough? */
@@ -237,7 +237,7 @@ CR_API int cr_checkstack(cr_State *ts, int n) {
         res = crT_growstack(ts, n, 0);
     if (res && cf->top.p < ts->sp.p + n)
         cf->top.p = ts->sp.p + n; /* adjust top */
-    cr_unlock(ts);
+    cs_unlock(ts);
     return res;
 }
 
@@ -250,10 +250,10 @@ CR_API int cr_checkstack(cr_State *ts, int n) {
 /*
 ** Push value at the index on to the top of the stack.
 */
-CR_API void cr_push(cr_State *ts, int index) {
-    cr_lock(ts);
+CS_API void cs_push(cs_State *ts, int index) {
+    cs_lock(ts);
     pushvalue(ts, index);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -262,9 +262,9 @@ CR_API void cr_push(cr_State *ts, int index) {
 ** This function pops 'n' values from 'src' and pushes them
 ** onto the stack of 'dest'.
 */
-CR_API void cr_xmove(cr_State *src, cr_State *dest, int n) {
+CS_API void cs_xmove(cs_State *src, cs_State *dest, int n) {
     if (src == dest) return; /* same thread ? */
-    cr_lock(dest);
+    cs_lock(dest);
     api_checknelems(src, n); /* have enough elements to move? */
     api_check(src, G_(src) == G_(dest), "moving between different states");
     api_check(src, dest->cf->top.p - dest->sp.p >= n, "dest stack overflow");
@@ -273,71 +273,75 @@ CR_API void cr_xmove(cr_State *src, cr_State *dest, int n) {
         setobjs2s(dest, dest->sp.p, src->sp.p + i);
         dest->sp.p++; /* already checked by 'api_check' */
     }
-    cr_unlock(dest);
+    cs_unlock(dest);
 }
 
 
 /* Check if the value at index is a number. */
-CR_API int cr_is_number(cr_State *ts, int index) {
-    cr_Number n;
+CS_API int cs_is_number(cs_State *ts, int index) {
+    cs_Number n;
     const TValue *o = index2value(ts, index);
     return tonumber(o, &n);
 }
 
 
 /* Check if the value at index is an integer. */
-CR_API int cr_is_integer(cr_State *ts, int index) {
-    cr_Integer i;
+CS_API int cs_is_integer(cs_State *ts, int index) {
+    cs_Integer i;
     const TValue *o = index2value(ts, index);
     return tointeger(o, &i);
 }
 
 
 /* Check if the value at index is a string. */
-CR_API int cr_is_string(cr_State *ts, int index) {
+CS_API int cs_is_string(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return ttisstr(o);
 }
 
 
 /* Check if the value at index is a C function. */
-CR_API int cr_is_cfunction(cr_State *ts, int index) {
+CS_API int cs_is_cfunction(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return (ttiscfn(o) || ttisccl(o));
 }
 
 
 /* Check if the value at index is a userdata. */
-CR_API int cr_is_userdata(cr_State *ts, int index) {
+CS_API int cs_is_userdata(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return (ttislud(o) || ttisud(o));
 }
 
 
-cr_sinline TValue *getvvmt(cr_State *ts, const TValue *o) {
+cs_sinline TValue *getvvmt(cs_State *ts, const TValue *o) {
     switch (ttype(o)) {
-        case CR_VINSTANCE: return insval(o)->oclass->vmt;
-        case CR_TCLASS: return clsval(o)->vmt;
-        case CR_TUDATA: return udval(o)->vmt;
+        case CS_VINSTANCE: {
+            if (insval(o) != GI(ts))
+                return insval(o)->oclass->vmt;
+            return NULL;
+        }
+        case CS_TCLASS: return clsval(o)->vmt;
+        case CS_TUDATA: return udval(o)->vmt;
         default: return G_(ts)->vmt[ttype(o)];
     }
 }
 
 
-cr_sinline TValue *getvmt(cr_State *ts, int index) {
+cs_sinline TValue *getvmt(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return getvvmt(ts, o);
 }
 
 
 /* 
-** Return the type of the value at valid index or CR_TNONE
+** Return the type of the value at valid index or CS_TNONE
 ** if index is invalid.
-** The types returned are defined in 'cscript.h' (CR_T*).
+** The types returned are defined in 'cscript.h' (CS_T*).
 */
-CR_API int cr_type(cr_State *ts, int index) {
+CS_API int cs_type(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
-    return (isvalid(ts, o) ? ttype(o) : CR_TNONE);
+    return (isvalid(ts, o) ? ttype(o) : CS_TNONE);
 }
 
 
@@ -346,9 +350,9 @@ CR_API int cr_type(cr_State *ts, int index) {
 ** The returned string has a static lifetime and should not be modified
 ** directly.
 */
-CR_API const char *cr_typename(cr_State *ts, int type) {
+CS_API const char *cs_typename(cs_State *ts, int type) {
     UNUSED(ts);
-    api_check(ts, 0 <= type && type < CR_NUM_TYPES, "invalid type");
+    api_check(ts, 0 <= type && type < CS_NUM_TYPES, "invalid type");
     return typename(type);
 }
 
@@ -358,8 +362,8 @@ CR_API const char *cr_typename(cr_State *ts, int type) {
 ** The fact whether the value was a number is stored in 'pisnum' if
 ** provided, the default value returned when index is not a number is 0.0.
 */
-CR_API cr_Number cr_to_numberx(cr_State *ts, int index, int *pisnum) {
-    cr_Number n = 0.0;
+CS_API cs_Number cs_to_numberx(cs_State *ts, int index, int *pisnum) {
+    cs_Number n = 0.0;
     const TValue *o = index2value(ts, index);
     int isnum = tonumber(o, &n);
     if (pisnum)
@@ -373,8 +377,8 @@ CR_API cr_Number cr_to_numberx(cr_State *ts, int index, int *pisnum) {
 ** The fact whether the value was an integer is stored in 'pisint' if
 ** provided, the default value returned when index is not an integer is 0.
 */
-CR_API cr_Integer cr_to_integerx(cr_State *ts, int index, int *pisint) {
-    cr_Integer i = 0;
+CS_API cs_Integer cs_to_integerx(cs_State *ts, int index, int *pisint) {
+    cs_Integer i = 0;
     const TValue *o = index2value(ts, index);
     int isint = tointeger(o, &i);
     if (pisint)
@@ -387,7 +391,7 @@ CR_API cr_Integer cr_to_integerx(cr_State *ts, int index, int *pisint) {
 ** Returns 0 or 1 whether the value at index is false or true respectively.
 ** All values in CScript are considered true except `nil` and `false`.
 */
-CR_API int cr_to_bool(cr_State *ts, int index) {
+CS_API int cs_to_bool(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return !cri_isfalse(o);
 }
@@ -399,24 +403,24 @@ CR_API int cr_to_bool(cr_State *ts, int index) {
 ** If the value is not a string return NULL (in this case if 'plen' is
 ** provided it is ignored).
 */
-CR_API const char *cr_to_lstring(cr_State *ts, int index, size_t *plen) {
+CS_API const char *cs_to_lstring(cs_State *ts, int index, size_t *plen) {
     const TValue *o;
-    cr_lock(ts);
+    cs_lock(ts);
     o = index2value(ts, index);
     if (!ttisstr(o)) /* not a string? */
         return NULL;
     if (plen)
         *plen = lenstr(o); 
-    cr_unlock(ts);
+    cs_unlock(ts);
     return cstrval(o);
 }
 
 
 /*
-** Return 'cr_CFunction' from the value at index.
+** Return 'cs_CFunction' from the value at index.
 ** If the value is not a C closure or light C function, then this returns NULL.
 */
-CR_API cr_CFunction cr_to_cfunction(cr_State *ts, int index) {
+CS_API cs_CFunction cs_to_cfunction(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     if (ttiscfn(o)) 
         return cfval(o);
@@ -427,10 +431,10 @@ CR_API cr_CFunction cr_to_cfunction(cr_State *ts, int index) {
 }
 
 
-cr_sinline void *touserdata(const TValue *o) {
+cs_sinline void *touserdata(const TValue *o) {
     switch (ttype(o)) {
-        case CR_TLUDATA: return pval(o);
-        case CR_TUDATA: return getudmem(udval(o));
+        case CS_TLUDATA: return pval(o);
+        case CS_TUDATA: return getudmem(udval(o));
         default: return NULL;
     }
 }
@@ -440,7 +444,7 @@ cr_sinline void *touserdata(const TValue *o) {
 ** Return pointer to userdata memory from the value at index.
 ** If the value is not userdata return NULL.
 */
-CR_API void *cr_to_userdata(cr_State *ts, int index) {
+CS_API void *cs_to_userdata(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return touserdata(o);
 }
@@ -451,12 +455,12 @@ CR_API void *cr_to_userdata(cr_State *ts, int index) {
 ** If the object is not userdata, C function or collectable, then this
 ** returns NULL. Note that returned pointer shouldn't be modified.
 */
-CR_API const void *cr_to_pointer(cr_State *ts, int index) {
+CS_API const void *cs_to_pointer(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     switch (ttypetag(o)) {
-        case CR_VCFUNCTION:
+        case CS_VCFUNCTION:
             return cast(void *, cast_sizet(cfval(o)));
-        case CR_VUDATA: case CR_VLUDATA:
+        case CS_VUDATA: case CS_VLUDATA:
             return touserdata(o);
         default: {
             if (iscollectable(o))
@@ -472,7 +476,7 @@ CR_API const void *cr_to_pointer(cr_State *ts, int index) {
 ** Return the thread value at index.
 ** If the value is not a thread, then this returns NULL.
 */
-CR_API cr_State *cr_to_thread(cr_State *ts, int index) {
+CS_API cs_State *cs_to_thread(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return (ttisthread(o) ? thval(o) : NULL);
 }
@@ -483,9 +487,9 @@ CR_API cr_State *cr_to_thread(cr_State *ts, int index) {
 ** located in 'cscript.h'.
 ** This functions is free to call overloadable methods.
 */
-CR_API void cr_arith(cr_State *ts, int op) {
-    cr_lock(ts);
-    if (op != CR_OPUNM && op != CR_OPBNOT) { /* binary op? */
+CS_API void cs_arith(cs_State *ts, int op) {
+    cs_lock(ts);
+    if (op != CS_OPUNM && op != CS_OPBNOT) { /* binary op? */
         api_checknelems(ts, 2);
         crV_binarithm(ts, s2v(ts->sp.p-2), s2v(ts->sp.p-1), ts->sp.p-2, op);
         ts->sp.p--; /* pop second operand */
@@ -493,7 +497,7 @@ CR_API void cr_arith(cr_State *ts, int op) {
         api_checknelems(ts, 1);
         crV_unarithm(ts, s2v(ts->sp.p-1), ts->sp.p-1, op);
     }
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -502,7 +506,7 @@ CR_API void cr_arith(cr_State *ts, int op) {
 ** "Raw" meaning this function won't call overloaded methods.
 ** In cases where either of the indexes is not valid this always returns 0.
 */
-CR_API int cr_rawequal(cr_State *ts, int index1, int index2) {
+CS_API int cs_rawequal(cs_State *ts, int index1, int index2) {
     const TValue *lhs = index2value(ts, index1);
     const TValue *rhs = index2value(ts, index2);
     return (isvalid(ts, lhs) && isvalid(ts, rhs) ? crV_raweq(lhs, rhs) : 0);
@@ -514,69 +518,69 @@ CR_API int cr_rawequal(cr_State *ts, int index1, int index2) {
 ** This function is free to call overloded methods.
 ** In case either index is invalid this then always returns 0.
 */
-CR_API int cr_compare(cr_State *ts, int index1, int index2, int op) {
+CS_API int cs_compare(cs_State *ts, int index1, int index2, int op) {
     const TValue *lhs;
     const TValue *rhs;
     int res = 0;
-    cr_lock(ts); /* might call overloaded method */
+    cs_lock(ts); /* might call overloaded method */
     lhs = index2value(ts, index1);
     rhs = index2value(ts, index2);
     if (isvalid(ts, lhs) && isvalid(ts, rhs)) {
         switch (op) {
-            case CR_OPEQ: res = crV_ordereq(ts, lhs, rhs);
-            case CR_OPLT: res = crV_orderlt(ts, lhs, rhs);
-            case CR_OPLE: res = crV_orderle(ts, lhs, rhs);
+            case CS_OPEQ: res = crV_ordereq(ts, lhs, rhs);
+            case CS_OPLT: res = crV_orderlt(ts, lhs, rhs);
+            case CS_OPLE: res = crV_orderle(ts, lhs, rhs);
             default: api_check(ts, 0, "invalid 'op'");
         }
     }
-    cr_unlock(ts);
+    cs_unlock(ts);
     return res;
 }
 
 
 /* Push nil value on top of the stack. */
-CR_API void cr_push_nil(cr_State *ts) {
-    cr_lock(ts);
+CS_API void cs_push_nil(cs_State *ts) {
+    cs_lock(ts);
     setnilval(s2v(ts->sp.p));
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-/* Push 'cr_Number' value on top of the stack. */
-CR_API void cr_push_number(cr_State *ts, cr_Number n) {
-    cr_lock(ts);
+/* Push 'cs_Number' value on top of the stack. */
+CS_API void cs_push_number(cs_State *ts, cs_Number n) {
+    cs_lock(ts);
     setfval(s2v(ts->sp.p), n);
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-/* Push 'cr_Integer' value on top of the stack. */
-CR_API void cr_push_integer(cr_State *ts, cr_Integer i) {
-    cr_lock(ts);
+/* Push 'cs_Integer' value on top of the stack. */
+CS_API void cs_push_integer(cs_State *ts, cs_Integer i) {
+    cs_lock(ts);
     setival(s2v(ts->sp.p), i);
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
 /* Push string value of length 'len' on top of the stack. */
-CR_API const char *cr_push_lstring(cr_State *ts, const char *str, size_t len) {
+CS_API const char *cs_push_lstring(cs_State *ts, const char *str, size_t len) {
     OString *s;
-    cr_lock(ts);
+    cs_lock(ts);
     s = (len == 0 ? crS_new(ts, "") : crS_newl(ts, str, len));
     setstrval2s(ts, ts->sp.p, s);
     api_inctop(ts);
     crG_check(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return getstrbytes(s);
 }
 
 
 /* Push null terminated string value on top of the stack. */
-CR_API const char *cr_push_string(cr_State *ts, const char *str) {
-    cr_lock(ts);
+CS_API const char *cs_push_string(cs_State *ts, const char *str) {
+    cs_lock(ts);
     if (str == NULL) {
         setnilval(s2v(ts->sp.p));
     } else {
@@ -586,46 +590,46 @@ CR_API const char *cr_push_string(cr_State *ts, const char *str) {
     }
     api_inctop(ts);
     crG_check(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return str;
 }
 
 
 /* 
 ** Push formatted string with format values in a 'va_list' on top of the stack.
-** Valid format values are c (char), d (int), I (cr_Integer), N (cr_Number),
+** Valid format values are c (char), d (int), I (cs_Integer), N (cs_Number),
 ** s (string), p (pointer) and % ('%'). Note that each format specifier is
 ** preceeded by '%' (so %I...).
 */
-CR_API const char *cr_push_vfstring(cr_State *ts, const char *fmt, va_list argp) {
+CS_API const char *cs_push_vfstring(cs_State *ts, const char *fmt, va_list argp) {
     const char *str;
-    cr_lock(ts);
+    cs_lock(ts);
     str = crS_pushvfstring(ts, fmt, argp);
     crG_check(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return str;
 }
 
 
 /* 
 ** Push formatted string with variable amount of format values on top of the
-** stack. Valid format specifiers are the same as in 'cr_pushvfstring'.
+** stack. Valid format specifiers are the same as in 'cs_pushvfstring'.
 */
-CR_API const char *cr_push_fstring(cr_State *ts, const char *fmt, ...) {
+CS_API const char *cs_push_fstring(cs_State *ts, const char *fmt, ...) {
     const char *str;
     va_list argp;
-    cr_lock(ts);
+    cs_lock(ts);
     va_start(argp, fmt);
     str = crS_pushvfstring(ts, fmt, argp);
     va_end(argp);
     crG_check(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return str;
 }
 
 
 /* auxiliary function, pushes C closure without locking */
-cr_sinline void auxpushcclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
+cs_sinline void auxpushcclosure(cs_State *ts, cs_CFunction fn, int nupvals) {
     if (nupvals == 0) {
         setcfval(s2v(ts->sp.p), fn);
         api_inctop(ts);
@@ -637,7 +641,7 @@ cr_sinline void auxpushcclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
         ts->sp.p -= nupvals;
         while (nupvals--) {
             setobj(ts, &ccl->upvals[nupvals], s2v(ts->sp.p + nupvals));
-            cr_assert(iswhite(ccl));
+            cs_assert(iswhite(ccl));
         }
         setccl2s(ts, ts->sp.p, ccl);
         api_inctop(ts);
@@ -651,12 +655,12 @@ cr_sinline void auxpushcclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
 ** This closure will have 'nupvals' upvalues, these values will be popped
 ** of the stack and inserted into the closure.
 ** If 'nupvals' is 0 then this does not create a C closure, rather it only
-** pushes the 'cr_CFunction' on top of the stack.
+** pushes the 'cs_CFunction' on top of the stack.
 */
-CR_API void cr_push_cclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
-    cr_lock(ts);
+CS_API void cs_push_cclosure(cs_State *ts, cs_CFunction fn, int nupvals) {
+    cs_lock(ts);
     auxpushcclosure(ts, fn, nupvals);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -664,34 +668,34 @@ CR_API void cr_push_cclosure(cr_State *ts, cr_CFunction fn, int nupvals) {
 ** Push boolean value on top of the stack.
 ** If 'b' is 0 then `false` is pushed, otherwise `true`.
 */
-CR_API void cr_push_bool(cr_State *ts, int b) {
-    cr_lock(ts);
+CS_API void cs_push_bool(cs_State *ts, int b) {
+    cs_lock(ts);
     if (b)
         setbtval(s2v(ts->sp.p));
     else
         setbfval(s2v(ts->sp.p));
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
 /* Push light userdata on top of the stack. */
-CR_API void cr_push_lightuserdata(cr_State *ts, void *p) {
-    cr_lock(ts);
+CS_API void cs_push_lightuserdata(cs_State *ts, void *p) {
+    cs_lock(ts);
     setpval(s2v(ts->sp.p), p);
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
 /* Push array on top of the stack. */
-CR_API void cr_push_array(cr_State *ts) {
+CS_API void cs_push_array(cs_State *ts) {
     Array *arr;
-    cr_lock(ts);
+    cs_lock(ts);
     arr = crA_new(ts);
     setarr2s(ts, ts->sp.p, arr);
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -699,38 +703,38 @@ CR_API void cr_push_array(cr_State *ts) {
 ** Push thread 'ts' on top of the stack.
 ** Returns non-zero if the pushed thread is main thread.
 */
-CR_API int cr_push_thread(cr_State *ts) {
-    cr_lock(ts);
+CS_API int cs_push_thread(cs_State *ts) {
+    cs_lock(ts);
     setsv2th(ts, ts->sp.p, ts);
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return (G_(ts)->mainthread == ts);
 }
 
 
-CR_API void cr_push_instance(cr_State *ts, int clsobj) {
+CS_API void cs_push_instance(cs_State *ts, int clsobj) {
     const TValue *o;
     SPtr func;
-    cr_lock(ts);
+    cs_lock(ts);
     o = index2value(ts, clsobj);
     api_check(ts, ttiscls(o), "expect class");
     func = ts->sp.p;
     setcls2s(ts, func, clsval(o));
     api_inctop(ts);
     crV_call(ts, func, 1);
-    cr_assert(ttisins(s2v(ts->sp.p))); /* result is the instance */
-    cr_unlock(ts);
+    cs_assert(ttisins(s2v(ts->sp.p))); /* result is the instance */
+    cs_unlock(ts);
 }
 
 
-cr_sinline void auxsetvmt(TValue *dest, const cr_VMT *vmt) {
-    for (int i = 0; i < CR_NUM_MM; i++)
+cs_sinline void auxsetvmt(TValue *dest, const cs_VMT *vmt) {
+    for (int i = 0; i < CS_NUM_MM; i++)
         setcfval(&dest[i], vmt->func[i]);
 }
 
 
-cr_sinline void auxclearvmt(TValue *vmt) {
-    for (int i = 0; i < CR_NUM_MM; i++)
+cs_sinline void auxclearvmt(TValue *vmt) {
+    for (int i = 0; i < CS_NUM_MM; i++)
         setnilval(&vmt[i]);
 }
 
@@ -742,7 +746,7 @@ cr_sinline void auxclearvmt(TValue *vmt) {
       crG_barrierback(ts, obj2gco(ht), v); }
 
 
-cr_sinline void auxrawsetstr(cr_State *ts, HTable *ht, const char *str,
+cs_sinline void auxrawsetstr(cs_State *ts, HTable *ht, const char *str,
                              const TValue *v) {
     const TValue *slot;
     OString *s = crS_new(ts, str);
@@ -758,9 +762,9 @@ cr_sinline void auxrawsetstr(cr_State *ts, HTable *ht, const char *str,
 }
 
 
-cr_sinline void auxsetentrylist(cr_State *ts, OClass *cls, cr_Entry *list,
+cs_sinline void auxsetentrylist(cs_State *ts, OClass *cls, cs_Entry *list,
                                 int nup) {
-    cr_checkstack(ts, nup);
+    cs_checkstack(ts, nup);
     if (list->name && !cls->methods) { /* have entry and no method table? */
         cls->methods = crH_new(ts);
         crG_check(ts);
@@ -776,10 +780,10 @@ cr_sinline void auxsetentrylist(cr_State *ts, OClass *cls, cr_Entry *list,
 }
 
 
-CR_API void cr_push_class(cr_State *ts, cr_VMT *vmt, int clsobjabs, int nup,
-                          cr_Entry *entries) {
+CS_API void cs_push_class(cs_State *ts, cs_VMT *vmt, int clsobjabs, int nup,
+                          cs_Entry *entries) {
     OClass *cls;
-    cr_lock(ts);
+    cs_lock(ts);
     cls = crMM_newclass(ts);
     crG_check(ts);
     setcls2s(ts, ts->sp.p, cls);
@@ -801,7 +805,7 @@ CR_API void cr_push_class(cr_State *ts, cr_VMT *vmt, int clsobjabs, int nup,
         auxsetentrylist(ts, cls, entries, nup);
     else /* otherwise there should be no upvalues */
         api_check(ts, nup == 0, "'nup' non-zero but 'entries' NULL");
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -817,16 +821,16 @@ CR_API void cr_push_class(cr_State *ts, cr_VMT *vmt, int clsobjabs, int nup,
 #define setslot2stacktop(ts,slot)   setslot2stack(ts,slot,(ts)->sp.p - 1)
 
 
-cr_sinline int finishrawget(cr_State *ts, const TValue *slot) {
+cs_sinline int finishrawget(cs_State *ts, const TValue *slot) {
     setslot2stack(ts, slot, ts->sp.p);
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
 
 
 /* auxiliary raw function for getting the value of the string 'k' */
-cr_sinline int auxrawgetstr(cr_State *ts, HTable *ht, const char *k) {
+cs_sinline int auxrawgetstr(cs_State *ts, HTable *ht, const char *k) {
     OString *key = crS_new(ts, k);
     return finishrawget(ts, crH_getstr(ht, key));
 }
@@ -836,35 +840,35 @@ cr_sinline int auxrawgetstr(cr_State *ts, HTable *ht, const char *k) {
 ** Gets the global variable 'name' value and pushes it on top of the stack.
 ** This function returns the value type.
 */
-CR_API int cr_get_global(cr_State *ts, const char *name) {
+CS_API int cs_get_global(cs_State *ts, const char *name) {
     HTable *G;
-    cr_lock(ts);
-    G = htval(&G_(ts)->globals);
+    cs_lock(ts);
+    G = &GI(ts)->fields;
     return auxrawgetstr(ts, G, name);
 }
 
 
-CR_API int cr_get(cr_State *ts, int obj) {
+CS_API int cs_get(cs_State *ts, int obj) {
     const TValue *o;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* key */
     o = index2value(ts, obj);
     crV_get(ts, o, s2v(ts->sp.p - 1), ts->sp.p - 1);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
 
 
-cr_sinline Array *getarray(cr_State *ts, int arrobj) {
+cs_sinline Array *getarray(cs_State *ts, int arrobj) {
     const TValue *o = index2value(ts, arrobj);
     api_check(ts, ttisarr(o), "expect array");
     return arrval(o);
 }
 
 
-CR_API int cr_get_index(cr_State *ts, int arrobj, cr_Integer index) {
+CS_API int cs_get_index(cs_State *ts, int arrobj, cs_Integer index) {
     Array *arr;
-    cr_lock(ts);
+    cs_lock(ts);
     api_check(ts, index >= 0 && index < ARRAYLIMIT, "invalid 'index'");
     arr = getarray(ts, arrobj);
     if (cri_castS2U(index) < arr->n) {
@@ -872,26 +876,26 @@ CR_API int cr_get_index(cr_State *ts, int arrobj, cr_Integer index) {
     } else
         setnilval(s2v(ts->sp.p));
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
 
 
-cr_sinline Instance *getinstance(cr_State *ts, int insobj) {
+cs_sinline Instance *getinstance(cs_State *ts, int insobj) {
     const TValue *o = index2value(ts, insobj);
     api_check(ts, ttisins(o), "expect instance");
     return insval(o);
 }
 
 
-cr_sinline int auxrawget(cr_State *ts, HTable *ht, const TValue *key) {
+cs_sinline int auxrawget(cs_State *ts, HTable *ht, const TValue *key) {
     return finishrawget(ts, crH_get(ht, key));
 }
 
 
-CR_API int cr_get_field(cr_State *ts, int insobj) {
+CS_API int cs_get_field(cs_State *ts, int insobj) {
     Instance *ins;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* key */
     ins = getinstance(ts, insobj);
     return auxrawget(ts, &ins->fields, s2v(--ts->sp.p));
@@ -899,29 +903,37 @@ CR_API int cr_get_field(cr_State *ts, int insobj) {
 }
 
 
-CR_API int cr_get_class(cr_State *ts, int insobj) {
+CS_API int cs_get_fieldstr(cs_State *ts, int insobj, const char *field) {
+    Instance *ins;
+    cs_lock(ts);
+    ins = getinstance(ts, insobj);
+    return auxrawgetstr(ts, &ins->fields, field);
+}
+
+
+CS_API int cs_get_class(cs_State *ts, int insobj) {
     const TValue *o;
     int tt;
-    cr_lock(ts);
+    cs_lock(ts);
     o = index2value(ts, insobj);
-    if (ttisins(o)) {
+    if (ttisins(o) && insval(o) != GI(ts)) {
         setcls2s(ts, ts->sp.p, insval(o)->oclass);
         api_inctop(ts);
-        tt = CR_TCLASS;
+        tt = CS_TCLASS;
     } else {
-        tt = CR_TNONE;
+        tt = CS_TNONE;
     }
-    cr_unlock(ts);
+    cs_unlock(ts);
     return tt;
 }
 
 
-CR_API int cr_get_method(cr_State *ts, int insobj) {
+CS_API int cs_get_method(cs_State *ts, int insobj) {
     Instance *ins;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* key */
     ins = getinstance(ts, insobj);
-    if (ins->oclass->methods) { /* have methods ? */
+    if (ins != GI(ts) && ins->oclass->methods) { /* have methods ? */
         const TValue *slot = crH_get(ins->oclass->methods, s2v(ts->sp.p - 1));
         if (!isabstkey(slot)) { /* found? */
             IMethod *im = crMM_newinsmethod(ts, ins, slot);
@@ -931,31 +943,31 @@ CR_API int cr_get_method(cr_State *ts, int insobj) {
     }
     setnilval(s2v(ts->sp.p - 1));
 unlock:
-    cr_unlock(ts);
+    cs_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
 
 
-CR_API int cr_get_metamethod(cr_State *ts, int obj, cr_MM mm) {
+CS_API int cs_get_metamethod(cs_State *ts, int obj, cs_MM mm) {
     TValue *vmt;
     int tt;
-    cr_lock(ts);
+    cs_lock(ts);
     vmt = getvmt(ts, obj);
     if (vmt) {
         setobj2s(ts, ts->sp.p, &vmt[mm]);
         api_inctop(ts);
         tt = ttype(s2v(ts->sp.p - 1)); 
     } else {
-        tt = CR_TNONE;
+        tt = CS_TNONE;
     }
-    cr_unlock(ts);
+    cs_unlock(ts);
     return tt;
 }
 
 
-CR_API void *cr_newuserdata(cr_State *ts, size_t sz, int nuv) {
+CS_API void *cs_newuserdata(cs_State *ts, size_t sz, int nuv) {
     UserData *ud;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, nuv);
     ud = crMM_newuserdata(ts, sz, nuv);
     ts->sp.p -= nuv;
@@ -964,96 +976,96 @@ CR_API void *cr_newuserdata(cr_State *ts, size_t sz, int nuv) {
     ud->nuv = nuv;
     setud2s(ts, ts->sp.p, ud);
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return getudmem(ud);
 }
 
 
-cr_sinline UserData *getuserdata(cr_State *ts, int index) {
+cs_sinline UserData *getuserdata(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     api_check(ts, ttisud(o), "expect userdata");
     return udval(o);
 }
 
 
-CR_API int cr_get_uservalue(cr_State *ts, int udobj, int n) {
+CS_API int cs_get_uservalue(cs_State *ts, int udobj, int n) {
     UserData *ud;
     int tt;
-    cr_lock(ts);
+    cs_lock(ts);
     ud = getuserdata(ts, udobj);
     if (0 < n || ud->nuv < n) {
         setnilval(s2v(ts->sp.p));
-        tt = CR_TNONE;
+        tt = CS_TNONE;
     } else {
         setobj2s(ts, ts->sp.p, &ud->uv[n]);
         tt = ttype(s2v(ts->sp.p - 1));
     }
     api_inctop(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return tt;
 }
 
 
-CR_API void cr_set_global(cr_State *ts, const char *name) {
+CS_API void cs_set_global(cs_State *ts, const char *name) {
     HTable *G;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* value */
-    G = htval(&G_(ts)->globals);
+    G = &GI(ts)->fields;
     auxrawsetstr(ts, G, name, s2v(ts->sp.p - 1));
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-CR_API void cr_set(cr_State *ts, int obj) {
+CS_API void cs_set(cs_State *ts, int obj) {
     TValue *o;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 2); /* value and key */
     o = index2value(ts, obj);
     crV_set(ts, o, s2v(ts->sp.p - 1), s2v(ts->sp.p - 2));
     ts->sp.p -= 2; /* remove value and key */
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-CR_API void cr_set_index(cr_State *ts, int arrobj, cr_Integer index) {
+CS_API void cs_set_index(cs_State *ts, int arrobj, cs_Integer index) {
     Array *arr;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* value */
     api_check(ts, index >= 0 && index < ARRAYLIMIT, "invalid 'index'");
     arr = getarray(ts, arrobj);
     crA_ensure(ts, arr, index);
     setobj(ts, &arr->b[index], s2v(ts->sp.p - 1));
     ts->sp.p--; /* pop value */
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-CR_API void cr_set_field(cr_State *ts, int insobj) {
+CS_API void cs_set_field(cs_State *ts, int insobj) {
     Instance *ins;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 2); /* key + value */
     ins = getinstance(ts, insobj);
     crH_set(ts, &ins->fields, s2v(ts->sp.p - 2), s2v(ts->sp.p - 1));
     crG_barrierback(ts, obj2gco(ins), s2v(ts->sp.p - 1));
     ts->sp.p -= 2; /* remove key + value */
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-CR_API void cr_set_fieldstr(cr_State *ts, int insobj, const char *field) {
+CS_API void cs_set_fieldstr(cs_State *ts, int insobj, const char *field) {
     Instance *ins;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* value */
     ins = getinstance(ts, insobj);
     auxrawsetstr(ts, &ins->fields, field, s2v(ts->sp.p - 1));
     ts->sp.p--; /* remove value */
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-CR_API void cr_set_userdatavmt(cr_State *ts, int index, const cr_VMT *vmt) {
+CS_API void cs_set_userdatavmt(cs_State *ts, int index, const cs_VMT *vmt) {
     UserData *ud;
-    cr_lock(ts);
+    cs_lock(ts);
     ud = getuserdata(ts, index);
     if (!ud->vmt) {
         ud->vmt = crMM_newvmt(ts);
@@ -1063,15 +1075,15 @@ CR_API void cr_set_userdatavmt(cr_State *ts, int index, const cr_VMT *vmt) {
         auxsetvmt(ud->vmt, vmt);
     else
         auxclearvmt(ud->vmt);
-    cr_unlock(ts);
+    cs_unlock(ts);
 
 }
 
 
-CR_API int cr_set_uservalue(cr_State *ts, int index, int n) {
+CS_API int cs_set_uservalue(cs_State *ts, int index, int n) {
     UserData *ud;
     int res;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* value */
     ud = getuserdata(ts, index);
     if (!(cast_uint(n) <= cast_uint(ud->nuv))) {
@@ -1082,14 +1094,14 @@ CR_API int cr_set_uservalue(cr_State *ts, int index, int n) {
         res = 1;
     }
     ts->sp.p--; /* remove value */
-    cr_unlock(ts);
+    cs_unlock(ts);
     return res;
 }
 
 
-CR_API void cr_set_userdatamm(cr_State *ts, int index, cr_MM mm) {
+CS_API void cs_set_userdatamm(cs_State *ts, int index, cs_MM mm) {
     UserData *ud;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* metamethod func */
     ud = getuserdata(ts, index);
     if (!ud->vmt) {
@@ -1099,7 +1111,7 @@ CR_API void cr_set_userdatamm(cr_State *ts, int index, cr_MM mm) {
     setobj(ts, &ud->vmt[mm], s2v(ts->sp.p - 1));
     crG_barrierback(ts, obj2gco(ud), s2v(ts->sp.p - 1));
     ts->sp.p--;
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -1107,22 +1119,22 @@ CR_API void cr_set_userdatamm(cr_State *ts, int index, cr_MM mm) {
 /* Error reporting */
 
 
-CR_API int cr_status(cr_State *ts) {
+CS_API int cs_status(cs_State *ts) {
     return ts->status;
 }
 
 
-CR_API int cr_error(cr_State *ts) {
+CS_API int cs_error(cs_State *ts) {
     TValue *errobj;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* errobj */
     errobj = s2v(ts->sp.p - 1);
     if (ttisstr(errobj) && strval(errobj) == G_(ts)->memerror) {
         crM_error(ts); /* raise a memory error */
     } else
         crD_errormsg(ts);
-    /* cr_unlock() is called when control leaves the core */
-    cr_unreachable();
+    /* cs_unlock() is called when control leaves the core */
+    cs_unreachable();
 }
 
 
@@ -1131,21 +1143,21 @@ CR_API int cr_error(cr_State *ts) {
 
 
 #define checkresults(ts,nargs,nres) \
-     api_check(ts, (nres) == CR_MULRET \
+     api_check(ts, (nres) == CS_MULRET \
                || (ts->cf->top.p - ts->sp.p >= (nres) - (nargs)), \
 	"results from function overflow current stack size")
 
 
-CR_API void cr_call(cr_State *ts, int nargs, int nresults) {
+CS_API void cs_call(cs_State *ts, int nargs, int nresults) {
     SPtr func;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, nargs + 1); /* args + func */
-    api_check(ts, ts->status == CR_OK, "can't do calls on non-normal thread");
+    api_check(ts, ts->status == CS_OK, "can't do calls on non-normal thread");
     checkresults(ts, nargs, nresults);
     func = ts->sp.p - nargs - 1;
     crV_call(ts, func, nresults);
     adjustresults(ts, nresults);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
@@ -1155,19 +1167,19 @@ struct PCallData {
 };
 
 
-static void fcall(cr_State *ts, void *ud) {
+static void fcall(cs_State *ts, void *ud) {
     struct PCallData *pcd = cast(struct PCallData*, ud);
     crV_call(ts, pcd->func, pcd->nresults);
 }
 
 
-CR_API int cr_pcall(cr_State *ts, int nargs, int nresults, int errfunc) {
+CS_API int cs_pcall(cs_State *ts, int nargs, int nresults, int errfunc) {
     struct PCallData pcd;
     int status;
     ptrdiff_t func;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, nargs + 1);
-    api_check(ts, ts->status == CR_OK, "can't do calls on non-normal thread");
+    api_check(ts, ts->status == CS_OK, "can't do calls on non-normal thread");
     checkresults(ts, nargs, nresults);
     if (errfunc == 0) {
         func = 0;
@@ -1180,56 +1192,56 @@ CR_API int cr_pcall(cr_State *ts, int nargs, int nresults, int errfunc) {
     pcd.nresults = nresults;
     status = crPR_call(ts, fcall, &pcd, savestack(ts, pcd.func), func);
     adjustresults(ts, nresults);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return status;
 }
 
 
-CR_API int cr_load(cr_State *ts, cr_Reader reader, void *userdata,
+CS_API int cs_load(cs_State *ts, cs_Reader reader, void *userdata,
                     const char *source) {
     BuffReader br;
     int status;
-    cr_lock(ts);
+    cs_lock(ts);
     if (!source) source = "?";
     crR_init(ts, &br, reader, userdata);
     status = crPR_parse(ts, &br, source);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return status;
 }
 
 
-CR_API int cr_gc(cr_State *ts, int option, ...) {
+CS_API int cs_gc(cs_State *ts, int option, ...) {
     va_list ap;
     int res = 0;
     GC *gc = &G_(ts)->gc;
-    cr_lock(ts);
+    cs_lock(ts);
     va_start(ap, option);
     switch (option) {
-	case CR_GCSTOP: { /* stop garbage collector */
+	case CS_GCSTOP: { /* stop garbage collector */
             gc->stopped = GCSTPUSR; /* stopped by user */
             break;
         }
-	case CR_GCRESTART: { /* restart GC */
+	case CS_GCRESTART: { /* restart GC */
             crG_setdebt(gc, 0);
             gc->stopped = 0;
             break;
         }
-	case CR_GCCOLLECT: { /* start GC cycle */
+	case CS_GCCOLLECT: { /* start GC cycle */
             crG_full(ts, 0);
             break;
         }
-	case CR_GCCOUNT: { /* total GC memory count in Kibibytes */
+	case CS_GCCOUNT: { /* total GC memory count in Kibibytes */
             res = totalbytes(gc) >> 10;
             break;
         }
-	case CR_GCCOUNTBYTES: { /* remainder bytes of total memory / 1024 */
+	case CS_GCCOUNTBYTES: { /* remainder bytes of total memory / 1024 */
             res = totalbytes(gc) & 0x3ff; /* all bits before 10th bit */
             break;
         }
-	case CR_GCSTEP: { /* perform GC step */
+	case CS_GCSTEP: { /* perform GC step */
             int data = va_arg(ap, int); /* kibibytes */
-            cr_mem debt = 69; /* >0 to signal that it did an actual step */
-            cr_ubyte old_stopped = gc->stopped;
+            cs_mem debt = 69; /* >0 to signal that it did an actual step */
+            cs_ubyte old_stopped = gc->stopped;
             if (data == 0) { /* do a regular step ? */
                 crG_setdebt(gc, 0);
                 crG_step(ts);
@@ -1244,29 +1256,29 @@ CR_API int cr_gc(cr_State *ts, int option, ...) {
                 res = 1; /* signal it */
             break;
         }
-        case CR_GCSETPAUSE: { /* set GC pause */
+        case CS_GCSETPAUSE: { /* set GC pause */
             int data = va_arg(ap, int); /* percentage */
-            api_check(ts, data <= CR_MAXPAUSE, "GC pause overflow");
+            api_check(ts, data <= CS_MAXPAUSE, "GC pause overflow");
             res = getgcparam(gc->pause);
             setgcparam(gc->pause, data);
             break;
         }
-        case CR_GCSETSTEPMUL: { /* set GC step multiplier */
+        case CS_GCSETSTEPMUL: { /* set GC step multiplier */
             int data = va_arg(ap, int); /* percentage */
-            api_check(ts, data <= CR_MAXPAUSE, "GC step multiplier overflow");
+            api_check(ts, data <= CS_MAXPAUSE, "GC step multiplier overflow");
             res = getgcparam(gc->stepmul);
             setgcparam(gc->stepmul, data);
             break;
         }
-	case CR_GCISRUNNING: { /* check if GC is running */
+	case CS_GCISRUNNING: { /* check if GC is running */
             res = gcrunning(gc);
             break;
         }
-        case CR_GCINC: {
+        case CS_GCINC: {
             int pause = va_arg(ap, int);
             int stepmul = va_arg(ap, int);
             int stepsize = va_arg(ap, int);
-            res = CR_GCINC;
+            res = CS_GCINC;
             if (pause != 0)
                 setgcparam(gc->pause, pause);
             if (stepmul != 0)
@@ -1279,34 +1291,34 @@ CR_API int cr_gc(cr_State *ts, int option, ...) {
         default: res = -1; /* invalid option */
     }
     va_end(ap);
-    cr_unlock(ts);
+    cs_unlock(ts);
     return res;
 }
 
 
-CR_API void cr_setwarnf(cr_State *ts, cr_WarnFunction fwarn, void *ud) {
-    cr_lock(ts);
+CS_API void cs_setwarnf(cs_State *ts, cs_WarnFunction fwarn, void *ud) {
+    cs_lock(ts);
     G_(ts)->fwarn = fwarn;
     G_(ts)->ud_warn = ud;
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-CR_API void cr_warning(cr_State *ts, const char *msg, int cont) {
-    cr_lock(ts);
+CS_API void cs_warning(cs_State *ts, const char *msg, int cont) {
+    cs_lock(ts);
     crT_warning(ts, msg, cont);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
 /* Check if the value at the index has virtual method table. */
-CR_API int cr_hasvmt(cr_State *ts, int index) {
+CS_API int cs_hasvmt(cs_State *ts, int index) {
     return getvmt(ts, index) != NULL;
 }
 
 
 /* Check if the value at the index has meta method. */
-CR_API int cr_hasmetamethod(cr_State *ts, int index, cr_MM mm) {
+CS_API int cs_hasmetamethod(cs_State *ts, int index, cs_MM mm) {
     TValue *vmt = getvmt(ts, index);
     return (vmt ? !ttisnil(&vmt[mm]) : 0);
 }
@@ -1319,23 +1331,23 @@ CR_API int cr_hasmetamethod(cr_State *ts, int index, cr_MM mm) {
 ** of methods; for instances, this is the number of fields; for userdata, this
 ** is the size of the block of memory allocated for userdata.
 */
-CR_API cr_Unsigned cr_len(cr_State *ts, int index) {
+CS_API cs_Unsigned cs_len(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     switch (ttypetag(o)) {
-        case CR_VSTRING: return lenstr(o);
-        case CR_VCLASS: return crH_len(htval(o));
-        case CR_VINSTANCE: return crH_len(&insval(o)->fields);
-        case CR_VARRAY: return arrval(o)->n;
-        case CR_VUDATA: return udval(o)->size;
+        case CS_VSTRING: return lenstr(o);
+        case CS_VCLASS: return crH_len(htval(o));
+        case CS_VINSTANCE: return crH_len(&insval(o)->fields);
+        case CS_VARRAY: return arrval(o)->n;
+        case CS_VUDATA: return udval(o)->size;
         default: return 0;
     }
 }
 
 
-CR_API int cr_next(cr_State *ts, int insobj) {
+CS_API int cs_next(cs_State *ts, int insobj) {
     Instance *ins;
     int more;
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* key */
     ins = getinstance(ts, insobj);
     more = crH_next(ts, &ins->fields, ts->sp.p - 1);
@@ -1343,13 +1355,13 @@ CR_API int cr_next(cr_State *ts, int insobj) {
         api_inctop(ts);
     } else
         ts->sp.p--; /* remove key */
-    cr_unlock(ts);
+    cs_unlock(ts);
     return more;
 }
 
 
-CR_API void cr_concat(cr_State *ts, int n) {
-    cr_lock(ts);
+CS_API void cs_concat(cs_State *ts, int n) {
+    cs_lock(ts);
     api_checknelems(ts, n);
     if (n > 0)
         crV_concat(ts, n);
@@ -1358,11 +1370,11 @@ CR_API void cr_concat(cr_State *ts, int n) {
         api_inctop(ts);
     }
     crG_check(ts);
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-CR_API size_t cr_stringtonumber(cr_State *ts, const char *s, int *povf) {
+CS_API size_t cs_stringtonumber(cs_State *ts, const char *s, int *povf) {
     size_t sz = crS_tonum(s, s2v(ts->sp.p), povf);
     if (sz != 0) /* no conversion errors? */
         api_inctop(ts);
@@ -1370,28 +1382,28 @@ CR_API size_t cr_stringtonumber(cr_State *ts, const char *s, int *povf) {
 }
 
 
-CR_API cr_Alloc cr_getallocf(cr_State *ts, void **ud) {
-    cr_Alloc falloc;
-    cr_lock(ts);
+CS_API cs_Alloc cs_getallocf(cs_State *ts, void **ud) {
+    cs_Alloc falloc;
+    cs_lock(ts);
     if (ud) *ud = G_(ts)->ud_alloc;
     falloc = G_(ts)->falloc;
-    cr_unlock(ts);
+    cs_unlock(ts);
     return falloc;
 }
 
 
-CR_API void cr_setallocf(cr_State *ts, cr_Alloc falloc, void *ud) {
-    cr_lock(ts);
+CS_API void cs_setallocf(cs_State *ts, cs_Alloc falloc, void *ud) {
+    cs_lock(ts);
     G_(ts)->falloc = falloc;
     G_(ts)->ud_alloc = ud;
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
-CR_API void cr_toclose(cr_State *ts, int index) {
+CS_API void cs_toclose(cs_State *ts, int index) {
     SPtr o;
     int nresults;
-    cr_lock(ts);
+    cs_lock(ts);
     o = index2stack(ts, index);
     api_check(ts, ts->tbclist.p < o,
                   "given index below or equal to the last marked slot");
@@ -1399,25 +1411,25 @@ CR_API void cr_toclose(cr_State *ts, int index) {
     nresults = ts->cf->nresults;
     if (!hastocloseCfunc(nresults)) /* function not yet marked? */
         ts->cf->nresults = codeNresults(nresults); /* mark it */
-    cr_assert(hastocloseCfunc(ts->cf->nresults)); /* must be marked */
-    cr_unlock(ts);
+    cs_assert(hastocloseCfunc(ts->cf->nresults)); /* must be marked */
+    cs_unlock(ts);
 }
 
 
-CR_API void cr_closeslot(cr_State *ts, int index) {
+CS_API void cs_closeslot(cs_State *ts, int index) {
     SPtr level;
-    cr_lock(ts);
+    cs_lock(ts);
     level = index2stack(ts, index);
     api_check(ts, hastocloseCfunc(ts->cf->nresults) && ts->tbclist.p == level,
                   "no variable to close at the given level");
     crF_close(ts, level, CLOSEKTOP);
     setnilval(s2v(level)); /* closed */
-    cr_unlock(ts);
+    cs_unlock(ts);
 }
 
 
 /*
-** Sets 'frame' in 'cr_DebugInfo'; 'level' is 'CallFrame' level.
+** Sets 'frame' in 'cs_DebugInfo'; 'level' is 'CallFrame' level.
 ** To traverse the call stack backwards (up), then level should be
 ** greater than 0. For example if you wish for currently active 'CallFrame',
 ** then 'level' should be 0, if 'level' is 1 then the 'CallFrame' of the
@@ -1425,12 +1437,12 @@ CR_API void cr_closeslot(cr_State *ts, int index) {
 ** If 'level' is found, therefore 'cf' is set, then this function returns 1,
 ** otherwise 0.
 */
-CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di) {
-    cr_lock(ts);
+CS_API int cs_getstack(cs_State *ts, int level, cs_DebugInfo *di) {
+    cs_lock(ts);
     int status = 0;
     CallFrame *cf;
     if (level > ts->ncf || level < 0) {
-        cr_unlock(ts);
+        cs_unlock(ts);
         return status;
     }
     for (cf = ts->cf; level > 0 && cf != &ts->basecf; cf = cf->prev)
@@ -1439,7 +1451,7 @@ CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di) {
         di->cf = cf;
         status = 1;
     }
-    cr_unlock(ts);
+    cs_unlock(ts);
     return status;
 }
 
@@ -1447,7 +1459,7 @@ CR_API int cr_getstack(cr_State *ts, int level, cr_DebugInfo *di) {
 static const char *auxupvalue(TValue *func, int n, TValue **val,
                                GCObject **owner) {
     switch (ttypetag(func)) {
-        case CR_VCCL: { /* C closure */
+        case CS_VCCL: { /* C closure */
             CClosure *ccl = cclval(func);
             if (!(cast_uint(n) < cast_uint(ccl->nupvalues)))
                 return NULL;  /* 'n' not in [0, cl->nupvalues) */
@@ -1456,7 +1468,7 @@ static const char *auxupvalue(TValue *func, int n, TValue **val,
                 *owner = obj2gco(ccl);
             return "";
         }
-        case CR_VCRCL: { /* CScript closure */
+        case CS_VCRCL: { /* CScript closure */
             OString *name;
             CrClosure *crcl = crclval(func);
             Function *fn = crcl->fn;
@@ -1466,7 +1478,7 @@ static const char *auxupvalue(TValue *func, int n, TValue **val,
             if (owner)
                 *owner = obj2gco(crcl->upvals[n]);
             name = fn->upvals[n].name;
-            cr_assert(name != NULL);
+            cs_assert(name != NULL);
             return getstrbytes(name);
         }
         default: return NULL; /* not a closure */
@@ -1474,26 +1486,26 @@ static const char *auxupvalue(TValue *func, int n, TValue **val,
 }
 
 
-CR_API const char *cr_getupvalue(cr_State *ts, int index, int n) {
+CS_API const char *cs_getupvalue(cs_State *ts, int index, int n) {
     const char *name;
     TValue *upval = NULL;
-    cr_lock(ts);
+    cs_lock(ts);
     name = auxupvalue(index2value(ts, index), n, &upval, NULL);
     if (name) { /* have upvalue ? */
         setobj2s(ts, ts->sp.p, upval);
         api_inctop(ts);
     }
-    cr_unlock(ts);
+    cs_unlock(ts);
     return name;
 }
 
 
-CR_API const char *cr_setupvalue(cr_State *ts, int index, int n) {
+CS_API const char *cs_setupvalue(cs_State *ts, int index, int n) {
     const char *name;
     TValue *upval = NULL;
     GCObject *owner = NULL;
     TValue *func;
-    cr_lock(L);
+    cs_lock(L);
     api_checknelems(ts, 1); /* value */
     func = index2value(ts, index);
     name = auxupvalue(func, n, &upval, &owner);
@@ -1501,6 +1513,6 @@ CR_API const char *cr_setupvalue(cr_State *ts, int index, int n) {
         setobj(ts, upval, s2v(--ts->sp.p));
         crG_barrier(ts, owner, upval);
     }
-    cr_unlock(L);
+    cs_unlock(L);
     return name;
 }

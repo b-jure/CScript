@@ -20,8 +20,8 @@
 
 
 
-/* Auxiliary to 'crM_realloc' and 'cr_malloc'. */
-cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
+/* Auxiliary to 'crM_realloc' and 'csmalloc'. */
+cs_sinline void *tryagain(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
     UNUSED(osz);
     if (cantryagain(gs)) {
@@ -32,59 +32,59 @@ cr_sinline void *tryagain(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
 }
 
 
-void *crM_realloc_(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
+void *crM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
-    cr_assert((osz == 0) == (ptr == NULL));
+    cs_assert((osz == 0) == (ptr == NULL));
     void *memblock = crM_rawrealloc(gs, ptr, osz, nsz);
-    if (cr_unlikely(!memblock && nsz != 0)) {
+    if (cs_unlikely(!memblock && nsz != 0)) {
         memblock = tryagain(ts, ptr, osz, nsz);
-        if (cr_unlikely(memblock == NULL))
+        if (cs_unlikely(memblock == NULL))
             return NULL;
     }
-    cr_assert((nsz == 0) == (memblock == NULL));
+    cs_assert((nsz == 0) == (memblock == NULL));
     gs->gc.debt += nsz - osz;
     return memblock;
 }
 
 
-void *crM_saferealloc(cr_State *ts, void *ptr, size_t osz, size_t nsz) {
+void *crM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     void *memblock = crM_realloc_(ts, ptr, osz, nsz);
-    if (cr_unlikely(memblock == NULL && nsz != 0))
-        cr_assert(0 && "out of memory");
+    if (cs_unlikely(memblock == NULL && nsz != 0))
+        cs_assert(0 && "out of memory");
     return memblock;
 }
 
 
-void *crM_malloc(cr_State *ts, size_t size) {
+void *crM_malloc(cs_State *ts, size_t size) {
     if (size == 0)
         return NULL;
     GState *gs = G_(ts);
     void *memblock = crM_rawmalloc(gs, size);
-    if (cr_unlikely(memblock == NULL)) {
+    if (cs_unlikely(memblock == NULL)) {
         memblock = tryagain(ts, NULL, 0, size);
-        if (cr_unlikely(memblock == NULL))
-            cr_assert(0 && "out of memory");
+        if (cs_unlikely(memblock == NULL))
+            cs_assert(0 && "out of memory");
     }
     gs->gc.debt += size;
     return memblock;
 }
 
 
-void *crM_growarr(cr_State *ts, void *ptr, int *sizep, int len, int elemsize,
+void *crM_growarr(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
                   int extra, int limit, const char *what) {
     int size = *sizep;
     if (len + extra <= size)
         return ptr;
     size += extra;
     if (size >= limit / 2) {
-        if (cr_unlikely(size >= limit))
+        if (cs_unlikely(size >= limit))
             crD_runerror(ts, "%s size limit", what);
         size = limit;
-        cr_assert(size >= CRI_MINARRSIZE);
+        cs_assert(size >= CSI_MINARRSIZE);
     } else {
         size *= 2;
-        if (size < CRI_MINARRSIZE)
-            size = CRI_MINARRSIZE;
+        if (size < CSI_MINARRSIZE)
+            size = CSI_MINARRSIZE;
     }
     ptr = crM_saferealloc(ts, ptr, *sizep * elemsize, size * elemsize);
     *sizep = size;
@@ -92,20 +92,20 @@ void *crM_growarr(cr_State *ts, void *ptr, int *sizep, int len, int elemsize,
 }
 
 
-void *crM_shrinkarr(cr_State *ts, void *ptr, int *sizep, int final,
+void *crM_shrinkarr(cs_State *ts, void *ptr, int *sizep, int final,
                     int elemsize) {
     size_t oldsize = cast_sizet(*sizep * elemsize);
     size_t newsize = cast_sizet(final * elemsize);
-    cr_assert(newsize <= oldsize);
+    cs_assert(newsize <= oldsize);
     ptr = crM_saferealloc(ts, ptr, oldsize, newsize);
     *sizep = final;
     return ptr;
 }
 
 
-void crM_free(cr_State *ts, void *ptr, size_t osz) {
+void crM_free(cs_State *ts, void *ptr, size_t osz) {
     GState *gs = G_(ts);
-    cr_assert((osz == 0) == (ptr == NULL));
+    cs_assert((osz == 0) == (ptr == NULL));
     crM_rawfree(gs, ptr, osz);
     gs->gc.debt -= osz;
 }

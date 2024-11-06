@@ -14,8 +14,8 @@
 #include "cvm.h"
 
 
-Function *crF_newfunction(cr_State *ts) {
-    Function *fn = crG_new(ts, sizeof(Function), CR_VFUNCTION, Function);
+Function *crF_newfunction(cs_State *ts) {
+    Function *fn = crG_new(ts, sizeof(Function), CS_VFUNCTION, Function);
     fn->isvararg = 0;
     fn->gclist = NULL;
     fn->source = NULL;
@@ -34,8 +34,8 @@ Function *crF_newfunction(cr_State *ts) {
 }
 
 
-CrClosure *crF_newCrClosure(cr_State *ts, int nup) {
-    CrClosure *crcl = crG_new(ts, sizeofcrcl(nup), CR_VCRCL, CrClosure);
+CrClosure *crF_newCrClosure(cs_State *ts, int nup) {
+    CrClosure *crcl = crG_new(ts, sizeofcrcl(nup), CS_VCRCL, CrClosure);
     crcl->nupvalues = nup;
     crcl->fn = NULL;
     for (int i = 0; i < nup; i++)
@@ -44,8 +44,8 @@ CrClosure *crF_newCrClosure(cr_State *ts, int nup) {
 }
 
 
-CClosure *crF_newCClosure(cr_State *ts, int nupvalues) {
-    CClosure *ccl = crG_new(ts, nupvalues * sizeof(TValue), CR_VCCL, CClosure);
+CClosure *crF_newCClosure(cs_State *ts, int nupvalues) {
+    CClosure *ccl = crG_new(ts, nupvalues * sizeof(TValue), CS_VCCL, CClosure);
     ccl->nupvalues = nupvalues;
     return ccl;
 }
@@ -57,7 +57,7 @@ CClosure *crF_newCClosure(cr_State *ts, int nupvalues) {
 ** Additionally adjust new top for 'cf' and invalidates
 ** old named parameters (after they get moved).
 */
-void crF_adjustvarargs(cr_State *ts, int arity, CallFrame *cf,
+void crF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
                        const Function *fn) {
     int i;
     int actual = cast_int(ts->sp.p - cf->func.p) - 1;
@@ -71,14 +71,14 @@ void crF_adjustvarargs(cr_State *ts, int arity, CallFrame *cf,
     }
     cf->func.p += actual + 1;
     cf->top.p += actual + 1;
-    cr_assert(ts->sp.p <= cf->top.p && cf->top.p <= ts->stackend.p);
+    cs_assert(ts->sp.p <= cf->top.p && cf->top.p <= ts->stackend.p);
 }
 
 
 /* Get 'wanted' varargs starting at the current stack pointer. */
-void crF_getvarargs(cr_State *ts, CallFrame *cf, int wanted) {
+void crF_getvarargs(cs_State *ts, CallFrame *cf, int wanted) {
     int have = cf->nvarargs;
-    if (wanted < 0) { /* CR_MULRET ? */
+    if (wanted < 0) { /* CS_MULRET ? */
         wanted = have;
         checkstackGC(ts, wanted); /* check stack, maybe 'wanted > have' */
     }
@@ -90,9 +90,9 @@ void crF_getvarargs(cr_State *ts, CallFrame *cf, int wanted) {
 
 
 /* Create and initialize all the upvalues in 'cl'. */
-void crF_initupvals(cr_State *ts, CrClosure *cl) {
+void crF_initupvals(cs_State *ts, CrClosure *cl) {
     for (int i = 0; i < cl->nupvalues; i++) {
-        UpVal *uv = crG_new(ts, sizeof(UpVal), CR_VUVALUE, UpVal);
+        UpVal *uv = crG_new(ts, sizeof(UpVal), CS_VUVALUE, UpVal);
         uv->v.p = &uv->u.value; /* close it */
         setnilval(uv->v.p);
         cl->upvals[i] = uv;
@@ -105,15 +105,15 @@ void crF_initupvals(cr_State *ts, CrClosure *cl) {
 ** Create a new upvalue and link it into 'openupval' list
 ** right after 'prev'.
 */
-static UpVal *newupval(cr_State *ts, SPtr val, UpVal **prev) {
-    UpVal *uv = crG_new(ts, sizeof(*uv), CR_VUVALUE, UpVal);
+static UpVal *newupval(cs_State *ts, SPtr val, UpVal **prev) {
+    UpVal *uv = crG_new(ts, sizeof(*uv), CS_VUVALUE, UpVal);
     UpVal *previous = *prev;
     uv->v.p = s2v(val);
     uv->u.open.next = previous;
     if (previous) /* have previous upval ? */
         previous->u.open.prev = &uv->u.open.next;
     *prev = uv; /* adjust list head or 'previous.u.open.next' */
-    cr_assert(prev == &ts->openupval);
+    cs_assert(prev == &ts->openupval);
     if (!isinthwouv(ts)) {
         GState *gs = G_(ts);
         ts->thwouv = gs->thwouv;
@@ -127,13 +127,13 @@ static UpVal *newupval(cr_State *ts, SPtr val, UpVal **prev) {
 ** Find and return already existing upvalue or create
 ** and return a new one.
 */
-UpVal *crF_findupval(cr_State *ts, SPtr sval) {
+UpVal *crF_findupval(cs_State *ts, SPtr sval) {
     UpVal *upval;
     SPtr sp;
-    cr_assert(isinthwouv(ts) || ts->openupval == NULL);
+    cs_assert(isinthwouv(ts) || ts->openupval == NULL);
     UpVal **pp = &ts->openupval; /* good ol' pp */
     while ((upval = *pp) != NULL && (sp = uvlevel(upval)) > sval) {
-        cr_assert(!isdead(&G_(ts)->gc, upval));
+        cs_assert(!isdead(&G_(ts)->gc, upval));
         if (sp == sval)
             return upval;
         pp = &upval->u.open.next;
@@ -150,7 +150,7 @@ UpVal *crF_findupval(cr_State *ts, SPtr sval) {
 ** Note: current version (1.0.0) always contains debug information.
 */
 const char *crF_getlocalname(const Function *fn, int lnum, int pc) {
-    cr_assert(lnum > 0);
+    cs_assert(lnum > 0);
     for (int i = 0; i < fn->sizelocals && fn->locals->startpc <= pc; i++)
         if ((lnum -= (pc < fn->locals[i].endpc)) == 0)
             return getstrbytes(fn->locals[i].name);
@@ -162,9 +162,9 @@ const char *crF_getlocalname(const Function *fn, int lnum, int pc) {
 ** Check if object at stack 'level' has a '__close' method,
 ** raise error if not.
 */
-static void checkclosem(cr_State *ts, SPtr level) {
-    const TValue *fn = crMM_get(ts, s2v(level), CR_MM_CLOSE);
-    if (cr_unlikely(ttisnil(fn))) { /* missing '__close' method ? */
+static void checkclosem(cs_State *ts, SPtr level) {
+    const TValue *fn = crMM_get(ts, s2v(level), CS_MM_CLOSE);
+    if (cs_unlikely(ttisnil(fn))) { /* missing '__close' method ? */
         int vidx = level - ts->cf->func.p;
         const char *name = crD_findlocal(ts, ts->cf, vidx, NULL);
         if (name == NULL) name = "?";
@@ -182,7 +182,7 @@ static void checkclosem(cr_State *ts, SPtr level) {
 
 
 /* insert variable into the list of to-be-closed variables */
-void crF_newtbcvar(cr_State *ts, SPtr level) {
+void crF_newtbcvar(cs_State *ts, SPtr level) {
     if (cri_isfalse(s2v(level)))
         return;
     checkclosem(ts, level);
@@ -204,7 +204,7 @@ static void unlinkupval(UpVal *upval) {
 
 
 /* close any open upvalues up to the 'level' */
-void crF_closeupval(cr_State *ts, SPtr level) {
+void crF_closeupval(cs_State *ts, SPtr level) {
     UpVal *uv = ts->openupval;
     while (uv != NULL && uvlevel(uv) <= level) {
         TValue *slot = &uv->u.value;
@@ -220,9 +220,9 @@ void crF_closeupval(cr_State *ts, SPtr level) {
 
 
 /* remove first element from 'tbclist' */
-static void poptbclist(cr_State *ts) {
+static void poptbclist(cs_State *ts) {
     SPtr tbc = ts->tbclist.p;
-    cr_assert(tbc->tbc.delta > 0);
+    cs_assert(tbc->tbc.delta > 0);
     tbc -= tbc->tbc.delta;
     while (tbc > ts->stack.p && tbc->tbc.delta == 0)
         tbc -= tbc->tbc.delta;
@@ -234,10 +234,10 @@ static void poptbclist(cr_State *ts) {
 ** Call '__close' method on 'obj' with error object 'errobj'.
 ** This function assumes 'EXTRA_STACK'.
 */
-static void callclosemethod(cr_State *ts, TValue *obj, TValue *errobj) {
+static void callclosemethod(cs_State *ts, TValue *obj, TValue *errobj) {
     SPtr top = ts->sp.p;
-    const TValue *method = crMM_get(ts, obj, CR_MM_CLOSE);
-    cr_assert(!ttisnil(method));
+    const TValue *method = crMM_get(ts, obj, CS_MM_CLOSE);
+    cs_assert(!ttisnil(method));
     setobj2s(ts, top + 1, method);
     setobj2s(ts, top + 2, obj);
     setobj2s(ts, top + 3, errobj);
@@ -253,7 +253,7 @@ static void callclosemethod(cr_State *ts, TValue *obj, TValue *errobj) {
 ** the 'level' of the upvalue being closed, as everything after that
 ** won't be used again.
 */
-static void prepcallclosem(cr_State *ts, SPtr level, int status) {
+static void prepcallclosem(cs_State *ts, SPtr level, int status) {
     TValue *v = s2v(level); /* value being closed */
     TValue *errobj;
     if (status == CLOSEKTOP) {
@@ -270,7 +270,7 @@ static void prepcallclosem(cr_State *ts, SPtr level, int status) {
 ** Close all up-values and to-be-closed variables up to (stack) 'level'.
 ** Returns (potentially restored stack) 'level'.
 */
-SPtr crF_close(cr_State *ts, SPtr level, int status) {
+SPtr crF_close(cs_State *ts, SPtr level, int status) {
     ptrdiff_t relativelevel = savestack(ts, level);
     crF_closeupval(ts, level);
     while (ts->tbclist.p >= level) {
@@ -284,7 +284,7 @@ SPtr crF_close(cr_State *ts, SPtr level, int status) {
 
 
 /* free 'UpVal' */
-void crF_freeupval(cr_State *ts, UpVal *upval) {
+void crF_freeupval(cs_State *ts, UpVal *upval) {
     if (uvisopen(upval))
         unlinkupval(upval);
     crM_free(ts, upval, sizeof(UpVal));
@@ -292,7 +292,7 @@ void crF_freeupval(cr_State *ts, UpVal *upval) {
 
 
 /* free 'Function' */
-void crF_free(cr_State *ts, Function *fn) {
+void crF_free(cs_State *ts, Function *fn) {
     crM_freearray(ts, fn->funcs, fn->sizefn, Function);
     crM_freearray(ts, fn->k, fn->sizek, TValue);
     crM_freearray(ts, fn->code, fn->sizecode, Instruction);

@@ -36,23 +36,23 @@
 
 
 
-CRI_FUNC void crS_init(cr_State *ts);
-CRI_FUNC OString *crS_new(cr_State *ts, const char *str);
-CRI_FUNC OString *crS_newl(cr_State *ts, const char *str, size_t len);
-CRI_FUNC OString *crS_newlobj(cr_State *ts, size_t len);
-CRI_FUNC void crS_free(cr_State *ts, OString *s);
-CRI_FUNC uint crS_hash(const char *str, size_t len, uint seed);
-CRI_FUNC int crS_cmp(const OString *s1, const OString *s2);
-CRI_FUNC int crS_eq(const OString *s1, const OString *s2);
-CRI_FUNC const char *crS_pushvfstring(cr_State *ts, const char *fmt,
+CSI_FUNC void crS_init(cs_State *ts);
+CSI_FUNC OString *crS_new(cs_State *ts, const char *str);
+CSI_FUNC OString *crS_newl(cs_State *ts, const char *str, size_t len);
+CSI_FUNC OString *crS_newlobj(cs_State *ts, size_t len);
+CSI_FUNC void crS_free(cs_State *ts, OString *s);
+CSI_FUNC uint crS_hash(const char *str, size_t len, uint seed);
+CSI_FUNC int crS_cmp(const OString *s1, const OString *s2);
+CSI_FUNC int crS_eq(const OString *s1, const OString *s2);
+CSI_FUNC const char *crS_pushvfstring(cs_State *ts, const char *fmt,
                                       va_list argp);
-CRI_FUNC const char *crS_pushfstring(cr_State *ts, const char *fmt, ...);
-CRI_FUNC size_t crS_tonum(const char *s, TValue *o, int *of);
-CRI_FUNC int crS_tomt(cr_State *ts, OString *id);
-CRI_FUNC const char *crS_numtostr(const TValue *o, size_t *plen);
-CRI_FUNC int crS_hexvalue(int c);
-CRI_FUNC const char *crS_tolowerall(const char *s);
-CRI_FUNC void crS_strlimit(char *dest, const char *src, size_t len, size_t limit);
-CRI_FUNC void crS_sourceid(char *dest, const char *src, size_t len);
+CSI_FUNC const char *crS_pushfstring(cs_State *ts, const char *fmt, ...);
+CSI_FUNC size_t crS_tonum(const char *s, TValue *o, int *of);
+CSI_FUNC int crS_tomt(cs_State *ts, OString *id);
+CSI_FUNC const char *crS_numtostr(const TValue *o, size_t *plen);
+CSI_FUNC int crS_hexvalue(int c);
+CSI_FUNC const char *crS_tolowerall(const char *s);
+CSI_FUNC void crS_strlimit(char *dest, const char *src, size_t len, size_t limit);
+CSI_FUNC void crS_sourceid(char *dest, const char *src, size_t len);
 
 #endif

@@ -12,7 +12,7 @@
 
 
 /* memory error */
-#define crM_error(ts)   crPR_throw(ts, CR_ERRMEM);
+#define crM_error(ts)   crPR_throw(ts, CS_ERRMEM);
 
 
 #define crM_newarray(ts,s,t)     crM_malloc(ts, (s) * sizeof(t))
@@ -35,18 +35,18 @@
 
 
 
-CRI_FUNC void *crM_malloc(cr_State *ts, cr_umem size);
-CRI_FUNC void *crM_realloc_(cr_State *ts, void *ptr, cr_umem osize,
-                            cr_umem nsize);
-CRI_FUNC void *crM_saferealloc(cr_State *ts, void *ptr, cr_umem osize,
-                               cr_umem nsize);
-CRI_FUNC void crM_free(cr_State *ts, void *ptr, cr_umem osize);
-CRI_FUNC void *crM_growarr(cr_State *ts, void *ptr, int *sizep, int len,
+CSI_FUNC void *crM_malloc(cs_State *ts, cs_umem size);
+CSI_FUNC void *crM_realloc_(cs_State *ts, void *ptr, cs_umem osize,
+                            cs_umem nsize);
+CSI_FUNC void *crM_saferealloc(cs_State *ts, void *ptr, cs_umem osize,
+                               cs_umem nsize);
+CSI_FUNC void crM_free(cs_State *ts, void *ptr, cs_umem osize);
+CSI_FUNC void *crM_growarr(cs_State *ts, void *ptr, int *sizep, int len,
                            int elemsize, int ensure, int limit,
                                const char *what);
-CRI_FUNC void *crM_shrinkarr(cr_State *ts, void *ptr, int *sizep, int final,
+CSI_FUNC void *crM_shrinkarr(cs_State *ts, void *ptr, int *sizep, int final,
                               int elemsize);
-CRI_FUNC int crM_reallocstack(cr_State *ts, int n);
-CRI_FUNC int crM_growstack(cr_State *ts, int n);
+CSI_FUNC int crM_reallocstack(cs_State *ts, int n);
+CSI_FUNC int crM_growstack(cs_State *ts, int n);
 
 #endif

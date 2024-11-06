@@ -48,21 +48,21 @@
 static const TValue absentkey = {ABSTKEYCONSTANT};
 
 
-static uint hashflt(cr_Number n) {
-    cr_Integer ni;
+static uint hashflt(cs_Number n) {
+    cs_Integer ni;
     int exp;
-    n = cr_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
-    if (cr_likely(cr_number2integer(n, &ni))) {
+    n = cs_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
+    if (cs_likely(cs_number2integer(n, &ni))) {
         uint ui = cast_uint(exp) + cast_uint(ni);
         return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
     }
-    cr_assert(cri_numisnan(n) || cr_mathop(fabs)(n) == cast_num(HUGE_VAL));
+    cs_assert(cri_numisnan(n) || cs_mathop(fabs)(n) == cast_num(HUGE_VAL));
     return 0;
 }
 
 
-static Node *hashint(const HTable *ht, cr_Integer i) {
-    cr_Unsigned ui = cri_castS2U(i);
+static Node *hashint(const HTable *ht, cs_Integer i) {
+    cs_Unsigned ui = cri_castS2U(i);
     if (ui <= cast_uint(INT_MAX))
         return hashslot(ht, cast_int(ui));
     else
@@ -71,9 +71,9 @@ static Node *hashint(const HTable *ht, cr_Integer i) {
 
 
 /* allocate hash array */
-static void newhasharray(cr_State *cr, HTable *ht, uint size) {
+static void newhasharray(cs_State *cr, HTable *ht, uint size) {
     int nbits = crO_ceillog2(size);
-    if (cr_unlikely(nbits > MAXHBITS || (1u << nbits) > MAXHSIZE))
+    if (cs_unlikely(nbits > MAXHBITS || (1u << nbits) > MAXHSIZE))
         crD_runerror(cr, "hashtable overflow");
     size = twoto(nbits);
     ht->node = crM_newarray(cr, size, Node);
@@ -88,7 +88,7 @@ static void newhasharray(cr_State *cr, HTable *ht, uint size) {
 }
 
 
-cr_sinline void htpreinit(HTable *ht) {
+cs_sinline void htpreinit(HTable *ht) {
     ht->size = 0;
     ht->isweak = 0;
     ht->node = ht->lastfree = NULL;
@@ -97,8 +97,8 @@ cr_sinline void htpreinit(HTable *ht) {
 
 
 /* create new hashtable */
-HTable *crH_new(cr_State *ts) {
-    HTable *ht = crG_new(ts, sizeof(*ht), CR_VHTABLE, HTable);
+HTable *crH_new(cs_State *ts) {
+    HTable *ht = crG_new(ts, sizeof(*ht), CS_VHTABLE, HTable);
     htpreinit(ht);
     newhasharray(ts, ht, MINHSIZE);
     return ht;
@@ -106,20 +106,20 @@ HTable *crH_new(cr_State *ts) {
 
 
 /* create new sized hashtable */
-HTable *crH_newsize(cr_State *ts, uint size) {
-    HTable *ht = crG_new(ts, sizeof(*ht), CR_VHTABLE, HTable);
+HTable *crH_newsize(cs_State *ts, uint size) {
+    HTable *ht = crG_new(ts, sizeof(*ht), CS_VHTABLE, HTable);
     htpreinit(ht);
     newhasharray(ts, ht, size);
     return ht;
 }
 
 
-static inline void freehash(cr_State *ts, HTable *ht) {
+static inline void freehash(cs_State *ts, HTable *ht) {
     crM_freearray(ts, ht->node, htsize(ht), TValue);
 }
 
 
-void crH_free(cr_State *ts, HTable *ht) {
+void crH_free(cs_State *ts, HTable *ht) {
     freehash(ts, ht);
     crM_free(ts, obj2gco(ht), sizeof(*ht));
 }
@@ -131,15 +131,15 @@ void crH_free(cr_State *ts, HTable *ht) {
  */
 static Node *mainposition(const HTable *ht, const TValue *k) {
     switch (ttypetag(k)) {
-        case CR_VTRUE: return hashboolean(ht, 1);
-        case CR_VFALSE: return hashboolean(ht, 0);
-        case CR_VNUMINT: return hashint(ht, ival(k));
-        case CR_VNUMFLT: return hashslot(ht, hashflt(fval(k)));
-        case CR_VLUDATA: return hashpointer(ht, pval(k));
-        case CR_VCFUNCTION: return hashpointer(ht, cfval(k));
-        case CR_VSTRING: return hashstr(ht, strval(k));
+        case CS_VTRUE: return hashboolean(ht, 1);
+        case CS_VFALSE: return hashboolean(ht, 0);
+        case CS_VNUMINT: return hashint(ht, ival(k));
+        case CS_VNUMFLT: return hashslot(ht, hashflt(fval(k)));
+        case CS_VLUDATA: return hashpointer(ht, pval(k));
+        case CS_VCFUNCTION: return hashpointer(ht, cfval(k));
+        case CS_VSTRING: return hashstr(ht, strval(k));
         default: {
-            cr_assert(!ttisnil(k) && iscollectable(k));
+            cs_assert(!ttisnil(k) && iscollectable(k));
             return hashpointer(ht, gcoval(k));
         }
     }
@@ -167,7 +167,7 @@ static Node *freepos(HTable *ht) {
 static void exchangedicts(HTable *d1, HTable *d2) {
     Node *node = d1->node;
     Node *lastfree = d1->lastfree;
-    cr_ubyte sz = d1->size;
+    cs_ubyte sz = d1->size;
     d1->size = d2->size;
     d1->node = d2->node;
     d1->lastfree = d2->lastfree;
@@ -181,7 +181,7 @@ static void exchangedicts(HTable *d1, HTable *d2) {
 ** Insert all the elements from 'src' hashtable to 'dest'
 ** hashtable.
 */
-static void insertfrom(cr_State *ts, HTable *src, HTable *dest) {
+static void insertfrom(cs_State *ts, HTable *src, HTable *dest) {
     int size = htsize(src);
     for (int i = 0; i < size; i++) {
         Node *n = htnode(src, i);
@@ -195,7 +195,7 @@ static void insertfrom(cr_State *ts, HTable *src, HTable *dest) {
 
 
 /* resize hashtable to new size */
-void crH_resize(cr_State *ts, HTable *ht, int size) {
+void crH_resize(cs_State *ts, HTable *ht, int size) {
     HTable newdict;
     newhasharray(ts, &newdict, size);
     exchangedicts(ht, &newdict);
@@ -205,7 +205,7 @@ void crH_resize(cr_State *ts, HTable *ht, int size) {
 
 
 /* rehash hashtable keys */
-static void rehash(cr_State *ts, HTable *ht) {
+static void rehash(cs_State *ts, HTable *ht) {
     int arrsize = htsize(ht);
     int usednodes = 0;
     for (int i = 0; i < arrsize; i++) {
@@ -218,13 +218,13 @@ static void rehash(cr_State *ts, HTable *ht) {
 
 
 /* insert new key */
-void crH_newkey(cr_State *ts, HTable *ht, const TValue *key,
+void crH_newkey(cs_State *ts, HTable *ht, const TValue *key,
                 const TValue *val) {
     HTable old;
     Node *mp = mainposition(ht, key); /* get main position for 'key' */
     if (!keyisempty(mp)) { /* mainposition already taken ? */
         Node *f = freepos(ht); /* get next free position */
-        if (cr_unlikely(f == NULL)) { /* no free position ? */
+        if (cs_unlikely(f == NULL)) { /* no free position ? */
             rehash(ts, &old);
             crH_set(ts, ht, key, val);
             return;
@@ -246,14 +246,14 @@ void crH_newkey(cr_State *ts, HTable *ht, const TValue *key,
             /* new node will go into free position */
             if (nodenext(mp) != 0)
                 nodenext(f) = mp + nodenext(mp) - f; /* chain new position */
-            else cr_assert(nodenext(f) == 0);
+            else cs_assert(nodenext(f) == 0);
             nodenext(mp) = f - mp;
             mp = f;
         }
     }
     setnodekey(ts, mp, key); /* set key */
     crG_barrierback(ts, obj2gco(ht), key); /* set 'ht' as gray */
-    cr_assert(ttisempty(nodeval(mp))); /* value slot must be empty */
+    cs_assert(ttisempty(nodeval(mp))); /* value slot must be empty */
     setobj(ts, nodeval(mp), val); /* set value */
 }
 
@@ -280,18 +280,18 @@ static int eqkey(const TValue *k, const Node *n, int deadok) {
             !(deadok && keyisdead(n) && iscollectable(k)))
         return 0;
     switch (ttypetag(k)) {
-    case CR_VTRUE: case CR_VFALSE:
+    case CS_VTRUE: case CS_VFALSE:
         return 1;
-    case CR_VNUMINT:
+    case CS_VNUMINT:
         return (ival(k) == keyival(n));
-    case CR_VNUMFLT:
+    case CS_VNUMFLT:
         return cri_numeq(fval(k), keyfval(n));
-    case CR_VLUDATA:
+    case CS_VLUDATA:
         return (pval(k) == keypval(n));
-    case CR_VCFUNCTION:
+    case CS_VCFUNCTION:
         return (cfval(k) == keycfval(n));
     default: /* all equal objects have equal pointers */
-        cr_assert(iscollectable(k));
+        cs_assert(iscollectable(k));
         return (gcoval(k) == keygcoval(n));
     }
     return 0;
@@ -314,10 +314,10 @@ static const TValue *getgeneric(HTable *ht, const TValue *key, int deadok) {
 
 
 /* auxliary function to 'crH_next' */
-static uint getindex(cr_State *ts, HTable *ht, const TValue *k) {
+static uint getindex(cs_State *ts, HTable *ht, const TValue *k) {
     if (ttisnil(k)) return 0;
     const TValue *slot = getgeneric(ht, k, 1);
-    if (cr_unlikely(isabstkey(slot)))
+    if (cs_unlikely(isabstkey(slot)))
         crD_runerror(ts, "invalid key passed to 'next'");
     uint i = cast(Node *, slot) - htnode(ht, 0); /* key index in hash table */
     return i + 1; /* return next slot index */
@@ -329,7 +329,7 @@ static uint getindex(cr_State *ts, HTable *ht, const TValue *k) {
  * If table had next entry then top of the stack will contain
  * key of that entry and its value (in that order).
  */
-int crH_next(cr_State *ts, HTable *ht, SPtr key) {
+int crH_next(cs_State *ts, HTable *ht, SPtr key) {
     uint i = getindex(ts, ht, s2v(key));
     for (; cast_int(i) < htsize(ht); i++) {
         Node *slot = htnode(ht, i);
@@ -344,7 +344,7 @@ int crH_next(cr_State *ts, HTable *ht, SPtr key) {
 
 
 /* insert all the 'keys' from 'stab' into 'dtab' */
-void crH_copykeys(cr_State *ts, HTable *stab, HTable *dtab) {
+void crH_copykeys(cs_State *ts, HTable *stab, HTable *dtab) {
     TValue k;
     for (int i = 0; i < htsize(stab); i++) {
         Node *slot = htnode(stab, i);
@@ -358,12 +358,12 @@ void crH_copykeys(cr_State *ts, HTable *stab, HTable *dtab) {
 
 const TValue *crH_getstr(HTable *ht, OString *key) {
     TValue aux;
-    setstrval(cast(cr_State *, NULL), &aux, key);
+    setstrval(cast(cs_State *, NULL), &aux, key);
     return getgeneric(ht, &aux, 0);
 }
 
 
-const TValue *crH_getint(HTable *ht, cr_Integer key) {
+const TValue *crH_getint(HTable *ht, cs_Integer key) {
     Node *n = hashint(ht, key);
     for (;;) {
         if (keyisinteger(n) && keyival(n) == key) {
@@ -380,22 +380,22 @@ const TValue *crH_getint(HTable *ht, cr_Integer key) {
 
 const TValue *crH_get(HTable *ht, const TValue *key) {
     switch (ttypetag(key)) {
-        case CR_VSTRING: return crH_getstr(ht, strval(key));
-        case CR_VNUMINT: return crH_getint(ht, ival(key));
-        case CR_VNUMFLT: {
-            cr_Integer i;
+        case CS_VSTRING: return crH_getstr(ht, strval(key));
+        case CS_VNUMINT: return crH_getint(ht, ival(key));
+        case CS_VNUMFLT: {
+            cs_Integer i;
             if (crO_tointeger(key, &i, N2IEXACT))
                 return crH_getint(ht, i);
         } /* FALLTHRU */
         default:  {
-            cr_assert(!ttisnil(key));
+            cs_assert(!ttisnil(key));
             return getgeneric(ht, key, 0);
         }
     }
 }
 
 
-void crH_finishset(cr_State *ts, HTable *ht, const TValue *slot,
+void crH_finishset(cs_State *ts, HTable *ht, const TValue *slot,
                    const TValue *key, const TValue *val) {
     if (isabstkey(slot))
         crH_newkey(ts, ht, key, val);
@@ -404,7 +404,7 @@ void crH_finishset(cr_State *ts, HTable *ht, const TValue *slot,
 }
 
 
-void crH_set(cr_State *ts, HTable *ht, const TValue *key, const TValue *val) {
+void crH_set(cs_State *ts, HTable *ht, const TValue *key, const TValue *val) {
     const TValue *slot = crH_get(ht, key);
     crH_finishset(ts, ht, slot, key, val);
 }
@@ -413,7 +413,7 @@ void crH_set(cr_State *ts, HTable *ht, const TValue *key, const TValue *val) {
 int crH_len(const HTable *ht) {
     int len = 0;
     Node *n = htnode(ht, 0);
-    cr_assert(htsize(ht) % 4 == 0);
+    cs_assert(htsize(ht) % 4 == 0);
     while (n != htnodelast(ht)) {
         len += !keyisempty(n++);
         len += !keyisempty(n++);
@@ -424,7 +424,7 @@ int crH_len(const HTable *ht) {
 }
 
 
-OString *crH_getinterned(cr_State *ts, HTable *ht, const char *str, size_t len,
+OString *crH_getinterned(cs_State *ts, HTable *ht, const char *str, size_t len,
                          uint hash) {
     for (Node *n = hashslot(ht, hash); n < htnodelast(ht); n++) {
         if (!ttisempty(nodeval(n))) {

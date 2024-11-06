@@ -15,22 +15,22 @@
  * Signed and unsigned types that represent count
  * in bytes of total memory used by cript.
  */
-typedef size_t cr_umem;
-typedef ptrdiff_t cr_mem;
+typedef size_t cs_umem;
+typedef ptrdiff_t cs_mem;
 
-#define CRUMEM_MAX      ((cr_umem)(~(cr_umem)(0)))
-#define CRMEM_MAX       ((cr_mem)(CRUMEM_MAX >> 1))
+#define CRUMEM_MAX      ((cs_umem)(~(cs_umem)(0)))
+#define CRMEM_MAX       ((cs_mem)(CRUMEM_MAX >> 1))
 
 
 /*
  * Used for representing small signed/unsigned
  * numbers instead of declaring them 'char'.
  */
-typedef unsigned char cr_ubyte;
-typedef signed char cr_byte;
+typedef unsigned char cs_ubyte;
+typedef signed char cs_byte;
 
-#define CRUBYTE_MAX     ((cr_ubyte)(~(cr_ubyte)(0)))
-#define CRBYTE_MAX      ((cr_ubyte)(CR_UBYTE_MAX >> 1))
+#define CRUBYTE_MAX     ((cs_ubyte)(~(cs_ubyte)(0)))
+#define CRBYTE_MAX      ((cs_ubyte)(cs_ubyte_MAX >> 1))
 
 
 /* 
@@ -38,7 +38,7 @@ typedef signed char cr_byte;
 ** This value must have 16 bits for counting nested
 ** Cript function calls and 16 bits for nested C calls.
 */
-typedef uint32_t cr_uint32;
+typedef uint32_t cs_uint32;
 
 
 /* nice to have */
@@ -48,11 +48,11 @@ typedef unsigned short ushrt;
 
 /*
  * Maximum size visible for CSript.
- * It must be less than what is representable by 'cr_Integer'.
+ * It must be less than what is representable by 'cs_Integer'.
  */
 #define CRMAXSIZE \
-    (sizeof(size_t) < sizeof(cr_Integer) ? \
-        (SIZE_MAX) : (size_t)(CR_INTEGER_MAX))
+    (sizeof(size_t) < sizeof(cs_Integer) ? \
+        (SIZE_MAX) : (size_t)(CS_INTEGER_MAX))
 
 
 
@@ -62,22 +62,22 @@ typedef unsigned short ushrt;
 
 
 /* internal assertions for debugging */
-#if defined(CRI_ASSERT)
+#if defined(CSI_ASSERT)
 #undef NDEBUG
 #include <assert.h>
-#define cr_assert(e)            assert(e)
+#define cs_assert(e)            assert(e)
 #endif
 
-#if defined(cr_assert)
-#define check_exp(c,e)          (cr_assert(c),(e))
+#if defined(cs_assert)
+#define check_exp(c,e)          (cs_assert(c),(e))
 #else
-#define cr_assert(e)            ((void)0)
+#define cs_assert(e)            ((void)0)
 #define check_exp(c,e)          (e)
 #endif
 
 /* C API assertions */
 #if !defined(cri_checkapi)
-#define cri_checkapi(ts,e)      ((void)ts, cr_assert(e))
+#define cri_checkapi(ts,e)      ((void)ts, cs_assert(e))
 #endif
 
 #define api_check(ts,e,err)     cri_checkapi(ts,(e) && err)
@@ -98,34 +98,34 @@ typedef unsigned short ushrt;
 
 /* inline functions */
 #if defined(__GNUC__)
-#define cr_inline       __inline__
+#define cs_inline       __inline__
 #else
-#define cr_inline       inline
+#define cs_inline       inline
 #endif
 
 /* static inline */
-#define cr_sinline      static cr_inline
+#define cs_sinline      static cs_inline
 
 
 
 /* non-return type */
 #if defined(__GNUC__)
-#define cr_noret        void __attribute__((noreturn))
+#define cs_noret        void __attribute__((noreturn))
 #elif defined(_MSC_VER) && _MSC_VER >= 1200
-#define cr_noret        void __declspec(noreturn)
+#define cs_noret        void __declspec(noreturn)
 #else
-#define cr_noret        void
+#define cs_noret        void
 #endif
 
 
 
 /* unreachable code (optimization) */
 #if defined(__GNUC__)
-#define cr_unreachable()        __builtin_unreachable()
+#define cs_unreachable()        __builtin_unreachable()
 #elif defined(_MSC_VER) && _MSC_VER >= 1200
-#define cr_unreachable()        __assume(0)
+#define cs_unreachable()        __assume(0)
 #else
-#define cr_unreachable()        cr_assert(0 && "unreachable")
+#define cs_unreachable()        cs_assert(0 && "unreachable")
 #endif
 
 
@@ -136,7 +136,7 @@ typedef unsigned short ushrt;
  * the arguments; arguments vary in size (short/long) and
  * more on that in 'copcode.h'.
  */
-typedef cr_ubyte Instruction;
+typedef cs_ubyte Instruction;
 
 
 
@@ -146,8 +146,8 @@ typedef cr_ubyte Instruction;
  * It has to be power of 2, because of the hash table
  * implementation.
  */
-#if !defined(CRI_MINSTRHTABSIZE)
-#define CRI_MINSTRHTABSIZE      64
+#if !defined(CSI_MINSTRHTABSIZE)
+#define CSI_MINSTRHTABSIZE      64
 #endif
 
 
@@ -158,8 +158,8 @@ typedef cr_ubyte Instruction;
  * It has to be power of 2, because of the hash table
  * implementation.
  */
-#if !defined(CRI_MINHTABSIZE)
-#define CRI_MINHTABSIZE         8
+#if !defined(CSI_MINHTABSIZE)
+#define CSI_MINHTABSIZE         8
 #endif
 
 
@@ -169,8 +169,8 @@ typedef cr_ubyte Instruction;
  * lexing, this buffer memory will be freed
  * after compilation.
  */
-#if !defined(CRI_MINBUFFER)
-#define CRI_MINBUFFER           32
+#if !defined(CSI_MINBUFFER)
+#define CSI_MINBUFFER           32
 #endif
 
 
@@ -181,8 +181,8 @@ typedef cr_ubyte Instruction;
  * keep this load factor <= 0.70 to
  * avoid excess collisions.
  */
-#if !defined(CRI_MAXTABLOAD)
-#define CRI_MAXHTABLOAD         0.70
+#if !defined(CSI_MAXTABLOAD)
+#define CSI_MAXHTABLOAD         0.70
 #endif
 
 
@@ -191,20 +191,20 @@ typedef cr_ubyte Instruction;
  * Maximum size for 'HTable'.
  * Make sure the value fits in 'INT_MAX'.
  */
-#if !defined(CRI_MAXHTABSIZE)
-#define CRI_MAXHTABSIZE         INT_MAX
+#if !defined(CSI_MAXHTABSIZE)
+#define CSI_MAXHTABSIZE         INT_MAX
 #endif
 
 
 
 /*
  * Minimum internal array siz.
- * This should be 2^n='CR_MINARRSIZE'.
+ * This should be 2^n='CS_MINARRSIZE'.
  * Make sure this value fits in 'INT_MAX'
  * and is >= 4.
  */
-#if !defined(CRI_MINARRSIZE)
-#define CRI_MINARRSIZE          8
+#if !defined(CSI_MINARRSIZE)
+#define CSI_MINARRSIZE          8
 #endif
 
 
@@ -215,24 +215,24 @@ typedef cr_ubyte Instruction;
  * other features implemented through recursion in C.
  * Any value will suffice as long as it fits in 'unsigned short'.
  */
-#define CRI_MAXCCALLS       4096
+#define CSI_MAXCCALLS       4096
 
 
 
 /*
- * Runs each time program enters ('cr_lock') and
- * leaves ('cr_unlock') CSript core (C API).
+ * Runs each time program enters ('cs_lock') and
+ * leaves ('cs_unlock') CSript core (C API).
  */
-#if !defined(cr_lock)
-#define cr_lock(ts)         ((void)0)
-#define cr_unlock(ts)       ((void)0)
+#if !defined(cs_lock)
+#define cs_lock(ts)         ((void)0)
+#define cs_unlock(ts)       ((void)0)
 #endif
 
 
 
 /*
  * These macros allow user-defined action to be taken each
- * time cr_State (thread) is created or deleted.
+ * time cs_State (thread) is created or deleted.
  */
 #if !defined(cri_userstatecreated)
 #define cri_userstatecreated(ts)            ((void)(ts))
@@ -296,22 +296,22 @@ typedef cr_ubyte Instruction;
 #define cast(t, e)          ((t)(e))
 
 #define cast_node(e)        cast(Node*,(e))
-#define cast_ubyte(e)       cast(cr_ubyte,(e))
-#define cast_ubytep(e)      cast(cr_ubyte*,(e))
-#define cast_byte(e)        cast(cr_byte,(e))
-#define cast_num(e)         cast(cr_Number,(e))
+#define cast_ubyte(e)       cast(cs_ubyte,(e))
+#define cast_ubytep(e)      cast(cs_ubyte*,(e))
+#define cast_byte(e)        cast(cs_byte,(e))
+#define cast_num(e)         cast(cs_Number,(e))
 #define cast_int(e)         cast(int,(e))
 #define cast_uint(e)        cast(uint,(e))
-#define cast_umem(e)        cast(cr_umem,(e))
-#define cast_mem(e)         cast(cr_mem,(e))
+#define cast_umem(e)        cast(cs_umem,(e))
+#define cast_mem(e)         cast(cs_mem,(e))
 #define cast_charp(e)       cast(char *,(e))
 #define cast_sizet(e)       cast(size_t,(e))
 
-/* cast 'cr_Integer' to 'cr_Unsigned' */
-#define cri_castS2U(i)      ((cr_Unsigned)(i))
+/* cast 'cs_Integer' to 'cs_Unsigned' */
+#define cri_castS2U(i)      ((cs_Unsigned)(i))
 
-/* cast 'cr_Unsigned' to 'cr_Integer' */
-#define cri_castU2S(i)      ((cr_Integer)(i))
+/* cast 'cs_Unsigned' to 'cs_Integer' */
+#define cri_castU2S(i)      ((cs_Integer)(i))
 
 
 
@@ -322,7 +322,7 @@ typedef cr_ubyte Instruction;
 
 /* @cri_nummod - modulo 'a - floor(a/b)*b'. */
 #define cri_nummod(ts,a,b,m) \
-        { (void)(ts); (m) = cr_mathop(fmod)(a, b); \
+        { (void)(ts); (m) = cs_mathop(fmod)(a, b); \
           if (((m) > 0) ? (b)<0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
 /* @cri_numdiv - float division. */
@@ -332,13 +332,13 @@ typedef cr_ubyte Instruction;
 
 /* @cri_numidiv - floor division (or division between integers). */
 #ifndef cri_numidiv
-#define cri_numidiv(ts, a, b)   ((void)(ts), cr_mathop(floor)(cri_numdiv(a, b)))
+#define cri_numidiv(ts, a, b)   ((void)(ts), cs_mathop(floor)(cri_numdiv(a, b)))
 #endif
 
 /* @cri_numpow - exponentiation. */
 #ifndef cri_numpow
 #define cri_numpow(ts, a, b) \
-    ((void)(ts), (b) == 2 ? (a)*(a) : cr_mathop(pow)(a, b))
+    ((void)(ts), (b) == 2 ? (a)*(a) : cs_mathop(pow)(a, b))
 #endif
 
 /*
@@ -378,11 +378,11 @@ typedef cr_ubyte Instruction;
 
 
 /*
-** @CR_STRESS_GC - enables stress test for garbage
+** @CS_STRESS_GC - enables stress test for garbage
 ** collector, on each tracked memory change it performs
 ** full garbage collection.
 */
-#if defined(CR_STRESS_GC)
+#if defined(CS_STRESS_GC)
 #define gcmemchange(ts,pre,pos) \
     { if (gcrunning(G_(ts)->gc)) { pre; crG_full(ts); pos; } }
 #else

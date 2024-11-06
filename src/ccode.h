@@ -272,7 +272,7 @@ OP_RET,   /* L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes) */
 ** [OP_RET]
 ** L2 is biased with +1, in order to represent multiple returns when the
 ** number of results is only known during runtime. For example (L2 == 0)
-** represents CR_MULRET, in this case we would return all values up to the
+** represents CS_MULRET, in this case we would return all values up to the
 ** top. S indicates if current function needs to close upvalues or tbc
 ** variables before returning.
 */
@@ -303,7 +303,7 @@ enum OpFormat {
 ** bit 5: instruction is metamethod call (MProp)
 ** bit 6-7: unused
 */
-CRI_DEC(const cr_ubyte crC_opProp[NUM_OPCODES];)
+CSI_DEC(const cs_ubyte crC_opProp[NUM_OPCODES];)
 
 #define getOpFormat(p)      (crC_opProp[p] & 0x07)
 #define testTProp(p)        (crC_opProp[p] & (1 << 3))
@@ -315,53 +315,53 @@ CRI_DEC(const cr_ubyte crC_opProp[NUM_OPCODES];)
 
 
 /* Instruction format sizes in bytes (aka as bytecode) */
-CRI_DEC(const cr_ubyte crC_opSize[FormatN];)
+CSI_DEC(const cs_ubyte crC_opSize[FormatN];)
 
 #define getOpSize(p)        crC_opSize[getOpFormat(p)]
 
-CRI_DEC(const char *crC_opSizeFormat[FormatN];)
+CSI_DEC(const char *crC_opSizeFormat[FormatN];)
 
 #define getOpSizeFormat(p)  crC_opSizeFormat[getOpFormat(p)]
 
 
 /* OpCode names table */ 
-CRI_DEC(const char *crC_opName[NUM_OPCODES];)
+CSI_DEC(const char *crC_opName[NUM_OPCODES];)
 
 #define getOpName(p)        crC_opName[p]
 
 
 
-CRI_FUNC int crC_emitI(FunctionState *fs, Instruction i);
-CRI_FUNC int crC_emitIS(FunctionState *fs, Instruction i, int a);
-CRI_FUNC int crC_emitIL(FunctionState *fs, Instruction i, int a);
-CRI_FUNC int crC_emitILL(FunctionState *fs, Instruction i, int a, int b);
-CRI_FUNC void crC_checkstack(FunctionState *fs, int n);
-CRI_FUNC void crC_reserveslots(FunctionState *fs, int n);
-CRI_FUNC void crC_setoneret(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void crC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
-CRI_FUNC int crC_nil(FunctionState *fs, int n);
-CRI_FUNC int crC_pop(FunctionState *fs, int n);
-CRI_FUNC int crC_ret(FunctionState *fs, int base, int nreturns);
-CRI_FUNC void crC_method(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void crC_storevar(FunctionState *fs, ExpInfo *var);
-CRI_FUNC void crC_defineglobal(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void crC_array(FunctionState *fs, ExpInfo *e, int base, int size,
+CSI_FUNC int crC_emitI(FunctionState *fs, Instruction i);
+CSI_FUNC int crC_emitIS(FunctionState *fs, Instruction i, int a);
+CSI_FUNC int crC_emitIL(FunctionState *fs, Instruction i, int a);
+CSI_FUNC int crC_emitILL(FunctionState *fs, Instruction i, int a, int b);
+CSI_FUNC void crC_checkstack(FunctionState *fs, int n);
+CSI_FUNC void crC_reserveslots(FunctionState *fs, int n);
+CSI_FUNC void crC_setoneret(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void crC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
+CSI_FUNC int crC_nil(FunctionState *fs, int n);
+CSI_FUNC int crC_pop(FunctionState *fs, int n);
+CSI_FUNC int crC_ret(FunctionState *fs, int base, int nreturns);
+CSI_FUNC void crC_method(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void crC_storevar(FunctionState *fs, ExpInfo *var);
+CSI_FUNC void crC_defineglobal(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void crC_array(FunctionState *fs, ExpInfo *e, int base, int size,
                         int elems);
-CRI_FUNC void crC_varexp2stack(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void crC_exp2stack(FunctionState *fs, ExpInfo *e);
-CRI_FUNC void crC_getproperty(FunctionState *fs, ExpInfo *var,
+CSI_FUNC void crC_varexp2stack(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void crC_exp2stack(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void crC_getproperty(FunctionState *fs, ExpInfo *var,
                               ExpInfo *keystr, int super);
-CRI_FUNC void crC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
+CSI_FUNC void crC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);
-CRI_FUNC void crC_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
-CRI_FUNC int crC_jmp(FunctionState *fs, OpCode jop);
-CRI_FUNC void crC_concatjmp(FunctionState *fs, int *l1, int l2);
-CRI_FUNC void crC_patch(FunctionState *fs, int pc, int target);
-CRI_FUNC void crC_patchtohere(FunctionState *fs, int pc);
-CRI_FUNC int crC_test(FunctionState *fs, OpCode testop, int cond);
-CRI_FUNC void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
-CRI_FUNC void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
+CSI_FUNC void crC_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
+CSI_FUNC int crC_jmp(FunctionState *fs, OpCode jop);
+CSI_FUNC void crC_concatjmp(FunctionState *fs, int *l1, int l2);
+CSI_FUNC void crC_patch(FunctionState *fs, int pc, int target);
+CSI_FUNC void crC_patchtohere(FunctionState *fs, int pc);
+CSI_FUNC int crC_test(FunctionState *fs, OpCode testop, int cond);
+CSI_FUNC void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
+CSI_FUNC void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                          Binopr opr);
-CRI_FUNC void crC_finish(FunctionState *fs);
+CSI_FUNC void crC_finish(FunctionState *fs);
 
 #endif

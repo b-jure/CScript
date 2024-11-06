@@ -22,27 +22,27 @@
 #define pcrel(pc,fn)    ((pc) - (fn)->code)
 
 
-CRI_FUNC int crD_getfuncline(const Function *fn, int pc);
-CRI_FUNC const char *crD_findlocal(cr_State *ts, CallFrame *cf, int n,
+CSI_FUNC int crD_getfuncline(const Function *fn, int pc);
+CSI_FUNC const char *crD_findlocal(cs_State *ts, CallFrame *cf, int n,
                                    SPtr *pos);
-CRI_FUNC const char *crD_addinfo(cr_State *ts, const char *msg, OString *src,
+CSI_FUNC const char *crD_addinfo(cs_State *ts, const char *msg, OString *src,
                                  int line);
-CRI_FUNC cr_noret crD_runerror(cr_State *ts, const char *fmt, ...);
-CRI_FUNC cr_noret crD_globalerror(cr_State *ts, const char *err, OString *name);
-CRI_FUNC cr_noret crD_typeerror(cr_State *ts, const TValue *v,
+CSI_FUNC cs_noret crD_runerror(cs_State *ts, const char *fmt, ...);
+CSI_FUNC cs_noret crD_globalerror(cs_State *ts, const char *err, OString *name);
+CSI_FUNC cs_noret crD_typeerror(cs_State *ts, const TValue *v,
                                 const char *op);
-CRI_FUNC cr_noret crD_ordererror(cr_State *ts, const TValue *v1,
+CSI_FUNC cs_noret crD_ordererror(cs_State *ts, const TValue *v1,
                                  const TValue *v2);
-CRI_FUNC cr_noret crD_typeerrormeta(cr_State *ts, const TValue *v1,
+CSI_FUNC cs_noret crD_typeerrormeta(cs_State *ts, const TValue *v1,
                                     const TValue *v2, const char * mop);
-CRI_FUNC cr_noret crD_operror(cr_State *ts, const TValue *v1,
+CSI_FUNC cs_noret crD_operror(cs_State *ts, const TValue *v1,
                               const TValue *v2, const char *op);
-CRI_FUNC cr_noret crD_callerror(cr_State *ts, const TValue *obj);
-CRI_FUNC cr_noret crD_concaterror(cr_State *ts, const TValue *v1,
+CSI_FUNC cs_noret crD_callerror(cs_State *ts, const TValue *obj);
+CSI_FUNC cs_noret crD_concaterror(cs_State *ts, const TValue *v1,
                                   const TValue *v2);
-CRI_FUNC cr_noret crD_indexerror(cr_State *ts, cr_Integer index,
+CSI_FUNC cs_noret crD_indexerror(cs_State *ts, cs_Integer index,
                                  const char *what);
-CRI_FUNC cr_noret crD_indextypeerror(cr_State *ts, const TValue *index);
-CRI_FUNC cr_noret crD_errormsg(cr_State *ts);
+CSI_FUNC cs_noret crD_indextypeerror(cs_State *ts, const TValue *index);
+CSI_FUNC cs_noret crD_errormsg(cs_State *ts);
 
 #endif

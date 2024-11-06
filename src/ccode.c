@@ -41,7 +41,7 @@
 ** OpCode properties table.
 ** (order 'OpCode')
 */
-CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
+CSI_DEF const cs_ubyte crC_opProp[NUM_OPCODES] = {
     /*     M  J  T  F      */
     opProp(0, 0, 0, FormatI), /* OP_TRUE */
     opProp(0, 0, 0, FormatI), /* OP_FALSE */
@@ -150,7 +150,7 @@ CRI_DEF const cr_ubyte crC_opProp[NUM_OPCODES] = {
 ** OpFormat size table.
 ** (order 'OpFormat')
 */
-CRI_DEF const cr_ubyte crC_opSize[FormatN] = {
+CSI_DEF const cs_ubyte crC_opSize[FormatN] = {
     1,  /* FormatI */
     2,  /* FormatIS */
     3,  /* FormatISS */
@@ -162,7 +162,7 @@ CRI_DEF const cr_ubyte crC_opSize[FormatN] = {
 };
 
 
-CRI_DEF const char *crC_opSizeFormat[FormatN] = {
+CSI_DEF const char *crC_opSizeFormat[FormatN] = {
     "FormatI",
     "FormatIS",
     "FormatISS",
@@ -178,7 +178,7 @@ CRI_DEF const char *crC_opSizeFormat[FormatN] = {
 ** Names of all instructions.
 ** (order 'OpCode')
 */
-CRI_DEF const char *crC_opName[NUM_OPCODES] = {
+CSI_DEF const char *crC_opName[NUM_OPCODES] = {
     "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
     "VARARGPREP", "VARARG", "CLOSURE", "ARRAY", "ARRAYELEMS", "CLASS",
     "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
@@ -235,7 +235,7 @@ static int emitS(FunctionState *fs, int arg) {
 
 /* emit instruction with short arg */
 int crC_emitIS(FunctionState *fs, Instruction i, int a) {
-    cr_assert(a <= MAXSHRTARGSIZE);
+    cs_assert(a <= MAXSHRTARGSIZE);
     int offset = crC_emitI(fs, i);
     emitS(fs, a);
     return offset;
@@ -255,7 +255,7 @@ static int emitL(FunctionState *fs, int idx) {
 
 /* emit instruction 'i' with long arg 'a' */
 int crC_emitIL(FunctionState *fs, Instruction i, int a) {
-    cr_assert(a <= MAXLONGARGSIZE);
+    cs_assert(a <= MAXLONGARGSIZE);
     int offset = crC_emitI(fs, i);
     emitL(fs, a);
     return offset;
@@ -314,7 +314,7 @@ static int stringK(FunctionState *fs, OString *s) {
 
 
 /* add integer constant to 'constants' */
-static int intK(FunctionState *fs, cr_Integer i) {
+static int intK(FunctionState *fs, cs_Integer i) {
     TValue vi;
     setival(&vi, i);
     return addK(fs, &vi);
@@ -322,7 +322,7 @@ static int intK(FunctionState *fs, cr_Integer i) {
 
 
 /* add float constant to 'constants' */
-static int fltK(FunctionState *fs, cr_Number n) {
+static int fltK(FunctionState *fs, cs_Number n) {
     TValue vn;
     setfval(&vn, n);
     return addK(fs, &vn);
@@ -332,9 +332,9 @@ static int fltK(FunctionState *fs, cr_Number n) {
 /* adjust 'maxstack' */
 void crC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
-    cr_assert(newstack >= 0);
+    cs_assert(newstack >= 0);
     if (fs->fn->maxstack > newstack) {
-        if (cr_unlikely(newstack >= MAXLONGARGSIZE))
+        if (cs_unlikely(newstack >= MAXLONGARGSIZE))
             crY_syntaxerror(fs->lx, "function requires too much stack space");
         fs->fn->maxstack = newstack;
     }
@@ -345,7 +345,7 @@ void crC_checkstack(FunctionState *fs, int n) {
 void crC_reserveslots(FunctionState *fs, int n) {
     crC_checkstack(fs, n);
     fs->sp += n;
-    cr_assert(fs->sp >= 0);
+    cs_assert(fs->sp >= 0);
 }
 
 
@@ -353,7 +353,7 @@ void crC_reserveslots(FunctionState *fs, int n) {
 void crC_setoneret(FunctionState *fs, ExpInfo *e) {
     if (e->et == EXP_CALL) {
         /* already returns a single result */
-        cr_assert(GETARG_L(getinstruction(fs, e), 0) == 2);
+        cs_assert(GETARG_L(getinstruction(fs, e), 0) == 2);
         e->et = EXP_FINEXPR;
     } else if (e->et == EXP_VARARG) {
         Instruction *vararg = getinstruction(fs, e);
@@ -369,7 +369,7 @@ void crC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
     if (e->et == EXP_CALL) {
         SETARG_L(pc, 1, nreturns + 1);
     } else {
-        cr_assert(e->et == EXP_VARARG);
+        cs_assert(e->et == EXP_VARARG);
         SETARG_L(pc, 0, nreturns + 1);
     }
 }
@@ -399,19 +399,19 @@ int crC_ret(FunctionState *fs, int base, int nreturns) {
 
 
 void crC_method(FunctionState *fs, ExpInfo *e) {
-    cr_assert(e->et == EXP_STRING);
+    cs_assert(e->et == EXP_STRING);
     e->u.info = crC_emitIL(fs, OP_METHOD, stringK(fs, e->u.str));
     e->et = EXP_FINEXPR;
 }
 
 
-cr_sinline void freeslots(FunctionState *fs, int n) {
+cs_sinline void freeslots(FunctionState *fs, int n) {
     fs->sp -= n;
 }
 
 
 static void string2K(FunctionState *fs, ExpInfo *e) {
-    cr_assert(e->et == EXP_STRING);
+    cs_assert(e->et == EXP_STRING);
     e->u.info = stringK(fs, e->u.str);
     e->et = EXP_K;
 }
@@ -432,7 +432,7 @@ static int isintKL(ExpInfo *e) {
 
 /* check if 'e' is numeral constant and fits inside of large arg */
 static int isnumKL(ExpInfo *e, int *imm, int *isflt) {
-    cr_Integer i;
+    cs_Integer i;
     if (e->et == EXP_INT)
         i = e->u.i;
     else if (e->et == EXP_FLT && crO_n2i(e->u.n, &i, N2IFLOOR))
@@ -449,7 +449,7 @@ static int isnumKL(ExpInfo *e, int *imm, int *isflt) {
 
 /* emit generic load constant instruction */
 static int codeK(FunctionState *fs, int idx) {
-    cr_assert(idx >= 0 && fitsLA(idx));
+    cs_assert(idx >= 0 && fitsLA(idx));
     return (fitsSA(idx) 
             ? crC_emitIS(fs, OP_CONST, idx) 
             : crC_emitIL(fs, OP_CONSTL, idx));
@@ -604,7 +604,7 @@ static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 
 
 /* emit integer constant */
-static int codeintK(FunctionState *fs, cr_Integer i) {
+static int codeintK(FunctionState *fs, cs_Integer i) {
     if (fitsLA(i))
         return emitILS(fs, OP_CONSTI, cri_abs(i), i < 0);
     else
@@ -613,8 +613,8 @@ static int codeintK(FunctionState *fs, cr_Integer i) {
 
 
 /* emit float constant */
-static int codefltK(FunctionState *fs, cr_Number n) {
-    cr_Integer i;
+static int codefltK(FunctionState *fs, cs_Number n) {
+    cs_Integer i;
     if (crO_n2i(n, &i, N2IFLOOR) && fitsLA(i))
         return emitILS(fs, OP_CONSTF, cri_abs(i), i < 0);
     else
@@ -623,13 +623,13 @@ static int codefltK(FunctionState *fs, cr_Number n) {
 
 
 void crC_array(FunctionState *fs, ExpInfo *e, int base, int size, int elems) {
-    cr_assert((size >= 0) == (size >= elems));
+    cs_assert((size >= 0) == (size >= elems));
     crC_reserveslots(fs, -elems + 1); /* +1 for array */
     if (elems == 0) {
-        cr_assert(base == -1);
+        cs_assert(base == -1);
         e->u.info = crC_emitIL(fs, OP_ARRAY, size + 1);
     } else {
-        cr_assert(base >= 0);
+        cs_assert(base >= 0);
         e->u.info = crC_emitILL(fs, OP_ARRAYELEMS, size + 1, base);
     }
     e->et = EXP_FINEXPR;
@@ -671,13 +671,13 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e) {
                 break;
             }
             default: {
-                cr_assert(e->et == EXP_JMP);
+                cs_assert(e->et == EXP_JMP);
                 return;
             }
         }
         e->et = EXP_FINEXPR;
     }
-    cr_assert(e->et == EXP_FINEXPR);
+    cs_assert(e->et == EXP_FINEXPR);
 }
 
 
@@ -693,7 +693,7 @@ void crC_exp2stack(FunctionState *fs, ExpInfo *e) {
 /* initialize dot indexed expression */
 void crC_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
         int super) {
-    cr_assert(keystr->et == EXP_STRING);
+    cs_assert(keystr->et == EXP_STRING);
     var->u.info = stringK(fs, keystr->u.str);
     var->et = (super ? EXP_DOTSUPER : EXP_DOT);
 }
@@ -701,8 +701,8 @@ void crC_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
 
 /* initialize indexed expression */
 void crC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
-    cr_assert(var->et == EXP_FINEXPR);
-    if (cr_unlikely(key->et == EXP_NIL))
+    cs_assert(var->et == EXP_FINEXPR);
+    if (cs_unlikely(key->et == EXP_NIL))
         crP_semerror(fs->lx, "nil index");
     if (key->et == EXP_STRING)
         string2K(fs, key);
@@ -732,12 +732,12 @@ void crC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
 /* return 1 if folding for 'op' can raise errors */
 static int validop(TValue *v1, TValue *v2, int op) {
     switch (op) {
-        case CR_OPBSHR: case CR_OPBSHL: case CR_OPBAND:
-        case CR_OPBOR: case CR_OPBXOR: case CR_OPBNOT: { /* conversion */
-            cr_Integer i;
+        case CS_OPBSHR: case CS_OPBSHL: case CS_OPBAND:
+        case CS_OPBOR: case CS_OPBXOR: case CS_OPBNOT: { /* conversion */
+            cs_Integer i;
             return (tointeger(v1, &i) && tointeger(v2, &i));
         }
-        case CR_OPDIV: case CR_OPMOD: { /* division by 0 */
+        case CS_OPDIV: case CS_OPMOD: { /* division by 0 */
             return (nval(v2) != 0);
         }
         default: return 1;
@@ -767,7 +767,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
         e1->et = EXP_INT;
         e1->u.i = ival(&res);
     } else {
-        cr_Number n = fval(&res);
+        cs_Number n = fval(&res);
         if (n == 0 || cri_numisnan(n))
             return 0;
         e1->et = EXP_FLT;
@@ -780,14 +780,14 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
 /* emit unary instruction; except logical not '!' */
 static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op) {
     crC_exp2stack(fs, e);
-    cr_assert(e->et == EXP_FINEXPR);
+    cs_assert(e->et == EXP_FINEXPR);
     e->u.info = crC_emitI(fs, op);
 }
 
 
 /* emit logical not instruction */
 static void codenot(FunctionState *fs, ExpInfo *e) {
-    cr_assert(!eisvar(e)); /* vars are already finalized */
+    cs_assert(!eisvar(e)); /* vars are already finalized */
     switch (e->et) {
         case EXP_NIL: case EXP_FALSE: {
             e->et = EXP_TRUE;
@@ -801,7 +801,7 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
             e->u.info = crC_emitI(fs, OP_NOT);
             break;
         }
-        default: cr_unreachable();
+        default: cs_unreachable();
     }
 }
 
@@ -809,11 +809,11 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
 /* emit unary instruction */
 void crC_unary(FunctionState *fs, ExpInfo *e, Unopr opr) {
     static const ExpInfo dummy = {EXP_INT, {0}, -1, -1};
-    cr_assert(OPR_NOT <= opr && opr < OPR_NOUNOPR);
+    cs_assert(OPR_NOT <= opr && opr < OPR_NOUNOPR);
     crC_varexp2stack(fs, e);
     switch (opr) {
         case OPR_UNM: case OPR_BNOT: {
-            if (constfold(fs, e, &dummy, (opr - OPR_UNM) + CR_OPUNM))
+            if (constfold(fs, e, &dummy, (opr - OPR_UNM) + CS_OPUNM))
                 break; /* folded */
             codeunary(fs, e, unopr2op(opr));
             break;
@@ -822,7 +822,7 @@ void crC_unary(FunctionState *fs, ExpInfo *e, Unopr opr) {
             codenot(fs, e); 
             break;
         }
-        default: cr_unreachable();
+        default: cs_unreachable();
     }
 }
 
@@ -855,7 +855,7 @@ static int getjmp(FunctionState *fs, int pc) {
 static void fixjmp(FunctionState *fs, int pc, int destpc) {
     Instruction *pcjmp = &fs->fn->code[pc];
     int offset = destpc - (pc + SIZEARGL);
-    if (cr_unlikely(offset > MAXLONGARGSIZE))
+    if (cs_unlikely(offset > MAXLONGARGSIZE))
         crP_semerror(fs->lx, "control structure too long");
     SETARG_L(pcjmp, 0, offset); /* patch it */
 }
@@ -975,7 +975,7 @@ void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             jmpiftrue(fs, e, OP_TESTORPOP);
             break;
         }
-        default: cr_unreachable();
+        default: cs_unreachable();
     }
 }
 
@@ -1000,7 +1000,7 @@ static int exp2K(FunctionState *fs, ExpInfo *e) {
 
 
 /* swap expressions */
-cr_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
+cs_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
     const ExpInfo temp = *e1; *e1 = *e2; *e2 = temp;
 }
 
@@ -1021,8 +1021,8 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDK);
     int idxK = e2->u.info; /* index into 'constants' */
-    cr_assert(e2->et == EXP_K);
-    cr_assert(OP_ADD <= op && op < OP_CONCAT);
+    cs_assert(e2->et == EXP_K);
+    cs_assert(OP_ADD <= op && op < OP_CONCAT);
     crC_exp2stack(fs, e1);
     e1->u.info = crC_emitIL(fs, op, idxK);
     e1->et = EXP_FINEXPR;
@@ -1048,7 +1048,7 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int sign = (rhs < 0 ? 0 : 2);
     int rhsabs = cri_abs(rhs);
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
-    cr_assert(e2->et == EXP_INT);
+    cs_assert(e2->et == EXP_INT);
     crC_exp2stack(fs, e1);
     e1->u.info = emitILS(fs, op, rhsabs, sign);
     e1->et = EXP_FINEXPR;
@@ -1082,10 +1082,10 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int imm; /* immediate */
     int isflt = 0;
     int iseq = (opr == OPR_EQ);
-    cr_assert(opr == OPR_NE || opr == OPR_EQ);
+    cs_assert(opr == OPR_NE || opr == OPR_EQ);
     if (e1->et != EXP_FINEXPR) {
         /* 'e1' is either a stored string constant or numeric value */
-        cr_assert(e1->et == EXP_K || e1->et == EXP_INT || e1->et == EXP_FLT);
+        cs_assert(e1->et == EXP_K || e1->et == EXP_INT || e1->et == EXP_FLT);
         swapexp(e1, e2);
     }
     crC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
@@ -1111,7 +1111,7 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int immediate;
     OpCode op;
     int sign;
-    cr_assert(OPR_LT == opr || opr == OPR_LE); /* should already be swapped */
+    cs_assert(OPR_LT == opr || opr == OPR_LE); /* should already be swapped */
     if (isnumKL(e2, &immediate, &isflt)) {
         crC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
         op = binopr2op(opr, OPR_LT, OP_LTI);
@@ -1141,7 +1141,7 @@ static void coderange(FunctionState *fs, ExpInfo *e1, ExpInfo *e2) {
 
 void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     crC_varexp2stack(fs, e2);
-    if (boprisfoldable(opr) && constfold(fs, e1, e2, opr + CR_OPADD))
+    if (boprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OPADD))
         return; /* folded */
     switch (opr) {
         case OPR_ADD: case OPR_MUL:
@@ -1175,18 +1175,18 @@ void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
             break;
         }
         case OPR_AND: {
-            cr_assert(e1->t == NOJMP); /* closed by 'crC_prebinary' */
+            cs_assert(e1->t == NOJMP); /* closed by 'crC_prebinary' */
             crC_concatjmp(fs, &e2->f, e1->f);
             *e1 = *e2;
             break;
         }
         case OPR_OR: {
-            cr_assert(e1->f == NOJMP); /* closed by 'crC_prebinary' */
+            cs_assert(e1->f == NOJMP); /* closed by 'crC_prebinary' */
             crC_concatjmp(fs, &e2->t, e1->t);
             *e1 = *e2;
             break;
         }
-        default: cr_unreachable();
+        default: cs_unreachable();
     }
 }
 

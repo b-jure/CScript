@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-#define CR_CORE
+#define CS_CORE
 
 #include "climits.h"
 #include "cobject.h"
@@ -13,7 +13,7 @@
 
 static const char udataname[] = "userdata";
 
-CRI_DEF const char *const crO_typenames[CRI_TOTALTYPES] = {
+CSI_DEF const char *const crO_typenames[CSI_TOTALTYPES] = {
     "no value", "boolean", "number", udataname, "string",
     "function", "class", "instance", udataname, "nil",
     "thread", "upvalue"
@@ -22,7 +22,7 @@ CRI_DEF const char *const crO_typenames[CRI_TOTALTYPES] = {
 
 /* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
 int crO_ceillog2 (uint x) {
-    static const cr_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
+    static const cs_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
         0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
         6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
         7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
@@ -39,12 +39,12 @@ int crO_ceillog2 (uint x) {
 }
 
 
-/* number of bits in 'cr_Integer' */
-#define INTBITS         cast_int((sizeof(cr_Integer)*8))
+/* number of bits in 'cs_Integer' */
+#define INTBITS         cast_int((sizeof(cs_Integer)*8))
 
 
 /* shift 'x', 'y' times, in case of overflow return 0 */
-cr_Integer crO_shiftr(cr_Integer x, cr_Integer y) {
+cs_Integer crO_shiftr(cs_Integer x, cs_Integer y) {
     if (y < 0) {
         if (y <= -INTBITS) return 0;
         return (x << y);
@@ -55,53 +55,53 @@ cr_Integer crO_shiftr(cr_Integer x, cr_Integer y) {
 }
 
 
-static cr_Number numarithm(cr_State *ts, cr_Number x, cr_Number y, int op) {
+static cs_Number numarithm(cs_State *ts, cs_Number x, cs_Number y, int op) {
     switch(op) {
-    case CR_OPADD: return cri_numadd(ts, x, y);
-    case CR_OPSUB: return cri_numsub(ts, x, y);
-    case CR_OPMUL: return cri_nummul(ts, x, y);
-    case CR_OPDIV: return cri_numdiv(ts, x, y);
-    case CR_OPMOD: return crV_modnum(ts, x, y);
-    case CR_OPPOW: return cri_numpow(ts, x, y);
-    case CR_OPUNM: return cri_nummul(ts, x, y);
-    default: cr_unreachable(); return 0.0;
+    case CS_OPADD: return cri_numadd(ts, x, y);
+    case CS_OPSUB: return cri_numsub(ts, x, y);
+    case CS_OPMUL: return cri_nummul(ts, x, y);
+    case CS_OPDIV: return cri_numdiv(ts, x, y);
+    case CS_OPMOD: return crV_modnum(ts, x, y);
+    case CS_OPPOW: return cri_numpow(ts, x, y);
+    case CS_OPUNM: return cri_nummul(ts, x, y);
+    default: cs_unreachable(); return 0.0;
     }
 }
 
 
-static cr_Integer intarithm(cr_State *ts, cr_Integer x, cr_Integer y, int op) {
+static cs_Integer intarithm(cs_State *ts, cs_Integer x, cs_Integer y, int op) {
     switch(op) {
-    case CR_OPADD: return cri_intop(+, x, y);
-    case CR_OPSUB: return cri_intop(-, x, y);
-    case CR_OPMUL: return cri_intop(*, x, y);
-    case CR_OPDIV: return crV_div(ts, x, y);
-    case CR_OPMOD: return crV_modint(ts, x, y);
-    case CR_OPPOW: return cri_intop(^, x, y);
-    case CR_OPUNM: return cri_intop(-, 0, x);
-    case CR_OPBSHL: return crO_shiftl(x, y);
-    case CR_OPBSHR: return crO_shiftr(x, y);
-    case CR_OPBNOT: return cri_intop(^, ~cri_castS2U(0), x);
-    case CR_OPBAND: return cri_intop(&, x, y);
-    case CR_OPBOR: return cri_intop(|, x, y);
-    case CR_OPBXOR: return cri_intop(^, x, y);
-    default: cr_unreachable(); return 0;
+    case CS_OPADD: return cri_intop(+, x, y);
+    case CS_OPSUB: return cri_intop(-, x, y);
+    case CS_OPMUL: return cri_intop(*, x, y);
+    case CS_OPDIV: return crV_div(ts, x, y);
+    case CS_OPMOD: return crV_modint(ts, x, y);
+    case CS_OPPOW: return cri_intop(^, x, y);
+    case CS_OPUNM: return cri_intop(-, 0, x);
+    case CS_OPBSHL: return crO_shiftl(x, y);
+    case CS_OPBSHR: return crO_shiftr(x, y);
+    case CS_OPBNOT: return cri_intop(^, ~cri_castS2U(0), x);
+    case CS_OPBAND: return cri_intop(&, x, y);
+    case CS_OPBOR: return cri_intop(|, x, y);
+    case CS_OPBXOR: return cri_intop(^, x, y);
+    default: cs_unreachable(); return 0;
     }
 }
 
 
 /* convert number 'n' to integer according to 'mode' */
-int crO_n2i(cr_Number n, cr_Integer *i, N2IMode mode) {
-    cr_Number floored = cr_floor(n);
+int crO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
+    cs_Number floored = cs_floor(n);
     if (floored != n) {
         if (mode == N2IEXACT) return 0;
         else if (mode == N2ICEIL) floored++;
     }
-    return cr_number2integer(n, i);
+    return cs_number2integer(n, i);
 }
 
 
-/* try to convert value to 'cr_Integer' */
-int crO_tointeger(const TValue *v, cr_Integer *i, int mode) {
+/* try to convert value to 'cs_Integer' */
+int crO_tointeger(const TValue *v, cs_Integer *i, int mode) {
     if (ttisnum(v)) {
         return crO_n2i(fval(v), i, mode);
     } else if (ttisint(v)) {
@@ -118,28 +118,28 @@ int crO_tointeger(const TValue *v, cr_Integer *i, int mode) {
 ** itself can't invoke runtime error, if the operation can't be
 ** done then return 0.
 */
-int crO_arithmraw(cr_State *ts, const TValue *a, const TValue *b,
+int crO_arithmraw(cs_State *ts, const TValue *a, const TValue *b,
                   TValue *res, int op) {
-    cr_Number n1, n2;
+    cs_Number n1, n2;
     switch (op) {
-    case CR_OPBNOT: case CR_OPBXOR: case CR_OPBSHL:
-    case CR_OPBSHR: case CR_OPBOR: case CR_OPBAND: {
-        cr_Integer i1, i2;
+    case CS_OPBNOT: case CS_OPBXOR: case CS_OPBSHL:
+    case CS_OPBSHR: case CS_OPBOR: case CS_OPBAND: {
+        cs_Integer i1, i2;
         if (tointeger(a, &i1) && tointeger(b, &i2)) {
             setival(res, intarithm(ts, i1, i2, op));
             return 1;
         }
         return 0;
     }
-    case CR_OPDIV: case CR_OPMOD: {
+    case CS_OPDIV: case CS_OPMOD: {
         if (tonumber(a, &n1) && tonumber(b, &n2)) {
             setfval(res, numarithm(ts, n1, n2, op));
             return 1;
         }
         return 0;
     }
-    case CR_OPADD: case CR_OPSUB:
-    case CR_OPMUL: case CR_OPUNM: {
+    case CS_OPADD: case CS_OPSUB:
+    case CS_OPMUL: case CS_OPUNM: {
         if (tonumber(a, &n1) && tonumber(b, &n2)) {
             setfval(res, numarithm(ts, n1, n2, op));
             return 1;

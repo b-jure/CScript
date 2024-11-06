@@ -26,7 +26,7 @@
 
 /* common signature for disassembly functions */
 #define UNASMDEF(name) \
-    static void unasm##name (cr_State *ts, const Function *fn, Instruction *pc)
+    static void unasm##name (cs_State *ts, const Function *fn, Instruction *pc)
 
 
 #define TABSZ   3
@@ -34,30 +34,30 @@
     { e; for(int i_ = 0; i_ < TABSZ; i_++) putchar(' '); }
 
 
-cr_sinline void startline(const Function *fn, const Instruction *pc) {
+cs_sinline void startline(const Function *fn, const Instruction *pc) {
     postab(printf("[%05d]", crD_getfuncline(fn, pcrel(pc, fn))));
 }
 
 
-cr_sinline void endline(void) {
+cs_sinline void endline(void) {
     putchar('\n');
     fflush(stdout);
 }
 
 
-cr_sinline int traceop(OpCode op) {
+cs_sinline int traceop(OpCode op) {
     postab(printf("%s", getOpName(op)));
     return SIZEINSTR;
 }
 
 
-cr_sinline int traceS(const Instruction *pc) {
+cs_sinline int traceS(const Instruction *pc) {
     postab(printf("S=%d", GETARG_S(pc, 0)));
     return SIZEARGS;
 }
 
 
-cr_sinline int traceL(const Instruction *pc) {
+cs_sinline int traceL(const Instruction *pc) {
     postab(printf("L=%d", GETARG_L(pc, 0)));
     return SIZEARGL;
 }
@@ -154,8 +154,8 @@ Instruction crTR_tracepc(const Function *fn, const Instruction *pc) {
         case FormatILL: traceILL(fn, pc); break;
         case FormatILLS: traceILLS(fn, pc); break;
         default: {
-            cr_unreachable();
-            cr_assert(0);
+            cs_unreachable();
+            cs_assert(0);
         }
     }
     return *pc++;
@@ -165,17 +165,17 @@ Instruction crTR_tracepc(const Function *fn, const Instruction *pc) {
 #define nextOp(pc)      ((pc) + getOpSize(*pc))
 
 
-cr_sinline void tracenil(void) {
+cs_sinline void tracenil(void) {
     printf("nil");
 }
 
 
-cr_sinline void tracetrue(void) {
+cs_sinline void tracetrue(void) {
     printf("true");
 }
 
 
-cr_sinline void tracefalse(void) {
+cs_sinline void tracefalse(void) {
     printf("false");
 }
 
@@ -183,28 +183,28 @@ cr_sinline void tracefalse(void) {
 /* maximum length for string constants */
 #define MAXSTRKLEN      20
 
-cr_sinline void tracestring(OString *s) {
+cs_sinline void tracestring(OString *s) {
     char buff[MAXSTRKLEN + 1];
     crS_strlimit(buff, getstrbytes(s), getstrlen(s), sizeof(buff));
     printf("%s", buff);
 }
 
 
-cr_sinline void tracenum(const TValue *o) {
+cs_sinline void tracenum(const TValue *o) {
     printf("%s", crS_numtostr(o, NULL));
 }
 
 
 static void tracevalue(const TValue *o) {
     switch (ttypetag(o)) {
-        case CR_VNIL: tracenil();
-        case CR_VTRUE: tracetrue();
-        case CR_VFALSE: tracefalse();
-        case CR_VSTRING: tracestring(strval(o)); break;
-        case CR_VNUMINT: case CR_VNUMFLT: tracenum(o); break;
+        case CS_VNIL: tracenil();
+        case CS_VTRUE: tracetrue();
+        case CS_VFALSE: tracefalse();
+        case CS_VSTRING: tracestring(strval(o)); break;
+        case CS_VNUMINT: case CS_VNUMFLT: tracenum(o); break;
         default: {
-            cr_unreachable();
-            cr_assert(0 && "invalid 'o' type");
+            cs_unreachable();
+            cs_assert(0 && "invalid 'o' type");
         }
     }
 }
@@ -262,7 +262,7 @@ UNASMDEF(K) {
 
 UNASMDEF(IMMint) {
     TValue aux;
-    cr_Integer i;
+    cs_Integer i;
     UNUSED(ts);
     startline(fn, pc);
     traceop(*pc);
@@ -275,7 +275,7 @@ UNASMDEF(IMMint) {
 
 UNASMDEF(IMMflt) {
     TValue aux;
-    cr_Number n;
+    cs_Number n;
     UNUSED(ts);
     startline(fn, pc);
     traceop(*pc);
@@ -300,7 +300,7 @@ UNASMDEF(EQK) {
 
 UNASMDEF(EQI) {
     TValue aux;
-    cr_Integer i;
+    cs_Integer i;
     UNUSED(ts);
     startline(fn, pc);
     traceop(*pc);
@@ -313,7 +313,7 @@ UNASMDEF(EQI) {
 
 UNASMDEF(IMMord) {
     TValue aux;
-    cr_Integer i;
+    cs_Integer i;
     UNUSED(ts);
     startline(fn, pc);
     traceop(*pc);
@@ -346,7 +346,7 @@ UNASMDEF(Call) {
 
 
 UNASMDEF(MM) {
-    cr_MM mm;
+    cs_MM mm;
     startline(fn, pc);
     traceop(*pc);
     mm = GETARG_S(pc, 0);
@@ -419,7 +419,7 @@ UNASMDEF(Ret) {
 ** This function provides more detailed semantic information compared
 ** to 'crTR_trace' when tracing OpCode and its arguments.
 */
-void crTR_disassemble(cr_State *ts, const Function *fn) {
+void crTR_disassemble(cs_State *ts, const Function *fn) {
     Instruction *pc = fn->code;
     for (int i = 0; i < fn->sizecode; i++) {
         switch (*pc) {
@@ -494,8 +494,8 @@ void crTR_disassemble(cr_State *ts, const Function *fn) {
             case OP_CALL: unasmCall(ts, fn, pc); break;
             case OP_RET: unasmRet(ts, fn, pc); break;
             default: {
-                cr_unreachable();
-                cr_assert(0 && "invalid OpCode");
+                cs_unreachable();
+                cs_assert(0 && "invalid OpCode");
             }
         }
         pc = nextOp(pc);

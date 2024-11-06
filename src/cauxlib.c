@@ -15,23 +15,23 @@
 
 
 
-CRLIB_API int crL_error(cr_State *ts, const char *fmt, ...) {
+CRLIB_API int crL_error(cs_State *ts, const char *fmt, ...) {
     va_list ap;
     crL_where(ts, 0);
     va_start(ap, fmt);
-    cr_push_vfstring(ts, fmt, ap);
+    cs_push_vfstring(ts, fmt, ap);
     va_end(ap);
-    cr_concat(ts, 2);
+    cs_concat(ts, 2);
     va_end(ap);
-    return cr_error(ts);
+    return cs_error(ts);
 }
 
 
-CRLIB_API int crL_arg_error(cr_State *ts, int argindex, const char *extra) {
-    cr_DebugInfo di;
-    if (!cr_getstack(ts, 0, &di)) /* no stack frame? */
+CRLIB_API int crL_arg_error(cs_State *ts, int argindex, const char *extra) {
+    cs_DebugInfo di;
+    if (!cs_getstack(ts, 0, &di)) /* no stack frame? */
         return crL_error(ts, "bad argument @%d (%s)", argindex, extra);
-    cr_getinfo(ts, "n", &di);
+    cs_getinfo(ts, "n", &di);
     if (strcmp(di.name, "method") == 0) {
         argindex--; /* ignore 'self' */
         if (argindex == 0) /* self is the invalid argument? */
@@ -44,67 +44,67 @@ CRLIB_API int crL_arg_error(cr_State *ts, int argindex, const char *extra) {
 }
 
 
-CRLIB_API int crL_type_error(cr_State *ts, int argindex, const char *tname) {
+CRLIB_API int crL_type_error(cs_State *ts, int argindex, const char *tname) {
     const char *msg;
     const char *argtype;
-    if (cr_type(ts, argindex) == CR_TLUDATA)
+    if (cs_type(ts, argindex) == CS_TLUDATA)
         argtype = "light userdata";
     else
         argtype = crL_typename(ts, argindex);
-    msg = cr_push_fstring(ts, "%s expected, got %s", tname, argtype);
+    msg = cs_push_fstring(ts, "%s expected, got %s", tname, argtype);
     return crL_arg_error(ts, argindex, msg);
 }
 
 
-static void tterror(cr_State *ts, int argindex, int tt) {
-    crL_type_error(ts, argindex, cr_typename(ts, tt));
+static void tterror(cs_State *ts, int argindex, int tt) {
+    crL_type_error(ts, argindex, cs_typename(ts, tt));
 }
 
 
-CRLIB_API cr_Number crL_check_number(cr_State *ts, int index) {
+CRLIB_API cs_Number crL_check_number(cs_State *ts, int index) {
     int isnum;
-    cr_Number n = cr_to_numberx(ts, index, &isnum);
-    if (cr_unlikely(!isnum))
-        tterror(ts, index, CR_TNUMBER);
+    cs_Number n = cs_to_numberx(ts, index, &isnum);
+    if (cs_unlikely(!isnum))
+        tterror(ts, index, CS_TNUMBER);
     return n;
 }
 
 
-static void interror(cr_State *ts, int argindex) {
-    if (cr_is_number(ts, argindex))
+static void interror(cs_State *ts, int argindex) {
+    if (cs_is_number(ts, argindex))
         crL_arg_error(ts, argindex, "number has no integer representation");
     else
-        tterror(ts, argindex, CR_TNUMBER);
+        tterror(ts, argindex, CS_TNUMBER);
 }
 
 
-CRLIB_API cr_Integer crL_check_integer(cr_State *ts, int index) {
+CRLIB_API cs_Integer crL_check_integer(cs_State *ts, int index) {
     int isint;
-    cr_Integer i = cr_to_integerx(ts, index, &isint);
-    if (cr_unlikely(!isint))
+    cs_Integer i = cs_to_integerx(ts, index, &isint);
+    if (cs_unlikely(!isint))
         interror(ts, index);
     return i;
 }
 
 
-CRLIB_API const char *crL_check_lstring(cr_State *ts, int index, size_t *len) {
-    const char *str = cr_to_lstring(ts, index, len);
-    if (cr_unlikely(str == NULL))
-        tterror(ts, index, CR_TSTRING);
+CRLIB_API const char *crL_check_lstring(cs_State *ts, int index, size_t *len) {
+    const char *str = cs_to_lstring(ts, index, len);
+    if (cs_unlikely(str == NULL))
+        tterror(ts, index, CS_TSTRING);
     return str;
 }
 
 
-CRLIB_API void *crL_check_userdata(cr_State *ts, int index, const char *name) {
+CRLIB_API void *crL_check_userdata(cs_State *ts, int index, const char *name) {
     void *p = crL_test_userdata(ts, index, name);
-    if (cr_unlikely(p == NULL))
+    if (cs_unlikely(p == NULL))
         crL_type_error(ts, index, name);
     return p;
 }
 
 
-CRLIB_API void crL_check_stack(cr_State *ts, int space, const char *msg) {
-    if (cr_unlikely(!cr_checkstack(ts, space))) {
+CRLIB_API void crL_check_stack(cs_State *ts, int space, const char *msg) {
+    if (cs_unlikely(!cs_checkstack(ts, space))) {
         if (msg)
             crL_error(ts, "stack overflow (%s)", msg);
         else
@@ -113,19 +113,19 @@ CRLIB_API void crL_check_stack(cr_State *ts, int space, const char *msg) {
 }
 
 
-CRLIB_API void crL_check_type(cr_State *ts, int index, int tt) {
-    if (cr_unlikely(cr_type(ts, index) != tt))
+CRLIB_API void crL_check_type(cs_State *ts, int index, int tt) {
+    if (cs_unlikely(cs_type(ts, index) != tt))
         tterror(ts, index, tt);
 }
 
 
-CRLIB_API void crL_check_any(cr_State *ts, int index) {
-    if (cr_unlikely(cr_type(ts, index) == CR_TNONE))
+CRLIB_API void crL_check_any(cs_State *ts, int index) {
+    if (cs_unlikely(cs_type(ts, index) == CS_TNONE))
         crL_arg_error(ts, index, "value expected");
 }
 
 
-CRLIB_API int crL_check_option(cr_State *ts, int index, const char *dfl,
+CRLIB_API int crL_check_option(cs_State *ts, int index, const char *dfl,
                                const char *const opts[]) {
     const char *str = (dfl ? crL_opt_string(ts, index, dfl) :
                              crL_check_string(ts, index));
@@ -134,23 +134,23 @@ CRLIB_API int crL_check_option(cr_State *ts, int index, const char *dfl,
         if (strcmp(str, opts[i]) == 0)
             return i;
     return crL_arg_error(ts, index,
-                         cr_push_fstring(ts, "invalid option '%s'", str));
+                         cs_push_fstring(ts, "invalid option '%s'", str));
 }
 
 
-CRLIB_API cr_Number crL_opt_number(cr_State *ts, int index, cr_Number dfl) {
+CRLIB_API cs_Number crL_opt_number(cs_State *ts, int index, cs_Number dfl) {
     return crL_opt(ts, crL_check_number, index, dfl);
 }
 
 
-CRLIB_API cr_Integer crL_opt_integer(cr_State *ts, int index, cr_Integer dfl) {
+CRLIB_API cs_Integer crL_opt_integer(cs_State *ts, int index, cs_Integer dfl) {
     return crL_opt(ts, crL_check_integer, index, dfl);
 }
 
 
-CRLIB_API const char *crL_opt_lstring(cr_State *ts, int index, const char *dfl,
+CRLIB_API const char *crL_opt_lstring(cs_State *ts, int index, const char *dfl,
                                       size_t *plen) {
-    if (cr_is_noneornil(ts, index)) {
+    if (cs_is_noneornil(ts, index)) {
         if (plen)
             *plen = (dfl ? strlen(dfl) : 0);
         return dfl;
@@ -167,7 +167,7 @@ typedef struct LoadFile {
 } LoadFile;
 
 
-static const char *filereader(cr_State *ts, void *data, size_t *szread) {
+static const char *filereader(cs_State *ts, void *data, size_t *szread) {
     LoadFile *fr = (LoadFile *)data;
     (void)ts; /* unused */
     if (fr->n > 0) { /* have pre-read characters ? */
@@ -181,41 +181,41 @@ static const char *filereader(cr_State *ts, void *data, size_t *szread) {
 }
 
 
-static int errorfile(cr_State *ts, const char *what, int filename_index) {
+static int errorfile(cs_State *ts, const char *what, int filename_index) {
     int err = errno;
-    const char *filename = cr_to_string(ts, filename_index);
+    const char *filename = cs_to_string(ts, filename_index);
     if (err != 0)
-        cr_push_fstring(ts, "cannot %s %s: %s", what, filename, strerror(err)); 
+        cs_push_fstring(ts, "cannot %s %s: %s", what, filename, strerror(err)); 
     else
-        cr_push_fstring(ts, "cannot %s %s", what, filename);
-    cr_remove(ts, filename_index);
-    return CR_ERRFILE;
+        cs_push_fstring(ts, "cannot %s %s", what, filename);
+    cs_remove(ts, filename_index);
+    return CS_ERRFILE;
 }
 
 
-CRLIB_API int crL_loadfile(cr_State *ts, const char *filename) {
+CRLIB_API int crL_loadfile(cs_State *ts, const char *filename) {
     LoadFile lf;
     int status, readstatus;
-    int filename_index = cr_gettop(ts) + 1;
+    int filename_index = cs_gettop(ts) + 1;
     errno = 0;
     if (filename == NULL) { /* stdin? */
-        cr_push_string(ts, "stdin");
+        cs_push_string(ts, "stdin");
         lf.fp = stdin;
     } else { /* otherwise real file */
-        cr_push_string(ts, filename);
+        cs_push_string(ts, filename);
         lf.fp = fopen(filename, "r");
         if (lf.fp == NULL)
             return errorfile(ts, "open", filename_index);
     }
-    status = cr_load(ts, filereader, &lf, cr_to_string(ts, -1));
+    status = cs_load(ts, filereader, &lf, cs_to_string(ts, -1));
     readstatus = ferror(lf.fp);
     if (filename) /* real file ? */
         fclose(lf.fp); /* close it */
     if (readstatus) { /* error while reading */
-        cr_setntop(ts, filename_index); /* remove any results */
+        cs_setntop(ts, filename_index); /* remove any results */
         return errorfile(ts, "read", filename_index);
     }
-    cr_remove(ts, filename_index);
+    cs_remove(ts, filename_index);
     return status;
 }
 
@@ -226,7 +226,7 @@ typedef struct LoadString {
 } LoadString;
 
 
-static const char *stringreader(cr_State *ts, void *data, size_t *szread) {
+static const char *stringreader(cs_State *ts, void *data, size_t *szread) {
     LoadString *ls = (LoadString *)data;
     (void)ts; /* unused */
     if (ls->sz == 0)
@@ -237,100 +237,100 @@ static const char *stringreader(cr_State *ts, void *data, size_t *szread) {
 }
 
 
-CRLIB_API int crL_loadbuffer(cr_State *ts, const char *buff, size_t sz,
+CRLIB_API int crL_loadbuffer(cs_State *ts, const char *buff, size_t sz,
                              const char *name) {
     LoadString ls;
     ls.sz = sz;
     ls.str = buff;
-    return cr_load(ts, stringreader, &ls, name);
+    return cs_load(ts, stringreader, &ls, name);
 }
 
 
-CRLIB_API int crL_loadstring(cr_State *ts, const char *str) {
+CRLIB_API int crL_loadstring(cs_State *ts, const char *str) {
     return crL_loadbuffer(ts, str, strlen(str), str);
 }
 
 
-CRLIB_API const char *crL_to_lstring(cr_State *ts, int index, size_t *plen) {
+CRLIB_API const char *crL_to_lstring(cs_State *ts, int index, size_t *plen) {
     int tt;
-    index = cr_absindex(ts, index);
-    tt = cr_type(ts, index);
+    index = cs_absindex(ts, index);
+    tt = cs_type(ts, index);
     switch (tt) {
-        case CR_TNIL: {
-            cr_push_literal(ts, "nil");
+        case CS_TNIL: {
+            cs_push_literal(ts, "nil");
             break;
         }
-        case CR_TBOOL: {
-            cr_push_string(ts, (cr_to_bool(ts, index) ? "true" : "false"));
+        case CS_TBOOL: {
+            cs_push_string(ts, (cs_to_bool(ts, index) ? "true" : "false"));
             break;
         }
-        case CR_TNUMBER: {
-            if (cr_is_integer(ts, index))
-                cr_push_fstring(ts, CR_INTEGER_FMT, cr_to_integer(ts, index));
+        case CS_TNUMBER: {
+            if (cs_is_integer(ts, index))
+                cs_push_fstring(ts, CS_INTEGER_FMT, cs_to_integer(ts, index));
             else
-                cr_push_fstring(ts, CR_FLOAT_FMT, cr_to_number(ts, index));
+                cs_push_fstring(ts, CS_FLOAT_FMT, cs_to_number(ts, index));
             break;
         }
-        case CR_TSTRING: {
-            cr_push(ts, index);
+        case CS_TSTRING: {
+            cs_push(ts, index);
             break;
         }
         default: {
-            const char *kind = cr_typename(ts, tt);
-            cr_push_fstring(ts, "%s: %p", kind, cr_to_pointer(ts, index));
+            const char *kind = cs_typename(ts, tt);
+            cs_push_fstring(ts, "%s: %p", kind, cs_to_pointer(ts, index));
             break;
         }
     }
-    return cr_to_lstring(ts, -1, plen);
+    return cs_to_lstring(ts, -1, plen);
 }
 
 
-CRLIB_API void crL_where(cr_State *ts, int level) {
-    cr_DebugInfo di;
-    if (cr_getstack(ts, level, &di)) {
-        cr_getinfo(ts, "sl", &di);
+CRLIB_API void crL_where(cs_State *ts, int level) {
+    cs_DebugInfo di;
+    if (cs_getstack(ts, level, &di)) {
+        cs_getinfo(ts, "sl", &di);
         if (di.defline > 0) { /* have info? */
-            cr_push_fstring(ts, "%s:%d", di.shortsrc, di.currline);
+            cs_push_fstring(ts, "%s:%d", di.shortsrc, di.currline);
             return;
         }
     }
-    cr_push_literal(ts, "");
+    cs_push_literal(ts, "");
 }
 
 
-CRLIB_API int crL_fileresult(cr_State *ts, int ok, const char *fname) {
+CRLIB_API int crL_fileresult(cs_State *ts, int ok, const char *fname) {
     int err = errno;
     if (ok) { /* ok? */
-        cr_push_bool(ts, 1);
-        return CR_OK;
+        cs_push_bool(ts, 1);
+        return CS_OK;
     } else {
         const char *msg;
         crL_push_fail(ts);
         msg = (err != 0 ? strerror(err) : "(no extra info)");
         if (fname) /* have file name? */
-            cr_push_fstring(ts, "%s: %s", fname, msg);
+            cs_push_fstring(ts, "%s: %s", fname, msg);
         else
-            cr_push_string(ts, msg);
-        cr_push_integer(ts, err);
-        return CR_ERRFILE;
+            cs_push_string(ts, msg);
+        cs_push_integer(ts, err);
+        return CS_ERRFILE;
     }
 }
 
 
-CRLIB_API int crL_get_property(cr_State *ts, int insobj) {
-    if (cr_get_field(ts, insobj) == CR_TNIL) {
-        cr_pop(ts, 1); /* remove nil */
-        cr_get_class(ts, insobj);
-        cr_get_method(ts, insobj);
+CRLIB_API int crL_get_property(cs_State *ts, int insobj) {
+    if (cs_get_field(ts, insobj) == CS_TNIL) {
+        cs_pop(ts, 1); /* remove nil */
+        cs_get_class(ts, insobj);
+        cs_get_method(ts, insobj);
     }
-    return cr_type(ts, -1);
+    return cs_type(ts, -1);
 }
 
 
-CRLIB_API void crL_set_cindex(cr_State *ts, int arrobj, cr_Integer i) {
-    if (cr_unlikely(i < 0 || i > CR_ARRAYMAX))
-        crL_error(ts, "array index too large %I, limit is %d", i, CR_ARRAYMAX);
-    cr_set_index(ts, arrobj, i);
+CRLIB_API void crL_set_cindex(cs_State *ts, int arrobj, cs_Integer i) {
+    if (cs_unlikely(i < 0 || i > CS_ARRAYMAX))
+        crL_error(ts, "array index too large %I, limit is %d", i, CS_ARRAYMAX);
+    cs_set_index(ts, arrobj, i);
 }
 
 
@@ -344,11 +344,11 @@ static void *allocator(void *ptr, size_t osz, size_t nsz, void *ud) {
 }
 
 
-static int panic(cr_State *ts) {
-    const char *msg = (cr_type(ts, -1) == CR_TSTRING
-                       ? cr_to_string(ts, -1)
+static int panic(cs_State *ts) {
+    const char *msg = (cs_type(ts, -1) == CS_TSTRING
+                       ? cs_to_string(ts, -1)
                        : "error object is not a string");
-    cst_writefmt(stderr, "PANIC: unprotected error in call to CScript API: %s\n",
+    cs_writefmt(stderr, "PANIC: unprotected error in call to CScript API: %s\n",
                          msg);
     return 0; /* return to abort */
 }
@@ -358,113 +358,245 @@ static void fwarnon(void *ud, const char *msg, int tocont);
 static void fwarnoff(void *ud, const char *msg, int tocont);
 
 
-static int warning_checkmessage(cr_State *ts, const char *msg, int tocont) {
+static int warning_checkmessage(cs_State *ts, const char *msg, int tocont) {
     if (tocont || *msg++ != '@') /* not a control message? */
         return 0;
     if (strcmp(msg, "on") == 0)
-        cr_setwarnf(ts, fwarnon, ts);
+        cs_setwarnf(ts, fwarnon, ts);
     else if (strcmp(msg, "off"))
-        cr_setwarnf(ts, fwarnoff, ts);
+        cs_setwarnf(ts, fwarnoff, ts);
     return 1;
 }
 
 
 static void fwarncont(void *ud, const char *msg, int tocont) {
-    cr_State *ts = (cr_State *)ud;
-    cst_writefmt(stderr, "%s", msg);
+    cs_State *ts = (cs_State *)ud;
+    cs_writefmt(stderr, "%s", msg);
     if (tocont) { /* to be continued? */
-        cr_setwarnf(ts, fwarncont, ud);
+        cs_setwarnf(ts, fwarncont, ud);
     } else { /* this is the end of the warning */
-        cst_writefmt(stderr, "%s", "\n");
-        cr_setwarnf(ts, fwarnon, ts);
+        cs_writefmt(stderr, "%s", "\n");
+        cs_setwarnf(ts, fwarnon, ts);
     }
 }
 
 
 static void fwarnon(void *ud, const char *msg, int tocont) {
-    if (warning_checkmessage((cr_State *)ud, msg, tocont))
+    if (warning_checkmessage((cs_State *)ud, msg, tocont))
         return; /* it was a control message */
-    cst_writefmt(stderr, "%s", "CScript warning: ");
+    cs_writefmt(stderr, "%s", "CScript warning: ");
     fwarncont(ud, msg, tocont);
 }
 
 
 static void fwarnoff(void *ud, const char *msg, int tocont) {
-    warning_checkmessage((cr_State *)ud, msg, tocont);
+    warning_checkmessage((cs_State *)ud, msg, tocont);
 }
 
 
-CRLIB_API cr_State *crL_newstate(void) {
-    cr_State *ts = cr_newstate(allocator, NULL);
-    if (cr_likely(ts)) {
-        cr_atpanic(ts, panic);
-        cr_setwarnf(ts, fwarnoff, ts); /* warnings off by default */
+CRLIB_API cs_State *crL_newstate(void) {
+    cs_State *ts = cs_newstate(allocator, NULL);
+    if (cs_likely(ts)) {
+        cs_atpanic(ts, panic);
+        cs_setwarnf(ts, fwarnoff, ts); /* warnings off by default */
     }
     return ts;
 }
 
 
-CRLIB_API void crL_push_hashtable(cr_State *ts) {
-    if (cr_get_global(ts, CR_HASHTABLE) == CR_TNIL) {
-        cr_pop(ts, 1); /* pop nil value */
-        cr_push_class(ts, NULL, -1, 0, NULL);
-        cr_push(ts, -1);                    /* push class again... */
-        cr_set_global(ts, CR_HASHTABLE);    /* ...and set it as global */
-    }
-    cr_assert(cr_is_class(ts, -1));
-    cr_push_instance(ts, -1);
-}
-
-
-/* get global 'lib' instance (hashtable) */
-static inline void getGlib(cr_State *ts) {
-    if (cr_get_global(ts, CR_LOADED_LIBS) == CR_TNIL) {
+CRLIB_API int crL_get_subinstance(cs_State *ts, int insobj, const char *field) {
+    if (cs_get_field(ts, insobj) == CS_TINSTANCE) {
+        return 1;
+    } else {
+        cs_pop(ts, 1); /* pop previous result */
+        insobj = cs_absindex(ts, insobj);
         crL_push_hashtable(ts);
-        cr_push(ts, -1); /* push instance of hashtable again... */
-        cr_set_global(ts, CR_LOADED_LIBS); /* ...and set it as global */
-    }
-    cr_assert(cr_is_instance(ts, -1));
-}
-
-
-CRLIB_API void crL_include(cr_State *ts, const char *libname,
-                           cr_CFunction openf, int global) {
-    getGlib(ts); /* get 'lib' (hashtable) */
-    cr_push_string(ts, libname);
-    cr_get_field(ts, -2); /* get lib[libname] */
-    if (!cr_to_bool(ts, -1)) { /* library not already loaded? */
-        cr_pop(ts, 1); /* pop field */
-        cr_push_cfunction(ts, openf); /* function that opens the library */
-        cr_push_string(ts, libname); /* argument to 'openf' */
-        cr_call(ts, 1, 1); /* call 'openf' */
-        cr_push(ts, -1); /* copy the library (call result) */
-        cr_set_fieldstr(ts, -3, libname); /* lib[libname] = library */
-    }
-    cr_remove(ts, -2); /* remove 'lib' */
-    if (global) {
-        cr_push(ts, -1); /* copy of library */
-        cr_set_global(ts, libname); /* set it as global variable */
+        cs_push(ts, -1); /* copy will be left on the top */
+        cs_set_global(ts, field); /* ...and set it as global */
+        return 0;
     }
 }
 
 
-CRLIB_API void *crL_test_userdata(cr_State *ts, int index, const char *name) {
-    void *p = cr_to_userdata(ts, index);
+CRLIB_API void crL_include(cs_State *ts, const char *libname,
+                           cs_CFunction openf, int global) {
+    crL_get_subinstance(ts, CS_GINSTANCEINDEX, CS_LOADED_INSTANCE);
+    cs_get_fieldstr(ts, -1, libname); /* get Lib[libname] */
+    if (!cs_to_bool(ts, -1)) { /* library not already loaded? */
+        cs_pop(ts, 1); /* remove field */
+        cs_push_cfunction(ts, openf); /* push func that opens the library */
+        cs_push_string(ts, libname); /* argument to 'openf' */
+        cs_call(ts, 1, 1); /* call 'openf' */
+        cs_push(ts, -1); /* copy the library (call result) */
+        cs_set_fieldstr(ts, -3, libname); /* Lib[libname] = library */
+    }
+    cs_remove(ts, -2); /* remove 'Lib' */
+    if (global) { /* set the library as global? */
+        cs_push(ts, -1); /* copy of library */
+        cs_set_global(ts, libname); /* set it as global variable */
+    }
+}
+
+
+CRLIB_API void *crL_test_userdata(cs_State *ts, int index, const char *name) {
+    void *p = cs_to_userdata(ts, index);
     if (p != NULL) { /* 'index' is userdata? */
-        cr_push(ts, index);
-        cr_get_global(ts, name);
-        if (!cr_rawequal(ts, -2, -1)) /* not the same as global? */
+        cs_push(ts, index);
+        cs_get_global(ts, name);
+        if (!cs_rawequal(ts, -2, -1)) /* not the same as global? */
             p = NULL; /* value is a userdata but not a global 'name' */
-        cr_pop(ts, 2); /* remove both values */
+        cs_pop(ts, 2); /* remove both values */
         return p;
     }
     return NULL; /* value is not a userdata */
 }
 
 
-/* --------- */
-/* Buffering */
-/* --------- */
+/* find and return last call frame level */
+static int lastlevel(cs_State *ts) {
+    cs_DebugInfo di;
+    int high = 0, low = 0;
+    /* get top limit, and store last known valid in 'low' */
+    while (cs_getstack(ts, high, &di)) { low = high; high *= 2; }
+    /* binary search between 'low' and 'high' levels */
+    while (low < high) {
+        int mid = low + ((high - low)/2);
+        if (cs_getstack(ts, mid, &di))
+            low = mid + 1;
+        else
+            high = mid;
+    }
+    return low - 1;
+}
+
+
+/*
+** Find field in instance at index -1. If field value is found
+** meaning the object at 'index' is equal to the field value, then
+** this function returns 1. Only string keys are considered and
+** limit is the limit of recursive calls in case instance field
+** contains instance value.
+*/
+static int findfield(cs_State *ts, int index, int limit) {
+    if (limit == 0 || !cs_is_instance(ts, -1))
+        return 0; /* not found */
+    cs_push_nil(ts); /* start 'next' loop */
+    while (cs_next(ts, -2)) { /* for each field in instance */
+        if (cs_type(ts, -2) == CS_TSTRING) { /* ignore non-string keys */
+            if (cs_rawequal(ts, index, -1)) { /* found object? */
+                cs_pop(ts, 1); /* remove value (but keep name) */
+                return 1;
+            }
+            else if (findfield(ts, index, limit - 1)) { /* try recursively */
+                /* stack: lib_name, lib_instance, field_name (top) */
+                cs_push_literal(ts, "."); /* place '.' between the two names */
+                cs_replace(ts, -3); /* (in the slot occupied by instance) */
+                cs_concat(ts, 3); /* lib_name.field_name */
+                return 1;
+            }
+        }
+        cs_pop(ts, 1); /* remove value */
+    }
+    return 0; /* not found */
+}
+
+
+/*
+** Try and push name of the currently active func in 'di'.
+** If func is global function, then the its name is pushed on the top of
+** the stack.
+*/
+static int pushglobalfuncname(cs_State *ts, cs_DebugInfo *di) {
+    int top = cs_gettop(ts);
+    cs_getinfo(ts, "f", di); /* push func */
+    cs_get_global(ts, CS_LOADED_INSTANCE); /* get global lib instance */
+    crL_check_stack(ts, 6, "not enough stack space"); /* for 'findfield' */
+    if (findfield(ts, top + 1, 2)) { /* found? */
+        cs_copy(ts, -1, top + 1); /* copy name to proper place */
+        cs_setntop(ts, top + 1); /* remove lib instance and name copy */
+        return 1;
+    } else { /* not a global */
+        cs_setntop(ts, top); /* remove func and lib instance */
+        return 0;
+    }
+}
+
+
+static void pushfuncname(cs_State *ts, cs_DebugInfo *di) {
+    if (pushglobalfuncname(ts, di)) { /* try first a global name */
+        cs_push_fstring(ts, "function '%s'", cs_to_string(ts, -1));
+        cs_remove(ts, -2); /* remove name */
+    }
+    else if (*di->namewhat != '\0') /* name from code? */
+        cs_push_fstring(ts, "%s '%s'", di->namewhat, di->name);
+    else if (*di->what == 'm') /* main? */
+        cs_push_literal(ts, "main chunk");
+    else if (*di->what != 'C') /* CScript functions? */
+        cs_push_fstring(ts, "function <%s:%d>", di->shortsrc, di->defline);
+    else /* unknown */
+        cs_push_literal(ts, "?");
+}
+
+
+/* '0' is a valid stack level (top-level) */
+#define tostacklevel(x)     ((x)-1)
+
+#define STACKLEVELS         tostacklevel(11)
+
+CRLIB_API void crL_traceback(cs_State *ts, cs_State *at, int level,
+                             const char *msg) {
+    crL_Buffer B;
+    cs_DebugInfo di;
+    int last = lastlevel(at);
+    int levelsleft = (last - level > (STACKLEVELS*2) ? STACKLEVELS : -1);
+    crL_buff_init(ts, &B);
+    if (msg) {
+        crL_buff_push_string(&B, msg);
+        crL_buff_push(&B, '\n');
+    }
+    crL_buff_push_string(&B, "stack traceback:");
+    while (cs_getstack(at, level++, &di)) { /* tracing back... */
+        if (levelsleft-- == 0) { /* too many levels? */
+            int n = last - level - STACKLEVELS + 1;
+            cs_push_fstring(ts, "\n\t(skipping %d levels)", n);
+            crL_buff_push_value(&B);
+            level += n;
+        } else {
+            /* source, name, line info */
+            cs_getinfo(at, "snl", &di);
+            if (di.defline <= 0)
+                cs_push_fstring(ts, "\n\t%s in ", di.shortsrc);
+            else
+                cs_push_fstring(ts, "\n\t%s:%d in ", di.shortsrc, di.currline);
+            crL_buff_push_value(&B);
+            pushfuncname(ts, &di);
+            crL_buff_push_value(&B);
+        }
+    }
+    crL_buff_end(&B);
+}
+
+
+CRLIB_API void crL_set_funcs(cs_State *ts, const cs_Entry *l, int nup) {
+    crL_check_stack(ts, nup, "too many upvalues");
+    for (; l->name != NULL; l++) {
+        if (l->func == NULL) { /* placeholder? */
+            cs_push_bool(ts, 0);
+        } else {
+            for (int i = 0; i < nup; i++) /* copy upvalues */
+                cs_push(ts, -nup);
+            cs_push_cclosure(ts, l->func, nup); /* create closure */
+        }
+        cs_set_fieldstr(ts, -(nup + 2), l->name);
+    }
+    cs_pop(ts, nup); /* remove upvalues */
+}
+
+
+
+/* ------------------------------------------------------------------------
+** Buffering
+** ------------------------------------------------------------------------ */
 
 typedef struct UserBox {
     void *p; /* data */
@@ -472,14 +604,14 @@ typedef struct UserBox {
 } UserBox;
 
 
-static void *resizebox(cr_State *ts, int index, size_t newsz) {
+static void *resizebox(cs_State *ts, int index, size_t newsz) {
     void *ud;
-    cr_Alloc falloc = cr_getallocf(ts, &ud);
-    UserBox *box = (UserBox *)cr_to_userdata(ts, index);
+    cs_Alloc falloc = cs_getallocf(ts, &ud);
+    UserBox *box = (UserBox *)cs_to_userdata(ts, index);
     void *newblock = falloc(box->p, box->sz, newsz, ud);
-    if (cr_unlikely(newblock == NULL && newsz > 0)) {
-        cr_push_literal(ts, "out of memory");
-        cr_error(ts);
+    if (cs_unlikely(newblock == NULL && newsz > 0)) {
+        cs_push_literal(ts, "out of memory");
+        cs_error(ts);
     }
     box->p = newblock;
     box->sz = newsz;
@@ -487,23 +619,23 @@ static void *resizebox(cr_State *ts, int index, size_t newsz) {
 }
 
 
-static int boxgc(cr_State *ts) {
+static int boxgc(cs_State *ts) {
     resizebox(ts, 0, 0);
     return 0;
 }
 
 
-static const cr_VMT boxvmt = {
-    .func[CR_MM_GC] = boxgc,
-    .func[CR_MM_CLOSE] = boxgc,
+static const cs_VMT boxvmt = {
+    .func[CS_MM_GC] = boxgc,
+    .func[CS_MM_CLOSE] = boxgc,
 };
 
 
-static void newbox(cr_State *ts) {
-    UserBox *box = cr_newuserdata(ts, sizeof(*box), 0);
+static void newbox(cs_State *ts) {
+    UserBox *box = cs_newuserdata(ts, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
-    cr_set_userdatavmt(ts, -1, &boxvmt);
+    cs_set_userdatavmt(ts, -1, &boxvmt);
 }
 
 
@@ -511,12 +643,12 @@ static void newbox(cr_State *ts) {
 ** Initializes the buffer 'B' and pushes it's placeholder onto
 ** the top of the stack as light userdata.
 */
-CRLIB_API void crL_buff_init(cr_State *ts, crL_Buffer *B) {
+CRLIB_API void crL_buff_init(cs_State *ts, crL_Buffer *B) {
     B->ts = ts;
     B->n = 0;
     B->b = B->init.b;
     B->sz = CRL_BUFFERSIZE;
-    cr_push_lightuserdata(ts, B);
+    cs_push_lightuserdata(ts, B);
 }
 
 
@@ -533,14 +665,14 @@ CRLIB_API void crL_buff_init(cr_State *ts, crL_Buffer *B) {
 ** that buffer is still using 'init.b[CRL_BUFFERSIZE]').
 */
 #define checkbufflevel(B, index) \
-    cr_assert(buffonstack(B) ? cr_to_userdata((B)->ts, index) != NULL \
-                             : cr_to_userdata((B)->ts, index) == (void*)(B))
+    cs_assert(buffonstack(B) ? cs_to_userdata((B)->ts, index) != NULL \
+                             : cs_to_userdata((B)->ts, index) == (void*)(B))
 
 
 /* calculate new buffer size */
 static size_t newbuffsize(crL_Buffer *B, size_t sz) {
     size_t newsize = (B->sz / 2) * 3; /* 1.5x size */
-    if (cr_unlikely(SIZE_MAX - sz < B->n)) /* would overflow? */
+    if (cs_unlikely(SIZE_MAX - sz < B->n)) /* would overflow? */
         return crL_error(B->ts, "buffer too large");
     if (newsize < B->n + sz)
         newsize = B->n + sz;
@@ -558,15 +690,15 @@ static char *buffensure(crL_Buffer *B, size_t sz, int boxindex) {
         return B->b + B->n;
     } else { /* otherwise expand */
         char *newb;
-        cr_State *ts = B->ts;
+        cs_State *ts = B->ts;
         size_t newsize = newbuffsize(B, sz);
         if (buffonstack(B)) { /* already have 'UserBox'? */
             newb = resizebox(ts, boxindex, newsize); /* resize it and done */
         } else {
-            cr_remove(ts, boxindex); /* remove placeholder */
+            cs_remove(ts, boxindex); /* remove placeholder */
             newbox(ts); /* create new user box on top */
-            cr_insert(ts, boxindex); /* insert the new box into 'boxindex' */
-            cr_toclose(ts, boxindex); /* mark box to-be-closed */
+            cs_insert(ts, boxindex); /* insert the new box into 'boxindex' */
+            cs_toclose(ts, boxindex); /* mark box to-be-closed */
             newb = resizebox(ts, boxindex, newsize); /* resize it */
             memcpy(newb, B->b, B->n * sizeof(char)); /* copy 'B->init.b' */
         }
@@ -581,7 +713,7 @@ static char *buffensure(crL_Buffer *B, size_t sz, int boxindex) {
 ** Initializes buffer 'B' to the size 'sz' bytes and returns the pointer
 ** to that memory block.
 */
-CRLIB_API char *crL_buff_initsz(cr_State *ts, crL_Buffer *B, size_t sz) {
+CRLIB_API char *crL_buff_initsz(cs_State *ts, crL_Buffer *B, size_t sz) {
     crL_buff_init(ts, B);
     return buffensure(B, sz, -1);
 }
@@ -629,11 +761,11 @@ CRLIB_API void crL_buff_push_string(crL_Buffer *B, const char *s) {
 */
 CRLIB_API void crL_buff_push_value(crL_Buffer *B) {
     size_t len;
-    const char *str = cr_to_lstring(B->ts, -1, &len);
+    const char *str = cs_to_lstring(B->ts, -1, &len);
     char *p = buffensure(B, len, -2);
     memcpy(p, str, len);
     crL_buffadd(B, len);
-    cr_pop(B->ts, 1); /* remove string */
+    cs_pop(B->ts, 1); /* remove string */
 }
 
 
@@ -642,138 +774,10 @@ CRLIB_API void crL_buff_push_value(crL_Buffer *B) {
 ** the stack.
 */
 CRLIB_API void crL_buff_end(crL_Buffer *B) {
-    cr_State *ts = B->ts;
+    cs_State *ts = B->ts;
     checkbufflevel(B, -1);
-    cr_push_lstring(ts, B->b, B->n);
+    cs_push_lstring(ts, B->b, B->n);
     if (buffonstack(B)) /* have 'UserBox'? */
-        cr_closeslot(ts, -2); /* close it -> boxgc */
-    cr_remove(ts, -2); /* remove buffer placeholder or box */
-}
-
-
-/* find and return last call frame level */
-static int lastlevel(cr_State *ts) {
-    cr_DebugInfo di;
-    int high = 0, low = 0;
-    /* get top limit, and store last known valid in 'low' */
-    while (cr_getstack(ts, high, &di)) {
-        low = high;
-        high *= 2;
-    }
-    /* binary search between 'low' and 'high' levels */
-    while (low < high) {
-        int mid = low + ((high - low)/2);
-        if (cr_getstack(ts, mid, &di))
-            low = mid + 1;
-        else
-            high = mid;
-    }
-    return low - 1;
-}
-
-
-/*
-** Find field in instance at index -1. If field value is found
-** meaning the object at 'index' is equal to the field value, then
-** this function returns 1. Only string keys are considered and
-** limit is the limit of recursive calls in case instance field
-** contains instance value.
-*/
-static int findfield(cr_State *ts, int index, int limit) {
-    if (limit == 0 || !cr_is_instance(ts, -1))
-        return 0; /* not found */
-    cr_push_nil(ts); /* start 'next' loop */
-    while (cr_next(ts, -2)) { /* for each field in instance */
-        if (cr_type(ts, -2) == CR_TSTRING) { /* ignore non-string keys */
-            if (cr_rawequal(ts, index, -1)) { /* found object? */
-                cr_pop(ts, 1); /* remove value (but keep name) */
-                return 1;
-            }
-            else if (findfield(ts, index, limit - 1)) { /* try recursively */
-                /* stack: lib_name, lib_instance, field_name (top) */
-                cr_push_literal(ts, "."); /* place '.' between the two names */
-                cr_replace(ts, -3); /* (in the slot occupied by instance) */
-                cr_concat(ts, 3); /* lib_name.field_name */
-                return 1;
-            }
-        }
-        cr_pop(ts, 1); /* remove value */
-    }
-    return 0; /* not found */
-}
-
-
-/*
-** Try and push name of the currently active func in 'di'.
-** If func is global function, then the its name is pushed on the top of
-** the stack.
-*/
-static int pushglobalfuncname(cr_State *ts, cr_DebugInfo *di) {
-    int top = cr_gettop(ts);
-    cr_getinfo(ts, "f", di); /* push func */
-    cr_get_global(ts, CR_LOADED_LIBS); /* get global lib instance */
-    crL_check_stack(ts, 6, "not enough stack space"); /* for 'findfield' */
-    if (findfield(ts, top + 1, 2)) { /* found? */
-        cr_copy(ts, -1, top + 1); /* copy name to proper place */
-        cr_setntop(ts, top + 1); /* remove lib instance and name copy */
-        return 1;
-    } else { /* not a global */
-        cr_setntop(ts, top); /* remove func and lib instance */
-        return 0;
-    }
-}
-
-
-static void pushfuncname(cr_State *ts, cr_DebugInfo *di) {
-    if (pushglobalfuncname(ts, di)) { /* try first a global name */
-        cr_push_fstring(ts, "function '%s'", cr_to_string(ts, -1));
-        cr_remove(ts, -2); /* remove name */
-    }
-    else if (*di->namewhat != '\0') /* name from code? */
-        cr_push_fstring(ts, "%s '%s'", di->namewhat, di->name);
-    else if (*di->what == 'm') /* main? */
-        cr_push_literal(ts, "main chunk");
-    else if (*di->what != 'C') /* CScript functions? */
-        cr_push_fstring(ts, "function <%s:%d>", di->shortsrc, di->defline);
-    else /* unknown */
-        cr_push_literal(ts, "?");
-}
-
-
-/* '0' is a valid stack level (top-level) */
-#define tostacklevel(x)     ((x)-1)
-
-#define STACKLEVELS         tostacklevel(11)
-
-CRLIB_API void crL_traceback(cr_State *ts, cr_State *at, int level,
-                             const char *msg) {
-    crL_Buffer B;
-    cr_DebugInfo di;
-    int last = lastlevel(at);
-    int levelsleft = (last - level > (STACKLEVELS*2) ? STACKLEVELS : -1);
-    crL_buff_init(ts, &B);
-    if (msg) {
-        crL_buff_push_string(&B, msg);
-        crL_buff_push(&B, '\n');
-    }
-    crL_buff_push_string(&B, "stack traceback:");
-    while (cr_getstack(at, level++, &di)) { /* tracing back... */
-        if (levelsleft-- == 0) { /* too many levels? */
-            int n = last - level - STACKLEVELS + 1;
-            cr_push_fstring(ts, "\n\t(skipping %d levels)", n);
-            crL_buff_push_value(&B);
-            level += n;
-        } else {
-            /* source, name, line info */
-            cr_getinfo(at, "snl", &di);
-            if (di.defline <= 0)
-                cr_push_fstring(ts, "\n\t%s in ", di.shortsrc);
-            else
-                cr_push_fstring(ts, "\n\t%s:%d in ", di.shortsrc, di.currline);
-            crL_buff_push_value(&B);
-            pushfuncname(ts, &di);
-            crL_buff_push_value(&B);
-        }
-    }
-    crL_buff_end(&B);
+        cs_closeslot(ts, -2); /* close it -> boxgc */
+    cs_remove(ts, -2); /* remove buffer placeholder or box */
 }

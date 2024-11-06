@@ -24,7 +24,7 @@
 
 
 /* initial stack size */
-#define INIT_STACKSIZE		(CR_MINSTACK * 4)
+#define INIT_STACKSIZE		(CS_MINSTACK * 4)
 
 
 /* stack size */
@@ -44,7 +44,7 @@
 ** then do 'pos'.
 */
 #define crT_checkstackaux(ts,n,pre,pos) \
-    if (cr_unlikely((ts)->stackend.p - (ts)->sp.p <= (n))) \
+    if (cs_unlikely((ts)->stackend.p - (ts)->sp.p <= (n))) \
         { pre; crT_growstack(ts, (n), 1); pos; }
 
 
@@ -99,15 +99,15 @@
  * ------------------------------------------------------------------------- */
 
 #define cri_jmpbuf          jmp_buf
-#define CRI_THROW(ts,b)     longjmp((b)->buf, 1)
-#define CRI_TRY(ts,b,fn)    if (setjmp((b)->buf) == 0) { fn }
+#define CSI_THROW(ts,b)     longjmp((b)->buf, 1)
+#define CSI_TRY(ts,b,fn)    if (setjmp((b)->buf) == 0) { fn }
 
 /* jmpbuf for jumping out of protected function */
-typedef struct cr_ljmp {
-    struct cr_ljmp *prev;
+typedef struct cs_ljmp {
+    struct cs_ljmp *prev;
     cri_jmpbuf buf;
     volatile int status;
-} cr_ljmp;
+} cs_ljmp;
 
 
 
@@ -137,7 +137,7 @@ typedef struct CallFrame {
     const Instruction *pc; /* (only for Cript function) */
     int nvarargs; /* number of varargs (only for Cript function) */
     int nresults; /* number of expected results from this function */
-    cr_ubyte status; /* call status */
+    cs_ubyte status; /* call status */
 } CallFrame;
 
 
@@ -147,20 +147,20 @@ typedef struct CallFrame {
  * ------------------------------------------------------------------------- */
 
 typedef struct GState {
-    cr_Alloc falloc; /* allocator */
+    cs_Alloc falloc; /* allocator */
     void *ud_alloc; /* userdata for 'falloc' */
-    cr_CFunction fpanic; /* panic handler (unprotected calls) */
+    cs_CFunction fpanic; /* panic handler (unprotected calls) */
     uint seed; /* initial seed for hashing */
     TValue nil; /* nil value (init flag) */
     GC gc; /* garbage collection managed values and parameters */
     HTable *strings; /* interned strings and weak refs */
-    TValue globals; /* global variables */
-    struct cr_State *mainthread; /* thread that also created global state */
-    struct cr_State *thwouv; /* thread with open upvalues */
+    TValue ginstance; /* global instance */
+    struct cs_State *mainthread; /* thread that also created global state */
+    struct cs_State *thwouv; /* thread with open upvalues */
     OString *memerror; /* preallocated message for memory errors */
-    OString *mmnames[CR_NUM_MM]; /* method names */
-    TValue *vmt[CR_NUM_TYPES]; /* vmt's for basic types */
-    cr_WarnFunction fwarn; /* warning function */
+    OString *mmnames[CS_NUM_MM]; /* method names */
+    TValue *vmt[CS_NUM_TYPES]; /* vmt's for basic types */
+    cs_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */
 } GState;
 
@@ -171,16 +171,16 @@ typedef struct GState {
  * ------------------------------------------------------------------------- */
 
 /* Cript thread state */
-struct cr_State {
+struct cs_State {
     ObjectHeader;
     ushrt ncf; /* number of call frames in 'cf' list */
     int status; /* status code */
     ptrdiff_t errfunc; /* error handling function (on stack) */
-    cr_uint32 nCcalls; /* number of C calls */
+    cs_uint32 nCcalls; /* number of C calls */
     GCObject *gclist;
-    struct cr_State *thwouv; /* next thread with open upvalues */
+    struct cs_State *thwouv; /* next thread with open upvalues */
     GState *gstate; /* shared global state */
-    cr_ljmp *errjmp; /* error recovery */
+    cs_ljmp *errjmp; /* error recovery */
     SIndex stack; /* stack base */
     SIndex sp; /* first free slot in the 'stack' */
     SIndex stackend; /* end of 'stack' + 1 */
@@ -192,7 +192,10 @@ struct cr_State {
 
 
 /* thread global state */
-#define G_(ts)          (ts)->gstate
+#define G_(ts)      (ts)->gstate
+
+/* get global instance */
+#define GI(ts)      insval(&G_(ts)->ginstance)
 
 /* check if global state is initialized */
 #define gsinitialized(g)        ttisnil(&(g)->nil)
@@ -202,10 +205,10 @@ struct cr_State {
 
 
 
-/* thread state + CR_EXTRASPACE */
+/* thread state + CS_EXTRASPACE */
 typedef struct XS {
-    cr_ubyte extra_[CR_EXTRASPACE];
-    cr_State ts;
+    cs_ubyte extra_[CS_EXTRASPACE];
+    cs_State ts;
 } XS;
 
 
@@ -216,8 +219,8 @@ typedef struct SG {
 } SG;
 
 
-/* cast 'cr_State' back to start of 'XS' */
-#define fromstate(th)   cast(XS *, cast(cr_ubyte *, th) - offsetof(XS, ts))
+/* cast 'cs_State' back to start of 'XS' */
+#define fromstate(th)   cast(XS *, cast(cs_ubyte *, th) - offsetof(XS, ts))
 
 
 
@@ -234,7 +237,7 @@ union GCUnion {
     struct Instance ins;
     struct IMethod im;
     struct UserData ud;
-    struct cr_State th;
+    struct cs_State th;
 };
 
 #define cast_gcu(o)     cast(union GCUnion *, (o))
@@ -256,17 +259,17 @@ union GCUnion {
 #define obj2gco(o)      (&(cast_gcu(o)->gc))
 
 
-CRI_FUNC CallFrame *crT_newcf(cr_State *ts);
-CRI_FUNC void crT_seterrorobj(cr_State *ts, int errcode, SPtr oldtop);
-CRI_FUNC int crT_reallocstack(cr_State *ts, int size, int raiseerr);
-CRI_FUNC int crT_growstack(cr_State *ts, int n, int raiseerr);
-CRI_FUNC void crT_shrinkstack(cr_State *ts);
-CRI_FUNC void crT_incsp(cr_State *ts);
-CRI_FUNC void crT_incCstack(cr_State *ts);
-CRI_FUNC void crT_checkCstack(cr_State *ts);
-CRI_FUNC int crT_resetthread(cr_State *ts, int status);
-CRI_FUNC void crT_warning(cr_State *ts, const char *msg, int cont);
-CRI_FUNC void crT_warnerror(cr_State *ts, const char *where);
-CRI_FUNC void crT_free(cr_State *ts, cr_State *thread);
+CSI_FUNC CallFrame *crT_newcf(cs_State *ts);
+CSI_FUNC void crT_seterrorobj(cs_State *ts, int errcode, SPtr oldtop);
+CSI_FUNC int crT_reallocstack(cs_State *ts, int size, int raiseerr);
+CSI_FUNC int crT_growstack(cs_State *ts, int n, int raiseerr);
+CSI_FUNC void crT_shrinkstack(cs_State *ts);
+CSI_FUNC void crT_incsp(cs_State *ts);
+CSI_FUNC void crT_incCstack(cs_State *ts);
+CSI_FUNC void crT_checkCstack(cs_State *ts);
+CSI_FUNC int crT_resetthread(cs_State *ts, int status);
+CSI_FUNC void crT_warning(cs_State *ts, const char *msg, int cont);
+CSI_FUNC void crT_warnerror(cs_State *ts, const char *where);
+CSI_FUNC void crT_free(cs_State *ts, cs_State *thread);
 
 #endif

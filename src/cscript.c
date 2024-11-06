@@ -10,19 +10,20 @@
 
 #include "cscript.h"
 #include "cauxlib.h"
+#include "cslib.h"
 
 
-#define CR_PROGNAME     "CScript"
+#define CS_PROGNAME     "CScript"
 
 
-#define ewritefmt(fmt,...)      cst_writefmt(stderr, fmt, __VA_ARGS__)
+#define ewritefmt(fmt,...)      cs_writefmt(stderr, fmt, __VA_ARGS__)
 
 
 /* assume stdin is a tty */
-#define cr_stdin_is_tty()   1
+#define cs_stdin_is_tty()   1
 
 
-static const char *progname = CR_PROGNAME;
+static const char *progname = CS_PROGNAME;
 
 
 static void printusage(const char *badopt) {
@@ -36,7 +37,7 @@ static void printusage(const char *badopt) {
     } else {
         fp = stdout;
     }
-    cst_writefmt(fp,
+    cs_writefmt(fp,
     "usage: %s [options] [script [args]]\n"
     "Available options are:\n"
     "   -s str      execute string 'str'\n"
@@ -49,8 +50,8 @@ static void printusage(const char *badopt) {
 
 
 static void printversion(void) {
-    cst_writelen(stdout, CR_COPYRIGHT, strlen(CR_COPYRIGHT));
-    cst_writeline(stdout);
+    cs_writelen(stdout, CS_COPYRIGHT, strlen(CS_COPYRIGHT));
+    cs_writeline(stdout);
 }
 
 
@@ -63,13 +64,13 @@ static void emessage(const char *prog, const char *msg) {
 
 
 /* report 'status' if it is error status */
-static int report(cr_State *ts, int status) {
-    if (status != CR_OK) { /* have errors? */
-        const char *msg = cr_to_string(ts, -1);
+static int report(cs_State *ts, int status) {
+    if (status != CS_OK) { /* have errors? */
+        const char *msg = cs_to_string(ts, -1);
         if (msg == NULL)
             msg = "(error object not a string)";
         emessage(progname, msg);
-        cr_pop(ts, 1); /* error object */
+        cs_pop(ts, 1); /* error object */
     }
     return status;
 }
@@ -128,10 +129,10 @@ static int parseargs(char **argv, int *first_arg) {
 
 
 /* errfunc for protected calls */
-static int errfunc(cr_State *ts) {
-    const char *msg = cr_to_string(ts, 1);
+static int errfunc(cs_State *ts) {
+    const char *msg = cs_to_string(ts, 1);
     if (msg == NULL) { /* error object is not a string? */
-        msg = cr_push_fstring(ts, "(error object is a %s value)",
+        msg = cs_push_fstring(ts, "(error object is a %s value)",
                                   crL_typename(ts, 0));
     }
     crL_traceback(ts, ts, 1, msg); /* append traceback */
@@ -139,31 +140,31 @@ static int errfunc(cr_State *ts) {
 }
 
 
-static int callcscript(cr_State *ts, int nargs, int nres) {
+static int execs_cript(cs_State *ts, int nargs, int nres) {
     int status;
-    int base = cr_gettop(ts) - nargs; /* function index */
-    cr_assert(base >= 0);
-    cr_push_cfunction(ts, errfunc); /* push 'errfunc' on top */
-    cr_insert(ts, base); /* insert 'errfunc' below the function */
-    status = cr_pcall(ts, nargs, nres, base);
-    cr_remove(ts, base); /* remove 'errfunc' */
+    int base = cs_gettop(ts) - nargs; /* function index */
+    cs_assert(base >= 0);
+    cs_push_cfunction(ts, errfunc); /* push 'errfunc' on top */
+    cs_insert(ts, base); /* insert 'errfunc' below the function */
+    status = cs_pcall(ts, nargs, nres, base);
+    cs_remove(ts, base); /* remove 'errfunc' */
     return status;
 }
 
 
-static int runchunk(cr_State *ts, int status) {
-    if (status == CR_OK)
-        callcscript(ts, 0, 0);
+static int runchunk(cs_State *ts, int status) {
+    if (status == CS_OK)
+        execs_cript(ts, 0, 0);
     return report(ts, status);
 }
 
 
-static int runfile(cr_State *ts, const char *filename) {
+static int runfile(cs_State *ts, const char *filename) {
     return runchunk(ts, crL_loadfile(ts, filename));
 }
 
 
-static int runstring(cr_State *ts, const char *str, const char *name) {
+static int runstring(cs_State *ts, const char *str, const char *name) {
     return runchunk(ts, crL_loadbuffer(ts, str, strlen(str), name));
 }
 
@@ -172,24 +173,24 @@ static int runstring(cr_State *ts, const char *str, const char *name) {
 ** Run options 's' which run CScript code and 'w' options which
 ** also affect the state.
 */
-static int runargs(cr_State *ts, char **argv, int n)  {
+static int runargs(cs_State *ts, char **argv, int n)  {
     for (int i = 0; i < n; i++) {
         int option = argv[i][1];
-        cr_assert(argv[i][0] == '-');
+        cs_assert(argv[i][0] == '-');
         switch (option) {
             case 's': {
                 int status;
                 char *extra = argv[i] + 2;
                 if (*extra == '\0')
                     extra = argv[++i];
-                cr_assert(extra != NULL);
+                cs_assert(extra != NULL);
                 status = runstring(ts, extra, "(command line)");
-                if (status != CR_OK) /* have error? */
+                if (status != CS_OK) /* have error? */
                     return 0;
                 break;
             }
             case 'w': {
-                cr_warning(ts, "@on", 0); /* warnings on */
+                cs_warning(ts, "@on", 0); /* warnings on */
                 break;
             }
             default: break;
@@ -199,15 +200,28 @@ static int runargs(cr_State *ts, char **argv, int n)  {
 }
 
 
-static int runscript(cr_State *ts, char **argv) {
+static int pushargs(cs_State *ts) {
+    int i, nargs;
+    if (cs_get_global(ts, "arg") != CS_TARRAY)
+        crL_error(ts, "'arg' is not an array");
+    nargs = cs_len(ts, -1);
+    crL_check_stack(ts, nargs + 3, "too many arguments to script");
+    for (i = 1; i <= nargs; i++) /* push all args */
+        cs_get_index(ts, -i, i - 1);
+    cs_remove(ts, -i); /* remove array from the stack */
+    return nargs;
+}
+
+
+static int runscript(cs_State *ts, char **argv) {
     int status;
     const char *filename = argv[0];
     if (strcmp(filename, "-") == 0 && strcmp(argv[-1], "--") != 0)
         filename = NULL; /* stdin */
     status = crL_loadfile(ts, filename);
-    if (status == CR_OK) {
-        /* TODO: push args after implementing args array */
-        status = callcscript(ts, 0, CR_MULRET);
+    if (status == CS_OK) {
+        int nargs = pushargs(ts);
+        status = execs_cript(ts, nargs, CS_MULRET);
     }
     return report(ts, status);
 }
@@ -222,8 +236,8 @@ static int runscript(cr_State *ts, char **argv) {
 
 #define CST_MAXLINE     512
 
-#if !defined(cst_readline)
-#define cst_readline(ts, buff, prompt) \
+#if !defined(cs_readline)
+#define cs_readline(ts, buff, prompt) \
     ((void)ts, fputs(prompt, stdout), fflush(stdout), \
        fgets(buff, CST_MAXLINE, stdin) != NULL)
 #endif
@@ -234,30 +248,30 @@ static inline const char *getprompt(int firstline) {
 }
 
 
-static int addreturn(cr_State *ts) {
-    const char *line = cr_to_string(ts, -1);
-    const char *retline = cr_push_fstring(ts, "return %s;", line);
+static int addreturn(cs_State *ts) {
+    const char *line = cs_to_string(ts, -1);
+    const char *retline = cs_push_fstring(ts, "return %s;", line);
     int status = crL_loadbuffer(ts, retline, strlen(retline), "stdin");
     /* stack: [line][retline][result] */
-    if (status == CR_OK)
-        cr_remove(ts, -2); /* remove 'retline' */
+    if (status == CS_OK)
+        cs_remove(ts, -2); /* remove 'retline' */
     else
-        cr_pop(ts, 2); /* pop result from 'crL_loadbuffer' and 'retline' */
+        cs_pop(ts, 2); /* pop result from 'crL_loadbuffer' and 'retline' */
     return status;
 }
 
 
-static int pushline(cr_State *ts, int firstline) {
+static int pushline(cs_State *ts, int firstline) {
     char buffer[CST_MAXLINE];
     char *b = buffer;
     size_t len;
     const char *pr = getprompt(firstline);
-    if (cst_readline(ts, b, pr) == 0)
+    if (cs_readline(ts, b, pr) == 0)
         return 0;
     len = strlen(b);
     if (len > 0 && b[len - 1] == '\n')
         b[--len] = '\0';
-    cr_push_lstring(ts, b, len);
+    cs_push_lstring(ts, b, len);
     return 1;
 }
 
@@ -271,12 +285,12 @@ static int pushline(cr_State *ts, int firstline) {
 ** that error occurred at the end of file, then the expression/statement
 ** is considered as incomplete.
 */
-static int incomplete(cr_State *ts, int status) {
-    if (status == CR_ERRSYNTAX) {
+static int incomplete(cs_State *ts, int status) {
+    if (status == CS_ERRSYNTAX) {
         size_t len;
-        const char *msg = cr_to_lstring(ts, -1, &len);
+        const char *msg = cs_to_lstring(ts, -1, &len);
         if (len >= EOFLEN && strcmp(msg + len - EOFLEN, EOFTEXT) == 0) {
-            cr_pop(ts, 1); /* pop 'msg' */
+            cs_pop(ts, 1); /* pop 'msg' */
             return 1;
         }
     }
@@ -284,61 +298,60 @@ static int incomplete(cr_State *ts, int status) {
 }
 
 
-static int multiline(cr_State *ts) {
+static int multiline(cs_State *ts) {
     for (;;) {
         size_t len;
-        const char *line = cr_to_lstring(ts, 0, &len);
+        const char *line = cs_to_lstring(ts, 0, &len);
         int status = crL_loadbuffer(ts, line, len, "stdin");
         if (!incomplete(ts, status) || !pushline(ts, 0))
             return status;
-        cr_push_literal(ts, "\n");
-        cr_insert(ts, -2); /* insert newline in between the lines */
-        cr_concat(ts, 3);
+        cs_push_literal(ts, "\n");
+        cs_insert(ts, -2); /* insert newline in between the lines */
+        cs_concat(ts, 3);
     }
 }
 
 
-static int loadline(cr_State *ts) {
+static int loadline(cs_State *ts) {
     int status;
-    cr_settop(ts, 0);
+    cs_setntop(ts, 0); /* remove all values */
     if (!pushline(ts, 1))
         return -1;
-    if ((status = addreturn(ts)) != CR_OK)
+    if ((status = addreturn(ts)) != CS_OK)
         status = multiline(ts);
-    cr_remove(ts, 0); /* remove line */
-    cr_assert(cr_gettop(ts) == 0); /* 'crL_loadbuffer' result on top */
+    cs_remove(ts, 0); /* remove line */
+    cs_assert(cs_gettop(ts) == 0); /* 'crL_loadbuffer' result on top */
     return status;
 }
 
 
-static void printresults(cr_State *ts) {
-    int n = cr_gettop(ts);
+static void printresults(cs_State *ts) {
+    int n = cs_gettop(ts);
     if (n > 0) { /* have result to print? */
-        crL_check_stack(ts, CR_MINSTACK, "too many results to print");
-        cr_get_global(ts, "print");
-        /* TODO: implement print global (in 'core' lib) */
-        cr_insert(ts, 1);
-        if (cr_pcall(ts, n, 0, 0) != CR_OK)
-            emessage(progname, cr_push_fstring(ts, "error calling 'print' (%s)",
-                        cr_to_string(ts, -1)));
+        crL_check_stack(ts, CS_MINSTACK, "too many results to print");
+        cs_get_global(ts, "print");
+        cs_insert(ts, 1);
+        if (cs_pcall(ts, n, 0, 0) != CS_OK)
+            emessage(progname, cs_push_fstring(ts, "error calling 'print' (%s)",
+                        cs_to_string(ts, -1)));
     }
 }
 
 
-static void runREPL(cr_State *ts) {
+static void runREPL(cs_State *ts) {
     int status;
     const char *old_progname = progname;
     progname = NULL;
     while ((status = loadline(ts)) != -1) { /* while no empty EOF line */
-        if (status == CR_OK) /* line loaded with no errors? */
-            status = callcscript(ts, 0, CR_MULRET);
-        if (status == CR_OK) /* script returned without errors? */
+        if (status == CS_OK) /* line loaded with no errors? */
+            status = execs_cript(ts, 0, CS_MULRET);
+        if (status == CS_OK) /* script returned without errors? */
             printresults(ts);
         else
             report(ts, status);
     }
-    cr_settop(ts, 0);
-    cst_writeline(stdout);
+    cs_setntop(ts, 0); /* remove all values */
+    cs_writeline(stdout);
     progname = old_progname;
 }
 
@@ -352,13 +365,23 @@ static void runREPL(cr_State *ts) {
 ** Interpreter entry (main) {
 ** ----------------------------------------------------------------------- */
 
+/* create global array 'arg' that holds command line arguments */
+static void createargarray(cs_State *ts, char **argv, int argc) {
+    cs_push_array(ts);
+    for (int i = 0; i < argc; i++) {
+        cs_push_string(ts, argv[i]);
+        cs_set_index(ts, -2, i);
+    }
+    cs_set_global(ts, "arg");
+}
+
 /*
 ** Main body of interpereter (called in protected mode).
 ** Reads all options and handles them all.
 */
-static int pmain(cr_State *ts) {
-    int argc = cr_to_integer(ts, -1);
-    char **argv = cr_to_userdata(ts, -2);
+static int pmain(cs_State *ts) {
+    int argc = cs_to_integer(ts, -1);
+    char **argv = cs_to_userdata(ts, -2);
     int script;
     int args = parseargs(argv, &script);
     int optlimit = (script > 0 ? script : argc);
@@ -370,50 +393,49 @@ static int pmain(cr_State *ts) {
         printusage(NULL);
     if (args & arg_v)
         printversion();
-    /* TODO: load libs here ('lib' class and instance) */
-    /* TODO: make sure to load core lib */
-    /* TODO: args instance here ('args' class and instance) */
-    cr_gc(ts, CR_GCRESTART);
-    cr_gc(ts, CR_GCINC, 0, 0, 0);
+    csL_open_libs(ts); /* open standard libraries */
+    createargarray(ts, argv, argc); /* create 'arg' array */
+    cs_gc(ts, CS_GCRESTART);
+    cs_gc(ts, CS_GCINC, 0, 0, 0);
     if (!runargs(ts, argv, optlimit)) /* have error? */
         return 0;
     if (script > 0) { /* have script file? */
-        if (runscript(ts, argv + script) != CR_OK)
+        if (runscript(ts, argv + script) != CS_OK)
             return 0;
     }
     if (args & arg_i) {
         runREPL(ts);
     } else if (script <= 0  && !(args & (arg_s | arg_v | arg_h))) {
-        if (cr_stdin_is_tty()) {
+        if (cs_stdin_is_tty()) {
             printversion();
             runREPL(ts);
         } else {
             runfile(ts, NULL); /* execute stdin as a file */
         }
     }
-    cr_push_bool(ts, 1);
+    cs_push_bool(ts, 1);
     return 1;
 }
 
 
 int main(int argc, char* argv[]) {
     int status, res;
-    cr_State *ts = crL_newstate();
+    cs_State *ts = crL_newstate();
     if (ts == NULL) {
         emessage(progname, "cannot create state: out of memory");
         return EXIT_FAILURE;
     }
-    cr_gc(ts, CR_GCSTOP); /* stop until all args are parsed */
-    cr_push_cfunction(ts, pmain);
-    cr_push_integer(ts, argc);
-    cr_push_lightuserdata(ts, argv);
-    status = cr_pcall(ts, 2, 1, 0);
-    res = cr_to_bool(ts, -1);
+    cs_gc(ts, CS_GCSTOP); /* stop until all args are parsed */
+    cs_push_cfunction(ts, pmain);
+    cs_push_integer(ts, argc);
+    cs_push_lightuserdata(ts, argv);
+    status = cs_pcall(ts, 2, 1, 0);
+    res = cs_to_bool(ts, -1);
     report(ts, status);
-    cr_freestate(ts);
-    return (res && status == CR_OK ? EXIT_SUCCESS : EXIT_FAILURE);
+    cs_freestate(ts);
+    return (res && status == CS_OK ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
 /* -----------------------------------------------------------------------
-** }
+** END }
 ** ----------------------------------------------------------------------- */

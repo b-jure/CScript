@@ -14,7 +14,7 @@
 ** increases its stack space ('ts->cf->top.p').
 */
 #define adjustresults(ts,nres) \
-    { if ((nres) <= CR_MULRET && (ts)->cf->top.p < (ts)->sp.p) \
+    { if ((nres) <= CS_MULRET && (ts)->cf->top.p < (ts)->sp.p) \
 	(ts)->cf->top.p = (ts)->sp.p; }
 
 
@@ -30,7 +30,7 @@
       api_check(ts, (ts)->sp.p <= (ts)->cf->top.p, "stack overflow"); }
 
 
-#define hastocloseCfunc(n)	((n) < CR_MULRET)
+#define hastocloseCfunc(n)	((n) < CS_MULRET)
 
 #define codeNresults(n)		(-(n) - 3)
 #define decodeNresults(n)	(-(n) - 3)

@@ -12,9 +12,9 @@
 /* array size limit */
 #define ARRAYLIMIT      (INT_MAX - 1)
 
-CRI_FUNC Array *crA_new(cr_State *ts);
-CRI_FUNC void crA_shrink(cr_State *ts, Array *arr);
-CRI_FUNC void crA_ensure(cr_State *ts, Array *arr, cr_Integer index);
-CRI_FUNC void crA_free(cr_State *ts, Array *arr);
+CSI_FUNC Array *crA_new(cs_State *ts);
+CSI_FUNC void crA_shrink(cs_State *ts, Array *arr);
+CSI_FUNC void crA_ensure(cs_State *ts, Array *arr, cs_Integer index);
+CSI_FUNC void crA_free(cs_State *ts, Array *arr);
 
 #endif

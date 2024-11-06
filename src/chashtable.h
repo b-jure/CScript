@@ -13,7 +13,7 @@
 #include "cbits.h"
 
 
-#define keyisempty(n)	    (keytt(n) == CR_VEMPTY)
+#define keyisempty(n)	    (keytt(n) == CS_VEMPTY)
 
 /* node value */
 #define nodeval(n)          (&(n)->i_val)
@@ -31,23 +31,23 @@
 #define htsize(ht)	    (twoto((ht)->size))
 
 
-CRI_FUNC HTable *crH_new(cr_State *ts);
-CRI_FUNC HTable *crH_newsize(cr_State *ts, uint size);
-CRI_FUNC int crH_next(cr_State *ts, HTable *tab, SPtr key);
-CRI_FUNC void crH_copykeys(cr_State *ts, HTable *stab, HTable *dtab);
-CRI_FUNC int crH_intern(cr_State *ts, const char *string);
-CRI_FUNC void crH_newkey(cr_State *ts, HTable *ht, const TValue *key,
+CSI_FUNC HTable *crH_new(cs_State *ts);
+CSI_FUNC HTable *crH_newsize(cs_State *ts, uint size);
+CSI_FUNC int crH_next(cs_State *ts, HTable *tab, SPtr key);
+CSI_FUNC void crH_copykeys(cs_State *ts, HTable *stab, HTable *dtab);
+CSI_FUNC int crH_intern(cs_State *ts, const char *string);
+CSI_FUNC void crH_newkey(cs_State *ts, HTable *ht, const TValue *key,
                          const TValue *val);
-CRI_FUNC const TValue *crH_getstr(HTable *ht, OString *key);
-CRI_FUNC const TValue *crH_getint(HTable *ht, cr_Integer key);
-CRI_FUNC const TValue *crH_get(HTable *tab, const TValue *key);
-CRI_FUNC void crH_finishset(cr_State *ts, HTable *ht, const TValue *slot,
+CSI_FUNC const TValue *crH_getstr(HTable *ht, OString *key);
+CSI_FUNC const TValue *crH_getint(HTable *ht, cs_Integer key);
+CSI_FUNC const TValue *crH_get(HTable *tab, const TValue *key);
+CSI_FUNC void crH_finishset(cs_State *ts, HTable *ht, const TValue *slot,
                             const TValue *key, const TValue *val);
-CRI_FUNC void crH_set(cr_State *ts, HTable *tab, const TValue *key,
+CSI_FUNC void crH_set(cs_State *ts, HTable *tab, const TValue *key,
                       const TValue *val);
-CRI_FUNC void crH_free(cr_State *ts, HTable *ht);
-CRI_FUNC int crH_len(const HTable *ht);
-CRI_FUNC OString *crH_getinterned(cr_State *ts, HTable *tab, const char *str,
+CSI_FUNC void crH_free(cs_State *ts, HTable *ht);
+CSI_FUNC int crH_len(const HTable *ht);
+CSI_FUNC OString *crH_getinterned(cs_State *ts, HTable *tab, const char *str,
                                   size_t len, uint hash);
 
 #endif

@@ -9,7 +9,7 @@
 
 
 
-void crR_init(cr_State *ts, BuffReader *br, cr_Reader freader, void *ud) {
+void crR_init(cs_State *ts, BuffReader *br, cs_Reader freader, void *ud) {
     br->n = 0;
     br->buff = NULL;
     br->reader = freader;
@@ -25,11 +25,11 @@ void crR_init(cr_State *ts, BuffReader *br, cr_Reader freader, void *ud) {
  * buffer. 
  */
 int crR_fill(BuffReader *br) {
-    cr_State *ts = br->ts;
+    cs_State *ts = br->ts;
     size_t size;
-    cr_unlock(ts);
+    cs_unlock(ts);
     const char *buff = br->reader(ts, br->userdata, &size);
-    cr_lock(ts);
+    cs_lock(ts);
     if (buff == NULL || size == 0)
         return CREOF;
     br->buff = buff;

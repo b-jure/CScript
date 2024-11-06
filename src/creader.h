@@ -17,7 +17,7 @@
 
 /* Return next char and progress the buffer or try fill the buffer. */
 #define brgetc(br) \
-	((br)->n-- > 0 ? cast(cr_ubyte, *(br)->buff++) : crR_fill(br))
+	((br)->n-- > 0 ? cast(cs_ubyte, *(br)->buff++) : crR_fill(br))
 
 /* Go back one character (byte) */
 #define brungetc(br)	((br)->n++, (br)->buff--)
@@ -26,16 +26,16 @@
 typedef struct {
     size_t n; /* unread bytes */
     const char* buff; /* position in buffer */
-    cr_Reader reader; /* reader function */
+    cs_Reader reader; /* reader function */
     void* userdata; /* user data for 'crR' */
-    cr_State* ts; /* 'cr_State' for 'crR' */
+    cs_State* ts; /* 'cs_State' for 'crR' */
 } BuffReader;
 
 
-CRI_FUNC void crR_init(cr_State* ts, BuffReader* br, cr_Reader freader,
+CSI_FUNC void crR_init(cs_State* ts, BuffReader* br, cs_Reader freader,
                        void* userdata);
-CRI_FUNC int crR_fill(BuffReader* br);
-CRI_FUNC size_t crR_readn(BuffReader* br, size_t n);
+CSI_FUNC int crR_fill(BuffReader* br);
+CSI_FUNC size_t crR_readn(BuffReader* br, size_t n);
 
 
 

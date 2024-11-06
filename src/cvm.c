@@ -30,23 +30,23 @@
 ** By default, use goto jump table in the interpreter loop
 ** if compiler supports precomputed goto.
 */
-#if !defined(CR_USE_JUMPTABLE)
+#if !defined(CS_USE_JUMPTABLE)
 #if defined(__GNUC__)
-#define CR_USE_JUMPTABLE	1
+#define CS_USE_JUMPTABLE	1
 #else
-#define CR_USE_JUMPTABLE	0
+#define CS_USE_JUMPTABLE	0
 #endif
 #endif
 
 
-static int booleans[2] = { CR_VFALSE, CR_VTRUE };
+static int booleans[2] = { CS_VFALSE, CS_VTRUE };
 
 
 /*
 ** Allocate new Cript closure, push it on stack and
 ** initialize its upvalues.
 */
-static void pushclosure(cr_State *ts, Function *fn, UpVal **enc, SPtr base) {
+static void pushclosure(cs_State *ts, Function *fn, UpVal **enc, SPtr base) {
     int nupvals = fn->sizeupvals;
     CrClosure *cl = crF_newCrClosure(ts, nupvals);
     cl->fn = fn;
@@ -66,7 +66,7 @@ static void pushclosure(cr_State *ts, Function *fn, UpVal **enc, SPtr base) {
 ** Allocate new array, push it on stack and pop 'elems' values off the
 ** stack into the array.
 */
-static void pusharray(cr_State *ts, int size, int elems) {
+static void pusharray(cs_State *ts, int size, int elems) {
     Array *arr = crA_new(ts);
     if (size < 0) /* unbounded ? */
         arr->sz = elems; /* equal to number of elements */
@@ -87,7 +87,7 @@ static void pusharray(cr_State *ts, int size, int elems) {
 
 
 /* allocate new class and push it on stack */
-static void pushclass(cr_State *ts) {
+static void pushclass(cs_State *ts) {
     OClass *cls = crMM_newclass(ts);
     setcls2s(ts, ts->sp.p++, cls); /* anchor to stack */
 }
@@ -95,10 +95,10 @@ static void pushclass(cr_State *ts) {
 
 /*
  * Integer division; handles division by 0 and possible
- * overflow if 'y' == '-1' and 'x' == CR_INTEGER_MIN.
+ * overflow if 'y' == '-1' and 'x' == CS_INTEGER_MIN.
  */
-cr_Integer crV_div(cr_State *ts, cr_Integer x, cr_Integer y) {
-    if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
+cs_Integer crV_div(cs_State *ts, cs_Integer x, cs_Integer y) {
+    if (cs_unlikely(cri_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
             crD_runerror(ts, "division by 0");
         return cri_intop(-, 0, x);
@@ -111,9 +111,9 @@ cr_Integer crV_div(cr_State *ts, cr_Integer x, cr_Integer y) {
  * Integer modulus; handles modulo by 0 and overflow
  * as explained in 'crV_div()'.
  */
-cr_Integer crV_modint(cr_State *ts, cr_Integer x, cr_Integer y) {
-    cr_Integer r;
-    if (cr_unlikely(cri_castS2U(y) + 1 <= 1)) {
+cs_Integer crV_modint(cs_State *ts, cs_Integer x, cs_Integer y) {
+    cs_Integer r;
+    if (cs_unlikely(cri_castS2U(y) + 1 <= 1)) {
         if (y == 0)
             crD_runerror(ts, "attempt to x%%0");
         return 0;
@@ -124,8 +124,8 @@ cr_Integer crV_modint(cr_State *ts, cr_Integer x, cr_Integer y) {
 
 
 /* floating point modulus */
-cr_Number crV_modnum(cr_State *ts, cr_Number x, cr_Number y) {
-    cr_Number r;
+cs_Number crV_modnum(cs_State *ts, cs_Number x, cs_Number y) {
+    cs_Number r;
     cri_nummod(ts, x, y, r);
     return r;
 }
@@ -135,10 +135,10 @@ cr_Number crV_modnum(cr_State *ts, cr_Number x, cr_Number y) {
  * Perform binary arithmetic operations on objects, this function is free
  * to call overloaded methods in cases where raw arithmetics are not possible.
  */
-void crV_binarithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
+void crV_binarithm(cs_State *ts, const TValue *v1, const TValue *v2, SPtr res,
                    int op) {
     if (!crO_arithmraw(ts, v1, v2, s2v(res), op))
-        crMM_trybin(ts, v1, v2, res, (op - CR_OPADD) + CR_MM_ADD);
+        crMM_trybin(ts, v1, v2, res, (op - CS_OPADD) + CS_MM_ADD);
 }
 
 
@@ -146,18 +146,18 @@ void crV_binarithm(cr_State *ts, const TValue *v1, const TValue *v2, SPtr res,
  * Perform unary arithmetic operations on objects, this function is free
  * to call overloaded methods in cases where raw arithmetics are not possible.
  */
-void crV_unarithm(cr_State *ts, const TValue *v, SPtr res, int op) {
+void crV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
     TValue aux;
     setival(&aux, 0);
     if (!crO_arithmraw(ts, v, &aux, s2v(res), op))
-        crMM_tryunary(ts, v, res, (op - CR_OPUNM) + CR_MM_UNM);
+        crMM_tryunary(ts, v, res, (op - CS_OPUNM) + CS_MM_UNM);
 }
 
 
 /* set 'vmt' entry */
-static void setmm(cr_State *ts, TValue **vmt, TValue *fn, int vmtt) {
-    cr_assert(0 <= vmtt && vmtt < CR_NUM_MM);
-    if (cr_unlikely(!(*vmt))) /* empty 'vmt' */
+static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
+    cs_assert(0 <= vmtt && vmtt < csNUM_MM);
+    if (cs_unlikely(!(*vmt))) /* empty 'vmt' */
         *vmt = crMM_newvmt(ts);
     (*vmt)[vmtt] = *fn; /* set the entry */
 }
@@ -169,28 +169,28 @@ static void setmm(cr_State *ts, TValue **vmt, TValue *fn, int vmtt) {
  * operand is converted, without change of type domain, to a type whose
  * corresponding real type is double."
  */
-cr_sinline int intlenum(cr_State *ts, const TValue *v1, const TValue *v2) {
+cs_sinline int intlenum(cs_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
     return cri_numle(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
-cr_sinline int numleint(cr_State *ts, const TValue *v1, const TValue *v2) {
+cs_sinline int numleint(cs_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
     return cri_numle(fval(v1), cast_num(ival(v2)));
 }
 
 
 /* less equal ordering on numbers */
-cr_sinline int numle(cr_State *ts, const TValue *v1, const TValue *v2) {
-    cr_assert(ttisnum(v1) && ttisnum(v2));
+cs_sinline int numle(cs_State *ts, const TValue *v1, const TValue *v2) {
+    cs_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
-        cr_Integer i1 = ival(v1);
+        cs_Integer i1 = ival(v1);
         if (ttisint(v2)) return (i1 <= ival(v2));
         else return intlenum(ts, v1, v2);
     } else {
-        cr_Number n1 = fval(v1);
+        cs_Number n1 = fval(v1);
         if (ttisint(v2)) return numleint(ts, v1, v2);
         else return cri_numlt(n1, fval(v2));
     }
@@ -198,16 +198,16 @@ cr_sinline int numle(cr_State *ts, const TValue *v1, const TValue *v2) {
 
 
 /* less equal ordering on non-number values */
-cr_sinline int otherle(cr_State *ts, const TValue *v1, const TValue *v2) {
+cs_sinline int otherle(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
         return (crS_cmp(strval(v1), strval(v2)) <= 0);
     else
-        return crMM_order(ts, v1, v2, CR_MM_LE);
+        return crMM_order(ts, v1, v2, CS_MM_LE);
 }
 
 
 /* 'less or equal' ordering '<=' */
-int crV_orderle(cr_State *ts, const TValue *v1, const TValue *v2) {
+int crV_orderle(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
         return numle(ts, v1, v2);
     return otherle(ts, v1, v2);
@@ -215,26 +215,26 @@ int crV_orderle(cr_State *ts, const TValue *v1, const TValue *v2) {
 
 
 /* check 'intLEnum' */
-cr_sinline int intltnum(const TValue *v1, const TValue *v2) {
+cs_sinline int intltnum(const TValue *v1, const TValue *v2) {
     return cri_numlt(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
-cr_sinline int numltint(const TValue *v1, const TValue *v2) {
+cs_sinline int numltint(const TValue *v1, const TValue *v2) {
     return cri_numlt(fval(v1), cast_num(ival(v2)));
 }
 
 
 /* 'less than' ordering '<' on number values */
-cr_sinline int numlt(const TValue *v1, const TValue *v2) {
-    cr_assert(ttisnum(v1) && ttisnum(v2));
+cs_sinline int numlt(const TValue *v1, const TValue *v2) {
+    cs_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
-        cr_Integer i1 = ival(v1);
+        cs_Integer i1 = ival(v1);
         if (ttisint(v2)) return (i1 <= ival(v2));
         else return intltnum(v1, v2);
     } else {
-        cr_Number n1 = fval(v1);
+        cs_Number n1 = fval(v1);
         if (ttisint(v2)) return numltint(v1, v2);
         else return cri_numlt(n1, fval(v2));
     }
@@ -242,16 +242,16 @@ cr_sinline int numlt(const TValue *v1, const TValue *v2) {
 
 
 /* 'less than' ordering '<' on non-number values */
-cr_sinline int otherlt(cr_State *ts, const TValue *v1, const TValue *v2) {
+cs_sinline int otherlt(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
         return crS_cmp(strval(v1), strval(v2));
     else
-        return crMM_order(ts, v1, v2, CR_MM_LT);
+        return crMM_order(ts, v1, v2, CS_MM_LT);
 }
 
 
 /* 'less than' ordering '<' */
-int crV_orderlt(cr_State *ts, const TValue *v1, const TValue *v2) {
+int crV_orderlt(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
         return numlt(v1, v2);
     return otherlt(ts, v1, v2);
@@ -262,35 +262,35 @@ int crV_orderlt(cr_State *ts, const TValue *v1, const TValue *v2) {
 ** Equality ordering '=='.
 ** In case 'ts' is NULL perform raw equality (without invoking '__eq').
 */
-int crV_ordereq(cr_State *ts, const TValue *v1, const TValue *v2) {
-    cr_Integer i1, i2;
+int crV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
+    cs_Integer i1, i2;
     const TValue *method;
     if (ttypetag(v1) != ttypetag(v2)) {
-        if (ttype(v1) != ttype(v2) || ttype(v1) != CR_TNUMBER)
+        if (ttype(v1) != ttype(v2) || ttype(v1) != CS_TNUMBER)
             return 0;
         return (crO_tointeger(v1, &i1, N2IEXACT) &&
                 crO_tointeger(v2, &i2, N2IEXACT) && i1 == i2);
     }
     switch (ttypetag(v1)) {
-    case CR_VNIL: case CR_VFALSE: case CR_VTRUE: return 1;
-    case CR_VNUMINT: return (ival(v1) == ival(v2));
-    case CR_VNUMFLT: return cri_numeq(fval(v1), fval(v2));
-    case CR_VLUDATA: return (pval(v1) == pval(v2));
-    case CR_VSTRING: return crS_eq(strval(v1), strval(v2));
-    case CR_VUDATA: {
+    case CS_VNIL: case CS_VFALSE: case CS_VTRUE: return 1;
+    case CS_VNUMINT: return (ival(v1) == ival(v2));
+    case CS_VNUMFLT: return cri_numeq(fval(v1), fval(v2));
+    case CS_VLUDATA: return (pval(v1) == pval(v2));
+    case CS_VSTRING: return crS_eq(strval(v1), strval(v2));
+    case CS_VUDATA: {
         if (udval(v1) == udval(v2)) return 1;
         else if (ts == NULL) return 0;
-        method = crMM_get(ts, v1, CR_MM_EQ);
+        method = crMM_get(ts, v1, CS_MM_EQ);
         if (ttisnil(method))
-            method = crMM_get(ts, v2, CR_MM_EQ);
+            method = crMM_get(ts, v2, CS_MM_EQ);
         break;
     }
-    case CR_VINSTANCE: {
+    case CS_VINSTANCE: {
         if (insval(v1) == insval(v2)) return 1;
         else if (ts == NULL) return 0;
-        method = crMM_get(ts, v1, CR_MM_EQ);
+        method = crMM_get(ts, v1, CS_MM_EQ);
         if (ttisnil(method))
-            method = crMM_get(ts, v2, CR_MM_EQ);
+            method = crMM_get(ts, v2, CS_MM_EQ);
         break;
     }
     default: return (gcoval(v1) == gcoval(v2));
@@ -308,45 +308,45 @@ int crV_ordereq(cr_State *ts, const TValue *v1, const TValue *v2) {
 ** Check if global exists and return it, othwerwise invoke
 ** undefined global variable error.
 */
-cr_sinline const TValue *checkglobal(cr_State *ts, TValue *key) {
-    const TValue *out = crH_get(htval(&G_(ts)->globals), key);
-    if (cr_unlikely(isabstkey(out)))
+cs_sinline const TValue *checkglobal(cs_State *ts, TValue *key) {
+    const TValue *out = crH_get(htval(&G_(ts)->ginstance), key);
+    if (cs_unlikely(isabstkey(out)))
         crD_globalerror(ts, "undefined", strval(key));
     return out;
 }
 
 
-cr_sinline void defineglobal(cr_State *ts, TValue *key, TValue *val) {
-    cr_assert(ttisstr(key));
-    const TValue *slot = crH_get(htval(&G_(ts)->globals), key);
-    if (cr_unlikely(!isabstkey(slot)))
+cs_sinline void defineglobal(cs_State *ts, TValue *key, TValue *val) {
+    cs_assert(ttisstr(key));
+    const TValue *slot = crH_get(htval(&G_(ts)->ginstance), key);
+    if (cs_unlikely(!isabstkey(slot)))
         crD_runerror(ts, "global variable '%s' redefinition", cstrval(key));
     else
-        crH_set(ts, htval(&G_(ts)->globals), key, val);
+        crH_set(ts, htval(&G_(ts)->ginstance), key, val);
 }
 
 
 /* get global variable value */
-cr_sinline void getglobal(cr_State *ts, TValue *key, TValue *out) {
-    cr_assert(ttisstr(key));
+cs_sinline void getglobal(cs_State *ts, TValue *key, TValue *out) {
+    cs_assert(ttisstr(key));
     setobj(ts, out, checkglobal(ts, key));
 }
 
 
 /* set global variable value */
-cr_sinline void setglobal(cr_State *ts, TValue *key, TValue *newval) {
-    if (cr_unlikely(isconst(checkglobal(ts, key))))
+cs_sinline void setglobal(cs_State *ts, TValue *key, TValue *newval) {
+    if (cs_unlikely(isconst(checkglobal(ts, key))))
         crD_globalerror(ts, "read-only", strval(key));
-    crH_set(ts, htval(&G_(ts)->globals), key, newval);
+    crH_set(ts, htval(&G_(ts)->ginstance), key, newval);
 }
 
 
-static void arrayseti(cr_State *ts, Array *arr, const TValue *index,
+static void arrayseti(cs_State *ts, Array *arr, const TValue *index,
                       const TValue *val) {
-    cr_Integer i;
-    if (cr_likely(tointeger(index, &i))) { /* index is integer? */
-        if (cr_likely(0 <= i)) { /* non-negative index */
-            if (cr_unlikely(i >= ARRAYLIMIT)) /* too large 'index'? */
+    cs_Integer i;
+    if (cs_likely(tointeger(index, &i))) { /* index is integer? */
+        if (cs_likely(0 <= i)) { /* non-negative index */
+            if (cs_unlikely(i >= ARRAYLIMIT)) /* too large 'index'? */
                 crD_indexerror(ts, i, "too large");
             crA_ensure(ts, arr, i); /* expand block */
             setobj(ts, &arr->b[i], val); /* set the value at index */
@@ -359,12 +359,12 @@ static void arrayseti(cr_State *ts, Array *arr, const TValue *index,
 }
 
 
-void crV_set(cr_State *ts, const TValue *obj, const TValue *key,
+void crV_set(cs_State *ts, const TValue *obj, const TValue *key,
              const TValue *val) {
     if (ttisarr(obj)) { /* array object? */
         arrayseti(ts, arrval(obj), key, val);
     } else {
-        const TValue *fmm = crMM_get(ts, obj, CR_MM_SETIDX);
+        const TValue *fmm = crMM_get(ts, obj, CS_MM_SETIDX);
         if (!ttisnil(fmm)) /* have metamethod ? */
             crMM_callhtm(ts, fmm, obj, key, val);
         else if (ttisins(obj)) /* object is instance ? */
@@ -375,11 +375,11 @@ void crV_set(cr_State *ts, const TValue *obj, const TValue *key,
 }
 
 
-static void arraygeti(cr_State *ts, Array *arr, const TValue *index, SPtr res) {
-    cr_Integer i;
-    if (cr_likely(tointeger(index, &i))) { /* index is integer? */
+static void arraygeti(cs_State *ts, Array *arr, const TValue *index, SPtr res) {
+    cs_Integer i;
+    if (cs_likely(tointeger(index, &i))) { /* index is integer? */
         if (i >= 0) { /* positive index? */
-            if (cr_unlikely(i >= ARRAYLIMIT)) { /* too large index? */
+            if (cs_unlikely(i >= ARRAYLIMIT)) { /* too large index? */
                 crD_indexerror(ts, i, "too large");
             } else if (i < arr->sz) { /* index in array block? */
                 setobj2s(ts, res, &arr->b[i]);
@@ -399,17 +399,17 @@ static void arraygeti(cr_State *ts, Array *arr, const TValue *index, SPtr res) {
     setim2s(ts, res, crMM_newinsmethod(ts, ins, v))
 
 
-void crV_get(cr_State *ts, const TValue *obj, const TValue *key, SPtr res) {
+void crV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
     if (ttisarr(obj)) { /* array object? */
         arraygeti(ts, arrval(obj), key, res);
     } else {
         Instance *ins;
         const TValue *fmm, *v;
-        fmm = crMM_get(ts, obj, CR_MM_GETIDX);
+        fmm = crMM_get(ts, obj, CS_MM_GETIDX);
         if (!ttisnil(fmm)) { /* have metamethod ? */
             crMM_callhtmres(ts, fmm, obj, key, res);
         } else { /* otherwise perform raw access */
-            if (cr_unlikely(ttypetag(obj) != CR_VINSTANCE))
+            if (cs_unlikely(ttypetag(obj) != CS_VINSTANCE))
                 crD_typeerror(ts, obj, "index");
             ins = insval(obj);
             v = crH_get(&ins->fields, key);
@@ -430,7 +430,7 @@ void crV_get(cr_State *ts, const TValue *obj, const TValue *key, SPtr res) {
 }
 
 
-void crV_getsuper(cr_State *ts, Instance *ins, OClass *cls, const TValue *s,
+void crV_getsuper(cs_State *ts, Instance *ins, OClass *cls, const TValue *s,
                   SPtr res) {
     if (cls->methods) { /* superclass has methods ? */
         const TValue *v = crH_get(cls->methods, s);
@@ -443,13 +443,13 @@ void crV_getsuper(cr_State *ts, Instance *ins, OClass *cls, const TValue *s,
 
 
 /* 'dest' inherits methods from 'obj' (if any) */
-cr_sinline void inherit(cr_State *ts, const TValue *obj, OClass *dest) {
+cs_sinline void inherit(cs_State *ts, const TValue *obj, OClass *dest) {
     OClass *src;
-    if (cr_unlikely(!ttiscls(obj)))
+    if (cs_unlikely(!ttiscls(obj)))
         crD_runerror(ts, "inherit a non-class value");
     src = clsval(obj);
-    if (cr_likely(src->methods)) { /* 'src' has methods ? */
-        cr_assert(dest->methods == NULL);
+    if (cs_likely(src->methods)) { /* 'src' has methods ? */
+        cs_assert(dest->methods == NULL);
         dest->methods = crH_new(ts);
         crH_copykeys(ts, src->methods, dest->methods);
     }
@@ -462,16 +462,16 @@ cr_sinline void inherit(cr_State *ts, const TValue *obj, OClass *dest) {
 ** that belong to different classes or v1 (self) doesn't have the
 ** overloaded method.
 */
-cr_sinline void precallmbin(cr_State *ts, const TValue *v1, const TValue *v2,
-                            cr_MM op, SPtr res) {
+cs_sinline void precallmbin(cs_State *ts, const TValue *v1, const TValue *v2,
+                            cs_MM op, SPtr res) {
     const TValue *func;
     const char *opname = getstrbytes(G_(ts)->mmnames[op]);
-    if (cr_unlikely(ttypetag(v1) != ttypetag(v2)))
+    if (cs_unlikely(ttypetag(v1) != ttypetag(v2)))
         crD_typeerrormeta(ts, v1, v2, opname);
-    if (cr_unlikely(ttisins(v1) && insval(v1)->oclass != insval(v2)->oclass))
+    if (cs_unlikely(ttisins(v1) && insval(v1)->oclass != insval(v2)->oclass))
         crD_runerror(ts, "tried to %s instances of different class", opname);
     func = crMM_get(ts, v1, op);
-    if (cr_unlikely(ttisnil(func)))
+    if (cs_unlikely(ttisnil(func)))
         crD_typeerror(ts, v1, opname);
     else
         crMM_callbinres(ts, func, v1, v2, res);
@@ -479,7 +479,7 @@ cr_sinline void precallmbin(cr_State *ts, const TValue *v1, const TValue *v2,
 
 
 /* properly move results and if needed close variables */
-cr_sinline void moveresults(cr_State *ts, SPtr res, int nres, int wanted) {
+cs_sinline void moveresults(cs_State *ts, SPtr res, int nres, int wanted) {
     int i;
     SPtr firstresult;
     switch (wanted) {
@@ -495,7 +495,7 @@ cr_sinline void moveresults(cr_State *ts, SPtr res, int nres, int wanted) {
             ts->sp.p = res + 1;
             return;
         }
-        case CR_MULRET: { /* all values needed */
+        case CS_MULRET: { /* all values needed */
             wanted = nres;
             break;
         }
@@ -503,7 +503,7 @@ cr_sinline void moveresults(cr_State *ts, SPtr res, int nres, int wanted) {
             if (hastocloseCfunc(wanted)) { /* tbc variables? */
                 res = crF_close(ts, res, CLOSEKTOP); /* do the closing */
                 wanted = decodeNresults(wanted); /* decode nresults */
-                if (wanted == CR_MULRET) /* all values needed? */
+                if (wanted == CS_MULRET) /* all values needed? */
                     wanted = nres;
             }
             break;
@@ -521,13 +521,13 @@ cr_sinline void moveresults(cr_State *ts, SPtr res, int nres, int wanted) {
 
 
 /* move the results into correct place and return to caller */
-cr_sinline void poscall(cr_State *ts, CallFrame *cf, int nres) {
+cs_sinline void poscall(cs_State *ts, CallFrame *cf, int nres) {
     moveresults(ts, cf->func.p, nres, cf->nresults);
     ts->cf = cf->prev; /* back to caller */
 }
 
 
-cr_sinline CallFrame *prepcallframe(cr_State *ts, SPtr func, int nret,
+cs_sinline CallFrame *prepcallframe(cs_State *ts, SPtr func, int nret,
                                     int mask, SPtr top) {
     CallFrame *cf = (ts->cf->next ? ts->cf->next : crT_newcf(ts));
     cf->func.p = func;
@@ -538,21 +538,21 @@ cr_sinline CallFrame *prepcallframe(cr_State *ts, SPtr func, int nret,
 }
 
 
-cr_sinline int precallC(cr_State *ts, SPtr func, int nres, cr_CFunction f) {
+cs_sinline int precallC(cs_State *ts, SPtr func, int nres, cs_CFunction f) {
     CallFrame *cf;
     int n; /* number of returns */
-    checkstackGCp(ts, CR_MINSTACK, func);
-    ts->cf = cf = prepcallframe(ts, func, nres, CFST_CCALL, ts->sp.p+CR_MINSTACK);
-    cr_unlock(ts);
+    checkstackGCp(ts, CS_MINSTACK, func);
+    ts->cf = cf = prepcallframe(ts, func, nres, CFST_CCALL, ts->sp.p+CS_MINSTACK);
+    cs_unlock(ts);
     n = (*f)(ts);
-    cr_lock(ts);
+    cs_lock(ts);
     api_checknelems(ts, n);
     poscall(ts, cf, n);
     return n;
 }
 
 
-cr_sinline SPtr adjustffunc(cr_State *ts, SPtr func, const TValue *f) {
+cs_sinline SPtr adjustffunc(cs_State *ts, SPtr func, const TValue *f) {
     checkstackGCp(ts, 1, func); /* space for 'f' */
     for (SPtr p = func; p < ts->sp.p; p--)
         setobjs2s(ts, p, p-1);
@@ -562,40 +562,40 @@ cr_sinline SPtr adjustffunc(cr_State *ts, SPtr func, const TValue *f) {
 }
 
 
-cr_sinline SPtr trymmcall(cr_State *ts, SPtr func) {
+cs_sinline SPtr trymmcall(cs_State *ts, SPtr func) {
     const TValue *f;
-    f = crMM_get(ts, s2v(func), CR_MM_CALL);
-    if (cr_unlikely(ttisnil(f)))
+    f = crMM_get(ts, s2v(func), CS_MM_CALL);
+    if (cs_unlikely(ttisnil(f)))
         crD_callerror(ts, s2v(func));
     return adjustffunc(ts, func, f);
 }
 
 
-CallFrame *precall(cr_State *ts, SPtr func, int nres) {
+CallFrame *precall(cs_State *ts, SPtr func, int nres) {
 retry:
     switch (ttypetag(s2v(func))) {
-        case CR_VCCL: { /* C closure */
-            precallC(ts, func, CR_MULRET, cclval(s2v(func))->fn);
+        case CS_VCCL: { /* C closure */
+            precallC(ts, func, CS_MULRET, cclval(s2v(func))->fn);
             return NULL;
         }
-        case CR_VCFUNCTION: { /* light C function */
-            precallC(ts, func, CR_MULRET, cfval(s2v(func)));
+        case CS_VCFUNCTION: { /* light C function */
+            precallC(ts, func, CS_MULRET, cfval(s2v(func)));
             return NULL;
         }
-        case CR_VCLASS: { /* Class */
+        case CS_VCLASS: { /* Class */
             const TValue *fmm;
             Instance *ins = crMM_newinstance(ts, clsval(s2v(func)));
             setins2s(ts, func, ins); /* replace class with its instance */
-            fmm = crMM_get(ts, s2v(func), CR_MM_INIT);
+            fmm = crMM_get(ts, s2v(func), CS_MM_INIT);
             if (!ttisnil(fmm)) { /* have '__init' ? */
                 func = adjustffunc(ts, func, fmm);
-                cr_assert(ttiscl(s2v(func)) || ttiscfn(s2v(func)));
+                cs_assert(ttiscl(s2v(func)) || ttiscfn(s2v(func)));
                 goto retry; /* call '__init' */
             } else {
                 return NULL; /* otherwise done */
             }
         }
-        case CR_VCRCL: { /* Cript function (closure) */
+        case CS_VCRCL: { /* Cript function (closure) */
             CallFrame *cf;
             Function *fn = crclval(s2v(func))->fn;
             int nargs = (ts->sp.p - func) - 1;
@@ -604,7 +604,7 @@ retry:
             ts->cf = cf = prepcallframe(ts, func, nres, 0, func+fsize+1);
             for (; nargs < fn->arity; nargs++)
                 setnilval(s2v(ts->sp.p++));
-            cr_assert(cf->top.p <= ts->stackend.p);
+            cs_assert(cf->top.p <= ts->stackend.p);
             return cf;
         }
         default: {
@@ -615,10 +615,10 @@ retry:
 }
 
 
-cr_sinline void ccall(cr_State *ts, SPtr func, int nresults, cr_uint32 inc) {
+cs_sinline void ccall(cs_State *ts, SPtr func, int nresults, cs_uint32 inc) {
     CallFrame *cf;
     ts->nCcalls += inc;
-    if (cr_unlikely(getCcalls(ts) >= CRI_MAXCCALLS)) {
+    if (cs_unlikely(getCcalls(ts) >= CSI_MAXCCALLS)) {
         checkstackp(ts, 0, func);  /* free any use of EXTRA_STACK */
         crT_checkCstack(ts);
     }
@@ -631,12 +631,12 @@ cr_sinline void ccall(cr_State *ts, SPtr func, int nresults, cr_uint32 inc) {
 
 
 /* external interface for 'ccall' */
-void crV_call(cr_State *ts, SPtr func, int nresults) {
+void crV_call(cs_State *ts, SPtr func, int nresults) {
     ccall(ts, func, nresults, nyci);
 }
 
 
-#define isemptystr(v)   (cr_assert(ttisstr(v)), lenstr(v) == 0)
+#define isemptystr(v)   (cs_assert(ttisstr(v)), lenstr(v) == 0)
 
 #define MAXSHRSTRLEN    95
 
@@ -651,7 +651,7 @@ static void copy2buff(SPtr top, int n, char *buff) {
 }
 
 
-void crV_concat(cr_State *ts, int total) {
+void crV_concat(cs_State *ts, int total) {
     if (total == 1)
         return; /* done */
     do {
@@ -664,12 +664,12 @@ void crV_concat(cr_State *ts, int total) {
         else if (isemptystr(s2v(top - 2))) { /* first operand is empty string? */
             setobjs2s(ts, top - 2, top - 1); /* result is second operand */
         } else { /* at least 2 non-empty strings */
-            cr_assert(ttisstr(s2v(top - 2)) && ttisstr(s2v(top - 1)));
+            cs_assert(ttisstr(s2v(top - 2)) && ttisstr(s2v(top - 1)));
             size_t ltotal = lenstr(s2v(top - 1));
             /* collect total length and number of strings */
             for (n = 1; n < total && ttisstr(s2v(top - n - 1)); n++) {
                 size_t len = lenstr(s2v(top - n - 1));
-                if (cr_unlikely(len >= SIZE_MAX - sizeof(OString) - ltotal)) {
+                if (cs_unlikely(len >= SIZE_MAX - sizeof(OString) - ltotal)) {
                     ts->sp.p = top - total; /* pop strings */
                     crD_runerror(ts, "string length overflow");
                 }
@@ -696,7 +696,7 @@ void crV_concat(cr_State *ts, int total) {
 ** Macros for arithmetic/bitwise/comparison instructions on integers.
 **------------------------------------------------------------------------- */
 
-/* 'cr_Integer' arithmetic operations */
+/* 'cs_Integer' arithmetic operations */
 #define iadd(ts,a,b)    (cri_intop(+, a, b))
 #define isub(ts,a,b)    (cri_intop(-, a, b))
 #define imul(ts,a,b)    (cri_intop(*, a, b))
@@ -718,7 +718,7 @@ void crV_concat(cr_State *ts, int total) {
 */
 
 #define op_arithKf_aux(ts,v1,v2,fop) { \
-    cr_Number n1, n2; \
+    cs_Number n1, n2; \
     if (tonumber(v1, &n1) && tonumber(v2, &n2)) { \
         setfval(v1, fop(ts, n1, n2)); \
     } else { \
@@ -738,8 +738,8 @@ void crV_concat(cr_State *ts, int total) {
     TValue *v = peek(0); \
     TValue *lk = getlK(); \
     if (ttisint(v) && ttisint(lk)) { \
-        cr_Integer i1 = ival(v); \
-        cr_Integer i2 = ival(lk); \
+        cs_Integer i1 = ival(v); \
+        cs_Integer i2 = ival(lk); \
         setival(v, iop(ts, i1, i2)); \
     } else { \
         op_arithKf_aux(ts, v, lk, fop); \
@@ -756,9 +756,9 @@ void crV_concat(cr_State *ts, int total) {
     TValue *v = peek(0); \
     int imm = fetchl(); /* L */\
     imm *= getsign(); /* S */\
-    cr_Number n; \
+    cs_Number n; \
     if (tonumber(v, &n)) { \
-        cr_Number fimm = cast_num(imm); \
+        cs_Number fimm = cast_num(imm); \
         setfval(v, fop(ts, n, fimm)); \
     } else { \
         op_arithI_error(ts, v, imm); \
@@ -771,11 +771,11 @@ void crV_concat(cr_State *ts, int total) {
     int imm = fetchl(); /* L */\
     imm *= getsign(); /* S */\
     if (ttisint(v)) { \
-        cr_Integer i = ival(v); \
+        cs_Integer i = ival(v); \
         setival(v, iop(ts, i, imm)); \
     } else if (ttisflt(v)) { \
-        cr_Number n = fval(v); \
-        cr_Number fimm = cast_num(imm); \
+        cs_Number n = fval(v); \
+        cs_Number fimm = cast_num(imm); \
         setfval(v, fop(ts, n, fimm)); \
     } else { \
         op_arithI_error(ts, v, imm); \
@@ -783,7 +783,7 @@ void crV_concat(cr_State *ts, int total) {
 
 
 #define op_arithf_aux(ts,v1,v2,fop) { \
-    cr_Number n1; cr_Number n2; \
+    cs_Number n1; cs_Number n2; \
     if (tonumber(v1, &n1) && tonumber(v2, &n2)) { \
         setfval(v1, fop(ts, n1, n2)); \
         pc += getOpSize(OP_MBIN); \
@@ -803,7 +803,7 @@ void crV_concat(cr_State *ts, int total) {
     TValue *v1 = peek(1); \
     TValue *v2 = peek(0); \
     if (ttisint(v1) && ttisint(v2)) { \
-        cr_Integer i1 = ival(v1); cr_Integer i2 = ival(v2); \
+        cs_Integer i1 = ival(v1); cs_Integer i2 = ival(v2); \
         setival(v1, iop(ts, i1, i2)); \
         pc += getOpSize(OP_MBIN); \
         pop(1); \
@@ -821,8 +821,8 @@ void crV_concat(cr_State *ts, int total) {
 #define op_bitwiseK(ts,op) { \
     TValue *v = peek(0); \
     TValue *lk = getlK(); /* L */\
-    cr_Integer i1; cr_Integer i2 = ival(lk);  \
-    if (cr_likely(tointeger(v, &i1))) { \
+    cs_Integer i1; cs_Integer i2 = ival(lk);  \
+    if (cs_likely(tointeger(v, &i1))) { \
         setival(v, op(i1, i2)); \
     } else { \
         crD_bitwerror(ts, v, lk); \
@@ -834,8 +834,8 @@ void crV_concat(cr_State *ts, int total) {
     TValue *v = peek(0); \
     int imm = fetchl(); /* L */\
     imm *= getsign(); /* S */\
-    cr_Integer i; \
-    if (cr_likely(tointeger(v, &i))) { \
+    cs_Integer i; \
+    if (cs_likely(tointeger(v, &i))) { \
         setival(v, op(i, imm)); \
     } else { \
         TValue vimm; setival(&vimm, imm); \
@@ -847,7 +847,7 @@ void crV_concat(cr_State *ts, int total) {
 #define op_bitwise(ts,op) { \
     TValue *v1 = peek(1); \
     TValue *v2 = peek(0); \
-    cr_Integer i1; cr_Integer i2; \
+    cs_Integer i1; cs_Integer i2; \
     if (tointeger(v1, &i1) && tointeger(v2, &i2)) { \
         setival(v1, op(i1, i2)); \
         pc += getOpSize(OP_MBIN); \
@@ -861,7 +861,7 @@ void crV_concat(cr_State *ts, int total) {
 
 /* set ordering result */
 #define setorderres(v,cond,eq) \
-    { cr_assert(0 <= cond && cond <= 1); settt(v, booleans[cond == eq]); }
+    { cs_assert(0 <= cond && cond <= 1); settt(v, booleans[cond == eq]); }
 
 
 /* order operations with stack operands */
@@ -871,8 +871,8 @@ void crV_concat(cr_State *ts, int total) {
     int iseq = fetchs(); /* S */\
     int cond; \
     if (ttisint(v1) && ttisint(v2)) { \
-        cr_Integer i1 = ival(v1); \
-        cr_Integer i2 = ival(v2); \
+        cs_Integer i1 = ival(v1); \
+        cs_Integer i2 = ival(v2); \
         cond = iop(i1, i2); \
     } else if (ttisnum(v1) && ttisnum(v2)) { \
         cond = fop(v1, v2); \
@@ -891,8 +891,8 @@ void crV_concat(cr_State *ts, int total) {
     if (ttisint(v)) { \
         cond = iop(ival(v), imm); \
     } else if (ttisflt(v)) { \
-        cr_Number n1 = fval(v); \
-        cr_Number n2 = cast_num(imm); \
+        cs_Number n1 = fval(v); \
+        cs_Number n2 = cast_num(imm); \
         cond = fop(n1, n2); \
     } else { \
         cond = 0; \
@@ -957,12 +957,12 @@ void crV_concat(cr_State *ts, int total) {
 #define vm_break            break
 
 
-void crV_execute(cr_State *ts, CallFrame *cf) {
+void crV_execute(cs_State *ts, CallFrame *cf) {
     register const Instruction *pc; /* program counter */
     register CrClosure *cl; /* closure being executed */
     register TValue *k; /* array of constants */
     register SPtr base; /* function base stack index */
-#if CR_USE_JUMPTABLE
+#if CS_USE_JUMPTABLE
 #include "cjmptable.h"
 #endif
 startfunc:
@@ -1041,7 +1041,7 @@ returning:
             vm_case(OP_ARRAYELEMS) {
                 int size = fetchl() - 1;
                 int elems = ts->sp.p - STK(fetchl());
-                cr_assert((0 <= size) == (elems <= size));
+                cs_assert((0 <= size) == (elems <= size));
                 protect(pusharray(ts, size, elems));
                 vm_break;
             }
@@ -1053,7 +1053,7 @@ returning:
                 TValue *v1 = peek(1); /* class */
                 TValue *v2 = peek(0); /* method */
                 TValue *key = getlK();
-                cr_assert(ttisstr(key));
+                cs_assert(ttisstr(key));
                 protect(crH_set(ts, clsval(v2)->methods, key, v1));
                 vm_break;
             }
@@ -1305,13 +1305,13 @@ returning:
                 SPtr res = TOPS();
                 TValue *v = s2v(res);
                 if (ttisint(v)) {
-                    cr_Integer i = ival(v);
+                    cs_Integer i = ival(v);
                     setival(v, cri_intop(-, 0, i));
                 } else if (ttisflt(v)) {
-                    cr_Number n = fval(v);
+                    cs_Number n = fval(v);
                     setfval(v, cri_numunm(ts, n));
                 } else {
-                    protect(crMM_tryunary(ts, v, res, CR_MM_UNM));
+                    protect(crMM_tryunary(ts, v, res, CS_MM_UNM));
                 }
                 vm_break;
             }
@@ -1319,10 +1319,10 @@ returning:
                 SPtr res = TOPS();
                 TValue *v = s2v(res);
                 if (ttisint(v)) {
-                    cr_Integer i = ival(v);
+                    cs_Integer i = ival(v);
                     setival(v, cri_intop(^, ~cri_castS2U(0), i));
                 } else {
-                    protect(crMM_tryunary(ts, v, res, CR_MM_BNOT));
+                    protect(crMM_tryunary(ts, v, res, CS_MM_BNOT));
                 }
                 vm_break;
             }
@@ -1389,7 +1389,7 @@ returning:
             }
             vm_case(OP_CLOSE) {
                 SPtr level = base + fetchl();
-                protect(crF_close(ts, level, CR_OK));
+                protect(crF_close(ts, level, CS_OK));
                 vm_break;
             }
             vm_case(OP_TBC) {
@@ -1449,7 +1449,7 @@ returning:
                 TValue *s = getlK();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cr_assert(ttisstr(s));
+                cs_assert(ttisstr(s));
                 protect(crV_set(ts, v1, s, v2));
                 pop(2); /* v1,v2 */
                 vm_break;
@@ -1457,7 +1457,7 @@ returning:
             vm_case(OP_GETPROPERTY) { /* optimize ? */
                 TValue *s = getlK();
                 TValue *v = peek(0);
-                cr_assert(ttisstr(s));
+                cs_assert(ttisstr(s));
                 protect(crV_get(ts, v, s, TOPS()));
                 vm_break;
             }
@@ -1479,7 +1479,7 @@ returning:
             vm_case(OP_GETINDEXSTR) { /* TODO: optimize */
                 TValue *s = getlK();
                 TValue *v = peek(0);
-                cr_assert(ttisstr(s));
+                cs_assert(ttisstr(s));
                 protect(crV_get(ts, v, s, TOPS()));
                 vm_break;
             }
@@ -1487,7 +1487,7 @@ returning:
                 TValue *s = getlK();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cr_assert(ttisstr(s));
+                cs_assert(ttisstr(s));
                 protect(crV_set(ts, v1, s, v2));
                 vm_break;
             }
@@ -1510,7 +1510,7 @@ returning:
                 TValue *s = getlK();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cr_assert(ttisstr(s));
+                cs_assert(ttisstr(s));
                 protect(crV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
                 pop(1); /* v2 */
                 vm_break;
@@ -1527,7 +1527,7 @@ returning:
                 TValue *s = getlK();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cr_assert(ttisstr(s));
+                cs_assert(ttisstr(s));
                 protect(crV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
                 pop(1); /* v2 */
                 vm_break;
@@ -1544,7 +1544,7 @@ returning:
                 int offset = fetchl();
                 protect(crF_newtbcvar(ts, stk + FORTBCVAR));
                 pc += offset;
-                cr_assert(*pc == OP_FORCALL);
+                cs_assert(*pc == OP_FORCALL);
                 goto l_forcall;
             }
             vm_case(OP_FORCALL) {
@@ -1559,7 +1559,7 @@ returning:
                 ts->sp.p = stk + NSTATEVARS + FORTBCVAR;
                 protect(crV_call(ts, stk + NSTATEVARS, nres));
                 updatebase(cf);
-                cr_assert(*pc == OP_FORLOOP);
+                cs_assert(*pc == OP_FORLOOP);
                 goto l_forloop;
             }}
             vm_case(OP_FORLOOP) {

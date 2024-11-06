@@ -12,33 +12,33 @@
 #include "cobject.h"
 
 
-CRI_FUNC void crMM_init(cr_State *ts);
-CRI_FUNC TValue *crMM_newvmt(cr_State *ts);
-CRI_FUNC const TValue *crMM_get(cr_State *ts, const TValue *v, cr_MM mm);
-CRI_FUNC OClass *crMM_newclass(cr_State *ts);
-CRI_FUNC Instance *crMM_newinstance(cr_State *ts, OClass *cls);
-CRI_FUNC UserData *crMM_newuserdata(cr_State *ts, size_t size, int nuv);
-CRI_FUNC IMethod *crMM_newinsmethod(cr_State *ts, Instance *receiver,
+CSI_FUNC void crMM_init(cs_State *ts);
+CSI_FUNC TValue *crMM_newvmt(cs_State *ts);
+CSI_FUNC const TValue *crMM_get(cs_State *ts, const TValue *v, cs_MM mm);
+CSI_FUNC OClass *crMM_newclass(cs_State *ts);
+CSI_FUNC Instance *crMM_newinstance(cs_State *ts, OClass *cls);
+CSI_FUNC UserData *crMM_newuserdata(cs_State *ts, size_t size, int nuv);
+CSI_FUNC IMethod *crMM_newinsmethod(cs_State *ts, Instance *receiver,
 				    const TValue *method);
-CRI_FUNC void crMM_callhtm(cr_State *ts, const TValue *fn, const TValue *p1,
+CSI_FUNC void crMM_callhtm(cs_State *ts, const TValue *fn, const TValue *p1,
                            const TValue *p2, const TValue *p3);
-CRI_FUNC void crMM_callhtmres(cr_State *ts, const TValue *fn, const TValue *p1,
+CSI_FUNC void crMM_callhtmres(cs_State *ts, const TValue *fn, const TValue *p1,
                               const TValue *p2, SPtr res);
-CRI_FUNC void crMM_callbinres(cr_State *ts, const TValue *fn, const TValue *v1,
+CSI_FUNC void crMM_callbinres(cs_State *ts, const TValue *fn, const TValue *v1,
                               const TValue *v2, SPtr res);
-CRI_FUNC void crMM_callunaryres(cr_State *ts, const TValue *fn,
+CSI_FUNC void crMM_callunaryres(cs_State *ts, const TValue *fn,
                                 const TValue *v, SPtr res);
-CRI_FUNC int crMM_order(cr_State *ts, const TValue *v1, const TValue *v2,
-		  	cr_MM mm);
-CRI_FUNC int crMM_orderI(cr_State *ts, const TValue *v1, int v2, int flip,
-                         int isflt, cr_MM mm);
-CRI_FUNC void crMM_trybin(cr_State *ts, const TValue *v1, const TValue *v2,
-		    	  SPtr res, cr_MM mm);
-CRI_FUNC void crMM_tryunary(cr_State *ts, const TValue *v, SPtr res,
-                             cr_MM mm);
-CRI_FUNC void crMM_tryconcat(cr_State *ts);
-CRI_FUNC void crMM_freeclass(cr_State *ts, OClass *cls);
-CRI_FUNC void crMM_freeinstance(cr_State *ts, Instance *ins);
-CRI_FUNC void crMM_freeuserdata(cr_State *ts, UserData *ud);
+CSI_FUNC int crMM_order(cs_State *ts, const TValue *v1, const TValue *v2,
+		  	cs_MM mm);
+CSI_FUNC int crMM_orderI(cs_State *ts, const TValue *v1, int v2, int flip,
+                         int isflt, cs_MM mm);
+CSI_FUNC void crMM_trybin(cs_State *ts, const TValue *v1, const TValue *v2,
+		    	  SPtr res, cs_MM mm);
+CSI_FUNC void crMM_tryunary(cs_State *ts, const TValue *v, SPtr res,
+                             cs_MM mm);
+CSI_FUNC void crMM_tryconcat(cs_State *ts);
+CSI_FUNC void crMM_freeclass(cs_State *ts, OClass *cls);
+CSI_FUNC void crMM_freeinstance(cs_State *ts, Instance *ins);
+CSI_FUNC void crMM_freeuserdata(cs_State *ts, UserData *ud);
 
 #endif

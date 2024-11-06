@@ -103,8 +103,8 @@ typedef enum expt {
 typedef struct ExpInfo {
     expt et;
     union {
-        cr_Number n; /* floating constant */
-        cr_Integer i; /* integer constant  */
+        cs_Number n; /* floating constant */
+        cs_Integer i; /* integer constant  */
         OString *str; /* string literal */
         int info; /* pc or some other generic information */
     } u;
@@ -151,7 +151,7 @@ typedef struct PatchList {
 /* class declaration information */
 typedef struct ClassState {
     struct ClassState *prev;
-    cr_ubyte super; /* true if class has superclass */
+    cs_ubyte super; /* true if class has superclass */
 } ClassState;
 
 
@@ -212,13 +212,13 @@ typedef struct FunctionState {
         int size; /* size of 'list' */
         PatchList *list; /* list of patch lists */
     } patches; /* 2Dvec */
-    cr_ubyte needclose; /* true if needs to close upvalues before returning */
-    cr_ubyte lastwasret; /* last statement is 'return' */
+    cs_ubyte needclose; /* true if needs to close upvalues before returning */
+    cs_ubyte lastwasret; /* last statement is 'return' */
 } FunctionState;
 
 
-CRI_FUNC cr_noret crP_semerror(Lexer *lx, const char *err);
-CRI_FUNC CrClosure *crP_parse(cr_State *ts, BuffReader *br, Buffer *buff,
+CSI_FUNC cs_noret crP_semerror(Lexer *lx, const char *err);
+CSI_FUNC CrClosure *crP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
                               ParserState *ps, const char *source);
 
 #endif

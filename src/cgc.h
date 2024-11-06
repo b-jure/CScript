@@ -91,14 +91,14 @@
 /* GC 'stopped' bits */
 #define GCSTP                   (1<<0) /* GC stopped by itself */
 #define GCSTPUSR                (1<<1) /* GC stopped by user */
-#define GCSTPCLS                (1<<2) /* GC stopped while freeing 'cr_State' */
+#define GCSTPCLS                (1<<2) /* GC stopped while freeing 'cs_State' */
 #define gcrunning(gc)           ((gc)->stopped == 0)
 
 
 /* default GC parameters */
-#define CRI_GCSTEPMUL           100 /* 'stepmul' */
-#define CRI_GCSTEPSIZE          14  /* 'stepsize' (log2) */
-#define CRI_GCPAUSE             200 /* after memory doubles begin cycle */
+#define CSI_GCSTEPMUL           100 /* 'stepmul' */
+#define CSI_GCSTEPSIZE          14  /* 'stepsize' (log2) */
+#define CSI_GCPAUSE             200 /* after memory doubles begin cycle */
 
 
 
@@ -158,7 +158,7 @@
 
 /* 
 ** Some GC parameters are stored divided by 4 to allow a
-** maximum value of up to 1023 in a 'cr_ubyte'.
+** maximum value of up to 1023 in a 'cs_ubyte'.
 */
 #define getgcparam(p)           ((p) * 4)
 #define setgcparam(p,v)         ((p) = (v) / 4)
@@ -170,11 +170,11 @@
 
 /* garbage collector parameters and state */
 typedef struct GC {
-    cr_mem next; /* next byte threshold when GC triggers */
-    cr_mem allocated; /* number of allocated bytes ? REMOVE */
-    cr_mem debt; /* memory unaccounted by collector */
-    cr_mem total; /* total memory in use in bytes - 'debt' */
-    cr_umem estimate; /* estimate of non-garbage memory in use */
+    cs_mem next; /* next byte threshold when GC triggers */
+    cs_mem allocated; /* number of allocated bytes ? REMOVE */
+    cs_mem debt; /* memory unaccounted by collector */
+    cs_mem total; /* total memory in use in bytes - 'debt' */
+    cs_umem estimate; /* estimate of non-garbage memory in use */
     GCObject *objects; /* list of all GC objects */
     GCObject **sweeppos; /* current position of sweep in list */
     GCObject *graylist; /* list of gray objects */
@@ -183,29 +183,29 @@ typedef struct GC {
     GCObject *fixed; /* list of fixed objects (not to be collected) */
     GCObject *fin; /* list of objects that have finalizer */
     GCObject *tobefin; /* list of objects to be finalized (pending) */
-    cr_ubyte pause; /* how long to wait until next cycle */
-    cr_ubyte stepmul; /* GC heap grow speed */
-    cr_ubyte stepsize; /* step size in bytes (log2) */
-    cr_ubyte state; /* GC state bits */
-    cr_ubyte stopped; /* collector is stopped bits */
-    cr_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
-    cr_ubyte isem; /* true if this is emergency collection */
-    cr_ubyte stopem; /* stop emergency collection */
+    cs_ubyte pause; /* how long to wait until next cycle */
+    cs_ubyte stepmul; /* GC heap grow speed */
+    cs_ubyte stepsize; /* step size in bytes (log2) */
+    cs_ubyte state; /* GC state bits */
+    cs_ubyte stopped; /* collector is stopped bits */
+    cs_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
+    cs_ubyte isem; /* true if this is emergency collection */
+    cs_ubyte stopem; /* stop emergency collection */
 } GC;
 
 
-CRI_FUNC void crG_init(GC *gc, cr_State *ts, size_t LGsize);
-CRI_FUNC GCObject *crG_new_(cr_State *ts, size_t size, int tt_);
-CRI_FUNC GCObject *crG_newoff(cr_State *ts, size_t sz, int tt_, size_t offset);
-CRI_FUNC void crG_step(cr_State *ts);
-CRI_FUNC void crG_full(cr_State *ts, int isemergency);
-CRI_FUNC void crG_rununtilstate(cr_State *ts, int statemask);
-CRI_FUNC void crG_freeallobjects(cr_State *ts);
-CRI_FUNC void crG_checkfin(cr_State *ts, GCObject *o, TValue *vmt);
-CRI_FUNC void crG_fix(cr_State *ts, GCObject *o);
-CRI_FUNC void crG_barrier_(cr_State *ts, GCObject *r, GCObject *o);
-CRI_FUNC void crG_barrierback_(cr_State *ts, GCObject *r);
-CRI_FUNC void crG_setdebt(GC *gc, cr_mem debt);
-CRI_FUNC void crG_incmode(cr_State *ts);
+CSI_FUNC void crG_init(GC *gc, cs_State *ts, size_t LGsize);
+CSI_FUNC GCObject *crG_new_(cs_State *ts, size_t size, int tt_);
+CSI_FUNC GCObject *crG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset);
+CSI_FUNC void crG_step(cs_State *ts);
+CSI_FUNC void crG_full(cs_State *ts, int isemergency);
+CSI_FUNC void crG_rununtilstate(cs_State *ts, int statemask);
+CSI_FUNC void crG_freeallobjects(cs_State *ts);
+CSI_FUNC void crG_checkfin(cs_State *ts, GCObject *o, TValue *vmt);
+CSI_FUNC void crG_fix(cs_State *ts, GCObject *o);
+CSI_FUNC void crG_barrier_(cs_State *ts, GCObject *r, GCObject *o);
+CSI_FUNC void crG_barrierback_(cs_State *ts, GCObject *r);
+CSI_FUNC void crG_setdebt(GC *gc, cs_mem debt);
+CSI_FUNC void crG_incmode(cs_State *ts);
 
 #endif

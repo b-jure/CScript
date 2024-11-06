@@ -20,10 +20,10 @@
 ** error handler or invoke panic if hook for it is present.
 ** In case none of the above occurs, program is aborted.
 */
-cr_noret crPR_throw(cr_State *ts, int errcode) {
+cs_noret crPR_throw(cs_State *ts, int errcode) {
     if (ts->errjmp) { /* thread has error handler? */
         ts->errjmp->status = errcode; /* set status */
-        CRI_THROW(ts, ts->errjmp); /* jump to it */
+        CSI_THROW(ts, ts->errjmp); /* jump to it */
     } else { /* thread has no error handler */
         GState *gs = G_(ts);
         crT_resetthread(ts, errcode); /* close all */
@@ -33,7 +33,7 @@ cr_noret crPR_throw(cr_State *ts, int errcode) {
             crPR_throw(ts, errcode); /* re-throw in main thread */
         } else { /* no error handlers, abort */
             if (gs->fpanic) { /* state has panic handler? */
-                cr_unlock(ts); /* release the lock... */
+                cs_unlock(ts); /* release the lock... */
                 gs->fpanic(ts); /* ...and call it */
             }
             abort();
@@ -47,13 +47,13 @@ cr_noret crPR_throw(cr_State *ts, int errcode) {
  * Protected call
  * ------------------------------------------------------------------------- */
 
-int crPR_rawcall(cr_State *ts, ProtectedFn fn, void *ud) {
-    cr_uint32 old_nCcalls = ts->nCcalls;
-    struct cr_ljmp lj;
-    lj.status = CR_OK;
+int crPR_rawcall(cs_State *ts, ProtectedFn fn, void *ud) {
+    cs_uint32 old_nCcalls = ts->nCcalls;
+    struct cs_ljmp lj;
+    lj.status = CS_OK;
     lj.prev = ts->errjmp;
     ts->errjmp = &lj;
-    CRI_TRY(ts, &lj, 
+    CSI_TRY(ts, &lj, 
         fn(ts, ud);
     );
     ts->errjmp = lj.prev;
@@ -62,14 +62,14 @@ int crPR_rawcall(cr_State *ts, ProtectedFn fn, void *ud) {
 }
 
 
-int crPR_call(cr_State *ts, ProtectedFn fn, void *ud, ptrdiff_t old_top,
+int crPR_call(cs_State *ts, ProtectedFn fn, void *ud, ptrdiff_t old_top,
               ptrdiff_t errfunc) {
     int status;
     CallFrame *old_cf = ts->cf;
     ptrdiff_t old_errfunc = errfunc;
     ts->errfunc = errfunc;
     status = crPR_rawcall(ts, fn, ud);
-    if (cr_unlikely(status != CR_OK)) {
+    if (cs_unlikely(status != CS_OK)) {
         ts->cf = old_cf;
         status = crPR_close(ts, old_top, status);
         crT_seterrorobj(ts, status, restorestack(ts, old_top));
@@ -88,20 +88,20 @@ struct PCloseData {
 
 
 /* auxiliary function to call 'crF_close' in protected mode */
-static void closepaux(cr_State *ts, void *ud) {
+static void closepaux(cs_State *ts, void *ud) {
     struct PCloseData *pcd = (struct PCloseData*)ud;
     crF_close(ts, pcd->level, pcd->status);
 }
 
 
 /* call 'crF_close' in protected mode */
-int crPR_close(cr_State *ts, ptrdiff_t level, int status) {
+int crPR_close(cs_State *ts, ptrdiff_t level, int status) {
     CallFrame *oldcf = ts->cf;
     for (;;) {
         struct PCloseData pcd;
         pcd.level = restorestack(ts, level); pcd.status = status;
         status = crPR_rawcall(ts, closepaux, &pcd);
-        if (cr_likely(status == CR_OK))
+        if (cs_likely(status == CS_OK))
             return  pcd.status;
         else
             ts->cf = oldcf;
@@ -119,7 +119,7 @@ struct PParseData {
 
 
 /* auxiliary function to call 'crP_pparse' in protected mode */
-static void parsepaux(cr_State *ts, void *userdata) {
+static void parsepaux(cs_State *ts, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);
     CrClosure *cl = crP_parse(ts, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
     crF_initupvals(ts, cl);
@@ -127,7 +127,7 @@ static void parsepaux(cr_State *ts, void *userdata) {
 
 
 /* call 'crP_parse' in protected mode */
-int crPR_parse(cr_State *ts, BuffReader *br, const char *name) {
+int crPR_parse(cs_State *ts, BuffReader *br, const char *name) {
     struct PParseData ppd;
     int status;
     ppd.br = br;
