@@ -43,32 +43,32 @@
 ** Check if stack nees to grow if so, do 'pre' then grow and
 ** then do 'pos'.
 */
-#define crT_checkstackaux(ts,n,pre,pos) \
+#define csT_checkstackaux(ts,n,pre,pos) \
     if (cs_unlikely((ts)->stackend.p - (ts)->sp.p <= (n))) \
-        { pre; crT_growstack(ts, (n), 1); pos; }
+        { pre; csT_growstack(ts, (n), 1); pos; }
 
 
 /* check if stack needs to grow */
-#define crT_checkstack(ts,n)    crT_checkstackaux(ts,n,(void)0,(void)0)
+#define csT_checkstack(ts,n)    csT_checkstackaux(ts,n,(void)0,(void)0)
 
 
 /* check if stack needs to grow and preserve 'p' */
 #define checkstackp(ts,n,p) \
-    crT_checkstackaux(ts, n, \
+    csT_checkstackaux(ts, n, \
             ptrdiff_t p_ = savestack(ts, p), \
             p = restorestack(ts, p_))
 
 
 /* check GC then check stack preserving 'p' */
 #define checkstackGCp(ts,n,p) \
-    crT_checkstackaux(ts,n, \
-            ptrdiff_t p_ = savestack(ts,p); crG_check(ts), \
+    csT_checkstackaux(ts,n, \
+            ptrdiff_t p_ = savestack(ts,p); csG_check(ts), \
             p = restorestack(ts, p_))
 
 
 /* check GC then check stack */
 #define checkstackGC(ts,n) \
-    crT_checkstackaux(ts,n,crG_check(ts),(void)0)
+    csT_checkstackaux(ts,n,csG_check(ts),(void)0)
     
 
 
@@ -98,14 +98,14 @@
  * Long jump (for protected calls)
  * ------------------------------------------------------------------------- */
 
-#define cri_jmpbuf          jmp_buf
+#define csi_jmpbuf          jmp_buf
 #define CSI_THROW(ts,b)     longjmp((b)->buf, 1)
 #define CSI_TRY(ts,b,fn)    if (setjmp((b)->buf) == 0) { fn }
 
 /* jmpbuf for jumping out of protected function */
 typedef struct cs_ljmp {
     struct cs_ljmp *prev;
-    cri_jmpbuf buf;
+    csi_jmpbuf buf;
     volatile int status;
 } cs_ljmp;
 
@@ -259,17 +259,17 @@ union GCUnion {
 #define obj2gco(o)      (&(cast_gcu(o)->gc))
 
 
-CSI_FUNC CallFrame *crT_newcf(cs_State *ts);
-CSI_FUNC void crT_seterrorobj(cs_State *ts, int errcode, SPtr oldtop);
-CSI_FUNC int crT_reallocstack(cs_State *ts, int size, int raiseerr);
-CSI_FUNC int crT_growstack(cs_State *ts, int n, int raiseerr);
-CSI_FUNC void crT_shrinkstack(cs_State *ts);
-CSI_FUNC void crT_incsp(cs_State *ts);
-CSI_FUNC void crT_incCstack(cs_State *ts);
-CSI_FUNC void crT_checkCstack(cs_State *ts);
-CSI_FUNC int crT_resetthread(cs_State *ts, int status);
-CSI_FUNC void crT_warning(cs_State *ts, const char *msg, int cont);
-CSI_FUNC void crT_warnerror(cs_State *ts, const char *where);
-CSI_FUNC void crT_free(cs_State *ts, cs_State *thread);
+CSI_FUNC CallFrame *csT_newcf(cs_State *ts);
+CSI_FUNC void csT_seterrorobj(cs_State *ts, int errcode, SPtr oldtop);
+CSI_FUNC int csT_reallocstack(cs_State *ts, int size, int raiseerr);
+CSI_FUNC int csT_growstack(cs_State *ts, int n, int raiseerr);
+CSI_FUNC void csT_shrinkstack(cs_State *ts);
+CSI_FUNC void csT_incsp(cs_State *ts);
+CSI_FUNC void csT_incCstack(cs_State *ts);
+CSI_FUNC void csT_checkCstack(cs_State *ts);
+CSI_FUNC int csT_resetthread(cs_State *ts, int status);
+CSI_FUNC void csT_warning(cs_State *ts, const char *msg, int cont);
+CSI_FUNC void csT_warnerror(cs_State *ts, const char *where);
+CSI_FUNC void csT_free(cs_State *ts, cs_State *thread);
 
 #endif

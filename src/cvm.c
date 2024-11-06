@@ -48,16 +48,16 @@ static int booleans[2] = { CS_VFALSE, CS_VTRUE };
 */
 static void pushclosure(cs_State *ts, Function *fn, UpVal **enc, SPtr base) {
     int nupvals = fn->sizeupvals;
-    CrClosure *cl = crF_newCrClosure(ts, nupvals);
+    CrClosure *cl = csF_newCrClosure(ts, nupvals);
     cl->fn = fn;
     setcrcl2s(ts, ts->sp.p++, cl); /* anchor to stack */
     for (int i = 0; i < nupvals; i++) {
         UpValInfo *uv = &fn->upvals[i];
         if (uv->onstack)
-            cl->upvals[i] = crF_findupval(ts, base + uv->idx);
+            cl->upvals[i] = csF_findupval(ts, base + uv->idx);
         else
             cl->upvals[i] = enc[uv->idx];
-        crG_objbarrier(ts, cl, cl->upvals[i]);
+        csG_objbarrier(ts, cl, cl->upvals[i]);
     }
 }
 
@@ -67,14 +67,14 @@ static void pushclosure(cs_State *ts, Function *fn, UpVal **enc, SPtr base) {
 ** stack into the array.
 */
 static void pusharray(cs_State *ts, int size, int elems) {
-    Array *arr = crA_new(ts);
+    Array *arr = csA_new(ts);
     if (size < 0) /* unbounded ? */
         arr->sz = elems; /* equal to number of elements */
     else /* fixed size */
         arr->sz = size;
     if (arr->sz > 0) {
         setarr2s(ts, ts->sp.p++, arr); /* anchor array */
-        arr->b = crM_newarray(ts, arr->sz, TValue);
+        arr->b = csM_newarray(ts, arr->sz, TValue);
         ts->sp.p--; /* pop array */
         while (elems) { /* set all elements from stack into array */
             elems--;
@@ -88,7 +88,7 @@ static void pusharray(cs_State *ts, int size, int elems) {
 
 /* allocate new class and push it on stack */
 static void pushclass(cs_State *ts) {
-    OClass *cls = crMM_newclass(ts);
+    OClass *cls = csMM_newclass(ts);
     setcls2s(ts, ts->sp.p++, cls); /* anchor to stack */
 }
 
@@ -97,11 +97,11 @@ static void pushclass(cs_State *ts) {
  * Integer division; handles division by 0 and possible
  * overflow if 'y' == '-1' and 'x' == CS_INTEGER_MIN.
  */
-cs_Integer crV_div(cs_State *ts, cs_Integer x, cs_Integer y) {
-    if (cs_unlikely(cri_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
+cs_Integer csV_div(cs_State *ts, cs_Integer x, cs_Integer y) {
+    if (cs_unlikely(csi_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
-            crD_runerror(ts, "division by 0");
-        return cri_intop(-, 0, x);
+            csD_runerror(ts, "division by 0");
+        return csi_intop(-, 0, x);
     }
     return (x / y);
 }
@@ -109,24 +109,24 @@ cs_Integer crV_div(cs_State *ts, cs_Integer x, cs_Integer y) {
 
 /*
  * Integer modulus; handles modulo by 0 and overflow
- * as explained in 'crV_div()'.
+ * as explained in 'csV_div()'.
  */
-cs_Integer crV_modint(cs_State *ts, cs_Integer x, cs_Integer y) {
+cs_Integer csV_modint(cs_State *ts, cs_Integer x, cs_Integer y) {
     cs_Integer r;
-    if (cs_unlikely(cri_castS2U(y) + 1 <= 1)) {
+    if (cs_unlikely(csi_castS2U(y) + 1 <= 1)) {
         if (y == 0)
-            crD_runerror(ts, "attempt to x%%0");
+            csD_runerror(ts, "attempt to x%%0");
         return 0;
     }
-    cri_nummod(ts, x, y, r);
+    csi_nummod(ts, x, y, r);
     return r;
 }
 
 
 /* floating point modulus */
-cs_Number crV_modnum(cs_State *ts, cs_Number x, cs_Number y) {
+cs_Number csV_modnum(cs_State *ts, cs_Number x, cs_Number y) {
     cs_Number r;
-    cri_nummod(ts, x, y, r);
+    csi_nummod(ts, x, y, r);
     return r;
 }
 
@@ -135,10 +135,10 @@ cs_Number crV_modnum(cs_State *ts, cs_Number x, cs_Number y) {
  * Perform binary arithmetic operations on objects, this function is free
  * to call overloaded methods in cases where raw arithmetics are not possible.
  */
-void crV_binarithm(cs_State *ts, const TValue *v1, const TValue *v2, SPtr res,
+void csV_binarithm(cs_State *ts, const TValue *v1, const TValue *v2, SPtr res,
                    int op) {
-    if (!crO_arithmraw(ts, v1, v2, s2v(res), op))
-        crMM_trybin(ts, v1, v2, res, (op - CS_OPADD) + CS_MM_ADD);
+    if (!csO_arithmraw(ts, v1, v2, s2v(res), op))
+        csMM_trybin(ts, v1, v2, res, (op - CS_OPADD) + CS_MM_ADD);
 }
 
 
@@ -146,11 +146,11 @@ void crV_binarithm(cs_State *ts, const TValue *v1, const TValue *v2, SPtr res,
  * Perform unary arithmetic operations on objects, this function is free
  * to call overloaded methods in cases where raw arithmetics are not possible.
  */
-void crV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
+void csV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
     TValue aux;
     setival(&aux, 0);
-    if (!crO_arithmraw(ts, v, &aux, s2v(res), op))
-        crMM_tryunary(ts, v, res, (op - CS_OPUNM) + CS_MM_UNM);
+    if (!csO_arithmraw(ts, v, &aux, s2v(res), op))
+        csMM_tryunary(ts, v, res, (op - CS_OPUNM) + CS_MM_UNM);
 }
 
 
@@ -158,7 +158,7 @@ void crV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
 static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
     cs_assert(0 <= vmtt && vmtt < csNUM_MM);
     if (cs_unlikely(!(*vmt))) /* empty 'vmt' */
-        *vmt = crMM_newvmt(ts);
+        *vmt = csMM_newvmt(ts);
     (*vmt)[vmtt] = *fn; /* set the entry */
 }
 
@@ -171,14 +171,14 @@ static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
  */
 cs_sinline int intlenum(cs_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
-    return cri_numle(cast_num(ival(v1)), fval(v2));
+    return csi_numle(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
 cs_sinline int numleint(cs_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
-    return cri_numle(fval(v1), cast_num(ival(v2)));
+    return csi_numle(fval(v1), cast_num(ival(v2)));
 }
 
 
@@ -192,7 +192,7 @@ cs_sinline int numle(cs_State *ts, const TValue *v1, const TValue *v2) {
     } else {
         cs_Number n1 = fval(v1);
         if (ttisint(v2)) return numleint(ts, v1, v2);
-        else return cri_numlt(n1, fval(v2));
+        else return csi_numlt(n1, fval(v2));
     }
 }
 
@@ -200,14 +200,14 @@ cs_sinline int numle(cs_State *ts, const TValue *v1, const TValue *v2) {
 /* less equal ordering on non-number values */
 cs_sinline int otherle(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
-        return (crS_cmp(strval(v1), strval(v2)) <= 0);
+        return (csS_cmp(strval(v1), strval(v2)) <= 0);
     else
-        return crMM_order(ts, v1, v2, CS_MM_LE);
+        return csMM_order(ts, v1, v2, CS_MM_LE);
 }
 
 
 /* 'less or equal' ordering '<=' */
-int crV_orderle(cs_State *ts, const TValue *v1, const TValue *v2) {
+int csV_orderle(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
         return numle(ts, v1, v2);
     return otherle(ts, v1, v2);
@@ -216,13 +216,13 @@ int crV_orderle(cs_State *ts, const TValue *v1, const TValue *v2) {
 
 /* check 'intLEnum' */
 cs_sinline int intltnum(const TValue *v1, const TValue *v2) {
-    return cri_numlt(cast_num(ival(v1)), fval(v2));
+    return csi_numlt(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
 cs_sinline int numltint(const TValue *v1, const TValue *v2) {
-    return cri_numlt(fval(v1), cast_num(ival(v2)));
+    return csi_numlt(fval(v1), cast_num(ival(v2)));
 }
 
 
@@ -236,7 +236,7 @@ cs_sinline int numlt(const TValue *v1, const TValue *v2) {
     } else {
         cs_Number n1 = fval(v1);
         if (ttisint(v2)) return numltint(v1, v2);
-        else return cri_numlt(n1, fval(v2));
+        else return csi_numlt(n1, fval(v2));
     }
 }
 
@@ -244,14 +244,14 @@ cs_sinline int numlt(const TValue *v1, const TValue *v2) {
 /* 'less than' ordering '<' on non-number values */
 cs_sinline int otherlt(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstr(v1) && ttisstr(v2))
-        return crS_cmp(strval(v1), strval(v2));
+        return csS_cmp(strval(v1), strval(v2));
     else
-        return crMM_order(ts, v1, v2, CS_MM_LT);
+        return csMM_order(ts, v1, v2, CS_MM_LT);
 }
 
 
 /* 'less than' ordering '<' */
-int crV_orderlt(cs_State *ts, const TValue *v1, const TValue *v2) {
+int csV_orderlt(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
         return numlt(v1, v2);
     return otherlt(ts, v1, v2);
@@ -262,35 +262,35 @@ int crV_orderlt(cs_State *ts, const TValue *v1, const TValue *v2) {
 ** Equality ordering '=='.
 ** In case 'ts' is NULL perform raw equality (without invoking '__eq').
 */
-int crV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
+int csV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
     cs_Integer i1, i2;
     const TValue *method;
     if (ttypetag(v1) != ttypetag(v2)) {
         if (ttype(v1) != ttype(v2) || ttype(v1) != CS_TNUMBER)
             return 0;
-        return (crO_tointeger(v1, &i1, N2IEXACT) &&
-                crO_tointeger(v2, &i2, N2IEXACT) && i1 == i2);
+        return (csO_tointeger(v1, &i1, N2IEXACT) &&
+                csO_tointeger(v2, &i2, N2IEXACT) && i1 == i2);
     }
     switch (ttypetag(v1)) {
     case CS_VNIL: case CS_VFALSE: case CS_VTRUE: return 1;
     case CS_VNUMINT: return (ival(v1) == ival(v2));
-    case CS_VNUMFLT: return cri_numeq(fval(v1), fval(v2));
+    case CS_VNUMFLT: return csi_numeq(fval(v1), fval(v2));
     case CS_VLUDATA: return (pval(v1) == pval(v2));
-    case CS_VSTRING: return crS_eq(strval(v1), strval(v2));
+    case CS_VSTRING: return csS_eq(strval(v1), strval(v2));
     case CS_VUDATA: {
         if (udval(v1) == udval(v2)) return 1;
         else if (ts == NULL) return 0;
-        method = crMM_get(ts, v1, CS_MM_EQ);
+        method = csMM_get(ts, v1, CS_MM_EQ);
         if (ttisnil(method))
-            method = crMM_get(ts, v2, CS_MM_EQ);
+            method = csMM_get(ts, v2, CS_MM_EQ);
         break;
     }
     case CS_VINSTANCE: {
         if (insval(v1) == insval(v2)) return 1;
         else if (ts == NULL) return 0;
-        method = crMM_get(ts, v1, CS_MM_EQ);
+        method = csMM_get(ts, v1, CS_MM_EQ);
         if (ttisnil(method))
-            method = crMM_get(ts, v2, CS_MM_EQ);
+            method = csMM_get(ts, v2, CS_MM_EQ);
         break;
     }
     default: return (gcoval(v1) == gcoval(v2));
@@ -298,8 +298,8 @@ int crV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (isabstkey(method))  {
         return 0;
     } else {
-        crMM_callbinres(ts, method, v1, v2, ts->sp.p);
-        return !cri_isfalse(s2v(ts->sp.p));
+        csMM_callbinres(ts, method, v1, v2, ts->sp.p);
+        return !csi_isfalse(s2v(ts->sp.p));
     }
 }
 
@@ -309,20 +309,20 @@ int crV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
 ** undefined global variable error.
 */
 cs_sinline const TValue *checkglobal(cs_State *ts, TValue *key) {
-    const TValue *out = crH_get(htval(&G_(ts)->ginstance), key);
+    const TValue *out = csH_get(htval(&G_(ts)->ginstance), key);
     if (cs_unlikely(isabstkey(out)))
-        crD_globalerror(ts, "undefined", strval(key));
+        csD_globalerror(ts, "undefined", strval(key));
     return out;
 }
 
 
 cs_sinline void defineglobal(cs_State *ts, TValue *key, TValue *val) {
     cs_assert(ttisstr(key));
-    const TValue *slot = crH_get(htval(&G_(ts)->ginstance), key);
+    const TValue *slot = csH_get(htval(&G_(ts)->ginstance), key);
     if (cs_unlikely(!isabstkey(slot)))
-        crD_runerror(ts, "global variable '%s' redefinition", cstrval(key));
+        csD_runerror(ts, "global variable '%s' redefinition", cstrval(key));
     else
-        crH_set(ts, htval(&G_(ts)->ginstance), key, val);
+        csH_set(ts, htval(&G_(ts)->ginstance), key, val);
 }
 
 
@@ -336,8 +336,8 @@ cs_sinline void getglobal(cs_State *ts, TValue *key, TValue *out) {
 /* set global variable value */
 cs_sinline void setglobal(cs_State *ts, TValue *key, TValue *newval) {
     if (cs_unlikely(isconst(checkglobal(ts, key))))
-        crD_globalerror(ts, "read-only", strval(key));
-    crH_set(ts, htval(&G_(ts)->ginstance), key, newval);
+        csD_globalerror(ts, "read-only", strval(key));
+    csH_set(ts, htval(&G_(ts)->ginstance), key, newval);
 }
 
 
@@ -347,30 +347,30 @@ static void arrayseti(cs_State *ts, Array *arr, const TValue *index,
     if (cs_likely(tointeger(index, &i))) { /* index is integer? */
         if (cs_likely(0 <= i)) { /* non-negative index */
             if (cs_unlikely(i >= ARRAYLIMIT)) /* too large 'index'? */
-                crD_indexerror(ts, i, "too large");
-            crA_ensure(ts, arr, i); /* expand block */
+                csD_indexerror(ts, i, "too large");
+            csA_ensure(ts, arr, i); /* expand block */
             setobj(ts, &arr->b[i], val); /* set the value at index */
         } else { /* negative index (error) */
-            crD_indexerror(ts, i, "negative");
+            csD_indexerror(ts, i, "negative");
         }
     } else {
-        crD_indextypeerror(ts, index);
+        csD_indextypeerror(ts, index);
     }
 }
 
 
-void crV_set(cs_State *ts, const TValue *obj, const TValue *key,
+void csV_set(cs_State *ts, const TValue *obj, const TValue *key,
              const TValue *val) {
     if (ttisarr(obj)) { /* array object? */
         arrayseti(ts, arrval(obj), key, val);
     } else {
-        const TValue *fmm = crMM_get(ts, obj, CS_MM_SETIDX);
+        const TValue *fmm = csMM_get(ts, obj, CS_MM_SETIDX);
         if (!ttisnil(fmm)) /* have metamethod ? */
-            crMM_callhtm(ts, fmm, obj, key, val);
+            csMM_callhtm(ts, fmm, obj, key, val);
         else if (ttisins(obj)) /* object is instance ? */
-            crH_set(ts, &insval(obj)->fields, key, val);
+            csH_set(ts, &insval(obj)->fields, key, val);
         else /* error */
-            crD_typeerror(ts, obj, "index");
+            csD_typeerror(ts, obj, "index");
     }
 }
 
@@ -380,44 +380,44 @@ static void arraygeti(cs_State *ts, Array *arr, const TValue *index, SPtr res) {
     if (cs_likely(tointeger(index, &i))) { /* index is integer? */
         if (i >= 0) { /* positive index? */
             if (cs_unlikely(i >= ARRAYLIMIT)) { /* too large index? */
-                crD_indexerror(ts, i, "too large");
+                csD_indexerror(ts, i, "too large");
             } else if (i < arr->sz) { /* index in array block? */
                 setobj2s(ts, res, &arr->b[i]);
             } else /* out of bounds */
                 setnilval(s2v(res));
         } else { /* negative index (error) */
-            crD_indexerror(ts, i, "negative");
+            csD_indexerror(ts, i, "negative");
         }
     } else {
-        crD_indextypeerror(ts, index);
+        csD_indextypeerror(ts, index);
     }
 }
 
 
 /* bind method to instance and set it at 'res' */
 #define bindmethod(ts,ins,fn,res) \
-    setim2s(ts, res, crMM_newinsmethod(ts, ins, v))
+    setim2s(ts, res, csMM_newinsmethod(ts, ins, v))
 
 
-void crV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
+void csV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
     if (ttisarr(obj)) { /* array object? */
         arraygeti(ts, arrval(obj), key, res);
     } else {
         Instance *ins;
         const TValue *fmm, *v;
-        fmm = crMM_get(ts, obj, CS_MM_GETIDX);
+        fmm = csMM_get(ts, obj, CS_MM_GETIDX);
         if (!ttisnil(fmm)) { /* have metamethod ? */
-            crMM_callhtmres(ts, fmm, obj, key, res);
+            csMM_callhtmres(ts, fmm, obj, key, res);
         } else { /* otherwise perform raw access */
             if (cs_unlikely(ttypetag(obj) != CS_VINSTANCE))
-                crD_typeerror(ts, obj, "index");
+                csD_typeerror(ts, obj, "index");
             ins = insval(obj);
-            v = crH_get(&ins->fields, key);
+            v = csH_get(&ins->fields, key);
             if (!isabstkey(v)) { /* have field ? */
                 setobj2s(ts, res, v);
                 return;
             } else if (ins->oclass->methods) { /* have methods table? */
-                v = crH_get(ins->oclass->methods, key);
+                v = csH_get(ins->oclass->methods, key);
                 if (!isabstkey(v)) { /* have method ? */
                     /* bind it to instance and set 'res'  */
                     bindmethod(ts, ins, v, res)
@@ -430,10 +430,10 @@ void crV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
 }
 
 
-void crV_getsuper(cs_State *ts, Instance *ins, OClass *cls, const TValue *s,
+void csV_getsuper(cs_State *ts, Instance *ins, OClass *cls, const TValue *s,
                   SPtr res) {
     if (cls->methods) { /* superclass has methods ? */
-        const TValue *v = crH_get(cls->methods, s);
+        const TValue *v = csH_get(cls->methods, s);
         if (!isabstkey(v))
             bindmethod(ts, ins, v, res)
     } else { /* no methods; set nil */
@@ -446,12 +446,12 @@ void crV_getsuper(cs_State *ts, Instance *ins, OClass *cls, const TValue *s,
 cs_sinline void inherit(cs_State *ts, const TValue *obj, OClass *dest) {
     OClass *src;
     if (cs_unlikely(!ttiscls(obj)))
-        crD_runerror(ts, "inherit a non-class value");
+        csD_runerror(ts, "inherit a non-class value");
     src = clsval(obj);
     if (cs_likely(src->methods)) { /* 'src' has methods ? */
         cs_assert(dest->methods == NULL);
-        dest->methods = crH_new(ts);
-        crH_copykeys(ts, src->methods, dest->methods);
+        dest->methods = csH_new(ts);
+        csH_copykeys(ts, src->methods, dest->methods);
     }
 }
 
@@ -467,14 +467,14 @@ cs_sinline void precallmbin(cs_State *ts, const TValue *v1, const TValue *v2,
     const TValue *func;
     const char *opname = getstrbytes(G_(ts)->mmnames[op]);
     if (cs_unlikely(ttypetag(v1) != ttypetag(v2)))
-        crD_typeerrormeta(ts, v1, v2, opname);
+        csD_typeerrormeta(ts, v1, v2, opname);
     if (cs_unlikely(ttisins(v1) && insval(v1)->oclass != insval(v2)->oclass))
-        crD_runerror(ts, "tried to %s instances of different class", opname);
-    func = crMM_get(ts, v1, op);
+        csD_runerror(ts, "tried to %s instances of different class", opname);
+    func = csMM_get(ts, v1, op);
     if (cs_unlikely(ttisnil(func)))
-        crD_typeerror(ts, v1, opname);
+        csD_typeerror(ts, v1, opname);
     else
-        crMM_callbinres(ts, func, v1, v2, res);
+        csMM_callbinres(ts, func, v1, v2, res);
 }
 
 
@@ -501,7 +501,7 @@ cs_sinline void moveresults(cs_State *ts, SPtr res, int nres, int wanted) {
         }
         default: {
             if (hastocloseCfunc(wanted)) { /* tbc variables? */
-                res = crF_close(ts, res, CLOSEKTOP); /* do the closing */
+                res = csF_close(ts, res, CLOSEKTOP); /* do the closing */
                 wanted = decodeNresults(wanted); /* decode nresults */
                 if (wanted == CS_MULRET) /* all values needed? */
                     wanted = nres;
@@ -529,7 +529,7 @@ cs_sinline void poscall(cs_State *ts, CallFrame *cf, int nres) {
 
 cs_sinline CallFrame *prepcallframe(cs_State *ts, SPtr func, int nret,
                                     int mask, SPtr top) {
-    CallFrame *cf = (ts->cf->next ? ts->cf->next : crT_newcf(ts));
+    CallFrame *cf = (ts->cf->next ? ts->cf->next : csT_newcf(ts));
     cf->func.p = func;
     cf->top.p = top;
     cf->nresults = nret;
@@ -564,9 +564,9 @@ cs_sinline SPtr adjustffunc(cs_State *ts, SPtr func, const TValue *f) {
 
 cs_sinline SPtr trymmcall(cs_State *ts, SPtr func) {
     const TValue *f;
-    f = crMM_get(ts, s2v(func), CS_MM_CALL);
+    f = csMM_get(ts, s2v(func), CS_MM_CALL);
     if (cs_unlikely(ttisnil(f)))
-        crD_callerror(ts, s2v(func));
+        csD_callerror(ts, s2v(func));
     return adjustffunc(ts, func, f);
 }
 
@@ -584,9 +584,9 @@ retry:
         }
         case CS_VCLASS: { /* Class */
             const TValue *fmm;
-            Instance *ins = crMM_newinstance(ts, clsval(s2v(func)));
+            Instance *ins = csMM_newinstance(ts, clsval(s2v(func)));
             setins2s(ts, func, ins); /* replace class with its instance */
-            fmm = crMM_get(ts, s2v(func), CS_MM_INIT);
+            fmm = csMM_get(ts, s2v(func), CS_MM_INIT);
             if (!ttisnil(fmm)) { /* have '__init' ? */
                 func = adjustffunc(ts, func, fmm);
                 cs_assert(ttiscl(s2v(func)) || ttiscfn(s2v(func)));
@@ -620,18 +620,18 @@ cs_sinline void ccall(cs_State *ts, SPtr func, int nresults, cs_uint32 inc) {
     ts->nCcalls += inc;
     if (cs_unlikely(getCcalls(ts) >= CSI_MAXCCALLS)) {
         checkstackp(ts, 0, func);  /* free any use of EXTRA_STACK */
-        crT_checkCstack(ts);
+        csT_checkCstack(ts);
     }
     if ((cf = precall(ts, func, nresults)) != NULL) {  /* CScript function? */
         cf->status = CFST_FRESH;
-        crV_execute(ts, cf);
+        csV_execute(ts, cf);
     }
     ts->nCcalls -= inc;
 }
 
 
 /* external interface for 'ccall' */
-void crV_call(cs_State *ts, SPtr func, int nresults) {
+void csV_call(cs_State *ts, SPtr func, int nresults) {
     ccall(ts, func, nresults, nyci);
 }
 
@@ -651,14 +651,14 @@ static void copy2buff(SPtr top, int n, char *buff) {
 }
 
 
-void crV_concat(cs_State *ts, int total) {
+void csV_concat(cs_State *ts, int total) {
     if (total == 1)
         return; /* done */
     do {
         SPtr top = ts->sp.p;
         int n = 2; /* number of elements (minimum 2) */
         if (!(ttisstr(s2v(top - 2)) && ttisstr(s2v(top - 1))))
-            crMM_tryconcat(ts);
+            csMM_tryconcat(ts);
         else if (isemptystr(s2v(top - 1))) /* second operand is empty string? */
             ; /* result already in the first operand */
         else if (isemptystr(s2v(top - 2))) { /* first operand is empty string? */
@@ -671,7 +671,7 @@ void crV_concat(cs_State *ts, int total) {
                 size_t len = lenstr(s2v(top - n - 1));
                 if (cs_unlikely(len >= SIZE_MAX - sizeof(OString) - ltotal)) {
                     ts->sp.p = top - total; /* pop strings */
-                    crD_runerror(ts, "string length overflow");
+                    csD_runerror(ts, "string length overflow");
                 }
                 ltotal += len;
             }
@@ -679,9 +679,9 @@ void crV_concat(cs_State *ts, int total) {
             if (ltotal <= MAXSHRSTRLEN) {
                 char buff[MAXSHRSTRLEN];
                 copy2buff(top, n, buff);
-                s = crS_newl(ts, buff, ltotal);
+                s = csS_newl(ts, buff, ltotal);
             } else {
-                s = crS_newlobj(ts, ltotal);
+                s = csS_newlobj(ts, ltotal);
                 copy2buff(top, n, getstrbytes(s));
             }
             setstrval2s(ts, top - n, s);
@@ -697,14 +697,14 @@ void crV_concat(cs_State *ts, int total) {
 **------------------------------------------------------------------------- */
 
 /* 'cs_Integer' arithmetic operations */
-#define iadd(ts,a,b)    (cri_intop(+, a, b))
-#define isub(ts,a,b)    (cri_intop(-, a, b))
-#define imul(ts,a,b)    (cri_intop(*, a, b))
+#define iadd(ts,a,b)    (csi_intop(+, a, b))
+#define isub(ts,a,b)    (csi_intop(-, a, b))
+#define imul(ts,a,b)    (csi_intop(*, a, b))
 
 /* integer bitwise operations */
-#define iband(a,b)      (cri_intop(&, a, b))
-#define ibor(a,b)       (cri_intop(|, a, b))
-#define ibxor(a,b)      (cri_intop(^, a, b))
+#define iband(a,b)      (csi_intop(&, a, b))
+#define ibor(a,b)       (csi_intop(|, a, b))
+#define ibxor(a,b)      (csi_intop(^, a, b))
 
 /* integer ordering operations */
 #define ilt(a,b)        (a < b)
@@ -722,7 +722,7 @@ void crV_concat(cs_State *ts, int total) {
     if (tonumber(v1, &n1) && tonumber(v2, &n2)) { \
         setfval(v1, fop(ts, n1, n2)); \
     } else { \
-        crD_aritherror(ts, v1, v2); \
+        csD_aritherror(ts, v1, v2); \
     }}
 
 
@@ -748,7 +748,7 @@ void crV_concat(cs_State *ts, int total) {
 
 /* arithmetic operation error with immediate operand */
 #define op_arithI_error(ts,v,imm) \
-    { TValue v2; setival(&v2, imm); crD_aritherror(ts, v, &v2); }
+    { TValue v2; setival(&v2, imm); csD_aritherror(ts, v, &v2); }
 
 
 /* arithmetic operations with immediate operand for floats */
@@ -825,7 +825,7 @@ void crV_concat(cs_State *ts, int total) {
     if (cs_likely(tointeger(v, &i1))) { \
         setival(v, op(i1, i2)); \
     } else { \
-        crD_bitwerror(ts, v, lk); \
+        csD_bitwerror(ts, v, lk); \
     }}
 
 
@@ -839,7 +839,7 @@ void crV_concat(cs_State *ts, int total) {
         setival(v, op(i, imm)); \
     } else { \
         TValue vimm; setival(&vimm, imm); \
-        crD_bitwerror(ts, v, &vimm); \
+        csD_bitwerror(ts, v, &vimm); \
     }}
 
 
@@ -915,7 +915,7 @@ void crV_concat(cs_State *ts, int total) {
 
 #if 0
 /* fetch and trace the instruction */
-#define fetch()         crTR_tracepc(cl->fn, pc)
+#define fetch()         csTR_tracepc(cl->fn, pc)
 #else
 /* fetch instruction */
 #define fetch()         (*pc++)
@@ -957,7 +957,7 @@ void crV_concat(cs_State *ts, int total) {
 #define vm_break            break
 
 
-void crV_execute(cs_State *ts, CallFrame *cf) {
+void csV_execute(cs_State *ts, CallFrame *cf) {
     register const Instruction *pc; /* program counter */
     register CrClosure *cl; /* closure being executed */
     register TValue *k; /* array of constants */
@@ -1018,13 +1018,13 @@ returning:
             }
             vm_case(OP_VARARGPREP) {
                 int L = fetchl();
-                protect(crF_adjustvarargs(ts, L, cf, cl->fn));
+                protect(csF_adjustvarargs(ts, L, cf, cl->fn));
                 updatebase(cf); /* update base, it changed */
                 vm_break;
             }
             vm_case(OP_VARARG) {
                 int L = fetchl(); /* how many */
-                protect(crF_getvarargs(ts, cf, L));
+                protect(csF_getvarargs(ts, cf, L));
                 vm_break;
             }
             vm_case(OP_CLOSURE) {
@@ -1054,7 +1054,7 @@ returning:
                 TValue *v2 = peek(0); /* method */
                 TValue *key = getlK();
                 cs_assert(ttisstr(key));
-                protect(crH_set(ts, clsval(v2)->methods, key, v1));
+                protect(csH_set(ts, clsval(v2)->methods, key, v1));
                 vm_break;
             }
             vm_case(OP_SETMM) {
@@ -1083,37 +1083,37 @@ returning:
                 vm_break;
             }
             vm_case(OP_ADDK) {
-                op_arithK(ts, iadd, cri_numadd);
+                op_arithK(ts, iadd, csi_numadd);
                 vm_break;
             }
             vm_case(OP_SUBK) {
-                op_arithK(ts, isub, cri_numsub);
+                op_arithK(ts, isub, csi_numsub);
                 vm_break;
             }
             vm_case(OP_MULK) {
-                op_arithK(ts, imul, cri_nummul);
+                op_arithK(ts, imul, csi_nummul);
                 vm_break;
             }
             vm_case(OP_DIVK) {
                 storepc(ts); /* in case of division by 0 */
-                op_arithK(ts, crV_div, cri_numdiv);
+                op_arithK(ts, csV_div, csi_numdiv);
                 vm_break;
             }
             vm_case(OP_MODK) {
                 storepc(ts); /* in case of division by 0 */
-                op_arithK(ts, crV_modint, crV_modnum);
+                op_arithK(ts, csV_modint, csV_modnum);
                 vm_break;
             }
             vm_case(OP_POWK) {
-                op_arithKf(ts, cri_numpow);
+                op_arithKf(ts, csi_numpow);
                 vm_break;
             }
             vm_case(OP_BSHLK) {
-                op_bitwiseK(ts, crO_shiftl);
+                op_bitwiseK(ts, csO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHRK) {
-                op_bitwiseK(ts, crO_shiftr);
+                op_bitwiseK(ts, csO_shiftr);
                 vm_break;
             }
             vm_case(OP_BANDK) {
@@ -1129,37 +1129,37 @@ returning:
                 vm_break;
             }
             vm_case(OP_ADDI) {
-                op_arithI(ts, iadd, cri_numadd);
+                op_arithI(ts, iadd, csi_numadd);
                 vm_break;
             }
             vm_case(OP_SUBI) {
-                op_arithI(ts, isub, cri_numsub);
+                op_arithI(ts, isub, csi_numsub);
                 vm_break;
             }
             vm_case(OP_MULI) {
-                op_arithI(ts, imul, cri_nummul);
+                op_arithI(ts, imul, csi_nummul);
                 vm_break;
             }
             vm_case(OP_DIVI) {
                 storepc(ts); /* in case of division by 0 */
-                op_arithI(ts, crV_div, cri_numdiv);
+                op_arithI(ts, csV_div, csi_numdiv);
                 vm_break;
             }
             vm_case(OP_MODI) {
                 storepc(ts); /* in case of division by 0 */
-                op_arithI(ts, crV_modint, crV_modnum);
+                op_arithI(ts, csV_modint, csV_modnum);
                 vm_break;
             }
             vm_case(OP_POWI) {
-                op_arithIf(ts, cri_numpow);
+                op_arithIf(ts, csi_numpow);
                 vm_break;
             }
             vm_case(OP_BSHLI) {
-                op_bitwiseI(ts, crO_shiftl);
+                op_bitwiseI(ts, csO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHRI) {
-                op_bitwiseI(ts, crO_shiftr);
+                op_bitwiseI(ts, csO_shiftr);
                 vm_break;
             }
             vm_case(OP_BANDI) {
@@ -1175,37 +1175,37 @@ returning:
                 vm_break;
             }
             vm_case(OP_ADD) {
-                op_arith(ts, iadd, cri_numadd);
+                op_arith(ts, iadd, csi_numadd);
                 vm_break;
             }
             vm_case(OP_SUB) {
-                op_arith(ts, isub, cri_numsub);
+                op_arith(ts, isub, csi_numsub);
                 vm_break;
             }
             vm_case(OP_MUL) {
-                op_arith(ts, imul, cri_nummul);
+                op_arith(ts, imul, csi_nummul);
                 vm_break;
             }
             vm_case(OP_DIV) {
                 storepc(ts); /* in case of division by 0 */
-                op_arith(ts, crV_div, cri_numdiv);
+                op_arith(ts, csV_div, csi_numdiv);
                 vm_break;
             }
             vm_case(OP_MOD) {
                 storepc(ts); /* in case of division by 0 */
-                op_arith(ts, crV_modint, crV_modnum);
+                op_arith(ts, csV_modint, csV_modnum);
                 vm_break;
             }
             vm_case(OP_POW) {
-                op_arithf(ts, crV_modnum);
+                op_arithf(ts, csV_modnum);
                 vm_break;
             }
             vm_case(OP_BSHL) {
-                op_bitwise(ts, crO_shiftl);
+                op_bitwise(ts, csO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHR) {
-                op_bitwise(ts, crO_shiftr);
+                op_bitwise(ts, csO_shiftr);
                 vm_break;
             }
             vm_case(OP_BAND) {
@@ -1222,8 +1222,8 @@ returning:
             }
             /* } CONCAT_OP { */
             vm_case(OP_CONCAT) { /* TODO: concat more than 2 at a time */
-                protect(crV_concat(ts, 2)); /* crV_concat handles stack ptr */
-                crG_check(ts);
+                protect(csV_concat(ts, 2)); /* csV_concat handles stack ptr */
+                csG_check(ts);
                 vm_break;
             }
             /* } ORDERING_OPS { */
@@ -1231,7 +1231,7 @@ returning:
                 TValue *v1 = peek(0);
                 const TValue *v2 = getlK(); /* L */
                 int S = fetchs(); /* iseq */
-                setorderres(v1, crV_raweq(v1, v2), S);
+                setorderres(v1, csV_raweq(v1, v2), S);
                 vm_break;
             }
             vm_case(OP_EQI) {
@@ -1244,26 +1244,26 @@ returning:
                 if (ttisint(v1))
                     cond = (ival(v1) == L);
                 else if (ttisflt(v1))
-                    cond = cri_numeq(fval(v1), cast_num(L));
+                    cond = csi_numeq(fval(v1), cast_num(L));
                 else
                     cond = 0;
                 setorderres(v1, cond, S2);
                 vm_break;
             }
             vm_case(OP_LTI) {
-                op_orderI(ts, ilt, cri_numlt);
+                op_orderI(ts, ilt, csi_numlt);
                 vm_break;
             }
             vm_case(OP_LEI) {
-                op_orderI(ts, ile, cri_numle);
+                op_orderI(ts, ile, csi_numle);
                 vm_break;
             }
             vm_case(OP_GTI) {
-                op_orderI(ts, igt, cri_numgt);
+                op_orderI(ts, igt, csi_numgt);
                 vm_break;
             }
             vm_case(OP_GEI) {
-                op_orderI(ts, ige, cri_numge);
+                op_orderI(ts, ige, csi_numge);
                 vm_break;
             }
             vm_case(OP_EQ) {
@@ -1271,31 +1271,31 @@ returning:
                 TValue *v2 = peek(0);
                 int S = fetchs(); /* iseq */
                 int cond;
-                protect(cond = crV_ordereq(ts, v1, v2));
+                protect(cond = csV_ordereq(ts, v1, v2));
                 setorderres(v1, cond, S);
                 pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_LT) {
-                op_order(ts, ilt, cri_numlt, otherlt);
+                op_order(ts, ilt, csi_numlt, otherlt);
                 vm_break;
             }
             vm_case(OP_LE) {
-                op_order(ts, ile, cri_numle, otherle);
+                op_order(ts, ile, csi_numle, otherle);
                 vm_break;
             }
             vm_case(OP_EQPRESERVE) {
                 SPtr res = TOPS();
                 TValue *v1 = peek(1);
                 TValue *v2 = s2v(res);
-                protect(crV_ordereq(ts, v1, v2));
+                protect(csV_ordereq(ts, v1, v2));
                 setobj2s(ts, res, s2v(ts->sp.p));
                 vm_break;
             }
             /* }} UNARY_OPS { */
             vm_case(OP_NOT) {
                 TValue *v = peek(0);
-                if (cri_isfalse(v))
+                if (csi_isfalse(v))
                     setbtval(v);
                 else
                     setbfval(v);
@@ -1306,12 +1306,12 @@ returning:
                 TValue *v = s2v(res);
                 if (ttisint(v)) {
                     cs_Integer i = ival(v);
-                    setival(v, cri_intop(-, 0, i));
+                    setival(v, csi_intop(-, 0, i));
                 } else if (ttisflt(v)) {
                     cs_Number n = fval(v);
-                    setfval(v, cri_numunm(ts, n));
+                    setfval(v, csi_numunm(ts, n));
                 } else {
-                    protect(crMM_tryunary(ts, v, res, CS_MM_UNM));
+                    protect(csMM_tryunary(ts, v, res, CS_MM_UNM));
                 }
                 vm_break;
             }
@@ -1320,9 +1320,9 @@ returning:
                 TValue *v = s2v(res);
                 if (ttisint(v)) {
                     cs_Integer i = ival(v);
-                    setival(v, cri_intop(^, ~cri_castS2U(0), i));
+                    setival(v, csi_intop(^, ~csi_castS2U(0), i));
                 } else {
-                    protect(crMM_tryunary(ts, v, res, CS_MM_BNOT));
+                    protect(csMM_tryunary(ts, v, res, CS_MM_BNOT));
                 }
                 vm_break;
             }
@@ -1342,7 +1342,7 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                if (!cri_isfalse(v) == S)
+                if (!csi_isfalse(v) == S)
                     pc += L;
                 vm_break;
             }
@@ -1350,7 +1350,7 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                if (!cri_isfalse(v) == S)
+                if (!csi_isfalse(v) == S)
                     pc += L;
                 else
                     pop(1); /* v */
@@ -1360,7 +1360,7 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                if (!cri_isfalse(v) == S) {
+                if (!csi_isfalse(v) == S) {
                     pc += L;
                     pop(1); /* v */
                 }
@@ -1370,7 +1370,7 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                if (!cri_isfalse(v) == S)
+                if (!csi_isfalse(v) == S)
                     pc += L;
                 pop(1); /* v */
                 vm_break;
@@ -1389,12 +1389,12 @@ returning:
             }
             vm_case(OP_CLOSE) {
                 SPtr level = base + fetchl();
-                protect(crF_close(ts, level, CS_OK));
+                protect(csF_close(ts, level, CS_OK));
                 vm_break;
             }
             vm_case(OP_TBC) {
                 SPtr level = base + fetchl();
-                protect(crF_newtbcvar(ts, level));
+                protect(csF_newtbcvar(ts, level));
                 vm_break;
             }
             vm_case(OP_GETLOCAL) {
@@ -1450,7 +1450,7 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cs_assert(ttisstr(s));
-                protect(crV_set(ts, v1, s, v2));
+                protect(csV_set(ts, v1, s, v2));
                 pop(2); /* v1,v2 */
                 vm_break;
             }
@@ -1458,13 +1458,13 @@ returning:
                 TValue *s = getlK();
                 TValue *v = peek(0);
                 cs_assert(ttisstr(s));
-                protect(crV_get(ts, v, s, TOPS()));
+                protect(csV_get(ts, v, s, TOPS()));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                protect(crV_get(ts, v1, v2, SPTR(1)));
+                protect(csV_get(ts, v1, v2, SPTR(1)));
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1472,7 +1472,7 @@ returning:
                 TValue *v1 = peek(2);
                 TValue *v2 = peek(1);
                 TValue *v3 = peek(0);
-                protect(crV_set(ts, v1, v2, v3));
+                protect(csV_set(ts, v1, v2, v3));
                 pop(3); /* v1,v2,v3 */
                 vm_break;
             }
@@ -1480,7 +1480,7 @@ returning:
                 TValue *s = getlK();
                 TValue *v = peek(0);
                 cs_assert(ttisstr(s));
-                protect(crV_get(ts, v, s, TOPS()));
+                protect(csV_get(ts, v, s, TOPS()));
                 vm_break;
             }
             vm_case(OP_SETINDEXSTR) { /* TODO: optimize */
@@ -1488,14 +1488,14 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cs_assert(ttisstr(s));
-                protect(crV_set(ts, v1, s, v2));
+                protect(csV_set(ts, v1, s, v2));
                 vm_break;
             }
             vm_case(OP_GETINDEXINT) { /* TODO: optimize */
                 TValue aux;
                 TValue *v = peek(0);
                 setival(&aux, fetchl());
-                protect(crV_get(ts, v, &aux, TOPS()));
+                protect(csV_get(ts, v, &aux, TOPS()));
                 vm_break;
             }
             vm_case(OP_SETINDEXINT) { /* TODO: optimize */
@@ -1503,7 +1503,7 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 setival(&aux, fetchl());
-                protect(crV_set(ts, v1, &aux, v2));
+                protect(csV_set(ts, v1, &aux, v2));
                 vm_break;
             }
             vm_case(OP_GETSUP) {
@@ -1511,7 +1511,7 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cs_assert(ttisstr(s));
-                protect(crV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
+                protect(csV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1519,7 +1519,7 @@ returning:
                 TValue *v1 = peek(2);
                 TValue *v2 = peek(1);
                 TValue *v3 = peek(0);
-                protect(crV_getsuper(ts, insval(v1), clsval(v2), v3, SPTR(2)));
+                protect(csV_getsuper(ts, insval(v1), clsval(v2), v3, SPTR(2)));
                 pop(2); /* v2,v3 */
                 vm_break;
             }
@@ -1528,7 +1528,7 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cs_assert(ttisstr(s));
-                protect(crV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
+                protect(csV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1542,7 +1542,7 @@ returning:
             vm_case(OP_FORPREP) {
                 SPtr stk = STK(fetchl());
                 int offset = fetchl();
-                protect(crF_newtbcvar(ts, stk + FORTBCVAR));
+                protect(csF_newtbcvar(ts, stk + FORTBCVAR));
                 pc += offset;
                 cs_assert(*pc == OP_FORCALL);
                 goto l_forcall;
@@ -1557,7 +1557,7 @@ returning:
                  * after these values (starting at 'stk + 4'). */
                 memcpy(stk+NSTATEVARS, stk, FORTBCVAR*sizeof(stk));
                 ts->sp.p = stk + NSTATEVARS + FORTBCVAR;
-                protect(crV_call(ts, stk + NSTATEVARS, nres));
+                protect(csV_call(ts, stk + NSTATEVARS, nres));
                 updatebase(cf);
                 cs_assert(*pc == OP_FORLOOP);
                 goto l_forloop;
@@ -1580,7 +1580,7 @@ returning:
                     n = ts->sp.p - stk;
                 storepc(ts);
                 if (fetchs()) { /* have open upvalues? */
-                    crF_close(ts, base, CLOSEKTOP);
+                    csF_close(ts, base, CLOSEKTOP);
                     updatebase(cf);
                 }
                 if (cl->fn->isvararg) /* vararg function ? */

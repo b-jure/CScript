@@ -12,10 +12,10 @@
 
 
 static int csCore_error(cs_State *ts) {
-    int level = crL_opt_integer(ts, 1, 0);
+    int level = csL_opt_integer(ts, 1, 0);
     cs_setntop(ts, 1); /* leave only message on top */
     if (cs_type(ts, 0) == CS_TSTRING && level >= 0) {
-        crL_where(ts, level); /* add extra information */
+        csL_where(ts, level); /* add extra information */
         cs_push(ts, 0); /* push original error message... */
         cs_concat(ts, 2); /* ...and concatenate it with extra information */
         /* error message with extra information is now on top */
@@ -28,7 +28,7 @@ static int csCore_assert(cs_State *ts) {
     if (cs_likely(cs_to_bool(ts, -1))) { /* true? */
         return cs_nvalues(ts); /* get all arguments */
     } else { /* failed assert (error) */
-        crL_check_any(ts, 0); /* must have a condition */
+        csL_check_any(ts, 0); /* must have a condition */
         cs_remove(ts, 0); /* remove condition */
         cs_push_literal(ts, "assertion failed"); /* push default err message */
         cs_setntop(ts, 1); /* leave only one message on top */
@@ -45,7 +45,7 @@ static int csCore_gc(cs_State *ts) {
         "step", "setpause", "setstepmul", "isrunning", NULL};
     static const int numopts[] = {CS_GCSTOP, CS_GCRESTART, CS_GCCOLLECT,
         CS_GCCOUNT, CS_GCSTEP, CS_GCSETPAUSE, CS_GCSETSTEPMUL, CS_GCISRUNNING};
-    int optnum = numopts[crL_check_option(ts, 0, "collect", opts)];
+    int optnum = numopts[csL_check_option(ts, 0, "collect", opts)];
     switch (optnum) {
         case CS_GCCOUNT: {
             int kb = cs_gc(ts, optnum); /* kibibytes */
@@ -55,14 +55,14 @@ static int csCore_gc(cs_State *ts) {
             return 1;
         }
         case CS_GCSTEP: {
-            int nstep = crL_opt_integer(ts, 1, 0);
+            int nstep = csL_opt_integer(ts, 1, 0);
             int completecycle = cs_gc(ts, optnum, nstep);
             checkres(completecycle);
             cs_push_bool(ts, completecycle);
             return 1;
         }
         case CS_GCSETPAUSE: case CS_GCSETSTEPMUL: {
-            int arg = crL_opt_integer(ts, 1, 0);
+            int arg = csL_opt_integer(ts, 1, 0);
             int prev = cs_gc(ts, optnum, arg);
             checkres(prev);
             cs_push_integer(ts, prev);
@@ -81,7 +81,7 @@ static int csCore_gc(cs_State *ts) {
             return 1;
         }
     }
-    crL_push_fail(ts);
+    csL_push_fail(ts);
     return 0;
 }
 
@@ -96,7 +96,7 @@ static int csCore_gc(cs_State *ts) {
 
 static const char *loadreader(cs_State *ts, void *ud, size_t *sz) {
     (void)ud; /* unused */
-    crL_check_stack(ts, 2, "too many nested functions");
+    csL_check_stack(ts, 2, "too many nested functions");
     cs_push(ts, 0); /* push func... */
     cs_call(ts, 0, 1); /* ...and call it */
     if (cs_is_nil(ts, -1)) { /* nothing else to read? */
@@ -104,16 +104,16 @@ static const char *loadreader(cs_State *ts, void *ud, size_t *sz) {
         *sz = 0;
         return NULL;
     } else if (cs_unlikely(!cs_is_string(ts, -1))) { /* top is not a string? */
-        crL_error(ts, "reader function must return a string");
+        csL_error(ts, "reader function must return a string");
     }
     cs_replace(ts, RESERVEDSLOT); /* move string into reserved slot */
-    return crL_to_lstring(ts, RESERVEDSLOT, sz);
+    return csL_to_lstring(ts, RESERVEDSLOT, sz);
 }
 
 
 static int auxload(cs_State *ts, int status) {
     if (cs_unlikely(status != CS_OK)) {
-        crL_push_fail(ts); /* push fail */
+        csL_push_fail(ts); /* push fail */
         cs_insert(ts, -2); /* and put it in front of error message */
         return 2; /* nil + error message */
     }
@@ -127,11 +127,11 @@ static int csCore_load(cs_State *ts) {
     const char *chunkname;
     const char *chunk = cs_to_lstring(ts, 0, &sz);
     if (chunk != NULL) { /* 'chunk' is a string? */
-        chunkname = crL_opt_string(ts, 1, chunk);
-        status = crL_loadbuffer(ts, chunk, sz, chunkname);
+        chunkname = csL_opt_string(ts, 1, chunk);
+        status = csL_loadbuffer(ts, chunk, sz, chunkname);
     } else { /* 'chunk' is not a string */
-        chunkname = crL_opt_string(ts, 1, "(load)");
-        crL_check_type(ts, 0, CS_TFUNCTION); /* 'chunk' must be a function */
+        chunkname = csL_opt_string(ts, 1, "(load)");
+        csL_check_type(ts, 0, CS_TFUNCTION); /* 'chunk' must be a function */
         status = cs_load(ts, loadreader, NULL, chunkname);
     }
     return auxload(ts, status);
@@ -139,16 +139,16 @@ static int csCore_load(cs_State *ts) {
 
 
 static int csCore_loadfile(cs_State *ts) {
-    const char *filename = crL_opt_string(ts, 0, NULL);
-    int status = crL_loadfile(ts, filename);
+    const char *filename = csL_opt_string(ts, 0, NULL);
+    int status = csL_loadfile(ts, filename);
     return auxload(ts, status);
 }
 
 
 static int csCore_runfile(cs_State *ts) {
-    const char *filename = crL_opt_string(ts, -1, NULL);
+    const char *filename = csL_opt_string(ts, -1, NULL);
     cs_setntop(ts, 1);
-    if (cs_unlikely(crL_loadfile(ts, filename) != CS_OK))
+    if (cs_unlikely(csL_loadfile(ts, filename) != CS_OK))
         return cs_error(ts);
     cs_call(ts, 0, CS_MULRET);
     return cs_nvalues(ts) - 1; /* all not including 'filename' */
@@ -166,8 +166,8 @@ static int csCore_getmetamethod(cs_State *ts) {
         CS_MM_BAND, CS_MM_BOR, CS_MM_BXOR, CS_MM_UNM, CS_MM_BNOT, CS_MM_EQ,
         CS_MM_LT, CS_MM_LE};
     cs_MM mm;
-    crL_check_any(ts, 0); /* object with metamethods */
-    mm = mmnum[crL_check_option(ts, 1, NULL, opts)];
+    csL_check_any(ts, 0); /* object with metamethods */
+    mm = mmnum[csL_check_option(ts, 1, NULL, opts)];
     if (!cs_hasvmt(ts, 0) || (cs_get_metamethod(ts, 0, mm) == CS_TNONE))
         cs_push_nil(ts);
     return 1;
@@ -175,7 +175,7 @@ static int csCore_getmetamethod(cs_State *ts) {
 
 
 static int csCore_next(cs_State *ts) {
-    crL_check_type(ts, 0, CS_TINSTANCE);
+    csL_check_type(ts, 0, CS_TINSTANCE);
     cs_setntop(ts, 2); /* if 2nd argument is missing create it */
     if (cs_next(ts, 0)) { /* found field? */
         return 2; /* key (index) + value */
@@ -199,7 +199,7 @@ static int finishpcall(cs_State *ts, int status, int extra) {
 
 static int csCore_pcall(cs_State *ts) {
     int status;
-    crL_check_any(ts, 0);
+    csL_check_any(ts, 0);
     cs_push_bool(ts, 1); /* first result if no errors */
     cs_insert(ts, 0); /* insert it before the object being called */
     status = cs_pcall(ts, cs_nvalues(ts) - 2, CS_MULRET, 0);
@@ -210,7 +210,7 @@ static int csCore_pcall(cs_State *ts) {
 static int csCore_xpcall(cs_State *ts) {
     int status;
     int nargs = cs_nvalues(ts) - 2;
-    crL_check_type(ts, 1, CS_TFUNCTION);
+    csL_check_type(ts, 1, CS_TFUNCTION);
     cs_push_bool(ts, 1); /* first result if no errors */
     cs_push(ts, 0); /* function */
     cs_rotate(ts, 2, 2); /* move them below the function's arguments */
@@ -223,11 +223,11 @@ static int csCore_print(cs_State *ts) {
     int n = cs_nvalues(ts);
     for (int i = 0; i < n; i++) {
         size_t len;
-        const char *str = crL_to_lstring(ts, i, &len);
+        const char *str = csL_to_lstring(ts, i, &len);
         if (i > 0)
             cs_writelen(stdout, "\t", 1);
         cs_writelen(stdout, str, len);
-        cs_pop(ts, 1); /* pop result from 'crL_to_string' */
+        cs_pop(ts, 1); /* pop result from 'csL_to_string' */
     }
     cs_writeline(stdout);
     return 0;
@@ -237,9 +237,9 @@ static int csCore_print(cs_State *ts) {
 static int csCore_warn(cs_State *ts) {
     int n = cs_nvalues(ts);
     int i;
-    crL_check_string(ts, 0); /* at least one string */
+    csL_check_string(ts, 0); /* at least one string */
     for (i = 1; i < n; i++)
-        crL_check_string(ts, i);
+        csL_check_string(ts, i);
     for (i = 0; i < n - 1; i++)
         cs_warning(ts, cs_to_string(ts, i), 1);
     cs_warning(ts, cs_to_string(ts, n - 1), 0);
@@ -248,26 +248,26 @@ static int csCore_warn(cs_State *ts) {
 
 
 static int csCore_rawequal(cs_State *ts) {
-    crL_check_any(ts, 0); /* lhs */
-    crL_check_any(ts, 1); /* rhs */
+    csL_check_any(ts, 0); /* lhs */
+    csL_check_any(ts, 1); /* rhs */
     cs_push_bool(ts, cs_rawequal(ts, 0, 1));
     return 1;
 }
 
 
 static int csCore_rawget(cs_State *ts) {
-    crL_check_type(ts, 0, CS_TINSTANCE);
-    crL_check_any(ts, 1); /* index */
+    csL_check_type(ts, 0, CS_TINSTANCE);
+    csL_check_any(ts, 1); /* index */
     cs_setntop(ts, 2);
-    crL_get_property(ts, 0); /* this pops index */
+    csL_get_property(ts, 0); /* this pops index */
     return 1; /* return property */
 }
 
 
 static int csCore_rawset(cs_State *ts) {
-    crL_check_type(ts, 0, CS_TINSTANCE);
-    crL_check_any(ts, 1); /* index */
-    crL_check_any(ts, 2); /* value */
+    csL_check_type(ts, 0, CS_TINSTANCE);
+    csL_check_any(ts, 1); /* index */
+    csL_check_any(ts, 2); /* value */
     cs_setntop(ts, 3);
     cs_set_field(ts, 1); /* this pops index and value */
     return 1; /* return instance */
@@ -284,7 +284,7 @@ static int csCore_getargs(cs_State *ts) {
             while (--n)
                 cs_set_index(ts, 0, n);
         } else if (strcmp(what, "set") == 0) {
-            crL_push_hashtable(ts);
+            csL_push_hashtable(ts);
             cs_replace(ts, 0);
             while (--n) {
                 cs_push_bool(ts, 1);
@@ -293,15 +293,15 @@ static int csCore_getargs(cs_State *ts) {
         } else if (strcmp(what, "len") == 0) {
             cs_push_integer(ts, n - 1);
         } else {
-            crL_arg_error(ts, 0,
+            csL_arg_error(ts, 0,
             "invalid string value, expected \"array\", \"set\" or \"len\"");
         }
         return 1;
     } else {
-        cs_Integer i = crL_check_integer(ts, 0);
+        cs_Integer i = csL_check_integer(ts, 0);
         if (i < 0) i = n + i;
         else if (++i > n) i = n - 1;
-        crL_check_arg(ts, 0 <= i, 0, "index out of range");
+        csL_check_arg(ts, 0 <= i, 0, "index out of range");
         return n - (int)i;
     }
 }
@@ -411,37 +411,37 @@ static int csCore_tonumber(cs_State *ts) {
                 cs_push_bool(ts, overflow);
                 return 1;
             }
-            crL_check_any(ts, 0);
+            csL_check_any(ts, 0);
         }
     } else { /* have base */
         size_t l;
         const char *s;
         cs_Integer n;
-        cs_Integer i = crL_check_integer(ts, 1); /* base */
-        crL_check_type(ts, 0, CS_TSTRING); /* string to convert */
+        cs_Integer i = csL_check_integer(ts, 1); /* base */
+        csL_check_type(ts, 0, CS_TSTRING); /* string to convert */
         s = cs_to_lstring(ts, 0, &l);
-        crL_check_arg(ts, 2 <= i && i <= 32, 1, "base out of range");
+        csL_check_arg(ts, 2 <= i && i <= 32, 1, "base out of range");
         if (strtoint(s, i, &n, &overflow) == s + l) { /* conversion ok? */
             cs_push_integer(ts, n); /* push the conversion number */
             cs_push_bool(ts, overflow); /* push overflow boolean */
             return 2;
         }
     }
-    crL_push_fail(ts); /* conversion failed */
+    csL_push_fail(ts); /* conversion failed */
     return 1; /* return fail */
 }
 
 
 static int csCore_tostring(cs_State *ts) {
-    crL_check_number(ts, 0);
-    crL_to_lstring(ts, 0, NULL);
+    csL_check_number(ts, 0);
+    csL_to_lstring(ts, 0, NULL);
     return 1;
 }
 
 
 static int csCore_typeof(cs_State *ts) {
     int tt = cs_type(ts, 0);
-    crL_check_arg(ts, tt != CS_TNONE, 0, "value expected");
+    csL_check_arg(ts, tt != CS_TNONE, 0, "value expected");
     cs_push_string(ts, cs_typename(ts, 0));
     return 1;
 }
@@ -472,10 +472,10 @@ static const cs_Entry core_funcs[] = {
 };
 
 
-CRMOD_API int csL_open_core(cs_State *ts) {
+CSMOD_API int csL_open_core(cs_State *ts) {
     /* open lib into global instance */
     cs_push_globalinstance(ts);
-    crL_set_funcs(ts, core_funcs, 0);
+    csL_set_funcs(ts, core_funcs, 0);
     /* set global _VERSION */
     cs_push_literal(ts, CS_VERSION);
     cs_set_global(ts, "_VERSION");

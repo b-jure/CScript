@@ -205,10 +205,10 @@ OP_BNOT,        /* V       '~V' */
 OP_JMP,         /* L       'pc += L' */
 OP_JMPS,        /* L       'pc -= L' */
 
-OP_TEST,        /* V L S   'if (!cri_isfalse(V) == S) pc += L' */
-OP_TESTORPOP,   /* V L S   'if (!cri_isfalse(V) == S) pc += L; else pop V;' */
-OP_TESTANDPOP,  /* V L S   'if (!cri_isfalse(V) == S) { pc += L; pop V; }' */
-OP_TESTPOP,     /* V L S   'if (!cri_isfalse(V) == S) { pc += L; } pop V;' */
+OP_TEST,        /* V L S   'if (!csi_isfalse(V) == S) pc += L' */
+OP_TESTORPOP,   /* V L S   'if (!csi_isfalse(V) == S) pc += L; else pop V;' */
+OP_TESTANDPOP,  /* V L S   'if (!csi_isfalse(V) == S) { pc += L; pop V; }' */
+OP_TESTPOP,     /* V L S   'if (!csi_isfalse(V) == S) { pc += L; } pop V;' */
 
 OP_CALL, /* L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offsp-1})'
                     (check info) */
@@ -303,65 +303,65 @@ enum OpFormat {
 ** bit 5: instruction is metamethod call (MProp)
 ** bit 6-7: unused
 */
-CSI_DEC(const cs_ubyte crC_opProp[NUM_OPCODES];)
+CSI_DEC(const cs_ubyte csC_opProp[NUM_OPCODES];)
 
-#define getOpFormat(p)      (crC_opProp[p] & 0x07)
-#define testTProp(p)        (crC_opProp[p] & (1 << 3))
-#define testJProp(p)        (crC_opProp[p] & (1 << 4))
-#define testMProp(p)        (crC_opProp[p] & (1 << 5))
+#define getOpFormat(p)      (csC_opProp[p] & 0x07)
+#define testTProp(p)        (csC_opProp[p] & (1 << 3))
+#define testJProp(p)        (csC_opProp[p] & (1 << 4))
+#define testMProp(p)        (csC_opProp[p] & (1 << 5))
 
 #define opProp(mm,j,t,f)    (((mm) << 5) | ((j) << 4) | ((t) << 3) | (f))
 
 
 
 /* Instruction format sizes in bytes (aka as bytecode) */
-CSI_DEC(const cs_ubyte crC_opSize[FormatN];)
+CSI_DEC(const cs_ubyte csC_opSize[FormatN];)
 
-#define getOpSize(p)        crC_opSize[getOpFormat(p)]
+#define getOpSize(p)        csC_opSize[getOpFormat(p)]
 
-CSI_DEC(const char *crC_opSizeFormat[FormatN];)
+CSI_DEC(const char *csC_opSizeFormat[FormatN];)
 
-#define getOpSizeFormat(p)  crC_opSizeFormat[getOpFormat(p)]
+#define getOpSizeFormat(p)  csC_opSizeFormat[getOpFormat(p)]
 
 
 /* OpCode names table */ 
-CSI_DEC(const char *crC_opName[NUM_OPCODES];)
+CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
-#define getOpName(p)        crC_opName[p]
+#define getOpName(p)        csC_opName[p]
 
 
 
-CSI_FUNC int crC_emitI(FunctionState *fs, Instruction i);
-CSI_FUNC int crC_emitIS(FunctionState *fs, Instruction i, int a);
-CSI_FUNC int crC_emitIL(FunctionState *fs, Instruction i, int a);
-CSI_FUNC int crC_emitILL(FunctionState *fs, Instruction i, int a, int b);
-CSI_FUNC void crC_checkstack(FunctionState *fs, int n);
-CSI_FUNC void crC_reserveslots(FunctionState *fs, int n);
-CSI_FUNC void crC_setoneret(FunctionState *fs, ExpInfo *e);
-CSI_FUNC void crC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
-CSI_FUNC int crC_nil(FunctionState *fs, int n);
-CSI_FUNC int crC_pop(FunctionState *fs, int n);
-CSI_FUNC int crC_ret(FunctionState *fs, int base, int nreturns);
-CSI_FUNC void crC_method(FunctionState *fs, ExpInfo *e);
-CSI_FUNC void crC_storevar(FunctionState *fs, ExpInfo *var);
-CSI_FUNC void crC_defineglobal(FunctionState *fs, ExpInfo *e);
-CSI_FUNC void crC_array(FunctionState *fs, ExpInfo *e, int base, int size,
+CSI_FUNC int csC_emitI(FunctionState *fs, Instruction i);
+CSI_FUNC int csC_emitIS(FunctionState *fs, Instruction i, int a);
+CSI_FUNC int csC_emitIL(FunctionState *fs, Instruction i, int a);
+CSI_FUNC int csC_emitILL(FunctionState *fs, Instruction i, int a, int b);
+CSI_FUNC void csC_checkstack(FunctionState *fs, int n);
+CSI_FUNC void csC_reserveslots(FunctionState *fs, int n);
+CSI_FUNC void csC_setoneret(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
+CSI_FUNC int csC_nil(FunctionState *fs, int n);
+CSI_FUNC int csC_pop(FunctionState *fs, int n);
+CSI_FUNC int csC_ret(FunctionState *fs, int base, int nreturns);
+CSI_FUNC void csC_method(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void csC_storevar(FunctionState *fs, ExpInfo *var);
+CSI_FUNC void csC_defineglobal(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void csC_array(FunctionState *fs, ExpInfo *e, int base, int size,
                         int elems);
-CSI_FUNC void crC_varexp2stack(FunctionState *fs, ExpInfo *e);
-CSI_FUNC void crC_exp2stack(FunctionState *fs, ExpInfo *e);
-CSI_FUNC void crC_getproperty(FunctionState *fs, ExpInfo *var,
+CSI_FUNC void csC_varexp2stack(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void csC_exp2stack(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void csC_getproperty(FunctionState *fs, ExpInfo *var,
                               ExpInfo *keystr, int super);
-CSI_FUNC void crC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
+CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);
-CSI_FUNC void crC_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
-CSI_FUNC int crC_jmp(FunctionState *fs, OpCode jop);
-CSI_FUNC void crC_concatjmp(FunctionState *fs, int *l1, int l2);
-CSI_FUNC void crC_patch(FunctionState *fs, int pc, int target);
-CSI_FUNC void crC_patchtohere(FunctionState *fs, int pc);
-CSI_FUNC int crC_test(FunctionState *fs, OpCode testop, int cond);
-CSI_FUNC void crC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
-CSI_FUNC void crC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
+CSI_FUNC void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
+CSI_FUNC int csC_jmp(FunctionState *fs, OpCode jop);
+CSI_FUNC void csC_concatjmp(FunctionState *fs, int *l1, int l2);
+CSI_FUNC void csC_patch(FunctionState *fs, int pc, int target);
+CSI_FUNC void csC_patchtohere(FunctionState *fs, int pc);
+CSI_FUNC int csC_test(FunctionState *fs, OpCode testop, int cond);
+CSI_FUNC void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
+CSI_FUNC void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                          Binopr opr);
-CSI_FUNC void crC_finish(FunctionState *fs);
+CSI_FUNC void csC_finish(FunctionState *fs);
 
 #endif

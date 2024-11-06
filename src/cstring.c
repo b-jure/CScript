@@ -26,7 +26,7 @@
 ** One-byte-at-a-time hash based on Murmur's mix
 ** Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
 */
-uint crS_hash(const char *str, size_t len, unsigned int seed) {
+uint csS_hash(const char *str, size_t len, unsigned int seed) {
     const cs_ubyte *data = cast(const cs_ubyte *, str);
     uint h = seed;
     for (uint i = 0; i < len; i++) {
@@ -38,17 +38,17 @@ uint crS_hash(const char *str, size_t len, unsigned int seed) {
 }
 
 
-void crS_init(cs_State *ts) {
+void csS_init(cs_State *ts) {
     GState *gs = G_(ts);
-    gs->strings = crH_newsize(ts, CSI_MINSTRHTABSIZE);
+    gs->strings = csH_newsize(ts, CSI_MINSTRHTABSIZE);
     gs->strings->isweak = 1;
-    gs->memerror = crS_newlit(ts, MEMERRMSG);
-    crG_fix(ts, obj2gco(gs->memerror));
+    gs->memerror = csS_newlit(ts, MEMERRMSG);
+    csG_fix(ts, obj2gco(gs->memerror));
 }
 
 
 static OString *createstrobj(cs_State *ts, size_t l, uint h) {
-    OString *s = crG_new(ts, sizeofstring(l), CS_VSTRING, OString);
+    OString *s = csG_new(ts, sizeofstring(l), CS_VSTRING, OString);
     s->len = l;
     s->hash = h;
     s->extra = 0;
@@ -61,11 +61,11 @@ static OString *createstrobj(cs_State *ts, size_t l, uint h) {
 ** Create new string object of size 'len'.
 ** Allocation is skipped in case string is already interned.
 */
-OString *crS_newl(cs_State *ts, const char *chars, size_t len) {
+OString *csS_newl(cs_State *ts, const char *chars, size_t len) {
     TValue key;
     HTable *strtab = G_(ts)->strings;
-    uint hash = crS_hash(chars, len, G_(ts)->seed);
-    OString *str = crH_getinterned(ts, strtab, chars, len, hash);
+    uint hash = csS_hash(chars, len, G_(ts)->seed);
+    OString *str = csH_getinterned(ts, strtab, chars, len, hash);
     if (str) { /* is interned or weak reference ? */
         return str;
     } else {
@@ -75,7 +75,7 @@ OString *crS_newl(cs_State *ts, const char *chars, size_t len) {
         setbit(str->bits, STRHASHBIT);
         setstrval(ts, &key, str);
         setstrval2s(ts, ts->sp.p++, str);
-        crH_set(ts, strtab, &key, &key);
+        csH_set(ts, strtab, &key, &key);
         ts->sp.p--;
         return str;
     }
@@ -83,19 +83,19 @@ OString *crS_newl(cs_State *ts, const char *chars, size_t len) {
 
 
 /* create new string object from null terminated bytes */
-OString *crS_new(cs_State *ts, const char *chars) {
-    return crS_newl(ts, chars, strlen(chars));
+OString *csS_new(cs_State *ts, const char *chars) {
+    return csS_newl(ts, chars, strlen(chars));
 }
 
 
-OString *crS_newlobj(cs_State *ts, size_t len) {
+OString *csS_newlobj(cs_State *ts, size_t len) {
     return createstrobj(ts, len, G_(ts)->seed);
 }
 
 
 /* free string object */
-void crS_free(cs_State *ts, OString *s) {
-    crM_free(ts, s, sizeofstring(s->len));
+void csS_free(cs_State *ts, OString *s) {
+    csM_free(ts, s, sizeofstring(s->len));
 }
 
 
@@ -104,7 +104,7 @@ void crS_free(cs_State *ts, OString *s) {
 ** strings that might have null terminator in between
 ** of their contents.
 */
-int crS_cmp(const OString *s1, const OString *s2) {
+int csS_cmp(const OString *s1, const OString *s2) {
     const char *p1 = s1->bytes;
     size_t s1l = s1->len;
     const char *p2 = s2->bytes;
@@ -126,14 +126,14 @@ int crS_cmp(const OString *s1, const OString *s2) {
 
 
 /* string equality */
-int crS_eq(const OString *s1, const OString *s2) {
+int csS_eq(const OString *s1, const OString *s2) {
     return ((s1 == s2) || (s1->hash == s2->hash /* pointers match or hash */
                 && s1->len == s2->len /* and length */
                 && memcmp(s1->bytes, s2->bytes, s1->len))); /* and contents */
 }
 
 
-void crS_strlimit(char *dest, const char *src, size_t len, size_t limit) {
+void csS_strlimit(char *dest, const char *src, size_t len, size_t limit) {
     limit--;
     if (limit < len) {
         memcpy(dest, src, limit - SLL("..."));
@@ -146,8 +146,8 @@ void crS_strlimit(char *dest, const char *src, size_t len, size_t limit) {
 }
 
 
-void crS_sourceid(char *restrict dest, const char *src, size_t len) {
-    crS_strlimit(dest, src, len, CSI_MAXSRC - 1);
+void csS_sourceid(char *restrict dest, const char *src, size_t len) {
+    csS_strlimit(dest, src, len, CSI_MAXSRC - 1);
 }
 
 
@@ -178,7 +178,7 @@ void crS_sourceid(char *restrict dest, const char *src, size_t len) {
 
 
 /* convert hex character into digit */
-int crS_hexvalue(int c) {
+int csS_hexvalue(int c) {
     cs_assert(isxdigit(c));
     if (isdigit(c)) 
         return c - '0';
@@ -196,7 +196,7 @@ int crS_hexvalue(int c) {
 ** Upon each call to this function static buffer is overwritten.
 ** Up to 'TOLOWERBUFFSZ' characters in 's' will be converted.
 */
-const char *crS_tolowerall(const char *s) {
+const char *csS_tolowerall(const char *s) {
     static char buff[TOLOWERBUFFSZ];
     int c;
     for (int i = 0; (c = *s++) && i < TOLOWERBUFFSZ; i++)
@@ -222,7 +222,7 @@ static const char *str2int(const char *s, cs_Integer *i, int *overflow) {
     if (*s == '0' && (*s == 'x' || *s == 'X')) { /* hex ? */
         s+=2; /* skip hex prefix */
         for (; isxdigit(*s); s++) {
-            digit = crS_hexvalue(*s);
+            digit = csS_hexvalue(*s);
             if (hexoverflow(u, digit)) {
                 if (overflow)
                     *overflow = 1;
@@ -257,7 +257,7 @@ static const char *str2int(const char *s, cs_Integer *i, int *overflow) {
     }
     while (isspace(*s)) s++; /* skip trailing spaces */
     if (ngcoval || *s != '\0') return NULL;
-    *i = cri_castU2S(u*sign);
+    *i = csi_castU2S(u*sign);
     return s;
 }
 
@@ -284,7 +284,7 @@ static const char *str2flt(const char *s, cs_Number *n, int *of) {
 
 
 /* convert string to 'cs_Number' or 'cs_Integer' */
-size_t crS_tonum(const char *s, TValue *o, int *of) {
+size_t csS_tonum(const char *s, TValue *o, int *of) {
     cs_Integer i;
     cs_Number n;
     const char *e;
@@ -329,7 +329,7 @@ static int num2buff(const TValue *nv, char *buff) {
 }
 
 
-const char *crS_numtostr(const TValue *v, size_t *plen) {
+const char *csS_numtostr(const TValue *v, size_t *plen) {
     static char buff[MAXNUM2STR];
     size_t len = num2buff(v, buff);
     if (plen)
@@ -344,17 +344,17 @@ const char *crS_numtostr(const TValue *v, size_t *plen) {
  * -------------------------------------------------------------------------- */
 
 /*
- * Initial size of buffer used in 'crS_newvstringf'
+ * Initial size of buffer used in 'csS_newvstringf'
  * to prevent allocations, instead the function
  * will directly work on the buffer and will push
  * strings on stack in case buffer exceeds this limit.
- * This is all done because 'crS_newvstringf' often
- * gets called by 'crD_getinfo'; the size should be
+ * This is all done because 'csS_newvstringf' often
+ * gets called by 'csD_getinfo'; the size should be
  * at least 'CS_MAXSRC' + 'MAXNUM2STR' + size for message.
  */
 #define BUFFVFSSIZ	(CSI_MAXSRC + MAXNUM2STR + 100)
 
-/* buffer for 'crS_newvstringf' */
+/* buffer for 'csS_newvstringf' */
 typedef struct BuffVSF {
     cs_State *ts;
     int pushed; /* true if 'space' was pushed on the stack */
@@ -369,11 +369,11 @@ typedef struct BuffVSF {
  */
 static void pushstr(BuffVFS *buff, const char *str, size_t len) {
     cs_State *ts = buff->ts;
-    OString *s = crS_newl(ts, str, len);
+    OString *s = csS_newl(ts, str, len);
     setstrval2s(ts, ts->sp.p, s);
     ts->sp.p++;
     if (buff->pushed)
-        crV_concat(ts, 2);
+        csV_concat(ts, 2);
     else
         buff->pushed = 1;
 }
@@ -422,7 +422,7 @@ static void buffaddptr(BuffVFS *buff, const void *p) {
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
-const char *crS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
+const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
     const char *end;
     TValue nv;
     BuffVFS buff;
@@ -465,7 +465,7 @@ const char *crS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
         }
         default:;
             cs_ubyte c = cast(unsigned char, *(end + 1));
-            crD_runerror(ts, "invalid format specifier '%%%c'", c);
+            csD_runerror(ts, "invalid format specifier '%%%c'", c);
             /* UNREACHED */
             return NULL;
         }
@@ -477,10 +477,10 @@ const char *crS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
 }
 
 
-const char *crS_pushfstring(cs_State *ts, const char *fmt, ...) {
+const char *csS_pushfstring(cs_State *ts, const char *fmt, ...) {
     va_list argp;
     va_start(argp, fmt);
-    const char *str = crS_pushvfstring(ts, fmt, argp);
+    const char *str = csS_pushvfstring(ts, fmt, argp);
     va_end(argp);
     return str;
 }

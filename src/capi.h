@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRIPTAPI_H
-#define CRIPTAPI_H
+#ifndef CSAPI_H
+#define CSAPI_H
 
 
 /*

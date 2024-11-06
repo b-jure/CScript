@@ -1,6 +1,6 @@
 /*
 ** cscript.h
-** CScript (inspired by Lua and C)
+** CScript - Scripting Language inspired by Lua and C
 ** See Copyright Notice at the end of this file
 */
 

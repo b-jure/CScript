@@ -9,7 +9,7 @@
 
 #include "cobject.h"
 
-CSI_FUNC Instruction crTR_tracepc(const Function *fn, const Instruction *pc);
-CSI_FUNC void crTR_disassemble(cs_State *ts, const Function *fn);
+CSI_FUNC Instruction csTR_tracepc(const Function *fn, const Instruction *pc);
+CSI_FUNC void csTR_disassemble(cs_State *ts, const Function *fn);
 
 #endif

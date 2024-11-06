@@ -35,7 +35,7 @@
 
 
 cs_sinline void startline(const Function *fn, const Instruction *pc) {
-    postab(printf("[%05d]", crD_getfuncline(fn, pcrel(pc, fn))));
+    postab(printf("[%05d]", csD_getfuncline(fn, pcrel(pc, fn))));
 }
 
 
@@ -143,7 +143,7 @@ TRACEDEF(ILLS) {
 /*
 ** Trace the current OpCode and its arguments.
 */
-Instruction crTR_tracepc(const Function *fn, const Instruction *pc) {
+Instruction csTR_tracepc(const Function *fn, const Instruction *pc) {
     switch (getOpFormat(*pc)) {
         case FormatI: traceI(fn, pc); break;
         case FormatIS: traceIS(fn, pc); break;
@@ -185,13 +185,13 @@ cs_sinline void tracefalse(void) {
 
 cs_sinline void tracestring(OString *s) {
     char buff[MAXSTRKLEN + 1];
-    crS_strlimit(buff, getstrbytes(s), getstrlen(s), sizeof(buff));
+    csS_strlimit(buff, getstrbytes(s), getstrlen(s), sizeof(buff));
     printf("%s", buff);
 }
 
 
 cs_sinline void tracenum(const TValue *o) {
-    printf("%s", crS_numtostr(o, NULL));
+    printf("%s", csS_numtostr(o, NULL));
 }
 
 
@@ -417,9 +417,9 @@ UNASMDEF(Ret) {
 /*
 ** Disassemble all of the bytecode in 'fn->code'.
 ** This function provides more detailed semantic information compared
-** to 'crTR_trace' when tracing OpCode and its arguments.
+** to 'csTR_trace' when tracing OpCode and its arguments.
 */
-void crTR_disassemble(cs_State *ts, const Function *fn) {
+void csTR_disassemble(cs_State *ts, const Function *fn) {
     Instruction *pc = fn->code;
     for (int i = 0; i < fn->sizecode; i++) {
         switch (*pc) {

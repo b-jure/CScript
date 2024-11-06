@@ -76,11 +76,11 @@ typedef unsigned short ushrt;
 #endif
 
 /* C API assertions */
-#if !defined(cri_checkapi)
-#define cri_checkapi(ts,e)      ((void)ts, cs_assert(e))
+#if !defined(csi_checkapi)
+#define csi_checkapi(ts,e)      ((void)ts, cs_assert(e))
 #endif
 
-#define api_check(ts,e,err)     cri_checkapi(ts,(e) && err)
+#define api_check(ts,e,err)     csi_checkapi(ts,(e) && err)
 
 
 
@@ -234,20 +234,20 @@ typedef cs_ubyte Instruction;
  * These macros allow user-defined action to be taken each
  * time cs_State (thread) is created or deleted.
  */
-#if !defined(cri_userstatecreated)
-#define cri_userstatecreated(ts)            ((void)(ts))
+#if !defined(csi_userstatecreated)
+#define csi_userstatecreated(ts)            ((void)(ts))
 #endif
 
-#if !defined(cri_userstatethread)
-#define cri_userstatethread(ts,thread)      ((void)ts)
+#if !defined(csi_userstatethread)
+#define csi_userstatethread(ts,thread)      ((void)ts)
 #endif
 
-#if !defined(cri_userthreadfree)
-#define cri_userthreadfree(ts,thread)       ((void)ts)
+#if !defined(csi_userthreadfree)
+#define csi_userthreadfree(ts,thread)       ((void)ts)
 #endif
 
-#if !defined(cri_userstatefree)
-#define cri_userstatefree(ts)               ((void)(ts))
+#if !defined(csi_userstatefree)
+#define csi_userstatefree(ts)               ((void)(ts))
 #endif
 
 
@@ -275,9 +275,9 @@ typedef cs_ubyte Instruction;
 
 
 
-/* @cri_abs - get absolute 'x' value. */
-#ifndef cri_abs
-#define cri_abs(x)      ((x) < 0 ? -(x) : (x))
+/* @csi_abs - get absolute 'x' value. */
+#ifndef csi_abs
+#define csi_abs(x)      ((x) < 0 ? -(x) : (x))
 #endif
 
 
@@ -308,10 +308,10 @@ typedef cs_ubyte Instruction;
 #define cast_sizet(e)       cast(size_t,(e))
 
 /* cast 'cs_Integer' to 'cs_Unsigned' */
-#define cri_castS2U(i)      ((cs_Unsigned)(i))
+#define csi_castS2U(i)      ((cs_Unsigned)(i))
 
 /* cast 'cs_Unsigned' to 'cs_Integer' */
-#define cri_castU2S(i)      ((cs_Integer)(i))
+#define csi_castU2S(i)      ((cs_Integer)(i))
 
 
 
@@ -320,60 +320,60 @@ typedef cs_ubyte Instruction;
 
 
 
-/* @cri_nummod - modulo 'a - floor(a/b)*b'. */
-#define cri_nummod(ts,a,b,m) \
+/* @csi_nummod - modulo 'a - floor(a/b)*b'. */
+#define csi_nummod(ts,a,b,m) \
         { (void)(ts); (m) = cs_mathop(fmod)(a, b); \
           if (((m) > 0) ? (b)<0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
-/* @cri_numdiv - float division. */
-#ifndef cri_numdiv
-#define cri_numdiv(ts, a, b)    ((void)(ts), (a)/(b))
+/* @csi_numdiv - float division. */
+#ifndef csi_numdiv
+#define csi_numdiv(ts, a, b)    ((void)(ts), (a)/(b))
 #endif
 
-/* @cri_numidiv - floor division (or division between integers). */
-#ifndef cri_numidiv
-#define cri_numidiv(ts, a, b)   ((void)(ts), cs_mathop(floor)(cri_numdiv(a, b)))
+/* @csi_numidiv - floor division (or division between integers). */
+#ifndef csi_numidiv
+#define csi_numidiv(ts, a, b)   ((void)(ts), cs_mathop(floor)(csi_numdiv(a, b)))
 #endif
 
-/* @cri_numpow - exponentiation. */
-#ifndef cri_numpow
-#define cri_numpow(ts, a, b) \
+/* @csi_numpow - exponentiation. */
+#ifndef csi_numpow
+#define csi_numpow(ts, a, b) \
     ((void)(ts), (b) == 2 ? (a)*(a) : cs_mathop(pow)(a, b))
 #endif
 
 /*
- * @cri_numadd - addition.
- * @cri_numsub - subtraction.
- * @cri_nummul - multiplication.
- * @cri_numunm - negation.
+ * @csi_numadd - addition.
+ * @csi_numsub - subtraction.
+ * @csi_nummul - multiplication.
+ * @csi_numunm - negation.
  */
-#ifndef cri_numadd
-#define cri_numadd(ts, a, b)    ((void)(ts), (a) + (b))
-#define cri_numsub(ts, a, b)    ((void)(ts), (a) - (b))
-#define cri_nummul(ts, a, b)    (void)(ts), ((a) * (b))
-#define cri_numunm(ts, a)       ((void)(ts), -(a))
+#ifndef csi_numadd
+#define csi_numadd(ts, a, b)    ((void)(ts), (a) + (b))
+#define csi_numsub(ts, a, b)    ((void)(ts), (a) - (b))
+#define csi_nummul(ts, a, b)    (void)(ts), ((a) * (b))
+#define csi_numunm(ts, a)       ((void)(ts), -(a))
 #endif
 
 /*
- * @cri_numeq - ordering equal.
- * @cri_numne - ordering not equal.
- * @cri_numlt - ordering less than.
- * @cri_numle - ordering less equal.
- * @cri_numgt - ordering greater than.
- * @cri_numge - ordering greater equal.
+ * @csi_numeq - ordering equal.
+ * @csi_numne - ordering not equal.
+ * @csi_numlt - ordering less than.
+ * @csi_numle - ordering less equal.
+ * @csi_numgt - ordering greater than.
+ * @csi_numge - ordering greater equal.
  */
-#ifndef cri_numeq
-#define cri_numeq(a, b)         ((a) == (b))
-#define cri_numne(a, b)         (!cri_numeq(a, b))
-#define cri_numlt(a, b)         ((a) < (b))
-#define cri_numle(a, b)         ((a) <= (b))
-#define cri_numgt(a, b)         ((a) > (b))
-#define cri_numge(a, b)         ((a) >= (b))
+#ifndef csi_numeq
+#define csi_numeq(a, b)         ((a) == (b))
+#define csi_numne(a, b)         (!csi_numeq(a, b))
+#define csi_numlt(a, b)         ((a) < (b))
+#define csi_numle(a, b)         ((a) <= (b))
+#define csi_numgt(a, b)         ((a) > (b))
+#define csi_numge(a, b)         ((a) >= (b))
 #endif
 
-/* @cri_numisnan - check if number is 'NaN'. */
-#ifndef cri_numisnan
-#define cri_numisnan(a)         (!cri_numeq(a, a))
+/* @csi_numisnan - check if number is 'NaN'. */
+#ifndef csi_numisnan
+#define csi_numisnan(a)         (!csi_numeq(a, a))
 #endif
 
 
@@ -384,7 +384,7 @@ typedef cs_ubyte Instruction;
 */
 #if defined(CS_STRESS_GC)
 #define gcmemchange(ts,pre,pos) \
-    { if (gcrunning(G_(ts)->gc)) { pre; crG_full(ts); pos; } }
+    { if (gcrunning(G_(ts)->gc)) { pre; csG_full(ts); pos; } }
 #else
 #define gcmemchange(ts,pre,pos)         ((void)0)
 #endif

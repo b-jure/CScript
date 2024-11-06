@@ -13,7 +13,7 @@
 
 static const char udataname[] = "userdata";
 
-CSI_DEF const char *const crO_typenames[CSI_TOTALTYPES] = {
+CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
     "no value", "boolean", "number", udataname, "string",
     "function", "class", "instance", udataname, "nil",
     "thread", "upvalue"
@@ -21,7 +21,7 @@ CSI_DEF const char *const crO_typenames[CSI_TOTALTYPES] = {
 
 
 /* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
-int crO_ceillog2 (uint x) {
+int csO_ceillog2 (uint x) {
     static const cs_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
         0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
         6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
@@ -44,7 +44,7 @@ int crO_ceillog2 (uint x) {
 
 
 /* shift 'x', 'y' times, in case of overflow return 0 */
-cs_Integer crO_shiftr(cs_Integer x, cs_Integer y) {
+cs_Integer csO_shiftr(cs_Integer x, cs_Integer y) {
     if (y < 0) {
         if (y <= -INTBITS) return 0;
         return (x << y);
@@ -57,13 +57,13 @@ cs_Integer crO_shiftr(cs_Integer x, cs_Integer y) {
 
 static cs_Number numarithm(cs_State *ts, cs_Number x, cs_Number y, int op) {
     switch(op) {
-    case CS_OPADD: return cri_numadd(ts, x, y);
-    case CS_OPSUB: return cri_numsub(ts, x, y);
-    case CS_OPMUL: return cri_nummul(ts, x, y);
-    case CS_OPDIV: return cri_numdiv(ts, x, y);
-    case CS_OPMOD: return crV_modnum(ts, x, y);
-    case CS_OPPOW: return cri_numpow(ts, x, y);
-    case CS_OPUNM: return cri_nummul(ts, x, y);
+    case CS_OPADD: return csi_numadd(ts, x, y);
+    case CS_OPSUB: return csi_numsub(ts, x, y);
+    case CS_OPMUL: return csi_nummul(ts, x, y);
+    case CS_OPDIV: return csi_numdiv(ts, x, y);
+    case CS_OPMOD: return csV_modnum(ts, x, y);
+    case CS_OPPOW: return csi_numpow(ts, x, y);
+    case CS_OPUNM: return csi_nummul(ts, x, y);
     default: cs_unreachable(); return 0.0;
     }
 }
@@ -71,26 +71,26 @@ static cs_Number numarithm(cs_State *ts, cs_Number x, cs_Number y, int op) {
 
 static cs_Integer intarithm(cs_State *ts, cs_Integer x, cs_Integer y, int op) {
     switch(op) {
-    case CS_OPADD: return cri_intop(+, x, y);
-    case CS_OPSUB: return cri_intop(-, x, y);
-    case CS_OPMUL: return cri_intop(*, x, y);
-    case CS_OPDIV: return crV_div(ts, x, y);
-    case CS_OPMOD: return crV_modint(ts, x, y);
-    case CS_OPPOW: return cri_intop(^, x, y);
-    case CS_OPUNM: return cri_intop(-, 0, x);
-    case CS_OPBSHL: return crO_shiftl(x, y);
-    case CS_OPBSHR: return crO_shiftr(x, y);
-    case CS_OPBNOT: return cri_intop(^, ~cri_castS2U(0), x);
-    case CS_OPBAND: return cri_intop(&, x, y);
-    case CS_OPBOR: return cri_intop(|, x, y);
-    case CS_OPBXOR: return cri_intop(^, x, y);
+    case CS_OPADD: return csi_intop(+, x, y);
+    case CS_OPSUB: return csi_intop(-, x, y);
+    case CS_OPMUL: return csi_intop(*, x, y);
+    case CS_OPDIV: return csV_div(ts, x, y);
+    case CS_OPMOD: return csV_modint(ts, x, y);
+    case CS_OPPOW: return csi_intop(^, x, y);
+    case CS_OPUNM: return csi_intop(-, 0, x);
+    case CS_OPBSHL: return csO_shiftl(x, y);
+    case CS_OPBSHR: return csO_shiftr(x, y);
+    case CS_OPBNOT: return csi_intop(^, ~csi_castS2U(0), x);
+    case CS_OPBAND: return csi_intop(&, x, y);
+    case CS_OPBOR: return csi_intop(|, x, y);
+    case CS_OPBXOR: return csi_intop(^, x, y);
     default: cs_unreachable(); return 0;
     }
 }
 
 
 /* convert number 'n' to integer according to 'mode' */
-int crO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
+int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
     cs_Number floored = cs_floor(n);
     if (floored != n) {
         if (mode == N2IEXACT) return 0;
@@ -101,9 +101,9 @@ int crO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
 
 
 /* try to convert value to 'cs_Integer' */
-int crO_tointeger(const TValue *v, cs_Integer *i, int mode) {
+int csO_tointeger(const TValue *v, cs_Integer *i, int mode) {
     if (ttisnum(v)) {
-        return crO_n2i(fval(v), i, mode);
+        return csO_n2i(fval(v), i, mode);
     } else if (ttisint(v)) {
         *i = ival(v);
         return 1;
@@ -118,7 +118,7 @@ int crO_tointeger(const TValue *v, cs_Integer *i, int mode) {
 ** itself can't invoke runtime error, if the operation can't be
 ** done then return 0.
 */
-int crO_arithmraw(cs_State *ts, const TValue *a, const TValue *b,
+int csO_arithmraw(cs_State *ts, const TValue *a, const TValue *b,
                   TValue *res, int op) {
     cs_Number n1, n2;
     switch (op) {

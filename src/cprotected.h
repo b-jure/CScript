@@ -16,11 +16,11 @@
 typedef void (*ProtectedFn)(cs_State *ts, void *userdata);
 
 
-CSI_FUNC cs_noret crPR_throw(cs_State *ts, int code);
-CSI_FUNC int crPR_close(cs_State *ts, ptrdiff_t level, int status);
-CSI_FUNC int crPR_rawcall(cs_State *ts, ProtectedFn fn, void *ud);
-CSI_FUNC int crPR_call(cs_State *ts, ProtectedFn fn, void *ud, ptrdiff_t top,
+CSI_FUNC cs_noret csPRthrow(cs_State *ts, int code);
+CSI_FUNC int csPRclose(cs_State *ts, ptrdiff_t level, int status);
+CSI_FUNC int csPRrawcall(cs_State *ts, ProtectedFn fn, void *ud);
+CSI_FUNC int csPRcall(cs_State *ts, ProtectedFn fn, void *ud, ptrdiff_t top,
                        ptrdiff_t errfunc);
-CSI_FUNC int crPR_parse(cs_State *ts, BuffReader *br, const char *name); 
+CSI_FUNC int csPRparse(cs_State *ts, BuffReader *br, const char *name); 
 
 #endif

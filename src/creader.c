@@ -9,7 +9,7 @@
 
 
 
-void crR_init(cs_State *ts, BuffReader *br, cs_Reader freader, void *ud) {
+void csR_init(cs_State *ts, BuffReader *br, cs_Reader freader, void *ud) {
     br->n = 0;
     br->buff = NULL;
     br->reader = freader;
@@ -24,7 +24,7 @@ void crR_init(cs_State *ts, BuffReader *br, cs_Reader freader, void *ud) {
  * reader read and return the pointer to the start of that
  * buffer. 
  */
-int crR_fill(BuffReader *br) {
+int csR_fill(BuffReader *br) {
     cs_State *ts = br->ts;
     size_t size;
     cs_unlock(ts);
@@ -42,12 +42,12 @@ int crR_fill(BuffReader *br) {
  * Read 'n' bytes from 'BuffReader' returning
  * count of unread bytes or 0 if all bytes were read. 
  */
-size_t crR_readn(BuffReader *br, size_t n) {
+size_t csR_readn(BuffReader *br, size_t n) {
     while (n) {
         if (br->n == 0) {
-            if (crR_fill(br) == CREOF)
+            if (csR_fill(br) == CREOF)
                 return n;
-            br->n++; /* 'crR_fill' decremented it */
+            br->n++; /* 'csR_fill' decremented it */
             br->buff--; /* restore that character */
         }
         size_t min = (br->n <= n ? br->n : n);

@@ -27,19 +27,19 @@
 #define CLOSEKTOP       (-1)
 
 
-CSI_FUNC Function *crF_new(cs_State *ts);
-CSI_FUNC CrClosure *crF_newCrClosure(cs_State *ts, int nup);
-CSI_FUNC CClosure *crF_newCClosure(cs_State *ts, int nup);
-CSI_FUNC void crF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
+CSI_FUNC Function *csF_new(cs_State *ts);
+CSI_FUNC CrClosure *csF_newCrClosure(cs_State *ts, int nup);
+CSI_FUNC CClosure *csF_newCClosure(cs_State *ts, int nup);
+CSI_FUNC void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
                                 const Function *fn);
-CSI_FUNC void crF_getvarargs(cs_State *ts, CallFrame *cf, int wanted);
-CSI_FUNC void crF_initupvals(cs_State *ts, CrClosure *cl);
-CSI_FUNC UpVal *crF_findupval(cs_State *ts, SPtr sval);
-CSI_FUNC const char *crF_getlocalname(const Function *fn, int lnum, int pc);
-CSI_FUNC void crF_newtbcvar(cs_State *ts, SPtr level);
-CSI_FUNC void crF_closeupval(cs_State *ts, SPtr level);
-CSI_FUNC SPtr crF_close(cs_State *ts, SPtr level, int status);
-CSI_FUNC void crF_freeupval(cs_State *ts, UpVal *upval);
-CSI_FUNC void crF_free(cs_State *ts, Function *fn);
+CSI_FUNC void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted);
+CSI_FUNC void csF_initupvals(cs_State *ts, CrClosure *cl);
+CSI_FUNC UpVal *csF_findupval(cs_State *ts, SPtr sval);
+CSI_FUNC const char *csF_getlocalname(const Function *fn, int lnum, int pc);
+CSI_FUNC void csF_newtbcvar(cs_State *ts, SPtr level);
+CSI_FUNC void csF_closeupval(cs_State *ts, SPtr level);
+CSI_FUNC SPtr csF_close(cs_State *ts, SPtr level, int status);
+CSI_FUNC void csF_freeupval(cs_State *ts, UpVal *upval);
+CSI_FUNC void csF_free(cs_State *ts, Function *fn);
 
 #endif

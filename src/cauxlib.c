@@ -15,9 +15,9 @@
 
 
 
-CRLIB_API int crL_error(cs_State *ts, const char *fmt, ...) {
+CSLIB_API int csL_error(cs_State *ts, const char *fmt, ...) {
     va_list ap;
-    crL_where(ts, 0);
+    csL_where(ts, 0);
     va_start(ap, fmt);
     cs_push_vfstring(ts, fmt, ap);
     va_end(ap);
@@ -27,41 +27,41 @@ CRLIB_API int crL_error(cs_State *ts, const char *fmt, ...) {
 }
 
 
-CRLIB_API int crL_arg_error(cs_State *ts, int argindex, const char *extra) {
+CSLIB_API int csL_arg_error(cs_State *ts, int argindex, const char *extra) {
     cs_DebugInfo di;
     if (!cs_getstack(ts, 0, &di)) /* no stack frame? */
-        return crL_error(ts, "bad argument @%d (%s)", argindex, extra);
+        return csL_error(ts, "bad argument @%d (%s)", argindex, extra);
     cs_getinfo(ts, "n", &di);
     if (strcmp(di.name, "method") == 0) {
         argindex--; /* ignore 'self' */
         if (argindex == 0) /* self is the invalid argument? */
-            crL_error(ts, "calling '%s' on a bad 'self' (%s)", di.name, extra);
+            csL_error(ts, "calling '%s' on a bad 'self' (%s)", di.name, extra);
     }
     if (di.name == NULL)
         di.name = "?";
-    return crL_error(ts, "bad argument @%d to '%s' (%s)",
+    return csL_error(ts, "bad argument @%d to '%s' (%s)",
                          argindex, di.name, extra);
 }
 
 
-CRLIB_API int crL_type_error(cs_State *ts, int argindex, const char *tname) {
+CSLIB_API int csL_type_error(cs_State *ts, int argindex, const char *tname) {
     const char *msg;
     const char *argtype;
     if (cs_type(ts, argindex) == CS_TLUDATA)
         argtype = "light userdata";
     else
-        argtype = crL_typename(ts, argindex);
+        argtype = csL_typename(ts, argindex);
     msg = cs_push_fstring(ts, "%s expected, got %s", tname, argtype);
-    return crL_arg_error(ts, argindex, msg);
+    return csL_arg_error(ts, argindex, msg);
 }
 
 
 static void tterror(cs_State *ts, int argindex, int tt) {
-    crL_type_error(ts, argindex, cs_typename(ts, tt));
+    csL_type_error(ts, argindex, cs_typename(ts, tt));
 }
 
 
-CRLIB_API cs_Number crL_check_number(cs_State *ts, int index) {
+CSLIB_API cs_Number csL_check_number(cs_State *ts, int index) {
     int isnum;
     cs_Number n = cs_to_numberx(ts, index, &isnum);
     if (cs_unlikely(!isnum))
@@ -72,13 +72,13 @@ CRLIB_API cs_Number crL_check_number(cs_State *ts, int index) {
 
 static void interror(cs_State *ts, int argindex) {
     if (cs_is_number(ts, argindex))
-        crL_arg_error(ts, argindex, "number has no integer representation");
+        csL_arg_error(ts, argindex, "number has no integer representation");
     else
         tterror(ts, argindex, CS_TNUMBER);
 }
 
 
-CRLIB_API cs_Integer crL_check_integer(cs_State *ts, int index) {
+CSLIB_API cs_Integer csL_check_integer(cs_State *ts, int index) {
     int isint;
     cs_Integer i = cs_to_integerx(ts, index, &isint);
     if (cs_unlikely(!isint))
@@ -87,7 +87,7 @@ CRLIB_API cs_Integer crL_check_integer(cs_State *ts, int index) {
 }
 
 
-CRLIB_API const char *crL_check_lstring(cs_State *ts, int index, size_t *len) {
+CSLIB_API const char *csL_check_lstring(cs_State *ts, int index, size_t *len) {
     const char *str = cs_to_lstring(ts, index, len);
     if (cs_unlikely(str == NULL))
         tterror(ts, index, CS_TSTRING);
@@ -95,67 +95,67 @@ CRLIB_API const char *crL_check_lstring(cs_State *ts, int index, size_t *len) {
 }
 
 
-CRLIB_API void *crL_check_userdata(cs_State *ts, int index, const char *name) {
-    void *p = crL_test_userdata(ts, index, name);
+CSLIB_API void *csL_check_userdata(cs_State *ts, int index, const char *name) {
+    void *p = csL_test_userdata(ts, index, name);
     if (cs_unlikely(p == NULL))
-        crL_type_error(ts, index, name);
+        csL_type_error(ts, index, name);
     return p;
 }
 
 
-CRLIB_API void crL_check_stack(cs_State *ts, int space, const char *msg) {
+CSLIB_API void csL_check_stack(cs_State *ts, int space, const char *msg) {
     if (cs_unlikely(!cs_checkstack(ts, space))) {
         if (msg)
-            crL_error(ts, "stack overflow (%s)", msg);
+            csL_error(ts, "stack overflow (%s)", msg);
         else
-            crL_error(ts, "stack overflow");
+            csL_error(ts, "stack overflow");
     }
 }
 
 
-CRLIB_API void crL_check_type(cs_State *ts, int index, int tt) {
+CSLIB_API void csL_check_type(cs_State *ts, int index, int tt) {
     if (cs_unlikely(cs_type(ts, index) != tt))
         tterror(ts, index, tt);
 }
 
 
-CRLIB_API void crL_check_any(cs_State *ts, int index) {
+CSLIB_API void csL_check_any(cs_State *ts, int index) {
     if (cs_unlikely(cs_type(ts, index) == CS_TNONE))
-        crL_arg_error(ts, index, "value expected");
+        csL_arg_error(ts, index, "value expected");
 }
 
 
-CRLIB_API int crL_check_option(cs_State *ts, int index, const char *dfl,
+CSLIB_API int csL_check_option(cs_State *ts, int index, const char *dfl,
                                const char *const opts[]) {
-    const char *str = (dfl ? crL_opt_string(ts, index, dfl) :
-                             crL_check_string(ts, index));
+    const char *str = (dfl ? csL_opt_string(ts, index, dfl) :
+                             csL_check_string(ts, index));
     int i;
     for (i=0; opts[i]; i++)
         if (strcmp(str, opts[i]) == 0)
             return i;
-    return crL_arg_error(ts, index,
+    return csL_arg_error(ts, index,
                          cs_push_fstring(ts, "invalid option '%s'", str));
 }
 
 
-CRLIB_API cs_Number crL_opt_number(cs_State *ts, int index, cs_Number dfl) {
-    return crL_opt(ts, crL_check_number, index, dfl);
+CSLIB_API cs_Number csL_opt_number(cs_State *ts, int index, cs_Number dfl) {
+    return csL_opt(ts, csL_check_number, index, dfl);
 }
 
 
-CRLIB_API cs_Integer crL_opt_integer(cs_State *ts, int index, cs_Integer dfl) {
-    return crL_opt(ts, crL_check_integer, index, dfl);
+CSLIB_API cs_Integer csL_opt_integer(cs_State *ts, int index, cs_Integer dfl) {
+    return csL_opt(ts, csL_check_integer, index, dfl);
 }
 
 
-CRLIB_API const char *crL_opt_lstring(cs_State *ts, int index, const char *dfl,
+CSLIB_API const char *csL_opt_lstring(cs_State *ts, int index, const char *dfl,
                                       size_t *plen) {
     if (cs_is_noneornil(ts, index)) {
         if (plen)
             *plen = (dfl ? strlen(dfl) : 0);
         return dfl;
     }
-    return crL_check_lstring(ts, index, plen);
+    return csL_check_lstring(ts, index, plen);
 }
 
 
@@ -193,7 +193,7 @@ static int errorfile(cs_State *ts, const char *what, int filename_index) {
 }
 
 
-CRLIB_API int crL_loadfile(cs_State *ts, const char *filename) {
+CSLIB_API int csL_loadfile(cs_State *ts, const char *filename) {
     LoadFile lf;
     int status, readstatus;
     int filename_index = cs_gettop(ts) + 1;
@@ -237,7 +237,7 @@ static const char *stringreader(cs_State *ts, void *data, size_t *szread) {
 }
 
 
-CRLIB_API int crL_loadbuffer(cs_State *ts, const char *buff, size_t sz,
+CSLIB_API int csL_loadbuffer(cs_State *ts, const char *buff, size_t sz,
                              const char *name) {
     LoadString ls;
     ls.sz = sz;
@@ -246,12 +246,12 @@ CRLIB_API int crL_loadbuffer(cs_State *ts, const char *buff, size_t sz,
 }
 
 
-CRLIB_API int crL_loadstring(cs_State *ts, const char *str) {
-    return crL_loadbuffer(ts, str, strlen(str), str);
+CSLIB_API int csL_loadstring(cs_State *ts, const char *str) {
+    return csL_loadbuffer(ts, str, strlen(str), str);
 }
 
 
-CRLIB_API const char *crL_to_lstring(cs_State *ts, int index, size_t *plen) {
+CSLIB_API const char *csL_to_lstring(cs_State *ts, int index, size_t *plen) {
     int tt;
     index = cs_absindex(ts, index);
     tt = cs_type(ts, index);
@@ -285,7 +285,7 @@ CRLIB_API const char *crL_to_lstring(cs_State *ts, int index, size_t *plen) {
 }
 
 
-CRLIB_API void crL_where(cs_State *ts, int level) {
+CSLIB_API void csL_where(cs_State *ts, int level) {
     cs_DebugInfo di;
     if (cs_getstack(ts, level, &di)) {
         cs_getinfo(ts, "sl", &di);
@@ -298,14 +298,14 @@ CRLIB_API void crL_where(cs_State *ts, int level) {
 }
 
 
-CRLIB_API int crL_fileresult(cs_State *ts, int ok, const char *fname) {
+CSLIB_API int csL_fileresult(cs_State *ts, int ok, const char *fname) {
     int err = errno;
     if (ok) { /* ok? */
         cs_push_bool(ts, 1);
         return CS_OK;
     } else {
         const char *msg;
-        crL_push_fail(ts);
+        csL_push_fail(ts);
         msg = (err != 0 ? strerror(err) : "(no extra info)");
         if (fname) /* have file name? */
             cs_push_fstring(ts, "%s: %s", fname, msg);
@@ -317,7 +317,7 @@ CRLIB_API int crL_fileresult(cs_State *ts, int ok, const char *fname) {
 }
 
 
-CRLIB_API int crL_get_property(cs_State *ts, int insobj) {
+CSLIB_API int csL_get_property(cs_State *ts, int insobj) {
     if (cs_get_field(ts, insobj) == CS_TNIL) {
         cs_pop(ts, 1); /* remove nil */
         cs_get_class(ts, insobj);
@@ -327,9 +327,9 @@ CRLIB_API int crL_get_property(cs_State *ts, int insobj) {
 }
 
 
-CRLIB_API void crL_set_cindex(cs_State *ts, int arrobj, cs_Integer i) {
+CSLIB_API void csL_set_cindex(cs_State *ts, int arrobj, cs_Integer i) {
     if (cs_unlikely(i < 0 || i > CS_ARRAYMAX))
-        crL_error(ts, "array index too large %I, limit is %d", i, CS_ARRAYMAX);
+        csL_error(ts, "array index too large %I, limit is %d", i, CS_ARRAYMAX);
     cs_set_index(ts, arrobj, i);
 }
 
@@ -394,7 +394,7 @@ static void fwarnoff(void *ud, const char *msg, int tocont) {
 }
 
 
-CRLIB_API cs_State *crL_newstate(void) {
+CSLIB_API cs_State *csL_newstate(void) {
     cs_State *ts = cs_newstate(allocator, NULL);
     if (cs_likely(ts)) {
         cs_atpanic(ts, panic);
@@ -404,13 +404,13 @@ CRLIB_API cs_State *crL_newstate(void) {
 }
 
 
-CRLIB_API int crL_get_subinstance(cs_State *ts, int insobj, const char *field) {
+CSLIB_API int csL_get_subinstance(cs_State *ts, int insobj, const char *field) {
     if (cs_get_field(ts, insobj) == CS_TINSTANCE) {
         return 1;
     } else {
         cs_pop(ts, 1); /* pop previous result */
         insobj = cs_absindex(ts, insobj);
-        crL_push_hashtable(ts);
+        csL_push_hashtable(ts);
         cs_push(ts, -1); /* copy will be left on the top */
         cs_set_global(ts, field); /* ...and set it as global */
         return 0;
@@ -418,9 +418,9 @@ CRLIB_API int crL_get_subinstance(cs_State *ts, int insobj, const char *field) {
 }
 
 
-CRLIB_API void crL_include(cs_State *ts, const char *libname,
+CSLIB_API void csL_include(cs_State *ts, const char *libname,
                            cs_CFunction openf, int global) {
-    crL_get_subinstance(ts, CS_GINSTANCEINDEX, CS_LOADED_INSTANCE);
+    csL_get_subinstance(ts, CS_GINSTANCEINDEX, CS_LOADED_INSTANCE);
     cs_get_fieldstr(ts, -1, libname); /* get Lib[libname] */
     if (!cs_to_bool(ts, -1)) { /* library not already loaded? */
         cs_pop(ts, 1); /* remove field */
@@ -438,7 +438,7 @@ CRLIB_API void crL_include(cs_State *ts, const char *libname,
 }
 
 
-CRLIB_API void *crL_test_userdata(cs_State *ts, int index, const char *name) {
+CSLIB_API void *csL_test_userdata(cs_State *ts, int index, const char *name) {
     void *p = cs_to_userdata(ts, index);
     if (p != NULL) { /* 'index' is userdata? */
         cs_push(ts, index);
@@ -510,7 +510,7 @@ static int pushglobalfuncname(cs_State *ts, cs_DebugInfo *di) {
     int top = cs_gettop(ts);
     cs_getinfo(ts, "f", di); /* push func */
     cs_get_global(ts, CS_LOADED_INSTANCE); /* get global lib instance */
-    crL_check_stack(ts, 6, "not enough stack space"); /* for 'findfield' */
+    csL_check_stack(ts, 6, "not enough stack space"); /* for 'findfield' */
     if (findfield(ts, top + 1, 2)) { /* found? */
         cs_copy(ts, -1, top + 1); /* copy name to proper place */
         cs_setntop(ts, top + 1); /* remove lib instance and name copy */
@@ -543,23 +543,23 @@ static void pushfuncname(cs_State *ts, cs_DebugInfo *di) {
 
 #define STACKLEVELS         tostacklevel(11)
 
-CRLIB_API void crL_traceback(cs_State *ts, cs_State *at, int level,
+CSLIB_API void csL_traceback(cs_State *ts, cs_State *at, int level,
                              const char *msg) {
-    crL_Buffer B;
+    csL_Buffer B;
     cs_DebugInfo di;
     int last = lastlevel(at);
     int levelsleft = (last - level > (STACKLEVELS*2) ? STACKLEVELS : -1);
-    crL_buff_init(ts, &B);
+    csL_buff_init(ts, &B);
     if (msg) {
-        crL_buff_push_string(&B, msg);
-        crL_buff_push(&B, '\n');
+        csL_buff_push_string(&B, msg);
+        csL_buff_push(&B, '\n');
     }
-    crL_buff_push_string(&B, "stack traceback:");
+    csL_buff_push_string(&B, "stack traceback:");
     while (cs_getstack(at, level++, &di)) { /* tracing back... */
         if (levelsleft-- == 0) { /* too many levels? */
             int n = last - level - STACKLEVELS + 1;
             cs_push_fstring(ts, "\n\t(skipping %d levels)", n);
-            crL_buff_push_value(&B);
+            csL_buff_push_value(&B);
             level += n;
         } else {
             /* source, name, line info */
@@ -568,17 +568,17 @@ CRLIB_API void crL_traceback(cs_State *ts, cs_State *at, int level,
                 cs_push_fstring(ts, "\n\t%s in ", di.shortsrc);
             else
                 cs_push_fstring(ts, "\n\t%s:%d in ", di.shortsrc, di.currline);
-            crL_buff_push_value(&B);
+            csL_buff_push_value(&B);
             pushfuncname(ts, &di);
-            crL_buff_push_value(&B);
+            csL_buff_push_value(&B);
         }
     }
-    crL_buff_end(&B);
+    csL_buff_end(&B);
 }
 
 
-CRLIB_API void crL_set_funcs(cs_State *ts, const cs_Entry *l, int nup) {
-    crL_check_stack(ts, nup, "too many upvalues");
+CSLIB_API void csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup) {
+    csL_check_stack(ts, nup, "too many upvalues");
     for (; l->name != NULL; l++) {
         if (l->func == NULL) { /* placeholder? */
             cs_push_bool(ts, 0);
@@ -643,11 +643,11 @@ static void newbox(cs_State *ts) {
 ** Initializes the buffer 'B' and pushes it's placeholder onto
 ** the top of the stack as light userdata.
 */
-CRLIB_API void crL_buff_init(cs_State *ts, crL_Buffer *B) {
+CSLIB_API void csL_buff_init(cs_State *ts, csL_Buffer *B) {
     B->ts = ts;
     B->n = 0;
     B->b = B->init.b;
-    B->sz = CRL_BUFFERSIZE;
+    B->sz = CSL_BUFFERSIZE;
     cs_push_lightuserdata(ts, B);
 }
 
@@ -662,7 +662,7 @@ CRLIB_API void crL_buff_init(cs_State *ts, crL_Buffer *B) {
 ** Whenever buffer is accessed, slot 'index' must be either a box,
 ** meaning the buffer is using a temporary arena on stack (which
 ** cannot be NULL) or it is a placeholder for the buffer (meaning
-** that buffer is still using 'init.b[CRL_BUFFERSIZE]').
+** that buffer is still using 'init.b[CSL_BUFFERSIZE]').
 */
 #define checkbufflevel(B, index) \
     cs_assert(buffonstack(B) ? cs_to_userdata((B)->ts, index) != NULL \
@@ -670,10 +670,10 @@ CRLIB_API void crL_buff_init(cs_State *ts, crL_Buffer *B) {
 
 
 /* calculate new buffer size */
-static size_t newbuffsize(crL_Buffer *B, size_t sz) {
+static size_t newbuffsize(csL_Buffer *B, size_t sz) {
     size_t newsize = (B->sz / 2) * 3; /* 1.5x size */
     if (cs_unlikely(SIZE_MAX - sz < B->n)) /* would overflow? */
-        return crL_error(B->ts, "buffer too large");
+        return csL_error(B->ts, "buffer too large");
     if (newsize < B->n + sz)
         newsize = B->n + sz;
     return newsize;
@@ -684,7 +684,7 @@ static size_t newbuffsize(crL_Buffer *B, size_t sz) {
 ** Ensure that buffer 'B' can fit 'sz' bytes.
 ** This also creates 'UserBox' if internal buffer is not big enough.
 */
-static char *buffensure(crL_Buffer *B, size_t sz, int boxindex) {
+static char *buffensure(csL_Buffer *B, size_t sz, int boxindex) {
     checkbufflevel(B, boxindex);
     if (B->sz - B->n >= sz) { /* have enough space? */
         return B->b + B->n;
@@ -713,8 +713,8 @@ static char *buffensure(crL_Buffer *B, size_t sz, int boxindex) {
 ** Initializes buffer 'B' to the size 'sz' bytes and returns the pointer
 ** to that memory block.
 */
-CRLIB_API char *crL_buff_initsz(cs_State *ts, crL_Buffer *B, size_t sz) {
-    crL_buff_init(ts, B);
+CSLIB_API char *csL_buff_initsz(cs_State *ts, csL_Buffer *B, size_t sz) {
+    csL_buff_init(ts, B);
     return buffensure(B, sz, -1);
 }
 
@@ -724,7 +724,7 @@ CRLIB_API char *crL_buff_initsz(cs_State *ts, crL_Buffer *B, size_t sz) {
 ** This function expects buffer placeholder or its 'UserBox' to be on
 ** top of the stack.
 */
-CRLIB_API char *crL_buff_ensure(crL_Buffer *B, size_t sz) {
+CSLIB_API char *csL_buff_ensure(csL_Buffer *B, size_t sz) {
     return buffensure(B, sz, -1);
 }
 
@@ -734,23 +734,23 @@ CRLIB_API char *crL_buff_ensure(crL_Buffer *B, size_t sz) {
 ** This function expects buffer placeholder or its 'UserBox' to be on
 ** top of the stack.
 */
-CRLIB_API void crL_buff_push_lstring(crL_Buffer *B, const char *s, size_t l) {
+CSLIB_API void csL_buff_push_lstring(csL_Buffer *B, const char *s, size_t l) {
     if (l > 0) {
         char *b = buffensure(B, l, -1);
         memcpy(b, s, l * sizeof(char));
-        crL_buffadd(B, l);
+        csL_buffadd(B, l);
     }
 }
 
 
 /*
-** Similar to 'crL_buff_push_lstring', the only difference is that this
+** Similar to 'csL_buff_push_lstring', the only difference is that this
 ** function measures the length of 's'.
 ** This function expects buffer placeholder or its 'UserBox' to be on
 ** top of the stack.
 */
-CRLIB_API void crL_buff_push_string(crL_Buffer *B, const char *s) {
-    crL_buff_push_lstring(B, s, strlen(s));
+CSLIB_API void csL_buff_push_string(csL_Buffer *B, const char *s) {
+    csL_buff_push_lstring(B, s, strlen(s));
 }
 
 
@@ -759,12 +759,12 @@ CRLIB_API void crL_buff_push_string(crL_Buffer *B, const char *s) {
 ** This function expects buffer placeholder or its 'UserBox' to be on
 ** the stack below the string value being pushed, which is on top of the stack.
 */
-CRLIB_API void crL_buff_push_value(crL_Buffer *B) {
+CSLIB_API void csL_buff_push_value(csL_Buffer *B) {
     size_t len;
     const char *str = cs_to_lstring(B->ts, -1, &len);
     char *p = buffensure(B, len, -2);
     memcpy(p, str, len);
-    crL_buffadd(B, len);
+    csL_buffadd(B, len);
     cs_pop(B->ts, 1); /* remove string */
 }
 
@@ -773,7 +773,7 @@ CRLIB_API void crL_buff_push_value(crL_Buffer *B) {
 ** Finish the use of buffer 'B' leaving the final string on top of
 ** the stack.
 */
-CRLIB_API void crL_buff_end(crL_Buffer *B) {
+CSLIB_API void csL_buff_end(csL_Buffer *B) {
     cs_State *ts = B->ts;
     checkbufflevel(B, -1);
     cs_push_lstring(ts, B->b, B->n);

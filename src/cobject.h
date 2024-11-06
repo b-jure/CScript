@@ -27,9 +27,9 @@
 #define CSI_TOTALTYPES      (CS_THTABLE + 2)
 
 
-CSI_DEC(const char *const crO_typenames[CSI_TOTALTYPES]);
+CSI_DEC(const char *const csO_typenames[CSI_TOTALTYPES]);
 
-#define typename(t)     crO_typenames[(t) + 1]
+#define typename(t)     csO_typenames[(t) + 1]
 
 
 /*
@@ -187,7 +187,7 @@ typedef struct {
 #define ttistrue(o)         checktag(o, CS_VTRUE)
 #define ttisfalse(o)        checktag(o, CS_VFALSE)
 
-#define cri_isfalse(o)      (ttisfalse(o) || ttisnil(o))
+#define csi_isfalse(o)      (ttisfalse(o) || ttisnil(o))
 
 
 
@@ -787,7 +787,7 @@ typedef enum N2IMode {
 #define tointeger(v,i) \
     (cs_likely(ttisint(v)) \
      ? (*(i) = ival(v), 1) \
-     : crO_tointeger(v, i, N2IFLOOR))
+     : csO_tointeger(v, i, N2IFLOOR))
 
 
 /* convert value to 'cs_Number' */
@@ -798,14 +798,14 @@ typedef enum N2IMode {
 
 
 /* same as right shift but indicate left by making 'y' negative */
-#define crO_shiftl(x,y)    crO_shiftr(x, -(y))
+#define csO_shiftl(x,y)    csO_shiftr(x, -(y))
 
 
-CSI_FUNC int crO_ceillog2(uint x);
-CSI_FUNC int crO_n2i(cs_Number n, cs_Integer *i, N2IMode mode);
-CSI_FUNC int crO_tointeger(const TValue *v, cs_Integer *i, int mode);
-CSI_FUNC cs_Integer crO_shiftr(cs_Integer x, cs_Integer y);
-CSI_FUNC int crO_arithmraw(cs_State *ts, const TValue *a, const TValue *b,
+CSI_FUNC int csO_ceillog2(uint x);
+CSI_FUNC int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode);
+CSI_FUNC int csO_tointeger(const TValue *v, cs_Integer *i, int mode);
+CSI_FUNC cs_Integer csO_shiftr(cs_Integer x, cs_Integer y);
+CSI_FUNC int csO_arithmraw(cs_State *ts, const TValue *a, const TValue *b,
                            TValue *res, int op);
 
 #endif

@@ -41,7 +41,7 @@
 
 
 /* get the current white bit */
-#define crG_white(gc)           ((gc)->whitebit & maskwhitebits)
+#define csG_white(gc)           ((gc)->whitebit & maskwhitebits)
 
 /* get the other white bit */
 #define whitexor(gc)            ((gc)->whitebit ^ maskwhitebits)
@@ -111,12 +111,12 @@
  ** debt is positive.
  */
 #define checkgc(ts,pre,pos) \
-    { pre; if (G_(ts)->gc.debt > 0) { crG_step(ts); pos; } \
+    { pre; if (G_(ts)->gc.debt > 0) { csG_step(ts); pos; } \
       gcmemchange(ts,pre,pos); }
 
 
 /* 'checkgc' but without 'pre' and 'pos' */
-#define crG_check(ts)       checkgc(ts,(void)0,(void)0)
+#define csG_check(ts)       checkgc(ts,(void)0,(void)0)
 
 
 
@@ -130,30 +130,30 @@
  * ------------------------------------------------------------------------- */
 
 /*
- ** Same as 'crG_barrierforward_' but ensures that it is only
+ ** Same as 'csG_barrierforward_' but ensures that it is only
  ** called when 'r' (root) is a black object and 'o' is white.
  */
-#define crG_objbarrier(ts,r,o) \
+#define csG_objbarrier(ts,r,o) \
     (isblack(r) && iswhite(o) \
-     ? crG_barrier_(ts, obj2gco(r), obj2gco(o)) \
+     ? csG_barrier_(ts, obj2gco(r), obj2gco(o)) \
      : (void)(0))
 
-/* wrapper around 'crG_objbarrier' that check if ** 'v' is object */
-#define crG_barrier(ts,r,v) \
-    (iscollectable(v) ? crG_objbarrier(ts, r, gcoval(v)) : (void)(0))
+/* wrapper around 'csG_objbarrier' that check if ** 'v' is object */
+#define csG_barrier(ts,r,v) \
+    (iscollectable(v) ? csG_objbarrier(ts, r, gcoval(v)) : (void)(0))
 
 /*
-** Same as 'crG_barrierback_' but ensures that it is only
+** Same as 'csG_barrierback_' but ensures that it is only
 ** called when 'r' (root) is a black object and 'o' is white.
 */
-#define crG_objbarrierback(ts,r,o) \
+#define csG_objbarrierback(ts,r,o) \
     (isblack(r) && iswhite(o) \
-     ? crG_barrierback_(ts, r) \
+     ? csG_barrierback_(ts, r) \
      : (void)(0))
 
-/* wrapper around 'crG_objbarrierback' that checks if 'v' is object */
-#define crG_barrierback(ts,r,v) \
-    (iscollectable(v) ? crG_objbarrierback(ts,r,gcoval(v)) : (void)(0))
+/* wrapper around 'csG_objbarrierback' that checks if 'v' is object */
+#define csG_barrierback(ts,r,v) \
+    (iscollectable(v) ? csG_objbarrierback(ts,r,gcoval(v)) : (void)(0))
 
 
 /* 
@@ -165,7 +165,7 @@
 
 
 /* allocate new GC object */
-#define crG_new(ts,s,tt,t)      cast(t *, crG_new_(ts, s, tt))
+#define csG_new(ts,s,tt,t)      cast(t *, csG_new_(ts, s, tt))
 
 
 /* garbage collector parameters and state */
@@ -194,18 +194,18 @@ typedef struct GC {
 } GC;
 
 
-CSI_FUNC void crG_init(GC *gc, cs_State *ts, size_t LGsize);
-CSI_FUNC GCObject *crG_new_(cs_State *ts, size_t size, int tt_);
-CSI_FUNC GCObject *crG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset);
-CSI_FUNC void crG_step(cs_State *ts);
-CSI_FUNC void crG_full(cs_State *ts, int isemergency);
-CSI_FUNC void crG_rununtilstate(cs_State *ts, int statemask);
-CSI_FUNC void crG_freeallobjects(cs_State *ts);
-CSI_FUNC void crG_checkfin(cs_State *ts, GCObject *o, TValue *vmt);
-CSI_FUNC void crG_fix(cs_State *ts, GCObject *o);
-CSI_FUNC void crG_barrier_(cs_State *ts, GCObject *r, GCObject *o);
-CSI_FUNC void crG_barrierback_(cs_State *ts, GCObject *r);
-CSI_FUNC void crG_setdebt(GC *gc, cs_mem debt);
-CSI_FUNC void crG_incmode(cs_State *ts);
+CSI_FUNC void csG_init(GC *gc, cs_State *ts, size_t LGsize);
+CSI_FUNC GCObject *csG_new_(cs_State *ts, size_t size, int tt_);
+CSI_FUNC GCObject *csG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset);
+CSI_FUNC void csG_step(cs_State *ts);
+CSI_FUNC void csG_full(cs_State *ts, int isemergency);
+CSI_FUNC void csG_rununtilstate(cs_State *ts, int statemask);
+CSI_FUNC void csG_freeallobjects(cs_State *ts);
+CSI_FUNC void csG_checkfin(cs_State *ts, GCObject *o, TValue *vmt);
+CSI_FUNC void csG_fix(cs_State *ts, GCObject *o);
+CSI_FUNC void csG_barrier_(cs_State *ts, GCObject *r, GCObject *o);
+CSI_FUNC void csG_barrierback_(cs_State *ts, GCObject *r);
+CSI_FUNC void csG_setdebt(GC *gc, cs_mem debt);
+CSI_FUNC void csG_incmode(cs_State *ts);
 
 #endif

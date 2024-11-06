@@ -83,8 +83,8 @@
 
 /* 
 ** @CS_API - signature for core API functions.
-** @CRLIB_API - signature for all auxiliary library functions.
-** @CRMOD_API - signature for all standard library opening functions.
+** @CSLIB_API - signature for all auxiliary library functions.
+** @CSMOD_API - signature for all standard library opening functions.
 */
 #if defined(CS_BUILD_AS_DLL)    /* { */
 #if defined(CS_CORE) || defined(CS_LIB)     /* { */
@@ -96,8 +96,8 @@
 #define CS_API      extern
 #endif                          /* } */
 
-#define CRLIB_API       CS_API
-#define CRMOD_API       CS_API
+#define CSLIB_API       CS_API
+#define CSMOD_API       CS_API
 
 
 /*
@@ -204,8 +204,8 @@
 #define cs_integer2str(s,sz,n) \
     snprintf((s),(sz),CS_INTEGER_FMT,(CS_INTEGER)(n))
 
-#define cri_intop(op,x,y) \
-    cri_castU2S(cri_castS2U(x) op cri_castS2U(y))
+#define csi_intop(op,x,y) \
+    csi_castU2S(csi_castS2U(x) op csi_castS2U(y))
 
 #elif UINTPTR_MAX == 0xffffffff             /* }{ */
 #error 'CScript' requires 64-bit integer size.
@@ -250,10 +250,10 @@
 
 
 /*
-** @CRL_BUFFERSIZE is the initial buffer size used by the cauxlib
+** @CSL_BUFFERSIZE is the initial buffer size used by the cauxlib
 ** buffer system.
 */
-#define CRL_BUFFERSIZE      1024
+#define CSL_BUFFERSIZE      1024
 
 
 /*
@@ -273,7 +273,7 @@
 /* @CS_CHECKAPI - enables C API asserts. */
 #if defined(CS_CHECKAPI)    /* { */
 #include <assert.h>
-#define cri_checkapi(ts,e)      assert(e)
+#define csi_checkapi(ts,e)      assert(e)
 #endif                      /* } */
 
 

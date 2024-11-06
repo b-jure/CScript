@@ -133,9 +133,9 @@ static int errfunc(cs_State *ts) {
     const char *msg = cs_to_string(ts, 1);
     if (msg == NULL) { /* error object is not a string? */
         msg = cs_push_fstring(ts, "(error object is a %s value)",
-                                  crL_typename(ts, 0));
+                                  csL_typename(ts, 0));
     }
-    crL_traceback(ts, ts, 1, msg); /* append traceback */
+    csL_traceback(ts, ts, 1, msg); /* append traceback */
     return 1;
 }
 
@@ -160,12 +160,12 @@ static int runchunk(cs_State *ts, int status) {
 
 
 static int runfile(cs_State *ts, const char *filename) {
-    return runchunk(ts, crL_loadfile(ts, filename));
+    return runchunk(ts, csL_loadfile(ts, filename));
 }
 
 
 static int runstring(cs_State *ts, const char *str, const char *name) {
-    return runchunk(ts, crL_loadbuffer(ts, str, strlen(str), name));
+    return runchunk(ts, csL_loadbuffer(ts, str, strlen(str), name));
 }
 
 
@@ -203,9 +203,9 @@ static int runargs(cs_State *ts, char **argv, int n)  {
 static int pushargs(cs_State *ts) {
     int i, nargs;
     if (cs_get_global(ts, "arg") != CS_TARRAY)
-        crL_error(ts, "'arg' is not an array");
+        csL_error(ts, "'arg' is not an array");
     nargs = cs_len(ts, -1);
-    crL_check_stack(ts, nargs + 3, "too many arguments to script");
+    csL_check_stack(ts, nargs + 3, "too many arguments to script");
     for (i = 1; i <= nargs; i++) /* push all args */
         cs_get_index(ts, -i, i - 1);
     cs_remove(ts, -i); /* remove array from the stack */
@@ -218,7 +218,7 @@ static int runscript(cs_State *ts, char **argv) {
     const char *filename = argv[0];
     if (strcmp(filename, "-") == 0 && strcmp(argv[-1], "--") != 0)
         filename = NULL; /* stdin */
-    status = crL_loadfile(ts, filename);
+    status = csL_loadfile(ts, filename);
     if (status == CS_OK) {
         int nargs = pushargs(ts);
         status = execs_cript(ts, nargs, CS_MULRET);
@@ -251,12 +251,12 @@ static inline const char *getprompt(int firstline) {
 static int addreturn(cs_State *ts) {
     const char *line = cs_to_string(ts, -1);
     const char *retline = cs_push_fstring(ts, "return %s;", line);
-    int status = crL_loadbuffer(ts, retline, strlen(retline), "stdin");
+    int status = csL_loadbuffer(ts, retline, strlen(retline), "stdin");
     /* stack: [line][retline][result] */
     if (status == CS_OK)
         cs_remove(ts, -2); /* remove 'retline' */
     else
-        cs_pop(ts, 2); /* pop result from 'crL_loadbuffer' and 'retline' */
+        cs_pop(ts, 2); /* pop result from 'csL_loadbuffer' and 'retline' */
     return status;
 }
 
@@ -302,7 +302,7 @@ static int multiline(cs_State *ts) {
     for (;;) {
         size_t len;
         const char *line = cs_to_lstring(ts, 0, &len);
-        int status = crL_loadbuffer(ts, line, len, "stdin");
+        int status = csL_loadbuffer(ts, line, len, "stdin");
         if (!incomplete(ts, status) || !pushline(ts, 0))
             return status;
         cs_push_literal(ts, "\n");
@@ -320,7 +320,7 @@ static int loadline(cs_State *ts) {
     if ((status = addreturn(ts)) != CS_OK)
         status = multiline(ts);
     cs_remove(ts, 0); /* remove line */
-    cs_assert(cs_gettop(ts) == 0); /* 'crL_loadbuffer' result on top */
+    cs_assert(cs_gettop(ts) == 0); /* 'csL_loadbuffer' result on top */
     return status;
 }
 
@@ -328,7 +328,7 @@ static int loadline(cs_State *ts) {
 static void printresults(cs_State *ts) {
     int n = cs_gettop(ts);
     if (n > 0) { /* have result to print? */
-        crL_check_stack(ts, CS_MINSTACK, "too many results to print");
+        csL_check_stack(ts, CS_MINSTACK, "too many results to print");
         cs_get_global(ts, "print");
         cs_insert(ts, 1);
         if (cs_pcall(ts, n, 0, 0) != CS_OK)
@@ -420,7 +420,7 @@ static int pmain(cs_State *ts) {
 
 int main(int argc, char* argv[]) {
     int status, res;
-    cs_State *ts = crL_newstate();
+    cs_State *ts = csL_newstate();
     if (ts == NULL) {
         emessage(progname, "cannot create state: out of memory");
         return EXIT_FAILURE;

@@ -10,9 +10,9 @@
 #include "cstate.h"
 
 
-#define crM_rawmalloc(gs,s)         (gs)->falloc(NULL, 0, s, (gs)->ud_alloc)
-#define crM_rawrealloc(gs,p,os,ns)  (gs)->falloc(p, os, ns, (gs)->ud_alloc)
-#define crM_rawfree(gs,p,osz)       (gs)->falloc(p, osz, 0, (gs)->ud_alloc)
+#define csM_rawmalloc(gs,s)         (gs)->falloc(NULL, 0, s, (gs)->ud_alloc)
+#define csM_rawrealloc(gs,p,os,ns)  (gs)->falloc(p, os, ns, (gs)->ud_alloc)
+#define csM_rawfree(gs,p,osz)       (gs)->falloc(p, osz, 0, (gs)->ud_alloc)
 
 
 /* can try to allocate second time */
@@ -20,22 +20,22 @@
 
 
 
-/* Auxiliary to 'crM_realloc' and 'csmalloc'. */
+/* Auxiliary to 'csM_realloc' and 'csmalloc'. */
 cs_sinline void *tryagain(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
     UNUSED(osz);
     if (cantryagain(gs)) {
-        crG_full(ts, 1);
-        return crM_rawrealloc(gs, ptr, osz, nsz);
+        csG_full(ts, 1);
+        return csM_rawrealloc(gs, ptr, osz, nsz);
     }
     return NULL;
 }
 
 
-void *crM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
+void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
     cs_assert((osz == 0) == (ptr == NULL));
-    void *memblock = crM_rawrealloc(gs, ptr, osz, nsz);
+    void *memblock = csM_rawrealloc(gs, ptr, osz, nsz);
     if (cs_unlikely(!memblock && nsz != 0)) {
         memblock = tryagain(ts, ptr, osz, nsz);
         if (cs_unlikely(memblock == NULL))
@@ -47,19 +47,19 @@ void *crM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
 }
 
 
-void *crM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
-    void *memblock = crM_realloc_(ts, ptr, osz, nsz);
+void *csM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
+    void *memblock = csM_realloc_(ts, ptr, osz, nsz);
     if (cs_unlikely(memblock == NULL && nsz != 0))
         cs_assert(0 && "out of memory");
     return memblock;
 }
 
 
-void *crM_malloc(cs_State *ts, size_t size) {
+void *csM_malloc(cs_State *ts, size_t size) {
     if (size == 0)
         return NULL;
     GState *gs = G_(ts);
-    void *memblock = crM_rawmalloc(gs, size);
+    void *memblock = csM_rawmalloc(gs, size);
     if (cs_unlikely(memblock == NULL)) {
         memblock = tryagain(ts, NULL, 0, size);
         if (cs_unlikely(memblock == NULL))
@@ -70,7 +70,7 @@ void *crM_malloc(cs_State *ts, size_t size) {
 }
 
 
-void *crM_growarr(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
+void *csM_growarr(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
                   int extra, int limit, const char *what) {
     int size = *sizep;
     if (len + extra <= size)
@@ -78,7 +78,7 @@ void *crM_growarr(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
     size += extra;
     if (size >= limit / 2) {
         if (cs_unlikely(size >= limit))
-            crD_runerror(ts, "%s size limit", what);
+            csD_runerror(ts, "%s size limit", what);
         size = limit;
         cs_assert(size >= CSI_MINARRSIZE);
     } else {
@@ -86,26 +86,26 @@ void *crM_growarr(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
         if (size < CSI_MINARRSIZE)
             size = CSI_MINARRSIZE;
     }
-    ptr = crM_saferealloc(ts, ptr, *sizep * elemsize, size * elemsize);
+    ptr = csM_saferealloc(ts, ptr, *sizep * elemsize, size * elemsize);
     *sizep = size;
     return ptr;
 }
 
 
-void *crM_shrinkarr(cs_State *ts, void *ptr, int *sizep, int final,
+void *csM_shrinkarr(cs_State *ts, void *ptr, int *sizep, int final,
                     int elemsize) {
     size_t oldsize = cast_sizet(*sizep * elemsize);
     size_t newsize = cast_sizet(final * elemsize);
     cs_assert(newsize <= oldsize);
-    ptr = crM_saferealloc(ts, ptr, oldsize, newsize);
+    ptr = csM_saferealloc(ts, ptr, oldsize, newsize);
     *sizep = final;
     return ptr;
 }
 
 
-void crM_free(cs_State *ts, void *ptr, size_t osz) {
+void csM_free(cs_State *ts, void *ptr, size_t osz) {
     GState *gs = G_(ts);
     cs_assert((osz == 0) == (ptr == NULL));
-    crM_rawfree(gs, ptr, osz);
+    csM_rawfree(gs, ptr, osz);
     gs->gc.debt -= osz;
 }

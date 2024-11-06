@@ -217,8 +217,8 @@ typedef struct FunctionState {
 } FunctionState;
 
 
-CSI_FUNC cs_noret crP_semerror(Lexer *lx, const char *err);
-CSI_FUNC CrClosure *crP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
+CSI_FUNC cs_noret csP_semerror(Lexer *lx, const char *err);
+CSI_FUNC CrClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
                               ParserState *ps, const char *source);
 
 #endif
