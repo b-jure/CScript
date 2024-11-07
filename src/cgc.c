@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "cgc.h"
 #include "carray.h"
 #include "cconf.h"
@@ -632,7 +636,7 @@ static void callfin(cs_State *ts) {
     int status = csPRcall(ts, protectedfinalizer, NULL, oldtop, ts->errfunc);
     ts->cf->status &= ~CFST_FIN; /* finalizer returned */
     gc->stopped = oldstopped;
-    if (cs_unlikely(status != CS_OK)) {
+    if (c_unlikely(status != CS_OK)) {
         csT_warnerror(ts, "__gc");
         ts->sp.p--; /* pop err object */
     }

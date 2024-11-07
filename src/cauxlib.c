@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_LIB
+
+
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -64,7 +68,7 @@ static void tterror(cs_State *ts, int argindex, int tt) {
 CSLIB_API cs_Number csL_check_number(cs_State *ts, int index) {
     int isnum;
     cs_Number n = cs_to_numberx(ts, index, &isnum);
-    if (cs_unlikely(!isnum))
+    if (csi_unlikely(!isnum))
         tterror(ts, index, CS_TNUMBER);
     return n;
 }
@@ -81,7 +85,7 @@ static void interror(cs_State *ts, int argindex) {
 CSLIB_API cs_Integer csL_check_integer(cs_State *ts, int index) {
     int isint;
     cs_Integer i = cs_to_integerx(ts, index, &isint);
-    if (cs_unlikely(!isint))
+    if (csi_unlikely(!isint))
         interror(ts, index);
     return i;
 }
@@ -89,7 +93,7 @@ CSLIB_API cs_Integer csL_check_integer(cs_State *ts, int index) {
 
 CSLIB_API const char *csL_check_lstring(cs_State *ts, int index, size_t *len) {
     const char *str = cs_to_lstring(ts, index, len);
-    if (cs_unlikely(str == NULL))
+    if (csi_unlikely(str == NULL))
         tterror(ts, index, CS_TSTRING);
     return str;
 }
@@ -97,14 +101,14 @@ CSLIB_API const char *csL_check_lstring(cs_State *ts, int index, size_t *len) {
 
 CSLIB_API void *csL_check_userdata(cs_State *ts, int index, const char *name) {
     void *p = csL_test_userdata(ts, index, name);
-    if (cs_unlikely(p == NULL))
+    if (csi_unlikely(p == NULL))
         csL_type_error(ts, index, name);
     return p;
 }
 
 
 CSLIB_API void csL_check_stack(cs_State *ts, int space, const char *msg) {
-    if (cs_unlikely(!cs_checkstack(ts, space))) {
+    if (csi_unlikely(!cs_checkstack(ts, space))) {
         if (msg)
             csL_error(ts, "stack overflow (%s)", msg);
         else
@@ -114,13 +118,13 @@ CSLIB_API void csL_check_stack(cs_State *ts, int space, const char *msg) {
 
 
 CSLIB_API void csL_check_type(cs_State *ts, int index, int tt) {
-    if (cs_unlikely(cs_type(ts, index) != tt))
+    if (csi_unlikely(cs_type(ts, index) != tt))
         tterror(ts, index, tt);
 }
 
 
 CSLIB_API void csL_check_any(cs_State *ts, int index) {
-    if (cs_unlikely(cs_type(ts, index) == CS_TNONE))
+    if (csi_unlikely(cs_type(ts, index) == CS_TNONE))
         csL_arg_error(ts, index, "value expected");
 }
 
@@ -328,7 +332,7 @@ CSLIB_API int csL_get_property(cs_State *ts, int insobj) {
 
 
 CSLIB_API void csL_set_cindex(cs_State *ts, int arrobj, cs_Integer i) {
-    if (cs_unlikely(i < 0 || i > CS_ARRAYMAX))
+    if (csi_unlikely(i < 0 || i > CS_ARRAYMAX))
         csL_error(ts, "array index too large %I, limit is %d", i, CS_ARRAYMAX);
     cs_set_index(ts, arrobj, i);
 }
@@ -396,7 +400,7 @@ static void fwarnoff(void *ud, const char *msg, int tocont) {
 
 CSLIB_API cs_State *csL_newstate(void) {
     cs_State *ts = cs_newstate(allocator, NULL);
-    if (cs_likely(ts)) {
+    if (csi_likely(ts)) {
         cs_atpanic(ts, panic);
         cs_setwarnf(ts, fwarnoff, ts); /* warnings off by default */
     }
@@ -609,7 +613,7 @@ static void *resizebox(cs_State *ts, int index, size_t newsz) {
     cs_Alloc falloc = cs_getallocf(ts, &ud);
     UserBox *box = (UserBox *)cs_to_userdata(ts, index);
     void *newblock = falloc(box->p, box->sz, newsz, ud);
-    if (cs_unlikely(newblock == NULL && newsz > 0)) {
+    if (csi_unlikely(newblock == NULL && newsz > 0)) {
         cs_push_literal(ts, "out of memory");
         cs_error(ts);
     }
@@ -672,7 +676,7 @@ CSLIB_API void csL_buff_init(cs_State *ts, csL_Buffer *B) {
 /* calculate new buffer size */
 static size_t newbuffsize(csL_Buffer *B, size_t sz) {
     size_t newsize = (B->sz / 2) * 3; /* 1.5x size */
-    if (cs_unlikely(SIZE_MAX - sz < B->n)) /* would overflow? */
+    if (csi_unlikely(SIZE_MAX - sz < B->n)) /* would overflow? */
         return csL_error(B->ts, "buffer too large");
     if (newsize < B->n + sz)
         newsize = B->n + sz;

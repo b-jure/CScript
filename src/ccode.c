@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "ccode.h"
 #include "clexer.h"
 #include "cbits.h"
@@ -334,7 +338,7 @@ void csC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
     cs_assert(newstack >= 0);
     if (fs->fn->maxstack > newstack) {
-        if (cs_unlikely(newstack >= MAXLONGARGSIZE))
+        if (c_unlikely(newstack >= MAXLONGARGSIZE))
             csY_syntaxerror(fs->lx, "function requires too much stack space");
         fs->fn->maxstack = newstack;
     }
@@ -702,7 +706,7 @@ void csC_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
 /* initialize indexed expression */
 void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
     cs_assert(var->et == EXP_FINEXPR);
-    if (cs_unlikely(key->et == EXP_NIL))
+    if (c_unlikely(key->et == EXP_NIL))
         csP_semerror(fs->lx, "nil index");
     if (key->et == EXP_STRING)
         string2K(fs, key);
@@ -855,7 +859,7 @@ static int getjmp(FunctionState *fs, int pc) {
 static void fixjmp(FunctionState *fs, int pc, int destpc) {
     Instruction *pcjmp = &fs->fn->code[pc];
     int offset = destpc - (pc + SIZEARGL);
-    if (cs_unlikely(offset > MAXLONGARGSIZE))
+    if (c_unlikely(offset > MAXLONGARGSIZE))
         csP_semerror(fs->lx, "control structure too long");
     SETARG_L(pcjmp, 0, offset); /* patch it */
 }

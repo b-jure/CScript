@@ -4,6 +4,10 @@
 ** See Copyright Notice in CScript.h
 */
 
+
+#define CS_CORE
+
+
 #include "cmeta.h"
 #include "cconf.h"
 #include "cstring.h"
@@ -166,7 +170,7 @@ static int callbinaux(cs_State *ts, const TValue *v1, const TValue *v2,
 /* try to call binary arithmetic or bitwise method */
 void csMM_trybin(cs_State *ts, const TValue *v1, const TValue *v2, SPtr res,
                  cs_MM mm) {
-    if (cs_unlikely(ttypetag(v1) != ttypetag(v2) /* types don't match */
+    if (c_unlikely(ttypetag(v1) != ttypetag(v2) /* types don't match */
                 || !callbinaux(ts, v1, v2, res, mm))) { /* or no method ? */
         switch (mm) {
         case CS_MM_BNOT: case CS_MM_BSHL: case CS_MM_BSHR:
@@ -205,7 +209,7 @@ static int callunaryaux(cs_State *ts, const TValue *v, SPtr res, int mt) {
 
 /* try to call unary method */
 void csMM_tryunary(cs_State *ts, const TValue *v, SPtr res, cs_MM mm) {
-    if (cs_unlikely(!callunaryaux(ts, v, res, mm))) {
+    if (c_unlikely(!callunaryaux(ts, v, res, mm))) {
         switch (mm) {
         case CS_MM_BNOT: {
             csD_bitwerror(ts, v, v);
@@ -225,7 +229,7 @@ void csMM_tryconcat(cs_State *ts) {
     SPtr top = ts->sp.p;
     const TValue *self = s2v(top - 2);
     const TValue *rhs = s2v(top - 1);
-    if (cs_unlikely(ttypetag(self) != ttypetag(rhs) || /* types not matching */
+    if (c_unlikely(ttypetag(self) != ttypetag(rhs) || /* types not matching */
                 !callbinaux(ts, self, rhs, top - 2, CS_MM_CONCAT))) {
         csD_concaterror(ts, self, rhs);
     }
@@ -235,7 +239,7 @@ void csMM_tryconcat(cs_State *ts) {
 /* call order method */
 int csMM_order(cs_State *ts, const TValue *v1, const TValue *v2, cs_MM mm) {
     cs_assert(CS_MM_EQ <= mm && mm <= CS_NUM_MM);
-    if (cs_likely(callbinaux(ts, v1, v2, ts->sp.p, mm)))
+    if (c_likely(callbinaux(ts, v1, v2, ts->sp.p, mm)))
         return csi_isfalse(s2v(ts->sp.p));
     csD_ordererror(ts, v1, v2);
     /* UNREACHED */

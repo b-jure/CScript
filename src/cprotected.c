@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include <stdlib.h> /* for 'abort()' */
 
 #include "cprotected.h"
@@ -69,7 +73,7 @@ int csPRcall(cs_State *ts, ProtectedFn fn, void *ud, ptrdiff_t old_top,
     ptrdiff_t old_errfunc = errfunc;
     ts->errfunc = errfunc;
     status = csPRrawcall(ts, fn, ud);
-    if (cs_unlikely(status != CS_OK)) {
+    if (c_unlikely(status != CS_OK)) {
         ts->cf = old_cf;
         status = csPRclose(ts, old_top, status);
         csT_seterrorobj(ts, status, restorestack(ts, old_top));
@@ -101,7 +105,7 @@ int csPRclose(cs_State *ts, ptrdiff_t level, int status) {
         struct PCloseData pcd;
         pcd.level = restorestack(ts, level); pcd.status = status;
         status = csPRrawcall(ts, closepaux, &pcd);
-        if (cs_likely(status == CS_OK))
+        if (c_likely(status == CS_OK))
             return  pcd.status;
         else
             ts->cf = oldcf;

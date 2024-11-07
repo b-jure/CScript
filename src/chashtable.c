@@ -4,7 +4,12 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include <string.h>
+#include <math.h>
 
 #include "chashtable.h"
 #include "cconf.h"
@@ -52,7 +57,7 @@ static uint hashflt(cs_Number n) {
     cs_Integer ni;
     int exp;
     n = cs_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
-    if (cs_likely(cs_number2integer(n, &ni))) {
+    if (c_likely(cs_number2integer(n, &ni))) {
         uint ui = cast_uint(exp) + cast_uint(ni);
         return (ui <= cast_uint(INT_MAX) ? ui : cast_int(~ui));
     }
@@ -73,7 +78,7 @@ static Node *hashint(const HTable *ht, cs_Integer i) {
 /* allocate hash array */
 static void newhasharray(cs_State *cr, HTable *ht, uint size) {
     int nbits = csO_ceillog2(size);
-    if (cs_unlikely(nbits > MAXHBITS || (1u << nbits) > MAXHSIZE))
+    if (c_unlikely(nbits > MAXHBITS || (1u << nbits) > MAXHSIZE))
         csD_runerror(cr, "hashtable overflow");
     size = twoto(nbits);
     ht->node = csM_newarray(cr, size, Node);
@@ -224,7 +229,7 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
     Node *mp = mainposition(ht, key); /* get main position for 'key' */
     if (!keyisempty(mp)) { /* mainposition already taken ? */
         Node *f = freepos(ht); /* get next free position */
-        if (cs_unlikely(f == NULL)) { /* no free position ? */
+        if (c_unlikely(f == NULL)) { /* no free position ? */
             rehash(ts, &old);
             csH_set(ts, ht, key, val);
             return;
@@ -317,7 +322,7 @@ static const TValue *getgeneric(HTable *ht, const TValue *key, int deadok) {
 static uint getindex(cs_State *ts, HTable *ht, const TValue *k) {
     if (ttisnil(k)) return 0;
     const TValue *slot = getgeneric(ht, k, 1);
-    if (cs_unlikely(isabstkey(slot)))
+    if (c_unlikely(isabstkey(slot)))
         csD_runerror(ts, "invalid key passed to 'next'");
     uint i = cast(Node *, slot) - htnode(ht, 0); /* key index in hash table */
     return i + 1; /* return next slot index */

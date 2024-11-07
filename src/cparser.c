@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "carray.h"
 #include "ccode.h"
 #include "cconf.h"
@@ -206,7 +210,7 @@ static cs_noret variniterror(Lexer *lx, const char *kind, const char *name) {
 static void checkvarcollision(FunctionState *fs, OString *name, const char *vk,
                     int (*fn)(FunctionState *, OString *, ExpInfo *)) {
     ExpInfo dummy;
-    if (cs_unlikely(fn(fs, name, &dummy) >= 0))
+    if (c_unlikely(fn(fs, name, &dummy) >= 0))
         csP_semerror(fs->lx, csS_pushfstring(fs->lx->ts,
                              "redefinition of %s variable '%s'", vk, name));
 }
@@ -552,7 +556,7 @@ static void expect(Lexer *lx, int tk) {
  * match a 'who' in line 'linenum'.
  */
 static void expectmatch(Lexer *lx, int what, int who, int linenum) {
-    if (cs_unlikely(!match(lx, what))) {
+    if (c_unlikely(!match(lx, what))) {
         if (lx->line == linenum) { /* same line ? */
             expecterror(lx, what); /* emit usual error message */
         } else {
@@ -597,7 +601,7 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e) {
     for (int i = fs->activelocals - 1; 0 <= i; i--) {
         LVar *local = getlocal(fs, i);
         if (streq(name, local->s.name)) {
-            if (cs_unlikely(local->s.idx == -1))
+            if (c_unlikely(local->s.idx == -1))
                 variniterror(lx, "local", getstrbytes(name));
             initexp(e, EXP_LOCAL, i);
             return e->et;
@@ -615,7 +619,7 @@ static int searchprivate(FunctionState *fs, OString *name, ExpInfo *e) {
     for (int i = fs->nprivate - 1; i >= 0; i--) {
         PrivateVar *pv = getprivate(fs, i);
         if (streq(name, pv->s.name)) {
-            if (cs_unlikely(testbits(pv->val.mod, UNDEFMODMASK)))
+            if (c_unlikely(testbits(pv->val.mod, UNDEFMODMASK)))
                 variniterror(lx, "private", getstrbytes(name));
             initexp(e, EXP_PRIVATE, i);
             return e->et;
@@ -751,7 +755,7 @@ static void varprivate(Lexer *lx, ExpInfo *e) {
     csY_scan(lx); /* skip '@' */
     OString *name = expect_id(lx);
     int vidx = searchprivate(lx->fs, name, e);
-    if (cs_unlikely(vidx < 0))
+    if (c_unlikely(vidx < 0))
         csP_semerror(lx, csS_pushfstring(lx->ts, 
                          "undefined static variable '%s'", name));
     initexp(e, EXP_PRIVATE, vidx);
@@ -795,7 +799,7 @@ static int exprlist(Lexer *lx, ExpInfo *e) {
 /* indexed ::= '[' expr ']' */
 static void indexed(Lexer *lx, ExpInfo *var, int super) {
     csY_scan(lx); /* skip '[' */
-    if (cs_unlikely(eisconstant(var)))
+    if (c_unlikely(eisconstant(var)))
         csP_semerror(lx, "can't index literal constant values");
     csC_exp2stack(lx->fs, var);
     ExpInfo key;
@@ -822,9 +826,9 @@ static void getprop(Lexer *lx, ExpInfo *var, int super) {
  *           | 'super' '[' string ']' 
  */
 static void superkw(Lexer *lx, ExpInfo *e) {
-    if (cs_unlikely(lx->ps->cs == NULL)) {
+    if (c_unlikely(lx->ps->cs == NULL)) {
         csP_semerror(lx, "usage of 'super' outside of method");
-    } else if (cs_unlikely(!lx->ps->cs->super)) {
+    } else if (c_unlikely(!lx->ps->cs->super)) {
         csY_syntaxerror(lx, "use of 'super' but class does not inherit");
     } else {
         FunctionState *fs = lx->fs;
@@ -988,7 +992,7 @@ static void arrayexp(Lexer *lx, ExpInfo *e) {
         if (!check(lx, '}')) {
             base = fs->sp;
             elems = exprlist(lx, e);
-            if (cs_unlikely(size >= 0 && size < elems))
+            if (c_unlikely(size >= 0 && size < elems))
                 csP_semerror(lx, csS_pushfstring(lx->ts,
                     "array elements %d overflow array size %d", elems, size));
             if (eismulret(e))
@@ -1369,7 +1373,7 @@ static int newvar(FunctionState *fs, OString *name, ExpInfo *e, int mods) {
     Lexer *lx = fs->lx;
     int vidx = -1;
     if (fs->scope->prev) { /* local ? */
-        if (cs_unlikely(testbit(mods, VARPRIVATE))) {
+        if (c_unlikely(testbit(mods, VARPRIVATE))) {
             csP_semerror(lx, csS_pushfstring(lx->ts,
             "local variable '%s' is already private", name));
         }
@@ -1401,7 +1405,7 @@ static void marktbc(FunctionState *fs, int idx) {
 
 
 static int closedecl(FunctionState *fs, int vidx) {
-    if (cs_unlikely(vidx == -1)) /* closing global ? */
+    if (c_unlikely(vidx == -1)) /* closing global ? */
         csP_semerror(fs->lx, "can't close global variables");
     return fs->activelocals;
 }
@@ -1409,7 +1413,7 @@ static int closedecl(FunctionState *fs, int vidx) {
 
 /* check if decl at 'vidx' needs to be closed and return the index */
 static void closeletdecl(FunctionState *fs, int nvars, int vidx, int *tbc) {
-    if (cs_unlikely(*tbc != -1)) { /* already have close ? */
+    if (c_unlikely(*tbc != -1)) { /* already have close ? */
         csP_semerror(fs->lx, 
                 "multiple to-be-closed variables in a single declaration");
     } else {
@@ -1622,7 +1626,7 @@ static void codeinherit(Lexer *lx, OString *name, Scope *s, ExpInfo *var) {
     if (private) { /* superclass is private global ? */
         /* assertion: 'name' (class) is not private global (no collision) */
         searchprivate(fs, supname, var);
-    } else if (cs_unlikely(streq(name, supname))) { /* name collision ? */
+    } else if (c_unlikely(streq(name, supname))) { /* name collision ? */
         csP_semerror(lx, csS_pushfstring(lx->ts,
             "variable '%s' attempt to inherit itself", name));
     } else { /* superclass is local, upvalue or global */
@@ -1811,19 +1815,19 @@ static LiteralInfo checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     cs_assert(eisconstant(e));
     switch (e->et) {
     case EXP_FALSE: {
-        if (cs_unlikely(ss->havefalse))
+        if (c_unlikely(ss->havefalse))
             what = "false";
         ss->havefalse = 1;
         break;
     }
     case EXP_TRUE: {
-        if (cs_unlikely(ss->havetrue))
+        if (c_unlikely(ss->havetrue))
             what = "true";
         ss->havetrue = 1;
         break;
     }
     case EXP_NIL: {
-        if (cs_unlikely(ss->havenil))
+        if (c_unlikely(ss->havenil))
             what = "nil";
         ss->havenil = 1;
         break;
@@ -1846,7 +1850,7 @@ static LiteralInfo checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e) {
         li.tt = CS_VNUMFLT;
 findliteral:;
         int idx = findli(ss, &li);
-        if (cs_likely(idx < 0)) 
+        if (c_likely(idx < 0)) 
             what = NULL;
         else
             extra = 1;
@@ -1854,7 +1858,7 @@ findliteral:;
     }
     default: cs_unreachable();
     }
-    if (cs_unlikely(what)) {
+    if (c_unlikely(what)) {
         csP_semerror(lx, csS_pushfstring(lx->ts,
         "duplicate %s literal%s in switch statement", 
         what, (extra ? li2text(lx->ts, &li) : "")));
@@ -2130,7 +2134,7 @@ static void whilestm(Lexer *lx) {
 static void foreachvar(Lexer *lx) {
     OString *name = expect_id(lx);
     int mods = modifiers(lx, getstrbytes(name));
-    if (cs_unlikely(testbits(mods, bit2mask(VARPRIVATE, VARTBC)))) {
+    if (c_unlikely(testbits(mods, bit2mask(VARPRIVATE, VARTBC)))) {
         csP_semerror(lx, csS_pushfstring(lx->ts,
         "local 'for each' loop variable '%s' can only have 'const' modifier",
         name));
@@ -2145,7 +2149,7 @@ static void patchforjmp(FunctionState *fs, int pc, int target, int back) {
     int offset = target - pc;
     if (back)
         offset = -offset;
-    if (cs_unlikely(offset > MAXJMP))
+    if (c_unlikely(offset > MAXJMP))
         csY_syntaxerror(fs->lx, "control structure (for loop) too long");
     SETARG_L(jmp, 1, offset);
 }
@@ -2155,7 +2159,7 @@ static void patchforjmp(FunctionState *fs, int pc, int target, int back) {
 static int forexprlist(Lexer *lx, ExpInfo *e, int limit) {
     int nexpr = 1;
     expr(lx, e);
-    if (cs_unlikely(eisconstant(e))) {
+    if (c_unlikely(eisconstant(e))) {
         csP_semerror(lx, csS_pushfstring(lx->ts,
         "'%s' is invalid iterator function (for loop)",
         csY_tok2str(lx, lx->t.tk)));
@@ -2165,7 +2169,7 @@ static int forexprlist(Lexer *lx, ExpInfo *e, int limit) {
         expr(lx, e);
         nexpr++;
     }
-    if (cs_unlikely(nexpr > limit))
+    if (c_unlikely(nexpr > limit))
         limiterror(lx->fs, "expressions", limit);
     return nexpr;
 }
@@ -2305,7 +2309,7 @@ static void loopstm(Lexer *lx) {
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     csY_scan(lx); /* skip 'continue' */
-    if (cs_unlikely(fs->loopstart == NOJMP)) { /* no loop ? */
+    if (c_unlikely(fs->loopstart == NOJMP)) { /* no loop ? */
         cs_assert(fs->loopscope == NULL);
         csP_semerror(lx, "'continue' not in loop statement");
     } else {
@@ -2335,7 +2339,7 @@ static void breakstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     const Scope *s = getcfscope(fs);
     csY_scan(lx); /* skip 'break' */
-    if (cs_unlikely(s == NULL)) { /* error ? */
+    if (c_unlikely(s == NULL)) { /* error ? */
         cs_assert(fs->loopscope == NULL && fs->switchscope == NULL);
         csP_semerror(lx, "'break' not in loop or switch statement");
     } else { /* otherwise add the jmp to patch list */

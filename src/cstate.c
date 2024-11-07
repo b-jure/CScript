@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "cstate.h"
 #include "capi.h"
 #include "cdebug.h"
@@ -160,7 +164,7 @@ CS_API cs_State *csnewstate(cs_Alloc falloc, void *ud) {
     GState *gs;
     cs_State *ts;
     SG *sg = falloc(NULL, 0, sizeof(SG), ud);
-    if (cs_unlikely(sg == NULL))
+    if (c_unlikely(sg == NULL))
         return NULL;
     gs = &sg->gs;
     ts = &sg->xs.ts;
@@ -334,7 +338,7 @@ int csT_reallocstack(cs_State *ts, int size, int raiseerr) {
     newstack = csM_reallocarray(ts, ts->stack.p, osz + EXTRA_STACK,
                                 size + EXTRA_STACK, SValue);
     gs->gc.stopem = old_stopem;
-    if (cs_unlikely(newstack == NULL)) {
+    if (c_unlikely(newstack == NULL)) {
         rel2sptr(ts);
         if (raiseerr)
             csPRthrow(ts, CS_ERRMEM);
@@ -352,20 +356,20 @@ int csT_reallocstack(cs_State *ts, int size, int raiseerr) {
 /* grow stack to accommodate 'n' values */
 int csT_growstack(cs_State *ts, int n, int raiseerr) {
     int size = stacksize(ts);
-    if (cs_unlikely(size > CSI_MAXSTACK)) { /* overflowed already ? */
+    if (c_unlikely(size > CSI_MAXSTACK)) { /* overflowed already ? */
         cs_assert(size == OVERFLOWSTACKSIZE);
         if (raiseerr)
             csPRthrow(ts, CS_ERRERROR);
         return 0;
     }
-    if (cs_unlikely(n > CSI_MAXSTACK)) {
+    if (c_unlikely(n > CSI_MAXSTACK)) {
         int nsize = size * 2;
         int needed = topoffset(ts) + n;
         if (nsize > CSI_MAXSTACK)
             nsize = CSI_MAXSTACK;
         if (nsize < needed)
             nsize = needed;
-        if (cs_likely(nsize <= CSI_MAXSTACK))
+        if (c_likely(nsize <= CSI_MAXSTACK))
             return csT_reallocstack(ts, nsize, raiseerr);
     }
     csT_reallocstack(ts, OVERFLOWSTACKSIZE, raiseerr);

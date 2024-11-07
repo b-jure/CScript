@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_LIB
+
+
 #include <ctype.h>
 #include <string.h>
 
@@ -25,7 +29,7 @@ static int csCore_error(cs_State *ts) {
 
 
 static int csCore_assert(cs_State *ts) {
-    if (cs_likely(cs_to_bool(ts, -1))) { /* true? */
+    if (c_likely(cs_to_bool(ts, -1))) { /* true? */
         return cs_nvalues(ts); /* get all arguments */
     } else { /* failed assert (error) */
         csL_check_any(ts, 0); /* must have a condition */
@@ -103,7 +107,7 @@ static const char *loadreader(cs_State *ts, void *ud, size_t *sz) {
         cs_pop(ts, 1); /* pop result (nil) */
         *sz = 0;
         return NULL;
-    } else if (cs_unlikely(!cs_is_string(ts, -1))) { /* top is not a string? */
+    } else if (c_unlikely(!cs_is_string(ts, -1))) { /* top is not a string? */
         csL_error(ts, "reader function must return a string");
     }
     cs_replace(ts, RESERVEDSLOT); /* move string into reserved slot */
@@ -112,7 +116,7 @@ static const char *loadreader(cs_State *ts, void *ud, size_t *sz) {
 
 
 static int auxload(cs_State *ts, int status) {
-    if (cs_unlikely(status != CS_OK)) {
+    if (c_unlikely(status != CS_OK)) {
         csL_push_fail(ts); /* push fail */
         cs_insert(ts, -2); /* and put it in front of error message */
         return 2; /* nil + error message */
@@ -148,7 +152,7 @@ static int csCore_loadfile(cs_State *ts) {
 static int csCore_runfile(cs_State *ts) {
     const char *filename = csL_opt_string(ts, -1, NULL);
     cs_setntop(ts, 1);
-    if (cs_unlikely(csL_loadfile(ts, filename) != CS_OK))
+    if (c_unlikely(csL_loadfile(ts, filename) != CS_OK))
         return cs_error(ts);
     cs_call(ts, 0, CS_MULRET);
     return cs_nvalues(ts) - 1; /* all not including 'filename' */
@@ -187,7 +191,7 @@ static int csCore_next(cs_State *ts) {
 
 
 static int finishpcall(cs_State *ts, int status, int extra) {
-    if (cs_unlikely(status != CS_OK)) {
+    if (c_unlikely(status != CS_OK)) {
         cs_push_bool(ts, 0); /* false */
         cs_push(ts, -2); /* error message */
         return 2; /* return false, message */

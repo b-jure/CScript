@@ -4,7 +4,9 @@
 ** See Copyright Notice in cscript.h
 */
 
+
 #define CS_CORE
+
 
 #include "climits.h"
 #include "cobject.h"

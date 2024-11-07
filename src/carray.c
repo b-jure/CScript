@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "carray.h"
 #include "cgc.h"
 #include "climits.h"

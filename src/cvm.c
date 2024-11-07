@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include <string.h>
 #include <stdio.h>
 
@@ -98,7 +102,7 @@ static void pushclass(cs_State *ts) {
  * overflow if 'y' == '-1' and 'x' == CS_INTEGER_MIN.
  */
 cs_Integer csV_div(cs_State *ts, cs_Integer x, cs_Integer y) {
-    if (cs_unlikely(csi_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
+    if (c_unlikely(csi_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
             csD_runerror(ts, "division by 0");
         return csi_intop(-, 0, x);
@@ -113,7 +117,7 @@ cs_Integer csV_div(cs_State *ts, cs_Integer x, cs_Integer y) {
  */
 cs_Integer csV_modint(cs_State *ts, cs_Integer x, cs_Integer y) {
     cs_Integer r;
-    if (cs_unlikely(csi_castS2U(y) + 1 <= 1)) {
+    if (c_unlikely(csi_castS2U(y) + 1 <= 1)) {
         if (y == 0)
             csD_runerror(ts, "attempt to x%%0");
         return 0;
@@ -157,7 +161,7 @@ void csV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
 /* set 'vmt' entry */
 static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
     cs_assert(0 <= vmtt && vmtt < csNUM_MM);
-    if (cs_unlikely(!(*vmt))) /* empty 'vmt' */
+    if (c_unlikely(!(*vmt))) /* empty 'vmt' */
         *vmt = csMM_newvmt(ts);
     (*vmt)[vmtt] = *fn; /* set the entry */
 }
@@ -310,7 +314,7 @@ int csV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
 */
 cs_sinline const TValue *checkglobal(cs_State *ts, TValue *key) {
     const TValue *out = csH_get(htval(&G_(ts)->ginstance), key);
-    if (cs_unlikely(isabstkey(out)))
+    if (c_unlikely(isabstkey(out)))
         csD_globalerror(ts, "undefined", strval(key));
     return out;
 }
@@ -319,7 +323,7 @@ cs_sinline const TValue *checkglobal(cs_State *ts, TValue *key) {
 cs_sinline void defineglobal(cs_State *ts, TValue *key, TValue *val) {
     cs_assert(ttisstr(key));
     const TValue *slot = csH_get(htval(&G_(ts)->ginstance), key);
-    if (cs_unlikely(!isabstkey(slot)))
+    if (c_unlikely(!isabstkey(slot)))
         csD_runerror(ts, "global variable '%s' redefinition", cstrval(key));
     else
         csH_set(ts, htval(&G_(ts)->ginstance), key, val);
@@ -335,7 +339,7 @@ cs_sinline void getglobal(cs_State *ts, TValue *key, TValue *out) {
 
 /* set global variable value */
 cs_sinline void setglobal(cs_State *ts, TValue *key, TValue *newval) {
-    if (cs_unlikely(isconst(checkglobal(ts, key))))
+    if (c_unlikely(isconst(checkglobal(ts, key))))
         csD_globalerror(ts, "read-only", strval(key));
     csH_set(ts, htval(&G_(ts)->ginstance), key, newval);
 }
@@ -344,9 +348,9 @@ cs_sinline void setglobal(cs_State *ts, TValue *key, TValue *newval) {
 static void arrayseti(cs_State *ts, Array *arr, const TValue *index,
                       const TValue *val) {
     cs_Integer i;
-    if (cs_likely(tointeger(index, &i))) { /* index is integer? */
-        if (cs_likely(0 <= i)) { /* non-negative index */
-            if (cs_unlikely(i >= ARRAYLIMIT)) /* too large 'index'? */
+    if (c_likely(tointeger(index, &i))) { /* index is integer? */
+        if (c_likely(0 <= i)) { /* non-negative index */
+            if (c_unlikely(i >= ARRAYLIMIT)) /* too large 'index'? */
                 csD_indexerror(ts, i, "too large");
             csA_ensure(ts, arr, i); /* expand block */
             setobj(ts, &arr->b[i], val); /* set the value at index */
@@ -377,9 +381,9 @@ void csV_set(cs_State *ts, const TValue *obj, const TValue *key,
 
 static void arraygeti(cs_State *ts, Array *arr, const TValue *index, SPtr res) {
     cs_Integer i;
-    if (cs_likely(tointeger(index, &i))) { /* index is integer? */
+    if (c_likely(tointeger(index, &i))) { /* index is integer? */
         if (i >= 0) { /* positive index? */
-            if (cs_unlikely(i >= ARRAYLIMIT)) { /* too large index? */
+            if (c_unlikely(i >= ARRAYLIMIT)) { /* too large index? */
                 csD_indexerror(ts, i, "too large");
             } else if (i < arr->sz) { /* index in array block? */
                 setobj2s(ts, res, &arr->b[i]);
@@ -409,7 +413,7 @@ void csV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
         if (!ttisnil(fmm)) { /* have metamethod ? */
             csMM_callhtmres(ts, fmm, obj, key, res);
         } else { /* otherwise perform raw access */
-            if (cs_unlikely(ttypetag(obj) != CS_VINSTANCE))
+            if (c_unlikely(ttypetag(obj) != CS_VINSTANCE))
                 csD_typeerror(ts, obj, "index");
             ins = insval(obj);
             v = csH_get(&ins->fields, key);
@@ -445,10 +449,10 @@ void csV_getsuper(cs_State *ts, Instance *ins, OClass *cls, const TValue *s,
 /* 'dest' inherits methods from 'obj' (if any) */
 cs_sinline void inherit(cs_State *ts, const TValue *obj, OClass *dest) {
     OClass *src;
-    if (cs_unlikely(!ttiscls(obj)))
+    if (c_unlikely(!ttiscls(obj)))
         csD_runerror(ts, "inherit a non-class value");
     src = clsval(obj);
-    if (cs_likely(src->methods)) { /* 'src' has methods ? */
+    if (c_likely(src->methods)) { /* 'src' has methods ? */
         cs_assert(dest->methods == NULL);
         dest->methods = csH_new(ts);
         csH_copykeys(ts, src->methods, dest->methods);
@@ -466,12 +470,12 @@ cs_sinline void precallmbin(cs_State *ts, const TValue *v1, const TValue *v2,
                             cs_MM op, SPtr res) {
     const TValue *func;
     const char *opname = getstrbytes(G_(ts)->mmnames[op]);
-    if (cs_unlikely(ttypetag(v1) != ttypetag(v2)))
+    if (c_unlikely(ttypetag(v1) != ttypetag(v2)))
         csD_typeerrormeta(ts, v1, v2, opname);
-    if (cs_unlikely(ttisins(v1) && insval(v1)->oclass != insval(v2)->oclass))
+    if (c_unlikely(ttisins(v1) && insval(v1)->oclass != insval(v2)->oclass))
         csD_runerror(ts, "tried to %s instances of different class", opname);
     func = csMM_get(ts, v1, op);
-    if (cs_unlikely(ttisnil(func)))
+    if (c_unlikely(ttisnil(func)))
         csD_typeerror(ts, v1, opname);
     else
         csMM_callbinres(ts, func, v1, v2, res);
@@ -565,7 +569,7 @@ cs_sinline SPtr adjustffunc(cs_State *ts, SPtr func, const TValue *f) {
 cs_sinline SPtr trymmcall(cs_State *ts, SPtr func) {
     const TValue *f;
     f = csMM_get(ts, s2v(func), CS_MM_CALL);
-    if (cs_unlikely(ttisnil(f)))
+    if (c_unlikely(ttisnil(f)))
         csD_callerror(ts, s2v(func));
     return adjustffunc(ts, func, f);
 }
@@ -618,7 +622,7 @@ retry:
 cs_sinline void ccall(cs_State *ts, SPtr func, int nresults, cs_uint32 inc) {
     CallFrame *cf;
     ts->nCcalls += inc;
-    if (cs_unlikely(getCcalls(ts) >= CSI_MAXCCALLS)) {
+    if (c_unlikely(getCcalls(ts) >= CSI_MAXCCALLS)) {
         checkstackp(ts, 0, func);  /* free any use of EXTRA_STACK */
         csT_checkCstack(ts);
     }
@@ -669,7 +673,7 @@ void csV_concat(cs_State *ts, int total) {
             /* collect total length and number of strings */
             for (n = 1; n < total && ttisstr(s2v(top - n - 1)); n++) {
                 size_t len = lenstr(s2v(top - n - 1));
-                if (cs_unlikely(len >= SIZE_MAX - sizeof(OString) - ltotal)) {
+                if (c_unlikely(len >= SIZE_MAX - sizeof(OString) - ltotal)) {
                     ts->sp.p = top - total; /* pop strings */
                     csD_runerror(ts, "string length overflow");
                 }
@@ -822,7 +826,7 @@ void csV_concat(cs_State *ts, int total) {
     TValue *v = peek(0); \
     TValue *lk = getlK(); /* L */\
     cs_Integer i1; cs_Integer i2 = ival(lk);  \
-    if (cs_likely(tointeger(v, &i1))) { \
+    if (c_likely(tointeger(v, &i1))) { \
         setival(v, op(i1, i2)); \
     } else { \
         csD_bitwerror(ts, v, lk); \
@@ -835,7 +839,7 @@ void csV_concat(cs_State *ts, int total) {
     int imm = fetchl(); /* L */\
     imm *= getsign(); /* S */\
     cs_Integer i; \
-    if (cs_likely(tointeger(v, &i))) { \
+    if (c_likely(tointeger(v, &i))) { \
         setival(v, op(i, imm)); \
     } else { \
         TValue vimm; setival(&vimm, imm); \

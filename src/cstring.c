@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "cscript.h"
 #include "cstring.h"
 #include "cobject.h"
@@ -70,7 +74,7 @@ OString *csS_newl(cs_State *ts, const char *chars, size_t len) {
         return str;
     } else {
         str = createstrobj(ts, len, hash);
-        if (cs_likely(len != 0))
+        if (c_likely(len != 0))
             memcpy(str->bytes, chars, len);
         setbit(str->bits, STRHASHBIT);
         setstrval(ts, &key, str);
@@ -266,13 +270,13 @@ static const char *str2flt(const char *s, cs_Number *n, int *of) {
     char *eptr;
     *of = 0;
     if (*s == '0'  && (s[1] == 'x' || s[1] == 'X'))
-        *n = cs_xstr2number(s, &eptr);
+        *n = cs_strx2number(s, &eptr);
     else
         *n = cs_str2number(s, &eptr);
     if (of) { /* set underflow flag */
-        if (strx2numberovf(*n)) 
+        if (cs_numoverflow(*n)) 
             *n = 1;
-        else if (strx2numberunf(*n)) 
+        else if (cs_numunderflow(*n)) 
             *n = -1;
     }
     if (eptr == s) 

@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "carray.h"
 #include "cdebug.h"
 #include "cfunction.h"
@@ -54,7 +58,7 @@ static TValue *index2value(const cs_State *ts, int index) {
     } else { /* upvalues */
         index = CS_GINSTANCEINDEX - index;
         api_check(ts, index < MAXUPVAL, "upvalue index too large");
-        if (cs_likely(ttisccl(s2v(cf->func.p)))) { /* C closure? */
+        if (c_likely(ttisccl(s2v(cf->func.p)))) { /* C closure? */
             CClosure *ccl = cclval(s2v(cf->func.p));
             return &ccl->upvals[index];
         } else { /* CScript function (invalid) */

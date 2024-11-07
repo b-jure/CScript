@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "cdebug.h"
 #include "cmem.h"
 #include "cconf.h"
@@ -36,9 +40,9 @@ void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
     cs_assert((osz == 0) == (ptr == NULL));
     void *memblock = csM_rawrealloc(gs, ptr, osz, nsz);
-    if (cs_unlikely(!memblock && nsz != 0)) {
+    if (c_unlikely(!memblock && nsz != 0)) {
         memblock = tryagain(ts, ptr, osz, nsz);
-        if (cs_unlikely(memblock == NULL))
+        if (c_unlikely(memblock == NULL))
             return NULL;
     }
     cs_assert((nsz == 0) == (memblock == NULL));
@@ -49,7 +53,7 @@ void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
 
 void *csM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     void *memblock = csM_realloc_(ts, ptr, osz, nsz);
-    if (cs_unlikely(memblock == NULL && nsz != 0))
+    if (c_unlikely(memblock == NULL && nsz != 0))
         cs_assert(0 && "out of memory");
     return memblock;
 }
@@ -60,9 +64,9 @@ void *csM_malloc(cs_State *ts, size_t size) {
         return NULL;
     GState *gs = G_(ts);
     void *memblock = csM_rawmalloc(gs, size);
-    if (cs_unlikely(memblock == NULL)) {
+    if (c_unlikely(memblock == NULL)) {
         memblock = tryagain(ts, NULL, 0, size);
-        if (cs_unlikely(memblock == NULL))
+        if (c_unlikely(memblock == NULL))
             cs_assert(0 && "out of memory");
     }
     gs->gc.debt += size;
@@ -77,7 +81,7 @@ void *csM_growarr(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
         return ptr;
     size += extra;
     if (size >= limit / 2) {
-        if (cs_unlikely(size >= limit))
+        if (c_unlikely(size >= limit))
             csD_runerror(ts, "%s size limit", what);
         size = limit;
         cs_assert(size >= CSI_MINARRSIZE);

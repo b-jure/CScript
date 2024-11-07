@@ -44,7 +44,7 @@
 ** then do 'pos'.
 */
 #define csT_checkstackaux(ts,n,pre,pos) \
-    if (cs_unlikely((ts)->stackend.p - (ts)->sp.p <= (n))) \
+    if (csi_unlikely((ts)->stackend.p - (ts)->sp.p <= (n))) \
         { pre; csT_growstack(ts, (n), 1); pos; }
 
 

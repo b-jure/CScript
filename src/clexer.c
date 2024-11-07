@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "clexer.h"
 #include "cdebug.h"
 #include "cprotected.h"
@@ -94,7 +98,7 @@ void csY_init(cs_State *ts) {
 
 
 static void inclinenr(Lexer *lx) {
-    if (cs_unlikely(lx->line >= INT_MAX))
+    if (c_unlikely(lx->line >= INT_MAX))
         csD_runerror(lx->ts, "too many lines in a chunk");
     lx->line++;
 }
@@ -107,7 +111,7 @@ static cs_noret lexerror(Lexer *lx, const char *err, int token);
 /* pushes character into token buffer */
 cs_sinline void savec(Lexer *lx, int c) {
     if (lblen(lx) >= lbsize(lx)) {
-        if (lbsize(lx) >= CRMAXSIZE >> 1)
+        if (lbsize(lx) >= CSMAXSIZE >> 1)
             lexerror(lx, "lexical element too long", 0);
         size_t newsize = lbsize(lx) << 1;
         csR_buffresize(lx->ts, lx->buff, newsize);
@@ -230,9 +234,9 @@ static int eschex(Lexer *lx) {
     int number = 0;
     for (int i = 0; i < 2; i++) {
         int digit;
-        if (cs_unlikely(isend(lx->c) || lx->c == '"'))
+        if (c_unlikely(isend(lx->c) || lx->c == '"'))
             lexerror(lx, "incomplete hexadecimal escape sequence", TK_STRING);
-        if (cs_unlikely((digit = hexdigit(lx)) == -1))
+        if (c_unlikely((digit = hexdigit(lx)) == -1))
             lexerror(lx, "invalid hexadecimal escape sequence", TK_STRING);
         number = (number << 4) | digit;
         advance(lx);

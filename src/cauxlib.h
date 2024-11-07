@@ -109,7 +109,7 @@ CSLIB_API void        csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup);
     (cs_is_noneornil(ts, index) ? (dfl) : fn(ts, index))
 
 #define csL_check_arg(ts, cond, arg, extramsg) \
-    ((void)(cs_likely(cond) || csL_arg_error(ts, (arg), (extramsg))))
+    ((void)(csi_likely(cond) || csL_arg_error(ts, (arg), (extramsg))))
 
 #define csL_push_fail(ts)               cs_push_nil(ts)
 

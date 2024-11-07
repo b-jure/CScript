@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "cdebug.h"
 #include "capi.h"
 #include "ccode.h"

@@ -4,6 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
+
 #ifndef CRLIMITS_H
 #define CRLIMITS_H
 
@@ -50,9 +51,9 @@ typedef unsigned short ushrt;
  * Maximum size visible for CSript.
  * It must be less than what is representable by 'cs_Integer'.
  */
-#define CRMAXSIZE \
-    (sizeof(size_t) < sizeof(cs_Integer) ? \
-        (SIZE_MAX) : (size_t)(CS_INTEGER_MAX))
+#define CSMAXSIZE \
+    (sizeof(size_t) < sizeof(cs_Integer) \
+     ? (SIZE_MAX) : (size_t)(CS_INTEGER_MAX))
 
 
 
@@ -171,18 +172,6 @@ typedef cs_ubyte Instruction;
  */
 #if !defined(CSI_MINBUFFER)
 #define CSI_MINBUFFER           32
-#endif
-
-
-
-/*
- * Maximum table load factor.
- * v1.0.0 is using linear probing so
- * keep this load factor <= 0.70 to
- * avoid excess collisions.
- */
-#if !defined(CSI_MAXTABLOAD)
-#define CSI_MAXHTABLOAD         0.70
 #endif
 
 

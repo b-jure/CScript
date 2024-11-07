@@ -4,6 +4,10 @@
 ** See Copyright Notice in cscript.h
 */
 
+
+#define CS_CORE
+
+
 #include "cfunction.h"
 #include "cdebug.h"
 #include "cgc.h"
@@ -164,7 +168,7 @@ const char *csF_getlocalname(const Function *fn, int lnum, int pc) {
 */
 static void checkclosem(cs_State *ts, SPtr level) {
     const TValue *fn = csMM_get(ts, s2v(level), CS_MM_CLOSE);
-    if (cs_unlikely(ttisnil(fn))) { /* missing '__close' method ? */
+    if (c_unlikely(ttisnil(fn))) { /* missing '__close' method ? */
         int vidx = level - ts->cf->func.p;
         const char *name = csD_findlocal(ts, ts->cf, vidx, NULL);
         if (name == NULL) name = "?";

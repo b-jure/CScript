@@ -5,6 +5,9 @@
 */
 
 
+#define CS_LIB
+
+
 #include "cslib.h"
 #include "cauxlib.h"
 
