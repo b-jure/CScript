@@ -10,7 +10,7 @@
 
 #include "cdebug.h"
 #include "cmem.h"
-#include "cconf.h"
+#include "csconf.h"
 #include "cstate.h"
 
 

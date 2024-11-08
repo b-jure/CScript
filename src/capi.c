@@ -16,7 +16,7 @@
 #include "cmeta.h"
 #include "cprotected.h"
 #include "cscript.h"
-#include "cconf.h"
+#include "csconf.h"
 #include "climits.h"
 #include "chashtable.h"
 #include "cobject.h"

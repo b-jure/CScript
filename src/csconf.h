@@ -1,5 +1,5 @@
 /*
-** cconf.h
+** csconf.h
 ** CScript configuration
 ** See Copyright Notice in cscript.h
 */
@@ -94,13 +94,13 @@
 ** In Windows, any exclamation mark ('!') in the path is replaced by the
 ** path of the directory of the executable file of the current process.
 */
-#define CS_LDIR "!\\cscript\\"
-#define CS_CDIR "!\\"
-#define CS_SHRDIR       "!\\..\\share\\cscript\\" CS_VDIR "\\"
+#define CS_CSDIR    "!\\cscript\\"
+#define CS_CDIR     "!\\"
+#define CS_SHRDIR   "!\\..\\share\\cscript\\" CS_VDIR "\\"
 
 #if !defined(CS_PATH_DEFAULT)
 #define CS_PATH_DEFAULT  \
-                CS_LDIR"?.csp;"  CS_LDIR"?\\init.csp;" \
+                CS_CSDIR"?.csp;"  CS_CSDIR"?\\init.csp;" \
                 CS_CDIR"?.csp;"  CS_CDIR"?\\init.csp;" \
                 CS_SHRDIR"?.csp;" CS_SHRDIR"?\\init.csp;" \
                 ".\\?.csp;" ".\\?\\init.csp"
@@ -115,13 +115,13 @@
 
 #else                   /* }{ */
 
-#define CS_ROOT "/usr/local/"
-#define CS_LDIR CS_ROOT "share/cscript/" CS_VDIR "/"
-#define CS_CDIR CS_ROOT "lib/cscript/" CS_VDIR "/"
+#define CS_ROOT     "/usr/local/"
+#define CS_CSDIR    CS_ROOT "share/cscript/" CS_VDIR "/"
+#define CS_CDIR     CS_ROOT "lib/cscript/" CS_VDIR "/"
 
 #if !defined(CS_PATH_DEFAULT)
 #define CS_PATH_DEFAULT  \
-                CS_LDIR"?.csp;"  CS_LDIR"?/init.csp;" \
+                CS_CSDIR"?.csp;"  CS_CSDIR"?/init.csp;" \
                 CS_CDIR"?.csp;"  CS_CDIR"?/init.csp;" \
                 "./?.csp;" "./?/init.csp"
 #endif

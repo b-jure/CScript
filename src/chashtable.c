@@ -12,7 +12,7 @@
 #include <math.h>
 
 #include "chashtable.h"
-#include "cconf.h"
+#include "csconf.h"
 #include "cgc.h"
 #include "cscript.h"
 #include "climits.h"

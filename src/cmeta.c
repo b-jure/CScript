@@ -9,7 +9,7 @@
 
 
 #include "cmeta.h"
-#include "cconf.h"
+#include "csconf.h"
 #include "cstring.h"
 #include "cdebug.h"
 #include "cstate.h"

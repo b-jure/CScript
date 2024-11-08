@@ -13,7 +13,7 @@
 
 #include "capi.h"
 #include "carray.h"
-#include "cconf.h"
+#include "csconf.h"
 #include "cfunction.h"
 #include "cgc.h"
 #include "chashtable.h"

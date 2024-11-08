@@ -7,7 +7,7 @@
 #ifndef CRMETA_H
 #define CRMETA_H
 
-#include "cconf.h"
+#include "csconf.h"
 #include "cscript.h"
 #include "cobject.h"
 

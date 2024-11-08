@@ -10,7 +10,7 @@
 
 #include "carray.h"
 #include "ccode.h"
-#include "cconf.h"
+#include "csconf.h"
 #include "cgc.h"
 #include "clexer.h"
 #include "climits.h"

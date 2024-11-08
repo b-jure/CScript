@@ -14,7 +14,7 @@
 #include <string.h>
 
 #include "cauxlib.h"
-#include "cconf.h"
+#include "csconf.h"
 #include "cscript.h"
 
 
