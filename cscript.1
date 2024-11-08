@@ -1,0 +1,49 @@
+.TH cscript 1 "08.11.2024" "version 1.0.0"
+
+.SH NAME
+cscript \- CScript interpreter
+
+.SH SYNOPSIS
+.B cscript [ \fIoptions\fP ] [ \fIscript\fP [ \fIargs\fP ] ] ]
+
+.SH DESCRIPTION
+\fBcscript\fR is the standalone CScript interpreter.
+It loads and executes CScript programs in textual source form.
+\fBcscript\fR can be used as a batch interpreter and also interactively.
+After handling the \fIoptions\fP, the CScript program in file \fIscript\fP
+is loaded and executed.
+The \fIargs\fP are available to \fIscript\fP as strings in a global array
+called \fBarg\fR and also as arguments to its main function.
+When called without arguments, \fBcscript\fR behaves as '\fBcscript \-v \-i\fR'
+if the standard input is a terminal, and as '\fBcscript \-\fR' otherwise.
+
+.SH OPTIONS
+.TP
+.B \-s " str"
+Execute string (statement) \fIstr\fP.
+.TP
+.B \-i
+Enter interactive mode after executing \fIscript\fP.
+.TP
+.B \-v
+Show version information.
+.TP
+.B \-w
+Turn warnings on.
+.TP
+.B \-h
+Show help.
+.TP
+.B \-\-
+Stop handling options.
+.TP
+.B \-
+Stop handling options and execute stdin.
+
+.SH EXIT STATUS
+\fBcscript\fR exits with EXIT_SUCCESS (0 on POSIX systems) if there were no
+errors and with EXIT_FAILURE (1 on POSIX systems) if there were errors.
+Errors raised in interactive mode do not cause exits.
+
+.SH AUTHOR
+B. Jure.

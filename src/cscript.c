@@ -42,10 +42,12 @@ static void printusage(const char *badopt) {
     "usage: %s [options] [script [args]]\n"
     "Available options are:\n"
     "   -s str      execute string 'str'\n"
+    "   -i          enter interactive mode after executing 'script'\n"
     "   -v          show version information\n"
     "   -w          turn warnings on\n"
-    "   -h, --help  show help (this)\n"
-    "   --          stop handling options\n",
+    "   -h          show help (this)\n"
+    "   --          stop handling options\n"
+    "   -           stop handling options and execute stdin\n",
     progname);
 }
 

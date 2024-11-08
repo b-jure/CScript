@@ -10,17 +10,17 @@ R = $V.0
 # { -------------------------------------------------------------------------
 # 				Paths & Installing
 
-PLATFORMS = linux mingw generic guess 	# list of all supported platforms
-PLATFORM = guess 			# target platform
+PLATFORMS = linux mingw generic guess
+PLATFORM = guess
 
 # Install paths
-ROOT_PATH = /usr/local
-INSTALL_BIN = $(ROOT_PATH)/bin
-INSTALL_INC = $(ROOT_PATH)/include
-INSTALL_LIB = $(ROOT_PATH)/lib
-INSTALL_MAN = $(ROOT_PATH)/man/man1
-INSTALL_CSMOD = $(ROOT_PATH)/share/cscript/$V
-INSTALL_CMOD = $(ROOT_PATH)/lib/cscript/$V
+INSTALL_ROOT = /usr/local
+INSTALL_BIN = $(INSTALL_ROOT)/bin
+INSTALL_INC = $(INSTALL_ROOT)/include
+INSTALL_LIB = $(INSTALL_ROOT)/lib
+INSTALL_MAN = $(INSTALL_ROOT)/man/man1
+INSTALL_CSMOD = $(INSTALL_ROOT)/share/cscript/$V
+INSTALL_CMOD = $(INSTALL_ROOT)/lib/cscript/$V
 
 # Install tool
 INSTALL = install -p
