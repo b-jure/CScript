@@ -160,7 +160,7 @@ static void freestate(cs_State *mt) {
 ** The returned thread state is mainthread.
 ** In case of errors NULL is returned.
 */
-CS_API cs_State *csnewstate(cs_Alloc falloc, void *ud) {
+CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     GState *gs;
     cs_State *ts;
     SG *sg = falloc(NULL, 0, sizeof(SG), ud);
@@ -192,7 +192,7 @@ CS_API cs_State *csnewstate(cs_Alloc falloc, void *ud) {
 
 
 /* free state (global state + mainthread) */
-CS_API void csfreestate(cs_State *mts) {
+CS_API void cs_freestate(cs_State *mts) {
     cs_lock(ts);
     cs_State *mt = G_(mts)->mainthread;
     freestate(mt);
@@ -203,7 +203,7 @@ CS_API void csfreestate(cs_State *mts) {
 ** Create new thread state.
 ** Argument 'mts' is the main thread created by 'csnewstate'.
 */
-CS_API cs_State *csnewthread(cs_State *mts) {
+CS_API cs_State *cs_newthread(cs_State *mts) {
     GState *gs = G_(mts);
     cs_State *newts;
     GCObject *o;
@@ -247,7 +247,7 @@ int csT_resetthread(cs_State *ts, int status) {
 ** stack and the function returns relevant status code.
 ** If no errors occured `CS_OK` status is returned.
 */
-CS_API int csresetthread(cs_State *ts) {
+CS_API int cs_resetthread(cs_State *ts) {
     int status;
     cs_lock(ts);
     status = csT_resetthread(ts, ts->status);

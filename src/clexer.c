@@ -250,32 +250,37 @@ static void readstring(Lexer *lx, Literal *k) {
     advance(lx); /* skip '"' */
     while (lx->c != '"') {
         switch (lx->c) {
-        case CREOF:
-            lexerror(lx, "unterminated string", CREOF);
-            break;
-        case '\r': case '\n':
-            lexerror(lx, "unterminated string", TK_STRING);
-            break;
-        case '\\':
-            advance(lx);
-            switch (lx->c) {
-            case '\"': case '\'': case '\\':
-                save_and_advance(lx);
+            case '\r': case '\n': {
+                lexerror(lx, "unterminated string", TK_STRING);
                 break;
-            case '0': savec_and_advance(lx, '\0'); break;
-            case 'a': savec_and_advance(lx, '\a'); break;
-            case 'b': savec_and_advance(lx, '\b'); break;
-            case 'e': savec_and_advance(lx, '\x1B'); break;
-            case 'f': savec_and_advance(lx, '\f'); break;
-            case 'n': savec_and_advance(lx, '\n'); break;
-            case 'r': savec_and_advance(lx, '\r'); break;
-            case 't': savec_and_advance(lx, '\t'); break;
-            case 'v': savec_and_advance(lx, '\v'); break;
-            case 'x': savec(lx, cast_int(eschex(lx))); break;
-            case CREOF: break; /* raise error next iteration */
-            default: lexerror(lx, "unknown escape sequence", lx->c);
             }
-        default: save_and_advance(lx); break;
+            case '\\': {
+                advance(lx);
+                switch (lx->c) {
+                    case '\"': case '\'': case '\\': {
+                        save_and_advance(lx);
+                        break;
+                    }
+                    case '0': savec_and_advance(lx, '\0'); break;
+                    case 'a': savec_and_advance(lx, '\a'); break;
+                    case 'b': savec_and_advance(lx, '\b'); break;
+                    case 'e': savec_and_advance(lx, '\x1B'); break;
+                    case 'f': savec_and_advance(lx, '\f'); break;
+                    case 'n': savec_and_advance(lx, '\n'); break;
+                    case 'r': savec_and_advance(lx, '\r'); break;
+                    case 't': savec_and_advance(lx, '\t'); break;
+                    case 'v': savec_and_advance(lx, '\v'); break;
+                    case 'x': savec(lx, cast_int(eschex(lx))); break;
+                    case CREOF: break; /* raise error next iteration */
+                    default: {
+                        lexerror(lx, "unknown escape sequence", lx->c);
+                        break; /* ureached */
+                    }
+                }
+                break;
+            }
+            case CREOF: lexerror(lx, "unterminated string", CREOF); break;
+            default: save_and_advance(lx); break;
         }
     }
     advance(lx); /* skip '"' */
@@ -503,7 +508,7 @@ readmore:
 
 
 /* fetch next token into 't' */
-void varstatic(Lexer *lx) {
+void csY_scan(Lexer *lx) {
     lx->lastline = lx->line;
     if (lx->tahead.tk != TK_EOS) {
         lx->t = lx->tahead;

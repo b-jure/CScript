@@ -28,7 +28,7 @@
     ((p) = csM_growarr(ts, p, cast(int *, &(s)), n, sizeof(t), e, l, w))
 
 #define csM_growvec(ts,p,s,n,l,w,t) \
-    ((p) = csM_ensurevec((ts), p, s, n, 0, l, w, t))
+    csM_ensurevec((ts), p, s, n, 0, l, w, t)
 
 #define csM_shrinkvec(ts,p,s,f,t) \
     ((p) = csM_shrinkarr(ts, p, cast(int *, &(s)), f, sizeof(t)))

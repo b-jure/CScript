@@ -29,9 +29,9 @@ int csD_getfuncline(const Function *fn, int pc) {
     int low = 0;
     int high = fn->sizelinfo - 1;
     int mid = low + ((high - low)/2);
+    li = &fn->linfo[mid];
     cs_assert(fn->sizelinfo > 0);
-    while (low <= high) {
-        li = &fn->linfo[mid];
+    for (; low <= high; li = &fn->linfo[mid]) {
         if (li->pc < pc) 
             low = mid + 1;
         else if (li->pc > pc) 
@@ -398,7 +398,7 @@ cs_noret csD_indexerror(cs_State *ts, cs_Integer index, const char *what) {
 }
 
 
-cs_noret csD_iindexerror(cs_State *ts, const TValue *index) {
+cs_noret csD_indextypeerror(cs_State *ts, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
     csD_runerror(ts, "invalid array index type (%s), expected integer",
                      typename(ttypetag(index)));

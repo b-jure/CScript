@@ -27,7 +27,7 @@
 #define CLOSEKTOP       (-1)
 
 
-CSI_FUNC Function *csF_new(cs_State *ts);
+CSI_FUNC Function *csF_newfunction(cs_State *ts);
 CSI_FUNC CrClosure *csF_newCrClosure(cs_State *ts, int nup);
 CSI_FUNC CClosure *csF_newCClosure(cs_State *ts, int nup);
 CSI_FUNC void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,

@@ -124,7 +124,7 @@ typedef struct ExpInfo {
 #define VARTBC          2 /* to-be-closed */
 
 /* bit mask of all valid modifiers in 'mod' */
-#define VARBITMASK      (bit2mask(VARFINAL, VARPRIVATE), bitmask(VARTBC))
+#define maskvarkind     (bit2mask(VARFINAL, VARPRIVATE) | bitmask(VARTBC))
 
 
 /* active local variable compiler information */

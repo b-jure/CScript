@@ -22,8 +22,7 @@
 
 
 #if SIZE_MAX < UINT_MAX     /* { */
-#error CScript doesn't handle implementations where 'size_t' is smaller than \
-    'unsigned int'.
+#error "SIZE_MAX must be greater or equal UINT_MAX"
 #endif                      /* } */
 
 

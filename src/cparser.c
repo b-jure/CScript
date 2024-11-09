@@ -134,8 +134,8 @@ static int patchlistpop(FunctionState *fs) {
 static void patchlistaddjmp(FunctionState *fs, int jmp) {
     cs_assert(fs->patches.len > 0);
     PatchList *list = &fs->patches.list[fs->patches.len - 1];
-    csM_growvec(fs->lx->ts, list->arr, list->size, list->len,
-                INT_MAX, "code jumps", int);
+    csM_growvec(fs->lx->ts, list->arr, list->size, list->len, INT_MAX,
+                "code jumps", int);
     list->arr[list->len++] = jmp;
 }
 
@@ -349,11 +349,11 @@ static void adjustlocals(Lexer *lx, int nvars) {
 
 /* 
  * Define private variable by removing UNDEFMODMASK.
- * UNDEFMODMASK is not contained in VARBITMASK. 
+ * UNDEFMODMASK is not contained in maskvarkind. 
  */ 
 static void defineprivate(FunctionState *fs, int vidx) {
     PrivateVar *pv = getprivate(fs, vidx);
-    pv->val.mod &= VARBITMASK;
+    pv->val.mod &= maskvarkind;
 }
 
 
@@ -499,7 +499,7 @@ static Function *addfunction(Lexer *lx) {
     checklimit(fs, fs->nfuncs + 1, MAXLONGARGSIZE, "functions");
     csM_growvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, MAXLONGARGSIZE,
                 "functions", Function);
-    fn->funcs[fs->nfuncs++] = new = csF_new(ts);
+    fn->funcs[fs->nfuncs++] = new = csF_newfunction(ts);
     csG_objbarrier(ts, fn, new);
     return new;
 }
@@ -2007,40 +2007,44 @@ static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
     cs_assert(isloop == (jmpop == OP_JMPS));
     optaway = condistrue = 0;
     endctx.pc = NOJMP;
+    jmp = NOJMP; /* to avoid warnings */
     if (condisctc && !(condistrue = eistrue(cond)))
-        optaway = 1;
-    else
+        optaway = 1; /* can optimize away the statement */
+    else /* otherwise emit test instruction */
         test = csC_test(fs, testop, 0);
-    stm(lx);
-    if (optaway) {
-        loadctx(fs, startctx);
+    stm(lx); /* condition statement (body) */
+    if (optaway) { /* optimize away the the whole statement? */
+        loadctx(fs, startctx); /* load the starting context */
         resetpatchlist(fs);
     } else if (condisctc && fs->lastwasret) {
-        cs_assert(condistrue);
-        storectx(fs, &endctx);
-        storereachablectx(fs);
-    } else {
-        jmp = csC_jmp(fs, jmpop);
+        /* last stm was `return` and... */
+        cs_assert(condistrue); /* ...condition is true */
+        storectx(fs, &endctx); /* store current context as the end */
+        storereachablectx(fs); /* ...and as the start of deadcode */
+    } else { /* emit jump */
+        jmp = csC_jmp(fs, jmpop); /* <- */
         if (isloop) { /* loop body ? */
             if (endclausepc != NOJMP) { /* 'for' loop ? */
                 csC_patch(fs, jmp, endclausepc);
-            } else if (condistrue) { /* 'while' loop with true ctcond ? */
+            } else if (condistrue) { /* 'while' loop with true condition ? */
                 csC_patch(fs, jmp, bodypc);
                 fs->loopstart = bodypc;
-            } else { /* else 'while' loop with unknown non-ctcond ? */
+            } else { /* else 'while' loop with unknown non-constant cond ? */
                 csC_patch(fs, jmp, condpc);
             }
-        }
+        } /* otherwise nothing to back-patch */
     }
-    if (!optaway)
-        csC_patchtohere(fs, test);
-    if (!isloop && match(lx, TK_ELSE)) {
-        stm(lx);
-        if (!optaway && !condisctc)
-            csC_patchtohere(fs, jmp);
+    if (!optaway) /* the statement wasn't optimized away ?*/
+        csC_patchtohere(fs, test); /* patch the test jump */
+    if (!isloop && match(lx, TK_ELSE)) { /* `if` statement with `else` ? */
+        stm(lx); /* `else` expects statement */
+        if (!optaway && !condisctc) { /* not optimized away and cond is not k */
+            cs_assert(jmp >= 0); /* must of emited a jump instruction */
+            csC_patchtohere(fs, jmp); /* -> patch the jump (grep '<-') */
+        } /* otherwise condition is a comp-time constant and there is no jmp */
     }
-    if (endctx.pc != NOJMP)
-        loadctx(fs, &endctx);
+    if (endctx.pc != NOJMP) /* have end context (unreachable code) ? */
+        loadctx(fs, &endctx); /* load it (discard unreachable code) */
 }
 
 
@@ -2457,7 +2461,7 @@ CrClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
     lx.tab = csH_new(ts);
     setht2s(ts, ts->sp.p, lx.tab); /* anchor scanner hashtable */
     csT_incsp(ts);
-    fs.fn = cl->fn = csF_new(ts);
+    fs.fn = cl->fn = csF_newfunction(ts);
     csG_objbarrier(ts, cl, cl->fn);
     fs.fn->source = csS_new(ts, source);
     csG_objbarrier(ts, fs.fn, fs.fn->source);
