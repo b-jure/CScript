@@ -517,7 +517,7 @@ static void freeobject(cs_State *ts, GCObject *o) {
         case CS_VARRAY: csA_free(ts, gco2arr(o)); break;
         case CS_VINSTANCE: csMM_freeinstance(ts, gco2ins(o)); break;
         case CS_VMETHOD: csM_free(ts, o, sizeof(*gco2im(o))); break;
-        case CS_VTHREAD: csT_free(ts, gco2th(o));
+        case CS_VTHREAD: csT_free(ts, gco2th(o)); break;
         case CS_VUDATA: csMM_freeuserdata(ts, gco2ud(o)); break;
         default: cs_unreachable();
     }

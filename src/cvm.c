@@ -1050,7 +1050,7 @@ returning:
                 vm_break;
             }
             vm_case(OP_CLASS) {
-                protect(pushclass);
+                protect(pushclass(ts));
                 vm_break;
             }
             vm_case(OP_METHOD) {
@@ -1346,7 +1346,8 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                if (!csi_isfalse(v) == S)
+                int cond = !csi_isfalse(v);
+                if (cond == S)
                     pc += L;
                 vm_break;
             }
@@ -1354,7 +1355,8 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                if (!csi_isfalse(v) == S)
+                int cond = !csi_isfalse(v);
+                if (cond == S)
                     pc += L;
                 else
                     pop(1); /* v */
@@ -1364,7 +1366,8 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                if (!csi_isfalse(v) == S) {
+                int cond = !csi_isfalse(v);
+                if (cond == S) {
                     pc += L;
                     pop(1); /* v */
                 }
@@ -1374,7 +1377,8 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                if (!csi_isfalse(v) == S)
+                int cond = !csi_isfalse(v);
+                if (cond == S)
                     pc += L;
                 pop(1); /* v */
                 vm_break;

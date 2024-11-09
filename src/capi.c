@@ -531,10 +531,10 @@ CS_API int cs_compare(cs_State *ts, int index1, int index2, int op) {
     rhs = index2value(ts, index2);
     if (isvalid(ts, lhs) && isvalid(ts, rhs)) {
         switch (op) {
-            case CS_OPEQ: res = csV_ordereq(ts, lhs, rhs);
-            case CS_OPLT: res = csV_orderlt(ts, lhs, rhs);
-            case CS_OPLE: res = csV_orderle(ts, lhs, rhs);
-            default: api_check(ts, 0, "invalid 'op'");
+            case CS_OPEQ: res = csV_ordereq(ts, lhs, rhs); break;
+            case CS_OPLT: res = csV_orderlt(ts, lhs, rhs); break;
+            case CS_OPLE: res = csV_orderle(ts, lhs, rhs); break;
+            default: api_check(ts, 0, "invalid 'op'"); break;
         }
     }
     cs_unlock(ts);

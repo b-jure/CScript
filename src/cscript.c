@@ -110,7 +110,8 @@ static int parseargs(char **argv, int *first_arg) {
         switch (argv[i][1]) {
             case '\0': return args; /* '-' */
             case '-': collectarg(0, 2); return args; /* -- */
-            case 'i': args |= arg_i; /* FALLTHRU ('i' implies 'v') */
+            case 'i': args |= arg_i; /* ('i' implies 'v') */
+            /* fall through */
             case 'v': collectarg(arg_v, 2); break; /* -v */
             case 'w': collectarg(arg_w, 2); break; /* -w */
             case 'h': collectarg(arg_h, 2); break; /* -h */

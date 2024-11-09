@@ -38,7 +38,7 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # 			Compiler and Linker Flags 
 CC = gcc -std=c99
 OPTS = -O2
-CFLAGS = -Wpedantic -Wall -Wextra ${OPTS} ${SYSCFLAGS} ${MYCFLAGS}
+CFLAGS = -Wall -Wextra ${OPTS} ${SYSCFLAGS} ${MYCFLAGS}
 LDFLAGS = ${SYSLDFLAGS} ${MYLDFLAGS}
 LIBS = -lm ${SYSLIBS} ${MYLIBS}
 

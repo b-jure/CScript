@@ -367,16 +367,16 @@ static const char *strtoint(const char *s, int base, cs_Integer *pn, int *of) {
         return NULL;
     }
     if (base == 10) { /* decimal base? */
-        for (;isdigit(c) && n <= lim/10 && 10*n <= lim-(c-'0'); c = *s++)
+        for (; isdigit(c) && n <= lim/10 && 10*n <= lim-(c-'0'); c = *s++)
             n = n * 10 + (c - '0');
         if (!isdigit(c)) goto done;
-    } else if (!(base & base-1)) { /* base is power of 2? */
+    } else if (!(base & (base-1))) { /* base is power of 2? */
         /* get the number of bit shifts depending on the value of base */
         int bs = "\0\1\2\4\7\3\6\5"[(0x17*base)>>5&7];
-        for (;isalnum(c) && val[c] < base && n <= lim>>bs; c = *s++)
+        for (; isalnum(c) && val[c] < base && n <= lim>>bs; c = *s++)
             n = n<<bs | val[c];
     } else {
-        for (;isalnum(c) && val[c]<base && n <= lim/base &&
+        for (; isalnum(c) && val[c]<base && n <= lim/base &&
                 base * n <= lim - val[c]; c = *s++)
             n = n * base + val[c];
     }

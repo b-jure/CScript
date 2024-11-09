@@ -201,9 +201,9 @@ cs_sinline void tracenum(const TValue *o) {
 
 static void tracevalue(const TValue *o) {
     switch (ttypetag(o)) {
-        case CS_VNIL: tracenil();
-        case CS_VTRUE: tracetrue();
-        case CS_VFALSE: tracefalse();
+        case CS_VNIL: tracenil(); break;
+        case CS_VTRUE: tracetrue(); break;
+        case CS_VFALSE: tracefalse(); break;
         case CS_VSTRING: tracestring(strval(o)); break;
         case CS_VNUMINT: case CS_VNUMFLT: tracenum(o); break;
         default: {
