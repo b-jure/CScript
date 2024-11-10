@@ -168,20 +168,20 @@ static void linkgclist_(GCObject *o, GCObject **gclist, GCObject **list) {
 
 static GCObject **getgclist(GCObject *o) {
     switch (o->tt_) {
-    case CS_VFUNCTION: return &gco2fn(o)->gclist;
-    case CS_VCRCL: return &gco2crcl(o)->gclist;
-    case CS_VCCL: return &gco2ccl(o)->gclist;
-    case CS_VCLASS: return &gco2cls(o)->gclist;
-    case CS_VARRAY: return &gco2arr(o)->gclist;
-    case CS_VHTABLE: return &gco2ht(o)->gclist;
-    case CS_VTHREAD: return &gco2th(o)->gclist;
-    case CS_VUDATA: {
-         UserData *ud = gco2ud(o);
-         UNUSED(ud);
-         cs_assert(ud->nuv > 0 || ud->vmt);
-         return &gco2ud(o)->gclist;
-    }
-    default: cs_unreachable();
+        case CS_VFUNCTION: return &gco2fn(o)->gclist;
+        case CS_VCRCL: return &gco2crcl(o)->gclist;
+        case CS_VCCL: return &gco2ccl(o)->gclist;
+        case CS_VCLASS: return &gco2cls(o)->gclist;
+        case CS_VARRAY: return &gco2arr(o)->gclist;
+        case CS_VHTABLE: return &gco2ht(o)->gclist;
+        case CS_VTHREAD: return &gco2th(o)->gclist;
+        case CS_VUDATA: {
+             UserData *ud = gco2ud(o);
+             UNUSED(ud);
+             cs_assert(ud->nuv > 0 || ud->vmt);
+             return &gco2ud(o)->gclist;
+        }
+        default: cs_assert(0); cs_unreachable();
     }
 }
 
@@ -261,6 +261,13 @@ static void markobject_(GC *gc, GCObject *o) {
             markvalue(gc, &im->method);
             break;
         }
+        case CS_VINSTANCE: {
+            Instance *ins = gco2ins(o);
+            markblack(ins);
+            markobject(gc, ins->fields);
+            markobject(gc, ins->oclass);
+            break;
+        }
         case CS_VARRAY: {
             Array *arr = gco2arr(o);
             if (arr->n == 0) { /* no elements? */
@@ -278,7 +285,7 @@ static void markobject_(GC *gc, GCObject *o) {
         } /* FALLTHRU */
     linklist:
         case CS_VHTABLE: case CS_VFUNCTION: case CS_VCRCL: case CS_VCCL:
-        case CS_VCLASS: case CS_VTHREAD: case CS_VINSTANCE: {
+        case CS_VCLASS: case CS_VTHREAD: {
             linkobjgclist(o, gc->graylist);
             break;
         }
@@ -457,12 +464,6 @@ static cs_mem markopenupvalues(GState *gs) {
 }
 
 
-static cs_mem markinstance(GC *gc, Instance *ins) {
-    markobjectcheck(gc, ins->oclass);
-    return markhtable(gc, &ins->fields); /* instance + fields */
-}
-
-
 static cs_mem markarray(GC *gc, Array *arr) {
     cs_assert(arr->n > 0);
     for (uint i = 0; i < arr->n; i++)
@@ -478,16 +479,15 @@ static cs_mem propagate(GState *gs) {
     notw2black(o);
     gs->gc.graylist = *getgclist(o);
     switch(o->tt_) {
-    case CS_VUDATA: return markuserdata(&gs->gc, gco2ud(o));
-    case CS_VHTABLE: return markhtable(&gs->gc, gco2ht(o));
-    case CS_VFUNCTION: return markfunction(&gs->gc, gco2fn(o));
-    case CS_VCRCL: return markcstclosure(&gs->gc, gco2crcl(o));
-    case CS_VCCL: return markcclosure(&gs->gc, gco2ccl(o));
-    case CS_VCLASS: return markclass(&gs->gc, gco2cls(o));
-    case CS_VINSTANCE: return markinstance(&gs->gc, gco2ins(o));
-    case CS_VARRAY: return markarray(&gs->gc, gco2arr(o));
-    case CS_VTHREAD: return markthread(gs, gco2th(o));
-    default: cs_unreachable(); cs_assert(0); return 0;
+        case CS_VUDATA: return markuserdata(&gs->gc, gco2ud(o));
+        case CS_VHTABLE: return markhtable(&gs->gc, gco2ht(o));
+        case CS_VFUNCTION: return markfunction(&gs->gc, gco2fn(o));
+        case CS_VCRCL: return markcstclosure(&gs->gc, gco2crcl(o));
+        case CS_VCCL: return markcclosure(&gs->gc, gco2ccl(o));
+        case CS_VCLASS: return markclass(&gs->gc, gco2cls(o));
+        case CS_VARRAY: return markarray(&gs->gc, gco2arr(o));
+        case CS_VTHREAD: return markthread(gs, gco2th(o));
+        default: cs_unreachable(); cs_assert(0); return 0;
     }
 }
 
@@ -511,12 +511,12 @@ static void freeobject(cs_State *ts, GCObject *o) {
         case CS_VSTRING: csS_free(ts, gco2str(o)); break;
         case CS_VFUNCTION: csF_free(ts, gco2fn(o)); break;
         case CS_VUVALUE: csF_freeupval(ts, gco2uv(o)); break;
-        case CS_VCRCL: csM_free(ts, o, sizeofcrcl(gco2crcl(o)->nupvalues)); break;
-        case CS_VCCL: csM_free(ts, o, sizeofccl(gco2ccl(o)->nupvalues)); break;
+        case CS_VCRCL: csM_free_(ts, o, sizeofcrcl(gco2crcl(o)->nupvalues)); break;
+        case CS_VCCL: csM_free_(ts, o, sizeofccl(gco2ccl(o)->nupvalues)); break;
         case CS_VCLASS: csMM_freeclass(ts, gco2cls(o)); break;
         case CS_VARRAY: csA_free(ts, gco2arr(o)); break;
-        case CS_VINSTANCE: csMM_freeinstance(ts, gco2ins(o)); break;
-        case CS_VMETHOD: csM_free(ts, o, sizeof(*gco2im(o))); break;
+        case CS_VINSTANCE: csM_free(ts, gco2ins(o)); break;
+        case CS_VMETHOD: csM_free(ts, gco2im(o)); break;
         case CS_VTHREAD: csT_free(ts, gco2th(o)); break;
         case CS_VUDATA: csMM_freeuserdata(ts, gco2ud(o)); break;
         default: cs_unreachable();
@@ -558,9 +558,10 @@ static GCObject **sweeplist(cs_State *ts, GCObject **l, int nobjects,
 static int sweepstep(cs_State *ts, GCObject **nextlist, int nextstate) {
     GC *gc = &G_(ts)->gc;
     if (gc->sweeppos) {
+        cs_mem old_debt = gc->debt;
         int cnt;
         gc->sweeppos = sweeplist(ts, gc->sweeppos, GCSWEEPMAX, &cnt);
-        gc->estimate += gc->debt;
+        gc->estimate += gc->debt - old_debt;
         return cnt;
     } else {
         gc->sweeppos = nextlist;
@@ -633,7 +634,7 @@ static void callfin(cs_State *ts) {
     setobj2s(ts, ts->sp.p++, &v);
     ptrdiff_t oldtop = savestack(ts, ts->sp.p - 2);
     ts->cf->status |= CFST_FIN; /* running a finalizer */
-    int status = csPRcall(ts, protectedfinalizer, NULL, oldtop, ts->errfunc);
+    int status = csPR_call(ts, protectedfinalizer, NULL, oldtop, ts->errfunc);
     ts->cf->status &= ~CFST_FIN; /* finalizer returned */
     gc->stopped = oldstopped;
     if (c_unlikely(status != CS_OK)) {
@@ -744,7 +745,7 @@ static cs_mem marktobefin(GState *gs) {
 static void markvmts(GState *gs) {
     for (int i = 0; i < CS_NUM_TYPES; i++)
         if (gs->vmt[i])
-            markvalue(&gs->gc, gs->vmt[i]);
+            markvmt(&gs->gc, gs->vmt[i]);
 }
 
 
@@ -818,6 +819,7 @@ static void restartgc(GState *gs) {
 }
 
 
+#include <stdio.h>
 /*
  * Garbage collector state machine.
  * GCSpause marks all the roots.
@@ -944,12 +946,14 @@ void csG_rununtilstate(cs_State *ts, int statemask) {
 }
 
 
+#include <stdio.h>
 /*
  * Run collector until debt is less than a stepsize
  * or the full cycle was done (GC state is GCSpause).
  * Both the debt and stepsize are converted to 'work',
  */
 static void step(cs_State *ts, GState *gs) {
+    printf("\n>>>>>>>>GC STEP<<<<<<<<<\n"); fflush(stdout);
     GC *gc = &gs->gc;
     int stepmul = getgcparam(gc->stepmul) | 1;
     cs_mem debt = (gc->debt / WORK2MEM) * stepmul;

@@ -162,7 +162,7 @@ static cs_noret lexerror(Lexer *lx, const char *err, int token) {
     err = csD_addinfo(ts, err, lx->src, lx->line);
     if (token)
         csS_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
-    csPRthrow(ts, CS_ERRSYNTAX);
+    csPR_throw(ts, CS_ERRSYNTAX);
 }
 
 

@@ -46,7 +46,7 @@ void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
             return NULL;
     }
     cs_assert((nsz == 0) == (memblock == NULL));
-    gs->gc.debt += nsz - osz;
+    gs->gc.debt = (gs->gc.debt + nsz) - osz;
     return memblock;
 }
 
@@ -107,7 +107,7 @@ void *csM_shrinkarr(cs_State *ts, void *ptr, int *sizep, int final,
 }
 
 
-void csM_free(cs_State *ts, void *ptr, size_t osz) {
+void csM_free_(cs_State *ts, void *ptr, size_t osz) {
     GState *gs = G_(ts);
     cs_assert((osz == 0) == (ptr == NULL));
     csM_rawfree(gs, ptr, osz);

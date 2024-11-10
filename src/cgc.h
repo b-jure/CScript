@@ -121,7 +121,7 @@
 
 
 /* get total bytes allocated (by accounting for 'debt') */
-#define totalbytes(gc)      cast_umem((gc)->total - (gc)->debt)
+#define totalbytes(gc)      cast_umem((gc)->total + (gc)->debt)
 
 
 

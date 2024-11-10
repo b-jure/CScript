@@ -291,7 +291,7 @@ SPtr csF_close(cs_State *ts, SPtr level, int status) {
 void csF_freeupval(cs_State *ts, UpVal *upval) {
     if (uvisopen(upval))
         unlinkupval(upval);
-    csM_free(ts, upval, sizeof(UpVal));
+    csM_free(ts, upval);
 }
 
 
@@ -303,5 +303,5 @@ void csF_free(cs_State *ts, Function *fn) {
     csM_freearray(ts, fn->linfo, fn->sizelinfo, LineInfo);
     csM_freearray(ts, fn->locals, fn->sizelocals, LVarInfo);
     csM_freearray(ts, fn->upvals, fn->sizeupvals, UpValInfo);
-    csM_free(ts, fn, sizeof(Function));
+    csM_free(ts, fn);
 }

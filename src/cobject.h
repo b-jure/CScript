@@ -55,12 +55,12 @@ typedef union Value {
 
 
 /* get raw union values */
-#define rawbval(o)      ((o).b)
-#define rawival(o)      ((o).i)
-#define rawfval(o)      ((o).n)
-#define rawpval(o)      ((o).p)
-#define rawcfval(o)     ((o).cfn)
-#define rawgcoval(o)    ((o).obj)
+#define rawbval(v)      ((v).b)
+#define rawival(v)      ((v).i)
+#define rawfval(v)      ((v).n)
+#define rawpval(v)      ((v).p)
+#define rawcfval(v)     ((v).cfn)
+#define rawgcoval(v)    ((v).obj)
 
 
 /* 'tt' */
@@ -73,11 +73,11 @@ typedef union Value {
 
 /* type tag of TValue; tag bits (0-3) + variant bits (4-6) */
 #define withvariant(t)      ((t) & 0x3F)
-#define ttypetag(o)         withvariant(o->tt)
+#define ttypetag(o)         withvariant((o)->tt)
 
 
 /* type of a TValue */
-#define ttype(o)            novariant(o->tt)
+#define ttype(o)            novariant((o)->tt)
 
 
 /* Macros to test type */
@@ -238,7 +238,7 @@ typedef struct {
 #define cfval(o)        rawcfval((o)->val)
 
 #define setcfval(o,cf) \
-    { TValue *o_=(o); cfval(o_)=(cf); settt(o_, CS_VCFUNCTION); }
+    { TValue *o_=(o); cfval(o_)=(cf); settt(o_, ctb(CS_VCFUNCTION)); }
 
 #define ttiscfn(o)      checktag(o, CS_VCFUNCTION)
 
@@ -304,12 +304,8 @@ typedef struct GCObject {
 
 /* set generic GC object value */
 #define setgcotval(ts,obj,x,t) \
-    { TValue *obj_=(obj); t *x_=x; \
+    { TValue *obj_=(obj); t *x_=(x); \
       gcoval(obj_) = obj2gco(x_); settt(obj_, ctb(x_->tt_)); }
-
-
-/* set GC object to stack */
-#define setsv2gco(ts,sv,o,t)    setgcotval(ts,s2v(sv),o,t)
 
 
 
@@ -441,8 +437,8 @@ typedef struct Array {
 #define getstrbytes(s)      ((s)->bytes)
 #define getstrlen(s)        ((s)->len)
 
-#define setstrval(ts,obj,s)     setgcotval(ts,obj,s,OString)
-#define setstrval2s(ts,sobj,s)    setstrval(ts,s2v(sobj),s)
+#define setstrval(ts,obj,s)         setgcotval(ts,obj,s,OString)
+#define setstrval2s(ts,sobj,s)      setstrval(ts,s2v(sobj),s)
 
 /* string 'bits' */
 #define STRHASHBIT      0 /* string has hash */
@@ -686,8 +682,7 @@ typedef struct OClass {
 typedef struct Instance {
     ObjectHeader;
     OClass *oclass; /* pointer to class */
-    HTable fields;
-    GCObject *gclist;
+    HTable *fields;
 } Instance;
 
 

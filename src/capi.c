@@ -17,6 +17,7 @@
 #include "cprotected.h"
 #include "cscript.h"
 #include "csconf.h"
+#include "ctrace.h"
 #include "climits.h"
 #include "chashtable.h"
 #include "cobject.h"
@@ -49,7 +50,7 @@ static TValue *index2value(const cs_State *ts, int index) {
     CallFrame *cf = ts->cf;
     if (index >= 0) {
         api_check(ts, index < (ts->sp.p - cf->func.p - 1), "index too large");
-        return s2v(cf->func.p + index);
+        return s2v(cf->func.p + index + 1);
     } else if (!ispseudo(index)) { /* negative index? */
         api_check(ts, -index <= ts->sp.p - cf->func.p, "index too small");
         return s2v(ts->sp.p + index);
@@ -100,7 +101,7 @@ CS_API cs_Number cs_version(cs_State *ts) {
 
 
 /* auxiliary function that sets the stack top without locking */
-cs_inline void auxsettop(cs_State *ts, int n) {
+static void auxsettop(cs_State *ts, int n) {
     CallFrame *cf;
     SPtr func, newtop;
     ptrdiff_t diff;
@@ -125,10 +126,10 @@ cs_inline void auxsettop(cs_State *ts, int n) {
 
 
 /* 
-** Sets the stack top to 'index'.
+** Sets the stack top to 'n' - 1 (n being the number of values to be on top).
 ** If new top is greater than the previous one, new values are elements
 ** are filled with 'nil'.
-** If index is 0, then all stack elements are removed.
+** If n is 0, then all stack elements are removed.
 ** This function can run '__close' if it removes an index from the stack
 ** marked as to-be-closed.
 */
@@ -158,7 +159,7 @@ CS_API int cs_absindex(cs_State *ts, int index)
 {
     return (index >= 0 || ispseudo(index))
             ? index
-            : cast_int(ts->sp.p - ts->cf->func.p - 1) + index;
+            : cast_int(ts->sp.p - ts->cf->func.p) + index;
 }
 
 
@@ -766,26 +767,26 @@ cs_sinline void auxrawsetstr(cs_State *ts, HTable *ht, const char *str,
 }
 
 
-cs_sinline void auxsetentrylist(cs_State *ts, OClass *cls, cs_Entry *list,
+cs_sinline void auxsetentrylist(cs_State *ts, OClass *cls, const cs_Entry *l,
                                 int nup) {
     cs_checkstack(ts, nup);
-    if (list->name && !cls->methods) { /* have entry and no method table? */
+    if (l->name && !cls->methods) { /* have entry and no method table? */
         cls->methods = csH_new(ts);
         csG_check(ts);
     }
-    for (; list->name; list++) {
-        api_check(ts, list->func, "entry 'func' is NULL");
+    for (; l->name; l++) {
+        api_check(ts, l->func, "entry 'func' is NULL");
         for (int i = 0; i < nup; i++) /* push upvalues to the top */
             pushvalue(ts, -nup);
-        auxpushcclosure(ts, list->func, nup);
-        auxrawsetstr(ts, cls->methods, list->name, s2v(ts->sp.p - 1));
+        auxpushcclosure(ts, l->func, nup);
+        auxrawsetstr(ts, cls->methods, l->name, s2v(ts->sp.p - 1));
     }
     auxsettop(ts, -(nup - 1)); /* pop upvalues */
 }
 
 
-CS_API void cs_push_class(cs_State *ts, cs_VMT *vmt, int clsobjabs, int nup,
-                          cs_Entry *entries) {
+CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobjabs,
+                          int nup, const cs_Entry *entries) {
     OClass *cls;
     cs_lock(ts);
     cls = csMM_newclass(ts);
@@ -817,9 +818,9 @@ CS_API void cs_push_class(cs_State *ts, cs_VMT *vmt, int clsobjabs, int nup,
 /* CScript -> stack */
 
 
-#define setslot2stack(ts,slot,sptr) \
-    { if (!isabstkey(slot)) { setobj2s(ts, sptr, slot); } \
-      else { setnilval(s2v(sptr)); }}
+#define setslot2stack(ts,slot,sp) \
+    { if (!isabstkey(slot)) { setobj2s(ts, sp, slot); } \
+      else { setnilval(s2v(sp)); }}
 
 
 #define setslot2stacktop(ts,slot)   setslot2stack(ts,slot,(ts)->sp.p - 1)
@@ -833,6 +834,7 @@ cs_sinline int finishrawget(cs_State *ts, const TValue *slot) {
 }
 
 
+#include <stdio.h>
 /* auxiliary raw function for getting the value of the string 'k' */
 cs_sinline int auxrawgetstr(cs_State *ts, HTable *ht, const char *k) {
     OString *key = csS_new(ts, k);
@@ -845,10 +847,8 @@ cs_sinline int auxrawgetstr(cs_State *ts, HTable *ht, const char *k) {
 ** This function returns the value type.
 */
 CS_API int cs_get_global(cs_State *ts, const char *name) {
-    HTable *G;
     cs_lock(ts);
-    G = &GI(ts)->fields;
-    return auxrawgetstr(ts, G, name);
+    return auxrawgetstr(ts, GI(ts)->fields, name);
 }
 
 
@@ -902,7 +902,7 @@ CS_API int cs_get_field(cs_State *ts, int insobj) {
     cs_lock(ts);
     api_checknelems(ts, 1); /* key */
     ins = getinstance(ts, insobj);
-    return auxrawget(ts, &ins->fields, s2v(--ts->sp.p));
+    return auxrawget(ts, ins->fields, s2v(--ts->sp.p));
 
 }
 
@@ -911,7 +911,7 @@ CS_API int cs_get_fieldstr(cs_State *ts, int insobj, const char *field) {
     Instance *ins;
     cs_lock(ts);
     ins = getinstance(ts, insobj);
-    return auxrawgetstr(ts, &ins->fields, field);
+    return auxrawgetstr(ts, ins->fields, field);
 }
 
 
@@ -1011,11 +1011,9 @@ CS_API int cs_get_uservalue(cs_State *ts, int udobj, int n) {
 
 
 CS_API void cs_set_global(cs_State *ts, const char *name) {
-    HTable *G;
     cs_lock(ts);
     api_checknelems(ts, 1); /* value */
-    G = &GI(ts)->fields;
-    auxrawsetstr(ts, G, name, s2v(ts->sp.p - 1));
+    auxrawsetstr(ts, GI(ts)->fields, name, s2v(ts->sp.p - 1));
     cs_unlock(ts);
 }
 
@@ -1049,7 +1047,7 @@ CS_API void cs_set_field(cs_State *ts, int insobj) {
     cs_lock(ts);
     api_checknelems(ts, 2); /* key + value */
     ins = getinstance(ts, insobj);
-    csH_set(ts, &ins->fields, s2v(ts->sp.p - 2), s2v(ts->sp.p - 1));
+    csH_set(ts, ins->fields, s2v(ts->sp.p - 2), s2v(ts->sp.p - 1));
     csG_barrierback(ts, obj2gco(ins), s2v(ts->sp.p - 1));
     ts->sp.p -= 2; /* remove key + value */
     cs_unlock(ts);
@@ -1061,8 +1059,7 @@ CS_API void cs_set_fieldstr(cs_State *ts, int insobj, const char *field) {
     cs_lock(ts);
     api_checknelems(ts, 1); /* value */
     ins = getinstance(ts, insobj);
-    auxrawsetstr(ts, &ins->fields, field, s2v(ts->sp.p - 1));
-    ts->sp.p--; /* remove value */
+    auxrawsetstr(ts, ins->fields, field, s2v(ts->sp.p - 1));
     cs_unlock(ts);
 }
 
@@ -1182,7 +1179,7 @@ CS_API int cs_pcall(cs_State *ts, int nargs, int nresults, int errfunc) {
     int status;
     ptrdiff_t func;
     cs_lock(ts);
-    api_checknelems(ts, nargs + 1);
+    api_checknelems(ts, nargs + 1); /* args + func */
     api_check(ts, ts->status == CS_OK, "can't do calls on non-normal thread");
     checkresults(ts, nargs, nresults);
     if (errfunc == 0) {
@@ -1194,7 +1191,7 @@ CS_API int cs_pcall(cs_State *ts, int nargs, int nresults, int errfunc) {
     }
     pcd.func = ts->sp.p - nargs - 1;
     pcd.nresults = nresults;
-    status = csPRcall(ts, fcall, &pcd, savestack(ts, pcd.func), func);
+    status = csPR_call(ts, fcall, &pcd, savestack(ts, pcd.func), func);
     adjustresults(ts, nresults);
     cs_unlock(ts);
     return status;
@@ -1208,7 +1205,7 @@ CS_API int cs_load(cs_State *ts, cs_Reader reader, void *userdata,
     cs_lock(ts);
     if (!source) source = "?";
     csR_init(ts, &br, reader, userdata);
-    status = csPRparse(ts, &br, source);
+    status = csPR_parse(ts, &br, source);
     cs_unlock(ts);
     return status;
 }
@@ -1340,7 +1337,7 @@ CS_API cs_Unsigned cs_len(cs_State *ts, int index) {
     switch (ttypetag(o)) {
         case CS_VSTRING: return lenstr(o);
         case CS_VCLASS: return csH_len(htval(o));
-        case CS_VINSTANCE: return csH_len(&insval(o)->fields);
+        case CS_VINSTANCE: return csH_len(insval(o)->fields);
         case CS_VARRAY: return arrval(o)->n;
         case CS_VUDATA: return udval(o)->size;
         default: return 0;
@@ -1354,7 +1351,7 @@ CS_API int cs_next(cs_State *ts, int insobj) {
     cs_lock(ts);
     api_checknelems(ts, 1); /* key */
     ins = getinstance(ts, insobj);
-    more = csH_next(ts, &ins->fields, ts->sp.p - 1);
+    more = csH_next(ts, ins->fields, ts->sp.p - 1);
     if (more) {
         api_inctop(ts);
     } else
@@ -1509,7 +1506,7 @@ CS_API const char *cs_setupvalue(cs_State *ts, int index, int n) {
     TValue *upval = NULL;
     GCObject *owner = NULL;
     TValue *func;
-    cs_lock(L);
+    cs_lock(ts);
     api_checknelems(ts, 1); /* value */
     func = index2value(ts, index);
     name = auxupvalue(func, n, &upval, &owner);
@@ -1517,6 +1514,6 @@ CS_API const char *cs_setupvalue(cs_State *ts, int index, int n) {
         setobj(ts, upval, s2v(--ts->sp.p));
         csG_barrier(ts, owner, upval);
     }
-    cs_unlock(L);
+    cs_unlock(ts);
     return name;
 }

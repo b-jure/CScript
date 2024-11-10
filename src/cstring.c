@@ -44,8 +44,10 @@ uint csS_hash(const char *str, size_t len, unsigned int seed) {
 
 void csS_init(cs_State *ts) {
     GState *gs = G_(ts);
+    /* first create weak strings table */
     gs->strings = csH_newsize(ts, CSI_MINSTRHTABSIZE);
     gs->strings->isweak = 1;
+    /* then we allocate the memory error msg */
     gs->memerror = csS_newlit(ts, MEMERRMSG);
     csG_fix(ts, obj2gco(gs->memerror));
 }
@@ -99,7 +101,7 @@ OString *csS_newlobj(cs_State *ts, size_t len) {
 
 /* free string object */
 void csS_free(cs_State *ts, OString *s) {
-    csM_free(ts, s, sizeofstring(s->len));
+    csM_free_(ts, s, sizeofstring(s->len));
 }
 
 

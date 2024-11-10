@@ -238,8 +238,8 @@ CS_API void        cs_push_lightuserdata(cs_State *ts, void *p);
 CS_API void        cs_push_array(cs_State *ts);
 CS_API int         cs_push_thread(cs_State *ts); 
 CS_API void        cs_push_instance(cs_State *ts, int clsobj);
-CS_API void        cs_push_class(cs_State *ts, cs_VMT *vmt, int clsobj,
-                                 int nup, cs_Entry *list); 
+CS_API void        cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobj,
+                                 int nup, const cs_Entry *list); 
 
 
 /* -------------------------------------------------------------------------

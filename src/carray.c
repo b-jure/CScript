@@ -44,5 +44,5 @@ void csA_ensure(cs_State *ts, Array *arr, cs_Integer index) {
 
 void csA_free(cs_State *ts, Array *arr) {
     csM_freearray(ts, arr->b, arr->sz, TValue);
-    csM_free(ts, arr, sizeof(*arr));
+    csM_free(ts, arr);
 }

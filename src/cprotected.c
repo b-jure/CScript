@@ -11,6 +11,7 @@
 #include <stdlib.h> /* for 'abort()' */
 
 #include "cprotected.h"
+#include "ctrace.h"
 #include "cmem.h"
 #include "cparser.h"
 #include "cobject.h"
@@ -24,7 +25,7 @@
 ** error handler or invoke panic if hook for it is present.
 ** In case none of the above occurs, program is aborted.
 */
-cs_noret csPRthrow(cs_State *ts, int errcode) {
+cs_noret csPR_throw(cs_State *ts, int errcode) {
     if (ts->errjmp) { /* thread has error handler? */
         ts->errjmp->status = errcode; /* set status */
         CSI_THROW(ts, ts->errjmp); /* jump to it */
@@ -34,7 +35,7 @@ cs_noret csPRthrow(cs_State *ts, int errcode) {
         if (gs->mainthread->errjmp) { /* mainthread has error handler? */
             /* copy over error object */
             setobj2s(ts, gs->mainthread->sp.p++, s2v(ts->sp.p));
-            csPRthrow(ts, errcode); /* re-throw in main thread */
+            csPR_throw(ts, errcode); /* re-throw in main thread */
         } else { /* no error handlers, abort */
             if (gs->fpanic) { /* state has panic handler? */
                 cs_unlock(ts); /* release the lock... */
@@ -51,7 +52,7 @@ cs_noret csPRthrow(cs_State *ts, int errcode) {
  * Protected call
  * ------------------------------------------------------------------------- */
 
-int csPRrawcall(cs_State *ts, ProtectedFn fn, void *ud) {
+int csPR_rawcall(cs_State *ts, ProtectedFn fn, void *ud) {
     cs_uint32 old_nCcalls = ts->nCcalls;
     struct cs_ljmp lj;
     lj.status = CS_OK;
@@ -66,16 +67,16 @@ int csPRrawcall(cs_State *ts, ProtectedFn fn, void *ud) {
 }
 
 
-int csPRcall(cs_State *ts, ProtectedFn fn, void *ud, ptrdiff_t old_top,
+int csPR_call(cs_State *ts, ProtectedFn fn, void *ud, ptrdiff_t old_top,
               ptrdiff_t errfunc) {
     int status;
     CallFrame *old_cf = ts->cf;
     ptrdiff_t old_errfunc = errfunc;
     ts->errfunc = errfunc;
-    status = csPRrawcall(ts, fn, ud);
+    status = csPR_rawcall(ts, fn, ud);
     if (c_unlikely(status != CS_OK)) {
         ts->cf = old_cf;
-        status = csPRclose(ts, old_top, status);
+        status = csPR_close(ts, old_top, status);
         csT_seterrorobj(ts, status, restorestack(ts, old_top));
         csT_shrinkstack(ts); /* restore stack (overflow might of happened) */
     }
@@ -99,12 +100,12 @@ static void closepaux(cs_State *ts, void *ud) {
 
 
 /* call 'csF_close' in protected mode */
-int csPRclose(cs_State *ts, ptrdiff_t level, int status) {
+int csPR_close(cs_State *ts, ptrdiff_t level, int status) {
     CallFrame *oldcf = ts->cf;
     for (;;) {
         struct PCloseData pcd;
         pcd.level = restorestack(ts, level); pcd.status = status;
-        status = csPRrawcall(ts, closepaux, &pcd);
+        status = csPR_rawcall(ts, closepaux, &pcd);
         if (c_likely(status == CS_OK))
             return  pcd.status;
         else
@@ -131,7 +132,7 @@ static void parsepaux(cs_State *ts, void *userdata) {
 
 
 /* call 'csP_parse' in protected mode */
-int csPRparse(cs_State *ts, BuffReader *br, const char *name) {
+int csPR_parse(cs_State *ts, BuffReader *br, const char *name) {
     struct PParseData ppd;
     int status;
     ppd.br = br;
@@ -139,7 +140,7 @@ int csPRparse(cs_State *ts, BuffReader *br, const char *name) {
     ppd.ps.lvars.len = ppd.ps.lvars.size = 0; ppd.ps.lvars.arr = NULL;
     ppd.ps.cs = NULL; /* 'cs' */
     ppd.source = name; /* 'source' */
-    status = csPRcall(ts, parsepaux, &ppd, savestack(ts, ts->sp.p), ts->errfunc);
+    status = csPR_call(ts, parsepaux, &ppd, savestack(ts, ts->sp.p), ts->errfunc);
     csR_freebuffer(ts, &ppd.buff);
     csM_freearray(ts, ppd.ps.lvars.arr, ppd.ps.lvars.size, LVar);
     decnnyc(ts);

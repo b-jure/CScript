@@ -12,6 +12,7 @@
 
 #include "cauxlib.h"
 #include "cslib.h"
+#include "ctrace.h"
 
 
 #define CS_PROGNAME     "CScript"
@@ -91,20 +92,20 @@ static int report(cs_State *ts, int status) {
 /* collects arg in 'parseargs' */
 #define collectarg(arg,endi) \
     { if (argv[i][(endi)] != '\0') return arg_error; \
-      args |= (arg); *first_arg = i + 1; }
+      args |= (arg); *first = i + 1; }
 
 
-static int parseargs(char **argv, int *first_arg) {
+static int parseargs(char **argv, int *first) {
     int args = 0;
     if (*argv) {
         if (argv[0][0])
             progname = *argv;
     } else { /* missing program name */
-        *first_arg = -1;
+        *first = -1;
         return 0;
     }
     for (int i = 1; argv[i] != NULL; i++) {
-        *first_arg = i;
+        *first = i;
         if (argv[i][0] != '-') /* no more args? */
             return args;
         switch (argv[i][1]) {
@@ -127,7 +128,7 @@ static int parseargs(char **argv, int *first_arg) {
             default: return arg_error;
         }
     }
-    *first_arg = 0; /* no script name */
+    *first = 0; /* no script name */
     return args;
 }
 
@@ -178,7 +179,7 @@ static int runstring(cs_State *ts, const char *str, const char *name) {
 ** also affect the state.
 */
 static int runargs(cs_State *ts, char **argv, int n)  {
-    for (int i = 0; i < n; i++) {
+    for (int i = 1; i < n; i++) {
         int option = argv[i][1];
         cs_assert(argv[i][0] == '-');
         switch (option) {
@@ -379,13 +380,14 @@ static void createargarray(cs_State *ts, char **argv, int argc) {
     cs_set_global(ts, "arg");
 }
 
+
 /*
 ** Main body of interpereter (called in protected mode).
 ** Reads all options and handles them all.
 */
 static int pmain(cs_State *ts) {
-    int argc = cs_to_integer(ts, -1);
-    char **argv = cs_to_userdata(ts, -2);
+    int argc = cs_to_integer(ts, -2);
+    char **argv = cs_to_userdata(ts, -1);
     int script;
     int args = parseargs(argv, &script);
     int optlimit = (script > 0 ? script : argc);
@@ -397,6 +399,7 @@ static int pmain(cs_State *ts) {
         printusage(NULL);
     if (args & arg_v)
         printversion();
+    csTR_dumpstack(ts, "before standard libraries are open");
     csL_open_libs(ts); /* open standard libraries */
     createargarray(ts, argv, argc); /* create 'arg' array */
     cs_gc(ts, CS_GCRESTART);

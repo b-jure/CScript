@@ -11,5 +11,6 @@
 
 CSI_FUNC Instruction csTR_tracepc(const Function *fn, const Instruction *pc);
 CSI_FUNC void csTR_disassemble(cs_State *ts, const Function *fn);
+CSI_FUNC void csTR_dumpstack(cs_State *ts, const char *fmt, ...);
 
 #endif

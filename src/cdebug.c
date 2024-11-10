@@ -16,6 +16,7 @@
 #include "cstring.h"
 #include "climits.h"
 #include "cstate.h"
+#include "ctrace.h"
 #include "cobject.h"
 #include "cprotected.h"
 #include "cvm.h"
@@ -97,7 +98,7 @@ const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n, SPtr *pos) {
 
 CS_API const char *cs_getlocal(cs_State *ts, const cs_DebugInfo *di, int n) {
     const char *name;
-    cs_lock(L);
+    cs_lock(ts);
     if (di == NULL) {
         if (!ttiscrcl(s2v(ts->sp.p - 1)))
             name = NULL;
@@ -112,7 +113,7 @@ CS_API const char *cs_getlocal(cs_State *ts, const cs_DebugInfo *di, int n) {
             api_inctop(ts);
         }
     }
-    cs_unlock(L);
+    cs_unlock(ts);
     return name;
 }
 
@@ -339,7 +340,7 @@ cs_noret csD_runerror(cs_State *ts, const char *fmt, ...) {
         setobj2s(ts, ts->sp.p - 2, s2v(ts->sp.p - 1)); /* remove 'err' */
         ts->sp.p--;
     }
-    csPRthrow(ts, CS_ERRRUNTIME);
+    csPR_throw(ts, CS_ERRRUNTIME);
 }
 
 
@@ -414,5 +415,5 @@ cs_noret csD_errormsg(cs_State *ts) {
         ts->sp.p++; /* assume EXTRA_STACK */
         csV_call(ts, ts->sp.p - 2, 1);
     }
-    csPRthrow(ts, CS_ERRRUNTIME); /* raise a regular runtime error */
+    csPR_throw(ts, CS_ERRRUNTIME); /* raise a regular runtime error */
 }

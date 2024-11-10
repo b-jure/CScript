@@ -213,10 +213,10 @@ typedef struct XS {
 
 
 /* Main thread + global state */
-typedef struct SG {
+typedef struct XSG {
     XS xs;
     GState gs;
-} SG;
+} XSG;
 
 
 /* cast 'cs_State' back to start of 'XS' */

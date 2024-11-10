@@ -20,14 +20,17 @@
 #include "cmem.h"
 
 
-
 void csMM_init(cs_State *ts) {
     const char *mmnames[CS_NUM_MM] = {
-        "__init", "__getidx", "__setidx", "__gc", "__close",
-        "__add", "__sub", "__mul", "__div", "__mod", "__pow",
-        "__not", "__bnot", "__shl", "__shr", "__band", "__bor",
-        "__xor", "__eq", "__lt", "__le",
+        "__init", "__getidx", "__setidx", "__gc", "__close", "__call",
+        "__concat", "__add", "__sub", "__mul", "__div", "__mod", "__pow",
+        "__shl", "__shr", "__band", "__bor", "__xor", "__unm", "__bnot",
+        "__eq", "__lt", "__le"
     };
+    TValue key, val;
+    Instance *G_ins;
+    OClass *cls;
+    GState *gs = G_(ts);
     for (int i = 0; i < CS_NUM_MM; i++) {
         OString *s = csS_new(ts, mmnames[i]);
         s->bits = bitmask(STRVMTBIT);
@@ -36,13 +39,15 @@ void csMM_init(cs_State *ts) {
         csG_fix(ts, obj2gco(G_(ts)->mmnames[i]));
     }
     /* create global 'HashTable' class */
-    TValue key, val;
-    OClass *cls = csMM_newclass(ts);
-    cls->vmt = NULL;
-    cls->methods = NULL;
+    cls = csMM_newclass(ts);
+    cs_assert(cls->vmt == NULL);
+    /* create global instance and anchor it to global state */
+    G_ins = csMM_newinstance(ts, cls);
+    setinsval(ts, &gs->ginstance, G_ins);
+    /* set HashTable class into global instance */
     setstrval(ts, &key, csS_newlit(ts, CS_HASHTABLE));
     setclsval(ts, &val, cls);
-    csH_set(ts, &GI(ts)->fields, &key, &val);
+    csH_set(ts, GI(ts)->fields, &key, &val);
 }
 
 
@@ -56,9 +61,9 @@ TValue *csMM_newvmt(cs_State *ts) {
 
 OClass *csMM_newclass(cs_State *ts) {
     OClass *cls = csG_new(ts, sizeof(OClass), CS_VCLASS, OClass);
-    cls->methods = NULL;
     cls->vmt = NULL;
     cls->methods = NULL;
+    cls->gclist = NULL;
     return cls;
 }
 
@@ -66,8 +71,10 @@ OClass *csMM_newclass(cs_State *ts) {
 Instance *csMM_newinstance(cs_State *ts, OClass *cls) {
     Instance *ins = csG_new(ts, sizeof(Instance), CS_VINSTANCE, Instance);
     ins->oclass = cls;
-    ins->fields.node = ins->fields.lastfree = NULL;
-    ins->fields.size = 0;
+    ins->fields = NULL;
+    setins2s(ts, ts->sp.p++, ins); /* anchor instance */
+    ins->fields = csH_new(ts);
+    ts->sp.p--; /* remove instance */
     return ins;
 }
 
@@ -89,23 +96,15 @@ UserData *csMM_newuserdata(cs_State *ts, size_t size, int nuv) {
 }
 
 
+#include <stdio.h>
 /* get method 'mm' */
 const TValue *csMM_get(cs_State *ts, const TValue *v, cs_MM mm) {
     TValue *vmt;
     cs_assert(0 <= mm && mm < CS_NUM_MM);
     switch (ttypetag(v)) {
-        case CS_VINSTANCE: {
-            vmt = (gco2ins(v) != GI(ts) ? gco2ins(v)->oclass->vmt : NULL);
-            break;
-        }
-        case CS_VUDATA: {
-            vmt = gco2ud(v)->vmt;
-            break;
-        }
-        default: {
-            vmt = G_(ts)->vmt[ttype(v)];
-            break;
-        }
+        case CS_VINSTANCE: vmt = insval(v)->oclass->vmt; break;
+        case CS_VUDATA: vmt = udval(v)->vmt; break;
+        default: vmt = G_(ts)->vmt[ttype(v)]; break;
     }
     return (vmt ? &vmt[mm] : &G_(ts)->nil);
 }
@@ -266,20 +265,14 @@ int csMM_orderI(cs_State *ts, const TValue *v1, int v2, int flip, int isflt,
 
 void csMM_freeclass(cs_State *ts, OClass *cls) {
     if (cls->vmt)
-        csM_free(ts, cls->vmt, SIZEVMT);
+        csM_free_(ts, cls->vmt, SIZEVMT);
     csH_free(ts, cls->methods);
-    csM_free(ts, cls, sizeof(*cls));
-}
-
-
-void csMM_freeinstance(cs_State *ts, Instance *ins) {
-    csM_freearray(ts, ins->fields.node, htsize(&ins->fields), Node);
-    csM_free(ts, ins, sizeof(*ins));
+    csM_free(ts, cls);
 }
 
 
 void csMM_freeuserdata(cs_State *ts, UserData *ud) {
     if (ud->vmt)
-        csM_free(ts, ud->vmt, SIZEVMT);
-    csM_free(ts, ud, sizeofud(ud->nuv, ud->size));
+        csM_free_(ts, ud->vmt, SIZEVMT);
+    csM_free_(ts, ud, sizeofud(ud->nuv, ud->size));
 }

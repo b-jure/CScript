@@ -9,7 +9,6 @@ R = $V.0
 
 # { -------------------------------------------------------------------------
 # 				Paths & Installing
-
 PLATFORMS = linux mingw generic guess
 PLATFORM = guess
 
@@ -37,7 +36,7 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # { -------------------------------------------------------------------------
 # 			Compiler and Linker Flags 
 CC = gcc -std=c99
-OPTS = -O2
+OPTS = -O0
 CFLAGS = -Wall -Wextra ${OPTS} ${SYSCFLAGS} ${MYCFLAGS}
 LDFLAGS = ${SYSLDFLAGS} ${MYLDFLAGS}
 LIBS = -lm ${SYSLIBS} ${MYLIBS}
@@ -48,13 +47,10 @@ SYSLDFLAGS =
 SYSLIBS =
 
 # user flags
-MYCFLAGS = -fsanitize=address -fsanitize=undefined -ggdb
+MYCFLAGS = -fsanitize=address -fsanitize=undefined -ggdb -DCSI_ASSERT -DCSI_TRACE_API
 MYLDFLAGS = -fsanitize=address -fsanitize=undefined
 MYLIBS =
 MYOBJS =
-
-# special flags for compiler modules
-CMCFLAGS =
 # } -------------------------------------------------------------------------
 
 

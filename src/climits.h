@@ -154,13 +154,12 @@ typedef cs_ubyte Instruction;
 
 
 /*
- * Initial size for hash tables excluding weak
- * strings hash table.
- * It has to be power of 2, because of the hash table
- * implementation.
- */
+** Minimum initial size for hashtables.
+** Size is power of 2 => 2^CSI_MINHTBITS.
+** Must be less than MAXHBITS (check chashtable.c).
+*/
 #if !defined(CSI_MINHTABSIZE)
-#define CSI_MINHTABSIZE         8
+#define CSI_MINHTBITS           3
 #endif
 
 
@@ -213,8 +212,15 @@ typedef cs_ubyte Instruction;
  * leaves ('cs_unlock') CSript core (C API).
  */
 #if !defined(cs_lock)
+
+#if defined(CSI_TRACE_API)
+#define cs_lock(ts)         ((void)0)
+#define cs_unlock(ts)       csTR_dumpstack(ts, "stack after -> %s", __func__)
+#else
 #define cs_lock(ts)         ((void)0)
 #define cs_unlock(ts)       ((void)0)
+#endif
+
 #endif
 
 

@@ -21,7 +21,7 @@
 ** Name of the field in global table where the 'Lib' instance is located.
 ** All loaded libraries are set as fields of this instance.
 */
-#define CS_LOADED_INSTANCE      "Lib"
+#define CS_LOADED_INSTANCE      "lib"
 
 
 /*
@@ -85,9 +85,10 @@ CSLIB_API int         csL_fileresult(cs_State *ts, int ok, const char *fname);
 CSLIB_API int         csL_get_property(cs_State *ts, int insobj);
 CSLIB_API void        csL_set_cindex(cs_State *ts, int arrobj, cs_Integer i);
 CSLIB_API cs_State   *csL_newstate(void);
-CSLIB_API void        csL_push_hashtable(cs_State *ts);
-CSLIB_API int         csL_get_subinstance(cs_State *ts, int idx,
-                                          const char *field);
+CSLIB_API int         csL_get_subinstance(cs_State *ts, int insobj,
+                                          const char *field, int clsobj,
+                                          int nup, const cs_VMT *vmt,
+                                          const cs_Entry *l);
 CSLIB_API void        csL_include(cs_State *ts, const char *lib,
                                   cs_CFunction openf, int global);
 CSLIB_API void       *csL_test_userdata(cs_State *ts, int index,
@@ -114,7 +115,11 @@ CSLIB_API void        csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup);
 #define csL_push_fail(ts)               cs_push_nil(ts)
 
 #define csL_push_hashtable(ts) \
-    { cs_get_global(ts, CS_HASHTABLE); cs_push_instance(ts, -1); }
+    { cs_get_global(ts, CS_HASHTABLE); cs_push_instance(ts, -1); \
+      cs_remove(ts, -2); }
+
+#define csL_get_subtable(ts, insobj, field) \
+    csL_get_subinstance(ts, insobj, field, -1, 0, NULL, NULL)
 
 
 /* internal assertions */

@@ -10,10 +10,10 @@
 
 #include "cstate.h"
 #include "capi.h"
+#include "ctrace.h"
 #include "cdebug.h"
 #include "cfunction.h"
 #include "cgc.h"
-#include "chashtable.h"
 #include "cmem.h"
 #include "cmeta.h"
 #include "cobject.h"
@@ -55,14 +55,16 @@ static uint csi_makeseed(cs_State *ts) {
 static void preinit_thread(cs_State *ts, GState *gs) {
     ts->ncf = 0;
     ts->status = CS_OK;
+    ts->errfunc = 0;
     ts->nCcalls = 0;
     ts->gclist = NULL;
     ts->thwouv = ts; /* if ('ts->thwouv' == 'ts') then no upvalues */
     G_(ts) = gs;
     ts->errjmp = NULL;
-    ts->stack.p = NULL;
+    ts->stack.p = ts->sp.p = ts->stackend.p = NULL;
     ts->cf = NULL;
     ts->openupval = NULL;
+    ts->tbclist.p = NULL;
 }
 
 
@@ -72,13 +74,14 @@ static void preinit_thread(cs_State *ts, GState *gs) {
 ** creating new state.
 */
 static void init_stack(cs_State *newts, cs_State *mts) {
+    CallFrame *cf;
     newts->stack.p = csM_newarray(mts, INIT_STACKSIZE + EXTRA_STACK, SValue);
     newts->tbclist.p = newts->stack.p;
     for (int i = 0; i < INIT_STACKSIZE + EXTRA_STACK; i++)
         setnilval(s2v(newts->stack.p + i));
     newts->sp.p = newts->stack.p;
     newts->stackend.p = newts->stack.p + INIT_STACKSIZE;
-    CallFrame *cf = &newts->basecf;
+    cf = &newts->basecf;
     cf->next = cf->prev = NULL;
     cf->func.p = newts->sp.p;
     cf->top.p = mts->stack.p + CS_MINSTACK;
@@ -99,11 +102,8 @@ static void init_stack(cs_State *newts, cs_State *mts) {
 static void fnewstate(cs_State *ts, void *ud) {
     GState *gs = G_(ts);
     UNUSED(ud);
-    init_stack(ts, ts); /* initialize 'ts' stack */
-    gs->strings = csH_new(ts); /* new weak strings table */
-    setinsval(ts, &gs->ginstance, csMM_newinstance(ts, NULL));
-    gs->memerror = csS_newlit(ts, MEMERRMSG);
-    csG_fix(ts, obj2gco(gs->memerror));
+    init_stack(ts, ts); /* first initialize 'ts' stack... */
+    csS_init(ts); /* ...then strings table and memory error msg */
     csMM_init(ts);
     csY_init(ts);
     gs->gc.stopped = 0;
@@ -119,7 +119,7 @@ static void freecallframes(cs_State *ts) {
     cf->next = NULL;
     while ((cf = next) != NULL) {
         next = cf->next;
-        csM_free(ts, cf, sizeof(cf));
+        csM_free(ts, cf);
         ts->ncf--;
     }
 }
@@ -144,7 +144,7 @@ static void freestate(cs_State *mt) {
         csG_freeallobjects(mt);
     } else {
         mt->cf = &mt->basecf; /* undwind call frame list */
-        csPRclose(mt, 1, CS_OK);
+        csPR_close(mt, 1, CS_OK);
         csG_freeallobjects(mt);
         csi_userstatefree(mt);
     }
@@ -163,27 +163,25 @@ static void freestate(cs_State *mt) {
 CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     GState *gs;
     cs_State *ts;
-    SG *sg = falloc(NULL, 0, sizeof(SG), ud);
-    if (c_unlikely(sg == NULL))
-        return NULL;
-    gs = &sg->gs;
-    ts = &sg->xs.ts;
+    XSG *xsg = falloc(NULL, 0, sizeof(XSG), ud);
+    if (c_unlikely(xsg == NULL)) return NULL;
+    gs = &xsg->gs;
+    ts = &xsg->xs.ts;
     ts->next = NULL;
     ts->tt_ = CS_VTHREAD;
-    csG_init(&gs->gc, ts, sizeof(SG)); /* initialize collector */
+    csG_init(&gs->gc, ts, sizeof(XSG)); /* initialize collector */
     ts->mark = csG_white(&gs->gc);
     preinit_thread(ts, gs);
     setnilval(&gs->ginstance);
     gs->falloc = falloc; gs->ud_alloc = ud;
     gs->fpanic = NULL; /* no panic handler by default */
-    gs->seed = csi_makeseed(ts); /* initial seed for hashing */
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
     gs->mainthread = ts;
     gs->thwouv = NULL;
     gs->fwarn = NULL; gs->ud_warn = NULL;
-    for (int i = 0; i < CS_NUM_TYPES; i++)
-        gs->vmt[i] = NULL;
-    if (csPRrawcall(ts, fnewstate, NULL) != CS_OK) {
+    gs->seed = csi_makeseed(ts); /* initial seed for hashing */
+    for (int i = 0; i < CS_NUM_TYPES; i++) gs->vmt[i] = NULL;
+    if (csPR_rawcall(ts, fnewstate, NULL) != CS_OK) {
         freestate(ts);
         ts = NULL;
     }
@@ -192,9 +190,9 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
 
 
 /* free state (global state + mainthread) */
-CS_API void cs_freestate(cs_State *mts) {
+CS_API void cs_freestate(cs_State *ts) {
     cs_lock(ts);
-    cs_State *mt = G_(mts)->mainthread;
+    cs_State *mt = G_(ts)->mainthread;
     freestate(mt);
 }
 
@@ -228,7 +226,7 @@ int csT_resetthread(cs_State *ts, int status) {
     cf->func.p = ts->stack.p;
     cf->status = CFST_CCALL;
     ts->status = CS_OK; /* so we can run '__close' */
-    status = csPRclose(ts, 1, status);
+    status = csPR_close(ts, 1, status);
     if (status != CS_OK) /* error? */
         csT_seterrorobj(ts, status, ts->stack.p + 1);
     else
@@ -341,7 +339,7 @@ int csT_reallocstack(cs_State *ts, int size, int raiseerr) {
     if (c_unlikely(newstack == NULL)) {
         rel2sptr(ts);
         if (raiseerr)
-            csPRthrow(ts, CS_ERRMEM);
+            csPR_throw(ts, CS_ERRMEM);
         return 0;
     }
     rel2sptr(ts);
@@ -359,7 +357,7 @@ int csT_growstack(cs_State *ts, int n, int raiseerr) {
     if (c_unlikely(size > CSI_MAXSTACK)) { /* overflowed already ? */
         cs_assert(size == OVERFLOWSTACKSIZE);
         if (raiseerr)
-            csPRthrow(ts, CS_ERRERROR);
+            csPR_throw(ts, CS_ERRERROR);
         return 0;
     }
     if (c_unlikely(n > CSI_MAXSTACK)) {
@@ -428,7 +426,7 @@ void csT_checkCstack(cs_State *ts) {
     if (getCcalls(ts) == CSI_MAXCCALLS) /* not handling error ? */
         csD_runerror(ts, "C stack overflow");
     else if (getCcalls(ts) >= (CSI_MAXCCALLS / 10 * 11))
-        csPRthrow(ts, CS_ERRERROR);
+        csPR_throw(ts, CS_ERRERROR);
 }
 
 
@@ -466,5 +464,5 @@ void csT_free(cs_State *ts, cs_State *thread) {
     cs_assert(thread->openupval == NULL);
     csi_userthreadfree(ts, thread);
     freestack(thread);
-    csM_free(ts, xs, sizeof(*xs));
+    csM_free(ts, xs);
 }

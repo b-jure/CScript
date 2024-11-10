@@ -504,4 +504,27 @@ void csTR_disassemble(cs_State *ts, const Function *fn) {
         }
         pc = nextOp(pc);
     }
+    fflush(stdout);
+}
+
+
+void csTR_dumpstack(cs_State *ts, const char *fmt, ...) {
+    CallFrame *cf = ts->cf;
+    SPtr prevtop = ts->sp.p;
+    if (fmt) {
+        va_list ap;
+        va_start(ap, fmt);
+        vprintf(fmt, ap);
+        va_end(ap);
+    }
+    printf("\n");
+    for (int i = 0; cf; i++) {
+        printf("[%d] >> ", i);
+        for (SPtr sp = cf->func.p; sp < prevtop; sp++)
+            printf("[%s]", typename(ttypetag(s2v(sp))));
+        printf("\n");
+        prevtop = cf->func.p;
+        cf = cf->prev;
+    }
+    fflush(stdout);
 }

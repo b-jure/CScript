@@ -9,8 +9,8 @@
 
 
 #include <string.h>
-#include <stdio.h>
 
+#include "ctrace.h"
 #include "capi.h"
 #include "carray.h"
 #include "csconf.h"
@@ -160,7 +160,7 @@ void csV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
 
 /* set 'vmt' entry */
 static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
-    cs_assert(0 <= vmtt && vmtt < csNUM_MM);
+    cs_assert(0 <= vmtt && vmtt < CS_NUM_MM);
     if (c_unlikely(!(*vmt))) /* empty 'vmt' */
         *vmt = csMM_newvmt(ts);
     (*vmt)[vmtt] = *fn; /* set the entry */
@@ -372,7 +372,7 @@ void csV_set(cs_State *ts, const TValue *obj, const TValue *key,
         if (!ttisnil(fmm)) /* have metamethod ? */
             csMM_callhtm(ts, fmm, obj, key, val);
         else if (ttisins(obj)) /* object is instance ? */
-            csH_set(ts, &insval(obj)->fields, key, val);
+            csH_set(ts, insval(obj)->fields, key, val);
         else /* error */
             csD_typeerror(ts, obj, "index");
     }
@@ -416,7 +416,7 @@ void csV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
             if (c_unlikely(ttypetag(obj) != CS_VINSTANCE))
                 csD_typeerror(ts, obj, "index");
             ins = insval(obj);
-            v = csH_get(&ins->fields, key);
+            v = csH_get(ins->fields, key);
             if (!isabstkey(v)) { /* have field ? */
                 setobj2s(ts, res, v);
                 return;
@@ -558,7 +558,7 @@ cs_sinline int precallC(cs_State *ts, SPtr func, int nres, cs_CFunction f) {
 
 cs_sinline SPtr adjustffunc(cs_State *ts, SPtr func, const TValue *f) {
     checkstackGCp(ts, 1, func); /* space for 'f' */
-    for (SPtr p = func; p < ts->sp.p; p--)
+    for (SPtr p = ts->sp.p; p > func; p--)
         setobjs2s(ts, p, p-1);
     ts->sp.p++;
     setobj2s(ts, func, f);
@@ -592,9 +592,8 @@ retry:
             setins2s(ts, func, ins); /* replace class with its instance */
             fmm = csMM_get(ts, s2v(func), CS_MM_INIT);
             if (!ttisnil(fmm)) { /* have '__init' ? */
-                func = adjustffunc(ts, func, fmm);
-                cs_assert(ttiscl(s2v(func)) || ttiscfn(s2v(func)));
-                goto retry; /* call '__init' */
+                func = adjustffunc(ts, func, fmm); /* make space for it... */
+                goto retry; /* ...and try calling it */
             } else {
                 return NULL; /* otherwise done */
             }
@@ -679,16 +678,24 @@ void csV_concat(cs_State *ts, int total) {
                 }
                 ltotal += len;
             }
+            TValue aux;
             OString *s;
+            int intern;
             if (ltotal <= MAXSHRSTRLEN) {
                 char buff[MAXSHRSTRLEN];
                 copy2buff(top, n, buff);
                 s = csS_newl(ts, buff, ltotal);
+                intern = 0;
             } else {
                 s = csS_newlobj(ts, ltotal);
                 copy2buff(top, n, getstrbytes(s));
+                intern = 1;
             }
             setstrval2s(ts, top - n, s);
+            if (intern) {
+                setstrval(ts, &aux, s);
+                csH_set(ts, G_(ts)->strings, &aux, &aux);
+            }
         }
         total -= n - 1; /* got 'n' strings to create one new */
         ts->sp.p -= n - 1; /* popped 'n' strings and pushed one */

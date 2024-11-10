@@ -704,7 +704,7 @@ static void newglobal(Lexer *lx, OString *name, int mods) {
     setstrval(lx->ts, &k, name);
     setemptyval(&val);
     val.mod = mods;
-    csH_set(lx->ts, &GI(lx->ts)->fields, &k, &val);
+    csH_set(lx->ts, GI(lx->ts)->fields, &k, &val);
 }
 
 
@@ -713,7 +713,7 @@ static void globalvar(FunctionState *fs, OString *name, ExpInfo *e) {
     TValue k;
     Lexer *lx = fs->lx;
     setstrval(lx->ts, &k, name);
-    if (isabstkey(csH_get(&GI(lx->ts)->fields, &k)))
+    if (isabstkey(csH_get(GI(lx->ts)->fields, &k)))
         newglobal(lx, name, UNDEFMODMASK >> (fs->prev != NULL));
     e->u.str = name;
     e->et = EXP_GLOBAL;
@@ -1234,7 +1234,7 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
         TValue key;
         const TValue *res;
         setstrval(lx->ts, &key, var->u.str);
-        res = csH_get(&GI(lx->ts)->fields, &key);
+        res = csH_get(GI(lx->ts)->fields, &key);
         if (!ttisempty(res) && ismod(res, VARFINAL))
             id = var->u.str;
         break;

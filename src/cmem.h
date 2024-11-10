@@ -12,7 +12,7 @@
 
 
 /* memory error */
-#define csM_error(ts)   csPRthrow(ts, CS_ERRMEM);
+#define csM_error(ts)   csPR_throw(ts, CS_ERRMEM);
 
 
 #define csM_newarray(ts,s,t)     csM_malloc(ts, (s) * sizeof(t))
@@ -21,7 +21,7 @@
     ((p) = csM_realloc_(ts, (p), (os)*sizeof(t), (ns)*sizeof(t)))
 
 #define csM_freearray(ts,p,n,t) \
-    csM_free((ts), (p), cast_umem(n)*sizeof(*(p)))
+    csM_free_((ts), (p), cast_umem(n)*sizeof(*(p)))
 
 
 #define csM_ensurevec(ts,p,s,n,e,l,w,t) \
@@ -34,13 +34,16 @@
     ((p) = csM_shrinkarr(ts, p, cast(int *, &(s)), f, sizeof(t)))
 
 
+#define csM_free(ts,p)      csM_free_(ts, p, sizeof(*(p)))
+
+
 
 CSI_FUNC void *csM_malloc(cs_State *ts, cs_umem size);
 CSI_FUNC void *csM_realloc_(cs_State *ts, void *ptr, cs_umem osize,
                             cs_umem nsize);
 CSI_FUNC void *csM_saferealloc(cs_State *ts, void *ptr, cs_umem osize,
                                cs_umem nsize);
-CSI_FUNC void csM_free(cs_State *ts, void *ptr, cs_umem osize);
+CSI_FUNC void csM_free_(cs_State *ts, void *ptr, cs_umem osize);
 CSI_FUNC void *csM_growarr(cs_State *ts, void *ptr, int *sizep, int len,
                            int elemsize, int ensure, int limit,
                                const char *what);

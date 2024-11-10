@@ -408,23 +408,33 @@ CSLIB_API cs_State *csL_newstate(void) {
 }
 
 
-CSLIB_API int csL_get_subinstance(cs_State *ts, int insobj, const char *field) {
-    if (cs_get_field(ts, insobj) == CS_TINSTANCE) {
-        return 1;
+CSLIB_API int csL_get_subinstance(cs_State *ts, int insobj, const char *field,
+                                  int clsobj, int nup, const cs_VMT *vmt,
+                                  const cs_Entry *l) {
+    if (cs_get_fieldstr(ts, insobj, field) == CS_TINSTANCE) {
+        return 1; /* true, have instance */
     } else {
         cs_pop(ts, 1); /* pop previous result */
         insobj = cs_absindex(ts, insobj);
-        csL_push_hashtable(ts);
-        cs_push(ts, -1); /* copy will be left on the top */
-        cs_set_global(ts, field); /* ...and set it as global */
-        return 0;
+        if (clsobj >= 0) { /* from class? */
+            csL_check_stack(ts, nup, "too many upvalues");
+            cs_push_class(ts, vmt, clsobj, nup, l);
+        } else { /* otherwise from hashtable class */
+            cs_get_global(ts, CS_HASHTABLE);
+        }
+        cs_assert(cs_type(ts, -1) == CS_TCLASS);
+        cs_push_instance(ts, -1);
+        cs_remove(ts, -2); /* remove class */
+        cs_push(ts, -1); /* instance copy will be left on the top */
+        cs_set_fieldstr(ts, insobj, field); /* assign new instance to field */
+        return 0; /* false, no instance was found */
     }
 }
 
 
 CSLIB_API void csL_include(cs_State *ts, const char *libname,
                            cs_CFunction openf, int global) {
-    csL_get_subinstance(ts, CS_GINSTANCEINDEX, CS_LOADED_INSTANCE);
+    csL_get_subtable(ts, CS_GINSTANCEINDEX, CS_LOADED_INSTANCE);
     cs_get_fieldstr(ts, -1, libname); /* get Lib[libname] */
     if (!cs_to_bool(ts, -1)) { /* library not already loaded? */
         cs_pop(ts, 1); /* remove field */
