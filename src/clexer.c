@@ -8,6 +8,7 @@
 #define CS_CORE
 
 
+#include "cgc.h"
 #include "clexer.h"
 #include "cdebug.h"
 #include "cprotected.h"

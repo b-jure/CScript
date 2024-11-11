@@ -236,8 +236,8 @@ static int runscript(cs_State *ts, char **argv) {
 ** REPL (read-eval-print loop) {
 ** ------------------------------------------------------------------------ */
 
-#define PROMPT1     ">"
-#define PROMPT2     ">>"
+#define PROMPT1     "> "
+#define PROMPT2     ">> "
 
 #define CST_MAXLINE     512
 
@@ -433,6 +433,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
     cs_gc(ts, CS_GCSTOP); /* stop until all args are parsed */
+    cs_test_hashtable(ts);
     cs_push_cfunction(ts, pmain);
     cs_push_integer(ts, argc);
     cs_push_lightuserdata(ts, argv);

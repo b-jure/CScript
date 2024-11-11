@@ -59,34 +59,34 @@ cs_Integer csO_shiftr(cs_Integer x, cs_Integer y) {
 
 static cs_Number numarithm(cs_State *ts, cs_Number x, cs_Number y, int op) {
     switch(op) {
-    case CS_OPADD: return csi_numadd(ts, x, y);
-    case CS_OPSUB: return csi_numsub(ts, x, y);
-    case CS_OPMUL: return csi_nummul(ts, x, y);
-    case CS_OPDIV: return csi_numdiv(ts, x, y);
-    case CS_OPMOD: return csV_modnum(ts, x, y);
-    case CS_OPPOW: return csi_numpow(ts, x, y);
-    case CS_OPUNM: return csi_nummul(ts, x, y);
-    default: cs_unreachable(); return 0.0;
+        case CS_OPADD: return csi_numadd(ts, x, y);
+        case CS_OPSUB: return csi_numsub(ts, x, y);
+        case CS_OPMUL: return csi_nummul(ts, x, y);
+        case CS_OPDIV: return csi_numdiv(ts, x, y);
+        case CS_OPMOD: return csV_modnum(ts, x, y);
+        case CS_OPPOW: return csi_numpow(ts, x, y);
+        case CS_OPUNM: return csi_nummul(ts, x, y);
+        default: cs_unreachable(); return 0.0;
     }
 }
 
 
 static cs_Integer intarithm(cs_State *ts, cs_Integer x, cs_Integer y, int op) {
     switch(op) {
-    case CS_OPADD: return csi_intop(+, x, y);
-    case CS_OPSUB: return csi_intop(-, x, y);
-    case CS_OPMUL: return csi_intop(*, x, y);
-    case CS_OPDIV: return csV_div(ts, x, y);
-    case CS_OPMOD: return csV_modint(ts, x, y);
-    case CS_OPPOW: return csi_intop(^, x, y);
-    case CS_OPUNM: return csi_intop(-, 0, x);
-    case CS_OPBSHL: return csO_shiftl(x, y);
-    case CS_OPBSHR: return csO_shiftr(x, y);
-    case CS_OPBNOT: return csi_intop(^, ~csi_castS2U(0), x);
-    case CS_OPBAND: return csi_intop(&, x, y);
-    case CS_OPBOR: return csi_intop(|, x, y);
-    case CS_OPBXOR: return csi_intop(^, x, y);
-    default: cs_unreachable(); return 0;
+        case CS_OPADD: return csi_intop(+, x, y);
+        case CS_OPSUB: return csi_intop(-, x, y);
+        case CS_OPMUL: return csi_intop(*, x, y);
+        case CS_OPDIV: return csV_div(ts, x, y);
+        case CS_OPMOD: return csV_modint(ts, x, y);
+        case CS_OPPOW: return csi_intop(^, x, y);
+        case CS_OPUNM: return csi_intop(-, 0, x);
+        case CS_OPBSHL: return csO_shiftl(x, y);
+        case CS_OPBSHR: return csO_shiftr(x, y);
+        case CS_OPBNOT: return csi_intop(^, ~csi_castS2U(0), x);
+        case CS_OPBAND: return csi_intop(&, x, y);
+        case CS_OPBOR: return csi_intop(|, x, y);
+        case CS_OPBXOR: return csi_intop(^, x, y);
+        default: cs_unreachable(); return 0;
     }
 }
 

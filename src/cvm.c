@@ -354,6 +354,7 @@ static void arrayseti(cs_State *ts, Array *arr, const TValue *index,
                 csD_indexerror(ts, i, "too large");
             csA_ensure(ts, arr, i); /* expand block */
             setobj(ts, &arr->b[i], val); /* set the value at index */
+            csG_barrierback(ts, obj2gco(arr), val);
         } else { /* negative index (error) */
             csD_indexerror(ts, i, "negative");
         }
@@ -369,12 +370,14 @@ void csV_set(cs_State *ts, const TValue *obj, const TValue *key,
         arrayseti(ts, arrval(obj), key, val);
     } else {
         const TValue *fmm = csMM_get(ts, obj, CS_MM_SETIDX);
-        if (!ttisnil(fmm)) /* have metamethod ? */
+        if (!ttisnil(fmm)) { /* have metamethod ? */
             csMM_callhtm(ts, fmm, obj, key, val);
-        else if (ttisins(obj)) /* object is instance ? */
+        } else if (ttisins(obj)) { /* object is instance ? */
             csH_set(ts, insval(obj)->fields, key, val);
-        else /* error */
+            csG_barrierback(ts, gcoval(obj), val);
+        } else { /* error */
             csD_typeerror(ts, obj, "index");
+        }
     }
 }
 

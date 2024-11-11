@@ -13,8 +13,6 @@
 #include "cbits.h"
 
 
-#define keyisempty(n)	    (keytt(n) == CS_VEMPTY)
-
 /* node value */
 #define nodeval(n)          (&(n)->i_val)
 
@@ -29,6 +27,7 @@
 
 /* get table size */
 #define htsize(ht)	    (twoto((ht)->size))
+
 
 
 CSI_FUNC HTable *csH_new(cs_State *ts);

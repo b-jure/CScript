@@ -14,6 +14,7 @@
 #include "climits.h"
 #include "cobject.h"
 #include "cparser.h"
+#include "cgc.h"
 #include "cmem.h"
 #include "cstate.h"
 
@@ -34,10 +35,10 @@
 
 
 /* check if 'i' fits in long arg */
-#define fitsLA(i)       (-MAXLONGARGSIZE <= (i) && (i) <= MAXLONGARGSIZE)
+#define fitsLA(i)       (-LARGMAX <= (i) && (i) <= LARGMAX)
 
 /* check if 'i' fits in short arg */
-#define fitsSA(i)       (-MAXSHRTARGSIZE <= (i) && (i) <= MAXSHRTARGSIZE)
+#define fitsSA(i)       (-SARGMAX <= (i) && (i) <= SARGMAX)
 
 
 
@@ -239,7 +240,7 @@ static int emitS(FunctionState *fs, int arg) {
 
 /* emit instruction with short arg */
 int csC_emitIS(FunctionState *fs, Instruction i, int a) {
-    cs_assert(a <= MAXSHRTARGSIZE);
+    cs_assert(a <= SARGMAX);
     int offset = csC_emitI(fs, i);
     emitS(fs, a);
     return offset;
@@ -259,7 +260,7 @@ static int emitL(FunctionState *fs, int idx) {
 
 /* emit instruction 'i' with long arg 'a' */
 int csC_emitIL(FunctionState *fs, Instruction i, int a) {
-    cs_assert(a <= MAXLONGARGSIZE);
+    cs_assert(a <= LARGMAX);
     int offset = csC_emitI(fs, i);
     emitL(fs, a);
     return offset;
@@ -276,12 +277,17 @@ int csC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
 
 
 /* add constant value to the function */
-static int addK(FunctionState *fs, TValue *constant) {
+static int addK(FunctionState *fs, TValue *v) {
+    cs_State *ts = fs->lx->ts;
     Function *f = fs->fn;
-    csM_growvec(fs->lx->ts, f->k, f->sizek, fs->nk, INT_MAX, "constants",
-                TValue);
-    f->k[fs->nk++] = *constant;
-    return fs->nk - 1;
+    int oldsz = f->sizek;
+    int k = fs->nk;
+    csM_growvec(ts, f->k, f->sizek, fs->nk, LARGMAX, "constants", TValue);
+    while (oldsz < f->sizek) setnilval(&f->k[oldsz++]);
+    setobj(ts, &f->k[k], v);
+    fs->nk++;
+    csG_barrier(ts, f, v);
+    return k;
 }
 
 
@@ -312,7 +318,7 @@ static int falseK(FunctionState *fs) {
 /* add string constant to 'constants' */
 static int stringK(FunctionState *fs, OString *s) {
     TValue vs;
-    setstrval(fs->ts, &vs, s);
+    setstrval(fs->lx->ts, &vs, s);
     return addK(fs, &vs);
 }
 
@@ -338,7 +344,7 @@ void csC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
     cs_assert(newstack >= 0);
     if (fs->fn->maxstack > newstack) {
-        if (c_unlikely(newstack >= MAXLONGARGSIZE))
+        if (c_unlikely(newstack >= LARGMAX))
             csY_syntaxerror(fs->lx, "function requires too much stack space");
         fs->fn->maxstack = newstack;
     }
@@ -859,7 +865,7 @@ static int getjmp(FunctionState *fs, int pc) {
 static void fixjmp(FunctionState *fs, int pc, int destpc) {
     Instruction *pcjmp = &fs->fn->code[pc];
     int offset = destpc - (pc + SIZEARGL);
-    if (c_unlikely(offset > MAXLONGARGSIZE))
+    if (c_unlikely(offset > LARGMAX))
         csP_semerror(fs->lx, "control structure too long");
     SETARG_L(pcjmp, 0, offset); /* patch it */
 }

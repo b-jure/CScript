@@ -106,7 +106,7 @@ static void fnewstate(cs_State *ts, void *ud) {
     csS_init(ts); /* ...then strings table and memory error msg */
     csMM_init(ts);
     csY_init(ts);
-    gs->gc.stopped = 0;
+    gs->gcstop = 0;
     setnilval(&gs->nil); /* signal that state is fully built */
     csi_userstatecreated(ts);
 }
@@ -149,7 +149,7 @@ static void freestate(cs_State *mt) {
         csi_userstatefree(mt);
     }
     freestack(mt);
-    cs_assert(totalbytes(&gs->gc) == sizeof(XS));
+    cs_assert(gettotalbytes(gs) == sizeof(XS));
     gs->falloc(fromstate(mt), sizeof(XS), 0, gs->ud_alloc);
 }
 
@@ -167,11 +167,25 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     if (c_unlikely(xsg == NULL)) return NULL;
     gs = &xsg->gs;
     ts = &xsg->xs.ts;
-    ts->next = NULL;
     ts->tt_ = CS_VTHREAD;
-    csG_init(&gs->gc, ts, sizeof(XSG)); /* initialize collector */
-    ts->mark = csG_white(&gs->gc);
+    gs->whitebit = bitmask(WHITEBIT0);
+    ts->mark = csG_white(gs);
     preinit_thread(ts, gs);
+    ts->next = NULL;
+    gs->objects = obj2gco(ts);
+    gs->totalbytes = gs->gcestimate = sizeof(XSG);
+    gs->gcdebt = 0;
+    gs->gcstate = GCSpause;
+    gs->gcstopem = 0;
+    gs->gcstop = GCSTP; /* stop while initializing */
+    gs->gcemergency = 0;
+    setgcparam(gs->gcpause, CSI_GCPAUSE);
+    setgcparam(gs->gcstepmul, CSI_GCSTEPMUL);
+    gs->gcstepsize = CSI_GCSTEPSIZE;
+    gs->sweeppos = NULL;
+    gs->fixed = gs->fin = gs->tobefin = NULL;
+    gs->graylist = gs->grayagain = NULL;
+    gs->weak = NULL;
     setnilval(&gs->ginstance);
     gs->falloc = falloc; gs->ud_alloc = ud;
     gs->fpanic = NULL; /* no panic handler by default */
@@ -208,7 +222,7 @@ CS_API cs_State *cs_newthread(cs_State *mts) {
     cs_lock(mts);
     o = csG_newoff(mts, sizeof(XS), CS_VTHREAD, offsetof(XS, ts));
     newts = gco2th(o);
-    setsv2th(mt, mts->sp.p, newts);
+    setsv2th(mts, mts->sp.p, newts);
     api_inctop(mts);
     preinit_thread(newts, gs);
     init_stack(newts, mts);
@@ -328,14 +342,14 @@ static void rel2sptr(cs_State *ts) {
 int csT_reallocstack(cs_State *ts, int size, int raiseerr) {
     SPtr newstack;
     GState *gs = G_(ts);
-    int old_stopem = gs->gc.stopem;
+    int old_stopem = gs->gcstopem;
     int osz = stacksize(ts);
     cs_assert(size <= CSI_MAXSTACK || size == OVERFLOWSTACKSIZE);
     sptr2rel(ts);
-    gs->gc.stopem = 1; /* no emergency collection when reallocating stack */
+    gs->gcstopem = 1; /* no emergency collection when reallocating stack */
     newstack = csM_reallocarray(ts, ts->stack.p, osz + EXTRA_STACK,
                                 size + EXTRA_STACK, SValue);
-    gs->gc.stopem = old_stopem;
+    gs->gcstopem = old_stopem;
     if (c_unlikely(newstack == NULL)) {
         rel2sptr(ts);
         if (raiseerr)

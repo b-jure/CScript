@@ -153,6 +153,9 @@ CS_API int              cs_resetthread(cs_State *ts);
 CS_API cs_CFunction     cs_atpanic(cs_State *ts, cs_CFunction fn);
 CS_API cs_Number        cs_version(cs_State *ts);
 
+// TODO: remove after testing
+CS_API void cs_test_hashtable(cs_State *ts);
+
 
 /* -------------------------------------------------------------------------
  * Stack manipulation
@@ -304,7 +307,7 @@ CS_API int  cs_load(cs_State *ts, cs_Reader reader, void *userdata,
 #define CS_GCCOLLECT            2 /* perform full GC cycle */
 #define CS_GCCOUNT              3 /* get number of (bytes_allocated/1024) */
 #define CS_GCCOUNTBYTES         4 /* get remainder of (bytes_allocated/1024) */
-#define CS_GCSTEP               5 /* perform single GC step and or set debt */
+#define CS_GCSTEP               5 /* perform single GC step and or set gcdebt */
 #define CS_GCSETPAUSE           6 /* set GC pause (as percentage) */
 #define CS_GCSETSTEPMUL         7 /* set GC step multiplier (as percentage) */
 #define CS_GCISRUNNING          8 /* test whether GC is running */

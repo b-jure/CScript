@@ -288,7 +288,7 @@ static void movexp2v(FunctionState *fs, ExpInfo *e, TValue *v) {
     case EXP_NIL: setnilval(v); break;
     case EXP_FALSE: setbfval(v); break;
     case EXP_TRUE: setbtval(v); break;
-    case EXP_STRING: setstrval(NULL, v, e->u.str); break;
+    case EXP_STRING: setstrval(cast(cs_State *, NULL), v, e->u.str); break;
     case EXP_INT: setival(v, e->u.i); break;
     case EXP_FLT: setfval(v, e->u.n); break;
     case EXP_K: *v = *getconstant(fs, e); break;
@@ -323,9 +323,9 @@ static void initstring(ExpInfo *e, OString *s) {
 /* add local debug information into 'locals' */
 static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
     Function *fn = fs->fn;
-    checklimit(fs, fs->nlocals, MAXLONGARGSIZE, "locals");
+    checklimit(fs, fs->nlocals, LARGMAX, "locals");
     csM_growvec(lx->ts, fn->locals, fn->sizelocals, fs->nlocals,
-                MAXLONGARGSIZE, "locals", LVarInfo);
+                LARGMAX, "locals", LVarInfo);
     LVarInfo *lvarinfo = &fn->locals[fs->nlocals++];
     lvarinfo->name = name;
     lvarinfo->startpc = fs->pc;
@@ -496,8 +496,8 @@ static Function *addfunction(Lexer *lx) {
     cs_State *ts = lx->ts;
     FunctionState *fs = lx->fs;
     Function *fn = fs->fn;
-    checklimit(fs, fs->nfuncs + 1, MAXLONGARGSIZE, "functions");
-    csM_growvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, MAXLONGARGSIZE,
+    checklimit(fs, fs->nfuncs + 1, LARGMAX, "functions");
+    csM_growvec(ts, fn->funcs, fn->sizefn, fs->nfuncs, LARGMAX,
                 "functions", Function);
     fn->funcs[fs->nfuncs++] = new = csF_newfunction(ts);
     csG_objbarrier(ts, fn, new);
@@ -578,9 +578,9 @@ static OString *expect_id(Lexer *lx) {
 static int newlocal(Lexer *lx, OString *name, int mods) {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
-    checklimit(fs, ps->lvars.len, MAXLONGARGSIZE, "locals");
+    checklimit(fs, ps->lvars.len, LARGMAX, "locals");
     csM_growvec(lx->ts, ps->lvars.arr, ps->lvars.size, ps->lvars.len,
-                MAXLONGARGSIZE, "locals", LVar);
+                LARGMAX, "locals", LVar);
     LVar *local = &ps->lvars.arr[ps->lvars.len++];
     local->val.mod = mods;
     local->s.name = name;
@@ -724,9 +724,9 @@ static void globalvar(FunctionState *fs, OString *name, ExpInfo *e) {
 static int newprivate(FunctionState *fs, OString *name, int mods) {
     Function *fn = fs->fn;
     cs_State *ts = fs->lx->ts;
-    checklimit(fs, fs->nprivate, MAXLONGARGSIZE, "private variables");
+    checklimit(fs, fs->nprivate, LARGMAX, "private variables");
     csM_growvec(ts, fn->private, fn->sizeprivate, fs->nprivate,
-                MAXLONGARGSIZE, "private variables", PrivateVar);
+                LARGMAX, "private variables", PrivateVar);
     PrivateVar *pv = &fn->private[fs->nprivate++];
     pv->s.name = name;
     pv->val.mod = (UNDEFMODMASK | mods);
@@ -1235,15 +1235,16 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
         const TValue *res;
         setstrval(lx->ts, &key, var->u.str);
         res = csH_get(GI(lx->ts)->fields, &key);
-        if (!ttisempty(res) && ismod(res, VARFINAL))
+        if (!isabstkey(res) && ismod(res, VARFINAL))
             id = var->u.str;
         break;
     }
     default: return; /* only runtime knows :( */
     }
-    if (id)
+    if (id) {
         csP_semerror(lx, csS_pushfstring(lx->ts, 
                          "attempt to assign to final variable '%s'", id));
+    }
 }
 
 
@@ -1875,7 +1876,7 @@ static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
     if (eisconstant(caseexp)) {
         LiteralInfo li = checkduplicate(lx, ss, caseexp);
         csM_growvec(lx->ts, ss->literals.arr, ss->literals.size,
-                    ss->literals.len, MAXLONGARGSIZE,
+                    ss->literals.len, LARGMAX,
                     "switch literals", LiteralInfo);
         ss->literals.arr[ss->literals.len++] = li;
         if (eisconstant(&ss->e)) { /* both are constant expressions ? */

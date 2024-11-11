@@ -15,6 +15,7 @@
 #include "cmem.h"
 #include "cparser.h"
 #include "cobject.h"
+#include "cgc.h"
 #include "cfunction.h"
 #include "creader.h"
 #include "cstate.h"

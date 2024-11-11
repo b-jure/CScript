@@ -17,10 +17,10 @@
 
 /* 
 ** Maximum amount of upvalues in a closure (both C and CScript).
-** Value must fit in 'MAXLONGARGSIZE' subtracted by 'CS_GINSTANCEINDEX'.
+** Value must fit in 'LARGMAX' subtracted by 'CS_GINSTANCEINDEX'.
 ** This is because of the nature C API functions 'index' argument works.
 */
-#define MAXUPVAL        (MAXLONGARGSIZE + CS_GINSTANCEINDEX)
+#define MAXUPVAL        (LARGMAX + CS_GINSTANCEINDEX)
 
 
 /* special status to close upvalues preserving the top of the stack */

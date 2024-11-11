@@ -46,10 +46,12 @@ void csS_init(cs_State *ts) {
     GState *gs = G_(ts);
     /* first create weak strings table */
     gs->strings = csH_newsize(ts, CSI_MINSTRHTABSIZE);
-    gs->strings->isweak = 1;
+    csG_fix(ts, obj2gco(gs->strings));
+    cs_assert(obj2gco(gs->strings) == gs->fixed);
     /* then we allocate the memory error msg */
     gs->memerror = csS_newlit(ts, MEMERRMSG);
     csG_fix(ts, obj2gco(gs->memerror));
+    cs_assert(obj2gco(gs->memerror) == gs->fixed);
 }
 
 
@@ -361,12 +363,18 @@ const char *csS_numtostr(const TValue *v, size_t *plen) {
 #define BUFFVFSSIZ	(CSI_MAXSRC + MAXNUM2STR + 100)
 
 /* buffer for 'csS_newvstringf' */
-typedef struct BuffVSF {
+typedef struct BuffVFS {
     cs_State *ts;
     int pushed; /* true if 'space' was pushed on the stack */
     int len; /* string length in 'space' */
     char space[BUFFVFSSIZ];
 } BuffVFS;
+
+
+static void initvfs(cs_State *ts, BuffVFS *vfs) {
+    vfs->len = vfs->pushed = 0;
+    vfs->ts = ts;
+}
 
 
 /*
@@ -432,6 +440,7 @@ const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
     const char *end;
     TValue nv;
     BuffVFS buff;
+    initvfs(ts, &buff);
     while ((end = strchr(fmt, '%')) != NULL) {
         buffaddstring(&buff, fmt, end - fmt);
         switch (*(end + 1)) {
@@ -478,6 +487,7 @@ const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
         fmt = end + 2; /* '%' + specifier */
     }
     buffaddstring(&buff, fmt, strlen(fmt));
+    printf("pushing buffer\n");
     pushbuff(&buff);
     return cstrval(s2v(ts->sp.p));
 }

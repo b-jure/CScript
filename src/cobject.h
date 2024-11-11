@@ -54,6 +54,21 @@ typedef union Value {
 } Value;
 
 
+/* 'TValue' fields, defined for reuse and alignment purposes */
+#define TValueFields    Value val; cs_ubyte tt; cs_ubyte mod
+
+
+/*
+ * 'Value' with type and modifiers.
+ * 'mod' might be unused but this memory would
+ * be padded by any sane compiler anyway.
+ */
+typedef struct TValue {
+    TValueFields;
+} TValue;
+
+
+
 /* get raw union values */
 #define rawbval(v)      ((v).b)
 #define rawival(v)      ((v).i)
@@ -96,15 +111,35 @@ typedef union Value {
 
 
 
-/* Set macros */
+/* Macros for internal tests */
+
+
+/* collectable object has the same tag as the original value */
+#define righttt(obj)		(ttypetag(obj) == gcoval(obj)->tt_)
+
+
+/*
+** Any value being manipulated by the program either is non
+** collectable, or the collectable object has the right tag
+** and it is not dead. The option 'ts == NULL' allows other
+** macros using this one to be used where ts is not available.
+*/
+#define checkliveness(ts,obj) \
+    ((void)ts, cs_assert(!iscollectable(obj) || \
+        (righttt(obj) && (ts == NULL || !isdead(G_(ts), gcoval(obj))))))
+
+
+
+/* Macros to set values */
 
 /* set object type tag */
 #define settt(o,t)          (rawtt(o)=(t))
 
 /* set object 'o1' to 'o2' */
 #define setobj(ts,o1,o2) \
-    { UNUSED(ts); TValue *o1_ = (o1); const TValue *o2_ = (o2); \
-      o1_->val = o2_->val; settt(o1_, rawtt(o2_)); o1_->mod = o2_->mod; }
+    { TValue *o1_=(o1); const TValue *o2_=(o2); \
+      o1_->val = o2_->val; o1_->tt = o2_->tt; o1_->mod = o2_->mod; \
+      checkliveness(ts,o1_); }
 
 /* from stack to stack */
 #define setobjs2s(ts,o1,o2)     setobj(ts,s2v(o1),s2v(o2))
@@ -112,32 +147,13 @@ typedef union Value {
 #define setobj2s(ts,o1,o2)      setobj(ts,s2v(o1),o2)
 
 
-
-/* 'TValue' fields, defined for reuse and alignment purposes */
-#define TValueFields    Value val; cs_ubyte tt; cs_ubyte mod
-
-
 /*
- * 'Value' with type and modifiers.
- * 'mod' might be unused but this memory would
- * be padded by any sane compiler anyway.
- */
-typedef struct TValue {
-    TValueFields;
-} TValue;
-
-
-
-/*
-** Stack value.
-** It contains 'delta' field which represents
-** offset from the current stack value to the
-** next value on the stack that needs to-be-closed.
-** 'delta' being 0 indicates that the distance value
-** doesn't fit in 'delta' and then it is ** assumed that
-** the actual value is MAXDELTA. 
-** This way we can represent larger distances without using
-** larger data type.
+** Entries in CScript stack.
+** 'tbc' list contains 'delta' field which represents offset from the current
+** stack value to the next value on the stack that needs to-be-closed.
+** 'delta' being 0 indicates that the distance value doesn't fit in 'delta'
+** and then it is assumed that the actual value is MAXDELTA. 
+** This way we can represent larger distances without using larger data type.
 ** Note: On 8-byte alignment 'SValue' should be 16 
 ** bytes, while on 4-byte alignement 8 bytes.
 */
@@ -247,15 +263,20 @@ typedef struct {
  * Nil
  * ------------------------------------------------------------------------- */
 
+/* standard nil */
 #define CS_VNIL         makevariant(CS_TNIL, 0)
+
+/* empty slot */
 #define CS_VEMPTY       makevariant(CS_TNIL, 1)
+
+/* value returned for a key not found in a hashtable */
 #define CS_VABSTKEY     makevariant(CS_TNIL, 2)
 
 #define setnilval(o)    settt(o, CS_VNIL)
 #define setemptyval(o)  settt(o, CS_VEMPTY)
 
-#define ttisnil(o)      checktype((o), CS_VNIL)
-#define ttisempty(o)    checktag((o), CS_VEMPTY)
+#define ttisnil(o)      checktype((o), CS_TNIL)
+#define isempty(o)      ttisnil(o)
 
 #define isabstkey(v)    checktag((v), CS_VABSTKEY)
 
@@ -305,7 +326,8 @@ typedef struct GCObject {
 /* set generic GC object value */
 #define setgcotval(ts,obj,x,t) \
     { TValue *obj_=(obj); t *x_=(x); \
-      gcoval(obj_) = obj2gco(x_); settt(obj_, ctb(x_->tt_)); }
+      gcoval(obj_) = obj2gco(x_); settt(obj_, ctb(x_->tt_)); \
+      checkliveness(ts,obj_); }
 
 
 
@@ -338,36 +360,6 @@ typedef struct GCObject {
 #define sethtval(ts,v,ht)       setgcotval(ts,v,ht,HTable)
 #define setht2s(ts,sv,ht)       sethtval(ts,s2v(sv),ht)
 
-#define keyval(n)       ((n)->s.key_val)
-#define keyival(n)      rawival(keyval(n))
-#define keyfval(n)      rawfval(keyval(n))
-#define keypval(n)      rawpval(keyval(n))
-#define keycfval(n)     rawcfval(keyval(n))
-#define keygcoval(n)    rawgcoval(keyval(n))
-#define keystrval(n)    gco2str(rawgcoval(keyval(n)))
-
-#define keytt(n)        ((n)->s.key_tt_)
-
-#define keyisobj(n)     (keytt(n) & BIT_COLLECTABLE)
-
-#define keyobj(n)       rawgcoval(keyval(n))
-#define keyobjN(n)      (keyisobj(n) ? keyobj(n) : NULL)
-
-
-#define setemptykey(n)      (keytt(n) = CS_VEMPTY)
-
-
-/* copy a value into a key */
-#define setnodekey(ts,n,obj) \
-    { Node *n_ = (n); const TValue *obj_=(obj); \
-      keyval(n_)=obj_->val; keytt(n_)=obj_->tt; }
-
-/* copy a value from a key */
-#define getnodekey(ts,obj,n) \
-    { TValue *obj_ = (obj); const Node *n_=(n); \
-      obj_->val=keyval(n_); obj_->tt=keytt(n_); obj_->mod=0; }
-
-
 /*
 ** Ordering of fields might seem weird but
 ** this is to ensure optimal alignment.
@@ -375,7 +367,7 @@ typedef struct GCObject {
 typedef union Node {
     struct NodeKey {
         TValueFields; /* fields for value */
-        cs_ubyte key_tt_; /* key type tag */
+        cs_ubyte key_tt; /* key type tag */
         int next; /* offset for next node */
         Value key_val; /* key value */
     } s;
@@ -383,20 +375,54 @@ typedef union Node {
 } Node;
 
 
+/* copy a value into a key */
+#define setnodekey(ts,n,obj) \
+    { Node *n_=(n); const TValue *obj_=(obj); \
+      n_->s.key_val = obj_->val; n_->s.key_tt = obj_->tt; \
+      checkliveness(ts,obj_); }
+
+
+/* copy a value from a key */
+#define getnodekey(ts,obj,n) \
+    { TValue *obj_=(obj); const Node *n_=(n); \
+      obj_->val = n_->s.key_val; obj_->tt = n_->s.key_tt; \
+      checkliveness(ts,obj_); }
+
+
+
 /* Hash Table */
 typedef struct HTable {
     ObjectHeader; /* internal only object */
     cs_ubyte size; /* 2^size */
-    cs_ubyte isweak; /* true if holds weak keys/values */
     Node *node; /* memory block */
     Node *lastfree; /* any free position is before this position */
     GCObject *gclist;
 } HTable;
 
 
+#define keytt(n)                ((n)->s.key_tt)
+#define keyval(n)               ((n)->s.key_val)
+
+#define keyival(n)              rawival(keyval(n))
+#define keyfval(n)              rawfval(keyval(n))
+#define keypval(n)              rawpval(keyval(n))
+#define keycfval(n)             rawcfval(keyval(n))
+#define keygcoval(n)            rawgcoval(keyval(n))
+#define keystrval(n)            gco2str(rawgcoval(keyval(n)))
+
+#define keyisobj(n)             (keytt(n) & BIT_COLLECTABLE)
+#define keyisnil(n)	        (keytt(n) == CS_TNIL)
+
+#define setnilkey(n)            (keytt(n) = CS_TNIL)
+
+#define keyisinteger(n)         (keytt(n) == CS_VNUMINT)
+
+#define keyiscollectable(n)     (keytt(n) & BIT_COLLECTABLE)
+
+/* unused in 1.0.0 */
 #define setdeadkey(node)    (keytt(node) = CS_TDEADKEY)
 #define keyisdead(n)	    (keytt(n) == CS_TDEADKEY)
-#define keyisinteger(n)     (keytt(n) == CS_VNUMINT)
+
 
 
 /* -------------------------------------------------------------------------

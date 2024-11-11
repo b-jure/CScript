@@ -34,10 +34,10 @@
 #define WIDTHARGL           (SIZEARGL << 3)
 
 /* maximum instruction and arg sizes */
-#define MAXSIZEINSTR        ((1 << WIDTHINSTR) - 1)
-#define MAXSHRTARGSIZE      MAXSIZEINSTR
-#define MAXLONGARGSIZE      ((1 << WIDTHARGL) - 1)
-#define MAXCODESIZE         MAXLONGARGSIZE
+#define INSTRMAX            ((1 << WIDTHINSTR) - 1)
+#define SARGMAX             INSTRMAX
+#define LARGMAX             ((1 << WIDTHARGL) - 1)
+#define CODEMAX             LARGMAX
 
 
 /* gets first arg pc */
@@ -67,7 +67,7 @@
 #define JMPARGSIZE      SIZEARGL
 
 /* max code jump offset value */
-#define MAXJMP          MAXLONGARGSIZE
+#define MAXJMP          LARGMAX
 
 /* value indicating there is no jump */
 #define NOJMP           (-1)

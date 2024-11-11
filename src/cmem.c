@@ -8,9 +8,9 @@
 #define CS_CORE
 
 
+#include "cgc.h"
 #include "cdebug.h"
 #include "cmem.h"
-#include "csconf.h"
 #include "cstate.h"
 
 
@@ -20,7 +20,7 @@
 
 
 /* can try to allocate second time */
-#define cantryagain(ts)     (gsinitialized(gs) && !(gs)->gc.stopem)
+#define cantryagain(ts)     (gsinitialized(gs) && !(gs)->gcstopem)
 
 
 
@@ -38,39 +38,42 @@ cs_sinline void *tryagain(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
 
 void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
+    void *block;
     cs_assert((osz == 0) == (ptr == NULL));
-    void *memblock = csM_rawrealloc(gs, ptr, osz, nsz);
-    if (c_unlikely(!memblock && nsz != 0)) {
-        memblock = tryagain(ts, ptr, osz, nsz);
-        if (c_unlikely(memblock == NULL))
+    block = csM_rawrealloc(gs, ptr, osz, nsz);
+    if (c_unlikely(!block && nsz != 0)) {
+        block = tryagain(ts, ptr, osz, nsz);
+        if (c_unlikely(block == NULL))
             return NULL;
     }
-    cs_assert((nsz == 0) == (memblock == NULL));
-    gs->gc.debt = (gs->gc.debt + nsz) - osz;
-    return memblock;
+    cs_assert((nsz == 0) == (block == NULL));
+    gs->gcdebt = (gs->gcdebt + nsz) - osz;
+    return block;
 }
 
 
 void *csM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
-    void *memblock = csM_realloc_(ts, ptr, osz, nsz);
-    if (c_unlikely(memblock == NULL && nsz != 0))
+    void *block = csM_realloc_(ts, ptr, osz, nsz);
+    if (c_unlikely(block == NULL && nsz != 0))
         cs_assert(0 && "out of memory");
-    return memblock;
+    return block;
 }
 
 
 void *csM_malloc(cs_State *ts, size_t size) {
+    GState *gs;
+    void *block;
     if (size == 0)
         return NULL;
-    GState *gs = G_(ts);
-    void *memblock = csM_rawmalloc(gs, size);
-    if (c_unlikely(memblock == NULL)) {
-        memblock = tryagain(ts, NULL, 0, size);
-        if (c_unlikely(memblock == NULL))
+    gs = G_(ts);
+    block = csM_rawmalloc(gs, size);
+    if (c_unlikely(block == NULL)) {
+        block = tryagain(ts, NULL, 0, size);
+        if (c_unlikely(block == NULL))
             cs_assert(0 && "out of memory");
     }
-    gs->gc.debt += size;
-    return memblock;
+    gs->gcdebt += size;
+    return block;
 }
 
 
@@ -111,5 +114,5 @@ void csM_free_(cs_State *ts, void *ptr, size_t osz) {
     GState *gs = G_(ts);
     cs_assert((osz == 0) == (ptr == NULL));
     csM_rawfree(gs, ptr, osz);
-    gs->gc.debt -= osz;
+    gs->gcdebt -= osz;
 }

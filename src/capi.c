@@ -100,6 +100,34 @@ CS_API cs_Number cs_version(cs_State *ts) {
 }
 
 
+CS_API void cs_test_hashtable(cs_State *ts) {
+    const char *teststr[] = { "HashTable", "Array", "__setidx", "__getidx",
+        "__init", "__concat", "Test", NULL };
+    G_(ts)->gcstop = GCSTP; /* stop for testing */
+    HTable *ht = csH_new(ts);
+    OString *s;
+    int i;
+    for (i = 0; teststr[i]; i++) {
+        TValue key, val;
+        s = csS_new(ts, teststr[i]);
+        setstrval(ts, &key, s);
+        setstrval(ts, &val, s);
+        csH_set(ts,  ht, &key, &val);
+        printf("csH_set(ts, ht, \"%s\", \"%s\")\n",
+                cstrval(&key), cstrval(&val));
+    }
+    for (i = 0; teststr[i]; i++) {
+        const TValue *res;
+        s = csS_new(ts, teststr[i]);
+        res = csH_getstr(ht, s);
+        printf("csH_getstr(ht, \"%s\") => ", getstrbytes(s));
+        cs_assert(!isabstkey(res));
+        printf("\"%s\"\n", cstrval(res));
+    }
+    cs_assert(0);
+}
+
+
 /* auxiliary function that sets the stack top without locking */
 static void auxsettop(cs_State *ts, int n) {
     CallFrame *cf;
@@ -1214,17 +1242,17 @@ CS_API int cs_load(cs_State *ts, cs_Reader reader, void *userdata,
 CS_API int cs_gc(cs_State *ts, int option, ...) {
     va_list ap;
     int res = 0;
-    GC *gc = &G_(ts)->gc;
+    GState *gs = G_(ts);
     cs_lock(ts);
     va_start(ap, option);
     switch (option) {
 	case CS_GCSTOP: { /* stop garbage collector */
-            gc->stopped = GCSTPUSR; /* stopped by user */
+            gs->gcstop = GCSTPUSR; /* stopped by user */
             break;
         }
 	case CS_GCRESTART: { /* restart GC */
-            csG_setdebt(gc, 0);
-            gc->stopped = 0;
+            csG_setgcdebt(gs, 0);
+            gs->gcstop = 0;
             break;
         }
 	case CS_GCCOLLECT: { /* start GC cycle */
@@ -1232,47 +1260,47 @@ CS_API int cs_gc(cs_State *ts, int option, ...) {
             break;
         }
 	case CS_GCCOUNT: { /* total GC memory count in Kibibytes */
-            res = totalbytes(gc) >> 10;
+            res = gettotalbytes(gs) >> 10;
             break;
         }
 	case CS_GCCOUNTBYTES: { /* remainder bytes of total memory / 1024 */
-            res = totalbytes(gc) & 0x3ff; /* all bits before 10th bit */
+            res = gettotalbytes(gs) & 0x3ff; /* all bits before 10th bit */
             break;
         }
 	case CS_GCSTEP: { /* perform GC step */
             int data = va_arg(ap, int); /* kibibytes */
-            cs_mem debt = 69; /* >0 to signal that it did an actual step */
-            cs_ubyte old_stopped = gc->stopped;
+            cs_mem gcdebt = 69; /* >0 to signal that it did an actual step */
+            cs_ubyte old_gcstop = gs->gcstop;
             if (data == 0) { /* do a regular step ? */
-                csG_setdebt(gc, 0);
+                csG_setgcdebt(gs, 0);
                 csG_step(ts);
-            } else { /* add 'data' to total debt */
+            } else { /* add 'data' to total gcdebt */
                 /* convert 'data' to bytes (data = bytes/2^10) */
-                debt = (data * 1024) + gc->debt;
-                csG_setdebt(gc, debt);
+                gcdebt = (data * 1024) + gs->gcdebt;
+                csG_setgcdebt(gs, gcdebt);
                 csG_check(ts);
             }
-            gc->stopped = old_stopped;
-            if (debt > 0 && gc->state == GCSpause) /* end of cycle? */
+            gs->gcstop = old_gcstop;
+            if (gcdebt > 0 && gs->gcstate == GCSpause) /* end of cycle? */
                 res = 1; /* signal it */
             break;
         }
         case CS_GCSETPAUSE: { /* set GC pause */
             int data = va_arg(ap, int); /* percentage */
             api_check(ts, data <= CS_MAXPAUSE, "GC pause overflow");
-            res = getgcparam(gc->pause);
-            setgcparam(gc->pause, data);
+            res = getgcparam(gs->gcpause);
+            setgcparam(gs->gcpause, data);
             break;
         }
         case CS_GCSETSTEPMUL: { /* set GC step multiplier */
             int data = va_arg(ap, int); /* percentage */
             api_check(ts, data <= CS_MAXPAUSE, "GC step multiplier overflow");
-            res = getgcparam(gc->stepmul);
-            setgcparam(gc->stepmul, data);
+            res = getgcparam(gs->gcstepmul);
+            setgcparam(gs->gcstepmul, data);
             break;
         }
 	case CS_GCISRUNNING: { /* check if GC is running */
-            res = gcrunning(gc);
+            res = gcrunning(gs);
             break;
         }
         case CS_GCINC: {
@@ -1281,11 +1309,11 @@ CS_API int cs_gc(cs_State *ts, int option, ...) {
             int stepsize = va_arg(ap, int);
             res = CS_GCINC;
             if (pause != 0)
-                setgcparam(gc->pause, pause);
+                setgcparam(gs->gcpause, pause);
             if (stepmul != 0)
-                setgcparam(gc->stepmul, stepmul);
+                setgcparam(gs->gcstepmul, stepmul);
             if (stepsize != 0)
-                gc->stepsize = stepsize;
+                gs->gcstepsize = stepsize;
             csG_incmode(ts);
             break;
         }

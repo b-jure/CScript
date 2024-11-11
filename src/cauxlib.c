@@ -423,6 +423,7 @@ CSLIB_API int csL_get_subinstance(cs_State *ts, int insobj, const char *field,
             cs_get_global(ts, CS_HASHTABLE);
         }
         cs_assert(cs_type(ts, -1) == CS_TCLASS);
+        cs_assert(0);
         cs_push_instance(ts, -1);
         cs_remove(ts, -2); /* remove class */
         cs_push(ts, -1); /* instance copy will be left on the top */

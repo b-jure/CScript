@@ -137,7 +137,7 @@ UpVal *csF_findupval(cs_State *ts, SPtr sval) {
     cs_assert(isinthwouv(ts) || ts->openupval == NULL);
     UpVal **pp = &ts->openupval; /* good ol' pp */
     while ((upval = *pp) != NULL && (sp = uvlevel(upval)) > sval) {
-        cs_assert(!isdead(&G_(ts)->gc, upval));
+        cs_assert(!isdead(G_(ts), upval));
         if (sp == sval)
             return upval;
         pp = &upval->u.open.next;

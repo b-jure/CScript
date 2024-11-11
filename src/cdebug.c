@@ -8,6 +8,8 @@
 #define CS_CORE
 
 
+#include <string.h>
+
 #include "cdebug.h"
 #include "capi.h"
 #include "ccode.h"
@@ -20,7 +22,7 @@
 #include "cobject.h"
 #include "cprotected.h"
 #include "cvm.h"
-#include <string.h>
+#include "cgc.h"
 
 
 

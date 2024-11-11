@@ -8,7 +8,6 @@
 #define CRSTATE_H
 
 
-#include "cgc.h"
 #include "cobject.h"
 #include "cobject.h"
 
@@ -149,16 +148,34 @@ typedef struct CallFrame {
 typedef struct GState {
     cs_Alloc falloc; /* allocator */
     void *ud_alloc; /* userdata for 'falloc' */
-    cs_CFunction fpanic; /* panic handler (unprotected calls) */
-    uint seed; /* initial seed for hashing */
-    TValue nil; /* nil value (init flag) */
-    GC gc; /* garbage collection managed values and parameters */
+    cs_mem totalbytes; /* number of bytes allocated - gcgcdebt */
+    cs_mem gcdebt; /* number of bbytes not yet compensated by collector */
+    cs_umem gcestimate; /* gcestimate of non-garbage memory in use */
     HTable *strings; /* interned strings and weak refs */
     TValue ginstance; /* global instance */
+    TValue nil; /* nil value (init flag) */
+    uint seed; /* initial seed for hashing */
+    cs_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
+    cs_ubyte gcstate; /* GC state bits */
+    cs_ubyte gcstopem; /* stops emergency collections */
+    cs_ubyte gcstop; /* control wheter GC is running */
+    cs_ubyte gcemergency; /* true if this is emergency collection */
+    cs_ubyte gcpause; /* how long to wait until next cycle */
+    cs_ubyte gcstepmul; /* GC "speed" (heap size grow speed) */
+    cs_ubyte gcstepsize; /* log2 of GC granularity */
+    GCObject *objects; /* list of all collectable objects */
+    GCObject **sweeppos; /* current position of sweep in list */
+    GCObject *fin; /* list of objects that have finalizer */
+    GCObject *graylist; /* list of gray objects */
+    GCObject *grayagain; /* list of objects to be traversed atomically */
+    GCObject *weak; /* list of all weak hashtables (key & value) */
+    GCObject *tobefin; /* list of objects to be finalized (pending) */
+    GCObject *fixed; /* list of fixed objects (not to be collected) */
+    struct cs_State *thwouv; /* list of threads with open upvalues */
+    cs_CFunction fpanic; /* panic handler (unprotected calls) */
     struct cs_State *mainthread; /* thread that also created global state */
-    struct cs_State *thwouv; /* thread with open upvalues */
     OString *memerror; /* preallocated message for memory errors */
-    OString *mmnames[CS_NUM_MM]; /* method names */
+    OString *mmnames[CS_NUM_MM]; /* array with metamethod names */
     TValue *vmt[CS_NUM_TYPES]; /* vmt's for basic types */
     cs_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */
@@ -198,7 +215,7 @@ struct cs_State {
 #define GI(ts)      insval(&G_(ts)->ginstance)
 
 /* check if global state is initialized */
-#define gsinitialized(g)        ttisnil(&(g)->nil)
+#define gsinitialized(gs)       ttisnil(&(gs)->nil)
 
 /* check if thread is in 'thwouv' list */
 #define isinthwouv(ts)          ((ts)->thwouv != (ts))

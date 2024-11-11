@@ -7,8 +7,11 @@
 #ifndef CRGC_H
 #define CRGC_H
 
+#include <stdio.h>
+
 #include "cbits.h"
 #include "cobject.h"
+#include "cstate.h"
 
 
 
@@ -27,33 +30,34 @@
 #define maskwhitebits   bit2mask(WHITEBIT0, WHITEBIT1)
 
 /* mask of bits used for coloring */
-#define maskcolorbits   (maskwhitebits | BLACKBIT)
+#define maskcolorbits   (maskwhitebits | bitmask(BLACKBIT))
 
 /* mask of all GC bits */
 #define maskgcbits      (maskcolorbits | maskwhitebits)
 
 
 /* test 'mark' bits */
-#define iswhite(o)      testbits(gcomark_(o), maskwhitebits)
-#define isgray(o)       (!testbits(gcomark_(o), maskcolorbits))
-#define isblack(o)      testbit(gcomark_(o), BLACKBIT)
-#define isfin(o)        testbit(gcomark_(o), FINBIT)
+#define iswhite(o)      testbits((o)->mark, maskwhitebits)
+#define isblack(o)      testbit((o)->mark, BLACKBIT)
+#define isgray(o) /* neither white nor black */ \
+    (!testbits((o)->mark, maskcolorbits))
+#define isfin(o)        testbit((o)->mark, FINBIT)
 
 
 /* get the current white bit */
-#define csG_white(gc)           ((gc)->whitebit & maskwhitebits)
+#define csG_white(gs)           ((gs)->whitebit & maskwhitebits)
 
 /* get the other white bit */
-#define whitexor(gc)            ((gc)->whitebit ^ maskwhitebits)
+#define whitexor(gs)            ((gs)->whitebit ^ maskwhitebits)
 
 /* mark object to be finalized */
-#define markfin(o)              setbit(gcomark_(o), FINBIT)
+#define markfin(o)              setbit((o)->mark, FINBIT)
 
 /* mark non-white object as black */
-#define notw2black(o)           setbit(gcomark_(o), BLACKBIT)
+#define notw2black(o)           setbit((o)->mark, BLACKBIT)
 
 /* object is dead if xor (flipped) white bit is set */
-#define isdead(gc, o)           testbits(whitexor(gc), gcomark_(o))
+#define isdead(gs, o)           testbits(whitexor(gs), (o)->mark)
 
 /* flip object white bit */
 #define changewhite(o)          ((o)->mark ^= maskwhitebits)
@@ -81,47 +85,49 @@
  * that white objects cannot point to black objects.
  * States that break this invariant are sweep states.
  */
-#define invariantstate(gc)      ((gc)->state <= GCSatomic)
+#define invariantstate(gs)      ((gs)->gcstate <= GCSatomic)
+
 
 /* check if GC is in a sweep state */
-#define sweepstate(gc) \
-    (GCSsweepall <= (gc)->state && (gc)->state <= GCSsweepend)
+#define sweepstate(gs) \
+    (GCSsweepall <= (gs)->gcstate && (gs)->gcstate <= GCSsweepend)
 
 
 /* GC 'stopped' bits */
 #define GCSTP                   (1<<0) /* GC stopped by itself */
 #define GCSTPUSR                (1<<1) /* GC stopped by user */
 #define GCSTPCLS                (1<<2) /* GC stopped while freeing 'cs_State' */
-#define gcrunning(gc)           ((gc)->stopped == 0)
+#define gcrunning(gs)           ((gs)->gcstop == 0)
 
 
 /* default GC parameters */
-#define CSI_GCSTEPMUL           100 /* 'stepmul' */
-#define CSI_GCSTEPSIZE          14  /* 'stepsize' (log2) */
-#define CSI_GCPAUSE             200 /* after memory doubles begin cycle */
+#define CSI_GCSTEPMUL           100 /* 'gcstepmul' */
+#define CSI_GCSTEPSIZE          13  /* 'gcstepsize' (log2) */
+#define CSI_GCPAUSE             200 /* 'gcpause' after memory 2x do cycle */
 
 
 
 /* -------------------------------------------------------------------------
- * Check GC debt
+ * Check GC gcdebt
  * ------------------------------------------------------------------------- */
 
 /*
  ** Performs a single step of collection if collector
- ** debt is positive.
+ ** gcdebt is positive.
  */
 #define checkgc(ts,pre,pos) \
-    { pre; if (G_(ts)->gc.debt > 0) { csG_step(ts); pos; } \
+    { pre; if (G_(ts)->gcdebt > 0) { csG_step(ts); pos; } \
       gcmemchange(ts,pre,pos); }
 
 
 /* 'checkgc' but without 'pre' and 'pos' */
-#define csG_check(ts)       checkgc(ts,(void)0,(void)0)
+#define csG_check(ts) \
+    { printf("GC check %s\n", __func__); checkgc(ts,(void)0,(void)0); }
 
 
 
-/* get total bytes allocated (by accounting for 'debt') */
-#define totalbytes(gc)      cast_umem((gc)->total + (gc)->debt)
+/* get total bytes allocated (by accounting for 'gcdebt') */
+#define gettotalbytes(gs)      cast_umem((gs)->totalbytes + (gs)->gcdebt)
 
 
 
@@ -147,9 +153,7 @@
 ** called when 'r' (root) is a black object and 'o' is white.
 */
 #define csG_objbarrierback(ts,r,o) \
-    (isblack(r) && iswhite(o) \
-     ? csG_barrierback_(ts, r) \
-     : (void)(0))
+    (isblack(r) && iswhite(o) ? csG_barrierback_(ts, r) : (void)(0))
 
 /* wrapper around 'csG_objbarrierback' that checks if 'v' is object */
 #define csG_barrierback(ts,r,v) \
@@ -168,33 +172,6 @@
 #define csG_new(ts,s,tt,t)      cast(t *, csG_new_(ts, s, tt))
 
 
-/* garbage collector parameters and state */
-typedef struct GC {
-    cs_mem next; /* next byte threshold when GC triggers */
-    cs_mem allocated; /* number of allocated bytes ? REMOVE */
-    cs_mem debt; /* memory unaccounted by collector */
-    cs_mem total; /* total memory in use in bytes - 'debt' */
-    cs_umem estimate; /* estimate of non-garbage memory in use */
-    GCObject *objects; /* list of all GC objects */
-    GCObject **sweeppos; /* current position of sweep in list */
-    GCObject *graylist; /* list of gray objects */
-    GCObject *grayagain; /* list of objects to be traversed atomically */
-    GCObject *weak; /* list of all weak hashtables (key & value) */
-    GCObject *fixed; /* list of fixed objects (not to be collected) */
-    GCObject *fin; /* list of objects that have finalizer */
-    GCObject *tobefin; /* list of objects to be finalized (pending) */
-    cs_ubyte pause; /* how long to wait until next cycle */
-    cs_ubyte stepmul; /* GC heap grow speed */
-    cs_ubyte stepsize; /* step size in bytes (log2) */
-    cs_ubyte state; /* GC state bits */
-    cs_ubyte stopped; /* collector is stopped bits */
-    cs_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
-    cs_ubyte isem; /* true if this is emergency collection */
-    cs_ubyte stopem; /* stop emergency collection */
-} GC;
-
-
-CSI_FUNC void csG_init(GC *gc, cs_State *ts, size_t LGsize);
 CSI_FUNC GCObject *csG_new_(cs_State *ts, size_t size, int tt_);
 CSI_FUNC GCObject *csG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset);
 CSI_FUNC void csG_step(cs_State *ts);
@@ -205,7 +182,7 @@ CSI_FUNC void csG_checkfin(cs_State *ts, GCObject *o, TValue *vmt);
 CSI_FUNC void csG_fix(cs_State *ts, GCObject *o);
 CSI_FUNC void csG_barrier_(cs_State *ts, GCObject *r, GCObject *o);
 CSI_FUNC void csG_barrierback_(cs_State *ts, GCObject *r);
-CSI_FUNC void csG_setdebt(GC *gc, cs_mem debt);
+CSI_FUNC void csG_setgcdebt(GState *gs, cs_mem gcdebt);
 CSI_FUNC void csG_incmode(cs_State *ts);
 
 #endif
