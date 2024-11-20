@@ -18,7 +18,6 @@
 #define FORCNTLVAR      2 /* control variable offset */
 #define FORTBCVAR       3 /* to-be-closed variable offset */
 
-/* number of state variables for generic forloop */
 #define NSTATEVARS      4
 
 

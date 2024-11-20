@@ -35,39 +35,48 @@
 ** (-CSI_MAXSTACK is the minimum valid index; we keep some free empty
 ** space after that to help overflow detection)
 */
-#define CS_GINSTANCEINDEX           (-CSI_MAXSTACK - 1000)
-#define cs_upvalueindex(i)          (CS_GINSTANCEINDEX - (i))
-
-
-/* name of the global hashtable class */
-#define CS_HASHTABLE        "HashTable"
-
-
-/* minimum stack space available to a C function */
-#define CS_MINSTACK     20
+#define CS_REGISTRYINDEX            (-CSI_MAXSTACK - 1000)
+#define cs_upvalueindex(i)          (CS_REGISTRYINDEX - (i))
 
 
 /* CScript thread state */
 typedef struct cs_State cs_State;
 
 
-
 /* types of values */
 #define CS_TNONE        (-1)
 
-#define CS_TNIL         0   /* nil */
-#define CS_TBOOL        1   /* boolean */
-#define CS_TNUMBER      2   /* number */
-#define CS_TLUDATA      3   /* light userdata */
-#define CS_TSTRING      4   /* string */
-#define CS_TARRAY       5   /* string */
-#define CS_TFUNCTION    6   /* function */
-#define CS_TCLASS       7   /* class */
-#define CS_TINSTANCE    8   /* instance */
-#define CS_TUDATA       9   /* userdata */
-#define CS_TTHREAD      10  /* thread */
+#define CS_TNIL                 0   /* nil */
+#define CS_TBOOL                1   /* boolean */
+#define CS_TNUMBER              2   /* number */
+#define CS_TUSERDATA            3   /* userdata */
+#define CS_TLIGHTUSERDATA       4   /* light userdata */
+#define CS_TSTRING              5   /* string */
+#define CS_TARRAY               6   /* array */
+#define CS_THTABLE              7   /* hashtable */
+#define CS_TFUNCTION            8   /* function */
+#define CS_TCLASS               9   /* class */
+#define CS_TINSTANCE            10  /* instance */
+#define CS_TTHREAD              11  /* thread */
 
-#define CS_NUM_TYPES    11
+#define CS_NUM_TYPES            12
+
+
+
+/* minimum stack space available to a C function */
+#define CS_MINSTACK     20
+
+
+/* predefined values in the registry */
+#define CS_RINDEX_MAINTHREAD        0
+#define CS_RINDEX_GLOBALS           1
+#define CS_RINDEX_LAST              CS_RINDEX_GLOBALS
+
+
+/*
+** This is maximum array index value.
+*/
+#define CS_ARRAYMAX     (INT_MAX - 1)
 
 
 
@@ -94,7 +103,7 @@ typedef const char *(*cs_Reader)(cs_State *ts, void *data, size_t *szread);
 typedef void (*cs_WarnFunction)(void *ud, const char *msg, int tocont);
 
 
-/* Virtual Method Table (for metamethods) */
+/* Virtual Method Table */
 typedef struct cs_VMT cs_VMT;
 
 /* Type for storing name:function pairs or placeholders */
@@ -105,7 +114,7 @@ typedef struct cs_DebugInfo cs_DebugInfo;
 
 
 /* metamethods */
-typedef enum cs_MM {
+typedef enum cs_MM { /* ORDER MM */
     CS_MM_INIT = 0,
     CS_MM_GETIDX,
     CS_MM_SETIDX,
@@ -129,13 +138,14 @@ typedef enum cs_MM {
     CS_MM_EQ,
     CS_MM_LT,
     CS_MM_LE,
+    CS_MM_N,
 } cs_MM;
 
-#define CS_NUM_MM     (CS_MM_LE + 1)
 
 struct cs_VMT {
-    cs_CFunction func[CS_NUM_MM]; /* metamethods */
+    cs_CFunction func[CS_MM_N]; /* metamethods */
 };
+
 
 struct cs_Entry {
     const char *name;
@@ -239,6 +249,7 @@ CS_API void        cs_push_cclosure(cs_State *ts, cs_CFunction fn, int upvals);
 CS_API void        cs_push_bool(cs_State *ts, int b); 
 CS_API void        cs_push_lightuserdata(cs_State *ts, void *p); 
 CS_API void        cs_push_array(cs_State *ts);
+CS_API void        cs_push_table(cs_State *ts);
 CS_API int         cs_push_thread(cs_State *ts); 
 CS_API void        cs_push_instance(cs_State *ts, int clsobj);
 CS_API void        cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobj,
@@ -251,8 +262,8 @@ CS_API void        cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobj,
 CS_API int   cs_get_global(cs_State *ts, const char *name); 
 CS_API int   cs_get(cs_State *ts, int obj); 
 CS_API int   cs_get_index(cs_State *ts, int arrobj, cs_Integer index);
-CS_API int   cs_get_field(cs_State *ts, int insobj); 
-CS_API int   cs_get_fieldstr(cs_State *ts, int insobj, const char *field); 
+CS_API int   cs_get_field(cs_State *ts, int obj); 
+CS_API int   cs_get_fieldstr(cs_State *ts, int obj, const char *field); 
 CS_API int   cs_get_class(cs_State *ts, int insobj); 
 CS_API int   cs_get_method(cs_State *ts, int insobj); 
 CS_API int   cs_get_metamethod(cs_State *ts, int obj, cs_MM mm); 
@@ -267,9 +278,9 @@ CS_API int   cs_get_uservalue(cs_State *ts, int udobj, int n);
 CS_API void  cs_set_global(cs_State *ts, const char *name); 
 CS_API void  cs_set(cs_State *ts, int obj); 
 CS_API void  cs_set_index(cs_State *ts, int arrobj, cs_Integer index);
-CS_API void  cs_set_field(cs_State *ts, int insobj); 
-CS_API void  cs_set_fieldstr(cs_State *ts, int insobj, const char *field); 
-CS_API void  cs_set_userdatavmt(cs_State *ts, int index, const cs_VMT *vmt); 
+CS_API void  cs_set_field(cs_State *ts, int obj); 
+CS_API void  cs_set_fieldstr(cs_State *ts, int obj, const char *field); 
+CS_API void  cs_set_uservmt(cs_State *ts, int index, const cs_VMT *vmt); 
 CS_API int   cs_set_uservalue(cs_State *ts, int index, int n); 
 CS_API void  cs_set_userdatamm(cs_State *ts, int index, cs_MM mm); 
 
@@ -357,6 +368,7 @@ CS_API size_t           cs_stringtonumber(cs_State *ts, const char *s, int *of);
 
 #define cs_is_function(ts, n)       (cs_type(ts, (n)) == CS_TFUNCTION)
 #define cs_is_array(ts, n)          (cs_type(ts, (n)) == CS_TARRAY)
+#define cs_is_hashtable(ts, n)      (cs_type(ts, (n)) == CS_THTABLE)
 #define cs_is_class(ts, n)          (cs_type(ts, (n)) == CS_TCLASS)
 #define cs_is_instance(ts, n)       (cs_type(ts, (n)) == CS_TINSTANCE)
 #define cs_is_lightuserdata(ts, n)  (cs_type(ts, (n)) == CS_TLUDATA)

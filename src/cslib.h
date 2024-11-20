@@ -11,7 +11,7 @@
 #include "cscript.h"
 
 
-#define CS_CORELIBNAME      "core"
+#define CS_CORELIBNAME      "__G"
 CSMOD_API int csL_open_core(cs_State *ts);
 
 

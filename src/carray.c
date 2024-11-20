@@ -33,8 +33,8 @@ void csA_shrink(cs_State *ts, Array *arr) {
 /* ensure that 'index' can fit into array memory block */
 void csA_ensure(cs_State *ts, Array *arr, cs_Integer index) {
     if (csi_castS2U(index) >= arr->sz) {
-        csM_ensurevec(ts, arr->b, arr->sz, arr->n, index - arr->n + 1, ARRAYLIMIT,
-                      "array elements", TValue);
+        csM_ensurevec(ts, arr->b, arr->sz, arr->n, index - arr->n + 1,
+                      ARRAYLIMIT, "array elements", TValue);
         for (uint i = arr->n; i < arr->sz; i++)
             setnilval(&arr->b[i]);
         arr->n = index + 1; /* adjust new length */

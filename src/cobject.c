@@ -13,15 +13,6 @@
 #include "cvm.h"
 
 
-static const char udataname[] = "userdata";
-
-CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
-    "no value", "nil", "boolean", "number", udataname, "string",
-    "array", "function", "class", "instance", udataname, "thread",
-    "upvalue"
-};
-
-
 /* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
 int csO_ceillog2 (uint x) {
     static const cs_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
@@ -66,7 +57,7 @@ static cs_Number numarithm(cs_State *ts, cs_Number x, cs_Number y, int op) {
         case CS_OPMOD: return csV_modnum(ts, x, y);
         case CS_OPPOW: return csi_numpow(ts, x, y);
         case CS_OPUNM: return csi_nummul(ts, x, y);
-        default: cs_unreachable(); return 0.0;
+        default: cs_assert(0); return 0.0;
     }
 }
 
@@ -86,7 +77,7 @@ static cs_Integer intarithm(cs_State *ts, cs_Integer x, cs_Integer y, int op) {
         case CS_OPBAND: return csi_intop(&, x, y);
         case CS_OPBOR: return csi_intop(|, x, y);
         case CS_OPBXOR: return csi_intop(^, x, y);
-        default: cs_unreachable(); return 0;
+        default: cs_assert(0); return 0;
     }
 }
 
@@ -103,11 +94,11 @@ int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
 
 
 /* try to convert value to 'cs_Integer' */
-int csO_tointeger(const TValue *v, cs_Integer *i, int mode) {
-    if (ttisnum(v)) {
-        return csO_n2i(fval(v), i, mode);
-    } else if (ttisint(v)) {
-        *i = ival(v);
+int csO_tointeger(const TValue *o, cs_Integer *i, int mode) {
+    if (ttisnum(o)) {
+        return csO_n2i(fval(o), i, mode);
+    } else if (ttisint(o)) {
+        *i = ival(o);
         return 1;
     }
     return 0;

@@ -110,6 +110,11 @@ void *csM_shrinkarr(cs_State *ts, void *ptr, int *sizep, int final,
 }
 
 
+cs_noret csM_toobig(cs_State *ts) {
+    csD_runerror(ts, "memory allocation error: block too big");
+}
+
+
 void csM_free_(cs_State *ts, void *ptr, size_t osz) {
     GState *gs = G_(ts);
     cs_assert((osz == 0) == (ptr == NULL));

@@ -9,6 +9,7 @@
 
 
 #include "cmeta.h"
+#include "clexer.h"
 #include "csconf.h"
 #include "cstring.h"
 #include "cdebug.h"
@@ -20,40 +21,33 @@
 #include "cmem.h"
 
 
+static const char udataname[] = "userdata";
+
+CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
+    "no value", "nil", "boolean", "number", udataname, udataname, "string",
+    "array", "hashtable", "function", "class", "instance", "thread", "upvalue"
+};
+
+
 void csMM_init(cs_State *ts) {
-    const char *mmnames[CS_NUM_MM] = {
+    const char *mmnames[CS_MM_N] = { /* ORDER MM */
         "__init", "__getidx", "__setidx", "__gc", "__close", "__call",
         "__concat", "__add", "__sub", "__mul", "__div", "__mod", "__pow",
         "__shl", "__shr", "__band", "__bor", "__xor", "__unm", "__bnot",
         "__eq", "__lt", "__le"
     };
-    TValue key, val;
-    Instance *G_ins;
-    OClass *cls;
-    GState *gs = G_(ts);
-    for (int i = 0; i < CS_NUM_MM; i++) {
+    for (int i = 0; i < CS_MM_N; i++) {
         OString *s = csS_new(ts, mmnames[i]);
-        s->bits = bitmask(STRVMTBIT);
-        s->extra = i;
+        s->extra = i + NUM_KEYWORDS + 1;
         G_(ts)->mmnames[i] = s;
         csG_fix(ts, obj2gco(G_(ts)->mmnames[i]));
     }
-    /* create global 'HashTable' class */
-    cls = csMM_newclass(ts);
-    cs_assert(cls->vmt == NULL);
-    /* create global instance and anchor it to global state */
-    G_ins = csMM_newinstance(ts, cls);
-    setinsval(ts, &gs->ginstance, G_ins);
-    /* set HashTable class into global instance */
-    setstrval(ts, &key, csS_newlit(ts, CS_HASHTABLE));
-    setclsval(ts, &val, cls);
-    csH_set(ts, GI(ts)->fields, &key, &val);
 }
 
 
 TValue *csMM_newvmt(cs_State *ts) {
     TValue *vmt = csM_malloc(ts, SIZEVMT);
-    for (int i = 0; i < CS_NUM_MM; i++)
+    for (int i = 0; i < CS_MM_N; i++)
         setnilval(&vmt[i]);
     return vmt;
 }
@@ -72,7 +66,7 @@ Instance *csMM_newinstance(cs_State *ts, OClass *cls) {
     Instance *ins = csG_new(ts, sizeof(Instance), CS_VINSTANCE, Instance);
     ins->oclass = cls;
     ins->fields = NULL;
-    setins2s(ts, ts->sp.p++, ins); /* anchor instance */
+    setinsval2s(ts, ts->sp.p++, ins); /* anchor instance */
     ins->fields = csH_new(ts);
     ts->sp.p--; /* remove instance */
     return ins;
@@ -80,15 +74,16 @@ Instance *csMM_newinstance(cs_State *ts, OClass *cls) {
 
 
 IMethod *csMM_newinsmethod(cs_State *ts, Instance *ins, const TValue *method) {
-    IMethod *im = csG_new(ts, sizeof(IMethod), CS_VMETHOD, IMethod);
-    im->receiver = ins;
+    IMethod *im = csG_new(ts, sizeof(IMethod), CS_VIMETHOD, IMethod);
+    im->ins = ins;
     setobj(ts, &im->method, method);
     return im;
 }
 
 
 UserData *csMM_newuserdata(cs_State *ts, size_t size, int nuv) {
-    UserData *ud = csG_new(ts, sizeofud(nuv, size), CS_VUDATA, UserData);
+    UserData *ud = csG_new(ts, sizeofuserdata(nuv, size), CS_VUSERDATA,
+                           UserData);
     ud->vmt = NULL;
     ud->nuv = nuv;
     ud->size = size;
@@ -96,14 +91,13 @@ UserData *csMM_newuserdata(cs_State *ts, size_t size, int nuv) {
 }
 
 
-#include <stdio.h>
 /* get method 'mm' */
 const TValue *csMM_get(cs_State *ts, const TValue *v, cs_MM mm) {
     TValue *vmt;
-    cs_assert(0 <= mm && mm < CS_NUM_MM);
+    cs_assert(0 <= mm && mm < CS_MM_N);
     switch (ttypetag(v)) {
         case CS_VINSTANCE: vmt = insval(v)->oclass->vmt; break;
-        case CS_VUDATA: vmt = udval(v)->vmt; break;
+        case CS_VUSERDATA: vmt = uval(v)->vmt; break;
         default: vmt = G_(ts)->vmt[ttype(v)]; break;
     }
     return (vmt ? &vmt[mm] : &G_(ts)->nil);
@@ -210,15 +204,15 @@ static int callunaryaux(cs_State *ts, const TValue *v, SPtr res, int mt) {
 void csMM_tryunary(cs_State *ts, const TValue *v, SPtr res, cs_MM mm) {
     if (c_unlikely(!callunaryaux(ts, v, res, mm))) {
         switch (mm) {
-        case CS_MM_BNOT: {
-            csD_bitwerror(ts, v, v);
-            break; /* UNREACHED */
-        }
-        case CS_MM_UNM: {
-            csD_aritherror(ts, v, v);
-            break; /* UNREACHED */
-        }
-        default: cs_unreachable(); break;
+            case CS_MM_BNOT: {
+                csD_bitwerror(ts, v, v);
+                break; /* UNREACHED */
+            }
+            case CS_MM_UNM: {
+                csD_aritherror(ts, v, v);
+                break; /* UNREACHED */
+            }
+            default: cs_assert(0); break;
         }
     }
 }
@@ -237,9 +231,9 @@ void csMM_tryconcat(cs_State *ts) {
 
 /* call order method */
 int csMM_order(cs_State *ts, const TValue *v1, const TValue *v2, cs_MM mm) {
-    cs_assert(CS_MM_EQ <= mm && mm <= CS_NUM_MM);
+    cs_assert(CS_MM_EQ <= mm && mm <= CS_MM_N);
     if (c_likely(callbinaux(ts, v1, v2, ts->sp.p, mm)))
-        return csi_isfalse(s2v(ts->sp.p));
+        return c_isfalse(s2v(ts->sp.p));
     csD_ordererror(ts, v1, v2);
     /* UNREACHED */
     return 0;
@@ -274,5 +268,5 @@ void csMM_freeclass(cs_State *ts, OClass *cls) {
 void csMM_freeuserdata(cs_State *ts, UserData *ud) {
     if (ud->vmt)
         csM_free_(ts, ud->vmt, SIZEVMT);
-    csM_free_(ts, ud, sizeofud(ud->nuv, ud->size));
+    csM_free_(ts, ud, sizeofuserdata(ud->nuv, ud->size));
 }

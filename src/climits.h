@@ -13,9 +13,9 @@
 
 
 /*
- * Signed and unsigned types that represent count
- * in bytes of total memory used by cript.
- */
+** Signed and unsigned types that represent count
+** in bytes of total memory used by cript.
+*/
 typedef size_t cs_umem;
 typedef ptrdiff_t cs_mem;
 
@@ -24,9 +24,9 @@ typedef ptrdiff_t cs_mem;
 
 
 /*
- * Used for representing small signed/unsigned
- * numbers instead of declaring them 'char'.
- */
+** Used for representing small signed/unsigned
+** numbers instead of declaring them 'char'.
+*/
 typedef unsigned char cs_ubyte;
 typedef signed char cs_byte;
 
@@ -48,12 +48,12 @@ typedef unsigned short ushrt;
 
 
 /*
- * Maximum size visible for CSript.
- * It must be less than what is representable by 'cs_Integer'.
- */
-#define CSMAXSIZE \
-    (sizeof(size_t) < sizeof(cs_Integer) \
-     ? (SIZE_MAX) : (size_t)(CS_INTEGER_MAX))
+** Maximum size visible for CSript.
+** It must be less than what is representable by 'cs_Integer'.
+*/
+#define MAXSIZE \
+        (sizeof(size_t) < sizeof(cs_Integer) \
+        ? (SIZE_MAX) : (size_t)(CS_INTEGER_MAX))
 
 
 
@@ -86,11 +86,11 @@ typedef unsigned short ushrt;
 
 
 /*
- * Allow threaded code by default on GNU C compilers.
- * What this allows is usage of jump table aka using
- * local labels inside arrays making O(1) jumps to
- * instructions inside interpreter loop.
- */
+** Allow threaded code by default on GNU C compilers.
+** What this allows is usage of jump table aka using
+** local labels inside arrays making O(1) jumps to
+** instructions inside interpreter loop.
+*/
 #if defined(__GNUC__)
 #define PRECOMPUTED_GOTO
 #endif
@@ -120,35 +120,48 @@ typedef unsigned short ushrt;
 
 
 
-/* unreachable code (optimization) */
-#if defined(__GNUC__)
-#define cs_unreachable()        __builtin_unreachable()
-#elif defined(_MSC_VER) && _MSC_VER >= 1200
-#define cs_unreachable()        __assume(0)
-#else
-#define cs_unreachable()        cs_assert(0 && "unreachable")
-#endif
-
-
-
 /*
- * Type for virtual-machine instructions
- * Instructions (opcodes) are 1 byte in size not including
- * the arguments; arguments vary in size (short/long) and
- * more on that in 'copcode.h'.
- */
+** Type for virtual-machine instructions
+** Instructions (opcodes) are 1 byte in size not including
+** the arguments; arguments vary in size (short/long) and
+** more on that in 'copcode.h'.
+*/
 typedef cs_ubyte Instruction;
 
 
 
 /*
- * Initial size for the weak hash table that stores
- * interned strings.
- * It has to be power of 2, because of the hash table
- * implementation.
- */
-#if !defined(CSI_MINSTRHTABSIZE)
-#define CSI_MINSTRHTABSIZE      64
+** Maximum length for short strings, that is, strings that are
+** internalized. (Cannot be smaller than reserved words or keys for
+** metamethods, as these strings must be internalized;
+** strlen("continue") = 8, strlen("__getidx") = 8.)
+*/
+#if !defined(CSI_MAXSHORTLEN)
+#define CSI_MAXSHORTLEN	    40
+#endif
+
+
+
+/*
+** Initial size for the string table (must be power of 2).
+** The CScript core alone registers ~50 strings (reserved words +
+** metamethod keys + a few others). Libraries would typically add
+** a few dozens more.
+*/
+#if !defined(MINSTRTABSIZE)
+#define MINSTRTABSIZE	    128
+#endif
+
+
+
+/*
+** Size of cache for strings in the API. 'N' is the number of
+** sets (better be a prime) and "M" is the size of each set (M == 1
+** makes a direct cache.)
+*/
+#if !defined(STRCACHE_N)
+#define STRCACHE_N	    53  /* cache lines */
+#define STRCACHE_M	    2   /* cache line size * sizeof(OString*) */
 #endif
 
 
@@ -165,32 +178,20 @@ typedef cs_ubyte Instruction;
 
 
 /*
- * Minimum size for string buffer during
- * lexing, this buffer memory will be freed
- * after compilation.
- */
-#if !defined(CSI_MINBUFFER)
-#define CSI_MINBUFFER           32
+** Minimum size for string buffer during lexing, this buffer memory
+** will be freed after compilation.
+*/
+#if !defined(CS_MINBUFFER)
+#define CS_MINBUFFER           32
 #endif
 
 
 
 /*
- * Maximum size for 'HTable'.
- * Make sure the value fits in 'INT_MAX'.
- */
-#if !defined(CSI_MAXHTABSIZE)
-#define CSI_MAXHTABSIZE         INT_MAX
-#endif
-
-
-
-/*
- * Minimum internal array siz.
- * This should be 2^n='CS_MINARRSIZE'.
- * Make sure this value fits in 'INT_MAX'
- * and is >= 4.
- */
+** Minimum internal array size.
+** This should be 2^n='CS_MINARRSIZE'.
+** Make sure this value fits in 'INT_MAX' and is >= 4.
+*/
 #if !defined(CSI_MINARRSIZE)
 #define CSI_MINARRSIZE          8
 #endif
@@ -198,18 +199,18 @@ typedef cs_ubyte Instruction;
 
 
 /*
- * Maximum call depth for nested C calls including the
- * parser limit for syntactically nested non-terminals and
- * other features implemented through recursion in C.
- * Any value will suffice as long as it fits in 'unsigned short'.
- */
+** Maximum call depth for nested C calls including the
+** parser limit for syntactically nested non-terminals and
+** other features implemented through recursion in C.
+** Any value will suffice as long as it fits in 'unsigned short'.
+*/
 #define CSI_MAXCCALLS       4096
 
 
 
 /*
- * Runs each time program enters ('cs_lock') and
- * leaves ('cs_unlock') CSript core (C API).
+** Runs each time program enters ('cs_lock') and
+** leaves ('cs_unlock') CSript core (C API).
  */
 #if !defined(cs_lock)
 
@@ -226,9 +227,9 @@ typedef cs_ubyte Instruction;
 
 
 /*
- * These macros allow user-defined action to be taken each
- * time cs_State (thread) is created or deleted.
- */
+** These macros allow user-defined action to be taken each
+** time cs_State (thread) is created or deleted.
+*/
 #if !defined(csi_userstatecreated)
 #define csi_userstatecreated(ts)            ((void)(ts))
 #endif
@@ -248,9 +249,9 @@ typedef cs_ubyte Instruction;
 
 
 /*
- * @MAX - return maximum value.
- * @MIN - return minimum value.
- */
+** @MAX - return maximum value.
+** @MIN - return minimum value.
+*/
 #if defined(__GNUC__)
 #define MAX(a, b) \
         __extension__ \
@@ -278,9 +279,9 @@ typedef cs_ubyte Instruction;
 
 
 /*
- * @UNUSED - marks variable unused to avoid compiler
- * warnings.
- */
+** @UNUSED - marks variable unused to avoid compiler
+** warnings.
+*/
 #ifndef UNUSED
 #define UNUSED(x)   ((void)(x))
 #endif
@@ -337,11 +338,11 @@ typedef cs_ubyte Instruction;
 #endif
 
 /*
- * @csi_numadd - addition.
- * @csi_numsub - subtraction.
- * @csi_nummul - multiplication.
- * @csi_numunm - negation.
- */
+** @csi_numadd - addition.
+** @csi_numsub - subtraction.
+** @csi_nummul - multiplication.
+** @csi_numunm - negation.
+*/
 #ifndef csi_numadd
 #define csi_numadd(ts, a, b)    ((void)(ts), (a) + (b))
 #define csi_numsub(ts, a, b)    ((void)(ts), (a) - (b))
@@ -350,13 +351,13 @@ typedef cs_ubyte Instruction;
 #endif
 
 /*
- * @csi_numeq - ordering equal.
- * @csi_numne - ordering not equal.
- * @csi_numlt - ordering less than.
- * @csi_numle - ordering less equal.
- * @csi_numgt - ordering greater than.
- * @csi_numge - ordering greater equal.
- */
+** @csi_numeq - ordering equal.
+** @csi_numne - ordering not equal.
+** @csi_numlt - ordering less than.
+** @csi_numle - ordering less equal.
+** @csi_numgt - ordering greater than.
+** @csi_numge - ordering greater equal.
+*/
 #ifndef csi_numeq
 #define csi_numeq(a, b)         ((a) == (b))
 #define csi_numne(a, b)         (!csi_numeq(a, b))

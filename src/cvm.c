@@ -30,10 +30,7 @@
 #include "cstring.h"
 
 
-/*
-** By default, use goto jump table in the interpreter loop
-** if compiler supports precomputed goto.
-*/
+/* by default, use jump table */
 #if !defined(CS_USE_JUMPTABLE)
 #if defined(__GNUC__)
 #define CS_USE_JUMPTABLE	1
@@ -47,16 +44,16 @@ static int booleans[2] = { CS_VFALSE, CS_VTRUE };
 
 
 /*
-** Allocate new Cript closure, push it on stack and
+** Allocate new CSript closure, push it on stack and
 ** initialize its upvalues.
 */
-static void pushclosure(cs_State *ts, Function *fn, UpVal **enc, SPtr base) {
-    int nupvals = fn->sizeupvals;
-    CrClosure *cl = csF_newCrClosure(ts, nupvals);
-    cl->fn = fn;
-    setcrcl2s(ts, ts->sp.p++, cl); /* anchor to stack */
+static void pushclosure(cs_State *ts, Proto *p, UpVal **enc, SPtr base) {
+    int nupvals = p->sizeupvals;
+    CSClosure *cl = csF_newCrClosure(ts, nupvals);
+    cl->p = p;
+    setclCSval2s(ts, ts->sp.p++, cl); /* anchor to stack */
     for (int i = 0; i < nupvals; i++) {
-        UpValInfo *uv = &fn->upvals[i];
+        UpValInfo *uv = &p->upvals[i];
         if (uv->onstack)
             cl->upvals[i] = csF_findupval(ts, base + uv->idx);
         else
@@ -93,7 +90,7 @@ static void pusharray(cs_State *ts, int size, int elems) {
 /* allocate new class and push it on stack */
 static void pushclass(cs_State *ts) {
     OClass *cls = csMM_newclass(ts);
-    setcls2s(ts, ts->sp.p++, cls); /* anchor to stack */
+    setclsval2s(ts, ts->sp.p++, cls); /* anchor to stack */
 }
 
 
@@ -160,7 +157,7 @@ void csV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
 
 /* set 'vmt' entry */
 static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
-    cs_assert(0 <= vmtt && vmtt < CS_NUM_MM);
+    cs_assert(0 <= vmtt && vmtt < CS_MM_N);
     if (c_unlikely(!(*vmt))) /* empty 'vmt' */
         *vmt = csMM_newvmt(ts);
     (*vmt)[vmtt] = *fn; /* set the entry */
@@ -203,7 +200,7 @@ cs_sinline int numle(cs_State *ts, const TValue *v1, const TValue *v2) {
 
 /* less equal ordering on non-number values */
 cs_sinline int otherle(cs_State *ts, const TValue *v1, const TValue *v2) {
-    if (ttisstr(v1) && ttisstr(v2))
+    if (ttisstring(v1) && ttisstring(v2))
         return (csS_cmp(strval(v1), strval(v2)) <= 0);
     else
         return csMM_order(ts, v1, v2, CS_MM_LE);
@@ -247,7 +244,7 @@ cs_sinline int numlt(const TValue *v1, const TValue *v2) {
 
 /* 'less than' ordering '<' on non-number values */
 cs_sinline int otherlt(cs_State *ts, const TValue *v1, const TValue *v2) {
-    if (ttisstr(v1) && ttisstr(v2))
+    if (ttisstring(v1) && ttisstring(v2))
         return csS_cmp(strval(v1), strval(v2));
     else
         return csMM_order(ts, v1, v2, CS_MM_LT);
@@ -276,77 +273,41 @@ int csV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
                 csO_tointeger(v2, &i2, N2IEXACT) && i1 == i2);
     }
     switch (ttypetag(v1)) {
-    case CS_VNIL: case CS_VFALSE: case CS_VTRUE: return 1;
-    case CS_VNUMINT: return (ival(v1) == ival(v2));
-    case CS_VNUMFLT: return csi_numeq(fval(v1), fval(v2));
-    case CS_VLUDATA: return (pval(v1) == pval(v2));
-    case CS_VSTRING: return csS_eq(strval(v1), strval(v2));
-    case CS_VUDATA: {
-        if (udval(v1) == udval(v2)) return 1;
-        else if (ts == NULL) return 0;
-        method = csMM_get(ts, v1, CS_MM_EQ);
-        if (ttisnil(method))
-            method = csMM_get(ts, v2, CS_MM_EQ);
-        break;
-    }
-    case CS_VINSTANCE: {
-        if (insval(v1) == insval(v2)) return 1;
-        else if (ts == NULL) return 0;
-        method = csMM_get(ts, v1, CS_MM_EQ);
-        if (ttisnil(method))
-            method = csMM_get(ts, v2, CS_MM_EQ);
-        break;
-    }
-    default: return (gcoval(v1) == gcoval(v2));
+        case CS_VNIL: case CS_VFALSE: case CS_VTRUE: return 1;
+        case CS_VNUMINT: return (ival(v1) == ival(v2));
+        case CS_VNUMFLT: return csi_numeq(fval(v1), fval(v2));
+        case CS_VLIGHTUSERDATA: return (pval(v1) == pval(v2));
+        case CS_VSHRSTR: return eqshrstr(strval(v1), strval(v2));
+        case CS_VLNGSTR: return csS_eqlngstr(strval(v1), strval(v2));
+        case CS_VUSERDATA: {
+            if (uval(v1) == uval(v2)) return 1;
+            else if (ts == NULL) return 0;
+            method = csMM_get(ts, v1, CS_MM_EQ);
+            if (ttisnil(method))
+                method = csMM_get(ts, v2, CS_MM_EQ);
+            break;
+        }
+        case CS_VINSTANCE: {
+            if (insval(v1) == insval(v2)) return 1;
+            else if (ts == NULL) return 0;
+            method = csMM_get(ts, v1, CS_MM_EQ);
+            if (ttisnil(method))
+                method = csMM_get(ts, v2, CS_MM_EQ);
+            break;
+        }
+        default: return (gcoval(v1) == gcoval(v2));
     }
     if (isabstkey(method))  {
         return 0;
     } else {
         csMM_callbinres(ts, method, v1, v2, ts->sp.p);
-        return !csi_isfalse(s2v(ts->sp.p));
+        return !c_isfalse(s2v(ts->sp.p));
     }
 }
 
 
-/* 
-** Check if global exists and return it, othwerwise invoke
-** undefined global variable error.
-*/
-cs_sinline const TValue *checkglobal(cs_State *ts, TValue *key) {
-    const TValue *out = csH_get(htval(&G_(ts)->ginstance), key);
-    if (c_unlikely(isabstkey(out)))
-        csD_globalerror(ts, "undefined", strval(key));
-    return out;
-}
-
-
-cs_sinline void defineglobal(cs_State *ts, TValue *key, TValue *val) {
-    cs_assert(ttisstr(key));
-    const TValue *slot = csH_get(htval(&G_(ts)->ginstance), key);
-    if (c_unlikely(!isabstkey(slot)))
-        csD_runerror(ts, "global variable '%s' redefinition", cstrval(key));
-    else
-        csH_set(ts, htval(&G_(ts)->ginstance), key, val);
-}
-
-
-/* get global variable value */
-cs_sinline void getglobal(cs_State *ts, TValue *key, TValue *out) {
-    cs_assert(ttisstr(key));
-    setobj(ts, out, checkglobal(ts, key));
-}
-
-
-/* set global variable value */
-cs_sinline void setglobal(cs_State *ts, TValue *key, TValue *newval) {
-    if (c_unlikely(isconst(checkglobal(ts, key))))
-        csD_globalerror(ts, "read-only", strval(key));
-    csH_set(ts, htval(&G_(ts)->ginstance), key, newval);
-}
-
-
-static void arrayseti(cs_State *ts, Array *arr, const TValue *index,
-                      const TValue *val) {
+static void setarrayindex(cs_State *ts, Array *arr, const TValue *index,
+                          const TValue *val) {
     cs_Integer i;
     if (c_likely(tointeger(index, &i))) { /* index is integer? */
         if (c_likely(0 <= i)) { /* non-negative index */
@@ -367,12 +328,12 @@ static void arrayseti(cs_State *ts, Array *arr, const TValue *index,
 void csV_set(cs_State *ts, const TValue *obj, const TValue *key,
              const TValue *val) {
     if (ttisarr(obj)) { /* array object? */
-        arrayseti(ts, arrval(obj), key, val);
+        setarrayindex(ts, arrval(obj), key, val);
     } else {
         const TValue *fmm = csMM_get(ts, obj, CS_MM_SETIDX);
         if (!ttisnil(fmm)) { /* have metamethod ? */
             csMM_callhtm(ts, fmm, obj, key, val);
-        } else if (ttisins(obj)) { /* object is instance ? */
+        } else if (ttisinstance(obj)) { /* object is instance ? */
             csH_set(ts, insval(obj)->fields, key, val);
             csG_barrierback(ts, gcoval(obj), val);
         } else { /* error */
@@ -403,7 +364,7 @@ static void arraygeti(cs_State *ts, Array *arr, const TValue *index, SPtr res) {
 
 /* bind method to instance and set it at 'res' */
 #define bindmethod(ts,ins,fn,res) \
-    setim2s(ts, res, csMM_newinsmethod(ts, ins, v))
+    setimval2s(ts, res, csMM_newinsmethod(ts, ins, fn))
 
 
 void csV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
@@ -415,7 +376,7 @@ void csV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
         fmm = csMM_get(ts, obj, CS_MM_GETIDX);
         if (!ttisnil(fmm)) { /* have metamethod ? */
             csMM_callhtmres(ts, fmm, obj, key, res);
-        } else { /* otherwise perform raw access */
+        } else { /* otherwise perform raw access on instance object */
             if (c_unlikely(ttypetag(obj) != CS_VINSTANCE))
                 csD_typeerror(ts, obj, "index");
             ins = insval(obj);
@@ -429,38 +390,23 @@ void csV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
                     /* bind it to instance and set 'res'  */
                     bindmethod(ts, ins, v, res)
                     return;
-                } /* else fallthrough */
-            }
+                } /* else fall through */
+            } /* else fall through */
             setnilval(s2v(res));
         }
     }
 }
 
 
-void csV_getsuper(cs_State *ts, Instance *ins, OClass *cls, const TValue *s,
-                  SPtr res) {
-    if (cls->methods) { /* superclass has methods ? */
-        const TValue *v = csH_get(cls->methods, s);
-        if (!isabstkey(v))
-            bindmethod(ts, ins, v, res)
-    } else { /* no methods; set nil */
-        setnilval(s2v(res));
-    }
-}
+#define checkmethods(cls,res) \
+        (!(cls)->methods ? (setnilval(s2v(res)), 0) : 1)
 
 
-/* 'dest' inherits methods from 'obj' (if any) */
-cs_sinline void inherit(cs_State *ts, const TValue *obj, OClass *dest) {
-    OClass *src;
-    if (c_unlikely(!ttiscls(obj)))
-        csD_runerror(ts, "inherit a non-class value");
-    src = clsval(obj);
-    if (c_likely(src->methods)) { /* 'src' has methods ? */
-        cs_assert(dest->methods == NULL);
-        dest->methods = csH_new(ts);
-        csH_copykeys(ts, src->methods, dest->methods);
-    }
-}
+#define getsuper(ts,ins,cls,k,res,fget) \
+    { if ((cls)->methods) { \
+        const TValue *f = fget((cls)->methods, k); \
+        if (!isabstkey(f)) bindmethod(ts, ins, f, res); \
+      } else setnilval(s2v(res)); }
 
 
 /*
@@ -472,10 +418,10 @@ cs_sinline void inherit(cs_State *ts, const TValue *obj, OClass *dest) {
 cs_sinline void precallmbin(cs_State *ts, const TValue *v1, const TValue *v2,
                             cs_MM op, SPtr res) {
     const TValue *func;
-    const char *opname = getstrbytes(G_(ts)->mmnames[op]);
+    const char *opname = getshrstr(G_(ts)->mmnames[op]);
     if (c_unlikely(ttypetag(v1) != ttypetag(v2)))
         csD_typeerrormeta(ts, v1, v2, opname);
-    if (c_unlikely(ttisins(v1) && insval(v1)->oclass != insval(v2)->oclass))
+    if (c_unlikely(ttisinstance(v1) && insval(v1)->oclass != insval(v2)->oclass))
         csD_runerror(ts, "tried to %s instances of different class", opname);
     func = csMM_get(ts, v1, op);
     if (c_unlikely(ttisnil(func)))
@@ -559,22 +505,30 @@ cs_sinline int precallC(cs_State *ts, SPtr func, int nres, cs_CFunction f) {
 }
 
 
-cs_sinline SPtr adjustffunc(cs_State *ts, SPtr func, const TValue *f) {
-    checkstackGCp(ts, 1, func); /* space for 'f' */
+/* 
+** Adjust stack for meta method call.
+** func is the object that has metamethod and f is the metamethod.
+** Stack is shifted so that the f is in place of func and func is its
+** argument at func + 1. This function assumes there is enough space
+** on the stack for f.
+*/
+cs_sinline void auxinsertf(cs_State *ts, SPtr func, const TValue *f) {
     for (SPtr p = ts->sp.p; p > func; p--)
         setobjs2s(ts, p, p-1);
     ts->sp.p++;
     setobj2s(ts, func, f);
-    return func;
 }
 
 
-cs_sinline SPtr trymmcall(cs_State *ts, SPtr func) {
+/* try and call __call metamethod */
+cs_sinline SPtr trymetacall(cs_State *ts, SPtr func) {
     const TValue *f;
-    f = csMM_get(ts, s2v(func), CS_MM_CALL);
-    if (c_unlikely(ttisnil(f)))
+    checkstackGCp(ts, 1, func); /* space for func */
+    f = csMM_get(ts, s2v(func), CS_MM_CALL); /* (after GC) */
+    if (c_unlikely(ttisnil(f))) /* missing __call? (after GC) */
         csD_callerror(ts, s2v(func));
-    return adjustffunc(ts, func, f);
+    auxinsertf(ts, func, f);
+    return func;
 }
 
 
@@ -582,39 +536,51 @@ CallFrame *precall(cs_State *ts, SPtr func, int nres) {
 retry:
     switch (ttypetag(s2v(func))) {
         case CS_VCCL: { /* C closure */
-            precallC(ts, func, CS_MULRET, cclval(s2v(func))->fn);
-            return NULL;
+            precallC(ts, func, CS_MULRET, clCval(s2v(func))->fn);
+            return NULL; /* done */
         }
-        case CS_VCFUNCTION: { /* light C function */
-            precallC(ts, func, CS_MULRET, cfval(s2v(func)));
-            return NULL;
+        case CS_VLCF: { /* light C function */
+            precallC(ts, func, CS_MULRET, lcfval(s2v(func)));
+            return NULL; /* done */
         }
-        case CS_VCLASS: { /* Class */
-            const TValue *fmm;
-            Instance *ins = csMM_newinstance(ts, clsval(s2v(func)));
-            setins2s(ts, func, ins); /* replace class with its instance */
-            fmm = csMM_get(ts, s2v(func), CS_MM_INIT);
-            if (!ttisnil(fmm)) { /* have '__init' ? */
-                func = adjustffunc(ts, func, fmm); /* make space for it... */
-                goto retry; /* ...and try calling it */
-            } else {
-                return NULL; /* otherwise done */
-            }
-        }
-        case CS_VCRCL: { /* Cript function (closure) */
+        case CS_VCSCL: { /* CSript closure */
             CallFrame *cf;
-            Function *fn = crclval(s2v(func))->fn;
+            Proto *p = clCSval(s2v(func))->p;
             int nargs = (ts->sp.p - func) - 1;
-            int fsize = fn->maxstack;
+            int fsize = p->maxstack;
             checkstackGCp(ts, fsize, func);
-            ts->cf = cf = prepcallframe(ts, func, nres, 0, func+fsize+1);
-            for (; nargs < fn->arity; nargs++)
-                setnilval(s2v(ts->sp.p++));
+            ts->cf = cf = prepcallframe(ts, func, nres, 0, func + fsize + 1);
+            for (; nargs < p->arity; nargs++)
+                setnilval(s2v(ts->sp.p++)); /* set missing args as 'nil' */
             cs_assert(cf->top.p <= ts->stackend.p);
-            return cf;
+            return cf; /* new call frame */
         }
-        default: {
-            func = trymmcall(ts, func);
+        case CS_VCLASS: { /* Class object */
+            const TValue *fmm;
+            Instance *ins = csMM_newinstance(ts, classval((s2v(func))));
+            setinsval2s(ts, func, ins); /* replace class with its instance */
+            fmm = csMM_get(ts, s2v(func), CS_MM_INIT);
+            if (!ttisnil(fmm)) { /* have __init ? */
+                checkstackGCp(ts, 1, func); /* space for fmm */
+                fmm = csMM_get(ts, s2v(func), CS_MM_INIT); /* (after GC) */
+                if (c_likely(!ttisnil(fmm))) { /* have __init (after GC)? */
+                    auxinsertf(ts, func, fmm); /* insert it into stack... */
+                    cs_assert(ttisfunction(fmm));
+                    goto retry; /* ...and try calling it */
+                } /* else fall through */
+            } /* else fall through */
+            return NULL; /* done */
+        }
+        case CS_VIMETHOD: { /* Instance method */
+            IMethod *im = imval(s2v(func));
+            cs_assert(ttisfunction(&im->method));
+            checkstackGCp(ts, 1, func); /* space for method */
+            auxinsertf(ts, func, &im->method); /* insert method... */
+            setinsval2s(ts, func + 1, im->ins); /* ...and replace func */
+            goto retry;
+        }
+        default: { /* check for __call */
+            func = trymetacall(ts, func);
             goto retry;
         }
     }
@@ -642,16 +608,15 @@ void csV_call(cs_State *ts, SPtr func, int nresults) {
 }
 
 
-#define isemptystr(v)   (cs_assert(ttisstr(v)), lenstr(v) == 0)
+#define isemptystr(v)   (ttisshrstring(v) && strval(v)->shrlen == 0)
 
-#define MAXSHRSTRLEN    95
 
 static void copy2buff(SPtr top, int n, char *buff) {
     size_t done = 0;
     do {
         OString *s = strval(s2v(top - n));
         size_t len = getstrlen(s);
-        memcpy(&buff[done], getstrbytes(s), len * sizeof(char));
+        memcpy(&buff[done], getstr(s), len * sizeof(char));
         done += len;
     } while (--n > 0);
 }
@@ -663,42 +628,33 @@ void csV_concat(cs_State *ts, int total) {
     do {
         SPtr top = ts->sp.p;
         int n = 2; /* number of elements (minimum 2) */
-        if (!(ttisstr(s2v(top - 2)) && ttisstr(s2v(top - 1))))
+        if (!(ttisstring(s2v(top - 2)) && ttisstring(s2v(top - 1))))
             csMM_tryconcat(ts);
         else if (isemptystr(s2v(top - 1))) /* second operand is empty string? */
             ; /* result already in the first operand */
         else if (isemptystr(s2v(top - 2))) { /* first operand is empty string? */
             setobjs2s(ts, top - 2, top - 1); /* result is second operand */
         } else { /* at least 2 non-empty strings */
-            cs_assert(ttisstr(s2v(top - 2)) && ttisstr(s2v(top - 1)));
-            size_t ltotal = lenstr(s2v(top - 1));
+            size_t ltotal = getstrlen(strval(s2v(top - 1)));
             /* collect total length and number of strings */
-            for (n = 1; n < total && ttisstr(s2v(top - n - 1)); n++) {
-                size_t len = lenstr(s2v(top - n - 1));
-                if (c_unlikely(len >= SIZE_MAX - sizeof(OString) - ltotal)) {
+            for (n = 1; n < total && ttisstring(s2v(top - n - 1)); n++) {
+                size_t len = getstrlen(strval(s2v(top - n - 1)));
+                if (c_unlikely(len >= MAXSIZE - sizeof(OString) - ltotal)) {
                     ts->sp.p = top - total; /* pop strings */
                     csD_runerror(ts, "string length overflow");
                 }
                 ltotal += len;
             }
-            TValue aux;
             OString *s;
-            int intern;
-            if (ltotal <= MAXSHRSTRLEN) {
-                char buff[MAXSHRSTRLEN];
+            if (ltotal <= CSI_MAXSHORTLEN) { /* fits in a short string? */
+                char buff[CSI_MAXSHORTLEN];
                 copy2buff(top, n, buff);
                 s = csS_newl(ts, buff, ltotal);
-                intern = 0;
-            } else {
-                s = csS_newlobj(ts, ltotal);
-                copy2buff(top, n, getstrbytes(s));
-                intern = 1;
+            } else { /* otherwise long string */
+                s = csS_newlngstrobj(ts, ltotal);
+                copy2buff(top, n, getstr(s));
             }
             setstrval2s(ts, top - n, s);
-            if (intern) {
-                setstrval(ts, &aux, s);
-                csH_set(ts, G_(ts)->strings, &aux, &aux);
-            }
         }
         total -= n - 1; /* got 'n' strings to create one new */
         ts->sp.p -= n - 1; /* popped 'n' strings and pushed one */
@@ -960,8 +916,6 @@ void csV_concat(cs_State *ts, int total) {
 #define SPTR(i)     (ts->sp.p-(i)-1)
 /* get stack top - 1 */
 #define TOPS()      SPTR(0)
-/* get private variable */
-#define PVAR(i)     (&cl->fn->private[i].val)
 
 
 
@@ -973,7 +927,7 @@ void csV_concat(cs_State *ts, int total) {
 
 void csV_execute(cs_State *ts, CallFrame *cf) {
     register const Instruction *pc; /* program counter */
-    register CrClosure *cl; /* closure being executed */
+    register CSClosure *cl; /* closure being executed */
     register TValue *k; /* array of constants */
     register SPtr base; /* function base stack index */
 #if CS_USE_JUMPTABLE
@@ -981,9 +935,9 @@ void csV_execute(cs_State *ts, CallFrame *cf) {
 #endif
 startfunc:
 returning:
-    cl = crclval(s2v(cf->func.p));
-    k = cl->fn->k;
-    pc = cl->fn->code;
+    cl = clCSval(s2v(cf->func.p));
+    k = cl->p->k;
+    pc = cl->p->code;
     base = cf->func.p + 1;
     for (;;) {
         vm_dispatch(fetch()) {
@@ -1032,7 +986,7 @@ returning:
             }
             vm_case(OP_VARARGPREP) {
                 int L = fetchl();
-                protect(csF_adjustvarargs(ts, L, cf, cl->fn));
+                protect(csF_adjustvarargs(ts, L, cf, cl->p));
                 updatebase(cf); /* update base, it changed */
                 vm_break;
             }
@@ -1043,7 +997,7 @@ returning:
             }
             vm_case(OP_CLOSURE) {
                 int L = fetchl();
-                Function *fn = cl->fn->funcs[L];
+                Proto *fn = cl->p->p[L];
                 protect(pushclosure(ts, fn, cl->upvals, base));
                 vm_break;
             }
@@ -1059,7 +1013,7 @@ returning:
                 protect(pusharray(ts, size, elems));
                 vm_break;
             }
-            vm_case(OP_CLASS) {
+            vm_case(OP_NEWCLASS) {
                 protect(pushclass(ts));
                 vm_break;
             }
@@ -1068,14 +1022,14 @@ returning:
                 TValue *v2 = peek(0); /* method */
                 TValue *key = getlK();
                 cs_assert(ttisstr(key));
-                protect(csH_set(ts, clsval(v2)->methods, key, v1));
+                protect(csH_set(ts, classval(v2)->methods, key, v1));
                 vm_break;
             }
             vm_case(OP_SETMM) {
                 TValue *v1 = peek(1); /* class or userdata */
                 TValue *v2 = peek(0); /* func */
                 int S = fetchs(); /* VMT index */
-                protect(setmm(ts, &clsval(v1)->vmt, v2, S));
+                protect(setmm(ts, &classval(v1)->vmt, v2, S));
                 vm_break;
             }
             vm_case(OP_POP) {
@@ -1309,7 +1263,7 @@ returning:
             /* }} UNARY_OPS { */
             vm_case(OP_NOT) {
                 TValue *v = peek(0);
-                if (csi_isfalse(v))
+                if (c_isfalse(v))
                     setbtval(v);
                 else
                     setbfval(v);
@@ -1356,7 +1310,7 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                int cond = !csi_isfalse(v);
+                int cond = !c_isfalse(v);
                 if (cond == S)
                     pc += L;
                 vm_break;
@@ -1365,7 +1319,7 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                int cond = !csi_isfalse(v);
+                int cond = !c_isfalse(v);
                 if (cond == S)
                     pc += L;
                 else
@@ -1376,7 +1330,7 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                int cond = !csi_isfalse(v);
+                int cond = !c_isfalse(v);
                 if (cond == S) {
                     pc += L;
                     pop(1); /* v */
@@ -1387,7 +1341,7 @@ returning:
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
                 int S = fetchs(); /* cond */
-                int cond = !csi_isfalse(v);
+                int cond = !c_isfalse(v);
                 if (cond == S)
                     pc += L;
                 pop(1); /* v */
@@ -1425,16 +1379,6 @@ returning:
                 setobjs2s(ts, STK(L), pop(1));
                 vm_break;
             }
-            vm_case(OP_GETPRIVATE) {
-                int L = fetchl();
-                setobj2s(ts, ts->sp.p++, PVAR(L));
-                vm_break;
-            }
-            vm_case(OP_SETPRIVATE) {
-                int L = fetchl();
-                setobj(ts, PVAR(L), s2v(pop(1)));
-                vm_break;
-            }
             vm_case(OP_GETUVAL) {
                 int L = fetchl();
                 setobj2s(ts, ts->sp.p++, cl->upvals[L]->v.p);
@@ -1443,24 +1387,6 @@ returning:
             vm_case(OP_SETUVAL) {
                 int L = fetchl();
                 setobj(ts, cl->upvals[L]->v.p, s2v(pop(1)));
-                vm_break;
-            }
-            vm_case(OP_DEFGLOBAL) {
-                TValue* s = getlK();
-                protect(defineglobal(ts, s, peek(0)));
-                pop(1);
-                vm_break;
-            }
-            vm_case(OP_GETGLOBAL) {
-                TValue *s = getlK();
-                protect(getglobal(ts, s, s2v(ts->sp.p)));
-                ts->sp.p++;
-                vm_break;
-            }
-            vm_case(OP_SETGLOBAL) {
-                TValue *s = getlK();
-                protect(setglobal(ts, s, peek(0)));
-                pop(1);
                 vm_break;
             }
             vm_case(OP_SETPROPERTY) { /* optimize ? */
@@ -1525,11 +1451,11 @@ returning:
                 vm_break;
             }
             vm_case(OP_GETSUP) {
-                TValue *s = getlK();
+                OString *s = getKStr();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cs_assert(ttisstr(s));
-                protect(csV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
+                storepc(ts);
+                getsuper(ts, insval(v1), classval(v2), s, SPTR(1), csH_getstr);
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1537,24 +1463,34 @@ returning:
                 TValue *v1 = peek(2);
                 TValue *v2 = peek(1);
                 TValue *v3 = peek(0);
-                protect(csV_getsuper(ts, insval(v1), clsval(v2), v3, SPTR(2)));
+                storepc(ts);
+                getsuper(ts, insval(v1), classval(v2), v3, SPTR(2), csH_get);
                 pop(2); /* v2,v3 */
                 vm_break;
             }
-            vm_case(OP_GETSUPIDXSTR) { /* TODO: optimize */
-                TValue *s = getlK();
+            vm_case(OP_GETSUPIDXSTR) {
+                OString *s = getKStr();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cs_assert(ttisstr(s));
-                protect(csV_getsuper(ts, insval(v1), clsval(v2), s, SPTR(1)));
+                storepc(ts);
+                getsuper(ts, insval(v1), classval(v2), s, SPTR(1), csH_getstr);
                 pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_INHERIT) {
-                TValue *v1 = peek(1);
-                TValue *v2 = peek(0);
-                protect(inherit(ts, v1, clsval(v2)));
-                pop(2); /* v1,v2 */
+                TValue *o = peek(1);
+                OClass *cls = classval(peek(0));
+                OClass *src;
+                storepc(ts);
+                if (c_unlikely(!ttisclass(o)))
+                    csD_runerror(ts, "inheriting a non-class value");
+                src = classval(o);
+                if (c_likely(src->methods)) { /* 'src' has methods ? */
+                    cs_assert(cls->methods == NULL);
+                    cls->methods = csH_new(ts);
+                    csH_copykeys(ts, src->methods, cls->methods);
+                }
+                pop(2); /* remove class objects */
                 vm_break;
             }
             vm_case(OP_FORPREP) {
@@ -1601,8 +1537,8 @@ returning:
                     csF_close(ts, base, CLOSEKTOP);
                     updatebase(cf);
                 }
-                if (cl->fn->isvararg) /* vararg function ? */
-                    cf->func.p -= cf->nvarargs + cl->fn->arity + 1;
+                if (cl->p->isvararg) /* vararg function ? */
+                    cf->func.p -= cf->nvarargs + cl->p->arity + 1;
                 ts->sp.p = stk + n;
                 poscall(ts, cf, n);
                 if (cf->status & CFST_FRESH) { /* top-level function? */

@@ -8,9 +8,10 @@
 #define CS_CORE
 
 
+#include "chashtable.h"
+#include "carray.h"
 #include "cstate.h"
 #include "capi.h"
-#include "ctrace.h"
 #include "cdebug.h"
 #include "cfunction.h"
 #include "cgc.h"
@@ -95,6 +96,17 @@ static void init_stack(cs_State *newts, cs_State *mts) {
 }
 
 
+static void init_registry(cs_State *ts, GState *gs) {
+    Array *registry = csA_new(ts); 
+    setarrval(ts, &gs->c_registry, registry);
+    csA_ensure(ts, registry, CS_RINDEX_LAST);
+    /* registry[CS_RINDEX_MAINTHREAD] = ts (mainthread) */
+    setthval(ts, &registry->b[CS_RINDEX_MAINTHREAD], ts);
+    /* registry[CS_RINDEX_MAINTHREAD] = new hashtable (for global variables) */
+    sethtval(ts, &registry->b[CS_RINDEX_GLOBALS], csH_new(ts));
+}
+
+
 /*
 ** Initialize parts of state that may cause memory
 ** allocation errors.
@@ -102,8 +114,9 @@ static void init_stack(cs_State *newts, cs_State *mts) {
 static void fnewstate(cs_State *ts, void *ud) {
     GState *gs = G_(ts);
     UNUSED(ud);
-    init_stack(ts, ts); /* first initialize 'ts' stack... */
-    csS_init(ts); /* ...then strings table and memory error msg */
+    init_stack(ts, ts);
+    init_registry(ts, gs);
+    csS_init(ts);
     csMM_init(ts);
     csY_init(ts);
     gs->gcstop = 0;
@@ -149,8 +162,8 @@ static void freestate(cs_State *mt) {
         csi_userstatefree(mt);
     }
     freestack(mt);
-    cs_assert(gettotalbytes(gs) == sizeof(XS));
-    gs->falloc(fromstate(mt), sizeof(XS), 0, gs->ud_alloc);
+    cs_assert(gettotalbytes(gs) == sizeof(XSG));
+    gs->falloc(fromstate(mt), sizeof(XSG), 0, gs->ud_alloc);
 }
 
 
@@ -186,7 +199,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     gs->fixed = gs->fin = gs->tobefin = NULL;
     gs->graylist = gs->grayagain = NULL;
     gs->weak = NULL;
-    setnilval(&gs->ginstance);
+    setnilval(&gs->c_registry);
     gs->falloc = falloc; gs->ud_alloc = ud;
     gs->fpanic = NULL; /* no panic handler by default */
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
@@ -222,7 +235,7 @@ CS_API cs_State *cs_newthread(cs_State *mts) {
     cs_lock(mts);
     o = csG_newoff(mts, sizeof(XS), CS_VTHREAD, offsetof(XS, ts));
     newts = gco2th(o);
-    setsv2th(mts, mts->sp.p, newts);
+    setthval2s(mts, mts->sp.p, newts);
     api_inctop(mts);
     preinit_thread(newts, gs);
     init_stack(newts, mts);
@@ -284,7 +297,7 @@ void csT_seterrorobj(cs_State *ts, int errcode, SPtr oldtop) {
         }
         default: { /* real error? */
             cs_assert(errcode > CS_OK);
-            setobjs2s(ts, oldtop, ts->sp.p - 1); /* error message on current top */
+            setobjs2s(ts, oldtop, ts->sp.p - 1); /* error msg on current top */
             break;
         }
     }
@@ -461,9 +474,9 @@ void csT_warning(cs_State *ts, const char *msg, int cont) {
 /* generate a warning from an error message */
 void csT_warnerror(cs_State *ts, const char *where) {
     TValue *errobj = s2v(ts->sp.p - 1);
-    const char *msg = (ttisstr(errobj))
-        ? getstrbytes(strval(errobj))
-        : "error object is not a string";
+    const char *msg = (ttisstring(errobj))
+                      ? getstr(strval(errobj))
+                      : "error object is not a string";
     csT_warning(ts, "error in ", 1);
     csT_warning(ts, where, 1);
     csT_warning(ts, " (", 1);

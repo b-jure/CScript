@@ -8,21 +8,49 @@
 #define CS_CORE
 
 
+#include "cstate.h"
 #include "cscript.h"
 #include "cstring.h"
 #include "cobject.h"
-#include "cstate.h"
-#include "chashtable.h"
 #include "cgc.h"
 #include "cdebug.h"
 #include "cmem.h"
 #include "cvm.h"
+#include "climits.h"
+#include "cprotected.h"
 
-#include <stdio.h>
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <locale.h>
+
+
+/* maximum size for string table */
+#define MAXSTRTABLE     INT_MAX
+
+
+/* string equality */
+int csS_eqlngstr(const OString *s1, const OString *s2) {
+    size_t len = s1->u.lnglen;
+    return (s1 == s2) || /* same instance or... */
+            ((len == s2->u.lnglen) && /* equal length and... */
+             (memcmp(getlngstr(s1), getlngstr(s2), len) == 0)); /* contents */
+}
+
+
+/*
+** Clear API string cache. (Entries cannot be empty, so fill them with
+** a non-collectable string.)
+*/
+void csS_clearcache(GState *gs) {
+    for (int i = 0; i < STRCACHE_N; i++) {
+        for (int j = 0; j < STRCACHE_M; j++) {
+            if (iswhite(gs->strcache[i][j])) /* will entry be collected? */
+                gs->strcache[i][j] = gs->memerror;
+        }
+    }
+}
 
 
 /*
@@ -42,102 +70,206 @@ uint csS_hash(const char *str, size_t len, unsigned int seed) {
 }
 
 
+uint csS_hashlngstr(OString *s) {
+    cs_assert(s->tt_ == CS_VLNGSTR);
+    if (s->extra == 0) { /* no hash? */
+        size_t len = s->u.lnglen;
+        s->hash = csS_hash(getlngstr(s), len, s->hash);
+        s->extra = 1; /* indicate that it has hash */
+    }
+    return s->hash;
+}
+
+
+static void rehashtable(OString **arr, int osz, int nsz) {
+    int i;
+    for (i = osz; i < nsz; i++) /* clear new part */
+        arr[i] = NULL;
+    for (i = 0; i < osz; i++) { /* rehash old part */
+        OString *s = arr[i]; /* get the slot if any */
+        arr[i] = NULL; /* clear the slot */
+        while (s) { /* for each string in the list/chain */
+            OString *next = s->u.next; /* save 'next' */
+            uint h = hashmod(s->hash, nsz); /* get hash position */
+            s->u.next = arr[h]; /* chain the existing if any */
+            arr[h] = s; /* set as head in the array */
+            s = next; /* insert/chain 'next' if any */
+        }
+    }
+}
+
+
+/* 
+** Resize string table. If allocation fails, keep the current size.
+*/
+void csS_resize(cs_State *ts, int nsz) {
+    StringTable *tab = &G_(ts)->strtab;
+    int osz = tab->size;
+    OString **newarr;
+    cs_assert(nsz <= MAXSTRTABLE);
+    if (nsz < osz) /* shrinking ? */
+        rehashtable(tab->hash, osz, nsz); /* depopulate shrinking part */
+    newarr = csM_reallocarray(ts, tab->hash, osz, nsz, OString*);
+    if (c_unlikely(newarr == NULL)) { /* reallocation failed? */
+        if (nsz < osz) /* was it shrinking table? */
+            rehashtable(tab->hash, nsz, osz); /* restore to original size */
+        /* leave table as it was */
+    } else { /* allocation succeeded */
+        tab->hash = newarr;
+        tab->size = nsz;
+        if (nsz > osz) /* expanded? */
+            rehashtable(newarr, osz, nsz); /* rehash for new size */
+    }
+}
+
+
 void csS_init(cs_State *ts) {
     GState *gs = G_(ts);
-    /* first create weak strings table */
-    gs->strings = csH_newsize(ts, CSI_MINSTRHTABSIZE);
-    csG_fix(ts, obj2gco(gs->strings));
-    cs_assert(obj2gco(gs->strings) == gs->fixed);
+    StringTable *tab = &gs->strtab;
+    /* first initialize string table */
+    tab->hash = csM_newarray(ts, MINSTRTABSIZE, OString*);
+    rehashtable(tab->hash, 0, MINSTRTABSIZE); /* clear array */
+    tab->size = MINSTRTABSIZE; tab->nuse = 0;
     /* then we allocate the memory error msg */
     gs->memerror = csS_newlit(ts, MEMERRMSG);
     csG_fix(ts, obj2gco(gs->memerror));
     cs_assert(obj2gco(gs->memerror) == gs->fixed);
+    /* fill cache with valid strings */
+    for (int i = 0; i < STRCACHE_N; i++)
+        for (int j = 0; j < STRCACHE_M; j++)
+            gs->strcache[i][j] = gs->memerror;
 }
 
 
-static OString *createstrobj(cs_State *ts, size_t l, uint h) {
-    OString *s = csG_new(ts, sizeofstring(l), CS_VSTRING, OString);
-    s->len = l;
+static OString *newstrobj(cs_State *ts, size_t l, int tt_, uint h) {
+    OString *s = csG_new(ts, sizeofstring(l), tt_, OString);
     s->hash = h;
     s->extra = 0;
-    getstrbytes(s)[l] = '\0';
+    getstr(s)[l] = '\0'; /* null-terminate */
     return s;
 }
 
 
-/*
-** Create new string object of size 'len'.
-** Allocation is skipped in case string is already interned.
-*/
-OString *csS_newl(cs_State *ts, const char *chars, size_t len) {
-    TValue key;
-    HTable *strtab = G_(ts)->strings;
-    uint hash = csS_hash(chars, len, G_(ts)->seed);
-    OString *str = csH_getinterned(ts, strtab, chars, len, hash);
-    if (str) { /* is interned or weak reference ? */
-        return str;
-    } else {
-        str = createstrobj(ts, len, hash);
-        if (c_likely(len != 0))
-            memcpy(str->bytes, chars, len);
-        setbit(str->bits, STRHASHBIT);
-        setstrval(ts, &key, str);
-        setstrval2s(ts, ts->sp.p++, str);
-        csH_set(ts, strtab, &key, &key);
-        ts->sp.p--;
-        return str;
+OString *csS_newlngstrobj(cs_State *ts, size_t len) {
+    OString *s = newstrobj(ts, len, CS_VLNGSTR, G_(ts)->seed);
+    s->u.lnglen = len;
+    s->shrlen = 0xFF;
+    return s;
+}
+
+
+void csS_remove(cs_State *ts, OString *s) {
+    StringTable *tab = &G_(ts)->strtab;
+    OString **pp = &tab->hash[hashmod(s->hash, tab->size)];
+    while (*pp != s) /* find previous element */
+        pp = &(*pp)->u.next;
+    *pp = (*pp)->u.next; /* remove it from list */
+    tab->nuse--;
+}
+
+
+/* grow string table */
+static void growtable(cs_State *ts, StringTable *tab) {
+    if (c_unlikely(tab->nuse == INT_MAX)) {
+        csG_full(ts, 1); /* try to reclaim memory */
+        if (tab->nuse == INT_MAX)
+            csM_error(ts);
+    }
+    if (tab->size <= MAXSTRTABLE / 2)
+        csS_resize(ts, tab->size * 2);
+}
+
+
+static OString *internshrstr(cs_State *ts, const char *str, size_t l) {
+    OString *s;
+    GState *gs = G_(ts);
+    StringTable *tab = &gs->strtab;
+    uint h = csS_hash(str, l, gs->seed);
+    OString **list = &tab->hash[hashmod(h, tab->size)];
+    cs_assert(s != NULL);
+    for (s = *list; s != NULL; s = s->u.next) { /* probe chain */
+        if (s->shrlen == l && (memcmp(s, getstr(s), l*sizeof(char)) == 0)) {
+            if (isdead(gs, s)) /* "dead"? */
+                changewhite(s); /* "ressurect" it */
+            return s;
+        }
+    }
+    /* otherwise create new string */
+    if (tab->nuse >= tab->size) { /* need to grow the table? */
+        growtable(ts, tab);
+        list = &tab->hash[hashmod(h, tab->size)];
+    }
+    s = newstrobj(ts, l, CS_VSHRSTR, h);
+    memcpy(getshrstr(s), s, l*sizeof(char));
+    s->shrlen = (cs_ubyte)l;
+    s->u.next = *list;
+    *list = s;
+    tab->nuse++;
+    return s;
+}
+
+
+/* create new string with explicit length */
+OString *csS_newl(cs_State *ts, const char *str, size_t len) {
+    if (len <= CSI_MAXSHORTLEN) { /* short string? */
+        return internshrstr(ts, str, len);
+    } else { /* otherwise long string */
+        OString *s;
+        if (c_unlikely(len * sizeof(char) >= (MAXSIZE - sizeof(OString))))
+            csM_toobig(ts);
+        s = csS_newlngstrobj(ts, len);
+        memcpy(getlngstr(s), str, len);
+        return s;
     }
 }
 
 
-/* create new string object from null terminated bytes */
-OString *csS_new(cs_State *ts, const char *chars) {
-    return csS_newl(ts, chars, strlen(chars));
-}
-
-
-OString *csS_newlobj(cs_State *ts, size_t len) {
-    return createstrobj(ts, len, G_(ts)->seed);
-}
-
-
-/* free string object */
-void csS_free(cs_State *ts, OString *s) {
-    csM_free_(ts, s, sizeofstring(s->len));
+/*
+** Create or ruse a zero-terminated string, first checking the
+** cache (using the string address as key). The cache can contain
+** only zero-terminated strings, so it is safe to use 'strcmp'.
+*/
+OString *csS_new(cs_State *ts, const char *str) {
+    int j;
+    uint i = pointer2uint(str) % STRCACHE_N;
+    OString **p = G_(ts)->strcache[i]; /* address as key */
+    for (j = 0; j < STRCACHE_M; j++)
+        if (strcmp(getstr(p[j]), str) == 0)
+            return p[j];
+    /* regular route */
+    for (j = STRCACHE_M - 1; j > 0; j--) /* make space for new string */
+        p[j] = p[j - 1]; /* move out last element */
+    /* new string is first in the cache line 'i' */
+    p[0] = csS_newl(ts, str, strlen(str));
+    return p[0];
 }
 
 
 /*
-** Comparison similar to 'strcmp' but this works on
-** strings that might have null terminator in between
-** of their contents.
+** Comparison similar to 'strcmp' but this works on strings that
+** might have null terminator before their end.
 */
 int csS_cmp(const OString *s1, const OString *s2) {
     const char *p1 = s1->bytes;
-    size_t s1l = s1->len;
+    size_t lreal1 = getstrlen(s1);
     const char *p2 = s2->bytes;
-    size_t s2l = s2->len;
-    for (;;) {
-        int res = strcoll(p1, p2);
-        if (res != 0)
-            return res;
-        size_t len = strlen(p1);
-        if (len == s2l)
-            return !(s1l == s2l);
-        else if (len == s1l)
-            return -1;
-        len++; /* skip '\0' */
-        p1 += len; s1l -= len;
-        p2 += len; s2l -= len;
+    size_t lreal2 = getstrlen(s2);
+    for (;;) { /* for each segment */
+        int temp = strcoll(p1, p2);
+        if (temp != 0) { /* not equal? */
+            return temp; /* done */
+        } else { /* strings are equal up to '\0' */
+            size_t lseg1 = strlen(p1); /* index of first '\0' in 'p1' */
+            size_t lseg2 = strlen(p2); /* index of first '\0' in 'p2' */
+            if (lseg2 == lreal2) /* 'p2' finished? */
+                return !(lseg1 == lreal2);
+            else if (lseg1 == lreal1) /* 'p1' finished? */
+                return -1; /* 'p1' is less than 'p2' ('p2' is not finihsed) */
+            /* both strings longher than the segments; compare after '\0' */
+            lseg1++; lseg2++; /* skip '\0' */
+            p1 += lseg1; lreal1 -= lseg1; p2 += lseg1; lreal2 -= lseg1;
+        }
     }
-}
-
-
-/* string equality */
-int csS_eq(const OString *s1, const OString *s2) {
-    return ((s1 == s2) || (s1->hash == s2->hash /* pointers match or hash */
-                && s1->len == s2->len /* and length */
-                && memcmp(s1->bytes, s2->bytes, s1->len))); /* and contents */
 }
 
 
@@ -329,7 +461,7 @@ static int num2buff(const TValue *nv, char *buff) {
         len = cs_number2str(buff, MAXNUM2STR, fval(nv));
         /* if it looks like integer append '.0' */
         if (strspn(buff, "-0123456789") == len) {
-            buff[len++] = *localeconv()->decimal_point;
+            buff[len++] = cs_getlocaledecpoint();
             buff[len++] = '0';
         }
     }

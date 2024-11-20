@@ -16,20 +16,15 @@
  * Additional types that are used only internally
  * or as markers.
  */
-#define CS_TUVALUE      CS_NUM_TYPES        /* upvalue */
-#define CS_THTABLE      (CS_NUM_TYPES + 1)  /* hashtable */
+#define CS_TUPVALUE     CS_NUM_TYPES        /* upvalue */
+#define CS_TPROTO       (CS_NUM_TYPES + 1)  /* hashtable */
 #define CS_TDEADKEY     (CS_NUM_TYPES + 2)  /* mark for dead htable keys */
 
 
 /* 
 ** Number of all types ('CS_T*') (including 'CS_TNONE' but excluding DEADKEY).
 */
-#define CSI_TOTALTYPES      (CS_THTABLE + 2)
-
-
-CSI_DEC(const char *const csO_typenames[CSI_TOTALTYPES]);
-
-#define typename(t)     csO_typenames[(t) + 1]
+#define CSI_TOTALTYPES      (CS_TPROTO + 2)
 
 
 /*
@@ -45,7 +40,7 @@ CSI_DEC(const char *const csO_typenames[CSI_TOTALTYPES]);
 
 /* Cript values */
 typedef union Value {
-    struct GCObject *obj; /* collectable value */
+    struct GCObject *gc; /* collectable value */
     void *p; /* light userdata */
     int b; /* boolean */
     cs_Integer i; /* integer */
@@ -55,68 +50,41 @@ typedef union Value {
 
 
 /* 'TValue' fields, defined for reuse and alignment purposes */
-#define TValueFields    Value val; cs_ubyte tt; cs_ubyte mod
+#define TValueFields    Value val; cs_ubyte tt
 
 
-/*
- * 'Value' with type and modifiers.
- * 'mod' might be unused but this memory would
- * be padded by any sane compiler anyway.
- */
+/* 'Value' with type */
 typedef struct TValue {
     TValueFields;
 } TValue;
 
 
-
-/* get raw union values */
-#define rawbval(v)      ((v).b)
-#define rawival(v)      ((v).i)
-#define rawfval(v)      ((v).n)
-#define rawpval(v)      ((v).p)
-#define rawcfval(v)     ((v).cfn)
-#define rawgcoval(v)    ((v).obj)
+#define val(o)      ((o)->val)
 
 
-/* 'tt' */
+/* raw type tag of a TValue */
 #define rawtt(o)            ((o)->tt)
 
-
-/* tag with no variant bits (0-3) */
+/* tag with no variant (bits 0-3) */
 #define novariant(t)        ((t) & 0x0F)
 
-
-/* type tag of TValue; tag bits (0-3) + variant bits (4-6) */
+/* type tag of a TValue (bits 0-3 for tags + variant bits 4-5) */
 #define withvariant(t)      ((t) & 0x3F)
 #define ttypetag(o)         withvariant((o)->tt)
-
 
 /* type of a TValue */
 #define ttype(o)            novariant((o)->tt)
 
 
-/* Macros to test type */
+/* macros to test type */
 #define checktag(o,t)       (rawtt(o) == (t))
 #define checktype(o,t)      (ttype(o) == (t))
 
 
-/* 'mod' */
-#define MODnone         0 /* no modifiers */
-#define MODconst        1 /* value is 'const' */
-
-
-/* Macros to test modifiers */
-#define ismod(o,m)      testbit((o)->mod, (m))
-#define isconst(o)      ismod(o, MODconst)
-
-
-
 /* Macros for internal tests */
-
 
 /* collectable object has the same tag as the original value */
 #define righttt(obj)		(ttypetag(obj) == gcoval(obj)->tt_)
-
 
 /*
 ** Any value being manipulated by the program either is non
@@ -129,21 +97,20 @@ typedef struct TValue {
         (righttt(obj) && (ts == NULL || !isdead(G_(ts), gcoval(obj))))))
 
 
-
 /* Macros to set values */
 
-/* set object type tag */
+/* set a value's tag */
 #define settt(o,t)          (rawtt(o)=(t))
 
-/* set object 'o1' to 'o2' */
-#define setobj(ts,o1,o2) \
-    { TValue *o1_=(o1); const TValue *o2_=(o2); \
-      o1_->val = o2_->val; o1_->tt = o2_->tt; o1_->mod = o2_->mod; \
+/* macro for copying values (from 'obj2' to 'obj1' */
+#define setobj(ts,obj1,obj2) \
+    { TValue *o1_=(obj1); const TValue *o2_=(obj2); \
+      o1_->val = o2_->val; settt(o1_, o2_->tt); \
       checkliveness(ts,o1_); }
 
-/* from stack to stack */
+/* copy object from stack to stack */
 #define setobjs2s(ts,o1,o2)     setobj(ts,s2v(o1),s2v(o2))
-/* set object to stack */
+/* copy object to stack */
 #define setobj2s(ts,o1,o2)      setobj(ts,s2v(o1),o2)
 
 
@@ -187,106 +154,9 @@ typedef struct {
 
 
 
-/* -------------------------------------------------------------------------
- * Boolean
- * ------------------------------------------------------------------------- */
-
-#define CS_VFALSE       makevariant(CS_TBOOL, 0)
-#define CS_VTRUE        makevariant(CS_TBOOL, 1)
-
-#define bval(o)         rawbval((o)->val)
-
-#define setbfval(o)     settt(o, CS_VFALSE)
-#define setbtval(o)     settt(o, CS_VTRUE)
-
-#define ttisbool(o)         checktype(o, CS_TBOOL)
-#define ttistrue(o)         checktag(o, CS_VTRUE)
-#define ttisfalse(o)        checktag(o, CS_VFALSE)
-
-#define csi_isfalse(o)      (ttisfalse(o) || ttisnil(o))
-
-
-
-/* -------------------------------------------------------------------------
- * Numbers
- * ------------------------------------------------------------------------- */
-
-#define CS_VNUMINT      makevariant(CS_TNUMBER, 0)
-#define CS_VNUMFLT      makevariant(CS_TNUMBER, 1)
-
-#define ival(o)         rawival((o)->val)
-#define fval(o)         rawfval((o)->val)
-#define nval(o)         (checktag(o,CS_VNUMINT) ? cast_num(ival(o)) : fval(o))
-
-#define setival(o,i) \
-    { TValue *o_=(o); ival(o_)=(i); settt(o_, CS_VNUMINT); }
-
-#define setfval(o,f) \
-    { TValue *o_=(o); fval(o_)=(f); settt(o_, CS_VNUMFLT); }
-
-#define ttisflt(o)      checktag(o, CS_VNUMFLT)
-#define ttisint(o)      checktag(o, CS_VNUMINT)
-#define ttisnum(o)      checktype(o, CS_TNUMBER)
-
-
-
-/* -------------------------------------------------------------------------
- * Light userdata
- * ------------------------------------------------------------------------- */
-
-#define CS_VLUDATA      makevariant(CS_TLUDATA, 0)
-
-#define pval(o)         rawpval((o)->val)
-
-#define setpval(o,p) \
-    { TValue *o_=(o); pval(o_)=(p); settt(o_, CS_VLUDATA); }
-
-#define ttislud(o)      checktag(o, CS_VLUDATA)
-
-
-
-/* -------------------------------------------------------------------------
- * C function
- * ------------------------------------------------------------------------- */
-
-#define CS_VCFUNCTION       makevariant(CS_TFUNCTION, 0)
-
-#define cfval(o)        rawcfval((o)->val)
-
-#define setcfval(o,cf) \
-    { TValue *o_=(o); cfval(o_)=(cf); settt(o_, ctb(CS_VCFUNCTION)); }
-
-#define ttiscfn(o)      checktag(o, CS_VCFUNCTION)
-
-
-/* -------------------------------------------------------------------------
- * Nil
- * ------------------------------------------------------------------------- */
-
-/* standard nil */
-#define CS_VNIL         makevariant(CS_TNIL, 0)
-
-/* empty slot */
-#define CS_VEMPTY       makevariant(CS_TNIL, 1)
-
-/* value returned for a key not found in a hashtable */
-#define CS_VABSTKEY     makevariant(CS_TNIL, 2)
-
-#define setnilval(o)    settt(o, CS_VNIL)
-#define setemptyval(o)  settt(o, CS_VEMPTY)
-
-#define ttisnil(o)      checktype((o), CS_TNIL)
-#define isempty(o)      ttisnil(o)
-
-#define isabstkey(v)    checktag((v), CS_VABSTKEY)
-
-#define ABSTKEYCONSTANT     {NULL}, CS_VABSTKEY, 0
-
-
-
-/* -------------------------------------------------------------------------
- * GCObject
- * ------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** Collectable Objects {
+** ----------------------------------------------------------------------- */
 
 /* common header for objects */
 #define ObjectHeader    struct GCObject* next; cs_ubyte tt_; cs_ubyte mark
@@ -299,70 +169,226 @@ typedef struct GCObject {
 
 
 /* bit for collectable types */
-#define BIT_COLLECTABLE      (1 << 7)
+#define BIT_COLLECTABLE     (1 << 6)
 
-/* check if value is collectable */
 #define iscollectable(o)    (rawtt(o) & BIT_COLLECTABLE)
 
-/* mark type-tag as collectable */
-#define ctb(tt)     ((tt) | BIT_COLLECTABLE)
+/* mark a tag as collectable */
+#define ctb(tt)             ((tt) | BIT_COLLECTABLE)
 
-/* get 'GCObject*' from 'TValue' */
-#define gcoval(o)    rawgcoval((o)->val)
+#define gcoval(o)           check_exp(iscollectable(o), val(o).gc)
 
+#define setgcoval(ts,obj,x) \
+    { TValue *o_=(obj); GCObject *x_=(x); \
+      val(o_).gc = x_; settt(o_, ctb(x_->tt_)); }
 
-#define setgcoval(ts,o,x) \
-    { TValue *o_=(o); GCObject *x_ = (x); \
-      gcoval(o_)=(x_); settt(o_, ctb(x_->tt_)); }
-
-
-#define gcomark_(o)   ((o)->mark)
-#define gconext_(o)   ((o)->next)
-
-#define gcomark(v)    (gcomark_(gcoval(v)))
-#define gconext(v)    (gconext_(gcoval(v)))
+/* } --------------------------------------------------------------------- */
 
 
-/* set generic GC object value */
-#define setgcotval(ts,obj,x,t) \
-    { TValue *obj_=(obj); t *x_=(x); \
-      gcoval(obj_) = obj2gco(x_); settt(obj_, ctb(x_->tt_)); \
-      checkliveness(ts,obj_); }
+
+/* ------------------------------------------------------------------------
+** Boolean {
+** ------------------------------------------------------------------------ */
+
+#define CS_VFALSE           makevariant(CS_TBOOL, 0) /* false bool */
+#define CS_VTRUE            makevariant(CS_TBOOL, 1) /* true bool */
+
+#define ttisbool(o)         checktype(o, CS_TBOOL)
+#define ttistrue(o)         checktag(o, CS_VTRUE)
+#define ttisfalse(o)        checktag(o, CS_VFALSE)
+
+#define c_isfalse(o)        (ttisfalse(o) || ttisnil(o))
+
+#define setbfval(o)         settt(o, CS_VFALSE)
+#define setbtval(o)         settt(o, CS_VTRUE)
+
+/* } --------------------------------------------------------------------- */
+
+
+
+/* -----------------------------------------------------------------------
+** Numbers {
+** ----------------------------------------------------------------------- */
+
+#define CS_VNUMINT      makevariant(CS_TNUMBER, 0) /* float numbers */
+#define CS_VNUMFLT      makevariant(CS_TNUMBER, 1) /* integer numbers */
+
+#define ttisnum(o)      checktype(o, CS_TNUMBER)
+#define ttisflt(o)      checktag(o, CS_VNUMFLT)
+#define ttisint(o)      checktag(o, CS_VNUMINT)
+
+#define nval(o)         check_exp(ttisnum(o), \
+                        ttisint(o) ? cast_num(ival(o)) : fval(o))
+#define ival(o)         check_exp(ttisint(o), val(o).i)
+#define fval(o)         check_exp(ttisflt(o), val(o).n)
+
+#define setival(obj,x) \
+    { TValue *o_=(obj); val(o_).i = (x); settt(o_, CS_VNUMINT); }
+
+#define changeival(obj,x) \
+    { TValue *o_=(obj); cs_assert(ttisint(o_)); val_(o_).i = (x); }
+
+#define setfval(obj,x) \
+    { TValue *o_=(obj); val(o_).n = (x); settt(o_, CS_VNUMFLT); }
+
+#define changefval(obj,x) \
+    { TValue *o_=(obj); cs_assert(ttisflt(o_)); val_(o_).n = (x); }
+
+/* } --------------------------------------------------------------------- */
+
+
+
+/* -----------------------------------------------------------------------
+** Userdata {
+** ----------------------------------------------------------------------- */
+
+#define CS_VLIGHTUSERDATA           makevariant(CS_TUSERDATA, 0)
+#define CS_VUSERDATA                makevariant(CS_TUSERDATA, 1)
+
+#define ttislightuserdata(o)        checktag(o, CS_VLIGHTUSERDATA)
+#define ttisfulluserdata(o)         checktag(o, ctb(CS_VUSERDATA))
+
+#define pval(o)     check_exp(ttislightuserdata(o), val(o).p)
+#define uval(o)     check_exp(ttisfulluserdata(o), gco2u(val(o).gc))
+
+#define setpval(obj,x) \
+    { TValue *o_=(obj); val(o_).p = (x); settt(o_, CS_VLIGHTUSERDATA); }
+
+#define setuval(ts,obj,x) \
+    { TValue *o_=(obj); const UserData *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUSERDATA)); \
+      checkliveness(ts,x_); }
+
+#define setuval2s(ts,o,uv)      setuval(ts, s2v(o), uv)
+
+
+/*
+** 'TValue' that ensures that addresses after this type are
+** always fully aligned.
+*/
+typedef union UValue {
+    TValue val;
+    CSI_MAXALIGN; /* ensures maximum alignment for udata bytes */
+} UValue;
+
+
+typedef struct UserData {
+    ObjectHeader;
+    int nuv; /* number of 'uservalues' */
+    size_t size; /* size of 'UserData' memory in bytes */
+    TValue *vmt;
+    GCObject *gclist;
+    UValue uv[]; /* user values */
+    /* 'UserData' memory starts here */
+} UserData;
+
+
+/*
+** 'UserData' without user values, meaning 'uv' is empty ('nuv' == 0).
+** This is used when allocating 'UserData' to properly calculate offset
+** of user memory because 'uv' is a flexible array member.
+** Also this kind of userdata is never gray so it doesnt need 'gclist'.
+** Internally Cript only uses 'UserData' to access fields and it takes
+** care to avoid using 'uv' and 'gclist' fields when 'nuv' is 0.
+** Additionally GC marks 'UserData' black in case 'nuv' is 0, to
+** avoid using the 'gclist' field.
+*/
+typedef struct EmptyUserData {
+    ObjectHeader;
+    int nuv; /* number of 'uservalues' */
+    size_t size; /* size of 'usermem' in bytes */
+    TValue *vmt;
+    union {CSI_MAXALIGN;} usermem;
+    /* 'UserData' memory starts here */
+} EmptyUserData;
+
+
+/* offset in 'UserData' where user memory begins */
+#define udmemoffset(nuv) \
+    ((nuv) == 0 ? offsetof(EmptyUserData, usermem) \
+                : offsetof(UserData, uv) + ((nuv) * sizeof(UValue)))
+
+/* get the address of the memory block inside 'UserData' */
+#define getuserdatamem(u)       (cast_charp(u) + udmemoffset((u)->nuv))
+
+/* size of 'UserData' */
+#define sizeofuserdata(nuv, size)   (udmemoffset(nuv) + (size))
+
+/* } --------------------------------------------------------------------- */
+
+
+
+/* -----------------------------------------------------------------------
+** Nil {
+** ----------------------------------------------------------------------- */
+
+/* standard nil */
+#define CS_VNIL         makevariant(CS_TNIL, 0)
+
+/* empty hashtable slot */
+#define CS_VEMPTY       makevariant(CS_TNIL, 1)
+
+/* value returned for a key not found in a hashtable (absent key) */
+#define CS_VABSTKEY     makevariant(CS_TNIL, 2)
+
+#define setnilval(o)        settt(o, CS_VNIL)
+#define setemptyval(o)      settt(o, CS_VEMPTY)
+
+#define ttisnil(o)      checktype((o), CS_TNIL)
+#define isempty(o)      ttisnil(o)
+
+#define isabstkey(v)    checktag((v), CS_VABSTKEY)
+
+#define ABSTKEYCONSTANT     {NULL}, CS_VABSTKEY
+
+/* } --------------------------------------------------------------------- */
 
 
 
 /* -------------------------------------------------------------------------
- * Thread (cs_State)
- * ------------------------------------------------------------------------- */
+** Thread (cs_State) {
+** ------------------------------------------------------------------------- */
 
 #define CS_VTHREAD      makevariant(CS_TTHREAD, 0)
 
-#define ttisthread(v)       checktag(v, ctb(CS_VTHREAD))
+#define ttisthread(o)   checktag(o, ctb(CS_VTHREAD))
 
-#define thval(v)      gco2th(gcoval(v))
+#define thval(o)        check_exp(ttisthread(o), gco2th(val(o).gc))
 
-#define setthval(ts,obj,th)     setgcotval(ts,obj,th,cs_State)
+#define setthval(ts,obj,x) \
+    { TValue *o_=(obj); const cs_State *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VTHREAD)); \
+      checkliveness(ts, o_); }
 
-#define setsv2th(ts,sv,th)      setthval(ts,s2v(sv),th)
+#define setthval2s(ts,o,th)     setthval(ts,s2v(o),th)
+
+/* } --------------------------------------------------------------------- */
 
 
 
-/* -------------------------------------------------------------------------
- * HTable (hashtable)
- * ------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** Hash Table {
+** ----------------------------------------------------------------------- */
 
-#define CS_VHTABLE      makevariant(CS_THTABLE, 0)
+#define CS_VHTABLE          makevariant(CS_THTABLE, 0)
 
-#define ttishtab(v)     checktag((v), ctb(CS_VHTABLE))
+#define ttishtab(o)         checktag((o), ctb(CS_VHTABLE))
 
-#define htval(v)        gco2ht(gcoval(v))
+#define htval(o)            check_exp(ttishtab(o), gco2ht(val(o).gc))
 
-#define sethtval(ts,v,ht)       setgcotval(ts,v,ht,HTable)
-#define setht2s(ts,sv,ht)       sethtval(ts,s2v(sv),ht)
+#define sethtval(ts,obj,x) \
+    { TValue *o_=(obj); const HTable *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VHTABLE)); \
+      checkliveness(ts, o_); }
+
+#define sethtval2s(ts,o,ht)     sethtval(ts,s2v(o),ht)
+
 
 /*
-** Ordering of fields might seem weird but
-** this is to ensure optimal alignment.
+** Nodes for hashtables; two TValue's for key-value pairs.
+** 'next' field is to link the colliding entries.
+** Ordering of fields might seem weird but this is to ensure optimal
+** alignment in both 4-byte and 8-byte alignments.
 */
 typedef union Node {
     struct NodeKey {
@@ -389,8 +415,6 @@ typedef union Node {
       checkliveness(ts,obj_); }
 
 
-
-/* Hash Table */
 typedef struct HTable {
     ObjectHeader; /* internal only object */
     cs_ubyte size; /* 2^size */
@@ -403,99 +427,282 @@ typedef struct HTable {
 #define keytt(n)                ((n)->s.key_tt)
 #define keyval(n)               ((n)->s.key_val)
 
-#define keyival(n)              rawival(keyval(n))
-#define keyfval(n)              rawfval(keyval(n))
-#define keypval(n)              rawpval(keyval(n))
-#define keycfval(n)             rawcfval(keyval(n))
-#define keygcoval(n)            rawgcoval(keyval(n))
-#define keystrval(n)            gco2str(rawgcoval(keyval(n)))
-
-#define keyisobj(n)             (keytt(n) & BIT_COLLECTABLE)
-#define keyisnil(n)	        (keytt(n) == CS_TNIL)
-
-#define setnilkey(n)            (keytt(n) = CS_TNIL)
-
-#define keyisinteger(n)         (keytt(n) == CS_VNUMINT)
+#define keyival(n)              (keyval(n).i)
+#define keyfval(n)              (keyval(n).n)
+#define keypval(n)              (keyval(n).p)
+#define keycfval(n)             (keyval(n).cfn)
+#define keygcoval(n)            (keyval(n).gc)
+#define keystrval(n)            (gco2str(keyval(n).gc))
 
 #define keyiscollectable(n)     (keytt(n) & BIT_COLLECTABLE)
+#define keyisnil(n)	        (keytt(n) == CS_TNIL)
+#define keyisshrstr(n)          (keytt(n) == CS_VSHRSTR)
+#define keyisint(n)             (keytt(n) == CS_VNUMINT)
+
+#define setnilkey(n)            (keytt(n) = CS_TNIL)
 
 /* unused in 1.0.0 */
 #define setdeadkey(node)    (keytt(node) = CS_TDEADKEY)
 #define keyisdead(n)	    (keytt(n) == CS_TDEADKEY)
 
+/* } --------------------------------------------------------------------- */
 
 
-/* -------------------------------------------------------------------------
- * Array
- * -------------------------------------------------------------------------- */
+
+/* -----------------------------------------------------------------------
+** Array {
+** ------------------------------------------------------------------------ */
 
 #define CS_VARRAY       makevariant(CS_TARRAY, 0)
 
-#define ttisarr(v)      checktag((v), ctb(CS_VARRAY))
+#define ttisarr(o)      checktag((o), ctb(CS_VARRAY))
 
-#define arrval(v)       gco2arr(gcoval(v))
+#define arrval(o)       gco2arr(val(o).gc)
 
-#define setarrval(ts,v,arr)     setgcotval(ts,v,arr,Array)
-#define setarr2s(ts,sv,arr)     setarrval(ts,s2v(sv),arr)
+#define setarrval(ts,obj,x) \
+    { TValue *o_=(obj); const Array *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VARRAY)); \
+      checkliveness(ts, o_); }
+
+#define setarrval2s(ts,o,arr)   setarrval(ts,s2v(o),arr)
 
 typedef struct Array {
     ObjectHeader;
     GCObject *gclist;
     TValue *b; /* memory block */
-    uint n; /* number of elements in 'b' */
+    uint n; /* number of elements in use in 'b' */
     uint sz; /* size of 'b' */
 } Array;
 
+/* } --------------------------------------------------------------------- */
 
 
-/* -------------------------------------------------------------------------
- * OString
- * -------------------------------------------------------------------------- */
 
-#define CS_VSTRING      makevariant(CS_TSTRING, 0)
+/* -----------------------------------------------------------------------
+** Strings {
+** ----------------------------------------------------------------------- */
 
-#define ttisstr(o)      checktag(o, ctb(CS_VSTRING))
-#define strval(o)       gco2str(gcoval(o))
+#define CS_VSHRSTR      makevariant(CS_TSTRING, 0) /* short string */
+#define CS_VLNGSTR      makevariant(CS_TSTRING, 1) /* long string */
 
+#define ttisstring(o)       checktype((o), CS_TSTRING)
+#define ttisshrstring(o)    checktag((o), ctb(CS_VSHRSTR))
+#define ttislngstring(o)    checktag((o), ctb(CS_VLNGSTR))
+
+/* get string contents from 'TValue' */
 #define cstrval(o)      (strval(o)->bytes)
-#define lenstr(o)       (strval(o)->len)
 
-#define getstrbytes(s)      ((s)->bytes)
-#define getstrlen(s)        ((s)->len)
+#define strval(o)       check_exp(ttisstring(o), gco2str(val(o).gc))
 
-#define setstrval(ts,obj,s)         setgcotval(ts,obj,s,OString)
-#define setstrval2s(ts,sobj,s)      setstrval(ts,s2v(sobj),s)
+#define setstrval(ts,obj,x) \
+    { TValue *o_=(obj); const OString *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(x_->tt_)); \
+      checkliveness(ts, o_); }
 
-/* string 'bits' */
-#define STRHASHBIT      0 /* string has hash */
-#define STRKWBIT        1 /* keyword string */
-#define STRVMTBIT       2 /* string is a name of method in VMT */
+#define setstrval2s(ts,o,s)     setstrval(ts,s2v(o),s)
+
 
 typedef struct OString {
     ObjectHeader;
-    cs_ubyte extra; /* extra information (for bits) */
-    cs_ubyte bits; /* context bits */
-    size_t len; /* excluding null terminator */
+    /* reserved words or tag names index for short strings;
+     * flag for long strings indicating that it has hash */
+    cs_ubyte extra;
+    cs_ubyte shrlen; /* length for short strings, 0xFF for longs strings */
     uint hash;
-    char bytes[];
+    union {
+        size_t lnglen; /* length for long strings */
+        struct OString *next; /* linked list for 'strtab' (hash table) */
+    } u;
+    char bytes[]; /* string contents */
 } OString;
 
 
+/*
+** Get string bytes from 'OString'. (Both generic version and specialized
+** versions for long and short strings.)
+*/
+#define getstr(os)       ((os)->bytes)
+#define getlngstr(os)    check_exp((os)->shrlen == 0xFF, (os)->bytes)
+#define getshrstr(os)    check_exp((os)->shrlen != 0xFF, (os)->bytes)
 
-/* -------------------------------------------------------------------------
- * UpVal
- * -------------------------------------------------------------------------- */
+/* get string length from 'OString *s' */
+#define getstrlen(s)    ((s)->shrlen != 0xFF ? (s)->shrlen : (s)->u.lnglen)
 
-#define CS_VUVALUE      makevariant(CS_TUVALUE, 0)
+/* } --------------------------------------------------------------------- */
 
-#define ttisuval(o)     checktag(o, ctb(CS_VUVALUE))
-#define upval(o)        gco2uv(gcoval(o))
 
-#define setv2uv(ts,obj,uv)      setgcotval(ts,obj,uv,UpVal)
-#define setsv2uv(ts,sobj,uv)    setv2uv(ts,s2v(sobj),uv)
 
-#define uvisopen(uv)    ((uv)->v.p != &(uv)->u.value)
+/* -----------------------------------------------------------------------
+** Class {
+** ----------------------------------------------------------------------- */
 
+#define CS_VCLASS       makevariant(CS_TCLASS, 0)
+
+#define ttisclass(o)    checktag(o, ctb(CS_VCLASS))
+
+#define classval(o)     check_exp(ttisclass(o), gco2cls(val(o).gc))
+
+#define setclsval(ts,obj,x) \
+    { TValue *o_=(obj); const OClass *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VCLASS)); \
+      checkliveness(ts, o_); }
+
+#define setclsval2s(ts,o,cls)       setclsval(ts,s2v(o),cls)
+
+typedef struct OClass {
+    ObjectHeader;
+    TValue *vmt;
+    HTable *methods;
+    GCObject *gclist;
+} OClass;
+
+/* } --------------------------------------------------------------------- */
+
+
+
+/* ------------------------------------------------------------------------
+** Function Prototypes {
+** ------------------------------------------------------------------------ */
+
+#define CS_VPROTO           makevariant(CS_TPROTO, 0)
+
+
+/* information of an upvalues for function prototypes */
+typedef struct UpValInfo {
+    OString *name;
+    int idx; /* index in stack or outer function local var list */
+    cs_ubyte onstack; /* is it on stack */
+    cs_ubyte kind;
+} UpValInfo;
+
+
+/* information of an local variable for function prototypes */
+typedef struct LVarInfo {
+    OString *name;
+    int startpc; /* point where variable is in scope */
+    int endpc; /* point where variable is out of scope */
+} LVarInfo;
+
+
+/* line information and associated instruction for function prototypes */
+typedef struct LineInfo {
+    int pc;
+    int line;
+} LineInfo;
+
+
+typedef struct Proto {
+    ObjectHeader;
+    cs_ubyte isvararg;
+    GCObject *gclist;
+    OString *source; /* source name */
+    struct Proto **p; /* functions defined inside of this function */
+    TValue *k; /* constant values */
+    Instruction *code; /* bytecode */
+    LineInfo *linfo; /* lines information for instructions */
+    LVarInfo *locals; /* debug information for local variables */
+    UpValInfo *upvals; /* debug information for upvalues */
+    int sizep; /* size of 'p' */
+    int sizek; /* size of 'k' */
+    int sizecode; /* size of 'code' */
+    int sizelinfo; /* size of 'linfo' */
+    int sizelocals; /* size of 'locals' */
+    int sizeupvals; /* size of 'upvals' */
+    int maxstack; /* max stack size for this function */
+    int arity; /* function argument count */
+    int defline; /* function definition line */
+    int deflastline; /* function definition end line */
+} Proto;
+
+/* } --------------------------------------------------------------------- */
+
+
+
+/* -----------------------------------------------------------------------
+**  Instance {
+** ----------------------------------------------------------------------- */
+
+#define CS_VINSTANCE        makevariant(CS_TINSTANCE, 0)
+
+#define ttisinstance(o)     checktag(o, ctb(CS_VINSTANCE))
+
+#define insval(o)       check_exp(ttisinstance(o), gco2ins(val(o).gc))
+
+#define setinsval(ts,obj,x) \
+    { TValue *o_=(obj); const Instance *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VINSTANCE)); \
+      checkliveness(ts, o_); }
+
+#define setinsval2s(ts,o,ins)       setinsval(ts,s2v(o),ins)
+
+typedef struct Instance {
+    ObjectHeader;
+    OClass *oclass; /* pointer to class */
+    HTable *fields;
+} Instance;
+
+/* } --------------------------------------------------------------------- */
+
+
+
+/* -----------------------------------------------------------------------
+** Functions {
+** ----------------------------------------------------------------------- */
+
+#define CS_UPVALUE      makevariant(CS_TUPVALUE, 0)
+
+#define CS_VCSCL        makevariant(CS_TFUNCTION, 0) /* CScript closure */
+#define CS_VLCF         makevariant(CS_TFUNCTION, 1) /* light C function */
+#define CS_VCCL         makevariant(CS_TFUNCTION, 2) /* C closure */
+#define CS_VIMETHOD     makevariant(CS_TFUNCTION, 3) /* bounded method */
+
+#define ttisfunction(o)         checktype(o, CS_TFUNCTION)
+#define ttisCSclosure(o)        checktag(o, ctb(CS_VCSCL))
+#define ttislcf(o)              checktag(o, CS_VLCF)
+#define ttisCclosure(o)         checktag(o, ctb(CS_VCCL))
+#define ttisinstancemethod(o)   checktag(o, ctb(CS_VIMETHOD))
+#define ttisclosure(o)          (ttisCSclosure(o) || ttisCclosure(o))
+
+#define clval(o)        check_exp(ttisclosure(o), gco2cl(val(o).gc))
+#define clCSval(o)      check_exp(ttisCSclosure(o), gco2clcs(val(o).gc))
+#define clCval(o)       check_exp(ttisCclosure(o), gco2clc(val(o).gc))
+#define lcfval(o)       check_exp(ttislcf(o), val(o).cfn)
+#define imval(o)        check_exp(ttisinstancemethod(o), gco2im(val(o).gc))
+
+#define setclCSval(ts,obj,x) \
+    { TValue *o_=(obj); const CSClosure *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VCSCL)); \
+      checkliveness(ts, o_); }
+
+#define setclCSval2s(ts,o,cl)   setclCSval(ts,s2v(o),cl)
+
+#define setcfval(ts,obj,x) \
+    { TValue *o_ = (obj); val(o_).cfn=(x); settt(o_, CS_VLCF); }
+
+#define setclCval(ts,obj,x) \
+    { TValue *o_=(obj); const CClosure *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VCCL)); \
+      checkliveness(ts, o_); }
+
+#define setclCval2s(ts,o,cl)    setclCval(ts,s2v(o),cl)
+
+#define setimval(ts,obj,x) \
+    { TValue *o_=(obj); const IMethod *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VIMETHOD)); \
+      checkliveness(ts, o_); }
+
+#define setimval2s(ts,o,im)     setimval(ts,s2v(o),im)
+
+
+/* method bounded to instance */
+typedef struct IMethod {
+    ObjectHeader;
+    Instance *ins;
+    TValue method;
+} IMethod;
+
+
+/* upvalues for CScript closures */
 typedef struct UpVal {
     ObjectHeader;
     union {
@@ -514,130 +721,21 @@ typedef struct UpVal {
             struct UpVal **prev;
         } open;
         TValue value; /* value stored here when closed */
+        cs_ubyte readonly; /* true if variable is read only */
     } u;
 } UpVal;
 
-
-
-/* -------------------------------------------------------------------------
- * Function
- * -------------------------------------------------------------------------- */
-
-#define CS_VFUNCTION    makevariant(CS_TFUNCTION, 0)
-
-#define ttisfunction(o)     checktype((o), CS_TFUNCTION)
-#define ttisfn(o)           checktag((o), ctb(CS_VFUNCTION))
-
-#define fnval(o)        gco2fn(gcoval(o))
-
-#define setfnval(ts,obj,fn)         setgcotval(ts,obj,fn,Function)
-#define setfnval2s(ts,sobj,fn)      setfnval(ts,s2v(sobj),fn)
-
-
-/* private global variable */
-typedef union PrivateVar {
-    struct {
-        TValueFields;
-        OString *name;
-    } s;
-    TValue val;
-} PrivateVar;
-
-
-
-/* upvalue variable debug information */
-typedef struct UpValInfo {
-    OString *name;
-    int idx; /* index in stack or outer function local var list */
-    cs_ubyte onstack; /* is it on stack */
-    cs_ubyte mod; /* type of corresponding variable */
-} UpValInfo;
-
-
-
-/* Automatic (local) variable debug information */
-typedef struct LVarInfo {
-    OString *name;
-    int startpc; /* point where variable is in scope */
-    int endpc; /* point where variable is out of scope */
-} LVarInfo;
-
-
-
-/* line information and associated instruction */
-typedef struct LineInfo {
-    int pc;
-    int line;
-} LineInfo;
-
-
-typedef struct Function {
-    ObjectHeader;
-    cs_ubyte isvararg;
-    GCObject *gclist;
-    OString *source; /* source name */
-    struct Function **funcs; /* functions defined inside of this function */
-    TValue *k; /* constant values */
-    PrivateVar *private; /* private variables (static globals) */
-    Instruction *code; /* bytecode */
-    LineInfo *linfo; /* lines information for instructions */
-    LVarInfo *locals; /* debug information for local variables */
-    UpValInfo *upvals; /* debug information for upvalues */
-    int sizefn; /* size of 'fn' */
-    int sizek; /* size of 'constants' */
-    int sizeprivate; /* size of 'private' */
-    int sizecode; /* size of 'code' */
-    int sizelinfo; /* size of 'linfo' */
-    int sizelocals; /* size of 'locals' */
-    int sizeupvals; /* size of 'upvals' */
-    int maxstack; /* max stack size for this function */
-    int arity; /* function argument count */
-    int defline; /* function definition line */
-    int deflastline; /* function definition end line */
-} Function;
-
-
-
-/* -------------------------------------------------------------------------
- * Closures
- * -------------------------------------------------------------------------- */
-
-#define CS_VCRCL    makevariant(CS_TFUNCTION, 1) /* 'CrClosure' */
-#define CS_VCCL     makevariant(CS_TFUNCTION, 2) /* 'CClosure' */
-
-#define ttiscrcl(o)     checktag((o), ctb(CS_VCRCL))
-
-#define crclval(o)      gco2crcl(gcoval(o))
-
-#define setcrclval(ts,obj,crcl)     setgcotval(ts,obj,crcl,CrClosure)
-#define setcrcl2s(ts,sobj,crcl)     setcrclval(ts,s2v(sobj),crcl)
 
 
 /* common closure header */
 #define ClosureHeader   ObjectHeader; int nupvalues; GCObject *gclist
 
 
-typedef struct CrClosure {
+typedef struct CSClosure {
     ClosureHeader;
-    Function *fn;
+    Proto *p;
     UpVal *upvals[];
-} CrClosure;
-
-
-/* size of 'CrClosure' */
-#define sizeofcrcl(nup) \
-    (offsetof(CrClosure, upvals) + ((nup) * sizeof(UpVal)))
-
-
-
-#define ttisccl(o)      checktag(o, ctb(CS_VCCL))
-
-#define cclval(o)       gco2ccl(gcoval(o))
-
-#define setcclval(ts,obj,ccl)   setgcotval(ts,obj,ccl,CClosure)
-#define setccl2s(ts,sobj,ccl)   setcclval(ts,s2v(sobj),ccl)
-
-#define CScriptclosure(cl)      ((cl) != NULL && (cl)->crc.tt_ == CS_VCRCL)
+} CSClosure;
 
 
 typedef struct {
@@ -647,149 +745,15 @@ typedef struct {
 } CClosure;
 
 
-#define sizeofccl(nup) \
-    (offsetof(CClosure, upvals) + ((nup) * sizeof(TValue)))
-
-
-
-#define ttiscl(v)   (ttisccl(v) || ttiscrcl(v))
-
-#define clval(v)    gco2cl(gcoval(v))
-
-#define setclval(ts,obj,cl)     setgcotval(ts,obj,cl,Closure)
-#define setcl2s(ts,sobj,cl)     setclval(ts,s2v(sobj),cl)
-
 typedef union Closure {
-    CClosure cc;
-    CrClosure crc;
+    CClosure c;
+    CSClosure cs;
 } Closure;
 
 
+#define getproto(o)	(clCSval(o)->p)
 
-/* --------------------------------------------------------------------------
- * OClass
- * -------------------------------------------------------------------------- */
-
-/* number of elements in VMT */
-#define SIZEVMT     (sizeof(TValue)*CS_NUM_MM)
-
-
-#define CS_VCLASS       makevariant(CS_TCLASS, 0)
-
-#define ttiscls(o)      checktag(o, ctb(CS_VCLASS))
-
-#define clsval(o)       (cs_assert(ttiscls(o)), gco2cls(gcoval(o)))
-
-#define setclsval(ts,obj,cls)   setgcotval(ts,obj,cls,OClass)
-#define setcls2s(ts,sv,cls)     setclsval(ts,s2v(sv),cls)
-
-typedef struct OClass {
-    ObjectHeader;
-    TValue *vmt;
-    HTable *methods;
-    GCObject *gclist;
-} OClass;
-
-
-
-/* --------------------------------------------------------------------------
- *  Instance
- * -------------------------------------------------------------------------- */
-
-#define CS_VINSTANCE    makevariant(CS_TINSTANCE, 0)
-
-#define ttisins(o)      checktag(o, ctb(CS_VINSTANCE))
-
-#define insval(o)       (cs_assert(ttisins(o)), gco2ins(gcoval(o)))
-
-#define setinsval(ts,obj,ins)       setgcotval(ts,obj,ins,Instance)
-#define setins2s(ts,sobj,ins)       setinsval(ts,s2v(sobj),ins)
-
-typedef struct Instance {
-    ObjectHeader;
-    OClass *oclass; /* pointer to class */
-    HTable *fields;
-} Instance;
-
-
-
-/* --------------------------------------------------------------------------
- *  IMethod (method binded to instance)
- * --------------------------------------------------------------------------- */
-
-#define CS_VMETHOD      makevariant(3, CS_TFUNCTION)
-
-#define ttisim(o)       checktag(o, ctb(CS_VMETHOD))
-
-#define imval(o)        gco2im(gcoval(o))
-
-#define setimval(ts,obj,im)     setgcotval(ts,obj,im,IMethod)
-#define setim2s(ts,sobj,im)     setimval(ts,s2v(sobj),im)
-
-typedef struct IMethod {
-    ObjectHeader;
-    Instance *receiver;
-    TValue method;
-} IMethod;
-
-
-
-/* --------------------------------------------------------------------------
- *  UserData
- * -------------------------------------------------------------------------- */
-
-#define CS_VUDATA       makevariant(CS_TUDATA, 0)
-
-#define ttisud(o)       checktag(o, ctb(CS_VUDATA))
-
-#define udval(o)        gco2ud(gcoval(o))
-
-#define setudval(ts,obj,ud)     setgcotval(ts,obj,ud,UserData)
-#define setud2s(ts,sobj,ud)     setudval(ts,s2v(sobj),ud)
-
-typedef struct UserData {
-    ObjectHeader;
-    int nuv; /* number of 'uservalues' */
-    TValue *vmt;
-    size_t size; /* size of 'UserData' memory in bytes */
-    GCObject *gclist;
-    TValue uv[]; /* user values */
-    /* 'UserData' memory starts here; after 'uv' elements */
-} UserData;
-
-
-/*
-** 'UserData' without user values, meaning 'uv' is empty
-** ('nuv' == 0). This is used when allocating 'UserData'
-** to properly calculate offset of user memory because
-** 'uv' is a flexible array member.
-** Internally Cript only uses 'UserData' to access
-** fields and it takes care to avoid using 'uv' and
-** 'gclist' fields when 'nuv' is 0.
-** Additionally GC marks 'UserData' black in case 'nuv'
-** is 0, to avoid using the 'gclist' field.
-*/
-typedef struct EmptyUserData {
-    ObjectHeader;
-    int nuv; /* number of 'uservalues' */
-    TValue *vmt;
-    size_t size; /* size of 'UserData' memory in bytes */
-    union {CSI_MAXALIGN;} usermem;
-    /* 'UserData' memory starts here */
-} EmptyUserData;
-
-
-/* offset in 'UserData' where user memory begins */
-#define udmemoffset(nuv) \
-    ((nuv) == 0 \
-        ? offsetof(EmptyUserData, usermem) \
-        : offsetof(UserData, uv) + ((nuv) * sizeof(TValue)))
-
-/* get the address of the memory block inside 'UserData' */
-#define getudmem(u)	(cast_charp(u) + udmemoffset((u)->nuv))
-
-/* size of 'UserData' */
-#define sizeofud(nuv, size)     (udmemoffset(nuv) + (size))
+/* } --------------------------------------------------------------------- */
 
 
 
@@ -806,20 +770,22 @@ typedef enum N2IMode {
 
 /* convert value to 'cs_Integer' */
 #define tointeger(v,i) \
-    (csi_likely(ttisint(v)) \
-     ? (*(i) = ival(v), 1) \
-     : csO_tointeger(v, i, N2IFLOOR))
+    (csi_likely(ttisint(v)) ? (*(i) = ival(v), 1) \
+                            : csO_tointeger(v, i, N2IFLOOR))
 
 
 /* convert value to 'cs_Number' */
 #define tonumber(v,n) \
-    (csi_likely(ttisflt(v)) \
-     ? (*(n) = fval(v), 1) \
-     : (ttisint(v)) ? (*(n) = ival(v), 1) : 0)
+    (csi_likely(ttisflt(v)) ? (*(n) = fval(v), 1) \
+                            : (ttisint(v)) ? (*(n) = ival(v), 1) : 0)
 
 
 /* same as right shift but indicate left by making 'y' negative */
 #define csO_shiftl(x,y)    csO_shiftr(x, -(y))
+
+
+/* alternative to '%' for hashing, 'sz' is always power of 2 */
+#define hashmod(h,sz)       check_exp(((sz&(sz-1))==0), cast_int(h)&(sz-1))
 
 
 CSI_FUNC int csO_ceillog2(uint x);

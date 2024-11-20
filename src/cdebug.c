@@ -18,23 +18,25 @@
 #include "cstring.h"
 #include "climits.h"
 #include "cstate.h"
-#include "ctrace.h"
 #include "cobject.h"
 #include "cprotected.h"
+#include "cmeta.h"
 #include "cvm.h"
-#include "cgc.h"
+
+
+#define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
 
 
 /* get line number of instruction ('pc') */
-int csD_getfuncline(const Function *fn, int pc) {
+int csD_getfuncline(const Proto *p, int pc) {
     LineInfo *li;
     int low = 0;
-    int high = fn->sizelinfo - 1;
+    int high = p->sizelinfo - 1;
     int mid = low + ((high - low)/2);
-    li = &fn->linfo[mid];
+    li = &p->linfo[mid];
     cs_assert(fn->sizelinfo > 0);
-    for (; low <= high; li = &fn->linfo[mid]) {
+    for (; low <= high; li = &p->linfo[mid]) {
         if (li->pc < pc) 
             low = mid + 1;
         else if (li->pc > pc) 
@@ -47,21 +49,21 @@ int csD_getfuncline(const Function *fn, int pc) {
 }
 
 
-/* current instruction in 'CrClosure' ('Function') */
+/* current instruction in 'CrClosure' ('Proto') */
 cs_sinline int currentpc(const CallFrame *cf) {
-    cs_assert(cfisCScript(cf));
-    return cast_int(cf->pc - cfFunction(cf)->code) - 1;
+    cs_assert(isCScript(cf));
+    return cast_int(cf->pc - cfProto(cf)->code) - 1;
 }
 
 
 /* current line number */
 cs_sinline int currentline(CallFrame *cf) {
-    return csD_getfuncline(cfFunction(cf), currentpc(cf));
+    return csD_getfuncline(cfProto(cf), currentpc(cf));
 }
 
 
 static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
-    if (cfFunction(cf)->isvararg) {
+    if (cfProto(cf)->isvararg) {
         int nextra = cf->nvarargs;
         if (n >= -nextra) {
             *pos = cf->func.p - nextra - (n + 1);
@@ -79,16 +81,16 @@ static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
 const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n, SPtr *pos) {
     SPtr base = cf->func.p + 1;
     const char *name = NULL;
-    if (cfisCScript(cf)) {
+    if (isCScript(cf)) {
         if (n < 0) /* vararg ? */
             return findvararg(cf, pos, n);
         else /* otherwise local variable */
-            name = csF_getlocalname(cfFunction(cf), n, currentpc(cf));
+            name = csF_getlocalname(cfProto(cf), n, currentpc(cf));
     }
     if (name == NULL) {
         SPtr limit = (cf == ts->cf) ? ts->sp.p : cf->next->func.p;
         if (limit - base >= n && n > 0) /* 'n' is in stack range ? */
-            name = cfisCScript(cf) ? "(auto)" : "(C auto)";
+            name = isCScript(cf) ? "(auto)" : "(C auto)";
         else
             return NULL;
     }
@@ -102,10 +104,10 @@ CS_API const char *cs_getlocal(cs_State *ts, const cs_DebugInfo *di, int n) {
     const char *name;
     cs_lock(ts);
     if (di == NULL) {
-        if (!ttiscrcl(s2v(ts->sp.p - 1)))
+        if (!ttisCSclosure(s2v(ts->sp.p - 1)))
             name = NULL;
         else
-            name = csF_getlocalname(crclval(s2v(ts->sp.p - 1))->fn, n, 0);
+            name = csF_getlocalname(clCSval(s2v(ts->sp.p - 1))->p, n, 0);
     }
     else {
         SPtr pos = NULL;
@@ -135,16 +137,16 @@ CS_API const char *cs_setlocal (cs_State *ts, const cs_DebugInfo *ar, int n) {
 
 
 static void getfuncinfo(Closure *cl, cs_DebugInfo *di) {
-    if (!CScriptclosure(cl)) {
+    if (!CScriptClosure(cl)) {
         di->source = "[C]";
         di->srclen = SLL("[C]");
         di->defline = -1;
         di->lastdefline = -1;
         di->what = "C";
     } else {
-        const Function *fn = cl->crc.fn;
+        const Proto *fn = cl->cs.p;
         if (fn->source) { /* have source? */
-          di->source = getstrbytes(fn->source);
+          di->source = getstr(fn->source);
           di->srclen = getstrlen(fn->source);
         }
         else {
@@ -159,15 +161,17 @@ static void getfuncinfo(Closure *cl, cs_DebugInfo *di) {
 }
 
 
-static const char *funcnamefromcode(cs_State *ts, const Function *fn, int pc,
+static const char *funcnamefromcode(cs_State *ts, const Proto *fn, int pc,
                                     const char **name) {
     cs_MM mm;
     Instruction *i = &fn->code[pc];
     switch (*i) {
         case OP_CALL: {
-            /* TODO: implement */
-            *name = "call object";
-            return "call object"; 
+            /* TODO: call instruction holds the stack position to the start
+            ** of the arguments, right before that is the object that was
+            ** called, find out its name. */
+            *name = "unknown_object()";
+            return "unknown_object()"; 
         }
         case OP_FORCALL: {
             *name = "for iterator";
@@ -196,7 +200,7 @@ static const char *funcnamefromcode(cs_State *ts, const Function *fn, int pc,
         case OP_CLOSE: case OP_RET: mm = CS_MM_CLOSE; break;
         default: return NULL;
     }
-    *name = getstrbytes(G_(ts)->mmnames[mm]) /* and skip '__' */ + 2;
+    *name = getstr(G_(ts)->mmnames[mm]) /* and skip '__' */ + 2;
     return "metamethod";
 }
 
@@ -208,8 +212,8 @@ static const char *funcnamefromcall(cs_State *ts, CallFrame *cf,
         *name = "__gc";
         return "metamethod";
     }
-    else if (cfisCScript(cf))
-        return funcnamefromcode(ts, cfFunction(cf), currentpc(cf), name);
+    else if (isCScript(cf))
+        return funcnamefromcode(ts, cfProto(cf), currentpc(cf), name);
     else
         return NULL;
 }
@@ -246,14 +250,14 @@ static int getinfo(cs_State *ts, const char *options, Closure *cl,
                 break;
             }
             case 'l': {
-                di->currline = (cfisCScript(cf) ? currentline(cf) : -1);
+                di->currline = (isCScript(cf) ? currentline(cf) : -1);
                 break;
             }
             case 'u': {
-                di->nupvals = (cl ? cl->cc.nupvalues : 0);
-                if (cfisCScript(cf)) {
-                    di->nparams = cl->crc.fn->arity;
-                    di->isvararg = cl->crc.fn->isvararg;
+                di->nupvals = (cl ? cl->c.nupvalues : 0);
+                if (isCScript(cf)) {
+                    di->nparams = cl->cs.p->arity;
+                    di->isvararg = cl->cs.p->isvararg;
                 } else {
                     di->nparams = 0;
                     di->isvararg = 1;
@@ -305,7 +309,7 @@ CS_API int cs_getinfo(cs_State *ts, const char *options, cs_DebugInfo *di) {
         func = s2v(cf->func.p);
         cs_assert(ttisfunction(func));
     }
-    cl = (ttiscrcl(func) ? clval(func) : NULL);
+    cl = (ttisCSclosure(func) ? clval(func) : NULL);
     status = getinfo(ts, options, cl, cf, di);
     if (strchr(options, 'f')) {
         setobj2s(ts, ts->sp.p, func);
@@ -321,7 +325,7 @@ const char *csD_addinfo(cs_State *ts, const char *msg, OString *src,
                         int line) {
     char buffer[CSI_MAXSRC];
     if (src) {
-        csS_sourceid(buffer, src->bytes, src->len);
+        csS_sourceid(buffer, getstr(src), getstrlen(src));
     } else {
         buffer[0] = '?';
         buffer[1] = '\0';
@@ -337,8 +341,8 @@ cs_noret csD_runerror(cs_State *ts, const char *fmt, ...) {
     va_start(ap, fmt);
     err = csS_pushvfstring(ts, fmt, ap);
     va_end(ap);
-    if (cfisCScript(ts->cf)) { /* in Cscript function (closure) ? */
-        csD_addinfo(ts, err, cfFunction(ts->cf)->source, currentline(ts->cf));
+    if (isCScript(ts->cf)) {
+        csD_addinfo(ts, err, cfProto(ts->cf)->source, currentline(ts->cf));
         setobj2s(ts, ts->sp.p - 2, s2v(ts->sp.p - 1)); /* remove 'err' */
         ts->sp.p--;
     }
@@ -348,7 +352,7 @@ cs_noret csD_runerror(cs_State *ts, const char *fmt, ...) {
 
 /* global variable related error */
 cs_noret csD_globalerror(cs_State *ts, const char *err, OString *name) {
-    csD_runerror(ts, "%s global variable '%s'", err, getstrbytes(name));
+    csD_runerror(ts, "%s global variable '%s'", err, getstr(name));
 }
 
 
@@ -386,7 +390,7 @@ cs_noret csD_ordererror(cs_State *ts, const TValue *v1, const TValue *v2) {
 
 
 cs_noret csD_concaterror(cs_State *ts, const TValue *v1, const TValue *v2) {
-    if (ttisstr(v1)) v1 = v2;
+    if (ttisstring(v1)) v1 = v2;
     csD_typeerror(ts, v1, "concatenate");
 }
 

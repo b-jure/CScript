@@ -17,15 +17,16 @@
 #include "cstate.h"
 #include "cvm.h"
 
+#include <stdio.h>
 
-Function *csF_newfunction(cs_State *ts) {
-    Function *fn = csG_new(ts, sizeof(Function), CS_VFUNCTION, Function);
+
+Proto *csF_newproto(cs_State *ts) {
+    Proto *fn = csG_new(ts, sizeof(Proto), CS_VPROTO, Proto);
     fn->isvararg = 0;
     fn->gclist = NULL;
     fn->source = NULL;
-    { fn->funcs = NULL; fn->sizefn = 0; } /* functions */
+    { fn->p = NULL; fn->sizep = 0; } /* function prototypes */
     { fn->k = NULL; fn->sizek = 0; } /* constants */
-    { fn->private = NULL; fn->sizeprivate = 0; } /* privates */
     { fn->code = NULL; fn->sizecode = 0; } /* code */
     { fn->linfo = NULL; fn->sizelinfo = 0; } /* line information */
     { fn->locals = NULL; fn->sizelocals = 0; } /* locals */
@@ -38,10 +39,10 @@ Function *csF_newfunction(cs_State *ts) {
 }
 
 
-CrClosure *csF_newCrClosure(cs_State *ts, int nup) {
-    CrClosure *crcl = csG_new(ts, sizeofcrcl(nup), CS_VCRCL, CrClosure);
+CSClosure *csF_newCrClosure(cs_State *ts, int nup) {
+    CSClosure *crcl = csG_new(ts, sizeofCScl(nup), CS_VCSCL, CSClosure);
     crcl->nupvalues = nup;
-    crcl->fn = NULL;
+    crcl->p = NULL;
     for (int i = 0; i < nup; i++)
         crcl->upvals[i] = NULL;
     return crcl;
@@ -49,7 +50,7 @@ CrClosure *csF_newCrClosure(cs_State *ts, int nup) {
 
 
 CClosure *csF_newCClosure(cs_State *ts, int nupvalues) {
-    CClosure *ccl = csG_new(ts, nupvalues * sizeof(TValue), CS_VCCL, CClosure);
+    CClosure *ccl = csG_new(ts, sizeofCcl(nupvalues), CS_VCCL, CClosure);
     ccl->nupvalues = nupvalues;
     return ccl;
 }
@@ -62,7 +63,7 @@ CClosure *csF_newCClosure(cs_State *ts, int nupvalues) {
 ** old named parameters (after they get moved).
 */
 void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
-                       const Function *fn) {
+                       const Proto *fn) {
     int i;
     int actual = cast_int(ts->sp.p - cf->func.p) - 1;
     int extra = actual - arity; /* number of varargs */
@@ -82,7 +83,7 @@ void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
 /* Get 'wanted' varargs starting at the current stack pointer. */
 void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted) {
     int have = cf->nvarargs;
-    if (wanted < 0) { /* CS_MULRET ? */
+    if (wanted < 0) { /* CS_MULRET? */
         wanted = have;
         checkstackGC(ts, wanted); /* check stack, maybe 'wanted > have' */
     }
@@ -94,9 +95,9 @@ void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted) {
 
 
 /* Create and initialize all the upvalues in 'cl'. */
-void csF_initupvals(cs_State *ts, CrClosure *cl) {
+void csF_initupvals(cs_State *ts, CSClosure *cl) {
     for (int i = 0; i < cl->nupvalues; i++) {
-        UpVal *uv = csG_new(ts, sizeof(UpVal), CS_VUVALUE, UpVal);
+        UpVal *uv = csG_new(ts, sizeof(UpVal), CS_UPVALUE, UpVal);
         uv->v.p = &uv->u.value; /* close it */
         setnilval(uv->v.p);
         cl->upvals[i] = uv;
@@ -110,7 +111,7 @@ void csF_initupvals(cs_State *ts, CrClosure *cl) {
 ** right after 'prev'.
 */
 static UpVal *newupval(cs_State *ts, SPtr val, UpVal **prev) {
-    UpVal *uv = csG_new(ts, sizeof(*uv), CS_VUVALUE, UpVal);
+    UpVal *uv = csG_new(ts, sizeof(*uv), CS_UPVALUE, UpVal);
     UpVal *previous = *prev;
     uv->v.p = s2v(val);
     uv->u.open.next = previous;
@@ -153,11 +154,11 @@ UpVal *csF_findupval(cs_State *ts, SPtr sval) {
 ** missing debug information (stripped).
 ** Note: current version (1.0.0) always contains debug information.
 */
-const char *csF_getlocalname(const Function *fn, int lnum, int pc) {
+const char *csF_getlocalname(const Proto *fn, int lnum, int pc) {
     cs_assert(lnum > 0);
     for (int i = 0; i < fn->sizelocals && fn->locals->startpc <= pc; i++)
         if ((lnum -= (pc < fn->locals[i].endpc)) == 0)
-            return getstrbytes(fn->locals[i].name);
+            return getstr(fn->locals[i].name);
     return NULL;
 }
 
@@ -187,7 +188,7 @@ static void checkclosem(cs_State *ts, SPtr level) {
 
 /* insert variable into the list of to-be-closed variables */
 void csF_newtbcvar(cs_State *ts, SPtr level) {
-    if (csi_isfalse(s2v(level)))
+    if (c_isfalse(s2v(level)))
         return;
     checkclosem(ts, level);
     while (cast_uint(level - ts->tbclist.p) > MAXDELTA) {
@@ -217,7 +218,7 @@ void csF_closeupval(cs_State *ts, SPtr level) {
         uv->v.p = slot;
         if (!iswhite(uv)) { /* not white but maybe gray ? */
             notw2black(uv); /* closed upvalue can't be gray */
-            csG_barrier(ts, uv, slot); /* noop, 'slot' (uv) is black */
+            csG_barrier(ts, uv, slot);
         }
     }
 }
@@ -295,9 +296,9 @@ void csF_freeupval(cs_State *ts, UpVal *upval) {
 }
 
 
-/* free 'Function' */
-void csF_free(cs_State *ts, Function *fn) {
-    csM_freearray(ts, fn->funcs, fn->sizefn, Function);
+/* free function prototype */
+void csF_free(cs_State *ts, Proto *fn) {
+    csM_freearray(ts, fn->p, fn->sizep, Proto);
     csM_freearray(ts, fn->k, fn->sizek, TValue);
     csM_freearray(ts, fn->code, fn->sizecode, Instruction);
     csM_freearray(ts, fn->linfo, fn->sizelinfo, LineInfo);

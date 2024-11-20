@@ -7,7 +7,6 @@
 #ifndef CRGC_H
 #define CRGC_H
 
-#include <stdio.h>
 
 #include "cbits.h"
 #include "cobject.h"
@@ -40,7 +39,7 @@
 #define iswhite(o)      testbits((o)->mark, maskwhitebits)
 #define isblack(o)      testbit((o)->mark, BLACKBIT)
 #define isgray(o) /* neither white nor black */ \
-    (!testbits((o)->mark, maskcolorbits))
+        (!testbits((o)->mark, maskcolorbits))
 #define isfin(o)        testbit((o)->mark, FINBIT)
 
 
@@ -54,7 +53,8 @@
 #define markfin(o)              setbit((o)->mark, FINBIT)
 
 /* mark non-white object as black */
-#define notw2black(o)           setbit((o)->mark, BLACKBIT)
+#define notw2black(o) \
+        check_exp(!iswhite(o), setbit((o)->mark, BLACKBIT))
 
 /* object is dead if xor (flipped) white bit is set */
 #define isdead(gs, o)           testbits(whitexor(gs), (o)->mark)
@@ -90,7 +90,7 @@
 
 /* check if GC is in a sweep state */
 #define sweepstate(gs) \
-    (GCSsweepall <= (gs)->gcstate && (gs)->gcstate <= GCSsweepend)
+        (GCSsweepall <= (gs)->gcstate && (gs)->gcstate <= GCSsweepend)
 
 
 /* GC 'stopped' bits */
@@ -136,28 +136,27 @@
  * ------------------------------------------------------------------------- */
 
 /*
- ** Same as 'csG_barrierforward_' but ensures that it is only
+ ** Same as 'csG_barrier_' but ensures that it is only
  ** called when 'r' (root) is a black object and 'o' is white.
  */
 #define csG_objbarrier(ts,r,o) \
-    (isblack(r) && iswhite(o) \
-     ? csG_barrier_(ts, obj2gco(r), obj2gco(o)) \
-     : (void)(0))
+        (isblack(r) && iswhite(o) ? csG_barrier_(ts, obj2gco(r), obj2gco(o)) \
+                                  : (void)(0))
 
-/* wrapper around 'csG_objbarrier' that check if ** 'v' is object */
+/* wrapper around 'csG_objbarrier' that check if 'v' is object */
 #define csG_barrier(ts,r,v) \
-    (iscollectable(v) ? csG_objbarrier(ts, r, gcoval(v)) : (void)(0))
+        (iscollectable(v) ? csG_objbarrier(ts, r, gcoval(v)) : (void)(0))
 
 /*
 ** Same as 'csG_barrierback_' but ensures that it is only
 ** called when 'r' (root) is a black object and 'o' is white.
 */
 #define csG_objbarrierback(ts,r,o) \
-    (isblack(r) && iswhite(o) ? csG_barrierback_(ts, r) : (void)(0))
+        (isblack(r) && iswhite(o) ? csG_barrierback_(ts, r) : (void)(0))
 
 /* wrapper around 'csG_objbarrierback' that checks if 'v' is object */
 #define csG_barrierback(ts,r,v) \
-    (iscollectable(v) ? csG_objbarrierback(ts,r,gcoval(v)) : (void)(0))
+        (iscollectable(v) ? csG_objbarrierback(ts,r,gcoval(v)) : (void)(0))
 
 
 /* 
@@ -178,7 +177,7 @@ CSI_FUNC void csG_step(cs_State *ts);
 CSI_FUNC void csG_full(cs_State *ts, int isemergency);
 CSI_FUNC void csG_rununtilstate(cs_State *ts, int statemask);
 CSI_FUNC void csG_freeallobjects(cs_State *ts);
-CSI_FUNC void csG_checkfin(cs_State *ts, GCObject *o, TValue *vmt);
+CSI_FUNC void csG_checkfin(cs_State *ts, GCObject *o, TValue vmt[CS_MM_N]);
 CSI_FUNC void csG_fix(cs_State *ts, GCObject *o);
 CSI_FUNC void csG_barrier_(cs_State *ts, GCObject *r, GCObject *o);
 CSI_FUNC void csG_barrierback_(cs_State *ts, GCObject *r);

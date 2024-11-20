@@ -160,7 +160,7 @@ static int csCore_runfile(cs_State *ts) {
 
 
 static int csCore_getmetamethod(cs_State *ts) {
-    static const char * const opts[CS_NUM_MM + 1] = {"__init", "__getidx",
+    static const char * const opts[CS_MM_N + 1] = {"__init", "__getidx",
         "__setidx", "__gc", "__close", "__call", "__concat", "__add", "__sub",
         "__mul", "__div", "__mod", "__pow", "__shl", "__shr", "__band",
         "__bor", "__xor", "__unm", "__bnot", "__eq", "__lt", "__le", NULL};
@@ -282,25 +282,24 @@ static int csCore_getargs(cs_State *ts) {
     int n = cs_nvalues(ts);
     if (cs_type(ts, 0) == CS_TSTRING) {
         const char *what = cs_to_string(ts, 0);
-        if (strcmp(what, "array") == 0) {
-            cs_push_array(ts);
-            cs_replace(ts, 0);
-            while (--n)
+        if (strcmp(what, "array") == 0) { /* array? */
+            cs_push_array(ts); /* push the array */
+            while (--n) /* set the array indices */
                 cs_set_index(ts, 0, n);
-        } else if (strcmp(what, "set") == 0) {
-            csL_push_hashtable(ts);
-            cs_replace(ts, 0);
-            while (--n) {
+        } else if (strcmp(what, "set") == 0) { /* hashset? */
+            cs_push_table(ts); /* push the table (hashset) */
+            while (--n) { /* set the table fields */
                 cs_push_bool(ts, 1);
                 cs_set_field(ts, 0);
             }
-        } else if (strcmp(what, "len") == 0) {
-            cs_push_integer(ts, n - 1);
+        } else if (strcmp(what, "len") == 0) { /* len? */
+            cs_push_integer(ts, n - 1); /* push total number of args */
         } else {
             csL_arg_error(ts, 0,
             "invalid string value, expected \"array\", \"set\" or \"len\"");
         }
-        return 1;
+        cs_replace(ts, 0); /* replace the option with the value */
+        return 1; /* return the value */
     } else {
         cs_Integer i = csL_check_integer(ts, 0);
         if (i < 0) i = n + i;

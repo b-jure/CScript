@@ -10,7 +10,9 @@
 
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
+#include "cstring.h"
 #include "chashtable.h"
 #include "csconf.h"
 #include "cgc.h"
@@ -33,10 +35,6 @@
 
 /* smallest size for the hash array */
 #define MINHSIZE        twoto(CSI_MINHTBITS)
-
-
-/* module operation for hashing, 'sz' is always power of 2 */
-#define hashmod(h,sz)   (cs_assert(((sz)&((sz)-1))==0), (cast_int(h)&((sz)-1)))
 
 
 /* get hashtable 'node' slot from hash 'h' */
@@ -111,7 +109,7 @@ cs_sinline void htpreinit(HTable *ht) {
 HTable *csH_new(cs_State *ts) {
     HTable *ht = csG_new(ts, sizeof(*ht), CS_VHTABLE, HTable);
     htpreinit(ht);
-    setht2s(ts, ts->sp.p++, ht); /* anchor */
+    sethtval2s(ts, ts->sp.p++, ht); /* anchor */
     newhasharray(ts, ht, MINHSIZE);
     ts->sp.p--; /* remove ht */
     return ht;
@@ -122,7 +120,7 @@ HTable *csH_new(cs_State *ts) {
 HTable *csH_newsize(cs_State *ts, uint size) {
     HTable *ht = csG_new(ts, sizeof(*ht), CS_VHTABLE, HTable);
     htpreinit(ht);
-    setht2s(ts, ts->sp.p++, ht); /* anchor */
+    sethtval2s(ts, ts->sp.p++, ht); /* anchor */
     newhasharray(ts, ht, size);
     ts->sp.p--; /* remove ht */
     return ht;
@@ -141,25 +139,40 @@ void csH_free(cs_State *ts, HTable *ht) {
 
 
 /*
- * Find the main position (slot) for key 'k' inside
- * the table array.
- */
+** Find the main position (slot) for key 'k' inside
+** the hash array.
+*/
 static Node *mainposition(const HTable *ht, const TValue *k) {
     switch (ttypetag(k)) {
-        case CS_VSTRING: {
-            printf("string '%s' => hash '%u'\n",
-                    cstrval(k), hashmod(strval(k)->hash, htsize(ht)));
-            return hashstr(ht, strval(k));
-        }
         case CS_VTRUE: return hashboolean(ht, 1);
         case CS_VFALSE: return hashboolean(ht, 0);
-        case CS_VNUMINT: return hashint(ht, ival(k));
-        case CS_VNUMFLT: return hashpow2(ht, hashflt(fval(k)));
-        case CS_VLUDATA: return hashpointer(ht, pval(k));
-        case CS_VCFUNCTION: return hashpointer(ht, cfval(k));
+        case CS_VSHRSTR: {
+            OString *s = strval(k);
+            return hashstr(ht, s);
+        }
+        case CS_VLNGSTR: {
+            OString *s = strval(k);
+            return hashpow2(ht, csS_hashlngstr(s));
+        }
+        case CS_VNUMINT: {
+            cs_Integer i = ival(k);
+            return hashint(ht, i);
+        }
+        case CS_VNUMFLT: {
+            cs_Number n = fval(k);
+            return hashpow2(ht, hashflt(n));
+        }
+        case CS_VLIGHTUSERDATA: {
+            void *p = pval(k);
+            return hashpointer(ht, p);
+        }
+        case CS_VLCF: {
+            cs_CFunction lcf = lcfval(k);
+            return hashpointer(ht, lcf);
+        }
         default: {
-            cs_assert(!ttisnil(k) && iscollectable(k));
-            return hashpointer(ht, gcoval(k));
+            GCObject *o = gcoval(k);
+            return hashpointer(ht, o);
         }
     }
 }
@@ -262,6 +275,8 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
         Node *f = getfreepos(ht); /* get next free position */
         if (f == NULL) { /* no free position ? */
             rehash(ts, ht); /* grow table */
+            printf("[recursive set]"); fflush(stdout);
+            fflush(stdout);
             csH_set(ts, ht, key, val); /* insert key */
             return; /* done, key must be a new key */
         }
@@ -287,6 +302,8 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
             mp = f;
         }
     }
+    printf("+++>>>[setting at slot %p]\n", (void*)mp);
+    fflush(stdout);
     setnodekey(ts, mp, key); /* set key */
     csG_barrierback(ts, obj2gco(ht), key); /* set 'ht' as gray */
     cs_assert(isempty(nodeval(mp))); /* value slot must be empty */
@@ -307,12 +324,11 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
 ** traverse the table and find all the valid values inside the table,
 ** because dead key nodes still have valid 'next' field.
 **
-** Note: as of version 1.0.0, CScript only has a single weak table
-** that is managed internally, so 'deadkey' is irrelevant but might
-** become usefull if weak hashtables are exposed in the API.
+** Note: as of current version CScript does not expose or implement
+** weak tables in its API, therefore 'deadok' is unused.
 */
 static int eqkey(const TValue *k, const Node *n, int deadok) {
-    (void)deadok;
+    UNUSED(deadok);
     if (rawtt(k) != keytt(n)) /* not the same variant? */
         return 0;
     switch (ttypetag(k)) {
@@ -322,11 +338,15 @@ static int eqkey(const TValue *k, const Node *n, int deadok) {
             return (ival(k) == keyival(n));
         case CS_VNUMFLT:
             return csi_numeq(fval(k), keyfval(n));
-        case CS_VLUDATA:
+        case CS_VLIGHTUSERDATA:
             return (pval(k) == keypval(n));
-        case CS_VCFUNCTION:
-            return (cfval(k) == keycfval(n));
-        default: /* all equal objects have equal pointers */
+        case CS_VLCF:
+            return (lcfval(k) == keycfval(n));
+        case CS_VSHRSTR:
+            return eqshrstr(strval(k), keystrval(n));
+        case CS_VLNGSTR:
+            return csS_eqlngstr(strval(k), keystrval(n));
+        default: /* rest of the objects are compared by pointer identity */
             cs_assert(iscollectable(k));
             return (gcoval(k) == keygcoval(n));
         }
@@ -393,16 +413,24 @@ void csH_copykeys(cs_State *ts, HTable *stab, HTable *dtab) {
 
 
 const TValue *csH_getstr(HTable *ht, OString *key) {
-    TValue aux;
-    setstrval(cast(cs_State *, NULL), &aux, key);
-    return getgeneric(ht, &aux, 0);
+    Node *n = hashstr(ht, key);
+    for (;;) {
+        if (keyisshrstr(n) && eqshrstr(key, keystrval(n))) {
+            return nodeval(n);
+        } else {
+            int next = nodenext(n);
+            if (next == 0)
+                return &absentkey;
+            n += next;
+        }
+    }
 }
 
 
 const TValue *csH_getint(HTable *ht, cs_Integer key) {
     Node *n = hashint(ht, key);
     for (;;) {
-        if (keyisinteger(n) && keyival(n) == key) {
+        if (keyisint(n) && keyival(n) == key) {
             return nodeval(n);
         } else {
             int next = nodenext(n);
@@ -416,14 +444,14 @@ const TValue *csH_getint(HTable *ht, cs_Integer key) {
 
 const TValue *csH_get(HTable *ht, const TValue *key) {
     switch (ttypetag(key)) {
-        case CS_VSTRING: return csH_getstr(ht, strval(key));
+        case CS_VSHRSTR: return csH_getstr(ht, strval(key));
         case CS_VNUMINT: return csH_getint(ht, ival(key));
         case CS_VNIL: return &absentkey;
         case CS_VNUMFLT: {
             cs_Integer i;
             if (csO_tointeger(key, &i, N2IEXACT))
                 return csH_getint(ht, i);
-        } /* FALLTHRU */
+        } /* else fall through */
         default:  {
             cs_assert(!ttisnil(key));
             return getgeneric(ht, key, 0);
@@ -458,21 +486,4 @@ int csH_len(const HTable *ht) {
         len += !isempty(nodeval(n)); n++;
     }
     return len;
-}
-
-
-OString *csH_getinterned(cs_State *ts, HTable *ht, const char *str, size_t len,
-                         uint hash) {
-    for (Node *n = hashpow2(ht, hash); n < htnodelast(ht); n++) {
-        if (!isempty(nodeval(n))) {
-            OString *s = keystrval(n);
-            if (s->hash == hash && s->len == len /* if same hash, length */
-                    && memcmp(s->bytes, str, len) == 0) { /* and contents */
-                if (isdead(G_(ts), s)) /* resurrect if dead */
-                    changewhite(s);
-                return s;
-            }
-        }
-    }
-    return NULL;
 }

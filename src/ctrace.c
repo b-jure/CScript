@@ -157,10 +157,7 @@ Instruction csTR_tracepc(const Function *fn, const Instruction *pc) {
         case FormatILSS: traceILSS(fn, pc); break;
         case FormatILL: traceILL(fn, pc); break;
         case FormatILLS: traceILLS(fn, pc); break;
-        default: {
-            cs_unreachable();
-            cs_assert(0);
-        }
+        default: cs_assert(0 && "invalid OpCode format"); break;
     }
     return *pc++;
 }
@@ -206,10 +203,7 @@ static void tracevalue(const TValue *o) {
         case CS_VFALSE: tracefalse(); break;
         case CS_VSTRING: tracestring(strval(o)); break;
         case CS_VNUMINT: case CS_VNUMFLT: tracenum(o); break;
-        default: {
-            cs_unreachable();
-            cs_assert(0 && "invalid 'o' type");
-        }
+        default: cs_assert(0 && "invalid 'o' type"); break;
     }
 }
 
@@ -427,7 +421,7 @@ void csTR_disassemble(cs_State *ts, const Function *fn) {
     Instruction *pc = fn->code;
     for (int i = 0; i < fn->sizecode; i++) {
         switch (*pc) {
-            case OP_TRUE: case OP_FALSE: case OP_NIL: case OP_CLASS:
+            case OP_TRUE: case OP_FALSE: case OP_NIL: case OP_NEWCLASS:
             case OP_POP: case OP_ADD: case OP_SUB: case OP_MUL:
             case OP_DIV: case OP_MOD: case OP_POW: case OP_BSHL:
             case OP_BSHR: case OP_BAND: case OP_BOR: case OP_BXOR:
@@ -497,10 +491,7 @@ void csTR_disassemble(cs_State *ts, const Function *fn) {
             case OP_EQ: unasmS(ts, fn, pc); break;
             case OP_CALL: unasmCall(ts, fn, pc); break;
             case OP_RET: unasmRet(ts, fn, pc); break;
-            default: {
-                cs_unreachable();
-                cs_assert(0 && "invalid OpCode");
-            }
+            default: cs_assert(0 && "invalid OpCode"); break;
         }
         pc = nextOp(pc);
     }

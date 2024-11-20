@@ -1,6 +1,6 @@
 /*
 ** clexer.h
-** Lexical Analyzer
+** Scanner
 ** See Copyright Notice in cscript.h
 */
 
@@ -15,28 +15,41 @@
 /* multi-char tokens start at this numeric value */
 #define FIRSTTK		(UCHAR_MAX + 1)
 
-/* number of Cript keywords */
+
+/*
+** Top-level ("main") CScript closures run in their own sandboxed environment,
+** meaning any declared global variable inside of a CScript closure is
+** actually getting set as the field in "__ENV" hashtable which itself is
+** the first and only upvalue in the top-level ("main") CScript closure.
+*/
+#if !defined(CS_ENV)
+#define CS_ENV	        "__ENV"
+#endif
+
+
+/*
+** WARNING: if you change the order of this enumeration, grep
+** "ORDER TK".
+*/
+enum TK {
+    /* keyword tokens */
+    TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE, TK_CLASS,
+    TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR, TK_EACH, TK_FN, TK_IF,
+    TK_IN, TK_INHERITS, TK_NIL, TK_NOT, TK_OR, TK_RETURN, TK_SUPER,
+    TK_SWITCH, TK_TRUE, TK_WHILE, TK_LOOP, TK_FINAL, TK_LOCAL,
+    /* other multi-char tokens */
+    TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR, TK_POW, TK_CONCAT,
+    TK_DOTS, TK_EOS,
+    /* literal tokens */
+    TK_FLT, TK_INT, TK_STRING, TK_NAME,
+};
+
+/* number of reserved keywords */
 #define NUM_KEYWORDS	((TK_FINAL - (FIRSTTK)) + 1)
 
 
 
-enum TK {
-    /* keyword tokens */
-    TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE,
-    TK_CLASS, TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR,
-    TK_EACH, TK_FN, TK_IF, TK_IN, TK_INHERITS, TK_NIL, TK_NOT,
-    TK_OR, TK_RETURN, TK_SUPER, TK_SELF, TK_SWITCH, TK_TRUE,
-    TK_LET, TK_WHILE, TK_LOOP, TK_FINAL, TK_PRIVATE,
-    /* other multi-char tokens */
-    TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR,
-    TK_POW, TK_CONCAT, TK_DOTS, TK_EOS,
-    /* literal tokens */
-    TK_FLT, TK_INT, TK_STRING, TK_IDENTIFIER,
-};
-
-
-
-/* storage for literals */
+/* scanner literals */
 typedef union {
     cs_Integer i;
     cs_Number n;
@@ -63,7 +76,7 @@ typedef struct Lexer {
     Buffer *buff; /* string buffer */
     struct ParserState *ps; /* dynamic data used by parser */
     OString *src; /* current source name */
-    OString *env; /* name of environment variable */
+    OString *envname; /* name of environment variable */
 } Lexer;
 
 

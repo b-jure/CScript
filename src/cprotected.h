@@ -7,9 +7,8 @@
 #ifndef CRPROTECTED_H
 #define CRPROTECTED_H
 
+
 #include "creader.h"
-#include "cscript.h"
-#include "climits.h"
 
 
 /* type for functions with error handler */

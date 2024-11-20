@@ -14,11 +14,16 @@
 #include "cbits.h"
 
 
+/* maximum number of local variables per function */
+#define MAXVARS     LARGMAX
 
 
-/* -------------------------------------------------------------------------
- * Expression info
- * ------------------------------------------------------------------------- */
+/* 
+** Because all strings are unified by the scanner, the parser
+** can use pointer equality for string equality
+*/
+#define eqstr(a,b)	((a) == (b))
+
 
 /* check expression type */
 #define eisvar(e)           ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
@@ -58,9 +63,6 @@ typedef enum expt {
     /* private variable;
      * 'info' = 'private' index; */
     EXP_PRIVATE,
-    /* global variable;
-     * 'str' = global id; */
-    EXP_GLOBAL,
     /* indexed variable; */
     EXP_INDEXED,
     /* variable indexed with literal string;
@@ -114,13 +116,9 @@ typedef struct ExpInfo {
 
 
 
-/* -------------------------------------------------------------------------
- * Function state
- * ------------------------------------------------------------------------- */
-
 /* variable kind (stored in 'mod') */
-#define VARFINAL        0 /* final (immutable) */
-#define VARPRIVATE      1 /* static */
+#define VARREG          0 /* regular */
+#define VARFINAL        1 /* final (immutable) */
 #define VARTBC          2 /* to-be-closed */
 
 /* bit mask of all valid modifiers in 'mod' */
@@ -131,6 +129,7 @@ typedef struct ExpInfo {
 typedef union LVar {
     struct {
         TValueFields;
+        cs_ubyte kind;
         int idx; /* index into 'locals' */
         OString *name;
     } s;
@@ -157,16 +156,16 @@ typedef struct ClassState {
 
 
 /*
- * Dynamic data used by parser.
- * It is stored inside 'Lexer' because each
- * 'FunctionState' shares the same 'Lexer'.
- */
+** Dynamic data used by parser.
+** It is stored inside 'Lexer' because each 'FunctionState' shares
+** the same 'Lexer'.
+*/
 typedef struct ParserState {
     struct {
         int len;
         int size;
         LVar *arr;
-    } lvars; /* local vars */
+    } actlocals; /* active local vars */
     struct ClassState *cs;
 } ParserState;
 
@@ -175,9 +174,8 @@ typedef struct ParserState {
 typedef struct DynCtx {
     int loopstart;
     int sp;
-    int nfuncs;
+    int np;
     int nk;
-    int nprivate;
     int pc;
     int nlinfo;
     int nlocals;
@@ -187,9 +185,9 @@ typedef struct DynCtx {
 } DynCtx;
 
 
-/* state for currently compiled 'Function' */
+/* state for currently compiled function prototype */
 typedef struct FunctionState {
-    Function *fn; /* current function */
+    Proto *p; /* current function prototype */
     struct FunctionState *prev; /* implicit linked-list */
     struct Lexer *lx; /* lexer */
     struct Scope *scope; /* scope information */
@@ -197,11 +195,10 @@ typedef struct FunctionState {
     struct Scope *switchscope; /* innermost switch scope */
     int loopstart; /* innermost loop start offset */
     int sp; /* first free compiler stack index */
-    int activelocals; /* number of active local variables */
+    int nactlocals; /* number of active local variables */
     int firstlocal; /* index of first local in 'lvars' */
-    int nfuncs; /* number of elements in 'funcs' */
+    int np; /* number of elements in 'p' */
     int nk; /* number of elements in 'k' */
-    int nprivate; /* number of elements in 'private' */
     int pc; /* number of elements in 'code' (equialent to 'ncode') */
     int nlinfo; /* number of elements in 'linfo' */
     int nlocals; /* number of elements in 'locals' */
@@ -218,7 +215,7 @@ typedef struct FunctionState {
 
 
 CSI_FUNC cs_noret csP_semerror(Lexer *lx, const char *err);
-CSI_FUNC CrClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
+CSI_FUNC CSClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
                               ParserState *ps, const char *source);
 
 #endif

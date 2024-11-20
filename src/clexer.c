@@ -1,6 +1,6 @@
 /*
 ** clexer.c
-** Lexical Analyzer
+** Scanner
 ** See Copyright Notice in cscript.h
 */
 
@@ -21,13 +21,8 @@
 
 
 
-/* maximum size of error token string */
-#define MAXERR          CS_MAXSRC
-#define errlen(len)     (MIN(MAXERR, len))
-
-
 /* checks for end of stream */
-#define isend(c)        ((c) == CREOF)
+#define isend(c)        ((c) == CSEOF)
 
 
 /* fetch the next character and store it as current char */
@@ -46,20 +41,19 @@
 
 #define lbptr(lx)       csR_buff((lx)->buff)
 #define lblen(lx)       csR_bufflen((lx)->buff)
-#define lbsize(lx)  csR_buffsize((lx)->buff)
+#define lbsize(lx)      csR_buffsize((lx)->buff)
 #define popc(lx)        csR_buffpop((lx)->buff)
 
 
 
-/* token string literals (static strings) */
-static const char *tkstr[] = {
+static const char *tkstr[] = { /* ORDER TK */
     "and", "break", "case", "continue", "class",
-    "default", "else", "false", "for", "each",
-    "fn", "if", "in", "inherits", "nil", "not", "or",
-    "return", "super", "self", "switch", "true",
-    "let", "while", "loop", "final", "private",
-    "!=", "==", ">=", "<=", "<<", ">>", "..", "...", "<eof>",
-    "<number>", "<integer>", "<string>", "<identifier>"
+    "default", "else", "false", "for", "each", "fn", "if",
+    "in", "inherits", "nil", "not", "or", "return", "super",
+    "switch", "true", "while", "loop", "final", "local",
+    "!=", "==", ">=", "<=", "<<", ">>", "**", "..",
+    "...", "<eof>",
+    "<number>", "<integer>", "<string>", "<name>"
 };
 
 
@@ -83,16 +77,18 @@ void csY_setsource(cs_State *ts, Lexer *lx, BuffReader *br, OString *source) {
     lx->tab = NULL;
     lx->br = br;
     lx->src = source;
-    csR_buffresize(ts, lx->buff, CSI_MINBUFFER);
+    lx->envname = csS_newlit(ts, CS_ENV);
+    csR_buffresize(ts, lx->buff, CS_MINBUFFER);
 }
 
 
 void csY_init(cs_State *ts) {
     /* intern and fix all keywords */
+    OString *env = csS_newlit(ts, CS_ENV);
+    csG_fix(ts, obj2gco(env));
     for (int i = 0; i < NUM_KEYWORDS; i++) {
         OString *s = csS_new(ts, tkstr[i]);
-        s->bits = bitmask(STRKWBIT);
-        s->extra = i;
+        s->extra = i + 1;
         csG_fix(ts, obj2gco(s));
     }
 }
@@ -112,9 +108,9 @@ static cs_noret lexerror(Lexer *lx, const char *err, int token);
 /* pushes character into token buffer */
 cs_sinline void savec(Lexer *lx, int c) {
     if (lblen(lx) >= lbsize(lx)) {
-        if (lbsize(lx) >= CSMAXSIZE >> 1)
+        if (lbsize(lx) >= MAXSIZE / 2)
             lexerror(lx, "lexical element too long", 0);
-        size_t newsize = lbsize(lx) << 1;
+        size_t newsize = lbsize(lx) * 2;
         csR_buffresize(lx->ts, lx->buff, newsize);
     }
     lbptr(lx)[lblen(lx)++] = c;
@@ -131,7 +127,7 @@ cs_sinline int lxmatch(Lexer *lexer, int c) {
 
 
 const char *csY_tok2str(Lexer *lx, int t) {
-    cs_assert(t <= TK_IDENTIFIER);
+    cs_assert(t <= TK_NAME);
     if (t >= FIRSTTK) {
         const char *str = tkstr[t - FIRSTTK];
         if (t < TK_EOS)
@@ -149,7 +145,7 @@ const char *csY_tok2str(Lexer *lx, int t) {
 static const char *lextok2str(Lexer *lx, int t) {
     switch (t) {
         case TK_FLT: case TK_INT:
-        case TK_STRING: case TK_IDENTIFIER: {
+        case TK_STRING: case TK_NAME: {
             savec(lx, '\0');
             return csS_pushfstring(lx->ts, "'%s'", lbptr(lx));
         }
@@ -185,9 +181,9 @@ OString *csY_newstring(Lexer *lx, const char *str, size_t len) {
 }
 
 
-/* --------------------------------------------------------------------------
- * Read comments
- * -------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** Read comments
+** ----------------------------------------------------------------------- */
 
 static void readcomment(Lexer *lx) {
     while (!isend(lx->c) && lx->c != '\n')
@@ -198,7 +194,7 @@ static void readcomment(Lexer *lx) {
 static void readlongcomment(Lexer *lx) {
 readmore:
     switch (lx->c) {
-    case CREOF:
+    case CSEOF:
         return;
     case '\n':
         advance(lx);
@@ -216,9 +212,9 @@ readmore:
 }
 
 
-/* --------------------------------------------------------------------------
- * Read string
- * -------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** Read string
+** ----------------------------------------------------------------------- */
 
 /* get new hex digit from current char */
 static int hexdigit(Lexer *lx) {
@@ -272,7 +268,7 @@ static void readstring(Lexer *lx, Literal *k) {
                     case 't': savec_and_advance(lx, '\t'); break;
                     case 'v': savec_and_advance(lx, '\v'); break;
                     case 'x': savec(lx, cast_int(eschex(lx))); break;
-                    case CREOF: break; /* raise error next iteration */
+                    case CSEOF: break; /* raise error next iteration */
                     default: {
                         lexerror(lx, "unknown escape sequence", lx->c);
                         break; /* ureached */
@@ -280,7 +276,7 @@ static void readstring(Lexer *lx, Literal *k) {
                 }
                 break;
             }
-            case CREOF: lexerror(lx, "unterminated string", CREOF); break;
+            case CSEOF: lexerror(lx, "unterminated string", CSEOF); break;
             default: save_and_advance(lx); break;
         }
     }
@@ -289,10 +285,10 @@ static void readstring(Lexer *lx, Literal *k) {
 }
 
 
-/* --------------------------------------------------------------------------
- * Read number
- * -------------------------------------------------------------------------- */
 
+/* -----------------------------------------------------------------------
+** Read number
+** ----------------------------------------------------------------------- */
 
 /* convert lexer buffer bytes into number constant */
 static int lexstr2num(Lexer *lx, Literal *k) {
@@ -324,10 +320,10 @@ static int auxreaddigs(Lexer *lx, Dig d, int fp) {
     for (;; advance(lx)) {
         if (!fp && lx->c == '_') continue;
         switch (d) {
-        case DigDec: if (!isdigit(lx->c)) return digits; break;
-        case DigHex: if (!isxdigit(lx->c)) return digits; break;
-        case DigOct: if (!isodigit(lx->c)) return digits; break;
-        default: cs_unreachable(); break;
+            case DigDec: if (!isdigit(lx->c)) return digits; break;
+            case DigHex: if (!isxdigit(lx->c)) return digits; break;
+            case DigOct: if (!isodigit(lx->c)) return digits; break;
+            default: cs_assert(0); break;
         }
         save(lx);
         digits++;
@@ -412,9 +408,9 @@ static int readnumber(Lexer *lx, Literal *k) {
 
 
 
-/* --------------------------------------------------------------------------
- * Scanner
- * -------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** Scanner
+** ----------------------------------------------------------------------- */
 
 /* scan for tokens */
 static int scan(Lexer *lx, Literal *k) {
@@ -488,7 +484,7 @@ readmore:
         if (!isdigit(lx->c)) 
             return '.';
         return readnumber(lx, k);
-    case CREOF:
+    case CSEOF:
         return TK_EOS;
     default:
         if (isalpha(lx->c)) {
@@ -497,9 +493,10 @@ readmore:
             } while (isalnum(lx->c));
             OString *s = csY_newstring(lx, lbptr(lx), lblen(lx));
             k->str = s;
-            if (siskeyword(s))
-                return s->extra + FIRSTTK;
-            return TK_IDENTIFIER;
+            if (isreserved(s))
+                return s->extra + FIRSTTK - 1;
+            else
+                return TK_NAME;
         }
         int c = lx->c;
         advance(lx);
@@ -523,5 +520,6 @@ void csY_scan(Lexer *lx) {
 /* fetch next token into 'tahead' */
 int csY_scanahead(Lexer *lx) {
     cs_assert(lx->t.tk != TK_EOS);
-    return (lx->t.tk = scan(lx, &lx->t.lit));
+    lx->tahead.tk = scan(lx, &lx->t.lit);
+    return lx->tahead.tk;
 }

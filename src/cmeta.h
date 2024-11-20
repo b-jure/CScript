@@ -12,6 +12,15 @@
 #include "cobject.h"
 
 
+/* number of elements in VMT */
+#define SIZEVMT         (sizeof(TValue) * CS_MM_N)
+
+
+CSI_DEC(const char *const csO_typenames[CSI_TOTALTYPES]);
+
+#define typename(t)     csO_typenames[(t) + 1]
+
+
 CSI_FUNC void csMM_init(cs_State *ts);
 CSI_FUNC TValue *csMM_newvmt(cs_State *ts);
 CSI_FUNC const TValue *csMM_get(cs_State *ts, const TValue *v, cs_MM mm);

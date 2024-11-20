@@ -16,7 +16,6 @@
 #include "cparser.h"
 #include "cgc.h"
 #include "cmem.h"
-#include "cstate.h"
 
 
 /* check if 'ExpInfo' has jumps */
@@ -59,9 +58,9 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatIL), /* OP_VARARGPREP */
     opProp(0, 0, 0, FormatIL), /* OP_VARARG */
     opProp(0, 0, 0, FormatIL), /* OP_CLOSURE */
-    opProp(0, 0, 0, FormatIL), /* OP_ARRAY */
-    opProp(0, 0, 0, FormatILL), /* OP_ARRAYELEMS */
-    opProp(0, 0, 0, FormatI), /* OP_CLASS */
+    opProp(0, 0, 0, FormatIS), /* OP_NEWARRAY */
+    opProp(0, 0, 0, FormatI), /* OP_NEWCLASS */
+    opProp(0, 0, 0, FormatIS), /* OP_NEWTABLE */
     opProp(0, 0, 0, FormatIL), /* OP_METHOD */
     opProp(0, 0, 0, FormatIS), /* OP_SETMM */
     opProp(0, 0, 0, FormatI), /* OP_POP */
@@ -125,13 +124,9 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatIL), /* OP_TBC */
     opProp(0, 0, 0, FormatIL), /* OP_GETLOCAL */
     opProp(0, 0, 0, FormatIL), /* OP_SETLOCAL */
-    opProp(0, 0, 0, FormatIL), /* OP_GETPRIVATE */
-    opProp(0, 0, 0, FormatIL), /* OP_SETPRIVATE */
     opProp(0, 0, 0, FormatIL), /* OP_GETUVAL */
     opProp(0, 0, 0, FormatIL), /* OP_SETUVAL */
-    opProp(0, 0, 0, FormatIL), /* OP_DEFGLOBAL */
-    opProp(0, 0, 0, FormatIL), /* OP_GETGLOBAL */
-    opProp(0, 0, 0, FormatIL), /* OP_SETGLOBAL */
+    opProp(0, 0, 0, FormatILS), /* OP_SETARRAY */
     opProp(0, 0, 0, FormatIL), /* OP_SETPROPERTY */
     opProp(0, 0, 0, FormatIL), /* OP_GETPROPERTY */
     opProp(0, 0, 0, FormatI), /* OP_GETINDEX */
@@ -181,11 +176,10 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = {
 
 /* 
 ** Names of all instructions.
-** (order 'OpCode')
 */
-CSI_DEF const char *csC_opName[NUM_OPCODES] = {
+CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
     "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
-    "VARARGPREP", "VARARG", "CLOSURE", "ARRAY", "ARRAYELEMS", "CLASS",
+    "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS", "NEWTABLE",
     "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
     "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK",
     "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
@@ -194,22 +188,23 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = {
     "LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM", "BNOT",
     "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
     "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL",
-    "GETPRIVATE", "SETPRIVATE", "GETUVAL", "SETUVAL", "DEFGLOBAL",
-    "GETGLOBAL", "SETGLOBAL", "SETPROPERTY", "GETPROPERTY", "GETINDEX",
+    "GETUVAL", "SETUVAL", "SETPROPERTY", "GETPROPERTY", "GETINDEX",
     "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT",
     "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL",
     "FORLOOP", "RET",
 };
 
 
+#define MAXLINES    INT_MAX
+
 /*
  * Add line and pc information, skip adding 'LineInfo' if previous
  * entry contained the same line.
  */
-static void addlineinfo(FunctionState *fs, Function *f, int line) {
+static void addlineinfo(FunctionState *fs, Proto *f, int line) {
     int len = fs->nlinfo;
     if (len <= 0 || f->linfo[len - 1].line < line) {
-        csM_growvec(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, INT_MAX,
+        csM_growvec(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, MAXLINES,
                     "lines", LineInfo);
         f->linfo[len].pc = fs->pc - 1;
         f->linfo[fs->nlinfo++].line = line;
@@ -219,21 +214,21 @@ static void addlineinfo(FunctionState *fs, Function *f, int line) {
 
 /* emit instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
-    Function *fn = fs->fn;
-    csM_growvec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, INT_MAX, "code",
+    Proto *p = fs->p;
+    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, CODEMAX, "code",
                 Instruction);
-    fn->code[fs->pc++] = i;
-    addlineinfo(fs, fn, fs->lx->line);
+    p->code[fs->pc++] = i;
+    addlineinfo(fs, p, fs->lx->line);
     return fs->pc - 1;
 }
 
 
 /* emit short arg */
 static int emitS(FunctionState *fs, int arg) {
-    Function *fn = fs->fn;
-    csM_growvec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, INT_MAX, "code",
+    Proto *p = fs->p;
+    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, CODEMAX, "code",
                 Instruction);
-    fn->code[fs->pc++] = cast_ubyte(arg & 0xff);
+    p->code[fs->pc++] = cast_ubyte(arg & 0xff);
     return fs->pc - 1;
 }
 
@@ -249,10 +244,10 @@ int csC_emitIS(FunctionState *fs, Instruction i, int a) {
 
 /* emit long arg */
 static int emitL(FunctionState *fs, int idx) {
-    Function *fn = fs->fn;
-    csM_ensurevec(fs->lx->ts, fn->code, fn->sizecode, fs->pc, 3, INT_MAX,
+    Proto *p = fs->p;
+    csM_ensurevec(fs->lx->ts, p->code, p->sizecode, fs->pc, 3, INT_MAX,
                   "code", Instruction);
-    set3bytes(fn->code, idx);
+    set3bytes(p->code, idx);
     fs->pc += 3;
     return fs->pc - 3;
 }
@@ -276,17 +271,21 @@ int csC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
 }
 
 
+/* maximum amount of constants in a function */
+#define KMAX    LARGMAX
+
 /* add constant value to the function */
 static int addK(FunctionState *fs, TValue *v) {
     cs_State *ts = fs->lx->ts;
-    Function *f = fs->fn;
-    int oldsz = f->sizek;
+    Proto *p = fs->p;
+    int oldsz = p->sizek;
     int k = fs->nk;
-    csM_growvec(ts, f->k, f->sizek, fs->nk, LARGMAX, "constants", TValue);
-    while (oldsz < f->sizek) setnilval(&f->k[oldsz++]);
-    setobj(ts, &f->k[k], v);
+    csM_growvec(ts, p->k, p->sizek, fs->nk, KMAX, "constants", TValue);
+    while (oldsz < p->sizek)
+        setnilval(&p->k[oldsz++]);
+    setobj(ts, &p->k[k], v);
     fs->nk++;
-    csG_barrier(ts, f, v);
+    csG_barrier(ts, p, v);
     return k;
 }
 
@@ -343,10 +342,10 @@ static int fltK(FunctionState *fs, cs_Number n) {
 void csC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
     cs_assert(newstack >= 0);
-    if (fs->fn->maxstack > newstack) {
+    if (fs->p->maxstack > newstack) {
         if (c_unlikely(newstack >= LARGMAX))
             csY_syntaxerror(fs->lx, "function requires too much stack space");
-        fs->fn->maxstack = newstack;
+        fs->p->maxstack = newstack;
     }
 }
 
@@ -417,6 +416,7 @@ void csC_method(FunctionState *fs, ExpInfo *e) {
 
 cs_sinline void freeslots(FunctionState *fs, int n) {
     fs->sp -= n;
+    cs_assert(fs->sp >= 0);
 }
 
 
@@ -477,14 +477,6 @@ void csC_storevar(FunctionState *fs, ExpInfo *var) {
             var->u.info = csC_emitIL(fs, OP_SETLOCAL, var->u.info);
             break;
         }
-        case EXP_PRIVATE: {
-            var->u.info = csC_emitIL(fs, OP_SETPRIVATE, var->u.info);
-            break;
-        }
-        case EXP_GLOBAL: {
-            var->u.info = csC_emitIL(fs, OP_SETGLOBAL, stringK(fs, var->u.str));
-            break;
-        }
         case EXP_INDEXED: {
             freeslots(fs, 2); /* receivier + key */
             var->u.info = csC_emitI(fs, OP_SETINDEX);
@@ -511,17 +503,9 @@ void csC_storevar(FunctionState *fs, ExpInfo *var) {
             csP_semerror(fs->lx, "attempt to assign to 'super' property");
             break;
         }
-        default: return; /* must be something else */
+        default: cs_assert(0); /* invalid store */
     }
     var->et = EXP_FINEXPR;
-    freeslots(fs, 1); /* rhs (expr) */
-}
-
-
-/* define global variable */
-void csC_defineglobal(FunctionState *fs, ExpInfo *e) {
-    e->et = EXP_FINEXPR;
-    e->u.info = csC_emitIL(fs, OP_DEFGLOBAL, stringK(fs, e->u.str));
     freeslots(fs, 1); /* rhs (expr) */
 }
 
@@ -533,16 +517,8 @@ static int dischargevars(FunctionState *fs, ExpInfo *e) {
             e->u.info = csC_emitIL(fs, OP_GETLOCAL, e->u.info);
             break;
         }
-        case EXP_PRIVATE: {
-            e->u.info = csC_emitIL(fs, OP_GETPRIVATE, e->u.info);
-            break;
-        }
         case EXP_UVAL: {
             e->u.info = csC_emitIL(fs, OP_GETUVAL, e->u.info);
-            break;
-        }
-        case EXP_GLOBAL: {
-            e->u.info = csC_emitIL(fs, OP_GETGLOBAL, stringK(fs, e->u.str));
             break;
         }
         case EXP_INDEXED: {
@@ -598,7 +574,7 @@ void csC_varexp2stack(FunctionState *fs, ExpInfo *e) {
 
 
 /* emit op with long and short args */
-static int emitILS(FunctionState *fs, Instruction op, int a, int b) {
+int csC_emitILS(FunctionState *fs, Instruction op, int a, int b) {
     int offset = csC_emitIL(fs, op, a);
     emitS(fs, b);
     return offset;
@@ -607,7 +583,7 @@ static int emitILS(FunctionState *fs, Instruction op, int a, int b) {
 
 /* emit op with long and 2 short args */
 static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
-    int offset = emitILS(fs, op, a, b);
+    int offset = csC_emitILS(fs, op, a, b);
     emitS(fs, c);
     return offset;
 }
@@ -616,7 +592,7 @@ static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 /* emit integer constant */
 static int codeintK(FunctionState *fs, cs_Integer i) {
     if (fitsLA(i))
-        return emitILS(fs, OP_CONSTI, csi_abs(i), i < 0);
+        return csC_emitILS(fs, OP_CONSTI, csi_abs(i), i < 0);
     else
         return codeK(fs, intK(fs, i));
 }
@@ -626,23 +602,35 @@ static int codeintK(FunctionState *fs, cs_Integer i) {
 static int codefltK(FunctionState *fs, cs_Number n) {
     cs_Integer i;
     if (csO_n2i(n, &i, N2IFLOOR) && fitsLA(i))
-        return emitILS(fs, OP_CONSTF, csi_abs(i), i < 0);
+        return csC_emitILS(fs, OP_CONSTF, csi_abs(i), i < 0);
     else
         return codeK(fs, fltK(fs, n));
 }
 
 
-void csC_array(FunctionState *fs, ExpInfo *e, int base, int size, int elems) {
-    cs_assert((size >= 0) == (size >= elems));
-    csC_reserveslots(fs, -elems + 1); /* +1 for array */
-    if (elems == 0) {
-        cs_assert(base == -1);
-        e->u.info = csC_emitIL(fs, OP_ARRAY, size + 1);
-    } else {
-        cs_assert(base >= 0);
-        e->u.info = csC_emitILL(fs, OP_ARRAYELEMS, size + 1, base);
-    }
-    e->et = EXP_FINEXPR;
+void csC_setarraysize(FunctionState *fs, int pc, int asize) {
+    Instruction *i = &fs->p->code[pc];
+    asize = (asize != 0 ? csO_ceillog2(asize) + 1 : 0);
+    cs_assert(asize <= SARGMAX);
+    SETARG_S(i, 0, asize); /* set size (log2 - 1) */
+}
+
+
+void csC_setarray(FunctionState *fs, int nelems, int tostore) {
+    cs_assert(tostore != 0 && tostore <= ARRFIELDS_PER_FLUSH);
+    cs_assert(nelems <= LARGMAX);
+    if (tostore == CS_MULRET)
+        tostore = 0; /* return up to stack top */
+    csC_emitILS(fs, OP_SETARRAY, nelems, tostore);
+    fs->sp -= tostore; /* free slots holding the array values */
+}
+
+
+void csC_settablesize(FunctionState *fs, int pc, int hsize) {
+    Instruction *i = &fs->p->code[pc];
+    hsize = (hsize != 0 ? csO_ceillog2(hsize) + 1 : 0);
+    cs_assert(sz <= SARGMAX);
+    SETARG_S(i, 0, hsize);
 }
 
 
@@ -701,7 +689,7 @@ void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
 
 
 /* initialize dot indexed expression */
-void csC_getproperty(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
+void csC_getfield(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
         int super) {
     cs_assert(keystr->et == EXP_STRING);
     var->u.info = stringK(fs, keystr->u.str);
@@ -811,7 +799,7 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
             e->u.info = csC_emitI(fs, OP_NOT);
             break;
         }
-        default: cs_unreachable();
+        default: cs_assert(0);
     }
 }
 
@@ -832,7 +820,7 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr) {
             codenot(fs, e); 
             break;
         }
-        default: cs_unreachable();
+        default: cs_assert(0);
     }
 }
 
@@ -840,7 +828,7 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr) {
 /* emit test jump instruction */
 static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
     csC_exp2stack(fs, e); /* ensure test operand is on stack */
-    return emitILS(fs, testop, NOJMP, cond);
+    return csC_emitILS(fs, testop, NOJMP, cond);
 }
 
 
@@ -852,7 +840,7 @@ int csC_jmp(FunctionState *fs, OpCode jop) {
 
 /* get 'pc' of jmp instruction destination */
 static int getjmp(FunctionState *fs, int pc) {
-    Instruction *i = &fs->fn->code[pc];
+    Instruction *i = &fs->p->code[pc];
     int offset = GETARG_L(i, 0);
     if (offset == NOJMP)
         return NOJMP;
@@ -863,7 +851,7 @@ static int getjmp(FunctionState *fs, int pc) {
 
 /* fix jmp instruction at 'pc' to jump to 'dest' */
 static void fixjmp(FunctionState *fs, int pc, int destpc) {
-    Instruction *pcjmp = &fs->fn->code[pc];
+    Instruction *pcjmp = &fs->p->code[pc];
     int offset = destpc - (pc + SIZEARGL);
     if (c_unlikely(offset > LARGMAX))
         csP_semerror(fs->lx, "control structure too long");
@@ -985,7 +973,7 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             jmpiftrue(fs, e, OP_TESTORPOP);
             break;
         }
-        default: cs_unreachable();
+        default: cs_assert(0);
     }
 }
 
@@ -1060,7 +1048,7 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
     cs_assert(e2->et == EXP_INT);
     csC_exp2stack(fs, e1);
-    e1->u.info = emitILS(fs, op, rhsabs, sign);
+    e1->u.info = csC_emitILS(fs, op, rhsabs, sign);
     e1->et = EXP_FINEXPR;
 }
 
@@ -1104,7 +1092,7 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
             int sign = (imm < 0 ? 0 : 2);
             e1->u.info = emitILSS(fs, OP_EQI, imm, sign, iseq);
         } else {
-            e1->u.info = emitILS(fs, OP_EQK, e2->u.info, iseq);
+            e1->u.info = csC_emitILS(fs, OP_EQK, e2->u.info, iseq);
         }
     } else {
         csC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
@@ -1131,7 +1119,7 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
         op = binopr2op(opr, OPR_LT, OP_GTI);
 emit:
         sign = (immediate < 0 ? 0 : 2);
-        e1->u.info = emitILS(fs, op, immediate, sign);
+        e1->u.info = csC_emitILS(fs, op, immediate, sign);
     } else {
         op = binopr2op(opr, OPR_LT, OP_LT);
         e1->u.info = csC_emitI(fs, op);
@@ -1151,7 +1139,7 @@ static void coderange(FunctionState *fs, ExpInfo *e1, ExpInfo *e2) {
 
 void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     csC_varexp2stack(fs, e2);
-    if (boprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OPADD))
+    if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OPADD))
         return; /* folded */
     switch (opr) {
         case OPR_ADD: case OPR_MUL:
@@ -1196,7 +1184,7 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
             *e1 = *e2;
             break;
         }
-        default: cs_unreachable();
+        default: cs_assert(0);
     }
 }
 
@@ -1222,9 +1210,9 @@ static int finaltarget(Instruction *code, int i) {
  ** and optimizations.
  */
 void csC_finish(FunctionState *fs) {
-    Function *fn = fs->fn;
+    Proto *p = fs->p;
     for (int i = 0; i < fs->pc; i++) {
-        Instruction *pc = &fn->code[i];
+        Instruction *pc = &p->code[i];
         switch (*pc) {
             case OP_RET: { /* check if need to close variables */
                 if (fs->needclose)
@@ -1232,7 +1220,7 @@ void csC_finish(FunctionState *fs) {
                 break;
             }
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */
-                int target = finaltarget(fn->code, i);
+                int target = finaltarget(p->code, i);
                 fixjmp(fs, i, target);
                 break;
             }

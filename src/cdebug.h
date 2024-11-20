@@ -22,7 +22,7 @@
 #define pcrel(pc,fn)    ((pc) - (fn)->code)
 
 
-CSI_FUNC int csD_getfuncline(const Function *fn, int pc);
+CSI_FUNC int csD_getfuncline(const Proto *fn, int pc);
 CSI_FUNC const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n,
                                    SPtr *pos);
 CSI_FUNC const char *csD_addinfo(cs_State *ts, const char *msg, OString *src,

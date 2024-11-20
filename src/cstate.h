@@ -53,21 +53,21 @@
 
 /* check if stack needs to grow and preserve 'p' */
 #define checkstackp(ts,n,p) \
-    csT_checkstackaux(ts, n, \
+        csT_checkstackaux(ts, n, \
             ptrdiff_t p_ = savestack(ts, p), \
             p = restorestack(ts, p_))
 
 
 /* check GC then check stack preserving 'p' */
 #define checkstackGCp(ts,n,p) \
-    csT_checkstackaux(ts,n, \
+        csT_checkstackaux(ts,n, \
             ptrdiff_t p_ = savestack(ts,p); csG_check(ts), \
             p = restorestack(ts, p_))
 
 
 /* check GC then check stack */
 #define checkstackGC(ts,n) \
-    csT_checkstackaux(ts,n,csG_check(ts),(void)0)
+        csT_checkstackaux(ts,n,csG_check(ts),(void)0)
     
 
 
@@ -114,8 +114,8 @@ typedef struct cs_ljmp {
  * CallFrame (function frame/stack)
  * ------------------------------------------------------------------------- */
 
-/* get CSript 'Function' */
-#define cfFunction(cf)      (crclval(s2v((cf)->func.p))->fn)
+/* get CSript function prototype */
+#define cfProto(cf)     (clCSval(s2v((cf)->func.p))->p)
 
 
 /* 'cfstatus' bits */
@@ -124,8 +124,8 @@ typedef struct cs_ljmp {
 #define CFST_FIN            (1<<2) /* function called finalizer */
 
 
-/* 'CallFrame' function is CSript function */
-#define cfisCScript(cf)     (!((cf)->status & CFST_CCALL))
+/* 'CallFrame' function is CSript closure */
+#define isCScript(cf)       (!((cf)->status & CFST_CCALL))
 
 
 /* call information */
@@ -145,14 +145,26 @@ typedef struct CallFrame {
  * Global state
  * ------------------------------------------------------------------------- */
 
+
+/* 
+** Table for interned strings.
+** Collision resolution is resolved by chain.
+*/
+typedef struct StringTable {
+    OString **hash;
+    int nuse;
+    int size;
+} StringTable;
+
+
 typedef struct GState {
     cs_Alloc falloc; /* allocator */
     void *ud_alloc; /* userdata for 'falloc' */
     cs_mem totalbytes; /* number of bytes allocated - gcgcdebt */
     cs_mem gcdebt; /* number of bbytes not yet compensated by collector */
     cs_umem gcestimate; /* gcestimate of non-garbage memory in use */
-    HTable *strings; /* interned strings and weak refs */
-    TValue ginstance; /* global instance */
+    StringTable strtab; /* interned strings (weak refs) */
+    TValue c_registry; /* global registry */
     TValue nil; /* nil value (init flag) */
     uint seed; /* initial seed for hashing */
     cs_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
@@ -175,8 +187,9 @@ typedef struct GState {
     cs_CFunction fpanic; /* panic handler (unprotected calls) */
     struct cs_State *mainthread; /* thread that also created global state */
     OString *memerror; /* preallocated message for memory errors */
-    OString *mmnames[CS_NUM_MM]; /* array with metamethod names */
+    OString *mmnames[CS_MM_N]; /* array with metamethod names */
     TValue *vmt[CS_NUM_TYPES]; /* vmt's for basic types */
+    OString *strcache[STRCACHE_N][STRCACHE_M]; /* cache for strings in API */
     cs_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */
 } GState;
@@ -210,9 +223,6 @@ struct cs_State {
 
 /* thread global state */
 #define G_(ts)      (ts)->gstate
-
-/* get global instance */
-#define GI(ts)      insval(&G_(ts)->ginstance)
 
 /* check if global state is initialized */
 #define gsinitialized(gs)       ttisnil(&(gs)->nil)
@@ -248,12 +258,12 @@ union GCUnion {
     struct Array arr;
     struct OString str;
     struct UpVal uv;
-    struct Function fn;
+    struct Proto p;
     union Closure cl;
     struct OClass cls;
     struct Instance ins;
     struct IMethod im;
-    struct UserData ud;
+    struct UserData u;
     struct cs_State th;
 };
 
@@ -263,14 +273,14 @@ union GCUnion {
 #define gco2arr(o)      (&(cast_gcu(o)->arr))
 #define gco2str(o)      (&(cast_gcu(o)->str))
 #define gco2uv(o)       (&(cast_gcu(o)->uv))
-#define gco2fn(o)       (&(cast_gcu(o)->fn))
-#define gco2ccl(o)      (&((cast_gcu(o)->cl).cc))
-#define gco2crcl(o)     (&((cast_gcu(o)->cl).crc))
+#define gco2proto(o)    (&(cast_gcu(o)->p))
+#define gco2clc(o)      (&((cast_gcu(o)->cl).c))
+#define gco2clcs(o)     (&((cast_gcu(o)->cl).cs))
 #define gco2cl(o)       (&(cast_gcu(o)->cl))
 #define gco2cls(o)      (&(cast_gcu(o)->cls))
 #define gco2ins(o)      (&(cast_gcu(o)->ins))
 #define gco2im(o)       (&(cast_gcu(o)->im))
-#define gco2ud(o)       (&(cast_gcu(o)->ud))
+#define gco2u(o)        (&(cast_gcu(o)->u))
 #define gco2th(o)       (&(cast_gcu(o)->th))
 
 #define obj2gco(o)      (&(cast_gcu(o)->gc))

@@ -13,7 +13,7 @@
 
 
 /* end of file */
-#define CREOF	(-1)
+#define CSEOF	(-1)
 
 
 /* Return next char and progress the buffer or try fill the buffer. */

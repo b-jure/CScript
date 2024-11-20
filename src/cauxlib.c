@@ -51,7 +51,7 @@ CSLIB_API int csL_arg_error(cs_State *ts, int argindex, const char *extra) {
 CSLIB_API int csL_type_error(cs_State *ts, int argindex, const char *tname) {
     const char *msg;
     const char *argtype;
-    if (cs_type(ts, argindex) == CS_TLUDATA)
+    if (cs_type(ts, argindex) == CS_TLIGHTUSERDATA)
         argtype = "light userdata";
     else
         argtype = csL_typename(ts, argindex);
@@ -408,34 +408,23 @@ CSLIB_API cs_State *csL_newstate(void) {
 }
 
 
-CSLIB_API int csL_get_subinstance(cs_State *ts, int insobj, const char *field,
-                                  int clsobj, int nup, const cs_VMT *vmt,
-                                  const cs_Entry *l) {
-    if (cs_get_fieldstr(ts, insobj, field) == CS_TINSTANCE) {
-        return 1; /* true, have instance */
+CSLIB_API int csL_get_subtable(cs_State *ts, int htobj, const char *field) {
+    if (cs_get_fieldstr(ts, htobj, field) == CS_THTABLE) {
+        return 1; /* true, already have table */
     } else {
         cs_pop(ts, 1); /* pop previous result */
-        insobj = cs_absindex(ts, insobj);
-        if (clsobj >= 0) { /* from class? */
-            csL_check_stack(ts, nup, "too many upvalues");
-            cs_push_class(ts, vmt, clsobj, nup, l);
-        } else { /* otherwise from hashtable class */
-            cs_get_global(ts, CS_HASHTABLE);
-        }
-        cs_assert(cs_type(ts, -1) == CS_TCLASS);
-        cs_assert(0);
-        cs_push_instance(ts, -1);
-        cs_remove(ts, -2); /* remove class */
-        cs_push(ts, -1); /* instance copy will be left on the top */
-        cs_set_fieldstr(ts, insobj, field); /* assign new instance to field */
-        return 0; /* false, no instance was found */
+        htobj = cs_absindex(ts, htobj);
+        cs_push_table(ts);
+        cs_push(ts, -1); /* copy will be left on the top */
+        cs_set_fieldstr(ts, htobj, field); /* table[field] = newtable */
+        return 0; /* false, no table was found */
     }
 }
 
 
 CSLIB_API void csL_include(cs_State *ts, const char *libname,
                            cs_CFunction openf, int global) {
-    csL_get_subtable(ts, CS_GINSTANCEINDEX, CS_LOADED_INSTANCE);
+    csL_get_subtable(ts, CS_REGISTRYINDEX, CS_LOADED_TABLE);
     cs_get_fieldstr(ts, -1, libname); /* get Lib[libname] */
     if (!cs_to_bool(ts, -1)) { /* library not already loaded? */
         cs_pop(ts, 1); /* remove field */
@@ -486,26 +475,25 @@ static int lastlevel(cs_State *ts) {
 
 
 /*
-** Find field in instance at index -1. If field value is found
+** Find field in table at index -1. If field value is found
 ** meaning the object at 'index' is equal to the field value, then
 ** this function returns 1. Only string keys are considered and
-** limit is the limit of recursive calls in case instance field
-** contains instance value.
+** limit is the limit of recursive calls in case table field
+** contains another table value.
 */
 static int findfield(cs_State *ts, int index, int limit) {
-    if (limit == 0 || !cs_is_instance(ts, -1))
+    if (limit == 0 || !cs_is_hashtable(ts, -1))
         return 0; /* not found */
     cs_push_nil(ts); /* start 'next' loop */
-    while (cs_next(ts, -2)) { /* for each field in instance */
+    while (cs_next(ts, -2)) { /* for each field in table */
         if (cs_type(ts, -2) == CS_TSTRING) { /* ignore non-string keys */
             if (cs_rawequal(ts, index, -1)) { /* found object? */
                 cs_pop(ts, 1); /* remove value (but keep name) */
                 return 1;
-            }
-            else if (findfield(ts, index, limit - 1)) { /* try recursively */
-                /* stack: lib_name, lib_instance, field_name (top) */
+            } else if (findfield(ts, index, limit - 1)) { /* try recursively */
+                /* stack: lib_name, lib_table, field_name (top) */
                 cs_push_literal(ts, "."); /* place '.' between the two names */
-                cs_replace(ts, -3); /* (in the slot occupied by instance) */
+                cs_replace(ts, -3); /* (in the slot occupied by table) */
                 cs_concat(ts, 3); /* lib_name.field_name */
                 return 1;
             }
@@ -524,14 +512,14 @@ static int findfield(cs_State *ts, int index, int limit) {
 static int pushglobalfuncname(cs_State *ts, cs_DebugInfo *di) {
     int top = cs_gettop(ts);
     cs_getinfo(ts, "f", di); /* push func */
-    cs_get_global(ts, CS_LOADED_INSTANCE); /* get global lib instance */
+    cs_get_global(ts, CS_LOADED_TABLE); /* get Lib */
     csL_check_stack(ts, 6, "not enough stack space"); /* for 'findfield' */
     if (findfield(ts, top + 1, 2)) { /* found? */
         cs_copy(ts, -1, top + 1); /* copy name to proper place */
-        cs_setntop(ts, top + 1); /* remove lib instance and name copy */
+        cs_setntop(ts, top + 1); /* remove Lib and copy of name */
         return 1;
     } else { /* not a global */
-        cs_setntop(ts, top); /* remove func and lib instance */
+        cs_setntop(ts, top); /* remove func and Lib */
         return 0;
     }
 }
@@ -650,7 +638,7 @@ static void newbox(cs_State *ts) {
     UserBox *box = cs_newuserdata(ts, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
-    cs_set_userdatavmt(ts, -1, &boxvmt);
+    cs_set_uservmt(ts, -1, &boxvmt);
 }
 
 

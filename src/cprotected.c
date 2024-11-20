@@ -11,11 +11,9 @@
 #include <stdlib.h> /* for 'abort()' */
 
 #include "cprotected.h"
-#include "ctrace.h"
 #include "cmem.h"
 #include "cparser.h"
 #include "cobject.h"
-#include "cgc.h"
 #include "cfunction.h"
 #include "creader.h"
 #include "cstate.h"
@@ -127,7 +125,7 @@ struct PParseData {
 /* auxiliary function to call 'csP_pparse' in protected mode */
 static void parsepaux(cs_State *ts, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);
-    CrClosure *cl = csP_parse(ts, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
+    CSClosure *cl = csP_parse(ts, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
     csF_initupvals(ts, cl);
 }
 
@@ -138,12 +136,12 @@ int csPR_parse(cs_State *ts, BuffReader *br, const char *name) {
     int status;
     ppd.br = br;
     csR_buffinit(&ppd.buff); /* 'buff' */
-    ppd.ps.lvars.len = ppd.ps.lvars.size = 0; ppd.ps.lvars.arr = NULL;
+    ppd.ps.actlocals.len = ppd.ps.actlocals.size = 0; ppd.ps.actlocals.arr = NULL;
     ppd.ps.cs = NULL; /* 'cs' */
     ppd.source = name; /* 'source' */
     status = csPR_call(ts, parsepaux, &ppd, savestack(ts, ts->sp.p), ts->errfunc);
     csR_freebuffer(ts, &ppd.buff);
-    csM_freearray(ts, ppd.ps.lvars.arr, ppd.ps.lvars.size, LVar);
+    csM_freearray(ts, ppd.ps.actlocals.arr, ppd.ps.actlocals.size, LVar);
     decnnyc(ts);
     return status;
 }
