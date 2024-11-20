@@ -1,5 +1,4 @@
-# tight - loseless file compression program/library
-# See 'tight.h' for copyright and licence details.
+# Makefile for installing CSript
 
 include config.mk
 
