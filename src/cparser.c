@@ -448,9 +448,9 @@ static void expr(Lexer *lx, ExpInfo *e);
 
 
 /* 
- * Advance scanner if 'tk' matches the current token,
- * otherwise return 0. 
- */
+** Advance scanner if 'tk' matches the current token,
+** otherwise return 0. 
+*/
 static int match(Lexer *lx, int tk) {
     if (check(lx, tk)) {
         csY_scan(lx);
@@ -836,8 +836,8 @@ static void lastarrfield(FunctionState *fs, Constructor *c) {
 
 
 /*
-** arrayexp ::= '[' ']'
-**            | '[' explist ']'
+** arrayexp ::= '[' [ arrfield [sep] ] ']'
+** sep ::= ',' | ';'
 */
 static void arrayexp(Lexer *lx, ExpInfo *a) {
     FunctionState *fs = lx->fs;
@@ -975,10 +975,11 @@ static void simpleexpr(Lexer *lx, ExpInfo *e) {
             funcbody(lx, e, lx->line, 0);
             return;
         }
-        default:
+        default: {
             suffixedexp(lx, e);
             return;
         }
+    }
     csY_scan(lx);
 }
 
@@ -1023,13 +1024,13 @@ static Binopr getbinopr(int token) {
 
 
 /*
- * If 'left' == 'right' then operator is associative;
- * if 'left' < 'right' then operator is left associative;
- * if 'left' > 'right' then operator is right associative.
- */
+** If 'left' == 'right' then operator is associative;
+** if 'left' < 'right' then operator is left associative;
+** if 'left' > 'right' then operator is right associative.
+*/
 static const struct {
-    cs_ubyte left; /* left priority */
-    cs_ubyte right; /* right priority */
+    cs_ubyte left;
+    cs_ubyte right;
 } priority[] = { /* ORDER OPR */
     /* binary operators priority */
     {12, 12}, {12, 12},             /* '+' '-' */
@@ -1045,34 +1046,34 @@ static const struct {
     {1, 1}                          /* TODO: '?' (ternary) */
 };
 
-#define UNARY_PRIORITY  14 /* priority for unary operators */
+#define UNARY_PRIORITY  14  /* priority for unary operators */
 
 
 /*
- * subexpr ::= simpleexp
- *           | '-' simpleexp
- *           | '!' simpleexp
- *           | '~' simpleexp
- *           | simpleexp '+' subexpr
- *           | simpleexp '-' subexpr
- *           | simpleexp '*' subexpr
- *           | simpleexp '/' subexpr
- *           | simpleexp '%' subexpr
- *           | simpleexp '**' subexpr
- *           | simpleexp '>>' subexpr
- *           | simpleexp '<<' subexpr
- *           | simpleexp '==' subexpr
- *           | simpleexp '<' subexpr
- *           | simpleexp '<=' subexpr
- *           | simpleexp '>' subexpr
- *           | simpleexp '>=' subexpr
- *           | simpleexp '&' subexpr
- *           | simpleexp '^' subexpr
- *           | simpleexp '|' subexpr
- *           | simpleexp 'and' subexpr
- *           | simpleexp 'or' subexpr
- *           | simpleexp '..' subexpr
- */
+** subexpr ::= simpleexp
+**           | '-' simpleexp
+**           | '!' simpleexp
+**           | '~' simpleexp
+**           | simpleexp '+' subexpr
+**           | simpleexp '-' subexpr
+**           | simpleexp '*' subexpr
+**           | simpleexp '/' subexpr
+**           | simpleexp '%' subexpr
+**           | simpleexp '**' subexpr
+**           | simpleexp '>>' subexpr
+**           | simpleexp '<<' subexpr
+**           | simpleexp '==' subexpr
+**           | simpleexp '<' subexpr
+**           | simpleexp '<=' subexpr
+**           | simpleexp '>' subexpr
+**           | simpleexp '>=' subexpr
+**           | simpleexp '&' subexpr
+**           | simpleexp '^' subexpr
+**           | simpleexp '|' subexpr
+**           | simpleexp 'and' subexpr
+**           | simpleexp 'or' subexpr
+**           | simpleexp '..' subexpr
+*/
 static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
     enterCstack(lx);
     Unopr uopr = getunopr(lx->t.tk);
@@ -1129,23 +1130,13 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
     }
     if (varid) {
         const char *msg = csS_pushfstring(lx->ts,
-            "attempt to assign to final variable '%s'", getstr(varid));
+            "attempt to assign to a read-only variable '%s'", getstr(varid));
         csP_semerror(lx, msg);
     }
 }
 
 
-/*
- * Used to chain variables on the left side of
- * the assignment.
- */
-struct LHS {
-    struct LHS *prev;
-    ExpInfo e;
-};
-
-
-/* adjust left and right side of assignment */
+/* adjust left and right side of an assignment */
 static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int need = nvars - nexps;
@@ -1167,7 +1158,22 @@ static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
 }
 
 
-/* auxiliary function for multiple variable assignment */
+/*
+** Structure to chain all variables on the left side of the
+** assignment.
+*/
+struct LHS {
+    struct LHS *prev;
+    ExpInfo e;
+};
+
+
+/*
+** assign ::= vars '=' explist
+**          | 
+** vars ::= var
+**        | var ',' vars
+*/
 static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
     expect_cond(lx, eisvar(&lhs->e), "expect variable");
     checkreadonly(lx, &lhs->e);
@@ -1175,13 +1181,14 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
         struct LHS var;
         var.prev = lhs;
         suffixedexp(lx, &var.e);
-        enterCstack(lx);
+        enterCstack(lx); /* control recursion depth */
         assign(lx, &var, nvars + 1);
         leaveCstack(lx);
     } else { /* right side of assignment '=' */
         ExpInfo e;
+        int nexps;
         expectnext(lx, '=');
-        int nexps = explist(lx, &e);
+        nexps = explist(lx, &e);
         if (nexps != nvars)
             adjustassign(lx, nexps, nvars, &e);
         else
@@ -1193,18 +1200,19 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
 
 /*
 ** exprstm ::= call
-**           | varlist '=' explist
+**           | assign
 */
 static void exprstm(Lexer *lx) {
     struct LHS var;
     suffixedexp(lx, &var.e);
-    if (check(lx, '=') || check(lx, ',')) {
+    if (check(lx, '=') || check(lx, ',')) { /* assignment? */
         var.prev = NULL;
         assign(lx, &var, 1);
-    } else {
+    } else { /* otherwise must be call */
+        Instruction *inst;
         expect_cond(lx, var.e.et == EXP_CALL, "syntax error");
-        Instruction *call = getinstruction(lx->fs, &var.e);
-        SETARG_L(call, 0, 1);
+        inst = getinstruction(lx->fs, &var.e);
+        SETARG_L(inst, 0, 1); /* call statements uses no results */
     }
 }
 
@@ -2242,7 +2250,7 @@ static void stm(Lexer *lx) {
         }
         case TK_RETURN: {
             returnstm(lx);
-            return;
+            return; /* done; avoid resetting 'lastwasret' */
         }
         case TK_LOOP: {
             loopstm(lx);
@@ -2267,7 +2275,6 @@ static void parseuntilEOS(Lexer *lx) {
     while (!check(lx, TK_EOS))
         stm(lx);
 }
-
 
 
 /* compile main function */
