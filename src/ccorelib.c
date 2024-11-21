@@ -283,11 +283,11 @@ static int csCore_getargs(cs_State *ts) {
     if (cs_type(ts, 0) == CS_TSTRING) {
         const char *what = cs_to_string(ts, 0);
         if (strcmp(what, "array") == 0) { /* array? */
-            cs_push_array(ts); /* push the array */
+            cs_push_array(ts, n); /* push the array */
             while (--n) /* set the array indices */
                 cs_set_index(ts, 0, n);
-        } else if (strcmp(what, "set") == 0) { /* hashset? */
-            cs_push_table(ts); /* push the table (hashset) */
+        } else if (strcmp(what, "table") == 0) { /* hashset? */
+            cs_push_table(ts, n); /* push the table (hashset) */
             while (--n) { /* set the table fields */
                 cs_push_bool(ts, 1);
                 cs_set_field(ts, 0);
@@ -296,7 +296,7 @@ static int csCore_getargs(cs_State *ts) {
             cs_push_integer(ts, n - 1); /* push total number of args */
         } else {
             csL_arg_error(ts, 0,
-            "invalid string value, expected \"array\", \"set\" or \"len\"");
+            "invalid string value, expected \"array\", \"table\" or \"len\"");
         }
         cs_replace(ts, 0); /* replace the option with the value */
         return 1; /* return the value */
@@ -470,17 +470,22 @@ static const cs_Entry core_funcs[] = {
     {"tonumber", csCore_tonumber},
     {"tostring", csCore_tostring},
     {"typeof", csCore_typeof},
-    {"_VERSION", NULL},
+    /* placeholders */
+    {CS_GNAME, NULL},
+    {"__VERSION", NULL},
     {NULL, NULL},
 };
 
 
 CSMOD_API int csL_open_core(cs_State *ts) {
     /* open lib into global instance */
-    cs_push_globalinstance(ts);
+    cs_push_globaltable(ts);
     csL_set_funcs(ts, core_funcs, 0);
-    /* set global _VERSION */
+    /* set global __G */
+    cs_push(ts, -1);
+    cs_set_fieldstr(ts, -2, CS_GNAME);
+    /* set global __VERSION */
     cs_push_literal(ts, CS_VERSION);
-    cs_set_global(ts, "_VERSION");
+    cs_set_global(ts, "__VERSION");
     return 1;
 }

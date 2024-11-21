@@ -20,8 +20,8 @@
 
 /* Ensure the stack has at least 'n' elements. */
 #define api_checknelems(ts, n) \
-    api_check(ts, (n) < (ts)->sp.p - (ts)->cf->func.p, \
-                 "not enough elements in the stack")
+        api_check(ts, (n) < (ts)->sp.p - (ts)->cf->func.p, \
+                    "not enough elements in the stack")
 
 
 /* increments 'ts->sp.p', checking for stack overflow */

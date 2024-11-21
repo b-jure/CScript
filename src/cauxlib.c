@@ -332,8 +332,8 @@ CSLIB_API int csL_get_property(cs_State *ts, int insobj) {
 
 
 CSLIB_API void csL_set_cindex(cs_State *ts, int arrobj, cs_Integer i) {
-    if (csi_unlikely(i < 0 || i > CS_ARRAYMAX))
-        csL_error(ts, "array index too large %I, limit is %d", i, CS_ARRAYMAX);
+    if (csi_unlikely(i < 0))
+        csL_error(ts, "array index is negative (%I)", i);
     cs_set_index(ts, arrobj, i);
 }
 
@@ -414,7 +414,7 @@ CSLIB_API int csL_get_subtable(cs_State *ts, int htobj, const char *field) {
     } else {
         cs_pop(ts, 1); /* pop previous result */
         htobj = cs_absindex(ts, htobj);
-        cs_push_table(ts);
+        cs_push_table(ts, 0);
         cs_push(ts, -1); /* copy will be left on the top */
         cs_set_fieldstr(ts, htobj, field); /* table[field] = newtable */
         return 0; /* false, no table was found */
@@ -425,16 +425,16 @@ CSLIB_API int csL_get_subtable(cs_State *ts, int htobj, const char *field) {
 CSLIB_API void csL_include(cs_State *ts, const char *libname,
                            cs_CFunction openf, int global) {
     csL_get_subtable(ts, CS_REGISTRYINDEX, CS_LOADED_TABLE);
-    cs_get_fieldstr(ts, -1, libname); /* get Lib[libname] */
+    cs_get_fieldstr(ts, -1, libname); /* get lib[libname] */
     if (!cs_to_bool(ts, -1)) { /* library not already loaded? */
         cs_pop(ts, 1); /* remove field */
         cs_push_cfunction(ts, openf); /* push func that opens the library */
         cs_push_string(ts, libname); /* argument to 'openf' */
         cs_call(ts, 1, 1); /* call 'openf' */
         cs_push(ts, -1); /* copy the library (call result) */
-        cs_set_fieldstr(ts, -3, libname); /* Lib[libname] = library */
+        cs_set_fieldstr(ts, -3, libname); /* lib[libname] = library */
     }
-    cs_remove(ts, -2); /* remove 'Lib' */
+    cs_remove(ts, -2); /* remove 'lib' */
     if (global) { /* set the library as global? */
         cs_push(ts, -1); /* copy of library */
         cs_set_global(ts, libname); /* set it as global variable */

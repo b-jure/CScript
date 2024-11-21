@@ -149,7 +149,6 @@ static void freestack(cs_State *ts) {
 }
 
 
-/* free global and mainthread state */
 static void freestate(cs_State *mt) {
     GState *gs = G_(mt);
     cs_assert(mt == G_(mt)->mainthread);

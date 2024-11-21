@@ -302,6 +302,7 @@ typedef cs_ubyte Instruction;
 #define cast_mem(e)         cast(cs_mem,(e))
 #define cast_charp(e)       cast(char *,(e))
 #define cast_sizet(e)       cast(size_t,(e))
+#define cast_voidp(e)       cast(void *,(e))
 
 /* cast 'cs_Integer' to 'cs_Unsigned' */
 #define csi_castS2U(i)      ((cs_Unsigned)(i))

@@ -5,6 +5,7 @@
 */
 
 
+#include "cmeta.h"
 #define CS_CORE
 
 
@@ -25,12 +26,12 @@
 
 /* common signature for tracing functions */
 #define TRACEDEF(name) \
-    static void trace##name (const Function *fn, const Instruction *pc)
+    static void trace##name (const Proto *p, const Instruction *pc)
 
 
 /* common signature for disassembly functions */
 #define UNASMDEF(name) \
-    static void unasm##name (cs_State *ts, const Function *fn, Instruction *pc)
+    static void unasm##name (cs_State *ts, const Proto *p, Instruction *pc)
 
 
 #define TABSZ   3
@@ -38,8 +39,8 @@
     { e; for(int i_ = 0; i_ < TABSZ; i_++) putchar(' '); }
 
 
-cs_sinline void startline(const Function *fn, const Instruction *pc) {
-    postab(printf("[%05d]", csD_getfuncline(fn, pcrel(pc, fn))));
+cs_sinline void startline(const Proto *p, const Instruction *pc) {
+    postab(printf("[%05d]", csD_getfuncline(p, pcrel(pc, p))));
 }
 
 
@@ -68,7 +69,7 @@ cs_sinline int traceL(const Instruction *pc) {
 
 
 TRACEDEF(I) {
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     endline();
 }
@@ -76,7 +77,7 @@ TRACEDEF(I) {
 
 TRACEDEF(IS) {
     OpCode op = *pc;
-    startline(fn, pc);
+    startline(p, pc);
     traceop(op);
     traceS(pc);
     endline();
@@ -85,7 +86,7 @@ TRACEDEF(IS) {
 
 TRACEDEF(ISS) {
     OpCode op = *pc;
-    startline(fn, pc);
+    startline(p, pc);
     traceop(op);
     pc += traceS(pc);
     traceS(pc);
@@ -95,7 +96,7 @@ TRACEDEF(ISS) {
 
 TRACEDEF(IL) {
     OpCode op = *pc;
-    startline(fn, pc);
+    startline(p, pc);
     traceop(op);
     traceL(pc);
     endline();
@@ -104,7 +105,7 @@ TRACEDEF(IL) {
 
 TRACEDEF(ILS) {
     OpCode op = *pc;
-    startline(fn, pc);
+    startline(p, pc);
     traceop(op);
     pc += traceL(pc);
     traceS(pc);
@@ -114,7 +115,7 @@ TRACEDEF(ILS) {
 
 TRACEDEF(ILSS) {
     OpCode op = *pc;
-    startline(fn, pc);
+    startline(p, pc);
     traceop(op);
     pc += traceL(pc);
     pc += traceS(pc);
@@ -125,7 +126,7 @@ TRACEDEF(ILSS) {
 
 TRACEDEF(ILL) {
     OpCode op = *pc;
-    startline(fn, pc);
+    startline(p, pc);
     traceop(op);
     pc += traceL(pc);
     traceL(pc);
@@ -135,7 +136,7 @@ TRACEDEF(ILL) {
 
 TRACEDEF(ILLS) {
     OpCode op = *pc;
-    startline(fn, pc);
+    startline(p, pc);
     traceop(op);
     pc += traceL(pc);
     pc += traceL(pc);
@@ -147,16 +148,16 @@ TRACEDEF(ILLS) {
 /*
 ** Trace the current OpCode and its arguments.
 */
-Instruction csTR_tracepc(const Function *fn, const Instruction *pc) {
+Instruction csTR_tracepc(const Proto *p, const Instruction *pc) {
     switch (getOpFormat(*pc)) {
-        case FormatI: traceI(fn, pc); break;
-        case FormatIS: traceIS(fn, pc); break;
-        case FormatISS: traceISS(fn, pc); break;
-        case FormatIL: traceIL(fn, pc); break;
-        case FormatILS: traceILS(fn, pc); break;
-        case FormatILSS: traceILSS(fn, pc); break;
-        case FormatILL: traceILL(fn, pc); break;
-        case FormatILLS: traceILLS(fn, pc); break;
+        case FormatI: traceI(p, pc); break;
+        case FormatIS: traceIS(p, pc); break;
+        case FormatISS: traceISS(p, pc); break;
+        case FormatIL: traceIL(p, pc); break;
+        case FormatILS: traceILS(p, pc); break;
+        case FormatILSS: traceILSS(p, pc); break;
+        case FormatILL: traceILL(p, pc); break;
+        case FormatILLS: traceILLS(p, pc); break;
         default: cs_assert(0 && "invalid OpCode format"); break;
     }
     return *pc++;
@@ -186,7 +187,7 @@ cs_sinline void tracefalse(void) {
 
 cs_sinline void tracestring(OString *s) {
     char buff[MAXSTRKLEN + 1];
-    csS_strlimit(buff, getstrbytes(s), getstrlen(s), sizeof(buff));
+    csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
     printf("%s", buff);
 }
 
@@ -201,21 +202,21 @@ static void tracevalue(const TValue *o) {
         case CS_VNIL: tracenil(); break;
         case CS_VTRUE: tracetrue(); break;
         case CS_VFALSE: tracefalse(); break;
-        case CS_VSTRING: tracestring(strval(o)); break;
+        case CS_VSHRSTR: case CS_VLNGSTR: tracestring(strval(o)); break;
         case CS_VNUMINT: case CS_VNUMFLT: tracenum(o); break;
         default: cs_assert(0 && "invalid 'o' type"); break;
     }
 }
 
 
-static void traceK(const Function *fn, int index) {
-    postab(printf("K[%d]=", index); tracevalue(&fn->k[index]));
+static void traceK(const Proto *p, int index) {
+    postab(printf("K[%d]=", index); tracevalue(&p->k[index]));
 }
 
 
 UNASMDEF() {
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     endline();
 }
@@ -223,16 +224,26 @@ UNASMDEF() {
 
 UNASMDEF(L) {
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     pc += traceop(*pc);
     traceL(pc);
     endline();
 }
 
 
+UNASMDEF(LS) {
+    UNUSED(ts);
+    startline(p, pc);
+    pc += traceop(*pc);
+    pc += traceL(pc);
+    traceS(pc);
+    endline();
+}
+
+
 UNASMDEF(LL) {
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     pc += traceop(*pc);
     pc += traceL(pc);
     traceL(pc);
@@ -242,18 +253,18 @@ UNASMDEF(LL) {
 
 UNASMDEF(KL) {
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
-    traceK(fn, GETARG_L(pc, 0));
+    traceK(p, GETARG_L(pc, 0));
     endline();
 }
 
 
 UNASMDEF(K) {
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
-    traceK(fn, GETARG_S(pc, 0));
+    traceK(p, GETARG_S(pc, 0));
     endline();
 }
 
@@ -262,7 +273,7 @@ UNASMDEF(IMMint) {
     TValue aux;
     cs_Integer i;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     getIMM(pc, i);
     setival(&aux, i);
@@ -275,7 +286,7 @@ UNASMDEF(IMMflt) {
     TValue aux;
     cs_Number n;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     getIMM(pc, n);
     setfval(&aux, n);
@@ -287,9 +298,9 @@ UNASMDEF(IMMflt) {
 UNASMDEF(EQK) {
     TValue aux;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
-    traceK(fn, GETARG_L(pc, 0));
+    traceK(p, GETARG_L(pc, 0));
     setival(&aux, GETARG_S(pc, SIZEARGL));
     postab(tracenum(&aux));
     endline();
@@ -300,7 +311,7 @@ UNASMDEF(EQI) {
     TValue aux;
     cs_Integer i;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     getIMM(pc, i);
     setival(&aux, i);
@@ -313,7 +324,7 @@ UNASMDEF(IMMord) {
     TValue aux;
     cs_Integer i;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     getIMM(pc, i);
     setival(&aux, i);
@@ -324,7 +335,7 @@ UNASMDEF(IMMord) {
 
 UNASMDEF(S) {
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     pc += traceop(*pc);
     traceS(pc);
     endline();
@@ -334,7 +345,7 @@ UNASMDEF(S) {
 UNASMDEF(Call) {
     int from, to;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     from = GETARG_L(pc, 0);
     to = GETARG_L(pc, 1);
@@ -345,10 +356,10 @@ UNASMDEF(Call) {
 
 UNASMDEF(MM) {
     cs_MM mm;
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     mm = GETARG_S(pc, 0);
-    postab(printf("%s", getstrbytes(G_(ts)->mmnames[mm])));
+    postab(printf("%s", getstr(G_(ts)->mmnames[mm])));
     endline();
 }
 
@@ -356,7 +367,7 @@ UNASMDEF(MM) {
 UNASMDEF(MBin) {
     OpCode op;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     op = GETARG_S(pc, 0) + OP_ADD;
     postab(printf("%s", getOpName(op)));
@@ -367,20 +378,9 @@ UNASMDEF(MBin) {
 UNASMDEF(Local) {
     const char *str;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
-    str = getstrbytes(fn->locals[GETARG_L(pc, 0)].name);
-    postab(printf("%s", str));
-    endline();
-}
-
-
-UNASMDEF(Private) {
-    const char *str;
-    UNUSED(ts);
-    startline(fn, pc);
-    traceop(*pc);
-    str = getstrbytes(fn->private[GETARG_L(pc, 0)].s.name);
+    str = getstr(p->locals[GETARG_L(pc, 0)].name);
     postab(printf("%s", str));
     endline();
 }
@@ -389,9 +389,9 @@ UNASMDEF(Private) {
 UNASMDEF(Upvalue) {
     const char *str;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
-    str = getstrbytes(fn->upvals[GETARG_L(pc, 0)].name);
+    str = getstr(p->upvals[GETARG_L(pc, 0)].name);
     postab(printf("%s", str));
     endline();
 }
@@ -400,7 +400,7 @@ UNASMDEF(Upvalue) {
 UNASMDEF(Ret) {
     int nres, nbase, close;
     UNUSED(ts);
-    startline(fn, pc);
+    startline(p, pc);
     traceop(*pc);
     nbase = GETARG_L(pc, 0);
     nres = GETARG_L(pc, 1);
@@ -413,13 +413,13 @@ UNASMDEF(Ret) {
 
 
 /*
-** Disassemble all of the bytecode in 'fn->code'.
+** Disassemble all of the bytecode in 'p->code'.
 ** This function provides more detailed semantic information compared
 ** to 'csTR_trace' when tracing OpCode and its arguments.
 */
-void csTR_disassemble(cs_State *ts, const Function *fn) {
-    Instruction *pc = fn->code;
-    for (int i = 0; i < fn->sizecode; i++) {
+void csTR_disassemble(cs_State *ts, const Proto *p) {
+    Instruction *pc = p->code;
+    for (int i = 0; i < p->sizecode; i++) {
         switch (*pc) {
             case OP_TRUE: case OP_FALSE: case OP_NIL: case OP_NEWCLASS:
             case OP_POP: case OP_ADD: case OP_SUB: case OP_MUL:
@@ -429,68 +429,67 @@ void csTR_disassemble(cs_State *ts, const Function *fn) {
             case OP_UNM: case OP_BNOT: case OP_EQPRESERVE:
             case OP_GETINDEX: case OP_SETINDEX: case OP_GETSUPIDX:
             case OP_INHERIT: case OP_FORCALL: case OP_FORLOOP: {
-                unasm(ts, fn, pc);
+                unasm(ts, p, pc);
                 break;
             }
             case OP_NILN: case OP_VARARGPREP: case OP_VARARG:
             case OP_CLOSURE: case OP_POPN: case OP_JMP:
             case OP_JMPS: case OP_CLOSE: case OP_TBC:
-            case OP_GETINDEXINT: case OP_SETINDEXINT: case OP_ARRAY: {
-                unasmL(ts, fn, pc);
+            case OP_GETINDEXINT: case OP_SETINDEXINT: {
+                unasmL(ts, p, pc);
                 break;
             }
-            case OP_DEFGLOBAL: case OP_GETGLOBAL: case OP_SETGLOBAL: 
             case OP_ADDK: case OP_SUBK: case OP_MULK: case OP_DIVK:
             case OP_MODK: case OP_POWK: case OP_BSHLK: case OP_BSHRK:
             case OP_BANDK: case OP_BORK: case OP_BXORK: case OP_CONSTL:
             case OP_SETPROPERTY: case OP_GETPROPERTY: case OP_GETINDEXSTR:
             case OP_SETINDEXSTR: case OP_METHOD: case OP_GETSUP:
             case OP_GETSUPIDXSTR: {
-                unasmKL(ts, fn, pc);
+                unasmKL(ts, p, pc);
                 break;
             }
             case OP_ADDI: case OP_SUBI: case OP_MULI:
             case OP_DIVI: case OP_MODI: case OP_POWI:
             case OP_BSHLI: case OP_BSHRI: case OP_BANDI:
             case OP_BORI: case OP_BXORI: {
-                unasmIMMint(ts, fn, pc);
+                unasmIMMint(ts, p, pc);
                 break;
             }
             case OP_TEST: case OP_TESTORPOP: case OP_TESTANDPOP:
-            case OP_TESTPOP: {
-                unasmS(ts, fn, pc);
+            case OP_TESTPOP: case OP_NEWARRAY: case OP_NEWTABLE: {
+                unasmS(ts, p, pc);
                 break;
             }
             case OP_LTI: case OP_LEI: case OP_GTI: case OP_GEI: {
-                unasmIMMord(ts, fn, pc);
+                unasmIMMord(ts, p, pc);
                 break;
             }
             case OP_GETLOCAL: case OP_SETLOCAL: {
-                unasmLocal(ts, fn, pc);
-                break;
-            }
-            case OP_GETPRIVATE: case OP_SETPRIVATE: {
-                unasmPrivate(ts, fn, pc);
+                unasmLocal(ts, p, pc);
                 break;
             }
             case OP_GETUVAL: case OP_SETUVAL: {
-                unasmUpvalue(ts, fn, pc);
+                unasmUpvalue(ts, p, pc);
                 break;
             }
-            case OP_FORPREP: case OP_ARRAYELEMS: {
-                unasmLL(ts, fn, pc);
+            case OP_FORPREP: {
+                unasmLL(ts, p, pc);
                 break;
             }
-            case OP_CONST: unasmK(ts, fn, pc); break;
-            case OP_CONSTI: unasmIMMint(ts, fn, pc); break;
-            case OP_CONSTF: unasmIMMflt(ts, fn, pc); break;
-            case OP_SETMM: unasmMM(ts, fn, pc); break;
-            case OP_MBIN: unasmMBin(ts, fn, pc); break;
-            case OP_EQK: unasmEQK(ts, fn, pc); break;
-            case OP_EQI: unasmEQI(ts, fn, pc); break;
-            case OP_EQ: unasmS(ts, fn, pc); break;
-            case OP_CALL: unasmCall(ts, fn, pc); break;
-            case OP_RET: unasmRet(ts, fn, pc); break;
+            case OP_SETARRAY: {
+                unasmLS(ts, p, pc);
+                break;
+            }
+            case OP_CONST: unasmK(ts, p, pc); break;
+            case OP_CONSTI: unasmIMMint(ts, p, pc); break;
+            case OP_CONSTF: unasmIMMflt(ts, p, pc); break;
+            case OP_SETMM: unasmMM(ts, p, pc); break;
+            case OP_MBIN: unasmMBin(ts, p, pc); break;
+            case OP_EQK: unasmEQK(ts, p, pc); break;
+            case OP_EQI: unasmEQI(ts, p, pc); break;
+            case OP_EQ: unasmS(ts, p, pc); break;
+            case OP_CALL: unasmCall(ts, p, pc); break;
+            case OP_RET: unasmRet(ts, p, pc); break;
             default: cs_assert(0 && "invalid OpCode"); break;
         }
         pc = nextOp(pc);

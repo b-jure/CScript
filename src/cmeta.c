@@ -104,8 +104,8 @@ const TValue *csMM_get(cs_State *ts, const TValue *v, cs_MM mm) {
 }
 
 
-/* call hashtable method that doesn't return value/result */
-void csMM_callhtm(cs_State *ts, const TValue *fn, const TValue *p1,
+/* call __setidx fn */
+void csMM_callset(cs_State *ts, const TValue *fn, const TValue *p1,
                   const TValue *p2, const TValue *p3) {
     SPtr func = ts->sp.p;
     setobj2s(ts, func, fn);
@@ -117,8 +117,8 @@ void csMM_callhtm(cs_State *ts, const TValue *fn, const TValue *p1,
 }
 
 
-/* call hashtable method that returns a value/result */
-void csMM_callhtmres(cs_State *ts, const TValue *fn, const TValue *p1,
+/* call __getidx fn */
+void csMM_callgetres(cs_State *ts, const TValue *fn, const TValue *p1,
                      const TValue *p2, SPtr res) {
     ptrdiff_t result = savestack(ts, res);
     SPtr func = ts->sp.p;

@@ -61,13 +61,13 @@
 /* check GC then check stack preserving 'p' */
 #define checkstackGCp(ts,n,p) \
         csT_checkstackaux(ts,n, \
-            ptrdiff_t p_ = savestack(ts,p); csG_check(ts), \
+            ptrdiff_t p_ = savestack(ts,p); csG_checkGC(ts), \
             p = restorestack(ts, p_))
 
 
 /* check GC then check stack */
 #define checkstackGC(ts,n) \
-        csT_checkstackaux(ts,n,csG_check(ts),(void)0)
+        csT_checkstackaux(ts,n,csG_checkGC(ts),(void)0)
     
 
 

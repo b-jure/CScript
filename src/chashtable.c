@@ -87,7 +87,10 @@ static inline void inithash(Node *n, int limit) {
 
 /* allocate hash array */
 static void newhasharray(cs_State *cr, HTable *ht, uint size) {
-    int nbits = csO_ceillog2(size);
+    int nbits;
+    if (size < MINHSIZE)
+        size = MINHSIZE;
+    nbits = csO_ceillog2(size);
     if (c_unlikely(nbits > MAXHBITS || (1u << nbits) > MAXHSIZE))
         csD_runerror(cr, "hashtable overflow");
     size = twoto(nbits);

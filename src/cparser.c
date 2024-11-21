@@ -407,7 +407,7 @@ static void endfs(FunctionState *fs) {
     csM_shrinkvec(ts, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
     csM_shrinkvec(ts, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev;
-    csG_check(ts);
+    csG_checkGC(ts);
 }
 
 

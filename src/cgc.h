@@ -107,23 +107,22 @@
 
 
 
-/* -------------------------------------------------------------------------
- * Check GC gcdebt
- * ------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** Check GC gcdebt
+** ----------------------------------------------------------------------- */
 
 /*
- ** Performs a single step of collection if collector
- ** gcdebt is positive.
- */
-#define checkgc(ts,pre,pos) \
+** Performs a single step of collection if collector
+** gcdebt is positive.
+*/
+#define csG_condGC(ts,pre,pos) \
     { pre; if (G_(ts)->gcdebt > 0) { csG_step(ts); pos; } \
       gcmemchange(ts,pre,pos); }
 
 
-/* 'checkgc' but without 'pre' and 'pos' */
-#define csG_check(ts) \
-    { printf("GC check %s\n", __func__); checkgc(ts,(void)0,(void)0); }
-
+/* 'csG_condGC' but without 'pre' and 'pos' */
+#define csG_checkGC(ts) \
+    { printf("csG_checkGC <-> %s\n", __func__); csG_condGC(ts,(void)0,(void)0); }
 
 
 /* get total bytes allocated (by accounting for 'gcdebt') */
@@ -131,14 +130,14 @@
 
 
 
-/* -------------------------------------------------------------------------
- * Write barriers
- * ------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** Write barriers
+** ----------------------------------------------------------------------- */
 
 /*
- ** Same as 'csG_barrier_' but ensures that it is only
- ** called when 'r' (root) is a black object and 'o' is white.
- */
+** Same as 'csG_barrier_' but ensures that it is only called when 'r'
+** (root) is a black object and 'o' is white.
+*/
 #define csG_objbarrier(ts,r,o) \
         (isblack(r) && iswhite(o) ? csG_barrier_(ts, obj2gco(r), obj2gco(o)) \
                                   : (void)(0))

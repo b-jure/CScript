@@ -17,7 +17,6 @@
 #include "cprotected.h"
 #include "cscript.h"
 #include "csconf.h"
-#include "ctrace.h"
 #include "climits.h"
 #include "chashtable.h"
 #include "cobject.h"
@@ -131,7 +130,7 @@ CS_API void cs_test_hashtable(cs_State *ts) {
 
 
 /* auxiliary function that sets the stack top without locking */
-static void auxsettop(cs_State *ts, int n) {
+cs_sinline void auxsettop(cs_State *ts, int n) {
     CallFrame *cf;
     SPtr func, newtop;
     ptrdiff_t diff;
@@ -489,8 +488,12 @@ CS_API void *cs_to_userdata(cs_State *ts, int index) {
 CS_API const void *cs_to_pointer(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     switch (ttypetag(o)) {
-        case CS_VLCF: return cast(void *, cast_sizet(lcfval(o)));
-        case CS_VUSERDATA: case CS_VLIGHTUSERDATA: return touserdata(o);
+        case CS_VLCF: {
+            return cast(void *, cast_sizet(lcfval(o)));
+        }
+        case CS_VUSERDATA: case CS_VLIGHTUSERDATA: {
+            return touserdata(o);
+        }
         default: {
             if (iscollectable(o))
                 return gcoval(o);
@@ -601,7 +604,7 @@ CS_API const char *cs_push_lstring(cs_State *ts, const char *str, size_t len) {
     s = (len == 0 ? csS_new(ts, "") : csS_newl(ts, str, len));
     setstrval2s(ts, ts->sp.p, s);
     api_inctop(ts);
-    csG_check(ts);
+    csG_checkGC(ts);
     cs_unlock(ts);
     return getstr(s);
 }
@@ -618,7 +621,7 @@ CS_API const char *cs_push_string(cs_State *ts, const char *str) {
         str = getstr(s);
     }
     api_inctop(ts);
-    csG_check(ts);
+    csG_checkGC(ts);
     cs_unlock(ts);
     return str;
 }
@@ -634,7 +637,7 @@ CS_API const char *cs_push_vfstring(cs_State *ts, const char *fmt, va_list argp)
     const char *str;
     cs_lock(ts);
     str = csS_pushvfstring(ts, fmt, argp);
-    csG_check(ts);
+    csG_checkGC(ts);
     cs_unlock(ts);
     return str;
 }
@@ -651,7 +654,7 @@ CS_API const char *cs_push_fstring(cs_State *ts, const char *fmt, ...) {
     va_start(argp, fmt);
     str = csS_pushvfstring(ts, fmt, argp);
     va_end(argp);
-    csG_check(ts);
+    csG_checkGC(ts);
     cs_unlock(ts);
     return str;
 }
@@ -674,7 +677,7 @@ cs_sinline void auxpushcclosure(cs_State *ts, cs_CFunction fn, int nupvals) {
         }
         setclCval2s(ts, ts->sp.p, ccl);
         api_inctop(ts);
-        csG_check(ts);
+        csG_checkGC(ts);
     }
 }
 
@@ -718,23 +721,27 @@ CS_API void cs_push_lightuserdata(cs_State *ts, void *p) {
 
 
 /* Push array on top of the stack. */
-CS_API void cs_push_array(cs_State *ts) {
+CS_API void cs_push_array(cs_State *ts, int sz) {
     Array *arr;
     cs_lock(ts);
     arr = csA_new(ts);
     setarrval2s(ts, ts->sp.p, arr);
     api_inctop(ts);
+    if (sz > 0)
+        csA_ensure(ts, arr, sz - 1);
     cs_unlock(ts);
 }
 
 
 /* Push hashtable on top of the stack. */
-CS_API void cs_push_table(cs_State *ts) {
+CS_API void cs_push_table(cs_State *ts, int sz) {
     HTable *ht;
     cs_lock(ts);
     ht = csH_new(ts);
     sethtval2s(ts, ts->sp.p, ht);
     api_inctop(ts);
+    if (sz > 0)
+        csH_resize(ts, ht, sz);
     cs_unlock(ts);
 }
 
@@ -777,7 +784,7 @@ cs_sinline void auxsetvmt(TValue *dest, const cs_VMT *vmt) {
 }
 
 
-#define fastget(ts,ht,k,slot,f)     ((slot = f(ht, k)), !isabstkey(slot))
+#define fastget(ts,ht,k,slot,f)     ((slot = f(ht, k)), !isempty(slot))
 
 #define finishfastset(ts,ht,slot,v) \
     { setobj(ts, cast(TValue *, slot), v); \
@@ -798,6 +805,7 @@ cs_sinline void auxrawsetstr(cs_State *ts, HTable *ht, const char *str,
         csG_barrierback(ts, obj2gco(ht), s2v(ts->sp.p - 1));
         ts->sp.p -= 2; /* pop string key and value */
     }
+    cs_unlock(ts);
 }
 
 
@@ -807,7 +815,7 @@ cs_sinline void auxsetentrylist(cs_State *ts, OClass *cls, const cs_Entry *l,
     cs_checkstack(ts, nup);
     if (l->name) { /* have at least one entry? */
         cls->methods = csH_new(ts);
-        csG_check(ts);
+        csG_checkGC(ts);
         do {
             api_check(ts, l->func, "l->func is NULL");
             for (int i = 0; i < nup; i++) /* push upvalues to the top */
@@ -825,7 +833,7 @@ CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobjabs,
     OClass *cls;
     cs_lock(ts);
     cls = csMM_newclass(ts);
-    csG_check(ts);
+    csG_checkGC(ts);
     setclsval2s(ts, ts->sp.p, cls);
     api_inctop(ts);
     if (clsobjabs >= 0) { /* have superclass? */
@@ -836,9 +844,9 @@ CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobjabs,
             csH_copykeys(ts, classval(osup)->methods, cls->methods);
         }
     }
-    if (vmt) { /* have Virtual Method Table? */
+    if (vmt) { /* have virtual method table? */
         cls->vmt = csMM_newvmt(ts);
-        csG_check(ts);
+        csG_checkGC(ts);
         auxsetvmt(cls->vmt, vmt);
     }
     if (l) /* have methods? */
@@ -852,28 +860,27 @@ CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobjabs,
 
 /* CScript -> stack */
 
-
-#define setslot2stack(ts,slot,sp) \
-    { if (!isabstkey(slot)) { setobj2s(ts, sp, slot); } \
-      else { setnilval(s2v(sp)); }}
-
-
-#define setslot2stacktop(ts,slot)   setslot2stack(ts,slot,(ts)->sp.p - 1)
-
-
-cs_sinline int finishrawget(cs_State *ts, const TValue *slot) {
-    setslot2stack(ts, slot, ts->sp.p);
+cs_sinline int finishrawgetfield(cs_State *ts, const TValue *val) {
+    if (isempty(val))
+        setnilval(s2v(ts->sp.p));
+    else
+        setobj2s(ts, ts->sp.p, val);
     api_inctop(ts);
     cs_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
 
 
-#include <stdio.h>
-/* auxiliary raw function for getting the value of the string 'k' */
-cs_sinline int auxrawgetstr(cs_State *ts, HTable *ht, const char *k) {
-    OString *key = csS_new(ts, k);
-    return finishrawget(ts, csH_getstr(ht, key));
+cs_sinline int auxrawgetfieldstr(cs_State *ts, HTable *ht, const char *k) {
+    const TValue *slot;
+    OString *str = csS_new(ts, k);
+    if (fastget(ts, ht, str, slot, csH_getstr)) {
+        setobj2s(ts, ts->sp.p, slot);
+    } else
+        setnilval(s2v(ts->sp.p));
+    api_inctop(ts);
+    cs_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
 }
 
 
@@ -895,7 +902,7 @@ CS_API int cs_get_global(cs_State *ts, const char *name) {
     TValue *gt;
     cs_lock(ts);
     gt = getGtable(ts);
-    return auxrawgetstr(ts, htval(gt), name);
+    return auxrawgetfieldstr(ts, htval(gt), name);
 }
 
 
@@ -905,6 +912,17 @@ CS_API int cs_get(cs_State *ts, int obj) {
     api_checknelems(ts, 1); /* key */
     o = index2value(ts, obj);
     csV_get(ts, o, s2v(ts->sp.p - 1), ts->sp.p - 1);
+    cs_unlock(ts);
+    return ttype(s2v(ts->sp.p - 1));
+}
+
+
+CS_API int cs_get_raw(cs_State *ts, int obj) {
+    const TValue *o;
+    cs_lock(ts);
+    api_checknelems(ts, 1); /* key */
+    o = index2value(ts, obj);
+    csV_rawget(ts, o, s2v(ts->sp.p - 1), ts->sp.p - 1);
     cs_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
@@ -932,7 +950,7 @@ CS_API int cs_get_index(cs_State *ts, int arrobj, cs_Integer index) {
 }
 
 
-cs_sinline HTable *getfieldtable(cs_State *ts, int obj) {
+cs_sinline HTable *gettable(cs_State *ts, int obj) {
     const TValue *o = index2value(ts, obj);
     switch (ttypetag(o)) {
         case CS_VINSTANCE: return insval(o)->fields;
@@ -945,17 +963,15 @@ cs_sinline HTable *getfieldtable(cs_State *ts, int obj) {
 }
 
 
-cs_sinline int auxrawget(cs_State *ts, HTable *ht, const TValue *key) {
-    return finishrawget(ts, csH_get(ht, key));
-}
-
-
 CS_API int cs_get_field(cs_State *ts, int obj) {
     HTable *ht;
+    const TValue *val;
     cs_lock(ts);
     api_checknelems(ts, 1); /* key */
-    ht = getfieldtable(ts, obj);
-    return auxrawget(ts, ht, s2v(--ts->sp.p));
+    ht = gettable(ts, obj);
+    val = csH_get(ht, s2v(ts->sp.p - 1));
+    ts->sp.p--; /* remove key */
+    return finishrawgetfield(ts, val);
 
 }
 
@@ -963,8 +979,36 @@ CS_API int cs_get_field(cs_State *ts, int obj) {
 CS_API int cs_get_fieldstr(cs_State *ts, int obj, const char *field) {
     HTable *ht;
     cs_lock(ts);
-    ht = getfieldtable(ts, obj);
-    return auxrawgetstr(ts, ht, field);
+    ht = gettable(ts, obj);
+    return auxrawgetfieldstr(ts, ht, field);
+}
+
+
+CS_API int cs_get_fieldptr(cs_State *ts, int obj, const void *field) {
+    HTable *ht;
+    TValue aux;
+    cs_lock(ts);
+    ht = gettable(ts, obj);
+    setpval(&aux, cast_voidp(field));
+    return finishrawgetfield(ts, csH_get(ht, &aux));
+}
+
+
+CS_API int cs_get_fieldint(cs_State *ts, int obj, cs_Integer i) {
+    HTable *ht;
+    cs_lock(ts);
+    ht = gettable(ts, obj);
+    return finishrawgetfield(ts, csH_getint(ht, i));
+}
+
+
+CS_API int cs_get_fieldflt(cs_State *ts, int obj, cs_Number n) {
+    HTable *ht;
+    TValue aux;
+    cs_lock(ts);
+    ht = gettable(ts, obj);
+    setfval(&aux, n);
+    return finishrawgetfield(ts, csH_get(ht, &aux));
 }
 
 
@@ -1002,7 +1046,7 @@ CS_API int cs_get_method(cs_State *ts, int insobj) {
         if (!isabstkey(slot)) { /* found? */
             IMethod *im = csMM_newinsmethod(ts, ins, slot);
             setimval2s(ts, ts->sp.p - 1, im);
-            goto unlock;
+            goto unlock; /* done */
         } /* else fallthrough */
     } /* else fall through */
     setnilval(s2v(ts->sp.p - 1));
@@ -1099,7 +1143,6 @@ CS_API void cs_set_global(cs_State *ts, const char *name) {
     api_checknelems(ts, 1); /* value */
     gt = getGtable(ts);
     auxrawsetstr(ts, htval(gt), name, s2v(ts->sp.p - 1));
-    cs_unlock(ts);
 }
 
 
@@ -1114,39 +1157,75 @@ CS_API void cs_set(cs_State *ts, int obj) {
 }
 
 
+CS_API void  cs_set_raw(cs_State *ts, int obj) {
+    TValue *o;
+    cs_lock(ts);
+    api_checknelems(ts, 2); /* value and key */
+    o = index2value(ts, obj);
+    csV_rawset(ts, o, s2v(ts->sp.p - 1), s2v(ts->sp.p - 2));
+    ts->sp.p -= 2; /* remove value and key */
+    cs_unlock(ts);
+}
+
+
 CS_API void cs_set_index(cs_State *ts, int arrobj, cs_Integer index) {
     Array *arr;
     cs_lock(ts);
     api_checknelems(ts, 1); /* value */
-    api_check(ts, index >= 0 && index < ARRAYLIMIT, "invalid 'index'");
+    api_check(ts, 0 <= index && index < ARRAYLIMIT, "'index' out of bounds");
     arr = getarray(ts, arrobj);
-    csA_ensure(ts, arr, index);
-    setobj(ts, &arr->b[index], s2v(ts->sp.p - 1));
+    csA_ensure(ts, arr, cast_int(index));
+    setobj(ts, &arr->b[cast_int(index)], s2v(ts->sp.p - 1));
     csG_barrierback(ts, obj2gco(arr), s2v(ts->sp.p - 1));
     ts->sp.p--; /* remove value */
     cs_unlock(ts);
 }
 
 
-CS_API void cs_set_field(cs_State *ts, int obj) {
+cs_sinline void auxrawsetfield(cs_State *ts, int obj, TValue *key, int n) {
     HTable *ht;
     cs_lock(ts);
-    api_checknelems(ts, 2); /* key + value */
-    ht = getfieldtable(ts, obj);
-    csH_set(ts, ht, s2v(ts->sp.p - 2), s2v(ts->sp.p - 1));
+    api_checknelems(ts, n);
+    ht = gettable(ts, obj);
+    csH_set(ts, ht, key, s2v(ts->sp.p - 1));
     csG_barrierback(ts, obj2gco(ht), s2v(ts->sp.p - 1));
-    ts->sp.p -= 2; /* remove key + value */
+    ts->sp.p -= n;
     cs_unlock(ts);
+}
+
+
+CS_API void cs_set_field(cs_State *ts, int obj) {
+    auxrawsetfield(ts, obj, s2v(ts->sp.p - 2), 2);
 }
 
 
 CS_API void cs_set_fieldstr(cs_State *ts, int obj, const char *field) {
     HTable *ht;
     cs_lock(ts);
-    api_checknelems(ts, 1); /* value */
-    ht = getfieldtable(ts, obj);
+    api_checknelems(ts, 1);
+    ht = gettable(ts, obj);
     auxrawsetstr(ts, ht, field, s2v(ts->sp.p - 1));
-    cs_unlock(ts);
+}
+
+
+CS_API void cs_set_fieldptr(cs_State *ts, int obj, const void *field) {
+    TValue key;
+    setpval(&key, cast_voidp(field));
+    auxrawsetfield(ts, obj, &key, 1);
+}
+
+
+CS_API void  cs_set_fieldint(cs_State *ts, int obj, cs_Integer field) {
+    TValue key;
+    setival(&key, field);
+    auxrawsetfield(ts, obj, &key, 1);
+}
+
+
+CS_API void  cs_set_fieldflt(cs_State *ts, int obj, cs_Number field) {
+    TValue key;
+    setfval(&key, field);
+    auxrawsetfield(ts, obj, &key, 1);
 }
 
 
@@ -1156,7 +1235,7 @@ CS_API void cs_set_uservmt(cs_State *ts, int udobj, const cs_VMT *vmt) {
     ud = getuserdata(ts, udobj);
     if (!ud->vmt) {
         ud->vmt = csMM_newvmt(ts);
-        csG_check(ts);
+        csG_checkGC(ts);
         if (!vmt) goto unlock;
     }
     if (vmt) {
@@ -1191,14 +1270,14 @@ CS_API int cs_set_uservalue(cs_State *ts, int index, int n) {
 }
 
 
-CS_API void cs_set_userdatamm(cs_State *ts, int index, cs_MM mm) {
+CS_API void cs_set_usermm(cs_State *ts, int index, cs_MM mm) {
     UserData *ud;
     cs_lock(ts);
     api_checknelems(ts, 1); /* metamethod func */
     ud = getuserdata(ts, index);
     if (!ud->vmt) {
         ud->vmt = csMM_newvmt(ts);
-        csG_check(ts);
+        csG_checkGC(ts);
     }
     setobj(ts, &ud->vmt[mm], s2v(ts->sp.p - 1));
     csG_barrierback(ts, obj2gco(ud), s2v(ts->sp.p - 1));
@@ -1232,7 +1311,6 @@ CS_API int cs_error(cs_State *ts) {
 
 
 /* Call/Load CScript code */
-
 
 #define checkresults(ts,nargs,nres) \
      api_check(ts, (nres) == CS_MULRET \
@@ -1349,7 +1427,7 @@ CS_API int cs_gc(cs_State *ts, int option, ...) {
                 /* convert 'data' to bytes (data = bytes/2^10) */
                 gcdebt = (data * 1024) + gs->gcdebt;
                 csG_setgcdebt(gs, gcdebt);
-                csG_check(ts);
+                csG_checkGC(ts);
             }
             gs->gcstop = old_gcstop;
             if (gcdebt > 0 && gs->gcstate == GCSpause) /* end of cycle? */
@@ -1451,7 +1529,7 @@ CS_API int cs_next(cs_State *ts, int obj) {
     int more;
     cs_lock(ts);
     api_checknelems(ts, 1); /* key */
-    ht = getfieldtable(ts, obj);
+    ht = gettable(ts, obj);
     more = csH_next(ts, ht, ts->sp.p - 1);
     if (more) {
         api_inctop(ts);
@@ -1471,13 +1549,13 @@ CS_API void cs_concat(cs_State *ts, int n) {
         setstrval2s(ts, ts->sp.p, csS_newl(ts, "", 0));
         api_inctop(ts);
     }
-    csG_check(ts);
+    csG_checkGC(ts);
     cs_unlock(ts);
 }
 
 
-CS_API size_t cs_stringtonumber(cs_State *ts, const char *s, int *povf) {
-    size_t sz = csS_tonum(s, s2v(ts->sp.p), povf);
+CS_API size_t cs_stringtonumber(cs_State *ts, const char *s, int *f) {
+    size_t sz = csS_tonum(s, s2v(ts->sp.p), f);
     if (sz != 0) /* no conversion errors? */
         api_inctop(ts);
     return sz;
@@ -1508,7 +1586,7 @@ CS_API void cs_toclose(cs_State *ts, int index) {
     cs_lock(ts);
     o = index2stack(ts, index);
     api_check(ts, ts->tbclist.p < o,
-                  "given index below or equal to the last marked slot");
+                  "given level below or equal to the last marked slot");
     csF_newtbcvar(ts, o); /* create new to-be-closed upvalue */
     nresults = ts->cf->nresults;
     if (!hastocloseCfunc(nresults)) /* function not yet marked? */

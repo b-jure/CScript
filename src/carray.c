@@ -31,7 +31,8 @@ void csA_shrink(cs_State *ts, Array *arr) {
 
 
 /* ensure that 'index' can fit into array memory block */
-void csA_ensure(cs_State *ts, Array *arr, cs_Integer index) {
+void csA_ensure(cs_State *ts, Array *arr, int index) {
+    cs_assert(index >= 0);
     if (csi_castS2U(index) >= arr->sz) {
         csM_ensurevec(ts, arr->b, arr->sz, arr->n, index - arr->n + 1,
                       ARRAYLIMIT, "array elements", TValue);

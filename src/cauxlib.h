@@ -13,15 +13,16 @@
 #include "cscript.h"
 
 
-/* error code for file related errors */
+/* global table name */
+#define CS_GNAME    "__G"
+
+
+/* error code for 'csL_loadfile' */
 #define CS_ERRFILE      (CS_ERRERROR + 1)
 
 
-/* 
-** Name of the field in global table where the 'lib' table is located.
-** All loaded libraries are set as fields of this table.
-*/
-#define CS_LOADED_TABLE     "Lib"
+/* key, in the registry, for table of loaded libraries/modules */
+#define CS_LOADED_TABLE     "__LOADED"
 
 
 /* buffer */

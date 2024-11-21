@@ -29,9 +29,9 @@ CSI_FUNC Instance *csMM_newinstance(cs_State *ts, OClass *cls);
 CSI_FUNC UserData *csMM_newuserdata(cs_State *ts, size_t size, int nuv);
 CSI_FUNC IMethod *csMM_newinsmethod(cs_State *ts, Instance *receiver,
 				    const TValue *method);
-CSI_FUNC void csMM_callhtm(cs_State *ts, const TValue *fn, const TValue *p1,
+CSI_FUNC void csMM_callset(cs_State *ts, const TValue *fn, const TValue *p1,
                            const TValue *p2, const TValue *p3);
-CSI_FUNC void csMM_callhtmres(cs_State *ts, const TValue *fn, const TValue *p1,
+CSI_FUNC void csMM_callgetres(cs_State *ts, const TValue *fn, const TValue *p1,
                               const TValue *p2, SPtr res);
 CSI_FUNC void csMM_callbinres(cs_State *ts, const TValue *fn, const TValue *v1,
                               const TValue *v2, SPtr res);
