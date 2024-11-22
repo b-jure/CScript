@@ -195,14 +195,14 @@ static void patchlistend(FunctionState *fs) {
 
 /* get local variable */
 static LVar *getlocalvar(FunctionState *fs, int idx) {
-    cs_assert(fs->firstlocal + idx < fs->lx->ps->lvars.len);
+    cs_assert(fs->firstlocal + idx < fs->lx->ps->actlocals.len);
     return &fs->lx->ps->actlocals.arr[fs->firstlocal + idx];
 }
 
 
 /* get local variable debug information */
 static LVarInfo *getlocalinfo(FunctionState *fs, int vidx) {
-    cs_assert(0 <= vidx && vidx <= fs->activelocals);
+    cs_assert(0 <= vidx && vidx <= fs->nactlocals);
     LVar *lv = getlocalvar(fs, vidx);
     return &fs->p->locals[lv->s.idx];
 }
@@ -307,12 +307,18 @@ static void adjustlocals(Lexer *lx, int nvars) {
 static void startscope(FunctionState *fs, Scope *s, int cfbits) {
     if (cfbits & (CFLOOP | CFSWITCH)) /* needs a patch list ? */
         patchliststart(fs); /* 'break' statement jumps storage */
+    if (fs->scope) {
+        s->nswscope = fs->scope->nswscope + scopeisswitch(fs->scope);
+        s->depth = fs->scope->depth + 1;
+        s->havetbcvar = fs->scope->havetbcvar;
+    } else {
+        s->nswscope = 0;
+        s->depth = 0;
+        s->havetbcvar = 0;
+    }
     s->activelocals = fs->nactlocals;
-    s->nswscope = fs->scope->nswscope + scopeisswitch(fs->scope);
-    s->depth = fs->scope->depth + 1;
     s->cfbits = cfbits;
     s->haveupval = 0;
-    s->havetbcvar = (fs->scope != NULL && fs->scope->havetbcvar);
     s->prev = fs->scope;
     fs->scope = s;
 }
@@ -323,7 +329,7 @@ static void endscope(FunctionState *fs) {
     Scope *s = fs->scope;
     int stklevel = getstacklevel(fs, s->activelocals);
     removelocals(fs, s->activelocals, scopeisswitch(s)); /* pop locals */
-    cs_assert(s->activelocals == fs->activelocals);
+    cs_assert(s->activelocals == fs->nactlocals);
     if (scopeisloop(s) || scopeisswitch(s)) /* have patch list? */
         patchlistend(fs);
     if (s->prev && s->haveupval) /* need to close upvalues? */
@@ -361,7 +367,8 @@ static void scopemarktbc(FunctionState *fs) {
 
 /* initialize function state */
 static void startfs(FunctionState *fs, Lexer *lx, Scope *s) {
-    cs_assert(fs->fn != NULL);
+    Proto *p = fs->p;
+    cs_assert(p != NULL);
     fs->prev = lx->fs;
     fs->lx = lx;
     lx->fs = fs;
@@ -379,8 +386,8 @@ static void startfs(FunctionState *fs, Lexer *lx, Scope *s) {
     fs->deadcode.pc = NOJMP;
     fs->patches.len = fs->patches.size = 0; fs->patches.list = NULL;
     fs->needclose = fs->lastwasret = 0;
-    fs->p->source = lx->src;
-    csG_objbarrier(lx->ts, fs->p, fs->p->source);
+    p->source = lx->src;
+    csG_objbarrier(lx->ts, p, p->source);
     fs->p->maxstack = 2; /* stacks slots 0/1 are always valid */
     startscope(fs, s, 0); /* start top-level scope */
 }
@@ -561,7 +568,7 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e) {
         uv->onstack = 1;
         uv->idx = e->u.info;
         uv->kind = getlocalvar(fs, e->u.info)->s.kind;
-        cs_assert(eqstr(name, getlocal(fs, e->u.info)->s.name));
+        cs_assert(eqstr(name, getlocalvar(fs, e->u.info)->s.name));
     } else { /* must be upvalue */
         cs_assert(e->et == EXP_UVAL);
         FunctionState *enclosing = fs->prev;
@@ -2303,7 +2310,7 @@ CSClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
                      ParserState *ps, const char *source) {
     Lexer lx;
     FunctionState fs;
-    CSClosure *cl = csF_newCrClosure(ts, 0);
+    CSClosure *cl = csF_newCSClosure(ts, 1);
     setclCSval2s(ts, ts->sp.p, cl); /* anchor main function closure */
     csT_incsp(ts);
     lx.tab = csH_new(ts);
@@ -2317,7 +2324,7 @@ CSClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
     lx.buff = buff;
     csY_setsource(ts, &lx, br, fs.p->source);
     mainfunc(&fs, &lx);
-    cs_assert(ps->lvars.len == 0); /* all scopes should be finished */
+    cs_assert(ps->actlocals.len == 0); /* all scopes should be finished */
     ts->sp.p--; /* remove scanner table */
     return cl;
 }

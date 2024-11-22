@@ -78,20 +78,21 @@ void *csM_malloc(cs_State *ts, size_t size) {
 
 
 void *csM_growarr(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
-                  int extra, int limit, const char *what) {
+                  int space, int limit, const char *what) {
     int size = *sizep;
-    if (len + extra <= size)
+    if (c_unlikely(size >= limit || len > len + space))
+        csD_runerror(ts, "too many %s (limit is %d)", what, limit);
+    else if (len + space <= size)
         return ptr;
-    size += extra;
-    if (size >= limit / 2) {
-        if (c_unlikely(size >= limit))
-            csD_runerror(ts, "%s size limit", what);
+    if (c_unlikely(size >= limit / 2)) {
         size = limit;
         cs_assert(size >= CSI_MINARRSIZE);
     } else {
         size *= 2;
         if (size < CSI_MINARRSIZE)
             size = CSI_MINARRSIZE;
+        if (size < len + space)
+            size = len + space;
     }
     ptr = csM_saferealloc(ts, ptr, *sizep * elemsize, size * elemsize);
     *sizep = size;

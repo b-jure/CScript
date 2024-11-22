@@ -24,11 +24,12 @@ void csR_init(cs_State *ts, BuffReader *br, cs_Reader freader, void *ud) {
 
 
 /* 
- * Invoke reader returning the first character or CREOF (-1).
- * 'crR' should set the 'size' to the amount of bytes
- * reader read and return the pointer to the start of that
- * buffer. 
- */
+** Invoke reader returning the first character or CSEOF (-1).
+** 'reader' function should set the 'size' to the amount of bytes reader
+** read and return the pointer to the start of that buffer. 
+** In case there is no more data to be read, 'reader' should set 'size'
+** to 0 or return NULL.
+*/
 int csR_fill(BuffReader *br) {
     cs_State *ts = br->ts;
     size_t size;
@@ -36,7 +37,7 @@ int csR_fill(BuffReader *br) {
     const char *buff = br->reader(ts, br->userdata, &size);
     cs_lock(ts);
     if (buff == NULL || size == 0)
-        return CREOF;
+        return CSEOF;
     br->buff = buff;
     br->n = size - 1;
     return *br->buff++;
@@ -44,13 +45,13 @@ int csR_fill(BuffReader *br) {
 
 
 /* 
- * Read 'n' bytes from 'BuffReader' returning
- * count of unread bytes or 0 if all bytes were read. 
- */
+** Read 'n' buffered bytes returning count of unread bytes or 0 if
+** all bytes were read. 
+*/
 size_t csR_readn(BuffReader *br, size_t n) {
     while (n) {
         if (br->n == 0) {
-            if (csR_fill(br) == CREOF)
+            if (csR_fill(br) == CSEOF)
                 return n;
             br->n++; /* 'csR_fill' decremented it */
             br->buff--; /* restore that character */

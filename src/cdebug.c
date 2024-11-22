@@ -22,6 +22,8 @@
 #include "cprotected.h"
 #include "cmeta.h"
 #include "cvm.h"
+#include "cgc.h"
+#include "ctrace.h"
 
 
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
@@ -35,7 +37,7 @@ int csD_getfuncline(const Proto *p, int pc) {
     int high = p->sizelinfo - 1;
     int mid = low + ((high - low)/2);
     li = &p->linfo[mid];
-    cs_assert(fn->sizelinfo > 0);
+    cs_assert(p->sizelinfo > 0);
     for (; low <= high; li = &p->linfo[mid]) {
         if (li->pc < pc) 
             low = mid + 1;
@@ -144,27 +146,27 @@ static void getfuncinfo(Closure *cl, cs_DebugInfo *di) {
         di->lastdefline = -1;
         di->what = "C";
     } else {
-        const Proto *fn = cl->cs.p;
-        if (fn->source) { /* have source? */
-          di->source = getstr(fn->source);
-          di->srclen = getstrlen(fn->source);
+        const Proto *p = cl->cs.p;
+        if (p->source) { /* have source? */
+          di->source = getstr(p->source);
+          di->srclen = getstrlen(p->source);
         }
         else {
           di->source = "?";
           di->srclen = SLL("?");
         }
-        di->defline = fn->defline;
-        di->lastdefline = fn->deflastline;
+        di->defline = p->defline;
+        di->lastdefline = p->deflastline;
         di->what = (di->lastdefline == 0) ? "main" : "CScript";
     }
     csS_sourceid(di->shortsrc, di->source, di->srclen);
 }
 
 
-static const char *funcnamefromcode(cs_State *ts, const Proto *fn, int pc,
+static const char *funcnamefromcode(cs_State *ts, const Proto *p, int pc,
                                     const char **name) {
     cs_MM mm;
-    Instruction *i = &fn->code[pc];
+    Instruction *i = &p->code[pc];
     switch (*i) {
         case OP_CALL: {
             /* TODO: call instruction holds the stack position to the start

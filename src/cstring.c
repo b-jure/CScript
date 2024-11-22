@@ -126,14 +126,13 @@ void csS_resize(cs_State *ts, int nsz) {
 void csS_init(cs_State *ts) {
     GState *gs = G_(ts);
     StringTable *tab = &gs->strtab;
-    /* first initialize string table */
+    /* first initialize string table... */
     tab->hash = csM_newarray(ts, MINSTRTABSIZE, OString*);
     rehashtable(tab->hash, 0, MINSTRTABSIZE); /* clear array */
     tab->size = MINSTRTABSIZE; tab->nuse = 0;
-    /* then we allocate the memory error msg */
+    /* ...then we allocate the memory error msg */
     gs->memerror = csS_newlit(ts, MEMERRMSG);
     csG_fix(ts, obj2gco(gs->memerror));
-    cs_assert(obj2gco(gs->memerror) == gs->fixed);
     /* fill cache with valid strings */
     for (int i = 0; i < STRCACHE_N; i++)
         for (int j = 0; j < STRCACHE_M; j++)
@@ -186,9 +185,9 @@ static OString *internshrstr(cs_State *ts, const char *str, size_t l) {
     StringTable *tab = &gs->strtab;
     uint h = csS_hash(str, l, gs->seed);
     OString **list = &tab->hash[hashmod(h, tab->size)];
-    cs_assert(s != NULL);
+    cs_assert(str != NULL); /* otherwise 'memcmp'/'memcpy' are undefined */
     for (s = *list; s != NULL; s = s->u.next) { /* probe chain */
-        if (s->shrlen == l && (memcmp(s, getstr(s), l*sizeof(char)) == 0)) {
+        if (s->shrlen == l && (memcmp(str, getstr(s), l*sizeof(char)) == 0)) {
             if (isdead(gs, s)) /* "dead"? */
                 changewhite(s); /* "ressurect" it */
             return s;
@@ -200,8 +199,8 @@ static OString *internshrstr(cs_State *ts, const char *str, size_t l) {
         list = &tab->hash[hashmod(h, tab->size)];
     }
     s = newstrobj(ts, l, CS_VSHRSTR, h);
-    memcpy(getshrstr(s), s, l*sizeof(char));
-    s->shrlen = (cs_ubyte)l;
+    memcpy(getshrstr(s), str, l*sizeof(char));
+    s->shrlen = cast_ubyte(l);
     s->u.next = *list;
     *list = s;
     tab->nuse++;
@@ -601,7 +600,7 @@ const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
             if (str == NULL) str = "(null)";
             buffaddstring(&buff, str, strlen(str));
             break;
-        }
+         }
         case 'p': { /* 'ptr' */
             buffaddptr(&buff, va_arg(argp, const void *));
             break;
@@ -619,9 +618,8 @@ const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
         fmt = end + 2; /* '%' + specifier */
     }
     buffaddstring(&buff, fmt, strlen(fmt));
-    printf("pushing buffer\n");
     pushbuff(&buff);
-    return cstrval(s2v(ts->sp.p));
+    return getstr(strval(s2v(ts->sp.p - 1)));
 }
 
 

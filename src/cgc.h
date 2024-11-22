@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRGC_H
-#define CRGC_H
+#ifndef CGC_H
+#define CGC_H
 
 
 #include "cbits.h"
@@ -81,10 +81,10 @@
 
 
 /*
- * Check if GC is in a state that holds the invariant
- * that white objects cannot point to black objects.
- * States that break this invariant are sweep states.
- */
+** Check if GC is in a state that holds the invariant
+** that white objects cannot point to black objects.
+** States that break this invariant are sweep states.
+*/
 #define invariantstate(gs)      ((gs)->gcstate <= GCSatomic)
 
 
@@ -121,8 +121,7 @@
 
 
 /* 'csG_condGC' but without 'pre' and 'pos' */
-#define csG_checkGC(ts) \
-    { printf("csG_checkGC <-> %s\n", __func__); csG_condGC(ts,(void)0,(void)0); }
+#define csG_checkGC(ts)         csG_condGC(ts,(void)0,(void)0)
 
 
 /* get total bytes allocated (by accounting for 'gcdebt') */

@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRMETA_H
-#define CRMETA_H
+#ifndef CMETA_H
+#define CMETA_H
 
 #include "csconf.h"
 #include "cscript.h"

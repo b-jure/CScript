@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CSLIB_H
-#define CSLIB_H
+#ifndef CLIB_H
+#define CLIB_H
 
 
 #include "cscript.h"

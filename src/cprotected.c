@@ -17,6 +17,8 @@
 #include "cfunction.h"
 #include "creader.h"
 #include "cstate.h"
+#include "cgc.h"
+#include "ctrace.h"
 
 
 /*

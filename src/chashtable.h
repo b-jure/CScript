@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef SKHASHTABLE_H
-#define SKHASHTABLE_H
+#ifndef CHASHTABLE_H
+#define CHASHTABLE_H
 
 
 #include "cobject.h"
@@ -37,6 +37,7 @@ CSI_FUNC void csH_copykeys(cs_State *ts, HTable *stab, HTable *dtab);
 CSI_FUNC void csH_resize(cs_State *ts, HTable *ht, uint newsize);
 CSI_FUNC void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
                          const TValue *val);
+CSI_FUNC const TValue *csH_getshortstr(HTable *ht, OString *key);
 CSI_FUNC const TValue *csH_getstr(HTable *ht, OString *key);
 CSI_FUNC const TValue *csH_getint(HTable *ht, cs_Integer key);
 CSI_FUNC const TValue *csH_get(HTable *tab, const TValue *key);

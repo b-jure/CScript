@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRJMPTABLE_H
-#define CRJMPTABLE_H
+#ifndef CJMPTABLE_H
+#define CJMPTABLE_H
 
 
 #undef vm_dispatch

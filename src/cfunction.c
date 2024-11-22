@@ -21,38 +21,37 @@
 
 
 Proto *csF_newproto(cs_State *ts) {
-    Proto *fn = csG_new(ts, sizeof(Proto), CS_VPROTO, Proto);
-    fn->isvararg = 0;
-    fn->gclist = NULL;
-    fn->source = NULL;
-    { fn->p = NULL; fn->sizep = 0; } /* function prototypes */
-    { fn->k = NULL; fn->sizek = 0; } /* constants */
-    { fn->code = NULL; fn->sizecode = 0; } /* code */
-    { fn->linfo = NULL; fn->sizelinfo = 0; } /* line information */
-    { fn->locals = NULL; fn->sizelocals = 0; } /* locals */
-    { fn->upvals = NULL; fn->sizeupvals = 0; } /* upvalues */
-    fn->maxstack = 0;
-    fn->arity = 0;
-    fn->defline = 0;
-    fn->deflastline = 0;
-    return fn;
+    Proto *p = csG_new(ts, sizeof(Proto), CS_VPROTO, Proto);
+    p->isvararg = 0;
+    p->gclist = NULL;
+    p->source = NULL;
+    { p->p = NULL; p->sizep = 0; } /* function prototypes */
+    { p->k = NULL; p->sizek = 0; } /* constants */
+    { p->code = NULL; p->sizecode = 0; } /* code */
+    { p->linfo = NULL; p->sizelinfo = 0; } /* line information */
+    { p->locals = NULL; p->sizelocals = 0; } /* locals */
+    { p->upvals = NULL; p->sizeupvals = 0; } /* upvalues */
+    p->maxstack = 0;
+    p->arity = 0;
+    p->defline = 0;
+    p->deflastline = 0;
+    return p;
 }
 
 
-CSClosure *csF_newCrClosure(cs_State *ts, int nup) {
-    CSClosure *crcl = csG_new(ts, sizeofCScl(nup), CS_VCSCL, CSClosure);
-    crcl->nupvalues = nup;
-    crcl->p = NULL;
-    for (int i = 0; i < nup; i++)
-        crcl->upvals[i] = NULL;
-    return crcl;
+CSClosure *csF_newCSClosure(cs_State *ts, int nup) {
+    CSClosure *cl = csG_new(ts, sizeofCScl(nup), CS_VCSCL, CSClosure);
+    cl->p = NULL;
+    cl->nupvalues = nup;
+    while (nup--) cl->upvals[nup] = NULL;
+    return cl;
 }
 
 
 CClosure *csF_newCClosure(cs_State *ts, int nupvalues) {
-    CClosure *ccl = csG_new(ts, sizeofCcl(nupvalues), CS_VCCL, CClosure);
-    ccl->nupvalues = nupvalues;
-    return ccl;
+    CClosure *cl = csG_new(ts, sizeofCcl(nupvalues), CS_VCCL, CClosure);
+    cl->nupvalues = nupvalues;
+    return cl;
 }
 
 

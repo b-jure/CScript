@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRPARSER_H
-#define CRPARSER_H
+#ifndef CPARSER_H
+#define CPARSER_H
 
 
 #include "cobject.h"

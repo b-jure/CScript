@@ -27,6 +27,7 @@
 #include "cvm.h"
 #include "cmeta.h"
 #include "cstring.h"
+#include "ctrace.h"
 
 
 /* by default, use jump table */
@@ -48,7 +49,7 @@ static int booleans[2] = { CS_VFALSE, CS_VTRUE };
 */
 static void pushclosure(cs_State *ts, Proto *p, UpVal **enc, SPtr base) {
     int nupvals = p->sizeupvals;
-    CSClosure *cl = csF_newCrClosure(ts, nupvals);
+    CSClosure *cl = csF_newCSClosure(ts, nupvals);
     cl->p = p;
     setclCSval2s(ts, ts->sp.p++, cl); /* anchor to stack */
     for (int i = 0; i < nupvals; i++) {
@@ -1061,7 +1062,7 @@ returning:
                 TValue *v1 = peek(1); /* class */
                 TValue *v2 = peek(0); /* method */
                 TValue *key = getlK();
-                cs_assert(ttisstr(key));
+                cs_assert(ttisstring(key));
                 Protect(csH_set(ts, classval(v2)->methods, key, v1));
                 vm_break;
             }
@@ -1452,7 +1453,7 @@ returning:
                 TValue *s = getlK();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cs_assert(ttisstr(s));
+                cs_assert(ttisstring(s));
                 Protect(csV_set(ts, v1, s, v2));
                 pop(2); /* v1,v2 */
                 vm_break;
@@ -1460,7 +1461,7 @@ returning:
             vm_case(OP_GETPROPERTY) { /* optimize ? */
                 TValue *s = getlK();
                 TValue *v = peek(0);
-                cs_assert(ttisstr(s));
+                cs_assert(ttisstring(s));
                 Protect(csV_get(ts, v, s, TOPS()));
                 vm_break;
             }
@@ -1482,7 +1483,7 @@ returning:
             vm_case(OP_GETINDEXSTR) { /* TODO: optimize */
                 TValue *s = getlK();
                 TValue *v = peek(0);
-                cs_assert(ttisstr(s));
+                cs_assert(ttisstring(s));
                 Protect(csV_get(ts, v, s, TOPS()));
                 vm_break;
             }
@@ -1490,7 +1491,7 @@ returning:
                 TValue *s = getlK();
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cs_assert(ttisstr(s));
+                cs_assert(ttisstring(s));
                 Protect(csV_set(ts, v1, s, v2));
                 vm_break;
             }

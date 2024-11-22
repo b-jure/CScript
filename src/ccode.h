@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRCODE_H
-#define CRCODE_H
+#ifndef CCODE_H
+#define CCODE_H
 
 
 #include "cparser.h"

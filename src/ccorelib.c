@@ -263,7 +263,7 @@ static int csCore_rawget(cs_State *ts) {
     csL_check_type(ts, 0, CS_TINSTANCE);
     csL_check_any(ts, 1); /* index */
     cs_setntop(ts, 2);
-    csL_get_property(ts, 0); /* this pops index */
+    cs_get_raw(ts, 0); /* this pops index */
     return 1; /* return property */
 }
 
@@ -273,7 +273,7 @@ static int csCore_rawset(cs_State *ts) {
     csL_check_any(ts, 1); /* index */
     csL_check_any(ts, 2); /* value */
     cs_setntop(ts, 3);
-    cs_set_field(ts, 1); /* this pops index and value */
+    cs_set_raw(ts, 1); /* this pops index and value */
     return 1; /* return instance */
 }
 

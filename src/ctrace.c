@@ -511,7 +511,7 @@ void csTR_dumpstack(cs_State *ts, const char *fmt, ...) {
     for (int i = 0; cf; i++) {
         printf("[%d] >> ", i);
         for (SPtr sp = cf->func.p; sp < prevtop; sp++)
-            printf("[%s]", typename(ttypetag(s2v(sp))));
+            printf("[%s]", typename(ttype(s2v(sp))));
         printf("\n");
         prevtop = cf->func.p;
         cf = cf->prev;

@@ -4,9 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRAUXLIB_H
-#define CRAUXLIB_H
-
+#ifndef CAUXLIB_H
+#define CAUXLIB_H
 
 #include <stdio.h>
 
@@ -36,7 +35,6 @@ CSLIB_API int csL_error(cs_State *ts, const char *fmt, ...);
 CSLIB_API int csL_arg_error(cs_State *ts, int argindex, const char *extra);
 CSLIB_API int csL_type_error(cs_State *ts, int argindex, const char *tname);
 
-
 /* ------------------------------------------------------------------------ 
 ** check functions
 ** ------------------------------------------------------------------------ */
@@ -52,7 +50,6 @@ CSLIB_API int           csL_check_option(cs_State *ts, int index,
                                          const char *dfl,
                                          const char *const opts[]);
 
-
 /* ------------------------------------------------------------------------ 
 ** optional argument functions
 ** ------------------------------------------------------------------------ */
@@ -61,7 +58,6 @@ CSLIB_API cs_Integer  csL_opt_integer(cs_State *ts, int index, cs_Integer dfl);
 CSLIB_API const char *csL_opt_lstring(cs_State *ts, int index, const char *dfl,
                                       size_t *plen);
 
-
 /* ------------------------------------------------------------------------ 
 ** loading functions
 ** ------------------------------------------------------------------------ */
@@ -69,7 +65,6 @@ CSLIB_API int csL_loadfile(cs_State *ts, const char *filename);
 CSLIB_API int csL_loadstring(cs_State *ts, const char *str);
 CSLIB_API int csL_loadbuffer(cs_State *ts, const char *buff, size_t sz,
                              const char *name);
-
 
 /* ------------------------------------------------------------------------ 
 ** miscellaneous functions
@@ -82,14 +77,13 @@ CSLIB_API void        csL_set_cindex(cs_State *ts, int arrobj, cs_Integer i);
 CSLIB_API cs_State   *csL_newstate(void);
 CSLIB_API int         csL_get_subtable(cs_State *ts, int insobj,
                                        const char *field);
-CSLIB_API void        csL_include(cs_State *ts, const char *lib,
+CSLIB_API void        csL_include(cs_State *ts, const char *modname,
                                   cs_CFunction openf, int global);
 CSLIB_API void       *csL_test_userdata(cs_State *ts, int index,
                                         const char *name);
 CSLIB_API void        csL_traceback(cs_State *ts, cs_State *at, int level,
                                     const char *msg);
 CSLIB_API void        csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup);
-
 
 /* ------------------------------------------------------------------------ 
 ** useful macros
@@ -107,6 +101,11 @@ CSLIB_API void        csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup);
 
 #define csL_push_fail(ts)               cs_push_nil(ts)
 
+#define csL_get_gsubtable(ts, name) \
+    { cs_push_globaltable(ts); \
+      csL_get_subtable(ts, -1, name); \
+      cs_remove(ts, -2); }
+
 
 
 /* internal assertions */
@@ -119,11 +118,9 @@ CSLIB_API void        csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup);
 #endif
 #endif
 
-
 /* ------------------------------------------------------------------------ 
 ** buffer manipulation
 ** ------------------------------------------------------------------------ */
-
 struct csL_Buffer {
     char *b;
     size_t n;
@@ -151,8 +148,7 @@ CSLIB_API char *csL_buff_ensure(csL_Buffer *B, size_t sz);
 CSLIB_API void  csL_buff_push_lstring(csL_Buffer *B, const char *s, size_t l);
 CSLIB_API void  csL_buff_push_string(csL_Buffer *B, const char *s);
 CSLIB_API void  csL_buff_push_value(csL_Buffer *B);
-CSLIB_API void csL_buff_end(csL_Buffer *B);
-
+CSLIB_API void  csL_buff_end(csL_Buffer *B);
 
 /* ------------------------------------------------------------------------ 
 ** basic message reporting

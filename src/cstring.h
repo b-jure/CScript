@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRSTRING_H
-#define CRSTRING_H
+#ifndef CSTRING_H
+#define CSTRING_H
 
 
 #include "cobject.h"
@@ -40,7 +40,7 @@
 
 
 /* equality for short strings, which are always internalized */
-#define eqshrstr(a,b)	check_exp((a)->tt == LUA_VSHRSTR, (a) == (b))
+#define eqshrstr(a,b)	check_exp((a)->tt_ == CS_VSHRSTR, (a) == (b))
 
 
 CSI_FUNC int csS_eqlngstr(const OString *s1, const OString *s2);

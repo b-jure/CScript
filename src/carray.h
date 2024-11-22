@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CSTARRAY_H
-#define CSTARRAY_H
+#ifndef CARRAY_H
+#define CARRAY_H
 
 #include "cobject.h"
 

@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CROBJECT_H
-#define CROBJECT_H
+#ifndef COBJECT_H
+#define COBJECT_H
 
 
 #include "cscript.h"
@@ -17,8 +17,8 @@
  * or as markers.
  */
 #define CS_TUPVALUE     CS_NUM_TYPES        /* upvalue */
-#define CS_TPROTO       (CS_NUM_TYPES + 1)  /* hashtable */
-#define CS_TDEADKEY     (CS_NUM_TYPES + 2)  /* mark for dead htable keys */
+#define CS_TPROTO       (CS_NUM_TYPES + 1)  /* function prototype */
+#define CS_TDEADKEY     (CS_NUM_TYPES + 2)  /* mark for dead hashtable keys */
 
 
 /* 
@@ -257,7 +257,7 @@ typedef struct GCObject {
 #define setuval(ts,obj,x) \
     { TValue *o_=(obj); const UserData *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUSERDATA)); \
-      checkliveness(ts,x_); }
+      checkliveness(ts,o_); }
 
 #define setuval2s(ts,o,uv)      setuval(ts, s2v(o), uv)
 
@@ -436,7 +436,7 @@ typedef struct HTable {
 
 #define keyiscollectable(n)     (keytt(n) & BIT_COLLECTABLE)
 #define keyisnil(n)	        (keytt(n) == CS_TNIL)
-#define keyisshrstr(n)          (keytt(n) == CS_VSHRSTR)
+#define keyisshrstr(n)          (keytt(n) == ctb(CS_VSHRSTR))
 #define keyisint(n)             (keytt(n) == CS_VNUMINT)
 
 #define setnilkey(n)            (keytt(n) = CS_TNIL)
@@ -488,9 +488,6 @@ typedef struct Array {
 #define ttisstring(o)       checktype((o), CS_TSTRING)
 #define ttisshrstring(o)    checktag((o), ctb(CS_VSHRSTR))
 #define ttislngstring(o)    checktag((o), ctb(CS_VLNGSTR))
-
-/* get string contents from 'TValue' */
-#define cstrval(o)      (strval(o)->bytes)
 
 #define strval(o)       check_exp(ttisstring(o), gco2str(val(o).gc))
 

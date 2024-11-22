@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRBITS_H
-#define CRBITS_H
+#ifndef CBITS_H
+#define CBITS_H
 
 
 /* raise 2 to the power of 'x' */

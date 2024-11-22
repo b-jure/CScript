@@ -195,8 +195,6 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 };
 
 
-#define MAXLINES    INT_MAX
-
 /*
  * Add line and pc information, skip adding 'LineInfo' if previous
  * entry contained the same line.
@@ -204,7 +202,7 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 static void addlineinfo(FunctionState *fs, Proto *f, int line) {
     int len = fs->nlinfo;
     if (len <= 0 || f->linfo[len - 1].line < line) {
-        csM_growvec(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, MAXLINES,
+        csM_growvec(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, INT_MAX,
                     "lines", LineInfo);
         f->linfo[len].pc = fs->pc - 1;
         f->linfo[fs->nlinfo++].line = line;
@@ -215,7 +213,7 @@ static void addlineinfo(FunctionState *fs, Proto *f, int line) {
 /* emit instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
     Proto *p = fs->p;
-    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, CODEMAX, "code",
+    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, INT_MAX, "code",
                 Instruction);
     p->code[fs->pc++] = i;
     addlineinfo(fs, p, fs->lx->line);
@@ -226,7 +224,7 @@ int csC_emitI(FunctionState *fs, Instruction i) {
 /* emit short arg */
 static int emitS(FunctionState *fs, int arg) {
     Proto *p = fs->p;
-    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, CODEMAX, "code",
+    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, INT_MAX, "code",
                 Instruction);
     p->code[fs->pc++] = cast_ubyte(arg & 0xff);
     return fs->pc - 1;
@@ -255,8 +253,8 @@ static int emitL(FunctionState *fs, int idx) {
 
 /* emit instruction 'i' with long arg 'a' */
 int csC_emitIL(FunctionState *fs, Instruction i, int a) {
-    cs_assert(a <= LARGMAX);
     int offset = csC_emitI(fs, i);
+    cs_assert(a <= LARGMAX);
     emitL(fs, a);
     return offset;
 }
@@ -629,7 +627,7 @@ void csC_setarray(FunctionState *fs, int nelems, int tostore) {
 void csC_settablesize(FunctionState *fs, int pc, int hsize) {
     Instruction *i = &fs->p->code[pc];
     hsize = (hsize != 0 ? csO_ceillog2(hsize) + 1 : 0);
-    cs_assert(sz <= SARGMAX);
+    cs_assert(hsize <= SARGMAX);
     SETARG_S(i, 0, hsize);
 }
 

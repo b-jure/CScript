@@ -8,6 +8,8 @@
 #define CS_CORE
 
 
+#include <stdio.h>
+
 #include "carray.h"
 #include "cdebug.h"
 #include "cfunction.h"
@@ -28,8 +30,7 @@
 #include "cvm.h"
 #include "stdarg.h"
 #include "capi.h"
-
-#include <stdio.h>
+#include "ctrace.h"
 
 
 /* test for pseudo index */
@@ -49,13 +50,15 @@
 */
 static TValue *index2value(const cs_State *ts, int index) {
     CallFrame *cf = ts->cf;
-    if (index >= 0) {
-        api_check(ts, index < (ts->sp.p - cf->func.p - 1), "index too large");
-        return s2v(cf->func.p + index + 1);
+    if (index >= 0) { /* absolute index? */
+        SPtr o = cf->func.p + index + 1;
+        api_check(ts, index < ts->sp.p - (cf->func.p + 1), "index too large");
+        if (o >= ts->sp.p) return &G_(ts)->nil;
+        else return s2v(o);
     } else if (!ispseudo(index)) { /* negative index? */
         api_check(ts, -index <= ts->sp.p - cf->func.p, "index too small");
         return s2v(ts->sp.p + index);
-    } else if (index == CS_REGISTRYINDEX) { /* registry? */
+    } else if (index == CS_REGISTRYINDEX) {
         return &G_(ts)->c_registry;
     } else { /* upvalues */
         index = CS_REGISTRYINDEX - index;
@@ -98,34 +101,6 @@ CS_API cs_CFunction cs_atpanic(cs_State *ts, cs_CFunction fpanic) {
 CS_API cs_Number cs_version(cs_State *ts) {
     UNUSED(ts);
     return CS_VERSION_NUMBER;
-}
-
-
-CS_API void cs_test_hashtable(cs_State *ts) {
-    const char *teststr[] = { "VAL-0", NULL };
-    G_(ts)->gcstop = GCSTP; /* stop for testing */
-    HTable *ht = csH_new(ts);
-    OString *s;
-    int i;
-    for (i = 0; teststr[i]; i++) {
-        TValue key, val;
-        s = csS_new(ts, teststr[i]);
-        setstrval(ts, &key, s);
-        setstrval(ts, &val, s);
-        csH_set(ts,  ht, &key, &val);
-        printf("KEY: \"%s\", VAL: \"%s\")\n", cstrval(&key), cstrval(&val));
-    }
-    for (i = 0; teststr[i]; i++) {
-        const TValue *res;
-        s = csS_new(ts, teststr[i]);
-        res = csH_getstr(ht, s);
-        printf("csH_getstr(ht, \"%s\") => ", getstr(s)); fflush(stdout);
-        fflush(stdout);
-        cs_assert(!isabstkey(res));
-        printf("\"%s\"\n", cstrval(res));
-        fflush(stdout);
-    }
-    cs_assert(0);
 }
 
 
@@ -764,7 +739,7 @@ CS_API void cs_push_instance(cs_State *ts, int clsobj) {
     SPtr func;
     cs_lock(ts);
     o = index2value(ts, clsobj);
-    api_check(ts, ttiscls(o), "expect class");
+    api_check(ts, ttisclass(o), "expect class");
     func = ts->sp.p;
     setclsval2s(ts, func, classval(o));
     api_inctop(ts);
@@ -838,7 +813,7 @@ CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobjabs,
     api_inctop(ts);
     if (clsobjabs >= 0) { /* have superclass? */
         const TValue *osup = index2value(ts, clsobjabs);
-        api_check(ts, ttiscls(osup), "expect class");
+        api_check(ts, ttisclass(osup), "expect class");
         if (classval(osup)->methods) { /* have methods? */
             cls->methods = csH_new(ts);
             csH_copykeys(ts, classval(osup)->methods, cls->methods);
@@ -1043,7 +1018,7 @@ CS_API int cs_get_method(cs_State *ts, int insobj) {
     ins = getinstance(ts, insobj);
     if (ins->oclass->methods) { /* have methods ? */
         const TValue *slot = csH_get(ins->oclass->methods, s2v(ts->sp.p - 1));
-        if (!isabstkey(slot)) { /* found? */
+        if (!isempty(slot)) { /* found? */
             IMethod *im = csMM_newinsmethod(ts, ins, slot);
             setimval2s(ts, ts->sp.p - 1, im);
             goto unlock; /* done */

@@ -10,7 +10,6 @@
 
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
 
 #include "cstring.h"
 #include "chashtable.h"
@@ -232,6 +231,8 @@ static void insertfrom(cs_State *ts, HTable *src, HTable *dest) {
 /* resize hashtable to new size */
 void csH_resize(cs_State *ts, HTable *ht, uint newsize) {
     HTable newht;
+    if (c_unlikely(newsize < MINHSIZE))
+        newsize = MINHSIZE;
     newhasharray(ts, &newht, newsize);
     exchangehashes(ht, &newht);
     insertfrom(ts, &newht, ht);
@@ -278,8 +279,6 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
         Node *f = getfreepos(ht); /* get next free position */
         if (f == NULL) { /* no free position ? */
             rehash(ts, ht); /* grow table */
-            printf("[recursive set]"); fflush(stdout);
-            fflush(stdout);
             csH_set(ts, ht, key, val); /* insert key */
             return; /* done, key must be a new key */
         }
@@ -305,8 +304,6 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
             mp = f;
         }
     }
-    printf("+++>>>[setting at slot %p]\n", (void*)mp);
-    fflush(stdout);
     setnodekey(ts, mp, key); /* set key */
     csG_barrierback(ts, obj2gco(ht), key); /* set 'ht' as gray */
     cs_assert(isempty(nodeval(mp))); /* value slot must be empty */
@@ -316,23 +313,20 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
 
 /* 
 ** Raw equality without calling vmt methods.
-** 'deadok' means that 'dead' keys - the keys that are white and
-** part of weak table (table with weak references) - are allowed
-** to be compared with the key 'k', meaning even if 'k' and node
-** 'n' key have different variant types they still can be equal
-** if node key is dead key (collectable object marked as dead)
-** and key 'k' is also a collectable object.
-** In that case they would get compared by pointer identity.
-** 'csH_next' function calls this with 'deadok' set in order  to
-** traverse the table and find all the valid values inside the table,
-** because dead key nodes still have valid 'next' field.
-**
+** 'deadok' means that 'dead' keys  are allowed to be compared with the
+** key 'k', meaning even if 'k' and node 'n' key have different variant types they still can be equal
+** if node key is dead key (collectable object marked as dead) and key 'k'
+** is also a collectable object. In that case they would get compared by
+** pointer identity. 'csH_next' function calls this with 'deadok' set in
+** order  to traverse the table and find all the valid values inside the
+** table, because dead key nodes still have valid 'next' field.
 ** Note: as of current version CScript does not expose or implement
-** weak tables in its API, therefore 'deadok' is unused.
+** weak tables in its API.
 */
 static int eqkey(const TValue *k, const Node *n, int deadok) {
     UNUSED(deadok);
-    if (rawtt(k) != keytt(n)) /* not the same variant? */
+    if ((rawtt(k) != keytt(n)) && /* not the same variant? */
+            !(deadok && keyisdead(n) && iscollectable(k)))
         return 0;
     switch (ttypetag(k)) {
         case CS_VNIL: case CS_VTRUE: case CS_VFALSE:
@@ -415,7 +409,7 @@ void csH_copykeys(cs_State *ts, HTable *stab, HTable *dtab) {
 }
 
 
-const TValue *csH_getstr(HTable *ht, OString *key) {
+const TValue *csH_getshortstr(HTable *ht, OString *key) {
     Node *n = hashstr(ht, key);
     for (;;) {
         if (keyisshrstr(n) && eqshrstr(key, keystrval(n))) {
@@ -426,6 +420,17 @@ const TValue *csH_getstr(HTable *ht, OString *key) {
                 return &absentkey;
             n += next;
         }
+    }
+}
+
+
+const TValue *csH_getstr(HTable *ht, OString *key) {
+    if (key->tt_ == CS_VSHRSTR) {
+        return csH_getshortstr(ht, key);
+    } else {
+        TValue k;
+        setstrval(cast(cs_State *, NULL), &k, key);
+        return getgeneric(ht, &k, 0);
     }
 }
 

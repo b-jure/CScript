@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRLEXER_H
-#define CRLEXER_H
+#ifndef CLEXER_H
+#define CLEXER_H
 
 #include "creader.h"
 #include "cobject.h"

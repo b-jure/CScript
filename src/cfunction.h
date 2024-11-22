@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRFUNCTION_H
-#define CRFUNCTION_H
+#ifndef CFUNCTION_H
+#define CFUNCTION_H
 
 #include "ccode.h"
 #include "cobject.h"
@@ -45,7 +45,7 @@
 
 
 CSI_FUNC Proto *csF_newproto(cs_State *ts);
-CSI_FUNC CSClosure *csF_newCrClosure(cs_State *ts, int nup);
+CSI_FUNC CSClosure *csF_newCSClosure(cs_State *ts, int nup);
 CSI_FUNC CClosure *csF_newCClosure(cs_State *ts, int nup);
 CSI_FUNC void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
                                 const Proto *fn);

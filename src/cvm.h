@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRVM_H
-#define CRVM_H
+#ifndef CVM_H
+#define CVM_H
 
 #include "cobject.h"
 #include "cstate.h"

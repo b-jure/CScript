@@ -21,6 +21,7 @@
 #include "cprotected.h"
 #include "cscript.h"
 #include "cstring.h"
+#include "ctrace.h"
 
 
 /*
@@ -108,10 +109,10 @@ static void init_registry(cs_State *ts, GState *gs) {
 
 
 /*
-** Initialize parts of state that may cause memory
-** allocation errors.
+** Initializes parts of state that may cause memory allocation
+** errors.
 */
-static void fnewstate(cs_State *ts, void *ud) {
+static void f_newstate(cs_State *ts, void *ud) {
     GState *gs = G_(ts);
     UNUSED(ud);
     init_stack(ts, ts);
@@ -186,10 +187,12 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     ts->next = NULL;
     gs->objects = obj2gco(ts);
     gs->totalbytes = gs->gcestimate = sizeof(XSG);
+    gs->strtab.hash = NULL;
+    gs->strtab.nuse = gs->strtab.size = 0;
     gs->gcdebt = 0;
     gs->gcstate = GCSpause;
     gs->gcstopem = 0;
-    gs->gcstop = GCSTP; /* stop while initializing */
+    gs->gcstop = GCSTP; /* no GC while creating state */
     gs->gcemergency = 0;
     setgcparam(gs->gcpause, CSI_GCPAUSE);
     setgcparam(gs->gcstepmul, CSI_GCSTEPMUL);
@@ -207,7 +210,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     gs->fwarn = NULL; gs->ud_warn = NULL;
     gs->seed = csi_makeseed(ts); /* initial seed for hashing */
     for (int i = 0; i < CS_NUM_TYPES; i++) gs->vmt[i] = NULL;
-    if (csPR_rawcall(ts, fnewstate, NULL) != CS_OK) {
+    if (csPR_rawcall(ts, f_newstate, NULL) != CS_OK) {
         freestate(ts);
         ts = NULL;
     }

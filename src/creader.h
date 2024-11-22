@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CRREADER_H
-#define CRREADER_H
+#ifndef CREADER_H
+#define CREADER_H
 
 
 #include "cscript.h"

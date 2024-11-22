@@ -5,8 +5,8 @@
 */
 
 
-#ifndef CRCONFIG_H
-#define CRCONFIG_H
+#ifndef CCONFIG_H
+#define CCONFIG_H
 
 #include <limits.h>
 #include <stdint.h>
