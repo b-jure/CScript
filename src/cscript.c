@@ -372,7 +372,7 @@ static void runREPL(cs_State *ts) {
 
 /* create global array 'arg' that holds command line arguments */
 static void createargarray(cs_State *ts, char **argv, int argc) {
-    cs_push_array(ts);
+    cs_push_array(ts, argc);
     for (int i = 0; i < argc; i++) {
         cs_push_string(ts, argv[i]);
         cs_set_index(ts, -2, i);
@@ -445,5 +445,5 @@ int main(int argc, char* argv[]) {
 }
 
 /* -----------------------------------------------------------------------
-** END }
+** }
 ** ----------------------------------------------------------------------- */
