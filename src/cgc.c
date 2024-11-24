@@ -43,18 +43,17 @@
 #define keyiswhite(n)		(keyiscollectable(n) && iswhite(keygcoval(n)))
 
 
+/* 'markobject_' but only if object is white */
+#define markobject(gs,o) \
+        (iswhite(o) ? markobject_(gs, obj2gco(o)) : (void)0)
+
+/* 'markobject' but only if 'o' is non-NULL */
+#define markobjectN(gs,o) \
+        ((o) ? markobject(gs, o) : (void)0)
 
 /* 'markobject_' but only if 'v' is object and white */
 #define markvalue(gs,v) \
         (valiswhite(v) ? markobject_(gs, gcoval(v)) : (void)0)
-
-/* 'markobject_' but only if 'o' is non-NULL */
-#define markobjectcheck(gs,o)	((o) ? markobject_(gs, obj2gco(o)) : (void)0)
-
-
-/* 'markobject_' but only if object is white */
-#define markobject(gs,o) \
-        (iswhite(o) ? markobject_(gs, obj2gco(o)) : (void)0)
 
 /* 'markobject' but only if key value is object and white */
 #define markkey(gs, n) \
@@ -242,8 +241,8 @@ static void markobject_(GState *gs, GCObject *o) {
         case CS_VINSTANCE: {
             Instance *ins = gco2ins(o);
             markblack(ins);
-            markobjectcheck(gs, ins->oclass);
-            markobjectcheck(gs, ins->fields);
+            markobjectN(gs, ins->oclass);
+            markobjectN(gs, ins->fields);
             break;
         }
         case CS_VARRAY: {
@@ -314,15 +313,15 @@ static cs_umem markhtable(GState *gs, HTable *ht) {
 /* mark 'Function' */
 static cs_umem markfunction(GState *gs, Proto *p) {
     int i;
-    markobjectcheck(gs, p->source);
+    markobjectN(gs, p->source);
     for (i = 0; i < p->sizep; i++)
         markobject(gs, p->p[i]);
     for (i = 0; i < p->sizek; i++)
         markvalue(gs, &p->k[i]);
     for (i = 0; i < p->sizelocals; i++)
-        markobjectcheck(gs, p->locals[i].name);
+        markobjectN(gs, p->locals[i].name);
     for (i = 0; i < p->sizeupvals; i++)
-        markobjectcheck(gs, p->upvals[i].name);
+        markobjectN(gs, p->upvals[i].name);
     /* p + prototypes + constants + locals + upvalues */
     return 1 + p->sizep + p->sizek + p->sizelocals + p->sizeupvals;
 }
@@ -340,10 +339,10 @@ static cs_umem markcclosure(GState *gs, CClosure *cl) {
 
 /* mark CScript closure */
 static cs_umem markcstclosure(GState *gs, CSClosure *cl) {
-    markobjectcheck(gs, cl->p);
+    markobjectN(gs, cl->p);
     for (int i = 0; i < cl->nupvalues; i++) {
         UpVal *uv = cl->upvals[i];
-        markobjectcheck(gs, uv);
+        markobjectN(gs, uv);
     }
     return 1 + cl->nupvalues; /* closure + upvalues */
 }
@@ -351,7 +350,7 @@ static cs_umem markcstclosure(GState *gs, CSClosure *cl) {
 
 /* mark 'OClass' */
 static cs_umem markclass(GState *gs, OClass *cls) {
-    markobjectcheck(gs, cls->methods);
+    markobjectN(gs, cls->methods);
     return 1 + (cls->vmt ? markvmt(gs, cls->vmt) : 0); /* class + VMT */
 }
 
@@ -360,7 +359,7 @@ static cs_umem markclass(GState *gs, OClass *cls) {
 static cs_umem markuserdata(GState *gs, UserData *ud) {
     /* no need to mark VMT, all functions in there are light C functions */
     for (int i = 0; i < ud->nuv; i++)
-        markobjectcheck(gs, &ud->uv[i]);
+        markvalue(gs, &ud->uv[i].val);
     return 1 + ud->nuv; /* user values + userdata */
 }
 

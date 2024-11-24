@@ -28,25 +28,24 @@
 
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
-
+#include <stdio.h>
 
 /* get line number of instruction ('pc') */
 int csD_getfuncline(const Proto *p, int pc) {
-    LineInfo *li;
     int low = 0;
     int high = p->sizelinfo - 1;
-    int mid = low + ((high - low)/2);
-    li = &p->linfo[mid];
-    cs_assert(p->sizelinfo > 0);
-    for (; low <= high; li = &p->linfo[mid]) {
-        if (li->pc < pc) 
-            low = mid + 1;
-        else if (li->pc > pc) 
+    LineInfo *li;
+    while (low <= high) {
+        int mid = low + ((high - low)/2);
+        li = &p->linfo[mid];
+        if (pc < li->pc)
             high = mid - 1;
-        else 
+        else if (li->pc < pc)
+            low = mid + 1;
+        else /* otherwise direct hit */
             break;
-        mid = low + ((high - low)/2);
     }
+    cs_assert(pc <= li->pc);
     return li->line;
 }
 

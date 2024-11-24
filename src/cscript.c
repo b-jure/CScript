@@ -145,7 +145,7 @@ static int errfunc(cs_State *ts) {
 }
 
 
-static int execs_cript(cs_State *ts, int nargs, int nres) {
+static int exec_cscript(cs_State *ts, int nargs, int nres) {
     int status;
     int base = cs_gettop(ts) - nargs; /* function index */
     cs_assert(base >= 0);
@@ -159,7 +159,7 @@ static int execs_cript(cs_State *ts, int nargs, int nres) {
 
 static int runchunk(cs_State *ts, int status) {
     if (status == CS_OK)
-        execs_cript(ts, 0, 0);
+        exec_cscript(ts, 0, 0);
     return report(ts, status);
 }
 
@@ -226,7 +226,7 @@ static int runscript(cs_State *ts, char **argv) {
     status = csL_loadfile(ts, filename);
     if (status == CS_OK) {
         int nargs = pushargs(ts);
-        status = execs_cript(ts, nargs, CS_MULRET);
+        status = exec_cscript(ts, nargs, CS_MULRET);
     }
     return report(ts, status);
 }
@@ -255,7 +255,7 @@ static inline const char *getprompt(int firstline) {
 
 static int addreturn(cs_State *ts) {
     const char *line = cs_to_string(ts, -1);
-    const char *retline = cs_push_fstring(ts, "return %s;", line);
+    const char *retline = cs_push_fstring(ts, "return %s", line);
     int status = csL_loadbuffer(ts, retline, strlen(retline), "stdin");
     /* stack: [line][retline][result] */
     if (status == CS_OK)
@@ -322,8 +322,10 @@ static int loadline(cs_State *ts) {
     cs_setntop(ts, 0); /* remove all values */
     if (!pushline(ts, 1))
         return -1;
-    if ((status = addreturn(ts)) != CS_OK)
+    if ((status = addreturn(ts)) != CS_OK) {
+        printf("status not CS_OK! Trying multiline!\n");
         status = multiline(ts);
+    }
     cs_remove(ts, 0); /* remove line */
     cs_assert(cs_gettop(ts) == 0); /* 'csL_loadbuffer' result on top */
     return status;
@@ -349,7 +351,7 @@ static void runREPL(cs_State *ts) {
     progname = NULL;
     while ((status = loadline(ts)) != -1) { /* while no empty EOF line */
         if (status == CS_OK) /* line loaded with no errors? */
-            status = execs_cript(ts, 0, CS_MULRET);
+            status = exec_cscript(ts, 0, CS_MULRET);
         if (status == CS_OK) /* script returned without errors? */
             printresults(ts);
         else
@@ -399,7 +401,6 @@ static int pmain(cs_State *ts) {
         printusage(NULL);
     if (args & arg_v)
         printversion();
-    csTR_dumpstack(ts, "before standard libraries are open");
     csL_open_libs(ts); /* open standard libraries */
     createargarray(ts, argv, argc); /* create 'arg' array */
     cs_gc(ts, CS_GCRESTART);

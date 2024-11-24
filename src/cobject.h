@@ -28,11 +28,11 @@
 
 
 /*
- * Tagged value types.
- * Bits 0-3 are for value types (CS_T*).
- * Bits 4-6 are for variant types (CS_V*).
- * Bit 7 for collectable object tag.
- */
+** Tagged value types.
+** Bits 0-3 are for value types (CS_T*).
+** Bits 4-6 are for variant types (CS_V*).
+** Bit 7 for collectable object tag.
+*/
 
 /* set variant bytes for type 't' */
 #define makevariant(t, v)       ((t) | ((v) << 4))

@@ -71,9 +71,9 @@ static void pushclass(cs_State *ts) {
 
 
 /*
- * Integer division; handles division by 0 and possible
- * overflow if 'y' == '-1' and 'x' == CS_INTEGER_MIN.
- */
+** Integer division; handles division by 0 and possible
+** overflow if 'y' == '-1' and 'x' == CS_INTEGER_MIN.
+*/
 cs_Integer csV_div(cs_State *ts, cs_Integer x, cs_Integer y) {
     if (c_unlikely(csi_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
@@ -85,9 +85,9 @@ cs_Integer csV_div(cs_State *ts, cs_Integer x, cs_Integer y) {
 
 
 /*
- * Integer modulus; handles modulo by 0 and overflow
- * as explained in 'csV_div()'.
- */
+** Integer modulus; handles modulo by 0 and overflow
+** as explained in 'csV_div()'.
+*/
 cs_Integer csV_modint(cs_State *ts, cs_Integer x, cs_Integer y) {
     cs_Integer r;
     if (c_unlikely(csi_castS2U(y) + 1 <= 1)) {
@@ -109,9 +109,9 @@ cs_Number csV_modnum(cs_State *ts, cs_Number x, cs_Number y) {
 
 
 /*
- * Perform binary arithmetic operations on objects, this function is free
- * to call overloaded methods in cases where raw arithmetics are not possible.
- */
+** Perform binary arithmetic operations on objects, this function is free
+** to call overloaded methods in cases where raw arithmetics are not possible.
+*/
 void csV_binarithm(cs_State *ts, const TValue *v1, const TValue *v2, SPtr res,
                    int op) {
     if (!csO_arithmraw(ts, v1, v2, s2v(res), op))
@@ -120,9 +120,9 @@ void csV_binarithm(cs_State *ts, const TValue *v1, const TValue *v2, SPtr res,
 
 
 /*
- * Perform unary arithmetic operations on objects, this function is free
- * to call overloaded methods in cases where raw arithmetics are not possible.
- */
+** Perform unary arithmetic operations on objects, this function is free
+** to call overloaded methods in cases where raw arithmetics are not possible.
+*/
 void csV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
     TValue aux;
     setival(&aux, 0);
@@ -141,11 +141,11 @@ static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
 
 
 /*
- * According to C99 6.3.1.8 page 45:
- * "...if the corresponding real type of either operand is double, the other
- * operand is converted, without change of type domain, to a type whose
- * corresponding real type is double."
- */
+** According to C99 6.3.1.8 page 45:
+** "...if the corresponding real type of either operand is double, the other
+** operand is converted, without change of type domain, to a type whose
+** corresponding real type is double."
+*/
 cs_sinline int intlenum(cs_State *ts, const TValue *v1, const TValue *v2) {
     UNUSED(ts);
     return csi_numle(cast_num(ival(v1)), fval(v2));
@@ -672,9 +672,9 @@ void csV_concat(cs_State *ts, int total) {
 }
 
 
-/* ------------------------------------------------------------------------
-** Macros for arithmetic/bitwise/comparison instructions on integers.
-**------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** Macros for arithmetic/bitwise/comparison operations on numbers.
+**------------------------------------------------------------------------ */
 
 /* 'cs_Integer' arithmetic operations */
 #define iadd(ts,a,b)    (csi_intop(+, a, b))
@@ -880,9 +880,9 @@ void csV_concat(cs_State *ts, int total) {
     setorderres(v, cond, 1); }
 
 
-/* ------------------------------------------------------------------------
+/* -----------------------------------------------------------------------
  * Interpreter loop
- * ------------------------------------------------------------------------ */
+ * ----------------------------------------------------------------------- */
 
 #define updatebase(cf)      (base = (cf)->func.p + 1)
 

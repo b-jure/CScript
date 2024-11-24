@@ -13,7 +13,6 @@
 #include "cvm.h"
 
 
-/* https://www.lua.org/source/5.4/lobject.c.html (~ line 35) */
 int csO_ceillog2 (uint x) {
     static const cs_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
         0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,

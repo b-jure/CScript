@@ -290,9 +290,9 @@ void csS_sourceid(char *restrict dest, const char *src, size_t len) {
 }
 
 
-/* -------------------------------------------------------------------------
- * String conversion
- * ------------------------------------------------------------------------- */
+/* -----------------------------------------------------------------------
+** String conversion
+** ----------------------------------------------------------------------- */
 
 /* maximum value for last integer digit */
 #define MAXINTLASTDIG		(CS_INTEGER_MAX % 10)
@@ -443,12 +443,12 @@ size_t csS_tonum(const char *s, TValue *o, int *of) {
 
 
 /*
- * Maximum conversion length of a number to a string.
- * 'long double' (not supported currently) can be 33 digits
- * + sign + decimal point + exponent sign + 5 exponent digits
- * + null terminator (43 total).
- * All other types require less space.
- */
+** Maximum conversion length of a number to a string.
+** 'long double' (not supported currently) can be 33 digits
+** + sign + decimal point + exponent sign + 5 exponent digits
+** + null terminator (43 total).
+** All other types require less space.
+*/
 #define MAXNUM2STR	44
 
 static int num2buff(const TValue *nv, char *buff) {
@@ -477,20 +477,38 @@ const char *csS_numtostr(const TValue *v, size_t *plen) {
 }
 
 
+int csS_utf8esc(char *buff, ulong n) {
+    int x = 1; /* number of bytes put in buffer (backwards) */
+    cs_assert(n <= 0x7FFFFFFFu);
+    if (n < 0x80) /* ascii? */
+        buff[UTF8BUFFSZ - 1] = cast_char(n);
+    else { /* need continuation bytes */
+        uint mfb = 0x3f; /* maximum that fits in first byte */
+        do { /* add continuation bytes */
+            buff[UTF8BUFFSZ - (x++)] = cast_char(0x80 | (n & 0x3f));
+            n >>= 6; /* remove added bits */
+            mfb >>= 1; /* now there is one less bit available in first byte */
+        } while (n > mfb); /* still needs continuation byte? */
+        buff[UTF8BUFFSZ - x] = cast_char((~mfb << 1) | n); /* add first byte */
+    }
+    return x;
+}
 
-/* --------------------------------------------------------------------------
- * String format
- * -------------------------------------------------------------------------- */
+
+
+/* ------------------------------------------------------------------------
+** String format
+** ------------------------------------------------------------------------ */
 
 /*
- * Initial size of buffer used in 'csS_newvstringf'
- * to prevent allocations, instead the function
- * will directly work on the buffer and will push
- * strings on stack in case buffer exceeds this limit.
- * This is all done because 'csS_newvstringf' often
- * gets called by 'csD_getinfo'; the size should be
- * at least 'CS_MAXSRC' + 'MAXNUM2STR' + size for message.
- */
+** Initial size of buffer used in 'csS_newvstringf'
+** to prevent allocations, instead the function
+** will directly work on the buffer and will push
+** strings on stack in case buffer exceeds this limit.
+** This is all done because 'csS_newvstringf' often
+** gets called by 'csD_getinfo'; the size should be
+** at least 'CS_MAXSRC' + 'MAXNUM2STR' + size for message.
+*/
 #define BUFFVFSSIZ	(CSI_MAXSRC + MAXNUM2STR + 100)
 
 /* buffer for 'csS_newvstringf' */
@@ -509,9 +527,9 @@ static void initvfs(cs_State *ts, BuffVFS *vfs) {
 
 
 /*
- * Pushes 'str' to the stack and concatenates it with
- * other string on the stack if 'pushed' is set.
- */
+** Pushes 'str' to the stack and concatenates it with
+** other string on the stack if 'pushed' is set.
+*/
 static void pushstr(BuffVFS *buff, const char *str, size_t len) {
     cs_State *ts = buff->ts;
     OString *s = csS_newl(ts, str, len);

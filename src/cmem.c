@@ -12,6 +12,7 @@
 #include "cdebug.h"
 #include "cmem.h"
 #include "cstate.h"
+#include "cprotected.h"
 
 
 #define csM_rawmalloc(gs,s)         (gs)->falloc(NULL, 0, s, (gs)->ud_alloc)
@@ -55,7 +56,7 @@ void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
 void *csM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     void *block = csM_realloc_(ts, ptr, osz, nsz);
     if (c_unlikely(block == NULL && nsz != 0))
-        cs_assert(0 && "out of memory");
+        csM_error(ts);
     return block;
 }
 
@@ -70,7 +71,7 @@ void *csM_malloc(cs_State *ts, size_t size) {
     if (c_unlikely(block == NULL)) {
         block = tryagain(ts, NULL, 0, size);
         if (c_unlikely(block == NULL))
-            cs_assert(0 && "out of memory");
+            csM_error(ts);
     }
     gs->gcdebt += size;
     return block;

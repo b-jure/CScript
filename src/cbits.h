@@ -54,7 +54,7 @@
 
 
 /* get byte at offset 'o' from 'v' */
-#define getbyte(v,o)	    (((v) >> ((o) * 8)) & 0xff)
+#define getbyte(v,o)	    (((v) >> ((o) * 8)) & 0xFF)
 
 
 /* set 'src' byte at offset 'o' to 'v' */

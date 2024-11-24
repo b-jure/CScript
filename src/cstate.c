@@ -149,6 +149,7 @@ static void freestack(cs_State *ts) {
     csM_freearray(ts, s2v(ts->stack.p), stacksize(ts), TValue);
 }
 
+#include <stdio.h>
 
 static void freestate(cs_State *mt) {
     GState *gs = G_(mt);
@@ -162,6 +163,7 @@ static void freestate(cs_State *mt) {
         csi_userstatefree(mt);
     }
     freestack(mt);
+    printf("totalbytes: %zu, sizeof(XSG): %zu\n", gettotalbytes(gs), sizeof(XSG));
     cs_assert(gettotalbytes(gs) == sizeof(XSG));
     gs->falloc(fromstate(mt), sizeof(XSG), 0, gs->ud_alloc);
 }
@@ -308,9 +310,9 @@ void csT_seterrorobj(cs_State *ts, int errcode, SPtr oldtop) {
 
 
 /*
- * Stack size to grow the stack to when stack
- * overflow occurs for error handling.
- */
+** Stack size to grow the stack to when stack
+** overflow occurs for error handling.
+*/
 #define OVERFLOWSTACKSIZE       (CSI_MAXSTACK + 200)
 
 
@@ -421,12 +423,12 @@ static int stackinuse(cs_State *ts) {
 
 
 /*
- * Shrink stack if the current stack size is more
- * than 3 times the current use.
- * This also rolls back the stack to its original maximum
- * size 'CSI_MAXSTACK' in case the stack was previously
- * handling stack overflow.
- */
+** Shrink stack if the current stack size is more
+** than 3 times the current use.
+** This also rolls back the stack to its original maximum
+** size 'CSI_MAXSTACK' in case the stack was previously
+** handling stack overflow.
+*/
 void csT_shrinkstack(cs_State *ts) {
     int inuse = stackinuse(ts);
     int limit = (inuse >= CSI_MAXSTACK / 3 ? CSI_MAXSTACK : inuse * 3);
@@ -472,6 +474,7 @@ void csT_warning(cs_State *ts, const char *msg, int cont) {
     if (fwarn)
         fwarn(G_(ts)->ud_warn, msg, cont);
 }
+
 
 /* generate a warning from an error message */
 void csT_warnerror(cs_State *ts, const char *where) {

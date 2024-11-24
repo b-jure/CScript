@@ -35,7 +35,7 @@ enum TK {
     /* keyword tokens */
     TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE, TK_CLASS,
     TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR, TK_EACH, TK_FN, TK_IF,
-    TK_IN, TK_INHERITS, TK_NIL, TK_NOT, TK_OR, TK_RETURN, TK_SUPER,
+    TK_IN, TK_INHERITS, TK_NIL, TK_OR, TK_RETURN, TK_SUPER,
     TK_SWITCH, TK_TRUE, TK_WHILE, TK_LOOP, TK_FINAL, TK_LOCAL,
     /* other multi-char tokens */
     TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR, TK_POW, TK_CONCAT,
@@ -45,7 +45,7 @@ enum TK {
 };
 
 /* number of reserved keywords */
-#define NUM_KEYWORDS	((TK_FINAL - (FIRSTTK)) + 1)
+#define NUM_KEYWORDS	((TK_LOCAL - (FIRSTTK)) + 1)
 
 
 
@@ -80,7 +80,7 @@ typedef struct Lexer {
 } Lexer;
 
 
-CSI_FUNC void csY_setsource(cs_State *ts, Lexer *lx, BuffReader *br,
+CSI_FUNC void csY_setinput(cs_State *ts, Lexer *lx, BuffReader *br,
                             OString *source);
 CSI_FUNC void csY_init(cs_State *ts);
 CSI_FUNC const char *csY_tok2str(Lexer *lx, int t);

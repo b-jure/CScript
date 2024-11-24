@@ -111,7 +111,7 @@ cs_sinline void htpreinit(HTable *ht) {
 HTable *csH_new(cs_State *ts) {
     HTable *ht = csG_new(ts, sizeof(*ht), CS_VHTABLE, HTable);
     htpreinit(ht);
-    sethtval2s(ts, ts->sp.p++, ht); /* anchor */
+    sethtval2s(ts, ts->sp.p++, ht); /* assume EXTRA_STACK */
     newhasharray(ts, ht, MINHSIZE);
     ts->sp.p--; /* remove ht */
     return ht;

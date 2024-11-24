@@ -145,8 +145,9 @@ static void loadreachablectx(FunctionState *fs) {
 
 /* pop last pending jump from currently active patch list */
 static int patchlistpop(FunctionState *fs) {
+    PatchList *list;
     cs_assert(fs->patches.len > 0);
-    PatchList *list = &fs->patches.list[fs->patches.len - 1];
+    list = &fs->patches.list[fs->patches.len - 1];
     if (list->len)
         return list->arr[--list->len];
     else
@@ -156,8 +157,9 @@ static int patchlistpop(FunctionState *fs) {
 
 /* add jump to patch list (for backpatching) */
 static void patchlistaddjmp(FunctionState *fs, int jmp) {
+    PatchList *list;
     cs_assert(fs->patches.len > 0);
-    PatchList *list = &fs->patches.list[fs->patches.len - 1];
+    list = &fs->patches.list[fs->patches.len - 1];
     checklimit(fs, fs->patches.len, CODEMAX, "code jumps");
     csM_growvec(fs->lx->ts, list->arr, list->size, list->len, CODEMAX,
                 "code jumps", int);
@@ -183,9 +185,10 @@ static void patchliststart(FunctionState *fs) {
 
 /* end patch list by patching all pending jumps */
 static void patchlistend(FunctionState *fs) {
+    PatchList *list;
+    int jmp; /* breakstm jump */
     cs_assert(fs->patches.len > 0);
-    PatchList *list = &fs->patches.list[--fs->patches.len];
-    int jmp; /* 'break' jmp */
+    list = &fs->patches.list[--fs->patches.len];
     while ((jmp = patchlistpop(fs)) != NOJMP)
         csC_patchtohere(fs, jmp);
     cs_assert(list->len == 0);
@@ -195,52 +198,43 @@ static void patchlistend(FunctionState *fs) {
 
 /* get local variable */
 static LVar *getlocalvar(FunctionState *fs, int idx) {
-    cs_assert(fs->firstlocal + idx < fs->lx->ps->actlocals.len);
     return &fs->lx->ps->actlocals.arr[fs->firstlocal + idx];
 }
 
 
 /* get local variable debug information */
 static LVarInfo *getlocalinfo(FunctionState *fs, int vidx) {
+    LVar *lv;
     cs_assert(0 <= vidx && vidx <= fs->nactlocals);
-    LVar *lv = getlocalvar(fs, vidx);
+    lv = getlocalvar(fs, vidx);
     return &fs->p->locals[lv->s.idx];
 }
 
 
 /*
-** Convert 'nvar', a compiler index level, to its 
-** corresponding stack position.
+** Convert 'nvar', a compiler index level, to its corresponding
+** stack level.
 */
 static int getstacklevel(FunctionState *fs, int nvar) {
-    return getlocalvar(fs, --nvar)->s.idx + 1;
+    if (nvar-- > 0) /* have at least one variable? */
+        return getlocalvar(fs, nvar)->s.idx + 1;
+    return 0; /* no variables on stack */
 }
 
 
 /* 
-** Pop local variables up to stack level 'tolevel'; 'extra'
-** values to pop are usually remaining switch statement
-** values or any other values left on stack besides
-** local variables.
+** Remove and pop local variables up to 'tolevel'; 'swexp' is used
+** in special cases where we have to pop 'switch' statement expressions.
 */
-static void poplocals(FunctionState *fs, int tolevel, int extra) {
+static void removelocals(FunctionState *fs, int tolevel, int swexp) {
     int popn = fs->nactlocals - tolevel;
     fs->lx->ps->actlocals.len -= popn;
-    popn += extra;
-    csC_pop(fs, popn);
+    popn += swexp;
     fs->sp -= popn;
-}
-
-
-/* 
-** Remove and pop local variables up to 'tolevel';
-** 'popextra' is used as 'extra' in 'poplocals'.
-*/
-static void removelocals(FunctionState *fs, int tolevel, int popextra) {
-    poplocals(fs, tolevel, popextra);
-    while (fs->nactlocals > tolevel) { /* set debug lifetime pc */
+    csC_pop(fs, popn);
+    while (fs->nactlocals > tolevel) { /* set debug information */
         LVarInfo *locinfo = getlocalinfo(fs, --fs->nactlocals);
-        locinfo->endpc = fs->pc;
+        locinfo->endpc = fs->pc; /* set debug lifetime pc */
     }
 }
 
@@ -290,9 +284,9 @@ static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
 
 
 /*
- * Adjust locals by increment 'nactlocals' and registering them
- * inside 'locals'.
- */
+** Adjust locals by increment 'nactlocals' and registering them
+** inside 'locals'.
+*/
 static void adjustlocals(Lexer *lx, int nvars) {
     FunctionState *fs = lx->fs;
     for (int i = 0; i < nvars; nvars--) {
@@ -327,11 +321,14 @@ static void startscope(FunctionState *fs, Scope *s, int cfbits) {
 /* end lexical scope */
 static void endscope(FunctionState *fs) {
     Scope *s = fs->scope;
-    int stklevel = getstacklevel(fs, s->activelocals);
-    removelocals(fs, s->activelocals, scopeisswitch(s)); /* pop locals */
-    cs_assert(s->activelocals == fs->nactlocals);
+    int stklevel;
     if (scopeisloop(s) || scopeisswitch(s)) /* have patch list? */
         patchlistend(fs);
+    removelocals(fs, s->activelocals, scopeisswitch(s)); /* pop locals */
+    printf("s->activelocals = %d, fs->nactlocals = %d\n",
+            s->activelocals, fs->nactlocals);
+    cs_assert(s->activelocals == fs->nactlocals);
+    stklevel = getstacklevel(fs, s->activelocals);
     if (s->prev && s->haveupval) /* need to close upvalues? */
         csC_emitIS(fs, OP_CLOSE, stklevel);
     fs->sp = stklevel; /* free stack slots */
@@ -340,10 +337,10 @@ static void endscope(FunctionState *fs) {
 
 
 /* 
- * Mark scope where variable at idx 'vidx' was defined
- * in order to emit close instruction before the scope
- * gets closed.
- */
+** Mark scope where variable at idx 'vidx' was defined
+** in order to emit close instruction before the scope
+** gets closed.
+*/
 static void scopemarkupval(FunctionState *fs, int vidx) {
     Scope *s = fs->scope;
     while(s->activelocals - 1 > vidx)
@@ -354,9 +351,9 @@ static void scopemarkupval(FunctionState *fs, int vidx) {
 
 
 /* 
- * Mark current scope as scopee that has a to-be-closed
- * variable.
- */
+** Mark current scope as scopee that has a to-be-closed
+** variable.
+*/
 static void scopemarktbc(FunctionState *fs) {
     Scope *s = fs->scope;
     s->haveupval = 1;
@@ -739,9 +736,9 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
 
 
 /* 
- * call ::= '(' ')'
- *        | '(' explist ')' 
- */
+** call ::= '(' ')'
+**        | '(' explist ')' 
+*/
 static void call(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int base;
@@ -996,7 +993,7 @@ static Unopr getunopr(int token) {
     switch (token) {
         case '-': return OPR_UNM;
         case '~': return OPR_BNOT;
-        case TK_NOT: return OPR_NOT;
+        case '!': return OPR_NOT;
         default: return OPR_NOUNOPR;
     }
 }
@@ -1112,9 +1109,24 @@ static void expr(Lexer *lx, ExpInfo *e) {
 
 
 
-/* -------------------------------------------------------------------------
- *                              STATEMENTS
- * ------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+**                              STATEMENTS
+** ---------------------------------------------------------------------- */
+
+/* 
+** stmlist ::= stm
+**           | stm stmlist
+*/
+static void stmlist(Lexer *lx, int blocktk) {
+    while (!check(lx, TK_EOS) && !(blocktk && check(lx, blocktk))) {
+        if (check(lx, TK_RETURN)) {
+            stm(lx);
+            return; /* 'return' must be the last statement */
+        }
+        stm(lx);
+    }
+}
+
 
 /* check if 'var' is 'final' (read-only) */
 static void checkreadonly(Lexer *lx, ExpInfo *var) {
@@ -1421,25 +1433,15 @@ static void localclass(Lexer *lx) {
 }
 
 
-/*
-** stmlist ::= '{' stm '}'
-**           | '{' stm [stm...] '}'
-*/
-static void stmlist(Lexer *lx) {
-    while (!check(lx, '}') && !check(lx, TK_EOS))
-        stm(lx);
-}
-
-
 /* blockstm ::= '{' stmlist '}' */
 static void blockstm(Lexer *lx) {
-    Scope s;
     int matchline = lx->line;
+    Scope s;
     csY_scan(lx); /* skip '{' */
     startscope(lx->fs, &s, 0);
-    stmlist(lx);
-    endscope(lx->fs);
+    stmlist(lx, '}');
     expectmatch(lx, '}', '{', matchline);
+    endscope(lx->fs);
 }
 
 
@@ -1505,7 +1507,7 @@ static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod) {
     expectnext(lx, ')');
     matchline = lx->line; /* line where '{' is located */
     expectnext(lx, '{');
-    stmlist(lx);
+    stmlist(lx, '}');
     expectmatch(lx, '}', '{', matchline);
     codeclosure(lx, v);
     endfs(&newfs);
@@ -2128,11 +2130,15 @@ static void continuestm(Lexer *lx) {
     } else {
         int extra, jmp;
         cs_assert(fs->loopscope != NULL);
-        /* pop active 'switch' statement expressions, and... */
+        /* pop active 'switch' statement expressions... */
         extra = fs->scope->nswscope - fs->loopscope->nswscope;
-        poplocals(fs, fs->loopscope->activelocals, extra); /* pop locals... */
-        jmp = csC_jmp(fs, OP_JMPS); /* and jump to... */
-        csC_patch(fs, jmp, fs->loopstart); /* ...loop start */
+        csC_pop(fs, fs->loopscope->activelocals + extra); /* pop values... */
+        if (fs->scope->haveupval) { /* have to-be-closed variables? */
+            int stklevel = getstacklevel(fs, fs->scope->activelocals);
+            csC_emitIS(fs, OP_CLOSE, stklevel);
+        }
+        jmp = csC_jmp(fs, OP_JMPS); /* and jump backwards... */
+        csC_patch(fs, jmp, fs->loopstart); /* ...to loop start */
     }
     expectnext(lx, ';');
 }
@@ -2158,8 +2164,6 @@ static void breakstm(Lexer *lx) {
         cs_assert(fs->loopscope == NULL && fs->switchscope == NULL);
         csP_semerror(lx, "'break' not in loop or switch statement");
     } else { /* otherwise add the jump to patch list */
-        /* pop locals and pop 'switch' expression (if any)... */
-        poplocals(fs, s->activelocals, scopeisswitch(s));
         patchlistaddjmp(fs, csC_jmp(fs, OP_JMP)); /* ...and jump out */
     }
     expectnext(lx, ';');
@@ -2277,13 +2281,6 @@ static void stm(Lexer *lx) {
 }
 
 
-/* parse current input until end of stream */
-static void parseuntilEOS(Lexer *lx) {
-    while (!check(lx, TK_EOS))
-        stm(lx);
-}
-
-
 /* compile main function */
 static void mainfunc(FunctionState *fs, Lexer *lx) {
     Scope s;
@@ -2296,8 +2293,8 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
     env->kind = VARREG;
     env->name = lx->envname;
     csY_scan(lx); /* scan first token */
-    parseuntilEOS(lx); /* parse */
-    cs_assert(lx->t.tk == TK_EOS);
+    stmlist(lx, 0);
+    expect(lx, TK_EOS);
     endfs(fs);
 #if 1 /* low-level bytecode disassembly */
     csTR_disassemble(fs->lx->ts, fs->p);
@@ -2322,7 +2319,7 @@ CSClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
     csG_objbarrier(ts, fs.p, fs.p->source);
     lx.ps = ps;
     lx.buff = buff;
-    csY_setsource(ts, &lx, br, fs.p->source);
+    csY_setinput(ts, &lx, br, fs.p->source);
     mainfunc(&fs, &lx);
     cs_assert(ps->actlocals.len == 0); /* all scopes should be finished */
     ts->sp.p--; /* remove scanner table */

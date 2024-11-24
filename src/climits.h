@@ -45,6 +45,7 @@ typedef uint32_t cs_uint32;
 /* nice to have */
 typedef unsigned int uint;
 typedef unsigned short ushrt;
+typedef unsigned long ulong;
 
 
 /*
@@ -214,7 +215,7 @@ typedef cs_ubyte Instruction;
  */
 #if !defined(cs_lock)
 
-#if 0
+#if 1
 #define cs_lock(ts)         ((void)0)
 #define cs_unlock(ts)       csTR_dumpstack(ts, "stack after -> %s", __func__)
 #else
@@ -301,8 +302,10 @@ typedef cs_ubyte Instruction;
 #define cast_umem(e)        cast(cs_umem,(e))
 #define cast_mem(e)         cast(cs_mem,(e))
 #define cast_charp(e)       cast(char *,(e))
+#define cast_char(e)        cast(char,(e))
 #define cast_sizet(e)       cast(size_t,(e))
 #define cast_voidp(e)       cast(void *,(e))
+#define cast_void(e)        cast(void,(e))
 
 /* cast 'cs_Integer' to 'cs_Unsigned' */
 #define csi_castS2U(i)      ((cs_Unsigned)(i))
@@ -375,9 +378,8 @@ typedef cs_ubyte Instruction;
 
 
 /*
-** @CS_STRESS_GC - enables stress test for garbage
-** collector, on each tracked memory change it performs
-** full garbage collection.
+** @CS_STRESS_GC - enables stress test for garbage collector, on each
+** tracked memory change it performs full garbage collection.
 */
 #if defined(CS_STRESS_GC)
 #define gcmemchange(ts,pre,pos) \

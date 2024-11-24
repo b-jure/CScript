@@ -20,7 +20,7 @@
 #define CS_ERRFILE      (CS_ERRERROR + 1)
 
 
-/* key, in the registry, for table of loaded libraries/modules */
+/* key, in the global table, for table of loaded modules */
 #define CS_LOADED_TABLE     "__LOADED"
 
 

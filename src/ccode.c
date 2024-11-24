@@ -188,45 +188,62 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
     "LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM", "BNOT",
     "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
     "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL",
-    "GETUVAL", "SETUVAL", "SETPROPERTY", "GETPROPERTY", "GETINDEX",
-    "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT", "SETINDEXINT",
-    "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL",
-    "FORLOOP", "RET",
+    "GETUVAL", "OPSETARRAY", "SETUVAL", "SETPROPERTY", "GETPROPERTY",
+    "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT",
+    "SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT",
+    "FORPREP", "FORCALL", "FORLOOP", "RET",
 };
 
 
 /*
- * Add line and pc information, skip adding 'LineInfo' if previous
- * entry contained the same line.
- */
+** Add line and pc information, skip adding 'LineInfo' if previous
+** entry contained the same line.
+*/
 static void addlineinfo(FunctionState *fs, Proto *f, int line) {
     int len = fs->nlinfo;
-    if (len <= 0 || f->linfo[len - 1].line < line) {
+    if (len == 0 || f->linfo[len - 1].line < line) { /* new line entry? */
         csM_growvec(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, INT_MAX,
                     "lines", LineInfo);
         f->linfo[len].pc = fs->pc - 1;
         f->linfo[fs->nlinfo++].line = line;
+    } else { /* otherwise update previous line entry with latest 'pc' */
+        cs_assert(f->linfo[len - 1].pc < fs->pc - 1);
+        f->linfo[len - 1].pc = fs->pc - 1;
     }
+}
+
+#include <stdio.h>
+
+
+static void emitbyte(FunctionState *fs, int code) {
+    Proto *p = fs->p;
+    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, INT_MAX, "code",
+                Instruction);
+    p->code[fs->pc++] = cast_ubyte(code);
+}
+
+
+static void emit3bytes(FunctionState *fs, int code) {
+    Proto *p = fs->p;
+    csM_ensurevec(fs->lx->ts, p->code, p->sizecode, fs->pc, 3, INT_MAX,
+                  "code", Instruction);
+    set3bytes(&p->code[fs->pc], code);
+    fs->pc += 3;
 }
 
 
 /* emit instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
-    Proto *p = fs->p;
-    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, INT_MAX, "code",
-                Instruction);
-    p->code[fs->pc++] = i;
-    addlineinfo(fs, p, fs->lx->line);
+    printf("emitting OpCode -> %s\n", getOpName(i));
+    emitbyte(fs, i);
+    addlineinfo(fs, fs->p, fs->lx->line);
     return fs->pc - 1;
 }
 
 
 /* emit short arg */
 static int emitS(FunctionState *fs, int arg) {
-    Proto *p = fs->p;
-    csM_growvec(fs->lx->ts, p->code, p->sizecode, fs->pc, INT_MAX, "code",
-                Instruction);
-    p->code[fs->pc++] = cast_ubyte(arg & 0xff);
+    emitbyte(fs, arg);
     return fs->pc - 1;
 }
 
@@ -241,12 +258,8 @@ int csC_emitIS(FunctionState *fs, Instruction i, int a) {
 
 
 /* emit long arg */
-static int emitL(FunctionState *fs, int idx) {
-    Proto *p = fs->p;
-    csM_ensurevec(fs->lx->ts, p->code, p->sizecode, fs->pc, 3, INT_MAX,
-                  "code", Instruction);
-    set3bytes(p->code, idx);
-    fs->pc += 3;
+static int emitL(FunctionState *fs, int arg) {
+    emit3bytes(fs, arg);
     return fs->pc - 3;
 }
 
@@ -633,9 +646,9 @@ void csC_settablesize(FunctionState *fs, int pc, int hsize) {
 
 
 /* 
- ** Ensure expression is not a variable, unregistered constant
- ** or a jump.
- */
+** Ensure expression is not a variable, unregistered constant
+** or a jump.
+*/
 static void dischargetostack(FunctionState *fs, ExpInfo *e) {
     if (!dischargevars(fs, e)) {
         switch (e->et) {
@@ -1204,9 +1217,9 @@ static int finaltarget(Instruction *code, int i) {
 
 
 /*
- ** Perform a final pass performing small adjustments
- ** and optimizations.
- */
+** Perform a final pass performing small adjustments
+** and optimizations.
+*/
 void csC_finish(FunctionState *fs) {
     Proto *p = fs->p;
     for (int i = 0; i < fs->pc; i++) {

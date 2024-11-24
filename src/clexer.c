@@ -8,6 +8,7 @@
 #define CS_CORE
 
 
+#include "cobject.h"
 #include "cgc.h"
 #include "clexer.h"
 #include "cdebug.h"
@@ -20,9 +21,10 @@
 #include <ctype.h>
 
 
+#define currIsNewline(lx)       ((lx)->c == '\r' || (lx)->c == '\n')
 
 /* checks for end of stream */
-#define isend(c)        ((c) == CSEOF)
+#define currIsEnd(lx)           ((lx)->c == CSEOF)
 
 
 /* fetch the next character and store it as current char */
@@ -39,17 +41,11 @@
 #define savec_and_advance(lx, c)        (savec(lx, c), advance(lx))
 
 
-#define lbptr(lx)       csR_buff((lx)->buff)
-#define lblen(lx)       csR_bufflen((lx)->buff)
-#define lbsize(lx)      csR_buffsize((lx)->buff)
-#define popc(lx)        csR_buffpop((lx)->buff)
-
-
 
 static const char *tkstr[] = { /* ORDER TK */
     "and", "break", "case", "continue", "class",
     "default", "else", "false", "for", "each", "fn", "if",
-    "in", "inherits", "nil", "not", "or", "return", "super",
+    "in", "inherits", "nil", "or", "return", "super",
     "switch", "true", "while", "loop", "final", "local",
     "!=", "==", ">=", "<=", "<<", ">>", "**", "..",
     "...", "<eof>",
@@ -67,14 +63,14 @@ typedef enum Dig {
 
 
 
-void csY_setsource(cs_State *ts, Lexer *lx, BuffReader *br, OString *source) {
+void csY_setinput(cs_State *ts, Lexer *lx, BuffReader *br, OString *source) {
     cs_assert(lx->ps != NULL);
     lx->c = brgetc(br); /* fetch first char */
     lx->line = 1;
     lx->lastline = 1;
     lx->ts = ts;
     lx->fs = NULL;
-    lx->tab = NULL;
+    lx->tahead.tk = TK_EOS; /* no lookahead token */
     lx->br = br;
     lx->src = source;
     lx->envname = csS_newlit(ts, CS_ENV);
@@ -107,21 +103,22 @@ static cs_noret lexerror(Lexer *lx, const char *err, int token);
 
 /* pushes character into token buffer */
 cs_sinline void savec(Lexer *lx, int c) {
-    if (lblen(lx) >= lbsize(lx)) {
-        if (lbsize(lx) >= MAXSIZE / 2)
+    if (csR_bufflen(lx->buff) >= csR_buffsize(lx->buff)) {
+        size_t newsize;
+        if (csR_buffsize(lx->buff) >= MAXSIZE / 2)
             lexerror(lx, "lexical element too long", 0);
-        size_t newsize = lbsize(lx) * 2;
+        newsize = csR_buffsize(lx->buff) * 2;
         csR_buffresize(lx->ts, lx->buff, newsize);
     }
-    lbptr(lx)[lblen(lx)++] = c;
+    csR_buff(lx->buff)[csR_bufflen(lx->buff)++] = cast_char(c);
 }
 
 
 /* if current char matches 'c' advance */
-cs_sinline int lxmatch(Lexer *lexer, int c) {
-    if (isend(lexer->c) || c != lexer->c)
+cs_sinline int lxmatch(Lexer *lx, int c) {
+    if (currIsEnd(lx) || c != lx->c)
         return 0;
-    advance(lexer);
+    advance(lx);
     return 1;
 }
 
@@ -147,7 +144,7 @@ static const char *lextok2str(Lexer *lx, int t) {
         case TK_FLT: case TK_INT:
         case TK_STRING: case TK_NAME: {
             savec(lx, '\0');
-            return csS_pushfstring(lx->ts, "'%s'", lbptr(lx));
+            return csS_pushfstring(lx->ts, "'%s'", csR_buff(lx->buff));
         }
         default: return csY_tok2str(lx, t);
     }
@@ -173,10 +170,11 @@ cs_noret csY_syntaxerror(Lexer *lx, const char *err) {
 OString *csY_newstring(Lexer *lx, const char *str, size_t len) {
     cs_State *ts = lx->ts;
     OString *s = csS_newl(ts, str, len);
-    TValue *stks = s2v(ts->sp.p++);
-    setstrval(ts, stks, s); /* temp anchor */
-    csH_set(lx->ts, lx->tab, stks, stks);
-    ts->sp.p--; /* pop */
+    TValue *ss = s2v(ts->sp.p++);
+    cs_assert(lx->tab != NULL);
+    setstrval(ts, ss, s); /* assuming EXTRA_STACK */
+    csH_set(lx->ts, lx->tab, ss, ss);
+    ts->sp.p--; /* remove ss */
     return s;
 }
 
@@ -185,18 +183,18 @@ OString *csY_newstring(Lexer *lx, const char *str, size_t len) {
 ** Read comments
 ** ----------------------------------------------------------------------- */
 
-static void readcomment(Lexer *lx) {
-    while (!isend(lx->c) && lx->c != '\n')
+static void read_linecomment(Lexer *lx) {
+    while (!currIsEnd(lx) && !currIsNewline(lx))
         advance(lx);
 }
 
 
-static void readlongcomment(Lexer *lx) {
+static void read_multilinecomment(Lexer *lx) {
 readmore:
     switch (lx->c) {
     case CSEOF:
         return;
-    case '\n':
+    case '\r': case '\n':
         advance(lx);
         inclinenr(lx);
         goto readmore;
@@ -216,72 +214,191 @@ readmore:
 ** Read string
 ** ----------------------------------------------------------------------- */
 
-/* get new hex digit from current char */
-static int hexdigit(Lexer *lx) {
-    int c = lx->c;
-    if (isxdigit(c))
-        return csS_hexvalue(c);
-    return -1;
+
+static void checkcond(Lexer *lx, int c, const char *msg) {
+    if (!c) {
+        if (lx->c != CSEOF)
+            save_and_advance(lx); /* add current to buffer for error message */
+        lexerror(lx, msg, TK_STRING);
+    }
 }
 
 
-/* parse hex escape sequence '\xyy' */
-static int eschex(Lexer *lx) {
-    advance(lx); /* skip 'x' */
-    int number = 0;
-    for (int i = 0; i < 2; i++) {
-        int digit;
-        if (c_unlikely(isend(lx->c) || lx->c == '"'))
-            lexerror(lx, "incomplete hexadecimal escape sequence", TK_STRING);
-        if (c_unlikely((digit = hexdigit(lx)) == -1))
-            lexerror(lx, "invalid hexadecimal escape sequence", TK_STRING);
-        number = (number << 4) | digit;
-        advance(lx);
+static int expect_hexdig(Lexer *lx){
+    save_and_advance(lx);
+    checkcond(lx, isxdigit(lx->c), "hexadecimal digit expected");
+    return csS_hexvalue(lx->c);
+}
+
+
+static int read_hexesc(Lexer *lx) {
+    int hd = expect_hexdig(lx);
+    hd = (hd << 4) + expect_hexdig(lx);
+    csR_buffpopn(lx->buff, 2); /* remove saved chars from buffer */
+    return hd;
+}
+
+
+/*
+** This function does not verify if the UTF-8 escape sequence is
+** valid, rather it only ensures the sequence is in bounds of
+** UTF-8 4 byte sequence. If the escape sequence is strict UTF-8
+** sequence, then it indicates that to caller through 'strict'.
+*/
+static unsigned long read_utf8esc(Lexer *lx, int *strict) {
+    ulong r;
+    int i = 4; /* chars to be removed: '\', 'u', '{', and first digit */
+    cs_assert(strict != NULL);
+    save_and_advance(lx); /* skip 'u' */
+    if (lx->c == '[') { /* strict? */
+        save_and_advance(lx); /* skip '[' */
+        *strict = 1; /* indicate this is strict utf8 */
+    } else
+        checkcond(lx, lx->c == '{', "missing '{'");
+    r = expect_hexdig(lx); /* must have at least one digit */
+    /* Read up to 7 hexadecimal digits, the last digit must be less than
+    ** 0x1F as the upper 5 bits are reserved for UTF-8 encoding.  */
+    while (cast_void(save_and_advance(lx)), isxdigit(lx->c)) {
+        i++;
+        checkcond(lx, r <= (0x7FFFFFFFu >> 4), "UTF-8 value too large");
+        r = (r << 4) + csS_hexvalue(lx->c);
     }
-    return number;
+    if (*strict)
+        checkcond(lx, lx->c == ']', "missing ']'");
+    else
+        checkcond(lx, lx->c == '}', "missing '}'");
+    advance(lx); /* skip '}' or ']' */
+    csR_buffpopn(lx->buff, i); /* remove saved chars from buffer */
+    return r;
+}
+
+
+/* 
+** UTF-8 encoding lengths.
+** Invalid first bytes:
+** 1000XXXX(8), 1001XXXX(9), 1010XXXX(A), 1011XXXX(B)
+*/
+static cs_ubyte const utf8len_[] = {
+/* 0 1 2 3 4 5 6 7 8 9 A B C D E F */
+   1,1,1,1,1,1,1,1,0,0,0,0,2,2,3,4
+};
+
+/* 
+** Get the length of the UTF-8 encoding by looking at the most
+** significant 4 bits of the first byte.
+*/
+#define utf8len(n)      utf8len_[(n&0xFF)>>4]
+
+
+static int check_utf8(Lexer *lx, ulong n) {
+    if (utf8len(n))
+        lexerror(lx, "invalid first byte in UTF-8 sequence", 0);
+    else if (n <= 0x7F) /* ascii? */
+        return 1; /* ok; valid ascii */
+    else if ((0xC280 <= n && n <= 0xDFBF) && /* 2-byte sequence... */
+                ((n & 0xE0C0) == 0xC080)) /* ...and is UTF-8? */
+        return 2; /* ok; valid 2-byte UTF-8 sequence */
+    else if (c_unlikely(0xEDA080 <= n && n <= 0xEDBFBF)) /* surrogate? */
+        lexerror(lx, "UTF-8 sequence encodes UTF-16 surrogate pair", 0);
+    else if ((0xE0A080 <= n && n <= 0xEFBFBF) && /* 3-byte sequence... */
+                ((n & 0xF0C0C0) == 0xE08080)) /* ...and is UTF-8? */
+        return 3; /* ok; valid 3-byte UTF-8 sequence */
+    else if ((0xF0908080 <= n && n <= 0xF48FBFBF) && /* 4-byte sequence... */
+                ((n & 0xF8C0C0C0) == 0xF0808080)) /* ...and is UTF-8? */
+        return 4; /* ok; valid 4-byte UTF-8 sequence */
+    lexerror(lx, "escape sequence value is not a valid UTF-8", 0);
+    return 0;
+}
+
+static void checked_utf8esc(char *buff, ulong n, int len) {
+    cs_assert(n <= 0x7FFFFFFFu);
+    do {
+        buff[UTF8BUFFSZ - len] = cast_char(0xFF & n);
+        n >>= 1;
+        len--;
+    } while (len > 0);
+    cs_assert(n == 0);
+}
+
+static void utf8esc(Lexer *lx) {
+    char buff[UTF8BUFFSZ];
+    int strict;
+    int n = read_utf8esc(lx, &strict);
+    if (strict) { /* n should already be valid UTF-8? */
+        int temp = n;
+        n = check_utf8(lx, n);
+        checked_utf8esc(buff, temp, n);
+    } else /* otherwise create non-strict UTF-8 sequence */
+        n = csS_utf8esc(buff, n);
+    for (; n > 0; n--) /* add 'buff' to string */
+        savec(lx, buff[UTF8BUFFSZ - n]);
+}
+
+
+static int read_decesc(Lexer *lx) {
+    int i;
+    int r = 0;
+    for (i = 0; i < 3 && isdigit(lx->c); i++) {
+        r = 10 * r + lx->c - '0';
+        save_and_advance(lx);
+    }
+    checkcond(lx, r <= UCHAR_MAX, "decimal escape too large");
+    csR_buffpopn(lx->buff, i); /* remove read digits from buffer */
+    return r;
 }
 
 
 /* create string token and handle the escape sequences */
-static void readstring(Lexer *lx, Literal *k) {
-    advance(lx); /* skip '"' */
+static void read_string(Lexer *lx, Literal *k) {
+    save_and_advance(lx); /* skip '"' */
     while (lx->c != '"') {
         switch (lx->c) {
-            case '\r': case '\n': {
+            case CSEOF:
+                lexerror(lx, "unterminated string", TK_EOS);
+                break; /* to avoid warnings */
+            case '\r': case '\n':
                 lexerror(lx, "unterminated string", TK_STRING);
-                break;
-            }
+                break; /* to avoid warnings */
             case '\\': {
+                int c;
                 advance(lx);
                 switch (lx->c) {
-                    case '\"': case '\'': case '\\': {
-                        save_and_advance(lx);
-                        break;
-                    }
-                    case '0': savec_and_advance(lx, '\0'); break;
-                    case 'a': savec_and_advance(lx, '\a'); break;
-                    case 'b': savec_and_advance(lx, '\b'); break;
-                    case 'e': savec_and_advance(lx, '\x1B'); break;
-                    case 'f': savec_and_advance(lx, '\f'); break;
-                    case 'n': savec_and_advance(lx, '\n'); break;
-                    case 'r': savec_and_advance(lx, '\r'); break;
-                    case 't': savec_and_advance(lx, '\t'); break;
-                    case 'v': savec_and_advance(lx, '\v'); break;
-                    case 'x': savec(lx, cast_int(eschex(lx))); break;
-                    case CSEOF: break; /* raise error next iteration */
+                    case '0': c = '\0'; goto read_save;
+                    case 'a': c = '\a'; goto read_save;
+                    case 'b': c = '\b'; goto read_save;
+                    case 'f': c = '\f'; goto read_save;
+                    case 'n': c = '\n'; goto read_save;
+                    case 'r': c = '\a'; goto read_save;
+                    case 't': c = '\a'; goto read_save;
+                    case 'v': c = '\a'; goto read_save;
+                    case 'e': c = '\x1B'; goto read_save;
+                    case 'x': c = read_hexesc(lx); goto read_save;
+                    case 'u': utf8esc(lx); goto no_save;
+                    case '\"': case '\'': case '\\':
+                        c = lx->c; goto read_save;
+                    case '\n': case '\r':
+                        inclinenr(lx); c = '\n'; goto only_save;
+                    case CSEOF: goto no_save; /* raise err on next iteration */
                     default: {
-                        lexerror(lx, "unknown escape sequence", lx->c);
-                        break; /* ureached */
+                        checkcond(lx, isdigit(lx->c), "invalid escape sequence");
+                        c = read_decesc(lx); /* '\ddd' */
+                        goto only_save;
                     }
                 }
-                break;
+                read_save:
+                    advance(lx);
+                    /* fall through */
+                only_save:
+                    csR_buffpop(lx->buff); /* remove '\\' */
+                    savec(lx, c);
+                    /* fall through */
+                no_save: break;
             }
-            case CSEOF: lexerror(lx, "unterminated string", CSEOF); break;
-            default: save_and_advance(lx); break;
+            default: save_and_advance(lx);
         }
     }
-    advance(lx); /* skip '"' */
-    k->str = csY_newstring(lx, lbptr(lx), lblen(lx));
+    save_and_advance(lx); /* skip '"' */
+    k->str = csY_newstring(lx, csR_buff(lx->buff)+1, csR_bufflen(lx->buff)-2);
 }
 
 
@@ -294,7 +411,7 @@ static void readstring(Lexer *lx, Literal *k) {
 static int lexstr2num(Lexer *lx, Literal *k) {
     int ovf;
     TValue o;
-    if (csS_tonum(lbptr(lx), &o, &ovf) == 0)
+    if (csS_tonum(csR_buff(lx->buff), &o, &ovf) == 0)
         lexerror(lx, "invalid number literal", TK_FLT);
     else if (ovf > 0)
         lexerror(lx, "number literal overflows", TK_FLT);
@@ -315,7 +432,7 @@ static int lexstr2num(Lexer *lx, Literal *k) {
 ** Read digits, additionally allow '_' separators
 ** if these are not mantissa digits denoted by 'fp'.
 */
-static int auxreaddigs(Lexer *lx, Dig d, int fp) {
+static int aux_readdigs(Lexer *lx, Dig d, int fp) {
     int digits = 0;
     for (;; advance(lx)) {
         if (!fp && lx->c == '_') continue;
@@ -332,29 +449,29 @@ static int auxreaddigs(Lexer *lx, Dig d, int fp) {
 
 
 /*
- * Read exponent digits.
- * Exponent must have at least 1 decimal digit.
- */
-static int auxreadexp(Lexer *lx) {
+** Read exponent digits.
+** Exponent must have at least 1 decimal digit.
+*/
+static int aux_readexponent(Lexer *lx) {
     int digits;
     if (lx->c == '-' || lx->c == '+')
         save_and_advance(lx);
-    if ((digits = auxreaddigs(lx, DigDec, 0) == 0))
+    if ((digits = aux_readdigs(lx, DigDec, 0) == 0))
         lexerror(lx, "exponent has no digits", TK_FLT);
     return digits;
 }
 
 
 /* read decimal number */
-static int readdecnum(Lexer *lx, Literal *k) {
+static int read_decnum(Lexer *lx, Literal *k) {
     cs_assert(isdigit(lx->c) || lx->c == '.');
-    auxreaddigs(lx, DigDec, 0);
+    aux_readdigs(lx, DigDec, 0);
     if (lx->c == '.') {
         save_and_advance(lx);
-        auxreaddigs(lx, DigDec, 1);
+        aux_readdigs(lx, DigDec, 1);
         if (lx->c == 'e' || lx->c == 'E') {
             save_and_advance(lx);
-            auxreadexp(lx);
+            aux_readexponent(lx);
         }
     }
     savec(lx, '\0');
@@ -363,20 +480,20 @@ static int readdecnum(Lexer *lx, Literal *k) {
 
 
 /* read hexadecimal number */
-static int readhexnum(Lexer *lx, Literal *k) {
+static int read_hexnum(Lexer *lx, Literal *k) {
     int fp, exp;
     advance(lx); /* skip 'x'/'X' */
-    int digits = auxreaddigs(lx, DigHex, 0);
+    int digits = aux_readdigs(lx, DigHex, 0);
     if ((fp = lx->c == '.')) {
         save_and_advance(lx);
-        if (auxreaddigs(lx, DigHex, 1) == 0 && !digits)
+        if (aux_readdigs(lx, DigHex, 1) == 0 && !digits)
             lexerror(lx, "missing significand", TK_FLT);
     } else if (!digits) {
         lexerror(lx, "invalid suffix 'x' to number constant", TK_FLT);
     }
     if ((exp = (lx->c == 'p' || lx->c == 'P'))) {
         save_and_advance(lx);
-        auxreadexp(lx);
+        aux_readexponent(lx);
     }
     if (fp && !exp)
         lexerror(lx, "missing exponent", TK_FLT);
@@ -386,24 +503,24 @@ static int readhexnum(Lexer *lx, Literal *k) {
 
 
 /* read octal number */
-static int readoctnum(Lexer *lx, Literal *k) {
+static int read_octnum(Lexer *lx, Literal *k) {
     cs_assert(isodigit(lx->c));
-    auxreaddigs(lx, DigOct, 0);
+    aux_readdigs(lx, DigOct, 0);
     savec(lx, '\0');
     return lexstr2num(lx, k);
 }
 
 
 /* read number */
-static int readnumber(Lexer *lx, Literal *k) {
+static int read_number(Lexer *lx, Literal *k) {
     cs_ubyte c = lx->c; /* cache previous digit */
     save_and_advance(lx);
     if (c == '0' && (lx->c == 'x' || lx->c == 'X'))
-        return readhexnum(lx, k);
+        return read_hexnum(lx, k);
     else if (c == '0' && isodigit(lx->c))
-        return readoctnum(lx, k);
+        return read_octnum(lx, k);
     else
-        return readdecnum(lx, k);
+        return read_decnum(lx, k);
 }
 
 
@@ -412,95 +529,116 @@ static int readnumber(Lexer *lx, Literal *k) {
 ** Scanner
 ** ----------------------------------------------------------------------- */
 
+
+#include <stdio.h>
 /* scan for tokens */
 static int scan(Lexer *lx, Literal *k) {
     csR_buffreset(lx->buff);
-readmore:
-    switch (lx->c) {
-    case ' ': case '\r': case '\t':
-        advance(lx);
-        goto readmore;
-    case '\n':
-        inclinenr(lx);
-        goto readmore;
-    case '#':
-        advance(lx);
-        readcomment(lx);
-        goto readmore;
-    case '/':
-        advance(lx);
-        if (lxmatch(lx, '/')) 
-            readcomment(lx);
-        else if (lxmatch(lx, '*')) 
-            readlongcomment(lx);
-        else 
-            return '/';
-        goto readmore;
-    case '"':
-        readstring(lx, k);
-        return TK_STRING;
-    case '0': case '1': case '2': case '3': case '4':
-    case '5': case '6': case '7': case '8': case '9':
-        return readnumber(lx, k);
-    case '@':
-        advance(lx);
-        return '@';
-    case '!':
-        advance(lx);
-        if (lxmatch(lx, '=')) 
-            return TK_NE;
-        return '!';
-    case '=':
-        advance(lx);
-        if (lxmatch(lx, '=')) 
-            return TK_EQ;
-        return '=';
-    case '>':
-        advance(lx);
-        if (lxmatch(lx, '>')) 
-            return TK_SHR;
-        else if (lxmatch(lx, '=')) 
-            return TK_GE;
-        return '>';
-    case '<':
-        advance(lx);
-        if (lxmatch(lx, '<')) 
-            return TK_SHL;
-        else if (lxmatch(lx, '=')) 
-            return TK_LE;
-        return '<';
-    case '*':
-        advance(lx);
-        if (lxmatch(lx, '*')) 
-            return TK_POW;
-        return '*';
-    case '.':
-        save_and_advance(lx);
-        if (lxmatch(lx, '.')) {
-            if (lxmatch(lx, '.'))
-                return TK_DOTS;
-            return TK_CONCAT;
-        }
-        if (!isdigit(lx->c)) 
-            return '.';
-        return readnumber(lx, k);
-    case CSEOF:
-        return TK_EOS;
-    default:
-        if (isalpha(lx->c)) {
-            do {
+    for (;;) {
+        switch (lx->c) {
+            case ' ': case '\t': case '\f': case '\v': {
+                advance(lx);
+                break;
+            }
+            case '\n': case '\r':  {
+                advance(lx);
+                inclinenr(lx);
+                break;
+            }
+            case '#': {
+                advance(lx);
+                read_linecomment(lx);
+                break;
+            }
+            case '/': {
+                advance(lx);
+                if (lxmatch(lx, '/')) 
+                    read_linecomment(lx);
+                else if (lxmatch(lx, '*')) 
+                    read_multilinecomment(lx);
+                else 
+                    return '/';
+                break;
+            }
+            case '"': {
+                read_string(lx, k);
+                return TK_STRING;
+            }
+            case '0': case '1': case '2': case '3': case '4':
+            case '5': case '6': case '7': case '8': case '9': {
+                return read_number(lx, k);
+            }
+            case '!': {
+                advance(lx);
+                if (lxmatch(lx, '=')) 
+                    return TK_NE;
+                return '!';
+            }
+            case '=': {
+                advance(lx);
+                if (lxmatch(lx, '=')) 
+                    return TK_EQ;
+                return '=';
+            }
+            case '>': {
+                advance(lx);
+                if (lxmatch(lx, '>')) 
+                    return TK_SHR;
+                else if (lxmatch(lx, '=')) 
+                    return TK_GE;
+                return '>';
+            }
+            case '<': {
+                advance(lx);
+                if (lxmatch(lx, '<')) 
+                    return TK_SHL;
+                else if (lxmatch(lx, '=')) 
+                    return TK_LE;
+                return '<';
+            }
+            case '*': {
+                advance(lx);
+                if (lxmatch(lx, '*')) 
+                    return TK_POW;
+                return '*';
+            }
+            case '.': {
                 save_and_advance(lx);
-            } while (isalnum(lx->c));
-            OString *s = csY_newstring(lx, lbptr(lx), lblen(lx));
-            k->str = s;
-            if (isreserved(s))
-                return s->extra + FIRSTTK - 1;
-            else
-                return TK_NAME;
+                if (lxmatch(lx, '.')) {
+                    if (lxmatch(lx, '.'))
+                        return TK_DOTS;
+                    return TK_CONCAT;
+                }
+                if (!isdigit(lx->c)) 
+                    return '.';
+                return read_number(lx, k);
+            }
+            case CSEOF: {
+                return TK_EOS;
+            }
+            default: {
+                if (isalpha(lx->c)) {
+                    OString *s;
+                    do {
+                        save_and_advance(lx);
+                    } while (isalnum(lx->c));
+                    s = csY_newstring(lx, csR_buff(lx->buff),
+                                          csR_bufflen(lx->buff));
+                    k->str = s;
+                    if (isreserved(s)) {
+                        printf("%s is RESERVED\n", getstr(s));
+                        return s->extra + FIRSTTK - 1;
+                    } else {
+                        printf("%s is not RESERVED\n", getstr(s));
+                        return TK_NAME;
+                    }
+                } else {
+                    int c = lx->c;
+                    advance(lx);
+                    return c;
+                }
+            }
         }
-        int c = lx->c;
-        advance(lx);
-        return c;
     }
 }
 

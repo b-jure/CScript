@@ -20,9 +20,6 @@
 #define brgetc(br) \
 	((br)->n-- > 0 ? cast(cs_ubyte, *(br)->buff++) : csR_fill(br))
 
-/* Go back one character (byte) */
-#define brungetc(br)	((br)->n++, (br)->buff--)
-
 
 typedef struct {
     size_t n; /* unread bytes */
@@ -46,8 +43,9 @@ CSI_FUNC size_t csR_readn(BuffReader* br, size_t n);
 #define csR_bufflen(b)    ((b)->len)
 #define csR_buffsize(b)   ((b)->size)
 
-#define csR_buffpop(b)        ((b)->len -= 1)
-#define csR_buffreset(b)      ((b)->len = 0)
+#define csR_buffpop(b)          ((b)->len -= 1)
+#define csR_buffreset(b)        ((b)->len = 0)
+#define csR_buffpopn(b,n)       ((b)->len -= (n))
 
 #define csR_buffresize(ts,b,s) \
     { (b)->str = csM_saferealloc(ts, (b)->str, (b)->size, s); \

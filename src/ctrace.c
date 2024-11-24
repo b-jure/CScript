@@ -5,6 +5,7 @@
 */
 
 
+#include "cbits.h"
 #include "cmeta.h"
 #define CS_CORE
 
@@ -24,16 +25,6 @@
     ((i) = GETARG_L(pc, 0), (i) *= GETARG_S(pc, SIZEARGL))
 
 
-/* common signature for tracing functions */
-#define TRACEDEF(name) \
-    static void trace##name (const Proto *p, const Instruction *pc)
-
-
-/* common signature for disassembly functions */
-#define UNASMDEF(name) \
-    static void unasm##name (cs_State *ts, const Proto *p, Instruction *pc)
-
-
 #define TABSZ   3
 #define postab(e) \
     { e; for(int i_ = 0; i_ < TABSZ; i_++) putchar(' '); }
@@ -51,31 +42,31 @@ cs_sinline void endline(void) {
 
 
 cs_sinline int traceop(OpCode op) {
-    postab(printf("%s", getOpName(op)));
+    postab(printf("%-12s", getOpName(op)));
     return SIZEINSTR;
 }
 
 
 cs_sinline int traceS(const Instruction *pc) {
-    postab(printf("S=%d", GETARG_S(pc, 0)));
+    postab(printf("sarg=%d", *pc & 0xFF));
     return SIZEARGS;
 }
 
 
 cs_sinline int traceL(const Instruction *pc) {
-    postab(printf("L=%d", GETARG_L(pc, 0)));
+    postab(printf("larg=%d", get3bytes(pc)));
     return SIZEARGL;
 }
 
 
-TRACEDEF(I) {
+static void traceI(const Proto *p, const Instruction *pc) {
     startline(p, pc);
     traceop(*pc);
     endline();
 }
 
 
-TRACEDEF(IS) {
+static void traceIS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
     traceop(op);
@@ -84,7 +75,7 @@ TRACEDEF(IS) {
 }
 
 
-TRACEDEF(ISS) {
+static void traceISS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
     traceop(op);
@@ -94,7 +85,7 @@ TRACEDEF(ISS) {
 }
 
 
-TRACEDEF(IL) {
+static void traceIL(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
     traceop(op);
@@ -103,7 +94,7 @@ TRACEDEF(IL) {
 }
 
 
-TRACEDEF(ILS) {
+static void traceILS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
     traceop(op);
@@ -113,7 +104,7 @@ TRACEDEF(ILS) {
 }
 
 
-TRACEDEF(ILSS) {
+static void traceILSS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
     traceop(op);
@@ -124,7 +115,7 @@ TRACEDEF(ILSS) {
 }
 
 
-TRACEDEF(ILL) {
+static void traceILL(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
     traceop(op);
@@ -134,7 +125,7 @@ TRACEDEF(ILL) {
 }
 
 
-TRACEDEF(ILLS) {
+static void traceILLS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
     traceop(op);
@@ -214,16 +205,14 @@ static void traceK(const Proto *p, int index) {
 }
 
 
-UNASMDEF() {
-    UNUSED(ts);
+static void unasm(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceop(*pc);
     endline();
 }
 
 
-UNASMDEF(L) {
-    UNUSED(ts);
+static void unasmL(const Proto *p, Instruction *pc) {
     startline(p, pc);
     pc += traceop(*pc);
     traceL(pc);
@@ -231,8 +220,7 @@ UNASMDEF(L) {
 }
 
 
-UNASMDEF(LS) {
-    UNUSED(ts);
+static void unasmLS(const Proto *p, Instruction *pc) {
     startline(p, pc);
     pc += traceop(*pc);
     pc += traceL(pc);
@@ -241,8 +229,7 @@ UNASMDEF(LS) {
 }
 
 
-UNASMDEF(LL) {
-    UNUSED(ts);
+static void unasmLL(const Proto *p, Instruction *pc) {
     startline(p, pc);
     pc += traceop(*pc);
     pc += traceL(pc);
@@ -251,8 +238,7 @@ UNASMDEF(LL) {
 }
 
 
-UNASMDEF(KL) {
-    UNUSED(ts);
+static void unasmKL(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceop(*pc);
     traceK(p, GETARG_L(pc, 0));
@@ -260,8 +246,7 @@ UNASMDEF(KL) {
 }
 
 
-UNASMDEF(K) {
-    UNUSED(ts);
+static void unasmK(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceop(*pc);
     traceK(p, GETARG_S(pc, 0));
@@ -269,10 +254,10 @@ UNASMDEF(K) {
 }
 
 
-UNASMDEF(IMMint) {
+static void unasmIMMint(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Integer i;
-    UNUSED(ts);
+    
     startline(p, pc);
     traceop(*pc);
     getIMM(pc, i);
@@ -282,10 +267,9 @@ UNASMDEF(IMMint) {
 }
 
 
-UNASMDEF(IMMflt) {
+static void unasmIMMflt(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Number n;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     getIMM(pc, n);
@@ -295,9 +279,8 @@ UNASMDEF(IMMflt) {
 }
 
 
-UNASMDEF(EQK) {
+static void unasmEQK(const Proto *p, Instruction *pc) {
     TValue aux;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     traceK(p, GETARG_L(pc, 0));
@@ -307,10 +290,9 @@ UNASMDEF(EQK) {
 }
 
 
-UNASMDEF(EQI) {
+static void unasmEQI(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Integer i;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     getIMM(pc, i);
@@ -320,10 +302,9 @@ UNASMDEF(EQI) {
 }
 
 
-UNASMDEF(IMMord) {
+static void unasmIMMord(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Integer i;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     getIMM(pc, i);
@@ -333,8 +314,7 @@ UNASMDEF(IMMord) {
 }
 
 
-UNASMDEF(S) {
-    UNUSED(ts);
+static void unasmS(const Proto *p, Instruction *pc) {
     startline(p, pc);
     pc += traceop(*pc);
     traceS(pc);
@@ -342,19 +322,18 @@ UNASMDEF(S) {
 }
 
 
-UNASMDEF(Call) {
+static void unasmCall(const Proto *p, Instruction *pc) {
     int from, to;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     from = GETARG_L(pc, 0);
     to = GETARG_L(pc, 1);
-    postab(printf("(STK@%d,...,STK@%d)", from, to)); 
+    postab(printf("(from=%d,...,to=%d)", from, to)); 
     endline();
 }
 
 
-UNASMDEF(MM) {
+static void unasmMM(cs_State *ts, const Proto *p, Instruction *pc) {
     cs_MM mm;
     startline(p, pc);
     traceop(*pc);
@@ -364,9 +343,8 @@ UNASMDEF(MM) {
 }
 
 
-UNASMDEF(MBin) {
+static void unasmMBin(const Proto *p, Instruction *pc) {
     OpCode op;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     op = GETARG_S(pc, 0) + OP_ADD;
@@ -375,9 +353,8 @@ UNASMDEF(MBin) {
 }
 
 
-UNASMDEF(Local) {
+static void unasmLocal(const Proto *p, Instruction *pc) {
     const char *str;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     str = getstr(p->locals[GETARG_L(pc, 0)].name);
@@ -386,9 +363,8 @@ UNASMDEF(Local) {
 }
 
 
-UNASMDEF(Upvalue) {
+static void unasmUpvalue(const Proto *p, Instruction *pc) {
     const char *str;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     str = getstr(p->upvals[GETARG_L(pc, 0)].name);
@@ -397,15 +373,14 @@ UNASMDEF(Upvalue) {
 }
 
 
-UNASMDEF(Ret) {
+static void unasmRet(const Proto *p, Instruction *pc) {
     int nres, nbase, close;
-    UNUSED(ts);
     startline(p, pc);
     traceop(*pc);
     nbase = GETARG_L(pc, 0);
     nres = GETARG_L(pc, 1);
     close = GETARG_S(pc, (2*SIZEARGL));
-    postab(printf("STK@%d", nbase));
+    postab(printf("from=%d", nbase));
     postab(printf("nres=%d", nres));
     postab(printf("close=%s", (close ? "yes" : "no")));
     endline();
@@ -419,7 +394,12 @@ UNASMDEF(Ret) {
 */
 void csTR_disassemble(cs_State *ts, const Proto *p) {
     Instruction *pc = p->code;
-    for (int i = 0; i < p->sizecode; i++) {
+    printf("code size: %d\n", p->sizecode);
+    // while (pc < &p->code[p->sizecode]) {
+    //     printf("%s\n", getOpName(*pc));
+    //     pc = nextOp(pc);
+    // }
+    while (pc < &p->code[p->sizecode]) {
         switch (*pc) {
             case OP_TRUE: case OP_FALSE: case OP_NIL: case OP_NEWCLASS:
             case OP_POP: case OP_ADD: case OP_SUB: case OP_MUL:
@@ -429,14 +409,14 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
             case OP_UNM: case OP_BNOT: case OP_EQPRESERVE:
             case OP_GETINDEX: case OP_SETINDEX: case OP_GETSUPIDX:
             case OP_INHERIT: case OP_FORCALL: case OP_FORLOOP: {
-                unasm(ts, p, pc);
+                unasm(p, pc);
                 break;
             }
             case OP_NILN: case OP_VARARGPREP: case OP_VARARG:
             case OP_CLOSURE: case OP_POPN: case OP_JMP:
             case OP_JMPS: case OP_CLOSE: case OP_TBC:
             case OP_GETINDEXINT: case OP_SETINDEXINT: {
-                unasmL(ts, p, pc);
+                unasmL(p, pc);
                 break;
             }
             case OP_ADDK: case OP_SUBK: case OP_MULK: case OP_DIVK:
@@ -445,51 +425,51 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
             case OP_SETPROPERTY: case OP_GETPROPERTY: case OP_GETINDEXSTR:
             case OP_SETINDEXSTR: case OP_METHOD: case OP_GETSUP:
             case OP_GETSUPIDXSTR: {
-                unasmKL(ts, p, pc);
+                unasmKL(p, pc);
                 break;
             }
             case OP_ADDI: case OP_SUBI: case OP_MULI:
             case OP_DIVI: case OP_MODI: case OP_POWI:
             case OP_BSHLI: case OP_BSHRI: case OP_BANDI:
             case OP_BORI: case OP_BXORI: {
-                unasmIMMint(ts, p, pc);
+                unasmIMMint(p, pc);
                 break;
             }
             case OP_TEST: case OP_TESTORPOP: case OP_TESTANDPOP:
             case OP_TESTPOP: case OP_NEWARRAY: case OP_NEWTABLE: {
-                unasmS(ts, p, pc);
+                unasmS(p, pc);
                 break;
             }
             case OP_LTI: case OP_LEI: case OP_GTI: case OP_GEI: {
-                unasmIMMord(ts, p, pc);
+                unasmIMMord(p, pc);
                 break;
             }
             case OP_GETLOCAL: case OP_SETLOCAL: {
-                unasmLocal(ts, p, pc);
+                unasmLocal(p, pc);
                 break;
             }
             case OP_GETUVAL: case OP_SETUVAL: {
-                unasmUpvalue(ts, p, pc);
+                unasmUpvalue(p, pc);
                 break;
             }
             case OP_FORPREP: {
-                unasmLL(ts, p, pc);
+                unasmLL(p, pc);
                 break;
             }
             case OP_SETARRAY: {
-                unasmLS(ts, p, pc);
+                unasmLS(p, pc);
                 break;
             }
-            case OP_CONST: unasmK(ts, p, pc); break;
-            case OP_CONSTI: unasmIMMint(ts, p, pc); break;
-            case OP_CONSTF: unasmIMMflt(ts, p, pc); break;
+            case OP_CONST: unasmK(p, pc); break;
+            case OP_CONSTI: unasmIMMint(p, pc); break;
+            case OP_CONSTF: unasmIMMflt(p, pc); break;
             case OP_SETMM: unasmMM(ts, p, pc); break;
-            case OP_MBIN: unasmMBin(ts, p, pc); break;
-            case OP_EQK: unasmEQK(ts, p, pc); break;
-            case OP_EQI: unasmEQI(ts, p, pc); break;
-            case OP_EQ: unasmS(ts, p, pc); break;
-            case OP_CALL: unasmCall(ts, p, pc); break;
-            case OP_RET: unasmRet(ts, p, pc); break;
+            case OP_MBIN: unasmMBin(p, pc); break;
+            case OP_EQK: unasmEQK(p, pc); break;
+            case OP_EQI: unasmEQI(p, pc); break;
+            case OP_EQ: unasmS(p, pc); break;
+            case OP_CALL: unasmCall(p, pc); break;
+            case OP_RET: unasmRet(p, pc); break;
             default: cs_assert(0 && "invalid OpCode"); break;
         }
         pc = nextOp(pc);
