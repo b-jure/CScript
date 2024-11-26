@@ -102,15 +102,15 @@ static void closepaux(cs_State *ts, void *ud) {
 
 /* call 'csF_close' in protected mode */
 int csPR_close(cs_State *ts, ptrdiff_t level, int status) {
-    CallFrame *oldcf = ts->cf;
-    for (;;) {
+    CallFrame *old_cf = ts->cf;
+    for (;;) { /* keep closing upvalues until no more errors */
         struct PCloseData pcd;
         pcd.level = restorestack(ts, level); pcd.status = status;
         status = csPR_rawcall(ts, closepaux, &pcd);
         if (c_likely(status == CS_OK))
             return  pcd.status;
-        else
-            ts->cf = oldcf;
+        else /* error occurred; restore saved state and repeat */
+            ts->cf = old_cf;
     }
 }
 
@@ -143,7 +143,7 @@ int csPR_parse(cs_State *ts, BuffReader *br, const char *name) {
     ppd.source = name; /* 'source' */
     status = csPR_call(ts, parsepaux, &ppd, savestack(ts, ts->sp.p), ts->errfunc);
     csR_freebuffer(ts, &ppd.buff);
-    csM_freearray(ts, ppd.ps.actlocals.arr, ppd.ps.actlocals.size, LVar);
+    csM_freearray(ts, ppd.ps.actlocals.arr, ppd.ps.actlocals.size);
     decnnyc(ts);
     return status;
 }

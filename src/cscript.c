@@ -12,10 +12,9 @@
 
 #include "cauxlib.h"
 #include "cslib.h"
-#include "ctrace.h"
 
 
-#define CS_PROGNAME     "CScript"
+#define CS_PROGNAME     "cscript"
 
 
 #define ewritefmt(fmt,...)      cs_writefmt(stderr, fmt, __VA_ARGS__)
@@ -60,7 +59,7 @@ static void printversion(void) {
 
 
 /* write 'msg' to 'stderr' */
-static void emessage(const char *prog, const char *msg) {
+static void emsg(const char *prog, const char *msg) {
     if (prog)
         ewritefmt("%s: ", prog);
     ewritefmt("%s\n", msg);
@@ -73,7 +72,7 @@ static int report(cs_State *ts, int status) {
         const char *msg = cs_to_string(ts, -1);
         if (msg == NULL)
             msg = "(error object not a string)";
-        emessage(progname, msg);
+        emsg(progname, msg);
         cs_pop(ts, 1); /* error object */
     }
     return status;
@@ -322,10 +321,8 @@ static int loadline(cs_State *ts) {
     cs_setntop(ts, 0); /* remove all values */
     if (!pushline(ts, 1))
         return -1;
-    if ((status = addreturn(ts)) != CS_OK) {
-        printf("status not CS_OK! Trying multiline!\n");
+    if ((status = addreturn(ts)) != CS_OK)
         status = multiline(ts);
-    }
     cs_remove(ts, 0); /* remove line */
     cs_assert(cs_gettop(ts) == 0); /* 'csL_loadbuffer' result on top */
     return status;
@@ -339,7 +336,7 @@ static void printresults(cs_State *ts) {
         cs_get_global(ts, "print");
         cs_insert(ts, 1);
         if (cs_pcall(ts, n, 0, 0) != CS_OK)
-            emessage(progname, cs_push_fstring(ts, "error calling 'print' (%s)",
+            emsg(progname, cs_push_fstring(ts, "error calling 'print' (%s)",
                         cs_to_string(ts, -1)));
     }
 }
@@ -430,7 +427,7 @@ int main(int argc, char* argv[]) {
     int status, res;
     cs_State *ts = csL_newstate();
     if (ts == NULL) {
-        emessage(progname, "cannot create state: out of memory");
+        emsg(progname, "cannot create state: out of memory");
         return EXIT_FAILURE;
     }
     cs_gc(ts, CS_GCSTOP); /* stop until all args are parsed */

@@ -1388,7 +1388,7 @@ CS_API int cs_gc(cs_State *ts, int option, ...) {
             break;
         }
 	case CS_GCCOUNTBYTES: { /* remainder bytes of total memory / 1024 */
-            res = gettotalbytes(gs) & 0x3ff; /* all bits before 10th bit */
+            res = gettotalbytes(gs) & 0x3FF; /* all bits before 10th bit */
             break;
         }
 	case CS_GCSTEP: { /* perform GC step */

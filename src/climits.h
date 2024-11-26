@@ -19,8 +19,8 @@
 typedef size_t cs_umem;
 typedef ptrdiff_t cs_mem;
 
-#define CRUMEM_MAX      ((cs_umem)(~(cs_umem)(0)))
-#define CRMEM_MAX       ((cs_mem)(CRUMEM_MAX >> 1))
+#define MAX_CUMEM       ((cs_umem)(~(cs_umem)(0)))
+#define MAX_CMEM        ((cs_mem)(MAX_CUMEM >> 1))
 
 
 /*
@@ -30,8 +30,8 @@ typedef ptrdiff_t cs_mem;
 typedef unsigned char cs_ubyte;
 typedef signed char cs_byte;
 
-#define CRUBYTE_MAX     ((cs_ubyte)(~(cs_ubyte)(0)))
-#define CRBYTE_MAX      ((cs_ubyte)(cs_ubyte_MAX >> 1))
+#define MAX_CUBYTE      ((cs_ubyte)(~(cs_ubyte)(0)))
+#define MAX_CBYTE       ((cs_ubyte)(MAX_UBYTE >> 1))
 
 
 /* 

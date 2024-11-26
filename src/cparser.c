@@ -161,7 +161,7 @@ static void patchlistaddjmp(FunctionState *fs, int jmp) {
     cs_assert(fs->patches.len > 0);
     list = &fs->patches.list[fs->patches.len - 1];
     checklimit(fs, fs->patches.len, CODEMAX, "code jumps");
-    csM_growvec(fs->lx->ts, list->arr, list->size, list->len, CODEMAX,
+    csM_growarray(fs->lx->ts, list->arr, list->size, list->len, CODEMAX,
                 "code jumps", int);
     list->arr[list->len++] = jmp;
 }
@@ -177,7 +177,7 @@ static void patchlistreset(FunctionState *fs) {
 /* create new patch list */
 static void patchliststart(FunctionState *fs) {
     checklimit(fs, fs->patches.len, INT_MAX, "patch lists");
-    csM_growvec(fs->lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
+    csM_growarray(fs->lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
                 INT_MAX, "patch lists", PatchList);
     fs->patches.list[fs->patches.len++] = (PatchList){0};
 }
@@ -192,7 +192,7 @@ static void patchlistend(FunctionState *fs) {
     while ((jmp = patchlistpop(fs)) != NOJMP)
         csC_patchtohere(fs, jmp);
     cs_assert(list->len == 0);
-    csM_freearray(fs->lx->ts, list->arr, list->size, int);
+    csM_freearray(fs->lx->ts, list->arr, list->size);
 }
 
 
@@ -274,7 +274,7 @@ static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
     LVarInfo *lvarinfo;
     Proto *p = fs->p;
     checklimit(fs, fs->nlocals, LARGMAX, "locals");
-    csM_growvec(lx->ts, p->locals, p->sizelocals, fs->nlocals,
+    csM_growarray(lx->ts, p->locals, p->sizelocals, fs->nlocals,
                 LARGMAX, "locals", LVarInfo);
     lvarinfo = &p->locals[fs->nlocals++];
     lvarinfo->name = name;
@@ -404,12 +404,12 @@ static void endfs(FunctionState *fs) {
     csC_finish(fs);
     /* preserve memory; shrink unused space; */
     /* by using counters in 'fs' as final size */
-    csM_shrinkvec(ts, p->p, p->sizep, fs->np, Proto);
-    csM_shrinkvec(ts, p->k, p->sizek, fs->nk, TValue);
-    csM_shrinkvec(ts, p->code, p->sizecode, fs->pc, Instruction);
-    csM_shrinkvec(ts, p->linfo, p->sizelinfo, fs->nlinfo, LineInfo);
-    csM_shrinkvec(ts, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
-    csM_shrinkvec(ts, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
+    csM_shrinkarray(ts, p->p, p->sizep, fs->np, Proto);
+    csM_shrinkarray(ts, p->k, p->sizek, fs->nk, TValue);
+    csM_shrinkarray(ts, p->code, p->sizecode, fs->pc, Instruction);
+    csM_shrinkarray(ts, p->linfo, p->sizelinfo, fs->nlinfo, LineInfo);
+    csM_shrinkarray(ts, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
+    csM_shrinkarray(ts, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev;
     csG_checkGC(ts);
 }
@@ -423,7 +423,7 @@ static Proto *addproto(Lexer *lx) {
     Proto *p = fs->p;
     if (fs->np >= p->sizep) {
         int oldsize = p->sizep;
-        csM_growvec(ts, p->p, p->sizep, fs->np, LARGMAX,
+        csM_growarray(ts, p->p, p->sizep, fs->np, LARGMAX,
                     "function prototypes", Proto);
         while (oldsize < p->sizep)
             p->p[oldsize++] = NULL;
@@ -510,7 +510,7 @@ static int newlocal(Lexer *lx, OString *name) {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
     checklimit(fs, ps->actlocals.len, MAXVARS, "locals");
-    csM_growvec(lx->ts, ps->actlocals.arr, ps->actlocals.size, ps->actlocals.len,
+    csM_growarray(lx->ts, ps->actlocals.arr, ps->actlocals.size, ps->actlocals.len,
                 MAXVARS, "locals", LVar);
     LVar *local = &ps->actlocals.arr[ps->actlocals.len++];
     local->s.kind = VARREG;
@@ -551,7 +551,7 @@ static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
     cs_State *ts = fs->lx->ts;
     checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
-    csM_growvec(ts, p->upvals, p->sizeupvals, fs->nupvals, MAXUPVAL,
+    csM_growarray(ts, p->upvals, p->sizeupvals, fs->nupvals, MAXUPVAL,
                 "upvalues", UpValInfo);
     return &p->upvals[fs->nupvals++];
 }
@@ -1688,7 +1688,7 @@ static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
     if (eisconstant(caseexp)) {
         LiteralInfo li = checkduplicate(lx, ss, caseexp);
         checklimit(fs, ss->literals.len, LARGMAX, "literal switch cases");
-        csM_growvec(lx->ts, ss->literals.arr, ss->literals.size,
+        csM_growarray(lx->ts, ss->literals.arr, ss->literals.size,
                     ss->literals.len, LARGMAX, "switch literals", LiteralInfo);
         ss->literals.arr[ss->literals.len++] = li;
         if (eisconstant(&ss->e)) { /* both are constant expressions ? */

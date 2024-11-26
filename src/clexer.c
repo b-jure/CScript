@@ -23,22 +23,17 @@
 
 #define currIsNewline(lx)       ((lx)->c == '\r' || (lx)->c == '\n')
 
-/* checks for end of stream */
 #define currIsEnd(lx)           ((lx)->c == CSEOF)
 
 
 /* fetch the next character and store it as current char */
 #define advance(lx)     ((lx)->c = brgetc((lx)->br))
 
-
 /* save current character into lexer buffer */
 #define save(lx)        savec(lx, (lx)->c)
 
 /* save the current character into lexer buffer and advance */
 #define save_and_advance(lx)            (save(lx), advance(lx))
-
-/* same as 'save_and_advance' except the character is 'c' */
-#define savec_and_advance(lx, c)        (savec(lx, c), advance(lx))
 
 
 
@@ -310,6 +305,7 @@ static int check_utf8(Lexer *lx, ulong n) {
     return 0;
 }
 
+
 static void checked_utf8esc(char *buff, ulong n, int len) {
     cs_assert(n <= 0x7FFFFFFFu);
     do {
@@ -319,6 +315,7 @@ static void checked_utf8esc(char *buff, ulong n, int len) {
     } while (len > 0);
     cs_assert(n == 0);
 }
+
 
 static void utf8esc(Lexer *lx) {
     char buff[UTF8BUFFSZ];
@@ -529,8 +526,6 @@ static int read_number(Lexer *lx, Literal *k) {
 ** Scanner
 ** ----------------------------------------------------------------------- */
 
-
-#include <stdio.h>
 /* scan for tokens */
 static int scan(Lexer *lx, Literal *k) {
     csR_buffreset(lx->buff);
@@ -625,13 +620,10 @@ static int scan(Lexer *lx, Literal *k) {
                     s = csY_newstring(lx, csR_buff(lx->buff),
                                           csR_bufflen(lx->buff));
                     k->str = s;
-                    if (isreserved(s)) {
-                        printf("%s is RESERVED\n", getstr(s));
+                    if (isreserved(s))
                         return s->extra + FIRSTTK - 1;
-                    } else {
-                        printf("%s is not RESERVED\n", getstr(s));
+                    else
                         return TK_NAME;
-                    }
                 } else {
                     int c = lx->c;
                     advance(lx);

@@ -130,7 +130,7 @@ HTable *csH_newsize(cs_State *ts, uint size) {
 
 
 static inline void freehash(cs_State *ts, HTable *ht) {
-    csM_freearray(ts, ht->node, htsize(ht), TValue);
+    csM_freearray(ts, ht->node, htsize(ht));
 }
 
 

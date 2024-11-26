@@ -109,7 +109,7 @@ void csS_resize(cs_State *ts, int nsz) {
     cs_assert(nsz <= MAXSTRTABLE);
     if (nsz < osz) /* shrinking ? */
         rehashtable(tab->hash, osz, nsz); /* depopulate shrinking part */
-    newarr = csM_reallocarray(ts, tab->hash, osz, nsz, OString*);
+    newarr = csM_reallocarray(ts, tab->hash, osz, nsz);
     if (c_unlikely(newarr == NULL)) { /* reallocation failed? */
         if (nsz < osz) /* was it shrinking table? */
             rehashtable(tab->hash, nsz, osz); /* restore to original size */

@@ -490,9 +490,11 @@ cs_sinline void poscall(cs_State *ts, CallFrame *cf, int nres) {
 }
 
 
+#define next_cf(ts)   ((ts)->cf->next ? (ts)->cf->next : csT_newcf(ts))
+
 cs_sinline CallFrame *prepcallframe(cs_State *ts, SPtr func, int nret,
                                     int mask, SPtr top) {
-    CallFrame *cf = (ts->cf->next ? ts->cf->next : csT_newcf(ts));
+    CallFrame *cf = ts->cf = next_cf(ts);
     cf->func.p = func;
     cf->top.p = top;
     cf->nresults = nret;
@@ -504,13 +506,16 @@ cs_sinline CallFrame *prepcallframe(cs_State *ts, SPtr func, int nret,
 cs_sinline int precallC(cs_State *ts, SPtr func, int nres, cs_CFunction f) {
     CallFrame *cf;
     int n; /* number of returns */
+    printf("PRECALL C!!!\n");
     checkstackGCp(ts, CS_MINSTACK, func);
-    ts->cf = cf = prepcallframe(ts, func, nres, CFST_CCALL, ts->sp.p+CS_MINSTACK);
+    ts->cf = cf = prepcallframe(ts, func, nres, CFST_CCALL,
+                                ts->sp.p + CS_MINSTACK);
     cs_unlock(ts);
     n = (*f)(ts);
     cs_lock(ts);
     api_checknelems(ts, n);
     poscall(ts, cf, n);
+    printf("POSCALL!!!\n");
     return n;
 }
 

@@ -184,7 +184,7 @@ typedef struct GState {
     GCObject *tobefin; /* list of objects to be finalized (pending) */
     GCObject *fixed; /* list of fixed objects (not to be collected) */
     struct cs_State *thwouv; /* list of threads with open upvalues */
-    cs_CFunction fpanic; /* panic handler (unprotected calls) */
+    cs_CFunction fpanic; /* panic handler (runs in unprotected calls) */
     struct cs_State *mainthread; /* thread that also created global state */
     OString *memerror; /* preallocated message for memory errors */
     OString *mmnames[CS_MM_N]; /* array with metamethod names */
@@ -224,8 +224,8 @@ struct cs_State {
 /* thread global state */
 #define G_(ts)      (ts)->gstate
 
-/* check if global state is initialized */
-#define gsinitialized(gs)       ttisnil(&(gs)->nil)
+/* check if global state is fully built */
+#define statebuilt(gs)          ttisnil(&(gs)->nil)
 
 /* check if thread is in 'thwouv' list */
 #define isinthwouv(ts)          ((ts)->thwouv != (ts))
@@ -247,7 +247,7 @@ typedef struct XSG {
 
 
 /* cast 'cs_State' back to start of 'XS' */
-#define fromstate(th)   cast(XS *, cast(cs_ubyte *, th) - offsetof(XS, ts))
+#define fromstate(th)   cast(XS *, cast(cs_ubyte *, (th)) - offsetof(XS, ts))
 
 
 

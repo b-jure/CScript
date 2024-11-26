@@ -209,14 +209,15 @@ static void unlinkupval(UpVal *upval) {
 
 /* close any open upvalues up to the 'level' */
 void csF_closeupval(cs_State *ts, SPtr level) {
-    UpVal *uv = ts->openupval;
-    while (uv != NULL && uvlevel(uv) <= level) {
-        TValue *slot = &uv->u.value;
-        unlinkupval(uv);
-        setobj(ts, slot, uv->v.p);
-        uv->v.p = slot;
-        if (!iswhite(uv)) { /* not white but maybe gray ? */
-            notw2black(uv); /* closed upvalue can't be gray */
+    UpVal *uv;
+    while ((uv = ts->openupval) != NULL && uvlevel(uv) >= level) {
+        TValue *slot = &uv->u.value; /* new position for value */
+        cs_assert(uvlevel(uv) < ts->sp.p);
+        unlinkupval(uv); /* remove it from 'openupval' list */
+        setobj(ts, slot, uv->v.p); /* move value to the upvalue slot */
+        uv->v.p = slot; /* adjust its pointer */
+        if (!iswhite(uv)) { /* neither white nor dead? */
+            notw2black(uv); /* closed upvalues cannot be gray */
             csG_barrier(ts, uv, slot);
         }
     }
@@ -229,7 +230,7 @@ static void poptbclist(cs_State *ts) {
     cs_assert(tbc->tbc.delta > 0);
     tbc -= tbc->tbc.delta;
     while (tbc > ts->stack.p && tbc->tbc.delta == 0)
-        tbc -= tbc->tbc.delta;
+        tbc -= MAXDELTA; /* remove dummy nodes */
     ts->tbclist.p = tbc;
 }
 
@@ -261,10 +262,10 @@ static void prepcallclosem(cs_State *ts, SPtr level, int status) {
     TValue *v = s2v(level); /* value being closed */
     TValue *errobj;
     if (status == CLOSEKTOP) {
-        errobj = &G_(ts)->nil;
+        errobj = &G_(ts)->nil; /* error object is nil */
     } else { /* top will be set to 'level' + 2 */
         errobj = s2v(level + 1); /* error object goes after 'v' */
-        csT_seterrorobj(ts, status, level + 1);
+        csT_seterrorobj(ts, status, level + 1); /* set error object */
     }
     callclosemethod(ts, v, errobj);
 }
@@ -275,13 +276,13 @@ static void prepcallclosem(cs_State *ts, SPtr level, int status) {
 ** Returns (potentially restored stack) 'level'.
 */
 SPtr csF_close(cs_State *ts, SPtr level, int status) {
-    ptrdiff_t relativelevel = savestack(ts, level);
+    ptrdiff_t rellevel = savestack(ts, level);
     csF_closeupval(ts, level);
     while (ts->tbclist.p >= level) {
         SPtr tbc = ts->tbclist.p;
         poptbclist(ts);
         prepcallclosem(ts, tbc, status);
-        level = restorestack(ts, relativelevel);
+        level = restorestack(ts, rellevel);
     }
     return level;
 }
@@ -297,11 +298,11 @@ void csF_freeupval(cs_State *ts, UpVal *upval) {
 
 /* free function prototype */
 void csF_free(cs_State *ts, Proto *fn) {
-    csM_freearray(ts, fn->p, fn->sizep, Proto);
-    csM_freearray(ts, fn->k, fn->sizek, TValue);
-    csM_freearray(ts, fn->code, fn->sizecode, Instruction);
-    csM_freearray(ts, fn->linfo, fn->sizelinfo, LineInfo);
-    csM_freearray(ts, fn->locals, fn->sizelocals, LVarInfo);
-    csM_freearray(ts, fn->upvals, fn->sizeupvals, UpValInfo);
+    csM_freearray(ts, fn->p, fn->sizep);
+    csM_freearray(ts, fn->k, fn->sizek);
+    csM_freearray(ts, fn->code, fn->sizecode);
+    csM_freearray(ts, fn->linfo, fn->sizelinfo);
+    csM_freearray(ts, fn->locals, fn->sizelocals);
+    csM_freearray(ts, fn->upvals, fn->sizeupvals);
     csM_free(ts, fn);
 }

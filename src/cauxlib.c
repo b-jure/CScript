@@ -8,7 +8,6 @@
 #define CS_LIB
 
 
-#include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -431,7 +430,7 @@ CSLIB_API void csL_include(cs_State *ts, const char *modname,
         cs_push_cfunction(ts, openf); /* push func that opens the module */
         cs_push_string(ts, modname); /* argument to 'openf' */
         cs_call(ts, 1, 1); /* call 'openf' */
-        cs_push(ts, -1);  /* include module *//* make copy of the module (call result) */
+        cs_push(ts, -1);  /* make copy of the module (call result) */
         cs_set_fieldstr(ts, -3, modname); /* __LOADED[modname] = module */
     }
     cs_remove(ts, -2); /* remove __LOADED */

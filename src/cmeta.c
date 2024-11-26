@@ -46,7 +46,7 @@ void csMM_init(cs_State *ts) {
 
 
 TValue *csMM_newvmt(cs_State *ts) {
-    TValue *vmt = csM_malloc(ts, SIZEVMT);
+    TValue *vmt = csM_newarray(ts, CS_MM_N, TValue);
     for (int i = 0; i < CS_MM_N; i++)
         setnilval(&vmt[i]);
     return vmt;
@@ -259,7 +259,7 @@ int csMM_orderI(cs_State *ts, const TValue *v1, int v2, int flip, int isflt,
 
 void csMM_freeclass(cs_State *ts, OClass *cls) {
     if (cls->vmt)
-        csM_free_(ts, cls->vmt, SIZEVMT);
+        csM_freearray(ts, cls->vmt, SIZEVMT);
     csH_free(ts, cls->methods);
     csM_free(ts, cls);
 }
@@ -267,6 +267,6 @@ void csMM_freeclass(cs_State *ts, OClass *cls) {
 
 void csMM_freeuserdata(cs_State *ts, UserData *ud) {
     if (ud->vmt)
-        csM_free_(ts, ud->vmt, SIZEVMT);
-    csM_free_(ts, ud, sizeofuserdata(ud->nuv, ud->size));
+        csM_freearray(ts, ud->vmt, SIZEVMT);
+    csM_freemem(ts, ud, sizeofuserdata(ud->nuv, ud->size));
 }

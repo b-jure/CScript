@@ -26,7 +26,7 @@ Array *csA_new(cs_State *ts) {
 /* shrinks array size to the actual size being used */
 void csA_shrink(cs_State *ts, Array *arr) {
     if (arr->b && arr->sz > arr->n)
-        csM_shrinkvec(ts, arr->b, arr->sz, arr->n, TValue);
+        csM_shrinkarray(ts, arr->b, arr->sz, arr->n, TValue);
 }
 
 
@@ -34,8 +34,8 @@ void csA_shrink(cs_State *ts, Array *arr) {
 void csA_ensure(cs_State *ts, Array *arr, int index) {
     cs_assert(index >= 0);
     if (csi_castS2U(index) >= arr->sz) {
-        csM_ensurevec(ts, arr->b, arr->sz, arr->n, index - arr->n + 1,
-                      ARRAYLIMIT, "array elements", TValue);
+        csM_ensurearray(ts, arr->b, arr->sz, arr->n, index - arr->n + 1,
+                        ARRAYLIMIT, "array elements", TValue);
         for (uint i = arr->n; i < arr->sz; i++)
             setnilval(&arr->b[i]);
         arr->n = index + 1; /* adjust new length */
@@ -44,6 +44,6 @@ void csA_ensure(cs_State *ts, Array *arr, int index) {
 
 
 void csA_free(cs_State *ts, Array *arr) {
-    csM_freearray(ts, arr->b, arr->sz, TValue);
+    csM_freearray(ts, arr->b, arr->sz);
     csM_free(ts, arr);
 }
