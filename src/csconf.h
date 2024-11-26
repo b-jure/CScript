@@ -434,7 +434,7 @@
 ** the CScript state with very fast access (memory chunk before state).
 ** CHANGE if you need a different size.
 */
-#define CS_EXTRASPACE       (sizeof(void *))
+#define CS_EXTRASPACE       sizeof(void *)
 
 
 /*

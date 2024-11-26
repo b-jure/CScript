@@ -47,6 +47,17 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
 #endif
 
 
+#if defined(TRACEMEMORY)
+#define nomemchg()  { printf("no change\n"); fflush(stdout); }
+#define posmem(gs) \
+    { printf("totalbytes: %zd, debt: %zd\n", (gs)->totalbytes, (gs)->gcdebt); \
+      fflush(stdout); }
+#else
+#define nomemchg()      ((void)0) 
+#define posmem(gs)      ((void)0)
+#endif
+
+
 cs_sinline void *tryagain(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
     if (cantryagain(gs)) {
@@ -56,7 +67,6 @@ cs_sinline void *tryagain(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     return NULL; /* cannot run an emergency collection */
 }
 
-#include <stdio.h>
 
 void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
@@ -70,7 +80,7 @@ void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     }
     cs_assert((nsz == 0) == (block == NULL));
     gs->gcdebt = (gs->gcdebt + nsz) - osz;
-    printf("totalbytes: %zd, gcdebt: %zd\n", gs->totalbytes, gs->gcdebt);
+    posmem(gs);
     return block;
 }
 
@@ -85,10 +95,10 @@ void *csM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
 
 void *csM_malloc_(cs_State *ts, size_t size, int tag) {
     if (size == 0) {
+        nomemchg();
         return NULL;
     } else {
         GState *gs = G_(ts);
-        printf("BEFORE: totalbytes: %zd, gcdebt: %zd\n", gs->totalbytes, gs->gcdebt);
         void *block = firsttry(gs, NULL, tag, size);
         if (c_unlikely(block == NULL)) {
             block = tryagain(ts, NULL, tag, size);
@@ -96,42 +106,44 @@ void *csM_malloc_(cs_State *ts, size_t size, int tag) {
                 csM_error(ts);
         }
         gs->gcdebt += size;
-        printf("AFTER: totalbytes: %zd, gcdebt: %zd\n", gs->totalbytes, gs->gcdebt);
+        posmem(gs);
         return block;
     }
 }
 
 
+/* minimum size of array memory block */
+#define MINSIZEARRAY    4
+
 void *csM_growarr_(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
-                  int space, int limit, const char *what) {
+                   int space, int limit, const char *what) {
     int size = *sizep;
-    if (c_unlikely(size >= limit || len > len + space))
-        csD_runerror(ts, "too many %s (limit is %d)", what, limit);
-    else if (len + space <= size)
-        return ptr;
-    if (c_unlikely(size >= limit / 2)) {
-        size = limit;
-        cs_assert(size >= CSI_MINARRSIZE);
-    } else {
-        size *= 2;
-        if (size < CSI_MINARRSIZE)
-            size = CSI_MINARRSIZE;
+    if (size - len >= space) { /* have enough space? */
+        nomemchg();
+        return ptr; /* done */
+    } else { /* otherwise expand */
+        size *= 2; /* 2x size */
+        if (c_unlikely(limit - space < len)) /* limit reached? */
+            csD_runerror(ts, "too many %s (limit is %d)", what, limit);
+        cs_assert(size <= limit);
         if (size < len + space)
             size = len + space;
+        if (c_unlikely(size < MINSIZEARRAY))
+            size = MINSIZEARRAY;
+        ptr = csM_saferealloc(ts, ptr, (*sizep)*elemsize, size*elemsize);
+        *sizep = size;
+        return ptr;
     }
-    ptr = csM_saferealloc(ts, ptr, *sizep * elemsize, size * elemsize);
-    *sizep = size;
-    return ptr;
 }
 
 
-void *csM_shrinkarr_(cs_State *ts, void *ptr, int *sizep, int final,
-                    int elemsize) {
-    size_t oldsize = cast_sizet(*sizep * elemsize);
-    size_t newsize = cast_sizet(final * elemsize);
-    cs_assert(newsize <= oldsize);
-    ptr = csM_saferealloc(ts, ptr, oldsize, newsize);
-    *sizep = final;
+void *csM_shrinkarr_(cs_State *ts, void *ptr, int *sizep, int nfinal,
+                     int elemsize) {
+    size_t osz = cast_sizet((*sizep) * elemsize);
+    size_t nsz = cast_sizet(nfinal * elemsize);
+    cs_assert(nsz <= osz);
+    ptr = csM_saferealloc(ts, ptr, osz, nsz);
+    *sizep = nfinal;
     return ptr;
 }
 
@@ -146,5 +158,5 @@ void csM_free_(cs_State *ts, void *ptr, size_t osz) {
     cs_assert((osz == 0) == (ptr == NULL));
     callfalloc(gs, ptr, osz, 0);
     gs->gcdebt -= osz;
-    printf("totalbytes: %zd, gcdebt: %zd\n", gs->totalbytes, gs->gcdebt);
+    posmem(gs);
 }

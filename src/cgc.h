@@ -102,7 +102,7 @@
 
 /* default GC parameters */
 #define CSI_GCSTEPMUL           100 /* 'gcstepmul' */
-#define CSI_GCSTEPSIZE          13  /* 'gcstepsize' (log2) */
+#define CSI_GCSTEPSIZE          13  /* 'gcstepsize' (log2; 8KB) */
 #define CSI_GCPAUSE             200 /* 'gcpause' after memory 2x do cycle */
 
 

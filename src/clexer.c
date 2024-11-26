@@ -75,9 +75,9 @@ void csY_setinput(cs_State *ts, Lexer *lx, BuffReader *br, OString *source) {
 
 void csY_init(cs_State *ts) {
     /* intern and fix all keywords */
-    OString *env = csS_newlit(ts, CS_ENV);
-    csG_fix(ts, obj2gco(env));
-    for (int i = 0; i < NUM_KEYWORDS; i++) {
+    OString *env = csS_newlit(ts, CS_ENV); /* create env name... */
+    csG_fix(ts, obj2gco(env)); /* ...and fix it */
+    for (int i = 0; i < NUM_KEYWORDS; i++) { /* internalize keywords */
         OString *s = csS_new(ts, tkstr[i]);
         s->extra = i + 1;
         csG_fix(ts, obj2gco(s));

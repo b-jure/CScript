@@ -48,6 +48,10 @@ typedef unsigned short ushrt;
 typedef unsigned long ulong;
 
 
+/* maximum value that fits in 'int' type */
+#define MAX_INT     INT_MAX
+
+
 /*
 ** Maximum size visible for CSript.
 ** It must be less than what is representable by 'cs_Integer'.
@@ -189,17 +193,6 @@ typedef cs_ubyte Instruction;
 
 
 /*
-** Minimum internal array size.
-** This should be 2^n='CS_MINARRSIZE'.
-** Make sure this value fits in 'INT_MAX' and is >= 4.
-*/
-#if !defined(CSI_MINARRSIZE)
-#define CSI_MINARRSIZE          8
-#endif
-
-
-
-/*
 ** Maximum call depth for nested C calls including the
 ** parser limit for syntactically nested non-terminals and
 ** other features implemented through recursion in C.
@@ -215,7 +208,7 @@ typedef cs_ubyte Instruction;
  */
 #if !defined(cs_lock)
 
-#if 1
+#if 0
 #define cs_lock(ts)         ((void)0)
 #define cs_unlock(ts)       csTR_dumpstack(ts, "stack after -> %s", __func__)
 #else

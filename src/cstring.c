@@ -129,12 +129,12 @@ void csS_init(cs_State *ts) {
     /* first initialize string table... */
     tab->hash = csM_newarray(ts, MINSTRTABSIZE, OString*);
     rehashtable(tab->hash, 0, MINSTRTABSIZE); /* clear array */
-    tab->size = MINSTRTABSIZE; tab->nuse = 0;
-    /* ...then we allocate the memory error msg */
+    tab->size = MINSTRTABSIZE;
+    cs_assert(tab->nuse == 0);
+    /* allocate the memory-error message... */
     gs->memerror = csS_newlit(ts, MEMERRMSG);
-    csG_fix(ts, obj2gco(gs->memerror));
-    /* fill cache with valid strings */
-    for (int i = 0; i < STRCACHE_N; i++)
+    csG_fix(ts, obj2gco(gs->memerror)); /* ...and fix it */
+    for (int i = 0; i < STRCACHE_N; i++) /* fill cache with valid strings */
         for (int j = 0; j < STRCACHE_M; j++)
             gs->strcache[i][j] = gs->memerror;
 }

@@ -506,7 +506,6 @@ cs_sinline CallFrame *prepcallframe(cs_State *ts, SPtr func, int nret,
 cs_sinline int precallC(cs_State *ts, SPtr func, int nres, cs_CFunction f) {
     CallFrame *cf;
     int n; /* number of returns */
-    printf("PRECALL C!!!\n");
     checkstackGCp(ts, CS_MINSTACK, func);
     ts->cf = cf = prepcallframe(ts, func, nres, CFST_CCALL,
                                 ts->sp.p + CS_MINSTACK);
@@ -515,7 +514,6 @@ cs_sinline int precallC(cs_State *ts, SPtr func, int nres, cs_CFunction f) {
     cs_lock(ts);
     api_checknelems(ts, n);
     poscall(ts, cf, n);
-    printf("POSCALL!!!\n");
     return n;
 }
 

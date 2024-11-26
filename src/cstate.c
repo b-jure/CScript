@@ -71,29 +71,30 @@ static void preinit_thread(cs_State *ts, GState *gs) {
 
 
 /*
-** Initialize stack and base call frame for 'newts'.
-** 'mts' is main thread state; 'newts' == 'mts' only when
-** creating new state.
+** Initialize stack and base call frame for 'ts'.
+** 'maints' is a main thread state ('ts' == 'maints' only when creating new
+** state).
 */
-static void init_stack(cs_State *newts, cs_State *mts) {
+static void init_stack(cs_State *ts, cs_State *maints) {
     CallFrame *cf;
-    newts->stack.p = csM_newarray(mts, INIT_STACKSIZE + EXTRA_STACK, SValue);
-    newts->tbclist.p = newts->stack.p;
+    cs_assert(!statebuilt(G_(ts)) == (ts == maints));
+    ts->stack.p = csM_newarray(maints, INIT_STACKSIZE + EXTRA_STACK, SValue);
+    ts->tbclist.p = ts->stack.p;
     for (int i = 0; i < INIT_STACKSIZE + EXTRA_STACK; i++)
-        setnilval(s2v(newts->stack.p + i));
-    newts->sp.p = newts->stack.p;
-    newts->stackend.p = newts->stack.p + INIT_STACKSIZE;
-    cf = &newts->basecf;
+        setnilval(s2v(ts->stack.p + i));
+    ts->sp.p = ts->stack.p;
+    ts->stackend.p = ts->stack.p + INIT_STACKSIZE;
+    cf = &ts->basecf;
     cf->next = cf->prev = NULL;
-    cf->func.p = newts->sp.p;
-    cf->top.p = mts->stack.p + CS_MINSTACK;
+    cf->func.p = ts->sp.p;
     cf->pc = NULL;
     cf->nvarargs = 0;
     cf->nresults = 0;
     cf->status = CFST_CCALL;
-    setnilval(s2v(mts->sp.p)); /* 'cf' entry function */
-    mts->sp.p++;
-    mts->cf = cf;
+    setnilval(s2v(maints->sp.p)); /* 'cf' entry function */
+    maints->sp.p++;
+    cf->top.p = maints->stack.p + CS_MINSTACK;
+    maints->cf = cf;
 }
 
 
@@ -126,15 +127,12 @@ static void f_newstate(cs_State *ts, void *ud) {
 }
 
 
-#include <stdio.h>
 /* free all 'CallFrame' structures NOT in use by thread */
-static void freecallframes(cs_State *ts) {
+static void free_frames(cs_State *ts) {
     CallFrame *cf = ts->cf;
     CallFrame *next = cf->next;
     cf->next = NULL;
-    printf("ts->ncf = %d\n", ts->ncf);
     while ((cf = next) != NULL) {
-        printf("free frame %p, size: %zu\n", (void*)cf, sizeof(*(cf)));
         next = cf->next;
         csM_free(ts, cf);
         ts->ncf--;
@@ -142,21 +140,22 @@ static void freecallframes(cs_State *ts) {
 }
 
 
-#include <stdio.h>
 /* free thread stack and call frames */
-static void freestack(cs_State *ts) {
+static void free_stack(cs_State *ts) {
     if (ts->stack.p != NULL) { /* stack fully built? */
         csTR_dumpstack(ts, "UNWIND STACK");
         ts->cf = &ts->basecf; /* free all of the call frames */
-        freecallframes(ts);
+        free_frames(ts);
         cs_assert(ts->ncf == 0 && ts->basecf.next == NULL);
         csM_freearray(ts, ts->stack.p, stacksize(ts) + EXTRA_STACK);
     }
 }
 
 
-static void freevmt(cs_State *ts) {
+/* free global state virtual method tables */
+static void free_vmt(cs_State *ts) {
     GState *gs = G_(ts);
+    cs_assert(ts == gs->mainthread);
     for (int i = 0; i < CS_NUM_TYPES; i++)
         if (gs->vmt[i])
             csM_freearray(ts, gs->vmt[i], CS_MM_N);
@@ -176,8 +175,8 @@ static void freestate(cs_State *ts) {
         csi_userstatefree(ts);
     }
     csM_freearray(ts, gs->strtab.hash, gs->strtab.size);
-    freevmt(ts);
-    freestack(ts);
+    free_stack(ts);
+    free_vmt(ts);
     printf("totalbytes: %zd, sizeof(XSG): %zd\n", gettotalbytes(gs), sizeof(XSG));
     /* 
     ** TODO: For some reason assertion below fails, but there are no memory
@@ -185,7 +184,7 @@ static void freestate(cs_State *ts) {
     ** 'CallFrame' but all frames are freed??? Must be a bug in how the
     ** 'gcdebt' and 'totalbytes' are calculated!
     */
-    cs_assert(1/*pass for now, fix later*/|| gettotalbytes(gs) == sizeof(XSG));
+    cs_assert(1/* remove '1' after fix */|| gettotalbytes(gs) == sizeof(XSG));
     gs->falloc(fromstate(ts), sizeof(XSG), 0, gs->ud_alloc); /* free state */
 }
 
@@ -208,6 +207,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     ts->mark = csG_white(gs);
     preinit_thread(ts, gs);
     ts->next = NULL;
+    incnnyc(ts);
     gs->objects = obj2gco(ts);
     gs->totalbytes = sizeof(XSG);
     gs->seed = csi_makeseed(ts); /* initial seed for hashing */
@@ -226,13 +226,15 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     gs->graylist = gs->grayagain = NULL;
     gs->weak = NULL;
     setnilval(&gs->c_registry);
-    gs->falloc = falloc; gs->ud_alloc = ud;
+    gs->falloc = falloc;
+    gs->ud_alloc = ud;
     gs->fpanic = NULL; /* no panic handler by default */
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
     gs->mainthread = ts;
     gs->thwouv = NULL;
     gs->fwarn = NULL; gs->ud_warn = NULL;
     for (int i = 0; i < CS_NUM_TYPES; i++) gs->vmt[i] = NULL;
+    cs_assert(gs->totalbytes == sizeof(XSG) && gs->gcdebt == 0);
     if (csPR_rawcall(ts, f_newstate, NULL) != CS_OK) {
         freestate(ts);
         ts = NULL;
@@ -339,7 +341,6 @@ void csT_seterrorobj(cs_State *ts, int errcode, SPtr oldtop) {
 
 CallFrame *csT_newcf(cs_State *ts) {
     CallFrame *cf;
-    printf("new CallFrame [%d]\n", ts->ncf);
     cs_assert(ts->cf->next == NULL);
     cf = csM_new(ts, CallFrame);
     cs_assert(ts->cf->next == NULL);
@@ -517,6 +518,6 @@ void csT_free(cs_State *ts, cs_State *thread) {
     csF_closeupval(thread, thread->stack.p);  /* close all upvalues */
     cs_assert(thread->openupval == NULL);
     csi_userthreadfree(ts, thread);
-    freestack(thread);
+    free_stack(thread);
     csM_free(ts, xs);
 }

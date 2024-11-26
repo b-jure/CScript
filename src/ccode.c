@@ -212,8 +212,6 @@ static void addlineinfo(FunctionState *fs, Proto *f, int line) {
     }
 }
 
-#include <stdio.h>
-
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
@@ -234,7 +232,6 @@ static void emit3bytes(FunctionState *fs, int code) {
 
 /* emit instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
-    printf("emitting OpCode -> %s\n", getOpName(i));
     emitbyte(fs, i);
     addlineinfo(fs, fs->p, fs->lx->line);
     return fs->pc - 1;

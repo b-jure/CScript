@@ -72,7 +72,7 @@
 
 
 /* 
-** Increment number of non-yieldable calls.
+** Increment number of nested non-yieldable calls.
 ** The counter is located in the upper 2 bytes of 'nCcalls'.
 */
 #define incnnyc(ts)       ((ts)->nCcalls += 0x10000)
@@ -227,19 +227,19 @@ struct cs_State {
 /* check if global state is fully built */
 #define statebuilt(gs)          ttisnil(&(gs)->nil)
 
-/* check if thread is in 'thwouv' list */
+/* check if thread is in 'thwouv' (Threads-With-Open-UpValues) list */
 #define isinthwouv(ts)          ((ts)->thwouv != (ts))
 
 
 
-/* thread state + CS_EXTRASPACE */
+/* extra space(X) + main thread state(S) */
 typedef struct XS {
     cs_ubyte extra_[CS_EXTRASPACE];
     cs_State ts;
 } XS;
 
 
-/* Main thread + global state */
+/* extra space(X) + main thread state(S) + global state(G) */
 typedef struct XSG {
     XS xs;
     GState gs;
