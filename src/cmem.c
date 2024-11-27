@@ -27,7 +27,7 @@
 ** is true, which means the interpreter is in the middle of a collection
 ** step.
 */
-#define cantryagain(gs)         (statebuilt(gs) && !(gs)->gcstopem)
+#define cantryagain(gs)         (statefullybuilt(gs) && !(gs)->gcstopem)
 
 
 #if defined(EMERGENCYGCTESTS)
@@ -44,17 +44,6 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
 }
 #else
 #define firsttry(gs,b,os,ns)    callfalloc(gs,b,os,ns)
-#endif
-
-
-#if defined(TRACEMEMORY)
-#define nomemchg()  { printf("no change\n"); fflush(stdout); }
-#define posmem(gs) \
-    { printf("totalbytes: %zd, debt: %zd\n", (gs)->totalbytes, (gs)->gcdebt); \
-      fflush(stdout); }
-#else
-#define nomemchg()      ((void)0) 
-#define posmem(gs)      ((void)0)
 #endif
 
 
@@ -80,7 +69,6 @@ void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     }
     cs_assert((nsz == 0) == (block == NULL));
     gs->gcdebt = (gs->gcdebt + nsz) - osz;
-    posmem(gs);
     return block;
 }
 
@@ -95,7 +83,6 @@ void *csM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
 
 void *csM_malloc_(cs_State *ts, size_t size, int tag) {
     if (size == 0) {
-        nomemchg();
         return NULL;
     } else {
         GState *gs = G_(ts);
@@ -106,7 +93,6 @@ void *csM_malloc_(cs_State *ts, size_t size, int tag) {
                 csM_error(ts);
         }
         gs->gcdebt += size;
-        posmem(gs);
         return block;
     }
 }
@@ -119,7 +105,6 @@ void *csM_growarr_(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
                    int space, int limit, const char *what) {
     int size = *sizep;
     if (size - len >= space) { /* have enough space? */
-        nomemchg();
         return ptr; /* done */
     } else { /* otherwise expand */
         size *= 2; /* 2x size */
@@ -158,5 +143,4 @@ void csM_free_(cs_State *ts, void *ptr, size_t osz) {
     cs_assert((osz == 0) == (ptr == NULL));
     callfalloc(gs, ptr, osz, 0);
     gs->gcdebt -= osz;
-    posmem(gs);
 }

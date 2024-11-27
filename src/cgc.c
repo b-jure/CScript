@@ -109,7 +109,7 @@ GCObject *csG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset) {
 }
 
 
-GCObject *csG_new_(cs_State *ts, size_t size, int tt_) {
+GCObject *csG_new(cs_State *ts, size_t size, int tt_) {
     return csG_newoff(ts, size, tt_, 0);
 }
 
@@ -223,7 +223,7 @@ static void markobject_(GState *gs, GCObject *o) {
             markblack(o);
             break;
         }
-        case CS_UPVALUE: {
+        case CS_VUPVALUE: {
             UpVal *uv = gco2uv(o);
             if (uvisopen(uv)) 
                 markgray(uv);
@@ -516,7 +516,7 @@ static void freeobject(cs_State *ts, GCObject *o) {
             csF_free(ts, p);
             break;
         }
-        case CS_UPVALUE: {
+        case CS_VUPVALUE: {
             UpVal *uv = gco2uv(o);
             csF_freeupval(ts, uv);
             break;

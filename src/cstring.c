@@ -27,7 +27,7 @@
 
 
 /* maximum size for string table */
-#define MAXSTRTABLE     INT_MAX
+#define MAXSTRTABLE     MAX_INT
 
 
 /* string equality */
@@ -141,7 +141,8 @@ void csS_init(cs_State *ts) {
 
 
 static OString *newstrobj(cs_State *ts, size_t l, int tt_, uint h) {
-    OString *s = csG_new(ts, sizeofstring(l), tt_, OString);
+    GCObject *o = csG_new(ts, sizeofstring(l), tt_);
+    OString *s = gco2str(o);
     s->hash = h;
     s->extra = 0;
     getstr(s)[l] = '\0'; /* null-terminate */
@@ -169,9 +170,9 @@ void csS_remove(cs_State *ts, OString *s) {
 
 /* grow string table */
 static void growtable(cs_State *ts, StringTable *tab) {
-    if (c_unlikely(tab->nuse == INT_MAX)) {
+    if (c_unlikely(tab->nuse == MAX_INT)) {
         csG_full(ts, 1); /* try to reclaim memory */
-        if (tab->nuse == INT_MAX)
+        if (tab->nuse == MAX_INT)
             csM_error(ts);
     }
     if (tab->size <= MAXSTRTABLE / 2)

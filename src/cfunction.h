@@ -26,12 +26,12 @@
 
 /* size of 'CSClosure' */
 #define sizeofCScl(nup) \
-    (offsetof(CSClosure, upvals) + ((nup)*sizeof(UpVal)))
+    (offsetof(CSClosure, upvals) + ((nup) * sizeof(UpVal)))
 
 
 /* size of 'CClosure' */
 #define sizeofCcl(nup) \
-    (offsetof(CClosure, upvals) + ((nup)*sizeof(TValue)))
+    (offsetof(CClosure, upvals) + ((nup) * sizeof(TValue)))
 
 
 /* 

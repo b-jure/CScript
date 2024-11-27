@@ -86,7 +86,7 @@ void csY_init(cs_State *ts) {
 
 
 static void inclinenr(Lexer *lx) {
-    if (c_unlikely(lx->line >= INT_MAX))
+    if (c_unlikely(lx->line >= MAX_INT))
         csD_runerror(lx->ts, "too many lines in a chunk");
     lx->line++;
 }

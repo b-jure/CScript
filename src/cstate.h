@@ -225,7 +225,7 @@ struct cs_State {
 #define G_(ts)      (ts)->gstate
 
 /* check if global state is fully built */
-#define statebuilt(gs)          ttisnil(&(gs)->nil)
+#define statefullybuilt(gs)          ttisnil(&(gs)->nil)
 
 /* check if thread is in 'thwouv' (Threads-With-Open-UpValues) list */
 #define isinthwouv(ts)          ((ts)->thwouv != (ts))

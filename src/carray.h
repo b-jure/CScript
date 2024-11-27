@@ -11,7 +11,7 @@
 
 
 /* array size limit */
-#define ARRAYLIMIT      INT_MAX
+#define ARRAYLIMIT      MAX_INT
 
 
 CSI_FUNC Array *csA_new(cs_State *ts);

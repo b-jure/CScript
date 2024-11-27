@@ -202,7 +202,7 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 static void addlineinfo(FunctionState *fs, Proto *f, int line) {
     int len = fs->nlinfo;
     if (len == 0 || f->linfo[len - 1].line < line) { /* new line entry? */
-        csM_growarray(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, INT_MAX,
+        csM_growarray(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, MAX_INT,
                     "lines", LineInfo);
         f->linfo[len].pc = fs->pc - 1;
         f->linfo[fs->nlinfo++].line = line;
@@ -215,7 +215,7 @@ static void addlineinfo(FunctionState *fs, Proto *f, int line) {
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->ts, p->code, p->sizecode, fs->pc, INT_MAX, "code",
+    csM_growarray(fs->lx->ts, p->code, p->sizecode, fs->pc, MAX_INT, "code",
                 Instruction);
     p->code[fs->pc++] = cast_ubyte(code);
 }
@@ -223,7 +223,7 @@ static void emitbyte(FunctionState *fs, int code) {
 
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_ensurearray(fs->lx->ts, p->code, p->sizecode, fs->pc, 3, INT_MAX,
+    csM_ensurearray(fs->lx->ts, p->code, p->sizecode, fs->pc, 3, MAX_INT,
                   "code", Instruction);
     set3bytes(&p->code[fs->pc], code);
     fs->pc += 3;

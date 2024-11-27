@@ -16,7 +16,8 @@
 
 
 Array *csA_new(cs_State *ts) {
-    Array *arr = csG_new(ts, sizeof(Array), CS_VARRAY, Array);
+    GCObject *o = csG_new(ts, sizeof(Array), CS_VARRAY);
+    Array *arr = gco2arr(o);
     arr->sz = arr->n = 0;
     arr->b = NULL;
     return arr;
@@ -33,14 +34,15 @@ void csA_shrink(cs_State *ts, Array *arr) {
 /* ensure that 'index' can fit into array memory block */
 void csA_ensure(cs_State *ts, Array *arr, int index) {
     cs_assert(index >= 0);
-    if (csi_castS2U(index) < arr->sz) {
+    if (cast_uint(index) < arr->n) { /* 'index' in bounds? */
         return; /* done */
-    } else {
+    } else { /* otherwise adjust new in-use length */
+        cs_assert(arr->n <= cast_uint(index));
         csM_ensurearray(ts, arr->b, arr->sz, arr->n, index - arr->n + 1,
                         ARRAYLIMIT, "array elements", TValue);
         for (uint i = arr->n; i < arr->sz; i++)
             setnilval(&arr->b[i]);
-        arr->n = index + 1; /* adjust new length */
+        arr->n = index + 1;
     }
 }
 

@@ -165,11 +165,7 @@
 #define setgcparam(p,v)         ((p) = (v) / 4)
 
 
-/* allocate new GC object */
-#define csG_new(ts,s,tt,t)      cast(t *, csG_new_(ts, s, tt))
-
-
-CSI_FUNC GCObject *csG_new_(cs_State *ts, size_t size, int tt_);
+CSI_FUNC GCObject *csG_new(cs_State *ts, size_t size, int tt_);
 CSI_FUNC GCObject *csG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset);
 CSI_FUNC void csG_step(cs_State *ts);
 CSI_FUNC void csG_full(cs_State *ts, int isemergency);

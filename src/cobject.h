@@ -646,7 +646,7 @@ typedef struct Instance {
 ** Functions {
 ** ----------------------------------------------------------------------- */
 
-#define CS_UPVALUE      makevariant(CS_TUPVALUE, 0)
+#define CS_VUPVALUE     makevariant(CS_TUPVALUE, 0)
 
 #define CS_VCSCL        makevariant(CS_TFUNCTION, 0) /* CScript closure */
 #define CS_VLCF         makevariant(CS_TFUNCTION, 1) /* light C function */

@@ -21,8 +21,8 @@
 
 
 
-#if SIZE_MAX < UINT_MAX     /* { */
-#error "SIZE_MAX must be greater or equal UINT_MAX"
+#if SIZE_MAX < UMAX_INT     /* { */
+#error "SIZE_MAX must be greater or equal UMAX_INT"
 #endif                      /* } */
 
 

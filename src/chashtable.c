@@ -56,7 +56,7 @@ static uint hashflt(cs_Number n) {
     n = cs_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
     if (c_likely(cs_number2integer(n, &ni))) {
         uint ui = cast_uint(exp) + cast_uint(ni);
-        return (ui <= cast_uint(INT_MAX) ? ui : cast_uint(~ui));
+        return (ui <= cast_uint(MAX_INT) ? ui : cast_uint(~ui));
     }
     cs_assert(csi_numisnan(n) || cs_mathop(fabs)(n) == cast_num(HUGE_VAL));
     return 0;
@@ -65,7 +65,7 @@ static uint hashflt(cs_Number n) {
 
 static Node *hashint(const HTable *ht, cs_Integer i) {
     cs_Unsigned ui = csi_castS2U(i);
-    if (ui <= cast_uint(INT_MAX))
+    if (ui <= cast_uint(MAX_INT))
         return hashpow2(ht, cast_int(ui));
     else
         return hashpow2(ht, ui);
@@ -109,7 +109,8 @@ cs_sinline void htpreinit(HTable *ht) {
 
 /* create new hashtable */
 HTable *csH_new(cs_State *ts) {
-    HTable *ht = csG_new(ts, sizeof(*ht), CS_VHTABLE, HTable);
+    GCObject *o = csG_new(ts, sizeof(HTable), CS_VHTABLE);
+    HTable *ht = gco2ht(o);
     htpreinit(ht);
     sethtval2s(ts, ts->sp.p++, ht); /* assume EXTRA_STACK */
     newhasharray(ts, ht, MINHSIZE);
@@ -120,7 +121,8 @@ HTable *csH_new(cs_State *ts) {
 
 /* create new sized hashtable */
 HTable *csH_newsize(cs_State *ts, uint size) {
-    HTable *ht = csG_new(ts, sizeof(*ht), CS_VHTABLE, HTable);
+    GCObject *o = csG_new(ts, sizeof(HTable), CS_VHTABLE);
+    HTable *ht = gco2ht(o);
     htpreinit(ht);
     sethtval2s(ts, ts->sp.p++, ht); /* anchor */
     newhasharray(ts, ht, size);
@@ -136,7 +138,7 @@ static inline void freehash(cs_State *ts, HTable *ht) {
 
 void csH_free(cs_State *ts, HTable *ht) {
     freehash(ts, ht);
-    csM_free(ts, obj2gco(ht));
+    csM_free(ts, ht);
 }
 
 

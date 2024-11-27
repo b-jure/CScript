@@ -394,11 +394,6 @@ static void unasmRet(const Proto *p, Instruction *pc) {
 */
 void csTR_disassemble(cs_State *ts, const Proto *p) {
     Instruction *pc = p->code;
-    printf("code size: %d\n", p->sizecode);
-    // while (pc < &p->code[p->sizecode]) {
-    //     printf("%s\n", getOpName(*pc));
-    //     pc = nextOp(pc);
-    // }
     while (pc < &p->code[p->sizecode]) {
         switch (*pc) {
             case OP_TRUE: case OP_FALSE: case OP_NIL: case OP_NEWCLASS:

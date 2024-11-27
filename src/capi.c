@@ -704,6 +704,7 @@ CS_API void cs_push_array(cs_State *ts, int sz) {
     api_inctop(ts);
     if (sz > 0)
         csA_ensure(ts, arr, sz - 1);
+    csG_checkGC(ts);
     cs_unlock(ts);
 }
 
@@ -717,6 +718,7 @@ CS_API void cs_push_table(cs_State *ts, int sz) {
     api_inctop(ts);
     if (sz > 0)
         csH_resize(ts, ht, sz);
+    csG_checkGC(ts);
     cs_unlock(ts);
 }
 
@@ -745,6 +747,7 @@ CS_API void cs_push_instance(cs_State *ts, int clsobj) {
     api_inctop(ts);
     csV_call(ts, func, 1);
     cs_assert(ttisinstance(s2v(ts->sp.p))); /* result is the instance */
+    csG_checkGC(ts);
     cs_unlock(ts);
 }
 

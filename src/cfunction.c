@@ -21,7 +21,8 @@
 
 
 Proto *csF_newproto(cs_State *ts) {
-    Proto *p = csG_new(ts, sizeof(Proto), CS_VPROTO, Proto);
+    GCObject *o = csG_new(ts, sizeof(Proto), CS_VPROTO); 
+    Proto *p = gco2proto(o);
     p->isvararg = 0;
     p->gclist = NULL;
     p->source = NULL;
@@ -40,7 +41,8 @@ Proto *csF_newproto(cs_State *ts) {
 
 
 CSClosure *csF_newCSClosure(cs_State *ts, int nup) {
-    CSClosure *cl = csG_new(ts, sizeofCScl(nup), CS_VCSCL, CSClosure);
+    GCObject *o = csG_new(ts, sizeofCScl(nup), CS_VCSCL);
+    CSClosure *cl = gco2clcs(o);
     cl->p = NULL;
     cl->nupvalues = nup;
     while (nup--) cl->upvals[nup] = NULL;
@@ -49,7 +51,8 @@ CSClosure *csF_newCSClosure(cs_State *ts, int nup) {
 
 
 CClosure *csF_newCClosure(cs_State *ts, int nupvalues) {
-    CClosure *cl = csG_new(ts, sizeofCcl(nupvalues), CS_VCCL, CClosure);
+    GCObject *o = csG_new(ts, sizeofCcl(nupvalues), CS_VCCL);
+    CClosure *cl = gco2clc(o);
     cl->nupvalues = nupvalues;
     return cl;
 }
@@ -96,7 +99,8 @@ void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted) {
 /* Create and initialize all the upvalues in 'cl'. */
 void csF_initupvals(cs_State *ts, CSClosure *cl) {
     for (int i = 0; i < cl->nupvalues; i++) {
-        UpVal *uv = csG_new(ts, sizeof(UpVal), CS_UPVALUE, UpVal);
+        GCObject *o = csG_new(ts, sizeof(UpVal), CS_VUPVALUE);
+        UpVal *uv = gco2uv(o);
         uv->v.p = &uv->u.value; /* close it */
         setnilval(uv->v.p);
         cl->upvals[i] = uv;
@@ -110,7 +114,8 @@ void csF_initupvals(cs_State *ts, CSClosure *cl) {
 ** right after 'prev'.
 */
 static UpVal *newupval(cs_State *ts, SPtr val, UpVal **prev) {
-    UpVal *uv = csG_new(ts, sizeof(*uv), CS_UPVALUE, UpVal);
+    GCObject *o = csG_new(ts, sizeof(UpVal), CS_VUPVALUE);
+    UpVal *uv = gco2uv(o);;
     UpVal *previous = *prev;
     uv->v.p = s2v(val);
     uv->u.open.next = previous;

@@ -25,7 +25,6 @@
 #include "cmem.h"
 
 #include <string.h>
-#include <stdio.h>
 
 
 /* check if current token matches 'tk' */
@@ -176,9 +175,9 @@ static void patchlistreset(FunctionState *fs) {
 
 /* create new patch list */
 static void patchliststart(FunctionState *fs) {
-    checklimit(fs, fs->patches.len, INT_MAX, "patch lists");
+    checklimit(fs, fs->patches.len, MAX_INT, "patch lists");
     csM_growarray(fs->lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
-                INT_MAX, "patch lists", PatchList);
+                MAX_INT, "patch lists", PatchList);
     fs->patches.list[fs->patches.len++] = (PatchList){0};
 }
 
@@ -325,8 +324,6 @@ static void endscope(FunctionState *fs) {
     if (scopeisloop(s) || scopeisswitch(s)) /* have patch list? */
         patchlistend(fs);
     removelocals(fs, s->activelocals, scopeisswitch(s)); /* pop locals */
-    printf("s->activelocals = %d, fs->nactlocals = %d\n",
-            s->activelocals, fs->nactlocals);
     cs_assert(s->activelocals == fs->nactlocals);
     stklevel = getstacklevel(fs, s->activelocals);
     if (s->prev && s->haveupval) /* need to close upvalues? */
@@ -882,7 +879,7 @@ static void tabfield(Lexer *lx, Constructor *c) {
     int sp = fs->sp;
     ExpInfo tab, key;
     if (check(lx, TK_NAME)) {
-        checklimit(fs, c->u.t.nh, INT_MAX, "records in a table constructor");
+        checklimit(fs, c->u.t.nh, MAX_INT, "records in a table constructor");
         expname(lx, &key);
     } else
         index(lx, &key);

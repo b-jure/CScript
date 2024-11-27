@@ -77,7 +77,7 @@ static void preinit_thread(cs_State *ts, GState *gs) {
 */
 static void init_stack(cs_State *ts, cs_State *maints) {
     CallFrame *cf;
-    cs_assert(!statebuilt(G_(ts)) == (ts == maints));
+    cs_assert(!statefullybuilt(G_(ts)) == (ts == maints));
     ts->stack.p = csM_newarray(maints, INIT_STACKSIZE + EXTRA_STACK, SValue);
     ts->tbclist.p = ts->stack.p;
     for (int i = 0; i < INIT_STACKSIZE + EXTRA_STACK; i++)
@@ -143,7 +143,6 @@ static void free_frames(cs_State *ts) {
 /* free thread stack and call frames */
 static void free_stack(cs_State *ts) {
     if (ts->stack.p != NULL) { /* stack fully built? */
-        csTR_dumpstack(ts, "UNWIND STACK");
         ts->cf = &ts->basecf; /* free all of the call frames */
         free_frames(ts);
         cs_assert(ts->ncf == 0 && ts->basecf.next == NULL);
@@ -162,11 +161,10 @@ static void free_vmt(cs_State *ts) {
 }
 
 
-#include <stdio.h>
 static void freestate(cs_State *ts) {
     GState *gs = G_(ts);
     cs_assert(ts == G_(ts)->mainthread);
-    if (!statebuilt(gs)) { /* partially built state? */
+    if (!statefullybuilt(gs)) { /* partially built state? */
         csG_freeallobjects(ts);
     } else { /* freeing fully built state */
         ts->cf = &ts->basecf; /* undwind call frames */
@@ -177,14 +175,7 @@ static void freestate(cs_State *ts) {
     csM_freearray(ts, gs->strtab.hash, gs->strtab.size);
     free_stack(ts);
     free_vmt(ts);
-    printf("totalbytes: %zd, sizeof(XSG): %zd\n", gettotalbytes(gs), sizeof(XSG));
-    /* 
-    ** TODO: For some reason assertion below fails, but there are no memory
-    ** leaks, the extra memory is 72 bytes which is the size of a single
-    ** 'CallFrame' but all frames are freed??? Must be a bug in how the
-    ** 'gcdebt' and 'totalbytes' are calculated!
-    */
-    cs_assert(1/* remove '1' after fix */|| gettotalbytes(gs) == sizeof(XSG));
+    cs_assert(gettotalbytes(gs) == sizeof(XSG));
     gs->falloc(fromstate(ts), sizeof(XSG), 0, gs->ud_alloc); /* free state */
 }
 

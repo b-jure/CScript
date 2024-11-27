@@ -54,7 +54,8 @@ TValue *csMM_newvmt(cs_State *ts) {
 
 
 OClass *csMM_newclass(cs_State *ts) {
-    OClass *cls = csG_new(ts, sizeof(OClass), CS_VCLASS, OClass);
+    GCObject *o = csG_new(ts, sizeof(OClass), CS_VCLASS);
+    OClass *cls = gco2cls(o);
     cls->vmt = NULL;
     cls->methods = NULL;
     cls->gclist = NULL;
@@ -63,7 +64,8 @@ OClass *csMM_newclass(cs_State *ts) {
 
 
 Instance *csMM_newinstance(cs_State *ts, OClass *cls) {
-    Instance *ins = csG_new(ts, sizeof(Instance), CS_VINSTANCE, Instance);
+    GCObject *o = csG_new(ts, sizeof(Instance), CS_VINSTANCE);
+    Instance *ins = gco2ins(o);
     ins->oclass = cls;
     ins->fields = NULL;
     setinsval2s(ts, ts->sp.p++, ins); /* anchor instance */
@@ -74,7 +76,8 @@ Instance *csMM_newinstance(cs_State *ts, OClass *cls) {
 
 
 IMethod *csMM_newinsmethod(cs_State *ts, Instance *ins, const TValue *method) {
-    IMethod *im = csG_new(ts, sizeof(IMethod), CS_VIMETHOD, IMethod);
+    GCObject *o = csG_new(ts, sizeof(IMethod), CS_VIMETHOD);
+    IMethod *im = gco2im(o);
     im->ins = ins;
     setobj(ts, &im->method, method);
     return im;
@@ -82,8 +85,8 @@ IMethod *csMM_newinsmethod(cs_State *ts, Instance *ins, const TValue *method) {
 
 
 UserData *csMM_newuserdata(cs_State *ts, size_t size, int nuv) {
-    UserData *ud = csG_new(ts, sizeofuserdata(nuv, size), CS_VUSERDATA,
-                           UserData);
+    GCObject *o = csG_new(ts, sizeof(UserData), CS_VUSERDATA);
+    UserData *ud = gco2u(o);
     ud->vmt = NULL;
     ud->nuv = nuv;
     ud->size = size;
@@ -258,9 +261,10 @@ int csMM_orderI(cs_State *ts, const TValue *v1, int v2, int flip, int isflt,
 
 
 void csMM_freeclass(cs_State *ts, OClass *cls) {
-    if (cls->vmt)
+    if (cls->vmt) /* have VMT? */
         csM_freearray(ts, cls->vmt, SIZEVMT);
-    csH_free(ts, cls->methods);
+    if (cls->methods) /* have methods? */
+        csH_free(ts, cls->methods);
     csM_free(ts, cls);
 }
 
