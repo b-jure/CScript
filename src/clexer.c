@@ -9,6 +9,7 @@
 
 
 #include "cobject.h"
+#include "ctypes.h"
 #include "cgc.h"
 #include "clexer.h"
 #include "cdebug.h"
@@ -17,8 +18,6 @@
 #include "chashtable.h"
 #include "cstring.h"
 #include "creader.h"
-
-#include <ctype.h>
 
 
 #define currIsNewline(lx)       ((lx)->c == '\r' || (lx)->c == '\n')
@@ -50,11 +49,11 @@ static const char *tkstr[] = { /* ORDER TK */
 
 
 /* type of digit */
-typedef enum Dig {
+typedef enum DigType {
     DigDec,
     DigHex,
     DigOct,
-} Dig;
+} DigType;
 
 
 
@@ -126,7 +125,7 @@ const char *csY_tok2str(Lexer *lx, int t) {
             return csS_pushfstring(lx->ts, "'%s'", str);
         return str;
     } else {
-        if (isprint(t))
+        if (cisprint(t))
             return csS_pushfstring(lx->ts, "'%c'", t);
         else
             return csS_pushfstring(lx->ts, "'\\%d'", t);
@@ -221,7 +220,7 @@ static void checkcond(Lexer *lx, int c, const char *msg) {
 
 static int expect_hexdig(Lexer *lx){
     save_and_advance(lx);
-    checkcond(lx, isxdigit(lx->c), "hexadecimal digit expected");
+    checkcond(lx, cisxdigit(lx->c), "hexadecimal digit expected");
     return csS_hexvalue(lx->c);
 }
 
@@ -253,7 +252,7 @@ static unsigned long read_utf8esc(Lexer *lx, int *strict) {
     r = expect_hexdig(lx); /* must have at least one digit */
     /* Read up to 7 hexadecimal digits, the last digit must be less than
     ** 0x1F as the upper 5 bits are reserved for UTF-8 encoding.  */
-    while (cast_void(save_and_advance(lx)), isxdigit(lx->c)) {
+    while (cast_void(save_and_advance(lx)), cisxdigit(lx->c)) {
         i++;
         checkcond(lx, r <= (0x7FFFFFFFu >> 4), "UTF-8 value too large");
         r = (r << 4) + csS_hexvalue(lx->c);
@@ -335,7 +334,7 @@ static void utf8esc(Lexer *lx) {
 static int read_decesc(Lexer *lx) {
     int i;
     int r = 0;
-    for (i = 0; i < 3 && isdigit(lx->c); i++) {
+    for (i = 0; i < 3 && cisdigit(lx->c); i++) {
         r = 10 * r + lx->c - '0';
         save_and_advance(lx);
     }
@@ -377,7 +376,7 @@ static void read_string(Lexer *lx, Literal *k) {
                         inclinenr(lx); c = '\n'; goto only_save;
                     case CSEOF: goto no_save; /* raise err on next iteration */
                     default: {
-                        checkcond(lx, isdigit(lx->c), "invalid escape sequence");
+                        checkcond(lx, cisdigit(lx->c), "invalid escape sequence");
                         c = read_decesc(lx); /* '\ddd' */
                         goto only_save;
                     }
@@ -426,22 +425,37 @@ static int lexstr2num(Lexer *lx, Literal *k) {
 
 
 /*
-** Read digits, additionally allow '_' separators
-** if these are not mantissa digits denoted by 'fp'.
+** Read digits, additionally allow '_' separators if these are
+** not decimal part digits denoted by 'fp'.
 */
-static int aux_readdigs(Lexer *lx, Dig d, int fp) {
+static int read_digits(Lexer *lx, DigType dt, int fp) {
     int digits = 0;
-    for (;; advance(lx)) {
-        if (!fp && lx->c == '_') continue;
-        switch (d) {
-            case DigDec: if (!isdigit(lx->c)) return digits; break;
-            case DigHex: if (!isxdigit(lx->c)) return digits; break;
-            case DigOct: if (!isodigit(lx->c)) return digits; break;
+    for (;;) {
+        if (!fp && lx->c == '_') /* digits separator? */
+            goto only_read; /* skip */
+        switch (dt) { /* otherwise get the digit */
+            case DigDec: if (!cisdigit(lx->c)) return digits; break;
+            case DigHex: if (!cisxdigit(lx->c)) return digits; break;
+            case DigOct: if (!cisodigit(lx->c)) return digits; break;
             default: cs_assert(0); break;
         }
         save(lx);
+    only_read:
+        advance(lx);
         digits++;
     }
+}
+
+
+/*
+** Same as 'read_digits' but checks if there is at least one 'dt'
+** digit, otherwise invokes error.
+*/
+static int expect_digits(Lexer *lx, DigType dt, int fp) {
+    int digits = read_digits(lx, dt, fp);
+    if (c_unlikely(digits == 0))
+        lexerror(lx, "at least one digit expected", TK_FLT);
+    return digits;
 }
 
 
@@ -449,26 +463,22 @@ static int aux_readdigs(Lexer *lx, Dig d, int fp) {
 ** Read exponent digits.
 ** Exponent must have at least 1 decimal digit.
 */
-static int aux_readexponent(Lexer *lx) {
-    int digits;
-    if (lx->c == '-' || lx->c == '+')
-        save_and_advance(lx);
-    if ((digits = aux_readdigs(lx, DigDec, 0) == 0))
-        lexerror(lx, "exponent has no digits", TK_FLT);
-    return digits;
+static int read_exponent(Lexer *lx) {
+    if (lx->c == '-' || lx->c == '+') /* have exponent sign? */
+        save_and_advance(lx); /* save and skip it */
+    return expect_digits(lx, DigDec, 0);
 }
 
 
-/* read decimal number */
-static int read_decnum(Lexer *lx, Literal *k) {
-    cs_assert(isdigit(lx->c) || lx->c == '.');
-    aux_readdigs(lx, DigDec, 0);
-    if (lx->c == '.') {
+/* read base 10 number */
+static int read_decimalnum(Lexer *lx, Literal *k) {
+    read_digits(lx, DigDec, 0);
+    if (lx->c == '.') { /* have decimal point? */
         save_and_advance(lx);
-        aux_readdigs(lx, DigDec, 1);
-        if (lx->c == 'e' || lx->c == 'E') {
-            save_and_advance(lx);
-            aux_readexponent(lx);
+        expect_digits(lx, DigDec, 1);
+        if (lx->c == 'e' || lx->c == 'E') { /* have exponent symbol? */
+            save_and_advance(lx); /* save and skip it */
+            read_exponent(lx);
         }
     }
     savec(lx, '\0');
@@ -476,21 +486,21 @@ static int read_decnum(Lexer *lx, Literal *k) {
 }
 
 
-/* read hexadecimal number */
-static int read_hexnum(Lexer *lx, Literal *k) {
+/* read base 16 number */
+static int read_hexadecimalnum(Lexer *lx, Literal *k) {
     int fp, exp;
     advance(lx); /* skip 'x'/'X' */
-    int digits = aux_readdigs(lx, DigHex, 0);
+    int digits = read_digits(lx, DigHex, 0);
     if ((fp = lx->c == '.')) {
         save_and_advance(lx);
-        if (aux_readdigs(lx, DigHex, 1) == 0 && !digits)
+        if (c_unlikely(read_digits(lx, DigHex, 1) == 0 && !digits))
             lexerror(lx, "missing significand", TK_FLT);
     } else if (!digits) {
         lexerror(lx, "invalid suffix 'x' to number constant", TK_FLT);
     }
     if ((exp = (lx->c == 'p' || lx->c == 'P'))) {
         save_and_advance(lx);
-        aux_readexponent(lx);
+        read_exponent(lx);
     }
     if (fp && !exp)
         lexerror(lx, "missing exponent", TK_FLT);
@@ -499,10 +509,12 @@ static int read_hexnum(Lexer *lx, Literal *k) {
 }
 
 
-/* read octal number */
-static int read_octnum(Lexer *lx, Literal *k) {
-    cs_assert(isodigit(lx->c));
-    aux_readdigs(lx, DigOct, 0);
+/* read base 8 number */
+static int read_octalnum(Lexer *lx, Literal *k) {
+    read_digits(lx, DigOct, 0);
+    if (c_unlikely(cisdigit(lx->c))) {
+
+    }
     savec(lx, '\0');
     return lexstr2num(lx, k);
 }
@@ -511,13 +523,13 @@ static int read_octnum(Lexer *lx, Literal *k) {
 /* read number */
 static int read_number(Lexer *lx, Literal *k) {
     cs_ubyte c = lx->c; /* cache previous digit */
-    save_and_advance(lx);
+    save_and_advance(lx); /* skip first digit */
     if (c == '0' && (lx->c == 'x' || lx->c == 'X'))
-        return read_hexnum(lx, k);
-    else if (c == '0' && isodigit(lx->c))
-        return read_octnum(lx, k);
+        return read_hexadecimalnum(lx, k);
+    else if (c == '0' && cisdigit(lx->c))
+        return read_octalnum(lx, k);
     else
-        return read_decnum(lx, k);
+        return read_decimalnum(lx, k);
 }
 
 
@@ -604,7 +616,7 @@ static int scan(Lexer *lx, Literal *k) {
                         return TK_DOTS;
                     return TK_CONCAT;
                 }
-                if (!isdigit(lx->c)) 
+                if (!cisdigit(lx->c)) 
                     return '.';
                 return read_number(lx, k);
             }
@@ -612,11 +624,11 @@ static int scan(Lexer *lx, Literal *k) {
                 return TK_EOS;
             }
             default: {
-                if (isalpha(lx->c)) {
+                if (cisalpha(lx->c)) {
                     OString *s;
                     do {
                         save_and_advance(lx);
-                    } while (isalnum(lx->c));
+                    } while (cisalnum(lx->c));
                     s = csY_newstring(lx, csR_buff(lx->buff),
                                           csR_bufflen(lx->buff));
                     k->str = s;

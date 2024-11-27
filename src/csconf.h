@@ -220,10 +220,16 @@
 ** @CS_FLOAT_FMTLEN - is the additional length modifier when writing floats.
 ** @cs_mathop - allows the addition of an 'l' or 'f' to all math operations.
 ** @cs_floor - takes the floor of a float.
-** @cs_str2float - convert string into float.
-** @cs_float2str - convert float into string.
-** @cs_float2integer - converts float to integer or returns 0 if float is
-** not within the range of integer.
+** @cs_number2str - convert float into string.
+** @cs_number2integer - converts float to integer or returns 0 if float is
+** not withing the range of integer.
+** @cs_str2number - converts numeral to float, in cases where numeral can't
+** be fully converted to float, 'p' is set to point to the one character
+** beyond the last successfully converted character. When p does not point
+** to '\0', then error occurred. In case of overflow, value returned shall
+** be equal to CS_HUGEVAL, in case of underflow, value returned shall be
+** equal to CS_NUMBER_MAX. Special type of error is when no conversion
+** occurred, then p must point to s in order to indicate that.
 */
 
 
@@ -346,20 +352,6 @@
 ** All uses in CScript have only one format item.
 */
 #define c_snprintf(s,sz,fmt,i)      snprintf(s,sz,fmt,i)
-
-
-/* 
-** @cs_strx2number - converts hexadecimal numeral to a number.
-*/
-#define cs_strx2number(s,p)         cs_str2number((s),(p))
-
-
-/*
-** @cs_numoverflow - checks for number overflow.
-** @cs_numunderflow - checks for number underflow.
-*/
-#define cs_numoverflow(n)       ((n) == (CS_HUGEVAL) || (n) == -(CS_HUGEVAL))
-#define cs_numunderflow(n)      ((n) == (CS_NUMBER_MIN))
 
 
 /* 

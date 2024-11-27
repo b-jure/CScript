@@ -5,8 +5,6 @@
 */
 
 
-#include "cbits.h"
-#include "cmeta.h"
 #define CS_CORE
 
 
@@ -14,6 +12,7 @@
 #include <string.h>
 
 #include "ctrace.h"
+#include "cmeta.h"
 #include "ccode.h"
 #include "cdebug.h"
 #include "climits.h"

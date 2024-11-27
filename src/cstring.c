@@ -13,6 +13,7 @@
 #include "cstring.h"
 #include "cobject.h"
 #include "cgc.h"
+#include "ctypes.h"
 #include "cdebug.h"
 #include "cmem.h"
 #include "cvm.h"
@@ -295,151 +296,144 @@ void csS_sourceid(char *restrict dest, const char *src, size_t len) {
 ** String conversion
 ** ----------------------------------------------------------------------- */
 
-/* maximum value for last integer digit */
-#define MAXINTLASTDIG		(CS_INTEGER_MAX % 10)
-
-/*
- * Check if integer 'i' overflows limit 'l' or in case
- * 'i' is equal to 'l' check if digit 'd' would overflow.
- */
-#define ioverflow(i,d,l) \
-    ((i) >= (l) && ((i) > (l) || (d) > MAXINTLASTDIG))
-
-
-/* decimal overflow */
-#define decoverflow(i,d)	ioverflow(i, d, (CS_INTEGER_MAX / 10))
-
-/* octal overflow */
-#define octoverflow(i,d)	ioverflow(i, d, (CS_INTEGER_MAX / 8))
-
-/* hexadecimal overflow */
-#define hexoverflow(i,d)	ioverflow(i, d, (CS_INTEGER_MAX / 16))
-
-
-
 /* convert hex character into digit */
 int csS_hexvalue(int c) {
     cs_assert(isxdigit(c));
-    if (isdigit(c)) 
+    if (cisdigit(c)) 
         return c - '0';
     else 
-        return (tolower(c) - 'a') + 10;
+        return (ctolower(c) - 'a') + 10;
 }
 
 
-
-#define TOLOWERBUFFSZ   200
-
-/* 
-** Convert all characters in 's' to lower case.
-** This function is not reentrant and 's' must be null terminated.
-** Upon each call to this function static buffer is overwritten.
-** Up to 'TOLOWERBUFFSZ' characters in 's' will be converted.
-*/
-const char *csS_tolowerall(const char *s) {
-    static char buff[TOLOWERBUFFSZ];
-    int c;
-    for (int i = 0; (c = *s++) && i < TOLOWERBUFFSZ; i++)
-        buff[i] = tolower(c);
-    return buff;
-}
-
+/* Lookup table for digit values. -1==255>=36 -> invalid */
+static const unsigned char table[] = { -1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,-1,-1,-1,-1,-1,-1,
+-1,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,
+25,26,27,28,29,30,31,32,33,34,35,-1,-1,-1,-1,-1,
+-1,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,
+25,26,27,28,29,30,31,32,33,34,35,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+};
 
 /*
 ** Convert string to 'cs_Integer'.
-** This function can convert hexadecimal, octal and decimal strings
-** to 'cs_Integer'.
+** This function can convert hexadecimal, octal and decimal numerals
+** to 'cs_Integer'. Additional conversions are possible for bases up to
+** 36, but this function is used for scanner, so it is not required.
 */
 static const char *str2int(const char *s, cs_Integer *i, int *overflow) {
-    cs_Unsigned u = 0;
-    int ngcoval, digit, sign;
-    sign = ngcoval = 1;
-    while (isspace(*s)) s++; /* skip leading spaces */
-    if (*s == '-' || *s == '+') {
-        sign -= 2 * (*s == '-');
-        s++;
+    const cs_ubyte *val = table + 1;
+    cs_Unsigned lim = CS_INTEGER_MIN;
+    int neg = 0;
+    uint x;
+    cs_Unsigned y;
+    int base, c, empty;
+    cs_assert(overflow != NULL);
+    c = *s++;
+    while (cisspace(c)) c = *s++; /* skip leading spaces */
+    if (c == '-' || c == '+') { /* have sign? */
+        neg = -(c == '-'); /* adjust sign value */
+        c = *s++;
     }
-    if (*s == '0' && (*s == 'x' || *s == 'X')) { /* hex ? */
-        s+=2; /* skip hex prefix */
-        for (; isxdigit(*s); s++) {
-            digit = csS_hexvalue(*s);
-            if (hexoverflow(u, digit)) {
-                if (overflow)
-                    *overflow = 1;
-                return NULL;
-            }
-            u = u * 16 + digit;
-            ngcoval = 0;
-        }
-    } else if (*s == '0' && isodigit(s[1])) { /* octal ? */
-        s++; /* skip '0' */
-        do {
-            digit = *s - '0';
-            if (octoverflow(u, digit)) {
-                if (overflow)
-                    *overflow = 1;
-                return NULL;
-            }
-            u = u * 8 + digit;
-            ngcoval = 0;
-        } while (isodigit(*++s));
-    } else { /* decimal */
-        for (; isdigit(*s); s++) {
-            digit = *s - '0';
-            if (decoverflow(u, digit)) {
-                if (overflow)
-                    *overflow = 1;
-                return NULL;
-            }
-            u = u * 10 + digit;
-            ngcoval = 0;
-        }
+    /* handle prefix to get base (if any) */
+    if (c == '0' && ctolower(*s) == 'x') { /* hexadecimal? */
+        s++; /* skip x | X */
+        base = 16;
+        c = *s++; /* get first digit */
+    } else if (c == '0' && cisodigit(*s)) { /* octal? */
+        base = 8;
+        c = *s++; /* get first digit */
+    } else /* otherwise it must be decimal */
+        base = 10; /* c already has first digit */
+    /* now do the conversion */
+    if (base == 10) {
+        empty = !cisdigit(c);
+        for (x = 0; cisdigit(c) && x <= UINT_MAX/10-1; c = *s++)
+            x = x * 10 + ctodigit(c);
+        for (y = x; cisdigit(c) && y <= CS_UNSIGNED_MAX/10 &&
+                    10*y <= CS_UNSIGNED_MAX - ctodigit(c); c = *s++)
+            y = y * 10 + ctodigit(c);
+        if (!cisdigit(c)) goto done;
+    } else if (!(base & base-1)) { /* base is power of 2? (up to base 32) */
+        int bs = "\0\1\2\4\7\3\6\5"[(0x17*base)>>5&7];
+        empty = val[c] >= base;
+        for (x = 0; val[c] < base && x <= UINT_MAX/32; c = *s++)
+            x = x<<bs | val[c];
+        for (y = x; val[c] < base && y <= CS_UNSIGNED_MAX>>bs; c = *s++)
+            y = y<<bs | val[c];
+    } else { /* other bases (up to base 36) */
+        empty = val[c] >= base;
+        for (x = 0; val[c] < base && x <= UINT_MAX/36-1; c = *s++)
+            x = x * base + val[c];
+        for (y = x; val[c] < base && y <= CS_UNSIGNED_MAX/base &&
+                    base*y <= CS_UNSIGNED_MAX-val[c]; c = *s++)
+            y = y * base + val[c];
     }
-    while (isspace(*s)) s++; /* skip trailing spaces */
-    if (ngcoval || *s != '\0') return NULL;
-    *i = csi_castU2S(u*sign);
-    return s;
+    if (val[c] < base) { /* numeral value too large? */
+        for (; val[c] < base; c = *s++); /* skip rest of the digits... */
+        y = CS_INTEGER_MIN; /* ...and indicate numeral is too large */
+    }
+done:
+    if (y >= lim) { /* potential overflow? */
+        if (!neg) { /* positive value overflows? */
+            *overflow = 1; /* propagate overflow */
+            *i = csi_castU2S(lim - 1); /* *i = CS_INTEGER_MAX */
+        } else if (y > lim) { /* negative value underflows? */
+            *overflow = -1; /* propagate underflow */
+            *i = csi_castU2S(lim); /* *i = CS_INTEGER_MIN */
+        } else /* otherwise y is negative value equal to lim */
+            cs_assert(neg && y == lim);
+    }
+    while (cisspace(c)) c = *s++; /* skip trailing spaces */
+    if (empty || c != '\0') return NULL; /* conversion failed? */
+    *i = csi_castU2S((y ^ neg) - neg); /* two's complement hack */
+    return s - 1;
 }
 
+
+#define converr(eptr)    (*(eptr) != '\0')
 
 static const char *str2flt(const char *s, cs_Number *n, int *of) {
     char *eptr;
     *of = 0;
-    if (*s == '0'  && (s[1] == 'x' || s[1] == 'X'))
-        *n = cs_strx2number(s, &eptr);
-    else
-        *n = cs_str2number(s, &eptr);
-    if (of) { /* set underflow flag */
-        if (cs_numoverflow(*n)) 
-            *n = 1;
-        else if (cs_numunderflow(*n)) 
-            *n = -1;
-    }
-    if (eptr == s) 
+    *n = cs_str2number(s, &eptr);
+    if (c_unlikely(of && eptr != s && converr(eptr))) {
+        /* have overflow flag, converted some characters and error occurred */
+        if (*n == CS_HUGEVAL || *n == -CS_HUGEVAL) *of = 1; /* overflow */
+        else if (*n == CS_NUMBER_MIN) *of = -1; /* underflow */
+        /* otherwise no overflow, but still have conversion error */
+    } else if (eptr == s) /* nothing was converted? */
         return NULL;
-    while (isspace(*eptr)) 
-        eptr++;
-    return (*eptr == '\0' ? eptr : NULL);
+    while (cisspace(*eptr)) eptr++; /* skip trailing spaces */
+    return (!converr(eptr) ? eptr : NULL);
 }
 
 
 /* convert string to 'cs_Number' or 'cs_Integer' */
-size_t csS_tonum(const char *s, TValue *o, int *of) {
+size_t csS_tonum(const char *s, TValue *o, int *poflow) {
     cs_Integer i;
     cs_Number n;
     const char *e;
-    int iof;
-
-    if (of) *of = iof = 0;
-    if ((e = str2int(s, &i, &iof)) != NULL) {
+    int oflow = 0;
+    if ((e = str2int(s, &i, &oflow)) != NULL) {
         setival(o, i);
-    } else if ((e = str2flt(s, &n, of)) != NULL) {
+    } else if ((e = str2flt(s, &n, &oflow)) != NULL) {
         setfval(o, n);
-    } else { /* both conversions failed */
-        if (of && !*of) *of = iof;
+    } else /* both conversions failed */
         return 0;
-    }
-    return (e - s) + 1;
+    if (poflow) *poflow = oflow; /* propagate overflow */
+    return (e - s) + 1; /* return size */
 }
 
 
@@ -472,8 +466,7 @@ static int num2buff(const TValue *nv, char *buff) {
 const char *csS_numtostr(const TValue *v, size_t *plen) {
     static char buff[MAXNUM2STR];
     size_t len = num2buff(v, buff);
-    if (plen)
-        *plen = len;
+    if (plen) *plen = len;
     return buff;
 }
 

@@ -81,9 +81,4 @@
       setbyte(dest, 1, getbyte(src, 1)); \
       setbyte(dest, 2, getbyte(src, 2)); }
 
-
-/* check if 'c' is octal */
-#define isodigit(c)	(isdigit(c) && (c) < '8')
-
-
 #endif

@@ -1,1 +1,1 @@
-local a;
+local a = 5;

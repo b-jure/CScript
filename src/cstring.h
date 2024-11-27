@@ -66,7 +66,6 @@ CSI_FUNC size_t csS_tonum(const char *s, TValue *o, int *of);
 CSI_FUNC const char *csS_numtostr(const TValue *o, size_t *plen);
 CSI_FUNC int csS_utf8esc(char *buff, ulong n);
 CSI_FUNC int csS_hexvalue(int c);
-CSI_FUNC const char *csS_tolowerall(const char *s);
 CSI_FUNC void csS_strlimit(char *dest, const char *src, size_t len, size_t limit);
 CSI_FUNC void csS_sourceid(char *dest, const char *src, size_t len);
 
