@@ -37,7 +37,7 @@
 /* 
 ** Maximum amount of upvalues in a closure (both C and CScript).
 */
-#define MAXUPVAL    LARGMAX
+#define MAXUPVAL    MAX_LARG
 
 
 /* special status to close upvalues preserving the top of the stack */

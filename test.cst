@@ -1,1 +1,6 @@
 local a = 5;
+print(a);
+local b, c;
+print(b, c);
+a = 69;
+print(a);

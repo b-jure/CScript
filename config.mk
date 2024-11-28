@@ -47,7 +47,7 @@ SYSLDFLAGS =
 SYSLIBS =
 
 # user flags
-MYCFLAGS = -fsanitize=address -fsanitize=undefined -ggdb -DCSI_ASSERT -DCSI_TRACE_API -DTRACEMEMORY
+MYCFLAGS = -fsanitize=address -fsanitize=undefined -ggdb -DCSI_ASSERT -DCSI_TRACE_API
 MYLDFLAGS = -fsanitize=address -fsanitize=undefined
 MYLIBS =
 MYOBJS =

@@ -332,14 +332,14 @@ static const unsigned char table[] = { -1,
 ** to 'cs_Integer'. Additional conversions are possible for bases up to
 ** 36, but this function is used for scanner, so it is not required.
 */
-static const char *str2int(const char *s, cs_Integer *i, int *overflow) {
+static const char *str2int(const char *s, cs_Integer *i, int *oflow) {
     const cs_ubyte *val = table + 1;
     cs_Unsigned lim = CS_INTEGER_MIN;
     int neg = 0;
     uint x;
     cs_Unsigned y;
     int base, c, empty;
-    cs_assert(overflow != NULL);
+    cs_assert(oflow != NULL);
     c = *s++;
     while (cisspace(c)) c = *s++; /* skip leading spaces */
     if (c == '-' || c == '+') { /* have sign? */
@@ -365,7 +365,7 @@ static const char *str2int(const char *s, cs_Integer *i, int *overflow) {
                     10*y <= CS_UNSIGNED_MAX - ctodigit(c); c = *s++)
             y = y * 10 + ctodigit(c);
         if (!cisdigit(c)) goto done;
-    } else if (!(base & base-1)) { /* base is power of 2? (up to base 32) */
+    } else if (!(base & (base-1))) { /* base is power of 2? (up to base 32) */
         int bs = "\0\1\2\4\7\3\6\5"[(0x17*base)>>5&7];
         empty = val[c] >= base;
         for (x = 0; val[c] < base && x <= UINT_MAX/32; c = *s++)
@@ -387,10 +387,10 @@ static const char *str2int(const char *s, cs_Integer *i, int *overflow) {
 done:
     if (y >= lim) { /* potential overflow? */
         if (!neg) { /* positive value overflows? */
-            *overflow = 1; /* propagate overflow */
+            *oflow = 1; /* propagate overflow */
             *i = csi_castU2S(lim - 1); /* *i = CS_INTEGER_MAX */
         } else if (y > lim) { /* negative value underflows? */
-            *overflow = -1; /* propagate underflow */
+            *oflow = -1; /* propagate underflow */
             *i = csi_castU2S(lim); /* *i = CS_INTEGER_MIN */
         } else /* otherwise y is negative value equal to lim */
             cs_assert(neg && y == lim);
@@ -404,17 +404,19 @@ done:
 
 #define converr(eptr)    (*(eptr) != '\0')
 
-static const char *str2flt(const char *s, cs_Number *n, int *of) {
+static const char *str2flt(const char *s, cs_Number *n, int *oflow) {
     char *eptr;
-    *of = 0;
+    cs_assert(oflow != NULL);
+    *oflow = 0;
     *n = cs_str2number(s, &eptr);
-    if (c_unlikely(of && eptr != s && converr(eptr))) {
-        /* have overflow flag, converted some characters and error occurred */
-        if (*n == CS_HUGEVAL || *n == -CS_HUGEVAL) *of = 1; /* overflow */
-        else if (*n == CS_NUMBER_MIN) *of = -1; /* underflow */
-        /* otherwise no overflow, but still have conversion error */
-    } else if (eptr == s) /* nothing was converted? */
+    if (eptr == s) { /* nothing was converted? */
         return NULL;
+    } else if (c_unlikely(oflow && converr(eptr))) {
+        /* have overflow flag, converted some characters and error occurred */
+        if (*n == CS_HUGEVAL || *n == -CS_HUGEVAL) *oflow = 1; /* overflow */
+        else if (*n == CS_NUMBER_MIN) *oflow = -1; /* underflow */
+        /* otherwise no (under)overflow, but still have conversion error */
+    }
     while (cisspace(*eptr)) eptr++; /* skip trailing spaces */
     return (!converr(eptr) ? eptr : NULL);
 }

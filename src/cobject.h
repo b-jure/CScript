@@ -210,8 +210,8 @@ typedef struct GCObject {
 ** Numbers {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VNUMINT      makevariant(CS_TNUMBER, 0) /* float numbers */
-#define CS_VNUMFLT      makevariant(CS_TNUMBER, 1) /* integer numbers */
+#define CS_VNUMFLT      makevariant(CS_TNUMBER, 0) /* float numbers */
+#define CS_VNUMINT      makevariant(CS_TNUMBER, 1) /* integer numbers */
 
 #define ttisnum(o)      checktype(o, CS_TNUMBER)
 #define ttisflt(o)      checktag(o, CS_VNUMFLT)

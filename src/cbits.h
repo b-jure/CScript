@@ -66,7 +66,7 @@
  * casted to 'int'.
  */
 #define get3bytes(p) \
-    (cast_int(0) | \
+    (cast_uint(0) | \
      ((*(cast_ubytep(p) + 2)) << 16) | \
      ((*(cast_ubytep(p) + 1)) << 8) | \
      (*cast_ubytep(p)))

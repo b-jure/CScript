@@ -159,8 +159,8 @@ static void patchlistaddjmp(FunctionState *fs, int jmp) {
     PatchList *list;
     cs_assert(fs->patches.len > 0);
     list = &fs->patches.list[fs->patches.len - 1];
-    checklimit(fs, fs->patches.len, CODEMAX, "code jumps");
-    csM_growarray(fs->lx->ts, list->arr, list->size, list->len, CODEMAX,
+    checklimit(fs, fs->patches.len, MAX_CODE, "code jumps");
+    csM_growarray(fs->lx->ts, list->arr, list->size, list->len, MAX_CODE,
                 "code jumps", int);
     list->arr[list->len++] = jmp;
 }
@@ -272,9 +272,12 @@ static void initstring(ExpInfo *e, OString *s) {
 static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
     LVarInfo *lvarinfo;
     Proto *p = fs->p;
-    checklimit(fs, fs->nlocals, LARGMAX, "locals");
+    int osz = p->sizelocals;
+    checklimit(fs, fs->nlocals, MAX_LARG, "locals");
     csM_growarray(lx->ts, p->locals, p->sizelocals, fs->nlocals,
-                LARGMAX, "locals", LVarInfo);
+                MAX_LARG, "locals", LVarInfo);
+    while (osz < p->sizelocals)
+        p->locals[osz++].name = NULL;
     lvarinfo = &p->locals[fs->nlocals++];
     lvarinfo->name = name;
     lvarinfo->startpc = fs->pc;
@@ -420,7 +423,7 @@ static Proto *addproto(Lexer *lx) {
     Proto *p = fs->p;
     if (fs->np >= p->sizep) {
         int oldsize = p->sizep;
-        csM_growarray(ts, p->p, p->sizep, fs->np, LARGMAX,
+        csM_growarray(ts, p->p, p->sizep, fs->np, MAX_LARG,
                     "function prototypes", Proto);
         while (oldsize < p->sizep)
             p->p[oldsize++] = NULL;
@@ -506,10 +509,11 @@ static OString *str_expectname(Lexer *lx) {
 static int newlocal(Lexer *lx, OString *name) {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
+    LVar *local;
     checklimit(fs, ps->actlocals.len, MAXVARS, "locals");
     csM_growarray(lx->ts, ps->actlocals.arr, ps->actlocals.size, ps->actlocals.len,
                 MAXVARS, "locals", LVar);
-    LVar *local = &ps->actlocals.arr[ps->actlocals.len++];
+    local = &ps->actlocals.arr[ps->actlocals.len++];
     local->s.kind = VARREG;
     local->s.name = name;
     local->s.idx = -1;
@@ -547,9 +551,12 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e) {
 static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
     cs_State *ts = fs->lx->ts;
+    int osz = p->sizeupvals;
     checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
     csM_growarray(ts, p->upvals, p->sizeupvals, fs->nupvals, MAXUPVAL,
-                "upvalues", UpValInfo);
+                  "upvalues", UpValInfo);
+    while (osz < p->sizeupvals)
+        p->upvals[osz++].name = NULL;
     return &p->upvals[fs->nupvals++];
 }
 
@@ -720,7 +727,6 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
         break;
     case TK_NAME:
         var(lx, str_expectname(lx), e);
-        csY_scan(lx);
         break;
     case TK_SUPER:
         superkw(lx, e);
@@ -739,21 +745,21 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
 static void call(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int base;
-    csC_exp2stack(fs, e);
-    base = fs->sp - 1;
+    csC_exp2stack(fs, e); /* put func on stack */
+    base = fs->sp - 1; /* func */
     csY_scan(lx); /* skip '(' */
     if (lx->t.tk != ')') { /* have args ? */
         explist(lx, e);
         if (eismulret(e))
-            csC_setreturns(fs, e, CS_MULRET);
-    } else {
+            csC_setmulret(fs, e);
+        else
+            csC_exp2stack(fs, e);
+    } else
         e->et = EXP_VOID;
-    }
     expectnext(lx, ')');
-    if (!eismulret(e) && e->et != EXP_VOID)
-        csC_exp2stack(lx->fs, e);
     initexp(e, EXP_CALL, csC_emitILL(fs, OP_CALL, base, 2));
-    fs->sp = base + 1;
+    fs->sp = base + 1; /* call removes function and arguments and leaves
+                          one result (unless changed later) */
 }
 
 
@@ -774,8 +780,6 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
             indexed(lx, e, 0);
             break;
         case '(':
-            if (!eisconstant(e))
-                csY_syntaxerror(lx, "tried calling constant value");
             call(lx, e);
             break;
         default:
@@ -1180,7 +1184,7 @@ static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
 */
 struct LHS {
     struct LHS *prev;
-    ExpInfo e;
+    ExpInfo v;
 };
 
 
@@ -1191,12 +1195,12 @@ struct LHS {
 **        | var ',' vars
 */
 static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
-    expect_cond(lx, eisvar(&lhs->e), "expect variable");
-    checkreadonly(lx, &lhs->e);
+    expect_cond(lx, eisvar(&lhs->v), "expect variable");
+    checkreadonly(lx, &lhs->v);
     if (match(lx, ',')) { /* more vars ? */
         struct LHS var;
         var.prev = lhs;
-        suffixedexp(lx, &var.e);
+        suffixedexp(lx, &var.v);
         enterCstack(lx); /* control recursion depth */
         assign(lx, &var, nvars + 1);
         leaveCstack(lx);
@@ -1210,7 +1214,7 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
         else
             csC_exp2stack(lx->fs, &e);
     }
-    csC_storevar(lx->fs, &lhs->e);
+    csC_storevar(lx->fs, &lhs->v);
 }
 
 
@@ -1219,16 +1223,18 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
 **           | assign
 */
 static void exprstm(Lexer *lx) {
-    struct LHS var;
-    suffixedexp(lx, &var.e);
+    struct LHS v;
+    suffixedexp(lx, &v.v);
     if (check(lx, '=') || check(lx, ',')) { /* assignment? */
-        var.prev = NULL;
-        assign(lx, &var, 1);
+        v.prev = NULL;
+        assign(lx, &v, 1);
     } else { /* otherwise must be call */
+        FunctionState *fs = lx->fs;
         Instruction *inst;
-        expect_cond(lx, var.e.et == EXP_CALL, "syntax error");
-        inst = getinstruction(lx->fs, &var.e);
-        SETARG_L(inst, 0, 1); /* call statements uses no results */
+        expect_cond(lx, v.v.et == EXP_CALL, "syntax error");
+        inst = getinstruction(fs, &v.v);
+        SETARG_L(inst, 1, 1); /* call statement uses no results... */
+        fs->sp--; /* ...so the slot is freed */
     }
 }
 
@@ -1684,9 +1690,9 @@ static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
     FunctionState *fs = lx->fs;
     if (eisconstant(caseexp)) {
         LiteralInfo li = checkduplicate(lx, ss, caseexp);
-        checklimit(fs, ss->literals.len, LARGMAX, "literal switch cases");
+        checklimit(fs, ss->literals.len, MAX_LARG, "literal switch cases");
         csM_growarray(lx->ts, ss->literals.arr, ss->literals.size,
-                    ss->literals.len, LARGMAX, "switch literals", LiteralInfo);
+                    ss->literals.len, MAX_LARG, "switch literals", LiteralInfo);
         ss->literals.arr[ss->literals.len++] = li;
         if (eisconstant(&ss->e)) { /* both are constant expressions ? */
             TValue v1, v2;
@@ -2180,7 +2186,7 @@ static void returnstm(Lexer *lx) {
     if (!check(lx, ';')) { /* have return values ? */
         nreturns = explist(lx, &e); /* get return values */
         if (eismulret(&e)) { /* last expression has multiple returns? */
-            csC_setreturns(fs, &e, CS_MULRET); /* emit as such... */
+            csC_setmulret(fs, &e); /* emit as such... */
             nreturns = CS_MULRET; /* ...and indicate */
         } else { /* otherwise make sure expression is on stack */
             csC_exp2stack(fs, &e);

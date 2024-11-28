@@ -210,7 +210,7 @@ typedef cs_ubyte Instruction;
 
 #if 0
 #define cs_lock(ts)         ((void)0)
-#define cs_unlock(ts)       csTR_dumpstack(ts, "stack after -> %s", __func__)
+#define cs_unlock(ts)       csTR_dumpstack(ts, 1, "stack after -> %s", __func__)
 #else
 #define cs_lock(ts)         ((void)0)
 #define cs_unlock(ts)       ((void)0)

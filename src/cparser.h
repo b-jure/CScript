@@ -15,7 +15,7 @@
 
 
 /* maximum number of local variables per function */
-#define MAXVARS     LARGMAX
+#define MAXVARS     MAX_LARG
 
 
 /* 

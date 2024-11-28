@@ -28,7 +28,6 @@
 
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
-#include <stdio.h>
 
 /* get line number of instruction ('pc') */
 int csD_getfuncline(const Proto *p, int pc) {
@@ -45,6 +44,7 @@ int csD_getfuncline(const Proto *p, int pc) {
         else /* otherwise direct hit */
             break;
     }
+    li += li->pc < pc;
     cs_assert(pc <= li->pc);
     return li->line;
 }

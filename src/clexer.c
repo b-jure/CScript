@@ -32,7 +32,7 @@
 #define save(lx)        savec(lx, (lx)->c)
 
 /* save the current character into lexer buffer and advance */
-#define save_and_advance(lx)            (save(lx), advance(lx))
+#define save_and_advance(lx)        (save(lx), advance(lx))
 
 
 
@@ -164,11 +164,16 @@ cs_noret csY_syntaxerror(Lexer *lx, const char *err) {
 OString *csY_newstring(Lexer *lx, const char *str, size_t len) {
     cs_State *ts = lx->ts;
     OString *s = csS_newl(ts, str, len);
-    TValue *ss = s2v(ts->sp.p++);
-    cs_assert(lx->tab != NULL);
-    setstrval(ts, ss, s); /* assuming EXTRA_STACK */
-    csH_set(lx->ts, lx->tab, ss, ss);
-    ts->sp.p--; /* remove ss */
+    const TValue *o = csH_getstr(lx->tab, s);
+    if (!ttisnil(o)) { /* string already present? */
+        s = keystrval(cast(Node *, o));
+    } else {
+        TValue *stkv = s2v(ts->sp.p++); /* reserve stack space for string */
+        setstrval(ts, stkv, s); /* anchor */
+        csH_finishset(ts, lx->tab, o, stkv, stkv); /* tab[string] = string */
+        csG_checkGC(ts);
+        ts->sp.p--;  /* remove string */
+    }
     return s;
 }
 
@@ -405,21 +410,23 @@ static void read_string(Lexer *lx, Literal *k) {
 
 /* convert lexer buffer bytes into number constant */
 static int lexstr2num(Lexer *lx, Literal *k) {
-    int ovf;
+    int oflow;
     TValue o;
-    if (csS_tonum(csR_buff(lx->buff), &o, &ovf) == 0)
-        lexerror(lx, "invalid number literal", TK_FLT);
-    else if (ovf > 0)
+    if (c_unlikely(csS_tonum(csR_buff(lx->buff), &o, &oflow) == 0))
+        lexerror(lx, "malformed number", TK_FLT);
+    else if (c_unlikely(oflow > 0)) /* overflow? */
         lexerror(lx, "number literal overflows", TK_FLT);
-    else if (ovf < 0)
+    else if (c_unlikely(oflow < 0)) /* underflow? */
         lexerror(lx, "number literal underflows", TK_FLT);
-    if (ttisint(&o)) {
-        k->i = ival(&o);
-        return TK_INT;
-    } else {
-        cs_assert(ttisflt(&o));
-        k->n = fval(&o);
-        return TK_FLT;
+    else { /* otherwise no errors */
+        if (ttisint(&o)) { /* integer constant? */
+            k->i = ival(&o);
+            return TK_INT;
+        } else { /* otherwise float constant */
+            cs_assert(ttisflt(&o));
+            k->n = fval(&o);
+            return TK_FLT;
+        }
     }
 }
 
@@ -491,20 +498,19 @@ static int read_hexadecimalnum(Lexer *lx, Literal *k) {
     int fp, exp;
     advance(lx); /* skip 'x'/'X' */
     int digits = read_digits(lx, DigHex, 0);
-    if ((fp = lx->c == '.')) {
+    if ((fp = lx->c == '.')) { /* hexadecimal float? */
         save_and_advance(lx);
         if (c_unlikely(read_digits(lx, DigHex, 1) == 0 && !digits))
-            lexerror(lx, "missing significand", TK_FLT);
-    } else if (!digits) {
-        lexerror(lx, "invalid suffix 'x' to number constant", TK_FLT);
-    }
+            lexerror(lx, "hexdecimal floating constant requires a significand", TK_FLT);
+    } else if (!digits) /* no digits in regular hexadecimal? */
+        lexerror(lx, "invalid suffix 'x' on integer constant", TK_FLT);
     if ((exp = (lx->c == 'p' || lx->c == 'P'))) {
         save_and_advance(lx);
         read_exponent(lx);
     }
-    if (fp && !exp)
-        lexerror(lx, "missing exponent", TK_FLT);
-    savec(lx, '\0');
+    if (c_unlikely(fp && !exp))
+        lexerror(lx, "hexadecimal floating constant requires an exponent", TK_FLT);
+    savec(lx, '\0'); /* terminate */
     return lexstr2num(lx, k);
 }
 
@@ -520,10 +526,10 @@ static int read_octalnum(Lexer *lx, Literal *k) {
 }
 
 
-/* read number */
+/* read number literal */
 static int read_number(Lexer *lx, Literal *k) {
-    cs_ubyte c = lx->c; /* cache previous digit */
-    save_and_advance(lx); /* skip first digit */
+    cs_ubyte c = lx->c;
+    save_and_advance(lx);
     if (c == '0' && (lx->c == 'x' || lx->c == 'X'))
         return read_hexadecimalnum(lx, k);
     else if (c == '0' && cisdigit(lx->c))

@@ -492,12 +492,12 @@ cs_sinline void poscall(cs_State *ts, CallFrame *cf, int nres) {
 
 #define next_cf(ts)   ((ts)->cf->next ? (ts)->cf->next : csT_newcf(ts))
 
-cs_sinline CallFrame *prepcallframe(cs_State *ts, SPtr func, int nret,
+cs_sinline CallFrame *prepcallframe(cs_State *ts, SPtr func, int nres,
                                     int mask, SPtr top) {
     CallFrame *cf = ts->cf = next_cf(ts);
     cf->func.p = func;
     cf->top.p = top;
-    cf->nresults = nret;
+    cf->nresults = nres;
     cf->status = mask;
     return cf;
 }
@@ -556,7 +556,7 @@ retry:
             precallC(ts, func, CS_MULRET, lcfval(s2v(func)));
             return NULL; /* done */
         }
-        case CS_VCSCL: { /* CSript closure */
+        case CS_VCSCL: { /* CScript closure */
             CallFrame *cf;
             Proto *p = clCSval(s2v(func))->p;
             int nargs = (ts->sp.p - func) - 1;
@@ -903,15 +903,15 @@ void csV_concat(cs_State *ts, int total) {
 #define checkGC(ts)     csG_condGC(ts, savepc(ts), (void)0)
 
 
-#if 0
+#if 1
 #include "ctrace.h"
-#define fetch()         csTR_tracepc(cl->fn, pc)
+#define fetch()         (csTR_tracepc(ts, cl->p, pc), *pc++)
 #else
 #define fetch()         (*pc++)
 #endif
 
 /* fetch short instruction argument */
-#define fetchs()        fetch()
+#define fetchs()        (*pc++)
 
 /* fetch long instruction argument */
 #define fetchl()        (pc += SIZEARGL, get3bytes(pc - SIZEARGL))
@@ -968,6 +968,9 @@ returning:
     k = cl->p->k;
     pc = cl->p->code;
     base = cf->func.p + 1;
+#if 1
+        printf(">> Tracing code execution <<\n");
+#endif
     for (;;) {
         vm_dispatch(fetch()) {
             vm_case(OP_TRUE) {
@@ -1003,7 +1006,7 @@ returning:
             }
             vm_case(OP_CONSTI) {
                 int L = fetchl(); /* int */
-                int S = fetchs(); /* sign */
+                int S = getsign(); /* sign */
                 setival(s2v(ts->sp.p++), L*S);
                 vm_break;
             }
@@ -1348,8 +1351,7 @@ returning:
                 int L = fetchl();
                 pc -= L;
                 vm_break;
-            }
-            /* } TEST_OPS { */
+            } /* } TEST_OPS { */
             vm_case(OP_TEST) {
                 TValue *v = peek(0);
                 int L = fetchl(); /* offset */
@@ -1390,8 +1392,7 @@ returning:
                     pc += L;
                 pop(1); /* v */
                 vm_break;
-            }
-            /* } */
+            } /* } */
             vm_case(OP_CALL) {
                 CallFrame *newcf;
                 SPtr func = STK(fetchl());
@@ -1400,7 +1401,7 @@ returning:
                 if ((newcf = precall(ts, func, nresults)) != NULL) {
                     cf = newcf;
                     goto startfunc;
-                } /* otherwise it was a C call or a class with no '__init' */
+                } /* otherwise it was a C call or a class with no __init */
                 vm_break;
             }
             vm_case(OP_CLOSE) {

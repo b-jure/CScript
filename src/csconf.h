@@ -256,10 +256,12 @@
 #define CS_FLOAT_FMT            "%.14g"
 
 #define CS_HUGEVAL              HUGE_VAL
-#define CS_NUMBER_MIN           DBL_MIN
-#define CS_NUMBER_MAX           DBL_MAX
+#define CS_NUMBER_MIN           cs_floatatt(MIN)
+#define CS_NUMBER_MAX           cs_floatatt(MAX)
 
 #define cs_mathop(op)           op
+
+#define cs_floatatt(n)          (DBL_##n)
 
 #define cs_str2number(s,p)      strtod((s),(p))
 

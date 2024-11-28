@@ -34,10 +34,11 @@
 #define WIDTHARGL           (SIZEARGL  * 8)
 
 /* maximum instruction and arg sizes */
-#define INSTRMAX            ((1 << WIDTHINSTR) - 1)
-#define SARGMAX             INSTRMAX
-#define LARGMAX             ((1 << WIDTHARGL) - 1)
-#define CODEMAX             LARGMAX
+#define MAX_INSTR           ((1 << WIDTHINSTR) - 1)
+#define MAX_SARG            MAX_INSTR
+#define MAX_LARG            ((1 << WIDTHARGL) - 1)
+
+#define MAX_CODE            MAX_LARG
 
 
 /* gets first arg pc */
@@ -65,7 +66,7 @@
 #define JMPARGSIZE      SIZEARGL
 
 /* max code jump offset value */
-#define MAXJMP          LARGMAX
+#define MAXJMP          MAX_LARG
 
 /* value indicating there is no jump */
 #define NOJMP           (-1)
@@ -314,8 +315,8 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
 /* 
 ** Number of array items to accumulate before a SETARRAY instruction.
-** Keep this value under SARGMAX or change the instruction format aka
-** the second argument size to long arg in order to fit up to LARGMAX.
+** Keep this value under MAX_SARG or change the instruction format aka
+** the second argument size to long arg in order to fit up to MAX_LARG.
 */
 #define ARRFIELDS_PER_FLUSH     50
 
