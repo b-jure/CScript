@@ -359,14 +359,14 @@ cs_noret csD_globalerror(cs_State *ts, const char *err, OString *name) {
 
 /* operation on invalid type error */
 cs_noret csD_typeerror(cs_State *ts, const TValue *v, const char *op) {
-    csD_runerror(ts, "tried to %s a %s value", op, typename(ttypetag(v)));
+    csD_runerror(ts, "tried to %s a %s value", op, typename(ttype(v)));
 }
 
 
 cs_noret csD_typeerrormeta(cs_State *ts, const TValue *v1, const TValue *v2,
                            const char * mop) {
     csD_runerror(ts, "tried to %s %s and %s values",
-                     mop, typename(ttypetag(v1)), typename(ttypetag(v2)));
+                     mop, typename(ttype(v1)), typename(ttype(v2)));
 }
 
 
@@ -409,7 +409,7 @@ cs_noret csD_indexerror(cs_State *ts, cs_Integer index, const char *what) {
 cs_noret csD_indextypeerror(cs_State *ts, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
     csD_runerror(ts, "invalid array index type (%s), expected integer",
-                     typename(ttypetag(index)));
+                     typename(ttype(index)));
 }
 
 

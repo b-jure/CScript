@@ -1497,6 +1497,7 @@ returning:
                 TValue *v2 = peek(0);
                 cs_assert(ttisstring(s));
                 Protect(csV_set(ts, v1, s, v2));
+                pop(2); /* v1,v2 */
                 vm_break;
             }
             vm_case(OP_GETINDEXINT) { /* TODO: optimize */

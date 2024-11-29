@@ -969,11 +969,11 @@ static void simpleexpr(Lexer *lx, ExpInfo *e) {
         }
         case '[': {
             arrayexp(lx, e);
-            break;
+            return;
         }
         case '{': {
             tableexp(lx, e);
-            break;
+            return;
         }
         case TK_FN: {
             csY_scan(lx); /* skip 'fn' */
@@ -1168,13 +1168,16 @@ static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
     } else {
         if (e->et != EXP_VOID)
             csC_exp2stack(fs, e);
-        if (need > 0)
+        if (need > 0) /* missing values? */
             csC_nil(fs, need);
     }
-    if (need > 0) /* need to reserve stack slots ? */
+    if (need > 0) { /* need to reserve stack slots ? */
         csC_reserveslots(fs, need);
-    else /* otherwise 'need' is negative or zero */
+    } else { /* otherwise 'need' is negative or zero */
+        if (need != 0) /* extra values? */
+            csC_pop(fs, -need); /* pop them */
         fs->sp += need;
+    }
 }
 
 

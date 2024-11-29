@@ -191,16 +191,14 @@ static void read_linecomment(Lexer *lx) {
 static void read_multilinecomment(Lexer *lx) {
 readmore:
     switch (lx->c) {
-    case CSEOF:
-        return;
+    case CSEOF: return;
     case '\r': case '\n':
         advance(lx);
         inclinenr(lx);
         goto readmore;
     case '*':
         advance(lx);
-        if (lx->c == '/')
-            return;
+        if (lxmatch(lx, '/')) return;
         goto readmore;
     default:
         advance(lx);
@@ -630,11 +628,11 @@ static int scan(Lexer *lx, Literal *k) {
                 return TK_EOS;
             }
             default: {
-                if (cisalpha(lx->c)) {
+                if (cisalpha(lx->c) || lx->c == '_') {
                     OString *s;
                     do {
                         save_and_advance(lx);
-                    } while (cisalnum(lx->c));
+                    } while (cisalnum(lx->c) || lx->c == '_');
                     s = csY_newstring(lx, csR_buff(lx->buff),
                                           csR_bufflen(lx->buff));
                     k->str = s;

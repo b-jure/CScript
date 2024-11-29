@@ -320,7 +320,6 @@ static cs_umem markhtable(GState *gs, HTable *ht) {
 }
 
 
-#include <stdio.h>
 /* mark 'Function' */
 static cs_umem markfunction(GState *gs, Proto *p) {
     int i;

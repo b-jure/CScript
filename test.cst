@@ -1,6 +1,51 @@
+/*
+** 'local' statement and expressions test.
+*/
+
+// single local with single value
 local a = 5;
-print(a);
+print(a); # and print it
+
+// multiple locals with no values
 local b, c;
-print(b, c);
+print(b, c); # and print it
+
+// set local
 a = 69;
-print(a);
+print(a); # and print it
+
+// set local list
+b, c = 69, 69;
+print(b, c); # and print it
+
+// multiple locals with multiple values
+local x, y, z = 420, 420, 420;
+print(x, y, z); # and print it
+
+// multiple locals with extra values
+local _x, _y, _z = 69, 69, 69, 420, 125;
+print(_x, _y, _z); # and print it
+
+// local hashtable
+local g = {};
+print(g);
+// set some fields
+g.x = 1;
+g.y = 1;
+g.z = 1;
+print(g.x, g.y, g.z); # and print it
+// set fields by indexing
+g["x"] = 2;
+g["y"] = 2;
+g["z"] = 2;
+g["u"] = 2;
+print(g["x"], g["y"], g["z"], g["u"]); # and print it
+// new table from constructor
+g = { // TODO: fix table constructor in parser
+    "cat" = true,
+    "farm" = {
+        "cow" = 2,
+        "fox" = 1,
+        "chicken" = 4,
+    }
+};
