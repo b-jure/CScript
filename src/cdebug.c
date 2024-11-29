@@ -359,7 +359,7 @@ cs_noret csD_globalerror(cs_State *ts, const char *err, OString *name) {
 
 /* operation on invalid type error */
 cs_noret csD_typeerror(cs_State *ts, const TValue *v, const char *op) {
-    csD_runerror(ts, "tried to %s a %s value", op, typename(ttype(v)));
+    csD_runerror(ts, "tried to %s %s value", op, typename(ttype(v)));
 }
 
 

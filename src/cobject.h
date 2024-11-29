@@ -768,7 +768,7 @@ typedef enum N2IMode {
 /* convert value to 'cs_Integer' */
 #define tointeger(v,i) \
     (csi_likely(ttisint(v)) ? (*(i) = ival(v), 1) \
-                            : csO_tointeger(v, i, N2IFLOOR))
+                            : csO_tointeger(v, i, N2IEXACT))
 
 
 /* convert value to 'cs_Number' */

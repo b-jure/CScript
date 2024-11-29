@@ -52,6 +52,7 @@
 */
 CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     /*     M  J  T  F      */
+    opProp(0, 0, 0, FormatI), /* OP_DUP */
     opProp(0, 0, 0, FormatI), /* OP_TRUE */
     opProp(0, 0, 0, FormatI), /* OP_FALSE */
     opProp(0, 0, 0, FormatI), /* OP_NIL */
@@ -183,20 +184,20 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = {
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
-    "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
-    "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS", "NEWTABLE",
-    "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
-    "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK",
-    "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
-    "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
-    "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
-    "LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM", "BNOT",
-    "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
-    "TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL",
-    "GETUVAL", "OPSETARRAY", "SETUVAL", "SETPROPERTY", "GETPROPERTY",
-    "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT",
-    "SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT",
-    "FORPREP", "FORCALL", "FORLOOP", "RET",
+"DUP", "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
+"VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS", "NEWTABLE",
+"METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
+"DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK",
+"ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
+"BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
+"BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
+"LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM", "BNOT",
+"EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
+"TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL",
+"GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY", "GETPROPERTY",
+"GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT",
+"SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT",
+"FORPREP", "FORCALL", "FORLOOP", "RET",
 };
 
 
@@ -437,6 +438,7 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
 
 
 int csC_nil(FunctionState *fs, int n) {
+    cs_assert(n > 0);
     if (n == 1)
         return csC_emitI(fs, OP_NIL);
     else
@@ -445,10 +447,13 @@ int csC_nil(FunctionState *fs, int n) {
 
 
 int csC_pop(FunctionState *fs, int n) {
-    if (n == 1)
-        return csC_emitI(fs, OP_POP);
-    else
-        return csC_emitIL(fs, OP_POPN, n);
+    if (n > 0) {
+        if (n == 1)
+            return csC_emitI(fs, OP_POP);
+        else
+            return csC_emitIL(fs, OP_POPN, n);
+    }
+    return -1;
 }
 
 
@@ -497,7 +502,7 @@ static int isnumKL(ExpInfo *e, int *imm, int *isflt) {
     cs_Integer i;
     if (e->et == EXP_INT)
         i = e->u.i;
-    else if (e->et == EXP_FLT && csO_n2i(e->u.n, &i, N2IFLOOR))
+    else if (e->et == EXP_FLT && csO_n2i(e->u.n, &i, N2IEXACT))
         *isflt = 1;
     else
         return 0;
@@ -653,7 +658,7 @@ static int codeintK(FunctionState *fs, cs_Integer i) {
 /* emit float constant */
 static int codefltK(FunctionState *fs, cs_Number n) {
     cs_Integer i;
-    if (csO_n2i(n, &i, N2IFLOOR) && fitsLA(i))
+    if (csO_n2i(n, &i, N2IEXACT) && fitsLA(i))
         return csC_emitILS(fs, OP_CONSTF, csi_abs(i), codesign(i));
     else
         return codeK(fs, fltK(fs, n));
@@ -670,11 +675,10 @@ void csC_setarraysize(FunctionState *fs, int pc, int asize) {
 
 void csC_setarray(FunctionState *fs, int nelems, int tostore) {
     cs_assert(tostore != 0 && tostore <= ARRFIELDS_PER_FLUSH);
-    cs_assert(nelems <= MAX_LARG);
     if (tostore == CS_MULRET)
         tostore = 0; /* return up to stack top */
     csC_emitILS(fs, OP_SETARRAY, nelems, tostore);
-    fs->sp -= tostore; /* free slots holding the array values */
+    freeslots(fs, tostore); /* free slots holding the array values */
 }
 
 
@@ -686,10 +690,7 @@ void csC_settablesize(FunctionState *fs, int pc, int hsize) {
 }
 
 
-/* 
-** Ensure expression is not a variable, unregistered constant
-** or a jump.
-*/
+/* finalize expression by ensuring it is on stack */
 static void dischargetostack(FunctionState *fs, ExpInfo *e) {
     if (!dischargevars(fs, e)) {
         switch (e->et) {
@@ -749,6 +750,7 @@ void csC_getfield(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
 }
 
 
+#include <stdio.h>
 /* initialize indexed expression */
 void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
     cs_assert(var->et == EXP_FINEXPR);
@@ -766,7 +768,7 @@ void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
             var->et = EXP_INDEXSUPER;
         }
     } else if (isintKL(key)) {
-        var->u.info = cast_int(var->u.i);
+        var->u.info = cast_int(key->u.i);
         var->et = EXP_INDEXINT;
     } else if (key->et == EXP_K) {
         var->u.info = key->u.info;

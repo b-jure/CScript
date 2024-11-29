@@ -182,13 +182,15 @@ OString *csY_newstring(Lexer *lx, const char *str, size_t len) {
 ** Read comments
 ** ----------------------------------------------------------------------- */
 
-static void read_linecomment(Lexer *lx) {
+/* read single line comment */
+static void read_comment(Lexer *lx) {
     while (!currIsEnd(lx) && !currIsNewline(lx))
         advance(lx);
 }
 
 
-static void read_multilinecomment(Lexer *lx) {
+/* read comment potentially spanning multiple lines */
+static void read_commentmult(Lexer *lx) {
 readmore:
     switch (lx->c) {
     case CSEOF: return;
@@ -558,15 +560,15 @@ static int scan(Lexer *lx, Literal *k) {
             }
             case '#': {
                 advance(lx);
-                read_linecomment(lx);
+                read_comment(lx);
                 break;
             }
             case '/': {
                 advance(lx);
                 if (lxmatch(lx, '/')) 
-                    read_linecomment(lx);
+                    read_comment(lx);
                 else if (lxmatch(lx, '*')) 
-                    read_multilinecomment(lx);
+                    read_commentmult(lx);
                 else 
                     return '/';
                 break;

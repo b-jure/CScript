@@ -271,7 +271,7 @@ CSLIB_API const char *csL_to_lstring(cs_State *ts, int index, size_t *plen) {
             if (cs_is_integer(ts, index))
                 cs_push_fstring(ts, "%I", cs_to_integer(ts, index));
             else
-                cs_push_fstring(ts, "%f", cs_to_number(ts, index));
+                cs_push_fstring(ts, "%N", cs_to_number(ts, index));
             break;
         }
         case CS_TSTRING: {

@@ -4,27 +4,27 @@
 
 // single local with single value
 local a = 5;
-print(a); # and print it
+print(a);
 
 // multiple locals with no values
 local b, c;
-print(b, c); # and print it
+print(b, c);
 
 // set local
 a = 69;
-print(a); # and print it
+print(a);
 
 // set local list
 b, c = 69, 69;
-print(b, c); # and print it
+print(b, c);
 
 // multiple locals with multiple values
 local x, y, z = 420, 420, 420;
-print(x, y, z); # and print it
+print(x, y, z);
 
 // multiple locals with extra values
 local _x, _y, _z = 69, 69, 69, 420, 125;
-print(_x, _y, _z); # and print it
+print(_x, _y, _z);
 
 // local hashtable
 local g = {};
@@ -33,19 +33,54 @@ print(g);
 g.x = 1;
 g.y = 1;
 g.z = 1;
-print(g.x, g.y, g.z); # and print it
+print(g.x, g.y, g.z);
 // set fields by indexing
 g["x"] = 2;
 g["y"] = 2;
 g["z"] = 2;
 g["u"] = 2;
-print(g["x"], g["y"], g["z"], g["u"]); # and print it
-// new table from constructor
-g = { // TODO: fix table constructor in parser
-    "cat" = true,
-    "farm" = {
-        "cow" = 2,
-        "fox" = 1,
-        "chicken" = 4,
+print(g["x"], g["y"], g["z"], g["u"]);
+// new table from constructor using names as fields
+g = {
+    cat = true,
+    farm = {
+        cow = 2,
+        fox = 1,
+        chicken = 4,
     }
 };
+print(g["cat"], g["farm"], g.farm.cow, g.farm.fox, g.farm.chicken);
+// new table from constructor using indices as fields
+g = {
+    ["cat"] = false,
+    ["animals"] = {
+        ["cow"] = 4,
+        ["fox"] = 8,
+        ["chicken"] = 15,
+    }
+};
+print(g["cat"], g["animals"], g.animals.cow, g.animals.fox, g.animals.chicken);
+
+// local array
+local h = [];
+print(h);
+// set some indices
+h[0] = 1;
+h[1] = 1;
+h[2] = 1;
+print(h[0], h[1], h[2]);
+// set indices but create holes
+h[4] = 2;
+h[7] = 2;
+h[9] = 2;
+print(h[3], h[4], h[5], h[6], h[7], h[8], h[9]);
+// new array from constructor
+h = [
+    15,
+    15.2,
+    13,
+    [69, 69, 69],
+];
+print(h[0], h[1], h[2], h[3]);
+// out of bounds access
+print(h[4]);

@@ -20,7 +20,6 @@
 #include "climits.h"
 #include "cprotected.h"
 
-#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -298,7 +297,7 @@ void csS_sourceid(char *restrict dest, const char *src, size_t len) {
 
 /* convert hex character into digit */
 int csS_hexvalue(int c) {
-    cs_assert(isxdigit(c));
+    cs_assert(cisxdigit(c));
     if (cisdigit(c)) 
         return c - '0';
     else 
@@ -605,7 +604,7 @@ const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
             break;
         }
         case 'N': { /* 'cs_Number' */
-            setival(&nv, va_arg(argp, cs_Number));
+            setfval(&nv, va_arg(argp, cs_Number));
             buffaddnum(&buff, &nv);
             break;
         }

@@ -793,7 +793,6 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
 typedef struct Constructor {
     union {
         struct {
-            ExpInfo *a; /* array descriptor */
             ExpInfo v; /* last array item read */
             int na; /* number of array elements already stored */
             int tostore; /* number of array elements pending to be stored */
@@ -819,7 +818,7 @@ static void closearrfield(FunctionState *fs, Constructor *c) {
     c->u.a.v.et = EXP_VOID; /* now empty */
     if (c->u.a.tostore == ARRFIELDS_PER_FLUSH) { /* flush? */
         csC_setarray(fs, c->u.a.na, c->u.a.tostore);
-        c->u.a.na += c->u.a.tostore;
+        c->u.a.na += c->u.a.tostore; /* add to total */
         c->u.a.tostore = 0; /* no more pending items */
     }
 }
@@ -833,7 +832,7 @@ static void lastarrfield(FunctionState *fs, Constructor *c) {
         c->u.a.na--; /* do not count last expression (unknown num of elems) */
     } else {
         if (c->u.a.v.et != EXP_VOID) /* have item? */
-            csC_exp2stack(fs, &c->u.a.v); /* push it on stack */
+            csC_exp2stack(fs, &c->u.a.v); /* ensure it is on stack */
         csC_setarray(fs, c->u.a.na, c->u.a.tostore);
     }
     c->u.a.na += c->u.a.tostore;
@@ -847,17 +846,18 @@ static void lastarrfield(FunctionState *fs, Constructor *c) {
 static void arrayexp(Lexer *lx, ExpInfo *a) {
     FunctionState *fs = lx->fs;
     int matchline = lx->line;
-    int pc = csC_emitILS(fs, OP_NEWARRAY, 0, 0);
+    int pc = csC_emitIS(fs, OP_NEWARRAY, 0);
     Constructor c;
-    initexp(a, EXP_FINEXPR, fs->sp); /* array will be at stack top */
+    c.u.a.na = c.u.a.tostore = 0;
+    initexp(a, EXP_FINEXPR, pc); /* finalize array expression */
     csC_reserveslots(fs, 1); /* space for array */
     initexp(&c.u.a.v, EXP_VOID, 0); /* no value (yet) */
     expectnext(lx, '[');
     do {
         cs_assert(c.u.a.v.et == EXP_VOID || c.u.a.tostore > 0);
-        if (check(lx, ']')) break;
-        closearrfield(fs, &c);
-        arrfield(lx, &c);
+        if (check(lx, ']')) break; /* delimiter; no more elements */
+        closearrfield(fs, &c); /* try to close any pending array elements */
+        arrfield(lx, &c); /* get array element */
     } while (match(lx, ',') || match(lx, ';'));
     expectmatch(lx, ']', '[', matchline);
     lastarrfield(fs, &c);
@@ -867,7 +867,7 @@ static void arrayexp(Lexer *lx, ExpInfo *a) {
 
 /* index ::= '[' expr ']' */
 static void index(Lexer *lx, ExpInfo *e) {
-    csY_scan(lx); /* skip '[' */
+    expectnext(lx, '[');
     expr(lx, e);
     csC_varexp2stack(lx->fs, e);
     expectnext(lx, ']');
@@ -881,17 +881,19 @@ static void index(Lexer *lx, ExpInfo *e) {
 static void tabfield(Lexer *lx, Constructor *c) {
     FunctionState *fs = lx->fs;
     int sp = fs->sp;
-    ExpInfo tab, key;
+    ExpInfo tab, e;
     if (check(lx, TK_NAME)) {
         checklimit(fs, c->u.t.nh, MAX_INT, "records in a table constructor");
-        expname(lx, &key);
+        expname(lx, &e);
     } else
-        index(lx, &key);
+        index(lx, &e);
+    cs_assert(e.et == EXP_STRING);
     c->u.t.nh++;
     expectnext(lx, '=');
     tab = *c->u.t.t;
-    csC_indexed(fs, &tab, &key, 0);
-    expr(lx, &key);
+    csC_indexed(fs, &tab, &e, 0);
+    expr(lx, &e); /* get key value... */
+    csC_exp2stack(fs, &e); /* ...and put it on stack */
     csC_storevar(fs, &tab);
     fs->sp = sp; /* free slots */
 }
@@ -911,9 +913,12 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
     expectnext(lx, '{');
     initexp(t, EXP_FINEXPR, fs->sp); /* table will be at stack top */
     csC_reserveslots(fs, 1); /* space for table */
-    do {
-        if (check(lx, '}')) break;
-        tabfield(lx, &c);
+    do { /* while have table fields */
+        if (check(lx, '}')) break; /* delimiter; no more field */
+        csC_emitI(fs, OP_DUP); /* otherwise push dpulicate table... */
+        csC_reserveslots(fs, 1); /* reserve extra slot for the duplicate... */
+        tabfield(lx, &c); /* ...and set its field */
+        fs->sp--; /* extra slot is now free */
     } while (match(lx, ',') || match(lx, ';'));
     expectmatch(lx, '}', '{', matchline);
     csC_settablesize(fs, pc, c.u.t.nh);

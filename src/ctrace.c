@@ -408,12 +408,12 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
     Instruction *pc = p->code;
     while (pc < &p->code[p->sizecode]) {
         switch (*pc) {
-            case OP_TRUE: case OP_FALSE: case OP_NIL: case OP_NEWCLASS:
-            case OP_POP: case OP_ADD: case OP_SUB: case OP_MUL:
-            case OP_DIV: case OP_MOD: case OP_POW: case OP_BSHL:
-            case OP_BSHR: case OP_BAND: case OP_BOR: case OP_BXOR:
-            case OP_CONCAT: case OP_LT: case OP_LE: case OP_NOT:
-            case OP_UNM: case OP_BNOT: case OP_EQPRESERVE:
+            case OP_DUP: case OP_TRUE: case OP_FALSE: case OP_NIL:
+            case OP_NEWCLASS: case OP_POP: case OP_ADD: case OP_SUB:
+            case OP_MUL: case OP_DIV: case OP_MOD: case OP_POW:
+            case OP_BSHL: case OP_BSHR: case OP_BAND: case OP_BOR:
+            case OP_BXOR: case OP_CONCAT: case OP_LT: case OP_LE:
+            case OP_NOT: case OP_UNM: case OP_BNOT: case OP_EQPRESERVE:
             case OP_GETINDEX: case OP_SETINDEX: case OP_GETSUPIDX:
             case OP_INHERIT: case OP_FORCALL: case OP_FORLOOP: {
                 unasm(p, pc);

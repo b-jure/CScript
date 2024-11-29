@@ -118,7 +118,8 @@ typedef enum { /* ORDER OP */
 **
 ** operation     args           description
 ** ------------------------------------------------------------------------ */
-OP_TRUE = 0,/*                'load true constant'                          */
+OP_DUP = 0,/*                 'duplicate value on top of the stack'         */
+OP_TRUE,/*                    'load true constant'                          */
 OP_FALSE,/*                   'load false constant'                         */
 OP_NIL,/*                     'load nil constant'                           */
 OP_NILN,/*         L          'load L nils'                                 */
