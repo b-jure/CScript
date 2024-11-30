@@ -861,7 +861,7 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
 /* emit unary instruction */
 void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr) {
     static const ExpInfo dummy = {EXP_INT, {0}, -1, -1};
-    cs_assert(OPR_NOT <= opr && opr < OPR_NOUNOPR);
+    cs_assert(0 <= opr && opr < OPR_NOUNOPR);
     csC_varexp2stack(fs, e);
     switch (opr) {
         case OPR_UNM: case OPR_BNOT: {

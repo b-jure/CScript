@@ -471,22 +471,37 @@ static int expect_digits(Lexer *lx, DigType dt, int fp) {
 ** Exponent must have at least 1 decimal digit.
 */
 static int read_exponent(Lexer *lx) {
+    int nlz = 0;
     if (lx->c == '-' || lx->c == '+') /* have exponent sign? */
         save_and_advance(lx); /* save and skip it */
-    return expect_digits(lx, DigDec, 0);
+    while (lx->c == '0') { /* skip leading 0s */
+        advance(lx);
+        nlz++;
+    }
+    if (cisdigit(lx->c) || !nlz) {
+        return expect_digits(lx, DigDec, 0);
+    } else {
+        savec(lx, '0'); /* save the leading zero */
+        return 1; /* truncated to only 1 leading zero digit */
+    }
 }
 
 
 /* read base 10 number */
-static int read_decimalnum(Lexer *lx, Literal *k) {
-    read_digits(lx, DigDec, 0);
-    if (lx->c == '.') { /* have decimal point? */
-        save_and_advance(lx);
-        expect_digits(lx, DigDec, 1);
-        if (lx->c == 'e' || lx->c == 'E') { /* have exponent symbol? */
-            save_and_advance(lx); /* save and skip it */
-            read_exponent(lx);
-        }
+static int read_decimalnum(Lexer *lx, Literal *k, int c) {
+    int fp = (c == '.'); /* check if '.' is first */
+    int ndigs = read_digits(lx, DigDec, fp);
+    if (!fp && lx->c == '.') { /* have decimal part? ('.' was not first) */
+        save_and_advance(lx); /* skip '.' */
+        int decdigs = read_digits(lx, DigDec, 1);
+        if (ndigs == 0) /* no integral part? */
+            ndigs = decdigs; /* number of digits is equal to decimal part */
+    }
+    if (lx->c == 'e' || lx->c == 'E') { /* have exponent? */
+        if (c_unlikely(fp && ndigs == 0)) /* no integral or decimal part? */
+            lexerror(lx, "missing integral or decimal digits", TK_FLT);
+        save_and_advance(lx); /* skip exponent symbol */
+        read_exponent(lx);
     }
     savec(lx, '\0');
     return lexstr2num(lx, k);
@@ -495,21 +510,21 @@ static int read_decimalnum(Lexer *lx, Literal *k) {
 
 /* read base 16 number */
 static int read_hexadecimalnum(Lexer *lx, Literal *k) {
-    int fp, exp;
-    advance(lx); /* skip 'x'/'X' */
-    int digits = read_digits(lx, DigHex, 0);
-    if ((fp = lx->c == '.')) { /* hexadecimal float? */
+    int fp, exp, ndigs;
+    save_and_advance(lx); /* skip 'x'/'X' */
+    ndigs = read_digits(lx, DigHex, 0);
+    if ((fp = (lx->c == '.'))) { /* have decimal part? */
         save_and_advance(lx);
-        if (c_unlikely(read_digits(lx, DigHex, 1) == 0 && !digits))
-            lexerror(lx, "hexdecimal floating constant requires a significand", TK_FLT);
-    } else if (!digits) /* no digits in regular hexadecimal? */
+        if (c_unlikely(read_digits(lx, DigHex, 1) == 0 && !ndigs))
+            lexerror(lx, "missing integral or decimal digits", TK_FLT);
+    } else if (!ndigs) /* no integral digits? */
         lexerror(lx, "invalid suffix 'x' on integer constant", TK_FLT);
-    if ((exp = (lx->c == 'p' || lx->c == 'P'))) {
-        save_and_advance(lx);
-        read_exponent(lx);
+    if ((exp = (ctolower(lx->c) == 'p'))) { /* have exponent? */
+        save_and_advance(lx); /* skip exponent... */
+        read_exponent(lx); /* ...and read it */
     }
     if (c_unlikely(fp && !exp))
-        lexerror(lx, "hexadecimal floating constant requires an exponent", TK_FLT);
+        lexerror(lx, "hexadecimal float is missing exponent", TK_FLT);
     savec(lx, '\0'); /* terminate */
     return lexstr2num(lx, k);
 }
@@ -517,10 +532,9 @@ static int read_hexadecimalnum(Lexer *lx, Literal *k) {
 
 /* read base 8 number */
 static int read_octalnum(Lexer *lx, Literal *k) {
+    if (c_unlikely(!cisodigit(lx->c))) /* first digit is not octal? */
+        lexerror(lx, "invalid digit in octal constant", TK_INT);
     read_digits(lx, DigOct, 0);
-    if (c_unlikely(cisdigit(lx->c))) {
-
-    }
     savec(lx, '\0');
     return lexstr2num(lx, k);
 }
@@ -528,14 +542,14 @@ static int read_octalnum(Lexer *lx, Literal *k) {
 
 /* read number literal */
 static int read_number(Lexer *lx, Literal *k) {
-    cs_ubyte c = lx->c;
+    int c = lx->c;
     save_and_advance(lx);
-    if (c == '0' && (lx->c == 'x' || lx->c == 'X'))
+    if (c == '0' && ctolower(lx->c) == 'x')
         return read_hexadecimalnum(lx, k);
     else if (c == '0' && cisdigit(lx->c))
         return read_octalnum(lx, k);
     else
-        return read_decimalnum(lx, k);
+        return read_decimalnum(lx, k, c);
 }
 
 
@@ -585,13 +599,15 @@ static int scan(Lexer *lx, Literal *k) {
                 advance(lx);
                 if (lxmatch(lx, '=')) 
                     return TK_NE;
-                return '!';
+                else
+                    return '!';
             }
             case '=': {
                 advance(lx);
                 if (lxmatch(lx, '=')) 
                     return TK_EQ;
-                return '=';
+                else
+                    return '=';
             }
             case '>': {
                 advance(lx);
@@ -599,7 +615,8 @@ static int scan(Lexer *lx, Literal *k) {
                     return TK_SHR;
                 else if (lxmatch(lx, '=')) 
                     return TK_GE;
-                return '>';
+                else
+                    return '>';
             }
             case '<': {
                 advance(lx);
@@ -607,7 +624,8 @@ static int scan(Lexer *lx, Literal *k) {
                     return TK_SHL;
                 else if (lxmatch(lx, '=')) 
                     return TK_LE;
-                return '<';
+                else
+                    return '<';
             }
             case '*': {
                 advance(lx);
@@ -620,11 +638,13 @@ static int scan(Lexer *lx, Literal *k) {
                 if (lxmatch(lx, '.')) {
                     if (lxmatch(lx, '.'))
                         return TK_DOTS;
-                    return TK_CONCAT;
+                    else
+                        return TK_CONCAT;
                 }
                 if (!cisdigit(lx->c)) 
                     return '.';
-                return read_number(lx, k);
+                else
+                    return read_decimalnum(lx, k, '.');
             }
             case CSEOF: {
                 return TK_EOS;

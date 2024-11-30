@@ -455,7 +455,7 @@ static int num2buff(const TValue *nv, char *buff) {
     } else {
         len = cs_number2str(buff, MAXNUM2STR, fval(nv));
         /* if it looks like integer append '.0' */
-        if (strspn(buff, "-0123456789") == len) {
+        if (buff[strspn(buff, "-0123456789")] == '\0') {
             buff[len++] = cs_getlocaledecpoint();
             buff[len++] = '0';
         }
@@ -467,6 +467,7 @@ static int num2buff(const TValue *nv, char *buff) {
 const char *csS_numtostr(const TValue *v, size_t *plen) {
     static char buff[MAXNUM2STR];
     size_t len = num2buff(v, buff);
+    buff[len] = '\0';
     if (plen) *plen = len;
     return buff;
 }

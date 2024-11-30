@@ -84,3 +84,64 @@ h = [
 print(h[0], h[1], h[2], h[3]);
 // out of bounds access
 print(h[4]);
+
+// FLOATS
+// decimal
+print(1.0);
+print(1000.);
+print(3.14159);
+print(.05);
+print(.0005);
+print(1e0);
+print(1.0000e0);
+print(100e1);
+print(100e+1);
+print(100E+1);
+print(100E+1);
+print(1e3);
+print(10000e-1);
+print(3.14159e0);
+print(5e-2);
+print(.0005e+2);
+print(5E-2);
+print(.0005E2);
+print(.05e-2);
+// hexadecimal
+print(0x2.0Bp4);    # 32.6875 decimal
+print(0xE.2p3);     # 113 decimal
+print(0x123.ABCp0); # 291.6708984375 in decimal
+print(0x123.ABCp4); # 4666.734375 in decimal
+print(0xEP-15);     # 0.000427246
+
+// INTEGERS
+// decimal
+print(1);
+print(1____);
+print(120);
+print(981);
+print(100_500_300);
+print(100__500___300);
+print(15e15);
+print(15E-15);
+print(1E-01_2_);
+print(15e00001);
+// hexadecimal
+print(0x1);             # 1 in decimal
+print(0x1__);           # 1 in decimal
+print(0x78);            # 120 in decimal
+print(0x3D5);           # 981 in decimal
+print(0x5fd834c);       # 100500300 in decimal
+print(0x5f__d8___34c);  # 100500300 in decimal
+print(0xEp15);          # 458752 in decimal
+print(0xEp1);           # 28 in decimal
+print(0xEp-1);          # 7 in decimal
+print(0xAp2);           # 40 in decimal
+print(0xAp-1);          # 5 in decimal
+print(0x100p-8);        # 1 in decimal
+print(0x10p-4);         # 1 in decimal
+print(0x1p+4);          # 16 in decimal
+print(0x1p+8);          # 256 in decimal
+// octal
+print(0015);            # 13 in decimal
+print(032);             # 26 in decimal
+print(0157);            # 111 in decimal
