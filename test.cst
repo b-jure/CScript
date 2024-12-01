@@ -1,32 +1,24 @@
-/*
-** 'local' statement and expressions test.
-*/
-
-// single local with single value
+// LOCAL STATEMENTS
 local a = 5;
 print(a);
-
 // multiple locals with no values
 local b, c;
 print(b, c);
-
 // set local
 a = 69;
 print(a);
-
 // set local list
 b, c = 69, 69;
 print(b, c);
-
 // multiple locals with multiple values
 local x, y, z = 420, 420, 420;
 print(x, y, z);
-
 // multiple locals with extra values
 local _x, _y, _z = 69, 69, 69, 420, 125;
 print(_x, _y, _z);
 
-// local hashtable
+
+// HASHTABLES
 local g = {};
 print(g);
 // set some fields
@@ -61,7 +53,8 @@ g = {
 };
 print(g["cat"], g["animals"], g.animals.cow, g.animals.fox, g.animals.chicken);
 
-// local array
+
+// ARRAYS
 local h = [];
 print(h);
 // set some indices
@@ -84,6 +77,7 @@ h = [
 print(h[0], h[1], h[2], h[3]);
 // out of bounds access
 print(h[4]);
+
 
 // FLOATS
 // decimal
@@ -112,6 +106,7 @@ print(0xE.2p3);     # 113 decimal
 print(0x123.ABCp0); # 291.6708984375 in decimal
 print(0x123.ABCp4); # 4666.734375 in decimal
 print(0xEP-15);     # 0.000427246
+
 
 // INTEGERS
 // decimal
@@ -145,3 +140,28 @@ print(0x1p+8);          # 256 in decimal
 print(0015);            # 13 in decimal
 print(032);             # 26 in decimal
 print(0157);            # 111 in decimal
+print(0123_570);        # 42872 in decimal
+
+
+// STRINGS
+print("test");              # string
+print("test");              # (check reuse of interned strings)
+print("");                  # empty string
+print("start\0end");        # null terminator
+print("start\aend");        # bell
+print("start\bend");        # backspace
+print("start\tend");        # horizontal tab
+print("start\nend");        # new line
+print("start\vend");        # vertical tab
+print("start\fend");        # form feed
+print("start\rend");        # carriage return
+print("start\e[1Kend");     # escape character (equivalent to '\x1B')
+print("start\x20end");      # \xhh, h is a hexadecimal digit
+print("start\u{57}end");    # \u{hhhhhhhh}, h is a hexadecimal digit (normalized UTF-8)
+print("start\u[57]end");    # \u[hhhhhhhh], h is a hexadecimal digit (verified UTF-8)
+print("start\"end");        # double quotation mark (22 in hexadecimal)
+print("start\'end");        # apostrophe (27 in hexadecimal)
+print("start\\end");        # backslash (5C in hexadecimal)
+print("start\
+end");                      # escaped newline/carriage return
+print("start\69end");       # \ddd, d is a decimal digit

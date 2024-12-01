@@ -84,14 +84,7 @@ void csY_init(cs_State *ts) {
 }
 
 
-static void inclinenr(Lexer *lx) {
-    if (c_unlikely(lx->line >= MAX_INT))
-        csD_runerror(lx->ts, "too many lines in a chunk");
-    lx->line++;
-}
-
-
-/* forward declare for 'savec' */
+/* forward declare */
 static cs_noret lexerror(Lexer *lx, const char *err, int token);
 
 
@@ -160,6 +153,17 @@ cs_noret csY_syntaxerror(Lexer *lx, const char *err) {
 }
 
 
+static void inclinenr(Lexer *lx) {
+    int old_c = lx->c;
+    cs_assert(currIsNewline(lx));
+    advance(lx); /* skip '\n' or '\r' */
+    if (currIsNewline(lx) && lx->c != old_c) /* have '\r\n' or '\n\r'? */
+        advance(lx); /* skip it */
+    if (c_unlikely(++lx->line >= MAX_INT))
+        lexerror(lx, "too many lines in a chunk", 0);
+}
+
+
 /* create new string and fix it inside of lexer htable */
 OString *csY_newstring(Lexer *lx, const char *str, size_t len) {
     cs_State *ts = lx->ts;
@@ -191,20 +195,18 @@ static void read_comment(Lexer *lx) {
 
 /* read comment potentially spanning multiple lines */
 static void read_commentmult(Lexer *lx) {
-readmore:
-    switch (lx->c) {
-    case CSEOF: return;
-    case '\r': case '\n':
-        advance(lx);
-        inclinenr(lx);
-        goto readmore;
-    case '*':
-        advance(lx);
-        if (lxmatch(lx, '/')) return;
-        goto readmore;
-    default:
-        advance(lx);
-        goto readmore;
+    for (;;) {
+        switch (lx->c) {
+            case CSEOF: return;
+            case '\r': case '\n':
+                inclinenr(lx); break;
+            case '*':
+                advance(lx);
+                if (lxmatch(lx, '/'))
+                    return;
+                break;
+            default: advance(lx); break;
+        }
     }
 }
 
@@ -248,15 +250,14 @@ static unsigned long read_utf8esc(Lexer *lx, int *strict) {
     ulong r;
     int i = 4; /* chars to be removed: '\', 'u', '{', and first digit */
     cs_assert(strict != NULL);
+    *strict = 0;
     save_and_advance(lx); /* skip 'u' */
-    if (lx->c == '[') { /* strict? */
-        save_and_advance(lx); /* skip '[' */
+    if (lx->c == '[') /* strict? */
         *strict = 1; /* indicate this is strict utf8 */
-    } else
+    else
         checkcond(lx, lx->c == '{', "missing '{'");
     r = expect_hexdig(lx); /* must have at least one digit */
-    /* Read up to 7 hexadecimal digits, the last digit must be less than
-    ** 0x1F as the upper 5 bits are reserved for UTF-8 encoding.  */
+    /* Read up to 7 hexadecimal digits (last digit is reserved for UTF-8) */
     while (cast_void(save_and_advance(lx)), cisxdigit(lx->c)) {
         i++;
         checkcond(lx, r <= (0x7FFFFFFFu >> 4), "UTF-8 value too large");
@@ -286,11 +287,11 @@ static cs_ubyte const utf8len_[] = {
 ** Get the length of the UTF-8 encoding by looking at the most
 ** significant 4 bits of the first byte.
 */
-#define utf8len(n)      utf8len_[(n&0xFF)>>4]
+#define utf8len(n)      utf8len_[((n) & 0xFF) >> 4]
 
 
 static int check_utf8(Lexer *lx, ulong n) {
-    if (utf8len(n))
+    if (!utf8len(n))
         lexerror(lx, "invalid first byte in UTF-8 sequence", 0);
     else if (n <= 0x7F) /* ascii? */
         return 1; /* ok; valid ascii */
@@ -310,13 +311,13 @@ static int check_utf8(Lexer *lx, ulong n) {
 }
 
 
-static void checked_utf8esc(char *buff, ulong n, int len) {
+static void utf8verfied(char *buff, ulong n, int len) {
+    int i = 1; /* number of bytes in the buffer */
     cs_assert(n <= 0x7FFFFFFFu);
     do {
-        buff[UTF8BUFFSZ - len] = cast_char(0xFF & n);
-        n >>= 1;
-        len--;
-    } while (len > 0);
+        buff[UTF8BUFFSZ - i++] = cast_char(0xFF & n);
+        n >>= 8; /* fetch next byte in the sequence (if any) */
+    } while (--len > 0);
     cs_assert(n == 0);
 }
 
@@ -328,7 +329,7 @@ static void utf8esc(Lexer *lx) {
     if (strict) { /* n should already be valid UTF-8? */
         int temp = n;
         n = check_utf8(lx, n);
-        checked_utf8esc(buff, temp, n);
+        utf8verfied(buff, temp, n);
     } else /* otherwise create non-strict UTF-8 sequence */
         n = csS_utf8esc(buff, n);
     for (; n > 0; n--) /* add 'buff' to string */
@@ -340,7 +341,7 @@ static int read_decesc(Lexer *lx) {
     int i;
     int r = 0;
     for (i = 0; i < 3 && cisdigit(lx->c); i++) {
-        r = 10 * r + lx->c - '0';
+        r = 10 * r + ctodigit(lx->c);
         save_and_advance(lx);
     }
     checkcond(lx, r <= UCHAR_MAX, "decimal escape too large");
@@ -362,23 +363,23 @@ static void read_string(Lexer *lx, Literal *k) {
                 break; /* to avoid warnings */
             case '\\': {
                 int c;
-                advance(lx);
+                save_and_advance(lx); /* keep '\\' for error messages */
                 switch (lx->c) {
                     case '0': c = '\0'; goto read_save;
                     case 'a': c = '\a'; goto read_save;
                     case 'b': c = '\b'; goto read_save;
-                    case 'f': c = '\f'; goto read_save;
+                    case 't': c = '\t'; goto read_save;
                     case 'n': c = '\n'; goto read_save;
-                    case 'r': c = '\a'; goto read_save;
-                    case 't': c = '\a'; goto read_save;
-                    case 'v': c = '\a'; goto read_save;
+                    case 'v': c = '\v'; goto read_save;
+                    case 'f': c = '\f'; goto read_save;
+                    case 'r': c = '\r'; goto read_save;
                     case 'e': c = '\x1B'; goto read_save;
                     case 'x': c = read_hexesc(lx); goto read_save;
                     case 'u': utf8esc(lx); goto no_save;
-                    case '\"': case '\'': case '\\':
-                        c = lx->c; goto read_save;
                     case '\n': case '\r':
                         inclinenr(lx); c = '\n'; goto only_save;
+                    case '\"': case '\'': case '\\':
+                        c = lx->c; goto read_save;
                     case CSEOF: goto no_save; /* raise err on next iteration */
                     default: {
                         checkcond(lx, cisdigit(lx->c), "invalid escape sequence");
@@ -568,7 +569,6 @@ static int scan(Lexer *lx, Literal *k) {
                 break;
             }
             case '\n': case '\r':  {
-                advance(lx);
                 inclinenr(lx);
                 break;
             }
