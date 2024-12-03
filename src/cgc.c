@@ -299,9 +299,9 @@ cs_sinline cs_umem markvmt(GState *gs, TValue *vmt) {
 ** logically empty.
 */
 static void clearkey (Node *n) {
-  cs_assert(isempty(nodeval(n)));
-  if (keyiscollectable(n))
-    setdeadkey(n); /* unused key; remove it */
+    cs_assert(isempty(nodeval(n)));
+    if (keyiscollectable(n))
+        setdeadkey(n); /* unused key; remove it */
 }
 
 

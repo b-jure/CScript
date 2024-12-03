@@ -17,17 +17,6 @@
 
 
 /*
-** Top-level ("main") CScript closures run in their own sandboxed environment,
-** meaning any declared global variable inside of a CScript closure is
-** actually getting set as the field in "__ENV" hashtable which itself is
-** the first and only upvalue in the top-level ("main") CScript closure.
-*/
-#if !defined(CS_ENV)
-#define CS_ENV	        "__ENV"
-#endif
-
-
-/*
 ** WARNING: if you change the order of this enumeration, grep
 ** "ORDER TK".
 */
@@ -76,7 +65,6 @@ typedef struct Lexer {
     Buffer *buff; /* string buffer */
     struct ParserState *ps; /* dynamic data used by parser */
     OString *src; /* current source name */
-    OString *envname; /* name of environment variable */
 } Lexer;
 
 

@@ -6,6 +6,7 @@
 
 
 #define CS_CORE
+#include "cmeta.h"
 
 
 #include <string.h>

@@ -104,6 +104,8 @@ typedef enum { OPR_UNM, OPR_BNOT, OPR_NOT, OPR_NOUNOPR } Unopr;
 
 typedef enum { /* ORDER OP */
 /* ------------------------------------------------------------------------
+** Legend for reading OpCodes:
+** ':' - value type
 ** S - short arg (8-bit)
 ** L - long arg (24-bit)
 ** V - stack value
@@ -112,8 +114,7 @@ typedef enum { /* ORDER OP */
 ** I(x) - 'x' is immediate operand
 ** U{x} - upvalue at index 'x'
 ** OU{x} - open upvalue at index 'x'
-** P{x} - private variable in 'p->private[x]'
-** G(x) - global variable from 'globals', key is K{x}:string.
+** G{x} - global variable, key is K{x}:string
 ** L{x} - local variable in 'p->locals[x]'
 **
 ** operation     args           description
@@ -204,11 +205,14 @@ OP_TESTORPOP,/*    V L S   'if (!c_isfalse(V) == S) pc += L; else pop V;'   */
 OP_TESTANDPOP,/*   V L S   'if (!c_isfalse(V) == S) { pc += L; pop V; }'    */
 OP_TESTPOP,/*      V L S   'if (!c_isfalse(V) == S) { pc += L; } pop V;'    */
 
-OP_CALL,/** L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offsp-1})'
+OP_CALL,/*  L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offsp-1})'
                     (check info)                                            */
 
 OP_CLOSE,/*        L           'close all upvalues >= OU{L}                 */
 OP_TBC,/*          L           'mark L{L} as to-be-closed'                  */
+
+OP_GETGLOBAL,/*    L           'G{L}'                                       */
+OP_SETGLOBAL,/*    V L         'G{L} = V'                                   */
 
 OP_GETLOCAL,/*     L           'L{L}'                                       */
 OP_SETLOCAL,/*     V L         'L{L} = V'                                   */
@@ -218,17 +222,17 @@ OP_SETUVAL,/*      V L         'U{L} = V'                                   */
 
 OP_SETARRAY,/*     L S         'V{-S}[L+i] = V{-S+i}, 1 <= i <= S           */
 
-OP_SETPROPERTY,/*  V1 V2 L     'V1.K{L} = V2'                               */
+OP_SETPROPERTY,/*  V L1 L2     'V{-L1}.K{L2}:string = V'                    */
 OP_GETPROPERTY,/*  V  L        'V.K{L}'                                     */
 
 OP_GETINDEX,/*     V1 V2       'V1[V2]'                                     */
 OP_SETINDEX,/*     V1 V2 V3    'V1[V2] = V3'                                */
 
 OP_GETINDEXSTR,/*  V L         'V[K{L}:string]'                             */
-OP_SETINDEXSTR,/*  V1 V2 L     'V1[K{L}:string] = V2'                       */
+OP_SETINDEXSTR,/*  V L1 L2     'V{-L1}[K{L2}:string] = V'                   */
 
 OP_GETINDEXINT,/*  V L         'V[I(L):integer]'                            */
-OP_SETINDEXINT,/*  V1 V2 L     'V[I(L):integer] = V2'                       */
+OP_SETINDEXINT,/*  V L1 L2     'V{-L1}[I(L2):integer] = V'                  */
 
 OP_GETSUP,/*       V1 V2 L     'V2:super.K{L}:string' (V1 is instance)      */
 OP_GETSUPIDX,/*    V1 V2 V3    'V2:super[V3]' (V1 is instance)              */
@@ -324,6 +328,8 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
 #define csC_setmulret(fs,e)     csC_setreturns(fs, e, CS_MULRET)
 
+#define csC_store(fs,var)       csC_storevar(fs, var, 0)
+
 
 CSI_FUNC int csC_emitI(FunctionState *fs, Instruction i);
 CSI_FUNC int csC_emitIS(FunctionState *fs, Instruction i, int a);
@@ -336,10 +342,10 @@ CSI_FUNC void csC_setoneret(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
 CSI_FUNC int csC_nil(FunctionState *fs, int n);
 CSI_FUNC int csC_pop(FunctionState *fs, int n);
+CSI_FUNC void csC_adjuststack(FunctionState *fs, int left);
 CSI_FUNC int csC_ret(FunctionState *fs, int base, int nreturns);
 CSI_FUNC void csC_method(FunctionState *fs, ExpInfo *e);
-CSI_FUNC void csC_storevar(FunctionState *fs, ExpInfo *var);
-CSI_FUNC void csC_defineglobal(FunctionState *fs, ExpInfo *e);
+CSI_FUNC int csC_storevar(FunctionState *fs, ExpInfo *var, int left);
 CSI_FUNC void csC_setarraysize(FunctionState *fs, int pc, int sz);
 CSI_FUNC void csC_setarray(FunctionState *fs, int nelems, int tostore);
 CSI_FUNC void csC_settablesize(FunctionState *fs, int pc, int hsize);

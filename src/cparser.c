@@ -31,10 +31,7 @@
 #define check(lx, tok)       ((lx)->t.tk == (tok))
 
 
-/* enter C function frame */
 #define enterCstack(lx)         csT_incCstack((lx)->ts)
-
-/* pop C function frame */
 #define leaveCstack(lx)         ((lx)->ts->nCcalls--)
 
 
@@ -214,10 +211,19 @@ static LVarInfo *getlocalinfo(FunctionState *fs, int vidx) {
 ** Convert 'nvar', a compiler index level, to its corresponding
 ** stack level.
 */
-static int getstacklevel(FunctionState *fs, int nvar) {
+static int stacklevel(FunctionState *fs, int nvar) {
     if (nvar-- > 0) /* have at least one variable? */
         return getlocalvar(fs, nvar)->s.idx + 1;
     return 0; /* no variables on stack */
+}
+
+
+/*
+** Return number of variables on the stack for the given
+** function.
+*/
+static int nvarstack(FunctionState *fs) {
+    return stacklevel(fs, fs->nactlocals);
 }
 
 
@@ -229,7 +235,6 @@ static void removelocals(FunctionState *fs, int tolevel, int swexp) {
     int popn = fs->nactlocals - tolevel;
     fs->lx->ps->actlocals.len -= popn;
     popn += swexp;
-    fs->sp -= popn;
     csC_pop(fs, popn);
     while (fs->nactlocals > tolevel) { /* set debug information */
         LVarInfo *locinfo = getlocalinfo(fs, --fs->nactlocals);
@@ -328,7 +333,7 @@ static void endscope(FunctionState *fs) {
         patchlistend(fs);
     removelocals(fs, s->activelocals, scopeisswitch(s)); /* pop locals */
     cs_assert(s->activelocals == fs->nactlocals);
-    stklevel = getstacklevel(fs, s->activelocals);
+    stklevel = stacklevel(fs, s->activelocals);
     if (s->prev && s->haveupval) /* need to close upvalues? */
         csC_emitIS(fs, OP_CLOSE, stklevel);
     fs->sp = stklevel; /* free stack slots */
@@ -395,10 +400,11 @@ static void endfs(FunctionState *fs) {
     Lexer *lx = fs->lx;
     Proto *p = fs->p;
     cs_State *ts = lx->ts;
-    csC_ret(fs, fs->nactlocals - 1, 0);
+    csC_ret(fs, nvarstack(fs), 0);
     cs_assert(fs->scope && !fs->scope->prev);
     endscope(fs); /* end global scope */
     cs_assert(fs->scope == NULL);
+    cs_assert(fs->sp == 0);
     if (fs->deadcode.pc != NOJMP) /* have dead code ? */
         loadreachablectx(fs);
     csC_finish(fs);
@@ -619,17 +625,14 @@ static void varaux(FunctionState *fs, OString *name, ExpInfo *var, int base) {
 }
 
 
+#include <stdio.h>
 /* find variable 'name' */
 static void var(Lexer *lx, OString *varname, ExpInfo *var) {
     FunctionState *fs = lx->fs;
     varaux(fs, varname, var, 1);
     if (var->et == EXP_VOID) { /* global name? */
-        ExpInfo key;
-        varaux(fs, lx->envname, var, 1); /* get environment variable... */
-        cs_assert(var->et != EXP_VOID); /* this one must exist */
-        csC_exp2stack(fs, var); /* ...and ensure it is on stack */
-        initstring(&key, varname); /* key is variable name */
-        csC_indexed(fs, var, &key, 0); /* env[varname] */
+        var->et = EXP_GLOBAL;
+        var->u.str = varname;
     }
 }
 
@@ -773,17 +776,19 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
     primaryexp(lx, e);
     for (;;) {
         switch (lx->t.tk) {
-        case '.':
-            getfield(lx, e, 0);
-            break;
-        case '[':
-            indexed(lx, e, 0);
-            break;
-        case '(':
-            call(lx, e);
-            break;
-        default:
-            return;
+            case '.': {
+                getfield(lx, e, 0);
+                break;
+            }
+            case '[': {
+                indexed(lx, e, 0);
+                break;
+            }
+            case '(': {
+                call(lx, e);
+                break;
+            }
+            default: return;
         }
     }
 }
@@ -865,8 +870,8 @@ static void arrayexp(Lexer *lx, ExpInfo *a) {
 }
 
 
-/* index ::= '[' expr ']' */
-static void index(Lexer *lx, ExpInfo *e) {
+/* tabindex ::= '[' expr ']' */
+static void tabindex(Lexer *lx, ExpInfo *e) {
     expectnext(lx, '[');
     expr(lx, e);
     csC_varexp2stack(lx->fs, e);
@@ -876,26 +881,28 @@ static void index(Lexer *lx, ExpInfo *e) {
 
 /*
 ** tabfield ::= name '=' expr
-**            | index '=' expr
+**            | tabindex '=' expr
 */
 static void tabfield(Lexer *lx, Constructor *c) {
     FunctionState *fs = lx->fs;
     int sp = fs->sp;
-    ExpInfo tab, e;
+    int extra;
+    ExpInfo tab, key, val;
+    UNUSED(sp); /* used only for assertion */
     if (check(lx, TK_NAME)) {
         checklimit(fs, c->u.t.nh, MAX_INT, "records in a table constructor");
-        expname(lx, &e);
+        expname(lx, &key);
     } else
-        index(lx, &e);
-    cs_assert(e.et == EXP_STRING);
+        tabindex(lx, &key);
     c->u.t.nh++;
     expectnext(lx, '=');
     tab = *c->u.t.t;
-    csC_indexed(fs, &tab, &e, 0);
-    expr(lx, &e); /* get key value... */
-    csC_exp2stack(fs, &e); /* ...and put it on stack */
-    csC_storevar(fs, &tab);
-    fs->sp = sp; /* free slots */
+    csC_indexed(fs, &tab, &key, 0); /* ensure key is in proper place... */
+    expr(lx, &val); /* get key value... */
+    csC_exp2stack(fs, &val); /* put it on stack... */
+    extra = csC_store(fs, &tab); /* ...and do the store */
+    csC_pop(fs, extra); /* pop potential key value */
+    cs_assert(fs->sp == sp);
 }
 
 
@@ -915,10 +922,7 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
     csC_reserveslots(fs, 1); /* space for table */
     do { /* while have table fields */
         if (check(lx, '}')) break; /* delimiter; no more field */
-        csC_emitI(fs, OP_DUP); /* otherwise push dpulicate table... */
-        csC_reserveslots(fs, 1); /* reserve extra slot for the duplicate... */
-        tabfield(lx, &c); /* ...and set its field */
-        fs->sp--; /* extra slot is now free */
+        tabfield(lx, &c);
     } while (match(lx, ',') || match(lx, ';'));
     expectmatch(lx, '}', '{', matchline);
     csC_settablesize(fs, pc, c.u.t.nh);
@@ -1173,16 +1177,15 @@ static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
     } else {
         if (e->et != EXP_VOID)
             csC_exp2stack(fs, e);
-        if (need > 0) /* missing values? */
+        if (need > 0) { /* missing values? */
             csC_nil(fs, need);
+            return; /* done */
+        } /* else fall through */
     }
-    if (need > 0) { /* need to reserve stack slots ? */
+    if (need > 0) /* need to reserve stack slots? */
         csC_reserveslots(fs, need);
-    } else { /* otherwise 'need' is negative or zero */
-        if (need != 0) /* extra values? */
-            csC_pop(fs, -need); /* pop them */
-        fs->sp += need;
-    }
+    else /* otherwise 'need' is negative or zero */
+        csC_pop(fs, -need); /* pop extra values if any */
 }
 
 
@@ -1190,8 +1193,8 @@ static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
 ** Structure to chain all variables on the left side of the
 ** assignment.
 */
-struct LHS {
-    struct LHS *prev;
+struct LHS_assign {
+    struct LHS_assign *prev;
     ExpInfo v;
 };
 
@@ -1202,15 +1205,16 @@ struct LHS {
 ** vars ::= var
 **        | var ',' vars
 */
-static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
+static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
+    int left = 0; /* number of values left in the stack after assignment */
     expect_cond(lx, eisvar(&lhs->v), "expect variable");
     checkreadonly(lx, &lhs->v);
     if (match(lx, ',')) { /* more vars ? */
-        struct LHS var;
-        var.prev = lhs;
-        suffixedexp(lx, &var.v);
-        enterCstack(lx); /* control recursion depth */
-        assign(lx, &var, nvars + 1);
+        struct LHS_assign var;
+        var.prev = lhs; /* chain previous variable */
+        suffixedexp(lx, &var.v); /* get the next variable in the list... */
+        enterCstack(lx);
+        left = assign(lx, &var, nvars + 1); /* ...and assign it */
         leaveCstack(lx);
     } else { /* right side of assignment '=' */
         ExpInfo e;
@@ -1218,11 +1222,16 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
         expectnext(lx, '=');
         nexps = explist(lx, &e);
         if (nexps != nvars)
-            adjustassign(lx, nexps, nvars, &e);
+            adjustassign(lx, nvars, nexps, &e);
         else
             csC_exp2stack(lx->fs, &e);
     }
-    csC_storevar(lx->fs, &lhs->v);
+    if (eisindexed(&lhs->v)) {
+        int extra = csC_storevar(lx->fs, &lhs->v, left+nvars-1);
+        left += 1 + extra; /* variable and extra (key value) */
+    } else /* no leftover values */
+        csC_store(lx->fs, &lhs->v);
+    return left;
 }
 
 
@@ -1231,18 +1240,20 @@ static void assign(Lexer *lx, struct LHS *lhs, int nvars) {
 **           | assign
 */
 static void exprstm(Lexer *lx) {
-    struct LHS v;
+    struct LHS_assign v;
     suffixedexp(lx, &v.v);
     if (check(lx, '=') || check(lx, ',')) { /* assignment? */
+        int left;
         v.prev = NULL;
-        assign(lx, &v, 1);
+        left = assign(lx, &v, 1);
+        csC_adjuststack(lx->fs, left);
     } else { /* otherwise must be call */
         FunctionState *fs = lx->fs;
         Instruction *inst;
         expect_cond(lx, v.v.et == EXP_CALL, "syntax error");
         inst = getinstruction(fs, &v.v);
         SETARG_L(inst, 1, 1); /* call statement uses no results... */
-        fs->sp--; /* ...so the slot is freed */
+        fs->sp--; /* ...so the slot is also free */
     }
 }
 
@@ -1546,7 +1557,7 @@ static void fnstm(Lexer *lx, int linenum) {
     stmname(lx, &var);
     funcbody(lx, &e, linenum, 0);
     checkreadonly(lx, &var);
-    csC_storevar(fs, &var);
+    csC_store(fs, &var);
 }
 
 
@@ -1559,7 +1570,7 @@ static void classstm(Lexer *lx) {
     name = stmname(lx, &var);
     klass(lx, fs, name);
     checkreadonly(lx, &var);
-    csC_storevar(fs, &var);
+    csC_store(fs, &var);
 }
 
 
@@ -2140,12 +2151,14 @@ static void continuestm(Lexer *lx) {
         csP_semerror(lx, "'continue' not in loop statement");
     } else {
         int extra, jmp;
+        int old_sp = fs->sp;
         cs_assert(fs->loopscope != NULL);
         /* pop active 'switch' statement expressions... */
         extra = fs->scope->nswscope - fs->loopscope->nswscope;
         csC_pop(fs, fs->loopscope->activelocals + extra); /* pop values... */
+        fs->sp = old_sp; /* restore old 'sp', as we are not jumping back */
         if (fs->scope->haveupval) { /* have to-be-closed variables? */
-            int stklevel = getstacklevel(fs, fs->scope->activelocals);
+            int stklevel = stacklevel(fs, fs->scope->activelocals);
             csC_emitIS(fs, OP_CLOSE, stklevel);
         }
         jmp = csC_jmp(fs, OP_JMPS); /* and jump backwards... */
@@ -2295,14 +2308,8 @@ static void stm(Lexer *lx) {
 /* compile main function */
 static void mainfunc(FunctionState *fs, Lexer *lx) {
     Scope s;
-    UpValInfo *env;
     startfs(fs, lx, &s);
     setvararg(fs, 0); /* main function is always vararg */
-    env = newupvalue(fs); /* set environment upvalue (for globals vars) */
-    env->onstack = 1;
-    env->idx = 0;
-    env->kind = VARREG;
-    env->name = lx->envname;
     csY_scan(lx); /* scan first token */
     stmlist(lx, 0);
     expect(lx, TK_EOS);

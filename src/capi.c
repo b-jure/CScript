@@ -8,8 +8,6 @@
 #define CS_CORE
 
 
-#include <stdio.h>
-
 #include "carray.h"
 #include "cdebug.h"
 #include "cfunction.h"
@@ -163,7 +161,7 @@ CS_API int cs_absindex(cs_State *ts, int index)
 {
     return (index >= 0 || ispseudo(index))
             ? index
-            : cast_int(ts->sp.p - ts->cf->func.p) + index;
+            : cast_int(ts->sp.p - ts->cf->func.p - 1) + index;
 }
 
 
@@ -774,13 +772,13 @@ cs_sinline void auxrawsetstr(cs_State *ts, HTable *ht, const char *str,
     const TValue *slot;
     OString *s = csS_new(ts, str);
     if (fastget(ts, ht, s, slot, csH_getstr)) {
-        finishfastset(ts, ht, slot, s2v(ts->sp.p - 1));
+        finishfastset(ts, ht, slot, v);
         ts->sp.p--; /* pop value */
     } else {
         setstrval2s(ts, ts->sp.p, s);
         api_inctop(ts);
         csH_set(ts, ht, s2v(ts->sp.p - 1), v);
-        csG_barrierback(ts, obj2gco(ht), s2v(ts->sp.p - 1));
+        csG_barrierback(ts, obj2gco(ht), v);
         ts->sp.p -= 2; /* pop string key and value */
     }
     cs_unlock(ts);
@@ -860,16 +858,6 @@ cs_sinline int auxrawgetfieldstr(cs_State *ts, HTable *ht, const char *k) {
     cs_unlock(ts);
     return ttype(s2v(ts->sp.p - 1));
 }
-
-
-/*
-** Get the global table in the registry. Since all predefined
-** indices in the registry were inserted right when the registry
-** was created and never removed, they must always be in the array
-** part of the registry.
-*/
-#define getGtable(ts) \
-	(&arrval(&G_(ts)->c_registry)->b[CS_RINDEX_GLOBALS])
 
 
 /*
@@ -1353,14 +1341,6 @@ CS_API int cs_load(cs_State *ts, cs_Reader reader, void *userdata,
     if (!source) source = "?";
     csR_init(ts, &br, reader, userdata);
     status = csPR_parse(ts, &br, source);
-    if (status == CS_OK) { /* no errors? */
-        CSClosure *cl = clCSval(s2v(ts->sp.p - 1));
-        const TValue *gt = getGtable(ts);
-        cs_assert(cl->nupvalues >= 1);
-        /* set global table as 1st upvalue of 'cl' (may be CS_ENV) */
-        setobj(ts, cl->upvals[0]->v.p, gt);
-        csG_barrier(ts, cl->upvals[0], gt);
-    }
     cs_unlock(ts);
     return status;
 }

@@ -231,6 +231,16 @@ struct cs_State {
 #define isinthwouv(ts)          ((ts)->thwouv != (ts))
 
 
+/*
+** Get the global table in the registry. Since all predefined
+** indices in the registry were inserted right when the registry
+** was created and never removed, they must always be in the array
+** part of the registry.
+*/
+#define getGtable(ts) \
+	(&arrval(&G_(ts)->c_registry)->b[CS_RINDEX_GLOBALS])
+
+
 
 /* extra space(X) + main thread state(S) */
 typedef struct XS {

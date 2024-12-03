@@ -89,7 +89,7 @@ void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted) {
         wanted = have;
         checkstackGC(ts, wanted); /* check stack, maybe 'wanted > have' */
     }
-    for (int i = 0; wanted-- && i < have; i++)
+    for (int i = 0; wanted > 0 && i < have; i++, wanted--)
         setobjs2s(ts, ts->sp.p++, cf->func.p - have + i);
     while (wanted--)
         setnilval(s2v(ts->sp.p++));

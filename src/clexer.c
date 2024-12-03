@@ -8,6 +8,7 @@
 #define CS_CORE
 
 
+#include "cmeta.h"
 #include "cobject.h"
 #include "ctypes.h"
 #include "cgc.h"
@@ -67,15 +68,12 @@ void csY_setinput(cs_State *ts, Lexer *lx, BuffReader *br, OString *source) {
     lx->tahead.tk = TK_EOS; /* no lookahead token */
     lx->br = br;
     lx->src = source;
-    lx->envname = csS_newlit(ts, CS_ENV);
     csR_buffresize(ts, lx->buff, CS_MINBUFFER);
 }
 
 
 void csY_init(cs_State *ts) {
     /* intern and fix all keywords */
-    OString *env = csS_newlit(ts, CS_ENV); /* create env name... */
-    csG_fix(ts, obj2gco(env)); /* ...and fix it */
     for (int i = 0; i < NUM_KEYWORDS; i++) { /* internalize keywords */
         OString *s = csS_new(ts, tkstr[i]);
         s->extra = i + 1;

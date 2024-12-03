@@ -94,9 +94,9 @@
 
 
 /* GC 'stopped' bits */
-#define GCSTP                   (1<<0) /* GC stopped by itself */
-#define GCSTPUSR                (1<<1) /* GC stopped by user */
-#define GCSTPCLS                (1<<2) /* GC stopped while freeing 'cs_State' */
+#define GCSTP                   1 /* GC stopped by itself */
+#define GCSTPUSR                2 /* GC stopped by user */
+#define GCSTPCLS                4 /* GC stopped while freeing 'cs_State' */
 #define gcrunning(gs)           ((gs)->gcstop == 0)
 
 

@@ -26,10 +26,11 @@
 
 
 /* check expression type */
-#define eisvar(e)           ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
+#define eisvar(e)           ((e)->et >= EXP_GLOBAL && (e)->et <= EXP_DOTSUPER)
 #define eisconstant(e)      ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
 #define eismulret(e)        ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
 #define eistrue(e)          ((e)->et >= EXP_TRUE && (e)->et <= EXP_K)
+#define eisindexed(e)       ((e)->et >= EXP_INDEXED && (e)->et <= EXP_DOTSUPER)
 
 
 /* expression types */
@@ -54,15 +55,15 @@ typedef enum expt {
     /* registered constant value;
      * 'info' = index in 'constants'; */
     EXP_K,
+    /* global variable;
+     * 'str' = global name */
+    EXP_GLOBAL,
     /* upvalue variable;
      * 'info' = index of upvalue in 'upvals'; */
     EXP_UVAL,
     /* local variable;
      * 'info' = stack index; */
     EXP_LOCAL,
-    /* private variable;
-     * 'info' = 'private' index; */
-    EXP_PRIVATE,
     /* indexed variable; */
     EXP_INDEXED,
     /* variable indexed with literal string;

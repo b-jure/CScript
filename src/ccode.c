@@ -128,19 +128,21 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatILL), /* OP_CALL */
     opProp(0, 0, 0, FormatIL), /* OP_CLOSE */
     opProp(0, 0, 0, FormatIL), /* OP_TBC */
+    opProp(0, 0, 0, FormatIL), /* OP_GETGLOBAL */
+    opProp(0, 0, 0, FormatIL), /* OP_SETGLOBAL */
     opProp(0, 0, 0, FormatIL), /* OP_GETLOCAL */
     opProp(0, 0, 0, FormatIL), /* OP_SETLOCAL */
     opProp(0, 0, 0, FormatIL), /* OP_GETUVAL */
     opProp(0, 0, 0, FormatIL), /* OP_SETUVAL */
     opProp(0, 0, 0, FormatILS), /* OP_SETARRAY */
-    opProp(0, 0, 0, FormatIL), /* OP_SETPROPERTY */
+    opProp(0, 0, 0, FormatILL), /* OP_SETPROPERTY */
     opProp(0, 0, 0, FormatIL), /* OP_GETPROPERTY */
     opProp(0, 0, 0, FormatI), /* OP_GETINDEX */
-    opProp(0, 0, 0, FormatI), /* OP_SETINDEX */
+    opProp(0, 0, 0, FormatIL), /* OP_SETINDEX */
     opProp(0, 0, 0, FormatIL), /* OP_GETINDEXSTR */
-    opProp(0, 0, 0, FormatIL), /* OP_SETINDEXSTR */
+    opProp(0, 0, 0, FormatILL), /* OP_SETINDEXSTR */
     opProp(0, 0, 0, FormatIL), /* OP_GETINDEXINT */
-    opProp(0, 0, 0, FormatIL), /* OP_SETINDEXINT */
+    opProp(0, 0, 0, FormatILL), /* OP_SETINDEXINT */
     opProp(0, 0, 0, FormatIL), /* OP_GETSUP */
     opProp(0, 0, 0, FormatI), /* OP_GETSUPIDX */
     opProp(0, 0, 0, FormatIL), /* OP_GETSUPIDXSTR */
@@ -193,8 +195,8 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
 "LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM", "BNOT",
 "EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
-"TESTPOP", "CALL", "CLOSE", "TBC", "GETLOCAL", "SETLOCAL",
-"GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY", "GETPROPERTY",
+"TESTPOP", "CALL", "CLOSE", "TBC", "GETGLOBAL", "SETGLOBAL", "GETLOCAL",
+"SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY", "GETPROPERTY",
 "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT",
 "SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT",
 "FORPREP", "FORCALL", "FORLOOP", "RET",
@@ -434,11 +436,14 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
         cs_assert(e->et == EXP_VARARG);
         SETARG_L(pc, 0, nreturns + 1);
     }
+    e->et = EXP_FINEXPR;
+    csC_reserveslots(fs, 1); /* space for call/vararg expression */
 }
 
 
 int csC_nil(FunctionState *fs, int n) {
     cs_assert(n > 0);
+    csC_reserveslots(fs, n);
     if (n == 1)
         return csC_emitI(fs, OP_NIL);
     else
@@ -446,14 +451,30 @@ int csC_nil(FunctionState *fs, int n) {
 }
 
 
+cs_sinline void freeslots(FunctionState *fs, int n) {
+    fs->sp -= n;
+    cs_assert(fs->sp >= 0); /* negative slots are invalid */
+}
+
+
 int csC_pop(FunctionState *fs, int n) {
     if (n > 0) {
+        freeslots(fs, n);
         if (n == 1)
             return csC_emitI(fs, OP_POP);
         else
             return csC_emitIL(fs, OP_POPN, n);
     }
     return -1;
+}
+
+
+void csC_adjuststack(FunctionState *fs, int left) {
+    if (left > 0)
+        csC_pop(fs, left);
+    else if (left < 0)
+        csC_nil(fs, -left);
+    /* else do nothing */
 }
 
 
@@ -468,12 +489,6 @@ void csC_method(FunctionState *fs, ExpInfo *e) {
     cs_assert(e->et == EXP_STRING);
     e->u.info = csC_emitIL(fs, OP_METHOD, stringK(fs, e->u.str));
     e->et = EXP_FINEXPR;
-}
-
-
-cs_sinline void freeslots(FunctionState *fs, int n) {
-    fs->sp -= n;
-    cs_assert(fs->sp >= 0);
 }
 
 
@@ -524,8 +539,13 @@ static int codeK(FunctionState *fs, int idx) {
 
 
 /* emit 'OP_SET' family of instructions */
-void csC_storevar(FunctionState *fs, ExpInfo *var) {
+int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
+    int extra = 0;
     switch (var->et) {
+        case EXP_GLOBAL: {
+            var->u.info = csC_emitIL(fs, OP_SETGLOBAL, stringK(fs, var->u.str));
+            break;
+        }
         case EXP_UVAL: {
             var->u.info = csC_emitIL(fs, OP_SETUVAL, var->u.info);
             break;
@@ -535,23 +555,20 @@ void csC_storevar(FunctionState *fs, ExpInfo *var) {
             break;
         }
         case EXP_INDEXED: {
-            freeslots(fs, 2); /* receivier + key */
-            var->u.info = csC_emitI(fs, OP_SETINDEX);
+            var->u.info = csC_emitIL(fs, OP_SETINDEX, left+2);
+            extra = 1; /* extra leftover values */
             break;
         }
         case EXP_INDEXSTR: {
-            freeslots(fs, 1); /* receiver */
-            var->u.info = csC_emitIL(fs, OP_SETINDEXSTR, var->u.info);
+            var->u.info = csC_emitILL(fs, OP_SETINDEXSTR, left+1, var->u.info);
             break;
         }
         case EXP_INDEXINT: {
-            freeslots(fs, 1); /* receiver */
-            var->u.info = csC_emitIL(fs, OP_SETINDEXINT, var->u.info);
+            var->u.info = csC_emitILL(fs, OP_SETINDEXINT, left+1, var->u.info);
             break;
         }
         case EXP_DOT: {
-            freeslots(fs, 1); /* receiver */
-            var->u.info = csC_emitIL(fs, OP_SETPROPERTY, var->u.info);
+            var->u.info = csC_emitILL(fs, OP_SETPROPERTY, left+1, var->u.info);
             break;
         }
         case EXP_INDEXSUPER:
@@ -560,22 +577,27 @@ void csC_storevar(FunctionState *fs, ExpInfo *var) {
             csP_semerror(fs->lx, "attempt to assign to 'super' property");
             break;
         }
-        default: cs_assert(0); /* invalid store */
+        default: cs_assert(0); break; /* invalid store */
     }
     var->et = EXP_FINEXPR;
-    freeslots(fs, 1); /* rhs (expr) */
+    freeslots(fs, 1); /* value */
+    return extra;
 }
 
 
 /* ensure variable is on stack */
 static int dischargevars(FunctionState *fs, ExpInfo *e) {
     switch (e->et) {
-        case EXP_LOCAL: {
-            e->u.info = csC_emitIL(fs, OP_GETLOCAL, e->u.info);
+        case EXP_GLOBAL: {
+            e->u.info = csC_emitIL(fs, OP_GETGLOBAL, stringK(fs, e->u.str));
             break;
         }
         case EXP_UVAL: {
             e->u.info = csC_emitIL(fs, OP_GETUVAL, e->u.info);
+            break;
+        }
+        case EXP_LOCAL: {
+            e->u.info = csC_emitIL(fs, OP_GETLOCAL, e->u.info);
             break;
         }
         case EXP_INDEXED: {
@@ -617,7 +639,7 @@ static int dischargevars(FunctionState *fs, ExpInfo *e) {
             csC_setoneret(fs, e);
             break;
         }
-        default: return 0;
+        default: return 0; /* expression is not a variable */
     }
     e->et = EXP_FINEXPR;
     return 1;
@@ -743,23 +765,23 @@ void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
 
 /* initialize dot indexed expression */
 void csC_getfield(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
-        int super) {
+                  int super) {
     cs_assert(keystr->et == EXP_STRING);
     var->u.info = stringK(fs, keystr->u.str);
     var->et = (super ? EXP_DOTSUPER : EXP_DOT);
 }
 
 
-#include <stdio.h>
 /* initialize indexed expression */
 void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
+    int strK = 0;
     cs_assert(var->et == EXP_FINEXPR);
-    if (c_unlikely(key->et == EXP_NIL))
-        csP_semerror(fs->lx, "nil index");
-    if (key->et == EXP_STRING)
+    if (key->et == EXP_STRING) {
         string2K(fs, key); /* make constant */
+        strK = 1;
+    }
     if (super) {
-        if (key->et == EXP_K) {
+        if (strK) {
             var->u.info = key->u.info;
             var->et = EXP_INDEXSUPERSTR;
         } else {
@@ -770,7 +792,7 @@ void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
     } else if (isintKL(key)) {
         var->u.info = cast_int(key->u.i);
         var->et = EXP_INDEXINT;
-    } else if (key->et == EXP_K) {
+    } else if (strK) {
         var->u.info = key->u.info;
         var->et = EXP_INDEXSTR;
     } else {

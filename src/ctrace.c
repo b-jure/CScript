@@ -361,6 +361,18 @@ static void unasmMBin(const Proto *p, Instruction *pc) {
 }
 
 
+static void unasmGlobal(const Proto *p, Instruction *pc) {
+    const char *str;
+    int index;
+    startline(p, pc);
+    traceop(*pc);
+    index = GETARG_L(pc, 0);
+    str = getstr(strval(&p->k[index]));
+    postab(printf("G@%d=%s", index, str));
+    endline();
+}
+
+
 static void unasmLocal(const Proto *p, Instruction *pc) {
     const char *str;
     int index;
@@ -414,23 +426,23 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
             case OP_BSHL: case OP_BSHR: case OP_BAND: case OP_BOR:
             case OP_BXOR: case OP_CONCAT: case OP_LT: case OP_LE:
             case OP_NOT: case OP_UNM: case OP_BNOT: case OP_EQPRESERVE:
-            case OP_GETINDEX: case OP_SETINDEX: case OP_GETSUPIDX:
-            case OP_INHERIT: case OP_FORCALL: case OP_FORLOOP: {
+            case OP_GETINDEX: case OP_GETSUPIDX: case OP_INHERIT:
+            case OP_FORCALL: case OP_FORLOOP: {
                 unasm(p, pc);
                 break;
             }
             case OP_NILN: case OP_VARARGPREP: case OP_VARARG:
             case OP_CLOSURE: case OP_POPN: case OP_JMP:
             case OP_JMPS: case OP_CLOSE: case OP_TBC:
-            case OP_GETINDEXINT: case OP_SETINDEXINT: {
+            case OP_GETINDEXINT: case OP_SETINDEX: {
                 unasmL(p, pc);
                 break;
             }
             case OP_ADDK: case OP_SUBK: case OP_MULK: case OP_DIVK:
             case OP_MODK: case OP_POWK: case OP_BSHLK: case OP_BSHRK:
             case OP_BANDK: case OP_BORK: case OP_BXORK: case OP_CONSTL:
-            case OP_SETPROPERTY: case OP_GETPROPERTY: case OP_GETINDEXSTR:
-            case OP_SETINDEXSTR: case OP_METHOD: case OP_GETSUP:
+            case OP_GETPROPERTY: case OP_GETINDEXSTR:
+            case OP_METHOD: case OP_GETSUP:
             case OP_GETSUPIDXSTR: {
                 unasmKL(p, pc);
                 break;
@@ -451,6 +463,10 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 unasmIMMord(p, pc);
                 break;
             }
+            case OP_GETGLOBAL: case OP_SETGLOBAL: {
+                unasmGlobal(p, pc);
+                break;
+            }
             case OP_GETLOCAL: case OP_SETLOCAL: {
                 unasmLocal(p, pc);
                 break;
@@ -459,7 +475,8 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 unasmUpvalue(p, pc);
                 break;
             }
-            case OP_FORPREP: {
+            case OP_FORPREP: case OP_SETINDEXINT: case OP_SETPROPERTY: 
+            case OP_SETINDEXSTR: {
                 unasmLL(p, pc);
                 break;
             }

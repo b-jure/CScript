@@ -124,6 +124,7 @@ struct PParseData {
 };
 
 
+#include <stdio.h>
 /* auxiliary function to call 'csP_pparse' in protected mode */
 static void parsepaux(cs_State *ts, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);

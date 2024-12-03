@@ -8,7 +8,6 @@
 #define CS_CORE
 
 
-#include <stdio.h>
 #include <string.h>
 
 #include "capi.h"
@@ -705,14 +704,14 @@ void csV_concat(cs_State *ts, int total) {
 /* arithmetic operations with constant operand for floats */
 #define op_arithKf(ts,fop) { \
     TValue *v = peek(0); \
-    TValue *lk = getlK(); \
+    TValue *lk = K(fetchl()); \
     op_arithKf_aux(ts, v, lk, fop); }
 
 
 /* arithmetic operations with constant operand */
 #define op_arithK(ts,iop,fop) { \
     TValue *v = peek(0); \
-    TValue *lk = getlK(); \
+    TValue *lk = K(fetchl()); \
     if (ttisint(v) && ttisint(lk)) { \
         cs_Integer i1 = ival(v); \
         cs_Integer i2 = ival(lk); \
@@ -796,7 +795,7 @@ void csV_concat(cs_State *ts, int total) {
 /* bitwise operations with constant operand */
 #define op_bitwiseK(ts,op) { \
     TValue *v = peek(0); \
-    TValue *lk = getlK(); /* L */\
+    TValue *lk = K(fetchl()); /* L */\
     cs_Integer i1; cs_Integer i2 = ival(lk);  \
     if (c_likely(tointeger(v, &i1))) { \
         setival(v, op(i1, i2)); \
@@ -907,17 +906,11 @@ void csV_concat(cs_State *ts, int total) {
 #define fetchs()        (*pc++)
 
 /* fetch long instruction argument */
-#define fetchl()        (pc += SIZEARGL, get3bytes(pc - SIZEARGL))
+#define fetchl()        (cast_void(pc += SIZEARGL), get3bytes(pc - SIZEARGL))
 
 
-/* get long constant */
-#define getlK()         (k + fetchl())
-
-/* get short constant */
-#define getsK()         (k + fetchs())
-
-/* get string constant */
-#define getKStr()       (strval(getlK()))
+/* get constant at index 'idx' */
+#define K(idx)        (k + (idx))
 
 
 /* get sign value */
@@ -962,6 +955,7 @@ returning:
     pc = cl->p->code;
     base = cf->func.p + 1;
 #if 1
+        #include <stdio.h>
         printf(">> Tracing code execution <<\n");
 #endif
     for (;;) {
@@ -994,12 +988,12 @@ returning:
                 vm_break;
             } 
             vm_case(OP_CONST) {
-                TValue *sk = getsK();
+                TValue *sk = K(fetchs());
                 setobj2s(ts, ts->sp.p++, sk);
                 vm_break;
             }
             vm_case(OP_CONSTL) {
-                TValue *lk = getlK();
+                TValue *lk = K(fetchl());
                 setobj2s(ts, ts->sp.p++, lk);
                 vm_break;
             }
@@ -1022,7 +1016,7 @@ returning:
                 vm_break;
             }
             vm_case(OP_VARARG) {
-                int n = fetchl(); /* num of varargs wanted */
+                int n = fetchl() - 1; /* num of varargs wanted */
                 Protect(csF_getvarargs(ts, cf, n));
                 vm_break;
             }
@@ -1069,7 +1063,7 @@ returning:
             vm_case(OP_METHOD) {
                 TValue *cls = peek(1);
                 TValue *f = peek(0); /* method */
-                TValue *key = getlK();
+                TValue *key = K(fetchl());
                 cs_assert(ttisstring(key));
                 Protect(csH_set(ts, classval(f)->methods, key, cls));
                 vm_break;
@@ -1246,7 +1240,7 @@ returning:
             /* } ORDERING_OPS { */
             vm_case(OP_EQK) {
                 TValue *v1 = peek(0);
-                const TValue *vK = getlK();
+                const TValue *vK = K(fetchl());
                 int cond = fetchs();
                 setorderres(v1, csV_raweq(v1, vK), cond);
                 vm_break;
@@ -1414,6 +1408,25 @@ returning:
                 Protect(csF_newtbcvar(ts, level));
                 vm_break;
             }
+            vm_case(OP_GETGLOBAL) {
+                TValue *key = K(fetchl());
+                TValue *G = getGtable(ts);
+                const TValue *val = csH_getstr(htval(G), strval(key));
+                if (!isempty(val)) {
+                    setobj2s(ts, ts->sp.p++, val);
+                } else
+                    setnilval(s2v(ts->sp.p++));
+                vm_break;
+            }
+            vm_case(OP_SETGLOBAL) {
+                TValue *key = K(fetchl());
+                TValue *G = getGtable(ts);
+                TValue *v = peek(0);
+                cs_assert(ttisstring(key));
+                csH_set(ts, htval(G), key, v);
+                pop(1); /* v */
+                vm_break;
+            }
             vm_case(OP_GETLOCAL) {
                 int i = fetchl();
                 setobjs2s(ts, ts->sp.p++, STK(i));
@@ -1455,50 +1468,51 @@ returning:
                 vm_break;
             }
             vm_case(OP_SETPROPERTY) { /* NOTE: optimize? */
-                TValue *prop = getlK();
-                TValue *v1 = peek(1);
-                TValue *v2 = peek(0);
+                TValue *o = peek(fetchl());
+                TValue *prop = K(fetchl());
+                TValue *v = peek(0);
                 cs_assert(ttisstring(prop));
-                Protect(csV_set(ts, v1, prop, v2));
-                pop(2); /* v1,v2 */
+                Protect(csV_set(ts, o, prop, v));
+                pop(1); /* v */
                 vm_break;
             }
             vm_case(OP_GETPROPERTY) { /* NOTE: optimize? */
-                TValue *prop = getlK();
+                TValue *prop = K(fetchl());
                 TValue *v = peek(0);
                 cs_assert(ttisstring(prop));
                 Protect(csV_get(ts, v, prop, TOPS()));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
-                TValue *v1 = peek(1);
-                TValue *v2 = peek(0);
-                Protect(csV_get(ts, v1, v2, SLOT(1)));
+                TValue *o = peek(1);
+                TValue *key = peek(0);
+                Protect(csV_get(ts, o, key, SLOT(1)));
                 pop(1); /* v2 */
                 vm_break;
             }
             vm_case(OP_SETINDEX) {
-                TValue *v1 = peek(2);
-                TValue *v2 = peek(1);
-                TValue *v3 = peek(0);
-                Protect(csV_set(ts, v1, v2, v3));
-                pop(3); /* v1,v2,v3 */
+                SPtr os = SLOT(fetchl());
+                TValue *o = s2v(os);
+                TValue *idx = s2v(os + 1);
+                TValue *v = peek(0);
+                Protect(csV_set(ts, o, idx, v));
+                pop(1); /* v */
                 vm_break;
             }
             vm_case(OP_GETINDEXSTR) { /* TODO: optimize */
-                TValue *i = getlK();
+                TValue *i = K(fetchl());
                 TValue *v = peek(0);
                 cs_assert(ttisstring(i));
                 Protect(csV_get(ts, v, i, TOPS()));
                 vm_break;
             }
             vm_case(OP_SETINDEXSTR) { /* TODO: optimize */
-                TValue *i = getlK();
-                TValue *v1 = peek(1);
-                TValue *v2 = peek(0);
-                cs_assert(ttisstring(i));
-                Protect(csV_set(ts, v1, i, v2));
-                pop(2); /* v1,v2 */
+                TValue *o = peek(fetchl());
+                TValue *idx = K(fetchl());
+                TValue *v = peek(0);
+                cs_assert(ttisstring(idx));
+                Protect(csV_set(ts, o, idx, v));
+                pop(1); /* v */
                 vm_break;
             }
             vm_case(OP_GETINDEXINT) { /* TODO: optimize */
@@ -1509,20 +1523,22 @@ returning:
                 vm_break;
             }
             vm_case(OP_SETINDEXINT) { /* TODO: optimize */
-                TValue i;
-                TValue *v1 = peek(1);
-                TValue *v2 = peek(0);
-                setival(&i, fetchl());
-                Protect(csV_set(ts, v1, &i, v2));
-                pop(2); /* v1,v2 */
+                TValue *o = peek(fetchl());
+                TValue *v = peek(0);
+                cs_Integer imm_i = fetchl();
+                TValue index;
+                setival(&index, imm_i);
+                Protect(csV_set(ts, o, &index, v));
+                pop(1); /* v */
                 vm_break;
             }
             vm_case(OP_GETSUP) {
-                OString *i = getKStr();
+                TValue *key = K(fetchl());
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 savepc(ts);
-                getsuper(ts, insval(v1), classval(v2), i, SLOT(1), csH_getstr);
+                getsuper(ts, insval(v1), classval(v2), strval(key), SLOT(1),
+                             csH_getstr);
                 pop(1); /* v2 */
                 vm_break;
             }
@@ -1536,11 +1552,12 @@ returning:
                 vm_break;
             }
             vm_case(OP_GETSUPIDXSTR) {
-                OString *i = getKStr();
+                TValue *key = K(fetchl());
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 savepc(ts);
-                getsuper(ts, insval(v1), classval(v2), i, SLOT(1), csH_getstr);
+                getsuper(ts, insval(v1), classval(v2), strval(key), SLOT(1),
+                             csH_getstr);
                 pop(1); /* v2 */
                 vm_break;
             }
