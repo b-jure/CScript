@@ -2195,8 +2195,8 @@ static void continuestm(Lexer *lx) {
 
 
 /* 
-** Get the most recent control flow scope and store the
-** depth difference in 'ns'.
+** Get the most recent control flow scope, or NULL if none
+** present.
 */
 static const Scope *getcfscope(const FunctionState *fs) {
     const Scope *s = NULL;
