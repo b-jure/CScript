@@ -128,7 +128,7 @@ typedef union {
     TValue val_;
     struct {
         TValueFields;
-        unsigned short delta;
+        ushort delta;
     } tbc;
 } SValue;
 
@@ -606,7 +606,7 @@ typedef struct Proto {
     int sizelocals; /* size of 'locals' */
     int sizeupvals; /* size of 'upvals' */
     int maxstack; /* max stack size for this function */
-    int arity; /* function argument count */
+    int arity; /* number of function parameters */
     int defline; /* function definition line */
     int deflastline; /* function definition end line */
 } Proto;
@@ -703,22 +703,15 @@ typedef struct IMethod {
 typedef struct UpVal {
     ObjectHeader;
     union {
-        TValue *p; /* stack or 'closed' */
+        TValue *p; /* on stack or 'u.value' */
         ptrdiff_t offset; /* when reallocating stack */
     } v;
     union {
-        struct {
-            /* This is still a singly linked list, the role of '**prev'
-             * is to easily update the previous 'UpVal' 'next' pointer
-             * when unlinking the open upvalue; meaning that 'prev' points
-             * not to the previous 'UpVal' but to the previous 'UpVal' 'next'
-             * field. This avoids branching as much as possible when
-             * unlinking the upvalue. */
-            struct UpVal *next;
+        struct { /* valid when open */
+            struct UpVal *next; /* linked list */
             struct UpVal **prev;
         } open;
         TValue value; /* value stored here when closed */
-        cs_ubyte readonly; /* true if variable is read only */
     } u;
 } UpVal;
 
@@ -735,7 +728,7 @@ typedef struct CSClosure {
 } CSClosure;
 
 
-typedef struct {
+typedef struct CClosure {
     ClosureHeader;
     cs_CFunction fn;
     TValue upvals[];

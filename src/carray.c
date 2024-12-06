@@ -40,7 +40,7 @@ void csA_ensure(cs_State *ts, Array *arr, int index) {
         cs_assert(arr->n <= cast_uint(index));
         csM_ensurearray(ts, arr->b, arr->sz, arr->n, index - arr->n + 1,
                         ARRAYLIMIT, "array elements", TValue);
-        for (uint i = arr->n; i < arr->sz; i++)
+        for (int i = arr->n; i <= index; i++)
             setnilval(&arr->b[i]);
         arr->n = index + 1;
     }

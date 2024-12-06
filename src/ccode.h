@@ -12,7 +12,7 @@
 
 
 /* get current pc */
-#define currentPC(fs)           ((fs)->pc)
+#define currentpc(fs)           ((fs)->pc)
 
 
 /* get constant of 'ExpInfo' */
@@ -253,16 +253,16 @@ OP_RET,/*    L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes)         */
 ** Sets virtual method table entry value at index S.
 ** 
 ** [OP_CALL]
-** L1 is the base stack offset where the value being called is located.
+** L1 is the offset from stack base, where the value being called is located.
 ** L2 is the number of expected results biased with +1.
-** If L2-1 == 0, then top is set to last return_result+1.
+** If L2 == 0, then 'sp' is set to last return_result+1.
 ** 
 ** [OP_RET]
 ** L2 is biased with +1, in order to represent multiple returns when the
-** number of results is only known during runtime. For example (L2 == 0)
+** number of results is only known during runtime. For example L2 == 0
 ** represents CS_MULRET, in this case we would return all values up to the
-** top. S indicates if current function needs to close upvalues or tbc
-** variables before returning.
+** top. S indicates if current function needs to close any open upvalues or
+** to-be-closed variables before returning.
 */
 
 
@@ -343,7 +343,7 @@ CSI_FUNC void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
 CSI_FUNC int csC_nil(FunctionState *fs, int n);
 CSI_FUNC int csC_pop(FunctionState *fs, int n);
 CSI_FUNC void csC_adjuststack(FunctionState *fs, int left);
-CSI_FUNC int csC_ret(FunctionState *fs, int base, int nreturns);
+CSI_FUNC int csC_ret(FunctionState *fs, int first, int nreturns);
 CSI_FUNC void csC_method(FunctionState *fs, ExpInfo *e);
 CSI_FUNC int csC_storevar(FunctionState *fs, ExpInfo *var, int left);
 CSI_FUNC void csC_setarraysize(FunctionState *fs, int pc, int sz);

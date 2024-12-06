@@ -104,6 +104,7 @@ void *csM_malloc_(cs_State *ts, size_t size, int tag) {
 void *csM_growarr_(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
                    int space, int limit, const char *what) {
     int size = *sizep;
+    cs_assert(space >= 1);
     if (size - len >= space) { /* have enough space? */
         return ptr; /* done */
     } else { /* otherwise expand */

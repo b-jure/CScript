@@ -46,8 +46,5 @@ CSI_FUNC void csMM_trybin(cs_State *ts, const TValue *v1, const TValue *v2,
 CSI_FUNC void csMM_tryunary(cs_State *ts, const TValue *v, SPtr res,
                              cs_MM mm);
 CSI_FUNC void csMM_tryconcat(cs_State *ts);
-CSI_FUNC void csMM_freeclass(cs_State *ts, OClass *cls);
-CSI_FUNC void csMM_freeinstance(cs_State *ts, Instance *ins);
-CSI_FUNC void csMM_freeuserdata(cs_State *ts, UserData *ud);
 
 #endif

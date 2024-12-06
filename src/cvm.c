@@ -440,7 +440,7 @@ cs_sinline void moveresults(cs_State *ts, SPtr res, int nres, int wanted) {
     switch (wanted) {
         case 0: { /* no values needed */
             ts->sp.p = res;
-            return;
+            return; /* done */
         }
         case 1: { /* one value needed */
             if (nres == 0)
@@ -448,7 +448,7 @@ cs_sinline void moveresults(cs_State *ts, SPtr res, int nres, int wanted) {
             else
                 setobjs2s(ts, res, ts->sp.p - nres);
             ts->sp.p = res + 1;
-            return;
+            return; /* done */
         }
         case CS_MULRET: { /* all values needed */
             wanted = nres;
@@ -483,6 +483,7 @@ cs_sinline void poscall(cs_State *ts, CallFrame *cf, int nres) {
 
 
 #define next_cf(ts)   ((ts)->cf->next ? (ts)->cf->next : csT_newcf(ts))
+
 
 cs_sinline CallFrame *prepcallframe(cs_State *ts, SPtr func, int nres,
                                     int mask, SPtr top) {
@@ -555,6 +556,7 @@ retry:
             int fsize = p->maxstack;
             checkstackGCp(ts, fsize, func);
             ts->cf = cf = prepcallframe(ts, func, nres, 0, func + fsize + 1);
+            cf->pc = p->code; /* set starting point */
             for (; nargs < p->arity; nargs++)
                 setnilval(s2v(ts->sp.p++)); /* set missing args as 'nil' */
             cs_assert(cf->top.p <= ts->stackend.p);
@@ -949,15 +951,15 @@ void csV_execute(cs_State *ts, CallFrame *cf) {
 #include "cjmptable.h"
 #endif
 startfunc:
+#if 1
+    #include <stdio.h>
+    printf(">> Executing new closure...\n");
+#endif
 returning:
     cl = clCSval(s2v(cf->func.p));
     k = cl->p->k;
-    pc = cl->p->code;
+    pc = cf->pc;
     base = cf->func.p + 1;
-#if 1
-        #include <stdio.h>
-        printf(">> Tracing code execution <<\n");
-#endif
     for (;;) {
         vm_dispatch(fetch()) {
             vm_case(OP_DUP) {
@@ -1021,8 +1023,8 @@ returning:
                 vm_break;
             }
             vm_case(OP_CLOSURE) {
-                int indexf = fetchl();
-                Proto *fn = cl->p->p[indexf];
+                int findex = fetchl();
+                Proto *fn = cl->p->p[findex];
                 Protect(pushclosure(ts, fn, cl->upvals, base));
                 checkGC(ts);
                 vm_break;
@@ -1395,7 +1397,7 @@ returning:
                 if ((newcf = precall(ts, func, nres)) != NULL) {
                     cf = newcf;
                     goto startfunc;
-                } /* otherwise it was a C call or a class with no __init */
+                } /* else call is already done (not a CScript closure) */
                 vm_break;
             }
             vm_case(OP_CLOSE) {
@@ -1626,8 +1628,14 @@ returning:
                 ts->sp.p = stk + nres;
                 poscall(ts, cf, nres);
                 if (cf->status & CFST_FRESH) { /* top-level function? */
+#if 1
+                    printf(">> Returning from main...\n");
+#endif
                     return; /* end this frame */
                 } else {
+#if 1
+                    printf(">> Returning...\n");
+#endif
                     cf = cf->prev; /* return to caller */
                     goto returning; /* continue running in this frame */
                 }

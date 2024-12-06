@@ -258,19 +258,3 @@ int csMM_orderI(cs_State *ts, const TValue *v1, int v2, int flip, int isflt,
     v2_ = (flip ? v1 : &aux);
     return csMM_order(ts, v1, v2_, mm);
 }
-
-
-void csMM_freeclass(cs_State *ts, OClass *cls) {
-    if (cls->vmt) /* have VMT? */
-        csM_freearray(ts, cls->vmt, SIZEVMT);
-    if (cls->methods) /* have methods? */
-        csH_free(ts, cls->methods);
-    csM_free(ts, cls);
-}
-
-
-void csMM_freeuserdata(cs_State *ts, UserData *ud) {
-    if (ud->vmt)
-        csM_freearray(ts, ud->vmt, SIZEVMT);
-    csM_freemem(ts, ud, sizeofuserdata(ud->nuv, ud->size));
-}

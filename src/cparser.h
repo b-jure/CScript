@@ -131,21 +131,25 @@ typedef union LVar {
     struct {
         TValueFields;
         cs_ubyte kind;
-        int idx; /* index into 'locals' */
+        int idx; /* index in 'locals' */
         OString *name;
     } s;
     TValue val; /* constant value */
 } LVar;
 
 
+typedef struct BreakJmp {
+    int jmp;
+    int hasclose;
+} BreakJmp;
+
 
 /* list of jump instructions to patch */
 typedef struct PatchList {
     int len;
     int size;
-    int *arr;
+    BreakJmp *arr;
 } PatchList;
-
 
 
 /* class declaration information */
@@ -183,6 +187,7 @@ typedef struct DynCtx {
     int nupvals;
     int nbrks;
     int needclose;
+    int lastwasret;
 } DynCtx;
 
 

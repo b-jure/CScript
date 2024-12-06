@@ -29,30 +29,31 @@
     { e; for(int i_ = 0; i_ < TABSZ; i_++) putchar(' '); }
 
 
-cs_sinline void startline(const Proto *p, const Instruction *pc) {
-    postab(printf("[%05d]", csD_getfuncline(p, pcrel(pc, p))));
+
+static void startline(const Proto *p, const Instruction *pc) {
+    postab(printf("[%05d]", csD_getfuncline(p, pc - p->code)));
 }
 
 
-cs_sinline void endline(void) {
+static void endline(void) {
     putchar('\n');
     fflush(stdout);
 }
 
 
-cs_sinline int traceop(OpCode op) {
+static int traceop(OpCode op) {
     postab(printf("%-12s", getOpName(op)));
     return SIZEINSTR;
 }
 
 
-cs_sinline int traceS(const Instruction *pc) {
+static int traceS(const Instruction *pc) {
     postab(printf("ArgS=%-8d", *pc & 0xFF));
     return SIZEARGS;
 }
 
 
-cs_sinline int traceL(const Instruction *pc) {
+static int traceL(const Instruction *pc) {
     postab(printf("ArgL=%-8d", get3bytes(pc)));
     return SIZEARGL;
 }
@@ -158,17 +159,17 @@ void csTR_tracepc(cs_State *ts, const Proto *p, const Instruction *pc) {
 #define nextOp(pc)      ((pc) + getOpSize(*pc))
 
 
-cs_sinline void tracenil(void) {
+static void tracenil(void) {
     printf("nil");
 }
 
 
-cs_sinline void tracetrue(void) {
+static void tracetrue(void) {
     printf("true");
 }
 
 
-cs_sinline void tracefalse(void) {
+static void tracefalse(void) {
     printf("false");
 }
 
@@ -176,14 +177,14 @@ cs_sinline void tracefalse(void) {
 /* maximum length for string constants */
 #define MAXSTRKLEN      20
 
-cs_sinline void tracestring(OString *s) {
+static void tracestring(OString *s) {
     char buff[MAXSTRKLEN + 1];
     csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
     printf("%s", buff);
 }
 
 
-cs_sinline void tracenum(const TValue *o) {
+static void tracenum(const TValue *o) {
     printf("%s", csS_numtostr(o, NULL));
 }
 
@@ -405,7 +406,7 @@ static void unasmRet(const Proto *p, Instruction *pc) {
     nres = GETARG_L(pc, 1);
     close = GETARG_S(pc, (2*SIZEARGL));
     postab(printf("S@%d", nbase));
-    postab(printf("nres=%d", nres));
+    postab(printf("nres=%d", nres - 1));
     postab(printf("close=%s", (close ? "yes" : "no")));
     endline();
 }
@@ -418,7 +419,12 @@ static void unasmRet(const Proto *p, Instruction *pc) {
 */
 void csTR_disassemble(cs_State *ts, const Proto *p) {
     Instruction *pc = p->code;
+    if (p->defline == 0)
+        printf("%s {\n", getstr(p->source));
+    else
+        printf("fn at line %d in %s {\n", p->defline, getstr(p->source));
     while (pc < &p->code[p->sizecode]) {
+        printf("    ");
         switch (*pc) {
             case OP_DUP: case OP_TRUE: case OP_FALSE: case OP_NIL:
             case OP_NEWCLASS: case OP_POP: case OP_ADD: case OP_SUB:
@@ -498,6 +504,7 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
         }
         pc = nextOp(pc);
     }
+    printf("}\n");
     fflush(stdout);
 }
 

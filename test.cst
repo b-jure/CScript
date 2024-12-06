@@ -166,4 +166,27 @@ print(a["cat"], a["animals"], a.animals.cow, a.animals.fox, a.animals.chicken);
 print(a[5.15]); // index access but element doesn't exist
 # }
 
+# {FUNCTIONS
+a = fn(x, y, ...) { return ...; }; // returns no results
+print(a(...));      // prints only newline
+print(a(5,2,7));    // prints only 7
+print(a(5,2,...));  // prints all varargs 
+a = fn() { print(a); return a; };
+print(a());         // prints a 2 times
+a = fn() {
+    local b = fn() { print(a); };   // creates open upvalue 'a'
+    return b;
+};
+print(a);
+a = a();
+print(a);
+a();
+a = fn() {
+    local b = "Hello, World";
+    return fn() { print(b); };      // creates closed upvalue 'b'
+};
+a = a();
+a();
+# }
+
 /* ===========================} */

@@ -45,8 +45,23 @@
 #define CFSWITCH    1 /* 'switch' */
 
 /* test 'cfbits' */
-#define scopeisloop(s)      testbit((s)->cfbits, CFLOOP)
-#define scopeisswitch(s)    testbit((s)->cfbits, CFSWITCH)
+#define sisloop(s)      testbit((s)->cfbits, CFLOOP)
+#define sisswitch(s)    testbit((s)->cfbits, CFSWITCH)
+
+
+#define checklen(fs)      ((fs)->patches.len > 0)
+
+#define lastpatchlist(fs) \
+        check_exp(checklen(fs), &(fs)->patches.list[(fs)->patches.len - 1])
+
+#define patchlistpop(fs) \
+        check_exp(checklen(fs), &(fs)->patches.list[--(fs)->patches.len])
+
+
+/*
+** BreakJmp used to indicate end of the patch list.
+*/
+static const BreakJmp dummyjmp = { NOJMP, 0 };
 
 
 /* lexical scope information */
@@ -54,7 +69,7 @@ typedef struct Scope {
     struct Scope *prev; /* implicit linked-list */
     int activelocals; /* number of locals outside of this scope */
     int nswscope; /* number of switch scopes before this scope */
-    int depth; /* NOTE: might remove, only used for O(1) in 'breakstm'  */
+    int depth;
     cs_ubyte cfbits; /* control flow bits */
     cs_ubyte haveupval; /* set if scope contains upvalue variable */
     cs_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
@@ -105,6 +120,7 @@ static void storectx(FunctionState *fs, DynCtx *ctx) {
     ctx->nupvals = fs->nupvals;
     ctx->nbrks = fs->patches.len;
     ctx->needclose = fs->needclose;
+    ctx->lastwasret = fs->lastwasret;
 }
 
 
@@ -119,6 +135,7 @@ static void loadctx(FunctionState *fs, DynCtx *ctx) {
     fs->nupvals = ctx->nupvals;
     fs->patches.len = ctx->nbrks;
     fs->needclose = ctx->needclose;
+    fs->lastwasret = ctx->lastwasret;
 }
 
 
@@ -136,59 +153,6 @@ static void storereachablectx(FunctionState *fs) {
 static void loadreachablectx(FunctionState *fs) {
     cs_assert(fs->deadcode.pc >= 0);
     loadctx(fs, &fs->deadcode);
-}
-
-
-/* pop last pending jump from currently active patch list */
-static int patchlistpop(FunctionState *fs) {
-    PatchList *list;
-    cs_assert(fs->patches.len > 0);
-    list = &fs->patches.list[fs->patches.len - 1];
-    if (list->len)
-        return list->arr[--list->len];
-    else
-        return NOJMP;
-}
-
-
-/* add jump to patch list (for backpatching) */
-static void patchlistaddjmp(FunctionState *fs, int jmp) {
-    PatchList *list;
-    cs_assert(fs->patches.len > 0);
-    list = &fs->patches.list[fs->patches.len - 1];
-    checklimit(fs, fs->patches.len, MAX_CODE, "code jumps");
-    csM_growarray(fs->lx->ts, list->arr, list->size, list->len, MAX_CODE,
-                "code jumps", int);
-    list->arr[list->len++] = jmp;
-}
-
-
-/* reset patch list length */
-static void patchlistreset(FunctionState *fs) {
-    cs_assert(fs->patches.len > 0);
-    fs->patches.list[fs->patches.len - 1].len = 0;
-}
-
-
-/* create new patch list */
-static void patchliststart(FunctionState *fs) {
-    checklimit(fs, fs->patches.len, MAX_INT, "patch lists");
-    csM_growarray(fs->lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
-                MAX_INT, "patch lists", PatchList);
-    fs->patches.list[fs->patches.len++] = (PatchList){0};
-}
-
-
-/* end patch list by patching all pending jumps */
-static void patchlistend(FunctionState *fs) {
-    PatchList *list;
-    int jmp; /* breakstm jump */
-    cs_assert(fs->patches.len > 0);
-    list = &fs->patches.list[--fs->patches.len];
-    while ((jmp = patchlistpop(fs)) != NOJMP)
-        csC_patchtohere(fs, jmp);
-    cs_assert(list->len == 0);
-    csM_freearray(fs->lx->ts, list->arr, list->size);
 }
 
 
@@ -227,19 +191,74 @@ static int nvarstack(FunctionState *fs) {
 }
 
 
-/* 
-** Remove and pop local variables up to 'tolevel'; 'swexp' is used
-** in special cases where we have to pop 'switch' statement expressions.
-*/
-static void removelocals(FunctionState *fs, int tolevel, int swexp) {
-    int popn = fs->nactlocals - tolevel;
-    fs->lx->ps->actlocals.len -= popn;
-    popn += swexp;
-    csC_pop(fs, popn);
-    while (fs->nactlocals > tolevel) { /* set debug information */
-        LVarInfo *locinfo = getlocalinfo(fs, --fs->nactlocals);
-        locinfo->endpc = fs->pc; /* set debug lifetime pc */
+/* pop last pending jump from currently active patch list */
+static BreakJmp popbreakjmp(Lexer *lx) {
+    FunctionState *fs = lx->fs;
+    PatchList *l = lastpatchlist(fs);
+    if (l->len > 0)
+        return l->arr[--l->len];
+    else
+        return dummyjmp;
+}
+
+
+/* add jump to patch list (for backpatching) */
+static void patchlistadd(Lexer *lx, int jmp, cs_ubyte hasclose) {
+    FunctionState *fs = lx->fs;
+    BreakJmp bj = { jmp, hasclose };
+    PatchList *l = lastpatchlist(fs);
+    checklimit(fs, l->size, MAX_INT, "code jumps");
+    csM_growarray(lx->ts, l->arr, l->size, l->len, MAX_CODE, "code jumps",
+                  BreakJmp);
+    l->arr[l->len++] = bj;
+}
+
+
+/* reset current patch list length */
+static void patchlistreset(Lexer *lx) {
+    lastpatchlist(lx->fs)->len = 0;
+}
+
+
+/* create new patch list */
+static void patchliststart(Lexer *lx) {
+    FunctionState *fs = lx->fs;
+    PatchList newpl = { 0, 0, NULL };
+    csM_growarray(lx->ts, fs->patches.list, fs->patches.size, fs->patches.len,
+                  MAX_INT, "control flows code jumps", PatchList);
+    fs->patches.list[fs->patches.len++] = newpl;
+}
+
+
+/* end patch list by patching all pending jumps */
+static int patchlistend(Lexer *lx, int target) {
+    FunctionState *fs = lx->fs;
+    PatchList *l = patchlistpop(fs);
+    BreakJmp brj;
+    int hasclose = 0;
+    while ((brj = popbreakjmp(lx)).jmp != NOJMP) {
+        hasclose |= brj.hasclose;
+        csC_patch(fs, brj.jmp, target); /* back-patch the jump */
     }
+    csM_freearray(lx->ts, l->arr, l->size);
+    if (hasclose) csC_emitIL(fs, OP_CLOSE, nvarstack(fs));
+    return hasclose;
+}
+
+
+static void poplocals(FunctionState *fs, int tolevel, int nswitch) {
+    csC_pop(fs, fs->nactlocals - tolevel + nswitch);
+}
+
+
+/* 
+** Remove local variables up to 'tolevel'.
+*/
+static void removelocals(FunctionState *fs, int tolevel) {
+    fs->lx->ps->actlocals.len -= (fs->nactlocals - tolevel);
+    cs_assert(fs->lx->ps->actlocals.len >= 0);
+    while (fs->nactlocals > tolevel) /* set debug information */
+        getlocalinfo(fs, --fs->nactlocals)->endpc = fs->pc;
 }
 
 
@@ -275,18 +294,16 @@ static void initstring(ExpInfo *e, OString *s) {
 
 /* add local debug information into 'locals' */
 static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
-    LVarInfo *lvarinfo;
     Proto *p = fs->p;
     int osz = p->sizelocals;
-    checklimit(fs, fs->nlocals, MAX_LARG, "locals");
     csM_growarray(lx->ts, p->locals, p->sizelocals, fs->nlocals,
-                MAX_LARG, "locals", LVarInfo);
+                  MAX_LARG, "locals", LVarInfo);
     while (osz < p->sizelocals)
         p->locals[osz++].name = NULL;
-    lvarinfo = &p->locals[fs->nlocals++];
-    lvarinfo->name = name;
-    lvarinfo->startpc = fs->pc;
-    return fs->nlocals - 1;
+    p->locals[fs->nlocals].name = name;
+    p->locals[fs->nlocals].startpc = fs->pc;
+    csG_objbarrier(lx->ts, p, name);
+    return fs->nlocals++;
 }
 
 
@@ -305,11 +322,11 @@ static void adjustlocals(Lexer *lx, int nvars) {
 
 
 /* start lexical scope */
-static void startscope(FunctionState *fs, Scope *s, int cfbits) {
+static void open_scope(FunctionState *fs, Scope *s, int cfbits) {
     if (cfbits & (CFLOOP | CFSWITCH)) /* needs a patch list ? */
-        patchliststart(fs); /* 'break' statement jumps storage */
+        patchliststart(fs->lx); /* 'break' statement jumps storage */
     if (fs->scope) {
-        s->nswscope = fs->scope->nswscope + scopeisswitch(fs->scope);
+        s->nswscope = fs->scope->nswscope + sisswitch(fs->scope);
         s->depth = fs->scope->depth + 1;
         s->havetbcvar = fs->scope->havetbcvar;
     } else {
@@ -326,18 +343,23 @@ static void startscope(FunctionState *fs, Scope *s, int cfbits) {
 
 
 /* end lexical scope */
-static void endscope(FunctionState *fs) {
+static void close_scope(FunctionState *fs) {
     Scope *s = fs->scope;
-    int stklevel;
-    if (scopeisloop(s) || scopeisswitch(s)) /* have patch list? */
-        patchlistend(fs);
-    removelocals(fs, s->activelocals, scopeisswitch(s)); /* pop locals */
+    int stklevel = stacklevel(fs, s->activelocals);
+    int popn = fs->nactlocals - s->activelocals + sisswitch(s);
+    int hasclose;
+    removelocals(fs, s->activelocals); /* remove scope locals */
     cs_assert(s->activelocals == fs->nactlocals);
-    stklevel = stacklevel(fs, s->activelocals);
-    if (s->prev && s->haveupval) /* need to close upvalues? */
-        csC_emitIS(fs, OP_CLOSE, stklevel);
-    fs->sp = stklevel; /* free stack slots */
-    fs->scope = s->prev;
+    if (sisloop(s) || sisswitch(s)) /* have pending jumps to fix? */
+        hasclose = patchlistend(fs->lx, currentpc(fs));
+    if (s->prev) { /* not main function scope? */
+        if (!hasclose && s->haveupval) /* still need to close? */
+            csC_emitIS(fs, OP_CLOSE, stklevel);
+        csC_pop(fs, popn); /* pop locals and switch expression (if any) */
+    } else if (!fs->lastwasret) /* last scope missing 'return'? */
+        csC_ret(fs, 0, 0); /* 'return;' */
+    fs->sp = stklevel; /* free scope stack slots */
+    fs->scope = s->prev; /* go back to the previous scope (if any) */
 }
 
 
@@ -356,10 +378,10 @@ static void scopemarkupval(FunctionState *fs, int vidx) {
 
 
 /* 
-** Mark current scope as scopee that has a to-be-closed
+** Mark current scope as scope that has a to-be-closed
 ** variable.
 */
-static void scopemarktbc(FunctionState *fs) {
+static void scopemarkclose(FunctionState *fs) {
     Scope *s = fs->scope;
     s->haveupval = 1;
     s->havetbcvar = 1;
@@ -367,8 +389,7 @@ static void scopemarktbc(FunctionState *fs) {
 }
 
 
-/* initialize function state */
-static void startfs(FunctionState *fs, Lexer *lx, Scope *s) {
+static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     Proto *p = fs->p;
     cs_assert(p != NULL);
     fs->prev = lx->fs;
@@ -390,53 +411,54 @@ static void startfs(FunctionState *fs, Lexer *lx, Scope *s) {
     fs->needclose = fs->lastwasret = 0;
     p->source = lx->src;
     csG_objbarrier(lx->ts, p, p->source);
-    fs->p->maxstack = 2; /* stacks slots 0/1 are always valid */
-    startscope(fs, s, 0); /* start top-level scope */
+    p->maxstack = 2; /* stacks slots 0/1 are always valid */
+    open_scope(fs, s, 0); /* start top-level scope */
 }
 
 
-/* cleanup function state */
-static void endfs(FunctionState *fs) {
-    Lexer *lx = fs->lx;
+static void close_func(Lexer *lx) {
+    FunctionState *fs = lx->fs;
     Proto *p = fs->p;
     cs_State *ts = lx->ts;
-    csC_ret(fs, nvarstack(fs), 0);
-    cs_assert(fs->scope && !fs->scope->prev);
-    endscope(fs); /* end global scope */
+    if (fs->deadcode.pc != NOJMP) /* have unreachable code? */
+        loadreachablectx(fs); /* load reachable context */
+    cs_assert(fs->scope && fs->scope->prev == NULL);
+    close_scope(fs); /* end final scope */
     cs_assert(fs->scope == NULL);
     cs_assert(fs->sp == 0);
-    if (fs->deadcode.pc != NOJMP) /* have dead code ? */
-        loadreachablectx(fs);
-    csC_finish(fs);
-    /* preserve memory; shrink unused space; */
-    /* by using counters in 'fs' as final size */
+    csM_freearray(ts, fs->patches.list, fs->patches.size);
+    csC_finish(fs); /* final code adjustments */
+    /* shrink unused memory */
     csM_shrinkarray(ts, p->p, p->sizep, fs->np, Proto);
     csM_shrinkarray(ts, p->k, p->sizek, fs->nk, TValue);
     csM_shrinkarray(ts, p->code, p->sizecode, fs->pc, Instruction);
     csM_shrinkarray(ts, p->linfo, p->sizelinfo, fs->nlinfo, LineInfo);
     csM_shrinkarray(ts, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
     csM_shrinkarray(ts, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
-    lx->fs = fs->prev;
-    csG_checkGC(ts);
+    lx->fs = fs->prev; /* go back to enclosing function (if any) */
+    csG_checkGC(ts); /* try to collect garbage memory */
+#if 1 /* low-level bytecode disassembly */
+    csTR_disassemble(fs->lx->ts, fs->p);
+#endif
 }
 
 
-/* add function */
+/* add function prototype */
 static Proto *addproto(Lexer *lx) {
-    Proto *newp;
+    Proto *clp; /* closure prototype */
     cs_State *ts = lx->ts;
     FunctionState *fs = lx->fs;
     Proto *p = fs->p;
     if (fs->np >= p->sizep) {
-        int oldsize = p->sizep;
-        csM_growarray(ts, p->p, p->sizep, fs->np, MAX_LARG,
-                    "function prototypes", Proto);
-        while (oldsize < p->sizep)
-            p->p[oldsize++] = NULL;
+        int osz = p->sizep;
+        csM_growarray(ts, p->p, p->sizep, fs->np, MAX_LARG, "functions",
+                      Proto *);
+        while (osz < p->sizep)
+            p->p[osz++] = NULL;
     }
-    p->p[fs->np++] = newp = csF_newproto(ts);
-    csG_objbarrier(ts, p, newp);
-    return newp;
+    p->p[fs->np++] = clp = csF_newproto(ts);
+    csG_objbarrier(ts, p, clp);
+    return clp;
 }
 
 
@@ -452,6 +474,7 @@ static void setvararg(FunctionState *fs, int arity) {
 static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod);
 
 /* forward declare recursive non-terminals */
+static void decl(Lexer *lx);
 static void stm(Lexer *lx);
 static void expr(Lexer *lx, ExpInfo *e);
 
@@ -516,9 +539,9 @@ static int newlocal(Lexer *lx, OString *name) {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
     LVar *local;
-    checklimit(fs, ps->actlocals.len, MAXVARS, "locals");
-    csM_growarray(lx->ts, ps->actlocals.arr, ps->actlocals.size, ps->actlocals.len,
-                MAXVARS, "locals", LVar);
+    checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
+    csM_growarray(lx->ts, ps->actlocals.arr, ps->actlocals.size,
+                  ps->actlocals.len, MAXVARS, "locals", LVar);
     local = &ps->actlocals.arr[ps->actlocals.len++];
     local->s.kind = VARREG;
     local->s.name = name;
@@ -570,20 +593,21 @@ static UpValInfo *newupvalue(FunctionState *fs) {
 /* add new upvalue 'name' into 'upvalues' */
 static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e) {
     UpValInfo *uv = newupvalue(fs);
-    uv->name = name;
+    FunctionState *prev = fs->prev;
     if (e->et == EXP_LOCAL) { /* local? */
         uv->onstack = 1;
         uv->idx = e->u.info;
-        uv->kind = getlocalvar(fs, e->u.info)->s.kind;
-        cs_assert(eqstr(name, getlocalvar(fs, e->u.info)->s.name));
+        uv->kind = getlocalvar(prev, e->u.info)->s.kind;
+        cs_assert(eqstr(name, getlocalvar(prev, e->u.info)->s.name));
     } else { /* must be upvalue */
         cs_assert(e->et == EXP_UVAL);
-        FunctionState *enclosing = fs->prev;
         uv->onstack = 0;
         uv->idx = e->u.info;
-        uv->kind = enclosing->p->upvals[e->u.info].kind;
-        cs_assert(eqstr(name, enclosing->p->upvals[e->u.info].name));
+        uv->kind = prev->p->upvals[e->u.info].kind;
+        cs_assert(eqstr(name, prev->p->upvals[e->u.info].name));
     }
+    uv->name = name;
+    csG_objbarrier(fs->lx->ts, fs->p, name);
     return fs->nupvals - 1;
 }
 
@@ -609,7 +633,7 @@ static void varaux(FunctionState *fs, OString *name, ExpInfo *var, int base) {
         int ret = searchlocal(fs, name, var); /* ...locals */
         if (ret >= 0) { /* found? */
             if (ret == EXP_LOCAL && !base) /* in recursive call to varaux? */
-                scopemarkupval(fs, var->u.info); /* mark local as upvalue */
+                scopemarkupval(fs, var->u.info); /* mark scope appropriately */
         } else { /* if not found try searching for upvalue */
             ret = searchupvalue(fs, name);
             if (ret < 0) { /* still not found? */
@@ -751,7 +775,7 @@ static void call(Lexer *lx, ExpInfo *e) {
     csC_exp2stack(fs, e); /* put func on stack */
     base = fs->sp - 1; /* func */
     csY_scan(lx); /* skip '(' */
-    if (lx->t.tk != ')') { /* have args ? */
+    if (!check(lx, ')')) { /* have args ? */
         explist(lx, e);
         if (eismulret(e))
             csC_setmulret(fs, e);
@@ -930,7 +954,7 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
 
 
 /*
-** simpleexpr ::= int
+** simpleexp ::= int
 **              | flt
 **              | string
 **              | nil
@@ -939,9 +963,10 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
 **              | '...'
 **              | arrayexp
 **              | tableexp
+**              | functionexp
 **              | suffixedexp
 */
-static void simpleexpr(Lexer *lx, ExpInfo *e) {
+static void simpleexp(Lexer *lx, ExpInfo *e) {
     switch (lx->t.tk) {
         case TK_INT: {
             initexp(e, EXP_INT, 0);
@@ -984,7 +1009,7 @@ static void simpleexpr(Lexer *lx, ExpInfo *e) {
             tableexp(lx, e);
             return;
         }
-        case TK_FN: {
+        case TK_FN: { /* functionexp */
             csY_scan(lx); /* skip 'fn' */
             funcbody(lx, e, lx->line, 0);
             return;
@@ -1096,7 +1121,7 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
         subexpr(lx, e, UNARY_PRIORITY);
         csC_unary(lx->fs, e, uopr);
     } else {
-        simpleexpr(lx, e);
+        simpleexp(lx, e);
     }
     Binopr opr = getbinopr(lx->t.tk);
     while (opr != OPR_NOBINOPR && priority[opr].left > limit) {
@@ -1124,16 +1149,21 @@ static void expr(Lexer *lx, ExpInfo *e) {
 ** ---------------------------------------------------------------------- */
 
 /* 
-** stmlist ::= stm
-**           | stm stmlist
+** listdecl ::= decl
+**           | decl listdecl
+**           | listdecl returnstm
+**           | listdecl continuestm
+**           | listdecl breakstm
 */
-static void stmlist(Lexer *lx, int blocktk) {
+static void listdecl(Lexer *lx, int blocktk) {
     while (!check(lx, TK_EOS) && !(blocktk && check(lx, blocktk))) {
-        if (check(lx, TK_RETURN)) {
-            stm(lx);
-            return; /* 'return' must be the last statement */
-        }
-        stm(lx);
+        if (check(lx, TK_RETURN) ||     /* if returnstm... */
+            check(lx, TK_CONTINUE) ||   /* or continuestm... */
+            check(lx, TK_BREAK)) {      /* ...or breakstm? */
+            stm(lx);                    /* then it must be the last statement */
+            return;                     /* done */
+        } else                          /* otherwise it is a declaration */
+            decl(lx);
     }
 }
 
@@ -1253,7 +1283,6 @@ static void exprstm(Lexer *lx) {
         expect_cond(lx, v.v.et == EXP_CALL, "syntax error");
         inst = getinstruction(fs, &v.v);
         SETARG_L(inst, 1, 1); /* call statement uses no results... */
-        fs->sp--; /* ...so the slot is also free */
     }
 }
 
@@ -1284,7 +1313,7 @@ static int newlocalvar(Lexer *lx, OString *name) {
 
 static void checkclose(FunctionState *fs, int level) {
     if (level != -1) {
-        scopemarktbc(fs);
+        scopemarkclose(fs);
         csC_emitIL(fs, OP_TBC, level);
     }
 }
@@ -1351,7 +1380,7 @@ static void codeinherit(Lexer *lx, OString *name, Scope *s, ExpInfo *var) {
                     "class '%s' attempt to inherit itself", name));
     varaux(fs, supname, var, 1); /* get the superclass... */
     csC_varexp2stack(fs, var); /* and put it on the stack... */
-    startscope(fs, s, 0); /* start scope for super variable... */
+    open_scope(fs, s, 0); /* start scope for super variable... */
     newlocallit(lx, "super"); /* create superclass variable... */
     adjustlocals(lx, 1); /* and register it... */
     varaux(fs, name, var, 1); /* get the class... */
@@ -1375,7 +1404,7 @@ static void endcs(Lexer *lx) {
     ParserState *ps = lx->ps;
     cs_assert(ps->cs != NULL);
     if (ps->cs->super) /* scope was created? */
-        endscope(lx->fs); /* if so, end it */
+        close_scope(lx->fs); /* if so, end it */
     ps->cs = ps->cs->prev;
 }
 
@@ -1460,29 +1489,29 @@ static void blockstm(Lexer *lx) {
     int matchline = lx->line;
     Scope s;
     csY_scan(lx); /* skip '{' */
-    startscope(lx->fs, &s, 0);
-    stmlist(lx, '}');
+    open_scope(lx->fs, &s, 0);
+    listdecl(lx, '}');
     expectmatch(lx, '}', '{', matchline);
-    endscope(lx->fs);
+    close_scope(lx->fs);
 }
 
 
 /* 
-** arglist ::= name
-**           | '...'
-**           | name ',' arglist
+** paramlist ::= name
+**             | '...'
+**             | name ',' paramlist
 */
-static void arglist(Lexer *lx) {
+static void paramlist(Lexer *lx) {
     FunctionState *fs = lx->fs;
     Proto *fn = fs->p;
-    int nargs = 0;
+    int nparams = 0;
     int isvararg = 0;
     if (!check(lx, ')')) { /* have at least one arg? */
         do {
             switch (lx->t.tk) {
                 case TK_NAME: {
                     newlocal(lx, str_expectname(lx));
-                    nargs++;
+                    nparams++;
                     break;
                 }
                 case TK_DOTS: {
@@ -1494,45 +1523,45 @@ static void arglist(Lexer *lx) {
             }
         } while (!isvararg && match(lx, ','));
     }
-    adjustlocals(lx, nargs);
-    fn->arity = nargs;
+    adjustlocals(lx, nparams);
+    fn->arity = nparams;
     if (isvararg)
-        setvararg(fs, nargs);
-    csC_reserveslots(fs, nargs);
+        setvararg(fs, nparams);
+    csC_reserveslots(fs, nparams);
 }
 
 
 /* emit closure instruction */
 static void codeclosure(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs->prev;
-    e->u.info = csC_emitIL(fs, OP_CLOSURE, fs->np - 1);
-    e->et = EXP_FINEXPR;
+    initexp(e, EXP_FINEXPR, csC_emitIL(fs, OP_CLOSURE, fs->np - 1));
+    csC_reserveslots(fs, 1); /* space for closure */
 }
 
 
-/* funcbody ::= '(' arglist ')' stmlist */
+/* funcbody ::= '(' paramlist ')' stmlist */
 static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod) {
     FunctionState newfs;
     Scope scope;
     int matchline;
     newfs.p = addproto(lx);
     newfs.p->defline = linenum;
-    startfs(lx->fs, lx, &scope);
+    open_func(lx, &newfs, &scope);
     matchline = lx->line; /* line where '(' is located */
     expectnext(lx, '(');
     if (ismethod) { /* is this method ? */
         newlocallit(lx, "self"); /* create 'self' */
         adjustlocals(lx, 1); /* and initialize it */
     }
-    arglist(lx);
+    paramlist(lx);
     expectmatch(lx, ')', '(', matchline);
-    expectnext(lx, ')');
     matchline = lx->line; /* line where '{' is located */
     expectnext(lx, '{');
-    stmlist(lx, '}');
+    listdecl(lx, '}');
+    newfs.p->deflastline = lx->line;
     expectmatch(lx, '}', '{', matchline);
     codeclosure(lx, v);
-    endfs(&newfs);
+    close_func(lx);
 }
 
 
@@ -1724,10 +1753,10 @@ static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
 }
 
 
-/* add new fall-through case jump */
-static void addfallthrujmp(FunctionState *fs) {
-    int jmp = csC_jmp(fs, OP_JMP);
-    patchlistaddjmp(fs, jmp);
+/* add new fall through case jump */
+static void addfallthrough(Lexer *lx) {
+    int jmp = csC_jmp(lx->fs, OP_JMP);
+    patchlistadd(lx, jmp, 0);
 }
 
 
@@ -1735,7 +1764,7 @@ static void addfallthrujmp(FunctionState *fs) {
 ** Tries to preserve expression 'e' after consuming it, in order
 ** to enable more optimizations.
 */
-static int codepresexp(FunctionState *fs, ExpInfo *e) {
+static int codepres_exp(FunctionState *fs, ExpInfo *e) {
     ExpInfo pres = *e;
     int isctc = eisconstant(e);
     csC_exp2stack(fs, e);
@@ -1754,25 +1783,25 @@ static int codepresexp(FunctionState *fs, ExpInfo *e) {
 static void switchbody(Lexer *lx, SwitchState *ss, DynCtx *ctx) {
     DynCtx endctx;
     FunctionState *fs = lx->fs;
-    int jmp = NOJMP;
+    BreakJmp brj;
     endctx.pc = ctx->pc;
     while (!check(lx, '}') && !check(lx, TK_EOS)) { /* while switch body... */
         if (check(lx, TK_CASE) || match(lx, TK_DEFAULT)) { /* has label?... */
             if (ss->label != LNONE && ss->label != LMATCH) {
                 /* have a label that is not a compile-time-constant match */
-                addfallthrujmp(fs); /* create fall through jump */
+                addfallthrough(lx); /* create fall through jump */
                 if (ss->label == LCASE) /* this is not a 'default' case? */
                     csC_patchtohere(fs, ss->jmp); /* patch test jump */
             }
             if (match(lx, TK_CASE)) { /* 'case'? */
                 ExpInfo cexp; /* case expression */
                 expr(lx, &cexp); /* get the case expression... */
-                codepresexp(fs, &cexp); /* ...and put it on stack (preserve) */
+                codepres_exp(fs, &cexp); /* ...and put it on stack (preserve) */
                 expectnext(lx, ':');
                 if (newlitinfo(lx, ss, &cexp)) { /* ctc match? */
                     ss->label = LMATCH; /* mark the current label as such */
                     loadctx(fs, ctx); /* load context ('switch' start) */
-                    patchlistreset(fs); /* all previous jumps are removed */
+                    patchlistreset(lx); /* all previous jumps are removed */
                 } else if (ss->label != LMATCH) { /* no match? */
                     ss->label = LCASE; /* mark the current label as such */
                     csC_emitI(fs, OP_EQPRESERVE); /* EQ but preserves lhs */
@@ -1782,11 +1811,10 @@ static void switchbody(Lexer *lx, SwitchState *ss, DynCtx *ctx) {
                 ss->havedefault = 1; /* remember this fact... */
                 ss->label = LDEFAULT; /* ...and mark the label as such */
                 expectnext(lx, ':');
-            } else { /* multiple 'default' cases are not allowed */
+            } else /* multiple 'default' cases are not allowed */
                 csP_semerror(lx, "multiple default cases in switch");
-            }
-            if ((jmp = patchlistpop(fs)) != NOJMP) /* have jump to patch? */
-                csC_patchtohere(fs, jmp); /* if so, patch it */
+            if ((brj = popbreakjmp(lx)).jmp != NOJMP) /* have jump to patch? */
+                csC_patchtohere(fs, brj.jmp); /* if so, patch it */
         } else if (ss->label != LNONE) { /* is not empty?... */
             stm(lx);
             if (ss->label == LMATCH && fs->lastwasret) {
@@ -1794,9 +1822,8 @@ static void switchbody(Lexer *lx, SwitchState *ss, DynCtx *ctx) {
                 storectx(fs, &endctx); /* store this as end context... */
                 storereachablectx(fs); /* ...and as start of 'deadcode' */
             }
-        } else { /* ...otherwise error */
+        } else /* ...otherwise error */
             csP_semerror(lx, "expected 'case' or 'default'");
-        }
     }
     if (ss->label == LMATCH) { /* had a ctc label match with 'return' */
         cs_assert(endctx.pc > ctx->pc); /* must have valid 'endctx' */
@@ -1813,20 +1840,20 @@ static void switchstm(Lexer *lx) {
     Scope *old_switchscope = fs->switchscope;
     Scope s; /* switch scope */
     initss(&ss); /* initialize 'switch' state */
-    startscope(fs, &s, CFSWITCH); /* enter switch scope */
+    open_scope(fs, &s, CFSWITCH); /* enter switch scope */
     fs->switchscope = &s; /* set the innermost 'switch' scope */
     csY_scan(lx); /* skip 'switch' */
     int matchline = lx->line;
     expectnext(lx, '(');
     expr(lx, &ss.e); /* get the 'switch' expression... */
-    codepresexp(fs, &ss.e); /* ...and put it on stack but preserve 'e' */
+    codepres_exp(fs, &ss.e); /* ...and put it on stack but preserve 'e' */
     storectx(fs, &ctx); /* store context at 'switch' start */
     expectmatch(lx, ')', '(', matchline);
     matchline = lx->line;
     expectnext(lx, '{');
     switchbody(lx, &ss, &ctx);
     expectmatch(lx, '}', '{', matchline);
-    endscope(fs); /* end 'switch' scope */
+    close_scope(fs); /* end 'switch' scope */
     fs->switchscope = old_switchscope;
 }
 
@@ -1839,8 +1866,8 @@ static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
     int test, jmp;
     int optaway, condistrue;
     int condisctc = eisconstant(cond);
-    int bodypc = currentPC(fs);
-    int isloop = scopeisloop(fs->scope);
+    int bodypc = currentpc(fs);
+    int isloop = sisloop(fs->scope);
     cs_assert(isloop == (jmpop == OP_JMPS));
     optaway = condistrue = 0;
     endctx.pc = NOJMP;
@@ -1852,7 +1879,7 @@ static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
     stm(lx); /* condition statement (body) */
     if (optaway) { /* optimize away the whole statement? */
         loadctx(fs, startctx); /* load the starting context */
-        patchlistreset(fs);
+        patchlistreset(lx);
     } else if (condisctc && fs->lastwasret) {
         /* last stm was `return` and... */
         cs_assert(condistrue); /* ...condition is true */
@@ -1897,7 +1924,7 @@ static void ifstm(Lexer *lx) {
     int matchline = lx->line;
     expectnext(lx, '(');
     expr(lx, &e);
-    codepresexp(lx->fs, &e);
+    codepres_exp(lx->fs, &e);
     expectmatch(lx, ')', '(', matchline);
     condbody(lx, &ctx, &e, OP_TESTPOP, OP_JMP, NOJMP, NOJMP);
 }
@@ -1936,18 +1963,18 @@ static void handleloopctx(FunctionState *fs, struct LoopCtx *ctx, int store) {
 /* start loop scope */
 static void startloop(FunctionState *fs, Scope *s, struct LoopCtx *ctx,
                       int cfbits) {
-    startscope(fs, s, cfbits);
+    open_scope(fs, s, cfbits);
     initloopctx(fs, ctx);
     handleloopctx(fs, ctx, 1);
     fs->loopscope = fs->scope;
-    fs->loopstart = currentPC(fs);
+    fs->loopstart = currentpc(fs);
 }
 
 
 /* end loop scope */
 static void endloop(FunctionState *fs) {
-    cs_assert(scopeisloop(fs->scope));
-    endscope(fs);
+    cs_assert(sisloop(fs->scope));
+    close_scope(fs);
     handleloopctx(fs, NULL, 0); /* load old loop ctx values */
 }
 
@@ -1962,11 +1989,11 @@ static void whilestm(Lexer *lx) {
     csY_scan(lx); /* skip 'while' */
     storectx(fs, &startctx);
     startloop(fs, &s, &lctx, CFLOOP);
-    int pcexpr = currentPC(fs);
+    int pcexpr = currentpc(fs);
     int matchline = lx->line;
     expectnext(lx, '(');
     expr(lx, &cond);
-    codepresexp(fs, &cond);
+    codepres_exp(fs, &cond);
     expectmatch(lx, ')', '(', matchline);
     condbody(lx, &startctx, &cond, OP_TESTPOP, OP_JMPS, pcexpr, NOJMP);
     endloop(fs);
@@ -2024,7 +2051,7 @@ static void foreachloop(Lexer *lx) {
     expectnext(lx, TK_IN);
     adjustassign(lx, NSTATEVARS, forexplist(lx, &e, NSTATEVARS), &e);
     adjustlocals(lx, NSTATEVARS); /* register control variables */
-    scopemarktbc(fs); /* last control variable must be closed */
+    scopemarkclose(fs); /* last control variable must be closed */
     /* runtime space for call (iterator, invariant state and control var) */
     csC_checkstack(fs, 3);
     int prep = csC_emitILL(fs, OP_FORPREP, base, 0);
@@ -2033,7 +2060,7 @@ static void foreachloop(Lexer *lx) {
     csC_reserveslots(fs, nvars); /* space for declared variables */
     stm(lx); /* body */
     endloop(fs); /* end scope for declared vars */
-    patchforjmp(fs, prep, currentPC(fs), 0);
+    patchforjmp(fs, prep, currentpc(fs), 0);
     csC_emitILL(fs, OP_FORCALL, base, nvars);
     forend = csC_emitILL(fs, OP_FORLOOP, base, 0);
     patchforjmp(fs, forend, prep + getOpSize(OP_FORPREP), 1);
@@ -2058,7 +2085,7 @@ void forinit(Lexer *lx) {
 void forcond(Lexer *lx, ExpInfo *e) {
     if (!match(lx, ';')) { /* have condition? */
         expr(lx, e); /* get it... */
-        codepresexp(lx->fs, e); /* ...and put it on stack (preserve) */
+        codepres_exp(lx->fs, e); /* ...and put it on stack (preserve) */
         expectnext(lx, ';');
     } else { /* otherwise no condition (infinite loop) */
         e->et = EXP_VOID; /* indicate it */
@@ -2077,7 +2104,7 @@ void forendclause(Lexer *lx, ExpInfo *cond, int *clausepc) {
         int inf = eistrue(cond) || cond->et == EXP_VOID;
         if (!inf) /* loop is not infinite? */
             bodyjmp = csC_jmp(fs, OP_JMP); /* insert jump in-between */
-        *clausepc = currentPC(fs); /* update end clause pc */
+        *clausepc = currentpc(fs); /* update end clause pc */
         exprstm(lx); /* get the end clause expression statement */
         if (!inf) { /* loop is not infinite? */
             loopjmp = csC_jmp(fs, OP_JMPS); /* emit jump back to cond... */
@@ -2103,7 +2130,7 @@ static void forloop(Lexer *lx) {
     expectnext(lx, '(');
     forinit(lx); /* get for loop initializer */
     storectx(fs, &startctx); /* store context at start of for loop */
-    condpc = currentPC(fs);
+    condpc = currentpc(fs);
     forcond(lx, &cond); /* get for loop condition expression */
     endclausepc = NOJMP;
     forendclause(lx, &cond, &endclausepc); /* get for last clause */
@@ -2131,13 +2158,13 @@ static void loopstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     struct LoopCtx ctx;
     Scope s;
-    int jmp, startpc;
+    int jmp, lstart;
     csY_scan(lx); /* skip 'loop' */
+    lstart = currentpc(fs); /* store the pc where the loop starts */
     startloop(fs, &s, &ctx, CFLOOP);
-    startpc = currentPC(fs);
     stm(lx);
     jmp = csC_jmp(fs, OP_JMPS);
-    csC_patch(fs, jmp, startpc);
+    csC_patch(fs, jmp, lstart);
     endloop(fs);
 }
 
@@ -2145,30 +2172,32 @@ static void loopstm(Lexer *lx) {
 /* continuestm ::= 'continue' ';' */
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
+    int old_sp = fs->sp;
+    int extra, jmp;
     csY_scan(lx); /* skip 'continue' */
     if (c_unlikely(fs->loopstart == NOJMP)) { /* not in a loop? */
-        cs_assert(fs->loopscope == NULL);
+        cs_assert(fs->loopscope == NULL); /* then there is no loop scope */
         csP_semerror(lx, "'continue' not in loop statement");
-    } else {
-        int extra, jmp;
-        int old_sp = fs->sp;
-        cs_assert(fs->loopscope != NULL);
-        /* pop active 'switch' statement expressions... */
-        extra = fs->scope->nswscope - fs->loopscope->nswscope;
-        csC_pop(fs, fs->loopscope->activelocals + extra); /* pop values... */
-        fs->sp = old_sp; /* restore old 'sp', as we are not jumping back */
-        if (fs->scope->haveupval) { /* have to-be-closed variables? */
-            int stklevel = stacklevel(fs, fs->scope->activelocals);
-            csC_emitIS(fs, OP_CLOSE, stklevel);
-        }
-        jmp = csC_jmp(fs, OP_JMPS); /* and jump backwards... */
-        csC_patch(fs, jmp, fs->loopstart); /* ...to loop start */
     }
+    cs_assert(fs->loopscope != NULL); /* must have loop scope */
+    /* pop (but do not remove) locals and switch expressions */
+    extra = fs->scope->nswscope - fs->loopscope->nswscope;
+    poplocals(fs, fs->loopscope->activelocals, extra);
+    fs->sp = old_sp; /* restore old 'sp', as parser is not jumping back */
+    if (fs->scope->havetbcvar) { /* have to close upvalues? */
+        int stklevel = stacklevel(fs, fs->loopscope->activelocals);
+        csC_emitIS(fs, OP_CLOSE, stklevel); /* close them */
+    }
+    jmp = csC_jmp(fs, OP_JMPS); /* jump backwards... */
+    csC_patch(fs, jmp, fs->loopstart); /* ...to start of the loop */
     expectnext(lx, ';');
 }
 
 
-/* get the most recent control flow scope */
+/* 
+** Get the most recent control flow scope and store the
+** depth difference in 'ns'.
+*/
 static const Scope *getcfscope(const FunctionState *fs) {
     const Scope *s = NULL;
     if (fs->switchscope)
@@ -2182,14 +2211,12 @@ static const Scope *getcfscope(const FunctionState *fs) {
 /* breakstm ::= 'break' ';' */
 static void breakstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    const Scope *s = getcfscope(fs);
+    Scope *s = fs->scope; /* current scope */
+    const Scope *cfs = getcfscope(fs); /* control flow scope */
     csY_scan(lx); /* skip 'break' */
-    if (c_unlikely(s == NULL)) { /* no control flow scope? */
-        cs_assert(fs->loopscope == NULL && fs->switchscope == NULL);
+    if (c_unlikely(cfs == NULL)) /* no control flow scope? */
         csP_semerror(lx, "'break' not in loop or switch statement");
-    } else { /* otherwise add the jump to patch list */
-        patchlistaddjmp(fs, csC_jmp(fs, OP_JMP)); /* ...and jump out */
-    }
+    patchlistadd(lx, csC_jmp(fs, OP_JMP), s->havetbcvar);
     expectnext(lx, ';');
 }
 
@@ -2201,52 +2228,43 @@ static void breakstm(Lexer *lx) {
 static void returnstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     ExpInfo e;
-    int base = fs->sp;
-    int nreturns = 0;
+    int first = nvarstack(fs); /* first slot to be returned */
+    int nret = 0;
     csY_scan(lx); /* skip 'return' */
     if (!check(lx, ';')) { /* have return values ? */
-        nreturns = explist(lx, &e); /* get return values */
-        if (eismulret(&e)) { /* last expression has multiple returns? */
-            csC_setmulret(fs, &e); /* emit as such... */
-            nreturns = CS_MULRET; /* ...and indicate */
-        } else { /* otherwise make sure expression is on stack */
+        nret = explist(lx, &e); /* get return values */
+        if (eismulret(&e)) {
+            csC_setmulret(fs, &e);
+            nret = CS_MULRET; /* return all values */
+        } else {
             csC_exp2stack(fs, &e);
+            cs_assert(nret == fs->sp - first);
         }
     }
-    csC_ret(fs, base, nreturns); /* emit return with 'nreturns' */
-    fs->lastwasret = 1; /* indicate last statement was return */
+    csC_ret(fs, first, nret);
     expectnext(lx, ';');
+    fs->lastwasret = 1; /* indicate last statement was return */
 }
 
 
 /* 
-** stm ::= localstm
-**       | localfn
-**       | localclass
-**       | whilestm
-**       | forstm
-**       | ifstm
-**       | switchstm
-**       | blockstm
-**       | continuestm
-**       | breakstm
-**       | returnstm
-**       | loopstm
-**       | ';'
-**       | exprstm
+** stm_ ::= localstm
+**        | localfn
+**        | localclass
+**        | whilestm
+**        | forstm
+**        | ifstm
+**        | switchstm
+**        | blockstm
+**        | continuestm
+**        | breakstm
+**        | returnstm
+**        | loopstm
+**        | ';'
+**        | exprstm
 */
-static void stm(Lexer *lx) {
+static void stm_(Lexer *lx) {
     switch (lx->t.tk) {
-        case TK_LOCAL: {
-            csY_scan(lx); /* skip 'local' */
-            if (match(lx, TK_FN))
-                localfn(lx);
-            else if (match(lx, TK_CLASS))
-                localclass(lx);
-            else
-                localstm(lx);
-            break;
-        }
         case TK_FN: {
             fnstm(lx, lx->line);
             break;
@@ -2285,7 +2303,7 @@ static void stm(Lexer *lx) {
         }
         case TK_RETURN: {
             returnstm(lx);
-            return; /* done; avoid resetting 'lastwasret' */
+            goto no_reset;
         }
         case TK_LOOP: {
             loopstm(lx);
@@ -2302,21 +2320,58 @@ static void stm(Lexer *lx) {
         }
     }
     lx->fs->lastwasret = 0;
+no_reset:
+    cs_assert(lx->fs->p->maxstack >= lx->fs->sp &&
+              lx->fs->sp >= nvarstack(lx->fs));
+    lx->fs->sp = nvarstack(lx->fs); /* free slots */
+}
+
+
+/*
+** decl ::= localstm
+**        | localfn
+**        | localclass
+**        | stm
+*/
+static void decl(Lexer *lx) {
+    enterCstack(lx);
+    switch (lx->t.tk) {
+        case TK_LOCAL: {
+            csY_scan(lx); /* skip 'local' */
+            if (match(lx, TK_FN))
+                localfn(lx);
+            else if (match(lx, TK_CLASS))
+                localclass(lx);
+            else
+                localstm(lx);
+            lx->fs->lastwasret = 0;
+            break;
+        }
+        default: {
+            stm_(lx);
+            break;
+        }
+    }
+    leaveCstack(lx);
+}
+
+
+static void stm(Lexer *lx) {
+    enterCstack(lx);
+    stm_(lx);
+    leaveCstack(lx);
 }
 
 
 /* compile main function */
 static void mainfunc(FunctionState *fs, Lexer *lx) {
     Scope s;
-    startfs(fs, lx, &s);
+    open_func(lx, fs, &s);
     setvararg(fs, 0); /* main function is always vararg */
     csY_scan(lx); /* scan first token */
-    stmlist(lx, 0);
+    listdecl(lx, 0);
     expect(lx, TK_EOS);
-    endfs(fs);
-#if 1 /* low-level bytecode disassembly */
-    csTR_disassemble(fs->lx->ts, fs->p);
-#endif
+    close_func(lx);
 }
 
 
@@ -2325,7 +2380,7 @@ CSClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
                      ParserState *ps, const char *source) {
     Lexer lx;
     FunctionState fs;
-    CSClosure *cl = csF_newCSClosure(ts, 1);
+    CSClosure *cl = csF_newCSClosure(ts, 0);
     setclCSval2s(ts, ts->sp.p, cl); /* anchor main function closure */
     csT_incsp(ts);
     lx.tab = csH_new(ts);

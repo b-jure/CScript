@@ -203,7 +203,7 @@ typedef struct GState {
 /* Cript thread state */
 struct cs_State {
     ObjectHeader;
-    ushrt ncf; /* number of call frames in 'cf' list */
+    ushort ncf; /* number of call frames in 'cf' list */
     int status; /* status code */
     ptrdiff_t errfunc; /* error handling function (on stack) */
     cs_uint32 nCcalls; /* number of C calls */

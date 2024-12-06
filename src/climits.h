@@ -44,7 +44,7 @@ typedef uint32_t cs_uint32;
 
 /* nice to have */
 typedef unsigned int uint;
-typedef unsigned short ushrt;
+typedef unsigned short ushort;
 typedef unsigned long ulong;
 
 

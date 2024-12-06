@@ -19,10 +19,6 @@
     csD_operror(ts, v1, v2, "perform bitwise operation on")
 
 
-/* relative 'pc' */
-#define pcrel(pc,p)     ((pc) - (p)->code)
-
-
 CSI_FUNC int csD_getfuncline(const Proto *fn, int pc);
 CSI_FUNC const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n,
                                    SPtr *pos);

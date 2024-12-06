@@ -310,12 +310,12 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
     setival(&val, k);
     csH_finishset(ts, fs->lx->tab, index, key, &val);
     csM_growarray(ts, p->k, p->sizek, k, MAX_LARG, "constants", TValue);
-    while (oldsz < p->sizek)
+    while (oldsz < p->sizek) /* nil out the new part */
         setnilval(&p->k[oldsz++]);
     setobj(ts, &p->k[k], v);
     fs->nk++;
     csG_barrier(ts, p, v);
-    return k;
+    return k; /* new index */
 }
 
 
@@ -417,7 +417,7 @@ void csC_reserveslots(FunctionState *fs, int n) {
 void csC_setoneret(FunctionState *fs, ExpInfo *e) {
     if (e->et == EXP_CALL) {
         /* already returns a single result */
-        cs_assert(GETARG_L(getinstruction(fs, e), 0) == 2);
+        cs_assert(GETARG_L(getinstruction(fs, e), 1) == 2);
         e->et = EXP_FINEXPR;
     } else if (e->et == EXP_VARARG) {
         Instruction *vararg = getinstruction(fs, e);
@@ -478,8 +478,8 @@ void csC_adjuststack(FunctionState *fs, int left) {
 }
 
 
-int csC_ret(FunctionState *fs, int base, int nreturns) {
-    int offset = csC_emitILL(fs, OP_RET, base, nreturns + 1);
+int csC_ret(FunctionState *fs, int first, int nreturns) {
+    int offset = csC_emitILL(fs, OP_RET, first, nreturns + 1);
     emitS(fs, 0); /* close flag */
     return offset;
 }
@@ -750,7 +750,6 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e) {
         }
         e->et = EXP_FINEXPR;
     }
-    cs_assert(e->et == EXP_FINEXPR);
 }
 
 
@@ -963,7 +962,7 @@ void csC_patch(FunctionState *fs, int pc, int target) {
 
 /* backpatch jump instruction to current pc */
 void csC_patchtohere(FunctionState *fs, int pc) {
-    csC_patch(fs, pc, currentPC(fs));
+    csC_patch(fs, pc, currentpc(fs));
 }
 
 
@@ -1277,8 +1276,8 @@ static int finaltarget(Instruction *code, int i) {
 
 
 /*
-** Perform a final pass performing small adjustments
-** and optimizations.
+** Perform a final pass performing small adjustments and
+** optimizations.
 */
 void csC_finish(FunctionState *fs) {
     Proto *p = fs->p;
@@ -1287,7 +1286,7 @@ void csC_finish(FunctionState *fs) {
         switch (*pc) {
             case OP_RET: { /* check if need to close variables */
                 if (fs->needclose)
-                    SETARG_LLS(pc, 1);
+                    SETARG_LLS(pc, 1); /* set the flag */
                 break;
             }
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */

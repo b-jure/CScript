@@ -50,8 +50,7 @@ int csD_getfuncline(const Proto *p, int pc) {
 }
 
 
-/* current instruction in 'CrClosure' ('Proto') */
-cs_sinline int currentpc(const CallFrame *cf) {
+cs_sinline int relpc(const CallFrame *cf) {
     cs_assert(isCScript(cf));
     return cast_int(cf->pc - cfProto(cf)->code) - 1;
 }
@@ -59,7 +58,7 @@ cs_sinline int currentpc(const CallFrame *cf) {
 
 /* current line number */
 cs_sinline int currentline(CallFrame *cf) {
-    return csD_getfuncline(cfProto(cf), currentpc(cf));
+    return csD_getfuncline(cfProto(cf), relpc(cf));
 }
 
 
@@ -86,7 +85,7 @@ const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n, SPtr *pos) {
         if (n < 0) /* vararg ? */
             return findvararg(cf, pos, n);
         else /* otherwise local variable */
-            name = csF_getlocalname(cfProto(cf), n, currentpc(cf));
+            name = csF_getlocalname(cfProto(cf), n, relpc(cf));
     }
     if (name == NULL) {
         SPtr limit = (cf == ts->cf) ? ts->sp.p : cf->next->func.p;
@@ -214,7 +213,7 @@ static const char *funcnamefromcall(cs_State *ts, CallFrame *cf,
         return "metamethod";
     }
     else if (isCScript(cf))
-        return funcnamefromcode(ts, cfProto(cf), currentpc(cf), name);
+        return funcnamefromcode(ts, cfProto(cf), relpc(cf), name);
     else
         return NULL;
 }

@@ -215,7 +215,7 @@ OString *csS_newl(cs_State *ts, const char *str, size_t len) {
         return internshrstr(ts, str, len);
     } else { /* otherwise long string */
         OString *s;
-        if (c_unlikely(len * sizeof(char) >= (MAXSIZE - sizeof(OString))))
+        if (c_unlikely(len*sizeof(char) >= (MAXSIZE - sizeof(OString))))
             csM_toobig(ts);
         s = csS_newlngstrobj(ts, len);
         memcpy(getlngstr(s), str, len);

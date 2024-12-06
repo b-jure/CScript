@@ -26,12 +26,12 @@
 
 /* size of 'CSClosure' */
 #define sizeofCScl(nup) \
-    (offsetof(CSClosure, upvals) + ((nup) * sizeof(UpVal)))
+        (offsetof(CSClosure, upvals) + ((nup) * sizeof(UpVal*)))
 
 
 /* size of 'CClosure' */
 #define sizeofCcl(nup) \
-    (offsetof(CClosure, upvals) + ((nup) * sizeof(TValue)))
+        (offsetof(CClosure, upvals) + ((nup) * sizeof(TValue)))
 
 
 /* 
@@ -52,6 +52,7 @@ CSI_FUNC void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
 CSI_FUNC void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted);
 CSI_FUNC void csF_initupvals(cs_State *ts, CSClosure *cl);
 CSI_FUNC UpVal *csF_findupval(cs_State *ts, SPtr sval);
+CSI_FUNC void csF_unlinkupval(UpVal *upval);
 CSI_FUNC const char *csF_getlocalname(const Proto *fn, int lnum, int pc);
 CSI_FUNC void csF_newtbcvar(cs_State *ts, SPtr level);
 CSI_FUNC void csF_closeupval(cs_State *ts, SPtr level);

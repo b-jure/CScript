@@ -497,9 +497,22 @@ static cs_umem propagateall(GState *gs) {
 ** Free objects
 ** ----------------------------------------------------------------------- */
 
-/* free objectc 'o' */
+static void freeupval(cs_State *ts, UpVal *uv) {
+    if (uvisopen(uv))
+        csF_unlinkupval(uv);
+    csM_free(ts, uv);
+}
+
+
 static void freeobject(cs_State *ts, GCObject *o) {
     switch (o->tt_) {
+        case CS_VPROTO: csF_free(ts, gco2proto(o)); break;
+        case CS_VUPVALUE: freeupval(ts, gco2uv(o)); break;
+        case CS_VARRAY: csA_free(ts, gco2arr(o)); break;
+        case CS_VHTABLE: csH_free(ts, gco2ht(o)); break;
+        case CS_VINSTANCE: csM_free(ts, gco2ins(o)); break;
+        case CS_VIMETHOD: csM_free(ts, gco2im(o)); break;
+        case CS_VTHREAD: csT_free(ts, gco2th(o)); break;
         case CS_VSHRSTR: {
             OString *s = gco2str(o);
             csS_remove(ts, s); /* remove the weak reference */
@@ -511,62 +524,33 @@ static void freeobject(cs_State *ts, GCObject *o) {
             csM_freemem(ts, s, sizeofstring(s->u.lnglen));
             break;
         }
-        case CS_VPROTO: {
-            Proto *p = gco2proto(o);
-            csF_free(ts, p);
-            break;
-        }
-        case CS_VUPVALUE: {
-            UpVal *uv = gco2uv(o);
-            csF_freeupval(ts, uv);
-            break;
-        }
         case CS_VCSCL: {
             CSClosure *cl = gco2clcs(o);
-            csM_freemem(ts, o, sizeofCScl(cl->nupvalues));
+            csM_freemem(ts, cl, sizeofCScl(cl->nupvalues));
             break;
         }
         case CS_VCCL: {
             CClosure *cl = gco2clc(o);
-            csM_freemem(ts, o, sizeofCcl(cl->nupvalues));
+            csM_freemem(ts, cl, sizeofCcl(cl->nupvalues));
             break;
         }
         case CS_VCLASS: {
             OClass *cls = gco2cls(o);
-            csMM_freeclass(ts, cls);
-            break;
-        }
-        case CS_VARRAY: {
-            Array *arr = gco2arr(o);
-            csA_free(ts, arr);
-            break;
-        }
-        case CS_VHTABLE: {
-            HTable *ht = gco2ht(o);
-            csH_free(ts, ht);
-            break;
-        }
-        case CS_VINSTANCE: {
-            Instance *ins = gco2ins(o);
-            csM_free(ts, ins);
-            break;
-        }
-        case CS_VIMETHOD: {
-            IMethod *im = gco2im(o);
-            csM_free(ts, im);
-            break;
-        }
-        case CS_VTHREAD: {
-            cs_State *th = gco2th(o);
-            csT_free(ts, th);
+            if (cls->vmt) /* have VMT? */
+                csM_freearray(ts, cls->vmt, SIZEVMT);
+            if (cls->methods) /* have methods? */
+                csH_free(ts, cls->methods);
+            csM_free(ts, cls);
             break;
         }
         case CS_VUSERDATA: {
             UserData *u = gco2u(o);
-            csMM_freeuserdata(ts, u);
+            if (u->vmt)
+                csM_freearray(ts, u->vmt, SIZEVMT);
+            csM_freemem(ts, u, sizeofuserdata(u->nuv, u->size));
             break;
         }
-        default: cs_assert(0); break;
+        default: cs_assert(0); break; /* invalid object */
     }
 }
 
@@ -724,10 +708,10 @@ static int runNfinalizers(cs_State *ts, int n) {
 void csG_checkfin(cs_State *ts, GCObject *o, TValue vmt[CS_MM_N]) {
     GCObject **pp;
     GState *gs = G_(ts);
-    if (isfin(o) ||             /* object is already marked... */
-        ttisnil(&vmt[CS_MM_GC])     /* or has no finalizer... */
-        || (gs->gcstop & GCSTPCLS))     /* ...or closing state ? */
-        return; /* nothing to be done */
+    if (isfin(o) ||                 /* object is already marked... */
+        ttisnil(&vmt[CS_MM_GC]) ||  /* or has no finalizer... */
+        (gs->gcstop & GCSTPCLS))    /* ...or closing state ? */
+        return;                     /* nothing to be done */
     /* otherwise move 'o' to 'fin' list */
     if (sweepstate(gs)) {
         markwhite(gs, o); /* sweep object 'o' */

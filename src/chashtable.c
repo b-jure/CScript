@@ -75,12 +75,11 @@ static Node *hashint(const HTable *ht, cs_Integer i) {
 
 static inline void inithash(Node *n, int limit) {
     cs_assert(!(limit & (limit - 1)) && limit >= 4);
-    for (int i = 0; i < limit; i += 4) {
-        TValue *aux = nodeval(n);
-        nodenext(n) = 0; setnilkey(n); setemptyval(aux); n++; aux = nodeval(n);
-        nodenext(n) = 0; setnilkey(n); setemptyval(aux); n++; aux = nodeval(n);
-        nodenext(n) = 0; setnilkey(n); setemptyval(aux); n++; aux = nodeval(n);
-        nodenext(n) = 0; setnilkey(n); setemptyval(aux); n++;
+    for (int i = 0; i < limit; i += 4) { /* unroll */
+        nodenext(n) = 0; setnilkey(n); setemptyval(nodeval(n)); n++;
+        nodenext(n) = 0; setnilkey(n); setemptyval(nodeval(n)); n++;
+        nodenext(n) = 0; setnilkey(n); setemptyval(nodeval(n)); n++;
+        nodenext(n) = 0; setnilkey(n); setemptyval(nodeval(n)); n++;
     }
 }
 
@@ -115,18 +114,6 @@ HTable *csH_new(cs_State *ts) {
     htpreinit(ht);
     sethtval2s(ts, ts->sp.p++, ht); /* assume EXTRA_STACK */
     newhasharray(ts, ht, MINHSIZE);
-    ts->sp.p--; /* remove ht */
-    return ht;
-}
-
-
-/* create new sized hashtable */
-HTable *csH_newsize(cs_State *ts, uint size) {
-    GCObject *o = csG_new(ts, sizeof(HTable), CS_VHTABLE);
-    HTable *ht = gco2ht(o);
-    htpreinit(ht);
-    sethtval2s(ts, ts->sp.p++, ht); /* anchor */
-    newhasharray(ts, ht, size);
     ts->sp.p--; /* remove ht */
     return ht;
 }
