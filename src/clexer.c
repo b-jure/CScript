@@ -101,10 +101,11 @@ cs_sinline void savec(Lexer *lx, int c) {
 
 /* if current char matches 'c' advance */
 cs_sinline int lxmatch(Lexer *lx, int c) {
-    if (currIsEnd(lx) || c != lx->c)
-        return 0;
-    advance(lx);
-    return 1;
+    if (c == lx->c) {
+        advance(lx);
+        return 1;
+    }
+    return 0;
 }
 
 

@@ -287,14 +287,16 @@ CS_API void cs_xmove(cs_State *src, cs_State *dest, int n) {
 /* Check if the value at index is a number. */
 CS_API int cs_is_number(cs_State *ts, int index) {
     cs_Number n;
+    UNUSED(n);
     const TValue *o = index2value(ts, index);
-    return tonumber(o, &n);
+    return tonumber(o, n);
 }
 
 
 /* Check if the value at index is an integer. */
 CS_API int cs_is_integer(cs_State *ts, int index) {
     cs_Integer i;
+    UNUSED(i);
     const TValue *o = index2value(ts, index);
     return tointeger(o, &i);
 }
@@ -368,7 +370,7 @@ CS_API const char *cs_typename(cs_State *ts, int type) {
 CS_API cs_Number cs_to_numberx(cs_State *ts, int index, int *pisnum) {
     cs_Number n = 0.0;
     const TValue *o = index2value(ts, index);
-    int isnum = tonumber(o, &n);
+    int isnum = tonumber(o, n);
     if (pisnum)
         *pisnum = isnum;
     return n;

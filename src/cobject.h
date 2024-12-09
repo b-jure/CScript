@@ -760,18 +760,18 @@ typedef enum N2IMode {
 
 /* convert value to 'cs_Integer' */
 #define tointeger(v,i) \
-    (csi_likely(ttisint(v)) ? (*(i) = ival(v), 1) \
-                            : csO_tointeger(v, i, N2IEXACT))
+        (ttisint(v) ? (*(i) = ival(v), 1) \
+                    : csO_tointeger(v, i, N2IEXACT))
 
 
 /* convert value to 'cs_Number' */
 #define tonumber(v,n) \
-    (csi_likely(ttisflt(v)) ? (*(n) = fval(v), 1) \
-                            : (ttisint(v)) ? (*(n) = ival(v), 1) : 0)
+        (ttisflt(v) ? ((n) = fval(v), 1) : \
+        (ttisint(v) ? ((n) = cast_num(ival(v)), 1) : 0))
 
 
-/* same as right shift but indicate left by making 'y' negative */
-#define csO_shiftl(x,y)    csO_shiftr(x, -(y))
+/* same as left shift but indicate right by making 'y' negative */
+#define csO_shiftr(x,y)     csO_shiftl(x, -(y))
 
 
 /* alternative to '%' for hashing, 'sz' is always power of 2 */
@@ -781,7 +781,7 @@ typedef enum N2IMode {
 CSI_FUNC int csO_ceillog2(uint x);
 CSI_FUNC int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode);
 CSI_FUNC int csO_tointeger(const TValue *v, cs_Integer *i, int mode);
-CSI_FUNC cs_Integer csO_shiftr(cs_Integer x, cs_Integer y);
+CSI_FUNC cs_Integer csO_shiftl(cs_Integer x, cs_Integer y);
 CSI_FUNC int csO_arithmraw(cs_State *ts, const TValue *a, const TValue *b,
                            TValue *res, int op);
 

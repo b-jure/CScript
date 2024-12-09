@@ -217,6 +217,7 @@ typedef struct FunctionState {
     } patches; /* 2Dvec */
     cs_ubyte needclose; /* true if needs to close upvalues before returning */
     cs_ubyte lastwasret; /* last statement is 'return' */
+    cs_ubyte pclastop; /* last OpCode pc */
 } FunctionState;
 
 

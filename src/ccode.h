@@ -8,6 +8,7 @@
 #define CCODE_H
 
 
+#include "cbits.h"
 #include "cparser.h"
 
 
@@ -141,17 +142,17 @@ OP_POPN,/*         L          'pop L values off the stack'                  */
 
 OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop)                       */
 
-OP_ADDK,/*         V L S   'V + K{L}:number'                                */
-OP_SUBK,/*         V L S   'V - K{L}:number'                                */
-OP_MULK,/*         V L S   'V * K{L}:number'                                */
-OP_DIVK,/*         V L S   'V / K{L}:number'                                */
-OP_MODK,/*         V L S   'V % K{L}:number'                                */
-OP_POWK,/*         V L S   'V ** K{L}:number'                               */
-OP_BSHLK,/*        V L S   'V << K{L}:number'                               */
-OP_BSHRK,/*        V L S   'V >> K{L}:number'                               */
-OP_BANDK,/*        V L S   'V & K{L}:number'                                */
-OP_BORK,/*         V L S   'V | K{L}:number'                                */
-OP_BXORK,/*        V L S   'V ^ K{L}:number'                                */
+OP_ADDK,/*         V L     'V + K{L}:number'                                */
+OP_SUBK,/*         V L     'V - K{L}:number'                                */
+OP_MULK,/*         V L     'V * K{L}:number'                                */
+OP_DIVK,/*         V L     'V / K{L}:number'                                */
+OP_MODK,/*         V L     'V % K{L}:number'                                */
+OP_POWK,/*         V L     'V ** K{L}:number'                               */
+OP_BSHLK,/*        V L     'V << K{L}:number'                               */
+OP_BSHRK,/*        V L     'V >> K{L}:number'                               */
+OP_BANDK,/*        V L     'V & K{L}:number'                                */
+OP_BORK,/*         V L     'V | K{L}:number'                                */
+OP_BXORK,/*        V L     'V ^ K{L}:number'                                */
 
 OP_ADDI,/*         V L S   'V + ((S - 1) * I(L))'                           */
 OP_SUBI,/*         V L S   'V - ((S - 1) * I(L))'                           */
@@ -177,7 +178,7 @@ OP_BAND,/*         V1 V2   'V1 & V2'                                        */
 OP_BOR,/*          V1 V2   'V1 | V2'                                        */
 OP_BXOR,/*         V1 V2   'V1 ^ V2'                                        */
 
-OP_CONCAT,/*       V V1    'V .. V1'                                        */
+OP_CONCAT,/*       L       'V{-L} = V{-L} .. V{L - 1}'                      */
 
 OP_EQK,/*          V L S   '(V == K{L}) == S'                               */
 
@@ -193,7 +194,7 @@ OP_LE,/*           V1 V2       '(V1 <= V2)'                                 */
 
 OP_EQPRESERVE,/*   V1 V2   'V1 == V2 (preserves V1 operand)'                */
 
-OP_NOT,/*          V       'not V'                                          */
+OP_NOT,/*          V       '!V'                                             */
 OP_UNM,/*          V       '-V'                                             */
 OP_BNOT,/*         V       '~V'                                             */
 

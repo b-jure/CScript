@@ -116,7 +116,8 @@ typedef enum cs_MM { /* ORDER MM */
     CS_MM_CLOSE,
     CS_MM_CALL,
     CS_MM_CONCAT,
-    CS_MM_ADD,
+    /* binary operators order => ORDER OP */
+    CS_MM_ADD, 
     CS_MM_SUB,
     CS_MM_MUL,
     CS_MM_DIV,

@@ -276,8 +276,9 @@ int csS_cmp(const OString *s1, const OString *s2) {
 void csS_strlimit(char *dest, const char *src, size_t len, size_t limit) {
     limit--;
     if (limit < len) {
-        memcpy(dest, src, limit - SLL("..."));
-        memcpy(dest, "...", SLL("..."));
+        size_t n = limit - SLL("...");
+        memcpy(dest, src, n);
+        memcpy(&dest[n], "...", SLL("..."));
         len = limit;
     } else {
         memcpy(dest, src, len);

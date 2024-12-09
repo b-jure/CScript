@@ -1,0 +1,17 @@
+/* {===========================
+**          LOCAL
+** ============================ */
+
+local a;                    // single local uninitialized (nil) variable
+print(a);
+local b, c, d;              // multiple local uninitialized (nil) variables
+print(b, c, d);
+local e, f, g = 1, 2, 3;    // multiple initialized local variables
+print(e, f, g);
+print(a, b, c, d, e, f, g);
+
+local fn add(x, y) {
+    return x + y;
+};
+
+/* ===========================} */

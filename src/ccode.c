@@ -9,6 +9,7 @@
 
 
 #include "ccode.h"
+#include "cdebug.h"
 #include "clexer.h"
 #include "chashtable.h"
 #include "cbits.h"
@@ -26,12 +27,17 @@
 
 /* unary 'opr' to opcode */
 #define unopr2op(opr) \
-    cast(OpCode, cast_int(opr) - OPR_UNM + OP_NOT)
+        cast(OpCode, cast_int(opr) - OPR_UNM + OP_NOT)
 
 
-/* binary operation to OpCode; 'a' anchor, 'b' base */
-#define binopr2op(opr,a,b) \
-    cast(OpCode, (cast_int(opr) - cast_int(a)) + cast_int(b))
+/* binary operation to OpCode */
+#define binopr2op(opr,x,from) \
+        cast(OpCode, (cast_int(opr) - cast_int(x)) + cast_int(from))
+
+
+/* binary OpCode to metamethod tag */
+#define binop2mm(op) \
+        cast(cs_MM, (cast_int(op) - OP_ADD) + cast_int(CS_MM_ADD))
 
 
 
@@ -72,17 +78,17 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatI), /* OP_POP */
     opProp(0, 0, 0, FormatIL), /* OP_POPN */
     opProp(1, 0, 0, FormatIS), /* OP_MBIN */
-    opProp(0, 0, 0, FormatILS), /* OP_ADDK */
-    opProp(0, 0, 0, FormatILS), /* OP_SUBK */
-    opProp(0, 0, 0, FormatILS), /* OP_MULK */
-    opProp(0, 0, 0, FormatILS), /* OP_DIVK */
-    opProp(0, 0, 0, FormatILS), /* OP_MODK */
-    opProp(0, 0, 0, FormatILS), /* OP_POWK */
-    opProp(0, 0, 0, FormatILS), /* OP_BSHLK */
-    opProp(0, 0, 0, FormatILS), /* OP_BSHRK */
-    opProp(0, 0, 0, FormatILS), /* OP_BANDK */
-    opProp(0, 0, 0, FormatILS), /* OP_BORK */
-    opProp(0, 0, 0, FormatILS), /* OP_BXORK */
+    opProp(0, 0, 0, FormatIL), /* OP_ADDK */
+    opProp(0, 0, 0, FormatIL), /* OP_SUBK */
+    opProp(0, 0, 0, FormatIL), /* OP_MULK */
+    opProp(0, 0, 0, FormatIL), /* OP_DIVK */
+    opProp(0, 0, 0, FormatIL), /* OP_MODK */
+    opProp(0, 0, 0, FormatIL), /* OP_POWK */
+    opProp(0, 0, 0, FormatIL), /* OP_BSHLK */
+    opProp(0, 0, 0, FormatIL), /* OP_BSHRK */
+    opProp(0, 0, 0, FormatIL), /* OP_BANDK */
+    opProp(0, 0, 0, FormatIL), /* OP_BORK */
+    opProp(0, 0, 0, FormatIL), /* OP_BXORK */
     opProp(0, 0, 0, FormatILS), /* OP_ADDI */
     opProp(0, 0, 0, FormatILS), /* OP_SUBI */
     opProp(0, 0, 0, FormatILS), /* OP_MULI */
@@ -105,7 +111,7 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatI), /* OP_BAND */
     opProp(0, 0, 0, FormatI), /* OP_BOR */
     opProp(0, 0, 0, FormatI), /* OP_BXOR */
-    opProp(0, 0, 0, FormatI), /* OP_CONCAT */
+    opProp(0, 0, 0, FormatIL), /* OP_CONCAT */
     opProp(0, 0, 0, FormatILS), /* OP_EQK */
     opProp(0, 0, 0, FormatILSS), /* OP_EQI */
     opProp(0, 0, 0, FormatILS), /* OP_LTI */
@@ -156,9 +162,8 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
 
 /* 
 ** OpFormat size table.
-** (order 'OpFormat')
 */
-CSI_DEF const cs_ubyte csC_opSize[FormatN] = {
+CSI_DEF const cs_ubyte csC_opSize[FormatN] = { /* ORDER OPFMT */
     1,  /* FormatI */
     2,  /* FormatIS */
     3,  /* FormatISS */
@@ -170,7 +175,7 @@ CSI_DEF const cs_ubyte csC_opSize[FormatN] = {
 };
 
 
-CSI_DEF const char *csC_opSizeFormat[FormatN] = {
+CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
     "FormatI",
     "FormatIS",
     "FormatISS",
@@ -193,8 +198,8 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
 "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
 "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
-"LEI", "GTI", "GEI", "EQ", "LT", "LE", "NOT", "UNM", "BNOT",
-"EQPRESERVE", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
+"LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "NOT", "UNM",
+"BNOT", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
 "TESTPOP", "CALL", "CLOSE", "TBC", "GETGLOBAL", "SETGLOBAL", "GETLOCAL",
 "SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY", "GETPROPERTY",
 "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT",
@@ -242,6 +247,7 @@ static void emit3bytes(FunctionState *fs, int code) {
 /* emit instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
     cs_assert(SIZEINSTR == sizeof(Instruction));
+    fs->pclastop = fs->pc;
     emitbyte(fs, i);
     storelineinfo(fs, fs->p, fs->lx->line);
     return fs->pc - 1;
@@ -830,16 +836,16 @@ static int tonumeral(const ExpInfo *e1, TValue *res) {
 
 /* fold constant expressions */
 static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
-        int opr)
+                     int op)
 {
     TValue v1, v2, res;
-    if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || validop(&v1, &v2, opr))
+    if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(&v1, &v2, op))
         return 0;
-    csO_arithmraw(fs->lx->ts, &v1, &v2, &res, opr);
+    csO_arithmraw(fs->lx->ts, &v1, &v2, &res, op);
     if (ttisint(&res)) {
         e1->et = EXP_INT;
         e1->u.i = ival(&res);
-    } else {
+    } else { /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
         cs_Number n = fval(&res);
         if (n == 0 || csi_numisnan(n))
             return 0;
@@ -853,7 +859,6 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
 /* emit unary instruction; except logical not '!' */
 static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op) {
     csC_exp2stack(fs, e);
-    cs_assert(e->et == EXP_FINEXPR);
     e->u.info = csC_emitI(fs, op);
 }
 
@@ -880,22 +885,22 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
 
 
 /* emit unary instruction */
-void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr) {
-    static const ExpInfo dummy = {EXP_INT, {0}, -1, -1};
-    cs_assert(0 <= opr && opr < OPR_NOUNOPR);
+void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr) {
+    static const ExpInfo dummy = {EXP_INT, {0}, NOJMP, NOJMP};
+    cs_assert(0 <= uopr && uopr < OPR_NOUNOPR);
     csC_varexp2stack(fs, e);
-    switch (opr) {
+    switch (uopr) {
         case OPR_UNM: case OPR_BNOT: {
-            if (constfold(fs, e, &dummy, (opr - OPR_UNM) + CS_OPUNM))
+            if (constfold(fs, e, &dummy, (uopr - OPR_UNM) + CS_OPUNM))
                 break; /* folded */
-            codeunary(fs, e, unopr2op(opr));
+            codeunary(fs, e, unopr2op(uopr));
             break;
         }
         case OPR_NOT:  {
             codenot(fs, e); 
             break;
         }
-        default: cs_assert(0);
+        default: cs_assert(0); /* invalid unary OPR */
     }
 }
 
@@ -1040,6 +1045,10 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
              * operand variant instruction */
             break;
         }
+        case OPR_CONCAT: {
+            csC_exp2stack(fs, e); /* operand must be on stack */
+            break;
+        }
         case OPR_AND: {
             jmpiffalse(fs, e, OP_TESTORPOP);
             break;
@@ -1048,7 +1057,7 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             jmpiftrue(fs, e, OP_TESTORPOP);
             break;
         }
-        default: cs_assert(0);
+        default: cs_assert(0); /* invalid binary OPR */
     }
 }
 
@@ -1083,28 +1092,28 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
     csC_exp2stack(fs, e1);
     csC_exp2stack(fs, e2);
-    freeslots(fs, 1); /* binary expression produces a single value */
+    freeslots(fs, 1); /* e2 */
     e1->u.info = csC_emitI(fs, op);
     e1->et = EXP_FINEXPR;
-    csC_emitIS(fs, OP_MBIN, op);
+    csC_emitIS(fs, OP_MBIN, binop2mm(op));
 }
 
 
 /* emit binary instruction variant where second operator is constant */
 static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDK);
-    int idxK = e2->u.info; /* index into 'constants' */
+    int ik = e2->u.info; /* index into 'constants' */
+    cs_assert(OP_ADDK <= op && op <= OP_BXORK);
     cs_assert(e2->et == EXP_K);
-    cs_assert(OP_ADD <= op && op < OP_CONCAT);
     csC_exp2stack(fs, e1);
-    e1->u.info = csC_emitIL(fs, op, idxK);
+    e1->u.info = csC_emitIL(fs, op, ik);
     e1->et = EXP_FINEXPR;
 }
 
 
 /* emit arithmetic binary op */
 static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                          int flip, Binopr opr) {
+                          Binopr opr, int flip) {
     if (tonumeral(e2, NULL) && exp2K(fs, e2)) {
         codebinK(fs, e1, e2, opr);
     } else {
@@ -1133,7 +1142,7 @@ static void codebinIK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     if (isintKL(e2))
         codebinI(fs, e1, e2, opr);
     else
-        codebinarithm(fs, e1, e2, flip, opr);
+        codebinarithm(fs, e1, e2, opr, flip);
 }
 
 
@@ -1199,18 +1208,28 @@ emit:
 }
 
 
-static void coderange(FunctionState *fs, ExpInfo *e1, ExpInfo *e2) {
-    csC_exp2stack(fs, e1);
-    csC_exp2stack(fs, e2);
-    e1->u.info = csC_emitI(fs, OP_CONCAT);
-    e1->et = EXP_FINEXPR;
+static Instruction *previousinstruction(FunctionState *fs) {
+    return &fs->p->code[fs->pclastop];
+}
+
+
+static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2) {
+    Instruction *i = previousinstruction(fs);
+    UNUSED(e2);
+    if (*i == OP_CONCAT) { /* 'e2' is a concatenation? */
+        int n = GETARG_L(i, 0);
+        SETARG_L(i, 0, n + 1); /* will concatenate one more element */
+    } else { /* 'e2' is not a concatenation */
+        e1->u.info = csC_emitIL(fs, OP_CONCAT, 2);
+        e1->et = EXP_FINEXPR;
+        freeslots(fs, 1); /* e2 */
+    }
 }
 
 
 void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
-    csC_varexp2stack(fs, e2);
     if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OPADD))
-        return; /* folded */
+        return; /* done (folded) */
     switch (opr) {
         case OPR_ADD: case OPR_MUL:
         case OPR_BAND: case OPR_BOR: case OPR_BXOR: {
@@ -1226,7 +1245,8 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
             break;
         }
         case OPR_CONCAT: {
-            coderange(fs, e1, e2);
+            csC_exp2stack(fs, e2); /* second operand must be on stack */
+            codeconcat(fs, e1, e2);
             break;
         }
         case OPR_NE: case OPR_EQ: {

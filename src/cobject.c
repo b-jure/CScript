@@ -32,17 +32,17 @@ int csO_ceillog2 (uint x) {
 
 
 /* number of bits in 'cs_Integer' */
-#define INTBITS         cast_int((sizeof(cs_Integer)*8))
+#define INTBITS         cast_int((sizeof(cs_Integer) * CHAR_BIT))
 
 
-/* shift 'x', 'y' times, in case of overflow return 0 */
-cs_Integer csO_shiftr(cs_Integer x, cs_Integer y) {
-    if (y < 0) {
-        if (y <= -INTBITS) return 0;
-        return (x << y);
-    } else {
-        if (y >= INTBITS) return 0;
-        return (x >> y);
+/* shift 'x', 'y' times, to the left; in case of overflow return 0 */
+cs_Integer csO_shiftl(cs_Integer x, cs_Integer y) {
+    if (y < 0) { /* shift right? */
+        if (y <= -INTBITS) return 0; /* overflow */
+        return csi_castU2S(csi_castS2U(x) >> csi_castS2U(-y));
+    } else { /* shift left */
+        if (y >= INTBITS) return 0; /* overflow */
+        return csi_castU2S(csi_castS2U(x) << csi_castS2U(y));
     }
 }
 
@@ -68,7 +68,6 @@ static cs_Integer intarithm(cs_State *ts, cs_Integer x, cs_Integer y, int op) {
         case CS_OPMUL: return csi_intop(*, x, y);
         case CS_OPDIV: return csV_div(ts, x, y);
         case CS_OPMOD: return csV_modint(ts, x, y);
-        case CS_OPPOW: return csi_intop(^, x, y);
         case CS_OPUNM: return csi_intop(-, 0, x);
         case CS_OPBSHL: return csO_shiftl(x, y);
         case CS_OPBSHR: return csO_shiftr(x, y);
@@ -112,41 +111,34 @@ int csO_tointeger(const TValue *o, cs_Integer *i, int mode) {
 */
 int csO_arithmraw(cs_State *ts, const TValue *a, const TValue *b,
                   TValue *res, int op) {
-    cs_Number n1, n2;
     switch (op) {
-    case CS_OPBNOT: case CS_OPBXOR: case CS_OPBSHL:
-    case CS_OPBSHR: case CS_OPBOR: case CS_OPBAND: {
-        cs_Integer i1, i2;
-        if (tointeger(a, &i1) && tointeger(b, &i2)) {
-            setival(res, intarithm(ts, i1, i2, op));
-            return 1;
+        case CS_OPBNOT: case CS_OPBXOR: case CS_OPBSHL:
+        case CS_OPBSHR: case CS_OPBOR: case CS_OPBAND: { /* only on integers */
+            cs_Integer i1, i2;
+            if (tointeger(a, &i1) && tointeger(b, &i2)) {
+                setival(res, intarithm(ts, i1, i2, op));
+                return 1;
+            }
+            return 0; /* fail */
         }
-        return 0;
-    }
-    case CS_OPDIV: case CS_OPMOD: {
-        if (tonumber(a, &n1) && tonumber(b, &n2)) {
-            setfval(res, numarithm(ts, n1, n2, op));
-            return 1;
+        case CS_OPDIV: case CS_OPMOD: {
+            cs_Number n1, n2;
+            if (tonumber(a, n1) && tonumber(b, n2)) { /* only on floats */
+                setfval(res, numarithm(ts, n1, n2, op));
+                return 1;
+            }
+            return 0; /* fail */
         }
-        return 0;
-    }
-    case CS_OPADD: case CS_OPSUB:
-    case CS_OPMUL: case CS_OPUNM: {
-        if (tonumber(a, &n1) && tonumber(b, &n2)) {
-            setfval(res, numarithm(ts, n1, n2, op));
-            return 1;
-        }
-        return 0;
-    }
-    default:
-        if (ttisint(a) && ttisint(b)) {
-            setival(res, intarithm(ts, ival(a), ival(b), op));
-            return 1;
-        } else if (tonumber(a, &n1) && tonumber(b, &n2)) {
-            setfval(res, numarithm(ts, n1, n2, op));
-            return 1;
-        } else {
-            return 0;
+        default: { /* other operations */
+            cs_Number n1, n2;
+            if (ttisint(a) && ttisint(b) && op != CS_OPPOW) {
+                setival(res, intarithm(ts, ival(a), ival(b), op));
+                return 1;
+            } else if (tonumber(a, n1) && tonumber(b, n2)) {
+                setfval(res, numarithm(ts, n1, n2, op));
+                return 1;
+            } else
+                return 0; /* fail */
         }
     }
 }

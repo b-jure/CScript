@@ -696,11 +696,9 @@ void csV_concat(cs_State *ts, int total) {
 
 #define op_arithKf_aux(ts,v1,v2,fop) { \
     cs_Number n1, n2; \
-    if (tonumber(v1, &n1) && tonumber(v2, &n2)) { \
+    if (tonumber(v1, n1) && tonumber(v2, n2)) { \
         setfval(v1, fop(ts, n1, n2)); \
-    } else { \
-        csD_aritherror(ts, v1, v2); \
-    }}
+    } else csD_aritherror(ts, v1, v2); }
 
 
 /* arithmetic operations with constant operand for floats */
@@ -734,7 +732,7 @@ void csV_concat(cs_State *ts, int total) {
     int imm = fetchl(); /* L */\
     imm *= getsign(); /* S */\
     cs_Number n; \
-    if (tonumber(v, &n)) { \
+    if (tonumber(v, n)) { \
         cs_Number fimm = cast_num(imm); \
         setfval(v, fop(ts, n, fimm)); \
     } else { \
@@ -761,10 +759,10 @@ void csV_concat(cs_State *ts, int total) {
 
 #define op_arithf_aux(ts,v1,v2,fop) { \
     cs_Number n1; cs_Number n2; \
-    if (tonumber(v1, &n1) && tonumber(v2, &n2)) { \
+    if (tonumber(v1, n1) && tonumber(v2, n2)) { \
         setfval(v1, fop(ts, n1, n2)); \
+        pop(1); /* v2 */ \
         pc += getOpSize(OP_MBIN); \
-        pop(1); \
     }/* FALLTHRU to 'OP_MBIN' */}
 
 
@@ -782,8 +780,8 @@ void csV_concat(cs_State *ts, int total) {
     if (ttisint(v1) && ttisint(v2)) { \
         cs_Integer i1 = ival(v1); cs_Integer i2 = ival(v2); \
         setival(v1, iop(ts, i1, i2)); \
+        pop(1); /* v2 */ \
         pc += getOpSize(OP_MBIN); \
-        pop(1); \
     } else { \
         op_arithf_aux(ts, v1, v2, fop); \
     }}
@@ -827,6 +825,7 @@ void csV_concat(cs_State *ts, int total) {
     cs_Integer i1; cs_Integer i2; \
     if (tointeger(v1, &i1) && tointeger(v2, &i2)) { \
         setival(v1, op(i1, i2)); \
+        pop(1); /* v2 */ \
         pc += getOpSize(OP_MBIN); \
     }/* else try 'OP_MBIN' */}
 
@@ -1210,7 +1209,7 @@ returning:
                 vm_break;
             }
             vm_case(OP_POW) {
-                op_arithf(ts, csV_modnum);
+                op_arithf(ts, csi_numpow);
                 vm_break;
             }
             vm_case(OP_BSHL) {
@@ -1234,8 +1233,9 @@ returning:
                 vm_break;
             }
             /* } CONCAT_OP { */
-            vm_case(OP_CONCAT) { /* TODO: concat more than 2 at a time */
-                Protect(csV_concat(ts, 2)); /* 'csV_concat handles 'sp' */
+            vm_case(OP_CONCAT) {
+                int n = fetchl();
+                Protect(csV_concat(ts, n)); /* 'csV_concat handles 'sp' */
                 checkGC(ts);
                 vm_break;
             }

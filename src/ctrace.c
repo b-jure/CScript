@@ -48,7 +48,7 @@ static int traceop(OpCode op) {
 
 
 static int traceS(const Instruction *pc) {
-    postab(printf("ArgS=%-8d", *pc & 0xFF));
+    postab(printf("ArgS=%-8d", *pc));
     return SIZEARGS;
 }
 
@@ -180,7 +180,7 @@ static void tracefalse(void) {
 static void tracestring(OString *s) {
     char buff[MAXSTRKLEN + 1];
     csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
-    printf("%s", buff);
+    printf("\"%s\"", buff);
 }
 
 
@@ -352,12 +352,12 @@ static void unasmMM(cs_State *ts, const Proto *p, Instruction *pc) {
 }
 
 
-static void unasmMBin(const Proto *p, Instruction *pc) {
-    OpCode op;
+static void unasmMBin(cs_State *ts, const Proto *p, Instruction *pc) {
+    cs_MM mm;
     startline(p, pc);
     traceop(*pc);
-    op = GETARG_S(pc, 0) + OP_ADD;
-    postab(printf("%s", getOpName(op)));
+    mm = GETARG_S(pc, 0);
+    postab(printf("%s", getstr(G_(ts)->mmnames[mm])));
     endline();
 }
 
@@ -430,8 +430,8 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
             case OP_NEWCLASS: case OP_POP: case OP_ADD: case OP_SUB:
             case OP_MUL: case OP_DIV: case OP_MOD: case OP_POW:
             case OP_BSHL: case OP_BSHR: case OP_BAND: case OP_BOR:
-            case OP_BXOR: case OP_CONCAT: case OP_LT: case OP_LE:
-            case OP_NOT: case OP_UNM: case OP_BNOT: case OP_EQPRESERVE:
+            case OP_BXOR:case OP_LT: case OP_LE: case OP_NOT:
+            case OP_UNM: case OP_BNOT: case OP_EQPRESERVE:
             case OP_GETINDEX: case OP_GETSUPIDX: case OP_INHERIT:
             case OP_FORCALL: case OP_FORLOOP: {
                 unasm(p, pc);
@@ -440,16 +440,15 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
             case OP_NILN: case OP_VARARGPREP: case OP_VARARG:
             case OP_CLOSURE: case OP_POPN: case OP_JMP:
             case OP_JMPS: case OP_CLOSE: case OP_TBC:
-            case OP_GETINDEXINT: case OP_SETINDEX: {
+            case OP_CONCAT: case OP_GETINDEXINT: case OP_SETINDEX: {
                 unasmL(p, pc);
                 break;
             }
             case OP_ADDK: case OP_SUBK: case OP_MULK: case OP_DIVK:
             case OP_MODK: case OP_POWK: case OP_BSHLK: case OP_BSHRK:
             case OP_BANDK: case OP_BORK: case OP_BXORK: case OP_CONSTL:
-            case OP_GETPROPERTY: case OP_GETINDEXSTR:
-            case OP_METHOD: case OP_GETSUP:
-            case OP_GETSUPIDXSTR: {
+            case OP_GETPROPERTY: case OP_GETINDEXSTR: case OP_METHOD:
+            case OP_GETSUP: case OP_GETSUPIDXSTR: {
                 unasmKL(p, pc);
                 break;
             }
@@ -494,7 +493,7 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
             case OP_CONSTI: unasmIMMint(p, pc); break;
             case OP_CONSTF: unasmIMMflt(p, pc); break;
             case OP_SETMM: unasmMM(ts, p, pc); break;
-            case OP_MBIN: unasmMBin(p, pc); break;
+            case OP_MBIN: unasmMBin(ts, p, pc); break;
             case OP_EQK: unasmEQK(p, pc); break;
             case OP_EQI: unasmEQI(p, pc); break;
             case OP_EQ: unasmS(p, pc); break;

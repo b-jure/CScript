@@ -108,7 +108,6 @@ static void checklimit(FunctionState *fs, int n, int limit, const char *what) {
 }
 
 
-
 static void storectx(FunctionState *fs, DynCtx *ctx) {
     ctx->loopstart = fs->loopstart;
     ctx->sp = fs->sp;
@@ -136,6 +135,7 @@ static void loadctx(FunctionState *fs, DynCtx *ctx) {
     fs->patches.len = ctx->nbrks;
     fs->needclose = ctx->needclose;
     fs->lastwasret = ctx->lastwasret;
+    fs->p->linfo[fs->nlinfo - 1].pc = fs->pc;
 }
 
 
@@ -409,6 +409,7 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->deadcode.pc = NOJMP;
     fs->patches.len = fs->patches.size = 0; fs->patches.list = NULL;
     fs->needclose = fs->lastwasret = 0;
+    fs->pclastop = -1;
     p->source = lx->src;
     csG_objbarrier(lx->ts, p, p->source);
     p->maxstack = 2; /* stacks slots 0/1 are always valid */
@@ -1082,7 +1083,7 @@ static const struct {
     {8, 8}, {8, 8},                 /* '<' '<= */
     {8, 8}, {8, 8},                 /* '>' '>= */
     {3, 3}, {2, 2},                 /* 'and' 'or' */
-    {1, 1}                          /* TODO: '?' (ternary) */
+    {1, 1}                          /* TODO: '?:' (ternary) */
 };
 
 #define UNARY_PRIORITY  14  /* priority for unary operators */
