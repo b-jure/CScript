@@ -236,7 +236,7 @@ void csMM_tryconcat(cs_State *ts) {
 int csMM_order(cs_State *ts, const TValue *v1, const TValue *v2, cs_MM mm) {
     cs_assert(CS_MM_EQ <= mm && mm <= CS_MM_N);
     if (c_likely(callbinaux(ts, v1, v2, ts->sp.p, mm)))
-        return c_isfalse(s2v(ts->sp.p));
+        return !c_isfalse(s2v(ts->sp.p));
     csD_ordererror(ts, v1, v2);
     /* UNREACHED */
     return 0;

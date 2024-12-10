@@ -93,7 +93,7 @@ int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
 
 /* try to convert value to 'cs_Integer' */
 int csO_tointeger(const TValue *o, cs_Integer *i, int mode) {
-    if (ttisnum(o)) {
+    if (ttisflt(o)) {
         return csO_n2i(fval(o), i, mode);
     } else if (ttisint(o)) {
         *i = ival(o);

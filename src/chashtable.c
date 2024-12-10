@@ -257,10 +257,10 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
             setival(&aux, k);
             key = &aux; /* insert it as an integer */
         }
-        else if (c_unlikely(csi_numisnan(f))) { /* float is NaN? */
+        else if (c_unlikely(csi_numisnan(f))) /* float is NaN? */
             csD_runerror(ts, "index is NaN");
-        }
-    }
+        /* else */
+    } /* fall through */
     if (ttisnil(val))
         return;  /* do not insert nil values */
     mp = mainposition(ht, key); /* get main position for 'key' */

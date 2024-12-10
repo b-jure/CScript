@@ -293,11 +293,14 @@ static void unasmEQK(const Proto *p, Instruction *pc) {
 static void unasmEQI(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Integer i;
+    int cond;
     startline(p, pc);
     traceop(*pc);
     getIMM(pc, i);
     setival(&aux, i);
     postab(tracenum(&aux));
+    cond = *(pc + SIZEINSTR + SIZEARGL + SIZEARGS);
+    postab(printf("%s", (cond ? "equal" : "not equal")));
     endline();
 }
 

@@ -138,30 +138,28 @@ static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
 ** operand is converted, without change of type domain, to a type whose
 ** corresponding real type is double."
 */
-cs_sinline int intlenum(cs_State *ts, const TValue *v1, const TValue *v2) {
-    UNUSED(ts);
+cs_sinline int intlenum(const TValue *v1, const TValue *v2) {
     return csi_numle(cast_num(ival(v1)), fval(v2));
 }
 
 
 /* check 'intLEnum' */
-cs_sinline int numleint(cs_State *ts, const TValue *v1, const TValue *v2) {
-    UNUSED(ts);
+cs_sinline int numleint(const TValue *v1, const TValue *v2) {
     return csi_numle(fval(v1), cast_num(ival(v2)));
 }
 
 
 /* less equal ordering on numbers */
-cs_sinline int numle(cs_State *ts, const TValue *v1, const TValue *v2) {
+cs_sinline int numle(const TValue *v1, const TValue *v2) {
     cs_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
         cs_Integer i1 = ival(v1);
         if (ttisint(v2)) return (i1 <= ival(v2));
-        else return intlenum(ts, v1, v2);
+        else return intlenum(v1, v2);
     } else {
         cs_Number n1 = fval(v1);
-        if (ttisint(v2)) return numleint(ts, v1, v2);
-        else return csi_numlt(n1, fval(v2));
+        if (ttisint(v2)) return numleint(v1, v2);
+        else return csi_numle(n1, fval(v2));
     }
 }
 
@@ -178,7 +176,7 @@ cs_sinline int otherle(cs_State *ts, const TValue *v1, const TValue *v2) {
 /* 'less or equal' ordering '<=' */
 int csV_orderle(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
-        return numle(ts, v1, v2);
+        return numle(v1, v2);
     return otherle(ts, v1, v2);
 }
 
@@ -213,7 +211,7 @@ cs_sinline int numlt(const TValue *v1, const TValue *v2) {
 /* 'less than' ordering '<' on non-number values */
 cs_sinline int otherlt(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
-        return csS_cmp(strval(v1), strval(v2));
+        return csS_cmp(strval(v1), strval(v2)) < 0;
     else
         return csMM_order(ts, v1, v2, CS_MM_LT);
 }
@@ -233,7 +231,7 @@ int csV_orderlt(cs_State *ts, const TValue *v1, const TValue *v2) {
 */
 int csV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
     cs_Integer i1, i2;
-    const TValue *method;
+    const TValue *fmm;
     if (ttypetag(v1) != ttypetag(v2)) {
         if (ttype(v1) != ttype(v2) || ttype(v1) != CS_TNUMBER)
             return 0;
@@ -250,25 +248,25 @@ int csV_ordereq(cs_State *ts, const TValue *v1, const TValue *v2) {
         case CS_VUSERDATA: {
             if (uval(v1) == uval(v2)) return 1;
             else if (ts == NULL) return 0;
-            method = csMM_get(ts, v1, CS_MM_EQ);
-            if (ttisnil(method))
-                method = csMM_get(ts, v2, CS_MM_EQ);
+            fmm = csMM_get(ts, v1, CS_MM_EQ);
+            if (ttisnil(fmm))
+                fmm = csMM_get(ts, v2, CS_MM_EQ);
             break;
         }
         case CS_VINSTANCE: {
             if (insval(v1) == insval(v2)) return 1;
             else if (ts == NULL) return 0;
-            method = csMM_get(ts, v1, CS_MM_EQ);
-            if (ttisnil(method))
-                method = csMM_get(ts, v2, CS_MM_EQ);
+            fmm = csMM_get(ts, v1, CS_MM_EQ);
+            if (ttisnil(fmm))
+                fmm = csMM_get(ts, v2, CS_MM_EQ);
             break;
         }
         default: return (gcoval(v1) == gcoval(v2));
     }
-    if (isabstkey(method))  {
+    if (ttisnil(fmm)) {
         return 0;
     } else {
-        csMM_callbinres(ts, method, v1, v2, ts->sp.p);
+        csMM_callbinres(ts, fmm, v1, v2, ts->sp.p);
         return !c_isfalse(s2v(ts->sp.p));
     }
 }
@@ -837,14 +835,13 @@ void csV_concat(cs_State *ts, int total) {
 
 /* set ordering result */
 #define setorderres(v,cond,eq) \
-    { cs_assert(0 <= cond && cond <= 1); settt(v, booleans[cond == eq]); }
+    { cs_assert(0 <= cond && cond <= 1); settt(v, booleans[(cond) == (eq)]); }
 
 
 /* order operations with stack operands */
 #define op_order(ts,iop,fop,other) { \
     TValue *v1 = peek(1); \
     TValue *v2 = peek(0); \
-    int iseq = fetchs(); /* S */\
     int cond; \
     if (ttisint(v1) && ttisint(v2)) { \
         cs_Integer i1 = ival(v1); \
@@ -852,10 +849,9 @@ void csV_concat(cs_State *ts, int total) {
         cond = iop(i1, i2); \
     } else if (ttisnum(v1) && ttisnum(v2)) { \
         cond = fop(v1, v2); \
-    } else { \
-        Protect(cond = other(ts, v1, v2)); \
-    } \
-    setorderres(v1, cond, iseq); }
+    } else Protect(cond = other(ts, v1, v2)); \
+    pop(1); /* v2 */ \
+    setorderres(v1, cond, 1); }
 
 
 /* order operations with immediate operand */
@@ -870,9 +866,7 @@ void csV_concat(cs_State *ts, int total) {
         cs_Number n1 = fval(v); \
         cs_Number n2 = cast_num(imm); \
         cond = fop(n1, n2); \
-    } else { \
-        cond = 0; \
-    } \
+    } else cond = 0; \
     setorderres(v, cond, 1); }
 
 
@@ -1290,11 +1284,11 @@ returning:
                 vm_break;
             }
             vm_case(OP_LT) {
-                op_order(ts, ilt, csi_numlt, otherlt);
+                op_order(ts, ilt, numlt, otherlt);
                 vm_break;
             }
             vm_case(OP_LE) {
-                op_order(ts, ile, csi_numle, otherle);
+                op_order(ts, ile, numle, otherle);
                 vm_break;
             }
             vm_case(OP_EQPRESERVE) {

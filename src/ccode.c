@@ -48,7 +48,7 @@
 #define fitsSA(i)       (-MAX_SARG <= (i) && (i) <= MAX_SARG)
 
 
-#define codesign(x)     ((x) < 0 ? 0 : 2)
+#define encodesign(x)     ((x) < 0 ? 0 : 2)
 
 
 
@@ -337,7 +337,7 @@ static int nilK(FunctionState *fs) {
 /* add 'true' constant to 'constants' */
 static int trueK(FunctionState *fs) {
     TValue btv;
-    setnilval(&btv);
+    setbtval(&btv);
     return addK(fs, &btv, &btv);
 }
 
@@ -677,7 +677,7 @@ static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 /* emit integer constant */
 static int codeintK(FunctionState *fs, cs_Integer i) {
     if (fitsLA(i))
-        return csC_emitILS(fs, OP_CONSTI, csi_abs(i), codesign(i));
+        return csC_emitILS(fs, OP_CONSTI, csi_abs(i), encodesign(i));
     else
         return codeK(fs, intK(fs, i));
 }
@@ -687,7 +687,7 @@ static int codeintK(FunctionState *fs, cs_Integer i) {
 static int codefltK(FunctionState *fs, cs_Number n) {
     cs_Integer i;
     if (csO_n2i(n, &i, N2IEXACT) && fitsLA(i))
-        return csC_emitILS(fs, OP_CONSTF, csi_abs(i), codesign(i));
+        return csC_emitILS(fs, OP_CONSTF, csi_abs(i), encodesign(i));
     else
         return codeK(fs, fltK(fs, n));
 }
@@ -1024,7 +1024,6 @@ void jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop) {
 
 
 void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
-    csC_varexp2stack(fs, e);
     switch (op) {
         case OPR_ADD: case OPR_SUB: case OPR_MUL:
         case OPR_DIV: case OPR_MOD: case OPR_POW:
@@ -1037,7 +1036,12 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
              * or immediate operand variant instruction */
             break;
         }
-        case OPR_LT: case OPR_LE: case OPR_GT: case OPR_GE: {
+        case OPR_GT: case OPR_GE: {
+            /* Do not push expression value on the stack yet!
+             * It will swap places with the second expression. */
+            break;
+        }
+        case OPR_LT: case OPR_LE: {
             int dummy, dummy2;
             if (!isnumKL(e, &dummy, &dummy2))
                 csC_exp2stack(fs, e);
@@ -1065,15 +1069,19 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
 /* register constant expressions */
 static int exp2K(FunctionState *fs, ExpInfo *e) {
     if (!hasjumps(e)) {
-        switch (e->et) {
-            case EXP_NIL: e->u.info = nilK(fs); break;
-            case EXP_FALSE: e->u.info = falseK(fs); break;
-            case EXP_TRUE: e->u.info = trueK(fs); break;
-            case EXP_STRING: e->u.info = stringK(fs, e->u.str); break;
-            case EXP_INT: e->u.info = intK(fs, e->u.i); break;
-            case EXP_FLT: e->u.info = fltK(fs, e->u.n); break;
-            default: return 0;
+        int info;
+        switch (e->et) { /* move constant to 'p->k[]' */
+            case EXP_NIL: info = nilK(fs); break;
+            case EXP_FALSE: info = falseK(fs); break;
+            case EXP_TRUE: info = trueK(fs); break;
+            case EXP_STRING: info = stringK(fs, e->u.str); break;
+            case EXP_INT: info = intK(fs, e->u.i); break;
+            case EXP_FLT: info = fltK(fs, e->u.n); break;
+            case EXP_K: info = e->u.info; break;
+            default: return 0; /* not a constant */
         }
+        cs_assert(0 <= info && info <= MAX_LARG);
+        e->u.info = info;
         e->et = EXP_K;
         return 1;
     }
@@ -1083,7 +1091,9 @@ static int exp2K(FunctionState *fs, ExpInfo *e) {
 
 /* swap expressions */
 cs_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
-    const ExpInfo temp = *e1; *e1 = *e2; *e2 = temp;
+    const ExpInfo temp = *e1;
+    *e1 = *e2;
+    *e2 = temp;
 }
 
 
@@ -1131,7 +1141,7 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
     cs_assert(e2->et == EXP_INT);
     csC_exp2stack(fs, e1);
-    e1->u.info = csC_emitILS(fs, op, rhsabs, codesign(rhs));
+    e1->u.info = csC_emitILS(fs, op, rhsabs, encodesign(rhs));
     e1->et = EXP_FINEXPR;
 }
 
@@ -1161,24 +1171,24 @@ static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 /* emit equality binary instruction */
 static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int imm; /* immediate */
-    int isflt = 0;
+    int isflt;
     int iseq = (opr == OPR_EQ);
     cs_assert(opr == OPR_NE || opr == OPR_EQ);
+    UNUSED(isflt);
     if (e1->et != EXP_FINEXPR) {
-        /* 'e1' is either a stored string constant or numeric value */
+        /* 'e1' is either a numerical or stored string constant */
         cs_assert(e1->et == EXP_K || e1->et == EXP_INT || e1->et == EXP_FLT);
         swapexp(e1, e2);
     }
-    csC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
-    if (isintK(e2)) {
-        if (isnumKL(e2, &imm, &isflt))
-            e1->u.info = emitILSS(fs, OP_EQI, imm, codesign(imm), iseq);
-        else 
-            e1->u.info = csC_emitILS(fs, OP_EQK, e2->u.info, iseq);
-    } else {
-        csC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
+    csC_exp2stack(fs, e1); /* ensure 1st expression is on stack */
+    if (isnumKL(e2, &imm, &isflt)) { /* 2nd expression is immediate operand? */
+        e1->u.info = emitILSS(fs, OP_EQI, imm, encodesign(imm), iseq);
+    } else if (exp2K(fs, e2)) { /* 2nd expression is a constant? */
+        e1->u.info = csC_emitILS(fs, OP_EQK, e2->u.info, iseq);
+    } else { /* otherwise 2nd expression must be on stack */
+        csC_exp2stack(fs, e2); /* ensure 2nd expression is on stack */
         e1->u.info = csC_emitIS(fs, OP_EQ, iseq);
-        freeslots(fs, 1);
+        freeslots(fs, 1); /* e2 */
     }
     e1->et = EXP_FINEXPR;
 }
@@ -1189,7 +1199,8 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int isflt; /* unused */
     int imm;
     OpCode op;
-    cs_assert(OPR_LT == opr || opr == OPR_LE); /* should already be swapped */
+    UNUSED(isflt);
+    cs_assert(OPR_LT == opr || OPR_LE == opr); /* should already be swapped */
     if (isnumKL(e2, &imm, &isflt)) {
         csC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
         op = binopr2op(opr, OPR_LT, OP_LTI);
@@ -1198,11 +1209,13 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
         csC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
         op = binopr2op(opr, OPR_LT, OP_GTI);
 emit:
-        e1->u.info = csC_emitILS(fs, op, imm, codesign(imm));
+        e1->u.info = csC_emitILS(fs, op, imm, encodesign(imm));
     } else {
+        csC_exp2stack(fs, e1); /* ensure first operand is on stack */
+        csC_exp2stack(fs, e2); /* ensure second operand is on stack */
         op = binopr2op(opr, OPR_LT, OP_LT);
         e1->u.info = csC_emitI(fs, op);
-        freeslots(fs, 1);
+        freeslots(fs, 1); /* e2 */
     }
     e1->et = EXP_FINEXPR;
 }

@@ -2,347 +2,347 @@
 **          EXPRESSIONS
 ** ============================ */
 
-local a; // local to hold values
+local a;                    // local to hold values
 
-## {INTEGERS
-## {decimal
-#print(1);
-#print(1____);
-#print(120);
-#print(981);
-#print(100_500_300);
-#print(100__500___300);
-#print(15e15);
-#print(15E-15);
-#print(1E-01_2_);
-#print(15e00001);
-## }{hexadecimal
-#print(0x1);             // 1 in decimal
-#print(0x1__);           // 1 in decimal
-#print(0x78);            // 120 in decimal
-#print(0x3D5);           // 981 in decimal
-#print(0x5fd834c);       // 100500300 in decimal
-#print(0x5f__d8___34c);  // 100500300 in decimal
-#print(0xEp15);          // 458752 in decimal
-#print(0xEp1);           // 28 in decimal
-#print(0xEp-1);          // 7 in decimal
-#print(0xAp2);           // 40 in decimal
-#print(0xAp-1);          // 5 in decimal
-#print(0x100p-8);        // 1 in decimal
-#print(0x10p-4);         // 1 in decimal
-#print(0x1p+4);          // 16 in decimal
-#print(0x1p+8);          // 256 in decimal
-## }{octal
-#print(0015);            // 13 in decimal
-#print(032);             // 26 in decimal
-#print(0157);            // 111 in decimal
-#print(0123_570);        // 42872 in decimal
-## }}
-#
-## {FLOATS
-## {decimal
-#print(1.0);
-#print(1000.);
-#print(3.14159);
-#print(.05);
-#print(.0005);
-#print(1e0);
-#print(1.0000e0);
-#print(100e1);
-#print(100e+1);
-#print(100E+1);
-#print(100E+1);
-#print(1e3);
-#print(10000e-1);
-#print(3.14159e0);
-#print(5e-2);
-#print(.0005e+2);
-#print(5E-2);
-#print(.0005E2);
-#print(.05e-2);
-## }{hexadecimal
-#print(0x2.0Bp4);    // 32.6875 decimal
-#print(0xE.2p3);     // 113 decimal
-#print(0x123.ABCp0); // 291.6708984375 in decimal
-#print(0x123.ABCp4); // 4666.734375 in decimal
-#print(0xEP-15);     // 0.000427246
-## }}
-#
-## {STRINGS
-#print("test");              // string
-#print("test");              // (check reuse of interned strings)
-#print("");                  // empty string
-#print("start\0end");        // null terminator
-#print("start\aend");        // bell
-#print("start\bend");        // backspace
-#print("start\tend");        // horizontal tab
-#print("start\nend");        // new line
-#print("start\vend");        // vertical tab
-#print("start\fend");        // form feed
-#print("start\rend");        // carriage return
-#print("start\e[1Kend");     // escape character (equivalent to '\x1B')
-#print("start\x20end");      // \xhh, h is a hexadecimal digit
-#print("start\u{57}end");    // \u{hhhhhhhh}, h is a hexadecimal digit (normalized UTF-8)
-#print("start\u[57]end");    // \u[hhhhhhhh], h is a hexadecimal digit (verified UTF-8)
-#print("start\"end");        // double quotation mark (22 in hexadecimal)
-#print("start\'end");        // apostrophe (27 in hexadecimal)
-#print("start\\end");        // backslash (5C in hexadecimal)
-#print("start\
-#end");                      // escaped newline/carriage return
-#print("start\69end");       // \ddd, d is a decimal digit
-## }
-#
-## {NIL
-#print(nil);
-## }
-#
-## {BOOLEANS
-#print(true);
-#print(false);
-## }
-#
-## {VARARGS
-#print(...);
-## }
-#
-## {ARRAYS
-#a = [];
-#print(a);
-#// set some indices
-#a[0] = 1;
-#a[1] = 1;
-#a[2] = 1;
-#print(a[0], a[1], a[2]);
-#// set indices but create holes
-#a[4] = 2;
-#a[7] = 2;
-#a[9] = 2;
-#print(a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
-#// new array from constructor
-#a = [
-#    15,
-#    15.2,
-#    13,
-#    [69, 69, 69],
-#];
-#print(a[0], a[1], a[2], a[3]);
-#print(a[4]); // out of bounds access
-## }
-#
-## {HASHTABLES
-#a = {};
-#print(a);
-#// set some fields
-#a.x = 1;
-#a.y = 1;
-#a.z = 1;
-#print(a.x, a.y, a.z);
-#// set fields by indexing
-#a["x"] = 2;
-#a["y"] = 2;
-#a["z"] = 2;
-#a["u"] = 2;
-#print(a["x"], a["y"], a["z"], a["u"]);
-#// new table from constructor using names as fields
-#a = {
-#    cat = true,
-#    farm = {
-#        cow = 2,
-#        fox = 1,
-#        chicken = 4,
-#    }
-#};
-#print(a["cat"], a["farm"], a.farm.cow, a.farm.fox, a.farm.chicken);
-#// new table from constructor using indices as fields
-#a = {
-#    ["cat"] = false,
-#    ["animals"] = {
-#        ["cow"] = 4,
-#        ["fox"] = 8,
-#        ["chicken"] = 15,
-#    }
-#};
-#print(a["cat"], a["animals"], a.animals.cow, a.animals.fox, a.animals.chicken);
-#print(a[5.15]); // index access but element doesn't exist
-## }
-#
-## {FUNCTIONS
-#a = fn(x, y, ...) { return ...; }; // returns no results
-#print(a(...));      // prints only newline
-#print(a(5,2,7));    // prints only 7
-#print(a(5,2,...));  // prints all varargs 
-#a = fn() { print(a); return a; };
-#print(a());         // prints a 2 times
-#a = fn() {
-#    local b = fn() { print(a); };   // creates open upvalue 'a'
-#    return b;
-#};
-#print(a);
-#a = a();
-#print(a);
-#a();
-#a = fn() {
-#    local b = "Hello, World";
-#    return fn() { print(b); };      // creates closed upvalue 'b'
-#};
-#a = a();
-#a();
-## }
-#
-#
-## {UNARY OPERATORS
-## {minus
-#a = -5;         # -5 (folded)
-#print(a);
-#a = --5;        # 5 (folded)
-#print(a);
-#a = ---5;       # -5 (folded)
-#print(a);
-#a = -a;         # 5 (not folded)
-#print(a);
-#a = --a;        # 5 (not folded)
-#print(a);
-#a = ---a;       # -5 (not folded)
-#print(a);
-## }{binary not
-#a = ~0;         # -1 (folded)
-#print(a);
-#a = ~~0;        # 0 (folded)
-#print(a);
-#a = ~~~0;       # -1 (folded)
-#print(a);
-#a = ~a;         # 0 (not folded)
-#print(a);
-#a = ~~a;        # 0 (not folded)
-#print(a);
-#a = ~~~a;       # -1 (not folded)
-#print(a);
-## }{logical not
-#a = !true;      # false (folded)
-#print(a);
-#a = !!true;     # true (folded)
-#print(a);
-#a = !!!true;    # false (folded)
-#print(a);
-#a = !false;     # true (folded)
-#print(a);
-#a = !!false;    # false (folded)
-#print(a);
-#a = !!!false;   # true (folded)
-#print(a);
-#a = !a;         # false (not folded)
-#print(a);
-#a = !!a;        # false (not folded)
-#print(a);
-#a = !!!a;       # true (not folded)
-#print(a);
-## }}
+# {INTEGERS
+# {decimal
+print(1);
+print(1____);
+print(120);
+print(981);
+print(100_500_300);
+print(100__500___300);
+print(15e15);
+print(15E-15);
+print(1E-01_2_);
+print(15e00001);
+# }{hexadecimal
+print(0x1);                 // 1 in decimal
+print(0x1__);               // 1 in decimal
+print(0x78);                // 120 in decimal
+print(0x3D5);               // 981 in decimal
+print(0x5fd834c);           // 100500300 in decimal
+print(0x5f__d8___34c);      // 100500300 in decimal
+print(0xEp15);              // 458752 in decimal
+print(0xEp1);               // 28 in decimal
+print(0xEp-1);              // 7 in decimal
+print(0xAp2);               // 40 in decimal
+print(0xAp-1);              // 5 in decimal
+print(0x100p-8);            // 1 in decimal
+print(0x10p-4);             // 1 in decimal
+print(0x1p+4);              // 16 in decimal
+print(0x1p+8);              // 256 in decimal
+# }{octal
+print(0015);                // 13 in decimal
+print(032);                 // 26 in decimal
+print(0157);                // 111 in decimal
+print(0123_570);            // 42872 in decimal
+# }}
 
-## {BINARY OPERATORS
-## {addition
-#print(2 + 2);       # 2 (folded)
-#print(2 + 2 + 4);   # 8 (folded)
-#a = 2 + 2 + 2 + 2;  # 8 (folded)
-#print(a);
-#a = a + 4;          # 12 (not folded)
-#print(a);
-#a = a + a;          # 24 (not folded)
-#print(a);
-#a = 5 + a;          # 29 (not folded)
-#print(a);
-## }{subtraction
-#print(2 - 2);       # 0 (folded)
-#print(2 - 4);       # -2 (folded)
-#print(4 - 2);       # 2 (folded)
-#print(4 - 2 - 2);   # 0 (folded)
-#a = 4 - 2 - 2;      # 0 (folded)
-#print(a);
-#print(a - 2);       # -2 (not folded)
-#print(5 - a);       # 5 (not folded)
-## }{multiplication
-#print(2 * 2);       # 4 (folded)
-#print(2 * 3);       # 6 (folded)
-#print(3 * 2);       # 6 (folded)
-#print(4 * 2 * 2);   # 16 (folded)
-#a = 4 * 2 * 2;      # 16 (folded)
-#print(a);
-#print(a * 2);       # 32 (not folded)
-#print(2 * a);       # 32 (not folded)
-## }{division
-#print(2 / 2);       # 1 (folded)
-#print(2 / 4);       # 0.5 (folded)
-#print(4 / 2);       # 2 (folded)
-#print(4 / 2 / 2);   # 1 (folded)
-#a = 8 / 2 / 2;      # 2 (folded)
-#print(a);
-#print(a / 2);       # 1 (not folded)
-#print(2 / a);       # 1 (not folded)
-## }{modulo
-#print(2 % 2);       # 0 (not folded)
-#print(2 % 4);       # 2 (folded)
-#print(4 % 2);       # 0 (not folded)
-#print(5 % 2);       # 1 (folded)
-#print(4 % 2 % 2);   # 0 (not folded)
-#a = 8 % 3;          # 2 (folded)
-#print(a);
-#print(a % 2);       # 0 (not folded)
-#print(2 % a);       # 0 (not folded)
+# {FLOATS
+# {decimal
+print(1.0);
+print(1000.);
+print(3.14159);
+print(.05);
+print(.0005);
+print(1e0);
+print(1.0000e0);
+print(100e1);
+print(100e+1);
+print(100E+1);
+print(100E+1);
+print(1e3);
+print(10000e-1);
+print(3.14159e0);
+print(5e-2);
+print(.0005e+2);
+print(5E-2);
+print(.0005E2);
+print(.05e-2);
+# }{hexadecimal
+print(0x2.0Bp4);            // 32.6875 decimal
+print(0xE.2p3);             // 113 decimal
+print(0x123.ABCp0);         // 291.6708984375 in decimal
+print(0x123.ABCp4);         // 4666.734375 in decimal
+print(0xEP-15);             // 0.000427246
+# }}
+
+# {STRINGS
+print("test");              // string
+print("test");              // (check reuse of interned strings)
+print("");                  // empty string
+print("start\0end");        // null terminator
+print("start\aend");        // bell
+print("start\bend");        // backspace
+print("start\tend");        // horizontal tab
+print("start\nend");        // new line
+print("start\vend");        // vertical tab
+print("start\fend");        // form feed
+print("start\rend");        // carriage return
+print("start\e[1Kend");     // escape character (equivalent to '\x1B')
+print("start\x20end");      // \xhh, h is a hexadecimal digit
+print("start\u{57}end");    // \u{hhhhhhhh}, h is a hexadecimal digit (normalized UTF-8)
+print("start\u[57]end");    // \u[hhhhhhhh], h is a hexadecimal digit (verified UTF-8)
+print("start\"end");        // double quotation mark (22 in hexadecimal)
+print("start\'end");        // apostrophe (27 in hexadecimal)
+print("start\\end");        // backslash (5C in hexadecimal)
+print("start\
+end");                      // escaped newline/carriage return
+print("start\69end");       // \ddd, d is a decimal digit
+# }
+
+# {NIL
+print(nil);
+# }
+
+# {BOOLEANS
+print(true);
+print(false);
+# }
+
+# {VARARGS
+print(...);
+# }
+
+# {ARRAYS
+a = [];
+print(a);
+// set some indices
+a[0] = 1;
+a[1] = 1;
+a[2] = 1;
+print(a[0], a[1], a[2]);
+// set indices but create holes
+a[4] = 2;
+a[7] = 2;
+a[9] = 2;
+print(a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
+// new array from constructor
+a = [
+    15,
+    15.2,
+    13,
+    [69, 69, 69],
+];
+print(a[0], a[1], a[2], a[3]);
+print(a[4]); // out of bounds access
+# }
+
+# {HASHTABLES
+a = {};
+print(a);
+// set some fields
+a.x = 1;
+a.y = 1;
+a.z = 1;
+print(a.x, a.y, a.z);
+// set fields by indexing
+a["x"] = 2;
+a["y"] = 2;
+a["z"] = 2;
+a["u"] = 2;
+print(a["x"], a["y"], a["z"], a["u"]);
+// new table from constructor using names as fields
+a = {
+    cat = true,
+    farm = {
+        cow = 2,
+        fox = 1,
+        chicken = 4,
+    }
+};
+print(a["cat"], a["farm"], a.farm.cow, a.farm.fox, a.farm.chicken);
+// new table from constructor using indices as fields
+a = {
+    ["cat"] = false,
+    ["animals"] = {
+        ["cow"] = 4,
+        ["fox"] = 8,
+        ["chicken"] = 15,
+    }
+};
+print(a["cat"], a["animals"], a.animals.cow, a.animals.fox, a.animals.chicken);
+print(a[5.15]); // index access but element doesn't exist
+# }
+
+# {FUNCTIONS
+a = fn(x, y, ...) { return ...; }; // returns no results
+print(a(...));      // prints only newline
+print(a(5,2,7));    // prints only 7
+print(a(5,2,...));  // prints all varargs 
+a = fn() { print(a); return a; };
+print(a());         // prints a 2 times
+a = fn() {
+    local b = fn() { print(a); };   // creates open upvalue 'a'
+    return b;
+};
+print(a);
+a = a();
+print(a);
+a();
+a = fn() {
+    local b = "Hello, World";
+    return fn() { print(b); };  // creates closed upvalue 'b'
+};
+a = a();
+a();
+# }
+
+
+# {UNARY OPERATORS
+# {minus
+a = -5;                 // -5 (folded)
+print(a);
+a = --5;                // 5 (folded)
+print(a);
+a = ---5;               // -5 (folded)
+print(a);
+a = -a;                 // 5 (not folded)
+print(a);
+a = --a;                // 5 (not folded)
+print(a);
+a = ---a;               // -5 (not folded)
+print(a);
+# }{binary not
+a = ~0;                 // -1 (folded)
+print(a);
+a = ~~0;                // 0 (folded)
+print(a);
+a = ~~~0;               // -1 (folded)
+print(a);
+a = ~a;                 // 0 (not folded)
+print(a);
+a = ~~a;                // 0 (not folded)
+print(a);
+a = ~~~a;               // -1 (not folded)
+print(a);
+# }{logical not
+a = !true;              // false (folded)
+print(a);
+a = !!true;             // true (folded)
+print(a);
+a = !!!true;            // false (folded)
+print(a);
+a = !false;             // true (folded)
+print(a);
+a = !!false;            // false (folded)
+print(a);
+a = !!!false;           // true (folded)
+print(a);
+a = !a;                 // false (not folded)
+print(a);
+a = !!a;                // false (not folded)
+print(a);
+a = !!!a;               // true (not folded)
+print(a);
+# }}
+
+# {BINARY OPERATORS
+# {addition
+print(2 + 2);               // 2 (folded)
+print(2 + 2 + 4);           // 8 (folded)
+a = 2 + 2 + 2 + 2;          // 8 (folded)
+print(a);
+a = a + 4;                  // 12 (not folded)
+print(a);
+a = a + a;                  // 24 (not folded)
+print(a);
+a = 5 + a;                  // 29 (not folded)
+print(a);
+# }{subtraction
+print(2 - 2);               // 0 (folded)
+print(2 - 4);               // -2 (folded)
+print(4 - 2);               // 2 (folded)
+print(4 - 2 - 2);           // 0 (folded)
+a = 4 - 2 - 2;              // 0 (folded)
+print(a);
+print(a - 2);               // -2 (not folded)
+print(5 - a);               // 5 (not folded)
+# }{multiplication
+print(2 * 2);               // 4 (folded)
+print(2 * 3);               // 6 (folded)
+print(3 * 2);               // 6 (folded)
+print(4 * 2 * 2);           // 16 (folded)
+a = 4 * 2 * 2;              // 16 (folded)
+print(a);
+print(a * 2);               // 32 (not folded)
+print(2 * a);               // 32 (not folded)
+# }{division
+print(2 / 2);               // 1 (folded)
+print(2 / 4);               // 0.5 (folded)
+print(4 / 2);               // 2 (folded)
+print(4 / 2 / 2);           // 1 (folded)
+a = 8 / 2 / 2;              // 2 (folded)
+print(a);
+print(a / 2);               // 1 (not folded)
+print(2 / a);               // 1 (not folded)
+# }{modulo
+print(2 % 2);               // 0 (not folded)
+print(2 % 4);               // 2 (folded)
+print(4 % 2);               // 0 (not folded)
+print(5 % 2);               // 1 (folded)
+print(4 % 2 % 2);           // 0 (not folded)
+a = 8 % 3;                  // 2 (folded)
+print(a);
+print(a % 2);               // 0 (not folded)
+print(2 % a);               // 0 (not folded)
 # }{pow
-#print(2**2);        # 4 (folded)
-#print(2**3);        # 8 (folded)
-#print(2**-3);       # 0.125 (folded)
-#a = 2**2;           # 4 (folded)
-#print(a);
-#print(a**2);        # 16 (not folded)
-#print(2**a);        # 16 (not folded)
-## }{left bit shift
-#print(1 << 2);      # 4 (folded)
-#print(2 << 3);      # 16 (folded)
-#print(8 << -3);     # 1 (folded)
-#a = 2 << 2;         # 8 (folded)
-#print(a);
-#print(a << 3);      # 64 (not folded)
-#print(3 << a);      # 768 (not folded)
-## }{right bit shift
-#print(2 >> 1);      # 1 (folded)
-#print(3 >> 2);      # 0 (folded)
-#print(4 >> 1);      # 2 (folded)
-#print(8 >> -3);     # 64 (folded)
-#a = 64 >> 2;        # 16 (folded)
-#print(a);
-#print(a >> 3);          # 2 (not folded)
-#print(131_072 >> a);    # 2 (not folded)
-## }{binary and
-#print(2 & 1);       # 0 (folded)
-#print(3 & 2);       # 2 (folded)
-#print(5 & 3);       # 1 (folded)
-#print(10 & -3);     # 8 (folded, assumming two's complement)
-#a = 58 & 14;        # 10 (folded)
-#print(a);
-#print(a & 3);       # 2 (not folded)
-#print(0xff & a);    # 10 (not folded)
-#print(a & a);       # 10 (not folded)
-## }{binary or
-#print(2 | 1);       # 3 (folded)
-#print(3 | 2);       # 3 (folded)
-#print(5 | 3);       # 7 (folded)
-#print(10 | -3);     # -1 (folded, assumming two's complement)
-#a = 58 | 14;        # 62 (folded)
-#print(a);
-#print(a | 1);       # 63 (not folded)
-#print(0xff | a);    # 255 (not folded)
-#print(a | a);       # 62 (not folded)
-## }{binary xor
-#print(2 ^ 1);       # 3 (folded)
-#print(3 ^ 2);       # 1 (folded)
-#print(5 ^ 3);       # 6 (folded)
-#print(10 ^ -3);     # -9 (folded, assumming two's complement)
-#a = 58 ^ 14;        # 52 (folded)
-#print(a);
-#print(a ^ 12);      # 56 (not folded)
-#print(0xff ^ a);    # 203 (not folded)
-#print(a ^ a);       # 0 (not folded)
-# }{concatenate
+print(2**2);                // 4 (folded)
+print(2**3);                // 8 (folded)
+print(2**-3);               // 0.125 (folded)
+a = 2**2;                   // 4 (folded)
+print(a);
+print(a**2);                // 16 (not folded)
+print(2**a);                // 16 (not folded)
+# }{left bit shift
+print(1 << 2);              // 4 (folded)
+print(2 << 3);              // 16 (folded)
+print(8 << -3);             // 1 (folded)
+a = 2 << 2;                 // 8 (folded)
+print(a);
+print(a << 3);              // 64 (not folded)
+print(3 << a);              // 768 (not folded)
+# }{right bit shift
+print(2 >> 1);              // 1 (folded)
+print(3 >> 2);              // 0 (folded)
+print(4 >> 1);              // 2 (folded)
+print(8 >> -3);             // 64 (folded)
+a = 64 >> 2;                // 16 (folded)
+print(a);
+print(a >> 3);              // 2 (not folded)
+print(131_072 >> a);        // 2 (not folded)
+# }{binary and
+print(2 & 1);               // 0 (folded)
+print(3 & 2);               // 2 (folded)
+print(5 & 3);               // 1 (folded)
+print(10 & -3);             // 8 (folded, assumming two's complement)
+a = 58 & 14;                // 10 (folded)
+print(a);
+print(a & 3);               // 2 (not folded)
+print(0xff & a);            // 10 (not folded)
+print(a & a);               // 10 (not folded)
+# }{binary or
+print(2 | 1);               // 3 (folded)
+print(3 | 2);               // 3 (folded)
+print(5 | 3);               // 7 (folded)
+print(10 | -3);             // -1 (folded, assumming two's complement)
+a = 58 | 14;                // 62 (folded)
+print(a);
+print(a | 1);               // 63 (not folded)
+print(0xff | a);            // 255 (not folded)
+print(a | a);               // 62 (not folded)
+# }{binary xor
+print(2 ^ 1);               // 3 (folded)
+print(3 ^ 2);               // 1 (folded)
+print(5 ^ 3);               // 6 (folded)
+print(10 ^ -3);             // -9 (folded, assumming two's complement)
+a = 58 ^ 14;                // 52 (folded)
+print(a);
+print(a ^ 12);              // 56 (not folded)
+print(0xff ^ a);            // 203 (not folded)
+print(a ^ a);               // 0 (not folded)
+# }{concatenation
 print("Hello," .. " World");
 print("My name is " .. "urMom" .. ", what is yours?");
 a = "Sir this is" ..
@@ -350,6 +350,118 @@ a = "Sir this is" ..
     "Wendys, what is your order?\n" ..
     "69 pieces of raw chicken please!";
 print(a);
+# }{not equal
+print(5 != 2);              // true
+print(5 != 5);              // false
+print("Dota" != "LoL");     // true
+print("Dota" != "Dota");    // false
+print(5.12 != 5.12);        // false
+print(5.12 != 5.69);        // true
+print(true != true);        // false
+print(true != false);       // true
+print(5 != true);           // true
+print(5 != false);          // true
+print("Dota" != true);      // true
+print("Dota" != false);     // true
+print(5.12 != true);        // true
+print(5.12 != false);       // true
+print(4 != 5.12);           // true
+print(4 != 4);              // false
+print(5.12 != 4);           // true
+a = 5;
+print(4 != a);              // true
+print(a != 4);              // true
+print(a != a);              // false
+# }{equal
+print(5 == 2);              // false
+print(5 == 5);              // true
+print("Dota" == "LoL");     // false
+print("Dota" == "Dota");    // true
+print(5.12 == 5.12);        // true
+print(5.12 == 5.69);        // false
+print(true == true);        // true
+print(true == false);       // false
+print(5 == true);           // false
+print(5 == false);          // false
+print("Dota" == true);      // false
+print("Dota" == false);     // false
+print(5.12 == true);        // false
+print(5.12 == false);       // false
+print(4 == 5.12);           // false
+print(4 == 4);              // true
+print(5.12 == 4);           // false
+a = 5;
+print(4 == a);              // false
+print(a == 4);              // false
+print(a == a);              // true
+# }{less than
+print(2 < 5);               // true
+print(5 < 5);               // false
+print(7 < 5);               // false
+print("Dota" < "LoL");      // true
+print("Dota" < "Dota");     // false
+print("LoL" < "Dota");      // false
+print(5.12 < 5.69);         // true
+print(5.12 < 5.12);         // false
+print(5.69 < 5.12);         // false
+print(4 < 5.12);            // true
+print(4 < 4);               // false
+print(5.12 < 4);            // false
+a = 5;
+print(4 < a);               // true
+print(a < 4);               // false
+print(a < a);               // false
+# }{less equal
+print(2 <= 5);              // true
+print(5 <= 5);              // true
+print(7 <= 5);              // false
+print("Dota" <= "LoL");     // true
+print("Dota" <= "Dota");    // true
+print("LoL" <= "Dota");     // false
+print(5.12 <= 5.69);        // true
+print(5.12 <= 5.12);        // true
+print(5.69 <= 5.12);        // false
+print(4 <= 5.12);           // true
+print(4 <= 4);              // true
+print(5.12 <= 4);           // false
+a = 5;
+print(4 <= a);              // true
+print(a <= 4);              // false
+print(a <= a);              // true
+# }{greater than
+print(2 > 5);               // false
+print(5 > 5);               // false
+print(7 > 5);               // true
+print("Dota" > "LoL");      // false
+print("Dota" > "Dota");     // false
+print("LoL" > "Dota");      // true
+print(5.12 > 5.69);         // false
+print(5.12 > 5.12);         // false
+print(5.69 > 5.12);         // true
+print(4 > 5.12);            // false
+print(4 > 4);               // false
+print(5.12 > 4);            // true
+a = 5;
+print(4 > a);               // false
+print(a > 4);               // true
+print(a > a);               // false
+# }{greater equal
+print(2 >= 5);              // false
+print(5 >= 5);              // true
+print(7 >= 5);              // true
+print("Dota" >= "LoL");     // false
+print("Dota" >= "Dota");    // true
+print("LoL" >= "Dota");     // true
+print(5.12 >= 5.69);        // false
+print(5.12 >= 5.12);        // true
+print(5.69 >= 5.12);        // true
+print(4 >= 5.12);           // false
+print(4 >= 4);              // true
+print(5.12 >= 4);           // true
+a = 5;
+print(4 >= a);              // false
+print(a >= 4);              // true
+print(a >= a);              // true
 # }}
 
 /* ===========================} */
