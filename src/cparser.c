@@ -694,6 +694,7 @@ static int explist(Lexer *lx, ExpInfo *e) {
 /* indexed ::= '[' expr ']' */
 static void indexed(Lexer *lx, ExpInfo *var, int super) {
     ExpInfo key;
+    initexp(&key, EXP_VOID, 0);
     csY_scan(lx); /* skip '[' */
     csC_exp2stack(lx->fs, var);
     expr(lx, &key);
@@ -705,6 +706,7 @@ static void indexed(Lexer *lx, ExpInfo *var, int super) {
 /* getfield ::= '.' name */
 static void getfield(Lexer *lx, ExpInfo *var, int super) {
     ExpInfo key;
+    initexp(&key, EXP_VOID, 0);
     csC_exp2stack(lx->fs, var);
     csY_scan(lx); /* skip '.' */
     expname(lx, &key);
@@ -1126,9 +1128,10 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
     }
     Binopr opr = getbinopr(lx->t.tk);
     while (opr != OPR_NOBINOPR && priority[opr].left > limit) {
+        ExpInfo e2;
+        initexp(&e2, EXP_VOID, 0);
         csY_scan(lx); /* skip operator */
         csC_prebinary(lx->fs, e, opr);
-        ExpInfo e2;
         Binopr next = subexpr(lx, &e2, priority[opr].right);
         csC_binary(lx->fs, e, &e2, opr);
         opr = next;
@@ -1796,6 +1799,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, DynCtx *ctx) {
             }
             if (match(lx, TK_CASE)) { /* 'case'? */
                 ExpInfo cexp; /* case expression */
+                initexp(&cexp, EXP_VOID, 0);
                 expr(lx, &cexp); /* get the case expression... */
                 codepres_exp(fs, &cexp); /* ...and put it on stack (preserve) */
                 expectnext(lx, ':');
@@ -1920,6 +1924,7 @@ static void condbody(Lexer *lx, DynCtx *startctx, ExpInfo *cond, OpCode testop,
 static void ifstm(Lexer *lx) {
     DynCtx ctx;
     ExpInfo e;
+    initexp(&e, EXP_VOID, 0);
     csY_scan(lx); /* skip 'if' */
     storectx(lx->fs, &ctx);
     int matchline = lx->line;
@@ -1987,6 +1992,7 @@ static void whilestm(Lexer *lx) {
     struct LoopCtx lctx;
     Scope s; /* new 'loopscope' */
     ExpInfo cond;
+    initexp(&cond, EXP_VOID, 0);
     csY_scan(lx); /* skip 'while' */
     storectx(fs, &startctx);
     startloop(fs, &s, &lctx, CFLOOP);
@@ -2031,13 +2037,14 @@ static int forexplist(Lexer *lx, ExpInfo *e, int limit) {
 /* foreachloop ::= 'for' 'each' idlist 'in' forexprlist '{' stmlist '}' */
 static void foreachloop(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    DynCtx startctx;
-    struct LoopCtx lctx;
-    ExpInfo e;
-    Scope s;
-    int forend;
     int nvars = 1; /* iter func result */
     int base = fs->sp;
+    DynCtx startctx;
+    struct LoopCtx lctx;
+    Scope s;
+    int forend;
+    ExpInfo e;
+    initexp(&e, EXP_VOID, 0);
     storectx(fs, &startctx);
     newlocallit(lx, "(for state)"); /* iterator         (base)   */
     newlocallit(lx, "(for state)"); /* invariant state  (base+1) */
@@ -2121,12 +2128,13 @@ void forendclause(Lexer *lx, ExpInfo *cond, int *clausepc) {
 /* forloop ::= 'for' '(' forinit ';' forcond ';' forendclause ')' condbody */
 static void forloop(Lexer *lx) {
     FunctionState *fs = lx->fs;
+    int matchline = lx->line;
+    int condpc, endclausepc;
     DynCtx startctx;
     struct LoopCtx lctx;
     Scope s; /* new 'loopscope' */
     ExpInfo cond;
-    int condpc, endclausepc;
-    int matchline = lx->line;
+    initexp(&cond, EXP_VOID, 0);
     startloop(fs, &s, &lctx, CFLOOP); /* enter loop */
     expectnext(lx, '(');
     forinit(lx); /* get for loop initializer */
@@ -2228,9 +2236,10 @@ static void breakstm(Lexer *lx) {
 */
 static void returnstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    ExpInfo e;
     int first = nvarstack(fs); /* first slot to be returned */
     int nret = 0;
+    ExpInfo e;
+    initexp(&e, EXP_VOID, 0);
     csY_scan(lx); /* skip 'return' */
     if (!check(lx, ';')) { /* have return values ? */
         nret = explist(lx, &e); /* get return values */

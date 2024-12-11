@@ -31,7 +31,7 @@
 
 
 static void startline(const Proto *p, const Instruction *pc) {
-    postab(printf("[%05d]", csD_getfuncline(p, pc - p->code)));
+    postab(printf("[LINE %4d]", csD_getfuncline(p, pc - p->code)));
 }
 
 
@@ -142,6 +142,7 @@ static void traceILLS(const Proto *p, const Instruction *pc) {
 */
 void csTR_tracepc(cs_State *ts, const Proto *p, const Instruction *pc) {
     csTR_dumpstack(ts, 1, NULL); /* first dump current function stack... */
+    printf("[PC %4ld]", pc - p->code);
     switch (getOpFormat(*pc)) { /* ...then trace the instruction */
         case FormatI: traceI(p, pc); break;
         case FormatIS: traceIS(p, pc); break;
@@ -462,8 +463,7 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 unasmIMMint(p, pc);
                 break;
             }
-            case OP_TEST: case OP_TESTORPOP: case OP_TESTANDPOP:
-            case OP_TESTPOP: case OP_NEWARRAY: case OP_NEWTABLE: {
+            case OP_NEWARRAY: case OP_NEWTABLE: {
                 unasmS(p, pc);
                 break;
             }
@@ -488,7 +488,8 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 unasmLL(p, pc);
                 break;
             }
-            case OP_SETARRAY: {
+            case OP_TEST: case OP_TESTORPOP: case OP_TESTANDPOP:
+            case OP_TESTPOP: case OP_SETARRAY: {
                 unasmLS(p, pc);
                 break;
             }
@@ -523,7 +524,7 @@ void csTR_dumpstack(cs_State *ts, int level, const char *fmt, ...) {
     }
     for (int i = 0; cf != NULL && level != 0; i++) {
         level--;
-        printf("@%-5d %-10s >> ", i, typename(ttype(s2v(cf->func.p))));
+        printf("[LEVEL %3d] %-10s >> ", i, typename(ttype(s2v(cf->func.p))));
         if (cf->func.p + 1 >= prevtop)
             printf("empty");
         else

@@ -121,10 +121,10 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatIS), /* OP_EQ */
     opProp(0, 0, 0, FormatI), /* OP_LT */
     opProp(0, 0, 0, FormatI), /* OP_LE */
+    opProp(0, 0, 0, FormatI), /* OP_EQPRESERVE */
     opProp(0, 0, 0, FormatI), /* OP_NOT */
     opProp(0, 0, 0, FormatI), /* OP_UNM */
     opProp(0, 0, 0, FormatI), /* OP_BNOT */
-    opProp(0, 0, 0, FormatI), /* OP_EQPRESERVE */
     opProp(0, 1, 0, FormatIL), /* OP_JMP */
     opProp(0, 1, 0, FormatIL), /* OP_JMPS */
     opProp(0, 1, 1, FormatILS), /* OP_TEST */
@@ -154,14 +154,17 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatIL), /* OP_GETSUPIDXSTR */
     opProp(0, 0, 0, FormatI), /* OP_INHERIT */
     opProp(0, 0, 0, FormatILL), /* OP_FORPREP */
-    opProp(0, 0, 0, FormatI), /* OP_FORCALL */
-    opProp(0, 1, 0, FormatI), /* OP_FORLOOP */
+    opProp(0, 0, 0, FormatILL), /* OP_FORCALL */
+    opProp(0, 1, 0, FormatILL), /* OP_FORLOOP */
     opProp(0, 0, 0, FormatILLS), /* OP_RET */
 };
 
 
 /* 
 ** OpFormat size table.
+** Instruction  = 1 byte
+** Short Arg    = 1 byte
+** Long Arg     = 3 bytes
 */
 CSI_DEF const cs_ubyte csC_opSize[FormatN] = { /* ORDER OPFMT */
     1,  /* FormatI */
@@ -652,6 +655,80 @@ static int dischargevars(FunctionState *fs, ExpInfo *e) {
 }
 
 
+/* get 'pc' of jmp instruction destination */
+static int getjump(FunctionState *fs, int pc) {
+    Instruction *i = &fs->p->code[pc];
+    int offset = GETARG_L(i, 0);
+    if (offset == 0)
+        return NOJMP;
+    else
+        return (pc + getOpSize(*i)) + offset;
+}
+
+
+/* fix jmp instruction at 'pc' to jump to 'dest' */
+static void fixjump(FunctionState *fs, int pc, int destpc) {
+    Instruction *jmp = &fs->p->code[pc];
+    int offset = destpc - (pc + getOpSize(*jmp));
+    cs_assert(offset > 0); /* at least one expression in between... */
+    cs_assert(opisjump(*jmp)); /* ...and 'jmp' is a jump instruction */
+    if (c_unlikely(offset > MAX_LARG)) /* is jump too large? */
+        csP_semerror(fs->lx, "control structure too long");
+    SETARG_L(jmp, 0, offset); /* fix the jump */
+}
+
+
+/* concatenate jump list 'l2' into jump list 'l1' */
+void csC_concatjl(FunctionState *fs, int *l1, int l2) {
+    if (l2 == NOJMP) return;
+    if (*l1 == NOJMP) {
+        *l1 = l2;
+    } else {
+        int curr = *l1;
+        int next;
+        while ((next = getjump(fs, curr)) != NOJMP) /* get last jump pc */
+            curr = next;
+        fixjump(fs, curr, l2); /* last jump jumps to 'l2' */
+    }
+}
+
+
+/* backpatch jump list at 'pc' */
+void csC_patch(FunctionState *fs, int pc, int target) {
+    while (pc != NOJMP) {
+        int next = getjump(fs, pc);
+        fixjump(fs, pc, target);
+        pc = next;
+    }
+}
+
+
+/* backpatch jump instruction to current pc */
+void csC_patchtohere(FunctionState *fs, int pc) {
+    csC_patch(fs, pc, currentpc(fs));
+}
+
+
+static void patchlistaux(FunctionState *fs, int list, int target) {
+    while (list != NOJMP) {
+        int next = getjump(fs, list);
+        fixjump(fs, list, target);
+        list = next;
+    }
+}
+
+
+static void fixjmplists(FunctionState *fs, ExpInfo *e) {
+    cs_assert(e->et == EXP_FINEXPR); /* must already be discharged */
+    if (hasjumps(e)) {
+        int final = currentpc(fs); /* position after whole expression */
+        patchlistaux(fs, e->f, final);
+        patchlistaux(fs, e->t, final);
+        e->f = e->t = NOJMP;
+    }
+}
+
+
 void csC_varexp2stack(FunctionState *fs, ExpInfo *e) {
     if (e->et != EXP_FINEXPR && dischargevars(fs, e))
         csC_reserveslots(fs, 1);
@@ -749,22 +826,25 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e) {
                 e->u.info = codeK(fs, e->u.info);
                 break;
             }
-            default: {
-                cs_assert(e->et == EXP_JMP);
-                return;
-            }
+            default: return;
         }
         e->et = EXP_FINEXPR;
     }
 }
 
 
+static void exp2stack(FunctionState *fs, ExpInfo *e) {
+    if (e->et != EXP_FINEXPR)  {
+        dischargetostack(fs, e);
+        csC_reserveslots(fs, 1);
+    }
+}
+
+
 /* ensure expression value is on stack */
 void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
-    if (e->et != EXP_FINEXPR)  {
-        csC_reserveslots(fs, 1);
-        dischargetostack(fs, e);
-    }
+    exp2stack(fs, e);
+    fixjmplists(fs, e);
 }
 
 
@@ -907,67 +987,14 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr) {
 
 /* emit test jump instruction */
 static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
-    csC_exp2stack(fs, e); /* ensure test operand is on stack */
-    return csC_emitILS(fs, testop, NOJMP, cond);
+    exp2stack(fs, e); /* ensure test operand is on the stack */
+    return csC_emitILS(fs, testop, 0, cond);
 }
 
 
 /* emit 'OP_JMP' family of instructions */
 int csC_jmp(FunctionState *fs, OpCode jop) {
-    return csC_emitIL(fs, jop, NOJMP);
-}
-
-
-/* get 'pc' of jmp instruction destination */
-static int getjmp(FunctionState *fs, int pc) {
-    Instruction *i = &fs->p->code[pc];
-    int offset = GETARG_L(i, 0);
-    if (offset == NOJMP)
-        return NOJMP;
-    else
-        return (pc + JMPARGSIZE + testTProp(*i)) + offset;
-}
-
-
-/* fix jmp instruction at 'pc' to jump to 'dest' */
-static void fixjmp(FunctionState *fs, int pc, int destpc) {
-    Instruction *pcjmp = &fs->p->code[pc];
-    int offset = destpc - (pc + SIZEARGL);
-    if (c_unlikely(offset > MAX_LARG))
-        csP_semerror(fs->lx, "control structure too long");
-    SETARG_L(pcjmp, 0, offset); /* patch it */
-}
-
-
-/* concatenate jmp label 'l2' into jmp label 'l1' */
-void csC_concatjmp(FunctionState *fs, int *l1, int l2) {
-    if (l2 == NOJMP) 
-        return;
-    if (*l1 == NOJMP) {
-        *l1 = l2;
-    } else {
-        int curr = *l1;
-        int next;
-        while ((next = getjmp(fs, curr)) != NOJMP) /* get last jmp pc */
-            curr = next;
-        fixjmp(fs, curr, l2); /* last jmp jumps to 'l2' */
-    }
-}
-
-
-/* backpatch jump list at 'pc' */
-void csC_patch(FunctionState *fs, int pc, int target) {
-    while (pc != NOJMP) {
-        int next = getjmp(fs, pc);
-        fixjmp(fs, pc, target);
-        pc = next;
-    }
-}
-
-
-/* backpatch jump instruction to current pc */
-void csC_patchtohere(FunctionState *fs, int pc) {
-    csC_patch(fs, pc, currentpc(fs));
+    return csC_emitIL(fs, jop, 0);
 }
 
 
@@ -979,47 +1006,50 @@ int csC_test(FunctionState *fs, OpCode testop, int cond) {
 }
 
 
-void jmpiffalse(FunctionState *fs, ExpInfo *e, OpCode jmpop) {
-    int pc;
-    csC_varexp2stack(fs, e);
+/* 
+** Insert new jump into 'e' false list.
+** This test jumps over the second expression if the first expression
+** is false (nil or false).
+*/
+void falsejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
+    int pc; /* pc of new jump */
     switch (e->et) {
-        case EXP_JMP: {
-            pc = e->u.info;
-            break;
-        }
-        case EXP_TRUE: case EXP_STRING: case EXP_INT: case EXP_FLT: case EXP_K: {
+        case EXP_TRUE: case EXP_STRING: case EXP_INT:
+        case EXP_FLT: case EXP_K: { /* constant true expression */
             pc = NOJMP; /* don't jump, always true */
             break;
         }
-        default: 
-            pc = codetest(fs, e, jmpop, 0); /* jump if false */
+        default: {
+            pc = codetest(fs, e, testop, 0); /* jump if false */
             break;
+        }
     }
-    csC_concatjmp(fs, &e->f, pc); /* insert new jump in false list */
+    csC_concatjl(fs, &e->f, pc); /* insert new jump in false list */
     csC_patchtohere(fs, e->t); /* true list jumps to here (after false test) */
-    e->t = NOJMP;
+    e->t = NOJMP; /* set true list as empty */
 }
 
 
-void jmpiftrue(FunctionState *fs, ExpInfo *e, OpCode jmpop) {
+/* 
+** Insert new jump into 'e' true list.
+** This test jumps over the second expression if the first expression
+** is true (everything else except nil and false).
+*/
+void truejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
     int pc;
-    csC_varexp2stack(fs, e);
     switch (e->et) {
-        case EXP_JMP: {
-            pc = e->u.info; /* already jump if true */
-            break;
-        }
         case EXP_NIL: case EXP_FALSE: {
             pc = NOJMP; /* don't jump, always false */
             break;
         }
-        default:
-            pc = codetest(fs, e, jmpop, 1); /* jump if true */
+        default: {
+            pc = codetest(fs, e, testop, 1); /* jump if true */
             break;
+        }
     }
-    csC_concatjmp(fs, &e->t, pc); /* insert new jump in true list */
+    csC_concatjl(fs, &e->t, pc); /* insert new jump in true list */
     csC_patchtohere(fs, e->f); /* false list jump to here (after true test) */
-    e->f = NOJMP;
+    e->f = NOJMP; /* set false list as empty */
 }
 
 
@@ -1054,11 +1084,11 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             break;
         }
         case OPR_AND: {
-            jmpiffalse(fs, e, OP_TESTORPOP);
+            falsejmp(fs, e, OP_TESTORPOP); /* jump out if 'e' is false */
             break;
         }
         case OPR_OR: {
-            jmpiftrue(fs, e, OP_TESTORPOP);
+            truejmp(fs, e, OP_TESTORPOP); /* jump out if 'e' is true */
             break;
         }
         default: cs_assert(0); /* invalid binary OPR */
@@ -1270,20 +1300,22 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
             /* 'a > b' <==> 'a < b', 'a >= b' <==> 'a <= b' */
             swapexp(e1, e2);
             opr = (opr - OPR_GT) + OPR_LT;
-        } /* FALLTHRU */
+        } /* fall through */
         case OPR_LT: case OPR_LE: {
             codeorder(fs, e1, e2, opr);
             break;
         }
         case OPR_AND: {
-            cs_assert(e1->t == NOJMP); /* closed by 'csC_prebinary' */
-            csC_concatjmp(fs, &e2->f, e1->f);
+            cs_assert(e1->t == NOJMP); /* list closed by 'csC_prebinary' */
+            dischargevars(fs, e2);
+            csC_concatjl(fs, &e2->f, e1->f);
             *e1 = *e2;
             break;
         }
         case OPR_OR: {
-            cs_assert(e1->f == NOJMP); /* closed by 'csC_prebinary' */
-            csC_concatjmp(fs, &e2->t, e1->t);
+            cs_assert(e1->f == NOJMP); /* list closed by 'csC_prebinary' */
+            dischargevars(fs, e2);
+            csC_concatjl(fs, &e2->t, e1->t);
             *e1 = *e2;
             break;
         }
@@ -1324,7 +1356,7 @@ void csC_finish(FunctionState *fs) {
             }
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */
                 int target = finaltarget(p->code, i);
-                fixjmp(fs, i, target);
+                fixjump(fs, i, target);
                 break;
             }
             default: break;

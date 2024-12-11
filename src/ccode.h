@@ -183,10 +183,10 @@ OP_CONCAT,/*       L       'V{-L} = V{-L} .. V{L - 1}'                      */
 OP_EQK,/*          V L S   '(V == K{L}) == S'                               */
 
 OP_EQI,/*          V L S1 S2      '(V == I(L) * (S1 - 1)) == S2'            */
-OP_LTI,/*          V L S1         'V < (S1 - 1) * I(L)'                     */
-OP_LEI,/*          V L S1         'V <= (S1 - 1) * I(L)'                    */
-OP_GTI,/*          V L S1         'V > (S1 - 1) * I(L)'                     */
-OP_GEI,/*          V L S1         'V >= (S1 - 1) * I(L)'                    */ 
+OP_LTI,/*          V L S          'V < (S  - 1) * I(L)'                     */
+OP_LEI,/*          V L S          'V <= (S  - 1) * I(L)'                    */
+OP_GTI,/*          V L S          'V > (S  - 1) * I(L)'                     */
+OP_GEI,/*          V L S          'V >= (S  - 1) * I(L)'                    */ 
 
 OP_EQ,/*           V1 V2 S     '(V1 == V2) == S'                            */
 OP_LT,/*           V1 V2       '(V1 < V2)'                                  */
@@ -227,7 +227,7 @@ OP_SETPROPERTY,/*  V L1 L2     'V{-L1}.K{L2}:string = V'                    */
 OP_GETPROPERTY,/*  V  L        'V.K{L}'                                     */
 
 OP_GETINDEX,/*     V1 V2       'V1[V2]'                                     */
-OP_SETINDEX,/*     V1 V2 V3    'V1[V2] = V3'                                */
+OP_SETINDEX,/*     V L         'V{-L}[V{-L + 1}] = V3'                      */
 
 OP_GETINDEXSTR,/*  V L         'V[K{L}:string]'                             */
 OP_SETINDEXSTR,/*  V L1 L2     'V{-L1}[K{L2}:string] = V'                   */
@@ -244,7 +244,7 @@ OP_FORPREP,/*     L1 L2  'create upvalue V{L1+3}; pc += L2'                 */
 OP_FORCALL,/*     L1 L2  'V{L1+4},...,V{L1+3+L2} = V{L1}(V{L1+1}, V{L1+2});'*/
 OP_FORLOOP,/*     L1 L2  'if V{L1+4} != nil { V{L1} = V{L1+2}; pc -= L2 }'  */
 
-OP_RET,/*    L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes)         */
+OP_RET,/*         L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes)    */
 } OpCode;
 
 
@@ -271,8 +271,7 @@ OP_RET,/*    L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes)         */
 #define NUM_OPCODES     (OP_RET + 1)
 
 
-/* OpCode format */
-enum OpFormat { 
+enum OpFormat { /* ORDER OPFMT */
     FormatI,
     FormatIS,
     FormatISS,
@@ -301,6 +300,8 @@ CSI_DEC(const cs_ubyte csC_opProp[NUM_OPCODES];)
 
 #define opProp(mm,j,t,f)    (((mm) << 5) | ((j) << 4) | ((t) << 3) | (f))
 
+
+#define opisjump(op)        testJProp(op)
 
 
 /* Instruction format sizes in bytes (aka as bytecode) */
@@ -358,7 +359,7 @@ CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);
 CSI_FUNC void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
 CSI_FUNC int csC_jmp(FunctionState *fs, OpCode jop);
-CSI_FUNC void csC_concatjmp(FunctionState *fs, int *l1, int l2);
+CSI_FUNC void csC_concatjl(FunctionState *fs, int *l1, int l2);
 CSI_FUNC void csC_patch(FunctionState *fs, int pc, int target);
 CSI_FUNC void csC_patchtohere(FunctionState *fs, int pc);
 CSI_FUNC int csC_test(FunctionState *fs, OpCode testop, int cond);

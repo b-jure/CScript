@@ -88,9 +88,6 @@ typedef enum expt {
     /* vararg expression '...';
      * 'info' = pc; */
     EXP_VARARG,
-    /* expression is a jump test;
-     * 'info' = pc; */
-    EXP_JMP,
     /* finalized expression */
     EXP_FINEXPR,
 } expt;
