@@ -107,15 +107,21 @@ cs_sinline void htpreinit(HTable *ht) {
 }
 
 
-/* create new hashtable */
-HTable *csH_new(cs_State *ts) {
+/* create new hashtable of specific size */
+HTable *csH_newsz(cs_State *ts, int size) {
     GCObject *o = csG_new(ts, sizeof(HTable), CS_VHTABLE);
     HTable *ht = gco2ht(o);
     htpreinit(ht);
     sethtval2s(ts, ts->sp.p++, ht); /* assume EXTRA_STACK */
-    newhasharray(ts, ht, MINHSIZE);
+    newhasharray(ts, ht, size);
     ts->sp.p--; /* remove ht */
     return ht;
+}
+
+
+/* create new hashtable with minimum size */
+HTable *csH_new(cs_State *ts) {
+    return csH_newsz(ts, MINHSIZE);
 }
 
 

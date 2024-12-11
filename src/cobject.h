@@ -494,7 +494,7 @@ typedef struct Array {
 #define setstrval(ts,obj,x) \
     { TValue *o_=(obj); const OString *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(x_->tt_)); \
-      checkliveness(ts, o_); }
+      checkliveness((ts), o_); }
 
 #define setstrval2s(ts,o,s)     setstrval(ts,s2v(o),s)
 

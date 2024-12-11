@@ -538,8 +538,6 @@ static void freeobject(cs_State *ts, GCObject *o) {
             OClass *cls = gco2cls(o);
             if (cls->vmt) /* have VMT? */
                 csM_freearray(ts, cls->vmt, SIZEVMT);
-            if (cls->methods) /* have methods? */
-                csH_free(ts, cls->methods);
             csM_free(ts, cls);
             break;
         }

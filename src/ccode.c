@@ -58,7 +58,6 @@
 */
 CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     /*     M  J  T  F      */
-    opProp(0, 0, 0, FormatI), /* OP_DUP */
     opProp(0, 0, 0, FormatI), /* OP_TRUE */
     opProp(0, 0, 0, FormatI), /* OP_FALSE */
     opProp(0, 0, 0, FormatI), /* OP_NIL */
@@ -71,7 +70,7 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatIL), /* OP_VARARG */
     opProp(0, 0, 0, FormatIL), /* OP_CLOSURE */
     opProp(0, 0, 0, FormatIS), /* OP_NEWARRAY */
-    opProp(0, 0, 0, FormatI), /* OP_NEWCLASS */
+    opProp(0, 0, 0, FormatIS), /* OP_NEWCLASS */
     opProp(0, 0, 0, FormatIS), /* OP_NEWTABLE */
     opProp(0, 0, 0, FormatIL), /* OP_METHOD */
     opProp(0, 0, 0, FormatIS), /* OP_SETMM */
@@ -194,7 +193,7 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
-"DUP", "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
+"TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
 "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS", "NEWTABLE",
 "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
 "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK",
@@ -495,7 +494,6 @@ int csC_ret(FunctionState *fs, int first, int nreturns) {
 
 
 void csC_method(FunctionState *fs, ExpInfo *e) {
-    cs_assert(e->et == EXP_STRING);
     e->u.info = csC_emitIL(fs, OP_METHOD, stringK(fs, e->u.str));
     e->et = EXP_FINEXPR;
 }

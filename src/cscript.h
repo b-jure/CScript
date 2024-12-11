@@ -133,7 +133,7 @@ typedef enum cs_MM { /* ORDER MM */
     CS_MM_EQ,
     CS_MM_LT,
     CS_MM_LE,
-    CS_MM_N,
+    CS_MM_N, /* number of mm */
 } cs_MM;
 
 

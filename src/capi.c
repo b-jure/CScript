@@ -792,6 +792,7 @@ cs_sinline void auxsetentrylist(cs_State *ts, OClass *cls, const cs_Entry *l,
     cs_assert(l != NULL);
     cs_checkstack(ts, nup);
     if (l->name) { /* have at least one entry? */
+        cs_assert(cls->methods == NULL);
         cls->methods = csH_new(ts);
         csG_checkGC(ts);
         do {

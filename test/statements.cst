@@ -1,17 +1,92 @@
 /* {===========================
-**          LOCAL
+**          STATEMENTS
 ** ============================ */
 
-local a;                    // single local uninitialized (nil) variable
-print(a);
-local b, c, d;              // multiple local uninitialized (nil) variables
-print(b, c, d);
-local e, f, g = 1, 2, 3;    // multiple initialized local variables
-print(e, f, g);
-print(a, b, c, d, e, f, g);
-
+# {LOCAL
+# {local statement
+local a;                        // single local uninitialized (nil) variable
+print(a);                       // nil
+local b, c, d;                  // multiple local uninitialized (nil) variables
+print(b, c, d);                 // nil nil nil
+local e, f, g = 1, 2, 3;        // multiple initialized local variables
+print(e, f, g);                 // 1 2 3
+print(a, b, c, d, e, f, g);     // nil nil nil nil 1 2 3
+local a1 <final> = 69;          // immutable local variable
+print(a1);                      // 69
+#a1 = a1 + 2;                    // error (assignment to a read-only variable)
+#local a2 <close> = 420;         // error (variable got a non-closeable value)
+local a2 <final>, a3 <final>, a4 <close>;
+#a2 = 5;                         // error (assignment to a read-only variable)
+#a3 = 6;                         // error (assignment to a read-only variable)
+local b1 <final>, b2 <final>, b3 <close> = "Hello, ", "World", false;
+print(b1 .. b2, b3);
+# }{local function
 local fn add(x, y) {
     return x + y;
+}
+print(add(5, 2));               // 7
+print(add);                     // function: <memory_address>
+# }{local class
+local PI <final> = 3.141592654;
+local class Empty {}
+print(Empty);                   // class: <memory_address>
+print(Empty());
+local class Circle {
+    fn __init() {               // override initializer
+        self.radius = 4;
+        return self;
+    }
+    fn area() {
+        rsq = self.radius ** 2;
+        return rsq * PI;
+    }
+    fn circumference() {
+        local d = self.radius * 2;
+        return d * PI;
+    }
+}
+local circ = Circle();
+print(circ);                        // instance: <memory_address>
+print(circ.radius);                 // 4
+print(circ.area());                 // around 50.265482464
+print(circ.circumference());        // around 25.13274123
+local class Person {
+    fn __init(fname, lname) {
+        self.firstname = fname;
+        self.lastname = lname;
+        return self;
+    }
+    fn full_name() {
+        return self.firstname .. " " .. self.lastname;
+    }
+}
+print(Person);                          // class: <memory_address>
+local john = Person("John", "Doe");
+print(john);                            // instance: <memory_address>
+print(john.full_name());                // "John Doe"
+local class Student inherits Person {   // inherits from Person
+    fn grade() {
+        return 69;
+    }
+}
+print(Student);                         // class: <memory_address>
+john = Student("Mile", "Kitić");
+print(john);                            // instance: <memory_address>
+print(john.full_name());                // "Mile Kitić"
+print(john.grade());                    // 69
+# }}
+
+# {function statement
+a = fn(...) {
+    print(...);                 
+    return 69;
 };
+print(a);                       // function: <memory_address>
+a = a(...);                     // binary_name and script_name (this test)
+print(a);                       // 69
+# }
+
+# {class statement
+# }
 
 /* ===========================} */

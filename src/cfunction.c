@@ -85,6 +85,7 @@ void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
 /* Get 'wanted' varargs starting at the current stack pointer. */
 void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted) {
     int have = cf->nvarargs;
+    printf("have %d varargs\n", have);
     if (wanted < 0) { /* CS_MULRET? */
         wanted = have;
         checkstackGC(ts, wanted); /* check stack, maybe 'wanted > have' */
@@ -190,8 +191,7 @@ static void checkclosem(cs_State *ts, SPtr level) {
 
 /* insert variable into the list of to-be-closed variables */
 void csF_newtbcvar(cs_State *ts, SPtr level) {
-    if (c_isfalse(s2v(level)))
-        return;
+    if (c_isfalse(s2v(level))) return;
     checkclosem(ts, level);
     while (cast_uint(level - ts->tbclist.p) > MAXDELTA) {
         ts->tbclist.p += MAXDELTA;

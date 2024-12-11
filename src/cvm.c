@@ -123,15 +123,6 @@ void csV_unarithm(cs_State *ts, const TValue *v, SPtr res, int op) {
 }
 
 
-/* set 'vmt' entry */
-static void setmm(cs_State *ts, TValue **vmt, TValue *fn, int vmtt) {
-    cs_assert(0 <= vmtt && vmtt < CS_MM_N);
-    if (c_unlikely(!(*vmt))) /* empty 'vmt' */
-        *vmt = csMM_newvmt(ts);
-    (*vmt)[vmtt] = *fn; /* set the entry */
-}
-
-
 /*
 ** According to C99 6.3.1.8 page 45:
 ** "...if the corresponding real type of either operand is double, the other
@@ -337,12 +328,10 @@ static void arraygeti(cs_State *ts, Array *arr, const TValue *index, SPtr res) {
                 setobj2s(ts, res, &arr->b[i]);
             } else /* index out of bounds */
                 setnilval(s2v(res));
-        } else { /* negative index */
+        } else /* negative index */
             csD_indexerror(ts, i, "negative");
-        }
-    } else { /* invalid index */
+    } else /* invalid index */
         csD_indextypeerror(ts, index);
-    }
 }
 
 
@@ -371,7 +360,7 @@ void csV_rawget(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
             if (isempty(slot) && ins->oclass->methods) {
                 /* try methods table */
                 slot = csH_get(ins->oclass->methods, key);
-                if (!isempty(slot)) {
+                if (!isempty(slot)) { /* have method? */
                     setobj2s(ts, res, slot);
                     bindmethod(ts, ins, slot, res);
                     break; /* done */
@@ -572,9 +561,12 @@ retry:
                     auxinsertf(ts, func, fmm); /* insert it into stack... */
                     cs_assert(ttisfunction(fmm));
                     goto retry; /* ...and try calling it */
-                } /* else fall through */
-            } /* else fall through */
-            return NULL; /* done */
+                } else goto no_init; /* no __init (after GC) */
+            } else {
+            no_init:
+                ts->sp.p -= (ts->sp.p - func - 1); /* remove args */
+                return NULL; /* done */
+            }
         }
         case CS_VIMETHOD: { /* Instance method */
             IMethod *im = imval(s2v(func));
@@ -955,12 +947,6 @@ returning:
     base = cf->func.p + 1;
     for (;;) {
         vm_dispatch(fetch()) {
-            vm_case(OP_DUP) {
-                /* no args */
-                setobj2s(ts, ts->sp.p, s2v(ts->sp.p - 1));
-                ts->sp.p++;
-                vm_break;
-            }
             vm_case(OP_TRUE) {
                 /* no args */
                 setbtval(s2v(ts->sp.p++));
@@ -1037,9 +1023,14 @@ returning:
             }
             vm_case(OP_NEWCLASS) {
                 OClass *cls;
+                int b = fetchs();
+                if (b > 0) /* class has methods? */
+                    b = 1 << (b - 1); /* size of methods table is 2^(b - 1) */
                 savepc(ts);
                 cls = csMM_newclass(ts);
                 setclsval2s(ts, ts->sp.p++, cls); /* push on stack */
+                if (b > 0)
+                    cls->methods = csH_newsz(ts, b);
                 vm_break;
             }
             vm_case(OP_NEWTABLE) {
@@ -1048,6 +1039,7 @@ returning:
                 if (b > 0) /* table has fields? */
                     b = 1 << (b - 1); /* size is 2^(b - 1) */
                 ts->sp.p++; /* inc. top */
+                savepc(ts); /* allocations might fail */
                 t = csH_new(ts);
                 sethtval2s(ts, ts->sp.p - 1, t);
                 if (b != 0) /* table is not empty? */
@@ -1056,18 +1048,27 @@ returning:
                 vm_break;
             }
             vm_case(OP_METHOD) {
-                TValue *cls = peek(1);
+                TValue *cls = peek(1); /* class */
                 TValue *f = peek(0); /* method */
                 TValue *key = K(fetchl());
                 cs_assert(ttisstring(key));
-                Protect(csH_set(ts, classval(f)->methods, key, cls));
+                cs_assert(classval(cls)->methods != NULL);
+                Protect(csH_set(ts, classval(cls)->methods, key, f));
+                pop(1); /* f */
                 vm_break;
             }
             vm_case(OP_SETMM) {
                 TValue *o = peek(1); /* class or userdata */
                 TValue *f = peek(0); /* func */
-                int mm = fetchs();
-                Protect(setmm(ts, &classval(o)->vmt, f, mm));
+                cs_MM mm = fetchs(); /* metamethod tag */
+                TValue **vmt = &classval(o)->vmt; /* VMT */
+                cs_assert(0 <= mm && mm < CS_MM_N);
+                if (c_unlikely(!(*vmt))) { /* VMT is empty? */
+                    savepc(ts); /* allocation might fail */
+                    *vmt = csMM_newvmt(ts);
+                }
+                (*vmt)[mm] = *f; /* set the entry */
+                pop(1); /* f */
                 vm_break;
             }
             vm_case(OP_POP) {
@@ -1395,12 +1396,12 @@ returning:
                 vm_break;
             }
             vm_case(OP_CLOSE) {
-                SPtr level = base + fetchl();
+                SPtr level = STK(fetchl());
                 Protect(csF_close(ts, level, CS_OK));
                 vm_break;
             }
             vm_case(OP_TBC) {
-                SPtr level = base + fetchl();
+                SPtr level = STK(fetchl());
                 Protect(csF_newtbcvar(ts, level));
                 vm_break;
             }
@@ -1565,12 +1566,16 @@ returning:
                 if (c_unlikely(!ttisclass(o)))
                     csD_runerror(ts, "inheriting a non-class value");
                 src = classval(o);
-                if (c_likely(src->methods)) { /* 'src' has methods ? */
-                    cs_assert(cls->methods == NULL);
+                if (c_likely(src->methods)) { /* 'src' has methods? */
                     cls->methods = csH_new(ts);
                     csH_copykeys(ts, src->methods, cls->methods);
                 }
-                pop(2); /* remove class objects */
+                if (src->vmt) { /* 'src' has metamethods? */
+                    cs_assert(cls->vmt == NULL);
+                    cls->vmt = csMM_newvmt(ts);
+                    for (int i = 0; i < CS_MM_N; i++)
+                        setobj(ts, &cls->vmt[i], &src->vmt[i]);
+                }
                 vm_break;
             }
             vm_case(OP_FORPREP) {

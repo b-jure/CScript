@@ -30,6 +30,7 @@
 
 
 
+CSI_FUNC HTable *csH_newsz(cs_State *ts, int size);
 CSI_FUNC HTable *csH_new(cs_State *ts);
 CSI_FUNC int csH_next(cs_State *ts, HTable *tab, SPtr key);
 CSI_FUNC void csH_copykeys(cs_State *ts, HTable *stab, HTable *dtab);

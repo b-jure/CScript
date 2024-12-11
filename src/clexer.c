@@ -41,7 +41,7 @@ static const char *tkstr[] = { /* ORDER TK */
     "and", "break", "case", "continue", "class",
     "default", "else", "false", "for", "each", "fn", "if",
     "in", "inherits", "nil", "or", "return", "super",
-    "switch", "true", "while", "loop", "final", "local",
+    "switch", "true", "while", "loop", "local",
     "!=", "==", ">=", "<=", "<<", ">>", "**", "..",
     "...", "<eof>",
     "<number>", "<integer>", "<string>", "<name>"

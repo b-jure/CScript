@@ -446,10 +446,10 @@ static void close_func(Lexer *lx) {
 
 /* add function prototype */
 static Proto *addproto(Lexer *lx) {
-    Proto *clp; /* closure prototype */
     cs_State *ts = lx->ts;
     FunctionState *fs = lx->fs;
     Proto *p = fs->p;
+    Proto *clp; /* closure prototype */
     if (fs->np >= p->sizep) {
         int osz = p->sizep;
         csM_growarray(ts, p->p, p->sizep, fs->np, MAX_LARG, "functions",
@@ -1294,6 +1294,7 @@ static void exprstm(Lexer *lx) {
 static int getlocalattribute(Lexer *lx) {
     if (match(lx, '<')) {
         const char *attr = getstr(str_expectname(lx));
+        expectnext(lx, '>');
         if (strcmp(attr, "final") == 0)
             return VARFINAL; /* read-only variable */
         else if (strcmp(attr, "close") == 0)
@@ -1310,7 +1311,7 @@ static int newlocalvar(Lexer *lx, OString *name) {
     ExpInfo dummy;
     if (c_unlikely(searchlocal(lx->fs, name, &dummy) >= 0))
         csP_semerror(lx, csS_pushfstring(lx->ts,
-                    "redefinition of local variable '%s'", getstr(name)));
+                     "redefinition of local variable '%s'", getstr(name)));
     return newlocal(lx, name);
 }
 
@@ -1366,7 +1367,6 @@ static void localfn(Lexer *lx) {
     ExpInfo e;
     FunctionState *fs = lx->fs;
     int fvar = fs->nactlocals; /* function's variable index */
-    csY_scan(lx); /* skip 'fn' */
     newlocalvar(lx, str_expectname(lx)); /* create new local... */
     adjustlocals(lx, 1); /* ...and register it */
     funcbody(lx, &e, lx->line, 0);
@@ -1376,27 +1376,27 @@ static void localfn(Lexer *lx) {
 
 
 /* inherit from superclass */
-static void codeinherit(Lexer *lx, OString *name, Scope *s, ExpInfo *var) {
+static void codeinherit(Lexer *lx, OString *name, Scope *s) {
     FunctionState *fs = lx->fs;
     OString *supname = str_expectname(lx);
+    ExpInfo e;
     if (c_unlikely(eqstr(name, supname))) /* name collision ? */
         csP_semerror(lx, csS_pushfstring(lx->ts,
                     "class '%s' attempt to inherit itself", name));
-    varaux(fs, supname, var, 1); /* get the superclass... */
-    csC_varexp2stack(fs, var); /* and put it on the stack... */
+    varaux(fs, supname, &e, 1); /* get the superclass... */
+    csC_varexp2stack(fs, &e); /* and put it on the stack... */
     open_scope(fs, s, 0); /* start scope for super variable... */
     newlocallit(lx, "super"); /* create superclass variable... */
     adjustlocals(lx, 1); /* and register it... */
-    varaux(fs, name, var, 1); /* get the class... */
-    csC_varexp2stack(fs, var); /* put it on the stack... */
+    varaux(fs, name, &e, 1); /* get the class... */
+    csC_varexp2stack(fs, &e); /* put it on the stack... */
     csC_emitI(fs, OP_INHERIT); /* ...and finally inherit */
-    fs->sp -= 2; /* after inherit both classes are popped */
     lx->ps->cs->super = 1; /* indicate class inherited (scope was started) */
 }
 
 
-static void startcs(Lexer *lx, ClassState *cs) {
-    ParserState *ps = lx->ps;
+static void startcs(FunctionState *fs, ClassState *cs) {
+    ParserState *ps = fs->lx->ps;
     cs->prev = ps->cs;
     cs->super = 0;
     ps->cs = cs;
@@ -1404,34 +1404,38 @@ static void startcs(Lexer *lx, ClassState *cs) {
 
 
 /* end current 'ClassState' */
-static void endcs(Lexer *lx) {
-    ParserState *ps = lx->ps;
+static void endcs(FunctionState *fs) {
+    ParserState *ps = fs->lx->ps;
     cs_assert(ps->cs != NULL);
-    if (ps->cs->super) /* scope was created? */
-        close_scope(lx->fs); /* if so, end it */
+    if (ps->cs->super) { /* scope was created? */
+        csC_pop(fs, 1); /* pop dup. class */
+        close_scope(fs); /* end 'super' scope */
+    }
     ps->cs = ps->cs->prev;
 }
 
 
-static void codemethod(FunctionState *fs, ExpInfo *var) {
+static int codemethod(FunctionState *fs, ExpInfo *var) {
     cs_assert(var->et == EXP_STRING);
     if (ismetatag(var->u.str)) {
-        csC_emitIL(fs, OP_SETMM, var->u.str->extra);
+        csC_emitIS(fs, OP_SETMM, var->u.str->extra - NUM_KEYWORDS - 1);
+        return 0; /* (this function goes in VMT) */
     } else {
-        csC_exp2stack(fs, var);
         csC_method(fs, var);
+        csC_reserveslots(fs, 1); /* space of method */
+        return 1; /* have methods hashtable entry */
     }
 }
 
 
 /* method ::= fn name funcbody */
-static void method(Lexer *lx) {
+static int method(Lexer *lx) {
     ExpInfo var, dummy;
     int defline = lx->line; /* method definition start line */
     expectnext(lx, TK_FN);
     expname(lx, &var);
     funcbody(lx, &dummy, defline, 1);
-    codemethod(lx->fs, &var);
+    return codemethod(lx->fs, &var);
 }
 
 
@@ -1440,9 +1444,11 @@ static void method(Lexer *lx) {
 **           | method methods
 **           | empty
 */
-static void methods(Lexer *lx) {
+static int methods(Lexer *lx) {
+    int i = 0;
     while (!check(lx, '}') && !check(lx, TK_EOS))
-        method(lx);
+        i += method(lx);
+    return i;
 }
 
 
@@ -1454,20 +1460,22 @@ static void methods(Lexer *lx) {
 */
 static void klass(Lexer *lx, FunctionState *fs, OString *name) {
     ClassState cs;
-    ExpInfo e;
     Scope s;
-    int matchline;
-    startcs(lx, &cs); /* start class state */
-    csC_emitI(fs, OP_NEWCLASS); /* create class object */
-    if (match(lx, TK_INHERITS)) /* class object inherits ? */
-        codeinherit(lx, name, &s, &e);
-    varaux(fs, name, &e, 1); /* get class variable again... */
-    csC_varexp2stack(fs, &e); /* ...and put it on stack */
+    int matchline, pc, nm;
+    startcs(fs, &cs); /* start class state */
+    pc = csC_emitIS(fs, OP_NEWCLASS, 0);
+    csC_reserveslots(fs, 1); /* space for class */
+    if (match(lx, TK_INHERITS)) /* class object inherits? */
+        codeinherit(lx, name, &s);
     matchline = lx->line;
     expectnext(lx, '{');
-    methods(lx);
+    nm = methods(lx);
+    if (nm > 0) {
+        nm += (nm == 1); /* avoid 0 edge case in 'csO_ceillog' */
+        SETARG_S(&fs->p->code[pc], 0, csO_ceillog2(nm));
+    }
     expectmatch(lx, '}', '{', matchline);
-    endcs(lx); /* end class state */
+    endcs(fs); /* end class state */
 }
 
 
@@ -1478,7 +1486,6 @@ static void localclass(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int cvar = fs->nactlocals; /* class variable index */
     OString *name;
-    csY_scan(lx); /* skip 'class' */
     name = str_expectname(lx);
     newlocalvar(lx, name); /* create new local... */
     adjustlocals(lx, 1); /* ...and register it */
@@ -1514,7 +1521,7 @@ static void paramlist(Lexer *lx) {
         do {
             switch (lx->t.tk) {
                 case TK_NAME: {
-                    newlocal(lx, str_expectname(lx));
+                    newlocalvar(lx, str_expectname(lx));
                     nparams++;
                     break;
                 }
@@ -1528,10 +1535,10 @@ static void paramlist(Lexer *lx) {
         } while (!isvararg && match(lx, ','));
     }
     adjustlocals(lx, nparams);
-    fn->arity = nparams;
+    fn->arity = fs->nactlocals;
     if (isvararg)
-        setvararg(fs, nparams);
-    csC_reserveslots(fs, nparams);
+        setvararg(fs, fn->arity);
+    csC_reserveslots(fs, fs->nactlocals);
 }
 
 
@@ -1555,7 +1562,8 @@ static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod) {
     expectnext(lx, '(');
     if (ismethod) { /* is this method ? */
         newlocallit(lx, "self"); /* create 'self' */
-        adjustlocals(lx, 1); /* and initialize it */
+        adjustlocals(lx, 1); /* and register it */
+        /* runtime ensures extra slot for 'self' */
     }
     paramlist(lx);
     expectmatch(lx, ')', '(', matchline);
@@ -2078,7 +2086,7 @@ static void foreachloop(Lexer *lx) {
 /* 'for' loop initializer */
 void forinit(Lexer *lx) {
     if (!match(lx, ';')) { /* have for loop initializer? */
-        if (check(lx, TK_LOCAL)) { /* 'local' statement? */
+        if (match(lx, TK_LOCAL)) { /* 'local' statement? */
             localstm(lx);
             /* statements end with ';' */
         } else { /* otherwise expression statement */
@@ -2246,10 +2254,8 @@ static void returnstm(Lexer *lx) {
         if (eismulret(&e)) {
             csC_setmulret(fs, &e);
             nret = CS_MULRET; /* return all values */
-        } else {
+        } else
             csC_exp2stack(fs, &e);
-            cs_assert(nret == fs->sp - first);
-        }
     }
     csC_ret(fs, first, nret);
     expectnext(lx, ';');
@@ -2258,9 +2264,8 @@ static void returnstm(Lexer *lx) {
 
 
 /* 
-** stm_ ::= localstm
-**        | localfn
-**        | localclass
+** stm_ ::= fnstm
+**        | classstm
 **        | whilestm
 **        | forstm
 **        | ifstm
@@ -2313,7 +2318,7 @@ static void stm_(Lexer *lx) {
         }
         case TK_RETURN: {
             returnstm(lx);
-            goto no_reset;
+            return; /* do not reset 'lastwasret' flag */
         }
         case TK_LOOP: {
             loopstm(lx);
@@ -2330,10 +2335,13 @@ static void stm_(Lexer *lx) {
         }
     }
     lx->fs->lastwasret = 0;
-no_reset:
-    cs_assert(lx->fs->p->maxstack >= lx->fs->sp &&
-              lx->fs->sp >= nvarstack(lx->fs));
-    lx->fs->sp = nvarstack(lx->fs); /* free slots */
+}
+
+
+static void freevalueslots(FunctionState *fs) {
+    cs_assert(fs->p->maxstack >= fs->sp);
+    cs_assert(fs->sp >= nvarstack(fs));
+    fs->sp = nvarstack(fs); /* leave only locals */
 }
 
 
@@ -2362,6 +2370,7 @@ static void decl(Lexer *lx) {
             break;
         }
     }
+    freevalueslots(lx->fs);
     leaveCstack(lx);
 }
 
@@ -2369,6 +2378,7 @@ static void decl(Lexer *lx) {
 static void stm(Lexer *lx) {
     enterCstack(lx);
     stm_(lx);
+    freevalueslots(lx->fs);
     leaveCstack(lx);
 }
 
