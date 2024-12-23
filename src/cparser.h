@@ -128,7 +128,8 @@ typedef union LVar {
     struct {
         TValueFields;
         cs_ubyte kind;
-        int idx; /* index in 'locals' */
+        int sidx; /* stack slot holding the value */
+        int pidx; /* index of local variable in Proto's 'locals' array */
         OString *name;
     } s;
     TValue val; /* constant value */

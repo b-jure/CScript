@@ -443,9 +443,9 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
     } else {
         cs_assert(e->et == EXP_VARARG);
         SETARG_L(pc, 0, nreturns + 1);
+        csC_reserveslots(fs, 1);
     }
     e->et = EXP_FINEXPR;
-    csC_reserveslots(fs, 1); /* space for call/vararg expression */
 }
 
 
@@ -849,7 +849,7 @@ void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
 /* initialize dot indexed expression */
 void csC_getfield(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
                   int super) {
-    cs_assert(keystr->et == EXP_STRING);
+    cs_assert(var->et == EXP_FINEXPR); /* 'var' must be finalized (on stack) */
     var->u.info = stringK(fs, keystr->u.str);
     var->et = (super ? EXP_DOTSUPER : EXP_DOT);
 }
@@ -858,7 +858,7 @@ void csC_getfield(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
 /* initialize indexed expression */
 void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
     int strK = 0;
-    cs_assert(var->et == EXP_FINEXPR);
+    cs_assert(var->et == EXP_FINEXPR); /* 'var' must be finalized (on stack) */
     if (key->et == EXP_STRING) {
         string2K(fs, key); /* make constant */
         strK = 1;

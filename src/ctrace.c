@@ -352,14 +352,8 @@ static void traceSTK(int sindex) {
 }
 
 
-static void unasmCall(const Proto *p, Instruction *pc) {
-    int from, nres;
+static void traceNres(int nres) {
     const char *res = NULL;
-    startline(p, pc);
-    traceop(*pc);
-    from = GETARG_L(pc, 0);
-    nres = GETARG_L(pc, 1) - 1;
-    traceSTK(from);
     if (nres < 0)
         res = "multiple";
     else if (nres == 0)
@@ -368,6 +362,17 @@ static void unasmCall(const Proto *p, Instruction *pc) {
         postab(printf("nres=%s", res));
     } else
         postab(printf("nres=%d", nres));
+}
+
+
+static void unasmCall(const Proto *p, Instruction *pc) {
+    int from, nres;
+    startline(p, pc);
+    traceop(*pc);
+    from = GETARG_L(pc, 0);
+    nres = GETARG_L(pc, 1) - 1;
+    traceSTK(from);
+    traceNres(nres);
     endline();
 }
 
@@ -444,10 +449,10 @@ static void unasmRet(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceop(*pc);
     nbase = GETARG_L(pc, 0);
-    nres = GETARG_L(pc, 1);
+    nres = GETARG_L(pc, 1) - 1;
     close = GETARG_S(pc, (2*SIZEARGL));
     traceSTK(nbase);
-    postab(printf("nres=%d", nres - 1));
+    traceNres(nres);
     postab(printf("close=%s", (close ? "yes" : "no")));
     endline();
 }

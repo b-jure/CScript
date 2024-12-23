@@ -85,7 +85,6 @@ void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
 /* Get 'wanted' varargs starting at the current stack pointer. */
 void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted) {
     int have = cf->nvarargs;
-    printf("have %d varargs\n", have);
     if (wanted < 0) { /* CS_MULRET? */
         wanted = have;
         checkstackGC(ts, wanted); /* check stack, maybe 'wanted > have' */
@@ -116,7 +115,7 @@ void csF_initupvals(cs_State *ts, CSClosure *cl) {
 */
 static UpVal *newupval(cs_State *ts, SPtr val, UpVal **prev) {
     GCObject *o = csG_new(ts, sizeof(UpVal), CS_VUPVALUE);
-    UpVal *uv = gco2uv(o);;
+    UpVal *uv = gco2uv(o);
     UpVal *next = *prev;
     uv->v.p = s2v(val); /* current value lives on the stack */
     uv->u.open.next = next; /* link it to the list of open upvalues */

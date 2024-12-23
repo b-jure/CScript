@@ -37,9 +37,9 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # 			Compiler and Linker Flags 
 CC = gcc -std=c99
 OPTS = -O0
-CFLAGS = -Wall -Wextra ${OPTS} ${SYSCFLAGS} ${MYCFLAGS}
-LDFLAGS = ${SYSLDFLAGS} ${MYLDFLAGS}
-LIBS = -lm ${SYSLIBS} ${MYLIBS}
+CFLAGS = -Wall -Wextra $(OPTS) $(SYSCFLAGS) $(MYCFLAGS)
+LDFLAGS = $(SYSLDFLAGS) $(MYLDFLAGS)
+LIBS = -lm $(SYSLIBS) $(MYLIBS)
 
 # system flags
 SYSCFLAGS =
@@ -47,8 +47,9 @@ SYSLDFLAGS =
 SYSLIBS =
 
 # user flags
-MYCFLAGS = -fsanitize=address -fsanitize=undefined -ggdb -DCS_USE_APICHECK -DCSI_ASSERT -DCSI_TRACE_API
-MYLDFLAGS = -fsanitize=address -fsanitize=undefined
+ASANFLAGS = -fsanitize=address -fsanitize=undefined
+MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT -DCSI_TRACE_API
+MYLDFLAGS = $(ASANFLAGS)
 MYLIBS =
 MYOBJS =
 # } -------------------------------------------------------------------------

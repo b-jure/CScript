@@ -29,13 +29,23 @@
 #include "ctrace.h"
 
 
-/* by default, use jump table */
+/*
+** By default, use jump table.
+*/
 #if !defined(CS_USE_JUMPTABLE)
 #if defined(__GNUC__)
 #define CS_USE_JUMPTABLE	1
 #else
 #define CS_USE_JUMPTABLE	0
 #endif
+#endif
+
+
+/*
+** By default, disable internal bytecode execution tracing.
+*/
+#if !defined(TRACE_EXEC)
+#define TRACE_EXEC      1
 #endif
 
 
@@ -337,7 +347,7 @@ static void arraygeti(cs_State *ts, Array *arr, const TValue *index, SPtr res) {
 
 /* bind method to instance and set it at 'res' */
 #define bindmethod(ts,ins,fn,res) \
-    setimval2s(ts, res, csMM_newinsmethod(ts, ins, fn))
+        setimval2s(ts, res, csMM_newinsmethod(ts, ins, fn))
 
 
 void csV_rawget(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
@@ -394,8 +404,8 @@ void csV_get(cs_State *ts, const TValue *obj, const TValue *key, SPtr res) {
 #define getsuper(ts,ins,cls,k,res,fget) \
     { if ((cls)->methods) { \
         const TValue *f = fget((cls)->methods, k); \
-        if (!isabstkey(f)) bindmethod(ts, ins, f, res); \
-      } else setnilval(s2v(res)); }
+        if (!isempty(f)) { bindmethod(ts, ins, f, res); }} \
+        else setnilval(s2v(res)); }
 
 
 /*
@@ -882,7 +892,7 @@ void csV_concat(cs_State *ts, int total) {
 #define checkGC(ts)     csG_condGC(ts, savepc(ts), (void)0)
 
 
-#if 1
+#if TRACE_EXEC
 #include "ctrace.h"
 #define fetch()         (csTR_tracepc(ts, cl->p, pc), *pc++)
 #else
@@ -936,7 +946,7 @@ void csV_execute(cs_State *ts, CallFrame *cf) {
 #include "cjmptable.h"
 #endif
 startfunc:
-#if 1
+#if TRACE_EXEC
     #include <stdio.h>
     printf(">> Executing new closure...\n");
 #endif
@@ -1436,11 +1446,15 @@ returning:
             }
             vm_case(OP_GETUVAL) {
                 int i = fetchl();
+                cs_assert(cl->upvals != NULL);
+                cs_assert(cl->nupvalues > i);
                 setobj2s(ts, ts->sp.p++, cl->upvals[i]->v.p);
                 vm_break;
             }
             vm_case(OP_SETUVAL) {
                 int i = fetchl();
+                cs_assert(cl->upvals != NULL);
+                cs_assert(cl->nupvalues > i);
                 setobj(ts, cl->upvals[i]->v.p, s2v(pop(1)));
                 vm_break;
             }
@@ -1530,51 +1544,49 @@ returning:
                 vm_break;
             }
             vm_case(OP_GETSUP) {
-                TValue *key = K(fetchl());
-                TValue *v1 = peek(1);
-                TValue *v2 = peek(0);
+                TValue *ks = K(fetchl());
+                Instance *ins = insval(peek(1));
+                OClass *cls = classval(peek(0));
                 savepc(ts);
-                getsuper(ts, insval(v1), classval(v2), strval(key), SLOT(1),
-                             csH_getstr);
-                pop(1); /* v2 */
+                getsuper(ts, ins, cls, strval(ks), SLOT(1), csH_getstr);
+                pop(1); /* cls */
                 vm_break;
             }
             vm_case(OP_GETSUPIDX) {
-                TValue *v1 = peek(2);
-                TValue *v2 = peek(1);
-                TValue *i = peek(0);
+                Instance *ins = insval(peek(2));
+                OClass *cls = classval(peek(1));
+                TValue *idx = peek(0);
                 savepc(ts);
-                getsuper(ts, insval(v1), classval(v2), i, SLOT(2), csH_get);
-                pop(2); /* v2,v3 */
+                getsuper(ts, ins, cls, idx, SLOT(2), csH_get);
+                pop(2); /* cls, idx */
                 vm_break;
             }
             vm_case(OP_GETSUPIDXSTR) {
-                TValue *key = K(fetchl());
-                TValue *v1 = peek(1);
-                TValue *v2 = peek(0);
+                TValue *ks = K(fetchl());
+                Instance *ins = insval(peek(1));
+                OClass *cls = classval(peek(0));
                 savepc(ts);
-                getsuper(ts, insval(v1), classval(v2), strval(key), SLOT(1),
-                             csH_getstr);
-                pop(1); /* v2 */
+                getsuper(ts, ins, cls, strval(ks), SLOT(1), csH_getstr);
+                pop(1); /* cls */
                 vm_break;
             }
             vm_case(OP_INHERIT) {
                 TValue *o = peek(1);
                 OClass *cls = classval(peek(0));
-                OClass *src;
+                OClass *sup;
                 savepc(ts);
                 if (c_unlikely(!ttisclass(o)))
-                    csD_runerror(ts, "inheriting a non-class value");
-                src = classval(o);
-                if (c_likely(src->methods)) { /* 'src' has methods? */
+                    csD_runerror(ts, "inherit from %s value", typename(ttype(o)));
+                sup = classval(o);
+                if (c_likely(sup->methods)) { /* superclass has methods? */
                     cls->methods = csH_new(ts);
-                    csH_copykeys(ts, src->methods, cls->methods);
+                    csH_copykeys(ts, cls->methods, sup->methods);
                 }
-                if (src->vmt) { /* 'src' has metamethods? */
+                if (sup->vmt) { /* superclass has metamethods? */
                     cs_assert(cls->vmt == NULL);
                     cls->vmt = csMM_newvmt(ts);
                     for (int i = 0; i < CS_MM_N; i++)
-                        setobj(ts, &cls->vmt[i], &src->vmt[i]);
+                        setobj(ts, &cls->vmt[i], &sup->vmt[i]);
                 }
                 vm_break;
             }
@@ -1627,12 +1639,12 @@ returning:
                 ts->sp.p = stk + nres;
                 poscall(ts, cf, nres);
                 if (cf->status & CFST_FRESH) { /* top-level function? */
-#if 1
+#if TRACE_EXEC
                     printf(">> Returning from main...\n");
 #endif
                     return; /* end this frame */
                 } else {
-#if 1
+#if TRACE_EXEC
                     printf(">> Returning...\n");
 #endif
                     cf = cf->prev; /* return to caller */

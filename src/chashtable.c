@@ -392,14 +392,14 @@ int csH_next(cs_State *ts, HTable *ht, SPtr key) {
 }
 
 
-/* insert all the 'keys' from 'stab' into 'dtab' */
-void csH_copykeys(cs_State *ts, HTable *stab, HTable *dtab) {
+/* insert all the 'keys' from src to dest */
+void csH_copykeys(cs_State *ts, HTable *dest, HTable *src) {
     TValue k;
-    for (int i = 0; i < htsize(stab); i++) {
-        Node *n = htnode(stab, i);
+    for (int i = 0; i < htsize(src); i++) {
+        Node *n = htnode(src, i);
         if (!isempty(nodeval(n))) {
             getnodekey(ts, &k, n);
-            csH_set(ts, dtab, &k, nodeval(n));
+            csH_set(ts, dest, &k, nodeval(n));
         }
     }
 }

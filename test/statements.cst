@@ -4,35 +4,35 @@
 
 # {LOCAL
 # {local statement
-local a;                        // single local uninitialized (nil) variable
-print(a);                       // nil
-local b, c, d;                  // multiple local uninitialized (nil) variables
-print(b, c, d);                 // nil nil nil
-local e, f, g = 1, 2, 3;        // multiple initialized local variables
-print(e, f, g);                 // 1 2 3
-print(a, b, c, d, e, f, g);     // nil nil nil nil 1 2 3
-local a1 <final> = 69;          // immutable local variable
-print(a1);                      // 69
-#a1 = a1 + 2;                    // error (assignment to a read-only variable)
-#local a2 <close> = 420;         // error (variable got a non-closeable value)
+local a;                                // single local uninitialized (nil) variable
+print(a);                               // nil
+local b, c, d;                          // multiple local uninitialized (nil) variables
+print(b, c, d);                         // nil nil nil
+local e, f, g = 1, 2, 3;                // multiple initialized local variables
+print(e, f, g);                         // 1 2 3
+print(a, b, c, d, e, f, g);             // nil nil nil nil 1 2 3
+local a1 <final> = 69;                  // immutable local variable
+print(a1);                              // 69
+#a1 = a1 + 2;                          // error (assignment to a read-only variable)
+#local a2 <close> = 420;               // error (variable got a non-closeable value)
 local a2 <final>, a3 <final>, a4 <close>;
-#a2 = 5;                         // error (assignment to a read-only variable)
-#a3 = 6;                         // error (assignment to a read-only variable)
+#a2 = 5;                               // error (assignment to a read-only variable)
+#a3 = 6;                               // error (assignment to a read-only variable)
 local b1 <final>, b2 <final>, b3 <close> = "Hello, ", "World", false;
-print(b1 .. b2, b3);
+print(b1 .. b2, b3);                    // "Hello, World"  false
 # }{local function
 local fn add(x, y) {
     return x + y;
 }
-print(add(5, 2));               // 7
-print(add);                     // function: <memory_address>
+print(add(5, 2));                       // 7
+print(add);                             // function: <memory_address>
 # }{local class
-local PI <final> = 3.141592654;
 local class Empty {}
-print(Empty);                   // class: <memory_address>
-print(Empty());
+print(Empty);                           // class: <memory_address>
+print(Empty());                         // instance: <memory_address>
+local PI <final> = 3.141592654;
 local class Circle {
-    fn __init() {               // override initializer
+    fn __init() {                       // override initializer
         self.radius = 4;
         return self;
     }
@@ -46,47 +46,83 @@ local class Circle {
     }
 }
 local circ = Circle();
-print(circ);                        // instance: <memory_address>
-print(circ.radius);                 // 4
-print(circ.area());                 // around 50.265482464
-print(circ.circumference());        // around 25.13274123
-local class Person {
+print(circ);                            // instance: <memory_address>
+print(circ.radius);                     // 4
+print(circ.area());                     // around 50.265482464
+print(circ.circumference());            // around 25.132741232
+local ent;
+local class Entity {
+    fn type() {
+        return "Entity";
+    }
+}
+ent = Entity();
+print(ent);                             // instance: <memory_address>
+print(ent.type());                      // "Entity"
+local class Human inherits Entity {     // Human class inherits Entity class
     fn __init(fname, lname) {
-        self.firstname = fname;
-        self.lastname = lname;
+        self.fname = fname;
+        self.lname = lname;
         return self;
     }
-    fn full_name() {
-        return self.firstname .. " " .. self.lastname;
+    fn name() {
+        local fname = self.fname or "?";
+        local lname = self.lname or "?";
+        return fname .. " " .. lname;
+    }
+    fn type() {
+        return "Human " .. super.type();
     }
 }
-print(Person);                          // class: <memory_address>
-local john = Person("John", "Doe");
-print(john);                            // instance: <memory_address>
-print(john.full_name());                // "John Doe"
-local class Student inherits Person {   // inherits from Person
-    fn grade() {
-        return 69;
-    }
-}
-print(Student);                         // class: <memory_address>
-john = Student("Mile", "Kitić");
-print(john);                            // instance: <memory_address>
-print(john.full_name());                // "Mile Kitić"
-print(john.grade());                    // 69
+ent = Human("John", "Cena");
+print(ent);                             // instance: <memory_address>
+print(ent.type());                      // "Human Entity"
+print(ent.name());                      // "John Cena"
+ent = Human();
+print(ent.name());                      // "? ?"
 # }}
 
 # {function statement
-a = fn(...) {
+fn func(...) {
     print(...);                 
     return 69;
 };
-print(a);                       // function: <memory_address>
-a = a(...);                     // binary_name and script_name (this test)
-print(a);                       // 69
+print(func);                            // function: <memory_address>
+func = func(...);                       // <binary>   <script>
+print(func);                            // 69
 # }
 
 # {class statement
+local table = {};
+print(table);                           // hashtable: <memory_address>
+class table.line {
+    fn __init(x, y) {
+        self.x = x;
+        self.y = y;
+        return self;
+    }
+    fn cords() {
+        return self.x, self.y;
+    }
+}
+table.myline = table.line(15, 12);
+print(table.myline);                    // instance: <memory_address>
+print(table.myline.cords());            // 15   12
+table.config = {};
+print(table.config);                    // hashtable: <memory_address>
+class table.config.point {
+    fn __init(x, y) {
+        self.x = x;
+        self.y = y;
+        return self;
+    }
+    fn cords() {
+        return self.x, self.y;
+    }
+}
+table.config.myconfig = table.config.point(69, 420);
+print(table.config.myconfig);           // instance: <memory_address>
+print(table.config.myconfig.cords());   // 69   420
 # }
-
+ 
 /* ===========================} */
