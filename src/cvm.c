@@ -1352,22 +1352,35 @@ returning:
                 int off = fetchl();
                 pc -= off;
                 vm_break;
+            }
+            vm_case(OP_BJMP) {
+                int off = fetchl();
+                int npop = fetchl();
+                if (*pc == OP_BCLOSE) {
+                    fetch(); /* skip OpCode */
+                    SPtr level = STK(fetchl());
+                    Protect(csF_close(ts, level, CS_OK));
+                }
+                pc += off;
+                pop(npop);
+                vm_break;
+            }
+            vm_case(OP_BCLOSE) { /* define case for jump table */
+                cs_assert(0); /* (unreachable) */
             } /* } TEST_OPS { */
             vm_case(OP_TEST) {
                 TValue *v = peek(0);
                 int off = fetchl();
-                int condexp = fetchs();
-                int cond = !c_isfalse(v);
-                if (cond == condexp)
+                int cond = fetchs();
+                if ((!c_isfalse(v)) == cond)
                     pc += off;
                 vm_break;
             }
             vm_case(OP_TESTORPOP) {
                 TValue *v = peek(0);
                 int off = fetchl();
-                int condexp = fetchs();
-                int cond = !c_isfalse(v);
-                if (cond == condexp)
+                int cond = fetchs();
+                if ((!c_isfalse(v)) == cond)
                     pc += off;
                 else
                     pop(1); /* v */
@@ -1376,9 +1389,8 @@ returning:
             vm_case(OP_TESTANDPOP) {
                 TValue *v = peek(0);
                 int off = fetchl();
-                int condexp = fetchs();
-                int cond = !c_isfalse(v);
-                if (cond == condexp) {
+                int cond = fetchs();
+                if ((!c_isfalse(v)) == cond) {
                     pc += off;
                     pop(1); /* v */
                 }
@@ -1387,9 +1399,8 @@ returning:
             vm_case(OP_TESTPOP) {
                 TValue *v = peek(0);
                 int off = fetchl();
-                int condexp = fetchs();
-                int cond = !c_isfalse(v);
-                if (cond == condexp)
+                int cond = fetchs();
+                if ((!c_isfalse(v)) == cond)
                     pc += off;
                 pop(1); /* v */
                 vm_break;

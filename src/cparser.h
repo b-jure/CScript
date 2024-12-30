@@ -138,6 +138,7 @@ typedef union LVar {
 
 typedef struct BreakJmp {
     int jmp;
+    int nactlocals;
     int hasclose;
 } BreakJmp;
 
@@ -164,11 +165,16 @@ typedef struct ClassState {
 ** the same 'Lexer'.
 */
 typedef struct ParserState {
-    struct {
+    struct { /* list of all active local variables */
         int len;
         int size;
         LVar *arr;
-    } actlocals; /* active local vars */
+    } actlocals;
+    struct { /* list of pending break jumps */
+        int len; /* number of elements in 'list' */
+        int size; /* size of 'list' */
+        PatchList *arr; /* list of patch lists */
+    } patches;
     struct ClassState *cs;
 } ParserState;
 
@@ -183,9 +189,10 @@ typedef struct DynCtx {
     int nlinfo;
     int nlocals;
     int nupvals;
-    int nbrks;
+    int npatches;
     int needclose;
     int lastwasret;
+    int pclastop;
 } DynCtx;
 
 
@@ -207,15 +214,9 @@ typedef struct FunctionState {
     int nlinfo; /* number of elements in 'linfo' */
     int nlocals; /* number of elements in 'locals' */
     int nupvals; /* number of elements in 'upvals' */
-    DynCtx deadcode; /* context before "dead" (unreachable) code */
-    struct {
-        int len; /* number of elements in 'list' */
-        int size; /* size of 'list' */
-        PatchList *list; /* list of patch lists */
-    } patches; /* 2Dvec */
+    int pclastop; /* last OpCode pc */
     cs_ubyte needclose; /* true if needs to close upvalues before returning */
     cs_ubyte lastwasret; /* last statement is 'return' */
-    cs_ubyte pclastop; /* last OpCode pc */
 } FunctionState;
 
 

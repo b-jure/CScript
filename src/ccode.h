@@ -199,6 +199,7 @@ OP_BNOT,/*         V       '~V'                                             */
 
 OP_JMP,/*          L       'pc += L'                                        */
 OP_JMPS,/*         L       'pc -= L'                                        */
+OP_BJMP,/*         L1 L2   'pc += L1; pop(L2)'                              */
 
 OP_TEST,/*         V L S   'if (!c_isfalse(V) == S) pc += L'                */
 OP_TESTORPOP,/*    V L S   'if (!c_isfalse(V) == S) pc += L; else pop V;'   */
@@ -208,7 +209,8 @@ OP_TESTPOP,/*      V L S   'if (!c_isfalse(V) == S) { pc += L; } pop V;'    */
 OP_CALL,/*  L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offsp-1})'
                     (check info)                                            */
 
-OP_CLOSE,/*        L           'close all upvalues >= OU{L}                 */
+OP_CLOSE,/*        L           'close all upvalues >= OU{L}'                */
+OP_BCLOSE,/*       L           'close all upavlues >= OU{L} (break variant) */
 OP_TBC,/*          L           'mark L{L} as to-be-closed'                  */
 
 OP_GETGLOBAL,/*    L           'G{L}'                                       */
@@ -330,6 +332,9 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 #define csC_setmulret(fs,e)     csC_setreturns(fs, e, CS_MULRET)
 
 #define csC_store(fs,var)       csC_storevar(fs, var, 0)
+
+
+#define lastop(fs)      ((fs)->p->code[(fs)->pclastop])
 
 
 CSI_FUNC int csC_emitI(FunctionState *fs, Instruction i);

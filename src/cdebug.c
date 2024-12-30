@@ -29,7 +29,19 @@
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
 
-/* get line number of instruction ('pc') */
+/* TODO: implement binary search */
+int csD_getfuncline(const Proto *fn, int pc) {
+    LineInfo *li = NULL;
+    for (int i = 0; i < fn->sizelinfo; i++) {
+        li = &fn->linfo[i];
+        if (pc <= li->pc) break;
+    }
+    return li->line;
+}
+
+
+/*
+// get line number of instruction ('pc')
 int csD_getfuncline(const Proto *p, int pc) {
     int low = 0;
     int high = p->sizelinfo - 1;
@@ -41,13 +53,14 @@ int csD_getfuncline(const Proto *p, int pc) {
             high = mid - 1;
         else if (li->pc < pc)
             low = mid + 1;
-        else /* otherwise direct hit */
+        else // otherwise direct hit
             break;
     }
     li += li->pc < pc;
     cs_assert(pc <= li->pc);
     return li->line;
 }
+*/
 
 
 cs_sinline int relpc(const CallFrame *cf) {

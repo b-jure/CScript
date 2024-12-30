@@ -124,5 +124,35 @@ table.config.myconfig = table.config.point(69, 420);
 print(table.config.myconfig);           // instance: <memory_address>
 print(table.config.myconfig.cords());   // 69   420
 # }
+
+# {while, break and block statements
+while (false) {                         // optimized away
+    print("unreachable");
+}
+while (true) {                          // converted to 'loop' statement
+    local a = 69;
+    print(a);                           // 69
+    break;
+}
+print(a);                               // nil
+local i = 0;
+while (i < 5) {
+    print("i = " .. tostring(i));
+    i = i + 1;
+}
+print("i = " .. tostring(i));           // "i = 5"
+while (true) {                          // 'break' in a loop with nested scopes
+    local inner1 = 69;
+    {
+        local inner2 = 420;
+        {
+            local inner3 = 1337;
+            print(inner1, inner2, inner3);  // 69  420  1337
+            break;
+        }
+    }
+}
+print(inner1, inner2, inner3);          // nil  nil  nil
+# }
  
 /* ===========================} */

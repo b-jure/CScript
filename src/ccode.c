@@ -9,7 +9,6 @@
 
 
 #include "ccode.h"
-#include "cdebug.h"
 #include "clexer.h"
 #include "chashtable.h"
 #include "cbits.h"
@@ -126,12 +125,14 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
     opProp(0, 0, 0, FormatI), /* OP_BNOT */
     opProp(0, 1, 0, FormatIL), /* OP_JMP */
     opProp(0, 1, 0, FormatIL), /* OP_JMPS */
+    opProp(0, 1, 0, FormatILL), /* OP_BJMP */
     opProp(0, 1, 1, FormatILS), /* OP_TEST */
     opProp(0, 1, 1, FormatILS), /* OP_TESTORPOP */
     opProp(0, 1, 1, FormatILS), /* OP_TESTANDPOP */
     opProp(0, 1, 1, FormatILS), /* OP_TESTPOP */
     opProp(0, 0, 0, FormatILL), /* OP_CALL */
     opProp(0, 0, 0, FormatIL), /* OP_CLOSE */
+    opProp(0, 0, 0, FormatIL), /* OP_BCLOSE */
     opProp(0, 0, 0, FormatIL), /* OP_TBC */
     opProp(0, 0, 0, FormatIL), /* OP_GETGLOBAL */
     opProp(0, 0, 0, FormatIL), /* OP_SETGLOBAL */
@@ -201,12 +202,12 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
 "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
 "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "NOT", "UNM",
-"BNOT", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTANDPOP",
-"TESTPOP", "CALL", "CLOSE", "TBC", "GETGLOBAL", "SETGLOBAL", "GETLOCAL",
-"SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY", "GETPROPERTY",
-"GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT",
-"SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT",
-"FORPREP", "FORCALL", "FORLOOP", "RET",
+"BNOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP", "TESTANDPOP",
+"TESTPOP", "CALL", "CLOSE", "BCLOSE", "TBC", "GETGLOBAL", "SETGLOBAL",
+"GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY",
+"GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",
+"GETINDEXINT", "SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR",
+"INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
 };
 
 
@@ -219,12 +220,12 @@ static void storelineinfo(FunctionState *fs, Proto *f, int line) {
     if (len == 0 || f->linfo[len - 1].line < line) { /* new line entry? */
         csM_growarray(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, MAX_INT,
                       "lines", LineInfo);
-        f->linfo[len].pc = fs->pc - 1;
+        f->linfo[len].pc = fs->pclastop;
         f->linfo[len].line = line;
-        fs->nlinfo++; /* inc */
+        fs->nlinfo++;
     } else { /* otherwise update previous line entry with latest 'pc' */
-        cs_assert(f->linfo[len - 1].pc < fs->pc - 1);
-        f->linfo[len - 1].pc = fs->pc - 1;
+        cs_assert(f->linfo[len - 1].pc <= fs->pclastop);
+        f->linfo[len - 1].pc = fs->pclastop;
     }
 }
 
@@ -248,7 +249,9 @@ static void emit3bytes(FunctionState *fs, int code) {
 
 /* emit instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
+    printf("emitting instruction %s at pc %d\n", getOpName(i), fs->pc);
     cs_assert(SIZEINSTR == sizeof(Instruction));
+    cs_assert(fs->pclastop <= fs->pc);
     fs->pclastop = fs->pc;
     emitbyte(fs, i);
     storelineinfo(fs, fs->p, fs->lx->line);
@@ -467,7 +470,16 @@ cs_sinline void freeslots(FunctionState *fs, int n) {
 
 int csC_pop(FunctionState *fs, int n) {
     if (n > 0) {
+        int extra = 0;
         freeslots(fs, n);
+        if (lastop(fs) == OP_POPN || lastop(fs) == OP_POP) { /* optimize? */
+            if (lastop(fs) == OP_POPN)
+                extra = GETARG_L(&fs->p->code[fs->pclastop], 0);
+            else
+                extra = 1;
+            fs->pc = fs->pclastop;
+        }
+        n += extra;
         if (n == 1)
             return csC_emitI(fs, OP_POP);
         else
@@ -664,13 +676,14 @@ static int getjump(FunctionState *fs, int pc) {
 }
 
 
-/* fix jmp instruction at 'pc' to jump to 'dest' */
-static void fixjump(FunctionState *fs, int pc, int destpc) {
+/* fix jmp instruction at 'pc' to jump to 'target' */
+static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
-    int offset = destpc - (pc + getOpSize(*jmp));
-    cs_assert(offset > 0); /* at least one expression in between... */
-    cs_assert(opisjump(*jmp)); /* ...and 'jmp' is a jump instruction */
-    if (c_unlikely(offset > MAX_LARG)) /* is jump too large? */
+    printf("pc = %d, target = %d\n", pc, target);
+    int offset = csi_abs(target - (pc + getOpSize(*jmp)));
+    cs_assert(offset > 0); /* at least one expression in between */
+    cs_assert(opisjump(*jmp)); /* 'jmp' is a valid jump instruction */
+    if (c_unlikely(offset > MAX_LARG)) /* jump is too large? */
         csP_semerror(fs->lx, "control structure too long");
     SETARG_L(jmp, 0, offset); /* fix the jump */
 }
@@ -990,9 +1003,14 @@ static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
 }
 
 
-/* emit 'OP_JMP' family of instructions */
+/* emit test/jump instruction */
 int csC_jmp(FunctionState *fs, OpCode jop) {
-    return csC_emitIL(fs, jop, 0);
+    if (jop == OP_TESTPOP) /* test jump? */
+        freeslots(fs, 1); /* test removes one value */
+    if (jop == OP_BJMP) /* break jump? */
+        return csC_emitILL(fs, OP_BJMP, 0, 0);
+    else /* otherwise test or regular jump */
+        return csC_emitIL(fs, jop, 0);
 }
 
 
@@ -1324,16 +1342,18 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 
 /* return the final target of a jump (skipping jumps to jumps) */
 static int finaltarget(Instruction *code, int i) {
-  int count;
-  for (count = 0; count < 100; count++) { /* avoid infinite loops */
+  for (int count = 0; count < 100; count++) { /* avoid infinite loops */
       Instruction *pc = &code[i];
-      if (*pc == OP_JMP)
+      if (*pc == OP_JMP) { /* jump forward? */
+          i += SIZEINSTR + SIZEARGL; /* skip instruction and offset */
           i += GETARG_L(pc, 0);
-      else if (*pc == OP_JMPS)
+      } else if (*pc == OP_JMPS) { /* jump back? */
+          i += SIZEINSTR + SIZEARGL; /* skip instruction and offset */
           i -= GETARG_L(pc, 0);
-      else
+      } else /* no jumps */
           break;
   }
+  printf("target is %d\n", i);
   return i;
 }
 
@@ -1344,7 +1364,8 @@ static int finaltarget(Instruction *code, int i) {
 */
 void csC_finish(FunctionState *fs) {
     Proto *p = fs->p;
-    for (int i = 0; i < fs->pc; i++) {
+    int i = 0;
+    while (i < fs->pc) {
         Instruction *pc = &p->code[i];
         switch (*pc) {
             case OP_RET: { /* check if need to close variables */
@@ -1353,11 +1374,13 @@ void csC_finish(FunctionState *fs) {
                 break;
             }
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */
+                printf("optimize %s at pc %d\n", getOpName(*pc), i);
                 int target = finaltarget(p->code, i);
                 fixjump(fs, i, target);
                 break;
             }
             default: break;
         }
+        i += getOpSize(*pc);
     }
 }

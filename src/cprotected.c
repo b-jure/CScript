@@ -139,12 +139,16 @@ int csPR_parse(cs_State *ts, BuffReader *br, const char *name) {
     int status;
     ppd.br = br;
     csR_buffinit(&ppd.buff); /* 'buff' */
-    ppd.ps.actlocals.len = ppd.ps.actlocals.size = 0; ppd.ps.actlocals.arr = NULL;
-    ppd.ps.cs = NULL; /* 'cs' */
-    ppd.source = name; /* 'source' */
+    ppd.ps.actlocals.len = ppd.ps.actlocals.size = 0;
+    ppd.ps.actlocals.arr = NULL;
+    ppd.ps.patches.len = ppd.ps.patches.size = 0;
+    ppd.ps.patches.arr = NULL;
+    ppd.ps.cs = NULL;
+    ppd.source = name;
     status = csPR_call(ts, parsepaux, &ppd, savestack(ts, ts->sp.p), ts->errfunc);
     csR_freebuffer(ts, &ppd.buff);
     csM_freearray(ts, ppd.ps.actlocals.arr, ppd.ps.actlocals.size);
+    csM_freearray(ts, ppd.ps.patches.arr, ppd.ps.patches.size);
     decnnyc(ts);
     return status;
 }

@@ -31,7 +31,8 @@
 
 
 static void startline(const Proto *p, const Instruction *pc) {
-    postab(printf("[LINE %4d]", csD_getfuncline(p, pc - p->code)));
+    int relpc = pc - p->code;
+    postab(printf("[LINE %4d][PC %4d]", csD_getfuncline(p, relpc), relpc));
 }
 
 
@@ -41,14 +42,14 @@ static void endline(void) {
 }
 
 
-static int traceop(OpCode op) {
+static int traceOp(OpCode op) {
     postab(printf("%-12s", getOpName(op)));
     return SIZEINSTR;
 }
 
 
-static int traceS(const Instruction *pc) {
-    postab(printf("ArgS=%-8d", *pc));
+static int traceS(int s) {
+    postab(printf("ArgS=%-8d", s));
     return SIZEARGS;
 }
 
@@ -61,7 +62,7 @@ static int traceL(const Instruction *pc) {
 
 static int traceI(const Proto *p, const Instruction *pc) {
     startline(p, pc);
-    traceop(*pc);
+    traceOp(*pc);
     endline();
     return SIZEINSTR;
 }
@@ -70,8 +71,8 @@ static int traceI(const Proto *p, const Instruction *pc) {
 static void traceIS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
-    pc += traceop(op);
-    traceS(pc);
+    pc += traceOp(op);
+    traceS(*pc);
     endline();
 }
 
@@ -79,9 +80,9 @@ static void traceIS(const Proto *p, const Instruction *pc) {
 static void traceISS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
-    pc += traceop(op);
-    pc += traceS(pc);
-    traceS(pc);
+    pc += traceOp(op);
+    pc += traceS(*pc);
+    traceS(*pc);
     endline();
 }
 
@@ -89,7 +90,7 @@ static void traceISS(const Proto *p, const Instruction *pc) {
 static void traceIL(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
-    pc += traceop(op);
+    pc += traceOp(op);
     traceL(pc);
     endline();
 }
@@ -98,9 +99,9 @@ static void traceIL(const Proto *p, const Instruction *pc) {
 static void traceILS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
-    pc += traceop(op);
+    pc += traceOp(op);
     pc += traceL(pc);
-    traceS(pc);
+    traceS(*pc);
     endline();
 }
 
@@ -108,10 +109,10 @@ static void traceILS(const Proto *p, const Instruction *pc) {
 static void traceILSS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
-    pc += traceop(op);
+    pc += traceOp(op);
     pc += traceL(pc);
-    pc += traceS(pc);
-    traceS(pc);
+    pc += traceS(*pc);
+    traceS(*pc);
     endline();
 }
 
@@ -119,7 +120,7 @@ static void traceILSS(const Proto *p, const Instruction *pc) {
 static void traceILL(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
-    pc += traceop(op);
+    pc += traceOp(op);
     pc += traceL(pc);
     traceL(pc);
     endline();
@@ -129,10 +130,10 @@ static void traceILL(const Proto *p, const Instruction *pc) {
 static void traceILLS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
-    pc += traceop(op);
+    pc += traceOp(op);
     pc += traceL(pc);
     pc += traceL(pc);
-    traceS(pc);
+    traceS(*pc);
     endline();
 }
 
@@ -142,7 +143,6 @@ static void traceILLS(const Proto *p, const Instruction *pc) {
 */
 void csTR_tracepc(cs_State *ts, const Proto *p, const Instruction *pc) {
     csTR_dumpstack(ts, 1, NULL); /* first dump current function stack... */
-    printf("[PC %4ld]", pc - p->code);
     switch (getOpFormat(*pc)) { /* ...then trace the instruction */
         case FormatI: traceI(p, pc); break;
         case FormatIS: traceIS(p, pc); break;
@@ -160,63 +160,63 @@ void csTR_tracepc(cs_State *ts, const Proto *p, const Instruction *pc) {
 #define nextOp(pc)      ((pc) + getOpSize(*pc))
 
 
-static void tracenil(void) {
+static void traceNil(void) {
     printf("nil");
 }
 
 
-static void tracetrue(void) {
+static void traceTrue(void) {
     printf("true");
 }
 
 
-static void tracefalse(void) {
+static void traceFalse(void) {
     printf("false");
 }
 
 
 /* maximum length for string constants */
-#define MAXSTRKLEN      20
+#define MAXSTRKLEN      25
 
-static void tracestring(OString *s) {
+static void traceString(OString *s) {
     char buff[MAXSTRKLEN + 1];
     csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
     printf("\"%s\"", buff);
 }
 
 
-static void tracenum(const TValue *o) {
+static void traceNumber(const TValue *o) {
     printf("%s", csS_numtostr(o, NULL));
 }
 
 
-static void tracevalue(const TValue *o) {
+static void traceValue(const TValue *o) {
     switch (ttypetag(o)) {
-        case CS_VNIL: tracenil(); break;
-        case CS_VTRUE: tracetrue(); break;
-        case CS_VFALSE: tracefalse(); break;
-        case CS_VSHRSTR: case CS_VLNGSTR: tracestring(strval(o)); break;
-        case CS_VNUMINT: case CS_VNUMFLT: tracenum(o); break;
+        case CS_VNIL: traceNil(); break;
+        case CS_VTRUE: traceTrue(); break;
+        case CS_VFALSE: traceFalse(); break;
+        case CS_VSHRSTR: case CS_VLNGSTR: traceString(strval(o)); break;
+        case CS_VNUMINT: case CS_VNUMFLT: traceNumber(o); break;
         default: cs_assert(0 && "invalid 'o' type"); break;
     }
 }
 
 
 static void traceK(const Proto *p, int index) {
-    postab(printf("K@%d=", index); tracevalue(&p->k[index]));
+    postab((printf("K@%d=", index), traceValue(&p->k[index])));
 }
 
 
 static void unasm(const Proto *p, Instruction *pc) {
     startline(p, pc);
-    traceop(*pc);
+    traceOp(*pc);
     endline();
 }
 
 
 static void unasmL(const Proto *p, Instruction *pc) {
     startline(p, pc);
-    pc += traceop(*pc);
+    pc += traceOp(*pc);
     traceL(pc);
     endline();
 }
@@ -224,16 +224,16 @@ static void unasmL(const Proto *p, Instruction *pc) {
 
 static void unasmLS(const Proto *p, Instruction *pc) {
     startline(p, pc);
-    pc += traceop(*pc);
+    pc += traceOp(*pc);
     pc += traceL(pc);
-    traceS(pc);
+    traceS(*pc);
     endline();
 }
 
 
 static void unasmLL(const Proto *p, Instruction *pc) {
     startline(p, pc);
-    pc += traceop(*pc);
+    pc += traceOp(*pc);
     pc += traceL(pc);
     traceL(pc);
     endline();
@@ -241,19 +241,17 @@ static void unasmLL(const Proto *p, Instruction *pc) {
 
 
 static void unasmKL(const Proto *p, Instruction *pc) {
-    int k = GETARG_L(pc, 0);
     startline(p, pc);
-    traceop(*pc);
-    traceK(p, k);
+    traceOp(*pc);
+    traceK(p, GETARG_L(pc, 0));
     endline();
 }
 
 
 static void unasmK(const Proto *p, Instruction *pc) {
-    int k = GETARG_S(pc, 0);
     startline(p, pc);
-    traceop(*pc);
-    traceK(p, k);
+    traceOp(*pc);
+    traceK(p, GETARG_S(pc, 0));
     endline();
 }
 
@@ -262,10 +260,10 @@ static void unasmIMMint(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Integer i;
     startline(p, pc);
-    traceop(*pc);
+    traceOp(*pc);
     getIMM(pc, i);
     setival(&aux, i);
-    postab(tracenum(&aux));
+    postab(traceNumber(&aux));
     endline();
 }
 
@@ -274,20 +272,24 @@ static void unasmIMMflt(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Number n;
     startline(p, pc);
-    traceop(*pc);
+    traceOp(*pc);
     getIMM(pc, n);
     setfval(&aux, n);
-    postab(tracenum(&aux));
+    postab(traceNumber(&aux));
     endline();
 }
 
 
+static void traceSize(int size) {
+    if (size > 0) size = 1 << (size - 1);
+    postab(printf("size=%d", size));
+}
+
+
 static void unasmNewObject(const Proto *p, Instruction *pc) {
-    int sz = GETARG_S(pc, 0);
-    if (sz > 0) sz = 1 << (sz - 1);
     startline(p, pc);
-    traceop(*pc);
-    postab(printf("size=%d", sz));
+    traceOp(*pc);
+    traceSize(GETARG_S(pc, 0));
     endline();
 }
 
@@ -295,25 +297,28 @@ static void unasmNewObject(const Proto *p, Instruction *pc) {
 static void unasmEQK(const Proto *p, Instruction *pc) {
     TValue aux;
     startline(p, pc);
-    traceop(*pc);
+    traceOp(*pc);
     traceK(p, GETARG_L(pc, 0));
     setival(&aux, GETARG_S(pc, SIZEARGL));
-    postab(tracenum(&aux));
+    postab(traceNumber(&aux));
     endline();
+}
+
+
+static void traceCond(int cond) {
+    postab(printf("%s", (cond ? "equal" : "not equal")));
 }
 
 
 static void unasmEQI(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Integer i;
-    int cond;
     startline(p, pc);
-    traceop(*pc);
+    traceOp(*pc);
     getIMM(pc, i);
     setival(&aux, i);
-    postab(tracenum(&aux));
-    cond = *(pc + SIZEINSTR + SIZEARGL + SIZEARGS);
-    postab(printf("%s", (cond ? "equal" : "not equal")));
+    postab(traceNumber(&aux));
+    traceCond(GETARG_S(pc, SIZEARGL));
     endline();
 }
 
@@ -322,33 +327,36 @@ static void unasmIMMord(const Proto *p, Instruction *pc) {
     TValue aux;
     cs_Integer i;
     startline(p, pc);
-    traceop(*pc);
+    traceOp(*pc);
     getIMM(pc, i);
     setival(&aux, i);
-    postab(tracenum(&aux));
+    postab(traceNumber(&aux));
     endline();
 }
 
 
-static void unasmVarargPrep(const Proto *p, Instruction *pc) {
-    int nparams = GETARG_L(pc, 0);
-    startline(p, pc);
-    traceop(*pc);
+static void traceNparams(int nparams) {
     postab(printf("nparams=%d", nparams));
+}
+
+
+static void unasmVarargPrep(const Proto *p, Instruction *pc) {
+    startline(p, pc);
+    traceOp(*pc);
+    traceNparams(GETARG_L(pc, 0));
     endline();
 }
 
 
 static void unasmS(const Proto *p, Instruction *pc) {
     startline(p, pc);
-    pc += traceop(*pc);
-    traceS(pc);
+    traceS(GETARG_S(pc, 0));
     endline();
 }
 
 
-static void traceSTK(int sindex) {
-    postab(printf("S@%d", sindex));
+static void traceStackSlot(int index) {
+    postab(printf("S@%d", index));
 }
 
 
@@ -366,94 +374,127 @@ static void traceNres(int nres) {
 
 
 static void unasmCall(const Proto *p, Instruction *pc) {
-    int from, nres;
     startline(p, pc);
-    traceop(*pc);
-    from = GETARG_L(pc, 0);
-    nres = GETARG_L(pc, 1) - 1;
-    traceSTK(from);
-    traceNres(nres);
+    traceOp(*pc);
+    traceStackSlot(GETARG_L(pc, 0));
+    traceNres(GETARG_L(pc, 1) - 1);
     endline();
+}
+
+
+static void traceMetaName(cs_State *ts, cs_MM mm) {
+    postab(printf("%s", getstr(G_(ts)->mmnames[mm])));
 }
 
 
 static void unasmMM(cs_State *ts, const Proto *p, Instruction *pc) {
-    cs_MM mm;
     startline(p, pc);
-    traceop(*pc);
-    mm = GETARG_S(pc, 0);
-    postab(printf("%s", getstr(G_(ts)->mmnames[mm])));
-    endline();
-}
-
-
-static void unasmMBin(cs_State *ts, const Proto *p, Instruction *pc) {
-    cs_MM mm;
-    startline(p, pc);
-    traceop(*pc);
-    mm = GETARG_S(pc, 0);
-    postab(printf("%s", getstr(G_(ts)->mmnames[mm])));
+    traceOp(*pc);
+    traceMetaName(ts, GETARG_S(pc, 0));
     endline();
 }
 
 
 static void unasmIndexedSet(const Proto *p, Instruction *pc) {
-    int s = GETARG_L(pc, 0);
-    int k = GETARG_L(pc, 1);
     startline(p, pc);
-    traceop(*pc);
-    traceSTK(s);
-    traceK(p, k);
+    traceOp(*pc);
+    traceStackSlot(GETARG_L(pc, 0));
+    traceK(p, GETARG_L(pc, 1));
     endline();
+}
+
+
+static void traceGlobal(TValue *k, int index) {
+    const char *str = getstr(strval(&k[index]));
+    postab(printf("G@%s", str));
 }
 
 
 static void unasmGlobal(const Proto *p, Instruction *pc) {
-    const char *str;
-    int index;
     startline(p, pc);
-    traceop(*pc);
-    index = GETARG_L(pc, 0);
-    str = getstr(strval(&p->k[index]));
-    postab(printf("G@%d=\"%s\"", index, str));
+    traceOp(*pc);
+    traceGlobal(p->k, GETARG_L(pc, 0));
     endline();
+}
+
+
+static void traceLocal(LVarInfo *lv, int index) {
+    const char *str = getstr(lv[index].name);
+    postab(printf("L@%d=%s", index, str));
 }
 
 
 static void unasmLocal(const Proto *p, Instruction *pc) {
-    const char *str;
-    int index;
     startline(p, pc);
-    traceop(*pc);
-    index = GETARG_L(pc, 0);
-    str = getstr(p->locals[index].name);
-    postab(printf("L@%d=\"%s\"", index, str));
+    traceOp(*pc);
+    traceLocal(p->locals, GETARG_L(pc, 0));
     endline();
 }
 
 
+static void traceUpVal(UpValInfo *uv, int index) {
+    const char *str = getstr(uv[index].name);
+    postab(printf("U@%d=%s", index, str));
+}
+
+
 static void unasmUpvalue(const Proto *p, Instruction *pc) {
-    const char *str;
-    int index;
     startline(p, pc);
-    traceop(*pc);
-    index = GETARG_L(pc, 0);
-    str = getstr(p->upvals[index].name);
-    postab(printf("U@%d=\"%s\"", index, str));
+    traceOp(*pc);
+    traceUpVal(p->upvals, GETARG_L(pc, 0));
+    endline();
+}
+
+
+static void traceOffset(int off) {
+    postab(printf("offset=%d", off));
+}
+
+
+static void traceClose(int close) {
+    postab(printf("close=%s", close ? "true" : "false"));
+}
+
+
+static void traceNpop(int npop) {
+    postab(printf("npop=%d", npop));
+}
+
+
+static void unasmPop(const Proto *p, Instruction *pc) {
+    startline(p, pc);
+    traceOp(*pc);
+    if (*pc == OP_POP)
+        traceNpop(1);
+    else
+        traceNpop(GETARG_L(pc, 0));
+    endline();
+}
+
+
+static void unasmJmp(const Proto *p, Instruction *pc) {
+    startline(p, pc);
+    traceOp(*pc);
+    traceOffset(GETARG_L(pc, 0));
+    endline();
+}
+
+
+static void unasmBreakJmp(const Proto *p, Instruction *pc) {
+    startline(p, pc);
+    traceOp(*pc);
+    traceOffset(GETARG_L(pc, 0));
+    traceNpop(GETARG_L(pc, 1));
     endline();
 }
 
 
 static void unasmRet(const Proto *p, Instruction *pc) {
-    int nres, nbase, close;
     startline(p, pc);
-    traceop(*pc);
-    nbase = GETARG_L(pc, 0);
-    nres = GETARG_L(pc, 1) - 1;
-    close = GETARG_S(pc, (2*SIZEARGL));
-    traceSTK(nbase);
-    traceNres(nres);
-    postab(printf("close=%s", (close ? "yes" : "no")));
+    traceOp(*pc);
+    traceStackSlot(GETARG_L(pc, 0));
+    traceNres(GETARG_L(pc, 1) - 1);
+    traceClose(GETARG_S(pc, (2*SIZEARGL)));
     endline();
 }
 
@@ -473,20 +514,26 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
         printf("    ");
         switch (*pc) {
             case OP_TRUE: case OP_FALSE: case OP_NIL:
-            case OP_POP: case OP_ADD: case OP_SUB:
-            case OP_MUL: case OP_DIV: case OP_MOD: case OP_POW:
-            case OP_BSHL: case OP_BSHR: case OP_BAND: case OP_BOR:
-            case OP_BXOR:case OP_LT: case OP_LE: case OP_NOT:
-            case OP_UNM: case OP_BNOT: case OP_EQPRESERVE:
-            case OP_GETINDEX: case OP_GETSUPIDX: case OP_INHERIT:
-            case OP_FORCALL: case OP_FORLOOP: {
+            case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV:
+            case OP_MOD: case OP_POW: case OP_BSHL: case OP_BSHR:
+            case OP_BAND: case OP_BOR: case OP_BXOR:case OP_LT:
+            case OP_LE: case OP_NOT: case OP_UNM: case OP_BNOT:
+            case OP_EQPRESERVE: case OP_GETINDEX: case OP_GETSUPIDX:
+            case OP_INHERIT: case OP_FORCALL: case OP_FORLOOP: {
                 unasm(p, pc);
                 break;
             }
+            case OP_POP: case OP_POPN: {
+                unasmPop(p, pc);
+                break;
+            }
+            case OP_JMP: case OP_JMPS: {
+                unasmJmp(p, pc);
+                break;
+            }
             case OP_NILN: case OP_VARARG: case OP_CLOSURE:
-            case OP_POPN: case OP_JMP: case OP_JMPS: case OP_CLOSE:
-            case OP_TBC: case OP_CONCAT: case OP_GETINDEXINT:
-            case OP_SETINDEX: {
+            case OP_CLOSE: case OP_BCLOSE: case OP_TBC: case OP_CONCAT:
+            case OP_GETINDEXINT: case OP_SETINDEX: {
                 unasmL(p, pc);
                 break;
             }
@@ -542,11 +589,14 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 unasmLS(p, pc);
                 break;
             }
+            case OP_MBIN: case OP_SETMM: {
+                unasmMM(ts, p, pc);
+                break;
+            }
             case OP_CONST: unasmK(p, pc); break;
             case OP_CONSTI: unasmIMMint(p, pc); break;
             case OP_CONSTF: unasmIMMflt(p, pc); break;
-            case OP_SETMM: unasmMM(ts, p, pc); break;
-            case OP_MBIN: unasmMBin(ts, p, pc); break;
+            case OP_BJMP: unasmBreakJmp(p, pc); break;
             case OP_EQK: unasmEQK(p, pc); break;
             case OP_EQI: unasmEQI(p, pc); break;
             case OP_EQ: unasmS(p, pc); break;
@@ -573,7 +623,8 @@ void csTR_dumpstack(cs_State *ts, int level, const char *fmt, ...) {
     }
     for (int i = 0; cf != NULL && level != 0; i++) {
         level--;
-        printf("[LEVEL %3d] %-10s >> ", i, typename(ttype(s2v(cf->func.p))));
+        printf("[LEVEL %3d] %-10s %s ",
+               i, typename(ttype(s2v(cf->func.p))), cf != ts->cf ? "--" : ">>");
         if (cf->func.p + 1 >= prevtop)
             printf("empty");
         else
