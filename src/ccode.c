@@ -472,7 +472,7 @@ int csC_pop(FunctionState *fs, int n) {
     if (n > 0) {
         int extra = 0;
         freeslots(fs, n);
-        if (lastop(fs) == OP_POPN || lastop(fs) == OP_POP) { /* optimize? */
+        if (lastop(fs) == OP_POPN || lastop(fs) == OP_POP) { /* can optimize? */
             if (lastop(fs) == OP_POPN)
                 extra = GETARG_L(&fs->p->code[fs->pclastop], 0);
             else
@@ -1242,11 +1242,10 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 
 /* emit binary ordering instruction */
 static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
-    int isflt; /* unused */
-    int imm;
     OpCode op;
+    int isflt, imm;
     UNUSED(isflt);
-    cs_assert(OPR_LT == opr || OPR_LE == opr); /* should already be swapped */
+    cs_assert(OPR_LT == opr || OPR_LE == opr); /* already swapped */
     if (isnumKL(e2, &imm, &isflt)) {
         csC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
         op = binopr2op(opr, OPR_LT, OP_LTI);

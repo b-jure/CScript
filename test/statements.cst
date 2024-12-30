@@ -154,5 +154,58 @@ while (true) {                          // 'break' in a loop with nested scopes
 }
 print(inner1, inner2, inner3);          // nil  nil  nil
 # }
+
+# {if/else statement
+if (false) {                            // optimized away
+    print("unreachable");
+}
+if (69 < 420) {
+    print("reachable");                 // reachable
+}
+if (true) {                             // condition optimized away
+    print("reachable");                 // reachable
+}
+if (420 < 69) {
+    print("unreachable");
+} else {
+    print("reachable");                 // reachable
+}
+if (420 < 69) {
+    print("unreachable");
+} else if (true) {                      // condition optimized away
+    print("reachable");                 // reachable
+}
+if (420 < 69) {
+    print("unreachable");
+} else if (false) {                     // branch optimized away
+    print("unreachable");
+} else if (true) {                      // condition optimized away
+    print("reachable");                 // reachable
+}
+if (420 < 69) {
+    print("unreachable");
+} else if (false) {                     // branch optimized away
+    print("unreachable");
+} else if (69 < 69) {
+    print("unreachable");
+} else if (69 < 420) {
+    print("reachable");                 // reachable
+} else {
+    print("unreachable");
+}
+if (420 < 69) {
+    print("unreachable");
+} else if (false) {                     // branch optimized away
+    print("unreachable");
+} else if (69 < 69) {
+    print("unreachable");
+} else if (true) {                      // condition optimized away
+    print("reachable");                 // reachable
+} else if (true) {                      // branch optimized away
+    print("unreachable");
+} else {                                // branch optimized away
+    print("unreachable");
+}
+# }
  
 /* ===========================} */

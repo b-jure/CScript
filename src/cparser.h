@@ -181,18 +181,19 @@ typedef struct ParserState {
 
 /* dynamic data context (for optimizations) */
 typedef struct DynCtx {
-    int loopstart;
-    int sp;
-    int np;
-    int nk;
-    int pc;
-    int nlinfo;
-    int nlocals;
-    int nupvals;
-    int npatches;
-    int needclose;
-    int lastwasret;
-    int pclastop;
+    int loopstart;  /* innermost loop start offset */
+    int sp;         /* first free stack slot */
+    int np;         /* number of prototypes */
+    int nk;         /* number of constants */
+    int pc;         /* program (code) counter */
+    int nlinfo;     /* number of line info */
+    int nlocals;    /* number of locals */
+    int nupvals;    /* number of upvalues */
+    int npatches;   /* number of patch lists */
+    int nbjmp;      /* number of 'break' jumps */
+    int needclose;  /* true if function needs to close */
+    int lastwasret; /* true if last statement was a return */
+    int pclastop;   /* pc of last instruction */
 } DynCtx;
 
 
