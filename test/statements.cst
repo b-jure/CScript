@@ -207,5 +207,32 @@ if (420 < 69) {
     print("unreachable");
 }
 # }
+
+# {for loop
+for (local i = 0; i < 5; i = i + 1)     // non-constant condition
+    print(i);
+for (local i = 0; ; i = i + 1) {        // infinite for loop
+    if (i > 6) break;
+    else print(i);
+}
+for (local i = 0; false; i = i + 1) {   // optimized away (except initializer)
+    if (i > 6) break;
+    print(i);
+}
+for (; true; print("unreachable"))      // for loop without initializer
+    break;
+for (;; print("unreachable"))           // for loop without initializer and condition
+    break;
+for (local i = 0; i < 2;) {             // for loop without last clause
+    print(i);
+    i = i + 1;
+}
+for (local i = 0;;) {                   // for loop without condition and last clause
+    print(i);
+    break;
+}
+for (;;)                                // for loop without initializer, condition and last clause
+    break;
+# }
  
 /* ===========================} */

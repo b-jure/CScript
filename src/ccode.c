@@ -249,7 +249,6 @@ static void emit3bytes(FunctionState *fs, int code) {
 
 /* emit instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
-    printf("emitting instruction %s at pc %d\n", getOpName(i), fs->pc);
     cs_assert(SIZEINSTR == sizeof(Instruction));
     cs_assert(fs->pclastop <= fs->pc);
     fs->pclastop = fs->pc;
@@ -679,7 +678,6 @@ static int getjump(FunctionState *fs, int pc) {
 /* fix jmp instruction at 'pc' to jump to 'target' */
 static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
-    printf("pc = %d, target = %d\n", pc, target);
     int offset = csi_abs(target - (pc + getOpSize(*jmp)));
     cs_assert(offset > 0); /* at least one expression in between */
     cs_assert(opisjump(*jmp)); /* 'jmp' is a valid jump instruction */
@@ -1352,7 +1350,6 @@ static int finaltarget(Instruction *code, int i) {
       } else /* no jumps */
           break;
   }
-  printf("target is %d\n", i);
   return i;
 }
 
@@ -1372,8 +1369,8 @@ void csC_finish(FunctionState *fs) {
                     SETARG_LLS(pc, 1); /* set the flag */
                 break;
             }
+            /* TODO: finaltarget the OP_BJMP and accumulate npop */
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */
-                printf("optimize %s at pc %d\n", getOpName(*pc), i);
                 int target = finaltarget(p->code, i);
                 fixjump(fs, i, target);
                 break;

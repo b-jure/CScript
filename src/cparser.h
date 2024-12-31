@@ -136,18 +136,18 @@ typedef union LVar {
 } LVar;
 
 
-typedef struct BreakJmp {
+typedef struct BJmp {
     int jmp;
     int nactlocals;
     int hasclose;
-} BreakJmp;
+} BJmp;
 
 
 /* list of jump instructions to patch */
 typedef struct PatchList {
     int len;
     int size;
-    BreakJmp *arr;
+    BJmp *arr;
 } PatchList;
 
 
