@@ -2124,7 +2124,7 @@ int forcondition(Lexer *lx, ExpInfo *e) {
         isctc = codepres_exp(lx->fs, e);    /* ...and put it on stack */
         expectnext(lx, ';');
     } else { /* otherwise no condition (infinite loop) */
-        e->et = EXP_TRUE; /* indicate it */
+        initexp(e, EXP_TRUE, 0);
         isctc = 1; /* true */
     }
     return isctc;
@@ -2203,8 +2203,10 @@ static void loopstm(Lexer *lx) {
     lstart = currentpc(fs); /* store the pc where the loop starts */
     enterloop(fs, &s, &ls, CFLOOP);
     stm(lx);
-    jmp = csC_jmp(fs, OP_JMPS);
-    csC_patch(fs, jmp, lstart);
+    if (!fs->lastwasret) {
+        jmp = csC_jmp(fs, OP_JMPS);
+        csC_patch(fs, jmp, lstart);
+    }
     leaveloop(fs);
 }
 
