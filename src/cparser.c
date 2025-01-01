@@ -242,8 +242,12 @@ static void addpatchlist(Lexer *lx) {
 }
 
 
-static void poplocals(FunctionState *fs, int tolevel, int nswitch) {
-    csC_pop(fs, fs->nactlocals - tolevel + nswitch);
+static void continuepop(FunctionState *fs) {
+    cs_assert(fs->loopscope);
+    /* pop locals */
+    csC_pop(fs, fs->nactlocals - fs->loopscope->nactlocals);
+    /* pop switch values up to the loop scope */
+    csC_pop(fs, fs->scope->nswscope - fs->loopscope->nswscope); 
 }
 
 
@@ -2162,12 +2166,13 @@ static void forloop(Lexer *lx) {
     int condpc, clausepc;
     DynCtx ctxbefore;
     struct LoopState ls;
-    Scope s;
+    Scope s, init;
     ExpInfo cond;
     initexp(&cond, EXP_VOID, 0);
-    enterloop(fs, &s, &ls, CFLOOP); /* enter loop (and loop scope) */
+    enterscope(fs, &init, 0); /* enter initializer scope */
     expectnext(lx, '(');
-    forinitializer(lx); /* get for loop initializer */
+    forinitializer(lx);
+    enterloop(fs, &s, &ls, CFLOOP); /* enter loop scope */
     fs->loopstart = currentpc(fs); /* loop is after initializer clause */
     storecontext(fs, &ctxbefore); /* store context at start of for loop */
     condpc = currentpc(fs);
@@ -2176,7 +2181,8 @@ static void forloop(Lexer *lx) {
     forlastclause(lx, &ctxbefore, &cond, &clausepc);
     expectmatch(lx, ')', '(', matchline);
     condbody(lx, &ctxbefore, &cond, 0, OP_TESTPOP, OP_JMPS, condpc, clausepc);
-    leaveloop(fs);
+    leaveloop(fs); /* leave loop scope */
+    leavescope(fs); /* leave initializer scope */
 }
 
 
@@ -2215,16 +2221,12 @@ static void loopstm(Lexer *lx) {
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int old_sp = fs->sp;
-    int extra, jmp;
+    int jmp;
     csY_scan(lx); /* skip 'continue' */
-    if (c_unlikely(fs->loopstart == NOJMP)) { /* not in a loop? */
-        cs_assert(fs->loopscope == NULL); /* then there is no loop scope */
+    if (c_unlikely(fs->loopscope == NULL)) /* not in a loop? */
         csP_semerror(lx, "'continue' not in loop statement");
-    }
-    cs_assert(fs->loopscope != NULL); /* must have loop scope */
-    /* pop (but do not remove) locals and switch expressions */
-    extra = fs->scope->nswscope - fs->loopscope->nswscope;
-    poplocals(fs, fs->loopscope->nactlocals, extra);
+    cs_assert(fs->loopstart != NOJMP); /* must have loop start offset */
+    continuepop(fs);
     fs->sp = old_sp; /* restore old 'sp', as parser is not jumping back */
     if (fs->scope->havetbcvar) { /* have to close upvalues? */
         int stklevel = stacklevel(fs, fs->loopscope->nactlocals);
@@ -2365,8 +2367,9 @@ static void stm_(Lexer *lx) {
 
 static void freestackslots(FunctionState *fs) {
     cs_assert(fs->p->maxstack >= fs->sp);
-    cs_assert(fs->sp >= nvarstack(fs));
-    fs->sp = nvarstack(fs); /* leave only locals */
+    cs_assert(fs->sp >= nvarstack(fs) + fs->scope->nswscope);
+    /* leave only locals and switch statement expressions */
+    fs->sp = nvarstack(fs) + fs->scope->nswscope;
 }
 
 

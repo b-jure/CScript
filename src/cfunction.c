@@ -151,17 +151,18 @@ UpVal *csF_findupval(cs_State *ts, SPtr sv) {
 
 /*
 ** Find local variable name that must be alive 'endpc > pc'
-** and must be at index 'lnum'.
-** This function takes into consideration that 'fn' might be
-** missing debug information (stripped).
-** Note: current version (1.0.0) always contains debug information.
+** and must be at index 'lnum' in the corresponding scope.
 */
 const char *csF_getlocalname(const Proto *fn, int lnum, int pc) {
     cs_assert(lnum > 0);
-    for (int i = 0; i < fn->sizelocals && fn->locals->startpc <= pc; i++)
-        if ((lnum -= (pc < fn->locals[i].endpc)) == 0)
-            return getstr(fn->locals[i].name);
-    return NULL;
+    for (int i = 0; i < fn->sizelocals && fn->locals->startpc <= pc; i++) {
+        if (pc < fn->locals[i].endpc) { /* variable is active? */
+            lnum--;
+            if (lnum == 0)
+                return getstr(fn->locals[i].name);
+        }
+    }
+    return NULL; /* not found */
 }
 
 

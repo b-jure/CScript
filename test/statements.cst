@@ -2,238 +2,238 @@
 **          STATEMENTS
 ** ============================ */
 
-## {LOCAL
-## {local statement
-#local a;                                // single local uninitialized (nil) variable
-#print(a);                               // nil
-#local b, c, d;                          // multiple local uninitialized (nil) variables
-#print(b, c, d);                         // nil nil nil
-#local e, f, g = 1, 2, 3;                // multiple initialized local variables
-#print(e, f, g);                         // 1 2 3
-#print(a, b, c, d, e, f, g);             // nil nil nil nil 1 2 3
-#local a1 <final> = 69;                  // immutable local variable
-#print(a1);                              // 69
-##a1 = a1 + 2;                          // error (assignment to a read-only variable)
-##local a2 <close> = 420;               // error (variable got a non-closeable value)
-#local a2 <final>, a3 <final>, a4 <close>;
-##a2 = 5;                               // error (assignment to a read-only variable)
-##a3 = 6;                               // error (assignment to a read-only variable)
-#local b1 <final>, b2 <final>, b3 <close> = "Hello, ", "World", false;
-#print(b1 .. b2, b3);                    // "Hello, World"  false
-## }{local function
-#local fn add(x, y) {
-#    return x + y;
-#}
-#print(add(5, 2));                       // 7
-#print(add);                             // function: <memory_address>
-## }{local class
-#local class Empty {}
-#print(Empty);                           // class: <memory_address>
-#print(Empty());                         // instance: <memory_address>
-#local PI <final> = 3.141592654;
-#local class Circle {
-#    fn __init() {                       // override initializer
-#        self.radius = 4;
-#        return self;
-#    }
-#    fn area() {
-#        rsq = self.radius ** 2;
-#        return rsq * PI;
-#    }
-#    fn circumference() {
-#        local d = self.radius * 2;
-#        return d * PI;
-#    }
-#}
-#local circ = Circle();
-#print(circ);                            // instance: <memory_address>
-#print(circ.radius);                     // 4
-#print(circ.area());                     // around 50.265482464
-#print(circ.circumference());            // around 25.132741232
-#local ent;
-#local class Entity {
-#    fn type() {
-#        return "Entity";
-#    }
-#}
-#ent = Entity();
-#print(ent);                             // instance: <memory_address>
-#print(ent.type());                      // "Entity"
-#local class Human inherits Entity {     // Human class inherits Entity class
-#    fn __init(fname, lname) {
-#        self.fname = fname;
-#        self.lname = lname;
-#        return self;
-#    }
-#    fn name() {
-#        local fname = self.fname or "?";
-#        local lname = self.lname or "?";
-#        return fname .. " " .. lname;
-#    }
-#    fn type() {
-#        return "Human " .. super.type();
-#    }
-#}
-#ent = Human("John", "Cena");
-#print(ent);                             // instance: <memory_address>
-#print(ent.type());                      // "Human Entity"
-#print(ent.name());                      // "John Cena"
-#ent = Human();
-#print(ent.name());                      // "? ?"
-## }}
-#
-## {function statement
-#fn func(...) {
-#    print(...);                 
-#    return 69;
-#};
-#print(func);                            // function: <memory_address>
-#func = func(...);                       // <binary>   <script>
-#print(func);                            // 69
-## }
-#
-## {class statement
-#local table = {};
-#print(table);                           // hashtable: <memory_address>
-#class table.line {
-#    fn __init(x, y) {
-#        self.x = x;
-#        self.y = y;
-#        return self;
-#    }
-#    fn cords() {
-#        return self.x, self.y;
-#    }
-#}
-#table.myline = table.line(15, 12);
-#print(table.myline);                    // instance: <memory_address>
-#print(table.myline.cords());            // 15   12
-#table.config = {};
-#print(table.config);                    // hashtable: <memory_address>
-#class table.config.point {
-#    fn __init(x, y) {
-#        self.x = x;
-#        self.y = y;
-#        return self;
-#    }
-#    fn cords() {
-#        return self.x, self.y;
-#    }
-#}
-#table.config.myconfig = table.config.point(69, 420);
-#print(table.config.myconfig);           // instance: <memory_address>
-#print(table.config.myconfig.cords());   // 69   420
-## }
-#
-## {while, break and block statements
-#while (false) {                         // optimized away
-#    print("unreachable");
-#}
-#while (true) {                          // converted to 'loop' statement
-#    local a = 69;
-#    print(a);                           // 69
-#    break;
-#}
-#print(a);                               // nil
-#local i = 0;
-#while (i < 5) {
-#    print("i = " .. tostring(i));
-#    i = i + 1;
-#}
-#print("i = " .. tostring(i));           // "i = 5"
-#while (true) {                          // 'break' in a loop with nested scopes
-#    local inner1 = 69;
-#    {
-#        local inner2 = 420;
-#        {
-#            local inner3 = 1337;
-#            print(inner1, inner2, inner3);  // 69  420  1337
-#            break;
-#        }
-#    }
-#}
-#print(inner1, inner2, inner3);          // nil  nil  nil
-## }
-#
-## {if/else statement
-#if (false) {                            // optimized away
-#    print("unreachable");
-#}
-#if (69 < 420) {
-#    print("reachable");                 // reachable
-#}
-#if (true) {                             // condition optimized away
-#    print("reachable");                 // reachable
-#}
-#if (420 < 69) {
-#    print("unreachable");
-#} else {
-#    print("reachable");                 // reachable
-#}
-#if (420 < 69) {
-#    print("unreachable");
-#} else if (true) {                      // condition optimized away
-#    print("reachable");                 // reachable
-#}
-#if (420 < 69) {
-#    print("unreachable");
-#} else if (false) {                     // branch optimized away
-#    print("unreachable");
-#} else if (true) {                      // condition optimized away
-#    print("reachable");                 // reachable
-#}
-#if (420 < 69) {
-#    print("unreachable");
-#} else if (false) {                     // branch optimized away
-#    print("unreachable");
-#} else if (69 < 69) {
-#    print("unreachable");
-#} else if (69 < 420) {
-#    print("reachable");                 // reachable
-#} else {
-#    print("unreachable");
-#}
-#if (420 < 69) {
-#    print("unreachable");
-#} else if (false) {                     // branch optimized away
-#    print("unreachable");
-#} else if (69 < 69) {
-#    print("unreachable");
-#} else if (true) {                      // condition optimized away
-#    print("reachable");                 // reachable
-#} else if (true) {                      // branch optimized away
-#    print("unreachable");
-#} else {                                // branch optimized away
-#    print("unreachable");
-#}
-## }
-#
-## {for loop
-#for (local i = 0; i < 5; i = i + 1)     // non-constant condition
-#    print(i);
-#for (local i = 0; ; i = i + 1) {        // infinite for loop
-#    if (i > 6) break;
-#    else print(i);
-#}
-#for (local i = 0; false; i = i + 1) {   // optimized away (except initializer)
-#    if (i > 6) break;
-#    print(i);
-#}
-#for (; true; print("unreachable"))      // for loop without initializer
-#    break;
-#for (;; print("unreachable"))           // for loop without initializer and condition
-#    break;
-#for (local i = 0; i < 2;) {             // for loop without last clause
-#    print(i);
-#    i = i + 1;
-#}
-#for (local i = 0;;) {                   // for loop without condition and last clause
-#    print(i);
-#    break;
-#}
-#for (;;)                                // for loop without initializer, condition and last clause
-#    break;
-## }
+# {LOCAL
+# {local statement
+local a;                                // single local uninitialized (nil) variable
+print(a);                               // nil
+local b, c, d;                          // multiple local uninitialized (nil) variables
+print(b, c, d);                         // nil nil nil
+local e, f, g = 1, 2, 3;                // multiple initialized local variables
+print(e, f, g);                         // 1 2 3
+print(a, b, c, d, e, f, g);             // nil nil nil nil 1 2 3
+local a1 <final> = 69;                  // immutable local variable
+print(a1);                              // 69
+#a1 = a1 + 2;                          // error (assignment to a read-only variable)
+#local a2 <close> = 420;               // error (variable got a non-closeable value)
+local a2 <final>, a3 <final>, a4 <close>;
+#a2 = 5;                               // error (assignment to a read-only variable)
+#a3 = 6;                               // error (assignment to a read-only variable)
+local b1 <final>, b2 <final>, b3 <close> = "Hello, ", "World", false;
+print(b1 .. b2, b3);                    // "Hello, World"  false
+# }{local function
+local fn add(x, y) {
+    return x + y;
+}
+print(add(5, 2));                       // 7
+print(add);                             // function: <memory_address>
+# }{local class
+local class Empty {}
+print(Empty);                           // class: <memory_address>
+print(Empty());                         // instance: <memory_address>
+local PI <final> = 3.141592654;
+local class Circle {
+    fn __init() {                       // override initializer
+        self.radius = 4;
+        return self;
+    }
+    fn area() {
+        rsq = self.radius ** 2;
+        return rsq * PI;
+    }
+    fn circumference() {
+        local d = self.radius * 2;
+        return d * PI;
+    }
+}
+local circ = Circle();
+print(circ);                            // instance: <memory_address>
+print(circ.radius);                     // 4
+print(circ.area());                     // around 50.265482464
+print(circ.circumference());            // around 25.132741232
+local ent;
+local class Entity {
+    fn type() {
+        return "Entity";
+    }
+}
+ent = Entity();
+print(ent);                             // instance: <memory_address>
+print(ent.type());                      // "Entity"
+local class Human inherits Entity {     // Human class inherits Entity class
+    fn __init(fname, lname) {
+        self.fname = fname;
+        self.lname = lname;
+        return self;
+    }
+    fn name() {
+        local fname = self.fname or "?";
+        local lname = self.lname or "?";
+        return fname .. " " .. lname;
+    }
+    fn type() {
+        return "Human " .. super.type();
+    }
+}
+ent = Human("John", "Cena");
+print(ent);                             // instance: <memory_address>
+print(ent.type());                      // "Human Entity"
+print(ent.name());                      // "John Cena"
+ent = Human();
+print(ent.name());                      // "? ?"
+# }}
+
+# {function statement
+fn func(...) {
+    print(...);                 
+    return 69;
+};
+print(func);                            // function: <memory_address>
+func = func(...);                       // <binary>   <script>
+print(func);                            // 69
+# }
+
+# {class statement
+local table = {};
+print(table);                           // hashtable: <memory_address>
+class table.line {
+    fn __init(x, y) {
+        self.x = x;
+        self.y = y;
+        return self;
+    }
+    fn cords() {
+        return self.x, self.y;
+    }
+}
+table.myline = table.line(15, 12);
+print(table.myline);                    // instance: <memory_address>
+print(table.myline.cords());            // 15   12
+table.config = {};
+print(table.config);                    // hashtable: <memory_address>
+class table.config.point {
+    fn __init(x, y) {
+        self.x = x;
+        self.y = y;
+        return self;
+    }
+    fn cords() {
+        return self.x, self.y;
+    }
+}
+table.config.myconfig = table.config.point(69, 420);
+print(table.config.myconfig);           // instance: <memory_address>
+print(table.config.myconfig.cords());   // 69   420
+# }
+
+# {while, break and block statements
+while (false) {                         // optimized away
+    print("unreachable");
+}
+while (true) {                          // converted to 'loop' statement
+    local a = 69;
+    print(a);                           // 69
+    break;
+}
+print(a);                               // nil
+local i = 0;
+while (i < 5) {
+    print("i = " .. tostring(i));
+    i = i + 1;
+}
+print("i = " .. tostring(i));           // "i = 5"
+while (true) {                          // 'break' in a loop with nested scopes
+    local inner1 = 69;
+    {
+        local inner2 = 420;
+        {
+            local inner3 = 1337;
+            print(inner1, inner2, inner3);  // 69  420  1337
+            break;
+        }
+    }
+}
+print(inner1, inner2, inner3);          // nil  nil  nil
+# }
+
+# {if/else statement
+if (false) {                            // optimized away
+    print("unreachable");
+}
+if (69 < 420) {
+    print("reachable");                 // reachable
+}
+if (true) {                             // condition optimized away
+    print("reachable");                 // reachable
+}
+if (420 < 69) {
+    print("unreachable");
+} else {
+    print("reachable");                 // reachable
+}
+if (420 < 69) {
+    print("unreachable");
+} else if (true) {                      // condition optimized away
+    print("reachable");                 // reachable
+}
+if (420 < 69) {
+    print("unreachable");
+} else if (false) {                     // branch optimized away
+    print("unreachable");
+} else if (true) {                      // condition optimized away
+    print("reachable");                 // reachable
+}
+if (420 < 69) {
+    print("unreachable");
+} else if (false) {                     // branch optimized away
+    print("unreachable");
+} else if (69 < 69) {
+    print("unreachable");
+} else if (69 < 420) {
+    print("reachable");                 // reachable
+} else {
+    print("unreachable");
+}
+if (420 < 69) {
+    print("unreachable");
+} else if (false) {                     // branch optimized away
+    print("unreachable");
+} else if (69 < 69) {
+    print("unreachable");
+} else if (true) {                      // condition optimized away
+    print("reachable");                 // reachable
+} else if (true) {                      // branch optimized away
+    print("unreachable");
+} else {                                // branch optimized away
+    print("unreachable");
+}
+# }
+
+# {for loop
+for (local i = 0; i < 5; i = i + 1)     // non-constant condition
+    print(i);
+for (local i = 0; ; i = i + 1) {        // infinite for loop
+    if (i > 6) break;
+    else print(i);
+}
+for (local i = 0; false; i = i + 1) {   // optimized away (except initializer)
+    if (i > 6) break;
+    print(i);
+}
+for (; true; print("unreachable"))      // for loop without initializer
+    break;
+for (;; print("unreachable"))           // for loop without initializer and condition
+    break;
+for (local i = 0; i < 2;) {             // for loop without last clause
+    print(i);
+    i = i + 1;
+}
+for (local i = 0;;) {                   // for loop without condition and last clause
+    print(i);
+    break;
+}
+for (;;)                                // for loop without initializer, condition and last clause
+    break;
+# }
 
 # {loop statement
 loop break;
@@ -249,5 +249,15 @@ loop break;
 #loop;                                   // infinite loop
 #loop {}                                 // infinite loop
 # }
+
+# {continue statement
+for (local x = 0; x < 3; x = x + 1) {
+    local y, z;                         // 'continue' pops them
+    if (x == 0) continue;               // first value of x is not printed
+    print(x);                           // prints 1 and 2
+}
+# }
+
+
  
 /* ===========================} */

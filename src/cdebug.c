@@ -14,34 +14,19 @@
 #include "capi.h"
 #include "ccode.h"
 #include "cfunction.h"
-#include "cobject.h"
 #include "cstring.h"
 #include "climits.h"
-#include "cstate.h"
 #include "cobject.h"
 #include "cprotected.h"
 #include "cmeta.h"
 #include "cvm.h"
 #include "cgc.h"
-#include "ctrace.h"
 
 
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
 
-/* TODO: implement binary search */
-int csD_getfuncline(const Proto *fn, int pc) {
-    LineInfo *li = NULL;
-    for (int i = 0; i < fn->sizelinfo; i++) {
-        li = &fn->linfo[i];
-        if (pc <= li->pc) break;
-    }
-    return li->line;
-}
-
-
-/*
-// get line number of instruction ('pc')
+/* get line number of instruction ('pc') */
 int csD_getfuncline(const Proto *p, int pc) {
     int low = 0;
     int high = p->sizelinfo - 1;
@@ -53,14 +38,13 @@ int csD_getfuncline(const Proto *p, int pc) {
             high = mid - 1;
         else if (li->pc < pc)
             low = mid + 1;
-        else // otherwise direct hit
+        else /* otherwise direct hit */
             break;
     }
     li += li->pc < pc;
     cs_assert(pc <= li->pc);
     return li->line;
 }
-*/
 
 
 cs_sinline int relpc(const CallFrame *cf) {
@@ -179,41 +163,34 @@ static const char *funcnamefromcode(cs_State *ts, const Proto *p, int pc,
     cs_MM mm;
     Instruction *i = &p->code[pc];
     switch (*i) {
-        case OP_CALL: {
-            /* TODO: call instruction holds the stack position to the start
-            ** of the arguments, right before that is the object that was
-            ** called, find out its name. */
-            *name = "unknown_object()";
-            return "unknown_object()"; 
-        }
+        /* TODO: symbolic execution for OP_CALL */
+        case OP_CALL: return NULL;
         case OP_FORCALL: {
             *name = "for iterator";
             return "for iterator";
         }
         case OP_GETPROPERTY: case OP_GETINDEX:
-        case OP_GETINDEXSTR: case OP_GETINDEXINT: {
+        case OP_GETINDEXSTR: case OP_GETINDEXINT:
             mm = CS_MM_GETIDX;
             break;
-        }
         case OP_SETPROPERTY: case OP_SETINDEX:
-        case OP_SETINDEXSTR: case OP_SETINDEXINT: {
+        case OP_SETINDEXSTR: case OP_SETINDEXINT:
             mm = CS_MM_SETIDX;
             break;
-        }
         case OP_MBIN: {
             mm = GETARG_S(i, 0);
             break;
         }
+        case OP_LT: case OP_LTI: case OP_GTI: mm = CS_MM_LT; break;
+        case OP_LE: case OP_LEI: case OP_GEI: mm = CS_MM_LE; break;
+        case OP_CLOSE: case OP_RET: mm = CS_MM_CLOSE; break;
         case OP_UNM: mm = CS_MM_UNM; break;
         case OP_BNOT: mm = CS_MM_BNOT; break;
         case OP_CONCAT: mm = CS_MM_CONCAT; break;
         case OP_EQ: mm = CS_MM_EQ; break;
-        case OP_LT: case OP_LTI: case OP_GTI: mm = CS_MM_LT; break;
-        case OP_LE: case OP_LEI: case OP_GEI: mm = CS_MM_LE; break;
-        case OP_CLOSE: case OP_RET: mm = CS_MM_CLOSE; break;
         default: return NULL;
     }
-    *name = getstr(G_(ts)->mmnames[mm]) /* and skip '__' */ + 2;
+    *name = getstr(G_(ts)->mmnames[mm]) + /* skip '__' */ 2;
     return "metamethod";
 }
 
