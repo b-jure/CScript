@@ -1,6 +1,6 @@
 /*
 ** ccorelib.c
-** Core library
+** Basic library
 ** See Copyright Notice in cscript.h
 */
 
@@ -15,7 +15,7 @@
 #include "cscript.h"
 
 
-static int csCore_error(cs_State *ts) {
+static int csB_error(cs_State *ts) {
     int level = csL_opt_integer(ts, 1, 0);
     cs_setntop(ts, 1); /* leave only message on top */
     if (cs_type(ts, 0) == CS_TSTRING && level >= 0) {
@@ -28,7 +28,7 @@ static int csCore_error(cs_State *ts) {
 }
 
 
-static int csCore_assert(cs_State *ts) {
+static int csB_assert(cs_State *ts) {
     if (c_likely(cs_to_bool(ts, -1))) { /* true? */
         return cs_nvalues(ts); /* get all arguments */
     } else { /* failed assert (error) */
@@ -36,7 +36,7 @@ static int csCore_assert(cs_State *ts) {
         cs_remove(ts, 0); /* remove condition */
         cs_push_literal(ts, "assertion failed"); /* push default err message */
         cs_setntop(ts, 1); /* leave only one message on top */
-        return csCore_error(ts);
+        return csB_error(ts);
     }
 }
 
@@ -44,7 +44,7 @@ static int csCore_assert(cs_State *ts) {
 /* check if 'optnum' for 'cs_gc' was valid */
 #define checkres(res)   { if (res == -1) break; }
 
-static int csCore_gc(cs_State *ts) {
+static int csB_gc(cs_State *ts) {
     static const char *const opts[] = {"stop", "restart", "collect", "count",
         "step", "setpause", "setstepmul", "isrunning", NULL};
     static const int numopts[] = {CS_GCSTOP, CS_GCRESTART, CS_GCCOLLECT,
@@ -125,7 +125,7 @@ static int auxload(cs_State *ts, int status) {
 }
 
 
-static int csCore_load(cs_State *ts) {
+static int csB_load(cs_State *ts) {
     int status;
     size_t sz;
     const char *chunkname;
@@ -142,14 +142,14 @@ static int csCore_load(cs_State *ts) {
 }
 
 
-static int csCore_loadfile(cs_State *ts) {
+static int csB_loadfile(cs_State *ts) {
     const char *filename = csL_opt_string(ts, 0, NULL);
     int status = csL_loadfile(ts, filename);
     return auxload(ts, status);
 }
 
 
-static int csCore_runfile(cs_State *ts) {
+static int csB_runfile(cs_State *ts) {
     const char *filename = csL_opt_string(ts, -1, NULL);
     cs_setntop(ts, 1);
     if (c_unlikely(csL_loadfile(ts, filename) != CS_OK))
@@ -159,7 +159,7 @@ static int csCore_runfile(cs_State *ts) {
 }
 
 
-static int csCore_getmetamethod(cs_State *ts) {
+static int csB_getmetamethod(cs_State *ts) {
     static const char * const opts[CS_MM_N + 1] = {"__init", "__getidx",
         "__setidx", "__gc", "__close", "__call", "__concat", "__add", "__sub",
         "__mul", "__div", "__mod", "__pow", "__shl", "__shr", "__band",
@@ -178,8 +178,10 @@ static int csCore_getmetamethod(cs_State *ts) {
 }
 
 
-static int csCore_next(cs_State *ts) {
-    csL_check_type(ts, 0, CS_TINSTANCE);
+static int csB_next(cs_State *ts) {
+    int tt = cs_type(ts, 0);
+    if (c_unlikely(tt != CS_TINSTANCE && tt != CS_THTABLE))
+        csL_type_error(ts, 0, cs_typename(ts, tt));
     cs_setntop(ts, 2); /* if 2nd argument is missing create it */
     if (cs_next(ts, 0)) { /* found field? */
         return 2; /* key (index) + value */
@@ -187,6 +189,15 @@ static int csCore_next(cs_State *ts) {
         cs_push_nil(ts);
         return 1;
     }
+}
+
+
+static int csB_pairs(cs_State *ts) {
+    csL_check_any(ts, 0);
+    cs_push_cfunction(ts, csB_next); /* will return generator, */
+    cs_push(ts, 0);                     /* state, */
+    cs_push_nil(ts);                    /* and initial value */
+    return 3;
 }
 
 
@@ -201,7 +212,7 @@ static int finishpcall(cs_State *ts, int status, int extra) {
 }
 
 
-static int csCore_pcall(cs_State *ts) {
+static int csB_pcall(cs_State *ts) {
     int status;
     csL_check_any(ts, 0);
     cs_push_bool(ts, 1); /* first result if no errors */
@@ -211,7 +222,7 @@ static int csCore_pcall(cs_State *ts) {
 }
 
 
-static int csCore_xpcall(cs_State *ts) {
+static int csB_xpcall(cs_State *ts) {
     int status;
     int nargs = cs_nvalues(ts) - 2;
     csL_check_type(ts, 1, CS_TFUNCTION);
@@ -223,7 +234,7 @@ static int csCore_xpcall(cs_State *ts) {
 }
 
 
-static int csCore_print(cs_State *ts) {
+static int csB_print(cs_State *ts) {
     int n = cs_nvalues(ts);
     for (int i = 0; i < n; i++) {
         size_t len;
@@ -238,7 +249,7 @@ static int csCore_print(cs_State *ts) {
 }
 
 
-static int csCore_warn(cs_State *ts) {
+static int csB_warn(cs_State *ts) {
     int n = cs_nvalues(ts);
     int i;
     csL_check_string(ts, 0); /* at least one string */
@@ -251,7 +262,7 @@ static int csCore_warn(cs_State *ts) {
 }
 
 
-static int csCore_rawequal(cs_State *ts) {
+static int csB_rawequal(cs_State *ts) {
     csL_check_any(ts, 0); /* lhs */
     csL_check_any(ts, 1); /* rhs */
     cs_push_bool(ts, cs_rawequal(ts, 0, 1));
@@ -259,7 +270,7 @@ static int csCore_rawequal(cs_State *ts) {
 }
 
 
-static int csCore_rawget(cs_State *ts) {
+static int csB_rawget(cs_State *ts) {
     csL_check_type(ts, 0, CS_TINSTANCE);
     csL_check_any(ts, 1); /* index */
     cs_setntop(ts, 2);
@@ -268,7 +279,7 @@ static int csCore_rawget(cs_State *ts) {
 }
 
 
-static int csCore_rawset(cs_State *ts) {
+static int csB_rawset(cs_State *ts) {
     csL_check_type(ts, 0, CS_TINSTANCE);
     csL_check_any(ts, 1); /* index */
     csL_check_any(ts, 2); /* value */
@@ -278,7 +289,7 @@ static int csCore_rawset(cs_State *ts) {
 }
 
 
-static int csCore_getargs(cs_State *ts) {
+static int csB_getargs(cs_State *ts) {
     int n = cs_nvalues(ts);
     if (cs_type(ts, 0) == CS_TSTRING) {
         const char *what = cs_to_string(ts, 0);
@@ -402,7 +413,7 @@ done:
 }
 
 
-static int csCore_tonumber(cs_State *ts) {
+static int csB_tonumber(cs_State *ts) {
     int overflow = 0;
     if (cs_is_noneornil(ts, 1)) { /* no base? */
         if (cs_type(ts, 0) == CS_TNUMBER) { /* number ? */
@@ -435,14 +446,14 @@ static int csCore_tonumber(cs_State *ts) {
 }
 
 
-static int csCore_tostring(cs_State *ts) {
+static int csB_tostring(cs_State *ts) {
     csL_check_number(ts, 0);
     csL_to_lstring(ts, 0, NULL);
     return 1;
 }
 
 
-static int csCore_typeof(cs_State *ts) {
+static int csB_typeof(cs_State *ts) {
     int tt = cs_type(ts, 0);
     csL_check_arg(ts, tt != CS_TNONE, 0, "value expected");
     cs_push_string(ts, cs_typename(ts, 0));
@@ -450,26 +461,27 @@ static int csCore_typeof(cs_State *ts) {
 }
 
 
-static const cs_Entry core_funcs[] = {
-    {"error", csCore_error},
-    {"assert", csCore_assert},
-    {"gc", csCore_gc},
-    {"load", csCore_load},
-    {"loadfile", csCore_loadfile},
-    {"runfile", csCore_runfile},
-    {"getmetamethod", csCore_getmetamethod},
-    {"next", csCore_next},
-    {"pcall", csCore_pcall},
-    {"xpcall", csCore_xpcall},
-    {"print", csCore_print},
-    {"warn", csCore_warn},
-    {"rawequal", csCore_rawequal},
-    {"rawget", csCore_rawget},
-    {"rawset", csCore_rawset},
-    {"getargs", csCore_getargs},
-    {"tonumber", csCore_tonumber},
-    {"tostring", csCore_tostring},
-    {"typeof", csCore_typeof},
+static const cs_Entry basic_funcs[] = {
+    {"error", csB_error},
+    {"assert", csB_assert},
+    {"gc", csB_gc},
+    {"load", csB_load},
+    {"loadfile", csB_loadfile},
+    {"runfile", csB_runfile},
+    {"getmetamethod", csB_getmetamethod},
+    {"next", csB_next},
+    {"pairs", csB_pairs},
+    {"pcall", csB_pcall},
+    {"xpcall", csB_xpcall},
+    {"print", csB_print},
+    {"warn", csB_warn},
+    {"rawequal", csB_rawequal},
+    {"rawget", csB_rawget},
+    {"rawset", csB_rawset},
+    {"getargs", csB_getargs},
+    {"tonumber", csB_tonumber},
+    {"tostring", csB_tostring},
+    {"typeof", csB_typeof},
     /* placeholders */
     {CS_GNAME, NULL},
     {"__VERSION", NULL},
@@ -477,10 +489,10 @@ static const cs_Entry core_funcs[] = {
 };
 
 
-CSMOD_API int csL_open_core(cs_State *ts) {
+CSMOD_API int csL_open_basic(cs_State *ts) {
     /* open lib into global instance */
     cs_push_globaltable(ts);
-    csL_set_funcs(ts, core_funcs, 0);
+    csL_set_funcs(ts, basic_funcs, 0);
     /* set global __G */
     cs_push(ts, -1);
     cs_set_fieldstr(ts, -2, CS_GNAME);

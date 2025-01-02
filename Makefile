@@ -7,7 +7,7 @@ CORE_O = src/capi.o src/carray.o src/ccode.o src/cdebug.o src/cfunction.o\
 src/cgc.o src/chashtable.o src/clexer.o src/cmem.o src/cmeta.o src/cobject.o\
 src/cparser.o src/cvm.o src/cprotected.o src/creader.o src/cscript.o\
 src/cstate.o src/cstring.o src/ctrace.o
-LIB_O = src/cauxlib.o src/ccorelib.o src/cslib.o
+LIB_O = src/cauxlib.o src/cbaselib.o src/cslib.o
 BASE_O = $(CORE_O) $(LIB_O) $(MYOBJS)
 
 CSCRIPT_T = cscript

@@ -1997,9 +1997,8 @@ static void handlels(FunctionState *fs, struct LoopState *ls, int store) {
 
 
 /* start loop scope */
-static void enterloop(FunctionState *fs, Scope *s, struct LoopState *ls,
-                      int cf) {
-    enterscope(fs, s, cf);
+static void enterloop(FunctionState *fs, Scope *s, struct LoopState *ls) {
+    enterscope(fs, s, CFLOOP);
     ls->prev = NULL;
     ls->loopscope = fs->loopscope;
     ls->loopstart = fs->loopstart;
@@ -2027,7 +2026,7 @@ static void whilestm(Lexer *lx) {
     int pcexpr, matchline;
     voidexp(&cond);
     csY_scan(lx); /* skip 'while' */
-    enterloop(fs, &s, &ls, CFLOOP);
+    enterloop(fs, &s, &ls);
     storecontext(fs, &ctxbefore);
     pcexpr = currentpc(fs);
     matchline = lx->line;
@@ -2081,12 +2080,14 @@ static void foreachloop(Lexer *lx) {
     addlocallit(lx, "(for state)"); /* invariant state  (base+1) */
     addlocallit(lx, "(for state)"); /* control var      (base+2) */
     addlocallit(lx, "(for state)"); /* to-be-closed var (base+3) */
-    /* create declared variables */
-    newlocalvar(lx, str_expectname(lx));
+    /* create locals variables */
+    enterloop(fs, &s, &ls); /* scope for local variables */
+    newlocalvar(lx, str_expectname(lx)); /* at least one variable expected */
     while (match(lx, ',')) {
         newlocalvar(lx, str_expectname(lx));
         nvars++;
     }
+    adjustlocals(lx, nvars); /* register locals */
     expectnext(lx, TK_IN);
     adjustassign(lx, NSTATEVARS, forexplist(lx, &e, NSTATEVARS), &e);
     adjustlocals(lx, NSTATEVARS); /* register control variables */
@@ -2094,11 +2095,9 @@ static void foreachloop(Lexer *lx) {
     /* runtime space for call (iterator, invariant state and control var) */
     csC_checkstack(fs, 3);
     prep = csC_emitILL(fs, OP_FORPREP, base, 0);
-    enterloop(fs, &s, &ls, CFLOOP); /* scope for declared variables */
-    adjustlocals(lx, nvars); /* register declared variables */
     csC_reserveslots(fs, nvars); /* space for declared variables */
     stm(lx); /* body */
-    leaveloop(fs); /* end scope for declared vars */
+    leaveloop(fs); /* leave loop scope */
     patchforjmp(fs, prep, currentpc(fs), 0);
     csC_emitILL(fs, OP_FORCALL, base, nvars);
     forend = csC_emitILL(fs, OP_FORLOOP, base, 0);
@@ -2172,7 +2171,7 @@ static void forloop(Lexer *lx) {
     enterscope(fs, &init, 0); /* enter initializer scope */
     expectnext(lx, '(');
     forinitializer(lx);
-    enterloop(fs, &s, &ls, CFLOOP); /* enter loop scope */
+    enterloop(fs, &s, &ls); /* enter loop scope */
     fs->loopstart = currentpc(fs); /* loop is after initializer clause */
     storecontext(fs, &ctxbefore); /* store context at start of for loop */
     condpc = currentpc(fs);
@@ -2207,7 +2206,7 @@ static void loopstm(Lexer *lx) {
     int jmp, lstart;
     csY_scan(lx); /* skip 'loop' */
     lstart = currentpc(fs); /* store the pc where the loop starts */
-    enterloop(fs, &s, &ls, CFLOOP);
+    enterloop(fs, &s, &ls);
     stm(lx);
     if (!fs->lastwasret) {
         jmp = csC_jmp(fs, OP_JMPS);

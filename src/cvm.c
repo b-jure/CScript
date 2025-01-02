@@ -1604,7 +1604,8 @@ returning:
             vm_case(OP_FORPREP) {
                 SPtr stk = STK(fetchl());
                 int off = fetchl();
-                Protect(csF_newtbcvar(ts, stk + FORTBCVAR));
+                /* create to-be-closed upvalue (if any) */
+                Protect(csF_newtbcvar(ts, stk+FORTBCVAR));
                 pc += off;
                 cs_assert(*pc == OP_FORCALL);
                 goto l_forcall;
@@ -1618,8 +1619,8 @@ returning:
                  * 'stk + 3' is the to-be-closed variable. Call uses stack
                  * after these values (starting at 'stk + 4'). */
                 memcpy(stk+NSTATEVARS, stk, FORTBCVAR*sizeof(stk));
-                ts->sp.p = stk + NSTATEVARS + FORTBCVAR;
-                Protect(csV_call(ts, stk + NSTATEVARS, nres));
+                ts->sp.p = stk+NSTATEVARS+FORTBCVAR; /* adjust stack pointer */
+                Protect(csV_call(ts, stk+NSTATEVARS, nres)); /* call iter */
                 updatebase(cf);
                 cs_assert(*pc == OP_FORLOOP);
                 goto l_forloop;
@@ -1628,11 +1629,11 @@ returning:
             l_forloop: {
                 SPtr stk = STK(fetchl());
                 int off = fetchl();
-                if (!ttisnil(s2v(stk + NSTATEVARS))) { /* continue loop? */
+                if (!ttisnil(s2v(stk + NSTATEVARS))) { /* result is not nil? */
                     /* save control variable */
-                    setobjs2s(ts, stk + FORCNTLVAR, stk + NSTATEVARS);
-                    pc -= off; /* jump back */
-                }
+                    setobjs2s(ts, stk+FORCNTLVAR, stk+NSTATEVARS);
+                    pc -= off; /* jump back to loop body */
+                } /* otherwise leave the loop (fetch next instruction) */
                 vm_break;
             }}
             vm_case(OP_RET) {

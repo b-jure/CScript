@@ -13,7 +13,7 @@
 
 
 static const cs_Entry loadedlibs[] = {
-    {CS_GNAME, csL_open_core},
+    {CS_GNAME, csL_open_basic},
     {NULL, NULL}
 };
 
