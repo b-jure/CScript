@@ -27,7 +27,7 @@
 
 
 /* maximum size for string table */
-#define MAXSTRTABLE     MAX_INT
+#define MAXSTRTABLE     MAXINT
 
 
 /* string equality */
@@ -59,7 +59,7 @@ void csS_clearcache(GState *gs) {
 ** Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
 */
 uint csS_hash(const char *str, size_t len, unsigned int seed) {
-    const cs_ubyte *data = cast(const cs_ubyte *, str);
+    const c_byte *data = cast(const c_byte *, str);
     uint h = seed;
     for (uint i = 0; i < len; i++) {
         h ^= data[i];
@@ -170,9 +170,9 @@ void csS_remove(cs_State *ts, OString *s) {
 
 /* grow string table */
 static void growtable(cs_State *ts, StringTable *tab) {
-    if (c_unlikely(tab->nuse == MAX_INT)) {
+    if (c_unlikely(tab->nuse == MAXINT)) {
         csG_full(ts, 1); /* try to reclaim memory */
-        if (tab->nuse == MAX_INT)
+        if (tab->nuse == MAXINT)
             csM_error(ts);
     }
     if (tab->size <= MAXSTRTABLE / 2)
@@ -201,7 +201,7 @@ static OString *internshrstr(cs_State *ts, const char *str, size_t l) {
     }
     s = newstrobj(ts, l, CS_VSHRSTR, h);
     memcpy(getshrstr(s), str, l*sizeof(char));
-    s->shrlen = cast_ubyte(l);
+    s->shrlen = cast_byte(l);
     s->u.next = *list;
     *list = s;
     tab->nuse++;
@@ -333,7 +333,7 @@ static const unsigned char table[] = { -1,
 ** 36, but this function is used for scanner, so it is not required.
 */
 static const char *str2int(const char *s, cs_Integer *i, int *oflow) {
-    const cs_ubyte *val = table + 1;
+    const c_byte *val = table + 1;
     cs_Unsigned lim = CS_INTEGER_MIN;
     int neg = 0;
     uint x;
@@ -388,16 +388,16 @@ done:
     if (y >= lim) { /* potential overflow? */
         if (!neg) { /* positive value overflows? */
             *oflow = 1; /* propagate overflow */
-            *i = csi_castU2S(lim - 1); /* *i = CS_INTEGER_MAX */
+            *i = c_castU2S(lim - 1); /* *i = CS_INTEGER_MAX */
         } else if (y > lim) { /* negative value underflows? */
             *oflow = -1; /* propagate underflow */
-            *i = csi_castU2S(lim); /* *i = CS_INTEGER_MIN */
+            *i = c_castU2S(lim); /* *i = CS_INTEGER_MIN */
         } else /* otherwise y is negative value equal to lim */
             cs_assert(neg && y == lim);
     }
     while (cisspace(c)) c = *s++; /* skip trailing spaces */
     if (empty || c != '\0') return NULL; /* conversion failed? */
-    *i = csi_castU2S((y ^ neg) - neg); /* two's complement hack */
+    *i = c_castU2S((y ^ neg) - neg); /* two's complement hack */
     return s - 1;
 }
 
@@ -625,7 +625,7 @@ const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
             break;
         }
         default:;
-            cs_ubyte c = cast(unsigned char, *(end + 1));
+            c_byte c = cast(unsigned char, *(end + 1));
             csD_runerror(ts, "invalid format specifier '%%%c'", c);
             /* UNREACHED */
             return NULL;

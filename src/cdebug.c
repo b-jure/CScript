@@ -20,6 +20,7 @@
 #include "cprotected.h"
 #include "cmeta.h"
 #include "cvm.h"
+#include "ctrace.h"
 #include "cgc.h"
 
 
@@ -47,14 +48,14 @@ int csD_getfuncline(const Proto *p, int pc) {
 }
 
 
-cs_sinline int relpc(const CallFrame *cf) {
+c_sinline int relpc(const CallFrame *cf) {
     cs_assert(isCScript(cf));
     return cast_int(cf->pc - cfProto(cf)->code) - 1;
 }
 
 
-/* current line number */
-cs_sinline int currentline(CallFrame *cf) {
+/* get current line number */
+c_sinline int getcurrentline(CallFrame *cf) {
     return csD_getfuncline(cfProto(cf), relpc(cf));
 }
 
@@ -201,10 +202,9 @@ static const char *funcnamefromcall(cs_State *ts, CallFrame *cf,
     if (cf->status & CFST_FIN) { /* called as finalizer? */
         *name = "__gc";
         return "metamethod";
-    }
-    else if (isCScript(cf))
+    } else if (isCScript(cf)) {
         return funcnamefromcode(ts, cfProto(cf), relpc(cf), name);
-    else
+    } else
         return NULL;
 }
 
@@ -222,11 +222,11 @@ static const char *getfuncname(cs_State *ts, CallFrame *cf, const char **name) {
 ** 'cs_DebugInfo' accordingly. If any invalid options is specified this
 ** returns 0.
 */
-static int getinfo(cs_State *ts, const char *options, Closure *cl,
-                   CallFrame *cf, cs_DebugInfo *di) {
+static int auxgetinfo(cs_State *ts, const char *options, Closure *cl,
+                      CallFrame *cf, cs_DebugInfo *di) {
     int status = 1;
-    for (; *options; options++) {
-        switch (*options) {
+    for (unsigned char opt = *options++; opt != '\0'; opt = *options++) {
+        switch (opt) {
             case 'n': {
                 di->namewhat = getfuncname(ts, cf, &di->name);
                 if (di->namewhat == NULL) { /* not found ? */
@@ -240,7 +240,7 @@ static int getinfo(cs_State *ts, const char *options, Closure *cl,
                 break;
             }
             case 'l': {
-                di->currline = (isCScript(cf) ? currentline(cf) : -1);
+                di->currline = (cf && isCScript(cf) ? getcurrentline(cf) : -1);
                 break;
             }
             case 'u': {
@@ -269,13 +269,13 @@ static int getinfo(cs_State *ts, const char *options, Closure *cl,
 /*
 ** Fill out 'cs_DebugInfo' according to 'options'.
 **
-** '>' - Pops the function on top of the stack and loads it into 'cf'.
-** 'n' - Fills in the field `name` and `namewhat`.
-** 's' - Fills in the fields `source`, `shortsrc`, `defline`,
+** `>` - Pops the function on top of the stack and loads it into 'cf'.
+** `n` - Fills in the field `name` and `namewhat`.
+** `s` - Fills in the fields `source`, `shortsrc`, `defline`,
 **       `lastdefline`, and `what`.
-** 'l' - Fills in the field `currentline`.
-** 'u' - Fills in the field `nupvals`.
-** 'f' - Pushes onto the stack the function that is running at the
+** `l` - Fills in the field `currentline`.
+** `u` - Fills in the field `nupvals`.
+** `f` - Pushes onto the stack the function that is running at the
 **       given level.
 **
 ** This function returns 0 on error (for instance if any option in 'options'
@@ -295,12 +295,12 @@ CS_API int cs_getinfo(cs_State *ts, const char *options, cs_DebugInfo *di) {
         options++; /* skip '>' */
         ts->sp.p--;
     } else {
-        cf = ts->cf;
+        cf = di->cf;
         func = s2v(cf->func.p);
         cs_assert(ttisfunction(func));
     }
     cl = (ttisCSclosure(func) ? clval(func) : NULL);
-    status = getinfo(ts, options, cl, cf, di);
+    status = auxgetinfo(ts, options, cl, cf, di);
     if (strchr(options, 'f')) {
         setobj2s(ts, ts->sp.p, func);
         api_inctop(ts);
@@ -325,14 +325,14 @@ const char *csD_addinfo(cs_State *ts, const char *msg, OString *src,
 
 
 /* generic runtime error */
-cs_noret csD_runerror(cs_State *ts, const char *fmt, ...) {
+c_noret csD_runerror(cs_State *ts, const char *fmt, ...) {
     va_list ap;
     const char *err;
     va_start(ap, fmt);
     err = csS_pushvfstring(ts, fmt, ap);
     va_end(ap);
     if (isCScript(ts->cf)) {
-        csD_addinfo(ts, err, cfProto(ts->cf)->source, currentline(ts->cf));
+        csD_addinfo(ts, err, cfProto(ts->cf)->source, getcurrentline(ts->cf));
         setobj2s(ts, ts->sp.p - 2, s2v(ts->sp.p - 1)); /* remove 'err' */
         ts->sp.p--;
     }
@@ -341,18 +341,18 @@ cs_noret csD_runerror(cs_State *ts, const char *fmt, ...) {
 
 
 /* global variable related error */
-cs_noret csD_globalerror(cs_State *ts, const char *err, OString *name) {
+c_noret csD_globalerror(cs_State *ts, const char *err, OString *name) {
     csD_runerror(ts, "%s global variable '%s'", err, getstr(name));
 }
 
 
 /* operation on invalid type error */
-cs_noret csD_typeerror(cs_State *ts, const TValue *v, const char *op) {
+c_noret csD_typeerror(cs_State *ts, const TValue *v, const char *op) {
     csD_runerror(ts, "tried to %s %s value", op, typename(ttype(v)));
 }
 
 
-cs_noret csD_typeerrormeta(cs_State *ts, const TValue *v1, const TValue *v2,
+c_noret csD_typeerrormeta(cs_State *ts, const TValue *v1, const TValue *v2,
                            const char * mop) {
     csD_runerror(ts, "tried to %s %s and %s values",
                      mop, typename(ttype(v1)), typename(ttype(v2)));
@@ -360,7 +360,7 @@ cs_noret csD_typeerrormeta(cs_State *ts, const TValue *v1, const TValue *v2,
 
 
 /* arithmetic operation error */
-cs_noret csD_operror(cs_State *ts, const TValue *v1, const TValue *v2,
+c_noret csD_operror(cs_State *ts, const TValue *v1, const TValue *v2,
                      const char *op) {
     if (ttisnum(v1))
         v1 = v2;  /* correct error value */
@@ -369,7 +369,7 @@ cs_noret csD_operror(cs_State *ts, const TValue *v1, const TValue *v2,
 
 
 /* ordering error */
-cs_noret csD_ordererror(cs_State *ts, const TValue *v1, const TValue *v2) {
+c_noret csD_ordererror(cs_State *ts, const TValue *v1, const TValue *v2) {
     const char *name1 = typename(ttype(v1));
     const char *name2 = typename(ttype(v2));
     if (name1 == name2) /* point to same entry ? */
@@ -379,30 +379,30 @@ cs_noret csD_ordererror(cs_State *ts, const TValue *v1, const TValue *v2) {
 }
 
 
-cs_noret csD_concaterror(cs_State *ts, const TValue *v1, const TValue *v2) {
+c_noret csD_concaterror(cs_State *ts, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1)) v1 = v2;
     csD_typeerror(ts, v1, "concatenate");
 }
 
 
-cs_noret csD_callerror(cs_State *ts, const TValue *o) {
+c_noret csD_callerror(cs_State *ts, const TValue *o) {
     csD_typeerror(ts, o, "call");
 }
 
 
-cs_noret csD_indexerror(cs_State *ts, cs_Integer index, const char *what) {
+c_noret csD_indexerror(cs_State *ts, cs_Integer index, const char *what) {
     csD_runerror(ts, "array index '%I' is %s", index, what);
 }
 
 
-cs_noret csD_indextypeerror(cs_State *ts, const TValue *index) {
+c_noret csD_indextypeerror(cs_State *ts, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
     csD_runerror(ts, "invalid array index type (%s), expected integer",
                      typename(ttype(index)));
 }
 
 
-cs_noret csD_errormsg(cs_State *ts) {
+c_noret csD_errormsg(cs_State *ts) {
     if (ts->errfunc != 0) { /* have error func? */
         SPtr errfunc = restorestack(ts, ts->errfunc); /* get it */
         cs_assert(ttisfunction(s2v(errfunc))); /* must be a function */

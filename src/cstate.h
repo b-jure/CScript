@@ -29,13 +29,10 @@
 /* stack size */
 #define stacksize(ts)		cast_int((ts)->stackend.p - (ts)->stack.p)
 
-/* current stack top offset */
-#define topoffset(ts)		cast_int((ts)->sp.p - (ts)->stack.p)
-
 
 /* save/restore stack position */
 #define savestack(ts,ptr)	(cast_charp(ptr) - cast_charp((ts)->stack.p))
-#define restorestack(ts,o)	cast(SPtr, cast_charp((ts)->stack.p) + (o))
+#define restorestack(ts,n)	cast(SPtr, cast_charp((ts)->stack.p) + (n))
 
 
 /* 
@@ -136,7 +133,7 @@ typedef struct CallFrame {
     const Instruction *pc; /* (only for Cript function) */
     int nvarargs; /* number of varargs (only for Cript function) */
     int nresults; /* number of expected results from this function */
-    cs_ubyte status; /* call status */
+    c_byte status; /* call status */
 } CallFrame;
 
 
@@ -162,19 +159,19 @@ typedef struct GState {
     void *ud_alloc; /* userdata for 'falloc' */
     cs_mem totalbytes; /* number of bytes allocated - gcgcdebt */
     cs_mem gcdebt; /* number of bbytes not yet compensated by collector */
-    cs_umem gcestimate; /* gcestimate of non-garbage memory in use */
+    c_mem gcestimate; /* gcestimate of non-garbage memory in use */
     StringTable strtab; /* interned strings (weak refs) */
     TValue c_registry; /* global registry */
     TValue nil; /* nil value (init flag) */
     uint seed; /* initial seed for hashing */
-    cs_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
-    cs_ubyte gcstate; /* GC state bits */
-    cs_ubyte gcstopem; /* stops emergency collections */
-    cs_ubyte gcstop; /* control wheter GC is running */
-    cs_ubyte gcemergency; /* true if this is emergency collection */
-    cs_ubyte gcpause; /* how long to wait until next cycle */
-    cs_ubyte gcstepmul; /* GC "speed" (heap size grow speed) */
-    cs_ubyte gcstepsize; /* log2 of GC granularity */
+    c_byte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
+    c_byte gcstate; /* GC state bits */
+    c_byte gcstopem; /* stops emergency collections */
+    c_byte gcstop; /* control wheter GC is running */
+    c_byte gcemergency; /* true if this is emergency collection */
+    c_byte gcpause; /* how long to wait until next cycle */
+    c_byte gcstepmul; /* GC "speed" (heap size grow speed) */
+    c_byte gcstepsize; /* log2 of GC granularity */
     GCObject *objects; /* list of all collectable objects */
     GCObject **sweeppos; /* current position of sweep in list */
     GCObject *fin; /* list of objects that have finalizer */
@@ -244,7 +241,7 @@ struct cs_State {
 
 /* extra space(X) + main thread state(S) */
 typedef struct XS {
-    cs_ubyte extra_[CS_EXTRASPACE];
+    c_byte extra_[CS_EXTRASPACE];
     cs_State ts;
 } XS;
 
@@ -257,7 +254,7 @@ typedef struct XSG {
 
 
 /* cast 'cs_State' back to start of 'XS' */
-#define fromstate(th)   cast(XS *, cast(cs_ubyte *, (th)) - offsetof(XS, ts))
+#define fromstate(th)   cast(XS *, cast(c_byte *, (th)) - offsetof(XS, ts))
 
 
 

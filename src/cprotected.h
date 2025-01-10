@@ -15,7 +15,7 @@
 typedef void (*ProtectedFn)(cs_State *ts, void *userdata);
 
 
-CSI_FUNC cs_noret csPR_throw(cs_State *ts, int code);
+CSI_FUNC c_noret csPR_throw(cs_State *ts, int code);
 CSI_FUNC int csPR_close(cs_State *ts, ptrdiff_t level, int status);
 CSI_FUNC int csPR_rawcall(cs_State *ts, ProtectedFn fn, void *ud);
 CSI_FUNC int csPR_call(cs_State *ts, ProtectedFn fn, void *ud, ptrdiff_t top,

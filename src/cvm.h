@@ -11,13 +11,11 @@
 #include "cstate.h"
 
 
-
-/* forloop private variable offsets */
-#define FORITERATOR     0 /* iterator offset */
-#define FORINVSTATE     1 /* invariant state offset */
-#define FORCNTLVAR      2 /* control variable offset */
-#define FORTBCVAR       3 /* to-be-closed variable offset */
-
+/* generic loop private variable offsets */
+#define FORITERATOR     0  /* iterator offset */
+#define FORINVSTATE     1  /* invariant state offset */
+#define FORCNTLVAR      2  /* control variable offset */
+#define FORTBCVAR       3  /* to-be-closed variable offset */
 #define NSTATEVARS      4
 
 

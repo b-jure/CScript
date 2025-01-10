@@ -6,7 +6,6 @@
 
 
 #define CS_CORE
-#include "cmeta.h"
 
 
 #include <string.h>
@@ -28,13 +27,15 @@
 /* largest integer such that 2^MAXHBITS fits in 'int' */
 #define MAXHBITS        ((int)(sizeof(int) * CHAR_BIT - 1))
 
+/* must be less than MAXHBITS */
+#define MINHTBITS       3
+
 
 /* maximum size for the hash array */
 #define MAXHSIZE        (1u << MAXHBITS)
 
-
 /* smallest size for the hash array */
-#define MINHSIZE        twoto(CSI_MINHTBITS)
+#define MINHSIZE        twoto(MINHTBITS)
 
 
 /* get hashtable 'node' slot from hash 'h' */
@@ -57,16 +58,16 @@ static uint hashflt(cs_Number n) {
     n = cs_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
     if (c_likely(cs_number2integer(n, &ni))) {
         uint ui = cast_uint(exp) + cast_uint(ni);
-        return (ui <= cast_uint(MAX_INT) ? ui : cast_uint(~ui));
+        return (ui <= cast_uint(MAXINT) ? ui : cast_uint(~ui));
     }
-    cs_assert(csi_numisnan(n) || cs_mathop(fabs)(n) == cast_num(HUGE_VAL));
+    cs_assert(c_numisnan(n) || cs_mathop(fabs)(n) == cast_num(HUGE_VAL));
     return 0;
 }
 
 
 static Node *hashint(const HTable *ht, cs_Integer i) {
-    cs_Unsigned ui = csi_castS2U(i);
-    if (ui <= cast_uint(MAX_INT))
+    cs_Unsigned ui = c_castS2U(i);
+    if (ui <= cast_uint(MAXINT))
         return hashpow2(ht, cast_int(ui));
     else
         return hashpow2(ht, ui);
@@ -100,7 +101,7 @@ static void newhasharray(cs_State *cr, HTable *ht, uint size) {
 }
 
 
-cs_sinline void htpreinit(HTable *ht) {
+c_sinline void htpreinit(HTable *ht) {
     ht->size = 0;
     ht->node = ht->lastfree = NULL;
     ht->gclist = NULL;
@@ -197,7 +198,7 @@ static Node *getfreepos(HTable *ht) {
 static void exchangehashes(HTable *ht1, HTable *ht2) {
     Node *node = ht1->node;
     Node *lastfree = ht1->lastfree;
-    cs_ubyte sz = ht1->size;
+    c_byte sz = ht1->size;
     ht1->size = ht2->size;
     ht1->node = ht2->node;
     ht1->lastfree = ht2->lastfree;
@@ -263,7 +264,7 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
             setival(&aux, k);
             key = &aux; /* insert it as an integer */
         }
-        else if (c_unlikely(csi_numisnan(f))) /* float is NaN? */
+        else if (c_unlikely(c_numisnan(f))) /* float is NaN? */
             csD_runerror(ts, "index is NaN");
         /* else */
     } /* fall through */
@@ -320,7 +321,6 @@ void csH_newkey(cs_State *ts, HTable *ht, const TValue *key,
 ** weak tables in its API.
 */
 static int eqkey(const TValue *k, const Node *n, int deadok) {
-    UNUSED(deadok);
     if ((rawtt(k) != keytt(n)) && /* not the same variant? */
             !(deadok && keyisdead(n) && iscollectable(k)))
         return 0;
@@ -330,7 +330,7 @@ static int eqkey(const TValue *k, const Node *n, int deadok) {
         case CS_VNUMINT:
             return (ival(k) == keyival(n));
         case CS_VNUMFLT:
-            return csi_numeq(fval(k), keyfval(n));
+            return c_numeq(fval(k), keyfval(n));
         case CS_VLIGHTUSERDATA:
             return (pval(k) == keypval(n));
         case CS_VLCF:
@@ -364,8 +364,9 @@ static const TValue *getgeneric(HTable *ht, const TValue *key, int deadok) {
 
 /* auxliary function to 'csH_next' */
 static uint getindex(cs_State *ts, HTable *ht, const TValue *k) {
-    if (ttisnil(k)) return 0;
-    const TValue *slot = getgeneric(ht, k, 1);
+    const TValue *slot;
+    if (ttisnil(k)) return 0; /* first iteration */
+    slot = getgeneric(ht, k, 1);
     if (c_unlikely(isabstkey(slot)))
         csD_runerror(ts, "invalid key passed to 'next'");
     uint i = cast(Node *, slot) - htnode(ht, 0); /* key index in hash table */

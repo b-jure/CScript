@@ -257,10 +257,28 @@
 #    print(x);                           // prints 1 and 2
 #}
 ## }
-#
-# {generic for loop statement
-for each x, y in 
-# }
+
+# {foreach statement
+local transactions = {                  // hashtable for traversal
+    Luigi = 69,
+    Marco = 420,
+    Fabio = 1337,
+};
+foreach k, v in pairs(transactions)
+    print(k, v);
+//local points = [69, 420, 1337];
+//local array_iter = fn (arr) {  // foreach generator
+//    local i = 0;
+//    local n = len(arr);
+//    return fn () {  // iterates the whole array
+//        if (i < n) {  // index in bounds?
+//            i = i + 1;
+//            return i - 1, arr[i - 1];
+//        } // otherwise implicitly returns 'nil'
+//    };
+//};
+foreach i, point in array_iter(points)
+    print("points[" .. tostring(i) .. "] = " .. tostring(point));
 
 
  

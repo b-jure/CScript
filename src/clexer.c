@@ -39,7 +39,7 @@
 
 static const char *tkstr[] = { /* ORDER TK */
     "and", "break", "case", "continue", "class",
-    "default", "else", "false", "for", "each", "fn", "if",
+    "default", "else", "false", "for", "foreach", "fn", "if",
     "in", "inherits", "nil", "or", "return", "super",
     "switch", "true", "while", "loop", "local",
     "!=", "==", ">=", "<=", "<<", ">>", "**", "..",
@@ -68,7 +68,7 @@ void csY_setinput(cs_State *ts, Lexer *lx, BuffReader *br, OString *source) {
     lx->tahead.tk = TK_EOS; /* no lookahead token */
     lx->br = br;
     lx->src = source;
-    csR_buffresize(ts, lx->buff, CS_MINBUFFER);
+    csR_buffresize(ts, lx->buff, CSI_MINBUFFER);
 }
 
 
@@ -83,11 +83,11 @@ void csY_init(cs_State *ts) {
 
 
 /* forward declare */
-static cs_noret lexerror(Lexer *lx, const char *err, int token);
+static c_noret lexerror(Lexer *lx, const char *err, int token);
 
 
 /* pushes character into token buffer */
-cs_sinline void savec(Lexer *lx, int c) {
+c_sinline void savec(Lexer *lx, int c) {
     if (csR_bufflen(lx->buff) >= csR_buffsize(lx->buff)) {
         size_t newsize;
         if (csR_buffsize(lx->buff) >= MAXSIZE / 2)
@@ -100,7 +100,7 @@ cs_sinline void savec(Lexer *lx, int c) {
 
 
 /* if current char matches 'c' advance */
-cs_sinline int lxmatch(Lexer *lx, int c) {
+c_sinline int lxmatch(Lexer *lx, int c) {
     if (c == lx->c) {
         advance(lx);
         return 1;
@@ -137,7 +137,7 @@ static const char *lextok2str(Lexer *lx, int t) {
 }
 
 
-static cs_noret lexerror(Lexer *lx, const char *err, int token) {
+static c_noret lexerror(Lexer *lx, const char *err, int token) {
     cs_State *ts = lx->ts;
     err = csD_addinfo(ts, err, lx->src, lx->line);
     if (token)
@@ -147,7 +147,7 @@ static cs_noret lexerror(Lexer *lx, const char *err, int token) {
 
 
 /* external interface for 'lexerror' */
-cs_noret csY_syntaxerror(Lexer *lx, const char *err) {
+c_noret csY_syntaxerror(Lexer *lx, const char *err) {
     lexerror(lx, err, lx->t.tk);
 }
 
@@ -158,7 +158,7 @@ static void inclinenr(Lexer *lx) {
     advance(lx); /* skip '\n' or '\r' */
     if (currIsNewline(lx) && lx->c != old_c) /* have '\r\n' or '\n\r'? */
         advance(lx); /* skip it */
-    if (c_unlikely(++lx->line >= MAX_INT))
+    if (c_unlikely(++lx->line >= MAXINT))
         lexerror(lx, "too many lines in a chunk", 0);
 }
 
@@ -277,7 +277,7 @@ static unsigned long read_utf8esc(Lexer *lx, int *strict) {
 ** Invalid first bytes:
 ** 1000XXXX(8), 1001XXXX(9), 1010XXXX(A), 1011XXXX(B)
 */
-static cs_ubyte const utf8len_[] = {
+static c_byte const utf8len_[] = {
 /* 0 1 2 3 4 5 6 7 8 9 A B C D E F */
    1,1,1,1,1,1,1,1,0,0,0,0,2,2,3,4
 };

@@ -14,7 +14,7 @@
 
 
 int csO_ceillog2 (uint x) {
-    static const cs_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
+    static const c_byte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
         0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
         6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
         7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
@@ -39,23 +39,23 @@ int csO_ceillog2 (uint x) {
 cs_Integer csO_shiftl(cs_Integer x, cs_Integer y) {
     if (y < 0) { /* shift right? */
         if (y <= -INTBITS) return 0; /* overflow */
-        return csi_castU2S(csi_castS2U(x) >> csi_castS2U(-y));
+        return c_castU2S(c_castS2U(x) >> c_castS2U(-y));
     } else { /* shift left */
         if (y >= INTBITS) return 0; /* overflow */
-        return csi_castU2S(csi_castS2U(x) << csi_castS2U(y));
+        return c_castU2S(c_castS2U(x) << c_castS2U(y));
     }
 }
 
 
 static cs_Number numarithm(cs_State *ts, cs_Number x, cs_Number y, int op) {
     switch(op) {
-        case CS_OPADD: return csi_numadd(ts, x, y);
-        case CS_OPSUB: return csi_numsub(ts, x, y);
-        case CS_OPMUL: return csi_nummul(ts, x, y);
-        case CS_OPDIV: return csi_numdiv(ts, x, y);
+        case CS_OPADD: return c_numadd(ts, x, y);
+        case CS_OPSUB: return c_numsub(ts, x, y);
+        case CS_OPMUL: return c_nummul(ts, x, y);
+        case CS_OPDIV: return c_numdiv(ts, x, y);
         case CS_OPMOD: return csV_modnum(ts, x, y);
-        case CS_OPPOW: return csi_numpow(ts, x, y);
-        case CS_OPUNM: return csi_nummul(ts, x, y);
+        case CS_OPPOW: return c_numpow(ts, x, y);
+        case CS_OPUNM: return c_nummul(ts, x, y);
         default: cs_assert(0); return 0.0;
     }
 }
@@ -63,18 +63,18 @@ static cs_Number numarithm(cs_State *ts, cs_Number x, cs_Number y, int op) {
 
 static cs_Integer intarithm(cs_State *ts, cs_Integer x, cs_Integer y, int op) {
     switch(op) {
-        case CS_OPADD: return csi_intop(+, x, y);
-        case CS_OPSUB: return csi_intop(-, x, y);
-        case CS_OPMUL: return csi_intop(*, x, y);
+        case CS_OPADD: return c_intop(+, x, y);
+        case CS_OPSUB: return c_intop(-, x, y);
+        case CS_OPMUL: return c_intop(*, x, y);
         case CS_OPDIV: return csV_div(ts, x, y);
         case CS_OPMOD: return csV_modint(ts, x, y);
-        case CS_OPUNM: return csi_intop(-, 0, x);
+        case CS_OPUNM: return c_intop(-, 0, x);
         case CS_OPBSHL: return csO_shiftl(x, y);
         case CS_OPBSHR: return csO_shiftr(x, y);
-        case CS_OPBNOT: return csi_intop(^, ~csi_castS2U(0), x);
-        case CS_OPBAND: return csi_intop(&, x, y);
-        case CS_OPBOR: return csi_intop(|, x, y);
-        case CS_OPBXOR: return csi_intop(^, x, y);
+        case CS_OPBNOT: return c_intop(^, ~c_castS2U(0), x);
+        case CS_OPBAND: return c_intop(&, x, y);
+        case CS_OPBOR: return c_intop(|, x, y);
+        case CS_OPBXOR: return c_intop(^, x, y);
         default: cs_assert(0); return 0;
     }
 }

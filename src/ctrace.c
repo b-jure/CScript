@@ -127,6 +127,17 @@ static void traceILL(const Proto *p, const Instruction *pc) {
 }
 
 
+static void traceILLL(const Proto *p, const Instruction *pc) {
+    OpCode op = *pc;
+    startline(p, pc);
+    pc += traceOp(op);
+    pc += traceL(pc);
+    pc += traceL(pc);
+    traceL(pc);
+    endline();
+}
+
+
 static void traceILLS(const Proto *p, const Instruction *pc) {
     OpCode op = *pc;
     startline(p, pc);
@@ -152,6 +163,7 @@ void csTR_tracepc(cs_State *ts, const Proto *p, const Instruction *pc) {
         case FormatILSS: traceILSS(p, pc); break;
         case FormatILL: traceILL(p, pc); break;
         case FormatILLS: traceILLS(p, pc); break;
+        case FormatILLL: traceILLL(p, pc); break;
         default: cs_assert(0 && "invalid OpCode format"); break;
     }
 }
@@ -234,6 +246,16 @@ static void unasmLS(const Proto *p, Instruction *pc) {
 static void unasmLL(const Proto *p, Instruction *pc) {
     startline(p, pc);
     pc += traceOp(*pc);
+    pc += traceL(pc);
+    traceL(pc);
+    endline();
+}
+
+
+static void unasmLLL(const Proto *p, Instruction *pc) {
+    startline(p, pc);
+    pc += traceOp(*pc);
+    pc += traceL(pc);
     pc += traceL(pc);
     traceL(pc);
     endline();
@@ -519,7 +541,7 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
             case OP_BAND: case OP_BOR: case OP_BXOR:case OP_LT:
             case OP_LE: case OP_NOT: case OP_UNM: case OP_BNOT:
             case OP_EQPRESERVE: case OP_GETINDEX: case OP_GETSUPIDX:
-            case OP_INHERIT: case OP_FORCALL: case OP_FORLOOP: {
+            case OP_INHERIT: {
                 unasm(p, pc);
                 break;
             }
@@ -532,7 +554,7 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 break;
             }
             case OP_NILN: case OP_VARARG: case OP_CLOSURE:
-            case OP_CLOSE: case OP_BCLOSE: case OP_TBC: case OP_CONCAT:
+            case OP_CLOSE: case OP_TBC: case OP_CONCAT:
             case OP_GETINDEXINT: case OP_SETINDEX: {
                 unasmL(p, pc);
                 break;
@@ -576,7 +598,7 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 unasmUpvalue(p, pc);
                 break;
             }
-            case OP_FORPREP: {
+            case OP_FORPREP: case OP_FORCALL: {
                 unasmLL(p, pc);
                 break;
             }
@@ -593,6 +615,7 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 unasmMM(ts, p, pc);
                 break;
             }
+            case OP_FORLOOP: unasmLLL(p, pc); break;
             case OP_CONST: unasmK(p, pc); break;
             case OP_CONSTI: unasmIMMint(p, pc); break;
             case OP_CONSTF: unasmIMMflt(p, pc); break;

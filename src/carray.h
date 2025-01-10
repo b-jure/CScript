@@ -11,7 +11,10 @@
 
 
 /* array size limit */
-#define ARRAYLIMIT      MAX_INT
+#define ARRAYLIMIT      MAXINT
+
+
+#define csA_reset(arr)      ((arr)->n = 0)
 
 
 CSI_FUNC Array *csA_new(cs_State *ts);

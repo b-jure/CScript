@@ -123,7 +123,7 @@ static void f_newstate(cs_State *ts, void *ud) {
     csY_init(ts);
     gs->gcstop = 0;
     setnilval(&gs->nil); /* signal that state is fully built */
-    csi_userstatecreated(ts);
+    csi_userstateopen(ts);
 }
 
 
@@ -170,7 +170,7 @@ static void freestate(cs_State *ts) {
         ts->cf = &ts->basecf; /* undwind call frames */
         csPR_close(ts, 1, CS_OK);
         csG_freeallobjects(ts);
-        csi_userstatefree(ts);
+        csi_userstateclose(ts);
     }
     csM_freearray(ts, gs->strtab.hash, gs->strtab.size);
     free_stack(ts);
@@ -236,10 +236,11 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
 
 
 /* free state (global state + mainthread) */
-CS_API void cs_freestate(cs_State *ts) {
+CS_API void cs_close(cs_State *ts) {
     cs_lock(ts);
     cs_State *mt = G_(ts)->mainthread;
     freestate(mt);
+    /* user shall handle unlocking he defined himself (if any) */
 }
 
 
@@ -260,7 +261,7 @@ CS_API cs_State *cs_newthread(cs_State *mts) {
     init_stack(newts, mts);
     memcpy(cs_getextraspace(newts), cs_getextraspace(gs->mainthread),
            CS_EXTRASPACE);
-    csi_userstatethread(mts, newts);
+    csi_userstate(mts, newts);
     cs_unlock(mts);
     return newts;
 }
@@ -408,7 +409,7 @@ int csT_growstack(cs_State *ts, int n, int raiseerr) {
     }
     if (c_unlikely(n > CSI_MAXSTACK)) {
         int nsize = size * 2;
-        int needed = topoffset(ts) + n;
+        int needed = cast_int((ts)->sp.p - (ts)->stack.p) + n;
         if (nsize > CSI_MAXSTACK)
             nsize = CSI_MAXSTACK;
         if (nsize < needed)
@@ -509,7 +510,7 @@ void csT_free(cs_State *ts, cs_State *thread) {
     XS *xs = fromstate(thread);
     csF_closeupval(thread, thread->stack.p);  /* close all upvalues */
     cs_assert(thread->openupval == NULL);
-    csi_userthreadfree(ts, thread);
+    csi_userstatefree(ts, thread);
     free_stack(thread);
     csM_free(ts, xs);
 }

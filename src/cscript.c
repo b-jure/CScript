@@ -134,11 +134,10 @@ static int parseargs(char **argv, int *first) {
 
 /* errfunc for protected calls */
 static int errfunc(cs_State *ts) {
-    const char *msg = cs_to_string(ts, 1);
-    if (msg == NULL) { /* error object is not a string? */
+    const char *msg = cs_to_string(ts, -1);
+    if (msg == NULL) /* error object is not a string? */
         msg = cs_push_fstring(ts, "(error object is a %s value)",
-                                  csL_typename(ts, 0));
-    }
+                                  csL_typename(ts, -1));
     csL_traceback(ts, ts, 1, msg); /* append traceback */
     return 1;
 }
@@ -437,7 +436,7 @@ int main(int argc, char* argv[]) {
     status = cs_pcall(ts, 2, 1, 0);
     res = cs_to_bool(ts, -1);
     report(ts, status);
-    cs_freestate(ts);
+    cs_close(ts);
     return (res && status == CS_OK ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 

@@ -26,7 +26,7 @@
 ** error handler or invoke panic if hook for it is present.
 ** In case none of the above occurs, program is aborted.
 */
-cs_noret csPR_throw(cs_State *ts, int errcode) {
+c_noret csPR_throw(cs_State *ts, int errcode) {
     if (ts->errjmp) { /* thread has error handler? */
         ts->errjmp->status = errcode; /* set status */
         CSI_THROW(ts, ts->errjmp); /* jump to it */

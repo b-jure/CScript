@@ -55,108 +55,107 @@
 ** OpCode properties table.
 ** (order 'OpCode')
 */
-CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
-    /*     M  J  T  F      */
-    opProp(0, 0, 0, FormatI), /* OP_TRUE */
-    opProp(0, 0, 0, FormatI), /* OP_FALSE */
-    opProp(0, 0, 0, FormatI), /* OP_NIL */
-    opProp(0, 0, 0, FormatIL), /* OP_NILN */
-    opProp(0, 0, 0, FormatIS), /* OP_CONST */
-    opProp(0, 0, 0, FormatIL), /* OP_CONSTL */
-    opProp(0, 0, 0, FormatILS), /* OP_CONSTI */
-    opProp(0, 0, 0, FormatILS), /* OP_CONSTF */
-    opProp(0, 0, 0, FormatIL), /* OP_VARARGPREP */
-    opProp(0, 0, 0, FormatIL), /* OP_VARARG */
-    opProp(0, 0, 0, FormatIL), /* OP_CLOSURE */
-    opProp(0, 0, 0, FormatIS), /* OP_NEWARRAY */
-    opProp(0, 0, 0, FormatIS), /* OP_NEWCLASS */
-    opProp(0, 0, 0, FormatIS), /* OP_NEWTABLE */
-    opProp(0, 0, 0, FormatIL), /* OP_METHOD */
-    opProp(0, 0, 0, FormatIS), /* OP_SETMM */
-    opProp(0, 0, 0, FormatI), /* OP_POP */
-    opProp(0, 0, 0, FormatIL), /* OP_POPN */
-    opProp(1, 0, 0, FormatIS), /* OP_MBIN */
-    opProp(0, 0, 0, FormatIL), /* OP_ADDK */
-    opProp(0, 0, 0, FormatIL), /* OP_SUBK */
-    opProp(0, 0, 0, FormatIL), /* OP_MULK */
-    opProp(0, 0, 0, FormatIL), /* OP_DIVK */
-    opProp(0, 0, 0, FormatIL), /* OP_MODK */
-    opProp(0, 0, 0, FormatIL), /* OP_POWK */
-    opProp(0, 0, 0, FormatIL), /* OP_BSHLK */
-    opProp(0, 0, 0, FormatIL), /* OP_BSHRK */
-    opProp(0, 0, 0, FormatIL), /* OP_BANDK */
-    opProp(0, 0, 0, FormatIL), /* OP_BORK */
-    opProp(0, 0, 0, FormatIL), /* OP_BXORK */
-    opProp(0, 0, 0, FormatILS), /* OP_ADDI */
-    opProp(0, 0, 0, FormatILS), /* OP_SUBI */
-    opProp(0, 0, 0, FormatILS), /* OP_MULI */
-    opProp(0, 0, 0, FormatILS), /* OP_DIVI */
-    opProp(0, 0, 0, FormatILS), /* OP_MODI */
-    opProp(0, 0, 0, FormatILS), /* OP_POWI */
-    opProp(0, 0, 0, FormatILS), /* OP_BSHLI */
-    opProp(0, 0, 0, FormatILS), /* OP_BSHRI */
-    opProp(0, 0, 0, FormatILS), /* OP_BANDI */
-    opProp(0, 0, 0, FormatILS), /* OP_BORI */
-    opProp(0, 0, 0, FormatILS), /* OP_BXORI */
-    opProp(0, 0, 0, FormatI), /* OP_ADD */
-    opProp(0, 0, 0, FormatI), /* OP_SUB */
-    opProp(0, 0, 0, FormatI), /* OP_MUL */
-    opProp(0, 0, 0, FormatI), /* OP_DIV */
-    opProp(0, 0, 0, FormatI), /* OP_MOD */
-    opProp(0, 0, 0, FormatI), /* OP_POW */
-    opProp(0, 0, 0, FormatI), /* OP_BSHL */
-    opProp(0, 0, 0, FormatI), /* OP_BSHR */
-    opProp(0, 0, 0, FormatI), /* OP_BAND */
-    opProp(0, 0, 0, FormatI), /* OP_BOR */
-    opProp(0, 0, 0, FormatI), /* OP_BXOR */
-    opProp(0, 0, 0, FormatIL), /* OP_CONCAT */
-    opProp(0, 0, 0, FormatILS), /* OP_EQK */
-    opProp(0, 0, 0, FormatILSS), /* OP_EQI */
-    opProp(0, 0, 0, FormatILS), /* OP_LTI */
-    opProp(0, 0, 0, FormatILS), /* OP_LEI */
-    opProp(0, 0, 0, FormatILS), /* OP_GTI */
-    opProp(0, 0, 0, FormatILS), /* OP_GEI */
-    opProp(0, 0, 0, FormatIS), /* OP_EQ */
-    opProp(0, 0, 0, FormatI), /* OP_LT */
-    opProp(0, 0, 0, FormatI), /* OP_LE */
-    opProp(0, 0, 0, FormatI), /* OP_EQPRESERVE */
-    opProp(0, 0, 0, FormatI), /* OP_NOT */
-    opProp(0, 0, 0, FormatI), /* OP_UNM */
-    opProp(0, 0, 0, FormatI), /* OP_BNOT */
-    opProp(0, 1, 0, FormatIL), /* OP_JMP */
-    opProp(0, 1, 0, FormatIL), /* OP_JMPS */
-    opProp(0, 1, 0, FormatILL), /* OP_BJMP */
-    opProp(0, 1, 1, FormatILS), /* OP_TEST */
-    opProp(0, 1, 1, FormatILS), /* OP_TESTORPOP */
-    opProp(0, 1, 1, FormatILS), /* OP_TESTANDPOP */
-    opProp(0, 1, 1, FormatILS), /* OP_TESTPOP */
-    opProp(0, 0, 0, FormatILL), /* OP_CALL */
-    opProp(0, 0, 0, FormatIL), /* OP_CLOSE */
-    opProp(0, 0, 0, FormatIL), /* OP_BCLOSE */
-    opProp(0, 0, 0, FormatIL), /* OP_TBC */
-    opProp(0, 0, 0, FormatIL), /* OP_GETGLOBAL */
-    opProp(0, 0, 0, FormatIL), /* OP_SETGLOBAL */
-    opProp(0, 0, 0, FormatIL), /* OP_GETLOCAL */
-    opProp(0, 0, 0, FormatIL), /* OP_SETLOCAL */
-    opProp(0, 0, 0, FormatIL), /* OP_GETUVAL */
-    opProp(0, 0, 0, FormatIL), /* OP_SETUVAL */
-    opProp(0, 0, 0, FormatILS), /* OP_SETARRAY */
-    opProp(0, 0, 0, FormatILL), /* OP_SETPROPERTY */
-    opProp(0, 0, 0, FormatIL), /* OP_GETPROPERTY */
-    opProp(0, 0, 0, FormatI), /* OP_GETINDEX */
-    opProp(0, 0, 0, FormatIL), /* OP_SETINDEX */
-    opProp(0, 0, 0, FormatIL), /* OP_GETINDEXSTR */
-    opProp(0, 0, 0, FormatILL), /* OP_SETINDEXSTR */
-    opProp(0, 0, 0, FormatIL), /* OP_GETINDEXINT */
-    opProp(0, 0, 0, FormatILL), /* OP_SETINDEXINT */
-    opProp(0, 0, 0, FormatIL), /* OP_GETSUP */
-    opProp(0, 0, 0, FormatI), /* OP_GETSUPIDX */
-    opProp(0, 0, 0, FormatIL), /* OP_GETSUPIDXSTR */
-    opProp(0, 0, 0, FormatI), /* OP_INHERIT */
-    opProp(0, 0, 0, FormatILL), /* OP_FORPREP */
-    opProp(0, 0, 0, FormatILL), /* OP_FORCALL */
-    opProp(0, 1, 0, FormatILL), /* OP_FORLOOP */
-    opProp(0, 0, 0, FormatILLS), /* OP_RET */
+CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
+    /*     J  F      */
+    opProp(0, FormatI), /* OP_TRUE */
+    opProp(0, FormatI), /* OP_FALSE */
+    opProp(0, FormatI), /* OP_NIL */
+    opProp(0, FormatIL), /* OP_NILN */
+    opProp(0, FormatIS), /* OP_CONST */
+    opProp(0, FormatIL), /* OP_CONSTL */
+    opProp(0, FormatILS), /* OP_CONSTI */
+    opProp(0, FormatILS), /* OP_CONSTF */
+    opProp(0, FormatIL), /* OP_VARARGPREP */
+    opProp(0, FormatIL), /* OP_VARARG */
+    opProp(0, FormatIL), /* OP_CLOSURE */
+    opProp(0, FormatIS), /* OP_NEWARRAY */
+    opProp(0, FormatIS), /* OP_NEWCLASS */
+    opProp(0, FormatIS), /* OP_NEWTABLE */
+    opProp(0, FormatIL), /* OP_METHOD */
+    opProp(0, FormatIS), /* OP_SETMM */
+    opProp(0, FormatI), /* OP_POP */
+    opProp(0, FormatIL), /* OP_POPN */
+    opProp(0, FormatIS), /* OP_MBIN */
+    opProp(0, FormatIL), /* OP_ADDK */
+    opProp(0, FormatIL), /* OP_SUBK */
+    opProp(0, FormatIL), /* OP_MULK */
+    opProp(0, FormatIL), /* OP_DIVK */
+    opProp(0, FormatIL), /* OP_MODK */
+    opProp(0, FormatIL), /* OP_POWK */
+    opProp(0, FormatIL), /* OP_BSHLK */
+    opProp(0, FormatIL), /* OP_BSHRK */
+    opProp(0, FormatIL), /* OP_BANDK */
+    opProp(0, FormatIL), /* OP_BORK */
+    opProp(0, FormatIL), /* OP_BXORK */
+    opProp(0, FormatILS), /* OP_ADDI */
+    opProp(0, FormatILS), /* OP_SUBI */
+    opProp(0, FormatILS), /* OP_MULI */
+    opProp(0, FormatILS), /* OP_DIVI */
+    opProp(0, FormatILS), /* OP_MODI */
+    opProp(0, FormatILS), /* OP_POWI */
+    opProp(0, FormatILS), /* OP_BSHLI */
+    opProp(0, FormatILS), /* OP_BSHRI */
+    opProp(0, FormatILS), /* OP_BANDI */
+    opProp(0, FormatILS), /* OP_BORI */
+    opProp(0, FormatILS), /* OP_BXORI */
+    opProp(0, FormatI), /* OP_ADD */
+    opProp(0, FormatI), /* OP_SUB */
+    opProp(0, FormatI), /* OP_MUL */
+    opProp(0, FormatI), /* OP_DIV */
+    opProp(0, FormatI), /* OP_MOD */
+    opProp(0, FormatI), /* OP_POW */
+    opProp(0, FormatI), /* OP_BSHL */
+    opProp(0, FormatI), /* OP_BSHR */
+    opProp(0, FormatI), /* OP_BAND */
+    opProp(0, FormatI), /* OP_BOR */
+    opProp(0, FormatI), /* OP_BXOR */
+    opProp(0, FormatIL), /* OP_CONCAT */
+    opProp(0, FormatILS), /* OP_EQK */
+    opProp(0, FormatILSS), /* OP_EQI */
+    opProp(0, FormatILS), /* OP_LTI */
+    opProp(0, FormatILS), /* OP_LEI */
+    opProp(0, FormatILS), /* OP_GTI */
+    opProp(0, FormatILS), /* OP_GEI */
+    opProp(0, FormatIS), /* OP_EQ */
+    opProp(0, FormatI), /* OP_LT */
+    opProp(0, FormatI), /* OP_LE */
+    opProp(0, FormatI), /* OP_EQPRESERVE */
+    opProp(0, FormatI), /* OP_NOT */
+    opProp(0, FormatI), /* OP_UNM */
+    opProp(0, FormatI), /* OP_BNOT */
+    opProp(1, FormatIL), /* OP_JMP */
+    opProp(1, FormatIL), /* OP_JMPS */
+    opProp(1, FormatILL), /* OP_BJMP */
+    opProp(1, FormatILS), /* OP_TEST */
+    opProp(1, FormatILS), /* OP_TESTORPOP */
+    opProp(1, FormatILS), /* OP_TESTANDPOP */
+    opProp(1, FormatILS), /* OP_TESTPOP */
+    opProp(0, FormatILL), /* OP_CALL */
+    opProp(0, FormatIL), /* OP_CLOSE */
+    opProp(0, FormatIL), /* OP_TBC */
+    opProp(0, FormatIL), /* OP_GETGLOBAL */
+    opProp(0, FormatIL), /* OP_SETGLOBAL */
+    opProp(0, FormatIL), /* OP_GETLOCAL */
+    opProp(0, FormatIL), /* OP_SETLOCAL */
+    opProp(0, FormatIL), /* OP_GETUVAL */
+    opProp(0, FormatIL), /* OP_SETUVAL */
+    opProp(0, FormatILS), /* OP_SETARRAY */
+    opProp(0, FormatILL), /* OP_SETPROPERTY */
+    opProp(0, FormatIL), /* OP_GETPROPERTY */
+    opProp(0, FormatI), /* OP_GETINDEX */
+    opProp(0, FormatIL), /* OP_SETINDEX */
+    opProp(0, FormatIL), /* OP_GETINDEXSTR */
+    opProp(0, FormatILL), /* OP_SETINDEXSTR */
+    opProp(0, FormatIL), /* OP_GETINDEXINT */
+    opProp(0, FormatILL), /* OP_SETINDEXINT */
+    opProp(0, FormatIL), /* OP_GETSUP */
+    opProp(0, FormatI), /* OP_GETSUPIDX */
+    opProp(0, FormatIL), /* OP_GETSUPIDXSTR */
+    opProp(0, FormatI), /* OP_INHERIT */
+    opProp(0, FormatILL), /* OP_FORPREP */
+    opProp(0, FormatILL), /* OP_FORCALL */
+    opProp(1, FormatILLL), /* OP_FORLOOP */
+    opProp(0, FormatILLS), /* OP_RET */
 };
 
 
@@ -166,7 +165,7 @@ CSI_DEF const cs_ubyte csC_opProp[NUM_OPCODES] = {
 ** Short Arg    = 1 byte
 ** Long Arg     = 3 bytes
 */
-CSI_DEF const cs_ubyte csC_opSize[FormatN] = { /* ORDER OPFMT */
+CSI_DEF const c_byte csC_opSize[FormatN] = { /* ORDER OPFMT */
     1,  /* FormatI */
     2,  /* FormatIS */
     3,  /* FormatISS */
@@ -175,6 +174,7 @@ CSI_DEF const cs_ubyte csC_opSize[FormatN] = { /* ORDER OPFMT */
     6,  /* FormatILSS */
     7,  /* FormatILL */
     8,  /* FormatILLS */
+    10, /* FormatILLL */
 };
 
 
@@ -187,6 +187,7 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
     "FormatILSS",
     "FormatILL",
     "FormatILLS",
+    "FormatILLL",
 };
 
 
@@ -194,31 +195,27 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
-"TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
-"VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS", "NEWTABLE",
-"METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
-"DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK",
-"ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
-"BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
-"BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
-"LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "NOT", "UNM",
-"BNOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP", "TESTANDPOP",
-"TESTPOP", "CALL", "CLOSE", "BCLOSE", "TBC", "GETGLOBAL", "SETGLOBAL",
-"GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY",
-"GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",
-"GETINDEXINT", "SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR",
-"INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
+    "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
+    "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS", "NEWTABLE",
+    "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
+    "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK",
+    "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
+    "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
+    "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
+    "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "NOT", "UNM",
+    "BNOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP", "TESTANDPOP",
+    "TESTPOP", "CALL", "CLOSE", "TBC", "GETGLOBAL", "SETGLOBAL",
+    "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY",
+    "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",
+    "GETINDEXINT", "SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR",
+    "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
 };
 
 
-/*
-** Store line and pc information, skip storing 'LineInfo' if previous
-** entry contained the same line.
-*/
-static void storelineinfo(FunctionState *fs, Proto *f, int line) {
+static void addlineinfo(FunctionState *fs, Proto *f, int line) {
     int len = fs->nlinfo;
     if (len == 0 || f->linfo[len - 1].line < line) { /* new line entry? */
-        csM_growarray(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, MAX_INT,
+        csM_growarray(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, MAXINT,
                       "lines", LineInfo);
         f->linfo[len].pc = fs->pclastop;
         f->linfo[len].line = line;
@@ -232,15 +229,15 @@ static void storelineinfo(FunctionState *fs, Proto *f, int line) {
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->ts, p->code, p->sizecode, fs->pc, MAX_INT, "code",
+    csM_growarray(fs->lx->ts, p->code, p->sizecode, fs->pc, MAXINT, "code",
                   Instruction);
-    p->code[fs->pc++] = cast_ubyte(code);
+    p->code[fs->pc++] = cast_byte(code);
 }
 
 
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_ensurearray(fs->lx->ts, p->code, p->sizecode, fs->pc, 3, MAX_INT,
+    csM_ensurearray(fs->lx->ts, p->code, p->sizecode, fs->pc, 3, MAXINT,
                     "code", Instruction);
     set3bytes(&p->code[fs->pc], code);
     fs->pc += SIZEARGL;
@@ -253,7 +250,7 @@ int csC_emitI(FunctionState *fs, Instruction i) {
     cs_assert(fs->pclastop <= fs->pc);
     fs->pclastop = fs->pc;
     emitbyte(fs, i);
-    storelineinfo(fs, fs->p, fs->lx->line);
+    addlineinfo(fs, fs->p, fs->lx->line);
     return fs->pc - 1;
 }
 
@@ -298,6 +295,37 @@ int csC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
     emitL(fs, a);
     emitL(fs, b);
     return offset;
+}
+
+
+/* emit instruction with 3 long args */
+int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c) {
+    int offset = csC_emitI(fs, i);
+    emitL(fs, a);
+    emitL(fs, b);
+    emitL(fs, c);
+    return offset;
+}
+
+
+/* fix previous line number in line information */
+void csC_fixline(FunctionState *fs, int line) {
+    int pc = fs->pclastop;
+    LineInfo *li = check_exp(fs->nlinfo > 0, &fs->p->linfo[fs->nlinfo - 1]);
+    cs_assert(li->pc == pc); /* can only fix line of last instruction */
+    if (pc > 0) { /* last instruction is not the first instruction? */
+        /* get previous line info (must have it) */
+        check_exp(fs->nlinfo - 2 >= 0, li -= 1);
+        if (li->line == line) { /* last instruction is on the same line? */
+            fs->nlinfo -= 1;    /* remove the last entry... */
+            li->pc = pc;        /* ...and update the pc */
+            return;             /* done */
+        } else { /* otherwise last instruction is on different line */
+            cs_assert(li->line < line); /* (which is larger than previous) */
+            li++; /* go back to the newly added entry */
+        }
+    }
+    li->line = line; /* set the line */
 }
 
 
@@ -428,7 +456,7 @@ void csC_setoneret(FunctionState *fs, ExpInfo *e) {
     if (e->et == EXP_CALL) {
         /* already returns a single result */
         cs_assert(GETARG_L(getinstruction(fs, e), 1) == 2);
-        e->et = EXP_FINEXPR;
+        e->et = EXP_FINEXPR; /* just mark as finalized */
     } else if (e->et == EXP_VARARG) {
         Instruction *vararg = getinstruction(fs, e);
         SETARG_L(vararg, 0, 2);
@@ -461,30 +489,37 @@ int csC_nil(FunctionState *fs, int n) {
 }
 
 
-cs_sinline void freeslots(FunctionState *fs, int n) {
+c_sinline void freeslots(FunctionState *fs, int n) {
     fs->sp -= n;
     cs_assert(fs->sp >= 0); /* negative slots are invalid */
 }
 
 
+static int removevalues(FunctionState *fs, int n) {
+    int extra = 0;
+    cs_assert(n > 0);
+    if (lastop(fs) == OP_POPN || lastop(fs) == OP_POP) { /* can optimize? */
+        if (lastop(fs) == OP_POPN)
+            extra = GETARG_L(&fs->p->code[fs->pclastop], 0);
+        else
+            extra = 1;
+        fs->pc = fs->pclastop;
+    }
+    n += extra;
+    if (n == 1)
+        return csC_emitI(fs, OP_POP);
+    else
+        return csC_emitIL(fs, OP_POPN, n);
+}
+
+
+/* pop values from stack and free stack slots */
 int csC_pop(FunctionState *fs, int n) {
     if (n > 0) {
-        int extra = 0;
         freeslots(fs, n);
-        if (lastop(fs) == OP_POPN || lastop(fs) == OP_POP) { /* can optimize? */
-            if (lastop(fs) == OP_POPN)
-                extra = GETARG_L(&fs->p->code[fs->pclastop], 0);
-            else
-                extra = 1;
-            fs->pc = fs->pclastop;
-        }
-        n += extra;
-        if (n == 1)
-            return csC_emitI(fs, OP_POP);
-        else
-            return csC_emitIL(fs, OP_POPN, n);
+        return removevalues(fs, n);
     }
-    return -1;
+    return -1; /* nothing to pop */
 }
 
 
@@ -493,7 +528,7 @@ void csC_adjuststack(FunctionState *fs, int left) {
         csC_pop(fs, left);
     else if (left < 0)
         csC_nil(fs, -left);
-    /* else do nothing */
+    /* else stack is already adjusted */
 }
 
 
@@ -678,7 +713,7 @@ static int getjump(FunctionState *fs, int pc) {
 /* fix jmp instruction at 'pc' to jump to 'target' */
 static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
-    int offset = csi_abs(target - (pc + getOpSize(*jmp)));
+    int offset = c_abs(target - (pc + getOpSize(*jmp)));
     cs_assert(offset > 0); /* at least one expression in between */
     cs_assert(opisjump(*jmp)); /* 'jmp' is a valid jump instruction */
     if (c_unlikely(offset > MAX_LARG)) /* jump is too large? */
@@ -714,7 +749,7 @@ void csC_patch(FunctionState *fs, int pc, int target) {
 
 /* backpatch jump instruction to current pc */
 void csC_patchtohere(FunctionState *fs, int pc) {
-    csC_patch(fs, pc, currentpc(fs));
+    csC_patch(fs, pc, PC);
 }
 
 
@@ -727,10 +762,10 @@ static void patchlistaux(FunctionState *fs, int list, int target) {
 }
 
 
-static void fixjmplists(FunctionState *fs, ExpInfo *e) {
+static void fixjumplists(FunctionState *fs, ExpInfo *e) {
     cs_assert(e->et == EXP_FINEXPR); /* must already be discharged */
     if (hasjumps(e)) {
-        int final = currentpc(fs); /* position after whole expression */
+        int final = PC; /* position after whole expression */
         patchlistaux(fs, e->f, final);
         patchlistaux(fs, e->t, final);
         e->f = e->t = NOJMP;
@@ -739,8 +774,12 @@ static void fixjmplists(FunctionState *fs, ExpInfo *e) {
 
 
 void csC_varexp2stack(FunctionState *fs, ExpInfo *e) {
-    if (e->et != EXP_FINEXPR && dischargevars(fs, e))
-        csC_reserveslots(fs, 1);
+    int et = e->et;
+    if (et != EXP_FINEXPR && dischargevars(fs, e)) {
+        fixjumplists(fs, e);
+        if (et != EXP_CALL)
+            csC_reserveslots(fs, 1);
+    }
 }
 
 
@@ -763,7 +802,7 @@ static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 /* emit integer constant */
 static int codeintK(FunctionState *fs, cs_Integer i) {
     if (fitsLA(i))
-        return csC_emitILS(fs, OP_CONSTI, csi_abs(i), encodesign(i));
+        return csC_emitILS(fs, OP_CONSTI, c_abs(i), encodesign(i));
     else
         return codeK(fs, intK(fs, i));
 }
@@ -773,7 +812,7 @@ static int codeintK(FunctionState *fs, cs_Integer i) {
 static int codefltK(FunctionState *fs, cs_Number n) {
     cs_Integer i;
     if (csO_n2i(n, &i, N2IEXACT) && fitsLA(i))
-        return csC_emitILS(fs, OP_CONSTF, csi_abs(i), encodesign(i));
+        return csC_emitILS(fs, OP_CONSTF, c_abs(i), encodesign(i));
     else
         return codeK(fs, fltK(fs, n));
 }
@@ -843,9 +882,11 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e) {
 
 
 static void exp2stack(FunctionState *fs, ExpInfo *e) {
-    if (e->et != EXP_FINEXPR)  {
+    int et = e->et;
+    if (et != EXP_FINEXPR)  {
         dischargetostack(fs, e);
-        csC_reserveslots(fs, 1);
+        if (et != EXP_CALL)
+            csC_reserveslots(fs, 1);
     }
 }
 
@@ -853,7 +894,7 @@ static void exp2stack(FunctionState *fs, ExpInfo *e) {
 /* ensure expression value is on stack */
 void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
     exp2stack(fs, e);
-    fixjmplists(fs, e);
+    fixjumplists(fs, e);
 }
 
 
@@ -936,7 +977,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
         e1->u.i = ival(&res);
     } else { /* folds neither NaN nor 0.0 (to avoid problems with -0.0) */
         cs_Number n = fval(&res);
-        if (n == 0 || csi_numisnan(n))
+        if (n == 0 || c_numisnan(n))
             return 0;
         e1->et = EXP_FLT;
         e1->u.n = n;
@@ -1105,7 +1146,7 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             truejmp(fs, e, OP_TESTORPOP); /* jump out if 'e' is true */
             break;
         }
-        default: cs_assert(0); /* invalid binary OPR */
+        default: cs_assert(0); /* invalid binary operation */
     }
 }
 
@@ -1134,7 +1175,7 @@ static int exp2K(FunctionState *fs, ExpInfo *e) {
 
 
 /* swap expressions */
-cs_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
+c_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
     const ExpInfo temp = *e1;
     *e1 = *e2;
     *e2 = temp;
@@ -1142,19 +1183,23 @@ cs_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
 
 
 /* emit generic binary instruction */
-static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
+static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
+                    int line) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
     csC_exp2stack(fs, e1);
     csC_exp2stack(fs, e2);
     freeslots(fs, 1); /* e2 */
     e1->u.info = csC_emitI(fs, op);
     e1->et = EXP_FINEXPR;
+    csC_fixline(fs, line);
     csC_emitIS(fs, OP_MBIN, binop2mm(op));
+    csC_fixline(fs, line);
 }
 
 
 /* emit binary instruction variant where second operator is constant */
-static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
+static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
+                     int line) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDK);
     int ik = e2->u.info; /* index into 'constants' */
     cs_assert(OP_ADDK <= op && op <= OP_BXORK);
@@ -1162,53 +1207,56 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     csC_exp2stack(fs, e1);
     e1->u.info = csC_emitIL(fs, op, ik);
     e1->et = EXP_FINEXPR;
+    csC_fixline(fs, line);
 }
 
 
 /* emit arithmetic binary op */
 static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                          Binopr opr, int flip) {
+                          Binopr opr, int flip, int line) {
     if (tonumeral(e2, NULL) && exp2K(fs, e2)) {
-        codebinK(fs, e1, e2, opr);
+        codebinK(fs, e1, e2, opr, line);
     } else {
         if (flip)
             swapexp(e1, e2);
-        codebin(fs, e1, e2, opr);
+        codebin(fs, e1, e2, opr, line);
     }
 }
 
 
 /* emit binary instruction variant where second operand is immediate value */
-static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
+static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
+                     int line) {
     int rhs = e2->u.i;
-    int rhsabs = csi_abs(rhs);
+    int rhsabs = c_abs(rhs);
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
     cs_assert(e2->et == EXP_INT);
     csC_exp2stack(fs, e1);
     e1->u.info = csC_emitILS(fs, op, rhsabs, encodesign(rhs));
     e1->et = EXP_FINEXPR;
+    csC_fixline(fs, line);
 }
 
 
 /* emit binary instruction trying both the immediate and constant variants */
 static void codebinIK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
-                      int flip) {
+                      int flip, int line) {
     if (isintKL(e2))
-        codebinI(fs, e1, e2, opr);
+        codebinI(fs, e1, e2, opr, line);
     else
-        codebinarithm(fs, e1, e2, opr, flip);
+        codebinarithm(fs, e1, e2, opr, flip, line);
 }
 
 
 /* emit commutative binary instruction */
 static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                            Binopr opr) {
+                            Binopr opr, int line) {
     int flip = 0;
     if (tonumeral(e1, NULL)) {
         swapexp(e1, e2);
         flip = 1;
     }
-    codebinIK(fs, e1, e2, opr, flip);
+    codebinIK(fs, e1, e2, opr, flip, line);
 }
 
 
@@ -1269,7 +1317,7 @@ static Instruction *previousinstruction(FunctionState *fs) {
 }
 
 
-static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2) {
+static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, int line) {
     Instruction *i = previousinstruction(fs);
     UNUSED(e2);
     if (*i == OP_CONCAT) { /* 'e2' is a concatenation? */
@@ -1278,31 +1326,33 @@ static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2) {
     } else { /* 'e2' is not a concatenation */
         e1->u.info = csC_emitIL(fs, OP_CONCAT, 2);
         e1->et = EXP_FINEXPR;
-        freeslots(fs, 1); /* e2 */
+        csC_fixline(fs, line);
     }
+    freeslots(fs, 1);
 }
 
 
-void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
+void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
+                int line) {
     if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OPADD))
         return; /* done (folded) */
     switch (opr) {
         case OPR_ADD: case OPR_MUL:
         case OPR_BAND: case OPR_BOR: case OPR_BXOR: {
-            codecommutative(fs, e1, e2, opr);
+            codecommutative(fs, e1, e2, opr, line);
             break;
         }
         case OPR_SUB: case OPR_DIV: case OPR_MOD: case OPR_POW: {
-            codebinarithm(fs, e1, e2, opr, 0);
+            codebinarithm(fs, e1, e2, opr, 0, line);
             break;
         }
         case OPR_SHL: case OPR_SHR:  {
-            codebinIK(fs, e1, e2, opr, 0);
+            codebinIK(fs, e1, e2, opr, 0, line);
             break;
         }
         case OPR_CONCAT: {
             csC_exp2stack(fs, e2); /* second operand must be on stack */
-            codeconcat(fs, e1, e2);
+            codeconcat(fs, e1, e2, line);
             break;
         }
         case OPR_NE: case OPR_EQ: {

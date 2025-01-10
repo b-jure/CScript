@@ -13,9 +13,9 @@
 
 
 /* 
- * Max/Min value for integral type 't'. 
- * This assumes two-complement representation.
- */
+** Max/Min value for integral type 't'. 
+** This assumes two-complement representation.
+*/
 #define bumax(t) ((t)(~(t)0))
 #define bumin(t) ((t)0)
 #define bsmax(t) (bumax(t)>>1)
@@ -27,9 +27,9 @@
 
 
 /* 
- * round 'x' to the next highest power of 2 
- * (https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2Float) 
- */
+** round 'x' to the next highest power of 2 
+** (https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2Float) 
+*/
 #define topow2(x) { \
     (x)--; \
     (x) |= (x) >> 1; \
@@ -58,24 +58,24 @@
 
 
 /* set 'src' byte at offset 'o' to 'v' */
-#define setbyte(src,o,v)      (*(cast_ubytep(src) + (o)) = (v))
+#define setbyte(src,o,v)      (*(cast_bytep(src) + (o)) = (v))
 
 
 /* 
- * Get first 3 bytes (LE byte order) from 'p' 
- * casted to 'int'.
- */
+** Get first 3 bytes (LE byte order) from 'p' 
+** casted to 'int'.
+*/
 #define get3bytes(p) \
     (cast_uint(0) | \
-     ((*(cast_ubytep(p) + 2)) << 16) | \
-     ((*(cast_ubytep(p) + 1)) << 8) | \
-     (*cast_ubytep(p)))
+     ((*(cast_bytep(p) + 2)) << 16) | \
+     ((*(cast_bytep(p) + 1)) << 8) | \
+     (*cast_bytep(p)))
 
 
 /* 
- * Set first 3 (LE byte order) bytes from 'src'
- * (integer type) into 'dest'.
- */
+** Set first 3 (LE byte order) bytes from 'src'
+** (integer type) into 'dest'.
+*/
 #define set3bytes(dest,src) \
     { setbyte(dest, 0, getbyte(src, 0)); \
       setbyte(dest, 1, getbyte(src, 1)); \

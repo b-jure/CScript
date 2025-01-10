@@ -20,7 +20,7 @@
 
 CSLIB_API int csL_error(cs_State *ts, const char *fmt, ...) {
     va_list ap;
-    csL_where(ts, 0);
+    csL_where(ts, 1);
     va_start(ap, fmt);
     cs_push_vfstring(ts, fmt, ap);
     va_end(ap);
@@ -30,31 +30,87 @@ CSLIB_API int csL_error(cs_State *ts, const char *fmt, ...) {
 }
 
 
+/*
+** Find field in table at index -1. If field value is found
+** meaning the object at `index` is equal to the field value, then
+** this function returns 1. Only string keys are considered and
+** limit is the limit of recursive calls in case hashtable field
+** contains another hashtable value.
+*/
+static int findfield(cs_State *ts, int index, int limit) {
+    if (limit == 0 || !cs_is_hashtable(ts, -1))
+        return 0; /* not found */
+    cs_push_nil(ts); /* start `next` loop (from beginning) */
+    while (cs_next(ts, -2)) { /* for each pair in the hashtable */
+        if (cs_type(ts, -2) == CS_TSTRING) { /* ignore non-string keys */
+            if (cs_rawequal(ts, index, -1)) { /* found object (function)? */
+                cs_pop(ts, 1); /* remove value (but keep name) */
+                return 1;
+            } else if (findfield(ts, index, limit - 1)) { /* try recursively */
+                /* stack: lib_name, lib_hashtable, field_name (top) */
+                cs_push_literal(ts, "."); /* place '.' between the two names */
+                cs_replace(ts, -3); /* (in the slot occupied by hashtable) */
+                cs_concat(ts, 3); /* lib_name.field_name */
+                return 1;
+            }
+        }
+        cs_pop(ts, 1); /* remove value */
+    }
+    return 0; /* not found */
+}
+
+
+/*
+** Try and push name of the currently active function in `di`.
+** If function is global function, then the its name is pushed
+** on the top of the stack.
+*/
+static int pushglobalfuncname(cs_State *ts, cs_DebugInfo *di) {
+    int top = cs_gettop(ts); /* index of value on top of the stack */
+    int func = top + 1;
+    cs_getinfo(ts, "f", di); /* push function (top + 1) */
+    cs_get_global(ts, CS_LOADED_TABLE);
+    csL_check_stack(ts, 6, "not enough stack space"); /* for `findfield` */
+    if (findfield(ts, func, 2)) { /* found? */
+        const char *name = cs_to_string(ts, -1);
+        if (strncmp(name, CS_GNAME ".", 4) == 0) { /* starts with '__G.'? */
+            cs_push_string(ts, name + 4); /* push name without prefix */
+            cs_remove(ts, -2); /* remove original name */
+        }
+        cs_copy(ts, -1, func); /* copy name to proper place */
+        cs_setntop(ts, func + 1); /* remove "loaded" table and name copy */
+        return 1;
+    } else { /* not a global */
+        cs_setntop(ts, func); /* remove func and Lib */
+        return 0;
+    }
+}
+
+
 CSLIB_API int csL_arg_error(cs_State *ts, int argindex, const char *extra) {
     cs_DebugInfo di;
     if (!cs_getstack(ts, 0, &di)) /* no stack frame? */
-        return csL_error(ts, "bad argument @%d (%s)", argindex, extra);
+        return csL_error(ts, "bad argument #%d (%s)", argindex, extra);
     cs_getinfo(ts, "n", &di);
-    if (strcmp(di.name, "method") == 0) {
-        argindex--; /* ignore 'self' */
+    if (strcmp(di.namewhat, "method") == 0) {
+        argindex--; /* ignore `self` */
         if (argindex == 0) /* self is the invalid argument? */
             csL_error(ts, "calling '%s' on a bad 'self' (%s)", di.name, extra);
     }
     if (di.name == NULL)
-        di.name = "?";
-    return csL_error(ts, "bad argument @%d to '%s' (%s)",
+        di.name = (pushglobalfuncname(ts, &di)) ? cs_to_string(ts, -1) : "?";
+    return csL_error(ts, "bad argument #%d to '%s' (%s)",
                          argindex, di.name, extra);
 }
 
 
 CSLIB_API int csL_type_error(cs_State *ts, int argindex, const char *tname) {
-    const char *msg;
-    const char *argtype;
+    const char *msg, *argtype;
     if (cs_type(ts, argindex) == CS_TLIGHTUSERDATA)
         argtype = "light userdata";
     else
         argtype = csL_typename(ts, argindex);
-    msg = cs_push_fstring(ts, "%s expected, got %s", tname, argtype);
+    msg = cs_push_fstring(ts, "%s expected, instead got %s", tname, argtype);
     return csL_arg_error(ts, argindex, msg);
 }
 
@@ -137,7 +193,7 @@ CSLIB_API int csL_check_option(cs_State *ts, int index, const char *dfl,
         if (strcmp(str, opts[i]) == 0)
             return i;
     return csL_arg_error(ts, index,
-                         cs_push_fstring(ts, "invalid option '%s'", str));
+                         cs_push_fstring(ts, "invalid option `%s`", str));
 }
 
 
@@ -292,8 +348,8 @@ CSLIB_API void csL_where(cs_State *ts, int level) {
     cs_DebugInfo di;
     if (cs_getstack(ts, level, &di)) {
         cs_getinfo(ts, "sl", &di);
-        if (di.defline > 0) { /* have info? */
-            cs_push_fstring(ts, "%s:%d", di.shortsrc, di.currline);
+        if (di.currline > 0) { /* have info? */
+            cs_push_fstring(ts, "%s:%d: ", di.shortsrc, di.currline);
             return;
         }
     }
@@ -428,8 +484,8 @@ CSLIB_API void csL_include(cs_State *ts, const char *modname,
     if (!cs_to_bool(ts, -1)) { /* module not already loaded? */
         cs_pop(ts, 1); /* remove field */
         cs_push_cfunction(ts, openf); /* push func that opens the module */
-        cs_push_string(ts, modname); /* argument to 'openf' */
-        cs_call(ts, 1, 1); /* call 'openf' */
+        cs_push_string(ts, modname); /* argument to `openf` */
+        cs_call(ts, 1, 1); /* call `openf` */
         cs_push(ts, -1);  /* make copy of the module (call result) */
         cs_set_fieldstr(ts, -3, modname); /* __LOADED[modname] = module */
     }
@@ -443,11 +499,11 @@ CSLIB_API void csL_include(cs_State *ts, const char *modname,
 
 CSLIB_API void *csL_test_userdata(cs_State *ts, int index, const char *name) {
     void *p = cs_to_userdata(ts, index);
-    if (p != NULL) { /* 'index' is userdata? */
+    if (p != NULL) { /* `index` is userdata? */
         cs_push(ts, index);
         cs_get_global(ts, name);
         if (!cs_rawequal(ts, -2, -1)) /* not the same as global? */
-            p = NULL; /* value is a userdata but not a global 'name' */
+            p = NULL; /* value is a userdata but not a global `name` */
         cs_pop(ts, 2); /* remove both values */
         return p;
     }
@@ -458,10 +514,14 @@ CSLIB_API void *csL_test_userdata(cs_State *ts, int index, const char *name) {
 /* find and return last call frame level */
 static int lastlevel(cs_State *ts) {
     cs_DebugInfo di;
-    int high = 0, low = 0;
-    /* get top limit, and store last known valid in 'low' */
-    while (cs_getstack(ts, high, &di)) { low = high; high *= 2; }
-    /* binary search between 'low' and 'high' levels */
+    int low = 0, high = 0;
+    /* get upper bound, and store last known valid level in `low` */
+    while (cs_getstack(ts, high, &di)) {
+        low = high;
+        high += (high == 0); /* avoid multiplying by 0 */
+        high *= 2;
+    }
+    /* binary search between `low` and `high` levels */
     while (low < high) {
         int mid = low + ((high - low)/2);
         if (cs_getstack(ts, mid, &di))
@@ -473,106 +533,53 @@ static int lastlevel(cs_State *ts) {
 }
 
 
-/*
-** Find field in table at index -1. If field value is found
-** meaning the object at 'index' is equal to the field value, then
-** this function returns 1. Only string keys are considered and
-** limit is the limit of recursive calls in case table field
-** contains another table value.
-*/
-static int findfield(cs_State *ts, int index, int limit) {
-    if (limit == 0 || !cs_is_hashtable(ts, -1))
-        return 0; /* not found */
-    cs_push_nil(ts); /* start 'next' loop */
-    while (cs_next(ts, -2)) { /* for each field in table */
-        if (cs_type(ts, -2) == CS_TSTRING) { /* ignore non-string keys */
-            if (cs_rawequal(ts, index, -1)) { /* found object? */
-                cs_pop(ts, 1); /* remove value (but keep name) */
-                return 1;
-            } else if (findfield(ts, index, limit - 1)) { /* try recursively */
-                /* stack: lib_name, lib_table, field_name (top) */
-                cs_push_literal(ts, "."); /* place '.' between the two names */
-                cs_replace(ts, -3); /* (in the slot occupied by table) */
-                cs_concat(ts, 3); /* lib_name.field_name */
-                return 1;
-            }
-        }
-        cs_pop(ts, 1); /* remove value */
-    }
-    return 0; /* not found */
-}
-
-
-/*
-** Try and push name of the currently active func in 'di'.
-** If func is global function, then the its name is pushed on the top of
-** the stack.
-*/
-static int pushglobalfuncname(cs_State *ts, cs_DebugInfo *di) {
-    int top = cs_gettop(ts);
-    cs_getinfo(ts, "f", di); /* push func */
-    cs_get_global(ts, CS_LOADED_TABLE); /* get Lib */
-    csL_check_stack(ts, 6, "not enough stack space"); /* for 'findfield' */
-    if (findfield(ts, top + 1, 2)) { /* found? */
-        cs_copy(ts, -1, top + 1); /* copy name to proper place */
-        cs_setntop(ts, top + 1); /* remove Lib and copy of name */
-        return 1;
-    } else { /* not a global */
-        cs_setntop(ts, top); /* remove func and Lib */
-        return 0;
-    }
-}
-
-
 static void pushfuncname(cs_State *ts, cs_DebugInfo *di) {
     if (pushglobalfuncname(ts, di)) { /* try first a global name */
-        cs_push_fstring(ts, "function '%s'", cs_to_string(ts, -1));
+        cs_push_fstring(ts, "function `%s`", cs_to_string(ts, -1));
         cs_remove(ts, -2); /* remove name */
-    }
-    else if (*di->namewhat != '\0') /* name from code? */
-        cs_push_fstring(ts, "%s '%s'", di->namewhat, di->name);
-    else if (*di->what == 'm') /* main? */
+    } else if (*di->namewhat != '\0') { /* name from code? */
+        cs_push_fstring(ts, "%s `%s`", di->namewhat, di->name);
+    } else if (*di->what == 'm') { /* main? */
         cs_push_literal(ts, "main chunk");
-    else if (*di->what != 'C') /* CScript functions? */
+    } else if (*di->what != 'C') { /* CScript functions? */
         cs_push_fstring(ts, "function <%s:%d>", di->shortsrc, di->defline);
-    else /* unknown */
+    } else /* unknown */
         cs_push_literal(ts, "?");
 }
 
 
-/* '0' is a valid stack level (top-level) */
+/* `0` is a valid stack level (top-level) */
 #define tostacklevel(x)     ((x)-1)
 
 #define STACKLEVELS         tostacklevel(11)
 
-CSLIB_API void csL_traceback(cs_State *ts, cs_State *at, int level,
+CSLIB_API void csL_traceback(cs_State *ts, cs_State *ts1, int level,
                              const char *msg) {
     csL_Buffer B;
     cs_DebugInfo di;
-    int last = lastlevel(at);
-    int levelsleft = (last - level > (STACKLEVELS*2) ? STACKLEVELS : -1);
+    int last = lastlevel(ts1);
+    int limit2show = (last - level > (STACKLEVELS * 2) ? STACKLEVELS : -1);
     csL_buff_init(ts, &B);
     if (msg) {
         csL_buff_push_string(&B, msg);
         csL_buff_push(&B, '\n');
     }
     csL_buff_push_string(&B, "stack traceback:");
-    while (cs_getstack(at, level++, &di)) { /* tracing back... */
-        if (levelsleft-- == 0) { /* too many levels? */
-            int n = last - level - STACKLEVELS + 1;
+    while (cs_getstack(ts1, level++, &di)) { /* tracing back... */
+        if (limit2show-- == 0) { /* too many levels? */
+            int n = last - level - STACKLEVELS + 1; /* levels to skip */
             cs_push_fstring(ts, "\n\t(skipping %d levels)", n);
-            csL_buff_push_value(&B);
-            level += n;
+            csL_buff_push_stack(&B);
+            level += n; /* skip to last levels */
         } else {
-            /* source, name, line info */
-            cs_getinfo(at, "snl", &di);
-            if (di.defline <= 0)
+            cs_getinfo(ts1, "snl", &di); /* source, name, line info */
+            if (di.currline <= 0)
                 cs_push_fstring(ts, "\n\t%s in ", di.shortsrc);
             else
-                cs_push_fstring(ts, "\n\t%s:%d in ", di.shortsrc, di.currline);
-            csL_buff_push_value(&B);
+                cs_push_fstring(ts, "\n\t%s:%d: in ", di.shortsrc, di.currline);
+            csL_buff_push_stack(&B);
             pushfuncname(ts, &di);
-            csL_buff_push_value(&B);
+            csL_buff_push_stack(&B);
         }
     }
     csL_buff_end(&B);
@@ -602,7 +609,7 @@ CSLIB_API void csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup) {
 
 typedef struct UserBox {
     void *p; /* data */
-    size_t sz; /* size of 'p' (data) */
+    size_t sz; /* size of `p` (data) */
 } UserBox;
 
 
@@ -642,7 +649,7 @@ static void newbox(cs_State *ts) {
 
 
 /*
-** Initializes the buffer 'B' and pushes it's placeholder onto
+** Initializes the buffer `B` and pushes it's placeholder onto
 ** the top of the stack as light userdata.
 */
 CSLIB_API void csL_buff_init(cs_State *ts, csL_Buffer *B) {
@@ -661,10 +668,10 @@ CSLIB_API void csL_buff_init(cs_State *ts, csL_Buffer *B) {
 
 
 /*
-** Whenever buffer is accessed, slot 'index' must be either a box,
-** meaning the buffer is using a temporary arena on stack (which
-** cannot be NULL) or it is a placeholder for the buffer (meaning
-** that buffer is still using 'init.b[CSL_BUFFERSIZE]').
+** Whenever buffer is accessed, slot `index` must be either a box,
+** meaning the buffer is stored as `UserBox` (which cannot be NULL)
+** or it is a placeholder for the buffer (meaning that buffer is
+** still using `init.b[CSL_BUFFERSIZE]`).
 */
 #define checkbufflevel(B, index) \
     cs_assert(buffonstack(B) ? cs_to_userdata((B)->ts, index) != NULL \
@@ -683,8 +690,8 @@ static size_t newbuffsize(csL_Buffer *B, size_t sz) {
 
 
 /*
-** Ensure that buffer 'B' can fit 'sz' bytes.
-** This also creates 'UserBox' if internal buffer is not big enough.
+** Ensure that buffer `B` can fit `sz` bytes.
+** This also creates `UserBox` if internal buffer is not big enough.
 */
 static char *buffensure(csL_Buffer *B, size_t sz, int boxindex) {
     checkbufflevel(B, boxindex);
@@ -694,15 +701,15 @@ static char *buffensure(csL_Buffer *B, size_t sz, int boxindex) {
         char *newb;
         cs_State *ts = B->ts;
         size_t newsize = newbuffsize(B, sz);
-        if (buffonstack(B)) { /* already have 'UserBox'? */
+        if (buffonstack(B)) { /* already have `UserBox`? */
             newb = resizebox(ts, boxindex, newsize); /* resize it and done */
         } else {
             cs_remove(ts, boxindex); /* remove placeholder */
             newbox(ts); /* create new user box on top */
-            cs_insert(ts, boxindex); /* insert the new box into 'boxindex' */
+            cs_insert(ts, boxindex); /* insert the new box into `boxindex` */
             cs_toclose(ts, boxindex); /* mark box to-be-closed */
             newb = resizebox(ts, boxindex, newsize); /* resize it */
-            memcpy(newb, B->b, B->n * sizeof(char)); /* copy 'B->init.b' */
+            memcpy(newb, B->b, B->n * sizeof(char)); /* copy `B->init.b` */
         }
         B->b = newb;
         B->sz = newsize;
@@ -712,7 +719,7 @@ static char *buffensure(csL_Buffer *B, size_t sz, int boxindex) {
 
 
 /*
-** Initializes buffer 'B' to the size 'sz' bytes and returns the pointer
+** Initializes buffer `B` to the size `sz` bytes and returns the pointer
 ** to that memory block.
 */
 CSLIB_API char *csL_buff_initsz(cs_State *ts, csL_Buffer *B, size_t sz) {
@@ -722,8 +729,8 @@ CSLIB_API char *csL_buff_initsz(cs_State *ts, csL_Buffer *B, size_t sz) {
 
 
 /*
-** Return the pointer to the free memory block of at least 'sz' bytes.
-** This function expects buffer placeholder or its 'UserBox' to be on
+** Return the pointer to the free memory block of at least `sz` bytes.
+** This function expects buffer placeholder or its `UserBox` to be on
 ** top of the stack.
 */
 CSLIB_API char *csL_buff_ensure(csL_Buffer *B, size_t sz) {
@@ -733,7 +740,7 @@ CSLIB_API char *csL_buff_ensure(csL_Buffer *B, size_t sz) {
 
 /*
 ** Push sized string into the buffer.
-** This function expects buffer placeholder or its 'UserBox' to be on
+** This function expects buffer placeholder or its `UserBox` to be on
 ** top of the stack.
 */
 CSLIB_API void csL_buff_push_lstring(csL_Buffer *B, const char *s, size_t l) {
@@ -746,9 +753,9 @@ CSLIB_API void csL_buff_push_lstring(csL_Buffer *B, const char *s, size_t l) {
 
 
 /*
-** Similar to 'csL_buff_push_lstring', the only difference is that this
-** function measures the length of 's'.
-** This function expects buffer placeholder or its 'UserBox' to be on
+** Similar to `csL_buff_push_lstring`, the only difference is that this
+** function measures the length of `s`.
+** This function expects buffer placeholder or its `UserBox` to be on
 ** top of the stack.
 */
 CSLIB_API void csL_buff_push_string(csL_Buffer *B, const char *s) {
@@ -758,10 +765,10 @@ CSLIB_API void csL_buff_push_string(csL_Buffer *B, const char *s) {
 
 /*
 ** Pushes the string value on top of the stack into the buffer.
-** This function expects buffer placeholder or its 'UserBox' to be on
+** This function expects buffer placeholder or its `UserBox` to be on
 ** the stack below the string value being pushed, which is on top of the stack.
 */
-CSLIB_API void csL_buff_push_value(csL_Buffer *B) {
+CSLIB_API void csL_buff_push_stack(csL_Buffer *B) {
     size_t len;
     const char *str = cs_to_lstring(B->ts, -1, &len);
     char *p = buffensure(B, len, -2);
@@ -772,14 +779,14 @@ CSLIB_API void csL_buff_push_value(csL_Buffer *B) {
 
 
 /*
-** Finish the use of buffer 'B' leaving the final string on top of
+** Finish the use of buffer `B` leaving the final string on top of
 ** the stack.
 */
 CSLIB_API void csL_buff_end(csL_Buffer *B) {
     cs_State *ts = B->ts;
     checkbufflevel(B, -1);
     cs_push_lstring(ts, B->b, B->n);
-    if (buffonstack(B)) /* have 'UserBox'? */
+    if (buffonstack(B)) /* have `UserBox`? */
         cs_closeslot(ts, -2); /* close it -> boxgc */
     cs_remove(ts, -2); /* remove buffer placeholder or box */
 }

@@ -18,7 +18,7 @@
 
 /* Return next char and progress the buffer or try fill the buffer. */
 #define brgetc(br) \
-	((br)->n-- > 0 ? cast(cs_ubyte, *(br)->buff++) : csR_fill(br))
+	((br)->n-- > 0 ? cast(c_byte, *(br)->buff++) : csR_fill(br))
 
 
 typedef struct {

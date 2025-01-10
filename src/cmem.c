@@ -47,7 +47,7 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
 #endif
 
 
-cs_sinline void *tryagain(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
+c_sinline void *tryagain(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G_(ts);
     if (cantryagain(gs)) {
         csG_full(ts, 1); /* try to reclaim some memory... */
@@ -134,7 +134,7 @@ void *csM_shrinkarr_(cs_State *ts, void *ptr, int *sizep, int nfinal,
 }
 
 
-cs_noret csM_toobig(cs_State *ts) {
+c_noret csM_toobig(cs_State *ts) {
     csD_runerror(ts, "memory allocation error: block too big");
 }
 

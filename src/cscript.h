@@ -152,7 +152,7 @@ struct cs_Entry {
  * State manipulation
  * ------------------------------------------------------------------------- */
 CS_API cs_State        *cs_newstate(cs_Alloc allocator, void *ud); 
-CS_API void             cs_freestate(cs_State *ts);
+CS_API void             cs_close(cs_State *ts);
 CS_API cs_State        *cs_newthread(cs_State *ts);
 CS_API int              cs_resetthread(cs_State *ts);
 CS_API cs_CFunction     cs_atpanic(cs_State *ts, cs_CFunction fn);

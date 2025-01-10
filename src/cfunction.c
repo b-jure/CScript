@@ -59,10 +59,9 @@ CClosure *csF_newCClosure(cs_State *ts, int nupvalues) {
 
 
 /*
-** Adjusts function varargs by moving the named parameters
-** and the function in front of the varargs.
-** Additionally adjust new top for 'cf' and invalidates
-** old named parameters (after they get moved).
+** Adjusts function varargs by moving the named parameters and the
+** function in front of the varargs. Additionally adjust new top for
+** 'cf' and invalidates old named parameters (after they get moved).
 */
 void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
                        const Proto *fn) {
@@ -242,7 +241,7 @@ static void poptbclist(cs_State *ts) {
 ** Call '__close' method on 'obj' with error object 'errobj'.
 ** This function assumes 'EXTRA_STACK'.
 */
-static void callcloseMM(cs_State *ts, TValue *obj, TValue *errobj) {
+static void callCLOSEmm(cs_State *ts, TValue *obj, TValue *errobj) {
     SPtr top = ts->sp.p;
     const TValue *method = csMM_get(ts, obj, CS_MM_CLOSE);
     cs_assert(!ttisnil(method));
@@ -261,7 +260,7 @@ static void callcloseMM(cs_State *ts, TValue *obj, TValue *errobj) {
 ** the 'level' of the upvalue being closed, as everything after that
 ** won't be used again.
 */
-static void prepcallcloseMM(cs_State *ts, SPtr level, int status) {
+static void prepcallCLOSEmm(cs_State *ts, SPtr level, int status) {
     TValue *v = s2v(level); /* value being closed */
     TValue *errobj;
     if (status == CLOSEKTOP) {
@@ -270,7 +269,7 @@ static void prepcallcloseMM(cs_State *ts, SPtr level, int status) {
         errobj = s2v(level + 1); /* error object goes after 'v' */
         csT_seterrorobj(ts, status, level + 1); /* set error object */
     }
-    callcloseMM(ts, v, errobj);
+    callCLOSEmm(ts, v, errobj);
 }
 
 
@@ -284,7 +283,7 @@ SPtr csF_close(cs_State *ts, SPtr level, int status) {
     while (ts->tbclist.p >= level) {
         SPtr tbc = ts->tbclist.p;
         poptbclist(ts);
-        prepcallcloseMM(ts, tbc, status);
+        prepcallCLOSEmm(ts, tbc, status);
         level = restorestack(ts, levelrel);
     }
     return level;

@@ -22,8 +22,8 @@
 
 
 
-#if SIZE_MAX < UMAX_INT     /* { */
-#error "SIZE_MAX must be greater or equal UMAX_INT"
+#if SIZE_MAX < UMAXINT     /* { */
+#error "SIZE_MAX must be greater or equal UMAXINT"
 #endif                      /* } */
 
 
@@ -295,9 +295,6 @@
 
 #define cs_integer2str(s,sz,n) \
     c_snprintf((s),(sz),CS_INTEGER_FMT,(CS_INTEGER)(n))
-
-#define csi_intop(op,x,y) \
-    csi_castU2S(csi_castS2U(x) op csi_castS2U(y))
 
 
 #if CS_INT_TYPE == CS_INT_INT               /* { int */

@@ -36,13 +36,13 @@
         ((p) = csM_shrinkarr_(ts, p, cast(int *, &(s)), f, sizeof(t)))
 
 
-CSI_FUNC void *csM_malloc_(cs_State *ts, cs_umem size, int tag);
-CSI_FUNC void *csM_realloc_(cs_State *ts, void *ptr, cs_umem osize,
-                            cs_umem nsize);
-CSI_FUNC void *csM_saferealloc(cs_State *ts, void *ptr, cs_umem osize,
-                               cs_umem nsize);
-CSI_FUNC cs_noret csM_toobig(cs_State *ts);
-CSI_FUNC void csM_free_(cs_State *ts, void *ptr, cs_umem osize);
+CSI_FUNC void *csM_malloc_(cs_State *ts, c_mem size, int tag);
+CSI_FUNC void *csM_realloc_(cs_State *ts, void *ptr, c_mem osize,
+                            c_mem nsize);
+CSI_FUNC void *csM_saferealloc(cs_State *ts, void *ptr, c_mem osize,
+                               c_mem nsize);
+CSI_FUNC c_noret csM_toobig(cs_State *ts);
+CSI_FUNC void csM_free_(cs_State *ts, void *ptr, c_mem osize);
 CSI_FUNC void *csM_growarr_(cs_State *ts, void *ptr, int *sizep, int len,
                            int elemsz, int ensure, int lim, const char *what);
 CSI_FUNC void *csM_shrinkarr_(cs_State *ts, void *ptr, int *sizep, int final,

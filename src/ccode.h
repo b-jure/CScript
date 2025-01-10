@@ -12,8 +12,10 @@
 #include "cparser.h"
 
 
-/* get current pc */
-#define currentpc(fs)           ((fs)->pc)
+/* 
+** Get current pc, this macro expects fs (FunctionState) to be in scope.
+*/
+#define PC      ((fs)->pc)
 
 
 /* get constant of 'ExpInfo' */
@@ -51,7 +53,7 @@
 
 
 /* get/set short parameter */
-#define GETARG_S(ip,o)          cast_ubyte(*GETPC_S(ip,o))
+#define GETARG_S(ip,o)          cast_byte(*GETPC_S(ip,o))
 #define SETARG_S(ip,o,v)        setbyte(GETPC_S(ip,0), o, v);
 #define SETARG_LS(ip,v)         setbyte(GETARG(ip), SIZEARGL, v)
 #define SETARG_LLS(ip,v)        setbyte(GETARG(ip), 2*SIZEARGL, v)
@@ -209,8 +211,7 @@ OP_TESTPOP,/*      V L S   'if (!c_isfalse(V) == S) { pc += L; } pop V;'    */
 OP_CALL,/*  L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offsp-1})'
                     (check info)                                            */
 
-OP_CLOSE,/*        L           'close all upvalues >= OU{L}'                */
-OP_BCLOSE,/*       L           'close all upavlues >= OU{L} (break variant) */
+OP_CLOSE,/*        L           'close all open upvalues >= V{L}'            */
 OP_TBC,/*          L           'mark L{L} as to-be-closed'                  */
 
 OP_GETGLOBAL,/*    L           'G{L}'                                       */
@@ -243,7 +244,7 @@ OP_GETSUPIDXSTR,/* V1 V2 L     'V2:super[K{L}:string]' (V1 is instance)     */
 OP_INHERIT,/*     V1 V2  'V2:class inherit V1                               */
 OP_FORPREP,/*     L1 L2  'create upvalue V{L1+3}; pc += L2'                 */
 OP_FORCALL,/*     L1 L2  'V{L1+4},...,V{L1+3+L2} = V{L1}(V{L1+1}, V{L1+2});'*/
-OP_FORLOOP,/*     L1 L2  'if V{L1+4} != nil { V{L1} = V{L1+2}; pc -= L2 }'  */
+OP_FORLOOP,/*L1 L2 L3 'if V{L1+4}!=nil {V{L1}=V{L1+2}; pc-=L2} else pop(L3)'*/
 
 OP_RET,/*         L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes)    */
 } OpCode;
@@ -281,32 +282,29 @@ enum OpFormat { /* ORDER OPFMT */
     FormatILSS,
     FormatILL,
     FormatILLS,
+    FormatILLL,
     FormatN,
 };
 
 
 /*
-** bits 0-2: format ('OpFormat')
-** bit 3: instruction is a test (TProp)
-** bit 4: instruction is a jump (JProp)
-** bit 5: instruction is metamethod call (MProp)
-** bit 6-7: unused
+** bits 0-3     instruction format (OpFormat)
+** bit  4       instruction is a jump
 */
-CSI_DEC(const cs_ubyte csC_opProp[NUM_OPCODES];)
+CSI_DEC(const c_byte csC_opProp[NUM_OPCODES];)
 
-#define getOpFormat(p)      (csC_opProp[p] & 0x07)
-#define testTProp(p)        (csC_opProp[p] & (1 << 3))
+#define getOpFormat(p)      (csC_opProp[p] & 0x0F)
 #define testJProp(p)        (csC_opProp[p] & (1 << 4))
-#define testMProp(p)        (csC_opProp[p] & (1 << 5))
 
-#define opProp(mm,j,t,f)    (((mm) << 5) | ((j) << 4) | ((t) << 3) | (f))
+/* creates OpCode property */
+#define opProp(j,f)         (((j) << 4) | (f))
 
 
 #define opisjump(op)        testJProp(op)
 
 
 /* Instruction format sizes in bytes (aka as bytecode) */
-CSI_DEC(const cs_ubyte csC_opSize[FormatN];)
+CSI_DEC(const c_byte csC_opSize[FormatN];)
 
 #define getOpSize(p)        csC_opSize[getOpFormat(p)]
 
@@ -342,6 +340,8 @@ CSI_FUNC int csC_emitIS(FunctionState *fs, Instruction i, int a);
 CSI_FUNC int csC_emitIL(FunctionState *fs, Instruction i, int a);
 CSI_FUNC int csC_emitILS(FunctionState *fs, Instruction op, int a, int b);
 CSI_FUNC int csC_emitILL(FunctionState *fs, Instruction i, int a, int b);
+CSI_FUNC int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c);
+CSI_FUNC void csC_fixline(FunctionState *fs, int line);
 CSI_FUNC void csC_checkstack(FunctionState *fs, int n);
 CSI_FUNC void csC_reserveslots(FunctionState *fs, int n);
 CSI_FUNC void csC_setoneret(FunctionState *fs, ExpInfo *e);
@@ -369,7 +369,7 @@ CSI_FUNC void csC_patchtohere(FunctionState *fs, int pc);
 CSI_FUNC int csC_test(FunctionState *fs, OpCode testop, int cond);
 CSI_FUNC void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
 CSI_FUNC void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                         Binopr opr);
+                         Binopr opr, int line);
 CSI_FUNC void csC_finish(FunctionState *fs);
 
 #endif

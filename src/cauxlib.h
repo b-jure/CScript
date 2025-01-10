@@ -20,7 +20,7 @@
 #define CS_ERRFILE      (CS_ERRERROR + 1)
 
 
-/* key, in the global table, for table of loaded modules */
+/* key, in the global table, for hashtable of loaded modules */
 #define CS_LOADED_TABLE     "__LOADED"
 
 
@@ -29,14 +29,14 @@ typedef struct csL_Buffer csL_Buffer;
 
 
 /* ------------------------------------------------------------------------ 
-** error functions
+** Error functions
 ** ------------------------------------------------------------------------ */
 CSLIB_API int csL_error(cs_State *ts, const char *fmt, ...);
 CSLIB_API int csL_arg_error(cs_State *ts, int argindex, const char *extra);
 CSLIB_API int csL_type_error(cs_State *ts, int argindex, const char *tname);
 
 /* ------------------------------------------------------------------------ 
-** check functions
+** Check functions
 ** ------------------------------------------------------------------------ */
 CSLIB_API cs_Number     csL_check_number(cs_State *ts, int index);
 CSLIB_API cs_Integer    csL_check_integer(cs_State *ts, int index);
@@ -51,7 +51,7 @@ CSLIB_API int           csL_check_option(cs_State *ts, int index,
                                          const char *const opts[]);
 
 /* ------------------------------------------------------------------------ 
-** optional argument functions
+** Optional argument functions
 ** ------------------------------------------------------------------------ */
 CSLIB_API cs_Number   csL_opt_number(cs_State *ts, int index, cs_Number dfl);
 CSLIB_API cs_Integer  csL_opt_integer(cs_State *ts, int index, cs_Integer dfl);
@@ -59,7 +59,7 @@ CSLIB_API const char *csL_opt_lstring(cs_State *ts, int index, const char *dfl,
                                       size_t *plen);
 
 /* ------------------------------------------------------------------------ 
-** loading functions
+** Loading functions
 ** ------------------------------------------------------------------------ */
 CSLIB_API int csL_loadfile(cs_State *ts, const char *filename);
 CSLIB_API int csL_loadstring(cs_State *ts, const char *str);
@@ -67,7 +67,7 @@ CSLIB_API int csL_loadbuffer(cs_State *ts, const char *buff, size_t sz,
                              const char *name);
 
 /* ------------------------------------------------------------------------ 
-** miscellaneous functions
+** Miscellaneous functions
 ** ------------------------------------------------------------------------ */
 CSLIB_API const char *csL_to_lstring(cs_State *ts, int index, size_t *plen);
 CSLIB_API void        csL_where(cs_State *ts, int level);
@@ -86,18 +86,21 @@ CSLIB_API void        csL_traceback(cs_State *ts, cs_State *at, int level,
 CSLIB_API void        csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup);
 
 /* ------------------------------------------------------------------------ 
-** useful macros
+** Useful macros
 ** ------------------------------------------------------------------------ */
-#define csL_typename(ts, index)         cs_typename(ts, cs_type(ts, index))
+#define csL_typename(ts,index)          cs_typename(ts, cs_type(ts, index))
 
-#define csL_check_string(ts, index)     csL_check_lstring(ts, index, NULL)
-#define csL_opt_string(ts, index, dfl)  csL_opt_lstring(ts, index, dfl, NULL)
+#define csL_check_string(ts,index)      csL_check_lstring(ts, index, NULL)
+#define csL_opt_string(ts,index,dfl)    csL_opt_lstring(ts, index, dfl, NULL)
 
-#define csL_opt(ts, fn, index, dfl) \
-    (cs_is_noneornil(ts, index) ? (dfl) : fn(ts, index))
+#define csL_opt(ts,fn,index,dfl) \
+        (cs_is_noneornil(ts, index) ? (dfl) : fn(ts, index))
 
-#define csL_check_arg(ts, cond, arg, extramsg) \
-    ((void)(csi_likely(cond) || csL_arg_error(ts, (arg), (extramsg))))
+#define csL_check_arg(ts,cond,arg,extramsg) \
+        ((void)(csi_likely(cond) || csL_arg_error(ts, (arg), (extramsg))))
+
+#define csL_expect_arg(ts,cond,arg,tname) \
+        ((void)(csi_likely(cond) || csL_type_error(ts, (arg), (tname))))
 
 #define csL_push_fail(ts)               cs_push_nil(ts)
 
@@ -106,6 +109,13 @@ CSLIB_API void        csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup);
       csL_get_subtable(ts, -1, name); \
       cs_remove(ts, -2); }
 
+
+/*
+** Perform arithmetic operations on cs_Integer values with wrap-around
+** semantics, as the CScript core does.
+*/
+#define csL_intop(op,x,y) \
+	((cs_Integer)((cs_Unsigned)(x) op (cs_Unsigned)(y)))
 
 
 /* internal assertions */
@@ -119,7 +129,7 @@ CSLIB_API void        csL_set_funcs(cs_State *ts, const cs_Entry *l, int nup);
 #endif
 
 /* ------------------------------------------------------------------------ 
-** buffer manipulation
+** Buffer manipulation
 ** ------------------------------------------------------------------------ */
 struct csL_Buffer {
     char *b;
@@ -147,11 +157,11 @@ CSLIB_API char *csL_buff_initsz(cs_State *ts, csL_Buffer *B, size_t sz);
 CSLIB_API char *csL_buff_ensure(csL_Buffer *B, size_t sz);
 CSLIB_API void  csL_buff_push_lstring(csL_Buffer *B, const char *s, size_t l);
 CSLIB_API void  csL_buff_push_string(csL_Buffer *B, const char *s);
-CSLIB_API void  csL_buff_push_value(csL_Buffer *B);
+CSLIB_API void  csL_buff_push_stack(csL_Buffer *B);
 CSLIB_API void  csL_buff_end(csL_Buffer *B);
 
 /* ------------------------------------------------------------------------ 
-** basic message reporting
+** Basic message reporting
 ** ------------------------------------------------------------------------ */
 /* write a message to 'fp' stream */
 #if !defined(cs_writelen)

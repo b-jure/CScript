@@ -11,54 +11,44 @@
 #include "cscript.h"
 
 
-
-/*
-** Signed and unsigned types that represent count
-** in bytes of total memory used by cript.
-*/
-typedef size_t cs_umem;
-typedef ptrdiff_t cs_mem;
-
-#define MAX_CUMEM       ((cs_umem)(~(cs_umem)(0)))
-#define MAX_CMEM        ((cs_mem)(MAX_CUMEM >> 1))
+typedef size_t          c_mem;
+#define MAXMEM          ((c_mem)(~(c_mem)(0)))
+typedef ptrdiff_t       cs_mem;
+#define MAXSMEM         ((cs_mem)(MAXMEM >> 1))
 
 
-/*
-** Used for representing small signed/unsigned
-** numbers instead of declaring them 'char'.
-*/
-typedef unsigned char cs_ubyte;
-typedef signed char cs_byte;
-
-#define MAX_CUBYTE      ((cs_ubyte)(~(cs_ubyte)(0)))
-#define MAX_CBYTE       ((cs_ubyte)(MAX_UBYTE >> 1))
+typedef unsigned char   c_byte;
+#define MAXBYTE         ((c_byte)(~(c_byte)(0)))
+typedef signed char     cs_byte;
+#define MAXSBYTE        ((c_byte)(MAXBYTE >> 1))
 
 
 /* 
 ** Unsigned 32-bit integer; for 'nCcalls'.
 ** This value must have 16 bits for counting nested
-** Cript function calls and 16 bits for nested C calls.
+** CSript function calls and 16 bits for nested C calls.
 */
-typedef uint32_t cs_uint32;
+typedef uint32_t        cs_uint32;
 
 
 /* nice to have */
-typedef unsigned int uint;
-typedef unsigned short ushort;
-typedef unsigned long ulong;
+typedef unsigned int    uint;
+typedef unsigned short  ushort;
+typedef unsigned long   ulong;
 
 
 /* maximum value that fits in 'int' type */
-#define MAX_INT     INT_MAX
+#define MAXINT      INT_MAX
 
 
 /*
-** Maximum size visible for CSript.
+** Maximum size visible for CScript.
 ** It must be less than what is representable by 'cs_Integer'.
 */
 #define MAXSIZE \
         (sizeof(size_t) < sizeof(cs_Integer) \
-        ? (SIZE_MAX) : (size_t)(CS_INTEGER_MAX))
+            ? (SIZE_MAX) \
+            : (size_t)(CS_INTEGER_MAX))
 
 
 
@@ -92,9 +82,9 @@ typedef unsigned long ulong;
 
 /*
 ** Allow threaded code by default on GNU C compilers.
-** What this allows is usage of jump table aka using
-** local labels inside arrays making O(1) jumps to
-** instructions inside interpreter loop.
+** What this allows is usage of jump table, meaning the use of
+** local labels inside arrays, making instruction dispatch O(1)
+** inside the interpreter loop.
 */
 #if defined(__GNUC__)
 #define PRECOMPUTED_GOTO
@@ -104,34 +94,34 @@ typedef unsigned long ulong;
 
 /* inline functions */
 #if defined(__GNUC__)
-#define cs_inline       __inline__
+#define c_inline        __inline__
 #else
-#define cs_inline       inline
+#define c_inline        inline
 #endif
 
 /* static inline */
-#define cs_sinline      static cs_inline
+#define c_sinline       static c_inline
 
 
 
 /* non-return type */
 #if defined(__GNUC__)
-#define cs_noret        void __attribute__((noreturn))
+#define c_noret         void __attribute__((noreturn))
 #elif defined(_MSC_VER) && _MSC_VER >= 1200
-#define cs_noret        void __declspec(noreturn)
+#define c_noret         void __declspec(noreturn)
 #else
-#define cs_noret        void
+#define c_noret         void
 #endif
 
 
 
 /*
-** Type for virtual-machine instructions
-** Instructions (opcodes) are 1 byte in size not including
+** Type for virtual-machine instructions.
+** Instructions (opcodes) are 1-byte in size not including
 ** the arguments; arguments vary in size (short/long) and
-** more on that in 'copcode.h'.
+** more on that in 'ccode.h'.
 */
-typedef cs_ubyte Instruction;
+typedef c_byte Instruction;
 
 
 
@@ -172,22 +162,11 @@ typedef cs_ubyte Instruction;
 
 
 /*
-** Minimum initial size for hashtables.
-** Size is power of 2 => 2^CSI_MINHTBITS.
-** Must be less than MAXHBITS (check chashtable.c).
-*/
-#if !defined(CSI_MINHTABSIZE)
-#define CSI_MINHTBITS           3
-#endif
-
-
-
-/*
 ** Minimum size for string buffer during lexing, this buffer memory
 ** will be freed after compilation.
 */
-#if !defined(CS_MINBUFFER)
-#define CS_MINBUFFER           32
+#if !defined(CSI_MINBUFFER)
+#define CSI_MINBUFFER       32
 #endif
 
 
@@ -198,76 +177,48 @@ typedef cs_ubyte Instruction;
 ** other features implemented through recursion in C.
 ** Any value will suffice as long as it fits in 'unsigned short'.
 */
+#if !defined(CSI_MAXCCALLS)
 #define CSI_MAXCCALLS       4096
+#endif
 
 
 
 /*
-** Runs each time program enters ('cs_lock') and
-** leaves ('cs_unlock') CSript core (C API).
- */
+** Runs each time program enters ('cs_lock') and leaves ('cs_unlock')
+** CSript core (C API).
+*/
 #if !defined(cs_lock)
-
-#if 0
-#define cs_lock(ts)         ((void)0)
-#define cs_unlock(ts)       csTR_dumpstack(ts, 1, "stack after -> %s", __func__)
-#else
 #define cs_lock(ts)         ((void)0)
 #define cs_unlock(ts)       ((void)0)
 #endif
 
-#endif
-
 
 
 /*
-** These macros allow user-defined action to be taken each
-** time cs_State (thread) is created or deleted.
+** These macros allow user-defined action to be taken each time
+** thread is created/deleted.
 */
-#if !defined(csi_userstatecreated)
-#define csi_userstatecreated(ts)            ((void)(ts))
+#if !defined(csi_userstateopen)
+#define csi_userstateopen(ts)               ((void)(ts))
 #endif
 
-#if !defined(csi_userstatethread)
-#define csi_userstatethread(ts,thread)      ((void)ts)
+#if !defined(csi_userstateclose)
+#define csi_userstateclose(ts)              ((void)(ts))
 #endif
 
-#if !defined(csi_userthreadfree)
-#define csi_userthreadfree(ts,thread)       ((void)ts)
+#if !defined(csi_userstate)
+#define csi_userstate(ts,thread)      ((void)(ts))
 #endif
 
 #if !defined(csi_userstatefree)
-#define csi_userstatefree(ts)               ((void)(ts))
+#define csi_userstatefree(ts,thread)       ((void)(ts))
 #endif
 
 
 
-/*
-** @MAX - return maximum value.
-** @MIN - return minimum value.
-*/
-#if defined(__GNUC__)
-#define MAX(a, b) \
-        __extension__ \
-        ({ __typeof__(a) _a = (a); \
-           __typeof__(b) _b = (b); \
-           _a > _b ? _a : _b; })
-
-#define MIN(a, b) \
-        __extension__\
-        ({ __typeof__(a) _a = (a); \
-           __typeof__(b) _b = (b); \
-           _a > _b ? _b : _a; })
-#else
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define MIN(a, b) ((a) > (b) ? (b) : (a))
-#endif
-
-
-
-/* @csi_abs - get absolute 'x' value. */
-#ifndef csi_abs
-#define csi_abs(x)      ((x) < 0 ? -(x) : (x))
+/* @c_abs - get absolute 'x' value. */
+#ifndef c_abs
+#define c_abs(x)    ((x) < 0 ? -(x) : (x))
 #endif
 
 
@@ -286,14 +237,13 @@ typedef cs_ubyte Instruction;
 #define cast(t, e)          ((t)(e))
 
 #define cast_node(e)        cast(Node*,(e))
-#define cast_ubyte(e)       cast(cs_ubyte,(e))
-#define cast_ubytep(e)      cast(cs_ubyte*,(e))
-#define cast_byte(e)        cast(cs_byte,(e))
+#define cast_byte(e)        cast(c_byte,(e))
+#define cast_bytep(e)       cast(c_byte*,(e))
+#define cast_sbyte(e)       cast(cs_byte,(e))
 #define cast_num(e)         cast(cs_Number,(e))
 #define cast_int(e)         cast(int,(e))
 #define cast_uint(e)        cast(uint,(e))
-#define cast_umem(e)        cast(cs_umem,(e))
-#define cast_mem(e)         cast(cs_mem,(e))
+#define cast_mem(e)         cast(c_mem,(e))
 #define cast_charp(e)       cast(char *,(e))
 #define cast_char(e)        cast(char,(e))
 #define cast_sizet(e)       cast(size_t,(e))
@@ -301,11 +251,13 @@ typedef cs_ubyte Instruction;
 #define cast_void(e)        cast(void,(e))
 
 /* cast 'cs_Integer' to 'cs_Unsigned' */
-#define csi_castS2U(i)      ((cs_Unsigned)(i))
+#define c_castS2U(i)        ((cs_Unsigned)(i))
 
 /* cast 'cs_Unsigned' to 'cs_Integer' */
-#define csi_castU2S(i)      ((cs_Integer)(i))
+#define c_castU2S(i)        ((cs_Integer)(i))
 
+
+#define c_intop(op,x,y)     c_castU2S(c_castS2U(x) op c_castS2U(y))
 
 
 /* string literal length */
@@ -313,68 +265,63 @@ typedef cs_ubyte Instruction;
 
 
 
-/* @csi_nummod - modulo 'a - floor(a/b)*b'. */
-#define csi_nummod(ts,a,b,m) \
+/* @c_nummod - modulo 'a - floor(a/b)*b'. */
+#define c_nummod(ts,a,b,m) \
         { (void)(ts); (m) = cs_mathop(fmod)(a, b); \
           if (((m) > 0) ? (b)<0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
-/* @csi_numdiv - float division. */
-#ifndef csi_numdiv
-#define csi_numdiv(ts, a, b)    ((void)(ts), (a)/(b))
+/* @c_numdiv - float division. */
+#ifndef c_numdiv
+#define c_numdiv(ts, a, b)    ((void)(ts), (a)/(b))
 #endif
 
-/* @csi_numidiv - floor division (or division between integers). */
-#ifndef csi_numidiv
-#define csi_numidiv(ts, a, b)   ((void)(ts), cs_mathop(floor)(csi_numdiv(a, b)))
-#endif
-
-/* @csi_numpow - exponentiation. */
-#ifndef csi_numpow
-#define csi_numpow(ts, a, b) \
-    ((void)(ts), (b) == 2 ? (a)*(a) : cs_mathop(pow)(a, b))
+/* @c_numpow - exponentiation. */
+#ifndef c_numpow
+#define c_numpow(ts, a, b) \
+        ((void)(ts), (b) == 2 ? (a)*(a) : cs_mathop(pow)(a, b))
 #endif
 
 /*
-** @csi_numadd - addition.
-** @csi_numsub - subtraction.
-** @csi_nummul - multiplication.
-** @csi_numunm - negation.
+** @c_numadd - addition.
+** @c_numsub - subtraction.
+** @c_nummul - multiplication.
+** @c_numunm - negation.
 */
-#ifndef csi_numadd
-#define csi_numadd(ts, a, b)    ((void)(ts), (a) + (b))
-#define csi_numsub(ts, a, b)    ((void)(ts), (a) - (b))
-#define csi_nummul(ts, a, b)    (void)(ts), ((a) * (b))
-#define csi_numunm(ts, a)       ((void)(ts), -(a))
+#ifndef c_numadd
+#define c_numadd(ts, a, b)      ((void)(ts), (a) + (b))
+#define c_numsub(ts, a, b)      ((void)(ts), (a) - (b))
+#define c_nummul(ts, a, b)      (void)(ts), ((a) * (b))
+#define c_numunm(ts, a)         ((void)(ts), -(a))
 #endif
 
 /*
-** @csi_numeq - ordering equal.
-** @csi_numne - ordering not equal.
-** @csi_numlt - ordering less than.
-** @csi_numle - ordering less equal.
-** @csi_numgt - ordering greater than.
-** @csi_numge - ordering greater equal.
+** @c_numeq - ordering equal.
+** @c_numne - ordering not equal.
+** @c_numlt - ordering less than.
+** @c_numle - ordering less equal.
+** @c_numgt - ordering greater than.
+** @c_numge - ordering greater equal.
 */
-#ifndef csi_numeq
-#define csi_numeq(a, b)         ((a) == (b))
-#define csi_numne(a, b)         (!csi_numeq(a, b))
-#define csi_numlt(a, b)         ((a) < (b))
-#define csi_numle(a, b)         ((a) <= (b))
-#define csi_numgt(a, b)         ((a) > (b))
-#define csi_numge(a, b)         ((a) >= (b))
+#ifndef c_numeq
+#define c_numeq(a, b)       ((a) == (b))
+#define c_numne(a, b)       (!c_numeq(a, b))
+#define c_numlt(a, b)       ((a) < (b))
+#define c_numle(a, b)       ((a) <= (b))
+#define c_numgt(a, b)       ((a) > (b))
+#define c_numge(a, b)       ((a) >= (b))
 #endif
 
-/* @csi_numisnan - check if number is 'NaN'. */
-#ifndef csi_numisnan
-#define csi_numisnan(a)         (!csi_numeq(a, a))
+/* @c_numisnan - check if number is 'NaN'. */
+#ifndef c_numisnan
+#define c_numisnan(a)       (!c_numeq(a, a))
 #endif
 
 
 /*
-** @CS_STRESS_GC - enables stress test for garbage collector, on each
+** @CSI_STRESS_GC - enables stress test for garbage collector, on each
 ** tracked memory change it performs full garbage collection.
 */
-#if defined(CS_STRESS_GC)
+#if defined(CSI_STRESS_GC)
 #define gcmemchange(ts,pre,pos) \
     { if (gcrunning(G_(ts)->gc)) { pre; csG_full(ts); pos; } }
 #else

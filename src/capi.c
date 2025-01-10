@@ -44,7 +44,7 @@
 /* 
 ** Convert index to a pointer to its value.
 ** Invalid indices (using upvalue index for CScript functions) return
-** special nil value '&G_(ts)->nil'.
+** special nil value `&G_(ts)->nil`.
 */
 static TValue *index2value(const cs_State *ts, int index) {
     CallFrame *cf = ts->cf;
@@ -103,7 +103,7 @@ CS_API cs_Number cs_version(cs_State *ts) {
 
 
 /* auxiliary function that sets the stack top without locking */
-cs_sinline void auxsettop(cs_State *ts, int n) {
+c_sinline void auxsettop(cs_State *ts, int n) {
     CallFrame *cf;
     SPtr func, newtop;
     ptrdiff_t diff;
@@ -128,11 +128,11 @@ cs_sinline void auxsettop(cs_State *ts, int n) {
 
 
 /* 
-** Sets the stack top to 'n' - 1 (n being the number of values to be on top).
+** Sets the stack top to `n` - 1 (n being the number of values to be on top).
 ** If new top is greater than the previous one, new values are elements
-** are filled with 'nil'.
+** are filled with `nil`.
 ** If n is 0, then all stack elements are removed.
-** This function can run '__close' if it removes an index from the stack
+** This function can run `__close` if it removes an index from the stack
 ** marked as to-be-closed.
 */
 CS_API void cs_setntop(cs_State *ts, int n) {
@@ -153,9 +153,9 @@ CS_API int cs_gettop(const cs_State *ts) {
 
 
 /* 
-** Convert 'acceptable' stack index into an absolute index.
+** Convert `acceptable` stack index into an absolute index.
 ** For example, if there are 5 values on the stack then passing
-** -1 as the value of 'index' would be return 4. 
+** -1 as the value of `index` would be return 4. 
 */
 CS_API int cs_absindex(cs_State *ts, int index)
 {
@@ -166,10 +166,10 @@ CS_API int cs_absindex(cs_State *ts, int index)
 
 
 /* 
-** Auxiliary to 'cs_rotate', reverses stack values 'from' until 'to'.
+** Auxiliary to `cs_rotate`, reverses stack values `from` until `to`.
 ** Note that this does not perform a deep copy.
 */
-cs_sinline void reverse(cs_State *ts, SPtr from, SPtr to) {
+c_sinline void reverse(cs_State *ts, SPtr from, SPtr to) {
     while (from < to) {
         TValue aux;
         setobj(ts, &aux, s2v(from));
@@ -181,11 +181,11 @@ cs_sinline void reverse(cs_State *ts, SPtr from, SPtr to) {
 
 
 /*
-** Stack-array rotation between the top of the stack and the 'index' for 'n'
-** times elements. Negative '-n' indicates left-rotation, while positive 'n'
-** right-rotation. The absolute value of 'n' must not be greater than the size
+** Stack-array rotation between the top of the stack and the `index` for `n`
+** times elements. Negative `-n` indicates left-rotation, while positive `n`
+** right-rotation. The absolute value of `n` must not be greater than the size
 ** of the slice being rotated.
-** Note that 'index' must be in stack.
+** Note that `index` must be in stack.
 **
 ** Example right-rotation:
 ** [func][0][1][2][3][4]
@@ -202,7 +202,7 @@ CS_API void cs_rotate(cs_State *ts, int index, int n) {
     cs_lock(ts);
     end = ts->sp.p - 1; /* end of segment */
     start = index2stack(ts, index); /* start of segment */
-    api_check(ts, (n >= 0 ? n : -n) <= (end - start + 1), "invalid 'n'");
+    api_check(ts, (n >= 0 ? n : -n) <= (end - start + 1), "invalid `n`");
     pivot = (n >= 0 ? end - n : start - n - 1); /* end of prefix */
     reverse(ts, start, pivot);
     reverse(ts, pivot + 1, end);
@@ -212,8 +212,8 @@ CS_API void cs_rotate(cs_State *ts, int index, int n) {
 
 
 /* 
-** Copy value at index 'src' to stack slot at index 'dest'.
-** Note that 'dest' must be stack index.
+** Copy value at index `src` to stack slot at index `dest`.
+** Note that `dest` must be stack index.
 */
 CS_API void cs_copy(cs_State *ts, int src, int dest) {
     TValue *from, *to;
@@ -229,7 +229,7 @@ CS_API void cs_copy(cs_State *ts, int src, int dest) {
 
 
 /*
-** Check if stack has enough space for 'n' elements,
+** Check if stack has enough space for `n` elements,
 ** if not ensure it does.
 */
 CS_API int cs_checkstack(cs_State *ts, int n) {
@@ -237,7 +237,7 @@ CS_API int cs_checkstack(cs_State *ts, int n) {
     int res;
     cs_lock(ts);
     cf = ts->cf;
-    api_check(ts, n >= 0, "negative 'n'");
+    api_check(ts, n >= 0, "negative `n`");
     if (cf->top.p - ts->sp.p >= n) /* stack large enough? */
         res = 1;
     else /* need to grow the stack */
@@ -266,8 +266,8 @@ CS_API void cs_push(cs_State *ts, int index) {
 
 /*
 ** Exchange values between two threads of the same state.
-** This function pops 'n' values from 'src' and pushes them
-** onto the stack of 'dest'.
+** This function pops `n` values from `src` and pushes them
+** onto the stack of `dest`.
 */
 CS_API void cs_xmove(cs_State *src, cs_State *dest, int n) {
     if (src == dest) return; /* same thread ? */
@@ -278,7 +278,7 @@ CS_API void cs_xmove(cs_State *src, cs_State *dest, int n) {
     src->sp.p -= n;
     for (int i = 0; i < n; i++) {
         setobjs2s(dest, dest->sp.p, src->sp.p + i);
-        dest->sp.p++; /* already checked by 'api_check' */
+        dest->sp.p++; /* already checked by `api_check` */
     }
     cs_unlock(dest);
 }
@@ -323,7 +323,7 @@ CS_API int cs_is_userdata(cs_State *ts, int index) {
 }
 
 
-cs_sinline TValue *getvvmt(cs_State *ts, const TValue *o) {
+c_sinline TValue *getvvmt(cs_State *ts, const TValue *o) {
     switch (ttype(o)) {
         case CS_VINSTANCE: return insval(o)->oclass->vmt;
         case CS_TCLASS: return classval(o)->vmt;
@@ -333,7 +333,7 @@ cs_sinline TValue *getvvmt(cs_State *ts, const TValue *o) {
 }
 
 
-cs_sinline TValue *getvmt(cs_State *ts, int index) {
+c_sinline TValue *getvmt(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     return getvvmt(ts, o);
 }
@@ -342,7 +342,7 @@ cs_sinline TValue *getvmt(cs_State *ts, int index) {
 /* 
 ** Return the type of the value at valid index or CS_TNONE
 ** if index is invalid.
-** The types returned are defined in 'cscript.h' (CS_T*).
+** The types returned are defined in `cscript.h` (CS_T*).
 */
 CS_API int cs_type(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
@@ -364,7 +364,7 @@ CS_API const char *cs_typename(cs_State *ts, int type) {
 
 /*
 ** Returns the number value of the value at index.
-** The fact whether the value was a number is stored in 'pisnum' if
+** The fact whether the value was a number is stored in `pisnum` if
 ** provided, the default value returned when index is not a number is 0.0.
 */
 CS_API cs_Number cs_to_numberx(cs_State *ts, int index, int *pisnum) {
@@ -379,7 +379,7 @@ CS_API cs_Number cs_to_numberx(cs_State *ts, int index, int *pisnum) {
 
 /*
 ** Returns the integer value of the value at index.
-** The fact whether the value was an integer is stored in 'pisint' if
+** The fact whether the value was an integer is stored in `pisint` if
 ** provided, the default value returned when index is not an integer is 0.
 */
 CS_API cs_Integer cs_to_integerx(cs_State *ts, int index, int *pisint) {
@@ -403,9 +403,9 @@ CS_API int cs_to_bool(cs_State *ts, int index) {
 
 
 /*
-** Return string value from value at index and if 'plen' is provided
+** Return string value from value at index and if `plen` is provided
 ** set it to match the length of the string.
-** If the value is not a string return NULL (in this case if 'plen' is
+** If the value is not a string return NULL (in this case if `plen` is
 ** provided it is ignored).
 */
 CS_API const char *cs_to_lstring(cs_State *ts, int index, size_t *plen) {
@@ -422,7 +422,7 @@ CS_API const char *cs_to_lstring(cs_State *ts, int index, size_t *plen) {
 
 
 /*
-** Return 'cs_CFunction' from the value at index.
+** Return `cs_CFunction` from the value at index.
 ** If the value is not a C closure or light C function, then this returns NULL.
 */
 CS_API cs_CFunction cs_to_cfunction(cs_State *ts, int index) {
@@ -436,7 +436,7 @@ CS_API cs_CFunction cs_to_cfunction(cs_State *ts, int index) {
 }
 
 
-cs_sinline void *touserdata(const TValue *o) {
+c_sinline void *touserdata(const TValue *o) {
     switch (ttypetag(o)) {
         case CS_VLIGHTUSERDATA: return pval(o);
         case CS_VUSERDATA: return getuserdatamem(uval(o));
@@ -490,8 +490,8 @@ CS_API cs_State *cs_to_thread(cs_State *ts, int index) {
 
 
 /*
-** Perform arithmetic operation 'op'; the valid arithmetic operations are
-** located in 'cscript.h'.
+** Perform arithmetic operation `op`; the valid arithmetic operations are
+** located in `cscript.h`.
 ** This functions is free to call overloadable methods.
 */
 CS_API void cs_arith(cs_State *ts, int op) {
@@ -509,8 +509,8 @@ CS_API void cs_arith(cs_State *ts, int op) {
 
 
 /*
-** Perform raw equality between values at 'index1' and 'index2'.
-** "Raw" meaning this function won't call overloaded methods.
+** Perform raw equality between values at `index1` and `index2`.
+** `raw` meaning this function won't call overloaded methods.
 ** In cases where either of the indexes is not valid this always returns 0.
 */
 CS_API int cs_rawequal(cs_State *ts, int index1, int index2) {
@@ -521,7 +521,7 @@ CS_API int cs_rawequal(cs_State *ts, int index1, int index2) {
 
 
 /*
-** Compares values at 'index1' and 'index2'.
+** Compares values at `index1` and `index2`.
 ** This function is free to call overloded methods.
 ** In case either index is invalid this then always returns 0.
 */
@@ -537,7 +537,7 @@ CS_API int cs_compare(cs_State *ts, int index1, int index2, int op) {
             case CS_OPEQ: res = csV_ordereq(ts, lhs, rhs); break;
             case CS_OPLT: res = csV_orderlt(ts, lhs, rhs); break;
             case CS_OPLE: res = csV_orderle(ts, lhs, rhs); break;
-            default: api_check(ts, 0, "invalid 'op'"); break;
+            default: api_check(ts, 0, "invalid `op`"); break;
         }
     }
     cs_unlock(ts);
@@ -554,7 +554,7 @@ CS_API void cs_push_nil(cs_State *ts) {
 }
 
 
-/* Push 'cs_Number' value on top of the stack. */
+/* Push `cs_Number` value on top of the stack. */
 CS_API void cs_push_number(cs_State *ts, cs_Number n) {
     cs_lock(ts);
     setfval(s2v(ts->sp.p), n);
@@ -563,7 +563,7 @@ CS_API void cs_push_number(cs_State *ts, cs_Number n) {
 }
 
 
-/* Push 'cs_Integer' value on top of the stack. */
+/* Push `cs_Integer` value on top of the stack. */
 CS_API void cs_push_integer(cs_State *ts, cs_Integer i) {
     cs_lock(ts);
     setival(s2v(ts->sp.p), i);
@@ -572,7 +572,7 @@ CS_API void cs_push_integer(cs_State *ts, cs_Integer i) {
 }
 
 
-/* Push string value of length 'len' on top of the stack. */
+/* Push string value of length `len` on top of the stack. */
 CS_API const char *cs_push_lstring(cs_State *ts, const char *str, size_t len) {
     OString *s;
     cs_lock(ts);
@@ -603,10 +603,10 @@ CS_API const char *cs_push_string(cs_State *ts, const char *str) {
 
 
 /* 
-** Push formatted string with format values in a 'va_list' on top of the stack.
+** Push formatted string with format values in a `va_list` on top of the stack.
 ** Valid format values are c (char), d (int), I (cs_Integer), N (cs_Number),
-** s (string), p (pointer) and % ('%'). Note that each format specifier is
-** preceeded by '%' (so %I...).
+** s (string), p (pointer) and % (`%`). Note that each format specifier is
+** preceeded by `%` (so %I...).
 */
 CS_API const char *cs_push_vfstring(cs_State *ts, const char *fmt, va_list argp) {
     const char *str;
@@ -620,7 +620,7 @@ CS_API const char *cs_push_vfstring(cs_State *ts, const char *fmt, va_list argp)
 
 /* 
 ** Push formatted string with variable amount of format values on top of the
-** stack. Valid format specifiers are the same as in 'cs_pushvfstring'.
+** stack. Valid format specifiers are the same as in `cs_pushvfstring`.
 */
 CS_API const char *cs_push_fstring(cs_State *ts, const char *fmt, ...) {
     const char *str;
@@ -636,7 +636,7 @@ CS_API const char *cs_push_fstring(cs_State *ts, const char *fmt, ...) {
 
 
 /* auxiliary function, pushes C closure without locking */
-cs_sinline void auxpushcclosure(cs_State *ts, cs_CFunction fn, int nupvals) {
+c_sinline void auxpushcclosure(cs_State *ts, cs_CFunction fn, int nupvals) {
     if (nupvals == 0) {
         setcfval(ts, s2v(ts->sp.p), fn);
         api_inctop(ts);
@@ -659,10 +659,10 @@ cs_sinline void auxpushcclosure(cs_State *ts, cs_CFunction fn, int nupvals) {
 
 /*
 ** Push C closure value on top of the stack.
-** This closure will have 'nupvals' upvalues, these values will be popped
+** This closure will have `nupvals` upvalues, these values will be popped
 ** of the stack and inserted into the closure.
-** If 'nupvals' is 0 then this does not create a C closure, rather it only
-** pushes the 'cs_CFunction' on top of the stack.
+** If `nupvals` is 0 then this does not create a C closure, rather it only
+** pushes the `cs_CFunction` on top of the stack.
 */
 CS_API void cs_push_cclosure(cs_State *ts, cs_CFunction fn, int nupvals) {
     cs_lock(ts);
@@ -673,7 +673,7 @@ CS_API void cs_push_cclosure(cs_State *ts, cs_CFunction fn, int nupvals) {
 
 /*
 ** Push boolean value on top of the stack.
-** If 'b' is 0 then `false` is pushed, otherwise `true`.
+** If `b` is 0 then `false` is pushed, otherwise `true`.
 */
 CS_API void cs_push_bool(cs_State *ts, int b) {
     cs_lock(ts);
@@ -724,7 +724,7 @@ CS_API void cs_push_table(cs_State *ts, int sz) {
 
 
 /*
-** Push thread 'ts' on top of the stack.
+** Push thread `ts` on top of the stack.
 ** Returns non-zero if the pushed thread is main thread.
 */
 CS_API int cs_push_thread(cs_State *ts) {
@@ -752,7 +752,7 @@ CS_API void cs_push_instance(cs_State *ts, int clsobj) {
 }
 
 
-cs_sinline void auxsetvmt(TValue *dest, const cs_VMT *vmt) {
+c_sinline void auxsetvmt(TValue *dest, const cs_VMT *vmt) {
     for (int i = 0; i < CS_MM_N; i++) {
         if (vmt->func[i]) {
             setcfval(ts, &dest[i], vmt->func[i]);
@@ -769,7 +769,7 @@ cs_sinline void auxsetvmt(TValue *dest, const cs_VMT *vmt) {
       csG_barrierback(ts, obj2gco(ht), v); }
 
 
-cs_sinline void auxrawsetstr(cs_State *ts, HTable *ht, const char *str,
+c_sinline void auxrawsetstr(cs_State *ts, HTable *ht, const char *str,
                              const TValue *v) {
     const TValue *slot;
     OString *s = csS_new(ts, str);
@@ -787,7 +787,7 @@ cs_sinline void auxrawsetstr(cs_State *ts, HTable *ht, const char *str,
 }
 
 
-cs_sinline void auxsetentrylist(cs_State *ts, OClass *cls, const cs_Entry *l,
+c_sinline void auxsetentrylist(cs_State *ts, OClass *cls, const cs_Entry *l,
                                 int nup) {
     cs_assert(l != NULL);
     cs_checkstack(ts, nup);
@@ -839,7 +839,7 @@ CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobjabs,
 
 /* CScript -> stack */
 
-cs_sinline int finishrawgetfield(cs_State *ts, const TValue *val) {
+c_sinline int finishrawgetfield(cs_State *ts, const TValue *val) {
     if (isempty(val))
         setnilval(s2v(ts->sp.p));
     else
@@ -850,7 +850,7 @@ cs_sinline int finishrawgetfield(cs_State *ts, const TValue *val) {
 }
 
 
-cs_sinline int auxrawgetfieldstr(cs_State *ts, HTable *ht, const char *k) {
+c_sinline int auxrawgetfieldstr(cs_State *ts, HTable *ht, const char *k) {
     const TValue *slot;
     OString *str = csS_new(ts, k);
     if (fastget(ts, ht, str, slot, csH_getstr)) {
@@ -864,7 +864,7 @@ cs_sinline int auxrawgetfieldstr(cs_State *ts, HTable *ht, const char *k) {
 
 
 /*
-** Gets the global variable 'name' value and pushes it on top of the stack.
+** Gets the global variable `name` value and pushes it on top of the stack.
 ** This function returns the value type.
 */
 CS_API int cs_get_global(cs_State *ts, const char *name) {
@@ -897,7 +897,7 @@ CS_API int cs_get_raw(cs_State *ts, int obj) {
 }
 
 
-cs_sinline Array *getarray(cs_State *ts, int arrobj) {
+c_sinline Array *getarray(cs_State *ts, int arrobj) {
     const TValue *o = index2value(ts, arrobj);
     api_check(ts, ttisarr(o), "expect array");
     return arrval(o);
@@ -907,9 +907,9 @@ cs_sinline Array *getarray(cs_State *ts, int arrobj) {
 CS_API int cs_get_index(cs_State *ts, int arrobj, cs_Integer index) {
     Array *arr;
     cs_lock(ts);
-    api_check(ts, index >= 0 && index < ARRAYLIMIT, "invalid 'index'");
+    api_check(ts, 0 <= index && index < ARRAYLIMIT, "invalid `index`");
     arr = getarray(ts, arrobj);
-    if (csi_castS2U(index) < arr->n) {
+    if (c_castS2U(index) < arr->n) {
         setobj2s(ts, ts->sp.p, &arr->b[index]);
     } else
         setnilval(s2v(ts->sp.p));
@@ -919,7 +919,7 @@ CS_API int cs_get_index(cs_State *ts, int arrobj, cs_Integer index) {
 }
 
 
-cs_sinline HTable *gettable(cs_State *ts, int obj) {
+c_sinline HTable *gettable(cs_State *ts, int obj) {
     const TValue *o = index2value(ts, obj);
     switch (ttypetag(o)) {
         case CS_VINSTANCE: return insval(o)->fields;
@@ -998,7 +998,7 @@ CS_API int cs_get_class(cs_State *ts, int insobj) {
 }
 
 
-cs_sinline Instance *getinstance(cs_State *ts, int insobj) {
+c_sinline Instance *getinstance(cs_State *ts, int insobj) {
     const TValue *o = index2value(ts, insobj);
     api_check(ts, ttisinstance(o), "expect instance");
     return insval(o);
@@ -1058,7 +1058,7 @@ CS_API void *cs_newuserdata(cs_State *ts, size_t sz, int nuv) {
 }
 
 
-cs_sinline UserData *getuserdata(cs_State *ts, int index) {
+c_sinline UserData *getuserdata(cs_State *ts, int index) {
     const TValue *o = index2value(ts, index);
     api_check(ts, ttisfulluserdata(o), "expect full userdata");
     return uval(o);
@@ -1069,7 +1069,7 @@ CS_API int cs_get_uservmt(cs_State *ts, int udobj, cs_VMT *pvmt) {
     UserData *ud;
     int nmm = 0;
     cs_lock(ts);
-    api_check(ts, pvmt != NULL, "'pvmt' is NULL");
+    api_check(ts, pvmt != NULL, "`pvmt` is NULL");
     ud = getuserdata(ts, udobj);
     if (!ud->vmt) {
         for (int i = 0; i < CS_MM_N; i++)
@@ -1141,7 +1141,7 @@ CS_API void cs_set_index(cs_State *ts, int arrobj, cs_Integer index) {
     Array *arr;
     cs_lock(ts);
     api_checknelems(ts, 1); /* value */
-    api_check(ts, 0 <= index && index < ARRAYLIMIT, "'index' out of bounds");
+    api_check(ts, 0 <= index && index < ARRAYLIMIT, "`index` out of bounds");
     arr = getarray(ts, arrobj);
     csA_ensure(ts, arr, cast_int(index));
     setobj(ts, &arr->b[cast_int(index)], s2v(ts->sp.p - 1));
@@ -1151,7 +1151,7 @@ CS_API void cs_set_index(cs_State *ts, int arrobj, cs_Integer index) {
 }
 
 
-cs_sinline void auxrawsetfield(cs_State *ts, int obj, TValue *key, int n) {
+c_sinline void auxrawsetfield(cs_State *ts, int obj, TValue *key, int n) {
     HTable *ht;
     cs_lock(ts);
     api_checknelems(ts, n);
@@ -1227,7 +1227,7 @@ CS_API int cs_set_uservalue(cs_State *ts, int index, int n) {
     api_checknelems(ts, 1); /* value */
     ud = getuserdata(ts, index);
     if (!(cast_uint(n) <= cast_uint(ud->nuv))) {
-        res = 0; /* 'n' not in [0, ud->nuv) */
+        res = 0; /* `n` not in [0, ud->nuv) */
     } else {
         setobj(ts, &ud->uv[n].val, s2v(ts->sp.p - 1));
         csG_barrierback(ts, obj2gco(ud), s2v(ts->sp.p - 1));
@@ -1380,12 +1380,12 @@ CS_API int cs_gc(cs_State *ts, int option, ...) {
 	case CS_GCSTEP: { /* perform GC step */
             int data = va_arg(ap, int); /* kibibytes */
             cs_mem gcdebt = 69; /* >0 to signal that it did an actual step */
-            cs_ubyte old_gcstop = gs->gcstop;
+            c_byte old_gcstop = gs->gcstop;
             if (data == 0) { /* do a regular step ? */
                 csG_setgcdebt(gs, 0);
                 csG_step(ts);
-            } else { /* add 'data' to total gcdebt */
-                /* convert 'data' to bytes (data = bytes/2^10) */
+            } else { /* add `data` to total gcdebt */
+                /* convert `data` to bytes (data = bytes/2^10) */
                 gcdebt = (data * 1024) + gs->gcdebt;
                 csG_setgcdebt(gs, gcdebt);
                 csG_checkGC(ts);
@@ -1504,9 +1504,9 @@ CS_API int cs_next(cs_State *ts, int obj) {
 CS_API void cs_concat(cs_State *ts, int n) {
     cs_lock(ts);
     api_checknelems(ts, n);
-    if (n > 0)
+    if (n > 0) {
         csV_concat(ts, n);
-    else { /* nothing to concatenate */
+    } else { /* nothing to concatenate */
         setstrval2s(ts, ts->sp.p, csS_newl(ts, "", 0));
         api_inctop(ts);
     }
@@ -1570,28 +1570,26 @@ CS_API void cs_closeslot(cs_State *ts, int index) {
 
 
 /*
-** Sets 'frame' in 'cs_DebugInfo'; 'level' is 'CallFrame' level.
+** Sets `frame` in `cs_DebugInfo`; `level` is `CallFrame` level.
 ** To traverse the call stack backwards (up), then level should be
-** greater than 0. For example if you wish for currently active 'CallFrame',
-** then 'level' should be 0, if 'level' is 1 then the 'CallFrame' of the
+** greater than 0. For example if you wish for currently active `CallFrame`,
+** then `level` should be 0, if `level` is 1 then the `CallFrame` of the
 ** function that called the current function is considered.
-** If 'level' is found, therefore 'cf' is set, then this function returns 1,
+** If `level` is found, therefore `cf` is set, then this function returns 1,
 ** otherwise 0.
 */
 CS_API int cs_getstack(cs_State *ts, int level, cs_DebugInfo *di) {
-    cs_lock(ts);
-    int status = 0;
+    int status;
     CallFrame *cf;
-    if (level > ts->ncf || level < 0) {
-        cs_unlock(ts);
-        return status;
-    }
+    if (level < 0) return 0; /* invalid (negative) level */
+    cs_lock(ts);
     for (cf = ts->cf; level > 0 && cf != &ts->basecf; cf = cf->prev)
         level--;
-    if (level == 0) { /* found ? */
+    if (level == 0 && cf != &ts->basecf) { /* level found ? */
         di->cf = cf;
         status = 1;
-    }
+    } else /* otherwise no such level */
+        status = 0;
     cs_unlock(ts);
     return status;
 }
@@ -1603,7 +1601,7 @@ static const char *auxupvalue(TValue *func, int n, TValue **val,
         case CS_VCCL: { /* C closure */
             CClosure *ccl = clCval(func);
             if (!(cast_uint(n) < cast_uint(ccl->nupvalues)))
-                return NULL;  /* 'n' not in [0, cl->nupvalues) */
+                return NULL;  /* `n` not in [0, cl->nupvalues) */
             *val = &ccl->upvals[n];
             if (owner)
                 *owner = obj2gco(ccl);
@@ -1614,7 +1612,7 @@ static const char *auxupvalue(TValue *func, int n, TValue **val,
             CSClosure *cl = clCSval(func);
             Proto *p = cl->p;
             if (!(cast_uint(n) < cast_uint(p->sizeupvals)))
-                return NULL;  /* 'n' not in [0, fn->sizeupvals) */
+                return NULL;  /* `n` not in [0, fn->sizeupvals) */
             *val = cl->upvals[n]->v.p;
             if (owner)
                 *owner = obj2gco(cl->upvals[n]);

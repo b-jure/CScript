@@ -50,7 +50,7 @@ typedef union Value {
 
 
 /* 'TValue' fields, defined for reuse and alignment purposes */
-#define TValueFields    Value val; cs_ubyte tt
+#define TValueFields    Value val; c_byte tt
 
 
 /* 'Value' with type */
@@ -159,7 +159,7 @@ typedef struct {
 ** ----------------------------------------------------------------------- */
 
 /* common header for objects */
-#define ObjectHeader    struct GCObject* next; cs_ubyte tt_; cs_ubyte mark
+#define ObjectHeader    struct GCObject* next; c_byte tt_; c_byte mark
 
 
 /* common type for collectable objects */
@@ -393,7 +393,7 @@ typedef struct EmptyUserData {
 typedef union Node {
     struct NodeKey {
         TValueFields; /* fields for value */
-        cs_ubyte key_tt; /* key type tag */
+        c_byte key_tt; /* key type tag */
         int next; /* offset for next node */
         Value key_val; /* key value */
     } s;
@@ -417,7 +417,7 @@ typedef union Node {
 
 typedef struct HTable {
     ObjectHeader; /* internal only object */
-    cs_ubyte size; /* 2^size */
+    c_byte size; /* 2^size */
     Node *node; /* memory block */
     Node *lastfree; /* any free position is before this position */
     GCObject *gclist;
@@ -441,7 +441,6 @@ typedef struct HTable {
 
 #define setnilkey(n)            (keytt(n) = CS_TNIL)
 
-/* unused in 1.0.0 */
 #define setdeadkey(node)    (keytt(node) = CS_TDEADKEY)
 #define keyisdead(n)	    (keytt(n) == CS_TDEADKEY)
 
@@ -503,8 +502,8 @@ typedef struct OString {
     ObjectHeader;
     /* reserved words or tag names index for short strings;
      * flag for long strings indicating that it has hash */
-    cs_ubyte extra;
-    cs_ubyte shrlen; /* length for short strings, 0xFF for longs strings */
+    c_byte extra;
+    c_byte shrlen; /* length for short strings, 0xFF for longs strings */
     uint hash;
     union {
         size_t lnglen; /* length for long strings */
@@ -568,8 +567,8 @@ typedef struct OClass {
 typedef struct UpValInfo {
     OString *name;
     int idx; /* index in stack or outer function local var list */
-    cs_ubyte onstack; /* is it on stack */
-    cs_ubyte kind;
+    c_byte onstack; /* is it on stack */
+    c_byte kind;
 } UpValInfo;
 
 
@@ -590,7 +589,7 @@ typedef struct LineInfo {
 
 typedef struct Proto {
     ObjectHeader;
-    cs_ubyte isvararg;
+    c_byte isvararg;
     GCObject *gclist;
     OString *source; /* source name */
     struct Proto **p; /* functions defined inside of this function */

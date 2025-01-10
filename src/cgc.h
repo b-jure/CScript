@@ -125,7 +125,7 @@
 
 
 /* get total bytes allocated (by accounting for 'gcdebt') */
-#define gettotalbytes(gs)      cast_umem((gs)->totalbytes + (gs)->gcdebt)
+#define gettotalbytes(gs)       cast_mem((gs)->totalbytes + (gs)->gcdebt)
 
 
 
@@ -159,7 +159,7 @@
 
 /* 
 ** Some GC parameters are stored divided by 4 to allow a
-** maximum value of up to 1023 in a 'cs_ubyte'.
+** maximum value of up to 1023 in a 'c_byte'.
 */
 #define getgcparam(p)           ((p) * 4)
 #define setgcparam(p,v)         ((p) = (v) / 4)

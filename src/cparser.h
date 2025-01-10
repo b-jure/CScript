@@ -127,7 +127,7 @@ typedef struct ExpInfo {
 typedef union LVar {
     struct {
         TValueFields;
-        cs_ubyte kind;
+        c_byte kind;
         int sidx; /* stack slot holding the value */
         int pidx; /* index of local variable in Proto's 'locals' array */
         OString *name;
@@ -154,7 +154,7 @@ typedef struct PatchList {
 /* class declaration information */
 typedef struct ClassState {
     struct ClassState *prev;
-    cs_ubyte super; /* true if class has superclass */
+    c_byte super; /* true if class has superclass */
 } ClassState;
 
 
@@ -216,12 +216,12 @@ typedef struct FunctionState {
     int nlocals; /* number of elements in 'locals' */
     int nupvals; /* number of elements in 'upvals' */
     int pclastop; /* last OpCode pc */
-    cs_ubyte needclose; /* true if needs to close upvalues before returning */
-    cs_ubyte lastwasret; /* last statement is 'return' */
+    c_byte needclose; /* true if needs to close upvalues before returning */
+    c_byte lastwasret; /* last statement is 'return' */
 } FunctionState;
 
 
-CSI_FUNC cs_noret csP_semerror(Lexer *lx, const char *err);
+CSI_FUNC c_noret csP_semerror(Lexer *lx, const char *err);
 CSI_FUNC CSClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
                               ParserState *ps, const char *source);
 

@@ -5,6 +5,7 @@
 */
 
 
+// TODO: documentation (just copy lua documentation as most functions are identical)
 #define CS_LIB
 
 
@@ -13,6 +14,7 @@
 
 #include "cauxlib.h"
 #include "cscript.h"
+
 
 
 static int csB_error(cs_State *ts) {
@@ -178,10 +180,26 @@ static int csB_getmetamethod(cs_State *ts) {
 }
 
 
+/*
+** This function allows traversal of all fields of a hashtable
+** or instance `obj`. First argument is `obj` and its second argument
+** is an index `idx`. `next` returns the next index of the `obj` and its
+** associated value. When called with `nil` as its second argument, `next`
+** returns an initial index and its associated value.
+** When called with the last index, or with `nil` in an empty table, `next`
+** returns `nil`. If the second argument is absent, then it is interpreted
+** as `nil`.
+**
+** The order in which the indices are enumerated is not specified.
+** 
+** The behavior of `next` is `undefined` if, during the traversal, you
+** assign any value to a non-existent field in the `obj`. You may however
+** modify existing fields. In particular, you may clear existing fields.
+*/
 static int csB_next(cs_State *ts) {
     int tt = cs_type(ts, 0);
-    if (c_unlikely(tt != CS_TINSTANCE && tt != CS_THTABLE))
-        csL_type_error(ts, 0, cs_typename(ts, tt));
+    csL_expect_arg(ts, (tt == CS_TINSTANCE || tt == CS_THTABLE), 0,
+                       "instance or table");
     cs_setntop(ts, 2); /* if 2nd argument is missing create it */
     if (cs_next(ts, 0)) { /* found field? */
         return 2; /* key (index) + value */
@@ -192,23 +210,44 @@ static int csB_next(cs_State *ts) {
 }
 
 
+/*
+** Returns `next` function, the hashtable or instance `obj`, and `nil`.
+*/
 static int csB_pairs(cs_State *ts) {
     csL_check_any(ts, 0);
-    cs_push_cfunction(ts, csB_next); /* will return generator, */
+    cs_push_cfunction(ts, csB_next);    /* will return generator, */
     cs_push(ts, 0);                     /* state, */
     cs_push_nil(ts);                    /* and initial value */
     return 3;
 }
 
 
+static int ipairsaux(cs_State *ts) {
+    cs_Integer i;
+    csL_check_type(ts, 0, CS_TARRAY);
+    i = csL_check_integer(ts, 1);
+    i = csL_intop(+, i, 1);
+    cs_push_integer(ts, i);
+    return (cs_get_index(ts, 0, i) == CS_TNIL ? 1 : 2);
+}
+
+
+static int csB_ipairs(cs_State *ts) {
+    csL_check_type(ts, 0, CS_TARRAY);
+    cs_push_cfunction(ts, ipairsaux); /* iteration function */
+    cs_push(ts, 0); /* state */
+    cs_push_integer(ts, -1); /* initial value */
+    return 3;
+}
+
+
 static int finishpcall(cs_State *ts, int status, int extra) {
     if (c_unlikely(status != CS_OK)) {
-        cs_push_bool(ts, 0); /* false */
-        cs_push(ts, -2); /* error message */
-        return 2; /* return false, message */
-    } else {
+        cs_push_bool(ts, 0);    /* false */
+        cs_push(ts, -2);        /* error message */
+        return 2;               /* return false, message */
+    } else
         return cs_nvalues(ts) - extra; /* return all */
-    }
 }
 
 
@@ -259,6 +298,16 @@ static int csB_warn(cs_State *ts) {
         cs_warning(ts, cs_to_string(ts, i), 1);
     cs_warning(ts, cs_to_string(ts, n - 1), 0);
     return 0;
+}
+
+
+static int csB_len(cs_State *ts) {
+    int t = cs_type(ts, 0);
+    csL_check_arg(ts, t == CS_TARRAY || t == CS_THTABLE ||
+                      t == CS_TINSTANCE || t == CS_TSTRING, 0,
+                      "array, hashtable, instance or string");
+    cs_push_integer(ts, cs_len(ts, 0));
+    return 1;
 }
 
 
@@ -342,7 +391,7 @@ static const unsigned char numeraltable[] = { -1,
 };
 
 /* space characters to skip */
-#define SPACECHARS	" \f\n\r\t\v"
+#define SPACECHARS      " \f\n\r\t\v"
 
 /*
 ** Converts string to 'cs_Integer', skips leading and trailing whitespace,
@@ -471,10 +520,12 @@ static const cs_Entry basic_funcs[] = {
     {"getmetamethod", csB_getmetamethod},
     {"next", csB_next},
     {"pairs", csB_pairs},
+    {"ipairs", csB_ipairs},
     {"pcall", csB_pcall},
     {"xpcall", csB_xpcall},
     {"print", csB_print},
     {"warn", csB_warn},
+    {"len", csB_len},
     {"rawequal", csB_rawequal},
     {"rawget", csB_rawget},
     {"rawset", csB_rawset},

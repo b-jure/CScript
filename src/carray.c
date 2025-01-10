@@ -8,6 +8,7 @@
 #define CS_CORE
 
 
+#include "cdebug.h"
 #include "carray.h"
 #include "cgc.h"
 #include "climits.h"

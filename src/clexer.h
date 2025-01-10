@@ -23,7 +23,7 @@
 enum TK {
     /* keyword tokens */
     TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE, TK_CLASS,
-    TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR, TK_EACH, TK_FN, TK_IF,
+    TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR, TK_FOREACH, TK_FN, TK_IF,
     TK_IN, TK_INHERITS, TK_NIL, TK_OR, TK_RETURN, TK_SUPER,
     TK_SWITCH, TK_TRUE, TK_WHILE, TK_LOOP, TK_LOCAL,
     /* other multi-char tokens */
@@ -73,7 +73,7 @@ CSI_FUNC void csY_setinput(cs_State *ts, Lexer *lx, BuffReader *br,
 CSI_FUNC void csY_init(cs_State *ts);
 CSI_FUNC const char *csY_tok2str(Lexer *lx, int t);
 CSI_FUNC OString *csY_newstring(Lexer *lx, const char *str, size_t len);
-CSI_FUNC cs_noret csY_syntaxerror(Lexer *lx, const char *err);
+CSI_FUNC c_noret csY_syntaxerror(Lexer *lx, const char *err);
 CSI_FUNC void csY_scan(Lexer *lx);
 CSI_FUNC int csY_scanahead(Lexer *lx);
 
