@@ -16,7 +16,7 @@
 
 
 /* call allocator ('falloc') */
-#define callfalloc(gs,b,os,ns)  (gs)->falloc(b, os, ns, (gs)->ud_alloc)
+#define callfalloc(gs,b,os,ns)      (gs)->falloc(b, os, ns, (gs)->ud_alloc)
 
 
 /* 

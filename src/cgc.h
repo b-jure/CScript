@@ -175,7 +175,7 @@ CSI_FUNC void csG_checkfin(cs_State *ts, GCObject *o, TValue vmt[CS_MM_N]);
 CSI_FUNC void csG_fix(cs_State *ts, GCObject *o);
 CSI_FUNC void csG_barrier_(cs_State *ts, GCObject *r, GCObject *o);
 CSI_FUNC void csG_barrierback_(cs_State *ts, GCObject *r);
-CSI_FUNC void csG_setgcdebt(GState *gs, cs_mem gcdebt);
+CSI_FUNC void csG_setgcdebt(GState *gs, c_smem gcdebt);
 CSI_FUNC void csG_incmode(cs_State *ts);
 
 #endif

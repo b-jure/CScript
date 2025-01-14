@@ -13,13 +13,13 @@
 
 typedef size_t          c_mem;
 #define MAXMEM          ((c_mem)(~(c_mem)(0)))
-typedef ptrdiff_t       cs_mem;
-#define MAXSMEM         ((cs_mem)(MAXMEM >> 1))
+typedef ptrdiff_t       c_smem;
+#define MAXSMEM         ((c_smem)(MAXMEM >> 1))
 
 
 typedef unsigned char   c_byte;
 #define MAXBYTE         ((c_byte)(~(c_byte)(0)))
-typedef signed char     cs_byte;
+typedef signed char     c_sbyte;
 #define MAXSBYTE        ((c_byte)(MAXBYTE >> 1))
 
 
@@ -28,7 +28,7 @@ typedef signed char     cs_byte;
 ** This value must have 16 bits for counting nested
 ** CSript function calls and 16 bits for nested C calls.
 */
-typedef uint32_t        cs_uint32;
+typedef uint32_t        c_uint32;
 
 
 /* nice to have */
@@ -199,19 +199,19 @@ typedef c_byte Instruction;
 ** thread is created/deleted.
 */
 #if !defined(csi_userstateopen)
-#define csi_userstateopen(ts)               ((void)(ts))
+#define csi_userstateopen(ts)           ((void)(ts))
 #endif
 
 #if !defined(csi_userstateclose)
-#define csi_userstateclose(ts)              ((void)(ts))
+#define csi_userstateclose(ts)          ((void)(ts))
 #endif
 
 #if !defined(csi_userstate)
-#define csi_userstate(ts,thread)      ((void)(ts))
+#define csi_userstate(ts,thread)        ((void)(ts))
 #endif
 
 #if !defined(csi_userstatefree)
-#define csi_userstatefree(ts,thread)       ((void)(ts))
+#define csi_userstatefree(ts,thread)    ((void)(ts))
 #endif
 
 
@@ -239,7 +239,7 @@ typedef c_byte Instruction;
 #define cast_node(e)        cast(Node*,(e))
 #define cast_byte(e)        cast(c_byte,(e))
 #define cast_bytep(e)       cast(c_byte*,(e))
-#define cast_sbyte(e)       cast(cs_byte,(e))
+#define cast_sbyte(e)       cast(c_sbyte,(e))
 #define cast_num(e)         cast(cs_Number,(e))
 #define cast_int(e)         cast(int,(e))
 #define cast_uint(e)        cast(uint,(e))
@@ -325,7 +325,7 @@ typedef c_byte Instruction;
 #define gcmemchange(ts,pre,pos) \
     { if (gcrunning(G_(ts)->gc)) { pre; csG_full(ts); pos; } }
 #else
-#define gcmemchange(ts,pre,pos)         ((void)0)
+#define gcmemchange(ts,pre,pos)     ((void)0)
 #endif
 
 

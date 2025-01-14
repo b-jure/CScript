@@ -27,24 +27,54 @@
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
 
-/* get line number of instruction ('pc') */
-int csD_getfuncline(const Proto *p, int pc) {
-    int low = 0;
-    int high = p->sizelinfo - 1;
-    LineInfo *li;
-    while (low <= high) {
-        int mid = low + ((high - low)/2);
-        li = &p->linfo[mid];
-        if (pc < li->pc)
-            high = mid - 1;
-        else if (li->pc < pc)
-            low = mid + 1;
-        else /* otherwise direct hit */
-            break;
+/*
+** Get a "base line" to find the line corresponding to an instruction.
+** Base lines are regularly placed at MAXIWTHABS intervals, so usually
+** an integer division gets the right place. When the source file has
+** large sequences of empty/comment lines, it may need extra entries,
+** so the original estimate needs a correction.
+** If the original estimate is -1, the initial 'if' ensures that the
+** 'while' will run at least once.
+** The assertion that the estimate is a lower bound for the correct base
+** is valid as long as the debug info has been generated with the same
+** value for MAXIWTHABS or smaller.
+*/
+static int getbaseline(const Proto *p, int pc, int *basepc) {
+    if (p->sizeabslineinfo == 0 || pc < p->abslineinfo[0].pc) {
+        *basepc = 0; /* start from the beginning */
+        return p->defline; /* (from the line this function was defined) */
+    } else {
+        int i = cast_uint(pc) / MAXIWTHABS - 1; /* get an estimate */
+        /* estimate must be a lower bound of the correct base */
+        cs_assert(i < 0 || /* linedif was too large before MAXIWTHABS? */
+                 (i < p->sizeabslineinfo && p->abslineinfo[i].pc <= pc));
+        while (i + 1 < p->sizeabslineinfo && pc >= p->abslineinfo[i + 1].pc)
+            i++; /* low estimate; adjust it */
+        *basepc = p->abslineinfo[i].pc;
+        return p->abslineinfo[i].line;
     }
-    li += li->pc < pc;
-    cs_assert(pc <= li->pc);
-    return li->line;
+}
+
+
+/*
+** Get the line corresponding to instruction 'pc' in function prototype 'p';
+** first gets a base line and from there does the increments until the
+** desired instruction.
+*/
+int csD_getfuncline(const Proto *p, int pc) {
+    if (p->lineinfo == NULL) { /* no debug information? */
+        cs_assert(0); /* (currently CScript always contains debug info) */
+        return -1;
+    } else {
+        int basepc;
+        int baseline = getbaseline(p, pc, &basepc);
+        while (basepc < pc) { /* walk until given instruction */
+            basepc += getOpSize(p->code[basepc]);
+            cs_assert(p->lineinfo[basepc] != ABSLINEINFO);
+            baseline += p->lineinfo[basepc]; /* correct line */
+        }
+        return baseline;
+    }
 }
 
 

@@ -563,7 +563,9 @@ typedef struct OClass {
 #define CS_VPROTO           makevariant(CS_TPROTO, 0)
 
 
-/* information of an upvalues for function prototypes */
+/* 
+** Information of the upvalues for function prototypes
+*/
 typedef struct UpValInfo {
     OString *name;
     int idx; /* index in stack or outer function local var list */
@@ -572,7 +574,10 @@ typedef struct UpValInfo {
 } UpValInfo;
 
 
-/* information of an local variable for function prototypes */
+/* 
+** Information of the local variable for function prototypes
+** (used for debug information).
+*/
 typedef struct LVarInfo {
     OString *name;
     int startpc; /* point where variable is in scope */
@@ -580,34 +585,48 @@ typedef struct LVarInfo {
 } LVarInfo;
 
 
-/* line information and associated instruction for function prototypes */
-typedef struct LineInfo {
+/*
+** Associates the absolute line source for a given instruction ('pc').
+** The array 'lineinfo' gives, for each instruction, the difference in
+** lines from the previous instruction. When that difference does not
+** fit into a byte, CScript saves the absolute line for that instruction.
+** (CScript also saves the absolute line periodically, to speed up the
+** computation of a line number: we can use binary search in the
+** absolute-line array, but we must traverse the 'lineinfo' array
+** linearly to compute a line.)
+*/
+typedef struct AbsLineInfo {
     int pc;
     int line;
-} LineInfo;
+} AbsLineInfo;
 
 
+/*
+** Function Prototypes.
+*/
 typedef struct Proto {
     ObjectHeader;
     c_byte isvararg;
-    GCObject *gclist;
-    OString *source; /* source name */
-    struct Proto **p; /* functions defined inside of this function */
-    TValue *k; /* constant values */
-    Instruction *code; /* bytecode */
-    LineInfo *linfo; /* lines information for instructions */
-    LVarInfo *locals; /* debug information for local variables */
-    UpValInfo *upvals; /* debug information for upvalues */
+    int arity; /* number of fixed (named) function parameters */
+    int maxstack; /* max stack size for this function */
     int sizep; /* size of 'p' */
     int sizek; /* size of 'k' */
     int sizecode; /* size of 'code' */
-    int sizelinfo; /* size of 'linfo' */
-    int sizelocals; /* size of 'locals' */
     int sizeupvals; /* size of 'upvals' */
-    int maxstack; /* max stack size for this function */
-    int arity; /* number of function parameters */
-    int defline; /* function definition line */
-    int deflastline; /* function definition end line */
+    int sizelineinfo; /* size of 'lineinfo' */
+    int sizeabslineinfo; /* size of 'abslineinfo' */
+    int sizelocals; /* size of 'locals' */
+    int defline; /* function definition line (debug information) */
+    int deflastline; /* function definition end line (debug information) */
+    struct Proto **p; /* functions defined inside of this function */
+    TValue *k; /* constant values */
+    Instruction *code; /* bytecode */
+    UpValInfo *upvals; /* debug information for upvalues */
+    c_sbyte *lineinfo; /* information about source lines (debug information) */
+    AbsLineInfo *abslineinfo; /* idem */
+    LVarInfo *locals; /* information about local variables (debug information) */
+    OString *source; /* source name (debug information) */
+    GCObject *gclist;
 } Proto;
 
 /* } --------------------------------------------------------------------- */

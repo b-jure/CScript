@@ -60,7 +60,8 @@ static void pushclosure(cs_State *ts, Proto *p, UpVal **enc, SPtr base) {
     int nupvals = p->sizeupvals;
     CSClosure *cl = csF_newCSClosure(ts, nupvals);
     cl->p = p;
-    setclCSval2s(ts, ts->sp.p++, cl); /* anchor to stack */
+    setclCSval2s(ts, ts->sp.p, cl); /* anchor to stack */
+    ts->sp.p += 1;
     for (int i = 0; i < nupvals; i++) {
         UpValInfo *uv = &p->upvals[i];
         if (uv->onstack)
@@ -518,7 +519,7 @@ c_sinline int precallC(cs_State *ts, SPtr func, int nres, cs_CFunction f) {
 c_sinline void auxinsertf(cs_State *ts, SPtr func, const TValue *f) {
     for (SPtr p = ts->sp.p; p > func; p--)
         setobjs2s(ts, p, p-1);
-    ts->sp.p++;
+    ts->sp.p += 1;
     setobj2s(ts, func, f);
 }
 
@@ -555,8 +556,10 @@ retry:
             checkstackGCp(ts, fsize, func);
             ts->cf = cf = initcallframe(ts, func, nres, 0, func + fsize + 1);
             cf->pc = p->code; /* set starting point */
-            for (; nargs < nparams; nargs++)
-                setnilval(s2v(ts->sp.p++)); /* set missing args as 'nil' */
+            for (; nargs < nparams; nargs++) {
+                setnilval(s2v(ts->sp.p)); /* set missing args as 'nil' */
+                ts->sp.p += 1;
+            }
             if (!p->isvararg)
                 ts->sp.p = func + nparams + 1; /* might have extra args */
             cs_assert(cf->top.p <= ts->stackend.p);
@@ -597,7 +600,7 @@ retry:
 }
 
 
-c_sinline void ccall(cs_State *ts, SPtr func, int nresults, cs_uint32 inc) {
+c_sinline void ccall(cs_State *ts, SPtr func, int nresults, c_uint32 inc) {
     CallFrame *cf;
     ts->nCcalls += inc;
     if (c_unlikely(getCcalls(ts) >= CSI_MAXCCALLS)) {
@@ -764,7 +767,7 @@ void csV_concat(cs_State *ts, int total) {
     cs_Number n1; cs_Number n2; \
     if (tonumber(v1, n1) && tonumber(v2, n2)) { \
         setfval(v1, fop(ts, n1, n2)); \
-        pop(1); /* v2 */ \
+        SP(-1); /* v2 */ \
         pc += getOpSize(OP_MBIN); \
     }/* FALLTHRU to 'OP_MBIN' */}
 
@@ -783,7 +786,7 @@ void csV_concat(cs_State *ts, int total) {
     if (ttisint(v1) && ttisint(v2)) { \
         cs_Integer i1 = ival(v1); cs_Integer i2 = ival(v2); \
         setival(v1, iop(ts, i1, i2)); \
-        pop(1); /* v2 */ \
+        SP(-1); /* v2 */ \
         pc += getOpSize(OP_MBIN); \
     } else { \
         op_arithf_aux(ts, v1, v2, fop); \
@@ -828,7 +831,7 @@ void csV_concat(cs_State *ts, int total) {
     cs_Integer i1; cs_Integer i2; \
     if (tointeger(v1, &i1) && tointeger(v2, &i2)) { \
         setival(v1, op(i1, i2)); \
-        pop(1); /* v2 */ \
+        SP(-1); /* v2 */ \
         pc += getOpSize(OP_MBIN); \
     }/* else try 'OP_MBIN' */}
 
@@ -855,7 +858,7 @@ void csV_concat(cs_State *ts, int total) {
     } else if (ttisnum(v1) && ttisnum(v2)) { \
         cond = fop(v1, v2); \
     } else Protect(cond = other(ts, v1, v2)); \
-    pop(1); /* v2 */ \
+    SP(-1); /* v2 */ \
     setorderres(v1, cond, 1); }
 
 
@@ -938,11 +941,8 @@ void csV_concat(cs_State *ts, int total) {
 #define getsign()       (fetchs() - 1)
 
 
-/* peek stack (from (sp - 1) - n) */
-#define peek(n)         s2v((ts->sp.p - 1) - n)
-
-/* pop stack */
-#define pop(n)          (ts->sp.p -= (n))
+/* peek stack value */
+#define peek(n)         s2v((ts->sp.p-1)-n)
 
 
 /* get stack slot (starting from 'base') */
@@ -953,6 +953,9 @@ void csV_concat(cs_State *ts, int total) {
 
 /* get top stack slot */
 #define TOP()           SLOT(0)
+
+/* increments/decrements stack pointer */
+#define SP(n)           (ts->sp.p += (n))
 
 
 /* In cases where jump table is not available or prefered. */
@@ -983,45 +986,53 @@ returning:
         vm_dispatch(fetch()) {
             vm_case(OP_TRUE) {
                 /* no args */
-                setbtval(s2v(ts->sp.p++));
+                setbtval(s2v(ts->sp.p));
+                SP(1);
                 vm_break;
             }
             vm_case(OP_FALSE) {
                 /* no args */
-                setbfval(s2v(ts->sp.p++));
+                setbfval(s2v(ts->sp.p));
+                SP(1);
                 vm_break;
             }
             vm_case(OP_NIL) {
                 /* no args */
-                setnilval(s2v(ts->sp.p++));
+                setnilval(s2v(ts->sp.p));
+                SP(1);
                 vm_break;
             }
             vm_case(OP_NILN) {
                 int n = fetchl();
-                while (n--)
-                    setnilval(s2v(ts->sp.p++));
+                SPtr p = ts->sp.p;
+                SP(n);
+                while (n--) setnilval(s2v(p++));
                 vm_break;
             } 
             vm_case(OP_CONST) {
                 TValue *sk = K(fetchs());
-                setobj2s(ts, ts->sp.p++, sk);
+                setobj2s(ts, ts->sp.p, sk);
+                SP(1);
                 vm_break;
             }
             vm_case(OP_CONSTL) {
                 TValue *lk = K(fetchl());
-                setobj2s(ts, ts->sp.p++, lk);
+                setobj2s(ts, ts->sp.p, lk);
+                SP(1);
                 vm_break;
             }
             vm_case(OP_CONSTI) {
                 int imm_i = fetchl();
                 int sign = getsign();
-                setival(s2v(ts->sp.p++), imm_i*sign);
+                setival(s2v(ts->sp.p), imm_i*sign);
+                SP(1);
                 vm_break;
             }
             vm_case(OP_CONSTF) {
                 int imm_f = fetchl();
                 int sign = getsign();
-                setfval(s2v(ts->sp.p++), cast_num(imm_f*sign));
+                setfval(s2v(ts->sp.p), cast_num(imm_f*sign));
+                SP(1);
                 vm_break;
             }
             vm_case(OP_VARARGPREP) {
@@ -1047,9 +1058,9 @@ returning:
                 Array *arr;
                 if (b > 0) /* array has elements? */
                     b = 1 << (b - 1); /* size is 2^(b - 1) */
-                ts->sp.p++; /* inc. top */
+                SP(1);
                 arr = csA_new(ts); /* memory allocation */
-                setarrval2s(ts, ts->sp.p - 1, arr);
+                setarrval2s(ts, TOP(), arr);
                 if (b != 0) { /* array is not empty? */
                     csA_ensure(ts, arr, b - 1); /* ensure arr[b-1] is valid */
                     csA_reset(arr); /* arr is empty (but can fit b-1 index) */
@@ -1064,7 +1075,8 @@ returning:
                     b = 1 << (b - 1); /* size of methods table is 2^(b - 1) */
                 savepc(ts);
                 cls = csMM_newclass(ts);
-                setclsval2s(ts, ts->sp.p++, cls); /* push on stack */
+                setclsval2s(ts, ts->sp.p, cls); /* push on stack */
+                SP(1);
                 if (b > 0)
                     cls->methods = csH_newsz(ts, b);
                 vm_break;
@@ -1074,10 +1086,10 @@ returning:
                 HTable *t;
                 if (b > 0) /* table has fields? */
                     b = 1 << (b - 1); /* size is 2^(b - 1) */
-                ts->sp.p++; /* inc. top */
+                SP(1);
                 savepc(ts); /* allocations might fail */
                 t = csH_new(ts);
-                sethtval2s(ts, ts->sp.p - 1, t);
+                sethtval2s(ts, TOP(), t);
                 if (b != 0) /* table is not empty? */
                     csH_resize(ts, t, b); /* grow table to size 'b' */
                 checkGC(ts);
@@ -1090,7 +1102,7 @@ returning:
                 cs_assert(ttisstring(key));
                 cs_assert(classval(cls)->methods != NULL);
                 Protect(csH_set(ts, classval(cls)->methods, key, f));
-                pop(1); /* f */
+                SP(-1); /* f */
                 vm_break;
             }
             vm_case(OP_SETMM) {
@@ -1104,16 +1116,16 @@ returning:
                     *vmt = csMM_newvmt(ts);
                 }
                 (*vmt)[mm] = *f; /* set the entry */
-                pop(1); /* f */
+                SP(-1); /* f */
                 vm_break;
             }
             vm_case(OP_POP) {
-                pop(1);
+                SP(-1);
                 vm_break;
             }
             vm_case(OP_POPN) {
                 int n = fetchl();
-                pop(n);
+                SP(-n);
                 vm_break;
             }
             /* } BINARY_OPS { ARITHMETIC_OPS { */
@@ -1122,7 +1134,7 @@ returning:
                 TValue *v2 = peek(0);
                 int op = fetchs(); /* op */
                 Protect(precallmbin(ts, v1, v2, op, SLOT(1)));
-                pop(1); /* v2 */
+                SP(-1); /* v2 */
                 vm_break;
             }
             vm_case(OP_ADDK) {
@@ -1317,7 +1329,7 @@ returning:
                 int cond;
                 Protect(cond = csV_ordereq(ts, v1, v2));
                 setorderres(v1, cond, condexp);
-                pop(1); /* v2 */
+                SP(-1); /* v2 */
                 vm_break;
             }
             vm_case(OP_LT) {
@@ -1383,7 +1395,7 @@ returning:
                 int off = fetchl();
                 int npop = fetchl();
                 pc += off;
-                pop(npop);
+                SP(-npop);
                 vm_break;
             } /* } TEST_OPS { */
             vm_case(OP_TEST) {
@@ -1401,7 +1413,7 @@ returning:
                 if ((!c_isfalse(v)) == cond)
                     pc += off;
                 else
-                    pop(1); /* v */
+                    SP(-1); /* v */
                 vm_break;
             }
             vm_case(OP_TESTANDPOP) {
@@ -1410,7 +1422,7 @@ returning:
                 int cond = fetchs();
                 if ((!c_isfalse(v)) == cond) {
                     pc += off;
-                    pop(1); /* v */
+                    SP(-1); /* v */
                 }
                 vm_break;
             }
@@ -1420,7 +1432,7 @@ returning:
                 int cond = fetchs();
                 if ((!c_isfalse(v)) == cond)
                     pc += off;
-                pop(1); /* v */
+                SP(-1); /* v */
                 vm_break;
             } /* } */
             vm_case(OP_CALL) {
@@ -1449,9 +1461,10 @@ returning:
                 TValue *G = getGtable(ts);
                 const TValue *val = csH_getstr(htval(G), strval(key));
                 if (!isempty(val)) {
-                    setobj2s(ts, ts->sp.p++, val);
+                    setobj2s(ts, ts->sp.p, val);
                 } else
-                    setnilval(s2v(ts->sp.p++));
+                    setnilval(s2v(ts->sp.p));
+                SP(1);
                 vm_break;
             }
             vm_case(OP_SETGLOBAL) {
@@ -1460,31 +1473,33 @@ returning:
                 TValue *v = peek(0);
                 cs_assert(ttisstring(key));
                 csH_set(ts, htval(G), key, v);
-                pop(1); /* v */
+                SP(-1); /* v */
                 vm_break;
             }
             vm_case(OP_GETLOCAL) {
                 int i = fetchl();
-                setobjs2s(ts, ts->sp.p++, STK(i));
+                setobjs2s(ts, ts->sp.p, STK(i));
+                SP(1);
                 vm_break;
             }
             vm_case(OP_SETLOCAL) {
                 int i = fetchl();
-                setobjs2s(ts, STK(i), pop(1));
+                setobjs2s(ts, STK(i), SP(-1));
                 vm_break;
             }
             vm_case(OP_GETUVAL) {
                 int i = fetchl();
                 cs_assert(cl->upvals != NULL);
                 cs_assert(cl->nupvalues > i);
-                setobj2s(ts, ts->sp.p++, cl->upvals[i]->v.p);
+                setobj2s(ts, ts->sp.p, cl->upvals[i]->v.p);
+                SP(1);
                 vm_break;
             }
             vm_case(OP_SETUVAL) {
                 int i = fetchl();
                 cs_assert(cl->upvals != NULL);
                 cs_assert(cl->nupvalues > i);
-                setobj(ts, cl->upvals[i]->v.p, s2v(pop(1)));
+                setobj(ts, cl->upvals[i]->v.p, s2v(SP(-1)));
                 vm_break;
             }
             vm_case(OP_SETARRAY) {
@@ -1512,7 +1527,7 @@ returning:
                 TValue *v = peek(0);
                 cs_assert(ttisstring(prop));
                 Protect(csV_set(ts, o, prop, v));
-                pop(1); /* v */
+                SP(-1); /* v */
                 vm_break;
             }
             vm_case(OP_GETPROPERTY) { /* NOTE: optimize? */
@@ -1526,7 +1541,7 @@ returning:
                 TValue *o = peek(1);
                 TValue *key = peek(0);
                 Protect(csV_get(ts, o, key, SLOT(1)));
-                pop(1); /* v2 */
+                SP(-1); /* v2 */
                 vm_break;
             }
             vm_case(OP_SETINDEX) {
@@ -1535,7 +1550,7 @@ returning:
                 TValue *idx = s2v(os + 1);
                 TValue *v = peek(0);
                 Protect(csV_set(ts, o, idx, v));
-                pop(1); /* v */
+                SP(-1); /* v */
                 vm_break;
             }
             vm_case(OP_GETINDEXSTR) { /* TODO: optimize */
@@ -1551,7 +1566,7 @@ returning:
                 TValue *v = peek(0);
                 cs_assert(ttisstring(idx));
                 Protect(csV_set(ts, o, idx, v));
-                pop(1); /* v */
+                SP(-1); /* v */
                 vm_break;
             }
             vm_case(OP_GETINDEXINT) { /* TODO: optimize */
@@ -1568,7 +1583,7 @@ returning:
                 TValue index;
                 setival(&index, imm_i);
                 Protect(csV_set(ts, o, &index, v));
-                pop(1); /* v */
+                SP(-1); /* v */
                 vm_break;
             }
             vm_case(OP_GETSUP) {
@@ -1577,7 +1592,7 @@ returning:
                 OClass *cls = classval(peek(0));
                 savepc(ts);
                 getsuper(ts, ins, cls, strval(ks), SLOT(1), csH_getstr);
-                pop(1); /* cls */
+                SP(-1); /* cls */
                 vm_break;
             }
             vm_case(OP_GETSUPIDX) {
@@ -1586,7 +1601,7 @@ returning:
                 TValue *idx = peek(0);
                 savepc(ts);
                 getsuper(ts, ins, cls, idx, SLOT(2), csH_get);
-                pop(2); /* cls, idx */
+                SP(-2); /* cls, idx */
                 vm_break;
             }
             vm_case(OP_GETSUPIDXSTR) {
@@ -1595,7 +1610,7 @@ returning:
                 OClass *cls = classval(peek(0));
                 savepc(ts);
                 getsuper(ts, ins, cls, strval(ks), SLOT(1), csH_getstr);
-                pop(1); /* cls */
+                SP(-1); /* cls */
                 vm_break;
             }
             vm_case(OP_INHERIT) {
@@ -1624,8 +1639,7 @@ returning:
                 /* create to-be-closed upvalue (if any) */
                 Protect(csF_newtbcvar(ts, stk+FORTBCVAR));
                 pc += off;
-                cs_assert(*pc == OP_FORCALL);
-                cast_void(fetch()); /* skip OP_FORCALL */
+                check_exp(*pc == OP_FORCALL, cast_void(fetch())); /* skip */
                 goto l_forcall;
             }
             vm_case(OP_FORCALL) {
@@ -1640,8 +1654,7 @@ returning:
                 ts->sp.p = stk+NSTATEVARS+FORTBCVAR; /* adjust stack pointer */
                 Protect(csV_call(ts, stk+NSTATEVARS, nres)); /* call iter */
                 updatebase(cf);
-                cs_assert(*pc == OP_FORLOOP);
-                cast_void(fetch()); /* skip OP_FORLOOP */
+                check_exp(*pc == OP_FORLOOP, cast_void(fetch())); /* skip */
                 goto l_forloop;
             }}
             vm_case(OP_FORLOOP) {
@@ -1654,7 +1667,7 @@ returning:
                     setobjs2s(ts, stk+FORCNTLVAR, stk+NSTATEVARS);
                     pc -= off; /* jump back to loop body */
                 } else /* otherwise leave the loop (fall through) */
-                    ts->sp.p -= nvars; /* remove leftover from last call */
+                    SP(-nvars); /* remove leftover vars from previous call */
                 vm_break;
             }}
             vm_case(OP_RET) {

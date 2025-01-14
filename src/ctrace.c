@@ -440,16 +440,15 @@ static void unasmGlobal(const Proto *p, Instruction *pc) {
 }
 
 
-static void traceLocal(LVarInfo *lv, int index) {
-    const char *str = getstr(lv[index].name);
-    postab(printf("L@%d=%s", index, str));
+static void traceLocal(int index) {
+    postab(printf("L@%d", index));
 }
 
 
 static void unasmLocal(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceLocal(p->locals, GETARG_L(pc, 0));
+    traceLocal(GETARG_L(pc, 0));
     endline();
 }
 
@@ -646,8 +645,8 @@ void csTR_dumpstack(cs_State *ts, int level, const char *fmt, ...) {
     }
     for (int i = 0; cf != NULL && level != 0; i++) {
         level--;
-        printf("[LEVEL %3d] %-10s %s ",
-               i, typename(ttype(s2v(cf->func.p))), cf != ts->cf ? "--" : ">>");
+        printf("[LEVEL %3d] %-10s %s ", i, typename(ttype(s2v(cf->func.p))),
+                                        cf != ts->cf ? "--" : ">>");
         if (cf->func.p + 1 >= prevtop)
             printf("empty");
         else

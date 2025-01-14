@@ -266,17 +266,18 @@ local transactions = {                  // hashtable for traversal
 };
 foreach k, v in pairs(transactions)
     print(k, v);
-//local points = [69, 420, 1337];
-//local array_iter = fn (arr) {  // foreach generator
-//    local i = 0;
-//    local n = len(arr);
-//    return fn () {  // iterates the whole array
-//        if (i < n) {  // index in bounds?
-//            i = i + 1;
-//            return i - 1, arr[i - 1];
-//        } // otherwise implicitly returns 'nil'
-//    };
-//};
+local points = [69, 420, 1337];
+local array_iter = fn (arr) {  // foreach generator
+    local i = 0;
+    local n = len(arr);
+    return fn () {  // iterates the whole array
+        if (i < n) {  // index in bounds?
+            i = i + 1;
+            return i - 1, arr[i - 1];
+        } else
+            return nil;
+    };
+};
 foreach i, point in array_iter(points)
     print("points[" .. tostring(i) .. "] = " .. tostring(point));
 

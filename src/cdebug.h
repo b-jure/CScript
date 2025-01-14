@@ -19,6 +19,23 @@
     csD_operror(ts, v1, v2, "perform bitwise operation on")
 
 
+/*
+** Mark for entries in 'lineinfo' array that has absolute information in
+** 'abslineinfo' array.
+*/
+#define ABSLINEINFO     (-0x80)
+
+
+/*
+** MAXimum number of successive Instructions WiTHout ABSolute line
+** information. (A power of two allows fast divisions.)
+*/
+#if !defined(MAXIWTHABS)
+#define MAXIWTHABS     128
+#endif
+
+
+
 CSI_FUNC int csD_getfuncline(const Proto *fn, int pc);
 CSI_FUNC const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n,
                                    SPtr *pos);

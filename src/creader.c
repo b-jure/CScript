@@ -8,7 +8,6 @@
 #define CS_CORE
 
 
-#include "ctrace.h"
 #include "creader.h"
 #include "climits.h"
 

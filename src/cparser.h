@@ -8,29 +8,28 @@
 #define CPARSER_H
 
 
-#include "cobject.h"
+#include "cbits.h"
 #include "clexer.h"
 #include "cobject.h"
-#include "cbits.h"
 
 
 /* maximum number of local variables per function */
-#define MAXVARS     MAX_LARG
+#define MAXVARS     MAX_CODE
 
 
-/* 
+/*
 ** Because all strings are unified by the scanner, the parser
 ** can use pointer equality for string equality
 */
-#define eqstr(a,b)	((a) == (b))
+#define eqstr(a, b)     ((a) == (b))
 
 
 /* check expression type */
-#define eisvar(e)           ((e)->et >= EXP_GLOBAL && (e)->et <= EXP_DOTSUPER)
-#define eisconstant(e)      ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
-#define eismulret(e)        ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
-#define eistrue(e)          ((e)->et >= EXP_TRUE && (e)->et <= EXP_K)
-#define eisindexed(e)       ((e)->et >= EXP_INDEXED && (e)->et <= EXP_DOTSUPER)
+#define eisvar(e)       ((e)->et >= EXP_GLOBAL && (e)->et <= EXP_DOTSUPER)
+#define eisconstant(e)  ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
+#define eismulret(e)    ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
+#define eistrue(e)      ((e)->et >= EXP_TRUE && (e)->et <= EXP_K)
+#define eisindexed(e)   ((e)->et >= EXP_INDEXED && (e)->et <= EXP_DOTSUPER)
 
 
 /* expression types */
@@ -94,33 +93,29 @@ typedef enum expt {
 
 
 /*
- * Expression information.
- * Parser builds up the expression information and feeds it into
- * functions that generate bytecode.
- * Then those functions also fill the 'ExpInfo' accordingly.
- * So the codegen functions are essentially consumers of 'ExpInfo'.
- */
+** Expression information.
+** Parser builds up the expression information and feeds it into
+** functions that generate bytecode.
+** Then those functions also fill the 'ExpInfo' accordingly.
+** So the codegen functions are essentially consumers of 'ExpInfo'.
+*/
 typedef struct ExpInfo {
     expt et;
     union {
-        cs_Number n; /* floating constant */
+        cs_Number n;  /* floating constant */
         cs_Integer i; /* integer constant  */
         OString *str; /* string literal */
-        int info; /* pc or some other generic information */
+        int info;     /* pc or some other generic information */
     } u;
     int t; /* jmp to patch if true */
     int f; /* jmp to patch if false */
 } ExpInfo;
 
 
-
-/* variable kind (stored in 'mod') */
-#define VARREG          0 /* regular */
-#define VARFINAL        1 /* final (immutable) */
-#define VARTBC          2 /* to-be-closed */
-
-/* bit mask of all valid modifiers in 'mod' */
-#define maskvarkind     (bit2mask(VARFINAL, VARPRIVATE) | bitmask(VARTBC))
+/* variable kind */
+#define VARREG      0   /* regular */
+#define VARFINAL    1   /* final (immutable) */
+#define VARTBC      2   /* to-be-closed */
 
 
 /* active local variable compiler information */
@@ -158,7 +153,6 @@ typedef struct ClassState {
 } ClassState;
 
 
-
 /*
 ** Dynamic data used by parser.
 ** It is stored inside 'Lexer' because each 'FunctionState' shares
@@ -166,57 +160,67 @@ typedef struct ClassState {
 */
 typedef struct ParserState {
     struct { /* list of all active local variables */
-        int len;
-        int size;
+        int len; int size;
         LVar *arr;
     } actlocals;
     struct { /* list of pending break jumps */
-        int len; /* number of elements in 'list' */
-        int size; /* size of 'list' */
-        PatchList *arr; /* list of patch lists */
+        int len; int size;
+        PatchList *arr;
     } patches;
+    struct { /* list of coded instructions offsets */
+        int len; int size;
+        c_byte *arr;
+    } pcdif;
     struct ClassState *cs;
 } ParserState;
 
 
-/* dynamic data context (for optimizations) */
-typedef struct DynCtx {
-    int loopstart;  /* innermost loop start offset */
-    int sp;         /* first free stack slot */
-    int np;         /* number of prototypes */
-    int nk;         /* number of constants */
-    int pc;         /* program (code) counter */
-    int nlinfo;     /* number of line info */
-    int nlocals;    /* number of locals */
-    int nupvals;    /* number of upvalues */
-    int npatches;   /* number of patch lists */
-    int nbjmp;      /* number of 'break' jumps */
-    int needclose;  /* true if function needs to close */
-    int lastwasret; /* true if last statement was a return */
-    int pclastop;   /* pc of last instruction */
-} DynCtx;
+/* 
+** Function state context (for optimizations); snapshot of state fields.
+*/
+typedef struct FuncContext {
+    int loopstart;
+    int prevpc;
+    int prevline;
+    int sp;
+    int nactlocals;
+    int np;
+    int nk;
+    int pc;
+    int nabslineinfo;
+    int nlocals;
+    int nupvals;
+    int npatches;
+    int nbjmp;
+    int npcdif;
+    c_byte iwthabs;
+    c_byte needclose;
+    c_byte lastwasret;
+} FuncContext;
 
 
 /* state for currently compiled function prototype */
 typedef struct FunctionState {
-    Proto *p; /* current function prototype */
+    Proto *p;                   /* current function prototype */
     struct FunctionState *prev; /* implicit linked-list */
-    struct Lexer *lx; /* lexer */
-    struct Scope *scope; /* scope information */
-    struct Scope *loopscope; /* innermost loop scope */
-    struct Scope *switchscope; /* innermost switch scope */
-    int loopstart; /* innermost loop start offset */
-    int sp; /* first free compiler stack index */
-    int nactlocals; /* number of active local variables */
-    int firstlocal; /* index of first local in 'lvars' */
-    int np; /* number of elements in 'p' */
-    int nk; /* number of elements in 'k' */
-    int pc; /* number of elements in 'code' (equialent to 'ncode') */
-    int nlinfo; /* number of elements in 'linfo' */
-    int nlocals; /* number of elements in 'locals' */
-    int nupvals; /* number of elements in 'upvals' */
-    int pclastop; /* last OpCode pc */
-    c_byte needclose; /* true if needs to close upvalues before returning */
+    struct Lexer *lx;           /* lexer */
+    struct Scope *scope;        /* scope information */
+    struct Scope *loopscope;    /* innermost loop scope */
+    struct Scope *switchscope;  /* innermost switch scope */
+    int firstlocal;    /* index of first local in 'lvars' */
+    int loopstart;     /* innermost loop start offset */
+    int prevpc;        /* previous instruction pc */
+    int prevline;      /* previous instruction line */
+    int sp;            /* first free compiler stack index */
+    int nactlocals;    /* number of active local variables */
+    int np;            /* number of elements in 'p' */
+    int nk;            /* number of elements in 'k' */
+    int pc;            /* number of elements in 'code' (equialent to 'ncode') */
+    int nabslineinfo;  /* number of elements in 'abslineinfo' */
+    int nlocals;       /* number of elements in 'locals' */
+    int nupvals;       /* number of elements in 'upvals' */
+    c_byte iwthabs;    /* instructions issued since last absolute line info */
+    c_byte needclose;  /* true if needs to close upvalues before returning */
     c_byte lastwasret; /* last statement is 'return' */
 } FunctionState;
 
@@ -224,5 +228,6 @@ typedef struct FunctionState {
 CSI_FUNC c_noret csP_semerror(Lexer *lx, const char *err);
 CSI_FUNC CSClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
                               ParserState *ps, const char *source);
+
 
 #endif

@@ -54,8 +54,8 @@ c_noret csPR_throw(cs_State *ts, int errcode) {
  * ------------------------------------------------------------------------- */
 
 int csPR_rawcall(cs_State *ts, ProtectedFn fn, void *ud) {
-    cs_uint32 old_nCcalls = ts->nCcalls;
-    struct cs_ljmp lj;
+    c_uint32 old_nCcalls = ts->nCcalls;
+    struct c_ljmp lj;
     lj.status = CS_OK;
     lj.prev = ts->errjmp;
     ts->errjmp = &lj;
@@ -135,20 +135,22 @@ static void parsepaux(cs_State *ts, void *userdata) {
 
 /* call 'csP_parse' in protected mode */
 int csPR_parse(cs_State *ts, BuffReader *br, const char *name) {
-    struct PParseData ppd;
+    struct PParseData pd;
     int status;
-    ppd.br = br;
-    csR_buffinit(&ppd.buff); /* 'buff' */
-    ppd.ps.actlocals.len = ppd.ps.actlocals.size = 0;
-    ppd.ps.actlocals.arr = NULL;
-    ppd.ps.patches.len = ppd.ps.patches.size = 0;
-    ppd.ps.patches.arr = NULL;
-    ppd.ps.cs = NULL;
-    ppd.source = name;
-    status = csPR_call(ts, parsepaux, &ppd, savestack(ts, ts->sp.p), ts->errfunc);
-    csR_freebuffer(ts, &ppd.buff);
-    csM_freearray(ts, ppd.ps.actlocals.arr, ppd.ps.actlocals.size);
-    csM_freearray(ts, ppd.ps.patches.arr, ppd.ps.patches.size);
+    pd.br = br;
+    csR_buffinit(&pd.buff); /* 'buff' */
+    pd.ps.actlocals.len = pd.ps.actlocals.size = 0; pd.ps.actlocals.arr = NULL;
+    pd.ps.patches.len = pd.ps.patches.size = 0; pd.ps.patches.arr = NULL;
+    pd.ps.pcdif.len = pd.ps.pcdif.size = 0; pd.ps.pcdif.arr = NULL;
+    pd.ps.cs = NULL;
+    pd.source = name;
+    status = csPR_call(ts, parsepaux, &pd, savestack(ts, ts->sp.p), ts->errfunc);
+    csR_freebuffer(ts, &pd.buff);
+    csM_freearray(ts, pd.ps.actlocals.arr, pd.ps.actlocals.size);
+    printf("Freeing patch lists storage of size %zu\n",
+            pd.ps.patches.size * sizeof(*pd.ps.patches.arr));
+    csM_freearray(ts, pd.ps.patches.arr, pd.ps.patches.size);
+    csM_freearray(ts, pd.ps.pcdif.arr, pd.ps.pcdif.size);
     decnnyc(ts);
     return status;
 }

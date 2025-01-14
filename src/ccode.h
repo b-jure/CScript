@@ -15,7 +15,7 @@
 /* 
 ** Get current pc, this macro expects fs (FunctionState) to be in scope.
 */
-#define PC      ((fs)->pc)
+#define currPC      (fs->pc)
 
 
 /* get constant of 'ExpInfo' */
@@ -320,6 +320,13 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
 
 /* 
+** Maximum size of a single instruction including all of its
+** arguments (in bytes).
+*/
+#define MAXOPSIZE       csC_opSize[FormatN - 1]
+
+
+/* 
 ** Number of array items to accumulate before a SETARRAY instruction.
 ** Keep this value under MAX_SARG or change the instruction format aka
 ** the second argument size to long arg in order to fit up to MAX_LARG.
@@ -332,7 +339,8 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 #define csC_store(fs,var)       csC_storevar(fs, var, 0)
 
 
-#define lastop(fs)      ((fs)->p->code[(fs)->pclastop])
+#define prevOP(fs)      ((fs)->p->code[(fs)->prevpc])
+#define currOP(fs)      ((fs)->p->code[(fs)->pc])
 
 
 CSI_FUNC int csC_emitI(FunctionState *fs, Instruction i);

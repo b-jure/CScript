@@ -12,6 +12,7 @@
 #include "clexer.h"
 #include "chashtable.h"
 #include "cbits.h"
+#include "cdebug.h"
 #include "cvm.h"
 #include "climits.h"
 #include "cobject.h"
@@ -212,18 +213,112 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 };
 
 
-static void addlineinfo(FunctionState *fs, Proto *f, int line) {
-    int len = fs->nlinfo;
-    if (len == 0 || f->linfo[len - 1].line < line) { /* new line entry? */
-        csM_growarray(fs->lx->ts, f->linfo, f->sizelinfo, fs->nlinfo, MAXINT,
-                      "lines", LineInfo);
-        f->linfo[len].pc = fs->pclastop;
-        f->linfo[len].line = line;
-        fs->nlinfo++;
-    } else { /* otherwise update previous line entry with latest 'pc' */
-        cs_assert(f->linfo[len - 1].pc <= fs->pclastop);
-        f->linfo[len - 1].pc = fs->pclastop;
+/* limit for difference between lines in relative line info. */
+#define LIMLINEDIFF     0x80
+
+
+/*
+** Save line info for new instruction. We only store difference
+** from the previous line in a singed byte array 'lineinfo' for each
+** instruction. Storing only the difference makes it easier to fit this
+** information in a single signed byte and save memory. In cases where the
+** difference of lines is too large to fit in a 'c_sbyte', or the MAXIWTHABS
+** limit is reached, we store absolute line information which is held in
+** 'abslineinfo' array. When we do store absolute line info, we also
+** indicate the corresponding 'lineinfo' entry with special value ABSLINEINFO,
+** which tells us there is absolute line information for this instruction.
+**
+** Complexity of lookup in turn is something along the lines of O(n/k+k),
+** where n is the number of instructions and k is a constant MAXIWTHABS.
+** However this approximation does not take into consideration LIMLINEDIFF
+** and assumes we do not have cases where the line difference is too high.
+*/
+static void savelineinfo(FunctionState *fs, Proto *p, int line) {
+    const int difinvalid = ABSLINEINFO + 1;
+    const int pc = fs->prevpc;
+    const int sz = getOpSize(prevOP(fs));
+    int linedif = line - fs->prevline;
+    if (c_abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS) {
+        csM_growarray(fs->lx->ts, p->abslineinfo, p->sizeabslineinfo,
+                      fs->nabslineinfo, MAXINT, "lines", AbsLineInfo);
+        p->abslineinfo[fs->nabslineinfo].pc = pc;
+        p->abslineinfo[fs->nabslineinfo++].line = line;
+        linedif = ABSLINEINFO; /* signal the absolute line info entry */
+        fs->iwthabs = 1; /* reset counter */
     }
+    csM_ensurearray(fs->lx->ts, p->lineinfo, p->sizelineinfo, pc, sz, MAXINT,
+                                "opcodes", c_sbyte);
+    p->lineinfo[pc] = linedif;
+    for (int i = 1; i < sz; i++) /* fill func args (if any) */
+        p->lineinfo[pc + i] = difinvalid;
+    fs->prevline = line; /* last line saved */
+}
+
+
+/*
+** Remove line information from the last instruction.
+** If line information for that instruction is absolute, set 'iwthabs'
+** above its max to force the new (replacing) instruction to have
+** absolute line info, too.
+*/
+static void removelastlineinfo(FunctionState *fs) {
+    Proto *p = fs->p;
+    int pc = fs->prevpc;
+    if (p->lineinfo[pc] != ABSLINEINFO) { /* relative line info? */
+        cs_assert(p->lineinfo[pc] >= 0); /* must have valid offset */
+        fs->prevline -= p->lineinfo[pc]; /* fix last line saved */
+        fs->iwthabs--; /* undo previous increment */
+    } else { /* otherwise absolute line info */
+        cs_assert(p->abslineinfo[fs->nabslineinfo - 1].pc == pc);
+        fs->nabslineinfo--; /* remove it */
+        fs->iwthabs = MAXIWTHABS + 1; /* force next line info to be absolute */
+    }
+}
+
+
+/* 
+** Removes last coded instruction difference stored in 'pcdif'.
+*/
+static void rmpcdif(FunctionState *fs) {
+    ParserState *ps = fs->lx->ps;
+    int diff = check_exp(ps->pcdif.len > 0, ps->pcdif.arr[--ps->pcdif.len]);
+    cs_assert(diff <= MAXOPSIZE);
+    cs_assert(currPC > fs->prevpc);
+    currPC = fs->prevpc;
+    fs->prevpc -= diff;
+}
+
+
+/* 
+** Adds new instruction difference into 'pcdif'.
+*/
+static void addpcdif(FunctionState *fs) {
+    ParserState *ps = fs->lx->ps;
+    int dif = (currPC != 0 ? getOpSize(prevOP(fs)) : 0);
+    csM_growarray(fs->lx->ts, ps->pcdif.arr, ps->pcdif.size, ps->pcdif.len,
+                  MAXINT, "code", c_byte);
+    ps->pcdif.arr[ps->pcdif.len++] = cast_byte(dif);
+    fs->prevpc = currPC; /* set current pc as last coded pc */
+}
+
+
+/*
+** Remove the last instruction created, correcting line information
+** accordingly.
+*/
+static void removelastinstruction(FunctionState *fs) {
+    removelastlineinfo(fs);
+    rmpcdif(fs);
+}
+
+
+/*
+** Change line information associated with current position, by removing
+** previous info and adding it again with new line.
+*/
+void csC_fixline(FunctionState *fs, int line) {
+    removelastlineinfo(fs);
+    savelineinfo(fs, fs->p, line);
 }
 
 
@@ -244,36 +339,41 @@ static void emit3bytes(FunctionState *fs, int code) {
 }
 
 
-/* emit instruction 'i' */
-int csC_emitI(FunctionState *fs, Instruction i) {
-    cs_assert(SIZEINSTR == sizeof(Instruction));
-    cs_assert(fs->pclastop <= fs->pc);
-    fs->pclastop = fs->pc;
+static void codeinstruction(FunctionState *fs, Instruction i) {
+    addpcdif(fs);
     emitbyte(fs, i);
-    addlineinfo(fs, fs->p, fs->lx->line);
-    return fs->pc - 1;
+    savelineinfo(fs, fs->p, fs->lx->line);
 }
 
 
-/* emit short arg */
+/* code instruction 'i' */
+int csC_emitI(FunctionState *fs, Instruction i) {
+    cs_assert(SIZEINSTR == sizeof(Instruction));
+    cs_assert(fs->prevpc <= fs->pc);
+    codeinstruction(fs, i);
+    return currPC - 1;
+}
+
+
+/* code short arg */
 static int emitS(FunctionState *fs, int arg) {
     cs_assert(SIZEARGS == sizeof(Instruction));
     cs_assert(0 <= arg && arg <= MAX_SARG);
     emitbyte(fs, arg);
-    return fs->pc - 1;
+    return currPC - 1;
 }
 
 
-/* emit long arg */
+/* code long arg */
 static int emitL(FunctionState *fs, int arg) {
-    cs_assert(SIZEARGL == sizeof(Instruction)*3);
+    cs_assert(SIZEARGL == (sizeof(Instruction) * 3));
     cs_assert(0 <= arg && arg <= MAX_LARG);
     emit3bytes(fs, arg);
-    return fs->pc - 3;
+    return currPC - 3;
 }
 
 
-/* emit instruction with short arg */
+/* code instruction with short arg */
 int csC_emitIS(FunctionState *fs, Instruction i, int a) {
     int offset = csC_emitI(fs, i);
     emitS(fs, a);
@@ -281,7 +381,7 @@ int csC_emitIS(FunctionState *fs, Instruction i, int a) {
 }
 
 
-/* emit instruction 'i' with long arg 'a' */
+/* code instruction 'i' with long arg 'a' */
 int csC_emitIL(FunctionState *fs, Instruction i, int a) {
     int offset = csC_emitI(fs, i);
     emitL(fs, a);
@@ -289,7 +389,7 @@ int csC_emitIL(FunctionState *fs, Instruction i, int a) {
 }
 
 
-/* emit instruction with 2 long args */
+/* code instruction with 2 long args */
 int csC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
     int offset = csC_emitI(fs, i);
     emitL(fs, a);
@@ -298,34 +398,13 @@ int csC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
 }
 
 
-/* emit instruction with 3 long args */
+/* code instruction with 3 long args */
 int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c) {
     int offset = csC_emitI(fs, i);
     emitL(fs, a);
     emitL(fs, b);
     emitL(fs, c);
     return offset;
-}
-
-
-/* fix previous line number in line information */
-void csC_fixline(FunctionState *fs, int line) {
-    int pc = fs->pclastop;
-    LineInfo *li = check_exp(fs->nlinfo > 0, &fs->p->linfo[fs->nlinfo - 1]);
-    cs_assert(li->pc == pc); /* can only fix line of last instruction */
-    if (pc > 0) { /* last instruction is not the first instruction? */
-        /* get previous line info (must have it) */
-        check_exp(fs->nlinfo - 2 >= 0, li -= 1);
-        if (li->line == line) { /* last instruction is on the same line? */
-            fs->nlinfo -= 1;    /* remove the last entry... */
-            li->pc = pc;        /* ...and update the pc */
-            return;             /* done */
-        } else { /* otherwise last instruction is on different line */
-            cs_assert(li->line < line); /* (which is larger than previous) */
-            li++; /* go back to the newly added entry */
-        }
-    }
-    li->line = line; /* set the line */
 }
 
 
@@ -479,13 +558,43 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
 }
 
 
+static int adjuststack(FunctionState *fs, OpCode op, int n) {
+    Instruction *inst = &prevOP(fs);
+    int prevn = 0;
+    switch (*inst) {
+        case OP_POPN: case OP_NILN: {
+            prevn = GETARG_L(inst, 0);
+            SETARG_L(inst, 0, n + prevn);
+            return fs->prevpc; /* done; do not code new instruction */
+        }
+        case OP_POP: {
+            op = OP_POPN;
+            goto nil;
+        }
+        case OP_NIL: {
+            op = OP_NILN;
+nil:
+            prevn = 1;
+            removelastinstruction(fs);
+            break;
+        }
+        default: break; /* nothing to be done */
+    }
+    n += prevn;
+    if (n == 1) {
+        cs_assert(op == OP_NIL || op == OP_POP);
+        return csC_emitI(fs, op);
+    } else {
+        cs_assert(op == OP_NILN || op == OP_POPN);
+        return csC_emitIL(fs, op, n);
+    }
+}
+
+
 int csC_nil(FunctionState *fs, int n) {
     cs_assert(n > 0);
     csC_reserveslots(fs, n);
-    if (n == 1)
-        return csC_emitI(fs, OP_NIL);
-    else
-        return csC_emitIL(fs, OP_NILN, n);
+    return adjuststack(fs, n > 1 ? OP_NILN : OP_NIL, n);
 }
 
 
@@ -495,29 +604,11 @@ c_sinline void freeslots(FunctionState *fs, int n) {
 }
 
 
-static int removevalues(FunctionState *fs, int n) {
-    int extra = 0;
-    cs_assert(n > 0);
-    if (lastop(fs) == OP_POPN || lastop(fs) == OP_POP) { /* can optimize? */
-        if (lastop(fs) == OP_POPN)
-            extra = GETARG_L(&fs->p->code[fs->pclastop], 0);
-        else
-            extra = 1;
-        fs->pc = fs->pclastop;
-    }
-    n += extra;
-    if (n == 1)
-        return csC_emitI(fs, OP_POP);
-    else
-        return csC_emitIL(fs, OP_POPN, n);
-}
-
-
 /* pop values from stack and free stack slots */
 int csC_pop(FunctionState *fs, int n) {
     if (n > 0) {
         freeslots(fs, n);
-        return removevalues(fs, n);
+        return adjuststack(fs, n > 1 ? OP_POPN : OP_POP, n);
     }
     return -1; /* nothing to pop */
 }
@@ -582,7 +673,7 @@ static int isnumKL(ExpInfo *e, int *imm, int *isflt) {
 }
 
 
-/* emit generic load constant instruction */
+/* code generic load constant instruction */
 static int codeK(FunctionState *fs, int idx) {
     cs_assert(idx >= 0 && fitsLA(idx));
     return (fitsSA(idx) 
@@ -591,7 +682,7 @@ static int codeK(FunctionState *fs, int idx) {
 }
 
 
-/* emit 'OP_SET' family of instructions */
+/* code 'OP_SET' family of instructions */
 int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
     int extra = 0;
     switch (var->et) {
@@ -701,12 +792,12 @@ static int dischargevars(FunctionState *fs, ExpInfo *e) {
 
 /* get 'pc' of jmp instruction destination */
 static int getjump(FunctionState *fs, int pc) {
-    Instruction *i = &fs->p->code[pc];
-    int offset = GETARG_L(i, 0);
+    Instruction *inst = &fs->p->code[pc];
+    int offset = GETARG_L(inst, 0);
     if (offset == 0)
         return NOJMP;
     else
-        return (pc + getOpSize(*i)) + offset;
+        return (pc + getOpSize(*inst)) + offset;
 }
 
 
@@ -749,7 +840,7 @@ void csC_patch(FunctionState *fs, int pc, int target) {
 
 /* backpatch jump instruction to current pc */
 void csC_patchtohere(FunctionState *fs, int pc) {
-    csC_patch(fs, pc, PC);
+    csC_patch(fs, pc, currPC);
 }
 
 
@@ -765,7 +856,7 @@ static void patchlistaux(FunctionState *fs, int list, int target) {
 static void fixjumplists(FunctionState *fs, ExpInfo *e) {
     cs_assert(e->et == EXP_FINEXPR); /* must already be discharged */
     if (hasjumps(e)) {
-        int final = PC; /* position after whole expression */
+        int final = currPC; /* position after whole expression */
         patchlistaux(fs, e->f, final);
         patchlistaux(fs, e->t, final);
         e->f = e->t = NOJMP;
@@ -783,7 +874,7 @@ void csC_varexp2stack(FunctionState *fs, ExpInfo *e) {
 }
 
 
-/* emit op with long and short args */
+/* code op with long and short args */
 int csC_emitILS(FunctionState *fs, Instruction op, int a, int b) {
     int offset = csC_emitIL(fs, op, a);
     emitS(fs, b);
@@ -791,7 +882,7 @@ int csC_emitILS(FunctionState *fs, Instruction op, int a, int b) {
 }
 
 
-/* emit op with long and 2 short args */
+/* code op with long and 2 short args */
 static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
     int offset = csC_emitILS(fs, op, a, b);
     emitS(fs, c);
@@ -799,7 +890,7 @@ static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
 }
 
 
-/* emit integer constant */
+/* code integer constant */
 static int codeintK(FunctionState *fs, cs_Integer i) {
     if (fitsLA(i))
         return csC_emitILS(fs, OP_CONSTI, c_abs(i), encodesign(i));
@@ -808,7 +899,7 @@ static int codeintK(FunctionState *fs, cs_Integer i) {
 }
 
 
-/* emit float constant */
+/* code float constant */
 static int codefltK(FunctionState *fs, cs_Number n) {
     cs_Integer i;
     if (csO_n2i(n, &i, N2IEXACT) && fitsLA(i))
@@ -819,10 +910,10 @@ static int codefltK(FunctionState *fs, cs_Number n) {
 
 
 void csC_setarraysize(FunctionState *fs, int pc, int asize) {
-    Instruction *i = &fs->p->code[pc];
+    Instruction *inst = &fs->p->code[pc];
     asize = (asize != 0 ? csO_ceillog2(asize) + 1 : 0);
     cs_assert(asize <= MAX_SARG);
-    SETARG_S(i, 0, asize); /* set size (log2 - 1) */
+    SETARG_S(inst, 0, asize); /* set size (log2 - 1) */
 }
 
 
@@ -836,10 +927,10 @@ void csC_setarray(FunctionState *fs, int nelems, int tostore) {
 
 
 void csC_settablesize(FunctionState *fs, int pc, int hsize) {
-    Instruction *i = &fs->p->code[pc];
+    Instruction *inst = &fs->p->code[pc];
     hsize = (hsize != 0 ? csO_ceillog2(hsize) + 1 : 0);
     cs_assert(hsize <= MAX_SARG);
-    SETARG_S(i, 0, hsize);
+    SETARG_S(inst, 0, hsize);
 }
 
 
@@ -986,14 +1077,14 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
 }
 
 
-/* emit unary instruction; except logical not '!' */
+/* code unary instruction; except logical not '!' */
 static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op) {
     csC_exp2stack(fs, e);
     e->u.info = csC_emitI(fs, op);
 }
 
 
-/* emit logical not instruction */
+/* code logical not instruction */
 static void codenot(FunctionState *fs, ExpInfo *e) {
     cs_assert(!eisvar(e)); /* vars are already finalized */
     switch (e->et) {
@@ -1014,7 +1105,7 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
 }
 
 
-/* emit unary instruction */
+/* code unary instruction */
 void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr) {
     static const ExpInfo dummy = {EXP_INT, {0}, NOJMP, NOJMP};
     cs_assert(0 <= uopr && uopr < OPR_NOUNOPR);
@@ -1035,14 +1126,14 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr) {
 }
 
 
-/* emit test jump instruction */
+/* code test jump instruction */
 static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
     exp2stack(fs, e); /* ensure test operand is on the stack */
     return csC_emitILS(fs, testop, 0, cond);
 }
 
 
-/* emit test/jump instruction */
+/* code test/jump instruction */
 int csC_jmp(FunctionState *fs, OpCode jop) {
     if (jop == OP_TESTPOP) /* test jump? */
         freeslots(fs, 1); /* test removes one value */
@@ -1053,7 +1144,7 @@ int csC_jmp(FunctionState *fs, OpCode jop) {
 }
 
 
-/* emit 'OP_TEST' family of instructions */
+/* code 'OP_TEST' family of instructions */
 int csC_test(FunctionState *fs, OpCode testop, int cond) {
     int offset = csC_jmp(fs, testop);
     emitS(fs, cond);
@@ -1182,7 +1273,7 @@ c_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
 }
 
 
-/* emit generic binary instruction */
+/* code generic binary instruction */
 static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                     int line) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
@@ -1197,7 +1288,7 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 }
 
 
-/* emit binary instruction variant where second operator is constant */
+/* code binary instruction variant where second operator is constant */
 static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                      int line) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDK);
@@ -1211,7 +1302,7 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 }
 
 
-/* emit arithmetic binary op */
+/* code arithmetic binary op */
 static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                           Binopr opr, int flip, int line) {
     if (tonumeral(e2, NULL) && exp2K(fs, e2)) {
@@ -1224,7 +1315,7 @@ static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 }
 
 
-/* emit binary instruction variant where second operand is immediate value */
+/* code binary instruction variant where second operand is immediate value */
 static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                      int line) {
     int rhs = e2->u.i;
@@ -1238,7 +1329,7 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 }
 
 
-/* emit binary instruction trying both the immediate and constant variants */
+/* code binary instruction trying both the immediate and constant variants */
 static void codebinIK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                       int flip, int line) {
     if (isintKL(e2))
@@ -1248,7 +1339,7 @@ static void codebinIK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 }
 
 
-/* emit commutative binary instruction */
+/* code commutative binary instruction */
 static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                             Binopr opr, int line) {
     int flip = 0;
@@ -1260,7 +1351,7 @@ static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 }
 
 
-/* emit equality binary instruction */
+/* code equality binary instruction */
 static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int imm; /* immediate */
     int isflt;
@@ -1286,7 +1377,7 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 }
 
 
-/* emit binary ordering instruction */
+/* code binary ordering instruction */
 static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op;
     int isflt, imm;
@@ -1295,11 +1386,11 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     if (isnumKL(e2, &imm, &isflt)) {
         csC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
         op = binopr2op(opr, OPR_LT, OP_LTI);
-        goto emit;
+        goto code;
     } else if (isnumKL(e1, &imm, &isflt)) {
         csC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
         op = binopr2op(opr, OPR_LT, OP_GTI);
-emit:
+code:
         e1->u.info = csC_emitILS(fs, op, imm, encodesign(imm));
     } else {
         csC_exp2stack(fs, e1); /* ensure first operand is on stack */
@@ -1313,16 +1404,16 @@ emit:
 
 
 static Instruction *previousinstruction(FunctionState *fs) {
-    return &fs->p->code[fs->pclastop];
+    return &fs->p->code[fs->prevpc];
 }
 
 
 static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, int line) {
-    Instruction *i = previousinstruction(fs);
+    Instruction *inst = previousinstruction(fs);
     UNUSED(e2);
-    if (*i == OP_CONCAT) { /* 'e2' is a concatenation? */
-        int n = GETARG_L(i, 0);
-        SETARG_L(i, 0, n + 1); /* will concatenate one more element */
+    if (*inst == OP_CONCAT) { /* 'e2' is a concatenation? */
+        int n = GETARG_L(inst, 0);
+        SETARG_L(inst, 0, n + 1); /* will concatenate one more element */
     } else { /* 'e2' is not a concatenation */
         e1->u.info = csC_emitIL(fs, OP_CONCAT, 2);
         e1->et = EXP_FINEXPR;
@@ -1410,9 +1501,9 @@ static int finaltarget(Instruction *code, int i) {
 */
 void csC_finish(FunctionState *fs) {
     Proto *p = fs->p;
-    int i = 0;
-    while (i < fs->pc) {
-        Instruction *pc = &p->code[i];
+    Instruction *pc;
+    for (int i = 0; i < currPC; i += getOpSize(*pc)) {
+        pc = &p->code[i];
         switch (*pc) {
             case OP_RET: { /* check if need to close variables */
                 if (fs->needclose)
@@ -1427,6 +1518,5 @@ void csC_finish(FunctionState *fs) {
             }
             default: break;
         }
-        i += getOpSize(*pc);
     }
 }

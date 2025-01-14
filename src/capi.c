@@ -1379,7 +1379,7 @@ CS_API int cs_gc(cs_State *ts, int option, ...) {
         }
 	case CS_GCSTEP: { /* perform GC step */
             int data = va_arg(ap, int); /* kibibytes */
-            cs_mem gcdebt = 69; /* >0 to signal that it did an actual step */
+            c_smem gcdebt = 69; /* >0 to signal that it did an actual step */
             c_byte old_gcstop = gs->gcstop;
             if (data == 0) { /* do a regular step ? */
                 csG_setgcdebt(gs, 0);

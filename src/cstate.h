@@ -99,11 +99,11 @@
 #define CSI_TRY(ts,b,fn)    if (setjmp((b)->buf) == 0) { fn }
 
 /* jmpbuf for jumping out of protected function */
-typedef struct cs_ljmp {
-    struct cs_ljmp *prev;
+typedef struct c_ljmp {
+    struct c_ljmp *prev;
     csi_jmpbuf buf;
     volatile int status;
-} cs_ljmp;
+} c_ljmp;
 
 
 
@@ -112,7 +112,7 @@ typedef struct cs_ljmp {
  * ------------------------------------------------------------------------- */
 
 /* get CSript function prototype */
-#define cfProto(cf)     (clCSval(s2v((cf)->func.p))->p)
+#define cfProto(cf)         (clCSval(s2v((cf)->func.p))->p)
 
 
 /* 'cfstatus' bits */
@@ -157,8 +157,8 @@ typedef struct StringTable {
 typedef struct GState {
     cs_Alloc falloc; /* allocator */
     void *ud_alloc; /* userdata for 'falloc' */
-    cs_mem totalbytes; /* number of bytes allocated - gcgcdebt */
-    cs_mem gcdebt; /* number of bbytes not yet compensated by collector */
+    c_smem totalbytes; /* number of bytes allocated - gcgcdebt */
+    c_smem gcdebt; /* number of bbytes not yet compensated by collector */
     c_mem gcestimate; /* gcestimate of non-garbage memory in use */
     StringTable strtab; /* interned strings (weak refs) */
     TValue c_registry; /* global registry */
@@ -203,11 +203,11 @@ struct cs_State {
     ushort ncf; /* number of call frames in 'cf' list */
     int status; /* status code */
     ptrdiff_t errfunc; /* error handling function (on stack) */
-    cs_uint32 nCcalls; /* number of C calls */
+    c_uint32 nCcalls; /* number of C calls */
     GCObject *gclist;
     struct cs_State *thwouv; /* next thread with open upvalues */
     GState *gstate; /* shared global state */
-    cs_ljmp *errjmp; /* error recovery */
+    c_ljmp *errjmp; /* error recovery */
     SIndex stack; /* stack base */
     SIndex sp; /* first free slot in the 'stack' */
     SIndex stackend; /* end of 'stack' + 1 */

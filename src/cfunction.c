@@ -29,7 +29,8 @@ Proto *csF_newproto(cs_State *ts) {
     { p->p = NULL; p->sizep = 0; } /* function prototypes */
     { p->k = NULL; p->sizek = 0; } /* constants */
     { p->code = NULL; p->sizecode = 0; } /* code */
-    { p->linfo = NULL; p->sizelinfo = 0; } /* line information */
+    { p->lineinfo = NULL; p->sizelineinfo = 0; } /* rel line info */
+    { p->abslineinfo = NULL; p->sizeabslineinfo = 0; } /* abs line info */
     { p->locals = NULL; p->sizelocals = 0; } /* locals */
     { p->upvals = NULL; p->sizeupvals = 0; } /* upvalues */
     p->maxstack = 0;
@@ -295,7 +296,8 @@ void csF_free(cs_State *ts, Proto *p) {
     csM_freearray(ts, p->p, p->sizep);
     csM_freearray(ts, p->k, p->sizek);
     csM_freearray(ts, p->code, p->sizecode);
-    csM_freearray(ts, p->linfo, p->sizelinfo);
+    csM_freearray(ts, p->lineinfo, p->sizelineinfo);
+    csM_freearray(ts, p->abslineinfo, p->sizeabslineinfo);
     csM_freearray(ts, p->locals, p->sizelocals);
     csM_freearray(ts, p->upvals, p->sizeupvals);
     csM_free(ts, p);

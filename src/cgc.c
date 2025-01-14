@@ -125,8 +125,8 @@ void csG_fix(cs_State *ts, GCObject *o) {
 
 
 /* set collector gcdebt */
-void csG_setgcdebt(GState *gs, cs_mem debt) {
-    cs_mem total = gettotalbytes(gs);
+void csG_setgcdebt(GState *gs, c_smem debt) {
+    c_smem total = gettotalbytes(gs);
     cs_assert(total > 0);
     if (debt < total - MAXSMEM) /* 'totalbytes' would underflow ? */
         debt = total - MAXSMEM; /* set maximum relative debt possible */
@@ -586,7 +586,7 @@ static GCObject **sweeplist(cs_State *ts, GCObject **l, int nobjects,
 static int sweepstep(cs_State *ts, GCObject **nextlist, int nextstate) {
     GState *gs = G_(ts);
     if (gs->sweeppos) {
-        cs_mem old_gcdebt = gs->gcdebt;
+        c_smem old_gcdebt = gs->gcdebt;
         int count;
         gs->sweeppos = sweeplist(ts, gs->sweeppos, GCSWEEPMAX, &count);
         gs->gcestimate += gs->gcdebt - old_gcdebt; /* update estimate */
@@ -631,7 +631,7 @@ static void entersweep(cs_State *ts) {
 static void checksizes(cs_State *ts, GState *gs) {
     if (!gs->gcemergency) {
         if (gs->strtab.nuse < gs->strtab.size / 4) { /* strtab too big? */
-            cs_mem old_gcdebt = gs->gcdebt;
+            c_smem old_gcdebt = gs->gcdebt;
             csS_resize(ts, gs->strtab.size / 2);
             gs->gcestimate += gs->gcdebt - old_gcdebt; /* correct estimate */
         }
@@ -781,7 +781,7 @@ static void markGvmt(GState *gs) {
 
 static c_mem atomic(cs_State *ts) {
     GState *gs = G_(ts);
-    cs_mem work = 0;
+    c_smem work = 0;
     GCObject *grayagain = gs->grayagain;
     gs->grayagain = NULL;
     cs_assert(gs->weak == NULL); /* 'weak' unused */
@@ -817,9 +817,9 @@ static c_mem atomic(cs_State *ts) {
 ** it is divided by 'PAUSEADJ' which is 100.
 */
 static void setpause(GState *gs) {
-    cs_mem threshold, debt;
+    c_smem threshold, debt;
     int pause = getgcparam(gs->gcpause);
-    cs_mem estimate = gs->gcestimate / PAUSEADJ; /* adjust estimate */
+    c_smem estimate = gs->gcestimate / PAUSEADJ; /* adjust estimate */
     cs_assert(estimate > 0);
     threshold = (pause < MAXSMEM / estimate) /* can fit ? */
               ? estimate * pause /* yes */
@@ -968,8 +968,8 @@ void csG_rununtilstate(cs_State *ts, int statemask) {
 */
 static void step(cs_State *ts, GState *gs) {
     int stepmul = (getgcparam(gs->gcstepmul) | 1); /* avoid division by 0 */
-    cs_mem debt = (gs->gcdebt / WORK2MEM) * stepmul;
-    cs_mem stepsize = (gs->gcstepsize <= sizeof(cs_mem) * 8 - 2 /* fits ? */
+    c_smem debt = (gs->gcdebt / WORK2MEM) * stepmul;
+    c_smem stepsize = (gs->gcstepsize <= sizeof(c_smem) * 8 - 2 /* fits ? */
                     ? ((cast_mem(1) << gs->gcstepsize) / WORK2MEM) * stepmul
                     : MAXSMEM); /* overflows; keep maximum value */
     do { /* do until pause or enough negative debt */
