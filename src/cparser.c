@@ -229,9 +229,10 @@ static const BJmp *popbreakjmp(PatchList *l) {
 }
 
 
-/* add break jump to patch list (for backpatching) */
-static void addbreakjmp(Lexer *lx, PatchList *l, int jmp, int hasclose) {
+/* add break jump to last patch list */
+static void addbreakjmp(Lexer *lx, int jmp, int hasclose) {
     FunctionState *fs = lx->fs;
+    PatchList *l = gplist(lx); /* last patch list */
     BJmp bjmp;
     bjmp.jmp = jmp;
     bjmp.nactlocals = fs->nactlocals;
@@ -245,7 +246,6 @@ static void addbreakjmp(Lexer *lx, PatchList *l, int jmp, int hasclose) {
 static void addpatchlist(Lexer *lx) {
     ParserState *ps = lx->ps;
     PatchList pl;
-    // TODO: memory leak (patch list not properly freed?)
     pl.len = pl.size = 0; pl.arr = NULL;
     csM_growarray(lx->ts, ps->patches.arr, ps->patches.size, ps->patches.len,
                   MAXINT, "control flows", PatchList);
@@ -255,8 +255,8 @@ static void addpatchlist(Lexer *lx) {
 
 static void continuepop(FunctionState *fs) {
     int ncntl = (check_exp(fs->loopscope, is_genloop(fs->loopscope))
-                 ? NSTATEVARS /* keep 'foreach' local control variables */
-                 : 0); /* otherwise pop all locals */
+              ? NSTATEVARS /* keep 'foreach' local control variables */
+              : 0); /* not in 'foreach' (no control vars) */
     csC_pop(fs, fs->nactlocals - fs->loopscope->nactlocals - ncntl);
     /* pop switch values up to the loop scope */
     csC_pop(fs, fs->scope->nswscope - fs->loopscope->nswscope); 
@@ -267,7 +267,6 @@ static void continuepop(FunctionState *fs) {
 ** Remove local variables up to 'tolevel'.
 */
 static void removelocals(FunctionState *fs, int tolevel) {
-    printf("Removing %d locals\n", fs->nactlocals - tolevel);
     fs->lx->ps->actlocals.len -= (fs->nactlocals - tolevel);
     cs_assert(fs->lx->ps->actlocals.len >= 0);
     while (fs->nactlocals > tolevel) /* set debug information */
@@ -296,7 +295,6 @@ static int finishpatchlist(FunctionState *fs, int level) {
         }
     }
     cs_assert(l->len == 0); /* at this point it must be empty */
-    printf("Freeing patch list of size %zu\n", l->size * sizeof(*l->arr));
     csM_freearray(fs->lx->ts, l->arr, l->size); /* free patch list memory */
     if (hasclose) csC_emitIL(fs, OP_CLOSE, nvarstack(fs));
     return hasclose;
@@ -395,7 +393,6 @@ static void leavescope(FunctionState *fs) {
     int nactlocals = fs->nactlocals;
     int popn = nactlocals - s->nactlocals + is_switch(s);
     int hasclose = 0;
-    printf("LEAVING SCOPE {\n");
     removelocals(fs, s->nactlocals); /* remove scope locals */
     cs_assert(s->nactlocals == fs->nactlocals);
     if (haspatchlist(s)) /* have to fix break jumps? */
@@ -406,7 +403,6 @@ static void leavescope(FunctionState *fs) {
         csC_pop(fs, popn); /* pop locals and switch expression (if any) */
     } else if (!fs->lastwasret) /* last scope missing 'return'? */
         csC_ret(fs, 0, 0); /* 'return;' */
-    printf("}\n");
     fs->sp = stklevel; /* free scope stack slots */
     fs->scope = s->prev; /* go back to the previous scope (if any) */
 }
@@ -456,8 +452,6 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->nabslineinfo = 0;
     fs->nlocals = 0;
     fs->nupvals = 0;
-    lx->ps->patches.len = lx->ps->patches.size = 0;
-    lx->ps->patches.arr = NULL;
     fs->iwthabs = fs->needclose = fs->lastwasret = 0;
     p->source = lx->src;
     csG_objbarrier(lx->ts, p, p->source);
@@ -925,7 +919,7 @@ static void lastarrfield(FunctionState *fs, Constructor *c) {
 */
 static void arrayexp(Lexer *lx, ExpInfo *a) {
     FunctionState *fs = lx->fs;
-    int matchline = lx->line;
+    int line = lx->line;
     int pc = csC_emitIS(fs, OP_NEWARRAY, 0);
     Constructor c;
     c.u.a.na = c.u.a.tostore = 0;
@@ -939,7 +933,7 @@ static void arrayexp(Lexer *lx, ExpInfo *a) {
         closearrfield(fs, &c); /* try to close any pending array elements */
         arrfield(lx, &c); /* get array element */
     } while (match(lx, ',') || match(lx, ';'));
-    expectmatch(lx, ']', '[', matchline);
+    expectmatch(lx, ']', '[', line);
     lastarrfield(fs, &c);
     csC_setarraysize(fs, pc, c.u.a.na);
 }
@@ -987,7 +981,7 @@ static void tabfield(Lexer *lx, Constructor *c) {
 */
 static void tableexp(Lexer *lx, ExpInfo *t) {
     FunctionState *fs = lx->fs;
-    int matchline = lx->line;
+    int line = lx->line;
     int pc = csC_emitIS(fs, OP_NEWTABLE, 0);
     Constructor c;
     c.u.t.nh = 0;
@@ -999,7 +993,7 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
         if (check(lx, '}')) break; /* delimiter; no more field */
         tabfield(lx, &c);
     } while (match(lx, ',') || match(lx, ';'));
-    expectmatch(lx, '}', '{', matchline);
+    expectmatch(lx, '}', '{', line);
     csC_settablesize(fs, pc, c.u.t.nh);
 }
 
@@ -1062,7 +1056,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
         }
         case TK_FN: { /* functionexp */
             csY_scan(lx); /* skip 'fn' */
-            funcbody(lx, e, lx->line, 0);
+            funcbody(lx, e, 0, lx->line);
             return;
         }
         default: {
@@ -1165,31 +1159,31 @@ static const struct {
 **           | simpleexp '..' subexpr
 */
 static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
-    Binopr opr;
-    Unopr uopr;
+    Binopr op;
+    Unopr uop;
     enterCstack(lx);
-    uopr = getunopr(lx->t.tk);
-    if (uopr != OPR_NOUNOPR) {
+    uop = getunopr(lx->t.tk);
+    if (uop != OPR_NOUNOPR) {
+        int line = lx->line;
         csY_scan(lx); /* skip operator */
         subexpr(lx, e, UNARY_PRIORITY);
-        csC_unary(lx->fs, e, uopr);
-    } else {
+        csC_unary(lx->fs, e, uop, line);
+    } else
         simpleexp(lx, e);
-    }
-    opr = getbinopr(lx->t.tk);
-    while (opr != OPR_NOBINOPR && priority[opr].left > limit) {
+    op = getbinopr(lx->t.tk);
+    while (op != OPR_NOBINOPR && priority[op].left > limit) {
         ExpInfo e2;
         Binopr next;
         int line = lx->line;
         voidexp(&e2);
         csY_scan(lx); /* skip operator */
-        csC_prebinary(lx->fs, e, opr);
-        next = subexpr(lx, &e2, priority[opr].right);
-        csC_binary(lx->fs, e, &e2, opr, line);
-        opr = next;
+        csC_prebinary(lx->fs, e, op);
+        next = subexpr(lx, &e2, priority[op].right);
+        csC_binary(lx->fs, e, &e2, op, line);
+        op = next;
     }
     leaveCstack(lx);
-    return opr;
+    return op;
 }
 
 
@@ -1216,9 +1210,9 @@ static void decl_list(Lexer *lx, int blocktk) {
         if (check(lx, TK_RETURN) ||     /* if returnstm... */
             check(lx, TK_CONTINUE) ||   /* or continuestm... */
             check(lx, TK_BREAK)) {      /* ...or breakstm? */
-            stm(lx);                    /* then it must be the last statement */
-            return;                     /* done */
-        } else                          /* otherwise it is a declaration */
+            stm(lx); /* then it must be the last statement */
+            return;  /* done */
+        } else  /* otherwise it is a declaration */
             decl(lx);
     }
 }
@@ -1422,7 +1416,7 @@ static void localfn(Lexer *lx) {
     int fvar = fs->nactlocals; /* function's variable index */
     newlocalvar(lx, str_expectname(lx)); /* create new local... */
     adjustlocals(lx, 1); /* ...and register it */
-    funcbody(lx, &e, lx->line, 0);
+    funcbody(lx, &e, 0, lx->line);
     /* debug information will only see the variable after this point! */
     getlocalinfo(fs, fvar)->startpc = currPC;
 }
@@ -1486,10 +1480,10 @@ static int codemethod(FunctionState *fs, ExpInfo *var) {
 /* method ::= fn name funcbody */
 static int method(Lexer *lx) {
     ExpInfo var, dummy;
-    int defline = lx->line; /* method definition start line */
+    int line = lx->line;
     expectnext(lx, TK_FN);
     expname(lx, &var);
-    funcbody(lx, &dummy, defline, 1);
+    funcbody(lx, &dummy, 0, line);
     return codemethod(lx->fs, &var);
 }
 
@@ -1605,14 +1599,12 @@ static void codeclosure(Lexer *lx, ExpInfo *e) {
 
 
 /* funcbody ::= '(' paramlist ')' stmlist */
-static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod) {
+static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
     FunctionState newfs;
     Scope scope;
-    int matchline;
     newfs.p = addproto(lx);
-    newfs.p->defline = linenum;
+    newfs.p->defline = line;
     open_func(lx, &newfs, &scope);
-    matchline = lx->line; /* line where '(' is located */
     expectnext(lx, '(');
     if (ismethod) { /* is this method ? */
         addlocallit(lx, "self"); /* create 'self' */
@@ -1620,12 +1612,12 @@ static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod) {
         /* runtime ensures extra slot for 'self' and its value */
     }
     paramlist(lx);
-    expectmatch(lx, ')', '(', matchline);
-    matchline = lx->line; /* line where '{' is located */
+    expectmatch(lx, ')', '(', line);
+    line = lx->line; /* line where '{' is located */
     expectnext(lx, '{');
-    decl_list(lx, '}');
+    decl_list(lx, '}'); /* function body */
     newfs.p->deflastline = lx->line;
-    expectmatch(lx, '}', '{', matchline);
+    expectmatch(lx, '}', '{', line);
     codeclosure(lx, v);
     close_func(lx);
 }
@@ -1988,7 +1980,7 @@ static void ifstm(Lexer *lx) {
     int condpc;
     voidexp(&cond);
     csY_scan(lx); /* skip 'if' */
-    storecontext(lx->fs, &ctxbefore);
+    storecontext(fs, &ctxbefore);
     condpc = currPC;
     expectnext(lx, '(');
     expr(lx, &cond);
@@ -2285,7 +2277,7 @@ static void breakstm(Lexer *lx) {
     if (c_unlikely(cfs == NULL)) /* no control flow scope? */
         csP_semerror(lx, "'break' not in loop or switch statement");
     cs_assert(haspatchlist(cfs));
-    addbreakjmp(lx, gplist(lx), csC_jmp(fs, OP_BJMP), fs->scope->haveupval);
+    addbreakjmp(lx, csC_jmp(fs, OP_BJMP), fs->scope->haveupval);
     expectnext(lx, ';');
 }
 
@@ -2446,8 +2438,8 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
     Scope s;
     open_func(lx, fs, &s);
     setvararg(fs, 0); /* main function is always vararg */
-    csY_scan(lx); /* scan first token */
-    decl_list(lx, 0);
+    csY_scan(lx); /* scan for first token */
+    decl_list(lx, 0); /* parse main body */
     expect(lx, TK_EOS);
     close_func(lx);
 }

@@ -147,8 +147,6 @@ int csPR_parse(cs_State *ts, BuffReader *br, const char *name) {
     status = csPR_call(ts, parsepaux, &pd, savestack(ts, ts->sp.p), ts->errfunc);
     csR_freebuffer(ts, &pd.buff);
     csM_freearray(ts, pd.ps.actlocals.arr, pd.ps.actlocals.size);
-    printf("Freeing patch lists storage of size %zu\n",
-            pd.ps.patches.size * sizeof(*pd.ps.patches.arr));
     csM_freearray(ts, pd.ps.patches.arr, pd.ps.patches.size);
     csM_freearray(ts, pd.ps.pcdif.arr, pd.ps.pcdif.size);
     decnnyc(ts);

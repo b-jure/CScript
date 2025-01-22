@@ -234,10 +234,10 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 ** and assumes we do not have cases where the line difference is too high.
 */
 static void savelineinfo(FunctionState *fs, Proto *p, int line) {
-    const int difinvalid = ABSLINEINFO + 1;
-    const int pc = fs->prevpc;
-    const int sz = getOpSize(prevOP(fs));
     int linedif = line - fs->prevline;
+    int pc = fs->prevpc; /* last coded instruction */
+    int opsize = getOpSize(prevOP(fs)); /* size of last coded instruction */
+    cs_assert(pc < currPC); /* must of emitted instruction */
     if (c_abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS) {
         csM_growarray(fs->lx->ts, p->abslineinfo, p->sizeabslineinfo,
                       fs->nabslineinfo, MAXINT, "lines", AbsLineInfo);
@@ -246,11 +246,11 @@ static void savelineinfo(FunctionState *fs, Proto *p, int line) {
         linedif = ABSLINEINFO; /* signal the absolute line info entry */
         fs->iwthabs = 1; /* reset counter */
     }
-    csM_ensurearray(fs->lx->ts, p->lineinfo, p->sizelineinfo, pc, sz, MAXINT,
-                                "opcodes", c_sbyte);
+    csM_ensurearray(fs->lx->ts, p->lineinfo, p->sizelineinfo, pc, opsize,
+                    MAXINT, "opcodes", c_sbyte);
     p->lineinfo[pc] = linedif;
-    for (int i = 1; i < sz; i++) /* fill func args (if any) */
-        p->lineinfo[pc + i] = difinvalid;
+    while (--opsize) /* fill func args (if any) */
+        p->lineinfo[++pc] = ARGLINEINFO;
     fs->prevline = line; /* last line saved */
 }
 
@@ -342,7 +342,7 @@ static void emit3bytes(FunctionState *fs, int code) {
 static void codeinstruction(FunctionState *fs, Instruction i) {
     addpcdif(fs);
     emitbyte(fs, i);
-    savelineinfo(fs, fs->p, fs->lx->line);
+    savelineinfo(fs, fs->p, fs->lx->lastline);
 }
 
 
@@ -1078,9 +1078,10 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
 
 
 /* code unary instruction; except logical not '!' */
-static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op) {
+static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op, int line) {
     csC_exp2stack(fs, e);
     e->u.info = csC_emitI(fs, op);
+    csC_fixline(fs, line);
 }
 
 
@@ -1106,7 +1107,7 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
 
 
 /* code unary instruction */
-void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr) {
+void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
     static const ExpInfo dummy = {EXP_INT, {0}, NOJMP, NOJMP};
     cs_assert(0 <= uopr && uopr < OPR_NOUNOPR);
     csC_varexp2stack(fs, e);
@@ -1114,7 +1115,7 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr) {
         case OPR_UNM: case OPR_BNOT: {
             if (constfold(fs, e, &dummy, (uopr - OPR_UNM) + CS_OPUNM))
                 break; /* folded */
-            codeunary(fs, e, unopr2op(uopr));
+            codeunary(fs, e, unopr2op(uopr), line);
             break;
         }
         case OPR_NOT:  {

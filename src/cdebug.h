@@ -27,6 +27,13 @@
 
 
 /*
+** Mark for entries in 'lineinfo' array that containt instruction
+** arguments.
+*/
+#define ARGLINEINFO     (ABSLINEINFO + 1)
+
+
+/*
 ** MAXimum number of successive Instructions WiTHout ABSolute line
 ** information. (A power of two allows fast divisions.)
 */

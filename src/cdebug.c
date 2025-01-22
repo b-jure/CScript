@@ -42,7 +42,7 @@
 static int getbaseline(const Proto *p, int pc, int *basepc) {
     if (p->sizeabslineinfo == 0 || pc < p->abslineinfo[0].pc) {
         *basepc = 0; /* start from the beginning */
-        return p->defline; /* (from the line this function was defined) */
+        return p->defline + p->lineinfo[0]; /* first instruction line */
     } else {
         int i = cast_uint(pc) / MAXIWTHABS - 1; /* get an estimate */
         /* estimate must be a lower bound of the correct base */
@@ -62,19 +62,16 @@ static int getbaseline(const Proto *p, int pc, int *basepc) {
 ** desired instruction.
 */
 int csD_getfuncline(const Proto *p, int pc) {
-    if (p->lineinfo == NULL) { /* no debug information? */
-        cs_assert(0); /* (currently CScript always contains debug info) */
-        return -1;
-    } else {
-        int basepc;
-        int baseline = getbaseline(p, pc, &basepc);
-        while (basepc < pc) { /* walk until given instruction */
-            basepc += getOpSize(p->code[basepc]);
-            cs_assert(p->lineinfo[basepc] != ABSLINEINFO);
-            baseline += p->lineinfo[basepc]; /* correct line */
-        }
-        return baseline;
+    int basepc;
+    cs_assert(p->lineinfo != NULL); /* must have debug information */
+    int baseline = getbaseline(p, pc, &basepc);
+    while (basepc < pc) { /* walk until given instruction */
+        basepc += getOpSize(p->code[basepc]); /* next instruction pc */
+        cs_assert(p->lineinfo[basepc] != ABSLINEINFO);
+        cs_assert(p->lineinfo[basepc] != ARGLINEINFO);
+        baseline += p->lineinfo[basepc]; /* correct line */
     }
+    return baseline;
 }
 
 

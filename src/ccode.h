@@ -369,7 +369,7 @@ CSI_FUNC void csC_getfield(FunctionState *fs, ExpInfo *var,
                               ExpInfo *keystr, int super);
 CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);
-CSI_FUNC void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr);
+CSI_FUNC void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr, int line);
 CSI_FUNC int csC_jmp(FunctionState *fs, OpCode jop);
 CSI_FUNC void csC_concatjl(FunctionState *fs, int *l1, int l2);
 CSI_FUNC void csC_patch(FunctionState *fs, int pc, int target);

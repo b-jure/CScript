@@ -303,8 +303,10 @@ static int csB_warn(cs_State *ts) {
 
 static int csB_len(cs_State *ts) {
     int t = cs_type(ts, 0);
-    csL_check_arg(ts, t == CS_TARRAY || t == CS_THTABLE ||
-                      t == CS_TINSTANCE || t == CS_TSTRING, 0,
+    csL_expect_arg(ts, t == CS_TARRAY ||
+                       t == CS_THTABLE ||
+                       t == CS_TINSTANCE ||
+                       t == CS_TSTRING, 0,
                       "array, hashtable, instance or string");
     cs_push_integer(ts, cs_len(ts, 0));
     return 1;

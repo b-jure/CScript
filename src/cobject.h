@@ -567,8 +567,8 @@ typedef struct OClass {
 ** Information of the upvalues for function prototypes
 */
 typedef struct UpValInfo {
-    OString *name;
-    int idx; /* index in stack or outer function local var list */
+    OString *name;  /* upvalue name */
+    int idx;        /* index in stack or outer function local var list */
     c_byte onstack; /* is it on stack */
     c_byte kind;
 } UpValInfo;
@@ -579,9 +579,9 @@ typedef struct UpValInfo {
 ** (used for debug information).
 */
 typedef struct LVarInfo {
-    OString *name;
-    int startpc; /* point where variable is in scope */
-    int endpc; /* point where variable is out of scope */
+    OString *name;  /* local name */
+    int startpc;    /* point where variable is in scope */
+    int endpc;      /* point where variable is out of scope */
 } LVarInfo;
 
 
@@ -606,26 +606,26 @@ typedef struct AbsLineInfo {
 */
 typedef struct Proto {
     ObjectHeader;
-    c_byte isvararg;
-    int arity; /* number of fixed (named) function parameters */
-    int maxstack; /* max stack size for this function */
-    int sizep; /* size of 'p' */
-    int sizek; /* size of 'k' */
-    int sizecode; /* size of 'code' */
-    int sizeupvals; /* size of 'upvals' */
-    int sizelineinfo; /* size of 'lineinfo' */
-    int sizeabslineinfo; /* size of 'abslineinfo' */
-    int sizelocals; /* size of 'locals' */
-    int defline; /* function definition line (debug information) */
-    int deflastline; /* function definition end line (debug information) */
-    struct Proto **p; /* functions defined inside of this function */
-    TValue *k; /* constant values */
-    Instruction *code; /* bytecode */
-    UpValInfo *upvals; /* debug information for upvalues */
-    c_sbyte *lineinfo; /* information about source lines (debug information) */
+    c_byte isvararg;        /* true if this function accepts extra params */
+    int arity;              /* number of fixed (named) function parameters */
+    int maxstack;           /* max stack size for this function */
+    int sizep;              /* size of 'p' */
+    int sizek;              /* size of 'k' */
+    int sizecode;           /* size of 'code' */
+    int sizeupvals;         /* size of 'upvals' */
+    int sizelineinfo;       /* size of 'lineinfo' */
+    int sizeabslineinfo;    /* size of 'abslineinfo' */
+    int sizelocals;         /* size of 'locals' */
+    int defline;            /* function definition line (debug) */
+    int deflastline;        /* function definition last line (debug) */
+    struct Proto **p;       /* list of funcs defined inside of this function */
+    TValue *k;              /* constant values */
+    Instruction *code;      /* bytecode */
+    UpValInfo *upvals;      /* debug information for upvalues */
+    c_sbyte *lineinfo;      /* information about source lines (debug) */
     AbsLineInfo *abslineinfo; /* idem */
-    LVarInfo *locals; /* information about local variables (debug information) */
-    OString *source; /* source name (debug information) */
+    LVarInfo *locals;       /* information about local variables (debug) */
+    OString *source;        /* source name (debug information) */
     GCObject *gclist;
 } Proto;
 
