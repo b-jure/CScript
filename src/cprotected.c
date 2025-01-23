@@ -48,11 +48,6 @@ c_noret csPR_throw(cs_State *ts, int errcode) {
 }
 
 
-
-/* -------------------------------------------------------------------------
- * Protected call
- * ------------------------------------------------------------------------- */
-
 int csPR_rawcall(cs_State *ts, ProtectedFn fn, void *ud) {
     c_uint32 old_nCcalls = ts->nCcalls;
     struct c_ljmp lj;
@@ -124,7 +119,6 @@ struct PParseData {
 };
 
 
-#include <stdio.h>
 /* auxiliary function to call 'csP_pparse' in protected mode */
 static void parsepaux(cs_State *ts, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);
@@ -141,14 +135,12 @@ int csPR_parse(cs_State *ts, BuffReader *br, const char *name) {
     csR_buffinit(&pd.buff); /* 'buff' */
     pd.ps.actlocals.len = pd.ps.actlocals.size = 0; pd.ps.actlocals.arr = NULL;
     pd.ps.patches.len = pd.ps.patches.size = 0; pd.ps.patches.arr = NULL;
-    pd.ps.pcdif.len = pd.ps.pcdif.size = 0; pd.ps.pcdif.arr = NULL;
     pd.ps.cs = NULL;
     pd.source = name;
     status = csPR_call(ts, parsepaux, &pd, savestack(ts, ts->sp.p), ts->errfunc);
     csR_freebuffer(ts, &pd.buff);
     csM_freearray(ts, pd.ps.actlocals.arr, pd.ps.actlocals.size);
     csM_freearray(ts, pd.ps.patches.arr, pd.ps.patches.size);
-    csM_freearray(ts, pd.ps.pcdif.arr, pd.ps.pcdif.size);
     decnnyc(ts);
     return status;
 }

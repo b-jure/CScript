@@ -56,13 +56,13 @@
 
 
 /*
-** Break jump used to indicate end of the patch list.
+** Jump used to indicate end of the patch list.
 */
-static const BJmp dummyjmp = { NOJMP, 0, 0 };
+static const Jump dummyjmp = {NOJMP, 0, {0}};
 
 
 /* check if 'BJmp' is a dummy :-) */
-#define isdummy(jmp)        ((jmp) == &dummyjmp)
+#define isdummy(j)        ((j) == &dummyjmp)
 
 
 
@@ -134,6 +134,7 @@ static void rmpatchlists(Lexer *lx, int limit) {
 
 static void storecontext(FunctionState *fs, FuncContext *ctx) {
     ParserState *ps = fs->lx->ps;
+    ctx->ninstpc = fs->ninstpc;
     ctx->loopstart = fs->loopstart;
     ctx->prevpc = fs->prevpc;
     ctx->prevline = fs->prevline;
@@ -147,8 +148,7 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
     ctx->nupvals = fs->nupvals;
     ctx->npatches = ps->patches.len;
     if (ctx->npatches > 0) /* have patch list */
-        ctx->nbjmp = gplist(fs->lx)->len;
-    ctx->npcdif = ps->pcdif.len;
+        ctx->njumps = gplist(fs->lx)->len;
     ctx->iwthabs = fs->iwthabs;
     ctx->needclose = fs->needclose;
     ctx->lastwasret = fs->lastwasret;
@@ -157,6 +157,7 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
 
 static void loadcontext(FunctionState *fs, FuncContext *ctx) {
     ParserState *ps = fs->lx->ps;
+    fs->ninstpc = ctx->ninstpc;
     fs->loopstart = ctx->loopstart;
     fs->prevpc = ctx->prevpc;
     fs->prevline = ctx->prevline;
@@ -171,8 +172,7 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
     rmpatchlists(fs->lx, ctx->npatches); /* remove extra patch lists */
     cs_assert(ps->patches.len == ctx->npatches);
     if (ctx->npatches > 0)
-        gplist(fs->lx)->len = ctx->nbjmp;
-    ps->pcdif.len = ctx->npcdif;
+        gplist(fs->lx)->len = ctx->njumps;
     fs->iwthabs = ctx->iwthabs;
     fs->needclose = ctx->needclose;
     fs->lastwasret = ctx->lastwasret;
@@ -221,7 +221,7 @@ static PatchList *patchlistpop(Lexer *lx) {
 
 
 /* pop last pending jump from patch list */
-static const BJmp *popbreakjmp(PatchList *l) {
+static const Jump *poplistjump(PatchList *l) {
     if (l->len > 0)
         return &l->arr[--l->len];
     else
@@ -229,16 +229,19 @@ static const BJmp *popbreakjmp(PatchList *l) {
 }
 
 
-/* add break jump to last patch list */
-static void addbreakjmp(Lexer *lx, int jmp, int hasclose) {
+/* add jump to last patch list */
+static void addlistjump(Lexer *lx, OpCode jop, int extra) {
     FunctionState *fs = lx->fs;
     PatchList *l = gplist(lx); /* last patch list */
-    BJmp bjmp;
-    bjmp.jmp = jmp;
-    bjmp.nactlocals = fs->nactlocals;
-    bjmp.hasclose = hasclose;
-    csM_growarray(lx->ts, l->arr, l->size, l->len, MAXINT, "breaks", BJmp);
-    l->arr[l->len++] = bjmp;
+    Jump j;
+    j.jmp = csC_jmp(fs, jop);
+    j.nactlocals = fs->nactlocals;
+    if (jop == OP_JMP)
+        j.e.iscontinue = 1;
+    else
+        j.e.hasclose = extra;
+    csM_growarray(lx->ts, l->arr, l->size, l->len, MAXINT, "breaks", Jump);
+    l->arr[l->len++] = j;
 }
 
 
@@ -257,6 +260,7 @@ static void continuepop(FunctionState *fs) {
     int ncntl = (check_exp(fs->loopscope, is_genloop(fs->loopscope))
               ? NSTATEVARS /* keep 'foreach' local control variables */
               : 0); /* not in 'foreach' (no control vars) */
+    /* pop locals */
     csC_pop(fs, fs->nactlocals - fs->loopscope->nactlocals - ncntl);
     /* pop switch values up to the loop scope */
     csC_pop(fs, fs->scope->nswscope - fs->loopscope->nswscope); 
@@ -276,22 +280,29 @@ static void removelocals(FunctionState *fs, int tolevel) {
 
 static int finishpatchlist(FunctionState *fs, int level) {
     PatchList *l = patchlistpop(fs->lx);
-    const BJmp *bjmp = popbreakjmp(l);
+    const Jump *j = poplistjump(l);
     int hasclose = 0;
-    if (!isdummy(bjmp)) { /* have break jump? */
-        if (bjmp->jmp == fs->prevpc) { /* no offset break jump? */
-            cs_assert(fs->p->code[fs->prevpc] == OP_BJMP);
-            currPC -= getOpSize(OP_BJMP); /* adjust pc */
-            bjmp = popbreakjmp(l); /* get the next break (if any) */
+    if (!isdummy(j)) { /* have jump? */
+        Instruction *jmp = &fs->p->code[j->jmp];
+        if (j->jmp == fs->prevpc) { /* no offset jump? */
+            cs_assert(fs->p->code[fs->prevpc] == *jmp);
+            currPC -= getOpSize(*jmp); /* adjust pc */
+            j = poplistjump(l); /* get the next jump (if any) */
         }
-        while (!isdummy(bjmp)) { /* (maybe removed last and only break) */
-            Instruction *jmp = &fs->p->code[bjmp->jmp];
-            int popn = bjmp->nactlocals - level;
-            hasclose |= bjmp->hasclose;
-            cs_assert(bjmp->nactlocals >= level);
-            csC_patch(fs, bjmp->jmp, currPC);   /* fix jump offset... */
-            SETARG_L(jmp, 1, popn);             /* ...and pop count */
-            bjmp = popbreakjmp(l);
+        while (!isdummy(j)) { /* (maybe removed last and only jump) */
+            jmp = &fs->p->code[j->jmp];
+            if (*jmp == OP_JMP) { /* 'continue' jump? */ 
+                /* 'continue' already performed potential close/pop */
+                cs_assert(fs->loopscope && fs->loopstart != NOJMP);
+                csC_patch(fs, j->jmp, fs->loopstart);
+            } else { /* otherwise 'break' jump */
+                cs_assert(*jmp == OP_BJMP);
+                hasclose |= j->e.hasclose;
+                csC_patchtohere(fs, j->jmp);
+                SETARG_L(jmp, 1, j->nactlocals - level);
+            }
+            cs_assert(j->nactlocals >= level);
+            j = poplistjump(l);
         }
     }
     cs_assert(l->len == 0); /* at this point it must be empty */
@@ -395,7 +406,7 @@ static void leavescope(FunctionState *fs) {
     int hasclose = 0;
     removelocals(fs, s->nactlocals); /* remove scope locals */
     cs_assert(s->nactlocals == fs->nactlocals);
-    if (haspatchlist(s)) /* have to fix break jumps? */
+    if (haspatchlist(s)) /* have to fix jumps? */
         hasclose = finishpatchlist(fs, nactlocals);
     if (s->prev) { /* not main function scope? */
         if (!hasclose && s->haveupval) /* still need to close? */
@@ -450,6 +461,7 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->np = 0;
     fs->nk = 0;
     fs->nabslineinfo = 0;
+    fs->ninstpc = 0;
     fs->nlocals = 0;
     fs->nupvals = 0;
     fs->iwthabs = fs->needclose = fs->lastwasret = 0;
@@ -476,6 +488,7 @@ static void close_func(Lexer *lx) {
     csM_shrinkarray(ts, p->lineinfo, p->sizelineinfo, currPC, c_sbyte);
     csM_shrinkarray(ts, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
                         AbsLineInfo);
+    csM_shrinkarray(ts, p->instpc, p->sizeinstpc, fs->ninstpc, int);
     csM_shrinkarray(ts, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
     csM_shrinkarray(ts, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev; /* go back to enclosing function (if any) */
@@ -2106,7 +2119,6 @@ static void foreachstm(Lexer *lx) {
         newlocalvar(lx, str_expectname(lx));
         nvars++;
     }
-    // TODO: locals not registered properly by the parser
     expectnext(lx, TK_IN);
     line = lx->line;
     adjustassign(lx, NSTATEVARS, forexplist(lx, &e, NSTATEVARS), &e);
@@ -2118,14 +2130,9 @@ static void foreachstm(Lexer *lx) {
     adjustlocals(lx, nvars); /* register delcared locals */
     csC_reserveslots(fs, nvars); /* space for declared locals */
     stm(lx); /* body */
-    fs->loopstart = currPC;
-    /* TODO:
-       - continue statement jump needs to be patched to here
-       - this would probably require continue jumps to be included in patch list
-         meaning that we should convert 'continue' into 'break' when in generic loop.
-    */
     leavescope(fs); /* leave declared locals scope */
     patchforjmp(fs, prep, currPC, 0);
+    fs->loopstart = currPC; /* generic loop starts here */
     csC_emitILL(fs, OP_FORCALL, base, nvars);
     csC_fixline(fs, line);
     forend = csC_emitILLL(fs, OP_FORLOOP, base, 0, nvars);
@@ -2237,20 +2244,21 @@ static void loopstm(Lexer *lx) {
 /* continuestm ::= 'continue' ';' */
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    int old_sp = fs->sp;
-    int jmp;
+    int sp = fs->sp;
     csY_scan(lx); /* skip 'continue' */
     if (c_unlikely(fs->loopscope == NULL)) /* not in a loop? */
-        csP_semerror(lx, "'continue' not in loop statement");
-    cs_assert(fs->loopstart != NOJMP); /* must have loop start offset */
-    continuepop(fs);
-    fs->sp = old_sp; /* restore old 'sp', as parser is not jumping back */
-    if (fs->scope->havetbcvar) { /* have to close upvalues? */
+        csP_semerror(lx, "'continue' not in a loop statement");
+    cs_assert(fs->loopstart != NOJMP);
+    continuepop(fs); /* pop leftover values */
+    fs->sp = sp; /* restore 'sp' (might have dead code) */
+    if (fs->scope->haveupval) { /* have to close upvalues? */
         int stklevel = stacklevel(fs, fs->loopscope->nactlocals);
-        csC_emitIL(fs, OP_CLOSE, stklevel); /* close them */
+        csC_emitIL(fs, OP_CLOSE, stklevel);
     }
-    jmp = csC_jmp(fs, OP_JMPS); /* jump backwards... */
-    csC_patch(fs, jmp, fs->loopstart); /* ...to start of the loop */
+    if (is_genloop(fs->loopscope)) /* generic loop? */
+        addlistjump(lx, OP_JMP, 0);
+    else /* otherwise regular loop */
+        csC_patch(fs, csC_jmp(fs, OP_JMPS), fs->loopstart);
     expectnext(lx, ';');
 }
 
@@ -2277,7 +2285,7 @@ static void breakstm(Lexer *lx) {
     if (c_unlikely(cfs == NULL)) /* no control flow scope? */
         csP_semerror(lx, "'break' not in loop or switch statement");
     cs_assert(haspatchlist(cfs));
-    addbreakjmp(lx, csC_jmp(fs, OP_BJMP), fs->scope->haveupval);
+    addlistjump(lx, OP_BJMP, fs->scope->haveupval);
     expectnext(lx, ';');
 }
 

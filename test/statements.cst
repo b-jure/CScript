@@ -278,8 +278,9 @@ local array_iter = fn (arr) {  // foreach generator
             return nil;
     };
 };
-array_iter(transactions);
+//array_iter(transactions);
 foreach i, point in array_iter(points) {
+    if (i == 0) continue;
     print("points[" .. tostring(i) .. "] = " .. tostring(point));
 }
 

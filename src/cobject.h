@@ -615,6 +615,7 @@ typedef struct Proto {
     int sizeupvals;         /* size of 'upvals' */
     int sizelineinfo;       /* size of 'lineinfo' */
     int sizeabslineinfo;    /* size of 'abslineinfo' */
+    int sizeinstpc;         /* size of 'instpc' */
     int sizelocals;         /* size of 'locals' */
     int defline;            /* function definition line (debug) */
     int deflastline;        /* function definition last line (debug) */
@@ -624,6 +625,7 @@ typedef struct Proto {
     UpValInfo *upvals;      /* debug information for upvalues */
     c_sbyte *lineinfo;      /* information about source lines (debug) */
     AbsLineInfo *abslineinfo; /* idem */
+    int *instpc;            /* list of pc's for each instruction (debug) */
     LVarInfo *locals;       /* information about local variables (debug) */
     OString *source;        /* source name (debug information) */
     GCObject *gclist;

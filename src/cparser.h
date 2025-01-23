@@ -8,7 +8,6 @@
 #define CPARSER_H
 
 
-#include "cbits.h"
 #include "clexer.h"
 #include "cobject.h"
 
@@ -131,18 +130,21 @@ typedef union LVar {
 } LVar;
 
 
-typedef struct BJmp {
+typedef struct Jump {
     int jmp;
     int nactlocals;
-    int hasclose;
-} BJmp;
+    union { /* extra information */
+        int hasclose;   /* true if has to close open upvalues */
+        int iscontinue; /* true if this is continue jump (generic loop) */
+    } e;
+} Jump;
 
 
 /* list of jump instructions to patch */
 typedef struct PatchList {
     int len;
     int size;
-    BJmp *arr;
+    Jump *arr;
 } PatchList;
 
 
@@ -167,10 +169,6 @@ typedef struct ParserState {
         int len; int size;
         PatchList *arr;
     } patches;
-    struct { /* list of coded instructions offsets */
-        int len; int size;
-        c_byte *arr;
-    } pcdif;
     struct ClassState *cs;
 } ParserState;
 
@@ -179,6 +177,7 @@ typedef struct ParserState {
 ** Function state context (for optimizations); snapshot of state fields.
 */
 typedef struct FuncContext {
+    int ninstpc;
     int loopstart;
     int prevpc;
     int prevline;
@@ -191,8 +190,7 @@ typedef struct FuncContext {
     int nlocals;
     int nupvals;
     int npatches;
-    int nbjmp;
-    int npcdif;
+    int njumps;
     c_byte iwthabs;
     c_byte needclose;
     c_byte lastwasret;
@@ -207,21 +205,22 @@ typedef struct FunctionState {
     struct Scope *scope;        /* scope information */
     struct Scope *loopscope;    /* innermost loop scope */
     struct Scope *switchscope;  /* innermost switch scope */
-    int firstlocal;    /* index of first local in 'lvars' */
-    int loopstart;     /* innermost loop start offset */
-    int prevpc;        /* previous instruction pc */
-    int prevline;      /* previous instruction line */
-    int sp;            /* first free compiler stack index */
-    int nactlocals;    /* number of active local variables */
-    int np;            /* number of elements in 'p' */
-    int nk;            /* number of elements in 'k' */
-    int pc;            /* number of elements in 'code' (equialent to 'ncode') */
-    int nabslineinfo;  /* number of elements in 'abslineinfo' */
-    int nlocals;       /* number of elements in 'locals' */
-    int nupvals;       /* number of elements in 'upvals' */
-    c_byte iwthabs;    /* instructions issued since last absolute line info */
-    c_byte needclose;  /* true if needs to close upvalues before returning */
-    c_byte lastwasret; /* last statement is 'return' */
+    int firstlocal;     /* index of first local in 'lvars' */
+    int loopstart;      /* innermost loop start offset */
+    int prevpc;         /* previous instruction pc */
+    int prevline;       /* previous instruction line */
+    int sp;             /* first free compiler stack index */
+    int nactlocals;     /* number of active local variables */
+    int np;             /* number of elements in 'p' */
+    int nk;             /* number of elements in 'k' */
+    int pc;             /* number of elements in 'code' (equialent to 'ncode') */
+    int nabslineinfo;   /* number of elements in 'abslineinfo' */
+    int ninstpc;        /* number of elements in 'instpc' */
+    int nlocals;        /* number of elements in 'locals' */
+    int nupvals;        /* number of elements in 'upvals' */
+    c_byte iwthabs;     /* instructions issued since last absolute line info */
+    c_byte needclose;   /* true if needs to close upvalues before returning */
+    c_byte lastwasret;  /* last statement is 'return' */
 } FunctionState;
 
 

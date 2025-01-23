@@ -236,7 +236,7 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 static void savelineinfo(FunctionState *fs, Proto *p, int line) {
     int linedif = line - fs->prevline;
     int pc = fs->prevpc; /* last coded instruction */
-    int opsize = getOpSize(prevOP(fs)); /* size of last coded instruction */
+    int opsize = getOpSize(p->code[pc]); /* size of last coded instruction */
     cs_assert(pc < currPC); /* must of emitted instruction */
     if (c_abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS) {
         csM_growarray(fs->lx->ts, p->abslineinfo, p->sizeabslineinfo,
@@ -276,29 +276,16 @@ static void removelastlineinfo(FunctionState *fs) {
 }
 
 
-/* 
-** Removes last coded instruction difference stored in 'pcdif'.
-*/
-static void rmpcdif(FunctionState *fs) {
-    ParserState *ps = fs->lx->ps;
-    int diff = check_exp(ps->pcdif.len > 0, ps->pcdif.arr[--ps->pcdif.len]);
-    cs_assert(diff <= MAXOPSIZE);
-    cs_assert(currPC > fs->prevpc);
-    currPC = fs->prevpc;
-    fs->prevpc -= diff;
-}
-
-
-/* 
-** Adds new instruction difference into 'pcdif'.
-*/
-static void addpcdif(FunctionState *fs) {
-    ParserState *ps = fs->lx->ps;
-    int dif = (currPC != 0 ? getOpSize(prevOP(fs)) : 0);
-    csM_growarray(fs->lx->ts, ps->pcdif.arr, ps->pcdif.size, ps->pcdif.len,
-                  MAXINT, "code", c_byte);
-    ps->pcdif.arr[ps->pcdif.len++] = cast_byte(dif);
-    fs->prevpc = currPC; /* set current pc as last coded pc */
+static void removeinstpc(FunctionState *fs) {
+    Proto *p = fs->p;
+    int pc = check_exp(fs->ninstpc > 0, p->instpc[--fs->ninstpc]);
+    currPC = pc;
+    if (fs->ninstpc > 0)
+        fs->prevpc = p->instpc[fs->ninstpc - 1];
+    else {
+        fs->prevpc = pc;
+        cs_assert(currPC == 0);
+    }
 }
 
 
@@ -308,7 +295,7 @@ static void addpcdif(FunctionState *fs) {
 */
 static void removelastinstruction(FunctionState *fs) {
     removelastlineinfo(fs);
-    rmpcdif(fs);
+    removeinstpc(fs);
 }
 
 
@@ -324,34 +311,42 @@ void csC_fixline(FunctionState *fs, int line) {
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->ts, p->code, p->sizecode, fs->pc, MAXINT, "code",
+    csM_growarray(fs->lx->ts, p->code, p->sizecode, currPC, MAXINT, "code",
                   Instruction);
-    p->code[fs->pc++] = cast_byte(code);
+    p->code[currPC++] = cast_byte(code);
 }
 
 
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_ensurearray(fs->lx->ts, p->code, p->sizecode, fs->pc, 3, MAXINT,
+    csM_ensurearray(fs->lx->ts, p->code, p->sizecode, currPC, 3, MAXINT,
                     "code", Instruction);
-    set3bytes(&p->code[fs->pc], code);
-    fs->pc += SIZEARGL;
+    set3bytes(&p->code[currPC], code);
+    currPC += SIZEARGL;
 }
 
 
-static void codeinstruction(FunctionState *fs, Instruction i) {
-    addpcdif(fs);
+static void addinstpc(FunctionState *fs) {
+    Proto *p = fs->p;
+    csM_growarray(fs->lx->ts, p->instpc, p->sizeinstpc, fs->ninstpc, MAXINT,
+                  "code", int);
+    fs->prevpc = p->instpc[fs->ninstpc++] = currPC;
+}
+
+
+static int codeinstruction(FunctionState *fs, Instruction i) {
+    addinstpc(fs);
     emitbyte(fs, i);
     savelineinfo(fs, fs->p, fs->lx->lastline);
+    return currPC - 1;
 }
 
 
 /* code instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
     cs_assert(SIZEINSTR == sizeof(Instruction));
-    cs_assert(fs->prevpc <= fs->pc);
-    codeinstruction(fs, i);
-    return currPC - 1;
+    cs_assert(fs->prevpc <= currPC);
+    return codeinstruction(fs, i);
 }
 
 
@@ -1137,7 +1132,7 @@ static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
 /* code test/jump instruction */
 int csC_jmp(FunctionState *fs, OpCode jop) {
     if (jop == OP_TESTPOP) /* test jump? */
-        freeslots(fs, 1); /* test removes one value */
+        freeslots(fs, 1); /* test pops one value */
     if (jop == OP_BJMP) /* break jump? */
         return csC_emitILL(fs, OP_BJMP, 0, 0);
     else /* otherwise test or regular jump */

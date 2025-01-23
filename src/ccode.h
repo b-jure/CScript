@@ -293,8 +293,8 @@ enum OpFormat { /* ORDER OPFMT */
 */
 CSI_DEC(const c_byte csC_opProp[NUM_OPCODES];)
 
-#define getOpFormat(p)      (csC_opProp[p] & 0x0F)
-#define testJProp(p)        (csC_opProp[p] & (1 << 4))
+#define getOpFormat(i)      (csC_opProp[i] & 0x0F)
+#define testJProp(i)        (csC_opProp[i] & (1 << 4))
 
 /* creates OpCode property */
 #define opProp(j,f)         (((j) << 4) | (f))
@@ -306,17 +306,17 @@ CSI_DEC(const c_byte csC_opProp[NUM_OPCODES];)
 /* Instruction format sizes in bytes (aka as bytecode) */
 CSI_DEC(const c_byte csC_opSize[FormatN];)
 
-#define getOpSize(p)        csC_opSize[getOpFormat(p)]
+#define getOpSize(i)        csC_opSize[getOpFormat(i)]
 
 CSI_DEC(const char *csC_opSizeFormat[FormatN];)
 
-#define getOpSizeFormat(p)  csC_opSizeFormat[getOpFormat(p)]
+#define getOpSizeFormat(i)  csC_opSizeFormat[getOpFormat(i)]
 
 
 /* OpCode names table */ 
 CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
-#define getOpName(p)        csC_opName[p]
+#define getOpName(i)        csC_opName[i]
 
 
 /* 

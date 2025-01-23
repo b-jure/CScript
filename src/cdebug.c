@@ -28,6 +28,32 @@
 
 
 /*
+** Gets the Number of instructions up to 'pc' (binary search).
+** As CSCript implementation is using stack-based architecture for its VM,
+** we then also store additional pc for each instruction emitted for a
+** faster lookup. This is required in order to properly calculate estimate
+** when fetching base line.
+*/
+static int Ninstuptopc(const Proto *p, int pc) {
+    int l = 0;
+    int h = p->sizeinstpc - 1;
+    int m, instpc;
+    cs_assert(h >= 0);
+    while (l <= h) {
+        m = l + ((h - l) / 2); /* avoid potential overflow */
+        instpc = p->instpc[m];
+        if (pc < instpc)
+            h = m - 1;
+        else if (instpc < pc)
+            l = m + 1;
+        else
+            return m;
+    }
+    cs_assert(0); /* 'pc' does not correspond to any instruction */
+}
+
+
+/*
 ** Get a "base line" to find the line corresponding to an instruction.
 ** Base lines are regularly placed at MAXIWTHABS intervals, so usually
 ** an integer division gets the right place. When the source file has
@@ -44,7 +70,7 @@ static int getbaseline(const Proto *p, int pc, int *basepc) {
         *basepc = 0; /* start from the beginning */
         return p->defline + p->lineinfo[0]; /* first instruction line */
     } else {
-        int i = cast_uint(pc) / MAXIWTHABS - 1; /* get an estimate */
+        int i = cast_uint(Ninstuptopc(p, pc)) / MAXIWTHABS - 1; /* get an estimate */
         /* estimate must be a lower bound of the correct base */
         cs_assert(i < 0 || /* linedif was too large before MAXIWTHABS? */
                  (i < p->sizeabslineinfo && p->abslineinfo[i].pc <= pc));

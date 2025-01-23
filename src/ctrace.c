@@ -33,6 +33,7 @@
 static void startline(const Proto *p, const Instruction *pc) {
     int relpc = pc - p->code;
     postab(printf("[LINE %4d][PC %4d]", csD_getfuncline(p, relpc), relpc));
+    fflush(stdout);
 }
 
 
@@ -44,18 +45,21 @@ static void endline(void) {
 
 static int traceOp(OpCode op) {
     postab(printf("%-12s", getOpName(op)));
+    fflush(stdout);
     return SIZEINSTR;
 }
 
 
 static int traceS(int s) {
     postab(printf("ArgS=%-8d", s));
+    fflush(stdout);
     return SIZEARGS;
 }
 
 
 static int traceL(const Instruction *pc) {
     postab(printf("ArgL=%-8d", get3bytes(pc)));
+    fflush(stdout);
     return SIZEARGL;
 }
 
@@ -211,11 +215,13 @@ static void traceValue(const TValue *o) {
         case CS_VNUMINT: case CS_VNUMFLT: traceNumber(o); break;
         default: cs_assert(0 && "invalid 'o' type"); break;
     }
+    fflush(stdout);
 }
 
 
 static void traceK(const Proto *p, int index) {
     postab((printf("K@%d=", index), traceValue(&p->k[index])));
+    fflush(stdout);
 }
 
 
@@ -305,6 +311,7 @@ static void unasmIMMflt(const Proto *p, Instruction *pc) {
 static void traceSize(int size) {
     if (size > 0) size = 1 << (size - 1);
     postab(printf("size=%d", size));
+    fflush(stdout);
 }
 
 
@@ -329,6 +336,7 @@ static void unasmEQK(const Proto *p, Instruction *pc) {
 
 static void traceCond(int cond) {
     postab(printf("%s", (cond ? "equal" : "not equal")));
+    fflush(stdout);
 }
 
 
@@ -359,6 +367,7 @@ static void unasmIMMord(const Proto *p, Instruction *pc) {
 
 static void traceNparams(int nparams) {
     postab(printf("nparams=%d", nparams));
+    fflush(stdout);
 }
 
 
@@ -379,6 +388,7 @@ static void unasmS(const Proto *p, Instruction *pc) {
 
 static void traceStackSlot(int index) {
     postab(printf("S@%d", index));
+    fflush(stdout);
 }
 
 
@@ -406,6 +416,7 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 
 static void traceMetaName(cs_State *ts, cs_MM mm) {
     postab(printf("%s", getstr(G_(ts)->mmnames[mm])));
+    fflush(stdout);
 }
 
 
@@ -429,6 +440,7 @@ static void unasmIndexedSet(const Proto *p, Instruction *pc) {
 static void traceGlobal(TValue *k, int index) {
     const char *str = getstr(strval(&k[index]));
     postab(printf("G@%s", str));
+    fflush(stdout);
 }
 
 
@@ -442,6 +454,7 @@ static void unasmGlobal(const Proto *p, Instruction *pc) {
 
 static void traceLocal(int index) {
     postab(printf("L@%d", index));
+    fflush(stdout);
 }
 
 
@@ -456,6 +469,7 @@ static void unasmLocal(const Proto *p, Instruction *pc) {
 static void traceUpVal(UpValInfo *uv, int index) {
     const char *str = getstr(uv[index].name);
     postab(printf("U@%d=%s", index, str));
+    fflush(stdout);
 }
 
 
@@ -469,16 +483,19 @@ static void unasmUpvalue(const Proto *p, Instruction *pc) {
 
 static void traceOffset(int off) {
     postab(printf("offset=%d", off));
+    fflush(stdout);
 }
 
 
 static void traceClose(int close) {
     postab(printf("close=%s", close ? "true" : "false"));
+    fflush(stdout);
 }
 
 
 static void traceNpop(int npop) {
     postab(printf("npop=%d", npop));
+    fflush(stdout);
 }
 
 
@@ -531,8 +548,10 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
         printf("%s {\n", getstr(p->source));
     else
         printf("fn at line %d in %s {\n", p->defline, getstr(p->source));
+    fflush(stdout);
     while (pc < &p->code[p->sizecode]) {
         printf("    ");
+        fflush(stdout);
         switch (*pc) {
             case OP_TRUE: case OP_FALSE: case OP_NIL:
             case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV:
