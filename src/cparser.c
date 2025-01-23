@@ -60,8 +60,7 @@
 */
 static const Jump dummyjmp = {NOJMP, 0, {0}};
 
-
-/* check if 'BJmp' is a dummy :-) */
+/* check if jump is a dummy :-) */
 #define isdummy(j)        ((j) == &dummyjmp)
 
 
@@ -1496,7 +1495,7 @@ static int method(Lexer *lx) {
     int line = lx->line;
     expectnext(lx, TK_FN);
     expname(lx, &var);
-    funcbody(lx, &dummy, 0, line);
+    funcbody(lx, &dummy, 1, line);
     return codemethod(lx->fs, &var);
 }
 
@@ -1523,9 +1522,9 @@ static int methods(Lexer *lx) {
 static void klass(Lexer *lx, FunctionState *fs, OString *name) {
     ClassState cs;
     Scope s;
-    int matchline, pc, nm;
+    int matchline, nm;
+    int pc = csC_emitIS(fs, OP_NEWCLASS, 0);
     startcs(fs, &cs); /* start class state */
-    pc = csC_emitIS(fs, OP_NEWCLASS, 0);
     csC_reserveslots(fs, 1); /* space for class */
     if (match(lx, TK_INHERITS)) /* class object inherits? */
         codeinherit(lx, name, &s);

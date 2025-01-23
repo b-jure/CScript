@@ -567,7 +567,7 @@ retry:
         }
         case CS_VCLASS: { /* Class object */
             const TValue *fmm;
-            Instance *ins = csMM_newinstance(ts, classval((s2v(func))));
+            Instance *ins = csMM_newinstance(ts, classval(s2v(func)));
             setinsval2s(ts, func, ins); /* replace class with its instance */
             fmm = csMM_get(ts, s2v(func), CS_MM_INIT);
             if (!ttisnil(fmm)) { /* have __init ? */
