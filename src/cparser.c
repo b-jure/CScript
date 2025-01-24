@@ -69,11 +69,11 @@ static const Jump dummyjmp = {NOJMP, 0, {0}};
 typedef struct Scope {
     struct Scope *prev; /* implicit linked-list */
     int nactlocals; /* number of locals outside of this scope */
-    int nswscope; /* number of switch scopes before this scope */
     int depth;
     c_byte cf; /* control flow */
     c_byte haveupval; /* set if scope contains upvalue variable */
     c_byte havetbcvar; /* set if scope contains to-be-closed variable */
+    c_byte haveswexp; /* true if have switch expression */
 } Scope;
 
 
@@ -83,9 +83,9 @@ typedef struct Scope {
 #define CFMS            4 /* switch */
 #define CFMASK          (CFML | CFMGL | CFMS)
 
-#define is_loop(s)          testbits((s)->cf, CFML)
-#define is_genloop(s)       testbits((s)->cf, CFMGL)
-#define is_switch(s)        testbits((s)->cf, CFMS)
+#define is_loop(s)          (testbits((s)->cf, CFML) != 0)
+#define is_genloop(s)       (testbits((s)->cf, CFMGL) != 0)
+#define is_switch(s)        (testbits((s)->cf, CFMS) != 0)
 #define haspatchlist(s)     testbits((s)->cf, CFMASK)
 
 
@@ -255,14 +255,31 @@ static void addpatchlist(Lexer *lx) {
 }
 
 
+/*
+** Get number of switch expressions starting from scope 's' up
+** to certain scope limit (limit must be some previous scope).
+** (if 'limit' is NULL then up to and including first scope)
+*/
+static int nswexpr(Scope *s, Scope *limit) {
+    Scope *curr = s;
+    int nsw = 0;
+    cs_assert((limit == NULL) || (s->depth >= limit->depth));
+    while (curr != limit) {
+        nsw += curr->haveswexp;
+        curr = curr->prev;
+    }
+    return nsw;
+}
+
+
 static void continuepop(FunctionState *fs) {
     int ncntl = (check_exp(fs->loopscope, is_genloop(fs->loopscope))
               ? NSTATEVARS /* keep 'foreach' local control variables */
               : 0); /* not in 'foreach' (no control vars) */
     /* pop locals */
     csC_pop(fs, fs->nactlocals - fs->loopscope->nactlocals - ncntl);
-    /* pop switch values up to the loop scope */
-    csC_pop(fs, fs->scope->nswscope - fs->loopscope->nswscope); 
+    /* pop switch expression values up to the loop scope */
+    csC_pop(fs, nswexpr(fs->scope, fs->loopscope)); 
 }
 
 
@@ -308,21 +325,6 @@ static int finishpatchlist(FunctionState *fs, int level) {
     csM_freearray(fs->lx->ts, l->arr, l->size); /* free patch list memory */
     if (hasclose) csC_emitIL(fs, OP_CLOSE, nvarstack(fs));
     return hasclose;
-}
-
-
-/* move constant expression to value 'v' */
-static void movexp2v(FunctionState *fs, ExpInfo *e, TValue *v) {
-    switch (e->et) {
-        case EXP_NIL: setnilval(v); break;
-        case EXP_FALSE: setbfval(v); break;
-        case EXP_TRUE: setbtval(v); break;
-        case EXP_STRING: setstrval(cast(cs_State *, NULL), v, e->u.str); break;
-        case EXP_INT: setival(v, e->u.i); break;
-        case EXP_FLT: setfval(v, e->u.n); break;
-        case EXP_K: *v = *getconstant(fs, e); break;
-        default: cs_assert(0);
-    }
 }
 
 
@@ -380,11 +382,11 @@ static void enterscope(FunctionState *fs, Scope *s, int cf) {
     if (testbits(cf, CFMASK)) /* needs a patch list? */
         addpatchlist(fs->lx); /* 'break' jumps storage */
     if (fs->scope) { /* not a global scope? */
-        s->nswscope = fs->scope->nswscope + is_switch(fs->scope);
+        s->haveswexp = is_switch(fs->scope);
         s->depth = fs->scope->depth + 1;
         s->havetbcvar = fs->scope->havetbcvar;
     } else { /* global scope */
-        s->nswscope = 0;
+        s->haveswexp = 0;
         s->depth = 0;
         s->havetbcvar = 0;
     }
@@ -401,7 +403,7 @@ static void leavescope(FunctionState *fs) {
     Scope *s = fs->scope;
     int stklevel = stacklevel(fs, s->nactlocals);
     int nactlocals = fs->nactlocals;
-    int popn = nactlocals - s->nactlocals + is_switch(s);
+    int popn = nactlocals - s->nactlocals + s->haveswexp;
     int hasclose = 0;
     removelocals(fs, s->nactlocals); /* remove scope locals */
     cs_assert(s->nactlocals == fs->nactlocals);
@@ -1210,6 +1212,7 @@ static void expr(Lexer *lx, ExpInfo *e) {
 **                              STATEMENTS
 ** ---------------------------------------------------------------------- */
 
+
 /* 
 ** decl_list ::= decl
 **             | decl decl_list
@@ -1639,29 +1642,29 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
 ** stmname ::= name
 **           | name '.' stmname
 */
-static OString *stmname(Lexer *lx, ExpInfo *v, int *left) {
+static OString *stmname(Lexer *lx, ExpInfo *v, int *leftover) {
     OString *name = str_expectname(lx);
-    cs_assert(left != NULL && *left == 0);
+    cs_assert(leftover != NULL && *leftover == 0);
     var(lx, name, v);
     while (check(lx, '.')) {
         getfield(lx, v, 0);
-        *left = 1;
+        *leftover = 1;
     }
-    return (*left ? strval(getconstant(lx->fs, v)) : name);
+    return (*leftover ? strval(csC_getconstant(lx->fs, v)) : name);
 }
 
 
 /* fnstm ::= 'fn' stmname funcbody */
 static void fnstm(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
-    int left = 0;
+    int leftover = 0;
     ExpInfo var, e;
     csY_scan(lx); /* skip 'fn' */
-    stmname(lx, &var, &left);
+    stmname(lx, &var, &leftover);
     funcbody(lx, &e, linenum, 0);
     checkreadonly(lx, &var);
     csC_store(fs, &var);
-    csC_pop(fs, left); /* remove leftover (if any) */
+    csC_pop(fs, leftover); /* remove leftover (if any) */
 }
 
 
@@ -1691,17 +1694,18 @@ typedef struct TLiteral {
 
 /* 'switch' statement state. */
 typedef struct {
-    ExpInfo e; /* expression being matched */
     struct {
         LiteralInfo *arr; /* array of literals */
         int len; /* number of elements in 'literals' */
         int size; /* size of 'literals' */
-    } literals; /* literal information */
+    } li; /* literal information */
+    TValue v; /* constant expression value (if any) */
+    c_byte isconst; /* true if 'e' is constant */
     c_byte havedefault; /* if switch has 'default' case */
     c_byte havenil; /* if switch has 'nil' case */
     c_byte havetrue; /* if switch has '1' case */
     c_byte havefalse; /* if switch has '0' case */
-    int jmp; /* code jmp to patch if 'label' expression is not 'CASEMATCH' */
+    int jmp; /* jump to patch if 'label' expression is not 'CASEMATCH' */
     enum { LNONE, LDEFAULT, LCASE, LMATCH } label;
 } SwitchState;
 
@@ -1711,109 +1715,143 @@ static const char *literal2text(cs_State *ts, LiteralInfo *li) {
     switch (li->tt) {
         case CS_VNUMINT: return csS_pushfstring(ts, " (%I)", li->lit.i);
         case CS_VNUMFLT: return csS_pushfstring(ts, " (%N)", li->lit.n);
-        case CS_VSHRSTR: case CS_VLNGSTR:
+        case CS_VSHRSTR:case CS_VLNGSTR:
             return csS_pushfstring(ts, " (%s)", getstr(li->lit.str));
-        default: cs_assert(0); return NULL;
+        default: cs_assert(0); return NULL; /* invalid literal */
     }
 }
 
 
-/* find literal info in 'literals' */
-static int findliteral(SwitchState *ss, LiteralInfo *tlit) {
-    for (int i = 0; i < ss->literals.len; i++) {
-        LiteralInfo *curr = &ss->literals.arr[i];
-        if (tlit->tt != curr->tt) continue; /* skip if types don't match */
-        switch (tlit->tt) {
+/* find literal info 'li' in 'literals' */
+static int findliteral(SwitchState *ss, LiteralInfo *li) {
+    for (int i = 0; i < ss->li.len; i++) { /* O(n) */
+        LiteralInfo *curr = &ss->li.arr[i];
+        if (li->tt != curr->tt) /* types don't match? */
+            continue; /* skip */
+        switch (li->tt) {
             case CS_VSHRSTR: case CS_VLNGSTR:
-                if (eqstr(tlit->lit.str, curr->lit.str)) return i;
+                if (eqstr(li->lit.str, curr->lit.str))
+                    return i; /* found */
                 break;
             case CS_VNUMINT:
-                if (tlit->lit.i == curr->lit.i) return i;
+                if (li->lit.i == curr->lit.i)
+                    return i; /* found */
                 break;
             case CS_VNUMFLT:
-                if (c_numeq(tlit->lit.n, curr->lit.n)) return i;
+                if (c_numeq(li->lit.n, curr->lit.n))
+                    return i; /* found */
                 break;
-            default:cs_assert(0); break;
+            default: cs_assert(0); break; /* invalid literal */
         }
     }
-    return -1;
-}
-
-
-/* check for duplicate literal otherwise fill the relevant info */
-static LiteralInfo checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e) {
-    const char *what = NULL;
-    int extra = 0;
-    LiteralInfo li;
-    cs_assert(eisconstant(e));
-    switch (e->et) {
-        case EXP_FALSE: {
-            if (c_unlikely(ss->havefalse)) what = "false";
-            ss->havefalse = 1;
-            break;
-        }
-        case EXP_TRUE: {
-            if (c_unlikely(ss->havetrue)) what = "true";
-            ss->havetrue = 1;
-            break;
-        }
-        case EXP_NIL: {
-            if (c_unlikely(ss->havenil)) what = "nil";
-            ss->havenil = 1;
-            break;
-        }
-        case EXP_STRING: {
-            what = "string";
-            li.lit.str = e->u.str;
-            li.tt = e->u.str->tt_;
-            goto findliteral;
-        }
-        case EXP_INT: {
-            what = "integer";
-            li.lit.i = e->u.i;
-            li.tt = CS_VNUMINT;
-            goto findliteral;
-        }
-        case EXP_FLT: {
-            int idx;
-            what = "number";
-            li.lit.n = e->u.n;
-            li.tt = CS_VNUMFLT;
-        findliteral:
-            idx = findliteral(ss, &li);
-            if (c_likely(idx < 0)) 
-                what = NULL;
-            else
-                extra = 1;
-            break;
-        }
-        default: cs_assert(0); break;
-    }
-    if (c_unlikely(what))
-        csP_semerror(lx, csS_pushfstring(lx->ts,
-                    "duplicate %s literal%s in switch statement",
-                    what, (extra ? literal2text(lx->ts, &li) : "")));
-    return li;
+    return -1; /* not found */
 }
 
 
 /*
-** Adds new literal information to 'literals' if 'e' is a constant
-** expression.
+** Checks if expression is a duplicate literal value.
 */
-static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
-    FunctionState *fs = lx->fs;
-    if (eisconstant(caseexp)) {
-        LiteralInfo li = checkduplicate(lx, ss, caseexp);
-        checklimit(fs, ss->literals.len, MAX_LARG, "literal switch cases");
-        csM_growarray(lx->ts, ss->literals.arr, ss->literals.size,
-                    ss->literals.len, MAX_LARG, "switch literals", LiteralInfo);
-        ss->literals.arr[ss->literals.len++] = li;
-        if (eisconstant(&ss->e)) { /* both are constant expressions ? */
-            TValue v1, v2;
-            movexp2v(fs, &ss->e, &v1);
-            movexp2v(fs, caseexp, &v2);
-            return csV_raweq(&v1, &v2); /* compare for match */
+static int checkliteral(SwitchState *ss, ExpInfo *e, const char **what) {
+    switch (e->et) {
+        case EXP_FALSE: {
+            if (c_unlikely(ss->havefalse))
+                *what = "false";
+            ss->havefalse = 1;
+            break;
+        }
+        case EXP_TRUE: {
+            if (c_unlikely(ss->havetrue))
+                *what = "true";
+            ss->havetrue = 1;
+            break;
+        }
+        case EXP_NIL: {
+            if (c_unlikely(ss->havenil))
+                *what = "nil";
+            ss->havenil = 1;
+            break;
+        }
+        default: return 0;
+    }
+    return 1;
+}
+
+
+/*
+** Checks if 'e' is a duplicate constant value and fills the relevant info.
+** If 'li' is a duplicate, 'what' and 'extra' are filled accordingly.
+*/
+static void checkK(SwitchState *ss, ExpInfo *e, LiteralInfo *li, int *extra,
+                  const char **what) {
+    switch (e->et) {
+        case EXP_STRING: {
+            *what = "string";
+            li->lit.str = e->u.str;
+            li->tt = e->u.str->tt_;
+            goto findliteral;
+        }
+        case EXP_INT: {
+            *what = "integer";
+            li->lit.i = e->u.i;
+            li->tt = CS_VNUMINT;
+            goto findliteral;
+        }
+        case EXP_FLT: {
+            *what = "number";
+            li->lit.n = e->u.n;
+            li->tt = CS_VNUMFLT;
+        findliteral: {
+            int idx = findliteral(ss, li);
+            if (c_likely(idx < 0))
+                *what = NULL;
+            else
+                *extra = 1;
+            break;
+        }}
+        default: cs_assert(0); break; /* 'e' is not a literal expression */
+    }
+}
+
+
+/* check for duplicate literal otherwise fill the relevant info */
+static void checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e,
+                           LiteralInfo *li) {
+    int extra = 0;
+    const char *what = NULL;
+    if (!checkliteral(ss, e, &what))
+         checkK(ss, e, li, &extra, &what);
+    if (c_unlikely(what)) {
+        const char *msg = csS_pushfstring(lx->ts,
+                            "duplicate %s literal%s in switch statement",
+                            what, (extra ? literal2text(lx->ts, li) : ""));
+        csP_semerror(lx, msg);
+    }
+}
+
+
+static void addliteralinfo(Lexer *lx, SwitchState *ss, ExpInfo *e) {
+    LiteralInfo li;
+    checkduplicate(lx, ss, e, &li);
+    checklimit(lx->fs, ss->li.len, MAX_LARG, "switch cases");
+    csM_growarray(lx->ts, ss->li.arr, ss->li.size, ss->li.len, MAX_LARG,
+                  "switch literals", LiteralInfo);
+    ss->li.arr[ss->li.len++] = li;
+}
+
+
+/*
+** Checks if 'e' is a compile-time match with the switch expression.
+** Additionally it remembers the 'e' if it is a constant value and
+** adds it to the list of literals; any duplicate literal value in switch
+** is a compile-time error.
+*/
+static int checkmatch(Lexer *lx, SwitchState *ss, ExpInfo *e) {
+    if (eisconstant(e)) {
+        addliteralinfo(lx, ss, e);
+        if (ss->isconst) { /* both are constant values? */
+            TValue v;
+            csC_constexp2val(lx->fs, e, &v);
+            return csV_raweq(&ss->v, &v); /* compare for match */
         } /* else fall through */
     } /* else fall through */
     return 0; /* no match */
@@ -1822,7 +1860,7 @@ static int newlitinfo(Lexer *lx, SwitchState *ss, ExpInfo *caseexp) {
 
 /* 
 ** Tries to preserve expression 'e' after consuming it, in order
-** to enable more optimizations.
+** to enable more optimizations if 'e' was a constant.
 */
 static int codepres_exp(FunctionState *fs, ExpInfo *e) {
     ExpInfo pres = *e;
@@ -1835,15 +1873,20 @@ static int codepres_exp(FunctionState *fs, ExpInfo *e) {
 
 /* 
 ** switchbody ::= 'case' ':' expr switchbody
-**              | 'default' ':' switchbody
-**              | stm switchbody
+**              | 'default' ':' switchbody1
+**              | switchstm
 **              | empty
+**
+** switchbody1 ::= 'case' ':' expr switchbody1
+**               | empty
+**
+** switchstm ::= switchbody stm 
 */
 static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
     FunctionState *fs = lx->fs;
-    FuncContext ctxafter;
     int ftjmp = NOJMP; /* fall-through jump */
-    ctxafter.pc = NOJMP;
+    FuncContext ctxafter;
+    ctxafter.pc = -1;
     while (!check(lx, '}') && !check(lx, TK_EOS)) { /* while switch body... */
         if (check(lx, TK_CASE) || match(lx, TK_DEFAULT)) { /* has label?... */
             if (ss->label != LNONE && ss->label != LMATCH) {
@@ -1853,14 +1896,15 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                     csC_patchtohere(fs, ss->jmp); /* patch test jump */
             }
             if (match(lx, TK_CASE)) { /* 'case' label? */
-                ExpInfo cexp; /* case expression */
-                voidexp(&cexp);
-                expr(lx, &cexp); /* get the case expression... */
-                codepres_exp(fs, &cexp); /* ...and put it on stack (preserve) */
+                ExpInfo e; /* case expression */
+                voidexp(&e);
+                expr(lx, &e); /* get the case expression... */
+                codepres_exp(fs, &e); /* ...and put it on stack */
                 expectnext(lx, ':');
-                if (newlitinfo(lx, ss, &cexp)) { /* ctc match? */
+                if (checkmatch(lx, ss, &e)) { /* ctc match? */
                     ss->label = LMATCH; /* mark the current label as such */
                     loadcontext(fs, ctxbefore); /* load context before switch */
+                    fs->scope->haveswexp = 0; /* switch expression opt-away */
                 } else if (ss->label != LMATCH) { /* no match? */
                     ss->label = LCASE; /* mark the current label as such */
                     csC_emitI(fs, OP_EQPRESERVE); /* EQ but preserves lhs */
@@ -1879,14 +1923,16 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
         } else if (ss->label != LNONE) { /* or is not empty?... */
             stm(lx);
             if (ss->label == LMATCH /* current label is a ctc match... */
-                    && fs->lastwasret /* and last statement was 'return'... */
-                    && ctxafter.pc == NOJMP) /* ...and context is free? */
+                    && fs->lastisend /* and statement ends control flow... */
+                    && ctxafter.pc == -1) /* ...and context is free? */
                 storecontext(fs, &ctxafter); /* set current context as end */
         } else /* ...otherwise error */
-            csP_semerror(lx, "expected 'case' or 'default'");
+            csP_semerror(lx, "expect at least one 'case' or 'default' label");
     }
-    if (ctxafter.pc != NOJMP) /* had a compile-time label match with 'return' */
+    cs_assert(ftjmp == NOJMP); /* no more fall-through jumps */
+    if (ctxafter.pc != -1) /* had a compile-time match with 'return' */
         loadcontext(fs, &ctxafter); /* load it */
+    csM_freearray(lx->ts, ss->li.arr, ss->li.size);
 }
 
 
@@ -1894,30 +1940,31 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
 static void switchstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     Scope *old_switchscope = fs->switchscope;
-    int matchline;
+    int line;
     FuncContext ctxbefore;
     Scope s; /* switch scope */
+    ExpInfo e;
     SwitchState ss;
-    ss.literals.len = ss.literals.size = 0;
-    ss.literals.arr = NULL;
+    ss.li.len = ss.li.size = 0; ss.li.arr = NULL;
+    ss.isconst = 0;
+    ss.havedefault = ss.havenil = ss.havetrue = ss.havefalse = 0;
     ss.jmp = NOJMP;
     ss.label = LNONE;
-    ss.havedefault = 0;
-    ss.havenil = 0;
-    ss.havetrue = 0;
-    ss.havefalse = 0;
     enterscope(fs, &s, CFMS);
     storecontext(fs, &ctxbefore);
     fs->switchscope = &s; /* set the innermost 'switch' scope */
     csY_scan(lx); /* skip 'switch' */
     expectnext(lx, '(');
-    expr(lx, &ss.e); /* get the 'switch' expression... */
+    expr(lx, &e); /* get the 'switch' expression... */
     expectnext(lx, ')');
-    codepres_exp(fs, &ss.e);
-    matchline = lx->line;
+    if (codepres_exp(fs, &e)) { /* constant expression? */
+        ss.isconst = 1;                     /* mark it as such... */
+        csC_constexp2val(fs, &e, &ss.v);    /* ...and get its value */
+    }
+    line = lx->line;
     expectnext(lx, '{');
     switchbody(lx, &ss, &ctxbefore);
-    expectmatch(lx, '}', '{', matchline);
+    expectmatch(lx, '}', '{', line);
     leavescope(fs);
     fs->switchscope = old_switchscope;
 }
@@ -2259,6 +2306,7 @@ static void continuestm(Lexer *lx) {
     else /* otherwise regular loop */
         csC_patch(fs, csC_jmp(fs, OP_JMPS), fs->loopstart);
     expectnext(lx, ';');
+    fs->lastisend = 1;
 }
 
 
@@ -2286,6 +2334,7 @@ static void breakstm(Lexer *lx) {
     cs_assert(haspatchlist(cfs));
     addlistjump(lx, OP_BJMP, fs->scope->haveupval);
     expectnext(lx, ';');
+    fs->lastisend = 1;
 }
 
 
@@ -2310,7 +2359,7 @@ static void returnstm(Lexer *lx) {
     }
     csC_ret(fs, first, nret);
     expectnext(lx, ';');
-    fs->lastwasret = 1; /* indicate last statement was return */
+    fs->lastisend = fs->lastwasret = 1; /* indicate last statement was return */
 }
 
 
@@ -2366,15 +2415,15 @@ static void stm_(Lexer *lx) {
         }
         case TK_CONTINUE: {
             continuestm(lx);
-            break;
+            return;
         }
         case TK_BREAK: {
             breakstm(lx);
-            break;
+            return;
         }
         case TK_RETURN: {
             returnstm(lx);
-            return; /* do not reset 'lastwasret' flag */
+            return;
         }
         case TK_LOOP: {
             loopstm(lx);
@@ -2390,15 +2439,15 @@ static void stm_(Lexer *lx) {
             break;
         }
     }
-    lx->fs->lastwasret = 0;
+    lx->fs->lastisend = lx->fs->lastwasret = 0;
 }
 
 
 static void freestackslots(FunctionState *fs) {
     cs_assert(fs->p->maxstack >= fs->sp);
-    cs_assert(fs->sp >= nvarstack(fs) + fs->scope->nswscope);
-    /* leave only locals and switch statement expressions */
-    fs->sp = nvarstack(fs) + fs->scope->nswscope;
+    cs_assert(fs->sp >= nvarstack(fs) + fs->scope->haveswexp);
+    /* leave only locals and switch statement expressions (if any) */
+    fs->sp = nvarstack(fs) + fs->scope->haveswexp;
 }
 
 
@@ -2419,7 +2468,7 @@ static void decl(Lexer *lx) {
                 localclass(lx);
             else
                 localstm(lx);
-            lx->fs->lastwasret = 0;
+            lx->fs->lastisend = lx->fs->lastwasret = 0;
             break;
         }
         default: {

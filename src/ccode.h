@@ -18,10 +18,6 @@
 #define currPC      (fs->pc)
 
 
-/* get constant of 'ExpInfo' */
-#define getconstant(fs,e)       (&(fs)->p->k[(e)->u.info])
-
-
 /* get pointer to instruction of 'ExpInfo' */
 #define getinstruction(fs,e)    (&(fs)->p->code[(e)->u.info])
 
@@ -363,6 +359,8 @@ CSI_FUNC int csC_storevar(FunctionState *fs, ExpInfo *var, int left);
 CSI_FUNC void csC_setarraysize(FunctionState *fs, int pc, int sz);
 CSI_FUNC void csC_setarray(FunctionState *fs, int nelems, int tostore);
 CSI_FUNC void csC_settablesize(FunctionState *fs, int pc, int hsize);
+CSI_FUNC void csC_constexp2val(FunctionState *fs, ExpInfo *e, TValue *v);
+CSI_FUNC TValue *csC_getconstant(FunctionState *fs, ExpInfo *v);
 CSI_FUNC void csC_varexp2stack(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_exp2stack(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_getfield(FunctionState *fs, ExpInfo *var,

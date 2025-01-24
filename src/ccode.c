@@ -859,6 +859,35 @@ static void fixjumplists(FunctionState *fs, ExpInfo *e) {
 }
 
 
+TValue *csC_getconstant(FunctionState *fs, ExpInfo *v) {
+    cs_assert(eisconstant(v));
+    return &fs->p->k[v->u.info];
+}
+
+
+/*
+** Convert constant expression to value 'v'.
+*/
+void csC_constexp2val(FunctionState *fs, ExpInfo *e, TValue *v) {
+    switch (e->et) {
+        case EXP_NIL: setnilval(v); break;
+        case EXP_FALSE: setbfval(v); break;
+        case EXP_TRUE: setbtval(v); break;
+        case EXP_INT: setival(v, e->u.i); break;
+        case EXP_FLT: setfval(v, e->u.n); break;
+        case EXP_STRING: {
+            setstrval(cast(cs_State *, NULL), v, e->u.str);
+            break;
+        }
+        case EXP_K: {
+            setobj(cast(cs_State *, NULL), v, csC_getconstant(fs, e));
+            break;
+        }
+        default: cs_assert(0);
+    }
+}
+
+
 void csC_varexp2stack(FunctionState *fs, ExpInfo *e) {
     int et = e->et;
     if (et != EXP_FINEXPR && dischargevars(fs, e)) {

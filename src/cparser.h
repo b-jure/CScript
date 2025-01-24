@@ -13,12 +13,12 @@
 
 
 /* maximum number of local variables per function */
-#define MAXVARS     MAX_CODE
+#define MAXVARS         MAX_CODE
 
 
 /*
 ** Because all strings are unified by the scanner, the parser
-** can use pointer equality for string equality
+** can use pointer equality for string equality.
 */
 #define eqstr(a, b)     ((a) == (b))
 
@@ -94,9 +94,8 @@ typedef enum expt {
 /*
 ** Expression information.
 ** Parser builds up the expression information and feeds it into
-** functions that generate bytecode.
+** functions that generate bytecode (codegen).
 ** Then those functions also fill the 'ExpInfo' accordingly.
-** So the codegen functions are essentially consumers of 'ExpInfo'.
 */
 typedef struct ExpInfo {
     expt et;
@@ -150,7 +149,7 @@ typedef struct PatchList {
 
 /* class declaration information */
 typedef struct ClassState {
-    struct ClassState *prev;
+    struct ClassState *prev; /* chain of nested declarations */
     c_byte super; /* true if class has superclass */
 } ClassState;
 
@@ -221,6 +220,7 @@ typedef struct FunctionState {
     c_byte iwthabs;     /* instructions issued since last absolute line info */
     c_byte needclose;   /* true if needs to close upvalues before returning */
     c_byte lastwasret;  /* last statement is 'return' */
+    c_byte lastisend;   /* true if last statement ends control flow */
 } FunctionState;
 
 
