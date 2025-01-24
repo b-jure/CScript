@@ -1684,21 +1684,8 @@ static void classstm(Lexer *lx) {
 }
 
 
-/* literal value information */
-typedef struct TLiteral {
-    Literal lit; /* literal value */
-    int tt; /* type tag */
-    int line; /* source line */
-} LiteralInfo;
-
-
 /* 'switch' statement state. */
 typedef struct {
-    struct {
-        LiteralInfo *arr; /* array of literals */
-        int len; /* number of elements in 'literals' */
-        int size; /* size of 'literals' */
-    } li; /* literal information */
     TValue v; /* constant expression value (if any) */
     c_byte isconst; /* true if 'e' is constant */
     c_byte havedefault; /* if switch has 'default' case */
@@ -1723,9 +1710,10 @@ static const char *literal2text(cs_State *ts, LiteralInfo *li) {
 
 
 /* find literal info 'li' in 'literals' */
-static int findliteral(SwitchState *ss, LiteralInfo *li) {
-    for (int i = 0; i < ss->li.len; i++) { /* O(n) */
-        LiteralInfo *curr = &ss->li.arr[i];
+static int findliteral(Lexer *lx, LiteralInfo *li) {
+    ParserState *ps = lx->ps;
+    for (int i = 0; i < ps->literals.len; i++) { /* O(n) */
+        LiteralInfo *curr = &ps->literals.arr[i];
         if (li->tt != curr->tt) /* types don't match? */
             continue; /* skip */
         switch (li->tt) {
@@ -1781,8 +1769,8 @@ static int checkliteral(SwitchState *ss, ExpInfo *e, const char **what) {
 ** Checks if 'e' is a duplicate constant value and fills the relevant info.
 ** If 'li' is a duplicate, 'what' and 'extra' are filled accordingly.
 */
-static void checkK(SwitchState *ss, ExpInfo *e, LiteralInfo *li, int *extra,
-                  const char **what) {
+static void checkK(Lexer *lx, ExpInfo *e, LiteralInfo *li, int *extra,
+                   const char **what) {
     switch (e->et) {
         case EXP_STRING: {
             *what = "string";
@@ -1801,8 +1789,7 @@ static void checkK(SwitchState *ss, ExpInfo *e, LiteralInfo *li, int *extra,
             li->lit.n = e->u.n;
             li->tt = CS_VNUMFLT;
         findliteral: {
-            int idx = findliteral(ss, li);
-            if (c_likely(idx < 0))
+            if (c_likely(findliteral(lx, li) < 0))
                 *what = NULL;
             else
                 *extra = 1;
@@ -1819,7 +1806,7 @@ static void checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e,
     int extra = 0;
     const char *what = NULL;
     if (!checkliteral(ss, e, &what))
-         checkK(ss, e, li, &extra, &what);
+         checkK(lx, e, li, &extra, &what);
     if (c_unlikely(what)) {
         const char *msg = csS_pushfstring(lx->ts,
                             "duplicate %s literal%s in switch statement",
@@ -1830,12 +1817,13 @@ static void checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e,
 
 
 static void addliteralinfo(Lexer *lx, SwitchState *ss, ExpInfo *e) {
+    ParserState *ps = lx->ps;
     LiteralInfo li;
     checkduplicate(lx, ss, e, &li);
-    checklimit(lx->fs, ss->li.len, MAX_LARG, "switch cases");
-    csM_growarray(lx->ts, ss->li.arr, ss->li.size, ss->li.len, MAX_LARG,
-                  "switch literals", LiteralInfo);
-    ss->li.arr[ss->li.len++] = li;
+    checklimit(lx->fs, ps->literals.len, MAX_LARG, "switch cases");
+    csM_growarray(lx->ts, ps->literals.arr, ps->literals.size,
+                  ps->literals.len, MAX_LARG, "switch literals", LiteralInfo);
+    ps->literals.arr[ps->literals.len++] = li;
 }
 
 
@@ -1871,6 +1859,15 @@ static int codepres_exp(FunctionState *fs, ExpInfo *e) {
 }
 
 
+static void removeliterals(Lexer *lx, int nliterals) {
+    ParserState *ps = lx->ps;
+    if (ps->literals.len < ps->literals.size / 3) /* too many literals? */
+        csM_shrinkarray(lx->ts, ps->literals.arr, ps->literals.size,
+                        ps->literals.size / 2, LiteralInfo);
+    ps->literals.len = nliterals;
+}
+
+
 /* 
 ** switchbody ::= 'case' ':' expr switchbody
 **              | 'default' ':' switchbody1
@@ -1885,6 +1882,7 @@ static int codepres_exp(FunctionState *fs, ExpInfo *e) {
 static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
     FunctionState *fs = lx->fs;
     int ftjmp = NOJMP; /* fall-through jump */
+    int nliterals = lx->ps->literals.len;
     FuncContext ctxafter;
     ctxafter.pc = -1;
     while (!check(lx, '}') && !check(lx, TK_EOS)) { /* while switch body... */
@@ -1932,7 +1930,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
     cs_assert(ftjmp == NOJMP); /* no more fall-through jumps */
     if (ctxafter.pc != -1) /* had a compile-time match with 'return' */
         loadcontext(fs, &ctxafter); /* load it */
-    csM_freearray(lx->ts, ss->li.arr, ss->li.size);
+    removeliterals(lx, nliterals);
 }
 
 
@@ -1945,7 +1943,6 @@ static void switchstm(Lexer *lx) {
     Scope s; /* switch scope */
     ExpInfo e;
     SwitchState ss;
-    ss.li.len = ss.li.size = 0; ss.li.arr = NULL;
     ss.isconst = 0;
     ss.havedefault = ss.havenil = ss.havetrue = ss.havefalse = 0;
     ss.jmp = NOJMP;
@@ -1993,11 +1990,11 @@ static void condbody(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond, int isif,
             test = csC_test(fs, opT, 0); /* condition test */
     }
     stm(lx); /* loop/if body */
-    if (optaway) { /* optimize away this statement? */
+    if (optaway) /* optimize away this statement? */
         loadcontext(fs, ctxbefore);
-    } else if (cistrue && (fs->lastwasret || isif)) {
+    else if (cistrue && (fs->lastwasret || isif))
         storecontext(fs, &ctxafter);
-    } else {
+    else {
         jump = csC_jmp(fs, opJ); /* loop/if jump */
         if (!isif) { /* loop statement? */
             if (clausepc != NOJMP) { /* 'for' loop? */

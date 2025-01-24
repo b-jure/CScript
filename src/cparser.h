@@ -147,6 +147,13 @@ typedef struct PatchList {
 } PatchList;
 
 
+/* literal value information */
+typedef struct LiteralInfo {
+    Literal lit; /* literal value */
+    int tt; /* type tag */
+} LiteralInfo;
+
+
 /* class declaration information */
 typedef struct ClassState {
     struct ClassState *prev; /* chain of nested declarations */
@@ -168,6 +175,10 @@ typedef struct ParserState {
         int len; int size;
         PatchList *arr;
     } patches;
+    struct { /* list of switch literals */
+        int len; int size;
+        LiteralInfo *arr;
+    } literals;
     struct ClassState *cs;
 } ParserState;
 
