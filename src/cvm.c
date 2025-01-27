@@ -955,7 +955,7 @@ void csV_concat(cs_State *ts, int total) {
 #define TOP()           SLOT(0)
 
 /* increments/decrements stack pointer */
-#define SP(n)           (ts->sp.p += (n))
+#define SP(n)           check_exp(ts->sp.p + (n) >= base, ts->sp.p += (n))
 
 
 /* In cases where jump table is not available or prefered. */
@@ -1344,8 +1344,9 @@ returning:
                 SPtr res = TOP();
                 TValue *v1 = peek(1);
                 TValue *v2 = s2v(res);
-                Protect(csV_ordereq(ts, v1, v2));
-                setobj2s(ts, res, s2v(ts->sp.p));
+                int cond;
+                Protect(cond = csV_ordereq(ts, v1, v2));
+                setorderres(v2, cond, 1);
                 vm_break;
             }
             /* }} UNARY_OPS { */

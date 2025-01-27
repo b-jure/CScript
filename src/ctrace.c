@@ -1,6 +1,6 @@
 /*
 ** ctrace.c
-** Low-level bytecode tracing
+** Low-level bytecode tracing and disassembly for internal debugging
 ** See Copyright Notice in cscript.h
 */
 

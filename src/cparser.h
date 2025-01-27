@@ -184,7 +184,8 @@ typedef struct ParserState {
 
 
 /* 
-** Function state context (for optimizations); snapshot of state fields.
+** Function state context.
+** (snapshot of state fields for optimizations).
 */
 typedef struct FuncContext {
     int ninstpc;

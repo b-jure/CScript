@@ -172,12 +172,12 @@ const char *csF_getlocalname(const Proto *fn, int lnum, int pc) {
 ** raise error if not.
 */
 static void checkclosem(cs_State *ts, SPtr level) {
-    const TValue *fn = csMM_get(ts, s2v(level), CS_MM_CLOSE);
-    if (c_unlikely(ttisnil(fn))) { /* missing '__close' method ? */
+    const TValue *fmm = csMM_get(ts, s2v(level), CS_MM_CLOSE);
+    if (c_unlikely(ttisnil(fmm))) { /* missing '__close'? */
         int vidx = level - ts->cf->func.p;
         const char *name = csD_findlocal(ts, ts->cf, vidx, NULL);
         if (name == NULL) name = "?";
-        csD_runerror(ts, "variable %s got a non-closeable value", name);
+        csD_runerror(ts, "local variable %s got a non-closeable value", name);
     }
 }
 

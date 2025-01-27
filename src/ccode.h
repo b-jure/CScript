@@ -346,6 +346,7 @@ CSI_FUNC int csC_emitILS(FunctionState *fs, Instruction op, int a, int b);
 CSI_FUNC int csC_emitILL(FunctionState *fs, Instruction i, int a, int b);
 CSI_FUNC int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c);
 CSI_FUNC void csC_fixline(FunctionState *fs, int line);
+CSI_FUNC void csC_removelastjump(FunctionState *fs);
 CSI_FUNC void csC_checkstack(FunctionState *fs, int n);
 CSI_FUNC void csC_reserveslots(FunctionState *fs, int n);
 CSI_FUNC void csC_setoneret(FunctionState *fs, ExpInfo *e);

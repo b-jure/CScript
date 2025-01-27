@@ -28,7 +28,7 @@
 
 
 /*
-** Gets the Number of instructions up to 'pc' (binary search).
+** Gets the Number of instructions up to 'pc' in O(log(n)).
 ** As CSCript implementation is using stack-based architecture for its VM,
 ** we then also store additional pc for each instruction emitted for a
 ** faster lookup. This is required in order to properly calculate estimate
@@ -89,13 +89,18 @@ static int getbaseline(const Proto *p, int pc, int *basepc) {
 */
 int csD_getfuncline(const Proto *p, int pc) {
     int basepc;
-    cs_assert(p->lineinfo != NULL); /* must have debug information */
+    int prevbaseline = -1;
     int baseline = getbaseline(p, pc, &basepc);
     while (basepc < pc) { /* walk until given instruction */
         basepc += getOpSize(p->code[basepc]); /* next instruction pc */
         cs_assert(p->lineinfo[basepc] != ABSLINEINFO);
         cs_assert(p->lineinfo[basepc] != ARGLINEINFO);
+        prevbaseline = baseline;
         baseline += p->lineinfo[basepc]; /* correct line */
+    }
+    if (c_unlikely(pc < basepc)) { /* 'pc' in between instructions? */
+        cs_assert(prevbaseline >= 0);
+        baseline -= p->lineinfo[basepc]; /* go back one instruction */
     }
     return baseline;
 }
@@ -217,8 +222,7 @@ static const char *funcnamefromcode(cs_State *ts, const Proto *p, int pc,
     cs_MM mm;
     Instruction *i = &p->code[pc];
     switch (*i) {
-        /* TODO: symbolic execution for OP_CALL */
-        case OP_CALL: return NULL;
+        case OP_CALL: return NULL; /* TODO(symbolic execution) */
         case OP_FORCALL: {
             *name = "for iterator";
             return "for iterator";

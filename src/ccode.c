@@ -155,7 +155,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatI), /* OP_INHERIT */
     opProp(0, FormatILL), /* OP_FORPREP */
     opProp(0, FormatILL), /* OP_FORCALL */
-    opProp(1, FormatILLL), /* OP_FORLOOP */
+    opProp(0, FormatILLL), /* OP_FORLOOP */
     opProp(0, FormatILLS), /* OP_RET */
 };
 
@@ -296,6 +296,15 @@ static void removeinstpc(FunctionState *fs) {
 static void removelastinstruction(FunctionState *fs) {
     removelastlineinfo(fs);
     removeinstpc(fs);
+}
+
+
+/*
+** Remove last instruction which must be a jump.
+*/
+void csC_removelastjump(FunctionState *fs) {
+    cs_assert(opisjump(fs->p->code[fs->prevpc])); /* last inst. is jump */
+    removelastinstruction(fs);
 }
 
 
@@ -586,10 +595,15 @@ nil:
 }
 
 
+static int codenil(FunctionState *fs, int n) {
+    return adjuststack(fs, n > 1 ? OP_NILN : OP_NIL, n);
+}
+
+
 int csC_nil(FunctionState *fs, int n) {
     cs_assert(n > 0);
     csC_reserveslots(fs, n);
-    return adjuststack(fs, n > 1 ? OP_NILN : OP_NIL, n);
+    return codenil(fs, n);
 }
 
 
@@ -785,7 +799,7 @@ static int dischargevars(FunctionState *fs, ExpInfo *e) {
 }
 
 
-/* get 'pc' of jmp instruction destination */
+/* get 'pc' of jump instruction destination */
 static int getjump(FunctionState *fs, int pc) {
     Instruction *inst = &fs->p->code[pc];
     int offset = GETARG_L(inst, 0);
@@ -860,7 +874,12 @@ static void fixjumplists(FunctionState *fs, ExpInfo *e) {
 
 
 TValue *csC_getconstant(FunctionState *fs, ExpInfo *v) {
-    cs_assert(eisconstant(v));
+    cs_assert(eisconstant(v) ||         /* expression is a constant... */
+              v->et == EXP_INDEXSTR ||  /* ...or indexed by one */
+              v->et == EXP_INDEXINT ||
+              v->et == EXP_INDEXSUPERSTR ||
+              v->et == EXP_DOT ||
+              v->et == EXP_DOTSUPER);
     return &fs->p->k[v->u.info];
 }
 
@@ -963,7 +982,7 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e) {
     if (!dischargevars(fs, e)) {
         switch (e->et) {
             case EXP_NIL: {
-                e->u.info = csC_nil(fs, 1);
+                e->u.info = codenil(fs, 1);
                 break;
             }
             case EXP_FALSE: {
@@ -1014,11 +1033,10 @@ void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
 
 
 /* initialize dot indexed expression */
-void csC_getfield(FunctionState *fs, ExpInfo *var, ExpInfo *keystr,
-                  int super) {
-    cs_assert(var->et == EXP_FINEXPR); /* 'var' must be finalized (on stack) */
-    var->u.info = stringK(fs, keystr->u.str);
-    var->et = (super ? EXP_DOTSUPER : EXP_DOT);
+void csC_getfield(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
+    cs_assert(v->et == EXP_FINEXPR); /* 'v' must be on stack */
+    v->u.info = stringK(fs, key->u.str);
+    v->et = (super ? EXP_DOTSUPER : EXP_DOT);
 }
 
 
@@ -1159,19 +1177,19 @@ static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
 
 
 /* code test/jump instruction */
-int csC_jmp(FunctionState *fs, OpCode jop) {
-    if (jop == OP_TESTPOP) /* test jump? */
+int csC_jmp(FunctionState *fs, OpCode opjump) {
+    if (opjump == OP_TESTPOP) /* test jump? */
         freeslots(fs, 1); /* test pops one value */
-    if (jop == OP_BJMP) /* break jump? */
+    if (opjump == OP_BJMP) /* break jump? */
         return csC_emitILL(fs, OP_BJMP, 0, 0);
     else /* otherwise test or regular jump */
-        return csC_emitIL(fs, jop, 0);
+        return csC_emitIL(fs, opjump, 0);
 }
 
 
 /* code 'OP_TEST' family of instructions */
-int csC_test(FunctionState *fs, OpCode testop, int cond) {
-    int offset = csC_jmp(fs, testop);
+int csC_test(FunctionState *fs, OpCode optest, int cond) {
+    int offset = csC_jmp(fs, optest);
     emitS(fs, cond);
     return offset;
 }
