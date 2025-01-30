@@ -132,7 +132,7 @@ int csPR_parse(cs_State *ts, BuffReader *br, const char *name) {
     struct PParseData pd;
     int status;
     pd.br = br;
-    csR_buffinit(&pd.buff); /* 'buff' */
+    csR_buffinit(&pd.buff);
     pd.ps.actlocals.len = pd.ps.actlocals.size = 0; pd.ps.actlocals.arr = NULL;
     pd.ps.patches.len = pd.ps.patches.size = 0; pd.ps.patches.arr = NULL;
     pd.ps.literals.len = pd.ps.literals.size = 0; pd.ps.literals.arr = NULL;

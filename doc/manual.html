@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width"/>
+        <title>CScript 1.0 Reference Manual</title>
+        <link rel="stylesheet" type="text/css" href="cscript.css">
+        <link rel="stylesheet" type="text/css" href="index.css">
+    </head>
+    <body>
+        <h1>CScript 1.0 Reference Manual</h1>
+        <small>
+            <p>
+            Copyright &copy; 2020&ndash;2024 Lua.org, PUC-Rio;
+            2024&ndash;2025 Jure Bagić.
+            </p>
+        </small>
+        <div class="menubar">
+            <a href="contents.html#contents">contents</a>
+            &middot;
+            <a href="contents.html#index">index</a>
+        </div>
+
+
+
+        <h1>1 &ndash; <a name="1">Introduction</a></h1>
+
+        <p>
+        CScript is a lightweight embeddable scripting language.
+        C in CScript refers to the C programming language as it mimics its
+        syntax (as much as possible).
+        It's syntax supports various types of programming styles and it does
+        not enforce any type/style upon the user (it has all the tools and the
+        user chooses the tool for the job).
+        </p>
+
+        <p>
+        CScript is dynamically typed, it runs by interpreting bytecode with
+        a stack-based virtual machine, and it's memory is automatically
+        managed by the incremental garbage collection.
+        </p>
+
+        <p>
+        CScript is implemented as a library fully written in C, and to be
+        compiled with any standard C/C++ compiler implementing C99 standard.
+        CScript distribution includes a host program called
+        <code>cscript</code>, which is the interpreter that uses CScript
+        library.
+        CScript is intended to be primarily used as lightweight embeddable
+        scripting language but also as a stand-alone language that is easy
+        to learn as it shares most of its syntax with the C programming
+        language and <a href="https://www.lua.org/">Lua</a>.
+        </p>
+
+        <p>
+        CScript is free software, and is provided with no guarantees,
+        as stated in its license.
+        </p>
+
+        <p>
+        This manual is subject to changes, as the language itself changes.
+        However the reference manual is always valid for the same version of
+        CScript distribution. If you spot the mistake or you think the manual
+        is lacking in various places, please let me know
+        (<a href="https://github.com/b-jure/cscript">link</a> to the official
+        git[hub] repository).
+        </p>
+
+
+
+        <h1>2 &ndash; <a name="2">Basic Concepts</a></h1>
+
+        <p>
+        This section describes the basic concepts of the language.
+        </p>
+
+        <h2>2.1 &ndash; <a name="2.1">Values and Types</a></h2>
+
+        <p>
+        CScript is a dynamically types language.
+        This means that variables do not have types; only values do.
+        There are no type definitions in the language instead all values
+        carry their own type.
+        </p>
+
+        <p>
+        All values in CScript are first-class values, meaning all values
+        can be stored in variables (as is expected), passed as arguments
+        to other functions and returned as results.
+        </p>
+
+        <p>
+        There are eleven basic types in CScript:
+        <em>nil</em>, <em>boolean</em>, <em>number</em>, <em>string</em>, 
+        <em>function</em>, <em>userdata</em>, <em>thread</em>, <em>table</em>, 
+        <em>array</em>, <em>class</em> and <em>instance</em>.
+        </p>
+
+        <p> <!-- nil -->
+        The type <em>nil</em> has one single value, <b>nil</b>, and is
+        intended to represent absence of value.
+        </p>
+
+        <p> <!-- boolean -->
+        The type <em>boolean</em> has two values, <b>true</b> and <b>false</b>.
+        Both <b>nil</b> and <b>false</b> make a condition false; they are
+        collectively called <em>false values</em>
+        (for example in C, we would consider <b>0</b> value as the
+        <em>false value</em>).
+        Any other value makes a condition true.
+        So what is the difference between the <b>false</b> and <b>nil</b>?
+        Here is a simple example, if we were to index a table with <b>nil</b>
+        it would raise a runtime error; as said, use <b>nil</b> to indicate
+        absence of value.
+        </p>
+
+        <p> <!-- number -->
+        The type <em>number</em> represents both integer and real
+        (floating-point) numbers, using two subtypes: <em>integer</em> and
+        <em>float</em> (as is indicated in the C&nbsp;API header).
+
+        Standard CScript uses 64-bit integers and double-precision (64-bit)
+        floats. Configuration header can be tinkered to allow 32-bit integers
+        and/or single-precision (32-bit) floats, but this but would probably
+        require internal patches (see <code>cconf.h</code> if interested).
+
+        Any overflow when manipulating integer values <em>wrap around</em>,
+        according to the usual rules of two-complement arithmetics.
+        This holds both for negative (signed) and positive (unsigned) integers.
+
+        The conversion between the two subtypes mimics C standard.
+        For example, if we were to do a mathematical operation between the two
+        numbers, one of them is <em>integer</em> and the other is
+        <em>float</em>, before the operation <em>integer</em> would be
+        converted to a <em>float</em>.
+        Additionally before the operation if the both numbers are of type
+        <em>float</em> but both have <em>integer</em> representation, then
+        they would be converted to <em>integers</em> before the operation
+        (this would result in a slower operation on processors that support
+        float division but this behaviour can also be configured in CScript
+        internals quite easily, check <code>cvm.c</code>).
+        </p>
+
+        <p> <!-- string -->
+        The type <em>string</em> represents immutable sequence of bytes.
+        Strings can contain any 8-bit value, including embedded zeros
+        ('<code>\0</code>').
+        Internally CScript is encoding-agnostic; it makes no assumptions
+        about the contents of a string.
+        The length of any string in CScript must fit in a CScript integer.
+        </p>
+
+        <p> <!-- function -->
+        The type <em>function</em> can be a function written in CScript or
+        C, both of which can be manipulated and called.
+        </p>
+
+        <p> <!-- userdata -->
+        The type <em>userdata</em> is provided to allow arbitrary C&nbsp;data
+        to be stored in a variable.
+        A userdata value represents a block of raw memory.
+        There are two kinds of userdata:
+        <em>full userdata</em>,
+        which is an object with a block of memory managed by CScript,
+        and <em>light userdata</em>,
+        which is simply a C&nbsp;pointer value.
+        Userdata has no predefined operations in CScript except assignment
+        and identity test (<code>==</code>).
+        By using <em>VMTs</em> (virtual method tables), the programmer can
+        define operations for full userdata values.
+        Userdata values cannot be created or modified in CScript, only
+        through the C&nbsp;API.
+        This guarantees the integrity of data owned by the host program
+        and C&nbsp;libraries.
+        </p>
+
+        <p> <!-- table -->
+        The type <em>table</em> implements associative arrays,
+        that is, arrays that can have as indices not only numbers,
+        but any CScript value except <b>nil</b> and NaN
+        (<em>Not a Number</em> is a special floating-point value
+        used by the IEEE 754 standard to represent undefined numerical
+        results, such as <code>0/0</code>).
+
+        Tables can be contain values of all types (except <b>nil</b>).
+        Any key associated to the value <b>nil</b> is not considered part of
+        the table. Conversely, any key that is not part of a table has
+        an associated value <b>nil</b>.
+
+        Tables can be indexed two different ways, given the key
+        <code>name</code> we index the table <code>t</code> either as
+        <code>t.name</code> or <code>t["name"]</code>.
+        The array-like indexing is useful when we want to index the table
+        with the value of the variable.
+        </p>
+
+        <p> <!-- array -->
+        The type <em>array</em> is a linear collection of values each
+        identified by an <b>index</b>. Each <b>index</b> is positive integer
+        value which is used to index the <em>array</em> in order to retrieve
+        the value (variable values can also be used in place of literal
+        integers). Negative integer indices are not allowed.
+        </p>
+
+        <p> <!-- class -->
+        The type <em>class</em> is useful for object-oriented programming.
+        Class can contain <em>methods</em> which are defined upon class
+        creation and can not be changed after.
+        The reason why they can't be changed is because how inheritance is
+        implemented internally, which in turn makes code much more manageable.
+        <em>class</em> can inherit from another class, the name of the
+        <em>class</em> from which we inherit is called a <em>superclass</em>.
+        When inheriting all of the <em>superclass methods</em> are copied over
+        to the <em>class</em> being created.
+
+        When constructing a <em>class</em> programmer can define
+        <em>metamethods</em> which are special functions that provide
+        meta-programming functionality.
+        </p>
+
+        <p> <!-- instance -->
+        The type <em>instance</em> is similar to <em>table</em>; it can be
+        indexed and indexed values are the values of the <em>instance</em>
+        <em>fields</em>. Each <em>instance</em> is constructed from a
+        <em>class</em>.
+        The <em>class</em> methods of the <em>instance</em> can't be changed
+        but can be shadowed by creating a non <b>nil</b> <em>field</em> with
+        the same key.
+        </p>
+
+        <p> <!-- thread -->
+        The type <em>thread</em> represents independent threads of execution.
+        CScript threads are not related to operating-system threads.
+        </p>
+
+        <p>
+        The library function <a href=#type><code>type</code></a> returns a
+        string describing the type of a given value.
+        </p>
+
+
+
+        <h2>2.2 &ndash; <a name="2.2">Global Table</a></h2>
+        <p>To do...</p>
+
+
+
+        <h1>3 &ndash; <a name="3">The Language</h1>
+        <p>To do...</p>
+
+
+
+        <h1>4 &ndash; <a name="4">The Application Programming Interface</h1>
+        <p>To do...</p>
+
+
+
+        <h1>5 &ndash; <a name="5">The Auxiliary Library</h1>
+        <p>To do...</p>
+
+
+
+        <h1>6 &ndash; <a name="6">The Standard Libraries</h1>
+        <p>
+        The standard CScript libraries provide useful functions that are
+        implemented in&nbsp;C through the C&nbsp;API.
+        Most of these functions provide essential service to the
+        language that is not express via the language syntax and others
+        provide access to outside services (e.g., I/O).
+        <br/>
+        All libraries are implemented through the official C&nbsp;API and are
+        provided as separate C&nbsp;modules.
+        <br/>
+        The notation <b>fail</b> means a false value representing some kind of
+        failure (the recommendation is to always test the success of these
+        functions with <code>(!status)</code>, instead of
+        <code>(status == nil)</code>).
+        </p>
+
+        <p>
+        Currently, CScript has the following standard libraries:
+        </p>
+        <ul>
+            <li>basic library (<a href="#6.1">&sect;6.1</a>);</li>
+            <li>string library (<a href="#6.2">&sect;6.2</a>);</li>
+            <li>math library (<a href="#6.3">&sect;6.3</a>);</li>
+            <li>utf-8 library (<a href="#6.4">&sect;6.4</a>);</li>
+            <li>input-output library (<a href="#6.5">&sect;6.5</a>);</li>
+            <li>operating system library (<a href="#6.6">&sect;6.6</a>);</li>
+        </ul>
+
+        <p>
+        To have access to these libraries, the C&nbsp;host program should
+        call the <a href="#csL_open_libs"><code>csL_openlibs</code></a>
+        function, which opens all standard libraries.
+        Alternatively, the host program can open them individually by using
+        <a href="#csL_include"><code>csL_include</code></a> to call
+        <a name="csL_open_base"><code>csL_open_base</code></a> (for the basic library),
+        <a name="csL_open_string"><code>csL_open_string</code></a> (for the string library),
+        <a name="csL_open_utf8"><code>csL_open_utf8</code></a> (for the UTF-8 library),
+        <a name="csL_open_math"><code>csL_open_math</code></a> (for the math library),
+        <a name="csL_open_io"><code>csL_open_io</code></a> (for the I/O library),
+        <a name="csL_open_os"><code>csL_open_os</code></a> (for the operating system library),
+        These functions are declared in <a name="cslib.h"><code>cslib.h</code></a>
+        </p>
+
+
+
+        <h2>6.1 &ndash; <a name="6.1">Basic Library</a></h2>
+        <p>
+        The basic library provides core functions to CScript.
+        </p>
+
+        <p> <!-- error -->
+        <hr/><h3><a name="error"><code>error(message [, level])</code></a></h3>
+        Raises an error with <code>message</code> as the error object.
+        This function never returns.
+        <br/>
+        Usually, <code>error</code> adds some information about the error position
+        at the beginning of the message, if the message is a string.
+        The <code>level</code> argument specifies how to get the error position.
+        With level&nbsp;0 (the default), the error position is where the
+        <code>error</code> function was called.
+        Level&nbsp;1 points the error to where the function
+        that called <code>error</code> was called; and so on.
+        Passing a negative level (e.g., <code>-1</code>) avoids the addition
+        of error position information to the message.
+        </p>
+
+        <p> <!-- assert -->
+        <hr/><h3><a name="assert"><code>assert(v [, message])</code></a></h3>
+        Raises an error if the value of its argument <code>v</code> is false
+        (i.e., <b>nil</b> or <b>false</b>); otherwise, returns all its arguments.
+        In case of error, <code>message</code> is the error object;
+        when absent, it defaults to "<code>assertion failed!</code>"
+        </p>
+
+        <p> <!-- gc -->
+        <hr/><h3><a name="gc"><code>gc([opt [, arg]])</code></a></h3>
+        This function is a generic interface to the garbage collector.
+        It performs different functions according to its first argument,
+        <code>opt</code>:
+        <ul>
+            <li>
+                <b>"<code>collect</code>": </b>
+                Performs a full garbage-collection cycle.
+                This is the default option.
+            </li>
+            <li>
+                <b>"<code>stop</code>": </b>
+                Stops automatic execution of the garbage collector.
+                The collector will run only when explicitly invoked,
+                until a call to restart it.
+            </li>
+            <li>
+                <b>"<code>restart</code>": </b>
+                Restarts automatic execution of the garbage collector.
+            </li>
+            <li>
+                <b>"<code>count</code>": </b>
+                Returns the total memory in use by CScript in Kbytes.
+                The value has a fractional part, so that it multiplied by
+                1024 gives the exact number of bytes in use by CScript.
+            </li>
+            <li>
+                <b>"<code>step</code>": </b>
+                Performs a garbage-collection step.
+                The step "size" is controlled by <code>arg</code>.
+                With a zero value, the collector will perform one basic
+                (indivisible) step.
+                For non-zero values, the collector will perform as if that
+                amount of memory (in Kbytes) had been allocated by CScript.
+                Returns <b>true</b> if the step finished a collection cycle.
+            </li>
+            <li>
+                <b>"<code>isrunning</code>": </b>
+                Returns a boolean that tells whether the collector is running
+                (i.e., not stopped).
+            </li>
+            <li>
+                <b>"<code>incremental</code>": </b>
+                Change the collector mode to incremental.
+                This option can be followed by three numbers:
+                the garbage-collector pause, the step multiplier,
+                and the step size. A zero means to not change that value.
+            </li>
+        </ul>
+        This function should not be called by a finalizer (<code>__gc</code>).
+        </p>
+
+        <p> <!-- load -->
+        <hr/><h3><a name="load"><code>load(chunk [, chunkname])</code></a></h3>
+        Loads a chunk.
+        <br/>
+        If <code>chunk</code> is a string, the chunk is this string.
+        If <code>chunk</code> is a function, <code>load</code> calls it
+        repeatedly to get the chunk pieces. Each call to <code>chunk</code>
+        must return a string that concatenates with previous results.
+        A return of an empty string, <b>nil</b>, or no value signals the end
+        of the chunk.
+        If there are no syntactic errors, <code>load</code> returns the
+        compiled chunk as a function; otherwise, it returns <b>fail</b> plus
+        the error message.
+        <br>
+        <code>chunkname</code> is used as the name of the chunk for error
+        messages and debug information.
+        When absent, it defaults to <code>chunk</code>, if <code>chunk</code>
+        is a string, or to "<code>=(load)</code>" otherwise.
+        </p>
+
+        <p> <!-- loadfile -->
+        <hr/><h3><a name="loadfile"><code>loadfile([filename])</code></a></h3>
+        Similar to <a href="#load"><code>load</code></a>,
+        but gets the chunk from file <code>filename</code> or from the
+        standard input, if no file name is given.
+        </p>
+
+        <p> <!-- runfile -->
+        <hr/><h3><a name="runfile"><code>runfile([filename])</code></a></h3>
+        Opens the named file and executes its content as a CScript chunk.
+        When called without arguments, <code>runfile</code> executes the
+        content of the standard input (<code>stdin</code>).
+        Returns all values returned by the chunk.
+        In case of errors, <code>runfile</code> propagates the error to its
+        caller (that is, <code>runfile</code> does not run in protected mode).
+        </p>
+
+        <p> <!-- getmetamethod -->
+        <hr/><h3><a name="getmetamethod"><code>getmetamethod(value, name)</code></a></h3>
+        Returns the metamethod of the given <code>value</code> or <b>nil</b>
+        if <code>value</code> does not have virtual method table and/or the
+        <code>value</code> does not implement the metamethod <code>name</code>.
+        </p>
+
+        <p> <!-- next -->
+        <hr/><h3><a name="next"><code>next(obj [, index])</code></a></h3>
+        Allows a program to traverse of all fields of <code>obj</code>.
+        Its first argument is a table or instance and its second argument
+        is an index into this table/instance.
+        A call to <code>next</code> returns the next index of the
+        <code>obj</code> and its associated value.
+        When called with <b>nil</b> as its second argument, <code>next</code>
+        returns an initial index and its associated value.
+        When called with the last index, or with <b>nil</b> in an empty
+        table or instance without fields, <code>next</code> returns <b>nil</b>.
+        If the second argument is absent, then it is interpreted as <b>nil</b>.
+        In particular, you can use <code>next(obj)</code> to check whether a
+        table is empty or if instance has no fields.
+        <br/>
+        The order in which the indices are enumerated is not specified.
+        <br/>
+        You should not assign any value to a non-existent field in a table
+        during its traversal. You may however modify existing fields.
+        In particular, you may set existing fields to nil.
+        </p>
+
+        <p> <!-- pairs -->
+        <hr/><h3><a name="pairs"><code>pairs()</code></a></h3>
+        </p>
+
+        <p> <!-- ipairs -->
+        <hr/><h3><a name="ipairs"><code>ipairs()</code></a></h3>
+        </p>
+
+        <p> <!-- pcall -->
+        <hr/><h3><a name="pcall"><code>pcall()</code></a></h3>
+        </p>
+
+        <p> <!-- xpcall -->
+        <hr/><h3><a name="xpcall"><code>xpcall()</code></a></h3>
+        </p>
+
+        <p> <!-- print -->
+        <hr/><h3><a name="print"><code>print()</code></a></h3>
+        </p>
+
+        <p> <!-- warn -->
+        <hr/><h3><a name="warn"><code>warn()</code></a></h3>
+        </p>
+
+        <p> <!-- len -->
+        <hr/><h3><a name="len"><code>len()</code></a></h3>
+        </p>
+
+        <p> <!-- rawequal -->
+        <hr/><h3><a name="rawequal"><code>rawequal()</code></a></h3>
+        </p>
+
+        <p> <!-- rawget -->
+        <hr/><h3><a name=rawget""><code>rawget()</code></a></h3>
+        </p>
+
+        <p> <!-- rawset -->
+        <hr/><h3><a name="rawset"><code>rawset()</code></a></h3>
+        </p>
+
+        <p> <!-- getargs -->
+        <hr/><h3><a name="getargs"><code>getargs()</code></a></h3>
+        </p>
+
+        <p> <!-- tonumber -->
+        <hr/><h3><a name="tonumber"><code>tonumber()</code></a></h3>
+        </p>
+
+        <p> <!-- tostring -->
+        <hr/><h3><a name="tostring"><code>tostring()</code></a></h3>
+        </p>
+
+        <p> <!-- typeof -->
+        <hr/><h3><a name="typeof"><code>typeof()</code></a></h3>
+        </p>
+
+        <p> <!-- __G -->
+        <hr/><h3><a name="__G"><code>__G()</code></a></h3>
+        </p>
+
+        <p> <!-- __VERSION -->
+        <hr/><h3><a name="__VERSION"><code>__VERSION()</code></a></h3>
+        </p>
+
+
+
+        <h2>6.2 &ndash; <a name="6.2">String Library</a></h2>
+        <p>
+        This library provides generic functions for string manipulation,
+        such as finding and extracting substrings and other common operations.
+        All of the functionality is provided in the global class 
+        <a name="String"><code>String</code></a>.
+        When indexing <code>String</code> instance in CScript, the first
+        character is at position &nbsp;0 (same as in C).
+        Indices are allowed to be negative and are interpreted as indexing
+        backwards, from the end of the <code>String</code>.
+        Thus, the last character is at position -1, and so on.
+        <br/>
+        The string library assumes one-byte character encodings.
+        </p>
+
+
+
+        <h2>6.3 &ndash; <a name="6.3">UTF-8 Library</a></h2>
+        <p>
+        </p>
+
+
+
+        <h2>6.4 &ndash; <a name="6.4">Math Library</a></h2>
+        <p>
+        </p>
+
+
+
+        <h2>6.5 &ndash; <a name="6.5">I/O Library</a></h2>
+        <p>
+        </p>
+
+
+
+        <h2>6.6 &ndash; <a name="6.6">OS Library</a></h2>
+        <p>
+        </p>
+    </body>
+</html>

@@ -37,13 +37,12 @@ void csA_ensure(cs_State *ts, Array *arr, int index) {
     cs_assert(index >= 0);
     if (cast_uint(index) < arr->n) { /* 'index' in bounds? */
         return; /* done */
-    } else { /* otherwise adjust new in-use length */
-        cs_assert(arr->n <= cast_uint(index));
-        csM_ensurearray(ts, arr->b, arr->sz, arr->n, index - arr->n + 1,
+    } else {
+        csM_ensurearray(ts, arr->b, arr->sz, arr->n, index + 1 - arr->n,
                         ARRAYLIMIT, "array elements", TValue);
-        for (int i = arr->n; i <= index; i++)
+        for (int i = arr->n; i <= index; i++) /* nil out values in-between */
             setnilval(&arr->b[i]);
-        arr->n = index + 1;
+        arr->n = index + 1; /* adjust new in-use length */
     }
 }
 

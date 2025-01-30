@@ -1,0 +1,160 @@
+html {
+    background-color: #1c1c1c ;
+}
+
+body {
+    background-color: #282828 ;
+    color: #ffffff ;
+    font-family: Helvetica, Arial, sans-serif ;
+    text-align: justify ;
+    line-height: 1.25 ;
+    margin: 16px auto ;
+    padding: 32px ;
+    max-width: 70em ;
+    width: 90% ;
+}
+
+h1, h2, h3, h4 {
+    color: #fabd2f ;
+    font-family: Verdana, Geneva, sans-serif ;
+    font-weight: normal ;
+    font-style: normal ;
+    text-align: left ;
+}
+
+h1 {
+    font-size: 28pt ;
+}
+
+h1 img {
+    vertical-align: text-bottom ;
+}
+
+h2:before {
+    content: "\2756" ;
+    padding-right: 0.5em ;
+}
+
+a {
+    text-decoration: none ;
+}
+
+a:link, a:visited {
+    color: #fb4934 ;
+}
+
+a:link:hover, a:visited:hover {
+    background-color: #282828 ;
+    color: #fb4934 ;
+    border-radius: 4px ;
+}
+
+a:link:active, a:visited:active {
+    color: #FF0000 ;
+}
+
+div.menubar {
+    padding-bottom: 0.5em ;
+}
+
+p.menubar {
+    margin-left: 2.5em ;
+}
+
+.menubar a:hover  {
+    margin: -3px -3px -3px -3px ;
+    padding: 3px  3px  3px  3px ;
+    border-radius: 4px ;
+}
+
+:target {
+    background-color: #222222 ;
+    margin: -8px ;
+    padding: 8px ;
+    border-radius: 8px ;
+    outline: none ;
+}
+
+hr {
+    display: 0 ;
+}
+
+table hr {
+    background-color: #282828 ;
+    color: #fb4934 ;
+    border: 0 ;
+    height: 1px ;
+    display: block ;
+}
+
+.footer {
+    color: gray ;
+    font-size: x-small ;
+    text-transform: lowercase ;
+}
+
+input[type=text] {
+    border: solid #a0a0a0 2px ;
+    border-radius: 2em ;
+    background-image: url('images/search.png') ;
+    background-repeat: no-repeat ;
+    background-position: 4px center ;
+    padding-left: 20px ;
+    height: 2em ;
+}
+
+pre.session {
+    background-color: #F8F8F8 ;
+    padding: 1em ;
+    border-radius: 8px ;
+}
+
+table {
+    border: none ;
+    border-spacing: 0 ;
+    border-collapse: collapse ;
+}
+
+td {
+    padding: 0 ;
+    margin: 0 ;
+}
+
+td.gutter {
+    width: 4% ;
+}
+
+table.columns td {
+    vertical-align: top ;
+    padding-bottom: 1em ;
+    text-align: justify ;
+    line-height: 1.25 ;
+}
+
+table.book td {
+    vertical-align: top ;
+}
+
+table.book td.cover {
+    padding-right: 1em ;
+}
+
+table.book img {
+    border: solid #FF0000 1px ;
+    border-radius: 2px ;
+}
+
+table.book span {
+    font-size: small ;
+    text-align: left ;
+    display: block ;
+    margin-top: 0.25em ;
+}
+
+p.logos a:link:hover, p.logos a:visited:hover {
+    background-color: #1c1c1c ;
+}
+
+img {
+    background-color: #282828 ;
+}

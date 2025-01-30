@@ -334,9 +334,7 @@ static void arraygeti(cs_State *ts, Array *arr, const TValue *index, SPtr res) {
     cs_Integer i;
     if (c_likely(tointeger(index, &i))) { /* index is integer? */
         if (0 <= i) { /* positive index? */
-            if (c_unlikely(ARRAYLIMIT <= i)) { /* too large index? */
-                csD_indexerror(ts, i, "too large");
-            } else if (i < arr->sz) { /* index in bounds? */
+            if (i < arr->sz) { /* index in bounds? */
                 setobj2s(ts, res, &arr->b[i]);
             } else /* index out of bounds */
                 setnilval(s2v(res));
