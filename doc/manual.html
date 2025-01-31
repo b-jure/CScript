@@ -23,6 +23,7 @@
 
 
 
+
         <h1>1 &ndash; <a name="1">Introduction</a></h1>
 
         <p>
@@ -68,14 +69,14 @@
 
 
 
-        <h1>2 &ndash; <a name="2">Basic Concepts</a></h1>
 
+        <h1>2 &ndash; <a name="2">Basic Concepts</a></h1>
         <p>
         This section describes the basic concepts of the language.
         </p>
 
-        <h2>2.1 &ndash; <a name="2.1">Values and Types</a></h2>
 
+        <h2>2.1 &ndash; <a name="2.1">Values and Types</a></h2>
         <p>
         CScript is a dynamically types language.
         This means that variables do not have types; only values do.
@@ -239,9 +240,9 @@
         </p>
 
 
-
         <h2>2.2 &ndash; <a name="2.2">Global Table</a></h2>
         <p>To do...</p>
+
 
 
 
@@ -250,13 +251,322 @@
 
 
 
+
         <h1>4 &ndash; <a name="4">The Application Programming Interface</h1>
+        <p>
+        This section describes the C&nbsp;API for CScript, that is,
+        the set of C&nbsp;functions available to the host program to
+        communicate with CScript.
+        All API functions and related types and constants are declared in
+        the header file <a name="cscript.h"><code>cscript.h</code></a>.
+        </br></br>
+        Even when we use the term "function", any facility in the API may be
+        provided as a macro instead.
+        Except where stated otherwise, all such macros use each of their
+        arguments exactly once (except for the first argument, which is always
+        a CScript state), and so do not generate any hidden side-effects.
+        </br></br>
+        As in most C&nbsp;libraries, the CScript API functions do not check
+        their arguments for validity or consistency.
+        However, you can change this behavior by compiling CScript with the
+        macro <a name="CS_USE_APICHECK"><code>CS_USE_APICHECK</code></a> defined.
+        </br></br>
+        The CScript library is fully reentrant: it has no global variables.
+        It keeps all information it needs in a dynamic structure, called
+        the <em>CScript state</em>.
+        </br></br>
+        Each CScript state has one or more threads, which correspond to
+        independent, cooperative lines of execution.
+        The type <a href="#cs_State"><code>cs_State</code></a> (despite its
+        name) refers to a thread.
+        (Indirectly, through the thread, it also refers to the CScript state
+        associated to the thread.)
+        </br></br>
+        A pointer to a thread must be passed as the first argument to every
+        function in the library, except to
+        <a href="#cs_newstate"><code>cs_newstate</code></a>, which creates
+        a CScript state from scratch and returns a pointer to the
+        <em>main thread</em> in the new state.
+        </p>
+
+
+        <h2>4.1 &ndash; <a name="4.1">The Stack</a></h2>
+        <p>
+        CScript uses a <em>virtual stack</em> to pass values to and from C.
+        Each element in this stack represents a CScript value (<b>nil</b>,
+        number, string, etc.).
+        Functions in the API can access this stack through the CScript state
+        parameter that they receive.
+        <br/><br/>
+        Whenever CScript calls C, the called function gets a new stack,
+        which is independent of previous stacks and of stacks of
+        C&nbsp;functions that are still active.
+        This stack initially contains any arguments to the C&nbsp;function
+        and it is where the C&nbsp;function can store temporary CScript
+        values and must push its results to be returned to the caller
+        (see <a href="#cs_CFunction"><code>cs_CFunction</code></a>).
+        <br/><br/>
+        For convenience, most query operations in the API do not follow a
+        strict stack discipline.
+        Instead, they can refer to any element in the stack by using an
+        <em>index</em>:
+        A positive index represents an absolute stack position, starting
+        at&nbsp;0 as the bottom of the stack;
+        a negative index represents an offset relative to the top of the stack.
+        More specifically, if the stack has <em>n</em> elements, then
+        index&nbsp;0 represents the first element
+        (that is, the element that was pushed onto the stack first)
+        and index&nbsp;<em>n-1</em> represents the last element;
+        index&nbsp;-1 also represents the last element
+        (that is, the element at the&nbsp;top)
+        and index <em>-n</em> represents the first element.
+        </p>
+
+
+        <h3>4.1.1 &ndash; <a name="4.1.1">Stack Size</a></h3>
+        <p>
+        When you interact with the CScript API, you are responsible for
+        ensuring consistency.
+        In particular,
+        <em>you are responsible for controlling stack overflow</em>.
+        When you call any API function, you must ensure the stack has enough
+        room to accommodate the results.
+        <br/><br/>
+        There is one exception to the above rule:
+        When you call a CScript function without a fixed number of results
+        (see <a href="#cs_call"><code>cs_call</code></a>),
+        CScript ensures that the stack has enough space for all results.
+        However, it does not ensure any extra space.
+        So, before pushing anything on the stack after such a call
+        you should use <a href="#cs_checkstack"><code>cs_checkstack</code></a>.
+        <br/><br/>
+        Whenever CScript calls C, it ensures that the stack has space for at
+        least <a name="CS_MINSTACK"><code>CS_MINSTACK</code></a> extra elements;
+        that is, you can safely push up to <code>CS_MINSTACK</code> values into it.
+        <code>CS_MINSTACK</code> is defined as 20, so that usually you do
+        not have to worry about stack space unless your code has loops pushing
+        elements onto the stack.
+        Whenever necessary, you can use the function
+        <a href="#cs_checkstack"><code>cs_checkstack</code></a> to ensure
+        that the stack has enough space for pushing new elements.
+        </p>
+
+
+        <h3>4.1.2 &ndash; <a name="4.1.2">Valid and Acceptable Indices</a></h3>
+        <p>
+        Any function in the API that receives stack indices works only with
+        <em>valid indices</em> or <em>acceptable indices</em>.
+        <br/><br/>
+        A <em>valid index</em> is an index that refers to a position that
+        stores a modifiable CScript value.
+        It comprises stack indices between&nbsp;0 and the stack top
+        (<code>0 &le; abs(index) &lt; top</code>) plus <em>pseudo-indices</em>,
+        which represent some positions that are accessible to C&nbsp;code
+        but that are not in the stack.
+        Pseudo-indices are used to access the registry (see <a href="#4.3">&sect;4.3</a>)
+        and the upvalues of a C&nbsp;function (see <a href="#4.2">&sect;4.2</a>).
+        <br/><br/>
+        Functions that do not need a specific mutable position, but only a
+        value (e.g., query functions), can be called with acceptable indices.
+        An <em>acceptable index</em> can be any valid index, but it also can
+        be any positive index after the stack top within the space allocated
+        for the stack, that is, indices up to the stack size (not inclusive).
+        Indices to upvalues (see <a href="#4.2">&sect;4.2</a>) greater than
+        the real number of upvalues in the current C&nbsp;function are also
+        acceptable (but invalid).
+        Except when noted otherwise, functions in the API work with acceptable
+        indices.
+        <br/><br/>
+        Acceptable indices serve to avoid extra tests against the stack top
+        when querying the stack.
+        For instance, a C&nbsp;function can query its third argument without
+        the need to check whether there is a third argument, that is, without
+        the need to check whether 2 is a valid index.
+        <br/><br/>
+        For functions that can be called with acceptable indices, any
+        non-valid index is treated as if it contains a value of a virtual
+        type <a name="CS_TNONE"><code>CS_TNONE</code></a>, which behaves
+        like a nil value.
+        </p>
+
+
+        <h3>4.1.3 &ndash; <a name="4.1.3">Pointers to strings</a></h3>
+        <p>
+        Several functions in the API return pointers (<code>const char*</code>)
+        to CScript strings in the stack.
+        (See <a href="#cs_pushfstring"><code>cs_push_fstring</code></a>,
+        <a href="#cs_push_lstring"><code>cs_push_lstring</code></a>,
+        <a href="#cs_push_string"><code>cs_push_string</code></a>,
+        and <a href="#cs_to_lstring"><code>cs_to_lstring</code></a>.
+        See also <a href="#csL_check_lstring"><code>csL_check_lstring</code></a>,
+        <a href="#csL_check_string"><code>csL_check_string</code></a>,
+        and <a href="#csL_to_lstring"><code>csL_to_lstring</code></a> in the
+        auxiliary library.)
+        <br/><br/>
+        In general, CScript's garbage collection can free or move internal
+        memory and then invalidate pointers to internal strings.
+        To allow a safe use of these pointers, the API guarantees that any
+        pointer to a string in a stack index is valid while the string value
+        at that index is not removed from the stack.
+        (It can be moved to another index, though.)
+        When the index is a pseudo-index (referring to an upvalue), the
+        pointer is valid while the corresponding call is active and the
+        corresponding upvalue is not modified.
+        <br/><br/>
+        Some functions in the debug interface also return pointers to strings,
+        namely <a href="#cs_getlocal"><code>cs_getlocal</code></a>,
+        <a href="#cs_getupvalue"><code>cs_getupvalue</code></a>,
+        <a href="#cs_setlocal"><code>cs_setlocal</code></a>,
+        and <a href="#cs_setupvalue"><code>cs_setupvalue</code></a>.
+        For these functions, the pointer is guaranteed to be valid while the
+        caller function is active and the given closure (if one was given)
+        is in the stack.
+        <br/><br/>
+        Except for these guarantees, the garbage collector is free to
+        invalidate any pointer to internal strings.
+        </p>
+
+
+        <h2>4.2 &ndash; <a name="4.2">C Closures</a></h2>
+        <p>
+        When a C&nbsp;function is created, it is possible to associate
+        some values with it, thus creating a <em>C&nbsp;closure</em>
+        (see <a href="#cs_push_cclosure"><code>cs_push_cclosure</code></a>);
+        these values are called <em>upvalues</em> and are accessible to the
+        function whenever it is called.
+        <br/><br/>
+        Whenever a C&nbsp;function is called, its upvalues are located at
+        specific pseudo-indices.
+        These pseudo-indices are produced by the macro
+        <a href="#cs_upvalueindex"><code>cs_upvalueindex</code></a>.
+        The first upvalue associated with a function is at index
+        <code>cs_upvalueindex(0)</code>, and so on.
+        Any access to <code>cs_upvalueindex(<em>n</em>)</code>,
+        where <em>n</em> is greater than the number of upvalues of the
+        current function, produces an acceptable but invalid index.
+        <br/><br/>
+        A C&nbsp;closure can also change the values of its corresponding
+        upvalues.
+        </p>
+
+
+        <h2>4.3 &ndash; <a name="4.3">Registry</a></h2>
+        <p>
+        CScript provides a <em>registry</em>, a predefined array that can be
+        used by any C&nbsp;code to store whatever CScript values it needs to
+        store.
+        The registry array is always accessible at pseudo-index
+        <a name="CS_REGISTRYINDEX"><code>CS_REGISTRYINDEX</code></a>.
+        Any C&nbsp;library can store data into this array, but it must take
+        care to choose indices that are different from those used by other
+        libraries, to avoid collisions.
+        Typically, you would use
+        <a href="#cs_getfreereg"><code>cs_getfreereg</code></a> in order to
+        obtain free registry index.
+        As with variable names, string keys starting with an two consecutive
+        underscore followed by uppercase letters are reserved for CScript.
+        <br/><br/>
+        When you create a new CScript state, its registry comes with some
+        predefined values.
+        These predefined values are indexed with indices defined as constants
+        in <code>cscript.h</code>.
+        The following constants are defined:
+        <ul>
+            <li>
+                <b><a name="CS_RINDEX_MAINTHREAD"><code>CS_RINDEX_MAINTHREAD</code></a>:</b>
+                At this index the registry has the main thread of the state.
+                (The main thread is the one created together with the state.)
+            </li>
+            <li>
+                <b><a name="CS_RINDEX_GLOBALS"><code>CS_RINDEX_GLOBALS</code></a>:</b>
+                At this index the registry has the global table.
+            </li>
+        </ul>
+        </p>
+
+
+        <h2>4.4 &ndash; <a name="4.4">Error Handling in C</a></h2>
+        <p>
+        Internally, CScript uses the C <code>longjmp</code> facility to handle
+        errors.
+        When CScript faces any error, such as a memory allocation error or a
+        type error, it <em>raises</em> an error; that is, it does a long jump.
+        A <em>protected environment</em> uses <code>setjmp</code>
+        to set a recovery point; any error jumps to the most recent active
+        recovery point.
+        <br/><br/>
+        Inside a C&nbsp;function you can raise an error explicitly
+        by calling <a href="#cs_error"><code>cs_error</code></a>.
+        <br/><br/>
+        Most functions in the API can raise an error, for instance due to
+        a memory allocation error.
+        The documentation for each function indicates whether it can raise
+        errors.
+        <br/><br/>
+        If an error happens outside any protected environment, CScript calls
+        a <em>panic function</em>
+        (see <a href="#cs_atpanic"><code>cs_atpanic</code></a>)
+        and then calls <code>abort</code>, thus exiting the host application.
+        Your panic function can avoid this exit by never returning
+        (e.g., doing a long jump to your own recovery point outside CScript).
+        <br/><br/>
+        The panic function, as its name implies, is a mechanism of last resort.
+        Programs should avoid it.
+        As a general rule, when a C&nbsp;function is called by CScript with a
+        CScript state, it can do whatever it wants on that CScript state,
+        as it should be already protected.
+        However, when C code operates on other CScript states
+        (e.g., a CScript-state argument to the function, a CScript state
+        stored in the registry, or the result of
+        <a href="#cs_newthread"><code>cs_newthread</code></a>),
+        it should use them only in API calls that cannot raise errors.
+        <br/><br/>
+        The panic function runs as if it were a message handler
+        (see <a href="#2.3">&sect;2.3</a>); in particular, the error object
+        is on the top of the stack.
+        However, there is no guarantee about stack space.
+        To push anything on the stack, the panic function must first check
+        the available space (see <a href="#4.1.1">&sect;4.1.1</a>).
+        </p>
+
+
+        <h3>4.4.1 &ndash; <a name="4.4.1">Status Codes</a></h3>
+        <p>
+        Several functions that report errors in the API use the following
+        status codes to indicate different kinds of errors or other conditions:
+        <ul>
+            <li><b><a name="pdf-CS_OK"><code>CS_OK</code></a> (0):</b>
+                no errors.
+            </li>
+            <li><b><a name="pdf-CS_ERRRUN"><code>CS_ERRRUNTIME</code></a>:</b>
+                a runtime error.
+            </li>
+            <li><b><a name="pdf-CS_ERRMEM"><code>CS_ERRMEM</code></a>: </b>
+                memory allocation error.
+                For such errors, CScript does not call the message handler.
+            </li>
+            <li><b><a name="pdf-CS_ERRERR"><code>CS_ERRERROR</code></a>: </b>
+                error while running the message handler.
+            </li>
+            <li><b><a name="pdf-CS_ERRSYNTAX"><code>CS_ERRSYNTAX</code></a>:</b>
+                syntax error during precompilation.</li>
+            <li><b><a name="pdf-CS_ERRFILE"><code>CS_ERRFILE</code></a>:</b>
+                a file-related error;
+                e.g., it cannot open or read the file.</li>
+        </ul><p>
+        These constants are defined in the header file <code>cscript.h</code>.
+        </p>
+
+
+        <h2>4.5 &ndash; <a name="4.5">Functions and Types</a></h2>
         <p>To do...</p>
+
 
 
 
         <h1>5 &ndash; <a name="5">The Auxiliary Library</h1>
         <p>To do...</p>
+
 
 
 
@@ -267,19 +577,16 @@
         Most of these functions provide essential service to the
         language that is not express via the language syntax and others
         provide access to outside services (e.g., I/O).
-        <br/>
+        <br/><br/>
         All libraries are implemented through the official C&nbsp;API and are
         provided as separate C&nbsp;modules.
-        <br/>
+        <br/><br/>
         The notation <b>fail</b> means a false value representing some kind of
         failure (the recommendation is to always test the success of these
         functions with <code>(!status)</code>, instead of
         <code>(status == nil)</code>).
-        </p>
-
-        <p>
+        <br/><br/>
         Currently, CScript has the following standard libraries:
-        </p>
         <ul>
             <li>basic library (<a href="#6.1">&sect;6.1</a>);</li>
             <li>string library (<a href="#6.2">&sect;6.2</a>);</li>
@@ -288,8 +595,6 @@
             <li>input-output library (<a href="#6.5">&sect;6.5</a>);</li>
             <li>operating system library (<a href="#6.6">&sect;6.6</a>);</li>
         </ul>
-
-        <p>
         To have access to these libraries, the C&nbsp;host program should
         call the <a href="#csL_open_libs"><code>csL_openlibs</code></a>
         function, which opens all standard libraries.
@@ -305,13 +610,12 @@
         </p>
 
 
-
         <h2>6.1 &ndash; <a name="6.1">Basic Library</a></h2>
         <p>
         The basic library provides core functions to CScript.
-        </p>
+        <br/><br/>
 
-        <p> <!-- error -->
+        <!-- error -->
         <hr/><h3><a name="error"><code>error (message [, level])</code></a></h3>
         Raises an error with <code>message</code> as the error object.
         This function never returns.
@@ -325,18 +629,18 @@
         that called <code>error</code> was called; and so on.
         Passing a negative level (e.g., <code>-1</code>) avoids the addition
         of error position information to the message.
-        </p>
+        <br/><br/>
 
-        <p> <!-- assert -->
+        <!-- assert -->
         <hr/><h3><a name="assert"><code>assert (v [, message])</code></a></h3>
         Raises an error if the value of its argument <code>v</code> is false
         (i.e., <b>nil</b> or <b>false</b>); otherwise, returns all its arguments.
         <br/><br/>
         In case of error, <code>message</code> is the error object;
         when absent, it defaults to "<code>assertion failed!</code>"
-        </p>
+        <br/><br/>
 
-        <p> <!-- gc -->
+        <!-- gc -->
         <hr/><h3><a name="gc"><code>gc ([opt [, arg]])</code></a></h3>
         This function is a generic interface to the garbage collector.
         It performs different functions according to its first argument,
@@ -387,9 +691,9 @@
             </li>
         </ul>
         This function should not be called by a finalizer (<code>__gc</code>).
-        </p>
+        <br/><br/>
 
-        <p> <!-- load -->
+        <!-- load -->
         <hr/><h3><a name="load"><code>load (chunk [, chunkname])</code></a></h3>
         Loads a chunk.
         <br/><br/>
@@ -407,16 +711,16 @@
         messages and debug information.
         When absent, it defaults to <code>chunk</code>, if <code>chunk</code>
         is a string, or to "<code>=(load)</code>" otherwise.
-        </p>
+        <br/><br/>
 
-        <p> <!-- loadfile -->
+        <!-- loadfile -->
         <hr/><h3><a name="loadfile"><code>loadfile ([filename])</code></a></h3>
         Similar to <a href="#load"><code>load</code></a>,
         but gets the chunk from file <code>filename</code> or from the
         standard input, if no file name is given.
-        </p>
+        <br/><br/>
 
-        <p> <!-- runfile -->
+        <!-- runfile -->
         <hr/><h3><a name="runfile"><code>runfile ([filename])</code></a></h3>
         Opens the named file and executes its content as a CScript chunk.
         When called without arguments, <code>runfile</code> executes the
@@ -424,16 +728,16 @@
         Returns all values returned by the chunk.
         In case of errors, <code>runfile</code> propagates the error to its
         caller (that is, <code>runfile</code> does not run in protected mode).
-        </p>
+        <br/><br/>
 
-        <p> <!-- getmetamethod -->
+        <!-- getmetamethod -->
         <hr/><h3><a name="getmetamethod"><code>getmetamethod (v, name)</code></a></h3>
         Returns the metamethod of the given <code>v</code> or <b>nil</b>
         if <code>v</code> does not have virtual method table and/or the
         <code>v</code> does not implement the metamethod <code>name</code>.
-        </p>
+        <br/><br/>
 
-        <p> <!-- next -->
+        <!-- next -->
         <hr/><h3><a name="next"><code>next (v [, index])</code></a></h3>
         Allows a program to traverse of all fields of <code>v</code>.
         Its first argument is a table or instance and its second argument
@@ -453,9 +757,9 @@
         You should not assign any value to a non-existent field in a table
         during its traversal. You may however modify existing fields.
         In particular, you may set existing fields to <b>nil</b>.
-        </p>
+        <br/><br/>
 
-        <p> <!-- pairs -->
+        <!-- pairs -->
         <hr/><h3><a name="pairs"><code>pairs (v)</code></a></h3>
         Returns three values: the <a href="#next"><code>next</code></a>
         function, <code>v</code>, and <b>nil</b>, so that the construction
@@ -465,9 +769,9 @@
         <br/><br/>
         See function <a href="next"><code>next</code></a> for the caveats
         of modifying the table or instance fields during its traversal.
-        </p>
+        <br/><br/>
 
-        <p> <!-- ipairs -->
+        <!-- ipairs -->
         <hr/><h3><a name="ipairs"><code>ipairs (a)</code></a></h3>
         Returns three values (an iterator function, the array <code>a</code>,
         and -1)
@@ -476,9 +780,9 @@
         will iterate over the index&ndash;value pairs
         (<code>0,a[0]</code>), (<code>1,a[1]</code>), ...,
         up to the <em>length</em> of the array <code>a</code>.
-        </p>
+        <br/><br/>
 
-        <p> <!-- pcall -->
+        <!-- pcall -->
         <hr/><h3><a name="pcall"><code>pcall (f [, arg1, &middot;&middot;&middot;])</code></a></h3>
         Calls the function <code>f</code> with the given arguments in
         <em>protected mode</em>.
@@ -488,35 +792,35 @@
         if the call succeeds without errors.
         In such case, <code>pcall</code> also returns all results from the call,
         after this first result.
-        <br/> <br/>
+        <br/><br/>
         In case of any error, <code>pcall</code> returns <b>false</b> plus the error object.
         Note that errors caught by <code>pcall</code> do not call a message handler.
-        </p>
+        <br/><br/>
 
-        <p> <!-- xpcall -->
+        <!-- xpcall -->
         <hr/><h3><a name="xpcall"><code>xpcall (f, msgh [, arg1, &middot;&middot;&middot;])</code></a></h3>
         This function is similar to <a href="#pcall"><code>pcall</code></a>,
         except that it sets a new message handler <code>msgh</code>.
-        </p>
+        <br/><br/>
 
-        <p> <!-- print -->
+        <!-- print -->
         <hr/><h3><a name="print"><code>print (&middot;&middot;&middot;)</code></a></h3>
         Receives any number of arguments and prints their values to
         <code>stdout</code>, converting each argument to a string
         following the same rules of <a href="#tostring"><code>tostring</code></a>.
-        <br/> <br/>
+        <br/><br/>
         The function <code>print</code> is not intended for formatted output,
         but only as a quick way to show a value, for instance for debugging.
         For complete control over the output, use
         <a href="#io.printf"><code>io.printf</code></a> and
         <a href="#io.write"><code>io.write</code></a>.
-        </p>
+        <br/><br/>
 
-        <p> <!-- warn -->
+        <!-- warn -->
         <hr/><h3><a name="warn"><code>warn (msg1, &middot;&middot;&middot;)</code></a></h3>
         Emits a warning with a message composed by the concatenation
         of all its arguments (which should be strings).
-        <br/> <br/>
+        <br/><br/>
         By convention, a one-piece message starting with '<code>@</code>'
         is intended to be a <em>control message</em>,
         which is a message to the warning system itself.
@@ -524,9 +828,9 @@
         recognizes the control messages "<code>@off</code>",
         to stop the emission of warnings, and "<code>@on</code>", to
         (re)start the emission; it ignores unknown control messages.
-        </p>
+        <br/><br/>
 
-        <p> <!-- len -->
+        <!-- len -->
         <hr/><h3><a name="len"><code>len (v)</code></a></h3>
         Returns the length of the object <code>v</code>, which must be
         array, table, instance or a string.
@@ -537,19 +841,19 @@
         values; <em>instance</em> length is total number of fields with
         non-<b>nil</b> values; <em>string</em> length is size of string in
         bytes.
-        <br/> <br/>
+        <br/><br/>
         Returns an integer.
-        </p>
+        <br/><br/>
 
-        <p> <!-- rawequal -->
+        <!-- rawequal -->
         <hr/><h3><a name="rawequal"><code>rawequal (v1, v2)</code></a></h3>
         Checks whether <code>v1</code> is equal to <code>v2</code>,
         without invoking the <code>__eq</code> metamethod.
-        <br/> <br/>
+        <br/><br/>
         Returns a boolean.
-        </p>
+        <br/><br/>
 
-        <p> <!-- rawget -->
+        <!-- rawget -->
         <hr/><h3><a name=rawget""><code>rawget (v, index)</code></a></h3>
         Gets the real value of <code>v[index]</code>,
         without calling the <code>__getidx</code> metamethod.
@@ -557,9 +861,9 @@
         <code>index</code> may be any value if <code>v</code> is instance or a
         table; if <code>v</code> is array, <code>index</code> should be
         positive integer or 0.
-        </p>
+        <br/><br/>
 
-        <p> <!-- rawset -->
+        <!-- rawset -->
         <hr/><h3><a name="rawset"><code>rawset (v, index, value)</code></a></h3>
         Sets the real value of <code>v[index]</code> to <code>value</code>,
         without using the <code>__setidx</code> metamethod.
@@ -567,43 +871,43 @@
         <code>index</code> any value different from <b>nil</b> and NaN if the
         <code>v</code> is a table or instance, otherwise <code>index</code>
         should be a positive integer or 0; <code>value</code> any CScript value.
-        <br/> <br/>
+        <br/><br/>
         This function returns <code>v</code>.
-        </p>
+        <br/><br/>
 
-        <p> <!-- getargs -->
+        <!-- getargs -->
         <hr/><h3><a name="getargs"><code>getargs (index, &middot;&middot;&middot;)</code></a></h3>
         If <code>index</code> is a number, returns all arguments after
         argument number <code>index</code>; a negative number indexes from
         the end (-1 is the last argument).
         Otherwise, <code>index</code> must be one of these strings:
         <code>"array"</code>, <code>"table"</code> or <code>"len"</code>.
-        <br/> <br/>
+        <br/><br/>
         In case <code>index</code> is <code>"array"</code> or
         <code>"table"</code> string then <code>getargs</code> returns
         the total number of extra arguments it received; <code>"array"</code>
         returns the extra arguments inside the array, <code>"table"</code>
         returns the extra arguments inside the table where each argument is
         a key with <b>true</b> value.
-        <br/> <br/>
+        <br/><br/>
         However if <code>index</code> is 
         <code>"len"</code> string, then <code>getargs</code> returns integer
         corresponding to total number of extra arguments.
-        </p>
+        <br/><br/>
 
-        <p> <!-- tonumber -->
+        <!-- tonumber -->
         <hr/><h3><a name="tonumber"><code>tonumber (v, [, base])</code></a></h3>
         When called with no <code>base</code>,
         <code>tonumber</code> tries to convert its argument to a number.
         If the argument <code>v</code> is already a number or a string
         convertible to a number, then <code>tonumber</code> returns this
         number and overflow flag; otherwise, it returns <b>fail</b>.
-        <br/> <br/>
+        <br/><br/>
         The conversion of strings can result in integers or floats.
         The string may have leading and trailing spaces and a sign.
         The conversion mimics C standard library functions <code>strtod</code>
         and <code>strtol</code>.
-        <br/> <br/>
+        <br/><br/>
         When called with <code>base</code>, then <code>v</code> must be a
         string to be interpreted as an integer numeral in that base.
         The base may be any integer between 2 and 36, inclusive.
@@ -612,15 +916,15 @@
         and so forth, with '<code>Z</code>' representing 35.
         If the string <code>v</code> is not a valid numeral in the given base,
         the function returns <b>fail</b>.
-        </p>
+        <br/><br/>
 
-        <p> <!-- tostring -->
+        <!-- tostring -->
         <hr/><h3><a name="tostring"><code>tostring (v)</code></a></h3>
         Receives a value of any type and converts it to a string in a
         human-readable format.
-        </p>
+        <br/><br/>
 
-        <p> <!-- typeof -->
+        <!-- typeof -->
         <hr/><h3><a name="typeof"><code>typeof (v)</code></a></h3>
         Returns the type of its only argument, coded as a string.
         The possible results of this function are
@@ -635,18 +939,18 @@
         "<code>instance</code>",
         "<code>thread</code>",
         and "<code>userdata</code>".
-        </p>
+        <br/><br/>
 
-        <p> <!-- __G -->
+        <!-- __G -->
         <hr/><h3><a name="__G"><code>__G</code></a></h3>
         A global variable (not a function) that holds the global table
         (see <a href="#2.2">&sect;2.2</a>).
         <br/>
         CScript itself does not use this variable;
         changing its value does not affect any environment, nor vice versa.
-        </p>
+        <br/><br/>
 
-        <p> <!-- __VERSION -->
+        <!-- __VERSION -->
         <hr/><h3><a name="__VERSION"><code>__VERSION</code></a></h3>
         A global variable (not a function) that holds a string containing
         the running CScript version.

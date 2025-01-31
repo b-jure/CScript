@@ -1568,6 +1568,17 @@ CS_API void cs_closeslot(cs_State *ts, int index) {
 }
 
 
+CS_API int cs_getfreereg(cs_State *ts) {
+    Array *arr = arrval(&G_(ts)->c_registry);
+    for (uint i = 0; i < arr->n; i++) {
+        TValue *v = &arr->b[i];
+        if (ttisnil(v))
+            return i;
+    }
+    return -1;
+}
+
+
 /*
 ** Sets `frame` in `cs_DebugInfo`; `level` is `CallFrame` level.
 ** To traverse the call stack backwards (up), then level should be

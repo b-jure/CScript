@@ -36,7 +36,7 @@
 ** space after that to help overflow detection)
 */
 #define CS_REGISTRYINDEX            (-CSI_MAXSTACK - 1000)
-#define cs_upvalueindex(i)          (CS_REGISTRYINDEX - (i))
+#define cs_upvalueindex(i)          (CS_REGISTRYINDEX - (i) - 1)
 
 
 /* CScript thread state */
@@ -339,6 +339,7 @@ CS_API cs_Alloc         cs_getallocf(cs_State *ts, void **ud);
 CS_API void             cs_setallocf(cs_State *ts, cs_Alloc falloc, void *ud); 
 CS_API void             cs_toclose(cs_State *ts, int index); 
 CS_API void             cs_closeslot(cs_State *ts, int index); 
+CS_API int              cs_getfreereg(cs_State *ts);
 
 #define cs_getextraspace(ts)        ((void *)((char *)(ts) - CS_EXTRASPACE))
 

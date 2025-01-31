@@ -161,7 +161,7 @@ typedef struct GState {
     c_smem gcdebt; /* number of bbytes not yet compensated by collector */
     c_mem gcestimate; /* gcestimate of non-garbage memory in use */
     StringTable strtab; /* interned strings (weak refs) */
-    TValue c_registry; /* global registry */
+    TValue c_registry; /* global registry (array) */
     TValue nil; /* nil value (init flag) */
     uint seed; /* initial seed for hashing */
     c_byte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
