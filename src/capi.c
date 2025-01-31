@@ -167,14 +167,13 @@ CS_API int cs_absindex(cs_State *ts, int index)
 
 /* 
 ** Auxiliary to `cs_rotate`, reverses stack values `from` until `to`.
-** Note that this does not perform a deep copy.
 */
-c_sinline void reverse(cs_State *ts, SPtr from, SPtr to) {
+c_sinline void rev(cs_State *ts, SPtr from, SPtr to) {
     while (from < to) {
-        TValue aux;
-        setobj(ts, &aux, s2v(from));
+        TValue temp;
+        setobj(ts, &temp, s2v(from));
         setobjs2s(ts, from, to);
-        setobj2s(ts, to, &aux);
+        setobj2s(ts, to, &temp);
         from++, to--;
     }
 }
@@ -204,9 +203,9 @@ CS_API void cs_rotate(cs_State *ts, int index, int n) {
     start = index2stack(ts, index); /* start of segment */
     api_check(ts, (n >= 0 ? n : -n) <= (end - start + 1), "invalid `n`");
     pivot = (n >= 0 ? end - n : start - n - 1); /* end of prefix */
-    reverse(ts, start, pivot);
-    reverse(ts, pivot + 1, end);
-    reverse(ts, start, end);
+    rev(ts, start, pivot);
+    rev(ts, pivot + 1, end);
+    rev(ts, start, end);
     cs_unlock(ts);
 }
 

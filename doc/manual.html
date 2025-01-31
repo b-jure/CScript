@@ -197,8 +197,8 @@
         <p> <!-- array -->
         The type <em>array</em> is a linear collection of values each
         identified by an <b>index</b>. Each <b>index</b> is positive integer
-        value which is used to index the <em>array</em> in order to retrieve
-        the value (variable values can also be used in place of literal
+        value or 0 which is used to index the <em>array</em> in order to
+        retrieve the value (variable values can also be used in place of literal
         integers). Negative integer indices are not allowed.
         </p>
 
@@ -312,10 +312,10 @@
         </p>
 
         <p> <!-- error -->
-        <hr/><h3><a name="error"><code>error(message [, level])</code></a></h3>
+        <hr/><h3><a name="error"><code>error (message [, level])</code></a></h3>
         Raises an error with <code>message</code> as the error object.
         This function never returns.
-        <br/>
+        <br/> <br/>
         Usually, <code>error</code> adds some information about the error position
         at the beginning of the message, if the message is a string.
         The <code>level</code> argument specifies how to get the error position.
@@ -328,15 +328,16 @@
         </p>
 
         <p> <!-- assert -->
-        <hr/><h3><a name="assert"><code>assert(v [, message])</code></a></h3>
+        <hr/><h3><a name="assert"><code>assert (v [, message])</code></a></h3>
         Raises an error if the value of its argument <code>v</code> is false
         (i.e., <b>nil</b> or <b>false</b>); otherwise, returns all its arguments.
+        <br/><br/>
         In case of error, <code>message</code> is the error object;
         when absent, it defaults to "<code>assertion failed!</code>"
         </p>
 
         <p> <!-- gc -->
-        <hr/><h3><a name="gc"><code>gc([opt [, arg]])</code></a></h3>
+        <hr/><h3><a name="gc"><code>gc ([opt [, arg]])</code></a></h3>
         This function is a generic interface to the garbage collector.
         It performs different functions according to its first argument,
         <code>opt</code>:
@@ -389,9 +390,9 @@
         </p>
 
         <p> <!-- load -->
-        <hr/><h3><a name="load"><code>load(chunk [, chunkname])</code></a></h3>
+        <hr/><h3><a name="load"><code>load (chunk [, chunkname])</code></a></h3>
         Loads a chunk.
-        <br/>
+        <br/><br/>
         If <code>chunk</code> is a string, the chunk is this string.
         If <code>chunk</code> is a function, <code>load</code> calls it
         repeatedly to get the chunk pieces. Each call to <code>chunk</code>
@@ -401,7 +402,7 @@
         If there are no syntactic errors, <code>load</code> returns the
         compiled chunk as a function; otherwise, it returns <b>fail</b> plus
         the error message.
-        <br>
+        <br/> <br/>
         <code>chunkname</code> is used as the name of the chunk for error
         messages and debug information.
         When absent, it defaults to <code>chunk</code>, if <code>chunk</code>
@@ -409,14 +410,14 @@
         </p>
 
         <p> <!-- loadfile -->
-        <hr/><h3><a name="loadfile"><code>loadfile([filename])</code></a></h3>
+        <hr/><h3><a name="loadfile"><code>loadfile ([filename])</code></a></h3>
         Similar to <a href="#load"><code>load</code></a>,
         but gets the chunk from file <code>filename</code> or from the
         standard input, if no file name is given.
         </p>
 
         <p> <!-- runfile -->
-        <hr/><h3><a name="runfile"><code>runfile([filename])</code></a></h3>
+        <hr/><h3><a name="runfile"><code>runfile ([filename])</code></a></h3>
         Opens the named file and executes its content as a CScript chunk.
         When called without arguments, <code>runfile</code> executes the
         content of the standard input (<code>stdin</code>).
@@ -426,96 +427,231 @@
         </p>
 
         <p> <!-- getmetamethod -->
-        <hr/><h3><a name="getmetamethod"><code>getmetamethod(value, name)</code></a></h3>
-        Returns the metamethod of the given <code>value</code> or <b>nil</b>
-        if <code>value</code> does not have virtual method table and/or the
-        <code>value</code> does not implement the metamethod <code>name</code>.
+        <hr/><h3><a name="getmetamethod"><code>getmetamethod (v, name)</code></a></h3>
+        Returns the metamethod of the given <code>v</code> or <b>nil</b>
+        if <code>v</code> does not have virtual method table and/or the
+        <code>v</code> does not implement the metamethod <code>name</code>.
         </p>
 
         <p> <!-- next -->
-        <hr/><h3><a name="next"><code>next(obj [, index])</code></a></h3>
-        Allows a program to traverse of all fields of <code>obj</code>.
+        <hr/><h3><a name="next"><code>next (v [, index])</code></a></h3>
+        Allows a program to traverse of all fields of <code>v</code>.
         Its first argument is a table or instance and its second argument
         is an index into this table/instance.
         A call to <code>next</code> returns the next index of the
-        <code>obj</code> and its associated value.
+        <code>v</code> and its associated value.
         When called with <b>nil</b> as its second argument, <code>next</code>
         returns an initial index and its associated value.
         When called with the last index, or with <b>nil</b> in an empty
         table or instance without fields, <code>next</code> returns <b>nil</b>.
         If the second argument is absent, then it is interpreted as <b>nil</b>.
-        In particular, you can use <code>next(obj)</code> to check whether a
-        table is empty or if instance has no fields.
-        <br/>
+        In particular, you can use <code>next(v)</code> to check whether a
+        table is empty or if the instance has no fields.
+        <br/><br/>
         The order in which the indices are enumerated is not specified.
-        <br/>
+        <br/><br/>
         You should not assign any value to a non-existent field in a table
         during its traversal. You may however modify existing fields.
-        In particular, you may set existing fields to nil.
+        In particular, you may set existing fields to <b>nil</b>.
         </p>
 
         <p> <!-- pairs -->
-        <hr/><h3><a name="pairs"><code>pairs()</code></a></h3>
+        <hr/><h3><a name="pairs"><code>pairs (v)</code></a></h3>
+        Returns three values: the <a href="#next"><code>next</code></a>
+        function, <code>v</code>, and <b>nil</b>, so that the construction
+        <pre>   foreach k,v in pairs(v) <em>body</em></pre>
+        will iterate over all key&ndash;value pairs of <code>v</code>;
+        <code>v</code> should be either a <em>table</em> or <em>instance</em>.
+        <br/><br/>
+        See function <a href="next"><code>next</code></a> for the caveats
+        of modifying the table or instance fields during its traversal.
         </p>
 
         <p> <!-- ipairs -->
-        <hr/><h3><a name="ipairs"><code>ipairs()</code></a></h3>
+        <hr/><h3><a name="ipairs"><code>ipairs (a)</code></a></h3>
+        Returns three values (an iterator function, the array <code>a</code>,
+        and -1)
+        so that the construction
+        <pre>   foreach i,v in ipairs(a) <em>body</em></pre>
+        will iterate over the index&ndash;value pairs
+        (<code>0,a[0]</code>), (<code>1,a[1]</code>), ...,
+        up to the <em>length</em> of the array <code>a</code>.
         </p>
 
         <p> <!-- pcall -->
-        <hr/><h3><a name="pcall"><code>pcall()</code></a></h3>
+        <hr/><h3><a name="pcall"><code>pcall (f [, arg1, &middot;&middot;&middot;])</code></a></h3>
+        Calls the function <code>f</code> with the given arguments in
+        <em>protected mode</em>.
+        This means that any error inside&nbsp;<code>f</code> is not propagated;
+        instead, <code>pcall</code> catches the error and returns a status code.
+        Its first result is the status code (a boolean), which is <b>true</b>
+        if the call succeeds without errors.
+        In such case, <code>pcall</code> also returns all results from the call,
+        after this first result.
+        <br/> <br/>
+        In case of any error, <code>pcall</code> returns <b>false</b> plus the error object.
+        Note that errors caught by <code>pcall</code> do not call a message handler.
         </p>
 
         <p> <!-- xpcall -->
-        <hr/><h3><a name="xpcall"><code>xpcall()</code></a></h3>
+        <hr/><h3><a name="xpcall"><code>xpcall (f, msgh [, arg1, &middot;&middot;&middot;])</code></a></h3>
+        This function is similar to <a href="#pcall"><code>pcall</code></a>,
+        except that it sets a new message handler <code>msgh</code>.
         </p>
 
         <p> <!-- print -->
-        <hr/><h3><a name="print"><code>print()</code></a></h3>
+        <hr/><h3><a name="print"><code>print (&middot;&middot;&middot;)</code></a></h3>
+        Receives any number of arguments and prints their values to
+        <code>stdout</code>, converting each argument to a string
+        following the same rules of <a href="#tostring"><code>tostring</code></a>.
+        <br/> <br/>
+        The function <code>print</code> is not intended for formatted output,
+        but only as a quick way to show a value, for instance for debugging.
+        For complete control over the output, use
+        <a href="#io.printf"><code>io.printf</code></a> and
+        <a href="#io.write"><code>io.write</code></a>.
         </p>
 
         <p> <!-- warn -->
-        <hr/><h3><a name="warn"><code>warn()</code></a></h3>
+        <hr/><h3><a name="warn"><code>warn (msg1, &middot;&middot;&middot;)</code></a></h3>
+        Emits a warning with a message composed by the concatenation
+        of all its arguments (which should be strings).
+        <br/> <br/>
+        By convention, a one-piece message starting with '<code>@</code>'
+        is intended to be a <em>control message</em>,
+        which is a message to the warning system itself.
+        In particular, the standard warning function in CScript
+        recognizes the control messages "<code>@off</code>",
+        to stop the emission of warnings, and "<code>@on</code>", to
+        (re)start the emission; it ignores unknown control messages.
         </p>
 
         <p> <!-- len -->
-        <hr/><h3><a name="len"><code>len()</code></a></h3>
+        <hr/><h3><a name="len"><code>len (v)</code></a></h3>
+        Returns the length of the object <code>v</code>, which must be
+        array, table, instance or a string.
+        <br/> <br/>
+        <em>Array</em> length is total number of elements in use (one index
+        above the biggest index that was set);
+        <em>table</em> length is total number of keys with non-<b>nil</b>
+        values; <em>instance</em> length is total number of fields with
+        non-<b>nil</b> values; <em>string</em> length is size of string in
+        bytes.
+        <br/> <br/>
+        Returns an integer.
         </p>
 
         <p> <!-- rawequal -->
-        <hr/><h3><a name="rawequal"><code>rawequal()</code></a></h3>
+        <hr/><h3><a name="rawequal"><code>rawequal (v1, v2)</code></a></h3>
+        Checks whether <code>v1</code> is equal to <code>v2</code>,
+        without invoking the <code>__eq</code> metamethod.
+        <br/> <br/>
+        Returns a boolean.
         </p>
 
         <p> <!-- rawget -->
-        <hr/><h3><a name=rawget""><code>rawget()</code></a></h3>
+        <hr/><h3><a name=rawget""><code>rawget (v, index)</code></a></h3>
+        Gets the real value of <code>v[index]</code>,
+        without calling the <code>__getidx</code> metamethod.
+        <code>v</code> must be a array, table or instance;
+        <code>index</code> may be any value if <code>v</code> is instance or a
+        table; if <code>v</code> is array, <code>index</code> should be
+        positive integer or 0.
         </p>
 
         <p> <!-- rawset -->
-        <hr/><h3><a name="rawset"><code>rawset()</code></a></h3>
+        <hr/><h3><a name="rawset"><code>rawset (v, index, value)</code></a></h3>
+        Sets the real value of <code>v[index]</code> to <code>value</code>,
+        without using the <code>__setidx</code> metamethod.
+        <code>v</code> must be an array, table or instance;
+        <code>index</code> any value different from <b>nil</b> and NaN if the
+        <code>v</code> is a table or instance, otherwise <code>index</code>
+        should be a positive integer or 0; <code>value</code> any CScript value.
+        <br/> <br/>
+        This function returns <code>v</code>.
         </p>
 
         <p> <!-- getargs -->
-        <hr/><h3><a name="getargs"><code>getargs()</code></a></h3>
+        <hr/><h3><a name="getargs"><code>getargs (index, &middot;&middot;&middot;)</code></a></h3>
+        If <code>index</code> is a number, returns all arguments after
+        argument number <code>index</code>; a negative number indexes from
+        the end (-1 is the last argument).
+        Otherwise, <code>index</code> must be one of these strings:
+        <code>"array"</code>, <code>"table"</code> or <code>"len"</code>.
+        <br/> <br/>
+        In case <code>index</code> is <code>"array"</code> or
+        <code>"table"</code> string then <code>getargs</code> returns
+        the total number of extra arguments it received; <code>"array"</code>
+        returns the extra arguments inside the array, <code>"table"</code>
+        returns the extra arguments inside the table where each argument is
+        a key with <b>true</b> value.
+        <br/> <br/>
+        However if <code>index</code> is 
+        <code>"len"</code> string, then <code>getargs</code> returns integer
+        corresponding to total number of extra arguments.
         </p>
 
         <p> <!-- tonumber -->
-        <hr/><h3><a name="tonumber"><code>tonumber()</code></a></h3>
+        <hr/><h3><a name="tonumber"><code>tonumber (v, [, base])</code></a></h3>
+        When called with no <code>base</code>,
+        <code>tonumber</code> tries to convert its argument to a number.
+        If the argument <code>v</code> is already a number or a string
+        convertible to a number, then <code>tonumber</code> returns this
+        number and overflow flag; otherwise, it returns <b>fail</b>.
+        <br/> <br/>
+        The conversion of strings can result in integers or floats.
+        The string may have leading and trailing spaces and a sign.
+        The conversion mimics C standard library functions <code>strtod</code>
+        and <code>strtol</code>.
+        <br/> <br/>
+        When called with <code>base</code>, then <code>v</code> must be a
+        string to be interpreted as an integer numeral in that base.
+        The base may be any integer between 2 and 36, inclusive.
+        In bases above&nbsp;10, the letter '<code>A</code>' (in either upper
+        or lower case) represents&nbsp;10, '<code>B</code>' represents&nbsp;11,
+        and so forth, with '<code>Z</code>' representing 35.
+        If the string <code>v</code> is not a valid numeral in the given base,
+        the function returns <b>fail</b>.
         </p>
 
         <p> <!-- tostring -->
-        <hr/><h3><a name="tostring"><code>tostring()</code></a></h3>
+        <hr/><h3><a name="tostring"><code>tostring (v)</code></a></h3>
+        Receives a value of any type and converts it to a string in a
+        human-readable format.
         </p>
 
         <p> <!-- typeof -->
-        <hr/><h3><a name="typeof"><code>typeof()</code></a></h3>
+        <hr/><h3><a name="typeof"><code>typeof (v)</code></a></h3>
+        Returns the type of its only argument, coded as a string.
+        The possible results of this function are
+        "<code>nil</code>" (a string, not the value <b>nil</b>),
+        "<code>number</code>",
+        "<code>string</code>",
+        "<code>boolean</code>",
+        "<code>array</code>",
+        "<code>table</code>",
+        "<code>function</code>",
+        "<code>class</code>",
+        "<code>instance</code>",
+        "<code>thread</code>",
+        and "<code>userdata</code>".
         </p>
 
         <p> <!-- __G -->
-        <hr/><h3><a name="__G"><code>__G()</code></a></h3>
+        <hr/><h3><a name="__G"><code>__G</code></a></h3>
+        A global variable (not a function) that holds the global table
+        (see <a href="#2.2">&sect;2.2</a>).
+        <br/>
+        CScript itself does not use this variable;
+        changing its value does not affect any environment, nor vice versa.
         </p>
 
         <p> <!-- __VERSION -->
-        <hr/><h3><a name="__VERSION"><code>__VERSION()</code></a></h3>
+        <hr/><h3><a name="__VERSION"><code>__VERSION</code></a></h3>
+        A global variable (not a function) that holds a string containing
+        the running CScript version.
+        <br/>
+        The current value of this variable is "<code>CScript 1.0</code>".
         </p>
 
 

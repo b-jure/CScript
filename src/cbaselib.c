@@ -264,10 +264,10 @@ static int csB_pcall(cs_State *ts) {
 static int csB_xpcall(cs_State *ts) {
     int status;
     int nargs = cs_nvalues(ts) - 2;
-    csL_check_type(ts, 1, CS_TFUNCTION);
-    cs_push_bool(ts, 1); /* first result if no errors */
+    csL_check_type(ts, 1, CS_TFUNCTION); /* check error function */
+    cs_push_bool(ts, 1); /* first result */
     cs_push(ts, 0); /* function */
-    cs_rotate(ts, 2, 2); /* move them below the function's arguments */
+    cs_rotate(ts, 2, 2); /* move them below function's arguments */
     status = cs_pcall(ts, nargs, CS_MULRET, 1);
     return finishpcall(ts, status, 1);
 }
@@ -321,22 +321,31 @@ static int csB_rawequal(cs_State *ts) {
 }
 
 
+/* helper for checking first argument for raw set/get */
+static void checkfirstarg(cs_State *ts) {
+    int t = cs_type(ts, 0);
+    csL_expect_arg(ts, t == CS_TARRAY ||
+                       t == CS_THTABLE ||
+                       t == CS_TINSTANCE, 0, "array, table or instance");
+}
+
+
 static int csB_rawget(cs_State *ts) {
-    csL_check_type(ts, 0, CS_TINSTANCE);
+    checkfirstarg(ts);
     csL_check_any(ts, 1); /* index */
     cs_setntop(ts, 2);
     cs_get_raw(ts, 0); /* this pops index */
-    return 1; /* return property */
+    return 1;
 }
 
 
 static int csB_rawset(cs_State *ts) {
-    csL_check_type(ts, 0, CS_TINSTANCE);
+    checkfirstarg(ts);
     csL_check_any(ts, 1); /* index */
     csL_check_any(ts, 2); /* value */
     cs_setntop(ts, 3);
     cs_set_raw(ts, 1); /* this pops index and value */
-    return 1; /* return instance */
+    return 1; /* return object */
 }
 
 
@@ -473,10 +482,10 @@ static int csB_tonumber(cs_State *ts) {
         } else { /* must be string */
             const char *s = cs_to_string(ts, 0);
             if (s != NULL && cs_stringtonumber(ts, s, &overflow)) {
-                cs_push_bool(ts, overflow);
-                return 1;
-            }
-            csL_check_any(ts, 0);
+                cs_push_bool(ts, overflow); /*push overflow flag */
+                return 1; /* successful conversion to number */
+            } /* else not a number */
+            csL_check_any(ts, 0); /* (but there must be some parameter) */
         }
     } else { /* have base */
         size_t l;
@@ -488,7 +497,7 @@ static int csB_tonumber(cs_State *ts) {
         csL_check_arg(ts, 2 <= i && i <= 32, 1, "base out of range");
         if (strtoint(s, i, &n, &overflow) == s + l) { /* conversion ok? */
             cs_push_integer(ts, n); /* push the conversion number */
-            cs_push_bool(ts, overflow); /* push overflow boolean */
+            cs_push_bool(ts, overflow); /* push overflow flag */
             return 2;
         }
     }

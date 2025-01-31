@@ -39,7 +39,11 @@ a {
     text-decoration: none ;
 }
 
-a:link, a:visited {
+a:link, a:visited code {
+    color: #fb4934 ;
+}
+
+a:visited {
     color: #fb4934 ;
 }
 

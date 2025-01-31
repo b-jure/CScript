@@ -25,7 +25,8 @@ static const char udataname[] = "userdata";
 
 CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
     "no value", "nil", "boolean", "number", udataname, udataname, "string",
-    "array", "hashtable", "function", "class", "instance", "thread", "upvalue"
+    "array", "table", "function", "class", "instance", "thread",
+    "upvalue", "proto" /* these last cases are used for tests only */
 };
 
 

@@ -285,9 +285,8 @@ static void setarrayindex(cs_State *ts, Array *arr, const TValue *index,
             csA_ensure(ts, arr, i); /* expand array */
             setobj(ts, &arr->b[i], val); /* set the value at index */
             csG_barrierback(ts, obj2gco(arr), val);
-        } else { /* negative index, error */
+        } else /* negative index, error */
             csD_indexerror(ts, i, "negative");
-        }
     } else {
         csD_indextypeerror(ts, index);
     }

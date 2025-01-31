@@ -375,10 +375,10 @@ static uint getindex(cs_State *ts, HTable *ht, const TValue *k) {
 
 
 /*
- * Find next table entry after 'key' entry.
- * If table had next entry then top of the stack will contain
- * key of that entry and its value (in that order).
- */
+** Find next table entry after 'key' entry.
+** If table had next entry then top of the stack will contain
+** key of that entry and its value (in that order).
+*/
 int csH_next(cs_State *ts, HTable *ht, SPtr key) {
     uint i = getindex(ts, ht, s2v(key));
     for (; cast_int(i) < htsize(ht); i++) {
