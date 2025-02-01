@@ -85,13 +85,13 @@ typedef CS_NUMBER cs_Number;
 
 
 /* C function registered with CScript */
-typedef int (*cs_CFunction)(cs_State *ts);
+typedef int (*cs_CFunction)(cs_State *C);
 
 /* Function for memory de/allocation */
 typedef void *(*cs_Alloc)(void *ptr, size_t osz, size_t nsz, void *ud);
 
 /* Function that reads blocks when loading CScript chunks */
-typedef const char *(*cs_Reader)(cs_State *ts, void *data, size_t *szread);
+typedef const char *(*cs_Reader)(cs_State *C, void *data, size_t *szread);
 
 /* Type for warning functions */
 typedef void (*cs_WarnFunction)(void *ud, const char *msg, int tocont);
@@ -152,43 +152,43 @@ struct cs_Entry {
  * State manipulation
  * ------------------------------------------------------------------------- */
 CS_API cs_State        *cs_newstate(cs_Alloc allocator, void *ud); 
-CS_API void             cs_close(cs_State *ts);
-CS_API cs_State        *cs_newthread(cs_State *ts);
-CS_API int              cs_resetthread(cs_State *ts);
-CS_API cs_CFunction     cs_atpanic(cs_State *ts, cs_CFunction fn);
-CS_API cs_Number        cs_version(cs_State *ts);
+CS_API void             cs_close(cs_State *C);
+CS_API cs_State        *cs_newthread(cs_State *C);
+CS_API int              cs_resetthread(cs_State *C);
+CS_API cs_CFunction     cs_atpanic(cs_State *C, cs_CFunction fn);
+CS_API cs_Number        cs_version(cs_State *C);
 
 /* -----------------------------------------------------------------------
 ** Stack manipulation
 ** ----------------------------------------------------------------------- */
-CS_API void             cs_setntop(cs_State *ts, int nvals); 
-CS_API int              cs_gettop(const cs_State *ts); 
-CS_API int              cs_absindex(cs_State *ts, int index); 
-CS_API void             cs_rotate(cs_State *ts, int index, int n); 
-CS_API void             cs_copy(cs_State *ts, int src, int dest); 
-CS_API int              cs_checkstack(cs_State *ts, int n); 
-CS_API void             cs_push(cs_State *ts, int index); 
+CS_API void             cs_setntop(cs_State *C, int nvals); 
+CS_API int              cs_gettop(const cs_State *C); 
+CS_API int              cs_absindex(cs_State *C, int index); 
+CS_API void             cs_rotate(cs_State *C, int index, int n); 
+CS_API void             cs_copy(cs_State *C, int src, int dest); 
+CS_API int              cs_checkstack(cs_State *C, int n); 
+CS_API void             cs_push(cs_State *C, int index); 
 CS_API void             cs_xmove(cs_State *src, cs_State *dest, int n); 
 
 /* -----------------------------------------------------------------------
 ** Access functions (Stack -> C)
 ** ----------------------------------------------------------------------- */
-CS_API int              cs_is_number(cs_State *ts, int index); 
-CS_API int              cs_is_integer(cs_State *ts, int index); 
-CS_API int              cs_is_string(cs_State *ts, int index); 
-CS_API int              cs_is_cfunction(cs_State *ts, int index); 
-CS_API int              cs_is_userdata(cs_State *ts, int index); 
-CS_API int              cs_type(cs_State *ts, int index); 
-CS_API const char      *cs_typename(cs_State *ts, int type); 
+CS_API int              cs_is_number(cs_State *C, int index); 
+CS_API int              cs_is_integer(cs_State *C, int index); 
+CS_API int              cs_is_string(cs_State *C, int index); 
+CS_API int              cs_is_cfunction(cs_State *C, int index); 
+CS_API int              cs_is_userdata(cs_State *C, int index); 
+CS_API int              cs_type(cs_State *C, int index); 
+CS_API const char      *cs_typename(cs_State *C, int type); 
 
-CS_API cs_Number        cs_to_numberx(cs_State *ts, int index, int *isnum); 
-CS_API cs_Integer       cs_to_integerx(cs_State *ts, int index, int *isnum); 
-CS_API int              cs_to_bool(cs_State *ts, int index); 
-CS_API const char      *cs_to_lstring(cs_State *ts, int index, size_t *plen); 
-CS_API cs_CFunction     cs_to_cfunction(cs_State *ts, int index); 
-CS_API void            *cs_to_userdata(cs_State *ts, int index); 
-CS_API const void      *cs_to_pointer(cs_State *ts, int index); 
-CS_API cs_State        *cs_to_thread(cs_State *ts, int index); 
+CS_API cs_Number        cs_to_numberx(cs_State *C, int index, int *isnum); 
+CS_API cs_Integer       cs_to_integerx(cs_State *C, int index, int *isnum); 
+CS_API int              cs_to_bool(cs_State *C, int index); 
+CS_API const char      *cs_to_lstring(cs_State *C, int index, size_t *plen); 
+CS_API cs_CFunction     cs_to_cfunction(cs_State *C, int index); 
+CS_API void            *cs_to_userdata(cs_State *C, int index); 
+CS_API const void      *cs_to_pointer(cs_State *C, int index); 
+CS_API cs_State        *cs_to_thread(cs_State *C, int index); 
 
 /* -----------------------------------------------------------------------
 ** Ordering & Arithmetic functions
@@ -210,7 +210,7 @@ CS_API cs_State        *cs_to_thread(cs_State *ts, int index);
 
 #define CS_NUM_ARITH    13
 
-CS_API void     cs_arith(cs_State *ts, int op); 
+CS_API void     cs_arith(cs_State *C, int op); 
 
 
 /* Ordering operations */
@@ -220,63 +220,63 @@ CS_API void     cs_arith(cs_State *ts, int op);
 
 #define CS_NUM_CMP      3
 
-CS_API int      cs_rawequal(cs_State *ts, int idx1, int idx2); 
-CS_API int      cs_compare(cs_State *ts, int idx1, int idx2, int op); 
+CS_API int      cs_rawequal(cs_State *C, int idx1, int idx2); 
+CS_API int      cs_compare(cs_State *C, int idx1, int idx2, int op); 
 
 /* -----------------------------------------------------------------------
 ** Push functions (C -> stack)
 ** ----------------------------------------------------------------------- */
-CS_API void        cs_push_nil(cs_State *ts); 
-CS_API void        cs_push_number(cs_State *ts, cs_Number n); 
-CS_API void        cs_push_integer(cs_State *ts, cs_Integer n); 
-CS_API const char *cs_push_lstring(cs_State *ts, const char *str, size_t len); 
-CS_API const char *cs_push_string(cs_State *ts, const char *str); 
-CS_API const char *cs_push_vfstring(cs_State *ts, const char *fmt, va_list argp); 
-CS_API const char *cs_push_fstring(cs_State *ts, const char *fmt, ...); 
-CS_API void        cs_push_cclosure(cs_State *ts, cs_CFunction fn, int upvals); 
-CS_API void        cs_push_bool(cs_State *ts, int b); 
-CS_API void        cs_push_lightuserdata(cs_State *ts, void *p); 
-CS_API void        cs_push_array(cs_State *ts, int sz);
-CS_API void        cs_push_table(cs_State *ts, int sz);
-CS_API int         cs_push_thread(cs_State *ts); 
-CS_API void        cs_push_instance(cs_State *ts, int clsobj);
-CS_API void        cs_push_class(cs_State *ts, const cs_VMT *vmt, int abscls,
+CS_API void        cs_push_nil(cs_State *C); 
+CS_API void        cs_push_number(cs_State *C, cs_Number n); 
+CS_API void        cs_push_integer(cs_State *C, cs_Integer n); 
+CS_API const char *cs_push_lstring(cs_State *C, const char *str, size_t len); 
+CS_API const char *cs_push_string(cs_State *C, const char *str); 
+CS_API const char *cs_push_vfstring(cs_State *C, const char *fmt, va_list argp); 
+CS_API const char *cs_push_fstring(cs_State *C, const char *fmt, ...); 
+CS_API void        cs_push_cclosure(cs_State *C, cs_CFunction fn, int upvals); 
+CS_API void        cs_push_bool(cs_State *C, int b); 
+CS_API void        cs_push_lightuserdata(cs_State *C, void *p); 
+CS_API void        cs_push_array(cs_State *C, int sz);
+CS_API void        cs_push_table(cs_State *C, int sz);
+CS_API int         cs_push_thread(cs_State *C); 
+CS_API void        cs_push_instance(cs_State *C, int clsobj);
+CS_API void        cs_push_class(cs_State *C, const cs_VMT *vmt, int abscls,
                                  int nup, const cs_Entry *list); 
 
 /* -----------------------------------------------------------------------
 ** Get functions (CScript -> stack)
 ** ----------------------------------------------------------------------- */
-CS_API int   cs_get_global(cs_State *ts, const char *name); 
-CS_API int   cs_get(cs_State *ts, int obj); 
-CS_API int   cs_get_raw(cs_State *ts, int obj); 
-CS_API int   cs_get_index(cs_State *ts, int arrobj, cs_Integer index);
-CS_API int   cs_get_field(cs_State *ts, int obj); 
-CS_API int   cs_get_fieldstr(cs_State *ts, int obj, const char *field); 
-CS_API int   cs_get_fieldptr(cs_State *ts, int obj, const void *field); 
-CS_API int   cs_get_fieldint(cs_State *ts, int obj, cs_Integer field); 
-CS_API int   cs_get_fieldflt(cs_State *ts, int obj, cs_Number field); 
-CS_API int   cs_get_class(cs_State *ts, int insobj); 
-CS_API int   cs_get_method(cs_State *ts, int insobj); 
-CS_API int   cs_get_metamethod(cs_State *ts, int obj, cs_MM mm); 
+CS_API int   cs_get_global(cs_State *C, const char *name); 
+CS_API int   cs_get(cs_State *C, int obj); 
+CS_API int   cs_get_raw(cs_State *C, int obj); 
+CS_API int   cs_get_index(cs_State *C, int arrobj, cs_Integer index);
+CS_API int   cs_get_field(cs_State *C, int obj); 
+CS_API int   cs_get_fieldstr(cs_State *C, int obj, const char *field); 
+CS_API int   cs_get_fieldptr(cs_State *C, int obj, const void *field); 
+CS_API int   cs_get_fieldint(cs_State *C, int obj, cs_Integer field); 
+CS_API int   cs_get_fieldflt(cs_State *C, int obj, cs_Number field); 
+CS_API int   cs_get_class(cs_State *C, int insobj); 
+CS_API int   cs_get_method(cs_State *C, int insobj); 
+CS_API int   cs_get_metamethod(cs_State *C, int obj, cs_MM mm); 
 
-CS_API void *cs_newuserdata(cs_State *ts, size_t sz, int nuv); 
-CS_API int   cs_get_uservalue(cs_State *ts, int udobj, int n); 
+CS_API void *cs_newuserdata(cs_State *C, size_t sz, int nuv); 
+CS_API int   cs_get_uservalue(cs_State *C, int udobj, int n); 
 
 /* -----------------------------------------------------------------------
 ** Set functions (stack -> CScript)
 ** ----------------------------------------------------------------------- */
-CS_API void  cs_set_global(cs_State *ts, const char *name); 
-CS_API void  cs_set(cs_State *ts, int obj); 
-CS_API void  cs_set_raw(cs_State *ts, int obj); 
-CS_API void  cs_set_index(cs_State *ts, int arrobj, cs_Integer index);
-CS_API void  cs_set_field(cs_State *ts, int obj); 
-CS_API void  cs_set_fieldstr(cs_State *ts, int obj, const char *field); 
-CS_API void  cs_set_fieldptr(cs_State *ts, int obj, const void *field); 
-CS_API void  cs_set_fieldint(cs_State *ts, int obj, cs_Integer field); 
-CS_API void  cs_set_fieldflt(cs_State *ts, int obj, cs_Number field); 
-CS_API void  cs_set_uservmt(cs_State *ts, int index, const cs_VMT *vmt); 
-CS_API int   cs_set_uservalue(cs_State *ts, int index, int n); 
-CS_API void  cs_set_usermm(cs_State *ts, int index, cs_MM mm); 
+CS_API void  cs_set_global(cs_State *C, const char *name); 
+CS_API void  cs_set(cs_State *C, int obj); 
+CS_API void  cs_set_raw(cs_State *C, int obj); 
+CS_API void  cs_set_index(cs_State *C, int arrobj, cs_Integer index);
+CS_API void  cs_set_field(cs_State *C, int obj); 
+CS_API void  cs_set_fieldstr(cs_State *C, int obj, const char *field); 
+CS_API void  cs_set_fieldptr(cs_State *C, int obj, const void *field); 
+CS_API void  cs_set_fieldint(cs_State *C, int obj, cs_Integer field); 
+CS_API void  cs_set_fieldflt(cs_State *C, int obj, cs_Number field); 
+CS_API void  cs_set_uservmt(cs_State *C, int index, const cs_VMT *vmt); 
+CS_API int   cs_set_uservalue(cs_State *C, int index, int n); 
+CS_API void  cs_set_usermm(cs_State *C, int index, cs_MM mm); 
 
 /* -----------------------------------------------------------------------
 ** Error reporting
@@ -288,15 +288,15 @@ CS_API void  cs_set_usermm(cs_State *ts, int index, cs_MM mm);
 #define CS_ERRMEM               4  /* memory related error (oom) */
 #define CS_ERRERROR             5  /* error while handling error */
 
-CS_API int cs_status(cs_State *ts); 
-CS_API int cs_error(cs_State *ts); 
+CS_API int cs_status(cs_State *C); 
+CS_API int cs_error(cs_State *C); 
 
 /* -----------------------------------------------------------------------
 ** Call/Load CScript code
 ** ----------------------------------------------------------------------- */
-CS_API void cs_call(cs_State *ts, int nargs, int nresults); 
-CS_API int  cs_pcall(cs_State *ts, int nargs, int nresults, int errfunc); 
-CS_API int  cs_load(cs_State *ts, cs_Reader reader, void *userdata,
+CS_API void cs_call(cs_State *C, int nargs, int nresults); 
+CS_API int  cs_pcall(cs_State *C, int nargs, int nresults, int errfunc); 
+CS_API int  cs_load(cs_State *C, cs_Reader reader, void *userdata,
                     const char *source); 
 
 /* -----------------------------------------------------------------------
@@ -318,78 +318,78 @@ CS_API int  cs_load(cs_State *ts, cs_Reader reader, void *userdata,
 #define CS_MAXPAUSE             1023
 #define CS_MAXSTEPMUL           1023
 
-CS_API int cs_gc(cs_State *ts, int option, ...); 
+CS_API int cs_gc(cs_State *C, int option, ...); 
 
 /* -----------------------------------------------------------------------
 ** Warning-related functions
 ** ----------------------------------------------------------------------- */
-CS_API void cs_setwarnf(cs_State *ts, cs_WarnFunction fwarn, void *ud); 
-CS_API void cs_warning(cs_State *ts, const char *msg, int cont); 
+CS_API void cs_setwarnf(cs_State *C, cs_WarnFunction fwarn, void *ud); 
+CS_API void cs_warning(cs_State *C, const char *msg, int cont); 
 
 /* -----------------------------------------------------------------------
 ** Miscellaneous functions/macros
 ** ----------------------------------------------------------------------- */
-CS_API int              cs_hasvmt(cs_State *ts, int index); 
-CS_API int              cs_hasmetamethod(cs_State *ts, int index, cs_MM mm); 
-CS_API cs_Unsigned      cs_len(cs_State *ts, int index); 
-CS_API int              cs_next(cs_State *ts, int insobj); 
-CS_API void             cs_concat(cs_State *ts, int n); 
-CS_API size_t           cs_stringtonumber(cs_State *ts, const char *s, int *f); 
-CS_API cs_Alloc         cs_getallocf(cs_State *ts, void **ud); 
-CS_API void             cs_setallocf(cs_State *ts, cs_Alloc falloc, void *ud); 
-CS_API void             cs_toclose(cs_State *ts, int index); 
-CS_API void             cs_closeslot(cs_State *ts, int index); 
-CS_API int              cs_getfreereg(cs_State *ts);
+CS_API int              cs_hasvmt(cs_State *C, int index); 
+CS_API int              cs_hasmetamethod(cs_State *C, int index, cs_MM mm); 
+CS_API cs_Unsigned      cs_len(cs_State *C, int index); 
+CS_API int              cs_next(cs_State *C, int insobj); 
+CS_API void             cs_concat(cs_State *C, int n); 
+CS_API size_t           cs_stringtonumber(cs_State *C, const char *s, int *f); 
+CS_API cs_Alloc         cs_getallocf(cs_State *C, void **ud); 
+CS_API void             cs_setallocf(cs_State *C, cs_Alloc falloc, void *ud); 
+CS_API void             cs_toclose(cs_State *C, int index); 
+CS_API void             cs_closeslot(cs_State *C, int index); 
+CS_API int              cs_getfreereg(cs_State *C);
 
-#define cs_getextraspace(ts)        ((void *)((char *)(ts) - CS_EXTRASPACE))
+#define cs_getextraspace(C)         ((void *)((char *)(C) - CS_EXTRASPACE))
 
-#define cs_nvalues(ts)              (cs_gettop(ts) + 1)
+#define cs_nvalues(C)               (cs_gettop(C) + 1)
 
-#define cs_to_number(ts,i)          cs_to_numberx(ts,(i),NULL)
-#define cs_to_integer(ts,i)         cs_to_integerx(ts,(i),NULL)
+#define cs_to_number(C,i)           cs_to_numberx(C,(i),NULL)
+#define cs_to_integer(C,i)          cs_to_integerx(C,(i),NULL)
 
-#define cs_pop(ts,n)                cs_setntop(ts, -(n)-1)
+#define cs_pop(C,n)                 cs_setntop(C, -(n)-1)
 
-#define cs_push_cfunction(ts,f)     cs_push_cclosure(ts,f,0)
+#define cs_push_cfunction(C,f)      cs_push_cclosure(C,f,0)
 
-#define cs_register(ts,n,f)  (cs_push_cfunction(ts,(f)), cs_set_global(ts,(n)))
+#define cs_register(C,n,f)  (cs_push_cfunction(C,(f)), cs_set_global(C,(n)))
 
-#define cs_is_function(ts, n)       (cs_type(ts, (n)) == CS_TFUNCTION)
-#define cs_is_array(ts, n)          (cs_type(ts, (n)) == CS_TARRAY)
-#define cs_is_hashtable(ts, n)      (cs_type(ts, (n)) == CS_THTABLE)
-#define cs_is_class(ts, n)          (cs_type(ts, (n)) == CS_TCLASS)
-#define cs_is_instance(ts, n)       (cs_type(ts, (n)) == CS_TINSTANCE)
-#define cs_is_lightuserdata(ts, n)  (cs_type(ts, (n)) == CS_TLUDATA)
-#define cs_is_nil(ts, n)            (cs_type(ts, (n)) == CS_TNIL)
-#define cs_is_boolean(ts, n)        (cs_type(ts, (n)) == CS_TBOOL)
-#define cs_is_thread(ts, n)         (cs_type(ts, (n)) == CS_TTHREAD)
-#define cs_is_none(ts, n)           (cs_type(ts, (n)) == CS_TNONE)
-#define cs_is_noneornil(ts, n)      (cs_type(ts, (n)) <= 0)
+#define cs_is_function(C, n)        (cs_type(C, (n)) == CS_TFUNCTION)
+#define cs_is_array(C, n)           (cs_type(C, (n)) == CS_TARRAY)
+#define cs_is_hashtable(C, n)       (cs_type(C, (n)) == CS_THTABLE)
+#define cs_is_class(C, n)           (cs_type(C, (n)) == CS_TCLASS)
+#define cs_is_instance(C, n)        (cs_type(C, (n)) == CS_TINSTANCE)
+#define cs_is_lightuserdata(C, n)   (cs_type(C, (n)) == CS_TLUDATA)
+#define cs_is_nil(C, n)             (cs_type(C, (n)) == CS_TNIL)
+#define cs_is_boolean(C, n)         (cs_type(C, (n)) == CS_TBOOL)
+#define cs_is_thread(C, n)          (cs_type(C, (n)) == CS_TTHREAD)
+#define cs_is_none(C, n)            (cs_type(C, (n)) == CS_TNONE)
+#define cs_is_noneornil(C, n)       (cs_type(C, (n)) <= 0)
 
-#define cs_push_literal(ts, s)      cs_push_string(ts, "" s)
+#define cs_push_literal(C, s)       cs_push_string(C, "" s)
 
-#define cs_push_globaltable(ts) \
-        ((void)cs_get_index(ts, CS_REGISTRYINDEX, CS_RINDEX_GLOBALS))
+#define cs_push_globaltable(C) \
+        ((void)cs_get_index(C, CS_REGISTRYINDEX, CS_RINDEX_GLOBALS))
 
-#define cs_to_string(ts, i)         cs_to_lstring(ts, i, NULL)
+#define cs_to_string(C, i)          cs_to_lstring(C, i, NULL)
 
-#define cs_insert(ts,index)         cs_rotate(ts, (index), 1)
+#define cs_insert(C,index)          cs_rotate(C, (index), 1)
 
-#define cs_remove(ts,index)         (cs_rotate(ts, (index), -1), cs_pop(ts, 1))
+#define cs_remove(C,index)          (cs_rotate(C, (index), -1), cs_pop(C, 1))
 
-#define cs_replace(ts,index)        (cs_copy(ts, -1, (index)), cs_pop(ts, 1))
+#define cs_replace(C,index)         (cs_copy(C, -1, (index)), cs_pop(C, 1))
 
 /* -----------------------------------------------------------------------
 ** Debug API
 ** ----------------------------------------------------------------------- */
-CS_API int cs_getstack(cs_State *ts, int level, cs_Debug *di); 
-CS_API int cs_getinfo(cs_State *ts, const char *what, cs_Debug *di); 
+CS_API int cs_getstack(cs_State *C, int level, cs_Debug *di); 
+CS_API int cs_getinfo(cs_State *C, const char *what, cs_Debug *di); 
 
-CS_API const char *cs_getlocal(cs_State *ts, const cs_Debug *di, int n); 
-CS_API const char *cs_setlocal (cs_State *ts, const cs_Debug *ar, int n); 
+CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *di, int n); 
+CS_API const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n); 
 
-CS_API const char *cs_getupvalue(cs_State *ts, int index, int n); 
-CS_API const char *cs_setupvalue(cs_State *ts, int index, int n); 
+CS_API const char *cs_getupvalue(cs_State *C, int index, int n); 
+CS_API const char *cs_setupvalue(cs_State *C, int index, int n); 
 
 struct cs_Debug {
     /* (>) pop the function on top of the stack and load it into 'cf' */

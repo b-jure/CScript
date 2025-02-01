@@ -47,23 +47,23 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
 #endif
 
 
-c_sinline void *tryagain(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
-    GState *gs = G_(ts);
+c_sinline void *tryagain(cs_State *C, void *ptr, size_t osz, size_t nsz) {
+    GState *gs = G_(C);
     if (cantryagain(gs)) {
-        csG_full(ts, 1); /* try to reclaim some memory... */
+        csG_full(C, 1); /* try to reclaim some memory... */
         return callfalloc(gs, ptr, osz, nsz); /* ...and try again */
     }
     return NULL; /* cannot run an emergency collection */
 }
 
 
-void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
-    GState *gs = G_(ts);
+void *csM_realloc_(cs_State *C, void *ptr, size_t osz, size_t nsz) {
+    GState *gs = G_(C);
     void *block;
     cs_assert((osz == 0) == (ptr == NULL));
     block = firsttry(gs, ptr, osz, nsz);
     if (c_unlikely(!block && nsz != 0)) {
-        block = tryagain(ts, ptr, osz, nsz);
+        block = tryagain(C, ptr, osz, nsz);
         if (c_unlikely(block == NULL)) /* still no memory? */
             return NULL; /* do not update 'gcdebt' */
     }
@@ -73,24 +73,24 @@ void *csM_realloc_(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
 }
 
 
-void *csM_saferealloc(cs_State *ts, void *ptr, size_t osz, size_t nsz) {
-    void *block = csM_realloc_(ts, ptr, osz, nsz);
+void *csM_saferealloc(cs_State *C, void *ptr, size_t osz, size_t nsz) {
+    void *block = csM_realloc_(C, ptr, osz, nsz);
     if (c_unlikely(block == NULL && nsz != 0))
-        csM_error(ts);
+        csM_error(C);
     return block;
 }
 
 
-void *csM_malloc_(cs_State *ts, size_t size, int tag) {
+void *csM_malloc_(cs_State *C, size_t size, int tag) {
     if (size == 0) {
         return NULL;
     } else {
-        GState *gs = G_(ts);
+        GState *gs = G_(C);
         void *block = firsttry(gs, NULL, tag, size);
         if (c_unlikely(block == NULL)) {
-            block = tryagain(ts, NULL, tag, size);
+            block = tryagain(C, NULL, tag, size);
             if (c_unlikely(block == NULL))
-                csM_error(ts);
+                csM_error(C);
         }
         gs->gcdebt += size;
         return block;
@@ -101,7 +101,7 @@ void *csM_malloc_(cs_State *ts, size_t size, int tag) {
 /* minimum size of array memory block */
 #define MINSIZEARRAY    4
 
-void *csM_growarr_(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
+void *csM_growarr_(cs_State *C, void *ptr, int *sizep, int len, int elemsize,
                    int space, int limit, const char *what) {
     int size = *sizep;
     cs_assert(space >= 1);
@@ -110,37 +110,37 @@ void *csM_growarr_(cs_State *ts, void *ptr, int *sizep, int len, int elemsize,
     } else { /* otherwise expand */
         size *= 2; /* 2x size */
         if (c_unlikely(limit - space < len)) /* limit reached? */
-            csD_runerror(ts, "too many %s (limit is %d)", what, limit);
+            csD_runerror(C, "too many %s (limit is %d)", what, limit);
         cs_assert(size <= limit);
         if (size < len + space)
             size = len + space;
         if (c_unlikely(size < MINSIZEARRAY))
             size = MINSIZEARRAY;
-        ptr = csM_saferealloc(ts, ptr, (*sizep)*elemsize, size*elemsize);
+        ptr = csM_saferealloc(C, ptr, (*sizep)*elemsize, size*elemsize);
         *sizep = size;
         return ptr;
     }
 }
 
 
-void *csM_shrinkarr_(cs_State *ts, void *ptr, int *sizep, int nfinal,
+void *csM_shrinkarr_(cs_State *C, void *ptr, int *sizep, int nfinal,
                      int elemsize) {
     size_t osz = cast_sizet((*sizep) * elemsize);
     size_t nsz = cast_sizet(nfinal * elemsize);
     cs_assert(nsz <= osz);
-    ptr = csM_saferealloc(ts, ptr, osz, nsz);
+    ptr = csM_saferealloc(C, ptr, osz, nsz);
     *sizep = nfinal;
     return ptr;
 }
 
 
-c_noret csM_toobig(cs_State *ts) {
-    csD_runerror(ts, "memory allocation error: block too big");
+c_noret csM_toobig(cs_State *C) {
+    csD_runerror(C, "memory allocation error: block too big");
 }
 
 
-void csM_free_(cs_State *ts, void *ptr, size_t osz) {
-    GState *gs = G_(ts);
+void csM_free_(cs_State *C, void *ptr, size_t osz) {
+    GState *gs = G_(C);
     cs_assert((osz == 0) == (ptr == NULL));
     callfalloc(gs, ptr, osz, 0);
     gs->gcdebt -= osz;

@@ -27,44 +27,44 @@
 
 
 /* stack size */
-#define stacksize(ts)		cast_int((ts)->stackend.p - (ts)->stack.p)
+#define stacksize(C)		cast_int((C)->stackend.p - (C)->stack.p)
 
 
 /* save/restore stack position */
-#define savestack(ts,ptr)	(cast_charp(ptr) - cast_charp((ts)->stack.p))
-#define restorestack(ts,n)	cast(SPtr, cast_charp((ts)->stack.p) + (n))
+#define savestack(C,ptr)	(cast_charp(ptr) - cast_charp((C)->stack.p))
+#define restorestack(C,n)	cast(SPtr, cast_charp((C)->stack.p) + (n))
 
 
 /* 
 ** Check if stack nees to grow if so, do 'pre' then grow and
 ** then do 'pos'.
 */
-#define csT_checkstackaux(ts,n,pre,pos) \
-    if (csi_unlikely((ts)->stackend.p - (ts)->sp.p <= (n))) \
-        { pre; csT_growstack(ts, (n), 1); pos; }
+#define csT_checkstackaux(C,n,pre,pos) \
+    if (csi_unlikely((C)->stackend.p - (C)->sp.p <= (n))) \
+        { pre; csT_growstack(C, (n), 1); pos; }
 
 
 /* check if stack needs to grow */
-#define csT_checkstack(ts,n)    csT_checkstackaux(ts,n,(void)0,(void)0)
+#define csT_checkstack(C,n)    csT_checkstackaux(C,n,(void)0,(void)0)
 
 
 /* check if stack needs to grow and preserve 'p' */
-#define checkstackp(ts,n,p) \
-        csT_checkstackaux(ts, n, \
-            ptrdiff_t p_ = savestack(ts, p), \
-            p = restorestack(ts, p_))
+#define checkstackp(C,n,p) \
+        csT_checkstackaux(C, n, \
+            ptrdiff_t p_ = savestack(C, p), \
+            p = restorestack(C, p_))
 
 
 /* check GC then check stack preserving 'p' */
-#define checkstackGCp(ts,n,p) \
-        csT_checkstackaux(ts,n, \
-            ptrdiff_t p_ = savestack(ts,p); csG_checkGC(ts), \
-            p = restorestack(ts, p_))
+#define checkstackGCp(C,n,p) \
+        csT_checkstackaux(C,n, \
+            ptrdiff_t p_ = savestack(C,p); csG_checkGC(C), \
+            p = restorestack(C, p_))
 
 
 /* check GC then check stack */
-#define checkstackGC(ts,n) \
-        csT_checkstackaux(ts,n,csG_checkGC(ts),(void)0)
+#define checkstackGC(C,n) \
+        csT_checkstackaux(C,n,csG_checkGC(C),(void)0)
     
 
 
@@ -72,17 +72,17 @@
 ** Increment number of nested non-yieldable calls.
 ** The counter is located in the upper 2 bytes of 'nCcalls'.
 */
-#define incnnyc(ts)       ((ts)->nCcalls += 0x10000)
+#define incnnyc(C)       ((C)->nCcalls += 0x10000)
 
 /* Decrement number of nested non-yieldable calls. */
-#define decnnyc(ts)       ((ts)->nCcalls -= 0x10000)
+#define decnnyc(C)       ((C)->nCcalls -= 0x10000)
 
 
 /*
 ** Get total number of C calls.
 ** This counter is located in the lower 2 bytes of 'nCcalls'.
 */
-#define getCcalls(ts)       ((ts)->nCcalls & 0xffff)
+#define getCcalls(C)       ((C)->nCcalls & 0xffff)
 
 
 /* non-yieldable and C calls increment */
@@ -95,8 +95,8 @@
  * ------------------------------------------------------------------------- */
 
 #define csi_jmpbuf          jmp_buf
-#define CSI_THROW(ts,b)     longjmp((b)->buf, 1)
-#define CSI_TRY(ts,b,fn)    if (setjmp((b)->buf) == 0) { fn }
+#define CSI_THROW(C,b)      longjmp((b)->buf, 1)
+#define CSI_TRY(C,b,fn)     if (setjmp((b)->buf) == 0) { fn }
 
 /* jmpbuf for jumping out of protected function */
 typedef struct c_ljmp {
@@ -219,13 +219,13 @@ struct cs_State {
 
 
 /* thread global state */
-#define G_(ts)      (ts)->gstate
+#define G_(C)       (C)->gstate
 
 /* check if global state is fully built */
 #define statefullybuilt(gs)          ttisnil(&(gs)->nil)
 
 /* check if thread is in 'thwouv' (Threads-With-Open-UpValues) list */
-#define isinthwouv(ts)          ((ts)->thwouv != (ts))
+#define isinthwouv(C)           ((C)->thwouv != (C))
 
 
 /*
@@ -234,15 +234,15 @@ struct cs_State {
 ** was created and never removed, they must always be in the array
 ** part of the registry.
 */
-#define getGtable(ts) \
-	(&arrval(&G_(ts)->c_registry)->b[CS_RINDEX_GLOBALS])
+#define getGtable(C) \
+	(&arrval(&G_(C)->c_registry)->b[CS_RINDEX_GLOBALS])
 
 
 
 /* extra space(X) + main thread state(S) */
 typedef struct XS {
     c_byte extra_[CS_EXTRASPACE];
-    cs_State ts;
+    cs_State C;
 } XS;
 
 
@@ -254,7 +254,7 @@ typedef struct XSG {
 
 
 /* cast 'cs_State' back to start of 'XS' */
-#define fromstate(th)   cast(XS *, cast(c_byte *, (th)) - offsetof(XS, ts))
+#define fromstate(th)   cast(XS *, cast(c_byte *, (th)) - offsetof(XS, C))
 
 
 
@@ -293,17 +293,17 @@ union GCUnion {
 #define obj2gco(o)      (&(cast_gcu(o)->gc))
 
 
-CSI_FUNC CallFrame *csT_newcf(cs_State *ts);
-CSI_FUNC void csT_seterrorobj(cs_State *ts, int errcode, SPtr oldtop);
-CSI_FUNC int csT_reallocstack(cs_State *ts, int size, int raiseerr);
-CSI_FUNC int csT_growstack(cs_State *ts, int n, int raiseerr);
-CSI_FUNC void csT_shrinkstack(cs_State *ts);
-CSI_FUNC void csT_incsp(cs_State *ts);
-CSI_FUNC void csT_incCstack(cs_State *ts);
-CSI_FUNC void csT_checkCstack(cs_State *ts);
-CSI_FUNC int csT_resetthread(cs_State *ts, int status);
-CSI_FUNC void csT_warning(cs_State *ts, const char *msg, int cont);
-CSI_FUNC void csT_warnerror(cs_State *ts, const char *where);
-CSI_FUNC void csT_free(cs_State *ts, cs_State *thread);
+CSI_FUNC CallFrame *csT_newcf(cs_State *C);
+CSI_FUNC void csT_seterrorobj(cs_State *C, int errcode, SPtr oldtop);
+CSI_FUNC int csT_reallocstack(cs_State *C, int size, int raiseerr);
+CSI_FUNC int csT_growstack(cs_State *C, int n, int raiseerr);
+CSI_FUNC void csT_shrinkstack(cs_State *C);
+CSI_FUNC void csT_incsp(cs_State *C);
+CSI_FUNC void csT_incCstack(cs_State *C);
+CSI_FUNC void csT_checkCstack(cs_State *C);
+CSI_FUNC int csT_resetthread(cs_State *C, int status);
+CSI_FUNC void csT_warning(cs_State *C, const char *msg, int cont);
+CSI_FUNC void csT_warnerror(cs_State *C, const char *where);
+CSI_FUNC void csT_free(cs_State *C, cs_State *thread);
 
 #endif

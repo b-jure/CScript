@@ -363,8 +363,8 @@
 /*
 ** @cs_number2strx - converts float to a hexadecimal numeral.
 */
-#define cs_number2strx(ts,b,sz,f,n)  \
-    ((void)ts, c_snprintf(b,sz,f,(CS_NUMBER)(n)))
+#define cs_number2strx(C,b,sz,f,n)  \
+        ((void)C, c_snprintf(b,sz,f,(CS_NUMBER)(n)))
 
 
 /*
@@ -434,7 +434,7 @@
 ** information.
 ** CHANGE if you need different size.
 */
-#define CS_MAXSRC       60
+#define CS_MAXSRC           60
 
 
 /*
@@ -457,7 +457,7 @@
 */
 #if defined(CS_USE_APICHECK)
 #include <assert.h>
-#define csi_checkapi(ts,e)      assert(e)
+#define csi_checkapi(C,e)       assert(e)
 #endif
 
 /* }---------------------------------------------------------------------- */

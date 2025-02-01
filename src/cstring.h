@@ -24,8 +24,8 @@
 
 
 /* create new string from literal 'lit' */
-#define csS_newlit(ts, lit) \
-        csS_newl(ts, "" lit, (sizeof(lit)/sizeof(char)) - 1)
+#define csS_newlit(C, lit) \
+        csS_newl(C, "" lit, (sizeof(lit)/sizeof(char)) - 1)
 
 
 
@@ -51,17 +51,17 @@ CSI_FUNC int csS_eqlngstr(const OString *s1, const OString *s2);
 CSI_FUNC void csS_clearcache(GState *gs);
 CSI_FUNC uint csS_hash(const char *str, size_t len, uint seed);
 CSI_FUNC uint csS_hashlngstr(OString *s);
-CSI_FUNC void csS_resize(cs_State *ts, int nsz);
-CSI_FUNC void csS_init(cs_State *ts);
-CSI_FUNC OString *csS_newlngstrobj(cs_State *ts, size_t len);
-CSI_FUNC void csS_remove(cs_State *ts, OString *s);
-CSI_FUNC OString *csS_new(cs_State *ts, const char *str);
-CSI_FUNC OString *csS_newl(cs_State *ts, const char *str, size_t len);
-CSI_FUNC void csS_free(cs_State *ts, OString *s);
+CSI_FUNC void csS_resize(cs_State *C, int nsz);
+CSI_FUNC void csS_init(cs_State *C);
+CSI_FUNC OString *csS_newlngstrobj(cs_State *C, size_t len);
+CSI_FUNC void csS_remove(cs_State *C, OString *s);
+CSI_FUNC OString *csS_new(cs_State *C, const char *str);
+CSI_FUNC OString *csS_newl(cs_State *C, const char *str, size_t len);
+CSI_FUNC void csS_free(cs_State *C, OString *s);
 CSI_FUNC int csS_cmp(const OString *s1, const OString *s2);
-CSI_FUNC const char *csS_pushvfstring(cs_State *ts, const char *fmt,
+CSI_FUNC const char *csS_pushvfstring(cs_State *C, const char *fmt,
                                       va_list argp);
-CSI_FUNC const char *csS_pushfstring(cs_State *ts, const char *fmt, ...);
+CSI_FUNC const char *csS_pushfstring(cs_State *C, const char *fmt, ...);
 CSI_FUNC size_t csS_tonum(const char *s, TValue *o, int *of);
 CSI_FUNC const char *csS_numtostr(const TValue *o, size_t *plen);
 CSI_FUNC int csS_utf8esc(char *buff, ulong n);

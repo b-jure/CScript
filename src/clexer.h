@@ -59,7 +59,7 @@ typedef struct Lexer {
     Token t; /* current token */
     Token tahead; /* lookahead token */
     HTable *tab; /* scanner table */
-    struct cs_State *ts;
+    struct cs_State *C;
     struct FunctionState *fs;
     BuffReader *br; /* buffered reader */
     Buffer *buff; /* string buffer */
@@ -68,9 +68,9 @@ typedef struct Lexer {
 } Lexer;
 
 
-CSI_FUNC void csY_setinput(cs_State *ts, Lexer *lx, BuffReader *br,
+CSI_FUNC void csY_setinput(cs_State *C, Lexer *lx, BuffReader *br,
                             OString *source);
-CSI_FUNC void csY_init(cs_State *ts);
+CSI_FUNC void csY_init(cs_State *C);
 CSI_FUNC const char *csY_tok2str(Lexer *lx, int t);
 CSI_FUNC OString *csY_newstring(Lexer *lx, const char *str, size_t len);
 CSI_FUNC c_noret csY_syntaxerror(Lexer *lx, const char *err);

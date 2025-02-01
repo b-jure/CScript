@@ -73,10 +73,10 @@ typedef unsigned long   ulong;
 
 /* C API assertions */
 #if !defined(csi_checkapi)
-#define csi_checkapi(ts,e)      ((void)ts, cs_assert(e))
+#define csi_checkapi(C,e)       ((void)C, cs_assert(e))
 #endif
 
-#define api_check(ts,e,err)     csi_checkapi(ts,(e) && err)
+#define api_check(C,e,err)      csi_checkapi(C,(e) && err)
 
 
 
@@ -188,8 +188,8 @@ typedef c_byte Instruction;
 ** CSript core (C API).
 */
 #if !defined(cs_lock)
-#define cs_lock(ts)         ((void)0)
-#define cs_unlock(ts)       ((void)0)
+#define cs_lock(C)          ((void)0)
+#define cs_unlock(C)        ((void)0)
 #endif
 
 
@@ -199,19 +199,19 @@ typedef c_byte Instruction;
 ** thread is created/deleted.
 */
 #if !defined(csi_userstateopen)
-#define csi_userstateopen(ts)           ((void)(ts))
+#define csi_userstateopen(C)            ((void)(C))
 #endif
 
 #if !defined(csi_userstateclose)
-#define csi_userstateclose(ts)          ((void)(ts))
+#define csi_userstateclose(C)           ((void)(C))
 #endif
 
 #if !defined(csi_userstate)
-#define csi_userstate(ts,thread)        ((void)(ts))
+#define csi_userstate(C,thread)         ((void)(C))
 #endif
 
 #if !defined(csi_userstatefree)
-#define csi_userstatefree(ts,thread)    ((void)(ts))
+#define csi_userstatefree(C,thread)     ((void)(C))
 #endif
 
 
@@ -266,19 +266,19 @@ typedef c_byte Instruction;
 
 
 /* @c_nummod - modulo 'a - floor(a/b)*b'. */
-#define c_nummod(ts,a,b,m) \
-        { (void)(ts); (m) = cs_mathop(fmod)(a, b); \
+#define c_nummod(C,a,b,m) \
+        { (void)(C); (m) = cs_mathop(fmod)(a, b); \
           if (((m) > 0) ? (b)<0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
 /* @c_numdiv - float division. */
 #ifndef c_numdiv
-#define c_numdiv(ts, a, b)    ((void)(ts), (a)/(b))
+#define c_numdiv(C, a, b)       ((void)(C), (a)/(b))
 #endif
 
 /* @c_numpow - exponentiation. */
 #ifndef c_numpow
-#define c_numpow(ts, a, b) \
-        ((void)(ts), (b) == 2 ? (a)*(a) : cs_mathop(pow)(a, b))
+#define c_numpow(C, a, b) \
+        ((void)(C), (b) == 2 ? (a)*(a) : cs_mathop(pow)(a, b))
 #endif
 
 /*
@@ -288,10 +288,10 @@ typedef c_byte Instruction;
 ** @c_numunm - negation.
 */
 #ifndef c_numadd
-#define c_numadd(ts, a, b)      ((void)(ts), (a) + (b))
-#define c_numsub(ts, a, b)      ((void)(ts), (a) - (b))
-#define c_nummul(ts, a, b)      (void)(ts), ((a) * (b))
-#define c_numunm(ts, a)         ((void)(ts), -(a))
+#define c_numadd(C, a, b)       ((void)(C), (a) + (b))
+#define c_numsub(C, a, b)       ((void)(C), (a) - (b))
+#define c_nummul(C, a, b)       (void)(C), ((a) * (b))
+#define c_numunm(C, a)          ((void)(C), -(a))
 #endif
 
 /*
@@ -322,10 +322,10 @@ typedef c_byte Instruction;
 ** tracked memory change it performs full garbage collection.
 */
 #if defined(CSI_STRESS_GC)
-#define gcmemchange(ts,pre,pos) \
-    { if (gcrunning(G_(ts)->gc)) { pre; csG_full(ts); pos; } }
+#define gcmemchange(C,pre,pos) \
+    { if (gcrunning(G_(C)->gc)) { pre; csG_full(C); pos; } }
 #else
-#define gcmemchange(ts,pre,pos)     ((void)0)
+#define gcmemchange(C,pre,pos)      ((void)0)
 #endif
 
 

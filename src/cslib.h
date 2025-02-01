@@ -10,8 +10,8 @@
 
 #include "cscript.h"
 
-CSMOD_API int csL_open_basic(cs_State *ts);
+CSMOD_API int csL_open_basic(cs_State *C);
 
-CSLIB_API void csL_open_libs(cs_State *ts);
+CSLIB_API void csL_open_libs(cs_State *C);
 
 #endif

@@ -102,14 +102,14 @@ static void rehashtable(OString **arr, int osz, int nsz) {
 /* 
 ** Resize string table. If allocation fails, keep the current size.
 */
-void csS_resize(cs_State *ts, int nsz) {
-    StringTable *tab = &G_(ts)->strtab;
+void csS_resize(cs_State *C, int nsz) {
+    StringTable *tab = &G_(C)->strtab;
     int osz = tab->size;
     OString **newarr;
     cs_assert(nsz <= MAXSTRTABLE);
     if (nsz < osz) /* shrinking ? */
         rehashtable(tab->hash, osz, nsz); /* depopulate shrinking part */
-    newarr = csM_reallocarray(ts, tab->hash, osz, nsz);
+    newarr = csM_reallocarray(C, tab->hash, osz, nsz);
     if (c_unlikely(newarr == NULL)) { /* reallocation failed? */
         if (nsz < osz) /* was it shrinking table? */
             rehashtable(tab->hash, nsz, osz); /* restore to original size */
@@ -123,25 +123,25 @@ void csS_resize(cs_State *ts, int nsz) {
 }
 
 
-void csS_init(cs_State *ts) {
-    GState *gs = G_(ts);
+void csS_init(cs_State *C) {
+    GState *gs = G_(C);
     StringTable *tab = &gs->strtab;
     /* first initialize string table... */
-    tab->hash = csM_newarray(ts, MINSTRTABSIZE, OString*);
+    tab->hash = csM_newarray(C, MINSTRTABSIZE, OString*);
     rehashtable(tab->hash, 0, MINSTRTABSIZE); /* clear array */
     tab->size = MINSTRTABSIZE;
     cs_assert(tab->nuse == 0);
     /* allocate the memory-error message... */
-    gs->memerror = csS_newlit(ts, MEMERRMSG);
-    csG_fix(ts, obj2gco(gs->memerror)); /* ...and fix it */
+    gs->memerror = csS_newlit(C, MEMERRMSG);
+    csG_fix(C, obj2gco(gs->memerror)); /* ...and fix it */
     for (int i = 0; i < STRCACHE_N; i++) /* fill cache with valid strings */
         for (int j = 0; j < STRCACHE_M; j++)
             gs->strcache[i][j] = gs->memerror;
 }
 
 
-static OString *newstrobj(cs_State *ts, size_t l, int tt_, uint h) {
-    GCObject *o = csG_new(ts, sizeofstring(l), tt_);
+static OString *newstrobj(cs_State *C, size_t l, int tt_, uint h) {
+    GCObject *o = csG_new(C, sizeofstring(l), tt_);
     OString *s = gco2str(o);
     s->hash = h;
     s->extra = 0;
@@ -150,16 +150,16 @@ static OString *newstrobj(cs_State *ts, size_t l, int tt_, uint h) {
 }
 
 
-OString *csS_newlngstrobj(cs_State *ts, size_t len) {
-    OString *s = newstrobj(ts, len, CS_VLNGSTR, G_(ts)->seed);
+OString *csS_newlngstrobj(cs_State *C, size_t len) {
+    OString *s = newstrobj(C, len, CS_VLNGSTR, G_(C)->seed);
     s->u.lnglen = len;
     s->shrlen = 0xFF;
     return s;
 }
 
 
-void csS_remove(cs_State *ts, OString *s) {
-    StringTable *tab = &G_(ts)->strtab;
+void csS_remove(cs_State *C, OString *s) {
+    StringTable *tab = &G_(C)->strtab;
     OString **pp = &tab->hash[hashmod(s->hash, tab->size)];
     while (*pp != s) /* find previous element */
         pp = &(*pp)->u.next;
@@ -169,20 +169,20 @@ void csS_remove(cs_State *ts, OString *s) {
 
 
 /* grow string table */
-static void growtable(cs_State *ts, StringTable *tab) {
+static void growtable(cs_State *C, StringTable *tab) {
     if (c_unlikely(tab->nuse == MAXINT)) {
-        csG_full(ts, 1); /* try to reclaim memory */
+        csG_full(C, 1); /* try to reclaim memory */
         if (tab->nuse == MAXINT)
-            csM_error(ts);
+            csM_error(C);
     }
     if (tab->size <= MAXSTRTABLE / 2)
-        csS_resize(ts, tab->size * 2);
+        csS_resize(C, tab->size * 2);
 }
 
 
-static OString *internshrstr(cs_State *ts, const char *str, size_t l) {
+static OString *internshrstr(cs_State *C, const char *str, size_t l) {
     OString *s;
-    GState *gs = G_(ts);
+    GState *gs = G_(C);
     StringTable *tab = &gs->strtab;
     uint h = csS_hash(str, l, gs->seed);
     OString **list = &tab->hash[hashmod(h, tab->size)];
@@ -196,10 +196,10 @@ static OString *internshrstr(cs_State *ts, const char *str, size_t l) {
     }
     /* otherwise create new string */
     if (tab->nuse >= tab->size) { /* need to grow the table? */
-        growtable(ts, tab);
+        growtable(C, tab);
         list = &tab->hash[hashmod(h, tab->size)];
     }
-    s = newstrobj(ts, l, CS_VSHRSTR, h);
+    s = newstrobj(C, l, CS_VSHRSTR, h);
     memcpy(getshrstr(s), str, l*sizeof(char));
     s->shrlen = cast_byte(l);
     s->u.next = *list;
@@ -210,14 +210,14 @@ static OString *internshrstr(cs_State *ts, const char *str, size_t l) {
 
 
 /* create new string with explicit length */
-OString *csS_newl(cs_State *ts, const char *str, size_t len) {
+OString *csS_newl(cs_State *C, const char *str, size_t len) {
     if (len <= CSI_MAXSHORTLEN) { /* short string? */
-        return internshrstr(ts, str, len);
+        return internshrstr(C, str, len);
     } else { /* otherwise long string */
         OString *s;
         if (c_unlikely(len*sizeof(char) >= (MAXSIZE - sizeof(OString))))
-            csM_toobig(ts);
-        s = csS_newlngstrobj(ts, len);
+            csM_toobig(C);
+        s = csS_newlngstrobj(C, len);
         memcpy(getlngstr(s), str, len);
         return s;
     }
@@ -229,10 +229,10 @@ OString *csS_newl(cs_State *ts, const char *str, size_t len) {
 ** cache (using the string address as key). The cache can contain
 ** only zero-terminated strings, so it is safe to use 'strcmp'.
 */
-OString *csS_new(cs_State *ts, const char *str) {
+OString *csS_new(cs_State *C, const char *str) {
     int j;
     uint i = pointer2uint(str) % STRCACHE_N;
-    OString **p = G_(ts)->strcache[i]; /* address as key */
+    OString **p = G_(C)->strcache[i]; /* address as key */
     for (j = 0; j < STRCACHE_M; j++)
         if (strcmp(getstr(p[j]), str) == 0)
             return p[j];
@@ -240,7 +240,7 @@ OString *csS_new(cs_State *ts, const char *str) {
     for (j = STRCACHE_M - 1; j > 0; j--) /* make space for new string */
         p[j] = p[j - 1]; /* move out last element */
     /* new string is first in the cache line 'i' */
-    p[0] = csS_newl(ts, str, strlen(str));
+    p[0] = csS_newl(C, str, strlen(str));
     return p[0];
 }
 
@@ -510,16 +510,16 @@ int csS_utf8esc(char *buff, ulong n) {
 
 /* buffer for 'csS_newvstringf' */
 typedef struct BuffVFS {
-    cs_State *ts;
+    cs_State *C;
     int pushed; /* true if 'space' was pushed on the stack */
     int len; /* string length in 'space' */
     char space[BUFFVFSSIZ];
 } BuffVFS;
 
 
-static void initvfs(cs_State *ts, BuffVFS *vfs) {
+static void initvfs(cs_State *C, BuffVFS *vfs) {
     vfs->len = vfs->pushed = 0;
-    vfs->ts = ts;
+    vfs->C = C;
 }
 
 
@@ -528,12 +528,12 @@ static void initvfs(cs_State *ts, BuffVFS *vfs) {
 ** other string on the stack if 'pushed' is set.
 */
 static void pushstr(BuffVFS *buff, const char *str, size_t len) {
-    cs_State *ts = buff->ts;
-    OString *s = csS_newl(ts, str, len);
-    setstrval2s(ts, ts->sp.p, s);
-    ts->sp.p++;
+    cs_State *C = buff->C;
+    OString *s = csS_newl(C, str, len);
+    setstrval2s(C, C->sp.p, s);
+    C->sp.p++;
     if (buff->pushed)
-        csV_concat(ts, 2);
+        csV_concat(C, 2);
     else
         buff->pushed = 1;
 }
@@ -582,11 +582,11 @@ static void buffaddptr(BuffVFS *buff, const void *p) {
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
-const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
+const char *csS_pushvfstring(cs_State *C, const char *fmt, va_list argp) {
     const char *end;
     TValue nv;
     BuffVFS buff;
-    initvfs(ts, &buff);
+    initvfs(C, &buff);
     while ((end = strchr(fmt, '%')) != NULL) {
         buffaddstring(&buff, fmt, end - fmt);
         switch (*(end + 1)) {
@@ -626,7 +626,7 @@ const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
         }
         default:;
             c_byte c = cast(unsigned char, *(end + 1));
-            csD_runerror(ts, "invalid format specifier '%%%c'", c);
+            csD_runerror(C, "invalid format specifier '%%%c'", c);
             /* UNREACHED */
             return NULL;
         }
@@ -634,14 +634,14 @@ const char *csS_pushvfstring(cs_State *ts, const char *fmt, va_list argp) {
     }
     buffaddstring(&buff, fmt, strlen(fmt));
     pushbuff(&buff);
-    return getstr(strval(s2v(ts->sp.p - 1)));
+    return getstr(strval(s2v(C->sp.p - 1)));
 }
 
 
-const char *csS_pushfstring(cs_State *ts, const char *fmt, ...) {
+const char *csS_pushfstring(cs_State *C, const char *fmt, ...) {
     va_list argp;
     va_start(argp, fmt);
-    const char *str = csS_pushvfstring(ts, fmt, argp);
+    const char *str = csS_pushvfstring(C, fmt, argp);
     va_end(argp);
     return str;
 }

@@ -17,9 +17,9 @@
 #define csA_reset(arr)      ((arr)->n = 0)
 
 
-CSI_FUNC Array *csA_new(cs_State *ts);
-CSI_FUNC void csA_shrink(cs_State *ts, Array *arr);
-CSI_FUNC void csA_ensure(cs_State *ts, Array *arr, int index);
-CSI_FUNC void csA_free(cs_State *ts, Array *arr);
+CSI_FUNC Array *csA_new(cs_State *C);
+CSI_FUNC void csA_shrink(cs_State *C, Array *arr);
+CSI_FUNC void csA_ensure(cs_State *C, Array *arr, int index);
+CSI_FUNC void csA_free(cs_State *C, Array *arr);
 
 #endif

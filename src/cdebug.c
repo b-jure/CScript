@@ -134,7 +134,7 @@ static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
 ** Find local variable at index 'n', store it in 'pos' and
 ** returns its name. If variable is not found return NULL.
 */
-const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n, SPtr *pos) {
+const char *csD_findlocal(cs_State *C, CallFrame *cf, int n, SPtr *pos) {
     SPtr base = cf->func.p + 1;
     const char *name = NULL;
     if (isCScript(cf)) {
@@ -144,7 +144,7 @@ const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n, SPtr *pos) {
             name = csF_getlocalname(cfProto(cf), n, relpc(cf));
     }
     if (name == NULL) {
-        SPtr limit = (cf == ts->cf) ? ts->sp.p : cf->next->func.p;
+        SPtr limit = (cf == C->cf) ? C->sp.p : cf->next->func.p;
         if (limit - base >= n && n > 0) /* 'n' is in stack range ? */
             name = isCScript(cf) ? "(auto)" : "(C auto)";
         else
@@ -156,38 +156,38 @@ const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n, SPtr *pos) {
 }
 
 
-CS_API const char *cs_getlocal(cs_State *ts, const cs_Debug *di, int n) {
+CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *di, int n) {
     const char *name;
-    cs_lock(ts);
+    cs_lock(C);
     if (di == NULL) {
-        if (!ttisCSclosure(s2v(ts->sp.p - 1)))
+        if (!ttisCSclosure(s2v(C->sp.p - 1)))
             name = NULL;
         else
-            name = csF_getlocalname(clCSval(s2v(ts->sp.p - 1))->p, n, 0);
+            name = csF_getlocalname(clCSval(s2v(C->sp.p - 1))->p, n, 0);
     }
     else {
         SPtr pos = NULL;
-        name = csD_findlocal(ts, di->cf, n, &pos);
+        name = csD_findlocal(C, di->cf, n, &pos);
         if (name) { /* found ? */
-            setobjs2s(ts, ts->sp.p, pos);
-            api_inctop(ts);
+            setobjs2s(C, C->sp.p, pos);
+            api_inctop(C);
         }
     }
-    cs_unlock(ts);
+    cs_unlock(C);
     return name;
 }
 
 
-CS_API const char *cs_setlocal (cs_State *ts, const cs_Debug *ar, int n) {
+CS_API const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n) {
     SPtr pos = NULL;
     const char *name;
-    cs_lock(ts);
-    name = csD_findlocal(ts, ar->cf, n, &pos);
+    cs_lock(C);
+    name = csD_findlocal(C, ar->cf, n, &pos);
     if (name) { /* found ? */
-        setobjs2s(ts, pos, ts->sp.p - 1); /* set the value */
-        ts->sp.p--; /* remove value */
+        setobjs2s(C, pos, C->sp.p - 1); /* set the value */
+        C->sp.p--; /* remove value */
     }
-    cs_unlock(ts);
+    cs_unlock(C);
     return name;
 }
 
@@ -217,7 +217,7 @@ static void getfuncinfo(Closure *cl, cs_Debug *di) {
 }
 
 
-static const char *funcnamefromcode(cs_State *ts, const Proto *p, int pc,
+static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
                                     const char **name) {
     cs_MM mm;
     Instruction *i = &p->code[pc];
@@ -248,27 +248,27 @@ static const char *funcnamefromcode(cs_State *ts, const Proto *p, int pc,
         case OP_EQ: mm = CS_MM_EQ; break;
         default: return NULL;
     }
-    *name = getstr(G_(ts)->mmnames[mm]) + /* skip '__' */ 2;
+    *name = getstr(G_(C)->mmnames[mm]) + /* skip '__' */ 2;
     return "metamethod";
 }
 
 
 /* try to find a name for a function based on how it was called */
-static const char *funcnamefromcall(cs_State *ts, CallFrame *cf,
+static const char *funcnamefromcall(cs_State *C, CallFrame *cf,
                                     const char **name) {
     if (cf->status & CFST_FIN) { /* called as finalizer? */
         *name = "__gc";
         return "metamethod";
     } else if (isCScript(cf)) {
-        return funcnamefromcode(ts, cfProto(cf), relpc(cf), name);
+        return funcnamefromcode(C, cfProto(cf), relpc(cf), name);
     } else
         return NULL;
 }
 
 
-static const char *getfuncname(cs_State *ts, CallFrame *cf, const char **name) {
+static const char *getfuncname(cs_State *C, CallFrame *cf, const char **name) {
     if (cf != NULL)
-        return funcnamefromcall(ts, cf->prev, name);
+        return funcnamefromcall(C, cf->prev, name);
     else
         return NULL;
 }
@@ -279,13 +279,13 @@ static const char *getfuncname(cs_State *ts, CallFrame *cf, const char **name) {
 ** 'cs_Debug' accordingly. If any invalid options is specified this
 ** returns 0.
 */
-static int auxgetinfo(cs_State *ts, const char *options, Closure *cl,
+static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
                       CallFrame *cf, cs_Debug *di) {
     int status = 1;
     for (unsigned char opt = *options++; opt != '\0'; opt = *options++) {
         switch (opt) {
             case 'n': {
-                di->namewhat = getfuncname(ts, cf, &di->name);
+                di->namewhat = getfuncname(C, cf, &di->name);
                 if (di->namewhat == NULL) { /* not found ? */
                     di->namewhat = "";
                     di->name = NULL;
@@ -338,37 +338,37 @@ static int auxgetinfo(cs_State *ts, const char *options, Closure *cl,
 ** This function returns 0 on error (for instance if any option in 'options'
 ** is invalid).
 */
-CS_API int cs_getinfo(cs_State *ts, const char *options, cs_Debug *di) {
+CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *di) {
     CallFrame *cf;
     Closure *cl;
     TValue *func;
     int status = 1;
-    cs_lock(ts);
-    api_check(ts, options, "'options' is NULL");
+    cs_lock(C);
+    api_check(C, options, "'options' is NULL");
     if (*options == '>') {
         cf = NULL; /* not currently running */
-        func = s2v(ts->sp.p - 1);
-        api_check(ts, ttisfunction(func), "expect function");
+        func = s2v(C->sp.p - 1);
+        api_check(C, ttisfunction(func), "expect function");
         options++; /* skip '>' */
-        ts->sp.p--;
+        C->sp.p--;
     } else {
         cf = di->cf;
         func = s2v(cf->func.p);
         cs_assert(ttisfunction(func));
     }
     cl = (ttisCSclosure(func) ? clval(func) : NULL);
-    status = auxgetinfo(ts, options, cl, cf, di);
+    status = auxgetinfo(C, options, cl, cf, di);
     if (strchr(options, 'f')) {
-        setobj2s(ts, ts->sp.p, func);
-        api_inctop(ts);
+        setobj2s(C, C->sp.p, func);
+        api_inctop(C);
     }
-    cs_unlock(ts);
+    cs_unlock(C);
     return status;
 }
 
 
 /* add usual debug information to 'msg' (source id and line) */
-const char *csD_addinfo(cs_State *ts, const char *msg, OString *src,
+const char *csD_addinfo(cs_State *C, const char *msg, OString *src,
                         int line) {
     char buffer[CS_MAXSRC];
     if (src) {
@@ -377,96 +377,96 @@ const char *csD_addinfo(cs_State *ts, const char *msg, OString *src,
         buffer[0] = '?';
         buffer[1] = '\0';
     }
-    return csS_pushfstring(ts, "%s:%d: %s", buffer, line, msg);
+    return csS_pushfstring(C, "%s:%d: %s", buffer, line, msg);
 }
 
 
 /* generic runtime error */
-c_noret csD_runerror(cs_State *ts, const char *fmt, ...) {
+c_noret csD_runerror(cs_State *C, const char *fmt, ...) {
     va_list ap;
     const char *err;
     va_start(ap, fmt);
-    err = csS_pushvfstring(ts, fmt, ap);
+    err = csS_pushvfstring(C, fmt, ap);
     va_end(ap);
-    if (isCScript(ts->cf)) {
-        csD_addinfo(ts, err, cfProto(ts->cf)->source, getcurrentline(ts->cf));
-        setobj2s(ts, ts->sp.p - 2, s2v(ts->sp.p - 1)); /* remove 'err' */
-        ts->sp.p--;
+    if (isCScript(C->cf)) {
+        csD_addinfo(C, err, cfProto(C->cf)->source, getcurrentline(C->cf));
+        setobj2s(C, C->sp.p - 2, s2v(C->sp.p - 1)); /* remove 'err' */
+        C->sp.p--;
     }
-    csPR_throw(ts, CS_ERRRUNTIME);
+    csPR_throw(C, CS_ERRRUNTIME);
 }
 
 
 /* global variable related error */
-c_noret csD_globalerror(cs_State *ts, const char *err, OString *name) {
-    csD_runerror(ts, "%s global variable '%s'", err, getstr(name));
+c_noret csD_globalerror(cs_State *C, const char *err, OString *name) {
+    csD_runerror(C, "%s global variable '%s'", err, getstr(name));
 }
 
 
 /* operation on invalid type error */
-c_noret csD_typeerror(cs_State *ts, const TValue *v, const char *op) {
-    csD_runerror(ts, "tried to %s %s value", op, typename(ttype(v)));
+c_noret csD_typeerror(cs_State *C, const TValue *v, const char *op) {
+    csD_runerror(C, "tried to %s %s value", op, typename(ttype(v)));
 }
 
 
-c_noret csD_typeerrormeta(cs_State *ts, const TValue *v1, const TValue *v2,
+c_noret csD_typeerrormeta(cs_State *C, const TValue *v1, const TValue *v2,
                            const char * mop) {
-    csD_runerror(ts, "tried to %s %s and %s values",
+    csD_runerror(C, "tried to %s %s and %s values",
                      mop, typename(ttype(v1)), typename(ttype(v2)));
 }
 
 
 /* arithmetic operation error */
-c_noret csD_operror(cs_State *ts, const TValue *v1, const TValue *v2,
+c_noret csD_operror(cs_State *C, const TValue *v1, const TValue *v2,
                      const char *op) {
     if (ttisnum(v1))
         v1 = v2;  /* correct error value */
-    csD_typeerror(ts, v1, op);
+    csD_typeerror(C, v1, op);
 }
 
 
 /* ordering error */
-c_noret csD_ordererror(cs_State *ts, const TValue *v1, const TValue *v2) {
+c_noret csD_ordererror(cs_State *C, const TValue *v1, const TValue *v2) {
     const char *name1 = typename(ttype(v1));
     const char *name2 = typename(ttype(v2));
     if (name1 == name2) /* point to same entry ? */
-        csD_runerror(ts, "tried to compare two %s values", name1);
+        csD_runerror(C, "tried to compare two %s values", name1);
     else
-        csD_runerror(ts, "tried to compare %s with %s", name1, name2);
+        csD_runerror(C, "tried to compare %s with %s", name1, name2);
 }
 
 
-c_noret csD_concaterror(cs_State *ts, const TValue *v1, const TValue *v2) {
+c_noret csD_concaterror(cs_State *C, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1)) v1 = v2;
-    csD_typeerror(ts, v1, "concatenate");
+    csD_typeerror(C, v1, "concatenate");
 }
 
 
-c_noret csD_callerror(cs_State *ts, const TValue *o) {
-    csD_typeerror(ts, o, "call");
+c_noret csD_callerror(cs_State *C, const TValue *o) {
+    csD_typeerror(C, o, "call");
 }
 
 
-c_noret csD_indexerror(cs_State *ts, cs_Integer index, const char *what) {
-    csD_runerror(ts, "array index '%I' is %s", index, what);
+c_noret csD_indexerror(cs_State *C, cs_Integer index, const char *what) {
+    csD_runerror(C, "array index '%I' is %s", index, what);
 }
 
 
-c_noret csD_indextypeerror(cs_State *ts, const TValue *index) {
+c_noret csD_indextypeerror(cs_State *C, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
-    csD_runerror(ts, "invalid array index type (%s), expected integer",
+    csD_runerror(C, "invalid array index type (%s), expected integer",
                      typename(ttype(index)));
 }
 
 
-c_noret csD_errormsg(cs_State *ts) {
-    if (ts->errfunc != 0) { /* have error func? */
-        SPtr errfunc = restorestack(ts, ts->errfunc); /* get it */
+c_noret csD_errormsg(cs_State *C) {
+    if (C->errfunc != 0) { /* have error func? */
+        SPtr errfunc = restorestack(C, C->errfunc); /* get it */
         cs_assert(ttisfunction(s2v(errfunc))); /* must be a function */
-        setobjs2s(ts, ts->sp.p, ts->sp.p - 1); /* move argument */
-        setobjs2s(ts, ts->sp.p - 1, errfunc); /* push function */
-        ts->sp.p++; /* assume EXTRA_STACK */
-        csV_call(ts, ts->sp.p - 2, 1);
+        setobjs2s(C, C->sp.p, C->sp.p - 1); /* move argument */
+        setobjs2s(C, C->sp.p - 1, errfunc); /* push function */
+        C->sp.p++; /* assume EXTRA_STACK */
+        csV_call(C, C->sp.p - 2, 1);
     }
-    csPR_throw(ts, CS_ERRRUNTIME); /* raise a regular runtime error */
+    csPR_throw(C, CS_ERRRUNTIME); /* raise a regular runtime error */
 }

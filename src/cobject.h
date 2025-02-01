@@ -89,12 +89,12 @@ typedef struct TValue {
 /*
 ** Any value being manipulated by the program either is non
 ** collectable, or the collectable object has the right tag
-** and it is not dead. The option 'ts == NULL' allows other
-** macros using this one to be used where ts is not available.
+** and it is not dead. The option 'C == NULL' allows other
+** macros using this one to be used where C is not available.
 */
-#define checkliveness(ts,obj) \
-    ((void)ts, cs_assert(!iscollectable(obj) || \
-        (righttt(obj) && (ts == NULL || !isdead(G_(ts), gcoval(obj))))))
+#define checkliveness(C,obj) \
+        ((void)C, cs_assert(!iscollectable(obj) || \
+        (righttt(obj) && (C == NULL || !isdead(G_(C), gcoval(obj))))))
 
 
 /* Macros to set values */
@@ -103,15 +103,15 @@ typedef struct TValue {
 #define settt(o,t)          (rawtt(o)=(t))
 
 /* macro for copying values (from 'obj2' to 'obj1' */
-#define setobj(ts,obj1,obj2) \
+#define setobj(C,obj1,obj2) \
     { TValue *o1_=(obj1); const TValue *o2_=(obj2); \
       o1_->val = o2_->val; settt(o1_, o2_->tt); \
-      checkliveness(ts,o1_); }
+      checkliveness(C,o1_); }
 
 /* copy object from stack to stack */
-#define setobjs2s(ts,o1,o2)     setobj(ts,s2v(o1),s2v(o2))
+#define setobjs2s(C,o1,o2)      setobj(C,s2v(o1),s2v(o2))
 /* copy object to stack */
-#define setobj2s(ts,o1,o2)      setobj(ts,s2v(o1),o2)
+#define setobj2s(C,o1,o2)       setobj(C,s2v(o1),o2)
 
 
 /*
@@ -178,7 +178,7 @@ typedef struct GCObject {
 
 #define gcoval(o)           check_exp(iscollectable(o), val(o).gc)
 
-#define setgcoval(ts,obj,x) \
+#define setgcoval(C,obj,x) \
     { TValue *o_=(obj); GCObject *x_=(x); \
       val(o_).gc = x_; settt(o_, ctb(x_->tt_)); }
 
@@ -254,12 +254,12 @@ typedef struct GCObject {
 #define setpval(obj,x) \
     { TValue *o_=(obj); val(o_).p = (x); settt(o_, CS_VLIGHTUSERDATA); }
 
-#define setuval(ts,obj,x) \
+#define setuval(C,obj,x) \
     { TValue *o_=(obj); const UserData *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUSERDATA)); \
-      checkliveness(ts,o_); }
+      checkliveness(C,o_); }
 
-#define setuval2s(ts,o,uv)      setuval(ts, s2v(o), uv)
+#define setuval2s(C,o,uv)       setuval(C, s2v(o), uv)
 
 
 /*
@@ -355,12 +355,12 @@ typedef struct EmptyUserData {
 
 #define thval(o)        check_exp(ttisthread(o), gco2th(val(o).gc))
 
-#define setthval(ts,obj,x) \
+#define setthval(C,obj,x) \
     { TValue *o_=(obj); const cs_State *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VTHREAD)); \
-      checkliveness(ts, o_); }
+      checkliveness(C, o_); }
 
-#define setthval2s(ts,o,th)     setthval(ts,s2v(o),th)
+#define setthval2s(C,o,th)      setthval(C,s2v(o),th)
 
 /* } --------------------------------------------------------------------- */
 
@@ -376,12 +376,12 @@ typedef struct EmptyUserData {
 
 #define htval(o)            check_exp(ttishtab(o), gco2ht(val(o).gc))
 
-#define sethtval(ts,obj,x) \
+#define sethtval(C,obj,x) \
     { TValue *o_=(obj); const HTable *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VHTABLE)); \
-      checkliveness(ts, o_); }
+      checkliveness(C, o_); }
 
-#define sethtval2s(ts,o,ht)     sethtval(ts,s2v(o),ht)
+#define sethtval2s(C,o,ht)      sethtval(C,s2v(o),ht)
 
 
 /*
@@ -402,17 +402,17 @@ typedef union Node {
 
 
 /* copy a value into a key */
-#define setnodekey(ts,n,obj) \
+#define setnodekey(C,n,obj) \
     { Node *n_=(n); const TValue *obj_=(obj); \
       n_->s.key_val = obj_->val; n_->s.key_tt = obj_->tt; \
-      checkliveness(ts,obj_); }
+      checkliveness(C,obj_); }
 
 
 /* copy a value from a key */
-#define getnodekey(ts,obj,n) \
+#define getnodekey(C,obj,n) \
     { TValue *obj_=(obj); const Node *n_=(n); \
       obj_->val = n_->s.key_val; obj_->tt = n_->s.key_tt; \
-      checkliveness(ts,obj_); }
+      checkliveness(C,obj_); }
 
 
 typedef struct HTable {
@@ -458,12 +458,12 @@ typedef struct HTable {
 
 #define arrval(o)       gco2arr(val(o).gc)
 
-#define setarrval(ts,obj,x) \
+#define setarrval(C,obj,x) \
     { TValue *o_=(obj); const Array *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VARRAY)); \
-      checkliveness(ts, o_); }
+      checkliveness(C, o_); }
 
-#define setarrval2s(ts,o,arr)   setarrval(ts,s2v(o),arr)
+#define setarrval2s(C,o,arr)    setarrval(C,s2v(o),arr)
 
 typedef struct Array {
     ObjectHeader;
@@ -490,12 +490,12 @@ typedef struct Array {
 
 #define strval(o)       check_exp(ttisstring(o), gco2str(val(o).gc))
 
-#define setstrval(ts,obj,x) \
+#define setstrval(C,obj,x) \
     { TValue *o_=(obj); const OString *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(x_->tt_)); \
-      checkliveness((ts), o_); }
+      checkliveness((C), o_); }
 
-#define setstrval2s(ts,o,s)     setstrval(ts,s2v(o),s)
+#define setstrval2s(C,o,s)      setstrval(C,s2v(o),s)
 
 
 typedef struct OString {
@@ -538,12 +538,12 @@ typedef struct OString {
 
 #define classval(o)     check_exp(ttisclass(o), gco2cls(val(o).gc))
 
-#define setclsval(ts,obj,x) \
+#define setclsval(C,obj,x) \
     { TValue *o_=(obj); const OClass *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VCLASS)); \
-      checkliveness(ts, o_); }
+      checkliveness(C, o_); }
 
-#define setclsval2s(ts,o,cls)       setclsval(ts,s2v(o),cls)
+#define setclsval2s(C,o,cls)        setclsval(C,s2v(o),cls)
 
 typedef struct OClass {
     ObjectHeader;
@@ -645,12 +645,12 @@ typedef struct Proto {
 
 #define insval(o)       check_exp(ttisinstance(o), gco2ins(val(o).gc))
 
-#define setinsval(ts,obj,x) \
+#define setinsval(C,obj,x) \
     { TValue *o_=(obj); const Instance *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VINSTANCE)); \
-      checkliveness(ts, o_); }
+      checkliveness(C, o_); }
 
-#define setinsval2s(ts,o,ins)       setinsval(ts,s2v(o),ins)
+#define setinsval2s(C,o,ins)        setinsval(C,s2v(o),ins)
 
 typedef struct Instance {
     ObjectHeader;
@@ -686,29 +686,29 @@ typedef struct Instance {
 #define lcfval(o)       check_exp(ttislcf(o), val(o).cfn)
 #define imval(o)        check_exp(ttisinstancemethod(o), gco2im(val(o).gc))
 
-#define setclCSval(ts,obj,x) \
+#define setclCSval(C,obj,x) \
     { TValue *o_=(obj); const CSClosure *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VCSCL)); \
-      checkliveness(ts, o_); }
+      checkliveness(C, o_); }
 
-#define setclCSval2s(ts,o,cl)   setclCSval(ts,s2v(o),cl)
+#define setclCSval2s(C,o,cl)    setclCSval(C,s2v(o),cl)
 
-#define setcfval(ts,obj,x) \
+#define setcfval(C,obj,x) \
     { TValue *o_ = (obj); val(o_).cfn=(x); settt(o_, CS_VLCF); }
 
-#define setclCval(ts,obj,x) \
+#define setclCval(C,obj,x) \
     { TValue *o_=(obj); const CClosure *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VCCL)); \
-      checkliveness(ts, o_); }
+      checkliveness(C, o_); }
 
-#define setclCval2s(ts,o,cl)    setclCval(ts,s2v(o),cl)
+#define setclCval2s(C,o,cl)     setclCval(C,s2v(o),cl)
 
-#define setimval(ts,obj,x) \
+#define setimval(C,obj,x) \
     { TValue *o_=(obj); const IMethod *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VIMETHOD)); \
-      checkliveness(ts, o_); }
+      checkliveness(C, o_); }
 
-#define setimval2s(ts,o,im)     setimval(ts,s2v(o),im)
+#define setimval2s(C,o,im)      setimval(C,s2v(o),im)
 
 
 /* method bounded to instance */
@@ -802,7 +802,7 @@ CSI_FUNC int csO_ceillog2(uint x);
 CSI_FUNC int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode);
 CSI_FUNC int csO_tointeger(const TValue *v, cs_Integer *i, int mode);
 CSI_FUNC cs_Integer csO_shiftl(cs_Integer x, cs_Integer y);
-CSI_FUNC int csO_arithmraw(cs_State *ts, const TValue *a, const TValue *b,
+CSI_FUNC int csO_arithmraw(cs_State *C, const TValue *a, const TValue *b,
                            TValue *res, int op);
 
 #endif

@@ -115,13 +115,13 @@
 ** Performs a single step of collection if collector
 ** gcdebt is positive.
 */
-#define csG_condGC(ts,pre,pos) \
-    { pre; if (G_(ts)->gcdebt > 0) { csG_step(ts); pos; } \
-      gcmemchange(ts,pre,pos); }
+#define csG_condGC(C,pre,pos) \
+    { pre; if (G_(C)->gcdebt > 0) { csG_step(C); pos; } \
+      gcmemchange(C,pre,pos); }
 
 
 /* 'csG_condGC' but without 'pre' and 'pos' */
-#define csG_checkGC(ts)         csG_condGC(ts,(void)0,(void)0)
+#define csG_checkGC(C)         csG_condGC(C,(void)0,(void)0)
 
 
 /* get total bytes allocated (by accounting for 'gcdebt') */
@@ -137,24 +137,24 @@
 ** Same as 'csG_barrier_' but ensures that it is only called when 'r'
 ** (root) is a black object and 'o' is white.
 */
-#define csG_objbarrier(ts,r,o) \
-        (isblack(r) && iswhite(o) ? csG_barrier_(ts, obj2gco(r), obj2gco(o)) \
+#define csG_objbarrier(C,r,o) \
+        (isblack(r) && iswhite(o) ? csG_barrier_(C, obj2gco(r), obj2gco(o)) \
                                   : (void)(0))
 
 /* wrapper around 'csG_objbarrier' that check if 'v' is object */
-#define csG_barrier(ts,r,v) \
-        (iscollectable(v) ? csG_objbarrier(ts, r, gcoval(v)) : (void)(0))
+#define csG_barrier(C,r,v) \
+        (iscollectable(v) ? csG_objbarrier(C, r, gcoval(v)) : (void)(0))
 
 /*
 ** Same as 'csG_barrierback_' but ensures that it is only
 ** called when 'r' (root) is a black object and 'o' is white.
 */
-#define csG_objbarrierback(ts,r,o) \
-        (isblack(r) && iswhite(o) ? csG_barrierback_(ts, r) : (void)(0))
+#define csG_objbarrierback(C,r,o) \
+        (isblack(r) && iswhite(o) ? csG_barrierback_(C, r) : (void)(0))
 
 /* wrapper around 'csG_objbarrierback' that checks if 'v' is object */
-#define csG_barrierback(ts,r,v) \
-        (iscollectable(v) ? csG_objbarrierback(ts,r,gcoval(v)) : (void)(0))
+#define csG_barrierback(C,r,v) \
+        (iscollectable(v) ? csG_objbarrierback(C,r,gcoval(v)) : (void)(0))
 
 
 /* 
@@ -165,17 +165,17 @@
 #define setgcparam(p,v)         ((p) = (v) / 4)
 
 
-CSI_FUNC GCObject *csG_new(cs_State *ts, size_t size, int tt_);
-CSI_FUNC GCObject *csG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset);
-CSI_FUNC void csG_step(cs_State *ts);
-CSI_FUNC void csG_full(cs_State *ts, int isemergency);
-CSI_FUNC void csG_rununtilstate(cs_State *ts, int statemask);
-CSI_FUNC void csG_freeallobjects(cs_State *ts);
-CSI_FUNC void csG_checkfin(cs_State *ts, GCObject *o, TValue vmt[CS_MM_N]);
-CSI_FUNC void csG_fix(cs_State *ts, GCObject *o);
-CSI_FUNC void csG_barrier_(cs_State *ts, GCObject *r, GCObject *o);
-CSI_FUNC void csG_barrierback_(cs_State *ts, GCObject *r);
+CSI_FUNC GCObject *csG_new(cs_State *C, size_t size, int tt_);
+CSI_FUNC GCObject *csG_newoff(cs_State *C, size_t sz, int tt_, size_t offset);
+CSI_FUNC void csG_step(cs_State *C);
+CSI_FUNC void csG_full(cs_State *C, int isemergency);
+CSI_FUNC void csG_rununtilstate(cs_State *C, int statemask);
+CSI_FUNC void csG_freeallobjects(cs_State *C);
+CSI_FUNC void csG_checkfin(cs_State *C, GCObject *o, TValue vmt[CS_MM_N]);
+CSI_FUNC void csG_fix(cs_State *C, GCObject *o);
+CSI_FUNC void csG_barrier_(cs_State *C, GCObject *r, GCObject *o);
+CSI_FUNC void csG_barrierback_(cs_State *C, GCObject *r);
 CSI_FUNC void csG_setgcdebt(GState *gs, c_smem gcdebt);
-CSI_FUNC void csG_incmode(cs_State *ts);
+CSI_FUNC void csG_incmode(cs_State *C);
 
 #endif

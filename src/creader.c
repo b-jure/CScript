@@ -13,12 +13,12 @@
 
 
 
-void csR_init(cs_State *ts, BuffReader *br, cs_Reader freader, void *ud) {
+void csR_init(cs_State *C, BuffReader *br, cs_Reader freader, void *ud) {
     br->n = 0;
     br->buff = NULL;
     br->reader = freader;
     br->userdata = ud;
-    br->ts = ts;
+    br->C = C;
 }
 
 
@@ -30,11 +30,11 @@ void csR_init(cs_State *ts, BuffReader *br, cs_Reader freader, void *ud) {
 ** to 0 or return NULL.
 */
 int csR_fill(BuffReader *br) {
-    cs_State *ts = br->ts;
+    cs_State *C = br->C;
     size_t size;
-    cs_unlock(ts);
-    const char *buff = br->reader(ts, br->userdata, &size);
-    cs_lock(ts);
+    cs_unlock(C);
+    const char *buff = br->reader(C, br->userdata, &size);
+    cs_lock(C);
     if (buff == NULL || size == 0)
         return CSEOF;
     br->buff = buff;

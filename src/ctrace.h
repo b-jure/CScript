@@ -9,8 +9,8 @@
 
 #include "cobject.h"
 
-CSI_FUNC void csTR_tracepc(cs_State *ts, const Proto *fn, const Instruction *pc);
-CSI_FUNC void csTR_disassemble(cs_State *ts, const Proto *fn);
-CSI_FUNC void csTR_dumpstack(cs_State *ts, int level, const char *fmt, ...);
+CSI_FUNC void csTR_tracepc(cs_State *C, const Proto *fn, const Instruction *pc);
+CSI_FUNC void csTR_disassemble(cs_State *C, const Proto *fn);
+CSI_FUNC void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...);
 
 #endif

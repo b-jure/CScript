@@ -156,8 +156,8 @@ static void traceILLS(const Proto *p, const Instruction *pc) {
 /*
 ** Trace the current OpCode and its arguments.
 */
-void csTR_tracepc(cs_State *ts, const Proto *p, const Instruction *pc) {
-    csTR_dumpstack(ts, 1, NULL); /* first dump current function stack... */
+void csTR_tracepc(cs_State *C, const Proto *p, const Instruction *pc) {
+    csTR_dumpstack(C, 1, NULL); /* first dump current function stack... */
     switch (getOpFormat(*pc)) { /* ...then trace the instruction */
         case FormatI: traceI(p, pc); break;
         case FormatIS: traceIS(p, pc); break;
@@ -414,16 +414,16 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 }
 
 
-static void traceMetaName(cs_State *ts, cs_MM mm) {
-    postab(printf("%s", getstr(G_(ts)->mmnames[mm])));
+static void traceMetaName(cs_State *C, cs_MM mm) {
+    postab(printf("%s", getstr(G_(C)->mmnames[mm])));
     fflush(stdout);
 }
 
 
-static void unasmMM(cs_State *ts, const Proto *p, Instruction *pc) {
+static void unasmMM(cs_State *C, const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceMetaName(ts, GETARG_S(pc, 0));
+    traceMetaName(C, GETARG_S(pc, 0));
     endline();
 }
 
@@ -542,7 +542,7 @@ static void unasmRet(const Proto *p, Instruction *pc) {
 ** This function provides more detailed semantic information compared
 ** to 'csTR_trace' when tracing OpCode and its arguments.
 */
-void csTR_disassemble(cs_State *ts, const Proto *p) {
+void csTR_disassemble(cs_State *C, const Proto *p) {
     Instruction *pc = p->code;
     if (p->defline == 0)
         printf("%s {\n", getstr(p->source));
@@ -630,7 +630,7 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
                 break;
             }
             case OP_MBIN: case OP_SETMM: {
-                unasmMM(ts, p, pc);
+                unasmMM(C, p, pc);
                 break;
             }
             case OP_FORLOOP: unasmLLL(p, pc); break;
@@ -652,9 +652,9 @@ void csTR_disassemble(cs_State *ts, const Proto *p) {
 }
 
 
-void csTR_dumpstack(cs_State *ts, int level, const char *fmt, ...) {
-    CallFrame *cf = ts->cf;
-    SPtr prevtop = ts->sp.p;
+void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...) {
+    CallFrame *cf = C->cf;
+    SPtr prevtop = C->sp.p;
     if (fmt) {
         va_list ap;
         va_start(ap, fmt);
@@ -665,7 +665,7 @@ void csTR_dumpstack(cs_State *ts, int level, const char *fmt, ...) {
     for (int i = 0; cf != NULL && level != 0; i++) {
         level--;
         printf("[LEVEL %3d] %-10s %s ", i, typename(ttype(s2v(cf->func.p))),
-                                        cf != ts->cf ? "--" : ">>");
+                                        cf != C->cf ? "--" : ">>");
         if (cf->func.p + 1 >= prevtop)
             printf("empty");
         else

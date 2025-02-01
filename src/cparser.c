@@ -39,8 +39,8 @@
 #define check(lx, tok)      ((lx)->t.tk == (tok))
 
 
-#define enterCstack(lx)     csT_incCstack((lx)->ts)
-#define leaveCstack(lx)     ((lx)->ts->nCcalls--)
+#define enterCstack(lx)     csT_incCstack((lx)->C)
+#define leaveCstack(lx)     ((lx)->C->nCcalls--)
 
 
 /* expect 'cond' to be true or invoke error */
@@ -91,18 +91,18 @@ typedef struct Scope {
 
 
 static c_noret expecterror(Lexer *lx, int tk) {
-    const char *err = csS_pushfstring(lx->ts, "expected %s",
+    const char *err = csS_pushfstring(lx->C, "expected %s",
                                             csY_tok2str(lx, tk));
     csY_syntaxerror(lx, err);
 }
 
 
 static c_noret limiterror(FunctionState *fs, const char *what, int limit) {
-    cs_State *ts = fs->lx->ts;
+    cs_State *C = fs->lx->C;
     int line = fs->p->defline;
     const char *where = (line == 0 ? "main function" :
-                        csS_pushfstring(ts, "function at line %d", line));
-    const char *err = csS_pushfstring(ts, "too many %s (limit is %d) in %s",
+                        csS_pushfstring(C, "function at line %d", line));
+    const char *err = csS_pushfstring(C, "too many %s (limit is %d) in %s",
                                           what, limit, where);
     csY_syntaxerror(fs->lx, err);
 }
@@ -126,7 +126,7 @@ static void rmpatchlists(Lexer *lx, int limit) {
     cs_assert(0 <= limit && limit <= ps->patches.len);
     while (limit < ps->patches.len) {
         PatchList *l = &ps->patches.arr[--ps->patches.len];
-        csM_freearray(lx->ts, l->arr, l->size);
+        csM_freearray(lx->C, l->arr, l->size);
     }
 }
 
@@ -218,7 +218,7 @@ static int nvarstack(FunctionState *fs) {
 static void rmlastpatchlist(Lexer *lx) {
     PatchList *l = check_exp(lx->ps->patches.len > 0,
                              &lx->ps->patches.arr[--lx->ps->patches.len]);
-    csM_freearray(lx->ts, l->arr, l->size);
+    csM_freearray(lx->C, l->arr, l->size);
 }
 
 
@@ -242,7 +242,7 @@ static void addlistjump(Lexer *lx, OpCode jop, int extra) {
         j.e.iscontinue = 1;
     else
         j.e.hasclose = extra;
-    csM_growarray(lx->ts, l->arr, l->size, l->len, MAXINT, "breaks", Jump);
+    csM_growarray(lx->C, l->arr, l->size, l->len, MAXINT, "breaks", Jump);
     l->arr[l->len++] = j;
 }
 
@@ -252,7 +252,7 @@ static void addpatchlist(Lexer *lx) {
     ParserState *ps = lx->ps;
     PatchList pl;
     pl.len = pl.size = 0; pl.arr = NULL;
-    csM_growarray(lx->ts, ps->patches.arr, ps->patches.size, ps->patches.len,
+    csM_growarray(lx->C, ps->patches.arr, ps->patches.size, ps->patches.len,
                   MAXINT, "control flows", PatchList);
     ps->patches.arr[ps->patches.len++] = pl;
 }
@@ -360,13 +360,13 @@ static void initstring(ExpInfo *e, OString *s) {
 static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
     Proto *p = fs->p;
     int osz = p->sizelocals;
-    csM_growarray(lx->ts, p->locals, p->sizelocals, fs->nlocals, MAXVARS,
+    csM_growarray(lx->C, p->locals, p->sizelocals, fs->nlocals, MAXVARS,
                   "locals", LVarInfo);
     while (osz < p->sizelocals)
         p->locals[osz++].name = NULL;
     p->locals[fs->nlocals].name = name;
     p->locals[fs->nlocals].startpc = currPC;
-    csG_objbarrier(lx->ts, p, name);
+    csG_objbarrier(lx->C, p, name);
     return fs->nlocals++;
 }
 
@@ -480,7 +480,7 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->nupvals = 0;
     fs->iwthabs = fs->needclose = fs->lastwasret = 0;
     p->source = lx->src;
-    csG_objbarrier(lx->ts, p, p->source);
+    csG_objbarrier(lx->C, p, p->source);
     p->maxstack = 2; /* stack slots 0/1 are always valid */
     enterscope(fs, s, 0); /* start top-level scope */
 }
@@ -489,45 +489,45 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
 static void close_func(Lexer *lx) {
     FunctionState *fs = lx->fs;
     Proto *p = fs->p;
-    cs_State *ts = lx->ts;
+    cs_State *C = lx->C;
     cs_assert(fs->scope && fs->scope->prev == NULL);
     leavescope(fs); /* end final scope */
     cs_assert(fs->scope == NULL);
     cs_assert(fs->sp == 0);
     csC_finish(fs); /* final code adjustments */
     /* shrink unused memory */
-    csM_shrinkarray(ts, p->p, p->sizep, fs->np, Proto);
-    csM_shrinkarray(ts, p->k, p->sizek, fs->nk, TValue);
-    csM_shrinkarray(ts, p->code, p->sizecode, currPC, Instruction);
-    csM_shrinkarray(ts, p->lineinfo, p->sizelineinfo, currPC, c_sbyte);
-    csM_shrinkarray(ts, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
+    csM_shrinkarray(C, p->p, p->sizep, fs->np, Proto);
+    csM_shrinkarray(C, p->k, p->sizek, fs->nk, TValue);
+    csM_shrinkarray(C, p->code, p->sizecode, currPC, Instruction);
+    csM_shrinkarray(C, p->lineinfo, p->sizelineinfo, currPC, c_sbyte);
+    csM_shrinkarray(C, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
                         AbsLineInfo);
-    csM_shrinkarray(ts, p->instpc, p->sizeinstpc, fs->ninstpc, int);
-    csM_shrinkarray(ts, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
-    csM_shrinkarray(ts, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
+    csM_shrinkarray(C, p->instpc, p->sizeinstpc, fs->ninstpc, int);
+    csM_shrinkarray(C, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
+    csM_shrinkarray(C, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev; /* go back to enclosing function (if any) */
-    csG_checkGC(ts); /* try to collect garbage memory */
+    csG_checkGC(C); /* try to collect garbage memory */
 #if DISASSEMBLE_BYTECODE
-    csTR_disassemble(fs->lx->ts, fs->p);
+    csTR_disassemble(fs->lx->C, fs->p);
 #endif
 }
 
 
 /* add function prototype */
 static Proto *addproto(Lexer *lx) {
-    cs_State *ts = lx->ts;
+    cs_State *C = lx->C;
     FunctionState *fs = lx->fs;
     Proto *p = fs->p;
     Proto *clp; /* closure prototype */
     if (fs->np >= p->sizep) {
         int osz = p->sizep;
-        csM_growarray(ts, p->p, p->sizep, fs->np, MAX_LARG, "functions",
+        csM_growarray(C, p->p, p->sizep, fs->np, MAX_LARG, "functions",
                       Proto *);
         while (osz < p->sizep)
             p->p[osz++] = NULL;
     }
-    p->p[fs->np++] = clp = csF_newproto(ts);
-    csG_objbarrier(ts, p, clp);
+    p->p[fs->np++] = clp = csF_newproto(C);
+    csG_objbarrier(C, p, clp);
     return clp;
 }
 
@@ -587,7 +587,7 @@ static void expectmatch(Lexer *lx, int what, int who, int linenum) {
         if (lx->line == linenum) /* same line? */
             expecterror(lx, what); /* emit usual error message */
         else /* otherwise spans across multiple lines */
-            csY_syntaxerror(lx, csS_pushfstring(lx->ts,
+            csY_syntaxerror(lx, csS_pushfstring(lx->C,
                     "%s expected (to close %s at line %d)",
                     csY_tok2str(lx, what), csY_tok2str(lx, who), linenum));
     }
@@ -609,7 +609,7 @@ static int addlocal(Lexer *lx, OString *name) {
     ParserState *ps = lx->ps;
     LVar *local;
     checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
-    csM_growarray(lx->ts, ps->actlocals.arr, ps->actlocals.size,
+    csM_growarray(lx->C, ps->actlocals.arr, ps->actlocals.size,
                   ps->actlocals.len, MAXINT, "locals", LVar);
     local = &ps->actlocals.arr[ps->actlocals.len++];
     local->s.kind = VARREG;
@@ -631,7 +631,7 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e, int limit) 
         LVar *lvar = getlocalvar(fs, i);
         if (eqstr(name, lvar->s.name)) { /* found? */
             if (c_unlikely(lvar->s.pidx == -1)) { /* uninitialized? */
-                const char *msg = csS_pushfstring(fs->lx->ts, 
+                const char *msg = csS_pushfstring(fs->lx->C, 
                     "can't read local variable '%s' in its own initializer",
                     getstr(name));
                 csP_semerror(fs->lx, msg);
@@ -648,10 +648,10 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e, int limit) 
 /* allocate space for new 'UpValInfo' */
 static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
-    cs_State *ts = fs->lx->ts;
+    cs_State *C = fs->lx->C;
     int osz = p->sizeupvals;
     checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
-    csM_growarray(ts, p->upvals, p->sizeupvals, fs->nupvals, MAXUPVAL,
+    csM_growarray(C, p->upvals, p->sizeupvals, fs->nupvals, MAXUPVAL,
                   "upvalues", UpValInfo);
     while (osz < p->sizeupvals)
         p->upvals[osz++].name = NULL;
@@ -676,7 +676,7 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *e) {
         cs_assert(eqstr(name, prev->p->upvals[e->u.info].name));
     }
     uv->name = name;
-    csG_objbarrier(fs->lx->ts, fs->p, name);
+    csG_objbarrier(fs->lx->C, fs->p, name);
     return fs->nupvals - 1;
 }
 
@@ -1266,7 +1266,7 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
     default: return; /* cannot be read-only */
     }
     if (varid) {
-        const char *msg = csS_pushfstring(lx->ts,
+        const char *msg = csS_pushfstring(lx->C,
             "attempt to assign to a read-only variable '%s'", getstr(varid));
         csP_semerror(lx, msg);
     }
@@ -1375,7 +1375,7 @@ static int getlocalattribute(Lexer *lx) {
             return VARTBC; /* to-be-closed variable */
         else
             csP_semerror(lx,
-                csS_pushfstring(lx->ts, "unknown attribute '%s'", attr));
+                csS_pushfstring(lx->C, "unknown attribute '%s'", attr));
     }
     return VARREG;
 }
@@ -1385,7 +1385,7 @@ static int newlocalvar(Lexer *lx, OString *name) {
     int limit = lx->fs->scope->nactlocals - 1;
     ExpInfo dummy;
     if (c_unlikely(searchlocal(lx->fs, name, &dummy, limit) >= 0))
-        csP_semerror(lx, csS_pushfstring(lx->ts,
+        csP_semerror(lx, csS_pushfstring(lx->C,
                      "redefinition of local variable '%s'", getstr(name)));
     return addlocal(lx, name);
 }
@@ -1457,7 +1457,7 @@ static void codeinherit(Lexer *lx, OString *name, Scope *s) {
     ExpInfo e;
     voidexp(&e);
     if (c_unlikely(eqstr(name, supname))) /* name collision? */
-        csP_semerror(lx, csS_pushfstring(lx->ts,
+        csP_semerror(lx, csS_pushfstring(lx->C,
                      "variable '%s' attempted to inherit itself", name));
     enterscope(fs, s, 0); /* start scope for superclass */
     addlocallit(lx, "super"); /* create 'super' local... */
@@ -1713,12 +1713,12 @@ typedef struct {
 
 
 /* convert literal information into text */
-static const char *literal2text(cs_State *ts, LiteralInfo *li) {
+static const char *literal2text(cs_State *C, LiteralInfo *li) {
     switch (li->tt) {
-        case CS_VNUMINT: return csS_pushfstring(ts, " (%I)", li->lit.i);
-        case CS_VNUMFLT: return csS_pushfstring(ts, " (%N)", li->lit.n);
+        case CS_VNUMINT: return csS_pushfstring(C, " (%I)", li->lit.i);
+        case CS_VNUMFLT: return csS_pushfstring(C, " (%N)", li->lit.n);
         case CS_VSHRSTR:case CS_VLNGSTR:
-            return csS_pushfstring(ts, " (%s)", getstr(li->lit.str));
+            return csS_pushfstring(C, " (%s)", getstr(li->lit.str));
         default: cs_assert(0); return NULL; /* invalid literal */
     }
 }
@@ -1823,9 +1823,9 @@ static void checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e,
     if (!checkliteral(ss, e, &what))
          checkK(lx, e, li, ss->firstli, &extra, &what);
     if (c_unlikely(what)) {
-        const char *msg = csS_pushfstring(lx->ts,
+        const char *msg = csS_pushfstring(lx->C,
                             "duplicate %s literal%s in switch statement",
-                            what, (extra ? literal2text(lx->ts, li) : ""));
+                            what, (extra ? literal2text(lx->C, li) : ""));
         csP_semerror(lx, msg);
     }
 }
@@ -1836,7 +1836,7 @@ static void addliteralinfo(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     LiteralInfo li;
     checkduplicate(lx, ss, e, &li);
     checklimit(lx->fs, ps->literals.len, MAX_LARG, "switch cases");
-    csM_growarray(lx->ts, ps->literals.arr, ps->literals.size,
+    csM_growarray(lx->C, ps->literals.arr, ps->literals.size,
                   ps->literals.len, MAX_LARG, "switch literals", LiteralInfo);
     ps->literals.arr[ps->literals.len++] = li;
 }
@@ -1883,7 +1883,7 @@ static int codepres_exp(FunctionState *fs, ExpInfo *e) {
 static void removeliterals(Lexer *lx, int nliterals) {
     ParserState *ps = lx->ps;
     if (ps->literals.len < ps->literals.size / 3) /* too many literals? */
-        csM_shrinkarray(lx->ts, ps->literals.arr, ps->literals.size,
+        csM_shrinkarray(lx->C, ps->literals.arr, ps->literals.size,
                         ps->literals.size / 2, LiteralInfo);
     ps->literals.len = nliterals;
 }
@@ -2547,27 +2547,27 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
 
 
 /* parse source code */
-CSClosure *csP_parse(cs_State *ts, BuffReader *br, Buffer *buff,
+CSClosure *csP_parse(cs_State *C, BuffReader *br, Buffer *buff,
                      ParserState *ps, const char *source) {
     Lexer lx;
     FunctionState fs;
-    CSClosure *cl = csF_newCSClosure(ts, 0);
-    setclCSval2s(ts, ts->sp.p, cl); /* anchor main function closure */
-    csT_incsp(ts);
-    lx.tab = csH_new(ts);
-    sethtval2s(ts, ts->sp.p, lx.tab); /* anchor scanner table */
-    csT_incsp(ts);
-    fs.p = cl->p = csF_newproto(ts);
-    csG_objbarrier(ts, cl, cl->p);
-    fs.p->source = csS_new(ts, source);
-    csG_objbarrier(ts, fs.p, fs.p->source);
+    CSClosure *cl = csF_newCSClosure(C, 0);
+    setclCSval2s(C, C->sp.p, cl); /* anchor main function closure */
+    csT_incsp(C);
+    lx.tab = csH_new(C);
+    sethtval2s(C, C->sp.p, lx.tab); /* anchor scanner table */
+    csT_incsp(C);
+    fs.p = cl->p = csF_newproto(C);
+    csG_objbarrier(C, cl, cl->p);
+    fs.p->source = csS_new(C, source);
+    csG_objbarrier(C, fs.p, fs.p->source);
     lx.ps = ps;
     lx.buff = buff;
-    csY_setinput(ts, &lx, br, fs.p->source);
+    csY_setinput(C, &lx, br, fs.p->source);
     mainfunc(&fs, &lx);
     cs_assert(!fs.prev && fs.nupvals == 0 && !lx.fs);
     /* all scopes should be correctly finished */
     cs_assert(ps->actlocals.len == 0 && ps->patches.len == 0 && !ps->cs);
-    ts->sp.p--; /* remove scanner table */
+    C->sp.p--; /* remove scanner table */
     return cl;
 }

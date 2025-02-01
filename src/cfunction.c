@@ -20,8 +20,8 @@
 #include <stdio.h>
 
 
-Proto *csF_newproto(cs_State *ts) {
-    GCObject *o = csG_new(ts, sizeof(Proto), CS_VPROTO); 
+Proto *csF_newproto(cs_State *C) {
+    GCObject *o = csG_new(C, sizeof(Proto), CS_VPROTO); 
     Proto *p = gco2proto(o);
     p->isvararg = 0;
     p->gclist = NULL;
@@ -42,8 +42,8 @@ Proto *csF_newproto(cs_State *ts) {
 }
 
 
-CSClosure *csF_newCSClosure(cs_State *ts, int nup) {
-    GCObject *o = csG_new(ts, sizeofCScl(nup), CS_VCSCL);
+CSClosure *csF_newCSClosure(cs_State *C, int nup) {
+    GCObject *o = csG_new(C, sizeofCScl(nup), CS_VCSCL);
     CSClosure *cl = gco2clcs(o);
     cl->p = NULL;
     cl->nupvalues = nup;
@@ -52,8 +52,8 @@ CSClosure *csF_newCSClosure(cs_State *ts, int nup) {
 }
 
 
-CClosure *csF_newCClosure(cs_State *ts, int nupvalues) {
-    GCObject *o = csG_new(ts, sizeofCcl(nupvalues), CS_VCCL);
+CClosure *csF_newCClosure(cs_State *C, int nupvalues) {
+    GCObject *o = csG_new(C, sizeofCcl(nupvalues), CS_VCCL);
     CClosure *cl = gco2clc(o);
     cl->nupvalues = nupvalues;
     return cl;
@@ -65,47 +65,47 @@ CClosure *csF_newCClosure(cs_State *ts, int nupvalues) {
 ** function in front of the varargs. Additionally adjust new top for
 ** 'cf' and invalidates old named parameters (after they get moved).
 */
-void csF_adjustvarargs(cs_State *ts, int arity, CallFrame *cf,
+void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
                        const Proto *fn) {
     int i;
-    int actual = cast_int(ts->sp.p - cf->func.p) - 1;
+    int actual = cast_int(C->sp.p - cf->func.p) - 1;
     int extra = actual - arity; /* number of varargs */
     cf->nvarargs = extra;
-    csT_checkstack(ts, fn->maxstack + 1);
-    setobjs2s(ts, ts->sp.p++, cf->func.p); /* move function */
+    csT_checkstack(C, fn->maxstack + 1);
+    setobjs2s(C, C->sp.p++, cf->func.p); /* move function */
     for (i = 0; i < arity; i++) {
-        setobjs2s(ts, ts->sp.p++, cf->func.p + i); /* move param */
+        setobjs2s(C, C->sp.p++, cf->func.p + i); /* move param */
         setnilval(s2v(cf->func.p + i)); /* invalidate old */
     }
     cf->func.p += actual + 1;
     cf->top.p += actual + 1;
-    cs_assert(ts->sp.p <= cf->top.p && cf->top.p <= ts->stackend.p);
+    cs_assert(C->sp.p <= cf->top.p && cf->top.p <= C->stackend.p);
 }
 
 
 /* Get 'wanted' varargs starting at the current stack pointer. */
-void csF_getvarargs(cs_State *ts, CallFrame *cf, int wanted) {
+void csF_getvarargs(cs_State *C, CallFrame *cf, int wanted) {
     int have = cf->nvarargs;
     if (wanted < 0) { /* CS_MULRET? */
         wanted = have;
-        checkstackGC(ts, wanted); /* check stack, maybe 'wanted > have' */
+        checkstackGC(C, wanted); /* check stack, maybe 'wanted > have' */
     }
     for (int i = 0; wanted > 0 && i < have; i++, wanted--)
-        setobjs2s(ts, ts->sp.p++, cf->func.p - have + i);
+        setobjs2s(C, C->sp.p++, cf->func.p - have + i);
     while (wanted--)
-        setnilval(s2v(ts->sp.p++));
+        setnilval(s2v(C->sp.p++));
 }
 
 
 /* Create and initialize all the upvalues in 'cl'. */
-void csF_initupvals(cs_State *ts, CSClosure *cl) {
+void csF_initupvals(cs_State *C, CSClosure *cl) {
     for (int i = 0; i < cl->nupvalues; i++) {
-        GCObject *o = csG_new(ts, sizeof(UpVal), CS_VUPVALUE);
+        GCObject *o = csG_new(C, sizeof(UpVal), CS_VUPVALUE);
         UpVal *uv = gco2uv(o);
         uv->v.p = &uv->u.value; /* close it */
         setnilval(uv->v.p);
         cl->upvals[i] = uv;
-        csG_objbarrier(ts, cl, uv);
+        csG_objbarrier(C, cl, uv);
     }
 }
 
@@ -114,8 +114,8 @@ void csF_initupvals(cs_State *ts, CSClosure *cl) {
 ** Create a new upvalue and link it into 'openupval' list
 ** right after 'prev'.
 */
-static UpVal *newupval(cs_State *ts, SPtr val, UpVal **prev) {
-    GCObject *o = csG_new(ts, sizeof(UpVal), CS_VUPVALUE);
+static UpVal *newupval(cs_State *C, SPtr val, UpVal **prev) {
+    GCObject *o = csG_new(C, sizeof(UpVal), CS_VUPVALUE);
     UpVal *uv = gco2uv(o);
     UpVal *next = *prev;
     uv->v.p = s2v(val); /* current value lives on the stack */
@@ -124,9 +124,9 @@ static UpVal *newupval(cs_State *ts, SPtr val, UpVal **prev) {
     if (next) /* have previous upvalue? */
         next->u.open.prev = &uv->u.open.next; /* adjust its 'u.open.prev' */
     *prev = uv; /* adjust list head or previous upvalues 'u.open.next' */
-    if (!isinthwouv(ts)) { /* thread not in list of threads with open upvals? */
-        ts->thwouv = G_(ts)->thwouv; /* link it to the list... */
-        G_(ts)->thwouv = ts; /* ...and adjust list head */
+    if (!isinthwouv(C)) { /* thread not in list of threads with open upvals? */
+        C->thwouv = G_(C)->thwouv; /* link it to the list... */
+        G_(C)->thwouv = C; /* ...and adjust list head */
     }
     return uv;
 }
@@ -136,17 +136,17 @@ static UpVal *newupval(cs_State *ts, SPtr val, UpVal **prev) {
 ** Find and return already existing upvalue or create
 ** and return a new one.
 */
-UpVal *csF_findupval(cs_State *ts, SPtr sv) {
-    UpVal **pp = &ts->openupval; /* good ol' pp */
+UpVal *csF_findupval(cs_State *C, SPtr sv) {
+    UpVal **pp = &C->openupval; /* good ol' pp */
     UpVal *p;
-    cs_assert(isinthwouv(ts) || ts->openupval == NULL);
+    cs_assert(isinthwouv(C) || C->openupval == NULL);
     while ((p = *pp) != NULL && uvlevel(p) > sv) {
-        cs_assert(!isdead(G_(ts), p));
+        cs_assert(!isdead(G_(C), p));
         if (uvlevel(p) == sv)
             return p;
         pp = &p->u.open.next;
     }
-    return newupval(ts, sv, pp);
+    return newupval(C, sv, pp);
 }
 
 
@@ -171,13 +171,13 @@ const char *csF_getlocalname(const Proto *fn, int lnum, int pc) {
 ** Check if object at stack 'level' has a '__close' method,
 ** raise error if not.
 */
-static void checkclosem(cs_State *ts, SPtr level) {
-    const TValue *fmm = csMM_get(ts, s2v(level), CS_MM_CLOSE);
+static void checkclosem(cs_State *C, SPtr level) {
+    const TValue *fmm = csMM_get(C, s2v(level), CS_MM_CLOSE);
     if (c_unlikely(ttisnil(fmm))) { /* missing '__close'? */
-        int vidx = level - ts->cf->func.p;
-        const char *name = csD_findlocal(ts, ts->cf, vidx, NULL);
+        int vidx = level - C->cf->func.p;
+        const char *name = csD_findlocal(C, C->cf, vidx, NULL);
         if (name == NULL) name = "?";
-        csD_runerror(ts, "local variable %s got a non-closeable value", name);
+        csD_runerror(C, "local variable %s got a non-closeable value", name);
     }
 }
 
@@ -187,19 +187,19 @@ static void checkclosem(cs_State *ts, SPtr level) {
 ** of 'tbc.delta'.
 */
 #define MAXDELTA \
-        ((256UL << ((sizeof(ts->stack.p->tbc.delta) - 1) * 8)) - 1)
+        ((256UL << ((sizeof(C->stack.p->tbc.delta) - 1) * 8)) - 1)
 
 
 /* insert variable into the list of to-be-closed variables */
-void csF_newtbcvar(cs_State *ts, SPtr level) {
+void csF_newtbcvar(cs_State *C, SPtr level) {
     if (c_isfalse(s2v(level))) return;
-    checkclosem(ts, level);
-    while (cast_uint(level - ts->tbclist.p) > MAXDELTA) {
-        ts->tbclist.p += MAXDELTA;
-        ts->tbclist.p->tbc.delta = 0;
+    checkclosem(C, level);
+    while (cast_uint(level - C->tbclist.p) > MAXDELTA) {
+        C->tbclist.p += MAXDELTA;
+        C->tbclist.p->tbc.delta = 0;
     }
-    level->tbc.delta = level - ts->tbclist.p;
-    ts->tbclist.p = level;
+    level->tbc.delta = level - C->tbclist.p;
+    C->tbclist.p = level;
 }
 
 
@@ -213,29 +213,29 @@ void csF_unlinkupval(UpVal *uv) {
 
 
 /* close any open upvalues up to the 'level' */
-void csF_closeupval(cs_State *ts, SPtr level) {
+void csF_closeupval(cs_State *C, SPtr level) {
     UpVal *uv;
-    while ((uv = ts->openupval) != NULL && uvlevel(uv) >= level) {
+    while ((uv = C->openupval) != NULL && uvlevel(uv) >= level) {
         TValue *slot = &uv->u.value; /* new position for value */
         csF_unlinkupval(uv); /* remove it from 'openupval' list */
-        setobj(ts, slot, uv->v.p); /* move value to the upvalue slot */
+        setobj(C, slot, uv->v.p); /* move value to the upvalue slot */
         uv->v.p = slot; /* adjust its pointer */
         if (!iswhite(uv)) { /* neither white nor dead? */
             notw2black(uv); /* closed upvalues cannot be gray */
-            csG_barrier(ts, uv, slot);
+            csG_barrier(C, uv, slot);
         }
     }
 }
 
 
 /* remove first element from 'tbclist' */
-static void poptbclist(cs_State *ts) {
-    SPtr tbc = ts->tbclist.p;
+static void poptbclist(cs_State *C) {
+    SPtr tbc = C->tbclist.p;
     cs_assert(tbc->tbc.delta > 0);
     tbc -= tbc->tbc.delta;
-    while (tbc > ts->stack.p && tbc->tbc.delta == 0)
+    while (tbc > C->stack.p && tbc->tbc.delta == 0)
         tbc -= MAXDELTA; /* remove dummy nodes */
-    ts->tbclist.p = tbc;
+    C->tbclist.p = tbc;
 }
 
 
@@ -243,15 +243,15 @@ static void poptbclist(cs_State *ts) {
 ** Call '__close' method on 'obj' with error object 'errobj'.
 ** This function assumes 'EXTRA_STACK'.
 */
-static void callCLOSEmm(cs_State *ts, TValue *obj, TValue *errobj) {
-    SPtr top = ts->sp.p;
-    const TValue *method = csMM_get(ts, obj, CS_MM_CLOSE);
+static void callCLOSEmm(cs_State *C, TValue *obj, TValue *errobj) {
+    SPtr top = C->sp.p;
+    const TValue *method = csMM_get(C, obj, CS_MM_CLOSE);
     cs_assert(!ttisnil(method));
-    setobj2s(ts, top + 1, method);
-    setobj2s(ts, top + 2, obj);
-    setobj2s(ts, top + 3, errobj);
-    ts->sp.p = top + 3;
-    csV_call(ts, top, 0);
+    setobj2s(C, top + 1, method);
+    setobj2s(C, top + 2, obj);
+    setobj2s(C, top + 3, errobj);
+    C->sp.p = top + 3;
+    csV_call(C, top, 0);
 }
 
 
@@ -262,16 +262,16 @@ static void callCLOSEmm(cs_State *ts, TValue *obj, TValue *errobj) {
 ** the 'level' of the upvalue being closed, as everything after that
 ** won't be used again.
 */
-static void prepcallCLOSEmm(cs_State *ts, SPtr level, int status) {
+static void prepcallCLOSEmm(cs_State *C, SPtr level, int status) {
     TValue *v = s2v(level); /* value being closed */
     TValue *errobj;
     if (status == CLOSEKTOP) {
-        errobj = &G_(ts)->nil; /* error object is nil */
+        errobj = &G_(C)->nil; /* error object is nil */
     } else { /* top will be set to 'level' + 2 */
         errobj = s2v(level + 1); /* error object goes after 'v' */
-        csT_seterrorobj(ts, status, level + 1); /* set error object */
+        csT_seterrorobj(C, status, level + 1); /* set error object */
     }
-    callCLOSEmm(ts, v, errobj);
+    callCLOSEmm(C, v, errobj);
 }
 
 
@@ -279,28 +279,28 @@ static void prepcallCLOSEmm(cs_State *ts, SPtr level, int status) {
 ** Close all up-values and to-be-closed variables up to (stack) 'level'.
 ** Returns (potentially restored stack) 'level'.
 */
-SPtr csF_close(cs_State *ts, SPtr level, int status) {
-    ptrdiff_t levelrel = savestack(ts, level);
-    csF_closeupval(ts, level);
-    while (ts->tbclist.p >= level) {
-        SPtr tbc = ts->tbclist.p;
-        poptbclist(ts);
-        prepcallCLOSEmm(ts, tbc, status);
-        level = restorestack(ts, levelrel);
+SPtr csF_close(cs_State *C, SPtr level, int status) {
+    ptrdiff_t levelrel = savestack(C, level);
+    csF_closeupval(C, level);
+    while (C->tbclist.p >= level) {
+        SPtr tbc = C->tbclist.p;
+        poptbclist(C);
+        prepcallCLOSEmm(C, tbc, status);
+        level = restorestack(C, levelrel);
     }
     return level;
 }
 
 
 /* free function prototype */
-void csF_free(cs_State *ts, Proto *p) {
-    csM_freearray(ts, p->p, p->sizep);
-    csM_freearray(ts, p->k, p->sizek);
-    csM_freearray(ts, p->code, p->sizecode);
-    csM_freearray(ts, p->lineinfo, p->sizelineinfo);
-    csM_freearray(ts, p->abslineinfo, p->sizeabslineinfo);
-    csM_freearray(ts, p->instpc, p->sizeinstpc);
-    csM_freearray(ts, p->locals, p->sizelocals);
-    csM_freearray(ts, p->upvals, p->sizeupvals);
-    csM_free(ts, p);
+void csF_free(cs_State *C, Proto *p) {
+    csM_freearray(C, p->p, p->sizep);
+    csM_freearray(C, p->k, p->sizek);
+    csM_freearray(C, p->code, p->sizecode);
+    csM_freearray(C, p->lineinfo, p->sizelineinfo);
+    csM_freearray(C, p->abslineinfo, p->sizeabslineinfo);
+    csM_freearray(C, p->instpc, p->sizeinstpc);
+    csM_freearray(C, p->locals, p->sizelocals);
+    csM_freearray(C, p->upvals, p->sizeupvals);
+    csM_free(C, p);
 }

@@ -18,9 +18,9 @@ static const cs_Entry loadedlibs[] = {
 };
 
 
-CSLIB_API void csL_open_libs(cs_State *ts) {
+CSLIB_API void csL_open_libs(cs_State *C) {
     for (const cs_Entry *lib = loadedlibs; lib->func; lib++) {
-        csL_include(ts, lib->name, lib->func, 1);
-        cs_pop(ts, 1); /* remove module */
+        csL_include(C, lib->name, lib->func, 1);
+        cs_pop(C, 1); /* remove module */
     }
 }

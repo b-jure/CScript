@@ -97,9 +97,9 @@ static void cleargraylists(GState *gs) {
 
 
 /* create new object and append it to 'objects' */
-GCObject *csG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset) {
-    GState *gs = G_(ts);
-    char *p = cast_charp(csM_newobj(ts, tt_, sz));
+GCObject *csG_newoff(cs_State *C, size_t sz, int tt_, size_t offset) {
+    GState *gs = G_(C);
+    char *p = cast_charp(csM_newobj(C, tt_, sz));
     GCObject *o = cast(GCObject*, p + offset);
     o->mark = csG_white(gs);
     o->tt_ = tt_;
@@ -109,13 +109,13 @@ GCObject *csG_newoff(cs_State *ts, size_t sz, int tt_, size_t offset) {
 }
 
 
-GCObject *csG_new(cs_State *ts, size_t size, int tt_) {
-    return csG_newoff(ts, size, tt_, 0);
+GCObject *csG_new(cs_State *C, size_t size, int tt_) {
+    return csG_newoff(C, size, tt_, 0);
 }
 
 
-void csG_fix(cs_State *ts, GCObject *o) {
-    GState *gs = G_(ts);
+void csG_fix(cs_State *C, GCObject *o) {
+    GState *gs = G_(C);
     cs_assert(o == gs->objects); /* first in the list */
     markgray(o);
     gs->objects = o->next;
@@ -177,8 +177,8 @@ static GCObject **getgclist(GCObject *o) {
 ** around, so marking 'r' white won't make it collectable until
 ** the next cycle.
 */
-void csG_barrier_(cs_State *ts, GCObject *r, GCObject *o) {
-    GState *gs = G_(ts);
+void csG_barrier_(cs_State *C, GCObject *r, GCObject *o) {
+    GState *gs = G_(C);
     if (invariantstate(gs)) { /* invariant holds ? */
         cs_assert(isblack(r) && iswhite(o));
         markobject_(gs, o);
@@ -194,8 +194,8 @@ void csG_barrier_(cs_State *ts, GCObject *r, GCObject *o) {
 ** pointing to a white object gray again, effectively
 ** moving the collector backwards.
 */
-void csG_barrierback_(cs_State *ts, GCObject *r) {
-    GState *gs = G_(ts);
+void csG_barrierback_(cs_State *C, GCObject *r) {
+    GState *gs = G_(C);
     cs_assert(isblack(r) && !isdead(gs, r));
     linkobjgclist(r, gs->grayagain);
 }
@@ -390,31 +390,31 @@ static c_mem markuserdata(GState *gs, UserData *ud) {
 ** really did get modified after we marked it black) without
 ** using write barriers.
 */
-static c_mem markthread(GState *gs, cs_State *ts) {
-    SPtr sp = ts->stack.p;
+static c_mem markthread(GState *gs, cs_State *C) {
+    SPtr sp = C->stack.p;
     if (gs->gcstate == GCSpropagate)
-        linkgclist(ts, gs->grayagain); /* traverse 'ts' again in 'atomic' */
+        linkgclist(C, gs->grayagain); /* traverse 'C' again in 'atomic' */
     if (sp == NULL) /* stack not fully built? */
         return 1;
     cs_assert(gs->gcstate == GCSatomic || /* either in atomic phase... */
-              ts->openupval == NULL || /* or no open upvalues... */
-              isinthwouv(ts)); /* ...or 'ts' is in correct list */
-    for (; sp < ts->sp.p; sp++) /* mark live stack elements */
+              C->openupval == NULL || /* or no open upvalues... */
+              isinthwouv(C)); /* ...or 'C' is in correct list */
+    for (; sp < C->sp.p; sp++) /* mark live stack elements */
         markvalue(gs, s2v(sp));
-    for (UpVal *uv = ts->openupval; uv != NULL; uv = uv->u.open.next)
+    for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
         markobject(gs, uv); /* open upvalues cannot be collected */
     if (gs->gcstate == GCSatomic) { /* final traversal? */
         if (!gs->gcemergency) /* not an emergency collection? */
-            csT_shrinkstack(ts); /* shrink stack if possible */
-        for (sp = ts->sp.p; sp < ts->stackend.p + EXTRA_STACK; sp++)
+            csT_shrinkstack(C); /* shrink stack if possible */
+        for (sp = C->sp.p; sp < C->stackend.p + EXTRA_STACK; sp++)
           setnilval(s2v(sp)); /* clear dead stack slice */
         /* 'markopenupvalues' might of removed thread from 'thwouv' list */
-        if (!isinthwouv(ts) && ts->openupval != NULL) {
-            ts->thwouv = gs->thwouv; /* link it back */
-            gs->thwouv = ts;
+        if (!isinthwouv(C) && C->openupval != NULL) {
+            C->thwouv = gs->thwouv; /* link it back */
+            gs->thwouv = C;
         }
     }
-    return 1 + stacksize(ts); /* thread + stack slots */
+    return 1 + stacksize(C); /* thread + stack slots */
 }
 
 
@@ -497,55 +497,55 @@ static c_mem propagateall(GState *gs) {
 ** Free objects
 ** ----------------------------------------------------------------------- */
 
-static void freeupval(cs_State *ts, UpVal *uv) {
+static void freeupval(cs_State *C, UpVal *uv) {
     if (uvisopen(uv))
         csF_unlinkupval(uv);
-    csM_free(ts, uv);
+    csM_free(C, uv);
 }
 
 
-static void freeobject(cs_State *ts, GCObject *o) {
+static void freeobject(cs_State *C, GCObject *o) {
     switch (o->tt_) {
-        case CS_VPROTO: csF_free(ts, gco2proto(o)); break;
-        case CS_VUPVALUE: freeupval(ts, gco2uv(o)); break;
-        case CS_VARRAY: csA_free(ts, gco2arr(o)); break;
-        case CS_VHTABLE: csH_free(ts, gco2ht(o)); break;
-        case CS_VINSTANCE: csM_free(ts, gco2ins(o)); break;
-        case CS_VIMETHOD: csM_free(ts, gco2im(o)); break;
-        case CS_VTHREAD: csT_free(ts, gco2th(o)); break;
+        case CS_VPROTO: csF_free(C, gco2proto(o)); break;
+        case CS_VUPVALUE: freeupval(C, gco2uv(o)); break;
+        case CS_VARRAY: csA_free(C, gco2arr(o)); break;
+        case CS_VHTABLE: csH_free(C, gco2ht(o)); break;
+        case CS_VINSTANCE: csM_free(C, gco2ins(o)); break;
+        case CS_VIMETHOD: csM_free(C, gco2im(o)); break;
+        case CS_VTHREAD: csT_free(C, gco2th(o)); break;
         case CS_VSHRSTR: {
             OString *s = gco2str(o);
-            csS_remove(ts, s); /* remove the weak reference */
-            csM_freemem(ts, s, sizeofstring(s->shrlen));
+            csS_remove(C, s); /* remove the weak reference */
+            csM_freemem(C, s, sizeofstring(s->shrlen));
             break;
         }
         case CS_VLNGSTR: {
             OString *s = gco2str(o);
-            csM_freemem(ts, s, sizeofstring(s->u.lnglen));
+            csM_freemem(C, s, sizeofstring(s->u.lnglen));
             break;
         }
         case CS_VCSCL: {
             CSClosure *cl = gco2clcs(o);
-            csM_freemem(ts, cl, sizeofCScl(cl->nupvalues));
+            csM_freemem(C, cl, sizeofCScl(cl->nupvalues));
             break;
         }
         case CS_VCCL: {
             CClosure *cl = gco2clc(o);
-            csM_freemem(ts, cl, sizeofCcl(cl->nupvalues));
+            csM_freemem(C, cl, sizeofCcl(cl->nupvalues));
             break;
         }
         case CS_VCLASS: {
             OClass *cls = gco2cls(o);
             if (cls->vmt) /* have VMT? */
-                csM_freearray(ts, cls->vmt, SIZEVMT);
-            csM_free(ts, cls);
+                csM_freearray(C, cls->vmt, SIZEVMT);
+            csM_free(C, cls);
             break;
         }
         case CS_VUSERDATA: {
             UserData *u = gco2u(o);
             if (u->vmt)
-                csM_freearray(ts, u->vmt, SIZEVMT);
-            csM_freemem(ts, u, sizeofuserdata(u->nuv, u->size));
+                csM_freearray(C, u->vmt, SIZEVMT);
+            csM_freemem(C, u, sizeofuserdata(u->nuv, u->size));
             break;
         }
         default: cs_assert(0); break; /* invalid object */
@@ -558,9 +558,9 @@ static void freeobject(cs_State *ts, GCObject *o) {
 ** Sweep functions
 ** ----------------------------------------------------------------------- */
 
-static GCObject **sweeplist(cs_State *ts, GCObject **l, int nobjects, 
+static GCObject **sweeplist(cs_State *C, GCObject **l, int nobjects, 
                             int *nsweeped) {
-    GState *gs = G_(ts);
+    GState *gs = G_(C);
     int white = csG_white(gs); /* current white */
     int whitexor = whitexor(gs); /* dead white */
     int i;
@@ -570,7 +570,7 @@ static GCObject **sweeplist(cs_State *ts, GCObject **l, int nobjects,
         int mark = curr->mark;
         if (whitexor & mark) { /* is 'curr' dead? */
             *l = curr->next; /* remove 'curr' from list */
-            freeobject(ts, curr); /* and collect it */
+            freeobject(C, curr); /* and collect it */
         } else { /* otherwise change mark to 'white' */
             curr->mark = cast_byte((mark & ~maskcolorbits) | white);
             l = &curr->next; /* go to next element */
@@ -583,12 +583,12 @@ static GCObject **sweeplist(cs_State *ts, GCObject **l, int nobjects,
 
 
 /* do a single sweep step limited by 'GCSWEEPMAX' */
-static int sweepstep(cs_State *ts, GCObject **nextlist, int nextstate) {
-    GState *gs = G_(ts);
+static int sweepstep(cs_State *C, GCObject **nextlist, int nextstate) {
+    GState *gs = G_(C);
     if (gs->sweeppos) {
         c_smem old_gcdebt = gs->gcdebt;
         int count;
-        gs->sweeppos = sweeplist(ts, gs->sweeppos, GCSWEEPMAX, &count);
+        gs->sweeppos = sweeplist(C, gs->sweeppos, GCSWEEPMAX, &count);
         gs->gcestimate += gs->gcdebt - old_gcdebt; /* update estimate */
         return count;
     } else { /* enter next state */
@@ -603,20 +603,20 @@ static int sweepstep(cs_State *ts, GCObject **nextlist, int nextstate) {
 ** Sweep objects in 'list' until alive (marked) object
 ** or the end of the list.
 */
-static GCObject **sweepuntilalive(cs_State *ts, GCObject **list) {
+static GCObject **sweepuntilalive(cs_State *C, GCObject **list) {
     GCObject **pp = list;
     do {
-        list = sweeplist(ts, list, 1, NULL);
+        list = sweeplist(C, list, 1, NULL);
     } while (pp == list);
     return list;
 }
 
 
-static void entersweep(cs_State *ts) {
-    GState *gs = G_(ts);
+static void entersweep(cs_State *C) {
+    GState *gs = G_(C);
     gs->gcstate = GCSsweepall;
     cs_assert(gs->sweeppos == NULL);
-    gs->sweeppos = sweepuntilalive(ts, &gs->objects);
+    gs->sweeppos = sweepuntilalive(C, &gs->objects);
 }
 
 
@@ -628,11 +628,11 @@ static void entersweep(cs_State *ts) {
 /*
 ** If possible, shrink string table.
 */
-static void checksizes(cs_State *ts, GState *gs) {
+static void checksizes(cs_State *C, GState *gs) {
     if (!gs->gcemergency) {
         if (gs->strtab.nuse < gs->strtab.size / 4) { /* strtab too big? */
             c_smem old_gcdebt = gs->gcdebt;
-            csS_resize(ts, gs->strtab.size / 2);
+            csS_resize(C, gs->strtab.size / 2);
             gs->gcestimate += gs->gcdebt - old_gcdebt; /* correct estimate */
         }
     }
@@ -656,43 +656,43 @@ static GCObject *gettobefin(GState *gs) {
 
 
 /* protected finalizer */
-static void pgc(cs_State *ts, void *userdata) {
+static void pgc(cs_State *C, void *userdata) {
     UNUSED(userdata);
-    csV_call(ts, ts->sp.p - 2, 0);
+    csV_call(C, C->sp.p - 2, 0);
 }
 
 
 /* call a finalizer "__gc" */
-static void callGCmm(cs_State *ts) {
+static void callGCmm(cs_State *C) {
     TValue v;
     const TValue *m;
-    GState *gs = G_(ts);
+    GState *gs = G_(C);
     cs_assert(!gs->gcemergency);
-    setgcoval(ts, &v, gettobefin(gs));
-    if (!ttisnil(m = csMM_get(ts, &v, CS_MM_GC))) { /* have __gc? */
+    setgcoval(C, &v, gettobefin(gs));
+    if (!ttisnil(m = csMM_get(C, &v, CS_MM_GC))) { /* have __gc? */
         int status;
         int old_gcstop = gs->gcstop;
         gs->gcstop = GCSTP; /* avoid GC steps */
-        setobj2s(ts, ts->sp.p++, m); /* push finalizer... */
-        setobj2s(ts, ts->sp.p++, &v); /* ...and its argument */
-        ts->cf->status |= CFST_FIN; /* will run a finalizer */
-        status = csPR_call(ts, pgc, NULL, savestack(ts,ts->sp.p-2), ts->errfunc);
-        ts->cf->status &= ~CFST_FIN; /* not running a finalizer anymore */
+        setobj2s(C, C->sp.p++, m); /* push finalizer... */
+        setobj2s(C, C->sp.p++, &v); /* ...and its argument */
+        C->cf->status |= CFST_FIN; /* will run a finalizer */
+        status = csPR_call(C, pgc, NULL, savestack(C,C->sp.p-2), C->errfunc);
+        C->cf->status &= ~CFST_FIN; /* not running a finalizer anymore */
         gs->gcstop = old_gcstop; /* restore state */
         if (c_unlikely(status != CS_OK)) { /* error while running __gc? */
-            csT_warnerror(ts, "__gc");
-            ts->sp.p--; /* pop error object */
+            csT_warnerror(C, "__gc");
+            C->sp.p--; /* pop error object */
         }
     }
 }
 
 
 /* call objects with finalizer in 'tobefin' */
-static int runNfinalizers(cs_State *ts, int n) {
+static int runNfinalizers(cs_State *C, int n) {
     int i;
-    GState *gs = G_(ts);
+    GState *gs = G_(C);
     for (i = 0; i < n && gs->tobefin; i++)
-        callGCmm(ts);
+        callGCmm(C);
     return i;
 }
 
@@ -703,9 +703,9 @@ static int runNfinalizers(cs_State *ts, int n) {
 ** 'FINBIT' being set, additionally don't move it in case
 ** state is closing.
 */
-void csG_checkfin(cs_State *ts, GCObject *o, TValue vmt[CS_MM_N]) {
+void csG_checkfin(cs_State *C, GCObject *o, TValue vmt[CS_MM_N]) {
     GCObject **pp;
-    GState *gs = G_(ts);
+    GState *gs = G_(C);
     if (isfin(o) ||                 /* object is already marked... */
         ttisnil(&vmt[CS_MM_GC]) ||  /* or has no finalizer... */
         (gs->gcstop & GCSTPCLS))    /* ...or closing state ? */
@@ -714,7 +714,7 @@ void csG_checkfin(cs_State *ts, GCObject *o, TValue vmt[CS_MM_N]) {
     if (sweepstate(gs)) {
         markwhite(gs, o); /* sweep object 'o' */
         if (gs->sweeppos == &o->next) /* should sweep more? */
-            gs->sweeppos = sweepuntilalive(ts, gs->sweeppos);
+            gs->sweeppos = sweepuntilalive(C, gs->sweeppos);
     }
     /* serch for pointer in 'objects' pointing to 'o' */
     for (pp = &gs->objects; *pp != o; pp = &(*pp)->next) {/* empty */}
@@ -779,15 +779,15 @@ static void markGvmt(GState *gs) {
 }
 
 
-static c_mem atomic(cs_State *ts) {
-    GState *gs = G_(ts);
+static c_mem atomic(cs_State *C) {
+    GState *gs = G_(C);
     c_smem work = 0;
     GCObject *grayagain = gs->grayagain;
     gs->grayagain = NULL;
     cs_assert(gs->weak == NULL); /* 'weak' unused */
     cs_assert(!iswhite(gs->mainthread)); /* mainthread must be marked */
     gs->gcstate = GCSatomic;
-    markobject(gs, ts); /* mark running thread */
+    markobject(gs, C); /* mark running thread */
     markvalue(gs, &gs->c_registry); /* mark registry */
     markGvmt(gs); /* mark global VMTs */
     work += propagateall(gs); /* traverse all gray objects */
@@ -858,9 +858,9 @@ static void restartgc(GState *gs) {
 ** in 'tobefin' and puts them back into 'objects'
 ** list after the call.
 */
-static c_mem singlestep(cs_State *ts) {
+static c_mem singlestep(cs_State *C) {
     c_mem work;
-    GState *gs = G_(ts);
+    GState *gs = G_(C);
     gs->gcstopem = 1; /* prevent emergency collections */
     switch (gs->gcstate) {
         case GCSpause: { /* mark roots */
@@ -879,25 +879,25 @@ static c_mem singlestep(cs_State *ts) {
             break;
         }
         case GCSenteratomic: { /* remark */
-            work = atomic(ts);
-            entersweep(ts);
+            work = atomic(C);
+            entersweep(C);
             gs->gcestimate = gettotalbytes(gs); /* first estimate */
             break;
         }
         case GCSsweepall: { /* sweep objects */
-            work = sweepstep(ts, &gs->fin, GCSsweepfin);
+            work = sweepstep(C, &gs->fin, GCSsweepfin);
             break;
         }
         case GCSsweepfin: { /* sweep objects with finalizers */
-            work = sweepstep(ts, &gs->tobefin, GCSsweeptofin);
+            work = sweepstep(C, &gs->tobefin, GCSsweeptofin);
             break;
         }
         case GCSsweeptofin: { /* sweep objects to be finalized */
-            work = sweepstep(ts, NULL, GCSsweepend);
+            work = sweepstep(C, NULL, GCSsweepend);
             break;
         }
         case GCSsweepend: { /* finish sweeps */
-            checksizes(ts, gs);
+            checksizes(C, gs);
             gs->gcstate = GCScallfin;
             work = 0;
             break;
@@ -905,7 +905,7 @@ static c_mem singlestep(cs_State *ts) {
         case GCScallfin: { /* call remaining finalizers */
             if (gs->tobefin && !gs->gcemergency) {
                 gs->gcstopem = 0; /* enable collections during finalizers */
-                work = runNfinalizers(ts, GCFINMAX) * GCFINCOST;
+                work = runNfinalizers(C, GCFINMAX) * GCFINCOST;
             } else { /* emergency or no more finalizers */
                 gs->gcstate = GCSpause;
                 work = 0;
@@ -920,19 +920,19 @@ static c_mem singlestep(cs_State *ts) {
 
 
 /* free list 'l' objects until 'limit' */
-c_sinline void freelist(cs_State *ts, GCObject *l, GCObject *limit) {
+c_sinline void freelist(cs_State *C, GCObject *l, GCObject *limit) {
     while (l != limit) {
         GCObject *next = l->next;
-        freeobject(ts, l);
+        freeobject(C, l);
         l = next;
     }
 }
 
 
-static void runallfinalizers(cs_State *ts) {
-    GState *gs = G_(ts);
+static void runallfinalizers(cs_State *C) {
+    GState *gs = G_(C);
     while (gs->tobefin)
-        callGCmm(ts);
+        callGCmm(C);
 }
 
 
@@ -940,24 +940,24 @@ static void runallfinalizers(cs_State *ts) {
 ** Free all objects except main thread, additionally
 ** call all finalizers.
 */
-void csG_freeallobjects(cs_State *ts) {
-    GState *gs = G_(ts);
+void csG_freeallobjects(cs_State *C) {
+    GState *gs = G_(C);
     gs->gcstop = GCSTPCLS; /* paused by state closing */
     separatetobefin(gs, 1); /* seperate all objects with a finalizer... */
     cs_assert(gs->fin == NULL);
-    runallfinalizers(ts); /* ...and run them */
-    freelist(ts, gs->objects, obj2gco(gs->mainthread));
+    runallfinalizers(C); /* ...and run them */
+    freelist(C, gs->objects, obj2gco(gs->mainthread));
     cs_assert(gs->fin == NULL); /* no new finalizers */
-    freelist(ts, gs->fixed, NULL); /* collect fixed objects */
+    freelist(C, gs->fixed, NULL); /* collect fixed objects */
     cs_assert(gs->strtab.nuse == 0);
 }
 
 
 /* run GState steps until 'state' is in any of the states of 'statemask' */
-void csG_rununtilstate(cs_State *ts, int statemask) {
-    GState *gs = G_(ts);
+void csG_rununtilstate(cs_State *C, int statemask) {
+    GState *gs = G_(C);
     while (!testbits(gs->gcstate, statemask))
-        singlestep(ts);
+        singlestep(C);
 }
 
 
@@ -966,14 +966,14 @@ void csG_rununtilstate(cs_State *ts, int statemask) {
 ** or the full cycle was done (GState state is GCSpause).
 ** Both the gcdebt and stepsize are converted to 'work',
 */
-static void step(cs_State *ts, GState *gs) {
+static void step(cs_State *C, GState *gs) {
     int stepmul = (getgcparam(gs->gcstepmul) | 1); /* avoid division by 0 */
     c_smem debt = (gs->gcdebt / WORK2MEM) * stepmul;
     c_smem stepsize = (gs->gcstepsize <= sizeof(c_smem) * 8 - 2 /* fits ? */
                     ? ((cast_mem(1) << gs->gcstepsize) / WORK2MEM) * stepmul
                     : MAXSMEM); /* overflows; keep maximum value */
     do { /* do until pause or enough negative debt */
-        c_mem work = singlestep(ts); /* perform one step */
+        c_mem work = singlestep(C); /* perform one step */
         debt -= work;
     } while (debt > -stepsize && gs->gcstate != GCSpause);
     if (gs->gcstate == GCSpause) { /* pause? */
@@ -985,36 +985,36 @@ static void step(cs_State *ts, GState *gs) {
 }
 
 
-void csG_step(cs_State *ts) {
-    GState *gs = G_(ts);
+void csG_step(cs_State *C) {
+    GState *gs = G_(C);
     if (!gcrunning(gs)) /* stopped ? */
         csG_setgcdebt(gs, -2000);
     else
-        step(ts, gs);
+        step(C, gs);
 }
 
 
-static void fullcycle(cs_State *ts) {
-    GState *gs = G_(ts);
+static void fullcycle(cs_State *C) {
+    GState *gs = G_(C);
     if (invariantstate(gs)) /* already have black objects ? */
-        entersweep(ts); /* if so sweep them first */
+        entersweep(C); /* if so sweep them first */
     /* finish any pending sweep phase to start a new cycle */
-    csG_rununtilstate(ts, bitmask(GCSpause));
-    csG_rununtilstate(ts, bitmask(GCSpropagate)); /* start a new cycle */
+    csG_rununtilstate(C, bitmask(GCSpause));
+    csG_rununtilstate(C, bitmask(GCSpropagate)); /* start a new cycle */
     gs->gcstate = GCSatomic; /* go to atomic phase (skip GCSenteratomic) */
-    csG_rununtilstate(ts, bitmask(GCScallfin)); /* run up to finalizers */
+    csG_rununtilstate(C, bitmask(GCScallfin)); /* run up to finalizers */
     /* estimate must be correct after full GC cycle */
     cs_assert(gs->gcestimate == gettotalbytes(gs));
-    csG_rununtilstate(ts, bitmask(GCSpause)); /* finish collection */
+    csG_rununtilstate(C, bitmask(GCSpause)); /* finish collection */
     setpause(gs);
 }
 
 
-void csG_full(cs_State *ts, int isemergency) {
-    GState *gs = G_(ts);
+void csG_full(cs_State *C, int isemergency) {
+    GState *gs = G_(C);
     cs_assert(!gs->gcemergency);
     gs->gcemergency = isemergency;
-    fullcycle(ts);
+    fullcycle(C);
     gs->gcemergency = 0;
 }
 
@@ -1041,6 +1041,6 @@ static void enterinc (GState *gs) {
 
 
 /* enter incremental mode */
-void csG_incmode(cs_State *ts) {
-    enterinc(G_(ts));
+void csG_incmode(cs_State *C) {
+    enterinc(G_(C));
 }

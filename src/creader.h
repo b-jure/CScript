@@ -26,11 +26,11 @@ typedef struct {
     const char* buff; /* position in buffer */
     cs_Reader reader; /* reader function */
     void* userdata; /* user data for 'crR' */
-    cs_State* ts; /* 'cs_State' for 'crR' */
+    cs_State* C; /* 'cs_State' for 'crR' */
 } BuffReader;
 
 
-CSI_FUNC void csR_init(cs_State* ts, BuffReader* br, cs_Reader freader,
+CSI_FUNC void csR_init(cs_State* C, BuffReader* br, cs_Reader freader,
                        void* userdata);
 CSI_FUNC int csR_fill(BuffReader* br);
 CSI_FUNC size_t csR_readn(BuffReader* br, size_t n);
@@ -47,11 +47,11 @@ CSI_FUNC size_t csR_readn(BuffReader* br, size_t n);
 #define csR_buffreset(b)        ((b)->len = 0)
 #define csR_buffpopn(b,n)       ((b)->len -= (n))
 
-#define csR_buffresize(ts,b,s) \
-    { (b)->str = csM_saferealloc(ts, (b)->str, (b)->size, s); \
+#define csR_buffresize(C,b,s) \
+    { (b)->str = csM_saferealloc(C, (b)->str, (b)->size, s); \
       (b)->size = s; }
 
-#define csR_freebuffer(ts,b)    csR_buffresize(ts, b, 0)
+#define csR_freebuffer(C,b)     csR_buffresize(C, b, 0)
 
 
 /* string buffer for lexer */

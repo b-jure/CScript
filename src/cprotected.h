@@ -12,14 +12,14 @@
 
 
 /* type for functions with error handler */
-typedef void (*ProtectedFn)(cs_State *ts, void *userdata);
+typedef void (*ProtectedFn)(cs_State *C, void *userdata);
 
 
-CSI_FUNC c_noret csPR_throw(cs_State *ts, int code);
-CSI_FUNC int csPR_close(cs_State *ts, ptrdiff_t level, int status);
-CSI_FUNC int csPR_rawcall(cs_State *ts, ProtectedFn fn, void *ud);
-CSI_FUNC int csPR_call(cs_State *ts, ProtectedFn fn, void *ud, ptrdiff_t top,
+CSI_FUNC c_noret csPR_throw(cs_State *C, int code);
+CSI_FUNC int csPR_close(cs_State *C, ptrdiff_t level, int status);
+CSI_FUNC int csPR_rawcall(cs_State *C, ProtectedFn fn, void *ud);
+CSI_FUNC int csPR_call(cs_State *C, ProtectedFn fn, void *ud, ptrdiff_t top,
                        ptrdiff_t errfunc);
-CSI_FUNC int csPR_parse(cs_State *ts, BuffReader *br, const char *name); 
+CSI_FUNC int csPR_parse(cs_State *C, BuffReader *br, const char *name); 
 
 #endif

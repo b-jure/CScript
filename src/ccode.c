@@ -239,14 +239,14 @@ static void savelineinfo(FunctionState *fs, Proto *p, int line) {
     int opsize = getOpSize(p->code[pc]); /* size of last coded instruction */
     cs_assert(pc < currPC); /* must of emitted instruction */
     if (c_abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS) {
-        csM_growarray(fs->lx->ts, p->abslineinfo, p->sizeabslineinfo,
+        csM_growarray(fs->lx->C, p->abslineinfo, p->sizeabslineinfo,
                       fs->nabslineinfo, MAXINT, "lines", AbsLineInfo);
         p->abslineinfo[fs->nabslineinfo].pc = pc;
         p->abslineinfo[fs->nabslineinfo++].line = line;
         linedif = ABSLINEINFO; /* signal the absolute line info entry */
         fs->iwthabs = 1; /* reset counter */
     }
-    csM_ensurearray(fs->lx->ts, p->lineinfo, p->sizelineinfo, pc, opsize,
+    csM_ensurearray(fs->lx->C, p->lineinfo, p->sizelineinfo, pc, opsize,
                     MAXINT, "opcodes", c_sbyte);
     p->lineinfo[pc] = linedif;
     while (--opsize) /* fill func args (if any) */
@@ -320,7 +320,7 @@ void csC_fixline(FunctionState *fs, int line) {
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->ts, p->code, p->sizecode, currPC, MAXINT, "code",
+    csM_growarray(fs->lx->C, p->code, p->sizecode, currPC, MAXINT, "code",
                   Instruction);
     p->code[currPC++] = cast_byte(code);
 }
@@ -328,7 +328,7 @@ static void emitbyte(FunctionState *fs, int code) {
 
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_ensurearray(fs->lx->ts, p->code, p->sizecode, currPC, 3, MAXINT,
+    csM_ensurearray(fs->lx->C, p->code, p->sizecode, currPC, 3, MAXINT,
                     "code", Instruction);
     set3bytes(&p->code[currPC], code);
     currPC += SIZEARGL;
@@ -337,7 +337,7 @@ static void emit3bytes(FunctionState *fs, int code) {
 
 static void addinstpc(FunctionState *fs) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->ts, p->instpc, p->sizeinstpc, fs->ninstpc, MAXINT,
+    csM_growarray(fs->lx->C, p->instpc, p->sizeinstpc, fs->ninstpc, MAXINT,
                   "code", int);
     fs->prevpc = p->instpc[fs->ninstpc++] = currPC;
 }
@@ -415,7 +415,7 @@ int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c) {
 /* add constant value to the function */
 static int addK(FunctionState *fs, TValue *key, TValue *v) {
     TValue val;
-    cs_State *ts = fs->lx->ts;
+    cs_State *C = fs->lx->C;
     Proto *p = fs->p;
     const TValue *index = csH_get(fs->lx->tab, key); /* from scanner table */
     int k, oldsz;
@@ -429,13 +429,13 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
     oldsz = p->sizek;
     k = fs->nk;
     setival(&val, k);
-    csH_finishset(ts, fs->lx->tab, index, key, &val);
-    csM_growarray(ts, p->k, p->sizek, k, MAX_LARG, "constants", TValue);
+    csH_finishset(C, fs->lx->tab, index, key, &val);
+    csM_growarray(C, p->k, p->sizek, k, MAX_LARG, "constants", TValue);
     while (oldsz < p->sizek) /* nil out the new part */
         setnilval(&p->k[oldsz++]);
-    setobj(ts, &p->k[k], v);
+    setobj(C, &p->k[k], v);
     fs->nk++;
-    csG_barrier(ts, p, v);
+    csG_barrier(C, p, v);
     return k; /* new index */
 }
 
@@ -444,7 +444,7 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
 static int nilK(FunctionState *fs) {
     TValue nv, key;
     setnilval(&nv);
-    sethtval(fs->lx->ts, &key, fs->lx->tab);
+    sethtval(fs->lx->C, &key, fs->lx->tab);
     return addK(fs, &key, &nv);
 }
 
@@ -468,7 +468,7 @@ static int falseK(FunctionState *fs) {
 /* add string constant to 'constants' */
 static int stringK(FunctionState *fs, OString *s) {
     TValue vs;
-    setstrval(fs->lx->ts, &vs, s);
+    setstrval(fs->lx->C, &vs, s);
     return addK(fs, &vs, &vs);
 }
 
@@ -1104,7 +1104,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
     TValue v1, v2, res;
     if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(&v1, &v2, op))
         return 0;
-    csO_arithmraw(fs->lx->ts, &v1, &v2, &res, op);
+    csO_arithmraw(fs->lx->C, &v1, &v2, &res, op);
     if (ttisint(&res)) {
         e1->et = EXP_INT;
         e1->u.i = ival(&res);

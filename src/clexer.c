@@ -58,26 +58,26 @@ typedef enum DigType {
 
 
 
-void csY_setinput(cs_State *ts, Lexer *lx, BuffReader *br, OString *source) {
+void csY_setinput(cs_State *C, Lexer *lx, BuffReader *br, OString *source) {
     cs_assert(lx->ps != NULL);
     lx->c = brgetc(br); /* fetch first char */
     lx->line = 1;
     lx->lastline = 1;
-    lx->ts = ts;
+    lx->C = C;
     lx->fs = NULL;
     lx->tahead.tk = TK_EOS; /* no lookahead token */
     lx->br = br;
     lx->src = source;
-    csR_buffresize(ts, lx->buff, CSI_MINBUFFER);
+    csR_buffresize(C, lx->buff, CSI_MINBUFFER);
 }
 
 
-void csY_init(cs_State *ts) {
+void csY_init(cs_State *C) {
     /* intern and fix all keywords */
     for (int i = 0; i < NUM_KEYWORDS; i++) { /* internalize keywords */
-        OString *s = csS_new(ts, tkstr[i]);
+        OString *s = csS_new(C, tkstr[i]);
         s->extra = i + 1;
-        csG_fix(ts, obj2gco(s));
+        csG_fix(C, obj2gco(s));
     }
 }
 
@@ -93,7 +93,7 @@ c_sinline void savec(Lexer *lx, int c) {
         if (csR_buffsize(lx->buff) >= MAXSIZE / 2)
             lexerror(lx, "lexical element too long", 0);
         newsize = csR_buffsize(lx->buff) * 2;
-        csR_buffresize(lx->ts, lx->buff, newsize);
+        csR_buffresize(lx->C, lx->buff, newsize);
     }
     csR_buff(lx->buff)[csR_bufflen(lx->buff)++] = cast_char(c);
 }
@@ -114,13 +114,13 @@ const char *csY_tok2str(Lexer *lx, int t) {
     if (t >= FIRSTTK) {
         const char *str = tkstr[t - FIRSTTK];
         if (t < TK_EOS)
-            return csS_pushfstring(lx->ts, "'%s'", str);
+            return csS_pushfstring(lx->C, "'%s'", str);
         return str;
     } else {
         if (cisprint(t))
-            return csS_pushfstring(lx->ts, "'%c'", t);
+            return csS_pushfstring(lx->C, "'%c'", t);
         else
-            return csS_pushfstring(lx->ts, "'\\%d'", t);
+            return csS_pushfstring(lx->C, "'\\%d'", t);
     }
 }
 
@@ -130,7 +130,7 @@ static const char *lextok2str(Lexer *lx, int t) {
         case TK_FLT: case TK_INT:
         case TK_STRING: case TK_NAME: {
             savec(lx, '\0');
-            return csS_pushfstring(lx->ts, "'%s'", csR_buff(lx->buff));
+            return csS_pushfstring(lx->C, "'%s'", csR_buff(lx->buff));
         }
         default: return csY_tok2str(lx, t);
     }
@@ -138,11 +138,11 @@ static const char *lextok2str(Lexer *lx, int t) {
 
 
 static c_noret lexerror(Lexer *lx, const char *err, int token) {
-    cs_State *ts = lx->ts;
-    err = csD_addinfo(ts, err, lx->src, lx->line);
+    cs_State *C = lx->C;
+    err = csD_addinfo(C, err, lx->src, lx->line);
     if (token)
-        csS_pushfstring(ts, "%s near %s", err, lextok2str(lx, token));
-    csPR_throw(ts, CS_ERRSYNTAX);
+        csS_pushfstring(C, "%s near %s", err, lextok2str(lx, token));
+    csPR_throw(C, CS_ERRSYNTAX);
 }
 
 
@@ -165,17 +165,17 @@ static void inclinenr(Lexer *lx) {
 
 /* create new string and fix it inside of lexer htable */
 OString *csY_newstring(Lexer *lx, const char *str, size_t len) {
-    cs_State *ts = lx->ts;
-    OString *s = csS_newl(ts, str, len);
+    cs_State *C = lx->C;
+    OString *s = csS_newl(C, str, len);
     const TValue *o = csH_getstr(lx->tab, s);
     if (!ttisnil(o)) { /* string already present? */
         s = keystrval(cast(Node *, o));
     } else {
-        TValue *stkv = s2v(ts->sp.p++); /* reserve stack space for string */
-        setstrval(ts, stkv, s); /* anchor */
-        csH_finishset(ts, lx->tab, o, stkv, stkv); /* tab[string] = string */
-        csG_checkGC(ts);
-        ts->sp.p--;  /* remove string */
+        TValue *stkv = s2v(C->sp.p++); /* reserve stack space for string */
+        setstrval(C, stkv, s); /* anchor */
+        csH_finishset(C, lx->tab, o, stkv, stkv); /* tab[string] = string */
+        csG_checkGC(C);
+        C->sp.p--; /* remove string */
     }
     return s;
 }
