@@ -107,7 +107,7 @@
         Standard CScript uses 64-bit integers and double-precision (64-bit)
         floats. Configuration header can be tinkered to allow 32-bit integers
         and/or single-precision (32-bit) floats, but this but would probably
-        require internal patches (see <code>cconf.h</code> if interested).
+        require internal patches (see <code>csconf.h</code> if interested).
         <br/>
         Any overflow when manipulating integer values <em>wrap around</em>,
         according to the usual rules of two-complement arithmetics.
@@ -781,7 +781,7 @@
     ** addition ("__add") operator and initializer ("__init").
     */
 
-    static int initvec2(cs_State *C) {
+    static int initvec2 (cs_State *C) {
         cs_push_number(C, 0.0);
         cs_set_fieldstr(C, 0, "x");     /* set "x" field */
 
@@ -791,7 +791,7 @@
         return 1;       /* return the instance */
     }
 
-    static int addvec2(cs_State *C) {
+    static int addvec2 (cs_State *C) {
         /* index 0 and 1 hold Vec2 instances */
         cs_get_class(C, 0); 
         cs_push_instance(C, 2);     /* create new Vec2 instance */
@@ -809,19 +809,19 @@
         return 1;       /* return only the new instance */
     }
 
-    static void pushclass_vec2(cs_State *C) {
+    static void pushclass_vec2 (cs_State *C) {
         cs_VMT vmt = {0};       /* zero initialize the whole array */
         vmt.func[CS_MM_INIT] = initvec2;    /* set CS_MM_INIT entry */
         vmt.func[CS_MM_ADD] = addvec2;      /* set CS_MM_ADD entry */
 
         /*
         ** Finally create (and push) the class with 'vmt', no superclass (-1),
-        ** no upvalues (0) and therefore no methods (NULL).
+        ** no upvalues (0) and no methods (NULL).
         */
         cs_push_class(C, &vmt, -1, 0, NULL);
     }</pre>
         For more information about what each metamethod function expects
-        see <a href="#cs_MM"><code>cs_MM</code></a>.
+        see <a href="#2.4"><code>&sect;2.4</code></a>.
         </p>
 
         <!-- cs_Entry -->
@@ -987,9 +987,10 @@
         a metamethod with
         <a href="#cs_get_metamethod"><code>cs_get_metamethod</code></a> and in
         setting the <a href="#cs_VMT"><code>cs_VMT</code></a>.
+        Total number of metamethods is denoted by <code>CS_MM_N</code>.
         <br/><br/>
         For more information on metamethods see
-        <a href="#Metamethods">&sect;2.4</a>.
+        <a href="#2.4">&sect;2.4</a>.
         </p>
 
 
