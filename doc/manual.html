@@ -559,7 +559,453 @@
 
 
         <h2>4.5 &ndash; <a name="4.5">Functions and Types</a></h2>
-        <p>To do...</p>
+        <p>
+        Here we list all functions and types from the C&nbsp;API in
+        alphabetical order.
+        Each function has an indicator like this:
+        <span class="apii">[-o, +p, <em>x</em>]</span>
+        <br/><br/>
+        The first field, <code>o</code>, is how many elements the function
+        pops from the stack.
+        The second field, <code>p</code>, is how many elements the function
+        pushes onto the stack.
+        (Any function always pushes its results after popping its arguments.)
+        A field in the form <code>x|y</code> means the function can push
+        (or pop) <code>x</code> or <code>y</code> elements, depending on
+        the situation; an interrogation mark '<code>?</code>' means that
+        we cannot know how many elements the function pops/pushes by looking
+        only at its arguments.
+        (For instance, they may depend on what is in the stack.)
+        The third field, <code>x</code>, tells whether the function may raise errors:
+        '<code>-</code>' means the function never raises any error;
+        '<code>m</code>' means the function may raise only out-of-memory errors;
+        '<code>v</code>' means the function may raise the errors explained in the text;
+        '<code>e</code>' means the function can run arbitrary CScript code,
+        either directly or through metamethods, and therefore may raise any
+        errors.
+        </p>
+
+        <!-- cs_State -->
+        <hr><h3><a name="cs_State"><code>cs_State</code></a></h3>
+        <pre>typedef struct cs_State cs_State;</pre>
+        <p>
+        An opaque structure that points to a thread and indirectly
+        (through the thread) to the whole state of a CScript interpreter.
+        The CScript library is fully reentrant: it has no global variables.
+        All information about a state is accessible through this structure.
+        <br/><br/>
+        A pointer to this structure must be passed as the first argument to
+        every function in the library, except to
+        <a href="#cs_newstate"><code>cs_newstate</code></a>, which creates a
+        CScript state from scratch.
+        </p>
+
+        <!-- cs_Integer -->
+        <hr><h3><a name="cs_Integer"><code>cs_Integer</code></a></h3>
+        <pre>typedef ... cs_Integer;</pre>
+        <p>
+        The type of integers in CScript.
+        <br/><br/>
+        By default this type is <code>long long</code>,
+        (usually a 64-bit two-complement integer),
+        (See <code>CS_INT_TYPE</code> in <code>csconf.h</code>.)
+        <br/><br/>
+        CScript also defines the constants
+        <a name="CS_INTEGER_MIN"><code>CS_INTEGER_MIN</code></a> and
+        <a name="CS_INTEGER_MAX"><code>CS_INTEGER_MAX</code></a>,
+        with the minimum and the maximum values that fit in this type.
+        </p>
+
+        <!-- cs_Unsigned -->
+        <hr><h3><a name="cs_Unsigned"><code>cs_Unsigned</code></a></h3>
+        <pre>typedef ... cs_Unsigned;</pre>
+        <p>
+        The unsigned version of <a href="#cs_Integer"><code>cs_Integer</code></a>.
+        </p>
+
+        <!-- cs_Number -->
+        <hr><h3><a name="cs_Number"><code>cs_Number</code></a></h3>
+        <pre>typedef ... cs_Number;</pre>
+        <p>
+        The type of floats in CScript.
+        <br/><br/>
+        By default this type is double, but that can be changed to a single
+        float or a long double.
+        (See <code>CS_FLOAT_TYPE</code> in <code>csconf.h</code>.)
+        </p>
+
+        <!-- cs_CFunction -->
+        <hr><h3><a name="cs_CFunction"><code>cs_CFunction</code></a></h3>
+        <pre>typedef int (*cs_CFunction) (cs_State *C);</pre>
+        <p>
+        Type for C&nbsp;functions.
+        <br/><br/>
+        In order to communicate properly with CScript, a C&nbsp;function
+        must use the following protocol, which defines the way parameters and
+        results are passed: a C&nbsp;function receives its arguments from
+        CScript in its stack in direct order (the first argument is pushed first).
+        So, when the function starts, <code>cs_nvalues(C)</code> returns the
+        number of arguments received by the function.
+        The first argument (if any) is at index 0 and its last argument is at
+        index <code>cs_gettop(C)</code>.
+        To return values to CScript, a C&nbsp;function just pushes them onto
+        the stack, in direct order (the first result is pushed first), and
+        returns in C the number of results.
+        Any other value in the stack below the results will be properly
+        discarded by CScript.
+        Like a CScript function, a C&nbsp;function called by CScript can also
+        return many results.
+        <br/><br/>
+        As an example, the following function receives a variable number
+        of numeric arguments and returns their average and their sum:
+        <pre>
+    static int foo (cs_State *C) {
+        int n = cs_gettop(C);   /* index of last argument (or cs_nvalues(C)-1) */
+        cs_Number sum = 0.0;
+        int i;
+        for (i = 0; i &lt;= n; i++) {
+            if (!cs_is_number(C, i)) {
+                cs_push_literal(C, "incorrect argument");
+                cs_error(C);
+            }
+            sum += cs_to_number(C, i);
+        }
+        cs_push_number(C, sum/n);       /* first result */
+        cs_push_number(C, sum);         /* second result */
+        return 2;                   /* number of results */
+    }</pre>
+        </p>
+
+        <!-- cs_Alloc -->
+        <hr><h3><a name="cs_Alloc"><code>cs_Alloc</code></a></h3>
+        <pre>typedef void *(*cs_Alloc) (void *ptr,
+                           size_t osz,
+                           size_t nsz,
+                           void *ud);</pre>
+        <p>
+        The type of the memory-allocation function used by CScript states.
+        The allocator function must provide a functionality similar to
+        <code>realloc</code>, but not exactly the same.
+        Its arguments are <code>ud</code>, last argument that is an opaque
+        pointer passed to <a href="#cs_newstate"><code>cs_newstate</code></a>;
+        <code>ptr</code>, a pointer to the block being allocated/reallocated/freed;
+        <code>osz</code>, the original size of the block or some code about
+        what is being allocated (such as a <a href="#cs_type">type</a> tag);
+        and <code>nsz</code>, the new size of the block.
+        <br/><br/>
+        When <code>ptr</code> is not <code>NULL</code>, <code>osz</code> is
+        the size of the block pointed by <code>ptr</code>, that is, the size
+        given when it was allocated or reallocated.
+        <br/><br/>
+        When <code>ptr</code> is <code>NULL</code>, <code>osz</code> encodes
+        the kind of object that CScript is allocating.
+        <code>osz</code> is any of
+        <a href="#pdf-CS_TUSERDATA"><code>CS_TUSERDATA</code></a>,
+        <a href="#pdf-CS_TSTRING"><code>CS_TSTRING</code></a>,
+        <a href="#pdf-CS_TARRAY"><code>CS_TARRAY</code></a>,
+        <a href="#pdf-CS_TTABLE"><code>CS_TTABLE</code></a>,
+        <a href="#pdf-CS_TFUNCTION"><code>CS_TFUNCTION</code></a>,
+        <a href="#pdf-CS_TCLASS"><code>CS_TCLASS</code></a>,
+        <a href="#pdf-CS_TINSTANCE"><code>CS_TINSTANCE</code></a>, or
+        <a href="#pdf-CS_TTHREAD"><code>CS_TTHREAD</code></a> when
+        (and only when) CScript is creating a new object of that type.
+        When <code>osz</code> is some other value, CScript is allocating
+        memory for something else.
+        <br/><br/>
+        CScript assumes the following behavior from the allocator function:
+        <br/><br/>
+        When <code>nsz</code> is zero, the allocator must behave like
+        <code>free</code> and then return <code>NULL</code>.
+        <br/><br/>
+        When <code>nsz</code> is not zero, the allocator must behave like
+        <code>realloc</code>.
+        In particular, the allocator returns <code>NULL</code> if and only if
+        it cannot fulfill the request.
+        <br/><br/>
+        Here is a simple implementation for the allocator function.
+        It is used in the auxiliary library by
+        <a href="#csL_newstate"><code>csL_newstate</code></a>.
+        <pre>
+    static void *allocator (void *ptr, size_t osz, size_t nsz, void *ud) {
+        (void)ud;  (void)osz;  /* not used */
+        if (nsz == 0) {
+            free(ptr);
+            return NULL;
+        } else
+            return realloc(ptr, nsz);
+    }</pre>
+        Note that ISO&nbsp;C ensures that <code>free(NULL)</code> has no
+        effect and that <code>realloc(NULL,size)</code> is equivalent to
+        <code>malloc(size)</code>.
+        </p>
+
+        <!-- cs_Reader -->
+        <hr><h3><a name="cs_Reader"><code>cs_Reader</code></a></h3>
+        <pre>typedef const char *(*cs_Reader) (cs_State *C,
+                                  void *data,
+                                  size_t *size);</pre>
+        <p>
+        The reader function used by <a href="#cs_load"><code>cs_load</code></a>.
+        Every time <a href="#cs_load"><code>cs_load</code></a> needs another
+        piece of the chunk, it calls the reader, passing along its
+        <code>data</code> parameter.
+        The reader must return a pointer to a block of memory with a new piece
+        of the chunk and set <code>size</code> to the block size.
+        The block must exist until the reader function is called again.
+        To signal the end of the chunk, the reader must return
+        <code>NULL</code> or set <code>size</code> to zero.
+        The reader function may return pieces of any size greater than zero.
+        </p>
+
+        <!-- cs_WarnFunction -->
+        <hr><h3><a name="cs_WarnFunction"><code>cs_WarnFunction</code></a></h3>
+        <pre>typedef void (*cs_WarnFunction) (void *ud, const char *msg, int tocont);</pre>
+        <p>
+        The type of warning functions, called by CScript to emit warnings.
+        The first parameter is an opaque pointer set by
+        <a href="#cs_setwarnf"><code>cs_setwarnf</code></a>.
+        The second parameter is the warning message.
+        The third parameter is a boolean that indicates whether the message is
+        to be continued by the message in the next call.
+        <br/><br/>
+        See <a href="#warn"><code>warn</code></a> for more details about
+        warnings.
+        </p>
+
+        <!-- cs_VMT -->
+        <hr><h3><a name="cs_VMT"><code>cs_VMT</code></a></h3>
+        <pre>typedef struct cs_VMT cs_VMT;</pre>
+        <p>
+        Type for Virtual Method Table used as an argument when creating a
+        class with <a href="#cs_push_class"><code>cs_push_class</code></a> or
+        when setting Virtual Method Table for <em>fulluserdata</em> with
+        <a href="#cs_set_uservmt"><code>cs_set_uservmt</code></a>.
+        <br/><br/>
+        It holds an array <code>func</code> of size
+        <a href="#CS_MM_N"><code>CS_MM_N</code></a> and each entry holds a
+        <a href="#cs_CFunction"><code>cs_CFunction</code></a>.
+        Programmer should set all entries in <code>func</code>; the metamethod
+        entries that are not being used should be set as <em>NULL</em>; used
+        entries should contain a valid
+        <a href="#cs_CFunction"><code>cs_CFunction</code></a>.
+        Here is an example of setting the <code>cs_VMT</code> before
+        calling the <a href="#cs_push_class"><code>cs_push_class</code></a>:
+        <pre>
+    /*
+    ** Suppose we are creating a Vec2 class and we wish to overload
+    ** addition ("__add") operator and initializer ("__init").
+    */
+
+    static int initvec2(cs_State *C) {
+        cs_push_number(C, 0.0);
+        cs_set_fieldstr(C, 0, "x");     /* set "x" field */
+
+        cs_push_number(C, 0.0);
+        cs_set_fieldstr(C, 0, "y");     /* set "y" field */
+
+        return 1;       /* return the instance */
+    }
+
+    static int addvec2(cs_State *C) {
+        /* index 0 and 1 hold Vec2 instances */
+        cs_get_class(C, 0); 
+        cs_push_instance(C, 2);     /* create new Vec2 instance */
+
+        cs_get_fieldstr(C, 0, "x");
+        cs_get_fieldstr(C, 1, "x");
+        cs_arith(C, OP_ADD);            /* add the "x" */
+        cs_set_fieldstr(C, 2, "x");     /* set the "x" field */
+
+        cs_get_fieldstr(C, 0, "y");
+        cs_get_fieldstr(C, 1, "y");
+        cs_arith(C, OP_ADD);            /* add the "y" */
+        cs_set_fieldstr(C, 2, "y");     /* set the "y" field */
+
+        return 1;       /* return only the new instance */
+    }
+
+    static void pushclass_vec2(cs_State *C) {
+        cs_VMT vmt = {0};       /* zero initialize the whole array */
+        vmt.func[CS_MM_INIT] = initvec2;    /* set CS_MM_INIT entry */
+        vmt.func[CS_MM_ADD] = addvec2;      /* set CS_MM_ADD entry */
+
+        /*
+        ** Finally create (and push) the class with 'vmt', no superclass (-1),
+        ** no upvalues (0) and therefore no methods (NULL).
+        */
+        cs_push_class(C, &vmt, -1, 0, NULL);
+    }</pre>
+        For more information about what each metamethod function expects
+        see <a href="#cs_MM"><code>cs_MM</code></a>.
+        </p>
+
+        <!-- cs_Entry -->
+        <hr><h3><a name="cs_Entry"><code>cs_Entry</code></a></h3>
+        <pre>
+    typedef struct cs_Entry {
+        const char *name;
+        cs_CFunction func;
+    } cs_Entry;</pre>
+        <p>
+        Type for arrays of functions or methods to be set by
+        <a href="#cs_push_class"><code>cs_push_class</code></a> or
+        <a href="#csL_set_funcs"><code>csL_set_funcs</code></a>.
+        <code>name</code> is the function name and <code>func</code> is a
+        pointer to the function.
+        Any array of <a href="#csL_Entry"><code>csL_Entry</code></a> must end
+        with a sentinel entry in which both <code>name</code> and
+        <code>func</code> are <code>NULL</code>.
+        </p>
+
+        <!-- cs_DebugInfo -->
+        <hr><h3><a name="cs_DebugInfo"><code>cs_DebugInfo</code></a></h3>
+        <pre>
+    typedef struct cs_Debug {
+        const char *name;           /* (n) */
+        const char *namewhat;       /* (n) */
+        const char *what;           /* (s) */
+        const char *source;         /* (s) */
+        size_t srclen;              /* (s) */
+        int currline;               /* (l) */
+        int defline;                /* (s) */
+        int lastdefline;            /* (s) */
+        int nupvals;                /* (u) number of upvalues */
+        int nparams;                /* (u) number of parameters */
+        char isvararg;              /* (u) */
+        char shortsrc[CS_MAXSRC];   /* (s) */
+        /* private part */
+        <em>other fields</em>
+    } cs_Debug;</pre>
+        <p>
+        A structure used to carry different pieces of information about a
+        function or an activation record.
+        <a href="#cs_getstack"><code>cs_getstack</code></a> fills only the
+        private part of this structure, for later use.
+        To fill the other fields of
+        <a href="#cs_Debug"><code>cs_Debug</code></a> with useful information,
+        you must call <a href="#cs_getinfo"><code>cs_getinfo</code></a> with
+        an appropriate parameter. (Specifically, to get a field, you must add
+        the letter between parentheses in the field's comment to the parameter
+        <code>what</code> of <a href="#cs_getinfo"><code>cs_getinfo</code></a>.)
+        <br/><br/>
+        The fields of <a href="#cs_Debug"><code>cs_Debug</code></a> have the
+        following meaning:
+        <ul>
+            <li>
+                <b><code>source</code>: </b>
+                the source of the chunk that created the function.
+            </li>
+            <li>
+                <b><code>srclen</code>: </b>
+                The length of the string <code>source</code>.
+            </li>
+            <li>
+                <b><code>shortsrc</code>: </b>
+                a "printable" version of <code>source</code>, to be used in
+                error messages.
+            </li>
+            <li>
+                <b><code>defline</code>: </b>
+                the line number where the definition of the function starts.
+            </li>
+            <li>
+                <b><code>lastdefline</code>: </b>
+                the line number where the definition of the function ends.
+            </li>
+            <li>
+                <b><code>what</code>: </b>
+                the string <code>"CScript"</code> if the function is a CScript
+                function, <code>"C"</code> if it is a C&nbsp;function,
+                <code>"main"</code> if it is the main part of a chunk.
+            </li>
+            <li>
+                <b><code>currline</code>: </b>
+                the current line where the given function is executing.
+            </li>
+            <li>
+                <b><code>name</code>: </b>
+                a reasonable name for the given function.
+                Because functions in CScript are first-class values, they do
+                not have a fixed name: some functions can be the value of
+                multiple global variables, while others can be stored only
+                in a table field.
+                The <code>cs_getinfo</code> function checks how the function
+                was called to find a suitable name.
+                If it cannot find a name, then <code>name</code> is set to
+                <code>NULL</code>.
+            </li>
+            <li>
+                <b><code>namewhat</code>: </b>
+                explains the <code>name</code> field.
+                The value of <code>namewhat</code> can be
+                <code>"global"</code>, <code>"local"</code>,
+                <code>"method"</code>, <code>"field"</code>,
+                <code>"upvalue"</code>, or <code>""</code> (the empty string),
+                according to how the function was called. (CScript uses the
+                empty string when no other option seems to apply.)
+                <br/>
+                <b>NOTE:</b> only <code>"method"</code> works for now, this
+                is until symbolic execution is implemented internally.
+            </li>
+            <li>
+                <b><code>nupvals</code>: </b>
+                the number of upvalues of the function.
+            </li>
+            <li>
+                <b><code>nparams</code>: </b>
+                the number of parameters of the function
+                (always 0&nbsp;for C&nbsp;functions).
+            </li>
+            <li>
+                <b><code>isvararg</code>: </b>
+                true if the function is a variadic function
+                (always true for C&nbsp;functions).
+            </li>
+        </ul>
+        </p>
+
+        <!-- cs_MM -->
+        <hr><h3><a name="cs_MM"><code>cs_MM</code></a></h3>
+        <p>
+        <pre>
+    typedef enum cs_MM {
+        CS_MM_INIT = 0,
+        CS_MM_GETIDX,
+        CS_MM_SETIDX,
+        CS_MM_GC,
+        CS_MM_CLOSE,
+        CS_MM_CALL,
+        CS_MM_CONCAT,
+        CS_MM_ADD, 
+        CS_MM_SUB,
+        CS_MM_MUL,
+        CS_MM_DIV,
+        CS_MM_MOD,
+        CS_MM_POW,
+        CS_MM_BSHL,
+        CS_MM_BSHR,
+        CS_MM_BAND,
+        CS_MM_BOR,
+        CS_MM_BXOR,
+        CS_MM_UNM,
+        CS_MM_BNOT,
+        CS_MM_EQ,
+        CS_MM_LT,
+        CS_MM_LE,
+        CS_MM_N, /* number of mm */
+    } cs_MM;</pre>
+        These values correspond to each <a href="#Metamethods">metamethod</a>.
+        They are used for setting <em>fulluserdata</em> metamethods with
+        <a href="#cs_set_usermm"><code>cs_set_usermm</code></a>, testing
+        if object has a metamethod defined with 
+        <a href="#cs_hasmetamethod"><code>cs_hasmetamethod</code></a>, getting
+        a metamethod with
+        <a href="#cs_get_metamethod"><code>cs_get_metamethod</code></a> and in
+        setting the <a href="#cs_VMT"><code>cs_VMT</code></a>.
+        <br/><br/>
+        For more information on metamethods see
+        <a href="#Metamethods">&sect;2.4</a>.
+        </p>
 
 
 

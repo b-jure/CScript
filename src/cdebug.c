@@ -156,7 +156,7 @@ const char *csD_findlocal(cs_State *ts, CallFrame *cf, int n, SPtr *pos) {
 }
 
 
-CS_API const char *cs_getlocal(cs_State *ts, const cs_DebugInfo *di, int n) {
+CS_API const char *cs_getlocal(cs_State *ts, const cs_Debug *di, int n) {
     const char *name;
     cs_lock(ts);
     if (di == NULL) {
@@ -178,7 +178,7 @@ CS_API const char *cs_getlocal(cs_State *ts, const cs_DebugInfo *di, int n) {
 }
 
 
-CS_API const char *cs_setlocal (cs_State *ts, const cs_DebugInfo *ar, int n) {
+CS_API const char *cs_setlocal (cs_State *ts, const cs_Debug *ar, int n) {
     SPtr pos = NULL;
     const char *name;
     cs_lock(ts);
@@ -192,7 +192,7 @@ CS_API const char *cs_setlocal (cs_State *ts, const cs_DebugInfo *ar, int n) {
 }
 
 
-static void getfuncinfo(Closure *cl, cs_DebugInfo *di) {
+static void getfuncinfo(Closure *cl, cs_Debug *di) {
     if (!CScriptClosure(cl)) {
         di->source = "[C]";
         di->srclen = SLL("[C]");
@@ -276,11 +276,11 @@ static const char *getfuncname(cs_State *ts, CallFrame *cf, const char **name) {
 
 /*
 ** Auxiliary to 'cs_getinfo', parses 'options' and fills out the
-** 'cs_DebugInfo' accordingly. If any invalid options is specified this
+** 'cs_Debug' accordingly. If any invalid options is specified this
 ** returns 0.
 */
 static int auxgetinfo(cs_State *ts, const char *options, Closure *cl,
-                      CallFrame *cf, cs_DebugInfo *di) {
+                      CallFrame *cf, cs_Debug *di) {
     int status = 1;
     for (unsigned char opt = *options++; opt != '\0'; opt = *options++) {
         switch (opt) {
@@ -324,7 +324,7 @@ static int auxgetinfo(cs_State *ts, const char *options, Closure *cl,
 
 
 /*
-** Fill out 'cs_DebugInfo' according to 'options'.
+** Fill out 'cs_Debug' according to 'options'.
 **
 ** `>` - Pops the function on top of the stack and loads it into 'cf'.
 ** `n` - Fills in the field `name` and `namewhat`.
@@ -338,7 +338,7 @@ static int auxgetinfo(cs_State *ts, const char *options, Closure *cl,
 ** This function returns 0 on error (for instance if any option in 'options'
 ** is invalid).
 */
-CS_API int cs_getinfo(cs_State *ts, const char *options, cs_DebugInfo *di) {
+CS_API int cs_getinfo(cs_State *ts, const char *options, cs_Debug *di) {
     CallFrame *cf;
     Closure *cl;
     TValue *func;
@@ -370,7 +370,7 @@ CS_API int cs_getinfo(cs_State *ts, const char *options, cs_DebugInfo *di) {
 /* add usual debug information to 'msg' (source id and line) */
 const char *csD_addinfo(cs_State *ts, const char *msg, OString *src,
                         int line) {
-    char buffer[CSI_MAXSRC];
+    char buffer[CS_MAXSRC];
     if (src) {
         csS_sourceid(buffer, getstr(src), getstrlen(src));
     } else {

@@ -65,7 +65,7 @@ static int findfield(cs_State *ts, int index, int limit) {
 ** If function is global function, then the its name is pushed
 ** on the top of the stack.
 */
-static int pushglobalfuncname(cs_State *ts, cs_DebugInfo *di) {
+static int pushglobalfuncname(cs_State *ts, cs_Debug *di) {
     int top = cs_gettop(ts); /* index of value on top of the stack */
     int func = top + 1;
     cs_getinfo(ts, "f", di); /* push function (top + 1) */
@@ -88,7 +88,7 @@ static int pushglobalfuncname(cs_State *ts, cs_DebugInfo *di) {
 
 
 CSLIB_API int csL_arg_error(cs_State *ts, int argindex, const char *extra) {
-    cs_DebugInfo di;
+    cs_Debug di;
     if (!cs_getstack(ts, 0, &di)) /* no stack frame? */
         return csL_error(ts, "bad argument #%d (%s)", argindex, extra);
     cs_getinfo(ts, "n", &di);
@@ -345,7 +345,7 @@ CSLIB_API const char *csL_to_lstring(cs_State *ts, int index, size_t *plen) {
 
 
 CSLIB_API void csL_where(cs_State *ts, int level) {
-    cs_DebugInfo di;
+    cs_Debug di;
     if (cs_getstack(ts, level, &di)) {
         cs_getinfo(ts, "sl", &di);
         if (di.currline > 0) { /* have info? */
@@ -398,8 +398,8 @@ static void *allocator(void *ptr, size_t osz, size_t nsz, void *ud) {
     if (nsz == 0) {
         free(ptr);
         return NULL;
-    }
-    return realloc(ptr, nsz);
+    } else
+        return realloc(ptr, nsz);
 }
 
 
@@ -513,7 +513,7 @@ CSLIB_API void *csL_test_userdata(cs_State *ts, int index, const char *name) {
 
 /* find and return last call frame level */
 static int lastlevel(cs_State *ts) {
-    cs_DebugInfo di;
+    cs_Debug di;
     int low = 0, high = 0;
     /* get upper bound, and store last known valid level in `low` */
     while (cs_getstack(ts, high, &di)) {
@@ -533,7 +533,7 @@ static int lastlevel(cs_State *ts) {
 }
 
 
-static void pushfuncname(cs_State *ts, cs_DebugInfo *di) {
+static void pushfuncname(cs_State *ts, cs_Debug *di) {
     if (pushglobalfuncname(ts, di)) { /* try first a global name */
         cs_push_fstring(ts, "function `%s`", cs_to_string(ts, -1));
         cs_remove(ts, -2); /* remove name */
@@ -556,7 +556,7 @@ static void pushfuncname(cs_State *ts, cs_DebugInfo *di) {
 CSLIB_API void csL_traceback(cs_State *ts, cs_State *ts1, int level,
                              const char *msg) {
     csL_Buffer B;
-    cs_DebugInfo di;
+    cs_Debug di;
     int last = lastlevel(ts1);
     int limit2show = (last - level > (STACKLEVELS * 2) ? STACKLEVELS : -1);
     csL_buff_init(ts, &B);

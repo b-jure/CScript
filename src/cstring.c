@@ -288,7 +288,7 @@ void csS_strlimit(char *dest, const char *src, size_t len, size_t limit) {
 
 
 void csS_sourceid(char *restrict dest, const char *src, size_t len) {
-    csS_strlimit(dest, src, len, CSI_MAXSRC - 1);
+    csS_strlimit(dest, src, len, CS_MAXSRC - 1);
 }
 
 
@@ -506,7 +506,7 @@ int csS_utf8esc(char *buff, ulong n) {
 ** gets called by 'csD_getinfo'; the size should be
 ** at least 'CS_MAXSRC' + 'MAXNUM2STR' + size for message.
 */
-#define BUFFVFSSIZ	(CSI_MAXSRC + MAXNUM2STR + 100)
+#define BUFFVFSSIZ	(CS_MAXSRC + MAXNUM2STR + 100)
 
 /* buffer for 'csS_newvstringf' */
 typedef struct BuffVFS {

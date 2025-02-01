@@ -806,7 +806,7 @@ c_sinline void auxsetentrylist(cs_State *ts, OClass *cls, const cs_Entry *l,
 }
 
 
-CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobjabs,
+CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int abscls,
                           int nup, const cs_Entry *l) {
     OClass *cls;
     cs_lock(ts);
@@ -814,8 +814,8 @@ CS_API void cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobjabs,
     csG_checkGC(ts);
     setclsval2s(ts, ts->sp.p, cls);
     api_inctop(ts);
-    if (clsobjabs >= 0) { /* have superclass? */
-        const TValue *osup = index2value(ts, clsobjabs);
+    if (abscls >= 0) { /* have superclass? */
+        const TValue *osup = index2value(ts, abscls);
         api_check(ts, ttisclass(osup), "expect class");
         if (classval(osup)->methods) { /* have methods? */
             cls->methods = csH_new(ts);
@@ -1580,7 +1580,7 @@ CS_API int cs_getfreereg(cs_State *ts) {
 
 
 /*
-** Sets `frame` in `cs_DebugInfo`; `level` is `CallFrame` level.
+** Sets `frame` in `cs_Debug`; `level` is `CallFrame` level.
 ** To traverse the call stack backwards (up), then level should be
 ** greater than 0. For example if you wish for currently active `CallFrame`,
 ** then `level` should be 0, if `level` is 1 then the `CallFrame` of the
@@ -1588,7 +1588,7 @@ CS_API int cs_getfreereg(cs_State *ts) {
 ** If `level` is found, therefore `cf` is set, then this function returns 1,
 ** otherwise 0.
 */
-CS_API int cs_getstack(cs_State *ts, int level, cs_DebugInfo *di) {
+CS_API int cs_getstack(cs_State *ts, int level, cs_Debug *di) {
     int status;
     CallFrame *cf;
     if (level < 0) return 0; /* invalid (negative) level */

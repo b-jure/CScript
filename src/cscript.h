@@ -104,7 +104,7 @@ typedef struct cs_VMT cs_VMT;
 typedef struct cs_Entry cs_Entry;
 
 /* Type for debug API */
-typedef struct cs_DebugInfo cs_DebugInfo;
+typedef struct cs_Debug cs_Debug;
 
 
 /* metamethods */
@@ -240,7 +240,7 @@ CS_API void        cs_push_array(cs_State *ts, int sz);
 CS_API void        cs_push_table(cs_State *ts, int sz);
 CS_API int         cs_push_thread(cs_State *ts); 
 CS_API void        cs_push_instance(cs_State *ts, int clsobj);
-CS_API void        cs_push_class(cs_State *ts, const cs_VMT *vmt, int clsobj,
+CS_API void        cs_push_class(cs_State *ts, const cs_VMT *vmt, int abscls,
                                  int nup, const cs_Entry *list); 
 
 /* -----------------------------------------------------------------------
@@ -382,20 +382,20 @@ CS_API int              cs_getfreereg(cs_State *ts);
 /* -----------------------------------------------------------------------
 ** Debug API
 ** ----------------------------------------------------------------------- */
-CS_API int cs_getstack(cs_State *ts, int level, cs_DebugInfo *di); 
-CS_API int cs_getinfo(cs_State *ts, const char *options, cs_DebugInfo *di); 
+CS_API int cs_getstack(cs_State *ts, int level, cs_Debug *di); 
+CS_API int cs_getinfo(cs_State *ts, const char *what, cs_Debug *di); 
 
-CS_API const char *cs_getlocal(cs_State *ts, const cs_DebugInfo *di, int n); 
-CS_API const char *cs_setlocal (cs_State *ts, const cs_DebugInfo *ar, int n); 
+CS_API const char *cs_getlocal(cs_State *ts, const cs_Debug *di, int n); 
+CS_API const char *cs_setlocal (cs_State *ts, const cs_Debug *ar, int n); 
 
 CS_API const char *cs_getupvalue(cs_State *ts, int index, int n); 
 CS_API const char *cs_setupvalue(cs_State *ts, int index, int n); 
 
-struct cs_DebugInfo {
+struct cs_Debug {
     /* (>) pop the function on top of the stack and load it into 'cf' */
     const char *name;       /* (n) */
-    const char *namewhat;   /* (n) 'global', 'local', 'field', 'method' */
-    const char *what;       /* (s) 'CScript', 'C', 'main' */
+    const char *namewhat;   /* (n) 'upvalue', 'global', 'local', 'field', 'method' */
+    const char *what;       /* (s) */
     const char *source;     /* (s) */
     size_t srclen;          /* (s) */
     int currline;           /* (l) */
@@ -404,7 +404,7 @@ struct cs_DebugInfo {
     int nupvals;            /* (u) */
     int nparams;            /* (u) */
     char isvararg;          /* (u) */
-    char shortsrc[CSI_MAXSRC]; /* (s) */
+    char shortsrc[CS_MAXSRC]; /* (s) */
     /* (f) pushes onto stack the function that is running at the given level */
     /* private */
     struct CallFrame *cf;

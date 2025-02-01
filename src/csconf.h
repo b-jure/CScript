@@ -430,11 +430,11 @@
 
 
 /*
-** @CSI_MAXSRC - maximum description size of function source in debug
+** @CS_MAXSRC - maximum description size of function source in debug
 ** information.
 ** CHANGE if you need different size.
 */
-#define CSI_MAXSRC          60
+#define CS_MAXSRC       60
 
 
 /*
