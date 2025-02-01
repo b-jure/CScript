@@ -25,7 +25,6 @@
 
 
         <h1>1 &ndash; <a name="1">Introduction</a></h1>
-
         <p>
         CScript is a lightweight embeddable scripting language.
         C in CScript refers to the C programming language as it mimics its
@@ -33,15 +32,11 @@
         It's syntax supports various types of programming styles and it does
         not enforce any type/style upon the user (it has all the tools and the
         user chooses the tool for the job).
-        </p>
-
-        <p>
+        <br/><br/>
         CScript is dynamically typed, it runs by interpreting bytecode with
         a stack-based virtual machine, and it's memory is automatically
         managed by the incremental garbage collection.
-        </p>
-
-        <p>
+        <br/><br/>
         CScript is implemented as a library fully written in C, and to be
         compiled with any standard C/C++ compiler implementing C99 standard.
         CScript distribution includes a host program called
@@ -51,14 +46,10 @@
         scripting language but also as a stand-alone language that is easy
         to learn as it shares most of its syntax with the C programming
         language and <a href="https://www.lua.org/">Lua</a>.
-        </p>
-
-        <p>
+        <br/><br/>
         CScript is free software, and is provided with no guarantees,
         as stated in its license.
-        </p>
-
-        <p>
+        <br/><br/>
         This manual is subject to changes, as the language itself changes.
         However the reference manual is always valid for the same version of
         CScript distribution. If you spot the mistake or you think the manual
@@ -82,27 +73,21 @@
         This means that variables do not have types; only values do.
         There are no type definitions in the language instead all values
         carry their own type.
-        </p>
-
-        <p>
+        <br/><br/>
         All values in CScript are first-class values, meaning all values
         can be stored in variables (as is expected), passed as arguments
         to other functions and returned as results.
-        </p>
-
-        <p>
+        <br/><br/>
         There are eleven basic types in CScript:
         <em>nil</em>, <em>boolean</em>, <em>number</em>, <em>string</em>, 
         <em>function</em>, <em>userdata</em>, <em>thread</em>, <em>table</em>, 
         <em>array</em>, <em>class</em> and <em>instance</em>.
-        </p>
-
-        <p> <!-- nil -->
+        <br/><br/>
+        <!-- nil -->
         The type <em>nil</em> has one single value, <b>nil</b>, and is
         intended to represent absence of value.
-        </p>
-
-        <p> <!-- boolean -->
+        <br/><br/>
+        <!-- boolean -->
         The type <em>boolean</em> has two values, <b>true</b> and <b>false</b>.
         Both <b>nil</b> and <b>false</b> make a condition false; they are
         collectively called <em>false values</em>
@@ -113,22 +98,21 @@
         Here is a simple example, if we were to index a table with <b>nil</b>
         it would raise a runtime error; as said, use <b>nil</b> to indicate
         absence of value.
-        </p>
-
-        <p> <!-- number -->
+        <br/><br/>
+        <!-- number -->
         The type <em>number</em> represents both integer and real
         (floating-point) numbers, using two subtypes: <em>integer</em> and
         <em>float</em> (as is indicated in the C&nbsp;API header).
-
+        <br/>
         Standard CScript uses 64-bit integers and double-precision (64-bit)
         floats. Configuration header can be tinkered to allow 32-bit integers
         and/or single-precision (32-bit) floats, but this but would probably
         require internal patches (see <code>cconf.h</code> if interested).
-
+        <br/>
         Any overflow when manipulating integer values <em>wrap around</em>,
         according to the usual rules of two-complement arithmetics.
         This holds both for negative (signed) and positive (unsigned) integers.
-
+        <br/>
         The conversion between the two subtypes mimics C standard.
         For example, if we were to do a mathematical operation between the two
         numbers, one of them is <em>integer</em> and the other is
@@ -140,30 +124,26 @@
         (this would result in a slower operation on processors that support
         float division but this behaviour can also be configured in CScript
         internals quite easily, check <code>cvm.c</code>).
-        </p>
-
-        <p> <!-- string -->
+        <br/><br/>
+        <!-- string -->
         The type <em>string</em> represents immutable sequence of bytes.
         Strings can contain any 8-bit value, including embedded zeros
         ('<code>\0</code>').
         Internally CScript is encoding-agnostic; it makes no assumptions
         about the contents of a string.
         The length of any string in CScript must fit in a CScript integer.
-        </p>
-
-        <p> <!-- function -->
+        <br/><br/>
+        <!-- function -->
         The type <em>function</em> can be a function written in CScript or
         C, both of which can be manipulated and called.
-        </p>
-
-        <p> <!-- userdata -->
+        <br/><br/>
+        <!-- userdata -->
         The type <em>userdata</em> is provided to allow arbitrary C&nbsp;data
         to be stored in a variable.
         A userdata value represents a block of raw memory.
         There are two kinds of userdata:
-        <em>full userdata</em>,
-        which is an object with a block of memory managed by CScript,
-        and <em>light userdata</em>,
+        <em>full userdata</em>, which is an object with a block of memory
+        managed by CScript, and <em>light userdata</em>,
         which is simply a C&nbsp;pointer value.
         Userdata has no predefined operations in CScript except assignment
         and identity test (<code>==</code>).
@@ -173,37 +153,34 @@
         through the C&nbsp;API.
         This guarantees the integrity of data owned by the host program
         and C&nbsp;libraries.
-        </p>
-
-        <p> <!-- table -->
+        <br/><br/>
+        <!-- table -->
         The type <em>table</em> implements associative arrays,
         that is, arrays that can have as indices not only numbers,
         but any CScript value except <b>nil</b> and NaN
         (<em>Not a Number</em> is a special floating-point value
         used by the IEEE 754 standard to represent undefined numerical
         results, such as <code>0/0</code>).
-
+        <br/>
         Tables can be contain values of all types (except <b>nil</b>).
         Any key associated to the value <b>nil</b> is not considered part of
         the table. Conversely, any key that is not part of a table has
         an associated value <b>nil</b>.
-
+        <br/>
         Tables can be indexed two different ways, given the key
         <code>name</code> we index the table <code>t</code> either as
         <code>t.name</code> or <code>t["name"]</code>.
         The array-like indexing is useful when we want to index the table
         with the value of the variable.
-        </p>
-
-        <p> <!-- array -->
+        <br/><br/>
+        <!-- array -->
         The type <em>array</em> is a linear collection of values each
         identified by an <b>index</b>. Each <b>index</b> is positive integer
         value or 0 which is used to index the <em>array</em> in order to
         retrieve the value (variable values can also be used in place of literal
         integers). Negative integer indices are not allowed.
-        </p>
-
-        <p> <!-- class -->
+        <br/><br/>
+        <!-- class -->
         The type <em>class</em> is useful for object-oriented programming.
         Class can contain <em>methods</em> which are defined upon class
         creation and can not be changed after.
@@ -213,13 +190,12 @@
         <em>class</em> from which we inherit is called a <em>superclass</em>.
         When inheriting all of the <em>superclass methods</em> are copied over
         to the <em>class</em> being created.
-
+        <br/>
         When constructing a <em>class</em> programmer can define
         <em>metamethods</em> which are special functions that provide
         meta-programming functionality.
-        </p>
-
-        <p> <!-- instance -->
+        <br/><br/>
+        <!-- instance -->
         The type <em>instance</em> is similar to <em>table</em>; it can be
         indexed and indexed values are the values of the <em>instance</em>
         <em>fields</em>. Each <em>instance</em> is constructed from a
@@ -227,20 +203,29 @@
         The <em>class</em> methods of the <em>instance</em> can't be changed
         but can be shadowed by creating a non <b>nil</b> <em>field</em> with
         the same key.
-        </p>
-
-        <p> <!-- thread -->
+        <br/><br/>
+        <!-- thread -->
         The type <em>thread</em> represents independent threads of execution.
         CScript threads are not related to operating-system threads.
-        </p>
-
-        <p>
-        The library function <a href=#type><code>type</code></a> returns a
+        <br/><br/>
+        The library function <a href=#typeof><code>typeof</code></a> returns a
         string describing the type of a given value.
         </p>
 
 
         <h2>2.2 &ndash; <a name="2.2">Global Table</a></h2>
+        <p>To do...</p>
+
+
+        <h2>2.3 &ndash; <a name="2.3">Error Handling</a></h2>
+        <p>To do...</p>
+
+
+        <h2>2.4 &ndash; <a name="2.4">Metamethods</a></h2>
+        <p>To do...</p>
+
+
+        <h2>2.5 &ndash; <a name="2.5">Garbage Collection</a></h2>
         <p>To do...</p>
 
 
