@@ -906,7 +906,7 @@ c_sinline Array *getarray(cs_State *C, int arrobj) {
 CS_API int cs_get_index(cs_State *C, int arrobj, cs_Integer index) {
     Array *arr;
     cs_lock(C);
-    api_check(C, index < 0, "invalid `index`");
+    api_check(C, index >= 0, "invalid `index`");
     arr = getarray(C, arrobj);
     if (c_castS2U(index) < arr->n) {
         setobj2s(C, C->sp.p, &arr->b[index]);
@@ -1140,7 +1140,7 @@ CS_API void cs_set_index(cs_State *C, int arrobj, cs_Integer index) {
     Array *arr;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    api_check(C, index < 0 && index < ARRAYLIMIT, "`index` out of bounds");
+    api_check(C, index >= 0 && index < ARRAYLIMIT, "`index` out of bounds");
     arr = getarray(C, arrobj);
     csA_ensure(C, arr, cast_int(index));
     setobj(C, &arr->b[cast_int(index)], s2v(C->sp.p - 1));

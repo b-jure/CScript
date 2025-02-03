@@ -566,17 +566,17 @@ retry:
             const TValue *fmm;
             Instance *ins = csMM_newinstance(C, classval(s2v(func)));
             setinsval2s(C, func, ins); /* replace class with its instance */
-            fmm = csMM_get(C, s2v(func), CS_MM_INIT);
-            if (!ttisnil(fmm)) { /* have __init ? */
+            fmm = csMM_get(C, s2v(func), CS_MM_CALL);
+            if (!ttisnil(fmm)) { /* have __call ? */
                 checkstackGCp(C, 1, func); /* space for fmm */
-                fmm = csMM_get(C, s2v(func), CS_MM_INIT); /* (after GC) */
-                if (c_likely(!ttisnil(fmm))) { /* have __init (after GC)? */
+                fmm = csMM_get(C, s2v(func), CS_MM_CALL); /* (after GC) */
+                if (c_likely(!ttisnil(fmm))) { /* have __call (after GC)? */
                     auxinsertf(C, func, fmm); /* insert it into stack... */
                     cs_assert(ttisfunction(fmm));
                     goto retry; /* ...and try calling it */
-                } else goto no_init; /* no __init (after GC) */
+                } else goto nocall; /* no __call (after GC) */
             } else {
-            no_init:
+            nocall:
                 C->sp.p -= (C->sp.p - func - 1); /* remove args */
                 return NULL; /* done */
             }
@@ -589,7 +589,7 @@ retry:
             setinsval2s(C, func + 1, im->ins); /* ...and replace func */
             goto retry;
         }
-        default: { /* check for __call */
+        default: { /* try metaamethod __call */
             func = trymetacall(C, func);
             goto retry;
         }

@@ -32,7 +32,7 @@ CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
 
 void csMM_init(cs_State *C) {
     const char *mmnames[CS_MM_N] = { /* ORDER MM */
-        "__init", "__getidx", "__setidx", "__gc", "__close", "__call",
+        "__getidx", "__setidx", "__gc", "__close", "__call",
         "__concat", "__add", "__sub", "__mul", "__div", "__mod", "__pow",
         "__shl", "__shr", "__band", "__bor", "__xor", "__unm", "__bnot",
         "__eq", "__lt", "__le"

@@ -161,12 +161,12 @@ static int csB_runfile(cs_State *C) {
 
 
 static int csB_getmetamethod(cs_State *C) {
-    static const char * const opts[CS_MM_N + 1] = {"__init", "__getidx",
-        "__setidx", "__gc", "__close", "__call", "__concat", "__add", "__sub",
-        "__mul", "__div", "__mod", "__pow", "__shl", "__shr", "__band",
-        "__bor", "__xor", "__unm", "__bnot", "__eq", "__lt", "__le", NULL};
-    static const cs_MM mmnum[] = {CS_MM_INIT, CS_MM_GETIDX, CS_MM_SETIDX,
-        CS_MM_GC, CS_MM_CLOSE, CS_MM_CALL, CS_MM_CONCAT, CS_MM_ADD, CS_MM_SUB,
+    static const char * const opts[CS_MM_N + 1] = {"__getidx", "__setidx",
+        "__gc", "__close", "__call", "__concat", "__add", "__sub", "__mul",
+        "__div", "__mod", "__pow", "__shl", "__shr", "__band", "__bor",
+        "__xor", "__unm", "__bnot", "__eq", "__lt", "__le", NULL};
+    static const cs_MM mmnum[] = {CS_MM_GETIDX, CS_MM_SETIDX, CS_MM_GC,
+        CS_MM_CLOSE, CS_MM_CALL, CS_MM_CONCAT, CS_MM_ADD, CS_MM_SUB,
         CS_MM_MUL, CS_MM_DIV, CS_MM_MOD, CS_MM_POW, CS_MM_BSHL, CS_MM_BSHR,
         CS_MM_BAND, CS_MM_BOR, CS_MM_BXOR, CS_MM_UNM, CS_MM_BNOT, CS_MM_EQ,
         CS_MM_LT, CS_MM_LE};
@@ -179,22 +179,6 @@ static int csB_getmetamethod(cs_State *C) {
 }
 
 
-/*
-** This function allows traversal of all fields of a hashtable
-** or instance `obj`. First argument is `obj` and its second argument
-** is an index `idx`. `next` returns the next index of the `obj` and its
-** associated value. When called with `nil` as its second argument, `next`
-** returns an initial index and its associated value.
-** When called with the last index, or with `nil` in an empty table, `next`
-** returns `nil`. If the second argument is absent, then it is interpreted
-** as `nil`.
-**
-** The order in which the indices are enumerated is not specified.
-** 
-** The behavior of `next` is `undefined` if, during the traversal, you
-** assign any value to a non-existent field in the `obj`. You may however
-** modify existing fields. In particular, you may clear existing fields.
-*/
 static int csB_next(cs_State *C) {
     int tt = cs_type(C, 0);
     csL_expect_arg(C, (tt == CS_TINSTANCE || tt == CS_THTABLE), 0,
@@ -209,9 +193,6 @@ static int csB_next(cs_State *C) {
 }
 
 
-/*
-** Returns `next` function, the hashtable or instance `obj`, and `nil`.
-*/
 static int csB_pairs(cs_State *C) {
     csL_check_any(C, 0);
     cs_push_cfunction(C, csB_next);    /* will return generator, */

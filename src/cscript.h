@@ -108,16 +108,14 @@ typedef struct cs_Debug cs_Debug;
 
 
 /* metamethods */
-typedef enum cs_MM { /* ORDER MM */
-    CS_MM_INIT = 0,
-    CS_MM_GETIDX,
+typedef enum cs_MM {    /* ORDER MM */
+    CS_MM_GETIDX = 0,
     CS_MM_SETIDX,
     CS_MM_GC,
     CS_MM_CLOSE,
     CS_MM_CALL,
     CS_MM_CONCAT,
-    /* binary operators order => ORDER OP */
-    CS_MM_ADD, 
+    CS_MM_ADD,          /* ORDER OP */
     CS_MM_SUB,
     CS_MM_MUL,
     CS_MM_DIV,
