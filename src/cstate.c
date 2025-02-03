@@ -8,7 +8,7 @@
 #define CS_CORE
 
 
-#include "chashtable.h"
+#include "ctable.h"
 #include "carray.h"
 #include "cstate.h"
 #include "capi.h"
@@ -104,8 +104,8 @@ static void init_registry(cs_State *C, GState *gs) {
     csA_ensure(C, registry, CS_RINDEX_LAST);
     /* registry[CS_RINDEX_MAINTHREAD] = C (mainthread) */
     setthval(C, &registry->b[CS_RINDEX_MAINTHREAD], C);
-    /* registry[CS_RINDEX_MAINTHREAD] = new hashtable (for global variables) */
-    sethtval(C, &registry->b[CS_RINDEX_GLOBALS], csH_new(C));
+    /* registry[CS_RINDEX_GLOBALS] = new table (for global variables) */
+    settval(C, &registry->b[CS_RINDEX_GLOBALS], csH_new(C));
 }
 
 

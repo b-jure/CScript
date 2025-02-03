@@ -16,7 +16,7 @@
 #include "cmeta.h"
 #include "cobject.h"
 #include "cstate.h"
-#include "chashtable.h"
+#include "ctable.h"
 #include "cmem.h"
 #include "cstring.h"
 #include "cvm.h"
@@ -39,7 +39,7 @@
 /* check if 'TValue' is object and white */
 #define valiswhite(v)		(iscollectable(v) && iswhite(gcoval(v)))
 
-/* check if 'HTable' key is object and white */
+/* check if 'Table' key is object and white */
 #define keyiswhite(n)		(keyiscollectable(n) && iswhite(keygcoval(n)))
 
 
@@ -157,7 +157,7 @@ static GCObject **getgclist(GCObject *o) {
         case CS_VCCL: return &gco2clc(o)->gclist;
         case CS_VCLASS: return &gco2cls(o)->gclist;
         case CS_VARRAY: return &gco2arr(o)->gclist;
-        case CS_VHTABLE: return &gco2ht(o)->gclist;
+        case CS_VTABLE: return &gco2ht(o)->gclist;
         case CS_VTHREAD: return &gco2th(o)->gclist;
         case CS_VUSERDATA: return &gco2u(o)->gclist;
         default: cs_assert(0); return NULL;
@@ -271,7 +271,7 @@ static void markobject_(GState *gs, GCObject *o) {
             } /* else fall through */
         } /* else fall through */
     linklist:
-        case CS_VHTABLE: case CS_VPROTO: case CS_VCSCL:
+        case CS_VTABLE: case CS_VPROTO: case CS_VCSCL:
         case CS_VCCL: case CS_VTHREAD: {
             linkobjgclist(o, gs->graylist);
             break;
@@ -305,8 +305,8 @@ static void clearkey (Node *n) {
 }
 
 
-/* mark 'HTable' slots */
-static c_mem markhtable(GState *gs, HTable *ht) {
+/* mark 'Table' slots */
+static c_mem markhtable(GState *gs, Table *ht) {
     Node *last = htnodelast(ht);
     for (Node *n = htnode(ht, 0); n < last; n++) {
         if (!isempty(nodeval(n))) { /* entry is not empty? */
@@ -471,7 +471,7 @@ static c_mem propagate(GState *gs) {
     gs->graylist = *getgclist(o); /* remove from gray list */
     switch(o->tt_) {
         case CS_VUSERDATA: return markuserdata(gs, gco2u(o));
-        case CS_VHTABLE: return markhtable(gs, gco2ht(o));
+        case CS_VTABLE: return markhtable(gs, gco2ht(o));
         case CS_VPROTO: return markfunction(gs, gco2proto(o));
         case CS_VCSCL: return markcstclosure(gs, gco2clcs(o));
         case CS_VCCL: return markcclosure(gs, gco2clc(o));
@@ -509,7 +509,7 @@ static void freeobject(cs_State *C, GCObject *o) {
         case CS_VPROTO: csF_free(C, gco2proto(o)); break;
         case CS_VUPVALUE: freeupval(C, gco2uv(o)); break;
         case CS_VARRAY: csA_free(C, gco2arr(o)); break;
-        case CS_VHTABLE: csH_free(C, gco2ht(o)); break;
+        case CS_VTABLE: csH_free(C, gco2ht(o)); break;
         case CS_VINSTANCE: csM_free(C, gco2ins(o)); break;
         case CS_VIMETHOD: csM_free(C, gco2im(o)); break;
         case CS_VTHREAD: csT_free(C, gco2th(o)); break;

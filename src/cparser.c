@@ -21,7 +21,7 @@
 #include "ctrace.h"
 #include "cvm.h"
 #include "cfunction.h"
-#include "chashtable.h"
+#include "ctable.h"
 #include "cmem.h"
 
 #include <string.h>
@@ -1716,7 +1716,7 @@ typedef struct {
 static const char *literal2text(cs_State *C, LiteralInfo *li) {
     switch (li->tt) {
         case CS_VNUMINT: return csS_pushfstring(C, " (%I)", li->lit.i);
-        case CS_VNUMFLT: return csS_pushfstring(C, " (%N)", li->lit.n);
+        case CS_VNUMFLT: return csS_pushfstring(C, " (%f)", li->lit.n);
         case CS_VSHRSTR:case CS_VLNGSTR:
             return csS_pushfstring(C, " (%s)", getstr(li->lit.str));
         default: cs_assert(0); return NULL; /* invalid literal */
@@ -2555,7 +2555,7 @@ CSClosure *csP_parse(cs_State *C, BuffReader *br, Buffer *buff,
     setclCSval2s(C, C->sp.p, cl); /* anchor main function closure */
     csT_incsp(C);
     lx.tab = csH_new(C);
-    sethtval2s(C, C->sp.p, lx.tab); /* anchor scanner table */
+    settval2s(C, C->sp.p, lx.tab); /* anchor scanner table */
     csT_incsp(C);
     fs.p = cl->p = csF_newproto(C);
     csG_objbarrier(C, cl, cl->p);

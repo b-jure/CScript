@@ -58,7 +58,7 @@ typedef struct Lexer {
     int line; /* current line number */
     Token t; /* current token */
     Token tahead; /* lookahead token */
-    HTable *tab; /* scanner table */
+    Table *tab; /* scanner table */
     struct cs_State *C;
     struct FunctionState *fs;
     BuffReader *br; /* buffered reader */

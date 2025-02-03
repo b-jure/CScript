@@ -181,7 +181,7 @@ static int csB_getmetamethod(cs_State *C) {
 
 static int csB_next(cs_State *C) {
     int tt = cs_type(C, 0);
-    csL_expect_arg(C, (tt == CS_TINSTANCE || tt == CS_THTABLE), 0,
+    csL_expect_arg(C, (tt == CS_TINSTANCE || tt == CS_TTABLE), 0,
                        "instance or table");
     cs_setntop(C, 2); /* if 2nd argument is missing create it */
     if (cs_next(C, 0)) { /* found field? */
@@ -284,7 +284,7 @@ static int csB_warn(cs_State *C) {
 static int csB_len(cs_State *C) {
     int t = cs_type(C, 0);
     csL_expect_arg(C, t == CS_TARRAY ||
-                       t == CS_THTABLE ||
+                       t == CS_TTABLE ||
                        t == CS_TINSTANCE ||
                        t == CS_TSTRING, 0,
                       "array, hashtable, instance or string");
@@ -305,7 +305,7 @@ static int csB_rawequal(cs_State *C) {
 static void checkfirstarg(cs_State *C) {
     int t = cs_type(C, 0);
     csL_expect_arg(C, t == CS_TARRAY ||
-                       t == CS_THTABLE ||
+                       t == CS_TTABLE ||
                        t == CS_TINSTANCE, 0, "array, table or instance");
 }
 

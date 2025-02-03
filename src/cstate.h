@@ -261,7 +261,7 @@ typedef struct XSG {
 /* union for conversions (casting) */
 union GCUnion {
     struct GCObject gc; /* object header */
-    struct HTable ht;
+    struct Table ht;
     struct Array arr;
     struct OString str;
     struct UpVal uv;

@@ -15,7 +15,7 @@
 #include "csconf.h"
 #include "cfunction.h"
 #include "cgc.h"
-#include "chashtable.h"
+#include "ctable.h"
 #include "cscript.h"
 #include "climits.h"
 #include "cobject.h"
@@ -300,8 +300,8 @@ void csV_rawset(cs_State *C, const TValue *obj, const TValue *key,
             setarrayindex(C, arrval(obj), key, val);
             break;
         }
-        case CS_VHTABLE: {
-            csH_set(C, htval(obj), key, val);
+        case CS_VTABLE: {
+            csH_set(C, tval(obj), key, val);
             csG_barrierback(C, gcoval(obj), val);
             break;
         }
@@ -355,8 +355,8 @@ void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
             arraygeti(C, arrval(obj), key, res);
             break;
         }
-        case CS_VHTABLE: {
-            const TValue *slot = csH_get(htval(obj), key);
+        case CS_VTABLE: {
+            const TValue *slot = csH_get(tval(obj), key);
             if (!ttisnil(slot)) {
                 setobj2s(C, res, slot);
             } else
@@ -1080,13 +1080,13 @@ returning:
             }
             vm_case(OP_NEWTABLE) {
                 int b = fetchs();
-                HTable *t;
+                Table *t;
                 if (b > 0) /* table has fields? */
                     b = 1 << (b - 1); /* size is 2^(b - 1) */
                 SP(1);
                 savepc(C); /* allocations might fail */
                 t = csH_new(C);
-                sethtval2s(C, TOP(), t);
+                settval2s(C, TOP(), t);
                 if (b != 0) /* table is not empty? */
                     csH_resize(C, t, b); /* grow table to size 'b' */
                 checkGC(C);
@@ -1457,7 +1457,7 @@ returning:
             vm_case(OP_GETGLOBAL) {
                 TValue *key = K(fetchl());
                 TValue *G = getGtable(C);
-                const TValue *val = csH_getstr(htval(G), strval(key));
+                const TValue *val = csH_getstr(tval(G), strval(key));
                 if (!isempty(val)) {
                     setobj2s(C, C->sp.p, val);
                 } else
@@ -1470,7 +1470,7 @@ returning:
                 TValue *G = getGtable(C);
                 TValue *v = peek(0);
                 cs_assert(ttisstring(key));
-                csH_set(C, htval(G), key, v);
+                csH_set(C, tval(G), key, v);
                 SP(-1); /* v */
                 vm_break;
             }

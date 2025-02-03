@@ -370,18 +370,18 @@ typedef struct EmptyUserData {
 ** Hash Table {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VHTABLE          makevariant(CS_THTABLE, 0)
+#define CS_VTABLE           makevariant(CS_TTABLE, 0)
 
-#define ttishtab(o)         checktag((o), ctb(CS_VHTABLE))
+#define ttishtab(o)         checktag((o), ctb(CS_VTABLE))
 
-#define htval(o)            check_exp(ttishtab(o), gco2ht(val(o).gc))
+#define tval(o)            check_exp(ttishtab(o), gco2ht(val(o).gc))
 
-#define sethtval(C,obj,x) \
-    { TValue *o_=(obj); const HTable *x_=(x); \
-      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VHTABLE)); \
+#define settval(C,obj,x) \
+    { TValue *o_=(obj); const Table *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VTABLE)); \
       checkliveness(C, o_); }
 
-#define sethtval2s(C,o,ht)      sethtval(C,s2v(o),ht)
+#define settval2s(C,o,ht)      settval(C,s2v(o),ht)
 
 
 /*
@@ -415,13 +415,13 @@ typedef union Node {
       checkliveness(C,obj_); }
 
 
-typedef struct HTable {
+typedef struct Table {
     ObjectHeader; /* internal only object */
     c_byte size; /* 2^size */
     Node *node; /* memory block */
     Node *lastfree; /* any free position is before this position */
     GCObject *gclist;
-} HTable;
+} Table;
 
 
 #define keytt(n)                ((n)->s.key_tt)
@@ -548,7 +548,7 @@ typedef struct OString {
 typedef struct OClass {
     ObjectHeader;
     TValue *vmt;
-    HTable *methods;
+    Table *methods;
     GCObject *gclist;
 } OClass;
 
@@ -655,7 +655,7 @@ typedef struct Proto {
 typedef struct Instance {
     ObjectHeader;
     OClass *oclass; /* pointer to class */
-    HTable *fields;
+    Table *fields;
 } Instance;
 
 /* } --------------------------------------------------------------------- */

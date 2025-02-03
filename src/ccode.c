@@ -10,7 +10,7 @@
 
 #include "ccode.h"
 #include "clexer.h"
-#include "chashtable.h"
+#include "ctable.h"
 #include "cbits.h"
 #include "cdebug.h"
 #include "cvm.h"
@@ -444,7 +444,7 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
 static int nilK(FunctionState *fs) {
     TValue nv, key;
     setnilval(&nv);
-    sethtval(fs->lx->C, &key, fs->lx->tab);
+    settval(fs->lx->C, &key, fs->lx->tab);
     return addK(fs, &key, &nv);
 }
 

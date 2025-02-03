@@ -327,7 +327,7 @@ CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
             if (cs_is_integer(C, index))
                 cs_push_fstring(C, "%I", cs_to_integer(C, index));
             else
-                cs_push_fstring(C, "%N", cs_to_number(C, index));
+                cs_push_fstring(C, "%f", cs_to_number(C, index));
             break;
         }
         case CS_TSTRING: {
@@ -464,7 +464,7 @@ CSLIB_API cs_State *csL_newstate(void) {
 
 
 CSLIB_API int csL_get_subtable(cs_State *C, int htobj, const char *field) {
-    if (cs_get_fieldstr(C, htobj, field) == CS_THTABLE) {
+    if (cs_get_fieldstr(C, htobj, field) == CS_TTABLE) {
         return 1; /* true, already have table */
     } else {
         cs_pop(C, 1); /* pop previous result */

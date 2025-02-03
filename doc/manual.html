@@ -1240,371 +1240,640 @@
         <pre>const char *cs_typename (cs_State *C, int type);</pre>
         Returns the name of the type encoded by the value <code>type</code>,
         which must be one the values returned by
-        <a href="#lua_type"><code>lua_type</code></a>.
+        <a href="#cs_type"><code>cs_type</code></a>.
         </p>
 
         <!-- cs_to_numberx -->
         <hr><h3><a name="cs_to_numberx"><code>cs_to_numberx</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_Number cs_to_numberx (cs_State *C);</pre>
+        <pre>cs_Number cs_to_numberx (cs_State *C, int index, int *isnum);</pre>
+        Converts the CScript value at the given index to the C&nbsp;type
+        <a href="#cs_Number"><code>cs_Number</code></a>
+        (see <a href="#cs_Number"><code>cs_Number</code></a>).
+        The CScript value must be a number or a string convertible to a number
+        (see <a href="#3.4.3">&sect;3.4.3</a>); otherwise,
+        <a href="#cs_to_numberx"><code>cs_to_numberx</code></a>
+        returns&nbsp;0.
+        <br/><br/>
+        If <code>isnum</code> is not <code>NULL</code>, its referent is
+        assigned a boolean value that indicates whether the operation
+        succeeded.
         </p>
 
         <!-- cs_to_integerx -->
         <hr><h3><a name="cs_to_integerx"><code>cs_to_integerx</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_Integer cs_to_integerx (cs_State *C);</pre>
+        <pre>cs_Integer cs_to_integerx (cs_State *C, int index, int *isnum);</pre>
         </p>
 
         <!-- cs_to_bool -->
         <hr><h3><a name="cs_to_bool"><code>cs_to_bool</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_to_bool (cs_State *C);</pre>
+        <pre>int cs_to_bool (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_to_lstring -->
         <hr><h3><a name="cs_to_lstring"><code>cs_to_lstring</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_to_lstring (cs_State *C);</pre>
+        <pre>const char *cs_to_lstring (cs_State *C, int index, size_t *plen);</pre>
         </p>
 
         <!-- cs_to_cfunction -->
         <hr><h3><a name="cs_to_cfunction"><code>cs_to_cfunction</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_CFunction cs_to_cfunction (cs_State *C);</pre>
+        <pre>cs_CFunction cs_to_cfunction (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_to_userdata -->
         <hr><h3><a name="cs_to_userdata"><code>cs_to_userdata</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void *cs_to_userdata (cs_State *C);</pre>
+        <pre>void *cs_to_userdata (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_to_pointer -->
         <hr><h3><a name="cs_to_pointer"><code>cs_to_pointer</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const void *cs_to_pointer (cs_State *C);</pre>
+        <pre>const void *cs_to_pointer (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_to_thread -->
         <hr><h3><a name="cs_to_thread"><code>cs_to_thread</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_State *cs_to_thread (cs_State *C);</pre>
+        <pre>cs_State *cs_to_thread (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_arith -->
         <hr><h3><a name="cs_arith"><code>cs_arith</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_arith (cs_State *C);</pre>
+        <span class="apii">[-(2|1), +1, <em>e</em>]</span>
+        <pre>void cs_arith (cs_State *C, int op);</pre>
+        Performs an arithmetic or bitwise operation over the two values
+        (or one, in the case of negations) at the top of the stack,
+        with the value on the top being the second operand, pops these values,
+        and pushes the result of the operation.
+        The function follows the semantics of the corresponding CScript
+        operator (that is, it may call metamethods).
+        <br/><br/>
+        The value of <code>op</code> must be one of the following constants:
+        <ul>
+            <li>
+                <b><a name="CS_OPADD"><code>CS_OPADD</code></a>: </b>
+                performs addition (<code>+</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPSUB"><code>CS_OPSUB</code></a>: </b>
+                performs subtraction (<code>-</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPMUL"><code>CS_OPMUL</code></a>: </b>
+                performs multiplication (<code>*</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPDIV"><code>CS_OPDIV</code></a>: </b>
+                performs float division (<code>/</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPMOD"><code>CS_OPMOD</code></a>: </b>
+                performs modulo (<code>%</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPPOW"><code>CS_OPPOW</code></a>: </b>
+                performs exponentiation (<code>^</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPSHL"><code>CS_OPSHL</code></a>: </b>
+                performs left shift (<code>&lt;&lt;</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPSHR"><code>CS_OPSHR</code></a>: </b>
+                performs right shift (<code>&gt;&gt;</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPBAND"><code>CS_OPBAND</code></a>: </b>
+                performs bitwise AND (<code>&amp;</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPBOR"><code>CS_OPBOR</code></a>: </b>
+                performs bitwise OR (<code>|</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPBXOR"><code>CS_OPBXOR</code></a>: </b>
+                performs bitwise exclusive OR (<code>~</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPUNM"><code>CS_OPUNM</code></a>: </b>
+                performs mathematical negation (unary <code>-</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPBNOT"><code>CS_OPBNOT</code></a>: </b>
+                performs bitwise NOT (<code>~</code>)
+            </li>
+        </ul>
         </p>
 
         <!-- cs_rawequal -->
         <hr><h3><a name="cs_rawequal"><code>cs_rawequal</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_rawequal (cs_State *C);</pre>
+        <pre>int cs_rawequal (cs_State *C, int v1, int v2);</pre>
+        Checks whether <code>v1</code> is equal to <code>v2</code>,
+        without invoking the <code>__eq</code> metamethod.
+        Returns a boolean.
         </p>
 
         <!-- cs_compare -->
         <hr><h3><a name="cs_compare"><code>cs_compare</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_compare (cs_State *C);</pre>
+        <pre>int cs_compare (cs_State *C, int index1, int index2, int op);</pre>
+        Compares two CScript values.
+        Returns 1 if the value at index <code>index1</code> satisfies
+        <code>op</code> when compared with the value at index
+        <code>index2</code>, following the semantics of the corresponding
+        CScript operator (that is, it may call metamethods).
+        Otherwise returns&nbsp;0.
+        Also returns&nbsp;0 if any of the indices is not valid.
+        <br/><br/>
+        The value of <code>op</code> must be one of the following constants:
+        <ul>
+            <li>
+                <b><a name="CS_OPEQ"><code>CS_OPEQ</code></a>: </b>
+                compares for equality (<code>==</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPLT"><code>CS_OPLT</code></a>: </b>
+                compares for less than (<code>&lt;</code>)
+            </li>
+            <li>
+                <b><a name="CS_OPLE"><code>CS_OPLE</code></a>: </b>
+                compares for less or equal (<code>&lt;=</code>)
+            </li>
+        </ul>
         </p>
 
         <!-- cs_push_nil -->
         <hr><h3><a name="cs_push_nil"><code>cs_push_nil</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +1, &ndash;]</span>
         <pre>void cs_push_nil (cs_State *C);</pre>
+        Pushes a nil value onto the stack.
         </p>
 
         <!-- cs_push_number -->
         <hr><h3><a name="cs_push_number"><code>cs_push_number</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_number (cs_State *C);</pre>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void cs_push_number (cs_State *C, cs_Number n);</pre>
+        Pushes a float with value <code>n</code> onto the stack.
         </p>
 
         <!-- cs_push_integer -->
         <hr><h3><a name="cs_push_integer"><code>cs_push_integer</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_integer (cs_State *C);</pre>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void cs_push_integer (cs_State *C, cs_Integer n);</pre>
+        Pushes an integer with value <code>n</code> onto the stack.
         </p>
 
         <!-- cs_push_lstring -->
         <hr><h3><a name="cs_push_lstring"><code>cs_push_lstring</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_push_lstring (cs_State *C);</pre>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>const char *cs_push_lstring (cs_State *C, const char *s, size_t len);</pre>
+        Pushes the string pointed to by <code>s</code> with size
+        <code>len</code> onto the stack.
+        CScript will make or reuse an internal copy of the given string,
+        so the memory at <code>s</code> can be freed or reused immediately
+        after the function returns.
+        The string can contain any binary data, including embedded zeros.
+        <br/><br/>
+        Returns a pointer to the internal copy of the string
+        (see <a href="#4.1.3">&sect;4.1.3</a>).
         </p>
 
         <!-- cs_push_string -->
         <hr><h3><a name="cs_push_string"><code>cs_push_string</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_push_string (cs_State *C);</pre>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>const char *cs_push_string (cs_State *C, const char *s);</pre>
+        Pushes the zero-terminated string pointed to by <code>s</code>
+        onto the stack.
+        CScript will make or reuse an internal copy of the given string,
+        so the memory at <code>s</code> can be freed or reused immediately
+        after the function returns.
+        <br/><br/>
+        Returns a pointer to the internal copy of the string
+        (see <a href="#4.1.3">&sect;4.1.3</a>).
+        <br/><br/>
+        If <code>s</code> is <code>NULL</code>, pushes <b>nil</b> and
+        returns <code>NULL</code>.
+        </p>
+
+        <!-- cs_push_fstring -->
+        <hr><h3><a name="cs_push_fstring"><code>cs_push_fstring</code></a></h3>
+        <p>
+        <span class="apii">[-0, +1, <em>v</em>]</span>
+        <pre>const char *cs_push_fstring (cs_State *C, const char *fmt, ...);</pre>
+        Pushes onto the stack a formatted string and returns a pointer to
+        this string (see <a href="#4.1.3">&sect;4.1.3</a>).
+        It is similar to the ISO&nbsp;C function <code>sprintf</code>,
+        but has two important differences.
+        First, you do not have to allocate space for the result; the result
+        is a Lua string and Lua takes care of memory allocation
+        (and deallocation, through garbage collection).
+        Second, the conversion specifiers are quite restricted.
+        There are no flags, widths, or precisions.
+        <br/>
+        The conversion specifiers can only be:
+        <ul>
+            <li>
+                '<code>%%</code>' (inserts the character '<code>%</code>'),
+            </li>
+            <li>
+                '<code>%s</code>' (inserts a zero-terminated string, with no size restrictions),
+            </li>
+            <li>
+                '<code>%f</code>' (inserts a <a href="#cs_Number"><code>cs_Number</code></a>),
+            </li>
+            <li>
+                '<code>%I</code>' (inserts a <a href="#cs_Integer"><code>cs_Integer</code></a>),
+            </li>
+            <li>
+                '<code>%p</code>' (inserts a pointer),
+            </li>
+            <li>
+                '<code>%d</code>' (inserts an <code>int</code>),
+            </li>
+            <li>
+                '<code>%c</code>' (inserts an <code>int</code> as a one-byte character), and
+            </li>
+            <li>
+                '<code>%U</code>' (inserts a <code>long int</code> as a UTF-8 byte sequence).
+            </li>
+        </ul>
+        This function may raise errors due to memory overflow
+        or an invalid conversion specifier.
         </p>
 
         <!-- cs_push_vfstring -->
         <hr><h3><a name="cs_push_vfstring"><code>cs_push_vfstring</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_push_vfstring (cs_State *C);</pre>
-        </p>
-
-        <!-- cs_push_fstring -->
-        <hr><h3><a name="cs_push_fstring"><code>cs_push_fstring</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_push_fstring (cs_State *C);</pre>
+        <pre>const char *cs_push_vfstring (cs_State *C, const char *fmt, va_list argp);</pre>
+        Equivalent to
+        <a href="#cs_push_fstring"><code>cs_push_fstring</code></a>,
+        except that it receives a <code>va_list</code> instead of a variable
+        number of arguments.
         </p>
 
         <!-- cs_push_cclosure -->
         <hr><h3><a name="cs_push_cclosure"><code>cs_push_cclosure</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_cclosure (cs_State *C);</pre>
+        <span class="apii">[-n, +1, <em>m</em>]</span>
+        <pre>void cs_push_cclosure (cs_State *C, cs_CFunction f, int upvals);</pre>
+        Pushes a new C&nbsp;closure onto the stack.
+        This function receives a pointer to a C&nbsp;function and pushes onto
+        the stack a CScript value of type <code>function</code> that, when
+        called, invokes the corresponding C&nbsp;function.
+        The parameter <code>n</code> tells how many upvalues this function
+        will have (see <a href="#4.2">&sect;4.2</a>).
+        <br/><br/>
+        Any function to be callable by CScript must follow the correct protocol
+        to receive its parameters and return its results
+        (see <a href="#cs_CFunction"><code>cs_CFunction</code></a>).
+        <br/><br/>
+        When a C&nbsp;function is created, it is possible to associate some
+        values with it, the so called upvalues; these upvalues are then
+        accessible to the function whenever it is called.
+        This association is called a C&nbsp;closure
+        (see <a href="#4.2">&sect;4.2</a>).
+        To create a C&nbsp;closure, first the initial values for its upvalues
+        must be pushed onto the stack.
+        (When there are multiple upvalues, the first value is pushed first.)
+        Then <a href="#cs_push_cclosure"><code>cs_push_cclosure</code></a>
+        is called to create and push the C&nbsp;function onto the stack,
+        with the argument <code>n</code> telling how many values will be
+        associated with the function.
+        <a href="#cs_push_cclosure"><code>cs_push_cclosure</code></a> also
+        pops these values from the stack.
+        <br/><br/>
+        When <code>n</code> is zero, this function creates a
+        <em>light C&nbsp;function</em>, which is just a pointer to the
+        C&nbsp;function.
+        In that case, it never raises a memory error.
         </p>
 
         <!-- cs_push_bool -->
         <hr><h3><a name="cs_push_bool"><code>cs_push_bool</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_bool (cs_State *C);</pre>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void cs_push_bool (cs_State *C, int b);</pre>
+        Pushes a boolean value with value <code>b</code> onto the stack.
         </p>
 
         <!-- cs_push_lightuserdata -->
         <hr><h3><a name="cs_push_lightuserdata"><code>cs_push_lightuserdata</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_lightuserdata (cs_State *C);</pre>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void cs_push_lightuserdata (cs_State *C, void *p);</pre>
+        Pushes a light userdata onto the stack.
+        <br/><br/>
+        Userdata represent C&nbsp;values in CScript.
+        A <em>light userdata</em> represents a pointer, a <code>void*</code>.
+        It is a value (like a number): you do not create it and it is not
+        collected (as it was never created).
+        A light userdata is equal to "any" light userdata with the same
+        C&nbsp;address.
         </p>
 
         <!-- cs_push_array -->
         <hr><h3><a name="cs_push_array"><code>cs_push_array</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_array (cs_State *C);</pre>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void cs_push_array (cs_State *C, int size);</pre>
+        Creates a new empty array and pushes it on the stack.
+        Parameter <code>size</code> is a hint for how many elements the
+        array will have.
+        CScript may use these hints to preallocate memory for the new
+        array.
+        This preallocation may help performance when you know in advance how
+        many elements the array will have.
         </p>
 
         <!-- cs_push_table -->
         <hr><h3><a name="cs_push_table"><code>cs_push_table</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_table (cs_State *C);</pre>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void cs_push_table (cs_State *C, int size);</pre>
+        Creates a new empty table and pushes it on the stack.
+        Parameter <code>size</code> is a hint for how many elements the
+        table will have.
+        CScript may use these hints to preallocate memory for the new
+        table.
+        This preallocation may help performance when you know in advance how
+        many elements the table will have.
         </p>
 
         <!-- cs_push_thread -->
         <hr><h3><a name="cs_push_thread"><code>cs_push_thread</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +1, &ndash;]</span>
         <pre>int cs_push_thread (cs_State *C);</pre>
+        Pushes the thread represented by <code>C</code> onto the stack.
+        Returns 1 if this thread is the main thread of its state.
         </p>
 
         <!-- cs_push_instance -->
         <hr><h3><a name="cs_push_instance"><code>cs_push_instance</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_instance (cs_State *C);</pre>
+        <span class="apii">[-0, +1, <em>e</em>]</span>
+        <pre>void cs_push_instance (cs_State *C, int clsobj);</pre>
+        Creates a new instance from class object at index <code>clsobj</code>
+        and pushes it on top of the stack. <code>clsobj</code> must be a
+        valid index of the class object.
+        <br/>
+        This function may call <code>__call</code> metamethod if the class
+        implements it.
+        <br/>
+        (In which case the returned value might not necessarily be the
+        instance.)
         </p>
 
         <!-- cs_push_class -->
         <hr><h3><a name="cs_push_class"><code>cs_push_class</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_class (cs_State *C);</pre>
+        <span class="apii">[-nup, +1, <em>m</em>]</span>
+        <pre>void cs_push_class (cs_State *C,
+                    const cs_VMT *vmt,
+                    int abscls,
+                    int nup,
+                    const cs_Entry *list);</pre>
+        Creates a new class and pushes it on top of the stack.
+        <a href="#cs_VMT"><code>vmt</code></a> structure holds metamethod
+        entries that class should implement.
+        <code>abscls</code> is the absolute index to the <em>superclass</em>
+        the class is inheriting, if set to negative value (e.g. -1) the class
+        will not inherit and the value is ignored.
+        <code>nup</code> is the number of values on top of the stack
+        associated with the class methods in <code>list</code>.
+        <a href="#cs_Entry"><code>list</code></a> is the list of the class
+        methods; in cases where the class has a <em>superclass</em>
+        (<code>abscls</code> >= 0) and function name in the <code>list</code>
+        collides with the <em>superclass</em> method, then the
+        <em>superclass</em> method gets overwritten, meaning <code>list</code>
+        methods have priority.
+        <br/><br/>
+        Every method entry in the <code>list</code> with a non-NULL name must
+        have a C&nbsp;function associated with it.
         </p>
 
         <!-- cs_get_global -->
         <hr><h3><a name="cs_get_global"><code>cs_get_global</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_global (cs_State *C);</pre>
+        <pre>int cs_get_global (cs_State *C, const char *name);</pre>
+        Pushes onto the stack the value of the global <code>name</code>.
+        Returns the type of that value.
         </p>
 
         <!-- cs_get -->
         <hr><h3><a name="cs_get"><code>cs_get</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get (cs_State *C);</pre>
+        <span class="apii">[-1, +1, <em>e</em>]</span>
+        <pre>int cs_get (cs_State *C, int index);</pre>
+        Pushes on the stack the value <code>obj[k]</code>, where
+        <code>obj</code> is the value at the given index and <code>k</code>
+        is the value on top of the stack.
+        <br/><br/>
+        This function pops the key from the stack, pushing the resulting
+        value in its place.
+        As in CScript, this function may trigger a metamethod
+        for the "getidx" event (see <a href="#2.4">&sect;2.4</a>).
+        <br/><br/>
+        Returns the type of the pushed value.
         </p>
 
         <!-- cs_get_raw -->
         <hr><h3><a name="cs_get_raw"><code>cs_get_raw</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_raw (cs_State *C);</pre>
+        <span class="apii">[-1, +1, &ndash;]</span>
+        <pre>int cs_get_raw (cs_State *C, int index);</pre>
+        Similar to <a href="#cs_get"><code>cs_get</code></a>, but does a raw
+        access (i.e., without metamethods).
+        The value at <code>index</code> must be a table, array or instance.
         </p>
 
         <!-- cs_get_index -->
         <hr><h3><a name="cs_get_index"><code>cs_get_index</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_index (cs_State *C);</pre>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>int cs_get_index (cs_State *C, int arrobj, cs_Integer index);</pre>
+        Pushes onto the stack the value <code>a[n]</code>,
+        where <code>a</code> is the array at the given index <code>arrobj</code>.
+        <br/><br/>
+        Returns the type of the pushed value.
         </p>
 
         <!-- cs_get_field -->
         <hr><h3><a name="cs_get_field"><code>cs_get_field</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_field (cs_State *C);</pre>
+        <pre>int cs_get_field (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_get_fieldstr -->
         <hr><h3><a name="cs_get_fieldstr"><code>cs_get_fieldstr</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_fieldstr (cs_State *C);</pre>
+        <pre>int cs_get_fieldstr (cs_State *C, int index, const char *field);</pre>
         </p>
 
         <!-- cs_get_fieldptr -->
         <hr><h3><a name="cs_get_fieldptr"><code>cs_get_fieldptr</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_fieldptr (cs_State *C);</pre>
+        <pre>int cs_get_fieldptr (cs_State *C, int index, const void *field);</pre>
         </p>
 
         <!-- cs_get_fieldint -->
         <hr><h3><a name="cs_get_fieldint"><code>cs_get_fieldint</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_fieldint (cs_State *C);</pre>
+        <pre>int cs_get_fieldint (cs_State *C, int index, cs_Integer field);</pre>
         </p>
 
         <!-- cs_get_fieldflt -->
         <hr><h3><a name="cs_get_fieldflt"><code>cs_get_fieldflt</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_fieldflt (cs_State *C);</pre>
+        <pre>int cs_get_fieldflt (cs_State *C, int index, cs_Number field);</pre>
         </p>
 
         <!-- cs_get_class -->
         <hr><h3><a name="cs_get_class"><code>cs_get_class</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_class (cs_State *C);</pre>
+        <pre>int cs_get_class (cs_State *C, int insobj);</pre>
         </p>
 
         <!-- cs_get_method -->
         <hr><h3><a name="cs_get_method"><code>cs_get_method</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_method (cs_State *C);</pre>
+        <pre>int cs_get_method (cs_State *C, int insobj);</pre>
         </p>
 
         <!-- cs_get_metamethod -->
         <hr><h3><a name="cs_get_metamethod"><code>cs_get_metamethod</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_metamethod (cs_State *C);</pre>
+        <pre>int cs_get_metamethod (cs_State *C, int index, cs_MM mm);</pre>
         </p>
 
         <!-- cs_newuserdata -->
         <hr><h3><a name="cs_newuserdata"><code>cs_newuserdata</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void *cs_newuserdata (cs_State *C);</pre>
+        <pre>void *cs_newuserdata (cs_State *C, size_t size, int nuv);</pre>
         </p>
 
         <!-- cs_get_uservalue -->
         <hr><h3><a name="cs_get_uservalue"><code>cs_get_uservalue</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_uservalue (cs_State *C);</pre>
+        <pre>int cs_get_uservalue (cs_State *C, int udobj, int index);</pre>
         </p>
 
         <!-- cs_set_global -->
         <hr><h3><a name="cs_set_global"><code>cs_set_global</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_global (cs_State *C);</pre>
+        <pre>void cs_set_global (cs_State *C, const char *name);</pre>
         </p>
 
         <!-- cs_set -->
         <hr><h3><a name="cs_set"><code>cs_set</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set (cs_State *C);</pre>
+        <pre>void cs_set (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_set_raw -->
         <hr><h3><a name="cs_set_raw"><code>cs_set_raw</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_raw (cs_State *C);</pre>
+        <pre>void cs_set_raw (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_set_index -->
         <hr><h3><a name="cs_set_index"><code>cs_set_index</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_index (cs_State *C);</pre>
+        <pre>void cs_set_index (cs_State *C, int arrobj, cs_Integer index);</pre>
         </p>
 
         <!-- cs_set_field -->
         <hr><h3><a name="cs_set_field"><code>cs_set_field</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_field (cs_State *C);</pre>
+        <pre>void cs_set_field (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_set_fieldstr -->
         <hr><h3><a name="cs_set_fieldstr"><code>cs_set_fieldstr</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_fieldstr (cs_State *C);</pre>
+        <pre>void cs_set_fieldstr (cs_State *C, int index, const char *field);</pre>
         </p>
 
         <!-- cs_set_fieldptr -->
         <hr><h3><a name="cs_set_fieldptr"><code>cs_set_fieldptr</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_fieldptr (cs_State *C);</pre>
+        <pre>void cs_set_fieldptr (cs_State *C, int index, const void *field);</pre>
         </p>
 
         <!-- cs_set_fieldint -->
         <hr><h3><a name="cs_set_fieldint"><code>cs_set_fieldint</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_fieldint (cs_State *C);</pre>
+        <pre>void cs_set_fieldint (cs_State *C, int index, cs_Integer field);</pre>
         </p>
 
         <!-- cs_set_fieldflt -->
         <hr><h3><a name="cs_set_fieldflt"><code>cs_set_fieldflt</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_fieldflt (cs_State *C);</pre>
+        <pre>void cs_set_fieldflt (cs_State *C, int index, cs_Number field);</pre>
         </p>
 
         <!-- cs_set_uservmt -->
         <hr><h3><a name="cs_set_uservmt"><code>cs_set_uservmt</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_uservmt (cs_State *C);</pre>
+        <pre>void cs_set_uservmt (cs_State *C, int index, const cs_VMT *vmt);</pre>
         </p>
 
         <!-- cs_set_uservalue -->
         <hr><h3><a name="cs_set_uservalue"><code>cs_set_uservalue</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_set_uservalue (cs_State *C);</pre>
+        <pre>int cs_set_uservalue (cs_State *C, int index, int n);</pre>
         </p>
 
         <!-- cs_set_usermm -->
         <hr><h3><a name="cs_set_usermm"><code>cs_set_usermm</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_set_usermm (cs_State *C);</pre>
+        <pre>void cs_set_usermm (cs_State *C, int index, cs_MM mm);</pre>
         </p>
 
         <!-- cs_status -->
@@ -1625,112 +1894,115 @@
         <hr><h3><a name="cs_call"><code>cs_call</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_call (cs_State *C);</pre>
+        <pre>void cs_call (cs_State *C, int nargs, int nresults);</pre>
         </p>
 
         <!-- cs_pcall -->
         <hr><h3><a name="cs_pcall"><code>cs_pcall</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_pcall (cs_State *C);</pre>
+        <pre>int cs_pcall (cs_State *C, int nargs, int nresults, int errfunc);</pre>
         </p>
 
         <!-- cs_load -->
         <hr><h3><a name="cs_load"><code>cs_load</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_load (cs_State *C);</pre>
+        <pre>int cs_load (cs_State *C,
+             cs_Reader reader,
+             void *userdata,
+             const char *source);</pre>
         </p>
 
         <!-- cs_gc -->
         <hr><h3><a name="cs_gc"><code>cs_gc</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_gc (cs_State *C);</pre>
+        <pre>int cs_gc (cs_State *C, int option, ...);</pre>
         </p>
 
         <!-- cs_setwarnf -->
         <hr><h3><a name="cs_setwarnf"><code>cs_setwarnf</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_setwarnf (cs_State *C);</pre>
+        <pre>void cs_setwarnf (cs_State *C, cs_WarnFunction fwarn, void *ud);</pre>
         </p>
 
         <!-- cs_warning -->
         <hr><h3><a name="cs_warning"><code>cs_warning</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_warning (cs_State *C);</pre>
+        <pre>void cs_warning (cs_State *C, const char *msg, int cont);</pre>
         </p>
 
         <!-- cs_hasvmt -->
         <hr><h3><a name="cs_hasvmt"><code>cs_hasvmt</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_hasvmt (cs_State *C);</pre>
+        <pre>int cs_hasvmt (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_hasmetamethod -->
         <hr><h3><a name="cs_hasmetamethod"><code>cs_hasmetamethod</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_hasmetamethod (cs_State *C);</pre>
+        <pre>int cs_hasmetamethod (cs_State *C, int index, cs_MM mm);</pre>
         </p>
 
         <!-- cs_len -->
         <hr><h3><a name="cs_len"><code>cs_len</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_Unsigned cs_len (cs_State *C);</pre>
+        <pre>cs_Unsigned cs_len (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_next -->
         <hr><h3><a name="cs_next"><code>cs_next</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_next (cs_State *C);</pre>
+        <pre>int cs_next (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_concat -->
         <hr><h3><a name="cs_concat"><code>cs_concat</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_concat (cs_State *C);</pre>
+        <pre>void cs_concat (cs_State *C,  int n);</pre>
         </p>
 
         <!-- cs_stringtonumber -->
         <hr><h3><a name="cs_stringtonumber"><code>cs_stringtonumber</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>size_t cs_stringtonumber (cs_State *C);</pre>
+        <pre>size_t cs_stringtonumber (cs_State *C, const char *s, int *f);</pre>
         </p>
 
         <!-- cs_getallocf -->
         <hr><h3><a name="cs_getallocf"><code>cs_getallocf</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_Alloc cs_getallocf (cs_State *C);</pre>
+        <pre>cs_Alloc cs_getallocf (cs_State *C, void **ud);</pre>
         </p>
 
         <!-- cs_setallocf -->
         <hr><h3><a name="cs_setallocf"><code>cs_setallocf</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_setallocf (cs_State *C);</pre>
+        <pre>void cs_setallocf (cs_State *C, cs_Alloc f, void *ud);</pre>
         </p>
 
         <!-- cs_toclose -->
         <hr><h3><a name="cs_toclose"><code>cs_toclose</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_toclose (cs_State *C);</pre>
+        <pre>void cs_toclose (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_closeslot -->
         <hr><h3><a name="cs_closeslot"><code>cs_closeslot</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_closeslot (cs_State *C);</pre>
+        <pre>void cs_closeslot (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_getfreereg -->
@@ -1758,119 +2030,119 @@
         <hr><h3><a name="cs_to_number"><code>cs_to_number</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_Number cs_to_number (cs_State *C);</pre>
+        <pre>cs_Number cs_to_number (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_to_integer -->
         <hr><h3><a name="cs_to_integer"><code>cs_to_integer</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_Integer cs_to_integer (cs_State *C);</pre>
+        <pre>cs_Integer cs_to_integer (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_pop -->
         <hr><h3><a name="cs_pop"><code>cs_pop</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_pop (cs_State *C);</pre>
+        <pre>void cs_pop (cs_State *C, int n);</pre>
         </p>
 
         <!-- cs_push_cfunction -->
         <hr><h3><a name="cs_push_cfunction"><code>cs_push_cfunction</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_push_cfunction (cs_State *C);</pre>
+        <pre>void cs_push_cfunction (cs_State *C, cs_CFunction f);</pre>
         </p>
 
         <!-- cs_register -->
         <hr><h3><a name="cs_register"><code>cs_register</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_register (cs_State *C);</pre>
+        <pre>void cs_register (cs_State *C, const char *name, cs_CFunction f);</pre>
         </p>
 
         <!-- cs_is_cfunction -->
         <hr><h3><a name="cs_is_cfunction"><code>cs_is_cfunction</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_cfunction (cs_State *C);</pre>
+        <pre>int cs_is_cfunction (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_array -->
         <hr><h3><a name="cs_is_array"><code>cs_is_array</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_array (cs_State *C);</pre>
+        <pre>int cs_is_array (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_table -->
         <hr><h3><a name="cs_is_table"><code>cs_is_table</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_table (cs_State *C);</pre>
+        <pre>int cs_is_table (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_class -->
         <hr><h3><a name="cs_is_class"><code>cs_is_class</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_class (cs_State *C);</pre>
+        <pre>int cs_is_class (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_instance -->
         <hr><h3><a name="cs_is_instance"><code>cs_is_instance</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_instance (cs_State *C);</pre>
+        <pre>int cs_is_instance (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_lightuserdata -->
         <hr><h3><a name="cs_is_lightuserdata"><code>cs_is_lightuserdata</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_lightuserdata (cs_State *C);</pre>
+        <pre>int cs_is_lightuserdata (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_nil -->
         <hr><h3><a name="cs_is_nil"><code>cs_is_nil</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_nil (cs_State *C);</pre>
+        <pre>int cs_is_nil (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_boolean -->
         <hr><h3><a name="cs_is_boolean"><code>cs_is_boolean</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_boolean (cs_State *C);</pre>
+        <pre>int cs_is_boolean (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_thread -->
         <hr><h3><a name="cs_is_thread"><code>cs_is_thread</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_thread (cs_State *C);</pre>
+        <pre>int cs_is_thread (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_none -->
         <hr><h3><a name="cs_is_none"><code>cs_is_none</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_none (cs_State *C);</pre>
+        <pre>int cs_is_none (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_is_noneornil -->
         <hr><h3><a name="cs_is_noneornil"><code>cs_is_noneornil</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_noneornil (cs_State *C);</pre>
+        <pre>int cs_is_noneornil (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_push_literal -->
         <hr><h3><a name="cs_push_literal"><code>cs_push_literal</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_push_literal (cs_State *C);</pre>
+        <pre>const char *cs_push_literal (cs_State *C, const char *s);</pre>
         </p>
 
         <!-- cs_push_globaltable -->
@@ -1884,70 +2156,70 @@
         <hr><h3><a name="cs_to_string"><code>cs_to_string</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_to_string (cs_State *C);</pre>
+        <pre>const char *cs_to_string (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_insert -->
         <hr><h3><a name="cs_insert"><code>cs_insert</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_insert (cs_State *C);</pre>
+        <pre>void cs_insert (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_remove -->
         <hr><h3><a name="cs_remove"><code>cs_remove</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_remove (cs_State *C);</pre>
+        <pre>void cs_remove (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_replace -->
         <hr><h3><a name="cs_replace"><code>cs_replace</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_replace (cs_State *C);</pre>
+        <pre>void cs_replace (cs_State *C, int index);</pre>
         </p>
 
         <!-- cs_getstack -->
         <hr><h3><a name="cs_getstack"><code>cs_getstack</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_getstack (cs_State *C);</pre>
+        <pre>int cs_getstack (cs_State *C, int level, cs_Debug *ar);</pre>
         </p>
 
         <!-- cs_getinfo -->
         <hr><h3><a name="cs_getinfo"><code>cs_getinfo</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_getinfo (cs_State *C);</pre>
+        <pre>int cs_getinfo (cs_State *C, const char *what, cs_Debug *ar);</pre>
         </p>
 
         <!-- cs_getlocal -->
         <hr><h3><a name="cs_getlocal"><code>cs_getlocal</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_getlocal (cs_State *C);</pre>
+        <pre>const char *cs_getlocal (cs_State *C, const cs_Debug *ar, int n);</pre>
         </p>
 
         <!-- cs_setlocal -->
         <hr><h3><a name="cs_setlocal"><code>cs_setlocal</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_setlocal (cs_State *C);</pre>
+        <pre>const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n);</pre>
         </p>
 
         <!-- cs_getupvalue -->
         <hr><h3><a name="cs_getupvalue"><code>cs_getupvalue</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_getupvalue (cs_State *C);</pre>
+        <pre>const char *cs_getupvalue (cs_State *C, int index, int n);</pre>
         </p>
 
         <!-- cs_setupvalue -->
         <hr><h3><a name="cs_setupvalue"><code>cs_setupvalue</code></a></h3>
         <p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>const char *cs_setupvalue (cs_State *C);</pre>
+        <pre>const char *cs_setupvalue (cs_State *C, int index, int n);</pre>
         </p>
 
 

@@ -156,10 +156,10 @@ const char *csD_findlocal(cs_State *C, CallFrame *cf, int n, SPtr *pos) {
 }
 
 
-CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *di, int n) {
+CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *ar, int n) {
     const char *name;
     cs_lock(C);
-    if (di == NULL) {
+    if (ar == NULL) {
         if (!ttisCSclosure(s2v(C->sp.p - 1)))
             name = NULL;
         else
@@ -167,7 +167,7 @@ CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *di, int n) {
     }
     else {
         SPtr pos = NULL;
-        name = csD_findlocal(C, di->cf, n, &pos);
+        name = csD_findlocal(C, ar->cf, n, &pos);
         if (name) { /* found ? */
             setobjs2s(C, C->sp.p, pos);
             api_inctop(C);
@@ -192,28 +192,28 @@ CS_API const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n) {
 }
 
 
-static void getfuncinfo(Closure *cl, cs_Debug *di) {
+static void getfuncinfo(Closure *cl, cs_Debug *ar) {
     if (!CScriptClosure(cl)) {
-        di->source = "[C]";
-        di->srclen = SLL("[C]");
-        di->defline = -1;
-        di->lastdefline = -1;
-        di->what = "C";
+        ar->source = "[C]";
+        ar->srclen = SLL("[C]");
+        ar->defline = -1;
+        ar->lastdefline = -1;
+        ar->what = "C";
     } else {
         const Proto *p = cl->cs.p;
         if (p->source) { /* have source? */
-          di->source = getstr(p->source);
-          di->srclen = getstrlen(p->source);
+          ar->source = getstr(p->source);
+          ar->srclen = getstrlen(p->source);
         }
         else {
-          di->source = "?";
-          di->srclen = SLL("?");
+          ar->source = "?";
+          ar->srclen = SLL("?");
         }
-        di->defline = p->defline;
-        di->lastdefline = p->deflastline;
-        di->what = (di->lastdefline == 0) ? "main" : "CScript";
+        ar->defline = p->defline;
+        ar->lastdefline = p->deflastline;
+        ar->what = (ar->lastdefline == 0) ? "main" : "CScript";
     }
-    csS_sourceid(di->shortsrc, di->source, di->srclen);
+    csS_sourceid(ar->shortsrc, ar->source, ar->srclen);
 }
 
 
@@ -280,34 +280,34 @@ static const char *getfuncname(cs_State *C, CallFrame *cf, const char **name) {
 ** returns 0.
 */
 static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
-                      CallFrame *cf, cs_Debug *di) {
+                      CallFrame *cf, cs_Debug *ar) {
     int status = 1;
     for (unsigned char opt = *options++; opt != '\0'; opt = *options++) {
         switch (opt) {
             case 'n': {
-                di->namewhat = getfuncname(C, cf, &di->name);
-                if (di->namewhat == NULL) { /* not found ? */
-                    di->namewhat = "";
-                    di->name = NULL;
+                ar->namewhat = getfuncname(C, cf, &ar->name);
+                if (ar->namewhat == NULL) { /* not found ? */
+                    ar->namewhat = "";
+                    ar->name = NULL;
                 }
                 break;
             }
             case 's': {
-                getfuncinfo(cl, di);
+                getfuncinfo(cl, ar);
                 break;
             }
             case 'l': {
-                di->currline = (cf && isCScript(cf) ? getcurrentline(cf) : -1);
+                ar->currline = (cf && isCScript(cf) ? getcurrentline(cf) : -1);
                 break;
             }
             case 'u': {
-                di->nupvals = (cl ? cl->c.nupvalues : 0);
+                ar->nupvals = (cl ? cl->c.nupvalues : 0);
                 if (isCScript(cf)) {
-                    di->nparams = cl->cs.p->arity;
-                    di->isvararg = cl->cs.p->isvararg;
+                    ar->nparams = cl->cs.p->arity;
+                    ar->isvararg = cl->cs.p->isvararg;
                 } else {
-                    di->nparams = 0;
-                    di->isvararg = 1;
+                    ar->nparams = 0;
+                    ar->isvararg = 1;
                 }
                 break;
             }
@@ -338,7 +338,7 @@ static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
 ** This function returns 0 on error (for instance if any option in 'options'
 ** is invalid).
 */
-CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *di) {
+CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
     CallFrame *cf;
     Closure *cl;
     TValue *func;
@@ -352,12 +352,12 @@ CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *di) {
         options++; /* skip '>' */
         C->sp.p--;
     } else {
-        cf = di->cf;
+        cf = ar->cf;
         func = s2v(cf->func.p);
         cs_assert(ttisfunction(func));
     }
     cl = (ttisCSclosure(func) ? clval(func) : NULL);
-    status = auxgetinfo(C, options, cl, cf, di);
+    status = auxgetinfo(C, options, cl, cf, ar);
     if (strchr(options, 'f')) {
         setobj2s(C, C->sp.p, func);
         api_inctop(C);

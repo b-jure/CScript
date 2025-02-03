@@ -605,9 +605,15 @@ const char *csS_pushvfstring(cs_State *C, const char *fmt, va_list argp) {
             buffaddnum(&buff, &nv);
             break;
         }
-        case 'N': { /* 'cs_Number' */
+        case 'f': { /* 'cs_Number' */
             setfval(&nv, va_arg(argp, cs_Number));
             buffaddnum(&buff, &nv);
+            break;
+        }
+        case 'U': {  /* a 'long' as a UTF-8 sequence */
+            char bf[UTF8BUFFSZ];
+            int len = csS_utf8esc(bf, va_arg(argp, long));
+            buffaddstring(&buff, bf + UTF8BUFFSZ - len, len);
             break;
         }
         case 's': { /* 'string' */

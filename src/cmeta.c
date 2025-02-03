@@ -14,7 +14,7 @@
 #include "cstring.h"
 #include "cdebug.h"
 #include "cstate.h"
-#include "chashtable.h"
+#include "ctable.h"
 #include "cobject.h"
 #include "cgc.h"
 #include "cvm.h"

@@ -16,7 +16,7 @@
 #include "cdebug.h"
 #include "cprotected.h"
 #include "cstate.h"
-#include "chashtable.h"
+#include "ctable.h"
 #include "cstring.h"
 #include "creader.h"
 

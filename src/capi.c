@@ -18,7 +18,7 @@
 #include "cscript.h"
 #include "csconf.h"
 #include "climits.h"
-#include "chashtable.h"
+#include "ctable.h"
 #include "cobject.h"
 #include "cscript.h"
 #include "creader.h"
@@ -710,10 +710,10 @@ CS_API void cs_push_array(cs_State *C, int sz) {
 
 /* Push hashtable on top of the stack. */
 CS_API void cs_push_table(cs_State *C, int sz) {
-    HTable *ht;
+    Table *ht;
     cs_lock(C);
     ht = csH_new(C);
-    sethtval2s(C, C->sp.p, ht);
+    settval2s(C, C->sp.p, ht);
     api_inctop(C);
     if (sz > 0)
         csH_resize(C, ht, sz);
@@ -768,7 +768,7 @@ c_sinline void auxsetvmt(TValue *dest, const cs_VMT *vmt) {
       csG_barrierback(C, obj2gco(ht), v); }
 
 
-c_sinline void auxrawsetstr(cs_State *C, HTable *ht, const char *str,
+c_sinline void auxrawsetstr(cs_State *C, Table *ht, const char *str,
                              const TValue *v) {
     const TValue *slot;
     OString *s = csS_new(C, str);
@@ -849,7 +849,7 @@ c_sinline int finishrawgetfield(cs_State *C, const TValue *val) {
 }
 
 
-c_sinline int auxrawgetfieldstr(cs_State *C, HTable *ht, const char *k) {
+c_sinline int auxrawgetfieldstr(cs_State *C, Table *ht, const char *k) {
     const TValue *slot;
     OString *str = csS_new(C, k);
     if (fastget(C, ht, str, slot, csH_getstr)) {
@@ -870,7 +870,7 @@ CS_API int cs_get_global(cs_State *C, const char *name) {
     TValue *gt;
     cs_lock(C);
     gt = getGtable(C);
-    return auxrawgetfieldstr(C, htval(gt), name);
+    return auxrawgetfieldstr(C, tval(gt), name);
 }
 
 
@@ -918,11 +918,11 @@ CS_API int cs_get_index(cs_State *C, int arrobj, cs_Integer index) {
 }
 
 
-c_sinline HTable *gettable(cs_State *C, int obj) {
+c_sinline Table *gettable(cs_State *C, int obj) {
     const TValue *o = index2value(C, obj);
     switch (ttypetag(o)) {
         case CS_VINSTANCE: return insval(o)->fields;
-        case CS_VHTABLE: return htval(o); 
+        case CS_VTABLE: return tval(o); 
         default:  {
             api_check(C, 0, "expect instance or hashtable");
             return NULL;
@@ -932,7 +932,7 @@ c_sinline HTable *gettable(cs_State *C, int obj) {
 
 
 CS_API int cs_get_field(cs_State *C, int obj) {
-    HTable *ht;
+    Table *ht;
     const TValue *val;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
@@ -945,7 +945,7 @@ CS_API int cs_get_field(cs_State *C, int obj) {
 
 
 CS_API int cs_get_fieldstr(cs_State *C, int obj, const char *field) {
-    HTable *ht;
+    Table *ht;
     cs_lock(C);
     ht = gettable(C, obj);
     return auxrawgetfieldstr(C, ht, field);
@@ -953,7 +953,7 @@ CS_API int cs_get_fieldstr(cs_State *C, int obj, const char *field) {
 
 
 CS_API int cs_get_fieldptr(cs_State *C, int obj, const void *field) {
-    HTable *ht;
+    Table *ht;
     TValue aux;
     cs_lock(C);
     ht = gettable(C, obj);
@@ -963,7 +963,7 @@ CS_API int cs_get_fieldptr(cs_State *C, int obj, const void *field) {
 
 
 CS_API int cs_get_fieldint(cs_State *C, int obj, cs_Integer i) {
-    HTable *ht;
+    Table *ht;
     cs_lock(C);
     ht = gettable(C, obj);
     return finishrawgetfield(C, csH_getint(ht, i));
@@ -971,7 +971,7 @@ CS_API int cs_get_fieldint(cs_State *C, int obj, cs_Integer i) {
 
 
 CS_API int cs_get_fieldflt(cs_State *C, int obj, cs_Number n) {
-    HTable *ht;
+    Table *ht;
     TValue aux;
     cs_lock(C);
     ht = gettable(C, obj);
@@ -1110,7 +1110,7 @@ CS_API void cs_set_global(cs_State *C, const char *name) {
     cs_lock(C);
     api_checknelems(C, 1); /* value */
     gt = getGtable(C);
-    auxrawsetstr(C, htval(gt), name, s2v(C->sp.p - 1));
+    auxrawsetstr(C, tval(gt), name, s2v(C->sp.p - 1));
 }
 
 
@@ -1151,7 +1151,7 @@ CS_API void cs_set_index(cs_State *C, int arrobj, cs_Integer index) {
 
 
 c_sinline void auxrawsetfield(cs_State *C, int obj, TValue *key, int n) {
-    HTable *ht;
+    Table *ht;
     cs_lock(C);
     api_checknelems(C, n);
     ht = gettable(C, obj);
@@ -1168,7 +1168,7 @@ CS_API void cs_set_field(cs_State *C, int obj) {
 
 
 CS_API void cs_set_fieldstr(cs_State *C, int obj, const char *field) {
-    HTable *ht;
+    Table *ht;
     cs_lock(C);
     api_checknelems(C, 1);
     ht = gettable(C, obj);
@@ -1474,9 +1474,9 @@ CS_API cs_Unsigned cs_len(cs_State *C, int index) {
     switch (ttypetag(o)) {
         case CS_VSHRSTR: return strval(o)->shrlen;
         case CS_VLNGSTR: return strval(o)->u.lnglen;
-        case CS_VCLASS: return csH_len(htval(o));
+        case CS_VCLASS: return csH_len(tval(o));
         case CS_VINSTANCE: return csH_len(insval(o)->fields);
-        case CS_VHTABLE: return csH_len(htval(o));
+        case CS_VTABLE: return csH_len(tval(o));
         case CS_VARRAY: return arrval(o)->n;
         case CS_VUSERDATA: return uval(o)->size;
         default: return 0;
@@ -1485,7 +1485,7 @@ CS_API cs_Unsigned cs_len(cs_State *C, int index) {
 
 
 CS_API int cs_next(cs_State *C, int obj) {
-    HTable *ht;
+    Table *ht;
     int more;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
