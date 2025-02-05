@@ -94,7 +94,7 @@ typedef struct TValue {
 */
 #define checkliveness(C,obj) \
         ((void)C, cs_assert(!iscollectable(obj) || \
-        (righttt(obj) && (C == NULL || !isdead(G_(C), gcoval(obj))))))
+        (righttt(obj) && (C == NULL || !isdead(G(C), gcoval(obj))))))
 
 
 /* Macros to set values */

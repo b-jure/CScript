@@ -31,7 +31,7 @@ c_noret csPR_throw(cs_State *C, int errcode) {
         C->errjmp->status = errcode; /* set status */
         CSI_THROW(C, C->errjmp); /* jump to it */
     } else { /* thread has no error handler */
-        GState *gs = G_(C);
+        GState *gs = G(C);
         csT_resetthread(C, errcode); /* close all */
         if (gs->mainthread->errjmp) { /* mainthread has error handler? */
             /* copy over error object */

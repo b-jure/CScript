@@ -61,7 +61,7 @@ static void preinit_thread(cs_State *C, GState *gs) {
     C->nCcalls = 0;
     C->gclist = NULL;
     C->thwouv = C; /* if ('C->thwouv' == 'C') then no upvalues */
-    G_(C) = gs;
+    G(C) = gs;
     C->errjmp = NULL;
     C->stack.p = C->sp.p = C->stackend.p = NULL;
     C->cf = NULL;
@@ -77,7 +77,7 @@ static void preinit_thread(cs_State *C, GState *gs) {
 */
 static void init_stack(cs_State *C1, cs_State *C) {
     CallFrame *cf;
-    cs_assert(!statefullybuilt(G_(C1)) == (C1 == C));
+    cs_assert(!statefullybuilt(G(C1)) == (C1 == C));
     C1->stack.p = csM_newarray(C, INIT_STACKSIZE + EXTRA_STACK, SValue);
     C1->tbclist.p = C1->stack.p;
     for (int i = 0; i < INIT_STACKSIZE + EXTRA_STACK; i++)
@@ -114,7 +114,7 @@ static void init_registry(cs_State *C, GState *gs) {
 ** errors.
 */
 static void f_newstate(cs_State *C, void *ud) {
-    GState *gs = G_(C);
+    GState *gs = G(C);
     UNUSED(ud);
     init_stack(C, C);
     init_registry(C, gs);
@@ -153,7 +153,7 @@ static void free_stack(cs_State *C) {
 
 /* free global state virtual method tables */
 static void free_vmt(cs_State *C) {
-    GState *gs = G_(C);
+    GState *gs = G(C);
     cs_assert(C == gs->mainthread);
     for (int i = 0; i < CS_NUM_TYPES; i++)
         if (gs->vmt[i])
@@ -162,8 +162,8 @@ static void free_vmt(cs_State *C) {
 
 
 static void freestate(cs_State *C) {
-    GState *gs = G_(C);
-    cs_assert(C == G_(C)->mainthread);
+    GState *gs = G(C);
+    cs_assert(C == G(C)->mainthread);
     if (!statefullybuilt(gs)) { /* partially built state? */
         csG_freeallobjects(C);
     } else { /* freeing fully built state */
@@ -238,7 +238,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
 /* free state (global state + mainthread) */
 CS_API void cs_close(cs_State *C) {
     cs_lock(C);
-    cs_State *mt = G_(C)->mainthread;
+    cs_State *mt = G(C)->mainthread;
     freestate(mt);
     /* user shall handle unlocking he defined himself (if any) */
 }
@@ -248,7 +248,7 @@ CS_API void cs_close(cs_State *C) {
 ** Create new thread state.
 */
 CS_API cs_State *cs_newthread(cs_State *C) {
-    GState *gs = G_(C);
+    GState *gs = G(C);
     cs_State *C1;
     GCObject *o;
     cs_lock(C);
@@ -303,7 +303,7 @@ CS_API int cs_resetthread(cs_State *C) {
 void csT_seterrorobj(cs_State *C, int errcode, SPtr oldtop) {
     switch (errcode) {
         case CS_ERRMEM: { /* memory error? */
-            setstrval2s(C, oldtop, G_(C)->memerror);
+            setstrval2s(C, oldtop, G(C)->memerror);
             break;
         }
         case CS_ERRERROR: { /* error while handling error? */
@@ -373,7 +373,7 @@ static void rel2sptr(cs_State *C) {
 /* reallocate stack to new size */
 int csT_reallocstack(cs_State *C, int size, int raiseerr) {
     SPtr newstack;
-    GState *gs = G_(C);
+    GState *gs = G(C);
     int old_stopem = gs->gcstopem;
     int osz = stacksize(C);
     cs_assert(size <= CSI_MAXSTACK || size == OVERFLOWSTACKSIZE);
@@ -485,9 +485,9 @@ void csT_incCstack(cs_State *C) {
 
 
 void csT_warning(cs_State *C, const char *msg, int cont) {
-    cs_WarnFunction fwarn = G_(C)->fwarn;
+    cs_WarnFunction fwarn = G(C)->fwarn;
     if (fwarn)
-        fwarn(G_(C)->ud_warn, msg, cont);
+        fwarn(G(C)->ud_warn, msg, cont);
 }
 
 

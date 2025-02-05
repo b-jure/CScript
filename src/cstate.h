@@ -219,10 +219,10 @@ struct cs_State {
 
 
 /* thread global state */
-#define G_(C)       (C)->gstate
+#define G(C)        (C)->gstate
 
 /* check if global state is fully built */
-#define statefullybuilt(gs)          ttisnil(&(gs)->nil)
+#define statefullybuilt(gs)     ttisnil(&(gs)->nil)
 
 /* check if thread is in 'thwouv' (Threads-With-Open-UpValues) list */
 #define isinthwouv(C)           ((C)->thwouv != (C))
@@ -235,7 +235,7 @@ struct cs_State {
 ** part of the registry.
 */
 #define getGtable(C) \
-	(&arrval(&G_(C)->c_registry)->b[CS_RINDEX_GLOBALS])
+	(&arrval(&G(C)->c_registry)->b[CS_RINDEX_GLOBALS])
 
 
 

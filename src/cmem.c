@@ -48,7 +48,7 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
 
 
 c_sinline void *tryagain(cs_State *C, void *ptr, size_t osz, size_t nsz) {
-    GState *gs = G_(C);
+    GState *gs = G(C);
     if (cantryagain(gs)) {
         csG_full(C, 1); /* try to reclaim some memory... */
         return callfalloc(gs, ptr, osz, nsz); /* ...and try again */
@@ -58,7 +58,7 @@ c_sinline void *tryagain(cs_State *C, void *ptr, size_t osz, size_t nsz) {
 
 
 void *csM_realloc_(cs_State *C, void *ptr, size_t osz, size_t nsz) {
-    GState *gs = G_(C);
+    GState *gs = G(C);
     void *block;
     cs_assert((osz == 0) == (ptr == NULL));
     block = firsttry(gs, ptr, osz, nsz);
@@ -85,7 +85,7 @@ void *csM_malloc_(cs_State *C, size_t size, int tag) {
     if (size == 0) {
         return NULL;
     } else {
-        GState *gs = G_(C);
+        GState *gs = G(C);
         void *block = firsttry(gs, NULL, tag, size);
         if (c_unlikely(block == NULL)) {
             block = tryagain(C, NULL, tag, size);
@@ -140,7 +140,7 @@ c_noret csM_toobig(cs_State *C) {
 
 
 void csM_free_(cs_State *C, void *ptr, size_t osz) {
-    GState *gs = G_(C);
+    GState *gs = G(C);
     cs_assert((osz == 0) == (ptr == NULL));
     callfalloc(gs, ptr, osz, 0);
     gs->gcdebt -= osz;

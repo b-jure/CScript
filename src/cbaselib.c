@@ -42,14 +42,23 @@ static int csB_assert(cs_State *C) {
 }
 
 
+static int pushmode(cs_State *C, int oldmode) {
+    if (oldmode == -1)
+        csL_push_fail(C);
+    else
+        cs_push_string(C, "incremental");
+    return 1;
+}
+
+
 /* check if 'optnum' for 'cs_gc' was valid */
 #define checkres(res)   { if (res == -1) break; }
 
 static int csB_gc(cs_State *C) {
     static const char *const opts[] = {"stop", "restart", "collect", "count",
-        "step", "setpause", "setstepmul", "isrunning", NULL};
+        "step", "isrunning", "incremental", NULL};
     static const int numopts[] = {CS_GCSTOP, CS_GCRESTART, CS_GCCOLLECT,
-        CS_GCCOUNT, CS_GCSTEP, CS_GCSETPAUSE, CS_GCSETSTEPMUL, CS_GCISRUNNING};
+        CS_GCCOUNT, CS_GCSTEP, CS_GCISRUNNING, CS_GCINC};
     int optnum = numopts[csL_check_option(C, 0, "collect", opts)];
     switch (optnum) {
         case CS_GCCOUNT: {
@@ -66,18 +75,17 @@ static int csB_gc(cs_State *C) {
             cs_push_bool(C, completecycle);
             return 1;
         }
-        case CS_GCSETPAUSE: case CS_GCSETSTEPMUL: {
-            int arg = csL_opt_integer(C, 1, 0);
-            int prev = cs_gc(C, optnum, arg);
-            checkres(prev);
-            cs_push_integer(C, prev);
-            return 1;
-        }
         case CS_GCISRUNNING: {
             int running = cs_gc(C, optnum);
             checkres(running);
             cs_push_bool(C, running);
             return 1;
+        }
+        case CS_GCINC: {
+            int pause = (int)csL_opt_integer(C, 1, 0);
+            int stepmul = (int)csL_opt_integer(C, 2, 0);
+            int stepsize = (int)csL_opt_integer(C, 3, 0);
+            return pushmode(C, cs_gc(C, optnum, pause, stepmul, stepsize));
         }
         default: {
             int res = cs_gc(C, optnum);

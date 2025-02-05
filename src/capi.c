@@ -38,26 +38,26 @@
 #define isupvalue(i)		((i) < CS_REGISTRYINDEX)
 
 /* test for valid index */
-#define isvalid(C,o)           (!ttisnil(o) || (o) != &G_(C)->nil)
+#define isvalid(C,o)           (!ttisnil(o) || (o) != &G(C)->nil)
 
 
 /* 
 ** Convert index to a pointer to its value.
 ** Invalid indices (using upvalue index for CScript functions) return
-** special nil value `&G_(C)->nil`.
+** special nil value `&G(C)->nil`.
 */
 static TValue *index2value(const cs_State *C, int index) {
     CallFrame *cf = C->cf;
     if (index >= 0) { /* absolute index? */
         SPtr o = cf->func.p + index + 1;
         api_check(C, index < C->sp.p - (cf->func.p + 1), "index too large");
-        if (o >= C->sp.p) return &G_(C)->nil;
+        if (o >= C->sp.p) return &G(C)->nil;
         else return s2v(o);
     } else if (!ispseudo(index)) { /* negative index? */
         api_check(C, -index <= C->sp.p - cf->func.p, "index too small");
         return s2v(C->sp.p + index);
     } else if (index == CS_REGISTRYINDEX) {
-        return &G_(C)->c_registry;
+        return &G(C)->c_registry;
     } else { /* upvalues */
         index = CS_REGISTRYINDEX - index;
         api_check(C, index < MAXUPVAL, "upvalue index too large");
@@ -66,7 +66,7 @@ static TValue *index2value(const cs_State *C, int index) {
             return &ccl->upvals[index];
         } else { /* CScript function (invalid) */
             api_check(C, 0, "caller not a C closure");
-            return &G_(C)->nil; /* no upvalues */
+            return &G(C)->nil; /* no upvalues */
         }
     }
 }
@@ -89,8 +89,8 @@ static SPtr index2stack(const cs_State *C, int index) {
 CS_API cs_CFunction cs_atpanic(cs_State *C, cs_CFunction fpanic) {
     cs_CFunction old_panic;
     cs_lock(C);
-    old_panic = G_(C)->fpanic;
-    G_(C)->fpanic = fpanic;
+    old_panic = G(C)->fpanic;
+    G(C)->fpanic = fpanic;
     cs_unlock(C);
     return old_panic;
 }
@@ -272,7 +272,7 @@ CS_API void cs_xmove(cs_State *src, cs_State *dest, int n) {
     if (src == dest) return; /* same thread ? */
     cs_lock(dest);
     api_checknelems(src, n); /* have enough elements to move? */
-    api_check(src, G_(src) == G_(dest), "moving between different states");
+    api_check(src, G(src) == G(dest), "moving between different states");
     api_check(src, dest->cf->top.p - dest->sp.p >= n, "dest stack overflow");
     src->sp.p -= n;
     for (int i = 0; i < n; i++) {
@@ -327,7 +327,7 @@ c_sinline TValue *getvvmt(cs_State *C, const TValue *o) {
         case CS_VINSTANCE: return insval(o)->oclass->vmt;
         case CS_TCLASS: return classval(o)->vmt;
         case CS_TUSERDATA: return uval(o)->vmt;
-        default: return G_(C)->vmt[ttype(o)];
+        default: return G(C)->vmt[ttype(o)];
     }
 }
 
@@ -731,7 +731,7 @@ CS_API int cs_push_thread(cs_State *C) {
     setthval2s(C, C->sp.p, C);
     api_inctop(C);
     cs_unlock(C);
-    return (G_(C)->mainthread == C);
+    return (G(C)->mainthread == C);
 }
 
 
@@ -940,7 +940,6 @@ CS_API int cs_get_field(cs_State *C, int obj) {
     val = csH_get(ht, s2v(C->sp.p - 1));
     C->sp.p--; /* remove key */
     return finishrawgetfield(C, val);
-
 }
 
 
@@ -1092,11 +1091,11 @@ CS_API int cs_get_uservalue(cs_State *C, int udobj, int n) {
     int tt;
     cs_lock(C);
     ud = getuserdata(C, udobj);
-    if (0 < n || ud->nuv < n) {
+    if (n <= 0 || ud->nuv < n) {
         setnilval(s2v(C->sp.p));
         tt = CS_TNONE;
     } else {
-        setobj2s(C, C->sp.p, &ud->uv[n].val);
+        setobj2s(C, C->sp.p, &ud->uv[n - 1].val);
         tt = ttype(s2v(C->sp.p - 1));
     }
     api_inctop(C);
@@ -1140,7 +1139,7 @@ CS_API void cs_set_index(cs_State *C, int arrobj, cs_Integer index) {
     Array *arr;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    api_check(C, index >= 0 && index < ARRAYLIMIT, "`index` out of bounds");
+    api_check(C, 0 <= index && index < ARRAYLIMIT, "`index` out of bounds");
     arr = getarray(C, arrobj);
     csA_ensure(C, arr, cast_int(index));
     setobj(C, &arr->b[cast_int(index)], s2v(C->sp.p - 1));
@@ -1228,7 +1227,7 @@ CS_API int cs_set_uservalue(cs_State *C, int index, int n) {
     if (!(cast_uint(n) <= cast_uint(ud->nuv))) {
         res = 0; /* `n` not in [0, ud->nuv) */
     } else {
-        setobj(C, &ud->uv[n].val, s2v(C->sp.p - 1));
+        setobj(C, &ud->uv[n - 1].val, s2v(C->sp.p - 1));
         csG_barrierback(C, obj2gco(ud), s2v(C->sp.p - 1));
         res = 1;
     }
@@ -1268,7 +1267,7 @@ CS_API int cs_error(cs_State *C) {
     cs_lock(C);
     api_checknelems(C, 1); /* errobj */
     errobj = s2v(C->sp.p - 1);
-    if (ttisstring(errobj) && strval(errobj) == G_(C)->memerror) {
+    if (ttisstring(errobj) && strval(errobj) == G(C)->memerror) {
         csM_error(C); /* raise a memory error */
     } else
         csD_errormsg(C);
@@ -1311,7 +1310,7 @@ static void fcall(cs_State *C, void *ud) {
 }
 
 
-CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int errfunc) {
+CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int absmsgh) {
     struct PCallData pcd;
     int status;
     ptrdiff_t func;
@@ -1319,10 +1318,10 @@ CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int errfunc) {
     api_checknelems(C, nargs + 1); /* args + func */
     api_check(C, C->status == CS_OK, "can't do calls on non-normal thread");
     checkresults(C, nargs, nresults);
-    if (errfunc == 0) {
+    if (absmsgh < 0) {
         func = 0;
     } else {
-        SPtr o = index2stack(C, errfunc);
+        SPtr o = index2stack(C, absmsgh);
         api_check(C, ttisfunction(s2v(o)), "error handler must be a function");
         func = savestack(C, o);
     }
@@ -1351,7 +1350,7 @@ CS_API int cs_load(cs_State *C, cs_Reader reader, void *userdata,
 CS_API int cs_gc(cs_State *C, int option, ...) {
     va_list ap;
     int res = 0;
-    GState *gs = G_(C);
+    GState *gs = G(C);
     cs_lock(C);
     va_start(ap, option);
     switch (option) {
@@ -1394,20 +1393,6 @@ CS_API int cs_gc(cs_State *C, int option, ...) {
                 res = 1; /* signal it */
             break;
         }
-        case CS_GCSETPAUSE: { /* set GC pause */
-            int data = va_arg(ap, int); /* percentage */
-            api_check(C, data <= CS_MAXPAUSE, "GC pause overflow");
-            res = getgcparam(gs->gcpause);
-            setgcparam(gs->gcpause, data);
-            break;
-        }
-        case CS_GCSETSTEPMUL: { /* set GC step multiplier */
-            int data = va_arg(ap, int); /* percentage */
-            api_check(C, data <= CS_MAXPAUSE, "GC step multiplier overflow");
-            res = getgcparam(gs->gcstepmul);
-            setgcparam(gs->gcstepmul, data);
-            break;
-        }
 	case CS_GCISRUNNING: { /* check if GC is running */
             res = gcrunning(gs);
             break;
@@ -1436,8 +1421,8 @@ CS_API int cs_gc(cs_State *C, int option, ...) {
 
 CS_API void cs_setwarnf(cs_State *C, cs_WarnFunction fwarn, void *ud) {
     cs_lock(C);
-    G_(C)->fwarn = fwarn;
-    G_(C)->ud_warn = ud;
+    G(C)->fwarn = fwarn;
+    G(C)->ud_warn = ud;
     cs_unlock(C);
 }
 
@@ -1525,8 +1510,8 @@ CS_API size_t cs_stringtonumber(cs_State *C, const char *s, int *f) {
 CS_API cs_Alloc cs_getallocf(cs_State *C, void **ud) {
     cs_Alloc falloc;
     cs_lock(C);
-    if (ud) *ud = G_(C)->ud_alloc;
-    falloc = G_(C)->falloc;
+    if (ud) *ud = G(C)->ud_alloc;
+    falloc = G(C)->falloc;
     cs_unlock(C);
     return falloc;
 }
@@ -1534,8 +1519,8 @@ CS_API cs_Alloc cs_getallocf(cs_State *C, void **ud) {
 
 CS_API void cs_setallocf(cs_State *C, cs_Alloc falloc, void *ud) {
     cs_lock(C);
-    G_(C)->falloc = falloc;
-    G_(C)->ud_alloc = ud;
+    G(C)->falloc = falloc;
+    G(C)->ud_alloc = ud;
     cs_unlock(C);
 }
 
@@ -1569,7 +1554,7 @@ CS_API void cs_closeslot(cs_State *C, int index) {
 
 
 CS_API int cs_getfreereg(cs_State *C) {
-    Array *arr = arrval(&G_(C)->c_registry);
+    Array *arr = arrval(&G(C)->c_registry);
     for (uint i = 0; i < arr->n; i++) {
         TValue *v = &arr->b[i];
         if (ttisnil(v))

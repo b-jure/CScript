@@ -416,7 +416,7 @@ void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 c_sinline void precallmbin(cs_State *C, const TValue *v1, const TValue *v2,
                             cs_MM op, SPtr res) {
     const TValue *func;
-    const char *opname = getshrstr(G_(C)->mmnames[op]);
+    const char *opname = getshrstr(G(C)->mmnames[op]);
     if (c_unlikely(ttypetag(v1) != ttypetag(v2)))
         csD_typeerrormeta(C, v1, v2, opname);
     if (c_unlikely(ttisinstance(v1) && insval(v1)->oclass != insval(v2)->oclass))

@@ -116,7 +116,7 @@
 ** gcdebt is positive.
 */
 #define csG_condGC(C,pre,pos) \
-    { pre; if (G_(C)->gcdebt > 0) { csG_step(C); pos; } \
+    { pre; if (G(C)->gcdebt > 0) { csG_step(C); pos; } \
       gcmemchange(C,pre,pos); }
 
 

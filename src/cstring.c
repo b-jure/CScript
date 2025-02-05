@@ -103,7 +103,7 @@ static void rehashtable(OString **arr, int osz, int nsz) {
 ** Resize string table. If allocation fails, keep the current size.
 */
 void csS_resize(cs_State *C, int nsz) {
-    StringTable *tab = &G_(C)->strtab;
+    StringTable *tab = &G(C)->strtab;
     int osz = tab->size;
     OString **newarr;
     cs_assert(nsz <= MAXSTRTABLE);
@@ -124,7 +124,7 @@ void csS_resize(cs_State *C, int nsz) {
 
 
 void csS_init(cs_State *C) {
-    GState *gs = G_(C);
+    GState *gs = G(C);
     StringTable *tab = &gs->strtab;
     /* first initialize string table... */
     tab->hash = csM_newarray(C, MINSTRTABSIZE, OString*);
@@ -151,7 +151,7 @@ static OString *newstrobj(cs_State *C, size_t l, int tt_, uint h) {
 
 
 OString *csS_newlngstrobj(cs_State *C, size_t len) {
-    OString *s = newstrobj(C, len, CS_VLNGSTR, G_(C)->seed);
+    OString *s = newstrobj(C, len, CS_VLNGSTR, G(C)->seed);
     s->u.lnglen = len;
     s->shrlen = 0xFF;
     return s;
@@ -159,7 +159,7 @@ OString *csS_newlngstrobj(cs_State *C, size_t len) {
 
 
 void csS_remove(cs_State *C, OString *s) {
-    StringTable *tab = &G_(C)->strtab;
+    StringTable *tab = &G(C)->strtab;
     OString **pp = &tab->hash[hashmod(s->hash, tab->size)];
     while (*pp != s) /* find previous element */
         pp = &(*pp)->u.next;
@@ -182,7 +182,7 @@ static void growtable(cs_State *C, StringTable *tab) {
 
 static OString *internshrstr(cs_State *C, const char *str, size_t l) {
     OString *s;
-    GState *gs = G_(C);
+    GState *gs = G(C);
     StringTable *tab = &gs->strtab;
     uint h = csS_hash(str, l, gs->seed);
     OString **list = &tab->hash[hashmod(h, tab->size)];
@@ -232,7 +232,7 @@ OString *csS_newl(cs_State *C, const char *str, size_t len) {
 OString *csS_new(cs_State *C, const char *str) {
     int j;
     uint i = pointer2uint(str) % STRCACHE_N;
-    OString **p = G_(C)->strcache[i]; /* address as key */
+    OString **p = G(C)->strcache[i]; /* address as key */
     for (j = 0; j < STRCACHE_M; j++)
         if (strcmp(getstr(p[j]), str) == 0)
             return p[j];

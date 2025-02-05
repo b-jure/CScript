@@ -125,8 +125,8 @@ static UpVal *newupval(cs_State *C, SPtr val, UpVal **prev) {
         next->u.open.prev = &uv->u.open.next; /* adjust its 'u.open.prev' */
     *prev = uv; /* adjust list head or previous upvalues 'u.open.next' */
     if (!isinthwouv(C)) { /* thread not in list of threads with open upvals? */
-        C->thwouv = G_(C)->thwouv; /* link it to the list... */
-        G_(C)->thwouv = C; /* ...and adjust list head */
+        C->thwouv = G(C)->thwouv; /* link it to the list... */
+        G(C)->thwouv = C; /* ...and adjust list head */
     }
     return uv;
 }
@@ -141,7 +141,7 @@ UpVal *csF_findupval(cs_State *C, SPtr sv) {
     UpVal *p;
     cs_assert(isinthwouv(C) || C->openupval == NULL);
     while ((p = *pp) != NULL && uvlevel(p) > sv) {
-        cs_assert(!isdead(G_(C), p));
+        cs_assert(!isdead(G(C), p));
         if (uvlevel(p) == sv)
             return p;
         pp = &p->u.open.next;
@@ -266,7 +266,7 @@ static void prepcallCLOSEmm(cs_State *C, SPtr level, int status) {
     TValue *v = s2v(level); /* value being closed */
     TValue *errobj;
     if (status == CLOSEKTOP) {
-        errobj = &G_(C)->nil; /* error object is nil */
+        errobj = &G(C)->nil; /* error object is nil */
     } else { /* top will be set to 'level' + 2 */
         errobj = s2v(level + 1); /* error object goes after 'v' */
         csT_seterrorobj(C, status, level + 1); /* set error object */

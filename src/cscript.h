@@ -182,7 +182,7 @@ CS_API const char      *cs_typename(cs_State *C, int type);
 CS_API cs_Number        cs_to_numberx(cs_State *C, int index, int *isnum); 
 CS_API cs_Integer       cs_to_integerx(cs_State *C, int index, int *isnum); 
 CS_API int              cs_to_bool(cs_State *C, int index); 
-CS_API const char      *cs_to_lstring(cs_State *C, int index, size_t *plen); 
+CS_API const char      *cs_to_lstring(cs_State *C, int index, size_t *len); 
 CS_API cs_CFunction     cs_to_cfunction(cs_State *C, int index); 
 CS_API void            *cs_to_userdata(cs_State *C, int index); 
 CS_API const void      *cs_to_pointer(cs_State *C, int index); 
@@ -247,18 +247,18 @@ CS_API void        cs_push_class(cs_State *C, const cs_VMT *vmt, int abscls,
 CS_API int   cs_get_global(cs_State *C, const char *name); 
 CS_API int   cs_get(cs_State *C, int index); 
 CS_API int   cs_get_raw(cs_State *C, int index); 
-CS_API int   cs_get_index(cs_State *C, int arrobj, cs_Integer index);
+CS_API int   cs_get_index(cs_State *C, int index, cs_Integer i);
 CS_API int   cs_get_field(cs_State *C, int index); 
 CS_API int   cs_get_fieldstr(cs_State *C, int index, const char *field); 
 CS_API int   cs_get_fieldptr(cs_State *C, int index, const void *field); 
 CS_API int   cs_get_fieldint(cs_State *C, int index, cs_Integer field); 
 CS_API int   cs_get_fieldflt(cs_State *C, int index, cs_Number field); 
-CS_API int   cs_get_class(cs_State *C, int insobj); 
-CS_API int   cs_get_method(cs_State *C, int insobj); 
+CS_API int   cs_get_class(cs_State *C, int index); 
+CS_API int   cs_get_method(cs_State *C, int index); 
 CS_API int   cs_get_metamethod(cs_State *C, int index, cs_MM mm); 
 
 CS_API void *cs_newuserdata(cs_State *C, size_t sz, int nuv); 
-CS_API int   cs_get_uservalue(cs_State *C, int udobj, int n); 
+CS_API int   cs_get_uservalue(cs_State *C, int index, int n); 
 
 /* -----------------------------------------------------------------------
 ** Set functions (stack -> CScript)
@@ -266,7 +266,7 @@ CS_API int   cs_get_uservalue(cs_State *C, int udobj, int n);
 CS_API void  cs_set_global(cs_State *C, const char *name); 
 CS_API void  cs_set(cs_State *C, int index); 
 CS_API void  cs_set_raw(cs_State *C, int index); 
-CS_API void  cs_set_index(cs_State *C, int arrobj, cs_Integer index);
+CS_API void  cs_set_index(cs_State *C, int index, cs_Integer i);
 CS_API void  cs_set_field(cs_State *C, int index); 
 CS_API void  cs_set_fieldstr(cs_State *C, int index, const char *field); 
 CS_API void  cs_set_fieldptr(cs_State *C, int index, const void *field); 
@@ -293,9 +293,9 @@ CS_API int cs_error(cs_State *C);
 ** Call/Load CScript code
 ** ----------------------------------------------------------------------- */
 CS_API void cs_call(cs_State *C, int nargs, int nresults); 
-CS_API int  cs_pcall(cs_State *C, int nargs, int nresults, int errfunc); 
+CS_API int  cs_pcall(cs_State *C, int nargs, int nresults, int msgh); 
 CS_API int  cs_load(cs_State *C, cs_Reader reader, void *userdata,
-                    const char *source); 
+                    const char *chunkname); 
 
 /* -----------------------------------------------------------------------
 ** Garbage collector
@@ -307,16 +307,10 @@ CS_API int  cs_load(cs_State *C, cs_Reader reader, void *userdata,
 #define CS_GCCOUNT              3 /* get number of (bytes_allocated/1024) */
 #define CS_GCCOUNTBYTES         4 /* get remainder of (bytes_allocated/1024) */
 #define CS_GCSTEP               5 /* perform single GC step and or set gcdebt */
-#define CS_GCSETPAUSE           6 /* set GC pause (as percentage) */
-#define CS_GCSETSTEPMUL         7 /* set GC step multiplier (as percentage) */
-#define CS_GCISRUNNING          8 /* test whether GC is running */
-#define CS_GCINC                9 /* set GC in incremental mode */
+#define CS_GCISRUNNING          6 /* test whether GC is running */
+#define CS_GCINC                7 /* set GC in incremental mode */
 
-/* Limits for 'data' parameter for GC options. */
-#define CS_MAXPAUSE             1023
-#define CS_MAXSTEPMUL           1023
-
-CS_API int cs_gc(cs_State *C, int option, ...); 
+CS_API int cs_gc(cs_State *C, int what, ...); 
 
 /* -----------------------------------------------------------------------
 ** Warning-related functions

@@ -40,8 +40,8 @@ void csMM_init(cs_State *C) {
     for (int i = 0; i < CS_MM_N; i++) {
         OString *s = csS_new(C, mmnames[i]);
         s->extra = i + NUM_KEYWORDS + 1;
-        G_(C)->mmnames[i] = s;
-        csG_fix(C, obj2gco(G_(C)->mmnames[i]));
+        G(C)->mmnames[i] = s;
+        csG_fix(C, obj2gco(G(C)->mmnames[i]));
     }
 }
 
@@ -102,9 +102,9 @@ const TValue *csMM_get(cs_State *C, const TValue *v, cs_MM mm) {
     switch (ttypetag(v)) {
         case CS_VINSTANCE: vmt = insval(v)->oclass->vmt; break;
         case CS_VUSERDATA: vmt = uval(v)->vmt; break;
-        default: vmt = G_(C)->vmt[ttype(v)]; break;
+        default: vmt = G(C)->vmt[ttype(v)]; break;
     }
-    return (vmt ? &vmt[mm] : &G_(C)->nil);
+    return (vmt ? &vmt[mm] : &G(C)->nil);
 }
 
 

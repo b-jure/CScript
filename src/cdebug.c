@@ -248,7 +248,7 @@ static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
         case OP_EQ: mm = CS_MM_EQ; break;
         default: return NULL;
     }
-    *name = getstr(G_(C)->mmnames[mm]) + /* skip '__' */ 2;
+    *name = getstr(G(C)->mmnames[mm]) + /* skip '__' */ 2;
     return "metamethod";
 }
 

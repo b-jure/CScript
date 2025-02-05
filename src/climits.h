@@ -323,7 +323,7 @@ typedef c_byte Instruction;
 */
 #if defined(CSI_STRESS_GC)
 #define gcmemchange(C,pre,pos) \
-    { if (gcrunning(G_(C)->gc)) { pre; csG_full(C); pos; } }
+    { if (gcrunning(G(C)->gc)) { pre; csG_full(C); pos; } }
 #else
 #define gcmemchange(C,pre,pos)      ((void)0)
 #endif

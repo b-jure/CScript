@@ -415,7 +415,7 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 
 
 static void traceMetaName(cs_State *C, cs_MM mm) {
-    postab(printf("%s", getstr(G_(C)->mmnames[mm])));
+    postab(printf("%s", getstr(G(C)->mmnames[mm])));
     fflush(stdout);
 }
 
