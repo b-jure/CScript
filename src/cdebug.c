@@ -164,8 +164,7 @@ CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *ar, int n) {
             name = NULL;
         else
             name = csF_getlocalname(clCSval(s2v(C->sp.p - 1))->p, n, 0);
-    }
-    else {
+    } else {
         SPtr pos = NULL;
         name = csD_findlocal(C, ar->cf, n, &pos);
         if (name) { /* found ? */
@@ -204,8 +203,7 @@ static void getfuncinfo(Closure *cl, cs_Debug *ar) {
         if (p->source) { /* have source? */
           ar->source = getstr(p->source);
           ar->srclen = getstrlen(p->source);
-        }
-        else {
+        } else {
           ar->source = "?";
           ar->srclen = SLL("?");
         }

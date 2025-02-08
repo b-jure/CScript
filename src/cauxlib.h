@@ -29,14 +29,14 @@ typedef struct csL_Buffer csL_Buffer;
 
 
 /* ------------------------------------------------------------------------ 
-** Error functions
+** Errors
 ** ------------------------------------------------------------------------ */
 CSLIB_API int csL_error(cs_State *C, const char *fmt, ...);
 CSLIB_API int csL_arg_error(cs_State *C, int argindex, const char *extra);
 CSLIB_API int csL_type_error(cs_State *C, int argindex, const char *tname);
 
 /* ------------------------------------------------------------------------ 
-** Check functions
+** Required argument
 ** ------------------------------------------------------------------------ */
 CSLIB_API cs_Number     csL_check_number(cs_State *C, int index);
 CSLIB_API cs_Integer    csL_check_integer(cs_State *C, int index);
@@ -51,7 +51,7 @@ CSLIB_API int           csL_check_option(cs_State *C, int index,
                                          const char *const opts[]);
 
 /* ------------------------------------------------------------------------ 
-** Optional argument functions
+** Optional argument
 ** ------------------------------------------------------------------------ */
 CSLIB_API cs_Number   csL_opt_number(cs_State *C, int index, cs_Number dfl);
 CSLIB_API cs_Integer  csL_opt_integer(cs_State *C, int index, cs_Integer dfl);
@@ -59,7 +59,7 @@ CSLIB_API const char *csL_opt_lstring(cs_State *C, int index, const char *dfl,
                                       size_t *plen);
 
 /* ------------------------------------------------------------------------ 
-** Loading functions
+** Chunk loading
 ** ------------------------------------------------------------------------ */
 CSLIB_API int csL_loadfile(cs_State *C, const char *filename);
 CSLIB_API int csL_loadstring(cs_State *C, const char *str);
@@ -84,6 +84,15 @@ CSLIB_API void       *csL_test_userdata(cs_State *C, int index,
 CSLIB_API void        csL_traceback(cs_State *C, cs_State *at, int level,
                                     const char *msg);
 CSLIB_API void        csL_set_funcs(cs_State *C, const cs_Entry *l, int nup);
+
+/* ------------------------------------------------------------------------ 
+** Reference system
+** ------------------------------------------------------------------------ */
+#define CS_NOREF        (-2)
+#define CS_REFNIL       (-1)
+
+CSLIB_API int   csL_ref(cs_State *C, int a);
+CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
 
 /* ------------------------------------------------------------------------ 
 ** Useful macros

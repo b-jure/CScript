@@ -102,8 +102,7 @@ CS_API cs_Number cs_version(cs_State *C) {
 }
 
 
-/* auxiliary function that sets the stack top without locking */
-c_sinline void auxsettop(cs_State *C, int n) {
+c_sinline void setntop(cs_State *C, int n) {
     CallFrame *cf;
     SPtr func, newtop;
     ptrdiff_t diff;
@@ -137,7 +136,7 @@ c_sinline void auxsettop(cs_State *C, int n) {
 */
 CS_API void cs_setntop(cs_State *C, int n) {
     cs_lock(C);
-    auxsettop(C, n);
+    setntop(C, n);
     cs_unlock(C);
 }
 
@@ -408,14 +407,11 @@ CS_API int cs_to_bool(cs_State *C, int index) {
 ** provided it is ignored).
 */
 CS_API const char *cs_to_lstring(cs_State *C, int index, size_t *plen) {
-    const TValue *o;
-    cs_lock(C);
-    o = index2value(C, index);
-    if (!ttisstring(o)) /* not a string? */
+    const TValue *o = index2value(C, index);
+    if (!ttisstring(o)) { /* not a string? */
         return NULL;
-    if (plen != NULL)
+    } else if (plen != NULL)
         *plen = getstrlen(strval(o)); 
-    cs_unlock(C);
     return getstr(strval(o));
 }
 
@@ -708,7 +704,7 @@ CS_API void cs_push_array(cs_State *C, int sz) {
 }
 
 
-/* Push hashtable on top of the stack. */
+/* Push table on top of the stack. */
 CS_API void cs_push_table(cs_State *C, int sz) {
     Table *ht;
     cs_lock(C);
@@ -802,7 +798,7 @@ c_sinline void auxsetentrylist(cs_State *C, OClass *cls, const cs_Entry *l,
             auxrawsetstr(C, cls->methods, l->name, s2v(C->sp.p - 1));
         } while (l++, l->name);
     }
-    auxsettop(C, -(nup - 1)); /* pop upvalues */
+    setntop(C, -(nup - 1)); /* pop upvalues */
 }
 
 
@@ -903,18 +899,29 @@ c_sinline Array *getarray(cs_State *C, int arrobj) {
 }
 
 
-CS_API int cs_get_index(cs_State *C, int arrobj, cs_Integer index) {
+CS_API int cs_get_index(cs_State *C, int index, cs_Integer i) {
     Array *arr;
     cs_lock(C);
-    api_check(C, index >= 0, "invalid `index`");
-    arr = getarray(C, arrobj);
-    if (c_castS2U(index) < arr->n) {
-        setobj2s(C, C->sp.p, &arr->b[index]);
+    api_check(C, i >= 0, "invalid `index`");
+    arr = getarray(C, index);
+    if (c_castS2U(i) < arr->n) {
+        setobj2s(C, C->sp.p, &arr->b[i]);
     } else
         setnilval(s2v(C->sp.p));
     api_inctop(C);
     cs_unlock(C);
     return ttype(s2v(C->sp.p - 1));
+}
+
+
+CS_API int cs_get_nilindex(cs_State *C, int index, int begin, int end) {
+    Array *arr = getarray(C, index);
+    uint len = (arr->n <= (uint)end ? arr->n : (uint)end + 1);
+    api_check(C, begin >= 0, "invalid 'begin' index");
+    for (uint i = begin; i < len; i++)
+        if (isempty(&arr->b[i]))
+            return i;
+    return -1;
 }
 
 
@@ -924,7 +931,7 @@ c_sinline Table *gettable(cs_State *C, int obj) {
         case CS_VINSTANCE: return insval(o)->fields;
         case CS_VTABLE: return tval(o); 
         default:  {
-            api_check(C, 0, "expect instance or hashtable");
+            api_check(C, 0, "expect instance or table");
             return NULL;
         }
     }
@@ -1459,10 +1466,13 @@ CS_API cs_Unsigned cs_len(cs_State *C, int index) {
     switch (ttypetag(o)) {
         case CS_VSHRSTR: return strval(o)->shrlen;
         case CS_VLNGSTR: return strval(o)->u.lnglen;
-        case CS_VCLASS: return csH_len(tval(o));
-        case CS_VINSTANCE: return csH_len(insval(o)->fields);
-        case CS_VTABLE: return csH_len(tval(o));
         case CS_VARRAY: return arrval(o)->n;
+        case CS_VTABLE: return csH_len(tval(o));
+        case CS_VCLASS: {
+            Table *t = classval(o)->methods;
+            return (t ? csH_len(classval(o)->methods) : 0);
+        }
+        case CS_VINSTANCE: return csH_len(insval(o)->fields);
         case CS_VUSERDATA: return uval(o)->size;
         default: return 0;
     }
@@ -1488,9 +1498,9 @@ CS_API int cs_next(cs_State *C, int obj) {
 CS_API void cs_concat(cs_State *C, int n) {
     cs_lock(C);
     api_checknelems(C, n);
-    if (n > 0) {
+    if (n > 0)
         csV_concat(C, n);
-    } else { /* nothing to concatenate */
+    else { /* nothing to concatenate */
         setstrval2s(C, C->sp.p, csS_newl(C, "", 0));
         api_inctop(C);
     }
@@ -1553,17 +1563,6 @@ CS_API void cs_closeslot(cs_State *C, int index) {
 }
 
 
-CS_API int cs_getfreereg(cs_State *C) {
-    Array *arr = arrval(&G(C)->c_registry);
-    for (uint i = 0; i < arr->n; i++) {
-        TValue *v = &arr->b[i];
-        if (ttisnil(v))
-            return i;
-    }
-    return -1;
-}
-
-
 /*
 ** Sets `frame` in `cs_Debug`; `level` is `CallFrame` level.
 ** To traverse the call stack backwards (up), then level should be
@@ -1573,7 +1572,7 @@ CS_API int cs_getfreereg(cs_State *C) {
 ** If `level` is found, therefore `cf` is set, then this function returns 1,
 ** otherwise 0.
 */
-CS_API int cs_getstack(cs_State *C, int level, cs_Debug *di) {
+CS_API int cs_getstack(cs_State *C, int level, cs_Debug *ar) {
     int status;
     CallFrame *cf;
     if (level < 0) return 0; /* invalid (negative) level */
@@ -1581,7 +1580,7 @@ CS_API int cs_getstack(cs_State *C, int level, cs_Debug *di) {
     for (cf = C->cf; level > 0 && cf != &C->basecf; cf = cf->prev)
         level--;
     if (level == 0 && cf != &C->basecf) { /* level found ? */
-        di->cf = cf;
+        ar->cf = cf;
         status = 1;
     } else /* otherwise no such level */
         status = 0;
@@ -1595,24 +1594,22 @@ static const char *auxupvalue(TValue *func, int n, TValue **val,
     switch (ttypetag(func)) {
         case CS_VCCL: { /* C closure */
             CClosure *ccl = clCval(func);
-            if (!(cast_uint(n) < cast_uint(ccl->nupvalues)))
+            if (!(cast_uint(n) - 1u < cast_uint(ccl->nupvalues)))
                 return NULL;  /* `n` not in [0, cl->nupvalues) */
-            *val = &ccl->upvals[n];
-            if (owner)
-                *owner = obj2gco(ccl);
+            *val = &ccl->upvals[n-1];
+            if (owner) *owner = obj2gco(ccl);
             return "";
         }
         case CS_VCSCL: { /* CScript closure */
             OString *name;
             CSClosure *cl = clCSval(func);
             Proto *p = cl->p;
-            if (!(cast_uint(n) < cast_uint(p->sizeupvals)))
+            if (!(cast_uint(n) - 1u < cast_uint(p->sizeupvals)))
                 return NULL;  /* `n` not in [0, fn->sizeupvals) */
-            *val = cl->upvals[n]->v.p;
-            if (owner)
-                *owner = obj2gco(cl->upvals[n]);
-            name = p->upvals[n].name;
-            cs_assert(name != NULL);
+            *val = cl->upvals[n-1]->v.p;
+            if (owner) *owner = obj2gco(cl->upvals[n]);
+            name = p->upvals[n-1].name;
+            cs_assert(name != NULL); /* must have debug information */
             return getstr(name);
         }
         default: return NULL; /* not a closure */

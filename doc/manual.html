@@ -1075,9 +1075,9 @@
         <!-- cs_setntop -->
         <hr><h3><a name="cs_setntop"><code>cs_setntop</code></a></h3>
         <span class="apii">[-?, +?, &ndash;]</span>
-        <pre>void cs_setntop (cs_State *C, int nvals);</pre>
+        <pre>void cs_setntop (cs_State *C, int n);</pre>
         <p>
-        Sets the stack top to hold <code>nvals</code> values on the stack.
+        Sets the stack top to hold <code>n</code> values on the stack.
         If the new top is greater than the old one, then the new elements are
         filled with <b>nil</b>.
         If <code>index</code> is&nbsp;0, then all stack elements are removed.
@@ -1771,6 +1771,22 @@
         Returns the type of the pushed value.
         </p>
 
+        <!-- cs_get_nilindex -->
+        <hr><h3><a name="cs_get_nilindex"><code>cs_get_nilindex</code></a></h3>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>int cs_get_nilindex (cs_State *C, int index, int begin, int end);</pre>
+        <p>
+        Returns the first index with <b>nil</b> value inside the array at
+        the given index starting from <code>begin</code> index up to
+        <code>end</code> index (inclusive).
+        If <code>begin</code> is greater than <code>end</code> or the
+        <code>end</code> is greater than the length of the array at the
+        given index, then the <code>end</code> will be set as the last
+        index of the array, and the whole array will be searched starting
+        from the <code>begin</code> index.
+        If there is no such index this returns -1.
+        </p>
+
         <!-- cs_get_field -->
         <hr><h3><a name="cs_get_field"><code>cs_get_field</code></a></h3>
         <span class="apii">[-1, +1, &ndash;]</span>
@@ -2295,289 +2311,568 @@
 
         <!-- cs_hasvmt -->
         <hr><h3><a name="cs_hasvmt"><code>cs_hasvmt</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_hasvmt (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index has a
+        <a href="#cs_VMT">vritual method table</a>, otherwise it returns 0.
+        <br/>
+        Note that this function would return 0 even for the types at the
+        given index that usually have a
+        <a href="#cs_VMT">virtual method table</a>;
+        this is because the value might never have been assigned one.
+        This function is useful as a quick test to see if the
+        <a href="#cs_VMT">virtual method table</a> is present, otherwise use
+        <a href="#cs_hasmetamethod"><code>cs_hasmetamethod</code></a> to check
+        for presence of specific metamethod.
         </p>
 
         <!-- cs_hasmetamethod -->
         <hr><h3><a name="cs_hasmetamethod"><code>cs_hasmetamethod</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_hasmetamethod (cs_State *C, int index, cs_MM mm);</pre>
+        <p>
+        Returns 1 if value at the given index has a <code>mm</code> metamethod.
+        Otherwise this returns 0 if the <code>mm</code> entry is <b>nil</b> or
+        the value does not have a <a href="cs_VMT">virtual method table</a>.
         </p>
 
         <!-- cs_len -->
         <hr><h3><a name="cs_len"><code>cs_len</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>cs_Unsigned cs_len (cs_State *C, int index);</pre>
+        <p>
+        Returns the "length" of the value at the given index.
+        For strings, this is the string length;
+        for arrays, this is the array length;
+        for tables, this is the number of non <b>nil</b> key values;
+        for classes, this is the number of methods;
+        for instances, this is the number of non <b>nil</b> fields;
+        for userdata, this is the size of the block of memory allocated
+        for the userdata.
+        For other values, this call returns&nbsp;0.
         </p>
 
         <!-- cs_next -->
         <hr><h3><a name="cs_next"><code>cs_next</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-1, +(2|0), <em>v</em>]</span>
         <pre>int cs_next (cs_State *C, int index);</pre>
+        <p>
+        Pops a key from the stack, and pushes a key&ndash;value pair from the
+        table or instance at the given index, the "next" pair
+        after the given key.
+        If there are no more elements in the table or no more fields in the
+        instances, then <a href="#cs_next"><code>cs_next</code></a>
+        returns&nbsp;0 and pushes nothing.
+        <br/><br/>
+        A typical table traversal looks like this:
+        <pre>
+    /* table is in the stack at index 't' */
+    cs_push_nil(C);  /* first key */
+    while (cs_next(C, t) != 0) {
+        /* uses 'key' (at index -2) and 'value' (at index -1) */
+        printf("%s - %s\n",
+               cs_typename(C, cs_type(C, -2)),
+               cs_typename(C, cs_type(C, -1)));
+        /* removes 'value'; keeps 'key' for next iteration */
+        cs_pop(C, 1);
+    }</pre>
+        This function may raise an error if the given key is neither
+        <b>nil</b> nor present in the table or instance.
+        See function <a href="#next"><code>next</code></a> for the caveats of
+        modifying the table or instance fields during its traversal.
         </p>
 
         <!-- cs_concat -->
         <hr><h3><a name="cs_concat"><code>cs_concat</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-n, +1, <em>e</em>]</span>
         <pre>void cs_concat (cs_State *C,  int n);</pre>
+        <p>
+        Concatenates the <code>n</code> values at the top of the stack,
+        pops them, and leaves the result on the top.
+        If <code>n</code>&nbsp;is&nbsp;1, the result is the single value on
+        the stack (that is, the function does nothing);
+        if <code>n</code> is 0, the result is the empty string.
+        Concatenation is performed following the usual semantics of CScript
+        (see <a href="#3.4.6">&sect;3.4.6</a>).
         </p>
 
         <!-- cs_stringtonumber -->
         <hr><h3><a name="cs_stringtonumber"><code>cs_stringtonumber</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +1, &ndash;]</span>
         <pre>size_t cs_stringtonumber (cs_State *C, const char *s, int *f);</pre>
+        <p>
+        Converts the zero-terminated string <code>s</code> to a number,
+        pushes that number into the stack, and returns the total size of
+        the string, that is, its length plus one.
+        The conversion can result in an integer or a float,
+        according to the lexical conventions of CScript
+        (see <a href="#3.1">&sect;3.1</a>).
+        The string may have leading and trailing whitespaces and a sign.
+        If the string is not a valid numeral, returns 0 and pushes nothing.
+        (Note that the result can be used as a boolean, true if the conversion
+        succeeds.)
+        If <code>f</code> is provided then it will be set to -1 in case the
+        underflow occurred, 1 if overflow occurred or 0 if conversion
+        was performed without underflow and overflow occurring.
         </p>
 
         <!-- cs_getallocf -->
         <hr><h3><a name="cs_getallocf"><code>cs_getallocf</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>cs_Alloc cs_getallocf (cs_State *C, void **ud);</pre>
+        <p>
+        Returns the memory-allocation function of a given state.
+        If <code>ud</code> is not <code>NULL</code>, CScript stores in
+        <code>*ud</code> the opaque pointer given when the memory-allocator
+        function was set.
         </p>
 
         <!-- cs_setallocf -->
         <hr><h3><a name="cs_setallocf"><code>cs_setallocf</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>void cs_setallocf (cs_State *C, cs_Alloc f, void *ud);</pre>
+        <p>
+        Changes the allocator function of a given state to <code>f</code>
+        with user data <code>ud</code>.
         </p>
 
         <!-- cs_toclose -->
         <hr><h3><a name="cs_toclose"><code>cs_toclose</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
         <pre>void cs_toclose (cs_State *C, int index);</pre>
+        <p>
+        Marks the given index in the stack as a to-be-closed slot
+        (see <a href="#3.3.8">&sect;3.3.8</a>).
+        Like a to-be-closed variable in CScript, the value at that slot in
+        the stack will be closed when it goes out of scope.
+        Here, in the context of a C function, to go out of scope means that
+        the running function returns to CScript, or there is an error,
+        or the slot is removed from the stack through
+        <a href="#cs_setntop"><code>cs_setntop</code></a> or
+        <a href="#cs_pop"><code>cs_pop</code></a>,
+        or there is a call to
+        <a href="#cs_closeslot"><code>cs_closeslot</code></a>.
+        A slot marked as to-be-closed should not be removed from the stack
+        by any other function in the API except
+        <a href="#cs_setntop"><code>cs_setntop</code></a> or
+        <a href="#cs_pop"><code>cs_pop</code></a>,
+        unless previously deactivated by
+        <a href="#cs_closeslot"><code>cs_closeslot</code></a>.
+        <br/><br/>
+        This function raises an error if the value at the given slot
+        neither has a <code>__close</code> metamethod nor is a false value.
+        <br/><br/>
+        This function should not be called for an index that is equal to
+        or below an active to-be-closed slot.
+        <br/><br/>
+        Note that, both in case of errors and of a regular return,
+        by the time the <code>__close</code> metamethod runs,
+        the C&nbsp;stack was already unwound, so that any automatic
+        C&nbsp;variable declared in the calling function
+        (e.g., a buffer) will be out of scope.
         </p>
 
         <!-- cs_closeslot -->
         <hr><h3><a name="cs_closeslot"><code>cs_closeslot</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +0, <em>e</em>]</span>
         <pre>void cs_closeslot (cs_State *C, int index);</pre>
-        </p>
-
-        <!-- cs_getfreereg -->
-        <hr><h3><a name="cs_getfreereg"><code>cs_getfreereg</code></a></h3>
         <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_getfreereg (cs_State *C);</pre>
+        Close the to-be-closed slot at the given index and set its value to
+        <b>nil</b>.
+        The index must be the last index previously marked to be closed
+        (see <a href="#cs_toclose"><code>cs_toclose</code></a>) that is still
+        active (that is, not closed yet).
         </p>
 
         <!-- cs_getextraspace -->
         <hr><h3><a name="cs_getextraspace"><code>cs_getextraspace</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>void *cs_getextraspace (cs_State *C);</pre>
+        <p>
+        Returns a pointer to a raw memory area associated with the
+        given CScript state.
+        The application can use this area for any purpose;
+        CScript does not use it for anything.
+        <br/><br/>
+        Each new thread has this area initialized with a copy of the area
+        of the main thread.
+        <br/><br/>
+        By default, this area has the size of a pointer to void, but you can
+        recompile CScript with a different size for this area.
+        (See <code>CS_EXTRASPACE</code> in <code>csconf.h</code>.)
         </p>
 
         <!-- cs_nvalues -->
         <hr><h3><a name="cs_nvalues"><code>cs_nvalues</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_nvalues (cs_State *C);</pre>
+        <p>
+        Similar to <a href="#cs_gettop"><code>cs_gettop</code></a> except
+        this returns the actual number of the values on the stack.
+        So the return value of 0 means an empty stack.
+        (This is equivalent to
+        <a href="#cs_gettop"><code>cs_gettop</code></a><code>&nbsp;+&nbsp;1</code>.)
         </p>
 
         <!-- cs_to_number -->
         <hr><h3><a name="cs_to_number"><code>cs_to_number</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>cs_Number cs_to_number (cs_State *C, int index);</pre>
+        <p>
+        Equivalent to <a href="#cs_to_numberx"><code>cs_to_numberx</code></a>
+        with <code>isnum</code> equal to <code>NULL</code>.
         </p>
 
         <!-- cs_to_integer -->
         <hr><h3><a name="cs_to_integer"><code>cs_to_integer</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>cs_Integer cs_to_integer (cs_State *C, int index);</pre>
+        <p>
+        Equivalent to <a href="#cs_to_integerx"><code>cs_to_integerx</code></a>
+        with <code>isnum</code> equal to <code>NULL</code>.
         </p>
 
         <!-- cs_pop -->
         <hr><h3><a name="cs_pop"><code>cs_pop</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-n, +0, &ndash;]</span>
         <pre>void cs_pop (cs_State *C, int n);</pre>
+        <p>
+        Pops <code>n</code> elements from the stack.
+        It is implemented as a macro over
+        <a href="#cs_setntop"><code>cs_setntop</code></a>.
         </p>
 
         <!-- cs_push_cfunction -->
         <hr><h3><a name="cs_push_cfunction"><code>cs_push_cfunction</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +1, &ndash;]</span>
         <pre>void cs_push_cfunction (cs_State *C, cs_CFunction f);</pre>
+        <p>
+        Pushes a C&nbsp;function onto the stack.
+        This function is equivalent to
+        <a href="#cs_push_cclosure"><code>cs_push_cclosure</code></a> with
+        no upvalues.
         </p>
 
         <!-- cs_register -->
         <hr><h3><a name="cs_register"><code>cs_register</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-1, +1, <em>m</em>]</span>
         <pre>void cs_register (cs_State *C, const char *name, cs_CFunction f);</pre>
+        <p>
+        Sets the C&nbsp;function <code>f</code> as the new value of global
+        <code>name</code>.
+        It is defined as a macro:
+        <pre>
+    #define cs_register(C,n,f) \
+            (cs_push_cfunction(C, f), cs_set_global(C, n))</pre>
         </p>
 
         <!-- cs_is_cfunction -->
         <hr><h3><a name="cs_is_cfunction"><code>cs_is_cfunction</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_cfunction (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is a C&nbsp;function,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_array -->
         <hr><h3><a name="cs_is_array"><code>cs_is_array</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_array (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is the array,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_table -->
         <hr><h3><a name="cs_is_table"><code>cs_is_table</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_table (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is a table,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_class -->
         <hr><h3><a name="cs_is_class"><code>cs_is_class</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_class (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is a class,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_instance -->
         <hr><h3><a name="cs_is_instance"><code>cs_is_instance</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_instance (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is a instance,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_lightuserdata -->
         <hr><h3><a name="cs_is_lightuserdata"><code>cs_is_lightuserdata</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_lightuserdata (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is a light userdata,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_nil -->
         <hr><h3><a name="cs_is_nil"><code>cs_is_nil</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_nil (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is <b>nil</b>,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_boolean -->
-        <hr><h3><a name="cs_is_boolean"><code>cs_is_boolean</code></a></h3>
-        <p>
+        <hr><h3><a name="cs_is_bool"><code>cs_is_bool</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_boolean (cs_State *C, int index);</pre>
+        <pre>int cs_is_bool (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is a boolean,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_thread -->
         <hr><h3><a name="cs_is_thread"><code>cs_is_thread</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_thread (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the value at the given index is a thread,
+        and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_none -->
         <hr><h3><a name="cs_is_none"><code>cs_is_none</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_none (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the given index is not valid, and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_is_noneornil -->
         <hr><h3><a name="cs_is_noneornil"><code>cs_is_noneornil</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_is_noneornil (cs_State *C, int index);</pre>
+        <p>
+        Returns 1 if the given index is not valid or if the value at this
+        index is <b>nil</b>, and 0&nbsp;otherwise.
         </p>
 
         <!-- cs_push_literal -->
         <hr><h3><a name="cs_push_literal"><code>cs_push_literal</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +1, &ndash;]</span>
         <pre>const char *cs_push_literal (cs_State *C, const char *s);</pre>
+        <p>
+        This macro is equivalent to
+        <a href="#cs_push_string"><code>cs_push_string</code></a>, but should
+        be used only when <code>s</code> is a literal string.
+        (CScript may optimize this case.)
         </p>
 
         <!-- cs_push_globaltable -->
         <hr><h3><a name="cs_push_globaltable"><code>cs_push_globaltable</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +1, &ndash;]</span>
         <pre>void cs_push_globaltable (cs_State *C);</pre>
+        <p>
+        Pushes the global table onto the stack.
         </p>
 
         <!-- cs_to_string -->
         <hr><h3><a name="cs_to_string"><code>cs_to_string</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>const char *cs_to_string (cs_State *C, int index);</pre>
+        <p>
+        Equivalent to <a href="#cs_to_lstring"><code>cs_to_lstring</code></a>
+        with <code>len</code> equal to <code>NULL</code>.
         </p>
 
         <!-- cs_insert -->
         <hr><h3><a name="cs_insert"><code>cs_insert</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-1, +1, &ndash;]</span>
         <pre>void cs_insert (cs_State *C, int index);</pre>
+        <p>
+        Moves the top element into the given valid index, shifting up the
+        elements above this index to open space.
+        This function cannot be called with a pseudo-index, because a
+        pseudo-index is not an actual stack position.
         </p>
 
         <!-- cs_remove -->
         <hr><h3><a name="cs_remove"><code>cs_remove</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-1, +0, &ndash;]</span>
         <pre>void cs_remove (cs_State *C, int index);</pre>
+        <p>
+        Removes the element at the given valid index, shifting down the
+        elements above this index to fill the gap.
+        This function cannot be called with a pseudo-index, because a
+        pseudo-index is not an actual stack position.
         </p>
 
         <!-- cs_replace -->
         <hr><h3><a name="cs_replace"><code>cs_replace</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-1, +0, &ndash;]</span>
         <pre>void cs_replace (cs_State *C, int index);</pre>
+        <p>
+        Moves the top element into the given valid index without shifting any
+        element (therefore replacing the value at that given index), and then
+        pops the top element.
         </p>
 
         <!-- cs_getstack -->
         <hr><h3><a name="cs_getstack"><code>cs_getstack</code></a></h3>
-        <p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_getstack (cs_State *C, int level, cs_Debug *ar);</pre>
+        <p>
+        Gets information about the interpreter runtime stack.
+        <br/><br/>
+        This function fills parts of a
+        <a href="#cs_Debug"><code>cs_Debug</code></a> structure with an
+        identification of the <em>activation record</em> of the function
+        executing at a given level.
+        Level&nbsp;0 is the current running function, whereas level
+        <em>n+1</em> is the function that has called level <em>n</em>.
+        When called with a level greater than the stack depth,
+        <a href="#cs_getstack"><code>cs_getstack</code></a> returns 0;
+        otherwise it returns 1.
         </p>
 
         <!-- cs_getinfo -->
         <hr><h3><a name="cs_getinfo"><code>cs_getinfo</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-(0|1), +(0|1|2), <em>m</em>]</span>
         <pre>int cs_getinfo (cs_State *C, const char *what, cs_Debug *ar);</pre>
+        <p>
+        Gets information about a specific function or function invocation.
+        <br/><br/>
+        To get information about a function invocation, the parameter
+        <code>ar</code> must be a valid activation record that was filled by
+        a previous call to <a href="#cs_getstack"><code>cs_getstack</code></a>.
+        <br/><br/>
+        To get information about a function, you push it onto the stack and
+        start the <code>what</code> string with the character
+        '<code>&gt;</code>'.
+        (In that case, <code>cs_getinfo</code> pops the function from the top
+        of the stack.)
+        For instance, to know in which line a function <code>f</code> was defined,
+        you can write the following code:
+        <pre>
+    cs_Debug ar;
+    cs_get_global(C, "f");  /* get global 'f' */
+    cs_getinfo(C, "&gt;s", &amp;ar);
+    printf("%d\n", ar.defline);</pre>
+        Each character in the string <code>what</code> selects some fields of
+        the structure <code>ar</code> to be filled or a value to be pushed on
+        the stack.
+        (These characters are also documented in the declaration of the
+        structure <a href="#cs_Debug"><code>cs_Debug</code></a>, between
+        parentheses in the comments following each field.)
+        <ul>
+            <li>
+                <b>'<code>f</code>': </b>
+                pushes onto the stack the function that is running at the
+                given level;
+            </li>
+            <li>
+                <b>'<code>l</code>': </b>
+                fills in the field <code>currline</code>;
+            </li>
+            <li>
+                <b>'<code>n</code>': </b>
+                fills in the fields <code>name</code> and
+                <code>namewhat</code>;
+            </li>
+            <li>
+                <b>'<code>s</code>': </b>
+                fills in the fields <code>source</code>,
+                <code>shortsrc</code>, <code>defline</code>,
+                <code>lastdefline</code> and <code>what</code>;
+            </li>
+            <li>
+                <b>'<code>u</code>': </b>
+                fills in the fields <code>nupvals</code>, <code>nparams</code>
+                and <code>isvararg</code>;
+            </li>
+        </ul>
+        This function returns 0 to signal an invalid option in
+        <code>what</code>; even then the valid options are handled correctly.
         </p>
 
         <!-- cs_getlocal -->
         <hr><h3><a name="cs_getlocal"><code>cs_getlocal</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +(0|1), &ndash;]</span>
         <pre>const char *cs_getlocal (cs_State *C, const cs_Debug *ar, int n);</pre>
+        <p>
+        Gets information about a local variable or a temporary value of a
+        given activation record or a given function.
+        <br/><br/>
+        In the first case, the parameter <code>ar</code> must be a valid
+        activation record that was filled by a previous call to
+        <a href="#cs_getstack"><code>cs_getstack</code></a>.
+        The index <code>n</code> selects which local variable to inspect.
+        <br/><br/>
+        <a href="#cs_getlocal"><code>cs_getlocal</code></a> pushes the
+        variable's value onto the stack and returns its name.
+        <br/><br/>
+        In the second case, <code>ar</code> must be <code>NULL</code> and the
+        function to be inspected must be on the top of the stack.
+        In this case, only parameters of CScript functions are visible
+        (as there is no information about what variables are active)
+        and no values are pushed onto the stack.
+        <br/><br/>
+        Returns <code>NULL</code> (and pushes nothing) when the index is
+        greater than the number of active local variables.
         </p>
 
         <!-- cs_setlocal -->
         <hr><h3><a name="cs_setlocal"><code>cs_setlocal</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-(0|1), +0, &ndash;]</span>
         <pre>const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n);</pre>
+        <p>
+        Sets the value of a local variable of a given activation record.
+        It assigns the value on the top of the stack to the variable and
+        returns its name.
+        It also pops the value from the stack.
+        <br/><br/>
+        Returns <code>NULL</code> (and pops nothing) when the index is
+        greater than the number of active local variables.
+        <br/><br/>
+        Parameters <code>ar</code> and <code>n</code> are as in the function
+        <a href="#cs_getlocal"><code>cs_getlocal</code></a>.
         </p>
 
         <!-- cs_getupvalue -->
         <hr><h3><a name="cs_getupvalue"><code>cs_getupvalue</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-0, +(0|1), &ndash;]</span>
         <pre>const char *cs_getupvalue (cs_State *C, int index, int n);</pre>
+        <p>
+        Gets information about the <code>n</code>-th upvalue of the closure
+        at the given index.
+        It pushes the upvalue's value onto the stack and returns its name.
+        Returns <code>NULL</code> (and pushes nothing) when the index
+        <code>n</code> is greater than the number of upvalues.
         </p>
 
         <!-- cs_setupvalue -->
         <hr><h3><a name="cs_setupvalue"><code>cs_setupvalue</code></a></h3>
-        <p>
-        <span class="apii">[-0, +0, &ndash;]</span>
+        <span class="apii">[-(0|1), +0, &ndash;]</span>
         <pre>const char *cs_setupvalue (cs_State *C, int index, int n);</pre>
+        <p>
+        Sets the value of a closure's upvalue.
+        It assigns the value on the top of the stack to the upvalue and
+        returns its name.
+        It also pops the value from the stack.
+        <br/><br/>
+        Returns <code>NULL</code> (and pops nothing) when the index
+        <code>n</code> is greater than the number of upvalues.
+        <br/><br/>
+        Parameters <code>funcindex</code> and <code>n</code> are as in
+        the function <a href="#cs_getupvalue"><code>cs_getupvalue</code></a>.
         </p>
 
 
@@ -2761,9 +3056,9 @@
 
         <!-- next -->
         <hr/><h3><a name="next"><code>next (v [, index])</code></a></h3>
-        Allows a program to traverse of all fields of <code>v</code>.
+        Allows a program to traverse of all keys or fields of <code>v</code>.
         Its first argument is a table or instance and its second argument
-        is an index into this table/instance.
+        is an index into this table or instance.
         A call to <code>next</code> returns the next index of the
         <code>v</code> and its associated value.
         When called with <b>nil</b> as its second argument, <code>next</code>

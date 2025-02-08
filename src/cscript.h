@@ -159,7 +159,7 @@ CS_API cs_Number        cs_version(cs_State *C);
 /* -----------------------------------------------------------------------
 ** Stack manipulation
 ** ----------------------------------------------------------------------- */
-CS_API void             cs_setntop(cs_State *C, int nvals); 
+CS_API void             cs_setntop(cs_State *C, int n); 
 CS_API int              cs_gettop(const cs_State *C); 
 CS_API int              cs_absindex(cs_State *C, int index); 
 CS_API void             cs_rotate(cs_State *C, int index, int n); 
@@ -248,6 +248,7 @@ CS_API int   cs_get_global(cs_State *C, const char *name);
 CS_API int   cs_get(cs_State *C, int index); 
 CS_API int   cs_get_raw(cs_State *C, int index); 
 CS_API int   cs_get_index(cs_State *C, int index, cs_Integer i);
+CS_API int   cs_get_nilindex(cs_State *C, int index, int begin, int end);
 CS_API int   cs_get_field(cs_State *C, int index); 
 CS_API int   cs_get_fieldstr(cs_State *C, int index, const char *field); 
 CS_API int   cs_get_fieldptr(cs_State *C, int index, const void *field); 
@@ -353,7 +354,7 @@ CS_API int              cs_getfreereg(cs_State *C);
 #define cs_is_instance(C, n)        (cs_type(C, (n)) == CS_TINSTANCE)
 #define cs_is_lightuserdata(C, n)   (cs_type(C, (n)) == CS_TLUDATA)
 #define cs_is_nil(C, n)             (cs_type(C, (n)) == CS_TNIL)
-#define cs_is_boolean(C, n)         (cs_type(C, (n)) == CS_TBOOL)
+#define cs_is_bool(C, n)            (cs_type(C, (n)) == CS_TBOOL)
 #define cs_is_thread(C, n)          (cs_type(C, (n)) == CS_TTHREAD)
 #define cs_is_none(C, n)            (cs_type(C, (n)) == CS_TNONE)
 #define cs_is_noneornil(C, n)       (cs_type(C, (n)) <= 0)

@@ -602,6 +602,50 @@ CSLIB_API void csL_set_funcs(cs_State *C, const cs_Entry *l, int nup) {
 }
 
 
+/* ------------------------------------------------------------------------
+** Reference System
+** ------------------------------------------------------------------------ */
+
+/* index of free-list header (after the predefined values) */
+#define freelist    (CS_RINDEX_LAST + 1)
+
+CSLIB_API int csL_ref(cs_State *C, int a) {
+    int ref;
+    if (cs_is_nil(C, -1)) { /* value on top is 'nil'? */
+        cs_pop(C, 1); /* remove it from the stack */
+        return CS_REFNIL;
+    }
+    a = cs_absindex(C, a);
+    if (cs_get_index(C, a, freelist) == CS_TNIL) { /* first access? */
+        ref = 0; /* list is empty */
+        cs_push_integer(C, 0); /* initialize empty list */
+        cs_set_index(C, a, freelist); /* ref = a[freelist] = 0 */
+    } else { /* already initialized */
+        cs_assert(cs_is_integer(C, -1));
+        ref = (int)cs_to_integer(C, -1); /* ref = a[freelist] */
+    }
+    cs_pop(C, 1); /* remove element */
+    if (ref != 0) { /* any free element? */
+        cs_get_index(C, a, ref); /* remove it from list */
+        cs_set_index(C, a, freelist); /* (a[freelist] = a[ref]) */
+    } else /* no free elements */
+        ref = (int)cs_get_nilindex(C, a, freelist+1, 0); /* get a new ref */
+    cs_set_index(C, a, ref);
+    return ref;
+}
+
+
+CSLIB_API void csL_unref(cs_State *C, int a, int ref) {
+    if (ref >= 0) {
+        a = cs_absindex(C, a);
+        cs_get_index(C, a, freelist);
+        cs_assert(cs_is_integer(C, -1));
+        cs_set_index(C, a, ref); /* a[ref] = a[freelist] */
+        cs_push_integer(C, ref);
+        cs_set_index(C, a, freelist); /* a[freelist] = ref */
+    }
+}
+
 
 /* ------------------------------------------------------------------------
 ** Buffering
