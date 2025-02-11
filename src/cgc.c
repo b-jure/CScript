@@ -716,7 +716,7 @@ void csG_checkfin(cs_State *C, GCObject *o, TValue vmt[CS_MM_N]) {
         if (gs->sweeppos == &o->next) /* should sweep more? */
             gs->sweeppos = sweepuntilalive(C, gs->sweeppos);
     }
-    /* serch for pointer in 'objects' pointing to 'o' */
+    /* search for pointer in 'objects' pointing to 'o' */
     for (pp = &gs->objects; *pp != o; pp = &(*pp)->next) {/* empty */}
     *pp = o->next; /* remove 'o' from 'objects' */
     o->next = gs->fin; /* link it in 'fin' list */

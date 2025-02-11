@@ -520,22 +520,22 @@
         Several functions that report errors in the API use the following
         status codes to indicate different kinds of errors or other conditions:
         <ul>
-            <li><b><a name="pdf-CS_OK"><code>CS_OK</code></a> (0):</b>
+            <li><b><a name="CS_OK"><code>CS_OK</code></a> (0):</b>
                 no errors.
             </li>
-            <li><b><a name="pdf-CS_ERRRUN"><code>CS_ERRRUNTIME</code></a>:</b>
+            <li><b><a name="CS_ERRRUN"><code>CS_ERRRUNTIME</code></a>:</b>
                 a runtime error.
             </li>
-            <li><b><a name="pdf-CS_ERRMEM"><code>CS_ERRMEM</code></a>: </b>
+            <li><b><a name="CS_ERRMEM"><code>CS_ERRMEM</code></a>: </b>
                 memory allocation error.
                 For such errors, CScript does not call the message handler.
             </li>
-            <li><b><a name="pdf-CS_ERRERR"><code>CS_ERRERROR</code></a>: </b>
+            <li><b><a name="CS_ERRERR"><code>CS_ERRERROR</code></a>: </b>
                 error while running the message handler.
             </li>
-            <li><b><a name="pdf-CS_ERRSYNTAX"><code>CS_ERRSYNTAX</code></a>:</b>
+            <li><b><a name="CS_ERRSYNTAX"><code>CS_ERRSYNTAX</code></a>:</b>
                 syntax error during precompilation.</li>
-            <li><b><a name="pdf-CS_ERRFILE"><code>CS_ERRFILE</code></a>:</b>
+            <li><b><a name="CS_ERRFILE"><code>CS_ERRFILE</code></a>:</b>
                 a file-related error;
                 e.g., it cannot open or read the file.</li>
         </ul><p>
@@ -545,8 +545,7 @@
 
         <h2>4.5 &ndash; <a name="4.5">Functions and Types</a></h2>
         <p>
-        Here we list all functions and types from the C&nbsp;API in
-        alphabetical order.
+        Here we list all functions and types from the C&nbsp;API.
         Each function has an indicator like this:
         <span class="apii">[-o, +p, <em>x</em>]</span>
         <br/><br/>
@@ -2556,7 +2555,7 @@
 
         <!-- cs_register -->
         <hr><h3><a name="cs_register"><code>cs_register</code></a></h3>
-        <span class="apii">[-1, +1, <em>m</em>]</span>
+        <span class="apii">[-0, +0, <em>m</em>]</span>
         <pre>void cs_register (cs_State *C, const char *name, cs_CFunction f);</pre>
         <p>
         Sets the C&nbsp;function <code>f</code> as the new value of global
@@ -2878,10 +2877,515 @@
 
 
 
-
         <h1>5 &ndash; <a name="5">The Auxiliary Library</h1>
-        <p>To do...</p>
+        <p>
+        The <em>auxiliary library</em> provides several convenient functions
+        to interface C with CScript.
+        While the basic API provides the primitive functions for all
+        interactions between C and CScript, the auxiliary library provides
+        higher-level functions for some common tasks.
+        <br/><br/>
+        All functions and types from the auxiliary library are defined in
+        header file <code>cauxlib.h</code> and have a prefix <code>csL_</code>.
+        <br/><br/>
+        All functions in the auxiliary library are built on top of the basic
+        API, and so they provide nothing that cannot be done with that API.
+        Nevertheless, the use of the auxiliary library ensures more
+        consistency to your code.
+        <br/><br/>
+        Several functions in the auxiliary library use internally some
+        extra stack slots.
+        When a function in the auxiliary library uses less than five slots,
+        it does not check the stack size; it simply assumes that there are
+        enough slots.
+        <br/><br/>
+        Several functions in the auxiliary library are used to check
+        C&nbsp;function arguments.
+        Because the error message is formatted for arguments
+        (e.g., "<code>bad argument #1</code>"), you should not use these
+        functions for other stack values.
+        <br/><br/>
+        Functions called <code>csL_check*</code> always raise an error if
+        the check is not satisfied.
+        </p>
 
+
+        <h2>5.1 &ndash; <a name="5.1">Functions and Types</a></h2>
+        <p>Here we list all functions and types from the auxiliary library:</p>
+
+        <hr><h3><a name="csL_error"><code>csL_error</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>int csL_error (cs_State *C, const char *fmt, ...);</pre>
+        <p>
+        Raises an error.
+        The error message format is given by <code>fmt</code> plus any extra
+        arguments, following the same rules of
+        <a href="#cs_push_fstring"><code>cs_push_fstring</code></a>.
+        It also adds at the beginning of the message the file name and
+        the line number where the error occurred, if this information is
+        available.
+        <br/><br/>
+        This function never returns, but it is an idiom to use it in
+        C&nbsp;functions as <code>return csL_error(<em>args</em>)</code>.
+        </p>
+
+        <hr><h3><a name="csL_arg_error"><code>csL_arg_error</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>int csL_arg_error (cs_State *C, int arg, const char *extra);</pre>
+        <p>
+        Raises an error reporting a problem with argument <code>arg</code>
+        of the C&nbsp;function that called it, using a standard message
+        that includes <code>extra</code> as a comment:
+        <pre>
+    bad argument #<em>arg</em> to '<em>funcname</em>' (<em>extra</em>)</pre>
+        This function never returns.
+        </p>
+
+        <hr><h3><a name="csL_type_error"><code>csL_type_error</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>int csL_type_error (cs_State *C, int arg, const char *tname);</pre>
+        <p>
+        Raises a type error for the argument <code>arg</code> of the
+        C&nbsp;function that called it, using a standard message;
+        <code>tname</code> is a "name" for the expected type.
+        This function never returns.
+        </p>
+
+        <hr><h3><a name="csL_check_number"><code>csL_check_number</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>cs_Number csL_check_number (cs_State *C, int arg);</pre>
+        <p>
+        Checks whether the function argument <code>arg</code> is a number
+        and returns this number converted to a <code>cs_Number</code>.
+        </p>
+
+        <hr><h3><a name="csL_check_integer"><code>csL_check_integer</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>cs_Integer csL_check_integer (cs_State *C);</pre>
+        <p>
+        Checks whether the function argument <code>arg</code> is an integer
+        and returns this integer.
+        </p>
+
+        <hr><h3><a name="csL_check_lstring"><code>csL_check_lstring</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>const char *csL_check_lstring (cs_State *C, int arg, size_t *l);</pre>
+        <p>
+        Checks whether the function argument <code>arg</code> is a string
+        and returns this string;
+        if <code>l</code> is not <code>NULL</code> fills its referent
+        with the string's length.
+        <br/><br/>
+        This function uses
+        <a href="#cs_to_lstring"><code>cs_to_lstring</code></a> to get its
+        result, so all conversions and caveats of that function apply here.
+        </p>
+
+        <hr><h3><a name="csL_check_type"><code>csL_check_type</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_check_type (cs_State *C, int arg, int t);</pre>
+        <p>
+        Checks whether the function argument <code>arg</code> has type
+        <code>t</code>.
+        See <a href="#cs_type"><code>cs_type</code></a> for the encoding of
+        types for <code>t</code>.
+        </p>
+
+        <hr><h3><a name="csL_check_any"><code>csL_check_any</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_check_any (cs_State *C, int arg);</pre>
+        <p>
+        Checks whether the function has an argument of any type
+        (including <b>nil</b>) at position <code>arg</code>.
+        </p>
+
+        <hr><h3><a name="csL_check_stack"><code>csL_check_stack</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_check_stack (cs_State *C, int sz, const char *msg);</pre>
+        <p>
+        Grows the stack size to <code>top + sz</code> elements,
+        raising an error if the stack cannot grow to that size.
+        <code>msg</code> is an additional text to go into the error message
+        (or <code>NULL</code> for no additional text).
+        </p>
+
+        <hr><h3><a name="csL_check_userdata"><code>csL_check_userdata</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_check_userdata (cs_State *C, int arg, const char *tname);</pre>
+        <p>
+        Checks whether the function argument <code>arg</code> is a userdata
+        of the type <code>tname</code> and returns the userdata's memory-block
+        address (see <a href="#cs_to_userdata"><code>cs_to_userdata</code></a>).
+        </p>
+
+        <hr><h3><a name="csL_check_option"><code>csL_check_option</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_check_option (cs_State *C
+                       int arg,
+                       const char *dfl,
+                       const char *const opts[]);</pre>
+        <p>
+        Checks whether the function argument <code>arg</code> is a string and
+        searches for this string in the array <code>opts</code>
+        (which must be NULL-terminated).
+        Returns the index in the array where the string was found.
+        Raises an error if the argument is not a string or if the string
+        cannot be found.
+        <br/><br/>
+        If <code>dfl</code> is not <code>NULL</code>, the function uses
+        <code>dfl</code> as a default value when there is no argument
+        <code>arg</code> or when this argument is <b>nil</b>.
+        <br/><br/>
+        This is a useful function for mapping strings to C&nbsp;enums.
+        (The usual convention in CScript libraries is to use strings instead of
+        numbers to select options.)
+        </p>
+
+        <hr><h3><a name="csL_opt_number"><code>csL_opt_number</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>cs_Number csL_opt_number (cs_State *C, int arg, cs_Number dfl);</pre>
+        <p>
+        If the function argument <code>arg</code> is a number, returns this
+        number as a <code>cs_Number</code>.
+        If this argument is absent or is <b>nil</b>, returns <code>dfl</code>.
+        Otherwise, raises an error.
+        </p>
+
+        <hr><h3><a name="csL_opt_integer"><code>csL_opt_integer</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>cs_Integer csL_opt_integer (cs_State *C, int arg, cs_Integer dfl);</pre>
+        <p>
+        If the function argument <code>arg</code> is an integer, returns this
+        integer.
+        If this argument is absent or is <b>nil</b>, returns <code>dfl</code>.
+        Otherwise, raises an error.
+        </p>
+
+        <hr><h3><a name="csL_opt_lstring"><code>csL_opt_lstring</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>const char *csL_opt_lstring (cs_State *C,
+                             int arg,
+                             const char *dfl,
+                             size_t *l);</pre>
+        <p>
+        If the function argument <code>arg</code> is a string, returns this
+        string.
+        If this argument is absent or is <b>nil</b>, returns <code>dfl</code>.
+        Otherwise, raises an error.
+        <br/><br/>
+        If <code>l</code> is not <code>NULL</code>, fills its referent with
+        the result's length.
+        If the result is <code>NULL</code> (only possible when returning
+        <code>dfl</code> and <code>dfl == NULL</code>), its length is
+        considered zero.
+        <br/><br/>
+        This function uses
+        <a href="#cs_to_lstring"><code>cs_to_lstring</code></a> to get its
+        result, so all conversions and caveats of that function apply here.
+        </p>
+
+        <hr><h3><a name="csL_loadfile"><code>csL_loadfile</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>int csL_loadfile (cs_State *C, const char *filename);</pre>
+        <p>
+        Loads a file as a CScript chunk.
+        This function uses <a href="#cs_load"><code>cs_load</code></a> to
+        load the chunk in the file named <code>filename</code>.
+        If <code>filename</code> is <code>NULL</code>, then it loads from
+        the standard input.
+        <br/><br/>
+        This function returns the same results as
+        <a href="#cs_load"><code>cs_load</code></a> or
+        <a href="#CS_ERRFILE"><code>CS_ERRFILE</code></a> for file-related
+        errors.
+        <br/><br/>
+        As <a href="#cs_load"><code>cs_load</code></a>, this function only
+        loads the chunk; it does not run it.
+        </p>
+
+        <hr><h3><a name="csL_loadstring"><code>csL_loadstring</code></a></h3><p>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void csL_loadstring (cs_State *C, const char *s);</pre>
+        <p>
+        Loads a string as a CScript chunk.
+        This function uses <a href="#cs_load"><code>cs_load</code></a> to
+        load the chunk in the zero-terminated string <code>s</code>.
+        </p>
+
+        <hr><h3><a name="csL_loadbuffer"><code>csL_loadbuffer</code></a></h3><p>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void csL_loadbuffer (cs_State *C,
+                     const char *buff,
+                     size_t sz,
+                     const char *name);</pre>
+        <p>
+        Loads a buffer as a CScript chunk.
+        This function uses <a href="#cs_load"><code>cs_load</code></a> to load
+        the chunk in the buffer pointed to by <code>buff</code> with size
+        <code>sz</code>.
+        <br/><br/>
+        This function returns the same results as
+        <a href="#cs_load"><code>cs_load</code></a>.
+        <code>name</code> is the chunk name, used for debug information and
+        error messages.
+        </p>
+
+        <hr><h3><a name="csL_to_lstring"><code>csL_to_lstring</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_to_lstring (cs_State *C, int index, size_t *len);</pre>
+        <p>
+        Converts any CScript value at the given index to a C&nbsp;string
+        in a reasonable format.
+        The resulting string is pushed onto the stack and also
+        returned by the function (see <a href="#4.1.3">&sect;4.1.3</a>).
+        If <code>len</code> is not <code>NULL</code>, the function also sets
+        <code>*len</code> with the string length.
+        </p>
+
+        <hr><h3><a name="csL_where"><code>csL_where</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_where (cs_State *C, int level);</pre>
+        <p>
+        Pushes onto the stack a string identifying the current position
+        of the control at level <code>lvl</code> in the call stack.
+        Typically this string has the following format:
+        <pre>
+    <em>chunkname</em>:<em>currentline</em>:</pre>
+        Level&nbsp;0 is the running function, level&nbsp;1 is the function
+        that called the running function, etc.
+        <br/><br/>
+        This function is used to build a prefix for error messages.
+        </p>
+
+        <hr><h3><a name="csL_fileresult"><code>csL_fileresult</code></a></h3><p>
+        <span class="apii">[-0, +(1|3), <em>m</em>]</span>
+        <pre>void csL_fileresult (cs_State *C, int ok, const char *fname);</pre>
+        <p>
+        This function produces the return values for file-related functions
+        in the standard library.
+        </p>
+
+        <hr><h3><a name="csL_get_property"><code>csL_get_property</code></a></h3><p>
+        <span class="apii">[-1, +1, <em>m</em>]</span>
+        <pre>int csL_get_property (cs_State *C, int index);</pre>
+        <p>
+        Equivalent to <a href="#cs_get_field"><code>cs_get_field</code></a>
+        except if the field is <b>nil</b> then it will try and get the method
+        under the same key
+        (via <a href="#cs_get_class"><code>cs_get_class</code></a>
+        and <a href="#cs_get_method"><code>cs_get_method</code></a>).
+        <br/><br/>
+        This function returns the type of the field or method (aka property),
+        and replaces the key on top of the stack with the value of the
+        property.
+        <br/>
+        (Note that if the function returned
+        <a href="#CS_TNIL"><code>CS_TNIL</code></a>, it means that both the
+        field and method are <b>nil</b>).
+        </p>
+
+        <hr><h3><a name="csL_set_index"><code>csL_set_index</code></a></h3><p>
+        <span class="apii">[-1, +0, <em>v</em>]</span>
+        <pre>void csL_set_index (cs_State *C, int index, cs_Integer i);</pre>
+        <p>
+        Equivalent to <a href="#cs_set_index"><code>cs_set_index</code></a>
+        but this invokes error if the index <code>i</code> is negative.
+        </p>
+
+        <hr><h3><a name="csL_newstate"><code>csL_newstate</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>cs_State *csL_newstate (void);</pre>
+        <p>
+        Creates a new CScript state.
+        It calls <a href="#cs_newstate"><code>cs_newstate</code></a> with an
+        allocator based on the ISO&nbsp;C allocation functions and then
+        sets a warning function and a panic function
+        (see <a href="#4.4">&sect;4.4</a>) that print messages to standard
+        error output.
+        <br/><br/>
+        Returns the new state or <code>NULL</code> if there is a memory
+        allocation error.
+        </p>
+
+        <hr><h3><a name="csL_get_subtable"><code>csL_get_subtable</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>e</em>]</span>
+        <pre>int csL_get_subfield (cs_State *C, int index, const char *field);</pre>
+        <p>
+        Ensures that the value <code>obj[field]</code>, where <code>obj</code>
+        is the value at the given index, is a table, and pushes that table
+        onto the stack.
+        Returns true if it finds a previous table there and false if it
+        creates a new table.
+        </p>
+
+        <hr><h3><a name="csL_include"><code>csL_include</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>e</em>]</span>
+        <pre>void csL_include (cs_State *C, const char *modname,
+                  cs_CFunction openf, int global);</pre>
+        <p>
+        If <code>package.loaded[modname]</code> is not true,
+        calls the function <code>openf</code> with the string <code>modname</code> as an argument
+        and sets the call result to <code>package.loaded[modname]</code>,
+        as if that function has been called through <a href="#pdf-require"><code>require</code></a>.
+        <br/><br/>
+        If <code>glb</code> is true,
+        also stores the module into the global <code>modname</code>.
+        <br/><br/>
+        Leaves a copy of the module on the stack.
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
+        <pre>void csL_some (cs_State *C);</pre>
+        <p>
+        </p>
+
+        <hr><h3><a name="csL_addchar"><code>csL_addchar</code></a></h3><p>
+        <span class="apii">[-?, +?, <em>m</em>]</span>
+        <pre>void csL_buff_push (csL_Buffer *B, char c);</pre>
+        <p>
+        Adds the byte <code>c</code> to the buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
+        </p>
 
 
 

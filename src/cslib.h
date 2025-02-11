@@ -10,8 +10,18 @@
 
 #include "cscript.h"
 
-CSMOD_API int csL_open_basic(cs_State *C);
 
-CSLIB_API void csL_open_libs(cs_State *C);
+/* version suffix for environment variable names */
+#define CS_VERSUFFIX          "_" CS_VERSION_MAJOR "_" CS_VERSION_MINOR
+
+
+CSMOD_API int csopen_basic(cs_State *C);
+
+#define CS_LOADLIBNAME  "package"
+CSMOD_API int csopen_package(cs_State *C);
+
+
+/* open all previous libraries */
+CSLIB_API void csL_openlibs(cs_State *C);
 
 #endif

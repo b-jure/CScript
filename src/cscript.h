@@ -22,8 +22,10 @@
 
 #define CS_VERSION      "CScript " CS_VERSION_MAJOR "." CS_VERSION_MINOR
 #define CS_RELEASE      CS_VERSION "." CS_VERSION_RELEASE
-#define CS_COPYRIGHT    CS_RELEASE " Copyright (C) 2023-2024 Jure Bagić"
+#define CS_COPYRIGHT    CS_RELEASE " Copyright (C) 2024-2025 Jure Bagić"
 
+/* For use in binary */
+#define LUA_COPYRIGHT   "Lua 5.3.6  Copyright (C) 1994-2020 Lua.org, PUC-Rio"
 
 
 /* option for multiple returns in 'cs_pcall' and 'cs_call' */
@@ -410,7 +412,7 @@ struct cs_Debug {
  | Big Thank You to Lua Developers! |
  \________________________________*/
 /* -----------------------------------------------------------------------
-** Copyright (C) 1994-2023 Lua.org, PUC-Rio.
+** Copyright (C) 1994-2020 Lua.org, PUC-Rio.
 ** Copyright (C) 2023-2024 Jure Bagić
 **
 ** Permission is hereby granted, free of charge, to any person obtaining

@@ -334,9 +334,9 @@ static void printresults(cs_State *C) {
         csL_check_stack(C, CS_MINSTACK, "too many results to print");
         cs_get_global(C, "print");
         cs_insert(C, 1);
-        if (cs_pcall(C, n, 0, 0) != CS_OK)
+        if (cs_pcall(C, n, 0, -1) != CS_OK)
             emsg(progname, cs_push_fstring(C, "error calling 'print' (%s)",
-                        cs_to_string(C, -1)));
+                           cs_to_string(C, -1)));
     }
 }
 
@@ -397,7 +397,7 @@ static int pmain(cs_State *C) {
         printusage(NULL);
     if (args & arg_v)
         printversion();
-    csL_open_libs(C); /* open standard libraries */
+    csL_openlibs(C); /* open standard libraries */
     createargarray(C, argv, argc); /* create 'arg' array */
     cs_gc(C, CS_GCRESTART);
     cs_gc(C, CS_GCINC, 0, 0, 0);
@@ -433,7 +433,7 @@ int main(int argc, char* argv[]) {
     cs_push_cfunction(C, pmain);
     cs_push_integer(C, argc);
     cs_push_lightuserdata(C, argv);
-    status = cs_pcall(C, 2, 1, 0);
+    status = cs_pcall(C, 2, 1, -1);
     res = cs_to_bool(C, -1);
     report(C, status);
     cs_close(C);

@@ -630,22 +630,22 @@ CS_API const char *cs_push_fstring(cs_State *C, const char *fmt, ...) {
 }
 
 
-/* auxiliary function, pushes C closure without locking */
-c_sinline void auxpushcclosure(cs_State *C, cs_CFunction fn, int nupvals) {
+/* pushes C closure without locking */
+c_sinline void pushcclosure(cs_State *C, cs_CFunction fn, int nupvals) {
     if (nupvals == 0) {
         setcfval(C, s2v(C->sp.p), fn);
         api_inctop(C);
     } else {
-        CClosure *ccl;
+        CClosure *cl;
         api_checknelems(C, nupvals);
-        ccl = csF_newCClosure(C, nupvals);
-        ccl->fn = fn;
+        cl = csF_newCClosure(C, nupvals);
+        cl->fn = fn;
         C->sp.p -= nupvals;
         while (nupvals--) {
-            setobj(C, &ccl->upvals[nupvals], s2v(C->sp.p + nupvals));
-            cs_assert(iswhite(ccl));
+            setobj(C, &cl->upvals[nupvals], s2v(C->sp.p + nupvals));
+            cs_assert(iswhite(cl));
         }
-        setclCval2s(C, C->sp.p, ccl);
+        setclCval(C, s2v(C->sp.p), cl);
         api_inctop(C);
         csG_checkGC(C);
     }
@@ -661,7 +661,8 @@ c_sinline void auxpushcclosure(cs_State *C, cs_CFunction fn, int nupvals) {
 */
 CS_API void cs_push_cclosure(cs_State *C, cs_CFunction fn, int nupvals) {
     cs_lock(C);
-    auxpushcclosure(C, fn, nupvals);
+    pushcclosure(C, fn, nupvals);
+    csTR_dumpstack(C, 1, "cclosure(%d)", nupvals);
     cs_unlock(C);
 }
 
@@ -794,7 +795,7 @@ c_sinline void auxsetentrylist(cs_State *C, OClass *cls, const cs_Entry *l,
             api_check(C, l->func, "l->func is NULL");
             for (int i = 0; i < nup; i++) /* push upvalues to the top */
                 pushvalue(C, -nup);
-            auxpushcclosure(C, l->func, nup);
+            pushcclosure(C, l->func, nup);
             auxrawsetstr(C, cls->methods, l->name, s2v(C->sp.p - 1));
         } while (l++, l->name);
     }
@@ -931,6 +932,8 @@ c_sinline Table *gettable(cs_State *C, int obj) {
         case CS_VINSTANCE: return insval(o)->fields;
         case CS_VTABLE: return tval(o); 
         default:  {
+            csTR_dumpstack(C, 1, "Stack dump");
+            printf("TYPENAME: %s\n", typename(ttype(o)));
             api_check(C, 0, "expect instance or table");
             return NULL;
         }
@@ -1142,14 +1145,14 @@ CS_API void  cs_set_raw(cs_State *C, int obj) {
 }
 
 
-CS_API void cs_set_index(cs_State *C, int arrobj, cs_Integer index) {
+CS_API void cs_set_index(cs_State *C, int index, cs_Integer i) {
     Array *arr;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    api_check(C, 0 <= index && index < ARRAYLIMIT, "`index` out of bounds");
-    arr = getarray(C, arrobj);
-    csA_ensure(C, arr, cast_int(index));
-    setobj(C, &arr->b[cast_int(index)], s2v(C->sp.p - 1));
+    api_check(C, 0 <= i && i < ARRAYLIMIT, "`index` out of bounds");
+    arr = getarray(C, index);
+    csA_ensure(C, arr, cast_int(i));
+    setobj(C, &arr->b[cast_int(i)], s2v(C->sp.p - 1));
     csG_barrierback(C, obj2gco(arr), s2v(C->sp.p - 1));
     C->sp.p--; /* remove value */
     cs_unlock(C);
@@ -1173,11 +1176,11 @@ CS_API void cs_set_field(cs_State *C, int obj) {
 }
 
 
-CS_API void cs_set_fieldstr(cs_State *C, int obj, const char *field) {
+CS_API void cs_set_fieldstr(cs_State *C, int index, const char *field) {
     Table *ht;
     cs_lock(C);
     api_checknelems(C, 1);
-    ht = gettable(C, obj);
+    ht = gettable(C, index);
     auxrawsetstr(C, ht, field, s2v(C->sp.p - 1));
 }
 
@@ -1255,6 +1258,7 @@ CS_API void cs_set_usermm(cs_State *C, int index, cs_MM mm) {
     }
     setobj(C, &ud->vmt[mm], s2v(C->sp.p - 1));
     csG_barrierback(C, obj2gco(ud), s2v(C->sp.p - 1));
+    csG_checkfin(C, obj2gco(ud), ud->vmt);
     C->sp.p--;
     cs_unlock(C);
 }

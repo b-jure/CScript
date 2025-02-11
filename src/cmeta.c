@@ -86,7 +86,7 @@ IMethod *csMM_newinsmethod(cs_State *C, Instance *ins, const TValue *method) {
 
 
 UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv) {
-    GCObject *o = csG_new(C, sizeof(UserData), CS_VUSERDATA);
+    GCObject *o = csG_new(C, sizeofuserdata(nuv, size), CS_VUSERDATA);
     UserData *ud = gco2u(o);
     ud->vmt = NULL;
     ud->nuv = nuv;

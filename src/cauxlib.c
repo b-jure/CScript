@@ -87,36 +87,36 @@ static int pushglobalfuncname(cs_State *C, cs_Debug *di) {
 }
 
 
-CSLIB_API int csL_arg_error(cs_State *C, int argindex, const char *extra) {
+CSLIB_API int csL_arg_error(cs_State *C, int arg, const char *extra) {
     cs_Debug di;
     if (!cs_getstack(C, 0, &di)) /* no stack frame? */
-        return csL_error(C, "bad argument #%d (%s)", argindex, extra);
+        return csL_error(C, "bad argument #%d (%s)", arg, extra);
     cs_getinfo(C, "n", &di);
     if (strcmp(di.namewhat, "method") == 0) {
-        argindex--; /* ignore `self` */
-        if (argindex == 0) /* self is the invalid argument? */
+        arg--; /* ignore `self` */
+        if (arg == 0) /* self is the invalid argument? */
             csL_error(C, "calling '%s' on a bad 'self' (%s)", di.name, extra);
     }
     if (di.name == NULL)
         di.name = (pushglobalfuncname(C, &di)) ? cs_to_string(C, -1) : "?";
     return csL_error(C, "bad argument #%d to '%s' (%s)",
-                         argindex, di.name, extra);
+                         arg, di.name, extra);
 }
 
 
-CSLIB_API int csL_type_error(cs_State *C, int argindex, const char *tname) {
-    const char *msg, *argtype;
-    if (cs_type(C, argindex) == CS_TLIGHTUSERDATA)
-        argtype = "light userdata";
+CSLIB_API int csL_type_error(cs_State *C, int arg, const char *tname) {
+    const char *msg, *type;
+    if (cs_type(C, arg) == CS_TLIGHTUSERDATA)
+        type = "light userdata";
     else
-        argtype = csL_typename(C, argindex);
-    msg = cs_push_fstring(C, "%s expected, instead got %s", tname, argtype);
-    return csL_arg_error(C, argindex, msg);
+        type = csL_typename(C, arg);
+    msg = cs_push_fstring(C, "%s expected, instead got %s", tname, type);
+    return csL_arg_error(C, arg, msg);
 }
 
 
-static void tterror(cs_State *C, int argindex, int tt) {
-    csL_type_error(C, argindex, cs_typename(C, tt));
+static void terror(cs_State *C, int arg, int t) {
+    csL_type_error(C, arg, cs_typename(C, t));
 }
 
 
@@ -124,7 +124,7 @@ CSLIB_API cs_Number csL_check_number(cs_State *C, int index) {
     int isnum;
     cs_Number n = cs_to_numberx(C, index, &isnum);
     if (csi_unlikely(!isnum))
-        tterror(C, index, CS_TNUMBER);
+        terror(C, index, CS_TNUMBER);
     return n;
 }
 
@@ -133,7 +133,7 @@ static void interror(cs_State *C, int argindex) {
     if (cs_is_number(C, argindex))
         csL_arg_error(C, argindex, "number has no integer representation");
     else
-        tterror(C, argindex, CS_TNUMBER);
+        terror(C, argindex, CS_TNUMBER);
 }
 
 
@@ -149,7 +149,7 @@ CSLIB_API cs_Integer csL_check_integer(cs_State *C, int index) {
 CSLIB_API const char *csL_check_lstring(cs_State *C, int index, size_t *len) {
     const char *str = cs_to_lstring(C, index, len);
     if (csi_unlikely(str == NULL))
-        tterror(C, index, CS_TSTRING);
+        terror(C, index, CS_TSTRING);
     return str;
 }
 
@@ -162,8 +162,8 @@ CSLIB_API void *csL_check_userdata(cs_State *C, int index, const char *name) {
 }
 
 
-CSLIB_API void csL_check_stack(cs_State *C, int space, const char *msg) {
-    if (csi_unlikely(!cs_checkstack(C, space))) {
+CSLIB_API void csL_check_stack(cs_State *C, int sz, const char *msg) {
+    if (csi_unlikely(!cs_checkstack(C, sz))) {
         if (msg)
             csL_error(C, "stack overflow (%s)", msg);
         else
@@ -172,27 +172,26 @@ CSLIB_API void csL_check_stack(cs_State *C, int space, const char *msg) {
 }
 
 
-CSLIB_API void csL_check_type(cs_State *C, int index, int tt) {
-    if (csi_unlikely(cs_type(C, index) != tt))
-        tterror(C, index, tt);
+CSLIB_API void csL_check_type(cs_State *C, int arg, int t) {
+    if (csi_unlikely(cs_type(C, arg) != t))
+        terror(C, arg, t);
 }
 
 
-CSLIB_API void csL_check_any(cs_State *C, int index) {
-    if (csi_unlikely(cs_type(C, index) == CS_TNONE))
-        csL_arg_error(C, index, "value expected");
+CSLIB_API void csL_check_any(cs_State *C, int arg) {
+    if (csi_unlikely(cs_type(C, arg) == CS_TNONE))
+        csL_arg_error(C, arg, "value expected");
 }
 
 
-CSLIB_API int csL_check_option(cs_State *C, int index, const char *dfl,
+CSLIB_API int csL_check_option(cs_State *C, int arg, const char *dfl,
                                const char *const opts[]) {
-    const char *str = (dfl ? csL_opt_string(C, index, dfl) :
-                             csL_check_string(C, index));
-    int i;
-    for (i=0; opts[i]; i++)
+    const char *str = dfl ? csL_opt_string(C, arg, dfl)
+                          : csL_check_string(C, arg);
+    for (int i=0; opts[i]; i++)
         if (strcmp(str, opts[i]) == 0)
             return i;
-    return csL_arg_error(C, index,
+    return csL_arg_error(C, arg,
                          cs_push_fstring(C, "invalid option `%s`", str));
 }
 
@@ -376,20 +375,20 @@ CSLIB_API int csL_fileresult(cs_State *C, int ok, const char *fname) {
 }
 
 
-CSLIB_API int csL_get_property(cs_State *C, int insobj) {
-    if (cs_get_field(C, insobj) == CS_TNIL) {
-        cs_pop(C, 1); /* remove nil */
-        cs_get_class(C, insobj);
-        cs_get_method(C, insobj);
+CSLIB_API int csL_get_property(cs_State *C, int index) {
+    if (cs_get_field(C, index) == CS_TNIL) {
+        cs_pop(C, 1); /* remove field */
+        cs_get_class(C, index);
+        cs_get_method(C, index);
     }
     return cs_type(C, -1);
 }
 
 
-CSLIB_API void csL_set_cindex(cs_State *C, int arrobj, cs_Integer i) {
+CSLIB_API void csL_set_index(cs_State *C, int index, cs_Integer i) {
     if (csi_unlikely(i < 0))
         csL_error(C, "array index is negative (%I)", i);
-    cs_set_index(C, arrobj, i);
+    cs_set_index(C, index, i);
 }
 
 
@@ -481,7 +480,7 @@ CSLIB_API void csL_include(cs_State *C, const char *modname,
                            cs_CFunction openf, int global) {
     csL_get_gsubtable(C, CS_LOADED_TABLE);
     cs_get_fieldstr(C, -1, modname); /* get __LOADED[modname] */
-    if (!cs_to_bool(C, -1)) { /* module not already loaded? */
+    if (!cs_to_bool(C, -1)) { /* package not already loaded? */
         cs_pop(C, 1); /* remove field */
         cs_push_cfunction(C, openf); /* push func that opens the module */
         cs_push_string(C, modname); /* argument to `openf` */
@@ -489,10 +488,10 @@ CSLIB_API void csL_include(cs_State *C, const char *modname,
         cs_push(C, -1);  /* make copy of the module (call result) */
         cs_set_fieldstr(C, -3, modname); /* __LOADED[modname] = module */
     }
-    cs_remove(C, -2); /* remove __LOADED */
+    cs_remove(C, -2); /* remove __LOADED table */
     if (global) { /* set the module as global? */
         cs_push(C, -1); /* copy of module */
-        cs_set_global(C, modname); /* set it as global variable */
+        cs_set_global(C, modname); /* __G[modname] = module */
     }
 }
 
@@ -586,7 +585,7 @@ CSLIB_API void csL_traceback(cs_State *C, cs_State *C1, int level,
 }
 
 
-CSLIB_API void csL_set_funcs(cs_State *C, const cs_Entry *l, int nup) {
+CSLIB_API void csL_setfuncs(cs_State *C, const cs_Entry *l, int nup) {
     csL_check_stack(C, nup, "too many upvalues");
     for (; l->name != NULL; l++) {
         if (l->func == NULL) { /* placeholder? */
@@ -599,6 +598,15 @@ CSLIB_API void csL_set_funcs(cs_State *C, const cs_Entry *l, int nup) {
         cs_set_fieldstr(C, -(nup + 2), l->name);
     }
     cs_pop(C, nup); /* remove upvalues */
+}
+
+
+CSLIB_API void csL_checkversion_(cs_State *C, cs_Number ver) {
+    cs_Number v = cs_version(C);
+    if (v != ver)
+        csL_error(C,
+            "version mismatch: application needs %f, CScript core provides %f",
+            ver, v);
 }
 
 
@@ -819,6 +827,29 @@ CSLIB_API void csL_buff_push_stack(csL_Buffer *B) {
     memcpy(p, str, len);
     csL_buffadd(B, len);
     cs_pop(B->C, 1); /* remove string */
+}
+
+
+CSLIB_API void csL_buff_push_gsub(csL_Buffer *B, const char *s, const char *p,
+                                  const char *r) {
+    const char *wild;
+    size_t l = strlen(p);
+    while ((wild = strstr(s, p)) != NULL) {
+        csL_buff_push_lstring(B, s, wild - s); /* push prefix */
+        csL_buff_push_string(B, r); /* push replacement in place of pattern */
+        s = wild + l; /* continue after 'p' */
+    }
+    csL_buff_push_string(B, s); /* push last suffix */
+}
+
+
+CSLIB_API const char *csL_gsub(cs_State *C, const char *s, const char *p,
+                               const char *r) {
+    csL_Buffer B;
+    csL_buff_init(C, &B);
+    csL_buff_push_gsub(&B, s, p, r);
+    csL_buff_end(&B);
+    return cs_to_string(C, -1);
 }
 
 

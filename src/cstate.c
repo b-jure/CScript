@@ -24,11 +24,6 @@
 #include "ctrace.h"
 
 
-/*
-** -- Lua 5.4.7 [lstate.c]:58
-** Macro for creating "random" seed when a state is created;
-** seed is used for randomizing string hashes.
-*/
 #if !defined(csi_makeseed)
 #include <time.h>
 #include <string.h>

@@ -34,15 +34,16 @@ void csA_shrink(cs_State *C, Array *arr) {
 
 /* ensure that 'index' can fit into array memory block */
 void csA_ensure(cs_State *C, Array *arr, int index) {
+    uint cindex = cast_uint(index);
     cs_assert(index >= 0);
-    if (cast_uint(index) < arr->n) { /* 'index' in bounds? */
+    if (cindex < arr->n) { /* 'cindex' in bounds? */
         return; /* done */
     } else {
-        csM_ensurearray(C, arr->b, arr->sz, arr->n, index + 1 - arr->n,
+        csM_ensurearray(C, arr->b, arr->sz, arr->n, cindex + 1 - arr->n,
                         ARRAYLIMIT, "array elements", TValue);
-        for (int i = arr->n; i <= index; i++) /* nil out values in-between */
+        for (uint i = arr->n; i <= cindex; i++) /* nil in-between */
             setnilval(&arr->b[i]);
-        arr->n = index + 1; /* adjust new in-use length */
+        arr->n = cast_uint(cindex) + 1; /* adjust new in-use length */
     }
 }
 
