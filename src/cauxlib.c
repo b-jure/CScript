@@ -87,7 +87,7 @@ static int pushglobalfuncname(cs_State *C, cs_Debug *di) {
 }
 
 
-CSLIB_API int csL_arg_error(cs_State *C, int arg, const char *extra) {
+CSLIB_API int csL_error_arg(cs_State *C, int arg, const char *extra) {
     cs_Debug di;
     if (!cs_getstack(C, 0, &di)) /* no stack frame? */
         return csL_error(C, "bad argument #%d (%s)", arg, extra);
@@ -104,19 +104,19 @@ CSLIB_API int csL_arg_error(cs_State *C, int arg, const char *extra) {
 }
 
 
-CSLIB_API int csL_type_error(cs_State *C, int arg, const char *tname) {
+CSLIB_API int csL_error_type(cs_State *C, int arg, const char *tname) {
     const char *msg, *type;
     if (cs_type(C, arg) == CS_TLIGHTUSERDATA)
         type = "light userdata";
     else
         type = csL_typename(C, arg);
     msg = cs_push_fstring(C, "%s expected, instead got %s", tname, type);
-    return csL_arg_error(C, arg, msg);
+    return csL_error_arg(C, arg, msg);
 }
 
 
 static void terror(cs_State *C, int arg, int t) {
-    csL_type_error(C, arg, cs_typename(C, t));
+    csL_error_type(C, arg, cs_typename(C, t));
 }
 
 
@@ -131,7 +131,7 @@ CSLIB_API cs_Number csL_check_number(cs_State *C, int index) {
 
 static void interror(cs_State *C, int argindex) {
     if (cs_is_number(C, argindex))
-        csL_arg_error(C, argindex, "number has no integer representation");
+        csL_error_arg(C, argindex, "number has no integer representation");
     else
         terror(C, argindex, CS_TNUMBER);
 }
@@ -157,7 +157,7 @@ CSLIB_API const char *csL_check_lstring(cs_State *C, int index, size_t *len) {
 CSLIB_API void *csL_check_userdata(cs_State *C, int index, const char *name) {
     void *p = csL_test_userdata(C, index, name);
     if (csi_unlikely(p == NULL))
-        csL_type_error(C, index, name);
+        csL_error_type(C, index, name);
     return p;
 }
 
@@ -180,7 +180,7 @@ CSLIB_API void csL_check_type(cs_State *C, int arg, int t) {
 
 CSLIB_API void csL_check_any(cs_State *C, int arg) {
     if (csi_unlikely(cs_type(C, arg) == CS_TNONE))
-        csL_arg_error(C, arg, "value expected");
+        csL_error_arg(C, arg, "value expected");
 }
 
 
@@ -191,7 +191,7 @@ CSLIB_API int csL_check_option(cs_State *C, int arg, const char *dfl,
     for (int i=0; opts[i]; i++)
         if (strcmp(str, opts[i]) == 0)
             return i;
-    return csL_arg_error(C, arg,
+    return csL_error_arg(C, arg,
                          cs_push_fstring(C, "invalid option `%s`", str));
 }
 
@@ -462,21 +462,21 @@ CSLIB_API cs_State *csL_newstate(void) {
 }
 
 
-CSLIB_API int csL_get_subtable(cs_State *C, int htobj, const char *field) {
-    if (cs_get_fieldstr(C, htobj, field) == CS_TTABLE) {
+CSLIB_API int csL_get_subtable(cs_State *C, int index, const char *field) {
+    if (cs_get_fieldstr(C, index, field) == CS_TTABLE) {
         return 1; /* true, already have table */
     } else {
         cs_pop(C, 1); /* pop previous result */
-        htobj = cs_absindex(C, htobj);
+        index = cs_absindex(C, index);
         cs_push_table(C, 0);
         cs_push(C, -1); /* copy will be left on the top */
-        cs_set_fieldstr(C, htobj, field); /* table[field] = newtable */
+        cs_set_fieldstr(C, index, field); /* table[field] = newtable */
         return 0; /* false, no table was found */
     }
 }
 
 
-CSLIB_API void csL_include(cs_State *C, const char *modname,
+CSLIB_API void csL_includef(cs_State *C, const char *modname,
                            cs_CFunction openf, int global) {
     csL_get_gsubtable(C, CS_LOADED_TABLE);
     cs_get_fieldstr(C, -1, modname); /* get __LOADED[modname] */

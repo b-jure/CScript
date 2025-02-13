@@ -1071,7 +1071,9 @@ void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
 }
 
 
-/* return 1 if folding for 'op' can raise errors */
+/*
+** Return 0 if folding for 'op' can raise errors.
+*/
 static int validop(TValue *v1, TValue *v2, int op) {
     switch (op) {
         case CS_OPBSHR: case CS_OPBSHL: case CS_OPBAND:
@@ -1079,10 +1081,9 @@ static int validop(TValue *v1, TValue *v2, int op) {
             cs_Integer i;
             return (tointeger(v1, &i) && tointeger(v2, &i));
         }
-        case CS_OPDIV: case CS_OPMOD: { /* division by 0 */
+        case CS_OPDIV: case CS_OPMOD: /* division by 0 */
             return (nval(v2) != 0);
-        }
-        default: return 1;
+        default: return 1; /* everything else is valid */
     }
 }
 

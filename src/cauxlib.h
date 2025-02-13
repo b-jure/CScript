@@ -36,30 +36,30 @@ typedef struct csL_Buffer csL_Buffer;
 ** Errors
 ** ------------------------------------------------------------------------ */
 CSLIB_API int csL_error(cs_State *C, const char *fmt, ...);
-CSLIB_API int csL_arg_error(cs_State *C, int arg, const char *extra);
-CSLIB_API int csL_type_error(cs_State *C, int arg, const char *tname);
+CSLIB_API int csL_error_arg(cs_State *C, int index, const char *extra);
+CSLIB_API int csL_error_type(cs_State *C, int index, const char *tname);
 
 /* ------------------------------------------------------------------------ 
 ** Required argument
 ** ------------------------------------------------------------------------ */
-CSLIB_API cs_Number     csL_check_number(cs_State *C, int arg);
-CSLIB_API cs_Integer    csL_check_integer(cs_State *C, int arg);
-CSLIB_API const char   *csL_check_lstring(cs_State *C, int arg, size_t *l);
-CSLIB_API void          csL_check_type(cs_State *C, int arg, int t);
-CSLIB_API void          csL_check_any(cs_State *C, int arg);
+CSLIB_API cs_Number     csL_check_number(cs_State *C, int index);
+CSLIB_API cs_Integer    csL_check_integer(cs_State *C, int index);
+CSLIB_API const char   *csL_check_lstring(cs_State *C, int index, size_t *l);
+CSLIB_API void          csL_check_type(cs_State *C, int index, int t);
+CSLIB_API void          csL_check_any(cs_State *C, int index);
 CSLIB_API void          csL_check_stack(cs_State *C, int sz, const char *msg);
-CSLIB_API void         *csL_check_userdata(cs_State *C, int arg,
+CSLIB_API void         *csL_check_userdata(cs_State *C, int index,
                                            const char *tname);
-CSLIB_API int           csL_check_option(cs_State *C, int arg,
+CSLIB_API int           csL_check_option(cs_State *C, int index,
                                          const char *dfl,
                                          const char *const opts[]);
 
 /* ------------------------------------------------------------------------ 
 ** Optional argument
 ** ------------------------------------------------------------------------ */
-CSLIB_API cs_Number   csL_opt_number(cs_State *C, int arg, cs_Number dfl);
-CSLIB_API cs_Integer  csL_opt_integer(cs_State *C, int arg, cs_Integer dfl);
-CSLIB_API const char *csL_opt_lstring(cs_State *C, int arg, const char *dfl,
+CSLIB_API cs_Number   csL_opt_number(cs_State *C, int index, cs_Number dfl);
+CSLIB_API cs_Integer  csL_opt_integer(cs_State *C, int index, cs_Integer dfl);
+CSLIB_API const char *csL_opt_lstring(cs_State *C, int index, const char *dfl,
                                       size_t *l);
 
 /* ------------------------------------------------------------------------ 
@@ -81,11 +81,11 @@ CSLIB_API void        csL_set_index(cs_State *C, int index, cs_Integer i);
 CSLIB_API cs_State   *csL_newstate(void);
 CSLIB_API int         csL_get_subtable(cs_State *C, int index,
                                        const char *field);
-CSLIB_API void        csL_include(cs_State *C, const char *modname,
+CSLIB_API void        csL_includef(cs_State *C, const char *modname,
                                   cs_CFunction openf, int global);
 CSLIB_API void       *csL_test_userdata(cs_State *C, int index,
                                         const char *name);
-CSLIB_API void        csL_traceback(cs_State *C, cs_State *at, int level,
+CSLIB_API void        csL_traceback(cs_State *C, cs_State *C1, int level,
                                     const char *msg);
 CSLIB_API void        csL_setfuncs(cs_State *C, const cs_Entry *l, int nup);
 CSLIB_API void        csL_checkversion_(cs_State *C, cs_Number ver);
@@ -114,11 +114,11 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
 #define csL_opt(C,fn,index,dfl) \
         (cs_is_noneornil(C, index) ? (dfl) : fn(C, index))
 
-#define csL_check_arg(C,cond,arg,extramsg) \
-        ((void)(csi_likely(cond) || csL_arg_error(C, (arg), (extramsg))))
+#define csL_check_arg(C,cond,index,extramsg) \
+        ((void)(csi_likely(cond) || csL_error_arg(C, (index), (extramsg))))
 
-#define csL_expect_arg(C,cond,arg,tname) \
-        ((void)(csi_likely(cond) || csL_type_error(C, (arg), (tname))))
+#define csL_expect_arg(C,cond,index,tname) \
+        ((void)(csi_likely(cond) || csL_error_type(C, (index), (tname))))
 
 #define csL_push_fail(C)       cs_push_nil(C)
 
@@ -166,15 +166,15 @@ struct csL_Buffer {
     } init;
 };
 
-#define csL_bufflen(B)          ((B)->n)
 #define csL_buffptr(B)          ((B)->b)
+#define csL_bufflen(B)          ((B)->n)
 
 #define csL_buffadd(B, sz)      ((B)->n += (sz))
 #define csL_buffsub(B, sz)      ((B)->n -= (sz))
 
 #define csL_buff_push(B, c) \
-    ((void)((B)->n < (B)->sz || csL_buff_ensure((B), 1)), \
-     ((B)->b[(B)->n++] = (c)))
+        ((void)((B)->n < (B)->sz || csL_buff_ensure((B), 1)), \
+        ((B)->b[(B)->n++] = (c)))
 
 CSLIB_API void  csL_buff_init(cs_State *C, csL_Buffer *B);
 CSLIB_API char *csL_buff_initsz(cs_State *C, csL_Buffer *B, size_t sz);

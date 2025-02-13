@@ -49,12 +49,12 @@
 static TValue *index2value(const cs_State *C, int index) {
     CallFrame *cf = C->cf;
     if (index >= 0) { /* absolute index? */
-        SPtr o = cf->func.p + index + 1;
+        SPtr o = (cf->func.p + 1) + index;
         api_check(C, index < C->sp.p - (cf->func.p + 1), "index too large");
         if (o >= C->sp.p) return &G(C)->nil;
         else return s2v(o);
     } else if (!ispseudo(index)) { /* negative index? */
-        api_check(C, -index <= C->sp.p - cf->func.p, "index too small");
+        api_check(C, -index <= C->sp.p - (cf->func.p + 1), "index too small");
         return s2v(C->sp.p + index);
     } else if (index == CS_REGISTRYINDEX) {
         return &G(C)->c_registry;
@@ -75,11 +75,11 @@ static TValue *index2value(const cs_State *C, int index) {
 static SPtr index2stack(const cs_State *C, int index) {
     CallFrame *cf = C->cf;
     if (index >= 0) {
-        SPtr p = cf->func.p + index;
+        SPtr p = (cf->func.p + 1) + index;
         api_check(C, p < C->sp.p, "invalid index");
         return p;
     } else { /* negative index */
-        api_check(C, -index <= (C->sp.p-cf->func.p), "invalid index");
+        api_check(C, -index <= (C->sp.p - (cf->func.p + 1)), "invalid index");
         api_check(C, !ispseudo(index), "invalid index");
         return C->sp.p + index; /* index is subtracted */
     }
@@ -194,6 +194,11 @@ c_sinline void rev(cs_State *C, SPtr from, SPtr to) {
 ** [func][0][1][2][3][4]
 ** cs_rotate(C, 2, -2);
 ** [func][0][1][4][3][2]
+**
+** Example right-rotation:
+** [nil][func]
+** cs_rotate(C, 0, 1);
+** [func][nil]
 */
 CS_API void cs_rotate(cs_State *C, int index, int n) {
     SPtr start, end, pivot;
@@ -662,7 +667,6 @@ c_sinline void pushcclosure(cs_State *C, cs_CFunction fn, int nupvals) {
 CS_API void cs_push_cclosure(cs_State *C, cs_CFunction fn, int nupvals) {
     cs_lock(C);
     pushcclosure(C, fn, nupvals);
-    csTR_dumpstack(C, 1, "cclosure(%d)", nupvals);
     cs_unlock(C);
 }
 
@@ -932,8 +936,6 @@ c_sinline Table *gettable(cs_State *C, int obj) {
         case CS_VINSTANCE: return insval(o)->fields;
         case CS_VTABLE: return tval(o); 
         default:  {
-            csTR_dumpstack(C, 1, "Stack dump");
-            printf("TYPENAME: %s\n", typename(ttype(o)));
             api_check(C, 0, "expect instance or table");
             return NULL;
         }
@@ -1326,7 +1328,7 @@ CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int absmsgh) {
     int status;
     ptrdiff_t func;
     cs_lock(C);
-    api_checknelems(C, nargs + 1); /* args + func */
+    api_checknelems(C, nargs+1); /* args + func */
     api_check(C, C->status == CS_OK, "can't do calls on non-normal thread");
     checkresults(C, nargs, nresults);
     if (absmsgh < 0) {

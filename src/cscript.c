@@ -12,6 +12,7 @@
 
 #include "cauxlib.h"
 #include "cslib.h"
+#include "ctrace.h"
 
 
 #define CS_PROGNAME     "cscript"
@@ -53,7 +54,9 @@ static void printusage(const char *badopt) {
 
 
 static void printversion(void) {
-    cs_writelen(stdout, CS_COPYRIGHT, strlen(CS_COPYRIGHT));
+    cs_writelen(stdout, LUA_COPYRIGHT, sizeof(LUA_COPYRIGHT)-1);
+    cs_writeline(stdout);
+    cs_writelen(stdout, CS_COPYRIGHT, sizeof(CS_COPYRIGHT)-1);
     cs_writeline(stdout);
 }
 
@@ -88,13 +91,13 @@ static int report(cs_State *C, int status) {
 #define arg_i           32  /* -i */
 
 
-/* collects arg in 'parseargs' */
+/* collects arg in 'colectargs' */
 #define collectarg(arg,endi) \
     { if (argv[i][(endi)] != '\0') return arg_error; \
       args |= (arg); *first = i + 1; }
 
 
-static int parseargs(char **argv, int *first) {
+static int collectargs(char **argv, int *first) {
     int args = 0;
     if (*argv) {
         if (argv[0][0])
@@ -237,12 +240,12 @@ static int runscript(cs_State *C, char **argv) {
 #define PROMPT1     "> "
 #define PROMPT2     ">> "
 
-#define CST_MAXLINE     512
+#define CS_MAXLINE     512
 
 #if !defined(cs_readline)
 #define cs_readline(C, buff, prompt) \
-    ((void)C, fputs(prompt, stdout), fflush(stdout), \
-       fgets(buff, CST_MAXLINE, stdin) != NULL)
+        ((void)C, fputs(prompt, stdout), fflush(stdout), \
+        fgets(buff, CS_MAXLINE, stdin) != NULL)
 #endif
 
 
@@ -252,12 +255,12 @@ static inline const char *getprompt(int firstline) {
 
 
 static int addreturn(cs_State *C) {
-    const char *line = cs_to_string(C, -1);
-    const char *retline = cs_push_fstring(C, "return %s", line);
+    const char *line = cs_to_string(C, -1); /* original line */
+    const char *retline = cs_push_fstring(C, "return %s;", line);
     int status = csL_loadbuffer(C, retline, strlen(retline), "stdin");
     /* stack: [line][retline][result] */
     if (status == CS_OK)
-        cs_remove(C, -2); /* remove 'retline' */
+        cs_remove(C, -2); /* remove modified line ('retline') */
     else
         cs_pop(C, 2); /* pop result from 'csL_loadbuffer' and 'retline' */
     return status;
@@ -265,15 +268,15 @@ static int addreturn(cs_State *C) {
 
 
 static int pushline(cs_State *C, int firstline) {
-    char buffer[CST_MAXLINE];
+    char buffer[CS_MAXLINE];
     char *b = buffer;
     size_t len;
     const char *pr = getprompt(firstline);
     if (cs_readline(C, b, pr) == 0)
-        return 0;
+        return 0; /* no input */
     len = strlen(b);
-    if (len > 0 && b[len - 1] == '\n')
-        b[--len] = '\0';
+    if (len > 0 && b[len - 1] == '\n') /* line ends with newline? */
+        b[--len] = '\0'; /* remove it */
     cs_push_lstring(C, b, len);
     return 1;
 }
@@ -302,15 +305,15 @@ static int incomplete(cs_State *C, int status) {
 
 
 static int multiline(cs_State *C) {
-    for (;;) {
+    for (;;) { /* repeat until complete statement */
         size_t len;
         const char *line = cs_to_lstring(C, 0, &len);
         int status = csL_loadbuffer(C, line, len, "stdin");
         if (!incomplete(C, status) || !pushline(C, 0))
             return status;
-        cs_push_literal(C, "\n");
-        cs_insert(C, -2); /* insert newline in between the lines */
-        cs_concat(C, 3);
+        cs_push_literal(C, "\n"); /* add newline... */
+        cs_insert(C, -2); /* ...between the two lines */
+        cs_concat(C, 3); /* join them */
     }
 }
 
@@ -319,21 +322,21 @@ static int loadline(cs_State *C) {
     int status;
     cs_setntop(C, 0); /* remove all values */
     if (!pushline(C, 1))
-        return -1;
-    if ((status = addreturn(C)) != CS_OK)
-        status = multiline(C);
-    cs_remove(C, 0); /* remove line */
-    cs_assert(cs_gettop(C) == 0); /* 'csL_loadbuffer' result on top */
+        return -1; /* no input */
+    if ((status = addreturn(C)) != CS_OK) /* 'return ...;' did not work? */
+        status = multiline(C); /* try as command, maybe with continuation lines */
+    cs_remove(C, 0); /* remove line from the stack */
+    cs_assert(cs_nvalues(C) == 1); /* 'csL_loadbuffer' result on top */
     return status;
 }
 
 
 static void printresults(cs_State *C) {
-    int n = cs_gettop(C);
+    int n = cs_nvalues(C);
     if (n > 0) { /* have result to print? */
         csL_check_stack(C, CS_MINSTACK, "too many results to print");
         cs_get_global(C, "print");
-        cs_insert(C, 1);
+        cs_insert(C, 0);
         if (cs_pcall(C, n, 0, -1) != CS_OK)
             emsg(progname, cs_push_fstring(C, "error calling 'print' (%s)",
                            cs_to_string(C, -1)));
@@ -387,8 +390,9 @@ static int pmain(cs_State *C) {
     int argc = cs_to_integer(C, -2);
     char **argv = cs_to_userdata(C, -1);
     int script;
-    int args = parseargs(argv, &script);
+    int args = collectargs(argv, &script);
     int optlimit = (script > 0 ? script : argc);
+    csL_checkversion(C);
     if (args == arg_error) {
         printusage(argv[script]);
         return 0;
@@ -413,9 +417,8 @@ static int pmain(cs_State *C) {
         if (cs_stdin_is_tty()) {
             printversion();
             runREPL(C);
-        } else {
+        } else
             runfile(C, NULL); /* execute stdin as a file */
-        }
     }
     cs_push_bool(C, 1);
     return 1;
@@ -429,12 +432,12 @@ int main(int argc, char* argv[]) {
         emsg(progname, "cannot create state: out of memory");
         return EXIT_FAILURE;
     }
-    cs_gc(C, CS_GCSTOP); /* stop until all args are parsed */
-    cs_push_cfunction(C, pmain);
-    cs_push_integer(C, argc);
-    cs_push_lightuserdata(C, argv);
-    status = cs_pcall(C, 2, 1, -1);
-    res = cs_to_bool(C, -1);
+    cs_gc(C, CS_GCSTOP); /* stop GC while building state */
+    cs_push_cfunction(C, &pmain); /* to call 'pmain' in protected mode */
+    cs_push_integer(C, argc); /* 1st argument */
+    cs_push_lightuserdata(C, argv); /* 2nd argument */
+    status = cs_pcall(C, 2, 1, -1); /* do the call */
+    res = cs_to_bool(C, -1); /* get result */
     report(C, status);
     cs_close(C);
     return (res && status == CS_OK ? EXIT_SUCCESS : EXIT_FAILURE);

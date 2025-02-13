@@ -2929,9 +2929,9 @@
         C&nbsp;functions as <code>return csL_error(<em>args</em>)</code>.
         </p>
 
-        <hr><h3><a name="csL_arg_error"><code>csL_arg_error</code></a></h3><p>
+        <hr><h3><a name="csL_error_arg"><code>csL_error_arg</code></a></h3><p>
         <span class="apii">[-0, +0, <em>v</em>]</span>
-        <pre>int csL_arg_error (cs_State *C, int arg, const char *extra);</pre>
+        <pre>int csL_error_arg (cs_State *C, int arg, const char *extra);</pre>
         <p>
         Raises an error reporting a problem with argument <code>arg</code>
         of the C&nbsp;function that called it, using a standard message
@@ -2941,9 +2941,9 @@
         This function never returns.
         </p>
 
-        <hr><h3><a name="csL_type_error"><code>csL_type_error</code></a></h3><p>
+        <hr><h3><a name="csL_error_type"><code>csL_error_type</code></a></h3><p>
         <span class="apii">[-0, +0, <em>v</em>]</span>
-        <pre>int csL_type_error (cs_State *C, int arg, const char *tname);</pre>
+        <pre>int csL_error_type (cs_State *C, int arg, const char *tname);</pre>
         <p>
         Raises a type error for the argument <code>arg</code> of the
         C&nbsp;function that called it, using a standard message;
@@ -3220,166 +3220,329 @@
 
         <hr><h3><a name="csL_include"><code>csL_include</code></a></h3><p>
         <span class="apii">[-0, +1, <em>e</em>]</span>
-        <pre>void csL_include (cs_State *C, const char *modname,
-                  cs_CFunction openf, int global);</pre>
+        <pre>void csL_includef (cs_State *C, const char *modname,
+                   cs_CFunction openf, int global);</pre>
         <p>
         If <code>package.loaded[modname]</code> is not true,
-        calls the function <code>openf</code> with the string <code>modname</code> as an argument
-        and sets the call result to <code>package.loaded[modname]</code>,
-        as if that function has been called through <a href="#pdf-require"><code>require</code></a>.
+        calls the function <code>openf</code> with the string
+        <code>modname</code> as an argument and sets the call result to
+        <code>package.loaded[modname]</code>, as if that function has been
+        called through <a href="#include"><code>include</code></a>.
         <br/><br/>
-        If <code>glb</code> is true,
-        also stores the module into the global <code>modname</code>.
+        If <code>global</code> is true, also stores the module into the
+        global <code>modname</code>.
         <br/><br/>
         Leaves a copy of the module on the stack.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_test_userdata"><code>csL_test_userdata</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>m</em>]</span>
+        <pre>void csL_test_userdata (cs_State *C, int index, const char *name);</pre>
         <p>
+        This function works like
+        <a href="#csL_check_userdata"><code>csL_checkuserdata</code></a>,
+        except that, when the test fails, it returns <code>NULL</code>
+        instead of raising an error.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_traceback"><code>csL_traceback</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_traceback (cs_State *C, cs_State *C1,
+                    int level, const char *msg);</pre>
         <p>
+        Creates and pushes a traceback of the stack <code>C1</code>.
+        If <code>msg</code> is not <code>NULL</code>, it is appended
+        at the beginning of the traceback.
+        The <code>level</code> parameter tells at which level to start the
+        traceback.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_setfuncs"><code>csL_setfuncs</code></a></h3><p>
+        <span class="apii">[-nup, +0, <em>m</em>]</span>
+        <pre>void csL_setfuncs (cs_State *C, const cs_Entry *l, int nup);</pre>
         <p>
+        Registers all functions in the array <code>l</code>
+        (see <a href="#cs_Entry"><code>cs_Entry</code></a>) into the table or
+        instance on the top of the stack (below optional upvalues, see next).
+        <br/><br/>
+        When <code>nup</code> is not zero, all functions are created with
+        <code>nup</code> upvalues, initialized with copies of the
+        <code>nup</code> values previously pushed on the stack on top of
+        the table or instance.
+        These values are popped from the stack after the registration.
+        <br/><br/>
+        A function with a <code>NULL</code> value represents a placeholder,
+        which is filled with <b>false</b>.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_gsub"><code>csL_gsub</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_gsub (cs_State *C, const char *s,
+               const char *p, const char *r);</pre>
         <p>
+        Creates a copy of string <code>s</code>, replacing any occurrence of
+        the string <code>p</code> with the string <code>r</code>.
+        Pushes the resulting string on the stack and returns it.
+        Think of it as string substitution <code>s/{p}/{r}/g</code>, the input
+        being the function argument <code>s</code>.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_ref"><code>csL_ref</code></a></h3><p>
+        <span class="apii">[-1, +0, <em>m</em>]</span>
+        <pre>void csL_ref (cs_State *C, int a);</pre>
         <p>
+        Creates and returns a <em>reference</em>, in the array at index
+        <code>a</code>, for the object on the top of the stack
+        (and pops the object).
+        <br/><br/>
+        A reference is a unique integer index into that array.
+        As long as you do not manually add entries into the array
+        <code>a</code>, <a href="#csL_ref"><code>csL_ref</code></a> ensures
+        the uniqueness of the index it returns.
+        You can retrieve an object referred by the reference <code>r</code>
+        by calling <code>cs_get_index(C, a, r)</code>.
+        The function <a href="#csL_unref"><code>csL_unref</code></a> frees
+        a reference.
+        <br/><br/>
+        If the object on the top of the stack is <b>nil</b>,
+        <a href="#csL_ref"><code>csL_ref</code></a> returns the constant
+        <a name="CS_REFNIL"><code>CS_REFNIL</code></a>.
+        The constant <a name="CS_NOREF"><code>CS_NOREF</code></a> is
+        guaranteed to be different from any reference returned by
+        <a href="#csL_ref"><code>csL_ref</code></a>.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_unref"><code>csL_unref</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>void csL_unref (cs_State *C, int a, int ref);</pre>
         <p>
+        Releases the reference <code>ref</code> from the array at index
+        <code>a</code> (see <a href="#csL_ref"><code>csL_ref</code></a>).
+        The entry is removed from the array, so that the referred object
+        can be collected.
+        The reference <code>ref</code> is also freed to be used again.
+        <br/><br/>
+        If <code>ref</code> is <a href="#CS_NOREF"><code>CS_NOREF</code></a>
+        or <a href="#CS_REFNIL"><code>CS_REFNIL</code></a>,
+        <a href="#csL_unref"><code>csL_unref</code></a> does nothing.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_checkversion"><code>csL_checkversion</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_checkversion (cs_State *C);</pre>
         <p>
+        Checks whether the code making the call and the CScript library being
+        called are using the same version of CScript.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_typename"><code>csL_typename</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>const char *csL_typename (cs_State *C, int index);</pre>
         <p>
+        Returns the name of the type of the value at the given index.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_check_string"><code>csL_check_string</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>const char *csL_check_string (cs_State *C, int index);</pre>
         <p>
+        Checks whether the function argument <code>index</code> is a string
+        and returns this string.
+        <br/><br/>
+        This function uses <a href="#cs_to_lstring"><code>cs_to_lstring</code></a> to get its result,
+        so all conversions and caveats of that function apply here.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_opt_string"><code>csL_opt_string</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_opt_string (cs_State *C, int index, const char *dflt);</pre>
         <p>
+        If the function argument <code>index</code> is a string, returns
+        this string.
+        If this argument is absent or is <b>nil</b>, returns <code>dflt</code>.
+        Otherwise, raises an error.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_opt"><code>csL_opt</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>T csL_opt (C, func, index, dflt);</pre>
         <p>
+        This macro is defined as follows:
+        <pre>
+    (cs_is_noneornil(C, index) ? (dfl) : fn(C, index))</pre>
+        In words, if the argument <code>index</code> is <b>nil</b> or absent,
+        the macro results in the default <code>dflt</code>.
+        Otherwise, it results in the result of calling <code>func</code>
+        with the state <code>C</code> and the argument index <code>index</code>
+        as arguments.
+        Note that it evaluates the expression <code>dflt</code> only if
+        needed.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_check_arg"><code>csL_check_arg</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_check_arg (cs_State *C,
+                    int cond,
+                    int index,
+                    const char *extramsg);</pre>
         <p>
+        Checks whether <code>cond</code> is true.
+        If it is not, raises an error with a standard message
+        (see <a href="#csL_error_arg"><code>csL_error_arg</code></a>).
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_expect_arg"><code>csL_expect_arg</code></a></h3><p>
+        <span class="apii">[-0, +0, <em>v</em>]</span>
+        <pre>void csL_expect_arg (cs_State *C
+                    int cond,
+                    int index,
+                    const char *tname);</pre>
         <p>
+        Checks whether <code>cond</code> is true.
+        If it is not, raises an error about the type of the argument
+        at <code>index</code> with a standard message
+        (see <a href="#csL_error_type"><code>csL_error_type</code></a>).
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_push_fail"><code>csL_push_fail</code></a></h3><p>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void csL_push_fail (cs_State *C);</pre>
         <p>
+        Pushes the <b>fail</b> value onto the stack
+        (see <a href="#6">&sect;6</a>).
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_newlibtable"><code>csL_newlibtable</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_newlibtable (cs_State *C, const cs_Entry l[]);</pre>
         <p>
+        Creates a new table with a size optimized to store all entries in
+        the array <code>l</code> (but does not actually store them).
+        It is intended to be used in conjunction with
+        <a href="#csL_setfuncs"><code>csL_setfuncs</code></a>
+        (see <a href="#csL_newlib"><code>csL_newlib</code></a>).
+        <br/><br/>
+        It is implemented as a macro.
+        The array <code>l</code> must be the actual array, not a pointer to it.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_newlib"><code>csL_newlib</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_newlib (cs_State *C, const cs_Entry l[]);</pre>
         <p>
+        Creates a new table and registers there
+        the functions in the list <code>l</code>.
+        <br/><br/>
+        It is implemented as the following macro:
+        <pre>
+    (csL_newlibtable(C,l), csL_setfuncs(C,l,0))</pre>
+        The array <code>l</code> must be the actual array, not a pointer to it.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_get_gsubtable"><code>csL_get_gsubtable</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_get_gsubtable (cs_State *C, const char *name);</pre>
         <p>
+        Equivalent to
+        <a href="#csL_get_subtable"><code>csL_get_subtable</code></a>, except
+        here the object being indexed is the global table which is pushed
+        on top of the stack, and later removed after the operation.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_intop"><code>csL_intop</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>cs_Integer csL_intop (op, x, y);</pre>
         <p>
+        Perform arithmetic operation <code>op</code> on
+        <a href="#cs_Integer"><code>cs_Integer</code></a> values
+        <code>x</code> and <code>y</code> with wrap-around semantics,
+        as the CScript core does.
+        <br/><br/>
+        This is implemented as the following macro:
+        <pre>
+    ((cs_Integer)((cs_Unsigned)(x) op (cs_Unsigned)(y)))</pre>
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_Buffer"><code>csL_Buffer</code></a></h3><p>
+        <pre>typedef struct csL_Buffer csL_Buffer;</pre>
         <p>
+        Type for a <em>string buffer</em>.
+        <br/><br/>
+        A string buffer allows C&nbsp;code to build CScript strings piecemeal.
+        Its pattern of use is as follows:
+        <ul>
+            <li>
+                First declare a variable <code>b</code> of type
+                <a href="#csL_Buffer"><code>csL_Buffer</code></a>.
+            </li>
+            <li>
+                Then initialize it with a call
+                <code>csL_buff_init(C, &amp;b)</code>.
+            </li>
+            <li>
+                Then add string pieces to the buffer calling any of
+                the <code>csL_buff_push*</code> functions.
+            </li>
+            <li>
+                Finish by calling <code>csL_buff_end(&amp;b)</code>.
+                This call leaves the final string on the top of the stack.
+            </li>
+        </ul>
+        If you know beforehand the maximum size of the resulting string,
+        you can initialize the buffer by preallocate the its size with
+        <a href="#csL_buff_initsz"><code>csL_buff_initsz</code></a>.
+        <br/><br/>
+        During its normal operation, a string buffer uses a variable number
+        of stack slots.
+        So, while using a buffer, you cannot assume that you know where
+        the top of the stack is.
+        You can use the stack between successive calls to buffer operations
+        as long as that use is balanced;
+        that is, when you call a buffer operation, the stack is at the same
+        level it was immediately after the previous buffer operation.
+        (The only exception to this rule is
+        <a href="#csL_buff_push_stack"><code>csL_buff_push_stack</code></a>.)
+        After calling <a href="#csL_buff_end"><code>csL_buff_end</code></a>,
+        the stack is back to its level when the buffer was initialized,
+        plus the final string on its top.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_buffptr"><code>csL_buffptr</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>char *csL_buffptr (csL_Buffer *B);</pre>
         <p>
+        Returns the address of the current content of buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
+        Note that any addition to the buffer may invalidate this address.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_bufflen"><code>csL_bufflen</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>size_t csL_bufflen (csL_Buffer *B);</pre>
         <p>
+        Returns the length of the current content of buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_buffadd"><code>csL_buffadd</code></a></h3><p>
+        <span class="apii">[-?, +?, &ndash;]</span>
+        <pre>void csL_buffadd (csL_Buffer *B, size_t n);</pre>
         <p>
+        Adds to the buffer <code>B</code> a string of length <code>n</code>
+        previously copied to the buffer area
+        (see <a href="#csL_buff_initsz"><code>csL_buff_initsz</code></a>).
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
+        <hr><h3><a name="csL_buffsub"><code>csL_buffsub</code></a></h3><p>
+        <span class="apii">[-?, +?, &ndash;]</span>
+        <pre>void csL_buffsub (csL_Buffer *B, int n);</pre>
         <p>
+        Removes <code>n</code> bytes from the buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
+        The buffer must have at least that many bytes.
         </p>
 
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
-        <p>
-        </p>
-
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
-        <p>
-        </p>
-
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
-        <p>
-        </p>
-
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
-        <p>
-        </p>
-
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
-        <p>
-        </p>
-
-        <hr><h3><a name="csL_some"><code>csL_some</code></a></h3><p>
-        <pre>void csL_some (cs_State *C);</pre>
-        <p>
-        </p>
-
-        <hr><h3><a name="csL_addchar"><code>csL_addchar</code></a></h3><p>
+        <hr><h3><a name="csL_buff_push"><code>csL_buff_push</code></a></h3><p>
         <span class="apii">[-?, +?, <em>m</em>]</span>
         <pre>void csL_buff_push (csL_Buffer *B, char c);</pre>
         <p>
@@ -3387,9 +3550,92 @@
         (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
         </p>
 
+        <hr><h3><a name="csL_buff_init"><code>csL_buff_init</code></a></h3><p>
+        <span class="apii">[-0, +?, &ndash;]</span>
+        <pre>void csL_buff_init (cs_State *C, csL_Buffer *B);</pre>
+        <p>
+        Initializes a buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
+        This function does not allocate any space;
+        the buffer must be declared as a variable.
+        </p>
+
+        <hr><h3><a name="csL_buff_initsz"><code>csL_buff_initsz</code></a></h3><p>
+        <span class="apii">[-?, +?, <em>m</em>]</span>
+        <pre>char *csL_buff_initsz (cs_State *C, csL_Buffer *B, size_t sz);</pre>
+        <p>
+        Equivalent to the sequence
+        <a href="#csL_buff_init"><code>csL_buff_init</code></a>,
+        <a href="#csL_buff_ensure"><code>csL_buff_ensure</code></a>.
+        </p>
+
+        <hr><h3><a name="csL_buff_ensure"><code>csL_buff_ensure</code></a></h3><p>
+        <span class="apii">[-?, +?, <em>m</em>]</span>
+        <pre>char *csL_buff_ensure (csL_Buffer *B, size_t sz);</pre>
+        <p>
+        Returns an address to a space of size <code>sz</code>
+        where you can copy a string to be added to buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
+        After copying the string into this space you must call
+        <a href="#csL_buffadd"><code>csL_buffadd</code></a> with the size
+        of the string to actually add it to the buffer.
+        </p>
+
+        <hr><h3><a name="csL_buff_push_lstring"><code>csL_buff_push_lstring</code></a></h3><p>
+        <span class="apii">[-?, +?, <em>m</em>]</span>
+        <pre>void csL_buff_push_lstring (csL_Buffer *B, const char *s, size_t l);</pre>
+        <p>
+        Adds the string pointed to by <code>s</code> with length
+        <code>l</code> to the buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
+        The string can contain embedded zeros.
+        </p>
+
+        <hr><h3><a name="csL_buff_push_string"><code>csL_buff_push_string</code></a></h3><p>
+        <span class="apii">[-?, +?, <em>m</em>]</span>
+        <pre>void csL_buff_push_string (csL_Buffer *B, const char *s);</pre>
+        <p>
+        Adds the zero-terminated string pointed to by <code>s</code>
+        to the buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
+        </p>
+
+        <hr><h3><a name="csL_buff_push_stack"><code>csL_buff_push_stack</code></a></h3><p>
+        <span class="apii">[-?, +?, <em>m</em>]</span>
+        <pre>void csL_buff_push_stack (csL_Buffer *B);</pre>
+        <p>
+        Adds the value on the top of the stack to the buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>).
+        Pops the value.
+        <br/><br/>
+        This is the only function on string buffers that can (and must)
+        be called with an extra element on the stack, which is the value
+        to be added to the buffer.
+        </p>
+
+        <hr><h3><a name="csL_buff_push_gsub"><code>csL_buff_push_gsub</code></a></h3><p>
+        <span class="apii">[-?, +?, <em>m</em>]</span>
+        <pre>void csL_buff_push_gsub (csL_Buffer *B, const char *s,
+                         const char *p, const char *r);</pre>
+        <p>
+        Adds a copy of the string <code>s</code> to the buffer <code>B</code>
+        (see <a href="#csL_Buffer"><code>csL_Buffer</code></a>),
+        replacing any occurrence of the string <code>p</code> with the
+        string <code>r</code>.
+        </p>
+
+        <hr><h3><a name="csL_buff_end"><code>csL_buff_end</code></a></h3><p>
+        <span class="apii">[-?, +1, <em>m</em>]</span>
+        <pre>void csL_buff_end (csL_Buffer *B);</pre>
+        <p>
+        Finishes the use of buffer <code>B</code> leaving the final string
+        on the top of the stack.
+        </p>
 
 
-        <h1>6 &ndash; <a name="6">The Standard Libraries</h1>
+
+
+        <hr><h1>6 &ndash; <a name="6">The Standard Libraries</h1>
         <p>
         The standard CScript libraries provide useful functions that are
         implemented in&nbsp;C through the C&nbsp;API.
@@ -3415,16 +3661,16 @@
             <li>operating system library (<a href="#6.6">&sect;6.6</a>);</li>
         </ul>
         To have access to these libraries, the C&nbsp;host program should
-        call the <a href="#csL_open_libs"><code>csL_openlibs</code></a>
+        call the <a href="#csL_openlibs"><code>csL_openlibs</code></a>
         function, which opens all standard libraries.
         Alternatively, the host program can open them individually by using
         <a href="#csL_include"><code>csL_include</code></a> to call
-        <a name="csL_open_base"><code>csL_open_base</code></a> (for the basic library),
-        <a name="csL_open_string"><code>csL_open_string</code></a> (for the string library),
-        <a name="csL_open_utf8"><code>csL_open_utf8</code></a> (for the UTF-8 library),
-        <a name="csL_open_math"><code>csL_open_math</code></a> (for the math library),
-        <a name="csL_open_io"><code>csL_open_io</code></a> (for the I/O library),
-        <a name="csL_open_os"><code>csL_open_os</code></a> (for the operating system library),
+        <a name="csopen_base"><code>csopen_base</code></a> (for the basic library),
+        <a name="csopen_package"><code>csopen_package</code></a> (for the package library),
+        <a name="csopen_string"><code>csopen_string</code></a> (for the string library),
+        <a name="csopen_math"><code>csopen_math</code></a> (for the math library),
+        <a name="csopen_io"><code>csopen_io</code></a> (for the I/O library),
+        <a name="csopen_os"><code>csopen_os</code></a> (for the operating system library),
         These functions are declared in <a name="cslib.h"><code>cslib.h</code></a>
         </p>
 
@@ -3798,7 +4044,7 @@
 
 
 
-        <h2>6.3 &ndash; <a name="6.3">UTF-8 Library</a></h2>
+        <h2>6.3 &ndash; <a name="6.3">Package Library</a></h2>
         <p>
         </p>
 

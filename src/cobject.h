@@ -102,7 +102,7 @@ typedef struct TValue {
 /* set a value's tag */
 #define settt(o,t)          (rawtt(o)=(t))
 
-/* macro for copying values (from 'obj2' to 'obj1' */
+/* macro for copying values (from 'obj2' to 'obj1') */
 #define setobj(C,obj1,obj2) \
     { TValue *o1_=(obj1); const TValue *o2_=(obj2); \
       o1_->val = o2_->val; settt(o1_, o2_->tt); \

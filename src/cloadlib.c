@@ -12,6 +12,7 @@
 
 #include "cscript.h"
 
+#include "ctrace.h"
 #include "cauxlib.h"
 #include "cslib.h"
 
@@ -591,7 +592,7 @@ static void createsearchersarray(cs_State *C) {
         cs_push_cclosure(C, searchers[i], 1);
         cs_set_index(C, -2, i);
     }
-    cs_set_fieldstr(C, -2, "searchers"); /* package.searchers = searchers */
+    cs_set_fieldstr(C, -2, "searchers"); /* package.searchers = array */
 }
 
 
@@ -654,9 +655,9 @@ static void setpath(cs_State *C, const char *fieldname, const char *envname,
 
 
 CSMOD_API int csopen_package(cs_State *C) {
-    /*0*/cs_push_globaltable(C);
-    /*1*/createclibs(C);
-    /*2*/csL_newlib(C, package_funcs); /* create 'package' table */
+    cs_push_globaltable(C);
+    createclibs(C);
+    csL_newlib(C, package_funcs); /* create 'package' table */
     createsearchersarray(C);
     /* set paths */
     setpath(C, "path", CS_PATH_VAR, CS_PATH_DEFAULT);
@@ -666,13 +667,13 @@ CSMOD_API int csopen_package(cs_State *C) {
                        CS_EXEC_DIR "\n" CS_IGMARK "\n");
     cs_set_fieldstr(C, -2, "config");
     /* package.loaded = __LOADED */
-    csL_get_subtable(C, 0, CS_LOADED_TABLE);
+    csL_get_subtable(C, -2, CS_LOADED_TABLE);
     cs_set_fieldstr(C, -2, "loaded");
     /* package.preload = __PRELOAD */
-    csL_get_subtable(C, 0, CS_PRELOAD_TABLE);
+    csL_get_subtable(C, -2, CS_PRELOAD_TABLE);
     cs_set_fieldstr(C, -2, "preload");
-    /*3*/cs_push(C, 0); /* push global table */
-    /*4*/cs_push(C, -2); /* set 'package' as upvalue for next lib */
+    cs_push(C, -2); /* push global table */
+    cs_push(C, -2); /* set 'package' as upvalue for next lib */
     csL_setfuncs(C, load_funcs, 1); /* open lib into global table */
     cs_pop(C, 1);  /* pop global table */
     return 1;  /* return 'package' table */

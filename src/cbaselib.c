@@ -356,7 +356,7 @@ static int b_getargs(cs_State *C) {
         } else if (strcmp(what, "len") == 0) { /* len? */
             cs_push_integer(C, n - 1); /* push total number of args */
         } else {
-            csL_arg_error(C, 0,
+            csL_error_arg(C, 0,
             "invalid string value, expected \"array\", \"table\" or \"len\"");
         }
         cs_replace(C, 0); /* replace the option with the value */

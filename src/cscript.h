@@ -25,7 +25,7 @@
 #define CS_COPYRIGHT    CS_RELEASE " Copyright (C) 2024-2025 Jure Bagić"
 
 /* For use in binary */
-#define LUA_COPYRIGHT   "Lua 5.3.6  Copyright (C) 1994-2020 Lua.org, PUC-Rio"
+#define LUA_COPYRIGHT   "Copyright (C) 1994-2020 Lua.org, PUC-Rio"
 
 
 /* option for multiple returns in 'cs_pcall' and 'cs_call' */
