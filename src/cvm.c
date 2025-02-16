@@ -83,7 +83,7 @@ cs_Integer csV_div(cs_State *C, cs_Integer x, cs_Integer y) {
             csD_runerror(C, "division by 0");
         return c_intop(-, 0, x);
     }
-    return (x / y);
+    return (x / y); /* C division */
 }
 
 
@@ -565,18 +565,19 @@ retry:
         case CS_VCLASS: { /* Class object */
             const TValue *fmm;
             Instance *ins = csMM_newinstance(C, classval(s2v(func)));
+            csG_checkfin(C, obj2gco(ins), ins->oclass->vmt);
             setinsval2s(C, func, ins); /* replace class with its instance */
-            fmm = csMM_get(C, s2v(func), CS_MM_CALL);
-            if (!ttisnil(fmm)) { /* have __call ? */
+            fmm = csMM_get(C, s2v(func), CS_MM_INIT);
+            if (!ttisnil(fmm)) { /* have __init ? */
                 checkstackGCp(C, 1, func); /* space for fmm */
-                fmm = csMM_get(C, s2v(func), CS_MM_CALL); /* (after GC) */
-                if (c_likely(!ttisnil(fmm))) { /* have __call (after GC)? */
+                fmm = csMM_get(C, s2v(func), CS_MM_INIT); /* (after GC) */
+                if (c_likely(!ttisnil(fmm))) { /* have __init (after GC)? */
                     auxinsertf(C, func, fmm); /* insert it into stack... */
                     cs_assert(ttisfunction(fmm));
                     goto retry; /* ...and try calling it */
-                } else goto nocall; /* no __call (after GC) */
+                } else goto noinit; /* no __init (after GC) */
             } else {
-            nocall:
+            noinit:
                 C->sp.p -= (C->sp.p - func - 1); /* remove args */
                 return NULL; /* done */
             }
@@ -701,7 +702,10 @@ void csV_concat(cs_State *C, int total) {
     cs_Number n1, n2; \
     if (tonumber(v1, n1) && tonumber(v2, n2)) { \
         setfval(v1, fop(C, n1, n2)); \
-    } else csD_aritherror(C, v1, v2); }
+    } else { \
+        savepc(C); \
+        csD_aritherror(C, v1, v2); \
+    }}
 
 
 /* arithmetic operations with constant operand for floats */
@@ -726,7 +730,8 @@ void csV_concat(cs_State *C, int total) {
 
 /* arithmetic operation error with immediate operand */
 #define op_arithI_error(C,v,imm) \
-    { TValue v2; setival(&v2, imm); csD_aritherror(C, v, &v2); }
+    { TValue v2; setival(&v2, imm); \
+      savepc(C); csD_aritherror(C, v, &v2); }
 
 
 /* arithmetic operations with immediate operand for floats */
@@ -766,7 +771,7 @@ void csV_concat(cs_State *C, int total) {
         setfval(v1, fop(C, n1, n2)); \
         SP(-1); /* v2 */ \
         pc += getOpSize(OP_MBIN); \
-    }/* FALLTHRU to 'OP_MBIN' */}
+    }/* else fall through to 'OP_MBIN' */}
 
 
 /* arithmetic operations with stack operands for floats */
@@ -803,6 +808,7 @@ void csV_concat(cs_State *C, int total) {
     if (c_likely(tointeger(v, &i1))) { \
         setival(v, op(i1, i2)); \
     } else { \
+        savepc(C); \
         csD_bitwerror(C, v, lk); \
     }}
 
@@ -817,6 +823,7 @@ void csV_concat(cs_State *C, int total) {
         setival(v, op(i, imm)); \
     } else { \
         TValue vimm; setival(&vimm, imm); \
+        savepc(C); \
         csD_bitwerror(C, v, &vimm); \
     }}
 
@@ -1147,8 +1154,7 @@ returning:
                 vm_break;
             }
             vm_case(OP_DIVK) {
-                savepc(C); /* in case of division by 0 */
-                op_arithK(C, csV_div, c_numdiv);
+                op_arithKf(C, c_numdiv);
                 vm_break;
             }
             vm_case(OP_MODK) {
@@ -1193,8 +1199,7 @@ returning:
                 vm_break;
             }
             vm_case(OP_DIVI) {
-                savepc(C); /* in case of division by 0 */
-                op_arithI(C, csV_div, c_numdiv);
+                op_arithIf(C, c_numdiv);
                 vm_break;
             }
             vm_case(OP_MODI) {
@@ -1239,8 +1244,7 @@ returning:
                 vm_break;
             }
             vm_case(OP_DIV) {
-                savepc(C); /* in case of division by 0 */
-                op_arith(C, csV_div, c_numdiv);
+                op_arithf(C, c_numdiv);
                 vm_break;
             }
             vm_case(OP_MOD) {

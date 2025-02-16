@@ -12,11 +12,11 @@
 #include "cstate.h"
 
 
-#define csD_aritherror(ts,v1,v2) \
-    csD_operror(ts, v1, v2, "perform arithmetic operation on")
+#define csD_aritherror(C,v1,v2) \
+        csD_operror(C, v1, v2, "perform arithmetic operation on")
 
-#define csD_bitwerror(ts,v1,v2) \
-    csD_operror(ts, v1, v2, "perform bitwise operation on")
+#define csD_bitwerror(C,v1,v2) \
+        csD_operror(C, v1, v2, "perform bitwise operation on")
 
 
 /*

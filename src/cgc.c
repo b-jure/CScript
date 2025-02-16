@@ -663,7 +663,7 @@ static void pgc(cs_State *C, void *userdata) {
 
 
 /* call a finalizer "__gc" */
-static void callGCmm(cs_State *C) {
+static void callgc(cs_State *C) {
     TValue v;
     const TValue *m;
     GState *gs = G(C);
@@ -692,7 +692,7 @@ static int runNfinalizers(cs_State *C, int n) {
     int i;
     GState *gs = G(C);
     for (i = 0; i < n && gs->tobefin; i++)
-        callGCmm(C);
+        callgc(C);
     return i;
 }
 
@@ -706,10 +706,11 @@ static int runNfinalizers(cs_State *C, int n) {
 void csG_checkfin(cs_State *C, GCObject *o, TValue vmt[CS_MM_N]) {
     GCObject **pp;
     GState *gs = G(C);
-    if (isfin(o) ||                 /* object is already marked... */
-        ttisnil(&vmt[CS_MM_GC]) ||  /* or has no finalizer... */
-        (gs->gcstop & GCSTPCLS))    /* ...or closing state ? */
-        return;                     /* nothing to be done */
+    if (!vmt ||                     /* vmt is NULL... */
+        isfin(o) ||                 /* or object is already marked... */
+        ttisnil(&vmt[CS_MM_GC]) ||  /* or it has no finalizer... */
+        (gs->gcstop & GCSTPCLS))    /* ...or state is closing? */
+        return; /* nothing to be done */
     /* otherwise move 'o' to 'fin' list */
     if (sweepstate(gs)) {
         markwhite(gs, o); /* sweep object 'o' */
@@ -932,7 +933,7 @@ c_sinline void freelist(cs_State *C, GCObject *l, GCObject *limit) {
 static void runallfinalizers(cs_State *C) {
     GState *gs = G(C);
     while (gs->tobefin)
-        callGCmm(C);
+        callgc(C);
 }
 
 

@@ -174,7 +174,7 @@ static int b_getmetamethod(cs_State *C) {
     static const char * const opts[CS_MM_N + 1] = {"__getidx", "__setidx",
         "__gc", "__close", "__call", "__concat", "__add", "__sub", "__mul",
         "__div", "__mod", "__pow", "__shl", "__shr", "__band", "__bor",
-        "__xor", "__unm", "__bnot", "__eq", "__lt", "__le", NULL};
+        "__bxor", "__unm", "__bnot", "__eq", "__lt", "__le", NULL};
     static const cs_MM mmnum[] = {CS_MM_GETIDX, CS_MM_SETIDX, CS_MM_GC,
         CS_MM_CLOSE, CS_MM_CALL, CS_MM_CONCAT, CS_MM_ADD, CS_MM_SUB,
         CS_MM_MUL, CS_MM_DIV, CS_MM_MOD, CS_MM_POW, CS_MM_BSHL, CS_MM_BSHR,

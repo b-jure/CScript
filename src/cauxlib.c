@@ -454,7 +454,7 @@ static void fwarnoff(void *ud, const char *msg, int tocont) {
 
 CSLIB_API cs_State *csL_newstate(void) {
     cs_State *C = cs_newstate(allocator, NULL);
-    if (csi_likely(C)) {
+    if (c_likely(C)) {
         cs_atpanic(C, panic);
         cs_setwarnf(C, fwarnoff, C); /* warnings off by default */
     }

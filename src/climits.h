@@ -268,7 +268,7 @@ typedef c_byte Instruction;
 /* @c_nummod - modulo 'a - floor(a/b)*b'. */
 #define c_nummod(C,a,b,m) \
         { (void)(C); (m) = cs_mathop(fmod)(a, b); \
-          if (((m) > 0) ? (b)<0 : ((m) < 0 && (b) > 0)) (m) += (b); }
+          if (((m) > 0) ? (b) < 0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
 /* @c_numdiv - float division. */
 #ifndef c_numdiv

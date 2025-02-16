@@ -219,7 +219,7 @@ struct cs_State {
 
 
 /* thread global state */
-#define G(C)        (C)->gstate
+#define G(C)        ((C)->gstate)
 
 /* check if global state is fully built */
 #define statefullybuilt(gs)     ttisnil(&(gs)->nil)

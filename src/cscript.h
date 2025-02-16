@@ -116,6 +116,7 @@ typedef enum cs_MM {    /* ORDER MM */
     CS_MM_GC,
     CS_MM_CLOSE,
     CS_MM_CALL,
+    CS_MM_INIT,
     CS_MM_CONCAT,
     CS_MM_ADD,          /* ORDER OP */
     CS_MM_SUB,

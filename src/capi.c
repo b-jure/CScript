@@ -736,11 +736,11 @@ CS_API int cs_push_thread(cs_State *C) {
 }
 
 
-CS_API void cs_push_instance(cs_State *C, int clsobj) {
+CS_API void cs_push_instance(cs_State *C, int index) {
     const TValue *o;
     SPtr func;
     cs_lock(C);
-    o = index2value(C, clsobj);
+    o = index2value(C, index);
     api_check(C, ttisclass(o), "expect class");
     func = C->sp.p;
     setclsval2s(C, func, classval(o));

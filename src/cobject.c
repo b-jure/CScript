@@ -113,7 +113,7 @@ int csO_arithmraw(cs_State *C, const TValue *a, const TValue *b,
                   TValue *res, int op) {
     switch (op) {
         case CS_OPBNOT: case CS_OPBXOR: case CS_OPBSHL:
-        case CS_OPBSHR: case CS_OPBOR: case CS_OPBAND: { /* only on integers */
+        case CS_OPBSHR: case CS_OPBOR: case CS_OPBAND: { /* for integers */
             cs_Integer i1, i2;
             if (tointeger(a, &i1) && tointeger(b, &i2)) {
                 setival(res, intarithm(C, i1, i2, op));
@@ -121,9 +121,9 @@ int csO_arithmraw(cs_State *C, const TValue *a, const TValue *b,
             }
             return 0; /* fail */
         }
-        case CS_OPDIV: case CS_OPMOD: {
+        case CS_OPDIV: case CS_OPPOW: { /* for floats */
             cs_Number n1, n2;
-            if (tonumber(a, n1) && tonumber(b, n2)) { /* only on floats */
+            if (tonumber(a, n1) && tonumber(b, n2)) {
                 setfval(res, numarithm(C, n1, n2, op));
                 return 1;
             }
@@ -131,7 +131,7 @@ int csO_arithmraw(cs_State *C, const TValue *a, const TValue *b,
         }
         default: { /* other operations */
             cs_Number n1, n2;
-            if (ttisint(a) && ttisint(b) && op != CS_OPPOW) {
+            if (ttisint(a) && ttisint(b)) {
                 setival(res, intarithm(C, ival(a), ival(b), op));
                 return 1;
             } else if (tonumber(a, n1) && tonumber(b, n2)) {

@@ -35,7 +35,7 @@ print(Empty);                           // class: <memory_address>
 print(Empty());                         // instance: <memory_address>
 local PI <final> = 3.141592654;
 local class Circle {
-    fn __call() {                       // override initializer
+    fn __init() {                       // override initializer
         self.radius = 4;
         return self;
     }
@@ -63,7 +63,7 @@ ent = Entity();
 print(ent);                             // instance: <memory_address>
 print(ent.type());                      // "Entity"
 local class Human inherits Entity {     // Human class inherits Entity class
-    fn __call(fname, lname) {
+    fn __init(fname, lname) {
         self.fname = fname;
         self.lname = lname;
         return self;
@@ -99,7 +99,7 @@ print(func);                            // 69
 local table = {};
 print(table);                           // hashtable: <memory_address>
 class table.line {
-    fn __call(x, y) {
+    fn __init(x, y) {
         self.x = x;
         self.y = y;
         return self;
@@ -114,7 +114,7 @@ print(table.myline.cords());            // 15   12
 table.config = {};
 print(table.config);                    // hashtable: <memory_address>
 class table.config.point {
-    fn __call(x, y) {
+    fn __init(x, y) {
         self.x = x;
         self.y = y;
         return self;

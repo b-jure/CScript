@@ -262,7 +262,7 @@ static void callCLOSEmm(cs_State *C, TValue *obj, TValue *errobj) {
 ** the 'level' of the upvalue being closed, as everything after that
 ** won't be used again.
 */
-static void prepcallCLOSEmm(cs_State *C, SPtr level, int status) {
+static void prepcallclose(cs_State *C, SPtr level, int status) {
     TValue *v = s2v(level); /* value being closed */
     TValue *errobj;
     if (status == CLOSEKTOP) {
@@ -285,7 +285,7 @@ SPtr csF_close(cs_State *C, SPtr level, int status) {
     while (C->tbclist.p >= level) {
         SPtr tbc = C->tbclist.p;
         poptbclist(C);
-        prepcallCLOSEmm(C, tbc, status);
+        prepcallclose(C, tbc, status);
         level = restorestack(C, levelrel);
     }
     return level;
