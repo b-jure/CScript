@@ -497,7 +497,7 @@ static int b_tonumber(cs_State *C) {
 
 
 static int b_tostring(cs_State *C) {
-    csL_check_number(C, 0);
+    csL_check_any(C, 0);
     csL_to_lstring(C, 0, NULL);
     return 1;
 }

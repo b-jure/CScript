@@ -89,19 +89,14 @@ static int getbaseline(const Proto *p, int pc, int *basepc) {
 */
 int csD_getfuncline(const Proto *p, int pc) {
     int basepc;
-    int prevbaseline = -1;
     int baseline = getbaseline(p, pc, &basepc);
     while (basepc < pc) { /* walk until given instruction */
         basepc += getOpSize(p->code[basepc]); /* next instruction pc */
         cs_assert(p->lineinfo[basepc] != ABSLINEINFO);
         cs_assert(p->lineinfo[basepc] != ARGLINEINFO);
-        prevbaseline = baseline;
         baseline += p->lineinfo[basepc]; /* correct line */
     }
-    if (c_unlikely(pc < basepc)) { /* 'pc' in between instructions? */
-        cs_assert(prevbaseline >= 0);
-        baseline -= p->lineinfo[basepc]; /* go back one instruction */
-    }
+    cs_assert(pc == basepc);
     return baseline;
 }
 

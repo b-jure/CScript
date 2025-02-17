@@ -62,6 +62,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatI), /* OP_FALSE */
     opProp(0, FormatI), /* OP_NIL */
     opProp(0, FormatIL), /* OP_NILN */
+    opProp(0, FormatIL), /* OP_LOAD */
     opProp(0, FormatIS), /* OP_CONST */
     opProp(0, FormatIL), /* OP_CONSTL */
     opProp(0, FormatILS), /* OP_CONSTI */
@@ -129,7 +130,6 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(1, FormatILL), /* OP_BJMP */
     opProp(1, FormatILS), /* OP_TEST */
     opProp(1, FormatILS), /* OP_TESTORPOP */
-    opProp(1, FormatILS), /* OP_TESTANDPOP */
     opProp(1, FormatILS), /* OP_TESTPOP */
     opProp(0, FormatILL), /* OP_CALL */
     opProp(0, FormatIL), /* OP_CLOSE */
@@ -196,15 +196,15 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
-    "TRUE", "FALSE", "NIL", "NILN", "CONST", "CONSTL", "CONSTI", "CONSTF",
-    "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS", "NEWTABLE",
-    "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK", "MULK",
-    "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK", "BXORK",
-    "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
+    "TRUE", "FALSE", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
+    "CONSTF", "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS",
+    "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK",
+    "MULK", "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK",
+    "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
     "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
     "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
     "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "NOT", "UNM",
-    "BNOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP", "TESTANDPOP",
+    "BNOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP",
     "TESTPOP", "CALL", "CLOSE", "TBC", "GETGLOBAL", "SETGLOBAL",
     "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY",
     "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",

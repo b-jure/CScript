@@ -38,7 +38,7 @@
 #define makevariant(t, v)       ((t) | ((v) << 4))
 
 
-/* Cript values */
+/* CScript values */
 typedef union Value {
     struct GCObject *gc; /* collectable value */
     void *p; /* light userdata */
@@ -288,7 +288,7 @@ typedef struct UserData {
 ** This is used when allocating 'UserData' to properly calculate offset
 ** of user memory because 'uv' is a flexible array member.
 ** Also this kind of userdata is never gray so it doesnt need 'gclist'.
-** Internally Cript only uses 'UserData' to access fields and it takes
+** Internally CScript only uses 'UserData' to access fields and it takes
 ** care to avoid using 'uv' and 'gclist' fields when 'nuv' is 0.
 ** Additionally GC marks 'UserData' black in case 'nuv' is 0, to
 ** avoid using the 'gclist' field.

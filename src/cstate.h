@@ -130,8 +130,9 @@ typedef struct CallFrame {
     SIndex func; /* function stack index */
     SIndex top; /* top for this function */
     struct CallFrame *prev, *next; /* call link */
-    const Instruction *pc; /* (only for Cript function) */
-    int nvarargs; /* number of varargs (only for Cript function) */
+    const Instruction *pc; /* (only for CScript function) */
+    const Instruction *realpc; /* (only for CScript function) */
+    int nvarargs; /* number of varargs (only for CScript function) */
     int nresults; /* number of expected results from this function */
     c_byte status; /* call status */
 } CallFrame;
@@ -197,7 +198,7 @@ typedef struct GState {
  * Thread (per-thread-state)
  * ------------------------------------------------------------------------- */
 
-/* Cript thread state */
+/* CScript thread state */
 struct cs_State {
     ObjectHeader;
     ushort ncf; /* number of call frames in 'cf' list */
@@ -211,7 +212,7 @@ struct cs_State {
     SIndex stack; /* stack base */
     SIndex sp; /* first free slot in the 'stack' */
     SIndex stackend; /* end of 'stack' + 1 */
-    CallFrame basecf; /* base frame, C's entry point to Cript */
+    CallFrame basecf; /* base frame, C's entry point to CScript */
     CallFrame *cf; /* active frame */
     UpVal *openupval; /* list of open upvalues */
     SIndex tbclist; /* list of to-be-closed variables */

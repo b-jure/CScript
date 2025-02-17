@@ -122,6 +122,7 @@ OP_TRUE = 0,/*                'load true constant'                          */
 OP_FALSE,/*                   'load false constant'                         */
 OP_NIL,/*                     'load nil constant'                           */
 OP_NILN,/*         L          'load L nils'                                 */
+OP_LOAD,/*         L          'load V{L}'                                   */
 OP_CONST,/*        S          'load K{S}'                                   */
 OP_CONSTL,/*       L          'load K{L}'                                   */
 OP_CONSTI,/*       L S        'load integer L (S signedness)'               */
@@ -201,7 +202,6 @@ OP_BJMP,/*         L1 L2   'pc += L1; pop(L2)'                              */
 
 OP_TEST,/*         V L S   'if (!c_isfalse(V) == S) pc += L'                */
 OP_TESTORPOP,/*    V L S   'if (!c_isfalse(V) == S) pc += L; else pop V;'   */
-OP_TESTANDPOP,/*   V L S   'if (!c_isfalse(V) == S) { pc += L; pop V; }'    */
 OP_TESTPOP,/*      V L S   'if (!c_isfalse(V) == S) { pc += L; } pop V;'    */
 
 OP_CALL,/*  L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offsp-1})'

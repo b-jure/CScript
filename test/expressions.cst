@@ -189,6 +189,15 @@ a = a();
 a();
 # }
 
+# {CLASSES
+a = class {
+    fn name() {
+        return tostring(self);
+    }
+};
+a = a();
+print(a.name());
+# }
 
 # {UNARY OPERATORS
 # {minus

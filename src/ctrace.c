@@ -537,6 +537,14 @@ static void unasmRet(const Proto *p, Instruction *pc) {
 }
 
 
+static void unasmLoad(const Proto *p, Instruction *pc) {
+    startline(p, pc);
+    traceOp(*pc);
+    traceStackSlot(GETARG_L(pc, 0));
+    endline();
+}
+
+
 /*
 ** Disassemble all of the bytecode in 'p->code'.
 ** This function provides more detailed semantic information compared
@@ -569,6 +577,10 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
             }
             case OP_JMP: case OP_JMPS: {
                 unasmJmp(p, pc);
+                break;
+            }
+            case OP_LOAD: {
+                unasmLoad(p, pc);
                 break;
             }
             case OP_NILN: case OP_VARARG: case OP_CLOSURE:
@@ -624,7 +636,7 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmIndexedSet(p, pc);
                 break;
             }
-            case OP_TEST: case OP_TESTORPOP: case OP_TESTANDPOP:
+            case OP_TEST: case OP_TESTORPOP:
             case OP_TESTPOP: case OP_SETARRAY: {
                 unasmLS(p, pc);
                 break;
