@@ -1162,7 +1162,7 @@
         <a href="#3.4.11">&sect;3.4.11</a>;
         function calls are explained in <a href="#3.4.10">&sect;3.4.10</a>;
         table and array constructors are explained in
-        <a href="#3.4.9">&sect;3.4.9</a>.
+        <a href="#3.4.8">&sect;3.4.8</a>.
         Vararg expressions, denoted by three dots ('<code>...</code>'),
         can only be used when directly inside a variadic function;
         they are explained in <a href="#3.4.11">&sect;3.4.11</a>.
@@ -1393,6 +1393,375 @@
         </p>
 
 
+        <h3>3.4.8 &ndash; <a name="3.4.8">Table and Array Constructors</a></h3><p>
+        Table and array constructors are expressions that create tables and
+        arrays.
+        Every time a constructor is evaluated, a new array or table is created.
+        A constructor can be used to create an empty table/array or to create
+        an array/table and initialize some of its fields/elements.
+        The general syntax for table constructors is
+
+        <pre>
+    tableconstructor ::= &lsquo;<b>{</b>&rsquo; [fieldlist] &lsquo;<b>}</b>&rsquo;
+    fieldlist ::= field {fieldsep field} [fieldsep]
+    field ::= &lsquo;<b>[</b>&rsquo; exp &lsquo;<b>]</b>&rsquo; &lsquo;<b>=</b>&rsquo; exp | Name &lsquo;<b>=</b>&rsquo; exp
+    fieldsep ::= &lsquo;<b>,</b>&rsquo; | &lsquo;<b>;</b>&rsquo;</pre>
+
+        Each field of the form <code>[exp1] = exp2</code> adds to the new
+        table an entry with key <code>exp1</code> and value <code>exp2</code>.
+        A field of the form <code>name = exp</code> is equivalent to
+        <code>["name"] = exp</code>.
+        For example,
+
+        <pre>
+    a = { [f(1)] = g; x = 5, ["y"] = 6; [30] = 23 };</pre>
+
+        is equivalent to
+
+        <pre>
+    local t = {};
+    t[f(1)] = g;
+    t.x = 5;        // t["x"] = 5;
+    t["y"] = 6;
+    t[30] = 23;
+    a = t;</pre>
+
+        The general syntax for array constructors is:
+
+        <pre>
+    arrayconstructor ::= &lsquo;<b>[</b>&rsquo; [elementlist] &lsquo;<b>]</b>&rsquo;
+    elementlist ::= exp {&lsquo;<b>,</b>&rsquo; exp} [&lsquo;<b>,</b>&rsquo;]</pre>
+
+        Each expression in the elements list is equivalent to
+        <code>[i] = exp</code>, where <code>i</code> are consecutive integers
+        starting with 0.
+        For example,
+
+        <pre>
+    a = [ 15, "okay", nil, true ];</pre>
+
+        is equivalent to
+
+        <pre>
+    local aux = [];
+    aux[0] = 15;
+    aux[1] = "okay";
+    aux[2] = nil;
+    aux[3] = true;
+    a = aux;
+        </pre>
+
+        The order of the assignments in any of the constructors is undefined.
+        (This order would be relevant only when there are repeated keys being set.)
+        <br/><br/>
+        The field or element list can have an optional trailing separator,
+        as a convenience for machine-generated code.
+        </p>
+
+
+        <h3>3.4.9 &ndash; <a name="3.4.9">Function Calls</a></h3>
+        <p>
+        A function call in CScript has the following syntax:
+
+        <pre>
+    functioncall ::= prefixexp &lsquo;<b>(</b>&rsquo; args &lsquo;<b>)</b>&rsquo;</pre>
+
+        In a function call, first prefixexp and args are evaluated.
+        <br/><br/>
+        If the value of prefixexp has type <em>function</em>, then this
+        function is called with the given arguments.
+        <br/><br/>
+        If the value of prefixexp has type <em>class</em>, then
+        if <code>__init</code> metamethod of that class is present,
+        it is called: its first and only argument is the instance of the class.
+        If <code>__init</code> is not present, then calling a class directly
+        returns the instance of that class (see <a href="#2.4">&sect;2.4</a>).
+        In both cases all the provided arguments are discarded as they are
+        not used, and a single result is returned, the instance.
+        <br/><br/>
+        Finally if prefixexp is not a <em>class</em> and a <em>function</em>,
+        and <code>__call</code> metamethod is present, it is called:
+        its first argument is the value of prefixexp, followed by the original
+        call arguments (see <a href="#2.4">&sect;2.4</a>).
+        <br/><br/>
+        Arguments have the following syntax:
+
+        <pre>
+        args ::= [explist]</pre>
+
+        All argument expressions are evaluated before the call.
+        </p>
+
+
+        <h3>3.4.10 &ndash; <a name="3.4.10">Function Definitions</a></h3>
+        <p>
+        The syntax for function definition is
+
+        <pre>
+        functiondef ::= <b>fn</b> funcbody
+        funcbody ::= &lsquo;<b>(</b>&rsquo; [parlist] &lsquo;<b>)</b>&rsquo; &lsquo;<b>{</b>&rsquo; block &lsquo;<b>}</b>&rsquo;</pre>
+
+        The following syntactic sugar simplifies function definitions:
+
+        <pre>
+        stm ::= <b>fn</b> funcname funcbody
+        stm ::= <b>local</b> <b>fn</b> Name funcbody
+        funcname ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
+        The statement
+
+        <pre>
+    fn f() { <em>body</em> }</pre>
+
+        translates to
+
+        <pre>
+     f = fn() { <em>body</em> };</pre>
+
+        The statement
+
+        <pre>
+     fn t.a.b.c.f() { <em>body</em> }</pre>
+
+        translates to
+
+        <pre>
+     t.a.b.c.f = fn() { <em>body</em> };</pre>
+
+        The statement
+
+        <pre>
+     local fn f() { <em>body</em> }</pre>
+
+        translates to
+
+        <pre>
+     local f; f = fn() { <em>body</em> };</pre>
+
+        not to
+
+        <pre>
+     local f = fn() { <em>body</em> };</pre>
+
+        (This only makes a difference when the body of the function
+        contains references to <code>f</code>.)
+        <br/><br/>
+        A function definition is an executable expression, whose value has
+        type <em>function</em>.
+        When CScript precompiles a chunk, all its function bodies are
+        precompiled too, but they are not created yet.
+        Then, whenever CScript executes the function definition,
+        the function is <em>instantiated</em> (or <em>closed</em>).
+        This function instance, or <em>closure</em>, is the final value of
+        the expression.
+        <br/><br/>
+        Parameters act as local variables that are initialized with the
+        argument values:
+
+        <pre>
+    parlist ::= namelist [&lsquo;<b>,</b>&rsquo; &lsquo;<b>...</b>&rsquo;] | &lsquo;<b>...</b>&rsquo;</pre>
+
+        When a CScript function is called, it adjusts its list of arguments to
+        the length of its list of parameters
+        (see <a href="#3.4.11">&sect;3.4.11</a>), unless the function is a
+        <em>variadic function</em>, which is indicated by three dots
+        ('<code>...</code>') at the end of its parameter list.
+        A variadic function does not adjust its argument list;
+        instead, it collects all extra arguments and supplies them
+        to the function through a <em>vararg expression</em>,
+        which is also written as three dots.
+        The value of this expression is a list of all actual extra arguments,
+        similar to a function with multiple results
+        (see <a href="#3.4.11">&sect;3.4.11</a>).
+        <br/><br/>
+        As an example, consider the following definitions:
+
+        <pre>
+    fn f(a, b) {}
+    fn g(a, b, ...) {}
+    fn r() { return 1, 2, 3; }</pre>
+
+        Then, we have the following mapping from arguments to parameters and
+        to the vararg expression:
+
+        <pre>
+     CALL             PARAMETERS
+
+     f(3)             a=3, b=nil
+     f(3, 4)          a=3, b=4
+     f(3, 4, 5)       a=3, b=4
+     f(r(), 10)       a=1, b=10
+     f(r())           a=1, b=2
+
+     g(3)             a=3, b=nil, ... --&gt;  (nothing)
+     g(3, 4)          a=3, b=4,   ... --&gt;  (nothing)
+     g(3, 4, 5, 8)    a=3, b=4,   ... --&gt;  5  8
+     g(5, r())        a=5, b=1,   ... --&gt;  2  3</pre>
+
+        Results are returned using the <b>return</b> statement
+        (see <a href="#3.3.4">&sect;3.3.4</a>).
+        If control reaches the end of a function without encountering a
+        <b>return</b> statement, then the function returns with no results.
+        <br/><br/>
+        CScript guarantees the number of values that a function may return
+        is <em>2<sup>24</sup> - 1</em>.
+        </p>
+
+
+        <h3>3.4.11 &ndash; <a name="3.4.11">Lists of expressions, multiple results, and adjustment</a></h3>
+        <p>
+        Both function calls and vararg expressions can result in multiple
+        values.
+        These expressions are called <em>multires expressions</em>.
+        <br/><br/>
+        When a multires expression is used as the last element
+        of a list of expressions, all results from the expression are
+        added to the list of values produced by the list of expressions.
+        Note that a single expression in a place that expects a list of
+        expressions is the last expression in that (singleton) list.
+        <br/><br/>
+        These are the places where CScript expects a list of expressions:
+        <ul>
+            <li>
+                A <b>return</b> statement,
+                for instance <code>return e1, e2, e3;</code>
+                (see <a href="#3.3.4">&sect;3.3.4</a>).
+            </li>
+            <li>
+                An array constructor,
+                for instance <code>[e1, e2, e3]</code>
+                (see <a href="#3.4.8">&sect;3.4.8</a>).
+            </li>
+            <li>
+                The arguments of a function call,
+                for instance <code>foo(e1, e2, e3)</code>
+                (see <a href="#3.4.9">&sect;3.4.9</a>).
+            </li>
+            <li>
+                A multiple assignment,
+                for instance <code>a, b, c = e1, e2, e3;</code>
+                (see <a href="#3.3.3">&sect;3.3.3</a>).
+            </li>
+            <li>
+                A local declaration,
+                for instance <code>local a, b, c = e1, e2, e3;</code>
+                (see <a href="#3.3.7">&sect;3.3.7</a>).
+            </li>
+            <li>
+                The initial values in a generic <b>foreach</b> loop,
+                for instance <code>foreach k in e1, e2, e3 { ... }</code>
+                (see <a href="#3.3.5">&sect;3.3.5</a>).
+            </li>
+        </ul>
+        In the last four cases, the list of values from the list of
+        expressions must be <em>adjusted</em> to a specific length:
+        the number of parameters in a call to a non-variadic function
+        (see <a href="#3.4.10">&sect;3.4.10</a>), the number of variables
+        in a multiple assignment or a local declaration, and exactly four
+        values for a generic <b>foreach</b> loop.
+        The <em>adjustment</em> follows these rules:
+        If there are more values than needed,
+        the extra values are thrown away;
+        if there are fewer values than needed,
+        the list is extended with <b>nil</b>'s.
+        When the list of expressions ends with a multires expression,
+        all results from that expression enter the list of values
+        before the adjustment.
+        <br/><br/>
+        When a multires expression is used in a list of expressions without
+        being the last element, or in a place where the syntax expects a
+        single expression, CScript adjusts the result list of that expression
+        to one element.
+        As a particular case, the syntax expects a single expression inside
+        a parenthesized expression; therefore, adding parentheses around a
+        multires expression forces it to produce exactly one result.
+        <br/><br/>
+        We rarely need to use a vararg expression in a place where the
+        syntax expects a single expression.
+        (Usually it is simpler to add a regular parameter before the
+        variadic part and use that parameter.)
+        When there is such a need, we recommend assigning the vararg
+        expression to a single variable and using that variable in its place.
+        <br/><br/>
+        Here are some examples of uses of mutlres expressions.
+        In all cases, when the construction needs
+        "the n-th result" and there is no such result,
+        it uses a <b>nil</b>.
+
+        <pre>
+    print(x, f())      -- prints x and all results from f().
+    print(x, (f()))    -- prints x and the first result from f().
+    print(f(), x)      -- prints the first result from f() and x.
+    print(1 + f())     -- prints 1 added to the first result from f().
+    local x = ...      -- x gets the first vararg argument.
+    x,y = ...          -- x gets the first vararg argument,
+                       -- y gets the second vararg argument.
+    x,y,z = w, f()     -- x gets w, y gets the first result from f(),
+                       -- z gets the second result from f().
+    x,y,z = f()        -- x gets the first result from f(),
+                       -- y gets the second result from f(),
+                       -- z gets the third result from f().
+    x,y,z = f(), g()   -- x gets the first result from f(),
+                       -- y gets the first result from g(),
+                       -- z gets the second result from g().
+    x,y,z = (f())      -- x gets the first result from f(), y and z get nil.
+    return f();        -- returns all results from f().
+    return x, ...;     -- returns x and all received vararg arguments.
+    return x,y,f();    -- returns x, y, and all results from f().
+    [f()]              -- creates array with all results from f().
+    [...]              -- creates array with all vararg arguments.
+    [f(), 5]           -- creates array with the first result from f() and 5.</pre>
+        </p>
+
+
+        <h2>3.5 &ndash; <a name="3.5">Visibility Rules</a></h2>
+        <p>
+        CScript is a lexically scoped language.
+        The scope of a local variable begins at the first statement after
+        its declaration and lasts until the last non-empty statement
+        of the innermost block that includes the declaration.
+        Consider the following example:
+
+        <pre>
+    x = 10;                 // global variable
+    {                       // new block
+        local x = x;        // new 'x', with value 10
+        print(x);           --&gt; 10
+        x = x+1;
+        {                   // another block
+            local x = x+1;  // another 'x'
+            print(x);       --&gt; 12
+        }  
+        print(x);           --&gt; 11
+    }  
+    print(x);               --&gt; 10  (the global one)</pre>
+
+        Notice that, in a declaration like <code>local x = x;</code>,
+        the new <code>x</code> being declared is not in scope yet,
+        and so the second <code>x</code> refers to the outside variable.
+        <br/><br/>
+        Because of the lexical scoping rules, local variables can be freely
+        accessed by functions defined inside their scope.
+        A local variable used by an inner function is called an
+        <em>upvalue</em> (or <em>external local variable</em>, or simply
+        <em>external variable</em>) inside the inner function.
+        <br/><br/>
+        Notice that each execution of a <b>local</b> statement defines new
+        local variables.
+        Consider the following example:
+
+        <pre>
+    a = [];
+    local x = 20;
+    for (local i = 1; i &lt; 11; i = i + 1) {
+        local y = 0;
+        a[i] = fn() { y = y + 1; return x + y; }
+    }</pre>
+
+        The loop creates ten closures
+        (that is, ten instances of the anonymous function).
+        Each of these closures uses a different <code>y</code> variable,
+        while all of them share the same <code>x</code>.
+        </p>
 
 
         <h1>4 &ndash; <a name="4">The Application Programming Interface</h1>
