@@ -491,7 +491,7 @@
         </ul>
         In addition to the previous list, the interpreter also implements
         the following events:
-        <code>__gc</code> (see <a href="#2.5.3">&sect;2.5.3</a>) and
+        <code>__gc</code> (see <a href="#2.5.2">&sect;2.5.2</a>) and
         <code>__close</code> (see <a href="#3.3.8">&sect;3.3.8</a>)
         </p>
 
@@ -1148,6 +1148,7 @@
     exp ::= Numeral
     exp ::= LiteralString
     exp ::= functiondef
+    exp ::= classdef
     exp ::= tableconstructor
     exp ::= arrayconstructor
     exp ::= &lsquo;<b>...</b>&rsquo;
@@ -1166,9 +1167,8 @@
         Vararg expressions, denoted by three dots ('<code>...</code>'),
         can only be used when directly inside a variadic function;
         they are explained in <a href="#3.4.11">&sect;3.4.11</a>.
-        Expressions with <code>super</code> keyword can only be used during
-        the class method declaration; this is explained in more detail in
-        <a href="#3.4.12">&sect;3.4.12</a>.
+        Class definitions and expressions with <code>super</code> keyword
+        are explained in <a href="#3.4.12">&sect;3.4.12</a>.
         <br/><br/>
         Binary operators comprise arithmetic operators
         (see <a href="#3.4.1">&sect;3.4.1</a>), bitwise operators
@@ -1507,6 +1507,7 @@
         stm ::= <b>fn</b> funcname funcbody
         stm ::= <b>local</b> <b>fn</b> Name funcbody
         funcname ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
+
         The statement
 
         <pre>
@@ -1718,8 +1719,147 @@
         The syntax for class definition is
 
         <pre>
-    classdef ::= <b>class</b> !!!TODO!!!
-        </pre>
+    classdef ::= <b>class</b> classbody
+    classbody ::= [<b>inherits</b> supername] &lsquo;<b>{</b>&rsquo; {functiondef} &lsquo;<b>}</b>&rsquo;
+    supername ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
+
+        The following syntactic sugar simplifies class definitions:
+
+        <pre>
+    stm ::= <b>class</b> classname classbody
+    stm ::= <b>local</b> <b>class</b> Name classbody 
+    classname ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
+
+        The statement
+
+        <pre>
+    class x {}</pre>
+
+        translates to
+
+        <pre>
+    x = class {};</pre>
+
+        The statement
+
+        <pre>
+    class x.y {}</pre>
+
+        translates to
+
+        <pre>
+    x.y = class {};</pre>
+
+        The statement
+
+        <pre>
+    local class x {}</pre>
+
+        translates to
+
+        <pre>
+    local x;
+    x = class {};</pre>
+
+        not to
+
+        <pre>
+    local x = class {};</pre>
+
+        (This is to enable usage of <code>self</code> local in the class
+        methods.)
+        <br/>
+        The next chunk of code illustrates how inheritance works:
+
+        <pre>
+    class Vec2 {
+        fn __init(x, y) {
+            self.x = (x or 0);
+            self.y = (y or 0);
+            return self;
+        }
+        fn __add(rhs) {
+            return getclass(self)(self.x + rhs.x, self.y + rhs.y);
+        }
+        fn name() {
+            return "Vec2";
+        }
+    };
+    local class x inherits Vec2 {
+        fn name() {
+            return "x{" .. super.name() .. "}";
+        }
+    }
+    local vec = x(2, 3) + x(3, 3);
+    assert(vec.x == 5 and vec.y == 6);
+    assert(vec.name() == "x{Vec2}");</pre>
+
+        Class methods always have the instance as the first argument.
+        This argument is named <code>self</code> and it is hidden but
+        accessible.
+        Additionally if the class inherits from another class, then the local
+        variable named <code>super</code> (which is also a keyword) is
+        accessible for each method.
+        This variable can access the superclass methods, but you can't
+        use <code>super</code> in order to assign to the superclass.
+        For example
+
+        <pre>
+    local class Empty {
+        fn level() {
+            return 0.0;
+        }
+    }
+    local class HalfFull inherits Empty {
+        fn level() {
+            super.level = fn() { return 69; };
+            return super.level() + 0.5;
+        }
+    }</pre>
+
+        This would invoke an error, as you are trying to assign different
+        value to <code>level</code> <em>property</em> of the superclass.
+        We call it property instead of field, as classes do not have fields,
+        only instances do.
+        <br/><br/>
+        Each time we call a class, we create a new instance of that class,
+        unless class has <code>__init</code> which might return something
+        else other than the instance (see <a href="#2.4">&sect;2.4</a>).
+        Instances can call the methods class defines and can set/get
+        <em>fields</em>. <em>fields</em> are similar to <em>keys</em> in a
+        table. Instances are the combination of immutable class interface
+        (<em>methods</em>) and a mutable state (<em>fields</em>).
+        <br/>
+        A field can shadow a method:
+
+        <pre>
+    local class Kek {
+        fn lol() { return "kek"; }
+    }
+    local player = Kek();
+    assert(typeof(player.lol) == "function");
+    player.lol = "lol";
+    assert(typeof(player.lol) == "string");
+    assert(player.lol == "lol");</pre>
+
+        In example above, when we index <code>player</code> such as
+        <code>player.lol</code>, we get back the method called
+        <em>bound method</em> (more on that shortly).
+        However after we assign <code>player.lol</code> to a non-<b>nil</b>
+        value we shadow the class <em>method</em> with the newly assigned
+        value.
+        (To access the <em>method</em> again, assign the field to <b>nil</b>.)
+        <br/><br/>
+        Methods returned by indexing the instance are called
+        <em>bound methods</em>, as they are bound to the instance they
+        belong to.
+        This is necessary in order for the method to properly access its
+        instance via <code>self</code> local variable.
+        Each time you index a instance with a key that corresponds to the
+        class method of the instance, you will create a <em>bound method</em>.
+        This is not something you should actively think about, as these
+        methods are indistinguishable from regular functions/methods as far
+        as the user is concerned.
         </p>
 
 

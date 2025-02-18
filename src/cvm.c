@@ -958,7 +958,7 @@ void csV_concat(cs_State *C, int total) {
 /* get top stack slot */
 #define TOP()           SLOT(0)
 
-/* increments/decrements stack pointer */
+/* mutate stack pointer by 'n' slots */
 #define SP(n)           check_exp(C->sp.p + (n) >= base, C->sp.p += (n))
 
 
@@ -1340,9 +1340,9 @@ returning:
             /* } ORDERING_OPS { */
             vm_case(OP_EQK) {
                 TValue *v1 = peek(0);
-                const TValue *vK = K(fetchl());
+                const TValue *vk = K(fetchl());
                 int cond = fetchs();
-                setorderres(v1, csV_raweq(v1, vK), cond);
+                setorderres(v1, csV_raweq(v1, vk), cond);
                 vm_break;
             }
             vm_case(OP_EQI) {
@@ -1672,10 +1672,10 @@ returning:
             vm_case(OP_GETSUP) {
                 Instance *ins = insval(peek(1));
                 OClass *cls = classval(peek(0));
-                TValue *ks;
+                TValue *sk;
                 storepc(C);
-                ks = K(fetchl());
-                getsuper(C, ins, cls, strval(ks), SLOT(1), csH_getstr);
+                sk = K(fetchl());
+                getsuper(C, ins, cls, strval(sk), SLOT(1), csH_getstr);
                 SP(-1); /* cls */
                 vm_break;
             }
@@ -1691,21 +1691,24 @@ returning:
             vm_case(OP_GETSUPIDXSTR) {
                 Instance *ins = insval(peek(1));
                 OClass *cls = classval(peek(0));
-                TValue *ks;
+                TValue *sk;
                 storepc(C);
-                ks = K(fetchl());
-                getsuper(C, ins, cls, strval(ks), SLOT(1), csH_getstr);
+                sk = K(fetchl());
+                getsuper(C, ins, cls, strval(sk), SLOT(1), csH_getstr);
                 SP(-1); /* cls */
                 vm_break;
             }
             vm_case(OP_INHERIT) {
-                TValue *o = peek(1);
-                OClass *cls = classval(peek(0));
+                TValue *o1 = peek(1);
+                TValue *o2 = peek(0);
+                OClass *cls = classval(o2);
                 OClass *sup;
                 storepc(C);
-                if (c_unlikely(!ttisclass(o)))
-                    csD_runerror(C, "inherit from %s value", typename(ttype(o)));
-                sup = classval(o);
+                if (c_unlikely(!ttisclass(o1)))
+                    csD_runerror(C, "inherit from %s value", typename(ttype(o1)));
+                else if (c_unlikely(csV_raweq(peek(0), o1)))
+                    csD_runerror(C, "class attempted to inherit from itself");
+                sup = classval(o1);
                 if (c_likely(sup->methods)) { /* superclass has methods? */
                     cls->methods = csH_new(C);
                     csH_copykeys(C, cls->methods, sup->methods);

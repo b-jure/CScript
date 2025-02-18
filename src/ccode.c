@@ -607,6 +607,12 @@ int csC_nil(FunctionState *fs, int n) {
 }
 
 
+void csC_load(FunctionState *fs, int stk) {
+    csC_emitIL(fs, OP_LOAD, stk);
+    csC_reserveslots(fs, 1);
+}
+
+
 c_sinline void freeslots(FunctionState *fs, int n) {
     fs->sp -= n;
     cs_assert(fs->sp >= 0); /* negative slots are invalid */

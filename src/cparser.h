@@ -157,7 +157,7 @@ typedef struct LiteralInfo {
 /* class declaration information */
 typedef struct ClassState {
     struct ClassState *prev; /* chain of nested declarations */
-    c_byte super; /* true if class has superclass */
+    c_byte super; /* 1 if class has superclass; 2 if it has leftover */
 } ClassState;
 
 

@@ -50,7 +50,7 @@ static TValue *index2value(const cs_State *C, int index) {
     CallFrame *cf = C->cf;
     if (index >= 0) { /* absolute index? */
         SPtr o = (cf->func.p + 1) + index;
-        api_check(C, index < C->sp.p - (cf->func.p + 1), "index too large");
+        api_check(C, index < cf->top.p - (cf->func.p + 1), "index too large");
         if (o >= C->sp.p) return &G(C)->nil;
         else return s2v(o);
     } else if (!ispseudo(index)) { /* negative index? */

@@ -352,6 +352,7 @@ CSI_FUNC void csC_reserveslots(FunctionState *fs, int n);
 CSI_FUNC void csC_setoneret(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
 CSI_FUNC int csC_nil(FunctionState *fs, int n);
+CSI_FUNC void csC_load(FunctionState *fs, int stk);
 CSI_FUNC int csC_pop(FunctionState *fs, int n);
 CSI_FUNC void csC_adjuststack(FunctionState *fs, int left);
 CSI_FUNC int csC_ret(FunctionState *fs, int first, int nreturns);

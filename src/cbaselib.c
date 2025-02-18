@@ -190,8 +190,8 @@ static int b_getmetamethod(cs_State *C) {
 
 
 static int b_next(cs_State *C) {
-    int tt = cs_type(C, 0);
-    csL_expect_arg(C, (tt == CS_TINSTANCE || tt == CS_TTABLE), 0,
+    int t = cs_type(C, 0);
+    csL_expect_arg(C, (t == CS_TINSTANCE || t == CS_TTABLE), 0,
                        "instance or table");
     cs_setntop(C, 2); /* if 2nd argument is missing create it */
     if (cs_next(C, 0)) { /* found field? */
@@ -504,9 +504,15 @@ static int b_tostring(cs_State *C) {
 
 
 static int b_typeof(cs_State *C) {
-    int tt = cs_type(C, 0);
-    csL_check_arg(C, tt != CS_TNONE, 0, "value expected");
-    cs_push_string(C, cs_typename(C, 0));
+    csL_check_any(C, 0);
+    cs_push_string(C, cs_typename(C, cs_type(C, 0)));
+    return 1;
+}
+
+
+static int b_getclass(cs_State *C) {
+    csL_check_type(C, 0, CS_TINSTANCE);
+    cs_get_class(C, 0);
     return 1;
 }
 
@@ -534,6 +540,7 @@ static const cs_Entry basic_funcs[] = {
     {"tonumber", b_tonumber},
     {"tostring", b_tostring},
     {"typeof", b_typeof},
+    {"getclass", b_getclass},
     /* placeholders */
     {CS_GNAME, NULL},
     {"__VERSION", NULL},
