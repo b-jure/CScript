@@ -630,15 +630,9 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e, int limit) 
     for (int i = fs->nactlocals - 1; 0 <= i && limit < i; i--) {
         LVar *lvar = getlocalvar(fs, i);
         if (eqstr(name, lvar->s.name)) { /* found? */
-            if (c_unlikely(lvar->s.pidx == -1)) { /* uninitialized? */
-                const char *msg = csS_pushfstring(fs->lx->C, 
-                    "can't read local variable '%s' in its own initializer",
-                    getstr(name));
-                csP_semerror(fs->lx, msg);
-            } else {
-                initexp(e, EXP_LOCAL, lvar->s.sidx);
-                return e->et;
-            }
+            assert(lvar->s.pidx >= 0);
+            initexp(e, EXP_LOCAL, lvar->s.sidx);
+            return e->et;
         }
     }
     return -1; /* not found */
@@ -1542,8 +1536,8 @@ static void localstm(Lexer *lx) {
     voidexp(&e);
     do {
         vidx = newlocalvar(lx, str_expectname(lx)); /* create new local... */
-        kind = getlocalattribute(lx); /* get its attribute... */
-        getlocalvar(fs, vidx)->s.kind = kind; /* ...and set it */
+        kind = getlocalattribute(lx);               /* get its attribute... */
+        getlocalvar(fs, vidx)->s.kind = kind;       /* ...and set the attr */
         if (kind & VARTBC) { /* to-be-closed? */
             if (toclose != -1) /* one already present? */
                 csP_semerror(fs->lx,

@@ -511,9 +511,12 @@ static int b_typeof(cs_State *C) {
 
 
 static int b_getclass(cs_State *C) {
-    csL_check_type(C, 0, CS_TINSTANCE);
-    cs_get_class(C, 0);
-    return 1;
+    csL_check_any(C, 0);
+    if (cs_type(C, 0) == CS_TINSTANCE) /* argument is instance? */
+        cs_get_class(C, 0);
+    else /* argument is not an instance */
+        csL_push_fail(C);
+    return 1; /* return fail value or class */
 }
 
 
