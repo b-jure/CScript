@@ -77,11 +77,11 @@ CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *len);
 CSLIB_API void        csL_where(cs_State *C, int level);
 CSLIB_API int         csL_fileresult(cs_State *C, int ok, const char *fname);
 CSLIB_API int         csL_get_property(cs_State *C, int index);
-CSLIB_API void        csL_set_index(cs_State *C, int index, cs_Integer i);
+CSLIB_API void        csL_set_index(cs_State *C, int index, int i);
 CSLIB_API cs_State   *csL_newstate(void);
 CSLIB_API int         csL_get_subtable(cs_State *C, int index,
                                        const char *field);
-CSLIB_API void        csL_includef(cs_State *C, const char *modname,
+CSLIB_API void        csL_importf(cs_State *C, const char *modname,
                                   cs_CFunction openf, int global);
 CSLIB_API void       *csL_test_userdata(cs_State *C, int index,
                                         const char *name);
@@ -185,6 +185,7 @@ CSLIB_API void  csL_buff_push_stack(csL_Buffer *B);
 CSLIB_API void  csL_buff_push_gsub(csL_Buffer *B, const char *s,
                                    const char *p, const char *r);
 CSLIB_API void  csL_buff_end(csL_Buffer *B);
+CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
 
 /* ------------------------------------------------------------------------ 
 ** Basic message reporting

@@ -2137,8 +2137,8 @@
         care to choose indices that are different from those used by other
         libraries, to avoid collisions.
         Typically, you would use
-        <a href="#cs_getfreereg"><code>cs_getfreereg</code></a> in order to
-        obtain free registry index.
+        <a href="#cs_get_nilindex"><code>cs_get_nilindex</code></a> in order
+        to obtain free registry index.
         As with variable names, string keys starting with an two consecutive
         underscore followed by uppercase letters are reserved for CScript.
         <br/><br/>
@@ -5724,12 +5724,314 @@
         </p>
 
 
-        <h2>6.2 &ndash; <a name="6.2">Package Library</a></h2>
+        <h2>6.2 &ndash; <a name="6.2">Modules</a></h2>
         <p>
+        The package library provides basic facilities for loading modules
+        in CScript.
+        It exports one function directly in the global environment:
+        <a href="#import"><code>import</code></a>.
+        Everything else is exported in the table
+        <a name="package"><code>package</code></a>.
+
+        <hr><h3><a name="import"><code>import (modname)</code></a></h3>
+        <p>
+        Loads the given module.
+        The function starts by looking into the
+        <a href="#package.loaded"><code>package.loaded</code></a> table
+        to determine whether <code>modname</code> is already loaded.
+        If it is, then <code>import</code> returns the value stored
+        at <code>package.loaded[modname]</code>.
+        (The absence of a second result in this case
+        signals that this call did not have to load the module.)
+        Otherwise, it tries to find a <em>loader</em> for the module.
+        <br/><br/>
+        To find a loader, <code>import</code> is guided by the array
+        <a href="#package.searchers"><code>package.searchers</code></a>.
+        Each item in this array is a search function, that searches for the
+        module in a particular way.
+        By changing this array, we can change how <code>import</code> looks
+        for a module.
+        The following explanation is based on the default configuration
+        for <a href="#package.searchers"><code>package.searchers</code></a>.
+        <br/><br/>
+        First <code>import</code> queries <code>package.preload[modname]</code>.
+        If it has a value, this value (which must be a function) is the loader.
+        Otherwise <code>import</code> searches for a CScript loader using the
+        path stored in <a href="#package.path"><code>package.path</code></a>.
+        If that also fails, it searches for a C&nbsp;loader using the
+        path stored in <a href="#package.cpath"><code>package.cpath</code></a>.
+        If that also fails, it tries an <em>all-in-one</em> loader
+        (see <a href="#package.searchers"><code>package.searchers</code></a>).
+        <br/><br/>
+        Once a loader is found, <code>import</code> calls the loader with
+        two arguments:
+        <code>modname</code> and an extra value, a <em>loader data</em>,
+        also returned by the searcher.
+        The loader data can be any value useful to the module;
+        for the default searchers,
+        it indicates where the loader was found.
+        (For instance, if the loader came from a file,
+        this extra value is the file path.)
+        If the loader returns any non-nil value,
+        <code>import</code> assigns the returned value to
+        <code>package.loaded[modname]</code>.
+        If the loader does not return a non-nil value and
+        has not assigned any value to <code>package.loaded[modname]</code>,
+        then <code>import</code> assigns <b>true</b> to this entry.
+        In any case, <code>import</code> returns the
+        final value of <code>package.loaded[modname]</code>.
+        Besides that value, <code>import</code> also returns as a second
+        result the loader data returned by the searcher,
+        which indicates how <code>import</code> found the module.
+        <br/><br/>
+        If there is any error loading or running the module,
+        or if it cannot find any loader for the module,
+        then <code>import</code> raises an error.
+        </p>
+
+        <hr><h3><a name="package.config"><code>package.config</code></a></h3>
+        <p>
+        A string describing some compile-time configurations for packages.
+        This string is a sequence of lines:
+        <ul>
+            <li>
+                The first line is the directory separator string.
+                Default is '<code>\</code>' for Windows and '<code>/</code>'
+                for all other systems.
+            </li>
+            <li>
+                The second line is the character that separates templates
+                in a path.
+                Default is '<code>;</code>'.
+            </li>
+            <li>
+                The third line is the string that marks the substitution
+                points in a template.
+                Default is '<code>?</code>'.
+            </li>
+            <li>
+                The fourth line is a string that, in a path in Windows,
+                is replaced by the executable's directory.
+                Default is '<code>!</code>'.
+            </li>
+            <li>
+                The fifth line is a mark to ignore all text after it
+                when building the <code>csopen_</code> function name.
+                Default is '<code>-</code>'.
+            </li>
+        </ul>
+        </p>
+
+        <hr><h3><a name="package.cpath"><code>package.cpath</code></a></h3>
+        <p>
+        A string with the path used by <a href="#import"><code>import</code></a>
+        to search for a C&nbsp;loader.
+        <br/><br/>
+        CScript initializes the C&nbsp;path
+        <a href="#package.cpath"><code>package.cpath</code></a> in the same
+        way it initializes the CScript path
+        <a href="#package.path"><code>package.path</code></a>,
+        using the environment variable
+        <a name="CS_CPATH_1_0"><code>CS_CPATH_1_0</code></a>,
+        or the environment variable
+        <a name="CS_CPATH"><code>CS_CPATH</code></a>,
+        or a default path defined in <code>csconf.h</code>.
+        </p>
+
+        <hr><h3><a name="package.loaded"><code>package.loaded</code></a></h3>
+        <p>
+        A table used by <a href="#import"><code>import</code></a> to control
+        which modules are already loaded.
+        When you import a module <code>modname</code> and
+        <code>package.loaded[modname]</code> is not false,
+        <a href="#import"><code>import</code></a> simply returns the value
+        stored there.
+        <br/><br/>
+        This variable is only a reference to the real table;
+        assignments to this variable do not change the
+        table used by <a href="#import"><code>import</code></a>.
+        The real table is in the global table
+        (see <a href="#2.2">&sect;2.2</a>) under the key
+        <code>CS_LOADED_TABLE</code>, which is equal to string
+        <code>"__LOADED"</code>.
+        (So to access it, do <code>__G[__LOADED]</code> or simply
+        <code>__LOADED</code>.)
+        </p>
+
+        <hr><h3><a name="package.loadlib"><code>package.loadlib (libname, funcname)</code></a></h3>
+        <p>
+        Dynamically links the host program with the C&nbsp;library
+        <code>libname</code>.
+        <br/><br/>
+        If <code>funcname</code> is "<code>*</code>", then it only links with
+        the library, making the symbols exported by the library available
+        to other dynamically linked libraries.
+        Otherwise, it looks for a function <code>funcname</code> inside the
+        library and returns this function as a C&nbsp;function.
+        So, <code>funcname</code> must follow the
+        <a href="#cs_CFunction"><code>cs_CFunction</code></a> prototype
+        (see <a href="#cs_CFunction"><code>cs_CFunction</code></a>).
+        <br/><br/>
+        This is a low-level function.
+        It completely bypasses the package and module system.
+        Unlike <a href="#import"><code>import</code></a>, it does not perform
+        any path searching and does not automatically adds extensions.
+        <code>libname</code> must be the complete file name of the
+        C&nbsp;library, including if necessary a path and an extension.
+        <code>funcname</code> must be the exact name exported by the
+        C&nbsp;library (which may depend on the C&nbsp;compiler and linker
+        used).
+        <br/><br/>
+        This functionality is not supported by ISO&nbsp;C.
+        As such, it is only available on some platforms
+        (Windows, Linux, Mac OS X, Solaris, BSD, plus other Unix systems
+        that support the <code>dlfcn</code> standard).
+        <br/><br/>
+        This function is inherently insecure, as it allows CScript to call
+        any function in any readable dynamic library in the system.
+        (CScript calls any function assuming the function has a proper
+        prototype and respects a proper protocol
+        (see <a href="#cs_CFunction"><code>cs_CFunction</code></a>).
+        Therefore, calling an arbitrary function in an arbitrary dynamic
+        library more often than not results in an access violation.)
+        </p>
+
+        <hr><h3><a name="package.path"><code>package.path</code></a></h3>
+        <p>
+        A string with the path used by<a href="#import"><code>import</code></a>
+        to search for a CScript loader.
+        <br/><br/>
+        At start-up, CScript initializes this variable with the value of the
+        environment variable <a name="CS_PATH_1_0"><code>CS_PATH_1_0</code></a>
+        or the environment variable <a name="CS_PATH"><code>CS_PATH</code></a>
+        or with a default path defined in <code>csconf.h</code>, if those
+        environment variables are not defined.
+        A "<code>;;</code>" in the value of the environment variable is
+        replaced by the default path.
+        </p>
+
+        <hr><h3><a name="package.preload"><code>package.preload</code></a></h3>
+        <p>
+        A table to store loaders for specific modules
+        (see <a href="#import"><code>import</code></a>).
+        <br/><br/>
+        This variable is only a reference to the real table;
+        assignments to this variable do not change the table used by
+        <a href="#import"><code>import</code></a>.
+        The real table is stored in the global table
+        (see <a href="#2.2">&sect;2.2</a>), under the key
+        <a name="CS_PRELOAD_TABLE"><code>CS_PRELOAD_TABLE</code></a>,
+        which is equal to a string <code>"__PRELOAD"</code>.
+        (So to access it, do <code>__G[__PRELOAD]</code> or simply
+        <code>__PRELOAD</code>.)
+        </p>
+
+        <hr><h3><a name="package.searchers"><code>package.searchers</code></a></h3>
+        <p>
+        Array used by <a href="#import"><code>import</code></a> to control
+        how to find modules.
+        <br/><br/>
+        Each entry in this array is a <em>searcher function</em>.
+        When looking for a module, <a href="#import"><code>import</code></a>
+        calls each of these searchers in ascending order, with the module name
+        (the argument given to <a href="#import"><code>import</code></a>) as
+        its sole argument.
+        If the searcher finds the module, it returns another function,
+        the module <em>loader</em>, plus an extra value,
+        a <em>loader data</em>, that will be passed to that loader and
+        returned as a second result by
+        <a href="#import"><code>import</code></a>.
+        If it cannot find the module, it returns a string explaining why
+        (or <b>nil</b> if it has nothing to say).
+        <br/><br/>
+        CScript initializes this array with four searcher functions.
+        <br/><br/>
+        The first searcher simply looks for a loader in the
+        <a href="#package.preload"><code>package.preload</code></a> array.
+        <br/><br/>
+        The second searcher looks for a loader as a CScript library,
+        using the path stored at
+        <a href="#package.path"><code>package.path</code></a>.
+        The search is done as described in function
+        <a href="#package.searchpath"><code>package.searchpath</code></a>.
+        <br/><br/>
+        The third searcher looks for a loader as a C&nbsp;library,
+        using the path given by the variable
+        <a href="#package.cpath"><code>package.cpath</code></a>.
+        Again, the search is done as described in function
+        <a href="#package.searchpath"><code>package.searchpath</code></a>.
+        For instance, if the C&nbsp;path is the string
+
+        <pre>
+    "./?.so;./?.dll;/usr/local/?/init.so"</pre>
+
+        the searcher for module <code>foo</code> will try to open the files
+        <code>./foo.so</code>, <code>./foo.dll</code>,
+        and <code>/usr/local/foo/init.so</code>, in that order.
+        Once it finds a C&nbsp;library, this searcher first uses a dynamic
+        link facility to link the application with the library.
+        Then it tries to find a C&nbsp;function inside the library to
+        be used as the loader.
+        The name of this C&nbsp;function is the string "<code>csopen_</code>"
+        concatenated with a copy of the module name where each dot
+        is replaced by an underscore.
+        Moreover, if the module name has a hyphen, its suffix after
+        (and including) the first hyphen is removed.
+        For instance, if the module name is <code>a.b.c-v2.1</code>,
+        the function name will be <code>csopen_a_b_c</code>.
+        <br/><br/>
+        The fourth searcher tries an <em>all-in-one loader</em>.
+        It searches the C&nbsp;path for a library for the root name of the
+        given module.
+        For instance, when requiring <code>a.b.c</code>, it will search for
+        a C&nbsp;library for <code>a</code>.
+        If found, it looks into it for an open function for
+        the submodule;
+        in our example, that would be <code>csopen_a_b_c</code>.
+        With this facility, a package can pack several C&nbsp;submodules
+        into one single library, with each submodule keeping its original
+        open function.
+        <br/><br/>
+        All searchers except the first one (preload) return as the extra
+        value the file path where the module was found, as returned by
+        <a href="#package.searchpath"><code>package.searchpath</code></a>.
+        The first searcher always returns the string "<code>:preload:</code>".
+        <br/><br/>
+        Searchers should raise no errors and have no side effects in CScript.
+        (They may have side effects in C, for instance by linking the
+        application with a library.)
+        </p>
+
+        <hr><h3><a name="package.searchpath"><code>package.searchpath (name, path [, sep [, rep]])</code></a></h3>
+        </p>
+        Searches for the given <code>name</code> in the given <code>path</code>.
+        <br/><br/>
+        A path is a string containing a sequence of <em>templates</em>
+        separated by semicolons.
+        For each template, the function replaces each interrogation mark
+        (if any) in the template with a copy of <code>name</code> wherein
+        all occurrences of <code>sep</code> (a dot, by default) were replaced
+        by <code>rep</code> (the system's directory separator, by default),
+        and then tries to open the resulting file name.
+        <br/><br/>
+        For instance, if the path is the string
+
+        <pre>
+    "./?.csp;./?.lc;/usr/local/?/init.csp"
+        </pre>
+
+        the search for the name <code>foo.a</code> will try to open the
+        files <code>./foo/a.csp</code>, <code>./foo/a.lc</code>, and
+        <code>/usr/local/foo/a/init.csp</code>, in that order.
+        <br/><br/>
+        Returns the resulting name of the first file that it can open in read
+        mode (after closing the file), or <b>fail</b> plus an error message
+        if none succeeds.
+        (This error message lists all file names it tried to open.)
         </p>
 
 
-        <h2>6.3 &ndash; <a name="6.3">String Library</a></h2>
+        <h2>6.3 &ndash; <a name="6.3">String Manipulation</a></h2>
         <p>
         This library provides generic functions for string manipulation,
         such as finding and extracting substrings and other common operations.

@@ -270,7 +270,7 @@ CS_API int   cs_get_uservalue(cs_State *C, int index, int n);
 CS_API void  cs_set_global(cs_State *C, const char *name); 
 CS_API void  cs_set(cs_State *C, int index); 
 CS_API void  cs_set_raw(cs_State *C, int index); 
-CS_API void  cs_set_index(cs_State *C, int index, cs_Integer i);
+CS_API void  cs_set_index(cs_State *C, int index, int i);
 CS_API void  cs_set_field(cs_State *C, int index); 
 CS_API void  cs_set_fieldstr(cs_State *C, int index, const char *field); 
 CS_API void  cs_set_fieldptr(cs_State *C, int index, const void *field); 

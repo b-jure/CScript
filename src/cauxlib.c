@@ -385,9 +385,9 @@ CSLIB_API int csL_get_property(cs_State *C, int index) {
 }
 
 
-CSLIB_API void csL_set_index(cs_State *C, int index, cs_Integer i) {
+CSLIB_API void csL_set_index(cs_State *C, int index, int i) {
     if (csi_unlikely(i < 0))
-        csL_error(C, "array index is negative (%I)", i);
+        csL_error(C, "array index is negative (%d)", i);
     cs_set_index(C, index, i);
 }
 
@@ -476,7 +476,7 @@ CSLIB_API int csL_get_subtable(cs_State *C, int index, const char *field) {
 }
 
 
-CSLIB_API void csL_includef(cs_State *C, const char *modname,
+CSLIB_API void csL_importf(cs_State *C, const char *modname,
                            cs_CFunction openf, int global) {
     csL_get_gsubtable(C, CS_LOADED_TABLE);
     cs_get_fieldstr(C, -1, modname); /* get __LOADED[modname] */
@@ -864,4 +864,10 @@ CSLIB_API void csL_buff_end(csL_Buffer *B) {
     if (buffonstack(B)) /* have `UserBox`? */
         cs_closeslot(C, -2); /* close it -> boxgc */
     cs_remove(C, -2); /* remove buffer placeholder or box */
+}
+
+
+CSLIB_API void csL_buff_endsz(csL_Buffer *B, size_t sz) {
+    csL_buffadd(B, sz);
+    csL_buff_end(B);
 }

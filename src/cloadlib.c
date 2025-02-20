@@ -12,7 +12,6 @@
 
 #include "cscript.h"
 
-#include "ctrace.h"
 #include "cauxlib.h"
 #include "cslib.h"
 
@@ -454,7 +453,7 @@ static void findloader(cs_State *C, const char *name) {
 }
 
 
-static int l_include(cs_State *C) {
+static int l_import(cs_State *C) {
     const char *name = csL_check_string(C, 0);
     cs_setntop(C, 1); /* __LOADED table will be at index 1 */
     cs_get_global(C, CS_LOADED_TABLE);
@@ -485,7 +484,7 @@ static int l_include(cs_State *C) {
 
 
 static const cs_Entry load_funcs[] = {
-    {"include", l_include},
+    {"import", l_import},
     {NULL, NULL}
 };
 
@@ -509,6 +508,11 @@ static int gcmm(cs_State *C) {
 }
 
 
+/*
+** CLIBS is full userdata with two upvalues, first one is
+** the array of library handles, second one is query table.
+** This full userdata when created is set as global name '__CLIBS'.
+*/
 static void createclibs(cs_State *C) {
     /* global table is on stack top */
     if (cs_get_fieldstr(C, -1, CLIBS) != CS_TUSERDATA) {
@@ -656,25 +660,30 @@ static void setpath(cs_State *C, const char *fieldname, const char *envname,
 
 CSMOD_API int csopen_package(cs_State *C) {
     cs_push_globaltable(C);
+    /* create '__CLIBS' global */
     createclibs(C);
-    csL_newlib(C, package_funcs); /* create 'package' table */
+    /* create 'package' table global */
+    csL_newlib(C, package_funcs);
+    /* set 'package.searchers' */
     createsearchersarray(C);
-    /* set paths */
+    /* set 'package.path' */
     setpath(C, "path", CS_PATH_VAR, CS_PATH_DEFAULT);
+    /* set 'package.cpath' */
     setpath(C, "cpath", CS_CPATH_VAR, CS_CPATH_DEFAULT);
-    /* package.config = configstring */
+    /* set 'package.config' */
     cs_push_literal(C, CS_DIRSEP "\n" CS_PATH_SEP "\n" CS_PATH_MARK "\n"
                        CS_EXEC_DIR "\n" CS_IGMARK "\n");
     cs_set_fieldstr(C, -2, "config");
-    /* package.loaded = __LOADED */
+    /* 'package.loaded' = '__LOADED' */
     csL_get_subtable(C, -2, CS_LOADED_TABLE);
     cs_set_fieldstr(C, -2, "loaded");
-    /* package.preload = __PRELOAD */
+    /* 'package.preload' = '__PRELOAD' */
     csL_get_subtable(C, -2, CS_PRELOAD_TABLE);
     cs_set_fieldstr(C, -2, "preload");
+    /* open library into global table */
     cs_push(C, -2); /* push global table */
     cs_push(C, -2); /* set 'package' as upvalue for next lib */
-    csL_setfuncs(C, load_funcs, 1); /* open lib into global table */
+    csL_setfuncs(C, load_funcs, 1);
     cs_pop(C, 1);  /* pop global table */
     return 1;  /* return 'package' table */
 }

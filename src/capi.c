@@ -1147,14 +1147,14 @@ CS_API void  cs_set_raw(cs_State *C, int obj) {
 }
 
 
-CS_API void cs_set_index(cs_State *C, int index, cs_Integer i) {
+CS_API void cs_set_index(cs_State *C, int index, int i) {
     Array *arr;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    api_check(C, 0 <= i && i < ARRAYLIMIT, "`index` out of bounds");
+    api_check(C, 0 <= i, "`index` out of bounds");
     arr = getarray(C, index);
-    csA_ensure(C, arr, cast_int(i));
-    setobj(C, &arr->b[cast_int(i)], s2v(C->sp.p - 1));
+    csA_ensure(C, arr, i);
+    setobj(C, &arr->b[i], s2v(C->sp.p - 1));
     csG_barrierback(C, obj2gco(arr), s2v(C->sp.p - 1));
     C->sp.p--; /* remove value */
     cs_unlock(C);

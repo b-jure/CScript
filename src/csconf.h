@@ -100,17 +100,17 @@
 
 #if !defined(CS_PATH_DEFAULT)
 #define CS_PATH_DEFAULT  \
-                CS_CSDIR"?.csp;"  CS_CSDIR"?\\init.csp;" \
-                CS_CDIR"?.csp;"  CS_CDIR"?\\init.csp;" \
-                CS_SHRDIR"?.csp;" CS_SHRDIR"?\\init.csp;" \
-                ".\\?.csp;" ".\\?\\init.csp"
+        CS_CSDIR"?.csp;"  CS_CSDIR"?\\init.csp;" \
+        CS_CDIR"?.csp;"  CS_CDIR"?\\init.csp;" \
+        CS_SHRDIR"?.csp;" CS_SHRDIR"?\\init.csp;" \
+        ".\\?.csp;" ".\\?\\init.csp"
 #endif
 
 #if !defined(CS_CPATH_DEFAULT)
 #define CS_CPATH_DEFAULT \
-                CS_CDIR"?.dll;" \
-                CS_CDIR"..\\lib\\csp\\" CS_VDIR "\\?.dll;" \
-                CS_CDIR"loadall.dll;" ".\\?.dll"
+        CS_CDIR"?.dll;" \
+        CS_CDIR"..\\lib\\csp\\" CS_VDIR "\\?.dll;" \
+        CS_CDIR"loadall.dll;" ".\\?.dll"
 #endif
 
 #else                   /* }{ */
@@ -121,14 +121,14 @@
 
 #if !defined(CS_PATH_DEFAULT)
 #define CS_PATH_DEFAULT  \
-                CS_CSDIR"?.csp;"  CS_CSDIR"?/init.csp;" \
-                CS_CDIR"?.csp;"  CS_CDIR"?/init.csp;" \
-                "./?.csp;" "./?/init.csp"
+        CS_CSDIR"?.csp;"  CS_CSDIR"?/init.csp;" \
+        CS_CDIR"?.csp;"  CS_CDIR"?/init.csp;" \
+        "./?.csp;" "./?/init.csp"
 #endif
 
 #if !defined(CS_CPATH_DEFAULT)
 #define CS_CPATH_DEFAULT \
-                CS_CDIR"?.so;" CS_CDIR"loadall.so;" "./?.so"
+        CS_CDIR"?.so;" CS_CDIR"loadall.so;" "./?.so"
 #endif
 
 #endif                  /* } */
@@ -237,7 +237,7 @@
 #define cs_floor(n)             (cs_mathop(floor)(n))
 
 #define cs_number2str(s,sz,n) \
-    c_snprintf((s), (sz), CS_FLOAT_FMT, (CS_NUMBER)(n))
+        c_snprintf((s), (sz), CS_FLOAT_FMT, (CS_NUMBER)(n))
 
 #define cs_number2integer(n,p) \
     ((n) >= (CS_NUMBER)(CS_INTEGER_MIN) && \
@@ -294,7 +294,7 @@
 #define CS_INTEGER_FMT      "%" CS_INTEGER_FMTLEN "d"
 
 #define cs_integer2str(s,sz,n) \
-    c_snprintf((s),(sz),CS_INTEGER_FMT,(CS_INTEGER)(n))
+        c_snprintf((s),(sz),CS_INTEGER_FMT,(CS_INTEGER)(n))
 
 
 #if CS_INT_TYPE == CS_INT_INT               /* { int */
