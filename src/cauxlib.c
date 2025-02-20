@@ -99,8 +99,7 @@ CSLIB_API int csL_error_arg(cs_State *C, int arg, const char *extra) {
     }
     if (di.name == NULL)
         di.name = (pushglobalfuncname(C, &di)) ? cs_to_string(C, -1) : "?";
-    return csL_error(C, "bad argument #%d to '%s' (%s)",
-                         arg, di.name, extra);
+    return csL_error(C, "bad argument #%d to '%s' (%s)", arg, di.name, extra);
 }
 
 

@@ -263,7 +263,7 @@ CS_API int   cs_get_method(cs_State *C, int index);
 CS_API int   cs_get_metamethod(cs_State *C, int index, cs_MM mm); 
 
 CS_API void *cs_newuserdata(cs_State *C, size_t sz, int nuv); 
-CS_API int   cs_get_uservalue(cs_State *C, int index, int n); 
+CS_API int   cs_get_uservalue(cs_State *C, int index, unsigned short n); 
 
 /* -----------------------------------------------------------------------
 ** Set functions (stack -> CScript)
@@ -278,7 +278,7 @@ CS_API void  cs_set_fieldptr(cs_State *C, int index, const void *field);
 CS_API void  cs_set_fieldint(cs_State *C, int index, cs_Integer field); 
 CS_API void  cs_set_fieldflt(cs_State *C, int index, cs_Number field); 
 CS_API void  cs_set_uservmt(cs_State *C, int index, const cs_VMT *vmt); 
-CS_API int   cs_set_uservalue(cs_State *C, int index, int n); 
+CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
 CS_API void  cs_set_usermm(cs_State *C, int index, cs_MM mm); 
 
 /* -----------------------------------------------------------------------

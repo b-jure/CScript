@@ -4,11 +4,11 @@
 ** See Copyright Notice in cscript.h
 */
 
-#include <ctype.h>
 #define cstrlib_c
 #define CS_LIB
 
 
+#include <ctype.h>
 #include <float.h>
 #include <limits.h>
 #include <locale.h>
@@ -30,6 +30,36 @@
 
 
 #define cast_uchar(c)   ((unsigned char)(c))
+
+
+/*
+** Maximum size of each format specification (such as "%-099.99d"):
+** Initial '%', flags (up to 5), width (2), period, precision (2),
+** length modifier (8), conversion specifier, and final '\0', plus some
+** extra.
+** ('s_format')
+*/
+#define MAX_FORMAT	32
+
+
+/*
+** All formats except '%f' do not need that large limit.  The other
+** float formats use exponents, so that they fit in the 99 limit for
+** significant digits; 's' for large strings and 'q' add items directly
+** to the buffer; all integer formats also fit in the 99 limit.  The
+** worst case are floats: they may need 99 significant digits, plus
+** '0x', '-', '.', 'e+XXXX', and '\0'. Adding some extra, 120.
+** ('s_format')
+*/
+#define MAX_ITEM    120
+
+
+/*
+** Conversion specification introducer character.
+** ('s_format')
+*/
+#define CONVCHAR    '%'
+
 
 
 static const char *find(const char *s, size_t ls, const char *p, size_t lp) {
@@ -80,12 +110,12 @@ static const char *rfind(const char *s, size_t ls, const char *p, size_t lp) {
 }
 
 
-static const char *findstr(const char *s, size_t ls,
-                           const char *p, size_t lp, int rev) {
-    if (c_unlikely(lp == 0)) return s; /* empty strings match everything */
-    else if (ls < lp) return NULL; /* avoid negative 'ls' */
-    else if (!rev) return find(s, ls, p, lp); /* regular find */
-    else return rfind(s, ls, p, lp); /* reverse find */
+static const char *findstr(const char *s, size_t l,
+                           const char *p, size_t lpat, int rev) {
+    if (c_unlikely(lpat == 0)) return s; /* empty strings match everything */
+    else if (l < lpat) return NULL; /* avoid negative 'l' */
+    else if (!rev) return find(s, l, p, lpat); /* regular find */
+    else return rfind(s, l, p, lpat); /* reverse find */
 }
 
 
@@ -135,9 +165,9 @@ static int s_rsplit(cs_State *C) {
 
 
 /*
-** Translate relative string index to absolute.
+** Translate starting position to actual index.
 */
-static size_t r2a(cs_Integer pos, size_t len) {
+static size_t posI(cs_Integer pos, size_t len) {
     if (pos >= 0) /* already absolute? */
         return pos;
     else if (pos < -(cs_Integer)len) /* negative out-of-bounds 'pos'? */
@@ -147,16 +177,32 @@ static size_t r2a(cs_Integer pos, size_t len) {
 }
 
 
+/*
+** Translate end position to actual index.
+*/
+static size_t posJ(cs_Integer pos, size_t len) {
+    if (pos >= (cs_Integer)len) /* absolute that overflows? */
+        return len - 1;
+    else if (pos >= 0) /* absolute in-range 'pos'? */
+        return pos;
+    else if (pos < -(cs_Integer)len) /* negative out-of-bounds 'pos'? */
+        return 0; /* clip it */
+    else /* otherwise negative in-range 'pos' */
+        return len + (size_t)pos;
+}
+
+
+
 static int s_startswith(cs_State *C) {
-    size_t l1, l2;
-    const char *s1 = csL_check_lstring(C, 0, &l1);
-    const char *s2 = csL_check_lstring(C, 1, &l2);
-    size_t i = r2a(csL_opt_integer(C, 2, 0), l1);
-    size_t j = r2a(csL_opt_integer(C, 3, -1), l1);
-    if (i < l1) {
+    size_t l, l1;
+    const char *s1 = csL_check_lstring(C, 0, &l);
+    const char *s2 = csL_check_lstring(C, 1, &l1);
+    size_t i = posI(csL_opt_integer(C, 2, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 3, -1), l);
+    if (i <= j) {
         size_t k = 0;
-        while (i <= j && k < l2 && s1[i] == s2[k]) { i++; k++; }
-        if (k+1 == l2) {
+        while (i <= j && k < l1 && s1[i] == s2[k]) { i++; k++; }
+        if (k+1 == l1) {
             cs_push_integer(C, i);
             return 1; /* return index after 's2' in 's1' */
         } /* else fall through */
@@ -257,24 +303,58 @@ static int s_join(cs_State *C) {
 }
 
 
-// string.format(string_fmt, ...)
+/*
+** Syntax of a conversion specification is:
+** %[argument$][flags][width][.precision][length modifier]conversion
+*/
+static int formatstr(cs_State *C, const char *fmt, size_t lfmt) {
+    int top = cs_gettop(C);
+    int arg = 0;
+    const char *efmt = fmt + lfmt;
+    csL_Buffer b;
+    csL_buff_init(C, &b);
+    while (fmt < efmt) {
+        if (*fmt != CONVCHAR) /* not % */
+            csL_buff_push(&b, *fmt++);
+        else if (*++fmt == CONVCHAR) /* %% */
+            csL_buff_push(&b, *fmt++);
+        else { /* % */
+            char form[MAX_FORMAT]; /* to store the format ('%...') */
+            int maxitem = MAX_ITEM; /* maximum length for the result */
+            char *buff = csL_buff_ensure(&b, maxitem); /* to put result */
+            int nb = 0; /* number of bytes in result */
+            if (++arg > top) /* too many format specifiers? */
+                return csL_error_arg(C, arg, "missing format value");
+            // TODO
+        }
+    }
+    csL_buff_end(&b);
+    return 1; /* return formatted string */
+}
+
+
 static int s_format(cs_State *C) {
-    return 1;
+    size_t lfmt;
+    const char *fmt = csL_check_lstring(C, 0, &lfmt);
+    if (lfmt == 0) {
+        cs_push_literal(C, "");
+        return 1;
+    }
+    return formatstr(C, fmt, lfmt);
 }
 
 
 static int auxtocase(cs_State *C, int (*f)(int c)) {
     size_t l;
     const char *s = csL_check_lstring(C, 0, &l);
-    size_t i = r2a(csL_opt_integer(C, 1, 0), l);
-    size_t j = r2a(csL_opt_integer(C, 2, -1), l);
-    if (l == 0 || i >= l || i > j)
+    size_t i = posI(csL_opt_integer(C, 1, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
+    if (l == 0 || i > j)
         cs_push_literal(C, "");
     else {
         csL_Buffer b;
         size_t sz = (j-i)+1;
         char *p = csL_buff_initsz(C, &b, sz);
-        if (j >= l) j = l-1; /* clip */
         for (; i <= j; i++)
             p[i] = f(s[i]);
         csL_buff_endsz(&b, sz);
@@ -297,9 +377,9 @@ static int s_count(cs_State *C) {
     size_t l, lpat;
     const char *s = csL_check_lstring(C, 0, &l);
     const char *pat = csL_check_lstring(C, 1, &lpat);
-    size_t i = r2a(csL_opt_integer(C, 2, 0), l);
-    size_t j = r2a(csL_opt_integer(C, 3, -1), l);
-    if (l == 0 || lpat > l || i >= l || i > j)
+    size_t i = posI(csL_opt_integer(C, 2, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 3, -1), l);
+    if (l == 0 || i > j)
         cs_push_integer(C, 0);
     else {
         size_t count = 0;
@@ -318,44 +398,129 @@ static int s_count(cs_State *C) {
 }
 
 
-// find(string, string_pattern, [, start, end])
-static int s_find(cs_State *C) {
+static int auxfind(cs_State *C, int rev) {
     size_t l, lpat;
     const char *s = csL_check_lstring(C, 0, &l);
     const char *pat = csL_check_lstring(C, 1, &lpat);
-    size_t i = r2a(csL_opt_integer(C, 2, 0), l);
-    size_t j = r2a(csL_opt_integer(C, 3, -1), l);
-
+    const char *p;
+    size_t i = posI(csL_opt_integer(C, 2, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 3, -1), l);
+    l = (j-i)+1;
+    s = s+i;
+    if ((p = findstr(s, l, pat, lpat, rev))) /* found? */
+        cs_push_integer(C, p-s);
+    else
+        csL_push_fail(C);
     return 1;
+}
+
+
+static int s_find(cs_State *C) {
+    return auxfind(C, 0);
 }
 
 
 static int s_rfind(cs_State *C) {
-    return 1;
+    return auxfind(C, 1);
 }
 
 
 static int s_replace(cs_State *C) {
-    return 1;
+    size_t l, lpat, lv;
+    const char *s = csL_check_lstring(C, 0, &l);
+    const char *pat = csL_check_lstring(C, 1, &lpat);
+    const char *v = csL_check_lstring(C, 2, &lv);
+    cs_Integer n = csL_opt_integer(C, 3, CS_INTEGER_MAX);
+    if (c_unlikely(n <= 0)) /* no replacements? */
+        cs_push(C, 0); /* return original string */
+    else if (lpat == 0) /* pattern is empty string? */
+        cs_push_lstring(C, v, lv); /* return replacement string */
+    else {
+        csL_Buffer b;
+        const char *p;
+        csL_buff_init(C, &b);
+        while (n > 0 && (p = findstr(s, l, pat, lpat, 0))) {
+            size_t sz = p - s;
+            csL_buff_push_lstring(&b, s, sz); /* push prefix */
+            csL_buff_push_lstring(&b, v, lv); /* push replacement text */
+            l -= sz + lpat; /* subtract prefix and pattern length */
+            s = p + lpat; /* go after the pattern */
+            n--; /* one less replacement to do */
+        }
+        csL_buff_push_lstring(&b, s, l); /* push remaining string */
+        csL_buff_end(&b);
+    }
+    return 1; /* return final string */
 }
 
 
 static int s_substr(cs_State *C) {
-    return 1;
+    size_t l;
+    const char *s = csL_check_lstring(C, 0, &l);
+    size_t i = posI(csL_check_integer(C, 1), l);
+    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
+    if (i <= j)
+        cs_push_lstring(C, s + i, (j - i) + 1);
+    else
+        cs_push_literal(C, "");
+    return 1; /* return final substring */
 }
 
 
 static int s_swapcase(cs_State *C) {
+    size_t l;
+    const char *s = csL_check_lstring(C, 0, &l);
+    size_t i = posI(csL_opt_integer(C, 1, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
+    char *p;
+    csL_Buffer b;
+    p = csL_buff_initsz(C, &b, l);
+    l = (j-i) + 1;
+    s = s+i;
+    while (l--) {
+        unsigned char c = s[l];
+        p[l] = (isupper(c)) ? tolower(c) : toupper(c);
+    }
+    csL_buff_endsz(&b, l);
     return 1;
 }
 
 
 static int s_swapupper(cs_State *C) {
+    size_t l;
+    const char *s = csL_check_lstring(C, 0, &l);
+    size_t i = posI(csL_opt_integer(C, 1, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
+    char *p;
+    csL_Buffer b;
+    p = csL_buff_initsz(C, &b, l);
+    l = (j-i) + 1;
+    s = s+i;
+    while (l--) {
+        unsigned char c = s[l];
+        p[l] = (isupper(c)) ? tolower(c) : c;
+    }
+    csL_buff_endsz(&b, l);
     return 1;
 }
 
 
 static int s_swaplower(cs_State *C) {
+    size_t l;
+    const char *s = csL_check_lstring(C, 0, &l);
+    size_t i = posI(csL_opt_integer(C, 1, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
+    char *p;
+    csL_Buffer b;
+    csL_buff_initsz(C, &b, l);
+    p = csL_buff_initsz(C, &b, l);
+    l = (j-i) + 1;
+    s = s+i;
+    while (l--) {
+        unsigned char c = s[l];
+        p[l] = (islower(c)) ? toupper(c) : c;
+    }
+    csL_buff_endsz(&b, l);
     return 1;
 }
 
@@ -381,14 +546,6 @@ static const cs_Entry strlib[] = {
     {"swaplower", s_swaplower},
     {NULL, NULL}
 };
-/*
-   string.rfind(string, string_pattern [, start, end]) // default: start = 0, end = -1
-   string.replace(string, string_pattern, value [, n_times]) // default: n_times = nil
-   string.substr(string, start [, end]) // default: end = -1
-   string.swapcase(string)
-   string.swapupper(string)
-   string.swaplower(string)
-*/
 
 
 CSMOD_API int luaopen_string (cs_State *C) {

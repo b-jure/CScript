@@ -1104,7 +1104,7 @@ CS_API int cs_get_uservmt(cs_State *C, int udobj, cs_VMT *pvmt) {
 }
 
 
-CS_API int cs_get_uservalue(cs_State *C, int udobj, int n) {
+CS_API int cs_get_uservalue(cs_State *C, int udobj, unsigned short n) {
     UserData *ud;
     int tt;
     cs_lock(C);
@@ -1236,7 +1236,7 @@ unlock:
 }
 
 
-CS_API int cs_set_uservalue(cs_State *C, int index, int n) {
+CS_API int cs_set_uservalue(cs_State *C, int index, unsigned short n) {
     UserData *ud;
     int res;
     cs_lock(C);

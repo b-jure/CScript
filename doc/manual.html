@@ -3612,7 +3612,7 @@
         <!-- cs_get_uservalue -->
         <hr><h3><a name="cs_get_uservalue"><code>cs_get_uservalue</code></a></h3>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>int cs_get_uservalue (cs_State *C, int index, int n);</pre>
+        <pre>int cs_get_uservalue (cs_State *C, int index, unsigned short n);</pre>
         <p>
         Pushes onto the stack the <code>n</code>-th user value associated with
         the full userdata at the given index and returns the type of the
@@ -3757,7 +3757,7 @@
         <!-- cs_set_uservalue -->
         <hr><h3><a name="cs_set_uservalue"><code>cs_set_uservalue</code></a></h3>
         <span class="apii">[-1, +0, &ndash;]</span>
-        <pre>int cs_set_uservalue (cs_State *C, int index, int n);</pre>
+        <pre>int cs_set_uservalue (cs_State *C, int index, unsigned short n);</pre>
         <p>
         Pops a value from the stack and sets it as the new <code>n</code>-th
         user value associated to the full userdata at the given index.
