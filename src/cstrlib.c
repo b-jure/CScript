@@ -4,6 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
+#include <ctype.h>
 #define cstrlib_c
 #define CS_LIB
 
@@ -20,6 +21,12 @@
 
 #include "cauxlib.h"
 #include "cslib.h"
+
+
+#define MAX_SIZET   ((size_t)(~(size_t)0))
+
+#define MAXSIZE \
+        (sizeof(size_t) < sizeof(int) ? (size_t)INT_MAX : MAX_SIZET)
 
 
 #define cast_uchar(c)   ((unsigned char)(c))
@@ -41,6 +48,7 @@ static const char *find(const char *s, size_t ls, const char *p, size_t lp) {
     return NULL; /* not found */
 }
 
+
 static const void *memrchr(const void *s, int c, size_t n, size_t nmin) {
     const unsigned char *p = s;
     const unsigned char *const e = p+n;
@@ -51,6 +59,7 @@ static const void *memrchr(const void *s, int c, size_t n, size_t nmin) {
             return ((size_t)(e-(p+n)) >= nmin) ? p+n : NULL;
     return NULL;
 }
+
 
 static const char *rfind(const char *s, size_t ls, const char *p, size_t lp) {
     const char *end = s + ls;
@@ -70,13 +79,15 @@ static const char *rfind(const char *s, size_t ls, const char *p, size_t lp) {
     return NULL; /* not found */
 }
 
+
 static const char *findstr(const char *s, size_t ls,
                            const char *p, size_t lp, int rev) {
     if (c_unlikely(lp == 0)) return s; /* empty strings match everything */
     else if (ls < lp) return NULL; /* avoid negative 'ls' */
-    else if (!rev)return find(s, ls, p, lp);
-    else return rfind(s, ls, p, lp);
+    else if (!rev) return find(s, ls, p, lp); /* regular find */
+    else return rfind(s, ls, p, lp); /* reverse find */
 }
+
 
 static int splitintoarray(cs_State *C, int rev) {
     size_t ls, lp;
@@ -111,6 +122,7 @@ static int splitintoarray(cs_State *C, int rev) {
     }
     return 1; /* return array */
 }
+
 
 static int s_split(cs_State *C) {
     return splitintoarray(C, 0);
@@ -167,36 +179,153 @@ static int s_reverse(cs_State *C) {
 
 
 static int s_repeat(cs_State *C) {
-    return 1;
+    size_t l, lsep;
+    const char *s = csL_check_lstring(C, 0, &l);
+    cs_Integer n = csL_check_integer(C, 1);
+    const char *sep = csL_opt_lstring(C, 2, "", &lsep);
+    if (c_unlikely(n <= 0))
+        cs_push_literal(C, "");
+    else if (l+lsep < l || l+lsep > MAXSIZE/n)
+        csL_error(C, "resulting string too large");
+    else {
+        size_t totalsize = (l+lsep) * n;
+        csL_Buffer b;
+        char *p = csL_buff_initsz(C, &b, totalsize);
+        while (n-- > 1) {
+            memcpy(p, s, l*sizeof(char)); p += l;
+            if (lsep > 0) { /* branch costs less than empty 'memcpy' copium */
+                memcpy(p, sep, lsep*sizeof(char));
+                p += lsep;
+            }
+        }
+        memcpy(p, s, l*sizeof(char)); /* last copy without separator */
+        csL_buff_endsz(&b, totalsize);
+    }
+    return 1; /* return final string */
+}
+
+
+static void auxjoinstr(cs_State *C, csL_Buffer *b,
+                       const char *sep, size_t lsep) {
+    size_t l;
+    const char *s = cs_to_lstring(C, -1, &l);
+    if (s && l > 0) { /* value is a non empty string? */
+        csL_buff_push_lstring(b, s, l);
+        if (lsep > 0) /* non empty separator? */
+            csL_buff_push_lstring(b, sep, lsep);
+    }
+    cs_pop(C, 1); /* remove the value */
+}
+
+
+static void joinfromtable(cs_State *C, csL_Buffer *b,
+                          const char *sep, size_t lsep) {
+    cs_push_nil(C);
+    while (cs_next(C, 1) != 0)
+        auxjoinstr(C, b, sep, lsep);
+}
+
+
+static void joinfromarray(cs_State *C, csL_Buffer *b,
+                          const char *sep, size_t lsep, int len) {
+    int i = cs_get_nnilindex(C, 1, 0, --len);
+    while (i >= 0) {
+        cs_get_index(C, 1, i);
+        auxjoinstr(C, b, sep, lsep);
+        i = cs_get_nnilindex(C, 1, ++i, len);
+    }
 }
 
 
 static int s_join(cs_State *C) {
-    return 1;
+    size_t lsep;
+    const char *sep = csL_check_lstring(C, 0, &lsep);
+    int t = cs_type(C, 1);
+    csL_expect_arg(C, (t == CS_TARRAY || t == CS_TTABLE), 0, "array or table");
+    csL_Buffer b;
+    csL_buff_init(C, &b);
+    if (t == CS_TARRAY) {
+        int len = cs_len(C, 1);
+        if (len > 0)
+            joinfromarray(C, &b, sep, lsep, len);
+    } else
+        joinfromtable(C, &b, sep, lsep);
+    if (csL_bufflen(&b) > 0 && lsep > 0) /* buffer has not empty separator? */
+        csL_buffsub(&b, lsep); /* remove it */
+    csL_buff_end(&b);
+    return 1; /* return final string */
 }
 
 
+// string.format(string_fmt, ...)
 static int s_format(cs_State *C) {
     return 1;
 }
 
 
+static int auxtocase(cs_State *C, int (*f)(int c)) {
+    size_t l;
+    const char *s = csL_check_lstring(C, 0, &l);
+    size_t i = r2a(csL_opt_integer(C, 1, 0), l);
+    size_t j = r2a(csL_opt_integer(C, 2, -1), l);
+    if (l == 0 || i >= l || i > j)
+        cs_push_literal(C, "");
+    else {
+        csL_Buffer b;
+        size_t sz = (j-i)+1;
+        char *p = csL_buff_initsz(C, &b, sz);
+        if (j >= l) j = l-1; /* clip */
+        for (; i <= j; i++)
+            p[i] = f(s[i]);
+        csL_buff_endsz(&b, sz);
+    }
+    return 1; /* return final string */
+}
+
+
 static int s_toupper(cs_State *C) {
-    return 1;
+    return auxtocase(C, toupper);
 }
 
 
 static int s_tolower(cs_State *C) {
-    return 1;
+    return auxtocase(C, tolower);
 }
 
 
 static int s_count(cs_State *C) {
-    return 1;
+    size_t l, lpat;
+    const char *s = csL_check_lstring(C, 0, &l);
+    const char *pat = csL_check_lstring(C, 1, &lpat);
+    size_t i = r2a(csL_opt_integer(C, 2, 0), l);
+    size_t j = r2a(csL_opt_integer(C, 3, -1), l);
+    if (l == 0 || lpat > l || i >= l || i > j)
+        cs_push_integer(C, 0);
+    else {
+        size_t count = 0;
+        const char *aux;
+        s = s+i;
+        l = (j-i) + 1;
+        while ((aux = findstr(s, l, pat, lpat, 0)) != NULL) {
+            aux++;
+            s = aux;
+            l -= aux-s;
+            count++;
+        }
+        cs_push_integer(C, count);
+    }
+    return 1; /* return the count */
 }
 
 
+// find(string, string_pattern, [, start, end])
 static int s_find(cs_State *C) {
+    size_t l, lpat;
+    const char *s = csL_check_lstring(C, 0, &l);
+    const char *pat = csL_check_lstring(C, 1, &lpat);
+    size_t i = r2a(csL_opt_integer(C, 2, 0), l);
+    size_t j = r2a(csL_opt_integer(C, 3, -1), l);
+
     return 1;
 }
 
@@ -253,13 +382,6 @@ static const cs_Entry strlib[] = {
     {NULL, NULL}
 };
 /*
-   string.repeat(string, n_times [, separator]) // default: separator = nil
-   string.join(separator_string, array|table)
-   string.format(string_fmt, ...)
-   string.toupper(string [, start, end]) // default: start = 0, end = -1
-   string.tolower(string [, start, end]) // default: start = 0, end = -1
-   string.count(string, string_pattern [, start, end]) // default: start = 0, end = -1
-   string.find(string, string_pattern, [, start, end]) // default: start = 0, end = -1
    string.rfind(string, string_pattern [, start, end]) // default: start = 0, end = -1
    string.replace(string, string_pattern, value [, n_times]) // default: n_times = nil
    string.substr(string, start [, end]) // default: end = -1

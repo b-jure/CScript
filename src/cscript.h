@@ -252,6 +252,7 @@ CS_API int   cs_get(cs_State *C, int index);
 CS_API int   cs_get_raw(cs_State *C, int index); 
 CS_API int   cs_get_index(cs_State *C, int index, cs_Integer i);
 CS_API int   cs_get_nilindex(cs_State *C, int index, int begin, int end);
+CS_API int   cs_get_nnilindex(cs_State *C, int index, int begin, int end);
 CS_API int   cs_get_field(cs_State *C, int index); 
 CS_API int   cs_get_fieldstr(cs_State *C, int index, const char *field); 
 CS_API int   cs_get_fieldptr(cs_State *C, int index, const void *field); 

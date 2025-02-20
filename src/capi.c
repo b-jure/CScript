@@ -919,14 +919,24 @@ CS_API int cs_get_index(cs_State *C, int index, cs_Integer i) {
 }
 
 
-CS_API int cs_get_nilindex(cs_State *C, int index, int begin, int end) {
+static int auxgetindex(cs_State *C, int index, int begin, int end, int nn) {
     Array *arr = getarray(C, index);
-    uint len = (arr->n <= (uint)end ? arr->n : (uint)end + 1);
+    uint len = (arr->n <= cast_uint(end) ? arr->n : cast_uint(end) + 1);
     api_check(C, begin >= 0, "invalid 'begin' index");
     for (uint i = begin; i < len; i++)
-        if (isempty(&arr->b[i]))
+        if (!isempty(&arr->b[i]) == nn)
             return i;
     return -1;
+}
+
+
+CS_API int cs_get_nilindex(cs_State *C, int index, int begin, int end) {
+    return auxgetindex(C, index, begin, end, 0);
+}
+
+
+CS_API int cs_get_nnilindex(cs_State *C, int index, int begin, int end) {
+    return auxgetindex(C, index, begin, end, 1);
 }
 
 

@@ -505,7 +505,7 @@ static int b_tostring(cs_State *C) {
 
 static int b_typeof(cs_State *C) {
     csL_check_any(C, 0);
-    cs_push_string(C, cs_typename(C, cs_type(C, 0)));
+    cs_push_string(C, csL_typename(C, 0));
     return 1;
 }
 
