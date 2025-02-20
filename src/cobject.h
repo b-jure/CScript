@@ -274,7 +274,7 @@ typedef union UValue {
 
 typedef struct UserData {
     ObjectHeader;
-    int nuv; /* number of 'uservalues' */
+    ushort nuv; /* number of 'uservalues' */
     size_t size; /* size of 'UserData' memory in bytes */
     TValue *vmt;
     GCObject *gclist;
@@ -290,12 +290,10 @@ typedef struct UserData {
 ** Also this kind of userdata is never gray so it doesnt need 'gclist'.
 ** Internally CScript only uses 'UserData' to access fields and it takes
 ** care to avoid using 'uv' and 'gclist' fields when 'nuv' is 0.
-** Additionally GC marks 'UserData' black in case 'nuv' is 0, to
-** avoid using the 'gclist' field.
 */
 typedef struct EmptyUserData {
     ObjectHeader;
-    int nuv; /* number of 'uservalues' */
+    ushort nuv; /* number of 'uservalues' */
     size_t size; /* size of 'usermem' in bytes */
     TValue *vmt;
     union {CSI_MAXALIGN;} usermem;
@@ -305,8 +303,8 @@ typedef struct EmptyUserData {
 
 /* offset in 'UserData' where user memory begins */
 #define udmemoffset(nuv) \
-    ((nuv) == 0 ? offsetof(EmptyUserData, usermem) \
-                : offsetof(UserData, uv) + ((nuv) * sizeof(UValue)))
+        ((nuv) == 0 ? offsetof(EmptyUserData, usermem) \
+                    : offsetof(UserData, uv) + ((nuv)*sizeof(UValue)))
 
 /* get the address of the memory block inside 'UserData' */
 #define getuserdatamem(u)       (cast_charp(u) + udmemoffset((u)->nuv))

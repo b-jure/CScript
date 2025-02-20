@@ -496,12 +496,12 @@ static void close_func(Lexer *lx) {
     cs_assert(fs->sp == 0);
     csC_finish(fs); /* final code adjustments */
     /* shrink unused memory */
-    csM_shrinkarray(C, p->p, p->sizep, fs->np, Proto);
+    csM_shrinkarray(C, p->p, p->sizep, fs->np, Proto *);
     csM_shrinkarray(C, p->k, p->sizek, fs->nk, TValue);
     csM_shrinkarray(C, p->code, p->sizecode, currPC, Instruction);
     csM_shrinkarray(C, p->lineinfo, p->sizelineinfo, currPC, c_sbyte);
     csM_shrinkarray(C, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
-                        AbsLineInfo);
+                       AbsLineInfo);
     csM_shrinkarray(C, p->instpc, p->sizeinstpc, fs->ninstpc, int);
     csM_shrinkarray(C, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
     csM_shrinkarray(C, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
@@ -1655,6 +1655,7 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
         addlocallit(lx, "self"); /* create 'self' */
         adjustlocals(lx, 1); /* and register it */
         /* runtime ensures extra slot for 'self' and its value */
+        /* TODO: maybe ensure space here instead? */
     }
     paramlist(lx);
     expectmatch(lx, ')', '(', line);

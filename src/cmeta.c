@@ -86,11 +86,17 @@ IMethod *csMM_newinsmethod(cs_State *C, Instance *ins, const TValue *method) {
 
 
 UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv) {
-    GCObject *o = csG_new(C, sizeofuserdata(nuv, size), CS_VUSERDATA);
-    UserData *ud = gco2u(o);
+    GCObject *o;
+    UserData *ud;
+    if (c_unlikely(size > MAXSIZE - udmemoffset(nuv)))
+        csM_toobig(C);
+    o = csG_new(C, sizeofuserdata(nuv, size), CS_VUSERDATA);
+    ud = gco2u(o);
     ud->vmt = NULL;
     ud->nuv = nuv;
     ud->size = size;
+    for (int i = 0; i < nuv; i++)
+        setnilval(&ud->uv[i].val);
     return ud;
 }
 

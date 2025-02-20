@@ -536,15 +536,13 @@ static void freeobject(cs_State *C, GCObject *o) {
         }
         case CS_VCLASS: {
             OClass *cls = gco2cls(o);
-            if (cls->vmt) /* have VMT? */
-                csM_freearray(C, cls->vmt, SIZEVMT);
+            if (cls->vmt) csM_freevmt(C, cls->vmt);
             csM_free(C, cls);
             break;
         }
         case CS_VUSERDATA: {
             UserData *u = gco2u(o);
-            if (u->vmt)
-                csM_freearray(C, u->vmt, SIZEVMT);
+            if (u->vmt) csM_freevmt(C, u->vmt);
             csM_freemem(C, u, sizeofuserdata(u->nuv, u->size));
             break;
         }

@@ -13,7 +13,7 @@
 
 
 /* number of elements in VMT */
-#define SIZEVMT         (sizeof(TValue) * CS_MM_N)
+#define SIZEVMT         (sizeof(TValue)*CS_MM_N)
 
 
 CSI_DEC(const char *const csO_typenames[CSI_TOTALTYPES]);

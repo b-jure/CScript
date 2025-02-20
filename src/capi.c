@@ -1055,12 +1055,8 @@ CS_API int cs_get_metamethod(cs_State *C, int obj, cs_MM mm) {
 CS_API void *cs_newuserdata(cs_State *C, size_t sz, int nuv) {
     UserData *ud;
     cs_lock(C);
-    api_checknelems(C, nuv);
+    api_check(C, 0 <= nuv && nuv < USHRT_MAX, "invalid value");
     ud = csMM_newuserdata(C, sz, nuv);
-    C->sp.p -= nuv;
-    while (nuv--)
-        setobj(C, &ud->uv[nuv].val, s2v(C->sp.p + nuv));
-    ud->nuv = nuv;
     setuval2s(C, C->sp.p, ud);
     api_inctop(C);
     cs_unlock(C);

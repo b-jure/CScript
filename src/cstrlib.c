@@ -74,7 +74,7 @@ static const char *findstr(const char *s, size_t ls,
                            const char *p, size_t lp, int rev) {
     if (c_unlikely(lp == 0)) return s; /* empty strings match everything */
     else if (ls < lp) return NULL; /* avoid negative 'ls' */
-    else if (!rev) return find(s, ls, p, lp);
+    else if (!rev)return find(s, ls, p, lp);
     else return rfind(s, ls, p, lp);
 }
 

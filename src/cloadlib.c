@@ -517,12 +517,19 @@ static void createclibs(cs_State *C) {
     /* global table is on stack top */
     if (cs_get_fieldstr(C, -1, CLIBS) != CS_TUSERDATA) {
         cs_pop(C, 1); /* remove value */
-        cs_push_array(C, 0); /* array uservalue for storing lib handles */
-        cs_push_table(C, 0); /* table uservalue for queries */
-        cs_newuserdata(C, 0, 2); /* fulluserdata for CLIBS */
-        cs_push(C, -1); /* copy of fulluserdata */
+        /* create CLIBS full userdata */
+        cs_newuserdata(C, 0, 2);
+        /* set array uservalue for storing lib handles */
+        cs_push_array(C, 0); 
+        cs_set_uservalue(C, -2, 1);
+        /* set query table uservalue */
+        cs_push_table(C, 0);
+        cs_set_uservalue(C, -2, 2);
+        /* set full userdata as global name */
+        cs_push(C, -1); /* copy of CLIBS */
         cs_set_fieldstr(C, -3, CLIBS); /* __G[CLIBS] = fulluserdata */
     }
+    /* set finalizer */
     cs_push_cfunction(C, gcmm);
     cs_set_usermm(C, -2, CS_MM_GC); /* set finalizer for CLIBS */
     cs_pop(C, 1); /* pop userdata (CLIBS) */
@@ -685,5 +692,6 @@ CSMOD_API int csopen_package(cs_State *C) {
     cs_push(C, -2); /* set 'package' as upvalue for next lib */
     csL_setfuncs(C, load_funcs, 1);
     cs_pop(C, 1);  /* pop global table */
+    cs_push_bool(C, 1);
     return 1;  /* return 'package' table */
 }
