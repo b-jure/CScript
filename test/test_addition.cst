@@ -1,0 +1,14 @@
+/*
+** Test script file for CScript addition operator.
+*/
+
+assert(2 + 2 == 4);             // (folded)
+assert(2 + 2 + 4 == 8);         // (folded)
+a = 2 + 2 + 2 + 2;              // (folded)
+assert(a == 8);
+a = a + 4;                      // (not folded)
+assert(a == 12);
+a = a + a;                      // (not folded)
+assert(a == 24);
+a = 5 + a;                      // (not folded)
+assert(a == 29);

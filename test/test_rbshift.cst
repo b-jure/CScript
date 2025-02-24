@@ -1,0 +1,12 @@
+/*
+** Test script file for CScript right bit shift operator.
+*/
+
+assert(2>>1 == 1);          // (folded)
+assert(3>>2 == 0);          // (folded)
+assert(4>>1 == 2);          // (folded)
+assert(8>>-3 == 64);        // (folded)
+a = 64>>2;                  // (folded)
+assert(a == 16);
+assert(a>>3 == 2);          // (not folded)
+assert(131_072>>a == 2);    // (not folded)

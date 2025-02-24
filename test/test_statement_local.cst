@@ -1,0 +1,17 @@
+local a;
+assert(a == nil);
+local b, c, d;
+assert(b == nil);
+assert(c == nil);
+assert(d == nil);
+local e, f, g = 1, 2, 3;
+assert(e == 1);
+assert(f == 2);
+assert(g == 3);
+local a1 <final> = 69;
+assert(a1 == 69);
+local a2 <close>;
+assert(a2 == nil);
+local b1 <final>, b2 <final>, b3 <close> = "Hello, ", "World", false;
+assert(b1..b2 == "Hello, World");
+assert(b3 == false);

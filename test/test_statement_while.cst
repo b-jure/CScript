@@ -1,0 +1,30 @@
+while (false) assert(false);
+while (true) {
+    local a = 69;
+    assert(a == 69);
+    break;
+}
+assert(a == nil);
+local i = 0;
+while (i < 5) {
+    assert(0 <= i);
+    assert(i < 5);
+    i = i + 1;
+}
+assert(i == 5);
+while (true) {
+    local inner1 = 69;
+    {
+        local inner2 = 420;
+        {
+            local inner3 = 1337;
+            assert(inner1 == 69);
+            assert(inner2 == 420);
+            assert(inner3 == 1337);
+            break;
+        }
+    }
+}
+assert(inner1 == nil);
+assert(inner2 == nil);
+assert(inner3 == nil);

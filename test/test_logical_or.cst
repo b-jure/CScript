@@ -1,0 +1,14 @@
+/*
+** Test script file for CScript logical OR operator.
+*/
+
+assert((nil or 5) == 5);
+assert((5 or 6) == 5);
+assert((true or 420 or false) == true);
+assert((false or 420 or 69) == 420);
+assert((false or false or 420) == 420);
+a = true;
+assert((a or 420 or false) == true);
+assert((!a or 69 or a) == 69);
+assert((!a or false or 420) == 420);
+assert((!a or !a or 420) == 420);

@@ -170,8 +170,7 @@ static void freestate(cs_State *C) {
     csM_freearray(C, gs->strtab.hash, gs->strtab.size);
     free_stack(C);
     free_vmt(C);
-    printf("gettotalbytes = %zd, sizeof(XSG) = %zd\n", gettotalbytes(gs), sizeof(XSG));
-    cs_assert(1 || gettotalbytes(gs) == sizeof(XSG)); /* TODO: fix */
+    cs_assert(gettotalbytes(gs) == sizeof(XSG));
     gs->falloc(fromstate(C), sizeof(XSG), 0, gs->ud_alloc); /* free state */
 }
 

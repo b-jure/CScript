@@ -1,0 +1,12 @@
+/*
+** Test script file for CScript subtraction operator.
+*/
+
+assert(2 - 2 == 0);         // (folded)
+assert(2 - 4 == -2);        // (folded)
+assert(4 - 2 == 2);         // (folded)
+assert(4 - 2 - 2 == 0);     // (folded)
+a = 4 - 2 - 2;              // (folded)
+assert(a == 0);
+assert(a - 2 == -2);        // (not folded)
+assert(5 - a == 5);         // (not folded)

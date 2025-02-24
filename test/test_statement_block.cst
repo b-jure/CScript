@@ -1,0 +1,14 @@
+local x = 10;
+{
+    local x = x + 1;
+    {
+        local x = x + 1;
+        {
+            local x = x + 1;
+            assert(x == 13);
+        }
+        assert(x == 12);
+    }
+    assert(x == 11);
+}
+assert(x == 10);

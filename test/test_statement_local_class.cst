@@ -1,0 +1,55 @@
+local class Empty {}
+assert(typeof(Empty) == "class");
+assert(typeof(Empty()) == "instance");
+local PI <final> = 3.141592654;
+local class Circle {
+    fn __init() {
+        self.radius = 4;
+        return self;
+    }
+    fn area() {
+        rsq = self.radius ** 2;
+        return rsq * PI;
+    }
+    fn circumference() {
+        local d = self.radius * 2;
+        return d * PI;
+    }
+}
+local circ = Circle();
+assert(typeof(circ) == "instance");
+assert(circ.radius == 4);
+assert(circ.area() == 4**2*PI);
+assert(circ.circumference() == 4*2*PI);
+local ent;
+assert(ent == nil);
+local class Entity {
+    fn type() {
+        return "Entity";
+    }
+}
+assert(typeof(Entity) == "class");
+ent = Entity();
+assert(typeof(ent) == "instance");
+assert(ent.type() == "Entity");
+local class Human inherits Entity {
+    fn __init(fname, lname) {
+        self.fname = fname;
+        self.lname = lname;
+        return self;
+    }
+    fn name() {
+        local fname = self.fname or "?";
+        local lname = self.lname or "?";
+        return fname .. " " .. lname;
+    }
+    fn type() {
+        return "Human " .. super.type();
+    }
+}
+ent = Human("John", "Cena");
+assert(typeof(ent) == "instance");
+assert(ent.type() == "Human Entity");
+assert(ent.name() == "John Cena");
+ent = Human();
+assert(ent.name() == "? ?");

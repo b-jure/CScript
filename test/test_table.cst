@@ -1,0 +1,49 @@
+/*
+** Test script file for CScript tables.
+*/
+
+a = {};
+assert(a);
+# set some fields
+a.x = 1;
+a.y = 1;
+a.z = 1;
+assert(a.x == 1, a.y == 1, a.z == 1);
+# set fields by indexing
+a["x"] = 2;
+a["y"] = 2;
+a["z"] = 2;
+a["u"] = 2;
+assert(a["x"] == 2);
+assert(a["y"] == 2);
+assert(a["z"] == 2);
+assert(a["u"] == 2);
+# new table from constructor using names as fields
+a = {
+    cat = true,
+    farm = {
+        cow = 2,
+        fox = 1,
+        chicken = 4,
+    }
+};
+assert(a["cat"] == true);
+assert(a["farm"]);
+assert(a.farm.cow == 2);
+assert(a.farm.fox == 1);
+assert(a.farm.chicken == 4);
+# new table from constructor using indices as fields
+a = {
+    ["cat"] = false,
+    ["animals"] = {
+        ["cow"] = 4,
+        ["fox"] = 8,
+        ["chicken"] = 15,
+    }
+};
+assert(a["cat"] == false);
+assert(a["animals"]);
+assert(a.animals.cow == 4);
+assert(a.animals.fox == 8);
+assert(a.animals.chicken == 15);
+assert(!a[5.15]); // index access but element doesn't exist

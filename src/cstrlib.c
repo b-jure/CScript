@@ -287,8 +287,8 @@ static int s_join(cs_State *C) {
     size_t lsep;
     const char *sep = csL_check_lstring(C, 0, &lsep);
     int t = cs_type(C, 1);
-    csL_expect_arg(C, (t == CS_TARRAY || t == CS_TTABLE), 0, "array or table");
     csL_Buffer b;
+    csL_expect_arg(C, (t == CS_TARRAY || t == CS_TTABLE), 0, "array or table");
     csL_buff_init(C, &b);
     if (t == CS_TARRAY) {
         int len = cs_len(C, 1);
@@ -325,7 +325,7 @@ static int formatstr(cs_State *C, const char *fmt, size_t lfmt) {
             int nb = 0; /* number of bytes in result */
             if (++arg > top) /* too many format specifiers? */
                 return csL_error_arg(C, arg, "missing format value");
-            // TODO
+            // TODO: continue...
         }
     }
     csL_buff_end(&b);
@@ -523,7 +523,6 @@ static int s_swaplower(cs_State *C) {
     csL_buff_endsz(&b, l);
     return 1;
 }
-
 
 
 static const cs_Entry strlib[] = {

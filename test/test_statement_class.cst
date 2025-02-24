@@ -1,0 +1,38 @@
+local table = {};
+assert(typeof(table) == "table");
+class table.line {
+    fn __init(x, y) {
+        self.x = x;
+        self.y = y;
+        return self;
+    }
+    fn cords() {
+        return self.x, self.y;
+    }
+}
+assert(typeof(table.line) == "class");
+table.myline = table.line(15, 12);
+assert(typeof(table.myline) == "instance");
+assert(table.myline.x == 15);
+assert(table.myline.y == 12);
+local x, y = table.myline.cords();
+assert(x == 15);
+assert(y == 12);
+table.config = {};
+assert(typeof(table.config) == "table");
+class table.config.point {
+    fn __init(x, y) {
+        self.x = x;
+        self.y = y;
+        return self;
+    }
+    fn cords() {
+        return self.x, self.y;
+    }
+}
+assert(typeof(table.config.point) == "class");
+table.config.myconfig = table.config.point(69, 420);
+assert(typeof(table.config.myconfig) == "instance");
+x, y = table.config.myconfig.cords();
+assert(x == 69);
+assert(y == 420);

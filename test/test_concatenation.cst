@@ -1,0 +1,8 @@
+/*
+** Test script file for CScript concatenation operator.
+*/
+
+assert("Hello," .. " World" == "Hello, World");
+assert("My name is " .. "urMom" .. ", what is yours?" == "My name is urMom, what is yours?");
+a = "Sir this is" .. " " .. "Wendys, what is your order?\n" .. "69 pieces of raw chicken please!";
+assert(a == "Sir this is Wendys, what is your order?\n69 pieces of raw chicken please!");

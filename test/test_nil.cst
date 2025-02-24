@@ -1,0 +1,8 @@
+/*
+** Test script file for CScript constant nil.
+*/
+
+assert(!nil);
+assert(nil == nil);
+assert(nil != true);
+assert(nil != false);

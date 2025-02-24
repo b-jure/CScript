@@ -1,0 +1,103 @@
+/*
+** This file serves as a syntax showcase.
+** It is useful for testing purposes when altering
+** (n)vim syntax file provided with the distribution.
+** 
+** When modyfing the syntax file, do ':syn set=cst'
+** to reload the syntax file.
+*/
+
+
+# Operators
+!    ~                          // unary
++    -    **    *    /    %     // arithmetic
+^    >>   <<    &    |          // bitwise
+>    <    ==    !=   >=   <=    // ordering
+or   and                        // logical
+
+
+/*
+** Multi-line comment
+** TODO, XXX, FIXME
+*/
+// Single-line comment TODO, XXX, FIXME
+# Single-line comment TODO, XXX, FIXME
+*/ # comment error
+
+
+# Special Characters (errors)
+\e                              // escape
+\\ \a \b \t \n \v \f \r \' \"   // control
+\532                            // \ddd
+\x15                            // \xhh
+\u{ffffffff}                    // utf-8 (1-8 hex digits)
+\u[ffffffff]                    // utf-8 strict (1-8 hex digits)
+
+
+# String
+"\escape, literal \\ backslash, \a bell,\
+\backspace, \tab, \newline, \vertical tab,\
+\form feed, carriage \return, literal \' apostrophe,\
+literal \" double quotes, opening parenthesis \040,\
+closing parenthesis \x29, exclamation mark \u{21},\
+dollar sign \u[24]"
+
+
+# Character Constant
+'0',  '5',  '\\', '\a', '\b'  '\t',  '\n',
+'\v', '\f', '\r', '\'', '\"', '\xff'
+
+
+# Integers
+0       5       63      -63     +63     691337   
+0x0     0x5     0x3f    -0x3f   +0x3f   0xa8c89  
+00      05      077     -077    +077    02506211
+092     #octal error
+
+
+# Floats
+64.64     64e-21     64e+22     64.64e-23     64.64e+24     64.64e25
+.15       -.15       +.15
+0x62.p2   0x62.3p3   0x62.p+21  0x62.p-22     0x62.3p+23    0x62.3p-24
+0x15p21   0x16p+72   0x16p-69
+
+
+# Keywords
+break   return   continue   local   // statements
+if      else     switch             // conditionals
+case    default                     // labels
+while   for      foreach    loop    // repeat
+true    false    nil                // constants
+
+
+# Blocks
+}  # curly error
+{
+    // TODO FIXME XXX
+    # TODO FIXME XXX
+    /* TODO FIXME XXX */
+    \e \n \f \x15 \523 \u[ff] \u{ffabcde2} */
+    2 52 0x15 052 15.2 0x.15p0 2 == 2
+    return break continue local
+    {
+        "ok\tay" '5' 'a' '\n'
+        if else switch
+        {case default}
+        while for foreach loop
+    }
+    true false nil
+}
+
+
+# Parens
+(// TODO FIXME XXX)
+(# TODO FIXME XXX)
+(/* TODO FIXME XXX */)
+(\e \n \f \x15 \523 \u[ff] \u{ffabcde2} */)
+(2 52 0x15 052 15.2 0x.15p0 2 == 2)
+("ok\tay" '5' 'a' '\n')
+(break return continue local)
+(if else switch)
+(case default)
+(while for foreach loop)
+(true false nil)

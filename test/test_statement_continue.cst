@@ -1,0 +1,15 @@
+for (local x = 0; x < 3; x = x + 1) {
+    local y, z;
+    assert(y == nil);
+    assert(z == nil);
+    {
+        local g = 1;
+        assert(g == 1);
+        if (x == 0) continue;
+    }
+    assert(g == nil);
+    assert(x > 0);
+}
+assert(x == nil);
+assert(y == nil);
+assert(z == nil);

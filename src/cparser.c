@@ -91,8 +91,7 @@ typedef struct Scope {
 
 
 static c_noret expecterror(Lexer *lx, int tk) {
-    const char *err = csS_pushfstring(lx->C, "expected %s",
-                                            csY_tok2str(lx, tk));
+    const char *err = csS_pushfstring(lx->C, "expected %s", csY_tok2str(lx, tk));
     csY_syntaxerror(lx, err);
 }
 
@@ -105,6 +104,100 @@ static c_noret limiterror(FunctionState *fs, const char *what, int limit) {
     const char *err = csS_pushfstring(C, "too many %s (limit is %d) in %s",
                                           what, limit, where);
     csY_syntaxerror(fs->lx, err);
+}
+
+
+/* 
+** Advance scanner if 'tk' matches the current token,
+** otherwise return 0. 
+*/
+static int match(Lexer *lx, int tk) {
+    if (check(lx, tk)) {
+        csY_scan(lx);
+        return 1;
+    }
+    return 0;
+}
+
+
+/* check if 'tk' matches the current token if not invoke error */
+static void expect(Lexer *lx, int tk) {
+    if (c_unlikely(!check(lx, tk)))
+        expecterror(lx, tk);
+}
+
+
+/* same as 'expect' but this also advances the scanner */
+static void expectnext(Lexer *lx, int tk) {
+    expect(lx, tk);
+    csY_scan(lx);
+}
+
+
+/*
+** Check that next token is 'what'. 
+** Otherwise raise an error that the expected 'what' should 
+** match a 'who' in line 'linenum'.
+*/
+static void expectmatch(Lexer *lx, int what, int who, int linenum) {
+    if (c_unlikely(!match(lx, what))) {
+        if (lx->line == linenum) /* same line? */
+            expecterror(lx, what); /* emit usual error message */
+        else /* otherwise spans across multiple lines */
+            csY_syntaxerror(lx, csS_pushfstring(lx->C,
+                    "expected %s (to close %s at line %d)",
+                    csY_tok2str(lx, what), csY_tok2str(lx, who), linenum));
+    }
+}
+
+
+static const char *errstmname(Lexer *lx, const char *err) {
+    const char *stm;
+    switch (lx->fs->lastisend) {
+        case 1: stm = "return"; break;
+        case 2: stm = "break"; break;
+        case 3: stm = "continue"; break;
+        default: stm = NULL; break;
+    }
+    if (stm)
+        err = csS_pushfstring(lx->C,
+              "%s ('%s' must be the last statement in this block)", err, stm);
+    return err;
+}
+
+
+static c_noret expecterrorblk(Lexer *lx) {
+    const char *err = csS_pushfstring(lx->C,
+                        "expected %s", csY_tok2str(lx, '{'));
+    err = errstmname(lx, err);
+    csY_syntaxerror(lx, err);
+}
+
+
+/*
+** Similar to 'expectmatch' but this is invoked only
+** when 'blockstm' expects delimiter '}' which is missing.
+*/
+static void expectmatchblk(Lexer *lx, int linenum) {
+    if (c_unlikely(!match(lx, '}'))) {
+        if (lx->line == linenum)
+            expecterrorblk(lx);
+        else {
+            const char *err = csS_pushfstring(lx->C,
+                    "expected %s to close %s at line %d",
+                    csY_tok2str(lx, '}'), csY_tok2str(lx, '{'), linenum);
+            csY_syntaxerror(lx, errstmname(lx, err));
+        }
+    }
+}
+
+
+static OString *str_expectname(Lexer *lx) {
+    OString *s;
+    expect(lx, TK_NAME);
+    s = lx->t.lit.str;
+    csY_scan(lx);
+    return s;
 }
 
 
@@ -521,7 +614,7 @@ static Proto *addproto(Lexer *lx) {
     Proto *clp; /* closure prototype */
     if (fs->np >= p->sizep) {
         int osz = p->sizep;
-        csM_growarray(C, p->p, p->sizep, fs->np, MAX_LARG, "functions",
+        csM_growarray(C, p->p, p->sizep, fs->np, MAX_ARG_L, "functions",
                       Proto *);
         while (osz < p->sizep)
             p->p[osz++] = NULL;
@@ -548,59 +641,6 @@ static void decl(Lexer *lx);
 static void stm(Lexer *lx);
 static void expr(Lexer *lx, ExpInfo *e);
 
-
-
-/* 
-** Advance scanner if 'tk' matches the current token,
-** otherwise return 0. 
-*/
-static int match(Lexer *lx, int tk) {
-    if (check(lx, tk)) {
-        csY_scan(lx);
-        return 1;
-    }
-    return 0;
-}
-
-
-/* check if 'tk' matches the current token if not invoke error */
-static void expect(Lexer *lx, int tk) {
-    if (c_unlikely(!check(lx, tk)))
-        expecterror(lx, tk);
-}
-
-
-/* same as 'expect' but this also advances the scanner */
-static void expectnext(Lexer *lx, int tk) {
-    expect(lx, tk);
-    csY_scan(lx);
-}
-
-
-/*
-** Check that next token is 'what'. 
-** Otherwise raise an error that the expected 'what' should 
-** match a 'who' in line 'linenum'.
-*/
-static void expectmatch(Lexer *lx, int what, int who, int linenum) {
-    if (c_unlikely(!match(lx, what))) {
-        if (lx->line == linenum) /* same line? */
-            expecterror(lx, what); /* emit usual error message */
-        else /* otherwise spans across multiple lines */
-            csY_syntaxerror(lx, csS_pushfstring(lx->C,
-                    "%s expected (to close %s at line %d)",
-                    csY_tok2str(lx, what), csY_tok2str(lx, who), linenum));
-    }
-}
-
-
-static OString *str_expectname(Lexer *lx) {
-    OString *s;
-    expect(lx, TK_NAME);
-    s = lx->t.lit.str;
-    csY_scan(lx);
-    return s;
-}
 
 
 /* adds local variable to the 'actlocals' */
@@ -1596,7 +1636,7 @@ static void blockstm(Lexer *lx) {
     csY_scan(lx); /* skip '{' */
     enterscope(lx->fs, &s, 0); /* explicit scope */
     decl_list(lx, '}'); /* body */
-    expectmatch(lx, '}', '{', matchline);
+    expectmatchblk(lx, matchline);
     leavescope(lx->fs);
 }
 
@@ -1654,8 +1694,7 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
     if (ismethod) { /* is this method ? */
         addlocallit(lx, "self"); /* create 'self' */
         adjustlocals(lx, 1); /* and register it */
-        /* runtime ensures extra slot for 'self' and its value */
-        /* TODO: maybe ensure space here instead? */
+        /* 'paramlist' reserves stack slots */
     }
     paramlist(lx);
     expectmatch(lx, ')', '(', line);
@@ -1676,7 +1715,7 @@ static void fnstm(Lexer *lx, int linenum) {
     ExpInfo var, e;
     csY_scan(lx); /* skip 'fn' */
     indexedname(lx, &var, &leftover);
-    funcbody(lx, &e, linenum, 0);
+    funcbody(lx, &e, 0, linenum);
     checkreadonly(lx, &var);
     csC_store(fs, &var);
     csC_pop(fs, leftover); /* remove leftover (if any) */
@@ -1837,9 +1876,9 @@ static void addliteralinfo(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     ParserState *ps = lx->ps;
     LiteralInfo li;
     checkduplicate(lx, ss, e, &li);
-    checklimit(lx->fs, ps->literals.len, MAX_LARG, "switch cases");
+    checklimit(lx->fs, ps->literals.len, MAX_ARG_L, "switch cases");
     csM_growarray(lx->C, ps->literals.arr, ps->literals.size,
-                  ps->literals.len, MAX_LARG, "switch literals", LiteralInfo);
+                  ps->literals.len, MAX_ARG_L, "switch literals", LiteralInfo);
     ps->literals.arr[ps->literals.len++] = li;
 }
 
@@ -2353,7 +2392,7 @@ static void continuestm(Lexer *lx) {
     else /* otherwise regular loop */
         csC_patch(fs, csC_jmp(fs, OP_JMPS), fs->loopstart);
     expectnext(lx, ';');
-    fs->lastisend = 1;
+    fs->lastisend = 3;
 }
 
 
@@ -2381,7 +2420,7 @@ static void breakstm(Lexer *lx) {
     cs_assert(haspatchlist(cfs));
     addlistjump(lx, OP_BJMP, fs->scope->haveupval);
     expectnext(lx, ';');
-    fs->lastisend = 1;
+    fs->lastisend = 2;
 }
 
 

@@ -1,0 +1,19 @@
+/*
+** Test script file for CScript hexadecimal integers.
+*/
+
+assert(0x1 == 1);
+assert(0x1__ == 1);
+assert(0x78 == 120);
+assert(0x3D5 == 981);
+assert(0x5fd834c == 100500300);
+assert(0x5f__d8___34c == 100500300);
+assert(0xEp15 == 458752);
+assert(0xEp1 == 28);
+assert(0xEp-1 == 7);
+assert(0xAp2 == 40);
+assert(0xAp-1 == 5);
+assert(0x100p-8 == 1);
+assert(0x10p-4 == 1);
+assert(0x1p+4 == 16);
+assert(0x1p+8 == 256);

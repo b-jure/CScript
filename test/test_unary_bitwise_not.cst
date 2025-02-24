@@ -1,0 +1,16 @@
+/*
+** Test script file for CScript unary bitwise not operator.
+*/
+
+a = ~0;                     // (folded)
+assert(a == -1);
+a = ~~0;                    // (folded)
+assert(a == 0);
+a = ~~~0;                   // (folded)
+assert(a == -1);
+a = ~a;                     // (not folded)
+assert(a == 0);
+a = ~~a;                    // (not folded)
+assert(a == 0);
+a = ~~~a;                   // (not folded)
+assert(a == -1);

@@ -100,16 +100,16 @@
 
 #if !defined(CS_PATH_DEFAULT)
 #define CS_PATH_DEFAULT  \
-        CS_CSDIR"?.csp;"  CS_CSDIR"?\\init.csp;" \
-        CS_CDIR"?.csp;"  CS_CDIR"?\\init.csp;" \
-        CS_SHRDIR"?.csp;" CS_SHRDIR"?\\init.csp;" \
-        ".\\?.csp;" ".\\?\\init.csp"
+        CS_CSDIR"?.cst;"  CS_CSDIR"?\\init.cst;" \
+        CS_CDIR"?.cst;"  CS_CDIR"?\\init.cst;" \
+        CS_SHRDIR"?.cst;" CS_SHRDIR"?\\init.cst;" \
+        ".\\?.cst;" ".\\?\\init.cst"
 #endif
 
 #if !defined(CS_CPATH_DEFAULT)
 #define CS_CPATH_DEFAULT \
         CS_CDIR"?.dll;" \
-        CS_CDIR"..\\lib\\csp\\" CS_VDIR "\\?.dll;" \
+        CS_CDIR"..\\lib\\cst\\" CS_VDIR "\\?.dll;" \
         CS_CDIR"loadall.dll;" ".\\?.dll"
 #endif
 
@@ -121,9 +121,9 @@
 
 #if !defined(CS_PATH_DEFAULT)
 #define CS_PATH_DEFAULT  \
-        CS_CSDIR"?.csp;"  CS_CSDIR"?/init.csp;" \
-        CS_CDIR"?.csp;"  CS_CDIR"?/init.csp;" \
-        "./?.csp;" "./?/init.csp"
+        CS_CSDIR"?.cst;"  CS_CSDIR"?/init.cst;" \
+        CS_CDIR"?.cst;"  CS_CDIR"?/init.cst;" \
+        "./?.cst;" "./?/init.cst"
 #endif
 
 #if !defined(CS_CPATH_DEFAULT)
@@ -224,13 +224,6 @@
 ** @cs_number2str - convert float into string.
 ** @cs_number2integer - converts float to integer or returns 0 if float is
 ** not withing the range of integer.
-** @cs_str2number - converts numeral to float, in cases where numeral can't
-** be fully converted to float, 'p' is set to point to the one character
-** beyond the last successfully converted character. When p does not point
-** to '\0', then error occurred. In case of overflow, value returned shall
-** be equal to CS_HUGEVAL, in case of underflow, value returned shall be
-** equal to CS_NUMBER_MAX. Special type of error is when no conversion
-** occurred, then p must point to s in order to indicate that.
 */
 
 
@@ -256,15 +249,12 @@
 #define CS_FLOAT_FMTLEN         ""
 #define CS_FLOAT_FMT            "%.14g"
 
-#define CS_HUGEVAL              HUGE_VAL
 #define CS_NUMBER_MIN           cs_floatatt(MIN)
 #define CS_NUMBER_MAX           cs_floatatt(MAX)
 
 #define cs_mathop(op)           op
 
 #define cs_floatatt(n)          (DBL_##n)
-
-#define cs_str2number(s,p)      strtod((s),(p))
 
 #elif CS_FLOAT_TYPE == CS_FLOAT_LONG_DOUBLE_TYPE
 

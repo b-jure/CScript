@@ -1,0 +1,13 @@
+/*
+** Test script file for CScript bitwise AND operator.
+*/
+
+assert((2&1) == 0);         // (folded)
+assert((3&2) == 2);         // (folded)
+assert((5&3) == 1);         // (folded)
+assert((10&-3) == 8);       // (folded, assumming two's complement)
+a = 58&14;                  // (folded)
+assert(a == 10);
+assert((a&3) == 2);         // (not folded)
+assert((0xff&a) == 10);     // (not folded)
+assert((a&a) == 10);        // (not folded)

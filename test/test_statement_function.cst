@@ -1,0 +1,14 @@
+fn func(x) {
+    return 34 + x;
+};
+assert(typeof(func) == "function");
+func = func(35);
+assert(func == 69);
+func = {};
+assert(typeof(func) == "table");
+fn func.anotha_one(y) {
+    return 400 + y;
+}
+assert(typeof(func.anotha_one) == "function");
+func.anotha_one = func.anotha_one(20);
+assert(func.anotha_one == 420);

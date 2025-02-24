@@ -25,7 +25,7 @@ enum TK {
     TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE, TK_CLASS,
     TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR, TK_FOREACH, TK_FN, TK_IF,
     TK_IN, TK_INHERITS, TK_NIL, TK_OR, TK_RETURN, TK_SUPER,
-    TK_SWITCH, TK_TRUE, TK_WHILE, TK_LOOP, TK_LOCAL,
+    TK_SWITCH, TK_TRUE, TK_WHILE, TK_LOOP, TK_LOCAL, TK_INF, TK_INFINITY,
     /* other multi-char tokens */
     TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR, TK_POW, TK_CONCAT,
     TK_DOTS, TK_EOS,
@@ -34,7 +34,7 @@ enum TK {
 };
 
 /* number of reserved keywords */
-#define NUM_KEYWORDS	((TK_LOCAL - (FIRSTTK)) + 1)
+#define NUM_KEYWORDS	((TK_INFINITY - (FIRSTTK)) + 1)
 
 
 

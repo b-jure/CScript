@@ -1,0 +1,37 @@
+local transactions = {
+    Luigi = 69,
+    Marco = 420,
+    Fabio = 1337,
+};
+assert(typeof(transactions) == "table");
+assert(transactions.Luigi == 69);
+assert(transactions.Marco == 420);
+assert(transactions.Fabio == 1337);
+foreach k, v in pairs(transactions) {
+    assert(k == "Luigi" or k == "Marco" or k == "Fabio");
+    assert(v == 69 or v == 420 or v == 1337);
+}
+local points = [69, 420, 1337];
+assert(typeof(points) == "array");
+assert(points[0] == 69);
+assert(points[1] == 420);
+assert(points[2] == 1337);
+local array_iter = fn (arr) {
+    local i = 0;
+    local n = len(arr);
+    return fn () {
+        if (i < n) {
+            i = i + 1;
+            return i - 1, arr[i - 1];
+        } else
+            return nil;
+    };
+};
+foreach i, point in array_iter(points) {
+    if (i == 0) {
+        assert(point == 69);
+        continue;
+    }
+    assert(i == 1 or i == 2);
+    assert(point == 420 or point == 1337);
+}

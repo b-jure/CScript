@@ -22,57 +22,74 @@
 #define getinstruction(fs,e)    (&(fs)->p->code[(e)->u.info])
 
 
-/* instruction and argument sizes (bytes) */
-#define SIZEINSTR           1
-#define SIZEARGS            SIZEINSTR
-#define SIZEARGL            3
+/* sizes in bytes */
+#define SIZE_INSTR          (sizeof(Instruction))
+#define SIZE_ARG_S          (sizeof(Instruction))
+#define SIZE_ARG_L          (sizeof(Instruction[3]))
 
-/* instruction and args width */
-#define WIDTHINSTR          (SIZEINSTR * 8)
-#define WIDTHARGS           (SIZEARGS  * 8)
-#define WIDTHARGL           (SIZEARGL  * 8)
+/* bit widths */
+#define WIDTH_INSTR         (SIZE_INSTR*CHAR_BIT)
+#define WIDTH_ARG_S         (SIZE_ARG_S*CHAR_BIT)
+#define WIDTH_ARG_L         (SIZE_ARG_L*CHAR_BIT)
 
-/* maximum instruction and arg sizes */
-#define MAX_INSTR           ((1 << WIDTHINSTR) - 1)
-#define MAX_SARG            MAX_INSTR
-#define MAX_LARG            ((1 << WIDTHARGL) - 1)
-
-#define MAX_CODE            MAX_LARG
+/* limits */
+#define MAX_INSTR           ((1<<WIDTH_INSTR)-1)
+#define MIN_ARG_S           (-(1<<(WIDTH_ARG_S)))
+#define MAX_ARG_S           ((1<<WIDTH_ARG_S)-1)
+#define MIN_ARG_L           (-(1<<(WIDTH_ARG_L)))
+#define MAX_ARG_L           ((1<<WIDTH_ARG_L)-1)
+#define MAX_CODE            MAX_ARG_L
 
 
 /* gets first arg pc */
-#define GETARG(ip)              ((ip) + SIZEINSTR)
+#define GETARG(ip)              ((ip)+SIZE_INSTR)
 
 /* get short/long argument pc */
-#define GETPC_S(ip,o)           (GETARG(ip) + ((o)*SIZEARGS))
-#define GETPC_L(ip,o)           (GETARG(ip) + ((o)*SIZEARGL))
+#define GETPC_S(ip,o)           (GETARG(ip)+((o)*SIZE_ARG_S))
+#define GETPC_L(ip,o)           (GETARG(ip)+((o)*SIZE_ARG_L))
 
 
 /* get/set short parameter */
 #define GETARG_S(ip,o)          cast_byte(*GETPC_S(ip,o))
 #define SETARG_S(ip,o,v)        setbyte(GETPC_S(ip,0), o, v);
-#define SETARG_LS(ip,v)         setbyte(GETARG(ip), SIZEARGL, v)
-#define SETARG_LLS(ip,v)        setbyte(GETARG(ip), 2*SIZEARGL, v)
+#define SETARG_LS(ip,v)         setbyte(GETARG(ip), SIZE_ARG_L, v)
+#define SETARG_LLS(ip,v)        setbyte(GETARG(ip), 2*SIZE_ARG_L, v)
 
 
 /* get/set long arg */
-#define GETARG_L(ip,o)          get3bytes(GETARG(ip) + ((o)*SIZEARGL))
+#define GETARG_L(ip,o)          get3bytes(GETARG(ip) + ((o)*SIZE_ARG_L))
 #define SETARG_L(ip,o,v)        set3bytes(GETPC_L(ip,o), v)
+
+
+/*
+** Decode short immediate operand by moving the immediate operand
+** sign from 8th bit to the 32nd bit.
+*/
+#define IMM(imm) \
+        (((imm)&0x80) ? cast_int(~((imm)&0x7f)+1) : cast_int(imm))
+
+/*
+** Decode long immediate operand by moving the immediate operand
+** sign from 24th bit to the 32nd bit.
+*/
+#define IMML(imm) \
+        (((imm)&0x00800000) ? cast_int(~((imm)&0xff7fffff)+1) : cast_int(imm))
 
 
 
 /* size of instruction jump argument in bytes */
-#define JMPARGSIZE      SIZEARGL
+#define JMPARGSIZE      SIZE_ARGL
 
 /* max code jump offset value */
-#define MAXJMP          MAX_LARG
+#define MAXJMP          MAX_ARG_L
 
 /* value indicating there is no jump */
 #define NOJMP           (-1)
 
 
 /* 
-** Grep "ORDER OPR" if you change these enums.
+** ORDER OPR
+** Binary operations.
 */
 typedef enum {
         /* arithmetic operators */
@@ -92,11 +109,14 @@ typedef enum {
 } Binopr;
 
 
-/* true if binary operator 'op' is foldable (it is arithmetic or bitwise) */
+/* true if binary operation 'op' is foldable (arithmetic or bitwise) */
 #define oprisfoldable(op)      ((op) <= OPR_BXOR)
 
 
-/* unary operators */
+/*
+** ORDER OP
+** Unary operations.
+*/
 typedef enum { OPR_UNM, OPR_BNOT, OPR_NOT, OPR_NOUNOPR } Unopr;
 
 
@@ -125,8 +145,10 @@ OP_NILN,/*         L          'load L nils'                                 */
 OP_LOAD,/*         L          'load V{L}'                                   */
 OP_CONST,/*        S          'load K{S}'                                   */
 OP_CONSTL,/*       L          'load K{L}'                                   */
-OP_CONSTI,/*       L S        'load integer L (S signedness)'               */
-OP_CONSTF,/*       L S        'load integer L as float (S signedness)'      */
+OP_CONSTI,/*       S          'load integer S'                              */
+OP_CONSTIL,/*      L          'load integer L'                              */
+OP_CONSTF,/*       S          'load integer S as float'                     */
+OP_CONSTFL,/*      L          'load integer L as float'                     */
 OP_VARARGPREP,/*   L          'adjust function varargs (L function arity)'  */
 OP_VARARG,/*       L          'load L-1 varargs'                            */
 OP_CLOSURE,/*      L          'load closure(Enclosing->fns[L])'             */
@@ -180,11 +202,11 @@ OP_CONCAT,/*       L       'V{-L} = V{-L} .. V{L - 1}'                      */
 
 OP_EQK,/*          V L S   '(V == K{L}) == S'                               */
 
-OP_EQI,/*          V L S1 S2      '(V == I(L) * (S1 - 1)) == S2'            */
-OP_LTI,/*          V L S          'V < (S  - 1) * I(L)'                     */
-OP_LEI,/*          V L S          'V <= (S  - 1) * I(L)'                    */
-OP_GTI,/*          V L S          'V > (S  - 1) * I(L)'                     */
-OP_GEI,/*          V L S          'V >= (S  - 1) * I(L)'                    */ 
+OP_EQI,/*          V L S          '(V == I(L)) == S'                        */
+OP_LTI,/*          V L            'V < I(L)'                                */
+OP_LEI,/*          V L            'V <= I(L)'                               */
+OP_GTI,/*          V L            'V > I(L)'                                */
+OP_GEI,/*          V L            'V >= I(L)'                               */ 
 
 OP_EQ,/*           V1 V2 S     '(V1 == V2) == S'                            */
 OP_LT,/*           V1 V2       '(V1 < V2)'                                  */
@@ -192,9 +214,9 @@ OP_LE,/*           V1 V2       '(V1 <= V2)'                                 */
 
 OP_EQPRESERVE,/*   V1 V2   'V1 == V2 (preserves V1 operand)'                */
 
-OP_NOT,/*          V       '!V'                                             */
 OP_UNM,/*          V       '-V'                                             */
 OP_BNOT,/*         V       '~V'                                             */
+OP_NOT,/*          V       '!V'                                             */
 
 OP_JMP,/*          L       'pc += L'                                        */
 OP_JMPS,/*         L       'pc -= L'                                        */
@@ -230,8 +252,10 @@ OP_SETINDEX,/*     V L         'V{-L}[V{-L + 1}] = V3'                      */
 OP_GETINDEXSTR,/*  V L         'V[K{L}:string]'                             */
 OP_SETINDEXSTR,/*  V L1 L2     'V{-L1}[K{L2}:string] = V'                   */
 
-OP_GETINDEXINT,/*  V L         'V[I(L):integer]'                            */
-OP_SETINDEXINT,/*  V L1 L2     'V{-L1}[I(L2):integer] = V'                  */
+OP_GETINDEXINT,/*  V S         'V[I(S):integer]'                            */
+OP_GETINDEXINTL,/* V L         'V[I(L):integer]'                            */
+OP_SETINDEXINT,/*  V L S       'V{-L}[I(S):integer] = V'                    */
+OP_SETINDEXINTL,/* V L1 L2     'V{-L1}[I(L2):integer] = V'                  */
 
 OP_GETSUP,/*       V1 V2 L     'V2:super.K{L}:string' (V1 is instance)      */
 OP_GETSUPIDX,/*    V1 V2 V3    'V2:super[V3]' (V1 is instance)              */
@@ -275,7 +299,6 @@ enum OpFormat { /* ORDER OPFMT */
     FormatISS,
     FormatIL,
     FormatILS,
-    FormatILSS,
     FormatILL,
     FormatILLS,
     FormatILLL,
@@ -324,8 +347,8 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
 /* 
 ** Number of array items to accumulate before a SETARRAY instruction.
-** Keep this value under MAX_SARG or change the instruction format aka
-** the second argument size to long arg in order to fit up to MAX_LARG.
+** Keep this value under MAX_ARG_S or change the instruction format aka
+** the second argument size to long arg in order to fit up to MAX_ARG_L.
 */
 #define ARRFIELDS_PER_FLUSH     50
 

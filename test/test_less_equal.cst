@@ -1,0 +1,20 @@
+/*
+** Test script file for CScript less-equal-to operator.
+*/
+
+assert(2 <= 5 == true);
+assert(5 <= 5);
+assert(7 <= 5 == false);
+assert("Dota" <= "LoL");
+assert("Dota" <= "Dota");
+assert("LoL" <= "Dota" == false);
+assert(5.12 <= 5.69);
+assert(5.12 <= 5.12);
+assert(5.69 <= 5.12 == false);
+assert(4 <= 5.12);
+assert(4 <= 4);
+assert(5.12 <= 4 == false);
+a = 5;
+assert(4 <= a);
+assert(a <= 4 == false);
+assert(a <= a);

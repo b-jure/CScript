@@ -1,0 +1,5 @@
+local fn add(x, y) {
+    return x + y;
+}
+assert(add(5, 2) == 7);
+assert(typeof(add) == "function");

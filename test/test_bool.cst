@@ -1,0 +1,6 @@
+/*
+** Test script file for CScript boolean constants.
+*/
+
+assert(true);
+assert(!false);

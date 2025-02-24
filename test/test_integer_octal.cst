@@ -1,0 +1,8 @@
+/*
+** Test script file for CScript octal integers.
+*/
+
+assert(0015 == 13);
+assert(032 == 26);
+assert(0157 == 111);
+assert(0123_570 == 42872);

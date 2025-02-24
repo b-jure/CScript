@@ -1,0 +1,16 @@
+/*
+** Test script file for CScript unary minus operator.
+*/
+
+a = -5;                     // (folded)
+assert(a == -5);
+a = --5;                    // (folded)
+assert(a == 5);
+a = ---5;                   // (folded)
+assert(a == -5);
+a = -a;                     // (not folded)
+assert(a == 5);
+a = --a;                    // (not folded)
+assert(a == 5);
+a = ---a;                   // (not folded)
+assert(a == -5);

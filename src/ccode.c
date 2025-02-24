@@ -27,7 +27,7 @@
 
 /* unary 'opr' to opcode */
 #define unopr2op(opr) \
-        cast(OpCode, cast_int(opr) - OPR_UNM + OP_NOT)
+        cast(OpCode, cast_int(opr) - OPR_UNM + OP_UNM)
 
 
 /* binary operation to OpCode */
@@ -40,12 +40,32 @@
         cast(cs_MM, (cast_int(op) - OP_ADD) + cast_int(CS_MM_ADD))
 
 
+/*
+** Max(Min)imum possible values for immediate operand.
+** Maximum limit is a "bit" smaller than 'MAX_ARG_*',
+** in order to ensure that the most significant bit is never set.
+** This is because immediate operands can be negative values
+** and we must be able to code them into the array and later decode them.
+** For example, bit pattern of signed integer '1111_1111' encodes value -1,
+** first we take absolute value '0000_0001',
+** then we set the most significant bit '1000_0001',
+** finally we code that result into the array.
+** When decoding, presence of most significant bit is checked,
+** if present first do '1000_0001 & 0111_1111',
+** then convert to signed '(char)(~0000_0001 + 1)'.
+** Note: all of this is done on integers, so the exact bit operations
+** differ from the ones shown above.
+*/
+#define MIN_IMM         (MIN_ARG_S>>1)
+#define MAX_IMM         (MAX_ARG_S>>1)
+#define MIN_IMML        (MIN_ARG_L>>1)
+#define MAX_IMML        (MAX_ARG_L>>1)
 
-/* check if 'i' fits in long arg */
-#define fitsLA(i)       (-MAX_LARG <= (i) && (i) <= MAX_LARG)
-
-/* check if 'i' fits in short arg */
-#define fitsSA(i)       (-MAX_SARG <= (i) && (i) <= MAX_SARG)
+/*
+** Check if value is in range of short/long immediate operand.
+*/
+#define isIMM(i)        (MIN_IMM <= (i) && (i) <= MAX_IMM)
+#define isIMML(i)       (MIN_IMML <= (i) && (i) <= MAX_IMML)
 
 
 #define encodesign(x)     ((x) < 0 ? 0 : 2)
@@ -65,8 +85,10 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_LOAD */
     opProp(0, FormatIS), /* OP_CONST */
     opProp(0, FormatIL), /* OP_CONSTL */
-    opProp(0, FormatILS), /* OP_CONSTI */
-    opProp(0, FormatILS), /* OP_CONSTF */
+    opProp(0, FormatIS), /* OP_CONSTI */
+    opProp(0, FormatIL), /* OP_CONSTIL */
+    opProp(0, FormatIS), /* OP_CONSTF */
+    opProp(0, FormatIL), /* OP_CONSTFL */
     opProp(0, FormatIL), /* OP_VARARGPREP */
     opProp(0, FormatIL), /* OP_VARARG */
     opProp(0, FormatIL), /* OP_CLOSURE */
@@ -113,18 +135,18 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatI), /* OP_BXOR */
     opProp(0, FormatIL), /* OP_CONCAT */
     opProp(0, FormatILS), /* OP_EQK */
-    opProp(0, FormatILSS), /* OP_EQI */
-    opProp(0, FormatILS), /* OP_LTI */
-    opProp(0, FormatILS), /* OP_LEI */
-    opProp(0, FormatILS), /* OP_GTI */
-    opProp(0, FormatILS), /* OP_GEI */
+    opProp(0, FormatILS), /* OP_EQI */
+    opProp(0, FormatIL), /* OP_LTI */
+    opProp(0, FormatIL), /* OP_LEI */
+    opProp(0, FormatIL), /* OP_GTI */
+    opProp(0, FormatIL), /* OP_GEI */
     opProp(0, FormatIS), /* OP_EQ */
     opProp(0, FormatI), /* OP_LT */
     opProp(0, FormatI), /* OP_LE */
     opProp(0, FormatI), /* OP_EQPRESERVE */
-    opProp(0, FormatI), /* OP_NOT */
     opProp(0, FormatI), /* OP_UNM */
     opProp(0, FormatI), /* OP_BNOT */
+    opProp(0, FormatI), /* OP_NOT */
     opProp(1, FormatIL), /* OP_JMP */
     opProp(1, FormatIL), /* OP_JMPS */
     opProp(1, FormatILL), /* OP_BJMP */
@@ -147,8 +169,10 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_SETINDEX */
     opProp(0, FormatIL), /* OP_GETINDEXSTR */
     opProp(0, FormatILL), /* OP_SETINDEXSTR */
-    opProp(0, FormatIL), /* OP_GETINDEXINT */
-    opProp(0, FormatILL), /* OP_SETINDEXINT */
+    opProp(0, FormatIS), /* OP_GETINDEXINT */
+    opProp(0, FormatIL), /* OP_GETINDEXINTL */
+    opProp(0, FormatILS), /* OP_SETINDEXINT */
+    opProp(0, FormatILL), /* OP_SETINDEXINTL */
     opProp(0, FormatIL), /* OP_GETSUP */
     opProp(0, FormatI), /* OP_GETSUPIDX */
     opProp(0, FormatIL), /* OP_GETSUPIDXSTR */
@@ -172,7 +196,6 @@ CSI_DEF const c_byte csC_opSize[FormatN] = { /* ORDER OPFMT */
     3,  /* FormatISS */
     4,  /* FormatIL */
     5,  /* FormatILS */
-    6,  /* FormatILSS */
     7,  /* FormatILL */
     8,  /* FormatILLS */
     10, /* FormatILLL */
@@ -185,7 +208,6 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
     "FormatISS",
     "FormatIL",
     "FormatILS",
-    "FormatILSS",
     "FormatILL",
     "FormatILLS",
     "FormatILLL",
@@ -196,21 +218,31 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
-    "TRUE", "FALSE", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
-    "CONSTF", "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY", "NEWCLASS",
-    "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK", "SUBK",
-    "MULK", "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK",
-    "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
-    "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW",
-    "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI",
-    "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "NOT", "UNM",
-    "BNOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP",
-    "TESTPOP", "CALL", "CLOSE", "TBC", "GETGLOBAL", "SETGLOBAL",
-    "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY", "SETPROPERTY",
-    "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",
-    "GETINDEXINT", "SETINDEXINT", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR",
-    "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
+"TRUE", "FALSE", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
+"CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY",
+"NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK",
+"SUBK", "MULK", "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK",
+"BXORK", "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
+"BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW", "BSHL",
+"BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI", "LEI", "GTI",
+"GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT", "NOT", "JMP", "JMPS",
+"BJMP", "TEST", "TESTORPOP", "TESTPOP", "CALL", "CLOSE", "TBC", "GETGLOBAL",
+"SETGLOBAL", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY",
+"SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
+"SETINDEXSTR", "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL",
+"GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL",
+"FORLOOP", "RET",
 };
+
+
+/*
+** Get absolute value of integer without branching
+** (assuming two's complement).
+*/
+static uint c_abs(int v) {
+    int const mask = v >> (sizeof(int)*CHAR_BIT - 1);
+    return (v+mask)^mask;
+}
 
 
 /* limit for difference between lines in relative line info. */
@@ -331,7 +363,7 @@ static void emit3bytes(FunctionState *fs, int code) {
     csM_ensurearray(fs->lx->C, p->code, p->sizecode, currPC, 3, MAXINT,
                     "code", Instruction);
     set3bytes(&p->code[currPC], code);
-    currPC += SIZEARGL;
+    currPC += SIZE_ARG_L;
 }
 
 
@@ -347,13 +379,12 @@ static int codeinstruction(FunctionState *fs, Instruction i) {
     addinstpc(fs);
     emitbyte(fs, i);
     savelineinfo(fs, fs->p, fs->lx->lastline);
-    return currPC - 1;
+    return currPC - SIZE_INSTR;
 }
 
 
 /* code instruction 'i' */
 int csC_emitI(FunctionState *fs, Instruction i) {
-    cs_assert(SIZEINSTR == sizeof(Instruction));
     cs_assert(fs->prevpc <= currPC);
     return codeinstruction(fs, i);
 }
@@ -361,19 +392,17 @@ int csC_emitI(FunctionState *fs, Instruction i) {
 
 /* code short arg */
 static int emitS(FunctionState *fs, int arg) {
-    cs_assert(SIZEARGS == sizeof(Instruction));
-    cs_assert(0 <= arg && arg <= MAX_SARG);
+    cs_assert(0 <= arg && arg <= MAX_ARG_S);
     emitbyte(fs, arg);
-    return currPC - 1;
+    return currPC - SIZE_ARG_S;
 }
 
 
 /* code long arg */
 static int emitL(FunctionState *fs, int arg) {
-    cs_assert(SIZEARGL == (sizeof(Instruction) * 3));
-    cs_assert(0 <= arg && arg <= MAX_LARG);
+    cs_assert(0 <= arg && arg <= MAX_ARG_L);
     emit3bytes(fs, arg);
-    return currPC - 3;
+    return currPC - SIZE_ARG_L;
 }
 
 
@@ -430,7 +459,7 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
     k = fs->nk;
     setival(&val, k);
     csH_finishset(C, fs->lx->tab, index, key, &val);
-    csM_growarray(C, p->k, p->sizek, k, MAX_LARG, "constants", TValue);
+    csM_growarray(C, p->k, p->sizek, k, MAX_ARG_L, "constants", TValue);
     while (oldsz < p->sizek) /* nil out the new part */
         setnilval(&p->k[oldsz++]);
     setobj(C, &p->k[k], v);
@@ -519,7 +548,7 @@ void csC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
     cs_assert(newstack >= 0);
     if (fs->p->maxstack < newstack) {
-        if (c_unlikely(newstack >= MAX_LARG))
+        if (c_unlikely(newstack >= MAX_ARG_L))
             csY_syntaxerror(fs->lx, "function requires too much stack space");
         fs->p->maxstack = newstack;
     }
@@ -659,41 +688,94 @@ static void string2K(FunctionState *fs, ExpInfo *e) {
 
 
 
-/* check if expression is a integer constant */
+/*
+** Check if expression is a integer constant without jumps.
+*/
 static int isintK(ExpInfo *e) {
     return (e->et == EXP_INT && !hasjumps(e));
 }
 
 
-/* check if 'isintK' and it fits in long arg */
+/*
+** Check if 'isintK' and it is in range of long immediate operand.
+*/
 static int isintKL(ExpInfo *e) {
-    return (isintK(e) && fitsLA(e->u.i));
+    return (isintK(e) && isIMML(e->u.i));
 }
 
 
-/* check if 'e' is numeral constant and fits inside of large arg */
-static int isnumKL(ExpInfo *e, int *imm, int *isflt) {
+/*
+** Code load constant instruction.
+*/
+static int codeK(FunctionState *fs, int idx) {
+    cs_assert(0 <= idx && idx <= MAX_ARG_L);
+    return (idx <= MAX_ARG_S) 
+            ? csC_emitIS(fs, OP_CONST, idx) 
+            : csC_emitIL(fs, OP_CONSTL, idx);
+}
+
+
+/*
+** Encode short immediate operand by moving the sign bit
+** from 32nd bit to the 8th bit.
+*/
+static int imms(int imm) {
+    int x = check_exp(imm < 0 && MIN_ARG_S <= imm, c_abs(imm));
+    cs_assert(!(x & 0x80)); /* 8th bit must be free */
+    return (x|0x80); /* set 8th bit */
+}
+
+
+/*
+** Encode long immediate operand by moving the sign bit
+** from 32nd bit to the 24th bit.
+*/
+static int imml(int imm) {
+    uint x = check_exp(imm < 0 && MIN_ARG_L <= imm, c_abs(imm));
+    cs_assert(!(x & 0x800000)); /* 24th bit must be free */
+    return (x|0x800000); /* set 24th bit */
+}
+
+
+/*
+** Encode value as immediate operand.
+*/
+static int encodeimm(int imm) {
+    cs_assert(isIMM(imm) || isIMML(imm)); /* must fit */
+    if (imm < 0) { /* must encode? */
+        if (imm >= MIN_ARG_S)
+            imm = imms(imm);
+        else
+            imm = imml(imm);
+    }
+    return imm;
+}
+
+
+/*
+** Check if 'e' is numeral constant that is in range of
+** long immediate operand.
+*/
+static int isnumIK(ExpInfo *e, int *imm) {
     cs_Integer i;
     if (e->et == EXP_INT)
         i = e->u.i;
-    else if (e->et == EXP_FLT && csO_n2i(e->u.n, &i, N2IEXACT))
-        *isflt = 1;
-    else
+    else if (!(e->et == EXP_FLT && csO_n2i(e->u.n, &i, N2IEXACT)))
         return 0;
-    if (!hasjumps(e) && fitsLA(i)) {
-        *imm = cast_int(i);
+    if (!hasjumps(e) && isIMML(i)) {
+        *imm = (i < 0) ? imml(i) : i;
         return 1;
     }
     return 0;
 }
 
 
-/* code generic load constant instruction */
-static int codeK(FunctionState *fs, int idx) {
-    cs_assert(idx >= 0 && fitsLA(idx));
-    return (fitsSA(idx) 
-            ? csC_emitIS(fs, OP_CONST, idx) 
-            : csC_emitIL(fs, OP_CONSTL, idx));
+static int setindexint(FunctionState *fs, ExpInfo *v, int left) {
+    uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
+    if (isIMM(v->u.info))
+        return csC_emitILS(fs, OP_SETINDEXINT, left, imm);
+    else
+        return csC_emitILL(fs, OP_SETINDEXINTL, left, imm);
 }
 
 
@@ -723,7 +805,7 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
             break;
         }
         case EXP_INDEXINT: {
-            var->u.info = csC_emitILL(fs, OP_SETINDEXINT, left+1, var->u.info);
+            var->u.info = setindexint(fs, var, left+1);
             break;
         }
         case EXP_DOT: {
@@ -744,63 +826,72 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
 }
 
 
+static int getindexint(FunctionState *fs, ExpInfo *v) {
+    uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
+    if (isIMM(v->u.info))
+        return csC_emitIS(fs, OP_GETINDEXINT, imm);
+    else
+        return csC_emitIL(fs, OP_GETINDEXINTL, imm);
+}
+
+
 /* ensure variable is on stack */
-static int dischargevars(FunctionState *fs, ExpInfo *e) {
-    switch (e->et) {
+static int dischargevars(FunctionState *fs, ExpInfo *v) {
+    switch (v->et) {
         case EXP_GLOBAL: {
-            e->u.info = csC_emitIL(fs, OP_GETGLOBAL, stringK(fs, e->u.str));
+            v->u.info = csC_emitIL(fs, OP_GETGLOBAL, stringK(fs, v->u.str));
             break;
         }
         case EXP_UVAL: {
-            e->u.info = csC_emitIL(fs, OP_GETUVAL, e->u.info);
+            v->u.info = csC_emitIL(fs, OP_GETUVAL, v->u.info);
             break;
         }
         case EXP_LOCAL: {
-            e->u.info = csC_emitIL(fs, OP_GETLOCAL, e->u.info);
+            v->u.info = csC_emitIL(fs, OP_GETLOCAL, v->u.info);
             break;
         }
         case EXP_INDEXED: {
             freeslots(fs, 2); /* receiver, key */
-            e->u.info = csC_emitI(fs, OP_GETINDEX);
+            v->u.info = csC_emitI(fs, OP_GETINDEX);
             break;
         }
         case EXP_INDEXSTR: {
             freeslots(fs, 1); /* receiver */
-            e->u.info = csC_emitIL(fs, OP_GETINDEXSTR, e->u.info);
+            v->u.info = csC_emitIL(fs, OP_GETINDEXSTR, v->u.info);
             break;
         }
         case EXP_INDEXINT: {
             freeslots(fs, 1); /* receiver */
-            e->u.info = csC_emitIL(fs, OP_GETINDEXINT, e->u.info);
+            v->u.info = getindexint(fs, v);
             break;
         }
         case EXP_INDEXSUPER: {
             freeslots(fs, 3); /* 'self', 'super', key */
-            e->u.info = csC_emitI(fs, OP_GETSUPIDX);
+            v->u.info = csC_emitI(fs, OP_GETSUPIDX);
             break;
         }
         case EXP_INDEXSUPERSTR: {
             freeslots(fs, 2); /* 'self', 'super' */
-            e->u.info = csC_emitIL(fs, OP_GETSUPIDXSTR, e->u.info);
+            v->u.info = csC_emitIL(fs, OP_GETSUPIDXSTR, v->u.info);
             break;
         }
         case EXP_DOT: {
             freeslots(fs, 1); /* receiver */
-            e->u.info = csC_emitIL(fs, OP_GETPROPERTY, e->u.info);
+            v->u.info = csC_emitIL(fs, OP_GETPROPERTY, v->u.info);
             break;
         }
         case EXP_DOTSUPER: {
             freeslots(fs, 2); /* 'self', 'super' */
-            e->u.info = csC_emitIL(fs, OP_GETSUP, e->u.info);
+            v->u.info = csC_emitIL(fs, OP_GETSUP, v->u.info);
             break;
         }
         case EXP_CALL: case EXP_VARARG: {
-            csC_setoneret(fs, e);
+            csC_setoneret(fs, v);
             break;
         }
         default: return 0; /* expression is not a variable */
     }
-    e->et = EXP_FINEXPR;
+    v->et = EXP_FINEXPR;
     return 1;
 }
 
@@ -822,7 +913,7 @@ static void fixjump(FunctionState *fs, int pc, int target) {
     int offset = c_abs(target - (pc + getOpSize(*jmp)));
     cs_assert(offset > 0); /* at least one expression in between */
     cs_assert(opisjump(*jmp)); /* 'jmp' is a valid jump instruction */
-    if (c_unlikely(offset > MAX_LARG)) /* jump is too large? */
+    if (c_unlikely(offset > MAX_ARG_L)) /* jump is too large? */
         csP_semerror(fs->lx, "control structure too long");
     SETARG_L(jmp, 0, offset); /* fix the jump */
 }
@@ -931,37 +1022,34 @@ int csC_emitILS(FunctionState *fs, Instruction op, int a, int b) {
 }
 
 
-/* code op with long and 2 short args */
-static int emitILSS(FunctionState *fs, Instruction op, int a, int b, int c) {
-    int offset = csC_emitILS(fs, op, a, b);
-    emitS(fs, c);
-    return offset;
-}
-
-
-/* code integer constant */
-static int codeintK(FunctionState *fs, cs_Integer i) {
-    if (fitsLA(i))
-        return csC_emitILS(fs, OP_CONSTI, c_abs(i), encodesign(i));
+/* code integer as constant or immediate operand */
+static int codeintIK(FunctionState *fs, cs_Integer i) {
+    if (isIMM(i))
+        return csC_emitIS(fs, OP_CONSTI, encodeimm(i));
+    else if (isIMML(i))
+        return csC_emitIL(fs, OP_CONSTIL, encodeimm(i));
     else
         return codeK(fs, intK(fs, i));
 }
 
 
-/* code float constant */
-static int codefltK(FunctionState *fs, cs_Number n) {
+/* code float as constant or immediate operand */
+static int codefltIK(FunctionState *fs, cs_Number n) {
     cs_Integer i;
-    if (csO_n2i(n, &i, N2IEXACT) && fitsLA(i))
-        return csC_emitILS(fs, OP_CONSTF, c_abs(i), encodesign(i));
-    else
-        return codeK(fs, fltK(fs, n));
+    if (csO_n2i(n, &i, N2IEXACT)) { /* try code as immediate? */
+        if (isIMM(i))
+            return csC_emitIS(fs, OP_CONSTF, encodeimm(i));
+        else if (isIMML(i))
+            return csC_emitIL(fs, OP_CONSTFL, encodeimm(i));
+    } /* else make a constant */
+    return codeK(fs, fltK(fs, n));
 }
 
 
 void csC_setarraysize(FunctionState *fs, int pc, int asize) {
     Instruction *inst = &fs->p->code[pc];
     asize = (asize != 0 ? csO_ceillog2(asize) + 1 : 0);
-    cs_assert(asize <= MAX_SARG);
+    cs_assert(asize <= MAX_ARG_S);
     SETARG_S(inst, 0, asize); /* set size (log2 - 1) */
 }
 
@@ -978,7 +1066,7 @@ void csC_setarray(FunctionState *fs, int nelems, int tostore) {
 void csC_settablesize(FunctionState *fs, int pc, int hsize) {
     Instruction *inst = &fs->p->code[pc];
     hsize = (hsize != 0 ? csO_ceillog2(hsize) + 1 : 0);
-    cs_assert(hsize <= MAX_SARG);
+    cs_assert(hsize <= MAX_ARG_S);
     SETARG_S(inst, 0, hsize);
 }
 
@@ -1000,11 +1088,11 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e) {
                 break;
             }
             case EXP_INT: {
-                e->u.info = codeintK(fs, e->u.i);
+                e->u.info = codeintIK(fs, e->u.i);
                 break;
             }
             case EXP_FLT: {
-                e->u.info = codefltK(fs, e->u.n);
+                e->u.info = codefltIK(fs, e->u.n);
                 break;
             }
             case EXP_STRING: {
@@ -1142,7 +1230,8 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
             e->et = EXP_TRUE;
             break;
         }
-        case EXP_TRUE: case EXP_INT: case EXP_FLT: case EXP_STRING: case EXP_K: {
+        case EXP_TRUE: case EXP_INT: case EXP_FLT:
+        case EXP_STRING: case EXP_K: {
             e->et = EXP_FALSE;
             break;
         }
@@ -1268,8 +1357,8 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             break;
         }
         case OPR_LT: case OPR_LE: {
-            int dummy, dummy2;
-            if (!isnumKL(e, &dummy, &dummy2))
+            int dummy;
+            if (!isnumIK(e, &dummy))
                 csC_exp2stack(fs, e);
             /* otherwise keep numeral for immediate
              * operand variant instruction */
@@ -1306,7 +1395,7 @@ static int exp2K(FunctionState *fs, ExpInfo *e) {
             case EXP_K: info = e->u.info; break;
             default: return 0; /* not a constant */
         }
-        cs_assert(0 <= info && info <= MAX_LARG);
+        cs_assert(0 <= info && info <= MAX_ARG_L);
         e->u.info = info;
         e->et = EXP_K;
         return 1;
@@ -1404,18 +1493,16 @@ static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 /* code equality binary instruction */
 static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int imm; /* immediate */
-    int isflt;
     int iseq = (opr == OPR_EQ);
     cs_assert(opr == OPR_NE || opr == OPR_EQ);
-    UNUSED(isflt);
     if (e1->et != EXP_FINEXPR) {
         /* 'e1' is either a numerical or stored string constant */
         cs_assert(e1->et == EXP_K || e1->et == EXP_INT || e1->et == EXP_FLT);
         swapexp(e1, e2);
     }
     csC_exp2stack(fs, e1); /* ensure 1st expression is on stack */
-    if (isnumKL(e2, &imm, &isflt)) { /* 2nd expression is immediate operand? */
-        e1->u.info = emitILSS(fs, OP_EQI, imm, encodesign(imm), iseq);
+    if (isnumIK(e2, &imm)) { /* 2nd expression is immediate operand? */
+        e1->u.info = csC_emitILS(fs, OP_EQI, imm, iseq);
     } else if (exp2K(fs, e2)) { /* 2nd expression is a constant? */
         e1->u.info = csC_emitILS(fs, OP_EQK, e2->u.info, iseq);
     } else { /* otherwise 2nd expression must be on stack */
@@ -1430,18 +1517,17 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 /* code binary ordering instruction */
 static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     OpCode op;
-    int isflt, imm;
-    UNUSED(isflt);
+    int imm;
     cs_assert(OPR_LT == opr || OPR_LE == opr); /* already swapped */
-    if (isnumKL(e2, &imm, &isflt)) {
+    if (isnumIK(e2, &imm)) {
         csC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
         op = binopr2op(opr, OPR_LT, OP_LTI);
         goto code;
-    } else if (isnumKL(e1, &imm, &isflt)) {
+    } else if (isnumIK(e1, &imm)) {
         csC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
         op = binopr2op(opr, OPR_LT, OP_GTI);
 code:
-        e1->u.info = csC_emitILS(fs, op, imm, encodesign(imm));
+        e1->u.info = csC_emitIL(fs, op, imm);
     } else {
         csC_exp2stack(fs, e1); /* ensure first operand is on stack */
         csC_exp2stack(fs, e2); /* ensure second operand is on stack */
@@ -1511,14 +1597,14 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
         }
         case OPR_AND: {
             cs_assert(e1->t == NOJMP); /* list closed by 'csC_prebinary' */
-            dischargevars(fs, e2);
+            exp2stack(fs, e2);
             csC_concatjl(fs, &e2->f, e1->f);
             *e1 = *e2;
             break;
         }
         case OPR_OR: {
             cs_assert(e1->f == NOJMP); /* list closed by 'csC_prebinary' */
-            dischargevars(fs, e2);
+            exp2stack(fs, e2);
             csC_concatjl(fs, &e2->t, e1->t);
             *e1 = *e2;
             break;
@@ -1533,10 +1619,10 @@ static int finaltarget(Instruction *code, int i) {
   for (int count = 0; count < 100; count++) { /* avoid infinite loops */
       Instruction *pc = &code[i];
       if (*pc == OP_JMP) { /* jump forward? */
-          i += SIZEINSTR + SIZEARGL; /* skip instruction and offset */
+          i += (SIZE_INSTR+SIZE_ARG_L); /* skip instruction and offset */
           i += GETARG_L(pc, 0);
       } else if (*pc == OP_JMPS) { /* jump back? */
-          i += SIZEINSTR + SIZEARGL; /* skip instruction and offset */
+          i += (SIZE_INSTR+SIZE_ARG_L); /* skip instruction and offset */
           i -= GETARG_L(pc, 0);
       } else /* no jumps */
           break;

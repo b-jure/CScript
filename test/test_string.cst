@@ -1,0 +1,25 @@
+/*
+** Test script file for CScript strings.
+*/
+
+assert("test");                 // string
+assert("test");                 // (check reuse of interned strings)
+assert("");                     // empty string
+assert("start\0end");           // null terminator
+assert("start\aend");           // bell
+assert("start\bend");           // backspace
+assert("start\tend");           // horizontal tab
+assert("start\nend");           // new line
+assert("start\vend");           // vertical tab
+assert("start\fend");           // form feed
+assert("start\rend");           // carriage return
+assert("start\e[1Kend");        // escape character (equivalent to '\x1B')
+assert("start\x20end");         // \xhh, h is a hexadecimal digit
+assert("start\u{57}end");       // \u{hhhhhhhh}, h is a hexadecimal digit (normalized UTF-8)
+assert("start\u[57]end");       // \u[hhhhhhhh], h is a hexadecimal digit (verified UTF-8)
+assert("start\"end");           // double quotation mark (22 in hexadecimal)
+assert("start\'end");           // apostrophe (27 in hexadecimal)
+assert("start\\end");           // backslash (5C in hexadecimal)
+assert("start\
+end");                          // escaped newline/carriage return
+assert("start\69end");          // \ddd, d is a decimal digit

@@ -1,0 +1,20 @@
+/*
+** Test script file for CScript less-than operator.
+*/
+
+assert(2 < 5 == true);
+assert(5 < 5 == false);
+assert(7 < 5 == false);
+assert("Dota" < "LoL" == true);
+assert("Dota" < "Dota" == false);
+assert("LoL" < "Dota" == false);
+assert(5.12 < 5.69 == true);
+assert(5.12 < 5.12 == false);
+assert(5.69 < 5.12 == false);
+assert(4 < 5.12 == true);
+assert(4 < 4 == false);
+assert(5.12 < 4 == false);
+a = 5;
+assert(4 < a == true);
+assert(a < 4 == false);
+assert(a < a == false);

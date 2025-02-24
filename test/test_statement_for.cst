@@ -1,0 +1,37 @@
+for (local i = 0; i < 5; i = i + 1) {
+    assert(0 <= i);
+    assert(i < 5);
+}
+assert(i == nil);
+for (local i = 0; ; i = i + 1) {
+    if (i > 6) {
+        break;
+    }
+    else assert(i < 7);
+}
+assert(i == nil);
+for (local i = 0; false; assert(false)) {
+    assert(false);
+    if (i > 6) break;
+    print(i);
+}
+assert(i == nil);
+for (; true; assert(false)) {
+    break;
+}
+assert(i == nil);
+for (;; assert(false)) {
+    break;
+}
+for (local i = 0; i < 2;) {
+    assert(0 <= i);
+    assert(i < 2);
+    i = i + 1;
+}
+assert(i == nil);
+for (local i = 0;;) {
+    assert(i == 0);
+    break;
+}
+assert(i == nil);
+for (;;) break;

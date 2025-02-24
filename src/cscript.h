@@ -194,7 +194,7 @@ CS_API cs_State        *cs_to_thread(cs_State *C, int index);
 /* -----------------------------------------------------------------------
 ** Ordering & Arithmetic functions
 ** ----------------------------------------------------------------------- */
-/* Arithmetic operations */
+/* Arithmetic and logical operations */
 #define CS_OPADD        0
 #define CS_OPSUB        1
 #define CS_OPMUL        2

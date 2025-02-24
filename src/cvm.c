@@ -507,11 +507,12 @@ c_sinline int precallC(cs_State *C, SPtr func, int nres, cs_CFunction f) {
 
 
 /* 
-** Adjust stack for meta method call.
-** func is the object that has metamethod and f is the metamethod.
-** Stack is shifted so that the f is in place of func and func is its
-** argument at func + 1. This function assumes there is enough space
-** on the stack for f.
+** Adjust stack for metamethod or instance method call.
+** 'func' is the instance or the object that has a metamethod
+** and 'f' is the function.
+** Stack is shifted so that 'f' is in place of 'func' and 'func' is its
+** argument at 'func + 1'. This function assumes there is enough space
+** on the stack for 'f'.
 */
 c_sinline void auxinsertf(cs_State *C, SPtr func, const TValue *f) {
     for (SPtr p = C->sp.p; p > func; p--)
@@ -584,10 +585,9 @@ retry:
         }
         case CS_VIMETHOD: { /* Instance method */
             IMethod *im = imval(s2v(func));
-            cs_assert(ttisfunction(&im->method));
-            checkstackGCp(C, 1, func); /* space for method */
+            checkstackGCp(C, 2, func); /* space for method and instance */
             auxinsertf(C, func, &im->method); /* insert method... */
-            setinsval2s(C, func + 1, im->ins); /* ...and replace func */
+            setinsval2s(C, func + 1, im->ins); /* ...and ins. as first arg */
             goto retry;
         }
         default: { /* try metaamethod __call */
@@ -869,8 +869,8 @@ void csV_concat(cs_State *C, int total) {
 /* order operations with immediate operand */
 #define op_orderI(C,iop,fop) { \
     int cond; \
-    int imm = fetchl(); /* L */\
-    imm *= getsign(); /* S */\
+    int imm = fetchl(); \
+    imm = IMML(imm); \
     TValue *v = peek(0); \
     if (ttisint(v)) { \
         cond = iop(ival(v), imm); \
@@ -923,18 +923,29 @@ void csV_concat(cs_State *C, int total) {
 #define checkGC(C)     csG_condGC(C, storepc(C), (void)0)
 
 
+/*
+** Fetch instruction.
+*/
 #if TRACE_EXEC
 #include "ctrace.h"
-#define fetch()         (csTR_tracepc(C, cl->p, pc), *pc++)
+#define fetch() \
+        check_exp(SIZE_INSTR == sizeof(Instruction), \
+                  (csTR_tracepc(C, cl->p, pc), *pc++))
 #else
-#define fetch()         (*pc++)
+#define fetch()     check_exp(SIZE_INSTR == sizeof(Instruction), *pc++)
 #endif
 
-/* fetch short instruction argument */
-#define fetchs()        (*pc++)
+/*
+** Fetch short instruction argument.
+*/
+#define fetchs()    check_exp(SIZE_ARG_S == SIZE_INSTR, *pc++)
 
-/* fetch long instruction argument */
-#define fetchl()        (cast_void(pc += SIZEARGL), get3bytes(pc - SIZEARGL))
+/*
+** Fetch long instruction argument.
+*/
+#define fetchl() \
+        check_exp(SIZE_ARG_L == sizeof(Instruction[3]), \
+                  (cast_void(pc+=SIZE_ARG_L), get3bytes(pc-SIZE_ARG_L)))
 
 
 /* get constant at index 'idx' */
@@ -1033,16 +1044,26 @@ returning:
                 vm_break;
             }
             vm_case(OP_CONSTI) {
-                int imm_i = fetchl();
-                int sign = getsign();
-                setival(s2v(C->sp.p), imm_i*sign);
+                int imm = fetchs();
+                setival(s2v(C->sp.p), IMM(imm));
+                SP(1);
+                vm_break;
+            }
+            vm_case(OP_CONSTIL) {
+                int imm = fetchl();
+                setival(s2v(C->sp.p), IMML(imm));
                 SP(1);
                 vm_break;
             }
             vm_case(OP_CONSTF) {
-                int imm_f = fetchl();
-                int sign = getsign();
-                setfval(s2v(C->sp.p), cast_num(imm_f*sign));
+                int imm = fetchs();
+                setfval(s2v(C->sp.p), cast_num(IMM(imm)));
+                SP(1);
+                vm_break;
+            }
+            vm_case(OP_CONSTFL) {
+                int imm = fetchl();
+                setfval(s2v(C->sp.p), cast_num(IMML(imm)));
                 SP(1);
                 vm_break;
             }
@@ -1348,14 +1369,12 @@ returning:
             vm_case(OP_EQI) {
                 TValue *v1 = peek(0);
                 int cond;
-                int imm_i = fetchl();
-                int sign = getsign();
+                int imm = fetchl();
                 int condexp = fetchs();
-                imm_i *= sign;
                 if (ttisint(v1))
-                    cond = (ival(v1) == imm_i);
+                    cond = (ival(v1) == IMML(imm));
                 else if (ttisflt(v1))
-                    cond = c_numeq(fval(v1), cast_num(imm_i));
+                    cond = c_numeq(fval(v1), IMML(imm));
                 else
                     cond = 0;
                 setorderres(v1, cond, condexp);
@@ -1627,7 +1646,7 @@ returning:
                 SP(-1); /* v */
                 vm_break;
             }
-            vm_case(OP_GETINDEXSTR) { /* TODO: optimize */
+            vm_case(OP_GETINDEXSTR) {
                 TValue *v = peek(0);
                 TValue *i;
                 storepc(C);
@@ -1636,7 +1655,7 @@ returning:
                 csV_get(C, v, i, TOP());
                 vm_break;
             }
-            vm_case(OP_SETINDEXSTR) { /* TODO: optimize */
+            vm_case(OP_SETINDEXSTR) {
                 TValue *v = peek(0);
                 TValue *o;
                 TValue *idx;
@@ -1648,23 +1667,48 @@ returning:
                 SP(-1); /* v */
                 vm_break;
             }
-            vm_case(OP_GETINDEXINT) { /* TODO: optimize */
+            vm_case(OP_GETINDEXINT) {
                 TValue *v = peek(0);
                 TValue i;
+                int imm;
                 storepc(C);
-                setival(&i, fetchl());
+                imm = fetchs();
+                setival(&i, IMM(imm));
                 csV_get(C, v, &i, TOP());
                 vm_break;
             }
-            vm_case(OP_SETINDEXINT) { /* TODO: optimize */
+            vm_case(OP_GETINDEXINTL) {
+                TValue *v = peek(0);
+                TValue i;
+                int imm;
+                storepc(C);
+                imm = fetchl();
+                setival(&i, IMML(imm));
+                csV_get(C, v, &i, TOP());
+                vm_break;
+            }
+            vm_case(OP_SETINDEXINT) {
                 TValue *v = peek(0);
                 TValue *o;
-                cs_Integer imm_i;
+                cs_Integer imm;
                 TValue index;
                 storepc(C);
                 o = peek(fetchl());
-                imm_i = fetchl();
-                setival(&index, imm_i);
+                imm = fetchs();
+                setival(&index, IMM(imm));
+                csV_set(C, o, &index, v);
+                SP(-1); /* v */
+                vm_break;
+            }
+            vm_case(OP_SETINDEXINTL) {
+                TValue *v = peek(0);
+                TValue *o;
+                cs_Integer imm;
+                TValue index;
+                storepc(C);
+                o = peek(fetchl());
+                imm = fetchl();
+                setival(&index, IMML(imm));
                 csV_set(C, o, &index, v);
                 SP(-1); /* v */
                 vm_break;

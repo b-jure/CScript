@@ -1,0 +1,14 @@
+/*
+** Test script file for CScript decimal integers.
+*/
+
+assert(1);
+assert(1____ == 1);
+assert(120);
+assert(981);
+assert(100_500_300 == 100500300);
+assert(100__500___300 == 100500300);
+assert(15e2 == 1500);
+assert(15E-2 == 0.15);
+assert(1E-01_2_ == 0.000000000001);
+assert(15e00001 == 150);

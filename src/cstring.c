@@ -5,6 +5,7 @@
 */
 
 
+#define cstring_c
 #define CS_CORE
 
 
@@ -21,6 +22,7 @@
 #include "cprotected.h"
 
 #include <string.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <locale.h>
@@ -297,12 +299,16 @@ void csS_sourceid(char *restrict dest, const char *src, size_t len) {
 ** ----------------------------------------------------------------------- */
 
 /* convert hex character into digit */
+c_sinline int hexvalue(int c) {
+    if (c > '9') /* hex digit? */ 
+        return (ctolower(c) - 'a') + 10;
+    else  /* decimal digit */
+        return c - '0';
+}
+
 int csS_hexvalue(int c) {
     cs_assert(cisxdigit(c));
-    if (cisdigit(c)) 
-        return c - '0';
-    else 
-        return (ctolower(c) - 'a') + 10;
+    return hexvalue(c);
 }
 
 
@@ -330,13 +336,15 @@ static const unsigned char table[] = { -1,
 ** Convert string to 'cs_Integer'.
 ** This function can convert hexadecimal, octal and decimal numerals
 ** to 'cs_Integer'. Additional conversions are possible for bases up to
-** 36, but this function is used for scanner, so it is not required.
+** 36. The conversion is exactly the same as in 'strtol' except this
+** indicates overflow through 'oflow' flag and allows for '_' digit
+** separator.
 */
 static const char *str2int(const char *s, cs_Integer *i, int *oflow) {
     const c_byte *val = table + 1;
     cs_Unsigned lim = CS_INTEGER_MIN;
     int neg = 0;
-    uint x;
+    uint32_t x;
     cs_Unsigned y;
     int base, c, empty;
     cs_assert(oflow != NULL);
@@ -358,38 +366,44 @@ static const char *str2int(const char *s, cs_Integer *i, int *oflow) {
         base = 10; /* c already has first digit */
     /* now do the conversion */
     if (base == 10) {
-        empty = !cisdigit(c);
-        for (x = 0; cisdigit(c) && x <= UINT_MAX/10-1; c = *s++)
-            x = x * 10 + ctodigit(c);
-        for (y = x; cisdigit(c) && y <= CS_UNSIGNED_MAX/10 &&
-                    10*y <= CS_UNSIGNED_MAX - ctodigit(c); c = *s++)
-            y = y * 10 + ctodigit(c);
+        if (!(empty = !cisdigit(c))) {
+            for (x=0; (cisdigit(c) || c == '_') && x <= UINT_MAX/10-1; c=*s++)
+                if (c != '_') x = x * 10 + ctodigit(c);
+            for (y=x; (cisdigit(c) || c == '_') && y <= CS_UNSIGNED_MAX/10
+                        && 10*y <= CS_UNSIGNED_MAX - ctodigit(c); c = *s++)
+                if (c != '_') y = y * 10 + ctodigit(c);
+        }
         if (!cisdigit(c)) goto done;
     } else if (!(base & (base-1))) { /* base is power of 2? (up to base 32) */
-        int bs = "\0\1\2\4\7\3\6\5"[(0x17*base)>>5&7];
-        empty = val[c] >= base;
-        for (x = 0; val[c] < base && x <= UINT_MAX/32; c = *s++)
-            x = x<<bs | val[c];
-        for (y = x; val[c] < base && y <= CS_UNSIGNED_MAX>>bs; c = *s++)
-            y = y<<bs | val[c];
+        if (!(empty = val[c] >= base)) {
+            int bs = "\0\1\2\4\7\3\6\5"[(0x17*base)>>5&7];
+            for (x=0; (c == '_' || val[c] < base) && x <= UINT_MAX/32; c=*s++)
+                if (c != '_') x = x<<bs | val[c];
+            for (y=x; (c == '_' || val[c] < base) && y <= CS_UNSIGNED_MAX>>bs; c=*s++)
+                if (c != '_') y = y<<bs | val[c];
+        }
     } else { /* other bases (up to base 36) */
-        empty = val[c] >= base;
-        for (x = 0; val[c] < base && x <= UINT_MAX/36-1; c = *s++)
-            x = x * base + val[c];
-        for (y = x; val[c] < base && y <= CS_UNSIGNED_MAX/base &&
-                    base*y <= CS_UNSIGNED_MAX-val[c]; c = *s++)
-            y = y * base + val[c];
+        if (!(empty = val[c] >= base)) {
+            for (x=0; (c == '_' || val[c] < base) && x <= UINT_MAX/36-1; c=*s++)
+                if (c != '_') x = x * base + val[c];
+            for (y=x; (c == '_' || val[c] < base) && y <= CS_UNSIGNED_MAX/base
+                       && base*y <= CS_UNSIGNED_MAX-val[c]; c=*s++)
+                if (c != '_') y = y * base + val[c];
+        }
     }
     if (val[c] < base) { /* numeral value too large? */
-        for (; val[c] < base; c = *s++); /* skip rest of the digits... */
+        for (; val[c] < base; c=*s++){/* skip rest of the digits... */}
+        errno = ERANGE;
         y = CS_INTEGER_MIN; /* ...and indicate numeral is too large */
     }
 done:
     if (y >= lim) { /* potential overflow? */
         if (!neg) { /* positive value overflows? */
+            errno = ERANGE;
             *oflow = 1; /* propagate overflow */
             *i = c_castU2S(lim - 1); /* *i = CS_INTEGER_MAX */
         } else if (y > lim) { /* negative value underflows? */
+            errno = ERANGE;
             *oflow = -1; /* propagate underflow */
             *i = c_castU2S(lim); /* *i = CS_INTEGER_MIN */
         } else /* otherwise y is negative value equal to lim */
@@ -402,39 +416,472 @@ done:
 }
 
 
+/*
+** Modified implementation of 'strtod' from musl libc.
+*/
+#if !defined(cs_str2number) && defined(LLONG_MAX) && LLONG_MAX==CS_INTEGER_MAX
+
+#include <float.h>
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+
+#define LD_B1B_DIG 2
+#define LD_B1B_MAX 9007199, 254740991
+#define KMAX 128
+
+#elif LDBL_MANT_DIG == 64 && LDBL_MAX_EXP == 16384
+
+#define LD_B1B_DIG 3
+#define LD_B1B_MAX 18, 446744073, 709551615
+#define KMAX 2048
+
+#elif LDBL_MANT_DIG == 113 && LDBL_MAX_EXP == 16384
+
+#define LD_B1B_DIG 4
+#define LD_B1B_MAX 10384593, 717069655, 257060992, 658440191
+#define KMAX 2048
+
+#else
+#error Unsupported long double representation
+#endif
+
+#define MASK (KMAX-1)
+
+
+static cs_Integer scanexp(const char **nptr)
+{
+    const char *p = *nptr;
+    int x;
+    cs_Integer y;
+    int neg = 0;
+    int c = *p++;
+    if (c == '+' || c == '-') {
+        neg = (c == '-');
+        c = *p++;
+    }
+    if (!cisdigit(c)) { /* missing a digit? */
+        *nptr = --p;
+        return CS_INTEGER_MIN;
+    }
+    for (x=0; (cisdigit(c) || c == '_') && x < INT_MAX/10; c=*p++)
+        if (c != '_') x = 10*x + ctodigit(c);
+    for (y=x; (cisdigit(c) || c == '_') && y < CS_INTEGER_MAX/100; c=*p++)
+        if (c != '_') y = 10*y + c-'0';
+    for (; cisdigit(c); c=*p++);
+    *nptr = --p;
+    return (neg) ? -y : y;
+}
+
+
+static long double decfloat(const char **nptr, int sign, int cradix,
+                            int bits, int emin) {
+    uint32_t x[KMAX];
+    static const uint32_t th[] = { LD_B1B_MAX };
+    const char *p = *nptr;
+    int i, j, k, a, z;
+    cs_Integer lrp=0, dc=0;
+    cs_Integer e10=0;
+    int lnz = 0;
+    int gotdig = 0, gotrad = 0, gotzero = 0;
+    int emax = -emin-bits+3;
+    int denormal = 0;
+    int rp;
+    int e2;
+    long double frac=0;
+    long double bias=0;
+    long double y;
+    int c = *p++;
+    static const int p10s[] = { /* power of 10s */
+        10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000
+    };
+    j=0; k=0;
+    if (c == '0') { /* have at least one leading zero? */
+        /* skip them and the separators */
+        gotzero = gotdig = 1;
+        while (c == '0' && c == '_') c = *p++;
+    }
+    if (c == cradix) { /* '.' */
+        gotrad = 1;
+        for (c=*p++; c == '0'; c=*p++) { gotdig=1; lrp--; }
+    }
+    if (!gotrad && c == '_' && !gotzero) { /* separator before digit? */
+        *nptr = --p;
+        return 0; /* error */
+    }
+    x[0] = 0;
+    for (; cisdigit(c) || (c == '_' && !gotrad) || c == cradix; c=*p++) {
+        if (c == '_') continue; /* skip separator */
+        if (c == cradix) {
+            if (gotrad) break;
+            gotrad = 1;
+            lrp = dc;
+        } else if (k < KMAX-3) {
+            dc++;
+            if (c != '0') lnz = dc;
+            if (j) x[k] = x[k]*10 + ctodigit(c);
+            else x[k] = ctodigit(c);
+            if (++j==9) {
+                k++;
+                j=0;
+            }
+            gotdig=1;
+        } else {
+            dc++;
+            if (c != '0') {
+                lnz = (KMAX-4)*9;
+                x[KMAX-4] |= 1;
+            }
+        }
+    }
+    *nptr = --p;
+    if (!gotrad) lrp = dc;
+    if (gotdig && ctolower(c) == 'e') {
+        *nptr = ++p; /* go past 'e|E' */
+        e10 = scanexp(nptr);
+        if (e10 == LLONG_MIN)
+            return 0; /* error */
+        lrp += e10;
+    } else if (!gotdig) { /* not a single digit? */
+        errno = EINVAL;
+        return 0; /* error */
+    }
+    /* handle zero specially to avoid nasty special cases later */
+    if (!x[0]) return sign * 0.0;
+    /* optimize small integers (w/no exponent) and over/under-flow */
+    if (lrp == dc && dc < 10 && (bits > 30 || x[0]>>bits == 0))
+        return sign * (long double)x[0];
+    if (lrp > -emin/2) { /* overflow? */
+        errno = ERANGE;
+        return sign * LDBL_MAX * LDBL_MAX;
+    } else if (lrp < emin-2*LDBL_MANT_DIG) { /* underflow? */
+        errno = ERANGE;
+        return sign * LDBL_MIN * LDBL_MIN;
+    }
+    /* align incomplete final B1B digit */
+    if (j) {
+        for (; j < 9; j++) x[k] *= 10;
+        k++;
+        j=0;
+    }
+    a = 0;
+    z = k;
+    e2 = 0;
+    rp = lrp;
+    /* optimize small to mid-size integers (even in exp. notation) */
+    if (lnz < 9 && lnz <= rp && rp < 18) {
+        if (rp == 9) return sign * (long double)x[0];
+        if (rp < 9) return sign * (long double)x[0] / p10s[8-rp];
+        int bitlim = bits-3*(int)(rp-9);
+        if (bitlim > 30 || x[0]>>bitlim == 0)
+            return sign * (long double)x[0] * p10s[rp-10];
+    }
+    /* drop trailing zeros */
+    for (; !x[z-1]; z--);
+    /* align radix point to B1B digit boundary */
+    if (rp % 9) {
+        int rpm9 = (rp >= 0) ? rp%9 : rp%9+9;
+        int p10 = p10s[8-rpm9];
+        uint32_t carry = 0;
+        for (k=a; k!=z; k++) {
+            uint32_t tmp = x[k] % p10;
+            x[k] = x[k]/p10 + carry;
+            carry = 1000000000/p10 * tmp;
+            if (k==a && !x[k]) {
+                a = ((a+1) & MASK);
+                rp -= 9;
+            }
+        }
+        if (carry) x[z++] = carry;
+        rp += 9-rpm9;
+    }
+    /* upscale until desired number of bits are left of radix point */
+    while (rp < 9*LD_B1B_DIG || (rp == 9*LD_B1B_DIG && x[a] < th[0])) {
+        uint32_t carry = 0;
+        e2 -= 29;
+        for (k=((z-1) & MASK); ; k=((k-1) & MASK)) {
+            uint64_t tmp = ((uint64_t)x[k] << 29) + carry;
+            if (tmp > 1000000000) {
+                carry = tmp / 1000000000;
+                x[k] = tmp % 1000000000;
+            } else {
+                carry = 0;
+                x[k] = tmp;
+            }
+            if (k == ((z-1) & MASK) && k != a && !x[k]) z = k;
+            if (k == a) break;
+        }
+        if (carry) {
+            rp += 9;
+            a = ((a-1) & MASK);
+            if (a == z) {
+                z = ((z-1) & MASK);
+                x[(z-1) & MASK] |= x[z];
+            }
+            x[a] = carry;
+        }
+    }
+    /* downscale until exactly number of bits are left of radix point */
+    for (;;) {
+        uint32_t carry = 0;
+        int sh = 1;
+        for (i=0; i < LD_B1B_DIG; i++) {
+            k = ((a+i) & MASK);
+            if (k == z || x[k] < th[i]) {
+                i = LD_B1B_DIG;
+                break;
+            }
+            if (x[(a+i) & MASK] > th[i]) break;
+        }
+        if (i == LD_B1B_DIG && rp == 9*LD_B1B_DIG) break;
+        if (rp > 9+9*LD_B1B_DIG) sh = 9;
+        e2 += sh;
+        for (k=a; k != z; k=((k+1) & MASK)) {
+            uint32_t tmp = x[k] & ((1<<sh)-1);
+            x[k] = (x[k]>>sh) + carry;
+            carry = (1000000000>>sh) * tmp;
+            if (k == a && !x[k]) {
+                a = ((a+1) & MASK);
+                i--;
+                rp -= 9;
+            }
+        }
+        if (carry) {
+            if (((z+1) & MASK) != a) {
+                x[z] = carry;
+                z = ((z+1) & MASK);
+            } else x[(z-1) & MASK] |= 1;
+        }
+    }
+    /* assemble desired bits into floating point variable */
+    for (y=i=0; i < LD_B1B_DIG; i++) {
+        if (((a+i) & MASK) == z) x[(z=((z+1) & MASK))-1] = 0;
+        y = 1000000000.0L * y + x[(a+i) & MASK];
+    }
+    y *= sign;
+    /* limit precision for denormal results */
+    if (bits > LDBL_MANT_DIG+e2-emin) {
+        bits = LDBL_MANT_DIG+e2-emin;
+        if (bits < 0) bits=0;
+        denormal = 1;
+    }
+    /* calculate bias term to force rounding, move out lower bits */
+    if (bits < LDBL_MANT_DIG) {
+        bias = copysignl(scalbn(1, 2*LDBL_MANT_DIG-bits-1), y);
+        frac = fmodl(y, scalbn(1, LDBL_MANT_DIG-bits));
+        y -= frac;
+        y += bias;
+    }
+    /* Process tail of decimal input so it can affect rounding */
+    if (((a+i) & MASK) != z) {
+        uint32_t t = x[(a+i) & MASK];
+        if (t < 500000000 && (t || ((a+i+1) & MASK) != z))
+            frac += 0.25*sign;
+        else if (t > 500000000)
+            frac += 0.75*sign;
+        else if (t == 500000000) {
+            if (((a+i+1) & MASK) == z)
+                frac += 0.5*sign;
+            else
+                frac += 0.75*sign;
+        }
+        if (LDBL_MANT_DIG-bits >= 2 && !fmodl(frac, 1))
+            frac++;
+    }
+    y += frac;
+    y -= bias;
+    if (((e2+LDBL_MANT_DIG) & INT_MAX) > emax-5) {
+        if (fabsl(y) >= 2/LDBL_EPSILON) {
+            if (denormal && bits == LDBL_MANT_DIG+e2-emin)
+                denormal = 0;
+            y *= 0.5;
+            e2++;
+        }
+        if (e2+LDBL_MANT_DIG > emax || (denormal && frac))
+            errno = ERANGE;
+    }
+    return scalbnl(y, e2);
+}
+
+static cs_Number hexfloat(const char **nptr, int sign, int cradix,
+                          int bits, int emin) {
+    const char *p = *nptr;
+    uint32_t x = 0;
+    long double y = 0;
+    long double scale = 1;
+    long double bias = 0;
+    int gottail = 0, gotrad = 0, gotdig = 0, gotzero = 0;
+    cs_Integer rp = 0;
+    cs_Integer dc = 0;
+    cs_Integer e2 = 0;
+    int c = *p++;
+    int d;
+    if (c == '0') { /* at least one leading zero? */
+        gotzero = gotdig = 1;
+        /* skip rest of the leading zeros and any separators */
+        for (; c == '_' || c == '0'; c = *p++) gotdig = 1;
+    }
+    if (c == cradix) { /* '.' */
+        gotrad = 1;
+        c = *p++;
+        if (c == '0') { /* at least one leading zero? */
+            gotdig = 1;
+            /* count zeros after the radix point before significand */
+            for (; c == '_' || c == '0'; c = *p++)
+                rp -= (c != '_');
+        }
+    }
+    if (!gotrad && c == '_' && !gotzero) { /* separator before digit? */
+        *nptr = --p;
+        return 0; /* error */
+    }
+    for (; cisxdigit(c) || (c == '_' && !gotrad) || c == cradix; c = *p++) {
+        if (c == '_') continue;
+        if (c == cradix) { /* '.' */
+            if (gotrad) break;
+            rp = dc;
+            gotrad = 1;
+        } else {
+            gotdig = 1;
+            d = hexvalue(c);
+            if (dc < 8) { /* have less than 8 digits total? */
+                x = x*16 + d;
+            } else if (dc < LDBL_MANT_DIG/4+1) { /* have free bits? */
+                y += d*(scale /= 16);
+            } else if (d && !gottail) {
+                y += 0.5*scale;
+                gottail = 1;
+            }
+            dc++;
+        }
+    }
+    *nptr = --p;
+    if (!gotdig) return sign * 0.0;
+    if (!gotrad) rp = dc;
+    while (dc < 8) { x *= 16; dc++; }
+    if (ctolower(c) == 'p') { /* have exponent p|P? */
+        *nptr = ++p; /* go past 'p|P' */
+        e2 = scanexp(nptr);
+        if (e2 == CS_INTEGER_MIN) /* exponent has no digits? */
+            return 0;
+    } /* else no exponent */
+    e2 += 4*rp - 32;
+    if (!x) return sign * 0.0;
+    if (e2 > -emin) { /* overflow? */
+        errno = ERANGE;
+        return sign * LDBL_MAX * LDBL_MAX;
+    }
+    if (e2 < emin-2*LDBL_MANT_DIG) { /* underflow? */
+        errno = ERANGE;
+        return sign * LDBL_MIN * LDBL_MIN;
+    }
+    while (x < 0x80000000) {
+        if (y >= 0.5) {
+            x += x + 1;
+            y += y - 1;
+        } else {
+            x += x;
+            y += y;
+        }
+        e2--;
+    }
+    if (bits > 32+e2-emin) {
+        bits = 32+e2-emin;
+        if (bits < 0) bits=0;
+    }
+    if (bits < LDBL_MANT_DIG)
+        bias = copysignl(scalbn(1, 32+LDBL_MANT_DIG-bits-1), sign);
+    if (bits < 32 && y && !(x&1)) { x++; y=0; }
+    y = bias + sign*(cs_Integer)x + sign*y;
+    y -= bias;
+    if (!y) errno = ERANGE;
+    return scalbnl(y, e2);
+}
+
+#define FLTSCAN_BITS    cs_floatatt(MANT_DIG)
+#define FLTSCAN_EMIN    cs_floatatt(MIN_EXP)
+
+static long double floatscan(const char **nptr, int cradix) {
+    const char *p = *nptr;
+    int bits = FLTSCAN_BITS;
+    int emin = FLTSCAN_EMIN - bits;
+    int sign = 1;
+    int i;
+    int c = *p++;
+    while (cisspace(c)) c = *p++; /* skip leading space */
+    if (c == '+' || c == '-') { /* have sign? */
+        sign -= 2*(c == '-');
+        c = *p++;
+    }
+    for (i = 0; i < 8 && c == "infinity"[i]; i++)
+        c = *p++;
+    if (i == 3 || i == 8) { /* "inf" or "infinity"? */
+        *nptr = --p;
+        return sign * INFINITY;
+    }
+    if (i) { /* incomplete "inf" or "infinity"? */
+        errno = EINVAL;
+        *nptr = --p;
+        return 0;
+    } else if (c == '0') { /* leading '0'? */
+        c = *p++; /* skip it */
+        if (ctolower(c) == 'x') { /* hex prefix 0x|0X? */
+            *nptr = p;
+            return hexfloat(nptr, sign, cradix, bits, emin);
+        }
+    }
+    *nptr = --p;
+    return decfloat(nptr, sign, cradix, bits, emin);
+}
+
+static long double cs_str2number(const char *nptr, const char **endptr) {
+    long double n;
+    const char *p = nptr;
+    cs_assert(nptr);
+    n = floatscan(&p, cs_getlocaledecpoint());
+    if (endptr) *endptr = p;
+    return n;
+}
+
+#elif !defined(cs_str2number)
+#error Missing supported internal implementation of 'cs_str2number'
+#endif
+
+
 #define converr(eptr)    (*(eptr) != '\0')
 
-static const char *str2flt(const char *s, cs_Number *n, int *oflow) {
-    char *eptr;
+static const char *str2flt(const char *s, long double *n, int *oflow) {
+    const char *eptr = NULL; /* to avoid warnings */
     cs_assert(oflow != NULL);
     *oflow = 0;
+    errno = 0;
     *n = cs_str2number(s, &eptr);
     if (eptr == s) { /* nothing was converted? */
         return NULL;
-    } else if (c_unlikely(oflow && converr(eptr))) {
-        /* have overflow flag, converted some characters and error occurred */
-        if (*n == CS_HUGEVAL || *n == -CS_HUGEVAL) *oflow = 1; /* overflow */
-        else if (*n == CS_NUMBER_MIN) *oflow = -1; /* underflow */
-        /* otherwise no (under)overflow, but still have conversion error */
+    } else if (c_unlikely(errno == ERANGE)) { /* (under)overflow? */
+        if (*n == HUGE_VALL || *n == -HUGE_VALL)
+            *oflow = 1; /* overflow */
+        else if (*n == LDBL_MIN)
+            *oflow = -1; /* underflow */
     }
     while (cisspace(*eptr)) eptr++; /* skip trailing spaces */
-    return (!converr(eptr) ? eptr : NULL);
+    return (*eptr == '\0') ? eptr : NULL;
 }
 
 
 /* convert string to 'cs_Number' or 'cs_Integer' */
 size_t csS_tonum(const char *s, TValue *o, int *poflow) {
     cs_Integer i;
-    cs_Number n;
+    long double n;
     const char *e;
     int oflow = 0;
     if ((e = str2int(s, &i, &oflow)) != NULL) {
         setival(o, i);
     } else if ((e = str2flt(s, &n, &oflow)) != NULL) {
-        setfval(o, n);
+        setfval(o, cast_num(n));
     } else /* both conversions failed */
         return 0;
-    if (poflow) *poflow = oflow; /* propagate overflow */
+    if (poflow) /* had (under)overflow? */
+        *poflow = oflow; /* propagate it */
     return (e - s) + 1; /* return size */
 }
 

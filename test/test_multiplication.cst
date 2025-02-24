@@ -1,0 +1,12 @@
+/*
+** Test script file for CScript multiplication operator.
+*/
+
+assert(2*2 == 4);           // (folded)
+assert(2*3 == 6);           // (folded)
+assert(3*2 == 6);           // (folded)
+assert(4*2*2 == 16);        // (folded)
+a = 4*2*2;                  // (folded)
+assert(a == 16);
+assert(a*2 == 32);          // (not folded)
+assert(2*a == 32);          // (not folded)

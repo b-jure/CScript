@@ -1,0 +1,15 @@
+loop break;
+{
+    local x = 2;
+    assert(x == 2);
+    loop {
+        if (x < 0) break;
+        assert(x >= 0);
+        x = x - 1;
+    }
+    assert(x < 0);
+    assert(x == -1);
+}
+assert(x == nil);
+loop { break; }
+loop return;

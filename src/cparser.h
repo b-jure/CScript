@@ -232,7 +232,8 @@ typedef struct FunctionState {
     c_byte iwthabs;     /* instructions issued since last absolute line info */
     c_byte needclose;   /* true if needs to close upvalues before returning */
     c_byte lastwasret;  /* last statement is 'return' */
-    c_byte lastisend;   /* true if last statement ends control flow */
+    c_byte lastisend;   /* true if last statement ends control flow
+                         * (1==return, 2==break, 3==continue)*/
 } FunctionState;
 
 

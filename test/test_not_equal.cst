@@ -1,0 +1,25 @@
+/*
+** Test script file for CScript not-equal-to operator.
+*/
+
+assert(5 != 2);
+assert((5 != 5) != true);
+assert("Dota" != "LoL");
+assert(("Dota" != "Dota") != true);
+assert((5.12 != 5.12) != true);
+assert(5.12 != 5.69);
+assert((true != true) != true);
+assert(true != false);
+assert(5 != true);
+assert(5 != false);
+assert("Dota" != true);
+assert("Dota" != false);
+assert(5.12 != true);
+assert(5.12 != false);
+assert(4 != 5.12);
+assert((4 != 4) != true);
+assert(5.12 != 4);
+a = 5;
+assert(4 != a);
+assert(a != 4);
+assert((a != a) != true);

@@ -1,0 +1,49 @@
+if (false)
+    assert(false);
+
+if (69 < 420)
+    assert(true);
+
+if (true)
+    assert(true);
+
+if (420 < 69)
+    assert(false);
+else
+    assert(true);
+
+if (420 < 69)
+    assert(false);
+else if (true)
+    assert(true);
+
+if (420 < 69)
+    assert(false);
+else if (false)
+    assert(false);
+else if (true)
+    assert(true);
+
+if (420 < 69)
+    assert(false);
+else if (false)
+    assert(false);
+else if (69 < 69)
+    assert(false);
+else if (69 < 420)
+    assert(true);
+else
+    assert(false);
+
+if (420 < 69)
+    assert(false);
+else if (false)
+    assert(false);
+else if (69 < 69)
+    assert(false);
+else if (true)
+    assert(true);
+else if (true)
+    assert(false);
+else
+    assert(false);

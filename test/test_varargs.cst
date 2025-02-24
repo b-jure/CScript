@@ -1,0 +1,5 @@
+/*
+** Test script file for CScript varargs.
+*/
+
+print(...);

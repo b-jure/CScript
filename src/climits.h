@@ -216,13 +216,6 @@ typedef c_byte Instruction;
 
 
 
-/* @c_abs - get absolute 'x' value. */
-#ifndef c_abs
-#define c_abs(x)    ((x) < 0 ? -(x) : (x))
-#endif
-
-
-
 /*
 ** @UNUSED - marks variable unused to avoid compiler
 ** warnings.

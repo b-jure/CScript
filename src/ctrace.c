@@ -20,10 +20,6 @@
 #include "cstring.h"
 
 
-#define getIMM(pc, i) \
-    ((i) = GETARG_L(pc, 0), (i) *= (GETARG_S(pc, SIZEARGL) - 1))
-
-
 #define TABSZ   3
 #define postab(e) \
     { e; for(int i_ = 0; i_ < TABSZ; i_++) putchar(' '); }
@@ -46,21 +42,21 @@ static void endline(void) {
 static int traceOp(OpCode op) {
     postab(printf("%-12s", getOpName(op)));
     fflush(stdout);
-    return SIZEINSTR;
+    return SIZE_INSTR;
 }
 
 
 static int traceS(int s) {
     postab(printf("ArgS=%-8d", s));
     fflush(stdout);
-    return SIZEARGS;
+    return SIZE_ARG_S;
 }
 
 
 static int traceL(const Instruction *pc) {
     postab(printf("ArgL=%-8d", get3bytes(pc)));
     fflush(stdout);
-    return SIZEARGL;
+    return SIZE_ARG_L;
 }
 
 
@@ -68,7 +64,7 @@ static int traceI(const Proto *p, const Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
     endline();
-    return SIZEINSTR;
+    return SIZE_INSTR;
 }
 
 
@@ -105,17 +101,6 @@ static void traceILS(const Proto *p, const Instruction *pc) {
     startline(p, pc);
     pc += traceOp(op);
     pc += traceL(pc);
-    traceS(*pc);
-    endline();
-}
-
-
-static void traceILSS(const Proto *p, const Instruction *pc) {
-    OpCode op = *pc;
-    startline(p, pc);
-    pc += traceOp(op);
-    pc += traceL(pc);
-    pc += traceS(*pc);
     traceS(*pc);
     endline();
 }
@@ -164,7 +149,6 @@ void csTR_tracepc(cs_State *C, const Proto *p, const Instruction *pc) {
         case FormatISS: traceISS(p, pc); break;
         case FormatIL: traceIL(p, pc); break;
         case FormatILS: traceILS(p, pc); break;
-        case FormatILSS: traceILSS(p, pc); break;
         case FormatILL: traceILL(p, pc); break;
         case FormatILLS: traceILLS(p, pc); break;
         case FormatILLL: traceILLL(p, pc); break;
@@ -284,26 +268,26 @@ static void unasmK(const Proto *p, Instruction *pc) {
 }
 
 
-static void unasmIMMint(const Proto *p, Instruction *pc) {
-    TValue aux;
-    cs_Integer i;
+static void traceImmediate(Instruction *pc, int off, int l) {
+    int imm = (l) ? GETARG_L(pc, off) : GETARG_S(pc, off);
+    imm = (l) ? IMML(imm) : IMM(imm);
+    postab(printf("IMM%s=%d", (l) ? "L" : "", imm));
+    fflush(stdout);
+}
+
+
+static void unasmIMMint(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
-    getIMM(pc, i);
-    setival(&aux, i);
-    postab(traceNumber(&aux));
+    traceImmediate(pc, 0, l);
     endline();
 }
 
 
-static void unasmIMMflt(const Proto *p, Instruction *pc) {
-    TValue aux;
-    cs_Number n;
+static void unasmIMMflt(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
-    getIMM(pc, n);
-    setfval(&aux, n);
-    postab(traceNumber(&aux));
+    traceImmediate(pc, 0, l);
     endline();
 }
 
@@ -328,7 +312,7 @@ static void unasmEQK(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
     traceK(p, GETARG_L(pc, 0));
-    setival(&aux, GETARG_S(pc, SIZEARGL));
+    setival(&aux, GETARG_S(pc, SIZE_ARG_L));
     postab(traceNumber(&aux));
     endline();
 }
@@ -341,26 +325,18 @@ static void traceCond(int cond) {
 
 
 static void unasmEQI(const Proto *p, Instruction *pc) {
-    TValue aux;
-    cs_Integer i;
     startline(p, pc);
     traceOp(*pc);
-    getIMM(pc, i);
-    setival(&aux, i);
-    postab(traceNumber(&aux));
-    traceCond(GETARG_S(pc, SIZEARGL));
+    traceImmediate(pc, 0, 1);
+    traceCond(GETARG_S(pc, SIZE_ARG_L));
     endline();
 }
 
 
 static void unasmIMMord(const Proto *p, Instruction *pc) {
-    TValue aux;
-    cs_Integer i;
     startline(p, pc);
     traceOp(*pc);
-    getIMM(pc, i);
-    setival(&aux, i);
-    postab(traceNumber(&aux));
+    traceImmediate(pc, 0, 1);
     endline();
 }
 
@@ -381,6 +357,7 @@ static void unasmVarargPrep(const Proto *p, Instruction *pc) {
 
 static void unasmS(const Proto *p, Instruction *pc) {
     startline(p, pc);
+    traceOp(*pc);
     traceS(GETARG_S(pc, 0));
     endline();
 }
@@ -432,7 +409,16 @@ static void unasmIndexedSet(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
     traceStackSlot(GETARG_L(pc, 0));
-    traceK(p, GETARG_L(pc, 1));
+    traceImmediate(pc, 1, 0);
+    endline();
+}
+
+
+static void unasmIndexedSetL(const Proto *p, Instruction *pc) {
+    startline(p, pc);
+    traceOp(*pc);
+    traceStackSlot(GETARG_L(pc, 0));
+    traceImmediate(pc, 1, 1);
     endline();
 }
 
@@ -532,7 +518,7 @@ static void unasmRet(const Proto *p, Instruction *pc) {
     traceOp(*pc);
     traceStackSlot(GETARG_L(pc, 0));
     traceNres(GETARG_L(pc, 1) - 1);
-    traceClose(GETARG_S(pc, (2*SIZEARGL)));
+    traceClose(GETARG_S(pc, (2*SIZE_ARG_L)));
     endline();
 }
 
@@ -541,6 +527,14 @@ static void unasmLoad(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
     traceStackSlot(GETARG_L(pc, 0));
+    endline();
+}
+
+
+static void unasmIndexedGet(const Proto *p, Instruction *pc, int l) {
+    startline(p, pc);
+    traceOp(*pc);
+    traceImmediate(pc, 0, l);
     endline();
 }
 
@@ -583,9 +577,17 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmLoad(p, pc);
                 break;
             }
+            case OP_GETINDEXINT: {
+                unasmIndexedGet(p, pc, 0);
+                break;
+            }
+            case OP_GETINDEXINTL: {
+                unasmIndexedGet(p, pc, 1);
+                break;
+            }
             case OP_NILN: case OP_VARARG: case OP_CLOSURE:
             case OP_CLOSE: case OP_TBC: case OP_CONCAT:
-            case OP_GETINDEXINT: case OP_SETINDEX: {
+            case OP_SETINDEX: {
                 unasmL(p, pc);
                 break;
             }
@@ -601,7 +603,7 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
             case OP_DIVI: case OP_MODI: case OP_POWI:
             case OP_BSHLI: case OP_BSHRI: case OP_BANDI:
             case OP_BORI: case OP_BXORI: {
-                unasmIMMint(p, pc);
+                unasmIMMint(p, pc, 1);
                 break;
             }
             case OP_NEWCLASS: case OP_NEWARRAY: case OP_NEWTABLE: {
@@ -632,8 +634,12 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmLL(p, pc);
                 break;
             }
-            case OP_SETINDEXINT: case OP_SETPROPERTY: case OP_SETINDEXSTR: {
+            case OP_SETINDEXINT: {
                 unasmIndexedSet(p, pc);
+                break;
+            }
+            case OP_SETINDEXINTL: case OP_SETPROPERTY: case OP_SETINDEXSTR: {
+                unasmIndexedSetL(p, pc);
                 break;
             }
             case OP_TEST: case OP_TESTORPOP:
@@ -645,10 +651,12 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmMM(C, p, pc);
                 break;
             }
+            case OP_CONSTI: unasmIMMint(p, pc, 0); break;
+            case OP_CONSTIL: unasmIMMint(p, pc, 1); break;
+            case OP_CONSTF: unasmIMMflt(p, pc, 0); break;
+            case OP_CONSTFL: unasmIMMflt(p, pc, 1); break;
             case OP_FORLOOP: unasmLLL(p, pc); break;
             case OP_CONST: unasmK(p, pc); break;
-            case OP_CONSTI: unasmIMMint(p, pc); break;
-            case OP_CONSTF: unasmIMMflt(p, pc); break;
             case OP_BJMP: unasmBreakJmp(p, pc); break;
             case OP_EQK: unasmEQK(p, pc); break;
             case OP_EQI: unasmEQI(p, pc); break;

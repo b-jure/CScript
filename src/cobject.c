@@ -5,6 +5,7 @@
 */
 
 
+#define cobject_c
 #define CS_CORE
 
 

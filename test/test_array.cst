@@ -1,0 +1,39 @@
+/*
+** Test script file for CScript arrays.
+*/
+
+a = [];
+assert(a);
+# set some indices
+a[0] = 1;
+a[1] = 1;
+a[2] = 1;
+assert(a[0] == 1);
+assert(a[1] == 1);
+assert(a[1] == 1);
+# set indices but create holes
+a[4] = 2;
+a[7] = 2;
+a[9] = 2;
+assert(a[3] == nil);
+assert(a[4] == 2);
+assert(a[5] == nil);
+assert(a[6] == nil);
+assert(a[7] == 2);
+assert(a[8] == nil);
+assert(a[9] == 2);
+# new array from constructor
+a = [
+    15,
+    15.2,
+    13,
+    [69, 69, 69],
+];
+assert(a[0] == 15);
+assert(a[1] == 15.2);
+assert(a[2] == 13);
+assert(a[3][0] == 69);
+assert(a[3][1] == 69);
+assert(a[3][2] == 69);
+assert(a[3][3] == nil);
+assert(a[4] == nil); // out of bounds access

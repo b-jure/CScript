@@ -1,0 +1,36 @@
+/*
+** Test script file for CScript functions.
+*/
+
+local a = fn(x, y, ...) {
+    return ...;
+};
+assert(a);
+assert(a(5) == nil);
+assert(a(5, 2) == nil);
+assert(a(5, 2, 7) == 7);
+a = fn() {
+    assert(a);
+    return a;
+};
+assert(a());
+a = 69;
+a = fn() {
+    local b = fn() {
+        assert(typeof(a) == "function");
+    };
+    return b;
+};
+assert(a);
+a = a();
+assert(typeof(a) == "function");
+assert(a() == nil);
+a = fn() {
+    local b = "Hello, World";
+    return fn() {
+        assert(b == "Hello, World");
+    };
+};
+a = a();
+assert(typeof(a) == "function");
+a();

@@ -1,0 +1,22 @@
+/*
+** Test script file for CScript classes and instances.
+*/
+
+a = {};
+assert(typeof(a) == "table");
+a.b = class {
+    fn name() {
+        return "Class";
+    }
+};
+assert(typeof(a.b) == "class");
+a = class inherits a.b {
+    fn myname() {
+        return "Sub" .. super.name();
+    }
+};
+assert(typeof(a) == "class");
+a = a();
+assert(typeof(a) == "instance");
+assert(a.name() == "Class");
+assert(a.myname() == "SubClass");

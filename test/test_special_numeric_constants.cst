@@ -1,0 +1,12 @@
+assert(typeof(inf) == "number");
+assert(typeof(infinity) == "number");
+assert(inf == inf);
+assert(-inf == -inf);
+assert(inf != -inf);
+assert(infinity == infinity);
+assert(-infinity == -infinity);
+assert(-infinity != infinity);
+assert(infinity == inf);
+assert(-infinity == -inf);
+assert(-infinity != inf);
+assert(infinity != -inf);

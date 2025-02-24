@@ -1,0 +1,22 @@
+/*
+** Test script file for CScript decimal floats.
+*/
+
+assert(1.0 == 1);
+assert(1000. == 1000);
+assert(3.14159 == 314159e-5);
+assert(.05 == 0.05);
+assert(.0005 == 5e-4);
+assert(1e0 == 1);
+assert(1.0000e0 == 1);
+assert(100e1 == 1000);
+assert(100e+1 == 1000);
+assert(100E+1 == 1000);
+assert(1e3 == 1000);
+assert(100__00e-1 == 1000);
+assert(3.14159e0 == 3.14159);
+assert(5e-2 == 0.05);
+assert(.0005e+2 == 0.05);
+assert(5E-2 == 0.05);
+assert(.0005E2 == 0.05);
+assert(.05e-2_ == 0.0005);
