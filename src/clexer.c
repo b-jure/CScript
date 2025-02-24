@@ -409,20 +409,44 @@ static void read_string(Lexer *lx, Literal *k) {
 
 /* reads a literal character */
 static int read_char(Lexer *lx, Literal *k) {
-    c_byte c;
+    int c;
     save_and_advance(lx); /* skip ' */
-    if (c_unlikely(lx->c == '\''))
-        lexerror(lx, "missing value of the character constant", TK_INT);
-    else if (lx->c == '\\') { /* escape char? */
-        save_and_advance(lx);
-        switch (lx->c) {
-
+    switch (lx->c) {
+        case CSEOF:
+            lexerror(lx, "unterminated character constant", TK_EOS);
+            break; /* to avoid warnings */
+        case '\r': case '\n':
+            lexerror(lx, "unterminated character constant", TK_INT);
+        case '\\': {
+            save_and_advance(lx); /* keep '\\' for error messages */
+            switch (lx->c) {
+                case 'a': c = '\a'; break;
+                case 'b': c = '\b'; break;
+                case 't': c = '\t'; break;
+                case 'n': c = '\n'; break;
+                case 'v': c = '\v'; break;
+                case 'f': c = '\f'; break;
+                case 'r': c = '\r'; break;
+                case 'x': c = read_hexesc(lx); break;
+                case '\"': case '\'': case '\\':
+                    c = lx->c; break;
+                default: { /* error */
+                    checkcond(lx, 0, "invalid escape sequence");
+                    return 0; /* unreachable; to avoid warnings */
+                }
+            }
+            csR_buffpop(lx->buff);
+            break;
+        }
+        default: {
+            c = cast_byte(lx->c);
+            break;
         }
     }
-    c = cast_byte(lx->c);
-    save_and_advance(lx);
+    savec(lx, c);
+    advance(lx);
     if (c_unlikely(lx->c != '\''))
-        lexerror(lx, "too large character constant", TK_INT);
+        lexerror(lx, "malformed character constant", TK_INT);
     advance(lx);
     k->i = c;
     return TK_INT;
