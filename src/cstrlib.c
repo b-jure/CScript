@@ -29,36 +29,7 @@
         (sizeof(size_t) < sizeof(int) ? (size_t)INT_MAX : MAX_SIZET)
 
 
-#define cast_uchar(c)   ((unsigned char)(c))
-
-
-/*
-** Maximum size of each format specification (such as "%-099.99d"):
-** Initial '%', flags (up to 5), width (2), period, precision (2),
-** length modifier (8), conversion specifier, and final '\0', plus some
-** extra.
-** ('s_format')
-*/
-#define MAX_FORMAT	32
-
-
-/*
-** All formats except '%f' do not need that large limit.  The other
-** float formats use exponents, so that they fit in the 99 limit for
-** significant digits; 's' for large strings and 'q' add items directly
-** to the buffer; all integer formats also fit in the 99 limit.  The
-** worst case are floats: they may need 99 significant digits, plus
-** '0x', '-', '.', 'e+XXXX', and '\0'. Adding some extra, 120.
-** ('s_format')
-*/
-#define MAX_ITEM    120
-
-
-/*
-** Conversion specification introducer character.
-** ('s_format')
-*/
-#define CONVCHAR    '%'
+#define uchar(c)    ((unsigned char)(c))
 
 
 
@@ -82,7 +53,7 @@ static const char *find(const char *s, size_t ls, const char *p, size_t lp) {
 static const void *memrchr(const void *s, int c, size_t n, size_t nmin) {
     const unsigned char *p = s;
     const unsigned char *const e = p+n;
-    c = cast_uchar(c);
+    c = uchar(c);
     n++; /* compensate for loop */
     while (n--)
         if (p[n] == c)
@@ -303,30 +274,311 @@ static int s_join(cs_State *C) {
 }
 
 
+
 /*
-** Syntax of a conversion specification is:
-** %[argument$][flags][width][.precision][length modifier]conversion
+** Maximum size for items formatted with '%f'. This size is produced
+** by format('%.99f', -maxfloat), and is equal to 99 + 3 ('-', '.',
+** and '\0') + number of decimal digits to represent maxfloat (which
+** is maximum exponent + 1). (99+3+1, adding some extra, 110)
 */
+#define MAX_ITEMF	(110 + cs_floatatt(MAX_10_EXP))
+
+
+/*
+** All formats except '%f' do not need that large limit.  The other
+** float formats use exponents, so that they fit in the 99 limit for
+** significant digits; 's' for large strings and 'q' add items directly
+** to the buffer; all integer formats also fit in the 99 limit.  The
+** worst case are floats: they may need 99 significant digits, plus
+** '0x', '-', '.', 'e+XXXX', and '\0'. Adding some extra, 120.
+** ('s_format')
+*/
+#define MAX_ITEM    120
+
+
+#if !defined(C_FMTC)
+
+/* conversion specification introducer */
+#define C_FMTC          '%'
+
+/* valid flags for a, A, e, E, f, F, g, and G conversions */
+#define C_FMTFLAGSF     "-+#0 "
+
+/* valid flags for o, x, and X conversions */
+#define C_FMTFLAGSX	"-#0"
+
+/* valid flags for d and i conversions */
+#define C_FMTFLAGSI	"-+0 "
+
+/* valid flags for u conversions */
+#define C_FMTFLAGSU	"-0"
+
+/* valid flags for c, p, and s conversions */
+#define C_FMTFLAGSC	"-"
+
+#endif
+
+
+/*
+** Maximum size of each format specification (such as "%-099.99d"):
+** Initial '%', flags (up to 5), width (2), period, precision (2),
+** length modifier (8), conversion specifier, and final '\0', plus some
+** extra.
+** ('s_format')
+*/
+#define MAX_FORMAT	32
+
+
+
+static void addquoted(csL_Buffer *b, const char *s, size_t len) {
+    csL_buff_push(b, '"');
+    while (len--) {
+        if (*s == '"' || *s == '\\' || *s == '\n') {
+            csL_buff_push(b, '\\');
+            csL_buff_push(b, *s);
+        }
+        else if (iscntrl(uchar(*s))) {
+            char buff[10];
+            if (!isdigit(uchar(*(s+1))))
+                c_snprintf(buff, sizeof(buff), "\\%d", (int)uchar(*s));
+            else
+                c_snprintf(buff, sizeof(buff), "\\%03d", (int)uchar(*s));
+            csL_buff_push_string(b, buff);
+        }
+        else
+            csL_buff_push(b, *s);
+        s++;
+    }
+    csL_buff_push(b, '"');
+}
+
+
+/*
+** Serialize a floating-point number in such a way that it can be
+** scanned back by Lua. Use hexadecimal format for "common" numbers
+** (to preserve precision); inf, -inf, and NaN are handled separately.
+** (NaN cannot be expressed as a numeral, so we write '(0/0)' for it.)
+*/
+static int quotefloat(cs_State *C, char *buff, cs_Number n) {
+    const char *s; /* for the fixed representations */
+    if (n == (cs_Number)HUGE_VAL) /* inf? */
+        s = "1e9999";
+    else if (n == -(cs_Number)HUGE_VAL) /* -inf? */
+        s = "-1e9999";
+    else if (n != n) /* NaN? */
+        s = "(0/0)";
+    else { /* format number as hexadecimal */
+        int  nb = cs_number2strx(C, buff, MAX_ITEM, "%"CS_NUMBER_FMTLEN"a", n);
+        /* ensures that 'buff' string uses a dot as the radix character */
+        if (memchr(buff, '.', nb) == NULL) { /* no dot? */
+            char point = cs_getlocaledecpoint(); /* try locale point */
+            char *ppoint = (char *)memchr(buff, point, nb);
+            if (ppoint) *ppoint = '.'; /* change it to a dot */
+        }
+        return nb;
+    }
+    /* for the fixed representations */
+    return c_snprintf(buff, MAX_ITEM, "%s", s);
+}
+
+
+static void addliteral(cs_State *C, csL_Buffer *b, int arg) {
+    switch (cs_type(C, arg)) {
+        case CS_TSTRING: {
+            size_t len;
+            const char *s = cs_to_lstring(C, arg, &len);
+            addquoted(b, s, len);
+            break;
+        }
+        case CS_TNUMBER: {
+            char *buff = csL_buff_ensure(b, MAX_ITEM);
+            int nb;
+            if (!cs_is_integer(C, arg)) /* float? */
+                nb = quotefloat(C, buff, cs_to_number(C, arg));
+            else { /* integers */
+                cs_Integer n = cs_to_integer(C, arg);
+                const char *format = (n == CS_INTEGER_MIN) /* corner case? */
+                    ? "0x%" CS_INTEGER_FMTLEN "x" /* use hex */
+                    : CS_INTEGER_FMT; /* else use default format */
+                nb = c_snprintf(buff, MAX_ITEM, format, (CS_INTEGER)n);
+            }
+            csL_buffadd(b, nb);
+            break;
+        }
+        case CS_TNIL: case CS_TBOOL: {
+            csL_to_lstring(C, arg, NULL);
+            csL_buff_push_stack(b);
+            break;
+        }
+        default: {
+            csL_error_arg(C, arg, "value has no literal form");
+        }
+    }
+}
+
+
+static const char *get2digits (const char *s) {
+    if (isdigit(uchar(*s))) {
+        s++;
+        if (isdigit(uchar(*s))) s++; /* (2 digits at most) */
+    }
+    return s;
+}
+
+
+/*
+** Check whether a conversion specification is valid. When called,
+** first character in 'form' must be '%' and last character must
+** be a valid conversion specifier. 'flags' are the accepted flags;
+** 'precision' signals whether to accept a precision.
+*/
+static void checkformat(cs_State *C, const char *form, const char *flags,
+                        int precision) {
+    const char *spec = form + 1; /* skip '%' */
+    spec += strspn(spec, flags); /* skip flags */
+    if (*spec != '0') { /* a width cannot start with '0' */
+        spec = get2digits(spec); /* skip width */
+        if (*spec == '.' && precision) {
+            spec++;
+            spec = get2digits(spec); /* skip precision */
+        }
+    }
+    if (!isalpha(uchar(*spec))) /* did not go to the end? */
+        csL_error(C, "invalid conversion specification: '%s'", form);
+}
+
+
+/*
+** Get a conversion specification and copy it to 'form'.
+** Return the address of its last character.
+*/
+static const char *getformat(cs_State *C, const char *strfrmt, char *form) {
+    /* spans flags, width, and precision ('0' is included as a flag) */
+    size_t len = strspn(strfrmt, C_FMTFLAGSF "123456789.");
+    len++;  /* adds following character (should be the specifier) */
+    /* still needs space for '%', '\0', plus a length modifier */
+    if (len >= MAX_FORMAT - 10)
+        csL_error(C, "invalid format (too long)");
+    *(form++) = '%';
+    memcpy(form, strfrmt, len*sizeof(char));
+    *(form + len) = '\0';
+    return strfrmt + len - 1;
+}
+
+
+/*
+** Add length modifier into formats.
+*/
+static void addlenmod(char *form, const char *lenmod) {
+    size_t l = strlen(form);
+    size_t lm = strlen(lenmod);
+    char spec = form[l - 1];
+    strcpy(form + l - 1, lenmod);
+    form[l + lm - 1] = spec;
+    form[l + lm] = '\0';
+}
+
+
 static int formatstr(cs_State *C, const char *fmt, size_t lfmt) {
     int top = cs_gettop(C);
     int arg = 0;
     const char *efmt = fmt + lfmt;
+    const char *flags;
     csL_Buffer b;
     csL_buff_init(C, &b);
     while (fmt < efmt) {
-        if (*fmt != CONVCHAR) /* not % */
+        if (*fmt != C_FMTC) { /* not % */
             csL_buff_push(&b, *fmt++);
-        else if (*++fmt == CONVCHAR) /* %% */
+            continue;
+        } else if (*++fmt == C_FMTC) { /* %% */
             csL_buff_push(&b, *fmt++);
-        else { /* % */
-            char form[MAX_FORMAT]; /* to store the format ('%...') */
-            int maxitem = MAX_ITEM; /* maximum length for the result */
-            char *buff = csL_buff_ensure(&b, maxitem); /* to put result */
-            int nb = 0; /* number of bytes in result */
-            if (++arg > top) /* too many format specifiers? */
-                return csL_error_arg(C, arg, "missing format value");
-            // TODO: continue...
+            continue;
+        } /* else '%' */
+        char form[MAX_FORMAT]; /* to store the format ('%...') */
+        int maxitem = MAX_ITEM; /* maximum length for the result */
+        char *buff = csL_buff_ensure(&b, maxitem); /* to put result */
+        int nb = 0; /* number of bytes in result */
+        if (++arg > top) /* too many format specifiers? */
+            return csL_error_arg(C, arg, "missing format value");
+        fmt = getformat(C, fmt, form);
+        switch (*fmt++) {
+            case 'c': {
+                checkformat(C, form, C_FMTFLAGSC, 0);
+                nb = c_snprintf(buff, maxitem, form, (int)csL_check_integer(C, arg));
+                break;
+            }
+            case 'd': case 'i':
+                flags = C_FMTFLAGSI;
+                goto intcase;
+            case 'u':
+                flags = C_FMTFLAGSU;
+                goto intcase;
+            case 'o': case 'x': case 'X':
+                flags = C_FMTFLAGSX;
+            intcase: {
+                cs_Integer n = csL_check_integer(C, arg);
+                checkformat(C, form, flags, 1);
+                addlenmod(form, CS_INTEGER_FMTLEN);
+                nb = c_snprintf(buff, maxitem, form, (CS_INTEGER)n);
+                break;
+            }
+            case 'a': case 'A':
+                checkformat(C, form, C_FMTFLAGSF, 1);
+                addlenmod(form, CS_NUMBER_FMTLEN);
+                nb = cs_number2strx(C, buff, maxitem, form, csL_check_number(C, arg));
+                break;
+            case 'f':
+                     maxitem = MAX_ITEMF; /* extra space for '%f' */
+                     buff = csL_buff_ensure(&b, maxitem);
+                     /* fall through */
+            case 'e': case 'E': case 'g': case 'G': {
+                cs_Number n = csL_check_number(C, arg);
+                checkformat(C, form, C_FMTFLAGSF, 1);
+                addlenmod(form, CS_NUMBER_FMTLEN);
+                nb = c_snprintf(buff, maxitem, form, (CS_NUMBER)n);
+                break;
+            }
+            case 'p': {
+                const void *p = cs_to_pointer(C, arg);
+                checkformat(C, form, C_FMTFLAGSC, 0);
+                if (p == NULL) { /* avoid calling 'printf' with NULL */
+                    p = "(null)"; /* result */
+                    form[strlen(form) - 1] = 's'; /* format it as a string */
+                }
+                nb = c_snprintf(buff, maxitem, form, p);
+                break;
+            }
+            case 'q': {
+                if (form[2] != '\0') /* modifiers? */
+                    return csL_error(C, "specifier '%%q' cannot have modifiers");
+                addliteral(C, &b, arg);
+                break;
+            }
+            case 's': {
+                size_t l;
+                const char *s = csL_to_lstring(C, arg, &l);
+                if (form[2] == '\0') /* no modifiers? */
+                    csL_buff_push_stack(&b); /* keep entire string */
+                else {
+                    csL_check_arg(C, l == strlen(s), arg, "string contains zeros");
+                    checkformat(C, form, C_FMTFLAGSC, 1);
+                    if (strchr(form, '.') == NULL && l >= 100) {
+                        /* no precision and string is too long to be formatted */
+                        csL_buff_push_stack(&b); /* keep entire string */
+                    }
+                    else { /* format the string into 'buff' */
+                        nb = c_snprintf(buff, maxitem, form, s);
+                        cs_pop(C, 1); /* remove result from 'csL_tolstring' */
+                    }
+                }
+                break;
+            }
+            default: { /* also treat cases 'pnLlh' */
+                return csL_error(C, "invalid conversion '%s' to 'format'", form);
+            }
         }
+        cs_assert(nb < maxitem);
+        csL_buffadd(&b, nb);
     }
     csL_buff_end(&b);
     return 1; /* return formatted string */
@@ -547,7 +799,7 @@ static const cs_Entry strlib[] = {
 };
 
 
-CSMOD_API int luaopen_string (cs_State *C) {
+CSMOD_API int csopen_string (cs_State *C) {
     csL_newlib(C, strlib);
     return 1;
 }

@@ -217,8 +217,8 @@
 
 /*
 ** @CS_NUMBER - is the CScript floating point type.
-** @CS_FLOAT_FMT - is the format for writing floats.
-** @CS_FLOAT_FMTLEN - is the additional length modifier when writing floats.
+** @CS_NUMBER_FMT - is the format for writing floats.
+** @CS_NUMBER_FMTLEN - is the additional length modifier when writing floats.
 ** @cs_mathop - allows the addition of an 'l' or 'f' to all math operations.
 ** @cs_floor - takes the floor of a float.
 ** @cs_number2str - convert float into string.
@@ -230,7 +230,7 @@
 #define cs_floor(n)             (cs_mathop(floor)(n))
 
 #define cs_number2str(s,sz,n) \
-        c_snprintf((s), (sz), CS_FLOAT_FMT, (CS_NUMBER)(n))
+        c_snprintf((s), (sz), CS_NUMBER_FMT, (CS_NUMBER)(n))
 
 #define cs_number2integer(n,p) \
     ((n) >= (CS_NUMBER)(CS_INTEGER_MIN) && \
@@ -246,8 +246,8 @@
 
 #define CS_NUMBER               double
 
-#define CS_FLOAT_FMTLEN         ""
-#define CS_FLOAT_FMT            "%.14g"
+#define CS_NUMBER_FMTLEN        ""
+#define CS_NUMBER_FMT           "%.14g"
 
 #define CS_NUMBER_MIN           cs_floatatt(MIN)
 #define CS_NUMBER_MAX           cs_floatatt(MAX)
