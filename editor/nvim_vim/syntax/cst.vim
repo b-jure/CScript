@@ -1,7 +1,7 @@
 " CScript syntax file
 " Language:     CScript 1.0
 " Maintainer:   Jure Bagić <jurebagic99@gmail.com>
-" Last Change:  2025 Feb 22 
+" Last Change:  2025 Feb 26
 
 
 " quit when a syntax file was already loaded
@@ -12,55 +12,155 @@ endif
 let s:cpo_save = &cpo
 set cpo&vim
 
+
 " case sensitive
 syn case match
-
-
-"-Keywords--------{
-syn keyword     cscriptStatement        break return continue local
-syn keyword     cscriptConditional      if else switch
-syn keyword     cscriptOperator         and or
-syn keyword     cscriptLabel            case default
-syn keyword     cscriptRepeat           while for foreach loop
-syn keyword     cscriptConstant         true false nil
-"-----------------}
-
-
-"-Foreach---------{
-syn region      cscriptForEach          transparent matchgroup=cscriptRepeat start=/\<foreach\>/ end=/\<in\>/me=e-2 contains=TOP skipwhite skipempty
-syn keyword     cscriptForEach          contained containedin=cscriptForEach in
-"-----------------}
-
-
-"-Classes---------{
-syn region      cscriptClass            transparent matchgroup=cscriptStatement start=/\<class\>/ end=/{/me=e-1 contains=TOP skipwhite skipempty
-syn keyword     cscriptClass            contained containedin=cscriptClass inherits
-"-----------------}
-
+syn sync fromstart
 
 "-Operators-------{
-syn match       cscriptSymbolOperator   /[<>=~^*&|/%+-]\|\.{2,3}/
+syn keyword cscriptOperator         and or
+syn match   cscriptSymbolOperator   /[<>=~^\*&|/%+-\!]\|\.{2,3}/
 "-----------------}
 
+"-Comments--------{
+syn keyword cscriptTodo         contained TODO FIXME XXX
+syn cluster cscriptCommentGroup contains=cscriptTodo,cscriptDocTag
+" single line
+syn region  cscriptComment  matchgroup=cscriptCommentStart start=/#/ skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
+syn region  cscriptComment  matchgroup=cscriptCommentStart start=/\/\// skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
+" multi-line
+if exists("c_no_comment_fold")
+    syn region  cscriptComment  matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError extend
+else
+    syn region  cscriptComment  matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError fold extend
+endif
+syn match   cscriptDocTag               display contained /\s\zs@\k\+/
+" errors
+syn match   cscriptCommentError         display /\*\//
+syn match   cscriptCommentStartError    display /\/\*/me=e-1 contained
+syn match   cscriptWrongComTail	        display /\*\//
+"-----------------}
 
-"-Functions-------{
-syn region      cscriptFunctionBlock    transparent matchgroup=cscriptFunction start=/\<fn\>/ end=/}/ contains=TOP
-syn keyword     cscriptSuper            contained containedin=cscriptFunctionBlock super
+"-Special---------{
+" highlight \e (aka \x1b)
+syn match   cscriptSpecialEsc       display contained /\\e/
+" highlight control chars
+syn match   cscriptSpecialControl   display contained /\\[\\abtnvfr'"]/
+" highlight decimal escape sequence \ddd
+syn match   cscriptSpecialDec       display contained /\\[[:digit:]]\{3}/
+" highlight hexadecimal escape sequence \xhh
+syn match   cscriptSpecialHex       display contained /\\x[[:xdigit:]]\{2}/
+" highlight utf8 \u{xxxxxxxx} or \u[xxxxxxxx]
+syn match   cscriptSpecialUtf       display contained /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
+syn cluster cscriptSpecial  contains=cscriptSpecialEsc,cscriptSpecialControl,cscriptSpecialDec,cscriptSpecialHex,cscriptSpecialUtf
+" errors
+syn match   cscriptSpecialEscError      /\\e/
+syn match   cscriptSpecialControlError  /\\[\\abtnvfr'"]/
+syn match   cscriptSpecialDecError      /\\[[:digit:]]\{3}/
+syn match   cscriptSpecialHexError      /\\x[[:xdigit:]]\{2}/
+syn match   cscriptSpecialUtfError      /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
+"-----------------}
 
+"-Strings---------{
+syn region  cscriptString       start=/"/ skip=/\\"/ end=/"/ contains=@cscriptSpecial,@Spell
+"-----------------}
+
+"-Characters-----{
+syn match   cscriptCharacter    /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}\)'/ contains=cscriptSpecialControl,cscriptSpecialHex
+"-----------------}
+
+"-Numbers---------{
+syn case ignore
+syn match   cscriptNumbers      display transparent /\<\d\|\.\d/ contains=cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError,cscriptConstant
+" decimal integers
+syn match   cscriptNumber       display contained /\%(0\|[^0\d]\d*\)\>/
+" hexadecimal integers
+syn match   cscriptNumber       display contained /0x\x\+\>/
+" octal integers
+syn match   cscriptOctal        display contained /0\o\+\>/ contains=cscriptOctalZero
+" flag the first zero of an octal number as something special
+syn match   cscriptOctalZero    display contained /\<0/
+" decimal floating point number, with dot, optional exponent
+syn match   cscriptFloat        display contained /\d\+\.\d*\%(e[-+]\=\d\+\)\=/
+" decimal floating point number, starting with a dot, optional exponent
+syn match   cscriptFloat        display contained /\.\d\+\%(e[-+]\=\d\+\)\>/
+" decimal floating point number, without dot, with exponent
+syn match   cscriptFloat        display contained "\d\+e[-+]\=\d\+\>"
+" hexadecimal foating point number, optional leading digits, with dot, with exponent
+syn match   cscriptFloat        display contained "0x\x*\.\x\+p[-+]\=\d\+\>"
+" hexadecimal floating point number, with leading digits, optional dot, with exponent
+syn match   cscriptFloat        display contained "0x\x\+\.\=p[-+]\=\d\+\>"
+" flag an octal number with wrong digits
+syn match   cscriptOctalError   display contained "0\o*[89]\d*"
+syn case match
+"-----------------}
+
+"-Identifier------{
+syn match cscriptIdentifier /\<\h\w*\>/
+syn match cscriptEmptyStatement /;/
+"-----------------}
+
+"-Keywords--------{
+syn keyword     cscriptLocal            local
+syn keyword     cscriptStatement        break return continue fn
+syn keyword     cscriptConditional      if else
+syn keyword     cscriptLabel            case default switch
+syn keyword     cscriptRepeat           loop while for
+syn keyword     cscriptConstant         true false nil inf infinity
+"-----------------}
+
+"-Blocks----------{
+if exists("c_curly_error")
+    syn match   cscriptCurlyError   /}/
+    syn region  cscriptBlock        start=/{/ end=/}/ contains=TOP,cscriptCommentStartError,cscriptCurlyError,cscriptSpecialError,cscriptErrorInBracket,@Spell fold
+else
+    syn region   cscriptBlock       start=/{/ end=/}/ transparent fold
+endif
+"-----------------}
+
+"-Parens---------{
+syn cluster cscriptParenGroup   contains=@cscriptSpecial,@cscriptCommentGroup,cscriptClass,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
+syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptIf,cscriptParenError,cscriptStatement,cscriptConditional,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
+syn match   cscriptParenError   display /)/
+syn match   cscriptErrorInParen display contained /]/
+"---------------}
+
+"-Bracket-------{
+syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptLocal,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptStatement,cscriptConditional,cscriptLabel,cscriptRepeat,@Spell
+syn match   cscriptBracketError     display /]/
+syn match   cscriptErrorInBracket   display contained /]/
+"---------------}
+
+"-Foreach---------{
+syn region  cscriptForEach  transparent matchgroup=cscriptRepeat start=/\<foreach\>\ze\_s\+\%(\h\w*\%(,\_s*\h\w*\)*\)\_s\<in\>/ end=/\h\w*\_s\+\zs\<in\>/me=e-2 contains=TOP,cscriptInError skipwhite skipempty
+syn keyword cscriptForEach  contained containedin=cscriptForEach in
+syn match   cscriptInError  /\<in\>/
+"-----------------}
+
+"-Classes---------{
+syn region cscriptClass transparent matchgroup=cscriptStatement start=/\<class\>/ end=/{/me=e-1 contains=TOP skipwhite skipempty
+syn keyword cscriptClass contained containedin=cscriptClass inherits
+syn keyword cscriptSuper super
+syn keyword cscriptSelf self
+"-----------------}
+
+"-Function calls--{
+syn match cscriptFunctionCall /\k\+\%(\_s*(\)\@=/
+"-----------------}
+
+"-MetaMethods-----{
 syn keyword     cscriptMetaMethod       __getidx __setidx
 syn keyword     cscriptMetaMethod       __gc __close __call __init __concat
 syn keyword     cscriptMetaMethod       __mod __pow __add __sub __mul __div
 syn keyword     cscriptMetaMethod       __shl __shr __band __bor __bxor
 syn keyword     cscriptMetaMethod       __unm __bnot
 syn keyword     cscriptMetaMethod       __eq __lt __le
-
 " basic library
 syn keyword     cscriptFunc             error assert gc load loadfile runfile
 syn keyword     cscriptFunc             getmetamethod next pairs ipairs pcall
 syn keyword     cscriptFunc             xpcall print warn len rawequal rawget
 syn keyword     cscriptFunc             rawset getargs tonumber tostring typeof
 syn keyword     cscriptFunc             getclass __G __VERSION
-
 " package library
 syn keyword     cscriptFunc             import
 syn match       cscriptFunc             /\<package\.loadlib\>/
@@ -70,7 +170,6 @@ syn match       cscriptFunc             /\<package\.cpath\>/
 syn match       cscriptFunc             /\<package\.path\>/
 syn match       cscriptFunc             /\<package\.searchers\>/
 syn match       cscriptFunc             /\<package\.loaded\>/
-
 " string library
 syn match       cscriptFunc             /\<string\.split\>/
 syn match       cscriptFunc             /\<string\.rsplit\>/
@@ -92,144 +191,57 @@ syn match       cscriptFunc             /\<string\.swaplower\>/
 "-----------------}
 
 
-"-Comments--------{
-syn keyword     cscriptTodo             contained TODO FIXME XXX
-syn cluster     cscriptCommentGroup     contains=cscriptTodo
-
-" single line
-syn region      cscriptComment          matchgroup=cscriptCommentStart start=/#/ skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
-syn region      cscriptComment          matchgroup=cscriptCommentStart start=/\/\// skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
-
-" multi-line
-if exists("c_no_comment_fold")
-    syn region      cscriptComment      matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError extend
-else
-    syn region      cscriptComment      matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError fold extend
-endif
-
-" errors
-syn match	cscriptCommentError         display /\*\//
-syn match	cscriptCommentStartError    display /\/\*/me=e-1 contained
-syn match	cscriptWrongComTail	    display /\*\//
-"-----------------}
-
-
-"-Strings---------{
-" highlight special characters (those which have a backslash) differently
-syn match	cscriptSpecial	        display contained /\\[\\abtnvfre"[\]]/
-" highlight decimal escape sequence \ddd
-syn match	cscriptSpecial	        display contained /\\[[:digit:]]\{,3}/
-" highlight hexadecimal escape sequence \xx
-syn match	cscriptSpecial	        display contained /\\x[[:xdigit:]]\{2}/
-" highlight unicode escape sequence \u{xx} or \u[xx]
-syn match	cscriptSpecial	        display contained /\\u\%({\|\[\)[[:xdigit:]]\+\%(}\|\]\)/
-
-syn region      cscriptString           start=/"/   skip=/\\"/  end=/"/ contains=cscriptSpecial,@Spell
-"-----------------}
-
-
-"-Characters------{
-syn match       cscriptCharacter        /'[^']'/ contains=cscriptSpecial
-"-----------------}
-
-
-"-Blocks----------{
-if exists("c_curly_error")
-    syn match       cscriptCurlyError       /}/
-    syn region      cscriptBlock            start=/{/   end=/}/     contains=TOP,cscriptCurlyError,@cscriptParenGroup,@Spell fold
-else
-    syn region      cscriptBlock            start=/{/   end=/}/     transparent fold
-endif
-"-----------------}
-
-
-"-Numbers---------{
-syn case ignore
-
-syn match       cscriptNumbers          display transparent /\<\d\|\.\d/ contains=cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalErr
-syn match       cscriptNumber           display contained /\d\+\>/
-
-" hexadecimal
-syn match       cscriptNumber           display contained /0x\x\+\>/
-
-" flag the first zero of an octal number as something special
-syn match       cscriptOctal            display contained /0\o\+\>/
-syn match       cscriptOctalZero        display contained /\<0/
-
-" floating point number, with dot, optional exponent
-syn match       cscriptFloat            display contained /\d\+\.\d*\%(e[-+]\=\d\+\)\=/
-" floating point number, starting with a dot, optional exponent
-syn match       cscriptFloat            display contained /\.\d\+\%(e[-+]\=\d\+\)\>/
-" floating point number, without dot, with exponent
-syn match	cscriptFloat		display contained "\d\+e[-+]\=\d\+\>"
-" hexadecimal floating point number, optional leading digits, with dot, with exponent
-syn match	cscriptFloat		display contained "0x\x*\.\x\+p[-+]\=\d\+\>"
-" hexadecimal floating point number, with leading digits, optional dot, with exponent
-syn match	cscriptFloat		display contained "0x\x\+\.\=p[-+]\=\d\+\>"
-
-" flag an octal number with wrong digits
-syn match	cscriptOctalError       display contained "0\o*[89]\d*"
-
-syn case match
-"-----------------}
-
-
-"-Tables----------{
-syn region      cscriptTableBlock       transparent matchgroup=cscriptTable start="{" end="}" contains=TOP,cscriptStatement
-"-----------------}
-
-
-"-Arrays----------{
-syn region      cscriptArrayBlock       transparent matchgroup=cscriptArray start="\[" end="]" contains=TOP,cscriptStatement
-"-----------------}
-
-
-"-Errors and Parens-{
-syn cluster     cscriptParenGroup       contains=cscriptParenError,cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptNumber,cscriptFloat,cscriptOctal
-syn region      cscriptParen            transparent start=/(/ end=/)/ contains=ALLBUT,@cscriptParenGroup,cscriptBlock,cscriptParenError,@Spell
-syn match       cscriptParenError       display /[\])]/
-syn match       cscriptErrorInParen     display contained /[\]{}]/
-syn match       cscriptError            /\<\%(else\|in\)\>/
-"------------------}
-
-
-" Statements
-hi def link cscriptStatement            Statement
-" Labels
-hi def link cscriptLabel                Label
-" Conditionals
-hi def link cscriptConditional          Conditional
-" Functions and Identifiers
+hi def link cscriptLocal                cscriptStatement
+hi def link cscriptEmptyStatement       cscriptOperator
+hi def link cscriptLocal                cscriptStatement
+hi def link cscriptIdentifier           NONE
+hi def link cscriptMethod               cscriptFunction
 hi def link cscriptFunction             Function
-hi def link cscriptMetaMethod           Function
-" Loops
+hi def link cscriptSelf                 PreProc
+hi def link cscriptSuper                PreProc
+hi def link cscriptClass                cscriptStatement
+hi def link cscriptMetaMethod           cscriptFunc
+hi def link cscriptFunc                 Identifier
+hi def link cscriptFunctionCall         Identifier
+hi def link cscriptDocTag               Underlined
+hi def link cscriptForEach              cscriptRepeat
+hi def link cscriptSpecialEsc           SpecialChar
+hi def link cscriptSpecialControl       SpecialChar
+hi def link cscriptSpecialDec           SpecialChar
+hi def link cscriptSpecialHex           SpecialChar
+hi def link cscriptSpecialUtf           SpecialChar
+hi def link cscriptString               String
+hi def link cscriptCharacter            Character
+hi def link cscriptStatement            Statement
+hi def link cscriptLabel                Label
+hi def link cscriptConditional          Conditional
 hi def link cscriptRepeat               Repeat
-" Comments
 hi def link cscriptTodo                 Todo
 hi def link cscriptCommentStart         Comment
-hi def link cscriptComment              Comment
-" Structured Data
-hi def link cscriptTable                Structure
-hi def link cscriptArray                Structure
-" Constant Values
-hi def link cscriptConstant             Constant
-hi def link cscriptCharacter            Character
 hi def link cscriptNumber               Number
 hi def link cscriptOctal                Number
 hi def link cscriptOctalZero            PreProc
 hi def link cscriptFloat                Float
-" Operators
+hi def link cscriptSymbolOperator       cscriptOperator
 hi def link cscriptOperator             Operator
-hi def link cscriptSymbolOperator       Operator
-" Errors
+hi def link cscriptComment              Comment
+hi def link cscriptConstant             Constant
+hi def link cscriptParenError           cscriptError 
+hi def link cscriptBracketError         cscriptError
+hi def link cscriptCurlyError           cscriptError
 hi def link cscriptErrorInParen         cscriptError
+hi def link cscriptErrorInBracket       cscriptError
 hi def link cscriptOctalError           cscriptError
 hi def link cscriptCommentError         cscriptError
 hi def link cscriptCommentStartError    cscriptError
 hi def link cscriptWrongComTail	        cscriptError
+hi def link cscriptSpecialEscError      cscriptError
+hi def link cscriptSpecialControlError  cscriptError
+hi def link cscriptSpecialDecError      cscriptError
+hi def link cscriptSpecialHexError      cscriptError
+hi def link cscriptSpecialUtfError      cscriptError 
+hi def link cscriptInError              cscriptError
 hi def link cscriptError                Error
-" Identifiers
-hi def link cscriptFunc                 Identifier
 
 
 let b:current_syntax = "cst"

@@ -19,9 +19,10 @@ or   and                        // logical
 /*
 ** Multi-line comment
 ** TODO, XXX, FIXME
+** @doctag
 */
-// Single-line comment TODO, XXX, FIXME
-# Single-line comment TODO, XXX, FIXME
+// Single-line comment TODO, XXX, FIXME @doctag
+# Single-line comment TODO, XXX, FIXME @doctag
 */ # comment error
 
 
@@ -63,41 +64,136 @@ dollar sign \u[24]"
 
 
 # Keywords
-break   return   continue   local   // statements
-if      else     switch             // conditionals
-case    default                     // labels
-while   for      foreach    loop    // repeat
-true    false    nil                // constants
+break   return   continue   local               # statements
+if      else     switch                         # conditionals
+case    default                                 # labels
+while   loop     for                            # repeat
+true    false    nil        inf     infinity    # constants
+super   self                                    # special instance variables
 
 
 # Blocks
-}  # curly error
+}  # curly error (only shown if 'c_curly_error' is set)
 {
+    ])
+    {}
     // TODO FIXME XXX
     # TODO FIXME XXX
     /* TODO FIXME XXX */
     \e \n \f \x15 \523 \u[ff] \u{ffabcde2} */
+    0908
     2 52 0x15 052 15.2 0x.15p0 2 == 2
-    return break continue local
+    class {} return break continue local fn
     {
-        "ok\tay" '5' 'a' '\n'
-        if else switch
+        "ok\tay" '5' 'a' '\n' +->>< '\x15'
+        if  else switch
         {case default}
-        while for foreach loop
+        while for foreach x in  loop
     }
-    true false nil
+    true false nil inf infinity
+    super self in
 }
 
 
 # Parens
-(// TODO FIXME XXX)
-(# TODO FIXME XXX)
-(/* TODO FIXME XXX */)
+) # paren error
+(}])
+(/* TODO FIXME XXX */ 009)
 (\e \n \f \x15 \523 \u[ff] \u{ffabcde2} */)
-(2 52 0x15 052 15.2 0x.15p0 2 == 2)
-("ok\tay" '5' 'a' '\n')
-(break return continue local)
+(2 52 0x15 052 15.2 0x.15p0 085 2 == 2)
+("ok\tay" '5' 'a' '\n' +->>< '\x15')
+(class {} break return continue local)
 (if else switch)
-(case default)
-(while for foreach loop)
-(true false nil)
+(case default [])
+(while for foreach loop fn {})
+(true false nil inf infinity ())
+(super self in)
+
+
+# Brackets
+] # bracket error
+[})]
+[/* TODO FIXME XXX */ 009]
+[\e \n \f \x15 \523 \u[ff] \u{ffabcde2} */]
+[2 52 0x15 052 15.2 0x.15p0 2 == 2]
+["ok\tay" '5' 'a' '\n' +->>< '\x15']
+[class {} break return continue local {}]
+[if else switch]
+[case default]
+[fn while for foreach loop []]
+[true false nil inf infinity ()]
+[super self in]
+
+
+# Identifier (name)
+My_Name69
+__myname420
+
+
+# Function
+fn add(x, y) {
+    return x + y;
+}
+fn module69.add3(x, y, z) {
+    return x + y + z;
+}
+
+
+# Class
+class b {
+    fn name() {
+        return "b";
+    }
+}
+class a inherits sdfa.sdf {
+    fn self __init(id) {
+        self.id = id;
+    }
+    fn func() {
+        return super.name() .. tostring(self.id);
+    }
+}
+local a_instance = a(69);
+assert(a_instance.func() == "69");
+
+
+# Foreach
+foreach node in iterator(btree) {
+    local node_id = getid(node);
+    print(__G[node_id]);
+}
+foreach i, n in ipairs([69, 420, 1337], ...) {
+    print(i, n);
+}
+
+
+# Switch
+switch (x) {
+    case 5:
+        print("x == 5");
+        break;
+    case "okay":
+        print("x == okay");
+        break;
+    case nil:
+        print("x == nil");
+        break;
+    default:
+        print("no match");
+        break;
+}
+
+
+# Loop
+loop {
+    break;
+}
+
+for (local x = 5; x < 7; x = x + 1) {
+    if (x == 5) continue;
+    else {
+        assert(x > 5);
+        break;
+    }
+}
+assert(x == 6);
