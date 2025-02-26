@@ -13,6 +13,9 @@ let s:cpo_save = &cpo
 set cpo&vim
 
 
+syn clear
+
+
 " case sensitive
 syn case match
 syn sync fromstart
@@ -190,7 +193,12 @@ syn match       cscriptFunc             /\<string\.swapupper\>/
 syn match       cscriptFunc             /\<string\.swaplower\>/
 "-----------------}
 
+syn match cscriptComma /,/
+syn match cscriptSemicoilon /;/
 
+
+hi def link cscriptComma                NONE
+hi def link cscriptSemicoilon           NONE
 hi def link cscriptLocal                cscriptStatement
 hi def link cscriptEmptyStatement       cscriptOperator
 hi def link cscriptLocal                cscriptStatement
