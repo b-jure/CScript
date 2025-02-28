@@ -200,6 +200,7 @@ typedef struct FuncContext {
     int nabslineinfo;
     int nlocals;
     int nupvals;
+    int fintestpc;
     int npatches;
     int njumps;
     c_byte iwthabs;
@@ -229,6 +230,7 @@ typedef struct FunctionState {
     int ninstpc;        /* number of elements in 'instpc' */
     int nlocals;        /* number of elements in 'locals' */
     int nupvals;        /* number of elements in 'upvals' */
+    int fintestpc;      /* 'pc' of the last test instruction in 'switchstm' */
     c_byte iwthabs;     /* instructions issued since last absolute line info */
     c_byte needclose;   /* true if needs to close upvalues before returning */
     c_byte lastwasret;  /* last statement is 'return' */

@@ -1,0 +1,27 @@
+fn test1() {
+    local x <close> = "invalid close value";
+    assert(false);
+}
+
+local res, err = pcall(test1);
+assert(res == false);
+assert(typeof(err) == "string");
+
+fn test2(...) {
+    print(x());
+    assert(false);
+}
+
+res, err = pcall(test2, 69);
+assert(res == false);
+assert(typeof(err) == "string");
+
+fn test3(y) {
+    assert(y == nil);
+    assert(true);
+    return 420;
+}
+
+res, err = pcall(test3);
+assert(res == true);
+assert(err == 420);

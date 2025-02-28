@@ -286,8 +286,7 @@ typedef struct LoadString {
 static const char *stringreader(cs_State *C, void *data, size_t *szread) {
     LoadString *ls = (LoadString *)data;
     (void)C; /* unused */
-    if (ls->sz == 0)
-        return NULL;
+    if (ls->sz == 0) return NULL;
     *szread = ls->sz;
     ls->sz = 0;
     return ls->str;
@@ -303,8 +302,8 @@ CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
 }
 
 
-CSLIB_API int csL_loadstring(cs_State *C, const char *str) {
-    return csL_loadbuffer(C, str, strlen(str), str);
+CSLIB_API int csL_loadstring(cs_State *C, const char *s) {
+    return csL_loadbuffer(C, s, strlen(s), s);
 }
 
 

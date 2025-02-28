@@ -1,0 +1,16 @@
+local a = [0, 69, 420, 1337, 133742069, 1337, 420, 69, 0];
+
+foreach i, v in ipairs(a) {
+    switch (i) {
+        case 0: assert(v == 0); break;
+        case 1: assert(v == 69); break;
+        case 2: assert(v == 420); break;
+        case 3: assert(v == 1337); break;
+        case 4: assert(v == 133742069); break;
+        case 5: assert(v == 1337); break;
+        case 6: assert(v == 420); break;
+        case 7: assert(v == 69); break;
+        case 8: assert(v == 0); break;
+        default: assert(false); break;
+    }
+}

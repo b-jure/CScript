@@ -18,7 +18,7 @@
  */
 #define CS_TUPVALUE     CS_NUM_TYPES        /* upvalue */
 #define CS_TPROTO       (CS_NUM_TYPES + 1)  /* function prototype */
-#define CS_TDEADKEY     (CS_NUM_TYPES + 2)  /* mark for dead hashtable keys */
+#define CS_TDEADKEY     (CS_NUM_TYPES + 2)  /* mark for dead table keys */
 
 
 /* 

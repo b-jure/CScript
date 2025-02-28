@@ -1,0 +1,49 @@
+local x = "Water";
+local t = {
+    a = "69",
+    b = "420",
+    c = "1337",
+    ["x"] = 69,
+    ["y"] = 420,
+    ["z"] = 1337,
+    [x] = true
+};
+assert(x and t);
+assert(typeof(t) == "table");
+
+local k, v = next(t);
+assert(k and v);
+k, v = next(t, k);
+assert(k and v);
+k, v = next(t, k);
+assert(k and v);
+k, v = next(t, k);
+assert(k and v);
+k, v = next(t, k);
+assert(k and v);
+k, v = next(t, k);
+assert(k and v);
+k, v = next(t, k);
+assert(k and v);
+k, v = next(t, k);
+assert(!k and !v);
+
+local class X {
+    fn __init(x, y, z) {
+        self.x = x;
+        self.y = y;
+        self.z = z;
+        return self;
+    }
+};
+local ins = X(69, 420, 1337);
+assert(typeof(ins) == "instance");
+assert(ins.x == 69 and ins.y == 420 and ins.z == 1337);
+k, v = next(ins);
+assert(k and v);
+k, v = next(ins, k);
+assert(k and v);
+k, v = next(ins, k);
+assert(k and v);
+k, v = next(ins, k);
+assert(!k and !v);

@@ -38,7 +38,7 @@
 #define isupvalue(i)		((i) < CS_REGISTRYINDEX)
 
 /* test for valid index */
-#define isvalid(C,o)           (!ttisnil(o) || (o) != &G(C)->nil)
+#define isvalid(C,o)           (!isempty(o) || (o) != &G(C)->nil)
 
 
 /* 
@@ -110,17 +110,18 @@ c_sinline void setntop(cs_State *C, int n) {
     func = cf->func.p;
     if (n >= 0) {
         api_check(C, n <= (cf->top.p - func + 1), "new top too large");
-        diff = (func + 1 + n) - C->sp.p;
+        diff = ((func + 1) + n) - C->sp.p;
         for (; diff > 0; diff--)
             setnilval(s2v(C->sp.p++));
     } else { /* negative index */
         api_check(C, -(n+1) <= (C->sp.p-(func+1)), "new top underflow");
         diff = n + 1;
     }
+    api_check(C, C->tbclist.p < C->sp.p, "previous pop of an unclosed slot");
     newtop = C->sp.p + diff;
     if (diff < 0 && C->tbclist.p >= newtop) {
         cs_assert(hastocloseCfunc(cf->nresults));
-        csF_close(C, newtop, CLOSEKTOP);
+        newtop = csF_close(C, newtop, CLOSEKTOP);
     }
     C->sp.p = newtop; /* set new top */
 }
@@ -502,7 +503,8 @@ CS_API void cs_arith(cs_State *C, int op) {
         C->sp.p--; /* pop second operand */
     } else { /* unary op */
         api_checknelems(C, 1);
-        csV_unarithm(C, s2v(C->sp.p-1), C->sp.p-1, op);
+        csV_unarithm(C, s2v(C->sp.p-1), op);
+        /* done */
     }
     cs_unlock(C);
 }
@@ -1045,23 +1047,6 @@ unlock:
 }
 
 
-CS_API int cs_get_metamethod(cs_State *C, int obj, cs_MM mm) {
-    TValue *vmt;
-    int tt;
-    cs_lock(C);
-    vmt = getvmt(C, obj);
-    if (vmt) {
-        setobj2s(C, C->sp.p, &vmt[mm]);
-        api_inctop(C);
-        tt = ttype(s2v(C->sp.p - 1)); 
-    } else {
-        tt = CS_TNONE;
-    }
-    cs_unlock(C);
-    return tt;
-}
-
-
 CS_API void *cs_newuserdata(cs_State *C, size_t sz, int nuv) {
     UserData *ud;
     cs_lock(C);
@@ -1366,6 +1351,7 @@ CS_API int cs_load(cs_State *C, cs_Reader reader, void *userdata,
 }
 
 
+// TODO: Fix inifnite loop when 'gc("collect")' is called!
 CS_API int cs_gc(cs_State *C, int option, ...) {
     va_list ap;
     int res = 0;
@@ -1462,7 +1448,7 @@ CS_API int cs_hasvmt(cs_State *C, int index) {
 /* Check if the value at the index has meta method. */
 CS_API int cs_hasmetamethod(cs_State *C, int index, cs_MM mm) {
     TValue *vmt = getvmt(C, index);
-    return (vmt ? !ttisnil(&vmt[mm]) : 0);
+    return (vmt ? !isempty(&vmt[mm]) : 0);
 }
 
 

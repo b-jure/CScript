@@ -1,0 +1,7 @@
+local x, y, z = runfile("test/libs/basic/loadfile_script");
+assert(a == 69);
+assert(b == 420);
+assert(c == 1337);
+assert(x == a);
+assert(y == b);
+assert(z == c);

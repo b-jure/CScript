@@ -222,6 +222,7 @@
 ** @cs_mathop - allows the addition of an 'l' or 'f' to all math operations.
 ** @cs_floor - takes the floor of a float.
 ** @cs_number2str - convert float into string.
+** @cs_str2number - convert numeral into float
 ** @cs_number2integer - converts float to integer or returns 0 if float is
 ** not withing the range of integer.
 */
@@ -249,12 +250,16 @@
 #define CS_NUMBER_FMTLEN        ""
 #define CS_NUMBER_FMT           "%.14g"
 
+#define cs_floatatt(n)          (DBL_##n)
+
 #define CS_NUMBER_MIN           cs_floatatt(MIN)
 #define CS_NUMBER_MAX           cs_floatatt(MAX)
 
+#define CS_HUGE_VAL             HUGE_VAL
+
 #define cs_mathop(op)           op
 
-#define cs_floatatt(n)          (DBL_##n)
+#define cs_str2number(s,p)      strtod((s), (p))
 
 #elif CS_FLOAT_TYPE == CS_FLOAT_LONG_DOUBLE_TYPE
 
@@ -266,6 +271,9 @@
 
 #endif                                              /* } */
 
+
+#if !defined(cs_str2number)
+#endif
 
 
 /*

@@ -1,0 +1,19 @@
+local res, err;
+assert(true);
+assert("str");
+assert(!false);
+assert(4.20);
+assert(69);
+assert(01337);
+assert(res == nil and err == nil);
+res, err = !res, !err;
+assert(res and err);
+assert(nil or true);
+
+res, err = pcall(assert, false);
+assert(res == false);
+assert(typeof(err) == "string");
+
+res, err = pcall(assert, nil);
+assert(res == false);
+assert(typeof(err) == "string");

@@ -1,0 +1,37 @@
+local x = "Water";
+local t = {
+    a = "69",
+    b = "420",
+    c = "1337",
+    ["x"] = 69,
+    ["y"] = 420,
+    ["z"] = 1337,
+    [x] = true
+};
+assert(x and t);
+assert(typeof(t) == "table");
+
+local i = 0;
+foreach k, v in pairs(t) {
+    assert(k and v);
+    i = i + 1;
+}
+assert(i == 7);
+
+local class X {
+    fn __init(x, y, z) {
+        self.x = x;
+        self.y = y;
+        self.z = z;
+        return self;
+    }
+};
+local ins = X(69, 420, 1337);
+assert(typeof(ins) == "instance");
+assert(ins.x == 69 and ins.y == 420 and ins.z == 1337);
+
+foreach k, v in pairs(ins) {
+    assert(k and v);
+    i = i + 1;
+}
+assert(i == 10);

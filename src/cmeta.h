@@ -35,16 +35,14 @@ CSI_FUNC void csMM_callgetres(cs_State *C, const TValue *fn, const TValue *p1,
                               const TValue *p2, SPtr res);
 CSI_FUNC void csMM_callbinres(cs_State *C, const TValue *fn, const TValue *v1,
                               const TValue *v2, SPtr res);
-CSI_FUNC void csMM_callunaryres(cs_State *C, const TValue *fn,
-                                const TValue *v, SPtr res);
+CSI_FUNC void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *v);
 CSI_FUNC int csMM_order(cs_State *C, const TValue *v1, const TValue *v2,
 		  	cs_MM mm);
 CSI_FUNC int csMM_orderI(cs_State *C, const TValue *v1, int v2, int flip,
                          int isflt, cs_MM mm);
 CSI_FUNC void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2,
 		    	  SPtr res, cs_MM mm);
-CSI_FUNC void csMM_tryunary(cs_State *C, const TValue *v, SPtr res,
-                             cs_MM mm);
+CSI_FUNC void csMM_tryunary(cs_State *C, const TValue *v, cs_MM mm);
 CSI_FUNC void csMM_tryconcat(cs_State *C);
 
 #endif

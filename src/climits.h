@@ -311,15 +311,21 @@ typedef c_byte Instruction;
 
 
 /*
-** @CSI_STRESS_GC - enables stress test for garbage collector, on each
-** tracked memory change it performs full garbage collection.
+** Macro to control inclusion of some hard tests on stack reallocation.
 */
-#if defined(CSI_STRESS_GC)
-#define gcmemchange(C,pre,pos) \
-    { if (gcrunning(G(C)->gc)) { pre; csG_full(C); pos; } }
+#if !defined(HARDSTACKTESTS)
+#define condmovestack(C,pre,pos)	((void)0)
 #else
-#define gcmemchange(C,pre,pos)      ((void)0)
+/* realloc stack keeping its size */
+#define condmovestack(C,pre,pos)  \
+    { int sz_ = stacksize(C); pre; csT_reallocstack((C), sz_, 0); pos; }
 #endif
 
+#if !defined(HARDMEMTESTS)
+#define condchangemem(C,pre,pos)	((void)0)
+#else
+#define condchangemem(C,pre,pos)  \
+    { if (gcrunning(G(C))) { pre; csG_full(C, 0); pos; } }
+#endif
 
 #endif

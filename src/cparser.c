@@ -238,6 +238,7 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
     ctx->nabslineinfo = fs->nabslineinfo;
     ctx->nlocals = fs->nlocals;
     ctx->nupvals = fs->nupvals;
+    ctx->fintestpc = fs->fintestpc;
     ctx->npatches = ps->patches.len;
     if (ctx->npatches > 0) /* have patch list */
         ctx->njumps = gplist(fs->lx)->len;
@@ -261,6 +262,7 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
     fs->nabslineinfo = ctx->nabslineinfo;
     fs->nlocals = ctx->nlocals;
     fs->nupvals = ctx->nupvals;
+    fs->fintestpc = ctx->fintestpc;
     rmpatchlists(fs->lx, ctx->npatches); /* remove extra patch lists */
     cs_assert(ps->patches.len == ctx->npatches);
     if (ctx->npatches > 0)
@@ -404,11 +406,23 @@ static int finishpatchlist(FunctionState *fs, int level) {
     int hasclose = 0;
     if (!isdummy(j)) { /* have jump? */
         Instruction *jmp = &fs->p->code[j->jmp];
-        if (j->jmp == fs->prevpc) { /* no offset jump? */
+        int removed = 0;
+        while (j->jmp == fs->prevpc) { /* have jumps with no offset? */
             csC_removelastjump(fs); /* remove it */
             j = poplistjump(l); /* get the next jump (if any) */
+            removed = 1;
         }
-        while (!isdummy(j)) { /* (maybe removed last and only jump) */
+        if (removed && fs->fintestpc > 0) { /* need to adjust test offset? */
+            int off;
+            cs_assert(fs->scope == fs->switchscope); /* 'switch' patchlist */
+            jmp = &fs->p->code[fs->fintestpc];
+            cs_assert(*jmp == OP_TESTPOP); /* must be OP_TESTPOP */
+            /* Last jump was OP_BJMP, it got optimized out, so we need
+            ** to fix the offset of the last OP_TESTPOP jump in switch. */
+            off = GETARG_L(jmp, 0) - getOpSize(OP_BJMP);
+            SETARG_L(jmp, 0, off);
+        }
+        while (!isdummy(j)) { /* (maybe removed all jumps) */
             jmp = &fs->p->code[j->jmp];
             if (*jmp == OP_JMP) { /* 'continue' jump? */ 
                 /* 'continue' already performed potential close/pop */
@@ -571,6 +585,7 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->ninstpc = 0;
     fs->nlocals = 0;
     fs->nupvals = 0;
+    fs->fintestpc = 0;
     fs->iwthabs = fs->needclose = fs->lastwasret = 0;
     p->source = lx->src;
     csG_objbarrier(lx->C, p, p->source);
@@ -1116,12 +1131,20 @@ static void endcs(FunctionState *fs) {
 }
 
 
-static int codemethod(FunctionState *fs, ExpInfo *var) {
+static int codemethod(FunctionState *fs, ExpInfo *var, c_byte *arrmm) {
     int ismethod = 1;
     cs_assert(var->et == EXP_STRING);
     if (ismetatag(var->u.str)) { /* metamethod? */
-        csC_emitIS(fs, OP_SETMM, var->u.str->extra - NUM_KEYWORDS - 1);
-        ismethod = 0; /* (this function goes in VMT) */
+        cs_MM mm = var->u.str->extra - NUM_KEYWORDS - 1;
+        cs_assert(0 <= mm && mm < CS_MM_N); /* must be valid tag */
+        if (c_unlikely(arrmm[mm])) {
+            const char *msg = csS_pushfstring(fs->lx->C,
+                    "redefinition of '%s' metamethod", getstr(var->u.str));
+            csP_semerror(fs->lx, msg);
+        } /* else fall through */
+        arrmm[mm] = 1; /* mark as defined */
+        csC_emitIS(fs, OP_SETMM, mm);
+        ismethod = 0; /* (this function goes into VMT) */
     } else /* otherwise have methods hashtable entry */
         csC_method(fs, var);
     fs->sp--; /* function is removed from stack */
@@ -1130,13 +1153,13 @@ static int codemethod(FunctionState *fs, ExpInfo *var) {
 
 
 /* method ::= fn name funcbody */
-static int method(Lexer *lx) {
+static int method(Lexer *lx, c_byte *arrmm) {
     ExpInfo var, dummy;
     int line = lx->line;
     expectnext(lx, TK_FN);
     expname(lx, &var);
     funcbody(lx, &dummy, 1, line);
-    return codemethod(lx->fs, &var);
+    return codemethod(lx->fs, &var, arrmm);
 }
 
 
@@ -1146,9 +1169,10 @@ static int method(Lexer *lx) {
 **           | empty
 */
 static int methods(Lexer *lx) {
+    c_byte arrmm[CS_MM_N] = {0};
     int i = 0;
     while (!check(lx, '}') && !check(lx, TK_EOS))
-        i += method(lx);
+        i += method(lx, arrmm);
     return i;
 }
 
@@ -1577,7 +1601,7 @@ static void localstm(Lexer *lx) {
     do {
         vidx = newlocalvar(lx, str_expectname(lx)); /* create new local... */
         kind = getlocalattribute(lx);               /* get its attribute... */
-        getlocalvar(fs, vidx)->s.kind = kind;       /* ...and set the attr */
+        getlocalvar(fs, vidx)->s.kind = kind;       /* ...and set the attr. */
         if (kind & VARTBC) { /* to-be-closed? */
             if (toclose != -1) /* one already present? */
                 csP_semerror(fs->lx,
@@ -1631,12 +1655,12 @@ static void localclass(Lexer *lx) {
 
 /* blockstm ::= '{' stmlist '}' */
 static void blockstm(Lexer *lx) {
-    int matchline = lx->line;
+    int line = lx->line;
     Scope s;
     csY_scan(lx); /* skip '{' */
     enterscope(lx->fs, &s, 0); /* explicit scope */
     decl_list(lx, '}'); /* body */
-    expectmatchblk(lx, matchline);
+    expectmatchblk(lx, line);
     leavescope(lx->fs);
 }
 
@@ -1863,7 +1887,7 @@ static void checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e,
     const char *what = NULL;
     if (!checkliteral(ss, e, &what))
          checkK(lx, e, li, ss->firstli, &extra, &what);
-    if (c_unlikely(what)) {
+    if (c_unlikely(what)) { /* have duplicate? */
         const char *msg = csS_pushfstring(lx->C,
                             "duplicate %s literal%s in switch statement",
                             what, (extra ? literal2text(lx->C, li) : ""));
@@ -1876,9 +1900,9 @@ static void addliteralinfo(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     ParserState *ps = lx->ps;
     LiteralInfo li;
     checkduplicate(lx, ss, e, &li);
-    checklimit(lx->fs, ps->literals.len, MAX_ARG_L, "switch cases");
+    checklimit(lx->fs, ps->literals.len, MAX_CODE, "switch cases");
     csM_growarray(lx->C, ps->literals.arr, ps->literals.size,
-                  ps->literals.len, MAX_ARG_L, "switch literals", LiteralInfo);
+                  ps->literals.len, MAX_CODE, "switch literals", LiteralInfo);
     ps->literals.arr[ps->literals.len++] = li;
 }
 
@@ -1900,7 +1924,7 @@ static int checkmatch(Lexer *lx, SwitchState *ss, ExpInfo *e) {
         if (ss->isconst) { /* both are constant values? */
             TValue v;
             csC_constexp2val(lx->fs, e, &v);
-            return csV_raweq(&ss->v, &v) + 1;
+            return csV_raweq(&ss->v, &v) + 1; /* NOMATCH or MATCH */
         } /* else fall-through */
     } /* else fall-through */
     ss->nomatch = 0; /* we don't know... */
@@ -1950,6 +1974,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
         if (check(lx, TK_CASE) || match(lx, TK_DEFAULT)) { /* has case?... */
             if (ss->c == CASE && check(lx, TK_CASE)) {
                 /* had previous case that is followed by another case */
+                cs_assert(ftjmp == NOJMP); /* can't have open 'ftjump' */
                 ftjmp = csC_jmp(fs, OP_JMP); /* new fall-through jump */
                 csC_patchtohere(fs, ss->jmp); /* patch test jump */
             }
@@ -1973,11 +1998,12 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                     /* compile-time mismatch or previous case is a match */
                     if (ss->c != CMATCH) ss->c = CMISMATCH;
                     loadcontext(fs, &ctxcase); /* remove case expression */
-                } else { /* otherwise already have matched case */
+                } else { /* else must check for match */
                     cs_assert(!ss->nomatch);
                     ss->c = CASE; /* regular case */
                     csC_emitI(fs, OP_EQPRESERVE); /* EQ but preserves lhs */
                     ss->jmp = csC_test(fs, OP_TESTPOP, 0); /* test jump */
+                    fs->fintestpc = ss->jmp;
                 }
             } else if (!ss->havedefault) { /* don't have 'default'? */
                 expectnext(lx, ':');
@@ -2024,6 +2050,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
 /* switchstm ::= 'switch' '(' expr ')' '{' switchbody '}' */
 static void switchstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
+    int old_fintestpc = fs->fintestpc;
     Scope *old_switchscope = fs->switchscope;
     int line;
     FuncContext ctxbefore;
@@ -2052,6 +2079,7 @@ static void switchstm(Lexer *lx) {
     switchbody(lx, &ss, &ctxbefore);
     expectmatch(lx, '}', '{', line);
     leavescope(fs);
+    fs->fintestpc = old_fintestpc;
     fs->switchscope = old_switchscope;
 }
 
@@ -2185,17 +2213,17 @@ static void whilestm(Lexer *lx) {
     struct LoopState ls;
     Scope s; /* new 'loopscope' */
     ExpInfo cond;
-    int pcexpr, matchline;
+    int pcexpr, line;
     voidexp(&cond);
     csY_scan(lx); /* skip 'while' */
     enterloop(fs, &s, &ls, 0);
     storecontext(fs, &ctxbefore);
     pcexpr = currPC;
-    matchline = lx->line;
+    line = lx->line;
     expectnext(lx, '(');
     expr(lx, &cond);
     codepres_exp(fs, &cond);
-    expectmatch(lx, ')', '(', matchline);
+    expectmatch(lx, ')', '(', line);
     condbody(lx, &ctxbefore, &cond, 0, OP_TESTPOP, OP_JMPS, pcexpr, NOJMP);
     leaveloop(fs);
 }
@@ -2330,7 +2358,7 @@ void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond, int *clause
 /* forstm ::= 'for' '(' forinit ';' forcond ';' forlastclause ')' condbody */
 static void forstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    int matchline = lx->line;
+    int line = lx->line;
     int condpc, clausepc;
     FuncContext ctxbefore;
     struct LoopState ls;
@@ -2348,7 +2376,7 @@ static void forstm(Lexer *lx) {
     forcondition(lx, &cond);
     clausepc = NOJMP;
     forlastclause(lx, &ctxbefore, &cond, &clausepc);
-    expectmatch(lx, ')', '(', matchline);
+    expectmatch(lx, ')', '(', line);
     condbody(lx, &ctxbefore, &cond, 0, OP_TESTPOP, OP_JMPS, condpc, clausepc);
     leaveloop(fs); /* leave loop scope */
     leavescope(fs); /* leave initializer scope */

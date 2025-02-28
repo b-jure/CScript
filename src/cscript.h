@@ -260,7 +260,6 @@ CS_API int   cs_get_fieldint(cs_State *C, int index, cs_Integer field);
 CS_API int   cs_get_fieldflt(cs_State *C, int index, cs_Number field); 
 CS_API int   cs_get_class(cs_State *C, int index); 
 CS_API int   cs_get_method(cs_State *C, int index); 
-CS_API int   cs_get_metamethod(cs_State *C, int index, cs_MM mm); 
 
 CS_API void *cs_newuserdata(cs_State *C, size_t sz, int nuv); 
 CS_API int   cs_get_uservalue(cs_State *C, int index, unsigned short n); 
@@ -341,6 +340,8 @@ CS_API int              cs_getfreereg(cs_State *C);
 #define cs_getextraspace(C)         ((void *)((char *)(C) - CS_EXTRASPACE))
 
 #define cs_nvalues(C)               (cs_gettop(C) + 1)
+
+#define cs_settop(C, index)         cs_setntop(C, (index)+1)
 
 #define cs_to_number(C,i)           cs_to_numberx(C,(i),NULL)
 #define cs_to_integer(C,i)          cs_to_integerx(C,(i),NULL)

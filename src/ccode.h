@@ -174,17 +174,17 @@ OP_BANDK,/*        V L     'V & K{L}:number'                                */
 OP_BORK,/*         V L     'V | K{L}:number'                                */
 OP_BXORK,/*        V L     'V ^ K{L}:number'                                */
 
-OP_ADDI,/*         V L S   'V + ((S - 1) * I(L))'                           */
-OP_SUBI,/*         V L S   'V - ((S - 1) * I(L))'                           */
-OP_MULI,/*         V L S   'V * ((S - 1) * I(L))'                           */
-OP_DIVI,/*         V L S   'V / ((S - 1) * I(L))'                           */
-OP_MODI,/*         V L S   'V % ((S - 1) * I(L))'                           */
-OP_POWI,/*         V L S   'V ** ((S - 1) * I(L))'                          */
-OP_BSHLI,/*        V L S   'V << ((S - 1) * I(L))'                          */
-OP_BSHRI,/*        V L S   'V >> ((S - 1) * I(L))'                          */
-OP_BANDI,/*        V L S   'V & ((S - 1) * I(L))'                           */
-OP_BORI,/*         V L S   'V | ((S - 1) * I(L))'                           */
-OP_BXORI,/*        V L S   'V ^ ((S - 1) * I(L))'                           */
+OP_ADDI,/*         V L     'V + I(L)'                                       */
+OP_SUBI,/*         V L     'V - I(L)'                                       */
+OP_MULI,/*         V L     'V * I(L)'                                       */
+OP_DIVI,/*         V L     'V / I(L)'                                       */
+OP_MODI,/*         V L     'V % I(L)'                                       */
+OP_POWI,/*         V L     'V ** I(L)'                                      */
+OP_BSHLI,/*        V L     'V << I(L)'                                      */
+OP_BSHRI,/*        V L     'V >> I(L)'                                      */
+OP_BANDI,/*        V L     'V & I(L)'                                       */
+OP_BORI,/*         V L     'V | I(L)'                                       */
+OP_BXORI,/*        V L     'V ^ I(L)'                                       */
 
 OP_ADD,/*          V1 V2   'V1 + V2'                                        */
 OP_SUB,/*          V1 V2   'V1 - V2'                                        */
@@ -319,9 +319,6 @@ CSI_DEC(const c_byte csC_opProp[NUM_OPCODES];)
 #define opProp(j,f)         (((j) << 4) | (f))
 
 
-#define opisjump(op)        testJProp(op)
-
-
 /* Instruction format sizes in bytes (aka as bytecode) */
 CSI_DEC(const c_byte csC_opSize[FormatN];)
 
@@ -358,8 +355,8 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 #define csC_store(fs,var)       csC_storevar(fs, var, 0)
 
 
-#define prevOP(fs)      ((fs)->p->code[(fs)->prevpc])
-#define currOP(fs)      ((fs)->p->code[(fs)->pc])
+#define prevOP(fs)      (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->prevpc])
+#define currOP(fs)      (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->pc])
 
 
 CSI_FUNC int csC_emitI(FunctionState *fs, Instruction i);

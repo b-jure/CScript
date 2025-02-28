@@ -103,26 +103,25 @@ static int b_gc(cs_State *C) {
 
 /*
 ** Reserved slot, above all arguments, to hold a copy of the returned
-** string to avoid it being collected while parsed. 'load' has two
-** optional arguments (chunk and source name).
+** string to avoid it being collected while parsed. 'load' has 2
+** optional arguments (chunk and chunkname).
 */
 #define RESERVEDSLOT  2
 
 
-static const char *loadreader(cs_State *C, void *ud, size_t *sz) {
+static const char *genericreader(cs_State *C, void *ud, size_t *sz) {
     (void)ud; /* unused */
     csL_check_stack(C, 2, "too many nested functions");
     cs_push(C, 0); /* push func... */
     cs_call(C, 0, 1); /* ...and call it */
     if (cs_is_nil(C, -1)) { /* nothing else to read? */
-        cs_pop(C, 1); /* pop result (nil) */
+        cs_pop(C, 1); /* pop result */
         *sz = 0;
         return NULL;
-    } else if (c_unlikely(!cs_is_string(C, -1))) { /* top is not a string? */
+    } else if (c_unlikely(!cs_is_string(C, -1))) /* top is not a string? */
         csL_error(C, "reader function must return a string");
-    }
     cs_replace(C, RESERVEDSLOT); /* move string into reserved slot */
-    return csL_to_lstring(C, RESERVEDSLOT, sz);
+    return cs_to_lstring(C, RESERVEDSLOT, sz);
 }
 
 
@@ -130,7 +129,7 @@ static int auxload(cs_State *C, int status) {
     if (c_unlikely(status != CS_OK)) {
         csL_push_fail(C); /* push fail */
         cs_insert(C, -2); /* and put it in front of error message */
-        return 2; /* nil + error message */
+        return 2; /* return fail + error message */
     }
     return 1; /* compiled function */
 }
@@ -138,16 +137,16 @@ static int auxload(cs_State *C, int status) {
 
 static int b_load(cs_State *C) {
     int status;
-    size_t sz;
-    const char *chunkname;
-    const char *chunk = cs_to_lstring(C, 0, &sz);
-    if (chunk != NULL) { /* 'chunk' is a string? */
-        chunkname = csL_opt_string(C, 1, chunk);
-        status = csL_loadbuffer(C, chunk, sz, chunkname);
-    } else { /* 'chunk' is not a string */
-        chunkname = csL_opt_string(C, 1, "(load)");
+    size_t l;
+    const char *s = cs_to_lstring(C, 0, &l);
+    if (s != NULL) { /* loading a string? */
+        const char *chunkname = csL_opt_string(C, 1, s);
+        status = csL_loadbuffer(C, s, l, chunkname);
+    } else { /* loading from a reader function */
+        const char *chunkname = csL_opt_string(C, 1, "(load)");
         csL_check_type(C, 0, CS_TFUNCTION); /* 'chunk' must be a function */
-        status = cs_load(C, loadreader, NULL, chunkname);
+        cs_settop(C, RESERVEDSLOT); /* create reserved slot */
+        status = cs_load(C, genericreader, NULL, chunkname);
     }
     return auxload(C, status);
 }
@@ -162,15 +161,15 @@ static int b_loadfile(cs_State *C) {
 
 static int b_runfile(cs_State *C) {
     const char *filename = csL_opt_string(C, -1, NULL);
-    cs_setntop(C, 1);
+    cs_settop(C, 0);
     if (c_unlikely(csL_loadfile(C, filename) != CS_OK))
         return cs_error(C);
     cs_call(C, 0, CS_MULRET);
-    return cs_nvalues(C) - 1; /* all not including 'filename' */
+    return cs_gettop(C); /* all except the 'filename' */
 }
 
 
-static int b_getmetamethod(cs_State *C) {
+static int b_hasmetamethod(cs_State *C) {
     static const char * const opts[CS_MM_N + 1] = {"__getidx", "__setidx",
         "__gc", "__close", "__call", "__concat", "__add", "__sub", "__mul",
         "__div", "__mod", "__pow", "__shl", "__shr", "__band", "__bor",
@@ -181,10 +180,9 @@ static int b_getmetamethod(cs_State *C) {
         CS_MM_BAND, CS_MM_BOR, CS_MM_BXOR, CS_MM_UNM, CS_MM_BNOT, CS_MM_EQ,
         CS_MM_LT, CS_MM_LE};
     cs_MM mm;
-    csL_check_any(C, 0); /* object with metamethods */
+    csL_check_any(C, 0); /* value with metamethods */
     mm = mmnum[csL_check_option(C, 1, NULL, opts)];
-    if (!cs_hasvmt(C, 0) || (cs_get_metamethod(C, 0, mm) == CS_TNONE))
-        cs_push_nil(C);
+    cs_push_bool(C, cs_hasmetamethod(C, 0, mm));
     return 1;
 }
 
@@ -205,9 +203,9 @@ static int b_next(cs_State *C) {
 
 static int b_pairs(cs_State *C) {
     csL_check_any(C, 0);
-    cs_push_cfunction(C, b_next);    /* will return generator, */
-    cs_push(C, 0);                     /* state, */
-    cs_push_nil(C);                    /* and initial value */
+    cs_push_cfunction(C, b_next);   /* will return generator, */
+    cs_push(C, 0);                  /* state, */
+    cs_push_nil(C);                 /* and initial value */
     return 3;
 }
 
@@ -233,8 +231,8 @@ static int b_ipairs(cs_State *C) {
 
 static int finishpcall(cs_State *C, int status, int extra) {
     if (c_unlikely(status != CS_OK)) {
-        cs_push_bool(C, 0);    /* false */
-        cs_push(C, -2);        /* error message */
+        cs_push_bool(C, 0);     /* false */
+        cs_push(C, -2);         /* error message */
         return 2;               /* return false, message */
     } else
         return cs_nvalues(C) - extra; /* return all */
@@ -246,7 +244,7 @@ static int b_pcall(cs_State *C) {
     csL_check_any(C, 0);
     cs_push_bool(C, 1); /* first result if no errors */
     cs_insert(C, 0); /* insert it before the object being called */
-    status = cs_pcall(C, cs_nvalues(C) - 2, CS_MULRET, 0);
+    status = cs_pcall(C, cs_nvalues(C) - 2, CS_MULRET, -1);
     return finishpcall(C, status, 0);
 }
 
@@ -471,10 +469,9 @@ static int b_tonumber(cs_State *C) {
             return 1; /* return it */
         } else { /* must be string */
             const char *s = cs_to_string(C, 0);
-            if (s != NULL && cs_stringtonumber(C, s, &overflow)) {
-                cs_push_bool(C, overflow); /*push overflow flag */
-                return 1; /* successful conversion to number */
-            } /* else not a number */
+            if (s != NULL && cs_stringtonumber(C, s, &overflow))
+                goto pushflag;
+            /* else not a number */
             csL_check_any(C, 0); /* (but there must be some parameter) */
         }
     } else { /* have base */
@@ -487,8 +484,12 @@ static int b_tonumber(cs_State *C) {
         csL_check_arg(C, 2 <= i && i <= 32, 1, "base out of range");
         if (strtoint(s, i, &n, &overflow) == s + l) { /* conversion ok? */
             cs_push_integer(C, n); /* push the conversion number */
-            cs_push_bool(C, overflow); /* push overflow flag */
-            return 2;
+pushflag:
+            if (overflow) {
+                cs_push_integer(C, overflow);
+                return 2; /* return number + over(under)flow flag (-1|1) */
+            }
+            return 1; /* return only number */ 
         }
     }
     csL_push_fail(C); /* conversion failed */
@@ -527,7 +528,7 @@ static const cs_Entry basic_funcs[] = {
     {"load", b_load},
     {"loadfile", b_loadfile},
     {"runfile", b_runfile},
-    {"getmetamethod", b_getmetamethod},
+    {"hasmetamethod", b_hasmetamethod},
     {"next", b_next},
     {"pairs", b_pairs},
     {"ipairs", b_ipairs},

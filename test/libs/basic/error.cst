@@ -1,0 +1,31 @@
+fn err0(name, level) {
+    if (!name)
+        error("name is nil", level);
+    else
+        return 69;
+}
+
+local res, err = pcall(err0, nil, 0);
+print(err);
+assert(!res);
+assert(typeof(err) == "string");
+
+
+fn err1(name, level) {
+    err0(name, level);
+}
+
+res, err = pcall(err1, nil, 0);
+print(err);
+assert(!res);
+assert(typeof(err) == "string");
+
+res, err = pcall(err1, nil, 1);
+print(err);
+assert(!res);
+assert(typeof(err) == "string");
+
+res, err = pcall(err1, nil, 2);
+print(err);
+assert(!res);
+assert(typeof(err) == "string");

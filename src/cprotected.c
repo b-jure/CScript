@@ -131,6 +131,7 @@ static void parsepaux(cs_State *C, void *userdata) {
 int csPR_parse(cs_State *C, BuffReader *br, const char *name) {
     struct PParseData pd;
     int status;
+    incnnyc(C);
     pd.br = br;
     csR_buffinit(&pd.buff);
     pd.ps.actlocals.len = pd.ps.actlocals.size = 0; pd.ps.actlocals.arr = NULL;

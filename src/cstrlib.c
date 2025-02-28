@@ -50,11 +50,10 @@ static const char *find(const char *s, size_t ls, const char *p, size_t lp) {
 }
 
 
-static const void *memrchr(const void *s, int c, size_t n, size_t nmin) {
+static const void *memrnchr(const void *s, int c, size_t n, size_t nmin) {
     const unsigned char *p = s;
     const unsigned char *const e = p+n;
     c = uchar(c);
-    n++; /* compensate for loop */
     while (n--)
         if (p[n] == c)
             return ((size_t)(e-(p+n)) >= nmin) ? p+n : NULL;
@@ -66,9 +65,9 @@ static const char *rfind(const char *s, size_t ls, const char *p, size_t lp) {
     const char *end = s + ls;
     const char *aux;
     size_t rl = ls; /* real length of 's' */
-    lp--; /* 'strrchr' checks the first char */
+    lp--; /* 'memrchr' checks the first char */
     ls -= lp; /* 'p' cannot be found after that */
-    while (ls > 0 && (aux = memrchr(s, *p, rl, lp+1)) != NULL) {
+    while (ls > 0 && (aux = memrnchr(s, *p, rl, lp)) != NULL) {
         if (memcmp(aux+1, p+1, lp) == 0)
             return aux;
         else {
@@ -85,7 +84,7 @@ static const char *findstr(const char *s, size_t l,
                            const char *p, size_t lpat, int rev) {
     if (c_unlikely(lpat == 0)) return s; /* empty strings match everything */
     else if (l < lpat) return NULL; /* avoid negative 'l' */
-    else if (!rev) return find(s, l, p, lpat); /* regular find */
+    else if (!rev) return find(s, l, p, lpat); /* find from start */
     else return rfind(s, l, p, lpat); /* reverse find */
 }
 
@@ -96,16 +95,17 @@ static int splitintoarray(cs_State *C, int rev) {
     const char *p = csL_check_lstring(C, 1, &lp); /* pattern */
     cs_Integer n = csL_opt_integer(C, 2, CS_INTEGER_MAX); /* maxsplit */
     const char *aux;
+    int arr = cs_nvalues(C);
     cs_push_array(C, (n > 0 ? n : 1));
     if (c_unlikely(n <= 0 || lp == 0)) { /* no splits or pattern is '""'? */
         cs_push(C, 0);
         cs_set_index(C, 3, 0);
     } else {
         int i = 0;
-        const char *e = s+lp;
-        while (n > 0 && (aux = findstr(s, ls, p, lp, rev)) != NULL) {
-            if (!rev) { /* regular find? */
-                cs_push_lstring(C, s, s-aux);
+        const char *e = s+ls;
+        while (n > 1 && (aux = findstr(s, ls, p, lp, rev)) != NULL) {
+            if (!rev) { /* find from start? */
+                cs_push_lstring(C, s, aux-s);
                 ls -= (aux+lp)-s;
                 s = aux+lp;
             } else { /* reverse find */
@@ -113,13 +113,11 @@ static int splitintoarray(cs_State *C, int rev) {
                 e = aux;
                 ls = aux-s;
             }
-            cs_set_index(C, 3, i);
+            cs_set_index(C, arr, i);
             n--; i++;
         }
-        if (n > 0) { /* maxsplit not reached? */
-            cs_push_lstring(C, s, ls); /* push last piece */
-            cs_set_index(C, 3, i);
-        }
+        cs_push_lstring(C, s, ls); /* push last piece */
+        cs_set_index(C, arr, i);
     }
     return 1; /* return array */
 }

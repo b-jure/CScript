@@ -29,33 +29,28 @@
 static void startline(const Proto *p, const Instruction *pc) {
     int relpc = pc - p->code;
     postab(printf("[LINE %4d][PC %4d]", csD_getfuncline(p, relpc), relpc));
-    fflush(stdout);
 }
 
 
 static void endline(void) {
-    putchar('\n');
-    fflush(stdout);
+    putchar('\n'); fflush(stdout);
 }
 
 
 static int traceOp(OpCode op) {
     postab(printf("%-12s", getOpName(op)));
-    fflush(stdout);
     return SIZE_INSTR;
 }
 
 
 static int traceS(int s) {
     postab(printf("ArgS=%-8d", s));
-    fflush(stdout);
     return SIZE_ARG_S;
 }
 
 
 static int traceL(const Instruction *pc) {
     postab(printf("ArgL=%-8d", get3bytes(pc)));
-    fflush(stdout);
     return SIZE_ARG_L;
 }
 
@@ -199,13 +194,11 @@ static void traceValue(const TValue *o) {
         case CS_VNUMINT: case CS_VNUMFLT: traceNumber(o); break;
         default: cs_assert(0 && "invalid 'o' type"); break;
     }
-    fflush(stdout);
 }
 
 
 static void traceK(const Proto *p, int index) {
     postab((printf("K@%d=", index), traceValue(&p->k[index])));
-    fflush(stdout);
 }
 
 
@@ -272,7 +265,6 @@ static void traceImmediate(Instruction *pc, int off, int l) {
     int imm = (l) ? GETARG_L(pc, off) : GETARG_S(pc, off);
     imm = (l) ? IMML(imm) : IMM(imm);
     postab(printf("IMM%s=%d", (l) ? "L" : "", imm));
-    fflush(stdout);
 }
 
 
@@ -295,7 +287,6 @@ static void unasmIMMflt(const Proto *p, Instruction *pc, int l) {
 static void traceSize(int size) {
     if (size > 0) size = 1 << (size - 1);
     postab(printf("size=%d", size));
-    fflush(stdout);
 }
 
 
@@ -320,7 +311,6 @@ static void unasmEQK(const Proto *p, Instruction *pc) {
 
 static void traceCond(int cond) {
     postab(printf("%s", (cond ? "equal" : "not equal")));
-    fflush(stdout);
 }
 
 
@@ -343,7 +333,6 @@ static void unasmIMMord(const Proto *p, Instruction *pc) {
 
 static void traceNparams(int nparams) {
     postab(printf("nparams=%d", nparams));
-    fflush(stdout);
 }
 
 
@@ -365,7 +354,6 @@ static void unasmS(const Proto *p, Instruction *pc) {
 
 static void traceStackSlot(int index) {
     postab(printf("S@%d", index));
-    fflush(stdout);
 }
 
 
@@ -393,7 +381,6 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 
 static void traceMetaName(cs_State *C, cs_MM mm) {
     postab(printf("%s", getstr(G(C)->mmnames[mm])));
-    fflush(stdout);
 }
 
 
@@ -426,7 +413,6 @@ static void unasmIndexedSetL(const Proto *p, Instruction *pc) {
 static void traceGlobal(TValue *k, int index) {
     const char *str = getstr(strval(&k[index]));
     postab(printf("G@%s", str));
-    fflush(stdout);
 }
 
 
@@ -440,7 +426,6 @@ static void unasmGlobal(const Proto *p, Instruction *pc) {
 
 static void traceLocal(int index) {
     postab(printf("L@%d", index));
-    fflush(stdout);
 }
 
 
@@ -455,7 +440,6 @@ static void unasmLocal(const Proto *p, Instruction *pc) {
 static void traceUpVal(UpValInfo *uv, int index) {
     const char *str = getstr(uv[index].name);
     postab(printf("U@%d=%s", index, str));
-    fflush(stdout);
 }
 
 
@@ -469,19 +453,16 @@ static void unasmUpvalue(const Proto *p, Instruction *pc) {
 
 static void traceOffset(int off) {
     postab(printf("offset=%d", off));
-    fflush(stdout);
 }
 
 
 static void traceClose(int close) {
     postab(printf("close=%s", close ? "true" : "false"));
-    fflush(stdout);
 }
 
 
 static void traceNpop(int npop) {
     postab(printf("npop=%d", npop));
-    fflush(stdout);
 }
 
 
@@ -550,10 +531,8 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
         printf("%s {\n", getstr(p->source));
     else
         printf("fn at line %d in %s {\n", p->defline, getstr(p->source));
-    fflush(stdout);
     while (pc < &p->code[p->sizecode]) {
         printf("    ");
-        fflush(stdout);
         switch (*pc) {
             case OP_TRUE: case OP_FALSE: case OP_NIL:
             case OP_ADD: case OP_SUB: case OP_MUL: case OP_DIV:
@@ -683,14 +662,16 @@ void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...) {
         printf("\n");
     }
     for (int i = 0; cf != NULL && level != 0; i++) {
+        SPtr base = cf->func.p;
         level--;
         printf("[LEVEL %3d] %-10s %s ", i, typename(ttype(s2v(cf->func.p))),
                                         cf != C->cf ? "--" : ">>");
-        if (cf->func.p + 1 >= prevtop)
+        if (base + 1 >= prevtop)
             printf("empty");
-        else
-            for (SPtr sp = cf->func.p + 1; sp < prevtop; sp++)
+        else {
+            for (SPtr sp = base + 1; sp < prevtop; sp++)
                 printf("[%s]", typename(ttype(s2v(sp))));
+        }
         printf("\n");
         prevtop = cf->func.p;
         cf = cf->prev;

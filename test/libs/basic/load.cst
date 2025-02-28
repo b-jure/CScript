@@ -1,0 +1,43 @@
+local chunk = "a = 420; assert(true); assert(!false); return 69;";
+local func = load(chunk, "string chunk");
+assert(a == nil);
+assert(func() == 69);
+assert(a == 420);
+
+local control = true;
+chunk = fn () {
+    if (control) {
+        control = false;
+        return "return 69;";
+    }
+};
+func, err = load(chunk);
+assert(!err);
+assert(func() == 69);
+
+local npieces = 1;
+chunk = fn () {
+    local s = nil;
+    switch (npieces) {
+        case 1: s = "a = 69;"; break;
+        case 2: s = "assert(true);"; break;
+        case 3: s = "assert(!false);"; break;
+        case 4: s = "return 420;"; break;
+        default: break;
+    }
+    npieces = npieces + 1;
+    return s;
+};
+func, err = load(chunk);
+assert(!err);
+assert(a == 420);
+assert(func() == 420);
+assert(a == 69);
+
+chunk = fn () {
+    return "break;";
+};
+func, err = load(chunk);
+assert(func == nil);
+assert(err != nil);
+assert(typeof(err) == "string");

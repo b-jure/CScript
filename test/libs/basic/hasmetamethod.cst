@@ -1,0 +1,122 @@
+local class vec2 {
+    fn __init(x, y, name) {
+        self.x = x or 0.0;
+        self.y = y or 0.0;
+        self.name = name or "instance(vec2)";
+        return self;
+    }
+    fn __gc() { print("vec2(" .. self.name .. ") memory is now freed"); }
+    fn __close() { assert(!closed); closed = true; }
+    fn __call(name) { return vec2(self.x, self.y, name or self.name); }
+    fn __add(rhs) { return vec2(self.x + rhs.x, self.y + rhs.y, self.name); }
+    fn __sub(rhs) { return vec2(self.x - rhs.x, self.y - rhs.y, self.name); }
+    fn __mul(rhs) { return vec2(self.x * rhs.x, self.y * rhs.y, self.name); }
+    fn __div(rhs) { return vec2(self.x / rhs.x, self.y / rhs.y, self.name); }
+    fn __mod(rhs) { return vec2(self.x % rhs.x, self.y % rhs.y, self.name); }
+    fn __pow(rhs) { return vec2(self.x ** rhs.x, self.y ** rhs.y, self.name); }
+    fn __unm() {
+        self.x = -self.x;
+        self.y = -self.y;
+        return self;
+    }
+    fn __eq(rhs) {
+        return (self.x == rhs.x and self.y == rhs.y);
+    }
+    fn __lt(rhs) {
+        if (self.x != rhs.x)
+            return self.x < rhs.x;
+        return self.y < rhs.y;
+    }
+    fn __le(rhs) {
+        return (self < rhs or self == rhs);
+    }
+}
+assert(vec2);
+assert(typeof(vec2) == "class");
+
+local v1 = vec2(6.9, 4.20, "original");
+assert(v1.x == 6.9);
+assert(v1.y == 4.20);
+assert(v1.name == "original");
+assert(hasmetamethod(v1, "__gc"));
+assert(hasmetamethod(v1, "__close"));
+assert(hasmetamethod(v1, "__call"));
+assert(hasmetamethod(v1, "__add"));
+assert(hasmetamethod(v1, "__sub"));
+assert(hasmetamethod(v1, "__mul"));
+assert(hasmetamethod(v1, "__div"));
+assert(hasmetamethod(v1, "__mod"));
+assert(hasmetamethod(v1, "__pow"));
+assert(!hasmetamethod(v1, "__shl"));
+assert(!hasmetamethod(v1, "__shr"));
+assert(!hasmetamethod(v1, "__band"));
+assert(!hasmetamethod(v1, "__bor"));
+assert(!hasmetamethod(v1, "__bxor"));
+assert(hasmetamethod(v1, "__unm"));
+assert(!hasmetamethod(v1, "__bnot"));
+assert(hasmetamethod(v1, "__eq"));
+assert(hasmetamethod(v1, "__lt"));
+assert(hasmetamethod(v1, "__le"));
+
+local v2 = v1("duplicate");
+assert(v2.x == 6.9);
+assert(v2.y == 4.20);
+assert(v2.name == "duplicate");
+assert(hasmetamethod(v2, "__gc"));
+assert(hasmetamethod(v2, "__close"));
+assert(hasmetamethod(v2, "__call"));
+assert(hasmetamethod(v2, "__add"));
+assert(hasmetamethod(v2, "__sub"));
+assert(hasmetamethod(v2, "__mul"));
+assert(hasmetamethod(v2, "__div"));
+assert(hasmetamethod(v2, "__mod"));
+assert(hasmetamethod(v2, "__pow"));
+assert(!hasmetamethod(v2, "__shl"));
+assert(!hasmetamethod(v2, "__shr"));
+assert(!hasmetamethod(v2, "__band"));
+assert(!hasmetamethod(v2, "__bor"));
+assert(!hasmetamethod(v2, "__bxor"));
+assert(hasmetamethod(v2, "__unm"));
+assert(!hasmetamethod(v2, "__bnot"));
+assert(hasmetamethod(v2, "__eq"));
+assert(hasmetamethod(v2, "__lt"));
+assert(hasmetamethod(v2, "__le"));
+
+local v3 = v1 + v2;
+assert(v3.x == 13.8 and v3.y == 8.40);
+assert(v3.name == v1.name);
+assert(hasmetamethod(v2, "__gc"));
+assert(hasmetamethod(v2, "__close"));
+assert(hasmetamethod(v2, "__call"));
+assert(hasmetamethod(v2, "__add"));
+assert(hasmetamethod(v2, "__sub"));
+assert(hasmetamethod(v2, "__mul"));
+assert(hasmetamethod(v2, "__div"));
+assert(hasmetamethod(v2, "__mod"));
+assert(hasmetamethod(v2, "__pow"));
+assert(!hasmetamethod(v2, "__shl"));
+assert(!hasmetamethod(v2, "__shr"));
+assert(!hasmetamethod(v2, "__band"));
+assert(!hasmetamethod(v2, "__bor"));
+assert(!hasmetamethod(v2, "__bxor"));
+assert(hasmetamethod(v2, "__unm"));
+assert(!hasmetamethod(v2, "__bnot"));
+assert(hasmetamethod(v2, "__eq"));
+assert(hasmetamethod(v2, "__lt"));
+assert(hasmetamethod(v2, "__le"));
+v3 = v1 - v2;
+assert(v3.x == 0 and v3.y == 0);
+v3 = v1 * v2;
+assert(v3.x == (v1.x*v2.x) and v3.y == (v1.y*v2.y));
+v3 = v1 / v2;
+assert(v3.x == (v1.x/v2.x) and v3.y == (v1.y/v2.y));
+v3 = v1 % v2;
+assert(v3.x == (v1.x%v2.x) and v3.y == (v1.y%v2.y));
+v3 = v1 ** v2;
+assert(v3.x == (v1.x**v2.x) and v3.y == (v1.y**v2.y));
+v3 = -v1;
+assert(v3.x == v1.x and v3.y == v2.y);
+assert(v3.x == -6.9 and v3.y == -4.20);
+assert(v3 == v1);
+assert(v3 < v2);
+assert(v3 <= v2 and v3 <= v1);

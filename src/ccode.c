@@ -111,17 +111,17 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_BANDK */
     opProp(0, FormatIL), /* OP_BORK */
     opProp(0, FormatIL), /* OP_BXORK */
-    opProp(0, FormatILS), /* OP_ADDI */
-    opProp(0, FormatILS), /* OP_SUBI */
-    opProp(0, FormatILS), /* OP_MULI */
-    opProp(0, FormatILS), /* OP_DIVI */
-    opProp(0, FormatILS), /* OP_MODI */
-    opProp(0, FormatILS), /* OP_POWI */
-    opProp(0, FormatILS), /* OP_BSHLI */
-    opProp(0, FormatILS), /* OP_BSHRI */
-    opProp(0, FormatILS), /* OP_BANDI */
-    opProp(0, FormatILS), /* OP_BORI */
-    opProp(0, FormatILS), /* OP_BXORI */
+    opProp(0, FormatIL), /* OP_ADDI */
+    opProp(0, FormatIL), /* OP_SUBI */
+    opProp(0, FormatIL), /* OP_MULI */
+    opProp(0, FormatIL), /* OP_DIVI */
+    opProp(0, FormatIL), /* OP_MODI */
+    opProp(0, FormatIL), /* OP_POWI */
+    opProp(0, FormatIL), /* OP_BSHLI */
+    opProp(0, FormatIL), /* OP_BSHRI */
+    opProp(0, FormatIL), /* OP_BANDI */
+    opProp(0, FormatIL), /* OP_BORI */
+    opProp(0, FormatIL), /* OP_BXORI */
     opProp(0, FormatI), /* OP_ADD */
     opProp(0, FormatI), /* OP_SUB */
     opProp(0, FormatI), /* OP_MUL */
@@ -335,7 +335,7 @@ static void removelastinstruction(FunctionState *fs) {
 ** Remove last instruction which must be a jump.
 */
 void csC_removelastjump(FunctionState *fs) {
-    cs_assert(opisjump(fs->p->code[fs->prevpc])); /* last inst. is jump */
+    cs_assert(testJProp(fs->p->code[fs->prevpc])); /* last inst. is jump */
     removelastinstruction(fs);
 }
 
@@ -592,28 +592,30 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
 
 
 static int adjuststack(FunctionState *fs, OpCode op, int n) {
-    Instruction *inst = &prevOP(fs);
+    Instruction *inst = prevOP(fs);
     int prevn = 0;
-    switch (*inst) {
-        case OP_POPN: case OP_NILN: {
-            prevn = GETARG_L(inst, 0);
-            SETARG_L(inst, 0, n + prevn);
-            return fs->prevpc; /* done; do not code new instruction */
+    if (inst) { /* have previous instruction? */
+        switch (*inst) { /* try to optimize it */
+            case OP_POPN: case OP_NILN: {
+                prevn = GETARG_L(inst, 0);
+                SETARG_L(inst, 0, n + prevn);
+                return fs->prevpc; /* done; do not code new instruction */
+            }
+            case OP_POP: {
+                op = OP_POPN;
+                goto nil;
+            }
+            case OP_NIL: {
+                op = OP_NILN;
+            nil:
+                prevn = 1;
+                removelastinstruction(fs);
+                break;
+            }
+            default: break; /* nothing to be done */
         }
-        case OP_POP: {
-            op = OP_POPN;
-            goto nil;
-        }
-        case OP_NIL: {
-            op = OP_NILN;
-nil:
-            prevn = 1;
-            removelastinstruction(fs);
-            break;
-        }
-        default: break; /* nothing to be done */
+        n += prevn;
     }
-    n += prevn;
     if (n == 1) {
         cs_assert(op == OP_NIL || op == OP_POP);
         return csC_emitI(fs, op);
@@ -747,7 +749,7 @@ static int encodeimm(int imm) {
             imm = imms(imm);
         else
             imm = imml(imm);
-    }
+    } /* else return as it is */
     return imm;
 }
 
@@ -912,7 +914,7 @@ static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
     int offset = c_abs(target - (pc + getOpSize(*jmp)));
     cs_assert(offset > 0); /* at least one expression in between */
-    cs_assert(opisjump(*jmp)); /* 'jmp' is a valid jump instruction */
+    cs_assert(testJProp(*jmp)); /* 'jmp' is a valid jump instruction */
     if (c_unlikely(offset > MAX_ARG_L)) /* jump is too large? */
         csP_semerror(fs->lx, "control structure too long");
     SETARG_L(jmp, 0, offset); /* fix the jump */
@@ -999,7 +1001,7 @@ void csC_constexp2val(FunctionState *fs, ExpInfo *e, TValue *v) {
             setobj(cast(cs_State *, NULL), v, csC_getconstant(fs, e));
             break;
         }
-        default: cs_assert(0);
+        default: cs_assert(0); /* 'e' is not a constant */
     }
 }
 
@@ -1457,12 +1459,11 @@ static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 /* code binary instruction variant where second operand is immediate value */
 static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                      int line) {
-    int rhs = e2->u.i;
-    int rhsabs = c_abs(rhs);
+    int imm = e2->u.i;
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
     cs_assert(e2->et == EXP_INT);
     csC_exp2stack(fs, e1);
-    e1->u.info = csC_emitILS(fs, op, rhsabs, encodesign(rhs));
+    e1->u.info = csC_emitIL(fs, op, (imm < 0 ? imml(imm) : imm));
     e1->et = EXP_FINEXPR;
     csC_fixline(fs, line);
 }

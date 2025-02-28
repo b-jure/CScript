@@ -41,7 +41,8 @@
 */
 #define csT_checkstackaux(C,n,pre,pos) \
     if (csi_unlikely((C)->stackend.p - (C)->sp.p <= (n))) \
-        { pre; csT_growstack(C, (n), 1); pos; }
+        { pre; csT_growstack(C, (n), 1); pos; } \
+    else { condmovestack(C, pre, pos); }
 
 
 /* check if stack needs to grow */

@@ -189,21 +189,21 @@ void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
 
 
 /* call unary method and store result in 'res' */
-void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *v,
-                       SPtr res) {
-    ptrdiff_t result = savestack(C, res);
+void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *v) {
     SPtr func = C->sp.p;
+    printf("CALLING MM __unm\n");
     setobj2s(C, func, fn); /* push function */
     setobj2s(C, func + 1, v); /* 'self' */
-    res = restorestack(C, result);
-    setobj2s(C, res, s2v(--C->sp.p));
+    C->sp.p += 2;
+    csV_call(C, func, 1);
+    /* value is already in the correct place (on the stack top) */
 }
 
 
-static int callunaryaux(cs_State *C, const TValue *v, SPtr res, int mt) {
+static int callunaryaux(cs_State *C, const TValue *v, int mt) {
     const TValue *fn = csMM_get(C, v, mt);
-    if (!ttisnil(fn)) {
-        csMM_callunaryres(C, fn, v, res);
+    if (c_likely(!ttisnil(fn))) {
+        csMM_callunaryres(C, fn, v);
         return 1;
     }
     return 0;
@@ -211,8 +211,8 @@ static int callunaryaux(cs_State *C, const TValue *v, SPtr res, int mt) {
 
 
 /* try to call unary method */
-void csMM_tryunary(cs_State *C, const TValue *v, SPtr res, cs_MM mm) {
-    if (c_unlikely(!callunaryaux(C, v, res, mm))) {
+void csMM_tryunary(cs_State *C, const TValue *v, cs_MM mm) {
+    if (c_unlikely(!callunaryaux(C, v, mm))) {
         switch (mm) {
             case CS_MM_BNOT: {
                 csD_bitwerror(C, v, v);

@@ -601,12 +601,12 @@ static int sweepstep(cs_State *C, GCObject **nextlist, int nextstate) {
 ** Sweep objects in 'list' until alive (marked) object
 ** or the end of the list.
 */
-static GCObject **sweepuntilalive(cs_State *C, GCObject **list) {
-    GCObject **pp = list;
+static GCObject **sweepuntilalive(cs_State *C, GCObject **l) {
+    GCObject **old = l;
     do {
-        list = sweeplist(C, list, 1, NULL);
-    } while (pp == list);
-    return list;
+        l = sweeplist(C, l, 1, NULL);
+    } while (old == l);
+    return l;
 }
 
 
@@ -952,10 +952,13 @@ void csG_freeallobjects(cs_State *C) {
 }
 
 
-/* run GState steps until 'state' is in any of the states of 'statemask' */
+/*
+** Advances the garbage collector until it reaches a state
+** allowed by 'statemask'.
+*/
 void csG_rununtilstate(cs_State *C, int statemask) {
     GState *gs = G(C);
-    while (!testbits(gs->gcstate, statemask))
+    while (!testbit(statemask, gs->gcstate))
         singlestep(C);
 }
 
@@ -993,14 +996,13 @@ void csG_step(cs_State *C) {
 }
 
 
-static void fullcycle(cs_State *C) {
-    GState *gs = G(C);
-    if (invariantstate(gs)) /* already have black objects ? */
-        entersweep(C); /* if so sweep them first */
+static void fullcycle(cs_State *C, GState *gs) {
+    if (invariantstate(gs)) /* already have black objects? */
+        entersweep(C); /* if so sweep them first to turn them back to white */
     /* finish any pending sweep phase to start a new cycle */
     csG_rununtilstate(C, bitmask(GCSpause));
     csG_rununtilstate(C, bitmask(GCSpropagate)); /* start a new cycle */
-    gs->gcstate = GCSatomic; /* go to atomic phase (skip GCSenteratomic) */
+    gs->gcstate = GCSenteratomic; /* go straight to atomic phase */
     csG_rununtilstate(C, bitmask(GCScallfin)); /* run up to finalizers */
     /* estimate must be correct after full GC cycle */
     cs_assert(gs->gcestimate == gettotalbytes(gs));
@@ -1013,7 +1015,7 @@ void csG_full(cs_State *C, int isemergency) {
     GState *gs = G(C);
     cs_assert(!gs->gcemergency);
     gs->gcemergency = isemergency;
-    fullcycle(C);
+    fullcycle(C, G(C));
     gs->gcemergency = 0;
 }
 

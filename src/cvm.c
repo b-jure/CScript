@@ -113,7 +113,7 @@ cs_Number csV_modnum(cs_State *C, cs_Number x, cs_Number y) {
 
 /*
 ** Perform binary arithmetic operations on objects, this function is free
-** to call overloaded methods in cases where raw arithmetics are not possible.
+** to call metamethods in cases where raw arithmetics are not possible.
 */
 void csV_binarithm(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
                    int op) {
@@ -124,13 +124,13 @@ void csV_binarithm(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
 
 /*
 ** Perform unary arithmetic operations on objects, this function is free
-** to call overloaded methods in cases where raw arithmetics are not possible.
+** to call metamethods in cases where raw arithmetics are not possible.
 */
-void csV_unarithm(cs_State *C, const TValue *v, SPtr res, int op) {
+void csV_unarithm(cs_State *C, const TValue *v, int op) {
     TValue aux;
     setival(&aux, 0);
-    if (!csO_arithmraw(C, v, &aux, s2v(res), op))
-        csMM_tryunary(C, v, res, (op - CS_OPUNM) + CS_MM_UNM);
+    if (!csO_arithmraw(C, v, &aux, s2v(C->sp.p - 1), op))
+        csMM_tryunary(C, v, (op - CS_OPUNM) + CS_MM_UNM);
 }
 
 
@@ -332,8 +332,8 @@ void csV_set(cs_State *C, const TValue *obj, const TValue *key,
 static void arraygeti(cs_State *C, Array *arr, const TValue *index, SPtr res) {
     cs_Integer i;
     if (c_likely(tointeger(index, &i))) { /* index is integer? */
-        if (0 <= i) { /* positive index? */
-            if (i < arr->sz) { /* index in bounds? */
+        if (c_likely(0 <= i)) { /* positive index? */
+            if (i < arr->n) { /* index in bounds? */
                 setobj2s(C, res, &arr->b[i]);
             } else /* index out of bounds */
                 setnilval(s2v(res));
@@ -389,10 +389,10 @@ void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 
 void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
     const TValue *fmm = csMM_get(C, obj, CS_MM_GETIDX);
-    if (!ttisnil(fmm)) { /* have metamethod ? */
-        csMM_callgetres(C, fmm, obj, key, res);
-    } else /* otherwise perform raw get */
+    if (ttisnil(fmm)) /* no metamethod? */
         csV_rawget(C, obj, key, res);
+    else /* otherwise call metamethod */
+        csMM_callgetres(C, fmm, obj, key, res);
 }
 
 
@@ -411,7 +411,7 @@ void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 ** Call binary meta method, but before that perform a quick check
 ** and invoke error if types don't match, the values are instances
 ** that belong to different classes or v1 (self) doesn't have the
-** overloaded method.
+** metamethod.
 */
 c_sinline void precallmbin(cs_State *C, const TValue *v1, const TValue *v2,
                             cs_MM op, SPtr res) {
@@ -733,8 +733,8 @@ void csV_concat(cs_State *C, int total) {
 /* arithmetic operations with immediate operand for floats */
 #define op_arithIf(C,fop) { \
     TValue *v = peek(0); \
-    int imm = fetchl(); /* L */\
-    imm *= getsign(); /* S */\
+    int imm = fetchl(); \
+    imm = IMML(imm); \
     cs_Number n; \
     if (tonumber(v, n)) { \
         cs_Number fimm = cast_num(imm); \
@@ -747,8 +747,8 @@ void csV_concat(cs_State *C, int total) {
 /* arithmetic operations with immediate operand */
 #define op_arithI(C,iop,fop) { \
     TValue *v = peek(0); \
-    int imm = fetchl(); /* L */\
-    imm *= getsign(); /* S */\
+    int imm = fetchl(); \
+    imm = IMML(imm); \
     if (ttisint(v)) { \
         cs_Integer i = ival(v); \
         setival(v, iop(C, i, imm)); \
@@ -809,8 +809,8 @@ void csV_concat(cs_State *C, int total) {
 /* bitwise operations with immediate operand */
 #define op_bitwiseI(C,op) { \
     TValue *v = peek(0); \
-    int imm = fetchl(); /* L */\
-    imm *= getsign(); /* S */\
+    int imm = fetchl(); \
+    imm = IMML(imm); \
     cs_Integer i; \
     if (c_likely(tointeger(v, &i))) { \
         setival(v, op(i, imm)); \
@@ -838,8 +838,9 @@ void csV_concat(cs_State *C, int total) {
 */
 
 /* set ordering result */
-#define setorderres(v,cond,eq) \
-    { cs_assert(0 <= cond && cond <= 1); settt(v, booleans[(cond) == (eq)]); }
+#define setorderres(v,cond_,eq_) \
+    { cs_assert(0 <= (cond_) && (cond_) <= 1); \
+      settt(v, booleans[(cond_) == (eq_)]); }
 
 
 /* order operations with stack operands */
@@ -901,21 +902,15 @@ void csV_concat(cs_State *C, int total) {
 */
 #define storerealpc(C)      (cf->realpc = pc)
 
-/*
-** Correct global 'pc' and set the stack pointer to point at the
-** end of the call frame stack.
-** Adjusting stack pointer is necessary when calling certain functions in
-** order to avoid overwriting existing values on the current call frame
-** stack (such as OP_CLOSE).
-*/
-#define savestate(C, cf)   (storepc(C), (C)->sp.p = (cf)->top.p)
+
+#define correcttop(C, cf)   ((C)->sp.p = (cf)->top.p)
 
 
 /*
 ** Protect code that can raise errors or overwrite stack values.
 */
 #define ProtectTop(exp) \
-    { ptrdiff_t oldtop = savestack(C, C->sp.p); savestate(C, cf); \
+    { ptrdiff_t oldtop = savestack(C, C->sp.p); correcttop(C, cf); \
         (exp); C->sp.p = restorestack(C, oldtop); }
 
 
@@ -961,16 +956,16 @@ void csV_concat(cs_State *C, int total) {
 
 
 /* get stack slot (starting from 'base') */
-#define STK(i)          (base+(i))
+#define STK(i_)         (base+(i_))
 
 /* get stack slot (starting from top) */
-#define SLOT(i)         (C->sp.p-(i)-1)
+#define SLOT(i_)        (C->sp.p-(i_)-1)
 
 /* get top stack slot */
 #define TOP()           SLOT(0)
 
 /* mutate stack pointer by 'n' slots */
-#define SP(n)           check_exp(C->sp.p + (n) >= base, C->sp.p += (n))
+#define SP(n)           check_exp(C->sp.p+(n) >= base, C->sp.p += (n))
 
 
 /* In cases where jump table is not available or prefered. */
@@ -1362,22 +1357,23 @@ returning:
             vm_case(OP_EQK) {
                 TValue *v1 = peek(0);
                 const TValue *vk = K(fetchl());
-                int cond = fetchs();
-                setorderres(v1, csV_raweq(v1, vk), cond);
+                int eq = fetchs();
+                int cond = csV_raweq(v1, vk);
+                setorderres(v1, cond, eq);
                 vm_break;
             }
             vm_case(OP_EQI) {
                 TValue *v1 = peek(0);
-                int cond;
                 int imm = fetchl();
-                int condexp = fetchs();
+                int eq = fetchs();
+                int cond;
                 if (ttisint(v1))
                     cond = (ival(v1) == IMML(imm));
                 else if (ttisflt(v1))
                     cond = c_numeq(fval(v1), IMML(imm));
                 else
                     cond = 0;
-                setorderres(v1, cond, condexp);
+                setorderres(v1, cond, eq);
                 vm_break;
             }
             vm_case(OP_LTI) {
@@ -1440,17 +1436,19 @@ returning:
                 vm_break;
             }
             vm_case(OP_UNM) {
-                SPtr res = TOP();
-                TValue *v = s2v(res);
+                TValue *v = peek(0);
                 if (ttisint(v)) {
+                    printf("INTEGER\n");
                     cs_Integer i = ival(v);
                     setival(v, c_intop(-, 0, i));
                 } else if (ttisflt(v)) {
+                    printf("FLOAT\n");
                     cs_Number n = fval(v);
                     setfval(v, c_numunm(C, n));
                 } else {
+                    printf("TRYING __unm METAMETHOD\n");
                     storepc(C);
-                    csMM_tryunary(C, v, res, CS_MM_UNM);
+                    csMM_tryunary(C, v, CS_MM_UNM);
                 }
                 vm_break;
             }
@@ -1462,7 +1460,7 @@ returning:
                     setival(v, c_intop(^, ~c_castS2U(0), i));
                 } else {
                     storepc(C);
-                    csMM_tryunary(C, v, res, CS_MM_BNOT);
+                    csMM_tryunary(C, v, CS_MM_BNOT);
                 }
                 vm_break;
             }
@@ -1534,8 +1532,8 @@ returning:
             }
             vm_case(OP_TBC) {
                 SPtr level;
-                level = STK(fetchl());
                 storepc(C);
+                level = STK(fetchl());
                 csF_newtbcvar(C, level);
                 vm_break;
             }

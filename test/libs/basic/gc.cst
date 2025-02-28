@@ -1,0 +1,15 @@
+local old = gc("count") * 1024; 
+assert(typeof(old) == "number");
+gc("collect");
+local bytes = gc("count") * 1024;
+assert(typeof(bytes) == "number");
+assert(gc("isrunning"));
+gc("stop");
+assert(!gc("isrunning"));
+gc("restart");
+assert(gc("isrunning"));
+gc("step");
+gc("step", 0);
+gc("step", 20);
+assert(gc("incremental") == "incremental");
+assert(gc("isrunning"));

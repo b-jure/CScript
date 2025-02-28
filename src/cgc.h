@@ -117,7 +117,7 @@
 */
 #define csG_condGC(C,pre,pos) \
     { pre; if (G(C)->gcdebt > 0) { csG_step(C); pos; } \
-      gcmemchange(C,pre,pos); }
+      condchangemem(C,pre,pos); }
 
 
 /* 'csG_condGC' but without 'pre' and 'pos' */
