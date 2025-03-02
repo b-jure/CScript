@@ -234,6 +234,7 @@ int csV_orderlt(cs_State *C, const TValue *v1, const TValue *v2) {
 int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
     cs_Integer i1, i2;
     const TValue *fmm;
+    int swap = 0;
     if (ttypetag(v1) != ttypetag(v2)) {
         if (ttype(v1) != ttype(v2) || ttype(v1) != CS_TNUMBER)
             return 0;
@@ -249,29 +250,23 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
         case CS_VSHRSTR: return eqshrstr(strval(v1), strval(v2));
         case CS_VLNGSTR: return csS_eqlngstr(strval(v1), strval(v2));
         case CS_VUSERDATA: {
-            if (uval(v1) == uval(v2)) return 1;
-            else if (C == NULL) return 0;
-            fmm = csMM_get(C, v1, CS_MM_EQ);
-            if (ttisnil(fmm))
-                fmm = csMM_get(C, v2, CS_MM_EQ);
+            if  (C == NULL || (ttisnil(fmm = csMM_get(C, v1, CS_MM_EQ)) &&
+                    (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MM_EQ))))
+                return uval(v1) == uval(v2);
             break;
         }
         case CS_VINSTANCE: {
-            if (insval(v1) == insval(v2)) return 1;
-            else if (C == NULL) return 0;
-            fmm = csMM_get(C, v1, CS_MM_EQ);
-            if (ttisnil(fmm))
-                fmm = csMM_get(C, v2, CS_MM_EQ);
+            if (C == NULL || (insval(v1)->oclass != insval(v2)->oclass) ||
+                    (ttisnil(fmm = csMM_get(C, v1, CS_MM_EQ)) &&
+                    (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MM_EQ))))
+                return insval(v1) == insval(v2);
             break;
         }
         default: return gcoval(v1) == gcoval(v2);
     }
-    if (ttisnil(fmm)) {
-        return 0;
-    } else {
-        csMM_callbinres(C, fmm, v1, v2, C->sp.p);
-        return !c_isfalse(s2v(C->sp.p));
-    }
+    assert(!ttisnil(fmm));
+    csMM_callbinres(C, fmm, v1, v2, C->sp.p);
+    return !c_isfalse(s2v(C->sp.p));
 }
 
 
@@ -312,12 +307,13 @@ void csV_rawset(cs_State *C, const TValue *obj, const TValue *key,
         }
         default: {
             csD_typeerror(C, obj, "index");
-            break;
+            break; /* unreachable */
         }
     }
 }
 
 
+/* TODO(see 'csV_get') */
 void csV_set(cs_State *C, const TValue *obj, const TValue *key,
              const TValue *val) {
     const TValue *fmm = csMM_get(C, obj, CS_MM_SETIDX);
@@ -387,6 +383,20 @@ void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 }
 
 
+/*
+** TODO
+** In the next version of CScript, each instance and full userdata will
+** contain virutal method table (or a 'ushort') that will hold additional
+** information that will tell us if the instance/userdata is in its own
+** metamethod, and which one. This is usefull in order to avoid recursive
+** calls to the same metamethod where this might be unwanted
+** (e.g., __getidx, __setidx). In the mentioned example for __getidx/__setidx,
+** user would then be able to index 'self' as usual without the need of
+** 'raw(set)get' functions. So if the __getidx gets called and another
+** function is called in the __getidx, then __getidx will be still active
+** further up the stack, meaning the __getidx metamethod can't trigger
+** for that instance/userdata until the initial __getidx returns.
+*/
 void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
     const TValue *fmm = csMM_get(C, obj, CS_MM_GETIDX);
     if (ttisnil(fmm)) /* no metamethod? */
@@ -1088,8 +1098,10 @@ returning:
                 vm_break;
             }
             vm_case(OP_NEWARRAY) {
-                int b = fetchs();
                 Array *arr;
+                int b;
+                storepc(C);
+                b = fetchs();
                 if (b > 0) /* array has elements? */
                     b = 1 << (b - 1); /* size is 2^(b - 1) */
                 SP(1);
@@ -1172,10 +1184,10 @@ returning:
             vm_case(OP_MBIN) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                int op; /* op */
+                cs_MM mm;
                 storepc(C);
-                op = fetchs();
-                precallmbin(C, v1, v2, op, SLOT(1));
+                mm = fetchs();
+                precallmbin(C, v1, v2, mm, SLOT(1));
                 SP(-1); /* v2 */
                 vm_break;
             }
@@ -1438,15 +1450,12 @@ returning:
             vm_case(OP_UNM) {
                 TValue *v = peek(0);
                 if (ttisint(v)) {
-                    printf("INTEGER\n");
                     cs_Integer i = ival(v);
                     setival(v, c_intop(-, 0, i));
                 } else if (ttisflt(v)) {
-                    printf("FLOAT\n");
                     cs_Number n = fval(v);
                     setfval(v, c_numunm(C, n));
                 } else {
-                    printf("TRYING __unm METAMETHOD\n");
                     storepc(C);
                     csMM_tryunary(C, v, CS_MM_UNM);
                 }
@@ -1549,9 +1558,11 @@ returning:
                 vm_break;
             }
             vm_case(OP_SETGLOBAL) {
-                TValue *key = K(fetchl());
                 TValue *G = getGtable(C);
                 TValue *v = peek(0);
+                TValue *key;
+                storepc(C);
+                key = K(fetchl());
                 cs_assert(ttisstring(key));
                 csH_set(C, tval(G), key, v);
                 SP(-1); /* v */
@@ -1584,10 +1595,15 @@ returning:
                 vm_break;
             }
             vm_case(OP_SETARRAY) {
-                uint last = fetchl(); /* num of elems. already in the array */
-                int n = fetchs(); /* num of elems. to store */
-                SPtr sa = SLOT(n); /* array stack slot */
-                Array *arr = arrval(s2v(sa));
+                Array *arr;
+                SPtr sa;
+                uint last;
+                int n;
+                storepc(C);
+                sa = STK(fetchl()); /* array stack slot */
+                arr = arrval(s2v(sa)); /* 'sa' as array value */
+                last = fetchl(); /* num of elems. already in the array */
+                n = fetchs(); /* num of elements to store */
                 if (n == 0)
                     n = (C->sp.p - sa) - 1; /* get up to the top */
                 cs_assert(n > 0);
@@ -1812,11 +1828,11 @@ returning:
             vm_case(OP_RET) {
                 SPtr stk;
                 int nres; /* number of results */
+                storepc(C);
                 stk = STK(fetchl());
                 nres = fetchl() - 1;
                 if (nres < 0) /* not fixed ? */
                     nres = C->sp.p - stk;
-                storepc(C);
                 if (fetchs()) { /* have open upvalues? */
                     csF_close(C, base, CLOSEKTOP);
                     updatebase(cf);

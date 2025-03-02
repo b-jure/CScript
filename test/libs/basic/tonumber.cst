@@ -1,0 +1,68 @@
+local res, of = tonumber("69");
+assert(res == 69 and of == nil);
+res, of = tonumber("-69");
+assert(res == -69 and of == nil);
+res, of = tonumber("69.420");
+assert(res == 69.420 and of == nil);
+res, of = tonumber("-69.420");
+assert(res == -69.420 and of == nil);
+res, of = tonumber(".420");
+assert(res == .420 and of == nil);
+res, of = tonumber("-.420");
+assert(res == -.420 and of == nil);
+res, of = tonumber("05");
+assert(res == 05 and of == nil);
+res, of = tonumber("0055");
+assert(res == 0055 and of == nil);
+res, of = tonumber("69.420e2");
+assert(res == 69.420e2 and of == nil);
+res, of = tonumber(".420e-2");
+assert(res == .420e-2 and of == nil);
+res, of = tonumber("0x15");
+assert(res == 0x15 and of == nil);
+res, of = tonumber("-0x15");
+assert(res == -0x15 and of == nil);
+res, of = tonumber("0x15P4");
+assert(res == 0x15P4 and of == nil);
+res, of = tonumber("-0x15p-4");
+assert(res == -0x15p-4 and of == nil);
+res, of = tonumber("inf");
+assert(res == inf and of == nil);
+res, of = tonumber("-inf");
+assert(res == -inf and of == nil);
+res, of = tonumber("infinity");
+assert(res == infinity and of == nil);
+res, of = tonumber("-infinity");
+assert(res == -infinity and of == nil);
+res, of = tonumber("InfiNity");
+assert(res == infinity and of == nil);
+res, of = tonumber("15e15324234");
+assert(res == inf and of == 1);
+res, of = tonumber("-15e153234");
+assert(res == -inf and of == 1);
+res, of = tonumber("15e-400");
+assert(res and of == -1);
+res, of = tonumber("63ab", 16);
+assert(res == 25515 and of == nil);
+res, of = tonumber("63abzg42z", 36);
+assert(res == 17184244426667 and of == nil);
+res, of = tonumber("-63abzg42z", 36);
+assert(res == -17184244426667 and of == nil);
+res, of = tonumber("63abzg42zzzzzzzzzz5555zzzzzzzzzzzzzzzzzzzzzzzz", 36);
+assert(res and of == 1);
+res, of = tonumber("-63abzg42zzzzzzzzzz5555zzzzzzzzzzzzzzzzzzzzzzzz", 36);
+assert(res and of == -1);
+
+/*
+** Assert below depends on the types CScript was compiled with.
+** For now CScript can be compiled only with 'long long int' for
+** integers and 'double' for floats.
+*/
+res, of = tonumber("0x7fffffffffffffff", 16);
+assert(res and of == nil);
+res, of = tonumber("-0x8000000000000000", 16);
+assert(res and of == nil);
+res, of = tonumber("0x8000000000000001", 16);
+assert(res == 0x7fffffffffffffff and of == 1);
+res, of = tonumber("-0x8000000000000001", 16);
+assert(res == 0x7fffffffffffffff+1 and of == -1);

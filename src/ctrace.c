@@ -261,17 +261,21 @@ static void unasmK(const Proto *p, Instruction *pc) {
 }
 
 
-static void traceImmediate(Instruction *pc, int off, int l) {
+static int getimm(Instruction *pc, int off, int l) {
     int imm = (l) ? GETARG_L(pc, off) : GETARG_S(pc, off);
-    imm = (l) ? IMML(imm) : IMM(imm);
-    postab(printf("IMM%s=%d", (l) ? "L" : "", imm));
+    return (l) ? IMML(imm) : IMM(imm);
+}
+
+
+static void traceImmediateInt(Instruction *pc, int off, int l) {
+    postab(printf("IMM%s=%d", (l) ? "L" : "", getimm(pc, off, l)));
 }
 
 
 static void unasmIMMint(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
-    traceImmediate(pc, 0, l);
+    traceImmediateInt(pc, 0, l);
     endline();
 }
 
@@ -279,7 +283,7 @@ static void unasmIMMint(const Proto *p, Instruction *pc, int l) {
 static void unasmIMMflt(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
-    traceImmediate(pc, 0, l);
+    traceImmediateInt(pc, 0, l);
     endline();
 }
 
@@ -317,7 +321,7 @@ static void traceCond(int cond) {
 static void unasmEQI(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceImmediate(pc, 0, 1);
+    traceImmediateInt(pc, 0, 1);
     traceCond(GETARG_S(pc, SIZE_ARG_L));
     endline();
 }
@@ -326,7 +330,7 @@ static void unasmEQI(const Proto *p, Instruction *pc) {
 static void unasmIMMord(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceImmediate(pc, 0, 1);
+    traceImmediateInt(pc, 0, 1);
     endline();
 }
 
@@ -392,20 +396,35 @@ static void unasmMM(cs_State *C, const Proto *p, Instruction *pc) {
 }
 
 
-static void unasmIndexedSet(const Proto *p, Instruction *pc) {
+static void unasmIndexedSetInt(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
     traceStackSlot(GETARG_L(pc, 0));
-    traceImmediate(pc, 1, 0);
+    traceImmediateInt(pc, 1, l);
     endline();
 }
 
 
-static void unasmIndexedSetL(const Proto *p, Instruction *pc) {
+static void traceImmediateK(const Proto *p, Instruction *pc, int off, int l) {
+    traceK(p, getimm(pc, off, l));
+}
+
+
+static void unasmIndexedSetStr(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
     traceStackSlot(GETARG_L(pc, 0));
-    traceImmediate(pc, 1, 1);
+    traceImmediateK(p, pc, 1, l);
+    endline();
+}
+
+
+static void unasmSetArray(const Proto *p, Instruction *pc) {
+    startline(p, pc);
+    traceOp(*pc);
+    traceStackSlot(GETARG_L(pc, 0));
+    postab(printf("lastindex=%d", GETARG_L(pc, 1)));
+    postab(printf("tostore=%d", GETARG_S(pc, SIZE_ARG_L*2)));
     endline();
 }
 
@@ -515,7 +534,7 @@ static void unasmLoad(const Proto *p, Instruction *pc) {
 static void unasmIndexedGet(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
-    traceImmediate(pc, 0, l);
+    traceImmediateInt(pc, 0, l);
     endline();
 }
 
@@ -614,15 +633,22 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 break;
             }
             case OP_SETINDEXINT: {
-                unasmIndexedSet(p, pc);
+                unasmIndexedSetInt(p, pc, 0);
                 break;
             }
-            case OP_SETINDEXINTL: case OP_SETPROPERTY: case OP_SETINDEXSTR: {
-                unasmIndexedSetL(p, pc);
+            case OP_SETINDEXINTL: {
+                unasmIndexedSetInt(p, pc, 1);
                 break;
             }
-            case OP_TEST: case OP_TESTORPOP:
-            case OP_TESTPOP: case OP_SETARRAY: {
+            case OP_SETPROPERTY: case OP_SETINDEXSTR: {
+                unasmIndexedSetStr(p, pc, 1);
+                break;
+            }
+            case OP_SETARRAY: {
+                unasmSetArray(p, pc);
+                break;
+            }
+            case OP_TEST: case OP_TESTORPOP: case OP_TESTPOP: {
                 unasmLS(p, pc);
                 break;
             }

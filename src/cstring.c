@@ -343,7 +343,7 @@ static const unsigned char table[] = { -1,
 static const char *str2int(const char *s, cs_Integer *i, int *oflow) {
     const c_byte *val = table + 1;
     cs_Unsigned lim = CS_INTEGER_MIN;
-    int neg = 0;
+    int sign = 1;
     uint32_t x;
     cs_Unsigned y;
     int base, c, empty;
@@ -351,86 +351,99 @@ static const char *str2int(const char *s, cs_Integer *i, int *oflow) {
     c = *s++;
     while (cisspace(c)) c = *s++; /* skip leading spaces */
     if (c == '-' || c == '+') { /* have sign? */
-        neg = -(c == '-'); /* adjust sign value */
+        sign -= 2*(c == '-'); /* adjust sign value */
         c = *s++;
     }
     /* handle prefix to get base (if any) */
     if (c == '0' && ctolower(*s) == 'x') { /* hexadecimal? */
-        s++; /* skip x | X */
+        s++; /* skip x|X */
         base = 16;
         c = *s++; /* get first digit */
-    } else if (c == '0' && cisodigit(*s)) { /* octal? */
+    } else if (c == '0') { /* octal? */
         base = 8;
         c = *s++; /* get first digit */
     } else /* otherwise it must be decimal */
         base = 10; /* c already has first digit */
     /* now do the conversion */
     if (base == 10) {
-        if (!(empty = !cisdigit(c))) {
-            for (x=0; (cisdigit(c) || c == '_') && x <= UINT_MAX/10-1; c=*s++)
-                if (c != '_') x = x * 10 + ctodigit(c);
-            for (y=x; (cisdigit(c) || c == '_') && y <= CS_UNSIGNED_MAX/10
-                        && 10*y <= CS_UNSIGNED_MAX - ctodigit(c); c = *s++)
-                if (c != '_') y = y * 10 + ctodigit(c);
+        empty = !(val[c]<base);
+        if (!empty) {
+            for (x=0; val[c]<base && x <= UINT_MAX/10-1; c=*s++)
+                x = x * 10 + val[c];
+            for (y=x; val[c]<base && y <= CS_UNSIGNED_MAX/10 &&
+                      10*y <= CS_UNSIGNED_MAX-val[c]; c = *s++)
+                y = y * 10 + val[c];
         }
-        if (!cisdigit(c)) goto done;
     } else if (!(base & (base-1))) { /* base is power of 2? (up to base 32) */
         if (!(empty = val[c] >= base)) {
             int bs = "\0\1\2\4\7\3\6\5"[(0x17*base)>>5&7];
-            for (x=0; (c == '_' || val[c] < base) && x <= UINT_MAX/32; c=*s++)
-                if (c != '_') x = x<<bs | val[c];
-            for (y=x; (c == '_' || val[c] < base) && y <= CS_UNSIGNED_MAX>>bs; c=*s++)
-                if (c != '_') y = y<<bs | val[c];
+            for (x=0; val[c] < base && x <= UINT_MAX/32; c=*s++)
+                x = x<<bs | val[c];
+            for (y=x; val[c]<base && y <= CS_UNSIGNED_MAX>>bs; c=*s++)
+                y = y<<bs | val[c];
         }
     } else { /* other bases (up to base 36) */
-        if (!(empty = val[c] >= base)) {
-            for (x=0; (c == '_' || val[c] < base) && x <= UINT_MAX/36-1; c=*s++)
-                if (c != '_') x = x * base + val[c];
-            for (y=x; (c == '_' || val[c] < base) && y <= CS_UNSIGNED_MAX/base
-                       && base*y <= CS_UNSIGNED_MAX-val[c]; c=*s++)
-                if (c != '_') y = y * base + val[c];
+        empty = !(val[c]<base);
+        if (!empty) {
+            for (x=0; val[c]<base && x <= UINT_MAX/36-1; c=*s++)
+                x = x * base + val[c];
+            for (y=x; val[c] < base && y <= CS_UNSIGNED_MAX/base &&
+                      base*y <= CS_UNSIGNED_MAX-val[c]; c=*s++)
+                y = y * base + val[c];
         }
     }
-    if (val[c] < base) { /* numeral value too large? */
-        for (; val[c] < base; c=*s++){/* skip rest of the digits... */}
+    if (val[c] < base) {
+        while (val[c] < base) c=*s++;
         errno = ERANGE;
-        y = CS_INTEGER_MIN; /* ...and indicate numeral is too large */
-    }
-done:
-    if (y >= lim) { /* potential overflow? */
-        if (!neg) { /* positive value overflows? */
+        if (sign > 0)
+            y = lim-1;
+        else
+            y = lim;
+        *oflow = sign;
+    } else if (y >= lim) {
+        if (sign > 0) {
             errno = ERANGE;
-            *oflow = 1; /* propagate overflow */
-            *i = c_castU2S(lim - 1); /* *i = CS_INTEGER_MAX */
-        } else if (y > lim) { /* negative value underflows? */
+            *oflow = 1;
+            y = lim-1;
+        } else if (y > lim) {
             errno = ERANGE;
-            *oflow = -1; /* propagate underflow */
-            *i = c_castU2S(lim); /* *i = CS_INTEGER_MIN */
-        } else /* otherwise y is negative value equal to lim */
-            cs_assert(neg && y == lim);
+            *oflow = -1;
+            y = lim;
+        }
     }
+    s--;
     while (cisspace(c)) c = *s++; /* skip trailing spaces */
     if (empty || c != '\0') return NULL; /* conversion failed? */
-    *i = c_castU2S((y ^ neg) - neg); /* two's complement hack */
+    *i = c_castU2S(sign * y);
     return s - 1;
 }
 
 
-#define converr(eptr)    (*(eptr) != '\0')
-
-static const char *str2flt(const char *s, long double *n, int *oflow) {
+/*
+** TODO: this might not catch underflow in cases where
+** 'cs_str2number' is equal to 'strtod', this is because
+** errno might not be set to ERANGE in cases where the value being
+** converted is a valid numeral that doesn't overflow but instead
+** underflows (e.g., 1e-400) according to C99.
+** This depends on the implementation of 'strtod' and as such
+** this function requires testing for each "mainstream" C standard library.
+*/
+static const char *str2flt(const char *s, cs_Number *n, int *oflow) {
     char *eptr = NULL; /* to avoid warnings */
     cs_assert(oflow != NULL);
     *oflow = 0;
     errno = 0;
     *n = cs_str2number(s, &eptr);
-    if (eptr == s) { /* nothing was converted? */
-        return NULL;
-    } else if (c_unlikely(errno == ERANGE)) { /* (under)overflow? */
+    if (eptr == s)
+        return NULL; /* nothing was converted? */
+    else if (c_unlikely(errno == ERANGE)) {
         if (*n == CS_HUGE_VAL || *n == -CS_HUGE_VAL)
-            *oflow = 1; /* overflow */
-        else if (*n <= CS_NUMBER_MIN)
-            *oflow = -1; /* underflow */
+            *oflow = 1; /* overflow (negative/positive infinity) */
+            /* explicit 'inf|infinity' does not set errno */
+        else {
+            cs_assert(*n <= CS_NUMBER_MIN);
+            *oflow = -1; /* underflow (very large negative exponent) */
+        }
     }
     while (cisspace(*eptr)) eptr++; /* skip trailing spaces */
     return (*eptr == '\0') ? eptr : NULL;
@@ -439,9 +452,9 @@ static const char *str2flt(const char *s, long double *n, int *oflow) {
 
 /* convert string to 'cs_Number' or 'cs_Integer' */
 size_t csS_tonum(const char *s, TValue *o, int *poflow) {
-    cs_Integer i;
-    long double n;
     const char *e;
+    cs_Integer i;
+    cs_Number n;
     int oflow = 0;
     if ((e = str2int(s, &i, &oflow)) != NULL) {
         setival(o, i);
@@ -449,8 +462,7 @@ size_t csS_tonum(const char *s, TValue *o, int *poflow) {
         setfval(o, cast_num(n));
     } else /* both conversions failed */
         return 0;
-    if (poflow) /* had (under)overflow? */
-        *poflow = oflow; /* propagate it */
+    if (poflow) *poflow = oflow;
     return (e - s) + 1; /* return size */
 }
 

@@ -455,7 +455,7 @@ static void findloader(cs_State *C, const char *name) {
 
 static int l_import(cs_State *C) {
     const char *name = csL_check_string(C, 0);
-    cs_setntop(C, 1); /* __LOADED table will be at index 1 */
+    cs_settop(C, 1); /* __LOADED table will be at index 1 */
     cs_get_global(C, CS_LOADED_TABLE);
     cs_get_fieldstr(C, 1, name); /* __LOADED[name] */
     if (cs_to_bool(C, -1)) /* is it there? */

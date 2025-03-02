@@ -162,7 +162,7 @@ syn keyword     cscriptMetaMethod       __eq __lt __le
 syn keyword     cscriptFunc             error assert gc load loadfile runfile
 syn keyword     cscriptFunc             getmetamethod next pairs ipairs pcall
 syn keyword     cscriptFunc             xpcall print warn len rawequal rawget
-syn keyword     cscriptFunc             rawset getargs tonumber tostring typeof
+syn keyword     cscriptFunc             rawset getresults tonumber tostring typeof
 syn keyword     cscriptFunc             getclass __G __VERSION
 " package library
 syn keyword     cscriptFunc             import

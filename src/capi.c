@@ -102,7 +102,7 @@ CS_API cs_Number cs_version(cs_State *C) {
 }
 
 
-c_sinline void setntop(cs_State *C, int n) {
+c_sinline void settop(cs_State *C, int n) {
     CallFrame *cf;
     SPtr func, newtop;
     ptrdiff_t diff;
@@ -127,17 +127,9 @@ c_sinline void setntop(cs_State *C, int n) {
 }
 
 
-/* 
-** Sets the stack top to `n` - 1 (n being the number of values to be on top).
-** If new top is greater than the previous one, new values are elements
-** are filled with `nil`.
-** If n is 0, then all stack elements are removed.
-** This function can run `__close` if it removes an index from the stack
-** marked as to-be-closed.
-*/
-CS_API void cs_setntop(cs_State *C, int n) {
+CS_API void cs_settop(cs_State *C, int n) {
     cs_lock(C);
-    setntop(C, n);
+    settop(C, n);
     cs_unlock(C);
 }
 
@@ -361,7 +353,7 @@ CS_API int cs_type(cs_State *C, int index) {
 */
 CS_API const char *cs_typename(cs_State *C, int type) {
     UNUSED(C);
-    api_check(C, 0 <= type && type < CS_NUM_TYPES, "invalid type");
+    api_check(C, CS_TNONE <= type && type < CS_NUM_TYPES, "invalid type");
     return typename(type);
 }
 
@@ -518,7 +510,7 @@ CS_API void cs_arith(cs_State *C, int op) {
 CS_API int cs_rawequal(cs_State *C, int index1, int index2) {
     const TValue *lhs = index2value(C, index1);
     const TValue *rhs = index2value(C, index2);
-    return (isvalid(C, lhs) && isvalid(C, rhs) ? csV_raweq(lhs, rhs) : 0);
+    return (isvalid(C, lhs) && isvalid(C, rhs)) ? csV_raweq(lhs, rhs) : 0;
 }
 
 
@@ -805,7 +797,7 @@ c_sinline void auxsetentrylist(cs_State *C, OClass *cls, const cs_Entry *l,
             auxrawsetstr(C, cls->methods, l->name, s2v(C->sp.p - 1));
         } while (l++, l->name);
     }
-    setntop(C, -(nup - 1)); /* pop upvalues */
+    settop(C, -(nup - 1)); /* pop upvalues */
 }
 
 
@@ -1121,7 +1113,7 @@ CS_API void cs_set(cs_State *C, int obj) {
     cs_lock(C);
     api_checknelems(C, 2); /* value and key */
     o = index2value(C, obj);
-    csV_set(C, o, s2v(C->sp.p - 1), s2v(C->sp.p - 2));
+    csV_set(C, o, s2v(C->sp.p - 2), s2v(C->sp.p - 1));
     C->sp.p -= 2; /* remove value and key */
     cs_unlock(C);
 }
@@ -1132,7 +1124,7 @@ CS_API void  cs_set_raw(cs_State *C, int obj) {
     cs_lock(C);
     api_checknelems(C, 2); /* value and key */
     o = index2value(C, obj);
-    csV_rawset(C, o, s2v(C->sp.p - 1), s2v(C->sp.p - 2));
+    csV_rawset(C, o, s2v(C->sp.p - 2), s2v(C->sp.p - 1));
     C->sp.p -= 2; /* remove value and key */
     cs_unlock(C);
 }
@@ -1275,7 +1267,7 @@ CS_API int cs_error(cs_State *C) {
         csM_error(C); /* raise a memory error */
     } else
         csD_errormsg(C);
-    /* cs_unlock() is called when control leaves the core */
+    /* cs_unlock() is called before control leaves the core */
     cs_assert(0);
 }
 

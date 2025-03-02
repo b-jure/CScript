@@ -8,7 +8,6 @@
 #define CS_CORE
 
 
-#include "cmeta.h"
 #include "cobject.h"
 #include "ctypes.h"
 #include "cgc.h"

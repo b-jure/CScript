@@ -162,7 +162,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_SETLOCAL */
     opProp(0, FormatIL), /* OP_GETUVAL */
     opProp(0, FormatIL), /* OP_SETUVAL */
-    opProp(0, FormatILS), /* OP_SETARRAY */
+    opProp(0, FormatILLS), /* OP_SETARRAY */
     opProp(0, FormatILL), /* OP_SETPROPERTY */
     opProp(0, FormatIL), /* OP_GETPROPERTY */
     opProp(0, FormatI), /* OP_GETINDEX */
@@ -580,12 +580,13 @@ void csC_setoneret(FunctionState *fs, ExpInfo *e) {
 /* set 'nreturns', for call and vararg expressions */
 void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
     Instruction *pc = getinstruction(fs, e);
+    nreturns++;
     if (e->et == EXP_CALL) {
-        SETARG_L(pc, 1, nreturns + 1);
+        SETARG_L(pc, 1, nreturns);
     } else {
         cs_assert(e->et == EXP_VARARG);
-        SETARG_L(pc, 0, nreturns + 1);
-        csC_reserveslots(fs, 1);
+        SETARG_L(pc, 0, nreturns);
+        csC_reserveslots(fs, 1); /* TODO: redundant? */
     }
     e->et = EXP_FINEXPR;
 }
@@ -1056,11 +1057,19 @@ void csC_setarraysize(FunctionState *fs, int pc, int asize) {
 }
 
 
-void csC_setarray(FunctionState *fs, int nelems, int tostore) {
+static int emitILLS(FunctionState *fs, Instruction i, int a, int b, int c) {
+    int offset = csC_emitILL(fs, i, a, b);
+    emitS(fs, c);
+    return offset;
+}
+
+
+void csC_setarray(FunctionState *fs, int base, int nelems, int tostore) {
+    cs_assert(ARRFIELDS_PER_FLUSH <= MAX_ARG_S);
     cs_assert(tostore != 0 && tostore <= ARRFIELDS_PER_FLUSH);
     if (tostore == CS_MULRET)
         tostore = 0; /* return up to stack top */
-    csC_emitILS(fs, OP_SETARRAY, nelems, tostore);
+    emitILLS(fs, OP_SETARRAY, base, nelems, tostore);
     freeslots(fs, tostore); /* free slots holding the array values */
 }
 
@@ -1270,6 +1279,7 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
 /* code test jump instruction */
 static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
     exp2stack(fs, e); /* ensure test operand is on the stack */
+    freeslots(fs, 1); /* test removes first expression if it goes through */
     return csC_emitILS(fs, testop, 0, cond);
 }
 
@@ -1298,7 +1308,7 @@ int csC_test(FunctionState *fs, OpCode optest, int cond) {
 ** This test jumps over the second expression if the first expression
 ** is false (nil or false).
 */
-void falsejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
+static void andjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
     int pc; /* pc of new jump */
     switch (e->et) {
         case EXP_TRUE: case EXP_STRING: case EXP_INT:
@@ -1322,7 +1332,7 @@ void falsejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
 ** This test jumps over the second expression if the first expression
 ** is true (everything else except nil and false).
 */
-void truejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
+void orjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
     int pc;
     switch (e->et) {
         case EXP_NIL: case EXP_FALSE: {
@@ -1371,11 +1381,11 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             break;
         }
         case OPR_AND: {
-            falsejmp(fs, e, OP_TESTORPOP); /* jump out if 'e' is false */
+            andjump(fs, e, OP_TESTORPOP); /* jump out if 'e' is false */
             break;
         }
         case OPR_OR: {
-            truejmp(fs, e, OP_TESTORPOP); /* jump out if 'e' is true */
+            orjump(fs, e, OP_TESTORPOP); /* jump out if 'e' is true */
             break;
         }
         default: cs_assert(0); /* invalid binary operation */

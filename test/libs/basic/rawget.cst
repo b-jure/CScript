@@ -1,0 +1,10 @@
+local a = class {
+    fn __getidx(k) {
+        assert(k);
+        return nil;
+    }
+};
+local x = a();
+x.ok = 69;
+assert(x["ok"] == nil);
+assert(rawget(x, "ok") == 69);

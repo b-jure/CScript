@@ -162,7 +162,7 @@ CS_API cs_Number        cs_version(cs_State *C);
 /* -----------------------------------------------------------------------
 ** Stack manipulation
 ** ----------------------------------------------------------------------- */
-CS_API void             cs_setntop(cs_State *C, int n); 
+CS_API void             cs_settop(cs_State *C, int n); 
 CS_API int              cs_gettop(const cs_State *C); 
 CS_API int              cs_absindex(cs_State *C, int index); 
 CS_API void             cs_rotate(cs_State *C, int index, int n); 
@@ -339,14 +339,12 @@ CS_API int              cs_getfreereg(cs_State *C);
 
 #define cs_getextraspace(C)         ((void *)((char *)(C) - CS_EXTRASPACE))
 
-#define cs_nvalues(C)               (cs_gettop(C) + 1)
-
-#define cs_settop(C, index)         cs_setntop(C, (index)+1)
+#define cs_getntop(C)               (cs_gettop(C) + 1)
 
 #define cs_to_number(C,i)           cs_to_numberx(C,(i),NULL)
 #define cs_to_integer(C,i)          cs_to_integerx(C,(i),NULL)
 
-#define cs_pop(C,n)                 cs_setntop(C, -(n)-1)
+#define cs_pop(C,n)                 cs_settop(C, -(n)-1)
 
 #define cs_push_cfunction(C,f)      cs_push_cclosure(C,f,0)
 

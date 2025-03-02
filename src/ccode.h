@@ -241,7 +241,7 @@ OP_SETLOCAL,/*     V L         'L{L} = V'                                   */
 OP_GETUVAL,/*      L           'U{L}'                                       */
 OP_SETUVAL,/*      V L         'U{L} = V'                                   */
 
-OP_SETARRAY,/*     L S         'V{-S}[L+i] = V{-S+i}, 1 <= i <= S           */
+OP_SETARRAY,/*     L1 L2 S      'V{-L1}[L2+i] = V{-S+i}, 1 <= i <= S        */
 
 OP_SETPROPERTY,/*  V L1 L2     'V{-L1}.K{L2}:string = V'                    */
 OP_GETPROPERTY,/*  V  L        'V.K{L}'                                     */
@@ -344,8 +344,7 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
 /* 
 ** Number of array items to accumulate before a SETARRAY instruction.
-** Keep this value under MAX_ARG_S or change the instruction format aka
-** the second argument size to long arg in order to fit up to MAX_ARG_L.
+** Keep this value under MAX_ARG_S.
 */
 #define ARRFIELDS_PER_FLUSH     50
 
@@ -379,7 +378,7 @@ CSI_FUNC int csC_ret(FunctionState *fs, int first, int nreturns);
 CSI_FUNC void csC_method(FunctionState *fs, ExpInfo *e);
 CSI_FUNC int csC_storevar(FunctionState *fs, ExpInfo *var, int left);
 CSI_FUNC void csC_setarraysize(FunctionState *fs, int pc, int sz);
-CSI_FUNC void csC_setarray(FunctionState *fs, int nelems, int tostore);
+CSI_FUNC void csC_setarray(FunctionState *fs, int base, int nelems, int tostore);
 CSI_FUNC void csC_settablesize(FunctionState *fs, int pc, int hsize);
 CSI_FUNC void csC_constexp2val(FunctionState *fs, ExpInfo *e, TValue *v);
 CSI_FUNC TValue *csC_getconstant(FunctionState *fs, ExpInfo *v);

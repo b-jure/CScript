@@ -1,0 +1,14 @@
+assert(tostring("already a string") == "already a string");
+assert(tostring(nil) == "nil");
+assert(tostring(true) == "true");
+assert(tostring(false) == "false");
+assert(tostring(52) == "52");
+assert(tostring(52.69) == "52.69");
+assert(tostring(52.69e2) == "5269");
+assert(tostring(0000) == "0");
+assert(typeof(tostring([])) == "string");
+assert(typeof(tostring({})) == "string");
+assert(typeof(tostring(fn (x){ return x; })) == "string");
+local class X {}
+assert(typeof(tostring(X)) == "string");
+assert(typeof(tostring(X())) == "string");

@@ -95,7 +95,7 @@ static int splitintoarray(cs_State *C, int rev) {
     const char *p = csL_check_lstring(C, 1, &lp); /* pattern */
     cs_Integer n = csL_opt_integer(C, 2, CS_INTEGER_MAX); /* maxsplit */
     const char *aux;
-    int arr = cs_nvalues(C);
+    int arr = cs_getntop(C);
     cs_push_array(C, (n > 0 ? n : 1));
     if (c_unlikely(n <= 0 || lp == 0)) { /* no splits or pattern is '""'? */
         cs_push(C, 0);

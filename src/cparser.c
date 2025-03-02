@@ -890,10 +890,8 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
 static void call(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
-    int base;
+    int base = fs->sp - 1;
     /* TODO(implement OP_CALLPROPERTY) */
-    csC_exp2stack(fs, e); /* put func on stack */
-    base = fs->sp - 1; /* func */
     csY_scan(lx); /* skip '(' */
     if (!check(lx, ')')) { /* have args ? */
         explist(lx, e);
@@ -930,6 +928,7 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
                 break;
             }
             case '(': {
+                csC_exp2stack(lx->fs, e);
                 call(lx, e);
                 break;
             }
@@ -948,10 +947,10 @@ typedef struct Constructor {
             int tostore; /* number of array elements pending to be stored */
         } a; /* array */
         struct {
-            ExpInfo *t; /* table descriptor */
             int nh; /* total number of table elements */
         } t; /* table */
     } u;
+    ExpInfo *e; /* table or array descriptor */
 } Constructor;
 
 
@@ -967,7 +966,7 @@ static void closearrfield(FunctionState *fs, Constructor *c) {
     csC_exp2stack(fs, &c->u.a.v); /* put the item on stack */
     c->u.a.v.et = EXP_VOID; /* now empty */
     if (c->u.a.tostore == ARRFIELDS_PER_FLUSH) { /* flush? */
-        csC_setarray(fs, c->u.a.na, c->u.a.tostore);
+        csC_setarray(fs, c->e->u.info, c->u.a.na, c->u.a.tostore);
         c->u.a.na += c->u.a.tostore; /* add to total */
         c->u.a.tostore = 0; /* no more pending items */
     }
@@ -978,12 +977,12 @@ static void lastarrfield(FunctionState *fs, Constructor *c) {
     if (c->u.a.tostore == 0) return;
     if (eismulret(&c->u.a.v)) { /* last item has multiple returns? */
         csC_setmulret(fs, &c->u.a.v);
-        csC_setarray(fs, c->u.a.na, CS_MULRET);
+        csC_setarray(fs, c->e->u.info, c->u.a.na, CS_MULRET);
         c->u.a.na--; /* do not count last expression (unknown num of elems) */
     } else {
         if (c->u.a.v.et != EXP_VOID) /* have item? */
             csC_exp2stack(fs, &c->u.a.v); /* ensure it is on stack */
-        csC_setarray(fs, c->u.a.na, c->u.a.tostore);
+        csC_setarray(fs, c->e->u.info, c->u.a.na, c->u.a.tostore);
     }
     c->u.a.na += c->u.a.tostore;
 }
@@ -999,7 +998,8 @@ static void arrayexp(Lexer *lx, ExpInfo *a) {
     int pc = csC_emitIS(fs, OP_NEWARRAY, 0);
     Constructor c;
     c.u.a.na = c.u.a.tostore = 0;
-    initexp(a, EXP_FINEXPR, pc); /* finalize array expression */
+    c.e = a;
+    initexp(a, EXP_FINEXPR, fs->sp); /* finalize array expression */
     csC_reserveslots(fs, 1); /* space for array */
     voidexp(&c.u.a.v); /* no value (yet) */
     expectnext(lx, '[');
@@ -1032,20 +1032,20 @@ static void tabfield(Lexer *lx, Constructor *c) {
     FunctionState *fs = lx->fs;
     int sp = fs->sp;
     int extra;
-    ExpInfo tab, key, val;
+    ExpInfo *t, k, v;
     UNUSED(sp); /* used only for assertion */
     if (check(lx, TK_NAME)) {
         checklimit(fs, c->u.t.nh, MAXINT, "records in a table constructor");
-        expname(lx, &key);
+        expname(lx, &k);
     } else
-        tabindex(lx, &key);
+        tabindex(lx, &k);
     c->u.t.nh++;
     expectnext(lx, '=');
-    tab = *c->u.t.t;
-    csC_indexed(fs, &tab, &key, 0); /* ensure key is in proper place... */
-    expr(lx, &val); /* get key value... */
-    csC_exp2stack(fs, &val); /* put it on stack... */
-    extra = csC_store(fs, &tab); /* ...and do the store */
+    t = c->e;
+    csC_indexed(fs, t, &k, 0); /* ensure key is in proper place... */
+    expr(lx, &v); /* get key value... */
+    csC_exp2stack(fs, &v); /* put it on stack... */
+    extra = csC_store(fs, t); /* ...and do the store */
     csC_pop(fs, extra); /* pop potential key value */
     cs_assert(fs->sp == sp);
 }
@@ -1061,9 +1061,9 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
     int pc = csC_emitIS(fs, OP_NEWTABLE, 0);
     Constructor c;
     c.u.t.nh = 0;
-    c.u.t.t = t;
+    c.e = t;
     expectnext(lx, '{');
-    initexp(t, EXP_FINEXPR, pc); /* finalize table expression */
+    initexp(t, EXP_FINEXPR, fs->sp); /* finalize table expression */
     csC_reserveslots(fs, 1); /* space for table */
     do { /* while have table fields */
         if (check(lx, '}')) break; /* delimiter; no more field */

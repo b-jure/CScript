@@ -1,0 +1,11 @@
+local a = class {
+    fn __setidx(k, v) {
+        assert(k and (typeof(v) == "number"));
+        rawset(self, k, v*2);
+    }
+};
+local x = a();
+x.a = 210;
+assert(x.a == 420);
+rawset(x, "a", 69);
+assert(x.a == 69);

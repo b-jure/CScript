@@ -92,7 +92,7 @@ void csF_getvarargs(cs_State *C, CallFrame *cf, int wanted) {
     }
     for (int i = 0; wanted > 0 && i < have; i++, wanted--)
         setobjs2s(C, C->sp.p++, cf->func.p - have + i);
-    while (wanted--)
+    while (wanted-- > 0)
         setnilval(s2v(C->sp.p++));
 }
 

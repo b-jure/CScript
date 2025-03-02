@@ -78,10 +78,10 @@ static int pushglobalfuncname(cs_State *C, cs_Debug *di) {
             cs_remove(C, -2); /* remove original name */
         }
         cs_copy(C, -1, func); /* copy name to proper place */
-        cs_setntop(C, func + 1); /* remove "loaded" table and name copy */
+        cs_settop(C, func + 1); /* remove "loaded" table and name copy */
         return 1;
     } else { /* not a global */
-        cs_setntop(C, func); /* remove func and Lib */
+        cs_settop(C, func); /* remove func and Lib */
         return 0;
     }
 }
@@ -269,7 +269,7 @@ CSLIB_API int csL_loadfile(cs_State *C, const char *filename) {
     if (filename) /* real file ? */
         fclose(lf.fp); /* close it */
     if (readstatus) { /* error while reading */
-        cs_setntop(C, filename_index); /* remove any results */
+        cs_settop(C, filename_index); /* remove any results */
         return errorfile(C, "read", filename_index);
     }
     cs_remove(C, filename_index);
@@ -417,20 +417,22 @@ static void fwarnoff(void *ud, const char *msg, int tocont);
 static int warning_checkmessage(cs_State *C, const char *msg, int tocont) {
     if (tocont || *msg++ != '@') /* not a control message? */
         return 0;
-    if (strcmp(msg, "on") == 0)
-        cs_setwarnf(C, fwarnon, C);
-    else if (strcmp(msg, "off"))
-        cs_setwarnf(C, fwarnoff, C);
-    return 1;
+    else {
+        if (strcmp(msg, "on") == 0) /* turn warnings on */
+            cs_setwarnf(C, fwarnon, C);
+        else if (strcmp(msg, "off") == 0) /* turn warnings off */
+            cs_setwarnf(C, fwarnoff, C);
+        return 1; /* it was a control message */
+    }
 }
 
 
 static void fwarncont(void *ud, const char *msg, int tocont) {
     cs_State *C = (cs_State *)ud;
     cs_writefmt(stderr, "%s", msg);
-    if (tocont) { /* to be continued? */
+    if (tocont) /* to be continued? */
         cs_setwarnf(C, fwarncont, ud);
-    } else { /* this is the end of the warning */
+    else { /* this is the end of the warning */
         cs_writefmt(stderr, "%s", "\n");
         cs_setwarnf(C, fwarnon, C);
     }

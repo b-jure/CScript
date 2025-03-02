@@ -1,0 +1,11 @@
+assert(typeof(5) == "number");
+assert(typeof(5.5) == "number");
+assert(typeof(true) == "boolean");
+assert(typeof(false) == "boolean");
+assert(typeof("69") == "string");
+assert(typeof([]) == "array");
+assert(typeof({}) == "table");
+assert(typeof(fn (){}) == "function");
+local class X {}
+assert(typeof(X) == "class");
+assert(typeof(X()) == "instance");

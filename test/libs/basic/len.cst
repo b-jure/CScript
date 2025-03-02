@@ -1,0 +1,19 @@
+assert(len([69, 420, 1337]) == 3);
+assert(len({ a = 69, b = 420, c = "1337"}) == 3);
+assert(len("69,420,1337") == 11);
+a = class {
+    fn __init() {
+        self.x = 69;
+        self.y = 420;
+        self.z = 1337;
+        self.k = 'k';
+        return self;
+    }
+    fn test1() {}
+    fn test2() {}
+    fn test3() {}
+    fn test4() {}
+    fn test5() {}
+};
+assert(len(a) == 5);
+assert(len(a()) == 4);

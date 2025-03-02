@@ -5,6 +5,7 @@
 */
 
 
+#include "cscript.h"
 #define CS_CORE
 
 
@@ -374,19 +375,34 @@ const char *csD_addinfo(cs_State *C, const char *msg, OString *src,
 }
 
 
+c_noret csD_errormsg(cs_State *C) {
+    if (C->errfunc != 0) { /* is there an error handling function? */
+        SPtr errfunc = restorestack(C, C->errfunc);
+        cs_assert(ttisfunction(s2v(errfunc)));
+        setobjs2s(C, C->sp.p, C->sp.p - 1); /* move argument */
+        setobjs2s(C, C->sp.p - 1, errfunc); /* push function */
+        C->sp.p++; /* assume EXTRA_STACK */
+        csV_call(C, C->sp.p - 2, 1); /* call it */
+    }
+    csPR_throw(C, CS_ERRRUNTIME);
+}
+
+
 /* generic runtime error */
 c_noret csD_runerror(cs_State *C, const char *fmt, ...) {
-    va_list ap;
+    CallFrame *cf = C->cf;
     const char *err;
+    va_list ap;
+    csG_checkGC(C);
     va_start(ap, fmt);
     err = csS_pushvfstring(C, fmt, ap);
     va_end(ap);
-    if (isCScript(C->cf)) {
-        csD_addinfo(C, err, cfProto(C->cf)->source, getcurrentline(C->cf));
+    if (isCScript(cf)) { /* can add source information? */
+        csD_addinfo(C, err, cfProto(cf)->source, getcurrentline(cf));
         setobj2s(C, C->sp.p - 2, s2v(C->sp.p - 1)); /* remove 'err' */
         C->sp.p--;
     }
-    csPR_throw(C, CS_ERRRUNTIME);
+    csD_errormsg(C);
 }
 
 
@@ -449,17 +465,4 @@ c_noret csD_indextypeerror(cs_State *C, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
     csD_runerror(C, "invalid array index type (%s), expected integer",
                      typename(ttype(index)));
-}
-
-
-c_noret csD_errormsg(cs_State *C) {
-    if (C->errfunc != 0) { /* have error func? */
-        SPtr errfunc = restorestack(C, C->errfunc); /* get it */
-        cs_assert(ttisfunction(s2v(errfunc))); /* must be a function */
-        setobjs2s(C, C->sp.p, C->sp.p - 1); /* move argument */
-        setobjs2s(C, C->sp.p - 1, errfunc); /* push function */
-        C->sp.p++; /* assume EXTRA_STACK */
-        csV_call(C, C->sp.p - 2, 1);
-    }
-    csPR_throw(C, CS_ERRRUNTIME); /* raise a regular runtime error */
 }

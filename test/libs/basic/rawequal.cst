@@ -1,0 +1,28 @@
+local a = class {
+    fn __eq(rhs) {
+        return nil;
+    }
+};
+local x = a();
+assert(!(x == x));
+assert(rawequal(x, x));
+assert(rawequal(5, 5));
+assert(!rawequal(5, 3));
+assert(rawequal(5.2, 5.2));
+assert(!rawequal(5.2, 5.1));
+assert(rawequal("ok", "ok"));
+assert(!rawequal("ok", "ko"));
+assert(rawequal(true, true));
+assert(!rawequal(true, false));
+assert(rawequal(nil, nil));
+assert(!rawequal(nil, !nil));
+assert(rawequal(inf, infinity));
+assert(!rawequal(inf, -infinity));
+x = [69, 420];
+assert(rawequal(x, x));
+assert(!rawequal(x, [69, 420]));
+x = { a = 69, b = 420 };
+assert(rawequal(x, x));
+assert(!rawequal(x, { a = 69, b = 420 }));
+assert(rawequal(a, a));
+assert(!rawequal(a, class {}));
