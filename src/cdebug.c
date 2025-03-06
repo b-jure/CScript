@@ -21,7 +21,6 @@
 #include "cprotected.h"
 #include "cmeta.h"
 #include "cvm.h"
-#include "ctrace.h"
 #include "cgc.h"
 
 

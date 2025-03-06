@@ -10,7 +10,6 @@
 
 #include <string.h>
 
-#include "ctrace.h"
 #include "cscript.h"
 
 #include "cauxlib.h"

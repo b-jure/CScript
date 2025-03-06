@@ -1,0 +1,10 @@
+local s = "<this> many people, <this> many houses";
+s = string.replace(s, "<this>", "how");
+assert("how many people, how many houses" == s);
+s = string.replace(s, "how many", "what are");
+assert("what are people, what are houses" == s);
+s = string.replace(s, "what are", "how many", 1);
+assert("how many people, what are houses" == s);
+assert(string.replace(s, "how many", "what are", 0) == s);
+assert(string.replace(s, "how many", "what are", -1) == s);
+assert(string.replace(s, "", "return this") == "return this");

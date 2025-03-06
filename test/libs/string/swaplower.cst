@@ -1,0 +1,16 @@
+local s = "SwAp CaSe";
+assert(string.swaplower(s) == "SWAP CASE");
+assert(string.swaplower(s, 0) == "SWAP CASE");
+assert(string.swaplower(s, 0, -1) == "SWAP CASE");
+assert(string.swaplower(s, 4, -1) == "SwAp CASE");
+assert(string.swaplower(s, 4, 3) == "SwAp CaSe");
+assert(string.swaplower("") == "");
+assert(string.swaplower(s, 4, -2) == "SwAp CASe");
+assert(string.swaplower("A") == "A");
+assert(string.swaplower("A", 0, -1) == "A");
+assert(string.swaplower("a") == "A");
+assert(string.swaplower("a", 0, -1) == "A");
+assert(string.swaplower("ab") == "AB");
+assert(string.swaplower("AB") == "AB");
+assert(string.swaplower("A", 1) == "A");
+assert(string.swaplower("a", 1) == "a");

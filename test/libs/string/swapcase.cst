@@ -1,0 +1,13 @@
+local s = "SwAp CaSe";
+assert(string.swapcase(s) == "sWaP cAsE");
+assert(string.swapcase(s, 0) == "sWaP cAsE");
+assert(string.swapcase(s, 0, -1) == "sWaP cAsE");
+assert(string.swapcase(s, 4, -1) == "SwAp cAsE");
+assert(string.swapcase(s, 4, 3) == "SwAp CaSe");
+assert(string.swapcase("") == "");
+assert(string.swapcase(s, 4, -2) == "SwAp cAse");
+assert(string.swapcase("A") == "a");
+assert(string.swapcase("a") == "A");
+assert(string.swapcase("ab") == "AB");
+assert(string.swapcase("AB") == "ab");
+assert(string.swapcase("a", 1) == "a");

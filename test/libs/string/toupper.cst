@@ -1,0 +1,16 @@
+local s = "This is a test string, used for testing, get it?";
+assert(string.toupper(s) == "THIS IS A TEST STRING, USED FOR TESTING, GET IT?");
+local x = "THIS IS A TEST STRING, USED FOR TESTING, GET IT?";
+assert(string.toupper(x) == "THIS IS A TEST STRING, USED FOR TESTING, GET IT?");
+assert(string.toupper(s, 4) == "This IS A TEST STRING, USED FOR TESTING, GET IT?");
+assert(string.toupper(s, 4, 2) == "This is a test string, used for testing, get it?");
+assert(string.toupper(s, 4, 2) == "This is a test string, used for testing, get it?");
+assert(string.toupper(s, 0, -1) == "THIS IS A TEST STRING, USED FOR TESTING, GET IT?");
+assert(string.toupper(s, 4, -1) == "This IS A TEST STRING, USED FOR TESTING, GET IT?");
+assert(string.toupper(s, 4, -8) == "This IS A TEST STRING, USED FOR TESTING, get it?");
+assert(string.toupper(s, 4, -100) == "This is a test string, used for testing, get it?");
+assert(string.toupper("this", 0, -100) == "This");
+assert(string.toupper("this", 1, -100) == "this");
+assert(string.toupper("this", -2) == "thIS");
+assert(string.toupper("this", -2, -2) == "thIs");
+assert(string.toupper("this", -10, -2) == "THIs");

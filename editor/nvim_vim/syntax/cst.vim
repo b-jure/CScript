@@ -104,11 +104,12 @@ syn match cscriptEmptyStatement /;/
 
 "-Keywords--------{
 syn keyword     cscriptLocal            local
-syn keyword     cscriptStatement        break return continue fn
+syn keyword     cscriptStatement        break return continue
 syn keyword     cscriptConditional      if else
 syn keyword     cscriptLabel            case default switch
 syn keyword     cscriptRepeat           loop while for
 syn keyword     cscriptConstant         true false nil inf infinity
+syn keyword     cscriptFn               fn
 "-----------------}
 
 "-Blocks----------{
@@ -121,14 +122,14 @@ endif
 "-----------------}
 
 "-Parens---------{
-syn cluster cscriptParenGroup   contains=@cscriptSpecial,@cscriptCommentGroup,cscriptClass,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
-syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptIf,cscriptParenError,cscriptStatement,cscriptConditional,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
+syn cluster cscriptParenGroup   contains=@cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
+syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptStatement,cscriptIf,cscriptParenError,cscriptStatement,cscriptConditional,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
 syn match   cscriptParenError   display /)/
 syn match   cscriptErrorInParen display contained /]/
 "---------------}
 
 "-Bracket-------{
-syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptLocal,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptStatement,cscriptConditional,cscriptLabel,cscriptRepeat,@Spell
+syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptStatement,cscriptLocal,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptConditional,cscriptLabel,cscriptRepeat,@Spell
 syn match   cscriptBracketError     display /]/
 syn match   cscriptErrorInBracket   display contained /]/
 "---------------}
@@ -196,6 +197,7 @@ syn match cscriptComma /,/
 syn match cscriptSemicoilon /;/
 
 
+hi def link cscriptFn                   cscriptStatement
 hi def link cscriptComma                NONE
 hi def link cscriptSemicoilon           NONE
 hi def link cscriptLocal                cscriptStatement

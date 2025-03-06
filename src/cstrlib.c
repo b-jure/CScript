@@ -33,16 +33,28 @@
 
 
 
-static const char *find(const char *s, size_t ls, const char *p, size_t lp) {
+static const char *rfind(const char *s, size_t l, const char *p, size_t lp) {
+    const char *start = (s + l) - lp;
+    lp--; /* first char is checked */
+    while (start >= s) {
+        if (*start == *p && memcmp(start + 1, p + 1, lp) == 0)
+            return start;
+        start--;
+    }
+    return NULL; /* not found */
+}
+
+
+static const char *find(const char *s, size_t l, const char *p, size_t lp) {
     const char *aux;
-    lp--; /* 'strchr' checks the first char */
-    ls -= lp; /* 'p' cannot be found after that */
-    while (ls > 0 && (aux = strchr(s, *p)) != NULL) {
+    lp--; /* 'memchr' checks the first char */
+    l -= lp; /* 'p' cannot be found after that */
+    while (l > 0 && (aux = memchr(s, *p, l)) != NULL) {
         aux++; /* skip first char (already checked) */
         if (memcmp(aux, p+1, lp) == 0)
             return aux-1;
         else {
-            ls -= aux-s;
+            l -= aux-s;
             s = aux;
         }
     }
@@ -50,42 +62,14 @@ static const char *find(const char *s, size_t ls, const char *p, size_t lp) {
 }
 
 
-static const void *memrnchr(const void *s, int c, size_t n, size_t nmin) {
-    const unsigned char *p = s;
-    const unsigned char *const e = p+n;
-    c = uchar(c);
-    while (n--)
-        if (p[n] == c)
-            return ((size_t)(e-(p+n)) >= nmin) ? p+n : NULL;
-    return NULL;
-}
-
-
-static const char *rfind(const char *s, size_t ls, const char *p, size_t lp) {
-    const char *end = s + ls;
-    const char *aux;
-    size_t rl = ls; /* real length of 's' */
-    lp--; /* 'memrchr' checks the first char */
-    ls -= lp; /* 'p' cannot be found after that */
-    while (ls > 0 && (aux = memrnchr(s, *p, rl, lp)) != NULL) {
-        if (memcmp(aux+1, p+1, lp) == 0)
-            return aux;
-        else {
-            rl = aux-s;
-            ls -= end-aux;
-            end = aux;
-        }
-    }
-    return NULL; /* not found */
-}
-
-
 static const char *findstr(const char *s, size_t l,
-                           const char *p, size_t lpat, int rev) {
-    if (c_unlikely(lpat == 0)) return s; /* empty strings match everything */
-    else if (l < lpat) return NULL; /* avoid negative 'l' */
-    else if (!rev) return find(s, l, p, lpat); /* find from start */
-    else return rfind(s, l, p, lpat); /* reverse find */
+                           const char *pat, size_t lpat, int rev) {
+    if (c_unlikely(lpat == 0))
+        return s; /* empty strings match everything */
+    else if (l < lpat)
+        return NULL; /* avoid negative 'l' */
+    else
+        return (!rev) ? find(s, l, pat, lpat) : rfind(s, l, pat, lpat);
 }
 
 
@@ -606,14 +590,16 @@ static int auxtocase(cs_State *C, int (*f)(int c)) {
     size_t i = posI(csL_opt_integer(C, 1, 0), l);
     size_t j = posJ(csL_opt_integer(C, 2, -1), l);
     if (l == 0 || i > j)
-        cs_push_literal(C, "");
+        cs_push(C, 0);
     else {
         csL_Buffer b;
-        size_t sz = (j-i)+1;
-        char *p = csL_buff_initsz(C, &b, sz);
+        char *p = csL_buff_initsz(C, &b, l);
+        memcpy(p, s, i);
         for (; i <= j; i++)
             p[i] = f(s[i]);
-        csL_buff_endsz(&b, sz);
+        j++;
+        memcpy(p+j, s+j, l-j);
+        csL_buff_endsz(&b, l);
     }
     return 1; /* return final string */
 }
@@ -629,44 +615,17 @@ static int s_tolower(cs_State *C) {
 }
 
 
-static int s_count(cs_State *C) {
-    size_t l, lpat;
-    const char *s = csL_check_lstring(C, 0, &l);
-    const char *pat = csL_check_lstring(C, 1, &lpat);
-    size_t i = posI(csL_opt_integer(C, 2, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 3, -1), l);
-    if (l == 0 || i > j)
-        cs_push_integer(C, 0);
-    else {
-        size_t count = 0;
-        const char *aux;
-        s = s+i;
-        l = (j-i) + 1;
-        while ((aux = findstr(s, l, pat, lpat, 0)) != NULL) {
-            aux++;
-            s = aux;
-            l -= aux-s;
-            count++;
-        }
-        cs_push_integer(C, count);
-    }
-    return 1; /* return the count */
-}
-
-
 static int auxfind(cs_State *C, int rev) {
     size_t l, lpat;
     const char *s = csL_check_lstring(C, 0, &l);
     const char *pat = csL_check_lstring(C, 1, &lpat);
-    const char *p;
     size_t i = posI(csL_opt_integer(C, 2, 0), l);
     size_t j = posJ(csL_opt_integer(C, 3, -1), l);
-    l = (j-i)+1;
-    s = s+i;
-    if ((p = findstr(s, l, pat, lpat, rev))) /* found? */
-        cs_push_integer(C, p-s);
+    const char *p;
+    if (i <= j && (p = findstr(s+i, (j-i) + 1, pat, lpat, rev)))
+        cs_push_integer(C, p-s); /* start index */
     else
-        csL_push_fail(C);
+        csL_push_fail(C); /* nothing was found */
     return 1;
 }
 
@@ -687,7 +646,7 @@ static int s_replace(cs_State *C) {
     const char *pat = csL_check_lstring(C, 1, &lpat);
     const char *v = csL_check_lstring(C, 2, &lv);
     cs_Integer n = csL_opt_integer(C, 3, CS_INTEGER_MAX);
-    if (c_unlikely(n <= 0)) /* no replacements? */
+    if (n <= 0) /* no replacements? */
         cs_push(C, 0); /* return original string */
     else if (lpat == 0) /* pattern is empty string? */
         cs_push_lstring(C, v, lv); /* return replacement string */
@@ -723,60 +682,74 @@ static int s_substr(cs_State *C) {
 }
 
 
-static int s_swapcase(cs_State *C) {
+static void auxswapcase(char *d, const char *s, size_t i, size_t j) {
+    for (; i <= j; i++) {
+        unsigned char c = s[i];
+        d[i] = isupper(c) ? tolower(c) : toupper(c);
+    }
+}
+
+
+static void auxuppercase(char *d, const char *s, size_t i, size_t j) {
+    for (; i <= j; i++) {
+        unsigned char c = s[i];
+        d[i] = isupper(c) ? tolower(c) : c;
+    }
+}
+
+
+static void auxlowercase(char *d, const char *s, size_t i, size_t j) {
+    for (; i <= j; i++) {
+        unsigned char c = s[i];
+        d[i] = islower(c) ? toupper(c) : c;
+    }
+}
+
+
+static int auxcase(cs_State *C, void (*f)(char*,const char*,size_t,size_t)) {
     size_t l;
     const char *s = csL_check_lstring(C, 0, &l);
     size_t i = posI(csL_opt_integer(C, 1, 0), l);
     size_t j = posJ(csL_opt_integer(C, 2, -1), l);
     char *p;
     csL_Buffer b;
-    p = csL_buff_initsz(C, &b, l);
-    l = (j-i) + 1;
-    s = s+i;
-    while (l--) {
-        unsigned char c = s[l];
-        p[l] = (isupper(c)) ? tolower(c) : toupper(c);
+    if (i > j || l == 0) {
+        cs_push(C, 0);
+        return 1;
     }
+    p = csL_buff_initsz(C, &b, l);
+    memcpy(p, s, i);
+    f(p, s, i, j);
+    j++; /* go past the last index that was swapped */
+    memcpy(p+j, s+j, l-j);
     csL_buff_endsz(&b, l);
     return 1;
+}
+
+
+static int s_swapcase(cs_State *C) {
+    return auxcase(C, auxswapcase);
 }
 
 
 static int s_swapupper(cs_State *C) {
-    size_t l;
-    const char *s = csL_check_lstring(C, 0, &l);
-    size_t i = posI(csL_opt_integer(C, 1, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
-    char *p;
-    csL_Buffer b;
-    p = csL_buff_initsz(C, &b, l);
-    l = (j-i) + 1;
-    s = s+i;
-    while (l--) {
-        unsigned char c = s[l];
-        p[l] = (isupper(c)) ? tolower(c) : c;
-    }
-    csL_buff_endsz(&b, l);
-    return 1;
+    return auxcase(C, auxuppercase);
 }
 
 
 static int s_swaplower(cs_State *C) {
+    return auxcase(C, auxlowercase);
+}
+
+
+static int s_byte(cs_State *C) {
     size_t l;
     const char *s = csL_check_lstring(C, 0, &l);
-    size_t i = posI(csL_opt_integer(C, 1, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
-    char *p;
-    csL_Buffer b;
-    csL_buff_initsz(C, &b, l);
-    p = csL_buff_initsz(C, &b, l);
-    l = (j-i) + 1;
-    s = s+i;
-    while (l--) {
-        unsigned char c = s[l];
-        p[l] = (islower(c)) ? toupper(c) : c;
-    }
-    csL_buff_endsz(&b, l);
+    size_t i = posI(csL_check_integer(C, 1), l);
+    if (i >= l)
+        csL_push_fail(C);
+    else
+        cs_push_integer(C, uchar(s[i]));
     return 1;
 }
 
@@ -791,7 +764,6 @@ static const cs_Entry strlib[] = {
     {"fmt", s_fmt},
     {"toupper", s_toupper},
     {"tolower", s_tolower},
-    {"count", s_count},
     {"find", s_find},
     {"rfind", s_rfind},
     {"replace", s_replace},
@@ -799,6 +771,7 @@ static const cs_Entry strlib[] = {
     {"swapcase", s_swapcase},
     {"swapupper", s_swapupper},
     {"swaplower", s_swaplower},
+    {"byte", s_byte},
     {NULL, NULL}
 };
 

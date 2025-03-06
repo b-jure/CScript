@@ -18,7 +18,6 @@
 #include "cstate.h"
 #include "cobject.h"
 #include "cstring.h"
-#include "ctrace.h"
 #include "cvm.h"
 #include "cfunction.h"
 #include "ctable.h"
@@ -31,6 +30,7 @@
 ** By default, disable bytecode disassembly.
 */
 #if !defined(DISASSEMBLE_BYTECODE)
+#include "ctrace.h"
 #define DISASSEMBLE_BYTECODE    1
 #endif
 

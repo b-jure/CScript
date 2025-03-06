@@ -13,7 +13,6 @@
 #include <string.h>
 
 #include "cauxlib.h"
-#include "ctrace.h"
 #include "csconf.h"
 #include "cscript.h"
 

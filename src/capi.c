@@ -28,7 +28,6 @@
 #include "cvm.h"
 #include "stdarg.h"
 #include "capi.h"
-#include "ctrace.h"
 
 
 /* test for pseudo index */

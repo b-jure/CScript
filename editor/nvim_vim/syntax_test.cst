@@ -9,11 +9,11 @@
 
 
 # Operators
-!    ~                          // unary
-+    -    **    *    /    %     // arithmetic
-^    >>   <<    &    |          // bitwise
->    <    ==    !=   >=   <=    // ordering
-or   and                        // logical
+!    ~                          # unary
++    -    **    *    /    %     # arithmetic
+^    >>   <<    &    |          # bitwise
+>    <    ==    !=   >=   <=    # ordering
+or   and                        # logical
 
 
 /*
@@ -21,18 +21,17 @@ or   and                        // logical
 ** TODO, XXX, FIXME
 ** @doctag
 */
-// Single-line comment TODO, XXX, FIXME @doctag
 # Single-line comment TODO, XXX, FIXME @doctag
 */ # comment error
 
 
 # Special Characters (errors)
-\e                              // escape
-\\ \a \b \t \n \v \f \r \' \"   // control
-\532                            // \ddd
-\x15                            // \xhh
-\u{ffffffff}                    // utf-8 (1-8 hex digits)
-\u[ffffffff]                    // utf-8 strict (1-8 hex digits)
+\e                              # escape
+\\ \a \b \t \n \v \f \r \' \"   # control
+\532                            # \ddd
+\x15                            # \xhh
+\u{ffffffff}                    # utf-8 (1-8 hex digits)
+\u[ffffffff]                    # utf-8 strict (1-8 hex digits)
 
 
 # String
@@ -64,7 +63,7 @@ dollar sign \u[24]"
 
 
 # Keywords
-break   return   continue   local               # statements
+break   return   continue   local   fn          # statements
 if      else     switch                         # conditionals
 case    default                                 # labels
 while   loop     for                            # repeat

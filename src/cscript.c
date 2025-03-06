@@ -12,7 +12,6 @@
 
 #include "cauxlib.h"
 #include "cslib.h"
-#include "ctrace.h"
 
 
 #define CS_PROGNAME     "cscript"
@@ -152,7 +151,6 @@ static int exec_script(cs_State *C, int nargs, int nres) {
     cs_assert(base >= 0);
     cs_push_cfunction(C, errfunc); /* push 'errfunc' on top */
     cs_insert(C, base); /* insert 'errfunc' below the function */
-    csTR_dumpstack(C, -1, "BEFORE EXEC SCRIPT");
     status = cs_pcall(C, nargs, nres, base);
     cs_remove(C, base); /* remove 'errfunc' */
     return status;

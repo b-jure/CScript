@@ -26,6 +26,7 @@ local fn topointer(s) {
     assert(string.fmt("%p", {}) != null);
     assert(string.fmt("%p", []) != null);
     assert(string.fmt("%p", class {}) != null);
+    assert(string.fmt("%p", fn (){}) != null);
     assert(string.fmt("%p", print) != null);
     assert(string.fmt("%p", topointer) != null);
     assert(string.fmt("%p", print) == string.fmt("%p", print));

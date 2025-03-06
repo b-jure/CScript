@@ -21,7 +21,6 @@
 #include "cprotected.h"
 #include "cscript.h"
 #include "cstring.h"
-#include "ctrace.h"
 
 
 #if !defined(csi_makeseed)
