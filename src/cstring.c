@@ -365,7 +365,7 @@ static const char *str2int(const char *s, cs_Integer *i) {
             for (y=x; val[c]<base && y <= CS_UNSIGNED_MAX>>bs; c=*s++)
                 y = y<<bs | val[c];
         }
-    } else { /* other bases */
+    } else { /* other bases (up to base 36) */
         empty = !(val[c]<base);
         if (!empty) {
             for (x=0; val[c]<base && x <= UINT_MAX/36-1; c=*s++)
