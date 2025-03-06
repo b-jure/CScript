@@ -2,12 +2,12 @@
 ** Test script file for CScript modulo operator.
 */
 
-assert(2%2 == 0);           // (not folded)
-assert(2%4 == 2);           // (folded)
-assert(4%2 == 0);           // (not folded)
-assert(5%2 == 1);           // (folded)
-assert(4%2%2 == 0);         // (not folded)
-a = 8%3;                    // (folded)
+assert(2%2 == 0);           # (not folded)
+assert(2%4 == 2);           # (folded)
+assert(4%2 == 0);           # (not folded)
+assert(5%2 == 1);           # (folded)
+assert(4%2%2 == 0);         # (not folded)
+a = 8%3;                    # (folded)
 assert(a == 2);
-assert(a%2 == 0);           // (not folded)
-assert(2%a == 0);           // (not folded)
+assert(a%2 == 0);           # (not folded)
+assert(2%a == 0);           # (not folded)

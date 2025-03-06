@@ -8,7 +8,6 @@
 #define CS_CORE
 
 
-#include "cmeta.h"
 #include "cobject.h"
 #include "ctypes.h"
 #include "cgc.h"
@@ -42,7 +41,7 @@ static const char *tkstr[] = { /* ORDER TK */
     "default", "else", "false", "for", "foreach", "fn", "if",
     "in", "inherits", "nil", "or", "return", "super",
     "switch", "true", "while", "loop", "local", "inf", "infinity",
-    "!=", "==", ">=", "<=", "<<", ">>", "**", "..",
+    "//", "!=", "==", ">=", "<=", "<<", ">>", "**", "..",
     "...", "<eof>",
     "<number>", "<integer>", "<string>", "<name>"
 };
@@ -137,12 +136,26 @@ static const char *lextok2str(Lexer *lx, int t) {
 }
 
 
-static c_noret lexerror(Lexer *lx, const char *err, int token) {
+static const char *lexmsg(Lexer *lx, const char *msg, int token) {
     cs_State *C = lx->C;
-    err = csD_addinfo(C, err, lx->src, lx->line);
+    msg = csD_addinfo(C, msg, lx->src, lx->line);
     if (token)
-        csS_pushfstring(C, "%s near: %s", err, lextok2str(lx, token));
-    csPR_throw(C, CS_ERRSYNTAX);
+        msg = csS_pushfstring(C, "%s near: %s", msg, lextok2str(lx, token));
+    return msg;
+}
+
+
+static void lexwarn(Lexer *lx, const char *msg, int token) {
+    cs_State *C = lx->C;
+    SPtr oldsp = C->sp.p;
+    csT_warning(C, lexmsg(lx, msg, token), 0);
+    C->sp.p = oldsp; /* remove warning messages */
+}
+
+
+static c_noret lexerror(Lexer *lx, const char *err, int token) {
+    lexmsg(lx, err, token);
+    csPR_throw(lx->C, CS_ERRSYNTAX);
 }
 
 
@@ -164,13 +177,13 @@ static void inclinenr(Lexer *lx) {
 
 
 /* create new string and fix it inside of lexer htable */
-OString *csY_newstring(Lexer *lx, const char *str, size_t len) {
+OString *csY_newstring(Lexer *lx, const char *str, size_t l) {
     cs_State *C = lx->C;
-    OString *s = csS_newl(C, str, len);
+    OString *s = csS_newl(C, str, l);
     const TValue *o = csH_getstr(lx->tab, s);
-    if (!ttisnil(o)) { /* string already present? */
+    if (!ttisnil(o)) /* string already present? */
         s = keystrval(cast(Node *, o));
-    } else {
+    else {
         TValue *stkv = s2v(C->sp.p++); /* reserve stack space for string */
         setstrval(C, stkv, s); /* anchor */
         csH_finishset(C, lx->tab, o, stkv, stkv); /* tab[string] = string */
@@ -455,23 +468,21 @@ static int read_char(Lexer *lx, Literal *k) {
 
 /* convert lexer buffer bytes into number constant */
 static int lexstr2num(Lexer *lx, Literal *k) {
-    int oflow;
+    int fof; /* flag for float overflow; -1 underflow; 1 overflow; 0 ok */
     TValue o;
-    if (c_unlikely(csS_tonum(csR_buff(lx->buff), &o, &oflow) == 0))
+    if (c_unlikely(csS_tonum(csR_buff(lx->buff), &o, &fof) == 0))
         lexerror(lx, "malformed number", TK_FLT);
-    else if (c_unlikely(oflow > 0)) /* overflow? */
-        lexerror(lx, "number constant overflows", TK_FLT);
-    else if (c_unlikely(oflow < 0)) /* underflow? */
-        lexerror(lx, "number constant underflows", TK_FLT);
-    else { /* otherwise no errors */
-        if (ttisint(&o)) { /* integer constant? */
-            k->i = ival(&o);
-            return TK_INT;
-        } else { /* otherwise float constant */
-            cs_assert(ttisflt(&o));
-            k->n = fval(&o);
-            return TK_FLT;
-        }
+    if (c_unlikely(fof > 0)) /* overflow? */
+        lexwarn(lx, "number constant overflows", TK_FLT);
+    else if (c_unlikely(fof < 0)) /* underflow? */
+        lexwarn(lx, "number constant underflows", TK_FLT);
+    if (ttisint(&o)) { /* integer constant? */
+        k->i = ival(&o);
+        return TK_INT;
+    } else { /* otherwise float constant */
+        cs_assert(ttisflt(&o));
+        k->n = fval(&o);
+        return TK_FLT;
     }
 }
 
@@ -625,7 +636,7 @@ static int scan(Lexer *lx, Literal *k) {
             case '/': {
                 advance(lx);
                 if (lxmatch(lx, '/')) 
-                    read_comment(lx);
+                    return TK_IDIV;
                 else if (lxmatch(lx, '*')) 
                     read_commentmult(lx);
                 else 

@@ -30,7 +30,6 @@ syn keyword cscriptTodo         contained TODO FIXME XXX
 syn cluster cscriptCommentGroup contains=cscriptTodo,cscriptDocTag
 " single line
 syn region  cscriptComment  matchgroup=cscriptCommentStart start=/#/ skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
-syn region  cscriptComment  matchgroup=cscriptCommentStart start=/\/\// skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
 " multi-line
 if exists("c_no_comment_fold")
     syn region  cscriptComment  matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError extend
@@ -46,15 +45,15 @@ syn match   cscriptWrongComTail	        display /\*\//
 
 "-Special---------{
 " highlight \e (aka \x1b)
-syn match   cscriptSpecialEsc       display contained /\\e/
+syn match   cscriptSpecialEsc       contained /\\e/
 " highlight control chars
-syn match   cscriptSpecialControl   display contained /\\[\\abtnvfr'"]/
+syn match   cscriptSpecialControl   contained /\\[\\abtnvfr'"]/
 " highlight decimal escape sequence \ddd
-syn match   cscriptSpecialDec       display contained /\\[[:digit:]]\{3}/
+syn match   cscriptSpecialDec       contained /\\[[:digit:]]\{3}/
 " highlight hexadecimal escape sequence \xhh
-syn match   cscriptSpecialHex       display contained /\\x[[:xdigit:]]\{2}/
+syn match   cscriptSpecialHex       contained /\\x[[:xdigit:]]\{2}/
 " highlight utf8 \u{xxxxxxxx} or \u[xxxxxxxx]
-syn match   cscriptSpecialUtf       display contained /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
+syn match   cscriptSpecialUtf       contained /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
 syn cluster cscriptSpecial  contains=cscriptSpecialEsc,cscriptSpecialControl,cscriptSpecialDec,cscriptSpecialHex,cscriptSpecialUtf
 " errors
 syn match   cscriptSpecialEscError      /\\e/
@@ -74,27 +73,27 @@ syn match   cscriptCharacter    /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}
 
 "-Numbers---------{
 syn case ignore
-syn match   cscriptNumbers      display transparent /\<\d\|\.\d/ contains=cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError,cscriptConstant
+syn match   cscriptNumbers      transparent /\<\d\|\.\d/ contains=cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError,cscriptConstant
 " decimal integers
-syn match   cscriptNumber       display contained /\%(0\|[^0\d]\d*\)\>/
+syn match   cscriptNumber       contained /\%(0\|[^0\d]\d*\)\>/
 " hexadecimal integers
-syn match   cscriptNumber       display contained /0x\x\+\>/
+syn match   cscriptNumber       contained /0x\x\+\>/
 " octal integers
-syn match   cscriptOctal        display contained /0\o\+\>/ contains=cscriptOctalZero
+syn match   cscriptOctal        contained /0\o\+\>/ contains=cscriptOctalZero
 " flag the first zero of an octal number as something special
-syn match   cscriptOctalZero    display contained /\<0/
+syn match   cscriptOctalZero    contained /\<0/
 " decimal floating point number, with dot, optional exponent
-syn match   cscriptFloat        display contained /\d\+\.\d*\%(e[-+]\=\d\+\)\=/
+syn match   cscriptFloat        contained /\d\+\.\d*\%(e[-+]\=\d\+\)\=/
 " decimal floating point number, starting with a dot, optional exponent
-syn match   cscriptFloat        display contained /\.\d\+\%(e[-+]\=\d\+\)\>/
+syn match   cscriptFloat        contained /\.\d\+\%(e[-+]\=\d\+\)\>/
 " decimal floating point number, without dot, with exponent
-syn match   cscriptFloat        display contained "\d\+e[-+]\=\d\+\>"
+syn match   cscriptFloat        contained "\d\+e[-+]\=\d\+\>"
 " hexadecimal foating point number, optional leading digits, with dot, with exponent
-syn match   cscriptFloat        display contained "0x\x*\.\x\+p[-+]\=\d\+\>"
+syn match   cscriptFloat        contained "0x\x*\.\x\+p[-+]\=\d\+\>"
 " hexadecimal floating point number, with leading digits, optional dot, with exponent
-syn match   cscriptFloat        display contained "0x\x\+\.\=p[-+]\=\d\+\>"
+syn match   cscriptFloat        contained "0x\x\+\.\=p[-+]\=\d\+\>"
 " flag an octal number with wrong digits
-syn match   cscriptOctalError   display contained "0\o*[89]\d*"
+syn match   cscriptOctalError   contained "0\o*[89]\d*"
 syn case match
 "-----------------}
 
@@ -162,7 +161,7 @@ syn keyword     cscriptMetaMethod       __eq __lt __le
 syn keyword     cscriptFunc             error assert gc load loadfile runfile
 syn keyword     cscriptFunc             getmetamethod next pairs ipairs pcall
 syn keyword     cscriptFunc             xpcall print warn len rawequal rawget
-syn keyword     cscriptFunc             rawset getargs tonumber tostring typeof
+syn keyword     cscriptFunc             rawset getresults tonumber tostring typeof
 syn keyword     cscriptFunc             getclass __G __VERSION
 " package library
 syn keyword     cscriptFunc             import
@@ -180,7 +179,7 @@ syn match       cscriptFunc             /\<string\.startswith\>/
 syn match       cscriptFunc             /\<string\.reverse\>/
 syn match       cscriptFunc             /\<string\.repeat\>/
 syn match       cscriptFunc             /\<string\.join\>/
-syn match       cscriptFunc             /\<string\.format\>/
+syn match       cscriptFunc             /\<string\.fmt\>/
 syn match       cscriptFunc             /\<string\.toupper\>/
 syn match       cscriptFunc             /\<string\.tolower\>/
 syn match       cscriptFunc             /\<string\.count\>/

@@ -20,7 +20,7 @@
 
 /* size of 'OString' object */
 #define sizeofstring(l) \
-        (offsetof(OString, bytes) + ((l) + 1) * sizeof(char))
+        (offsetof(OString, bytes) + ((l) + 1)*sizeof(char))
 
 
 /* create new string from literal 'lit' */

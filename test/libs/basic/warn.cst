@@ -1,0 +1,9 @@
+warn("@on"); # turn warnings on
+warn("this is a", " warning for ", "'69' users");
+warn("@this is ignored");
+warn("this is a", " warning for ", "'420' users");
+warn("@off"); # turn warnings off
+warn("warnings are off ", "so this is ignored");
+warn("warnings are still off");
+warn("@on");
+warn("this is a", " warning for ", "'1337' users");

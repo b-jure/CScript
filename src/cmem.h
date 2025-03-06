@@ -17,15 +17,16 @@
 
 #define csM_new(C,t)            csM_malloc_(C, sizeof(t), 0)
 #define csM_newarray(C,s,t)     csM_malloc_(C, (s)*sizeof(t), 0)
-#define csM_newobj(C,tag,sz)    csM_malloc_(C, (sz), tag)
+#define csM_newobj(C,tag,sz)    csM_malloc_(C, (sz), (tag))
 
 #define csM_free(C,p)           csM_free_(C, p, sizeof(*(p)))
 #define csM_freemem(C,p,sz)     csM_free_((C), (p), (sz))
 #define csM_freearray(C,p,n)    csM_free_((C), (p), (n)*sizeof(*(p)))
 #define csM_freevmt(C,p)        csM_free_((C), (p), SIZEVMT)
 
-#define csM_reallocarray(C,p,os,ns) \
-        ((p) = csM_realloc_(C, p, (os)*sizeof(*(p)), (ns)*sizeof(*(p))))
+
+#define csM_reallocarray(C,p,os,ns,t) \
+        ((p) = csM_realloc_(C, p, (os)*sizeof(t), (ns)*sizeof(t)))
 
 #define csM_ensurearray(C,p,s,n,e,l,w,t) \
         ((p) = csM_growarr_(C, p, cast(int *,&(s)), n, sizeof(t), e, l, w))

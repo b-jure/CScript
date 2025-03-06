@@ -8,9 +8,9 @@
 #define CS_LIB
 
 
-#include <ctype.h>
 #include <string.h>
 
+#include "ctrace.h"
 #include "cscript.h"
 
 #include "cauxlib.h"
@@ -19,8 +19,8 @@
 
 
 static int b_error(cs_State *C) {
-    int level = csL_opt_integer(C, 1, 0);
-    cs_setntop(C, 1); /* leave only message on top */
+    int level = csL_opt_integer(C, 1, 1);
+    cs_settop(C, 1); /* leave only message on top */
     if (cs_type(C, 0) == CS_TSTRING && level >= 0) {
         csL_where(C, level); /* add extra information */
         cs_push(C, 0); /* push original error message... */
@@ -33,12 +33,12 @@ static int b_error(cs_State *C) {
 
 static int b_assert(cs_State *C) {
     if (c_likely(cs_to_bool(C, -1))) { /* true? */
-        return cs_nvalues(C); /* get all arguments */
+        return cs_getntop(C); /* get all arguments */
     } else { /* failed assert (error) */
         csL_check_any(C, 0); /* must have a condition */
         cs_remove(C, 0); /* remove condition */
         cs_push_literal(C, "assertion failed"); /* push default err message */
-        cs_setntop(C, 1); /* leave only one message on top */
+        cs_settop(C, 1); /* leave only one message on top */
         return b_error(C);
     }
 }
@@ -145,7 +145,7 @@ static int b_load(cs_State *C) {
     } else { /* loading from a reader function */
         const char *chunkname = csL_opt_string(C, 1, "(load)");
         csL_check_type(C, 0, CS_TFUNCTION); /* 'chunk' must be a function */
-        cs_settop(C, RESERVEDSLOT); /* create reserved slot */
+        cs_settop(C, RESERVEDSLOT+1); /* create reserved slot */
         status = cs_load(C, genericreader, NULL, chunkname);
     }
     return auxload(C, status);
@@ -161,7 +161,7 @@ static int b_loadfile(cs_State *C) {
 
 static int b_runfile(cs_State *C) {
     const char *filename = csL_opt_string(C, -1, NULL);
-    cs_settop(C, 0);
+    cs_settop(C, 1);
     if (c_unlikely(csL_loadfile(C, filename) != CS_OK))
         return cs_error(C);
     cs_call(C, 0, CS_MULRET);
@@ -191,7 +191,7 @@ static int b_next(cs_State *C) {
     int t = cs_type(C, 0);
     csL_expect_arg(C, (t == CS_TINSTANCE || t == CS_TTABLE), 0,
                        "instance or table");
-    cs_setntop(C, 2); /* if 2nd argument is missing create it */
+    cs_settop(C, 2); /* if 2nd argument is missing create it */
     if (cs_next(C, 0)) { /* found field? */
         return 2; /* key (index) + value */
     } else {
@@ -235,7 +235,7 @@ static int finishpcall(cs_State *C, int status, int extra) {
         cs_push(C, -2);         /* error message */
         return 2;               /* return false, message */
     } else
-        return cs_nvalues(C) - extra; /* return all */
+        return cs_getntop(C) - extra; /* return all */
 }
 
 
@@ -244,14 +244,14 @@ static int b_pcall(cs_State *C) {
     csL_check_any(C, 0);
     cs_push_bool(C, 1); /* first result if no errors */
     cs_insert(C, 0); /* insert it before the object being called */
-    status = cs_pcall(C, cs_nvalues(C) - 2, CS_MULRET, -1);
+    status = cs_pcall(C, cs_getntop(C) - 2, CS_MULRET, -1);
     return finishpcall(C, status, 0);
 }
 
 
 static int b_xpcall(cs_State *C) {
     int status;
-    int nargs = cs_nvalues(C) - 2;
+    int nargs = cs_getntop(C) - 2;
     csL_check_type(C, 1, CS_TFUNCTION); /* check error function */
     cs_push_bool(C, 1); /* first result */
     cs_push(C, 0); /* function */
@@ -262,7 +262,7 @@ static int b_xpcall(cs_State *C) {
 
 
 static int b_print(cs_State *C) {
-    int n = cs_nvalues(C);
+    int n = cs_getntop(C);
     for (int i = 0; i < n; i++) {
         size_t len;
         const char *str = csL_to_lstring(C, i, &len);
@@ -277,7 +277,7 @@ static int b_print(cs_State *C) {
 
 
 static int b_warn(cs_State *C) {
-    int n = cs_nvalues(C);
+    int n = cs_getntop(C);
     int i;
     csL_check_string(C, 0); /* at least one string */
     for (i = 1; i < n; i++)
@@ -292,9 +292,10 @@ static int b_warn(cs_State *C) {
 static int b_len(cs_State *C) {
     int t = cs_type(C, 0);
     csL_expect_arg(C, t == CS_TARRAY ||
-                       t == CS_TTABLE ||
-                       t == CS_TINSTANCE ||
-                       t == CS_TSTRING, 0,
+                      t == CS_TTABLE ||
+                      t == CS_TINSTANCE ||
+                      t == CS_TCLASS ||
+                      t == CS_TSTRING, 0,
                       "array, hashtable, instance or string");
     cs_push_integer(C, cs_len(C, 0));
     return 1;
@@ -309,68 +310,62 @@ static int b_rawequal(cs_State *C) {
 }
 
 
-/* helper for checking first argument for raw set/get */
-static void checkfirstarg(cs_State *C) {
-    int t = cs_type(C, 0);
-    csL_expect_arg(C, t == CS_TARRAY ||
-                       t == CS_TTABLE ||
-                       t == CS_TINSTANCE, 0, "array, table or instance");
-}
-
-
 static int b_rawget(cs_State *C) {
-    checkfirstarg(C);
+    csL_check_type(C, 0, CS_TINSTANCE);
     csL_check_any(C, 1); /* index */
-    cs_setntop(C, 2);
+    cs_settop(C, 2);
     cs_get_raw(C, 0); /* this pops index */
     return 1;
 }
 
 
 static int b_rawset(cs_State *C) {
-    checkfirstarg(C);
+    csL_check_type(C, 0, CS_TINSTANCE);
     csL_check_any(C, 1); /* index */
     csL_check_any(C, 2); /* value */
-    cs_setntop(C, 3);
-    cs_set_raw(C, 1); /* this pops index and value */
+    cs_settop(C, 3);
+    cs_set_raw(C, 0); /* this pops index and value */
     return 1; /* return object */
 }
 
 
 static int b_getargs(cs_State *C) {
-    int n = cs_nvalues(C);
+    int nres = cs_getntop(C) - 1;
     if (cs_type(C, 0) == CS_TSTRING) {
         const char *what = cs_to_string(C, 0);
         if (strcmp(what, "array") == 0) { /* array? */
-            cs_push_array(C, n); /* push the array */
-            while (--n) /* set the array indices */
-                cs_set_index(C, 0, n);
+            cs_push_array(C, nres); /* push the array */
+            cs_replace(C, 0); /* move in place of string */
+            while (nres--) /* set the array indices */
+                cs_set_index(C, 0, nres);
         } else if (strcmp(what, "table") == 0) { /* hashset? */
-            cs_push_table(C, n); /* push the table (hashset) */
-            while (--n) { /* set the table fields */
+            cs_push_table(C, nres); /* push the table (hashset) */
+            cs_replace(C, 0); /* move in place of string */
+            while (nres--) { /* set the table fields */
                 cs_push_bool(C, 1);
                 cs_set_field(C, 0);
             }
-        } else if (strcmp(what, "len") == 0) { /* len? */
-            cs_push_integer(C, n - 1); /* push total number of args */
-        } else {
+        } else if (strcmp(what, "len") == 0) /* len? */
+            cs_push_integer(C, nres);
+        else
             csL_error_arg(C, 0,
             "invalid string value, expected \"array\", \"table\" or \"len\"");
-        }
-        cs_replace(C, 0); /* replace the option with the value */
-        return 1; /* return the value */
+        return 1; /* return (array|table|len) */
     } else {
         cs_Integer i = csL_check_integer(C, 0);
-        if (i < 0) i = n + i;
-        else if (++i > n) i = n - 1;
+        if (i < 0) i = nres + i;
+        else if (i > nres) i = nres - 1;
         csL_check_arg(C, 0 <= i, 0, "index out of range");
-        return n - (int)i;
+        return nres - (int)i; /* return 'nres-i' results */
     }
 }
 
 
-/* lookup table for digit values; -1==255>=36 -> invalid */
-static const unsigned char numeraltable[] = { -1,
+/* space characters to skip */
+#define SPACECHARS      " \f\n\r\t\v"
+
+/* Lookup table for digit values. -1==255>=36 -> invalid */
+static const unsigned char table[] = { -1,
 -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
 -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
 -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
@@ -389,74 +384,58 @@ static const unsigned char numeraltable[] = { -1,
 -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
 };
 
-/* space characters to skip */
-#define SPACECHARS      " \f\n\r\t\v"
-
 /*
 ** Converts string to 'cs_Integer', skips leading and trailing whitespace,
 ** checks for overflows and underflows and checks if 's' is valid numeral
-** string. Conversion works for bases 2-36 and hexadecimal and octal literal
+** string. Conversion works for bases [2,36] and hexadecimal and octal literal
 ** strings.
 */
 static const char *strtoint(const char *s, int base, cs_Integer *pn, int *of) {
-    const unsigned char *val = numeraltable + 1;
-    const cs_Unsigned lowlim = CS_INTEGER_MIN;
-    const cs_Unsigned lim = CS_UNSIGNED_MAX;
+    const unsigned char *val = table+1;
+    cs_Unsigned lim = CS_INTEGER_MIN;
     cs_Unsigned n = 0;
-    int c, neg = 0;
-    *of = 0; /* reset overflow flag */
-    s += strspn(s, SPACECHARS); /* skip leading whitespace */
-    c = *s;
-    if (c == '+' || c == '-') { /* have sign? */
-        neg = -(c == '-');
+    int sign = 1;
+    int c;
+    s += strspn(s, SPACECHARS); /* skip leading spaces */
+    c = *s++;
+    if (c == '-' || c == '+') { /* handle sign */
+        sign -= 2*(c == '-');
         c = *s++;
     }
-    if ((base == 8 || base == 16) && c == '0') { /* hexadecimal or octal? */
-        c = *s++;
-        /* (c | 32) => tolower */
-        if ((c | 32) == 'x') { /* X or x ? */
-            c = *s++;
-            if (val[c] >= 16) return NULL; /* missing first digit */
-            base = 16; /* set hexadecimal base */
-        } else if (base == 0) { /* must be octal */
-            base = 8; /* set octal base */
+    if (c == '0' && (base == 8 || base == 16)) {
+        c = *s++; /* skip 0 */
+        if ((c|32) == 'x') { /* hexadecimal prefix? */
+            if (base != 16) return NULL; /* octal numeral with x|X */
+            c = *s++; /* skip x|X */
         }
-    } else if (val[c] >= base) {
+    }
+    if (!(val[c] < base)) /* no digit? */
         return NULL;
-    }
-    if (base == 10) { /* decimal base? */
-        for (; isdigit(c) && n <= lim/10 && 10*n <= lim - (c - '0'); c = *s++)
-            n = n * 10 + (c - '0');
-        if (!isdigit(c)) goto done;
-    } else if (!(base & (base-1))) { /* base is power of 2? */
-        /* get the number of bit shifts depending on the value of base */
-        int bs = "\0\1\2\4\7\3\6\5"[(0x17 * base) >> 5 & 7];
-        for (; isalnum(c) && val[c] < base && n <= lim >> bs; c = *s++)
-            n = n<<bs | val[c];
-    } else {
-        for (; isalnum(c) && val[c] < base && n <= lim / base &&
-                base * n <= lim - val[c]; c = *s++)
-            n = n * base + val[c];
-    }
-    if (isalnum(c) && val[c] < base) { /* overflow? */
-        *of = 1; /* signal it */
-        do {c = *s++;} while(isalnum(c) && val[c] < base); /* skip numerals */
-        n = lowlim;
-    }
-done:
-    s--; s += strspn(s, SPACECHARS); /* skip trailing whitespace */
-    if (n >= lowlim) { /* potential overflow? */
-        if (!neg) { /* overflow */
+    do {
+        if (val[c] >= base) return NULL; /* invalid numeral */
+        n = n * base + val[c];
+        c = *s++;
+    } while (val[c] < base && n <= CS_UNSIGNED_MAX/base &&
+             base*n <= CS_UNSIGNED_MAX-val[c]);
+    if (val[c] < base) {
+        while (val[c] < base) c=*s++;
+        if (sign > 0)
+            n = lim-1;
+        else
+            n = lim;
+        *of = sign;
+    } else if (n >= lim) {
+        if (sign > 0) {
             *of = 1;
-            *pn = lim;
-            return s;
-        } else if (n > lowlim) { /* underflow? */
+            n = lim-1;
+        } else if (n > lim) {
             *of = -1;
-            *pn = lowlim;
-            return s;
+            n = lim;
         }
     }
-    *pn = (cs_Integer)((n^neg) - neg); /* resolve sign and store the result */
+    s--;
+    s += strspn(s, SPACECHARS); /* skip trailing spaces */
+    *pn = sign * n;
     return s;
 }
 
@@ -465,12 +444,12 @@ static int b_tonumber(cs_State *C) {
     int overflow = 0;
     if (cs_is_noneornil(C, 1)) { /* no base? */
         if (cs_type(C, 0) == CS_TNUMBER) { /* number ? */
-            cs_setntop(C, 1); /* set it as top */
+            cs_settop(C, 1); /* set it as top */
             return 1; /* return it */
         } else { /* must be string */
             const char *s = cs_to_string(C, 0);
             if (s != NULL && cs_stringtonumber(C, s, &overflow))
-                goto pushflag;
+                goto done;
             /* else not a number */
             csL_check_any(C, 0); /* (but there must be some parameter) */
         }
@@ -479,12 +458,11 @@ static int b_tonumber(cs_State *C) {
         const char *s;
         cs_Integer n;
         cs_Integer i = csL_check_integer(C, 1); /* base */
-        csL_check_type(C, 0, CS_TSTRING); /* string to convert */
-        s = cs_to_lstring(C, 0, &l);
-        csL_check_arg(C, 2 <= i && i <= 32, 1, "base out of range");
+        s = csL_check_lstring(C, 0, &l); /* numeral to convert */
+        csL_check_arg(C, 2 <= i && i <= 36, 1, "base out of range [2,36]");
         if (strtoint(s, i, &n, &overflow) == s + l) { /* conversion ok? */
             cs_push_integer(C, n); /* push the conversion number */
-pushflag:
+done:
             if (overflow) {
                 cs_push_integer(C, overflow);
                 return 2; /* return number + over(under)flow flag (-1|1) */

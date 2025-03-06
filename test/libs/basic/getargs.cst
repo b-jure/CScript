@@ -1,0 +1,39 @@
+if (args) { /* have global 'args' ? */
+    assert(typeof(args) == "array");
+    assert(len(args) == 2);
+}
+
+args2 = [ ... ];
+assert(args2);
+assert(typeof(args2) == "array");
+assert(len(args2) == 2);
+
+local bin_name, script_name = getargs(0, ...);
+assert(bin_name);
+assert(typeof(bin_name) == "string");
+assert(bin_name == getargs(0, ...));
+assert(script_name);
+assert(typeof(script_name) == "string");
+assert(script_name == getargs(1, ...));
+
+local x = getargs("array", ...);
+assert(x);
+assert(typeof(x) == "array");
+assert(len(x) == 2);
+
+x = getargs("table", ...);
+assert(x);
+assert(typeof(x) == "table");
+assert(len(x) == 2);
+assert(x[args[0]] == true);
+assert(x[args[1]] == true);
+assert(x[args[2]] == nil);
+
+local y;
+assert(getargs("len", ...) == 2);
+x, y = getargs(-1, ...);
+assert(x and typeof(x) == "string");
+assert(!y);
+x, y = getargs(-2, ...);
+assert(x and typeof(x) == "string");
+assert(y and typeof(y) == "string");

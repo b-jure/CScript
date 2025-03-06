@@ -1,0 +1,14 @@
+local s = "RepeatMe";
+assert(string.repeat(s, 1, " ") == "RepeatMe");
+assert(string.repeat(s, 2, " ") == "RepeatMe RepeatMe");
+assert(string.repeat(s, 3, " ") == "RepeatMe RepeatMe RepeatMe");
+assert(string.repeat(s, 1, "#") == "RepeatMe");
+assert(string.repeat(s, 2, "#") == "RepeatMe#RepeatMe");
+assert(string.repeat(s, 3, "#") == "RepeatMe#RepeatMe#RepeatMe");
+assert(string.repeat(s, -1, " ") == "");
+assert(string.repeat(s, 0, " ") == "");
+assert(string.repeat(s, 1, "") == "RepeatMe");
+assert(string.repeat(s, 2, "") == "RepeatMeRepeatMe");
+assert(string.repeat(s, 1) == "RepeatMe");
+assert(string.repeat(s, 2) == "RepeatMeRepeatMe");
+assert(len(string.repeat(s, 10000)) == len(s)*10000);

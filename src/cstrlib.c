@@ -95,11 +95,11 @@ static int splitintoarray(cs_State *C, int rev) {
     const char *p = csL_check_lstring(C, 1, &lp); /* pattern */
     cs_Integer n = csL_opt_integer(C, 2, CS_INTEGER_MAX); /* maxsplit */
     const char *aux;
-    int arr = cs_nvalues(C);
-    cs_push_array(C, (n > 0 ? n : 1));
-    if (c_unlikely(n <= 0 || lp == 0)) { /* no splits or pattern is '""'? */
+    int arr = cs_getntop(C);
+    cs_push_array(C, (n > 0) ? n : 1);
+    if (c_unlikely(n <= 1 || lp == 0)) { /* no splits or pattern is '""' */
         cs_push(C, 0);
-        cs_set_index(C, 3, 0);
+        cs_set_index(C, arr, 0);
     } else {
         int i = 0;
         const char *e = s+ls;
@@ -171,7 +171,7 @@ static int s_startswith(cs_State *C) {
     if (i <= j) {
         size_t k = 0;
         while (i <= j && k < l1 && s1[i] == s2[k]) { i++; k++; }
-        if (k+1 == l1) {
+        if (k == l1) {
             cs_push_integer(C, i);
             return 1; /* return index after 's2' in 's1' */
         } /* else fall through */
@@ -203,7 +203,7 @@ static int s_repeat(cs_State *C) {
     else if (l+lsep < l || l+lsep > MAXSIZE/n)
         csL_error(C, "resulting string too large");
     else {
-        size_t totalsize = (l+lsep) * n;
+        size_t totalsize = (size_t)n*l + (size_t)(n-1)*lsep;
         csL_Buffer b;
         char *p = csL_buff_initsz(C, &b, totalsize);
         while (n-- > 1) {
@@ -220,24 +220,28 @@ static int s_repeat(cs_State *C) {
 }
 
 
-static void auxjoinstr(cs_State *C, csL_Buffer *b,
-                       const char *sep, size_t lsep) {
-    size_t l;
-    const char *s = cs_to_lstring(C, -1, &l);
-    if (s && l > 0) { /* value is a non empty string? */
-        csL_buff_push_lstring(b, s, l);
-        if (lsep > 0) /* non empty separator? */
-            csL_buff_push_lstring(b, sep, lsep);
-    }
-    cs_pop(C, 1); /* remove the value */
+static void auxjoinstr(csL_Buffer *b, const char *s, size_t l,
+                                      const char *sep, size_t lsep) {
+    csL_buff_push_lstring(b, s, l);
+    if (lsep > 0) /* non empty separator? */
+        csL_buff_push_lstring(b, sep, lsep);
 }
 
 
 static void joinfromtable(cs_State *C, csL_Buffer *b,
                           const char *sep, size_t lsep) {
     cs_push_nil(C);
-    while (cs_next(C, 1) != 0)
-        auxjoinstr(C, b, sep, lsep);
+    while (cs_next(C, 1) != 0) {
+        size_t l;
+        const char *s = cs_to_lstring(C, -1, &l);
+        int pop = 1; /* value */
+        if (s && l > 0) {
+            cs_push(C, -3); /* push buffer */
+            auxjoinstr(b, s, l, sep, lsep);
+            pop++; /* buffer */
+        }
+        cs_pop(C, pop);
+    }
 }
 
 
@@ -245,8 +249,13 @@ static void joinfromarray(cs_State *C, csL_Buffer *b,
                           const char *sep, size_t lsep, int len) {
     int i = cs_get_nnilindex(C, 1, 0, --len);
     while (i >= 0) {
+        size_t l;
+        const char *s;
         cs_get_index(C, 1, i);
-        auxjoinstr(C, b, sep, lsep);
+        s = cs_to_lstring(C, -1, &l);
+        cs_pop(C, 1);
+        if (s && l > 0)
+            auxjoinstr(b, s, l, sep, lsep);
         i = cs_get_nnilindex(C, 1, ++i, len);
     }
 }
@@ -257,7 +266,7 @@ static int s_join(cs_State *C) {
     const char *sep = csL_check_lstring(C, 0, &lsep);
     int t = cs_type(C, 1);
     csL_Buffer b;
-    csL_expect_arg(C, (t == CS_TARRAY || t == CS_TTABLE), 0, "array or table");
+    csL_expect_arg(C, (t == CS_TARRAY || t == CS_TTABLE), 1, "array or table");
     csL_buff_init(C, &b);
     if (t == CS_TARRAY) {
         int len = cs_len(C, 1);
@@ -265,7 +274,7 @@ static int s_join(cs_State *C) {
             joinfromarray(C, &b, sep, lsep, len);
     } else
         joinfromtable(C, &b, sep, lsep);
-    if (csL_bufflen(&b) > 0 && lsep > 0) /* buffer has not empty separator? */
+    if (csL_bufflen(&b) > 0 && lsep > 0) /* buffer has separator? */
         csL_buffsub(&b, lsep); /* remove it */
     csL_buff_end(&b);
     return 1; /* return final string */
@@ -289,7 +298,6 @@ static int s_join(cs_State *C) {
 ** to the buffer; all integer formats also fit in the 99 limit.  The
 ** worst case are floats: they may need 99 significant digits, plus
 ** '0x', '-', '.', 'e+XXXX', and '\0'. Adding some extra, 120.
-** ('s_format')
 */
 #define MAX_ITEM    120
 
@@ -322,7 +330,6 @@ static int s_join(cs_State *C) {
 ** Initial '%', flags (up to 5), width (2), period, precision (2),
 ** length modifier (8), conversion specifier, and final '\0', plus some
 ** extra.
-** ('s_format')
 */
 #define MAX_FORMAT	32
 
@@ -398,7 +405,7 @@ static void addliteral(cs_State *C, csL_Buffer *b, int arg) {
                 const char *format = (n == CS_INTEGER_MIN) /* corner case? */
                     ? "0x%" CS_INTEGER_FMTLEN "x" /* use hex */
                     : CS_INTEGER_FMT; /* else use default format */
-                nb = c_snprintf(buff, MAX_ITEM, format, (CS_INTEGER)n);
+                nb = c_snprintf(buff, MAX_ITEM, format, (cs_Integer)n);
             }
             csL_buffadd(b, nb);
             break;
@@ -408,9 +415,8 @@ static void addliteral(cs_State *C, csL_Buffer *b, int arg) {
             csL_buff_push_stack(b);
             break;
         }
-        default: {
+        default:
             csL_error_arg(C, arg, "value has no literal form");
-        }
     }
 }
 
@@ -583,7 +589,7 @@ static int formatstr(cs_State *C, const char *fmt, size_t lfmt) {
 }
 
 
-static int s_format(cs_State *C) {
+static int s_fmt(cs_State *C) {
     size_t lfmt;
     const char *fmt = csL_check_lstring(C, 0, &lfmt);
     if (lfmt == 0) {
@@ -782,7 +788,7 @@ static const cs_Entry strlib[] = {
     {"reverse", s_reverse},
     {"repeat", s_repeat},
     {"join", s_join},
-    {"format", s_format},
+    {"fmt", s_fmt},
     {"toupper", s_toupper},
     {"tolower", s_tolower},
     {"count", s_count},

@@ -2319,7 +2319,7 @@
         must use the following protocol, which defines the way parameters and
         results are passed: a C&nbsp;function receives its arguments from
         CScript in its stack in direct order (the first argument is pushed first).
-        So, when the function starts, <code>cs_nvalues(C)</code> returns the
+        So, when the function starts, <code>cs_getntop(C)</code> returns the
         number of arguments received by the function.
         The first argument (if any) is at index 0 and its last argument is at
         index <code>cs_gettop(C)</code>.
@@ -2335,7 +2335,7 @@
         of numeric arguments and returns their average and their sum:
         <pre>
     static int foo (cs_State *C) {
-        int n = cs_gettop(C);   /* index of last argument (or cs_nvalues(C)-1) */
+        int n = cs_gettop(C);   /* index of last argument (or cs_getntop(C)-1) */
         cs_Number sum = 0.0;
         int i;
         for (i = 0; i &lt;= n; i++) {
@@ -2760,31 +2760,19 @@
         Returns the version number of this core.
         </p>
 
-        <!-- cs_setntop -->
-        <hr><h3><a name="cs_setntop"><code>cs_setntop</code></a></h3>
-        <span class="apii">[-?, +?, <em>e</em>]</span>
-        <pre>void cs_setntop (cs_State *C, int n);</pre>
-        <p>
-        Sets the stack top to hold <code>n</code> values on the stack.
-        If the new top is greater than the old one, then the new elements are
-        filled with <b>nil</b>.
-        If <code>index</code> is&nbsp;0, then all stack elements are removed.
-        <br/><br/>
-        This function can run arbitrary code when removing an index
-        marked as to-be-closed from the stack.
-        </p>
-
         <!-- cs_settop -->
         <hr><h3><a name="cs_settop"><code>cs_settop</code></a></h3>
         <span class="apii">[-?, +?, <em>e</em>]</span>
         <pre>void cs_settop (cs_State *C, int n);</pre>
         <p>
-        Almost identical to <a href="#cs_setntop"><code>cs_setntop</code></a>,
-        except the <code>n</code> is the index (as opposed to it being the
-        number of values on the current stack).
-        This is defined as macro:
-<pre>
-#define cs_settop(C, n)     cs_setntop(C, (n) + 1)</pre>
+        Sets the stack top to hold <code>n</code> values on the stack.
+        If the new top is greater than the old one, then the new elements are
+        filled with <b>nil</b>.
+        If <code>index</code> is&nbsp;0, then all stack elements are removed.
+        If <code>index</code> is negative, then the new 
+        <br/><br/>
+        This function can run arbitrary code when removing an index
+        marked as to-be-closed from the stack.
         </p>
 
         <!-- cs_gettop -->
@@ -3649,7 +3637,7 @@
         <p>
         Does the equivalent to <code>obj[k] = v</code>, where <code>obj</code>
         is the value at the given index, <code>v</code> is the value on top of
-        the stack and <code>k</code> is the value on stack below the
+        the stack and <code>k</code> is the key value on stack below the
         <code>v</code>.
         <br/><br/>
         This function pops both the key and value off the stack.
@@ -4214,10 +4202,10 @@
         (See <code>CS_EXTRASPACE</code> in <code>csconf.h</code>.)
         </p>
 
-        <!-- cs_nvalues -->
-        <hr><h3><a name="cs_nvalues"><code>cs_nvalues</code></a></h3>
+        <!-- cs_getntop -->
+        <hr><h3><a name="cs_getntop"><code>cs_getntop</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_nvalues (cs_State *C);</pre>
+        <pre>int cs_getntop (cs_State *C);</pre>
         <p>
         Similar to <a href="#cs_gettop"><code>cs_gettop</code></a> except
         this returns the actual number of the values on the stack.
@@ -5640,29 +5628,26 @@
         <hr/><h3><a name=rawget""><code>rawget (v, index)</code></a></h3>
         Gets the real value of <code>v[index]</code>,
         without calling the <code>__getidx</code> metamethod.
-        <code>v</code> must be a array, table or instance;
-        <code>index</code> may be any value if <code>v</code> is instance or a
-        table; if <code>v</code> is array, <code>index</code> should be
-        positive integer or 0.
+        <code>v</code> must be an instance and <code>index</code> may be
+        any CScript value.
         <br/><br/>
 
         <!-- rawset -->
         <hr/><h3><a name="rawset"><code>rawset (v, index, value)</code></a></h3>
         Sets the real value of <code>v[index]</code> to <code>value</code>,
         without using the <code>__setidx</code> metamethod.
-        <code>v</code> must be an array, table or instance;
-        <code>index</code> any value different from <b>nil</b> and NaN if the
-        <code>v</code> is a table or instance, otherwise <code>index</code>
-        should be a positive integer or 0; <code>value</code> any CScript value.
+        <code>v</code> must be an instance;
+        <code>index</code> any value different from <b>nil</b> and NaN;
+        <code>value</code> any CScript value.
         <br/><br/>
         This function returns <code>v</code>.
         <br/><br/>
 
         <!-- getargs -->
         <hr/><h3><a name="getargs"><code>getargs (index, &middot;&middot;&middot;)</code></a></h3>
-        If <code>index</code> is a number, returns all arguments after
-        argument number <code>index</code>; a negative number indexes from
-        the end (-1 is the last argument).
+        If <code>index</code> is a number, this returns all arguments after
+        argument at number <code>index</code> (starting from 0); a negative
+        number indexes from the end (-1 is the last argument).
         Otherwise, <code>index</code> must be one of these strings:
         <code>"array"</code>, <code>"table"</code> or <code>"len"</code>.
         <br/><br/>

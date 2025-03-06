@@ -2,11 +2,11 @@
 ** Test script file for CScript division operator.
 */
 
-assert(2/2 == 1);           // (folded)
-assert(2/4 == 0.5);         // (folded)
-assert(4/2 == 2);           // (folded)
-assert(4/2/2 == 1);         // (folded)
-a = 8/2/2;                  // (folded)
+assert(2/2 == 1);           # (folded)
+assert(2/4 == 0.5);         # (folded)
+assert(4/2 == 2);           # (folded)
+assert(4/2/2 == 1);         # (folded)
+a = 8/2/2;                  # (folded)
 assert(a == 2);
-assert(a/2 == 1);           // (not folded)
-assert(2/a == 1);           // (not folded)
+assert(a/2 == 1);           # (not folded)
+assert(2/a == 1);           # (not folded)

@@ -96,7 +96,7 @@ static void init_stack(cs_State *C1, cs_State *C) {
 static void init_registry(cs_State *C, GState *gs) {
     Array *registry = csA_new(C); 
     setarrval(C, &gs->c_registry, registry);
-    csA_ensure(C, registry, CS_RINDEX_LAST);
+    csA_ensureindex(C, registry, CS_RINDEX_LAST);
     /* registry[CS_RINDEX_MAINTHREAD] = C (mainthread) */
     setthval(C, &registry->b[CS_RINDEX_MAINTHREAD], C);
     /* registry[CS_RINDEX_GLOBALS] = new table (for global variables) */
@@ -374,7 +374,7 @@ int csT_reallocstack(cs_State *C, int size, int raiseerr) {
     sptr2rel(C);
     gs->gcstopem = 1; /* no emergency collection when reallocating stack */
     newstack = csM_reallocarray(C, C->stack.p, osz + EXTRA_STACK,
-                                size + EXTRA_STACK);
+                                size + EXTRA_STACK, SValue);
     gs->gcstopem = old_stopem;
     if (c_unlikely(newstack == NULL)) {
         rel2sptr(C);

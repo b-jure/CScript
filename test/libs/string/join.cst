@@ -1,0 +1,9 @@
+local s = "<sep>";
+local x = [ "420", "69", "1337" ];
+assert(string.join(s, x) == "420<sep>69<sep>1337");
+x = { x = "420", y = "69", z = "1377" };
+assert(len(string.join(s, x)) == len("420<sep>69<sep>1337"));
+assert(string.join(s, ["ok"]) == "ok");
+assert(string.join(s, {a = "ok"}) == "ok");
+assert(string.join(s, []) == "");
+assert(string.join(s, {}) == "");

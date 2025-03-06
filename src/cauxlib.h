@@ -144,12 +144,14 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
 
 /* internal assertions */
 #if !defined(cs_assert)
+
 #if defined CSI_ASSERT
-  #include <assert.h>
-  #define cs_assert(e)	    assert(e)
+#include <assert.h>
+#define cs_assert(e)	    assert(e)
 #else
-  #define cs_assert(e)	    ((void)0)
+#define cs_assert(e)	    ((void)0)
 #endif
+
 #endif
 
 /* ------------------------------------------------------------------------ 

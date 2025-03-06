@@ -99,11 +99,11 @@ static void cleargraylists(GState *gs) {
 /* create new object and append it to 'objects' */
 GCObject *csG_newoff(cs_State *C, size_t sz, int tt_, size_t offset) {
     GState *gs = G(C);
-    char *p = cast_charp(csM_newobj(C, tt_, sz));
+    char *p = csM_newobj(C, novariant(tt_), sz);
     GCObject *o = cast(GCObject*, p + offset);
-    o->mark = csG_white(gs);
+    o->mark = csG_white(gs); /* mark as white */
     o->tt_ = tt_;
-    o->next = gs->objects;
+    o->next = gs->objects; /* chain it */
     gs->objects = o;
     return o;
 }

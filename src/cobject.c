@@ -54,7 +54,8 @@ static cs_Number numarithm(cs_State *C, cs_Number x, cs_Number y, int op) {
         case CS_OPSUB: return c_numsub(C, x, y);
         case CS_OPMUL: return c_nummul(C, x, y);
         case CS_OPDIV: return c_numdiv(C, x, y);
-        case CS_OPMOD: return csV_modnum(C, x, y);
+        case CS_OPIDIV: return c_numidiv(C, x, y);
+        case CS_OPMOD: return csV_modf(C, x, y);
         case CS_OPPOW: return c_numpow(C, x, y);
         case CS_OPUNM: return c_nummul(C, x, y);
         default: cs_assert(0); return 0.0;
@@ -67,8 +68,8 @@ static cs_Integer intarithm(cs_State *C, cs_Integer x, cs_Integer y, int op) {
         case CS_OPADD: return c_intop(+, x, y);
         case CS_OPSUB: return c_intop(-, x, y);
         case CS_OPMUL: return c_intop(*, x, y);
-        case CS_OPDIV: return csV_div(C, x, y);
-        case CS_OPMOD: return csV_modint(C, x, y);
+        case CS_OPIDIV: return csV_divi(C, x, y);
+        case CS_OPMOD: return csV_modi(C, x, y);
         case CS_OPUNM: return c_intop(-, 0, x);
         case CS_OPBSHL: return csO_shiftl(x, y);
         case CS_OPBSHR: return csO_shiftr(x, y);
@@ -83,7 +84,7 @@ static cs_Integer intarithm(cs_State *C, cs_Integer x, cs_Integer y, int op) {
 
 /* convert number 'n' to integer according to 'mode' */
 int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
-    cs_Number floored = cs_floor(n);
+    cs_Number floored = c_floor(n);
     if (floored != n) {
         if (mode == N2IEXACT) return 0;
         else if (mode == N2ICEIL) floored++;

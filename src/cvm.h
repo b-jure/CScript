@@ -24,9 +24,9 @@
 
 CSI_FUNC void csV_call(cs_State *C, SPtr fn, int nreturns);
 CSI_FUNC void csV_concat(cs_State *C, int n);
-CSI_FUNC cs_Integer csV_div(cs_State *C, cs_Integer x, cs_Integer y);
-CSI_FUNC cs_Integer csV_modint(cs_State *C, cs_Integer x, cs_Integer y);
-CSI_FUNC cs_Number csV_modnum(cs_State *C, cs_Number x, cs_Number y);
+CSI_FUNC cs_Integer csV_divi(cs_State *C, cs_Integer x, cs_Integer y);
+CSI_FUNC cs_Integer csV_modi(cs_State *C, cs_Integer x, cs_Integer y);
+CSI_FUNC cs_Number csV_modf(cs_State *C, cs_Number x, cs_Number y);
 CSI_FUNC void csV_binarithm(cs_State *C, const TValue *a, const TValue *b,
                             SPtr res, int op);
 CSI_FUNC void csV_unarithm(cs_State *C, const TValue *v, int op);

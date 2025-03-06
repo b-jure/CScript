@@ -53,8 +53,13 @@ typedef unsigned long   ulong;
 
 
 /* convert pointer 'p' to 'unsigned int' */
-#define pointer2uint(p)         ((uint)((uintptr_t)(p)&(UINT_MAX)))
+#if defined(UINTPTR_MAX)
+#define C_P2I   uintptr_t
+#else
+#define C_P2I   uintmax_t
+#endif
 
+#define pointer2uint(p)     ((unsigned int)((C_P2I)(p) & UINT_MAX))
 
 
 /* internal assertions for debugging */
@@ -266,6 +271,11 @@ typedef c_byte Instruction;
 /* @c_numdiv - float division. */
 #ifndef c_numdiv
 #define c_numdiv(C, a, b)       ((void)(C), (a)/(b))
+#endif
+
+/* @c_numidiv - float floor division. */
+#ifndef c_numidiv
+#define c_numidiv(C, a, b)      ((void)(C), c_floor(c_numdiv(C,a,b)))
 #endif
 
 /* @c_numpow - exponentiation. */

@@ -1,0 +1,3 @@
+local s = "?ti teg ,gnitset rof desu ,gnirts tset a si sihT";
+assert(string.reverse(s) == "This is a test string, used for testing, get it?");
+assert(string.reverse("This is a test string, used for testing, get it?") == s);

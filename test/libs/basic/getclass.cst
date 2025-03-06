@@ -1,0 +1,4 @@
+local class X {}
+local x = X();
+assert(getclass(x) == X);
+assert(getclass(X) == nil);

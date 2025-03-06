@@ -46,4 +46,4 @@ assert(a["animals"]);
 assert(a.animals.cow == 4);
 assert(a.animals.fox == 8);
 assert(a.animals.chicken == 15);
-assert(!a[5.15]); // index access but element doesn't exist
+assert(!a[5.15]); # index access but element doesn't exist

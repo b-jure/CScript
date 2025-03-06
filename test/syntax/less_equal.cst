@@ -18,3 +18,4 @@ a = 5;
 assert(4 <= a);
 assert(a <= 4 == false);
 assert(a <= a);
+assert(a >= 4.8);

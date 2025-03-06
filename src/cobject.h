@@ -792,8 +792,9 @@ typedef enum N2IMode {
 #define csO_shiftr(x,y)     csO_shiftl(x, -(y))
 
 
-/* alternative to '%' for hashing, 'sz' is always power of 2 */
-#define hashmod(h,sz)       check_exp(((sz&(sz-1))==0), cast_int(h)&(sz-1))
+/* fast 'module' operation for hashing (sz is always power of 2) */
+#define hashmod(h,sz) \
+        (check_exp(((sz&(sz-1))==0), (cast_int((h) & ((sz)-1)))))
 
 
 CSI_FUNC int csO_ceillog2(uint x);

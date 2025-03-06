@@ -36,8 +36,8 @@
 int csS_eqlngstr(const OString *s1, const OString *s2) {
     size_t len = s1->u.lnglen;
     return (s1 == s2) || /* same instance or... */
-            ((len == s2->u.lnglen) && /* equal length and... */
-             (memcmp(getlngstr(s1), getlngstr(s2), len) == 0)); /* contents */
+        ((len == s2->u.lnglen) && /* equal length and... */
+        (memcmp(getlngstr(s1), getlngstr(s2), len) == 0)); /* equal contents */
 }
 
 
@@ -55,19 +55,10 @@ void csS_clearcache(GState *gs) {
 }
 
 
-/*
-** Hash string.
-** One-byte-at-a-time hash based on Murmur's mix
-** Source: https://github.com/aappleby/smhasher/blob/master/src/Hashes.cpp
-*/
-uint csS_hash(const char *str, size_t len, unsigned int seed) {
-    const c_byte *data = cast(const c_byte *, str);
-    uint h = seed;
-    for (uint i = 0; i < len; i++) {
-        h ^= data[i];
-        h *= 0x5bd1e995;
-        h ^= h >> 15;
-    }
+uint csS_hash(const char *str, size_t l, unsigned int seed) {
+    uint h = seed ^ cast_uint(l);
+    for (; l > 0; l--)
+        h ^= ((h<<5) + (h>>2) + cast_byte(str[l - 1]));
     return h;
 }
 
@@ -88,14 +79,14 @@ static void rehashtable(OString **arr, int osz, int nsz) {
     for (i = osz; i < nsz; i++) /* clear new part */
         arr[i] = NULL;
     for (i = 0; i < osz; i++) { /* rehash old part */
-        OString *s = arr[i]; /* get the slot if any */
+        OString *s = arr[i]; /* get the string at slot (if any) */
         arr[i] = NULL; /* clear the slot */
-        while (s) { /* for each string in the list/chain */
+        while (s) { /* for each string in the chain */
             OString *next = s->u.next; /* save 'next' */
             uint h = hashmod(s->hash, nsz); /* get hash position */
-            s->u.next = arr[h]; /* chain the existing if any */
-            arr[h] = s; /* set as head in the array */
-            s = next; /* insert/chain 'next' if any */
+            s->u.next = arr[h]; /* chain it into array */
+            arr[h] = s;
+            s = next;
         }
     }
 }
@@ -111,7 +102,7 @@ void csS_resize(cs_State *C, int nsz) {
     cs_assert(nsz <= MAXSTRTABLE);
     if (nsz < osz) /* shrinking ? */
         rehashtable(tab->hash, osz, nsz); /* depopulate shrinking part */
-    newarr = csM_reallocarray(C, tab->hash, osz, nsz);
+    newarr = csM_reallocarray(C, tab->hash, osz, nsz, OString*);
     if (c_unlikely(newarr == NULL)) { /* reallocation failed? */
         if (nsz < osz) /* was it shrinking table? */
             rehashtable(tab->hash, nsz, osz); /* restore to original size */
@@ -133,17 +124,17 @@ void csS_init(cs_State *C) {
     rehashtable(tab->hash, 0, MINSTRTABSIZE); /* clear array */
     tab->size = MINSTRTABSIZE;
     cs_assert(tab->nuse == 0);
-    /* allocate the memory-error message... */
+    /* allocate the memory-error message */
     gs->memerror = csS_newlit(C, MEMERRMSG);
-    csG_fix(C, obj2gco(gs->memerror)); /* ...and fix it */
+    csG_fix(C, obj2gco(gs->memerror)); /* fix it */
     for (int i = 0; i < STRCACHE_N; i++) /* fill cache with valid strings */
         for (int j = 0; j < STRCACHE_M; j++)
             gs->strcache[i][j] = gs->memerror;
 }
 
 
-static OString *newstrobj(cs_State *C, size_t l, int tt_, uint h) {
-    GCObject *o = csG_new(C, sizeofstring(l), tt_);
+static OString *newstrobj(cs_State *C, size_t l, int tag, uint h) {
+    GCObject *o = csG_new(C, sizeofstring(l), tag);
     OString *s = gco2str(o);
     s->hash = h;
     s->extra = 0;
@@ -174,10 +165,10 @@ void csS_remove(cs_State *C, OString *s) {
 static void growtable(cs_State *C, StringTable *tab) {
     if (c_unlikely(tab->nuse == MAXINT)) {
         csG_full(C, 1); /* try to reclaim memory */
-        if (tab->nuse == MAXINT)
+        if (tab->nuse == MAXINT) /* still too many strings? */
             csM_error(C);
     }
-    if (tab->size <= MAXSTRTABLE / 2)
+    if (tab->size <= MAXSTRTABLE / 2) /* can grow string table? */
         csS_resize(C, tab->size * 2);
 }
 
@@ -190,20 +181,20 @@ static OString *internshrstr(cs_State *C, const char *str, size_t l) {
     OString **list = &tab->hash[hashmod(h, tab->size)];
     cs_assert(str != NULL); /* otherwise 'memcmp'/'memcpy' are undefined */
     for (s = *list; s != NULL; s = s->u.next) { /* probe chain */
-        if (s->shrlen == l && (memcmp(str, getstr(s), l*sizeof(char)) == 0)) {
-            if (isdead(gs, s)) /* "dead"? */
-                changewhite(s); /* "ressurect" it */
+        if (s->shrlen==l && (memcmp(str, getshrstr(s), l*sizeof(char))==0)) {
+            if (isdead(gs, s)) /* dead (but not yet collected)? */
+                changewhite(s); /* ressurect it */
             return s;
         }
     }
-    /* otherwise create new string */
+    /* else must create a new string */
     if (tab->nuse >= tab->size) { /* need to grow the table? */
         growtable(C, tab);
-        list = &tab->hash[hashmod(h, tab->size)];
+        list = &tab->hash[hashmod(h, tab->size)]; /* rehash with new size */
     }
     s = newstrobj(C, l, CS_VSHRSTR, h);
-    memcpy(getshrstr(s), str, l*sizeof(char));
     s->shrlen = cast_byte(l);
+    memcpy(getshrstr(s), str, l*sizeof(char));
     s->u.next = *list;
     *list = s;
     tab->nuse++;
@@ -212,15 +203,15 @@ static OString *internshrstr(cs_State *C, const char *str, size_t l) {
 
 
 /* create new string with explicit length */
-OString *csS_newl(cs_State *C, const char *str, size_t len) {
-    if (len <= CSI_MAXSHORTLEN) { /* short string? */
-        return internshrstr(C, str, len);
+OString *csS_newl(cs_State *C, const char *str, size_t l) {
+    if (l <= CSI_MAXSHORTLEN) { /* short string? */
+        return internshrstr(C, str, l);
     } else { /* otherwise long string */
         OString *s;
-        if (c_unlikely(len*sizeof(char) >= (MAXSIZE - sizeof(OString))))
+        if (c_unlikely(l*sizeof(char) >= (MAXSIZE-sizeof(OString))))
             csM_toobig(C);
-        s = csS_newlngstrobj(C, len);
-        memcpy(getlngstr(s), str, len);
+        s = csS_newlngstrobj(C, l);
+        memcpy(getlngstr(s), str, l*sizeof(char));
         return s;
     }
 }
@@ -232,16 +223,17 @@ OString *csS_newl(cs_State *C, const char *str, size_t len) {
 ** only zero-terminated strings, so it is safe to use 'strcmp'.
 */
 OString *csS_new(cs_State *C, const char *str) {
-    int j;
-    uint i = pointer2uint(str) % STRCACHE_N;
+    uint i = pointer2uint(str) % STRCACHE_N; /* hash */
     OString **p = G(C)->strcache[i]; /* address as key */
-    for (j = 0; j < STRCACHE_M; j++)
-        if (strcmp(getstr(p[j]), str) == 0)
-            return p[j];
-    /* regular route */
+    int j;
+    for (j = 0; j < STRCACHE_M; j++) {
+        if (strcmp(str, getstr(p[j])) == 0) /* hit? */
+            return p[j]; /* done */
+    }
+    /* normal route */
     for (j = STRCACHE_M - 1; j > 0; j--) /* make space for new string */
         p[j] = p[j - 1]; /* move out last element */
-    /* new string is first in the cache line 'i' */
+    /* new string is first in the list */
     p[0] = csS_newl(C, str, strlen(str));
     return p[0];
 }
@@ -332,105 +324,95 @@ static const unsigned char table[] = { -1,
 -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
 };
 
-/*
-** Convert string to 'cs_Integer'.
-** This function can convert hexadecimal, octal and decimal numerals
-** to 'cs_Integer'. Additional conversions are possible for bases up to
-** 36. The conversion is exactly the same as in 'strtol' except this
-** indicates overflow through 'oflow' flag and allows for '_' digit
-** separator.
-*/
-static const char *str2int(const char *s, cs_Integer *i, int *oflow) {
+static const char *str2int(const char *s, cs_Integer *i) {
     const c_byte *val = table + 1;
     cs_Unsigned lim = CS_INTEGER_MIN;
-    int neg = 0;
+    int sign = 1;
     uint32_t x;
     cs_Unsigned y;
     int base, c, empty;
-    cs_assert(oflow != NULL);
     c = *s++;
     while (cisspace(c)) c = *s++; /* skip leading spaces */
     if (c == '-' || c == '+') { /* have sign? */
-        neg = -(c == '-'); /* adjust sign value */
+        sign -= 2*(c == '-'); /* adjust sign value */
         c = *s++;
     }
     /* handle prefix to get base (if any) */
     if (c == '0' && ctolower(*s) == 'x') { /* hexadecimal? */
-        s++; /* skip x | X */
+        s++; /* skip x|X */
         base = 16;
         c = *s++; /* get first digit */
-    } else if (c == '0' && cisodigit(*s)) { /* octal? */
+    } else if (c == '0') { /* octal? */
         base = 8;
         c = *s++; /* get first digit */
     } else /* otherwise it must be decimal */
         base = 10; /* c already has first digit */
     /* now do the conversion */
     if (base == 10) {
-        if (!(empty = !cisdigit(c))) {
-            for (x=0; (cisdigit(c) || c == '_') && x <= UINT_MAX/10-1; c=*s++)
-                if (c != '_') x = x * 10 + ctodigit(c);
-            for (y=x; (cisdigit(c) || c == '_') && y <= CS_UNSIGNED_MAX/10
-                        && 10*y <= CS_UNSIGNED_MAX - ctodigit(c); c = *s++)
-                if (c != '_') y = y * 10 + ctodigit(c);
+        empty = !(val[c]<base);
+        if (!empty) {
+            for (x=0; val[c]<base && x <= UINT_MAX/10-1; c=*s++)
+                x = x * 10 + val[c];
+            for (y=x; val[c]<base && y <= CS_UNSIGNED_MAX/10 &&
+                      10*y <= CS_UNSIGNED_MAX-val[c]; c = *s++)
+                y = y * 10 + val[c];
         }
-        if (!cisdigit(c)) goto done;
     } else if (!(base & (base-1))) { /* base is power of 2? (up to base 32) */
         if (!(empty = val[c] >= base)) {
             int bs = "\0\1\2\4\7\3\6\5"[(0x17*base)>>5&7];
-            for (x=0; (c == '_' || val[c] < base) && x <= UINT_MAX/32; c=*s++)
-                if (c != '_') x = x<<bs | val[c];
-            for (y=x; (c == '_' || val[c] < base) && y <= CS_UNSIGNED_MAX>>bs; c=*s++)
-                if (c != '_') y = y<<bs | val[c];
+            for (x=0; val[c] < base && x <= UINT_MAX/32; c=*s++)
+                x = x<<bs | val[c];
+            for (y=x; val[c]<base && y <= CS_UNSIGNED_MAX>>bs; c=*s++)
+                y = y<<bs | val[c];
         }
-    } else { /* other bases (up to base 36) */
-        if (!(empty = val[c] >= base)) {
-            for (x=0; (c == '_' || val[c] < base) && x <= UINT_MAX/36-1; c=*s++)
-                if (c != '_') x = x * base + val[c];
-            for (y=x; (c == '_' || val[c] < base) && y <= CS_UNSIGNED_MAX/base
-                       && base*y <= CS_UNSIGNED_MAX-val[c]; c=*s++)
-                if (c != '_') y = y * base + val[c];
+    } else { /* other bases */
+        empty = !(val[c]<base);
+        if (!empty) {
+            for (x=0; val[c]<base && x <= UINT_MAX/36-1; c=*s++)
+                x = x * base + val[c];
+            for (y=x; val[c] < base && y <= CS_UNSIGNED_MAX/base &&
+                      base*y <= CS_UNSIGNED_MAX-val[c]; c=*s++)
+                y = y * base + val[c];
         }
     }
-    if (val[c] < base) { /* numeral value too large? */
-        for (; val[c] < base; c=*s++){/* skip rest of the digits... */}
-        errno = ERANGE;
-        y = CS_INTEGER_MIN; /* ...and indicate numeral is too large */
+    if (val[c] < base || (y >= lim && (sign > 0 || y > lim)))
+        return NULL; /* over(under)flow (do not accept it as integer) */
+    else {
+        s--;
+        while (cisspace(c)) c = *s++; /* skip trailing spaces */
+        if (empty || c != '\0') return NULL; /* conversion failed? */
+        *i = c_castU2S(sign * y);
+        return s - 1;
     }
-done:
-    if (y >= lim) { /* potential overflow? */
-        if (!neg) { /* positive value overflows? */
-            errno = ERANGE;
-            *oflow = 1; /* propagate overflow */
-            *i = c_castU2S(lim - 1); /* *i = CS_INTEGER_MAX */
-        } else if (y > lim) { /* negative value underflows? */
-            errno = ERANGE;
-            *oflow = -1; /* propagate underflow */
-            *i = c_castU2S(lim); /* *i = CS_INTEGER_MIN */
-        } else /* otherwise y is negative value equal to lim */
-            cs_assert(neg && y == lim);
-    }
-    while (cisspace(c)) c = *s++; /* skip trailing spaces */
-    if (empty || c != '\0') return NULL; /* conversion failed? */
-    *i = c_castU2S((y ^ neg) - neg); /* two's complement hack */
-    return s - 1;
 }
 
 
-#define converr(eptr)    (*(eptr) != '\0')
-
-static const char *str2flt(const char *s, long double *n, int *oflow) {
+/*
+** TODO: this function might not catch underflow in cases where
+** 'cs_str2number' is equal to 'strtod', this is because errno
+** might not be set to ERANGE in cases where the value being
+** converted is a valid numeral that doesn't overflow but instead
+** underflows (e.g., 1e-400) according to C99.
+** This depends on the implementation of 'strtod' and as such
+** this function requires testing for each "mainstream" C standard
+** library.
+*/
+static const char *str2flt(const char *s, cs_Number *n, int *fof) {
     char *eptr = NULL; /* to avoid warnings */
-    cs_assert(oflow != NULL);
-    *oflow = 0;
+    cs_assert(fof != NULL);
+    *fof = 0;
     errno = 0;
     *n = cs_str2number(s, &eptr);
-    if (eptr == s) { /* nothing was converted? */
-        return NULL;
-    } else if (c_unlikely(errno == ERANGE)) { /* (under)overflow? */
+    if (eptr == s)
+        return NULL; /* nothing was converted? */
+    else if (c_unlikely(errno == ERANGE)) {
         if (*n == CS_HUGE_VAL || *n == -CS_HUGE_VAL)
-            *oflow = 1; /* overflow */
-        else if (*n <= CS_NUMBER_MIN)
-            *oflow = -1; /* underflow */
+            *fof = 1; /* overflow (negative/positive infinity) */
+            /* explicit 'inf|infinity' does not set errno */
+        else {
+            cs_assert(*n <= CS_NUMBER_MIN);
+            *fof = -1; /* underflow (very large negative exponent) */
+        }
     }
     while (cisspace(*eptr)) eptr++; /* skip trailing spaces */
     return (*eptr == '\0') ? eptr : NULL;
@@ -438,19 +420,18 @@ static const char *str2flt(const char *s, long double *n, int *oflow) {
 
 
 /* convert string to 'cs_Number' or 'cs_Integer' */
-size_t csS_tonum(const char *s, TValue *o, int *poflow) {
-    cs_Integer i;
-    long double n;
+size_t csS_tonum(const char *s, TValue *o, int *pfof) {
     const char *e;
-    int oflow = 0;
-    if ((e = str2int(s, &i, &oflow)) != NULL) {
+    cs_Integer i;
+    cs_Number n;
+    int fof = 0; /* flag for float overflow */
+    if ((e = str2int(s, &i)) != NULL) {
         setival(o, i);
-    } else if ((e = str2flt(s, &n, &oflow)) != NULL) {
+    } else if ((e = str2flt(s, &n, &fof)) != NULL) {
         setfval(o, cast_num(n));
     } else /* both conversions failed */
         return 0;
-    if (poflow) /* had (under)overflow? */
-        *poflow = oflow; /* propagate it */
+    if (pfof) *pfof = fof;
     return (e - s) + 1; /* return size */
 }
 
@@ -606,51 +587,52 @@ const char *csS_pushvfstring(cs_State *C, const char *fmt, va_list argp) {
     while ((end = strchr(fmt, '%')) != NULL) {
         buffaddstring(&buff, fmt, end - fmt);
         switch (*(end + 1)) {
-        case 'c': { /* 'char' */
-            char c = cast(unsigned char, va_arg(argp, int));
-            buffaddstring(&buff, &c, sizeof(c));
-            break;
-        }
-        case 'd': { /* 'int' */
-            setival(&nv, va_arg(argp, int));
-            buffaddnum(&buff, &nv);
-            break;
-        }
-        case 'I': { /* 'cs_Integer' */
-            setival(&nv, va_arg(argp, cs_Integer));
-            buffaddnum(&buff, &nv);
-            break;
-        }
-        case 'f': { /* 'cs_Number' */
-            setfval(&nv, va_arg(argp, cs_Number));
-            buffaddnum(&buff, &nv);
-            break;
-        }
-        case 'U': {  /* a 'long' as a UTF-8 sequence */
-            char bf[UTF8BUFFSZ];
-            int len = csS_utf8esc(bf, va_arg(argp, long));
-            buffaddstring(&buff, bf + UTF8BUFFSZ - len, len);
-            break;
-        }
-        case 's': { /* 'string' */
-            const char *str = va_arg(argp, const char *);
-            if (str == NULL) str = "(null)";
-            buffaddstring(&buff, str, strlen(str));
-            break;
-         }
-        case 'p': { /* 'ptr' */
-            buffaddptr(&buff, va_arg(argp, const void *));
-            break;
-        }
-        case '%': {
-            buffaddstring(&buff, "%", 1);
-            break;
-        }
-        default:;
-            c_byte c = cast(unsigned char, *(end + 1));
-            csD_runerror(C, "invalid format specifier '%%%c'", c);
-            /* UNREACHED */
-            return NULL;
+            case 'c': { /* 'char' */
+                char c = cast(unsigned char, va_arg(argp, int));
+                buffaddstring(&buff, &c, sizeof(c));
+                break;
+            }
+            case 'd': { /* 'int' */
+                setival(&nv, va_arg(argp, int));
+                buffaddnum(&buff, &nv);
+                break;
+            }
+            case 'I': { /* 'cs_Integer' */
+                setival(&nv, va_arg(argp, cs_Integer));
+                buffaddnum(&buff, &nv);
+                break;
+            }
+            case 'f': { /* 'cs_Number' */
+                setfval(&nv, va_arg(argp, cs_Number));
+                buffaddnum(&buff, &nv);
+                break;
+            }
+            case 'U': {  /* a 'long' as a UTF-8 sequence */
+                char bf[UTF8BUFFSZ];
+                int len = csS_utf8esc(bf, va_arg(argp, long));
+                buffaddstring(&buff, bf + UTF8BUFFSZ - len, len);
+                break;
+            }
+            case 's': { /* 'string' */
+                const char *str = va_arg(argp, const char *);
+                if (str == NULL) str = "(null)";
+                buffaddstring(&buff, str, strlen(str));
+                break;
+            }
+            case 'p': { /* 'ptr' */
+                buffaddptr(&buff, va_arg(argp, const void *));
+                break;
+            }
+            case '%': {
+                buffaddstring(&buff, "%", 1);
+                break;
+            }
+            default: {
+                c_byte c = cast(unsigned char, *(end + 1));
+                csD_runerror(C, "invalid format specifier '%%%c'", c);
+                /* UNREACHED */
+                return NULL;
+            }
         }
         fmt = end + 2; /* '%' + specifier */
     }

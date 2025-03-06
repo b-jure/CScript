@@ -1,0 +1,17 @@
+assert(!print(true));
+assert(!print(false));
+assert(!print(nil));
+assert(!print("ok"));
+assert(!print('a'));
+assert(!print(69));
+assert(!print(420.69));
+assert(!print([69, 420, 1337]));
+assert(!print({ a = 69, ["b"] = 420; c = 1337,}));
+assert(!print(class {}));
+assert(!print(fn (a) { return a; }));
+assert(!print('\x35'));
+a = class {};
+assert(!print(a()));
+assert(!print(true, false, nil, "ok", 'a', 69, 420.69, [69, 420, 1337], 
+              { a = 69, ["b"] = 420; c = 1337}, class {}, fn (a) {return a;},
+              '\x35', class {}, a()));

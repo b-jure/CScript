@@ -67,7 +67,7 @@ int csPR_call(cs_State *C, ProtectedFn fn, void *ud, ptrdiff_t old_top,
               ptrdiff_t errfunc) {
     int status;
     CallFrame *old_cf = C->cf;
-    ptrdiff_t old_errfunc = errfunc;
+    ptrdiff_t old_errfunc = C->errfunc;
     C->errfunc = errfunc;
     status = csPR_rawcall(C, fn, ud);
     if (c_unlikely(status != CS_OK)) {

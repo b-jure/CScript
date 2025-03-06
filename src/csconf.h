@@ -220,7 +220,7 @@
 ** @CS_NUMBER_FMT - is the format for writing floats.
 ** @CS_NUMBER_FMTLEN - is the additional length modifier when writing floats.
 ** @cs_mathop - allows the addition of an 'l' or 'f' to all math operations.
-** @cs_floor - takes the floor of a float.
+** @c_floor - floor division.
 ** @cs_number2str - convert float into string.
 ** @cs_str2number - convert numeral into float
 ** @cs_number2integer - converts float to integer or returns 0 if float is
@@ -228,7 +228,7 @@
 */
 
 
-#define cs_floor(n)             (cs_mathop(floor)(n))
+#define c_floor(n)          (cs_mathop(floor)(n))
 
 #define cs_number2str(s,sz,n) \
         c_snprintf((s), (sz), CS_NUMBER_FMT, (CS_NUMBER)(n))

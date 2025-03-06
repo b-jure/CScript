@@ -94,7 +94,7 @@
 typedef enum {
         /* arithmetic operators */
         OPR_ADD, OPR_SUB, OPR_MUL,
-        OPR_DIV, OPR_MOD, OPR_POW,
+        OPR_DIV, OPR_IDIV, OPR_MOD, OPR_POW,
         /* bitwise operators */
         OPR_SHL, OPR_SHR, OPR_BAND,
         OPR_BOR, OPR_BXOR,
@@ -160,12 +160,13 @@ OP_SETMM,/*        S V1 V2    'V1->vmt[S] = V2' (see notes)                 */
 OP_POP,/*                     'pop value off the stack'                     */
 OP_POPN,/*         L          'pop L values off the stack'                  */
 
-OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop)                       */
+OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop, if S&0x80 swap oper.) */
 
 OP_ADDK,/*         V L     'V + K{L}:number'                                */
 OP_SUBK,/*         V L     'V - K{L}:number'                                */
 OP_MULK,/*         V L     'V * K{L}:number'                                */
 OP_DIVK,/*         V L     'V / K{L}:number'                                */
+OP_IDIVK,/*        V L     'V // K{L}:number'                               */
 OP_MODK,/*         V L     'V % K{L}:number'                                */
 OP_POWK,/*         V L     'V ** K{L}:number'                               */
 OP_BSHLK,/*        V L     'V << K{L}:number'                               */
@@ -178,6 +179,7 @@ OP_ADDI,/*         V L     'V + I(L)'                                       */
 OP_SUBI,/*         V L     'V - I(L)'                                       */
 OP_MULI,/*         V L     'V * I(L)'                                       */
 OP_DIVI,/*         V L     'V / I(L)'                                       */
+OP_IDIVI,/*        V L     'V // I(L)'                                      */
 OP_MODI,/*         V L     'V % I(L)'                                       */
 OP_POWI,/*         V L     'V ** I(L)'                                      */
 OP_BSHLI,/*        V L     'V << I(L)'                                      */
@@ -186,17 +188,18 @@ OP_BANDI,/*        V L     'V & I(L)'                                       */
 OP_BORI,/*         V L     'V | I(L)'                                       */
 OP_BXORI,/*        V L     'V ^ I(L)'                                       */
 
-OP_ADD,/*          V1 V2   'V1 + V2'                                        */
-OP_SUB,/*          V1 V2   'V1 - V2'                                        */
-OP_MUL,/*          V1 V2   'V1 * V2'                                        */
-OP_DIV,/*          V1 V2   'V1 / V2'                                        */
-OP_MOD,/*          V1 V2   'V1 % V2'                                        */
-OP_POW,/*          V1 V2   'V1 ** V2'                                       */
-OP_BSHL,/*         V1 V2   'V1 << V2'                                       */
-OP_BSHR,/*         V1 V2   'V1 >> V2'                                       */
-OP_BAND,/*         V1 V2   'V1 & V2'                                        */
-OP_BOR,/*          V1 V2   'V1 | V2'                                        */
-OP_BXOR,/*         V1 V2   'V1 ^ V2'                                        */
+OP_ADD,/*          V1 V2 S 'V1 + V2'                                        */
+OP_SUB,/*          V1 V2 S 'V1 - V2'                                        */
+OP_MUL,/*          V1 V2 S 'V1 * V2'                                        */
+OP_DIV,/*          V1 V2 S 'V1 / V2  (if (S) swap operands)'                */
+OP_IDIV,/*         V1 V2 S 'V1 // V2'                                       */
+OP_MOD,/*          V1 V2 S 'V1 % V2'                                        */
+OP_POW,/*          V1 V2 S 'V1 ** V2'                                       */
+OP_BSHL,/*         V1 V2 S 'V1 << V2'                                       */
+OP_BSHR,/*         V1 V2 S 'V1 >> V2'                                       */
+OP_BAND,/*         V1 V2 S 'V1 & V2'                                        */
+OP_BOR,/*          V1 V2 S 'V1 | V2'                                        */
+OP_BXOR,/*         V1 V2 S 'V1 ^ V2'                                        */
 
 OP_CONCAT,/*       L       'V{-L} = V{-L} .. V{L - 1}'                      */
 
@@ -209,8 +212,8 @@ OP_GTI,/*          V L            'V > I(L)'                                */
 OP_GEI,/*          V L            'V >= I(L)'                               */ 
 
 OP_EQ,/*           V1 V2 S     '(V1 == V2) == S'                            */
-OP_LT,/*           V1 V2       '(V1 < V2)'                                  */
-OP_LE,/*           V1 V2       '(V1 <= V2)'                                 */
+OP_LT,/*           V1 V2 S     '(V1 < V2)  (if (S) swap operands)'          */
+OP_LE,/*           V1 V2 S     '(V1 <= V2)'                                 */
 
 OP_EQPRESERVE,/*   V1 V2   'V1 == V2 (preserves V1 operand)'                */
 
@@ -241,7 +244,7 @@ OP_SETLOCAL,/*     V L         'L{L} = V'                                   */
 OP_GETUVAL,/*      L           'U{L}'                                       */
 OP_SETUVAL,/*      V L         'U{L} = V'                                   */
 
-OP_SETARRAY,/*     L S         'V{-S}[L+i] = V{-S+i}, 1 <= i <= S           */
+OP_SETARRAY,/*     L1 L2 S      'V{-L1}[L2+i] = V{-S+i}, 1 <= i <= S        */
 
 OP_SETPROPERTY,/*  V L1 L2     'V{-L1}.K{L2}:string = V'                    */
 OP_GETPROPERTY,/*  V  L        'V.K{L}'                                     */
@@ -344,8 +347,7 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
 /* 
 ** Number of array items to accumulate before a SETARRAY instruction.
-** Keep this value under MAX_ARG_S or change the instruction format aka
-** the second argument size to long arg in order to fit up to MAX_ARG_L.
+** Keep this value under MAX_ARG_S.
 */
 #define ARRFIELDS_PER_FLUSH     50
 
@@ -379,7 +381,7 @@ CSI_FUNC int csC_ret(FunctionState *fs, int first, int nreturns);
 CSI_FUNC void csC_method(FunctionState *fs, ExpInfo *e);
 CSI_FUNC int csC_storevar(FunctionState *fs, ExpInfo *var, int left);
 CSI_FUNC void csC_setarraysize(FunctionState *fs, int pc, int sz);
-CSI_FUNC void csC_setarray(FunctionState *fs, int nelems, int tostore);
+CSI_FUNC void csC_setarray(FunctionState *fs, int base, int nelems, int tostore);
 CSI_FUNC void csC_settablesize(FunctionState *fs, int pc, int hsize);
 CSI_FUNC void csC_constexp2val(FunctionState *fs, ExpInfo *e, TValue *v);
 CSI_FUNC TValue *csC_getconstant(FunctionState *fs, ExpInfo *v);

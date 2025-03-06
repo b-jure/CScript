@@ -1,0 +1,13 @@
+local s = "This is a test string, used for testing, get it?";
+
+assert(string.startswith(s, "This") == 4);
+assert(string.startswith(s, "This", 0, 3) == 4);
+assert(string.startswith(s, "This", 0, -1) == 4);
+assert(string.startswith(s, "it?", 45) == 48);
+assert(string.startswith(s, "it?", 45, -1) == 48);
+assert(string.startswith(s, "it?", 45, -2) == nil);
+assert(string.startswith(s, "his") == nil);
+assert(string.startswith(s, "is a", 5) == 9);
+assert(string.startswith(s, "is a", 5, 8) == 9);
+assert(string.startswith(s, "is a", 5, 7) == nil);
+assert(string.startswith(s, "") == 0);

@@ -74,7 +74,7 @@
 
 /* 
 ** OpCode properties table.
-** (order 'OpCode')
+** ORDER OP
 */
 CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     /*     J  F      */
@@ -104,6 +104,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_SUBK */
     opProp(0, FormatIL), /* OP_MULK */
     opProp(0, FormatIL), /* OP_DIVK */
+    opProp(0, FormatIL), /* OP_IDIVK */
     opProp(0, FormatIL), /* OP_MODK */
     opProp(0, FormatIL), /* OP_POWK */
     opProp(0, FormatIL), /* OP_BSHLK */
@@ -115,6 +116,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_SUBI */
     opProp(0, FormatIL), /* OP_MULI */
     opProp(0, FormatIL), /* OP_DIVI */
+    opProp(0, FormatIL), /* OP_IDIVI */
     opProp(0, FormatIL), /* OP_MODI */
     opProp(0, FormatIL), /* OP_POWI */
     opProp(0, FormatIL), /* OP_BSHLI */
@@ -122,17 +124,18 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_BANDI */
     opProp(0, FormatIL), /* OP_BORI */
     opProp(0, FormatIL), /* OP_BXORI */
-    opProp(0, FormatI), /* OP_ADD */
-    opProp(0, FormatI), /* OP_SUB */
-    opProp(0, FormatI), /* OP_MUL */
-    opProp(0, FormatI), /* OP_DIV */
-    opProp(0, FormatI), /* OP_MOD */
-    opProp(0, FormatI), /* OP_POW */
-    opProp(0, FormatI), /* OP_BSHL */
-    opProp(0, FormatI), /* OP_BSHR */
-    opProp(0, FormatI), /* OP_BAND */
-    opProp(0, FormatI), /* OP_BOR */
-    opProp(0, FormatI), /* OP_BXOR */
+    opProp(0, FormatIS), /* OP_ADD */
+    opProp(0, FormatIS), /* OP_SUB */
+    opProp(0, FormatIS), /* OP_MUL */
+    opProp(0, FormatIS), /* OP_DIV */
+    opProp(0, FormatIS), /* OP_IDIV */
+    opProp(0, FormatIS), /* OP_MOD */
+    opProp(0, FormatIS), /* OP_POW */
+    opProp(0, FormatIS), /* OP_BSHL */
+    opProp(0, FormatIS), /* OP_BSHR */
+    opProp(0, FormatIS), /* OP_BAND */
+    opProp(0, FormatIS), /* OP_BOR */
+    opProp(0, FormatIS), /* OP_BXOR */
     opProp(0, FormatIL), /* OP_CONCAT */
     opProp(0, FormatILS), /* OP_EQK */
     opProp(0, FormatILS), /* OP_EQI */
@@ -141,8 +144,8 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_GTI */
     opProp(0, FormatIL), /* OP_GEI */
     opProp(0, FormatIS), /* OP_EQ */
-    opProp(0, FormatI), /* OP_LT */
-    opProp(0, FormatI), /* OP_LE */
+    opProp(0, FormatIS), /* OP_LT */
+    opProp(0, FormatIS), /* OP_LE */
     opProp(0, FormatI), /* OP_EQPRESERVE */
     opProp(0, FormatI), /* OP_UNM */
     opProp(0, FormatI), /* OP_BNOT */
@@ -162,7 +165,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_SETLOCAL */
     opProp(0, FormatIL), /* OP_GETUVAL */
     opProp(0, FormatIL), /* OP_SETUVAL */
-    opProp(0, FormatILS), /* OP_SETARRAY */
+    opProp(0, FormatILLS), /* OP_SETARRAY */
     opProp(0, FormatILL), /* OP_SETPROPERTY */
     opProp(0, FormatIL), /* OP_GETPROPERTY */
     opProp(0, FormatI), /* OP_GETINDEX */
@@ -221,17 +224,17 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "TRUE", "FALSE", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
 "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY",
 "NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK",
-"SUBK", "MULK", "DIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK", "BORK",
-"BXORK", "ADDI", "SUBI", "MULI", "DIVI", "MODI", "POWI", "BSHLI", "BSHRI",
-"BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "MOD", "POW", "BSHL",
-"BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI", "LTI", "LEI", "GTI",
-"GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT", "NOT", "JMP", "JMPS",
-"BJMP", "TEST", "TESTORPOP", "TESTPOP", "CALL", "CLOSE", "TBC", "GETGLOBAL",
-"SETGLOBAL", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETARRAY",
-"SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
-"SETINDEXSTR", "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL",
-"GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL",
-"FORLOOP", "RET",
+"SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK",
+"BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "IDIVI", "MODI", "POWI",
+"BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "IDIV",
+"MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI",
+"LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT",
+"NOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP", "TESTPOP", "CALL", "CLOSE",
+"TBC", "GETGLOBAL", "SETGLOBAL", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL",
+"SETARRAY", "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX",
+"GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT",
+"SETINDEXINTL", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP",
+"FORCALL", "FORLOOP", "RET",
 };
 
 
@@ -580,12 +583,13 @@ void csC_setoneret(FunctionState *fs, ExpInfo *e) {
 /* set 'nreturns', for call and vararg expressions */
 void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
     Instruction *pc = getinstruction(fs, e);
+    nreturns++;
     if (e->et == EXP_CALL) {
-        SETARG_L(pc, 1, nreturns + 1);
+        SETARG_L(pc, 1, nreturns);
     } else {
         cs_assert(e->et == EXP_VARARG);
-        SETARG_L(pc, 0, nreturns + 1);
-        csC_reserveslots(fs, 1);
+        SETARG_L(pc, 0, nreturns);
+        csC_reserveslots(fs, 1); /* TODO: redundant? */
     }
     e->et = EXP_FINEXPR;
 }
@@ -1056,11 +1060,19 @@ void csC_setarraysize(FunctionState *fs, int pc, int asize) {
 }
 
 
-void csC_setarray(FunctionState *fs, int nelems, int tostore) {
+static int emitILLS(FunctionState *fs, Instruction i, int a, int b, int c) {
+    int offset = csC_emitILL(fs, i, a, b);
+    emitS(fs, c);
+    return offset;
+}
+
+
+void csC_setarray(FunctionState *fs, int base, int nelems, int tostore) {
+    cs_assert(ARRFIELDS_PER_FLUSH <= MAX_ARG_S);
     cs_assert(tostore != 0 && tostore <= ARRFIELDS_PER_FLUSH);
     if (tostore == CS_MULRET)
         tostore = 0; /* return up to stack top */
-    csC_emitILS(fs, OP_SETARRAY, nelems, tostore);
+    emitILLS(fs, OP_SETARRAY, base, nelems, tostore);
     freeslots(fs, tostore); /* free slots holding the array values */
 }
 
@@ -1270,6 +1282,7 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
 /* code test jump instruction */
 static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
     exp2stack(fs, e); /* ensure test operand is on the stack */
+    freeslots(fs, 1); /* test removes first expression if it goes through */
     return csC_emitILS(fs, testop, 0, cond);
 }
 
@@ -1298,7 +1311,7 @@ int csC_test(FunctionState *fs, OpCode optest, int cond) {
 ** This test jumps over the second expression if the first expression
 ** is false (nil or false).
 */
-void falsejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
+static void andjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
     int pc; /* pc of new jump */
     switch (e->et) {
         case EXP_TRUE: case EXP_STRING: case EXP_INT:
@@ -1322,7 +1335,7 @@ void falsejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
 ** This test jumps over the second expression if the first expression
 ** is true (everything else except nil and false).
 */
-void truejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
+void orjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
     int pc;
     switch (e->et) {
         case EXP_NIL: case EXP_FALSE: {
@@ -1343,19 +1356,19 @@ void truejmp(FunctionState *fs, ExpInfo *e, OpCode testop) {
 void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
     switch (op) {
         case OPR_ADD: case OPR_SUB: case OPR_MUL:
-        case OPR_DIV: case OPR_MOD: case OPR_POW:
-        case OPR_SHL: case OPR_SHR: case OPR_BAND:
-        case OPR_BOR: case OPR_BXOR: case OPR_NE:
-        case OPR_EQ: {
+        case OPR_DIV: case OPR_IDIV: case OPR_MOD:
+        case OPR_POW: case OPR_SHL: case OPR_SHR:
+        case OPR_BAND: case OPR_BOR: case OPR_BXOR:
+        case OPR_NE: case OPR_EQ: {
             if (!tonumeral(e, NULL))
                 csC_exp2stack(fs, e);
             /* otherwise keep numeral for constant
-             * or immediate operand variant instruction */
+            ** or immediate operand variant instruction */
             break;
         }
         case OPR_GT: case OPR_GE: {
             /* Do not push expression value on the stack yet!
-             * It will swap places with the second expression. */
+            ** It will swap places with the second expression. */
             break;
         }
         case OPR_LT: case OPR_LE: {
@@ -1363,7 +1376,7 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             if (!isnumIK(e, &dummy))
                 csC_exp2stack(fs, e);
             /* otherwise keep numeral for immediate
-             * operand variant instruction */
+            ** operand variant instruction */
             break;
         }
         case OPR_CONCAT: {
@@ -1371,11 +1384,11 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             break;
         }
         case OPR_AND: {
-            falsejmp(fs, e, OP_TESTORPOP); /* jump out if 'e' is false */
+            andjump(fs, e, OP_TESTORPOP); /* jump out if 'e' is false */
             break;
         }
         case OPR_OR: {
-            truejmp(fs, e, OP_TESTORPOP); /* jump out if 'e' is true */
+            orjump(fs, e, OP_TESTORPOP); /* jump out if 'e' is true */
             break;
         }
         default: cs_assert(0); /* invalid binary operation */
@@ -1416,15 +1429,16 @@ c_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
 
 /* code generic binary instruction */
 static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
-                    int line) {
+                    int commutative, int line) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
+    int swap = !commutative && (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR);
     csC_exp2stack(fs, e1);
     csC_exp2stack(fs, e2);
     freeslots(fs, 1); /* e2 */
-    e1->u.info = csC_emitI(fs, op);
+    e1->u.info = csC_emitIS(fs, op, swap);
     e1->et = EXP_FINEXPR;
     csC_fixline(fs, line);
-    csC_emitIS(fs, OP_MBIN, binop2mm(op));
+    csC_emitIS(fs, OP_MBIN, binop2mm(op) | ((swap) ? 0x80 : 0));
     csC_fixline(fs, line);
 }
 
@@ -1445,13 +1459,13 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 
 /* code arithmetic binary op */
 static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                          Binopr opr, int flip, int line) {
-    if (tonumeral(e2, NULL) && exp2K(fs, e2)) {
+                          Binopr opr, int flip, int commutative, int line) {
+    if (tonumeral(e2, NULL) && exp2K(fs, e2))
         codebinK(fs, e1, e2, opr, line);
-    } else {
+    else {
         if (flip)
             swapexp(e1, e2);
-        codebin(fs, e1, e2, opr, line);
+        codebin(fs, e1, e2, opr, commutative, line);
     }
 }
 
@@ -1471,11 +1485,11 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 
 /* code binary instruction trying both the immediate and constant variants */
 static void codebinIK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
-                      int flip, int line) {
+                      int flip, int commutative, int line) {
     if (isintKL(e2))
         codebinI(fs, e1, e2, opr, line);
     else
-        codebinarithm(fs, e1, e2, opr, flip, line);
+        codebinarithm(fs, e1, e2, opr, flip, commutative, line);
 }
 
 
@@ -1487,7 +1501,7 @@ static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
         swapexp(e1, e2);
         flip = 1;
     }
-    codebinIK(fs, e1, e2, opr, flip, line);
+    codebinIK(fs, e1, e2, opr, flip, 1, line);
 }
 
 
@@ -1502,11 +1516,11 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
         swapexp(e1, e2);
     }
     csC_exp2stack(fs, e1); /* ensure 1st expression is on stack */
-    if (isnumIK(e2, &imm)) { /* 2nd expression is immediate operand? */
+    if (isnumIK(e2, &imm)) /* 2nd expression is immediate operand? */
         e1->u.info = csC_emitILS(fs, OP_EQI, imm, iseq);
-    } else if (exp2K(fs, e2)) { /* 2nd expression is a constant? */
+    else if (exp2K(fs, e2)) /* 2nd expression is a constant? */
         e1->u.info = csC_emitILS(fs, OP_EQK, e2->u.info, iseq);
-    } else { /* otherwise 2nd expression must be on stack */
+    else { /* otherwise 2nd expression must be on stack */
         csC_exp2stack(fs, e2); /* ensure 2nd expression is on stack */
         e1->u.info = csC_emitIS(fs, OP_EQ, iseq);
         freeslots(fs, 1); /* e2 */
@@ -1516,10 +1530,13 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 
 
 /* code binary ordering instruction */
-static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
+static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
+                      Binopr opr, int swapped) {
     OpCode op;
     int imm;
     cs_assert(OPR_LT == opr || OPR_LE == opr); /* already swapped */
+    csC_varexp2stack(fs, e1);
+    csC_varexp2stack(fs, e2);
     if (isnumIK(e2, &imm)) {
         csC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
         op = binopr2op(opr, OPR_LT, OP_LTI);
@@ -1530,10 +1547,12 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 code:
         e1->u.info = csC_emitIL(fs, op, imm);
     } else {
+        int swap = (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR) ||
+                   (swapped && e1->et == EXP_FINEXPR);
         csC_exp2stack(fs, e1); /* ensure first operand is on stack */
         csC_exp2stack(fs, e2); /* ensure second operand is on stack */
         op = binopr2op(opr, OPR_LT, OP_LT);
-        e1->u.info = csC_emitI(fs, op);
+        e1->u.info = csC_emitIS(fs, op, swap);
         freeslots(fs, 1); /* e2 */
     }
     e1->et = EXP_FINEXPR;
@@ -1560,8 +1579,26 @@ static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, int line) {
 }
 
 
+static int codeaddnI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
+                           int line) {
+    if (!isintK(e2))
+        return 0; /* not an integer constant */
+    else {
+        cs_Integer i2 = e2->u.i;
+        if (!(isIMML(i2)))
+            return 0; /* not in the proper range */
+        else {
+            e2->u.i = -cast_int(i2);
+            codebinI(fs, e1, e2, OPR_ADD, line);
+            return 1; /* successfully coded */
+        }
+    }
+}
+
+
 void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                 int line) {
+    int swapped = 0;
     if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OPADD))
         return; /* done (folded) */
     switch (opr) {
@@ -1570,12 +1607,19 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
             codecommutative(fs, e1, e2, opr, line);
             break;
         }
-        case OPR_SUB: case OPR_DIV: case OPR_MOD: case OPR_POW: {
-            codebinarithm(fs, e1, e2, opr, 0, line);
+        case OPR_SUB: {
+            if (codeaddnI(fs, e1, e2, line))
+                break; /* coded as (r1 + -I) */
+            /* else */
+        } /* fall through */
+        case OPR_IDIV: case OPR_DIV: case OPR_MOD: case OPR_POW: {
+            csC_varexp2stack(fs, e2);
+            codebinIK(fs, e1, e2, opr, 0, 0, line);
             break;
         }
         case OPR_SHL: case OPR_SHR:  {
-            codebinIK(fs, e1, e2, opr, 0, line);
+            csC_varexp2stack(fs, e2);
+            codebinIK(fs, e1, e2, opr, 0, 0, line);
             break;
         }
         case OPR_CONCAT: {
@@ -1591,9 +1635,10 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
             /* 'a > b' <==> 'a < b', 'a >= b' <==> 'a <= b' */
             swapexp(e1, e2);
             opr = (opr - OPR_GT) + OPR_LT;
+            swapped = 1;
         } /* fall through */
         case OPR_LT: case OPR_LE: {
-            codeorder(fs, e1, e2, opr);
+            codeorder(fs, e1, e2, opr, swapped);
             break;
         }
         case OPR_AND: {

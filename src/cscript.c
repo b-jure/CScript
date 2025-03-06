@@ -28,7 +28,7 @@
 static const char *progname = CS_PROGNAME;
 
 
-static void printusage(const char *badopt) {
+static void print_usage(const char *badopt) {
     FILE *fp;
     if (badopt) {
         fp = stderr;
@@ -53,7 +53,7 @@ static void printusage(const char *badopt) {
 }
 
 
-static void printversion(void) {
+static void print_version(void) {
     cs_writelen(stdout, LUA_COPYRIGHT, sizeof(LUA_COPYRIGHT)-1);
     cs_writeline(stdout);
     cs_writelen(stdout, CS_COPYRIGHT, sizeof(CS_COPYRIGHT)-1);
@@ -97,7 +97,7 @@ static int report(cs_State *C, int status) {
       args |= (arg); *first = i + 1; }
 
 
-static int collectargs(char **argv, int *first) {
+static int collect_args(char **argv, int *first) {
     int args = 0;
     if (*argv) {
         if (argv[0][0])
@@ -146,12 +146,13 @@ static int errfunc(cs_State *C) {
 }
 
 
-static int exec_cscript(cs_State *C, int nargs, int nres) {
+static int exec_script(cs_State *C, int nargs, int nres) {
     int status;
     int base = cs_gettop(C) - nargs; /* function index */
     cs_assert(base >= 0);
     cs_push_cfunction(C, errfunc); /* push 'errfunc' on top */
     cs_insert(C, base); /* insert 'errfunc' below the function */
+    csTR_dumpstack(C, -1, "BEFORE EXEC SCRIPT");
     status = cs_pcall(C, nargs, nres, base);
     cs_remove(C, base); /* remove 'errfunc' */
     return status;
@@ -160,12 +161,12 @@ static int exec_cscript(cs_State *C, int nargs, int nres) {
 
 static int runchunk(cs_State *C, int status) {
     if (status == CS_OK)
-        exec_cscript(C, 0, 0);
+        exec_script(C, 0, 0);
     return report(C, status);
 }
 
 
-static int runfile(cs_State *C, const char *filename) {
+static int run_file(cs_State *C, const char *filename) {
     return runchunk(C, csL_loadfile(C, filename));
 }
 
@@ -208,8 +209,8 @@ static int runargs(cs_State *C, char **argv, int n)  {
 
 static int pushargs(cs_State *C) {
     int i, nargs;
-    if (cs_get_global(C, "arg") != CS_TARRAY)
-        csL_error(C, "'arg' is not an array");
+    if (cs_get_global(C, "args") != CS_TARRAY)
+        csL_error(C, "'args' is not an array");
     nargs = cs_len(C, -1);
     csL_check_stack(C, nargs + 3, "too many arguments to script");
     for (i = 1; i <= nargs; i++) /* push all args */
@@ -219,7 +220,7 @@ static int pushargs(cs_State *C) {
 }
 
 
-static int runscript(cs_State *C, char **argv) {
+static int run_script(cs_State *C, char **argv) {
     int status;
     const char *filename = argv[0];
     if (strcmp(filename, "-") == 0 && strcmp(argv[-1], "--") != 0)
@@ -227,7 +228,7 @@ static int runscript(cs_State *C, char **argv) {
     status = csL_loadfile(C, filename);
     if (status == CS_OK) {
         int nargs = pushargs(C);
-        status = exec_cscript(C, nargs, CS_MULRET);
+        status = exec_script(C, nargs, CS_MULRET);
     }
     return report(C, status);
 }
@@ -318,21 +319,21 @@ static int multiline(cs_State *C) {
 }
 
 
-static int loadline(cs_State *C) {
+static int load_line(cs_State *C) {
     int status;
-    cs_setntop(C, 0); /* remove all values */
+    cs_settop(C, 0); /* remove all values */
     if (!pushline(C, 1))
         return -1; /* no input */
     if ((status = addreturn(C)) != CS_OK) /* 'return ...;' did not work? */
         status = multiline(C); /* try as command, maybe with continuation lines */
     cs_remove(C, 0); /* remove line from the stack */
-    cs_assert(cs_nvalues(C) == 1); /* 'csL_loadbuffer' result on top */
+    cs_assert(cs_getntop(C) == 1); /* 'csL_loadbuffer' result on top */
     return status;
 }
 
 
-static void printresults(cs_State *C) {
-    int n = cs_nvalues(C);
+static void print_result(cs_State *C) {
+    int n = cs_getntop(C);
     if (n > 0) { /* have result to print? */
         csL_check_stack(C, CS_MINSTACK, "too many results to print");
         cs_get_global(C, "print");
@@ -344,19 +345,19 @@ static void printresults(cs_State *C) {
 }
 
 
-static void runREPL(cs_State *C) {
+static void run_repl(cs_State *C) {
     int status;
     const char *old_progname = progname;
     progname = NULL;
-    while ((status = loadline(C)) != -1) { /* while no empty EOF line */
+    while ((status = load_line(C)) != -1) { /* while no empty EOF line */
         if (status == CS_OK) /* line loaded with no errors? */
-            status = exec_cscript(C, 0, CS_MULRET);
+            status = exec_script(C, 0, CS_MULRET);
         if (status == CS_OK) /* script returned without errors? */
-            printresults(C);
+            print_result(C);
         else
             report(C, status);
     }
-    cs_setntop(C, 0); /* remove all values */
+    cs_settop(C, 0); /* remove all values */
     cs_writeline(stdout);
     progname = old_progname;
 }
@@ -371,14 +372,14 @@ static void runREPL(cs_State *C) {
 ** Interpreter entry (main) {
 ** ----------------------------------------------------------------------- */
 
-/* create global array 'arg' that holds command line arguments */
-static void createargarray(cs_State *C, char **argv, int argc) {
+/* create global array 'args' that holds command line arguments */
+static void create_args_array(cs_State *C, char **argv, int argc) {
     cs_push_array(C, argc);
     for (int i = 0; i < argc; i++) {
         cs_push_string(C, argv[i]);
         cs_set_index(C, -2, i);
     }
-    cs_set_global(C, "arg");
+    cs_set_global(C, "args");
 }
 
 
@@ -390,35 +391,35 @@ static int pmain(cs_State *C) {
     int argc = cs_to_integer(C, -2);
     char **argv = cs_to_userdata(C, -1);
     int script;
-    int args = collectargs(argv, &script);
+    int args = collect_args(argv, &script);
     int optlimit = (script > 0 ? script : argc);
     csL_checkversion(C);
     if (args == arg_error) {
-        printusage(argv[script]);
+        print_usage(argv[script]);
         return 0;
     }
     if (args & arg_h)
-        printusage(NULL);
+        print_usage(NULL);
     if (args & arg_v)
-        printversion();
+        print_version();
     csL_openlibs(C); /* open standard libraries */
-    createargarray(C, argv, argc); /* create 'arg' array */
+    create_args_array(C, argv, argc); /* create 'args' array */
     cs_gc(C, CS_GCRESTART);
     cs_gc(C, CS_GCINC, 0, 0, 0);
     if (!runargs(C, argv, optlimit)) /* have error? */
         return 0;
     if (script > 0) { /* have script file? */
-        if (runscript(C, argv + script) != CS_OK)
+        if (run_script(C, argv + script) != CS_OK)
             return 0;
     }
     if (args & arg_i) {
-        runREPL(C);
+        run_repl(C);
     } else if (script <= 0  && !(args & (arg_s | arg_v | arg_h))) {
         if (cs_stdin_is_tty()) {
-            printversion();
-            runREPL(C);
+            print_version();
+            run_repl(C);
         } else
-            runfile(C, NULL); /* execute stdin as a file */
+            run_file(C, NULL); /* execute stdin as a file */
     }
     cs_push_bool(C, 1);
     return 1;

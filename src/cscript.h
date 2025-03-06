@@ -122,6 +122,7 @@ typedef enum cs_MM {    /* ORDER MM */
     CS_MM_SUB,
     CS_MM_MUL,
     CS_MM_DIV,
+    CS_MM_IDIV,
     CS_MM_MOD,
     CS_MM_POW,
     CS_MM_BSHL,
@@ -162,7 +163,7 @@ CS_API cs_Number        cs_version(cs_State *C);
 /* -----------------------------------------------------------------------
 ** Stack manipulation
 ** ----------------------------------------------------------------------- */
-CS_API void             cs_setntop(cs_State *C, int n); 
+CS_API void             cs_settop(cs_State *C, int n); 
 CS_API int              cs_gettop(const cs_State *C); 
 CS_API int              cs_absindex(cs_State *C, int index); 
 CS_API void             cs_rotate(cs_State *C, int index, int n); 
@@ -199,17 +200,18 @@ CS_API cs_State        *cs_to_thread(cs_State *C, int index);
 #define CS_OPSUB        1
 #define CS_OPMUL        2
 #define CS_OPDIV        3
-#define CS_OPMOD        4
-#define CS_OPPOW        5
-#define CS_OPBSHL       6
-#define CS_OPBSHR       7
-#define CS_OPBAND       8
-#define CS_OPBOR        9
-#define CS_OPBXOR       10
-#define CS_OPUNM        11
-#define CS_OPBNOT       12
+#define CS_OPIDIV       4
+#define CS_OPMOD        5
+#define CS_OPPOW        6
+#define CS_OPBSHL       7
+#define CS_OPBSHR       8
+#define CS_OPBAND       9
+#define CS_OPBOR        10
+#define CS_OPBXOR       11
+#define CS_OPUNM        12
+#define CS_OPBNOT       13
 
-#define CS_NUM_ARITH    13
+#define CS_NUM_ARITH    14
 
 CS_API void     cs_arith(cs_State *C, int op); 
 
@@ -339,14 +341,12 @@ CS_API int              cs_getfreereg(cs_State *C);
 
 #define cs_getextraspace(C)         ((void *)((char *)(C) - CS_EXTRASPACE))
 
-#define cs_nvalues(C)               (cs_gettop(C) + 1)
-
-#define cs_settop(C, index)         cs_setntop(C, (index)+1)
+#define cs_getntop(C)               (cs_gettop(C) + 1)
 
 #define cs_to_number(C,i)           cs_to_numberx(C,(i),NULL)
 #define cs_to_integer(C,i)          cs_to_integerx(C,(i),NULL)
 
-#define cs_pop(C,n)                 cs_setntop(C, -(n)-1)
+#define cs_pop(C,n)                 cs_settop(C, -(n)-1)
 
 #define cs_push_cfunction(C,f)      cs_push_cclosure(C,f,0)
 

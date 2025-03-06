@@ -8,7 +8,6 @@
 #define CS_CORE
 
 
-#include "cdebug.h"
 #include "carray.h"
 #include "cgc.h"
 #include "climits.h"
@@ -25,26 +24,28 @@ Array *csA_new(cs_State *C) {
 }
 
 
-/* shrinks array size to the actual size being used */
 void csA_shrink(cs_State *C, Array *arr) {
     if (arr->b && arr->sz > arr->n)
         csM_shrinkarray(C, arr->b, arr->sz, arr->n, TValue);
 }
 
 
-/* ensure that 'index' can fit into array memory block */
-void csA_ensure(cs_State *C, Array *arr, int index) {
-    uint cindex = cast_uint(index);
-    cs_assert(index >= 0);
-    if (cindex < arr->n) { /* 'cindex' in bounds? */
-        return; /* done */
-    } else {
-        csM_ensurearray(C, arr->b, arr->sz, arr->n, cindex + 1 - arr->n,
+int csA_ensure(cs_State *C, Array *arr, uint n) {
+    if (n <= arr->n) /* in bound? */
+        return 0; /* done */
+    else {
+        csM_ensurearray(C, arr->b, arr->sz, arr->n, n - arr->n,
                         ARRAYLIMIT, "array elements", TValue);
-        for (uint i = arr->n; i <= cindex; i++) /* nil in-between */
-            setnilval(&arr->b[i]);
-        arr->n = cast_uint(cindex) + 1; /* adjust new in-use length */
+        for (uint i = arr->n; i < n; i++)
+            setnilval(&arr->b[i]); /* clear new part */
+        return 1;
     }
+}
+
+
+void csA_ensureindex(cs_State *C, Array *arr, uint index) {
+    if (csA_ensure(C, arr, index + 1))
+        arr->n = index + 1;
 }
 
 

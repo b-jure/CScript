@@ -33,9 +33,9 @@ CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
 void csMM_init(cs_State *C) {
     const char *mmnames[CS_MM_N] = { /* ORDER MM */
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
-        "__concat", "__add", "__sub", "__mul", "__div", "__mod", "__pow",
-        "__shl", "__shr", "__band", "__bor", "__bxor", "__unm", "__bnot",
-        "__eq", "__lt", "__le"
+        "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",
+        "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
+        "__bnot", "__eq", "__lt", "__le"
     };
     for (int i = 0; i < CS_MM_N; i++) {
         OString *s = csS_new(C, mmnames[i]);

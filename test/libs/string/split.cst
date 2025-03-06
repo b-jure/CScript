@@ -1,0 +1,33 @@
+local s = "This is a test string, used for testing, get it?";
+
+local l = string.split(s, " ");
+assert(len(l) == 10);
+assert(l[0] == "This");
+assert(l[1] == "is");
+assert(l[2] == "a");
+assert(l[3] == "test");
+assert(l[4] == "string,");
+assert(l[5] == "used");
+assert(l[6] == "for");
+assert(l[7] == "testing,");
+assert(l[8] == "get");
+assert(l[9] == "it?");
+
+l = string.split(s, " ", 3);
+assert(len(l) == 3);
+assert(l[0] == "This");
+assert(l[1] == "is");
+assert(l[2] == "a test string, used for testing, get it?");
+
+l = string.split(s, "");
+assert(len(l) == 1);
+assert(l[0] == s);
+l = string.split(s, "", 1);
+assert(len(l) == 1);
+assert(l[0] == s);
+l = string.split(s, "", 0);
+assert(len(l) == 1);
+assert(l[0] == s);
+l = string.split(s, "", -1);
+assert(len(l) == 1);
+assert(l[0] == s);

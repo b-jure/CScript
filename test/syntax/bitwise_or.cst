@@ -2,12 +2,12 @@
 ** Test script file for CScript bitwise OR operator.
 */
 
-assert((2|1) == 3);         // (folded)
-assert((3|2) == 3);         // (folded)
-assert((5|3) == 7);         // (folded)
-assert((10|-3) == -1);      // (folded, assumming two's complement)
-a = 58|14;                  // (folded)
+assert((2|1) == 3);         # (folded)
+assert((3|2) == 3);         # (folded)
+assert((5|3) == 7);         # (folded)
+assert((10|-3) == -1);      # (folded, assumming two's complement)
+a = 58|14;                  # (folded)
 assert(a == 62);
-assert((a|1) == 63);        // (not folded)
-assert((0xff|a) == 255);    // (not folded)
-assert((a|a) == 62);        // (not folded)
+assert((a|1) == 63);        # (not folded)
+assert((0xff|a) == 255);    # (not folded)
+assert((a|a) == 62);        # (not folded)

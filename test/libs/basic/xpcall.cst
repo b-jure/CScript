@@ -1,0 +1,13 @@
+local fn msgh(err) {
+    return err .. " 69"; # concat string to original error
+}
+
+fn test1() {
+    local x <close> = "invalid close value";
+    assert(false);
+}
+
+local res, err = xpcall(test1, msgh);
+assert(res == false);
+# Good test for 'and'/'or' with function calls
+assert(err and (typeof(err) == "string") and err and (x or typeof(err)));

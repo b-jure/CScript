@@ -67,13 +67,12 @@ CClosure *csF_newCClosure(cs_State *C, int nupvalues) {
 */
 void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
                        const Proto *fn) {
-    int i;
     int actual = cast_int(C->sp.p - cf->func.p) - 1;
     int extra = actual - arity; /* number of varargs */
     cf->nvarargs = extra;
     csT_checkstack(C, fn->maxstack + 1);
     setobjs2s(C, C->sp.p++, cf->func.p); /* move function */
-    for (i = 0; i < arity; i++) {
+    for (int i = 1; i <= arity; i++) {
         setobjs2s(C, C->sp.p++, cf->func.p + i); /* move param */
         setnilval(s2v(cf->func.p + i)); /* invalidate old */
     }
@@ -92,7 +91,7 @@ void csF_getvarargs(cs_State *C, CallFrame *cf, int wanted) {
     }
     for (int i = 0; wanted > 0 && i < have; i++, wanted--)
         setobjs2s(C, C->sp.p++, cf->func.p - have + i);
-    while (wanted--)
+    while (wanted-- > 0)
         setnilval(s2v(C->sp.p++));
 }
 
@@ -243,13 +242,13 @@ static void poptbclist(cs_State *C) {
 ** Call '__close' method on 'obj' with error object 'errobj'.
 ** This function assumes 'EXTRA_STACK'.
 */
-static void callCLOSEmm(cs_State *C, TValue *obj, TValue *errobj) {
+static void callclosemm(cs_State *C, TValue *obj, TValue *errobj) {
     SPtr top = C->sp.p;
     const TValue *method = csMM_get(C, obj, CS_MM_CLOSE);
     cs_assert(!ttisnil(method));
-    setobj2s(C, top + 1, method);
-    setobj2s(C, top + 2, obj);
-    setobj2s(C, top + 3, errobj);
+    setobj2s(C, top, method);
+    setobj2s(C, top + 1, obj);
+    setobj2s(C, top + 2, errobj);
     C->sp.p = top + 3;
     csV_call(C, top, 0);
 }
@@ -265,13 +264,13 @@ static void callCLOSEmm(cs_State *C, TValue *obj, TValue *errobj) {
 static void prepcallclose(cs_State *C, SPtr level, int status) {
     TValue *v = s2v(level); /* value being closed */
     TValue *errobj;
-    if (status == CLOSEKTOP) {
+    if (status == CLOSEKTOP)
         errobj = &G(C)->nil; /* error object is nil */
-    } else { /* top will be set to 'level' + 2 */
+    else { /* top will be set to 'level' + 2 */
         errobj = s2v(level + 1); /* error object goes after 'v' */
         csT_seterrorobj(C, status, level + 1); /* set error object */
     }
-    callCLOSEmm(C, v, errobj);
+    callclosemm(C, v, errobj);
 }
 
 

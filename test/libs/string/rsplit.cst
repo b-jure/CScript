@@ -1,0 +1,33 @@
+local s = "This is a test string, used for testing, get it?";
+
+local l = string.rsplit(s, " ");
+assert(len(l) == 10);
+assert(l[0] == "it?");
+assert(l[1] == "get");
+assert(l[2] == "testing,");
+assert(l[3] == "for");
+assert(l[4] == "used");
+assert(l[5] == "string,");
+assert(l[6] == "test");
+assert(l[7] == "a");
+assert(l[8] == "is");
+assert(l[9] == "This");
+
+l = string.rsplit(s, " ", 3);
+assert(len(l) == 3);
+assert(l[0] == "it?");
+assert(l[1] == "get");
+assert(l[2] == "This is a test string, used for testing,");
+
+l = string.rsplit(s, "");
+assert(len(l) == 1);
+assert(l[0] == s);
+l = string.rsplit(s, "", 1);
+assert(len(l) == 1);
+assert(l[0] == s);
+l = string.rsplit(s, "", 0);
+assert(len(l) == 1);
+assert(l[0] == s);
+l = string.rsplit(s, "", -1);
+assert(len(l) == 1);
+assert(l[0] == s);
