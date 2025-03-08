@@ -93,7 +93,7 @@ static void *csys_load(cs_State *C, const char *path, int global) {
 static cs_CFunction csys_symbolf(cs_State *C, void *lib, const char *sym) {
     cs_CFunction f;
     const char *msg;
-    dlerror(); /* clear any old error conditions before calling 'dlsym' */
+    (void)dlerror(); /* clear any old error conds. before calling 'dlsym' */
     f = cast_func(dlsym(lib, sym));
     if (c_unlikely(f == NULL && (msg = dlerror()) != NULL))
         cs_push_fstring(C, msg);
@@ -136,16 +136,16 @@ static void setprogdir(cs_State *C) {
 }
 
 
-
 static void pusherror(cs_State *C) {
     int error = GetLastError();
     char buffer[128];
-    if (FormatMessageA(FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_FROM_SYSTEM,
+    if (FormatMessageA(FORMAT_MESSAGE_IGNORE_INSERTS|FORMAT_MESSAGE_FROM_SYSTEM,
                 NULL, error, 0, buffer, sizeof(buffer)/sizeof(char), NULL))
         cs_push_string(C, buffer);
     else
         cs_push_fstring(C, "system error %d\n", error);
 }
+
 
 static int csys_unloadlib(cs_State *C, void *lib) {
     int res = FreeLibrary((HMODULE)lib);
@@ -173,7 +173,7 @@ static cs_CFunction csys_symbolf(cs_State *C, void *lib, const char *sym) {
 #undef LIB_FAIL
 #define LIB_FAIL    "absent"
 
-#define DLMSG   "dynamic libraries not enabled; check your CScript installation"
+#define DLMSG "dynamic libraries not enabled; check your CScript installation"
 
 static int csys_unloadlib(cs_State *C, void *lib) {
     (void)(lib); /* unused */
@@ -199,15 +199,15 @@ static cs_CFunction csys_symbolf(cs_State *C, void *lib, const char *sym) {
 
 
 static int searcher_preload(cs_State *C) {
-    const char *name = csL_check_string(C, 1);
-    cs_push_globaltable(C); /* get __G table */
-    cs_get_fieldstr(C, -1, CS_PRELOAD_TABLE); /* get __PRELOAD table */
+    const char *name = csL_check_string(C, 0);
+    cs_push_registrytable(C); /* get registry table */
+    cs_get_fieldstr(C, -1, CS_PRELOAD_TABLE); /* get regtable[__PRELOAD] */
     if (cs_get_fieldstr(C, -1, name) == CS_TNIL) { /* not found? */
         cs_push_fstring(C, "no field package.preload[\"%s\"]", name);
         return 1;
     } else {
         cs_push_literal(C, ":preload:");
-        return 2;
+        return 2; /* return value and literal string */
     }
 }
 
@@ -215,35 +215,36 @@ static int searcher_preload(cs_State *C) {
 /*
 ** Return package C library.
 */
-static void *checkclib(cs_State *C, const char *path) {
+static void *check_clib(cs_State *C, const char *path) {
     void *plib;
-    cs_get_global(C, CLIBS); /* get CLIBS userdata */
-    cs_get_uservalue(C, -1, 2); /* get query table uservalue */
-    cs_get_fieldstr(C, -1, path);
+    cs_push_registrytable(C); /* get registry table */
+    cs_get_fieldstr(C, -1, CLIBS); /* get clibs userdata */
+    cs_get_uservalue(C, -1, 1); /* get array uservalue */
+    cs_get_index(C, -1, 0); /* get array query table */
+    cs_get_fieldstr(C, -1, path); /* get qtable[path] */
     plib = cs_to_userdata(C, -1); /* plib = qtable[path] */
-    cs_pop(C, 3); /* pop CLIBS table, query table and 'plib' */
+    cs_pop(C, 5); /* remove reg. table, clibs, array, query table and plib */
     return plib;
 }
 
 
 /*
-** Adds 'plib' to CLIBS.
-** (CLIBS query table)      qtable[path] = plib
-** (CLIBS libraries array)  arr[len(arr)] = plib
+** Adds 'plib' (a library handle) to clibs userdata.
 */
-static void addtoclibs(cs_State *C, const char *path, void *plib) {
-    cs_get_global(C, CLIBS); /* get CLIBS userdata */
-    cs_get_uservalue(C, -1, 1); /* get array of libraries */
-    cs_get_uservalue(C, -2, 2); /* get query table */
-    cs_push_lightuserdata(C, plib);
-    cs_push(C, -1);
-    cs_set_index(C, -4, cs_len(C, -4)); /* arr[len(arr)] = plib */
+static void add_libhandle_to_clibs(cs_State *C, const char *path, void *plib) {
+    cs_push_registrytable(C);
+    cs_get_fieldstr(C, -1, CLIBS); /* get clibs userdata */
+    cs_get_uservalue(C, -1, 1); /* get array uservalue */
+    cs_get_index(C, -1, 0); /* get array[0] (query table) */
+    cs_push_lightuserdata(C, plib); /* push lib handle */
+    cs_push(C, -1); /* copy of lib handle */
+    cs_set_index(C, -4, cs_len(C, -3)); /* arr[len(arr)] = plib */
     cs_set_fieldstr(C, -2, path); /* qtable[path] = plib */
-    cs_pop(C, 3); /* pop array, qtable and CLIBS userdata */
+    cs_pop(C, 4); /* remove registry table, clibs, array and query table */
 }
 
 
-/* error codes for 'lookforfunc' */
+/* error codes for 'look_for_func' */
 #define ERRLIB		1 /* unable to load library */
 #define ERRFUNC		2 /* unable to find function */
 
@@ -258,16 +259,16 @@ static void addtoclibs(cs_State *C, const char *path, void *plib) {
 ** Return 0 and 'true' or a function in the stack; in case of
 ** errors, return an error code and an error message in the stack.
 */
-static int lookforfunc(cs_State *C, const char *path, const char *sym) {
-    void *reg = checkclib(C, path); /* check loaded C libraries */
+static int look_for_func(cs_State *C, const char *path, const char *sym) {
+    void *reg = check_clib(C, path); /* check loaded C libraries */
     if (reg == NULL) { /* must load library? */
         reg = csys_load(C, path, *sym == '*'); /* global symbols if 'sym'=='*' */
         if (reg == NULL) return ERRLIB; /* unable to load library */
-        addtoclibs(C, path, reg);
+        add_libhandle_to_clibs(C, path, reg);
     }
-    if (*sym == '*') { /* loading only library (no function)? */
+    if (*sym == '*') /* loading only library (no function)? */
         cs_push_bool(C, 1); /* return 'true' */
-    } else {
+    else {
         cs_CFunction f = csys_symbolf(C, reg, sym);
         if (f == NULL) return ERRFUNC; /* unable to find function */
         cs_push_cfunction(C, f); /* else create new function */
@@ -279,7 +280,7 @@ static int lookforfunc(cs_State *C, const char *path, const char *sym) {
 static int l_loadlib(cs_State *C) {
     const char *path = csL_check_string(C, 0);
     const char *init = csL_check_string(C, 1);
-    int res = lookforfunc(C, path, init);
+    int res = look_for_func(C, path, init);
     if (c_likely(res == 0)) /* no errors? */
         return 1; /* return the loaded function */
     else { /* error; error message is on top of the stack */
@@ -299,9 +300,9 @@ static int l_loadlib(cs_State *C) {
 static const char *getnextfilename (char **path, char *end) {
     char *sep;
     char *name = *path;
-    if (name == end) {
+    if (name == end)
         return NULL; /* no more names */
-    } else if (*name == '\0') { /* from previous iteration? */
+    else if (*name == '\0') { /* from previous iteration? */
         *name = *CS_PATH_SEP; /* restore separator */
         name++;  /* skip it */
     }
@@ -318,7 +319,7 @@ static int readable (const char *filename) {
     FILE *f = fopen(filename, "r"); /* try to open file */
     if (f == NULL) return 0; /* open failed */
     fclose(f);
-    return 1;
+    return 1; /* ok (can be read) */
 }
 
 
@@ -328,7 +329,7 @@ static int readable (const char *filename) {
 ** no file 'blabla.so'
 **	no file 'blublu.so'
 */
-static void pusherrornotfound (cs_State *C, const char *path) {
+static void push_notfound_error(cs_State *C, const char *path) {
     csL_Buffer b;
     csL_buff_init(C, &b);
     csL_buff_push_string(&b, "no file \"");
@@ -338,7 +339,7 @@ static void pusherrornotfound (cs_State *C, const char *path) {
 }
 
 
-static const char *searchpath(cs_State *C, const char *name, const char *path,
+static const char *search_path(cs_State *C, const char *name, const char *path,
                               const char *sep, const char *dirsep) {
     csL_Buffer buff;
     char *pathname; /* path with name inserted */
@@ -358,16 +359,16 @@ static const char *searchpath(cs_State *C, const char *name, const char *path,
             return cs_push_string(C, filename); /* save and return name */
     }
     csL_buff_end(&buff); /* push path to create error message */
-    pusherrornotfound(C, cs_to_string(C, -1)); /* create error message */
+    push_notfound_error(C, cs_to_string(C, -1)); /* create error message */
     return NULL; /* not found */
 }
 
 
 static int l_searchpath(cs_State *C) {
-    const char *fname = searchpath(C, csL_check_string(C, 1),
-                                      csL_check_string(C, 2),
-                                      csL_opt_string(C, 3, "."),
-                                      csL_opt_string(C, 4, CS_DIRSEP));
+    const char *fname = search_path(C, csL_check_string(C, 1),
+                                       csL_check_string(C, 2),
+                                       csL_opt_string(C, 3, "."),
+                                       csL_opt_string(C, 4, CS_DIRSEP));
     if (fname != NULL) {
         return 1;
     } else { /* error message is on top of the stack */
@@ -378,18 +379,19 @@ static int l_searchpath(cs_State *C) {
 }
 
 
-static const char *findfile(cs_State *C, const char *name, const char *pname,
+static const char *find_file(cs_State *C, const char *name, const char *pname,
                             const char *dirsep) {
     const char *path;
-    cs_get_fieldstr(C, cs_upvalueindex(0), pname);
+    cs_get_fieldstr(C, cs_upvalueindex(1), pname); /* get 'package[pname]' */
     path = cs_to_string(C, -1);
-    if (c_unlikely(path == NULL))
+    if (c_unlikely(path == NULL)) /* path template is not a string? */
         csL_error(C, "'package.%s' must be a string", pname);
-    return searchpath(C, name, path, ".", dirsep);
+    /* otherwise, search for the path in the 'path' template */
+    return search_path(C, name, path, ".", dirsep);
 }
 
 
-static int checkload(cs_State *C, int res, const char *filename) {
+static int check_load(cs_State *C, int res, const char *filename) {
     if (c_likely(res)) { /* module loaded successfully? */
         cs_push_string(C, filename); /* will be 2nd argument to module */
         return 2; /* return open function and file name */
@@ -401,16 +403,16 @@ static int checkload(cs_State *C, int res, const char *filename) {
 
 static int searcher_CScript(cs_State *C) {
     const char *filename;
-    const char *name = csL_check_string(C, 1);
-    filename = findfile(C, name, "path", CS_DIRSEP);
+    const char *name = csL_check_string(C, 0);
+    filename = find_file(C, name, "path", CS_DIRSEP);
     if (filename == NULL) return 1; /* module not found in this path */
-    return checkload(C, (csL_loadfile(C, filename) == CS_OK), filename);
+    return check_load(C, (csL_loadfile(C, filename) == CS_OK), filename);
 }
 
 
 static const cs_Entry package_funcs[] = {
     {"loadlib", l_loadlib},
-    {"searchpath", l_searchpath},
+    {"search_path", l_searchpath},
     /* placeholders */
     {"preload", NULL},
     {"cpath", NULL},
@@ -421,18 +423,16 @@ static const cs_Entry package_funcs[] = {
 };
 
 
-static void findloader(cs_State *C, const char *name) {
+static void find_loader(cs_State *C, const char *name) {
     int i;
     csL_Buffer msg; /* to build error message */
     /* push 'package.searchers' array to index 2 in the stack */
-    if (c_unlikely(cs_get_fieldstr(C, cs_upvalueindex(0), "searchers")
-                != CS_TARRAY))
+    if (c_unlikely(cs_get_fieldstr(C, cs_upvalueindex(1), "searchers") != CS_TARRAY))
         csL_error(C, "'package.searchers' must be array value");
     csL_buff_init(C, &msg);
-    /* iterate over available searchers to find a loader */
-    for (i = 1; ; i++) {
+    for (i = 0; ; i++) { /* iter over available searchers to find a loader */
         csL_buff_push_string(&msg, "\n\t"); /* error-message prefix */
-        if (c_unlikely(cs_get_index(C, 2, i) == CS_TNIL)) { /* no more searchers? */
+        if (c_unlikely(cs_get_index(C, 2, i) == CS_TNIL)) { /* no more? */
             cs_pop(C, 1); /* remove nil */
             csL_buffsub(&msg, 2); /* remove prefix */
             csL_buff_end(&msg); /* create error message */
@@ -456,13 +456,15 @@ static void findloader(cs_State *C, const char *name) {
 static int l_import(cs_State *C) {
     const char *name = csL_check_string(C, 0);
     cs_settop(C, 1); /* __LOADED table will be at index 1 */
-    cs_get_global(C, CS_LOADED_TABLE);
-    cs_get_fieldstr(C, 1, name); /* __LOADED[name] */
+    cs_push_registrytable(C); /* get registry table */
+    cs_get_fieldstr(C, -1, CS_LOADED_TABLE); /* get __LOADED table */
+    cs_remove(C, -2); /* remove registry table */
+    cs_get_fieldstr(C, 1, name); /* get __LOADED[name] */
     if (cs_to_bool(C, -1)) /* is it there? */
         return 1; /* package is already loaded */
     /* else must load package */
-    cs_pop(C, 1); /* remove 'get_fieldstr' result */
-    findloader(C, name);
+    cs_pop(C, 1); /* remove result */
+    find_loader(C, name);
     cs_rotate(C, -2, 1); /* loader function <-> loader data */
     cs_push(C, 0); /* name is 1st argument to module loader */
     cs_push(C, -3); /* loader data is 2nd argument */
@@ -470,16 +472,16 @@ static int l_import(cs_State *C) {
     cs_call(C, 2, 1); /* run loader to load module */
     /* stack: ...; loader data; result from loader */
     if (!cs_is_nil(C, -1)) /* non-nil return? */
-        cs_set_fieldstr(C, 1, name); /* __LOADED[name] = returned value */
+        cs_set_fieldstr(C, 1, name); /* __LOADED[name] = result from loader */
     else
-        cs_pop(C, 1); /* pop nil */
+        cs_pop(C, 1); /* remove nil */
     if (cs_get_fieldstr(C, 1, name) == CS_TNIL) { /* module set no value? */
         cs_push_bool(C, 1); /* use true as result */
         cs_copy(C, -1, -2); /* replace loader result */
         cs_set_fieldstr(C, 1, name); /* __LOADED[name] = true */
     }
     cs_rotate(C, -2, 1); /* loader data <-> module result  */
-    return 2; /* return module result and loader data */
+    return 2; /* return module result and loader data (in that order) */
 }
 
 
@@ -490,49 +492,47 @@ static const cs_Entry load_funcs[] = {
 
 
 /*
-** __gc metamethod for CLIBS table: calls 'csys_unloadlib' for all lib
-** handles in list CLIBS.
+** Finalizer for clibs: calls 'csys_unloadlib' for all lib
+** handles in clibs array upvalue in reverse order.
 */
 static int gcmm(cs_State *C) {
-    cs_Integer n;
-    cs_get_uservalue(C, -1, 1); /* get lib handles array (uservalue of CLIBS) */
-    n = cs_len(C, -1); /* get the number of lib handles */
-    while (--n >= 0) { /* for each handle, in reverse order */
-        cs_get_index(C, -1, n); /* get handle */
+    cs_Integer i;
+    cs_get_uservalue(C, -1, 1); /* get array upvalue */
+    /* get initial lib handle index (reverse) */
+    i = cs_get_nnilindex_rev(C, -1, 1, cs_len(C, -1) - 1);
+    while (i > 0) { /* for each handle (in reverse order) */
+        cs_get_index(C, -1, i); /* get handle */
         if (c_unlikely(csys_unloadlib(C, cs_to_userdata(C, -1)) != 0))
             cs_error(C); /* unloading failed; error string is on top */
         cs_pop(C, 1); /* pop handle */
+        i = cs_get_nnilindex_rev(C, -1, 1, i);
     }
-    cs_pop(C, 1); /* pop lib handles array */
     return 0;
 }
 
 
 /*
-** CLIBS is full userdata with two upvalues, first one is
-** the array of library handles, second one is query table.
-** This full userdata when created is set as global name '__CLIBS'.
+** clibs is full userdata with one upvalue.
+** The upvalues is an array holding table at index 0 used for
+** querying loaded libraries, while the rest of indices hold
+** loaded C libraries. When created, it is set under key "__CLIBS"
+** in the registry table.
 */
-static void createclibs(cs_State *C) {
-    /* global table is on stack top */
+static void create_clibs_userdata(cs_State *C) {
+    /* registry table is on stack top */
     if (cs_get_fieldstr(C, -1, CLIBS) != CS_TUSERDATA) {
         cs_pop(C, 1); /* remove value */
-        /* create CLIBS full userdata */
-        cs_newuserdata(C, 0, 2);
-        /* set array uservalue for storing lib handles */
-        cs_push_array(C, 0); 
-        cs_set_uservalue(C, -2, 1);
-        /* set query table uservalue */
-        cs_push_table(C, 0);
-        cs_set_uservalue(C, -2, 2);
-        /* set full userdata as global name */
-        cs_push(C, -1); /* copy of CLIBS */
-        cs_set_fieldstr(C, -3, CLIBS); /* __G[CLIBS] = fulluserdata */
+        cs_push_userdata(C, 0, 1); /* create clibs userdata with one upvalue */
+        cs_push_array(C, 1); /* create the upvalue */
+        cs_push_table(C, 0); /* create query table */
+        cs_set_index(C, -2, 0); /* set query table into the array */
+        cs_set_uservalue(C, -2, 1); /* set array as first upvalue of clibs */
+        cs_push(C, -1); /* copy of clibs */
+        cs_set_fieldstr(C, -3, CLIBS); /* regtable[CLIBS] = userdata */
     }
-    /* set finalizer */
-    cs_push_cfunction(C, gcmm);
-    cs_set_usermm(C, -2, CS_MM_GC); /* set finalizer for CLIBS */
-    cs_pop(C, 1); /* pop userdata (CLIBS) */
+    cs_push_cfunction(C, gcmm); /* push finalizer */
+    cs_set_usermm(C, -2, CS_MM_GC); /* set clibs finalizer */
+    cs_pop(C, 1); /* pop clibs */
 }
 
 
@@ -543,7 +543,7 @@ static void createclibs(cs_State *C) {
 ** name "csopen_X" and look for it.
 ** If there is no ignore mark, look for a function named "csopen_modname".
 */
-static int loadfunc(cs_State *C, const char *filename, const char *modname) {
+static int load_func(cs_State *C, const char *filename, const char *modname) {
     const char *openfunc;
     const char *mark;
     modname = csL_gsub(C, modname, ".", CS_OFSEP);
@@ -553,15 +553,15 @@ static int loadfunc(cs_State *C, const char *filename, const char *modname) {
         openfunc = cs_push_fstring(C, CS_POF"%s", openfunc);
     } else /* no ignore mark (will try "csopen_modname") */
         openfunc = cs_push_fstring(C, CS_POF"%s", modname);
-    return lookforfunc(C, filename, openfunc);
+    return look_for_func(C, filename, openfunc);
 }
 
 
 static int searcher_C(cs_State *C) {
     const char *name = csL_check_string(C, 0);
-    const char *filename = findfile(C, name, "cpath", CS_DIRSEP);
+    const char *filename = find_file(C, name, "cpath", CS_DIRSEP);
     if (filename == NULL) return 1;  /* module not found in this path */
-    return checkload(C, (loadfunc(C, filename, name) == 0), filename);
+    return check_load(C, (load_func(C, filename, name) == 0), filename);
 }
 
 
@@ -572,12 +572,12 @@ static int searcher_Croot(cs_State *C) {
     int res;
     if (p == NULL) return 0; /* is root */
     cs_push_lstring(C, name, p - name);
-    filename = findfile(C, cs_to_string(C, -1), "cpath", CS_DIRSEP);
+    filename = find_file(C, cs_to_string(C, -1), "cpath", CS_DIRSEP);
     if (filename == NULL) return 1; /* root not found */
-    if ((res = loadfunc(C, filename, name)) != 0) { /* error? */
-        if (res != ERRFUNC) {
-            return checkload(C, 0, filename); /* real error */
-        } else { /* open function not found */
+    if ((res = load_func(C, filename, name)) != 0) { /* error? */
+        if (res != ERRFUNC)
+            return check_load(C, 0, filename); /* real error */
+        else { /* open function not found */
             cs_push_fstring(C, "no module '%s' in file '%s'", name, filename);
             return 1;
         }
@@ -587,7 +587,7 @@ static int searcher_Croot(cs_State *C) {
 }
 
 
-static void createsearchersarray(cs_State *C) {
+static void create_searchers_array(cs_State *C) {
     static const cs_CFunction searchers[] = {
         searcher_preload,
         searcher_CScript,
@@ -666,32 +666,23 @@ static void setpath(cs_State *C, const char *fieldname, const char *envname,
 
 
 CSMOD_API int csopen_package(cs_State *C) {
-    cs_push_globaltable(C);
-    /* create '__CLIBS' global */
-    createclibs(C);
-    /* create 'package' table global */
-    csL_newlib(C, package_funcs);
-    /* set 'package.searchers' */
-    createsearchersarray(C);
-    /* set 'package.path' */
-    setpath(C, "path", CS_PATH_VAR, CS_PATH_DEFAULT);
-    /* set 'package.cpath' */
-    setpath(C, "cpath", CS_CPATH_VAR, CS_CPATH_DEFAULT);
+    cs_push_registrytable(C); /* get registry table */
+    create_clibs_userdata(C); /* create clibs userdata */
+    csL_newlib(C, package_funcs); /* create 'package' table */
+    create_searchers_array(C); /* set 'package.searchers' */
+    setpath(C, "path", CS_PATH_VAR, CS_PATH_DEFAULT); /* 'package.path' */
+    setpath(C, "cpath", CS_CPATH_VAR, CS_CPATH_DEFAULT); /* 'package.cpath' */
     /* set 'package.config' */
     cs_push_literal(C, CS_DIRSEP "\n" CS_PATH_SEP "\n" CS_PATH_MARK "\n"
                        CS_EXEC_DIR "\n" CS_IGMARK "\n");
     cs_set_fieldstr(C, -2, "config");
-    /* 'package.loaded' = '__LOADED' */
-    csL_get_subtable(C, -2, CS_LOADED_TABLE);
-    cs_set_fieldstr(C, -2, "loaded");
-    /* 'package.preload' = '__PRELOAD' */
-    csL_get_subtable(C, -2, CS_PRELOAD_TABLE);
-    cs_set_fieldstr(C, -2, "preload");
-    /* open library into global table */
-    cs_push(C, -2); /* push global table */
+    csL_get_subtable(C, -2, CS_LOADED_TABLE); /* regtable[__LOADED] = table */
+    cs_set_fieldstr(C, -2, "loaded"); /* 'package.loaded' = __LOADED */
+    csL_get_subtable(C, -2, CS_PRELOAD_TABLE); /* regtable[__PRELOAD] = table */
+    cs_set_fieldstr(C, -2, "preload"); /* 'package.preload' = __PRELOAD */
+    cs_push_globaltable(C); /* open library into global table */
     cs_push(C, -2); /* set 'package' as upvalue for next lib */
     csL_setfuncs(C, load_funcs, 1);
-    cs_pop(C, 1);  /* pop global table */
-    cs_push_bool(C, 1);
-    return 1;  /* return 'package' table */
+    cs_pop(C, 1); /* pop global table */
+    return 1; /* return 'package' table */
 }

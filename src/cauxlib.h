@@ -20,11 +20,11 @@
 #define CS_ERRFILE      (CS_ERRERROR + 1)
 
 
-/* key, in the global table, for table of loaded modules */
+/* key, in the registry table, for table of loaded modules */
 #define CS_LOADED_TABLE     "__LOADED"
 
 
-/* key, in the global table, for table of preloaded loaders */
+/* key, in the registry table, for table of preloaded loaders */
 #define CS_PRELOAD_TABLE    "__PRELOAD"
 
 
@@ -49,7 +49,7 @@ CSLIB_API void          csL_check_type(cs_State *C, int index, int t);
 CSLIB_API void          csL_check_any(cs_State *C, int index);
 CSLIB_API void          csL_check_stack(cs_State *C, int sz, const char *msg);
 CSLIB_API void         *csL_check_userdata(cs_State *C, int index,
-                                           const char *tname);
+                                           const char *name);
 CSLIB_API int           csL_check_option(cs_State *C, int index,
                                          const char *dfl,
                                          const char *const opts[]);
@@ -74,6 +74,8 @@ CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
 ** Miscellaneous functions
 ** ------------------------------------------------------------------------ */
 CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *len);
+CSLIB_API void       *csL_to_fulluserdata(cs_State *C, int index);
+CSLIB_API void       *csL_to_lightuserdata(cs_State *C, int index);
 CSLIB_API void        csL_where(cs_State *C, int level);
 CSLIB_API int         csL_fileresult(cs_State *C, int ok, const char *fname);
 CSLIB_API int         csL_get_property(cs_State *C, int index);
@@ -84,13 +86,15 @@ CSLIB_API int         csL_get_subtable(cs_State *C, int index,
 CSLIB_API void        csL_importf(cs_State *C, const char *modname,
                                   cs_CFunction openf, int global);
 CSLIB_API void       *csL_test_userdata(cs_State *C, int index,
-                                        const char *name);
+                                        const char *vmtname);
 CSLIB_API void        csL_traceback(cs_State *C, cs_State *C1, int level,
                                     const char *msg);
 CSLIB_API void        csL_setfuncs(cs_State *C, const cs_Entry *l, int nup);
 CSLIB_API void        csL_checkversion_(cs_State *C, cs_Number ver);
 CSLIB_API const char *csL_gsub(cs_State *C, const char *s, const char *p,
                                const char *r);
+CSLIB_API int         csL_vmt_isequal(cs_State *C, int index,
+                                      const cs_VMT *vmt);
 
 /* ------------------------------------------------------------------------ 
 ** Reference system
@@ -128,8 +132,18 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
 #define csL_newlib(C,l) \
         (csL_checkversion(C), csL_newlibtable(C,l), csL_setfuncs(C,l,0))
 
+#define csL_get_registrytable(C, name) \
+    { cs_push_registrytable(C); \
+      cs_get_fieldstr(C, -1, name); \
+      cs_remove(C, -2); }
+
 #define csL_get_gsubtable(C, name) \
     { cs_push_globaltable(C); \
+      csL_get_subtable(C, -1, name); \
+      cs_remove(C, -2); }
+
+#define csL_get_rsubtable(C, name) \
+    { cs_push_registrytable(C); \
       csL_get_subtable(C, -1, name); \
       cs_remove(C, -2); }
 

@@ -120,10 +120,10 @@
         converted to a <em>float</em>.
         Additionally before the operation if the both numbers are of type
         <em>float</em> but both have <em>integer</em> representation, then
-        they would be converted to <em>integers</em> before the operation
-        (this would result in a slower operation on processors that support
-        float division but this behaviour can also be configured in CScript
-        internals quite easily, check <code>cvm.c</code>).
+        they would be converted to <em>integers</em> before the operation.
+        However operations such as division and exponentiation always convert
+        their operands to <em>float</em> subtype (the exception being the
+        integer division '<code>//</code>').
         <br/><br/>
         <!-- string -->
         The type <em>string</em> represents immutable sequence of bytes.
@@ -358,7 +358,12 @@
             </li>
             <li>
                 <b><code>__div</code>: </b>
-                the division (<code>/</code>) operation.
+                the float division (<code>/</code>) operation.
+                Behavior similar to the addition operation.
+            </li>
+            <li>
+                <b><code>__idiv</code>: </b>
+                the integer division (<code>/</code>) operation.
                 Behavior similar to the addition operation.
             </li>
             <li>
@@ -712,7 +717,7 @@
         The following strings denote other tokens:
 
         <pre>
-    +     -     *     /     %     ^     !
+    +     -     *     /     //    %     ^     !
     &amp;     ~     |     &lt;&lt;    &gt;&gt;    **
     ==    !=    &lt;=    &gt;=    &lt;     &gt;     =
     (     )     {     }     [     ]
@@ -781,9 +786,12 @@
         CScript also accepts hexadecimal constants, which start with
         <code>0x</code> or <code>0X</code>, and octal constants, which
         start with <code>0</code>.
+        A <em>constant</em> <code>inf</code> or <code>infinity</code>
+        represent positive infinity (putting '<code>-</code>' in front denotes
+        negative infinity).
         Additionally all <em>numeric constants</em> can have '<code>_</code>'
-        in between digits, this acts as a separator, however this separator
-        is not allowed in fractional part.
+        in between digits, this acts as a separator, however this separator is
+        not allowed in fractional part.
         Hexadecimal constants also accept an optional fractional part
         plus an optional binary exponent, marked by a letter
         '<code>p</code>' or '<code>P</code>' and written in decimal.
@@ -813,7 +821,8 @@
 
         <pre>
     3.0      3.1416      .153      14.16e-2      0.31416E1      34e1
-    0x.1Ep0  0xA23p-4    0X1.921FB54442D18P+1</pre>
+    0x.1Ep0  0xA23p-4    0X1.921FB54442D18P+1
+    inf      infinity</pre>
 
         A <em>short comment</em> starts with a double forward slash
         (<code>//</code>) or a pound sign (<code>#</code>) and runs until
@@ -1191,6 +1200,7 @@
             <li><b><code>-</code>: </b>subtraction</li>
             <li><b><code>*</code>: </b>multiplication</li>
             <li><b><code>/</code>: </b>float division</li>
+            <li><b><code>//</code>: </b>integer division</li>
             <li><b><code>%</code>: </b>modulo</li>
             <li><b><code>**</code>: </b>exponentiation</li>
             <li><b><code>-</code>: </b>unary minus</li>
@@ -1299,8 +1309,8 @@
         differences may be classified as equal or not
         (depending on internal caching details).
         <br/><br/>
-        You can change the way that CScript compares instances and userdata
-        by using the <code>__eq</code> metamethod
+        You can change the way that CScript compares instances and
+        full&nbsp;userdata by using the <code>__eq</code> metamethod
         (see <a href="#2.4">&sect;2.4</a>).
         <br/><br/>
         The operator <code>!=</code> is exactly the negation of equality
@@ -1381,7 +1391,7 @@
     &lt;&lt;   &gt;&gt;
     ..
     +    -
-    *    /    %
+    *    /    //    %
     unary operators (-    ~    !)
     **</pre>
 
@@ -2116,7 +2126,7 @@
         These pseudo-indices are produced by the macro
         <a href="#cs_upvalueindex"><code>cs_upvalueindex</code></a>.
         The first upvalue associated with a function is at index
-        <code>cs_upvalueindex(0)</code>, and so on.
+        <code>cs_upvalueindex(1)</code>, and so on.
         Any access to <code>cs_upvalueindex(<em>n</em>)</code>,
         where <em>n</em> is greater than the number of upvalues of the
         current function, produces an acceptable but invalid index.
@@ -2133,14 +2143,12 @@
         store.
         The registry array is always accessible at pseudo-index
         <a name="CS_REGISTRYINDEX"><code>CS_REGISTRYINDEX</code></a>.
-        Any C&nbsp;library can store data into this array, but it must take
-        care to choose indices that are different from those used by other
-        libraries, to avoid collisions.
-        Typically, you would use
-        <a href="#cs_get_nilindex"><code>cs_get_nilindex</code></a> in order
-        to obtain free registry index.
-        As with variable names, string keys starting with an two consecutive
-        underscore followed by uppercase letters are reserved for CScript.
+        The indices in the <em>registry</em> are used by the reference
+        mechanism (see <a href="#csL_ref"><code>csL_ref</code></a>) and by
+        some predefined values.
+        Therefore, indices in the registry must not be used for other
+        purposes, meaning you should not manually set elements into the
+        <em>registry</em>, instead you would use the reference mechanism.
         <br/><br/>
         When you create a new CScript state, its registry comes with some
         predefined values.
@@ -2157,7 +2165,28 @@
                 <b><a name="CS_RINDEX_GLOBALS"><code>CS_RINDEX_GLOBALS</code></a>:</b>
                 At this index the registry has the global table.
             </li>
+            <li>
+                <b><a name="CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>:</b>
+                At this index the registry has the registry table.
+                This table is usually used to store C libraries and values
+                in order to protect that C code from CScript code.
+                This serves as a query table for C libraries from your own
+                C library, and therefore leaves the <em>registry</em> slots
+                free for the reference mechanism.
+                (Lua does the exact same thing, but since CScript distinguishes
+                tables from lists/arrays, as such the registry must be
+                complemented with its own registry table.)
+            </li>
         </ul>
+        The registry table is used for C&nbsp;libraries, and any C&nbsp;library
+        can store data into this table, but it must take care to chose keys
+        that are different from those used by other libraries, to avoid
+        collisions.
+        Typically, you should use as key a string containing your library name,
+        or a light userdata with the address of a C&nbsp;object in your code,
+        or any CScript object created by your code.
+        As with variable names, string keys starting with an two consecutive
+        underscore followed by uppercase letters are reserved for CScript.
         </p>
 
 
@@ -2211,24 +2240,31 @@
         Several functions that report errors in the API use the following
         status codes to indicate different kinds of errors or other conditions:
         <ul>
-            <li><b><a name="CS_OK"><code>CS_OK</code></a> (0):</b>
+            <li>
+                <b><a name="CS_OK"><code>CS_OK</code></a> (0):</b>
                 no errors.
             </li>
-            <li><b><a name="CS_ERRRUN"><code>CS_ERRRUNTIME</code></a>:</b>
+            <li>
+                <b><a name="CS_ERRRUN"><code>CS_ERRRUNTIME</code></a>:</b>
                 a runtime error.
             </li>
-            <li><b><a name="CS_ERRMEM"><code>CS_ERRMEM</code></a>: </b>
+            <li>
+                <b><a name="CS_ERRMEM"><code>CS_ERRMEM</code></a>: </b>
                 memory allocation error.
                 For such errors, CScript does not call the message handler.
             </li>
-            <li><b><a name="CS_ERRERR"><code>CS_ERRERROR</code></a>: </b>
+            <li>
+                <b><a name="CS_ERRERR"><code>CS_ERRERROR</code></a>: </b>
                 error while running the message handler.
             </li>
-            <li><b><a name="CS_ERRSYNTAX"><code>CS_ERRSYNTAX</code></a>:</b>
+            <li>
+                <b><a name="CS_ERRSYNTAX"><code>CS_ERRSYNTAX</code></a>:</b>
                 syntax error during precompilation.</li>
-            <li><b><a name="CS_ERRFILE"><code>CS_ERRFILE</code></a>:</b>
+            <li>
+                <b><a name="CS_ERRFILE"><code>CS_ERRFILE</code></a>:</b>
                 a file-related error;
-                e.g., it cannot open or read the file.</li>
+                e.g., it cannot open or read the file.
+            </li>
         </ul><p>
         These constants are defined in the header file <code>cscript.h</code>.
         </p>
@@ -2658,6 +2694,7 @@
         CS_MM_SUB,
         CS_MM_MUL,
         CS_MM_DIV,
+        CS_MM_IDIV,
         CS_MM_MOD,
         CS_MM_POW,
         CS_MM_BSHL,
@@ -3079,6 +3116,10 @@
                 performs float division (<code>/</code>)
             </li>
             <li>
+                <b><a name="CS_OPIDIV"><code>CS_OPIDIV</code></a>: </b>
+                performs integer division (<code>//</code>)
+            </li>
+            <li>
                 <b><a name="CS_OPMOD"><code>CS_OPMOD</code></a>: </b>
                 performs modulo (<code>%</code>)
             </li>
@@ -3332,6 +3373,21 @@
         C&nbsp;address.
         </p>
 
+        <!-- cs_push_vmt -->
+        <hr><h3><a name="cs_push_vmt"><code>cs_push_vmt</code></a></h3>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void cs_push_vmt (cs_State *C, cs_VMT *vmt);</pre>
+        <p>
+        Pushes <a href="#cs_VMT">vmt</a> onto the stack.
+        <br/>
+        This macro is defined as follows:
+        <a href="#cs_push_lightuserdata"><code>cs_push_lightuserdata</code></a>
+        and is implemented as the following macro:
+
+<pre>
+#define cs_push_vmt(C, vmt)     cs_push_lightuserdata(C, (void*)vmt)</pre>
+        </p>
+
         <!-- cs_push_array -->
         <hr><h3><a name="cs_push_array"><code>cs_push_array</code></a></h3>
         <span class="apii">[-0, +1, <em>m</em>]</span>
@@ -3463,27 +3519,46 @@
         <!-- cs_get_nilindex -->
         <hr><h3><a name="cs_get_nilindex"><code>cs_get_nilindex</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_nilindex (cs_State *C, int index, int begin, int end);</pre>
+        <pre>int cs_get_nilindex (cs_State *C, int index, uint begin, int end);</pre>
         <p>
-        Returns the first index with <b>nil</b> value inside the array at
+        Returns the first <b>nil</b> index  inside the array at
         the given index starting from <code>begin</code> index up to
         <code>end</code> index (inclusive).
-        If <code>begin</code> is greater than <code>end</code> or the
-        <code>end</code> is greater than the length of the array at the
-        given index, then the <code>end</code> will be set as the last
-        index of the array, and the whole array will be searched starting
-        from the <code>begin</code> index.
+        If <code>end</code> is greater or equal than the length of the array,
+        or is less than 0, it is clipped to the last index (array length - 1).
         If there is no such index this returns -1.
         </p>
 
         <!-- cs_get_nnilindex -->
         <hr><h3><a name="cs_get_nnilindex"><code>cs_get_nnilindex</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_nnilindex (cs_State *C, int index, int begin, int end);</pre>
+        <pre>int cs_get_nnilindex (cs_State *C, int index, uint begin, int end);</pre>
         <p>
         Similar to <a href="#cs_get_nnilindex"><code>cs_get_nnilindex</code></a>
-        except this returns the first Non-<b>nil</b> index (or -1 if there is
-        none).
+        except this returns the first Non-<b>nil</b> index.
+        </p>
+
+        <!-- cs_get_nilindex_rev -->
+        <hr><h3><a name="cs_get_nilindex_rev"><code>cs_get_nilindex_rev</code></a></h3>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>int cs_get_nilindex_rev (cs_State *C, int index, int begin, uint end);</pre>
+        <p>
+        Similar to
+        <a href="#cs_get_nilindex"><code>cs_get_nilindex</code></a>
+        except this performs the search in reverse.
+        Additionally if <code>begin</code> is greater or equal than the length
+        of the array, or is less than 0, it is clipped to the last index
+        (array length - 1).
+        </p>
+
+        <!-- cs_get_nnilindex_rev -->
+        <hr><h3><a name="cs_get_nnilindex_rev"><code>cs_get_nnilindex_rev</code></a></h3>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>int cs_get_nnilindex_rev (cs_State *C, int index, int begin, uint end);</pre>
+        <p>
+        Similar to
+        <a href="#cs_get_nilindex_rev"><code>cs_get_nilindex_rev</code></a>
+        except this returns the first Non-<b>nil</b> index.
         </p>
 
         <!-- cs_get_field -->
@@ -3587,10 +3662,10 @@
         stack.
         </p>
 
-        <!-- cs_newuserdata -->
-        <hr><h3><a name="cs_newuserdata"><code>cs_newuserdata</code></a></h3>
+        <!-- cs_push_userdata -->
+        <hr><h3><a name="cs_push_userdata"><code>cs_push_userdata</code></a></h3>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void *cs_newuserdata (cs_State *C, size_t size, int nuv);</pre>
+        <pre>void *cs_push_userdata (cs_State *C, size_t size, int nuv);</pre>
         <p>
         This function creates and pushes on the stack a new full userdata,
         with <code>nuv</code> associated CScript values, called
@@ -3619,6 +3694,20 @@
         <br/><br/>
         If the userdata does not have that value, pushes <b>nil</b> and
         returns <a href="CS_TNONE"><code>CS_TNONE</code></a>.
+        </p>
+
+        <!-- cs_get_uservmt -->
+        <hr><h3><a name="cs_get_uservmt"><code>cs_get_uservmt</code></a></h3>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>int cs_get_uservmt (cs_State *C, int index, cs_VMT *pvmt);</pre>
+        <p>
+        Gets the <a href="#cs_VMT">vmt</a> entries of the userdata at the
+        given index, and sets them into <code>pvmt</code>.
+        <br/><br/>
+        Returns the number of metamethods in the <a href="#cs_VMT">vmt</a>
+        or it returns -1 if the userdata has never been assigned
+        a <a href="#cs_VMT">vmt</a>
+        (see <a href="#cs_set_uservmt"><code>cs_set_uservmt</code></a>).
         </p>
 
         <!-- cs_set_global -->
@@ -3741,14 +3830,14 @@
         <!-- cs_set_uservmt -->
         <hr><h3><a name="cs_set_uservmt"><code>cs_set_uservmt</code></a></h3>
         <span class="apii">[-0, +0, <em>m</em>]</span>
-        <pre>void cs_set_uservmt (cs_State *C, int index, const cs_VMT *vmt);</pre>
+        <pre>void cs_set_uservmt (cs_State *C, int index, const cs_VMT *pvmt);</pre>
         <p>
         Sets the <a href="#cs_VMT">virtual method table</a> of the full
         userdata at the given index.
         <br/>
-        If <code>vmt</code> is NULL then the full userdata
+        If <code>pvmt</code> is NULL then the full userdata
         <a href="#cs_VMT">virtual method table</a>
-        entries will be all set to <b>nil</b>, otherwise <code>vmt</code> will
+        entries will be all set to <b>nil</b>, otherwise <code>pvmt</code> will
         now be the <a href="#cs_VMT">virtual method table</a> of the full
         userdata at the given index.
         </p>
@@ -4375,12 +4464,28 @@
         (CScript may optimize this case.)
         </p>
 
+        <!-- cs_push_mainthread -->
+        <hr><h3><a name="cs_push_mainthread"><code>cs_push_mainthread</code></a></h3>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void cs_push_mainthread (cs_State *C);</pre>
+        <p>
+        Pushes the main thread of the state onto the stack.
+        </p>
+
         <!-- cs_push_globaltable -->
         <hr><h3><a name="cs_push_globaltable"><code>cs_push_globaltable</code></a></h3>
         <span class="apii">[-0, +1, &ndash;]</span>
         <pre>void cs_push_globaltable (cs_State *C);</pre>
         <p>
         Pushes the global table onto the stack.
+        </p>
+
+        <!-- cs_push_registrytable -->
+        <hr><h3><a name="cs_push_registrytable"><code>cs_push_registrytable</code></a></h3>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void cs_push_registrytable (cs_State *C);</pre>
+        <p>
+        Pushes the registry table onto the stack.
         </p>
 
         <!-- cs_to_string -->
@@ -4711,11 +4816,14 @@
 
         <hr><h3><a name="csL_check_userdata"><code>csL_check_userdata</code></a></h3><p>
         <span class="apii">[-0, +0, <em>v</em>]</span>
-        <pre>void csL_check_userdata (cs_State *C, int arg, const char *tname);</pre>
+        <pre>void *csL_check_userdata (cs_State *C, int arg, const char *vmtname);</pre>
         <p>
-        Checks whether the function argument <code>arg</code> is a userdata
-        of the type <code>tname</code> and returns the userdata's memory-block
-        address (see <a href="#cs_to_userdata"><code>cs_to_userdata</code></a>).
+        Checks whether the function argument <code>arg</code> is a full userdata
+        and if it's <a href="#cs_VMT">vmt</a> is equal to the
+        <code>vmtname</code> in the registry table, if true, this returns
+        the pointer to the <em>fulluserdata</em>
+        (see <a href="#cs_to_userdata"><code>cs_to_userdata</code></a>),
+        otherwise it raises error.
         </p>
 
         <hr><h3><a name="csL_check_option"><code>csL_check_option</code></a></h3><p>
@@ -4842,6 +4950,22 @@
         <code>*len</code> with the string length.
         </p>
 
+        <hr><h3><a name="csL_to_fulluserdata"><code>csL_to_fulluserdata</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>void csL_to_fulluserdata (cs_State *C, int index);</pre>
+        <p>
+        Returns pointer to the <em>full userdata</em> at the given index.
+        If the value is not <em>full userdata</em> this returns NULL.
+        </p>
+
+        <hr><h3><a name="csL_to_lightuserdata"><code>csL_to_lightuserdata</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>void csL_to_lightuserdata (cs_State *C, int index);</pre>
+        <p>
+        Returns pointer to the <em>light userdata</em> at the given index.
+        If the value is not <em>light userdata</em> this returns NULL.
+        </p>
+
         <hr><h3><a name="csL_where"><code>csL_where</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
         <pre>void csL_where (cs_State *C, int level);</pre>
@@ -4918,16 +5042,16 @@
         creates a new table.
         </p>
 
-        <hr><h3><a name="csL_include"><code>csL_include</code></a></h3><p>
+        <hr><h3><a name="csL_importf"><code>csL_importf</code></a></h3><p>
         <span class="apii">[-0, +1, <em>e</em>]</span>
-        <pre>void csL_includef (cs_State *C, const char *modname,
-                   cs_CFunction openf, int global);</pre>
+        <pre>void csL_importf (cs_State *C, const char *modname,
+                  cs_CFunction openf, int global);</pre>
         <p>
         If <code>package.loaded[modname]</code> is not true,
         calls the function <code>openf</code> with the string
         <code>modname</code> as an argument and sets the call result to
         <code>package.loaded[modname]</code>, as if that function has been
-        called through <a href="#include"><code>include</code></a>.
+        called through <a href="#import"><code>import</code></a>.
         <br/><br/>
         If <code>global</code> is true, also stores the module into the
         global <code>modname</code>.
@@ -4936,11 +5060,11 @@
         </p>
 
         <hr><h3><a name="csL_test_userdata"><code>csL_test_userdata</code></a></h3><p>
-        <span class="apii">[-0, +0, <em>m</em>]</span>
-        <pre>void csL_test_userdata (cs_State *C, int index, const char *name);</pre>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>void *csL_test_userdata (cs_State *C, int index, const char *vmtname);</pre>
         <p>
         This function works like
-        <a href="#csL_check_userdata"><code>csL_checkuserdata</code></a>,
+        <a href="#csL_check_userdata"><code>csL_check_userdata</code></a>,
         except that, when the test fails, it returns <code>NULL</code>
         instead of raising an error.
         </p>
@@ -4985,6 +5109,21 @@
         Pushes the resulting string on the stack and returns it.
         Think of it as string substitution <code>s/{p}/{r}/g</code>, the input
         being the function argument <code>s</code>.
+        </p>
+
+        <hr><h3><a name="csL_vmt_isequal"><code>csL_vmt_isequal</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>void csL_vmt_isequal (cs_State *C, int index, const cs_VMT *vmt);</pre>
+        <p>
+        Checks whether the value at index is light userdata and compares the
+        <code>vmt</code> with the light userdata vmt.
+        If <code>index</code> is a light userdata then this function assumes
+        the data it points to is a valid
+        <a href="#cs_VMT"><code>cs_VMT</code></a> structure.
+        <br/>
+        This returns 1 if vmt's are equal
+        (contain pointers to same <a href="#cs_CFunction">functions</a>),
+        otherwise 0.
         </p>
 
         <hr><h3><a name="csL_ref"><code>csL_ref</code></a></h3><p>
@@ -5137,6 +5276,26 @@
         <pre>
     (csL_newlibtable(C,l), csL_setfuncs(C,l,0))</pre>
         The array <code>l</code> must be the actual array, not a pointer to it.
+        </p>
+
+        <hr><h3><a name="csL_get_registrytable"><code>csL_get_registrytable</code></a></h3><p>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void csL_get_registrytable (cs_State *C, const char *name);</pre>
+        <p>
+        Equivalent to <code>t[name]</code> where <code>t</code> is the
+        registry table located in the registry under index
+        <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
+        (see <a href="#4.3">&sect;4.3</a>).
+        </p>
+
+        <hr><h3><a name="csL_get_rsubtable"><code>csL_get_rsubtable</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_get_rsubtable (cs_State *C, const char *name);</pre>
+        <p>
+        Equivalent to
+        <a href="#csL_get_subtable"><code>csL_get_subtable</code></a>, except
+        here the object being indexed is the registry table which is pushed
+        on top of the stack, and later removed after the operation.
         </p>
 
         <hr><h3><a name="csL_get_gsubtable"><code>csL_get_gsubtable</code></a></h3><p>
@@ -5364,7 +5523,7 @@
         call the <a href="#csL_openlibs"><code>csL_openlibs</code></a>
         function, which opens all standard libraries.
         Alternatively, the host program can open them individually by using
-        <a href="#csL_include"><code>csL_include</code></a> to call
+        <a href="#csL_importf"><code>csL_importf</code></a> to call
         <a name="csopen_base"><code>csopen_base</code></a> (for the basic library),
         <a name="csopen_package"><code>csopen_package</code></a> (for the package library),
         <a name="csopen_string"><code>csopen_string</code></a> (for the string library),
@@ -5856,12 +6015,9 @@
         This variable is only a reference to the real table;
         assignments to this variable do not change the
         table used by <a href="#import"><code>import</code></a>.
-        The real table is in the global table
-        (see <a href="#2.2">&sect;2.2</a>) under the key
-        <code>CS_LOADED_TABLE</code>, which is equal to string
-        <code>"__LOADED"</code>.
-        (So to access it, do <code>__G[__LOADED]</code> or simply
-        <code>__LOADED</code>.)
+        The real table is in the registry table
+        (see <a href="#4.3">&sect;4.3</a>) under the key
+        <a name="CS_LOADED_TABLE"><code>CS_LOADED_TABLE</code></a>.
         </p>
 
         <hr><h3><a name="package.loadlib"><code>package.loadlib (libname, funcname)</code></a></h3>
@@ -5924,12 +6080,9 @@
         This variable is only a reference to the real table;
         assignments to this variable do not change the table used by
         <a href="#import"><code>import</code></a>.
-        The real table is stored in the global table
-        (see <a href="#2.2">&sect;2.2</a>), under the key
-        <a name="CS_PRELOAD_TABLE"><code>CS_PRELOAD_TABLE</code></a>,
-        which is equal to a string <code>"__PRELOAD"</code>.
-        (So to access it, do <code>__G[__PRELOAD]</code> or simply
-        <code>__PRELOAD</code>.)
+        The real table is stored in the registry table
+        (see <a href="#4.3">&sect;4.3</a>), under the key
+        <a name="CS_PRELOAD_TABLE"><code>CS_PRELOAD_TABLE</code></a>.
         </p>
 
         <hr><h3><a name="package.searchers"><code>package.searchers</code></a></h3>
@@ -6047,7 +6200,7 @@
         Indices are allowed to be negative and are interpreted as indexing
         backwards, from the end of the string.
         Thus, the last character is at position -1, and so on.
-        <br/>
+        <br/><br/>
         The string library assumes one-byte character encodings.
         </p>
 

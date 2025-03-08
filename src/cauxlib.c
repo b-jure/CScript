@@ -34,22 +34,22 @@ CSLIB_API int csL_error(cs_State *C, const char *fmt, ...) {
 ** Find field in table at index -1. If field value is found
 ** meaning the object at `index` is equal to the field value, then
 ** this function returns 1. Only string keys are considered and
-** limit is the limit of recursive calls in case hashtable field
-** contains another hashtable value.
+** limit is the limit of recursive calls in case table field
+** contains another table value.
 */
 static int findfield(cs_State *C, int index, int limit) {
-    if (limit == 0 || !cs_is_hashtable(C, -1))
+    if (limit == 0 || !cs_is_table(C, -1))
         return 0; /* not found */
     cs_push_nil(C); /* start `next` loop (from beginning) */
-    while (cs_next(C, -2)) { /* for each pair in the hashtable */
+    while (cs_next(C, -2)) { /* for each pair in the table */
         if (cs_type(C, -2) == CS_TSTRING) { /* ignore non-string keys */
             if (cs_rawequal(C, index, -1)) { /* found object (function)? */
                 cs_pop(C, 1); /* remove value (but keep name) */
                 return 1;
             } else if (findfield(C, index, limit - 1)) { /* try recursively */
-                /* stack: lib_name, lib_hashtable, field_name (top) */
+                /* stack: lib_name, lib_table, field_name (top) */
                 cs_push_literal(C, "."); /* place '.' between the two names */
-                cs_replace(C, -3); /* (in the slot occupied by hashtable) */
+                cs_replace(C, -3); /* (in the slot occupied by table) */
                 cs_concat(C, 3); /* lib_name.field_name */
                 return 1;
             }
@@ -65,11 +65,11 @@ static int findfield(cs_State *C, int index, int limit) {
 ** If function is global function, then the its name is pushed
 ** on the top of the stack.
 */
-static int pushglobalfuncname(cs_State *C, cs_Debug *di) {
+static int push_glbfunc_name(cs_State *C, cs_Debug *di) {
     int top = cs_gettop(C); /* index of value on top of the stack */
     int func = top + 1;
     cs_getinfo(C, "f", di); /* push function (top + 1) */
-    cs_get_global(C, CS_LOADED_TABLE);
+    csL_get_registrytable(C, CS_LOADED_TABLE);
     csL_check_stack(C, 6, "not enough stack space"); /* for `findfield` */
     if (findfield(C, func, 2)) { /* found? */
         const char *name = cs_to_string(C, -1);
@@ -98,7 +98,7 @@ CSLIB_API int csL_error_arg(cs_State *C, int arg, const char *extra) {
             csL_error(C, "calling '%s' on a bad 'self' (%s)", di.name, extra);
     }
     if (di.name == NULL)
-        di.name = (pushglobalfuncname(C, &di)) ? cs_to_string(C, -1) : "?";
+        di.name = (push_glbfunc_name(C, &di)) ? cs_to_string(C, -1) : "?";
     return csL_error(C, "bad argument #%d to '%s' (%s)", arg, di.name, extra);
 }
 
@@ -341,6 +341,16 @@ CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
 }
 
 
+CSLIB_API void *csL_to_fulluserdata(cs_State *C, int index) {
+    return cs_is_fulluserdata(C, index) ? cs_to_userdata(C, index) : NULL;
+}
+
+
+CSLIB_API void *csL_to_lightuserdata(cs_State *C, int index) {
+    return cs_is_lightuserdata(C, index) ? cs_to_userdata(C, index) : NULL;
+}
+
+
 CSLIB_API void csL_where(cs_State *C, int level) {
     cs_Debug di;
     if (cs_getstack(C, level, &di)) {
@@ -478,7 +488,7 @@ CSLIB_API int csL_get_subtable(cs_State *C, int index, const char *field) {
 
 CSLIB_API void csL_importf(cs_State *C, const char *modname,
                            cs_CFunction openf, int global) {
-    csL_get_gsubtable(C, CS_LOADED_TABLE);
+    csL_get_rsubtable(C, CS_LOADED_TABLE);
     cs_get_fieldstr(C, -1, modname); /* get __LOADED[modname] */
     if (!cs_to_bool(C, -1)) { /* package not already loaded? */
         cs_pop(C, 1); /* remove field */
@@ -496,16 +506,18 @@ CSLIB_API void csL_importf(cs_State *C, const char *modname,
 }
 
 
-CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *name) {
-    void *p = cs_to_userdata(C, index);
-    if (p != NULL) { /* `index` is userdata? */
-        cs_push(C, index);
-        cs_get_global(C, name);
-        if (!cs_rawequal(C, -2, -1)) /* not the same as global? */
-            p = NULL; /* value is a userdata but not a global `name` */
-        cs_pop(C, 2); /* remove both values */
-        return p;
-    }
+CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *vmtname) {
+    void *p = csL_to_fulluserdata(C, index);
+    if (p != NULL) { /* `index` is full userdata? */
+        cs_VMT vmt;
+        if (cs_get_uservmt(C, index, &vmt) >= 0) {
+            csL_get_registrytable(C, vmtname);
+            if (!csL_vmt_isequal(C, -1, &vmt))
+                p = NULL;
+            cs_pop(C, 1); /* remove vmt userdata value */
+            return p;
+        } /* else fall through */
+    } /* else fall through */
     return NULL; /* value is not a userdata */
 }
 
@@ -532,8 +544,8 @@ static int lastlevel(cs_State *C) {
 }
 
 
-static void pushfuncname(cs_State *C, cs_Debug *di) {
-    if (pushglobalfuncname(C, di)) { /* try first a global name */
+static void push_func_name(cs_State *C, cs_Debug *di) {
+    if (push_glbfunc_name(C, di)) { /* try first a global name */
         cs_push_fstring(C, "function `%s`", cs_to_string(C, -1));
         cs_remove(C, -2); /* remove name */
     } else if (*di->namewhat != '\0') { /* name from code? */
@@ -577,7 +589,7 @@ CSLIB_API void csL_traceback(cs_State *C, cs_State *C1, int level,
             else
                 cs_push_fstring(C, "\n\t%s:%d: in ", di.shortsrc, di.currline);
             csL_buff_push_stack(&B);
-            pushfuncname(C, &di);
+            push_func_name(C, &di);
             csL_buff_push_stack(&B);
         }
     }
@@ -607,6 +619,17 @@ CSLIB_API void csL_checkversion_(cs_State *C, cs_Number ver) {
         csL_error(C,
             "version mismatch: application needs %f, CScript core provides %f",
             ver, v);
+}
+
+
+CSLIB_API int csL_vmt_isequal(cs_State *C, int index, const cs_VMT *vmt) {
+    cs_VMT *udvmt = (cs_VMT*)csL_to_lightuserdata(C, index);
+    if (udvmt) {
+        for (int i = 0; i < CS_MM_N; i++)
+            if (udvmt->func[i] != vmt->func[i]) return 0;
+        return 1; /* equal */
+    }
+    return 0;
 }
 
 
@@ -693,7 +716,7 @@ static const cs_VMT boxvmt = {
 
 
 static void newbox(cs_State *C) {
-    UserBox *box = cs_newuserdata(C, sizeof(*box), 0);
+    UserBox *box = cs_push_userdata(C, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
     cs_set_uservmt(C, -1, &boxvmt);

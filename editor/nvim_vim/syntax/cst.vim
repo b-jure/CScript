@@ -1,7 +1,7 @@
 " CScript syntax file
 " Language:     CScript 1.0
 " Maintainer:   Jure Bagić <jurebagic99@gmail.com>
-" Last Change:  2025 Feb 26
+" Last Change:  2025 Mar 7
 
 
 " quit when a syntax file was already loaded
@@ -99,17 +99,15 @@ syn case match
 
 "-Identifier------{
 syn match cscriptIdentifier /\<\h\w*\>/
-syn match cscriptEmptyStatement /;/
 "-----------------}
 
 "-Keywords--------{
-syn keyword     cscriptLocal            local
+"syn keyword     cscriptLocal            local
 syn keyword     cscriptStatement        break return continue
 syn keyword     cscriptConditional      if else
 syn keyword     cscriptLabel            case default switch
 syn keyword     cscriptRepeat           loop while for
 syn keyword     cscriptConstant         true false nil inf infinity
-syn keyword     cscriptFn               fn
 "-----------------}
 
 "-Blocks----------{
@@ -123,13 +121,13 @@ endif
 
 "-Parens---------{
 syn cluster cscriptParenGroup   contains=@cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
-syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptStatement,cscriptIf,cscriptParenError,cscriptStatement,cscriptConditional,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
+syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptStatement,cscriptIf,cscriptParenError,cscriptStatement,cscriptConditional,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
 syn match   cscriptParenError   display /)/
 syn match   cscriptErrorInParen display contained /]/
 "---------------}
 
 "-Bracket-------{
-syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptStatement,cscriptLocal,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptConditional,cscriptLabel,cscriptRepeat,@Spell
+syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptStatement,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptConditional,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
 syn match   cscriptBracketError     display /]/
 syn match   cscriptErrorInBracket   display contained /]/
 "---------------}
@@ -138,17 +136,6 @@ syn match   cscriptErrorInBracket   display contained /]/
 syn region  cscriptForEach  transparent matchgroup=cscriptRepeat start=/\<foreach\>\ze\_s\+\%(\h\w*\%(,\_s*\h\w*\)*\)\_s\<in\>/ end=/\h\w*\_s\+\zs\<in\>/me=e-2 contains=TOP,cscriptInError skipwhite skipempty
 syn keyword cscriptForEach  contained containedin=cscriptForEach in
 syn match   cscriptInError  /\<in\>/
-"-----------------}
-
-"-Classes---------{
-syn region cscriptClass transparent matchgroup=cscriptStatement start=/\<class\>/ end=/{/me=e-1 contains=TOP skipwhite skipempty
-syn keyword cscriptClass contained containedin=cscriptClass inherits
-syn keyword cscriptSuper super
-syn keyword cscriptSelf self
-"-----------------}
-
-"-Function calls--{
-syn match cscriptFunctionCall /\k\+\%(\_s*(\)\@=/
 "-----------------}
 
 "-MetaMethods-----{
@@ -194,20 +181,34 @@ syn match       cscriptFunc             /\<string\.swaplower\>/
 "-----------------}
 
 syn match cscriptComma /,/
-syn match cscriptSemicoilon /;/
+syn match cscriptSemicolon /;/
+
+syn region cscriptLocalStatement transparent start=/\<local\_s*\h\w*\_s*/ end=/\ze\%(;\|=\|}\)/ contains=cscriptLocal,cscriptAttribute,cscriptClassDefinition,cscriptFunction,cscriptFn,cscriptFunctionCall
+syn keyword cscriptLocal local contained
+syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/ contained
+
+"-Classes---------{
+syn region cscriptClassDefinition transparent matchgroup=cscriptStatement start=/\<class\>/ end=/{/me=e-1 contains=cscriptClass skipwhite skipempty
+syn keyword cscriptClass class inherits
+syn keyword cscriptSuper super
+syn keyword cscriptSelf self
+"-----------------}
+
+syn region cscriptFunction transparent start=/\<fn\_s\+\k\+\%(\.\k\+\)*\%(\_s*(\zs\)\@=/ end=/)/ keepend contains=cscriptFn,cscriptFunctionCall
+syn match cscriptFunctionCall /\k\+\%(\_s*(\)\@=/ keepend
+syn keyword cscriptFn fn
 
 
+hi def link cscriptAttribute            StorageClass
 hi def link cscriptFn                   cscriptStatement
 hi def link cscriptComma                NONE
-hi def link cscriptSemicoilon           NONE
-hi def link cscriptLocal                cscriptStatement
-hi def link cscriptEmptyStatement       cscriptOperator
+hi def link cscriptSemicolon            cscriptStatement
 hi def link cscriptLocal                cscriptStatement
 hi def link cscriptIdentifier           NONE
-hi def link cscriptMethod               cscriptFunction
-hi def link cscriptFunction             Function
+hi def link cscriptFunction             cscriptStatement
 hi def link cscriptSelf                 PreProc
 hi def link cscriptSuper                PreProc
+hi def link cscriptClassDefinition      cscriptStatement
 hi def link cscriptClass                cscriptStatement
 hi def link cscriptMetaMethod           cscriptFunc
 hi def link cscriptFunc                 Identifier

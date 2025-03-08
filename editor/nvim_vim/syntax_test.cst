@@ -3,17 +3,18 @@
 ** It is useful for testing purposes when altering
 ** (n)vim syntax file provided with the distribution.
 ** 
-** When modyfing the syntax file, do ':syn set=cst'
-** to reload the syntax file.
+** When modyfing the syntax file,
+** do ':syn reset' followed by ':syn set=cst'
+** to properly reload the syntax file.
 */
 
 
 # Operators
-!    ~                          # unary
-+    -    **    *    /    %     # arithmetic
-^    >>   <<    &    |          # bitwise
->    <    ==    !=   >=   <=    # ordering
-or   and                        # logical
+!    ~                              # unary
++    -    **    *    /    //   %    # arithmetic
+^    >>   <<    &    |              # bitwise
+>    <    ==    !=   >=   <=        # ordering
+or   and                            # logical
 
 
 /*
@@ -63,12 +64,12 @@ dollar sign \u[24]"
 
 
 # Keywords
-break   return   continue   local   fn          # statements
-if      else     switch                         # conditionals
-case    default                                 # labels
-while   loop     for                            # repeat
-true    false    nil        inf     infinity    # constants
-super   self                                    # special instance variables
+break   return   continue   fn
+if      else     switch
+case    default
+while   loop     for
+true    false    nil        inf     infinity
+super   self
 
 
 # Blocks
@@ -101,7 +102,7 @@ super   self                                    # special instance variables
 (\e \n \f \x15 \523 \u[ff] \u{ffabcde2} */)
 (2 52 0x15 052 15.2 0x.15p0 085 2 == 2)
 ("ok\tay" '5' 'a' '\n' +->>< '\x15')
-(class {} break return continue local)
+(class {} break return continue local a;)
 (if else switch)
 (case default [])
 (while for foreach loop fn {})
@@ -124,9 +125,10 @@ super   self                                    # special instance variables
 [super self in]
 
 
-# Identifier (name)
+# Identifier
 My_Name69
 __myname420
+My_Name69.__myname420
 
 
 # Function
@@ -164,6 +166,21 @@ foreach node in iterator(btree) {
 foreach i, n in ipairs([69, 420, 1337], ...) {
     print(i, n);
 }
+
+# Attributes
+local a <final>;
+local b <close>;
+local a <  final  >;
+local b <  close  >;
+local a <final> = 5;
+local b <close> = 6;
+local class a inherits b {}
+local fn a.sfsfd() {}
+local fn a() {}
+a <final> g
+a <close> g
+<final>
+<close>
 
 
 # Switch

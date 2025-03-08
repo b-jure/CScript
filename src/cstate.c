@@ -100,6 +100,8 @@ static void init_registry(cs_State *C, GState *gs) {
     setthval(C, &registry->b[CS_RINDEX_MAINTHREAD], C);
     /* registry[CS_RINDEX_GLOBALS] = new table (for global variables) */
     settval(C, &registry->b[CS_RINDEX_GLOBALS], csH_new(C));
+    /* registry[CS_RINDEX_REGTABLE] = new table (for C code) */
+    settval(C, &registry->b[CS_RINDEX_REGTABLE], csH_new(C));
 }
 
 

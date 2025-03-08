@@ -38,7 +38,7 @@
 ** space after that to help overflow detection)
 */
 #define CS_REGISTRYINDEX            (-CSI_MAXSTACK - 1000)
-#define cs_upvalueindex(i)          (CS_REGISTRYINDEX - (i) - 1)
+#define cs_upvalueindex(i)          (CS_REGISTRYINDEX - (i))
 
 
 /* CScript thread state */
@@ -66,13 +66,14 @@ typedef struct cs_State cs_State;
 
 
 /* minimum stack space available to a C function */
-#define CS_MINSTACK     20
+#define CS_MINSTACK         20
 
 
 /* predefined values in the registry */
 #define CS_RINDEX_MAINTHREAD        0
 #define CS_RINDEX_GLOBALS           1
-#define CS_RINDEX_LAST              CS_RINDEX_GLOBALS
+#define CS_RINDEX_REGTABLE          2
+#define CS_RINDEX_LAST              CS_RINDEX_REGTABLE
 
 
 
@@ -135,7 +136,7 @@ typedef enum cs_MM {    /* ORDER MM */
     CS_MM_EQ,
     CS_MM_LT,
     CS_MM_LE,
-    CS_MM_N, /* number of mm */
+    CS_MM_N,    /* total number of metamethods */
 } cs_MM;
 
 
@@ -153,44 +154,44 @@ struct cs_Entry {
 /* -------------------------------------------------------------------------
  * State manipulation
  * ------------------------------------------------------------------------- */
-CS_API cs_State        *cs_newstate(cs_Alloc allocator, void *ud); 
-CS_API void             cs_close(cs_State *C);
-CS_API cs_State        *cs_newthread(cs_State *C);
-CS_API int              cs_resetthread(cs_State *C);
-CS_API cs_CFunction     cs_atpanic(cs_State *C, cs_CFunction fn);
-CS_API cs_Number        cs_version(cs_State *C);
+CS_API cs_State     *cs_newstate(cs_Alloc allocator, void *ud); 
+CS_API void          cs_close(cs_State *C);
+CS_API cs_State     *cs_newthread(cs_State *C);
+CS_API int           cs_resetthread(cs_State *C);
+CS_API cs_CFunction  cs_atpanic(cs_State *C, cs_CFunction fn);
+CS_API cs_Number     cs_version(cs_State *C);
 
 /* -----------------------------------------------------------------------
 ** Stack manipulation
 ** ----------------------------------------------------------------------- */
-CS_API void             cs_settop(cs_State *C, int n); 
-CS_API int              cs_gettop(const cs_State *C); 
-CS_API int              cs_absindex(cs_State *C, int index); 
-CS_API void             cs_rotate(cs_State *C, int index, int n); 
-CS_API void             cs_copy(cs_State *C, int src, int dest); 
-CS_API int              cs_checkstack(cs_State *C, int n); 
-CS_API void             cs_push(cs_State *C, int index); 
-CS_API void             cs_xmove(cs_State *src, cs_State *dest, int n); 
+CS_API void  cs_settop(cs_State *C, int n); 
+CS_API int   cs_gettop(const cs_State *C); 
+CS_API int   cs_absindex(cs_State *C, int index); 
+CS_API void  cs_rotate(cs_State *C, int index, int n); 
+CS_API void  cs_copy(cs_State *C, int src, int dest); 
+CS_API int   cs_checkstack(cs_State *C, int n); 
+CS_API void  cs_push(cs_State *C, int index); 
+CS_API void  cs_xmove(cs_State *src, cs_State *dest, int n); 
 
 /* -----------------------------------------------------------------------
 ** Access functions (Stack -> C)
 ** ----------------------------------------------------------------------- */
-CS_API int              cs_is_number(cs_State *C, int index); 
-CS_API int              cs_is_integer(cs_State *C, int index); 
-CS_API int              cs_is_string(cs_State *C, int index); 
-CS_API int              cs_is_cfunction(cs_State *C, int index); 
-CS_API int              cs_is_userdata(cs_State *C, int index); 
-CS_API int              cs_type(cs_State *C, int index); 
-CS_API const char      *cs_typename(cs_State *C, int type); 
+CS_API int          cs_is_number(cs_State *C, int index); 
+CS_API int          cs_is_integer(cs_State *C, int index); 
+CS_API int          cs_is_string(cs_State *C, int index); 
+CS_API int          cs_is_cfunction(cs_State *C, int index); 
+CS_API int          cs_is_userdata(cs_State *C, int index); 
+CS_API int          cs_type(cs_State *C, int index); 
+CS_API const char  *cs_typename(cs_State *C, int type); 
 
-CS_API cs_Number        cs_to_numberx(cs_State *C, int index, int *isnum); 
-CS_API cs_Integer       cs_to_integerx(cs_State *C, int index, int *isnum); 
-CS_API int              cs_to_bool(cs_State *C, int index); 
-CS_API const char      *cs_to_lstring(cs_State *C, int index, size_t *len); 
-CS_API cs_CFunction     cs_to_cfunction(cs_State *C, int index); 
-CS_API void            *cs_to_userdata(cs_State *C, int index); 
-CS_API const void      *cs_to_pointer(cs_State *C, int index); 
-CS_API cs_State        *cs_to_thread(cs_State *C, int index); 
+CS_API cs_Number    cs_to_numberx(cs_State *C, int index, int *isnum); 
+CS_API cs_Integer   cs_to_integerx(cs_State *C, int index, int *isnum); 
+CS_API int          cs_to_bool(cs_State *C, int index); 
+CS_API const char  *cs_to_lstring(cs_State *C, int index, size_t *len); 
+CS_API cs_CFunction cs_to_cfunction(cs_State *C, int index); 
+CS_API void        *cs_to_userdata(cs_State *C, int index); 
+CS_API const void  *cs_to_pointer(cs_State *C, int index); 
+CS_API cs_State    *cs_to_thread(cs_State *C, int index); 
 
 /* -----------------------------------------------------------------------
 ** Ordering & Arithmetic functions
@@ -213,7 +214,7 @@ CS_API cs_State        *cs_to_thread(cs_State *C, int index);
 
 #define CS_NUM_ARITH    14
 
-CS_API void     cs_arith(cs_State *C, int op); 
+CS_API void cs_arith(cs_State *C, int op); 
 
 
 /* Ordering operations */
@@ -223,8 +224,8 @@ CS_API void     cs_arith(cs_State *C, int op);
 
 #define CS_NUM_CMP      3
 
-CS_API int      cs_rawequal(cs_State *C, int idx1, int idx2); 
-CS_API int      cs_compare(cs_State *C, int idx1, int idx2, int op); 
+CS_API int cs_rawequal(cs_State *C, int idx1, int idx2); 
+CS_API int cs_compare(cs_State *C, int idx1, int idx2, int op); 
 
 /* -----------------------------------------------------------------------
 ** Push functions (C -> stack)
@@ -239,6 +240,7 @@ CS_API const char *cs_push_vfstring(cs_State *C, const char *fmt, va_list argp);
 CS_API void        cs_push_cclosure(cs_State *C, cs_CFunction fn, int upvals); 
 CS_API void        cs_push_bool(cs_State *C, int b); 
 CS_API void        cs_push_lightuserdata(cs_State *C, void *p); 
+CS_API void       *cs_push_userdata(cs_State *C, size_t sz, int nuv); 
 CS_API void        cs_push_array(cs_State *C, int sz);
 CS_API void        cs_push_table(cs_State *C, int sz);
 CS_API int         cs_push_thread(cs_State *C); 
@@ -249,22 +251,25 @@ CS_API void        cs_push_class(cs_State *C, const cs_VMT *vmt, int abscls,
 /* -----------------------------------------------------------------------
 ** Get functions (CScript -> stack)
 ** ----------------------------------------------------------------------- */
-CS_API int   cs_get_global(cs_State *C, const char *name); 
-CS_API int   cs_get(cs_State *C, int index); 
-CS_API int   cs_get_raw(cs_State *C, int index); 
-CS_API int   cs_get_index(cs_State *C, int index, cs_Integer i);
-CS_API int   cs_get_nilindex(cs_State *C, int index, int begin, int end);
-CS_API int   cs_get_nnilindex(cs_State *C, int index, int begin, int end);
-CS_API int   cs_get_field(cs_State *C, int index); 
-CS_API int   cs_get_fieldstr(cs_State *C, int index, const char *field); 
-CS_API int   cs_get_fieldptr(cs_State *C, int index, const void *field); 
-CS_API int   cs_get_fieldint(cs_State *C, int index, cs_Integer field); 
-CS_API int   cs_get_fieldflt(cs_State *C, int index, cs_Number field); 
-CS_API int   cs_get_class(cs_State *C, int index); 
-CS_API int   cs_get_method(cs_State *C, int index); 
-
-CS_API void *cs_newuserdata(cs_State *C, size_t sz, int nuv); 
-CS_API int   cs_get_uservalue(cs_State *C, int index, unsigned short n); 
+CS_API int cs_get_global(cs_State *C, const char *name); 
+CS_API int cs_get(cs_State *C, int index); 
+CS_API int cs_get_raw(cs_State *C, int index); 
+CS_API int cs_get_index(cs_State *C, int index, cs_Integer i);
+CS_API int cs_get_nilindex(cs_State *C, int index, unsigned int begin, int end);
+CS_API int cs_get_nnilindex(cs_State *C, int index, unsigned int begin, int end);
+CS_API int cs_get_nilindex_rev(cs_State *C, int index, int begin,
+                               unsigned int end);
+CS_API int cs_get_nnilindex_rev(cs_State *C, int index, int begin,
+                                unsigned int end);
+CS_API int cs_get_field(cs_State *C, int index); 
+CS_API int cs_get_fieldstr(cs_State *C, int index, const char *field); 
+CS_API int cs_get_fieldptr(cs_State *C, int index, const void *field); 
+CS_API int cs_get_fieldint(cs_State *C, int index, cs_Integer field); 
+CS_API int cs_get_fieldflt(cs_State *C, int index, cs_Number field); 
+CS_API int cs_get_class(cs_State *C, int index); 
+CS_API int cs_get_method(cs_State *C, int index); 
+CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n); 
+CS_API int cs_get_uservmt(cs_State *C, int index, cs_VMT *pvmt); 
 
 /* -----------------------------------------------------------------------
 ** Set functions (stack -> CScript)
@@ -278,8 +283,8 @@ CS_API void  cs_set_fieldstr(cs_State *C, int index, const char *field);
 CS_API void  cs_set_fieldptr(cs_State *C, int index, const void *field); 
 CS_API void  cs_set_fieldint(cs_State *C, int index, cs_Integer field); 
 CS_API void  cs_set_fieldflt(cs_State *C, int index, cs_Number field); 
-CS_API void  cs_set_uservmt(cs_State *C, int index, const cs_VMT *vmt); 
 CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
+CS_API void  cs_set_uservmt(cs_State *C, int index, const cs_VMT *vmt); 
 CS_API void  cs_set_usermm(cs_State *C, int index, cs_MM mm); 
 
 /* -----------------------------------------------------------------------
@@ -327,17 +332,17 @@ CS_API void cs_warning(cs_State *C, const char *msg, int cont);
 /* -----------------------------------------------------------------------
 ** Miscellaneous functions/macros
 ** ----------------------------------------------------------------------- */
-CS_API int              cs_hasvmt(cs_State *C, int index); 
-CS_API int              cs_hasmetamethod(cs_State *C, int index, cs_MM mm); 
-CS_API cs_Unsigned      cs_len(cs_State *C, int index); 
-CS_API int              cs_next(cs_State *C, int index); 
-CS_API void             cs_concat(cs_State *C, int n); 
-CS_API size_t           cs_stringtonumber(cs_State *C, const char *s, int *f); 
-CS_API cs_Alloc         cs_getallocf(cs_State *C, void **ud); 
-CS_API void             cs_setallocf(cs_State *C, cs_Alloc falloc, void *ud); 
-CS_API void             cs_toclose(cs_State *C, int index); 
-CS_API void             cs_closeslot(cs_State *C, int index); 
-CS_API int              cs_getfreereg(cs_State *C);
+CS_API int         cs_hasvmt(cs_State *C, int index); 
+CS_API int         cs_hasmetamethod(cs_State *C, int index, cs_MM mm); 
+CS_API cs_Unsigned cs_len(cs_State *C, int index); 
+CS_API int         cs_next(cs_State *C, int index); 
+CS_API void        cs_concat(cs_State *C, int n); 
+CS_API size_t      cs_stringtonumber(cs_State *C, const char *s, int *f); 
+CS_API cs_Alloc    cs_getallocf(cs_State *C, void **ud); 
+CS_API void        cs_setallocf(cs_State *C, cs_Alloc falloc, void *ud); 
+CS_API void        cs_toclose(cs_State *C, int index); 
+CS_API void        cs_closeslot(cs_State *C, int index); 
+CS_API int         cs_getfreereg(cs_State *C);
 
 #define cs_getextraspace(C)         ((void *)((char *)(C) - CS_EXTRASPACE))
 
@@ -354,10 +359,11 @@ CS_API int              cs_getfreereg(cs_State *C);
 
 #define cs_is_function(C, n)        (cs_type(C, (n)) == CS_TFUNCTION)
 #define cs_is_array(C, n)           (cs_type(C, (n)) == CS_TARRAY)
-#define cs_is_hashtable(C, n)       (cs_type(C, (n)) == CS_TTABLE)
+#define cs_is_table(C, n)           (cs_type(C, (n)) == CS_TTABLE)
 #define cs_is_class(C, n)           (cs_type(C, (n)) == CS_TCLASS)
 #define cs_is_instance(C, n)        (cs_type(C, (n)) == CS_TINSTANCE)
-#define cs_is_lightuserdata(C, n)   (cs_type(C, (n)) == CS_TLUDATA)
+#define cs_is_lightuserdata(C, n)   (cs_type(C, (n)) == CS_TLIGHTUSERDATA)
+#define cs_is_fulluserdata(C, n)    (cs_type(C, (n)) == CS_TUSERDATA)
 #define cs_is_nil(C, n)             (cs_type(C, (n)) == CS_TNIL)
 #define cs_is_bool(C, n)            (cs_type(C, (n)) == CS_TBOOL)
 #define cs_is_thread(C, n)          (cs_type(C, (n)) == CS_TTHREAD)
@@ -366,16 +372,24 @@ CS_API int              cs_getfreereg(cs_State *C);
 
 #define cs_push_literal(C, s)       cs_push_string(C, "" s)
 
+#define cs_push_vmt(C, vmt)         cs_push_lightuserdata(C, (void*)vmt)
+
+#define cs_push_mainthread(C) \
+        ((void)cs_get_index(C, CS_REGISTRYINDEX, CS_RINDEX_MAINTHREAD))
+
 #define cs_push_globaltable(C) \
         ((void)cs_get_index(C, CS_REGISTRYINDEX, CS_RINDEX_GLOBALS))
 
-#define cs_to_string(C, i)          cs_to_lstring(C, i, NULL)
+#define cs_push_registrytable(C) \
+        ((void)cs_get_index(C, CS_REGISTRYINDEX, CS_RINDEX_REGTABLE))
 
-#define cs_insert(C,index)          cs_rotate(C, (index), 1)
+#define cs_to_string(C, i)      cs_to_lstring(C, i, NULL)
 
-#define cs_remove(C,index)          (cs_rotate(C, (index), -1), cs_pop(C, 1))
+#define cs_insert(C,index)      cs_rotate(C, (index), 1)
 
-#define cs_replace(C,index)         (cs_copy(C, -1, (index)), cs_pop(C, 1))
+#define cs_remove(C,index)      (cs_rotate(C, (index), -1), cs_pop(C, 1))
+
+#define cs_replace(C,index)     (cs_copy(C, -1, (index)), cs_pop(C, 1))
 
 /* -----------------------------------------------------------------------
 ** Debug API
@@ -416,7 +430,7 @@ struct cs_Debug {
  \________________________________*/
 /* -----------------------------------------------------------------------
 ** Copyright (C) 1994-2020 Lua.org, PUC-Rio.
-** Copyright (C) 2023-2024 Jure Bagić
+** Copyright (C) 2024-2025 Jure Bagić
 **
 ** Permission is hereby granted, free of charge, to any person obtaining
 ** a copy of this software and associated documentation files (the

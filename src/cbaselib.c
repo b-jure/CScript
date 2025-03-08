@@ -171,13 +171,13 @@ static int b_runfile(cs_State *C) {
 static int b_hasmetamethod(cs_State *C) {
     static const char * const opts[CS_MM_N + 1] = {"__getidx", "__setidx",
         "__gc", "__close", "__call", "__concat", "__add", "__sub", "__mul",
-        "__div", "__mod", "__pow", "__shl", "__shr", "__band", "__bor",
-        "__bxor", "__unm", "__bnot", "__eq", "__lt", "__le", NULL};
+        "__div", "__idiv", "__mod", "__pow", "__shl", "__shr", "__band",
+        "__bor", "__bxor", "__unm", "__bnot", "__eq", "__lt", "__le", NULL};
     static const cs_MM mmnum[] = {CS_MM_GETIDX, CS_MM_SETIDX, CS_MM_GC,
         CS_MM_CLOSE, CS_MM_CALL, CS_MM_CONCAT, CS_MM_ADD, CS_MM_SUB,
-        CS_MM_MUL, CS_MM_DIV, CS_MM_MOD, CS_MM_POW, CS_MM_BSHL, CS_MM_BSHR,
-        CS_MM_BAND, CS_MM_BOR, CS_MM_BXOR, CS_MM_UNM, CS_MM_BNOT, CS_MM_EQ,
-        CS_MM_LT, CS_MM_LE};
+        CS_MM_MUL, CS_MM_DIV, CS_MM_IDIV, CS_MM_MOD, CS_MM_POW, CS_MM_BSHL,
+        CS_MM_BSHR, CS_MM_BAND, CS_MM_BOR, CS_MM_BXOR, CS_MM_UNM, CS_MM_BNOT,
+        CS_MM_EQ, CS_MM_LT, CS_MM_LE};
     cs_MM mm;
     csL_check_any(C, 0); /* value with metamethods */
     mm = mmnum[csL_check_option(C, 1, NULL, opts)];
@@ -538,6 +538,6 @@ CSMOD_API int csopen_basic(cs_State *C) {
     cs_set_fieldstr(C, -2, CS_GNAME);
     /* set global __VERSION */
     cs_push_literal(C, CS_VERSION);
-    cs_set_global(C, "__VERSION");
+    cs_set_fieldstr(C, -2, "__VERSION");
     return 1;
 }

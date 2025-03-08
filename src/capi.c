@@ -688,6 +688,18 @@ CS_API void cs_push_lightuserdata(cs_State *C, void *p) {
 }
 
 
+CS_API void *cs_push_userdata(cs_State *C, size_t sz, int nuv) {
+    UserData *ud;
+    cs_lock(C);
+    api_check(C, 0 <= nuv && nuv < USHRT_MAX, "invalid value");
+    ud = csMM_newuserdata(C, sz, nuv);
+    setuval2s(C, C->sp.p, ud);
+    api_inctop(C);
+    cs_unlock(C);
+    return getuserdatamem(ud);
+}
+
+
 /* Push array on top of the stack. */
 CS_API void cs_push_array(cs_State *C, int sz) {
     Array *arr;
@@ -914,22 +926,47 @@ CS_API int cs_get_index(cs_State *C, int index, cs_Integer i) {
 
 static int auxgetindex(cs_State *C, int index, int begin, int end, int nn) {
     Array *arr = getarray(C, index);
-    uint len = (arr->n <= cast_uint(end) ? arr->n : cast_uint(end) + 1);
-    api_check(C, begin >= 0, "invalid 'begin' index");
-    for (uint i = begin; i < len; i++)
-        if (!isempty(&arr->b[i]) == nn)
-            return i;
-    return -1;
+    if (end < 0 || end >= (int)arr->n)
+        end = (arr->n > 0) ? (int)(arr->n-1) : end;
+    while (begin <= end) {
+        if (!isempty(&arr->b[begin]) == nn)
+            return begin; /* found */
+        begin++;
+    }
+    return -1; /* not found */
 }
 
 
-CS_API int cs_get_nilindex(cs_State *C, int index, int begin, int end) {
+CS_API int cs_get_nilindex(cs_State *C, int index, uint begin, int end) {
     return auxgetindex(C, index, begin, end, 0);
 }
 
 
-CS_API int cs_get_nnilindex(cs_State *C, int index, int begin, int end) {
+CS_API int cs_get_nnilindex(cs_State *C, int index, uint begin, int end) {
     return auxgetindex(C, index, begin, end, 1);
+}
+
+
+static int auxgetrindex(cs_State *C, int index, int begin, int end, int nn) {
+    Array *arr = getarray(C, index);
+    if (begin < 0 || begin >= (int)arr->n)
+        begin = (arr->n > 0) ? (int)(arr->n-1) : begin;
+    while (begin <= end) {
+        if (!isempty(&arr->b[end]) == nn)
+            return end; /* found */
+        end--;
+    }
+    return -1; /* not found */
+}
+
+
+CS_API int cs_get_nilindex_rev(cs_State *C, int index, int begin, uint end) {
+    return auxgetrindex(C, index, begin, end, 0);
+}
+
+
+CS_API int cs_get_nnilindex_rev(cs_State *C, int index, int begin, uint end) {
+    return auxgetrindex(C, index, begin, end, 1);
 }
 
 
@@ -1038,18 +1075,6 @@ unlock:
 }
 
 
-CS_API void *cs_newuserdata(cs_State *C, size_t sz, int nuv) {
-    UserData *ud;
-    cs_lock(C);
-    api_check(C, 0 <= nuv && nuv < USHRT_MAX, "invalid value");
-    ud = csMM_newuserdata(C, sz, nuv);
-    setuval2s(C, C->sp.p, ud);
-    api_inctop(C);
-    cs_unlock(C);
-    return getuserdatamem(ud);
-}
-
-
 c_sinline UserData *getuserdata(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     api_check(C, ttisfulluserdata(o), "expect full userdata");
@@ -1057,22 +1082,18 @@ c_sinline UserData *getuserdata(cs_State *C, int index) {
 }
 
 
-CS_API int cs_get_uservmt(cs_State *C, int udobj, cs_VMT *pvmt) {
+CS_API int cs_get_uservmt(cs_State *C, int index, cs_VMT *pvmt) {
     UserData *ud;
     int nmm = 0;
     cs_lock(C);
     api_check(C, pvmt != NULL, "`pvmt` is NULL");
-    ud = getuserdata(C, udobj);
-    if (!ud->vmt) {
-        for (int i = 0; i < CS_MM_N; i++)
-            pvmt->func[i] = NULL;
-    } else {
-        for (int i = 0; i < CS_MM_N; i++) {
-            if (!isempty(&ud->vmt[i])) {
-                cs_assert(ttislcf(&ud->vmt[i]));
-                pvmt->func[i] = lcfval(&ud->vmt[i]);
-                nmm++;
-            }
+    ud = getuserdata(C, index);
+    if (ud->vmt == NULL) return -1; /* no vmt */
+    for (int i = 0; i < CS_MM_N; i++) { /* fill 'vmt' */
+        if (!isempty(&ud->vmt[i])) {
+            cs_assert(ttislcf(&ud->vmt[i]));
+            pvmt->func[i] = lcfval(&ud->vmt[i]);
+            nmm++;
         }
     }
     cs_unlock(C);
@@ -1080,11 +1101,11 @@ CS_API int cs_get_uservmt(cs_State *C, int udobj, cs_VMT *pvmt) {
 }
 
 
-CS_API int cs_get_uservalue(cs_State *C, int udobj, unsigned short n) {
+CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n) {
     UserData *ud;
     int tt;
     cs_lock(C);
-    ud = getuserdata(C, udobj);
+    ud = getuserdata(C, index);
     if (n <= 0 || ud->nuv < n) {
         setnilval(s2v(C->sp.p));
         tt = CS_TNONE;
@@ -1190,17 +1211,17 @@ CS_API void  cs_set_fieldflt(cs_State *C, int obj, cs_Number field) {
 }
 
 
-CS_API void cs_set_uservmt(cs_State *C, int udobj, const cs_VMT *vmt) {
+CS_API void cs_set_uservmt(cs_State *C, int udobj, const cs_VMT *pvmt) {
     UserData *ud;
     cs_lock(C);
     ud = getuserdata(C, udobj);
     if (!ud->vmt) {
         ud->vmt = csMM_newvmt(C);
         csG_checkGC(C);
-        if (!vmt) goto unlock;
+        if (!pvmt) goto unlock;
     }
-    if (vmt) {
-        auxsetvmt(ud->vmt, vmt);
+    if (pvmt) {
+        auxsetvmt(ud->vmt, pvmt);
         csG_checkfin(C, obj2gco(ud), ud->vmt);
     } else {
         for (int i = 0; i < CS_MM_N; i++)
