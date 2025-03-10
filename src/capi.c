@@ -405,9 +405,9 @@ CS_API int cs_to_bool(cs_State *C, int index) {
 */
 CS_API const char *cs_to_lstring(cs_State *C, int index, size_t *plen) {
     const TValue *o = index2value(C, index);
-    if (!ttisstring(o)) { /* not a string? */
+    if (!ttisstring(o)) /* not a string? */
         return NULL;
-    } else if (plen != NULL)
+    else if (plen != NULL)
         *plen = getstrlen(strval(o)); 
     return getstr(strval(o));
 }

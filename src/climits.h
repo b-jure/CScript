@@ -244,6 +244,7 @@ typedef c_byte Instruction;
 #define cast_mem(e)         cast(c_mem,(e))
 #define cast_charp(e)       cast(char *,(e))
 #define cast_char(e)        cast(char,(e))
+#define cast_uchar(e)       cast(unsigned char,(e))
 #define cast_sizet(e)       cast(size_t,(e))
 #define cast_voidp(e)       cast(void *,(e))
 #define cast_void(e)        cast(void,(e))

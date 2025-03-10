@@ -1,0 +1,17 @@
+local a = string.bytes("Hello");
+assert(len(a) == 5);
+assert(a[0] == 'H');
+assert(a[1] == 'e');
+assert(a[2] == 'l');
+assert(a[3] == 'l');
+assert(a[4] == 'o');
+assert(a[5] == nil);
+
+a = string.bytes("World", 1, -3);
+assert(len(a) == 2);
+assert(a[0] == 'o');
+assert(a[1] == 'r');
+assert(a[2] == nil);
+
+assert(string.bytes("") == nil);
+assert(string.bytes("a", 2) == nil);

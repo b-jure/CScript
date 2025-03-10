@@ -1,13 +1,20 @@
-local s = "Hello";
-assert(string.byte(s, 0) == 'H');
-assert(string.byte(s, 1) == 'e');
-assert(string.byte(s, 2) == 'l');
-assert(string.byte(s, 3) == 'l');
-assert(string.byte(s, 4) == 'o');
-assert(string.byte(s, 5) == nil);
-assert(string.byte(s, -1) == 'o');
-assert(string.byte(s, -2) == 'l');
-assert(string.byte(s, -3) == 'l');
-assert(string.byte(s, -4) == 'e');
-assert(string.byte(s, -5) == 'H');
-assert(string.byte(s, -6) == 'H');
+local a, b, c, d, e, f = string.byte("Hello", 0, -1);
+assert(a == 'H');
+assert(b == 'e');
+assert(c == 'l');
+assert(d == 'l');
+assert(e == 'o');
+assert(f == nil);
+
+a, b, c = string.byte("World", 1, -3);
+assert(a == 'o');
+assert(b == 'r');
+assert(c == nil);
+
+assert(string.byte("") == nil);
+assert(string.byte("a", 2) == nil);
+assert(string.byte("a") == 'a');
+
+a, b = string.byte("ab");
+assert(a == 'a');
+assert(b == nil);

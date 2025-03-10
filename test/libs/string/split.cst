@@ -13,11 +13,25 @@ assert(l[7] == "testing,");
 assert(l[8] == "get");
 assert(l[9] == "it?");
 
-l = string.split(s, " ", 3);
-assert(len(l) == 3);
+l = string.split(s);
+assert(len(l) == 10);
 assert(l[0] == "This");
 assert(l[1] == "is");
-assert(l[2] == "a test string, used for testing, get it?");
+assert(l[2] == "a");
+assert(l[3] == "test");
+assert(l[4] == "string,");
+assert(l[5] == "used");
+assert(l[6] == "for");
+assert(l[7] == "testing,");
+assert(l[8] == "get");
+assert(l[9] == "it?");
+
+l = string.split(s, " ", 3);
+assert(len(l) == 4);
+assert(l[0] == "This");
+assert(l[1] == "is");
+assert(l[2] == "a");
+assert(l[3] == "test string, used for testing, get it?");
 
 l = string.split(s, "");
 assert(len(l) == 1);
@@ -31,3 +45,40 @@ assert(l[0] == s);
 l = string.split(s, "", -1);
 assert(len(l) == 1);
 assert(l[0] == s);
+
+l = string.split("   Skip   whitespace  ");
+assert(len(l) == 2);
+assert(l[0] == "Skip");
+assert(l[1] == "whitespace");
+
+l = string.split("A   Skip   whitespace  ");
+assert(len(l) == 3);
+assert(l[0] == "A");
+assert(l[1] == "Skip");
+assert(l[2] == "whitespace");
+
+l = string.split("   Skip   whitespace  ", nil, 2);
+assert(len(l) == 2);
+assert(l[0] == "Skip");
+assert(l[1] == "whitespace");
+
+l = string.split("   Skip   whitespace  ", nil, 1);
+print(len(l));
+assert(len(l) == 2);
+assert(l[0] == "Skip");
+assert(l[1] == "whitespace  ");
+
+l = string.split("   Skip   whitespace  ", nil, 0);
+assert(len(l) == 1);
+assert(l[0] == "Skip   whitespace  ");
+
+l = string.split("A   Skip   whitespace  ", nil, 1);
+assert(len(l) == 2);
+assert(l[0] == "A");
+assert(l[1] == "Skip   whitespace  ");
+
+l = string.split("           ", nil);
+assert(len(l) == 0);
+
+l = string.split("", nil, 2);
+assert(len(l) == 0);

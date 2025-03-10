@@ -6204,6 +6204,446 @@
         The string library assumes one-byte character encodings.
         </p>
 
+        <!-- string.split -->
+        <hr/><h3><a name="string.split"><code>string.split (s [, sep [, maxsplit]])</code></a></h3>
+        Return array of the words in the string, using sep as the delimiter
+        string.
+        If <code>maxsplit</code> is given, at most maxsplit splits are done
+        (thus, the array will have at most <code>maxsplit+1</code> elements).
+        If <code>maxsplit</code> is not specified or is <b>nil</b>, then there
+        is no limit on the number of splits (all possible splits are made).
+        <br/>
+        If <code>sep</code> is given, consecutive delimiters are not grouped
+        together and are deemed to delimit empty strings.
+        <br/>
+        For example
+
+        <pre>
+    string.split("1,,2", ",")</pre>
+
+        returns
+
+        <pre>
+    ["1", "", "2"]</pre>
+
+        The <code>sep</code> argument is a string so it may consist of
+        multiple characters.
+        <br/>
+        For example
+
+        <pre>
+    string.split("1&lt;&gt;2&lt;&gt;3", "&lt;&gt;")</pre>
+
+        returns
+
+        <pre>
+    ["1", "2", "3"]</pre>
+
+        Splitting an empty string with a specified separator returns
+
+        <pre>
+    [""]</pre>
+
+        If <code>sep</code> is not specified or is <b>nil</b>, a different
+        splitting algorithm is applied: runs of consecutive whitespace are
+        regarded as a single separator, and the result will contain no empty
+        strings at the start or end if the string has leading or trailing
+        whitespace.
+        Consequently, splitting an empty string or a string consisting of
+        just whitespace without specified separator or a <b>nil</b> separator
+        returns
+
+        <pre>
+    []</pre>
+
+        (an empty array).
+        <br/>
+        For example
+
+        <pre>
+    string.split(" 1  2   3  ");</pre>
+
+        returns
+
+        <pre>
+    ["1", "2", "3"]</pre>
+
+        and
+
+        <pre>
+    string.split("  1  2   3  ", nil, 1);</pre>
+
+    returns
+
+        <pre>
+    ["1", "2   3  "]</pre>
+        
+        (notice how the last element has no leading whitespace).
+        <br/><br/>
+
+        <!-- string.split -->
+        <hr/><h3><a name="rsplit"><code>rsplit (s [, sep [, maxsplit]])</code></a></h3>
+        Similar to <a href="#string.split"><code>string.split</code></a> but it does the
+        splitting in reverse, starting from the end of <code>s</code>.
+        The returned value is also an array holding the splits which are
+        in reverse order.
+        <br/><br/>
+
+        <!-- string.startswith -->
+        <hr/><h3><a name="string.startswith"><code>string.startswith (s, prefix [, i [, j]])</code></a></h3>
+        Checks if the string <code>s</code> starts with the <code>prefix</code>
+        string and it returns the index in <code>s</code> after the
+        <code>prefix</code>.
+        If the <code>prefix</code> is not the prefix of <code>s</code> this
+        returns <b>fail</b> and the non-matching index in <code>s</code>.
+        There are two optional arguments, start index to where to start the
+        search from in <code>s</code>, and end index that specifies to
+        stop comparing the string after that index.
+        In case where start index <code>i</code> and end index <code>j</code>
+        is specified and <code>i</code> is greater than <code>j</code> or the
+        range between <code>i</code> and <code>j</code> is smaller than the
+        length of <code>prefix</code> string, <b>fail</b> is returned
+        (as usual) and -1 representing invalid index.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/><br/>
+        Example
+        <pre>
+    local res, i = string.startswith("This is it!", "This", 0, -1);
+    assert(res == 4 and i == nil);</pre>
+
+        <!-- reverse -->
+        <hr/><h3><a name="reverse"><code>reverse (s)</code></a></h3>
+        Returns reversed string <code>s</code>.
+        <br/><br/>
+        Example
+        <pre>
+    local s = string.reverse("test");
+    assert(s == "tset");</pre>
+
+        <!-- string.repeat -->
+        <hr/><h3><a name="string.repeat"><code>string.repeat (s, n, [, sep])</code></a></h3>
+        Returns string <code>s</code> that is repeated <code>n</code> times.
+        Optional separator <code>sep</code> can be specified which will
+        separate repeated string <code>s</code>.
+        If <code>n</code> is less than 1, empty string will be returned.
+        <br/><br/>
+        Example:
+        <pre>
+    local s = string.repeat("69", 4, "&lt;420&gt;");
+    assert(s == "69&lt;420&gt;69&lt;420&gt;69&lt;420&gt;69");</pre>
+
+        <!-- string.join -->
+        <hr/><h3><a name="string.join"><code>string.join (s, v)</code></a></h3>
+        Return a string which is the concatenation of the strings in the
+        array or table <code>v</code>.
+        The separator between elements is the string <code>s</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    local t = ["Love", "Anger", "Fury", "Peace"];
+    local s = string.join(", ", t);
+    assert(s == "Love, Anger, Fury, Peace");</pre>
+
+        <!-- string.fmt -->
+        <hr/><h3><a name="string.fmt"><code>string.fmt (fmts, &middot;&middot;&middot;)</code></a></h3>
+        Returns a formatted version of its variable number of arguments
+        following the description given in its first argument,
+        which must be a string.
+        The format string follows the same rules as the ISO&nbsp;C function
+        <code>sprintf</code>.
+        The only differences are that the conversion specifiers and modifiers
+        <code>F</code>, <code>n</code>, <code>*</code>, <code>h</code>,
+        <code>L</code>, and <code>l</code> are not supported and that there
+        is an extra specifier, <code>q</code>.
+        Both width and precision, when present, are limited to two digits.
+        <br/><br/>
+        The specifier <code>q</code> formats booleans, nil, numbers, and
+        strings in a way that the result is a valid constant in CScript
+        source code.
+        Booleans and nil are written in the obvious way
+        (<code>true</code>, <code>false</code>, <code>nil</code>).
+        Floats are written in hexadecimal,
+        to preserve full precision.
+        A string is written between double quotes,
+        using escape sequences when necessary to ensure that
+        it can safely be read back by the CScript interpreter.
+        For instance, the call
+
+        <pre>
+    string.fmt('%q', "a string with \"quotes\" and \n new line")</pre>
+
+        may produce the string:
+
+        <pre>
+    "a string with \"quotes\" and \
+     new line"</pre>
+
+        This specifier does not support modifiers (flags, width, precision).
+        <br/><br/>
+        The conversion specifiers
+        <code>A</code>, <code>a</code>, <code>E</code>, <code>e</code>,
+        <code>f</code>, <code>G</code>, and <code>g</code> all expect a
+        number as argument.
+        The specifiers <code>c</code>, <code>d</code>, <code>i</code>,
+        <code>o</code>, <code>u</code>, <code>X</code>, and <code>x</code>
+        expect an integer.
+        <br/><br/>
+        The specifier <code>s</code> expects a string;
+        if its argument is not a string,
+        it is converted to one following the same rules of
+        <a href="#tostring"><code>tostring</code></a>.
+        If the specifier has any modifier, the corresponding string argument
+        should not contain embedded zeros.
+        <br/><br/>
+        The specifier <code>p</code> formats the pointer returned by
+        <a href="#cs_to_pointer"><code>cs_to_pointer</code></a>.
+        That gives a unique string identifier for tables, userdata,
+        threads, strings, and functions.
+        For other values (numbers, nil, booleans),
+        this specifier results in a string representing
+        the pointer <code>NULL</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    local s = string.fmt("Hello, %s", "World!");
+    assert(s == "Hello, World");</pre>
+
+        <!-- string.toupper -->
+        <hr/><h3><a name="string.toupper"><code>string.toupper (s [, i [, j]])</code></a></h3>
+        Returns string <code>s</code> which has all its characters converted
+        to uppercase.
+        Start index <code>i</code> and end index <code>j</code> can be
+        specified to define range of the operation.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        If, after these corrections, <code>i</code> is greater than
+        <code>j</code>, this function returns <code>s</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.toupper("blabla", 3, 4) == "blaBLa");</pre>
+
+        <!-- string.tolower -->
+        <hr/><h3><a name="string.tolower"><code>string.tolower (s [, i [, j]])</code></a></h3>
+        Returns string <code>s</code> which has all its characters converted
+        to lowercase.
+        Start index <code>i</code> and end index <code>j</code> can be
+        specified to define range of the operation.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        If, after these corrections, <code>i</code> is greater than
+        <code>j</code>, this function returns <code>s</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.tolower("BLABLA", 3, 4) == "BLAblA");</pre>
+
+        <!-- string.find -->
+        <hr/><h3><a name="string.find"><code>string.find (s, sub [, i [, j]])</code></a></h3>
+        Return the lowest index in the string <code>s</code> where substring
+        <code>sub</code> is found, such that <code>sub</code> is contained in
+        the slice s[i:j].
+        Optional arguments <code>i</code> and <code>j</code> are interpreted
+        as in slice notation. Return <b>fail</b> if <code>sub</code> is not
+        found.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.find("Hello, World", "llo") == 2);</pre>
+
+        <!-- string.rfind -->
+        <hr/><h3><a name="string.rfind"><code>string.rfind (s, sub [, i [, j]])</code></a></h3>
+        Similar to <a href="#string.find"><code>string.find</code></a>,
+        except the search for <code>sub</code> is done in reverse.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.rfind("Hello, Hello", "llo") == 9);</pre>
+
+        <!-- string.replace -->
+        <hr/><h3><a name="string.replace"><code>string.replace (s, sub, new [, n])</code></a></h3>
+        Return a copy of the string <code>s</code> with all occurrences of
+        substring <code>sub</code> replaced by <code>new</code>.
+        If the optional argument <code>n</code> is given, only the first
+        <code>n</code> occurrences are replaced.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.replace("Hello, Hello", "ll", "LL", 1) == "HeLLo, Hello");</pre>
+
+        <!-- string.substr -->
+        <hr/><h3><a name="string.substr"><code>string.substr (s [, i [, j]])</code></a></h3>
+        Returns the substring of <code>s</code> that starts at <code>i</code>
+        and continues up to (including) <code>j</code>.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        If, after these corrections, <code>i</code> is greater than
+        <code>j</code>, the function returns the empty string.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.substr("Hello, Hello", 2, -4) == "llo, He");</pre>
+
+        <!-- string.swapcase -->
+        <hr/><h3><a name="string.swapcase"><code>string.swapcase (s [, i [, j]])</code></a></h3>
+        Swaps case of characters of string <code>s</code> in range starting
+        from index <code>i</code> up to (including) <code>j</code>.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        If, after these corrections, <code>i</code> is greater than
+        <code>j</code>, the function returns <code>s</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.swapcase("hi, HI") == "HI, hi");</pre>
+
+        <!-- string.swapupper -->
+        <hr/><h3><a name="string.swapupper"><code>string.swapupper (s [, i [, j]])</code></a></h3>
+        Swaps lowercase characters to uppercase of string <code>s</code> in
+        range starting from index <code>i</code> up to (including)
+        <code>j</code>.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        If, after these corrections, <code>i</code> is greater than
+        <code>j</code>, the function returns <code>s</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.swapupper("hi, HI") == "HI, HI");</pre>
+
+        <!-- string.swaplower -->
+        <hr/><h3><a name="string.swaplower"><code>string.swaplower (s [, i [, j]])</code></a></h3>
+        Swaps uppercase characters to lowercase of string <code>s</code> in
+        range starting from index <code>i</code> up to (including)
+        <code>j</code>.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        If, after these corrections, <code>i</code> is greater than
+        <code>j</code>, the function returns <code>s</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.swaplower("hi, HI") == "hi, hi");</pre>
+
+        <!-- string.byte -->
+        <hr/><h3><a name="string.byte"><code>string.byte (s [, i [, j]])</code></a></h3>
+        Returns the internal numeric codes of the characters
+        <code>s[i]</code>, <code>s[i+1]</code>, ..., <code>s[j]</code>.
+        <br/><br/>
+        The default value for <code>i</code> is&nbsp;0;
+        <br/>
+        The default value for <code>j</code> is&nbsp;i;
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        If, after these corrections, <code>i</code> is greater than
+        <code>j</code>, or the string <code>s</code> is empty,
+        the function will not return any results.
+        <br/><br/>
+        Example:
+        <pre>
+    local a, b = string.byte("ok");
+    assert(a == 'o');
+    assert(b == nil);</pre>
+
+        <!-- string.bytes -->
+        <hr/><h3><a name="string.bytes"><code>string.bytes (s [, i [, j]])</code></a></h3>
+        Similar to <a href="#string.byte"><code>string.byte</code></a>,
+        except this returns results in an array.
+        <br/><br/>
+        The default value for <code>i</code> is&nbsp;0.
+        <br/>
+        The default value for <code>j</code> is&nbsp;-1.
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/>
+        If, after these corrections, <code>i</code> is greater than
+        <code>j</code>, or the string <code>s</code> is empty,
+        the function will not return any results.
+        <br/><br/>
+        Example:
+        <pre>
+    local a = string.bytes("Hello");
+    assert(len(a) == 5);
+    assert(a[0] == 'H');
+    assert(a[1] == 'e');
+    assert(a[2] == 'l');
+    assert(a[3] == 'l');
+    assert(a[4] == 'o');
+    assert(a[5] == nil);</pre>
+
 
         <h2>6.4 &ndash; <a name="6.4">Math Library</a></h2>
         <p>

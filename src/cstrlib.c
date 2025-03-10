@@ -21,15 +21,14 @@
 
 #include "cauxlib.h"
 #include "cslib.h"
+#include "climits.h"
+
 
 
 #define MAX_SIZET   ((size_t)(~(size_t)0))
 
-#define MAXSIZE \
+#define MAX_SIZE \
         (sizeof(size_t) < sizeof(int) ? (size_t)INT_MAX : MAX_SIZET)
-
-
-#define uchar(c)    ((unsigned char)(c))
 
 
 
@@ -73,47 +72,96 @@ static const char *findstr(const char *s, size_t l,
 }
 
 
-static int splitintoarray(cs_State *C, int rev) {
-    size_t ls, lp;
+static const char *skipws(const char *s, size_t *pl, int rev) {
+    const unsigned char *p;
+    size_t l = *pl;
+    if (l == 0) return NULL;
+    else if (!rev) { /* from 's'? */
+        p = (const unsigned char *)s;
+        while (l > 0 && isspace(*p)) { p++; l--; }
+    } else { /* reverse */
+        p = ((const unsigned char *)s + l) - 1;
+        while (l > 0 && isspace(*p)) { p--; l--; }
+    }
+    *pl = l;
+    return (l > 0 ? (const char *)p : NULL);
+}
+
+
+static int split_into_array(cs_State *C, int rev) {
+    size_t ls;
     const char *s = csL_check_lstring(C, 0, &ls); /* string */
-    const char *p = csL_check_lstring(C, 1, &lp); /* pattern */
-    cs_Integer n = csL_opt_integer(C, 2, CS_INTEGER_MAX); /* maxsplit */
-    const char *aux;
+    cs_Integer n = csL_opt_integer(C, 2, CS_INTEGER_MAX-1); /* maxsplit */
     int arr = cs_getntop(C);
-    cs_push_array(C, (n > 0) ? n : 1);
-    if (c_unlikely(n <= 1 || lp == 0)) { /* no splits or pattern is '""' */
-        cs_push(C, 0);
-        cs_set_index(C, arr, 0);
-    } else {
-        int i = 0;
+    int i = 0;
+    const char *aux;
+    if (cs_is_noneornil(C, 1)) { /* split by whitespace? */
+        cs_push_array(C, 1);
+        if (!rev)
+            while (ls > 0 && isspace(cast_uchar(*s))) { s++; ls--; }
+        else {
+            aux = (s + ls) - 1;
+            while (ls > 0 && isspace(cast_uchar(*aux))) { aux--; ls--; }
+        }
+        while (n > 0 && (aux = skipws(s, &ls, rev)) != NULL) {
+            size_t lw = 0;
+            const char *p = aux;
+            if (!rev)
+                while (ls > 0 && !isspace(cast_uchar(*aux)))
+                { ls--; lw++; aux++; }
+            else { /* reverse */
+                while (ls > 0 && !isspace(cast_uchar(*aux)))
+                { ls--; lw++; aux--; }
+                p = aux+1;
+            }
+            cs_assert(lw > 0);
+            printf("pushing = '%.*s'\n", (int)lw, p);
+            cs_push_lstring(C, p, lw);
+            cs_set_index(C, arr, i);
+            if (!rev) s = aux;
+            n--; i++;
+        }
+        if (!rev)
+            while (ls > 0 && isspace(cast_uchar(*s))) { s++; ls--; }
+        else {
+            aux = (s + ls) - 1;
+            while (ls > 0 && isspace(cast_uchar(*aux))) { aux--; ls--; }
+        }
+        if (ls == 0) return 1; /* done */
+    } else { /* else split by pattern */
+        size_t lpat;
+        const char *pat = csL_check_lstring(C, 1, &lpat);
         const char *e = s+ls;
-        while (n > 1 && (aux = findstr(s, ls, p, lp, rev)) != NULL) {
+        cs_push_array(C, 1);
+        if (n < 1 || lpat == 0) goto pushs;
+        while (n > 0 && (aux = findstr(s, ls, pat, lpat, rev)) != NULL) {
             if (!rev) { /* find from start? */
                 cs_push_lstring(C, s, aux-s);
-                ls -= (aux+lp)-s;
-                s = aux+lp;
+                ls -= (aux+lpat)-s;
+                s = aux+lpat;
             } else { /* reverse find */
-                cs_push_lstring(C, aux+lp, e-(aux+lp));
+                cs_push_lstring(C, aux+lpat, e-(aux+lpat));
                 e = aux;
                 ls = aux-s;
             }
             cs_set_index(C, arr, i);
             n--; i++;
         }
-        cs_push_lstring(C, s, ls); /* push last piece */
-        cs_set_index(C, arr, i);
     }
+pushs:
+    cs_push_lstring(C, s, ls); /* push last piece */
+    cs_set_index(C, arr, i);
     return 1; /* return array */
 }
 
 
 static int s_split(cs_State *C) {
-    return splitintoarray(C, 0);
+    return split_into_array(C, 0);
 }
 
 
 static int s_rsplit(cs_State *C) {
-    return splitintoarray(C, 1);
+    return split_into_array(C, 1);
 }
 
 
@@ -152,16 +200,21 @@ static int s_startswith(cs_State *C) {
     const char *s2 = csL_check_lstring(C, 1, &l1);
     size_t i = posI(csL_opt_integer(C, 2, 0), l);
     size_t j = posJ(csL_opt_integer(C, 3, -1), l);
-    if (i <= j) {
+    if (i <= j && l1 <= (j-i) + 1) {
         size_t k = 0;
         while (i <= j && k < l1 && s1[i] == s2[k]) { i++; k++; }
+        cs_push_integer(C, i);
         if (k == l1) {
-            cs_push_integer(C, i);
             return 1; /* return index after 's2' in 's1' */
-        } /* else fall through */
-    } /* else fall through */
-    csL_push_fail(C);
-    return 1; /* return fail */
+        } else {
+            csL_push_fail(C);
+            cs_insert(C, -2);
+        }
+    } else {
+        csL_push_fail(C);
+        cs_push_integer(C, -1); /* invalid range */
+    }
+    return 2; /* return fail and invalid or non-matching index */
 }
 
 
@@ -184,7 +237,7 @@ static int s_repeat(cs_State *C) {
     const char *sep = csL_opt_lstring(C, 2, "", &lsep);
     if (c_unlikely(n <= 0))
         cs_push_literal(C, "");
-    else if (l+lsep < l || l+lsep > MAXSIZE/n)
+    else if (l+lsep < l || l+lsep > MAX_SIZE/n)
         csL_error(C, "resulting string too large");
     else {
         size_t totalsize = (size_t)n*l + (size_t)(n-1)*lsep;
@@ -326,12 +379,12 @@ static void addquoted(csL_Buffer *b, const char *s, size_t len) {
             csL_buff_push(b, '\\');
             csL_buff_push(b, *s);
         }
-        else if (iscntrl(uchar(*s))) {
+        else if (iscntrl(cast_uchar(*s))) {
             char buff[10];
-            if (!isdigit(uchar(*(s+1))))
-                c_snprintf(buff, sizeof(buff), "\\%d", (int)uchar(*s));
+            if (!isdigit(cast_uchar(*(s+1))))
+                c_snprintf(buff, sizeof(buff), "\\%d", (int)cast_uchar(*s));
             else
-                c_snprintf(buff, sizeof(buff), "\\%03d", (int)uchar(*s));
+                c_snprintf(buff, sizeof(buff), "\\%03d", (int)cast_uchar(*s));
             csL_buff_push_string(b, buff);
         }
         else
@@ -406,9 +459,9 @@ static void addliteral(cs_State *C, csL_Buffer *b, int arg) {
 
 
 static const char *get2digits (const char *s) {
-    if (isdigit(uchar(*s))) {
+    if (isdigit(cast_uchar(*s))) {
         s++;
-        if (isdigit(uchar(*s))) s++; /* (2 digits at most) */
+        if (isdigit(cast_uchar(*s))) s++; /* (2 digits at most) */
     }
     return s;
 }
@@ -431,7 +484,7 @@ static void checkformat(cs_State *C, const char *form, const char *flags,
             spec = get2digits(spec); /* skip precision */
         }
     }
-    if (!isalpha(uchar(*spec))) /* did not go to the end? */
+    if (!isalpha(cast_uchar(*spec))) /* did not go to the end? */
         csL_error(C, "invalid conversion specification: '%s'", form);
 }
 
@@ -742,15 +795,49 @@ static int s_swaplower(cs_State *C) {
 }
 
 
-static int s_byte(cs_State *C) {
+static int getbytes_array(cs_State *C, const char *s, size_t i, size_t j) {
+    int n = (int)(j - i) + 1;
+    cs_push_array(C, n);
+    for (int k = 0; k < n; k++) {
+        cs_push_integer(C, cast_uchar(s[i + cast_uint(k)]));
+        cs_set_index(C, -2, k);
+    }
+    return 1; /* return array */
+}
+
+
+static int getbytes_bytes(cs_State *C, const char *s, size_t i, size_t j) {
+    int n = (int)(j - i) + 1;
+    csL_check_stack(C, n, "string slice too long");
+    for (int k = 0; k < n; k++)
+        cs_push_integer(C, cast_uchar(s[i + cast_uint(k)]));
+    return n; /* return 'n' bytes */
+}
+
+
+static int auxgetbytes(cs_State *C, int pack) {
     size_t l;
     const char *s = csL_check_lstring(C, 0, &l);
-    size_t i = posI(csL_check_integer(C, 1), l);
-    if (i >= l)
-        csL_push_fail(C);
-    else
-        cs_push_integer(C, uchar(s[i]));
-    return 1;
+    size_t i = posI(csL_opt_integer(C, 1, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 2, (pack) ? -1 : (cs_Integer)i), l);
+    if (i > j || l == 0) /* empty interval? */
+        return 0; /* return no values */
+    else if (c_unlikely((j-i)+1 <= (j-i) || (j-i)+1 >= (size_t)INT_MAX))
+        return csL_error(C, "string slice too long");
+    else if (pack) /* pack into array? */
+        return getbytes_array(C, s, i, j);
+    else /* get them individually */
+        return getbytes_bytes(C, s, i, j);
+}
+
+
+static int s_byte(cs_State *C) {
+    return auxgetbytes(C, 0);
+}
+
+
+static int s_bytes(cs_State *C) {
+    return auxgetbytes(C, 1);
 }
 
 
@@ -772,6 +859,7 @@ static const cs_Entry strlib[] = {
     {"swapupper", s_swapupper},
     {"swaplower", s_swaplower},
     {"byte", s_byte},
+    {"bytes", s_bytes},
     {NULL, NULL}
 };
 
