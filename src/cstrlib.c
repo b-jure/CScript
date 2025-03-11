@@ -864,7 +864,7 @@ static const cs_Entry strlib[] = {
 };
 
 
-CSMOD_API int csopen_string (cs_State *C) {
+CSMOD_API int csopen_string(cs_State *C) {
     csL_newlib(C, strlib);
     return 1;
 }

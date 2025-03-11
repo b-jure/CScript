@@ -534,13 +534,13 @@ static int fltK(FunctionState *fs, cs_Number n) {
         /* number of mantissa bits including the leading bit (1) */
         const int nmb = cs_floatatt(MANT_DIG); 
         /* q = 1.0 * (1/2^52) */
-        const cs_Number q = cs_mathop(ldexp)(cs_mathop(1.0), -nmb + 1);
+        const cs_Number q = c_mathop(ldexp)(c_mathop(1.0), -nmb + 1);
         const cs_Number k = (ik == 0 ? q : n + n*q); /* new key */
         TValue kv;
         setfval(&kv, k);
         /* result is not an integral value, unless value is too large */
         cs_assert(!csO_n2i(k, &ik, N2IEXACT) ||
-                   cs_mathop(fabs)(n) >= cs_mathop(1e6));
+                   c_mathop(fabs)(n) >= c_mathop(1e6));
         return addK(fs, &kv, &vn);
     }
 }

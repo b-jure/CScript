@@ -17,11 +17,14 @@
 
 CSMOD_API int csopen_basic(cs_State *C);
 
-#define CS_LOADLIBNAME  "package"
+#define CS_LOADLIBNAME      "package"
 CSMOD_API int csopen_package(cs_State *C);
 
-#define CS_STRLIBNAME  "string"
+#define CS_STRLIBNAME       "string"
 CSMOD_API int csopen_string(cs_State *C);
+
+#define CS_MATHLIBNAME      "math"
+CSMOD_API int csopen_math(cs_State *C);
 
 
 /* open all previous libraries */

@@ -7,7 +7,8 @@ CORE_O = src/capi.o src/carray.o src/ccode.o src/cdebug.o src/cfunction.o\
 	 src/cgc.o src/ctable.o src/clexer.o src/cmem.o src/cmeta.o\
 	 src/cobject.o src/cparser.o src/cvm.o src/cprotected.o src/creader.o\
 	 src/cscript.o src/cstate.o src/cstring.o src/ctrace.o
-LIB_O = src/cauxlib.o src/cbaselib.o src/cloadlib.o src/cslib.o src/cstrlib.o
+LIB_O = src/cauxlib.o src/cbaselib.o src/cloadlib.o src/cslib.o src/cstrlib.o\
+	src/cmathlib.o
 BASE_O = $(CORE_O) $(LIB_O) $(MYOBJS)
 
 CSCRIPT_T = cscript
@@ -132,28 +133,27 @@ pc:
 	echo pc o a depend buildecho
 
 
-# DO NOT MODIFY
 
+# DO NOT MODIFY
 
 capi.o: src/capi.c src/carray.h src/cobject.h src/cscript.h src/csconf.h \
  src/climits.h src/cdebug.h src/cstate.h src/cfunction.h src/ccode.h \
  src/cbits.h src/cparser.h src/clexer.h src/creader.h src/cmem.h \
  src/cgc.h src/cmeta.h src/cprotected.h src/ctable.h src/cstring.h \
- src/cvm.h src/capi.h src/ctrace.h
-carray.o: src/carray.c src/cdebug.h src/cobject.h src/cscript.h \
- src/csconf.h src/climits.h src/cstate.h src/carray.h src/cgc.h \
- src/cbits.h src/cmem.h
+ src/cvm.h src/capi.h
+carray.o: src/carray.c src/carray.h src/cobject.h src/cscript.h \
+ src/csconf.h src/climits.h src/cgc.h src/cbits.h src/cstate.h src/cmem.h
 cauxlib.o: src/cauxlib.c src/cauxlib.h src/cscript.h src/csconf.h
 cbaselib.o: src/cbaselib.c src/cscript.h src/csconf.h src/cauxlib.h \
  src/cslib.h
 ccode.o: src/ccode.c src/ccode.h src/cbits.h src/cparser.h src/clexer.h \
  src/creader.h src/cscript.h src/csconf.h src/cmem.h src/climits.h \
  src/cobject.h src/ctable.h src/cdebug.h src/cstate.h src/cvm.h src/cgc.h
-cdebug.o: src/cdebug.c src/cdebug.h src/cobject.h src/cscript.h \
- src/csconf.h src/climits.h src/cstate.h src/capi.h src/ccode.h \
+cdebug.o: src/cdebug.c src/cscript.h src/csconf.h src/cdebug.h \
+ src/cobject.h src/climits.h src/cstate.h src/capi.h src/ccode.h \
  src/cbits.h src/cparser.h src/clexer.h src/creader.h src/cmem.h \
  src/cfunction.h src/cstring.h src/cprotected.h src/cmeta.h src/cvm.h \
- src/ctrace.h src/cgc.h
+ src/cgc.h
 cfunction.o: src/cfunction.c src/cfunction.h src/ccode.h src/cbits.h \
  src/cparser.h src/clexer.h src/creader.h src/cscript.h src/csconf.h \
  src/cmem.h src/climits.h src/cobject.h src/cstate.h src/cdebug.h \
@@ -162,12 +162,14 @@ cgc.o: src/cgc.c src/cgc.h src/cbits.h src/cobject.h src/cscript.h \
  src/csconf.h src/climits.h src/cstate.h src/carray.h src/cfunction.h \
  src/ccode.h src/cparser.h src/clexer.h src/creader.h src/cmem.h \
  src/cmeta.h src/ctable.h src/cstring.h src/cvm.h src/cprotected.h
-clexer.o: src/clexer.c src/cmeta.h src/csconf.h src/cscript.h \
- src/cobject.h src/climits.h src/ctypes.h src/cgc.h src/cbits.h \
- src/cstate.h src/clexer.h src/creader.h src/cmem.h src/cdebug.h \
- src/cprotected.h src/ctable.h src/cstring.h
+clexer.o: src/clexer.c src/cobject.h src/cscript.h src/csconf.h \
+ src/climits.h src/ctypes.h src/cgc.h src/cbits.h src/cstate.h \
+ src/clexer.h src/creader.h src/cmem.h src/cdebug.h src/cprotected.h \
+ src/ctable.h src/cstring.h
 cloadlib.o: src/cloadlib.c src/cscript.h src/csconf.h src/cauxlib.h \
  src/cslib.h
+cmathlib.o: src/cmathlib.c src/cscript.h src/csconf.h src/cauxlib.h \
+ src/cslib.h src/climits.h
 cmem.o: src/cmem.c src/cgc.h src/cbits.h src/cobject.h src/cscript.h \
  src/csconf.h src/climits.h src/cstate.h src/cdebug.h src/cmem.h \
  src/cprotected.h src/creader.h
@@ -179,11 +181,11 @@ cobject.o: src/cobject.c src/climits.h src/cscript.h src/csconf.h \
 cparser.o: src/cparser.c src/ccode.h src/cbits.h src/cparser.h \
  src/clexer.h src/creader.h src/cscript.h src/csconf.h src/cmem.h \
  src/climits.h src/cobject.h src/cgc.h src/cstate.h src/cstring.h \
- src/ctrace.h src/cvm.h src/cfunction.h src/ctable.h
+ src/cvm.h src/cfunction.h src/ctable.h src/ctrace.h
 cprotected.o: src/cprotected.c src/cprotected.h src/creader.h \
  src/cscript.h src/csconf.h src/cmem.h src/climits.h src/cparser.h \
  src/clexer.h src/cobject.h src/cfunction.h src/ccode.h src/cbits.h \
- src/cstate.h src/cgc.h src/ctrace.h
+ src/cstate.h src/cgc.h
 creader.o: src/creader.c src/creader.h src/cscript.h src/csconf.h \
  src/cmem.h src/climits.h
 cscript.o: src/cscript.c src/cscript.h src/csconf.h src/cauxlib.h \
@@ -193,11 +195,13 @@ cstate.o: src/cstate.c src/ctable.h src/cobject.h src/cscript.h \
  src/csconf.h src/climits.h src/cbits.h src/carray.h src/cstate.h \
  src/capi.h src/cdebug.h src/cfunction.h src/ccode.h src/cparser.h \
  src/clexer.h src/creader.h src/cmem.h src/cgc.h src/cmeta.h \
- src/cprotected.h src/cstring.h src/ctrace.h
+ src/cprotected.h src/cstring.h
 cstring.o: src/cstring.c src/cstate.h src/cobject.h src/cscript.h \
  src/csconf.h src/climits.h src/cstring.h src/cgc.h src/cbits.h \
  src/ctypes.h src/cdebug.h src/cmem.h src/cvm.h src/cprotected.h \
  src/creader.h
+cstrlib.o: src/cstrlib.c src/cscript.h src/csconf.h src/cauxlib.h \
+ src/cslib.h src/climits.h
 ctable.o: src/ctable.c src/cstring.h src/cobject.h src/cscript.h \
  src/csconf.h src/climits.h src/cstate.h src/ctable.h src/cbits.h \
  src/cgc.h src/cmem.h src/cdebug.h

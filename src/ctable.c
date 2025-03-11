@@ -55,12 +55,12 @@ static const TValue absentkey = {ABSTKEYCONSTANT};
 static uint hashflt(cs_Number n) {
     cs_Integer ni;
     int exp;
-    n = cs_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
+    n = c_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
     if (c_likely(cs_number2integer(n, &ni))) {
         uint ui = cast_uint(exp) + cast_uint(ni);
         return (ui <= cast_uint(MAXINT) ? ui : cast_uint(~ui));
     }
-    cs_assert(c_numisnan(n) || cs_mathop(fabs)(n) == cast_num(HUGE_VAL));
+    cs_assert(c_numisnan(n) || c_mathop(fabs)(n) == cast_num(HUGE_VAL));
     return 0;
 }
 

@@ -266,7 +266,7 @@ typedef c_byte Instruction;
 
 /* @c_nummod - modulo 'a - floor(a/b)*b'. */
 #define c_nummod(C,a,b,m) \
-        { (void)(C); (m) = cs_mathop(fmod)(a, b); \
+        { (void)(C); (m) = c_mathop(fmod)(a, b); \
           if (((m) > 0) ? (b) < 0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
 /* @c_numdiv - float division. */
@@ -282,7 +282,7 @@ typedef c_byte Instruction;
 /* @c_numpow - exponentiation. */
 #ifndef c_numpow
 #define c_numpow(C, a, b) \
-        ((void)(C), (b) == 2 ? (a)*(a) : cs_mathop(pow)(a, b))
+        ((void)(C), (b) == 2 ? (a)*(a) : c_mathop(pow)(a, b))
 #endif
 
 /*

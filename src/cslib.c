@@ -16,6 +16,7 @@ static const cs_Entry loadedlibs[] = {
     {CS_GNAME, csopen_basic},
     {CS_LOADLIBNAME, csopen_package},
     {CS_STRLIBNAME, csopen_string},
+    {CS_MATHLIBNAME, csopen_math},
     {NULL, NULL}
 };
 
