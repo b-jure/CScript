@@ -10,7 +10,8 @@ cscript_testsuite_paths = {
     "syntax": Path("./test/syntax"),
     "basic": Path("./test/libs/basic"),
     "package": Path("./test/libs/package"),
-    "string": Path("./test/libs/string")
+    "string": Path("./test/libs/string"),
+    "math": Path("./test/libs/math"),
 }
 
 
