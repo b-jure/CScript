@@ -503,7 +503,7 @@ const cs_Entry mathlib[] = {
     {"cos", m_cos},
     {"deg", m_deg},
     {"exp", m_exp},
-    {"to_integer", m_toint},
+    {"tointeger", m_toint},
     {"floor", m_floor},
     {"fmod", m_fmod},
     {"ult", m_ult},
