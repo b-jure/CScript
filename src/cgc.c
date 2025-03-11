@@ -799,6 +799,7 @@ static c_mem atomic(cs_State *C) {
     separatetobefin(gs, 0);
     work += marktobefin(gs); /* ...and mark them */
     work += propagateall(gs); /* propagate changes */
+    csS_clearcache(gs);
     gs->whitebit = whitexor(gs); /* flip current white bit */
     cs_assert(gs->graylist == NULL); /* all must be propagated */
     cs_assert(gs->weak == NULL); /* 'weak' unused */

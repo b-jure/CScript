@@ -61,14 +61,14 @@ static int findfield(cs_State *C, int index, int limit) {
 
 
 /*
-** Try and push name of the currently active function in `di`.
+** Try and push name of the currently active function in `ar`.
 ** If function is global function, then the its name is pushed
 ** on the top of the stack.
 */
-static int push_glbfunc_name(cs_State *C, cs_Debug *di) {
+static int push_glbfunc_name(cs_State *C, cs_Debug *ar) {
     int top = cs_gettop(C); /* index of value on top of the stack */
     int func = top + 1;
-    cs_getinfo(C, "f", di); /* push function (top + 1) */
+    cs_getinfo(C, "f", ar); /* push function (top + 1) */
     csL_get_registrytable(C, CS_LOADED_TABLE);
     csL_check_stack(C, 6, "not enough stack space"); /* for `findfield` */
     if (findfield(C, func, 2)) { /* found? */
@@ -88,18 +88,18 @@ static int push_glbfunc_name(cs_State *C, cs_Debug *di) {
 
 
 CSLIB_API int csL_error_arg(cs_State *C, int arg, const char *extra) {
-    cs_Debug di;
-    if (!cs_getstack(C, 0, &di)) /* no stack frame? */
+    cs_Debug ar;
+    if (!cs_getstack(C, 0, &ar)) /* no stack frame? */
         return csL_error(C, "bad argument #%d (%s)", arg, extra);
-    cs_getinfo(C, "n", &di);
-    if (strcmp(di.namewhat, "method") == 0) {
+    cs_getinfo(C, "n", &ar);
+    if (strcmp(ar.namewhat, "method") == 0) {
         arg--; /* ignore `self` */
         if (arg == 0) /* self is the invalid argument? */
-            csL_error(C, "calling '%s' on a bad 'self' (%s)", di.name, extra);
+            csL_error(C, "calling '%s' on a bad 'self' (%s)", ar.name, extra);
     }
-    if (di.name == NULL)
-        di.name = (push_glbfunc_name(C, &di)) ? cs_to_string(C, -1) : "?";
-    return csL_error(C, "bad argument #%d to '%s' (%s)", arg, di.name, extra);
+    if (ar.name == NULL)
+        ar.name = (push_glbfunc_name(C, &ar)) ? cs_to_string(C, -1) : "?";
+    return csL_error(C, "bad argument #%d to '%s' (%s)", arg, ar.name, extra);
 }
 
 
@@ -352,11 +352,11 @@ CSLIB_API void *csL_to_lightuserdata(cs_State *C, int index) {
 
 
 CSLIB_API void csL_where(cs_State *C, int level) {
-    cs_Debug di;
-    if (cs_getstack(C, level, &di)) {
-        cs_getinfo(C, "sl", &di);
-        if (di.currline > 0) { /* have info? */
-            cs_push_fstring(C, "%s:%d: ", di.shortsrc, di.currline);
+    cs_Debug ar;
+    if (cs_getstack(C, level, &ar)) {
+        cs_getinfo(C, "sl", &ar);
+        if (ar.currline > 0) { /* have info? */
+            cs_push_fstring(C, "%s:%d: ", ar.shortsrc, ar.currline);
             return;
         }
     }
@@ -524,10 +524,10 @@ CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *vmtname) {
 
 /* find and return last call frame level */
 static int lastlevel(cs_State *C) {
-    cs_Debug di;
+    cs_Debug ar;
     int low = 0, high = 0;
     /* get upper bound, and store last known valid level in `low` */
-    while (cs_getstack(C, high, &di)) {
+    while (cs_getstack(C, high, &ar)) {
         low = high;
         high += (high == 0); /* avoid multiplying by 0 */
         high *= 2;
@@ -535,7 +535,7 @@ static int lastlevel(cs_State *C) {
     /* binary search between `low` and `high` levels */
     while (low < high) {
         int mid = low + ((high - low)/2);
-        if (cs_getstack(C, mid, &di))
+        if (cs_getstack(C, mid, &ar))
             low = mid + 1;
         else
             high = mid;
@@ -544,16 +544,16 @@ static int lastlevel(cs_State *C) {
 }
 
 
-static void push_func_name(cs_State *C, cs_Debug *di) {
-    if (push_glbfunc_name(C, di)) { /* try first a global name */
+static void push_func_name(cs_State *C, cs_Debug *ar) {
+    if (push_glbfunc_name(C, ar)) { /* try first a global name */
         cs_push_fstring(C, "function `%s`", cs_to_string(C, -1));
         cs_remove(C, -2); /* remove name */
-    } else if (*di->namewhat != '\0') { /* name from code? */
-        cs_push_fstring(C, "%s `%s`", di->namewhat, di->name);
-    } else if (*di->what == 'm') { /* main? */
+    } else if (*ar->namewhat != '\0') { /* name from code? */
+        cs_push_fstring(C, "%s `%s`", ar->namewhat, ar->name);
+    } else if (*ar->what == 'm') { /* main? */
         cs_push_literal(C, "main chunk");
-    } else if (*di->what != 'C') { /* CScript functions? */
-        cs_push_fstring(C, "function <%s:%d>", di->shortsrc, di->defline);
+    } else if (*ar->what != 'C') { /* CScript functions? */
+        cs_push_fstring(C, "function <%s:%d>", ar->shortsrc, ar->defline);
     } else /* unknown */
         cs_push_literal(C, "?");
 }
@@ -567,7 +567,7 @@ static void push_func_name(cs_State *C, cs_Debug *di) {
 CSLIB_API void csL_traceback(cs_State *C, cs_State *C1, int level,
                              const char *msg) {
     csL_Buffer B;
-    cs_Debug di;
+    cs_Debug ar;
     int last = lastlevel(C1);
     int limit2show = (last - level > (STACKLEVELS * 2) ? STACKLEVELS : -1);
     csL_buff_init(C, &B);
@@ -576,20 +576,20 @@ CSLIB_API void csL_traceback(cs_State *C, cs_State *C1, int level,
         csL_buff_push(&B, '\n');
     }
     csL_buff_push_string(&B, "stack traceback:");
-    while (cs_getstack(C1, level++, &di)) { /* tracing back... */
+    while (cs_getstack(C1, level++, &ar)) { /* tracing back... */
         if (limit2show-- == 0) { /* too many levels? */
             int n = last - level - STACKLEVELS + 1; /* levels to skip */
             cs_push_fstring(C, "\n\t(skipping %d levels)", n);
             csL_buff_push_stack(&B);
             level += n; /* skip to last levels */
         } else {
-            cs_getinfo(C1, "snl", &di); /* source, name, line info */
-            if (di.currline <= 0)
-                cs_push_fstring(C, "\n\t%s in ", di.shortsrc);
+            cs_getinfo(C1, "snl", &ar); /* source, name, line info */
+            if (ar.currline <= 0)
+                cs_push_fstring(C, "\n\t%s in ", ar.shortsrc);
             else
-                cs_push_fstring(C, "\n\t%s:%d: in ", di.shortsrc, di.currline);
+                cs_push_fstring(C, "\n\t%s:%d: in ", ar.shortsrc, ar.currline);
             csL_buff_push_stack(&B);
-            push_func_name(C, &di);
+            push_func_name(C, &ar);
             csL_buff_push_stack(&B);
         }
     }
