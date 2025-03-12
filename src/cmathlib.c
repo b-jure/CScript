@@ -259,8 +259,11 @@ static int m_type(cs_State *C) {
 
 
 /*
-** Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
-** All rights reserved.                          
+** This is a 64-bit version of Mersenne Twister pseudorandom number
+** generator.
+**
+** Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura,
+** All rights reserved.   
 **
 ** Redistribution and use in source and binary forms, with or without
 ** modification, are permitted provided that the following conditions
@@ -317,166 +320,250 @@ static int m_type(cs_State *C) {
 #endif
 
 
-#if defined(DBL_MIN)
-
-/* 'double' has 64 bits */
-#define RandF   double
-
-#elif (sizeof(cs_Number) * CHAR_BIT) >= 64
-
-/* 'cs_Number' has at least 64 bits */
-#define RandF   cs_Number
-
-#endif
-
-
 #if !defined(Rand64)
 #error Mersenne Twister implementation is missing 64-bit integer type
 #endif
 
-#if !defined(RandF)
-#error Mersenne Twister implementation is missing 64-bit float type
+
+/* convert 'Rand64' to 'cs_Unsigned' */
+#define R2U(x)      cast(cs_Unsigned, (x) & 0xffffffffffffffffu)
+
+/* convert a 'cs_Unsigned' to a 'Rand64' */
+#define U2R(x)	    cast(Rand64, (x))
+
+
+#if defined(DBL_MIN)
+#define RandF   double
 #endif
 
 
-/* Period parameters */  
-#define N 624
-#define M 397
-#define MATRIX_A 0x9908b0dfUL   /* constant vector a */
-#define UPPER_MASK 0x80000000UL /* most significant w-r bits */
-#define LOWER_MASK 0x7fffffffUL /* least significant r bits */
+#if !defined(RandF)
+#error Mersenne Twister implementation is missing double precision float type
+#endif
 
 
-static Rand64 mt[N]; /* the array for the state vector  */
-static int mti=N+1; /* mti==N+1 means mt[N] is not initialized */
+/* convert 'RandF' to 'cs_Number' */
+#define Rf2N(x)     cast(cs_Number, x)
 
 
-/*
-** Initializes mt[N] with a seed.
-*/
-static void init_genrand(Rand64 s) {
-    mt[0]= s & 0xffffffffUL;
-    for (mti=1; mti<N; mti++) {
-        mt[mti] = (1812433253UL * (mt[mti-1] ^ (mt[mti-1] >> 30)) + mti); 
-        mt[mti] &= 0xffffffffUL;
-    }
+
+#define NN          312
+#define MM          156
+#define MATRIX_A    0xB5026F5AA96619E9ULL
+#define UM          0xFFFFFFFF80000000ULL /* most significant 33 bits */
+#define LM          0x7FFFFFFFULL /* least significant 31 bits */
+
+
+/* Mersenne Twister algo-state */
+typedef struct MT19937 {
+    Rand64 mt[NN]; /* the array for the state vector */
+    int mti; /* mti == NN+1 means mt[NN] is not initialized */
+} MT19937;
+
+
+/* initializes context with a seed */
+static void init_ctx_seed(MT19937 *ctx, Rand64 seed) {
+    ctx->mt[0] = seed;
+    for (ctx->mti=1; ctx->mti<NN; ctx->mti++) 
+        ctx->mt[ctx->mti] =
+            (6364136223846793005ULL *
+            (ctx->mt[ctx->mti-1] ^ (ctx->mt[ctx->mti-1] >> 62)) + ctx->mti);
 }
 
 
 /*
-** Initialize by an array with array-length.
-** 'init_key' is the array for initializing keys.
-** 'key_length' is its length.
+** Initialize context by an array.
+** 'key' is the array for initializing keys and 'klen' is its length.
 */
-static void init_by_array(Rand64 init_key[], int key_length) {
-    int i, j, k;
-    init_genrand(19650218UL);
-    i=1; j=0;
-    k = (N>key_length ? N : key_length);
+static void init_ctx_array(MT19937 *ctx, Rand64 key[], Rand64 klen) {
+    Rand64 i = 1, j = 0;
+    Rand64 k = (NN>klen ? NN : klen);
+    init_ctx_seed(ctx, 19650218ULL);
     for (; k; k--) {
-        mt[i] = (mt[i] ^ ((mt[i-1] ^ (mt[i-1] >> 30)) * 1664525UL))
-          + init_key[j] + j; /* non linear */
-        mt[i] &= 0xffffffffUL;
+        ctx->mt[i] =
+            (ctx->mt[i] ^
+            ((ctx->mt[i-1] ^ (ctx->mt[i-1] >> 62)) * 3935559000370003845ULL)) +
+            key[j] + j; /* non linear */
         i++; j++;
-        if (i>=N) { mt[0] = mt[N-1]; i=1; }
-        if (j>=key_length) j=0;
+        if (i >= NN) { ctx->mt[0] = ctx->mt[NN-1]; i = 1; }
+        if (j >= klen) j = 0;
     }
-    for (k=N-1; k; k--) {
-        mt[i] = (mt[i] ^ ((mt[i-1] ^ (mt[i-1] >> 30)) * 1566083941UL))
-          - i; /* non linear */
-        mt[i] &= 0xffffffffUL;
+    for (k=NN-1; k; k--) {
+        ctx->mt[i] =
+            (ctx->mt[i] ^
+            ((ctx->mt[i-1] ^ (ctx->mt[i-1] >> 62)) * 2862933555777941757ULL)) -
+            i; /* non linear */
         i++;
-        if (i>=N) { mt[0] = mt[N-1]; i=1; }
+        if (i >= NN) { ctx->mt[0] = ctx->mt[NN-1]; i = 1; }
     }
-    mt[0] = 0x80000000UL; /* MSB is 1; assuring non-zero initial array */ 
+    ctx->mt[0] = 1ULL << 63; /* MSB is 1; assuring non-zero initial array */ 
 }
 
 
-/* 
-** Generates a random number on [0,0xffffffff] interval.
-*/
-static Rand64 genrand_int32(void) {
-    static Rand64 mag01[2]={0x0UL, MATRIX_A};
-    Rand64 y;
-    /* mag01[x] = x * MATRIX_A  for x=0,1 */
-    if (mti >= N) { /* generate N words at one time */
-        int kk;
-        if (mti == N+1) /* init_genrand() has not been called? */
-            init_genrand(5489UL); /* use default initial seed */
-        for (kk = 0; kk < N-M; kk++) {
-            y = (mt[kk]&UPPER_MASK) | (mt[kk+1]&LOWER_MASK);
-            mt[kk] = mt[kk+M] ^ (y >> 1) ^ mag01[y & 0x1UL];
+/* initializes context with default seed */
+static void init_ctx_default(MT19937 *ctx) {
+    init_ctx_seed(ctx, 5489ULL);
+}
+
+
+/* generates a random number on [0, 2^64-1] interval */
+static Rand64 genrand_integer(MT19937 *ctx) {
+    static Rand64 mag01[2]={0ULL, MATRIX_A};
+    Rand64 x;
+    if (ctx->mti >= NN) { /* generate NN words at one time */
+        int i;
+        if (ctx->mti == NN+1)  /* 'init_ctx_seed' has not been called? */
+            init_ctx_default(ctx); /* use default initialization */
+        for (i = 0; i < NN-MM; i++) {
+            x = (ctx->mt[i]&UM) | (ctx->mt[i+1]&LM);
+            ctx->mt[i] = ctx->mt[i+MM] ^ (x>>1) ^ mag01[cast_int(x&1ULL)];
         }
-        for (; kk < N-1; kk++) {
-            y = (mt[kk]&UPPER_MASK) | (mt[kk+1]&LOWER_MASK);
-            mt[kk] = mt[kk+(M-N)] ^ (y >> 1) ^ mag01[y & 0x1UL];
+        for (; i < NN-1; i++) {
+            x = (ctx->mt[i]&UM) | (ctx->mt[i+1]&LM);
+            ctx->mt[i] = ctx->mt[i+(MM-NN)] ^ (x>>1) ^ mag01[cast_int(x&1ULL)];
         }
-        y = (mt[N-1]&UPPER_MASK) | (mt[0]&LOWER_MASK);
-        mt[N-1] = mt[M-1] ^ (y >> 1) ^ mag01[y & 0x1UL];
-        mti = 0;
+        x = (ctx->mt[NN-1]&UM) | (ctx->mt[0]&LM);
+        ctx->mt[NN-1] = ctx->mt[MM-1] ^ (x>>1) ^ mag01[cast_int(x&1ULL)];
+        ctx->mti = 0;
     }
-    y = mt[mti++];
-    /* Tempering */
-    y ^= (y >> 11);
-    y ^= (y << 7) & 0x9d2c5680UL;
-    y ^= (y << 15) & 0xefc60000UL;
-    y ^= (y >> 18);
-    return y;
+    x = ctx->mt[ctx->mti++];
+    x ^= (x >> 29) & 0x5555555555555555ULL;
+    x ^= (x << 17) & 0x71D67FFFEDA60000ULL;
+    x ^= (x << 37) & 0xFFF7EEE000000000ULL;
+    x ^= (x >> 43);
+    return x;
 }
 
 
-/*
-** Generates a random number on [0,0x7fffffff] interval.
-*/
-static SRand64 genrand_int31(void) {
-    return (SRand64)(genrand_int32()>>1);
+/* generates a random number on (0,1) real-interval */
+static RandF genrand_float(MT19937 *ctx) {
+    return ((genrand_integer(ctx)>>12)+0.5) * (1.0/4503599627370496.0);
 }
 
 
-/*
-** Generates a random number on [0,1] real-interval.
-*/
-static RandF genrand_float32_full(void) {
-    return (RandF)(genrand_int32()*(1.0/4294967295.0/*(1.0/(2^32-1))*/)); 
+/* maximum number of elements in the seed array */
+#define SEEDELEMS       1000
+
+typedef struct SeedArray {
+    Rand64 seed[SEEDELEMS]; /* seed elements */
+    ushort i; /* next element position in 'seed' */
+    ushort n; /* total number of elements in 'seed' */
+} SeedArray;
+
+
+/* adds seed element to 'SeedArray' */
+static void add_seed_elem(cs_State *C, SeedArray *sa) {
+    cs_Unsigned seed = pointer2uint(cs_to_pointer(C, -1));
+    if (seed == 0) /* no pointer? */
+        seed = cast(cs_Unsigned, time(NULL)); /* use current time instead */
+    if (sa->i >= sizeof(sa->seed)/sizeof(sa->seed[0]))
+        sa->i = 0; /* wrap */
+    else
+        sa->n++; /* new seed element */
+    sa->seed[sa->i++] = U2R(seed);
+    cs_pop(C, 1); /* remove seed value */
 }
 
 
-/*
-** Generates a random number on [0,1) real-interval.
-*/
-static RandF genrand_float32_notone(void) {
-    return (RandF)(genrand_int32()*(1.0/4294967296.0/*(1.0/(2^32))*/));
+static int m_srand(cs_State *C) {
+    SeedArray sa = {0};
+    MT19937 *ctx = cast(MT19937 *, cs_to_userdata(C, cs_upvalueindex(1)));
+    int t = cs_type(C, 0);
+    if (t != CS_TNONE) { /* have at least one argument? */
+        if (t == CS_TNUMBER) { /* seed with integer? */
+            cs_Integer n = csL_check_integer(C, 0);
+            sa.seed[0] = U2R(c_castS2U(n));
+            sa.n = 1;
+        } else if (t == CS_TARRAY) { /* seed with array values? */
+            int i = cs_get_nnilindex(C, 0, 0, -1);
+            while (i >= 0) {
+                add_seed_elem(C, &sa);
+                cs_get_nnilindex(C, 0, i, -1);
+            }
+        } else if (t == CS_TTABLE) { /* seed with table values */
+            cs_push_nil(C);
+            while (cs_next(C, 0))
+                add_seed_elem(C, &sa);
+        } else /* invalid argument type */
+            csL_error_type(C, 0, "number, array or table");
+    }
+    if (sa.n == 0) /* no seed values? */
+        init_ctx_default(ctx); /* default initialization */
+    else if (sa.n == 1) /* single seed value? */
+        init_ctx_seed(ctx, sa.seed[0]); /* use it as seed */
+    else /* multiple seed values */
+        init_ctx_array(ctx, sa.seed, sa.n); /* use all of them to seed */
+    return 0;
+}
+
+
+/* project random number into the [0..n] interval */
+static cs_Unsigned project(MT19937 *ctx, cs_Unsigned ran, cs_Unsigned n) {
+    if ((n & (n-1)) == 0) /* 'n' is power of 2? */
+        return ran & n;
+    else {
+        cs_Unsigned lim = n;
+        /* Computes the smallest (2^b - 1) not smaller than 'n'.
+        ** It works by copying the highest bit set in 'n' to
+        ** all of the lower bits. */
+        lim |= (lim >> 1);
+        lim |= (lim >> 2);
+        lim |= (lim >> 4);
+        lim |= (lim >> 8);
+        lim |= (lim >> 16);
+#if (CS_UNSIGNED_MAX >> 31) >= 3
+        lim |= (lim >> 32); /* type of 'lim' has more than 32 bits */
+#endif
+        cs_assert((lim & (lim+1)) == 0 /* 'lim + 1' is a power of 2, */
+                && lim >= n /* not smaller than 'n', */
+                && (lim >> 1) < n); /* and it is the smallest one */
+        while ((ran &= lim) > n) /* project 'ran' into [0..lim] */
+            ran = R2U(genrand_integer(ctx)); /* not in [0..n]? try again */
+        return ran;
+    }
 }
 
 
 static int m_rand(cs_State *C) {
-    cs_push_integer(C, (cs_Integer)genrand_int32());
-    return 1;
-}
-
-
-static int m_rands(cs_State *C) {
-    cs_push_integer(C, (cs_Integer)genrand_int31());
-    return 1;
-}
-
-
-static int m_randff(cs_State *C) {
-    cs_push_number(C, (cs_Number)genrand_float32_full());
+    MT19937 *ctx = cs_to_userdata(C, cs_upvalueindex(1));
+    Rand64 ran = genrand_integer(ctx);
+    cs_Integer low, up;
+    cs_Unsigned p;
+    switch (cs_getntop(C)) {
+        case 0: {
+            cs_push_integer(C, c_castU2S(R2U(ran)));
+            return 1;
+        }
+        case 1: { /* upper limit */
+            low = 1;
+            up = csL_check_integer(C, 0);
+            break;
+        }
+        case 2: { /* lower and upper limit */
+            low = csL_check_integer(C, 0);
+            up = csL_check_integer(C, 1);
+            break;
+        }
+        default: csL_error(C, "invalid number of arguments");
+    }
+    csL_check_arg(C, low <= up, 0, "interval is empty");
+    /* project random integer into the interval [low, up] */
+    p = project(ctx, ran, c_castS2U(up - low));
+    cs_push_integer(C, c_castU2S(p) + low);
     return 1;
 }
 
 
 static int m_randf(cs_State *C) {
-    cs_push_number(C, (cs_Number)genrand_float32_notone());
+    MT19937 *ctx = cs_to_userdata(C, cs_upvalueindex(1));
+    cs_push_number(C, Rf2N(genrand_float(ctx)));
     return 1;
 }
 
 
 static const cs_Entry randfuncs[] = {
+    {"srand", m_srand},
     {"rand", m_rand},
-    {"rands", m_rands},
-    {"randff", m_randff},
     {"randf", m_randf},
     {NULL, NULL}
 };
@@ -486,10 +573,10 @@ static const cs_Entry randfuncs[] = {
 ** Register the random functions and initialize their state.
 */
 static void set_rand_funcs(cs_State *C) {
-    init_genrand(5489UL); /* initialize with default seed */
-    csL_setfuncs(C, randfuncs, 0);
+    MT19937 *ctx = cs_push_userdata(C, sizeof(*ctx), 0);
+    init_ctx_default(ctx);
+    csL_setfuncs(C, randfuncs, 1);
 }
-
 
 /* }================================================================== */
 
@@ -517,8 +604,9 @@ const cs_Entry mathlib[] = {
     {"tan", m_tan},
     {"type", m_type},
     /* placeholders */
-    {"random", NULL},
-    {"random_seed", NULL},
+    {"srand", NULL},
+    {"rand", NULL},
+    {"randf", NULL},
     {"pi", NULL},
     {"huge", NULL},
     {"maxint", NULL},

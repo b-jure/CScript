@@ -59,21 +59,21 @@ typedef unsigned long   ulong;
 #define C_P2I   uintmax_t
 #endif
 
-#define pointer2uint(p)     ((unsigned int)((C_P2I)(p) & UINT_MAX))
+#define pointer2uint(p)     cast_uint((C_P2I)(p) & UINT_MAX)
 
 
 /* internal assertions for debugging */
 #if defined(CSI_ASSERT)
 #undef NDEBUG
 #include <assert.h>
-#define cs_assert(e)            assert(e)
+#define cs_assert(e)        assert(e)
 #endif
 
 #if defined(cs_assert)
-#define check_exp(c,e)          (cs_assert(c),(e))
+#define check_exp(c,e)      (cs_assert(c),(e))
 #else
-#define cs_assert(e)            ((void)0)
-#define check_exp(c,e)          (e)
+#define cs_assert(e)        ((void)0)
+#define check_exp(c,e)      (e)
 #endif
 
 /* C API assertions */
