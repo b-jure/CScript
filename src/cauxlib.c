@@ -480,11 +480,12 @@ static void fwarnoff(void *ud, const char *msg, int tocont) {
 #define addbuff(b,v)	(memcpy(&b[0], &(v), sizeof(v)), b += sizeof(v))
 
 
-static uint csi_makeseed(void) {
-    uint buff[BUFSEED];
+static unsigned int csi_makeseed(void) {
+    unsigned int buff[BUFSEED];
+    unsigned int res;
+    unsigned int i;
     time_t t = time(NULL);
     char *b = (char*)buff;
-    uint res, i;
     addbuff(b, b);  /* local variable's address */
     addbuff(b, t);  /* time */
     /* fill (rare but possible) remain of the buffer with zeros */
@@ -670,6 +671,7 @@ CSLIB_API int csL_vmt_isequal(cs_State *C, int index, const cs_VMT *vmt) {
 
 
 CSLIB_API unsigned csL_makeseed(cs_State *C) {
+    (void)(C); /* unused */
     return csi_makeseed();
 }
 

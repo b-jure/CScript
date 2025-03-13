@@ -154,7 +154,7 @@ struct cs_Entry {
 /* -------------------------------------------------------------------------
  * State manipulation
  * ------------------------------------------------------------------------- */
-CS_API cs_State     *cs_newstate(cs_Alloc allocator, void *ud); 
+CS_API cs_State     *cs_newstate(cs_Alloc allocator, void *ud, unsigned seed); 
 CS_API void          cs_close(cs_State *C);
 CS_API cs_State     *cs_newthread(cs_State *C);
 CS_API int           cs_resetthread(cs_State *C);

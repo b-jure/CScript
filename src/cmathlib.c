@@ -416,7 +416,7 @@ static Rand64 genrand_integer(cs_State *C, MT19937 *ctx) {
     if (ctx->mti >= NN) { /* generate NN words at one time */
         int i;
         if (ctx->mti == NN+1)  /* 'init_ctx_seed' has not been called? */
-            init_ctx_default(ctx); /* use default initialization */
+            init_ctx_default(C, ctx); /* use default initialization */
         for (i = 0; i < NN-MM; i++) {
             x = (ctx->mt[i]&UM) | (ctx->mt[i+1]&LM);
             ctx->mt[i] = ctx->mt[i+MM] ^ (x>>1) ^ mag01[cast_int(x&1ULL)];
@@ -439,8 +439,8 @@ static Rand64 genrand_integer(cs_State *C, MT19937 *ctx) {
 
 
 /* generates a random number on (0,1) real-interval */
-static RandF genrand_float(MT19937 *ctx) {
-    return ((genrand_integer(ctx)>>12)+0.5) * (1.0/4503599627370496.0);
+static RandF genrand_float(cs_State *C, MT19937 *ctx) {
+    return ((genrand_integer(C, ctx)>>12)+0.5) * (1.0/4503599627370496.0);
 }
 
 
@@ -533,7 +533,7 @@ static cs_Unsigned project(cs_State *C, MT19937 *ctx, cs_Unsigned ran,
 
 static int m_rand(cs_State *C) {
     MT19937 *ctx = cs_to_userdata(C, cs_upvalueindex(1));
-    Rand64 ran = genrand_integer(ctx);
+    Rand64 ran = genrand_integer(C, ctx);
     cs_Integer low, up;
     cs_Unsigned p;
     switch (cs_getntop(C)) {
@@ -555,7 +555,7 @@ static int m_rand(cs_State *C) {
     }
     csL_check_arg(C, low <= up, 0, "interval is empty");
     /* project random integer into the interval [low, up] */
-    p = project(ctx, ran, c_castS2U(up - low));
+    p = project(C, ctx, ran, c_castS2U(up - low));
     cs_push_integer(C, c_castU2S(p) + low);
     return 1;
 }
@@ -563,7 +563,7 @@ static int m_rand(cs_State *C) {
 
 static int m_randf(cs_State *C) {
     MT19937 *ctx = cs_to_userdata(C, cs_upvalueindex(1));
-    cs_push_number(C, Rf2N(genrand_float(ctx)));
+    cs_push_number(C, Rf2N(genrand_float(C, ctx)));
     return 1;
 }
 

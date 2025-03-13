@@ -7,6 +7,7 @@
 
 #define CS_CORE
 
+#include <string.h>
 
 #include "ctable.h"
 #include "carray.h"
