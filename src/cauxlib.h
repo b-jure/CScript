@@ -95,6 +95,7 @@ CSLIB_API const char *csL_gsub(cs_State *C, const char *s, const char *p,
                                const char *r);
 CSLIB_API int         csL_vmt_isequal(cs_State *C, int index,
                                       const cs_VMT *vmt);
+CSLIB_API unsigned    csL_makeseed(cs_State *C);
 
 /* ------------------------------------------------------------------------ 
 ** Reference system

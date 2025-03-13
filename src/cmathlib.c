@@ -19,7 +19,10 @@
 #endif
 
 
-static cs_Unsigned int_abs(cs_Integer v) {
+#define cs_seed
+
+
+static cs_Unsigned auxabs(cs_Integer v) {
     cs_Integer const mask = v >> (sizeof(cs_Integer)*CHAR_BIT - 1);
     return c_castS2U((v + mask) ^ mask);
 }
@@ -27,34 +30,10 @@ static cs_Unsigned int_abs(cs_Integer v) {
 
 static int m_abs(cs_State *C) {
     if (cs_is_integer(C, 0)) {
-        cs_Integer n = int_abs(cs_to_integer(C, 0));
+        cs_Integer n = auxabs(cs_to_integer(C, 0));
         cs_push_integer(C, n);
     } else
         cs_push_number(C, c_mathop(fabs)(csL_check_number(C, 0)));
-    return 1;
-}
-
-
-static int m_sin(cs_State *C) {
-    cs_push_number(C, c_mathop(sin)(csL_check_number(C, 0)));
-    return 1;
-}
-
-
-static int m_cos(cs_State *C) {
-    cs_push_number(C, c_mathop(cos)(csL_check_number(C, 0)));
-    return 1;
-}
-
-
-static int m_tan(cs_State *C) {
-    cs_push_number(C, c_mathop(tan)(csL_check_number(C, 0)));
-    return 1;
-}
-
-
-static int m_asin(cs_State *C) {
-    cs_push_number(C, c_mathop(asin)(csL_check_number(C, 0)));
     return 1;
 }
 
@@ -65,24 +44,16 @@ static int m_acos(cs_State *C) {
 }
 
 
-static int m_atan(cs_State *C) {
-    cs_Number y = csL_check_number(C, 0);
-    cs_Number x = csL_opt_number(C, 1, 1);
-    cs_push_number(C, c_mathop(atan2)(y, x));
+static int m_asin(cs_State *C) {
+    cs_push_number(C, c_mathop(asin)(csL_check_number(C, 0)));
     return 1;
 }
 
 
-/* convert top to integer */
-static int m_toint(cs_State *C) {
-    int valid;
-    cs_Integer n = cs_to_integerx(C, 0, &valid);
-    if (c_likely(valid))
-        cs_push_integer(C, n);
-    else {
-        csL_check_any(C, 0);
-        csL_push_fail(C); /* value is not convertible to integer */
-    }
+static int m_atan(cs_State *C) {
+    cs_Number y = csL_check_number(C, 0);
+    cs_Number x = csL_opt_number(C, 1, 1);
+    cs_push_number(C, c_mathop(atan2)(y, x));
     return 1;
 }
 
@@ -96,24 +67,44 @@ static void push_num_or_int(cs_State *C, cs_Number d) {
 }
 
 
-/* round down */
-static int m_floor(cs_State *C) {
-    if (cs_is_integer(C, 0))
-        cs_settop(C, 1); /* integer is its own floor */
-    else {
-        cs_Number d = c_mathop(floor)(csL_check_number(C, 0));
-        push_num_or_int(C, d);
-    }
-    return 1;
-}
-
-
 /* round up */
 static int m_ceil (cs_State *C) {
     if (cs_is_integer(C, 0))
         cs_settop(C, 1); /* integer is its own ceiling */
     else {
         cs_Number d = c_mathop(ceil)(csL_check_number(C, 0));
+        push_num_or_int(C, d);
+    }
+    return 1;
+}
+
+
+static int m_cos(cs_State *C) {
+    cs_push_number(C, c_mathop(cos)(csL_check_number(C, 0)));
+    return 1;
+}
+
+
+/* angle from radians to degrees */
+static int m_deg(cs_State *C) {
+    cs_push_number(C, csL_check_number(C, 0) * (c_mathop(180.0) / PI));
+    return 1;
+}
+
+
+/* base-e exponentiation */
+static int m_exp(cs_State *C) {
+    cs_push_number(C, c_mathop(exp)(csL_check_number(C, 0)));
+    return 1;
+}
+
+
+/* round down */
+static int m_floor(cs_State *C) {
+    if (cs_is_integer(C, 0))
+        cs_settop(C, 1); /* integer is its own floor */
+    else {
+        cs_Number d = c_mathop(floor)(csL_check_number(C, 0));
         push_num_or_int(C, d);
     }
     return 1;
@@ -135,24 +126,29 @@ static int m_fmod(cs_State *C) {
 }
 
 
-/*
-** Next function does not use 'modf', avoiding problems with 'double*'
-** (which is not compatible with 'float*') when cs_Number is not
-** 'double'.
-*/
-static int m_modf(cs_State *C) {
-    if (cs_is_integer(C ,0)) {
-        cs_settop(C, 1); /* number is its own integer part */
-        cs_push_number(C, 0); /* no fractional part */
-    } else {
-        cs_Number n = csL_check_number(C, 0);
-        /* integer part (rounds toward zero) */
-        cs_Number ip = (n < 0) ? c_mathop(ceil)(n) : c_mathop(floor)(n);
-        push_num_or_int(C, ip);
-        /* fractional part (test needed for inf/-inf) */
-        cs_push_number(C, (n == ip) ? c_mathop(0.0) : (n - ip));
+static int m_sin(cs_State *C) {
+    cs_push_number(C, c_mathop(sin)(csL_check_number(C, 0)));
+    return 1;
+}
+
+
+static int m_tan(cs_State *C) {
+    cs_push_number(C, c_mathop(tan)(csL_check_number(C, 0)));
+    return 1;
+}
+
+
+/* convert top to integer */
+static int m_toint(cs_State *C) {
+    int valid;
+    cs_Integer n = cs_to_integerx(C, 0, &valid);
+    if (c_likely(valid))
+        cs_push_integer(C, n);
+    else {
+        csL_check_any(C, 0);
+        csL_push_fail(C); /* value is not convertible to integer */
     }
-    return 2; /* return integer part and fractional part */
+    return 1;
 }
 
 
@@ -192,24 +188,16 @@ static int m_log(cs_State *C) {
 }
 
 
-/* base-e exponentiation */
-static int m_exp(cs_State *C) {
-    cs_push_number(C, c_mathop(exp)(csL_check_number(C, 0)));
-    return 1;
-}
-
-
-/* angle from radians to degrees */
-static int m_deg(cs_State *C) {
-    cs_push_number(C, csL_check_number(C, 0) * (c_mathop(180.0) / PI));
-    return 1;
-}
-
-
-/* angle from degrees to radians */
-static int m_rad (cs_State *C) {
-    cs_push_number(C, csL_check_number(C, 0) * (PI / c_mathop(180.0)));
-    return 1;
+static int m_max(cs_State *C) {
+    int n = cs_getntop(C); /* number of arguments */
+    int imax = 0; /* index of current maximum value */
+    csL_check_arg(C, n >= 0, 0, "value expected");
+    for (int i = 1; i < n; i++) {
+        if (cs_compare(C, imax, i, CS_OPLT))
+            imax = i;
+    }
+    cs_push(C, imax); /* push value at 'imax' index */
+    return 1; /* return max */
 }
 
 
@@ -226,16 +214,31 @@ static int m_min(cs_State *C) {
 }
 
 
-static int m_max(cs_State *C) {
-    int n = cs_getntop(C); /* number of arguments */
-    int imax = 0; /* index of current maximum value */
-    csL_check_arg(C, n >= 0, 0, "value expected");
-    for (int i = 1; i < n; i++) {
-        if (cs_compare(C, imax, i, CS_OPLT))
-            imax = i;
+/*
+** Next function does not use 'modf', avoiding problems with 'double*'
+** (which is not compatible with 'float*') when cs_Number is not
+** 'double'.
+*/
+static int m_modf(cs_State *C) {
+    if (cs_is_integer(C ,0)) {
+        cs_settop(C, 1); /* number is its own integer part */
+        cs_push_number(C, 0); /* no fractional part */
+    } else {
+        cs_Number n = csL_check_number(C, 0);
+        /* integer part (rounds toward zero) */
+        cs_Number ip = (n < 0) ? c_mathop(ceil)(n) : c_mathop(floor)(n);
+        push_num_or_int(C, ip);
+        /* fractional part (test needed for inf/-inf) */
+        cs_push_number(C, (n == ip) ? c_mathop(0.0) : (n - ip));
     }
-    cs_push(C, imax); /* push value at 'imax' index */
-    return 1; /* return max */
+    return 2; /* return integer part and fractional part */
+}
+
+
+/* angle from degrees to radians */
+static int m_rad (cs_State *C) {
+    cs_push_number(C, csL_check_number(C, 0) * (PI / c_mathop(180.0)));
+    return 1;
 }
 
 
@@ -400,14 +403,14 @@ static void init_ctx_array(MT19937 *ctx, Rand64 key[], Rand64 klen) {
 }
 
 
-/* initializes context with default seed */
-static void init_ctx_default(MT19937 *ctx) {
-    init_ctx_seed(ctx, 5489ULL);
+/* default initialization */
+static void init_ctx_default(cs_State *C, MT19937 *ctx) {
+    init_ctx_seed(ctx, csL_makeseed(C));
 }
 
 
 /* generates a random number on [0, 2^64-1] interval */
-static Rand64 genrand_integer(MT19937 *ctx) {
+static Rand64 genrand_integer(cs_State *C, MT19937 *ctx) {
     static Rand64 mag01[2]={0ULL, MATRIX_A};
     Rand64 x;
     if (ctx->mti >= NN) { /* generate NN words at one time */
@@ -454,8 +457,11 @@ typedef struct SeedArray {
 /* adds seed element to 'SeedArray' */
 static void add_seed_elem(cs_State *C, SeedArray *sa) {
     cs_Unsigned seed = pointer2uint(cs_to_pointer(C, -1));
-    if (seed == 0) /* no pointer? */
-        seed = cast(cs_Unsigned, time(NULL)); /* use current time instead */
+    if (seed == 0) { /* no pointer? */
+        cs_Unsigned ub = csL_makeseed(C);
+        cs_Unsigned lb = csL_makeseed(C);
+        seed = (ub << 31)|lb;
+    }
     if (sa->i >= sizeof(sa->seed)/sizeof(sa->seed[0]))
         sa->i = 0; /* wrap */
     else
@@ -488,7 +494,7 @@ static int m_srand(cs_State *C) {
             csL_error_type(C, 0, "number, array or table");
     }
     if (sa.n == 0) /* no seed values? */
-        init_ctx_default(ctx); /* default initialization */
+        init_ctx_default(C, ctx); /* default initialization */
     else if (sa.n == 1) /* single seed value? */
         init_ctx_seed(ctx, sa.seed[0]); /* use it as seed */
     else /* multiple seed values */
@@ -498,7 +504,8 @@ static int m_srand(cs_State *C) {
 
 
 /* project random number into the [0..n] interval */
-static cs_Unsigned project(MT19937 *ctx, cs_Unsigned ran, cs_Unsigned n) {
+static cs_Unsigned project(cs_State *C, MT19937 *ctx, cs_Unsigned ran,
+                                                      cs_Unsigned n) {
     if ((n & (n-1)) == 0) /* 'n' is power of 2? */
         return ran & n;
     else {
@@ -518,7 +525,7 @@ static cs_Unsigned project(MT19937 *ctx, cs_Unsigned ran, cs_Unsigned n) {
                 && lim >= n /* not smaller than 'n', */
                 && (lim >> 1) < n); /* and it is the smallest one */
         while ((ran &= lim) > n) /* project 'ran' into [0..lim] */
-            ran = R2U(genrand_integer(ctx)); /* not in [0..n]? try again */
+            ran = R2U(genrand_integer(C, ctx)); /* not in [0..n]? try again */
         return ran;
     }
 }
@@ -574,7 +581,7 @@ static const cs_Entry randfuncs[] = {
 */
 static void set_rand_funcs(cs_State *C) {
     MT19937 *ctx = cs_push_userdata(C, sizeof(*ctx), 0);
-    init_ctx_default(ctx);
+    init_ctx_default(C, ctx);
     csL_setfuncs(C, randfuncs, 1);
 }
 

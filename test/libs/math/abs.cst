@@ -1,0 +1,14 @@
+local fn assert_error(f, ...) {
+    local res, err = pcall(f, ...);
+    assert(!res and err);
+}
+
+local x = -5;
+assert(math.abs(x) == 5);
+assert(math.abs(-x) == 5);
+assert(math.abs(-5) == 5);
+assert(math.abs(--5) == 5);
+x = -6.420e-2;
+assert(math.abs(x) == -x);
+assert(math.abs(x) == 6.420e-2);
+assert_error(math.abs, "str");

@@ -23,26 +23,6 @@
 #include "cstring.h"
 
 
-#if !defined(csi_makeseed)
-#include <time.h>
-#include <string.h>
-
-#define buffadd(b,p,e) \
-    { size_t t = cast_sizet(e); \
-      memcpy((b) + (p), &t, sizeof(t)); (p) += sizeof(t); }
-
-static uint csi_makeseed(cs_State *C) {
-    char str[3 * sizeof(size_t)];
-    uint seed = time(NULL); /* seed with current time */
-    int n = 0;
-    buffadd(str, n, C); /* heap variable */
-    buffadd(str, n, &seed); /* local variable */
-    buffadd(str, n, &cs_newstate); /* public function */
-    cs_assert(n == sizeof(str));
-    return csS_hash(str, n, seed);
-}
-#endif
-
 
 /*
 ** Preinitialize all thread fields to avoid collector
@@ -182,7 +162,7 @@ static void freestate(cs_State *C) {
 ** The returned thread state is mainthread.
 ** In case of errors NULL is returned.
 */
-CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
+CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     GState *gs;
     cs_State *C;
     XSG *xsg = falloc(NULL, 0, sizeof(XSG), ud);
@@ -197,7 +177,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud) {
     incnnyc(C);
     gs->objects = obj2gco(C);
     gs->totalbytes = sizeof(XSG);
-    gs->seed = csi_makeseed(C); /* initial seed for hashing */
+    gs->seed = seed; /* initial seed for hashing */
     gs->strtab.hash = NULL;
     gs->strtab.nuse = gs->strtab.size = 0;
     gs->gcdebt = 0;

@@ -750,8 +750,8 @@ void csV_concat(cs_State *C, int total) {
 #define op_arithIf(C,fop) { \
     TValue *v = peek(0); \
     int imm = fetchl(); \
-    imm = IMML(imm); \
     cs_Number n; \
+    imm = IMML(imm); \
     if (tonumber(v, n)) { \
         cs_Number fimm = cast_num(imm); \
         setfval(v, fop(C, n, fimm)); \

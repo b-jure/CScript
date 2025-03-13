@@ -462,8 +462,44 @@ static void fwarnoff(void *ud, const char *msg, int tocont) {
 }
 
 
+#if !defined(csi_makeseed)
+
+#include <time.h>
+
+
+/* Size for the buffer, in bytes */
+#define BUFSEEDB	(sizeof(void*) + sizeof(time_t))
+
+/* Size for the buffer in int's, rounded up */
+#define BUFSEED		((BUFSEEDB + sizeof(int) - 1) / sizeof(int))
+
+/*
+** Copy the contents of variable 'v' into the buffer pointed by 'b'.
+** (The '&b[0]' disguises 'b' to fix an absurd warning from clang.)
+*/
+#define addbuff(b,v)	(memcpy(&b[0], &(v), sizeof(v)), b += sizeof(v))
+
+
+static uint csi_makeseed(void) {
+    uint buff[BUFSEED];
+    time_t t = time(NULL);
+    char *b = (char*)buff;
+    uint res, i;
+    addbuff(b, b);  /* local variable's address */
+    addbuff(b, t);  /* time */
+    /* fill (rare but possible) remain of the buffer with zeros */
+    memset(b, 0, sizeof(buff) - BUFSEEDB);
+    res = buff[0];
+    for (i = 1; i < BUFSEED; i++)
+        res ^= (res >> 3) + (res << 7) + buff[i];
+    return res;
+}
+
+#endif
+
+
 CSLIB_API cs_State *csL_newstate(void) {
-    cs_State *C = cs_newstate(allocator, NULL);
+    cs_State *C = cs_newstate(allocator, NULL, csi_makeseed());
     if (c_likely(C)) {
         cs_atpanic(C, panic);
         cs_setwarnf(C, fwarnoff, C); /* warnings off by default */
@@ -630,6 +666,11 @@ CSLIB_API int csL_vmt_isequal(cs_State *C, int index, const cs_VMT *vmt) {
         return 1; /* equal */
     }
     return 0;
+}
+
+
+CSLIB_API unsigned csL_makeseed(cs_State *C) {
+    return csi_makeseed();
 }
 
 

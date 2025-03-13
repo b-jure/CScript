@@ -7,7 +7,7 @@
         <link rel="stylesheet" type="text/css" href="cscript.css">
         <link rel="stylesheet" type="text/css" href="index.css">
     </head>
-    <body>
+    <p>
         <h1>CScript 1.0 Reference Manual</h1>
         <small>
             <p>
@@ -2724,7 +2724,7 @@
         <!-- cs_newstate -->
         <hr><h3><a name="cs_newstate"><code>cs_newstate</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void cs_newstate (cs_Alloc f, void *ud);</pre>
+        <pre>void cs_newstate (cs_Alloc f, void *ud, unsigned int seed);</pre>
         <p>
         Creates a new independent state and returns its main thread.
         Returns <code>NULL</code> if it cannot create the state
@@ -2734,6 +2734,8 @@
         function (see <a href="#cs_Alloc"><code>cs_Alloc</code></a>).
         The second argument, <code>ud</code>, is an opaque pointer that
         CScript passes to the allocator in every call.
+        The thrid argument <code>seed</code>, is a seed for the hashing
+        of the strings.
         </p>
 
         <!-- cs_close -->
@@ -5537,10 +5539,11 @@
         <h2>6.1 &ndash; <a name="6.1">Basic Library</a></h2>
         <p>
         The basic library provides core functions to CScript.
-        <br/><br/>
+        </p>
 
         <!-- error -->
         <hr/><h3><a name="error"><code>error (message [, level])</code></a></h3>
+        <p>
         Raises an error with <code>message</code> as the error object.
         This function never returns.
         <br/> <br/>
@@ -5553,19 +5556,21 @@
         that called <code>error</code> was called; and so on.
         Passing a negative level (e.g., <code>-1</code>) avoids the addition
         of error position information to the message.
-        <br/><br/>
+        </p>
 
         <!-- assert -->
         <hr/><h3><a name="assert"><code>assert (v [, message])</code></a></h3>
+        <p>
         Raises an error if the value of its argument <code>v</code> is false
         (i.e., <b>nil</b> or <b>false</b>); otherwise, returns all its arguments.
         <br/><br/>
         In case of error, <code>message</code> is the error object;
         when absent, it defaults to "<code>assertion failed!</code>"
-        <br/><br/>
+        </p>
 
         <!-- gc -->
         <hr/><h3><a name="gc"><code>gc ([opt [, arg]])</code></a></h3>
+        <p>
         This function is a generic interface to the garbage collector.
         It performs different functions according to its first argument,
         <code>opt</code>:
@@ -5617,10 +5622,11 @@
             </li>
         </ul>
         This function should not be called by a finalizer (<code>__gc</code>).
-        <br/><br/>
+        </p>
 
         <!-- load -->
         <hr/><h3><a name="load"><code>load (chunk [, chunkname])</code></a></h3>
+        <p>
         Loads a chunk.
         <br/><br/>
         If <code>chunk</code> is a string, the chunk is this string.
@@ -5637,34 +5643,38 @@
         messages and debug information.
         When absent, it defaults to <code>chunk</code>, if <code>chunk</code>
         is a string, or to "<code>=(load)</code>" otherwise.
-        <br/><br/>
+        </p>
 
         <!-- loadfile -->
         <hr/><h3><a name="loadfile"><code>loadfile ([filename])</code></a></h3>
+        <p>
         Similar to <a href="#load"><code>load</code></a>,
         but gets the chunk from file <code>filename</code> or from the
         standard input, if no file name is given.
-        <br/><br/>
+        </p>
 
         <!-- runfile -->
         <hr/><h3><a name="runfile"><code>runfile ([filename])</code></a></h3>
+        <p>
         Opens the named file and executes its content as a CScript chunk.
         When called without arguments, <code>runfile</code> executes the
         content of the standard input (<code>stdin</code>).
         Returns all values returned by the chunk.
         In case of errors, <code>runfile</code> propagates the error to its
         caller (that is, <code>runfile</code> does not run in protected mode).
-        <br/><br/>
+        </p>
 
         <!-- getmetamethod -->
         <hr/><h3><a name="getmetamethod"><code>getmetamethod (v, name)</code></a></h3>
+        <p>
         Returns the metamethod of the given <code>v</code> or <b>nil</b>
         if <code>v</code> does not have virtual method table and/or the
         <code>v</code> does not implement the metamethod <code>name</code>.
-        <br/><br/>
+        </p>
 
         <!-- next -->
         <hr/><h3><a name="next"><code>next (v [, index])</code></a></h3>
+        <p>
         Allows a program to traverse of all keys or fields of <code>v</code>.
         Its first argument is a table or instance and its second argument
         is an index into this table or instance.
@@ -5683,10 +5693,11 @@
         You should not assign any value to a non-existent field in a table
         during its traversal. You may however modify existing fields.
         In particular, you may set existing fields to <b>nil</b>.
-        <br/><br/>
+        </p>
 
         <!-- pairs -->
         <hr/><h3><a name="pairs"><code>pairs (v)</code></a></h3>
+        <p>
         Returns three values: the <a href="#next"><code>next</code></a>
         function, <code>v</code>, and <b>nil</b>, so that the construction
 
@@ -5697,10 +5708,11 @@
         <br/><br/>
         See function <a href="next"><code>next</code></a> for the caveats
         of modifying the table or instance fields during its traversal.
-        <br/><br/>
+        </p>
 
         <!-- ipairs -->
         <hr/><h3><a name="ipairs"><code>ipairs (a)</code></a></h3>
+        <p>
         Returns three values (an iterator function, the array <code>a</code>,
         and -1)
         so that the construction
@@ -5710,10 +5722,11 @@
         will iterate over the index&ndash;value pairs
         (<code>0,a[0]</code>), (<code>1,a[1]</code>), ...,
         up to the <em>length</em> of the array <code>a</code>.
-        <br/><br/>
+        </p>
 
         <!-- pcall -->
         <hr/><h3><a name="pcall"><code>pcall (f [, arg1, &middot;&middot;&middot;])</code></a></h3>
+        </p>
         Calls the function <code>f</code> with the given arguments in
         <em>protected mode</em>.
         This means that any error inside&nbsp;<code>f</code> is not propagated;
@@ -5725,16 +5738,18 @@
         <br/><br/>
         In case of any error, <code>pcall</code> returns <b>false</b> plus the error object.
         Note that errors caught by <code>pcall</code> do not call a message handler.
-        <br/><br/>
+        <p>
 
         <!-- xpcall -->
         <hr/><h3><a name="xpcall"><code>xpcall (f, msgh [, arg1, &middot;&middot;&middot;])</code></a></h3>
+        <p>
         This function is similar to <a href="#pcall"><code>pcall</code></a>,
         except that it sets a new message handler <code>msgh</code>.
-        <br/><br/>
+        </p>
 
         <!-- print -->
         <hr/><h3><a name="print"><code>print (&middot;&middot;&middot;)</code></a></h3>
+        <p>
         Receives any number of arguments and prints their values to
         <code>stdout</code>, converting each argument to a string
         following the same rules of <a href="#tostring"><code>tostring</code></a>.
@@ -5744,10 +5759,11 @@
         For complete control over the output, use
         <a href="#io.printf"><code>io.printf</code></a> and
         <a href="#io.write"><code>io.write</code></a>.
-        <br/><br/>
+        </p>
 
         <!-- warn -->
         <hr/><h3><a name="warn"><code>warn (msg1, &middot;&middot;&middot;)</code></a></h3>
+        <p>
         Emits a warning with a message composed by the concatenation
         of all its arguments (which should be strings).
         <br/><br/>
@@ -5758,10 +5774,11 @@
         recognizes the control messages "<code>@off</code>",
         to stop the emission of warnings, and "<code>@on</code>", to
         (re)start the emission; it ignores unknown control messages.
-        <br/><br/>
+        </p>
 
         <!-- len -->
         <hr/><h3><a name="len"><code>len (v)</code></a></h3>
+        <p>
         Returns the length of the object <code>v</code>, which must be
         array, table, instance or a string.
         <br/> <br/>
@@ -5773,26 +5790,29 @@
         bytes.
         <br/><br/>
         Returns an integer.
-        <br/><br/>
+        </p>
 
         <!-- rawequal -->
         <hr/><h3><a name="rawequal"><code>rawequal (v1, v2)</code></a></h3>
+        <p>
         Checks whether <code>v1</code> is equal to <code>v2</code>,
         without invoking the <code>__eq</code> metamethod.
         <br/><br/>
         Returns a boolean.
-        <br/><br/>
+        </p>
 
         <!-- rawget -->
         <hr/><h3><a name=rawget""><code>rawget (v, index)</code></a></h3>
+        <p>
         Gets the real value of <code>v[index]</code>,
         without calling the <code>__getidx</code> metamethod.
         <code>v</code> must be an instance and <code>index</code> may be
         any CScript value.
-        <br/><br/>
+        </p>
 
         <!-- rawset -->
         <hr/><h3><a name="rawset"><code>rawset (v, index, value)</code></a></h3>
+        <p>
         Sets the real value of <code>v[index]</code> to <code>value</code>,
         without using the <code>__setidx</code> metamethod.
         <code>v</code> must be an instance;
@@ -5800,10 +5820,11 @@
         <code>value</code> any CScript value.
         <br/><br/>
         This function returns <code>v</code>.
-        <br/><br/>
+        </p>
 
         <!-- getargs -->
         <hr/><h3><a name="getargs"><code>getargs (index, &middot;&middot;&middot;)</code></a></h3>
+        <p>
         If <code>index</code> is a number, this returns all arguments after
         argument at number <code>index</code> (starting from 0); a negative
         number indexes from the end (-1 is the last argument).
@@ -5820,10 +5841,11 @@
         However if <code>index</code> is 
         <code>"len"</code> string, then <code>getargs</code> returns integer
         corresponding to total number of extra arguments.
-        <br/><br/>
+        </p>
 
         <!-- tonumber -->
         <hr/><h3><a name="tonumber"><code>tonumber (v, [, base])</code></a></h3>
+        <p>
         When called with no <code>base</code>,
         <code>tonumber</code> tries to convert its argument to a number.
         If the argument <code>v</code> is already a number or a string
@@ -5843,16 +5865,18 @@
         and so forth, with '<code>Z</code>' representing 35.
         If the string <code>v</code> is not a valid numeral in the given base,
         the function returns <b>fail</b>.
-        <br/><br/>
+        </p>
 
         <!-- tostring -->
         <hr/><h3><a name="tostring"><code>tostring (v)</code></a></h3>
+        <p>
         Receives a value of any type and converts it to a string in a
         human-readable format.
-        <br/><br/>
+        </p>
 
         <!-- typeof -->
         <hr/><h3><a name="typeof"><code>typeof (v)</code></a></h3>
+        <p>
         Returns the type of its only argument, coded as a string.
         The possible results of this function are
         "<code>nil</code>" (a string, not the value <b>nil</b>),
@@ -5866,16 +5890,18 @@
         "<code>instance</code>",
         "<code>thread</code>",
         and "<code>userdata</code>".
-        <br/><br/>
+        </p>
 
         <hr/><h3><a name="getclass"><code>getclass (v)</code></a></h3>
+        <p>
         Returns the class of the instance <code>v</code>.
         If <code>v</code> is not an instance, the function returns
         <b>fail</b>.
-        <br/><br/>
+        </p>
 
         <!-- __G -->
         <hr/><h3><a name="__G"><code>__G</code></a></h3>
+        <p>
         A global variable (not a function) that holds the global table
         (see <a href="#2.2">&sect;2.2</a>).
         </p>
@@ -6206,6 +6232,7 @@
 
         <!-- string.split -->
         <hr/><h3><a name="string.split"><code>string.split (s [, sep [, maxsplit]])</code></a></h3>
+        <p>
         Return array of the words in the string, using sep as the delimiter
         string.
         If <code>maxsplit</code> is given, at most maxsplit splits are done
@@ -6279,18 +6306,20 @@
     ["1", "2   3  "]</pre>
         
         (notice how the last element has no leading whitespace).
-        <br/><br/>
+        </p>
 
         <!-- string.split -->
         <hr/><h3><a name="rsplit"><code>rsplit (s [, sep [, maxsplit]])</code></a></h3>
+        <p>
         Similar to <a href="#string.split"><code>string.split</code></a> but it does the
         splitting in reverse, starting from the end of <code>s</code>.
         The returned value is also an array holding the splits which are
         in reverse order.
-        <br/><br/>
+        </p>
 
         <!-- string.startswith -->
         <hr/><h3><a name="string.startswith"><code>string.startswith (s, prefix [, i [, j]])</code></a></h3>
+        <p>
         Checks if the string <code>s</code> starts with the <code>prefix</code>
         string and it returns the index in <code>s</code> after the
         <code>prefix</code>.
@@ -6318,18 +6347,22 @@
         <pre>
     local res, i = string.startswith("This is it!", "This", 0, -1);
     assert(res == 4 and i == nil);</pre>
+        </p>
 
         <!-- reverse -->
         <hr/><h3><a name="reverse"><code>reverse (s)</code></a></h3>
+        <p>
         Returns reversed string <code>s</code>.
         <br/><br/>
         Example
         <pre>
     local s = string.reverse("test");
     assert(s == "tset");</pre>
+        </p>
 
         <!-- string.repeat -->
         <hr/><h3><a name="string.repeat"><code>string.repeat (s, n, [, sep])</code></a></h3>
+        <p>
         Returns string <code>s</code> that is repeated <code>n</code> times.
         Optional separator <code>sep</code> can be specified which will
         separate repeated string <code>s</code>.
@@ -6339,9 +6372,11 @@
         <pre>
     local s = string.repeat("69", 4, "&lt;420&gt;");
     assert(s == "69&lt;420&gt;69&lt;420&gt;69&lt;420&gt;69");</pre>
+        </p>
 
         <!-- string.join -->
         <hr/><h3><a name="string.join"><code>string.join (s, v)</code></a></h3>
+        <p>
         Return a string which is the concatenation of the strings in the
         array or table <code>v</code>.
         The separator between elements is the string <code>s</code>.
@@ -6351,9 +6386,11 @@
     local t = ["Love", "Anger", "Fury", "Peace"];
     local s = string.join(", ", t);
     assert(s == "Love, Anger, Fury, Peace");</pre>
+        </p>
 
         <!-- string.fmt -->
         <hr/><h3><a name="string.fmt"><code>string.fmt (fmts, &middot;&middot;&middot;)</code></a></h3>
+        <p>
         Returns a formatted version of its variable number of arguments
         following the description given in its first argument,
         which must be a string.
@@ -6415,9 +6452,11 @@
         <pre>
     local s = string.fmt("Hello, %s", "World!");
     assert(s == "Hello, World");</pre>
+        </p>
 
         <!-- string.toupper -->
         <hr/><h3><a name="string.toupper"><code>string.toupper (s [, i [, j]])</code></a></h3>
+        <p>
         Returns string <code>s</code> which has all its characters converted
         to uppercase.
         Start index <code>i</code> and end index <code>j</code> can be
@@ -6438,9 +6477,11 @@
         Example:
         <pre>
     assert(string.toupper("blabla", 3, 4) == "blaBLa");</pre>
+        </p>
 
         <!-- string.tolower -->
         <hr/><h3><a name="string.tolower"><code>string.tolower (s [, i [, j]])</code></a></h3>
+        <p>
         Returns string <code>s</code> which has all its characters converted
         to lowercase.
         Start index <code>i</code> and end index <code>j</code> can be
@@ -6461,9 +6502,11 @@
         Example:
         <pre>
     assert(string.tolower("BLABLA", 3, 4) == "BLAblA");</pre>
+        </p>
 
         <!-- string.find -->
         <hr/><h3><a name="string.find"><code>string.find (s, sub [, i [, j]])</code></a></h3>
+        <p>
         Return the lowest index in the string <code>s</code> where substring
         <code>sub</code> is found, such that <code>sub</code> is contained in
         the slice s[i:j].
@@ -6484,18 +6527,22 @@
         Example:
         <pre>
     assert(string.find("Hello, World", "llo") == 2);</pre>
+        </p>
 
         <!-- string.rfind -->
         <hr/><h3><a name="string.rfind"><code>string.rfind (s, sub [, i [, j]])</code></a></h3>
+        <p>
         Similar to <a href="#string.find"><code>string.find</code></a>,
         except the search for <code>sub</code> is done in reverse.
         <br/><br/>
         Example:
         <pre>
     assert(string.rfind("Hello, Hello", "llo") == 9);</pre>
+        </p>
 
         <!-- string.replace -->
         <hr/><h3><a name="string.replace"><code>string.replace (s, sub, new [, n])</code></a></h3>
+        <p>
         Return a copy of the string <code>s</code> with all occurrences of
         substring <code>sub</code> replaced by <code>new</code>.
         If the optional argument <code>n</code> is given, only the first
@@ -6504,9 +6551,11 @@
         Example:
         <pre>
     assert(string.replace("Hello, Hello", "ll", "LL", 1) == "HeLLo, Hello");</pre>
+        </p>
 
         <!-- string.substr -->
         <hr/><h3><a name="string.substr"><code>string.substr (s [, i [, j]])</code></a></h3>
+        <p>
         Returns the substring of <code>s</code> that starts at <code>i</code>
         and continues up to (including) <code>j</code>.
         <br/><br/>
@@ -6525,9 +6574,11 @@
         Example:
         <pre>
     assert(string.substr("Hello, Hello", 2, -4) == "llo, He");</pre>
+        </p>
 
         <!-- string.swapcase -->
         <hr/><h3><a name="string.swapcase"><code>string.swapcase (s [, i [, j]])</code></a></h3>
+        <p>
         Swaps case of characters of string <code>s</code> in range starting
         from index <code>i</code> up to (including) <code>j</code>.
         <br/><br/>
@@ -6546,9 +6597,11 @@
         Example:
         <pre>
     assert(string.swapcase("hi, HI") == "HI, hi");</pre>
+        </p>
 
         <!-- string.swapupper -->
         <hr/><h3><a name="string.swapupper"><code>string.swapupper (s [, i [, j]])</code></a></h3>
+        <p>
         Swaps lowercase characters to uppercase of string <code>s</code> in
         range starting from index <code>i</code> up to (including)
         <code>j</code>.
@@ -6566,9 +6619,11 @@
         Example:
         <pre>
     assert(string.swapupper("hi, HI") == "HI, HI");</pre>
+        </p>
 
         <!-- string.swaplower -->
         <hr/><h3><a name="string.swaplower"><code>string.swaplower (s [, i [, j]])</code></a></h3>
+        <p>
         Swaps uppercase characters to lowercase of string <code>s</code> in
         range starting from index <code>i</code> up to (including)
         <code>j</code>.
@@ -6588,9 +6643,11 @@
         Example:
         <pre>
     assert(string.swaplower("hi, HI") == "hi, hi");</pre>
+        </p>
 
         <!-- string.byte -->
         <hr/><h3><a name="string.byte"><code>string.byte (s [, i [, j]])</code></a></h3>
+        <p>
         Returns the internal numeric codes of the characters
         <code>s[i]</code>, <code>s[i+1]</code>, ..., <code>s[j]</code>.
         <br/><br/>
@@ -6613,9 +6670,11 @@
     local a, b = string.byte("ok");
     assert(a == 'o');
     assert(b == nil);</pre>
+        </p>
 
         <!-- string.bytes -->
         <hr/><h3><a name="string.bytes"><code>string.bytes (s [, i [, j]])</code></a></h3>
+        <p>
         Similar to <a href="#string.byte"><code>string.byte</code></a>,
         except this returns results in an array.
         <br/><br/>
@@ -6643,6 +6702,7 @@
     assert(a[3] == 'l');
     assert(a[4] == 'o');
     assert(a[5] == nil);</pre>
+        </p>
 
 
         <h2>6.4 &ndash; <a name="6.4">Math Library</a></h2>
@@ -6654,15 +6714,371 @@
         integer results for integer arguments
         and float results for non-integer arguments.
         The rounding functions
-        <a href="manual.html#pdf-math.ceil"><code>math.ceil</code></a>, <a href="manual.html#pdf-math.floor"><code>math.floor</code></a>, and <a href="manual.html#pdf-math.modf"><code>math.modf</code></a>
+        <a href="math.ceil"><code>math.ceil</code></a>,
+        <a href="math.floor"><code>math.floor</code></a>,
+        and <a href="math.modf"><code>math.modf</code></a>
         return an integer when the result fits in the range of an integer,
         or a float otherwise.
         </p>
+
+        <!-- math.abs -->
+        <hr/><h3><a name="math.abs"><code>math.abs (x)</code></a></h3>
+        <p>
+        Returns the maximum value between <code>x</code> and <code>-x</code>.
+        (integer/float)
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.abs(-5) == 5);
+    assert(math.abs(5) == 5);
+    assert(math.abs(-5.25) == 5.25);
+    assert(math.abs(5.25) == 5.25);</pre>
+        </p>
+
+        <!-- math.acos -->
+        <hr/><h3><a name="math.acos"><code>math.acos (x)</code></a></h3>
+        <p>
+        Returns the arc cosine of <code>x</code> (in radians).
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.acos(1) == 0);
+    assert(math.acos(1.2) != math.acos(1.2));</pre>
+        </p>
+
+        <!-- math.asin -->
+        <hr/><h3><a name="math.asin"><code>math.asin (x)</code></a></h3>
+        <p>
+        Returns the arc sine of <code>x</code> (in radians).
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.asin(0) == 0);
+    assert(math.asin(1.2) != math.asin(1.2));</pre>
+        </p>
+
+        <!-- math.atan -->
+        <hr/><h3><a name="math.atan"><code>math.atan (y [, x])</code></a></h3>
+        <p>
+        Returns the arc tangen of <code>y/x</code> (in radians),
+        using the sign of both arguments to find the quadrant of the result.
+        It also handles correctly the case of <code>x</code> being zero.
+        <br/><br/>
+        The default value for <code>x</code> is 1, so that the call
+        <code>math.atan(y)</code> returns the arc tangent of <code>y</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.atan(0) == 0);
+    assert(math.atan(0, 2.5) == 0);</pre>
+        </p>
+
+        <!-- math.ceil -->
+        <hr/><h3><a name="math.ceil"><code>math.ceil (x)</code></a></h3>
+        <p>
+        Returns the smallest integral value greater than or equal to
+        <code>x</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.ceil(1) == 1);
+    assert(math.ceil(0.6) == 1);
+    assert(math.ceil(0.5) == 1);
+    assert(math.ceil(0.49) == 1);
+    assert(math.ceil(-15) == -15);
+    assert(math.ceil(-15.6) == -15);
+    assert(math.ceil(-15.5) == -15);
+    assert(math.ceil(-15.4) == -15);</pre>
+        </p>
+
+        <!-- math.cos -->
+        <hr/><h3><a name="math.cos"><code>math.cos (x)</code></a></h3>
+        <p>
+        Returns the cosine of <code>x</code> (assumed to be in radians).
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.cos(1) == 1);</pre>
+        </p>
+
+        <!-- math.deg -->
+        <hr/><h3><a name="math.deg"><code>math.deg (x)</code></a></h3>
+        <p>
+        Converts the angle <code>x</code> from radians to degrees.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.deg(math.pi) == 180);
+    assert(math.deg(math.pi*2) == 360);</pre>
+        </p>
+
+        <!-- math.exp -->
+        <hr/><h3><a name="math.exp"><code>math.exp (x)</code></a></h3>
+        <p>
+        Returns the value <em>e<sup>x</sup></em>
+        (where <code>e</code> is the base of natural logarithms).
+        <br/><br/>
+        Example:
+        <pre>
+    print(math.exp(1));     # around 2.718281828459</pre>
+        </p>
+
+        <!-- math.floor -->
+        <hr/><h3><a name="math.floor"><code>math.floor (x)</code></a></h3>
+        <p>
+        Returns the largest integral value less than or equal to
+        <code>x</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.floor(1.2) == 1);
+    assert(math.floor(1.5) == 1);
+    assert(math.floor(1.6) == 1);
+    assert(math.floor(-1.2) == -2);
+    assert(math.floor(-1.5) == -2);
+    assert(math.floor(-1.6) == -2);</pre>
+        </p>
+
+        <!-- math.fmod -->
+        <hr/><h3><a name="math.fmod"><code>math.fmod (x, y)</code></a></h3>
+        <p>
+        Returns the remainder of the division of <code>x</code> by
+        <code>y</code> that rounds the quotient towards zero. (integer/float)
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.fmod(2, 3) == 2);
+    assert(math.fmod(2.5, 3.6) == 2.5);
+    assert(math.fmod(3.1, 3.0) == 0.1);
+    assert(math.fmod(-2.5, -3) == -2.5);
+    assert(math.fmod(-2.5, 3) == -2.5);</pre>
+        </p>
+
+        <!-- math.huge -->
+        <hr/><h3><a name="math.huge"><code>math.huge</code></a></h3>
+        <p>
+        The float value <code>HUGE_VAL</code>, a value greater than
+        any other numeric value (almost always equal to <code>infinity</code>).
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.huge &gt;= inf);
+    assert(math.huge &gt;= infinity);
+    assert(-math.huge &lt;= -inf);
+    assert(-math.huge &lt;= -infinity);</pre>
+        </p>
+
+        <!-- math.max -->
+        <hr/><h3><a name="math.max"><code>math.max (x, &middot;&middot;&middot;)</code></a></h3>
+        <p>
+        Returns the argument with the maximum value,
+        according to the CScript operator <code>&lt;</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.max(2, 5, 9, 1) == 9);
+    assert(math.max(inf, 2**50, -1000) == inf);</pre>
+        </p>
+
+        <!-- math.maxint -->
+        <hr/><h3><a name="math.maxint"><code>math.maxint</code></a></h3>
+        <p>
+        An integer with the maximum value for an integer.
+        </p>
+
+        <!-- math.min -->
+        <hr/><h3><a name="math.min"><code>math.min (x, &middot;&middot;&middot;)</code></a></h3>
+        <p>
+        Returns the argument with the minimum value,
+        according to the CScript operator <code>&lt;</code>.
+        <pre>
+    assert(math.min(2, 5, 9, 1) == 1);
+    assert(math.min(inf, 2**50, -1000) == -1000);</pre>
+        </p>
+
+        <!-- math.minint -->
+        <hr/><h3><a name="math.minint"><code>math.minint</code></a></h3>
+        <p>
+        An integer with the minimum value for an integer.
+        </p>
+
+        <!-- math.modf -->
+        <hr/><h3><a name="math.modf"><code>math.modf (x)</code></a></h3>
+        <p>
+        Returns the integral part of <code>x</code> and the fractional part
+        of <code>x</code>.
+        Its second result is always a float.
+        <pre>
+    local ipart, fpart = math.modf(5.69);
+    assert(ipart == 5 and fpart == 0.69);</pre>
+        </p>
+
+        <!-- math.pi -->
+        <hr/><h3><a name="math.pi"><code>math.pi</code></a></h3>
+        <p>
+        The value of <em>&pi;</em>.
+        </p>
+
+        <!-- math.rad -->
+        <hr/><h3><a name="math.rad"><code>math.rad (x)</code></a></h3>
+        <p>
+        Converts the angle <code>x</code> from degrees to radians.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.rad(180) == math.pi);
+    assert(math.rad(360) == math.pi*2);</pre>
+        </p>
+
+        <!-- math.srand -->
+        <hr/><h3><a name="math.srand"><code>math.srand ([v])</code></a></h3>
+        <p>
+        Seeds pseudo-random number generator (PRNG).
+        <br/>
+        If <code>v</code> is not specified, CScript seeds the PRNG with
+        its own implementation of generating seed.
+        <br/>
+        If <code>v</code> is an array or table, the PRNG is seeded by the
+        non-<b>nil</b> values inside the array or table, if the value is
+        collectable or has a pointer, its pointer is used as the seed value,
+        otherwise the CScript generates the seed, in the way as if no
+        arguments were provided.
+        This is done for all the values inside the array or table.
+        <br/>
+        Finally if <code>v</code> is an integer, this integer is converted
+        to unsigned integer, and is then used as the seed for the PRNG.
+        </p>
+
+        <!-- math.rand -->
+        <hr/><h3><a name="math.rand"><code>math.rand ([m [, n]])</code></a></h3>
+        <p>
+        Returns a pseudo-random integer with uniform distribution.
+        When called without arguments, the "random" integer is in range
+        <em>[math.min, math.max]</em>.
+        When called with two integers <code>m</code> and <code>n</code>,
+        the "random" integer is in range <em>[m, n]</em>.
+        When called with one integer <code>m</code>, the "random" integer
+        is in range <em>[math.min, m]</em>.
+        <br/><br/>
+        This function uses the <code>MT19937-64</code>
+        (64-bit Marsenne Twister) algorithm to produce psuedo-random 64-bit
+        integers.
+        <br/><br/>
+        CScript initializes its pseudo-random generator with the equivalent
+        of a call to <a href="#math.srand"><code>math.srand</code></a> with
+        no arguments, so that <code>math.rand</code> should generate
+        different sequences of results each time the program runs.
+        <br/><br/>
+        Example:
+        <pre>
+    local x = math.rand();
+    assert(math.minint &lt;= x and x &lt;= math.maxint);
+    x = math.rand(10);
+    assert(math.minint &lt;= x and x &lt;= 10);
+    x = math.rand(10, 50);
+    assert(10 &lt;= x and x &lt;= 50);</pre>
+        </p>
+
+        <!-- math.randf -->
+        <hr/><h3><a name="math.randf"><code>math.randf ()</code></a></h3>
+        <p>
+        Similar to <a href="#math.rand"><code>math.rand</code></a>, except
+        this generates and returns a double-precision float in the range (0, 1).
+        <br/><br/>
+        Example:
+        <pre>
+    local x = math.randf();
+    assert(0.0 &lt; x and x &lt; 1.0);
+    x = -x;
+    assert(-1.0 &lt; x and x &lt; 0);</pre>
+        </p>
+
+        <!-- math.sin -->
+        <hr/><h3><a name="math.sin"><code>math.sin (x)</code></a></h3>
+        <p>
+        Returns the sine of <code>x</code> (assumed to be in radians).
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.sin(0) == 0);</pre>
+        </p>
+
+        <!-- math.sqrt -->
+        <hr/><h3><a name="math.sqrt"><code>math.sqrt (x)</code></a></h3>
+        <p>
+        Returns the square root of <code>x</code>.
+        (You can also use the expression <code>x**0.5</code> to compute this
+        value.)
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.sqrt(4) == 2);
+    assert(math.sqrt(4) == 4**0.5);</pre>
+        </p>
+
+        <!-- math.tan -->
+        <hr/><h3><a name="math.tan"><code>math.tan (x)</code></a></h3>
+        <p>
+        Returns the tangent of <code>x</code> (assumed to be in radians).
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.tan(0) == 0);</pre>
+        </p>
+
+        <!-- math.tointeger -->
+        <hr/><h3><a name="math.tointeger"><code>math.tointeger (x)</code></a></h3>
+        <p>
+        If the value <code>x</code> is convertible to an integer,
+        returns that integer.
+        Otherwise, returns <b>fail</b>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.tointeger(3) == 3);
+    assert(math.tointeger(5.0) == 5);
+    assert(math.tointeger(5.1) == nil);
+    assert(math.tointeger("5.2") == nil);</pre>
+        </p>
+
+        <!-- math.type -->
+        <hr/><h3><a name="math.type"><code>math.type (x)</code></a></h3>
+        <p>
+        Returns "<code>integer</code>" if <code>x</code> is an integer,
+        "<code>float</code>" if it is a float,
+        or <b>fail</b> if <code>x</code> is not a number.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.type(3) == "integer");
+    assert(math.type(5.0) == "integer");
+    assert(math.type(5.1) == "float");
+    assert(math.type("5.2") == nil);</pre>
+        </p>
+
+        <!-- math.ult -->
+        <hr/><h3><a name="math.ult"><code>math.ult (m, n)</code></a></h3>
+        <p>
+        Returns a boolean, <b>true</b> if and only if integer <code>m</code>
+        is below integer <code>n</code> when they are compared as unsigned
+        integers ("unsigned less than").
+        <br/><br/>
+        Example:
+        <pre>
+    assert(math.ult(3, 5) == true);
+    assert(math.ult(5, 4) == false);
+    assert(math.ult(-5, 4) == false);
+    assert(math.ult(5, -4) == true);</pre>
+        </p>
+
+
 
 
         <h2>6.5 &ndash; <a name="6.5">I/O Library</a></h2>
         <p>
         </p>
+
+
 
 
         <h2>6.6 &ndash; <a name="6.6">OS Library</a></h2>
