@@ -17,3 +17,5 @@ assert(0x100p-8 == 1);
 assert(0x10p-4 == 1);
 assert(0x1p+4 == 16);
 assert(0x1p+8 == 256);
+assert(0xffffffffffffffff == -1);
+assert(0x7fffffffffffffff > 0);

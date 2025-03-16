@@ -1,0 +1,26 @@
+# value and type equality
+local fn eqt(x,y) {
+    return a == b and math.type(a) == math.type(b);
+}
+
+assert(math.fmod(10,3) == 1);
+for (local i = -6; i <= 6; i = i + 1) {
+    for (local j = -6; j <= 6; j = j + 1) {
+        if (j != 0) {
+            local mi = math.fmod(i, j);
+            local mf = math.fmod(i + 0.0, j);
+            assert(mi == mf);
+            assert(math.type(mi) == "integer" and math.type(mf) == "float");
+            if ((i >= 0 and j >= 0) or (i <= 0 and j <= 0) or mi == 0)
+                assert(eqt(mi, i % j));
+        }
+    }
+}
+assert(eqt(math.fmod(math.minint, math.minint), 0));
+assert(eqt(math.fmod(math.maxint, math.maxint), 0));
+assert(eqt(math.fmod(math.minint + 1, math.minint), math.minint + 1));
+assert(eqt(math.fmod(math.maxint - 1, math.maxint), math.maxint - 1));
+
+local s, err = pcall(math.fmod, 3, 0);
+print(s, err);
+assert(!s and string.find(err, "zero"));

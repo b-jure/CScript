@@ -1,0 +1,54 @@
+local minint <final> = math.minint;
+local maxint <final> = math.maxint;
+local intbits <final> = math.floor(math.log(maxint, 2) + 0.5) + 1;
+
+
+# integer PRNG
+
+local fn checkrandint(seed, res, l, h) {
+    if (seed) math.srand(seed);
+    else math.srand();
+    if (!l and !h)
+        assert(math.rand() == res);
+    else if(!l and h)
+        assert(math.rand(h) == res);
+    else if(l and h)
+        assert(math.rand(l, h) == res);
+    else
+        assert(false);
+}
+
+# integer seed
+checkrandint(1000, 2632470296759921198);
+checkrandint(1000, 2607, nil, 5000);
+checkrandint(1000, 2606, 0, 5000);
+checkrandint(1000, 880, -300, 2000);
+checkrandint(1000, -1820, -3000, -500);
+
+# array and table seeds
+math.srand([69, 420, "1337", {["ok"] = fn(){}}, []]);
+assert(math.rand());
+math.srand({ a = 69, ["420"] = fn(){}, ok = "1337"});
+assert(math.rand());
+
+
+assert(!pcall(math.srand, "ok")); # invalid argument type #1
+assert(!pcall(math.srand, 5.2)); # expect integer
+
+assert(!pcall(math.rand, 1, 2, 3)); # too many arguments
+
+# empty interval
+assert(!pcall(math.random, minint + 1, minint));
+assert(!pcall(math.random, maxint, maxint - 1));
+assert(!pcall(math.random, maxint, minint));
+
+
+{ # float PRNG
+    local x = math.randf();
+    local n = 0;
+    loop {
+        assert(0.0 < x and x < 1.0);
+        if (n > 1000) break;
+        n = n + 1;
+    }
+}

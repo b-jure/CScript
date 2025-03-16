@@ -1,0 +1,50 @@
+# value and type equality
+local fn eqt(x,y) {
+    return a == b and math.type(a) == math.type(b);
+}
+
+local fn checkerror(msg, f, ...) {
+    local s, err = pcall(f, ...);
+    assert(!s and string.find(err, msg));
+}
+
+assert(eqt(math.floor(3.4), 3));
+assert(eqt(math.ceil(3.4), 4));
+assert(eqt(math.floor(-3.4), -4));
+assert(eqt(math.ceil(-3.4), -3));
+assert(eqt(math.floor(math.maxint), math.maxint));
+assert(eqt(math.ceil(math.maxint), math.maxint));
+assert(eqt(math.floor(math.minint), math.minint));
+assert(eqt(math.floor(math.minint + 0.0), math.minint));
+assert(eqt(math.ceil(math.minint), math.minint));
+assert(eqt(math.ceil(math.minint + 0.0), math.minint));
+assert(math.floor(1e50) == 1e50);
+assert(math.ceil(1e50) == 1e50);
+assert(math.floor(-1e50) == -1e50);
+assert(math.ceil(-1e50) == -1e50);
+foreach _, p in ipairs([31,32,63,64]) {
+    assert(math.floor(2**p) == 2**p);
+    assert(math.floor(2**p + 0.5) == 2**p);
+    assert(math.ceil(2**p) == 2**p);
+    assert(math.ceil(2**p - 0.5) == 2**p);
+}
+checkerror("number expected", math.floor, {});
+checkerror("number expected", math.ceil, print);
+assert(eqt(math.toint(math.minint), math.minint));
+assert(eqt(math.toint(tonum(tostr(math.minint) .. "")), math.minint));
+assert(eqt(math.toint(math.maxint), math.maxint));
+assert(eqt(math.toint(tonum(tostr(math.maxint) .. "")), math.maxint));
+assert(eqt(math.toint(math.minint + 0.0), math.minint));
+assert(!math.toint(0.0 - math.minint));
+assert(!math.toint(math.pi));
+assert(!math.toint(-math.pi));
+assert(math.floor(math.huge) == math.huge);
+assert(math.ceil(math.huge) == math.huge);
+assert(!math.toint(math.huge));
+assert(math.floor(-math.huge) == -math.huge);
+assert(math.ceil(-math.huge) == -math.huge);
+assert(!math.toint(-math.huge));
+assert(math.toint(tonum("34.0")) == 34);
+assert(!math.toint(tonum("34.3")));
+assert(!math.toint({}));
+assert(!math.toint(0/0));   # NaN;

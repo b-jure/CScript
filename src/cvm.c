@@ -29,6 +29,7 @@
 #include "ctrace.h"
 
 
+
 /*
 ** By default, use jump table.
 */
@@ -41,12 +42,46 @@
 #endif
 
 
+
 /*
 ** By default, disable internal bytecode execution tracing.
 */
 #if !defined(TRACE_EXEC)
 #define TRACE_EXEC      1
 #endif
+
+
+
+/*
+** 'c_intfitsf' checks whether a given integer is in the range that
+** can be converted to a float without rounding. Used in comparisons.
+*/
+
+/* number of bits in the mantissa of a float */
+#define NBM		(c_floatatt(MANT_DIG))
+
+/*
+** Check whether some integers may not fit in a float, testing whether
+** (maxinteger >> NBM) > 0. (That implies (1 << NBM) <= maxinteger.)
+** (The shifts are done in parts, to avoid shifting by more than the size
+** of an integer. In a worst case, NBM == 113 for long double and
+** sizeof(long) == 32.)
+*/
+#if ((((CS_INTEGER_MAX >> (NBM / 4)) >> (NBM / 4)) >> (NBM / 4)) \
+	>> (NBM - (3 * (NBM / 4))))  >  0
+
+/* limit for integers that fit in a float */
+#define MAXINTFITSF	((cs_Unsigned)1 << NBM)
+
+/* check whether 'i' is in the interval [-MAXINTFITSF, MAXINTFITSF] */
+#define c_intfitsf(i)	((MAXINTFITSF + c_castS2U(i)) <= (2 * MAXINTFITSF))
+
+#else /* all integers fit in a float precisely */
+
+#define c_intfitsf(i)	1
+
+#endif
+
 
 
 static int booleans[2] = { CS_VFALSE, CS_VTRUE };
@@ -80,7 +115,7 @@ static void pushclosure(cs_State *C, Proto *p, UpVal **enc, SPtr base) {
 cs_Integer csV_divi(cs_State *C, cs_Integer x, cs_Integer y) {
     if (c_unlikely(c_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
-            csD_runerror(C, "division by 0");
+            csD_runerror(C, "division by zero");
         return c_intop(-, 0, x);
     } else {
         cs_Integer q = x / y; /* perform C division */
@@ -140,40 +175,53 @@ void csV_unarithm(cs_State *C, const TValue *v, int op) {
 }
 
 
-/*
-** According to C99 6.3.1.8 page 45:
-** "...if the corresponding real type of either operand is double, the other
-** operand is converted, without change of type domain, to a type whose
-** corresponding real type is double."
-*/
-c_sinline int intlenum(const TValue *v1, const TValue *v2) {
-    return c_numle(cast_num(ival(v1)), fval(v2));
+c_sinline int LEintfloat(cs_Integer i, cs_Number f) {
+    if (c_intfitsf(i))
+        return c_numle(cast_num(i), f); /* compare them as floats */
+    else {  /* i <= f <=> i <= floor(f) */
+        cs_Integer fi;
+        if (csO_n2i(f, &fi, N2IFLOOR)) /* fi = floor(f) */
+            return i <= fi; /* compare them as integers */
+        else /* 'f' is either greater or less than all integers */
+            return f > 0; /* greater? */
+    }
 }
 
 
-/* check 'intLEnum' */
-c_sinline int numleint(const TValue *v1, const TValue *v2) {
-    return c_numle(fval(v1), cast_num(ival(v2)));
+c_sinline int LEfloatint(cs_Number f, cs_Integer i) {
+    if (c_intfitsf(i))
+        return c_numle(f, cast_num(i)); /* compare them as floats */
+    else {  /* f <= i <=> ceil(f) <= i */
+        cs_Integer fi;
+        if (csO_n2i(f, &fi, N2ICEIL)) /* fi = ceil(f) */
+            return fi <= i; /* compare them as integers */
+        else /* 'f' is either greater or less than all integers */
+            return f < 0; /* less? */
+    }
 }
 
 
 /* less equal ordering on numbers */
-c_sinline int numle(const TValue *v1, const TValue *v2) {
+c_sinline int LEnum(const TValue *v1, const TValue *v2) {
     cs_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
         cs_Integer i1 = ival(v1);
-        if (ttisint(v2)) return (i1 <= ival(v2));
-        else return intlenum(v1, v2);
+        if (ttisint(v2))
+            return i1 <= ival(v2);
+        else
+            return LEintfloat(i1, fval(v2));
     } else {
         cs_Number n1 = fval(v1);
-        if (ttisint(v2)) return numleint(v1, v2);
-        else return c_numle(n1, fval(v2));
+        if (ttisint(v2))
+            return LEfloatint(n1, ival(v2));
+        else
+            return c_numle(n1, fval(v2));
     }
 }
 
 
 /* less equal ordering on non-number values */
-c_sinline int otherle(cs_State *C, const TValue *v1, const TValue *v2) {
+c_sinline int LEother(cs_State *C, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
         return (csS_cmp(strval(v1), strval(v2)) <= 0);
     else
@@ -184,40 +232,58 @@ c_sinline int otherle(cs_State *C, const TValue *v1, const TValue *v2) {
 /* 'less or equal' ordering '<=' */
 int csV_orderle(cs_State *C, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
-        return numle(v1, v2);
-    return otherle(C, v1, v2);
+        return LEnum(v1, v2);
+    return LEother(C, v1, v2);
 }
 
 
-/* check 'intLEnum' */
-c_sinline int intltnum(const TValue *v1, const TValue *v2) {
-    return c_numlt(cast_num(ival(v1)), fval(v2));
+c_sinline int LTintfloat(cs_Integer i, cs_Number f) {
+    if (c_intfitsf(i))
+        return c_numlt(cast_num(i), f);
+    else { /* i < f <=> i < ceil(f) */
+        cs_Integer fi;
+        if (csO_n2i(f, &fi, N2ICEIL)) /* fi = ceil(f) */
+            return i < fi; /* compare them as integers */
+        else /* 'f' is either greater or less than all integers */
+            return f > 0; /* greater? */
+    }
 }
 
 
-/* check 'intLEnum' */
-c_sinline int numltint(const TValue *v1, const TValue *v2) {
-    return c_numlt(fval(v1), cast_num(ival(v2)));
+c_sinline int LTfloatint(cs_Number f, cs_Integer i) {
+    if (c_intfitsf(i))
+        return c_numlt(f, cast_num(i)); /* compare them as floats */
+    else { /* f < i <=> floor(f) < i */
+        cs_Integer fi;
+        if (csO_n2i(f, &fi, N2IFLOOR)) /* fi = floor(f) */
+            return fi < i; /* compare them as integers */
+        else /* 'f' is either greater or less than all integers */
+            return f < 0; /* less? */
+    }
 }
 
 
 /* 'less than' ordering '<' on number values */
-c_sinline int numlt(const TValue *v1, const TValue *v2) {
+c_sinline int LTnum(const TValue *v1, const TValue *v2) {
     cs_assert(ttisnum(v1) && ttisnum(v2));
     if (ttisint(v1)) {
         cs_Integer i1 = ival(v1);
-        if (ttisint(v2)) return (i1 <= ival(v2));
-        else return intltnum(v1, v2);
+        if (ttisint(v2))
+            return i1 < ival(v2);
+        else
+            return LTintfloat(i1, fval(v2));
     } else {
         cs_Number n1 = fval(v1);
-        if (ttisint(v2)) return numltint(v1, v2);
-        else return c_numlt(n1, fval(v2));
+        if (ttisflt(v2))
+            return c_numlt(n1, fval(v2));
+        else
+            return LTfloatint(n1, ival(v2));
     }
 }
 
 
 /* 'less than' ordering '<' on non-number values */
-c_sinline int otherlt(cs_State *C, const TValue *v1, const TValue *v2) {
+c_sinline int LTother(cs_State *C, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
         return csS_cmp(strval(v1), strval(v2)) < 0;
     else
@@ -228,8 +294,8 @@ c_sinline int otherlt(cs_State *C, const TValue *v1, const TValue *v2) {
 /* 'less than' ordering '<' */
 int csV_orderlt(cs_State *C, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
-        return numlt(v1, v2);
-    return otherlt(C, v1, v2);
+        return LTnum(v1, v2);
+    return LTother(C, v1, v2);
 }
 
 
@@ -432,11 +498,11 @@ void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 c_sinline void precallmbin(cs_State *C, const TValue *v1, const TValue *v2,
                             cs_MM op, SPtr res) {
     const TValue *func;
-    const char *opname = getshrstr(G(C)->mmnames[op]);
+    const char *opname = getshrstr(G(C)->mmnames[op]) + 2; /* skip '__' */
     if (c_unlikely(ttypetag(v1) != ttypetag(v2)))
         csD_typeerrormeta(C, v1, v2, opname);
     if (c_unlikely(ttisinstance(v1) && insval(v1)->oclass != insval(v2)->oclass))
-        csD_runerror(C, "tried to %s instances of different class", opname);
+        csD_runerror(C, "tried to '%s' instances of different class", opname);
     func = csMM_get(C, v1, op);
     if (c_unlikely(ttisnil(func)))
         csD_typeerror(C, v1, opname);
@@ -750,8 +816,8 @@ void csV_concat(cs_State *C, int total) {
 #define op_arithIf(C,fop) { \
     TValue *v = peek(0); \
     int imm = fetchl(); \
-    cs_Number n; \
     imm = IMML(imm); \
+    cs_Number n; \
     if (tonumber(v, n)) { \
         cs_Number fimm = cast_num(imm); \
         setfval(v, fop(C, n, fimm)); \
@@ -819,11 +885,16 @@ void csV_concat(cs_State *C, int total) {
 /* bitwise operations with constant operand */
 #define op_bitwiseK(C,op) { \
     TValue *v = peek(0); \
-    TValue *lk = K(fetchl()); /* L */\
-    cs_Integer i1; cs_Integer i2 = ival(lk);  \
-    if (c_likely(tointeger(v, &i1))) { \
+    TValue *lk = K(fetchl()); \
+    cs_Integer i1, i2; \
+    if (c_likely(tointeger(v, &i1) && tointeger(lk, &i2))) { \
         setival(v, op(i1, i2)); \
-    } else csD_bitwerror(C, v, lk); }
+    } else { \
+        if (ttisnum(v) && ttisnum(lk)) \
+            csD_runerror(C, "number has no integer representation"); \
+        else \
+            csD_bitwerror(C, v, lk); \
+    }}
 
 
 /* bitwise operations with immediate operand */
@@ -835,8 +906,12 @@ void csV_concat(cs_State *C, int total) {
     if (c_likely(tointeger(v, &i))) { \
         setival(v, op(i, imm)); \
     } else { \
-        TValue vimm; setival(&vimm, imm); \
-        csD_bitwerror(C, v, &vimm); \
+        if (ttisnum(v)) \
+            csD_runerror(C, "number has no integer representation"); \
+        else { \
+            TValue vimm; setival(&vimm, imm); \
+            csD_bitwerror(C, v, &vimm); \
+        } \
     }}
 
 
@@ -851,6 +926,8 @@ void csV_concat(cs_State *C, int total) {
         setival(res, op(i1, i2)); \
         SP(-1); /* v2 */ \
         pc += getOpSize(OP_MBIN); \
+    } else if (c_unlikely(ttisnum(v1) && ttisnum(v2))) { \
+        csD_runerror(C, "number has no integer representation"); \
     }/* else try 'OP_MBIN' */}
 
 
@@ -1453,11 +1530,11 @@ returning:
                 vm_break;
             }
             vm_case(OP_LT) {
-                op_order(C, ilt, numlt, otherlt);
+                op_order(C, ilt, LTnum, LTother);
                 vm_break;
             }
             vm_case(OP_LE) {
-                op_order(C, ile, numle, otherle);
+                op_order(C, ile, LEnum, LEother);
                 vm_break;
             }
             vm_case(OP_EQPRESERVE) {
@@ -1482,8 +1559,8 @@ returning:
             vm_case(OP_UNM) {
                 TValue *v = peek(0);
                 if (ttisint(v)) {
-                    cs_Integer i = ival(v);
-                    setival(v, c_intop(-, 0, i));
+                    cs_Integer ib = ival(v);
+                    setival(v, c_intop(-, 0, ib));
                 } else if (ttisflt(v)) {
                     cs_Number n = fval(v);
                     setfval(v, c_numunm(C, n));

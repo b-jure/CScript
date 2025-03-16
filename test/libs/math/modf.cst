@@ -1,0 +1,26 @@
+local fn isnan(x) {
+    return (x != x);
+}
+
+local fn eqt(x, y) {
+    return a == b and math.type(a) == math.type(b);
+}
+
+local a,b = math.modf(3.5);
+assert(a == 3.0 and b == 0.5);
+a,b = math.modf(-2.5);
+assert(a == -2.0 and b == -0.5);
+a,b = math.modf(-3e23);
+assert(a == -3e23 and b == 0.0);
+a,b = math.modf(3e35);
+assert(a == 3e35 and b == 0.0);
+a,b = math.modf(-1/0);            # -inf
+assert(a == -1/0 and b == 0.0);
+a,b = math.modf(1/0);             # inf
+assert(a == 1/0 and b == 0.0);
+a,b = math.modf(0/0);             # NaN
+assert(isnan(a) and isnan(b));
+a,b = math.modf(3);               # integer argument
+assert(eqt(a, 3) and eqt(b, 0.0));
+a,b = math.modf(math.minint);
+assert(eqt(a, math.minint) and eqt(b, 0.0));

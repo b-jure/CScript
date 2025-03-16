@@ -325,7 +325,7 @@ static int s_join(cs_State *C) {
 ** and '\0') + number of decimal digits to represent maxfloat (which
 ** is maximum exponent + 1). (99+3+1, adding some extra, 110)
 */
-#define MAX_ITEMF	(110 + cs_floatatt(MAX_10_EXP))
+#define MAX_ITEMF	(110 + c_floatatt(MAX_10_EXP))
 
 
 /*

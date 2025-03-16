@@ -1,0 +1,25 @@
+# value and type equality
+local fn eqt(x,y) {
+    return a == b and math.type(a) == math.type(b);
+}
+
+local fn checkerror(msg, f, ...) {
+    local s, err = pcall(f, ...);
+    print(s, err);
+    print(string.find(err, msg));
+    assert(!s and string.find(err, msg));
+}
+
+checkerror("value expected", math.max);
+checkerror("value expected", math.min);
+assert(eqt(math.max(3), 3));
+assert(eqt(math.max(3, 5, 9, 1), 9));
+assert(math.max(math.maxint, 10e60) == 10e60);
+assert(eqt(math.max(math.minint, math.minint + 1), math.minint + 1));
+assert(eqt(math.min(3), 3));
+assert(eqt(math.min(3, 5, 9, 1), 1));
+assert(math.min(3.2, 5.9, -9.2, 1.1) == -9.2);
+assert(math.min(1.9, 1.7, 1.72) == 1.7);
+assert(math.min(-10e60, math.minint) == -10e60);
+assert(eqt(math.min(math.maxint, math.maxint - 1), math.maxint - 1));
+assert(eqt(math.min(math.maxint - 2, math.maxint, math.maxint - 1), math.maxint - 2));

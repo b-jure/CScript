@@ -1,0 +1,7 @@
+assert(math.ult(3, 4));
+assert(!math.ult(4, 4));
+assert(math.ult(-2, -1));
+assert(math.ult(2, -1));
+assert(!math.ult(-2, -2));
+assert(math.ult(math.maxint, math.minint));
+assert(!math.ult(math.minint, math.maxint));

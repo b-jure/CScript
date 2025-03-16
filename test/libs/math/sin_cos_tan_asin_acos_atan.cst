@@ -18,4 +18,10 @@ local fn eq(a,b,limit) {
     return (a == b or math.abs(a-b) <= limit);
 }
 
-assert(eq(math.exp(0), 1));
+assert(eq(math.sin(-9.8)**2 + math.cos(-9.8)**2, 1));
+assert(eq(math.tan(math.pi/4), 1));
+assert(eq(math.sin(math.pi/2), 1) and eq(math.cos(math.pi/2), 0));
+assert(eq(math.atan(1), math.pi/4) and eq(math.acos(0), math.pi/2) and
+       eq(math.asin(1), math.pi/2));
+assert(eq(math.atan(1,0), math.pi/2));
+assert(eq(math.sin(10), math.sin(10%(2*math.pi))));

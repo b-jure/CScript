@@ -3,20 +3,27 @@ import subprocess
 import sys
 
 
-# Mapping of testsuite names to their relative paths,
-# assuming the script is ran from the cscript git repository
-# root directory.
-cscript_testsuite_paths = {
-    "syntax": Path("./test/syntax"),
-    "basic": Path("./test/libs/basic"),
-    "package": Path("./test/libs/package"),
-    "string": Path("./test/libs/string"),
-    "math": Path("./test/libs/math"),
-}
-
-
 # Interpreter binary
 cscript_bin = "./cscript"
+
+# Root test directory
+cscript_root = "./test"
+
+cscript_total_fail = 0      # total failed tests
+cscript_total_pass = 0      # total passed tests
+
+# Return path relative to root test directory
+def rootpath(path):
+    return Path(f"{cscript_root}/{path}")
+
+# Testsuites
+cscript_testsuite_paths = {
+    "syntax": rootpath("syntax"),
+    "basic": rootpath("libs/basic"),
+    "package": rootpath("libs/package"),
+    "string": rootpath("libs/string"),
+    "math": rootpath("libs/math"),
+}
 
 
 # Coloring
@@ -26,6 +33,7 @@ def green(s):
     return f"\x1b[32m{s}\x1b[0m"
 def yellow(s):
     return f"\x1b[33m{s}\x1b[0m"
+
 
 
 def begin_testsuite(testsuite, path, total):
@@ -38,7 +46,11 @@ def begin_testsuite(testsuite, path, total):
 
 
 def end_testsuite(testsuite, total, failed):
+    global cscript_total_fail
+    global cscript_total_pass
     isatty = sys.stdout.isatty()
+    cscript_total_fail += failed
+    cscript_total_pass += (total - failed)
     passed = str(total - failed);
     failed = str(failed)
     end = "END"
@@ -52,7 +64,7 @@ def end_testsuite(testsuite, total, failed):
     print(f"{end} {testsuite}")
 
 
-# Print individual test result
+
 def print_test_result(test, code):
     tname = str(test)
     isatty = sys.stdout.isatty()
@@ -70,7 +82,7 @@ def print_test_result(test, code):
         return 0
 
 
-# Run all CScript testsuite tests located at 'path'
+
 def run_cscript_testsuite(testsuite, path):
     tests = list(path.glob('*.cst'))
     total = len(tests)
@@ -84,7 +96,7 @@ def run_cscript_testsuite(testsuite, path):
     end_testsuite(testsuite, total, failed)
 
 
-# Get testsuite path (with error handling)
+
 def get_testsuite_path(testsuite):
     try:
         return cscript_testsuite_paths[testsuite]
@@ -93,20 +105,27 @@ def get_testsuite_path(testsuite):
                          .format(testsuite, list(cscript_testsuite_paths.keys())))
 
 
-# Entry, runs all testsuites or specific ones if command line
-# arguments are present.
+
 def run_tests():
+    global cscript_testsuite_paths
     argv = sys.argv
     argc = len(argv)
+
+    # Handle command-line arguments
     if (argc > 1): # run specific testsuites?
         while (True):
             argc -= 1;
             testsuite = argv[argc]
             run_cscript_testsuite(testsuite, get_testsuite_path(testsuite))
             if argc <= 1: break;
-    else: # otherwise run all testsuites
+    else: # run all testsuites
         for testsuite in cscript_testsuite_paths.keys():
             run_cscript_testsuite(testsuite, cscript_testsuite_paths[testsuite])
+
+    # Output aggregate test counts
+    print(f">> Total tests  ===> {yellow(cscript_total_pass+cscript_total_fail)}")
+    print(f">> Total passed ===> {green(cscript_total_pass)}")
+    print(f">> Total fail   ===> {red(cscript_total_fail)}")
 
 
 run_tests()

@@ -31,7 +31,7 @@ static int b_error(cs_State *C) {
 
 
 static int b_assert(cs_State *C) {
-    if (c_likely(cs_to_bool(C, -1))) { /* true? */
+    if (c_likely(cs_to_bool(C, 0))) { /* true? */
         return cs_getntop(C); /* get all arguments */
     } else { /* failed assert (error) */
         csL_check_any(C, 0); /* must have a condition */
@@ -439,25 +439,25 @@ static const char *strtoint(const char *s, int base, cs_Integer *pn, int *of) {
 }
 
 
-static int b_tonumber(cs_State *C) {
+static int b_tonum(cs_State *C) {
     int overflow = 0;
     if (cs_is_noneornil(C, 1)) { /* no base? */
         if (cs_type(C, 0) == CS_TNUMBER) { /* number ? */
             cs_settop(C, 1); /* set it as top */
             return 1; /* return it */
         } else { /* must be string */
-            const char *s = cs_to_string(C, 0);
-            if (s != NULL && cs_stringtonumber(C, s, &overflow))
+            size_t l;
+            const char *s = cs_to_lstring(C, 0, &l);
+            if (s != NULL && cs_stringtonumber(C, s, &overflow) == l + 1)
                 goto done;
             /* else not a number */
             csL_check_any(C, 0); /* (but there must be some parameter) */
         }
     } else { /* have base */
         size_t l;
-        const char *s;
-        cs_Integer n;
         cs_Integer i = csL_check_integer(C, 1); /* base */
-        s = csL_check_lstring(C, 0, &l); /* numeral to convert */
+        const char *s = csL_check_lstring(C, 0, &l); /* numeral to convert */
+        cs_Integer n;
         csL_check_arg(C, 2 <= i && i <= 36, 1, "base out of range [2,36]");
         if (strtoint(s, i, &n, &overflow) == s + l) { /* conversion ok? */
             cs_push_integer(C, n); /* push the conversion number */
@@ -474,7 +474,7 @@ done:
 }
 
 
-static int b_tostring(cs_State *C) {
+static int b_tostr(cs_State *C) {
     csL_check_any(C, 0);
     csL_to_lstring(C, 0, NULL);
     return 1;
@@ -518,8 +518,8 @@ static const cs_Entry basic_funcs[] = {
     {"rawget", b_rawget},
     {"rawset", b_rawset},
     {"getargs", b_getargs},
-    {"tonumber", b_tonumber},
-    {"tostring", b_tostring},
+    {"tonum", b_tonum},
+    {"tostr", b_tostr},
     {"typeof", b_typeof},
     {"getclass", b_getclass},
     /* placeholders */

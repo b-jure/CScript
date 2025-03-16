@@ -183,7 +183,7 @@ syn match       cscriptFunc             /\<string\.swaplower\>/
 syn match cscriptComma /,/
 syn match cscriptSemicolon /;/
 
-syn region cscriptLocalStatement transparent start=/\<local\_s*\h\w*\_s*/ end=/\ze\%(;\|=\|}\)/ contains=cscriptLocal,cscriptAttribute,cscriptClassDefinition,cscriptFunction,cscriptFn,cscriptFunctionCall
+syn region cscriptLocalStatement transparent start=/\<local\_s*\h\w*\_s*/ end=/\ze\%(;\|=\|{\)/ contains=cscriptLocal,cscriptAttribute,cscriptClassDefinition,cscriptFunction,cscriptFn,cscriptFunctionCall
 syn keyword cscriptLocal local contained
 syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/ contained
 

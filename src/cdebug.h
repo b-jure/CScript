@@ -18,6 +18,9 @@
 #define csD_bitwerror(C,v1,v2) \
         csD_operror(C, v1, v2, "perform bitwise operation on")
 
+#define csD_tointerror(C) \
+        csD_runerror(C, "number has no integer representation")
+
 
 /*
 ** Mark for entries in 'lineinfo' array that has absolute information in

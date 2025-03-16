@@ -1,0 +1,12 @@
+assert(math.type(0) == "integer");
+assert(math.type(0.0) == "float");
+assert(math.type(-5) == "integer");
+assert(math.type(-3.2) == "float");
+assert(math.type(inf) == "float");
+assert(math.type(-inf) == "float");
+assert(math.type(infinity) == "float");
+assert(math.type(-infinity) == "float");
+assert(!math.type("10"));
+assert(!math.type(true));
+assert(!math.type(false));
+assert(!math.type(nil));

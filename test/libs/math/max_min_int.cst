@@ -1,8 +1,0 @@
-local maxint <final> = math.maxint;
-local minint <final> = math.minint;
-
-local intbits <final> = math.floor(math.log(maxint, 2) + 0.5) + 1;
-assert((1 << intbits) == 0);
-
-assert(minint == 1 << (intbits - 1));
-assert(maxint == minint - 1);

@@ -6958,10 +6958,10 @@
         When called with two integers <code>m</code> and <code>n</code>,
         the "random" integer is in range <em>[m, n]</em>.
         When called with one integer <code>m</code>, the "random" integer
-        is in range <em>[math.min, m]</em>.
+        is in range <em>[1, m]</em>.
         <br/><br/>
         This function uses the <code>MT19937-64</code>
-        (64-bit Marsenne Twister) algorithm to produce psuedo-random 64-bit
+        (64-bit Mersenne Twister) algorithm to produce psuedo-random 64-bit
         integers.
         <br/><br/>
         CScript initializes its pseudo-random generator with the equivalent
@@ -6974,7 +6974,7 @@
     local x = math.rand();
     assert(math.minint &lt;= x and x &lt;= math.maxint);
     x = math.rand(10);
-    assert(math.minint &lt;= x and x &lt;= 10);
+    assert(1 &lt;= x and x &lt;= 10);
     x = math.rand(10, 50);
     assert(10 &lt;= x and x &lt;= 50);</pre>
         </p>

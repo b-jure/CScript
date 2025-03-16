@@ -27,7 +27,7 @@
 
 
 /*
-** By default, disable bytecode disassembly.
+** TODO: By default, disable bytecode disassembly.
 */
 #if !defined(DISASSEMBLE_BYTECODE)
 #include "ctrace.h"

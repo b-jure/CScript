@@ -191,7 +191,7 @@ static int m_log(cs_State *C) {
 static int m_max(cs_State *C) {
     int n = cs_getntop(C); /* number of arguments */
     int imax = 0; /* index of current maximum value */
-    csL_check_arg(C, n >= 0, 0, "value expected");
+    csL_check_arg(C, n > 0, 0, "value expected");
     for (int i = 1; i < n; i++) {
         if (cs_compare(C, imax, i, CS_OPLT))
             imax = i;
@@ -204,7 +204,7 @@ static int m_max(cs_State *C) {
 static int m_min(cs_State *C) {
     int n = cs_getntop(C); /* number of arguments */
     int imin = 0; /* index of current minimum value */
-    csL_check_arg(C, n >= 0, 0, "value expected");
+    csL_check_arg(C, n > 0, 0, "value expected");
     for (int i = 1; i < n; i++) {
         if (cs_compare(C, i, imin, CS_OPLT))
             imin = i;
@@ -481,10 +481,12 @@ static int m_srand(cs_State *C) {
             sa.seed[0] = U2R(c_castS2U(n));
             sa.n = 1;
         } else if (t == CS_TARRAY) { /* seed with array values? */
-            int i = cs_get_nnilindex(C, 0, 0, -1);
+            cs_Unsigned len = cs_len(C, 0);
+            int i = cs_get_nnilindex(C, 0, 0, len);
             while (i >= 0) {
+                cs_get_index(C, 0, i);
                 add_seed_elem(C, &sa);
-                cs_get_nnilindex(C, 0, i, -1);
+                i = cs_get_nnilindex(C, 0, i+1, len);
             }
         } else if (t == CS_TTABLE) { /* seed with table values */
             cs_push_nil(C);
@@ -597,7 +599,7 @@ const cs_Entry mathlib[] = {
     {"cos", m_cos},
     {"deg", m_deg},
     {"exp", m_exp},
-    {"tointeger", m_toint},
+    {"toint", m_toint},
     {"floor", m_floor},
     {"fmod", m_fmod},
     {"ult", m_ult},

@@ -1,6 +1,6 @@
 /*
 ** ccode.c
-** Bytecode emiting functions
+*  Bytecode emiting functions
 ** See Copyright Notice in cscript.h
 */
 
@@ -532,7 +532,7 @@ static int fltK(FunctionState *fs, cs_Number n) {
         return addK(fs, &vn, &vn); /* use number itself as key */
     } else { /* otherwise must build an alternative key */
         /* number of mantissa bits including the leading bit (1) */
-        const int nmb = cs_floatatt(MANT_DIG); 
+        const int nmb = c_floatatt(MANT_DIG); 
         /* q = 1.0 * (1/2^52) */
         const cs_Number q = c_mathop(ldexp)(c_mathop(1.0), -nmb + 1);
         const cs_Number k = (ik == 0 ? q : n + n*q); /* new key */
@@ -1187,9 +1187,10 @@ static int validop(TValue *v1, TValue *v2, int op) {
         case CS_OPBSHR: case CS_OPBSHL: case CS_OPBAND:
         case CS_OPBOR: case CS_OPBXOR: case CS_OPBNOT: { /* conversion */
             cs_Integer i;
-            return (tointeger(v1, &i) && tointeger(v2, &i));
+            return (csO_tointeger(v1, &i, N2IEXACT) &&
+                    csO_tointeger(v2, &i, N2IEXACT));
         }
-        case CS_OPDIV: case CS_OPMOD: /* division by 0 */
+        case CS_OPDIV: case CS_OPIDIV: case CS_OPMOD: /* division by 0 */
             return (nval(v2) != 0);
         default: return 1; /* everything else is valid */
     }
@@ -1306,13 +1307,19 @@ int csC_test(FunctionState *fs, OpCode optest, int cond) {
 }
 
 
+static void patchtruelist(FunctionState *fs, ExpInfo *e) {
+    csC_patchtohere(fs, e->t);
+    e->t = NOJMP;
+}
+
+
 /* 
 ** Insert new jump into 'e' false list.
 ** This test jumps over the second expression if the first expression
 ** is false (nil or false).
 */
-static void andjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
-    int pc; /* pc of new jump */
+static void andjump(FunctionState *fs, ExpInfo *e) {
+    int pc;
     switch (e->et) {
         case EXP_TRUE: case EXP_STRING: case EXP_INT:
         case EXP_FLT: case EXP_K: { /* constant true expression */
@@ -1320,13 +1327,24 @@ static void andjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
             break;
         }
         default: {
-            pc = codetest(fs, e, testop, 0); /* jump if false */
+            pc = codetest(fs, e, OP_TESTORPOP, 0); /* jump if false */
+            if (e->t != NOJMP) {
+                int jump = csC_jmp(fs, OP_JMP);
+                patchtruelist(fs, e);
+                csC_emitI(fs, OP_POP);
+                csC_patchtohere(fs, jump);
+            }
             break;
         }
     }
     csC_concatjl(fs, &e->f, pc); /* insert new jump in false list */
-    csC_patchtohere(fs, e->t); /* true list jumps to here (after false test) */
-    e->t = NOJMP; /* set true list as empty */
+    patchtruelist(fs, e);
+}
+
+
+static void patchfalselist(FunctionState *fs, ExpInfo *e) {
+    csC_patchtohere(fs, e->f);
+    e->f = NOJMP;
 }
 
 
@@ -1335,7 +1353,7 @@ static void andjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
 ** This test jumps over the second expression if the first expression
 ** is true (everything else except nil and false).
 */
-void orjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
+void orjump(FunctionState *fs, ExpInfo *e) {
     int pc;
     switch (e->et) {
         case EXP_NIL: case EXP_FALSE: {
@@ -1343,13 +1361,18 @@ void orjump(FunctionState *fs, ExpInfo *e, OpCode testop) {
             break;
         }
         default: {
-            pc = codetest(fs, e, testop, 1); /* jump if true */
+            pc = codetest(fs, e, OP_TESTORPOP, 1); /* jump if true */
+            if (e->f != NOJMP) {
+                int jump = csC_jmp(fs, OP_JMP);
+                patchfalselist(fs, e);
+                csC_emitI(fs, OP_POP);
+                csC_patchtohere(fs, jump);
+            }
             break;
         }
     }
     csC_concatjl(fs, &e->t, pc); /* insert new jump in true list */
-    csC_patchtohere(fs, e->f); /* false list jump to here (after true test) */
-    e->f = NOJMP; /* set false list as empty */
+    patchfalselist(fs, e);
 }
 
 
@@ -1366,11 +1389,7 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             ** or immediate operand variant instruction */
             break;
         }
-        case OPR_GT: case OPR_GE: {
-            /* Do not push expression value on the stack yet!
-            ** It will swap places with the second expression. */
-            break;
-        }
+        case OPR_GT: case OPR_GE:
         case OPR_LT: case OPR_LE: {
             int dummy;
             if (!isnumIK(e, &dummy))
@@ -1384,11 +1403,11 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             break;
         }
         case OPR_AND: {
-            andjump(fs, e, OP_TESTORPOP); /* jump out if 'e' is false */
+            andjump(fs, e); /* jump out if 'e' is false */
             break;
         }
         case OPR_OR: {
-            orjump(fs, e, OP_TESTORPOP); /* jump out if 'e' is true */
+            orjump(fs, e); /* jump out if 'e' is true */
             break;
         }
         default: cs_assert(0); /* invalid binary operation */
@@ -1547,8 +1566,21 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 code:
         e1->u.info = csC_emitIL(fs, op, imm);
     } else {
-        int swap = (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR) ||
-                   (swapped && e1->et == EXP_FINEXPR);
+        // TODO: FIX SWAP BUG
+        int swap = 0;
+        if (!swapped)
+            swap = (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR);
+        else if (e1->et == EXP_FINEXPR && e2->et == EXP_FINEXPR) {
+            swap = 1;
+        } else if (e1->et == EXP_FINEXPR && e2->et != EXP_FINEXPR) {
+            // e1(notfin) > e2(fin)
+            // e1(notfin) < e2(fin)
+            swap = 0;
+        } else if (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR) {
+            // e1(fin) > e2(notfin)
+            // e1(fin) < e2(notfin)
+            swap = 1;
+        }
         csC_exp2stack(fs, e1); /* ensure first operand is on stack */
         csC_exp2stack(fs, e2); /* ensure second operand is on stack */
         op = binopr2op(opr, OPR_LT, OP_LT);
@@ -1633,6 +1665,8 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
         }
         case OPR_GT: case OPR_GE: {
             /* 'a > b' <==> 'a < b', 'a >= b' <==> 'a <= b' */
+            csC_varexp2stack(fs, e1);
+            csC_varexp2stack(fs, e2);
             swapexp(e1, e2);
             opr = (opr - OPR_GT) + OPR_LT;
             swapped = 1;

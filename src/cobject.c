@@ -57,7 +57,7 @@ static cs_Number numarithm(cs_State *C, cs_Number x, cs_Number y, int op) {
         case CS_OPIDIV: return c_numidiv(C, x, y);
         case CS_OPMOD: return csV_modf(C, x, y);
         case CS_OPPOW: return c_numpow(C, x, y);
-        case CS_OPUNM: return c_nummul(C, x, y);
+        case CS_OPUNM: return c_numunm(C, x);
         default: cs_assert(0); return 0.0;
     }
 }
@@ -95,9 +95,9 @@ int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
 
 /* try to convert value to 'cs_Integer' */
 int csO_tointeger(const TValue *o, cs_Integer *i, int mode) {
-    if (ttisflt(o)) {
+    if (ttisflt(o))
         return csO_n2i(fval(o), i, mode);
-    } else if (ttisint(o)) {
+    else if (ttisint(o)) {
         *i = ival(o);
         return 1;
     }

@@ -345,20 +345,21 @@ static const char *str2int(const char *s, cs_Integer *i) {
     } else if (c == '0') { /* octal? */
         base = 8;
         c = *s++; /* get first digit */
+        empty = 0; /* have '0' */
     } else /* otherwise it must be decimal */
         base = 10; /* c already has first digit */
+    empty = !(val[c] < base) && empty;
     /* now do the conversion */
     if (base == 10) {
-        empty = !(val[c]<base);
-        if (!empty) {
+        if (!empty) {  
             for (x=0; val[c]<base && x <= UINT_MAX/10-1; c=*s++)
                 x = x * 10 + val[c];
             for (y=x; val[c]<base && y <= CS_UNSIGNED_MAX/10 &&
-                      10*y <= CS_UNSIGNED_MAX-val[c]; c = *s++)
+                      10*y <= CS_UNSIGNED_MAX-val[c]; c=*s++)
                 y = y * 10 + val[c];
         }
     } else if (!(base & (base-1))) { /* base is power of 2? (up to base 32) */
-        if (!(empty = val[c] >= base)) {
+        if (!empty) {
             int bs = "\0\1\2\4\7\3\6\5"[(0x17*base)>>5&7];
             for (x=0; val[c] < base && x <= UINT_MAX/32; c=*s++)
                 x = x<<bs | val[c];
@@ -366,7 +367,6 @@ static const char *str2int(const char *s, cs_Integer *i) {
                 y = y<<bs | val[c];
         }
     } else { /* other bases (up to base 36) */
-        empty = !(val[c]<base);
         if (!empty) {
             for (x=0; val[c]<base && x <= UINT_MAX/36-1; c=*s++)
                 x = x * base + val[c];
@@ -375,17 +375,20 @@ static const char *str2int(const char *s, cs_Integer *i) {
                 y = y * base + val[c];
         }
     }
-    if (val[c] < base || (y >= lim && (sign > 0 || y > lim)))
+    if (val[c] < base || /* 'CS_UNSIGNED_MAX' overflown, */
+        (y >= lim && /* or numeral is bigger or equal than 'lim', */
+         ((sign > 0 && base != 16) || /* and is positive and not hex, */
+          (y > lim && /* or the 'lim' is overflown' */
+          /* and is not hex and less than max unsigned int */
+          !(base == 16 && y <= CS_UNSIGNED_MAX))))) {
         return NULL; /* over(under)flow (do not accept it as integer) */
-    else {
-        s--;
+    } else {
         while (cisspace(c)) c = *s++; /* skip trailing spaces */
         if (empty || c != '\0') return NULL; /* conversion failed? */
         *i = c_castU2S(sign * y);
         return s - 1;
     }
 }
-
 
 /*
 ** TODO: this function might not catch underflow in cases where

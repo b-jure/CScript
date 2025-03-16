@@ -3,6 +3,10 @@ local fn assert_error(f, ...) {
     assert(!res and err);
 }
 
+local fn eqt(x,y) {
+    return a == b and math.type(a) == math.type(b);
+}
+
 local x = -5;
 assert(math.abs(x) == 5);
 assert(math.abs(-x) == 5);
@@ -12,3 +16,6 @@ x = -6.420e-2;
 assert(math.abs(x) == -x);
 assert(math.abs(x) == 6.420e-2);
 assert_error(math.abs, "str");
+assert(eqt(math.abs(math.minint), math.minint));
+assert(eqt(math.abs(math.maxint), math.maxint));
+assert(eqt(math.abs(-math.maxint), math.maxint));

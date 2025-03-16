@@ -43,7 +43,7 @@
 /* 
 ** Convert index to a pointer to its value.
 ** Invalid indices (using upvalue index for CScript functions) return
-** special nil value `&G(C)->nil`.
+** special nil value '&G(C)->nil'.
 */
 static TValue *index2value(const cs_State *C, int index) {
     CallFrame *cf = C->cf;
@@ -58,7 +58,7 @@ static TValue *index2value(const cs_State *C, int index) {
     } else if (index == CS_REGISTRYINDEX) {
         return &G(C)->c_registry;
     } else { /* upvalues */
-        index = CS_REGISTRYINDEX - index;
+        index = (CS_REGISTRYINDEX - index) - 1;
         api_check(C, index < MAXUPVAL, "upvalue index too large");
         if (c_likely(ttisCclosure(s2v(cf->func.p)))) { /* C closure? */
             CClosure *ccl = clCval(s2v(cf->func.p));
@@ -290,10 +290,8 @@ CS_API int cs_is_number(cs_State *C, int index) {
 
 /* Check if the value at index is an integer. */
 CS_API int cs_is_integer(cs_State *C, int index) {
-    cs_Integer i;
-    UNUSED(i);
     const TValue *o = index2value(C, index);
-    return tointeger(o, &i);
+    return ttisint(o);
 }
 
 
@@ -927,7 +925,7 @@ CS_API int cs_get_index(cs_State *C, int index, cs_Integer i) {
 static int auxgetindex(cs_State *C, int index, int begin, int end, int nn) {
     Array *arr = getarray(C, index);
     if (end < 0 || end >= (int)arr->n)
-        end = (arr->n > 0) ? (int)(arr->n-1) : end;
+        end = cast_int(arr->n - (arr->n > 0));
     while (begin <= end) {
         if (!isempty(&arr->b[begin]) == nn)
             return begin; /* found */
@@ -950,7 +948,7 @@ CS_API int cs_get_nnilindex(cs_State *C, int index, uint begin, int end) {
 static int auxgetrindex(cs_State *C, int index, int begin, int end, int nn) {
     Array *arr = getarray(C, index);
     if (begin < 0 || begin >= (int)arr->n)
-        begin = (arr->n > 0) ? (int)(arr->n-1) : begin;
+        begin = cast_int(arr->n - (arr->n > 0));
     while (begin <= end) {
         if (!isempty(&arr->b[end]) == nn)
             return end; /* found */

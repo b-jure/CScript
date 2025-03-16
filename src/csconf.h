@@ -250,10 +250,10 @@
 #define CS_NUMBER_FMTLEN        ""
 #define CS_NUMBER_FMT           "%.14g"
 
-#define cs_floatatt(n)          (DBL_##n)
+#define c_floatatt(n)           (DBL_##n)
 
-#define CS_NUMBER_MIN           cs_floatatt(MIN)
-#define CS_NUMBER_MAX           cs_floatatt(MAX)
+#define CS_NUMBER_MIN           c_floatatt(MIN)
+#define CS_NUMBER_MAX           c_floatatt(MAX)
 
 #define CS_HUGE_VAL             ((cs_Number)HUGE_VAL)
 
