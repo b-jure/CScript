@@ -1566,21 +1566,13 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 code:
         e1->u.info = csC_emitIL(fs, op, imm);
     } else {
-        // TODO: FIX SWAP BUG
         int swap = 0;
         if (!swapped)
             swap = (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR);
-        else if (e1->et == EXP_FINEXPR && e2->et == EXP_FINEXPR) {
+        else if (e2->et == EXP_FINEXPR)
             swap = 1;
-        } else if (e1->et == EXP_FINEXPR && e2->et != EXP_FINEXPR) {
-            // e1(notfin) > e2(fin)
-            // e1(notfin) < e2(fin)
+        else if (e1->et == EXP_FINEXPR && e2->et != EXP_FINEXPR)
             swap = 0;
-        } else if (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR) {
-            // e1(fin) > e2(notfin)
-            // e1(fin) < e2(notfin)
-            swap = 1;
-        }
         csC_exp2stack(fs, e1); /* ensure first operand is on stack */
         csC_exp2stack(fs, e2); /* ensure second operand is on stack */
         op = binopr2op(opr, OPR_LT, OP_LT);
