@@ -205,27 +205,22 @@ CSLIB_API void  csL_buff_end(csL_Buffer *B);
 CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
 
 /* ------------------------------------------------------------------------ 
-** Basic message reporting
+** File handles for IO library
 ** ------------------------------------------------------------------------ */
-/* write a message to 'fp' stream */
-#if !defined(cs_writelen)
-#define cs_writelen(fp,s,l)    fwrite((s), sizeof(char), (l), fp)
-#endif
 
-/* write a newline to 'fp' and flush it */
-#if !defined(cs_writeline)
-#define cs_writeline(fp)       (cs_writelen(fp, "\n", 1), fflush(fp))
-#endif
+/*
+** A file handle is a userdata with vmt 'CS_FILEHANDLE' and
+** initial structure 'luaL_Stream' (it may contain other fields
+** after that initial structure).
+*/
 
-/* write formatted message to 'fp' and flush it */
-#if !defined(cs_writefmt)
-#define cs_writefmt(fp, msg, ...)  (fprintf(fp, msg, __VA_ARGS__), fflush(fp))
-#endif
+#define CS_FILEHANDLE       "FILE*"
 
-/* write formatted message to 'fp' ('ap' is va_list) and flush it */
-#if !defined(cs_writevfmt)
-#define cs_writevfmt(fp,msg,ap)    (vfprintf(fp, msg, ap), fflush(fp))
-#endif
+
+typedef struct csL_Stream {
+  FILE *f; /* stream (NULL for incompletely created streams) */
+  cs_CFunction closef; /* to close stream (NULL for closed streams) */
+} csL_Stream;
 
 
 #endif

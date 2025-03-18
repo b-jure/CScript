@@ -480,7 +480,7 @@ static int m_srand(cs_State *C) {
             cs_Integer n = csL_check_integer(C, 0);
             sa.seed[0] = U2R(c_castS2U(n));
             sa.n = 1;
-        } else if (t == CS_TARRAY) { /* seed with array values? */
+        } else if (t == CS_TLIST) { /* seed with array values? */
             cs_Unsigned len = cs_len(C, 0);
             int i = cs_get_nnilindex(C, 0, 0, len);
             while (i >= 0) {
@@ -493,7 +493,7 @@ static int m_srand(cs_State *C) {
             while (cs_next(C, 0))
                 add_seed_elem(C, &sa);
         } else /* invalid argument type */
-            csL_error_type(C, 0, "number, array or table");
+            csL_error_type(C, 0, "number, list or a table");
     }
     if (sa.n == 0) /* no seed values? */
         init_ctx_default(C, ctx); /* default initialization */

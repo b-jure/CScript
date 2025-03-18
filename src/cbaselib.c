@@ -211,7 +211,7 @@ static int b_pairs(cs_State *C) {
 
 static int ipairsaux(cs_State *C) {
     cs_Integer i;
-    csL_check_type(C, 0, CS_TARRAY);
+    csL_check_type(C, 0, CS_TLIST);
     i = csL_check_integer(C, 1);
     i = csL_intop(+, i, 1);
     cs_push_integer(C, i);
@@ -220,7 +220,7 @@ static int ipairsaux(cs_State *C) {
 
 
 static int b_ipairs(cs_State *C) {
-    csL_check_type(C, 0, CS_TARRAY);
+    csL_check_type(C, 0, CS_TLIST);
     cs_push_cfunction(C, ipairsaux); /* iteration function */
     cs_push(C, 0); /* state */
     cs_push_integer(C, -1); /* initial value */
@@ -290,12 +290,12 @@ static int b_warn(cs_State *C) {
 
 static int b_len(cs_State *C) {
     int t = cs_type(C, 0);
-    csL_expect_arg(C, t == CS_TARRAY ||
+    csL_expect_arg(C, t == CS_TLIST ||
                       t == CS_TTABLE ||
                       t == CS_TINSTANCE ||
                       t == CS_TCLASS ||
                       t == CS_TSTRING, 0,
-                      "array, hashtable, instance or string");
+                      "list, hashtable, instance or string");
     cs_push_integer(C, cs_len(C, 0));
     return 1;
 }
@@ -332,10 +332,10 @@ static int b_getargs(cs_State *C) {
     int nres = cs_getntop(C) - 1;
     if (cs_type(C, 0) == CS_TSTRING) {
         const char *what = cs_to_string(C, 0);
-        if (strcmp(what, "array") == 0) { /* array? */
-            cs_push_array(C, nres); /* push the array */
+        if (strcmp(what, "list") == 0) { /* list? */
+            cs_push_list(C, nres); /* push the list */
             cs_replace(C, 0); /* move in place of string */
-            while (nres--) /* set the array indices */
+            while (nres--) /* set the list indices */
                 cs_set_index(C, 0, nres);
         } else if (strcmp(what, "table") == 0) { /* hashset? */
             cs_push_table(C, nres); /* push the table (hashset) */
@@ -348,8 +348,8 @@ static int b_getargs(cs_State *C) {
             cs_push_integer(C, nres);
         else
             csL_error_arg(C, 0,
-            "invalid string value, expected \"array\", \"table\" or \"len\"");
-        return 1; /* return (array|table|len) */
+            "invalid string value, expected \"list\", \"table\" or \"len\"");
+        return 1; /* return (list|table|len) */
     } else {
         cs_Integer i = csL_check_integer(C, 0);
         if (i < 0) i = nres + i;

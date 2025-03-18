@@ -81,15 +81,17 @@
 
 
 /*
-** Check if GC is in a state that holds the invariant
-** that white objects cannot point to black objects.
-** States that break this invariant are sweep states.
+** Macro to tell when main invariant (white objects cannot point to black
+** objects) must be kept. During a collection, the sweep phase may break
+** the invariant, as objects turned white may point to still-black
+** objects. The invariant is restored when sweep ends and all objects
+** are white again.
 */
-#define invariantstate(gs)      ((gs)->gcstate <= GCSatomic)
+#define keepinvariant(gs)       ((gs)->gcstate <= GCSatomic)
 
 
 /* check if GC is in a sweep state */
-#define sweepstate(gs) \
+#define issweepstate(gs) \
         (GCSsweepall <= (gs)->gcstate && (gs)->gcstate <= GCSsweepend)
 
 

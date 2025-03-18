@@ -152,7 +152,7 @@ OP_CONSTFL,/*      L          'load integer L as float'                     */
 OP_VARARGPREP,/*   L          'adjust function varargs (L function arity)'  */
 OP_VARARG,/*       L          'load L-1 varargs'                            */
 OP_CLOSURE,/*      L          'load closure(Enclosing->fns[L])'             */
-OP_NEWARRAY,/*     S          'create and load new array of size 1<<(S-1)'  */
+OP_NEWLIST,/*      S          'create and load new array of size 1<<(S-1)'  */
 OP_NEWCLASS,/*                'create and load new class'                   */
 OP_NEWTABLE,/*     S          'create and load new table of size 1<<(S-1)'  */
 OP_METHOD,/*       L V1 V2    'define method V2 for class V1 under key K{L}'*/
@@ -244,7 +244,7 @@ OP_SETLOCAL,/*     V L         'L{L} = V'                                   */
 OP_GETUVAL,/*      L           'U{L}'                                       */
 OP_SETUVAL,/*      V L         'U{L} = V'                                   */
 
-OP_SETARRAY,/*     L1 L2 S      'V{-L1}[L2+i] = V{-S+i}, 1 <= i <= S        */
+OP_SETLIST,/*     L1 L2 S      'V{-L1}[L2+i] = V{-S+i}, 1 <= i <= S         */
 
 OP_SETPROPERTY,/*  V L1 L2     'V{-L1}.K{L2}:string = V'                    */
 OP_GETPROPERTY,/*  V  L        'V.K{L}'                                     */
@@ -346,10 +346,10 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 
 
 /* 
-** Number of array items to accumulate before a SETARRAY instruction.
+** Number of list items to accumulate before a SETLIST instruction.
 ** Keep this value under MAX_ARG_S.
 */
-#define ARRFIELDS_PER_FLUSH     50
+#define LISTFIELDS_PER_FLUSH     50
 
 
 #define csC_setmulret(fs,e)     csC_setreturns(fs, e, CS_MULRET)
@@ -380,8 +380,8 @@ CSI_FUNC void csC_adjuststack(FunctionState *fs, int left);
 CSI_FUNC int csC_ret(FunctionState *fs, int first, int nreturns);
 CSI_FUNC void csC_method(FunctionState *fs, ExpInfo *e);
 CSI_FUNC int csC_storevar(FunctionState *fs, ExpInfo *var, int left);
-CSI_FUNC void csC_setarraysize(FunctionState *fs, int pc, int sz);
-CSI_FUNC void csC_setarray(FunctionState *fs, int base, int nelems, int tostore);
+CSI_FUNC void csC_setlistsize(FunctionState *fs, int pc, int lsz);
+CSI_FUNC void csC_setlist(FunctionState *fs, int base, int nelems, int tostore);
 CSI_FUNC void csC_settablesize(FunctionState *fs, int pc, int hsize);
 CSI_FUNC void csC_constexp2val(FunctionState *fs, ExpInfo *e, TValue *v);
 CSI_FUNC TValue *csC_getconstant(FunctionState *fs, ExpInfo *v);

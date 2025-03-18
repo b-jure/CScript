@@ -8,7 +8,7 @@
 #define CS_CORE
 
 
-#include "carray.h"
+#include "clist.h"
 #include "cdebug.h"
 #include "cfunction.h"
 #include "cgc.h"
@@ -686,6 +686,7 @@ CS_API void cs_push_lightuserdata(cs_State *C, void *p) {
 }
 
 
+/* Push fulluserdata on top of the stack. */
 CS_API void *cs_push_userdata(cs_State *C, size_t sz, int nuv) {
     UserData *ud;
     cs_lock(C);
@@ -693,20 +694,21 @@ CS_API void *cs_push_userdata(cs_State *C, size_t sz, int nuv) {
     ud = csMM_newuserdata(C, sz, nuv);
     setuval2s(C, C->sp.p, ud);
     api_inctop(C);
+    csG_checkGC(C);
     cs_unlock(C);
     return getuserdatamem(ud);
 }
 
 
-/* Push array on top of the stack. */
-CS_API void cs_push_array(cs_State *C, int sz) {
-    Array *arr;
+/* Push list on top of the stack. */
+CS_API void cs_push_list(cs_State *C, int sz) {
+    List *l;
     cs_lock(C);
-    arr = csA_new(C);
-    setarrval2s(C, C->sp.p, arr);
+    l = csA_new(C);
+    setlistval2s(C, C->sp.p, l);
     api_inctop(C);
     if (sz > 0)
-        csA_ensure(C, arr, sz);
+        csA_ensure(C, l, sz);
     csG_checkGC(C);
     cs_unlock(C);
 }
@@ -714,13 +716,13 @@ CS_API void cs_push_array(cs_State *C, int sz) {
 
 /* Push table on top of the stack. */
 CS_API void cs_push_table(cs_State *C, int sz) {
-    Table *ht;
+    Table *t;
     cs_lock(C);
-    ht = csH_new(C);
-    settval2s(C, C->sp.p, ht);
+    t = csH_new(C);
+    settval2s(C, C->sp.p, t);
     api_inctop(C);
     if (sz > 0)
-        csH_resize(C, ht, sz);
+        csH_resize(C, t, sz);
     csG_checkGC(C);
     cs_unlock(C);
 }
@@ -765,25 +767,24 @@ c_sinline void auxsetvmt(TValue *dest, const cs_VMT *vmt) {
 }
 
 
-#define fastget(C,ht,k,slot,f)     ((slot = f(ht, k)), !isempty(slot))
+#define fastget(C,t,k,slot,f)     ((slot = f(t, k)), !isempty(slot))
 
-#define finishfastset(C,ht,slot,v) \
+#define finishfastset(C,t,slot,v) \
     { setobj(C, cast(TValue *, slot), v); \
-      csG_barrierback(C, obj2gco(ht), v); }
+      csG_barrierback(C, obj2gco(t), v); }
 
 
-c_sinline void auxrawsetstr(cs_State *C, Table *ht, const char *str,
-                             const TValue *v) {
+c_sinline void auxrawsetstr(cs_State *C, Table *t, const char *str,
+                            const TValue *v) {
     const TValue *slot;
     OString *s = csS_new(C, str);
-    if (fastget(C, ht, s, slot, csH_getstr)) {
-        finishfastset(C, ht, slot, v);
+    if (fastget(C, t, s, slot, csH_getstr)) {
+        finishfastset(C, t, slot, v);
         C->sp.p--; /* pop value */
     } else {
         setstrval2s(C, C->sp.p, s);
         api_inctop(C);
-        csH_set(C, ht, s2v(C->sp.p - 1), v);
-        csG_barrierback(C, obj2gco(ht), v);
+        csV_settable(C, t, s2v(C->sp.p - 1), v);
         C->sp.p -= 2; /* pop string key and value */
     }
     cs_unlock(C);
@@ -853,10 +854,10 @@ c_sinline int finishrawgetfield(cs_State *C, const TValue *val) {
 }
 
 
-c_sinline int auxrawgetfieldstr(cs_State *C, Table *ht, const char *k) {
+c_sinline int auxrawgetfieldstr(cs_State *C, Table *t, const char *k) {
     const TValue *slot;
     OString *str = csS_new(C, k);
-    if (fastget(C, ht, str, slot, csH_getstr)) {
+    if (fastget(C, t, str, slot, csH_getstr)) {
         setobj2s(C, C->sp.p, slot);
     } else
         setnilval(s2v(C->sp.p));
@@ -900,20 +901,20 @@ CS_API int cs_get_raw(cs_State *C, int obj) {
 }
 
 
-c_sinline Array *getarray(cs_State *C, int arrobj) {
-    const TValue *o = index2value(C, arrobj);
-    api_check(C, ttisarr(o), "expect array");
-    return arrval(o);
+c_sinline List *getlist(cs_State *C, int index) {
+    const TValue *o = index2value(C, index);
+    api_check(C, ttislist(o), "expect list");
+    return listval(o);
 }
 
 
 CS_API int cs_get_index(cs_State *C, int index, cs_Integer i) {
-    Array *arr;
+    List *l;
     cs_lock(C);
     api_check(C, i >= 0, "invalid `index`");
-    arr = getarray(C, index);
-    if (c_castS2U(i) < arr->n) {
-        setobj2s(C, C->sp.p, &arr->b[i]);
+    l = getlist(C, index);
+    if (c_castS2U(i) < l->n) {
+        setobj2s(C, C->sp.p, &l->b[i]);
     } else
         setnilval(s2v(C->sp.p));
     api_inctop(C);
@@ -923,11 +924,11 @@ CS_API int cs_get_index(cs_State *C, int index, cs_Integer i) {
 
 
 static int auxgetindex(cs_State *C, int index, int begin, int end, int nn) {
-    Array *arr = getarray(C, index);
-    if (end < 0 || end >= (int)arr->n)
-        end = cast_int(arr->n - (arr->n > 0));
+    List *l = getlist(C, index);
+    if (end < 0 || end >= (int)l->n)
+        end = cast_int(l->n - (l->n > 0));
     while (begin <= end) {
-        if (!isempty(&arr->b[begin]) == nn)
+        if (!isempty(&l->b[begin]) == nn)
             return begin; /* found */
         begin++;
     }
@@ -946,11 +947,11 @@ CS_API int cs_get_nnilindex(cs_State *C, int index, uint begin, int end) {
 
 
 static int auxgetrindex(cs_State *C, int index, int begin, int end, int nn) {
-    Array *arr = getarray(C, index);
-    if (begin < 0 || begin >= (int)arr->n)
-        begin = cast_int(arr->n - (arr->n > 0));
+    List *l = getlist(C, index);
+    if (begin < 0 || begin >= (int)l->n)
+        begin = cast_int(l->n - (l->n > 0));
     while (begin <= end) {
-        if (!isempty(&arr->b[end]) == nn)
+        if (!isempty(&l->b[end]) == nn)
             return end; /* found */
         end--;
     }
@@ -982,50 +983,50 @@ c_sinline Table *gettable(cs_State *C, int obj) {
 
 
 CS_API int cs_get_field(cs_State *C, int obj) {
-    Table *ht;
+    Table *t;
     const TValue *val;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    ht = gettable(C, obj);
-    val = csH_get(ht, s2v(C->sp.p - 1));
+    t = gettable(C, obj);
+    val = csH_get(t, s2v(C->sp.p - 1));
     C->sp.p--; /* remove key */
     return finishrawgetfield(C, val);
 }
 
 
 CS_API int cs_get_fieldstr(cs_State *C, int obj, const char *field) {
-    Table *ht;
+    Table *t;
     cs_lock(C);
-    ht = gettable(C, obj);
-    return auxrawgetfieldstr(C, ht, field);
+    t = gettable(C, obj);
+    return auxrawgetfieldstr(C, t, field);
 }
 
 
 CS_API int cs_get_fieldptr(cs_State *C, int obj, const void *field) {
-    Table *ht;
+    Table *t;
     TValue aux;
     cs_lock(C);
-    ht = gettable(C, obj);
+    t = gettable(C, obj);
     setpval(&aux, cast_voidp(field));
-    return finishrawgetfield(C, csH_get(ht, &aux));
+    return finishrawgetfield(C, csH_get(t, &aux));
 }
 
 
 CS_API int cs_get_fieldint(cs_State *C, int obj, cs_Integer i) {
-    Table *ht;
+    Table *t;
     cs_lock(C);
-    ht = gettable(C, obj);
-    return finishrawgetfield(C, csH_getint(ht, i));
+    t = gettable(C, obj);
+    return finishrawgetfield(C, csH_getint(t, i));
 }
 
 
 CS_API int cs_get_fieldflt(cs_State *C, int obj, cs_Number n) {
-    Table *ht;
+    Table *t;
     TValue aux;
     cs_lock(C);
-    ht = gettable(C, obj);
+    t = gettable(C, obj);
     setfval(&aux, n);
-    return finishrawgetfield(C, csH_get(ht, &aux));
+    return finishrawgetfield(C, csH_get(t, &aux));
 }
 
 
@@ -1038,9 +1039,8 @@ CS_API int cs_get_class(cs_State *C, int insobj) {
         setclsval2s(C, C->sp.p, insval(o)->oclass);
         api_inctop(C);
         tt = CS_TCLASS;
-    } else {
+    } else
         tt = CS_TNONE;
-    }
     cs_unlock(C);
     return tt;
 }
@@ -1149,26 +1149,25 @@ CS_API void  cs_set_raw(cs_State *C, int obj) {
 
 
 CS_API void cs_set_index(cs_State *C, int index, int i) {
-    Array *arr;
+    List *l;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    api_check(C, 0 <= i, "`index` out of bounds");
-    arr = getarray(C, index);
-    csA_ensureindex(C, arr, i);
-    setobj(C, &arr->b[i], s2v(C->sp.p - 1));
-    csG_barrierback(C, obj2gco(arr), s2v(C->sp.p - 1));
+    api_check(C, 0 <= i && i <= CS_MAXLISTINDEX, "`index` out of bounds");
+    l = getlist(C, index);
+    csA_ensureindex(C, l, i);
+    setobj(C, &l->b[i], s2v(C->sp.p - 1));
+    csV_finishrawset(C, l, s2v(C->sp.p - 1));
     C->sp.p--; /* remove value */
     cs_unlock(C);
 }
 
 
 c_sinline void auxrawsetfield(cs_State *C, int obj, TValue *key, int n) {
-    Table *ht;
+    Table *t;
     cs_lock(C);
     api_checknelems(C, n);
-    ht = gettable(C, obj);
-    csH_set(C, ht, key, s2v(C->sp.p - 1));
-    csG_barrierback(C, obj2gco(ht), s2v(C->sp.p - 1));
+    t = gettable(C, obj);
+    csV_settable(C, t, key, s2v(C->sp.p - 1));
     C->sp.p -= n;
     cs_unlock(C);
 }
@@ -1180,11 +1179,11 @@ CS_API void cs_set_field(cs_State *C, int obj) {
 
 
 CS_API void cs_set_fieldstr(cs_State *C, int index, const char *field) {
-    Table *ht;
+    Table *t;
     cs_lock(C);
     api_checknelems(C, 1);
-    ht = gettable(C, index);
-    auxrawsetstr(C, ht, field, s2v(C->sp.p - 1));
+    t = gettable(C, index);
+    auxrawsetstr(C, t, field, s2v(C->sp.p - 1));
 }
 
 
@@ -1231,6 +1230,10 @@ unlock:
 }
 
 
+CS_API void cs_set_usermetalist(cs_State *C, int udobj, const cs_VMT *pvmt) {
+}
+
+
 CS_API int cs_set_uservalue(cs_State *C, int index, unsigned short n) {
     UserData *ud;
     int res;
@@ -1241,7 +1244,7 @@ CS_API int cs_set_uservalue(cs_State *C, int index, unsigned short n) {
         res = 0; /* `n` not in [0, ud->nuv) */
     } else {
         setobj(C, &ud->uv[n - 1].val, s2v(C->sp.p - 1));
-        csG_barrierback(C, obj2gco(ud), s2v(C->sp.p - 1));
+        csV_finishrawset(C, ud, s2v(C->sp.p - 1));
         res = 1;
     }
     C->sp.p--; /* remove value */
@@ -1255,13 +1258,14 @@ CS_API void cs_set_usermm(cs_State *C, int index, cs_MM mm) {
     cs_lock(C);
     api_checknelems(C, 1); /* metamethod func */
     ud = getuserdata(C, index);
-    if (!ud->vmt) {
-        ud->vmt = csMM_newvmt(C);
+    if (!ud->meta) {
+        ud->meta = csMM_newvmt(C);
         csG_checkGC(C);
     }
-    setobj(C, &ud->vmt[mm], s2v(C->sp.p - 1));
+    setobj(C, &ud->meta[mm], s2v(C->sp.p - 1));
+    csV_finishrawset(C, ud, s2v(C->sp.p - 1));
     csG_barrierback(C, obj2gco(ud), s2v(C->sp.p - 1));
-    csG_checkfin(C, obj2gco(ud), ud->vmt);
+    csG_checkfin(C, obj2gco(ud), ud->meta);
     C->sp.p--;
     cs_unlock(C);
 }
@@ -1474,7 +1478,7 @@ CS_API cs_Unsigned cs_len(cs_State *C, int index) {
     switch (ttypetag(o)) {
         case CS_VSHRSTR: return strval(o)->shrlen;
         case CS_VLNGSTR: return strval(o)->u.lnglen;
-        case CS_VARRAY: return arrval(o)->n;
+        case CS_VLIST: return listval(o)->n;
         case CS_VTABLE: return csH_len(tval(o));
         case CS_VCLASS: {
             Table *t = classval(o)->methods;
@@ -1488,12 +1492,12 @@ CS_API cs_Unsigned cs_len(cs_State *C, int index) {
 
 
 CS_API int cs_next(cs_State *C, int obj) {
-    Table *ht;
+    Table *t;
     int more;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    ht = gettable(C, obj);
-    more = csH_next(C, ht, C->sp.p - 1);
+    t = gettable(C, obj);
+    more = csH_next(C, t, C->sp.p - 1);
     if (more) {
         api_inctop(C);
     } else
@@ -1506,13 +1510,13 @@ CS_API int cs_next(cs_State *C, int obj) {
 CS_API void cs_concat(cs_State *C, int n) {
     cs_lock(C);
     api_checknelems(C, n);
-    if (n > 0)
+    if (n > 0) {
         csV_concat(C, n);
-    else { /* nothing to concatenate */
+        csG_checkGC(C);
+    } else { /* nothing to concatenate */
         setstrval2s(C, C->sp.p, csS_newl(C, "", 0));
         api_inctop(C);
     }
-    csG_checkGC(C);
     cs_unlock(C);
 }
 

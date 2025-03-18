@@ -109,7 +109,7 @@ c_sinline void htpreinit(Table *ht) {
 }
 
 
-/* create new hashtable of specific size */
+/* create new table of specific size */
 Table *csH_newsz(cs_State *C, int size) {
     GCObject *o = csG_new(C, sizeof(Table), CS_VTABLE);
     Table *ht = gco2ht(o);
@@ -251,7 +251,10 @@ static void rehash(cs_State *C, Table *ht) {
 }
 
 
-/* insert new key */
+/*
+** Warning: when using this function the caller probably needs to
+** check a GC barrier.
+*/
 void csH_newkey(cs_State *C, Table *ht, const TValue *key,
                 const TValue *val) {
     Node *mp;
@@ -466,6 +469,10 @@ const TValue *csH_get(Table *ht, const TValue *key) {
 }
 
 
+/*
+** Warning: when using this function the caller probably needs to
+** check a GC barrier.
+*/
 void csH_finishset(cs_State *C, Table *ht, const TValue *slot,
                    const TValue *key, const TValue *val) {
     if (isabstkey(slot))
@@ -475,12 +482,17 @@ void csH_finishset(cs_State *C, Table *ht, const TValue *slot,
 }
 
 
+/*
+** Warning: when using this function the caller probably needs to
+** check a GC barrier.
+*/
 void csH_set(cs_State *C, Table *ht, const TValue *key, const TValue *val) {
     const TValue *slot = csH_get(ht, key);
     csH_finishset(C, ht, slot, key, val);
 }
 
 
+/* length of a table is the number of key-value pairs */
 int csH_len(const Table *ht) {
     int len = 0;
     Node *n = htnode(ht, 0);

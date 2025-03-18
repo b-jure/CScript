@@ -1,23 +1,17 @@
 /*
-** carray.h
-** Array manipulation functions
+** clist.h
+** List manipulation functions
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CARRAY_H
-#define CARRAY_H
+#ifndef CLIST_H
+#define CLIST_H
 
 #include "cobject.h"
 
 
-/* array size limit */
-#define ARRAYLIMIT      MAXINT
-
-
-#define csA_reset(arr)      ((arr)->n = 0)
-
-
 CSI_FUNC Array *csA_new(cs_State *C);
+CSI_FUNC Array *csA_newl(cs_State *C, uint n);
 CSI_FUNC void csA_shrink(cs_State *C, Array *arr);
 CSI_FUNC int csA_ensure(cs_State *C, Array *arr, uint n);
 CSI_FUNC void csA_ensureindex(cs_State *C, Array *arr, uint index);

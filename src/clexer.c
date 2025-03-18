@@ -186,9 +186,9 @@ OString *csY_newstring(Lexer *lx, const char *str, size_t l) {
     else {
         TValue *stkv = s2v(C->sp.p++); /* reserve stack space for string */
         setstrval(C, stkv, s); /* anchor */
-        csH_finishset(C, lx->tab, o, stkv, stkv); /* tab[string] = string */
+        csH_set(C, lx->tab, stkv, stkv); /* t[string] = string */
         csG_checkGC(C);
-        C->sp.p--; /* remove string */
+        C->sp.p--; /* remove string from stack */
     }
     return s;
 }

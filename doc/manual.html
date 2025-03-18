@@ -81,7 +81,7 @@
         There are eleven basic types in CScript:
         <em>nil</em>, <em>boolean</em>, <em>number</em>, <em>string</em>, 
         <em>function</em>, <em>userdata</em>, <em>thread</em>, <em>table</em>, 
-        <em>array</em>, <em>class</em> and <em>instance</em>.
+        <em>list</em>, <em>class</em> and <em>instance</em>.
         <br/><br/>
         <!-- nil -->
         The type <em>nil</em> has one single value, <b>nil</b>, and is
@@ -173,10 +173,10 @@
         The array-like indexing is useful when we want to index the table
         with the value of the variable.
         <br/><br/>
-        <!-- array -->
-        The type <em>array</em> is a linear collection of values each
+        <!-- list -->
+        The type <em>list</em> is a linear collection of values each
         identified by an <b>index</b>. Each <b>index</b> is positive integer
-        value or 0 which is used to index the <em>array</em> in order to
+        value or 0 which is used to index the <em>list</em> in order to
         retrieve the value (variable values can also be used in place of literal
         integers). Negative integer indices are not allowed.
         <br/><br/>
@@ -509,7 +509,7 @@
         CScript manages memory automatically by running a
         <em>garbage collector</em> to collect all <em>dead</em> objects.
         All memory used by CScript is subject to automatic management:
-        strings, tables, arrays, userdata, functions, threads, classes,
+        strings, tables, lists, userdata, functions, threads, classes,
         instances, internal structures, etc.
         <br/><br/>
         An object is considered <em>dead</em> as soon as the collector
@@ -856,7 +856,7 @@
         <br/><br/>
         Before the first assignment to a variable, its value is <b>nil</b>.
         <br/><br/>
-        Square brackets are used to index a table, array or instance:
+        Square brackets are used to index a table, list or instance:
 
         <pre>
     var ::= prefixexp &lsquo;<b>[</b>&rsquo; exp &lsquo;<b>]</b>&rsquo;</pre>
@@ -1159,7 +1159,7 @@
     exp ::= functiondef
     exp ::= classdef
     exp ::= tableconstructor
-    exp ::= arrayconstructor
+    exp ::= listconstructor
     exp ::= &lsquo;<b>...</b>&rsquo;
     exp ::= exp binop exp
     exp ::= unop exp
@@ -1171,7 +1171,7 @@
         function definitions are explained in
         <a href="#3.4.10">&sect;3.4.10</a>;
         function calls are explained in <a href="#3.4.9">&sect;3.4.9</a>;
-        table and array constructors are explained in
+        table and list constructors are explained in
         <a href="#3.4.8">&sect;3.4.8</a>.
         Vararg expressions, denoted by three dots ('<code>...</code>'),
         can only be used when directly inside a variadic function;
@@ -1296,11 +1296,11 @@
         Strings are equal if they have the same byte content.
         Numbers are equal if they denote the same mathematical value.
         <br/><br/>
-        Tables, arrays, classes, instances, userdata, and threads are
+        Tables, lists, classes, instances, userdata, and threads are
         compared by reference:
         two objects are considered equal only if they are the same object.
         Every time you create a new object
-        (a table, array, a class, a instance, a userdata or a thread),
+        (a table, a list, a class, a instance, a userdata or a thread),
         this new object is different from any previously existing object.
         A function is always equal to itself.
         Functions with any detectable difference
@@ -1403,12 +1403,12 @@
         </p>
 
 
-        <h3>3.4.8 &ndash; <a name="3.4.8">Table and Array Constructors</a></h3><p>
-        Table and array constructors are expressions that create tables and
-        arrays.
-        Every time a constructor is evaluated, a new array or table is created.
-        A constructor can be used to create an empty table/array or to create
-        an array/table and initialize some of its fields/elements.
+        <h3>3.4.8 &ndash; <a name="3.4.8">Table and List Constructors</a></h3><p>
+        Table and list constructors are expressions that create tables and
+        lists.
+        Every time a constructor is evaluated, a new list or table is created.
+        A constructor can be used to create an empty table/list or to create
+        an list/table and initialize some of its fields/elements.
         The general syntax for table constructors is
 
         <pre>
@@ -1436,10 +1436,10 @@
     t[30] = 23;
     a = t;</pre>
 
-        The general syntax for array constructors is:
+        The general syntax for list constructors is:
 
         <pre>
-    arrayconstructor ::= &lsquo;<b>[</b>&rsquo; [elementlist] &lsquo;<b>]</b>&rsquo;
+    listconstructor ::= &lsquo;<b>[</b>&rsquo; [elementlist] &lsquo;<b>]</b>&rsquo;
     elementlist ::= exp {&lsquo;<b>,</b>&rsquo; exp} [&lsquo;<b>,</b>&rsquo;]</pre>
 
         Each expression in the elements list is equivalent to
@@ -1638,7 +1638,7 @@
                 (see <a href="#3.3.4">&sect;3.3.4</a>).
             </li>
             <li>
-                An array constructor,
+                An list constructor,
                 for instance <code>[e1, e2, e3]</code>
                 (see <a href="#3.4.8">&sect;3.4.8</a>).
             </li>
@@ -1718,9 +1718,9 @@
     return f();        -- returns all results from f().
     return x, ...;     -- returns x and all received vararg arguments.
     return x,y,f();    -- returns x, y, and all results from f().
-    [f()]              -- creates array with all results from f().
-    [...]              -- creates array with all vararg arguments.
-    [f(), 5]           -- creates array with the first result from f() and 5.</pre>
+    [f()]              -- creates list with all results from f().
+    [...]              -- creates list with all vararg arguments.
+    [f(), 5]           -- creates list with the first result from f() and 5.</pre>
         </p>
 
 
@@ -2138,10 +2138,10 @@
 
         <h2>4.3 &ndash; <a name="4.3">Registry</a></h2>
         <p>
-        CScript provides a <em>registry</em>, a predefined array that can be
+        CScript provides a <em>registry</em>, a predefined list that can be
         used by any C&nbsp;code to store whatever CScript values it needs to
         store.
-        The registry array is always accessible at pseudo-index
+        The registry list is always accessible at pseudo-index
         <a name="CS_REGISTRYINDEX"><code>CS_REGISTRYINDEX</code></a>.
         The indices in the <em>registry</em> are used by the reference
         mechanism (see <a href="#csL_ref"><code>csL_ref</code></a>) and by
@@ -2174,8 +2174,8 @@
                 C library, and therefore leaves the <em>registry</em> slots
                 free for the reference mechanism.
                 (Lua does the exact same thing, but since CScript distinguishes
-                tables from lists/arrays, as such the registry must be
-                complemented with its own registry table.)
+                tables from lists, as such the registry must be complemented
+                with its own registry table.)
             </li>
         </ul>
         The registry table is used for C&nbsp;libraries, and any C&nbsp;library
@@ -2413,7 +2413,7 @@
         <code>osz</code> is any of
         <a href="#CS_TUSERDATA"><code>CS_TUSERDATA</code></a>,
         <a href="#CS_TSTRING"><code>CS_TSTRING</code></a>,
-        <a href="#CS_TARRAY"><code>CS_TARRAY</code></a>,
+        <a href="#CS_TLIST"><code>CS_TLIST</code></a>,
         <a href="#CS_TTABLE"><code>CS_TTABLE</code></a>,
         <a href="#CS_TFUNCTION"><code>CS_TFUNCTION</code></a>,
         <a href="#CS_TCLASS"><code>CS_TCLASS</code></a>,
@@ -2953,7 +2953,7 @@
         <a name="CS_TUSERDATA"><code>CS_TUSERDATA</code></a>,
         <a name="CS_TLIGHTUSERDATA"><code>CS_TLIGHTUSERDATA</code></a>,
         <a name="CS_TSTRING"><code>CS_TSTRING</code></a>,
-        <a name="CS_TARRAY"><code>CS_TARRAY</code></a>,
+        <a name="CS_TLIST"><code>CS_TLIST</code></a>,
         <a name="CS_TTABLE"><code>CS_TTABLE</code></a>,
         <a name="CS_TFUNCTION"><code>CS_TFUNCTION</code></a>,
         <a name="CS_TCLASS"><code>CS_TCLASS</code></a>,
@@ -3068,7 +3068,7 @@
         Converts the value at the given index to a generic C&nbsp;pointer
         (<code>void*</code>).
         The value can be a userdata, a table, a thread, a string, instance,
-        a class, array or a function; otherwise, <code>cs_to_pointer</code>
+        a class, a list or a function; otherwise, <code>cs_to_pointer</code>
         returns <code>NULL</code>.
         Different objects will give different pointers.
         There is no way to convert the pointer back to its original value.
@@ -3390,18 +3390,18 @@
 #define cs_push_vmt(C, vmt)     cs_push_lightuserdata(C, (void*)vmt)</pre>
         </p>
 
-        <!-- cs_push_array -->
-        <hr><h3><a name="cs_push_array"><code>cs_push_array</code></a></h3>
+        <!-- cs_push_list -->
+        <hr><h3><a name="cs_push_list"><code>cs_push_list</code></a></h3>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void cs_push_array (cs_State *C, int size);</pre>
+        <pre>void cs_push_list (cs_State *C, int size);</pre>
         <p>
-        Creates a new empty array and pushes it on the stack.
+        Creates a new empty list and pushes it on the stack.
         Parameter <code>size</code> is a hint for how many elements the
-        array will have.
+        list will have.
         CScript may use these hints to preallocate memory for the new
-        array.
+        list.
         This preallocation may help performance when you know in advance how
-        many elements the array will have.
+        many elements the list will have.
         </p>
 
         <!-- cs_push_table -->
@@ -3504,7 +3504,7 @@
         <p>
         Similar to <a href="#cs_get"><code>cs_get</code></a>, but does a raw
         access (i.e., without metamethods).
-        The value at <code>index</code> must be a table, array or instance.
+        The value at <code>index</code> must be a table, list or instance.
         </p>
 
         <!-- cs_get_index -->
@@ -3513,7 +3513,7 @@
         <pre>int cs_get_index (cs_State *C, int index, cs_Integer i);</pre>
         <p>
         Pushes onto the stack the value <code>a[i]</code>,
-        where <code>a</code> is the array at the given index.
+        where <code>a</code> is the list at the given index.
         <br/><br/>
         Returns the type of the pushed value.
         </p>
@@ -3523,11 +3523,11 @@
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>int cs_get_nilindex (cs_State *C, int index, uint begin, int end);</pre>
         <p>
-        Returns the first <b>nil</b> index  inside the array at
+        Returns the first <b>nil</b> index  inside the list at
         the given index starting from <code>begin</code> index up to
         <code>end</code> index (inclusive).
-        If <code>end</code> is greater or equal than the length of the array,
-        or is less than 0, it is clipped to the last index (array length - 1).
+        If <code>end</code> is greater or equal than the length of the list,
+        or is less than 0, it is clipped to the last index (list length - 1).
         If there is no such index this returns -1.
         </p>
 
@@ -3549,8 +3549,8 @@
         <a href="#cs_get_nilindex"><code>cs_get_nilindex</code></a>
         except this performs the search in reverse.
         Additionally if <code>begin</code> is greater or equal than the length
-        of the array, or is less than 0, it is clipped to the last index
-        (array length - 1).
+        of the list, or is less than 0, it is clipped to the last index
+        (list length - 1).
         </p>
 
         <!-- cs_get_nnilindex_rev -->
@@ -3570,7 +3570,7 @@
         <p>
         Identical to <a href="#cs_get_raw"><code>cs_get_raw</code></a> the only
         difference being that value at <code>index</code> must only be a
-        table or instance (array is not allowed as arrays do not have fields).
+        table or instance (list is not allowed as lists do not have fields).
         <br/><br/>
         Returns the type of the pushed value.
         </p>
@@ -3744,7 +3744,7 @@
         Similar to <a href="#cs_set"><code>cs_set</code></a> except that it
         performs a raw set, meaning it wont invoke a metamethod.
         <br/>
-        Value at the given index must be a table, array or instance, otherwise
+        Value at the given index must be a table, list or instance, otherwise
         this function errors as the value can't be indexed.
         <br/><br/>
         This function pops both the key and value off the stack.
@@ -3755,13 +3755,13 @@
         <span class="apii">[-1, +0, <em>m</em>]</span>
         <pre>void cs_set_index (cs_State *C, int index, cs_Integer i);</pre>
         <p>
-        Does the equivalent of <code>a[i] = v</code>, where <code>a</code>
-        is the array at the given index, <code>i</code> is index into the
-        array and <code>v</code> is element value on top of the stack.
+        Does the equivalent of <code>l[i] = v</code>, where <code>l</code>
+        is the list at the given index, <code>i</code> is index into the
+        list and <code>v</code> is element value on top of the stack.
         <br/>
-        As in CScript, the array grows in order to ensure that index fits,
-        so if the index into the array is not in positive bounds of the array,
-        then the array will try to grow in order to fit the index.
+        As in CScript, the list grows in order to ensure that index fits,
+        so if the index into the list is not in positive bounds of the list,
+        then the list will try to grow in order to fit the index.
         Additionally all the "holes" will be set as <b>nil</b> and length
         updated to the <code>i + 1</code> (assuming that <code>i</code> is
         positive and in bounds of <code>int</code>).
@@ -3776,7 +3776,7 @@
         <p>
         Identical to <a href="#cs_set_raw"><code>cs_set_raw</code></a> the only
         difference being that value at <code>index</code> must only be a table
-        or instance (array is not allowed as arrays do not have fields).
+        or instance (list is not allowed as lists do not have fields).
         <br/><br/>
         This function pops both the key and value off the stack.
         </p>
@@ -4105,7 +4105,7 @@
         <pre>int cs_hasvmt (cs_State *C, int index);</pre>
         <p>
         Returns 1 if the value at the given index has a
-        <a href="#cs_VMT">vritual method table</a>, otherwise it returns 0.
+        <a href="#cs_VMT">virtual method table</a>, otherwise it returns 0.
         <br/>
         Note that this function would return 0 even for the types at the
         given index that usually have a
@@ -4134,7 +4134,7 @@
         <p>
         Returns the "length" of the value at the given index.
         For strings, this is the string length;
-        for arrays, this is the array length;
+        for lists, this is the list length;
         for tables, this is the number of non <b>nil</b> key values;
         for classes, this is the number of methods;
         for instances, this is the number of non <b>nil</b> fields;
@@ -4366,12 +4366,12 @@
         and 0&nbsp;otherwise.
         </p>
 
-        <!-- cs_is_array -->
-        <hr><h3><a name="cs_is_array"><code>cs_is_array</code></a></h3>
+        <!-- cs_is_list -->
+        <hr><h3><a name="cs_is_list"><code>cs_is_list</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_is_array (cs_State *C, int index);</pre>
+        <pre>int cs_is_list (cs_State *C, int index);</pre>
         <p>
-        Returns 1 if the value at the given index is the array,
+        Returns 1 if the value at the given index is the list,
         and 0&nbsp;otherwise.
         </p>
 
@@ -5130,18 +5130,18 @@
 
         <hr><h3><a name="csL_ref"><code>csL_ref</code></a></h3><p>
         <span class="apii">[-1, +0, <em>m</em>]</span>
-        <pre>void csL_ref (cs_State *C, int a);</pre>
+        <pre>void csL_ref (cs_State *C, int l);</pre>
         <p>
-        Creates and returns a <em>reference</em>, in the array at index
-        <code>a</code>, for the object on the top of the stack
+        Creates and returns a <em>reference</em>, in the list at index
+        <code>l</code>, for the object on the top of the stack
         (and pops the object).
         <br/><br/>
-        A reference is a unique integer index into that array.
-        As long as you do not manually add entries into the array
-        <code>a</code>, <a href="#csL_ref"><code>csL_ref</code></a> ensures
+        A reference is a unique integer index into that list.
+        As long as you do not manually add entries into the list
+        <code>l</code>, <a href="#csL_ref"><code>csL_ref</code></a> ensures
         the uniqueness of the index it returns.
         You can retrieve an object referred by the reference <code>r</code>
-        by calling <code>cs_get_index(C, a, r)</code>.
+        by calling <code>cs_get_index(C, l, r)</code>.
         The function <a href="#csL_unref"><code>csL_unref</code></a> frees
         a reference.
         <br/><br/>
@@ -5155,11 +5155,11 @@
 
         <hr><h3><a name="csL_unref"><code>csL_unref</code></a></h3><p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void csL_unref (cs_State *C, int a, int ref);</pre>
+        <pre>void csL_unref (cs_State *C, int l, int ref);</pre>
         <p>
-        Releases the reference <code>ref</code> from the array at index
-        <code>a</code> (see <a href="#csL_ref"><code>csL_ref</code></a>).
-        The entry is removed from the array, so that the referred object
+        Releases the reference <code>ref</code> from the list at index
+        <code>l</code> (see <a href="#csL_ref"><code>csL_ref</code></a>).
+        The entry is removed from the list, so that the referred object
         can be collected.
         The reference <code>ref</code> is also freed to be used again.
         <br/><br/>
@@ -5711,17 +5711,17 @@
         </p>
 
         <!-- ipairs -->
-        <hr/><h3><a name="ipairs"><code>ipairs (a)</code></a></h3>
+        <hr/><h3><a name="ipairs"><code>ipairs (l)</code></a></h3>
         <p>
-        Returns three values (an iterator function, the array <code>a</code>,
+        Returns three values (an iterator function, the list <code>l</code>,
         and -1)
         so that the construction
 
-        <pre>   foreach i,v in ipairs(a) <em>body</em></pre>
+        <pre>   foreach i,v in ipairs(l) <em>body</em></pre>
 
         will iterate over the index&ndash;value pairs
-        (<code>0,a[0]</code>), (<code>1,a[1]</code>), ...,
-        up to the <em>length</em> of the array <code>a</code>.
+        (<code>0,l[0]</code>), (<code>1,l[1]</code>), ...,
+        up to the <em>length</em> of the list <code>a</code>.
         </p>
 
         <!-- pcall -->
@@ -5780,9 +5780,9 @@
         <hr/><h3><a name="len"><code>len (v)</code></a></h3>
         <p>
         Returns the length of the object <code>v</code>, which must be
-        array, table, instance or a string.
+        list, table, instance or a string.
         <br/> <br/>
-        <em>Array</em> length is total number of elements in use (one index
+        <em>List</em> length is total number of elements in use (one index
         above the biggest index that was set);
         <em>table</em> length is total number of keys with non-<b>nil</b>
         values; <em>instance</em> length is total number of fields with
@@ -5829,12 +5829,12 @@
         argument at number <code>index</code> (starting from 0); a negative
         number indexes from the end (-1 is the last argument).
         Otherwise, <code>index</code> must be one of these strings:
-        <code>"array"</code>, <code>"table"</code> or <code>"len"</code>.
+        <code>"list"</code>, <code>"table"</code> or <code>"len"</code>.
         <br/><br/>
-        In case <code>index</code> is <code>"array"</code> or
+        In case <code>index</code> is <code>"list"</code> or
         <code>"table"</code> string then <code>getargs</code> returns
-        the total number of extra arguments it received; <code>"array"</code>
-        returns the extra arguments inside the array, <code>"table"</code>
+        the total number of extra arguments it received; <code>"list"</code>
+        returns the extra arguments inside the list, <code>"table"</code>
         returns the extra arguments inside the table where each argument is
         a key with <b>true</b> value.
         <br/><br/>
@@ -5883,7 +5883,7 @@
         "<code>number</code>",
         "<code>string</code>",
         "<code>boolean</code>",
-        "<code>array</code>",
+        "<code>list</code>",
         "<code>table</code>",
         "<code>function</code>",
         "<code>class</code>",
@@ -5936,11 +5936,11 @@
         signals that this call did not have to load the module.)
         Otherwise, it tries to find a <em>loader</em> for the module.
         <br/><br/>
-        To find a loader, <code>import</code> is guided by the array
+        To find a loader, <code>import</code> is guided by the list
         <a href="#package.searchers"><code>package.searchers</code></a>.
-        Each item in this array is a search function, that searches for the
+        Each item in this list is a search function, that searches for the
         module in a particular way.
-        By changing this array, we can change how <code>import</code> looks
+        By changing this list, we can change how <code>import</code> looks
         for a module.
         The following explanation is based on the default configuration
         for <a href="#package.searchers"><code>package.searchers</code></a>.
@@ -6113,10 +6113,10 @@
 
         <hr><h3><a name="package.searchers"><code>package.searchers</code></a></h3>
         <p>
-        Array used by <a href="#import"><code>import</code></a> to control
+        List used by <a href="#import"><code>import</code></a> to control
         how to find modules.
         <br/><br/>
-        Each entry in this array is a <em>searcher function</em>.
+        Each entry in this list is a <em>searcher function</em>.
         When looking for a module, <a href="#import"><code>import</code></a>
         calls each of these searchers in ascending order, with the module name
         (the argument given to <a href="#import"><code>import</code></a>) as
@@ -6129,10 +6129,10 @@
         If it cannot find the module, it returns a string explaining why
         (or <b>nil</b> if it has nothing to say).
         <br/><br/>
-        CScript initializes this array with four searcher functions.
+        CScript initializes this list with four searcher functions.
         <br/><br/>
         The first searcher simply looks for a loader in the
-        <a href="#package.preload"><code>package.preload</code></a> array.
+        <a href="#package.preload"><code>package.preload</code></a> list.
         <br/><br/>
         The second searcher looks for a loader as a CScript library,
         using the path stored at
@@ -6233,10 +6233,10 @@
         <!-- string.split -->
         <hr/><h3><a name="string.split"><code>string.split (s [, sep [, maxsplit]])</code></a></h3>
         <p>
-        Return array of the words in the string, using sep as the delimiter
+        Return list of the words in the string, using sep as the delimiter
         string.
         If <code>maxsplit</code> is given, at most maxsplit splits are done
-        (thus, the array will have at most <code>maxsplit+1</code> elements).
+        (thus, the list will have at most <code>maxsplit+1</code> elements).
         If <code>maxsplit</code> is not specified or is <b>nil</b>, then there
         is no limit on the number of splits (all possible splits are made).
         <br/>
@@ -6283,7 +6283,7 @@
         <pre>
     []</pre>
 
-        (an empty array).
+        (an empty list).
         <br/>
         For example
 
@@ -6313,7 +6313,7 @@
         <p>
         Similar to <a href="#string.split"><code>string.split</code></a> but it does the
         splitting in reverse, starting from the end of <code>s</code>.
-        The returned value is also an array holding the splits which are
+        The returned value is also an list holding the splits which are
         in reverse order.
         </p>
 
@@ -6378,7 +6378,7 @@
         <hr/><h3><a name="string.join"><code>string.join (s, v)</code></a></h3>
         <p>
         Return a string which is the concatenation of the strings in the
-        array or table <code>v</code>.
+        list or table <code>v</code>.
         The separator between elements is the string <code>s</code>.
         <br/><br/>
         Example:
@@ -6676,7 +6676,7 @@
         <hr/><h3><a name="string.bytes"><code>string.bytes (s [, i [, j]])</code></a></h3>
         <p>
         Similar to <a href="#string.byte"><code>string.byte</code></a>,
-        except this returns results in an array.
+        except this returns results in an list.
         <br/><br/>
         The default value for <code>i</code> is&nbsp;0.
         <br/>
@@ -6938,12 +6938,12 @@
         If <code>v</code> is not specified, CScript seeds the PRNG with
         its own implementation of generating seed.
         <br/>
-        If <code>v</code> is an array or table, the PRNG is seeded by the
-        non-<b>nil</b> values inside the array or table, if the value is
+        If <code>v</code> is a list or a table, the PRNG is seeded by the
+        non-<b>nil</b> values inside the list or a table, if the value is
         collectable or has a pointer, its pointer is used as the seed value,
         otherwise the CScript generates the seed, in the way as if no
         arguments were provided.
-        This is done for all the values inside the array or table.
+        This is done for all the values inside the list or table.
         <br/>
         Finally if <code>v</code> is an integer, this integer is converted
         to unsigned integer, and is then used as the seed for the PRNG.

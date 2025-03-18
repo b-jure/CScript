@@ -92,7 +92,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_VARARGPREP */
     opProp(0, FormatIL), /* OP_VARARG */
     opProp(0, FormatIL), /* OP_CLOSURE */
-    opProp(0, FormatIS), /* OP_NEWARRAY */
+    opProp(0, FormatIS), /* OP_NEWLIST */
     opProp(0, FormatIS), /* OP_NEWCLASS */
     opProp(0, FormatIS), /* OP_NEWTABLE */
     opProp(0, FormatIL), /* OP_METHOD */
@@ -165,7 +165,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatIL), /* OP_SETLOCAL */
     opProp(0, FormatIL), /* OP_GETUVAL */
     opProp(0, FormatIL), /* OP_SETUVAL */
-    opProp(0, FormatILLS), /* OP_SETARRAY */
+    opProp(0, FormatILLS), /* OP_SETLIST */
     opProp(0, FormatILL), /* OP_SETPROPERTY */
     opProp(0, FormatIL), /* OP_GETPROPERTY */
     opProp(0, FormatI), /* OP_GETINDEX */
@@ -222,7 +222,7 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
 */
 CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "TRUE", "FALSE", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
-"CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG", "CLOSURE", "NEWARRAY",
+"CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG", "CLOSURE", "NEWLIST",
 "NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK",
 "SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK",
 "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "IDIVI", "MODI", "POWI",
@@ -231,7 +231,7 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT",
 "NOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP", "TESTPOP", "CALL", "CLOSE",
 "TBC", "GETGLOBAL", "SETGLOBAL", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL",
-"SETARRAY", "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX",
+"SETLIST", "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX",
 "GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT",
 "SETINDEXINTL", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP",
 "FORCALL", "FORLOOP", "RET",
@@ -1052,11 +1052,11 @@ static int codefltIK(FunctionState *fs, cs_Number n) {
 }
 
 
-void csC_setarraysize(FunctionState *fs, int pc, int asize) {
+void csC_setlistsize(FunctionState *fs, int pc, int lsz) {
     Instruction *inst = &fs->p->code[pc];
-    asize = (asize != 0 ? csO_ceillog2(asize) + 1 : 0);
-    cs_assert(asize <= MAX_ARG_S);
-    SETARG_S(inst, 0, asize); /* set size (log2 - 1) */
+    lsz = (lsz != 0 ? csO_ceillog2(lsz) + 1 : 0);
+    cs_assert(lsz <= MAX_ARG_S);
+    SETARG_S(inst, 0, lsz); /* set size (log2 - 1) */
 }
 
 
@@ -1067,13 +1067,12 @@ static int emitILLS(FunctionState *fs, Instruction i, int a, int b, int c) {
 }
 
 
-void csC_setarray(FunctionState *fs, int base, int nelems, int tostore) {
-    cs_assert(ARRFIELDS_PER_FLUSH <= MAX_ARG_S);
-    cs_assert(tostore != 0 && tostore <= ARRFIELDS_PER_FLUSH);
-    if (tostore == CS_MULRET)
-        tostore = 0; /* return up to stack top */
-    emitILLS(fs, OP_SETARRAY, base, nelems, tostore);
-    freeslots(fs, tostore); /* free slots holding the array values */
+void csC_setlist(FunctionState *fs, int base, int nelems, int tostore) {
+    cs_assert(LISTFIELDS_PER_FLUSH <= MAX_ARG_S);
+    cs_assert(tostore != 0 && tostore <= LISTFIELDS_PER_FLUSH);
+    if (tostore == CS_MULRET) tostore = 0; /* return up to stack top */
+    emitILLS(fs, OP_SETLIST, base, nelems, tostore);
+    freeslots(fs, tostore); /* free slots holding the list values */
 }
 
 

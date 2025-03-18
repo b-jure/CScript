@@ -129,6 +129,11 @@ typedef unsigned long   ulong;
 typedef c_byte Instruction;
 
 
+#if !defined(CS_MAXLISTINDEX)
+#define CS_MAXLISTINDEX     (MAXINT - 1)
+#endif
+
+
 
 /*
 ** Maximum length for short strings, that is, strings that are
@@ -338,5 +343,28 @@ typedef c_byte Instruction;
 #define condchangemem(C,pre,pos)  \
     { if (gcrunning(G(C))) { pre; csG_full(C, 0); pos; } }
 #endif
+
+
+
+/* write a message to 'fp' stream */
+#if !defined(cs_writelen)
+#define cs_writelen(fp,s,l)    fwrite((s), sizeof(char), (l), fp)
+#endif
+
+/* write a newline to 'fp' and flush it */
+#if !defined(cs_writeline)
+#define cs_writeline(fp)       (cs_writelen(fp, "\n", 1), fflush(fp))
+#endif
+
+/* write formatted message to 'fp' and flush it */
+#if !defined(cs_writefmt)
+#define cs_writefmt(fp, msg, ...)  (fprintf(fp, msg, __VA_ARGS__), fflush(fp))
+#endif
+
+/* write formatted message to 'fp' ('ap' is va_list) and flush it */
+#if !defined(cs_writevfmt)
+#define cs_writevfmt(fp,msg,ap)    (vfprintf(fp, msg, ap), fflush(fp))
+#endif
+
 
 #endif

@@ -9,7 +9,7 @@
 
 
 #include "cgc.h"
-#include "carray.h"
+#include "clist.h"
 #include "csconf.h"
 #include "cfunction.h"
 #include "climits.h"
@@ -48,8 +48,7 @@
         (iswhite(o) ? markobject_(gs, obj2gco(o)) : (void)0)
 
 /* 'markobject' but only if 'o' is non-NULL */
-#define markobjectN(gs,o) \
-        ((o) ? markobject(gs, o) : (void)0)
+#define markobjectN(gs,o)       ((o) ? markobject(gs, o) : (void)0)
 
 /* 'markobject_' but only if 'v' is object and white */
 #define markvalue(gs,v) \
@@ -74,9 +73,9 @@
 
 
 /*
- * Action of visiting a slot or sweeping an object converted
- * into bytes.
- */
+** Action of visiting a slot or sweeping an object converted
+** into bytes.
+*/
 #define WORK2MEM	sizeof(TValue)
 
 
@@ -155,8 +154,7 @@ static GCObject **getgclist(GCObject *o) {
         case CS_VPROTO: return &gco2proto(o)->gclist;
         case CS_VCSCL: return &gco2clcs(o)->gclist;
         case CS_VCCL: return &gco2clc(o)->gclist;
-        case CS_VCLASS: return &gco2cls(o)->gclist;
-        case CS_VARRAY: return &gco2arr(o)->gclist;
+        case CS_VLIST: return &gco2list(o)->gclist;
         case CS_VTABLE: return &gco2ht(o)->gclist;
         case CS_VTHREAD: return &gco2th(o)->gclist;
         case CS_VUSERDATA: return &gco2u(o)->gclist;
@@ -168,23 +166,22 @@ static GCObject **getgclist(GCObject *o) {
 /*
 ** Write barrier that marks white object 'o' pointed to by black
 ** object 'r' (as in root), effectively moving the collector forward.
-** This is to ensure that the garbage collector doesn't miss any objects
-** that have become reachable since the last collection cycle and
-** to maintain the invariant that no black object points to a white object.
-** In case we are in sweep phase, then just mark 'r' as white to keep the
-** invariant and prevent further write barriers.
-** Not to worry, the white bits after atomic phase are switched
-** around, so marking 'r' white won't make it collectable until
-** the next cycle.
+** If called in the sweep phase, it clears the black object to white
+** (sweeps it) to avoid other barrier calls for this same object.
+** NOTE that there is a difference between the dead and white object.
+** Object is considered dead if it was white prior to sweep phase in
+** the current GC cycle, so clearing (sweeping) the black object to white
+** by calling this function in the sweep phase, will not result in the
+** object being collected.
 */
 void csG_barrier_(cs_State *C, GCObject *r, GCObject *o) {
     GState *gs = G(C);
-    if (invariantstate(gs)) { /* invariant holds ? */
-        cs_assert(isblack(r) && iswhite(o));
-        markobject_(gs, o);
-    } else { /* in sweep phase */
-        cs_assert(sweepstate(gs));
-        markwhite(gs, r);
+    cs_assert(isblack(r) && iswhite(o) && !isdead(gs, r) && !isdead(gs, o));
+    if (keepinvariant(gs)) /* must keep invariant? */
+        markobject_(gs, o); /* restore invariant */
+    else { /* sweep phase */
+        cs_assert(issweepstate(gs));
+        markwhite(gs, r); /* sweep the black object */
     }
 }
 
@@ -214,79 +211,71 @@ void csG_barrierback_(cs_State *C, GCObject *r) {
 ** Other objects are marked gray, more precisely they are
 ** first moved into 'gray' list and then marked as gray.
 ** The 'gclist' pointer is the way we link them into graylist, while
-** preserving their link in the 'objects'.
+** preserving their link in the list of all objects ('object').
 */
 static void markobject_(GState *gs, GCObject *o) {
     cs_assert(iswhite(o));
     switch (o->tt_) {
         case CS_VSHRSTR: case CS_VLNGSTR: {
-            markblack(o);
+            markblack(o); /* nothing to visit */
             break;
         }
         case CS_VUPVALUE: {
             UpVal *uv = gco2uv(o);
             if (uvisopen(uv)) 
-                markgray(uv);
+                markgray(uv); /* open upvalues are kept gray */
             else 
-                markblack(uv);
-            markvalue(gs, uv->v.p);
+                markblack(uv); /* closed upvalues are visited here */
+            markvalue(gs, uv->v.p); /* mark its contents */
             break;
         }
         case CS_VIMETHOD: {
             IMethod *im = gco2im(o);
-            markblack(im);
             markobject(gs, im->ins);
             markvalue(gs, &im->method);
+            markblack(im); /* nothing else to mark */
             break;
         }
         case CS_VINSTANCE: {
             Instance *ins = gco2ins(o);
-            markblack(ins);
-            markobjectN(gs, ins->oclass);
+            markobject(gs, ins->oclass);
             markobjectN(gs, ins->fields);
+            markblack(ins); /* nothing else to mark */
             break;
         }
-        case CS_VARRAY: {
-            Array *arr = gco2arr(o);
+        case CS_VLIST: {
+            List *arr = gco2list(o);
             if (arr->n == 0) { /* no elements? */
-                markblack(arr);
-                break; /* done */
-            } /* else fall through */
+                markblack(arr); /* nothing to visit */
+                break;
+            }
+            /* else... */
             goto linklist; /* link to gray list */
         }
         case CS_VCLASS: {
             OClass *cls = gco2cls(o);
+            markobjectN(gs, cls->metalist);
             markobjectN(gs, cls->methods);
-            if (cls->vmt == NULL) { /* empty class? */
-                markblack(cls);
-                break; /* done */
-            } /* else fall through */
-            goto linklist; /* link to gray list */
+            markblack(cls); /* nothing else to mark */
+            break;
         }
         case CS_VUSERDATA: {
             UserData *ud = gco2u(o);
             if (ud->nuv == 0) { /* no user values? */
-                markblack(ud);
-                break; /* done */
-            } /* else fall through */
-        } /* else fall through */
+                markobjectN(gs, ud->metalist); /* mark its metalist */
+                markblack(ud); /* nothing else to mark */
+                break;
+            }
+            /* else ... */
+        } /* fall through */
     linklist:
         case CS_VTABLE: case CS_VPROTO: case CS_VCSCL:
         case CS_VCCL: case CS_VTHREAD: {
             linkobjgclist(o, gs->graylist);
             break;
         }
-        default: cs_assert(0); break;
+        default: cs_assert(0); /* invalid object tag */
     }
-}
-
-
-/* mark 'VMT' */
-c_sinline c_mem markvmt(GState *gs, TValue *vmt) {
-    cs_assert(vmt != NULL);
-    for (int i = 0; i < CS_MM_N; i++)
-        markvalue(gs, &vmt[i]);
-    return CS_MM_N; /* size of VMT array */
 }
 
 
@@ -305,10 +294,9 @@ static void clearkey (Node *n) {
 }
 
 
-/* mark 'Table' slots */
-static c_mem markhtable(GState *gs, Table *ht) {
-    Node *last = htnodelast(ht);
-    for (Node *n = htnode(ht, 0); n < last; n++) {
+static c_mem marktable(GState *gs, Table *t) {
+    Node *last = htnodelast(t);
+    for (Node *n = htnode(t, 0); n < last; n++) {
         if (!isempty(nodeval(n))) { /* entry is not empty? */
             cs_assert(!keyisnil(n));
             markkey(gs, n);
@@ -316,12 +304,11 @@ static c_mem markhtable(GState *gs, Table *ht) {
         } else
             clearkey(n);
     }
-    return 1 + htsize(ht) * 2; /* hashtable + key/value pairs */
+    return 1 + htsize(t) * 2; /* table + key/value pairs */
 }
 
 
-/* mark 'Function' */
-static c_mem markfunction(GState *gs, Proto *p) {
+static c_mem markproto(GState *gs, Proto *p) {
     int i;
     markobjectN(gs, p->source);
     for (i = 0; i < p->sizep; i++)
@@ -337,7 +324,6 @@ static c_mem markfunction(GState *gs, Proto *p) {
 }
 
 
-/* mark C closure */
 static c_mem markcclosure(GState *gs, CClosure *cl) {
     for (int i = 0; i < cl->nupvalues; i++) {
         TValue *uv = &cl->upvals[i];
@@ -347,8 +333,7 @@ static c_mem markcclosure(GState *gs, CClosure *cl) {
 }
 
 
-/* mark CScript closure */
-static c_mem markcstclosure(GState *gs, CSClosure *cl) {
+static c_mem markcsclosure(GState *gs, CSClosure *cl) {
     markobjectN(gs, cl->p);
     for (int i = 0; i < cl->nupvalues; i++) {
         UpVal *uv = cl->upvals[i];
@@ -358,15 +343,8 @@ static c_mem markcstclosure(GState *gs, CSClosure *cl) {
 }
 
 
-/* mark 'OClass' */
-static c_mem markclass(GState *gs, OClass *cls) {
-    return 1 + markvmt(gs, cls->vmt); /* class + VMT */
-}
-
-
-/* mark 'UserData' */
 static c_mem markuserdata(GState *gs, UserData *ud) {
-    /* no need to mark VMT, all functions in there are light C functions */
+    markobjectN(gs, ud->metalist);
     for (int i = 0; i < ud->nuv; i++)
         markvalue(gs, &ud->uv[i].val);
     return 1 + ud->nuv; /* user values + userdata */
@@ -453,11 +431,11 @@ static int markopenupvalues(GState *gs) {
 }
 
 
-static c_mem markarray(GState *gs, Array *arr) {
-    cs_assert(arr->n > 0);
-    for (uint i = 0; i < arr->n; i++)
-        markvalue(gs, &arr->b[i]);
-    return 1 + arr->n; /* array + elements */
+static c_mem marklist(GState *gs, List *l) {
+    cs_assert(l->n > 0);
+    for (uint i = 0; i < l->n; i++)
+        markvalue(gs, &l->b[i]);
+    return 1 + l->n; /* list + elements */
 }
 
 
@@ -471,12 +449,11 @@ static c_mem propagate(GState *gs) {
     gs->graylist = *getgclist(o); /* remove from gray list */
     switch(o->tt_) {
         case CS_VUSERDATA: return markuserdata(gs, gco2u(o));
-        case CS_VTABLE: return markhtable(gs, gco2ht(o));
-        case CS_VPROTO: return markfunction(gs, gco2proto(o));
-        case CS_VCSCL: return markcstclosure(gs, gco2clcs(o));
+        case CS_VTABLE: return marktable(gs, gco2ht(o));
+        case CS_VPROTO: return markproto(gs, gco2proto(o));
+        case CS_VCSCL: return markcsclosure(gs, gco2clcs(o));
         case CS_VCCL: return markcclosure(gs, gco2clc(o));
-        case CS_VCLASS: return markclass(gs, gco2cls(o));
-        case CS_VARRAY: return markarray(gs, gco2arr(o));
+        case CS_VLIST: return marklist(gs, gco2list(o));
         case CS_VTHREAD: return markthread(gs, gco2th(o));
         default: cs_assert(0); return 0;
     }
@@ -508,7 +485,7 @@ static void freeobject(cs_State *C, GCObject *o) {
     switch (o->tt_) {
         case CS_VPROTO: csF_free(C, gco2proto(o)); break;
         case CS_VUPVALUE: freeupval(C, gco2uv(o)); break;
-        case CS_VARRAY: csA_free(C, gco2arr(o)); break;
+        case CS_VLIST: csA_free(C, gco2list(o)); break;
         case CS_VTABLE: csH_free(C, gco2ht(o)); break;
         case CS_VINSTANCE: csM_free(C, gco2ins(o)); break;
         case CS_VIMETHOD: csM_free(C, gco2im(o)); break;
@@ -536,13 +513,11 @@ static void freeobject(cs_State *C, GCObject *o) {
         }
         case CS_VCLASS: {
             OClass *cls = gco2cls(o);
-            if (cls->vmt) csM_freevmt(C, cls->vmt);
             csM_free(C, cls);
             break;
         }
         case CS_VUSERDATA: {
             UserData *u = gco2u(o);
-            if (u->vmt) csM_freevmt(C, u->vmt);
             csM_freemem(C, u, sizeofuserdata(u->nuv, u->size));
             break;
         }
@@ -647,7 +622,7 @@ static GCObject *gettobefin(GState *gs) {
     gs->tobefin = o->next;
     o->next = gs->objects;
     gs->objects = o;
-    if (sweepstate(gs))
+    if (issweepstate(gs))
         markwhite(gs, o);
     return o;
 }
@@ -710,7 +685,7 @@ void csG_checkfin(cs_State *C, GCObject *o, TValue vmt[CS_MM_N]) {
         (gs->gcstop & GCSTPCLS))    /* ...or state is closing? */
         return; /* nothing to be done */
     /* otherwise move 'o' to 'fin' list */
-    if (sweepstate(gs)) {
+    if (issweepstate(gs)) {
         markwhite(gs, o); /* sweep object 'o' */
         if (gs->sweeppos == &o->next) /* should sweep more? */
             gs->sweeppos = sweepuntilalive(C, gs->sweeppos);
@@ -998,7 +973,7 @@ void csG_step(cs_State *C) {
 
 
 static void fullcycle(cs_State *C, GState *gs) {
-    if (invariantstate(gs)) /* already have black objects? */
+    if (keepinvariant(gs)) /* already have black objects? */
         entersweep(C); /* if so sweep them first to turn them back to white */
     /* finish any pending sweep phase to start a new cycle */
     csG_rununtilstate(C, bitmask(GCSpause));

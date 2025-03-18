@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "ctable.h"
-#include "carray.h"
+#include "clist.h"
 #include "cstate.h"
 #include "capi.h"
 #include "cdebug.h"
@@ -75,7 +75,7 @@ static void init_stack(cs_State *C1, cs_State *C) {
 
 static void init_registry(cs_State *C, GState *gs) {
     Array *registry = csA_new(C); 
-    setarrval(C, &gs->c_registry, registry);
+    setlistval(C, &gs->c_registry, registry);
     csA_ensureindex(C, registry, CS_RINDEX_LAST);
     /* registry[CS_RINDEX_MAINTHREAD] = C (mainthread) */
     setthval(C, &registry->b[CS_RINDEX_MAINTHREAD], C);
@@ -225,9 +225,10 @@ CS_API void cs_close(cs_State *C) {
 */
 CS_API cs_State *cs_newthread(cs_State *C) {
     GState *gs = G(C);
-    cs_State *C1;
     GCObject *o;
+    cs_State *C1;
     cs_lock(C);
+    csG_checkGC(C);
     o = csG_newoff(C, sizeof(XS), CS_VTHREAD, offsetof(XS, C));
     C1 = gco2th(o);
     setthval2s(C, C->sp.p, C1);

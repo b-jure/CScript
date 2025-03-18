@@ -11,7 +11,7 @@
 #include <string.h>
 
 #include "capi.h"
-#include "carray.h"
+#include "clist.h"
 #include "csconf.h"
 #include "cfunction.h"
 #include "cgc.h"
@@ -343,16 +343,15 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
 }
 
 
-static void setarrayindex(cs_State *C, Array *arr, const TValue *index,
+static void setlistindex(cs_State *C, List *l, const TValue *index,
                           const TValue *val) {
     cs_Integer i;
     if (c_likely(tointeger(index, &i))) { /* index is integer? */
         if (c_likely(0 <= i)) { /* non-negative index? */
-            if (c_unlikely(i >= ARRAYLIMIT)) /* too large 'index'? */
+            if (c_unlikely(i > CS_MAXLISTINDEX)) /* 'index' too large? */
                 csD_indexerror(C, i, "too large");
-            csA_ensureindex(C, arr, i); /* expand array */
-            setobj(C, &arr->b[i], val); /* set the value at index */
-            csG_barrierback(C, obj2gco(arr), val);
+            csA_ensureindex(C, l, i); /* expand list */
+            setobj(C, &l->b[i], val); /* set the value at index */
         } else /* negative index, error */
             csD_indexerror(C, i, "negative");
     } else
@@ -362,19 +361,22 @@ static void setarrayindex(cs_State *C, Array *arr, const TValue *index,
 
 void csV_rawset(cs_State *C, const TValue *obj, const TValue *key,
                 const TValue *val) {
+    Table *t;
     switch (ttypetag(obj)) {
-        case CS_VARRAY: {
-            setarrayindex(C, arrval(obj), key, val);
+        case CS_VLIST: {
+            List *l = listval(obj);
+            setlistindex(C, l, key, val);
+            csV_finishrawset(C, l, val);
             break;
         }
         case CS_VTABLE: {
-            csH_set(C, tval(obj), key, val);
-            csG_barrierback(C, gcoval(obj), val);
-            break;
+            t = tval(obj);
+            goto set_table;
         }
         case CS_VINSTANCE: {
-            csH_set(C, insval(obj)->fields, key, val);
-            csG_barrierback(C, gcoval(obj), val);
+            t = insval(obj)->fields;
+        set_table:
+            csV_settable(C, t, key, val);
             break;
         }
         default: {
@@ -385,24 +387,22 @@ void csV_rawset(cs_State *C, const TValue *obj, const TValue *key,
 }
 
 
-/* TODO(see 'csV_get') */
 void csV_set(cs_State *C, const TValue *obj, const TValue *key,
              const TValue *val) {
     const TValue *fmm = csMM_get(C, obj, CS_MM_SETIDX);
-    if (!ttisnil(fmm)) { /* have metamethod? */
+    if (!ttisnil(fmm)) /* have metamethod? */
         csMM_callset(C, fmm, obj, key, val);
-        return; /* done */
-    } else /* otherwise perform raw set */
+    else /* otherwise perform raw set */
         csV_rawset(C, obj, key, val);
 }
 
 
-static void arraygeti(cs_State *C, Array *arr, const TValue *index, SPtr res) {
+static void listgetindex(cs_State *C, List *l, const TValue *index, SPtr res) {
     cs_Integer i;
     if (c_likely(tointeger(index, &i))) { /* index is integer? */
         if (c_likely(0 <= i)) { /* positive index? */
-            if (i < arr->n) { /* index in bounds? */
-                setobj2s(C, res, &arr->b[i]);
+            if (i < l->n) { /* index in bounds? */
+                setobj2s(C, res, &l->b[i]);
             } else /* index out of bounds */
                 setnilval(s2v(res));
         } else /* negative index */
@@ -419,8 +419,8 @@ static void arraygeti(cs_State *C, Array *arr, const TValue *index, SPtr res) {
 
 void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
     switch (ttypetag(obj)) {
-        case CS_VARRAY: {
-            arraygeti(C, arrval(obj), key, res);
+        case CS_VLIST: {
+            listgetindex(C, listval(obj), key, res);
             break;
         }
         case CS_VTABLE: {
@@ -456,18 +456,18 @@ void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 
 
 /*
-** TODO
+** XXX
 ** In the next version of CScript, each instance and full userdata will
-** contain virutal method table (or a 'ushort') that will hold additional
-** information that will tell us if the instance/userdata is in its own
-** metamethod, and which one. This is usefull in order to avoid recursive
-** calls to the same metamethod where this might be unwanted
-** (e.g., __getidx, __setidx). In the mentioned example for __getidx/__setidx,
-** user would then be able to index 'self' as usual without the need of
-** 'raw(set)get' functions. So if the __getidx gets called and another
-** function is called in the __getidx, then __getidx will be still active
-** further up the stack, meaning the __getidx metamethod can't trigger
-** for that instance/userdata until the initial __getidx returns.
+** contain additional state information that will tell us if the
+** instance/userdata is in its own metamethod, and which one.
+** This is usefull in order to avoid recursive calls to the same metamethod
+** where this might be unwanted (e.g., __getidx, __setidx).
+** In the mentioned example for __getidx/__setidx, user would then be able
+** to index 'self' as usual without the need of 'raw(set)get' functions.
+** So if the __getidx gets called and another function is called in the
+** __getidx, then __getidx will be still active further up the stack,
+** meaning the __getidx metamethod can't trigger for that instance/userdata
+** until the initial __getidx returns.
 */
 void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
     const TValue *fmm = csMM_get(C, obj, CS_MM_GETIDX);
@@ -755,6 +755,15 @@ void csV_concat(cs_State *C, int total) {
 }
 
 
+static OClass *checksuper(cs_State *C, const TValue *cls, const TValue *sup) {
+    if (c_unlikely(!ttisclass(sup)))
+        csD_runerror(C, "inherit from %s value", typename(ttype(sup)));
+    else if (c_unlikely(csV_raweq(cls, sup)))
+        csD_runerror(C, "class attempted to inherit from itself");
+    return classval(sup);
+}
+
+
 /* -----------------------------------------------------------------------
 ** Macros for arithmetic/bitwise/comparison operations on numbers.
 **------------------------------------------------------------------------ */
@@ -1016,7 +1025,7 @@ void csV_concat(cs_State *C, int total) {
 
 
 /* correct global 'pc' before checking collector debt */
-#define checkGC(C)     csG_condGC(C, storepc(C), (void)0)
+#define checkGC(C)     csG_condGC(C, (void)0, (void)0)
 
 
 /*
@@ -1188,33 +1197,35 @@ returning:
                 checkGC(C);
                 vm_break;
             }
-            vm_case(OP_NEWARRAY) {
-                Array *arr;
+            vm_case(OP_NEWLIST) {
+                List *l;
                 int b;
                 storepc(C);
                 b = fetchs();
-                if (b > 0) /* array has elements? */
+                if (b > 0) /* list has elements? */
                     b = 1 << (b - 1); /* size is 2^(b - 1) */
                 SP(1);
-                arr = csA_new(C); /* memory allocation */
-                setarrval2s(C, TOP(), arr);
-                if (b != 0) /* array is not empty? */
-                    csA_ensure(C, arr, b);
+                l = csA_new(C); /* memory allocation */
+                setlistval2s(C, TOP(), l);
+                if (b != 0) /* list is not empty? */
+                    csA_ensure(C, l, b);
                 checkGC(C);
                 vm_break;
             }
-            vm_case(OP_NEWCLASS) {
+            vm_case(OP_NEWCLASS) { 
                 OClass *cls;
                 int b;
                 storepc(C);
+                /* TODO: set 7th bit of 'b' if class has metamethods */
                 b = fetchs();
                 if (b > 0) /* class has methods? */
                     b = 1 << (b - 1); /* size of methods table is 2^(b - 1) */
                 cls = csMM_newclass(C);
                 setclsval2s(C, C->sp.p, cls); /* push on stack */
                 SP(1);
-                if (b > 0)
+                if (b > 0) /* have methods? */
                     cls->methods = csH_newsz(C, b);
+                checkGC(C);
                 vm_break;
             }
             vm_case(OP_NEWTABLE) {
@@ -1233,30 +1244,32 @@ returning:
                 vm_break;
             }
             vm_case(OP_METHOD) {
-                TValue *cls = peek(1); /* class */
-                TValue *f = peek(0); /* method */
+                Table *t = classval(peek(1))->methods;
+                TValue *f = peek(0);
                 TValue *key;
                 storepc(C);
                 key = K(fetchl());
-                cs_assert(ttisstring(key));
-                cs_assert(classval(cls)->methods != NULL);
-                csH_set(C, classval(cls)->methods, key, f);
+                cs_assert(t && ttisstring(key));
+                csV_settable(C, t, key, f);
                 SP(-1); /* f */
                 vm_break;
             }
             vm_case(OP_SETMM) {
                 TValue *o = peek(1); /* class or userdata */
                 TValue *f = peek(0); /* func */
-                TValue **vmt = &classval(o)->vmt; /* VMT */
+                List *ml = &classval(o)->metalist;
                 cs_MM mm; /* metamethod tag */
                 storepc(C);
                 mm = fetchs();
                 cs_assert(0 <= mm && mm < CS_MM_N);
-                if (c_unlikely(!(*vmt))) { /* VMT is empty? */
-                    storepc(C); /* allocation might fail */
-                    *vmt = csMM_newvmt(C);
+                /* TODO: remove this check (see OP_NEWCLASS) */
+                if (c_unlikely(!ml)) { /* no metalist? */
+                    ml = csA_newl(C, CS_MM_N);
+                    checkGC(C);
                 }
-                (*vmt)[mm] = *f; /* set the entry */
+                cs_assert(ml && mm < ml->n);
+                ml->b[mm] = *f; /* set the entry */
+                csV_finishrawset(C, ml, f);
                 SP(-1); /* f */
                 vm_break;
             }
@@ -1657,8 +1670,8 @@ returning:
             }
             vm_case(OP_GETGLOBAL) {
                 TValue *key = K(fetchl());
-                TValue *G = getGtable(C);
-                const TValue *val = csH_getstr(tval(G), strval(key));
+                Table *G = tval(getGtable(C));
+                const TValue *val = csH_getstr(G, strval(key));
                 if (!isempty(val)) {
                     setobj2s(C, C->sp.p, val);
                 } else
@@ -1667,64 +1680,63 @@ returning:
                 vm_break;
             }
             vm_case(OP_SETGLOBAL) {
-                TValue *G = getGtable(C);
+                Table *G = tval(getGtable(C));
                 TValue *v = peek(0);
                 TValue *key;
                 storepc(C);
                 key = K(fetchl());
                 cs_assert(ttisstring(key));
-                csH_set(C, tval(G), key, v);
+                csV_settable(C, G, key, v);
                 SP(-1); /* v */
                 vm_break;
             }
             vm_case(OP_GETLOCAL) {
-                int i = fetchl();
-                setobjs2s(C, C->sp.p, STK(i));
+                SPtr l = STK(fetchl());
+                setobjs2s(C, C->sp.p, l);
                 SP(1);
                 vm_break;
             }
             vm_case(OP_SETLOCAL) {
-                int i = fetchl();
-                setobjs2s(C, STK(i), SP(-1));
+                SPtr l = STK(fetchl());
+                setobjs2s(C, l, C->sp.p - 1);
+                SP(-1);
                 vm_break;
             }
             vm_case(OP_GETUVAL) {
-                int i = fetchl();
-                cs_assert(cl->upvals != NULL);
-                cs_assert(cl->nupvalues > i);
-                setobj2s(C, C->sp.p, cl->upvals[i]->v.p);
+                UpVal *uv = cl->upvals[fetchl()];
+                setobj2s(C, C->sp.p, uv->v.p);
                 SP(1);
                 vm_break;
             }
             vm_case(OP_SETUVAL) {
-                int i = fetchl();
-                cs_assert(cl->upvals != NULL);
-                cs_assert(cl->nupvalues > i);
-                setobj(C, cl->upvals[i]->v.p, s2v(SP(-1)));
+                UpVal *uv = cl->upvals[fetchl()];
+                setobj(C, uv->v.p, s2v(ts->sp.p - 1));
+                csG_barrier(C, uv, s2v(ts->sp.p - 1));
+                SP(-1);
                 vm_break;
             }
-            vm_case(OP_SETARRAY) {
-                Array *arr;
-                SPtr sa;
+            vm_case(OP_SETLIST) {
+                List *l;
+                SPtr sl;
                 uint last;
                 int n;
                 storepc(C);
-                sa = STK(fetchl()); /* array stack slot */
-                arr = arrval(s2v(sa)); /* 'sa' as array value */
-                last = fetchl(); /* num of elems. already in the array */
+                sl = STK(fetchl()); /* list stack slot */
+                l = listval(s2v(sl)); /* 'sl' as list value */
+                last = fetchl(); /* num of elems. already in the list */
                 n = fetchs(); /* num of elements to store */
                 if (n == 0)
-                    n = (C->sp.p - sa) - 1; /* get up to the top */
+                    n = (C->sp.p - sl) - 1; /* get up to the top */
                 cs_assert(n > 0);
                 last += n - 1;
-                csA_ensureindex(C, arr, last);
+                csA_ensureindex(C, l, last);
                 for (; n > 0; n--) { /* set the values from the stack... */
-                    /* ...into the array (in reverse order) */
-                    TValue *v = s2v(sa + n);
-                    setobj(C, &arr->b[last--], v);
-                    csG_barrierback(C, obj2gco(arr), v);
+                    /* ...into the list (in reverse order) */
+                    TValue *v = s2v(sl + n);
+                    setobj(C, &l->b[last--], v);
+                    csV_finishrawset(C, l, v);
                 }
-                C->sp.p = sa + 1; /* pop off elements */
+                C->sp.p = sl + 1; /* pop off elements */
                 vm_break;
             }
             vm_case(OP_SETPROPERTY) { /* NOTE: optimize? */
@@ -1871,21 +1883,18 @@ returning:
                 OClass *cls = classval(o2);
                 OClass *sup;
                 storepc(C);
-                if (c_unlikely(!ttisclass(o1)))
-                    csD_runerror(C, "inherit from %s value", typename(ttype(o1)));
-                else if (c_unlikely(csV_raweq(peek(0), o1)))
-                    csD_runerror(C, "class attempted to inherit from itself");
-                sup = classval(o1);
+                sup = checksuper(C, o2, o1);
                 if (c_likely(sup->methods)) { /* superclass has methods? */
                     cls->methods = csH_new(C);
                     csH_copykeys(C, cls->methods, sup->methods);
                 }
-                if (sup->vmt) { /* superclass has metamethods? */
-                    cs_assert(cls->vmt == NULL);
-                    cls->vmt = csMM_newvmt(C);
+                if (sup->meta) { /* superclass has metamethods? */
+                    cs_assert(cls->meta == NULL);
+                    cls->meta = csA_newl(C, CS_MM_N);
                     for (int i = 0; i < CS_MM_N; i++)
-                        setobj(C, &cls->vmt[i], &sup->vmt[i]);
+                        setobj(C, &cls->meta[i], &sup->meta[i]);
                 }
+                checkGC(C);
                 vm_break;
             }
             vm_case(OP_FORPREP) {

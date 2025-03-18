@@ -88,7 +88,7 @@ static const char *skipws(const char *s, size_t *pl, int rev) {
 }
 
 
-static int split_into_array(cs_State *C, int rev) {
+static int split_into_list(cs_State *C, int rev) {
     size_t ls;
     const char *s = csL_check_lstring(C, 0, &ls); /* string */
     cs_Integer n = csL_opt_integer(C, 2, CS_INTEGER_MAX-1); /* maxsplit */
@@ -96,7 +96,7 @@ static int split_into_array(cs_State *C, int rev) {
     int i = 0;
     const char *aux;
     if (cs_is_noneornil(C, 1)) { /* split by whitespace? */
-        cs_push_array(C, 1);
+        cs_push_list(C, 1);
         if (!rev)
             while (ls > 0 && isspace(cast_uchar(*s))) { s++; ls--; }
         else {
@@ -132,7 +132,7 @@ static int split_into_array(cs_State *C, int rev) {
         size_t lpat;
         const char *pat = csL_check_lstring(C, 1, &lpat);
         const char *e = s+ls;
-        cs_push_array(C, 1);
+        cs_push_list(C, 1);
         if (n < 1 || lpat == 0) goto pushs;
         while (n > 0 && (aux = findstr(s, ls, pat, lpat, rev)) != NULL) {
             if (!rev) { /* find from start? */
@@ -151,17 +151,17 @@ static int split_into_array(cs_State *C, int rev) {
 pushs:
     cs_push_lstring(C, s, ls); /* push last piece */
     cs_set_index(C, arr, i);
-    return 1; /* return array */
+    return 1; /* return list */
 }
 
 
 static int s_split(cs_State *C) {
-    return split_into_array(C, 0);
+    return split_into_list(C, 0);
 }
 
 
 static int s_rsplit(cs_State *C) {
-    return split_into_array(C, 1);
+    return split_into_list(C, 1);
 }
 
 
@@ -282,7 +282,7 @@ static void joinfromtable(cs_State *C, csL_Buffer *b,
 }
 
 
-static void joinfromarray(cs_State *C, csL_Buffer *b,
+static void joinfromlist(cs_State *C, csL_Buffer *b,
                           const char *sep, size_t lsep, int len) {
     int i = cs_get_nnilindex(C, 1, 0, --len);
     while (i >= 0) {
@@ -303,12 +303,12 @@ static int s_join(cs_State *C) {
     const char *sep = csL_check_lstring(C, 0, &lsep);
     int t = cs_type(C, 1);
     csL_Buffer b;
-    csL_expect_arg(C, (t == CS_TARRAY || t == CS_TTABLE), 1, "array or table");
+    csL_expect_arg(C, (t == CS_TLIST || t == CS_TTABLE), 1, "list or a table");
     csL_buff_init(C, &b);
-    if (t == CS_TARRAY) {
+    if (t == CS_TLIST) {
         int len = cs_len(C, 1);
         if (len > 0)
-            joinfromarray(C, &b, sep, lsep, len);
+            joinfromlist(C, &b, sep, lsep, len);
     } else
         joinfromtable(C, &b, sep, lsep);
     if (csL_bufflen(&b) > 0 && lsep > 0) /* buffer has separator? */
@@ -795,14 +795,14 @@ static int s_swaplower(cs_State *C) {
 }
 
 
-static int getbytes_array(cs_State *C, const char *s, size_t i, size_t j) {
+static int getbytes_list(cs_State *C, const char *s, size_t i, size_t j) {
     int n = (int)(j - i) + 1;
-    cs_push_array(C, n);
+    cs_push_list(C, n);
     for (int k = 0; k < n; k++) {
         cs_push_integer(C, cast_uchar(s[i + cast_uint(k)]));
         cs_set_index(C, -2, k);
     }
-    return 1; /* return array */
+    return 1; /* return list */
 }
 
 
@@ -824,8 +824,8 @@ static int auxgetbytes(cs_State *C, int pack) {
         return 0; /* return no values */
     else if (c_unlikely((j-i)+1 <= (j-i) || (j-i)+1 >= (size_t)INT_MAX))
         return csL_error(C, "string slice too long");
-    else if (pack) /* pack into array? */
-        return getbytes_array(C, s, i, j);
+    else if (pack) /* pack into list? */
+        return getbytes_list(C, s, i, j);
     else /* get them individually */
         return getbytes_bytes(C, s, i, j);
 }

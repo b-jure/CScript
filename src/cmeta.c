@@ -25,7 +25,7 @@ static const char udataname[] = "userdata";
 
 CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
     "no value", "nil", "boolean", "number", udataname, udataname, "string",
-    "array", "table", "function", "class", "instance", "thread",
+    "list", "table", "function", "class", "instance", "thread",
     "upvalue", "proto" /* these last cases are used for tests only */
 };
 
@@ -46,18 +46,10 @@ void csMM_init(cs_State *C) {
 }
 
 
-TValue *csMM_newvmt(cs_State *C) {
-    TValue *vmt = csM_newarray(C, CS_MM_N, TValue);
-    for (int i = 0; i < CS_MM_N; i++)
-        setnilval(&vmt[i]);
-    return vmt;
-}
-
-
 OClass *csMM_newclass(cs_State *C) {
     GCObject *o = csG_new(C, sizeof(OClass), CS_VCLASS);
     OClass *cls = gco2cls(o);
-    cls->vmt = NULL;
+    cls->metalist = NULL;
     cls->methods = NULL;
     cls->gclist = NULL;
     return cls;
@@ -68,7 +60,7 @@ Instance *csMM_newinstance(cs_State *C, OClass *cls) {
     GCObject *o = csG_new(C, sizeof(Instance), CS_VINSTANCE);
     Instance *ins = gco2ins(o);
     ins->oclass = cls;
-    ins->fields = NULL;
+    ins->fields = NULL; /* to not confuse GC */
     setinsval2s(C, C->sp.p++, ins); /* anchor instance */
     ins->fields = csH_new(C);
     C->sp.p--; /* remove instance */
@@ -92,7 +84,7 @@ UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv) {
         csM_toobig(C);
     o = csG_new(C, sizeofuserdata(nuv, size), CS_VUSERDATA);
     ud = gco2u(o);
-    ud->vmt = NULL;
+    ud->metalist = NULL;
     ud->nuv = nuv;
     ud->size = size;
     for (int i = 0; i < nuv; i++)
@@ -103,18 +95,19 @@ UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv) {
 
 /* get method 'mm' */
 const TValue *csMM_get(cs_State *C, const TValue *v, cs_MM mm) {
-    TValue *vmt;
+    List *ml;
     cs_assert(0 <= mm && mm < CS_MM_N);
     switch (ttypetag(v)) {
-        case CS_VINSTANCE: vmt = insval(v)->oclass->vmt; break;
-        case CS_VUSERDATA: vmt = uval(v)->vmt; break;
-        default: vmt = G(C)->vmt[ttype(v)]; break;
+        case CS_VINSTANCE: ml = insval(v)->oclass->ml; break;
+        case CS_VUSERDATA: ml = uval(v)->ml; break;
+        default: ml = G(C)->ml[ttype(v)]; break;
     }
-    return (vmt ? &vmt[mm] : &G(C)->nil);
+    cs_assert((ml != NULL) == (mm < ml->n));
+    return (ml ? &ml[mm] : &G(C)->nil);
 }
 
 
-/* call __setidx fn */
+/* call __setidx metamethod */
 void csMM_callset(cs_State *C, const TValue *fn, const TValue *p1,
                   const TValue *p2, const TValue *p3) {
     SPtr func = C->sp.p;
@@ -127,7 +120,7 @@ void csMM_callset(cs_State *C, const TValue *fn, const TValue *p1,
 }
 
 
-/* call __getidx fn */
+/* call __getidx metamethod */
 void csMM_callgetres(cs_State *C, const TValue *fn, const TValue *p1,
                      const TValue *p2, SPtr res) {
     ptrdiff_t result = savestack(C, res);
@@ -191,7 +184,6 @@ void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
 /* call unary method and store result in 'res' */
 void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *v) {
     SPtr func = C->sp.p;
-    printf("CALLING MM __unm\n");
     setobj2s(C, func, fn); /* push function */
     setobj2s(C, func + 1, v); /* 'self' */
     C->sp.p += 2;

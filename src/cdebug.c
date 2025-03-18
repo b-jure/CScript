@@ -456,12 +456,12 @@ c_noret csD_callerror(cs_State *C, const TValue *o) {
 
 
 c_noret csD_indexerror(cs_State *C, cs_Integer index, const char *what) {
-    csD_runerror(C, "array index '%I' is %s", index, what);
+    csD_runerror(C, "list index '%I' is %s", index, what);
 }
 
 
 c_noret csD_indextypeerror(cs_State *C, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
-    csD_runerror(C, "invalid array index type (%s), expected integer",
+    csD_runerror(C, "invalid list index type (%s), expected integer",
                      typename(ttype(index)));
 }

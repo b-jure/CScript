@@ -427,7 +427,7 @@ static void find_loader(cs_State *C, const char *name) {
     int i;
     csL_Buffer msg; /* to build error message */
     /* push 'package.searchers' array to index 2 in the stack */
-    if (c_unlikely(cs_get_fieldstr(C, cs_upvalueindex(1), "searchers") != CS_TARRAY))
+    if (c_unlikely(cs_get_fieldstr(C, cs_upvalueindex(1), "searchers") != CS_TLIST))
         csL_error(C, "'package.searchers' must be array value");
     csL_buff_init(C, &msg);
     for (i = 0; ; i++) { /* iter over available searchers to find a loader */
@@ -523,7 +523,7 @@ static void create_clibs_userdata(cs_State *C) {
     if (cs_get_fieldstr(C, -1, CLIBS) != CS_TUSERDATA) {
         cs_pop(C, 1); /* remove value */
         cs_push_userdata(C, 0, 1); /* create clibs userdata with one upvalue */
-        cs_push_array(C, 1); /* create the upvalue */
+        cs_push_list(C, 1); /* create the upvalue */
         cs_push_table(C, 0); /* create query table */
         cs_set_index(C, -2, 0); /* set query table into the array */
         cs_set_uservalue(C, -2, 1); /* set array as first upvalue of clibs */
@@ -596,7 +596,7 @@ static void create_searchers_array(cs_State *C) {
         NULL
     };
     /* create 'searchers' array ('package' table is on stack top) */
-    cs_push_array(C, sizeof(searchers)/sizeof(searchers[0]) - 1);
+    cs_push_list(C, sizeof(searchers)/sizeof(searchers[0]) - 1);
     /* fill it with predefined searchers */
     for (int i = 0; searchers[i] != NULL; i++) {
         cs_push(C, -2); /* set 'package' as upvalue for all searchers */

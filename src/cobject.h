@@ -276,7 +276,7 @@ typedef struct UserData {
     ObjectHeader;
     ushort nuv; /* number of 'uservalues' */
     size_t size; /* size of 'UserData' memory in bytes */
-    TValue *vmt;
+    List *metalist;
     GCObject *gclist;
     UValue uv[]; /* user values */
     /* 'UserData' memory starts here */
@@ -295,7 +295,7 @@ typedef struct EmptyUserData {
     ObjectHeader;
     ushort nuv; /* number of 'uservalues' */
     size_t size; /* size of 'usermem' in bytes */
-    TValue *vmt;
+    List *metalist;
     union {CSI_MAXALIGN;} usermem;
     /* 'UserData' memory starts here */
 } EmptyUserData;
@@ -447,29 +447,29 @@ typedef struct Table {
 
 
 /* -----------------------------------------------------------------------
-** Array {
+** List {
 ** ------------------------------------------------------------------------ */
 
-#define CS_VARRAY       makevariant(CS_TARRAY, 0)
+#define CS_VLIST        makevariant(CS_TLIST, 0)
 
-#define ttisarr(o)      checktag((o), ctb(CS_VARRAY))
+#define ttislist(o)     checktag((o), ctb(CS_VLIST))
 
-#define arrval(o)       gco2arr(val(o).gc)
+#define listval(o)      gco2list(val(o).gc)
 
-#define setarrval(C,obj,x) \
-    { TValue *o_=(obj); const Array *x_=(x); \
-      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VARRAY)); \
+#define setlistval(C,obj,x) \
+    { TValue *o_=(obj); const List *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VLIST)); \
       checkliveness(C, o_); }
 
-#define setarrval2s(C,o,arr)    setarrval(C,s2v(o),arr)
+#define setlistval2s(C,o,l)     setlistval(C,s2v(o),l)
 
-typedef struct Array {
+typedef struct List {
     ObjectHeader;
     GCObject *gclist;
     TValue *b; /* memory block */
     uint n; /* number of elements in use in 'b' */
     uint sz; /* size of 'b' */
-} Array;
+} List;
 
 /* } --------------------------------------------------------------------- */
 
@@ -545,9 +545,8 @@ typedef struct OString {
 
 typedef struct OClass {
     ObjectHeader;
-    TValue *vmt;
+    List *metalist;
     Table *methods;
-    GCObject *gclist;
 } OClass;
 
 /* } --------------------------------------------------------------------- */
@@ -652,8 +651,8 @@ typedef struct Proto {
 
 typedef struct Instance {
     ObjectHeader;
-    OClass *oclass; /* pointer to class */
-    Table *fields;
+    OClass *oclass; /* instance class */
+    Table *fields; /* instance fields */
 } Instance;
 
 /* } --------------------------------------------------------------------- */

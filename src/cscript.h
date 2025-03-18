@@ -54,7 +54,7 @@ typedef struct cs_State cs_State;
 #define CS_TUSERDATA            3   /* userdata */
 #define CS_TLIGHTUSERDATA       4   /* light userdata */
 #define CS_TSTRING              5   /* string */
-#define CS_TARRAY               6   /* array */
+#define CS_TLIST               6   /* array */
 #define CS_TTABLE               7   /* table */
 #define CS_TFUNCTION            8   /* function */
 #define CS_TCLASS               9   /* class */
@@ -87,16 +87,16 @@ typedef CS_UNSIGNED cs_Unsigned;
 typedef CS_NUMBER cs_Number;
 
 
-/* C function registered with CScript */
+/* type for C function registered with CScript */
 typedef int (*cs_CFunction)(cs_State *C);
 
-/* Function for memory de/allocation */
+/* type for function that de/allocates memory */
 typedef void *(*cs_Alloc)(void *ptr, size_t osz, size_t nsz, void *ud);
 
-/* Function that reads blocks when loading CScript chunks */
+/* type for function that reads blocks when loading CScript chunks */
 typedef const char *(*cs_Reader)(cs_State *C, void *data, size_t *szread);
 
-/* Type for warning functions */
+/* type for warning functions */
 typedef void (*cs_WarnFunction)(void *ud, const char *msg, int tocont);
 
 
@@ -110,7 +110,7 @@ typedef struct cs_Entry cs_Entry;
 typedef struct cs_Debug cs_Debug;
 
 
-/* metamethods */
+/* metamethod indices */
 typedef enum cs_MM {    /* ORDER MM */
     CS_MM_GETIDX = 0,
     CS_MM_SETIDX,
@@ -159,7 +159,6 @@ CS_API void          cs_close(cs_State *C);
 CS_API cs_State     *cs_newthread(cs_State *C);
 CS_API int           cs_resetthread(cs_State *C);
 CS_API cs_CFunction  cs_atpanic(cs_State *C, cs_CFunction fn);
-CS_API cs_Number     cs_version(cs_State *C);
 
 /* -----------------------------------------------------------------------
 ** Stack manipulation
@@ -241,7 +240,7 @@ CS_API void        cs_push_cclosure(cs_State *C, cs_CFunction fn, int upvals);
 CS_API void        cs_push_bool(cs_State *C, int b); 
 CS_API void        cs_push_lightuserdata(cs_State *C, void *p); 
 CS_API void       *cs_push_userdata(cs_State *C, size_t sz, int nuv); 
-CS_API void        cs_push_array(cs_State *C, int sz);
+CS_API void        cs_push_list(cs_State *C, int sz);
 CS_API void        cs_push_table(cs_State *C, int sz);
 CS_API int         cs_push_thread(cs_State *C); 
 CS_API void        cs_push_instance(cs_State *C, int clsobj);
@@ -285,6 +284,7 @@ CS_API void  cs_set_fieldint(cs_State *C, int index, cs_Integer field);
 CS_API void  cs_set_fieldflt(cs_State *C, int index, cs_Number field); 
 CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
 CS_API void  cs_set_uservmt(cs_State *C, int index, const cs_VMT *vmt); 
+CS_API void  cs_set_usermetalist(cs_State *C, int index); 
 CS_API void  cs_set_usermm(cs_State *C, int index, cs_MM mm); 
 
 /* -----------------------------------------------------------------------
@@ -293,8 +293,8 @@ CS_API void  cs_set_usermm(cs_State *C, int index, cs_MM mm);
 /* thread status codes */
 #define CS_OK                   0  /* ok */
 #define CS_ERRRUNTIME           1  /* runtime error */
-#define CS_ERRSYNTAX            3  /* syntax error (compiler) */
-#define CS_ERRMEM               4  /* memory related error (oom) */
+#define CS_ERRSYNTAX            3  /* syntax (compiler) error */
+#define CS_ERRMEM               4  /* memory related error */
 #define CS_ERRERROR             5  /* error while handling error */
 
 CS_API int cs_status(cs_State *C); 
@@ -330,8 +330,9 @@ CS_API void cs_setwarnf(cs_State *C, cs_WarnFunction fwarn, void *ud);
 CS_API void cs_warning(cs_State *C, const char *msg, int cont); 
 
 /* -----------------------------------------------------------------------
-** Miscellaneous functions/macros
+** Miscellaneous functions and useful macros
 ** ----------------------------------------------------------------------- */
+CS_API cs_Number   cs_version(cs_State *C);
 CS_API int         cs_hasvmt(cs_State *C, int index); 
 CS_API int         cs_hasmetamethod(cs_State *C, int index, cs_MM mm); 
 CS_API cs_Unsigned cs_len(cs_State *C, int index); 
@@ -358,7 +359,7 @@ CS_API int         cs_getfreereg(cs_State *C);
 #define cs_register(C,n,f)  (cs_push_cfunction(C,(f)), cs_set_global(C,(n)))
 
 #define cs_is_function(C, n)        (cs_type(C, (n)) == CS_TFUNCTION)
-#define cs_is_array(C, n)           (cs_type(C, (n)) == CS_TARRAY)
+#define cs_is_list(C, n)            (cs_type(C, (n)) == CS_TLIST)
 #define cs_is_table(C, n)           (cs_type(C, (n)) == CS_TTABLE)
 #define cs_is_class(C, n)           (cs_type(C, (n)) == CS_TCLASS)
 #define cs_is_instance(C, n)        (cs_type(C, (n)) == CS_TINSTANCE)

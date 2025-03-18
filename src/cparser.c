@@ -938,80 +938,80 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
 }
 
 
-/* array and table constructor */
+/* list and table constructor */
 typedef struct Constructor {
     union {
         struct {
-            ExpInfo v; /* last array item read */
-            int na; /* number of array elements already stored */
-            int tostore; /* number of array elements pending to be stored */
-        } a; /* array */
+            ExpInfo v; /* last list item read */
+            int na; /* number of list elements already stored */
+            int tostore; /* number of list elements pending to be stored */
+        } l; /* list */
         struct {
             int nh; /* total number of table elements */
         } t; /* table */
     } u;
-    ExpInfo *e; /* table or array descriptor */
+    ExpInfo *e; /* table or list descriptor */
 } Constructor;
 
 
-/* arrfield ::= expr */
-static void arrfield(Lexer *lx, Constructor *c) {
-    expr(lx, &c->u.a.v);
-    c->u.a.tostore++;
+/* listfield ::= expr */
+static void listfield(Lexer *lx, Constructor *c) {
+    expr(lx, &c->u.l.v);
+    c->u.l.tostore++;
 }
 
 
-static void closearrfield(FunctionState *fs, Constructor *c) {
-    if (c->u.a.v.et == EXP_VOID) return; /* there is no array item */
-    csC_exp2stack(fs, &c->u.a.v); /* put the item on stack */
-    c->u.a.v.et = EXP_VOID; /* now empty */
-    if (c->u.a.tostore == ARRFIELDS_PER_FLUSH) { /* flush? */
-        csC_setarray(fs, c->e->u.info, c->u.a.na, c->u.a.tostore);
-        c->u.a.na += c->u.a.tostore; /* add to total */
-        c->u.a.tostore = 0; /* no more pending items */
+static void closelistfield(FunctionState *fs, Constructor *c) {
+    if (c->u.l.v.et == EXP_VOID) return; /* there is no list item */
+    csC_exp2stack(fs, &c->u.l.v); /* put the item on stack */
+    c->u.l.v.et = EXP_VOID; /* now empty */
+    if (c->u.l.tostore == LISTFIELDS_PER_FLUSH) { /* flush? */
+        csC_setlist(fs, c->e->u.info, c->u.l.na, c->u.l.tostore);
+        c->u.l.na += c->u.l.tostore; /* add to total */
+        c->u.l.tostore = 0; /* no more pending items */
     }
 }
 
 
-static void lastarrfield(FunctionState *fs, Constructor *c) {
-    if (c->u.a.tostore == 0) return;
-    if (eismulret(&c->u.a.v)) { /* last item has multiple returns? */
-        csC_setmulret(fs, &c->u.a.v);
-        csC_setarray(fs, c->e->u.info, c->u.a.na, CS_MULRET);
-        c->u.a.na--; /* do not count last expression (unknown num of elems) */
+static void lastlistfield(FunctionState *fs, Constructor *c) {
+    if (c->u.l.tostore == 0) return;
+    if (eismulret(&c->u.l.v)) { /* last item has multiple returns? */
+        csC_setmulret(fs, &c->u.l.v);
+        csC_setlist(fs, c->e->u.info, c->u.l.na, CS_MULRET);
+        c->u.l.na--; /* do not count last expression (unknown num of elems) */
     } else {
-        if (c->u.a.v.et != EXP_VOID) /* have item? */
-            csC_exp2stack(fs, &c->u.a.v); /* ensure it is on stack */
-        csC_setarray(fs, c->e->u.info, c->u.a.na, c->u.a.tostore);
+        if (c->u.l.v.et != EXP_VOID) /* have item? */
+            csC_exp2stack(fs, &c->u.l.v); /* ensure it is on stack */
+        csC_setlist(fs, c->e->u.info, c->u.l.na, c->u.l.tostore);
     }
-    c->u.a.na += c->u.a.tostore;
+    c->u.l.na += c->u.l.tostore;
 }
 
 
 /*
-** arrayexp ::= '[' [ arrfield [sep] ] ']'
+** listexp ::= '[' [ listfield [sep] ] ']'
 ** sep ::= ',' | ';'
 */
-static void arrayexp(Lexer *lx, ExpInfo *a) {
+static void listexp(Lexer *lx, ExpInfo *l) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
-    int pc = csC_emitIS(fs, OP_NEWARRAY, 0);
+    int pc = csC_emitIS(fs, OP_NEWLIST, 0);
     Constructor c;
-    c.u.a.na = c.u.a.tostore = 0;
-    c.e = a;
-    initexp(a, EXP_FINEXPR, fs->sp); /* finalize array expression */
-    csC_reserveslots(fs, 1); /* space for array */
-    voidexp(&c.u.a.v); /* no value (yet) */
+    c.u.l.na = c.u.l.tostore = 0;
+    c.e = l;
+    initexp(l, EXP_FINEXPR, fs->sp); /* finalize list expression */
+    csC_reserveslots(fs, 1); /* space for list */
+    voidexp(&c.u.l.v); /* no value (yet) */
     expectnext(lx, '[');
     do {
-        cs_assert(c.u.a.v.et == EXP_VOID || c.u.a.tostore > 0);
+        cs_assert(c.u.l.v.et == EXP_VOID || c.u.l.tostore > 0);
         if (check(lx, ']')) break; /* delimiter; no more elements */
-        closearrfield(fs, &c); /* try to close any pending array elements */
-        arrfield(lx, &c); /* get array element */
+        closelistfield(fs, &c); /* try to close any pending list elements */
+        listfield(lx, &c); /* get list element */
     } while (match(lx, ',') || match(lx, ';'));
     expectmatch(lx, ']', '[', line);
-    lastarrfield(fs, &c);
-    csC_setarraysize(fs, pc, c.u.a.na);
+    lastlistfield(fs, &c);
+    csC_setlistsize(fs, pc, c.u.l.na);
 }
 
 
@@ -1214,7 +1214,7 @@ static void klass(Lexer *lx, ExpInfo *e, OString *name, int leftover) {
 **              | true
 **              | false
 **              | '...'
-**              | arrayexp
+**              | listexp
 **              | tableexp
 **              | functionexp
 **              | klassexp
@@ -1256,7 +1256,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
             break;
         }
         case '[': {
-            arrayexp(lx, e);
+            listexp(lx, e);
             return;
         }
         case '{': {

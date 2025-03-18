@@ -207,7 +207,7 @@ static int runargs(cs_State *C, char **argv, int n)  {
 
 static int pushargs(cs_State *C) {
     int i, nargs;
-    if (cs_get_global(C, "args") != CS_TARRAY)
+    if (cs_get_global(C, "args") != CS_TLIST)
         csL_error(C, "'args' is not an array");
     nargs = cs_len(C, -1);
     csL_check_stack(C, nargs + 3, "too many arguments to script");
@@ -372,7 +372,7 @@ static void run_repl(cs_State *C) {
 
 /* create global array 'args' that holds command line arguments */
 static void create_args_array(cs_State *C, char **argv, int argc) {
-    cs_push_array(C, argc);
+    cs_push_list(C, argc);
     for (int i = 0; i < argc; i++) {
         cs_push_string(C, argv[i]);
         cs_set_index(C, -2, i);

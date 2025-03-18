@@ -394,8 +394,8 @@ CSLIB_API int csL_get_property(cs_State *C, int index) {
 
 
 CSLIB_API void csL_set_index(cs_State *C, int index, int i) {
-    if (csi_unlikely(i < 0))
-        csL_error(C, "array index is negative (%d)", i);
+    if (csi_unlikely(i < 0 || CS_MAXLISTINDEX < i))
+        csL_error(C, "list index out of bounds (%d)", i);
     cs_set_index(C, index, i);
 }
 
@@ -762,7 +762,7 @@ static void newbox(cs_State *C) {
     UserBox *box = cs_push_userdata(C, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
-    cs_set_uservmt(C, -1, &boxvmt);
+    cs_set_usermetalist(C, -1, &boxvmt);
 }
 
 

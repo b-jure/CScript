@@ -163,7 +163,7 @@ typedef struct GState {
     c_smem gcdebt; /* number of bbytes not yet compensated by collector */
     c_mem gcestimate; /* gcestimate of non-garbage memory in use */
     StringTable strtab; /* interned strings (weak refs) */
-    TValue c_registry; /* global registry (array) */
+    TValue c_registry; /* global registry (list) */
     TValue nil; /* nil value (init flag) */
     uint seed; /* initial seed for hashing */
     c_byte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
@@ -187,7 +187,7 @@ typedef struct GState {
     struct cs_State *mainthread; /* thread that also created global state */
     OString *memerror; /* preallocated message for memory errors */
     OString *mmnames[CS_MM_N]; /* array with metamethod names */
-    TValue *vmt[CS_NUM_TYPES]; /* vmt's for basic types */
+    List **meta[CS_NUM_TYPES]; /* meta for basic types */
     OString *strcache[STRCACHE_N][STRCACHE_M]; /* cache for strings in API */
     cs_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */
@@ -233,11 +233,10 @@ struct cs_State {
 /*
 ** Get the global table in the registry. Since all predefined
 ** indices in the registry were inserted right when the registry
-** was created and never removed, they must always be in the array
-** part of the registry.
+** was created and never removed, they must always be present.
 */
 #define getGtable(C) \
-	(&arrval(&G(C)->c_registry)->b[CS_RINDEX_GLOBALS])
+	(&listval(&G(C)->c_registry)->b[CS_RINDEX_GLOBALS])
 
 
 
@@ -264,7 +263,7 @@ typedef struct XSG {
 union GCUnion {
     struct GCObject gc; /* object header */
     struct Table ht;
-    struct Array arr;
+    struct List l;
     struct OString str;
     struct UpVal uv;
     struct Proto p;
@@ -279,7 +278,7 @@ union GCUnion {
 #define cast_gcu(o)     cast(union GCUnion *, (o))
 
 #define gco2ht(o)       (&(cast_gcu(o)->ht))
-#define gco2arr(o)      (&(cast_gcu(o)->arr))
+#define gco2list(o)     (&(cast_gcu(o)->l))
 #define gco2str(o)      (&(cast_gcu(o)->str))
 #define gco2uv(o)       (&(cast_gcu(o)->uv))
 #define gco2proto(o)    (&(cast_gcu(o)->p))

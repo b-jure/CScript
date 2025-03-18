@@ -13,19 +13,29 @@
 #include <float.h>
 #include <math.h>
 
-#include <stdio.h>
-
 /* ======================================================================= 
 **                      Configuration file for CScript.
 **                (Tries its best to mimic Lua configuration)
 ** ======================================================================= */
 
 
+#if SIZE_MAX < UMAXINT
+#error SIZE_MAX must be greater or equal UMAXINT
+#endif
 
-#if SIZE_MAX < UMAXINT     /* { */
-#error "SIZE_MAX must be greater or equal UMAXINT"
-#endif                      /* } */
+#if ((UINT_MAX >> 30) < 3)
+#error 'int' has to have at least 32 bits
+#endif
 
+
+#if defined(_WIN32) && !defined(_WIN32_WCE)
+#define CS_USE_WINDOWS      /* enable goodies for regular Windows */
+#endif
+
+
+#if defined(CS_USE_WINDOWS)
+#define CS_DL_DLL           /* enable support for DLL */
+#endif
 
 
 

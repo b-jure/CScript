@@ -631,7 +631,7 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmIMMint(p, pc, 1);
                 break;
             }
-            case OP_NEWCLASS: case OP_NEWARRAY: case OP_NEWTABLE: {
+            case OP_NEWCLASS: case OP_NEWLIST: case OP_NEWTABLE: {
                 unasmNewObject(p, pc);
                 break;
             }
@@ -671,7 +671,7 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmIndexedSetStr(p, pc, 1);
                 break;
             }
-            case OP_SETARRAY: {
+            case OP_SETLIST: {
                 unasmSetArray(p, pc);
                 break;
             }
