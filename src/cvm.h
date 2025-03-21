@@ -21,12 +21,13 @@
 
 #define csV_raweq(v1_,v2_)    csV_ordereq(NULL, v1_, v2_)
 
-#define csV_finishrawset(C,o,v)     csG_barrierback(C, gcoval(o), v)
+#define csV_finishrawset(C,o,v)     csG_barrierback(C, obj2gco(o), v)
 
 #define csV_settable(C,t,k,v) \
-    { csH_set(C, t, k, v); csV_finishrawset(C, gcoval(t), v); }
+    { csH_set(C, t, k, v); csV_finishrawset(C, obj2gco(t), v); }
 
 
+CSI_FUNC void csV_inherit(cs_State *C, OClass *cls, OClass *scl);
 CSI_FUNC void csV_call(cs_State *C, SPtr fn, int nreturns);
 CSI_FUNC void csV_concat(cs_State *C, int n);
 CSI_FUNC cs_Integer csV_divi(cs_State *C, cs_Integer x, cs_Integer y);

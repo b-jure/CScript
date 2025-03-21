@@ -187,7 +187,6 @@ typedef struct GState {
     struct cs_State *mainthread; /* thread that also created global state */
     OString *memerror; /* preallocated message for memory errors */
     OString *mmnames[CS_MM_N]; /* array with metamethod names */
-    List **meta[CS_NUM_TYPES]; /* meta for basic types */
     OString *strcache[STRCACHE_N][STRCACHE_M]; /* cache for strings in API */
     cs_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */
@@ -243,7 +242,7 @@ struct cs_State {
 /* extra space(X) + main thread state(S) */
 typedef struct XS {
     c_byte extra_[CS_EXTRASPACE];
-    cs_State C;
+    cs_State c;
 } XS;
 
 
@@ -255,7 +254,7 @@ typedef struct XSG {
 
 
 /* cast 'cs_State' back to start of 'XS' */
-#define fromstate(th)   cast(XS *, cast(c_byte *, (th)) - offsetof(XS, C))
+#define fromstate(C)    cast(XS *, cast(c_byte *, (C)) - offsetof(XS, c))
 
 
 
@@ -272,7 +271,7 @@ union GCUnion {
     struct Instance ins;
     struct IMethod im;
     struct UserData u;
-    struct cs_State th;
+    struct cs_State C;
 };
 
 #define cast_gcu(o)     cast(union GCUnion *, (o))
@@ -289,7 +288,7 @@ union GCUnion {
 #define gco2ins(o)      (&(cast_gcu(o)->ins))
 #define gco2im(o)       (&(cast_gcu(o)->im))
 #define gco2u(o)        (&(cast_gcu(o)->u))
-#define gco2th(o)       (&(cast_gcu(o)->th))
+#define gco2th(o)       (&(cast_gcu(o)->C))
 
 #define obj2gco(o)      (&(cast_gcu(o)->gc))
 

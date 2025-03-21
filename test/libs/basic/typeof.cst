@@ -3,7 +3,7 @@ assert(typeof(5.5) == "number");
 assert(typeof(true) == "boolean");
 assert(typeof(false) == "boolean");
 assert(typeof("69") == "string");
-assert(typeof([]) == "array");
+assert(typeof([]) == "list");
 assert(typeof({}) == "table");
 assert(typeof(fn (){}) == "function");
 local class X {}

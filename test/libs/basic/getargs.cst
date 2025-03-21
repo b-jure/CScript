@@ -1,11 +1,11 @@
 if (args) { /* have global 'args' ? */
-    assert(typeof(args) == "array");
+    assert(typeof(args) == "list");
     assert(len(args) == 2);
 }
 
 args2 = [ ... ];
 assert(args2);
-assert(typeof(args2) == "array");
+assert(typeof(args2) == "list");
 assert(len(args2) == 2);
 
 local bin_name, script_name = getargs(0, ...);
@@ -16,9 +16,9 @@ assert(script_name);
 assert(typeof(script_name) == "string");
 assert(script_name == getargs(1, ...));
 
-local x = getargs("array", ...);
+local x = getargs("list", ...);
 assert(x);
-assert(typeof(x) == "array");
+assert(typeof(x) == "list");
 assert(len(x) == 2);
 
 x = getargs("table", ...);

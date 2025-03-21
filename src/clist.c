@@ -50,11 +50,12 @@ void csA_ensureindex(cs_State *C, List *l, uint index) {
 
 
 List *csA_newl(cs_State *C, uint n) {
-    List *l = csA_new(cs_State *C);
+    List *l = csA_new(C);
     cs_assert(n > 0);
-    setobj2s(C, C->sp.p++, gcoval(l)); /* anchor it */
+    setlistval2s(C, C->sp.p++, l); /* anchor it */
     csA_ensureindex(C, l, n - 1);
     C->sp.p--; /* remove list */
+    return l;
 }
 
 

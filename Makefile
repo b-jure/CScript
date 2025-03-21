@@ -141,11 +141,10 @@ capi.o: src/capi.c src/clist.h src/cobject.h src/cscript.h src/csconf.h \
  src/cbits.h src/cparser.h src/clexer.h src/creader.h src/cmem.h \
  src/cgc.h src/cmeta.h src/cprotected.h src/ctable.h src/cstring.h \
  src/cvm.h src/capi.h
-clist.o: src/clist.c src/clist.h src/cobject.h src/cscript.h \
- src/csconf.h src/climits.h src/cgc.h src/cbits.h src/cstate.h src/cmem.h
-cauxlib.o: src/cauxlib.c src/cauxlib.h src/cscript.h src/csconf.h
+cauxlib.o: src/cauxlib.c src/cscript.h src/csconf.h src/cauxlib.h \
+ src/climits.h
 cbaselib.o: src/cbaselib.c src/cscript.h src/csconf.h src/cauxlib.h \
- src/cslib.h
+ src/cslib.h src/climits.h
 ccode.o: src/ccode.c src/ccode.h src/cbits.h src/cparser.h src/clexer.h \
  src/creader.h src/cscript.h src/csconf.h src/cmem.h src/climits.h \
  src/cobject.h src/ctable.h src/cdebug.h src/cstate.h src/cvm.h src/cgc.h
@@ -162,10 +161,14 @@ cgc.o: src/cgc.c src/cgc.h src/cbits.h src/cobject.h src/cscript.h \
  src/csconf.h src/climits.h src/cstate.h src/clist.h src/cfunction.h \
  src/ccode.h src/cparser.h src/clexer.h src/creader.h src/cmem.h \
  src/cmeta.h src/ctable.h src/cstring.h src/cvm.h src/cprotected.h
+ciolib.o: src/ciolib.c src/cscript.h src/csconf.h src/cauxlib.h \
+ src/cslib.h src/climits.h
 clexer.o: src/clexer.c src/cobject.h src/cscript.h src/csconf.h \
  src/climits.h src/ctypes.h src/cgc.h src/cbits.h src/cstate.h \
  src/clexer.h src/creader.h src/cmem.h src/cdebug.h src/cprotected.h \
  src/ctable.h src/cstring.h
+clist.o: src/clist.c src/clist.h src/cobject.h src/cscript.h src/csconf.h \
+ src/climits.h src/cgc.h src/cbits.h src/cstate.h src/cmem.h
 cloadlib.o: src/cloadlib.c src/cscript.h src/csconf.h src/cauxlib.h \
  src/cslib.h
 cmathlib.o: src/cmathlib.c src/cscript.h src/csconf.h src/cauxlib.h \
@@ -189,7 +192,7 @@ cprotected.o: src/cprotected.c src/cprotected.h src/creader.h \
 creader.o: src/creader.c src/creader.h src/cscript.h src/csconf.h \
  src/cmem.h src/climits.h
 cscript.o: src/cscript.c src/cscript.h src/csconf.h src/cauxlib.h \
- src/cslib.h
+ src/cslib.h src/climits.h
 cslib.o: src/cslib.c src/cslib.h src/cscript.h src/csconf.h src/cauxlib.h
 cstate.o: src/cstate.c src/ctable.h src/cobject.h src/cscript.h \
  src/csconf.h src/climits.h src/cbits.h src/clist.h src/cstate.h \

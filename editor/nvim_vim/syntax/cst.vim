@@ -191,7 +191,6 @@ syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/ contained
 syn region cscriptClassDefinition transparent matchgroup=cscriptStatement start=/\<class\>/ end=/{/me=e-1 contains=cscriptClass skipwhite skipempty
 syn keyword cscriptClass class inherits
 syn keyword cscriptSuper super
-syn keyword cscriptSelf self
 "-----------------}
 
 syn region cscriptFunction transparent start=/\<fn\_s\+\k\+\%(\.\k\+\)*\%(\_s*(\zs\)\@=/ end=/)/ keepend contains=cscriptFn,cscriptFunctionCall
@@ -206,7 +205,6 @@ hi def link cscriptSemicolon            cscriptStatement
 hi def link cscriptLocal                cscriptStatement
 hi def link cscriptIdentifier           NONE
 hi def link cscriptFunction             cscriptStatement
-hi def link cscriptSelf                 PreProc
 hi def link cscriptSuper                PreProc
 hi def link cscriptClassDefinition      cscriptStatement
 hi def link cscriptClass                cscriptStatement

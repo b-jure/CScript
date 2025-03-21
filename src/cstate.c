@@ -74,9 +74,8 @@ static void init_stack(cs_State *C1, cs_State *C) {
 
 
 static void init_registry(cs_State *C, GState *gs) {
-    Array *registry = csA_new(C); 
+    List *registry = csA_newl(C, CS_RINDEX_LAST + 1); 
     setlistval(C, &gs->c_registry, registry);
-    csA_ensureindex(C, registry, CS_RINDEX_LAST);
     /* registry[CS_RINDEX_MAINTHREAD] = C (mainthread) */
     setthval(C, &registry->b[CS_RINDEX_MAINTHREAD], C);
     /* registry[CS_RINDEX_GLOBALS] = new table (for global variables) */
@@ -128,16 +127,6 @@ static void free_stack(cs_State *C) {
 }
 
 
-/* free global state virtual method tables */
-static void free_vmt(cs_State *C) {
-    GState *gs = G(C);
-    cs_assert(C == gs->mainthread);
-    for (int i = 0; i < CS_NUM_TYPES; i++)
-        if (gs->vmt[i])
-            csM_freearray(C, gs->vmt[i], CS_MM_N);
-}
-
-
 static void freestate(cs_State *C) {
     GState *gs = G(C);
     cs_assert(C == G(C)->mainthread);
@@ -151,7 +140,6 @@ static void freestate(cs_State *C) {
     }
     csM_freearray(C, gs->strtab.hash, gs->strtab.size);
     free_stack(C);
-    free_vmt(C);
     cs_assert(gettotalbytes(gs) == sizeof(XSG));
     gs->falloc(fromstate(C), sizeof(XSG), 0, gs->ud_alloc); /* free state */
 }
@@ -169,7 +157,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     XSG *xsg = falloc(NULL, 0, sizeof(XSG), ud);
     if (c_unlikely(xsg == NULL)) return NULL;
     gs = &xsg->gs;
-    C = &xsg->xs.C;
+    C = &xsg->xs.c;
     C->tt_ = CS_VTHREAD;
     gs->whitebit = bitmask(WHITEBIT0);
     C->mark = csG_white(gs);
@@ -201,7 +189,6 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     gs->mainthread = C;
     gs->thwouv = NULL;
     gs->fwarn = NULL; gs->ud_warn = NULL;
-    for (int i = 0; i < CS_NUM_TYPES; i++) gs->vmt[i] = NULL;
     cs_assert(gs->totalbytes == sizeof(XSG) && gs->gcdebt == 0);
     if (csPR_rawcall(C, f_newstate, NULL) != CS_OK) {
         freestate(C);
@@ -229,7 +216,7 @@ CS_API cs_State *cs_newthread(cs_State *C) {
     cs_State *C1;
     cs_lock(C);
     csG_checkGC(C);
-    o = csG_newoff(C, sizeof(XS), CS_VTHREAD, offsetof(XS, C));
+    o = csG_newoff(C, sizeof(XS), CS_VTHREAD, offsetof(XS, c));
     C1 = gco2th(o);
     setthval2s(C, C->sp.p, C1);
     api_inctop(C);
@@ -482,11 +469,11 @@ void csT_warnerror(cs_State *C, const char *where) {
 }
 
 
-void csT_free(cs_State *C, cs_State *thread) {
-    XS *xs = fromstate(thread);
-    csF_closeupval(thread, thread->stack.p);  /* close all upvalues */
-    cs_assert(thread->openupval == NULL);
-    csi_userstatefree(C, thread);
-    free_stack(thread);
+void csT_free(cs_State *C, cs_State *C1) {
+    XS *xs = fromstate(C1);
+    csF_closeupval(C1, C1->stack.p);  /* close all upvalues */
+    cs_assert(C1->openupval == NULL);
+    csi_userstatefree(C, C1);
+    free_stack(C1);
     csM_free(C, xs);
 }

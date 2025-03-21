@@ -173,7 +173,7 @@ CSI_FUNC void csG_step(cs_State *C);
 CSI_FUNC void csG_full(cs_State *C, int isemergency);
 CSI_FUNC void csG_rununtilstate(cs_State *C, int statemask);
 CSI_FUNC void csG_freeallobjects(cs_State *C);
-CSI_FUNC void csG_checkfin(cs_State *C, GCObject *o, TValue vmt[CS_MM_N]);
+CSI_FUNC void csG_checkfin(cs_State *C, GCObject *o, List *metalist);
 CSI_FUNC void csG_fix(cs_State *C, GCObject *o);
 CSI_FUNC void csG_barrier_(cs_State *C, GCObject *r, GCObject *o);
 CSI_FUNC void csG_barrierback_(cs_State *C, GCObject *r);

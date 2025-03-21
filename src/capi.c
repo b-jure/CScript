@@ -316,22 +316,6 @@ CS_API int cs_is_userdata(cs_State *C, int index) {
 }
 
 
-c_sinline TValue *getvvmt(cs_State *C, const TValue *o) {
-    switch (ttype(o)) {
-        case CS_VINSTANCE: return insval(o)->oclass->vmt;
-        case CS_TCLASS: return classval(o)->vmt;
-        case CS_TUSERDATA: return uval(o)->vmt;
-        default: return G(C)->vmt[ttype(o)];
-    }
-}
-
-
-c_sinline TValue *getvmt(cs_State *C, int index) {
-    const TValue *o = index2value(C, index);
-    return getvvmt(C, o);
-}
-
-
 /* 
 ** Return the type of the value at valid index or CS_TNONE
 ** if index is invalid.
@@ -707,8 +691,7 @@ CS_API void cs_push_list(cs_State *C, int sz) {
     l = csA_new(C);
     setlistval2s(C, C->sp.p, l);
     api_inctop(C);
-    if (sz > 0)
-        csA_ensure(C, l, sz);
+    csA_ensure(C, l, sz);
     csG_checkGC(C);
     cs_unlock(C);
 }
@@ -743,27 +726,15 @@ CS_API int cs_push_thread(cs_State *C) {
 
 CS_API void cs_push_instance(cs_State *C, int index) {
     const TValue *o;
-    SPtr func;
+    SPtr func = C->sp.p;
     cs_lock(C);
     o = index2value(C, index);
     api_check(C, ttisclass(o), "expect class");
-    func = C->sp.p;
     setclsval2s(C, func, classval(o));
     api_inctop(C);
     csV_call(C, func, 1);
-    cs_assert(ttisinstance(s2v(C->sp.p))); /* result is the instance */
     csG_checkGC(C);
     cs_unlock(C);
-}
-
-
-c_sinline void auxsetvmt(TValue *dest, const cs_VMT *vmt) {
-    for (int i = 0; i < CS_MM_N; i++) {
-        if (vmt->func[i]) {
-            setcfval(C, &dest[i], vmt->func[i]);
-        } else
-            setnilval(&dest[i]);
-    }
 }
 
 
@@ -791,52 +762,86 @@ c_sinline void auxrawsetstr(cs_State *C, Table *t, const char *str,
 }
 
 
-c_sinline void auxsetentrylist(cs_State *C, OClass *cls, const cs_Entry *l,
-                                int nup) {
-    cs_assert(l != NULL);
-    cs_checkstack(C, nup);
-    if (l->name) { /* have at least one entry? */
-        cs_assert(cls->methods == NULL);
-        cls->methods = csH_new(C);
-        csG_checkGC(C);
-        do {
-            api_check(C, l->func, "l->func is NULL");
-            for (int i = 0; i < nup; i++) /* push upvalues to the top */
-                pushvalue(C, -nup);
-            pushcclosure(C, l->func, nup);
-            auxrawsetstr(C, cls->methods, l->name, s2v(C->sp.p - 1));
-        } while (l++, l->name);
-    }
-    settop(C, -(nup - 1)); /* pop upvalues */
+c_sinline OClass *getclass(cs_State *C, int index) {
+    const TValue *o = index2value(C, index);
+    api_check(C, ttisclass(o), "expected class");
+    return classval(o);
 }
 
 
-CS_API void cs_push_class(cs_State *C, const cs_VMT *vmt, int abscls,
-                          int nup, const cs_Entry *l) {
+c_sinline List *getlist(cs_State *C, int index) {
+    const TValue *o = index2value(C, index);
+    api_check(C, ttislist(o), "expect list");
+    return listval(o);
+}
+
+
+c_sinline void setmethods(cs_State *C, OClass *cls, const cs_Entry *l,
+                          int nup) {
+    if (l) { /* have methods? */
+        cs_checkstack(C, nup);
+        if (l->name) { /* have at least one entry? */
+            cs_assert(cls->methods == NULL);
+            cls->methods = csH_new(C);
+            do {
+                api_check(C, l->func, "l->func is NULL");
+                for (int i = 0; i < nup; i++) /* push upvalues to the top */
+                    pushvalue(C, -nup);
+                pushcclosure(C, l->func, nup);
+                auxrawsetstr(C, cls->methods, l->name, s2v(C->sp.p - 1));
+            } while (l++, l->name);
+        }
+        settop(C, -(nup - 1)); /* pop upvalues */
+    } else
+        api_check(C, nup <= 0, "'nup' greater than zero but 'l' is NULL");
+}
+
+
+/* 'dowhat' bits for 'aux_pushclass' */
+#define DOWNOTHING          0
+#define DOWINHERIT          1 /* inherit from superclass */
+#define DOWMETALIST         2 /* set class metalist */
+
+static void aux_pushclass(cs_State *C, int nup, const cs_Entry *l, int sci,
+                          int mli, int dowhat) {
     OClass *cls;
     cs_lock(C);
     cls = csMM_newclass(C);
-    csG_checkGC(C);
     setclsval2s(C, C->sp.p, cls);
     api_inctop(C);
-    if (abscls >= 0) { /* have superclass? */
-        const TValue *osup = index2value(C, abscls);
-        api_check(C, ttisclass(osup), "expect class");
-        if (classval(osup)->methods) { /* have methods? */
-            cls->methods = csH_new(C);
-            csH_copykeys(C, classval(osup)->methods, cls->methods);
-        }
+    if (dowhat & DOWINHERIT) { /* inherit? */
+        OClass *scl = getclass(C, sci);
+        csV_inherit(C, cls, scl);
     }
-    if (vmt) { /* have virtual method table? */
-        cls->vmt = csMM_newvmt(C);
-        csG_checkGC(C);
-        auxsetvmt(cls->vmt, vmt);
+    if (dowhat & DOWMETALIST) { /* set metalist? */
+        List *ml = getlist(C, mli);
+        cls->metalist = ml;
     }
-    if (l) /* have methods? */
-        auxsetentrylist(C, cls, l, nup);
-    else /* otherwise there should be no upvalues */
-        api_check(C, nup == 0, "nup non-zero but l is NULL");
+    setmethods(C, cls, l, nup);
+    csG_checkGC(C);
     cs_unlock(C);
+}
+
+
+CS_API void cs_push_class(cs_State *C, int nup, const cs_Entry *l) {
+    aux_pushclass(C, nup, l, 0, 0, DOWNOTHING);
+}
+
+
+CS_API void cs_push_metaclass(cs_State *C, int ml, int nup,
+                              const cs_Entry *l) {
+    aux_pushclass(C, nup, l, 0, ml, DOWMETALIST);
+}
+
+
+CS_API void cs_push_subclass(cs_State *C, int sc, int nup, const cs_Entry *l) {
+    aux_pushclass(C, nup, l, sc, 0, DOWINHERIT);
+}
+
+
+CS_API void cs_push_metasubclass(cs_State *C, int sc, int ml, int nup,
+                                 const cs_Entry *l) {
+    aux_pushclass(C, nup, l, sc, ml, (DOWINHERIT | DOWMETALIST));
 }
 
 
@@ -898,13 +903,6 @@ CS_API int cs_get_raw(cs_State *C, int obj) {
     csV_rawget(C, o, s2v(C->sp.p - 1), C->sp.p - 1);
     cs_unlock(C);
     return ttype(s2v(C->sp.p - 1));
-}
-
-
-c_sinline List *getlist(cs_State *C, int index) {
-    const TValue *o = index2value(C, index);
-    api_check(C, ttislist(o), "expect list");
-    return listval(o);
 }
 
 
@@ -1030,34 +1028,55 @@ CS_API int cs_get_fieldflt(cs_State *C, int obj, cs_Number n) {
 }
 
 
-CS_API int cs_get_class(cs_State *C, int insobj) {
+CS_API int cs_get_class(cs_State *C, int index) {
     const TValue *o;
-    int tt;
+    int t;
     cs_lock(C);
-    o = index2value(C, insobj);
+    o = index2value(C, index);
     if (ttisinstance(o)) {
         setclsval2s(C, C->sp.p, insval(o)->oclass);
         api_inctop(C);
-        tt = CS_TCLASS;
+        t = CS_TCLASS;
     } else
-        tt = CS_TNONE;
+        t = CS_TNONE;
     cs_unlock(C);
-    return tt;
+    return t;
 }
 
 
-c_sinline Instance *getinstance(cs_State *C, int insobj) {
-    const TValue *o = index2value(C, insobj);
+CS_API int cs_get_superclass(cs_State *C, int index) {
+    OClass *scl = NULL;
+    int res = 1;
+    const TValue *o;
+    cs_lock(C);
+    o = index2value(C, index);
+    if (ttisinstance(o))
+        scl = insval(o)->oclass->sclass;
+    else if (ttisclass(o))
+        scl = classval(o)->sclass;
+    else
+        res = 0;
+    if (scl) {
+        setclsval2s(C, C->sp.p, scl);
+        api_inctop(C);
+    }
+    cs_unlock(C);
+    return res;
+}
+
+
+c_sinline Instance *getinstance(cs_State *C, int index) {
+    const TValue *o = index2value(C, index);
     api_check(C, ttisinstance(o), "expect instance");
     return insval(o);
 }
 
 
-CS_API int cs_get_method(cs_State *C, int insobj) {
+CS_API int cs_get_method(cs_State *C, int index) {
     Instance *ins;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    ins = getinstance(C, insobj);
+    ins = getinstance(C, index);
     if (ins->oclass->methods) { /* have methods ? */
         const TValue *slot = csH_get(ins->oclass->methods, s2v(C->sp.p - 1));
         if (!isempty(slot)) { /* found? */
@@ -1080,40 +1099,51 @@ c_sinline UserData *getuserdata(cs_State *C, int index) {
 }
 
 
-CS_API int cs_get_uservmt(cs_State *C, int index, cs_VMT *pvmt) {
-    UserData *ud;
-    int nmm = 0;
+CS_API int cs_get_metalist(cs_State *C, int index) {
+    const TValue *obj;
+    List *ml;
+    int res = 0;
     cs_lock(C);
-    api_check(C, pvmt != NULL, "`pvmt` is NULL");
-    ud = getuserdata(C, index);
-    if (ud->vmt == NULL) return -1; /* no vmt */
-    for (int i = 0; i < CS_MM_N; i++) { /* fill 'vmt' */
-        if (!isempty(&ud->vmt[i])) {
-            cs_assert(ttislcf(&ud->vmt[i]));
-            pvmt->func[i] = lcfval(&ud->vmt[i]);
-            nmm++;
-        }
+    obj = index2value(C, index);
+    switch (ttype(obj)) {
+        case CS_TINSTANCE:
+            ml = insval(obj)->oclass->metalist;
+            break;
+        case CS_TCLASS:
+            ml = classval(obj)->metalist;
+            break;
+        case CS_TUSERDATA:
+            ml = uval(obj)->metalist;
+            break;
+        default:
+            ml = NULL;
+            break;
+    }
+    if (ml != NULL) {
+        setlistval2s(C, C->sp.p, ml);
+        api_inctop(C);
+        res = 1;
     }
     cs_unlock(C);
-    return nmm;
+    return res;
 }
 
 
 CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n) {
     UserData *ud;
-    int tt;
+    int t;
     cs_lock(C);
     ud = getuserdata(C, index);
     if (n <= 0 || ud->nuv < n) {
         setnilval(s2v(C->sp.p));
-        tt = CS_TNONE;
+        t = CS_TNONE;
     } else {
         setobj2s(C, C->sp.p, &ud->uv[n - 1].val);
-        tt = ttype(s2v(C->sp.p - 1));
+        t = ttype(s2v(C->sp.p - 1));
     }
     api_inctop(C);
     cs_unlock(C);
-    return tt;
+    return t;
 }
 
 
@@ -1208,29 +1238,46 @@ CS_API void  cs_set_fieldflt(cs_State *C, int obj, cs_Number field) {
 }
 
 
-CS_API void cs_set_uservmt(cs_State *C, int udobj, const cs_VMT *pvmt) {
-    UserData *ud;
+CS_API int cs_set_metalist(cs_State *C, int index) {
+    const TValue *obj;
+    List *ml;
+    int res = 1;
     cs_lock(C);
-    ud = getuserdata(C, udobj);
-    if (!ud->vmt) {
-        ud->vmt = csMM_newvmt(C);
-        csG_checkGC(C);
-        if (!pvmt) goto unlock;
+    api_checknelems(C, 1); /* metalist */
+    obj = index2value(C, index);
+    if (ttisnil(s2v(C->sp.p - 1)))
+        ml = NULL;
+    else {
+        api_check(C, ttislist(s2v(C->sp.p - 1)), "list expected");
+        ml = listval(s2v(C->sp.p - 1));
     }
-    if (pvmt) {
-        auxsetvmt(ud->vmt, pvmt);
-        csG_checkfin(C, obj2gco(ud), ud->vmt);
-    } else {
-        for (int i = 0; i < CS_MM_N; i++)
-            setnilval(&ud->vmt[i]);
+    switch (ttype(obj)) {
+        case CS_TINSTANCE: {
+            insval(obj)->oclass->metalist = ml;
+            break;
+        }
+        case CS_TCLASS: {
+            classval(obj)->metalist = ml;
+            break;
+        }
+        case CS_TUSERDATA: {
+            uval(obj)->metalist = ml;
+            break;
+        }
+        default: {
+            res = 0;
+            goto done;
+        }
     }
-unlock:
+    if (ml) {
+        csG_objbarrier(C, gcoval(obj), ml);
+        csG_checkfin(C, gcoval(obj), ml);
+        csA_ensureindex(C, ml, CS_MM_N - 1);
+    }
+done:
+    C->sp.p--; /* remove metalist */
     cs_unlock(C);
-
-}
-
-
-CS_API void cs_set_usermetalist(cs_State *C, int udobj, const cs_VMT *pvmt) {
+    return res;
 }
 
 
@@ -1258,14 +1305,14 @@ CS_API void cs_set_usermm(cs_State *C, int index, cs_MM mm) {
     cs_lock(C);
     api_checknelems(C, 1); /* metamethod func */
     ud = getuserdata(C, index);
-    if (!ud->meta) {
-        ud->meta = csMM_newvmt(C);
+    if (!ud->metalist) {
+        ud->metalist = csA_newmetalist(C);
         csG_checkGC(C);
     }
-    setobj(C, &ud->meta[mm], s2v(C->sp.p - 1));
+    setobj(C, &ud->metalist->b[mm], s2v(C->sp.p - 1));
     csV_finishrawset(C, ud, s2v(C->sp.p - 1));
     csG_barrierback(C, obj2gco(ud), s2v(C->sp.p - 1));
-    csG_checkfin(C, obj2gco(ud), ud->meta);
+    csG_checkfin(C, obj2gco(ud), ud->metalist);
     C->sp.p--;
     cs_unlock(C);
 }
@@ -1450,19 +1497,6 @@ CS_API void cs_warning(cs_State *C, const char *msg, int cont) {
     cs_lock(C);
     csT_warning(C, msg, cont);
     cs_unlock(C);
-}
-
-
-/* Check if the value at the index has virtual method table. */
-CS_API int cs_hasvmt(cs_State *C, int index) {
-    return getvmt(C, index) != NULL;
-}
-
-
-/* Check if the value at the index has meta method. */
-CS_API int cs_hasmetamethod(cs_State *C, int index, cs_MM mm) {
-    TValue *vmt = getvmt(C, index);
-    return (vmt ? !isempty(&vmt[mm]) : 0);
 }
 
 

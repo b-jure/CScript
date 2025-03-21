@@ -54,7 +54,7 @@ typedef struct cs_State cs_State;
 #define CS_TUSERDATA            3   /* userdata */
 #define CS_TLIGHTUSERDATA       4   /* light userdata */
 #define CS_TSTRING              5   /* string */
-#define CS_TLIST               6   /* array */
+#define CS_TLIST                6   /* list */
 #define CS_TTABLE               7   /* table */
 #define CS_TFUNCTION            8   /* function */
 #define CS_TCLASS               9   /* class */
@@ -100,9 +100,6 @@ typedef const char *(*cs_Reader)(cs_State *C, void *data, size_t *szread);
 typedef void (*cs_WarnFunction)(void *ud, const char *msg, int tocont);
 
 
-/* Virtual Method Table */
-typedef struct cs_VMT cs_VMT;
-
 /* Type for storing name:function pairs or placeholders */
 typedef struct cs_Entry cs_Entry;
 
@@ -110,7 +107,7 @@ typedef struct cs_Entry cs_Entry;
 typedef struct cs_Debug cs_Debug;
 
 
-/* metamethod indices */
+/* metamethod list indices */
 typedef enum cs_MM {    /* ORDER MM */
     CS_MM_GETIDX = 0,
     CS_MM_SETIDX,
@@ -136,13 +133,8 @@ typedef enum cs_MM {    /* ORDER MM */
     CS_MM_EQ,
     CS_MM_LT,
     CS_MM_LE,
-    CS_MM_N,    /* total number of metamethods */
+    CS_MM_N, /* total number of metamethods */
 } cs_MM;
-
-
-struct cs_VMT {
-    cs_CFunction func[CS_MM_N]; /* metamethods */
-};
 
 
 struct cs_Entry {
@@ -244,8 +236,12 @@ CS_API void        cs_push_list(cs_State *C, int sz);
 CS_API void        cs_push_table(cs_State *C, int sz);
 CS_API int         cs_push_thread(cs_State *C); 
 CS_API void        cs_push_instance(cs_State *C, int clsobj);
-CS_API void        cs_push_class(cs_State *C, const cs_VMT *vmt, int abscls,
-                                 int nup, const cs_Entry *list); 
+
+CS_API void cs_push_class(cs_State *C, int nup, const cs_Entry *l);
+CS_API void cs_push_subclass(cs_State *C, int sc, int nup, const cs_Entry *l);
+CS_API void cs_push_metaclass(cs_State *C, int ml, int nup, const cs_Entry *l);
+CS_API void cs_push_metasubclass(cs_State *C, int sc, int ml, int nup,
+                                 const cs_Entry *l);
 
 /* -----------------------------------------------------------------------
 ** Get functions (CScript -> stack)
@@ -266,9 +262,10 @@ CS_API int cs_get_fieldptr(cs_State *C, int index, const void *field);
 CS_API int cs_get_fieldint(cs_State *C, int index, cs_Integer field); 
 CS_API int cs_get_fieldflt(cs_State *C, int index, cs_Number field); 
 CS_API int cs_get_class(cs_State *C, int index); 
+CS_API int cs_get_superclass(cs_State *C, int index); 
 CS_API int cs_get_method(cs_State *C, int index); 
+CS_API int cs_get_metalist(cs_State *C, int index);
 CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n); 
-CS_API int cs_get_uservmt(cs_State *C, int index, cs_VMT *pvmt); 
 
 /* -----------------------------------------------------------------------
 ** Set functions (stack -> CScript)
@@ -282,10 +279,8 @@ CS_API void  cs_set_fieldstr(cs_State *C, int index, const char *field);
 CS_API void  cs_set_fieldptr(cs_State *C, int index, const void *field); 
 CS_API void  cs_set_fieldint(cs_State *C, int index, cs_Integer field); 
 CS_API void  cs_set_fieldflt(cs_State *C, int index, cs_Number field); 
+CS_API int   cs_set_metalist(cs_State *C, int index);
 CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
-CS_API void  cs_set_uservmt(cs_State *C, int index, const cs_VMT *vmt); 
-CS_API void  cs_set_usermetalist(cs_State *C, int index); 
-CS_API void  cs_set_usermm(cs_State *C, int index, cs_MM mm); 
 
 /* -----------------------------------------------------------------------
 ** Error reporting
@@ -333,8 +328,6 @@ CS_API void cs_warning(cs_State *C, const char *msg, int cont);
 ** Miscellaneous functions and useful macros
 ** ----------------------------------------------------------------------- */
 CS_API cs_Number   cs_version(cs_State *C);
-CS_API int         cs_hasvmt(cs_State *C, int index); 
-CS_API int         cs_hasmetamethod(cs_State *C, int index, cs_MM mm); 
 CS_API cs_Unsigned cs_len(cs_State *C, int index); 
 CS_API int         cs_next(cs_State *C, int index); 
 CS_API void        cs_concat(cs_State *C, int n); 
@@ -343,7 +336,6 @@ CS_API cs_Alloc    cs_getallocf(cs_State *C, void **ud);
 CS_API void        cs_setallocf(cs_State *C, cs_Alloc falloc, void *ud); 
 CS_API void        cs_toclose(cs_State *C, int index); 
 CS_API void        cs_closeslot(cs_State *C, int index); 
-CS_API int         cs_getfreereg(cs_State *C);
 
 #define cs_getextraspace(C)         ((void *)((char *)(C) - CS_EXTRASPACE))
 
@@ -372,8 +364,6 @@ CS_API int         cs_getfreereg(cs_State *C);
 #define cs_is_noneornil(C, n)       (cs_type(C, (n)) <= 0)
 
 #define cs_push_literal(C, s)       cs_push_string(C, "" s)
-
-#define cs_push_vmt(C, vmt)         cs_push_lightuserdata(C, (void*)vmt)
 
 #define cs_push_mainthread(C) \
         ((void)cs_get_index(C, CS_REGISTRYINDEX, CS_RINDEX_MAINTHREAD))

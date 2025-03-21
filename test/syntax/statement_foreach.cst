@@ -12,7 +12,7 @@ foreach k, v in pairs(transactions) {
     assert(v == 69 or v == 420 or v == 1337);
 }
 local points = [69, 420, 1337];
-assert(typeof(points) == "array");
+assert(typeof(points) == "list");
 assert(points[0] == 69);
 assert(points[1] == 420);
 assert(points[2] == 1337);

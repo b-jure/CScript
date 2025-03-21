@@ -156,7 +156,7 @@ OP_NEWLIST,/*      S          'create and load new array of size 1<<(S-1)'  */
 OP_NEWCLASS,/*                'create and load new class'                   */
 OP_NEWTABLE,/*     S          'create and load new table of size 1<<(S-1)'  */
 OP_METHOD,/*       L V1 V2    'define method V2 for class V1 under key K{L}'*/
-OP_SETMM,/*        S V1 V2    'V1->vmt[S] = V2' (see notes)                 */
+OP_SETMM,/*        S V1 V2    'V1->metalist[S] = V2'                        */
 OP_POP,/*                     'pop value off the stack'                     */
 OP_POPN,/*         L          'pop L values off the stack'                  */
 
@@ -275,9 +275,7 @@ OP_RET,/*         L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes)    */
 
 /*
 ** Notes:
-** [OP_SETMM]
-** Sets virtual method table entry value at index S.
-** 
+**
 ** [OP_CALL]
 ** L1 is the offset from stack base, where the value being called is located.
 ** L2 is the number of expected results biased with +1.

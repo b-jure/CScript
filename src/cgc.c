@@ -256,6 +256,7 @@ static void markobject_(GState *gs, GCObject *o) {
             OClass *cls = gco2cls(o);
             markobjectN(gs, cls->metalist);
             markobjectN(gs, cls->methods);
+            markobjectN(gs, cls->sclass);
             markblack(cls); /* nothing else to mark */
             break;
         }
@@ -676,13 +677,13 @@ static int runNfinalizers(cs_State *C, int n) {
 ** 'FINBIT' being set, additionally don't move it in case
 ** state is closing.
 */
-void csG_checkfin(cs_State *C, GCObject *o, TValue vmt[CS_MM_N]) {
+void csG_checkfin(cs_State *C, GCObject *o, List *ml) {
     GCObject **pp;
     GState *gs = G(C);
-    if (!vmt ||                     /* vmt is NULL... */
-        isfin(o) ||                 /* or object is already marked... */
-        ttisnil(&vmt[CS_MM_GC]) ||  /* or it has no finalizer... */
-        (gs->gcstop & GCSTPCLS))    /* ...or state is closing? */
+    if (!ml ||                          /* no metalist... */
+        isfin(o) ||                     /* or object is already marked... */
+        ttisnil(&ml->b[CS_MM_GC]) ||    /* or it has no finalizer... */
+        (gs->gcstop & GCSTPCLS))        /* ...or state is closing? */
         return; /* nothing to be done */
     /* otherwise move 'o' to 'fin' list */
     if (issweepstate(gs)) {
@@ -746,13 +747,6 @@ static c_mem marktobefin(GState *gs) {
 }
 
 
-static void markGvmt(GState *gs) {
-    for (int i = 0; i < CS_NUM_TYPES; i++)
-        if (gs->vmt[i])
-            markvmt(gs, gs->vmt[i]);
-}
-
-
 static c_mem atomic(cs_State *C) {
     GState *gs = G(C);
     c_smem work = 0;
@@ -763,7 +757,6 @@ static c_mem atomic(cs_State *C) {
     gs->gcstate = GCSatomic;
     markobject(gs, C); /* mark running thread */
     markvalue(gs, &gs->c_registry); /* mark registry */
-    markGvmt(gs); /* mark global VMTs */
     work += propagateall(gs); /* traverse all gray objects */
     work += markopenupvalues(gs); /* mark open upvalues */
     work += propagateall(gs); /* propagate changes */
@@ -811,7 +804,6 @@ static void restartgc(GState *gs) {
     cleargraylists(gs);
     markobject(gs, gs->mainthread); /* mark mainthread */
     markvalue(gs, &gs->c_registry); /* mark registry */
-    markGvmt(gs);
     marktobefin(gs); /* mark any finalizing object left from previous cycle */
 }
 

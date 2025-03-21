@@ -14,6 +14,7 @@
 
 #include "cauxlib.h"
 #include "cslib.h"
+#include "climits.h"
 
 
 
@@ -168,20 +169,20 @@ static int b_runfile(cs_State *C) {
 }
 
 
-static int b_hasmetamethod(cs_State *C) {
-    static const char * const opts[CS_MM_N + 1] = {"__getidx", "__setidx",
-        "__gc", "__close", "__call", "__concat", "__add", "__sub", "__mul",
-        "__div", "__idiv", "__mod", "__pow", "__shl", "__shr", "__band",
-        "__bor", "__bxor", "__unm", "__bnot", "__eq", "__lt", "__le", NULL};
-    static const cs_MM mmnum[] = {CS_MM_GETIDX, CS_MM_SETIDX, CS_MM_GC,
-        CS_MM_CLOSE, CS_MM_CALL, CS_MM_CONCAT, CS_MM_ADD, CS_MM_SUB,
-        CS_MM_MUL, CS_MM_DIV, CS_MM_IDIV, CS_MM_MOD, CS_MM_POW, CS_MM_BSHL,
-        CS_MM_BSHR, CS_MM_BAND, CS_MM_BOR, CS_MM_BXOR, CS_MM_UNM, CS_MM_BNOT,
-        CS_MM_EQ, CS_MM_LT, CS_MM_LE};
-    cs_MM mm;
-    csL_check_any(C, 0); /* value with metamethods */
-    mm = mmnum[csL_check_option(C, 1, NULL, opts)];
-    cs_push_bool(C, cs_hasmetamethod(C, 0, mm));
+static int b_getmetalist(cs_State *C) {
+    csL_check_any(C, 0);
+    if (!cs_get_metalist(C, 0))
+        cs_push_nil(C);
+    return 1; /* return 'nil' or metalist */
+}
+
+
+static int b_setmetalist(cs_State *C) {
+    int t = cs_type(C, 1);
+    csL_check_type(C, 0, CS_TCLASS);
+    csL_expect_arg(C, t == CS_TNIL || t == CS_TLIST, 2, "nil or list");
+    cs_settop(C, 2);
+    cs_set_metalist(C, 0);
     return 1;
 }
 
@@ -505,7 +506,8 @@ static const cs_Entry basic_funcs[] = {
     {"load", b_load},
     {"loadfile", b_loadfile},
     {"runfile", b_runfile},
-    {"hasmetamethod", b_hasmetamethod},
+    {"getmetalist", b_getmetalist},
+    {"setmetalist", b_setmetalist},
     {"next", b_next},
     {"pairs", b_pairs},
     {"ipairs", b_ipairs},
@@ -525,8 +527,47 @@ static const cs_Entry basic_funcs[] = {
     /* placeholders */
     {CS_GNAME, NULL},
     {"__VERSION", NULL},
+    /* metalist indices */
+    {"__getidx", NULL},
+    {"__setidx", NULL},
+    {"__gc", NULL},
+    {"__close", NULL},
+    {"__call", NULL},
+    {"__init", NULL},
+    {"__concat", NULL},
+    {"__add", NULL},
+    {"__sub", NULL},
+    {"__mul", NULL},
+    {"__div", NULL},
+    {"__idiv", NULL},
+    {"__mod", NULL},
+    {"__pow", NULL},
+    {"__shl", NULL},
+    {"__shr", NULL},
+    {"__band", NULL},
+    {"__bor", NULL},
+    {"__bxor", NULL},
+    {"__unm", NULL},
+    {"__bnot", NULL},
+    {"__eq", NULL},
+    {"__lt", NULL},
+    {"__le", NULL},
     {NULL, NULL},
 };
+
+
+static void set_metalist_indices(cs_State *C) {
+    const char *mm[CS_MM_N] = {
+        "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
+        "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",
+        "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
+        "__bnot", "__eq", "__lt", "__le"
+    };
+    for (int i = 0; i < CS_MM_N; i++) {
+        cs_push_integer(C, i);
+        cs_set_fieldstr(C, -2, mm[i]);
+    }
+}
 
 
 CSMOD_API int csopen_basic(cs_State *C) {
@@ -534,10 +575,12 @@ CSMOD_API int csopen_basic(cs_State *C) {
     cs_push_globaltable(C);
     csL_setfuncs(C, basic_funcs, 0);
     /* set global __G */
-    cs_push(C, -1);
+    cs_push(C, -1); /* copy of global table */
     cs_set_fieldstr(C, -2, CS_GNAME);
     /* set global __VERSION */
     cs_push_literal(C, CS_VERSION);
     cs_set_fieldstr(C, -2, "__VERSION");
+    /* set global metalist indices */
+    set_metalist_indices(C);
     return 1;
 }

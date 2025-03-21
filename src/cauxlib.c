@@ -12,9 +12,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cauxlib.h"
-#include "csconf.h"
 #include "cscript.h"
+
+#include "cauxlib.h"
+#include "climits.h"
 
 
 
@@ -153,12 +154,13 @@ CSLIB_API const char *csL_check_lstring(cs_State *C, int index, size_t *len) {
 }
 
 
-CSLIB_API void *csL_check_userdata(cs_State *C, int index, const char *name) {
-    void *p = csL_test_userdata(C, index, name);
-    if (csi_unlikely(p == NULL))
-        csL_error_type(C, index, name);
-    return p;
-}
+// TODO
+//CSLIB_API void *csL_check_userdata(cs_State *C, int index, const char *name) {
+//    void *p = csL_test_userdata(C, index, name);
+//    if (csi_unlikely(p == NULL))
+//        csL_error_type(C, index, name);
+//    return p;
+//}
 
 
 CSLIB_API void csL_check_stack(cs_State *C, int sz, const char *msg) {
@@ -543,20 +545,21 @@ CSLIB_API void csL_importf(cs_State *C, const char *modname,
 }
 
 
-CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *vmtname) {
-    void *p = csL_to_fulluserdata(C, index);
-    if (p != NULL) { /* `index` is full userdata? */
-        cs_VMT vmt;
-        if (cs_get_uservmt(C, index, &vmt) >= 0) {
-            csL_get_registrytable(C, vmtname);
-            if (!csL_vmt_isequal(C, -1, &vmt))
-                p = NULL;
-            cs_pop(C, 1); /* remove vmt userdata value */
-            return p;
-        } /* else fall through */
-    } /* else fall through */
-    return NULL; /* value is not a userdata */
-}
+// TODO
+//CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *vmtname) {
+//    void *p = csL_to_fulluserdata(C, index);
+//    if (p != NULL) { /* `index` is full userdata? */
+//        cs_VMT vmt;
+//        if (cs_get_uservmt(C, index, &vmt) >= 0) {
+//            csL_get_registrytable(C, vmtname);
+//            if (!csL_vmt_isequal(C, -1, &vmt))
+//                p = NULL;
+//            cs_pop(C, 1); /* remove vmt userdata value */
+//            return p;
+//        } /* else fall through */
+//    } /* else fall through */
+//    return NULL; /* value is not a userdata */
+//}
 
 
 /* find and return last call frame level */
@@ -659,17 +662,6 @@ CSLIB_API void csL_checkversion_(cs_State *C, cs_Number ver) {
 }
 
 
-CSLIB_API int csL_vmt_isequal(cs_State *C, int index, const cs_VMT *vmt) {
-    cs_VMT *udvmt = (cs_VMT*)csL_to_lightuserdata(C, index);
-    if (udvmt) {
-        for (int i = 0; i < CS_MM_N; i++)
-            if (udvmt->func[i] != vmt->func[i]) return 0;
-        return 1; /* equal */
-    }
-    return 0;
-}
-
-
 CSLIB_API unsigned csL_makeseed(cs_State *C) {
     (void)(C); /* unused */
     return csi_makeseed();
@@ -752,17 +744,16 @@ static int boxgc(cs_State *C) {
 }
 
 
-static const cs_VMT boxvmt = {
-    .func[CS_MM_GC] = boxgc,
-    .func[CS_MM_CLOSE] = boxgc,
-};
-
-
 static void newbox(cs_State *C) {
     UserBox *box = cs_push_userdata(C, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
-    cs_set_usermetalist(C, -1, &boxvmt);
+    cs_push_list(C, CS_MM_N);
+    cs_push_cfunction(C, boxgc);
+    cs_set_index(C, -2, CS_MM_GC);
+    cs_push_cfunction(C, boxgc);
+    cs_set_index(C, -2, CS_MM_CLOSE);
+    cs_set_metalist(C, -2);
 }
 
 

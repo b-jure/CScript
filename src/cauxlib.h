@@ -85,6 +85,7 @@ CSLIB_API int         csL_get_subtable(cs_State *C, int index,
                                        const char *field);
 CSLIB_API void        csL_importf(cs_State *C, const char *modname,
                                   cs_CFunction openf, int global);
+// TODO
 CSLIB_API void       *csL_test_userdata(cs_State *C, int index,
                                         const char *vmtname);
 CSLIB_API void        csL_traceback(cs_State *C, cs_State *C1, int level,
@@ -93,8 +94,6 @@ CSLIB_API void        csL_setfuncs(cs_State *C, const cs_Entry *l, int nup);
 CSLIB_API void        csL_checkversion_(cs_State *C, cs_Number ver);
 CSLIB_API const char *csL_gsub(cs_State *C, const char *s, const char *p,
                                const char *r);
-CSLIB_API int         csL_vmt_isequal(cs_State *C, int index,
-                                      const cs_VMT *vmt);
 CSLIB_API unsigned    csL_makeseed(cs_State *C);
 
 /* ------------------------------------------------------------------------ 
@@ -209,13 +208,12 @@ CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
 ** ------------------------------------------------------------------------ */
 
 /*
-** A file handle is a userdata with vmt 'CS_FILEHANDLE' and
-** initial structure 'luaL_Stream' (it may contain other fields
+** A file handle is a userdata with 'CS_FILEHANDLE' metalist and
+** initial structure 'csL_Stream' (it may contain other fields
 ** after that initial structure).
 */
 
 #define CS_FILEHANDLE       "FILE*"
-
 
 typedef struct csL_Stream {
   FILE *f; /* stream (NULL for incompletely created streams) */

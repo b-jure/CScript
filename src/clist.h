@@ -10,11 +10,14 @@
 #include "cobject.h"
 
 
-CSI_FUNC Array *csA_new(cs_State *C);
-CSI_FUNC Array *csA_newl(cs_State *C, uint n);
-CSI_FUNC void csA_shrink(cs_State *C, Array *arr);
-CSI_FUNC int csA_ensure(cs_State *C, Array *arr, uint n);
-CSI_FUNC void csA_ensureindex(cs_State *C, Array *arr, uint index);
-CSI_FUNC void csA_free(cs_State *C, Array *arr);
+#define csA_newmetalist(C)      csA_newl(C, CS_MM_N)
+
+
+CSI_FUNC List *csA_new(cs_State *C);
+CSI_FUNC List *csA_newl(cs_State *C, uint n);
+CSI_FUNC void csA_shrink(cs_State *C, List *l);
+CSI_FUNC int csA_ensure(cs_State *C, List *l, uint n);
+CSI_FUNC void csA_ensureindex(cs_State *C, List *l, uint index);
+CSI_FUNC void csA_free(cs_State *C, List *l);
 
 #endif

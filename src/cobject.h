@@ -239,78 +239,29 @@ typedef struct GCObject {
 
 
 /* -----------------------------------------------------------------------
-** Userdata {
-** ----------------------------------------------------------------------- */
+** List {
+** ------------------------------------------------------------------------ */
 
-#define CS_VLIGHTUSERDATA           makevariant(CS_TUSERDATA, 0)
-#define CS_VUSERDATA                makevariant(CS_TUSERDATA, 1)
+#define CS_VLIST        makevariant(CS_TLIST, 0)
 
-#define ttislightuserdata(o)        checktag(o, CS_VLIGHTUSERDATA)
-#define ttisfulluserdata(o)         checktag(o, ctb(CS_VUSERDATA))
+#define ttislist(o)     checktag((o), ctb(CS_VLIST))
 
-#define pval(o)     check_exp(ttislightuserdata(o), val(o).p)
-#define uval(o)     check_exp(ttisfulluserdata(o), gco2u(val(o).gc))
+#define listval(o)      gco2list(val(o).gc)
 
-#define setpval(obj,x) \
-    { TValue *o_=(obj); val(o_).p = (x); settt(o_, CS_VLIGHTUSERDATA); }
+#define setlistval(C,obj,x) \
+    { TValue *o_=(obj); const List *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VLIST)); \
+      checkliveness(C, o_); }
 
-#define setuval(C,obj,x) \
-    { TValue *o_=(obj); const UserData *x_=(x); \
-      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUSERDATA)); \
-      checkliveness(C,o_); }
+#define setlistval2s(C,o,l)     setlistval(C,s2v(o),l)
 
-#define setuval2s(C,o,uv)       setuval(C, s2v(o), uv)
-
-
-/*
-** 'TValue' that ensures that addresses after this type are
-** always fully aligned.
-*/
-typedef union UValue {
-    TValue val;
-    CSI_MAXALIGN; /* ensures maximum alignment for udata bytes */
-} UValue;
-
-
-typedef struct UserData {
+typedef struct List {
     ObjectHeader;
-    ushort nuv; /* number of 'uservalues' */
-    size_t size; /* size of 'UserData' memory in bytes */
-    List *metalist;
     GCObject *gclist;
-    UValue uv[]; /* user values */
-    /* 'UserData' memory starts here */
-} UserData;
-
-
-/*
-** 'UserData' without user values, meaning 'uv' is empty ('nuv' == 0).
-** This is used when allocating 'UserData' to properly calculate offset
-** of user memory because 'uv' is a flexible array member.
-** Also this kind of userdata is never gray so it doesnt need 'gclist'.
-** Internally CScript only uses 'UserData' to access fields and it takes
-** care to avoid using 'uv' and 'gclist' fields when 'nuv' is 0.
-*/
-typedef struct EmptyUserData {
-    ObjectHeader;
-    ushort nuv; /* number of 'uservalues' */
-    size_t size; /* size of 'usermem' in bytes */
-    List *metalist;
-    union {CSI_MAXALIGN;} usermem;
-    /* 'UserData' memory starts here */
-} EmptyUserData;
-
-
-/* offset in 'UserData' where user memory begins */
-#define udmemoffset(nuv) \
-        ((nuv) == 0 ? offsetof(EmptyUserData, usermem) \
-                    : offsetof(UserData, uv) + ((nuv)*sizeof(UValue)))
-
-/* get the address of the memory block inside 'UserData' */
-#define getuserdatamem(u)       (cast_charp(u) + udmemoffset((u)->nuv))
-
-/* size of 'UserData' */
-#define sizeofuserdata(nuv, size)   (udmemoffset(nuv) + (size))
+    TValue *b; /* memory block */
+    uint n; /* number of elements in use in 'b' */
+    uint sz; /* size of 'b' */
+} List;
 
 /* } --------------------------------------------------------------------- */
 
@@ -447,35 +398,6 @@ typedef struct Table {
 
 
 /* -----------------------------------------------------------------------
-** List {
-** ------------------------------------------------------------------------ */
-
-#define CS_VLIST        makevariant(CS_TLIST, 0)
-
-#define ttislist(o)     checktag((o), ctb(CS_VLIST))
-
-#define listval(o)      gco2list(val(o).gc)
-
-#define setlistval(C,obj,x) \
-    { TValue *o_=(obj); const List *x_=(x); \
-      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VLIST)); \
-      checkliveness(C, o_); }
-
-#define setlistval2s(C,o,l)     setlistval(C,s2v(o),l)
-
-typedef struct List {
-    ObjectHeader;
-    GCObject *gclist;
-    TValue *b; /* memory block */
-    uint n; /* number of elements in use in 'b' */
-    uint sz; /* size of 'b' */
-} List;
-
-/* } --------------------------------------------------------------------- */
-
-
-
-/* -----------------------------------------------------------------------
 ** Strings {
 ** ----------------------------------------------------------------------- */
 
@@ -547,6 +469,7 @@ typedef struct OClass {
     ObjectHeader;
     List *metalist;
     Table *methods;
+    struct OClass *sclass;
 } OClass;
 
 /* } --------------------------------------------------------------------- */
@@ -651,8 +574,8 @@ typedef struct Proto {
 
 typedef struct Instance {
     ObjectHeader;
-    OClass *oclass; /* instance class */
-    Table *fields; /* instance fields */
+    OClass *oclass;
+    Table *fields;
 } Instance;
 
 /* } --------------------------------------------------------------------- */
@@ -764,10 +687,88 @@ typedef union Closure {
 
 
 
+/* -----------------------------------------------------------------------
+** Userdata {
+** ----------------------------------------------------------------------- */
+
+#define CS_VLIGHTUSERDATA           makevariant(CS_TUSERDATA, 0)
+#define CS_VUSERDATA                makevariant(CS_TUSERDATA, 1)
+
+#define ttislightuserdata(o)        checktag(o, CS_VLIGHTUSERDATA)
+#define ttisfulluserdata(o)         checktag(o, ctb(CS_VUSERDATA))
+
+#define pval(o)     check_exp(ttislightuserdata(o), val(o).p)
+#define uval(o)     check_exp(ttisfulluserdata(o), gco2u(val(o).gc))
+
+#define setpval(obj,x) \
+    { TValue *o_=(obj); val(o_).p = (x); settt(o_, CS_VLIGHTUSERDATA); }
+
+#define setuval(C,obj,x) \
+    { TValue *o_=(obj); const UserData *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUSERDATA)); \
+      checkliveness(C,o_); }
+
+#define setuval2s(C,o,uv)       setuval(C, s2v(o), uv)
+
+
 /*
- * Conversion modes when converting 'cs_Integer'
- * into 'cs_Number'.
- */
+** 'TValue' that ensures that addresses after this type are
+** always fully aligned.
+*/
+typedef union UValue {
+    TValue val;
+    CSI_MAXALIGN; /* ensures maximum alignment for udata bytes */
+} UValue;
+
+
+typedef struct UserData {
+    ObjectHeader;
+    ushort nuv; /* number of 'uservalues' */
+    size_t size; /* size of 'UserData' memory in bytes */
+    List *metalist;
+    GCObject *gclist;
+    UValue uv[]; /* user values */
+    /* 'UserData' memory starts here */
+} UserData;
+
+
+/*
+** 'UserData' without user values, meaning 'uv' is empty ('nuv' == 0).
+** This is used when allocating 'UserData' to properly calculate offset
+** of user memory because 'uv' is a flexible array member.
+** Also this kind of userdata is never gray so it doesnt need 'gclist'.
+** Internally CScript only uses 'UserData' to access fields and it takes
+** care to avoid using 'uv' and 'gclist' fields when 'nuv' is 0.
+*/
+typedef struct EmptyUserData {
+    ObjectHeader;
+    ushort nuv; /* number of 'uservalues' */
+    size_t size; /* size of 'usermem' in bytes */
+    List *metalist;
+    union {CSI_MAXALIGN;} usermem;
+    /* 'UserData' memory starts here */
+} EmptyUserData;
+
+
+/* offset in 'UserData' where user memory begins */
+#define udmemoffset(nuv) \
+        ((nuv) == 0 ? offsetof(EmptyUserData, usermem) \
+                    : offsetof(UserData, uv) + ((nuv)*sizeof(UValue)))
+
+/* get the address of the memory block inside 'UserData' */
+#define getuserdatamem(u)       (cast_charp(u) + udmemoffset((u)->nuv))
+
+/* size of 'UserData' */
+#define sizeofuserdata(nuv, size)   (udmemoffset(nuv) + (size))
+
+/* } --------------------------------------------------------------------- */
+
+
+
+/*
+** Conversion modes when converting 'cs_Integer'
+** into 'cs_Number'.
+*/
 typedef enum N2IMode {
     N2IFLOOR,
     N2ICEIL,

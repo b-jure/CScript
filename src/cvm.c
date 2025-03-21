@@ -648,7 +648,7 @@ retry:
         case CS_VCLASS: { /* Class object */
             const TValue *fmm;
             Instance *ins = csMM_newinstance(C, classval(s2v(func)));
-            csG_checkfin(C, obj2gco(ins), ins->oclass->vmt);
+            csG_checkfin(C, obj2gco(ins), ins->oclass->metalist);
             setinsval2s(C, func, ins); /* replace class with its instance */
             fmm = csMM_get(C, s2v(func), CS_MM_INIT);
             if (!ttisnil(fmm)) { /* have __init ? */
@@ -656,7 +656,6 @@ retry:
                 fmm = csMM_get(C, s2v(func), CS_MM_INIT); /* (after GC) */
                 if (c_likely(!ttisnil(fmm))) { /* have __init (after GC)? */
                     auxinsertf(C, func, fmm); /* insert it into stack... */
-                    cs_assert(ttisfunction(fmm));
                     goto retry; /* ...and try calling it */
                 } else goto noinit; /* no __init (after GC) */
             } else {
@@ -761,6 +760,16 @@ static OClass *checksuper(cs_State *C, const TValue *cls, const TValue *sup) {
     else if (c_unlikely(csV_raweq(cls, sup)))
         csD_runerror(C, "class attempted to inherit from itself");
     return classval(sup);
+}
+
+
+void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
+    if (scl->methods) { /* superclass has methods? */
+        cls->methods = csH_new(C);
+        csH_copykeys(C, cls->methods, scl->methods);
+    }
+    cls->metalist = scl->metalist; /* set the metalist */
+    cls->sclass = scl; /* set the superclass */
 }
 
 
@@ -1255,16 +1264,17 @@ returning:
                 vm_break;
             }
             vm_case(OP_SETMM) {
-                TValue *o = peek(1); /* class or userdata */
+                TValue *o = peek(1); /* class */
                 TValue *f = peek(0); /* func */
-                List *ml = &classval(o)->metalist;
+                List *ml = classval(o)->metalist;
                 cs_MM mm; /* metamethod tag */
                 storepc(C);
                 mm = fetchs();
                 cs_assert(0 <= mm && mm < CS_MM_N);
                 /* TODO: remove this check (see OP_NEWCLASS) */
                 if (c_unlikely(!ml)) { /* no metalist? */
-                    ml = csA_newl(C, CS_MM_N);
+                    ml = csA_newmetalist(C);
+                    classval(o)->metalist = ml;
                     checkGC(C);
                 }
                 cs_assert(ml && mm < ml->n);
@@ -1710,8 +1720,8 @@ returning:
             }
             vm_case(OP_SETUVAL) {
                 UpVal *uv = cl->upvals[fetchl()];
-                setobj(C, uv->v.p, s2v(ts->sp.p - 1));
-                csG_barrier(C, uv, s2v(ts->sp.p - 1));
+                setobj(C, uv->v.p, s2v(C->sp.p - 1));
+                csG_barrier(C, uv, s2v(C->sp.p - 1));
                 SP(-1);
                 vm_break;
             }
@@ -1884,16 +1894,7 @@ returning:
                 OClass *sup;
                 storepc(C);
                 sup = checksuper(C, o2, o1);
-                if (c_likely(sup->methods)) { /* superclass has methods? */
-                    cls->methods = csH_new(C);
-                    csH_copykeys(C, cls->methods, sup->methods);
-                }
-                if (sup->meta) { /* superclass has metamethods? */
-                    cs_assert(cls->meta == NULL);
-                    cls->meta = csA_newl(C, CS_MM_N);
-                    for (int i = 0; i < CS_MM_N; i++)
-                        setobj(C, &cls->meta[i], &sup->meta[i]);
-                }
+                csV_inherit(C, cls, sup);
                 checkGC(C);
                 vm_break;
             }

@@ -51,7 +51,7 @@ OClass *csMM_newclass(cs_State *C) {
     OClass *cls = gco2cls(o);
     cls->metalist = NULL;
     cls->methods = NULL;
-    cls->gclist = NULL;
+    cls->sclass = NULL;
     return cls;
 }
 
@@ -98,12 +98,11 @@ const TValue *csMM_get(cs_State *C, const TValue *v, cs_MM mm) {
     List *ml;
     cs_assert(0 <= mm && mm < CS_MM_N);
     switch (ttypetag(v)) {
-        case CS_VINSTANCE: ml = insval(v)->oclass->ml; break;
-        case CS_VUSERDATA: ml = uval(v)->ml; break;
-        default: ml = G(C)->ml[ttype(v)]; break;
+        case CS_VINSTANCE: ml = insval(v)->oclass->metalist; break;
+        case CS_VUSERDATA: ml = uval(v)->metalist; break;
+        default: ml = NULL; break;
     }
-    cs_assert((ml != NULL) == (mm < ml->n));
-    return (ml ? &ml[mm] : &G(C)->nil);
+    return (ml ? &ml->b[mm] : &G(C)->nil);
 }
 
 

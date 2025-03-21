@@ -147,8 +147,8 @@
         which is simply a C&nbsp;pointer value.
         Userdata has no predefined operations in CScript except assignment
         and identity test (<code>==</code>).
-        By using <em>VMTs</em> (virtual method tables), the programmer can
-        define operations for full userdata values.
+        By using <em>metalists</em>, the programmer can define operations
+        for full userdata values (see <a href="#2.4">&sect;2.4</a>).
         Userdata values cannot be created or modified in CScript, only
         through the C&nbsp;API.
         This guarantees the integrity of data owned by the host program
@@ -175,34 +175,33 @@
         <br/><br/>
         <!-- list -->
         The type <em>list</em> is a linear collection of values each
-        identified by an <b>index</b>. Each <b>index</b> is positive integer
-        value or 0 which is used to index the <em>list</em> in order to
-        retrieve the value (variable values can also be used in place of literal
-        integers). Negative integer indices are not allowed.
+        identified by an <b>index</b>. Each <b>index</b> is an integer
+        value starting from 0 which is used to index the <em>list</em> in
+        order to retrieve the value (variable values can also be used in
+        place of literal integers). Negative integer indices are not allowed.
         <br/><br/>
         <!-- class -->
-        The type <em>class</em> is useful for object-oriented programming.
+        The type <em>class</em> is useful abstraction for object-oriented
+        programming.
         Class can contain <em>methods</em> which are defined upon class
-        creation and can not be changed after.
-        The reason why they can't be changed is because how inheritance is
-        implemented internally, which in turn makes code much more manageable.
+        creation and can not be changed thereafter.
         <em>class</em> can inherit from another class, the name of the
         <em>class</em> from which we inherit is called a <em>superclass</em>.
         When inheriting all of the <em>superclass methods</em> are copied over
         to the <em>class</em> being created.
         <br/>
-        When constructing a <em>class</em> programmer can define
-        <em>metamethods</em> which are special functions that provide
-        meta-programming functionality.
+        Similar to <em>full userdata</em>, classes can also make use of
+        <em>metalists</em> to define operations on their instances.
         <br/><br/>
         <!-- instance -->
-        The type <em>instance</em> is similar to <em>table</em>; it can be
-        indexed and indexed values are the values of the <em>instance</em>
-        <em>fields</em>. Each <em>instance</em> is constructed from a
-        <em>class</em>.
+        The type <em>instance</em> is similar to <em>table</em>,
+        meaning they can be indexed in the same way as a table and therefore
+        can hold values (a state), these values are called
+        <em>instance fields</em>.
+        Each <em>instance</em> is constructed from a <em>class</em>.
         The <em>class</em> methods of the <em>instance</em> can't be changed
-        but can be shadowed by creating a non <b>nil</b> <em>field</em> with
-        the same key.
+        but can be shadowed by creating a non-<b>nil</b> <em>field</em> under
+        the same index value.
         <br/><br/>
         <!-- thread -->
         The type <em>thread</em> represents independent threads of execution.
@@ -220,12 +219,13 @@
         (that is, a name not bound to any declaration) <code>var</code>
         is considered to be a global variable and it's value is set into
         the global table.
+        This value is kept aat a special index in the C registry
+        (see <a href="#4.3">&sect;4.3</a>).
         Moreover, every chunk is compiled in the scope of global table.
         This table can be accessed via <a href="#4">API</a> or the global
-        variable <a href="#__G"><code>__G</code></a> if the host program
-        opened <a href="#6.1">basic library</a> (by calling
-        <a href="#csL_openlibs"><code>csL_openlibs</code></a> or
-        <a href="#csopen_basic"><code>csopen_basic</code></a>).
+        variable <a href="#__G"><code>__G</code></a>.
+        Note that <a href="#__G"><code>__G</code></a> is never used
+        internally, so changing its value will affect only your own code.
         </p>
 
 
@@ -294,38 +294,66 @@
         </p>
 
 
-        <h2>2.4 &ndash; <a name="2.4">Metamethods</a></h2>
+        <h2>2.4 &ndash; <a name="2.4">Metalists aand Metamethods</a></h2>
         <p>
-        Metamethods are special kind of <b>methods</b> that alter the
-        behavior of the original value under certain events.
-        Class and full userdata are the only values in CScript that can
-        implement <b>metamethods</b>.
-        Both of these values contain a <b>virtual method table</b>, and
-        each entry in this "table" contains a <b>function</b>.
-        You can change several aspects of the behavior of a value by
-        setting specific entries in the virtual method table.
-        For example, when you try to add two instance objects, CScript
-        checks for a function <code>__add</code> in the virtual method table.
+        Every value in CScript can have a <em>metalist</em>.
+        This <em>metalist</em> is an ordinary CScript list that defines
+        the behaviour of the original value under certain events.
+        You can change several aspects of the behaviour of a value by
+        setting specific indices in its metalist.
+        For instance, when a non-numeric values are the operands of an
+        addition, CScript checks for a function at the index 
+        <code>__add</code> of the value's metalist.
         If it finds one, CScript calls this function to perform the addition.
         <br/><br/>
-        The name of each <b>metamethod</b> is prefixed with two underscores.
-        A metamethod can only be a CScript&nbsp;function or a C&nbsp;function.
+        The index for each event in a metalist is a regular global integer
+        value prefixed by two underscores;
+        the corresponding value is called a <em>metavalue</em>.
+        For most events, the metavalue must be a function,
+        which is then called a <em>metamethod</em>.
+        In the previous example, the index is the global variable
+        <code>__add</code> and the metamethod is the function that
+        performs the addition.
+        Unless stated otherwise, a metamethod can in fact be any callable
+        value, which is either a function, a class or a value with a
+        <code>__call</code> metamethod.
         <br/><br/>
-        You can query the virtual method table of a class, instance or
-        full userdata using the
-        <a href="#getmetamethod"><code>getmetamethod</code></a> function.
+        You can query the metalist of any value using the
+        <a href="#getmetalist"><code>getmetalist</code></a> function.
+        CScript queries metamethods in metalists by indexing the list
+        with predefined global values.
+        <br/>
+        Example:
+
+        <pre>
+    class Human { 
+        __init() {
+            self.name = "Human";
+            return self;
+        }
+    }
+    local ml = getmetalist(Human);  /* get 'Human' class metalist */
+    local mm = ml[__init];  /* get __init metamethod */</pre>
+
+        You can replace the metalist of a class using the
+        <a href="#setmetalist"><code>setmetalist</code></a> function.
+        You cannot change the metalist of other types from CScript code.
+        <br/>
+        Example:
+
+        <pre>
+    class Human {}
+    local ml = [];  /* create list */
+    ml[__init] = fn(self) {  /* set function under index __init */
+        self.name = "Human";
+        return self;
+    };
+    setmetalist(Human, ml);  /* set 'Human' class metalist */</pre>
+
+        Classes and full userdata have individual metalists,
+        although multiple classes and userdata can share their metalists.
         <br/><br/>
-        After the class is created/defined, you can't change its
-        <b>virtual method table</b> anymore, this is also ensured in
-        C&nbsp;API as class creation, method definitions and <em>vmt</em>
-        (short for virtual method table) creation is one atomic operation.
-        However the full userdata <em>vmt</em> can be mutated or changed
-        at any time, but only from C&nbsp;code.
-        The reason why classes can't mutate their <em>vmt</em> is because
-        classes can inherit thus would introduce much more complexity.
-        (Additionally the author himself dislikes the idea.)
-        <br/><br/>
-        A detailed list of operations controlled by <em>vmt</em> is given next.
+        A detailed list of operations controlled by metalist is given next.
         By convention, all metamethod names used by CScript are composed by
         two underscores followed by lowercase Latin letters.
         <ul>
@@ -363,7 +391,7 @@
             </li>
             <li>
                 <b><code>__idiv</code>: </b>
-                the integer division (<code>/</code>) operation.
+                the integer division (<code>//</code>) operation.
                 Behavior similar to the addition operation.
             </li>
             <li>
@@ -604,18 +632,15 @@
         <br/><br/>
         For an object (instance or userdata) to be finalized when collected,
         you must <em>mark</em> it for finalization.
-        You mark an object for finalization when you set its <em>vmt</em>
-        <code>__gc</code> metamethod.
-        This marking, for instances is as soon as the class is called, before
-        <code>__init</code> even runs (if present).
-        As for the full userdata, it is after the <code>__gc</code> is set
-        from C&nbsp;code
-        (see <a href="#cs_set_usermm"><code>cs_set_usermm</code></a> and
-        <a href="#cs_set_uservmt"><code>cs_set_uservmt</code></a>).
+        You mark an object for finalization when you set its metalist and
+        metalist has <code>__gc</code> metamethod.
+        Note that if you set a metalist without setting <code>__gc</code>
+        index and later set that index in the metalist, the object will
+        not be marked for finalization.
         <br/><br/>
         When a marked object becomes dead, it is not collected immediately
         by the garbage collector.
-        Instead, CScript puts it in a list.
+        Instead, CScript puts it in a (linked)list.
         After the collection, CScript goes through that list.
         For each object in the list, it checks the object's
         <code>__gc</code> metamethod:
@@ -824,9 +849,8 @@
     0x.1Ep0  0xA23p-4    0X1.921FB54442D18P+1
     inf      infinity</pre>
 
-        A <em>short comment</em> starts with a double forward slash
-        (<code>//</code>) or a pound sign (<code>#</code>) and runs until
-        the end of the line.
+        A <em>short comment</em> starts with a pound sign (<code>#</code>)
+        and runs until the end of the line.
         A <em>long comment</em> starts with a forward slash and
         asterisk sign (<code>/*</code>) and is delimited by asterisk sign and
         forward slash (<code>*/</code>).
@@ -2483,78 +2507,6 @@
         warnings.
         </p>
 
-        <!-- cs_VMT -->
-        <hr><h3><a name="cs_VMT"><code>cs_VMT</code></a></h3>
-        <pre>typedef struct cs_VMT cs_VMT;</pre>
-        <p>
-        Type for Virtual Method Table used as an argument when creating a
-        class with <a href="#cs_push_class"><code>cs_push_class</code></a> or
-        when setting Virtual Method Table for <em>fulluserdata</em> with
-        <a href="#cs_set_uservmt"><code>cs_set_uservmt</code></a>.
-        <br/><br/>
-        It holds an array <code>func</code> of size
-        <a href="#CS_MM_N"><code>CS_MM_N</code></a> and each entry holds a
-        <a href="#cs_CFunction"><code>cs_CFunction</code></a>.
-        Programmer should set all entries in <code>func</code>; the metamethod
-        entries that are not being used should be set as <em>NULL</em>; used
-        entries should contain a valid
-        <a href="#cs_CFunction"><code>cs_CFunction</code></a>.
-        Here is an example of setting the <code>cs_VMT</code> before
-        calling the <a href="#cs_push_class"><code>cs_push_class</code></a>:
-        <pre>
-    /*
-    ** Suppose we are creating a Vec2 class and we wish to overload
-    ** addition ("__add") operator and instance initializer ("__init").
-    */
-
-    static int initvec2 (cs_State *C) {
-        /* Vec2 instance is the first and only argument */
-        cs_push_number(C, 0.0);
-        cs_set_fieldstr(C, 0, "x");     /* set "x" field */
-
-        cs_push_number(C, 0.0);
-        cs_set_fieldstr(C, 0, "y");     /* set "y" field */
-
-        return 1;       /* return the instance */
-    }
-
-    static int addvec2 (cs_State *C) {
-        /* arguments are two Vec2 instances */
-        cs_get_class(C, 0); 
-        cs_push_instance(C, -1);    /* create new Vec2 instance */
-
-        cs_get_fieldstr(C, 0, "x");
-        cs_get_fieldstr(C, 1, "x");
-        cs_arith(C, OP_ADD);         /* add the "x" */
-        cs_set_fieldstr(C, 2, "x");  /* set the "x" field of the new instance */
-
-        cs_get_fieldstr(C, 0, "y");
-        cs_get_fieldstr(C, 1, "y");
-        cs_arith(C, OP_ADD);         /* add the "y" */
-        cs_set_fieldstr(C, 2, "y");  /* set the "y" field of the new instance */
-
-        return 1;   /* return only the new instance */
-    }
-
-    static void pushclass_vec2 (cs_State *C) {
-        cs_VMT vmt = {0};       /* zero initialize */
-        vmt.func[CS_MM_INIT] = initvec2;    /* set CS_MM_INIT entry */
-        vmt.func[CS_MM_ADD] = addvec2;      /* set CS_MM_ADD entry */
-
-        /*
-        ** Finally create (and push) the class with 'vmt', no superclass (-1),
-        ** no upvalues (0) and no methods (NULL).
-        */
-        cs_push_class(C, &vmt, -1, 0, NULL);
-    }</pre>
-        Usually you would implement this functionality within
-        <em>fulluserdata</em> bypassing core API which would greatly increase
-        performance. Classes are meant to be used within CScript functions,
-        however CScript offers both options in order to be fully embeddable.
-        For more information about what each metamethod function expects
-        see <a href="#2.4"><code>&sect;2.4</code></a>.
-        </p>
-
         <!-- cs_Entry -->
         <hr><h3><a name="cs_Entry"><code>cs_Entry</code></a></h3>
         <pre>
@@ -2564,9 +2516,9 @@
     } cs_Entry;</pre>
         <p>
         Type for arrays of functions or methods to be set by
-        <a href="#cs_push_class"><code>cs_push_class</code></a> or
-        <a href="#csL_set_funcs"><code>csL_set_funcs</code></a>.
-        <code>name</code> is the function name and <code>func</code> is a
+        <a href="#cs_push_class"><code>cs_push_class</code></a> family of
+        functions or <a href="#csL_set_funcs"><code>csL_set_funcs</code></a>.
+        Function name is <code>name</code> and <code>func</code> is a
         pointer to the function.
         Any array of <a href="#csL_Entry"><code>csL_Entry</code></a> must end
         with a sentinel entry in which both <code>name</code> and
@@ -2711,11 +2663,7 @@
     } cs_MM;</pre>
         <p>
         These values correspond to each <a href="#Metamethods">metamethod</a>.
-        They are used for setting <em>fulluserdata</em> metamethods with
-        <a href="#cs_set_usermm"><code>cs_set_usermm</code></a>, testing
-        if object has a specific metamethod defined with 
-        <a href="#cs_hasmetamethod"><code>cs_hasmetamethod</code></a>
-        and in setting the <a href="#cs_VMT"><code>cs_VMT</code></a>.
+        They are indices into metalist</code></a>.
         Total number of metamethods is denoted by <code>CS_MM_N</code>.
         <br/><br/>
         For more information on metamethods see <a href="#2.4">&sect;2.4</a>.
@@ -3375,19 +3323,25 @@
         C&nbsp;address.
         </p>
 
-        <!-- cs_push_vmt -->
-        <hr><h3><a name="cs_push_vmt"><code>cs_push_vmt</code></a></h3>
-        <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>void cs_push_vmt (cs_State *C, cs_VMT *vmt);</pre>
+        <!-- cs_push_userdata -->
+        <hr><h3><a name="cs_push_userdata"><code>cs_push_userdata</code></a></h3>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void *cs_push_userdata (cs_State *C, size_t size, int nuv);</pre>
         <p>
-        Pushes <a href="#cs_VMT">vmt</a> onto the stack.
-        <br/>
-        This macro is defined as follows:
-        <a href="#cs_push_lightuserdata"><code>cs_push_lightuserdata</code></a>
-        and is implemented as the following macro:
-
-<pre>
-#define cs_push_vmt(C, vmt)     cs_push_lightuserdata(C, (void*)vmt)</pre>
+        This function creates and pushes on the stack a new full userdata,
+        with <code>nuv</code> associated CScript values, called
+        <code>user values</code>, plus an associated block of raw memory with
+        <code>size</code> bytes.
+        (The user values can be set and read with the functions
+        <a href="#cs_set_uservalue"><code>cs_set_uservalue</code></a> and
+        <a href="#cs_get_uservalue"><code>cs_get_uservalue</code></a>.)
+        <br/><br/>
+        The function returns the address of the block of memory.
+        CScript ensures that this address is valid as long as the corresponding
+        userdata is alive (see <a href="#2.5">&sect;2.5</a>).
+        Moreover, if the userdata is marked for finalization
+        (see <a href="#2.5.3">&sect;2.5.3</a>), its address is valid at least
+        until the call to its finalizer.
         </p>
 
         <!-- cs_push_list -->
@@ -3446,29 +3400,61 @@
         <!-- cs_push_class -->
         <hr><h3><a name="cs_push_class"><code>cs_push_class</code></a></h3>
         <span class="apii">[-nup, +1, <em>m</em>]</span>
-        <pre>void cs_push_class (cs_State *C,
-                    const cs_VMT *vmt,
-                    int abscls,
-                    int nup,
-                    const cs_Entry *list);</pre>
+        <pre>void cs_push_class (cs_State *C, int nup, const cs_Entry *l);</pre>
         <p>
         Creates a new class and pushes it on top of the stack.
-        <a href="#cs_VMT"><code>vmt</code></a> structure holds metamethod
-        entries that class should implement.
-        <code>abscls</code> is the absolute index to the <em>superclass</em>
-        the class is inheriting, if set to negative value (e.g. -1) the class
-        will not inherit and the value is ignored.
-        <code>nup</code> is the number of values on top of the stack
-        associated with the class methods in <code>list</code>.
-        <a href="#cs_Entry"><code>list</code></a> is the list of the class
-        methods; in cases where the class has a <em>superclass</em>
-        (<code>abscls</code> >= 0) and function name in the <code>list</code>
-        collides with the <em>superclass</em> method, then the
-        <em>superclass</em> method gets overwritten, meaning <code>list</code>
-        methods have priority.
+        Argument <code>l</code> is a list of name-function pairs which are
+        set as the <em>methods</em> of the class.
+        Additionally each <em>method</em> in <code>l</code> has <code>nup</code>
+        upvalues associated with it.
+        These upvalues are located on top of the stack and are popped off after
+        this function returns.
         <br/><br/>
-        Every method entry in the <code>list</code> with a non-NULL name must
-        have a C&nbsp;function associated with it.
+        Every method entry in the list <code>l</code> with a non-NULL name
+        must have a C&nbsp;function associated with it.
+        </p>
+
+        <!-- cs_push_subclass -->
+        <hr><h3><a name="cs_push_subclass"><code>cs_push_subclass</code></a></h3>
+        <span class="apii">[-nup, +1, <em>m</em>]</span>
+        <pre>void cs_push_subclass (cs_State *C,
+                       int sc,
+                       int nup,
+                       const cs_Entry *l);</pre>
+        <p>
+        Similar to <a href="#cs_push_class"><code>cs_push_class</code></a>,
+        except this creates a <em>sub</em>class of superclass at index
+        <code>sc</code>.
+        First the inheritance of superclass <code>sc</code> is done, then the
+        methods in list <code>l</code> are set.
+        </p>
+
+        <!-- cs_push_metaclass -->
+        <hr><h3><a name="cs_push_metaclass"><code>cs_push_metaclass</code></a></h3>
+        <span class="apii">[-nup, +1, <em>m</em>]</span>
+        <pre>void cs_push_metaclass (cs_State *C,
+                        int ml,
+                        int nup,
+                        const cs_Entry *l);</pre>
+        <p>
+        Similar to <a href="#cs_push_class"><code>cs_push_class</code></a>,
+        except this function accepts additional argument <code>ml</code>
+        which is the index of <em>metalist</em>
+        (see <a href="#2.4">&sect;2.4</a>).
+        </p>
+
+        <!-- cs_push_metasubclass -->
+        <hr><h3><a name="cs_push_metasubclass"><code>cs_push_metasubclass</code></a></h3>
+        <span class="apii">[-nup, +1, <em>m</em>]</span>
+        <pre>void cs_push_metasubclass (cs_State *C,
+                           int sc,
+                           int ml,
+                           int nup,
+                           const cs_Entry *l);</pre>
+        <p>
+        This function is combination of
+        <a href="#cs_push_subclass"><code>cs_push_subclass</code></a> and
+        <a href="#cs_push_metaclass"><code>cs_push_metaclass</code></a>.
         </p>
 
         <!-- cs_get_global -->
@@ -3634,6 +3620,18 @@
         <code>CS_TNONE</code>.
         </p>
 
+        <!-- cs_get_superclass -->
+        <hr><h3><a name="cs_get_superclass"><code>cs_get_superclass</code></a></h3>
+        <span class="apii">[-0, +(0|1), &ndash;]</span>
+        <pre>int cs_get_superclass (cs_State *C, int index);</pre>
+        <p>
+        Pushes the superclass of the value at the given index; the value at
+        the given index must be either a class or instance.
+        <br/>
+        Returns 1 if the value has superclass, otherwise nothing is pushed
+        and 0 is returned.
+        </p>
+
         <!-- cs_get_method -->
         <hr><h3><a name="cs_get_method"><code>cs_get_method</code></a></h3>
         <span class="apii">[-0, +1, &ndash;]</span>
@@ -3646,43 +3644,6 @@
         such can't invoke a metamethod.
         <br/><br/>
         Returns the type of the pushed value.
-        </p>
-
-        <!-- cs_get_metamethod -->
-        <hr><h3><a name="cs_get_metamethod"><code>cs_get_metamethod</code></a></h3>
-        <span class="apii">[-0, +0|1, &ndash;]</span>
-        <pre>int cs_get_metamethod (cs_State *C, int index, cs_MM mm);</pre>
-        <p>
-        Pushes onto the stack a metamethod <code>mm</code> of the value at
-        <code>index</code>. Values that can have metamethods are fulluserdata
-        and classes (and instances by proxy).
-        <br/><br/>
-        If the value has <a href="#cs_VMT"><code>virtual method table</code></a>
-        then this returns <code>CS_TFUNCTION</code> if <code>mm</code> is set;
-        else <code>CS_TNIL</code>.
-        Otherwise returns <code>CS_TNONE</code> and nothing is pushed on the
-        stack.
-        </p>
-
-        <!-- cs_push_userdata -->
-        <hr><h3><a name="cs_push_userdata"><code>cs_push_userdata</code></a></h3>
-        <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void *cs_push_userdata (cs_State *C, size_t size, int nuv);</pre>
-        <p>
-        This function creates and pushes on the stack a new full userdata,
-        with <code>nuv</code> associated CScript values, called
-        <code>user values</code>, plus an associated block of raw memory with
-        <code>size</code> bytes.
-        (The user values can be set and read with the functions
-        <a href="#cs_set_uservalue"><code>cs_set_uservalue</code></a> and
-        <a href="#cs_get_uservalue"><code>cs_get_uservalue</code></a>.)
-        <br/><br/>
-        The function returns the address of the block of memory.
-        CScript ensures that this address is valid as long as the corresponding
-        userdata is alive (see <a href="#2.5">&sect;2.5</a>).
-        Moreover, if the userdata is marked for finalization
-        (see <a href="#2.5.3">&sect;2.5.3</a>), its address is valid at least
-        until the call to its finalizer.
         </p>
 
         <!-- cs_get_uservalue -->
@@ -3698,18 +3659,16 @@
         returns <a href="CS_TNONE"><code>CS_TNONE</code></a>.
         </p>
 
-        <!-- cs_get_uservmt -->
-        <hr><h3><a name="cs_get_uservmt"><code>cs_get_uservmt</code></a></h3>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_uservmt (cs_State *C, int index, cs_VMT *pvmt);</pre>
+        <!-- cs_get_metalist -->
+        <hr><h3><a name="cs_get_metalist"><code>cs_get_metalist</code></a></h3>
+        <span class="apii">[-0, +(0|1), &ndash;]</span>
+        <pre>int cs_get_metalist (cs_State *C, int index);</pre>
         <p>
-        Gets the <a href="#cs_VMT">vmt</a> entries of the userdata at the
-        given index, and sets them into <code>pvmt</code>.
-        <br/><br/>
-        Returns the number of metamethods in the <a href="#cs_VMT">vmt</a>
-        or it returns -1 if the userdata has never been assigned
-        a <a href="#cs_VMT">vmt</a>
-        (see <a href="#cs_set_uservmt"><code>cs_set_uservmt</code></a>).
+        Pushes the metalist of value at the given index on top of the stack.
+        Only <em>fulluserdata</em>, <em>class</em> and transitively
+        <em>instance</em> values have metalist.
+        This returns 1 if the value at given index has a metalist,
+        otherwise it does not push anything on the stack and it returns 0.
         </p>
 
         <!-- cs_set_global -->
@@ -3829,19 +3788,12 @@
         This function pops the value off the stack.
         </p>
 
-        <!-- cs_set_uservmt -->
-        <hr><h3><a name="cs_set_uservmt"><code>cs_set_uservmt</code></a></h3>
+        <!-- cs_set_metalist -->
+        <hr><h3><a name="cs_set_metalist"><code>cs_set_metalist</code></a></h3>
         <span class="apii">[-0, +0, <em>m</em>]</span>
-        <pre>void cs_set_uservmt (cs_State *C, int index, const cs_VMT *pvmt);</pre>
+        <pre>void cs_set_metalist (cs_State *C, int index);</pre>
         <p>
-        Sets the <a href="#cs_VMT">virtual method table</a> of the full
-        userdata at the given index.
-        <br/>
-        If <code>pvmt</code> is NULL then the full userdata
-        <a href="#cs_VMT">virtual method table</a>
-        entries will be all set to <b>nil</b>, otherwise <code>pvmt</code> will
-        now be the <a href="#cs_VMT">virtual method table</a> of the full
-        userdata at the given index.
+
         </p>
 
         <!-- cs_set_uservalue -->
@@ -3852,16 +3804,6 @@
         Pops a value from the stack and sets it as the new <code>n</code>-th
         user value associated to the full userdata at the given index.
         Returns 0 if the userdata does not have that value.
-        </p>
-
-        <!-- cs_set_usermm -->
-        <hr><h3><a name="cs_set_usermm"><code>cs_set_usermm</code></a></h3>
-        <span class="apii">[-1, +0, <em>m</em>]</span>
-        <pre>void cs_set_usermm (cs_State *C, int index, cs_MM mm);</pre>
-        <p>
-        Pops a value from the stack and sets it as the <code>mm</code> entry
-        in the <a href="#cs_VMT">virtual method table</a> of the full userdata
-        at the given index.
         </p>
 
         <!-- cs_status -->
@@ -4097,34 +4039,6 @@
         in another call to this function.
         <br/><br/>
         See <a href="#warn"><code>warn</code></a> for more details about warnings.
-        </p>
-
-        <!-- cs_hasvmt -->
-        <hr><h3><a name="cs_hasvmt"><code>cs_hasvmt</code></a></h3>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_hasvmt (cs_State *C, int index);</pre>
-        <p>
-        Returns 1 if the value at the given index has a
-        <a href="#cs_VMT">virtual method table</a>, otherwise it returns 0.
-        <br/>
-        Note that this function would return 0 even for the types at the
-        given index that usually have a
-        <a href="#cs_VMT">virtual method table</a>;
-        this is because the value might never have been assigned one.
-        This function is useful as a quick test to see if the
-        <a href="#cs_VMT">virtual method table</a> is present, otherwise use
-        <a href="#cs_hasmetamethod"><code>cs_hasmetamethod</code></a> to check
-        for presence of specific metamethod.
-        </p>
-
-        <!-- cs_hasmetamethod -->
-        <hr><h3><a name="cs_hasmetamethod"><code>cs_hasmetamethod</code></a></h3>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_hasmetamethod (cs_State *C, int index, cs_MM mm);</pre>
-        <p>
-        Returns 1 if value at the given index has a <code>mm</code> metamethod.
-        Otherwise this returns 0 if the <code>mm</code> entry is <b>nil</b> or
-        the value does not have a <a href="cs_VMT">virtual method table</a>.
         </p>
 
         <!-- cs_len -->
@@ -4816,6 +4730,7 @@
         (or <code>NULL</code> for no additional text).
         </p>
 
+        <!-- TODO -->
         <hr><h3><a name="csL_check_userdata"><code>csL_check_userdata</code></a></h3><p>
         <span class="apii">[-0, +0, <em>v</em>]</span>
         <pre>void *csL_check_userdata (cs_State *C, int arg, const char *vmtname);</pre>
@@ -5061,6 +4976,7 @@
         Leaves a copy of the module on the stack.
         </p>
 
+        <!-- TODO -->
         <hr><h3><a name="csL_test_userdata"><code>csL_test_userdata</code></a></h3><p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>void *csL_test_userdata (cs_State *C, int index, const char *vmtname);</pre>
@@ -5111,21 +5027,6 @@
         Pushes the resulting string on the stack and returns it.
         Think of it as string substitution <code>s/{p}/{r}/g</code>, the input
         being the function argument <code>s</code>.
-        </p>
-
-        <hr><h3><a name="csL_vmt_isequal"><code>csL_vmt_isequal</code></a></h3><p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void csL_vmt_isequal (cs_State *C, int index, const cs_VMT *vmt);</pre>
-        <p>
-        Checks whether the value at index is light userdata and compares the
-        <code>vmt</code> with the light userdata vmt.
-        If <code>index</code> is a light userdata then this function assumes
-        the data it points to is a valid
-        <a href="#cs_VMT"><code>cs_VMT</code></a> structure.
-        <br/>
-        This returns 1 if vmt's are equal
-        (contain pointers to same <a href="#cs_CFunction">functions</a>),
-        otherwise 0.
         </p>
 
         <hr><h3><a name="csL_ref"><code>csL_ref</code></a></h3><p>

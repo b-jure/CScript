@@ -312,17 +312,25 @@ void csH_newkey(cs_State *C, Table *ht, const TValue *key,
 }
 
 
-/* 
-** Raw equality without calling vmt methods.
-** 'deadok' means that 'dead' keys  are allowed to be compared with the
-** key 'k', meaning even if 'k' and node 'n' key have different variant types they still can be equal
-** if node key is dead key (collectable object marked as dead) and key 'k'
-** is also a collectable object. In that case they would get compared by
-** pointer identity. 'csH_next' function calls this with 'deadok' set in
-** order  to traverse the table and find all the valid values inside the
-** table, because dead key nodes still have valid 'next' field.
-** Note: as of current version CScript does not expose or implement
-** weak tables in its API.
+/*
+** Check whether key 'k' is equal to the key in node 'n'. This
+** equality is raw, so there are no metamethods. Floats with integer
+** values have been normalized, so integers cannot be equal to
+** floats. It is assumed that 'eqshrstr' is simply pointer equality, so
+** that short strings are handled in the default case.
+** A true 'deadok' means to accept dead keys as equal to their original
+** values. All dead keys are compared in the default case, by pointer
+** identity. (Only collectable objects can produce dead keys.) Note that
+** dead long strings are also compared by identity.
+** Once a key is dead, its corresponding value may be collected, and
+** then another value can be created with the same address. If this
+** other value is given to 'next', 'eqkey' will signal a false
+** positive. In a regular traversal, this situation should never happen,
+** as all keys given to 'next' came from the table itself, and therefore
+** could not have been collected. Outside a regular traversal, we
+** have garbage in, garbage out. What is relevant is that this false
+** positive does not break anything. (In particular, 'next' will return
+** some other valid item on the table or nil.)
 */
 static int eqkey(const TValue *k, const Node *n, int deadok) {
     if ((rawtt(k) != keytt(n)) && /* not the same variant? */
@@ -366,23 +374,21 @@ static const TValue *getgeneric(Table *ht, const TValue *key, int deadok) {
 }
 
 
-/* auxliary function to 'csH_next' */
+/*
+** Returns the index of a 'key' for table traversals.
+** The beginning of a traversal is signaled by 0.
+*/
 static uint getindex(cs_State *C, Table *ht, const TValue *k) {
     const TValue *slot;
     if (ttisnil(k)) return 0; /* first iteration */
     slot = getgeneric(ht, k, 1);
     if (c_unlikely(isabstkey(slot)))
-        csD_runerror(C, "invalid key passed to 'next'");
+        csD_runerror(C, "invalid key passed to 'next'"); /* key not found */
     uint i = cast(Node *, slot) - htnode(ht, 0); /* key index in hash table */
     return i + 1; /* return next slot index */
 }
 
 
-/*
-** Find next table entry after 'key' entry.
-** If table had next entry then top of the stack will contain
-** key of that entry and its value (in that order).
-*/
 int csH_next(cs_State *C, Table *ht, SPtr key) {
     uint i = getindex(C, ht, s2v(key));
     for (; cast_int(i) < htsize(ht); i++) {
@@ -397,7 +403,7 @@ int csH_next(cs_State *C, Table *ht, SPtr key) {
 }
 
 
-/* insert all the 'keys' from src to dest */
+/* insert all the keys-value pairs from src into dest */
 void csH_copykeys(cs_State *C, Table *dest, Table *src) {
     TValue k;
     for (int i = 0; i < htsize(src); i++) {

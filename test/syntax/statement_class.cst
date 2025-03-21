@@ -13,6 +13,7 @@ class table.line {
 assert(typeof(table.line) == "class");
 table.myline = table.line(15, 12);
 assert(typeof(table.myline) == "instance");
+print(table.myline.x);
 assert(table.myline.x == 15);
 assert(table.myline.y == 12);
 local x, y = table.myline.cords();

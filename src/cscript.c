@@ -12,6 +12,7 @@
 
 #include "cauxlib.h"
 #include "cslib.h"
+#include "climits.h"
 
 
 #define CS_PROGNAME     "cscript"
