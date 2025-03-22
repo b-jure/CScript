@@ -586,7 +586,7 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
     while (pc < &p->code[p->sizecode]) {
         printf("    ");
         switch (*pc) {
-            case OP_TRUE: case OP_FALSE: case OP_NIL:
+            case OP_TRUE: case OP_FALSE: case OP_NIL: case OP_SUPER:
             case OP_NOT: case OP_UNM: case OP_BNOT:
             case OP_EQPRESERVE: case OP_GETINDEX:
             case OP_GETSUPIDX: case OP_INHERIT: {

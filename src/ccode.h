@@ -141,6 +141,7 @@ typedef enum { /* ORDER OP */
 OP_TRUE = 0,/*                'load true constant'                          */
 OP_FALSE,/*                   'load false constant'                         */
 OP_NIL,/*                     'load nil constant'                           */
+OP_SUPER,/*        V          'load V.class.superclass'                     */
 OP_NILN,/*         L          'load L nils'                                 */
 OP_LOAD,/*         L          'load V{L}'                                   */
 OP_CONST,/*        S          'load K{S}'                                   */

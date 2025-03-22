@@ -81,6 +81,7 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatI), /* OP_TRUE */
     opProp(0, FormatI), /* OP_FALSE */
     opProp(0, FormatI), /* OP_NIL */
+    opProp(0, FormatI), /* OP_SUPER */
     opProp(0, FormatIL), /* OP_NILN */
     opProp(0, FormatIL), /* OP_LOAD */
     opProp(0, FormatIS), /* OP_CONST */
@@ -221,7 +222,7 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
-"TRUE", "FALSE", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
+"TRUE", "FALSE", "NIL", "SUPER", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
 "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG", "CLOSURE", "NEWLIST",
 "NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK",
 "SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK",

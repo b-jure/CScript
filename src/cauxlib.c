@@ -94,8 +94,8 @@ CSLIB_API int csL_error_arg(cs_State *C, int arg, const char *extra) {
         return csL_error(C, "bad argument #%d (%s)", arg, extra);
     cs_getinfo(C, "n", &ar);
     if (strcmp(ar.namewhat, "method") == 0) {
-        arg--; /* ignore `self` */
-        if (arg == 0) /* self is the invalid argument? */
+        arg--; /* ignore 'self' */
+        if (arg == -1) /* 'self' is the invalid argument? */
             csL_error(C, "calling '%s' on a bad 'self' (%s)", ar.name, extra);
     }
     if (ar.name == NULL)

@@ -850,8 +850,8 @@ static void superkw(Lexer *lx, ExpInfo *e) {
             indexed(lx, e, 1);
         else if (check(lx, '.')) /* field access? */
             getfield(lx, e, 1);
-        else
-            csY_syntaxerror(lx, "'.' or '[' expected");
+        else /* get superclass */
+            csC_emitI(lx->fs, OP_SUPER);
     }
 }
 

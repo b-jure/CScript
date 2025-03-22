@@ -1110,21 +1110,24 @@ returning:
     for (;;) {
         vm_dispatch(fetch()) {
             vm_case(OP_TRUE) {
-                /* no args */
                 setbtval(s2v(C->sp.p));
                 SP(1);
                 vm_break;
             }
             vm_case(OP_FALSE) {
-                /* no args */
                 setbfval(s2v(C->sp.p));
                 SP(1);
                 vm_break;
             }
             vm_case(OP_NIL) {
-                /* no args */
                 setnilval(s2v(C->sp.p));
                 SP(1);
+                vm_break;
+            }
+            vm_case(OP_SUPER) {
+                OClass *scl = insval(peek(0))->oclass->sclass;
+                cs_assert(scl != NULL);
+                setclsval2s(C, C->sp.p - 1, scl);
                 vm_break;
             }
             vm_case(OP_NILN) {

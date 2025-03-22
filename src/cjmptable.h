@@ -22,6 +22,7 @@ static const void *const jmptable[NUM_OPCODES] = { /* ORDER OP */
     &&L_OP_TRUE,
     &&L_OP_FALSE,
     &&L_OP_NIL,
+    &&L_OP_SUPER,
     &&L_OP_NILN,
     &&L_OP_LOAD,
     &&L_OP_CONST,

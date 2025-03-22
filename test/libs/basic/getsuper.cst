@@ -10,7 +10,9 @@ assert(x.name() == "X");
 class Y inherits X {
     fn name() {
         assert(super.name() == "X");
-        assert(getsuper(self, "name")() == "X");
+        assert(getsuper(super) == nil);
+        assert(super == X);
+        assert(super.name == getsuper(self, "name"));
         return "Y" .. super.name();
     }
 }
