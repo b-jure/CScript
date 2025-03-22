@@ -149,11 +149,11 @@ typedef struct CallFrame {
 ** Table for interned strings.
 ** Collision resolution is resolved by chain.
 */
-typedef struct StringTable {
+typedef struct stringtable {
     OString **hash;
     int nuse;
     int size;
-} StringTable;
+} stringtable;
 
 
 typedef struct GState {
@@ -162,8 +162,8 @@ typedef struct GState {
     c_smem totalbytes; /* number of bytes allocated - gcgcdebt */
     c_smem gcdebt; /* number of bbytes not yet compensated by collector */
     c_mem gcestimate; /* gcestimate of non-garbage memory in use */
-    StringTable strtab; /* interned strings (weak refs) */
-    TValue c_registry; /* global registry (list) */
+    stringtable strtab; /* interned strings (weak refs) */
+    TValue c_registry; /* global registry */
     TValue nil; /* nil value (init flag) */
     uint seed; /* initial seed for hashing */
     c_byte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */

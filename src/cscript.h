@@ -264,6 +264,7 @@ CS_API int cs_get_fieldflt(cs_State *C, int index, cs_Number field);
 CS_API int cs_get_class(cs_State *C, int index); 
 CS_API int cs_get_superclass(cs_State *C, int index); 
 CS_API int cs_get_method(cs_State *C, int index); 
+CS_API int cs_get_supermethod(cs_State *C, int index);
 CS_API int cs_get_metalist(cs_State *C, int index);
 CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n); 
 

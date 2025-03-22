@@ -403,14 +403,16 @@ int csH_next(cs_State *C, Table *ht, SPtr key) {
 }
 
 
-/* insert all the keys-value pairs from src into dest */
+/* insert all the key-value pairs from src into dest */
 void csH_copykeys(cs_State *C, Table *dest, Table *src) {
     TValue k;
-    for (int i = 0; i < htsize(src); i++) {
+    int sz = htsize(src);
+    for (int i = 0; i < sz; i++) {
         Node *n = htnode(src, i);
         if (!isempty(nodeval(n))) {
             getnodekey(C, &k, n);
             csH_set(C, dest, &k, nodeval(n));
+            csG_barrierback(C, obj2gco(dest), nodeval(n));
         }
     }
 }

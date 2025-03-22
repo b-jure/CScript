@@ -643,7 +643,7 @@ typedef struct IMethod {
 typedef struct UpVal {
     ObjectHeader;
     union {
-        TValue *p; /* on stack or 'u.value' */
+        TValue *p; /* on stack or in 'u.value' */
         ptrdiff_t offset; /* when reallocating stack */
     } v;
     union {

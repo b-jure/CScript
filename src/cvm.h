@@ -21,10 +21,10 @@
 
 #define csV_raweq(v1_,v2_)    csV_ordereq(NULL, v1_, v2_)
 
-#define csV_finishrawset(C,o,v)     csG_barrierback(C, obj2gco(o), v)
+#define csV_finishrawset(C,o,val)     csG_barrierback(C, obj2gco(o), val)
 
-#define csV_settable(C,t,k,v) \
-    { csH_set(C, t, k, v); csV_finishrawset(C, obj2gco(t), v); }
+#define csV_settable(C,t,key,val) \
+    { csH_set(C, t, key, val); csV_finishrawset(C, obj2gco(t), val); }
 
 
 CSI_FUNC void csV_inherit(cs_State *C, OClass *cls, OClass *scl);

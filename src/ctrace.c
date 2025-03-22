@@ -20,15 +20,25 @@
 #include "cstring.h"
 
 
-#define TABSZ   3
-#define postab(e) \
-    { e; for(int i_ = 0; i_ < TABSZ; i_++) putchar(' '); }
+/* number of spaces for 'posfix_spaces' (used when unassembling chunks) */
+#define ARGSPACES       3
+
+
+/* prints ARGSPACES spaces after 'e' */
+#define posfix_spaces(e)        (e, printf("%*s", ARGSPACES, ""))
+
+
+/* maximum size of value names when tracing execution */
+#define MAXTXT      25
+
+/* string size being displayed when tracing execution */
+#define MAXSTR      (MAXTXT - 2)
 
 
 
 static void startline(const Proto *p, const Instruction *pc) {
     int relpc = pc - p->code;
-    postab(printf("[LINE %4d][PC %4d]", csD_getfuncline(p, relpc), relpc));
+    posfix_spaces(printf("[LINE %4d][PC %4d]", csD_getfuncline(p, relpc), relpc));
 }
 
 
@@ -38,19 +48,19 @@ static void endline(void) {
 
 
 static int traceOp(OpCode op) {
-    postab(printf("%-12s", getOpName(op)));
+    posfix_spaces(printf("%-12s", getOpName(op)));
     return SIZE_INSTR;
 }
 
 
 static int traceS(int s) {
-    postab(printf("ArgS=%-8d", s));
+    posfix_spaces(printf("ArgS=%-8d", s));
     return SIZE_ARG_S;
 }
 
 
 static int traceL(const Instruction *pc) {
-    postab(printf("ArgL=%-8d", get3bytes(pc)));
+    posfix_spaces(printf("ArgL=%-8d", get3bytes(pc)));
     return SIZE_ARG_L;
 }
 
@@ -198,7 +208,7 @@ static void traceValue(const TValue *o) {
 
 
 static void traceK(const Proto *p, int index) {
-    postab((printf("K@%d=", index), traceValue(&p->k[index])));
+    posfix_spaces((printf("K@%d=", index), traceValue(&p->k[index])));
 }
 
 
@@ -268,7 +278,7 @@ static int getimm(Instruction *pc, int off, int l) {
 
 
 static void traceImmediateInt(Instruction *pc, int off, int l) {
-    postab(printf("IMM%s=%d", (l) ? "L" : "", getimm(pc, off, l)));
+    posfix_spaces(printf("IMM%s=%d", (l) ? "L" : "", getimm(pc, off, l)));
 }
 
 
@@ -290,7 +300,7 @@ static void unasmIMMflt(const Proto *p, Instruction *pc, int l) {
 
 static void traceSize(int size) {
     if (size > 0) size = 1 << (size - 1);
-    postab(printf("size=%d", size));
+    posfix_spaces(printf("size=%d", size));
 }
 
 
@@ -308,13 +318,13 @@ static void unasmEQK(const Proto *p, Instruction *pc) {
     traceOp(*pc);
     traceK(p, GETARG_L(pc, 0));
     setival(&aux, GETARG_S(pc, SIZE_ARG_L));
-    postab(traceNumber(&aux));
+    posfix_spaces(traceNumber(&aux));
     endline();
 }
 
 
 static void traceCond(int cond) {
-    postab(printf("%s", (cond ? "equal" : "not equal")));
+    posfix_spaces(printf("%s", (cond ? "equal" : "not equal")));
 }
 
 
@@ -336,7 +346,7 @@ static void unasmIMMord(const Proto *p, Instruction *pc) {
 
 
 static void traceNparams(int nparams) {
-    postab(printf("nparams=%d", nparams));
+    posfix_spaces(printf("nparams=%d", nparams));
 }
 
 
@@ -357,7 +367,7 @@ static void unasmS(const Proto *p, Instruction *pc) {
 
 
 static void traceStackSlot(int index) {
-    postab(printf("S@%d", index));
+    posfix_spaces(printf("S@%d", index));
 }
 
 
@@ -368,9 +378,9 @@ static void traceNres(int nres) {
     else if (nres == 0)
         res = "none";
     if (res) {
-        postab(printf("nres=%s", res));
+        posfix_spaces(printf("nres=%s", res));
     } else
-        postab(printf("nres=%d", nres));
+        posfix_spaces(printf("nres=%d", nres));
 }
 
 
@@ -384,12 +394,12 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 
 
 static void traceMetaName(cs_State *C, cs_MM mm) {
-    postab(printf("%s", getstr(G(C)->mmnames[mm])));
+    posfix_spaces(printf("%s", getstr(G(C)->mmnames[mm])));
 }
 
 
 static void traceSwap(int swap) {
-    postab(printf("swap=%s", (swap) ? "yes" : "no"));
+    posfix_spaces(printf("swap=%s", (swap) ? "yes" : "no"));
 }
 
 
@@ -438,15 +448,15 @@ static void unasmSetArray(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
     traceStackSlot(GETARG_L(pc, 0));
-    postab(printf("lastindex=%d", GETARG_L(pc, 1)));
-    postab(printf("tostore=%d", GETARG_S(pc, SIZE_ARG_L*2)));
+    posfix_spaces(printf("lastindex=%d", GETARG_L(pc, 1)));
+    posfix_spaces(printf("tostore=%d", GETARG_S(pc, SIZE_ARG_L*2)));
     endline();
 }
 
 
 static void traceGlobal(TValue *k, int index) {
     const char *str = getstr(strval(&k[index]));
-    postab(printf("G@%s", str));
+    posfix_spaces(printf("G@%s", str));
 }
 
 
@@ -459,7 +469,7 @@ static void unasmGlobal(const Proto *p, Instruction *pc) {
 
 
 static void traceLocal(int index) {
-    postab(printf("L@%d", index));
+    posfix_spaces(printf("L@%d", index));
 }
 
 
@@ -473,7 +483,7 @@ static void unasmLocal(const Proto *p, Instruction *pc) {
 
 static void traceUpVal(UpValInfo *uv, int index) {
     const char *str = getstr(uv[index].name);
-    postab(printf("U@%d=%s", index, str));
+    posfix_spaces(printf("U@%d=%s", index, str));
 }
 
 
@@ -486,17 +496,17 @@ static void unasmUpvalue(const Proto *p, Instruction *pc) {
 
 
 static void traceOffset(int off) {
-    postab(printf("offset=%d", off));
+    posfix_spaces(printf("offset=%d", off));
 }
 
 
 static void traceClose(int close) {
-    postab(printf("close=%s", close ? "true" : "false"));
+    posfix_spaces(printf("close=%s", close ? "true" : "false"));
 }
 
 
 static void traceNpop(int npop) {
-    postab(printf("npop=%d", npop));
+    posfix_spaces(printf("npop=%d", npop));
 }
 
 
@@ -577,8 +587,8 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
         printf("    ");
         switch (*pc) {
             case OP_TRUE: case OP_FALSE: case OP_NIL:
-            case OP_NOT: case OP_UNM:
-            case OP_BNOT: case OP_EQPRESERVE: case OP_GETINDEX:
+            case OP_NOT: case OP_UNM: case OP_BNOT:
+            case OP_EQPRESERVE: case OP_GETINDEX:
             case OP_GETSUPIDX: case OP_INHERIT: {
                 unasm(p, pc);
                 break;
@@ -708,6 +718,67 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
 }
 
 
+static void *getptr(const TValue *obj) {
+    switch (ttypetag(obj)) {
+        case CS_VLCF: return cast(void *, cast_sizet(lcfval(obj)));
+        case CS_VUSERDATA: return pval(obj);
+        case CS_VLIGHTUSERDATA: return getuserdatamem(uval(obj));
+        default: return gcoval(obj);
+    }
+}
+
+
+
+static const char *trimstr(OString *s) {
+    static char temp[MAXSTR];
+    size_t l = getstrlen(s);
+    const char *str = getstr(s);
+    if (l > MAXSTR) { /* trim? */
+        c_snprintf(temp, sizeof(temp), "%.*s...", (int)sizeof(temp)-4, str);
+        return temp;
+    } else
+        return str;
+}
+
+
+static const char *objtxt(const TValue *obj) {
+    static char buff[MAXTXT];
+    int tt = ttypetag(obj);
+    switch (tt) {
+        case CS_VNUMFLT: {
+            c_snprintf(buff, sizeof(buff), CS_NUMBER_FMT, fval(obj));
+            break;
+        }
+        case CS_VNUMINT: {
+            c_snprintf(buff, sizeof(buff), CS_INTEGER_FMT, ival(obj));
+            break;
+        }
+        case CS_VSHRSTR: case CS_VLNGSTR: {
+            const char *s = trimstr(strval(obj));
+            c_snprintf(buff, sizeof(buff), "\"%s\"", s);
+            break;
+        }
+        case CS_VTRUE: case CS_VFALSE: {
+            const char *s = (tt == CS_VTRUE) ? "true" : "false";
+            c_snprintf(buff, sizeof(buff), "%s", s);
+            break;
+        }
+        case CS_VNIL: {
+            c_snprintf(buff, sizeof(buff), "%s", "nil");
+            break;
+        }
+        default: {
+            const void *p = getptr(obj);
+            const char *s = typename(ttype(obj));
+            int l = c_snprintf(buff, sizeof(buff), "%s: ", s);
+            c_snprintf(buff + l, sizeof(buff) - l, "%p", p);
+            break;
+        }
+    }
+    return buff;
+}
+
+
 void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...) {
     CallFrame *cf = C->cf;
     SPtr prevtop = C->sp.p;
@@ -721,13 +792,13 @@ void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...) {
     for (int i = 0; cf != NULL && level != 0; i++) {
         SPtr base = cf->func.p;
         level--;
-        printf("[LEVEL %3d] %-10s %s ", i, typename(ttype(s2v(cf->func.p))),
-                                        cf != C->cf ? "--" : ">>");
+        printf("[LEVEL %3d] %-10s %s ",
+                i, objtxt(s2v(cf->func.p)), (cf != C->cf) ? "--" : ">>");
         if (base + 1 >= prevtop)
             printf("empty");
         else {
             for (SPtr sp = base + 1; sp < prevtop; sp++)
-                printf("[%s]", typename(ttype(s2v(sp))));
+                printf("[%s]", objtxt(s2v(sp)));
         }
         printf("\n");
         prevtop = cf->func.p;

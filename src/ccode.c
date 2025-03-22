@@ -872,12 +872,12 @@ static int dischargevars(FunctionState *fs, ExpInfo *v) {
             break;
         }
         case EXP_INDEXSUPER: {
-            freeslots(fs, 3); /* 'self', 'super', key */
+            freeslots(fs, 2); /* 'self' (instance), key */
             v->u.info = csC_emitI(fs, OP_GETSUPIDX);
             break;
         }
         case EXP_INDEXSUPERSTR: {
-            freeslots(fs, 2); /* 'self', 'super' */
+            freeslots(fs, 1); /* 'self' (instance) */
             v->u.info = csC_emitIL(fs, OP_GETSUPIDXSTR, v->u.info);
             break;
         }
@@ -887,7 +887,7 @@ static int dischargevars(FunctionState *fs, ExpInfo *v) {
             break;
         }
         case EXP_DOTSUPER: {
-            freeslots(fs, 2); /* 'self', 'super' */
+            freeslots(fs, 1); /* 'self' (instance) */
             v->u.info = csC_emitIL(fs, OP_GETSUP, v->u.info);
             break;
         }

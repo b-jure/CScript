@@ -260,16 +260,16 @@ OP_GETINDEXINTL,/* V L         'V[I(L):integer]'                            */
 OP_SETINDEXINT,/*  V L S       'V{-L}[I(S):integer] = V'                    */
 OP_SETINDEXINTL,/* V L1 L2     'V{-L1}[I(L2):integer] = V'                  */
 
-OP_GETSUP,/*       V1 V2 L     'V2:super.K{L}:string' (V1 is instance)      */
-OP_GETSUPIDX,/*    V1 V2 V3    'V2:super[V3]' (V1 is instance)              */
-OP_GETSUPIDXSTR,/* V1 V2 L     'V2:super[K{L}:string]' (V1 is instance)     */
+OP_GETSUP,/*       V L         'V.oclass.sclass.methods.K{L}:string'        */
+OP_GETSUPIDX,/*    V1 V2       'V1.class.superclass.methods[V2]'            */
+OP_GETSUPIDXSTR,/* V L         'V.class.superclass.methods[K{L}:string]'    */
 
-OP_INHERIT,/*     V1 V2  'V2:class inherit V1                               */
-OP_FORPREP,/*     L1 L2  'create upvalue V{L1+3}; pc += L2'                 */
+OP_INHERIT,/*     V1 V2        'V2 inherits V1'                             */
+OP_FORPREP,/*     L1 L2        'create upvalue V{L1+3}; pc += L2'           */
 OP_FORCALL,/*     L1 L2  'V{L1+4},...,V{L1+3+L2} = V{L1}(V{L1+1}, V{L1+2});'*/
 OP_FORLOOP,/*L1 L2 L3 'if V{L1+4}!=nil {V{L1}=V{L1+2}; pc-=L2} else pop(L3)'*/
 
-OP_RET,/*         L1 L2 S  'return V{L1}, ... ,V{L1+L2-2}' (check notes)    */
+OP_RET,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notes)*/
 } OpCode;
 
 

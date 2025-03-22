@@ -265,7 +265,7 @@ typedef c_byte Instruction;
 
 
 /* string literal length */
-#define SLL(sl) (sizeof(sl) - 1)
+#define SLL(sl)     (sizeof(sl) - 1)
 
 
 

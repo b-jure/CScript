@@ -123,7 +123,7 @@
 
 
 /* 'csG_condGC' but without 'pre' and 'pos' */
-#define csG_checkGC(C)         csG_condGC(C,(void)0,(void)0)
+#define csG_checkGC(C)          csG_condGC(C,(void)0,(void)0)
 
 
 /* get total bytes allocated (by accounting for 'gcdebt') */

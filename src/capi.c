@@ -1054,12 +1054,11 @@ CS_API int cs_get_superclass(cs_State *C, int index) {
         scl = insval(o)->oclass->sclass;
     else if (ttisclass(o))
         scl = classval(o)->sclass;
-    else
-        res = 0;
     if (scl) {
         setclsval2s(C, C->sp.p, scl);
         api_inctop(C);
-    }
+    } else
+        res = 0;
     cs_unlock(C);
     return res;
 }
@@ -1072,23 +1071,41 @@ c_sinline Instance *getinstance(cs_State *C, int index) {
 }
 
 
+static int auxgetmethod(cs_State *C, Instance *ins, Table *t) {
+    const TValue *slot = csH_get(t, s2v(C->sp.p - 1));
+    if (t) {
+        if (!isempty(slot)) { /* found? */
+            IMethod *im = csMM_newinsmethod(C, ins, slot);
+            setimval2s(C, C->sp.p - 1, im);
+            csG_checkGC(C);
+            goto unlock;
+        }
+    }
+    setnilval(s2v(C->sp.p - 1));
+unlock:
+    cs_unlock(C);
+    return ttype(s2v(C->sp.p - 1));
+}
+
+
 CS_API int cs_get_method(cs_State *C, int index) {
     Instance *ins;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
     ins = getinstance(C, index);
-    if (ins->oclass->methods) { /* have methods ? */
-        const TValue *slot = csH_get(ins->oclass->methods, s2v(C->sp.p - 1));
-        if (!isempty(slot)) { /* found? */
-            IMethod *im = csMM_newinsmethod(C, ins, slot);
-            setimval2s(C, C->sp.p - 1, im);
-            goto unlock; /* done */
-        } /* else fallthrough */
-    } /* else fall through */
-    setnilval(s2v(C->sp.p - 1));
-unlock:
-    cs_unlock(C);
-    return ttype(s2v(C->sp.p - 1));
+    return auxgetmethod(C, ins, ins->oclass->methods);
+}
+
+
+CS_API int cs_get_supermethod(cs_State *C, int index) {
+    Instance *ins;
+    Table *t = NULL;
+    cs_lock(C);
+    api_checknelems(C, 1); /* key */
+    ins = getinstance(C, index);
+    if (ins->oclass->sclass) /* have superclass? */
+        t = ins->oclass->sclass->methods;
+    return auxgetmethod(C, ins, t);
 }
 
 
@@ -1412,7 +1429,6 @@ CS_API int cs_load(cs_State *C, cs_Reader reader, void *userdata,
 }
 
 
-// TODO: Fix inifnite loop when 'gc("collect")' is called!
 CS_API int cs_gc(cs_State *C, int option, ...) {
     va_list ap;
     int res = 0;

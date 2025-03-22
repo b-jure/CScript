@@ -357,9 +357,8 @@
 
 /*
 ** @c_sprintf - is equivalent to 'snprintf'.
-** All uses in CScript have only one format item.
 */
-#define c_snprintf(s,sz,fmt,i)      snprintf(s,sz,fmt,i)
+#define c_snprintf(s,sz,fmt,...)        snprintf(s, sz, fmt, __VA_ARGS__)
 
 
 /* 

@@ -68,15 +68,6 @@ Instance *csMM_newinstance(cs_State *C, OClass *cls) {
 }
 
 
-IMethod *csMM_newinsmethod(cs_State *C, Instance *ins, const TValue *method) {
-    GCObject *o = csG_new(C, sizeof(IMethod), CS_VIMETHOD);
-    IMethod *im = gco2im(o);
-    im->ins = ins;
-    setobj(C, &im->method, method);
-    return im;
-}
-
-
 UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv) {
     GCObject *o;
     UserData *ud;
@@ -90,6 +81,22 @@ UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv) {
     for (int i = 0; i < nuv; i++)
         setnilval(&ud->uv[i].val);
     return ud;
+}
+
+
+IMethod *csMM_newinsmethod(cs_State *C, Instance *ins, const TValue *method) {
+    GCObject *o = csG_new(C, sizeof(IMethod), CS_VIMETHOD);
+    IMethod *im = gco2im(o);
+    im->ins = ins;
+    setobj(C, &im->method, method);
+    return im;
+}
+
+
+int csMM_eqimethod(const IMethod *v1, const IMethod *v2) {
+    return (v1 == v2) || /* same instance... */
+        (v1->ins == v2->ins && /* ...or equal instances */
+         csV_raweq(&v1->method, &v2->method)); /* ...and equal methods */
 }
 
 

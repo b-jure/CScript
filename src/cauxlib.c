@@ -310,10 +310,10 @@ CSLIB_API int csL_loadstring(cs_State *C, const char *s) {
 
 
 CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
-    int tt;
+    int t;
     index = cs_absindex(C, index);
-    tt = cs_type(C, index);
-    switch (tt) {
+    t = cs_type(C, index);
+    switch (t) {
         case CS_TNIL: {
             cs_push_literal(C, "nil");
             break;
@@ -334,7 +334,7 @@ CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
             break;
         }
         default: {
-            const char *kind = cs_typename(C, tt);
+            const char *kind = cs_typename(C, t);
             cs_push_fstring(C, "%s: %p", kind, cs_to_pointer(C, index));
             break;
         }

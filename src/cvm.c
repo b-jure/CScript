@@ -321,6 +321,7 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
         case CS_VLIGHTUSERDATA: return pval(v1) == pval(v2);
         case CS_VSHRSTR: return eqshrstr(strval(v1), strval(v2));
         case CS_VLNGSTR: return csS_eqlngstr(strval(v1), strval(v2));
+        case CS_VIMETHOD: return csMM_eqimethod(imval(v1), imval(v2));
         case CS_VUSERDATA: {
             if  (C == NULL || (ttisnil(fmm = csMM_get(C, v1, CS_MM_EQ)) &&
                     (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MM_EQ))))
@@ -413,8 +414,8 @@ static void listgetindex(cs_State *C, List *l, const TValue *index, SPtr res) {
 
 
 /* bind method to instance and set it at 'res' */
-#define bindmethod(C,ins,fn,res) \
-        setimval2s(C, res, csMM_newinsmethod(C, ins, fn))
+#define bindmethod(C,in,fn,res) \
+        setimval2s(C, res, csMM_newinsmethod(C, in, fn))
 
 
 void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
@@ -432,14 +433,14 @@ void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
             break;
         }
         case CS_VINSTANCE: {
-            Instance *ins = insval(obj);
-            const TValue *slot = csH_get(ins->fields, key);
-            if (isempty(slot) && ins->oclass->methods) {
+            Instance *in = insval(obj);
+            const TValue *slot = csH_get(in->fields, key);
+            if (isempty(slot) && in->oclass->methods) {
                 /* try methods table */
-                slot = csH_get(ins->oclass->methods, key);
+                slot = csH_get(in->oclass->methods, key);
                 if (!isempty(slot)) { /* have method? */
                     setobj2s(C, res, slot);
-                    bindmethod(C, ins, slot, res);
+                    bindmethod(C, in, slot, res);
                     break; /* done */
                 } /* else fall through */
                 setnilval(s2v(res));
@@ -478,15 +479,11 @@ void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 }
 
 
-#define checkmethods(cls,res) \
-        (!(cls)->methods ? (setnilval(s2v(res)), 0) : 1)
-
-
-#define getsuper(C,ins,cls,k,res,fget) \
-    { if ((cls)->methods) { \
-        const TValue *f = fget((cls)->methods, k); \
-        if (!isempty(f)) { bindmethod(C, ins, f, res); }} \
-        else setnilval(s2v(res)); }
+#define getsuper(C,in,scl,k,res,fget) { \
+    if (c_likely((scl)->methods)) { \
+        const TValue *f = fget((scl)->methods, k); \
+        if (!isempty(f)) { bindmethod(C, in, f, res); } \
+      } else setnilval(s2v(res)); }
 
 
 /*
@@ -647,9 +644,9 @@ retry:
         }
         case CS_VCLASS: { /* Class object */
             const TValue *fmm;
-            Instance *ins = csMM_newinstance(C, classval(s2v(func)));
-            csG_checkfin(C, obj2gco(ins), ins->oclass->metalist);
-            setinsval2s(C, func, ins); /* replace class with its instance */
+            Instance *in = csMM_newinstance(C, classval(s2v(func)));
+            csG_checkfin(C, obj2gco(in), in->oclass->metalist);
+            setinsval2s(C, func, in); /* replace class with its instance */
             fmm = csMM_get(C, s2v(func), CS_MM_INIT);
             if (!ttisnil(fmm)) { /* have __init ? */
                 checkstackGCp(C, 1, func); /* space for fmm */
@@ -754,18 +751,17 @@ void csV_concat(cs_State *C, int total) {
 }
 
 
-static OClass *checksuper(cs_State *C, const TValue *cls, const TValue *sup) {
-    if (c_unlikely(!ttisclass(sup)))
-        csD_runerror(C, "inherit from %s value", typename(ttype(sup)));
-    else if (c_unlikely(csV_raweq(cls, sup)))
-        csD_runerror(C, "class attempted to inherit from itself");
-    return classval(sup);
+static OClass *checksuper(cs_State *C, const TValue *scl) {
+    if (c_unlikely(!ttisclass(scl)))
+        csD_runerror(C, "inherit from %s value", typename(ttype(scl)));
+    return classval(scl);
 }
 
 
 void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
     if (scl->methods) { /* superclass has methods? */
-        cls->methods = csH_new(C);
+        if (!cls->methods) /* class needs a method table? */
+            cls->methods = csH_new(C);
         csH_copykeys(C, cls->methods, scl->methods);
     }
     cls->metalist = scl->metalist; /* set the metalist */
@@ -1139,9 +1135,7 @@ returning:
                 vm_break;
             }
             vm_case(OP_LOAD) {
-                int n = fetchl();
-                SPtr v = STK(n);
-                setobjs2s(C, C->sp.p, v);
+                setobjs2s(C, C->sp.p, STK(fetchl()));
                 SP(1);
                 vm_break;
             }
@@ -1859,42 +1853,44 @@ returning:
                 vm_break;
             }
             vm_case(OP_GETSUP) {
-                Instance *ins = insval(peek(1));
-                OClass *cls = classval(peek(0));
+                Instance *in = insval(peek(0));
+                OClass *scl = in->oclass->sclass;
                 TValue *sk;
                 storepc(C);
+                cs_assert(scl != NULL);
                 sk = K(fetchl());
-                getsuper(C, ins, cls, strval(sk), SLOT(1), csH_getstr);
-                SP(-1); /* cls */
+                getsuper(C, in, scl, strval(sk), SLOT(0), csH_getstr);
                 vm_break;
             }
             vm_case(OP_GETSUPIDX) {
-                Instance *ins = insval(peek(2));
-                OClass *cls = classval(peek(1));
+                Instance *in = insval(peek(1));
+                OClass *scl = in->oclass->sclass;;
                 TValue *idx = peek(0);
                 storepc(C);
-                getsuper(C, ins, cls, idx, SLOT(2), csH_get);
-                SP(-2); /* cls, idx */
+                cs_assert(scl != NULL);
+                getsuper(C, in, scl, idx, SLOT(1), csH_get);
+                SP(-1); /* idx */
                 vm_break;
             }
             vm_case(OP_GETSUPIDXSTR) {
-                Instance *ins = insval(peek(1));
-                OClass *cls = classval(peek(0));
+                Instance *in = insval(peek(0));
+                OClass *scl = in->oclass->sclass;;
                 TValue *sk;
                 storepc(C);
+                cs_assert(scl != NULL);
                 sk = K(fetchl());
-                getsuper(C, ins, cls, strval(sk), SLOT(1), csH_getstr);
-                SP(-1); /* cls */
+                getsuper(C, in, scl, strval(sk), SLOT(0), csH_getstr);
                 vm_break;
             }
             vm_case(OP_INHERIT) {
-                TValue *o1 = peek(1);
-                TValue *o2 = peek(0);
+                TValue *o1 = peek(1); /* superclass */
+                TValue *o2 = peek(0); /* class */
                 OClass *cls = classval(o2);
-                OClass *sup;
+                OClass *scl;
                 storepc(C);
-                sup = checksuper(C, o2, o1);
-                csV_inherit(C, cls, sup);
+                cs_assert(!csV_raweq(o1, o2));
+                scl = checksuper(C, o1);
+                csV_inherit(C, cls, scl);
                 checkGC(C);
                 vm_break;
             }

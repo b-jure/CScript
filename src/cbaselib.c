@@ -499,6 +499,21 @@ static int b_getclass(cs_State *C) {
 }
 
 
+static int b_getsuper(cs_State *C) {
+    int t = cs_type(C, 0);
+    cs_settop(C, 2);
+    csL_expect_arg(C, t == CS_TCLASS || t == CS_TINSTANCE, 0, "class or instance");
+    if (!cs_get_superclass(C, 0))
+        cs_push_nil(C); /* value has no superclass */
+    else if (!cs_is_noneornil(C, 1)) { /* get superclass method? */
+        cs_pop(C, 1); /* remove superclass */
+        csL_check_type(C, 0, CS_TINSTANCE);
+        cs_get_supermethod(C, 0);
+    }
+    return 1; /* return superclass or superclass method or nil */
+}
+
+
 static const cs_Entry basic_funcs[] = {
     {"error", b_error},
     {"assert", b_assert},
@@ -524,6 +539,7 @@ static const cs_Entry basic_funcs[] = {
     {"tostr", b_tostr},
     {"typeof", b_typeof},
     {"getclass", b_getclass},
+    {"getsuper", b_getsuper},
     /* placeholders */
     {CS_GNAME, NULL},
     {"__VERSION", NULL},
