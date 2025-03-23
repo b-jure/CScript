@@ -313,7 +313,7 @@ CSLIB_API int csL_new_metalist(cs_State *C, const char *lname) {
         return 0; /* false; metalist already exists */
     cs_pop(C, 1); /* remove nil */
     cs_push_metalist(C); /* create metalist */
-    cs_pushvalue(C, -1); /* push metalist copy */
+    cs_push(C, -1); /* push metalist copy */
     cs_set_rtable(C, lname); /* registrytable.lname = metalist */
     cs_pop(C, 1); /* remove registry table */
     return 1; /* true; created new metalist */
@@ -322,7 +322,7 @@ CSLIB_API int csL_new_metalist(cs_State *C, const char *lname) {
 
 CSLIB_API int csL_set_metalist(cs_State *C, const char *lname) {
     csL_get_metalist(C, lname);
-    cs_set_metalist(C, -2);
+    return cs_set_metalist(C, -2);
 }
 
 

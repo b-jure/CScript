@@ -80,7 +80,6 @@ CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
 /* }======================================================================= */
 
 
-
 /* {=======================================================================
 ** Metalist functions
 ** ======================================================================== */
@@ -163,7 +162,7 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
       csL_get_subtable(C, -1, name); \
       cs_remove(C, -2); }
 
-#define csL_get_metalist(C, name)   csL_get_rtable(C, name)
+#define csL_get_metalist(C, name)   cs_get_rtable(C, name)
 
 
 /*

@@ -3477,12 +3477,14 @@
         <!-- cs_get_rtable -->
         <hr><h3><a name="cs_get_rtable"><code>cs_get_rtable</code></a></h3><p>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>void cs_get_rtable (cs_State *C, const char *field);</pre>
+        <pre>int cs_get_rtable (cs_State *C, const char *field);</pre>
         <p>
         Equivalent to <code>t[field]</code> where <code>t</code> is the
         registry table located in the registry under index
         <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
         (see <a href="#4.3">&sect;4.3</a>).
+        <br/><br/>
+        Returns the type of the pushed value.
         </p>
 
         <!-- cs_get -->
@@ -3824,7 +3826,7 @@
         <!-- cs_set_metalist -->
         <hr><h3><a name="cs_set_metalist"><code>cs_set_metalist</code></a></h3>
         <span class="apii">[-1, +0, &ndash;]</span>
-        <pre>void cs_set_metalist (cs_State *C, int index);</pre>
+        <pre>int cs_set_metalist (cs_State *C, int index);</pre>
         <p>
         Pops a list or <b>nil</b> from the stack and sets that value as
         the new metalist for the value at the given index.
@@ -4902,7 +4904,7 @@
 
         <hr><h3><a name="csL_new_metalist"><code>csL_new_metalist</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void *csL_new_metalist (cs_State *C, const char *lname);</pre>
+        <pre>int csL_new_metalist (cs_State *C, const char *lname);</pre>
         <p>
         Creates a new list to be used as a metalist for userdata,
         adds it into into the table located in the registry at the index
@@ -4918,7 +4920,7 @@
 
         <hr><h3><a name="csL_set_metalist"><code>csL_set_metalist</code></a></h3><p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void *csL_set_metalist (cs_State *C, const char *lname);</pre>
+        <pre>int csL_set_metalist (cs_State *C, const char *lname);</pre>
         <p>
         Sets the metalist of the object on top of the stack as the metalist
         associated with name <code>lname</code> in the table located in
@@ -4926,6 +4928,9 @@
         <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
         (see <a href="#4.3">&sect;4.3</a> and
         <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>).
+        <br/><br/>
+        If the value on top of the stack is not a class, instance or userdata,
+        this returns 0, otherwise 1 is returned.
         </p>
 
         <hr><h3><a name="csL_test_userdata"><code>csL_test_userdata</code></a></h3><p>
@@ -5279,7 +5284,7 @@
 
         <hr><h3><a name="csL_get_metalist"><code>csL_get_metalist</code></a></h3><p>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>void csL_get_metalist (cs_State *C, const char *name);</pre>
+        <pre>int csL_get_metalist (cs_State *C, const char *name);</pre>
         <p>
         This macro is equivalent to
         <a href="#cs_get_rtable"><code>cs_get_rtable</code></a>.
