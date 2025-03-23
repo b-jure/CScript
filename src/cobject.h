@@ -321,9 +321,9 @@ typedef struct List {
 
 #define CS_VTABLE           makevariant(CS_TTABLE, 0)
 
-#define ttishtab(o)         checktag((o), ctb(CS_VTABLE))
+#define ttistable(o)        checktag((o), ctb(CS_VTABLE))
 
-#define tval(o)            check_exp(ttishtab(o), gco2ht(val(o).gc))
+#define tval(o)     check_exp(ttistable(o), gco2ht(val(o).gc))
 
 #define settval(C,obj,x) \
     { TValue *o_=(obj); const Table *x_=(x); \

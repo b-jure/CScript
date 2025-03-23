@@ -872,15 +872,19 @@ c_sinline int auxrawgetfieldstr(cs_State *C, Table *t, const char *k) {
 }
 
 
-/*
-** Gets the global variable `name` value and pushes it on top of the stack.
-** This function returns the value type.
-*/
 CS_API int cs_get_global(cs_State *C, const char *name) {
     TValue *gt;
     cs_lock(C);
     gt = getGtable(C);
     return auxrawgetfieldstr(C, tval(gt), name);
+}
+
+
+CS_API int cs_get_rtable(cs_State *C, const char *field) {
+    const TValue *t = getRtable(C);
+    cs_lock(C);
+    api_check(C, ttistable(t), "expect table");
+    return auxrawgetfieldstr(C, tval(t), field);
 }
 
 
@@ -1170,6 +1174,15 @@ CS_API void cs_set_global(cs_State *C, const char *name) {
     api_checknelems(C, 1); /* value */
     gt = getGtable(C);
     auxrawsetstr(C, tval(gt), name, s2v(C->sp.p - 1));
+}
+
+
+CS_API void cs_set_rtable(cs_State *C, const char *field) {
+    TValue *t = getRtable(C);
+    cs_lock(C);
+    api_checknelems(C, 1);
+    api_check(C, ttistable(t), "expect table");
+    auxrawsetstr(C, tval(t), field, s2v(C->sp.p - 1));
 }
 
 

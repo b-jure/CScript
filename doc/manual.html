@@ -3474,6 +3474,17 @@
         Returns the type of that value.
         </p>
 
+        <!-- cs_get_rtable -->
+        <hr><h3><a name="cs_get_rtable"><code>cs_get_rtable</code></a></h3><p>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void cs_get_rtable (cs_State *C, const char *field);</pre>
+        <p>
+        Equivalent to <code>t[field]</code> where <code>t</code> is the
+        registry table located in the registry under index
+        <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
+        (see <a href="#4.3">&sect;4.3</a>).
+        </p>
+
         <!-- cs_get -->
         <hr><h3><a name="cs_get"><code>cs_get</code></a></h3>
         <span class="apii">[-1, +1, <em>e</em>]</span>
@@ -3571,10 +3582,10 @@
 
         <!-- cs_get_fieldstr -->
         <hr><h3><a name="cs_get_fieldstr"><code>cs_get_fieldstr</code></a></h3>
-        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <span class="apii">[-0, +1, &ndash;]</span>
         <pre>int cs_get_fieldstr (cs_State *C, int index, const char *field);</pre>
         <p>
-        Similar to <a href="#cs_get_field"><code>cs_get_fieldstr</code></a>
+        Similar to <a href="#cs_get_field"><code>cs_get_field</code></a>
         but instead of using the value on top of the stack as key, it instead
         uses the argument <code>field</code> which is a null-terminated string
         (i.e., <code>obj[field]</code>).
@@ -3676,7 +3687,7 @@
         Only <em>fulluserdata</em>, <em>class</em> and transitively
         <em>instance</em> values have metalist.
         This returns 1 if the value at given index has a metalist,
-        otherwise it does not push anything on the stack and it returns 0.
+        otherwise nothing is pushed on the stack and 0 is returned.
         </p>
 
         <!-- cs_set_global -->
@@ -3686,6 +3697,20 @@
         <p>
         Pops a value from the stack and sets it as the new value of global
         <code>name</code>.
+        </p>
+
+        <!-- cs_set_rtable -->
+        <hr><h3><a name="cs_set_rtable"><code>cs_set_rtable</code></a></h3>
+        <span class="apii">[-1, +0, <em>m</em>]</span>
+        <pre>void cs_set_rtable (cs_State *C, const char *field);</pre>
+        <p>
+        Equivalent to <code>t[field] = v</code> where <code>t</code> is the
+        registry table located in the registry under index
+        <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
+        (see <a href="#4.3">&sect;4.3</a>), and <code>v</code> is the
+        value on top of the stack.
+        <br/><br/>
+        Value on top of the stack is popped.
         </p>
 
         <!-- cs_set -->
@@ -3798,10 +3823,16 @@
 
         <!-- cs_set_metalist -->
         <hr><h3><a name="cs_set_metalist"><code>cs_set_metalist</code></a></h3>
-        <span class="apii">[-0, +0, <em>m</em>]</span>
+        <span class="apii">[-1, +0, &ndash;]</span>
         <pre>void cs_set_metalist (cs_State *C, int index);</pre>
         <p>
-
+        Pops a list or <b>nil</b> from the stack and sets that value as
+        the new metalist for the value at the given index.
+        (<b>nil</b> means no metalist.)
+        <br/><br/>
+        If value at the given index is an instance, class or userdata, 1 is
+        returned, otherwise 0 is returned to indicate metalist was not set
+        or removed.
         </p>
 
         <!-- cs_set_uservalue -->
@@ -4388,6 +4419,15 @@
         (CScript may optimize this case.)
         </p>
 
+        <!-- cs_push_metalist -->
+        <hr><h3><a name="cs_push_metalist"><code>cs_push_metalist</code></a></h3>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>const char *cs_push_metalist (cs_State *C);</pre>
+        <p>
+        This macro is equivalent to <code>cs_push_list(C, CS_MM_N)</code>
+        (see <a href="#cs_push_list"><code>cs_push_list</code></a>).
+        </p>
+
         <!-- cs_push_mainthread -->
         <hr><h3><a name="cs_push_mainthread"><code>cs_push_mainthread</code></a></h3>
         <span class="apii">[-0, +1, &ndash;]</span>
@@ -4738,17 +4778,14 @@
         (or <code>NULL</code> for no additional text).
         </p>
 
-        <!-- TODO: add 'setmetalist', 'getmetalist' and rework TODO funcs  -->
         <hr><h3><a name="csL_check_userdata"><code>csL_check_userdata</code></a></h3><p>
         <span class="apii">[-0, +0, <em>v</em>]</span>
-        <pre>void *csL_check_userdata (cs_State *C, int arg, const char *vmtname);</pre>
+        <pre>void *csL_check_userdata (cs_State *C, int index, const char *lname);</pre>
         <p>
-        Checks whether the function argument <code>arg</code> is a full userdata
-        and if it's <a href="#cs_VMT">vmt</a> is equal to the
-        <code>vmtname</code> in the registry table, if true, this returns
-        the pointer to the <em>fulluserdata</em>
-        (see <a href="#cs_to_userdata"><code>cs_to_userdata</code></a>),
-        otherwise it raises error.
+        Similar to <a href="#csL_test_userdata"><code>csL_test_userdata</code></a>,
+        except this function raises error if
+        <a href="#csL_test_userdata"><code>csL_test_userdata</code></a>
+        returns NULL.
         </p>
 
         <hr><h3><a name="csL_check_option"><code>csL_check_option</code></a></h3><p>
@@ -4861,6 +4898,46 @@
         <a href="#cs_load"><code>cs_load</code></a>.
         <code>name</code> is the chunk name, used for debug information and
         error messages.
+        </p>
+
+        <hr><h3><a name="csL_new_metalist"><code>csL_new_metalist</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void *csL_new_metalist (cs_State *C, const char *lname);</pre>
+        <p>
+        Creates a new list to be used as a metalist for userdata,
+        adds it into into the table located in the registry at the index
+        <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
+        (see <a href="#4.3">&sect;4.3</a>) under the name <code>lname</code>,
+        and returns 1.
+        Otherwise if the registry table already has the key
+        <code>lname</code>, 0 is returned.
+        <br/><br/>
+        In both cases, the function pushes onto the stack the final value
+        associated with <code>lname</code> in the registry table.
+        </p>
+
+        <hr><h3><a name="csL_set_metalist"><code>csL_set_metalist</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>void *csL_set_metalist (cs_State *C, const char *lname);</pre>
+        <p>
+        Sets the metalist of the object on top of the stack as the metalist
+        associated with name <code>lname</code> in the table located in
+        the registry at the index
+        <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
+        (see <a href="#4.3">&sect;4.3</a> and
+        <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>).
+        </p>
+
+        <hr><h3><a name="csL_test_userdata"><code>csL_test_userdata</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>void *csL_test_userdata (cs_State *C, int index, const char *lname);</pre>
+        <p>
+        Checks whether the value at the given index is a full userdata with
+        a metalist equal to the metalist <code>lname</code> in the registry
+        table.
+        If true, this returns the pointer to the underlying memory full
+        userdata points to, otherwise if the value is not a full userdata or
+        it doesn't have a matching metalist, NULL is returned.
         </p>
 
         <hr><h3><a name="csL_to_lstring"><code>csL_to_lstring</code></a></h3><p>
@@ -4982,17 +5059,6 @@
         global <code>modname</code>.
         <br/><br/>
         Leaves a copy of the module on the stack.
-        </p>
-
-        <!-- TODO -->
-        <hr><h3><a name="csL_test_userdata"><code>csL_test_userdata</code></a></h3><p>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void *csL_test_userdata (cs_State *C, int index, const char *vmtname);</pre>
-        <p>
-        This function works like
-        <a href="#csL_check_userdata"><code>csL_check_userdata</code></a>,
-        except that, when the test fails, it returns <code>NULL</code>
-        instead of raising an error.
         </p>
 
         <hr><h3><a name="csL_traceback"><code>csL_traceback</code></a></h3><p>
@@ -5184,29 +5250,11 @@
         the functions in the list <code>l</code>.
         <br/><br/>
         It is implemented as the following macro:
+
         <pre>
     (csL_newlibtable(C,l), csL_setfuncs(C,l,0))</pre>
+
         The array <code>l</code> must be the actual array, not a pointer to it.
-        </p>
-
-        <hr><h3><a name="csL_get_registrytable"><code>csL_get_registrytable</code></a></h3><p>
-        <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>void csL_get_registrytable (cs_State *C, const char *name);</pre>
-        <p>
-        Equivalent to <code>t[name]</code> where <code>t</code> is the
-        registry table located in the registry under index
-        <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
-        (see <a href="#4.3">&sect;4.3</a>).
-        </p>
-
-        <hr><h3><a name="csL_get_rsubtable"><code>csL_get_rsubtable</code></a></h3><p>
-        <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void csL_get_rsubtable (cs_State *C, const char *name);</pre>
-        <p>
-        Equivalent to
-        <a href="#csL_get_subtable"><code>csL_get_subtable</code></a>, except
-        here the object being indexed is the registry table which is pushed
-        on top of the stack, and later removed after the operation.
         </p>
 
         <hr><h3><a name="csL_get_gsubtable"><code>csL_get_gsubtable</code></a></h3><p>
@@ -5219,6 +5267,29 @@
         on top of the stack, and later removed after the operation.
         </p>
 
+        <hr><h3><a name="csL_get_rsubtable"><code>csL_get_rsubtable</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_get_rsubtable (cs_State *C, const char *name);</pre>
+        <p>
+        Equivalent to
+        <a href="#csL_get_subtable"><code>csL_get_subtable</code></a>, except
+        here the object being indexed is the registry table which is pushed
+        on top of the stack, and later removed after the operation.
+        </p>
+
+        <hr><h3><a name="csL_get_metalist"><code>csL_get_metalist</code></a></h3><p>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>void csL_get_metalist (cs_State *C, const char *name);</pre>
+        <p>
+        This macro is equivalent to
+        <a href="#cs_get_rtable"><code>cs_get_rtable</code></a>.
+        This is defined in order to imply that metalists for full userdata
+        should be stored in the registry table.
+        Of course this is not a requirement, but this is how the CScript
+        libraries store userdata metalists
+        (see <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>).
+        </p>
+
         <hr><h3><a name="csL_intop"><code>csL_intop</code></a></h3><p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>cs_Integer csL_intop (op, x, y);</pre>
@@ -5229,6 +5300,7 @@
         as the CScript core does.
         <br/><br/>
         This is implemented as the following macro:
+
         <pre>
     ((cs_Integer)((cs_Unsigned)(x) op (cs_Unsigned)(y)))</pre>
         </p>
@@ -5402,6 +5474,34 @@
         on the top of the stack.
         </p>
 
+        <hr><h3><a name="csL_Stream"><code>csL_Stream</code></a></h3><p>
+        <pre>typedef struct csL_Stream {
+            FILE *f;
+            cs_CFunction closef;
+        } csL_Stream;</pre>
+        <p>
+        The standard representation for file handles used by the standard
+        I/O library.
+        <br/><br/>
+        A file handle is implemented as a full userdata, with a metalist
+        called <code>CS_FILEHANDLE</code> (where <code>CS_FILEHANDLE</code>
+        is a macro with the actual metalist's name).
+        The metalist is created by the I/O library
+        (see <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>).
+        <br/><br/>
+        This userdata must start with the structure <code>csL_Stream</code>;
+        it can contain other data after this initial structure.
+        The field <code>f</code> points to the corresponding C stream
+        (or it can be <code>NULL</code> to indicate an incompletely created handle).
+        The field <code>closef</code> points to a CScript function that will
+        be called to close the stream when the handle is closed or collected;
+        this function receives the file handle as its sole argument and
+        must return either a true value, in case of success,
+        or a false value plus an error message, in case of error.
+        Once CScript calls this field, it changes the field value to
+        <code>NULL</code> to signal that the handle is closed.
+        </p>
+
 
 
 
@@ -5573,12 +5673,21 @@
         caller (that is, <code>runfile</code> does not run in protected mode).
         </p>
 
-        <!-- getmetamethod -->
-        <hr/><h3><a name="getmetamethod"><code>getmetamethod (v, name)</code></a></h3>
+        <!-- getmetalist -->
+        <hr/><h3><a name="getmetalist"><code>getmetalist (object)</code></a></h3>
         <p>
-        Returns the metamethod of the given <code>v</code> or <b>nil</b>
-        if <code>v</code> does not have virtual method table and/or the
-        <code>v</code> does not implement the metamethod <code>name</code>.
+        Returns the metalist of the given <code>object</code>.
+        If <code>object</code> does not have a metalist, <b>nil</b> is returned.
+        </p>
+
+        <!-- setmetalist -->
+        <hr/><h3><a name="setmetalist"><code>setmetalist (class, metalist)</code></a></h3>
+        <p>
+        Sets the metalist for the given class.
+        If <code>metalist</code> is <b>nil</b>, metatable of the given class
+        is removed.
+        <br/><br/>
+        This function returns <code>class</code>.
         </p>
 
         <!-- next -->

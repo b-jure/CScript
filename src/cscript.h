@@ -22,10 +22,10 @@
 
 #define CS_VERSION      "CScript " CS_VERSION_MAJOR "." CS_VERSION_MINOR
 #define CS_RELEASE      CS_VERSION "." CS_VERSION_RELEASE
-#define CS_COPYRIGHT    CS_RELEASE " Copyright (C) 2024-2025 Jure Bagić"
-
-/* For use in binary */
 #define LUA_COPYRIGHT   "Copyright (C) 1994-2020 Lua.org, PUC-Rio"
+
+#define CS_COPYRIGHT \
+        LUA_COPYRIGHT "\r\n" CS_RELEASE " Copyright (C) 2024-2025 Jure Bagić"
 
 
 /* option for multiple returns in 'cs_pcall' and 'cs_call' */
@@ -247,6 +247,7 @@ CS_API void cs_push_metasubclass(cs_State *C, int sc, int ml, int nup,
 ** Get functions (CScript -> stack)
 ** ----------------------------------------------------------------------- */
 CS_API int cs_get_global(cs_State *C, const char *name); 
+CS_API int cs_get_rtable(cs_State *C, const char *field); 
 CS_API int cs_get(cs_State *C, int index); 
 CS_API int cs_get_raw(cs_State *C, int index); 
 CS_API int cs_get_index(cs_State *C, int index, cs_Integer i);
@@ -272,6 +273,7 @@ CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n);
 ** Set functions (stack -> CScript)
 ** ----------------------------------------------------------------------- */
 CS_API void  cs_set_global(cs_State *C, const char *name); 
+CS_API void  cs_set_rtable(cs_State *C, const char *field);
 CS_API void  cs_set(cs_State *C, int index); 
 CS_API void  cs_set_raw(cs_State *C, int index); 
 CS_API void  cs_set_index(cs_State *C, int index, int i);
@@ -297,7 +299,7 @@ CS_API int cs_status(cs_State *C);
 CS_API int cs_error(cs_State *C); 
 
 /* -----------------------------------------------------------------------
-** Call/Load CScript code
+** Call/Load CScript chunks
 ** ----------------------------------------------------------------------- */
 CS_API void cs_call(cs_State *C, int nargs, int nresults); 
 CS_API int  cs_pcall(cs_State *C, int nargs, int nresults, int msgh); 
@@ -365,6 +367,8 @@ CS_API void        cs_closeslot(cs_State *C, int index);
 #define cs_is_noneornil(C, n)       (cs_type(C, (n)) <= 0)
 
 #define cs_push_literal(C, s)       cs_push_string(C, "" s)
+
+#define cs_push_metalist(C)         cs_push_list(C, CS_MM_N)
 
 #define cs_push_mainthread(C) \
         ((void)cs_get_index(C, CS_REGISTRYINDEX, CS_RINDEX_MAINTHREAD))

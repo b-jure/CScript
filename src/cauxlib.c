@@ -70,7 +70,7 @@ static int push_glbfunc_name(cs_State *C, cs_Debug *ar) {
     int top = cs_gettop(C); /* index of value on top of the stack */
     int func = top + 1;
     cs_getinfo(C, "f", ar); /* push function (top + 1) */
-    csL_get_registrytable(C, CS_LOADED_TABLE);
+    cs_get_rtable(C, CS_LOADED_TABLE);
     csL_check_stack(C, 6, "not enough stack space"); /* for `findfield` */
     if (findfield(C, func, 2)) { /* found? */
         const char *name = cs_to_string(C, -1);
@@ -154,13 +154,12 @@ CSLIB_API const char *csL_check_lstring(cs_State *C, int index, size_t *len) {
 }
 
 
-// TODO
-//CSLIB_API void *csL_check_userdata(cs_State *C, int index, const char *name) {
-//    void *p = csL_test_userdata(C, index, name);
-//    if (csi_unlikely(p == NULL))
-//        csL_error_type(C, index, name);
-//    return p;
-//}
+CSLIB_API void *csL_check_userdata(cs_State *C, int index, const char *name) {
+    void *p = csL_test_userdata(C, index, name);
+    if (csi_unlikely(p == NULL))
+        csL_error_type(C, index, name);
+    return p;
+}
 
 
 CSLIB_API void csL_check_stack(cs_State *C, int sz, const char *msg) {
@@ -295,6 +294,11 @@ static const char *stringreader(cs_State *C, void *data, size_t *szread) {
 }
 
 
+CSLIB_API int csL_loadstring(cs_State *C, const char *s) {
+    return csL_loadbuffer(C, s, strlen(s), s);
+}
+
+
 CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
                              const char *name) {
     LoadString ls;
@@ -304,8 +308,36 @@ CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
 }
 
 
-CSLIB_API int csL_loadstring(cs_State *C, const char *s) {
-    return csL_loadbuffer(C, s, strlen(s), s);
+CSLIB_API int csL_new_metalist(cs_State *C, const char *lname) {
+    if (csL_get_metalist(C, lname) != CS_TNIL) /* name already in use? */
+        return 0; /* false; metalist already exists */
+    cs_pop(C, 1); /* remove nil */
+    cs_push_metalist(C); /* create metalist */
+    cs_pushvalue(C, -1); /* push metalist copy */
+    cs_set_rtable(C, lname); /* registrytable.lname = metalist */
+    cs_pop(C, 1); /* remove registry table */
+    return 1; /* true; created new metalist */
+}
+
+
+CSLIB_API int csL_set_metalist(cs_State *C, const char *lname) {
+    csL_get_metalist(C, lname);
+    cs_set_metalist(C, -2);
+}
+
+
+CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname) {
+    void *p = csL_to_fulluserdata(C, index);
+    if (p != NULL) { /* `index` is full userdata? */
+        if (cs_get_metalist(C, -1)) { /* it has a metalist? */
+            csL_get_metalist(C, lname); /* get correct metalist */
+            if (!cs_rawequal(C, -1, -2)) /* not the same? */
+                p = NULL;
+            cs_pop(C, 2); /* remove both metalists */
+            return p;
+        } /* else fall through */
+    } /* else fall through */
+    return NULL; /* value is not a userdata with a metalist */
 }
 
 
@@ -543,23 +575,6 @@ CSLIB_API void csL_importf(cs_State *C, const char *modname,
         cs_set_global(C, modname); /* __G[modname] = module */
     }
 }
-
-
-// TODO
-//CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *vmtname) {
-//    void *p = csL_to_fulluserdata(C, index);
-//    if (p != NULL) { /* `index` is full userdata? */
-//        cs_VMT vmt;
-//        if (cs_get_uservmt(C, index, &vmt) >= 0) {
-//            csL_get_registrytable(C, vmtname);
-//            if (!csL_vmt_isequal(C, -1, &vmt))
-//                p = NULL;
-//            cs_pop(C, 1); /* remove vmt userdata value */
-//            return p;
-//        } /* else fall through */
-//    } /* else fall through */
-//    return NULL; /* value is not a userdata */
-//}
 
 
 /* find and return last call frame level */

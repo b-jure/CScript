@@ -237,6 +237,10 @@ struct cs_State {
 #define getGtable(C) \
 	(&listval(&G(C)->c_registry)->b[CS_RINDEX_GLOBALS])
 
+/* get the registry table */
+#define getRtable(C) \
+        (&listval(&G(C)->c_registry)->b[CS_RINDEX_REGTABLE])
+
 
 
 /* extra space(X) + main thread state(S) */

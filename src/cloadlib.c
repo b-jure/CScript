@@ -201,7 +201,7 @@ static cs_CFunction csys_symbolf(cs_State *C, void *lib, const char *sym) {
 static int searcher_preload(cs_State *C) {
     const char *name = csL_check_string(C, 0);
     cs_push_registrytable(C); /* get registry table */
-    cs_get_fieldstr(C, -1, CS_PRELOAD_TABLE); /* get regtable[__PRELOAD] */
+    cs_get_fieldstr(C, -1, CS_PRELOAD_TABLE); /* get rtable[__PRELOAD] */
     if (cs_get_fieldstr(C, -1, name) == CS_TNIL) { /* not found? */
         cs_push_fstring(C, "no field package.preload[\"%s\"]", name);
         return 1;
@@ -217,13 +217,12 @@ static int searcher_preload(cs_State *C) {
 */
 static void *check_clib(cs_State *C, const char *path) {
     void *plib;
-    cs_push_registrytable(C); /* get registry table */
-    cs_get_fieldstr(C, -1, CLIBS); /* get clibs userdata */
+    cs_get_rtable(C, CLIBS); /* get clibs userdata */
     cs_get_uservalue(C, -1, 1); /* get array uservalue */
     cs_get_index(C, -1, 0); /* get array query table */
     cs_get_fieldstr(C, -1, path); /* get qtable[path] */
     plib = cs_to_userdata(C, -1); /* plib = qtable[path] */
-    cs_pop(C, 5); /* remove reg. table, clibs, array, query table and plib */
+    cs_pop(C, 4); /* clibs, array, query table and plib */
     return plib;
 }
 
@@ -232,15 +231,14 @@ static void *check_clib(cs_State *C, const char *path) {
 ** Adds 'plib' (a library handle) to clibs userdata.
 */
 static void add_libhandle_to_clibs(cs_State *C, const char *path, void *plib) {
-    cs_push_registrytable(C);
-    cs_get_fieldstr(C, -1, CLIBS); /* get clibs userdata */
+    cs_get_rtable(C, CLIBS); /* get clibs userdata */
     cs_get_uservalue(C, -1, 1); /* get array uservalue */
     cs_get_index(C, -1, 0); /* get array[0] (query table) */
     cs_push_lightuserdata(C, plib); /* push lib handle */
     cs_push(C, -1); /* copy of lib handle */
     cs_set_index(C, -4, cs_len(C, -3)); /* arr[len(arr)] = plib */
     cs_set_fieldstr(C, -2, path); /* qtable[path] = plib */
-    cs_pop(C, 4); /* remove registry table, clibs, array and query table */
+    cs_pop(C, 3); /* clibs, array and query table */
 }
 
 
@@ -456,9 +454,7 @@ static void find_loader(cs_State *C, const char *name) {
 static int l_import(cs_State *C) {
     const char *name = csL_check_string(C, 0);
     cs_settop(C, 1); /* __LOADED table will be at index 1 */
-    cs_push_registrytable(C); /* get registry table */
-    cs_get_fieldstr(C, -1, CS_LOADED_TABLE); /* get __LOADED table */
-    cs_remove(C, -2); /* remove registry table */
+    cs_get_rtable(C, CS_LOADED_TABLE); /* get __LOADED table */
     cs_get_fieldstr(C, 1, name); /* get __LOADED[name] */
     if (cs_to_bool(C, -1)) /* is it there? */
         return 1; /* package is already loaded */
@@ -512,15 +508,14 @@ static int gcmm(cs_State *C) {
 
 
 /*
-** clibs is full userdata with one upvalue.
+** CLIBS is full userdata with one upvalue.
 ** The upvalues is an array holding table at index 0 used for
 ** querying loaded libraries, while the rest of indices hold
 ** loaded C libraries. When created, it is set under key "__CLIBS"
 ** in the registry table.
 */
 static void create_clibs_userdata(cs_State *C) {
-    /* registry table is on stack top */
-    if (cs_get_fieldstr(C, -1, CLIBS) != CS_TUSERDATA) {
+    if (cs_get_rtable(C, CLIBS) != CS_TUSERDATA) {
         cs_pop(C, 1); /* remove value */
         cs_push_userdata(C, 0, 1); /* create clibs userdata with one upvalue */
         cs_push_list(C, 1); /* create the upvalue */
@@ -528,7 +523,7 @@ static void create_clibs_userdata(cs_State *C) {
         cs_set_index(C, -2, 0); /* set query table into the array */
         cs_set_uservalue(C, -2, 1); /* set array as first upvalue of clibs */
         cs_push(C, -1); /* copy of clibs */
-        cs_set_fieldstr(C, -3, CLIBS); /* regtable[CLIBS] = userdata */
+        cs_set_rtable(C, CLIBS); /* rtable[CLIBS] = userdata */
     }
     cs_push_list(C, CS_MM_N); /* push metalist */
     cs_push_cfunction(C, gcmm); /* push finalizer */
@@ -668,7 +663,6 @@ static void setpath(cs_State *C, const char *fieldname, const char *envname,
 
 
 CSMOD_API int csopen_package(cs_State *C) {
-    cs_push_registrytable(C); /* get registry table */
     create_clibs_userdata(C); /* create clibs userdata */
     csL_newlib(C, package_funcs); /* create 'package' table */
     create_searchers_array(C); /* set 'package.searchers' */
@@ -678,9 +672,9 @@ CSMOD_API int csopen_package(cs_State *C) {
     cs_push_literal(C, CS_DIRSEP "\n" CS_PATH_SEP "\n" CS_PATH_MARK "\n"
                        CS_EXEC_DIR "\n" CS_IGMARK "\n");
     cs_set_fieldstr(C, -2, "config");
-    csL_get_subtable(C, -2, CS_LOADED_TABLE); /* regtable[__LOADED] = table */
+    csL_get_rsubtable(C, CS_LOADED_TABLE); /* rtable[__LOADED] = table */
     cs_set_fieldstr(C, -2, "loaded"); /* 'package.loaded' = __LOADED */
-    csL_get_subtable(C, -2, CS_PRELOAD_TABLE); /* regtable[__PRELOAD] = table */
+    csL_get_rsubtable(C, CS_PRELOAD_TABLE); /* rtable[__PRELOAD] = table */
     cs_set_fieldstr(C, -2, "preload"); /* 'package.preload' = __PRELOAD */
     cs_push_globaltable(C); /* open library into global table */
     cs_push(C, -2); /* set 'package' as upvalue for next lib */
