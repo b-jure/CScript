@@ -471,7 +471,7 @@ done:
         }
     }
     csL_push_fail(C); /* conversion failed */
-    return 1; /* return fail */
+    return 1;
 }
 
 
@@ -495,7 +495,7 @@ static int b_getclass(cs_State *C) {
         cs_get_class(C, 0);
     else /* argument is not an instance */
         csL_push_fail(C);
-    return 1; /* return fail value or class */
+    return 1;
 }
 
 
@@ -510,7 +510,7 @@ static int b_getsuper(cs_State *C) {
         csL_check_type(C, 0, CS_TINSTANCE);
         cs_get_supermethod(C, 0);
     }
-    return 1; /* return superclass or superclass method or nil */
+    return 1;
 }
 
 

@@ -12,6 +12,7 @@ class Y inherits X {
         assert(super.name() == "X");
         assert(getsuper(super) == nil);
         assert(super == X);
+        assert(super.name == super.name);
         assert(super.name == getsuper(self, "name"));
         return "Y" .. super.name();
     }

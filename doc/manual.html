@@ -1831,30 +1831,38 @@
         Class methods always have the instance as the first argument.
         This argument is named <code>self</code> and it is hidden but
         accessible.
-        Additionally if the class inherits from another class, then the local
-        variable named <code>super</code> (which is also a keyword) is
-        accessible for each method.
-        This variable can access the superclass methods, but you can't
-        use <code>super</code> in order to assign to the superclass.
-        For example
+        Additionally if the class inherits from another class, then the
+        <code>super</code> keyword is accessible for each method.
+        This keyword can access the superclass and its methods.
+        <br/>
+        Here is the small exmple:
 
         <pre>
     local class Empty {
         fn level() {
+            print(super);  /* error */
             return 0.0;
         }
     }
     local class HalfFull inherits Empty {
         fn level() {
-            super.level = fn() { return 69; };
+            assert(super == Empty);
+            super.level = fn() { return 69; };  /* error */
             return super.level() + 0.5;
         }
     }</pre>
 
         This would invoke an error, as you are trying to assign different
-        value to <code>level</code> <em>property</em> of the superclass.
+        value to <code>level</code> <em>property</em> of the superclass,
+        also the <code>Empty</code> class has no superclass so
+        <code>super</code> keyword is not available in the call to the
+        <code>print</code> function.
         We call it property instead of field, as classes do not have fields,
-        only instances do.
+        only instances do. Additionally we can see that <code>super</code>
+        corresponds to <code>Empty</code> class and <code>super.level()</code>
+        calls <code>level</code> method of <code>Empty</code> class, thus
+        the returned value of <code>level</code> method of
+        <code>HalfFull</code> class would be <code>0.5</code>.
         <br/><br/>
         Each time we call a class, we create a new instance of that class,
         unless class has <code>__init</code> which might return something
@@ -5653,7 +5661,7 @@
         <p>
         Receives any number of arguments and prints their values to
         <code>stdout</code>, converting each argument to a string
-        following the same rules of <a href="#tostring"><code>tostring</code></a>.
+        following the same rules of <a href="#tostr"><code>tostr</code></a>.
         <br/><br/>
         The function <code>print</code> is not intended for formatted output,
         but only as a quick way to show a value, for instance for debugging.
@@ -5744,13 +5752,13 @@
         corresponding to total number of extra arguments.
         </p>
 
-        <!-- tonumber -->
-        <hr/><h3><a name="tonumber"><code>tonumber (v, [, base])</code></a></h3>
+        <!-- tonum -->
+        <hr/><h3><a name="tonum"><code>tonum (v, [, base])</code></a></h3>
         <p>
         When called with no <code>base</code>,
-        <code>tonumber</code> tries to convert its argument to a number.
+        <code>tonum</code> tries to convert its argument to a number.
         If the argument <code>v</code> is already a number or a string
-        convertible to a number, then <code>tonumber</code> returns this
+        convertible to a number, then <code>tonum</code> returns this
         number and overflow flag; otherwise, it returns <b>fail</b>.
         <br/><br/>
         The conversion of strings can result in integers or floats.
@@ -5768,8 +5776,8 @@
         the function returns <b>fail</b>.
         </p>
 
-        <!-- tostring -->
-        <hr/><h3><a name="tostring"><code>tostring (v)</code></a></h3>
+        <!-- tostr -->
+        <hr/><h3><a name="tostr"><code>tostr (v)</code></a></h3>
         <p>
         Receives a value of any type and converts it to a string in a
         human-readable format.
@@ -5793,11 +5801,25 @@
         and "<code>userdata</code>".
         </p>
 
+        <!-- getclass -->
         <hr/><h3><a name="getclass"><code>getclass (v)</code></a></h3>
         <p>
         Returns the class of the instance <code>v</code>.
         If <code>v</code> is not an instance, the function returns
         <b>fail</b>.
+        </p>
+
+        <!-- getsuper -->
+        <hr/><h3><a name="getsuper"><code>getsuper (v [, method])</code></a></h3>
+        <p>
+        Gets the superclass method of the instance <code>v</code>,
+        identical to operation <code>v[method]</code>.
+        If <code>method</code> is not provided, then only the superclass
+        of <code>v</code> is returned, and in that case <code>v</code> must
+        be either an instance or a class.
+        <br/><br/>
+        If <code>v</code> has no superclass or the superclass
+        <code>method</code>, then <b>nil</b> is returned.
         </p>
 
         <!-- __G -->
@@ -5815,6 +5837,174 @@
         The current value of this variable is "<code>CScript 1.0</code>".
         </p>
 
+        <!-- __getidx -->
+        <hr/><h3><a name="__getidx"><code>__getidx</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__getidx</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __setidx -->
+        <hr/><h3><a name="__setidx"><code>__setidx</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__setidx</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __gc -->
+        <hr/><h3><a name="__gc"><code>__gc</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__gc</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __close -->
+        <hr/><h3><a name="__close"><code>__close</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__close</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __call -->
+        <hr/><h3><a name="__call"><code>__call</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__call</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __init -->
+        <hr/><h3><a name="__init"><code>__init</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__init</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __concat -->
+        <hr/><h3><a name="__concat"><code>__concat</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__concat</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __add -->
+        <hr/><h3><a name="__add"><code>__add</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__add</code> metamethod in the
+        metalist.
+        </p>
+
+
+        <!-- __sub -->
+        <hr/><h3><a name="__sub"><code>__sub</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__sub</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __mul -->
+        <hr/><h3><a name="__mul"><code>__mul</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__mul</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __div -->
+        <hr/><h3><a name="__div"><code>__div</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__div</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __idiv -->
+        <hr/><h3><a name="__idiv"><code>__idiv</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__idiv</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __mod -->
+        <hr/><h3><a name="__mod"><code>__mod</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__mod</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __pow -->
+        <hr/><h3><a name="__pow"><code>__pow</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__pow</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __shl -->
+        <hr/><h3><a name="__shl"><code>__shl</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__shl</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __shr -->
+        <hr/><h3><a name="__shr"><code>__shr</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__shr</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __band -->
+        <hr/><h3><a name="__band"><code>__band</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__band</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __bor -->
+        <hr/><h3><a name="__bor"><code>__bor</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__bor</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __bxor -->
+        <hr/><h3><a name="__bxor"><code>__bxor</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__bxor</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __unm -->
+        <hr/><h3><a name="__unm"><code>__unm</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__unm</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __bnot -->
+        <hr/><h3><a name="__bnot"><code>__bnot</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__bnot</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __eq -->
+        <hr/><h3><a name="__eq"><code>__eq</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__eq</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __lt -->
+        <hr/><h3><a name="__lt"><code>__lt</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__lt</code> metamethod in the
+        metalist.
+        </p>
+
+        <!-- __le -->
+        <hr/><h3><a name="__le"><code>__le</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__le</code> metamethod in the
+        metalist.
+        </p>
 
         <h2>6.2 &ndash; <a name="6.2">Package Library</a></h2>
         <p>
@@ -6337,7 +6527,7 @@
         The specifier <code>s</code> expects a string;
         if its argument is not a string,
         it is converted to one following the same rules of
-        <a href="#tostring"><code>tostring</code></a>.
+        <a href="#tostr"><code>tostr</code></a>.
         If the specifier has any modifier, the corresponding string argument
         should not contain embedded zeros.
         <br/><br/>
