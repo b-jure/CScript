@@ -28,6 +28,7 @@
 #endif
 
 
+
 #if defined(_WIN32) && !defined(_WIN32_WCE)
 #define CS_USE_WINDOWS      /* enable goodies for regular Windows */
 #endif
@@ -37,6 +38,23 @@
 #define CS_DL_DLL           /* enable support for DLL */
 #endif
 
+
+#if defined(CS_USE_LINUX)
+#define CS_USE_POSIX
+#define CS_USE_DLOPEN
+#endif
+
+
+#if defined(CS_USE_MACOSX)
+#define CS_USE_POSIX
+#define CS_USE_DLOPEN
+#endif
+
+
+#if defined(CS_USE_IOS)
+#define CS_USE_POSIX
+#define CS_USE_DLOPEN
+#endif
 
 
 /* {----------------------------------------------------------------------

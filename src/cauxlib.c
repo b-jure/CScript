@@ -403,6 +403,62 @@ CSLIB_API void csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l,
 }
 
 
+CSLIB_API int csL_fileresult(cs_State *C, int ok, const char *fname) {
+    int err = errno;
+    if (ok) { /* ok? */
+        cs_push_bool(C, 1);
+        return 1; /* return true */
+    } else {
+        const char *msg = (err != 0) ? strerror(err) : "(no extra info)";
+        csL_push_fail(C);
+        if (fname) /* have file name? */
+            cs_push_fstring(C, "%s: %s", fname, msg);
+        else
+            cs_push_string(C, msg);
+        cs_push_integer(C, err);
+        return 3; /* return fail, msg, and error code */
+    }
+}
+
+
+#if !defined(c_inspectstat)	/* { */
+
+#if defined(CS_USE_POSIX)
+
+#include <sys/wait.h>
+
+/* use appropriate macros to interpret 'pclose' return status */
+#define c_inspectstat(stat,what)  \
+    if (WIFEXITED(stat)) { stat = WEXITSTATUS(stat); } \
+    else if (WIFSIGNALED(stat)) { stat = WTERMSIG(stat); what = "signal"; }
+
+#else
+
+#define c_inspectstat(stat,what)  /* no op */
+
+#endif
+
+#endif				/* } */
+
+
+// TODO: add docs
+CSLIB_API int csL_execresult(cs_State *C, int stat) {
+    if (stat != 0 && errno != 0) /* error with an 'errno'? */
+        return csL_fileresult(C, 0, NULL);
+    else {
+        const char *what = "exit"; /* type of termination */
+        c_inspectstat(stat, what); /* interpret result */
+        if (*what == 'e' && stat == 0) /* successful termination? */
+            cs_push_bool(C, 1);
+        else
+            csL_push_fail(C);
+        cs_push_string(C, what);
+        cs_push_integer(C, stat);
+        return 3; /* return true/fail, what and code */
+    }
+}
+
+
 // TODO: update docs
 CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
     index = cs_absindex(C, index);
@@ -461,24 +517,6 @@ CSLIB_API void csL_where(cs_State *C, int level) {
         }
     }
     cs_push_literal(C, "");
-}
-
-
-CSLIB_API int csL_fileresult(cs_State *C, int ok, const char *fname) {
-    int err = errno;
-    if (ok) { /* ok? */
-        cs_push_bool(C, 1);
-        return 1; /* return true */
-    } else {
-        const char *msg = (err != 0) ? strerror(err) : "(no extra info)";
-        csL_push_fail(C);
-        if (fname) /* have file name? */
-            cs_push_fstring(C, "%s: %s", fname, msg);
-        else
-            cs_push_string(C, msg);
-        cs_push_integer(C, err);
-        return 3; /* return fail, msg, and error code */
-    }
 }
 
 

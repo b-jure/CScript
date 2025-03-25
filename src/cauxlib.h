@@ -44,11 +44,9 @@ typedef struct csL_Buffer csL_Buffer;
 /* {=======================================================================
 ** Errors
 ** ======================================================================== */
-
 CSLIB_API int csL_error(cs_State *C, const char *fmt, ...);
 CSLIB_API int csL_error_arg(cs_State *C, int index, const char *extra);
 CSLIB_API int csL_error_type(cs_State *C, int index, const char *tname);
-
 /* }======================================================================= */
 
 
@@ -110,13 +108,20 @@ CSLIB_API void  csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l, int nup);
 
 
 /* {=======================================================================
+** File/Exec result process functions
+** ======================================================================== */
+CSLIB_API int csL_fileresult(cs_State *C, int ok, const char *fname);
+CSLIB_API int csL_execresult(cs_State *C, int stat);
+/* }======================================================================= */
+
+
+/* {=======================================================================
 ** Miscellaneous functions
 ** ======================================================================== */
 CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *len);
 CSLIB_API void       *csL_to_fulluserdata(cs_State *C, int index);
 CSLIB_API void       *csL_to_lightuserdata(cs_State *C, int index);
 CSLIB_API void        csL_where(cs_State *C, int level);
-CSLIB_API int         csL_fileresult(cs_State *C, int ok, const char *fname);
 CSLIB_API int         csL_get_property(cs_State *C, int index);
 CSLIB_API void        csL_set_index(cs_State *C, int index, int i);
 CSLIB_API cs_State   *csL_newstate(void);
