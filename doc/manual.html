@@ -3576,7 +3576,7 @@
         <pre>int cs_get_field (cs_State *C, int index);</pre>
         <p>
         Identical to <a href="#cs_get_raw"><code>cs_get_raw</code></a> the only
-        difference being that value at <code>index</code> must only be a
+        difference being that value at <code>index</code> can only be a
         table or instance (list is not allowed as lists do not have fields).
         <br/><br/>
         Returns the type of the pushed value.
@@ -4990,10 +4990,19 @@
 
         <hr><h3><a name="csL_fileresult"><code>csL_fileresult</code></a></h3><p>
         <span class="apii">[-0, +(1|3), <em>m</em>]</span>
-        <pre>void csL_fileresult (cs_State *C, int ok, const char *fname);</pre>
+        <pre>int csL_fileresult (cs_State *C, int ok, const char *fname);</pre>
         <p>
         This function produces the return values for file-related functions
-        in the standard library.
+        in the standard library
+        (<a href="#io.open"><code>io.open</code></a>,
+        <a href="#os.rename"><code>os.rename</code></a>,
+        <a href="#file.seek"><code>file.seek</code></a>, etc.).
+        <br/><br/>
+        If <code>ok</code> is 0, then, <b>fail</b>, error message and error
+        code are pushed on top of the stack (in that order).
+        Otherwise <em>true</em> is pushed on top of the stack.
+        <br/><br/>
+        In both cases, this returns the number of values pushed.
         </p>
 
         <hr><h3><a name="csL_get_property"><code>csL_get_property</code></a></h3><p>
@@ -5489,8 +5498,11 @@
         I/O library.
         <br/><br/>
         A file handle is implemented as a full userdata, with a metalist
-        called <code>CS_FILEHANDLE</code> (where <code>CS_FILEHANDLE</code>
-        is a macro with the actual metalist's name).
+        called <code>CS_FILEHANDLE</code> and methods table
+        called <code>CS_FILEHANDLE_TABLE</code>
+        (where <code>CS_FILEHANDLE</code> is a macro with the metalist's
+        name and <code>CS_FILEHANDLE_TABLE</code> is a macro with the name
+        of the methods table).
         The metalist is created by the I/O library
         (see <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>).
         <br/><br/>

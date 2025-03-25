@@ -315,7 +315,6 @@ CSLIB_API int csL_new_metalist(cs_State *C, const char *lname) {
     cs_push_metalist(C); /* create metalist */
     cs_push(C, -1); /* push metalist copy */
     cs_set_rtable(C, lname); /* registrytable.lname = metalist */
-    cs_pop(C, 1); /* remove registry table */
     return 1; /* true; created new metalist */
 }
 
@@ -323,6 +322,52 @@ CSLIB_API int csL_new_metalist(cs_State *C, const char *lname) {
 CSLIB_API int csL_set_metalist(cs_State *C, const char *lname) {
     csL_get_metalist(C, lname);
     return cs_set_metalist(C, -2);
+}
+
+
+// TODO: add docs
+CSLIB_API int csL_get_metaindex(cs_State *C, int index, int mm) {
+    if (!cs_get_metalist(C, index)) {
+        return CS_TNONE;
+    } else {
+        int t = cs_get_index(C, -1, mm);
+        if (t == CS_TNIL) {
+            cs_pop(C, 2); /* remove metalist and nil */
+            t = CS_TNONE;
+        } else
+            cs_remove(C, -2); /* remove only metalist */
+        return t; /* return metalist index value type */
+    }
+}
+
+
+// TODO: add docs
+CSLIB_API int csL_callmeta(cs_State *C, int index, int mm) {
+    index = cs_absindex(C, index);
+    if (csL_get_metaindex(C, index, mm) == CS_TNONE)
+        return 0;
+    cs_push(C, index);
+    cs_call(C, 1, 1);
+    return 1;
+}
+
+
+// TODO: add docs
+CSLIB_API int csL_new_usermethods(cs_State *C, const char *tname, int sz) {
+    if (csL_get_usermethods(C, tname) != CS_TNIL) /* name already in use? */
+        return 0; /* false; methods table already exists */
+    cs_pop(C, 1); /* remove nil */
+    cs_push_table(C, sz); /* create methods table */
+    cs_push(C, -1); /* push table copy */
+    cs_set_rtable(C, tname); /* registrytable.tname = table */
+    return 1; /* true; created new methods table */
+}
+
+
+// TODO: add docs
+CSLIB_API void csL_set_usermethods(cs_State *C, const char *tname) {
+    csL_get_usermethods(C, tname);
+    cs_set_usermethods(C, -2);
 }
 
 
@@ -341,34 +386,55 @@ CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname) {
 }
 
 
+// TODO: add docs
+CSLIB_API void csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l,
+                                 int nup) {
+    csL_check_stack(C, nup, "too many upvalues");
+    for (; l->mm >= 0; l++) { /* for each metamethod */
+        if (l->metaf != NULL) { /* have function? */
+            for (int i = 0; i < nup; i++) /* copy upvalues */
+                cs_push(C, -nup);
+            cs_push_cclosure(C, l->metaf, nup); /* create closure */
+        } else /* otherwise set as nil */
+            cs_push_nil(C);
+        cs_set_index(C, -(nup + 2), l->mm);
+    }
+    cs_pop(C, nup);
+}
+
+
+// TODO: update docs
 CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
-    int t;
     index = cs_absindex(C, index);
-    t = cs_type(C, index);
-    switch (t) {
-        case CS_TNIL: {
-            cs_push_literal(C, "nil");
-            break;
-        }
-        case CS_TBOOL: {
-            cs_push_string(C, (cs_to_bool(C, index) ? "true" : "false"));
-            break;
-        }
-        case CS_TNUMBER: {
-            if (cs_is_integer(C, index))
-                cs_push_fstring(C, "%I", cs_to_integer(C, index));
-            else
-                cs_push_fstring(C, "%f", cs_to_number(C, index));
-            break;
-        }
-        case CS_TSTRING: {
-            cs_push(C, index);
-            break;
-        }
-        default: {
-            const char *kind = cs_typename(C, t);
-            cs_push_fstring(C, "%s: %p", kind, cs_to_pointer(C, index));
-            break;
+    if (csL_callmeta(C, index, CS_MM_TOSTRING)) {
+        if (!cs_is_string(C, -1))
+            csL_error(C, "'__tostring' must return a string");
+    } else {
+        switch (cs_type(C, index)) {
+            case CS_TNIL: {
+                cs_push_literal(C, "nil");
+                break;
+            }
+            case CS_TBOOL: {
+                cs_push_string(C, (cs_to_bool(C, index) ? "true" : "false"));
+                break;
+            }
+            case CS_TNUMBER: {
+                if (cs_is_integer(C, index))
+                    cs_push_fstring(C, "%I", cs_to_integer(C, index));
+                else
+                    cs_push_fstring(C, "%f", cs_to_number(C, index));
+                break;
+            }
+            case CS_TSTRING: {
+                cs_push(C, index);
+                break;
+            }
+            default: {
+                const char *kind = csL_typename(C, index);
+                cs_push_fstring(C, "%s: %p", kind, cs_to_pointer(C, index));
+                break;
+            }
         }
     }
     return cs_to_lstring(C, -1, plen);
@@ -402,17 +468,16 @@ CSLIB_API int csL_fileresult(cs_State *C, int ok, const char *fname) {
     int err = errno;
     if (ok) { /* ok? */
         cs_push_bool(C, 1);
-        return CS_OK;
+        return 1; /* return true */
     } else {
-        const char *msg;
+        const char *msg = (err != 0) ? strerror(err) : "(no extra info)";
         csL_push_fail(C);
-        msg = (err != 0 ? strerror(err) : "(no extra info)");
         if (fname) /* have file name? */
             cs_push_fstring(C, "%s: %s", fname, msg);
         else
             cs_push_string(C, msg);
         cs_push_integer(C, err);
-        return CS_ERRFILE;
+        return 3; /* return fail, msg, and error code */
     }
 }
 
@@ -652,7 +717,8 @@ CSLIB_API void csL_traceback(cs_State *C, cs_State *C1, int level,
 }
 
 
-CSLIB_API void csL_setfuncs(cs_State *C, const cs_Entry *l, int nup) {
+// TODO: change function name in docs
+CSLIB_API void csL_set_funcs(cs_State *C, const cs_Entry *l, int nup) {
     csL_check_stack(C, nup, "too many upvalues");
     for (; l->name != NULL; l++) {
         if (l->func == NULL) { /* placeholder? */

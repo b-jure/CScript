@@ -584,7 +584,7 @@ static const cs_Entry randfuncs[] = {
 static void set_rand_funcs(cs_State *C) {
     MT19937 *ctx = cs_push_userdata(C, sizeof(*ctx), 0);
     init_ctx_default(C, ctx);
-    csL_setfuncs(C, randfuncs, 1);
+    csL_set_funcs(C, randfuncs, 1);
 }
 
 /* }================================================================== */

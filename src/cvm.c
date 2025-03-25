@@ -175,7 +175,7 @@ void csV_unarithm(cs_State *C, const TValue *v, int op) {
 }
 
 
-c_sinline int LEintfloat(cs_Integer i, cs_Number f) {
+c_sinline int intLEfloat(cs_Integer i, cs_Number f) {
     if (c_intfitsf(i))
         return c_numle(cast_num(i), f); /* compare them as floats */
     else {  /* i <= f <=> i <= floor(f) */
@@ -188,7 +188,7 @@ c_sinline int LEintfloat(cs_Integer i, cs_Number f) {
 }
 
 
-c_sinline int LEfloatint(cs_Number f, cs_Integer i) {
+c_sinline int floatLEint(cs_Number f, cs_Integer i) {
     if (c_intfitsf(i))
         return c_numle(f, cast_num(i)); /* compare them as floats */
     else {  /* f <= i <=> ceil(f) <= i */
@@ -209,11 +209,11 @@ c_sinline int LEnum(const TValue *v1, const TValue *v2) {
         if (ttisint(v2))
             return i1 <= ival(v2);
         else
-            return LEintfloat(i1, fval(v2));
+            return intLEfloat(i1, fval(v2));
     } else {
         cs_Number n1 = fval(v1);
         if (ttisint(v2))
-            return LEfloatint(n1, ival(v2));
+            return floatLEint(n1, ival(v2));
         else
             return c_numle(n1, fval(v2));
     }
@@ -237,7 +237,7 @@ int csV_orderle(cs_State *C, const TValue *v1, const TValue *v2) {
 }
 
 
-c_sinline int LTintfloat(cs_Integer i, cs_Number f) {
+c_sinline int intLTfloat(cs_Integer i, cs_Number f) {
     if (c_intfitsf(i))
         return c_numlt(cast_num(i), f);
     else { /* i < f <=> i < ceil(f) */
@@ -250,7 +250,7 @@ c_sinline int LTintfloat(cs_Integer i, cs_Number f) {
 }
 
 
-c_sinline int LTfloatint(cs_Number f, cs_Integer i) {
+c_sinline int floatLTint(cs_Number f, cs_Integer i) {
     if (c_intfitsf(i))
         return c_numlt(f, cast_num(i)); /* compare them as floats */
     else { /* f < i <=> floor(f) < i */
@@ -271,13 +271,13 @@ c_sinline int LTnum(const TValue *v1, const TValue *v2) {
         if (ttisint(v2))
             return i1 < ival(v2);
         else
-            return LTintfloat(i1, fval(v2));
+            return intLTfloat(i1, fval(v2));
     } else {
         cs_Number n1 = fval(v1);
         if (ttisflt(v2))
             return c_numlt(n1, fval(v2));
         else
-            return LTfloatint(n1, ival(v2));
+            return floatLTint(n1, ival(v2));
     }
 }
 
@@ -322,6 +322,7 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
         case CS_VSHRSTR: return eqshrstr(strval(v1), strval(v2));
         case CS_VLNGSTR: return csS_eqlngstr(strval(v1), strval(v2));
         case CS_VIMETHOD: return csMM_eqimethod(imval(v1), imval(v2));
+        case CS_VUMETHOD: return csMM_equmethod(umval(v1), umval(v2));
         case CS_VUSERDATA: {
             if  (C == NULL || (ttisnil(fmm = csMM_get(C, v1, CS_MM_EQ)) &&
                     (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MM_EQ))))
@@ -575,7 +576,7 @@ c_sinline int precallC(cs_State *C, SPtr func, int nres, cs_CFunction f) {
     int n; /* number of returns */
     checkstackGCp(C, CS_MINSTACK, func); /* ensure minimum stack space */
     C->cf = cf = initcallframe(C, func, nres, CFST_CCALL,
-                                C->sp.p + CS_MINSTACK);
+                               C->sp.p + CS_MINSTACK);
     cs_unlock(C);
     n = (*f)(C);
     cs_lock(C);
@@ -601,7 +602,6 @@ c_sinline void auxinsertf(cs_State *C, SPtr func, const TValue *f) {
 }
 
 
-/* try and call __call metamethod */
 c_sinline SPtr trymetacall(cs_State *C, SPtr func) {
     const TValue *f;
     checkstackGCp(C, 1, func); /* space for func */
@@ -668,7 +668,14 @@ retry:
             setinsval2s(C, func + 1, im->ins); /* ...and ins. as first arg */
             goto retry;
         }
-        default: { /* try metaamethod __call */
+        case CS_VUMETHOD: { /* UserData method */
+            UMethod *um = umval(s2v(func));
+            checkstackGCp(C, 2, func); /* space for method and userdata */
+            auxinsertf(C, func, &um->method); /* insert method... */
+            setuval2s(C, func + 1, um->ud); /* ...and udata as first arg */
+            goto retry;
+        }
+        default: { /* try __call metamethod */
             func = trymetacall(C, func);
             goto retry;
         }

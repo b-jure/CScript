@@ -274,6 +274,7 @@ union GCUnion {
     struct OClass cls;
     struct Instance ins;
     struct IMethod im;
+    struct UMethod um;
     struct UserData u;
     struct cs_State C;
 };
@@ -291,6 +292,7 @@ union GCUnion {
 #define gco2cls(o)      (&(cast_gcu(o)->cls))
 #define gco2ins(o)      (&(cast_gcu(o)->ins))
 #define gco2im(o)       (&(cast_gcu(o)->im))
+#define gco2um(o)       (&(cast_gcu(o)->um))
 #define gco2u(o)        (&(cast_gcu(o)->u))
 #define gco2th(o)       (&(cast_gcu(o)->C))
 

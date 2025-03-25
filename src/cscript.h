@@ -100,10 +100,10 @@ typedef const char *(*cs_Reader)(cs_State *C, void *data, size_t *szread);
 typedef void (*cs_WarnFunction)(void *ud, const char *msg, int tocont);
 
 
-/* Type for storing name:function pairs or placeholders */
+/* type for storing name:function pairs or placeholders */
 typedef struct cs_Entry cs_Entry;
 
-/* Type for debug API */
+/* type for debug API */
 typedef struct cs_Debug cs_Debug;
 
 
@@ -250,7 +250,7 @@ CS_API int cs_get_global(cs_State *C, const char *name);
 CS_API int cs_get_rtable(cs_State *C, const char *field); 
 CS_API int cs_get(cs_State *C, int index); 
 CS_API int cs_get_raw(cs_State *C, int index); 
-CS_API int cs_get_index(cs_State *C, int index, cs_Integer i);
+CS_API int cs_get_index(cs_State *C, int index, int i);
 CS_API int cs_get_nilindex(cs_State *C, int index, unsigned int begin, int end);
 CS_API int cs_get_nnilindex(cs_State *C, int index, unsigned int begin, int end);
 CS_API int cs_get_nilindex_rev(cs_State *C, int index, int begin,
@@ -268,6 +268,7 @@ CS_API int cs_get_method(cs_State *C, int index);
 CS_API int cs_get_supermethod(cs_State *C, int index);
 CS_API int cs_get_metalist(cs_State *C, int index);
 CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n); 
+CS_API int cs_get_usermethods(cs_State *C, int index); 
 
 /* -----------------------------------------------------------------------
 ** Set functions (stack -> CScript)
@@ -284,6 +285,7 @@ CS_API void  cs_set_fieldint(cs_State *C, int index, cs_Integer field);
 CS_API void  cs_set_fieldflt(cs_State *C, int index, cs_Number field); 
 CS_API int   cs_set_metalist(cs_State *C, int index);
 CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
+CS_API void  cs_set_usermethods(cs_State *C, int index); 
 
 /* -----------------------------------------------------------------------
 ** Error reporting

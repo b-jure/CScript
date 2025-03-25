@@ -241,7 +241,7 @@ static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
         case OP_EQ: mm = CS_MM_EQ; break;
         default: return NULL;
     }
-    *name = getstr(G(C)->mmnames[mm]) + /* skip '__' */ 2;
+    *name = getstr(G(C)->mmnames[mm]) + 2; /* skip '__' */
     return "metamethod";
 }
 
@@ -275,8 +275,8 @@ static const char *getfuncname(cs_State *C, CallFrame *cf, const char **name) {
 static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
                       CallFrame *cf, cs_Debug *ar) {
     int status = 1;
-    for (unsigned char opt = *options++; opt != '\0'; opt = *options++) {
-        switch (opt) {
+    for (; *options; options++) {
+        switch (*options) {
             case 'n': {
                 ar->namewhat = getfuncname(C, cf, &ar->name);
                 if (ar->namewhat == NULL) { /* not found ? */

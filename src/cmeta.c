@@ -76,6 +76,7 @@ UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv) {
     o = csG_new(C, sizeofuserdata(nuv, size), CS_VUSERDATA);
     ud = gco2u(o);
     ud->metalist = NULL;
+    ud->methods = NULL;
     ud->nuv = nuv;
     ud->size = size;
     for (int i = 0; i < nuv; i++)
@@ -96,6 +97,22 @@ IMethod *csMM_newinsmethod(cs_State *C, Instance *ins, const TValue *method) {
 int csMM_eqimethod(const IMethod *v1, const IMethod *v2) {
     return (v1 == v2) || /* same instance... */
         (v1->ins == v2->ins && /* ...or equal instances */
+         csV_raweq(&v1->method, &v2->method)); /* ...and equal methods */
+}
+
+
+UMethod *csMM_newudmethod(cs_State *C, UserData *ud, const TValue *method) {
+    GCObject *o = csG_new(C, sizeof(UMethod), CS_VUMETHOD);
+    UMethod *um = gco2um(o);
+    um->ud = ud;
+    setobj(C, &um->method, method);
+    return um;
+}
+
+
+int csMM_equmethod(const UMethod *v1, const UMethod *v2) {
+    return (v1 == v2) || /* same instance... */
+        (v1->ud == v2->ud && /* ...or equal userdata */
          csV_raweq(&v1->method, &v2->method)); /* ...and equal methods */
 }
 

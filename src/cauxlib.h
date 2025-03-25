@@ -16,11 +16,20 @@
 #define CS_GNAME    "__G"
 
 
+/* type for storing metaindex:function pairs */
+typedef struct csL_MetaEntry csL_MetaEntry;
+
+/* type for buffering system */
 typedef struct csL_Buffer csL_Buffer;
 
 
 /* extra error code for 'csL_loadfile' */
 #define CS_ERRFILE      (CS_ERRERROR + 1)
+
+
+// TODO: add docs
+/* new index into the metalist, for when converting values to string */
+#define CS_MM_TOSTRING      CS_MM_N
 
 
 /* key, in the registry table, for table of loaded modules */
@@ -81,11 +90,22 @@ CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
 
 
 /* {=======================================================================
-** Metalist functions
+** Userdata and Metalist functions
 ** ======================================================================== */
+typedef struct csL_MetaEntry { // TODO: add docs
+    int mm; /* metamethod index */
+    cs_CFunction metaf; /* metamethod function */
+} csL_MetaEntry;
+
 CSLIB_API int   csL_new_metalist(cs_State *C, const char *lname);
 CSLIB_API int   csL_set_metalist(cs_State *C, const char *lname);
+CSLIB_API int   csL_get_metaindex(cs_State *C, int index, int mm);
+CSLIB_API int   csL_callmeta(cs_State *C, int index, int mm);
+CSLIB_API int   csL_new_usermethods(cs_State *C, const char *tname, int sz);
+CSLIB_API void  csL_set_usermethods(cs_State *C, const char *tname);
+CSLIB_API int   csL_get_usermethods(cs_State *C, const char *tname);
 CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname);
+CSLIB_API void  csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l, int nup);
 /* }======================================================================= */
 
 
@@ -106,7 +126,7 @@ CSLIB_API void        csL_importf(cs_State *C, const char *modname,
                                   cs_CFunction openf, int global);
 CSLIB_API void        csL_traceback(cs_State *C, cs_State *C1, int level,
                                     const char *msg);
-CSLIB_API void        csL_setfuncs(cs_State *C, const cs_Entry *l, int nup);
+CSLIB_API void        csL_set_funcs(cs_State *C, const cs_Entry *l, int nup);
 CSLIB_API void        csL_checkversion_(cs_State *C, cs_Number ver);
 CSLIB_API const char *csL_gsub(cs_State *C, const char *s, const char *p,
                                const char *r);
@@ -150,7 +170,7 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
         cs_push_table(C, sizeof(l)/sizeof((l)[0]) - 1)
 
 #define csL_newlib(C,l) \
-        (csL_checkversion(C), csL_newlibtable(C,l), csL_setfuncs(C,l,0))
+        (csL_checkversion(C), csL_newlibtable(C,l), csL_set_funcs(C,l,0))
 
 #define csL_get_gsubtable(C, name) \
     { cs_push_globaltable(C); \
@@ -162,7 +182,9 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
       csL_get_subtable(C, -1, name); \
       cs_remove(C, -2); }
 
-#define csL_get_metalist(C, name)   cs_get_rtable(C, name)
+// TODO: add docs
+#define csL_get_usermethods(C, tname)   cs_get_rtable(C, tname)
+#define csL_get_metalist(C, lname)      cs_get_rtable(C, lname)
 
 
 /*
@@ -227,17 +249,21 @@ CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
 /* {=======================================================================
 ** File handles for IO library
 ** ======================================================================== */
+
 /*
-** A file handle is a userdata with 'CS_FILEHANDLE' metalist and
-** initial structure 'csL_Stream' (it may contain other fields
-** after that initial structure).
+** A file handle is a userdata with 'CS_FILEHANDLE' metalist,
+** 'CS_FILEHANDLE_TABLE' methods table and initial structure
+** 'csL_Stream' (it may contain other fields after that initial
+** structure).
 */
 
 #define CS_FILEHANDLE       "FILE*"
 
+#define CS_FILEHANDLE_TABLE     "FILE_METHODS*"
+
 typedef struct csL_Stream {
-  FILE *f; /* stream (NULL for incompletely created streams) */
-  cs_CFunction closef; /* to close stream (NULL for closed streams) */
+    FILE *f; /* stream (NULL for incompletely created streams) */
+    cs_CFunction closef; /* to close stream (NULL for closed streams) */
 } csL_Stream;
 /* }======================================================================= */
 

@@ -568,10 +568,13 @@ static const cs_Entry basic_funcs[] = {
     {"__eq", NULL},
     {"__lt", NULL},
     {"__le", NULL},
+    {"__tostring", NULL},
+    {"__N", NULL},
     {NULL, NULL},
 };
 
 
+// TODO: update docs
 static void set_metalist_indices(cs_State *C) {
     const char *mm[CS_MM_N] = {
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
@@ -583,13 +586,19 @@ static void set_metalist_indices(cs_State *C) {
         cs_push_integer(C, i);
         cs_set_fieldstr(C, -2, mm[i]);
     }
+    /* set __tostring metamethod index */
+    cs_push_integer(C, CS_MM_N);
+    cs_set_fieldstr(C, -2, "__tostring");
+    /* set total number of metamethods */
+    cs_push_integer(C, CS_MM_N + 1);
+    cs_set_fieldstr(C, -2, "__N");
 }
 
 
 CSMOD_API int csopen_basic(cs_State *C) {
     /* open lib into global instance */
     cs_push_globaltable(C);
-    csL_setfuncs(C, basic_funcs, 0);
+    csL_set_funcs(C, basic_funcs, 0);
     /* set global __G */
     cs_push(C, -1); /* copy of global table */
     cs_set_fieldstr(C, -2, CS_GNAME);

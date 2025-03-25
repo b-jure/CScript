@@ -678,7 +678,7 @@ CSMOD_API int csopen_package(cs_State *C) {
     cs_set_fieldstr(C, -2, "preload"); /* 'package.preload' = __PRELOAD */
     cs_push_globaltable(C); /* open library into global table */
     cs_push(C, -2); /* set 'package' as upvalue for next lib */
-    csL_setfuncs(C, load_funcs, 1);
+    csL_set_funcs(C, load_funcs, 1);
     cs_pop(C, 1); /* pop global table */
     return 1; /* return 'package' table */
 }

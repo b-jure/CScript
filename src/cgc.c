@@ -236,6 +236,13 @@ static void markobject_(GState *gs, GCObject *o) {
             markblack(im); /* nothing else to mark */
             break;
         }
+        case CS_VUMETHOD: {
+            UMethod *um = gco2um(o);
+            markobject(gs, um->ud);
+            markvalue(gs, &um->method);
+            markblack(um); /* nothing else to mark */
+            break;
+        }
         case CS_VINSTANCE: {
             Instance *ins = gco2ins(o);
             markobject(gs, ins->oclass);
@@ -263,7 +270,8 @@ static void markobject_(GState *gs, GCObject *o) {
         case CS_VUSERDATA: {
             UserData *ud = gco2u(o);
             if (ud->nuv == 0) { /* no user values? */
-                markobjectN(gs, ud->metalist); /* mark its metalist */
+                markobjectN(gs, ud->metalist);
+                markobjectN(gs, ud->methods);
                 markblack(ud); /* nothing else to mark */
                 break;
             }
@@ -346,6 +354,7 @@ static c_mem markcsclosure(GState *gs, CSClosure *cl) {
 
 static c_mem markuserdata(GState *gs, UserData *ud) {
     markobjectN(gs, ud->metalist);
+    markobjectN(gs, ud->methods);
     for (int i = 0; i < ud->nuv; i++)
         markvalue(gs, &ud->uv[i].val);
     return 1 + ud->nuv; /* user values + userdata */
@@ -490,10 +499,11 @@ static void freeobject(cs_State *C, GCObject *o) {
         case CS_VTABLE: csH_free(C, gco2ht(o)); break;
         case CS_VINSTANCE: csM_free(C, gco2ins(o)); break;
         case CS_VIMETHOD: csM_free(C, gco2im(o)); break;
+        case CS_VUMETHOD: csM_free(C, gco2um(o)); break;
         case CS_VTHREAD: csT_free(C, gco2th(o)); break;
         case CS_VSHRSTR: {
             OString *s = gco2str(o);
-            csS_remove(C, s); /* remove the weak reference */
+            csS_remove(C, s); /* remove it from the string table */
             csM_freemem(C, s, sizeofstring(s->shrlen));
             break;
         }
@@ -522,7 +532,7 @@ static void freeobject(cs_State *C, GCObject *o) {
             csM_freemem(C, u, sizeofuserdata(u->nuv, u->size));
             break;
         }
-        default: cs_assert(0); break; /* invalid object */
+        default: cs_assert(0); /* invalid object tag */
     }
 }
 

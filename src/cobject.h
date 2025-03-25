@@ -591,13 +591,15 @@ typedef struct Instance {
 #define CS_VCSCL        makevariant(CS_TFUNCTION, 0) /* CScript closure */
 #define CS_VLCF         makevariant(CS_TFUNCTION, 1) /* light C function */
 #define CS_VCCL         makevariant(CS_TFUNCTION, 2) /* C closure */
-#define CS_VIMETHOD     makevariant(CS_TFUNCTION, 3) /* bounded method */
+#define CS_VIMETHOD     makevariant(CS_TFUNCTION, 3) /* instance method */
+#define CS_VUMETHOD     makevariant(CS_TFUNCTION, 4) /* userdata method */
 
 #define ttisfunction(o)         checktype(o, CS_TFUNCTION)
 #define ttisCSclosure(o)        checktag(o, ctb(CS_VCSCL))
 #define ttislcf(o)              checktag(o, CS_VLCF)
 #define ttisCclosure(o)         checktag(o, ctb(CS_VCCL))
 #define ttisinstancemethod(o)   checktag(o, ctb(CS_VIMETHOD))
+#define ttisusermethod(o)       checktag(o, ctb(CS_VUMETHOD))
 #define ttisclosure(o)          (ttisCSclosure(o) || ttisCclosure(o))
 
 #define clval(o)        check_exp(ttisclosure(o), gco2cl(val(o).gc))
@@ -605,6 +607,7 @@ typedef struct Instance {
 #define clCval(o)       check_exp(ttisCclosure(o), gco2clc(val(o).gc))
 #define lcfval(o)       check_exp(ttislcf(o), val(o).cfn)
 #define imval(o)        check_exp(ttisinstancemethod(o), gco2im(val(o).gc))
+#define umval(o)        check_exp(ttisusermethod(o), gco2um(val(o).gc))
 
 #define setclCSval(C,obj,x) \
     { TValue *o_=(obj); const CSClosure *x_=(x); \
@@ -630,13 +633,29 @@ typedef struct Instance {
 
 #define setimval2s(C,o,im)      setimval(C,s2v(o),im)
 
+#define setumval(C,obj,x) \
+    { TValue *o_=(obj); const UMethod *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUMETHOD)); \
+      checkliveness(C, o_); }
 
-/* method bounded to instance */
+#define setumval2s(C,o,um)      setumval(C,s2v(o),um)
+
+
+/* method bound to Instance */
 typedef struct IMethod {
     ObjectHeader;
     Instance *ins;
     TValue method;
 } IMethod;
+
+
+/* method bound to UserData */
+typedef struct UMethod {
+    ObjectHeader;
+    struct UserData *ud;
+    TValue method;
+} UMethod;
+
 
 
 /* upvalues for CScript closures */
@@ -691,11 +710,11 @@ typedef union Closure {
 ** Userdata {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VLIGHTUSERDATA           makevariant(CS_TUSERDATA, 0)
-#define CS_VUSERDATA                makevariant(CS_TUSERDATA, 1)
+#define CS_VLIGHTUSERDATA   makevariant(CS_TUSERDATA, 0)
+#define CS_VUSERDATA        makevariant(CS_TUSERDATA, 1)
 
-#define ttislightuserdata(o)        checktag(o, CS_VLIGHTUSERDATA)
-#define ttisfulluserdata(o)         checktag(o, ctb(CS_VUSERDATA))
+#define ttislightuserdata(o)    checktag(o, CS_VLIGHTUSERDATA)
+#define ttisfulluserdata(o)     checktag(o, ctb(CS_VUSERDATA))
 
 #define pval(o)     check_exp(ttislightuserdata(o), val(o).p)
 #define uval(o)     check_exp(ttisfulluserdata(o), gco2u(val(o).gc))
@@ -726,6 +745,7 @@ typedef struct UserData {
     ushort nuv; /* number of 'uservalues' */
     size_t size; /* size of 'UserData' memory in bytes */
     List *metalist;
+    Table *methods;
     GCObject *gclist;
     UValue uv[]; /* user values */
     /* 'UserData' memory starts here */
@@ -742,9 +762,10 @@ typedef struct UserData {
 */
 typedef struct EmptyUserData {
     ObjectHeader;
-    ushort nuv; /* number of 'uservalues' */
-    size_t size; /* size of 'usermem' in bytes */
+    ushort nuv;
+    size_t size;
     List *metalist;
+    Table *methods;
     union {CSI_MAXALIGN;} usermem;
     /* 'UserData' memory starts here */
 } EmptyUserData;

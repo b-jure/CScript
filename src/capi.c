@@ -745,7 +745,7 @@ CS_API void cs_push_instance(cs_State *C, int index) {
       csG_barrierback(C, obj2gco(t), v); }
 
 
-c_sinline void auxrawsetstr(cs_State *C, Table *t, const char *str,
+c_sinline void aux_rawsetstr(cs_State *C, Table *t, const char *str,
                             const TValue *v) {
     const TValue *slot;
     OString *s = csS_new(C, str);
@@ -788,7 +788,7 @@ c_sinline void setmethods(cs_State *C, OClass *cls, const cs_Entry *l,
                 for (int i = 0; i < nup; i++) /* push upvalues to the top */
                     pushvalue(C, -nup);
                 pushcclosure(C, l->func, nup);
-                auxrawsetstr(C, cls->methods, l->name, s2v(C->sp.p - 1));
+                aux_rawsetstr(C, cls->methods, l->name, s2v(C->sp.p - 1));
             } while (l++, l->name);
         }
         settop(C, -(nup - 1)); /* pop upvalues */
@@ -859,7 +859,7 @@ c_sinline int finishrawgetfield(cs_State *C, const TValue *val) {
 }
 
 
-c_sinline int auxrawgetfieldstr(cs_State *C, Table *t, const char *k) {
+c_sinline int aux_rawgetfieldstr(cs_State *C, Table *t, const char *k) {
     const TValue *slot;
     OString *str = csS_new(C, k);
     if (fastget(C, t, str, slot, csH_getstr)) {
@@ -876,7 +876,7 @@ CS_API int cs_get_global(cs_State *C, const char *name) {
     TValue *gt;
     cs_lock(C);
     gt = getGtable(C);
-    return auxrawgetfieldstr(C, tval(gt), name);
+    return aux_rawgetfieldstr(C, tval(gt), name);
 }
 
 
@@ -884,7 +884,7 @@ CS_API int cs_get_rtable(cs_State *C, const char *field) {
     const TValue *t = getRtable(C);
     cs_lock(C);
     api_check(C, ttistable(t), "expect table");
-    return auxrawgetfieldstr(C, tval(t), field);
+    return aux_rawgetfieldstr(C, tval(t), field);
 }
 
 
@@ -910,7 +910,7 @@ CS_API int cs_get_raw(cs_State *C, int obj) {
 }
 
 
-CS_API int cs_get_index(cs_State *C, int index, cs_Integer i) {
+CS_API int cs_get_index(cs_State *C, int index, int i) {
     List *l;
     cs_lock(C);
     api_check(C, i >= 0, "invalid `index`");
@@ -1000,7 +1000,7 @@ CS_API int cs_get_fieldstr(cs_State *C, int obj, const char *field) {
     Table *t;
     cs_lock(C);
     t = gettable(C, obj);
-    return auxrawgetfieldstr(C, t, field);
+    return aux_rawgetfieldstr(C, t, field);
 }
 
 
@@ -1075,41 +1075,65 @@ c_sinline Instance *getinstance(cs_State *C, int index) {
 }
 
 
-static int auxgetmethod(cs_State *C, Instance *ins, Table *t) {
-    const TValue *slot = csH_get(t, s2v(C->sp.p - 1));
-    if (t) {
-        if (!isempty(slot)) { /* found? */
-            IMethod *im = csMM_newinsmethod(C, ins, slot);
-            setimval2s(C, C->sp.p - 1, im);
+static int aux_getmethod(cs_State *C, const TValue *obj, Table *t) {
+    int tt;
+    if (t) { /* have methods table? */
+        const TValue *method = csH_get(t, s2v(C->sp.p - 1));
+        if (!isempty(method)) { /* method found? */
+            tt = ttype(method);
+            if (ttisinstance(obj)) { /* instance method? */
+                IMethod *im = csMM_newinsmethod(C, insval(obj), method);
+                setimval2s(C, C->sp.p - 1, im);
+            } else { /* userdata method */
+                UMethod *um = csMM_newudmethod(C, uval(obj), method);
+                setumval2s(C, C->sp.p - 1, um);
+            }
             csG_checkGC(C);
             goto unlock;
         }
     }
+    tt = CS_TNIL;
     setnilval(s2v(C->sp.p - 1));
 unlock:
     cs_unlock(C);
-    return ttype(s2v(C->sp.p - 1));
+    return tt;
 }
 
 
+static const TValue *objwithmethods(cs_State *C, int index, Table **t) {
+    const TValue *obj = index2value(C, index);
+    assert(t != NULL);
+    api_check(C, ttisinstance(obj) || ttisfulluserdata(obj),
+                 "expect full userdata or instance");
+    if (ttisinstance(obj))
+        *t = insval(obj)->oclass->methods;
+    else
+        *t = uval(obj)->methods;
+    return obj;
+}
+
+
+// TODO: update docs
 CS_API int cs_get_method(cs_State *C, int index) {
-    Instance *ins;
+    const TValue *obj;
+    Table *t;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    ins = getinstance(C, index);
-    return auxgetmethod(C, ins, ins->oclass->methods);
+    obj = objwithmethods(C, index, &t);
+    return aux_getmethod(C, obj, t);
 }
 
 
 CS_API int cs_get_supermethod(cs_State *C, int index) {
-    Instance *ins;
+    const TValue *obj;
     Table *t = NULL;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    ins = getinstance(C, index);
-    if (ins->oclass->sclass) /* have superclass? */
-        t = ins->oclass->sclass->methods;
-    return auxgetmethod(C, ins, t);
+    obj = index2value(C, index);
+    api_check(C, ttisinstance(obj), "expect instance");
+    if (insval(obj)->oclass->sclass) /* have superclass? */
+        t = insval(obj)->oclass->sclass->methods;
+    return aux_getmethod(C, obj, t);
 }
 
 
@@ -1168,12 +1192,28 @@ CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n) {
 }
 
 
+// TODO: add docs
+CS_API int cs_get_usermethods(cs_State *C, int index) {
+    UserData *ud;
+    int res = 0;
+    cs_lock(C);
+    ud = getuserdata(C, index);
+    if (ud->methods) {
+        settval2s(C, C->sp.p, ud->methods);
+        api_inctop(C);
+        res = 1;
+    }
+    cs_unlock(C);
+    return res;
+}
+
+
 CS_API void cs_set_global(cs_State *C, const char *name) {
     TValue *gt;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
     gt = getGtable(C);
-    auxrawsetstr(C, tval(gt), name, s2v(C->sp.p - 1));
+    aux_rawsetstr(C, tval(gt), name, s2v(C->sp.p - 1));
 }
 
 
@@ -1182,7 +1222,7 @@ CS_API void cs_set_rtable(cs_State *C, const char *field) {
     cs_lock(C);
     api_checknelems(C, 1);
     api_check(C, ttistable(t), "expect table");
-    auxrawsetstr(C, tval(t), field, s2v(C->sp.p - 1));
+    aux_rawsetstr(C, tval(t), field, s2v(C->sp.p - 1));
 }
 
 
@@ -1222,7 +1262,7 @@ CS_API void cs_set_index(cs_State *C, int index, int i) {
 }
 
 
-c_sinline void auxrawsetfield(cs_State *C, int obj, TValue *key, int n) {
+c_sinline void aux_rawsetfield(cs_State *C, int obj, TValue *key, int n) {
     Table *t;
     cs_lock(C);
     api_checknelems(C, n);
@@ -1234,7 +1274,7 @@ c_sinline void auxrawsetfield(cs_State *C, int obj, TValue *key, int n) {
 
 
 CS_API void cs_set_field(cs_State *C, int obj) {
-    auxrawsetfield(C, obj, s2v(C->sp.p - 2), 2);
+    aux_rawsetfield(C, obj, s2v(C->sp.p - 2), 2);
 }
 
 
@@ -1243,28 +1283,28 @@ CS_API void cs_set_fieldstr(cs_State *C, int index, const char *field) {
     cs_lock(C);
     api_checknelems(C, 1);
     t = gettable(C, index);
-    auxrawsetstr(C, t, field, s2v(C->sp.p - 1));
+    aux_rawsetstr(C, t, field, s2v(C->sp.p - 1));
 }
 
 
 CS_API void cs_set_fieldptr(cs_State *C, int obj, const void *field) {
     TValue key;
     setpval(&key, cast_voidp(field));
-    auxrawsetfield(C, obj, &key, 1);
+    aux_rawsetfield(C, obj, &key, 1);
 }
 
 
 CS_API void  cs_set_fieldint(cs_State *C, int obj, cs_Integer field) {
     TValue key;
     setival(&key, field);
-    auxrawsetfield(C, obj, &key, 1);
+    aux_rawsetfield(C, obj, &key, 1);
 }
 
 
 CS_API void  cs_set_fieldflt(cs_State *C, int obj, cs_Number field) {
     TValue key;
     setfval(&key, field);
-    auxrawsetfield(C, obj, &key, 1);
+    aux_rawsetfield(C, obj, &key, 1);
 }
 
 
@@ -1330,20 +1370,16 @@ CS_API int cs_set_uservalue(cs_State *C, int index, unsigned short n) {
 }
 
 
-CS_API void cs_set_usermm(cs_State *C, int index, cs_MM mm) {
+// TODO: add docs
+CS_API void cs_set_usermethods(cs_State *C, int index) {
     UserData *ud;
     cs_lock(C);
-    api_checknelems(C, 1); /* metamethod func */
+    api_checknelems(C, 1); /* table */
     ud = getuserdata(C, index);
-    if (!ud->metalist) {
-        ud->metalist = csA_newmetalist(C);
-        csG_checkGC(C);
-    }
-    setobj(C, &ud->metalist->b[mm], s2v(C->sp.p - 1));
-    csV_finishrawset(C, ud, s2v(C->sp.p - 1));
+    api_check(C, ttistable(s2v(C->sp.p - 1)), "expect table");
+    ud->methods = tval(s2v(C->sp.p - 1));
     csG_barrierback(C, obj2gco(ud), s2v(C->sp.p - 1));
-    csG_checkfin(C, obj2gco(ud), ud->metalist);
-    C->sp.p--;
+    C->sp.p--; /* remove table */
     cs_unlock(C);
 }
 
@@ -1664,7 +1700,7 @@ CS_API int cs_getstack(cs_State *C, int level, cs_Debug *ar) {
 }
 
 
-static const char *auxupvalue(TValue *func, int n, TValue **val,
+static const char *aux_upvalue(TValue *func, int n, TValue **val,
                                GCObject **owner) {
     switch (ttypetag(func)) {
         case CS_VCCL: { /* C closure */
@@ -1696,7 +1732,7 @@ CS_API const char *cs_getupvalue(cs_State *C, int index, int n) {
     const char *name;
     TValue *upval = NULL;
     cs_lock(C);
-    name = auxupvalue(index2value(C, index), n, &upval, NULL);
+    name = aux_upvalue(index2value(C, index), n, &upval, NULL);
     if (name) { /* have upvalue ? */
         setobj2s(C, C->sp.p, upval);
         api_inctop(C);
@@ -1714,7 +1750,7 @@ CS_API const char *cs_setupvalue(cs_State *C, int index, int n) {
     cs_lock(C);
     api_checknelems(C, 1); /* value */
     func = index2value(C, index);
-    name = auxupvalue(func, n, &upval, &owner);
+    name = aux_upvalue(func, n, &upval, &owner);
     if (name) { /* found upvalue ? */
         setobj(C, upval, s2v(--C->sp.p));
         csG_barrier(C, owner, upval);
