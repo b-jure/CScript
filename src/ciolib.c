@@ -749,6 +749,7 @@ static void create_filehandle_methods(cs_State *C) {
     csL_set_funcs(C, f_methods, 0);
     csL_new_usermethods(C, CS_FILEHANDLE_TABLE,
                         sizeof(f_methods)/sizeof(f_methods[0]) - 1);
+    cs_pop(C, 1); /* remove methods table */
 }
 
 

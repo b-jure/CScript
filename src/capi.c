@@ -1109,7 +1109,6 @@ static const TValue *objwithmethods(cs_State *C, int index, Table **t) {
 }
 
 
-// TODO: update docs
 CS_API int cs_get_method(cs_State *C, int index) {
     const TValue *obj;
     Table *t;
@@ -1188,7 +1187,6 @@ CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n) {
 }
 
 
-// TODO: add docs
 CS_API int cs_get_usermethods(cs_State *C, int index) {
     UserData *ud;
     int res = 0;
@@ -1366,7 +1364,6 @@ CS_API int cs_set_uservalue(cs_State *C, int index, unsigned short n) {
 }
 
 
-// TODO: add docs
 CS_API void cs_set_usermethods(cs_State *C, int index) {
     UserData *ud;
     cs_lock(C);

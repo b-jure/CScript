@@ -574,7 +574,6 @@ static const cs_Entry basic_funcs[] = {
 };
 
 
-// TODO: update docs
 static void set_metalist_indices(cs_State *C) {
     const char *mm[CS_MM_N] = {
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",

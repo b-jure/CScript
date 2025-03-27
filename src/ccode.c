@@ -590,7 +590,7 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
     } else {
         cs_assert(e->et == EXP_VARARG);
         SETARG_L(pc, 0, nreturns);
-        csC_reserveslots(fs, 1); /* TODO: redundant? */
+        csC_reserveslots(fs, 1);
     }
     e->et = EXP_FINEXPR;
 }

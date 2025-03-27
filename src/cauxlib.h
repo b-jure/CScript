@@ -27,7 +27,6 @@ typedef struct csL_Buffer csL_Buffer;
 #define CS_ERRFILE      (CS_ERRERROR + 1)
 
 
-// TODO: add docs
 /* new index into the metalist, for when converting values to string */
 #define CS_MM_TOSTRING      CS_MM_N
 
@@ -90,7 +89,7 @@ CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
 /* {=======================================================================
 ** Userdata and Metalist functions
 ** ======================================================================== */
-typedef struct csL_MetaEntry { // TODO: add docs
+typedef struct csL_MetaEntry {
     int mm; /* metamethod index */
     cs_CFunction metaf; /* metamethod function */
 } csL_MetaEntry;
@@ -187,13 +186,13 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
       csL_get_subtable(C, -1, name); \
       cs_remove(C, -2); }
 
-// TODO: add docs
 #define csL_get_usermethods(C, tname)   cs_get_rtable(C, tname)
+
 #define csL_get_metalist(C, lname)      cs_get_rtable(C, lname)
 
 
 /*
-** Perform arithmetic operations on cs_Integer values with wrap-around
+** Perform arithmetic operations on 'cs_Integer' values with wrap-around
 ** semantics, as the CScript core does.
 */
 #define csL_intop(op,x,y) \
@@ -249,7 +248,6 @@ CSLIB_API void  csL_buff_push_gsub(csL_Buffer *B, const char *s,
 CSLIB_API void  csL_buff_end(csL_Buffer *B);
 CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
 
-// TODO: add docs
 #define csL_buff_prep(B)    csL_buff_ensure(B, CSL_BUFFERSIZE)
 /* }======================================================================= */
 
@@ -258,7 +256,6 @@ CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
 ** File handles for IO library
 ** ======================================================================== */
 
-// TODO: update docs
 /*
 ** A file handle is a userdata with 'CS_FILEHANDLE' metalist,
 ** 'CS_FILEHANDLE_TABLE' methods table and initial structure
@@ -274,6 +271,7 @@ typedef struct csL_Stream {
     FILE *f; /* stream (NULL for incompletely created streams) */
     cs_CFunction closef; /* to close stream (NULL for closed streams) */
 } csL_Stream;
+
 /* }======================================================================= */
 
 

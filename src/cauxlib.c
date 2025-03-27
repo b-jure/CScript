@@ -325,7 +325,6 @@ CSLIB_API int csL_set_metalist(cs_State *C, const char *lname) {
 }
 
 
-// TODO: add docs
 CSLIB_API int csL_get_metaindex(cs_State *C, int index, int mm) {
     if (!cs_get_metalist(C, index)) {
         return CS_TNONE;
@@ -341,7 +340,6 @@ CSLIB_API int csL_get_metaindex(cs_State *C, int index, int mm) {
 }
 
 
-// TODO: add docs
 CSLIB_API int csL_callmeta(cs_State *C, int index, int mm) {
     index = cs_absindex(C, index);
     if (csL_get_metaindex(C, index, mm) == CS_TNONE)
@@ -352,7 +350,6 @@ CSLIB_API int csL_callmeta(cs_State *C, int index, int mm) {
 }
 
 
-// TODO: add docs
 CSLIB_API int csL_new_usermethods(cs_State *C, const char *tname, int sz) {
     if (csL_get_usermethods(C, tname) != CS_TNIL) /* name already in use? */
         return 0; /* false; methods table already exists */
@@ -364,7 +361,6 @@ CSLIB_API int csL_new_usermethods(cs_State *C, const char *tname, int sz) {
 }
 
 
-// TODO: add docs
 CSLIB_API void csL_set_usermethods(cs_State *C, const char *tname) {
     csL_get_usermethods(C, tname);
     cs_set_usermethods(C, -2);
@@ -386,7 +382,6 @@ CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname) {
 }
 
 
-// TODO: add docs
 CSLIB_API void csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l,
                                  int nup) {
     csL_check_stack(C, nup, "too many upvalues");
@@ -441,7 +436,6 @@ CSLIB_API int csL_fileresult(cs_State *C, int ok, const char *fname) {
 #endif				/* } */
 
 
-// TODO: add docs
 CSLIB_API int csL_execresult(cs_State *C, int stat) {
     if (stat != 0 && errno != 0) /* error with an 'errno'? */
         return csL_fileresult(C, 0, NULL);
@@ -459,7 +453,6 @@ CSLIB_API int csL_execresult(cs_State *C, int stat) {
 }
 
 
-// TODO: update docs
 CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
     index = cs_absindex(C, index);
     if (csL_callmeta(C, index, CS_MM_TOSTRING)) {
@@ -755,7 +748,6 @@ CSLIB_API void csL_traceback(cs_State *C, cs_State *C1, int level,
 }
 
 
-// TODO: change function name in docs
 CSLIB_API void csL_set_funcs(cs_State *C, const cs_Entry *l, int nup) {
     csL_check_stack(C, nup, "too many upvalues");
     for (; l->name != NULL; l++) {

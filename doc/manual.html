@@ -2421,10 +2421,7 @@
 
         <!-- cs_Alloc -->
         <hr><h3><a name="cs_Alloc"><code>cs_Alloc</code></a></h3>
-        <pre>typedef void *(*cs_Alloc) (void *ptr,
-                           size_t osz,
-                           size_t nsz,
-                           void *ud);</pre>
+        <pre>typedef void *(*cs_Alloc) (void *ptr, size_t osz, size_t nsz, void *ud);</pre>
         <p>
         The type of the memory-allocation function used by CScript states.
         The allocator function must provide a functionality similar to
@@ -2484,9 +2481,7 @@
 
         <!-- cs_Reader -->
         <hr><h3><a name="cs_Reader"><code>cs_Reader</code></a></h3>
-        <pre>typedef const char *(*cs_Reader) (cs_State *C,
-                                  void *data,
-                                  size_t *size);</pre>
+        <pre>typedef const char *(*cs_Reader) (cs_State *C, void *data, size_t *size);</pre>
         <p>
         The reader function used by <a href="#cs_load"><code>cs_load</code></a>.
         Every time <a href="#cs_load"><code>cs_load</code></a> needs another
@@ -2518,10 +2513,10 @@
         <!-- cs_Entry -->
         <hr><h3><a name="cs_Entry"><code>cs_Entry</code></a></h3>
         <pre>
-    typedef struct cs_Entry {
-        const char *name;
-        cs_CFunction func;
-    } cs_Entry;</pre>
+typedef struct cs_Entry {
+    const char *name;
+    cs_CFunction func;
+} cs_Entry;</pre>
         <p>
         Type for arrays of functions or methods to be set by
         <a href="#cs_push_class"><code>cs_push_class</code></a> family of
@@ -2533,25 +2528,25 @@
         <code>func</code> are <code>NULL</code>.
         </p>
 
-        <!-- cs_DebugInfo -->
-        <hr><h3><a name="cs_DebugInfo"><code>cs_DebugInfo</code></a></h3>
+        <!-- cs_Debug -->
+        <hr><h3><a name="cs_Debug"><code>cs_Debug</code></a></h3>
         <pre>
-    typedef struct cs_Debug {
-        const char *name;           /* (n) */
-        const char *namewhat;       /* (n) */
-        const char *what;           /* (s) */
-        const char *source;         /* (s) */
-        size_t srclen;              /* (s) */
-        int currline;               /* (l) */
-        int defline;                /* (s) */
-        int lastdefline;            /* (s) */
-        int nupvals;                /* (u) number of upvalues */
-        int nparams;                /* (u) number of parameters */
-        char isvararg;              /* (u) */
-        char shortsrc[CS_MAXSRC];   /* (s) */
-        /* private part */
-        <em>other fields</em>
-    } cs_Debug;</pre>
+typedef struct cs_Debug {
+    const char *name;           /* (n) */
+    const char *namewhat;       /* (n) */
+    const char *what;           /* (s) */
+    const char *source;         /* (s) */
+    size_t srclen;              /* (s) */
+    int currline;               /* (l) */
+    int defline;                /* (s) */
+    int lastdefline;            /* (s) */
+    int nupvals;                /* (u) number of upvalues */
+    int nparams;                /* (u) number of parameters */
+    char isvararg;              /* (u) */
+    char shortsrc[CS_MAXSRC];   /* (s) */
+    /* private part */
+    <em>other fields</em>
+} cs_Debug;</pre>
         <p>
         A structure used to carry different pieces of information about a
         function or an activation record.
@@ -2900,7 +2895,8 @@
         <pre>int cs_type (cs_State *C, int index);</pre>
         <p>
         Returns the type of the value in the given valid index,
-        or <code>CS_TNONE</code> for a non-valid but acceptable index.
+        or <a href="#CS_TNONE"><code>CS_TNONE</code></a> for a non-valid but
+        acceptable index.
         The types returned by <a href="#cs_type"><code>cs_type</code></a>
         are coded by the following constants defined in <code>cscript.h</code>:
         <a name="CS_TNIL"><code>CS_TNIL</code></a>,
@@ -3638,7 +3634,7 @@
         <br/>
         Returns <code>CS_TCLASS</code> if the object at <code>index</code>
         is instance, otherwise nothing is pushed and this returns 
-        <code>CS_TNONE</code>.
+        <a href="#CS_TNONE"><code>CS_TNONE</code></a>.
         </p>
 
         <!-- cs_get_superclass -->
@@ -3655,16 +3651,39 @@
 
         <!-- cs_get_method -->
         <hr><h3><a name="cs_get_method"><code>cs_get_method</code></a></h3>
-        <span class="apii">[-0, +1, &ndash;]</span>
+        <span class="apii">[-0, +0, <em>m</em>]</span>
         <pre>int cs_get_method (cs_State *C, int index);</pre>
         <p>
-        Pushes onto the stack a method of the value <code>ins[k]</code> where
-        <code>ins</code> is the value at the given index and <code>k</code>
+        Pushes onto the stack a method of the value at the given index,
+        this value must be either an instance or full userdata.
+        This is equivalent to <code>v[k]</code> where <code>v</code> is the
+        methods table of the value at the given index and <code>k</code>
         is the value on top of the stack.
-        This performs raw access on the method table of the instance and as
-        such can't invoke a metamethod.
+        This creates a bound method, a special type of method that
+        contains a reference to the receiver (instance or full userdata) and
+        the value of the method.
         <br/><br/>
-        Returns the type of the pushed value.
+        Returns the type of the pushed value, which is always a
+        <a href="#CS_TFUNCTION"><code>CS_TFUNCTION</code></a>, unless the
+        value was never assigned a methods table
+        (see <a href="#cs_push_class"><code>cs_push_class</code></a> and
+        <a href="#cs_set_usermethods"><code>cs_set_usermethods</code></a>)
+        or the <code>k</code> field in the methods table is <b>nil</b>,
+        in which case this returns <a href="#CS_TNIL"><code>CS_TNIL</code></a>.
+        </p>
+
+        <!-- cs_get_supermethod -->
+        <hr><h3><a name="cs_get_supermethod"><code>cs_get_supermethod</code></a></h3>
+        <span class="apii">[-0, +0, <em>m</em>]</span>
+        <pre>int cs_get_supermethod (cs_State *C, int index);</pre>
+        <p>
+        Similar to <a href="#cs_get_method"><code>cs_get_method</code></a>,
+        except the value at the given index must be an instance and the
+        methods table being queried belongs to the superclass of the instance
+        class.
+        This also pushes <b>nil</b> and returns
+        <a href="#CS_TNIL"><code>CS_TNIL</code></a> if the class of the
+        instance does not have a superclass.
         </p>
 
         <!-- cs_get_uservalue -->
@@ -3677,7 +3696,18 @@
         pushed value.
         <br/><br/>
         If the userdata does not have that value, pushes <b>nil</b> and
-        returns <a href="CS_TNONE"><code>CS_TNONE</code></a>.
+        returns <a href="#CS_TNONE"><code>CS_TNONE</code></a>.
+        </p>
+
+        <!-- cs_get_usermethods -->
+        <hr><h3><a name="cs_get_usermethods"><code>cs_get_usermethods</code></a></h3>
+        <span class="apii">[-0, +(0|1), &ndash;]</span>
+        <pre>int cs_get_usermethods (cs_State *C, int index);</pre>
+        <p>
+        Pushes methods table of the full userdata at the given index and
+        returns 1.
+        If the full userdata does not have a methods table, then nothing
+        is pushed and 0 is returned.
         </p>
 
         <!-- cs_get_metalist -->
@@ -3845,6 +3875,16 @@
         Pops a value from the stack and sets it as the new <code>n</code>-th
         user value associated to the full userdata at the given index.
         Returns 0 if the userdata does not have that value.
+        </p>
+
+        <!-- cs_set_usermethods -->
+        <hr><h3><a name="cs_set_usermethods"><code>cs_set_usermethods</code></a></h3>
+        <span class="apii">[-1, +0, &ndash;]</span>
+        <pre>void cs_set_usermethods (cs_State *C, int index);</pre>
+        <p>
+        Pops a value on top of the stack, which must be a table, and
+        sets it as the methods table of the value at the given index,
+        which must be a full userdata.
         </p>
 
         <!-- cs_status -->
@@ -4911,8 +4951,8 @@
         <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
         (see <a href="#4.3">&sect;4.3</a>) under the name <code>lname</code>,
         and returns 1.
-        Otherwise if the registry table already has the key
-        <code>lname</code>, 0 is returned.
+        If the registry table already has the key <code>lname</code>,
+        0 is returned.
         <br/><br/>
         In both cases, the function pushes onto the stack the final value
         associated with <code>lname</code> in the registry table.
@@ -4933,6 +4973,60 @@
         this returns 0, otherwise 1 is returned.
         </p>
 
+
+        <hr><h3><a name="csL_get_metaindex"><code>csL_get_metaindex</code></a></h3><p>
+        <span class="apii">[-0, +(0|1), &ndash;]</span>
+        <pre>int csL_get_metaindex (cs_State *C, int index, int mm);</pre>
+        <p>
+        Equivalent to <code>ml[mm]</code>, where <code>ml</code> is the
+        metalist of the value at the given index.
+        If the value at the given index does not have a metalist or the
+        value of metalist at the index <code>mm</code> is <b>nil</b>, then
+        nothing is pushed and <a href="#CS_TNONE"><code>CS_TNONE</code></a>
+        is returned.
+        Otherwise this returns the type of the value pushed on the stack.
+        </p>
+
+        <hr><h3><a name="csL_callmeta"><code>csL_callmeta</code></a></h3><p>
+        <span class="apii">[-0, +(0|1), <em>e</em>]</span>
+        <pre>int csL_callmeta (cs_State *C, int index, int mm);</pre>
+        <p>
+        If the value at the given index has a metalist and this metalist
+        has a index <code>mm</code>, this function calls this index value
+        passing the value at the given index as its only argument.
+        In this case this function returns true and pushes onto the stack
+        the value returned by the call.
+        If there is no metalist or no metamethod, this function returns
+        false without pushing any value on the stack.
+        </p>
+
+        <hr><h3><a name="csL_new_usermethods"><code>csL_new_usermethods</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>int csL_new_usermethods (cs_State *C, const char *tname, int sz);</pre>
+        <p>
+        Creates a new table of size <code>sz</code> to be used as a methods
+        table for userdata, adds it into into the table located in the
+        registry at the index
+        <a href="#CS_RINDEX_REGTABLE"><code>CS_RINDEX_REGTABLE</code></a>
+        (see <a href="#4.3">&sect;4.3</a>) under the name <code>tname</code>,
+        and returns 1.
+        If the registry table already has the key <code>tname</code>,
+        this returns 0.
+        <br/><br/>
+        In both cases, the function pushes onto the stack the final value
+        associated with <code>tname</code> in the registry table.
+        </p>
+
+        <hr><h3><a name="csL_set_usermethods"><code>csL_set_usermethods</code></a></h3><p>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>int csL_set_usermethods (cs_State *C, const char *tname);</pre>
+        <p>
+        Sets the methods table of the userdata object on top of the stack
+        as the methods table associated with name <code>tname</code> in
+        the registry table
+        (see <a href="#csL_new_usermethods"><code>csL_new_usermethods</code></a>).
+        </p>
+
         <hr><h3><a name="csL_test_userdata"><code>csL_test_userdata</code></a></h3><p>
         <span class="apii">[-0, +0, &ndash;]</span>
         <pre>void *csL_test_userdata (cs_State *C, int index, const char *lname);</pre>
@@ -4945,8 +5039,69 @@
         it doesn't have a matching metalist, NULL is returned.
         </p>
 
+        <hr><h3><a name="csL_MetaEntry"><code>csL_MetaEntry</code></a></h3><p>
+        <pre>
+typedef struct csL_MetaEntry {
+    int mm;
+    cs_CFunction metaf;
+} csL_MetaEntry;</pre>
+        <p>
+        Type for arrays of functions to be registered by
+        <a href="#csL_set_metafuncs"><code>csL_set_metafuncs</code></a>.
+        <code>mm</code> is the index into the metalist and <code>metaf</code>
+        is a pointer to the function.
+        Any array of <a href="#csL_MetaEntry"><code>csL_MetaEntry</code></a>
+        must end with a sentinel entry in which the <code>mm</code> is set
+        to the invalid index, a negative integer.
+        </p>
+
+        <hr><h3><a name="csL_set_metafuncs"><code>csL_set_metafuncs</code></a></h3><p>
+        <span class="apii">[-nup, +0, <em>m</em>]</span>
+        <pre>int csL_set_metafuncs (cs_State *C, const csL_MetaEntry *l, int nup);</pre>
+        <p>
+        Registers all functions in the array <code>l</code>
+        (see <a href="#csL_MetaEntry"><code>csL_MetaEntry</code></a>) into
+        the list on top of the stack (below optional upvalues, see next).
+        <br/><br/>
+        When <code>nup</code> is not zero, all functions are created with
+        <code>nup</code> upvalues, initialized with copies of the
+        <code>nup</code> values previously pushed on the stack on top
+        of the metalist.
+        These values are popped from the stack after the registration.
+        <br/><br/>
+        A function with a <code>NULL</code> value means that the index for
+        that function (<code>mm</code>) in the list, will be set to <b>nil</b>.
+        </p>
+
+        <hr><h3><a name="csL_fileresult"><code>csL_fileresult</code></a></h3><p>
+        <span class="apii">[-0, +(1|3), <em>m</em>]</span>
+        <pre>int csL_fileresult (cs_State *C, int ok, const char *fname);</pre>
+        <p>
+        This function produces the return values for file-related functions
+        in the standard library
+        (<a href="#io.open"><code>io.open</code></a>,
+        <a href="#os.rename"><code>os.rename</code></a>,
+        <a href="#file.seek"><code>file.seek</code></a>, etc.).
+        <br/><br/>
+        If <code>ok</code> is 0, then, <b>fail</b>, error message and error
+        code are pushed on top of the stack (in that order).
+        Otherwise <em>true</em> is pushed on top of the stack.
+        <br/><br/>
+        In both cases, this returns the number of values pushed.
+        </p>
+
+        <hr><h3><a name="csL_execresult"><code>csL_execresult</code></a></h3><p>
+        <span class="apii">[-0, +3, <em>m</em>]</span>
+        <pre>int csL_execresult (cs_State *C, int stat);</pre>
+        <p>
+        This function produces the return values for process-related
+        function in the standard library
+        (<a href="#os.execute"><code>os.execute</code></a> and
+        <a href="#io.close"><code>io.close</code></a>).
+        </p>
+
         <hr><h3><a name="csL_to_lstring"><code>csL_to_lstring</code></a></h3><p>
-        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <span class="apii">[-0, +1, <em>e</em>]</span>
         <pre>void csL_to_lstring (cs_State *C, int index, size_t *len);</pre>
         <p>
         Converts any CScript value at the given index to a C&nbsp;string
@@ -4955,6 +5110,12 @@
         returned by the function (see <a href="#4.1.3">&sect;4.1.3</a>).
         If <code>len</code> is not <code>NULL</code>, the function also sets
         <code>*len</code> with the string length.
+        <br/><br/>
+        If the value has a metalist with a
+        <a name="CS_MM_TOSTRING"><code>CS_MM_TOSTRING</code></a> index
+        set, then <code>csL_to_lstring</code> calls the corresponding
+        metamethod with the value as argument, and uses the result of the
+        call as its result.
         </p>
 
         <hr><h3><a name="csL_to_fulluserdata"><code>csL_to_fulluserdata</code></a></h3><p>
@@ -4986,23 +5147,6 @@
         that called the running function, etc.
         <br/><br/>
         This function is used to build a prefix for error messages.
-        </p>
-
-        <hr><h3><a name="csL_fileresult"><code>csL_fileresult</code></a></h3><p>
-        <span class="apii">[-0, +(1|3), <em>m</em>]</span>
-        <pre>int csL_fileresult (cs_State *C, int ok, const char *fname);</pre>
-        <p>
-        This function produces the return values for file-related functions
-        in the standard library
-        (<a href="#io.open"><code>io.open</code></a>,
-        <a href="#os.rename"><code>os.rename</code></a>,
-        <a href="#file.seek"><code>file.seek</code></a>, etc.).
-        <br/><br/>
-        If <code>ok</code> is 0, then, <b>fail</b>, error message and error
-        code are pushed on top of the stack (in that order).
-        Otherwise <em>true</em> is pushed on top of the stack.
-        <br/><br/>
-        In both cases, this returns the number of values pushed.
         </p>
 
         <hr><h3><a name="csL_get_property"><code>csL_get_property</code></a></h3><p>
@@ -5087,9 +5231,9 @@
         traceback.
         </p>
 
-        <hr><h3><a name="csL_setfuncs"><code>csL_setfuncs</code></a></h3><p>
+        <hr><h3><a name="csL_set_funcs"><code>csL_set_funcs</code></a></h3><p>
         <span class="apii">[-nup, +0, <em>m</em>]</span>
-        <pre>void csL_setfuncs (cs_State *C, const cs_Entry *l, int nup);</pre>
+        <pre>void csL_set_funcs (cs_State *C, const cs_Entry *l, int nup);</pre>
         <p>
         Registers all functions in the array <code>l</code>
         (see <a href="#cs_Entry"><code>cs_Entry</code></a>) into the table or
@@ -5249,7 +5393,7 @@
         Creates a new table with a size optimized to store all entries in
         the array <code>l</code> (but does not actually store them).
         It is intended to be used in conjunction with
-        <a href="#csL_setfuncs"><code>csL_setfuncs</code></a>
+        <a href="#csL_set_funcs"><code>csL_set_funcs</code></a>
         (see <a href="#csL_newlib"><code>csL_newlib</code></a>).
         <br/><br/>
         It is implemented as a macro.
@@ -5266,7 +5410,7 @@
         It is implemented as the following macro:
 
         <pre>
-    (csL_newlibtable(C,l), csL_setfuncs(C,l,0))</pre>
+    (csL_newlibtable(C,l), csL_set_funcs(C,l,0))</pre>
 
         The array <code>l</code> must be the actual array, not a pointer to it.
         </p>
@@ -5291,17 +5435,20 @@
         on top of the stack, and later removed after the operation.
         </p>
 
+        <hr><h3><a name="csL_get_usermethods"><code>csL_get_usermethods</code></a></h3><p>
+        <span class="apii">[-0, +1, &ndash;]</span>
+        <pre>int csL_get_usermethods (cs_State *C, const char *name);</pre>
+        <p>
+        This macro is equivalent to
+        <a href="#cs_get_rtable"><code>cs_get_rtable</code></a>.
+        </p>
+
         <hr><h3><a name="csL_get_metalist"><code>csL_get_metalist</code></a></h3><p>
         <span class="apii">[-0, +1, &ndash;]</span>
         <pre>int csL_get_metalist (cs_State *C, const char *name);</pre>
         <p>
         This macro is equivalent to
         <a href="#cs_get_rtable"><code>cs_get_rtable</code></a>.
-        This is defined in order to imply that metalists for full userdata
-        should be stored in the registry table.
-        Of course this is not a requirement, but this is how the CScript
-        libraries store userdata metalists
-        (see <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>).
         </p>
 
         <hr><h3><a name="csL_intop"><code>csL_intop</code></a></h3><p>
@@ -5488,11 +5635,31 @@
         on the top of the stack.
         </p>
 
+        <hr><h3><a name="csL_buff_endsz"><code>csL_buff_endsz</code></a></h3><p>
+        <span class="apii">[-?, +1, <em>m</em>]</span>
+        <pre>void csL_buff_endsz (csL_Buffer *B, size_t sz);</pre>
+        <p>
+        Equivalent to the sequence
+        <a href="csL_buffadd"><code>csL_buffadd</code></a>,
+        <a href="csL_buff_end"><code>csL_buff_end</code></a>.
+        </p>
+
+        <hr><h3><a name="csL_buff_prep"><code>csL_buff_prep</code></a></h3><p>
+        <span class="apii">[-?, +1, <em>m</em>]</span>
+        <pre>void csL_buff_prep (csL_Buffer *B);</pre>
+        <p>
+        Equivalent to
+        <a href="#csL_buff_ensure"><code>csL_buff_ensure</code></a>
+        with the predefined size
+        <a name="CSL_BUFFERSIZE"><code>CSL_BUFFERSIZE</code></a>.
+        </p>
+
         <hr><h3><a name="csL_Stream"><code>csL_Stream</code></a></h3><p>
-        <pre>typedef struct csL_Stream {
-            FILE *f;
-            cs_CFunction closef;
-        } csL_Stream;</pre>
+        <pre>
+typedef struct csL_Stream {
+    FILE *f;
+    cs_CFunction closef;
+} csL_Stream;</pre>
         <p>
         The standard representation for file handles used by the standard
         I/O library.
@@ -5503,8 +5670,9 @@
         (where <code>CS_FILEHANDLE</code> is a macro with the metalist's
         name and <code>CS_FILEHANDLE_TABLE</code> is a macro with the name
         of the methods table).
-        The metalist is created by the I/O library
-        (see <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>).
+        The metalist and the methods table are created by the I/O library
+        (see <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>
+        and <a href="#csL_new_usermethods"><code>csL_new_usermethods</code></a>).
         <br/><br/>
         This userdata must start with the structure <code>csL_Stream</code>;
         it can contain other data after this initial structure.
@@ -6019,7 +6187,6 @@
         metalist.
         </p>
 
-
         <!-- __sub -->
         <hr/><h3><a name="__sub"><code>__sub</code></a></h3>
         A global variable (not a function) that holds integer index that
@@ -6130,6 +6297,19 @@
         A global variable (not a function) that holds integer index that
         corresponds to the index for <code>__le</code> metamethod in the
         metalist.
+
+        <!-- __tostring -->
+        <hr/><h3><a name="__tostring"><code>__tostring</code></a></h3>
+        A global variable (not a function) that holds integer index that
+        corresponds to the index for <code>__tostring</code> metamethod in
+        the metalist.
+        </p>
+
+        <!-- __N -->
+        <hr/><h3><a name="__N"><code>__N</code></a></h3>
+        A global variable (not a function) that holds total number of
+        metamethods reserved by the CScript and the standard library.
+        In other terms, this is the first free index in the metalist.
         </p>
 
         <h2>6.2 &ndash; <a name="6.2">Package Library</a></h2>
@@ -6739,7 +6919,6 @@
         <br/>
         If <code>j</code> is greater than the last index,
         it is corrected to that index.
-        <br/>
         <br/><br/>
         Example:
         <pre>
@@ -6755,6 +6934,43 @@
         Example:
         <pre>
     assert(string.rfind("Hello, Hello", "llo") == 9);</pre>
+        </p>
+
+        <!-- string.span -->
+        <hr/><h3><a name="string.span"><code>string.span (s, accept [, i [, j]])</code></a></h3>
+        <p>
+        Returns the length of the initial segment of string <code>s</code>
+        which consists entirely of bytes in the string <code>accept</code>.
+        There are two optional arguments, the start index <code>i</code> which
+        is the index where the string <code>s</code> starts, and end index
+        <code>j</code> which defined where the string <code>s</code> ends.
+        This returns fail if index <code>i</code> is greater than index
+        <code>j</code>.
+        <br/><br/>
+        If <code>i</code> is not specified it is set to 0, if <code>j</code>
+        is not specified, it is set to -1 (last index).
+        <br/>
+        If, after the translation of negative indices,
+        <code>i</code> is less than 0, it is corrected to 0.
+        <br/>
+        If <code>j</code> is greater than the last index,
+        it is corrected to that index.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.span("154329okA", "0123456789") == 6);</pre>
+        </p>
+
+        <!-- string.cspan -->
+        <hr/><h3><a name="string.cspan"><code>string.cspan (s, reject [, i [, j]])</code></a></h3>
+        <p>
+        Similar to <a href="#string.span"><code>string.span</code></a>,
+        except this returns the length of the initial segment which consists
+        entirely of bytes <b>not</b> in the string <code>reject</code>.
+        <br/><br/>
+        Example:
+        <pre>
+    assert(string.cspan("abc154329", "0123456789") == 3);</pre>
         </p>
 
         <!-- string.replace -->

@@ -72,10 +72,10 @@ p.menubar {
 }
 
 :target {
-    background-color: #222222 ;
-    margin: -8px ;
-    padding: 8px ;
-    border-radius: 8px ;
+    background-color: #000000 ;
+    margin: -2px ;
+    padding: 2px ;
+    border-radius: 4px ;
     outline: none ;
 }
 

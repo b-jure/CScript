@@ -733,13 +733,11 @@ pushlen:
 }
 
 
-// TODO: add docs and test
 static int s_span(cs_State *C) {
     return aux_span(C, 0);
 }
 
 
-// TODO: add docs and test
 static int s_cspan(cs_State *C) {
     return aux_span(C, 1);
 }
