@@ -134,8 +134,8 @@ static int checkmode(const char *mode) {
 
 #define IO_PREFIX	"__IO_"
 #define IOPREF_LEN	(sizeof(IO_PREFIX)/sizeof(char) - 1)
-#define IO_INPUT	(IO_PREFIX "STDIN")
-#define IO_OUTPUT	(IO_PREFIX "STDOUT")
+#define IO_INPUT	(IO_PREFIX "stdin")
+#define IO_OUTPUT	(IO_PREFIX "stdout")
 
 
 typedef csL_Stream CStream;
@@ -402,6 +402,12 @@ static const char *read_format_err[] = {
 #define EREAD_FMTLEN      read_format_err[1]
 
 
+/* types of digits for 'read_digits' */
+#define DIGDEC  0
+#define DIGHEX  1
+#define DIGOCT  2
+
+
 /* maximum length of a numeral */
 #if !defined(C_MAXNUMERAL)
 #define C_MAXNUMERAL    200
@@ -430,6 +436,12 @@ static int nextchar(NumBuff *nb) {
 }
 
 
+/* skip current char */
+static void skipchar(NumBuff *nb) {
+    nb->c = c_getc(nb->f);
+}
+
+
 /* accept current char if it is in 'set' (of size 2) */
 static int test2(NumBuff *nb, const char *set) {
     if (nb->c == set[0] || nb->c == set[1])
@@ -439,10 +451,20 @@ static int test2(NumBuff *nb, const char *set) {
 
 
 /* read sequence of (hex)digits */
-static int read_digits(NumBuff *nb, int hex) {
+static int read_digits(NumBuff *nb, int dtype, int frac) {
     int count = 0;
-    while ((hex ? isxdigit(nb->c) : isdigit(nb->c)) && nextchar(nb))
+    do {
+        if (count > 0 && !frac && nb->c == '_')
+            skipchar(nb);
+        switch (dtype) {
+            case DIGDEC: if (!isdigit(nb->c)) goto ret; break;
+            case DIGHEX: if (!isxdigit(nb->c)) goto ret; break;
+            case DIGOCT: if (!isdigit(nb->c) || nb->c > '7') goto ret; break;
+            default: cs_assert(0); /* invalid digit type */
+        }
         count++;
+    } while (nextchar(nb));
+ret:
     return count;
 }
 
@@ -455,7 +477,8 @@ static int read_digits(NumBuff *nb, int hex) {
 static int read_number(cs_State *C, FILE *f) {
     NumBuff nb;
     int count = 0;
-    int hex = 0;
+    int gotrad = 0;
+    int dtype = DIGDEC;
     char decp[2];
     nb.f = f; nb.n = 0;
     decp[0] = cs_getlocaledecpoint();
@@ -463,16 +486,22 @@ static int read_number(cs_State *C, FILE *f) {
     c_lockfile(nb.f);
     do { nb.c = c_getc(nb.f); } while (isspace(nb.c)); /* skip leading space */
     test2(&nb, "+-"); /* optional sign */
-    if (test2(&nb, "00")) {
-        if (test2(&nb, "xX")) hex = 1; /* numeral as hexadecimal */
-        else count = 1; /* count initial '0' as valid digit */
+    if (test2(&nb, "00")) { /* leading zero? */
+        if (test2(&nb, "xX")) /* have hex prefix? */
+            dtype = DIGHEX; /* numeral as hexadecimal */
+        else { /* either decimal or octal */
+            dtype = DIGOCT;
+            count = 1; /* count initial '0' as valid digit */
+        }
     }
-    count += read_digits(&nb, hex); /* integral part */
-    if (test2(&nb, decp)) /* decimal point? */
-        count += read_digits(&nb, hex); /* read fractional part */
-    if (count > 0 && test2(&nb, (hex ? "pP" : "eE"))) { /* exponent mark? */
+    count += read_digits(&nb, dtype, 0); /* integral part */
+    if (test2(&nb, decp)) { /* decimal point? */
+        count += read_digits(&nb, dtype, 1); /* read fractional part */
+        gotrad = 1;
+    }
+    if (test2(&nb, (dtype == DIGHEX ? "pP" : "eE"))) { /* exponent mark? */
         test2(&nb, "+-"); /* exponent sign */
-        read_digits(&nb, 0); /* exponent digits */
+        read_digits(&nb, dtype, gotrad); /* exponent digits */
     }
     ungetc(nb.c, nb.f); /* unread look-ahead char */
     c_unlockfile(nb.f);

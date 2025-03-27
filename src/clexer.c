@@ -468,13 +468,14 @@ static int read_char(Lexer *lx, Literal *k) {
 
 /* convert lexer buffer bytes into number constant */
 static int lexstr2num(Lexer *lx, Literal *k) {
-    int fof; /* flag for float overflow; -1 underflow; 1 overflow; 0 ok */
+    int f; /* flag for float overflow; -1 underflow; 1 overflow; 0 ok */
     TValue o;
-    if (c_unlikely(csS_tonum(csR_buff(lx->buff), &o, &fof) == 0))
+    savec(lx, '\0'); /* terminate */
+    if (c_unlikely(csS_tonum(csR_buff(lx->buff), &o, &f) == 0))
         lexerror(lx, "malformed number", TK_FLT);
-    if (c_unlikely(fof > 0)) /* overflow? */
+    if (c_unlikely(f > 0)) /* overflow? */
         lexwarn(lx, "number constant overflows", TK_FLT);
-    else if (c_unlikely(fof < 0)) /* underflow? */
+    else if (c_unlikely(f < 0)) /* underflow? */
         lexwarn(lx, "number constant underflows", TK_FLT);
     if (ttisint(&o)) { /* integer constant? */
         k->i = ival(&o);
@@ -487,6 +488,24 @@ static int lexstr2num(Lexer *lx, Literal *k) {
 }
 
 
+static int check_next(Lexer *lx, int c) {
+    if (lx->c == c) {
+        advance(lx);
+        return 1;
+    } else
+        return 0;
+}
+
+
+static int check_next2(Lexer *lx, const char *set) {
+    if (lx->c == set[0] || lx->c == set[1]) {
+        save_and_advance(lx);
+        return 1;
+    } else
+        return 0;
+}
+
+
 /*
 ** Read digits, additionally allow '_' separators if these are
 ** not digits in the fractional part denoted by 'frac'.
@@ -494,114 +513,108 @@ static int lexstr2num(Lexer *lx, Literal *k) {
 static int read_digits(Lexer *lx, DigType dt, int frac) {
     int digits = 0;
     for (;;) {
-        if (!frac && lx->c == '_') /* digit separator? */
-            goto only_read; /* skip */
+        if (!frac && check_next(lx, '_')) /* separator? */
+            continue; /* skip */
         switch (dt) { /* otherwise get the digit */
             case DigDec: if (!cisdigit(lx->c)) return digits; break;
             case DigHex: if (!cisxdigit(lx->c)) return digits; break;
             case DigOct: if (!cisodigit(lx->c)) return digits; break;
             default: cs_assert(0); break; /* invalid 'dt' */
         }
-        save(lx);
+        save_and_advance(lx);
         digits++;
-    only_read:
-        advance(lx);
     }
 }
 
 
-/*
-** Read exponent digits.
-*/
+/* read exponent digits (in base 10) */
 static int read_exponent(Lexer *lx) {
     int gotzero = 0;
-    if (lx->c == '-' || lx->c == '+') /* have exponent sign? */
-        save_and_advance(lx); /* save and skip it */
-    if (lx->c == '0') { /* leading zero? */
+    check_next2(lx, "-+"); /* optional sign */
+    if (check_next(lx, '0')) { /* leading zero? */
         gotzero = 1;
         while (lx->c == '_' || lx->c == '0')
             advance(lx); /* skip separators and leading zeros */
     }
-    if (cisdigit(lx->c)) /* got digits? */
+    if (cisalpha(lx->c)) { /* exponent touching a letter? */
+        save_and_advance(lx); /* force an error */
+        return 0; /* no digits */
+    } else if (cisdigit(lx->c)) { /* got at least one non-zero digit? */
         return read_digits(lx, DigDec, 0);
-    else if (c_unlikely(!gotzero))
+    } else if (c_unlikely(!gotzero)) { /* no digits? */
         lexerror(lx, "at least one exponent digit expected", TK_FLT);
-    else {
+    } else { /* one or more leading zeros */
         savec(lx, '0'); /* save only one leading zero */
         return 1; /* (one zero) */
     }
 }
 
 
-/*
-** Read base 10 (decimal) number.
-*/
+/* read base 10 (decimal) numeral */
 static int read_decnum(Lexer *lx, Literal *k, int c) {
     int fp = (c == '.'); /* check if '.' is first */
     int ndigs = read_digits(lx, DigDec, fp) + !fp;
     if (!fp && lx->c == '.') { /* have fractional part? ('.' was not first) */
+        int nfrac; /* fractional digits */
         save_and_advance(lx); /* skip '.' */
-        int nfrac = read_digits(lx, DigDec, 1);
-        if (ndigs == 0) /* no integer part? */
+        nfrac = read_digits(lx, DigDec, 1);
+        if (ndigs == 0) /* no integral part? */
             ndigs = nfrac; /* number of digits is equal to fractional part */
     }
-    if (ctolower(lx->c) == 'e') { /* have exponent? */
-        if (c_unlikely(fp && !ndigs)) /* no integer or fractional part? */
-            lexerror(lx, "decimal constant expects at least one digit", TK_FLT);
-        save_and_advance(lx); /* skip exponent symbol */
-        read_exponent(lx);
+    if (check_next2(lx, "eE")) { /* have exponent? */
+        if (c_unlikely(fp && !ndigs)) /* no integral or fractional part? */
+            lexerror(lx, "no digits in integral or fractional part", TK_FLT);
+        if (read_exponent(lx) == 0) /* error? */
+            goto convert;
     }
-    savec(lx, '\0'); /* terminate */
+    if (cisalpha(lx->c)) /* numeral touching a letter? */
+        save_and_advance(lx); /* force an error */
+convert:
     return lexstr2num(lx, k);
 }
 
 
-/*
-** Read base 16 (hexadecimal) number.
-*/
+/* read base 16 (hexadecimal) numeral */
 static int read_hexnum(Lexer *lx, Literal *k) {
-    int gotrad = 0, gotexpo = 0, ndigs = 0;
-    save_and_advance(lx); /* skip 'x'/'X' */
+    int ndigs = 0;
+    int gotexp, gotrad;
     if (cisxdigit(lx->c)) /* can't have separator before first digit */
         ndigs = read_digits(lx, DigHex, 0);
-    if (lx->c == '.') {
-        gotrad = 1;
+    if ((gotrad = lx->c == '.')) {
         save_and_advance(lx);
         if (c_unlikely(!read_digits(lx, DigHex, 1) && !ndigs))
             lexerror(lx,"hexadecimal constant expects at least one digit", TK_FLT);
     } else if (!ndigs)
         lexerror(lx, "invalid suffix 'x|X' on integer constant", TK_FLT);
-    if (ctolower(lx->c) == 'p') { /* have exponent? */
-        gotexpo = 1;
-        save_and_advance(lx); /* skip exponent sign... */
-        read_exponent(lx); /* ...and read its value */
+    if ((gotexp = check_next2(lx, "pP"))) { /* have exponent? */
+        if (read_exponent(lx) == 0) /* error? */
+            goto convert;
     }
-    if (c_unlikely(gotrad && !gotexpo))
+    if (c_unlikely(gotrad && !gotexp))
         lexerror(lx, "hexadecimal float constant is missing exponent 'p|P'", TK_FLT);
-    savec(lx, '\0'); /* terminate */
+    if (cisalpha(lx->c)) /* numeral touching a letter? */
+        save_and_advance(lx); /* force an error */
+convert:
     return lexstr2num(lx, k);
 }
 
 
-/*
-** Read base 8 (octal) number.
-*/
+/* read base 8 (octal) numeral */
 static int read_octnum(Lexer *lx, Literal *k) {
     if (c_unlikely(!cisodigit(lx->c))) /* first digit is not octal digit? */
         lexerror(lx, "octal constant expects at least one digit", TK_INT);
     read_digits(lx, DigOct, 0);
-    savec(lx, '\0'); /* terminate */
+    if (cisalpha(lx->c)) /* numeral touching a letter? */
+        save_and_advance(lx); /* force an error */
     return lexstr2num(lx, k);
 }
 
 
-/*
-** Read a number constant.
-*/
-static int read_number(Lexer *lx, Literal *k) {
+/* read a numeral string */
+static int read_numeral(Lexer *lx, Literal *k) {
     int c = lx->c;
     save_and_advance(lx);
-    if (c == '0' && ctolower(lx->c) == 'x')
+    if (c == '0' && check_netx2(lx, "xX"))
         return read_hexnum(lx, k);
     else if (c == '0' && cisdigit(lx->c))
         return read_octnum(lx, k);
@@ -610,10 +623,9 @@ static int read_number(Lexer *lx, Literal *k) {
 }
 
 
-
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Scanner
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 
 /* scan for tokens */
 static int scan(Lexer *lx, Literal *k) {
@@ -652,7 +664,7 @@ static int scan(Lexer *lx, Literal *k) {
             }
             case '0': case '1': case '2': case '3': case '4':
             case '5': case '6': case '7': case '8': case '9': {
-                return read_number(lx, k);
+                return read_numeral(lx, k);
             }
             case '!': {
                 advance(lx);
@@ -719,10 +731,9 @@ static int scan(Lexer *lx, Literal *k) {
                     k->str = s;
                     if (isreserved(s)) { /* reserved keywword? */
                         int tk = s->extra + FIRSTTK - 1;
-                        if (tk == TK_INF || tk == TK_INFINITY) {
-                            savec(lx, '\0'); /* terminate */
-                            return lexstr2num(lx, k); /* TK_FLT */
-                        } else
+                        if (tk == TK_INF || tk == TK_INFINITY)
+                            return lexstr2num(lx, k);
+                        else
                             return tk;
                     } else /* identifier */
                         return TK_NAME;
@@ -755,3 +766,5 @@ int csY_scanahead(Lexer *lx) {
     lx->tahead.tk = scan(lx, &lx->t.lit);
     return lx->tahead.tk;
 }
+
+/* }====================================================================== */

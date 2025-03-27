@@ -71,7 +71,7 @@ typedef struct Lexer {
 #define csY_newliteral(lx, l)   csY_newstring(lx, "" (l), SLL(l))
 
 CSI_FUNC void csY_setinput(cs_State *C, Lexer *lx, BuffReader *br,
-                            OString *source);
+                           OString *source);
 CSI_FUNC void csY_init(cs_State *C);
 CSI_FUNC const char *csY_tok2str(Lexer *lx, int t);
 CSI_FUNC OString *csY_newstring(Lexer *lx, const char *str, size_t len);

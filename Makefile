@@ -8,7 +8,7 @@ CORE_O = src/capi.o src/clist.o src/ccode.o src/cdebug.o src/cfunction.o\
 	 src/cobject.o src/cparser.o src/cvm.o src/cprotected.o src/creader.o\
 	 src/cscript.o src/cstate.o src/cstring.o src/ctrace.o
 LIB_O = src/cauxlib.o src/cbaselib.o src/cloadlib.o src/cslib.o src/cstrlib.o\
-	src/cmathlib.o src/ciolib.o
+	src/cmathlib.o src/ciolib.o src/coslib.c
 BASE_O = $(CORE_O) $(LIB_O) $(MYOBJS)
 
 CSCRIPT_T = cscript
@@ -181,6 +181,8 @@ cmeta.o: src/cmeta.c src/cmeta.h src/csconf.h src/cscript.h src/cobject.h \
  src/cstate.h src/cdebug.h src/ctable.h src/cbits.h src/cgc.h src/cvm.h
 cobject.o: src/cobject.c src/climits.h src/cscript.h src/csconf.h \
  src/cobject.h src/cvm.h src/cstate.h
+coslib.o: src/coslib.c src/cscript.h src/csconf.h src/cauxlib.h \
+ src/cslib.h
 cparser.o: src/cparser.c src/ccode.h src/cbits.h src/cparser.h \
  src/clexer.h src/creader.h src/cscript.h src/csconf.h src/cmem.h \
  src/climits.h src/cobject.h src/cgc.h src/cstate.h src/cstring.h \

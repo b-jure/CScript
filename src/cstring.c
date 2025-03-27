@@ -400,10 +400,10 @@ static const char *str2flt(const char *s, cs_Number *n, int *pf) {
     if (eptr == s)
         return NULL; /* nothing was converted? */
     else if (c_unlikely(errno == ERANGE)) {
-        if (*n == CS_HUGE_VAL || *n == -CS_HUGE_VAL)
+        if (*n == CS_HUGE_VAL || *n == -CS_HUGE_VAL) {
             *pf = 1; /* overflow (negative/positive infinity) */
             /* explicit 'inf|infinity' does not set errno */
-        else {
+        } else {
             cs_assert(*n <= CS_NUMBER_MIN);
             *pf = -1; /* underflow (very large negative exponent) */
         }

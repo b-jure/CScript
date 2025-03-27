@@ -29,6 +29,9 @@ CSMOD_API int csopen_math(cs_State *C);
 #define CS_IOLIBNAME    "io"
 CSMOD_API int csopen_io(cs_State *C);
 
+#define CS_OSLIBNAME    "os"
+CSMOD_API int csopen_os(cs_State *C);
+
 
 /* open all previous libraries */
 CSLIB_API void csL_openlibs(cs_State *C);
