@@ -709,7 +709,7 @@ static int aux_span(cs_State *C, int complement) {
             goto pushlen;
         }
         while (i <= j) {
-            for (int k = 0; k < lb; k++)
+            for (uint k = 0; k < lb; k++)
                 if (s[i] == b[k]) goto pushlen;
             i++;
         }
@@ -719,7 +719,7 @@ static int aux_span(cs_State *C, int complement) {
             goto pushlen;
         }
         while (i <= j) {
-            for (int k = 0; k < lb; k++)
+            for (uint k = 0; k < lb; k++)
                 if (s[i] == b[k]) goto nextc;
             break; /* push segment len */
         nextc:
@@ -735,13 +735,13 @@ pushlen:
 
 // TODO: add docs and test
 static int s_span(cs_State *C) {
-    aux_span(C, 0);
+    return aux_span(C, 0);
 }
 
 
 // TODO: add docs and test
 static int s_cspan(cs_State *C) {
-    aux_span(C, 1);
+    return aux_span(C, 1);
 }
 
 
