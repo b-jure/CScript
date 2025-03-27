@@ -693,6 +693,58 @@ static int s_rfind(cs_State *C) {
 }
 
 
+static int aux_span(cs_State *C, int complement) {
+    size_t l, lb;
+    const char *s = csL_check_lstring(C, 0, &l);
+    const char *b = csL_check_lstring(C, 1, &lb);
+    size_t i = posI(csL_opt_integer(C, 2, 0), l);
+    size_t j = posJ(csL_opt_integer(C, 3, -1), l);
+    size_t starti = i;
+    if (i > j) { /* 'i' too large? */
+        csL_push_fail(C);
+        return 1;
+    } else if (complement) { /* strcspn */
+        if (lb == 0) { /* 'b' is empty string? */
+            i = l - i; /* whole segment is valid */
+            goto pushlen;
+        }
+        while (i <= j) {
+            for (int k = 0; k < lb; k++)
+                if (s[i] == b[k]) goto pushlen;
+            i++;
+        }
+    } else { /* strspn */
+        if (lb == 0) { /* 'b' is empty string? */
+            i = starti; /* 0 */
+            goto pushlen;
+        }
+        while (i <= j) {
+            for (int k = 0; k < lb; k++)
+                if (s[i] == b[k]) goto nextc;
+            break; /* push segment len */
+        nextc:
+            i++;
+        }
+    }
+pushlen:
+    /* return computed segment length (span) */
+    cs_push_integer(C, (i - starti));
+    return 1;
+}
+
+
+// TODO: add docs and test
+static int s_span(cs_State *C) {
+    aux_span(C, 0);
+}
+
+
+// TODO: add docs and test
+static int s_cspan(cs_State *C) {
+    aux_span(C, 1);
+}
+
+
 static int s_replace(cs_State *C) {
     size_t l, lpat, lv;
     const char *s = csL_check_lstring(C, 0, &l);
@@ -853,6 +905,8 @@ static const cs_Entry strlib[] = {
     {"tolower", s_tolower},
     {"find", s_find},
     {"rfind", s_rfind},
+    {"span", s_span},
+    {"cspan", s_cspan},
     {"replace", s_replace},
     {"substr", s_substr},
     {"swapcase", s_swapcase},

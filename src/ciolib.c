@@ -1,7 +1,7 @@
 /*
 ** ciolib.c
 ** Standard I/O (and system) library
-** See Copyright Notice in lua.h
+** See Copyright Notice in cscript.h
 */
 
 #define CS_LIB
@@ -9,6 +9,9 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <locale.h>
 
 #include "cscript.h"
 
@@ -164,9 +167,17 @@ static FILE *tofile(cs_State *C) {
 static CStream *new_cstream(cs_State *C) {
     CStream *p = (CStream *)cs_push_userdata(C, sizeof(CStream), 0);
     p->closef = NULL; /* mark as closed */
-    csL_set_metalist(C, CS_FILEHANDLE);
     csL_set_usermethods(C, CS_FILEHANDLE_TABLE);
+    csL_set_metalist(C, CS_FILEHANDLE);
     return p;
+}
+
+
+static int aux_close(cs_State *C) {
+    CStream *p = tocstream(C);
+    cs_CFunction f = p->closef;
+    markclosed(p);
+    return (*f)(C); /* close it */
 }
 
 
@@ -213,18 +224,8 @@ static int io_open(cs_State *C) {
 }
 
 
-static int aux_close(cs_State *C) {
-    CStream *p = tocstream(C);
-    cs_CFunction f = p->closef;
-    markclosed(p);
-    return (*f)(C); /* close it */
-}
-
-
-static int f_close(cs_State *C) {
-    tofile(C); /* make sure argument is open stream */
-    return aux_close(cs_State *C);
-}
+/* forward declare */
+static int f_close(cs_State *C);
 
 
 static int io_close(cs_State *C) {
@@ -255,7 +256,7 @@ static int open_or_set_iofile(cs_State *C, const char *f, const char *mode) {
     if (!cs_is_noneornil(C, 0)) { /* have an argument? */
         const char *fname = cs_to_string(C, 0);
         if (fname) /* have a filename? */
-            open_and_check(f, mode); /* open 'fname' and check for errors */
+            open_and_check(C, fname, mode); /* open it */
         else { /* otherwise it is a file handle */
             tofile(C); /* check that it's a valid file handle */
             cs_push(C, 0); /* push on top */
@@ -269,12 +270,12 @@ static int open_or_set_iofile(cs_State *C, const char *f, const char *mode) {
 
 
 static int io_input(cs_State *C) {
-    open_or_set_iofile(C, IO_INPUT, "r");
+    return open_or_set_iofile(C, IO_INPUT, "r");
 }
 
 
 static int io_output(cs_State *C) {
-    open_or_set_iofile(C, IO_OUTPUT, "w");
+    return open_or_set_iofile(C, IO_OUTPUT, "w");
 }
 
 
@@ -313,31 +314,312 @@ static int io_type(cs_State *C) {
     if (p == NULL) /* not a file? */
         csL_push_fail(C);
     else if (isclosed(p)) /* closed file? */
-        lua_pushliteral(C, "closed file");
+        cs_push_literal(C, "closed file");
     else /* open file */
-        lua_pushliteral(C, "file");
+        cs_push_literal(C, "file");
     return 1;
 }
 
 
 /* forward declare */
-static int io_readline(cs_State *C);
+static int iter_readline(cs_State *C);
 
 
+/*
+** maximum number of arguments to 'f:lines'/'io.lines' (it + 3 must fit
+** in the limit for upvalues of a closure)
+*/
+#define MAXARGLINE      (USHRT_MAX - 5)
+
+
+/*
+** Auxiliary function to create the iteration function for 'lines'.
+** The iteration function is a closure over 'iter_readline', with
+** the following upvalues:
+** 1) The file being read (first value in the stack)
+** 2) the number of arguments to read
+** 3) a boolean, true iff file has to be closed when finished ('toclose')
+** *) a variable number of format arguments (rest of the stack)
+*/
+static void aux_lines(cs_State *C, int toclose) {
+    int n = cs_getntop(C) - 1;
+    csL_check_arg(C, n <= MAXARGLINE, MAXARGLINE + 1, "too many arguments");
+    cs_push(C, 0); /* file */
+    cs_push_integer(C, n); /* number of arguments to read */
+    cs_push_bool(C, toclose); /* to (not)close file when finished */
+    cs_rotate(C, 1, 3); /* move the three values to their positions */
+    cs_push_cclosure(C, iter_readline, 3 + n);
+}
+
+
+/*
+** Return an iteration function for 'io.lines'. If file has to be
+** closed, also returns the file itself as a second result (to be
+** closed as the state at the exit of a foreach loop).
+*/
 static int io_lines(cs_State *C) {
-    // TODO
-    return 0;
+    int toclose;
+    if (cs_is_none(C, 0)) cs_push_nil(C); /* at least one argument */
+    if (cs_is_nil(C, 0)) { /* no file name? */
+        cs_get_rtable(C, IO_INPUT); /* get default input */
+        cs_replace(C, 0); /* put it at index 0 */
+        tofile(C); /* check that it's a valid file handle */
+        toclose = 0; /* do not close it after iteration */
+    } else { /* open a new file */
+        const char *fname = csL_check_string(C, 0);
+        open_and_check(C, fname, "r");
+        cs_replace(C, 0); /* put file at index 0 */
+        toclose = 1; /* close it after iteration */
+    }
+    aux_lines(C, toclose); /* push iteration function */
+    if (toclose) { /* file is not a default input? */
+        cs_push_nil(C); /* state (unused in the iterator function) */
+        cs_push_nil(C); /* control (unused in the iterator function) */
+        cs_push(C, 0); /* file is the to-be-closed variable (4th result) */
+        return 4; /* return iter. function, state, control var and file */
+    } else
+        return 1; /* return only iter. function */
+}
+
+
+/* {======================================================
+** READ
+** ======================================================= */
+
+/* valid formats for 'aux_read' */
+#define READFORMATS \
+    "\"n\" read number, \"l\" read line without end of line, " \
+    "\"L\" read line inclusive, or \"a\" read all file contents"
+
+/* errors for 'aux_read' */
+static const char *read_format_err[] = {
+    "invalid format, expected " READFORMATS,
+    "format too long, expected " READFORMATS, 
+};
+
+/* errors for 'aux_read' as macros */
+#define EREAD_FMT         read_format_err[0]
+#define EREAD_FMTLEN      read_format_err[1]
+
+
+/* maximum length of a numeral */
+#if !defined(C_MAXNUMERAL)
+#define C_MAXNUMERAL    200
+#endif
+
+
+/* auxiliary structure used by 'read_number' */
+typedef struct NumBuff {
+    FILE *f;
+    int c;
+    int n;
+    char buff[C_MAXNUMERAL + 1];
+} NumBuff;
+
+
+/* add current char to buffer (if not out of space) and read next one */
+static int nextchar(NumBuff *nb) {
+    if (c_unlikely(nb->n >= C_MAXNUMERAL)) { /* buffer overflow? */
+        nb->buff[0] = '\0'; /* invalidate result */
+        return 0; /* fail */
+    } else {
+        nb->buff[nb->n++] = nb->c; /* save current char */
+        nb->c = c_getc(nb->f); /* read next char */
+        return 1;
+    }
+}
+
+
+/* accept current char if it is in 'set' (of size 2) */
+static int test2(NumBuff *nb, const char *set) {
+    if (nb->c == set[0] || nb->c == set[1])
+        return nextchar(nb);
+    else return 0;
+}
+
+
+/* read sequence of (hex)digits */
+static int read_digits(NumBuff *nb, int hex) {
+    int count = 0;
+    while ((hex ? isxdigit(nb->c) : isdigit(nb->c)) && nextchar(nb))
+        count++;
+    return count;
+}
+
+
+/*
+** Read a number; first reads a valid prefix of a numeral into a buffer.
+** Then it calls 'cs_stringtonumber' to check wheter the format is
+** correct and to convert it to a CScript number.
+*/
+static int read_number(cs_State *C, FILE *f) {
+    NumBuff nb;
+    int count = 0;
+    int hex = 0;
+    char decp[2];
+    nb.f = f; nb.n = 0;
+    decp[0] = cs_getlocaledecpoint();
+    decp[1] = '.';
+    c_lockfile(nb.f);
+    do { nb.c = c_getc(nb.f); } while (isspace(nb.c)); /* skip leading space */
+    test2(&nb, "+-"); /* optional sign */
+    if (test2(&nb, "00")) {
+        if (test2(&nb, "xX")) hex = 1; /* numeral as hexadecimal */
+        else count = 1; /* count initial '0' as valid digit */
+    }
+    count += read_digits(&nb, hex); /* integral part */
+    if (test2(&nb, decp)) /* decimal point? */
+        count += read_digits(&nb, hex); /* read fractional part */
+    if (count > 0 && test2(&nb, (hex ? "pP" : "eE"))) { /* exponent mark? */
+        test2(&nb, "+-"); /* exponent sign */
+        read_digits(&nb, 0); /* exponent digits */
+    }
+    ungetc(nb.c, nb.f); /* unread look-ahead char */
+    c_unlockfile(nb.f);
+    nb.buff[nb.n] = '\0'; /* null terminate */
+    if (c_likely(cs_stringtonumber(C, nb.buff, NULL)))
+        return 1; /* ok, it is a valid number */
+    else { /* invalid format */
+        cs_push_nil(C); /* "result to be removed */
+        return 0; /* read fails */
+    }
+}
+
+
+static int test_eof(cs_State *C, FILE *f) {
+    int c = getc(f);
+    ungetc(c, f); /* no-op when c == EOF */
+    cs_push_literal(C, "");
+    return (c != EOF);
+}
+
+
+static int read_line(cs_State *C, FILE *f, int chop) {
+    csL_Buffer b;
+    int c;
+    csL_buff_init(C, &b);
+    do { /* may need to read several chunks to get whole line */
+        char *buff = csL_buff_prep(&b); /* preallocate buffer space */
+        int i = 0;
+        c_lockfile(f); /* no memory errors can happen inside the lock */
+        while (i < CSL_BUFFERSIZE && (c = c_getc(f)) != EOF && c != '\n')
+            buff[i++] = c;/* read up to end of line or buffer limit */
+        c_unlockfile(f);
+        csL_buffadd(&b, i);
+    } while (c != EOF && c != '\n'); /* repeat until end of line */
+    if (!chop && c == '\n') /* want a newline and have one? */
+        csL_buff_push(&b, c); /* add ending newline to result */
+    csL_buff_end(&b); /* close buffer */
+    /* return ok if read something (either a newline or something else) */
+    return (c == '\n' || cs_len(C, -1) > 0);
+}
+
+
+static void read_all(cs_State *C, FILE *f) {
+    size_t nr;
+    csL_Buffer b;
+    csL_buff_init(C, &b);
+    do { /* read file in chunks of CSL_BUFFERSIZE bytes */
+        char *p = csL_buff_prep(&b);
+        nr = fread(p, sizeof(char), CSL_BUFFERSIZE, f);
+        csL_buffadd(&b, nr);
+    } while (nr == CSL_BUFFERSIZE);
+    csL_buff_end(&b); /* close buffer */
+}
+
+
+static int read_chars(cs_State *C, FILE *f, size_t n) {
+    size_t nr; /* number of chars actually read */
+    char *p;
+    csL_Buffer b;
+    csL_buff_init(C, &b);
+    p = csL_buff_ensure(&b, n); /* prepare buffer to read whole block */
+    nr = fread(p, sizeof(char), n, f); /* try to read 'n' chars */
+    csL_buffadd(&b, nr);
+    csL_buff_end(&b); /* close buffer */
+    return (nr > 0); /* true if read something */
 }
 
 
 static int aux_read(cs_State *C, FILE *f, int first) {
-    // TODO
+    int nargs = cs_getntop(C) - 1;
+    int n, success;
+    clearerr(f);
+    errno = 0;
+    if (nargs == 0) { /* no arguments? */
+        success = read_line(C, f, 0);
+        n = first + 1; /* return 1 result */
+    } else {
+        /* ensure stack space for all results and for auxlib's buffer */
+        csL_check_stack(C, nargs + CS_MINSTACK, "too many arguments");
+        success = 1;
+        for (n = first; nargs-- && success; n++) {
+            if (cs_type(C, n) == CS_TNUMBER) {
+                size_t l = csL_check_integer(C, n);
+                success = (l == 0) ? test_eof(C, f) : read_chars(C, f, l);
+            } else {
+                size_t lp;
+                const char *p = csL_check_lstring(C, n, &lp);
+                if (c_unlikely(lp > 1))
+                    return csL_error_arg(C, n, EREAD_FMTLEN);
+                else {
+                    switch (*p) {
+                        case 'n': success = read_number(C, f); break;
+                        case 'l': success = read_line(C, f, 1); break;
+                        case 'L': success = read_line(C, f, 0); break;
+                        case 'a': read_all(C, f); success = 1; break;
+                        default: return csL_error_arg(C, n, EREAD_FMT);
+                    }
+                }
+            }
+        }
+    }
+    if (ferror(f))
+        return csL_fileresult(C, 0, NULL);
+    if (!success) {
+        cs_pop(C, 1); /* remove last result */
+        csL_push_fail(C); /* push nil instead */
+    }
+    return n - first;
 }
 
 
 static int io_read(cs_State *C) {
-    // TODO
+    FILE *f = getiofile(C, IO_INPUT);
+    return aux_read(C, f, 0);
 }
+
+
+/* iterator function for 'lines' */
+static int iter_readline(cs_State *C) {
+    CStream *p = (CStream *)cs_to_userdata(C, cs_upvalueindex(1));
+    int n = cs_to_integer(C, cs_upvalueindex(2));
+    int i;
+    if (isclosed(p)) /* file is already closed? */
+        return csL_error(C, "file is already closed");
+    cs_settop(C, 1);
+    csL_check_stack(C, n, "too many arguments");
+    for (i = 1; i <= n; i++) /* push arguments to 'aux_read' */
+        cs_push(C, cs_upvalueindex(3 + i));
+    n = aux_read(C, p->f, 1); /* 'n' is number of results */
+    cs_assert(n > 0); /* should return at least a nil */
+    if (cs_to_bool(C, -n)) /* read at least one value? */
+        return n; /* return them */
+    else { /* first result is false: EOF or error */
+        if (n > 1) { /* is there error information? */
+            /* 2nd result is error message */
+            return csL_error(C, "%s", cs_to_string(C, -n + 1));
+        }
+        if (cs_to_bool(C, cs_upvalueindex(3))) { /* generator created file? */
+            cs_settop(C, 0); /* clear stack */
+            cs_push(C, cs_upvalueindex(1)); /* push file */
+            aux_close(C); /* close it */
+        }
+        return 0;
+    }
+}
+
+/* }====================================================== */
 
 
 static int aux_write(cs_State *C, FILE *f, int arg) {
@@ -365,17 +647,12 @@ static int aux_write(cs_State *C, FILE *f, int arg) {
 
 static int io_write(cs_State *C) {
     FILE *f = getiofile(C, IO_OUTPUT);
-    aux_write(C, f, 0);
+    return aux_write(C, f, 0);
 }
 
 
-static int f_write(cs_State *C) {
-    FILE *f = tofile(C);
-    cs_push(C, 0); /* push file at the stack top (to be returned) */
-    aux_write(C, f, 1);
-}
-
-
+/* function for 'io' library */
+// TODO: add docs
 static const cs_Entry iolib[] = {
     {"open", io_open},
     {"close", io_close},
@@ -392,6 +669,26 @@ static const cs_Entry iolib[] = {
 };
 
 
+static int f_read(cs_State *C) {
+    FILE *f = tofile(C);
+    return aux_read(C, f, 1);
+}
+
+
+static int f_write(cs_State *C) {
+    FILE *f = tofile(C);
+    cs_push(C, 0); /* push file at the stack top (to be returned) */
+    return aux_write(C, f, 1);
+}
+
+
+static int f_lines(cs_State *C) {
+    tofile(C);
+    aux_lines(C, 0);
+    return 0;
+}
+
+
 static int f_flush(cs_State *C) {
     FILE *f = tofile(C);
     errno = 0;
@@ -399,6 +696,42 @@ static int f_flush(cs_State *C) {
 }
 
 
+static int f_seek(cs_State *C) {
+    static const int whence[] = { SEEK_SET, SEEK_CUR, SEEK_END };
+    static const char *whence_names[] = { "set", "cur", "end", NULL };
+    FILE *f = tofile(C);
+    int opt = csL_check_option(C, 1, NULL, whence_names);
+    c_seeknum offset = (c_seeknum)csL_opt_integer(C, 2, 0);
+    int res = fseek(f, offset, whence[opt]);
+    if (c_unlikely(res))
+        return csL_fileresult(C, 0, NULL); /* error */
+    else {
+        /* 'c_ftell' shouldn't fail as 'fseek' was successful */
+        cs_push_integer(C, (cs_Integer)c_ftell(f));
+        return 1;
+    }
+}
+
+
+static int f_close(cs_State *C) {
+    tofile(C); /* make sure argument is open stream */
+    return aux_close(C);
+}
+
+
+static int f_setvbuf(cs_State *C) {
+    static const int modes[] = { _IONBF, _IOLBF, _IOFBF };
+    static const char *mode_names[] = { "no", "line", "full", NULL };
+    FILE *f = tofile(C);
+    int opt = csL_check_option(C, 1, NULL, mode_names);
+    cs_Integer sz = csL_opt_integer(C, 2, CSL_BUFFERSIZE);
+    int res = setvbuf(f, NULL, modes[opt], (size_t)sz);
+    return csL_fileresult(C, (res == 0), NULL);
+}
+
+
+/* methods for file handles */
+// TODO: add docs
 static const cs_Entry f_methods[] = {
     {"read", f_read},
     {"write", f_write},
@@ -420,7 +753,7 @@ static void create_filehandle_methods(cs_State *C) {
 
 
 static int f_getidx(cs_State *C) {
-    (void)tocstream(C);
+    tocstream(C);
     cs_get_method(C, -2);
     return 1;
 }

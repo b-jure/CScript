@@ -390,31 +390,22 @@ static const char *str2int(const char *s, cs_Integer *i) {
     }
 }
 
-/*
-** TODO: this function might not catch underflow in cases where
-** 'cs_str2number' is equal to 'strtod', this is because errno
-** might not be set to ERANGE in cases where the value being
-** converted is a valid numeral that doesn't overflow but instead
-** underflows (e.g., 1e-400) according to C99.
-** This depends on the implementation of 'strtod' and as such
-** this function requires testing for each "mainstream" C standard
-** library.
-*/
-static const char *str2flt(const char *s, cs_Number *n, int *fof) {
+
+static const char *str2flt(const char *s, cs_Number *n, int *pf) {
     char *eptr = NULL; /* to avoid warnings */
-    cs_assert(fof != NULL);
-    *fof = 0;
+    cs_assert(pf != NULL);
+    *pf = 0;
     errno = 0;
     *n = cs_str2number(s, &eptr);
     if (eptr == s)
         return NULL; /* nothing was converted? */
     else if (c_unlikely(errno == ERANGE)) {
         if (*n == CS_HUGE_VAL || *n == -CS_HUGE_VAL)
-            *fof = 1; /* overflow (negative/positive infinity) */
+            *pf = 1; /* overflow (negative/positive infinity) */
             /* explicit 'inf|infinity' does not set errno */
         else {
             cs_assert(*n <= CS_NUMBER_MIN);
-            *fof = -1; /* underflow (very large negative exponent) */
+            *pf = -1; /* underflow (very large negative exponent) */
         }
     }
     while (cisspace(*eptr)) eptr++; /* skip trailing spaces */
@@ -423,18 +414,18 @@ static const char *str2flt(const char *s, cs_Number *n, int *fof) {
 
 
 /* convert string to 'cs_Number' or 'cs_Integer' */
-size_t csS_tonum(const char *s, TValue *o, int *pfof) {
+size_t csS_tonum(const char *s, TValue *o, int *pf) {
     const char *e;
     cs_Integer i;
     cs_Number n;
-    int fof = 0; /* flag for float overflow */
+    int f = 0; /* flag for float overflow */
     if ((e = str2int(s, &i)) != NULL) {
         setival(o, i);
-    } else if ((e = str2flt(s, &n, &fof)) != NULL) {
+    } else if ((e = str2flt(s, &n, &f)) != NULL) {
         setfval(o, cast_num(n));
     } else /* both conversions failed */
         return 0;
-    if (pfof) *pfof = fof;
+    if (pf) *pf = f;
     return (e - s) + 1; /* return size */
 }
 

@@ -248,6 +248,9 @@ CSLIB_API void  csL_buff_push_gsub(csL_Buffer *B, const char *s,
                                    const char *p, const char *r);
 CSLIB_API void  csL_buff_end(csL_Buffer *B);
 CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
+
+// TODO: add docs
+#define csL_buff_prep(B)    csL_buff_ensure(B, CSL_BUFFERSIZE)
 /* }======================================================================= */
 
 
@@ -255,6 +258,7 @@ CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
 ** File handles for IO library
 ** ======================================================================== */
 
+// TODO: update docs
 /*
 ** A file handle is a userdata with 'CS_FILEHANDLE' metalist,
 ** 'CS_FILEHANDLE_TABLE' methods table and initial structure

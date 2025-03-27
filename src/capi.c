@@ -187,10 +187,6 @@ c_sinline void rev(cs_State *C, SPtr from, SPtr to) {
 ** cs_rotate(C, 2, -2);
 ** [func][0][1][4][3][2]
 **
-** Example right-rotation:
-** [nil][func]
-** cs_rotate(C, 0, 1);
-** [func][nil]
 */
 CS_API void cs_rotate(cs_State *C, int index, int n) {
     SPtr start, end, pivot;
