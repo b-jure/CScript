@@ -614,7 +614,7 @@ static int read_octnum(Lexer *lx, Literal *k) {
 static int read_numeral(Lexer *lx, Literal *k) {
     int c = lx->c;
     save_and_advance(lx);
-    if (c == '0' && check_netx2(lx, "xX"))
+    if (c == '0' && check_next2(lx, "xX"))
         return read_hexnum(lx, k);
     else if (c == '0' && cisdigit(lx->c))
         return read_octnum(lx, k);

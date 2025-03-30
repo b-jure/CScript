@@ -1614,7 +1614,7 @@ CS_API void cs_concat(cs_State *C, int n) {
 
 
 CS_API size_t cs_stringtonumber(cs_State *C, const char *s, int *f) {
-    sz = csS_tonum(s, s2v(C->sp.p), f);
+    size_t sz = csS_tonum(s, s2v(C->sp.p), f);
     if (sz != 0) /* no conversion errors? */
         api_inctop(C);
     return sz;

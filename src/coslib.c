@@ -1,5 +1,7 @@
 #define CS_LIB
 
+#include <errno.h>
+
 #include "cscript.h"
 #include "cauxlib.h"
 
@@ -7,15 +9,15 @@
 
 
 static int os_remove(cs_State *C) {
-    const char *fname = cs_check_string(C, 0);
+    const char *fname = csL_check_string(C, 0);
     errno = 0;
     return csL_fileresult(C, (remove(fname) != -1), fname);
 }
 
 
 static int os_rename(cs_State *C) {
-    const char *old_name = cs_check_string(C, 0);
-    const char *new_name = cs_check_string(C, 1);
+    const char *old_name = csL_check_string(C, 0);
+    const char *new_name = csL_check_string(C, 1);
     errno = 0;
     return csL_fileresult(C, rename(old_name, new_name) == 0, NULL);
 }
