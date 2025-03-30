@@ -437,8 +437,11 @@ static int nextchar(NumBuff *nb) {
 
 
 /* skip current char */
-static void skipchar(NumBuff *nb) {
+static int skipchar(NumBuff *nb) {
+    if (c_unlikely(nb->n >= C_MAXNUMERAL))
+        return 0;
     nb->c = c_getc(nb->f);
+    return 1;
 }
 
 
@@ -453,18 +456,31 @@ static int test2(NumBuff *nb, const char *set) {
 /* read sequence of (hex)digits */
 static int read_digits(NumBuff *nb, int dtype, int frac) {
     int count = 0;
-    do {
-        if (count > 0 && !frac && nb->c == '_')
-            skipchar(nb);
-        switch (dtype) {
-            case DIGDEC: if (!isdigit(nb->c)) goto ret; break;
-            case DIGHEX: if (!isxdigit(nb->c)) goto ret; break;
-            case DIGOCT: if (!isdigit(nb->c) || nb->c > '7') goto ret; break;
-            default: cs_assert(0); /* invalid digit type */
+    for (;;) {
+        if (count > 0 && !frac && nb->c == '_') {
+            if (!skipchar(nb))
+                break; /* buffer overflow */
+        } else {
+            switch (dtype) {
+                case DIGDEC:
+                    if (!isdigit(nb->c))
+                        return count;
+                    break;
+                case DIGHEX:
+                    if (!isxdigit(nb->c))
+                        return count;
+                    break;
+                case DIGOCT:
+                    if (!isdigit(nb->c) || nb->c > '7')
+                        return count;
+                    break;
+                default: cs_assert(0); /* invalid digit type */
+            }
+            count++;
+            if (!nextchar(nb))
+                break; /* buffer overflow */
         }
-        count++;
-    } while (nextchar(nb));
-ret:
+    }
     return count;
 }
 
