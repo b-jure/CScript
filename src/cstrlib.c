@@ -733,11 +733,13 @@ pushlen:
 }
 
 
+// TODO: add tests
 static int s_span(cs_State *C) {
     return aux_span(C, 0);
 }
 
 
+// TODO: add tests
 static int s_cspan(cs_State *C) {
     return aux_span(C, 1);
 }
@@ -917,6 +919,6 @@ static const cs_Entry strlib[] = {
 
 
 CSMOD_API int csopen_string(cs_State *C) {
-    csL_newlib(C, strlib);
+    csL_push_lib(C, strlib);
     return 1;
 }

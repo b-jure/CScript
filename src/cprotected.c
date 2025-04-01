@@ -17,7 +17,84 @@
 #include "cfunction.h"
 #include "creader.h"
 #include "cstate.h"
+#include "cstring.h"
 #include "cgc.h"
+
+
+
+/*
+** {======================================================
+** Error-recovery functions
+** =======================================================
+*/
+
+/*
+** CSI_THROW/CSI_TRY define how CScript does exception handling. By
+** default, CScript handles errors with exceptions when compiling as
+** C++ code, with _longjmp/_setjmp when asked to use them, and with
+** longjmp/setjmp otherwise.
+*/
+#if !defined(CSI_THROW)				        /* { */
+
+#if defined(__cplusplus) && !defined(CS_USE_LONGJMP)	/* { */
+
+/* C++ exceptions */
+#define CSI_THROW(C,c)		throw(c)
+#define CSI_TRY(C,c,a) \
+	try { a } catch(...) { if ((c)->status == 0) (c)->status = -1; }
+#define csi_jmpbuf	        int  /* dummy variable */
+
+#elif defined(CS_USE_POSIX)				/* }{ */
+
+/* in POSIX, try _longjmp/_setjmp (more efficient) */
+#define CSI_THROW(C,c)		_longjmp((c)->buf, 1)
+#define CSI_TRY(C,c,a)		if (_setjmp((c)->buf) == 0) { a }
+#define csi_jmpbuf		jmp_buf
+
+#else						        /* }{ */
+
+/* ISO C handling with long jumps */
+#define CSI_THROW(C,c)		longjmp((c)->buf, 1)
+#define CSI_TRY(C,c,a)		if (setjmp((c)->buf) == 0) { a }
+#define csi_jmpbuf		jmp_buf
+
+#endif							/* } */
+
+#endif							/* } */
+
+
+
+/* chain list of long jump buffers */
+typedef struct cs_longjmp {
+    struct cs_longjmp *prev;
+    csi_jmpbuf buf;
+    volatile int status;
+} cs_longjmp;
+
+
+
+void csPR_seterrorobj(cs_State *C, int errcode, SPtr oldtop) {
+    switch (errcode) {
+        case CS_ERRMEM: { /* memory error? */
+            setstrval2s(C, oldtop, G(C)->memerror);
+            break;
+        }
+        case CS_ERRERROR: { /* error while handling error? */
+            setstrval2s(C, oldtop, csS_newlit(C, "error in error handling"));
+            break;
+        }
+        case CS_OK: { /* closing upvalue? */
+            setnilval(s2v(oldtop)); /* no error message */
+            break;
+        }
+        default: {
+            cs_assert(errcode > CS_OK); /* real error */
+            setobjs2s(C, oldtop, C->sp.p - 1); /* error msg on current top */
+            break;
+        }
+    }
+    C->sp.p = oldtop + 1;
+}
 
 
 /*
@@ -49,7 +126,7 @@ c_noret csPR_throw(cs_State *C, int errcode) {
 
 int csPR_rawcall(cs_State *C, ProtectedFn fn, void *ud) {
     c_uint32 old_nCcalls = C->nCcalls;
-    struct c_ljmp lj;
+    cs_longjmp lj;
     lj.status = CS_OK;
     lj.prev = C->errjmp;
     C->errjmp = &lj;
@@ -60,6 +137,8 @@ int csPR_rawcall(cs_State *C, ProtectedFn fn, void *ud) {
     C->nCcalls = old_nCcalls;
     return lj.status;
 }
+
+/* }====================================================== */
 
 
 int csPR_call(cs_State *C, ProtectedFn fn, void *ud, ptrdiff_t old_top,
@@ -72,7 +151,7 @@ int csPR_call(cs_State *C, ProtectedFn fn, void *ud, ptrdiff_t old_top,
     if (c_unlikely(status != CS_OK)) {
         C->cf = old_cf;
         status = csPR_close(C, old_top, status);
-        csT_seterrorobj(C, status, restorestack(C, old_top));
+        csPR_seterrorobj(C, status, restorestack(C, old_top));
         csT_shrinkstack(C); /* restore stack (overflow might of happened) */
     }
     C->errfunc = old_errfunc;

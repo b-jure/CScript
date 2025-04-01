@@ -123,7 +123,7 @@ static void terror(cs_State *C, int arg, int t) {
 CSLIB_API cs_Number csL_check_number(cs_State *C, int index) {
     int isnum;
     cs_Number n = cs_to_numberx(C, index, &isnum);
-    if (csi_unlikely(!isnum))
+    if (c_unlikely(!isnum))
         terror(C, index, CS_TNUMBER);
     return n;
 }
@@ -140,7 +140,7 @@ static void interror(cs_State *C, int argindex) {
 CSLIB_API cs_Integer csL_check_integer(cs_State *C, int index) {
     int isint;
     cs_Integer i = cs_to_integerx(C, index, &isint);
-    if (csi_unlikely(!isint))
+    if (c_unlikely(!isint))
         interror(C, index);
     return i;
 }
@@ -148,7 +148,7 @@ CSLIB_API cs_Integer csL_check_integer(cs_State *C, int index) {
 
 CSLIB_API const char *csL_check_lstring(cs_State *C, int index, size_t *len) {
     const char *str = cs_to_lstring(C, index, len);
-    if (csi_unlikely(str == NULL))
+    if (c_unlikely(str == NULL))
         terror(C, index, CS_TSTRING);
     return str;
 }
@@ -156,14 +156,14 @@ CSLIB_API const char *csL_check_lstring(cs_State *C, int index, size_t *len) {
 
 CSLIB_API void *csL_check_userdata(cs_State *C, int index, const char *name) {
     void *p = csL_test_userdata(C, index, name);
-    if (csi_unlikely(p == NULL))
+    if (c_unlikely(p == NULL))
         csL_error_type(C, index, name);
     return p;
 }
 
 
 CSLIB_API void csL_check_stack(cs_State *C, int sz, const char *msg) {
-    if (csi_unlikely(!cs_checkstack(C, sz))) {
+    if (c_unlikely(!cs_checkstack(C, sz))) {
         if (msg)
             csL_error(C, "stack overflow (%s)", msg);
         else
@@ -173,13 +173,13 @@ CSLIB_API void csL_check_stack(cs_State *C, int sz, const char *msg) {
 
 
 CSLIB_API void csL_check_type(cs_State *C, int arg, int t) {
-    if (csi_unlikely(cs_type(C, arg) != t))
+    if (c_unlikely(cs_type(C, arg) != t))
         terror(C, arg, t);
 }
 
 
 CSLIB_API void csL_check_any(cs_State *C, int arg) {
-    if (csi_unlikely(cs_type(C, arg) == CS_TNONE))
+    if (c_unlikely(cs_type(C, arg) == CS_TNONE))
         csL_error_arg(C, arg, "value expected");
 }
 
@@ -351,7 +351,7 @@ CSLIB_API int csL_callmeta(cs_State *C, int index, int mm) {
 
 
 CSLIB_API int csL_new_usermethods(cs_State *C, const char *tname, int sz) {
-    if (csL_get_usermethods(C, tname) != CS_TNIL) /* name already in use? */
+    if (csL_get_methods(C, tname) != CS_TNIL) /* name already in use? */
         return 0; /* false; methods table already exists */
     cs_pop(C, 1); /* remove nil */
     cs_push_table(C, sz); /* create methods table */
@@ -362,7 +362,7 @@ CSLIB_API int csL_new_usermethods(cs_State *C, const char *tname, int sz) {
 
 
 CSLIB_API void csL_set_usermethods(cs_State *C, const char *tname) {
-    csL_get_usermethods(C, tname);
+    csL_get_methods(C, tname);
     cs_set_usermethods(C, -2);
 }
 
@@ -370,7 +370,7 @@ CSLIB_API void csL_set_usermethods(cs_State *C, const char *tname) {
 CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname) {
     void *p = csL_to_fulluserdata(C, index);
     if (p != NULL) { /* `index` is full userdata? */
-        if (cs_get_metalist(C, -1)) { /* it has a metalist? */
+        if (cs_get_metalist(C, 0)) { /* it has a metalist? */
             csL_get_metalist(C, lname); /* get correct metalist */
             if (!cs_rawequal(C, -1, -2)) /* not the same? */
                 p = NULL;
@@ -524,7 +524,7 @@ CSLIB_API int csL_get_property(cs_State *C, int index) {
 
 
 CSLIB_API void csL_set_index(cs_State *C, int index, int i) {
-    if (csi_unlikely(i < 0 || CS_MAXLISTINDEX < i))
+    if (c_unlikely(i < 0 || CS_MAXLISTINDEX < i))
         csL_error(C, "list index out of bounds (%d)", i);
     cs_set_index(C, index, i);
 }
@@ -696,15 +696,15 @@ static int lastlevel(cs_State *C) {
 
 
 static void push_func_name(cs_State *C, cs_Debug *ar) {
-    if (push_glbfunc_name(C, ar)) { /* try first a global name */
-        cs_push_fstring(C, "function `%s`", cs_to_string(C, -1));
-        cs_remove(C, -2); /* remove name */
-    } else if (*ar->namewhat != '\0') { /* name from code? */
+    if (*ar->namewhat != '\0') { /* name from code? */
         cs_push_fstring(C, "%s `%s`", ar->namewhat, ar->name);
     } else if (*ar->what == 'm') { /* main? */
         cs_push_literal(C, "main chunk");
-    } else if (*ar->what != 'C') { /* CScript functions? */
+    } else if (*ar->what != 'C') { /* CScript function? */
         cs_push_fstring(C, "function <%s:%d>", ar->shortsrc, ar->defline);
+    } else if (push_glbfunc_name(C, ar)) { /* try global name */
+        cs_push_fstring(C, "function `%s`", cs_to_string(C, -1));
+        cs_remove(C, -2); /* remove name */
     } else /* unknown */
         cs_push_literal(C, "?");
 }
@@ -764,7 +764,7 @@ CSLIB_API void csL_set_funcs(cs_State *C, const cs_Entry *l, int nup) {
 }
 
 
-CSLIB_API void csL_checkversion_(cs_State *C, cs_Number ver) {
+CSLIB_API void csL_check_version_(cs_State *C, cs_Number ver) {
     cs_Number v = cs_version(C);
     if (v != ver)
         csL_error(C,
@@ -839,7 +839,7 @@ static void *resizebox(cs_State *C, int index, size_t newsz) {
     cs_Alloc falloc = cs_getallocf(C, &ud);
     UserBox *box = (UserBox *)cs_to_userdata(C, index);
     void *newblock = falloc(box->p, box->sz, newsz, ud);
-    if (csi_unlikely(newblock == NULL && newsz > 0)) {
+    if (c_unlikely(newblock == NULL && newsz > 0)) {
         cs_push_literal(C, "out of memory");
         cs_error(C);
     }
@@ -901,7 +901,7 @@ CSLIB_API void csL_buff_init(cs_State *C, csL_Buffer *B) {
 /* calculate new buffer size */
 static size_t newbuffsize(csL_Buffer *B, size_t sz) {
     size_t newsize = (B->sz / 2) * 3; /* 1.5x size */
-    if (csi_unlikely(SIZE_MAX - sz < B->n)) /* would overflow? */
+    if (c_unlikely(SIZE_MAX - sz < B->n)) /* would overflow? */
         return csL_error(B->C, "buffer too large");
     if (newsize < B->n + sz)
         newsize = B->n + sz;

@@ -376,7 +376,7 @@ static int io_lines(cs_State *C) {
         cs_push_nil(C); /* state (unused in the iterator function) */
         cs_push_nil(C); /* control (unused in the iterator function) */
         cs_push(C, 0); /* file is the to-be-closed variable (4th result) */
-        return 4; /* return iter. function, state, control var and file */
+        return 4; /* return func, nil, nil, file */
     } else
         return 1; /* return only iter. function */
 }
@@ -389,7 +389,7 @@ static int io_lines(cs_State *C) {
 /* valid formats for 'aux_read' */
 #define READFORMATS \
     "\"n\" read number, \"l\" read line without end of line, " \
-    "\"L\" read line inclusive, or \"a\" read all file contents"
+    "\"L\" read line, or \"a\" read all file contents"
 
 /* errors for 'aux_read' */
 static const char *read_format_err[] = {
@@ -454,31 +454,24 @@ static int test2(NumBuff *nb, const char *set) {
 
 
 /* read sequence of (hex)digits */
-static int read_digits(NumBuff *nb, int dtype, int frac) {
+static int read_digits(NumBuff *nb, int dtype, int rad) {
     int count = 0;
     for (;;) {
-        if (count > 0 && !frac && nb->c == '_') {
+        if (count > 0 && !rad && nb->c == '_') {
             if (!skipchar(nb))
                 break; /* buffer overflow */
         } else {
             switch (dtype) {
-                case DIGDEC:
-                    if (!isdigit(nb->c))
-                        return count;
-                    break;
-                case DIGHEX:
-                    if (!isxdigit(nb->c))
-                        return count;
-                    break;
+                case DIGDEC: if (!isdigit(nb->c)) return count; break;
+                case DIGHEX: if (!isxdigit(nb->c)) return count; break;
                 case DIGOCT:
-                    if (!isdigit(nb->c) || nb->c > '7')
-                        return count;
+                    if (!isdigit(nb->c) || nb->c > '7') return count;
                     break;
                 default: cs_assert(0); /* invalid digit type */
             }
-            count++;
             if (!nextchar(nb))
                 break; /* buffer overflow */
+            count++;
         }
     }
     return count;
@@ -493,7 +486,6 @@ static int read_digits(NumBuff *nb, int dtype, int frac) {
 static int read_number(cs_State *C, FILE *f) {
     NumBuff nb;
     int count = 0;
-    int gotrad = 0;
     int dtype = DIGDEC;
     char decp[2];
     nb.f = f; nb.n = 0;
@@ -511,13 +503,15 @@ static int read_number(cs_State *C, FILE *f) {
         }
     }
     count += read_digits(&nb, dtype, 0); /* integral part */
-    if (test2(&nb, decp)) { /* decimal point? */
+    if (count == 1 && dtype == DIGOCT) /* one '0' in the integral part? */
+        dtype = DIGDEC; /* adjust back to decimal */
+    if (test2(&nb, decp)) /* decimal point? */
         count += read_digits(&nb, dtype, 1); /* read fractional part */
-        gotrad = 1;
-    }
-    if (test2(&nb, (dtype == DIGHEX ? "pP" : "eE"))) { /* exponent mark? */
-        test2(&nb, "+-"); /* exponent sign */
-        read_digits(&nb, dtype, gotrad); /* exponent digits */
+    if (count > 0 && dtype != DIGOCT) { /* can have an exponent? */
+        if (test2(&nb, (dtype == DIGHEX) ? "pP" : "eE")) { /* exponent? */
+            test2(&nb, "+-"); /* exponent sign */
+            read_digits(&nb, DIGDEC, 0); /* exponent digits */
+        }
     }
     ungetc(nb.c, nb.f); /* unread look-ahead char */
     c_unlockfile(nb.f);
@@ -592,7 +586,7 @@ static int aux_read(cs_State *C, FILE *f, int first) {
     clearerr(f);
     errno = 0;
     if (nargs == 0) { /* no arguments? */
-        success = read_line(C, f, 0);
+        success = read_line(C, f, 1);
         n = first + 1; /* return 1 result */
     } else {
         /* ensure stack space for all results and for auxlib's buffer */
@@ -697,7 +691,6 @@ static int io_write(cs_State *C) {
 
 
 /* function for 'io' library */
-// TODO: add docs
 static const cs_Entry iolib[] = {
     {"open", io_open},
     {"close", io_close},
@@ -730,7 +723,7 @@ static int f_write(cs_State *C) {
 static int f_lines(cs_State *C) {
     tofile(C);
     aux_lines(C, 0);
-    return 0;
+    return 1;
 }
 
 
@@ -745,7 +738,7 @@ static int f_seek(cs_State *C) {
     static const int whence[] = { SEEK_SET, SEEK_CUR, SEEK_END };
     static const char *whence_names[] = { "set", "cur", "end", NULL };
     FILE *f = tofile(C);
-    int opt = csL_check_option(C, 1, NULL, whence_names);
+    int opt = csL_check_option(C, 1, "cur", whence_names);
     c_seeknum offset = (c_seeknum)csL_opt_integer(C, 2, 0);
     int res = fseek(f, offset, whence[opt]);
     if (c_unlikely(res))
@@ -776,7 +769,6 @@ static int f_setvbuf(cs_State *C) {
 
 
 /* methods for file handles */
-// TODO: add docs
 static const cs_Entry f_methods[] = {
     {"read", f_read},
     {"write", f_write},
@@ -790,10 +782,7 @@ static const cs_Entry f_methods[] = {
 
 
 static void create_filehandle_methods(cs_State *C) {
-    csL_newlibtable(C, f_methods);
-    csL_set_funcs(C, f_methods, 0);
-    csL_new_usermethods(C, CS_FILEHANDLE_TABLE,
-                        sizeof(f_methods)/sizeof(f_methods[0]) - 1);
+    csL_push_methods(C, CS_FILEHANDLE_TABLE, f_methods);
     cs_pop(C, 1); /* remove methods table */
 }
 
@@ -818,15 +807,14 @@ static int f_tostring(cs_State *C) {
 static const csL_MetaEntry f_mm[] = {
     {CS_MM_GETIDX, f_getidx},
     {CS_MM_GC, f_gc},
-    {CS_MM_CLOSE, f_close},
+    {CS_MM_CLOSE, f_gc},
     {CS_MM_TOSTRING, f_tostring},
     {-1, NULL},
 };
 
 
 static void create_filehandle_metalist(cs_State *C) {
-    csL_new_metalist(C, CS_FILEHANDLE); /* metalist for file handles */
-    csL_set_metafuncs(C, f_mm, 0); /* set its metamethods */
+    csL_push_metalist(C, CS_FILEHANDLE, f_mm);
     cs_pop(C, 1); /* remove metalist */
 }
 
@@ -857,7 +845,7 @@ static void create_stdfile(cs_State *C, FILE *f, const char *k,
 
 
 CSMOD_API int csopen_io(cs_State *C) {
-    csL_newlib(C, iolib); /* 'io' table */
+    csL_push_lib(C, iolib); /* 'io' table */
     create_filehandle_methods(C);
     create_filehandle_metalist(C);
     /* create (and set) default files */

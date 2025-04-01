@@ -12,7 +12,7 @@
 
 
 /* memory error */
-#define csM_error(C)    csPR_throw(C, CS_ERRMEM);
+#define csM_error(C)    csPR_throw(C, CS_ERRMEM)
 
 
 #define csM_new(C,t)            csM_malloc_(C, sizeof(t), 0)

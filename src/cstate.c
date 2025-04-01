@@ -35,7 +35,7 @@ static void preinit_thread(cs_State *C, GState *gs) {
     C->errfunc = 0;
     C->nCcalls = 0;
     C->gclist = NULL;
-    C->thwouv = C; /* if ('C->thwouv' == 'C') then no upvalues */
+    C->twups = C; /* if ('C->twups' == 'C') then no upvalues */
     G(C) = gs;
     C->errjmp = NULL;
     C->stack.p = C->sp.p = C->stackend.p = NULL;
@@ -187,7 +187,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     gs->fpanic = NULL; /* no panic handler by default */
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
     gs->mainthread = C;
-    gs->thwouv = NULL;
+    gs->twups = NULL;
     gs->fwarn = NULL; gs->ud_warn = NULL;
     cs_assert(gs->totalbytes == sizeof(XSG) && gs->gcdebt == 0);
     if (csPR_rawcall(C, f_newstate, NULL) != CS_OK) {
@@ -238,7 +238,7 @@ int csT_resetthread(cs_State *C, int status) {
     C->status = CS_OK; /* so we can run '__close' */
     status = csPR_close(C, 1, status);
     if (status != CS_OK) /* error? */
-        csT_seterrorobj(C, status, C->stack.p + 1);
+        csPR_seterrorobj(C, status, C->stack.p + 1);
     else
         C->sp.p = C->stack.p + 1;
     cf->top.p = C->sp.p + CS_MINSTACK;
@@ -264,35 +264,8 @@ CS_API int cs_resetthread(cs_State *C) {
 }
 
 
-void csT_seterrorobj(cs_State *C, int errcode, SPtr oldtop) {
-    switch (errcode) {
-        case CS_ERRMEM: { /* memory error? */
-            setstrval2s(C, oldtop, G(C)->memerror);
-            break;
-        }
-        case CS_ERRERROR: { /* error while handling error? */
-            setstrval2s(C, oldtop, csS_newlit(C, "error in error handling"));
-            break;
-        }
-        case CS_OK: { /* closing upvalue? */
-            setnilval(s2v(oldtop)); /* no error message */
-            break;
-        }
-        default: { /* real error */
-            cs_assert(errcode > CS_OK);
-            setobjs2s(C, oldtop, C->sp.p - 1); /* error msg on current top */
-            break;
-        }
-    }
-    C->sp.p = oldtop + 1;
-}
-
-
-/*
-** Stack size to grow the stack to when stack overflow occurs
-** for error handling.
-*/
-#define OVERFLOWSTACKSIZE       (CSI_MAXSTACK + 200)
+/* some space for error handling */
+#define ERRORSTACKSIZE      (CSI_MAXSTACK + 200)
 
 
 CallFrame *csT_newcf(cs_State *C) {
@@ -303,84 +276,93 @@ CallFrame *csT_newcf(cs_State *C) {
     C->cf->next = cf;
     cf->prev = C->cf;
     cf->next = NULL;
+    cf->trap = 0;
     C->ncf++;
     return cf;
 }
 
 
 /* convert stack pointers into relative stack offsets */
-static void sptr2rel(cs_State *C) {
+static void relstack(cs_State *C) {
     C->sp.offset = savestack(C, C->sp.p);
+    C->tbclist.offset = savestack(C, C->tbclist.p);
+    for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
+        uv->v.offset = savestack(C, uvlevel(uv));
     for (CallFrame *cf = C->cf; cf != NULL; cf = cf->prev) {
         cf->func.offset = savestack(C, cf->func.p);
         cf->top.offset = savestack(C, cf->top.p);
     }
-    for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
-        uv->v.offset = savestack(C, uv->v.p);
-    C->tbclist.offset = savestack(C, C->tbclist.p);
 }
 
 
 /* convert relative stack offsets into stack pointers */
-static void rel2sptr(cs_State *C) {
+static void correctstack(cs_State *C) {
     C->sp.p = restorestack(C, C->sp.offset);
+    C->tbclist.p = restorestack(C, C->tbclist.offset);
+    for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
+        uv->v.p = s2v(restorestack(C, uv->v.offset));
     for (CallFrame *cf = C->cf; cf != NULL; cf = cf->prev) {
         cf->func.p = restorestack(C, cf->func.offset);
         cf->top.p = restorestack(C, cf->top.offset);
+        if (isCScript(cf))
+            cf->trap = 1; /* signal to update 'trap' in 'csV_execute' */
     }
-    for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
-        uv->v.p = s2v(restorestack(C, uv->v.offset));
-    C->tbclist.p = restorestack(C, C->tbclist.offset);
 }
 
 
 /* reallocate stack to new size */
-int csT_reallocstack(cs_State *C, int size, int raiseerr) {
-    SPtr newstack;
-    GState *gs = G(C);
-    int old_stopem = gs->gcstopem;
+int csT_reallocstack(cs_State *C, int newsize, int raiseerr) {
     int osz = stacksize(C);
-    cs_assert(size <= CSI_MAXSTACK || size == OVERFLOWSTACKSIZE);
-    sptr2rel(C);
-    gs->gcstopem = 1; /* no emergency collection when reallocating stack */
+    int old_stopem = G(C)->gcstopem;
+    SPtr newstack;
+    cs_assert(newsize <= CSI_MAXSTACK || newsize == ERRORSTACKSIZE);
+    relstack(C); /* change pointers to offsets */
+    G(C)->gcstopem = 1; /* no emergency collection when reallocating stack */
     newstack = csM_reallocarray(C, C->stack.p, osz + EXTRA_STACK,
-                                size + EXTRA_STACK, SValue);
-    gs->gcstopem = old_stopem;
+                                newsize + EXTRA_STACK, SValue);
+    G(C)->gcstopem = old_stopem;
     if (c_unlikely(newstack == NULL)) {
-        rel2sptr(C);
+        correctstack(C); /* change offsets back to pointers */
         if (raiseerr)
-            csPR_throw(C, CS_ERRMEM);
-        return 0;
+            csM_error(C);
+        else return 0;
     }
-    rel2sptr(C);
     C->stack.p = newstack;
-    C->stackend.p = newstack + size;
-    for (int i = osz + EXTRA_STACK; i < size + EXTRA_STACK; i++)
-        setnilval(s2v(newstack + i));
+    correctstack(C); /* change offsets back to pointers */
+    C->stackend.p = C->stack.p + newsize;
+    for (int i = osz + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
+        setnilval(s2v(newstack + i)); /* erase new segment */
     return 1;
 }
 
 
-/* grow stack to accommodate 'n' values */
+/* 
+** Grow stack to accommodate 'n' values. When 'raiseerr' is true,
+** raises any error; otherwise, return 0 in case of errors.
+*/
 int csT_growstack(cs_State *C, int n, int raiseerr) {
     int size = stacksize(C);
     if (c_unlikely(size > CSI_MAXSTACK)) { /* overflowed already ? */
-        cs_assert(size == OVERFLOWSTACKSIZE);
+        /* if stack is larger than maximum, thread is already using the
+        ** extra space reserved for errors, that is, thread is handling
+        ** a stack error; cannot grow further than that. */
+        cs_assert(size == ERRORSTACKSIZE);
         if (raiseerr)
             csPR_throw(C, CS_ERRERROR);
         return 0;
-    }
-    if (c_unlikely(n > CSI_MAXSTACK)) {
+    } else if (n < CSI_MAXSTACK) { /* avoid arithmetic overflow */
         int nsize = size * 2;
         int needed = cast_int((C)->sp.p - (C)->stack.p) + n;
         if (nsize > CSI_MAXSTACK)
-            nsize = CSI_MAXSTACK;
-        if (nsize < needed)
-            nsize = needed;
-        if (c_likely(nsize <= CSI_MAXSTACK))
+            nsize = CSI_MAXSTACK; /* clamp it */
+        if (nsize < needed) /* size still too small? */
+            nsize = needed; /* grow to needed size */
+        if (c_likely(nsize <= CSI_MAXSTACK)) /* new size is ok? */
             return csT_reallocstack(C, nsize, raiseerr);
     }
-    csT_reallocstack(C, OVERFLOWSTACKSIZE, raiseerr);
+    /* else stack overflow */
+    /* add extra size to be able to handle the error message */
+    csT_reallocstack(C, ERRORSTACKSIZE, raiseerr);
     if (raiseerr)
         csD_runerror(C, "stack overflow");
     return 0;
@@ -389,12 +371,13 @@ int csT_growstack(cs_State *C, int n, int raiseerr) {
 
 static int stackinuse(cs_State *C) {
     SPtr maxtop = C->cf->top.p;
+    int n;
     for (CallFrame *cf = C->cf->prev; cf != NULL; cf = cf->prev) {
         if (maxtop < cf->top.p)
             maxtop = cf->top.p;
     }
     cs_assert(maxtop <= C->stackend.p + EXTRA_STACK);
-    int n = savestack(C, maxtop);
+    n = savestack(C, maxtop);
     if (n < CS_MINSTACK)
         n = CS_MINSTACK;
     return n;
@@ -402,11 +385,10 @@ static int stackinuse(cs_State *C) {
 
 
 /*
-** Shrink stack if the current stack size is more
-** than 3 times the current use.
-** This also rolls back the stack to its original maximum
-** size 'CSI_MAXSTACK' in case the stack was previously
-** handling stack overflow.
+** Shrink stack if the current stack size is more than 3 times the
+** current use. This also rolls back the stack to its original maximum
+** size 'CSI_MAXSTACK' in case the stack was previously handling stack
+** overflow.
 */
 void csT_shrinkstack(cs_State *C) {
     int inuse = stackinuse(C);
@@ -420,7 +402,7 @@ void csT_shrinkstack(cs_State *C) {
 
 /* increment stack pointer */
 void csT_incsp(cs_State *C) {
-    csT_checkstack(C, 1);
+    csPR_checkstack(C, 1);
     C->sp.p++;
 }
 

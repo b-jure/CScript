@@ -23,16 +23,14 @@
 #include "ctable.h"
 #include "cmem.h"
 
-#include <string.h>
-
-
-/*
-** TODO: By default, disable bytecode disassembly.
-*/
-#if !defined(DISASSEMBLE_BYTECODE)
+#if defined(CSI_DISASSEMBLE_BYTECODE)
 #include "ctrace.h"
-#define DISASSEMBLE_BYTECODE    1
+#define unasmfunc(C,p)      csTR_disassemble(C, p)
+#else
+#define unasmfunc(C,p)      ((void)0)
 #endif
+
+#include <string.h>
 
 
 /* check if current token matches 'tk' */
@@ -380,7 +378,7 @@ static int nswexpr(FunctionState *fs) {
 
 static void continuepop(FunctionState *fs) {
     int ncntl = (check_exp(fs->loopscope, is_genloop(fs->loopscope))
-              ? NSTATEVARS /* keep 'foreach' local control variables */
+              ? VAR_N /* keep 'foreach' local control variables */
               : 0); /* not in 'foreach' (no control vars) */
     /* pop locals */
     csC_pop(fs, fs->nactlocals - fs->loopscope->nactlocals - ncntl);
@@ -514,6 +512,7 @@ static void enterscope(FunctionState *fs, Scope *s, int cf) {
     fs->scope = s;
 }
 
+#include<stdio.h>
 
 /* end lexical scope */
 static void leavescope(FunctionState *fs) {
@@ -522,6 +521,7 @@ static void leavescope(FunctionState *fs) {
     int nactlocals = fs->nactlocals;
     int popn = nactlocals - s->nactlocals + s->haveswexp;
     int hasclose = 0;
+    printf("REMOVING %d, at pc %d\n", popn, fs->pc);
     removelocals(fs, s->nactlocals); /* remove scope locals */
     cs_assert(s->nactlocals == fs->nactlocals);
     if (haspatchlist(s)) /* have to fix jumps? */
@@ -615,9 +615,7 @@ static void close_func(Lexer *lx) {
     csM_shrinkarray(C, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev; /* go back to enclosing function (if any) */
     csG_checkGC(C); /* try to collect garbage memory */
-#if DISASSEMBLE_BYTECODE
-    csTR_disassemble(fs->lx->C, fs->p);
-#endif
+    unasmfunc(fs->lx->C, fs->p);
 }
 
 
@@ -2251,8 +2249,8 @@ static void foreachstm(Lexer *lx) {
     }
     expectnext(lx, TK_IN);
     line = lx->line;
-    adjustassign(lx, NSTATEVARS, forexplist(lx, &e, NSTATEVARS), &e);
-    adjustlocals(lx, NSTATEVARS); /* register control variables */
+    adjustassign(lx, VAR_N, forexplist(lx, &e, VAR_N), &e);
+    adjustlocals(lx, VAR_N); /* register control variables */
     scopemarkclose(fs); /* last control variable might get closed */
     csC_checkstack(fs, 3); /* extra space to call generator */
     prep = csC_emitILL(fs, OP_FORPREP, base, 0);
@@ -2260,6 +2258,7 @@ static void foreachstm(Lexer *lx) {
     adjustlocals(lx, nvars); /* register delcared locals */
     csC_reserveslots(fs, nvars); /* space for declared locals */
     stm(lx); /* body */
+    printf("LEAVING delcared locals scope\n");
     leavescope(fs); /* leave declared locals scope */
     patchforjmp(fs, prep, currPC, 0);
     fs->loopstart = currPC; /* generic loop starts here */
@@ -2268,6 +2267,7 @@ static void foreachstm(Lexer *lx) {
     forend = csC_emitILLL(fs, OP_FORLOOP, base, 0, nvars);
     patchforjmp(fs, forend, prep + getOpSize(OP_FORPREP), 1);
     csC_fixline(fs, line);
+    printf("LEAVING for-loop scope\n");
     leaveloop(fs); /* leave loop (pops control variables) */
 }
 

@@ -555,11 +555,8 @@ static int read_decnum(Lexer *lx, Literal *k, int c) {
     int fp = (c == '.'); /* check if '.' is first */
     int ndigs = read_digits(lx, DigDec, fp) + !fp;
     if (!fp && lx->c == '.') { /* have fractional part? ('.' was not first) */
-        int nfrac; /* fractional digits */
         save_and_advance(lx); /* skip '.' */
-        nfrac = read_digits(lx, DigDec, 1);
-        if (ndigs == 0) /* no integral part? */
-            ndigs = nfrac; /* number of digits is equal to fractional part */
+        ndigs += read_digits(lx, DigDec, 1);
     }
     if (check_next2(lx, "eE")) { /* have exponent? */
         if (c_unlikely(fp && !ndigs)) /* no integral or fractional part? */

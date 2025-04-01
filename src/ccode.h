@@ -140,8 +140,8 @@ typedef enum { /* ORDER OP */
 ** ------------------------------------------------------------------------ */
 OP_TRUE = 0,/*                'load true constant'                          */
 OP_FALSE,/*                   'load false constant'                         */
-OP_NIL,/*                     'load nil constant'                           */
 OP_SUPER,/*        V          'load V.class.superclass'                     */
+OP_NIL,/*                     'load nil constant'                           */
 OP_NILN,/*         L          'load L nils'                                 */
 OP_LOAD,/*         L          'load V{L}'                                   */
 OP_CONST,/*        S          'load K{S}'                                   */
@@ -154,7 +154,7 @@ OP_VARARGPREP,/*   L          'adjust function varargs (L function arity)'  */
 OP_VARARG,/*       L          'load L-1 varargs'                            */
 OP_CLOSURE,/*      L          'load closure(Enclosing->fns[L])'             */
 OP_NEWLIST,/*      S          'create and load new array of size 1<<(S-1)'  */
-OP_NEWCLASS,/*                'create and load new class'                   */
+OP_NEWCLASS,/*     S          'create and load new class of size 1<<(S-1)'  */
 OP_NEWTABLE,/*     S          'create and load new table of size 1<<(S-1)'  */
 OP_METHOD,/*       L V1 V2    'define method V2 for class V1 under key K{L}'*/
 OP_SETMM,/*        S V1 V2    'V1->metalist[S] = V2'                        */

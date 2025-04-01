@@ -16,6 +16,7 @@
 #include "cobject.h"
 #include "cstate.h"
 #include "cvm.h"
+#include "cprotected.h"
 
 #include <stdio.h>
 
@@ -70,7 +71,7 @@ void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
     int actual = cast_int(C->sp.p - cf->func.p) - 1;
     int extra = actual - arity; /* number of varargs */
     cf->nvarargs = extra;
-    csT_checkstack(C, fn->maxstack + 1);
+    csPR_checkstack(C, fn->maxstack + 1);
     setobjs2s(C, C->sp.p++, cf->func.p); /* move function */
     for (int i = 1; i <= arity; i++) {
         setobjs2s(C, C->sp.p++, cf->func.p + i); /* move param */
@@ -82,7 +83,6 @@ void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
 }
 
 
-/* Get 'wanted' varargs starting at the current stack pointer. */
 void csF_getvarargs(cs_State *C, CallFrame *cf, int wanted) {
     int have = cf->nvarargs;
     if (wanted < 0) { /* CS_MULRET? */
@@ -123,9 +123,9 @@ static UpVal *newupval(cs_State *C, SPtr val, UpVal **prev) {
     if (next) /* have previous upvalue? */
         next->u.open.prev = &uv->u.open.next; /* adjust its 'u.open.prev' */
     *prev = uv; /* adjust list head or previous upvalues 'u.open.next' */
-    if (!isinthwouv(C)) { /* thread not in list of threads with open upvals? */
-        C->thwouv = G(C)->thwouv; /* link it to the list... */
-        G(C)->thwouv = C; /* ...and adjust list head */
+    if (!isintwups(C)) { /* thread not in list of threads with open upvals? */
+        C->twups = G(C)->twups; /* link it to the list... */
+        G(C)->twups = C; /* ...and adjust list head */
     }
     return uv;
 }
@@ -138,7 +138,7 @@ static UpVal *newupval(cs_State *C, SPtr val, UpVal **prev) {
 UpVal *csF_findupval(cs_State *C, SPtr sv) {
     UpVal **pp = &C->openupval; /* good ol' pp */
     UpVal *p;
-    cs_assert(isinthwouv(C) || C->openupval == NULL);
+    cs_assert(isintwups(C) || C->openupval == NULL);
     while ((p = *pp) != NULL && uvlevel(p) > sv) {
         cs_assert(!isdead(G(C), p));
         if (uvlevel(p) == sv)
@@ -172,8 +172,8 @@ const char *csF_getlocalname(const Proto *fn, int lnum, int pc) {
 */
 static void checkclosem(cs_State *C, SPtr level) {
     const TValue *fmm = csMM_get(C, s2v(level), CS_MM_CLOSE);
-    if (c_unlikely(ttisnil(fmm))) { /* missing '__close'? */
-        int vidx = level - C->cf->func.p;
+    if (c_unlikely(ttisnil(fmm))) { /* missing __close metamethod? */
+        int vidx = cast_int(level - C->cf->func.p);
         const char *name = csD_findlocal(C, C->cf, vidx, NULL);
         if (name == NULL) name = "?";
         csD_runerror(C, "local variable %s got a non-closeable value", name);
@@ -191,13 +191,15 @@ static void checkclosem(cs_State *C, SPtr level) {
 
 /* insert variable into the list of to-be-closed variables */
 void csF_newtbcvar(cs_State *C, SPtr level) {
-    if (c_isfalse(s2v(level))) return;
+    cs_assert(level > C->tbclist.p);
+    if (c_isfalse(s2v(level)))
+        return; /* false doesn't need to be closed */
     checkclosem(C, level);
     while (cast_uint(level - C->tbclist.p) > MAXDELTA) {
-        C->tbclist.p += MAXDELTA;
+        C->tbclist.p += MAXDELTA; /* create a dummy node at maximum delta */
         C->tbclist.p->tbc.delta = 0;
     }
-    level->tbc.delta = level - C->tbclist.p;
+    level->tbc.delta = cast(ushort, level - C->tbclist.p);
     C->tbclist.p = level;
 }
 
@@ -268,7 +270,7 @@ static void prepcallclose(cs_State *C, SPtr level, int status) {
         errobj = &G(C)->nil; /* error object is nil */
     else { /* top will be set to 'level' + 2 */
         errobj = s2v(level + 1); /* error object goes after 'v' */
-        csT_seterrorobj(C, status, level + 1); /* set error object */
+        csPR_seterrorobj(C, status, level + 1); /* set error object */
     }
     callclosemm(C, v, errobj);
 }

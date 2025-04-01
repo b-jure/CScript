@@ -27,6 +27,7 @@
 #include "cmeta.h"
 #include "cstring.h"
 #include "ctrace.h"
+#include "cprotected.h"
 
 
 
@@ -39,15 +40,6 @@
 #else
 #define CS_USE_JUMPTABLE	0
 #endif
-#endif
-
-
-
-/*
-** By default, disable internal bytecode execution tracing.
-*/
-#if !defined(TRACE_EXEC)
-#define TRACE_EXEC      1
 #endif
 
 
@@ -83,6 +75,18 @@
 #endif
 
 
+#if !defined(c_swap)
+
+/* swap 'TValue*' */
+#define c_swap(v1_,v2_) \
+    { TValue *temp = (v1_); (v1_) = (v2_); (v2_) = temp; }
+
+/* swap 'const TValue*' */
+#define c_cswap(v1_,v2_) \
+    { const TValue *temp = (v1_); (v1_) = (v2_); (v2_) = temp; }
+
+#endif
+
 
 static int booleans[2] = { CS_VFALSE, CS_VTRUE };
 
@@ -95,8 +99,7 @@ static void pushclosure(cs_State *C, Proto *p, UpVal **enc, SPtr base) {
     int nupvals = p->sizeupvals;
     CSClosure *cl = csF_newCSClosure(C, nupvals);
     cl->p = p;
-    setclCSval2s(C, C->sp.p, cl); /* anchor to stack */
-    C->sp.p += 1;
+    setclCSval2s(C, C->sp.p++, cl); /* anchor to stack */
     for (int i = 0; i < nupvals; i++) {
         UpValInfo *uv = &p->upvals[i];
         if (uv->onstack)
@@ -339,7 +342,7 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
         default: return gcoval(v1) == gcoval(v2);
     }
     assert(!ttisnil(fmm));
-    if (swap) { const TValue *temp = v1; v1 = v2; v2 = temp; }
+    if (swap) c_cswap(v1, v2);
     csMM_callbinres(C, fmm, v1, v2, C->sp.p);
     return !c_isfalse(s2v(C->sp.p));
 }
@@ -457,26 +460,12 @@ void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 }
 
 
-/*
-** XXX
-** In the next version of CScript, each instance and full userdata will
-** contain additional state information that will tell us if the
-** instance/userdata is in its own metamethod, and which one.
-** This is usefull in order to avoid recursive calls to the same metamethod
-** where this might be unwanted (e.g., __getidx, __setidx).
-** In the mentioned example for __getidx/__setidx, user would then be able
-** to index 'self' as usual without the need of 'raw(set)get' functions.
-** So if the __getidx gets called and another function is called in the
-** __getidx, then __getidx will be still active further up the stack,
-** meaning the __getidx metamethod can't trigger for that instance/userdata
-** until the initial __getidx returns.
-*/
 void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
-    const TValue *fmm = csMM_get(C, obj, CS_MM_GETIDX);
-    if (ttisnil(fmm)) /* no metamethod? */
+    const TValue *f = csMM_get(C, obj, CS_MM_GETIDX);
+    if (ttisnil(f)) /* no metamethod? */
         csV_rawget(C, obj, key, res);
     else /* otherwise call metamethod */
-        csMM_callgetres(C, fmm, obj, key, res);
+        csMM_callgetres(C, f, obj, key, res);
 }
 
 
@@ -776,6 +765,37 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 }
 
 
+#define getbsize(b)     ((b > 0) ? (1<<((b)-1)) : 0)
+
+
+c_sinline void pushclass(cs_State *C, int b) {
+    OClass *cls = csMM_newclass(C);
+    setclsval2s(C, C->sp.p++, cls);
+    if (b & 0x80) { /* have metamethods? */
+        b &= 0x7F; /* remove flag */
+        cs_assert(0); /* TODO */
+    }
+    if (b > 0) /* have methods? */
+        cls->methods = csH_newsz(C, getbsize(b));
+}
+
+
+c_sinline void pushlist(cs_State *C, int b) {
+    List *l = csA_new(C);
+    setlistval2s(C, C->sp.p++, l);
+    if (b > 0) /* list is not empty? */
+        csA_ensure(C, l, getbsize(b));
+}
+
+
+c_sinline void pushtable(cs_State *C, int b) {
+    Table *t = csH_new(C);
+    settval2s(C, C->sp.p++, t);
+    if (b > 0) /* table is not empty? */
+        csH_resize(C, t, getbsize(b));
+}
+
+
 /* -----------------------------------------------------------------------
 ** Macros for arithmetic/bitwise/comparison operations on numbers.
 **------------------------------------------------------------------------ */
@@ -811,14 +831,18 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 /* arithmetic operations with constant operand for floats */
 #define op_arithKf(C,fop) { \
     TValue *v = peek(0); \
-    TValue *lk = K(fetchl()); \
+    TValue *lk; \
+    savestate(C); \
+    lk = K(fetch_l()); \
     op_arithKf_aux(C, v, lk, fop); }
 
 
-/* arithmetic operations with constant operand */
+/* arithmetic operations with number constant operand */
 #define op_arithK(C,iop,fop) { \
     TValue *v = peek(0); \
-    TValue *lk = K(fetchl()); cs_assert(ttisnum(lk)); \
+    TValue *lk; \
+    savestate(C); \
+    lk = K(fetch_l()); cs_assert(ttisnum(lk)); \
     if (ttisint(v) && ttisint(lk)) { \
         cs_Integer i1 = ival(v); \
         cs_Integer i2 = ival(lk); \
@@ -836,7 +860,9 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 /* arithmetic operations with immediate operand for floats */
 #define op_arithIf(C,fop) { \
     TValue *v = peek(0); \
-    int imm = fetchl(); \
+    int imm; \
+    savestate(C); \
+    imm = fetch_l(); \
     imm = IMML(imm); \
     cs_Number n; \
     if (tonumber(v, n)) { \
@@ -850,7 +876,9 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 /* arithmetic operations with immediate operand */
 #define op_arithI(C,iop,fop) { \
     TValue *v = peek(0); \
-    int imm = fetchl(); \
+    int imm; \
+    savestate(C); \
+    imm = fetch_l(); \
     imm = IMML(imm); \
     if (ttisint(v)) { \
         cs_Integer i = ival(v); \
@@ -868,7 +896,7 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
     cs_Number n1; cs_Number n2; \
     if (tonumber(v1, n1) && tonumber(v2, n2)) { \
         setfval(res, fop(C, n1, n2)); \
-        SP(-1); /* v2 */ \
+        sp--; /* v2 */ \
         pc += getOpSize(OP_MBIN); \
     }/* else fall through to 'OP_MBIN' */}
 
@@ -878,7 +906,7 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
     TValue *res = peek(1); \
     TValue *v1 = res; \
     TValue *v2 = peek(0); \
-    if (fetchs()) { TValue *temp = v1; v1 = v2; v2 = temp; } \
+    if (fetch_s()) c_swap(v1, v2); \
     op_arithf_aux(C, res, v1, v2, fop); }
 
 
@@ -887,11 +915,11 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
     TValue *res = peek(1); \
     TValue *v1 = res; \
     TValue *v2 = peek(0); \
-    if (fetchs()) { TValue *temp = v1; v1 = v2; v2 = temp; } \
+    if (fetch_s()) c_swap(v1, v2); \
     if (ttisint(v1) && ttisint(v2)) { \
         cs_Integer i1 = ival(v1); cs_Integer i2 = ival(v2); \
         setival(res, iop(C, i1, i2)); \
-        SP(-1); /* v2 */ \
+        sp--; /* v2 */ \
         pc += getOpSize(OP_MBIN); \
     } else { \
         op_arithf_aux(C, res, v1, v2, fop); \
@@ -906,8 +934,10 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 /* bitwise operations with constant operand */
 #define op_bitwiseK(C,op) { \
     TValue *v = peek(0); \
-    TValue *lk = K(fetchl()); \
+    TValue *lk; \
     cs_Integer i1, i2; \
+    savestate(C); \
+    lk = K(fetch_l()); \
     if (c_likely(tointeger(v, &i1) && tointeger(lk, &i2))) { \
         setival(v, op(i1, i2)); \
     } else { \
@@ -921,7 +951,9 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 /* bitwise operations with immediate operand */
 #define op_bitwiseI(C,op) { \
     TValue *v = peek(0); \
-    int imm = fetchl(); \
+    int imm; \
+    savestate(C); \
+    imm = fetch_l(); \
     imm = IMML(imm); \
     cs_Integer i; \
     if (c_likely(tointeger(v, &i))) { \
@@ -942,10 +974,11 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
     TValue *v1 = res; \
     TValue *v2 = peek(0); \
     cs_Integer i1; cs_Integer i2; \
-    if (fetchs()) { TValue *temp = v1; v1 = v2; v2 = temp; } \
+    savestate(C); \
+    if (fetch_s()) c_swap(v1, v2); \
     if (tointeger(v1, &i1) && tointeger(v2, &i2)) { \
         setival(res, op(i1, i2)); \
-        SP(-1); /* v2 */ \
+        sp--; /* v2 */ \
         pc += getOpSize(OP_MBIN); \
     } else if (c_unlikely(ttisnum(v1) && ttisnum(v2))) { \
         csD_runerror(C, "number has no integer representation"); \
@@ -969,7 +1002,8 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
     TValue *v1 = res; \
     TValue *v2 = peek(0); \
     int cond; \
-    if (fetchs()) { TValue *temp = v1; v1 = v2; v2 = temp; } \
+    savestate(C); \
+    if (fetch_s()) c_swap(v1, v2); \
     if (ttisint(v1) && ttisint(v2)) { \
         cs_Integer i1 = ival(v1); \
         cs_Integer i2 = ival(v2); \
@@ -977,11 +1011,9 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
     } else if (ttisnum(v1) && ttisnum(v2)) { \
         cond = fop(v1, v2); \
     } else { \
-        storepc(C); \
-        cond = other(C, v1, v2); \
+        Protect(cond = other(C, v1, v2)); \
     } \
-    SP(-1); /* v2 */ \
-    setorderres(res, cond, 1); }
+    setorderres(res, cond, 1); sp = --C->sp.p; }
 
 
 /* order operation error with immediate operand */
@@ -991,8 +1023,9 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 
 /* order operations with immediate operand */
 #define op_orderI(C,iop,fop) { \
-    int cond; \
-    int imm = fetchl(); \
+    int cond, imm; \
+    savestate(C); \
+    imm = fetch_l(); \
     imm = IMML(imm); \
     TValue *v = peek(0); \
     if (ttisint(v)) { \
@@ -1005,89 +1038,57 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
     setorderres(v, cond, 1); }
 
 
-/* -----------------------------------------------------------------------
- * Interpreter loop
- * ----------------------------------------------------------------------- */
+/* =======================================================================
+** Interpreter loop
+** ======================================================================= */
 
-/*
-** Correct global 'base' (function stack).
-*/
+
+#define K(idx)          (k + (idx))
+#define STK(i_)         (base+(i_))
+#define stkpeek(i_)     (sp-1-(i_))
+#define peek(n)         s2v(stkpeek(n))
+
+
+#define updatetrap(cf)      (trap = cf->trap)
 #define updatebase(cf)      (base = (cf)->func.p + 1)
+#define updatestack(cf) \
+    { if (c_unlikely(trap)) { updatebase(cf); sp = C->sp.p; }}
 
-/* 
-** Store global 'pc'.
-*/
+
 #define storepc(C)          (cf->pc = pc)
+#define storesp(C)          (C->sp.p = sp)
 
-/*
-** Store global 'pc' into 'realpc'.
-*/
-#define storerealpc(C)      (cf->realpc = pc)
+#define savestate(C)        (storepc(C), storesp(C))
 
 
-#define correcttop(C, cf)   ((C)->sp.p = (cf)->top.p)
-
-
-/*
-** Protect code that can raise errors or overwrite stack values.
-*/
-#define ProtectTop(exp) \
-    { ptrdiff_t oldtop = savestack(C, C->sp.p); correcttop(C, cf); \
-        (exp); C->sp.p = restorestack(C, oldtop); }
-
-
-/* correct global 'pc' before checking collector debt */
-#define checkGC(C)     csG_condGC(C, (void)0, (void)0)
-
-
-/*
-** Fetch instruction.
-*/
-#if TRACE_EXEC
+#if defined(CSI_TRACE_EXEC)
 #include "ctrace.h"
-#define fetch() \
-        check_exp(SIZE_INSTR == sizeof(Instruction), \
-                  (csTR_tracepc(C, cl->p, pc), *pc++))
+#define tracepc(C,p)        (csTR_tracepc(C, sp, p, pc))
 #else
-#define fetch()     check_exp(SIZE_INSTR == sizeof(Instruction), *pc++)
+#define tracepc(C,p)        ((void)0)
 #endif
 
-/*
-** Fetch short instruction argument.
-*/
-#define fetchs()    check_exp(SIZE_ARG_S == SIZE_INSTR, *pc++)
 
-/*
-** Fetch long instruction argument.
-*/
-#define fetchl() \
-        check_exp(SIZE_ARG_L == sizeof(Instruction[3]), \
-                  (cast_void(pc+=SIZE_ARG_L), get3bytes(pc-SIZE_ARG_L)))
+/* fetch instruction */
+#define fetch() { \
+    if (c_unlikely(trap)) { /* stack reallocation? */ \
+        trap = csD_traceexec(C, pc); \
+        updatebase(cf); /* correct stack */ \
+        sp = C->sp.p; /* correct stack pointer */ \
+    } \
+    I = (tracepc(C, cl->p), *(pc++)); \
+}
 
-
-/* get constant at index 'idx' */
-#define K(idx)          (k + (idx))
-
-
-/* get sign value */
-#define getsign()       (fetchs() - 1)
+/* fetch instruction arguments (short/long) */
+#define fetch_s()       (*(pc++))
+#define fetch_l()       (pc += SIZE_ARG_L, get3bytes(pc - SIZE_ARG_L))
 
 
-/* peek stack value */
-#define peek(n)         s2v((C->sp.p-1)-n)
+/* protect code that can change stack */
+#define Protect(exp)    ((exp), updatetrap(cf))
 
 
-/* get stack slot (starting from 'base') */
-#define STK(i_)         (base+(i_))
-
-/* get stack slot (starting from top) */
-#define SLOT(i_)        (C->sp.p-(i_)-1)
-
-/* get top stack slot */
-#define TOP()           SLOT(0)
-
-/* mutate stack pointer by 'n' slots */
-#define SP(n)           check_exp(C->sp.p+(n) >= base, C->sp.p += (n))
+#define checkGC(C)      csG_checkGC(C)
 
 
 /* In cases where jump table is not available or prefered. */
@@ -1097,174 +1098,148 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 
 
 void csV_execute(cs_State *C, CallFrame *cf) {
-    register const Instruction *pc; /* program counter */
-    register CSClosure *cl; /* closure being executed */
-    register TValue *k; /* array of constants */
-    register SPtr base; /* function base stack index */
+    CSClosure *cl;              /* active CScript function (closure) */
+    TValue *k;                  /* constants */
+    SPtr base;                  /* frame stack base */
+    SPtr sp;                    /* local stack pointer (for performance) */
+    const Instruction *pc;      /* program counter */
+    int trap;                   /* true if 'base' reallocated */
 #if CS_USE_JUMPTABLE
 #include "cjmptable.h"
 #endif
 startfunc:
-#if TRACE_EXEC
-    #include <stdio.h>
-    printf(">> Executing new closure...\n");
-#endif
-returning:
-    cl = clCSval(s2v(cf->func.p));
+    trap = 0; /* no hooks */
+returning: /* trap already set */
+    cl = cf_func(cf);
     k = cl->p->k;
+    sp = C->sp.p;
     pc = cf->realpc;
     base = cf->func.p + 1;
+    /* main loop of interpreter */
     for (;;) {
-        vm_dispatch(fetch()) {
+        Instruction I; /* instruction being executed */
+        fetch();
+        cs_assert(base == cf->func.p + 1);
+        cs_assert(base <= C->sp.p && C->sp.p <= C->stackend.p);
+        vm_dispatch(I) {
             vm_case(OP_TRUE) {
-                setbtval(s2v(C->sp.p));
-                SP(1);
+                setbtval(s2v(sp));
+                sp++;
                 vm_break;
             }
             vm_case(OP_FALSE) {
-                setbfval(s2v(C->sp.p));
-                SP(1);
+                setbfval(s2v(sp));
+                sp++;
                 vm_break;
             }
             vm_case(OP_NIL) {
-                setnilval(s2v(C->sp.p));
-                SP(1);
+                setnilval(s2v(sp));
+                sp++;
                 vm_break;
             }
             vm_case(OP_SUPER) {
                 OClass *scl = insval(peek(0))->oclass->sclass;
                 cs_assert(scl != NULL);
-                setclsval2s(C, C->sp.p - 1, scl);
+                setclsval2s(C, sp - 1, scl);
                 vm_break;
             }
             vm_case(OP_NILN) {
-                int n = fetchl();
-                SPtr p = C->sp.p;
-                SP(n);
-                while (n--) setnilval(s2v(p++));
+                int n = fetch_l();
+                while (n--)
+                    setnilval(s2v(sp++));
                 vm_break;
             }
             vm_case(OP_LOAD) {
-                setobjs2s(C, C->sp.p, STK(fetchl()));
-                SP(1);
+                setobjs2s(C, sp, STK(fetch_l()));
+                sp++;
                 vm_break;
             }
             vm_case(OP_CONST) {
-                TValue *sk = K(fetchs());
-                setobj2s(C, C->sp.p, sk);
-                SP(1);
+                setobj2s(C, sp, K(fetch_s()));
+                sp++;
                 vm_break;
             }
             vm_case(OP_CONSTL) {
-                TValue *lk = K(fetchl());
-                setobj2s(C, C->sp.p, lk);
-                SP(1);
+                setobj2s(C, sp, K(fetch_l()));
+                sp++;
                 vm_break;
             }
             vm_case(OP_CONSTI) {
-                int imm = fetchs();
-                setival(s2v(C->sp.p), IMM(imm));
-                SP(1);
+                int imm = fetch_s();
+                setival(s2v(sp), IMM(imm));
+                sp++;
                 vm_break;
             }
             vm_case(OP_CONSTIL) {
-                int imm = fetchl();
-                setival(s2v(C->sp.p), IMML(imm));
-                SP(1);
+                int imm = fetch_l();
+                setival(s2v(sp), IMML(imm));
+                sp++;
                 vm_break;
             }
             vm_case(OP_CONSTF) {
-                int imm = fetchs();
-                setfval(s2v(C->sp.p), cast_num(IMM(imm)));
-                SP(1);
+                int imm = fetch_s();
+                setfval(s2v(sp), cast_num(IMM(imm)));
+                sp++;
                 vm_break;
             }
             vm_case(OP_CONSTFL) {
-                int imm = fetchl();
-                setfval(s2v(C->sp.p), cast_num(IMML(imm)));
-                SP(1);
+                int imm = fetch_l();
+                setfval(s2v(sp), cast_num(IMML(imm)));
+                sp++;
                 vm_break;
             }
             vm_case(OP_VARARGPREP) {
-                int arity;
-                storepc(C);
-                arity = fetchl();
-                csF_adjustvarargs(C, arity, cf, cl->p);
-                updatebase(cf); /* update base (it changed) */
+                savestate(C);
+                csF_adjustvarargs(C, fetch_l(), cf, cl->p);
+                updatebase(cf); /* update base (changed after adjustment) */
+                sp = C->sp.p;
                 vm_break;
             }
             vm_case(OP_VARARG) {
-                int n; /* num of varargs wanted */
-                storepc(C);
-                n = fetchl() - 1;
-                csF_getvarargs(C, cf, n);
+                savestate(C);
+                Protect(csF_getvarargs(C, cf, fetch_l() - 1));
+                sp = C->sp.p;
                 vm_break;
             }
             vm_case(OP_CLOSURE) {
-                int findex;
                 Proto *fn;
-                storepc(C);
-                findex = fetchl();
-                fn = cl->p->p[findex];
+                savestate(C);
+                fn = cl->p->p[fetch_l()];
                 pushclosure(C, fn, cl->upvals, base);
                 checkGC(C);
+                sp = C->sp.p;
                 vm_break;
             }
             vm_case(OP_NEWLIST) {
-                List *l;
-                int b;
-                storepc(C);
-                b = fetchs();
-                if (b > 0) /* list has elements? */
-                    b = 1 << (b - 1); /* size is 2^(b - 1) */
-                SP(1);
-                l = csA_new(C); /* memory allocation */
-                setlistval2s(C, TOP(), l);
-                if (b != 0) /* list is not empty? */
-                    csA_ensure(C, l, b);
+                savestate(C);
+                pushlist(C, fetch_s());
                 checkGC(C);
+                sp = C->sp.p;
                 vm_break;
             }
-            vm_case(OP_NEWCLASS) { 
-                OClass *cls;
-                int b;
-                storepc(C);
-                /* TODO: set 7th bit of 'b' if class has metamethods */
-                b = fetchs();
-                if (b > 0) /* class has methods? */
-                    b = 1 << (b - 1); /* size of methods table is 2^(b - 1) */
-                cls = csMM_newclass(C);
-                setclsval2s(C, C->sp.p, cls); /* push on stack */
-                SP(1);
-                if (b > 0) /* have methods? */
-                    cls->methods = csH_newsz(C, b);
+            vm_case(OP_NEWCLASS) { /* TODO: 'b' 7th bit flag */
+                savestate(C);
+                pushclass(C, fetch_s());
                 checkGC(C);
+                sp = C->sp.p;
                 vm_break;
             }
             vm_case(OP_NEWTABLE) {
-                Table *t;
-                int b;
-                storepc(C);
-                b = fetchs();
-                if (b > 0) /* table has fields? */
-                    b = 1 << (b - 1); /* size is 2^(b - 1) */
-                SP(1);
-                t = csH_new(C);
-                settval2s(C, TOP(), t);
-                if (b != 0) /* table is not empty? */
-                    csH_resize(C, t, b); /* grow table to size 'b' */
+                savestate(C);
+                pushtable(C, fetch_s());
                 checkGC(C);
+                sp = C->sp.p;
                 vm_break;
             }
             vm_case(OP_METHOD) {
                 Table *t = classval(peek(1))->methods;
                 TValue *f = peek(0);
                 TValue *key;
-                storepc(C);
-                key = K(fetchl());
+                savestate(C);
+                key = K(fetch_l());
                 cs_assert(t && ttisstring(key));
                 csV_settable(C, t, key, f);
-                SP(-1); /* f */
+                sp--;
                 vm_break;
             }
             vm_case(OP_SETMM) {
@@ -1272,10 +1247,10 @@ returning:
                 TValue *f = peek(0); /* func */
                 List *ml = classval(o)->metalist;
                 cs_MM mm; /* metamethod tag */
-                storepc(C);
-                mm = fetchs();
+                savestate(C);
+                mm = fetch_s();
                 cs_assert(0 <= mm && mm < CS_MM_N);
-                /* TODO: remove this check (see OP_NEWCLASS) */
+                /* TODO: remove this check (see pushclass) */
                 if (c_unlikely(!ml)) { /* no metalist? */
                     ml = csA_newmetalist(C);
                     classval(o)->metalist = ml;
@@ -1284,16 +1259,15 @@ returning:
                 cs_assert(ml && mm < ml->n);
                 ml->b[mm] = *f; /* set the entry */
                 csV_finishrawset(C, ml, f);
-                SP(-1); /* f */
+                sp--;
                 vm_break;
             }
             vm_case(OP_POP) {
-                SP(-1);
+                sp--;
                 vm_break;
             }
             vm_case(OP_POPN) {
-                int n = fetchl();
-                SP(-n);
+                sp -= fetch_l();
                 vm_break;
             }
             /* } BINARY_OPS { ARITHMETIC_OPS { */
@@ -1301,219 +1275,178 @@ returning:
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
                 cs_MM mm;
-                storepc(C);
-                mm = fetchs();
-                if (mm & 0x80) { /* swap operands? */
-                    TValue *temp = v1;
-                    v1 = v2;
-                    v2 = temp;
-                }
-                precallmbin(C, v1, v2, mm&0x7f, SLOT(1));
-                SP(-1); /* v2 */
+                savestate(C);
+                mm = fetch_s();
+                if (mm & 0x80) c_swap(v1, v2);
+                Protect(precallmbin(C, v1, v2, mm&0x7f, sp - 2));
+                sp = --C->sp.p;
                 vm_break;
             }
             vm_case(OP_ADDK) {
-                storepc(C);
                 op_arithK(C, iadd, c_numadd);
                 vm_break;
             }
             vm_case(OP_SUBK) {
-                storepc(C);
                 op_arithK(C, isub, c_numsub);
                 vm_break;
             }
             vm_case(OP_MULK) {
-                storepc(C);
                 op_arithK(C, imul, c_nummul);
                 vm_break;
             }
             vm_case(OP_DIVK) {
-                storepc(C);
                 op_arithKf(C, c_numdiv);
                 vm_break;
             }
             vm_case(OP_IDIVK) {
-                storepc(C);
                 op_arithK(C, csV_divi, c_numidiv);
                 vm_break;
             }
             vm_case(OP_MODK) {
-                storepc(C); /* in case of division by 0 */
                 op_arithK(C, csV_modi, csV_modf);
                 vm_break;
             }
             vm_case(OP_POWK) {
-                storepc(C);
                 op_arithKf(C, c_numpow);
                 vm_break;
             }
             vm_case(OP_BSHLK) {
-                storepc(C);
                 op_bitwiseK(C, csO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHRK) {
-                storepc(C);
                 op_bitwiseK(C, csO_shiftr);
                 vm_break;
             }
             vm_case(OP_BANDK) {
-                storepc(C);
                 op_bitwiseK(C, iband);
                 vm_break;
             }
             vm_case(OP_BORK) {
-                storepc(C);
                 op_bitwiseK(C, ibor);
                 vm_break;
             }
             vm_case(OP_BXORK) {
-                storepc(C);
                 op_bitwiseK(C, ibxor);
                 vm_break;
             }
             vm_case(OP_ADDI) {
-                storepc(C);
                 op_arithI(C, iadd, c_numadd);
                 vm_break;
             }
             vm_case(OP_SUBI) {
-                storepc(C);
                 op_arithI(C, isub, c_numsub);
                 vm_break;
             }
             vm_case(OP_MULI) {
-                storepc(C);
                 op_arithI(C, imul, c_nummul);
                 vm_break;
             }
             vm_case(OP_DIVI) {
-                storepc(C);
                 op_arithIf(C, c_numdiv);
                 vm_break;
             }
             vm_case(OP_IDIVI) {
-                storepc(C);
                 op_arithI(C, csV_divi, c_numidiv);
                 vm_break;
             }
             vm_case(OP_MODI) {
-                storepc(C);
                 op_arithI(C, csV_modi, csV_modf);
                 vm_break;
             }
             vm_case(OP_POWI) {
-                storepc(C);
                 op_arithIf(C, c_numpow);
                 vm_break;
             }
             vm_case(OP_BSHLI) {
-                storepc(C);
                 op_bitwiseI(C, csO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHRI) {
-                storepc(C);
                 op_bitwiseI(C, csO_shiftr);
                 vm_break;
             }
             vm_case(OP_BANDI) {
-                storepc(C);
                 op_bitwiseI(C, iband);
                 vm_break;
             }
             vm_case(OP_BORI) {
-                storepc(C);
                 op_bitwiseI(C, ibor);
                 vm_break;
             }
             vm_case(OP_BXORI) {
-                storepc(C);
                 op_bitwiseI(C, ibxor);
                 vm_break;
             }
             vm_case(OP_ADD) {
-                storepc(C);
                 op_arith(C, iadd, c_numadd);
                 vm_break;
             }
             vm_case(OP_SUB) {
-                storepc(C);
                 op_arith(C, isub, c_numsub);
                 vm_break;
             }
             vm_case(OP_MUL) {
-                storepc(C);
                 op_arith(C, imul, c_nummul);
                 vm_break;
             }
             vm_case(OP_DIV) {
-                storepc(C);
                 op_arithf(C, c_numdiv);
                 vm_break;
             }
             vm_case(OP_IDIV) {
-                storepc(C);
                 op_arith(C, csV_divi, c_numidiv);
                 vm_break;
             }
             vm_case(OP_MOD) {
-                storepc(C);
                 op_arith(C, csV_modi, csV_modf);
                 vm_break;
             }
             vm_case(OP_POW) {
-                storepc(C);
                 op_arithf(C, c_numpow);
                 vm_break;
             }
             vm_case(OP_BSHL) {
-                storepc(C);
                 op_bitwise(C, csO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHR) {
-                storepc(C);
                 op_bitwise(C, csO_shiftr);
                 vm_break;
             }
             vm_case(OP_BAND) {
-                storepc(C);
                 op_bitwise(C, iband);
                 vm_break;
             }
             vm_case(OP_BOR) {
-                storepc(C);
                 op_bitwise(C, ibor);
                 vm_break;
             }
             vm_case(OP_BXOR) {
-                storepc(C);
                 op_bitwise(C, ibxor);
                 vm_break;
             }
             /* } CONCAT_OP { */
             vm_case(OP_CONCAT) {
-                int n;
-                storepc(C);
-                n = fetchl();
-                csV_concat(C, n); /* 'csV_concat handles 'sp' */
+                savestate(C);
+                Protect(csV_concat(C, fetch_l()));
                 checkGC(C);
+                sp = C->sp.p;
                 vm_break;
             }
             /* } ORDERING_OPS { */
             vm_case(OP_EQK) {
                 TValue *v1 = peek(0);
-                const TValue *vk = K(fetchl());
-                int eq = fetchs();
+                const TValue *vk = K(fetch_l());
+                int eq = fetch_s();
                 int cond = csV_raweq(v1, vk);
                 setorderres(v1, cond, eq);
                 vm_break;
             }
             vm_case(OP_EQI) {
                 TValue *v1 = peek(0);
-                int imm = fetchl();
-                int eq = fetchs();
+                int imm = fetch_l();
+                int eq = fetch_s();
                 int cond;
                 if (ttisint(v1))
                     cond = (ival(v1) == IMML(imm));
@@ -1525,35 +1458,30 @@ returning:
                 vm_break;
             }
             vm_case(OP_LTI) {
-                storepc(C);
                 op_orderI(C, ilt, c_numlt);
                 vm_break;
             }
             vm_case(OP_LEI) {
-                storepc(C);
                 op_orderI(C, ile, c_numle);
                 vm_break;
             }
             vm_case(OP_GTI) {
-                storepc(C);
                 op_orderI(C, igt, c_numgt);
                 vm_break;
             }
             vm_case(OP_GEI) {
-                storepc(C);
                 op_orderI(C, ige, c_numge);
                 vm_break;
             }
             vm_case(OP_EQ) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                int condexp; /* iseq */
-                int cond;
-                storepc(C);
-                condexp = fetchs();
-                cond = csV_ordereq(C, v1, v2);
+                int condexp, cond;
+                savestate(C);
+                condexp = fetch_s();
+                Protect(cond = csV_ordereq(C, v1, v2));
                 setorderres(v1, cond, condexp);
-                SP(-1); /* v2 */
+                sp = --C->sp.p;
                 vm_break;
             }
             vm_case(OP_LT) {
@@ -1565,12 +1493,11 @@ returning:
                 vm_break;
             }
             vm_case(OP_EQPRESERVE) {
-                SPtr res = TOP();
                 TValue *v1 = peek(1);
-                TValue *v2 = s2v(res);
+                TValue *v2 = peek(0);
                 int cond;
-                storepc(C);
-                cond = csV_ordereq(C, v1, v2);
+                savestate(C);
+                Protect(cond = csV_ordereq(C, v1, v2));
                 setorderres(v2, cond, 1);
                 vm_break;
             }
@@ -1592,141 +1519,139 @@ returning:
                     cs_Number n = fval(v);
                     setfval(v, c_numunm(C, n));
                 } else {
-                    storepc(C);
-                    csMM_tryunary(C, v, CS_MM_UNM);
+                    savestate(C);
+                    Protect(csMM_tryunary(C, v, CS_MM_UNM));
                 }
                 vm_break;
             }
             vm_case(OP_BNOT) {
-                SPtr res = TOP();
-                TValue *v = s2v(res);
+                TValue *v = peek(0);
                 if (ttisint(v)) {
                     cs_Integer i = ival(v);
                     setival(v, c_intop(^, ~c_castS2U(0), i));
                 } else {
-                    storepc(C);
-                    csMM_tryunary(C, v, CS_MM_BNOT);
+                    savestate(C);
+                    Protect(csMM_tryunary(C, v, CS_MM_BNOT));
                 }
                 vm_break;
             }
             /* } JMP_OPS { */
             vm_case(OP_JMP) {
-                int off = fetchl();
-                pc += off;
+                int offset = fetch_l();
+                pc += offset;
                 vm_break;
             }
             vm_case(OP_JMPS) {
-                int off = fetchl();
-                pc -= off;
+                int offset = fetch_l();
+                pc -= offset;
                 vm_break;
             }
             vm_case(OP_BJMP) {
-                int off = fetchl();
-                int npop = fetchl();
-                pc += off;
-                SP(-npop);
+                int offset = fetch_l();
+                int npop = fetch_l();
+                pc += offset;
+                sp -= npop;
                 vm_break;
             } /* } TEST_OPS { */
             vm_case(OP_TEST) {
                 TValue *v = peek(0);
-                int off = fetchl();
-                int cond = fetchs();
+                int offset = fetch_l();
+                int cond = fetch_s();
                 if ((!c_isfalse(v)) == cond)
-                    pc += off;
+                    pc += offset;
                 vm_break;
             }
             vm_case(OP_TESTORPOP) {
                 TValue *v = peek(0);
-                int off = fetchl();
-                int cond = fetchs();
+                int offset = fetch_l();
+                int cond = fetch_s();
                 if ((!c_isfalse(v)) == cond)
-                    pc += off;
+                    pc += offset;
                 else
-                    SP(-1); /* v */
+                    sp--;
                 vm_break;
             }
             vm_case(OP_TESTPOP) {
                 TValue *v = peek(0);
-                int off = fetchl();
-                int cond = fetchs();
+                int offset = fetch_l();
+                int cond = fetch_s();
                 if ((!c_isfalse(v)) == cond)
-                    pc += off;
-                SP(-1); /* v */
+                    pc += offset;
+                sp--;
                 vm_break;
             } /* } */
             vm_case(OP_CALL) {
                 CallFrame *newcf;
                 SPtr func;
                 int nres;
-                storepc(C);
-                func = STK(fetchl());
-                nres = fetchl() - 1;
-                storerealpc(C); /* will continue from 'realpc' */
-                if ((newcf = precall(C, func, nres)) != NULL) {
-                    cf = newcf;
+                savestate(C);
+                func = STK(fetch_l());
+                nres = fetch_l()-1;
+                if ((newcf = precall(C, func, nres)) == NULL) /* C call? */
+                    updatetrap(cf); /* done; it already returned */
+                else { /* CScript call */
+                    cf->realpc = pc; /* after return continue from here */
+                    cf = newcf; /* run function in this same C frame */
                     goto startfunc;
-                } /* else call is already done (not a CScript closure) */
+                }
+                sp = C->sp.p;
                 vm_break;
             }
             vm_case(OP_CLOSE) {
                 SPtr level;
-                storepc(C);
-                level = STK(fetchl());
-                ProtectTop(csF_close(C, level, CS_OK));
+                savestate(C);
+                level = STK(fetch_l());
+                Protect(csF_close(C, level, CS_OK));
                 vm_break;
             }
             vm_case(OP_TBC) {
-                SPtr level;
-                storepc(C);
-                level = STK(fetchl());
-                csF_newtbcvar(C, level);
+                savestate(C);
+                csF_newtbcvar(C, STK(fetch_l()));
                 vm_break;
             }
             vm_case(OP_GETGLOBAL) {
-                TValue *key = K(fetchl());
-                Table *G = tval(getGtable(C));
+                TValue *key = K(fetch_l());
+                Table *G = tval(GT(C));
                 const TValue *val = csH_getstr(G, strval(key));
                 if (!isempty(val)) {
-                    setobj2s(C, C->sp.p, val);
+                    setobj2s(C, sp, val);
                 } else
-                    setnilval(s2v(C->sp.p));
-                SP(1);
+                    setnilval(s2v(sp));
+                sp++;
                 vm_break;
             }
             vm_case(OP_SETGLOBAL) {
-                Table *G = tval(getGtable(C));
+                Table *G = tval(GT(C));
                 TValue *v = peek(0);
                 TValue *key;
-                storepc(C);
-                key = K(fetchl());
+                savestate(C);
+                key = K(fetch_l());
                 cs_assert(ttisstring(key));
                 csV_settable(C, G, key, v);
-                SP(-1); /* v */
+                sp--;
                 vm_break;
             }
             vm_case(OP_GETLOCAL) {
-                SPtr l = STK(fetchl());
-                setobjs2s(C, C->sp.p, l);
-                SP(1);
+                setobjs2s(C, sp, STK(fetch_l()));
+                sp++;
                 vm_break;
             }
             vm_case(OP_SETLOCAL) {
-                SPtr l = STK(fetchl());
-                setobjs2s(C, l, C->sp.p - 1);
-                SP(-1);
+                setobjs2s(C, STK(fetch_l()), sp - 1);
+                sp--;
                 vm_break;
             }
             vm_case(OP_GETUVAL) {
-                UpVal *uv = cl->upvals[fetchl()];
-                setobj2s(C, C->sp.p, uv->v.p);
-                SP(1);
+                UpVal *uv = cl->upvals[fetch_l()];
+                setobj2s(C, sp, uv->v.p);
+                sp++;
                 vm_break;
             }
             vm_case(OP_SETUVAL) {
-                UpVal *uv = cl->upvals[fetchl()];
-                setobj(C, uv->v.p, s2v(C->sp.p - 1));
-                csG_barrier(C, uv, s2v(C->sp.p - 1));
-                SP(-1);
+                UpVal *uv = cl->upvals[fetch_l()];
+                setobj(C, uv->v.p, s2v(sp - 1));
+                csG_barrier(C, uv, s2v(sp - 1));
+                sp--;
                 vm_break;
             }
             vm_case(OP_SETLIST) {
@@ -1734,13 +1659,13 @@ returning:
                 SPtr sl;
                 uint last;
                 int n;
-                storepc(C);
-                sl = STK(fetchl()); /* list stack slot */
+                savestate(C);
+                sl = STK(fetch_l()); /* list stack slot */
                 l = listval(s2v(sl)); /* 'sl' as list value */
-                last = fetchl(); /* num of elems. already in the list */
-                n = fetchs(); /* num of elements to store */
+                last = fetch_l(); /* num of elems. already in the list */
+                n = fetch_s(); /* num of elements to store */
                 if (n == 0)
-                    n = (C->sp.p - sl) - 1; /* get up to the top */
+                    n = (sp - sl) - 1; /* get up to the top */
                 cs_assert(n > 0);
                 last += n - 1;
                 csA_ensureindex(C, l, last);
@@ -1750,36 +1675,36 @@ returning:
                     setobj(C, &l->b[last--], v);
                     csV_finishrawset(C, l, v);
                 }
-                C->sp.p = sl + 1; /* pop off elements */
+                sp = C->sp.p = sl + 1; /* pop off elements */
                 vm_break;
             }
             vm_case(OP_SETPROPERTY) { /* NOTE: optimize? */
                 TValue *v = peek(0);
                 TValue *o;
                 TValue *prop;
-                storepc(C);
-                o = peek(fetchl());
-                prop = K(fetchl());
+                savestate(C);
+                o = peek(fetch_l());
+                prop = K(fetch_l());
                 cs_assert(ttisstring(prop));
-                csV_set(C, o, prop, v);
-                SP(-1); /* v */
+                Protect(csV_set(C, o, prop, v));
+                sp = --C->sp.p;
                 vm_break;
             }
             vm_case(OP_GETPROPERTY) { /* NOTE: optimize? */
                 TValue *v = peek(0);
                 TValue *prop;
-                storepc(C);
-                prop = K(fetchl());
+                savestate(C);
+                prop = K(fetch_l());
                 cs_assert(ttisstring(prop));
-                csV_get(C, v, prop, TOP());
+                Protect(csV_get(C, v, prop, sp - 1));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
                 TValue *o = peek(1);
                 TValue *key = peek(0);
-                storepc(C);
-                csV_get(C, o, key, SLOT(1));
-                SP(-1); /* v2 */
+                savestate(C);
+                Protect(csV_get(C, o, key, sp - 2));
+                sp = --C->sp.p;
                 vm_break;
             }
             vm_case(OP_SETINDEX) {
@@ -1787,53 +1712,53 @@ returning:
                 SPtr os;
                 TValue *o;
                 TValue *idx;
-                storepc(C);
-                os = SLOT(fetchl());
+                savestate(C);
+                os = stkpeek(fetch_l());
                 o = s2v(os);
-                idx = s2v(os + 1);
-                csV_set(C, o, idx, v);
-                SP(-1); /* v */
+                idx = s2v(os+1);
+                Protect(csV_set(C, o, idx, v));
+                sp = --C->sp.p;
                 vm_break;
             }
             vm_case(OP_GETINDEXSTR) {
                 TValue *v = peek(0);
                 TValue *i;
-                storepc(C);
-                i = K(fetchl());
+                savestate(C);
+                i = K(fetch_l());
                 cs_assert(ttisstring(i));
-                csV_get(C, v, i, TOP());
+                Protect(csV_get(C, v, i, sp - 1));
                 vm_break;
             }
             vm_case(OP_SETINDEXSTR) {
                 TValue *v = peek(0);
                 TValue *o;
                 TValue *idx;
-                storepc(C);
-                o = peek(fetchl());
-                idx = K(fetchl());
+                savestate(C);
+                o = peek(fetch_l());
+                idx = K(fetch_l());
                 cs_assert(ttisstring(idx));
-                csV_set(C, o, idx, v);
-                SP(-1); /* v */
+                Protect(csV_set(C, o, idx, v));
+                sp = --C->sp.p;
                 vm_break;
             }
             vm_case(OP_GETINDEXINT) {
                 TValue *v = peek(0);
                 TValue i;
                 int imm;
-                storepc(C);
-                imm = fetchs();
+                savestate(C);
+                imm = fetch_s();
                 setival(&i, IMM(imm));
-                csV_get(C, v, &i, TOP());
+                Protect(csV_get(C, v, &i, sp - 1));
                 vm_break;
             }
             vm_case(OP_GETINDEXINTL) {
                 TValue *v = peek(0);
                 TValue i;
                 int imm;
-                storepc(C);
-                imm = fetchl();
+                savestate(C);
+                imm = fetch_l();
                 setival(&i, IMML(imm));
-                csV_get(C, v, &i, TOP());
+                Protect(csV_get(C, v, &i, sp - 1));
                 vm_break;
             }
             vm_case(OP_SETINDEXINT) {
@@ -1841,12 +1766,12 @@ returning:
                 TValue *o;
                 cs_Integer imm;
                 TValue index;
-                storepc(C);
-                o = peek(fetchl());
-                imm = fetchs();
+                savestate(C);
+                o = peek(fetch_l());
+                imm = fetch_s();
                 setival(&index, IMM(imm));
-                csV_set(C, o, &index, v);
-                SP(-1); /* v */
+                Protect(csV_set(C, o, &index, v));
+                sp = --C->sp.p;
                 vm_break;
             }
             vm_case(OP_SETINDEXINTL) {
@@ -1854,42 +1779,42 @@ returning:
                 TValue *o;
                 cs_Integer imm;
                 TValue index;
-                storepc(C);
-                o = peek(fetchl());
-                imm = fetchl();
+                savestate(C);
+                o = peek(fetch_l());
+                imm = fetch_l();
                 setival(&index, IMML(imm));
-                csV_set(C, o, &index, v);
-                SP(-1); /* v */
+                Protect(csV_set(C, o, &index, v));
+                sp = --C->sp.p;
                 vm_break;
             }
             vm_case(OP_GETSUP) {
                 Instance *in = insval(peek(0));
                 OClass *scl = in->oclass->sclass;
                 TValue *sk;
-                storepc(C);
+                savestate(C);
                 cs_assert(scl != NULL);
-                sk = K(fetchl());
-                getsuper(C, in, scl, strval(sk), SLOT(0), csH_getstr);
+                sk = K(fetch_l());
+                getsuper(C, in, scl, strval(sk), sp - 1, csH_getstr);
                 vm_break;
             }
             vm_case(OP_GETSUPIDX) {
                 Instance *in = insval(peek(1));
                 OClass *scl = in->oclass->sclass;;
                 TValue *idx = peek(0);
-                storepc(C);
+                savestate(C);
                 cs_assert(scl != NULL);
-                getsuper(C, in, scl, idx, SLOT(1), csH_get);
-                SP(-1); /* idx */
+                getsuper(C, in, scl, idx, sp - 2, csH_get);
+                sp--;
                 vm_break;
             }
             vm_case(OP_GETSUPIDXSTR) {
                 Instance *in = insval(peek(0));
                 OClass *scl = in->oclass->sclass;;
                 TValue *sk;
-                storepc(C);
+                savestate(C);
                 cs_assert(scl != NULL);
-                sk = K(fetchl());
-                getsuper(C, in, scl, strval(sk), SLOT(0), csH_getstr);
+                sk = K(fetch_l());
+                getsuper(C, in, scl, strval(sk), sp - 1, csH_getstr);
                 vm_break;
             }
             vm_case(OP_INHERIT) {
@@ -1897,7 +1822,7 @@ returning:
                 TValue *o2 = peek(0); /* class */
                 OClass *cls = classval(o2);
                 OClass *scl;
-                storepc(C);
+                savestate(C);
                 cs_assert(!csV_raweq(o1, o2));
                 scl = checksuper(C, o1);
                 csV_inherit(C, cls, scl);
@@ -1905,78 +1830,72 @@ returning:
                 vm_break;
             }
             vm_case(OP_FORPREP) {
-                SPtr stk; /* slot of iterator function */
-                int off; /* offset that skips loop body */
-                storepc(C);
-                stk = STK(fetchl());
-                off = fetchl();
+                int offset;
+                savestate(C);
                 /* create to-be-closed upvalue (if any) */
-                csF_newtbcvar(C, stk+FORTBCVAR);
-                pc += off;
-                check_exp(*pc == OP_FORCALL, cast_void(fetch())); /* skip */
+                csF_newtbcvar(C, STK(fetch_l()) + VAR_TBC);
+                offset = fetch_l();
+                pc += offset;
+                /* go to the next instruction */
+                I = (tracepc(C, cl->p), *(pc++));
+                cs_assert(I == OP_FORCALL);
                 goto l_forcall;
             }
             vm_case(OP_FORCALL) {
             l_forcall: {
                 SPtr stk;
-                int nres;
-                storepc(C);
-                stk = STK(fetchl());
-                nres = fetchl();
+                savestate(C);
+                stk = STK(fetch_l());
                 /* 'stk' slot is iterator function, 'stk + 1' is the
                  * invariant state 'stk + 2' is the control variable, and
                  * 'stk + 3' is the to-be-closed variable. Call uses stack
                  * after these values (starting at 'stk + 4'). */
-                memcpy(stk+NSTATEVARS, stk, FORTBCVAR*sizeof(*stk));
-                C->sp.p = stk+NSTATEVARS+FORTBCVAR; /* adjust stack pointer */
-                csV_call(C, stk+NSTATEVARS, nres); /* call iter */
-                updatebase(cf);
-                check_exp(*pc == OP_FORLOOP, cast_void(fetch())); /* skip */
+                /* push function, state and control variable */
+                memcpy(stk+VAR_N, stk, VAR_TBC * sizeof(*stk));
+                C->sp.p = stk + VAR_N + VAR_TBC; /* adjust stk ptr */
+                Protect(csV_call(C, stk + VAR_N, fetch_l())); /* call iter */
+                updatestack(cf);
+                sp = C->sp.p;
+                /* go to the next instruction */
+                I = (tracepc(C, cl->p), *(pc++));
+                cs_assert(I == OP_FORLOOP);
                 goto l_forloop;
             }}
             vm_case(OP_FORLOOP) {
             l_forloop: {
-                SPtr stk;
-                int off;
-                int nvars;
-                stk = STK(fetchl());
-                off = fetchl();
-                nvars = fetchl();
-                if (!ttisnil(s2v(stk + NSTATEVARS))) { /* result is not nil? */
+                SPtr stk = STK(fetch_l());
+                int offset = fetch_l();
+                int nvars = fetch_l();
+                if (!ttisnil(s2v(stk + VAR_N))) { /* continue loop? */
                     /* save control variable */
-                    setobjs2s(C, stk+FORCNTLVAR, stk+NSTATEVARS);
-                    pc -= off; /* jump back to loop body */
+                    setobjs2s(C, stk+VAR_CNTL, stk+VAR_N);
+                    pc -= offset; /* jump back to loop body */
                 } else /* otherwise leave the loop (fall through) */
-                    SP(-nvars); /* remove leftover vars from previous call */
+                    sp -= nvars; /* remove leftover vars from previous call */
                 vm_break;
             }}
             vm_case(OP_RET) {
                 SPtr stk;
                 int nres; /* number of results */
-                storepc(C);
-                stk = STK(fetchl());
-                nres = fetchl() - 1;
+                savestate(C);
+                stk = STK(fetch_l());
+                nres = fetch_l() - 1;
                 if (nres < 0) /* not fixed ? */
-                    nres = C->sp.p - stk;
-                if (fetchs()) { /* have open upvalues? */
-                    csF_close(C, base, CLOSEKTOP);
-                    updatebase(cf);
+                    nres = sp - stk;
+                if (fetch_s()) { /* have open upvalues? */
+                    Protect(csF_close(C, base, CLOSEKTOP));
+                    updatestack(cf);
                 }
-                if (cl->p->isvararg) /* vararg function ? */
+                if (cl->p->isvararg) /* vararg function? */
                     cf->func.p -= cf->nvarargs + cl->p->arity + 1;
-                C->sp.p = stk + nres;
+                C->sp.p = stk + nres; /* set stk ptr for 'poscall' */
                 poscall(C, cf, nres);
-                if (cf->status & CFST_FRESH) { /* top-level function? */
-#if TRACE_EXEC
-                    printf(">> Returning from main...\n");
-#endif
+                /* return from CScript function */
+                if (cf->status & CFST_FRESH) /* top-level function? */
                     return; /* end this frame */
-                } else {
-#if TRACE_EXEC
-                    printf(">> Returning...\n");
-#endif
+                else {
                     cf = cf->prev; /* return to caller */
-                    goto returning; /* continue running in this frame */
+                    goto returning; /* continue running caller in this frame */
                 }
             }
         }

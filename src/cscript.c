@@ -54,8 +54,6 @@ static void print_usage(const char *badopt) {
 
 
 static void print_version(void) {
-    cs_writelen(stdout, LUA_COPYRIGHT, sizeof(LUA_COPYRIGHT)-1);
-    cs_writeline(stdout);
     cs_writelen(stdout, CS_COPYRIGHT, sizeof(CS_COPYRIGHT)-1);
     cs_writeline(stdout);
 }
@@ -392,7 +390,7 @@ static int pmain(cs_State *C) {
     int script;
     int args = collect_args(argv, &script);
     int optlimit = (script > 0 ? script : argc);
-    csL_checkversion(C);
+    csL_check_version(C);
     if (args == arg_error) {
         print_usage(argv[script]);
         return 0;

@@ -46,9 +46,16 @@ SYSCFLAGS =
 SYSLDFLAGS =
 SYSLIBS =
 
-# user flags
+# user flags (asserts in the API are enabled by default)
+#MYCFLAGS = -DCS_USE_APICHECK -DCSI_ASSERT
+#MYLDFLAGS =
+#MYLIBS =
+#MYOBJS =
+
+# developer debug flags
 ASANFLAGS = -fsanitize=address -fsanitize=undefined
-MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT -DCSI_TRACE_API
+MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT -DCSI_TRACE_API \
+	   -DCSI_TRACE_EXEC -DCSI_DISASSEMBLE_BYTECODE
 MYLDFLAGS = $(ASANFLAGS)
 MYLIBS =
 MYOBJS =

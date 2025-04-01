@@ -14,136 +14,83 @@
 #include <setjmp.h>
 
 
-
-/*
- * Extra stack space that is used mostly when calling vtable
- * methods. Helps in avoiding stack checks (branching).
- */
-#define EXTRA_STACK	5
-
-
-/* initial stack size */
-#define INIT_STACKSIZE		(CS_MINSTACK * 4)
-
-
-/* stack size */
-#define stacksize(C)		cast_int((C)->stackend.p - (C)->stack.p)
-
-
-/* save/restore stack position */
-#define savestack(C,ptr)	(cast_charp(ptr) - cast_charp((C)->stack.p))
-#define restorestack(C,n)	cast(SPtr, cast_charp((C)->stack.p) + (n))
-
-
-/* 
-** Check if stack nees to grow if so, do 'pre' then grow and
-** then do 'pos'.
-*/
-#define csT_checkstackaux(C,n,pre,pos) \
-    if (csi_unlikely((C)->stackend.p - (C)->sp.p <= (n))) \
-        { pre; csT_growstack(C, (n), 1); pos; } \
-    else { condmovestack(C, pre, pos); }
-
-
-/* check if stack needs to grow */
-#define csT_checkstack(C,n)    csT_checkstackaux(C,n,(void)0,(void)0)
-
-
-/* check if stack needs to grow and preserve 'p' */
-#define checkstackp(C,n,p) \
-        csT_checkstackaux(C, n, \
-            ptrdiff_t p_ = savestack(C, p), \
-            p = restorestack(C, p_))
-
-
-/* check GC then check stack preserving 'p' */
-#define checkstackGCp(C,n,p) \
-        csT_checkstackaux(C,n, \
-            ptrdiff_t p_ = savestack(C,p); csG_checkGC(C), \
-            p = restorestack(C, p_))
-
-
-/* check GC then check stack */
-#define checkstackGC(C,n) \
-        csT_checkstackaux(C,n,csG_checkGC(C),(void)0)
-    
-
-
 /* 
 ** Increment number of nested non-yieldable calls.
 ** The counter is located in the upper 2 bytes of 'nCcalls'.
 */
-#define incnnyc(C)       ((C)->nCcalls += 0x10000)
+#define incnnyc(C)      ((C)->nCcalls += 0x10000)
 
 /* Decrement number of nested non-yieldable calls. */
-#define decnnyc(C)       ((C)->nCcalls -= 0x10000)
+#define decnnyc(C)      ((C)->nCcalls -= 0x10000)
 
 
 /*
 ** Get total number of C calls.
 ** This counter is located in the lower 2 bytes of 'nCcalls'.
 */
-#define getCcalls(C)       ((C)->nCcalls & 0xffff)
+#define getCcalls(C)    ((C)->nCcalls & 0xffff)
 
 
 /* non-yieldable and C calls increment */
 #define nyci        (0x10000 | 1)
 
 
-
-/* -------------------------------------------------------------------------
- * Long jump (for protected calls)
- * ------------------------------------------------------------------------- */
-
-#define csi_jmpbuf          jmp_buf
-#define CSI_THROW(C,b)      longjmp((b)->buf, 1)
-#define CSI_TRY(C,b,fn)     if (setjmp((b)->buf) == 0) { fn }
-
-/* jmpbuf for jumping out of protected function */
-typedef struct c_ljmp {
-    struct c_ljmp *prev;
-    csi_jmpbuf buf;
-    volatile int status;
-} c_ljmp;
+typedef struct cs_longjmp cs_longjmp; /* defined in 'cprotected.c' */
 
 
-
-/* -------------------------------------------------------------------------
- * CallFrame (function frame/stack)
- * ------------------------------------------------------------------------- */
-
-/* get CSript function prototype */
-#define cfProto(cf)         (clCSval(s2v((cf)->func.p))->p)
+/* atomic type */
+#if !defined(c_signal)
+#include <signal.h>
+#define c_signal        sig_atomic_t
+#endif
 
 
-/* 'cfstatus' bits */
+/*
+** Extra stack space that is used mostly when calling metamethods.
+** Helps in avoiding stack checks (branching).
+*/
+#define EXTRA_STACK	5
+
+
+#define INIT_STACKSIZE		(CS_MINSTACK * 4)
+
+#define stacksize(th)	    cast_int((th)->stackend.p - (th)->stack.p)
+
+
+
+/* {======================================================================
+** CallFrame
+** ======================================================================= */
+
+/* 'status' bits */
 #define CFST_FRESH          (1<<0) /* fresh execute of Cript functon */
 #define CFST_CCALL          (1<<1) /* call is running C function */
-#define CFST_FIN            (1<<2) /* function called finalizer */
+#define CFST_FIN            (1<<2) /* function "called" a finalizer */
 
 
 /* 'CallFrame' function is CSript closure */
 #define isCScript(cf)       (!((cf)->status & CFST_CCALL))
 
 
-/* call information */
 typedef struct CallFrame {
     SIndex func; /* function stack index */
     SIndex top; /* top for this function */
-    struct CallFrame *prev, *next; /* call link */
-    const Instruction *pc; /* (only for CScript function) */
-    const Instruction *realpc; /* (only for CScript function) */
-    int nvarargs; /* number of varargs (only for CScript function) */
+    struct CallFrame *prev, *next; /* dynamic call link */
+    const Instruction *pc; /* (only for CScript func.) */
+    const Instruction *realpc; /* (only for CScript func.) */
+    volatile c_signal trap; /* (only for CScript func.) */
+    int nvarargs; /* number of optional arguments (only for CScript func.) */
     int nresults; /* number of expected results from this function */
-    c_byte status; /* call status */
+    c_byte status; /* call status (CFST_*) */
 } CallFrame;
 
+/* }====================================================================== */
 
 
-/* -------------------------------------------------------------------------
- * Global state
- * ------------------------------------------------------------------------- */
 
+/* {======================================================================
+** Global state
+** ======================================================================= */
 
 /* 
 ** Table for interned strings.
@@ -182,7 +129,7 @@ typedef struct GState {
     GCObject *weak; /* list of all weak hashtables (key & value) */
     GCObject *tobefin; /* list of objects to be finalized (pending) */
     GCObject *fixed; /* list of fixed objects (not to be collected) */
-    struct cs_State *thwouv; /* list of threads with open upvalues */
+    struct cs_State *twups; /* list of threads with open upvalues */
     cs_CFunction fpanic; /* panic handler (runs in unprotected calls) */
     struct cs_State *mainthread; /* thread that also created global state */
     OString *memerror; /* preallocated message for memory errors */
@@ -192,11 +139,12 @@ typedef struct GState {
     void *ud_warn; /* userdata for 'fwarn' */
 } GState;
 
+/* }====================================================================== */
 
 
-/* -------------------------------------------------------------------------
- * Thread (per-thread-state)
- * ------------------------------------------------------------------------- */
+/* {======================================================================
+** Thread (per-thread-state)
+** ======================================================================= */
 
 /* CScript thread state */
 struct cs_State {
@@ -206,9 +154,9 @@ struct cs_State {
     ptrdiff_t errfunc; /* error handling function (on stack) */
     c_uint32 nCcalls; /* number of C calls */
     GCObject *gclist;
-    struct cs_State *thwouv; /* next thread with open upvalues */
+    struct cs_State *twups; /* next thread with open upvalues */
     GState *gstate; /* shared global state */
-    c_ljmp *errjmp; /* error recovery */
+    cs_longjmp *errjmp; /* error recovery */
     SIndex stack; /* stack base */
     SIndex sp; /* first free slot in the 'stack' */
     SIndex stackend; /* end of 'stack' + 1 */
@@ -225,20 +173,17 @@ struct cs_State {
 /* check if global state is fully built */
 #define statefullybuilt(gs)     ttisnil(&(gs)->nil)
 
-/* check if thread is in 'thwouv' (Threads-With-Open-UpValues) list */
-#define isinthwouv(C)           ((C)->thwouv != (C))
-
 
 /*
 ** Get the global table in the registry. Since all predefined
 ** indices in the registry were inserted right when the registry
 ** was created and never removed, they must always be present.
 */
-#define getGtable(C) \
+#define GT(C) \
 	(&listval(&G(C)->c_registry)->b[CS_RINDEX_GLOBALS])
 
 /* get the registry table */
-#define getRtable(C) \
+#define RT(C) \
         (&listval(&G(C)->c_registry)->b[CS_RINDEX_REGTABLE])
 
 
@@ -259,6 +204,8 @@ typedef struct XSG {
 
 /* cast 'cs_State' back to start of 'XS' */
 #define fromstate(C)    cast(XS *, cast(c_byte *, (C)) - offsetof(XS, c))
+
+/* }====================================================================== */
 
 
 
@@ -300,7 +247,6 @@ union GCUnion {
 
 
 CSI_FUNC CallFrame *csT_newcf(cs_State *C);
-CSI_FUNC void csT_seterrorobj(cs_State *C, int errcode, SPtr oldtop);
 CSI_FUNC int csT_reallocstack(cs_State *C, int size, int raiseerr);
 CSI_FUNC int csT_growstack(cs_State *C, int n, int raiseerr);
 CSI_FUNC void csT_shrinkstack(cs_State *C);

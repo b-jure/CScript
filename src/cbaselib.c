@@ -514,6 +514,26 @@ static int b_getsuper(cs_State *C) {
 }
 
 
+// TODO: add docs and tests
+static int b_flatten(cs_State *C) {
+    cs_Unsigned n;
+    cs_Integer i = csL_opt_integer(C, 1, 0);
+    cs_Integer e = csL_opt(C, csL_check_integer, 3, cs_len(C, 0));
+    e -= (e > 0);
+    if (i > e) return 0; /* empty range */
+    n = (cs_Unsigned)e - i; /* number of elements minus 1 (avoid overflows) */
+    if (c_unlikely(n >= (uint)INT_MAX  || !cs_checkstack(C, (int)(++n))))
+        return csL_error(C, "too many results to unpack");
+    for (; i < e; i++) { /* push arg[i..e - 1] (to avoid overflows) */
+        cs_push_integer(C, i);
+        cs_get(C, 0);
+    }
+    cs_push_integer(C, e);
+    cs_get(C, 0); /* push last element */
+    return n;
+}
+
+
 static const cs_Entry basic_funcs[] = {
     {"error", b_error},
     {"assert", b_assert},
@@ -540,6 +560,7 @@ static const cs_Entry basic_funcs[] = {
     {"typeof", b_typeof},
     {"getclass", b_getclass},
     {"getsuper", b_getsuper},
+    {"flatten", b_flatten},
     /* placeholders */
     {CS_GNAME, NULL},
     {"__VERSION", NULL},

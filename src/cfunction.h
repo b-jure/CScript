@@ -12,32 +12,31 @@
 #include "cstate.h"
 
 
-/* get upvalue stack level */
-#define uvlevel(u)	cast(SPtr, (u)->v.p)
-
-
-/* test if upvalue is open */
-#define uvisopen(uv)    ((uv)->v.p != &(uv)->u.value)
-
-
 /* test if 'cl' is CScript closure */
 #define isCSclosure(cl)     ((cl) != NULL && (cl)->csc.tt_ == CS_VCSCL)
 
 
-/* size of 'CSClosure' */
 #define sizeofCScl(nup) \
         (offsetof(CSClosure, upvals) + ((nup) * cast_int(sizeof(UpVal*))))
 
 
-/* size of 'CClosure' */
 #define sizeofCcl(nup) \
         (offsetof(CClosure, upvals) + ((nup) * cast_int(sizeof(TValue))))
 
 
-/* 
-** Maximum amount of upvalues in a closure (both C and CScript).
-*/
+/* check if thread is in 'twups' (Threads with open UPvalueS) list */
+#define isintwups(C)        ((C)->twups != (C))
+
+
+/* maximum amount of upvalues in a closure (both C and CScript) */
 #define MAXUPVAL    MAX_ARG_L
+
+
+#define uvisopen(uv)    ((uv)->v.p != &(uv)->u.value)
+
+
+#define uvlevel(uv)	check_exp(uvisopen(uv), cast(SPtr, (uv)->v.p))
+
 
 
 /* special status to close upvalues preserving the top of the stack */

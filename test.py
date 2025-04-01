@@ -23,6 +23,7 @@ cscript_testsuite_paths = {
     "package": rootpath("libs/package"),
     "string": rootpath("libs/string"),
     "math": rootpath("libs/math"),
+    "io": rootpath("libs/io"),
 }
 
 

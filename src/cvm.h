@@ -12,11 +12,11 @@
 
 
 /* generic loop private variable offsets */
-#define FORITERATOR     0  /* iterator offset */
-#define FORINVSTATE     1  /* invariant state offset */
-#define FORCNTLVAR      2  /* control variable offset */
-#define FORTBCVAR       3  /* to-be-closed variable offset */
-#define NSTATEVARS      4
+#define VAR_ITER    0  /* iterator offset */
+#define VAR_STATE   1  /* invariant state offset */
+#define VAR_CNTL    2  /* control variable offset */
+#define VAR_TBC     3  /* to-be-closed variable offset */
+#define VAR_N       4
 
 
 #define csV_raweq(v1_,v2_)    csV_ordereq(NULL, v1_, v2_)

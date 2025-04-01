@@ -45,6 +45,9 @@
 #endif
 
 
+/* active CScript function (given call frame) */
+#define cf_func(cf)     (clCSval(s2v((cf)->func.p)))
+
 
 CSI_FUNC int csD_getfuncline(const Proto *fn, int pc);
 CSI_FUNC const char *csD_findlocal(cs_State *C, CallFrame *cf, int n,
@@ -68,5 +71,6 @@ CSI_FUNC c_noret csD_indexerror(cs_State *C, cs_Integer index,
                                  const char *what);
 CSI_FUNC c_noret csD_indextypeerror(cs_State *C, const TValue *index);
 CSI_FUNC c_noret csD_errormsg(cs_State *C);
+CSI_FUNC int csD_traceexec(cs_State *C, const Instruction *pc);
 
 #endif

@@ -146,7 +146,10 @@ static void traceILLS(const Proto *p, const Instruction *pc) {
 /*
 ** Trace the current OpCode and its arguments.
 */
-void csTR_tracepc(cs_State *C, const Proto *p, const Instruction *pc) {
+void csTR_tracepc(cs_State *C, SPtr sp, const Proto *p,
+                  const Instruction *pc) {
+    SPtr oldsp = C->sp.p;
+    C->sp.p = sp; /* save correct stack pointer */
     csTR_dumpstack(C, 1, NULL); /* first dump current function stack... */
     switch (getOpFormat(*pc)) { /* ...then trace the instruction */
         case FormatI: traceI(p, pc); break;
@@ -159,6 +162,7 @@ void csTR_tracepc(cs_State *C, const Proto *p, const Instruction *pc) {
         case FormatILLL: traceILLL(p, pc); break;
         default: cs_assert(0 && "invalid OpCode format"); break;
     }
+    C->sp.p = oldsp; /* after this, the caller manages stack pointer */
 }
 
 
@@ -183,6 +187,7 @@ static void traceFalse(void) {
 /* maximum length for string constants */
 #define MAXSTRKLEN      25
 
+// TODO: unescape \n,\t,\r,etc...
 static void traceString(OString *s) {
     char buff[MAXSTRKLEN + 1];
     csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
@@ -721,8 +726,8 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
 static void *getptr(const TValue *obj) {
     switch (ttypetag(obj)) {
         case CS_VLCF: return cast(void *, cast_sizet(lcfval(obj)));
-        case CS_VUSERDATA: return pval(obj);
-        case CS_VLIGHTUSERDATA: return getuserdatamem(uval(obj));
+        case CS_VUSERDATA: return getuserdatamem(uval(obj));
+        case CS_VLIGHTUSERDATA: return pval(obj);
         default: return gcoval(obj);
     }
 }

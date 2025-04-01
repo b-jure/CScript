@@ -19,6 +19,7 @@
 #include "cgc.h"
 #include "cvm.h"
 #include "cmem.h"
+#include "cprotected.h"
 
 
 static const char udataname[] = "userdata";
@@ -131,10 +132,10 @@ const TValue *csMM_get(cs_State *C, const TValue *v, cs_MM mm) {
 
 
 /* call __setidx metamethod */
-void csMM_callset(cs_State *C, const TValue *fn, const TValue *p1,
+void csMM_callset(cs_State *C, const TValue *f, const TValue *p1,
                   const TValue *p2, const TValue *p3) {
     SPtr func = C->sp.p;
-    setobj2s(C, func, fn);
+    setobj2s(C, func, f);
     setobj2s(C, func + 1, p1);
     setobj2s(C, func + 2, p2);
     setobj2s(C, func + 3, p3);
@@ -144,11 +145,11 @@ void csMM_callset(cs_State *C, const TValue *fn, const TValue *p1,
 
 
 /* call __getidx metamethod */
-void csMM_callgetres(cs_State *C, const TValue *fn, const TValue *p1,
+void csMM_callgetres(cs_State *C, const TValue *f, const TValue *p1,
                      const TValue *p2, SPtr res) {
     ptrdiff_t result = savestack(C, res);
     SPtr func = C->sp.p;
-    setobj2s(C, func, fn);
+    setobj2s(C, func, f);
     setobj2s(C, func + 1, p1);
     setobj2s(C, func + 2, p2);
     C->sp.p = func + 3;
@@ -159,12 +160,12 @@ void csMM_callgetres(cs_State *C, const TValue *fn, const TValue *p1,
 
 
 /* call binary method and store the result in 'res' */
-void csMM_callbinres(cs_State *C, const TValue *fn, const TValue *self,
+void csMM_callbinres(cs_State *C, const TValue *f, const TValue *self,
                      const TValue *rhs, SPtr res) {
     /* assuming EXTRA_STACK */
     ptrdiff_t result = savestack(C, res);
     SPtr func = C->sp.p;
-    setobj2s(C, func, fn); /* push function */
+    setobj2s(C, func, f); /* push function */
     setobj2s(C, func + 1, self); /* lhs arg */
     setobj2s(C, func + 2, rhs); /* rhs arg */
     C->sp.p += 3;

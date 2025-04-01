@@ -625,7 +625,7 @@ const cs_Entry mathlib[] = {
 
 
 CSMOD_API int csopen_math(cs_State *C) {
-    csL_newlib(C, mathlib);
+    csL_push_lib(C, mathlib);
     cs_push_number(C, PI);
     cs_set_fieldstr(C, -2, "pi");
     cs_push_number(C, CS_HUGE_VAL);

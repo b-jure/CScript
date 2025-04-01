@@ -8,6 +8,40 @@
 #include "cslib.h"
 
 
+/*
+** {======================================================
+** 'tmpnam' configuration
+** =======================================================
+*/
+
+#if !defined(c_tmpnam)      /* { */
+
+#if defined(CS_USE_POSIX)   /* { */
+
+#define C_TMPNAMBUFSZ       32
+
+#if !defined(C_TEMPLATENAME)
+#define C_TEMPLATENAME      "/tmp/cs_XXXXXX"
+#endif
+
+#define c_tmpnam(b, e) \
+    { strcpy(buff, C_TEMPLATENAME); \
+      e = mkstemp(C_TEMPLATENAME); \
+      if (e != -1) close(e); \
+      e = (e == -1); }
+
+#else                       /* } */
+
+#define C_TMPNAMBUFSZ       L_tmpnam
+#define c_tmpnam(b, e)      { e = (tmpnam(b) == NULL); }
+
+#endif                      /* } */
+
+#endif                      /* } */
+
+/* }====================================================== */
+
+
 static int os_remove(cs_State *C) {
     const char *fname = csL_check_string(C, 0);
     errno = 0;
@@ -23,6 +57,17 @@ static int os_rename(cs_State *C) {
 }
 
 
+static int os_tmpname(cs_State *C) {
+    char buff[C_TMPNAMBUFSZ];
+    int err;
+    c_tmpnam(buff, err);
+    if (c_unlikely(err))
+        csL_error(C, "unable to generate a unique filename");
+    cs_push_string(C, buff);
+    return 1;
+}
+
+
 static const cs_Entry syslib[] = {
     //{"clock",     os_clock},
     //{"date",      os_date},
@@ -34,12 +79,12 @@ static const cs_Entry syslib[] = {
     {"rename",    os_rename},
     //{"setlocale", os_setlocale},
     //{"time",      os_time},
-    //{"tmpname",   os_tmpname},
+    {"tmpname",   os_tmpname},
     {NULL, NULL}
 };
 
 
 CSMOD_API int csopen_os(cs_State *C) {
-    csL_newlib(C, syslib);
+    csL_push_lib(C, syslib);
     return 1;
 }

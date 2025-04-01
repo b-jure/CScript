@@ -222,19 +222,20 @@ CS_API void cs_copy(cs_State *C, int src, int dest) {
 /*
 ** Check if stack has enough space for `n` elements,
 ** if not ensure it does.
+** TODO: We must be able to update 'base' in the interpreter loop!!!
 */
 CS_API int cs_checkstack(cs_State *C, int n) {
     CallFrame *cf;
     int res;
     cs_lock(C);
     cf = C->cf;
-    api_check(C, n >= 0, "negative `n`");
-    if (cf->top.p - C->sp.p >= n) /* stack large enough? */
+    api_check(C, n >= 0, "negative 'n'");
+    if (C->stackend.p - C->sp.p >= n) /* stack large enough? */
         res = 1;
     else /* need to grow the stack */
         res = csT_growstack(C, n, 0);
     if (res && cf->top.p < C->sp.p + n)
-        cf->top.p = C->sp.p + n; /* adjust top */
+        cf->top.p = C->sp.p + n; /* adjust frame top */
     cs_unlock(C);
     return res;
 }
@@ -871,35 +872,35 @@ c_sinline int aux_rawgetfieldstr(cs_State *C, Table *t, const char *k) {
 CS_API int cs_get_global(cs_State *C, const char *name) {
     TValue *gt;
     cs_lock(C);
-    gt = getGtable(C);
+    gt = GT(C);
     return aux_rawgetfieldstr(C, tval(gt), name);
 }
 
 
 CS_API int cs_get_rtable(cs_State *C, const char *field) {
-    const TValue *t = getRtable(C);
+    const TValue *t = RT(C);
     cs_lock(C);
     api_check(C, ttistable(t), "expect table");
     return aux_rawgetfieldstr(C, tval(t), field);
 }
 
 
-CS_API int cs_get(cs_State *C, int obj) {
+CS_API int cs_get(cs_State *C, int index) {
     const TValue *o;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    o = index2value(C, obj);
+    o = index2value(C, index);
     csV_get(C, o, s2v(C->sp.p - 1), C->sp.p - 1);
     cs_unlock(C);
     return ttype(s2v(C->sp.p - 1));
 }
 
 
-CS_API int cs_get_raw(cs_State *C, int obj) {
+CS_API int cs_get_raw(cs_State *C, int index) {
     const TValue *o;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    o = index2value(C, obj);
+    o = index2value(C, index);
     csV_rawget(C, o, s2v(C->sp.p - 1), C->sp.p - 1);
     cs_unlock(C);
     return ttype(s2v(C->sp.p - 1));
@@ -967,8 +968,8 @@ CS_API int cs_get_nnilindex_rev(cs_State *C, int index, int begin, uint end) {
 }
 
 
-c_sinline Table *gettable(cs_State *C, int obj) {
-    const TValue *o = index2value(C, obj);
+c_sinline Table *gettable(cs_State *C, int index) {
+    const TValue *o = index2value(C, index);
     switch (ttypetag(o)) {
         case CS_VINSTANCE: return insval(o)->fields;
         case CS_VTABLE: return tval(o); 
@@ -980,49 +981,49 @@ c_sinline Table *gettable(cs_State *C, int obj) {
 }
 
 
-CS_API int cs_get_field(cs_State *C, int obj) {
+CS_API int cs_get_field(cs_State *C, int index) {
     Table *t;
     const TValue *val;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    t = gettable(C, obj);
+    t = gettable(C, index);
     val = csH_get(t, s2v(C->sp.p - 1));
     C->sp.p--; /* remove key */
     return finishrawgetfield(C, val);
 }
 
 
-CS_API int cs_get_fieldstr(cs_State *C, int obj, const char *field) {
+CS_API int cs_get_fieldstr(cs_State *C, int index, const char *field) {
     Table *t;
     cs_lock(C);
-    t = gettable(C, obj);
+    t = gettable(C, index);
     return aux_rawgetfieldstr(C, t, field);
 }
 
 
-CS_API int cs_get_fieldptr(cs_State *C, int obj, const void *field) {
+CS_API int cs_get_fieldptr(cs_State *C, int index, const void *field) {
     Table *t;
     TValue aux;
     cs_lock(C);
-    t = gettable(C, obj);
+    t = gettable(C, index);
     setpval(&aux, cast_voidp(field));
     return finishrawgetfield(C, csH_get(t, &aux));
 }
 
 
-CS_API int cs_get_fieldint(cs_State *C, int obj, cs_Integer i) {
+CS_API int cs_get_fieldint(cs_State *C, int index, cs_Integer i) {
     Table *t;
     cs_lock(C);
-    t = gettable(C, obj);
+    t = gettable(C, index);
     return finishrawgetfield(C, csH_getint(t, i));
 }
 
 
-CS_API int cs_get_fieldflt(cs_State *C, int obj, cs_Number n) {
+CS_API int cs_get_fieldflt(cs_State *C, int index, cs_Number n) {
     Table *t;
     TValue aux;
     cs_lock(C);
-    t = gettable(C, obj);
+    t = gettable(C, index);
     setfval(&aux, n);
     return finishrawgetfield(C, csH_get(t, &aux));
 }
@@ -1071,18 +1072,18 @@ c_sinline Instance *getinstance(cs_State *C, int index) {
 }
 
 
-static int aux_getmethod(cs_State *C, const TValue *obj, Table *t) {
+static int aux_getmethod(cs_State *C, const TValue *index, Table *t) {
     int tt;
     if (t) { /* have methods table? */
         const TValue *method = csH_get(t, s2v(C->sp.p - 1));
         if (!isempty(method)) { /* method found? */
             tt = ttype(method);
-            if (ttisinstance(obj)) { /* instance method? */
-                IMethod *im = csMM_newinsmethod(C, insval(obj), method);
-                setimval2s(C, C->sp.p - 1, im);
+            if (ttisinstance(index)) { /* instance method? */
+                IMethod *im = csMM_newinsmethod(C, insval(index), method);
+                setimval2s(C, C->sp.p-1, im);
             } else { /* userdata method */
-                UMethod *um = csMM_newudmethod(C, uval(obj), method);
-                setumval2s(C, C->sp.p - 1, um);
+                UMethod *um = csMM_newudmethod(C, uval(index), method);
+                setumval2s(C, C->sp.p-1, um);
             }
             csG_checkGC(C);
             goto unlock;
@@ -1206,13 +1207,13 @@ CS_API void cs_set_global(cs_State *C, const char *name) {
     TValue *gt;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    gt = getGtable(C);
+    gt = GT(C);
     aux_rawsetstr(C, tval(gt), name, s2v(C->sp.p - 1));
 }
 
 
 CS_API void cs_set_rtable(cs_State *C, const char *field) {
-    TValue *t = getRtable(C);
+    TValue *t = RT(C);
     cs_lock(C);
     api_checknelems(C, 1);
     api_check(C, ttistable(t), "expect table");
@@ -1565,7 +1566,8 @@ CS_API void cs_warning(cs_State *C, const char *msg, int cont) {
 ** of methods; for instances, this is the number of fields; for userdata, this
 ** is the size of the block of memory allocated for userdata.
 */
-CS_API cs_Unsigned cs_len(cs_State *C, int index) {
+// TODO: update docs (removed CS_VUSERDATA and changed return value signature)
+CS_API cs_Integer cs_len(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     switch (ttypetag(o)) {
         case CS_VSHRSTR: return strval(o)->shrlen;
@@ -1577,7 +1579,6 @@ CS_API cs_Unsigned cs_len(cs_State *C, int index) {
             return (t ? csH_len(classval(o)->methods) : 0);
         }
         case CS_VINSTANCE: return csH_len(insval(o)->fields);
-        case CS_VUSERDATA: return uval(o)->size;
         default: return 0;
     }
 }

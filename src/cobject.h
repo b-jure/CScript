@@ -68,8 +68,8 @@ typedef struct TValue {
 /* tag with no variant (bits 0-3) */
 #define novariant(t)        ((t) & 0x0F)
 
-/* type tag of a TValue (bits 0-3 for tags + variant bits 4-5) */
-#define withvariant(t)      ((t) & 0x3F)
+/* type tag of a TValue (bits 0-3 for tags + variant bits 4-6) */
+#define withvariant(t)      ((t) & 0x7F)
 #define ttypetag(o)         withvariant((o)->tt)
 
 /* type of a TValue */
@@ -169,7 +169,7 @@ typedef struct GCObject {
 
 
 /* bit for collectable types */
-#define BIT_COLLECTABLE     (1 << 6)
+#define BIT_COLLECTABLE     (1 << 7)
 
 #define iscollectable(o)    (rawtt(o) & BIT_COLLECTABLE)
 

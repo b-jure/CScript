@@ -664,7 +664,7 @@ static void setpath(cs_State *C, const char *fieldname, const char *envname,
 
 CSMOD_API int csopen_package(cs_State *C) {
     create_clibs_userdata(C); /* create clibs userdata */
-    csL_newlib(C, package_funcs); /* create 'package' table */
+    csL_push_lib(C, package_funcs); /* create 'package' table */
     create_searchers_array(C); /* set 'package.searchers' */
     setpath(C, "path", CS_PATH_VAR, CS_PATH_DEFAULT); /* 'package.path' */
     setpath(C, "cpath", CS_CPATH_VAR, CS_CPATH_DEFAULT); /* 'package.cpath' */

@@ -103,18 +103,18 @@ int csD_getfuncline(const Proto *p, int pc) {
 
 c_sinline int relpc(const CallFrame *cf) {
     cs_assert(isCScript(cf));
-    return cast_int(cf->pc - cfProto(cf)->code) - 1;
+    return cast_int(cf->pc - cf_func(cf)->p->code) - 1;
 }
 
 
 /* get current line number */
 c_sinline int getcurrentline(CallFrame *cf) {
-    return csD_getfuncline(cfProto(cf), relpc(cf));
+    return csD_getfuncline(cf_func(cf)->p, relpc(cf));
 }
 
 
 static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
-    if (cfProto(cf)->isvararg) {
+    if (cf_func(cf)->p->isvararg) {
         int nextra = cf->nvarargs;
         if (n >= -nextra) {
             *pos = cf->func.p - nextra - (n + 1);
@@ -136,7 +136,7 @@ const char *csD_findlocal(cs_State *C, CallFrame *cf, int n, SPtr *pos) {
         if (n < 0) /* vararg ? */
             return findvararg(cf, pos, n);
         else /* otherwise local variable */
-            name = csF_getlocalname(cfProto(cf), n, relpc(cf));
+            name = csF_getlocalname(cf_func(cf)->p, n, relpc(cf));
     }
     if (name == NULL) {
         SPtr limit = (cf == C->cf) ? C->sp.p : cf->next->func.p;
@@ -253,7 +253,7 @@ static const char *funcnamefromcall(cs_State *C, CallFrame *cf,
         *name = "__gc";
         return "metamethod";
     } else if (isCScript(cf)) {
-        return funcnamefromcode(C, cfProto(cf), relpc(cf), name);
+        return funcnamefromcode(C, cf_func(cf)->p, relpc(cf), name);
     } else
         return NULL;
 }
@@ -295,7 +295,7 @@ static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
             }
             case 'u': {
                 ar->nupvals = (cl ? cl->c.nupvalues : 0);
-                if (isCScript(cf)) {
+                if (CScriptClosure(cl)) {
                     ar->nparams = cl->cs.p->arity;
                     ar->isvararg = cl->cs.p->isvararg;
                 } else {
@@ -397,7 +397,7 @@ c_noret csD_runerror(cs_State *C, const char *fmt, ...) {
     err = csS_pushvfstring(C, fmt, ap);
     va_end(ap);
     if (isCScript(cf)) { /* can add source information? */
-        csD_addinfo(C, err, cfProto(cf)->source, getcurrentline(cf));
+        csD_addinfo(C, err, cf_func(cf)->p->source, getcurrentline(cf));
         setobj2s(C, C->sp.p - 2, s2v(C->sp.p - 1)); /* remove 'err' */
         C->sp.p--;
     }
@@ -464,4 +464,12 @@ c_noret csD_indextypeerror(cs_State *C, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
     csD_runerror(C, "invalid list index type (%s), expected integer",
                      typename(ttype(index)));
+}
+
+
+/* TODO(v2.0): implement hooks */
+int csD_traceexec(cs_State *C, const Instruction *pc) {
+    UNUSED(pc); /* no hooks */
+    C->cf->trap = 0; /* stack reallocation handled */
+    return 0; /* turn off 'trap' */
 }

@@ -80,8 +80,8 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     /*     J  F      */
     opProp(0, FormatI), /* OP_TRUE */
     opProp(0, FormatI), /* OP_FALSE */
-    opProp(0, FormatI), /* OP_NIL */
     opProp(0, FormatI), /* OP_SUPER */
+    opProp(0, FormatI), /* OP_NIL */
     opProp(0, FormatIL), /* OP_NILN */
     opProp(0, FormatIL), /* OP_LOAD */
     opProp(0, FormatIS), /* OP_CONST */
@@ -189,20 +189,17 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
 
 
 /* 
-** OpFormat size table.
-** Instruction  = 1 byte
-** Short Arg    = 1 byte
-** Long Arg     = 3 bytes
+** OpFormat size table (in bytes).
 */
-CSI_DEF const c_byte csC_opSize[FormatN] = { /* ORDER OPFMT */
-    1,  /* FormatI */
-    2,  /* FormatIS */
-    3,  /* FormatISS */
-    4,  /* FormatIL */
-    5,  /* FormatILS */
-    7,  /* FormatILL */
-    8,  /* FormatILLS */
-    10, /* FormatILLL */
+CSI_DEF const c_byte csC_opSize[FormatN] = {    /* ORDER OPFMT */
+    SIZE_INSTR,                             /* FormatI */
+    SIZE_INSTR+SIZE_ARG_S,                  /* FormatIS */
+    SIZE_INSTR+SIZE_ARG_S*2,                /* FormatISS */
+    SIZE_INSTR+SIZE_ARG_L,                  /* FormatIL */
+    SIZE_INSTR+SIZE_ARG_L+SIZE_ARG_S,       /* FormatILS */
+    SIZE_INSTR+SIZE_ARG_L*2,                /* FormatILL */
+    SIZE_INSTR+SIZE_ARG_L*2+SIZE_ARG_S,     /* FormatILLS */
+    SIZE_INSTR+SIZE_ARG_L*3,                /* FormatILLL */
 };
 
 
@@ -222,7 +219,7 @@ CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
-"TRUE", "FALSE", "NIL", "SUPER", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
+"TRUE", "FALSE", "SUPER", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
 "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG", "CLOSURE", "NEWLIST",
 "NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK",
 "SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK",
@@ -380,6 +377,7 @@ static void addinstpc(FunctionState *fs) {
 
 
 static int codeinstruction(FunctionState *fs, Instruction i) {
+    printf("EMIT => %s :: %d\n", getOpName(i), currPC);
     addinstpc(fs);
     emitbyte(fs, i);
     savelineinfo(fs, fs->p, fs->lx->lastline);
@@ -596,13 +594,27 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
 }
 
 
+/*
+** Auxiliary function for 'adjuststack', checks if the 'prev' instruction
+** adjusts the stack in the same direction as 'new'.
+*/
+static int sameadjust(OpCode prev, OpCode new) {
+    /* adjust instructions do not overlap and are ordered properly */
+    cs_assert(OP_POP-1 != OP_NIL && OP_NIL-1 != OP_POP &&
+              OP_POPN-1 == OP_POP && OP_NILN-1 == OP_NIL);
+    return (prev == new || prev == new-1 || prev-1 == new);
+}
+
+
 static int adjuststack(FunctionState *fs, OpCode op, int n) {
     Instruction *inst = prevOP(fs);
     int prevn = 0;
-    if (inst) { /* have previous instruction? */
-        switch (*inst) { /* try to optimize it */
+    cs_assert((n > 1) == (op == OP_POPN || op == OP_NILN));
+    if (inst && sameadjust(*inst, op)) { /* can optimize? */
+        switch (*inst) {
             case OP_POPN: case OP_NILN: {
                 prevn = GETARG_L(inst, 0);
+                printf("Optimizing pop => %d into %d\n", n, prevn + n);
                 SETARG_L(inst, 0, n + prevn);
                 return fs->prevpc; /* done; do not code new instruction */
             }
@@ -612,12 +624,12 @@ static int adjuststack(FunctionState *fs, OpCode op, int n) {
             }
             case OP_NIL: {
                 op = OP_NILN;
-            nil:
+nil:
                 prevn = 1;
                 removelastinstruction(fs);
                 break;
             }
-            default: break; /* nothing to be done */
+            default: cs_assert(0); /* invalid OpCode */
         }
         n += prevn;
     }
@@ -625,7 +637,6 @@ static int adjuststack(FunctionState *fs, OpCode op, int n) {
         cs_assert(op == OP_NIL || op == OP_POP);
         return csC_emitI(fs, op);
     } else {
-        cs_assert(op == OP_NILN || op == OP_POPN);
         return csC_emitIL(fs, op, n);
     }
 }

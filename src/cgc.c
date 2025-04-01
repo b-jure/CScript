@@ -386,7 +386,7 @@ static c_mem markthread(GState *gs, cs_State *C) {
         return 1;
     cs_assert(gs->gcstate == GCSatomic || /* either in atomic phase... */
               C->openupval == NULL || /* or no open upvalues... */
-              isinthwouv(C)); /* ...or 'C' is in correct list */
+              isintwups(C)); /* ...or 'C' is in correct list */
     for (; sp < C->sp.p; sp++) /* mark live stack elements */
         markvalue(gs, s2v(sp));
     for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
@@ -396,10 +396,10 @@ static c_mem markthread(GState *gs, cs_State *C) {
             csT_shrinkstack(C); /* shrink stack if possible */
         for (sp = C->sp.p; sp < C->stackend.p + EXTRA_STACK; sp++)
           setnilval(s2v(sp)); /* clear dead stack slice */
-        /* 'markopenupvalues' might of removed thread from 'thwouv' list */
-        if (!isinthwouv(C) && C->openupval != NULL) {
-            C->thwouv = gs->thwouv; /* link it back */
-            gs->thwouv = C;
+        /* 'markopenupvalues' might of removed thread from 'twups' list */
+        if (!isintwups(C) && C->openupval != NULL) {
+            C->twups = gs->twups; /* link it back */
+            gs->twups = C;
         }
     }
     return 1 + stacksize(C); /* thread + stack slots */
@@ -407,7 +407,7 @@ static c_mem markthread(GState *gs, cs_State *C) {
 
 
 /*
-** Remarks open upvalues in 'thwouv'.
+** Remarks open upvalues in 'twups'.
 ** Basically acts as a barrier for values in already
 ** visited open upvalues. It keeps those values alive
 ** as long as its upvalue is marked.
@@ -418,13 +418,13 @@ static c_mem markthread(GState *gs, cs_State *C) {
 static int markopenupvalues(GState *gs) {
     int work = 0; /* work estimate */
     cs_State *th;
-    cs_State **pp = &gs->thwouv;
+    cs_State **pp = &gs->twups;
     while ((th = *pp) != NULL) {
         work++;
         if (iswhite(th) || th->openupval == NULL) {
             cs_assert(th->openupval == NULL);
-            *pp = th->thwouv; /* remove thread from the list... */
-            th->thwouv = th; /* ...and mark it as such */
+            *pp = th->twups; /* remove thread from the list... */
+            th->twups = th; /* ...and mark it as such */
             for (UpVal *uv = th->openupval; uv; uv = uv->u.open.next) {
                 work++;
                 /* if visited then keep values alive */
@@ -434,7 +434,7 @@ static int markopenupvalues(GState *gs) {
                 }
             }
         } else { /* thread is marked and has upvalues */
-            pp = &th->thwouv; /* keep it in the list */
+            pp = &th->twups; /* keep it in the list */
         }
     }
     return work;
