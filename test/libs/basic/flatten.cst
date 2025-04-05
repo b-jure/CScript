@@ -1,0 +1,56 @@
+local a = ["420", "69", "1337"];
+local x, y, z, g = flatten(a);
+assert(x == "420");
+assert(y == "69");
+assert(z == "1337");
+assert(g == nil);
+local b = [flatten(a)];
+assert(b[0] == "420");
+assert(b[1] == "69");
+assert(b[2] == "1337");
+assert(b[3] == nil);
+b[3] = true;
+x, y, z, g = flatten(b);
+assert(x == "420");
+assert(y == "69");
+assert(z == "1337");
+assert(g == true);
+
+/* use ranges */
+x, y, z, g = flatten(b, 0, 2);
+assert(x == "420");
+assert(y == "69");
+assert(z == nil);
+assert(g == nil);
+x, y, z, g = flatten(b, 1, 3);
+assert(x == "69");
+assert(y == "1337");
+assert(z == nil);
+assert(g == nil);
+x, y, z, g = flatten(b, 1, 2);
+assert(x == "69");
+assert(y == nil);
+assert(z == nil);
+assert(g == nil);
+x, y, z, g = flatten(b, 2);
+assert(x == "1337");
+assert(y == true);
+assert(z == nil);
+assert(g == nil);
+
+/* empty ranges */
+x, y, z, g = flatten(b, 1, 0);
+assert(x == nil);
+assert(y == nil);
+assert(z == nil);
+assert(g == nil);
+x, y, z, g = flatten(b, 3, 3);
+assert(x == nil);
+assert(y == nil);
+assert(z == nil);
+assert(g == nil);
+x, y, z, g = flatten(b, 4);
+assert(x == nil);
+assert(y == nil);
+assert(z == nil);
+assert(g == nil);

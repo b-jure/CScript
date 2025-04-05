@@ -377,7 +377,6 @@ static void addinstpc(FunctionState *fs) {
 
 
 static int codeinstruction(FunctionState *fs, Instruction i) {
-    printf("EMIT => %s :: %d\n", getOpName(i), currPC);
     addinstpc(fs);
     emitbyte(fs, i);
     savelineinfo(fs, fs->p, fs->lx->lastline);
@@ -614,7 +613,6 @@ static int adjuststack(FunctionState *fs, OpCode op, int n) {
         switch (*inst) {
             case OP_POPN: case OP_NILN: {
                 prevn = GETARG_L(inst, 0);
-                printf("Optimizing pop => %d into %d\n", n, prevn + n);
                 SETARG_L(inst, 0, n + prevn);
                 return fs->prevpc; /* done; do not code new instruction */
             }

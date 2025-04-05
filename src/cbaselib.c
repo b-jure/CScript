@@ -296,7 +296,7 @@ static int b_len(cs_State *C) {
                       t == CS_TINSTANCE ||
                       t == CS_TCLASS ||
                       t == CS_TSTRING, 0,
-                      "list, hashtable, instance or string");
+                      "list, table, class, instance or string");
     cs_push_integer(C, cs_len(C, 0));
     return 1;
 }
@@ -514,11 +514,10 @@ static int b_getsuper(cs_State *C) {
 }
 
 
-// TODO: add docs and tests
 static int b_flatten(cs_State *C) {
     cs_Unsigned n;
     cs_Integer i = csL_opt_integer(C, 1, 0);
-    cs_Integer e = csL_opt(C, csL_check_integer, 3, cs_len(C, 0));
+    cs_Integer e = csL_opt(C, csL_check_integer, 2, cs_len(C, 0));
     e -= (e > 0);
     if (i > e) return 0; /* empty range */
     n = (cs_Unsigned)e - i; /* number of elements minus 1 (avoid overflows) */

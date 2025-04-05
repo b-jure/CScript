@@ -13,8 +13,6 @@
 #include <float.h>
 #include <math.h>
 
-// TODO: remove
-#include <stdio.h>
 
 /* ======================================================================= 
 **                      Configuration file for CScript.

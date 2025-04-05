@@ -222,7 +222,6 @@ CS_API void cs_copy(cs_State *C, int src, int dest) {
 /*
 ** Check if stack has enough space for `n` elements,
 ** if not ensure it does.
-** TODO: We must be able to update 'base' in the interpreter loop!!!
 */
 CS_API int cs_checkstack(cs_State *C, int n) {
     CallFrame *cf;
@@ -1566,7 +1565,6 @@ CS_API void cs_warning(cs_State *C, const char *msg, int cont) {
 ** of methods; for instances, this is the number of fields; for userdata, this
 ** is the size of the block of memory allocated for userdata.
 */
-// TODO: update docs (removed CS_VUSERDATA and changed return value signature)
 CS_API cs_Integer cs_len(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     switch (ttypetag(o)) {
@@ -1581,6 +1579,11 @@ CS_API cs_Integer cs_len(cs_State *C, int index) {
         case CS_VINSTANCE: return csH_len(insval(o)->fields);
         default: return 0;
     }
+}
+
+
+CS_API size_t cs_lenudata(cs_State *C, int index) {
+    return getuserdata(C, index)->size;
 }
 
 

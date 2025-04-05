@@ -101,7 +101,6 @@ CSLIB_API int   csL_get_metaindex(cs_State *C, int index, int mm);
 CSLIB_API int   csL_callmeta(cs_State *C, int index, int mm);
 CSLIB_API int   csL_new_usermethods(cs_State *C, const char *tname, int sz);
 CSLIB_API void  csL_set_usermethods(cs_State *C, const char *tname);
-CSLIB_API int   csL_get_methods(cs_State *C, const char *tname);
 CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname);
 CSLIB_API void  csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l, int nup);
 /* }======================================================================= */
@@ -171,18 +170,14 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
 
 #define csL_push_fail(C)    cs_push_nil(C)
 
-// TODO: update name in docs
 #define csL_push_libtable(C,l)  cs_push_table(C, sizeof(l)/sizeof((l)[0]) - 1)
 
-// TODO: update name in docs
 #define csL_push_lib(C,l) \
         (csL_check_version(C), csL_push_libtable(C,l), csL_set_funcs(C,l,0))
 
-// TODO: add docs
 #define csL_push_metalist(C,lname,l) \
         (csL_new_metalist(C,lname), csL_set_metafuncs(C,l,0))
 
-// TODO: add docs
 #define csL_push_methods(C,tname,l) \
     { csL_new_usermethods(C, tname, sizeof(l)/sizeof(l[0]) - 1); \
       csL_set_funcs(C,l,0); }
@@ -197,7 +192,6 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
       csL_get_subtable(C, -1, name); \
       cs_remove(C, -2); }
 
-// TODO: update name in docs
 #define csL_get_methods(C, tname)       cs_get_rtable(C, tname)
 #define csL_get_metalist(C, lname)      cs_get_rtable(C, lname)
 

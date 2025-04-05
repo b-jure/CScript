@@ -4125,17 +4125,24 @@ typedef struct cs_Debug {
         <!-- cs_len -->
         <hr><h3><a name="cs_len"><code>cs_len</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>cs_Unsigned cs_len (cs_State *C, int index);</pre>
+        <pre>cs_Integer cs_len (cs_State *C, int index);</pre>
         <p>
         Returns the "length" of the value at the given index.
         For strings, this is the string length;
         for lists, this is the list length;
         for tables, this is the number of non <b>nil</b> key values;
         for classes, this is the number of methods;
-        for instances, this is the number of non <b>nil</b> fields;
-        for userdata, this is the size of the block of memory allocated
-        for the userdata.
+        for instances, this is the number of non <b>nil</b> fields.
         For other values, this call returns&nbsp;0.
+        </p>
+
+        <!-- cs_lenudata -->
+        <hr><h3><a name="cs_lenudata"><code>cs_lenudata</code></a></h3>
+        <span class="apii">[-0, +0, &ndash;]</span>
+        <pre>size_t cs_len (cs_State *C, int index);</pre>
+        <p>
+        Returns the size of the block of memory allocated for the userdata
+        at the given index.
         </p>
 
         <!-- cs_next -->
@@ -4346,10 +4353,11 @@ typedef struct cs_Debug {
         <p>
         Sets the C&nbsp;function <code>f</code> as the new value of global
         <code>name</code>.
+        <br/><br/>
         It is defined as a macro:
+
         <pre>
-    #define cs_register(C,n,f) \
-            (cs_push_cfunction(C, f), cs_set_global(C, n))</pre>
+    (cs_push_cfunction(C, f), cs_set_global(C, name))</pre>
         </p>
 
         <!-- cs_is_cfunction -->
@@ -5386,31 +5394,62 @@ typedef struct csL_MetaEntry {
         (see <a href="#6">&sect;6</a>).
         </p>
 
-        <hr><h3><a name="csL_newlibtable"><code>csL_newlibtable</code></a></h3><p>
+        <hr><h3><a name="csL_push_libtable"><code>csL_push_libtable</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void csL_newlibtable (cs_State *C, const cs_Entry l[]);</pre>
+        <pre>void csL_push_libtable (cs_State *C, const cs_Entry l[]);</pre>
         <p>
         Creates a new table with a size optimized to store all entries in
         the array <code>l</code> (but does not actually store them).
         It is intended to be used in conjunction with
         <a href="#csL_set_funcs"><code>csL_set_funcs</code></a>
-        (see <a href="#csL_newlib"><code>csL_newlib</code></a>).
+        (see <a href="#csL_push_lib"><code>csL_push_lib</code></a>).
         <br/><br/>
         It is implemented as a macro.
         The array <code>l</code> must be the actual array, not a pointer to it.
         </p>
 
-        <hr><h3><a name="csL_newlib"><code>csL_newlib</code></a></h3><p>
+        <hr><h3><a name="csL_push_lib"><code>csL_push_lib</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void csL_newlib (cs_State *C, const cs_Entry l[]);</pre>
+        <pre>void csL_push_lib (cs_State *C, const cs_Entry l[]);</pre>
         <p>
-        Creates a new table and registers there
-        the functions in the list <code>l</code>.
+        Creates a new table and registers there the functions in the
+        list <code>l</code>.
         <br/><br/>
         It is implemented as the following macro:
 
         <pre>
-    (csL_newlibtable(C,l), csL_set_funcs(C,l,0))</pre>
+    (csL_check_version(C), csL_push_libtable(C,l), csL_set_funcs(C,l,0))</pre>
+
+        The array <code>l</code> must be the actual array, not a pointer to it.
+        </p>
+
+        <hr><h3><a name="csL_push_metalist"><code>csL_push_metalist</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_push_metalist (cs_State *C, const char *lname, const csL_MetaEntry l[]);</pre>
+        <p>
+        Gets (or creates) a list <code>lname</code> in the registry table and
+        registers there the functions in the list <code>l</code>.
+        <br/><br/>
+        It is implemented as the following macro:
+
+        <pre>
+    (csL_new_metalist(C,lname), csL_set_metafuncs(C,l,0))</pre>
+
+        The array <code>l</code> must be the actual array, not a pointer to it.
+        </p>
+
+        <hr><h3><a name="csL_push_methods"><code>csL_push_methods</code></a></h3><p>
+        <span class="apii">[-0, +1, <em>m</em>]</span>
+        <pre>void csL_push_methods (cs_State *C, const char *tname, const cs_Entry l[]);</pre>
+        <p>
+        Gets (or creates) a table <code>tname</code> in the registry table and
+        registers there the functions in the list <code>l</code>.
+        <br/><br/>
+        It is implemented as the following macro:
+
+        <pre>
+    { csL_new_usermethods(C,tname,sizeof(l)/sizeof(l[0]) - 1); \
+      csL_set_funcs(C,l,0); }</pre>
 
         The array <code>l</code> must be the actual array, not a pointer to it.
         </p>
@@ -5435,11 +5474,11 @@ typedef struct csL_MetaEntry {
         on top of the stack, and later removed after the operation.
         </p>
 
-        <hr><h3><a name="csL_get_usermethods"><code>csL_get_usermethods</code></a></h3><p>
+        <hr><h3><a name="csL_get_methods"><code>csL_get_methods</code></a></h3><p>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>int csL_get_usermethods (cs_State *C, const char *name);</pre>
+        <pre>int csL_get_methods (cs_State *C, const char *tname);</pre>
         <p>
-        This macro is equivalent to
+        This is implemented as a macro equivalent to
         <a href="#cs_get_rtable"><code>cs_get_rtable</code></a>.
         </p>
 
@@ -5447,7 +5486,7 @@ typedef struct csL_MetaEntry {
         <span class="apii">[-0, +1, &ndash;]</span>
         <pre>int csL_get_metalist (cs_State *C, const char *name);</pre>
         <p>
-        This macro is equivalent to
+        This is implemented as a macro equivalent to
         <a href="#cs_get_rtable"><code>cs_get_rtable</code></a>.
         </p>
 
@@ -5989,8 +6028,9 @@ typedef struct csL_Stream {
         above the biggest index that was set);
         <em>table</em> length is total number of keys with non-<b>nil</b>
         values; <em>instance</em> length is total number of fields with
-        non-<b>nil</b> values; <em>string</em> length is size of string in
-        bytes.
+        non-<b>nil</b> values; <em>class</em> length is the total number of
+        defined methods for that class; <em>string</em> length is the size of
+        string in bytes.
         <br/><br/>
         Returns an integer.
         </p>
@@ -6115,6 +6155,19 @@ typedef struct csL_Stream {
         <br/><br/>
         If <code>v</code> has no superclass or the superclass
         <code>method</code>, then <b>nil</b> is returned.
+        </p>
+
+        <!-- flatten -->
+        <hr/><h3><a name="flatten"><code>flatten (v [, i [, j]])</code></a></h3>
+        <p>
+        Returns the elements from the given value <code>v</code>.
+        This function is equivalent to
+
+        <pre>
+    return v[i], v[i+1], &middot;&middot;&middot;, v[j-1];</pre>
+
+        By default, <code>i</code> is&nbsp;0 and <code>j</code> is
+        <a href="#len"><code>len</code></a><code>(v)</code>.
         </p>
 
         <!-- __G -->

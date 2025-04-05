@@ -334,6 +334,7 @@ CS_API void cs_warning(cs_State *C, const char *msg, int cont);
 ** ----------------------------------------------------------------------- */
 CS_API cs_Number   cs_version(cs_State *C);
 CS_API cs_Integer  cs_len(cs_State *C, int index); 
+CS_API size_t      cs_lenudata(cs_State *C, int index);
 CS_API int         cs_next(cs_State *C, int index); 
 CS_API void        cs_concat(cs_State *C, int n); 
 CS_API size_t      cs_stringtonumber(cs_State *C, const char *s, int *f); 
