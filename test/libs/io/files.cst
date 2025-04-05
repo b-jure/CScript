@@ -1,0 +1,336 @@
+local maxint = math.maxint;
+
+local fn testerr(msg, f, ...) {
+    local stat, err = pcall(f, ...);
+    return (!stat and string.find(err, msg));
+}
+
+
+local fn checkerr(msg, f, ...) {
+    assert(testerr(msg, f, ...));
+}
+
+
+assert(io.input(io.stdin) == io.stdin);
+assert(!pcall(io.input, "non-existent-file"));
+assert(io.output(io.stdout) == io.stdout);
+
+
+/* cannot close standard files */
+assert(!io.close(io.stdin) and !io.stdout.close() and !io.stderr.close());
+
+
+assert(typeof(io.input()) == "userdata" and io.type(io.output()) == "file");
+assert(typeof(io.stdin) == "userdata" and io.type(io.stderr) == "file");
+assert(!io.type(8));
+local class X {}
+assert(!io.type(X));
+
+
+local a,b,c = io.open("blabla69");
+assert(!a and typeof(b) == "string" and typeof(c) == "number");
+a,b,c = io.open("/a/b/c/d", "w");
+assert(!a and typeof(b) == "string" and typeof(c) == "number");
+
+local fname = os.tmpname();
+assert(io.open(fname, "w")).close();
+checkerr("invalid mode", io.open, fname, "rw");
+checkerr("invalid mode", io.open, fname, "rb+");
+checkerr("invalid mode", io.open, fname, "r+bk");
+checkerr("invalid mode", io.open, fname, "");
+checkerr("invalid mode", io.open, fname, "+");
+checkerr("invalid mode", io.open, fname, "b");
+assert(io.open(fname, "r+b")).close();
+assert(io.open(fname, "r+")).close();
+assert(io.open(fname, "rb")).close();
+
+io.input(io.stdin);
+io.output(io.stdout);
+
+os.remove(fname);
+assert(!loadfile(fname));
+checkerr("", runfile, fname);
+assert(!io.open(fname));
+io.output(fname); /* create new 'fname' file and set it as output */
+assert(io.output() != io.stdout);
+
+{
+    local status, msg, code = io.stdin.seek("set", 1000);
+    assert(!status and typeof(msg) == "string" and typeof(code) == "number");
+}
+
+assert(io.output().seek() == 0);
+assert(io.write("baba loo").seek() == len("baba loo"));
+assert(io.output().seek("cur", -3) == len("baba loo")-3);
+assert(io.write("hello"));
+assert(io.output().seek("end") == len("baba hello"));
+
+assert(io.output().seek("set") == 0);
+
+assert(io.write("\"alo\"", "{a}\n", "second line\n", "third line \n"));
+assert(io.write("Xfourth_line"));
+io.output(io.stdout);
+gc(); /* 'fname' file should be closed by GC */
+assert(io.input() == io.stdin and rawequal(io.output(), io.stdout));
+
+
+/* test GC for files */
+gc();
+for (local i = 0; i < 121; i = i + 1) {
+    for (local i = 0; i < 6; i = i + 1) {
+        io.input(fname);
+        assert(io.open(fname, "r"));
+        io.lines(fname);
+    }
+    gc();
+}
+
+io.input().close();
+io.close();
+
+local otherfname = os.tmpname();
+assert(os.rename(fname, otherfname));
+assert(!os.rename(fname, otherfname));
+
+io.output(io.open(otherfname, "ab"));
+assert(io.write("\n\n\t\t  ", 3450, "\n"));
+io.close();
+
+{
+    /* closing file by scope */
+    local F = nil;
+    assert(tostr(F) == "nil");
+    {
+        local f <close> = assert(io.open(fname, "w"));
+        F = f;
+        assert(io.type(F) == "file");
+    }
+    assert(tostr(F) == "file (closed)");
+}
+assert(os.remove(fname));
+
+
+{
+    /* test writing/reading numbers */
+    local f <close> = assert(io.open(fname, "w"));
+    f.write(maxint, "\n");
+    f.write(string.fmt("0X%x\n", maxint));
+    f.write("0xABCp-3", "\n");
+    f.write(0, "\n");
+    f.write(-maxint, "\n");
+    f.write(string.fmt("0x%X\n", -maxint));
+    f.write("-0xABCp-3", "\n");
+    assert(f.close());
+    f = assert(io.open(fname, "r"));
+    assert(f.read("n") == maxint);
+    assert(f.read("n") == maxint);
+    assert(f.read("n") == 0xABCp-3);
+    assert(f.read("n") == 0);
+    assert(f.read("n") == -maxint);
+    assert(f.read("n") == -maxint);
+    assert(f.read("n") == -0xABCp-3);
+    assert(os.remove(fname));
+}
+
+
+/* testing multiple arguments to io.read */
+{
+    local FF = assert(io.open(fname, "w"));
+    {
+        local f <close> = FF;
+        f.write("a line\nanother line\n1234\n3.45\none\ntwo\nthree");
+        local l1, l2, l3, l4, n1, n2, c, dummy;
+        assert(f.close());
+        f = assert(io.open(fname, "r"));
+        l1, l2, n1, n2, dummy = f.read("l", "L", "n", "n");
+        assert(l1 == "a line" and l2 == "another line\n" and
+                n1 == 1234 and n2 == 3.45 and dummy == nil);
+        assert(f.close());
+        f = assert(io.open(fname, "r"));
+        l1, l2, n1, n2, c, l3, l4, dummy = f.read(7, "l", "n", "n", 1, "l", "l");
+        assert(l1 == "a line\n" and l2 == "another line" and c == "\n" and
+                n1 == 1234 and n2 == 3.45 and l3 == "one" and l4 == "two"
+                and dummy == nil);
+        assert(f.close());
+        f = assert(io.open(fname, "r"));
+        /* second item failing */
+        l1, n1, n2, dummy = f.read("l", "n", "n", "l");
+        assert(l1 == "a line" and !n1);
+    }
+    assert(tostr(FF) == "file (closed)");
+    assert(os.remove(fname));
+}
+
+
+local f = assert(io.open(fname, "w"));
+/* test number termination */
+f.write("-12.3-	-0xffff+  .3|5.E-3X  +234e+13E 0xDEADBEEFDEADBEEFx\n0x1.13Ap+3e");
+/* very long number */
+f.write("1234");
+for (local i = 1; i < 1001; i = i + 1)
+    f.write("0");
+f.write("\n");
+/* invalid sequences (must read and discard valid prefixes) */
+f.write(".e+    0.e;    --;  0xX;");
+assert(f.close());
+f = assert(io.open(fname, "r"));
+assert(f.read("n") == -12.3);
+assert(f.read(1) == "-");
+assert(f.read("n") == -0xffff);
+assert(f.read(2) == "+ ");
+assert(f.read("n") == 0.3);
+assert(f.read(1) == "|");
+assert(f.read("n") == 5e-3);
+assert(f.read(1) == "X");
+assert(f.read("n") == 234e13);
+assert(f.read(1) == "E");
+assert(f.read("n") == 0Xdeadbeefdeadbeef);
+assert(f.read(2) == "x\n");
+assert(f.read("n") == 0x1.13aP3);
+assert(f.read(1) == "e");
+
+{  /* attempt to read too long number */
+    assert(!f.read("n"));   # fails
+    local s = f.read("L");  # read rest of line
+    assert(string.find(s, "000000000\n"));  # lots of 0's left
+}
+
+assert(!f.read("n"));
+assert(f.read(2) == "e+");
+assert(!f.read("n"));
+assert(f.read(1) == ";");
+assert(!f.read("n"));
+assert(f.read(2) == "-;");
+assert(!f.read("n"));
+assert(f.read(1) == "X");
+assert(!f.read("n"));
+assert(f.read(1) == ";");
+assert(!f.read("n"));
+assert(!f.read(0));      # end of file
+assert(f.close());
+assert(os.remove(fname));
+
+
+
+/* test line generators */
+assert(!pcall(io.lines, "non-existent-file"));
+assert(os.rename(otherfname, fname));
+io.output(otherfname);
+local n = 0;
+f = io.lines(fname);
+while (f()) n = n + 1;
+assert(n == 6);     # number of lines in the fname
+checkerr("file is already closed", f);
+checkerr("file is already closed", f);
+/* copy from fname to otherfname */
+n = 0;
+foreach l in io.lines(fname) {
+    io.write(l, "\n");
+    n = n + 1;
+}
+io.close();
+assert(n == 6);
+/* copy from otherfname back to fname */
+f = assert(io.open(otherfname));
+assert(io.type(f) == "file");
+io.output(fname);
+assert(!io.output().read());
+n = 0;
+foreach l in f.lines() {
+    io.write(l, "\n");
+    n = n + 1;
+}
+assert(string.substr(tostr(f), 0, 4) == "file ");
+assert(f.close()); io.close();
+assert(n == 6);
+checkerr("closed file", io.close, f);
+assert(tostr(f) == "file (closed)");
+assert(io.type(f) == "closed file");
+io.input(fname);
+f = io.open(otherfname).lines();
+n = 0;
+foreach l in io.lines() {
+    assert(l == f());
+    n = n + 1;
+}
+f = nil;
+gc();
+assert(n == 6);
+assert(os.remove(otherfname));
+
+{ /* test with lots of arguments */
+    io.output(otherfname);
+    io.write(string.repeat("a", 300), "\n");
+    io.close();
+    local a = [];
+    for (local i = 0; i < 300; i = i + 1) a[i] = 1;
+    a = [io.lines(otherfname, flatten(a))()];
+    assert(len(a) == 300 and a[0] == "a" and a[len(a)-1] == "a");
+    gc(); # ensure 'otherfname' is closed
+    assert(os.remove(otherfname));
+}
+
+io.input(fname);
+{ # test error returns
+    local a,b,c = io.input().write("xuxu");
+    assert(!a and typeof(b) == "string" and typeof(c) == "number");
+}
+checkerr("invalid format", io.read, "x");
+assert(io.read(0) == "");   # not eof
+assert(io.read(5, "l") == "\"alo\"");
+assert(io.read(0) == "");
+assert(io.read() == "second line");
+local x = io.input().seek();
+assert(io.read() == "third line ");
+assert(io.input().seek("set", x));
+assert(io.read("L") == "third line \n");
+assert(io.read(1) == "X");
+assert(io.read(len("fourth_line")) == "fourth_line");
+assert(io.input().seek("cur", -len("fourth_line")));
+assert(io.read() == "fourth_line");
+assert(io.read() == "");    # empty line
+assert(io.read("n") == 3450);
+assert(io.read(1) == "\n");
+assert(!io.read(0));    # end of file
+assert(!io.read(1));    # end of file
+assert(!io.read(30000));    # end of file
+assert(([io.read(1)])[1] == undef);
+assert(!io.read());     # end of file
+assert(([io.read()])[1] == undef);
+assert(!io.read("n"));  # end of file
+assert(([io.read("n")])[1] == undef);
+assert(io.read("a") == "");     # end of file (OK for "a")
+assert(io.read("a") == "");     # end of file (OK for "a")
+gc();
+io.close(io.input());
+checkerr(" stdin file is closed", io.read);
+
+assert(os.remove(fname));
+
+local s = "0123456789";
+for (local i=1; i < 11; i = i + 1) s = s..s;
+assert(len(s) == 10*2**10);
+
+io.output(fname);
+io.write("alo").write("\n");
+io.close();
+checkerr(" stdout file is closed", io.write);
+f = io.open(fname, "a+b");
+io.output(f);
+gc();
+
+assert(io.write(" " .. s .. " "));
+assert(io.write(";", "end of file\n"));
+f.flush();
+io.flush();
+f.close();
+
+io.input(fname);
+assert(io.read() == "alo");
+assert(io.read(1) == " ");
+assert(io.read(len(s)) == s);
+assert(io.read(1) == " ");
+assert(io.read(0));
+assert(io.read("a") == ";end of file\n");
+assert(!io.read(0));
+assert(io.close(io.input()));
