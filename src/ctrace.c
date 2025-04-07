@@ -223,7 +223,7 @@ static void traceString(OString *s) {
 
 
 static void traceNumber(const TValue *o) {
-    char buff[CS_N2BUFFSZ];
+    char buff[CS_N2SBUFFSZ];
     csS_tostringbuff(o, buff);
     printf("%s", buff);
 }

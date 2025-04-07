@@ -456,22 +456,22 @@ unsigned csS_tostringbuff(const TValue *obj, char *buff) {
     size_t len;
     cs_assert(ttisnum(obj));
     if (ttisint(obj)) {
-        len = cs_integer2str(buff, CS_N2BUFFSZ, ival(obj));
+        len = cs_integer2str(buff, CS_N2SBUFFSZ, ival(obj));
     } else {
-        len = cs_number2str(buff, CS_N2BUFFSZ, fval(obj));
+        len = cs_number2str(buff, CS_N2SBUFFSZ, fval(obj));
         /* if it looks like integer append '.0' */
         if (buff[strspn(buff, "-0123456789")] == '\0') {
             buff[len++] = cs_getlocaledecpoint();
             buff[len++] = '0'; /* adds ".0" to result */
         }
     }
-    cs_assert(len < CS_N2BUFFSZ);
+    cs_assert(len < CS_N2SBUFFSZ);
     return cast_uint(len);
 }
 
 
 void csS_tostring(cs_State *C, TValue *obj) {
-    char buff[CS_N2BUFFSZ];
+    char buff[CS_N2SBUFFSZ];
     uint len = csS_tostringbuff(obj, buff);
     setstrval(C, obj, csS_newl(C, buff, len));
 }
@@ -509,7 +509,7 @@ int csS_utf8esc(char *buff, ulong n) {
 ** gets called by 'csD_getinfo'; the size should be
 ** at least 'CS_MAXSRC' + 'MAXNUM2STR' + size for message.
 */
-#define BUFFVFSSIZ	(CS_MAXSRC + CS_N2BUFFSZ + 100)
+#define BUFFVFSSIZ	(CS_MAXSRC + CS_N2SBUFFSZ + 100)
 
 /* buffer for 'csS_newvstringf' */
 typedef struct BuffVFS {
@@ -573,7 +573,7 @@ static void buffaddstring(BuffVFS *buff, const char *str, size_t len) {
 
 /* add number to buffer */
 static void buffaddnum(BuffVFS *buff, const TValue *nv) {
-    buff->len += csS_tostringbuff(nv, getbuff(buff, CS_N2BUFFSZ));
+    buff->len += csS_tostringbuff(nv, getbuff(buff, CS_N2SBUFFSZ));
 }
 
 

@@ -1,12 +1,10 @@
 /*
-** ccorelib.c
+** cbaselib.c
 ** Basic library
 ** See Copyright Notice in cscript.h
 */
 
-
 #define CS_LIB
-
 
 #include <string.h>
 
@@ -15,7 +13,6 @@
 #include "cauxlib.h"
 #include "cslib.h"
 #include "climits.h"
-
 
 
 static int b_error(cs_State *C) {

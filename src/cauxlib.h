@@ -151,7 +151,6 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
 /* {=======================================================================
 ** Useful macros
 ** ======================================================================== */
-// TODO: update name in docs
 #define csL_check_version(C)    csL_check_version_(C, CS_VERSION_NUMBER)
 
 #define csL_typename(C,index)   cs_typename(C, cs_type(C, index))

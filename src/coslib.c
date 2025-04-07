@@ -1,3 +1,9 @@
+/*
+** coslib.c
+** Standard Operating System library
+** See Copyright Notice in cscript.h
+*/
+
 #define CS_LIB
 
 #include <errno.h>
