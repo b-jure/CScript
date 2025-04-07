@@ -1617,6 +1617,17 @@ CS_API void cs_concat(cs_State *C, int n) {
 }
 
 
+CS_API unsigned cs_numbertocstring(cs_State *C, int index, char *buff) {
+    const TValue *o = index2value(C, index);
+    if (ttisnum(o)) {
+        uint len = csS_tostringbuff(o, buff);
+        buff[len++] = '\0'; /* terminate */
+        return len;
+    } else
+        return 0;
+}
+
+
 CS_API size_t cs_stringtonumber(cs_State *C, const char *s, int *f) {
     size_t sz = csS_tonum(s, s2v(C->sp.p), f);
     if (sz != 0) /* no conversion errors? */

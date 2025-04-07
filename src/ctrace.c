@@ -187,16 +187,45 @@ static void traceFalse(void) {
 /* maximum length for string constants */
 #define MAXSTRKLEN      25
 
-// TODO: unescape \n,\t,\r,etc...
 static void traceString(OString *s) {
     char buff[MAXSTRKLEN + 1];
+    char *p = buff;
+    csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
+    while (*p) {
+        int skip = 1;
+        char c;
+        switch (*p++) {
+            case '\n': c = 'n'; break;
+            case '\r': c = 'r'; break;
+            case '\a': c = 'a'; break;
+            case '\b': c = 'b'; break;
+            case '\t': c = 't'; break;
+            case '\v': c = 'v'; break;
+            case '\f': c = 'f'; break;
+            case '\"': c = '\"'; break;
+            case '\x1B': c = 'e'; break;
+            default: skip = 0; break; 
+        }
+        if (skip) {
+            if (p-buff >= MAXSTRKLEN-1) /* can't finish escape sequence? */
+                *(p-1) = '\\'; /* un-escape it partially */
+            else { /* otherwise un-escape fully */
+                memmove(p+1, p, MAXSTRKLEN - ((p - buff) + 1));
+                *(p-1) = '\\';
+                *p++ = c;
+            }
+        }
+    }
+    /* make sure '...' is at the end if needed (after unescaping) */
     csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
     printf("\"%s\"", buff);
 }
 
 
 static void traceNumber(const TValue *o) {
-    printf("%s", csS_numtostr(o, NULL));
+    char buff[CS_N2BUFFSZ];
+    csS_tostringbuff(o, buff);
+    printf("%s", buff);
 }
 
 

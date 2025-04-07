@@ -277,7 +277,7 @@
 #define CS_NUMBER               double
 
 #define CS_NUMBER_FMTLEN        ""
-#define CS_NUMBER_FMT           "%.14g"
+#define CS_NUMBER_FMT           "%.17g"
 
 #define c_floatatt(n)           (DBL_##n)
 
@@ -399,7 +399,7 @@
 ** macro must include the header 'locale.h'.)
 */
 #if !defined(cs_getlocaledecpoint)
-#define cs_getlocaledecpoint()          (localeconv()->decimal_point[0])
+#define cs_getlocaledecpoint()      (localeconv()->decimal_point[0])
 #endif
 
 

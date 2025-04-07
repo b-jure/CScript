@@ -337,11 +337,16 @@ CS_API cs_Integer  cs_len(cs_State *C, int index);
 CS_API size_t      cs_lenudata(cs_State *C, int index);
 CS_API int         cs_next(cs_State *C, int index); 
 CS_API void        cs_concat(cs_State *C, int n); 
-CS_API size_t      cs_stringtonumber(cs_State *C, const char *s, int *f); 
+CS_API size_t      cs_numbertostring(cs_State *C, const char *s, int *f); 
 CS_API cs_Alloc    cs_getallocf(cs_State *C, void **ud); 
 CS_API void        cs_setallocf(cs_State *C, cs_Alloc falloc, void *ud); 
 CS_API void        cs_toclose(cs_State *C, int index); 
 CS_API void        cs_closeslot(cs_State *C, int index); 
+
+// TODO: add docs
+#define CS_N2BUFFSZ     64
+CS_API unsigned cs_numbertocstring(cs_State *C, int index, char *buff); 
+CS_API size_t cs_stringtonumber(cs_State *C, const char *s, int *f); 
 
 #define cs_getextraspace(C)         ((void *)((char *)(C) - CS_EXTRASPACE))
 

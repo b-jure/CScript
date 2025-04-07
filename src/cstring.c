@@ -391,20 +391,26 @@ static const char *str2int(const char *s, cs_Integer *i) {
 }
 
 
-static const char *str2flt(const char *s, cs_Number *n, int *pf) {
+/* maximum length of a numeral to be converted to a number */
+#if !defined (C_MAXNUMERAL)
+#define C_MAXNUMERAL	200
+#endif
+
+
+static const char *loc_str2flt(const char *s, cs_Number *res, int *pf) {
     char *eptr = NULL; /* to avoid warnings */
     cs_assert(pf != NULL);
     *pf = 0;
     errno = 0;
-    *n = cs_str2number(s, &eptr);
+    *res = cs_str2number(s, &eptr);
     if (eptr == s)
         return NULL; /* nothing was converted? */
     else if (c_unlikely(errno == ERANGE)) {
-        if (*n == CS_HUGE_VAL || *n == -CS_HUGE_VAL) {
+        if (*res == CS_HUGE_VAL || *res == -CS_HUGE_VAL) {
             *pf = 1; /* overflow (negative/positive infinity) */
             /* explicit 'inf|infinity' does not set errno */
         } else {
-            cs_assert(*n <= CS_NUMBER_MIN);
+            cs_assert(*res <= CS_NUMBER_MIN);
             *pf = -1; /* underflow (very large negative exponent) */
         }
     }
@@ -413,7 +419,23 @@ static const char *str2flt(const char *s, cs_Number *n, int *pf) {
 }
 
 
-/* convert string to 'cs_Number' or 'cs_Integer' */
+static const char *str2flt(const char *s, cs_Number *res, int *pf) {
+    const char *endptr = loc_str2flt(s, res, pf);
+    if (endptr == NULL) { /* failed? may be a different locale */
+        char buff[C_MAXNUMERAL + 1];
+        const char *pdot = strchr(s, '.');
+        if (pdot == NULL || strlen(s) > C_MAXNUMERAL)
+            return NULL; /* no dot or string too long; fail */
+        strcpy(buff, s);
+        buff[pdot - s] = cs_getlocaledecpoint(); /* correct decimal point */
+        endptr = loc_str2flt(s, res, pf);
+        if (endptr != NULL)
+            endptr = s + (endptr - buff); /* make relative to 's' */
+    }
+    return endptr;
+}
+
+
 size_t csS_tonum(const char *s, TValue *o, int *pf) {
     const char *e;
     cs_Integer i;
@@ -426,42 +448,32 @@ size_t csS_tonum(const char *s, TValue *o, int *pf) {
     } else /* both conversions failed */
         return 0;
     if (pf) *pf = f;
-    return (e - s) + 1; /* return size */
+    return (e - s) + 1; /* success; return string size */
 }
 
 
-/*
-** Maximum conversion length of a number to a string.
-** 'long double' (not supported currently) can be 33 digits
-** + sign + decimal point + exponent sign + 5 exponent digits
-** + null terminator (43 total).
-** All other types require less space.
-*/
-#define MAXNUM2STR	44
-
-static int num2buff(const TValue *nv, char *buff) {
+unsigned csS_tostringbuff(const TValue *obj, char *buff) {
     size_t len;
-    cs_assert(ttisnum(nv));
-    if (ttisint(nv)) {
-        len = cs_integer2str(buff, MAXNUM2STR, ival(nv));
+    cs_assert(ttisnum(obj));
+    if (ttisint(obj)) {
+        len = cs_integer2str(buff, CS_N2BUFFSZ, ival(obj));
     } else {
-        len = cs_number2str(buff, MAXNUM2STR, fval(nv));
+        len = cs_number2str(buff, CS_N2BUFFSZ, fval(obj));
         /* if it looks like integer append '.0' */
         if (buff[strspn(buff, "-0123456789")] == '\0') {
             buff[len++] = cs_getlocaledecpoint();
-            buff[len++] = '0';
+            buff[len++] = '0'; /* adds ".0" to result */
         }
     }
-    return len;
+    cs_assert(len < CS_N2BUFFSZ);
+    return cast_uint(len);
 }
 
 
-const char *csS_numtostr(const TValue *v, size_t *plen) {
-    static char buff[MAXNUM2STR];
-    size_t len = num2buff(v, buff);
-    buff[len] = '\0';
-    if (plen) *plen = len;
-    return buff;
+void csS_tostring(cs_State *C, TValue *obj) {
+    char buff[CS_N2BUFFSZ];
+    uint len = csS_tostringbuff(obj, buff);
+    setstrval(C, obj, csS_newl(C, buff, len));
 }
 
 
@@ -497,7 +509,7 @@ int csS_utf8esc(char *buff, ulong n) {
 ** gets called by 'csD_getinfo'; the size should be
 ** at least 'CS_MAXSRC' + 'MAXNUM2STR' + size for message.
 */
-#define BUFFVFSSIZ	(CS_MAXSRC + MAXNUM2STR + 100)
+#define BUFFVFSSIZ	(CS_MAXSRC + CS_N2BUFFSZ + 100)
 
 /* buffer for 'csS_newvstringf' */
 typedef struct BuffVFS {
@@ -561,7 +573,7 @@ static void buffaddstring(BuffVFS *buff, const char *str, size_t len) {
 
 /* add number to buffer */
 static void buffaddnum(BuffVFS *buff, const TValue *nv) {
-    buff->len += num2buff(nv, getbuff(buff, MAXNUM2STR));
+    buff->len += csS_tostringbuff(nv, getbuff(buff, CS_N2BUFFSZ));
 }
 
 
