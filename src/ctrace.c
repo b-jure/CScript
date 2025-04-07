@@ -184,6 +184,7 @@ static void traceFalse(void) {
 }
 
 
+// TODO: fix newline escaping...
 /* maximum length for string constants */
 #define MAXSTRKLEN      25
 

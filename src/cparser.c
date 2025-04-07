@@ -512,7 +512,6 @@ static void enterscope(FunctionState *fs, Scope *s, int cf) {
     fs->scope = s;
 }
 
-#include<stdio.h>
 
 /* end lexical scope */
 static void leavescope(FunctionState *fs) {
@@ -521,7 +520,6 @@ static void leavescope(FunctionState *fs) {
     int nactlocals = fs->nactlocals;
     int popn = nactlocals - s->nactlocals + s->haveswexp;
     int hasclose = 0;
-    printf("REMOVING %d, at pc %d\n", popn, fs->pc);
     removelocals(fs, s->nactlocals); /* remove scope locals */
     cs_assert(s->nactlocals == fs->nactlocals);
     if (haspatchlist(s)) /* have to fix jumps? */
@@ -2258,7 +2256,6 @@ static void foreachstm(Lexer *lx) {
     adjustlocals(lx, nvars); /* register delcared locals */
     csC_reserveslots(fs, nvars); /* space for declared locals */
     stm(lx); /* body */
-    printf("LEAVING delcared locals scope\n");
     leavescope(fs); /* leave declared locals scope */
     patchforjmp(fs, prep, currPC, 0);
     fs->loopstart = currPC; /* generic loop starts here */
@@ -2267,7 +2264,6 @@ static void foreachstm(Lexer *lx) {
     forend = csC_emitILLL(fs, OP_FORLOOP, base, 0, nvars);
     patchforjmp(fs, forend, prep + getOpSize(OP_FORPREP), 1);
     csC_fixline(fs, line);
-    printf("LEAVING for-loop scope\n");
     leaveloop(fs); /* leave loop (pops control variables) */
 }
 
