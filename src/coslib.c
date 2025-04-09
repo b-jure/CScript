@@ -152,12 +152,21 @@ static int c_setenv(cs_State *C, const char *name, const char *value) {
 
 #elif defined(CS_USE_POSIX)         /* }{ */
 
-#define c_setenv(C,name,value)      setenv(name, value, 1)
+static int c_setenv(cs_State *C, const char *name, const char *value) {
+    int res;
+    if (*value == '\0' && strlen(value) == 0)
+        res = unsetenv(name);
+    else
+        res = setenv(name, value, 1);
+    return res;
+}
 
 #else                               /* }{ */
 
 /* ISO C definition */
-#define c_setenv(C,name,value)      ((void)(name), (void)(value), -1)
+#define c_setenv(C,name,value) \
+        ((void)(name), (void)(value), \
+         csL_error(C, "cannot set environment in this installation"), -1)
 
 #endif                              /* } */
 
@@ -466,8 +475,6 @@ static int os_setlocale (cs_State *C) {
 }
 
 
-// TODO: add documentation, tests are not really viable as many of the
-// behvaiour depends on the implementation and or current time...
 static const cs_Entry syslib[] = {
     {"clock",     os_clock},
     {"date",      os_date},

@@ -7,12 +7,13 @@
         <link rel="stylesheet" type="text/css" href="cscript.css">
         <link rel="stylesheet" type="text/css" href="index.css">
     </head>
-    <p>
+    <body>
         <h1>CScript 1.0 Reference Manual</h1>
         <small>
             <p>
-            Copyright &copy; 2020&ndash;2024 Lua.org, PUC-Rio;
-            2024&ndash;2025 Jure Bagić.
+            Copyright &copy; 1994&ndash;2024 Lua.org, PUC-Rio
+            <br/>
+            Copyright &copy; 2024&ndash;2025 Jure Bagić.
             </p>
         </small>
         <div class="menubar">
@@ -54,8 +55,8 @@
         However the reference manual is always valid for the same version of
         CScript distribution. If you spot the mistake or you think the manual
         is lacking in various places, please let me know
-        (<a href="https://github.com/b-jure/cscript">link</a> to the official
-        git[hub] repository).
+        <a href="https://github.com/b-jure/cscript">here</a>
+        (github repo).
         </p>
 
 
@@ -896,22 +897,28 @@
         </p>
 
 
-        <h2>3.3 &ndash; <a name="3.3">Statements</a></h2>
+        <h2>3.3 &ndash; <a name="3.3">Declarations and Statements</a></h2>
         <p>
-        CScript supports almost identical set of statements as found in C.
-        This set includes blocks, assignments, control structures,
-        function calls and variable declarations.
+        CScript supports (almost) identical set of statements as found in C.
+        This set includes blocks, assignments, control structures, function calls.
+        In order to define new local variables, CScript syntax defines
+        declarations (see <a href="#3.3.7">&sect;3.3.7</a>).
+        Statement is considered to be declaration, while declaration is
+        not considered to be a statement.
         </p>
 
 
         <h3>3.3.1 &ndash; <a name="3.3.1">Blocks</a></h3>
         <p>
-        A block is a list of statements with its own scope enclosed in between
-        curly braces.
-        These statements are executed sequentially:
+        A block is a list of declarations with its own scope enclosed in
+        between curly braces.
+        These declarations are executed sequentially:
 
         <pre>
-    block ::= &lsquo;<b>{</b>&rsquo; {stm} &lsquo;<b>}</b>&rsquo;</pre>
+    stm ::= &lsquo;<b>{</b>&rsquo; loopblock &lsquo;<b>}</b>&rsquo;
+    loopblock ::= {decl} [continuestm] | switchblock
+    switchblock ::= {decl} [breakstm] | block
+    block ::= {decl} [retstm]</pre>
         </p>
 
 
@@ -921,7 +928,7 @@
         Syntactically, a chunk is simply a block without curly braces:
 
         <pre>
-    chunk ::= {stm}</pre>
+    chunk ::= block</pre>
 
         CScript handles a chunk as the body of an anonymous function
         with a variable number of arguments
@@ -947,7 +954,8 @@
         by a semicolon:
 
         <pre>
-    stm ::= varlist &lsquo;<b>=</b>&rsquo; explist &lsquo;<b>;</b>&rsquo;
+    stm ::= expstm &lsquo;<b>;</b>&rsquo;
+    expstm ::= varlist &lsquo;<b>=</b>&rsquo; explist 
     varlist ::= var {&lsquo;<b>,</b>&rsquo; var}
     explist ::= exp {&lsquo;<b>,</b>&rsquo; exp}</pre>
 
@@ -996,15 +1004,18 @@
 
         <h3>3.3.4 &ndash; <a name="3.3.4">Control Structures</a></h3>
         <p>
-        The control structures
-        <b>if</b>, <b>while</b>, <b>for</b> and <b>loop</b> have the usual
-        meaning and familiar syntax:
+        The control structures <b>if</b>, <b>while</b>, <b>for</b>,
+        <b>loop</b> and <b>switch</b> have the usual meaning and
+        familiar syntax:
 
         <pre>
     stm ::= <b>while</b> &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; stm
-    stm ::= <b>for</b> &lsquo;<b>(</b>&rsquo; {localstm | exprstm} &lsquo;<b>;</b>&rsquo; {exp} &lsquo;<b>;</b>&rsquo; {exprstm} &lsquo;<b>)</b>&rsquo; stm
+    stm ::= <b>for</b> &lsquo;<b>(</b>&rsquo; [forinit] &lsquo;<b>;</b>&rsquo; [exp] &lsquo;<b>;</b>&rsquo; [expstm] &lsquo;<b>)</b>&rsquo; stm
     stm ::= <b>loop</b> stm
-    stm ::= <b>if</b> &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; stm {<b>else</b> stm}</pre>
+    stm ::= <b>if</b> &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; stm [<b>else</b> stm]
+    stm ::= <b>switch</b> &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; switchbody
+    switchbody ::= &lsquo;<b>{</b>&rsquo; {<b>case</b> exp &lsquo;<b>:</b>&rsquo; {stm}} [<b>default</b> &lsquo;<b>:</b>&rsquo; {stm}] &lsquo;<b>}</b>&rsquo;</pre>
+    forinit ::= localdecl | expstm
 
         CScript also has a <b>foreach</b> statement
         (see <a href="#3.3.5">&sect;3.3.5</a>).
@@ -1014,32 +1025,35 @@
         All values different from <b>nil</b> and <b>false</b> test true.
         In particular, the number 0 and the empty string also test true.
         <br/><br/>
-        The <b>break</b> statement terminates the execution of a
-        <b>while</b>, <b>repeat</b>, or <b>for</b> loop,
-        skipping to the next statement after the loop:
+        The <b>break</b> statement terminates the execution of a <b>switch</b>
+        statement and a <b>while</b>, <b>loop</b>, or <b>for</b> loop,
+        skipping to the next statement after the loop or switch:
 
         <pre>
-    stm ::= <b>break</b> &lsquo;<b>;</b>&rsquo;</pre>
+    stm ::= breakstm
+    breakstm ::= <b>break</b> &lsquo;<b>;</b>&rsquo;</pre>
 
-        A <b>break</b> ends the innermost enclosing loop.
+        A <b>break</b> ends the innermost enclosing loop or switch statement.
         <br/><br/>
         The <b>continue</b> statement is used to skip the current iteration
         and proceed to the next iteration of the loop:
 
         <pre>
-    stm ::= <b>continue</b> &lsquo;<b>;</b>&rsquo;</pre>
+    stm ::= continuestm
+    continuestm ::= <b>continue</b> &lsquo;<b>;</b>&rsquo;</pre>
 
         When a <b>continue</b> statement is encountered, the remaining
         statements in the loop body are skipped, and control is transferred
         to the loop's next iteration.
-        <br/><br/>
+
         The <b>return</b> statement is used to return values from a function
         or a chunk (which is handled as an anonymous function).
         Functions can return more than one value, so the syntax for the
         <b>return</b> statement is
 
         <pre>
-    stm ::= <b>return</b> [explist] &lsquo;<b>;</b>&rsquo;</pre>
+    stm ::= retstm
+    retstm ::= <b>return</b> [explist] &lsquo;<b>;</b>&rsquo;</pre>
 
         The <b>return</b> statement can only be written as the last statement
         of a block or a chunk.
@@ -1058,13 +1072,14 @@
         The generic <b>foreach</b> loop has the following syntax:
 
         <pre>
-    stm ::= <b>foreach</b> namelist <b>in</b> explist stm
-    namelist ::= Name {&lsquo;<b>,</b>&rsquo; Name}</pre>
+    stm ::= <b>foreach</b> namelist <b>in</b> forexplist stm
+    namelist ::= Name {&lsquo;<b>,</b>&rsquo; Name}
+    forexplist ::= exp [&lsquo;<b>,</b>&rsquo; exp [&lsquo;<b>,</b>&rsquo; exp [&lsquo;<b>,</b>&rsquo; exp]]]</pre>
 
         A <b>foreach</b> statement like
 
         <pre>
-    foreach <em>var_1</em>, &middot;&middot;&middot;, <em>var_n</em> in <em>explist</em> <em>body</em></pre>
+    foreach <em>var_1</em>, &middot;&middot;&middot;, <em>var_n</em> in <em>forexplist</em> <em>stm</em></pre>
 
         works as follows.
         <br/><br/>
@@ -1081,7 +1096,7 @@
         following the rules of multiple assignments
         (see <a href="#3.3.3">&sect;3.3.3</a>).
         If the control variable becomes <b>nil</b>, the loop terminates.
-        Otherwise, the body is executed and the loop goes to the next
+        Otherwise, the statement is executed and the loop goes to the next
         iteration.
         <br/><br/>
         The closing value behaves like a to-be-closed variable
@@ -1100,7 +1115,7 @@
         function calls can be executed as statements:
 
         <pre>
-    stm ::= functioncall</pre>
+    stm ::= functioncall &lsquo;<b>;</b>&rsquo;</pre>
 
         In this case, all returned values are thrown away.
         Function calls are explained in <a href="#3.4.10">&sect;3.4.10</a>.
@@ -1113,7 +1128,8 @@
         The declaration can include an initialization:
 
         <pre>
-    stm ::= <b>local</b> attnamelist [&lsquo;<b>=</b>&rsquo; explist] &lsquo;<b>;</b>&rsquo;
+    decl ::= localdecl &lsquo;;&rsquo; | <b>local</b> <b>fn</b> Name funcbody | <b>local</b> <b>class</b> Name classbody | stm
+    localdecl ::= <b>local</b> attnamelist [&lsquo;<b>=</b>&rsquo; explist]
     attnamelist ::=  Name attrib {&lsquo;<b>,</b>&rsquo; Name attrib}</pre>
 
         If present, an initial assignment has the same semantics
@@ -1176,20 +1192,20 @@
         The basic expressions in CScript are the following:
 
         <pre>
-    exp ::= prefixexp
     exp ::= <b>nil</b> | <b>false</b> | <b>true</b>
-    exp ::= Numeral
+    exp ::= &lsquo;<b>...</b>&rsquo;
+    exp ::= Number
     exp ::= LiteralString
+    exp ::= listdef
+    exp ::= tabledef
     exp ::= functiondef
     exp ::= classdef
-    exp ::= tableconstructor
-    exp ::= listconstructor
-    exp ::= &lsquo;<b>...</b>&rsquo;
+    exp ::= prefixexp
     exp ::= exp binop exp
     exp ::= unop exp
-    prefixexp ::= var | super | functioncall | &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo;</pre>
+    prefixexp ::= var | functioncall | &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; | superexp</pre>
 
-        Numerals and literal strings are explained in
+        Numbers and literal strings are explained in
         <a href="#3.1">&sect;3.1</a>;
         variables are explained in <a href="#3.2">&sect;3.2</a>;
         function definitions are explained in
@@ -1427,19 +1443,19 @@
         </p>
 
 
-        <h3>3.4.8 &ndash; <a name="3.4.8">Table and List Constructors</a></h3><p>
-        Table and list constructors are expressions that create tables and
+        <h3>3.4.8 &ndash; <a name="3.4.8">Table and List definition</a></h3><p>
+        Table and list definitions are expressions that create tables and
         lists.
-        Every time a constructor is evaluated, a new list or table is created.
-        A constructor can be used to create an empty table/list or to create
-        an list/table and initialize some of its fields/elements.
-        The general syntax for table constructors is
+        Every time a definition is evaluated, a new list or table is created.
+        A definition can be used to create an empty table/list or to create
+        a table/list and initialize some of its fields/elements.
+        The general syntax for table definition is
 
         <pre>
-    tableconstructor ::= &lsquo;<b>{</b>&rsquo; [fieldlist] &lsquo;<b>}</b>&rsquo;
-    fieldlist ::= field {fieldsep field} [fieldsep]
+    tabledef ::= &lsquo;<b>{</b>&rsquo; [fieldlist] &lsquo;<b>}</b>&rsquo;
+    fieldlist ::= field {sep field} [sep]
     field ::= &lsquo;<b>[</b>&rsquo; exp &lsquo;<b>]</b>&rsquo; &lsquo;<b>=</b>&rsquo; exp | Name &lsquo;<b>=</b>&rsquo; exp
-    fieldsep ::= &lsquo;<b>,</b>&rsquo; | &lsquo;<b>;</b>&rsquo;</pre>
+    sep ::= &lsquo;<b>,</b>&rsquo; | &lsquo;<b>;</b>&rsquo;</pre>
 
         Each field of the form <code>[exp1] = exp2</code> adds to the new
         table an entry with key <code>exp1</code> and value <code>exp2</code>.
@@ -1455,16 +1471,16 @@
         <pre>
     local t = {};
     t[f(1)] = g;
-    t.x = 5;        // t["x"] = 5;
+    t.x = 5;        # t["x"] = 5;
     t["y"] = 6;
     t[30] = 23;
     a = t;</pre>
 
-        The general syntax for list constructors is:
+        The general syntax for list definition is:
 
         <pre>
-    listconstructor ::= &lsquo;<b>[</b>&rsquo; [elementlist] &lsquo;<b>]</b>&rsquo;
-    elementlist ::= exp {&lsquo;<b>,</b>&rsquo; exp} [&lsquo;<b>,</b>&rsquo;]</pre>
+    listdef ::= &lsquo;<b>[</b>&rsquo; [elementlist] &lsquo;<b>]</b>&rsquo;
+    elementlist ::= exp {sep exp} [sep]</pre>
 
         Each expression in the elements list is equivalent to
         <code>[i] = exp</code>, where <code>i</code> are consecutive integers
@@ -1485,7 +1501,7 @@
     a = aux;
         </pre>
 
-        The order of the assignments in any of the constructors is undefined.
+        The order of the assignments in any of the definitions is undefined.
         (This order would be relevant only when there are repeated keys being set.)
         <br/><br/>
         The field or element list can have an optional trailing separator,
@@ -1498,7 +1514,7 @@
         A function call in CScript has the following syntax:
 
         <pre>
-    functioncall ::= prefixexp &lsquo;<b>(</b>&rsquo; args &lsquo;<b>)</b>&rsquo;</pre>
+    functioncall ::= prefixexp &lsquo;<b>(</b>&rsquo; [explist] &lsquo;<b>)</b>&rsquo;</pre>
 
         In a function call, first prefixexp and args are evaluated.
         <br/><br/>
@@ -1518,11 +1534,6 @@
         its first argument is the value of prefixexp, followed by the original
         call arguments (see <a href="#2.4">&sect;2.4</a>).
         <br/><br/>
-        Arguments have the following syntax:
-
-        <pre>
-        args ::= [explist]</pre>
-
         All argument expressions are evaluated before the call.
         </p>
 
@@ -1532,15 +1543,15 @@
         The syntax for function definition is
 
         <pre>
-        functiondef ::= <b>fn</b> funcbody
-        funcbody ::= &lsquo;<b>(</b>&rsquo; [parlist] &lsquo;<b>)</b>&rsquo; &lsquo;<b>{</b>&rsquo; block &lsquo;<b>}</b>&rsquo;</pre>
+    functiondef ::= <b>fn</b> funcbody
+    funcbody ::= &lsquo;<b>(</b>&rsquo; [parameters] &lsquo;<b>)</b>&rsquo; &lsquo;<b>{</b>&rsquo; block &lsquo;<b>}</b>&rsquo;</pre>
 
         The following syntactic sugar simplifies function definitions:
 
         <pre>
-        stm ::= <b>fn</b> funcname funcbody
-        stm ::= <b>local</b> <b>fn</b> Name funcbody
-        funcname ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
+    stm ::= <b>fn</b> indexedname funcbody
+    stm ::= <b>local</b> <b>fn</b> Name funcbody
+    indexedname ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
 
         The statement
 
@@ -1593,7 +1604,7 @@
         argument values:
 
         <pre>
-    parlist ::= namelist [&lsquo;<b>,</b>&rsquo; &lsquo;<b>...</b>&rsquo;] | &lsquo;<b>...</b>&rsquo;</pre>
+    parameters ::= namelist [&lsquo;<b>,</b>&rsquo; &lsquo;<b>...</b>&rsquo;] | &lsquo;<b>...</b>&rsquo;</pre>
 
         When a CScript function is called, it adjusts its list of arguments to
         the length of its list of parameters
@@ -1754,15 +1765,14 @@
 
         <pre>
     classdef ::= <b>class</b> classbody
-    classbody ::= [<b>inherits</b> supername] &lsquo;<b>{</b>&rsquo; {functiondef} &lsquo;<b>}</b>&rsquo;
-    supername ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
+    classbody ::= [<b>inherits</b> indexedname] &lsquo;<b>{</b>&rsquo; {method} &lsquo;<b>}</b>&rsquo;
+    method ::= <b>fn</b> Name funcbody</pre>
 
         The following syntactic sugar simplifies class definitions:
 
         <pre>
-    stm ::= <b>class</b> classname classbody
-    stm ::= <b>local</b> <b>class</b> Name classbody 
-    classname ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
+    stm ::= <b>class</b> indexedname classbody
+    stm ::= <b>local</b> <b>class</b> Name classbody</pre>
 
         The statement
 
@@ -1831,7 +1841,10 @@
         Additionally if the class inherits from another class, then the
         <code>super</code> keyword is accessible for each method.
         This keyword can access the superclass and its methods.
-        <br/>
+        Here is the syntax:
+        <pre>
+    superexp ::= <b>super</b> [&lsquo;[&rsquo; exp &lsquo;]&rsquo;] | <b>super</b> [&lsquo;.&rsquo; Name] | <b>super</b></pre>
+
         Here is the small exmple:
 
         <pre>
@@ -1849,17 +1862,16 @@
         }
     }</pre>
 
-        This would invoke an error, as you are trying to assign different
+        This would raise an error, as you are trying to assign different
         value to <code>level</code> <em>property</em> of the superclass,
         also the <code>Empty</code> class has no superclass so
         <code>super</code> keyword is not available in the call to the
         <code>print</code> function.
-        We call it property instead of field, as classes do not have fields,
-        only instances do. Additionally we can see that <code>super</code>
-        corresponds to <code>Empty</code> class and <code>super.level()</code>
-        calls <code>level</code> method of <code>Empty</code> class, thus
-        the returned value of <code>level</code> method of
-        <code>HalfFull</code> class would be <code>0.5</code>.
+        Additionally we can see that <code>super</code> corresponds to
+        <code>Empty</code> class and <code>super.level()</code> calls
+        <code>level</code> method of <code>Empty</code> class, thus the
+        returned value of <code>level</code> method of <code>HalfFull</code>
+        class would be <code>0.5</code>.
         <br/><br/>
         Each time we call a class, we create a new instance of that class,
         unless class has <code>__init</code> which might return something
@@ -2634,39 +2646,41 @@ typedef struct cs_Debug {
 
         <!-- cs_MM -->
         <hr><h3><a name="cs_MM"><code>cs_MM</code></a></h3>
-        <pre>
-    typedef enum cs_MM {
-        CS_MM_GETIDX = 0,
-        CS_MM_SETIDX,
-        CS_MM_GC,
-        CS_MM_CLOSE,
-        CS_MM_CALL,
-        CS_MM_CONCAT,
-        CS_MM_ADD, 
-        CS_MM_SUB,
-        CS_MM_MUL,
-        CS_MM_DIV,
-        CS_MM_IDIV,
-        CS_MM_MOD,
-        CS_MM_POW,
-        CS_MM_BSHL,
-        CS_MM_BSHR,
-        CS_MM_BAND,
-        CS_MM_BOR,
-        CS_MM_BXOR,
-        CS_MM_UNM,
-        CS_MM_BNOT,
-        CS_MM_EQ,
-        CS_MM_LT,
-        CS_MM_LE,
-        CS_MM_N, /* number of mm */
-    } cs_MM;</pre>
         <p>
-        These values correspond to each <a href="#Metamethods">metamethod</a>.
-        They are indices into metalist</code></a>.
-        Total number of metamethods is denoted by <code>CS_MM_N</code>.
+        <pre>
+typedef enum cs_MM {
+    CS_MM_GETIDX = 0,
+    CS_MM_SETIDX,
+    CS_MM_GC,
+    CS_MM_CLOSE,
+    CS_MM_CALL,
+    CS_MM_CONCAT,
+    CS_MM_ADD, 
+    CS_MM_SUB,
+    CS_MM_MUL,
+    CS_MM_DIV,
+    CS_MM_IDIV,
+    CS_MM_MOD,
+    CS_MM_POW,
+    CS_MM_BSHL,
+    CS_MM_BSHR,
+    CS_MM_BAND,
+    CS_MM_BOR,
+    CS_MM_BXOR,
+    CS_MM_UNM,
+    CS_MM_BNOT,
+    CS_MM_EQ,
+    CS_MM_LT,
+    CS_MM_LE,
+    CS_MM_N,
+} cs_MM;</pre>
+        These values are indices for the metalist.
+        <br/>
+        Total number of metamethods defined by CScript without any libraries,
+        is denoted by <a name="CS_MM_N"><code>CS_MM_N</code></a>.
         <br/><br/>
-        For more information on metamethods see <a href="#2.4">&sect;2.4</a>.
+        For more information on metalists and metamethods see
+        <a href="#2.4">&sect;2.4</a>.
         </p>
 
         <!-- cs_newstate -->
@@ -4484,7 +4498,8 @@ typedef struct cs_Debug {
         <span class="apii">[-0, +1, &ndash;]</span>
         <pre>const char *cs_push_metalist (cs_State *C);</pre>
         <p>
-        This macro is equivalent to <code>cs_push_list(C, CS_MM_N)</code>
+        This macro is equivalent to
+        <code>cs_push_list(C, <a href="#CS_MM_N">CS_MM_N</a>)</code>
         (see <a href="#cs_push_list"><code>cs_push_list</code></a>).
         </p>
 
@@ -6761,11 +6776,11 @@ typedef struct csL_Stream {
         <pre>
     string.split("  1  2   3  ", nil, 1);</pre>
 
-    returns
+        returns
 
         <pre>
     ["1", "2   3  "]</pre>
-        
+
         (notice how the last element has no leading whitespace).
         </p>
 
@@ -7913,7 +7928,407 @@ typedef struct csL_Stream {
 
         <h2>6.6 &ndash; <a name="6.6">OS Library</a></h2>
         <p>
-        TODO...
+        This library is implemented through table
+        <a name="os"><code>os</code></a>.
         </p>
+
+        <!-- os.clock -->
+        <hr/><h3><a name="os.clock"><code>os.clock ()</code></a></h3>
+        <p>
+        Returns an approximation of the amount in seconds of CPU time
+        used by the program, as returned by the underlying ISO&nbsp;C
+        function <code>clock</code>.
+        </p>
+
+        <!-- os.date -->
+        <hr/><h3><a name="os.date"><code>os.date ([format [, time]])</code></a></h3>
+        <p>
+        Returns a string or a table containing date and time,
+        formatted according to the given string <code>format</code>.
+        <br/><br/>
+        If the <code>time</code> argument is present, this is the time to
+        be formatted (see the <a href="#os.time"><code>os.time</code></a>
+        function for a description of this value).
+        Otherwise, <code>date</code> formats the current time.
+        <br/><br/>
+        If <code>format</code> starts with '<code>!</code>',
+        then the date is formatted in Coordinated Universal Time.
+        After this optional character, if <code>format</code> is the string
+        "<code>t</code>", then <code>date</code> returns a table with the
+        following fields:
+        <code>year</code>,
+        <code>month</code> (1&ndash;12),
+        <code>day</code> (1&ndash;31),
+        <code>hour</code> (0&ndash;23),
+        <code>min</code> (0&ndash;59),
+        <code>sec</code> (0&ndash;61, due to leap seconds),
+        <code>wday</code> (weekday, 1&ndash;7, Sunday is&nbsp;1),
+        <code>yday</code> (day of the year, 1&ndash;366),
+        and <code>isdst</code> (daylight saving flag, a boolean).
+        This last field may be absent if the information is not available.
+        <br/><br/>
+        If <code>format</code> is not "<code>t</code>", then <code>date</code>
+        returns the date as a string, formatted according to the same rules as
+        the ISO&nbsp;C function <code>strftime</code>.
+        <br/><br/>
+        If <code>format</code> is absent, it defaults to "<code>%c</code>",
+        which gives a human-readable date and time representation
+        using the current locale.
+        <br/><br/>
+        On non-POSIX systems, this function may be not thread safe because of
+        its reliance on C&nbsp;function <code>gmtime</code> and
+        C&nbsp;function <code>localtime</code>.
+        </p>
+
+        <!-- os.difftime -->
+        <hr/><h3><a name="os.difftime"><code>os.difftime (t2, t1)</code></a></h3>
+        <p>
+        Returns the difference, in seconds, from time <code>t1</code> to time
+        <code>t2</code> (where the times are values returned by
+        <a href="#os.time"><code>os.time</code></a>).
+        In POSIX, Windows, and some other systems, this value is exactly
+        <code>t2</code><em>-</em><code>t1</code>.
+        </p>
+
+        <!-- os.execute -->
+        <hr/><h3><a name="os.execute"><code>os.execute ([command])</code></a></h3>
+        <p>
+        This function is equivalent to the ISO&nbsp;C function
+        <code>system</code>.
+        It passes <code>command</code> to be executed by an operating system
+        shell.
+        Its first result is <b>true</b> if the command terminated successfully,
+        or <b>fail</b> otherwise.
+        After this first result the function returns a string plus a number,
+        as follows:
+        <ul>
+            <li>
+                <b>"<code>exit</code>": </b>
+                the command terminated normally;
+                the following number is the exit status of the command.
+            </li>
+            <li>
+                <b>"<code>signal</code>": </b>
+                the command was terminated by a signal;
+                the following number is the signal that terminated the command.
+            </li>
+        </ul>
+        When called without a <code>command</code>, <code>os.execute</code>
+        returns a boolean that is true if a shell is available.
+        </p>
+
+        <!-- os.exit -->
+        <hr/><h3><a name="os.exit"><code>os.exit ([code [, close]])</code></a></h3>
+        <p>
+        Calls the ISO&nbsp;C function <code>exit</code> to terminate the host
+        program.
+        If <code>code</code> is <b>true</b>, the returned status is
+        <code>EXIT_SUCCESS</code>;
+        if <code>code</code> is <b>false</b>, the returned status is
+        <code>EXIT_FAILURE</code>;
+        if <code>code</code> is a number, the returned status is this number.
+        The default value for <code>code</code> is <b>true</b>.
+        <br/><br/>
+        If the optional second argument <code>close</code> is true,
+        the function closes the CScript state before exiting
+        (see <a href="#cs_close"><code>cs_close</code></a>).
+        </p>
+
+        <!-- os.getenv -->
+        <hr/><h3><a name="os.getenv"><code>os.getenv (varname)</code></a></h3>
+        <p>
+        Returns the value of the process environment variable
+        <code>varname</code> or <b>fail</b> if the variable is not defined.
+        </p>
+
+        <!-- os.setenv -->
+        <hr/><h3><a name="os.setenv"><code>os.setenv (varname [, value])</code></a></h3>
+        <p>
+        Sets or removes the environment variable <code>varname</code> from the
+        environment and returns true if it was sucessfull, or <b>fail</b>
+        if not.
+        <br/><br/>
+        If optional parameter <code>value</code> is provided, then the
+        value of the environment variable <code>varname</code> is set to
+        that value and the variable <code>varname</code> is created if
+        it was not previously in the environment.
+        <br/><br/>
+        If <code>value</code> is an empty string, or it was not provided
+        (defaults to an empty string <code>""</code>), the environment
+        variable <code>varname</code> is removed from the environment.
+        </p>
+
+        <!-- os.remove -->
+        <hr/><h3><a name="os.remove"><code>os.remove (filename)</code></a></h3>
+        <p>
+        Deletes the file (or empty directory, on POSIX systems) with the
+        given name.
+        If this function fails, it returns <b>fail</b> plus a string
+        describing the error and the error code.
+        Otherwise, it returns true.
+        </p>
+
+        <!-- os.rename -->
+        <hr/><h3><a name="os.rename"><code>os.rename (oldname, newname)</code></a></h3>
+        <p>
+        Renames the file or directory named <code>oldname</code> to
+        <code>newname</code>.
+        If this function fails, it returns <b>fail</b>, plus a string
+        describing the error and the error code.
+        Otherwise, it returns true.
+        </p>
+
+        <!-- os.setlocale -->
+        <hr/><h3><a name="os.setlocale"><code>os.setlocale (locale [, category])</code></a></h3>
+        <p>
+        Sets the current locale of the program.
+        <code>locale</code> is a system-dependent string specifying a locale;
+        <code>category</code> is an optional string describing which category
+        to change: <code>"all"</code>, <code>"collate"</code>,
+        <code>"ctype"</code>, <code>"monetary"</code>, <code>"numeric"</code>,
+        or <code>"time"</code>; the default category is <code>"all"</code>.
+        The function returns the name of the new locale, or <b>fail</b> if
+        the request cannot be honored.
+        <br/><br/>
+        If <code>locale</code> is the empty string, the current locale is set
+        to an implementation-defined native locale.
+        If <code>locale</code> is the string "<code>C</code>", the current
+        locale is set to the standard C locale.
+        <br/><br/>
+        When called with <b>nil</b> as the first argument, this function only
+        returns the name of the current locale for the given category.
+        <br/><br/>
+        This function may be not thread safe because of its reliance on
+        C&nbsp;function <code>setlocale</code>.
+        </p>
+
+        <!-- os.time -->
+        <hr/><h3><a name="os.time"><code>os.time ([table])</code></a></h3>
+        <p>
+        Returns the current time when called without arguments, or a time
+        representing the local date and time specified by the given table.
+        This table must have fields
+        <code>year</code>,
+        <code>month</code>,
+        and <code>day</code>, and may have fields
+        <code>hour</code> (default is 12),
+        <code>min</code> (default is 0),
+        <code>sec</code> (default is 0),
+        and <code>isdst</code> (default is <b>nil</b>).
+        Other fields are ignored.
+        For a description of these fields, see the
+        <a href="#os.date"><code>os.date</code></a> function.
+        <br/><br/>
+        When the function is called, the values in these fields do not need
+        to be inside their valid ranges.
+        For instance, if <code>sec</code> is -10, it means 10 seconds before
+        the time specified by the other fields;
+        if <code>hour</code> is 1000, it means 1000 hours after the time
+        specified by the other fields.
+        <br/><br/>
+        The returned value is a number, whose meaning depends on your system.
+        In POSIX, Windows, and some other systems, this number counts the
+        number of seconds since some given start time (the "epoch").
+        In other systems, the meaning is not specified, and the number
+        returned by <code>time</code> can be used only as an argument to
+        <a href="#os.date"><code>os.date</code></a> and
+        <a href="#os.difftime"><code>os.difftime</code></a>.
+        <br/><br/>
+        When called with a table, <code>os.time</code> also normalizes all
+        the fields documented in the
+        <a href="#os.date"><code>os.date</code></a> function, so that they
+        represent the same time as before the call but with values inside
+        their valid ranges.
+        </p>
+
+        <!-- os.tmpname -->
+        <hr/><h3><a name="os.tmpname"><code>os.tmpname ()</code></a></h3>
+        <p>
+        Returns a string with a file name that can be used for a temporary file.
+        The file must be explicitly opened before its use and explicitly
+        removed when no longer needed.
+        <br/><br/>
+        In POSIX systems, this function also creates a file with that name,
+        to avoid security risks.
+        (Someone else might create the file with wrong permissions
+        in the time between getting the name and creating the file.)
+        You still have to open the file to use it and to remove it
+        (even if you do not use it).
+        <br/><br/>
+        When possible, you may prefer to use
+        <a href="#io.tmpfile"><code>io.tmpfile</code></a>,
+        which automatically removes the file when the program ends.
+        </p>
+
+
+
+
+        <h1>9 &ndash; <a name="9">The Complete Syntax of CScript</a></h1>
+        <p>
+        Here is the complete syntax of CScript in extended BNF.
+        As usual in extended BNF, {A} means 0 or more As, and [A] means an
+        optional A.
+        (For operator precedences, see <a href="#3.4.7">&sect;3.4.7</a>;
+        for a description of the terminals Name, Numeral,
+        and LiteralString, see <a href="#3.1">&sect;3.1</a>.)
+        <br/><br/>
+
+        <pre>
+    chunk ::= block
+    
+    block ::= {decl} [retstm]
+    
+    decl ::= localdecl &lsquo;;&rsquo;
+           | <b>local</b> <b>fn</b> Name funcbody
+           | <b>local</b> <b>class</b> Name classbody
+           | stm
+    
+    localdecl ::= <b>local</b> attnamelist [&lsquo;=&rsquo; explist]
+    
+    attnamelist ::= Name attrib {&lsquo;,&rsquo; Name attrib}
+    
+    attrib ::= [&lsquo;<&rsquo; Name &lsquo;>&rsquo;]
+    
+    stm ::= &lsquo;;&rsquo;
+          | expstm &lsquo;;&rsquo;
+          | functioncall &lsquo;;&rsquo;
+          | breakstm
+          | continuestm
+          | <b>fn</b> indexedname funcbody
+          | <b>class</b> indexedname classbody
+          | <b>loop</b> stm
+          | <b>while</b> &lsquo;(&rsquo; exp &lsquo;)&rsquo; stm
+          | <b>for</b> &lsquo;(&rsquo; [forinit] &lsquo;;&rsquo; [exp] &lsquo;;&rsquo; [expstm] &lsquo;)&rsquo; stm
+          | <b>foreach</b> namelist <b>in</b> forexplist stm
+          | <b>if</b> &lsquo;(&rsquo; exp &lsquo;)&rsquo; stm [<b>else</b> stm]
+          | <b>switch</b> &lsquo;(&rsquo; exp &lsquo;)&rsquo; switchbody
+          | &lsquo;{&rsquo; loopblock &lsquo;}&rsquo; 
+          | retstm
+    
+    expstm ::= varlist &lsquo;=&rsquo; explist
+    
+    varlist ::= var {&lsquo;,&rsquo; var}
+    
+    var ::= Name
+          | prefixexp &lsquo;[&rsquo; exp &lsquo;]&rsquo;
+          | prefiexp &lsquo;.&rsquo; Name
+    
+    explist ::= exp {&lsquo;,&rsquo; exp}
+    
+    breakstm ::= <b>break</b> &lsquo;;&rsquo;
+    
+    continuestm ::= <b>continue</b> &lsquo;;&rsquo;
+    
+    indexedname ::= Name {&lsquo;.&rsquo; Name}
+    
+    forinit ::= localdecl
+              | expstm
+    
+    namelist ::= Name {&lsquo;,&rsquo; Name}
+    
+    forexplist ::= exp [&lsquo;,&rsquo; exp [&lsquo;,&rsquo; exp [&lsquo;,&rsquo; exp]]]
+    
+    switchbody ::= &lsquo;{&rsquo; {case exp &lsquo;:&rsquo; {stm}} [<b>default</b> &lsquo;:&rsquo; {stm}] &lsquo;}&rsquo;
+    
+    loopblock ::= {decl} [continuestm]
+                | switchblock
+                | block
+    
+    switchblock ::= {decl} [breakstm]
+                  | block
+
+    retstm ::= <b>return</b> [explist] &lsquo;;&rsquo;
+    
+    exp ::= <b>true</b>
+          | <b>false</b>
+          | <b>nil</b>
+          | '...'
+          | Number
+          | LiteralString
+          | listdef
+          | tabledef
+          | functiondef
+          | classdef
+          | prefixexp
+          | exp binop exp
+          | unop exp
+    
+    prefixexp ::= var
+                | functioncall
+                | &lsquo;(&rsquo; exp &lsquo;)&rsquo;
+                | superexp
+    
+    functioncall ::= prefixexp &lsquo;(&rsquo; [explist] &lsquo;)&rsquo;
+    
+    superexp ::= <b>super</b> [&lsquo;[&rsquo; exp &lsquo;]&rsquo;]
+               | <b>super</b> [&lsquo;.&rsquo; Name]
+               | <b>super</b>
+    
+    listdef ::= &lsquo;[&rsquo; [elementlist] &lsquo;]&rsquo;
+    
+    elementlist ::= exp {sep exp} [sep]
+    
+    tabledef ::= &lsquo;{&rsquo; [fieldlist] &lsquo;}&rsquo;
+    
+    fieldlist ::= field {sep field} [sep]
+    
+    field ::= &lsquo;[&rsquo; exp &lsquo;]&rsquo; &lsquo;=&rsquo; exp
+            | Name &lsquo;=&rsquo; exp
+    
+    sep ::= &lsquo;,&rsquo; | &lsquo;;&rsquo;
+    
+    functiondef ::= <b>fn</b> funcbody
+    
+    funcbody ::= &lsquo;(&rsquo; [parameters] &lsquo;)&rsquo; &lsquo;{&rsquo; block &lsquo;}&rsquo;
+    
+    parameters ::= namelist [&lsquo;,&rsquo; '...']
+                 | '...'
+    
+    classdef ::= <b>class</b> classbody
+    
+    classbody ::= &lsquo;{&rsquo; {method} &lsquo;}&rsquo;
+    
+    method ::= <b>fn</b> Name funcbody
+    
+    binop ::= &lsquo;+&rsquo;
+            | &lsquo;-&rsquo;
+            | &lsquo;*&rsquo;
+            | &lsquo;/&rsquo;
+            | &lsquo;//&rsquo;
+            | &lsquo;**&rsquo;
+            | &lsquo;%&rsquo;
+            | &lsquo;&amp;&rsquo;
+            | &lsquo;~&rsquo;
+            | &lsquo;|&rsquo;
+            | &lsquo;^&rsquo;
+            | &lsquo;&gt;&gt;&rsquo;
+            | &lsquo;&lt;&lt;&rsquo;
+            | &lsquo;..&rsquo;
+            | &lsquo;&lt;&rsquo;
+            | &lsquo;&lt;=&rsquo;
+            | &lsquo;&gt;&rsquo;
+            | &lsquo;&gt;=&rsquo;
+            | &lsquo;==&rsquo;
+            | &lsquo;!=&rsquo;
+            | and
+            | or
+    
+    unop ::= &lsquo;-&rsquo;
+           | &lsquo;!&rsquo;
+           | &lsquo;~&rsquo;
+        </pre>
+        </p>
+
+
+
+
+        <p class="footer">
+        Last update:
+        Wed Apr  9 15:52:43 UTC 2025
+        </p>
+        <!--
+            Last change: release of CScript 1.0.0
+        -->
+
     </body>
 </html>

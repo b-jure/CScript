@@ -178,10 +178,11 @@ int csPR_close(cs_State *C, ptrdiff_t level, int status) {
     CallFrame *old_cf = C->cf;
     for (;;) { /* keep closing upvalues until no more errors */
         struct PCloseData pcd;
-        pcd.level = restorestack(C, level); pcd.status = status;
+        pcd.level = restorestack(C, level);
+        pcd.status = status;
         status = csPR_rawcall(C, closepaux, &pcd);
         if (c_likely(status == CS_OK))
-            return  pcd.status;
+            return pcd.status;
         else /* error occurred; restore saved state and repeat */
             C->cf = old_cf;
     }

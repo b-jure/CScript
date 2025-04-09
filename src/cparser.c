@@ -786,10 +786,6 @@ static void expname(Lexer *lx, ExpInfo *e) {
 }
 
 
-/*
-** explist ::= expr
-**           | expr ',' explist
-*/
 static int explist(Lexer *lx, ExpInfo *e) {
     int n = 1;
     expr(lx, e);
@@ -802,7 +798,6 @@ static int explist(Lexer *lx, ExpInfo *e) {
 }
 
 
-/* indexed ::= '[' expr ']' */
 static void indexed(Lexer *lx, ExpInfo *var, int super) {
     ExpInfo key;
     voidexp(&key);
@@ -814,7 +809,6 @@ static void indexed(Lexer *lx, ExpInfo *var, int super) {
 }
 
 
-/* getfield ::= '.' name */
 static void getfield(Lexer *lx, ExpInfo *v, int super) {
     ExpInfo key;
     voidexp(&key);
@@ -826,11 +820,6 @@ static void getfield(Lexer *lx, ExpInfo *v, int super) {
 
 
 /* TODO(implement OP_CALLSUP) */
-/* 
-** superkw ::= 'super' '.' name 
-**           | 'super' '[' name ']'
-**           | 'super' '[' string ']' 
-*/
 static void superkw(Lexer *lx, ExpInfo *e) {
     if (c_unlikely(lx->ps->cs == NULL))
         csP_semerror(lx, "used 'super' outside of class method definition");
@@ -852,11 +841,6 @@ static void superkw(Lexer *lx, ExpInfo *e) {
 }
 
 
-/*
-** primaryexp ::= '(' expr ')'
-**              | name
-**              | superkw
-*/
 static void primaryexp(Lexer *lx, ExpInfo *e) {
     switch (lx->t.tk) {
     case '(':
@@ -878,10 +862,6 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
 }
 
 
-/* 
-** call ::= '(' ')'
-**        | '(' explist ')' 
-*/
 static void call(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
@@ -904,12 +884,6 @@ static void call(Lexer *lx, ExpInfo *e) {
 }
 
 
-/*
-** suffixedexpr ::= primaryexp
-**               | primaryexp dotaccess
-**               | primaryexp call
-**               | primaryexp indexed
-*/
 static void suffixedexp(Lexer *lx, ExpInfo *e) {
     primaryexp(lx, e);
     for (;;) {
@@ -949,7 +923,6 @@ typedef struct Constructor {
 } Constructor;
 
 
-/* listfield ::= expr */
 static void listfield(Lexer *lx, Constructor *c) {
     expr(lx, &c->u.l.v);
     c->u.l.tostore++;
@@ -983,10 +956,6 @@ static void lastlistfield(FunctionState *fs, Constructor *c) {
 }
 
 
-/*
-** listexp ::= '[' [ listfield [sep] ] ']'
-** sep ::= ',' | ';'
-*/
 static void listexp(Lexer *lx, ExpInfo *l) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
@@ -1010,7 +979,6 @@ static void listexp(Lexer *lx, ExpInfo *l) {
 }
 
 
-/* tabindex ::= '[' expr ']' */
 static void tabindex(Lexer *lx, ExpInfo *e) {
     expectnext(lx, '[');
     expr(lx, e);
@@ -1019,10 +987,6 @@ static void tabindex(Lexer *lx, ExpInfo *e) {
 }
 
 
-/*
-** tabfield ::= name '=' expr
-**            | tabindex '=' expr
-*/
 static void tabfield(Lexer *lx, Constructor *c) {
     FunctionState *fs = lx->fs;
     int sp = fs->sp;
@@ -1046,10 +1010,6 @@ static void tabfield(Lexer *lx, Constructor *c) {
 }
 
 
-/*
-** tableexp ::= '{' [ tabfield { sep tabfield } [sep] ] '}'
-** sep ::= ',' | ';'
-*/
 static void tableexp(Lexer *lx, ExpInfo *t) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
@@ -1069,10 +1029,6 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
 }
 
 
-/* 
-** indexedname ::= name
-**               | name '.' indexedname
-*/
 static OString *indexedname(Lexer *lx, ExpInfo *v, int *leftover) {
     OString *name = str_expectname(lx);
     *leftover = 0;
@@ -1106,7 +1062,6 @@ static int codemethod(FunctionState *fs, ExpInfo *var, c_byte *arrmm) {
 }
 
 
-/* method ::= fn name funcbody */
 static int method(Lexer *lx, c_byte *arrmm) {
     ExpInfo var, dummy;
     int line = lx->line;
@@ -1117,11 +1072,6 @@ static int method(Lexer *lx, c_byte *arrmm) {
 }
 
 
-/* 
-** methods ::= method
-**           | method methods
-**           | empty
-*/
 static int methods(Lexer *lx) {
     c_byte arrmm[CS_MM_N] = {0};
     int i = 0;
@@ -1131,12 +1081,6 @@ static int methods(Lexer *lx) {
 }
 
 
-/* 
-** klass ::= '{' '}'
-**         | '{' methods '}'
-**         | 'inherits' name '{' '}'
-**         | 'inherits' name '{' methods '}'
-*/
 static void klass(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     ParserState *ps = fs->lx->ps;
@@ -1172,20 +1116,6 @@ static void klass(Lexer *lx, ExpInfo *e) {
 }
 
 
-/*
-** simpleexp ::= int
-**              | flt
-**              | string
-**              | nil
-**              | true
-**              | false
-**              | '...'
-**              | listexp
-**              | tableexp
-**              | functionexp
-**              | klassexp
-**              | suffixedexp
-*/
 static void simpleexp(Lexer *lx, ExpInfo *e) {
     switch (lx->t.tk) {
         case TK_INT: {
@@ -1314,31 +1244,6 @@ static const struct {
 #define UNARY_PRIORITY  14  /* priority for unary operators */
 
 
-/*
-** subexpr ::= simpleexp
-**           | '-' simpleexp
-**           | '!' simpleexp
-**           | '~' simpleexp
-**           | simpleexp '+' subexpr
-**           | simpleexp '-' subexpr
-**           | simpleexp '*' subexpr
-**           | simpleexp '/' subexpr
-**           | simpleexp '%' subexpr
-**           | simpleexp '**' subexpr
-**           | simpleexp '>>' subexpr
-**           | simpleexp '<<' subexpr
-**           | simpleexp '==' subexpr
-**           | simpleexp '<' subexpr
-**           | simpleexp '<=' subexpr
-**           | simpleexp '>' subexpr
-**           | simpleexp '>=' subexpr
-**           | simpleexp '&' subexpr
-**           | simpleexp '^' subexpr
-**           | simpleexp '|' subexpr
-**           | simpleexp 'and' subexpr
-**           | simpleexp 'or' subexpr
-**           | simpleexp '..' subexpr
-*/
 static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
     Binopr op;
     Unopr uop;
@@ -1380,13 +1285,6 @@ static void expr(Lexer *lx, ExpInfo *e) {
 ** ---------------------------------------------------------------------- */
 
 
-/* 
-** decl_list ::= decl
-**             | decl decl_list
-**             | decl_list returnstm
-**             | decl_list continuestm
-**             | decl_list breakstm
-*/
 static void decl_list(Lexer *lx, int blocktk) {
     while (!check(lx, TK_EOS) && !(blocktk && check(lx, blocktk))) {
         if (check(lx, TK_RETURN) ||     /* if returnstm... */
@@ -1461,12 +1359,6 @@ struct LHS_assign {
 };
 
 
-/*
-** assign ::= vars '=' explist
-**          | 
-** vars ::= var
-**        | var ',' vars
-*/
 static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
     int left = 0; /* number of values left in the stack after assignment */
     expect_cond(lx, eisvar(&lhs->v), "expect variable");
@@ -1497,10 +1389,6 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
 }
 
 
-/*
-** exprstm ::= call
-**           | assign
-*/
 static void exprstm(Lexer *lx) {
     struct LHS_assign v;
     suffixedexp(lx, &v.v);
@@ -1553,10 +1441,6 @@ static void checkclose(FunctionState *fs, int level) {
 }
 
 
-/* 
-** localstm ::= 'local' idlist ';'
-**            | 'local' idlist '=' explist ';'
-*/
 static void localstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int toclose = -1;
@@ -1589,9 +1473,6 @@ static void localstm(Lexer *lx) {
 }
 
 
-/*
-** localfn ::= 'local' 'fn' name funcbody
-*/
 static void localfn(Lexer *lx) {
     ExpInfo e;
     FunctionState *fs = lx->fs;
@@ -1604,9 +1485,6 @@ static void localfn(Lexer *lx) {
 }
 
 
-/*
-** localclass ::= 'local' 'class' name klass
-*/
 static void localclass(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int cvar = fs->nactlocals; /* class variable index */
@@ -1620,7 +1498,6 @@ static void localclass(Lexer *lx) {
 }
 
 
-/* blockstm ::= '{' stmlist '}' */
 static void blockstm(Lexer *lx) {
     int line = lx->line;
     Scope s;
@@ -1632,11 +1509,6 @@ static void blockstm(Lexer *lx) {
 }
 
 
-/* 
-** paramlist ::= name
-**             | '...'
-**             | name ',' paramlist
-*/
 static void paramlist(Lexer *lx) {
     FunctionState *fs = lx->fs;
     Proto *fn = fs->p;
@@ -1674,7 +1546,6 @@ static void codeclosure(Lexer *lx, ExpInfo *e) {
 }
 
 
-/* funcbody ::= '(' paramlist ')' stmlist */
 static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
     FunctionState newfs;
     Scope scope;
@@ -1699,7 +1570,6 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
 }
 
 
-/* fnstm ::= 'fn' indexedname funcbody */
 static void fnstm(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
     int left;
@@ -1713,7 +1583,6 @@ static void fnstm(Lexer *lx, int linenum) {
 }
 
 
-/* classstm ::= 'class' indexedname klass */
 static void classstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int left;
@@ -1920,17 +1789,6 @@ static void removeliterals(Lexer *lx, int nliterals) {
 }
 
 
-/* 
-** switchbody ::= 'case' ':' expr switchbody
-**              | 'default' ':' switchbody1
-**              | switchstm
-**              | empty
-**
-** switchbody1 ::= stm
-**               | empty
-**
-** switchstm ::= switchbody stm 
-*/
 static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
     FunctionState *fs = lx->fs;
     int ftjmp = NOJMP; /* fall-through jump */
@@ -2013,7 +1871,6 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
 }
 
 
-/* switchstm ::= 'switch' '(' expr ')' '{' switchbody '}' */
 static void switchstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int old_fintestpc = fs->fintestpc;
@@ -2109,9 +1966,6 @@ static void condbody(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond, int isif,
 }
 
 
-/* 
-** ifstm ::= 'if' '(' expr ')' condbody
-*/
 static void ifstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     FuncContext ctxbefore;
@@ -2172,7 +2026,6 @@ static void leaveloop(FunctionState *fs) {
 }
 
 
-/* whilestm ::= 'while' '(' expr ')' condbody */
 static void whilestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     FuncContext ctxbefore;
@@ -2222,7 +2075,6 @@ static int forexplist(Lexer *lx, ExpInfo *e, int limit) {
 }
 
 
-/* foreachstm ::= 'for' 'each' idlist 'in' forexplist '{' stmlist '}' */
 static void foreachstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int nvars = 1; /* iter func result */
@@ -2321,7 +2173,6 @@ void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond, int *clause
 }
 
 
-/* forstm ::= 'for' '(' forinit ';' forcond ';' forlastclause ')' condbody */
 static void forstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
@@ -2349,7 +2200,6 @@ static void forstm(Lexer *lx) {
 }
 
 
-/* loopstm ::= 'loop' stm */
 static void loopstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     struct LoopState ls;
@@ -2367,7 +2217,6 @@ static void loopstm(Lexer *lx) {
 }
 
 
-/* continuestm ::= 'continue' ';' */
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int sp = fs->sp;
@@ -2404,7 +2253,6 @@ static const Scope *getcfscope(const FunctionState *fs) {
 }
 
 
-/* breakstm ::= 'break' ';' */
 static void breakstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     const Scope *cfs = getcfscope(fs); /* control flow scope */
@@ -2418,10 +2266,6 @@ static void breakstm(Lexer *lx) {
 }
 
 
-/* 
-** returnstm ::= 'return' ';' 
-**             | 'return' explist ';'
-*/
 static void returnstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     int first = nvarstack(fs); /* first slot to be returned */
@@ -2443,22 +2287,6 @@ static void returnstm(Lexer *lx) {
 }
 
 
-/* 
-** stm_ ::= fnstm
-**        | classstm
-**        | whilestm
-**        | forstm
-**        | foreachstm
-**        | ifstm
-**        | switchstm
-**        | blockstm
-**        | continuestm
-**        | breakstm
-**        | returnstm
-**        | loopstm
-**        | ';'
-**        | exprstm
-*/
 static void stm_(Lexer *lx) {
     switch (lx->t.tk) {
         case TK_FN: {
@@ -2531,12 +2359,6 @@ static void freestack(FunctionState *fs) {
 }
 
 
-/*
-** decl ::= localstm
-**        | localfn
-**        | localclass
-**        | stm
-*/
 static void decl(Lexer *lx) {
     enterCstack(lx);
     switch (lx->t.tk) {

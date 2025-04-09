@@ -432,7 +432,7 @@ struct cs_Debug {
  | Big Thank You to Lua Developers! |
  \________________________________*/
 /* -----------------------------------------------------------------------
-** Copyright (C) 1994-2020 Lua.org, PUC-Rio.
+** Copyright (C) 1994-2024 Lua.org, PUC-Rio.
 ** Copyright (C) 2024-2025 Jure Bagić
 **
 ** Permission is hereby granted, free of charge, to any person obtaining
