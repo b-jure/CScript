@@ -1,10 +1,10 @@
-if (__POSIX == true)
+if (__POSIX) {
+    assert(typeof(__POSIX) == "number");
     assert(__DLOPEN == true);
-else if (__WINDOWS == true)
+    assert(__WINDOWS == nil and __DLL == nil);
+} else if (__WINDOWS) {
+    assert(typeof(__WINDOWS) == "number");
     assert(__DLL == true);
-else {
-    assert(__POSIX == nil);
-    assert(__DLOPEN == nil);
-    assert(__WINDOWS == nil);
-    assert(__DLL == nil);
-}
+    assert(__POSIX == nil and __DLOPEN == nil);
+} else
+    assert(__POSIX == nil and __DLOPEN == nil and __WINDOWS == nil and __DLL == nil);
