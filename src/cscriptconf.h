@@ -1,5 +1,5 @@
 /*
-** csconf.h
+** cscriptconf.h
 ** CScript configuration
 ** See Copyright Notice in cscript.h
 */
@@ -464,7 +464,7 @@
 
 
 /*
-** @CSL_BUFFERSIZE is the initial buffer size used by the cauxlib
+** @CSL_BUFFERSIZE is the initial buffer size used by the cscriptaux
 ** buffer system.
 */
 #define CSL_BUFFERSIZE      1024

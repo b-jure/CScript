@@ -1,0 +1,6 @@
+local start = os.clock();
+assert(start and typeof(start) == "number");
+for (local i = 0; i < 5000; i = i + 1);
+local end = os.clock();
+assert(end and typeof(end) == "number");
+assert(end - start > 0);

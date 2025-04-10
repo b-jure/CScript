@@ -13,9 +13,9 @@
 #include <locale.h>
 
 #include "cscript.h"
-#include "cauxlib.h"
+#include "cscriptaux.h"
 
-#include "cslib.h"
+#include "cscriptlib.h"
 
 
 /*
@@ -387,7 +387,7 @@ static int os_date(cs_State *C) {
     if (stm == NULL) /* invalid date? */
         return csL_error(C,
                 "date result cannot be represented in this installation");
-    if (strcmp(s, "t") == 0) {
+    if (s[0] == 't' && s[1] == '\0') {
         cs_push_table(C, 9); /* 9 = number of fields */
         set_all_fields(C, stm);
     } else {

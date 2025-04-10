@@ -10,7 +10,7 @@
 
 #include "cmeta.h"
 #include "clexer.h"
-#include "csconf.h"
+#include "cscriptconf.h"
 #include "cstring.h"
 #include "cdebug.h"
 #include "cstate.h"

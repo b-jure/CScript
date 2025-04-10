@@ -1,5 +1,5 @@
 /*
-** cslib.h
+** cscriptlib.h
 ** CScript standard libraries
 ** See Copyright Notice in cscript.h
 */

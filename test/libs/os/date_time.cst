@@ -1,0 +1,151 @@
+local maxint = math.maxint;
+
+local fn testerr(msg, f, ...) {
+    local stat, err = pcall(f, ...);
+    return (!stat and string.find(err, msg));
+}
+
+local fn checkerr(msg, f, ...) {
+    assert(testerr(msg, f, ...));
+}
+
+assert(os.date("") == "");
+assert(os.date("!") == "");
+assert(os.date("\0\0") == "\0\0");
+assert(os.date("!\0\0") == "\0\0");
+local x = string.repeat("a", 10000);
+assert(os.date(x) == x);
+local t = os.time();
+D = os.date("*t", t);
+assert(os.date(string.repeat("%d", 1000), t) ==
+       string.repeat(os.date("%d", t), 1000));
+assert(os.date(string.repeat("%", 200)) == string.repeat("%", 100));
+
+local fn checkDateTable(t) {
+    assert(t);
+    __G.D = os.date("t", t);
+    assert(os.time(D) == t);
+    local x = os.date("assert(D.year==%Y and D.month==%m and D.day==%d and " ..
+                      "D.hour==%H and D.min==%M and D.sec==%S and " ..
+                      "D.wday==%w+1 and D.yday==%j);", t);
+    print(x);
+    print(load(x));
+    load(x)();
+    __G.D = nil;
+}
+
+checkDateTable(os.time());
+checkDateTable(0);
+checkDateTable(1);
+checkDateTable(1000);
+checkDateTable(0x7fffffff);
+checkDateTable(0x80000000);
+
+checkerr("invalid conversion specifier", os.date, "%");
+checkerr("invalid conversion specifier", os.date, "%9");
+checkerr("invalid conversion specifier", os.date, "%");
+checkerr("invalid conversion specifier", os.date, "%O");
+checkerr("invalid conversion specifier", os.date, "%E");
+checkerr("invalid conversion specifier", os.date, "%Ea");
+
+checkerr("not an integer", os.time, {year=1000, month=1, day=1, hour="x"});
+checkerr("not an integer", os.time, {year=1000, month=1, day=1, hour=1.5});
+
+checkerr("missing", os.time, {hour = 12});  # missing date
+
+/* assuming 'int' is 4 byte */
+checkerr("field 'year' is out-of-bound", os.time,
+         {year = -(1 << 31) + 1899, month = 1, day = 1});
+checkerr("field 'year' is out-of-bound", os.time,
+         {year = -(1 << 31), month = 1, day = 1});
+
+if (math.maxint > 2**31) # have larger cs_Integer?
+    checkerr("field 'year' is out-of-bound", os.time,
+             {year = (1 << 31) + 1900, month = 1, day = 1});
+
+
+if (__POSIX) {
+    /* test Posix-specific modifiers */
+    assert(typeof(os.date("%Ex")) == "string");
+    assert(typeof(os.date("%Oy")) == "string");
+
+    /* test large dates (assume at least 4-byte ints and time_t) */
+    local t0 = os.time({year = 1970, month = 1, day = 0});
+    local t1 = os.time({year = 1970, month = 1, day = 0, sec = (1 << 31) - 1});
+    assert(t1 - t0 == (1 << 31) - 1);
+    t0 = os.time({year = 1970, month = 1, day = 1});
+    t1 = os.time({year = 1970, month = 1, day = 1, sec = -(1 << 31)});
+    assert(t1 - t0 == -(1 << 31));
+
+    /* test out-of-range dates (at least for Unix) */
+    if (maxint >= 2**62) {
+        /* no arith overflows */
+        checkerr("out-of-bound", os.time, {year = -maxint, month = 1, day = 1});
+        /* assume 4-byte ints */
+        if (testerr("out-of-bound", os.date, "%Y", 2**40)) {
+            /* time_t has 4 bytes and therefore cannot represent year 4000 */
+            checkerr("cannot be represented", os.time, {year=4000, month=1, day=1});
+        } else {
+            /* time_t has 8 bytes; an int year cannot represent a huge time */
+            checkerr("cannot be represented", os.date, "%Y", 2**60);
+            /* this is the maximum year */
+            assert(tonumber(os.time({year=(1 << 31) + 1899, month=12, day=31,
+                            hour=23, min=59, sec=59})));
+            /* this is too much */
+            checkerr("represented", os.time, {year=(1 << 31) + 1899, month=12,
+                    day=31, hour=23, min=59, sec=60});
+        }
+        /* internal 'int' fields cannot hold these values */
+        checkerr("field 'day' is out-of-bound", os.time,
+                {year = 0, month = 1, day = 2**32});
+        checkerr("field 'month' is out-of-bound", os.time,
+                {year = 0, month = -((1 << 31) + 1), day = 1});
+        checkerr("field 'year' is out-of-bound", os.time,
+                {year = (1 << 31) + 1900, month = 1, day = 1});
+    } else { # 8-byte ints
+        /* assume time_t has 8 bytes too */
+        assert(tonum(os.date("%Y", 2**60)));
+        /* but still cannot represent a huge year */
+        checkerr("cannot be represented", os.time, {year=2**60, month=1, day=1});
+    }
+}
+
+
+{
+    local D = os.date("t");
+    local t = os.time(D);
+    if (D.isdst == nil)
+        print("no daylight saving information");
+    else
+        assert(typeof(D.isdst) == "boolean");
+    D.isdst = nil;
+    local t1 = os.time(D);
+    assert(t == t1);  # if 'isdst' is absent it uses correct default
+}
+
+local D = os.date("t");
+t = os.time(D);
+D.year = D.year-1;
+local t1 = os.time(D);
+/* allow for leap years */
+assert(math.abs(os.difftime(t,t1)/(24*3600) - 365) < 2);
+
+/* should not take more than 1 second to execute these two lines */
+t = os.time();
+t1 = os.time(os.date("t"));
+local diff = os.difftime(t1,t);
+assert(0 <= diff and diff <= 1);
+diff = os.difftime(t,t1);
+assert(-1 <= diff and diff <= 0);
+
+t1 = os.time({year=2000, month=10, day=1, hour=23, min=12});
+local t2 = os.time({year=2000, month=10, day=1, hour=23, min=10, sec=19});
+assert(os.difftime(t1,t2) == 60*2-19);
+
+/* table fields are normalized */
+t1 = {year = 2005, month = 1, day = 1, hour = 1, min = 0, sec = -3602};
+os.time(t1);
+assert(t1.day == 31 and t1.month == 12 and t1.year == 2004 and
+       t1.hour == 23 and t1.min == 59 and t1.sec == 58 and
+       t1.yday == 366);
+print("__POSIX: " .. tostr(__POSIX));

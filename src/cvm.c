@@ -12,7 +12,7 @@
 
 #include "capi.h"
 #include "clist.h"
-#include "csconf.h"
+#include "cscriptconf.h"
 #include "cfunction.h"
 #include "cgc.h"
 #include "ctable.h"

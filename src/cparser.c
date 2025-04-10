@@ -9,7 +9,7 @@
 
 
 #include "ccode.h"
-#include "csconf.h"
+#include "cscriptconf.h"
 #include "cgc.h"
 #include "clexer.h"
 #include "climits.h"

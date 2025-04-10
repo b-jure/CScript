@@ -15,8 +15,8 @@
 
 #include "cscript.h"
 
-#include "cauxlib.h"
-#include "cslib.h"
+#include "cscriptaux.h"
+#include "cscriptlib.h"
 #include "climits.h"
 
 

@@ -108,7 +108,7 @@
         Standard CScript uses 64-bit integers and double-precision (64-bit)
         floats. Configuration header can be tinkered to allow 32-bit integers
         and/or single-precision (32-bit) floats, but this but would probably
-        require internal patches (see <code>csconf.h</code> if interested).
+        require internal patches (see <code>cscriptconf.h</code> if interested).
         <br/>
         Any overflow when manipulating integer values <em>wrap around</em>,
         according to the usual rules of two-complement arithmetics.
@@ -812,6 +812,8 @@
         CScript also accepts hexadecimal constants, which start with
         <code>0x</code> or <code>0X</code>, and octal constants, which
         start with <code>0</code>.
+        Octal constants (integers that start with leading zero) that contain
+        decimal digit(s) are interpreted as decimal numbers.
         A <em>constant</em> <code>inf</code> or <code>infinity</code>
         represent positive infinity (putting '<code>-</code>' in front denotes
         negative infinity).
@@ -2360,7 +2362,7 @@
         <br/><br/>
         By default this type is <code>long long</code>,
         (usually a 64-bit two-complement integer),
-        (See <code>CS_INT_TYPE</code> in <code>csconf.h</code>.)
+        (See <code>CS_INT_TYPE</code> in <code>cscriptconf.h</code>.)
         <br/><br/>
         CScript also defines the constants
         <a name="CS_INTEGER_MIN"><code>CS_INTEGER_MIN</code></a> and
@@ -2383,7 +2385,7 @@
         <br/><br/>
         By default this type is double, but that can be changed to a single
         float or a long double.
-        (See <code>CS_FLOAT_TYPE</code> in <code>csconf.h</code>.)
+        (See <code>CS_FLOAT_TYPE</code> in <code>cscriptconf.h</code>.)
         </p>
 
         <!-- cs_CFunction -->
@@ -4316,7 +4318,7 @@ typedef enum cs_MM {
         <br/><br/>
         By default, this area has the size of a pointer to void, but you can
         recompile CScript with a different size for this area.
-        (See <code>CS_EXTRASPACE</code> in <code>csconf.h</code>.)
+        (See <code>CS_EXTRASPACE</code> in <code>cscriptconf.h</code>.)
         </p>
 
         <!-- cs_getntop -->
@@ -4730,7 +4732,7 @@ typedef enum cs_MM {
         higher-level functions for some common tasks.
         <br/><br/>
         All functions and types from the auxiliary library are defined in
-        header file <code>cauxlib.h</code> and have a prefix <code>csL_</code>.
+        header file <code>cscriptaux.h</code> and have a prefix <code>csL_</code>.
         <br/><br/>
         All functions in the auxiliary library are built on top of the basic
         API, and so they provide nothing that cannot be done with that API.
@@ -5790,7 +5792,7 @@ typedef struct csL_Stream {
         <a name="csopen_math"><code>csopen_math</code></a> (for the math library),
         <a name="csopen_io"><code>csopen_io</code></a> (for the I/O library),
         <a name="csopen_os"><code>csopen_os</code></a> (for the operating system library),
-        These functions are declared in <a name="cslib.h"><code>cslib.h</code></a>
+        These functions are declared in <a name="cscriptlib.h"><code>cscriptlib.h</code></a>
         </p>
 
 
@@ -6210,6 +6212,44 @@ typedef struct csL_Stream {
         The current value of this variable is "<code>CScript 1.0</code>".
         </p>
 
+        <!-- __POSIX -->
+        <hr/><h3><a name="__POSIX"><code>__POSIX</code></a></h3>
+        A global variable (not a function) that is <b>true</b> if the
+        current environment is compatible with POSIX APIs.
+        Otherwise this is set to <b>nil</b>.
+        </p>
+
+        <!-- __DLOPEN -->
+        <hr/><h3><a name="__DLOPEN"><code>__DLOPEN</code></a></h3>
+        A global variable (not a function) that is <b>true</b> if the
+        current environment has access to the library for dynamic linking
+        used for POSIX compatible systems.
+        This means that opening and closing C shared libraries is enabled
+        in the current CScript installation.
+        If <a href="#__POSIX"><code>__POSIX</code></a> is <b>true</b>, then
+        this should also be <b>true</b>.
+        Otherwise this is set to <b>nil</b>.
+        </p>
+
+        <!-- __WINDOWS -->
+        <hr/><h3><a name="__WINDOWS"><code>__WINDOWS</code></a></h3>
+        A global variable (not a function) that is <b>true</b> if the
+        current environment is Windows environment.
+        Otherwise this is set to <b>nil</b>.
+        </p>
+
+        <!-- __DLL -->
+        <hr/><h3><a name="__DLL"><code>__DLL</code></a></h3>
+        A global variable (not a function) that is <b>true</b> if the
+        current environment has access to the library for dynamic linking
+        used for Windows systems.
+        This means that opening and closing C shared libraries is enabled
+        in the current CScript installation.
+        If <a href="#__WINDOWS"><code>__WINDOWS</code></a> is <b>true</b>,
+        then this should also be <b>true</b>.
+        Otherwise this is set to <b>nil</b>.
+        </p>
+
         <!-- __getidx -->
         <hr/><h3><a name="__getidx"><code>__getidx</code></a></h3>
         A global variable (not a function) that holds integer index that
@@ -6502,7 +6542,7 @@ typedef struct csL_Stream {
         <a name="CS_CPATH_1_0"><code>CS_CPATH_1_0</code></a>,
         or the environment variable
         <a name="CS_CPATH"><code>CS_CPATH</code></a>,
-        or a default path defined in <code>csconf.h</code>.
+        or a default path defined in <code>cscriptconf.h</code>.
         </p>
 
         <hr><h3><a name="package.loaded"><code>package.loaded</code></a></h3>
@@ -6568,7 +6608,7 @@ typedef struct csL_Stream {
         At start-up, CScript initializes this variable with the value of the
         environment variable <a name="CS_PATH_1_0"><code>CS_PATH_1_0</code></a>
         or the environment variable <a name="CS_PATH"><code>CS_PATH</code></a>
-        or with a default path defined in <code>csconf.h</code>, if those
+        or with a default path defined in <code>cscriptconf.h</code>, if those
         environment variables are not defined.
         A "<code>;;</code>" in the value of the environment variable is
         replaced by the default path.
@@ -8169,7 +8209,11 @@ typedef struct csL_Stream {
         As usual in extended BNF, {A} means 0 or more As, and [A] means an
         optional A.
         (For operator precedences, see <a href="#3.4.7">&sect;3.4.7</a>;
+<<<<<<< Updated upstream
         for a description of the terminals Name, Numeral,
+=======
+        for a description of the terminals Name, Number,
+>>>>>>> Stashed changes
         and LiteralString, see <a href="#3.1">&sect;3.1</a>.)
         <br/><br/>
 
@@ -8324,7 +8368,11 @@ typedef struct csL_Stream {
 
         <p class="footer">
         Last update:
+<<<<<<< Updated upstream
         Wed Apr  9 15:52:43 UTC 2025
+=======
+        Wed Apr 09 15:52:43 UTC 2025
+>>>>>>> Stashed changes
         </p>
         <!--
             Last change: release of CScript 1.0.0

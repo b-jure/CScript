@@ -1,5 +1,5 @@
 /*
-** cauxlib.h
+** cscriptaux.h
 ** Auxiliary library
 ** See Copyright Notice in cscript.h
 */

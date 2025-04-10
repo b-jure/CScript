@@ -1,5 +1,5 @@
 /*
-** cauxlib.c
+** cscriptaux.c
 ** Auxiliary library
 ** See Copyright Notice in cscript.h
 */
@@ -14,7 +14,7 @@
 
 #include "cscript.h"
 
-#include "cauxlib.h"
+#include "cscriptaux.h"
 #include "climits.h"
 
 

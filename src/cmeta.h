@@ -7,7 +7,7 @@
 #ifndef CMETA_H
 #define CMETA_H
 
-#include "csconf.h"
+#include "cscriptconf.h"
 #include "cscript.h"
 #include "cobject.h"
 

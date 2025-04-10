@@ -598,10 +598,10 @@ convert:
 
 /* read base 8 (octal) numeral */
 static int read_octnum(Lexer *lx, Literal *k) {
-    if (c_unlikely(!cisodigit(lx->c))) /* first digit is not octal digit? */
-        lexerror(lx, "octal constant expects at least one digit", TK_INT);
-    read_digits(lx, DigOct, 0);
-    if (cisalpha(lx->c)) /* numeral touching a letter? */
+    int digits = read_digits(lx, DigOct, 0);
+    if (digits == 0 || cisdigit(lx->c)) /* no digits or has decimal digit? */
+        return read_decnum(lx, k, lx->c); /* try as decimal numeral */
+    else if (cisalpha(lx->c)) /* octal numeral touching a letter? */
         save_and_advance(lx); /* force an error */
     return lexstr2num(lx, k);
 }

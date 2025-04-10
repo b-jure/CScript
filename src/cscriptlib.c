@@ -1,5 +1,5 @@
 /*
-** cslib.h
+** cscriptlib.c
 ** CScript standard libraries
 ** See Copyright Notice in cscript.h
 */
@@ -8,8 +8,8 @@
 #define CS_LIB
 
 
-#include "cslib.h"
-#include "cauxlib.h"
+#include "cscriptlib.h"
+#include "cscriptaux.h"
 
 
 static const cs_Entry loadedlibs[] = {

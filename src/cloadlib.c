@@ -12,8 +12,8 @@
 
 #include "cscript.h"
 
-#include "cauxlib.h"
-#include "cslib.h"
+#include "cscriptaux.h"
+#include "cscriptlib.h"
 
 
 /* prefix for open functions in C libraries */

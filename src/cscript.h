@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <stdarg.h>
 
-#include "csconf.h"
+#include "cscriptconf.h"
 
 
 #define CS_VERSION_MAJOR        "1"

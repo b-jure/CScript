@@ -10,8 +10,8 @@
 
 #include "cscript.h"
 
-#include "cauxlib.h"
-#include "cslib.h"
+#include "cscriptaux.h"
+#include "cscriptlib.h"
 #include "climits.h"
 
 
@@ -560,6 +560,11 @@ static const cs_Entry basic_funcs[] = {
     /* placeholders */
     {CS_GNAME, NULL},
     {"__VERSION", NULL},
+    /* compatibility flags */
+    {"__POSIX", NULL},
+    {"__DLOPEN", NULL},
+    {"__WINDOWS", NULL},
+    {"__DLL", NULL},
     /* metalist indices */
     {"__getidx", NULL},
     {"__setidx", NULL},
@@ -589,6 +594,32 @@ static const cs_Entry basic_funcs[] = {
     {"__N", NULL},
     {NULL, NULL},
 };
+
+
+static void setcompat(cs_State *C, const char *have, const char *missing) {
+    if (have) {
+        cs_push_bool(C, 1);
+        cs_set_fieldstr(C, -2, have);
+    }
+    cs_push_nil(C);
+    cs_set_fieldstr(C, -2, missing);
+}
+
+
+static void set_compat_flags(cs_State *C) {
+    #if (defined(CS_USE_POSIX)) /* posix + dlopen */
+        setcompat(C, "__WINDOWS", "__POSIX");
+        setcompat(C, "__DLL", "__DLOPEN");
+    #elif (defined(CS_USE_WINDOWS)) /* windows + dll */
+        setcompat(C, "__POSIX", "__WINDOWS");
+        setcompat(C, "__DLOPEN", "__DLL");
+    #else /* iso C compatibility */
+        setcompat(C, NULL, "__POSIX");
+        setcompat(C, NULL, "__DLOPEN");
+        setcompat(C, NULL, "__WINDOWS");
+        setcompat(C, NULL, "__DLL");
+    #endif
+}
 
 
 static void set_metalist_indices(cs_State *C) {
@@ -621,6 +652,8 @@ CSMOD_API int csopen_basic(cs_State *C) {
     /* set global __VERSION */
     cs_push_literal(C, CS_VERSION);
     cs_set_fieldstr(C, -2, "__VERSION");
+    /* set compatibility flags */
+    set_compat_flags(C);
     /* set global metalist indices */
     set_metalist_indices(C);
     return 1;

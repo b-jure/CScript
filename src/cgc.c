@@ -10,7 +10,7 @@
 
 #include "cgc.h"
 #include "clist.h"
-#include "csconf.h"
+#include "cscriptconf.h"
 #include "cfunction.h"
 #include "climits.h"
 #include "cmeta.h"

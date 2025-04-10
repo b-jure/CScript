@@ -1,0 +1,10 @@
+if (__POSIX == true)
+    assert(__DLOPEN == true);
+else if (__WINDOWS == true)
+    assert(__DLL == true);
+else {
+    assert(__POSIX == nil);
+    assert(__DLOPEN == nil);
+    assert(__WINDOWS == nil);
+    assert(__DLL == nil);
+}
