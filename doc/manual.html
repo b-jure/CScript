@@ -6214,35 +6214,45 @@ typedef struct csL_Stream {
 
         <!-- __POSIX -->
         <hr/><h3><a name="__POSIX"><code>__POSIX</code></a></h3>
-        A global variable (not a function) that is <b>true</b> if the
-        current environment is compatible with POSIX APIs.
+        A global variable (not a function) that is set to an integer that
+        corresponds to the release year of the POSIX specification.
+        For example, if the CScript library or the standalone interpreter
+        is internally using API's defined by POSIX 2004 revision, then this
+        would have the integer value <code>2004</code>.
         Otherwise this is set to <b>nil</b>.
         </p>
 
         <!-- __DLOPEN -->
         <hr/><h3><a name="__DLOPEN"><code>__DLOPEN</code></a></h3>
         A global variable (not a function) that is <b>true</b> if the
-        current environment has access to the library for dynamic linking
-        used for POSIX compatible systems.
+        current installation has access to the library for dynamic linking
+        used for POSIX compatible systems (<code>libdl</code>).
         This means that opening and closing C shared libraries is enabled
         in the current CScript installation.
-        If <a href="#__POSIX"><code>__POSIX</code></a> is <b>true</b>, then
-        this should also be <b>true</b>.
+        If <a href="#__POSIX"><code>__POSIX</code></a> is not <b>nil</b>,
+        then this should be set to <b>true</b>.
         Otherwise this is set to <b>nil</b>.
         </p>
 
         <!-- __WINDOWS -->
         <hr/><h3><a name="__WINDOWS"><code>__WINDOWS</code></a></h3>
-        A global variable (not a function) that is <b>true</b> if the
-        current environment is Windows environment.
-        Otherwise this is set to <b>nil</b>.
+        A global variable (not a function) that is set to an integer that
+        corresponds to the major and minor version of the Microsoft
+        C/C++ compiler.
+        For example, if the version number of Microsoft C/C++ compiler is
+        17.00.51106.1, the value of
+        <a href="#__WINDOWS"><code>__WINDOWS</code></a> will be
+        <code>1700</code>.
+        Otherwise, if the current installation wasn't built with
+        Microsoft C/C++ compiler, or it is not using Windows API, then this
+        is set to <b>nil</b>.
         </p>
 
         <!-- __DLL -->
         <hr/><h3><a name="__DLL"><code>__DLL</code></a></h3>
         A global variable (not a function) that is <b>true</b> if the
-        current environment has access to the library for dynamic linking
-        used for Windows systems.
+        current installation has access to the Windows functions for
+        dynamic linking.
         This means that opening and closing C shared libraries is enabled
         in the current CScript installation.
         If <a href="#__WINDOWS"><code>__WINDOWS</code></a> is <b>true</b>,

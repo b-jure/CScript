@@ -4,6 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
+#include "cprefix.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

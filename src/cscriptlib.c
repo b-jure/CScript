@@ -7,6 +7,7 @@
 
 #define CS_LIB
 
+#include "cprefix.h"
 
 #include "cscriptlib.h"
 #include "cscriptaux.h"

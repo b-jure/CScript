@@ -6,6 +6,8 @@
 
 #define CS_LIB
 
+#include "cprefix.h"
+
 #include <string.h>
 
 #include "cscript.h"
@@ -596,11 +598,9 @@ static const cs_Entry basic_funcs[] = {
 };
 
 
-static void setcompat(cs_State *C, const char *have, const char *missing) {
-    if (have) {
-        cs_push_bool(C, 1);
+static void set_compat(cs_State *C, const char *have, const char *missing) {
+    if (have)
         cs_set_fieldstr(C, -2, have);
-    }
     cs_push_nil(C);
     cs_set_fieldstr(C, -2, missing);
 }
@@ -608,16 +608,20 @@ static void setcompat(cs_State *C, const char *have, const char *missing) {
 
 static void set_compat_flags(cs_State *C) {
     #if (defined(CS_USE_POSIX)) /* posix + dlopen */
-        setcompat(C, "__WINDOWS", "__POSIX");
-        setcompat(C, "__DLL", "__DLOPEN");
+        cs_push_integer(C, CS_POSIX_YEAR);
+        set_compat(C, "__POSIX", "__WINDOWS");
+        cs_push_bool(C, 1);
+        set_compat(C, "__DLOPEN", "__DLL");
     #elif (defined(CS_USE_WINDOWS)) /* windows + dll */
-        setcompat(C, "__POSIX", "__WINDOWS");
-        setcompat(C, "__DLOPEN", "__DLL");
+        cs_push_integer(C, _MSC_VER);
+        set_compat(C, "__WINDOWS", "__POSIX");
+        cs_push_bool(C, 1);
+        set_compat(C, "__DLL", "__DLOPEN");
     #else /* iso C compatibility */
-        setcompat(C, NULL, "__POSIX");
-        setcompat(C, NULL, "__DLOPEN");
-        setcompat(C, NULL, "__WINDOWS");
-        setcompat(C, NULL, "__DLL");
+        set_compat(C, NULL, "__POSIX");
+        set_compat(C, NULL, "__DLOPEN");
+        set_compat(C, NULL, "__WINDOWS");
+        set_compat(C, NULL, "__DLL");
     #endif
 }
 

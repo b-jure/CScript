@@ -1,6 +1,8 @@
 
 #define CS_LIB
 
+#include "cprefix.h"
+
 #include <float.h>
 #include <math.h>
 #include <limits.h>

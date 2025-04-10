@@ -7,6 +7,8 @@
 
 #define CS_CORE
 
+#include "cprefix.h"
+
 #include <string.h>
 
 #include "ctable.h"

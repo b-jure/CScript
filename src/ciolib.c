@@ -6,9 +6,11 @@
 
 #define CS_LIB
 
-#include <errno.h>
-#include <stdio.h>
+#include "cprefix.h"
+
 #include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
 #include <string.h>
 #include <ctype.h>
 #include <locale.h>

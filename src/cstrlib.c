@@ -7,6 +7,7 @@
 #define cstrlib_c
 #define CS_LIB
 
+#include "cprefix.h"
 
 #include <ctype.h>
 #include <float.h>

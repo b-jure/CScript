@@ -8,6 +8,7 @@
 #define cobject_c
 #define CS_CORE
 
+#include "cprefix.h"
 
 #include "climits.h"
 #include "cobject.h"

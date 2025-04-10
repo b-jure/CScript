@@ -5,12 +5,13 @@
 */
 
 
-#include "cscript.h"
 #define CS_CORE
 
+#include "cprefix.h"
 
 #include <string.h>
 
+#include "cscript.h"
 #include "cdebug.h"
 #include "capi.h"
 #include "ccode.h"

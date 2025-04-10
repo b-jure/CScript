@@ -8,6 +8,7 @@
 #define cstring_c
 #define CS_CORE
 
+#include "cprefix.h"
 
 #include "cstate.h"
 #include "cscript.h"

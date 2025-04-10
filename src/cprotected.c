@@ -7,8 +7,10 @@
 
 #define CS_CORE
 
+#include "cprefix.h"
 
-#include <stdlib.h> /* for 'abort()' */
+#include <setjmp.h>
+#include <stdlib.h>
 
 #include "cprotected.h"
 #include "cmem.h"
@@ -46,7 +48,10 @@
 
 #elif defined(CS_USE_POSIX)				/* }{ */
 
-/* in POSIX, try _longjmp/_setjmp (more efficient) */
+/*
+** In POSIX, try _longjmp/_setjmp
+** (more efficient, does not manipulate signal mask).
+*/
 #define CSI_THROW(C,c)		_longjmp((c)->buf, 1)
 #define CSI_TRY(C,c,a)		if (_setjmp((c)->buf) == 0) { a }
 #define csi_jmpbuf		jmp_buf

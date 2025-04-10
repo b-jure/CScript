@@ -7,6 +7,7 @@
 
 #define CS_CORE
 
+#include "cprefix.h"
 
 #include "ccode.h"
 #include "cscriptconf.h"

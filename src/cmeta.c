@@ -7,6 +7,7 @@
 
 #define CS_CORE
 
+#include "cprefix.h"
 
 #include "cmeta.h"
 #include "clexer.h"

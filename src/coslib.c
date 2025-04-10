@@ -6,8 +6,11 @@
 
 #define CS_LIB
 
-#include <errno.h>
+#include "cprefix.h"
+
 #include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
 #include <time.h>
 #include <string.h>
 #include <locale.h>
@@ -104,8 +107,8 @@
 #endif
 
 #define c_tmpnam(b, e) \
-    { strcpy(buff, C_TEMPLATENAME); \
-      e = mkstemp(C_TEMPLATENAME); \
+    { strcpy(b, C_TEMPLATENAME); \
+      e = mkstemp(b); \
       if (e != -1) close(e); \
       e = (e == -1); }
 
@@ -154,6 +157,7 @@ static int c_setenv(cs_State *C, const char *name, const char *value) {
 
 static int c_setenv(cs_State *C, const char *name, const char *value) {
     int res;
+    (void)(C); /* unused */
     if (*value == '\0' && strlen(value) == 0)
         res = unsetenv(name);
     else
