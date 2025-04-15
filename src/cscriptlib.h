@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CLIB_H
-#define CLIB_H
+#ifndef cscriptlib_h
+#define cscriptlib_h
 
 
 #include "cscript.h"
@@ -31,6 +31,9 @@ CSMOD_API int csopen_io(cs_State *C);
 
 #define CS_OSLIBNAME    "os"
 CSMOD_API int csopen_os(cs_State *C);
+
+#define CS_REGLIBNAME   "reg"
+CSMOD_API int csopen_reg(cs_State *C);
 
 
 /* open all previous libraries */

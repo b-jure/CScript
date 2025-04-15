@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CMEM_H
-#define CMEM_H
+#ifndef cmem_h
+#define cmem_h
 
 
 #include "climits.h"

@@ -9,8 +9,16 @@ cscript_bin = "./cscript"
 # Root test directory
 cscript_root = "./test"
 
-cscript_total_fail = 0      # total failed tests
-cscript_total_pass = 0      # total passed tests
+# Script file extension
+cscript_extension = "cscript"
+
+# Total number of failed/passed tests
+cscript_total_fail = 0
+cscript_total_pass = 0
+
+# List of failed tests
+cscript_failed_tests = []
+
 
 # Return path relative to root test directory
 def rootpath(path):
@@ -19,12 +27,12 @@ def rootpath(path):
 # Testsuites
 cscript_testsuite_paths = {
     "syntax": rootpath("syntax"),
-    "basic": rootpath("libs/basic"),
-    "package": rootpath("libs/package"),
-    "string": rootpath("libs/string"),
-    "math": rootpath("libs/math"),
-    "io": rootpath("libs/io"),
-    "os": rootpath("libs/os"),
+    "basic": rootpath("stdlibs/basic"),
+    "package": rootpath("stdlibs/package"),
+    "string": rootpath("stdlibs/string"),
+    "math": rootpath("stdlibs/math"),
+    "io": rootpath("stdlibs/io"),
+    "os": rootpath("stdlibs/os"),
 }
 
 
@@ -35,7 +43,6 @@ def green(s):
     return f"\x1b[32m{s}\x1b[0m"
 def yellow(s):
     return f"\x1b[33m{s}\x1b[0m"
-
 
 
 def begin_testsuite(testsuite, path, total):
@@ -75,6 +82,7 @@ def print_test_result(test, code):
             print('{:60} {}'.format(red(tname), red("fail")))
         else:
             print('{:60} {}'.format(tname, "fail"))
+        cscript_failed_tests.append(red(tname));
         return 1
     else:
         if isatty:
@@ -86,7 +94,7 @@ def print_test_result(test, code):
 
 
 def run_cscript_testsuite(testsuite, path):
-    tests = list(path.glob('*.cst'))
+    tests = list(path.glob(f"*.{cscript_extension}"))
     total = len(tests)
     failed = 0
     begin_testsuite(testsuite, path, total)
@@ -128,6 +136,8 @@ def run_tests():
     print(f">> Total tests  ===> {yellow(cscript_total_pass+cscript_total_fail)}")
     print(f">> Total passed ===> {green(cscript_total_pass)}")
     print(f">> Total fail   ===> {red(cscript_total_fail)}")
+    for test in cscript_failed_tests:
+        print(f"\t{test}");
 
 
 run_tests()

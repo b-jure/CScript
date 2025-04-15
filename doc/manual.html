@@ -6200,21 +6200,21 @@ typedef struct csL_Stream {
         <!-- __G -->
         <hr/><h3><a name="__G"><code>__G</code></a></h3>
         <p>
-        A global variable (not a function) that holds the global table
+        A global variable that holds the global table
         (see <a href="#2.2">&sect;2.2</a>).
         </p>
 
         <!-- __VERSION -->
         <hr/><h3><a name="__VERSION"><code>__VERSION</code></a></h3>
-        A global variable (not a function) that holds a string containing
-        the running CScript version.
+        A global variable that holds a string containing the running CScript
+        version.
         <br/>
         The current value of this variable is "<code>CScript 1.0</code>".
         </p>
 
         <!-- __POSIX -->
         <hr/><h3><a name="__POSIX"><code>__POSIX</code></a></h3>
-        A global variable (not a function) that is set to an integer that
+        A global variable that is set to an integer that
         corresponds to the release year of the POSIX specification.
         For example, if the CScript library or the standalone interpreter
         is internally using API's defined by POSIX 2004 revision, then this
@@ -6222,21 +6222,9 @@ typedef struct csL_Stream {
         Otherwise this is set to <b>nil</b>.
         </p>
 
-        <!-- __DLOPEN -->
-        <hr/><h3><a name="__DLOPEN"><code>__DLOPEN</code></a></h3>
-        A global variable (not a function) that is <b>true</b> if the
-        current installation has access to the library for dynamic linking
-        used for POSIX compatible systems (<code>libdl</code>).
-        This means that opening and closing C shared libraries is enabled
-        in the current CScript installation.
-        If <a href="#__POSIX"><code>__POSIX</code></a> is not <b>nil</b>,
-        then this should be set to <b>true</b>.
-        Otherwise this is set to <b>nil</b>.
-        </p>
-
         <!-- __WINDOWS -->
         <hr/><h3><a name="__WINDOWS"><code>__WINDOWS</code></a></h3>
-        A global variable (not a function) that is set to an integer that
+        A global variable that is set to an integer that
         corresponds to the major and minor version of the Microsoft
         C/C++ compiler.
         For example, if the version number of Microsoft C/C++ compiler is
@@ -6248,195 +6236,183 @@ typedef struct csL_Stream {
         is set to <b>nil</b>.
         </p>
 
-        <!-- __DLL -->
-        <hr/><h3><a name="__DLL"><code>__DLL</code></a></h3>
-        A global variable (not a function) that is <b>true</b> if the
-        current installation has access to the Windows functions for
-        dynamic linking.
-        This means that opening and closing C shared libraries is enabled
-        in the current CScript installation.
-        If <a href="#__WINDOWS"><code>__WINDOWS</code></a> is <b>true</b>,
-        then this should also be <b>true</b>.
-        Otherwise this is set to <b>nil</b>.
-        </p>
-
         <!-- __getidx -->
         <hr/><h3><a name="__getidx"><code>__getidx</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__getidx</code> metamethod in the
         metalist.
         </p>
 
         <!-- __setidx -->
         <hr/><h3><a name="__setidx"><code>__setidx</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__setidx</code> metamethod in the
         metalist.
         </p>
 
         <!-- __gc -->
         <hr/><h3><a name="__gc"><code>__gc</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__gc</code> metamethod in the
         metalist.
         </p>
 
         <!-- __close -->
         <hr/><h3><a name="__close"><code>__close</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__close</code> metamethod in the
         metalist.
         </p>
 
         <!-- __call -->
         <hr/><h3><a name="__call"><code>__call</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__call</code> metamethod in the
         metalist.
         </p>
 
         <!-- __init -->
         <hr/><h3><a name="__init"><code>__init</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__init</code> metamethod in the
         metalist.
         </p>
 
         <!-- __concat -->
         <hr/><h3><a name="__concat"><code>__concat</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__concat</code> metamethod in the
         metalist.
         </p>
 
         <!-- __add -->
         <hr/><h3><a name="__add"><code>__add</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__add</code> metamethod in the
         metalist.
         </p>
 
         <!-- __sub -->
         <hr/><h3><a name="__sub"><code>__sub</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__sub</code> metamethod in the
         metalist.
         </p>
 
         <!-- __mul -->
         <hr/><h3><a name="__mul"><code>__mul</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__mul</code> metamethod in the
         metalist.
         </p>
 
         <!-- __div -->
         <hr/><h3><a name="__div"><code>__div</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__div</code> metamethod in the
         metalist.
         </p>
 
         <!-- __idiv -->
         <hr/><h3><a name="__idiv"><code>__idiv</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__idiv</code> metamethod in the
         metalist.
         </p>
 
         <!-- __mod -->
         <hr/><h3><a name="__mod"><code>__mod</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__mod</code> metamethod in the
         metalist.
         </p>
 
         <!-- __pow -->
         <hr/><h3><a name="__pow"><code>__pow</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__pow</code> metamethod in the
         metalist.
         </p>
 
         <!-- __shl -->
         <hr/><h3><a name="__shl"><code>__shl</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__shl</code> metamethod in the
         metalist.
         </p>
 
         <!-- __shr -->
         <hr/><h3><a name="__shr"><code>__shr</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__shr</code> metamethod in the
         metalist.
         </p>
 
         <!-- __band -->
         <hr/><h3><a name="__band"><code>__band</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__band</code> metamethod in the
         metalist.
         </p>
 
         <!-- __bor -->
         <hr/><h3><a name="__bor"><code>__bor</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__bor</code> metamethod in the
         metalist.
         </p>
 
         <!-- __bxor -->
         <hr/><h3><a name="__bxor"><code>__bxor</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__bxor</code> metamethod in the
         metalist.
         </p>
 
         <!-- __unm -->
         <hr/><h3><a name="__unm"><code>__unm</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__unm</code> metamethod in the
         metalist.
         </p>
 
         <!-- __bnot -->
         <hr/><h3><a name="__bnot"><code>__bnot</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__bnot</code> metamethod in the
         metalist.
         </p>
 
         <!-- __eq -->
         <hr/><h3><a name="__eq"><code>__eq</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__eq</code> metamethod in the
         metalist.
         </p>
 
         <!-- __lt -->
         <hr/><h3><a name="__lt"><code>__lt</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__lt</code> metamethod in the
         metalist.
         </p>
 
         <!-- __le -->
         <hr/><h3><a name="__le"><code>__le</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__le</code> metamethod in the
         metalist.
 
         <!-- __tostring -->
         <hr/><h3><a name="__tostring"><code>__tostring</code></a></h3>
-        A global variable (not a function) that holds integer index that
+        A global variable that holds integer index that
         corresponds to the index for <code>__tostring</code> metamethod in
         the metalist.
         </p>
 
         <!-- __N -->
         <hr/><h3><a name="__N"><code>__N</code></a></h3>
-        A global variable (not a function) that holds total number of
+        A global variable that holds total number of
         metamethods reserved by the CScript and the standard library.
         In other terms, this is the first free index in the metalist.
         </p>

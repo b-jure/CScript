@@ -1,0 +1,55 @@
+if (!__POSIX and !__WINDOWS)
+    return; /* not portable */
+
+local fn testerr(msg, f, ...) {
+    local stat, err = pcall(f, ...);
+    return (!stat and string.find(err, msg));
+}
+
+local fn checkerr(msg, f, ...) {
+    assert(testerr(msg, f, ...));
+}
+
+local progname = "\"" .. args[0] .. "\"";
+# invalid mode for popen
+checkerr("invalid mode", io.popen, "cat", "");
+checkerr("invalid mode", io.popen, "cat", "r+");
+checkerr("invalid mode", io.popen, "cat", "rw");
+{  /* basic tests for popen */
+    local file = os.tmpname();
+    local f = assert(io.popen("cat - > " .. file, "w"));
+    f.write("a line");
+    assert(f.close());
+    f = assert(io.popen("cat - < " .. file, "r"));
+    assert(f.read("a") == "a line");
+    assert(f.close());
+    assert(os.remove(file));
+}
+
+local exit_or_signal = __POSIX and "signal" or "exit";
+local tests = [
+    /* command,   what,  code */
+    ["ls > /dev/null", "ok"],
+    ["not-to-be-found-command", "exit"],
+    ["exit 3", "exit", 3],
+    ["exit 129", "exit", 129],
+    ["kill -s HUP $$", exit_or_signal, 1],
+    ["kill -s KILL $$", exit_or_signal, 9],
+    ["sh -c 'kill -s HUP $$'", exit_or_signal],
+    [progname .. " -s \" \"", "ok"],
+    [progname .. " -s \"os.exit(0, true);\"", "ok"],
+    [progname .. " -s \"os.exit(20, true);\"", "exit", 20],
+];
+foreach _, v in ipairs(tests) {
+    local f = io.popen(v[0]);
+    local x, y, z = io.popen(v[0]).close();
+    local x1, y1, z1 = os.execute(v[0]);
+    assert(x == x1 and y == y1 and z == z1);
+    if (v[1] == "ok")
+        assert(x and y == "exit" and z == 0);
+    else {
+        assert(!x and y == v[1]);  # correct status and 'what'
+        # correct code if known (but always different from 0)
+        assert((v[2] == nil and z > 0) or v[2] == z);
+    }
+}

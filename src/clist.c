@@ -1,10 +1,10 @@
 /*
-** carray.h
-** Array manipulation functions
+** clist.c
+** List manipulation functions
 ** See Copyright Notice in cscript.h
 */
 
-
+#define clist_c
 #define CS_CORE
 
 #include "cprefix.h"
@@ -32,12 +32,12 @@ void csA_shrink(cs_State *C, List *l) {
 
 
 int csA_ensure(cs_State *C, List *l, uint n) {
-    if (n <= l->n) /* in bound? */
+    if (n < l->n) /* in bound? */
         return 0; /* done */
     else {
-        csM_ensurearray(C, l->b, l->sz, l->n, n - l->n, CS_MAXLISTINDEX,
+        csM_ensurearray(C, l->b, l->sz, l->n, (n - l->n) + 1, MAXLISTINDEX,
                         "list elements", TValue);
-        for (uint i = l->n; i < n; i++)
+        for (uint i = l->n; i <= n; i++)
             setnilval(&l->b[i]); /* clear new part */
         return 1;
     }

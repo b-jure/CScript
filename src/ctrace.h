@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CTRACE_H
-#define CTRACE_H
+#ifndef ctrace_h
+#define ctrace_h
 
 #include "cobject.h"
 

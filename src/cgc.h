@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CGC_H
-#define CGC_H
+#ifndef cgc_h
+#define cgc_h
 
 
 #include "cbits.h"

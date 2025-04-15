@@ -64,10 +64,11 @@ if (math.maxint > 2**31) # have larger cs_Integer?
              {year = (1 << 31) + 1900, month = 1, day = 1});
 
 
-if (__POSIX) {
-    /* test Posix-specific modifiers */
-    assert(typeof(os.date("%Ex")) == "string");
-    assert(typeof(os.date("%Oy")) == "string");
+if (__POSIX or __WINDOWS) {
+    if (__POSIX) { /* test Posix-specific modifiers */
+        assert(typeof(os.date("%Ex")) == "string");
+        assert(typeof(os.date("%Oy")) == "string");
+    }
 
     /* test large dates (assume at least 4-byte ints and time_t) */
     local t0 = os.time({year = 1970, month = 1, day = 0});

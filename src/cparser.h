@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CPARSER_H
-#define CPARSER_H
+#ifndef cparser_h
+#define cparser_h
 
 
 #include "clexer.h"
@@ -24,7 +24,7 @@
 
 
 /* check expression type */
-#define eisvar(e)       ((e)->et >= EXP_GLOBAL && (e)->et <= EXP_DOTSUPER)
+#define eisvar(e)       ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
 #define eisconstant(e)  ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
 #define eismulret(e)    ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
 #define eistrue(e)      ((e)->et >= EXP_TRUE && (e)->et <= EXP_K)
@@ -53,9 +53,6 @@ typedef enum expt {
     /* registered constant value;
      * 'info' = index in 'constants'; */
     EXP_K,
-    /* global variable;
-     * 'str' = global name */
-    EXP_GLOBAL,
     /* upvalue variable;
      * 'info' = index of upvalue in 'upvals'; */
     EXP_UVAL,

@@ -25,6 +25,11 @@
 #define CS_OFSEP    "_"
 
 
+/* prefix in errors */
+#define PREFIX      "\n        "
+#define PREFIX_LEN  (sizeof(PREFIX) - 1)
+
+
 /*
 ** Key for fulluserdata in the global table that keeps handles
 ** for all loaded C libraries.
@@ -202,10 +207,9 @@ static cs_CFunction csys_symbolf(cs_State *C, void *lib, const char *sym) {
 
 static int searcher_preload(cs_State *C) {
     const char *name = csL_check_string(C, 0);
-    cs_push_registrytable(C); /* get registry table */
-    cs_get_fieldstr(C, -1, CS_PRELOAD_TABLE); /* get rtable[__PRELOAD] */
-    if (cs_get_fieldstr(C, -1, name) == CS_TNIL) { /* not found? */
-        cs_push_fstring(C, "no field package.preload[\"%s\"]", name);
+    cs_get_rtable(C, CS_PRELOAD_TABLE); /* get rtable[__PRELOAD] */
+    if (cs_get_fieldstr(C, -1, name) == CS_TNIL) { /* 'name' not found? */
+        cs_push_fstring(C, "no field package.preload['%s']", name);
         return 1;
     } else {
         cs_push_literal(C, ":preload:");
@@ -238,7 +242,7 @@ static void add_libhandle_to_clibs(cs_State *C, const char *path, void *plib) {
     cs_get_index(C, -1, 0); /* get array[0] (query table) */
     cs_push_lightuserdata(C, plib); /* push lib handle */
     cs_push(C, -1); /* copy of lib handle */
-    cs_set_index(C, -4, cs_len(C, -3)); /* arr[len(arr)] = plib */
+    cs_set_index(C, -4, cs_len(C, -4)); /* list[len(list)] = plib */
     cs_set_fieldstr(C, -2, path); /* qtable[path] = plib */
     cs_pop(C, 3); /* clibs, array and query table */
 }
@@ -277,7 +281,7 @@ static int look_for_func(cs_State *C, const char *path, const char *sym) {
 }
 
 
-static int l_loadlib(cs_State *C) {
+static int pkg_loadlib(cs_State *C) {
     const char *path = csL_check_string(C, 0);
     const char *init = csL_check_string(C, 1);
     int res = look_for_func(C, path, init);
@@ -297,7 +301,7 @@ static int l_loadlib(cs_State *C) {
 ** the ending ';' to '\0' to create a zero-terminated string. Return
 ** NULL when list ends.
 */
-static const char *getnextfilename (char **path, char *end) {
+static const char *get_next_filename (char **path, char *end) {
     char *sep;
     char *name = *path;
     if (name == end)
@@ -327,14 +331,14 @@ static int readable (const char *filename) {
 ** Given a path such as "blabla.so;blublu.so", pushes the string
 **
 ** no file 'blabla.so'
-**	no file 'blublu.so'
+**         no file 'blublu.so'
 */
 static void push_notfound_error(cs_State *C, const char *path) {
     csL_Buffer b;
     csL_buff_init(C, &b);
-    csL_buff_push_string(&b, "no file \"");
-    csL_buff_push_gsub(&b, path, CS_PATH_SEP, "'\n\tno file \"");
-    csL_buff_push_string(&b, "\"");
+    csL_buff_push_string(&b, "no file '");
+    csL_buff_push_gsub(&b, path, CS_PATH_SEP, "'" PREFIX "no file '");
+    csL_buff_push_string(&b, "'");
     csL_buff_end(&b);
 }
 
@@ -347,14 +351,14 @@ static const char *search_path(cs_State *C, const char *name, const char *path,
     const char *filename;
     /* separator is non-empty and appears in 'name'? */
     if (*sep != '\0' && strchr(name, *sep) != NULL)
-        name = csL_gsub(C, name, sep, dirsep);  /* replace it by 'dirsep' */
+        name = csL_gsub(C, name, sep, dirsep); /* replace it by 'dirsep' */
     csL_buff_init(C, &buff);
     /* add path to the buffer, replacing marks ('?') with the file name */
     csL_buff_push_gsub(&buff, path, CS_PATH_MARK, name);
     csL_buff_push(&buff, '\0');
     pathname = csL_buffptr(&buff); /* writable list of file names */
     endpathname = pathname + csL_bufflen(&buff) - 1;
-    while ((filename = getnextfilename(&pathname, endpathname)) != NULL) {
+    while ((filename = get_next_filename(&pathname, endpathname)) != NULL) {
         if (readable(filename)) /* does file exist and is readable? */
             return cs_push_string(C, filename); /* save and return name */
     }
@@ -364,11 +368,11 @@ static const char *search_path(cs_State *C, const char *name, const char *path,
 }
 
 
-static int l_searchpath(cs_State *C) {
-    const char *fname = search_path(C, csL_check_string(C, 1),
-                                       csL_check_string(C, 2),
-                                       csL_opt_string(C, 3, "."),
-                                       csL_opt_string(C, 4, CS_DIRSEP));
+static int pkg_searchpath(cs_State *C) {
+    const char *fname = search_path(C, csL_check_string(C, 0),
+                                       csL_check_string(C, 1),
+                                       csL_opt_string(C, 2, "."),
+                                       csL_opt_string(C, 3, CS_DIRSEP));
     if (fname != NULL) {
         return 1;
     } else { /* error message is on top of the stack */
@@ -379,8 +383,8 @@ static int l_searchpath(cs_State *C) {
 }
 
 
-static const char *find_file(cs_State *C, const char *name, const char *pname,
-                            const char *dirsep) {
+static const char *find_file(cs_State *C, const char *name,
+                             const char *pname, const char *dirsep) {
     const char *path;
     cs_get_fieldstr(C, cs_upvalueindex(1), pname); /* get 'package[pname]' */
     path = cs_to_string(C, -1);
@@ -396,8 +400,9 @@ static int check_load(cs_State *C, int res, const char *filename) {
         cs_push_string(C, filename); /* will be 2nd argument to module */
         return 2; /* return open function and file name */
     } else
-        return csL_error(C, "error loading module '%s' from file '%s':\n\t%s",
-                            cs_to_string(C, 1), filename, cs_to_string(C, -1));
+        return csL_error(C, "error loading module '%s' from file '%s':"
+                            PREFIX "%s", cs_to_string(C, 1), filename,
+                            cs_to_string(C, -1));
 }
 
 
@@ -410,9 +415,9 @@ static int searcher_CScript(cs_State *C) {
 }
 
 
-static const cs_Entry package_funcs[] = {
-    {"loadlib", l_loadlib},
-    {"search_path", l_searchpath},
+static const cs_Entry pkg_funcs[] = {
+    {"loadlib", pkg_loadlib},
+    {"searchpath", pkg_searchpath},
     /* placeholders */
     {"preload", NULL},
     {"cpath", NULL},
@@ -428,26 +433,26 @@ static void find_loader(cs_State *C, const char *name) {
     csL_Buffer msg; /* to build error message */
     /* push 'package.searchers' array to index 2 in the stack */
     if (c_unlikely(cs_get_fieldstr(C, cs_upvalueindex(1), "searchers") != CS_TLIST))
-        csL_error(C, "'package.searchers' must be array value");
+        csL_error(C, "'package.searchers' must be list");
     csL_buff_init(C, &msg);
     for (i = 0; ; i++) { /* iter over available searchers to find a loader */
-        csL_buff_push_string(&msg, "\n\t"); /* error-message prefix */
+        csL_buff_push_string(&msg, PREFIX); /* error-message prefix */
         if (c_unlikely(cs_get_index(C, 2, i) == CS_TNIL)) { /* no more? */
             cs_pop(C, 1); /* remove nil */
-            csL_buffsub(&msg, 2); /* remove prefix */
+            csL_buffsub(&msg, PREFIX_LEN); /* remove prefix */
             csL_buff_end(&msg); /* create error message */
-            csL_error(C, "module '%s' not found:%s", name, cs_to_string(C, -1));
+            csL_error(C, "module '%s' not found:%s", name, cs_to_string(C,-1));
         }
         cs_push_string(C, name);
         cs_call(C, 1, 2); /* call it */
         if (cs_is_function(C, -2)) { /* did it find a loader? */
             return; /* module loader found */
-        } else if (cs_is_string(C, -2)) { /* searcher returned error message? */
+        } else if (cs_is_string(C, -2)) { /* searcher returned error msg? */
             cs_pop(C, 1); /* remove extra return */
             csL_buff_push_stack(&msg); /* concatenate error message */
         } else { /* no error message */
             cs_pop(C, 2); /* remove both returns */
-            csL_buffsub(&msg, 2); /* remove prefix */
+            csL_buffsub(&msg, PREFIX_LEN); /* remove prefix */
         }
     }
 }
@@ -510,7 +515,7 @@ static int gcmm(cs_State *C) {
 
 
 /*
-** CLIBS is full userdata with one upvalue.
+** CLIBS is full userdata with one user value.
 ** The upvalues is an array holding table at index 0 used for
 ** querying loaded libraries, while the rest of indices hold
 ** loaded C libraries. When created, it is set under key "__CLIBS"
@@ -519,11 +524,11 @@ static int gcmm(cs_State *C) {
 static void create_clibs_userdata(cs_State *C) {
     if (cs_get_rtable(C, CLIBS) != CS_TUSERDATA) {
         cs_pop(C, 1); /* remove value */
-        cs_push_userdata(C, 0, 1); /* create clibs userdata with one upvalue */
-        cs_push_list(C, 1); /* create the upvalue */
+        cs_push_userdata(C, 0, 1); /* create clibs userdata */
+        cs_push_list(C, 1); /* create the user value */
         cs_push_table(C, 0); /* create query table */
         cs_set_index(C, -2, 0); /* set query table into the array */
-        cs_set_uservalue(C, -2, 1); /* set array as first upvalue of clibs */
+        cs_set_uservalue(C, -2, 1); /* set array as first user value of clibs */
         cs_push(C, -1); /* copy of clibs */
         cs_set_rtable(C, CLIBS); /* rtable[CLIBS] = userdata */
     }
@@ -666,7 +671,7 @@ static void setpath(cs_State *C, const char *fieldname, const char *envname,
 
 CSMOD_API int csopen_package(cs_State *C) {
     create_clibs_userdata(C); /* create clibs userdata */
-    csL_push_lib(C, package_funcs); /* create 'package' table */
+    csL_push_lib(C, pkg_funcs); /* create 'package' table */
     create_searchers_array(C); /* set 'package.searchers' */
     setpath(C, "path", CS_PATH_VAR, CS_PATH_DEFAULT); /* 'package.path' */
     setpath(C, "cpath", CS_CPATH_VAR, CS_CPATH_DEFAULT); /* 'package.cpath' */

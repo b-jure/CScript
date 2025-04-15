@@ -30,6 +30,7 @@ syn keyword cscriptTodo         contained TODO FIXME XXX
 syn cluster cscriptCommentGroup contains=cscriptTodo,cscriptDocTag
 " single line
 syn region  cscriptComment  matchgroup=cscriptCommentStart start=/#/ skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
+syn region  cscriptComment  matchgroup=cscriptCommentStart start="///" skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
 " multi-line
 if exists("c_no_comment_fold")
     syn region  cscriptComment  matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError extend
@@ -65,6 +66,7 @@ syn match   cscriptSpecialUtfError      /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit
 
 "-Strings---------{
 syn region  cscriptString       start=/"/ skip=/\\"/ end=/"/ contains=@cscriptSpecial,@Spell
+syn region  cscriptLongString   start=/"""/ end=/"""/ contains=@Spell
 "-----------------}
 
 "-Characters-----{
@@ -219,6 +221,7 @@ hi def link cscriptSpecialDec           SpecialChar
 hi def link cscriptSpecialHex           SpecialChar
 hi def link cscriptSpecialUtf           SpecialChar
 hi def link cscriptString               String
+hi def link cscriptLongString           String
 hi def link cscriptCharacter            Character
 hi def link cscriptStatement            Statement
 hi def link cscriptLabel                Label
@@ -252,7 +255,7 @@ hi def link cscriptInError              cscriptError
 hi def link cscriptError                Error
 
 
-let b:current_syntax = "cst"
+let b:current_syntax = "cscript"
 
 let &cpo = s:cpo_save
 unlet s:cpo_save

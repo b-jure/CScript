@@ -5,8 +5,8 @@
 */
 
 
-#ifndef CLIMITS_H
-#define CLIMITS_H
+#ifndef climits_h
+#define climits_h
 
 #include "cscript.h"
 
@@ -129,8 +129,8 @@ typedef unsigned long   ulong;
 typedef c_byte Instruction;
 
 
-#if !defined(CS_MAXLISTINDEX)
-#define CS_MAXLISTINDEX     (MAXINT - 1)
+#if !defined(MAXLISTINDEX)
+#define MAXLISTINDEX        (MAXINT - 1)
 #endif
 
 

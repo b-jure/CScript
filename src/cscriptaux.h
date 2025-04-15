@@ -4,11 +4,13 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CAUXLIB_H
-#define CAUXLIB_H
+#ifndef cscriptaux_h
+#define cscriptaux_h
 
+#include <stddef.h>
 #include <stdio.h>
 
+#include "cscriptconf.h"
 #include "cscript.h"
 
 
@@ -54,6 +56,7 @@ CSLIB_API int csL_error_type(cs_State *C, int index, const char *tname);
 ** ======================================================================== */
 CSLIB_API cs_Number     csL_check_number(cs_State *C, int index);
 CSLIB_API cs_Integer    csL_check_integer(cs_State *C, int index);
+CSLIB_API int           csL_check_bool(cs_State *C, int index);
 CSLIB_API const char   *csL_check_lstring(cs_State *C, int index, size_t *l);
 CSLIB_API void          csL_check_type(cs_State *C, int index, int t);
 CSLIB_API void          csL_check_any(cs_State *C, int index);
@@ -72,6 +75,7 @@ CSLIB_API int           csL_check_option(cs_State *C, int index,
 ** ======================================================================== */
 CSLIB_API cs_Number   csL_opt_number(cs_State *C, int index, cs_Number dfl);
 CSLIB_API cs_Integer  csL_opt_integer(cs_State *C, int index, cs_Integer dfl);
+CSLIB_API int         csL_opt_bool(cs_State *C, int index, int dfl);
 CSLIB_API const char *csL_opt_lstring(cs_State *C, int index, const char *dfl,
                                       size_t *l);
 /* }======================================================================= */
@@ -192,6 +196,7 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
       cs_remove(C, -2); }
 
 #define csL_get_methods(C, tname)       cs_get_rtable(C, tname)
+
 #define csL_get_metalist(C, lname)      cs_get_rtable(C, lname)
 
 

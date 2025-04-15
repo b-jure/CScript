@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-
+#define ctrace_c
 #define CS_CORE
 
 #include "cprefix.h"
@@ -490,20 +490,6 @@ static void unasmSetArray(const Proto *p, Instruction *pc) {
 }
 
 
-static void traceGlobal(TValue *k, int index) {
-    const char *str = getstr(strval(&k[index]));
-    posfix_spaces(printf("G@%s", str));
-}
-
-
-static void unasmGlobal(const Proto *p, Instruction *pc) {
-    startline(p, pc);
-    traceOp(*pc);
-    traceGlobal(p->k, GETARG_L(pc, 0));
-    endline();
-}
-
-
 static void traceLocal(int index) {
     posfix_spaces(printf("L@%d", index));
 }
@@ -689,10 +675,6 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmVarargPrep(p, pc);
                 break;
             }
-            case OP_GETGLOBAL: case OP_SETGLOBAL: {
-                unasmGlobal(p, pc);
-                break;
-            }
             case OP_GETLOCAL: case OP_SETLOCAL: {
                 unasmLocal(p, pc);
                 break;
@@ -828,7 +810,7 @@ void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...) {
     for (int i = 0; cf != NULL && level != 0; i++) {
         SPtr base = cf->func.p;
         level--;
-        printf("[LEVEL %3d] %-10s %s ",
+        printf("[LEVEL %3d] %-25s %s ",
                 i, objtxt(s2v(cf->func.p)), (cf != C->cf) ? "--" : ">>");
         if (base + 1 >= prevtop)
             printf("empty");

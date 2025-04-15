@@ -4,7 +4,6 @@
 ** See Copyright Notice in cscript.h
 */
 
-
 #define cobject_c
 #define CS_CORE
 

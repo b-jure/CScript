@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CLIST_H
-#define CLIST_H
+#ifndef clist_h
+#define clist_h
 
 #include "cobject.h"
 

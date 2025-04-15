@@ -20,56 +20,44 @@
 
 #include "cscript.h"
 
+#include "cstrlib.h"
 #include "cscriptaux.h"
 #include "cscriptlib.h"
 #include "climits.h"
 
 
+#if !defined(CS_BYTES)
 
-#define MAX_SIZET   ((size_t)(~(size_t)0))
+#define CS_BYTES
 
-#define MAX_SIZE \
-        (sizeof(size_t) < sizeof(int) ? (size_t)INT_MAX : MAX_SIZET)
+#define CS_BYTES_UPPERCASE      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+#define CS_BYTES_LOWERCASE      "abcdefghijklmnopqrstuvwxyz"
+#define CS_BYTES_LETTERS        CS_BYTES_UPPERCASE CS_BYTES_LOWERCASE
 
+#define CS_BYTES_OCTDIGITS      "01234567"
+#define CS_BYTES_DIGITS         CS_BYTES_OCTDIGITS "89"
+#define CS_BYTES_HEXDIGITS      CS_BYTES_DIGITS "abcdef"
 
+#define CS_BYTES_PUNCTUATION    "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
 
-static const char *rfind(const char *s, size_t l, const char *p, size_t lp) {
-    const char *start = (s + l) - lp;
-    lp--; /* first char is checked */
-    while (start >= s) {
-        if (*start == *p && memcmp(start + 1, p + 1, lp) == 0)
-            return start;
-        start--;
-    }
-    return NULL; /* not found */
-}
+#define CS_BYTES_WHITESPACE     " \t\n\r\v\f"
 
+#define CS_BYTES_PRINTABLE      CS_BYTES_DIGITS CS_BYTES_LETTERS \
+                                CS_BYTES_PUNCTUATION CS_BYTES_WHITESPACE
 
-static const char *find(const char *s, size_t l, const char *p, size_t lp) {
-    const char *aux;
-    lp--; /* 'memchr' checks the first char */
-    l -= lp; /* 'p' cannot be found after that */
-    while (l > 0 && (aux = memchr(s, *p, l)) != NULL) {
-        aux++; /* skip first char (already checked) */
-        if (memcmp(aux, p+1, lp) == 0)
-            return aux-1;
-        else {
-            l -= aux-s;
-            s = aux;
-        }
-    }
-    return NULL; /* not found */
-}
+#endif
 
 
-static const char *findstr(const char *s, size_t l,
-                           const char *pat, size_t lpat, int rev) {
-    if (c_unlikely(lpat == 0))
-        return s; /* empty strings match everything */
-    else if (l < lpat)
-        return NULL; /* avoid negative 'l' */
-    else
-        return (!rev) ? find(s, l, pat, lpat) : rfind(s, l, pat, lpat);
+/* Translate relative end position to absolute slice index. */
+static size_t posrelEnd(cs_Integer pos, size_t len) {
+    if (pos >= (cs_Integer)len) /* absolute that overflows? */
+        return (size_t)(len - 1);
+    else if (pos >= 0) /* absolute in-range 'pos'? */
+        return pos;
+    else if (pos < -(cs_Integer)len) /* negative out-of-bounds 'pos'? */
+        return 0; /* clip it */
+    else /* otherwise negative in-range 'pos' */
+        return len + (size_t)pos;
 }
 
 
@@ -99,19 +87,19 @@ static int split_into_list(cs_State *C, int rev) {
     if (cs_is_noneornil(C, 1)) { /* split by whitespace? */
         cs_push_list(C, 1);
         if (!rev)
-            while (ls > 0 && isspace(cast_uchar(*s))) { s++; ls--; }
+            while (ls > 0 && isspace(uchar(*s))) { s++; ls--; }
         else {
             aux = (s + ls) - 1;
-            while (ls > 0 && isspace(cast_uchar(*aux))) { aux--; ls--; }
+            while (ls > 0 && isspace(uchar(*aux))) { aux--; ls--; }
         }
         while (n > 0 && (aux = skipws(s, &ls, rev)) != NULL) {
             size_t lw = 0;
             const char *p = aux;
             if (!rev)
-                while (ls > 0 && !isspace(cast_uchar(*aux)))
+                while (ls > 0 && !isspace(uchar(*aux)))
                 { ls--; lw++; aux++; }
             else { /* reverse */
-                while (ls > 0 && !isspace(cast_uchar(*aux)))
+                while (ls > 0 && !isspace(uchar(*aux)))
                 { ls--; lw++; aux--; }
                 p = aux+1;
             }
@@ -123,10 +111,10 @@ static int split_into_list(cs_State *C, int rev) {
             n--; i++;
         }
         if (!rev)
-            while (ls > 0 && isspace(cast_uchar(*s))) { s++; ls--; }
+            while (ls > 0 && isspace(uchar(*s))) { s++; ls--; }
         else {
             aux = (s + ls) - 1;
-            while (ls > 0 && isspace(cast_uchar(*aux))) { aux--; ls--; }
+            while (ls > 0 && isspace(uchar(*aux))) { aux--; ls--; }
         }
         if (ls == 0) return 1; /* done */
     } else { /* else split by pattern */
@@ -166,41 +154,12 @@ static int s_rsplit(cs_State *C) {
 }
 
 
-/*
-** Translate starting position to actual index.
-*/
-static size_t posI(cs_Integer pos, size_t len) {
-    if (pos >= 0) /* already absolute? */
-        return pos;
-    else if (pos < -(cs_Integer)len) /* negative out-of-bounds 'pos'? */
-        return 0; /* clip it */
-    else /* otherwise negative in-range 'pos' */
-        return len + (size_t)pos;
-}
-
-
-/*
-** Translate end position to actual index.
-*/
-static size_t posJ(cs_Integer pos, size_t len) {
-    if (pos >= (cs_Integer)len) /* absolute that overflows? */
-        return len - 1;
-    else if (pos >= 0) /* absolute in-range 'pos'? */
-        return pos;
-    else if (pos < -(cs_Integer)len) /* negative out-of-bounds 'pos'? */
-        return 0; /* clip it */
-    else /* otherwise negative in-range 'pos' */
-        return len + (size_t)pos;
-}
-
-
-
 static int s_startswith(cs_State *C) {
     size_t l, l1;
     const char *s1 = csL_check_lstring(C, 0, &l);
     const char *s2 = csL_check_lstring(C, 1, &l1);
-    size_t i = posI(csL_opt_integer(C, 2, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 3, -1), l);
+    size_t i = posrelStart(csL_opt_integer(C, 2, 0), l);
+    size_t j = posrelEnd(csL_opt_integer(C, 3, -1), l);
     if (i <= j && l1 <= (j-i) + 1) {
         size_t k = 0;
         while (i <= j && k < l1 && s1[i] == s2[k]) { i++; k++; }
@@ -238,7 +197,7 @@ static int s_repeat(cs_State *C) {
     const char *sep = csL_opt_lstring(C, 2, "", &lsep);
     if (c_unlikely(n <= 0))
         cs_push_literal(C, "");
-    else if (l+lsep < l || l+lsep > MAX_SIZE/n)
+    else if (l+lsep < l || l+lsep > STR_MAXSIZE/n)
         csL_error(C, "resulting string too large");
     else {
         size_t totalsize = (size_t)n*l + (size_t)(n-1)*lsep;
@@ -304,7 +263,7 @@ static int s_join(cs_State *C) {
     const char *sep = csL_check_lstring(C, 0, &lsep);
     int t = cs_type(C, 1);
     csL_Buffer b;
-    csL_expect_arg(C, (t == CS_TLIST || t == CS_TTABLE), 1, "list or a table");
+    csL_expect_arg(C, (t == CS_TLIST || t == CS_TTABLE), 1, "list/table");
     csL_buff_init(C, &b);
     if (t == CS_TLIST) {
         int len = cs_len(C, 1);
@@ -318,6 +277,12 @@ static int s_join(cs_State *C) {
     return 1; /* return final string */
 }
 
+
+/*
+** {======================================================
+** STRING FORMAT
+** =======================================================
+*/
 
 
 /*
@@ -380,12 +345,12 @@ static void addquoted(csL_Buffer *b, const char *s, size_t len) {
             csL_buff_push(b, '\\');
             csL_buff_push(b, *s);
         }
-        else if (iscntrl(cast_uchar(*s))) {
+        else if (iscntrl(uchar(*s))) {
             char buff[10];
-            if (!isdigit(cast_uchar(*(s+1))))
-                c_snprintf(buff, sizeof(buff), "\\%d", (int)cast_uchar(*s));
+            if (!isdigit(uchar(*(s+1))))
+                c_snprintf(buff, sizeof(buff), "\\%d", (int)uchar(*s));
             else
-                c_snprintf(buff, sizeof(buff), "\\%03d", (int)cast_uchar(*s));
+                c_snprintf(buff, sizeof(buff), "\\%03d", (int)uchar(*s));
             csL_buff_push_string(b, buff);
         }
         else
@@ -460,9 +425,9 @@ static void addliteral(cs_State *C, csL_Buffer *b, int arg) {
 
 
 static const char *get2digits (const char *s) {
-    if (isdigit(cast_uchar(*s))) {
+    if (isdigit(uchar(*s))) {
         s++;
-        if (isdigit(cast_uchar(*s))) s++; /* (2 digits at most) */
+        if (isdigit(uchar(*s))) s++; /* (2 digits at most) */
     }
     return s;
 }
@@ -485,7 +450,7 @@ static void checkformat(cs_State *C, const char *form, const char *flags,
             spec = get2digits(spec); /* skip precision */
         }
     }
-    if (!isalpha(cast_uchar(*spec))) /* did not go to the end? */
+    if (!isalpha(uchar(*spec))) /* did not go to the end? */
         csL_error(C, "invalid conversion specification: '%s'", form);
 }
 
@@ -637,12 +602,14 @@ static int s_fmt(cs_State *C) {
     return formatstr(C, fmt, lfmt);
 }
 
+/* }====================================================== */
+
 
 static int auxtocase(cs_State *C, int (*f)(int c)) {
     size_t l;
     const char *s = csL_check_lstring(C, 0, &l);
-    size_t i = posI(csL_opt_integer(C, 1, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
+    size_t i = posrelStart(csL_opt_integer(C, 1, 0), l);
+    size_t j = posrelEnd(csL_opt_integer(C, 2, -1), l);
     if (l == 0 || i > j)
         cs_push(C, 0);
     else {
@@ -673,8 +640,8 @@ static int auxfind(cs_State *C, int rev) {
     size_t l, lpat;
     const char *s = csL_check_lstring(C, 0, &l);
     const char *pat = csL_check_lstring(C, 1, &lpat);
-    size_t i = posI(csL_opt_integer(C, 2, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 3, -1), l);
+    size_t i = posrelStart(csL_opt_integer(C, 2, 0), l);
+    size_t j = posrelEnd(csL_opt_integer(C, 3, -1), l);
     const char *p;
     if (i <= j && (p = findstr(s+i, (j-i) + 1, pat, lpat, rev)))
         cs_push_integer(C, p-s); /* start index */
@@ -698,8 +665,8 @@ static int aux_span(cs_State *C, int complement) {
     size_t l, lb;
     const char *s = csL_check_lstring(C, 0, &l);
     const char *b = csL_check_lstring(C, 1, &lb);
-    size_t i = posI(csL_opt_integer(C, 2, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 3, -1), l);
+    size_t i = posrelStart(csL_opt_integer(C, 2, 0), l);
+    size_t j = posrelEnd(csL_opt_integer(C, 3, -1), l);
     size_t starti = i;
     if (i > j) { /* 'i' too large? */
         csL_push_fail(C);
@@ -776,8 +743,8 @@ static int s_replace(cs_State *C) {
 static int s_substr(cs_State *C) {
     size_t l;
     const char *s = csL_check_lstring(C, 0, &l);
-    size_t i = posI(csL_check_integer(C, 1), l);
-    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
+    size_t i = posrelStart(csL_check_integer(C, 1), l);
+    size_t j = posrelEnd(csL_opt_integer(C, 2, -1), l);
     if (i <= j)
         cs_push_lstring(C, s + i, (j - i) + 1);
     else
@@ -813,8 +780,8 @@ static void auxlowercase(char *d, const char *s, size_t i, size_t j) {
 static int auxcase(cs_State *C, void (*f)(char*,const char*,size_t,size_t)) {
     size_t l;
     const char *s = csL_check_lstring(C, 0, &l);
-    size_t i = posI(csL_opt_integer(C, 1, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 2, -1), l);
+    size_t i = posrelStart(csL_opt_integer(C, 1, 0), l);
+    size_t j = posrelEnd(csL_opt_integer(C, 2, -1), l);
     char *p;
     csL_Buffer b;
     if (i > j || l == 0) {
@@ -850,7 +817,7 @@ static int getbytes_list(cs_State *C, const char *s, size_t i, size_t j) {
     int n = (int)(j - i) + 1;
     cs_push_list(C, n);
     for (int k = 0; k < n; k++) {
-        cs_push_integer(C, cast_uchar(s[i + cast_uint(k)]));
+        cs_push_integer(C, uchar(s[i + cast_uint(k)]));
         cs_set_index(C, -2, k);
     }
     return 1; /* return list */
@@ -861,7 +828,7 @@ static int getbytes_bytes(cs_State *C, const char *s, size_t i, size_t j) {
     int n = (int)(j - i) + 1;
     csL_check_stack(C, n, "string slice too long");
     for (int k = 0; k < n; k++)
-        cs_push_integer(C, cast_uchar(s[i + cast_uint(k)]));
+        cs_push_integer(C, uchar(s[i + cast_uint(k)]));
     return n; /* return 'n' bytes */
 }
 
@@ -869,8 +836,8 @@ static int getbytes_bytes(cs_State *C, const char *s, size_t i, size_t j) {
 static int auxgetbytes(cs_State *C, int pack) {
     size_t l;
     const char *s = csL_check_lstring(C, 0, &l);
-    size_t i = posI(csL_opt_integer(C, 1, 0), l);
-    size_t j = posJ(csL_opt_integer(C, 2, (pack) ? -1 : (cs_Integer)i), l);
+    size_t i = posrelStart(csL_opt_integer(C, 1, 0), l);
+    size_t j = posrelEnd(csL_opt_integer(C, 2, (pack) ? -1 : (cs_Integer)i), l);
     if (i > j || l == 0) /* empty interval? */
         return 0; /* return no values */
     else if (c_unlikely((j-i)+1 <= (j-i) || (j-i)+1 >= (size_t)INT_MAX))
@@ -889,6 +856,62 @@ static int s_byte(cs_State *C) {
 
 static int s_bytes(cs_State *C) {
     return auxgetbytes(C, 1);
+}
+
+
+static void addvalue(cs_State *C, csL_Buffer *b, int i) {
+    cs_get_index(C, 0, i);
+    if (c_unlikely(!cs_is_string(C, -1)))
+        csL_error(C, "invalid value (%s) at index %I in list for 'concat'",
+                     csL_typename(C, -1), i);
+    csL_buff_push_stack(b);
+}
+
+
+#define getnexti(C,begin,end,skip) \
+        ((!skip) ? (int)begin+1 : cs_get_nnilindex(C,0,(uint)begin,(int)end))
+
+
+// TODO: add docs and tests
+static int s_concat(cs_State *C) {
+    csL_Buffer b;
+    size_t lsep;
+    cs_Integer l = (csL_check_type(C, 0, CS_TLIST), cs_len(C, 0));
+    const char *sep = csL_opt_lstring(C, 1, "", &lsep);
+    cs_Integer i = posrelStart(csL_opt_integer(C, 2, 0), l);
+    cs_Integer j = posrelEnd(csL_opt_integer(C, 3, l - 1), l);
+    int skipnil = csL_opt_bool(C, 4, 0);
+    int il = getnexti(C, (i - !skipnil), j, skipnil);
+    csL_buff_init(C, &b);
+    while (il != -1 && il < j) {
+        addvalue(C, &b, (int)il);
+        csL_buff_push_lstring(&b, sep, lsep);
+        il = getnexti(C, il, j, skipnil);
+    }
+    if (il == j && (!skipnil || cs_get_nnilindex(C, 0, il, j) != -1))
+        addvalue(C, &b, (int)j); /* add last value */
+    csL_buff_end(&b);
+    return 1;
+}
+
+
+// TODO: add docs and tests
+static int s_cmp(cs_State *C) {
+    int diff;
+    size_t l1, l2, i;
+    const char *s1 = csL_check_lstring(C, 0, &l1);
+    const char *s2 = csL_check_lstring(C, 1, &l2);
+    for (i = 0; l1 && l2 && *s1 == *s2; i++) {
+        l1--; l2--;
+        s1++; s2++;
+    }
+    diff = *(unsigned char *)s1 - *(unsigned char *)s2;
+    cs_push_integer(C, diff);
+    if (diff) /* strings are not equal? */
+        cs_push_integer(C, i); /* push that index */
+    else /* strings are equal */
+        cs_push_nil(C); /* that index does not exist */
+    return 2;
 }
 
 
@@ -913,11 +936,51 @@ static const cs_Entry strlib[] = {
     {"swaplower", s_swaplower},
     {"byte", s_byte},
     {"bytes", s_bytes},
+    {"concat", s_concat},
+    {"cmp", s_cmp},
+    {"ascii_uppercase", NULL},
+    {"ascii_lowercase", NULL},
+    {"ascii_letters", NULL},
+    {"digits", NULL},
+    {"hexdigits", NULL},
+    {"octdigits", NULL},
+    {"punctuation", NULL},
+    {"printable", NULL},
+    {"printable", NULL},
     {NULL, NULL}
 };
 
 
+// TODO: add docs
+static void set_string_bytes(cs_State *C) {
+    /* letter bytes */
+    cs_push_string(C, CS_BYTES_UPPERCASE);
+    cs_set_fieldstr(C, -2, "ascii_uppercase");
+    cs_push_string(C, CS_BYTES_LOWERCASE);
+    cs_set_fieldstr(C, -2, "ascii_lowercase");
+    cs_push_string(C, CS_BYTES_LETTERS);
+    cs_set_fieldstr(C, -2, "ascii_letters");
+    /* digit bytes */
+    cs_push_string(C, CS_BYTES_OCTDIGITS);
+    cs_set_fieldstr(C, -2, "octdigits");
+    cs_push_string(C, CS_BYTES_DIGITS);
+    cs_set_fieldstr(C, -2, "digits");
+    cs_push_string(C, CS_BYTES_HEXDIGITS);
+    cs_set_fieldstr(C, -2, "hexdigits");
+    /* punctuation bytes */
+    cs_push_string(C, CS_BYTES_PUNCTUATION);
+    cs_set_fieldstr(C, -2, "punctuation");
+    /* whitespace bytes */
+    cs_push_string(C, CS_BYTES_WHITESPACE);
+    cs_set_fieldstr(C, -2, "whitespace");
+    /* printable bytes */
+    cs_push_string(C, CS_BYTES_PRINTABLE);
+    cs_set_fieldstr(C, -2, "printable");
+}
+
+
 CSMOD_API int csopen_string(cs_State *C) {
     csL_push_lib(C, strlib);
+    set_string_bytes(C);
     return 1;
 }

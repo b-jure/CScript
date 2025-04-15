@@ -4,7 +4,7 @@
 ** (n)vim syntax file provided with the distribution.
 ** 
 ** When modyfing the syntax file,
-** do ':syn reset' followed by ':syn set=cst'
+** do ':syn reset' followed by ':syn set=cscript'
 ** to properly reload the syntax file.
 */
 

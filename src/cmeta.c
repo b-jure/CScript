@@ -1,10 +1,10 @@
 /*
-** cmeta.h
+** cmeta.c
 ** Functions for metamethods and meta types
 ** See Copyright Notice in CScript.h
 */
 
-
+#define cmeta_c
 #define CS_CORE
 
 #include "cprefix.h"
@@ -33,6 +33,7 @@ CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
 
 
 void csMM_init(cs_State *C) {
+    // TODO: make 'mmnames' a global symbol and provide the 'cs_metamethodtostring()' API
     const char *mmnames[CS_MM_N] = { /* ORDER MM */
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
         "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",

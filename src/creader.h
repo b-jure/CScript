@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CREADER_H
-#define CREADER_H
+#ifndef creader_h
+#define creader_h
 
 
 #include "cscript.h"

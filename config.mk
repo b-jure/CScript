@@ -40,6 +40,11 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # {=========================================================================
 # 			Compiler and Linker Flags
 # ==========================================================================
+# Internal defines used for testing (all of these slow down operations a lot):
+# -DCSI_ASSERT => enables internal asserts
+# -DCSI_TRACE_EXEC => traces bytecode execution (stack and instructions)
+# -DCSI_DISASSEMBLE_BYTECODE => disassembles and outputs compiled chunks
+
 CC = gcc -std=c99
 OPTS = -O0
 CFLAGS = -Wall -Wextra $(OPTS) $(SYSCFLAGS) $(MYCFLAGS)
@@ -51,16 +56,16 @@ SYSCFLAGS =
 SYSLDFLAGS =
 SYSLIBS =
 
-# user flags (asserts in the API are enabled by default)
-#MYCFLAGS = -DCS_USE_APICHECK -DCSI_ASSERT
-#MYLDFLAGS =
-#MYLIBS =
-#MYOBJS =
+# Flags for production
+# MYCFLAGS = -DCS_USE_APICHECK
+# MYLDFLAGS =
+# MYLIBS =
+# MYOBJS =
 
-# developer debug flags
+# Flags for testing
 ASANFLAGS = -fsanitize=address -fsanitize=undefined
-MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT -DCSI_TRACE_API \
-	   -DCSI_TRACE_EXEC -DCSI_DISASSEMBLE_BYTECODE
+MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT
+	   #-DCSI_TRACE_EXEC #-DCSI_DISASSEMBLE_BYTECODE
 MYLDFLAGS = $(ASANFLAGS)
 MYLIBS =
 MYOBJS =

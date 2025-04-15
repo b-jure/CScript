@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-
+#define ccode_c
 #define CS_CORE
 
 #include "cprefix.h"
@@ -161,8 +161,6 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatILL), /* OP_CALL */
     opProp(0, FormatIL), /* OP_CLOSE */
     opProp(0, FormatIL), /* OP_TBC */
-    opProp(0, FormatIL), /* OP_GETGLOBAL */
-    opProp(0, FormatIL), /* OP_SETGLOBAL */
     opProp(0, FormatIL), /* OP_GETLOCAL */
     opProp(0, FormatIL), /* OP_SETLOCAL */
     opProp(0, FormatIL), /* OP_GETUVAL */
@@ -229,11 +227,10 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI",
 "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT",
 "NOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP", "TESTPOP", "CALL", "CLOSE",
-"TBC", "GETGLOBAL", "SETGLOBAL", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL",
-"SETLIST", "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX",
-"GETINDEXSTR", "SETINDEXSTR", "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT",
-"SETINDEXINTL", "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP",
-"FORCALL", "FORLOOP", "RET",
+"TBC", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETLIST", "SETPROPERTY",
+"GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",
+"GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL", "GETSUP",
+"GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
 };
 
 
@@ -798,12 +795,8 @@ static int setindexint(FunctionState *fs, ExpInfo *v, int left) {
 
 /* code 'OP_SET' family of instructions */
 int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
-    int extra = 0;
+    int extra = 0; /* extra leftover values */
     switch (var->et) {
-        case EXP_GLOBAL: {
-            var->u.info = csC_emitIL(fs, OP_SETGLOBAL, stringK(fs, var->u.str));
-            break;
-        }
         case EXP_UVAL: {
             var->u.info = csC_emitIL(fs, OP_SETUVAL, var->u.info);
             break;
@@ -814,19 +807,22 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
         }
         case EXP_INDEXED: {
             var->u.info = csC_emitIL(fs, OP_SETINDEX, left+2);
-            extra = 1; /* extra leftover values */
+            extra = 2;
             break;
         }
         case EXP_INDEXSTR: {
             var->u.info = csC_emitILL(fs, OP_SETINDEXSTR, left+1, var->u.info);
+            extra = 1;
             break;
         }
         case EXP_INDEXINT: {
             var->u.info = setindexint(fs, var, left+1);
+            extra = 1;
             break;
         }
         case EXP_DOT: {
             var->u.info = csC_emitILL(fs, OP_SETPROPERTY, left+1, var->u.info);
+            extra = 1;
             break;
         }
         case EXP_INDEXSUPER:
@@ -855,10 +851,6 @@ static int getindexint(FunctionState *fs, ExpInfo *v) {
 /* ensure variable is on stack */
 static int dischargevars(FunctionState *fs, ExpInfo *v) {
     switch (v->et) {
-        case EXP_GLOBAL: {
-            v->u.info = csC_emitIL(fs, OP_GETGLOBAL, stringK(fs, v->u.str));
-            break;
-        }
         case EXP_UVAL: {
             v->u.info = csC_emitIL(fs, OP_GETUVAL, v->u.info);
             break;

@@ -4,6 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
+#define cbaselib_c
 #define CS_LIB
 
 #include "cprefix.h"
@@ -102,10 +103,10 @@ static int b_gc(cs_State *C) {
 
 /*
 ** Reserved slot, above all arguments, to hold a copy of the returned
-** string to avoid it being collected while parsed. 'load' has 2
-** optional arguments (chunk and chunkname).
+** string to avoid it being collected while parsed. 'load' has 3
+** optional arguments (chunk, chunkname and environment).
 */
-#define RESERVEDSLOT  2
+#define RESERVEDSLOT    3
 
 
 static const char *genericreader(cs_State *C, void *ud, size_t *sz) {
@@ -124,20 +125,28 @@ static const char *genericreader(cs_State *C, void *ud, size_t *sz) {
 }
 
 
-static int auxload(cs_State *C, int status) {
-    if (c_unlikely(status != CS_OK)) {
+static int auxload(cs_State *C, int status, int envidx) {
+    if (c_likely(status == CS_OK)) {
+        if (envidx != 0) { /* 'env' parameter? */
+            cs_push(C, envidx); /* environment for loaded function */
+            if (!cs_setupvalue(C, -2, 1)) /* set it as 1st upvalue */
+                cs_pop(C, 1); /* remove 'env' if not used by previous call */
+        }
+        return 1; /* compiled function */
+    } else { /* error (message is on top of the stack) */
         csL_push_fail(C); /* push fail */
-        cs_insert(C, -2); /* and put it in front of error message */
+        cs_insert(C, -2); /* and put it before error message */
         return 2; /* return fail + error message */
     }
-    return 1; /* compiled function */
 }
 
 
+// TODO: update docs and tests
 static int b_load(cs_State *C) {
     int status;
     size_t l;
     const char *s = cs_to_lstring(C, 0, &l);
+    int env = (!cs_is_none(C, 2) ? 2 : 0);
     if (s != NULL) { /* loading a string? */
         const char *chunkname = csL_opt_string(C, 1, s);
         status = csL_loadbuffer(C, s, l, chunkname);
@@ -147,19 +156,21 @@ static int b_load(cs_State *C) {
         cs_settop(C, RESERVEDSLOT+1); /* create reserved slot */
         status = cs_load(C, genericreader, NULL, chunkname);
     }
-    return auxload(C, status);
+    return auxload(C, status, env);
 }
 
 
+// TODO: update docs and tests
 static int b_loadfile(cs_State *C) {
     const char *filename = csL_opt_string(C, 0, NULL);
+    int env = (!cs_is_none(C, 1) ? 1 : 0);
     int status = csL_loadfile(C, filename);
-    return auxload(C, status);
+    return auxload(C, status, env);
 }
 
 
 static int b_runfile(cs_State *C) {
-    const char *filename = csL_opt_string(C, -1, NULL);
+    const char *filename = csL_opt_string(C, 0, NULL);
     cs_settop(C, 1);
     if (c_unlikely(csL_loadfile(C, filename) != CS_OK))
         return cs_error(C);
@@ -179,7 +190,7 @@ static int b_getmetalist(cs_State *C) {
 static int b_setmetalist(cs_State *C) {
     int t = cs_type(C, 1);
     csL_check_type(C, 0, CS_TCLASS);
-    csL_expect_arg(C, t == CS_TNIL || t == CS_TLIST, 2, "nil or list");
+    csL_expect_arg(C, t == CS_TNIL || t == CS_TLIST, 2, "nil/list");
     cs_settop(C, 2);
     cs_set_metalist(C, 0);
     return 1;
@@ -189,7 +200,7 @@ static int b_setmetalist(cs_State *C) {
 static int b_next(cs_State *C) {
     int t = cs_type(C, 0);
     csL_expect_arg(C, (t == CS_TINSTANCE || t == CS_TTABLE), 0,
-                       "instance or table");
+                       "instance/table");
     cs_settop(C, 2); /* if 2nd argument is missing create it */
     if (cs_next(C, 0)) { /* found field? */
         return 2; /* key (index) + value */
@@ -295,7 +306,7 @@ static int b_len(cs_State *C) {
                       t == CS_TINSTANCE ||
                       t == CS_TCLASS ||
                       t == CS_TSTRING, 0,
-                      "list, table, class, instance or string");
+                      "list/table/class/instance/string");
     cs_push_integer(C, cs_len(C, 0));
     return 1;
 }
@@ -501,7 +512,7 @@ static int b_getclass(cs_State *C) {
 static int b_getsuper(cs_State *C) {
     int t = cs_type(C, 0);
     cs_settop(C, 2);
-    csL_expect_arg(C, t == CS_TCLASS || t == CS_TINSTANCE, 0, "class or instance");
+    csL_expect_arg(C, t == CS_TCLASS || t == CS_TINSTANCE, 0, "class/instance");
     if (!cs_get_superclass(C, 0))
         cs_push_nil(C); /* value has no superclass */
     else if (!cs_is_noneornil(C, 1)) { /* get superclass method? */
@@ -599,29 +610,22 @@ static const cs_Entry basic_funcs[] = {
 
 
 static void set_compat(cs_State *C, const char *have, const char *missing) {
-    if (have)
-        cs_set_fieldstr(C, -2, have);
+    if (have) cs_set_fieldstr(C, -2, have);
     cs_push_nil(C);
     cs_set_fieldstr(C, -2, missing);
 }
 
 
 static void set_compat_flags(cs_State *C) {
-    #if (defined(CS_USE_POSIX)) /* posix + dlopen */
-        cs_push_integer(C, CS_POSIX_YEAR);
+    #if (defined(CS_USE_POSIX)) /* POSIX */
+        cs_push_integer(C, CS_POSIX_REV);
         set_compat(C, "__POSIX", "__WINDOWS");
-        cs_push_bool(C, 1);
-        set_compat(C, "__DLOPEN", "__DLL");
-    #elif (defined(CS_USE_WINDOWS)) /* windows + dll */
+    #elif (defined(CS_USE_WINDOWS)) /* WINDOWS */
         cs_push_integer(C, _MSC_VER);
         set_compat(C, "__WINDOWS", "__POSIX");
-        cs_push_bool(C, 1);
-        set_compat(C, "__DLL", "__DLOPEN");
-    #else /* iso C compatibility */
+    #else /* ISO C */
         set_compat(C, NULL, "__POSIX");
-        set_compat(C, NULL, "__DLOPEN");
         set_compat(C, NULL, "__WINDOWS");
-        set_compat(C, NULL, "__DLL");
     #endif
 }
 

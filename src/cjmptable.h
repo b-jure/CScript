@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CJMPTABLE_H
-#define CJMPTABLE_H
+#ifndef cjmptable_h
+#define cjmptable_h
 
 
 #undef vm_dispatch
@@ -101,8 +101,6 @@ static const void *const jmptable[NUM_OPCODES] = { /* ORDER OP */
     &&L_OP_CALL,
     &&L_OP_CLOSE,
     &&L_OP_TBC,
-    &&L_OP_GETGLOBAL,
-    &&L_OP_SETGLOBAL,
     &&L_OP_GETLOCAL,
     &&L_OP_SETLOCAL,
     &&L_OP_GETUVAL,

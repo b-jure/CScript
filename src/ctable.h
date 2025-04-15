@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CTABLE_H
-#define CTABLE_H
+#ifndef ctable_h
+#define ctable_h
 
 
 #include "cobject.h"

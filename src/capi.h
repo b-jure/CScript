@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CAPI_H
-#define CAPI_H
+#ifndef capi_h
+#define capi_h
 
 
 /*

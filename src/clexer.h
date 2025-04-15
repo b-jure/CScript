@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CLEXER_H
-#define CLEXER_H
+#ifndef clexer_h
+#define clexer_h
 
 #include "creader.h"
 #include "cobject.h"
@@ -14,6 +14,11 @@
 
 /* multi-char tokens start at this numeric value */
 #define FIRSTTK		(UCHAR_MAX + 1)
+
+
+#if !defined(CS_ENV)
+#define CS_ENV      "__ENV"
+#endif
 
 
 /*
@@ -65,6 +70,7 @@ typedef struct Lexer {
     Buffer *buff; /* string buffer */
     struct ParserState *ps; /* dynamic data used by parser */
     OString *src; /* current source name */
+    OString *envn; /* environment variable */
 } Lexer;
 
 

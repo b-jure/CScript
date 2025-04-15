@@ -1,0 +1,7 @@
+assert(typeof(os.getenv("PATH")) == "string");
+assert(!os.getenv("bamboozle"));
+os.setenv("bamboozle", "69");
+assert(os.getenv("bamboozle") == "69");
+os.setenv("bamboozle");
+assert(!os.getenv("bamboozle"));
+assert(!os.getenv("wut69"));

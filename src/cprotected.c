@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-
+#define cprotected_c
 #define CS_CORE
 
 #include "cprefix.h"
@@ -207,6 +207,7 @@ struct PParseData {
 static void parsepaux(cs_State *C, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);
     CSClosure *cl = csP_parse(C, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
+    cs_assert(cl->nupvalues == cl->p->sizeupvalues);
     csF_initupvals(C, cl);
 }
 

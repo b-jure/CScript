@@ -4,17 +4,17 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CPREFIX_H
-#define CPREFIX_H
+#ifndef cprefix_h
+#define cprefix_h
 
 
 /* Enable some POSIX functions and definitions */
 #if !defined(_XOPEN_SOURCE)
 #define _XOPEN_SOURCE       600
-#define CS_POSIX_YEAR       2004
+#define CS_POSIX_REV        2004
 #elif _XOPEN_SOURCE == 0
 #undef _XOPEN_SOURCE
-#undef CS_POSIX_YEAR
+#undef CS_POSIX_REV
 #endif
 
 /* Allows manipulation of large files in gcc and some other compilers */

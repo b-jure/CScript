@@ -4,8 +4,8 @@
 ** See Copyright Notice at the end of this file
 */
 
-#ifndef CSCRIPT_H
-#define CSCRIPT_H
+#ifndef cscript_h
+#define cscript_h
 
 #include <stddef.h>
 #include <stdarg.h>
@@ -177,7 +177,7 @@ CS_API const char  *cs_typename(cs_State *C, int type);
 
 CS_API cs_Number    cs_to_numberx(cs_State *C, int index, int *isnum); 
 CS_API cs_Integer   cs_to_integerx(cs_State *C, int index, int *isnum); 
-CS_API int          cs_to_bool(cs_State *C, int index); 
+CS_API int          cs_to_boolx(cs_State *C, int index, int *isbool); 
 CS_API const char  *cs_to_lstring(cs_State *C, int index, size_t *len); 
 CS_API cs_CFunction cs_to_cfunction(cs_State *C, int index); 
 CS_API void        *cs_to_userdata(cs_State *C, int index); 
@@ -353,6 +353,8 @@ CS_API size_t   cs_stringtonumber(cs_State *C, const char *s, int *f);
 
 #define cs_to_number(C,i)           cs_to_numberx(C,(i),NULL)
 #define cs_to_integer(C,i)          cs_to_integerx(C,(i),NULL)
+// TODO: update docs
+#define cs_to_bool(C,i)             cs_to_boolx(C,(i),NULL)
 
 #define cs_pop(C,n)                 cs_settop(C, -(n)-1)
 

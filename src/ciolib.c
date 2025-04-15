@@ -4,22 +4,24 @@
 ** See Copyright Notice in cscript.h
 */
 
+#define ciolib_c
 #define CS_LIB
 
 #include "cprefix.h"
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
 #include <ctype.h>
+#include <errno.h>
 #include <locale.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "cscript.h"
 
 #include "cscriptaux.h"
 #include "cscriptlib.h"
-#include "climits.h"
+
+
 
 
 #if !defined(c_checkmode)
@@ -46,12 +48,12 @@ static int checkmode(const char *mode) {
 
 #if defined(CS_USE_POSIX)       /* { */
 
-#define c_popen(C,f,m)      (fflush(NULL), popen(f,m))
+#define c_popen(C,c,m)      (fflush(NULL), popen(c,m))
 #define c_pclose(C,file)    (pclose(file))
 
 #elif defined(CS_USE_WINDOWS)   /* }{ */
 
-#define c_popen(C,f,m)      (_popen(f,m))
+#define c_popen(C,c,m)      (_popen(c,m))
 #define c_pclose(C,file)    (_pclose(file))
 
 #if !defined(c_checkmodep)
@@ -63,8 +65,8 @@ static int checkmode(const char *mode) {
 #else                           /* }{ */
 
 /* ISO C definition */
-#define c_popen(C,f,m) \
-        ((void)f, (void)m, csL_error(C, "'popen' not supported"), (FILE*)0)
+#define c_popen(C,c,m) \
+        ((void)c, (void)m, csL_error(C, "'popen' not supported"), (FILE*)0)
 #define c_pclose(C,file)    ((void)C, (void)file, -1)
 
 #endif                          /* } */
@@ -290,14 +292,14 @@ static int io_pclose(cs_State *C) {
 
 
 static int io_popen(cs_State *C) {
-    const char *fname = csL_check_string(C, 0);
+    const char *cmd = csL_check_string(C, 0);
     const char *mode = csL_opt_string(C, 1, "r");
     CStream *p = new_cstream(C);
     csL_check_arg(C, c_checkmodep(mode), 1, "invalid mode");
     errno = 0;
-    p->f = c_popen(C, fname, mode);
+    p->f = c_popen(C, cmd, mode);
     p->closef = &io_pclose;
-    return (p->f == NULL) ? csL_fileresult(C, 0, fname) : 1;
+    return (p->f == NULL) ? csL_fileresult(C, 0, cmd) : 1;
 }
 
 

@@ -5,8 +5,8 @@
 */
 
 
-#ifndef CTYPES_H
-#define CTYPES_H
+#ifndef ctypes_h
+#define ctypes_h
 
 
 /* miscellaneous macros (not part of C standard) */

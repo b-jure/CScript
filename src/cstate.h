@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CSTATE_H
-#define CSTATE_H
+#ifndef cstate_h
+#define cstate_h
 
 
 #include "cobject.h"

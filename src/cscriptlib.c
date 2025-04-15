@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-
+#define cscriptlib_c
 #define CS_LIB
 
 #include "cprefix.h"
@@ -20,6 +20,7 @@ static const cs_Entry loadedlibs[] = {
     {CS_MATHLIBNAME, csopen_math},
     {CS_IOLIBNAME, csopen_io},
     {CS_OSLIBNAME, csopen_os},
+    {CS_REGLIBNAME, csopen_reg},
     {NULL, NULL}
 };
 

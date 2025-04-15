@@ -4,6 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
+#define cscript_c
+
 #include "cprefix.h"
 
 #include <stdio.h>
@@ -170,8 +172,7 @@ static int docall(cs_State *C, int nargs, int nres) {
 
 
 static int run_chunk(cs_State *C, int status) {
-    if (status == CS_OK)
-        status = docall(C, 0, 0);
+    if (status == CS_OK) status = docall(C, 0, 0);
     return report(C, status);
 }
 

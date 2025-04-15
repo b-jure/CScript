@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-
+#define cparser_c
 #define CS_CORE
 
 #include "cprefix.h"
@@ -24,6 +24,7 @@
 #include "ctable.h"
 #include "cmem.h"
 
+// TODO
 #if defined(CSI_DISASSEMBLE_BYTECODE)
 #include "ctrace.h"
 #define unasmfunc(C,p)      csTR_disassemble(C, p)
@@ -611,7 +612,7 @@ static void close_func(Lexer *lx) {
                        AbsLineInfo);
     csM_shrinkarray(C, p->instpc, p->sizeinstpc, fs->ninstpc, int);
     csM_shrinkarray(C, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
-    csM_shrinkarray(C, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
+    csM_shrinkarray(C, p->upvals, p->sizeupvalues, fs->nupvals, UpValInfo);
     lx->fs = fs->prev; /* go back to enclosing function (if any) */
     csG_checkGC(C); /* try to collect garbage memory */
     unasmfunc(fs->lx->C, fs->p);
@@ -695,11 +696,11 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e, int limit) 
 static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
     cs_State *C = fs->lx->C;
-    int osz = p->sizeupvals;
+    int osz = p->sizeupvalues;
     checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
-    csM_growarray(C, p->upvals, p->sizeupvals, fs->nupvals, MAXUPVAL,
+    csM_growarray(C, p->upvals, p->sizeupvalues, fs->nupvals, MAXUPVAL,
                   "upvalues", UpValInfo);
-    while (osz < p->sizeupvals)
+    while (osz < p->sizeupvalues)
         p->upvals[osz++].name = NULL;
     return &p->upvals[fs->nupvals++];
 }
@@ -764,12 +765,23 @@ static void varaux(FunctionState *fs, OString *name, ExpInfo *var, int base) {
 }
 
 
+static void expname(Lexer *lx, ExpInfo *e) {
+    initstring(e, str_expectname(lx));
+}
+
+
+// TODO: add docs, there is no more set/get global instead all is __ENV access
 /* find variable 'name' */
 static void var(Lexer *lx, OString *varname, ExpInfo *var) {
+    FunctionState *fs= lx->fs;
     varaux(lx->fs, varname, var, 1);
-    if (var->et == EXP_VOID) { /* global name? */
-        var->et = EXP_GLOBAL;
-        var->u.str = varname;
+    if (var->et == EXP_VOID) {
+        ExpInfo key;
+        varaux(fs, lx->envn, var, 1); /* get environment variable */
+        cs_assert(var->et != EXP_VOID); /* this one must exist */
+        csC_exp2stack(fs, var); /* put env on stack */
+        initstring(&key, varname); /* key is variable name */
+        csC_indexed(fs, var, &key, 0); /* env[varname] */
     }
 }
 
@@ -781,11 +793,6 @@ static void var(Lexer *lx, OString *varname, ExpInfo *var) {
 /*-------------------------------------------------------------------------
 **                              EXPRESSIONS
 **------------------------------------------------------------------------- */
-
-static void expname(Lexer *lx, ExpInfo *e) {
-    initstring(e, str_expectname(lx));
-}
-
 
 static int explist(Lexer *lx, ExpInfo *e) {
     int n = 1;
@@ -957,7 +964,7 @@ static void lastlistfield(FunctionState *fs, Constructor *c) {
 }
 
 
-static void listexp(Lexer *lx, ExpInfo *l) {
+static void listdef(Lexer *lx, ExpInfo *l) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
     int pc = csC_emitIS(fs, OP_NEWLIST, 0);
@@ -1002,16 +1009,16 @@ static void tabfield(Lexer *lx, Constructor *c) {
     c->u.t.nh++;
     expectnext(lx, '=');
     t = c->e;
-    csC_indexed(fs, t, &k, 0); /* ensure key is in proper place... */
-    expr(lx, &v); /* get key value... */
-    csC_exp2stack(fs, &v); /* put it on stack... */
-    extra = csC_store(fs, t); /* ...and do the store */
-    csC_pop(fs, extra); /* pop potential key value */
+    csC_indexed(fs, t, &k, 0);
+    expr(lx, &v);               /* get the value... */
+    csC_exp2stack(fs, &v);      /* put it on stack... */
+    extra = csC_store(fs, t);   /* ...and do the store */
+    csC_pop(fs, extra-1);       /* (keep table) */
     cs_assert(fs->sp == sp);
 }
 
 
-static void tableexp(Lexer *lx, ExpInfo *t) {
+static void tabledef(Lexer *lx, ExpInfo *t) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
     int pc = csC_emitIS(fs, OP_NEWTABLE, 0);
@@ -1021,8 +1028,8 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
     expectnext(lx, '{');
     initexp(t, EXP_FINEXPR, fs->sp); /* finalize table expression */
     csC_reserveslots(fs, 1); /* space for table */
-    do { /* while have table fields */
-        if (check(lx, '}')) break; /* delimiter; no more field */
+    do {
+        if (check(lx, '}')) break; /* delimiter; no more fields */
         tabfield(lx, &c);
     } while (match(lx, ',') || match(lx, ';'));
     expectmatch(lx, '}', '{', line);
@@ -1030,15 +1037,15 @@ static void tableexp(Lexer *lx, ExpInfo *t) {
 }
 
 
-static OString *indexedname(Lexer *lx, ExpInfo *v, int *leftover) {
+static OString *indexedname(Lexer *lx, ExpInfo *v) {
     OString *name = str_expectname(lx);
-    *leftover = 0;
+    int field = 0;
     var(lx, name, v);
     while (check(lx, '.')) {
         getfield(lx, v, 0);
-        *leftover = 1;
+        field = 1;
     }
-    return (*leftover ? strval(csC_getconstant(lx->fs, v)) : name);
+    return (field ? strval(csC_getconstant(lx->fs, v)) : name);
 }
 
 
@@ -1094,9 +1101,8 @@ static void klass(Lexer *lx, ExpInfo *e) {
     csC_reserveslots(fs, 1); /* space for class */
     if (match(lx, TK_INHERITS)) { /* class object inherits? */
         int cls = fs->sp - 1;
-        int dummy;
         ExpInfo v;
-        indexedname(lx, &v, &dummy);    /* get superclass... */
+        indexedname(lx, &v);            /* get superclass... */
         csC_exp2stack(fs, &v);          /* put it on stack... */
         csC_load(fs, cls);              /* load class... */
         csC_emitI(fs, OP_INHERIT);      /* ...and do the inherit */
@@ -1153,11 +1159,11 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
             break;
         }
         case '[': {
-            listexp(lx, e);
+            listdef(lx, e);
             return;
         }
         case '{': {
-            tableexp(lx, e);
+            tabledef(lx, e);
             return;
         }
         case TK_FN: {
@@ -1304,19 +1310,19 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
     FunctionState *fs = lx->fs;
     OString *varid = NULL;
     switch (var->et) {
-    case EXP_UVAL: {
-        UpValInfo *uv = &fs->p->upvals[var->u.info];
-        if (uv->kind == VARFINAL)
-            varid = uv->name;
-        break;
-    }
-    case EXP_LOCAL: {
-        LVar *lv = getlocalvar(fs, var->u.info);
-        if (lv->s.kind == VARFINAL)
-            varid = lv->s.name;
-        break;
-    }
-    default: return; /* cannot be read-only */
+        case EXP_UVAL: {
+            UpValInfo *uv = &fs->p->upvals[var->u.info];
+            if (uv->kind == VARFINAL)
+                varid = uv->name;
+            break;
+        }
+        case EXP_LOCAL: {
+            LVar *lv = getlocalvar(fs, var->u.info);
+            if (lv->s.kind == VARFINAL)
+                varid = lv->s.name;
+            break;
+        }
+        default: return; /* cannot be read-only */
     }
     if (varid) {
         const char *msg = csS_pushfstring(lx->C,
@@ -1336,17 +1342,17 @@ static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
             extra = 0;
         csC_setreturns(fs, e, extra);
     } else {
-        if (e->et != EXP_VOID)
-            csC_exp2stack(fs, e);
+        if (e->et != EXP_VOID) /* have one or more expressions? */
+            csC_exp2stack(fs, e); /* finalize the last expression */
         if (need > 0) { /* missing values? */
-            csC_nil(fs, need);
+            csC_nil(fs, need); /* assign them as nil */
             return; /* done */
-        } /* else fall through */
-    }
+        } /* else ... */
+    } /* fall through */
     if (need > 0) /* need to reserve stack slots? */
         csC_reserveslots(fs, need);
-    else /* otherwise 'need' is negative or zero */
-        csC_pop(fs, -need); /* pop extra values if any */
+    else /* otherwise we might have extra values */
+        csC_pop(fs, -need); /* pop them (if any) */
 }
 
 
@@ -1381,10 +1387,9 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
         else
             csC_exp2stack(lx->fs, &e);
     }
-    if (eisindexed(&lhs->v)) {
-        int extra = csC_storevar(lx->fs, &lhs->v, left+nvars-1);
-        left += 1 + extra; /* variable and extra (key value) */
-    } else /* no leftover values */
+    if (eisindexed(&lhs->v))
+        left += csC_storevar(lx->fs, &lhs->v, left+nvars-1);
+    else /* no leftover values */
         csC_store(lx->fs, &lhs->v);
     return left;
 }
@@ -1571,30 +1576,26 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
 }
 
 
+#include <stdio.h>
 static void fnstm(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
-    int left;
     ExpInfo var, e;
     csY_scan(lx); /* skip 'fn' */
-    indexedname(lx, &var, &left);
+    indexedname(lx, &var);
     funcbody(lx, &e, 0, linenum);
     checkreadonly(lx, &var);
-    csC_store(fs, &var);
-    csC_pop(fs, left); /* remove leftover (if any) */
+    csC_pop(fs, csC_store(fs, &var)); /* remove leftover (if any) */
 }
 
 
 static void classstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    int left;
     ExpInfo var;
     csY_scan(lx); /* skip 'class' */
-    indexedname(lx, &var, &left);
+    indexedname(lx, &var);
     klass(lx, NULL);
     checkreadonly(lx, &var);
-    csC_store(fs, &var);
-    cs_assert(var.et == EXP_FINEXPR);
-    csC_pop(fs, left); /* remove leftover (if any) */
+    csC_pop(fs, csC_store(fs, &var)); /* remove leftover (if any) */
 }
 
 
@@ -2395,8 +2396,15 @@ static void stm(Lexer *lx) {
 /* compile main function */
 static void mainfunc(FunctionState *fs, Lexer *lx) {
     Scope s;
+    UpValInfo *env;
     open_func(lx, fs, &s);
     setvararg(fs, 0); /* main function is always vararg */
+    env = newupvalue(fs);
+    env->name = lx->envn;
+    env->idx = 0;
+    env->onstack = 1;
+    env->kind = VARREG;
+    csG_objbarrier(lx->C, fs->p, env->name);
     csY_scan(lx); /* scan for first token */
     decl_list(lx, 0); /* parse main body */
     expect(lx, TK_EOS);
@@ -2409,7 +2417,7 @@ CSClosure *csP_parse(cs_State *C, BuffReader *br, Buffer *buff,
                      ParserState *ps, const char *source) {
     Lexer lx;
     FunctionState fs;
-    CSClosure *cl = csF_newCSClosure(C, 0);
+    CSClosure *cl = csF_newCSClosure(C, 1);
     setclCSval2s(C, C->sp.p, cl); /* anchor main function closure */
     csT_incsp(C);
     lx.tab = csH_new(C);
@@ -2423,7 +2431,7 @@ CSClosure *csP_parse(cs_State *C, BuffReader *br, Buffer *buff,
     lx.buff = buff;
     csY_setinput(C, &lx, br, fs.p->source);
     mainfunc(&fs, &lx);
-    cs_assert(!fs.prev && fs.nupvals == 0 && !lx.fs);
+    cs_assert(!fs.prev && fs.nupvals == 1 && !lx.fs);
     /* all scopes should be correctly finished */
     cs_assert(ps->actlocals.len == 0 && ps->patches.len == 0 && !ps->cs);
     C->sp.p--; /* remove scanner table */

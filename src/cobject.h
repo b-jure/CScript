@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef COBJECT_H
-#define COBJECT_H
+#ifndef cobject_h
+#define cobject_h
 
 
 #include "cscript.h"
@@ -532,7 +532,7 @@ typedef struct Proto {
     int sizep;              /* size of 'p' */
     int sizek;              /* size of 'k' */
     int sizecode;           /* size of 'code' */
-    int sizeupvals;         /* size of 'upvals' */
+    int sizeupvalues;         /* size of 'upvals' */
     int sizelineinfo;       /* size of 'lineinfo' */
     int sizeabslineinfo;    /* size of 'abslineinfo' */
     int sizeinstpc;         /* size of 'instpc' */

@@ -1,0 +1,331 @@
+assert(import("string") == string);
+assert(import("math") == math);
+assert(import("io") == io);
+assert(import("os") == os);
+assert(import("reg") == reg);
+
+assert(typeof(package.path) == "string");
+assert(typeof(package.cpath) == "string");
+assert(typeof(package.loaded) == "table");
+assert(typeof(package.preload) == "table");
+
+assert(typeof(package.config) == "string");
+
+{
+    /// create a path with 'max' templates,
+    /// each with 1-10 repetitions of '?'
+    local max = 2000;
+    local l = [];
+    for (local i = 0; i < max; i = i+1)
+        l[i] = string.repeat("?", i%10 + 1);
+    l[len(l)] = ";";  /// empty template
+    local path = string.concat(l, ";");
+    /// use that path in a search
+    local s, err = package.searchpath("xuxu", path);
+    /// search fails; check that message has an occurrence of
+    /// '??????????' with ? replaced by xuxu and at least 'max' lines
+    assert(!s and
+           reg.find(err, string.repeat("xuxu", 10)) and
+           len(reg.gsub(err, "[^\n]", "")) >= max);
+    /// path with one very long template
+    path = string.repeat("?", max);
+    s, err = package.searchpath("xuxu", path);
+    assert(!s and string.find(err, string.repeat("xuxu", max)));
+}
+
+{
+    local oldpath = package.path;
+    package.path = {};
+    local s, err = pcall(import, "no-such-file");
+    assert(!s and string.find(err, "package.path"));
+    package.path = oldpath;
+}
+
+
+{
+    local oldpath = package.path;
+    local oldcpath = package.cpath;
+
+    package.path = "?.cscript;?/?";
+    package.cpath = "?.so;?/init";
+
+    local st, msg = pcall(import, "XXX");
+
+    local expected = """
+module 'XXX' not found:
+        no field package.preload['XXX']
+        no file 'XXX.cscript'
+        no file 'XXX/XXX'
+        no file 'XXX.so'
+        no file 'XXX/init'
+""";
+
+    assert(msg == expected);
+
+    package.path = oldpath;
+    package.cpath = oldcpath;
+}
+
+
+/// The next tests for 'import' assume some specific directories and
+/// libraries.
+
+if (__POSIX or __WINDOWS) {
+
+    local dirsep = reg.match(package.config, "^([^\n]+)\n");
+    /// auxiliary directory with C modules and temporary files
+    local DIR = "libs" .. dirsep;
+
+    /// prepend DIR to a name and correct directory separators
+    local fn D(x) {
+        x = reg.gsub(x, "/", dirsep);
+        return DIR .. x;
+    }
+
+    /// prepend DIR and pospend proper C lib. extension to a name
+    local fn DC(x) {
+        local ext = (dirsep == '\\') and ".dll" or ".so";
+        return D(x .. ext);
+    }
+
+    local fn createfiles(files, preextras, posextras) {
+        foreach n,c in pairs(files) {
+            io.output(D(n));
+            io.write(string.fmt(preextras, n));
+            io.write(c);
+            io.write(string.fmt(posextras, n));
+            io.close(io.output());
+        }
+    }
+
+    local fn removefiles(files) {
+        foreach n in pairs(files)
+            os.remove(D(n));
+    }
+
+    local files = {
+        ["names.cscript"] = "{ return [...]; }\n",
+        ["err.cscript"] = "B = 15; a = a + 1;",
+        ["synerr.cscript"] = "B =",
+        ["A.cscript"] = "",
+        ["B.cscript"] = "assert(...==\"B\");import(\"A\");",
+        ["A.lc"] = "",
+        ["A"] = "",
+        ["L"] = "",
+        ["XXxX"] = "",
+        ["C.cscript"] = "package.loaded[...] = 25; import(\"C\");",
+    };
+
+    AA = nil;
+    local extras = """
+NAME = "%s";
+REQUIRED = ...;
+return AA;
+""";
+
+    createfiles(files, "", extras);
+
+    /// testing explicit "dir" separator in 'searchpath'
+    assert(package.searchpath("C.cscript", D("?"), "", "") == D("C.cscript"));
+    assert(package.searchpath("C.cscript", D("?"), ".", ".") == D("C.cscript"));
+    assert(package.searchpath("--x-", D("?"), "-", "X") == D("XXxX"));
+    assert(package.searchpath("---xX", D("?"), "---", "XX") == D("XXxX"));
+    assert(package.searchpath(D("C.cscript"), "?", dirsep) == D("C.cscript"));
+    assert(package.searchpath(".\\C.cscript", D("?"), "\\") == D("./C.cscript"));
+
+    local oldpath = package.path;
+
+    package.path = reg.gsub("D/?.cscript;D/?.lc;D/?;D/??x?;D/L", "D/", DIR);
+
+    local try = fn(p, n, r, ext) {
+        NAME = nil;
+        local rr, x = import(p);
+        assert(NAME == n);
+        assert(REQUIRED == p);
+        assert(rr == r);
+        assert(ext == x);
+    };
+
+    local a = import("names");
+    assert(a[0] == "names" and a[1] == D("names.cscript"));
+
+    {
+        local st, msg = pcall(import, "err");
+        assert(!st and string.find(msg, "arithmetic") and B == 15);
+        st, msg = pcall(import, "synerr");
+        assert(!st and string.find(msg, "error loading module"));
+    }
+
+    assert(package.searchpath("C", package.path) == D("C.cscript"));
+    assert(import("C") == 25);
+    assert(import("C") == 25);
+    AA = nil;
+    try("B", "B.cscript", true, "libs/B.cscript");
+    assert(package.loaded.B);
+    assert(import("B") == true);
+    assert(package.loaded.A);
+    assert(import("C") == 25);
+    package.loaded.A = nil;
+    try("B", nil, true, nil);  /// should not reload package
+    try("A", "A.cscript", true, "libs/A.cscript");
+    package.loaded.A = nil;
+    os.remove(D("A.cscript"));
+    AA = {};
+    try("A", "A.lc", AA, "libs/A.lc");  /// now must find second option
+    assert(package.searchpath("A", package.path) == D("A.lc"));
+    assert(import("A") == AA);
+    AA = false;
+    try("K", "L", false, "libs/L");  /// default option
+    try("K", "L", false, "libs/L");  /// default option (should reload it)
+    assert(__G._REQUIREDNAME == nil);
+
+    AA = "x";
+    try("X", "XXxX", AA, "libs/XXxX");
+
+    removefiles(files);
+    NAME, REQUIRED, AA, B = nil;
+
+
+    /// testing import of sub-packages
+
+    local __G = __G;
+
+    package.path = reg.gsub("D/?.cscript;D/?/init.cscript", "D/", DIR);
+
+    files = {
+        ["P1/init.cscript"] = "AA = 10;",
+        ["P1/xuxu.cscript"] = "AA = 20;",
+    };
+
+    createfiles(files, "__ENV = {};\n", "\nreturn __ENV;\n");
+    AA = 0;
+
+    {
+        local m, ext = assert(import("P1"));
+        assert(ext == "libs/P1/init.cscript");
+        assert(AA == 0 and m.AA == 10);
+        assert(import("P1") == m);
+        assert(import("P1") == m);
+
+        assert(package.searchpath("P1.xuxu", package.path) == D("P1/xuxu.cscript"));
+        m.xuxu, ext = assert(import("P1.xuxu"));
+        assert(AA == 0 and m.xuxu.AA == 20);
+        assert(ext == "libs/P1/xuxu.cscript");
+        assert(import("P1.xuxu") == m.xuxu);
+        assert(import("P1.xuxu") == m.xuxu);
+        assert(import("P1") == m and m.AA == 10);
+    }
+
+
+    removefiles(files);
+    AA = nil;
+
+    package.path = "";
+    assert(!pcall(import, "file_does_not_exist"));
+    package.path = "??\0?";
+    assert(!pcall(import, "file_does_not_exist1"));
+
+    package.path = oldpath;
+
+    { /// check 'import' error message
+        local fname = "file_does_not_exist2";
+        local m, err = pcall(import, fname);
+        foreach t in reg.gmatch(package.path..";"..package.cpath, "[^;]+") {
+            local t = reg.gsub(t, "?", fname);
+            assert(reg.find(err, t, 1, true));
+        }
+    }
+
+    { /// testing 'package.searchers' not being an array
+        local searchers = package.searchers;
+        package.searchers = 3;
+        local st, msg = pcall(import, "a");
+        assert(!st and string.find(msg, "must be list"));
+        package.searchers = searchers;
+    }
+
+    local fn _import(...) {
+        local f = [...];
+        return fn(m) {
+            local j = len(f);
+            for (local i=0; i < j; i=i+1)
+                m[f[i]] = __G[f[i]];
+        };
+    }
+
+    /// cannot change environment of a C function
+    assert(!pcall(module, "XUXU"));
+
+
+
+    /// testing import of C libraries
+
+
+    local p = "";   /// On Mac OS X, redefine this to "_"
+
+    /// check whether loadlib works in this system
+    local st, err, when = package.loadlib(DC("lib1"), "*");
+    if (!st) {
+        local f, err, when = package.loadlib("donotexist", p.."xuxu");
+        assert(!f and typeof(err) == "string" and when == "absent");
+        print("\n >>> cannot load dynamic library <<<\n");
+        print(err, when);
+    } else {
+        { /// tests for loadlib
+            local f = assert(package.loadlib(DC("lib1"), p.."onefunction"));
+            local a, b = f(15, 25);
+            assert(a == 25 and b == 15);
+            f = assert(package.loadlib(DC("lib1"), p.."anotherfunc"));
+            assert(f(10, 20) == "10%20\n");
+        }
+
+        { /// check error messages
+            local f, err, when = package.loadlib(DC("lib1"), p.."xuxu");
+            assert(!f and typeof(err) == "string" and when == "init");
+            f, err, when = package.loadlib("donotexist", p.."xuxu");
+            assert(!f and typeof(err) == "string" and when == "open");
+
+            /// symbols from 'lib1' must be visible to other libraries
+            f = assert(package.loadlib(DC("lib11"), p.."csopen_lib11"));
+            assert(f() == "exported");
+        }
+
+        { /// test C modules with prefixes in names
+            package.cpath = DC("?");
+            local lib2, ext = import("lib2-v2");
+            assert(string.find(ext, "libs/lib2-v2"));
+            /// check correct access to global environment and correct parameters
+            assert(__ENV.x == "lib2-v2" and __ENV.y == DC("lib2-v2"));
+            assert(lib2.id("x") == true); /// a different "id" implementation
+        }
+
+        { /// test C submodules
+            local fs, ext = import("lib1.sub");
+            assert(__ENV.x == "lib1.sub" and __ENV.y == DC("lib1"));
+            assert(string.find(ext, "libs/lib1"));
+            assert(fs.id(45) == 45);
+            __ENV.x, __ENV.y = nil;
+        }
+    }
+
+    __ENV = __G;
+
+    
+    { /// testing preload
+        local p = package;
+        package = {};
+        p.preload.pl = fn (...) {
+            __ENV.l = [...];
+            fn xuxu(x) { return x+20; }
+            return __ENV;
+        };
+
+        local pl, ext = import("pl");
+        assert(import("pl") == pl);
+        assert(pl.xuxu(10) == 30);
+        assert(pl.l[0] == "pl" and pl.l[1] == ":preload:" and ext == ":preload:");
+
+        package = p;
+        assert(typeof(package.path) == "string");
+    }
+}

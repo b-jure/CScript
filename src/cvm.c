@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-
+#define cvm_c
 #define CS_CORE
 
 #include "cprefix.h"
@@ -97,7 +97,7 @@ static int booleans[2] = { CS_VFALSE, CS_VTRUE };
 ** initialize its upvalues.
 */
 static void pushclosure(cs_State *C, Proto *p, UpVal **enc, SPtr base) {
-    int nupvals = p->sizeupvals;
+    int nupvals = p->sizeupvalues;
     CSClosure *cl = csF_newCSClosure(C, nupvals);
     cl->p = p;
     setclCSval2s(C, C->sp.p++, cl); /* anchor to stack */
@@ -350,11 +350,11 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
 
 
 static void setlistindex(cs_State *C, List *l, const TValue *index,
-                          const TValue *val) {
+                         const TValue *val) {
     cs_Integer i;
     if (c_likely(tointeger(index, &i))) { /* index is integer? */
         if (c_likely(0 <= i)) { /* non-negative index? */
-            if (c_unlikely(i > CS_MAXLISTINDEX)) /* 'index' too large? */
+            if (c_unlikely(i > MAXLISTINDEX)) /* 'index' too large? */
                 csD_indexerror(C, i, "too large");
             csA_ensureindex(C, l, i); /* expand list */
             setobj(C, &l->b[i], val); /* set the value at index */
@@ -1062,6 +1062,7 @@ c_sinline void pushtable(cs_State *C, int b) {
 #define savestate(C)        (storepc(C), storesp(C))
 
 
+// TODO
 #if defined(CSI_TRACE_EXEC)
 #include "ctrace.h"
 #define tracepc(C,p)        (csTR_tracepc(C, sp, p, pc))
@@ -1608,28 +1609,6 @@ returning: /* trap already set */
             vm_case(OP_TBC) {
                 savestate(C);
                 csF_newtbcvar(C, STK(fetch_l()));
-                vm_break;
-            }
-            vm_case(OP_GETGLOBAL) {
-                TValue *key = K(fetch_l());
-                Table *G = tval(GT(C));
-                const TValue *val = csH_getstr(G, strval(key));
-                if (!isempty(val)) {
-                    setobj2s(C, sp, val);
-                } else
-                    setnilval(s2v(sp));
-                sp++;
-                vm_break;
-            }
-            vm_case(OP_SETGLOBAL) {
-                Table *G = tval(GT(C));
-                TValue *v = peek(0);
-                TValue *key;
-                savestate(C);
-                key = K(fetch_l());
-                cs_assert(ttisstring(key));
-                csV_settable(C, G, key, v);
-                sp--;
                 vm_break;
             }
             vm_case(OP_GETLOCAL) {

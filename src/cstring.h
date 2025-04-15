@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CSTRING_H
-#define CSTRING_H
+#ifndef cstring_h
+#define cstring_h
 
 
 #include "cobject.h"

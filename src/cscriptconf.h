@@ -5,8 +5,8 @@
 */
 
 
-#ifndef CCONFIG_H
-#define CCONFIG_H
+#ifndef cscriptconfig_h
+#define cscriptconfig_h
 
 
 #include <limits.h>
@@ -128,17 +128,17 @@
 #define CS_SHRDIR   "!\\..\\share\\cscript\\" CS_VDIR "\\"
 
 #if !defined(CS_PATH_DEFAULT)
-#define CS_PATH_DEFAULT  \
-        CS_CSDIR"?.cst;"  CS_CSDIR"?\\init.cst;" \
-        CS_CDIR"?.cst;"  CS_CDIR"?\\init.cst;" \
-        CS_SHRDIR"?.cst;" CS_SHRDIR"?\\init.cst;" \
-        ".\\?.cst;" ".\\?\\init.cst"
+#define CS_PATH_DEFAULT \
+        CS_CSDIR"?.cscript;"  CS_CSDIR"?\\init.cscript;" \
+        CS_CDIR"?.cscript;"  CS_CDIR"?\\init.cscript;" \
+        CS_SHRDIR"?.cscript;" CS_SHRDIR"?\\init.cscript;" \
+        ".\\?.cscript;" ".\\?\\init.cscript"
 #endif
 
 #if !defined(CS_CPATH_DEFAULT)
 #define CS_CPATH_DEFAULT \
         CS_CDIR"?.dll;" \
-        CS_CDIR"..\\lib\\cst\\" CS_VDIR "\\?.dll;" \
+        CS_CDIR"..\\lib\\cscript\\" CS_VDIR "\\?.dll;" \
         CS_CDIR"loadall.dll;" ".\\?.dll"
 #endif
 
@@ -149,10 +149,10 @@
 #define CS_CDIR     CS_ROOT "lib/cscript/" CS_VDIR "/"
 
 #if !defined(CS_PATH_DEFAULT)
-#define CS_PATH_DEFAULT  \
-        CS_CSDIR"?.cst;"  CS_CSDIR"?/init.cst;" \
-        CS_CDIR"?.cst;"  CS_CDIR"?/init.cst;" \
-        "./?.cst;" "./?/init.cst"
+#define CS_PATH_DEFAULT \
+        CS_CSDIR"?.cscript;"  CS_CSDIR"?/init.cscript;" \
+        CS_CDIR"?.cscript;"  CS_CDIR"?/init.cscript;" \
+        "./?.cscript;" "./?/init.cscript"
 #endif
 
 #if !defined(CS_CPATH_DEFAULT)

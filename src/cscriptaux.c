@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-
+#define cscriptaux_c
 #define CS_LIB
 
 #include "cprefix.h"
@@ -147,6 +147,16 @@ CSLIB_API cs_Integer csL_check_integer(cs_State *C, int index) {
 }
 
 
+// TODO: add docs
+CSLIB_API int csL_check_bool(cs_State *C, int index) {
+    int isbool;
+    int i = cs_to_boolx(C, index, &isbool);
+    if (c_unlikely(!isbool))
+        terror(C, index, CS_TBOOL);
+    return i;
+}
+
+
 CSLIB_API const char *csL_check_lstring(cs_State *C, int index, size_t *len) {
     const char *str = cs_to_lstring(C, index, len);
     if (c_unlikely(str == NULL))
@@ -204,6 +214,12 @@ CSLIB_API cs_Number csL_opt_number(cs_State *C, int index, cs_Number dfl) {
 
 CSLIB_API cs_Integer csL_opt_integer(cs_State *C, int index, cs_Integer dfl) {
     return csL_opt(C, csL_check_integer, index, dfl);
+}
+
+
+// TODO: add docs
+CSLIB_API int csL_opt_bool(cs_State *C, int index, int dfl) {
+    return csL_opt(C, csL_check_bool, index, dfl);
 }
 
 
@@ -377,8 +393,8 @@ CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname) {
                 p = NULL;
             cs_pop(C, 2); /* remove both metalists */
             return p;
-        } /* else fall through */
-    } /* else fall through */
+        }
+    }
     return NULL; /* value is not a userdata with a metalist */
 }
 
@@ -525,7 +541,7 @@ CSLIB_API int csL_get_property(cs_State *C, int index) {
 
 
 CSLIB_API void csL_set_index(cs_State *C, int index, int i) {
-    if (c_unlikely(i < 0 || CS_MAXLISTINDEX < i))
+    if (c_unlikely(i < 0 || MAXLISTINDEX < i))
         csL_error(C, "list index out of bounds (%d)", i);
     cs_set_index(C, index, i);
 }

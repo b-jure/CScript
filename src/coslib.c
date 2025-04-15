@@ -4,6 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
+#define coslib_c
 #define CS_LIB
 
 #include "cprefix.h"

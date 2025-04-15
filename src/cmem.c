@@ -4,7 +4,7 @@
 ** See Copyright Notice in cscript.h
 */
 
-
+#define cmem_c
 #define CS_CORE
 
 #include "cprefix.h"

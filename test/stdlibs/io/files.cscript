@@ -334,3 +334,249 @@ assert(io.read(0));
 assert(io.read("a") == ";end of file\n");
 assert(!io.read(0));
 assert(io.close(io.input()));
+
+/* test errors in read/write */
+{
+    local fn ismsg(m) {
+        # error message is not a code number
+        return (typeof(m) == "string" and !tonum(m));
+    }
+
+    # read
+    local f = io.open(fname, "w");
+    local r, m, c = f.read();
+    assert(!r and ismsg(m) and typeof(c) == "number");
+    assert(f.close());
+    # write
+    f = io.open(fname, "r");
+    r, m, c = f.write("whatever");
+    assert(!r and ismsg(m) and typeof(c) == "number");
+    assert(f.close());
+    # lines
+    f = io.open(fname, "w");
+    r, m = pcall(f.lines());
+    assert(r == false and ismsg(m));
+    assert(f.close());
+}
+
+assert(os.remove(fname));
+
+
+/* test for L format */
+io.output(fname); io.write("\n\nline\nother").close();
+io.input(fname);
+assert(io.read("L") == "\n");
+assert(io.read("L") == "\n");
+assert(io.read("L") == "line\n");
+assert(io.read("L") == "other");
+assert(!io.read("L"));
+io.input().close();
+
+f = assert(io.open(fname));
+s = "";
+foreach l in f.lines("L")
+    s = s .. l;
+assert(s == "\n\nline\nother");
+f.close();
+
+io.input(fname);
+s = "";
+foreach l in io.lines(nil, "L")
+    s = s .. l;
+assert(s == "\n\nline\nother");
+io.input().close();
+
+s = "";
+foreach l in io.lines(fname, "L")
+    s = s .. l;
+assert(s == "\n\nline\nother");
+
+s = "";
+foreach l in io.lines(fname, "l")
+    s = s .. l;
+assert(s == "lineother");
+
+io.output(fname);
+io.write("a = 10 + 34;\na = 2*a;\na = -a;\n").close();
+assert(load((io.lines(fname, "L"))))();
+assert(__G.a == -((10 + 34) * 2));
+
+
+
+/* test for multipe arguments in 'lines' */
+io.output(fname);
+io.write("0123456789\n").close();
+foreach a,b in io.lines(fname, 1, 1) {
+    if (a == "\n") assert(!b);
+    else assert(tonum(a) == tonum(b) - 1);
+}
+
+foreach a,b,c in io.lines(fname, 1, 2, "a")
+    assert(a == "0" and b == "12" and c == "3456789\n");
+
+foreach a,b,c in io.lines(fname, "a", 0, 1) {
+  if (a == "") break;
+  assert(a == "0123456789\n" and !b and !c);
+}
+gc();   # to close file in previous iteration
+
+io.output(fname);
+io.write("00\n10\n20\n30\n40\n").close();
+foreach a, b in io.lines(fname, "n", "n") {
+  if (a == 40) assert(!b);
+  else assert(a == b - 10);
+}
+
+
+/* test load x lines */
+io.output(fname);
+io.write("""
+local y
+= X;
+X =
+X *
+2 +
+X;
+X =
+X
+-                                   y;
+
+"""
+).close();
+__G.X = 1;
+assert(load((io.lines(fname))));
+gc();   # to close file in previous iteration
+load((io.lines(fname, "L")))();
+assert(__G.X == 2);
+load((io.lines(fname, 1)))();
+assert(__G.X == 4);
+load((io.lines(fname, 3)))();
+assert(__G.X == 8);
+__G.X = nil;
+
+
+local x1 = "string\n\n\\com \"\"''strange [[things]] ]]'";
+io.output(fname);
+assert(io.write(string.fmt("X2 = %q;\n# comment without ending EOS", x1)));
+io.close();
+assert(loadfile(fname))();
+assert(x1 == __G.X2);
+__G.X2 = nil;
+assert(os.remove(fname));
+assert(!os.remove(fname));
+assert(!os.remove(otherfname));
+
+/* testing loadfile */
+local fn testloadfile(s, expres) {
+  io.output(fname);
+  if (s) io.write(s);
+  io.close();
+  local res = assert(loadfile(fname))();
+  assert(os.remove(fname));
+  assert(res == expres);
+}
+
+/* loading empty file */
+testloadfile(nil, nil);
+
+/* loading file with initial comment without end of line */
+testloadfile("# a non-ending comment", nil);
+
+
+io.output(fname);
+assert(io.write("qualquer coisa\n"));
+assert(io.write("mais qualquer coisa"));
+io.close();
+assert(io.output(assert(io.open(otherfname, "wb")))
+       .write("outra coisa\0\1\3\0\0\0\0\255\0")
+       .close());
+
+local filehandle = assert(io.open(fname, "r+"));
+local otherfilehandle = assert(io.open(otherfname, "rb"));
+assert(filehandle != otherfilehandle);
+assert(typeof(filehandle) == "userdata");
+assert(filehandle.read("l") == "qualquer coisa");
+io.input(otherfilehandle);
+assert(io.read(len("outra coisa")) == "outra coisa");
+assert(filehandle.read("l") == "mais qualquer coisa");
+filehandle.close();
+assert(typeof(filehandle) == "userdata");
+io.input(otherfilehandle);
+assert(io.read(4) == "\0\1\3\0");
+assert(io.read(3) == "\0\0\0");
+assert(io.read(0) == "");       # 255 is not eof
+assert(io.read(1) == "\255");
+assert(io.read('a') == "\0");
+assert(!io.read(0));
+assert(otherfilehandle == io.input());
+otherfilehandle.close();
+assert(os.remove(fname));
+assert(os.remove(otherfname));
+gc();
+
+{
+    io.output(fname).write("""
+ 123.4	-56e-2  not a number
+second line
+third line
+
+and the rest of the file
+""").close();
+    io.input(fname);
+    local _,a,b,c,d,e,h,__ = io.read(1, "n", "n", "l", "l", "l", "a", 10);
+    assert(io.close(io.input()));
+    assert(_ == " " and !__);
+    assert(typeof(a) == "number" and a==123.4 and b==-56e-2);
+    assert(d=="second line" and e=="third line");
+    assert(h== ("\nand the rest of the file"));
+    assert(os.remove(fname));
+    gc();
+}
+
+
+# testing buffers
+{
+    local f = assert(io.open(fname, "w"));
+    local fr = assert(io.open(fname, "r"));
+    assert(f.setvbuf("full", 2000));
+    f.write("x");
+    assert(fr.read("a") == "");  # full buffer; output not written yet
+    f.close();
+    fr.seek("set");
+    assert(fr.read("a") == "x");   # `close' flushes it
+    f = assert(io.open(fname), "w");
+    assert(f.setvbuf("no"));
+    f.write("x");
+    fr.seek("set");
+    assert(fr.read("a") == "x");  # no buffer; output is ready
+    f.close();
+    f = assert(io.open(fname, "a"));
+    assert(f.setvbuf("line"));
+    f.write("x");
+    fr.seek("set", 1);
+    assert(fr.read("a") == "");   # line buffer; no output without `\n'
+    f.write("a\n").seek("set", 1);
+    assert(fr.read("a") == "xa\n");  # now we have a whole line
+    f.close(); fr.close();
+    assert(os.remove(fname));
+}
+
+
+{ /* test large files */
+    io.output(fname);
+    for (local i=0; i < 5000; i=i+1) io.write("0123456789123");
+    io.write("\n12346").close();
+    io.input(fname);
+    local x = io.read("a");
+    io.input().seek("set", 0);
+    local y = io.read(30001)..io.read(1005)..io.read(0)..
+              io.read(1)..io.read(100003);
+    assert(x == y and len(x) == 5000*13 + 6);
+    io.input().seek("set", 0);
+    y = io.read();    # huge line
+    assert(x == y.."\n"..io.read());
+    assert(!io.read());
+    io.close(io.input());
+    assert(os.remove(fname));
+    x = nil; y = nil;
+}

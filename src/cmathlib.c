@@ -1,4 +1,10 @@
+/*
+** cmathlib.c
+** Standard mathematical library
+** See Copyright Notice in cscript.h
+*/
 
+#define cmathlib_c
 #define CS_LIB
 
 #include "cprefix.h"

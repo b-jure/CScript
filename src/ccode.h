@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CCODE_H
-#define CCODE_H
+#ifndef ccode_h
+#define ccode_h
 
 
 #include "cbits.h"
@@ -235,9 +235,6 @@ OP_CALL,/*  L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offsp-1})'
 
 OP_CLOSE,/*        L           'close all open upvalues >= V{L}'            */
 OP_TBC,/*          L           'mark L{L} as to-be-closed'                  */
-
-OP_GETGLOBAL,/*    L           'G{L}'                                       */
-OP_SETGLOBAL,/*    V L         'G{L} = V'                                   */
 
 OP_GETLOCAL,/*     L           'L{L}'                                       */
 OP_SETLOCAL,/*     V L         'L{L} = V'                                   */

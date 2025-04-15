@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CDEBUG_H
-#define CDEBUG_H
+#ifndef cdebug_h
+#define cdebug_h
 
 
 #include "cobject.h"

@@ -366,22 +366,15 @@ CS_API cs_Integer cs_to_integerx(cs_State *C, int index, int *pisint) {
 }
 
 
-/*
-** Returns 0 or 1 whether the value at index is false or true respectively.
-** All values in CScript are considered true except `nil` and `false`.
-*/
-CS_API int cs_to_bool(cs_State *C, int index) {
+// TODO: add docs
+CS_API int cs_to_boolx(cs_State *C, int index, int *isbool) {
     const TValue *o = index2value(C, index);
+    if (isbool)
+        *isbool = ttisbool(o);
     return !c_isfalse(o);
 }
 
 
-/*
-** Return string value from value at index and if `plen` is provided
-** set it to match the length of the string.
-** If the value is not a string return NULL (in this case if `plen` is
-** provided it is ignored).
-*/
 CS_API const char *cs_to_lstring(cs_State *C, int index, size_t *plen) {
     const TValue *o = index2value(C, index);
     if (!ttisstring(o)) /* not a string? */
@@ -392,10 +385,6 @@ CS_API const char *cs_to_lstring(cs_State *C, int index, size_t *plen) {
 }
 
 
-/*
-** Return `cs_CFunction` from the value at index.
-** If the value is not a C closure or light C function, then this returns NULL.
-*/
 CS_API cs_CFunction cs_to_cfunction(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     if (ttislcf(o)) 
@@ -912,7 +901,7 @@ CS_API int cs_get_index(cs_State *C, int index, int i) {
     cs_lock(C);
     api_check(C, i >= 0, "invalid `index`");
     l = getlist(C, index);
-    if (c_castS2U(i) < l->n) {
+    if (cast_uint(i) < l->n) {
         setobj2s(C, C->sp.p, &l->b[i]);
     } else
         setnilval(s2v(C->sp.p));
@@ -1247,7 +1236,7 @@ CS_API void cs_set_index(cs_State *C, int index, int i) {
     List *l;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    api_check(C, 0 <= i && i <= CS_MAXLISTINDEX, "`index` out of bounds");
+    api_check(C, 0 <= i && i <= MAXLISTINDEX, "`index` out of bounds");
     l = getlist(C, index);
     csA_ensureindex(C, l, i);
     setobj(C, &l->b[i], s2v(C->sp.p - 1));
@@ -1450,7 +1439,7 @@ CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int abserrfunc) {
         api_check(C, ttisfunction(s2v(o)), "error handler must be a function");
         func = savestack(C, o);
     }
-    pcd.func = C->sp.p - nargs - 1;
+    pcd.func = C->sp.p - (nargs + 1); /* function to be called */
     pcd.nresults = nresults;
     status = csPR_call(C, fcall, &pcd, savestack(C, pcd.func), func);
     adjustresults(C, nresults);
@@ -1459,14 +1448,25 @@ CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int abserrfunc) {
 }
 
 
+// TODO: update docs
 CS_API int cs_load(cs_State *C, cs_Reader reader, void *userdata,
-                    const char *source) {
+                   const char *chunkname) {
     BuffReader br;
     int status;
     cs_lock(C);
-    if (!source) source = "?";
+    if (!chunkname) chunkname = "?";
     csR_init(C, &br, reader, userdata);
-    status = csPR_parse(C, &br, source);
+    status = csPR_parse(C, &br, chunkname);
+    if (status == CS_OK) {  /* no errors? */
+        CSClosure *cl = clCSval(s2v(C->sp.p - 1)); /* get new function */
+        if (cl->nupvalues >= 1) { /* does it have an upvalue? */
+            /* get global table from registry */
+            const TValue *gt = GT(C);
+            /* set global table as 1st upvalue of 'cl' (may be CS_ENV) */
+            setobj(C, cl->upvals[0]->v.p, gt);
+            csG_barrier(C, cl->upvals[0], gt);
+        }
+    }
     cs_unlock(C);
     return status;
 }
@@ -1724,13 +1724,12 @@ static const char *aux_upvalue(TValue *func, int n, TValue **val,
             OString *name;
             CSClosure *cl = clCSval(func);
             Proto *p = cl->p;
-            if (!(cast_uint(n) - 1u < cast_uint(p->sizeupvals)))
-                return NULL;  /* `n` not in [0, fn->sizeupvals) */
+            if (!(cast_uint(n) - 1u < cast_uint(p->sizeupvalues)))
+                return NULL;  /* `n` not in [0, fn->sizeupvalues) */
             *val = cl->upvals[n-1]->v.p;
-            if (owner) *owner = obj2gco(cl->upvals[n]);
+            if (owner) *owner = obj2gco(cl->upvals[n - 1]);
             name = p->upvals[n-1].name;
-            cs_assert(name != NULL); /* must have debug information */
-            return getstr(name);
+            return (name == NULL) ? "(no name)" : getstr(name);
         }
         default: return NULL; /* not a closure */
     }
@@ -1739,7 +1738,7 @@ static const char *aux_upvalue(TValue *func, int n, TValue **val,
 
 CS_API const char *cs_getupvalue(cs_State *C, int index, int n) {
     const char *name;
-    TValue *upval = NULL;
+    TValue *upval = NULL; /* to avoid warnings */
     cs_lock(C);
     name = aux_upvalue(index2value(C, index), n, &upval, NULL);
     if (name) { /* have upvalue ? */
@@ -1751,17 +1750,19 @@ CS_API const char *cs_getupvalue(cs_State *C, int index, int n) {
 }
 
 
+#include <stdio.h>
 CS_API const char *cs_setupvalue(cs_State *C, int index, int n) {
     const char *name;
-    TValue *upval = NULL;
-    GCObject *owner = NULL;
+    TValue *upval = NULL; /* to avoid warnings */
+    GCObject *owner = NULL; /* to avoid warnings */
     TValue *func;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
     func = index2value(C, index);
     name = aux_upvalue(func, n, &upval, &owner);
     if (name) { /* found upvalue ? */
-        setobj(C, upval, s2v(--C->sp.p));
+        C->sp.p--;
+        setobj(C, upval, s2v(C->sp.p));
         csG_barrier(C, owner, upval);
     }
     cs_unlock(C);

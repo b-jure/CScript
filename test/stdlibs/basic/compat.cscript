@@ -1,0 +1,6 @@
+if (__POSIX)
+    assert(typeof(__POSIX) == "number" and __WINDOWS == nil);
+else if (__WINDOWS)
+    assert(typeof(__WINDOWS) == "number" and __POSIX == nil);
+else
+    assert(__POSIX == nil and __WINDOWS);

@@ -4,8 +4,8 @@
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef CFUNCTION_H
-#define CFUNCTION_H
+#ifndef cfunction_h
+#define cfunction_h
 
 #include "ccode.h"
 #include "cobject.h"
