@@ -19,6 +19,9 @@ cscript_total_pass = 0
 # List of failed tests
 cscript_failed_tests = []
 
+# Padding between test name and test result
+cscript_test_result_padding = 65
+
 
 # Return path relative to root test directory
 def rootpath(path):
@@ -79,16 +82,16 @@ def print_test_result(test, code):
     isatty = sys.stdout.isatty()
     if code != 0:
         if isatty:
-            print('{:60} {}'.format(red(tname), red("fail")))
+            print('{:{}} {}'.format(red(tname), cscript_test_result_padding, red("fail")))
         else:
-            print('{:60} {}'.format(tname, "fail"))
+            print('{:{}} {}'.format(tname, cscript_test_result_padding, "fail"))
         cscript_failed_tests.append(red(tname));
         return 1
     else:
         if isatty:
-            print('{:60} {}'.format(green(tname), green("ok")))
+            print('{:{}} {}'.format(green(tname), cscript_test_result_padding, green("ok")))
         else:
-            print('{:60} {}'.format(tname, "ok"))
+            print('{:{}} {}'.format(thame, cscript_test_result_padding, "ok"))
         return 0
 
 

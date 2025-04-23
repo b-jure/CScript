@@ -22,6 +22,12 @@
 #include "cmem.h"
 
 
+/*
+** TODO: change how and/or is compiled, accordingly change
+** 'csC_exp2stack' which all together might require changing bytecode.
+*/
+
+
 /* check if 'ExpInfo' has jumps */
 #define hasjumps(e)     ((e)->t != (e)->f)
 
@@ -67,9 +73,6 @@
 */
 #define isIMM(i)        (MIN_IMM <= (i) && (i) <= MAX_IMM)
 #define isIMML(i)       (MIN_IMML <= (i) && (i) <= MAX_IMML)
-
-
-#define encodesign(x)     ((x) < 0 ? 0 : 2)
 
 
 
@@ -565,12 +568,12 @@ void csC_reserveslots(FunctionState *fs, int n) {
 /* set single return for call and vararg expressions */
 void csC_setoneret(FunctionState *fs, ExpInfo *e) {
     if (e->et == EXP_CALL) {
-        /* already returns a single result */
-        cs_assert(GETARG_L(getinstruction(fs, e), 1) == 2);
+        /* already returns 1 value */
+        cs_assert(GETARG_L(getip(fs, e), 1) == 2);
         e->et = EXP_FINEXPR; /* just mark as finalized */
     } else if (e->et == EXP_VARARG) {
-        Instruction *vararg = getinstruction(fs, e);
-        SETARG_L(vararg, 0, 2);
+        Instruction *pi = getip(fs, e);
+        SETARG_L(pi, 0, 2);
         e->et = EXP_FINEXPR;
     }
 }
@@ -578,13 +581,12 @@ void csC_setoneret(FunctionState *fs, ExpInfo *e) {
 
 /* set 'nreturns', for call and vararg expressions */
 void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
-    Instruction *pc = getinstruction(fs, e);
-    nreturns++;
+    Instruction *pc = getip(fs, e);
     if (e->et == EXP_CALL) {
-        SETARG_L(pc, 1, nreturns);
+        SETARG_L(pc, 1, nreturns + 1);
     } else {
         cs_assert(e->et == EXP_VARARG);
-        SETARG_L(pc, 0, nreturns);
+        SETARG_L(pc, 0, nreturns + 1);
         csC_reserveslots(fs, 1);
     }
     e->et = EXP_FINEXPR;
@@ -616,11 +618,11 @@ static int adjuststack(FunctionState *fs, OpCode op, int n) {
             }
             case OP_POP: {
                 op = OP_POPN;
-                goto nil;
+                goto l_nil;
             }
             case OP_NIL: {
                 op = OP_NILN;
-nil:
+l_nil:
                 prevn = 1;
                 removelastinstruction(fs);
                 break;
@@ -793,7 +795,12 @@ static int setindexint(FunctionState *fs, ExpInfo *v, int left) {
 }
 
 
-/* code 'OP_SET' family of instructions */
+/*
+** Store value on top of the stack into 'var'.
+** 'left' represents leftover values from other expressions in the
+** assignment statement, this is needed to properly locate variable
+** we are storing.
+*/
 int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
     int extra = 0; /* extra leftover values */
     switch (var->et) {
@@ -828,14 +835,19 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
         case EXP_INDEXSUPER:
         case EXP_INDEXSUPERSTR:
         case EXP_DOTSUPER: {
-            csP_semerror(fs->lx, "attempt to assign to 'super' property");
+            csP_semerror(fs->lx, "can't assign to 'super' property");
             break;
         }
         default: cs_assert(0); break; /* invalid store */
     }
     var->et = EXP_FINEXPR;
-    freeslots(fs, 1); /* value */
+    freeslots(fs, 1); /* 'exp' (value) */
     return extra;
+}
+
+
+void csC_storevarpop(FunctionState *fs, ExpInfo *var, int left) {
+    csC_pop(fs, csC_storevar(fs, var, left));
 }
 
 
@@ -848,8 +860,111 @@ static int getindexint(FunctionState *fs, ExpInfo *v) {
 }
 
 
-/* ensure variable is on stack */
-static int dischargevars(FunctionState *fs, ExpInfo *v) {
+/*
+** Gets the destination address of a jump instruction.
+** Used to traverse a list of jumps.
+*/
+static int getjump(FunctionState *fs, int pc) {
+    Instruction *inst = &fs->p->code[pc];
+    int offset = GETARG_L(inst, 0);
+    if (offset == 0)
+        return NOJMP;
+    else
+        return (pc + getOpSize(*inst)) + offset;
+}
+
+
+/* fix jmp instruction at 'pc' to jump to 'target' */
+static void fixjump(FunctionState *fs, int pc, int target) {
+    Instruction *jmp = &fs->p->code[pc];
+    int offset = c_abs(target - (pc + getOpSize(*jmp)));
+    cs_assert(offset > 0); /* at least one expression in between */
+    cs_assert(testJProp(*jmp)); /* 'jmp' is a valid jump instruction */
+    if (c_unlikely(offset > MAX_ARG_L)) /* jump is too large? */
+        csP_semerror(fs->lx, "control structure too long");
+    SETARG_L(jmp, 0, offset); /* fix the jump */
+}
+
+
+/* concatenate jump list 'l2' into jump list 'l1' */
+void csC_concatjl(FunctionState *fs, int *l1, int l2) {
+    if (l2 == NOJMP) return;
+    if (*l1 == NOJMP) *l1 = l2;
+    else {
+        int curr = *l1;
+        int next;
+        while ((next = getjump(fs, curr)) != NOJMP) /* get last jump pc */
+            curr = next;
+        fixjump(fs, curr, l2); /* last jump jumps to 'l2' */
+    }
+}
+
+
+/* backpatch jump list at 'pc' */
+void csC_patch(FunctionState *fs, int pc, int target) {
+    while (pc != NOJMP) {
+        int next = getjump(fs, pc);
+        fixjump(fs, pc, target);
+        pc = next;
+    }
+}
+
+
+/* backpatch jump instruction to current pc */
+void csC_patchtohere(FunctionState *fs, int pc) {
+    csC_patch(fs, pc, currPC);
+}
+
+
+static void patchlistaux(FunctionState *fs, int list, int target) {
+    while (list != NOJMP) {
+        int next = getjump(fs, list);
+        fixjump(fs, list, target);
+        list = next;
+    }
+}
+
+
+TValue *csC_getconstant(FunctionState *fs, ExpInfo *v) {
+    cs_assert(eisconstant(v) ||         /* expression is a constant... */
+              v->et == EXP_INDEXSTR ||  /* ...or indexed by one */
+              v->et == EXP_INDEXINT ||
+              v->et == EXP_INDEXSUPERSTR ||
+              v->et == EXP_DOT ||
+              v->et == EXP_DOTSUPER);
+    return &fs->p->k[v->u.info];
+}
+
+
+/*
+** Convert constant expression to value 'v'.
+*/
+void csC_const2v(FunctionState *fs, ExpInfo *e, TValue *v) {
+    switch (e->et) {
+        case EXP_NIL: setnilval(v); break;
+        case EXP_FALSE: setbfval(v); break;
+        case EXP_TRUE: setbtval(v); break;
+        case EXP_INT: setival(v, e->u.i); break;
+        case EXP_FLT: setfval(v, e->u.n); break;
+        case EXP_STRING: {
+            setstrval(cast(cs_State *, NULL), v, e->u.str);
+            break;
+        }
+        case EXP_K: {
+            setobj(cast(cs_State *, NULL), v, csC_getconstant(fs, e));
+            break;
+        }
+        default: cs_assert(0); /* 'e' is not a constant */
+    }
+}
+
+
+/*
+** Ensure expression 'v' is not a variable.
+** This additionally reserves stack slot (if one is needed).
+** (Expressions may still have jump lists.)
+*/
+int csC_dischargevars(FunctionState *fs, ExpInfo *v) {
     switch (v->et) {
         case EXP_UVAL: {
             v->u.info = csC_emitIL(fs, OP_GETUVAL, v->u.info);
@@ -895,131 +1010,17 @@ static int dischargevars(FunctionState *fs, ExpInfo *v) {
             break;
         }
         case EXP_CALL: case EXP_VARARG: {
+            int slot_reserved = (v->et == EXP_CALL);
             csC_setoneret(fs, v);
+            if (slot_reserved) goto l_fin; /* callee slot already reserved */
             break;
         }
         default: return 0; /* expression is not a variable */
     }
+    csC_reserveslots(fs, 1);
+l_fin:
     v->et = EXP_FINEXPR;
     return 1;
-}
-
-
-/* get 'pc' of jump instruction destination */
-static int getjump(FunctionState *fs, int pc) {
-    Instruction *inst = &fs->p->code[pc];
-    int offset = GETARG_L(inst, 0);
-    if (offset == 0)
-        return NOJMP;
-    else
-        return (pc + getOpSize(*inst)) + offset;
-}
-
-
-/* fix jmp instruction at 'pc' to jump to 'target' */
-static void fixjump(FunctionState *fs, int pc, int target) {
-    Instruction *jmp = &fs->p->code[pc];
-    int offset = c_abs(target - (pc + getOpSize(*jmp)));
-    cs_assert(offset > 0); /* at least one expression in between */
-    cs_assert(testJProp(*jmp)); /* 'jmp' is a valid jump instruction */
-    if (c_unlikely(offset > MAX_ARG_L)) /* jump is too large? */
-        csP_semerror(fs->lx, "control structure too long");
-    SETARG_L(jmp, 0, offset); /* fix the jump */
-}
-
-
-/* concatenate jump list 'l2' into jump list 'l1' */
-void csC_concatjl(FunctionState *fs, int *l1, int l2) {
-    if (l2 == NOJMP) return;
-    if (*l1 == NOJMP) {
-        *l1 = l2;
-    } else {
-        int curr = *l1;
-        int next;
-        while ((next = getjump(fs, curr)) != NOJMP) /* get last jump pc */
-            curr = next;
-        fixjump(fs, curr, l2); /* last jump jumps to 'l2' */
-    }
-}
-
-
-/* backpatch jump list at 'pc' */
-void csC_patch(FunctionState *fs, int pc, int target) {
-    while (pc != NOJMP) {
-        int next = getjump(fs, pc);
-        fixjump(fs, pc, target);
-        pc = next;
-    }
-}
-
-
-/* backpatch jump instruction to current pc */
-void csC_patchtohere(FunctionState *fs, int pc) {
-    csC_patch(fs, pc, currPC);
-}
-
-
-static void patchlistaux(FunctionState *fs, int list, int target) {
-    while (list != NOJMP) {
-        int next = getjump(fs, list);
-        fixjump(fs, list, target);
-        list = next;
-    }
-}
-
-
-static void fixjumplists(FunctionState *fs, ExpInfo *e) {
-    cs_assert(e->et == EXP_FINEXPR); /* must already be discharged */
-    if (hasjumps(e)) {
-        int final = currPC; /* position after whole expression */
-        patchlistaux(fs, e->f, final);
-        patchlistaux(fs, e->t, final);
-        e->f = e->t = NOJMP;
-    }
-}
-
-
-TValue *csC_getconstant(FunctionState *fs, ExpInfo *v) {
-    cs_assert(eisconstant(v) ||         /* expression is a constant... */
-              v->et == EXP_INDEXSTR ||  /* ...or indexed by one */
-              v->et == EXP_INDEXINT ||
-              v->et == EXP_INDEXSUPERSTR ||
-              v->et == EXP_DOT ||
-              v->et == EXP_DOTSUPER);
-    return &fs->p->k[v->u.info];
-}
-
-
-/*
-** Convert constant expression to value 'v'.
-*/
-void csC_constexp2val(FunctionState *fs, ExpInfo *e, TValue *v) {
-    switch (e->et) {
-        case EXP_NIL: setnilval(v); break;
-        case EXP_FALSE: setbfval(v); break;
-        case EXP_TRUE: setbtval(v); break;
-        case EXP_INT: setival(v, e->u.i); break;
-        case EXP_FLT: setfval(v, e->u.n); break;
-        case EXP_STRING: {
-            setstrval(cast(cs_State *, NULL), v, e->u.str);
-            break;
-        }
-        case EXP_K: {
-            setobj(cast(cs_State *, NULL), v, csC_getconstant(fs, e));
-            break;
-        }
-        default: cs_assert(0); /* 'e' is not a constant */
-    }
-}
-
-
-void csC_varexp2stack(FunctionState *fs, ExpInfo *e) {
-    int et = e->et;
-    if (et != EXP_FINEXPR && dischargevars(fs, e)) {
-        fixjumplists(fs, e);
-        if (et != EXP_CALL)
-            csC_reserveslots(fs, 1);
-    }
 }
 
 
@@ -1087,9 +1088,14 @@ void csC_settablesize(FunctionState *fs, int pc, int hsize) {
 }
 
 
-/* finalize expression by ensuring it is on stack */
-static void dischargetostack(FunctionState *fs, ExpInfo *e) {
-    if (!dischargevars(fs, e)) {
+/*
+** Ensure expression 'e' is on top of the stack, making 'e'
+** a finalized expression.
+** This additionally reserves stack slot (if one is needed).
+** (Expressions may still have jump lists.)
+*/
+static void discharge2stack(FunctionState *fs, ExpInfo *e) {
+    if (!csC_dischargevars(fs, e)) {
         switch (e->et) {
             case EXP_NIL: {
                 e->u.info = codenil(fs, 1);
@@ -1120,29 +1126,47 @@ static void dischargetostack(FunctionState *fs, ExpInfo *e) {
             }
             default: return;
         }
+        csC_reserveslots(fs, 1);
         e->et = EXP_FINEXPR;
     }
 }
 
 
-static void exp2stack(FunctionState *fs, ExpInfo *e) {
-    int et = e->et;
-    if (et != EXP_FINEXPR)  {
-        dischargetostack(fs, e);
-        if (et != EXP_CALL)
-            csC_reserveslots(fs, 1);
-    }
-}
-
-
-/* ensure expression value is on stack */
+/*
+** Ensures final expression result is on stop of the stack.
+** If expression has jumps, need to patch these jumps to its
+** final position.
+*/
 void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
-    exp2stack(fs, e);
-    fixjumplists(fs, e);
+    discharge2stack(fs, e);
+    if (hasjumps(e)) {
+        int final = currPC; /* position after the expression */
+        patchlistaux(fs, e->f, final);
+        patchlistaux(fs, e->t, final);
+        e->f = e->t = NOJMP;
+    }
+    cs_assert(e->f == NOJMP && e->t == NOJMP);
+    cs_assert(e->et == EXP_FINEXPR);
 }
 
 
-/* initialize dot indexed expression */
+/*
+** Ensures final expression result is either on stack
+** or it is a constant.
+*/
+void csC_exp2val(FunctionState *fs, ExpInfo *e) {
+    if (hasjumps(e))
+        csC_exp2stack(fs, e);
+    else
+        csC_dischargevars(fs, e);
+}
+
+
+/*
+** Initialize '.' indexed expression.
+** If 'super' is true, then this indexing is considered as
+** indexing 'super' (superclass).
+*/
 void csC_getfield(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
     cs_assert(v->et == EXP_FINEXPR); /* 'v' must be on stack */
     v->u.info = stringK(fs, key->u.str);
@@ -1150,10 +1174,15 @@ void csC_getfield(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
 }
 
 
-/* initialize indexed expression */
+/* 
+** Initialize '[]' indexed expression.
+** If 'super' is true, then this indexing is considered as
+** indexing 'super' (superclass).
+*/
 void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
     int strK = 0;
     cs_assert(var->et == EXP_FINEXPR); /* 'var' must be finalized (on stack) */
+    csC_exp2val(fs, key);
     if (key->et == EXP_STRING) {
         string2K(fs, key); /* make constant */
         strK = 1;
@@ -1182,7 +1211,9 @@ void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
 
 
 /*
-** Return 0 if folding for 'op' can raise errors.
+** Return false if folding can raise an error.
+** Bitwise operations need operands convertible to integers; division
+** operations cannot have 0 as divisor.
 */
 static int validop(TValue *v1, TValue *v2, int op) {
     switch (op) {
@@ -1199,7 +1230,10 @@ static int validop(TValue *v1, TValue *v2, int op) {
 }
 
 
-/* check if expression is numeral constant */
+/*
+** Check if expression is numeral constant, and if
+** so, set the value into 'res'.
+*/
 static int tonumeral(const ExpInfo *e1, TValue *res) {
     switch (e1->et) {
         case EXP_FLT: if (res) setfval(res, e1->u.n); return 1;
@@ -1209,10 +1243,12 @@ static int tonumeral(const ExpInfo *e1, TValue *res) {
 }
 
 
-/* fold constant expressions */
+/*
+** Try to "constant-fold" an operation; return 1 if successful.
+** (In this case, 'e1' has the final result.)
+*/
 static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
-                     int op)
-{
+                     int op) {
     TValue v1, v2, res;
     if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(&v1, &v2, op))
         return 0;
@@ -1231,17 +1267,22 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
 }
 
 
-/* code unary instruction; except logical not '!' */
+/*
+** Emit code for unary expressions that "produce values"
+** (everything but '!').
+*/
 static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op, int line) {
     csC_exp2stack(fs, e);
     e->u.info = csC_emitI(fs, op);
+    e->et = EXP_FINEXPR;
     csC_fixline(fs, line);
 }
 
 
-/* code logical not instruction */
+/*
+** Code '!e', doing constant folding.
+*/
 static void codenot(FunctionState *fs, ExpInfo *e) {
-    cs_assert(!eisvar(e)); /* vars are already finalized */
     switch (e->et) {
         case EXP_NIL: case EXP_FALSE: {
             e->et = EXP_TRUE;
@@ -1252,20 +1293,25 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
             e->et = EXP_FALSE;
             break;
         }
-        case EXP_FINEXPR: { /* 'e' already on stack */
+        case EXP_FINEXPR: {
+            csC_exp2stack(fs, e);
             e->u.info = csC_emitI(fs, OP_NOT);
             break;
         }
-        default: cs_assert(0);
+        default: cs_assert(0); /* vars should already be discharged */
     }
+    /* interchange true and false lists */
+    { int temp = e->f; e->f = e->t; e->t = temp; }
 }
 
 
-/* code unary instruction */
+/*
+** Apply prefix operation 'uopr' to expression 'e'.
+*/
 void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
     static const ExpInfo dummy = {EXP_INT, {0}, NOJMP, NOJMP};
     cs_assert(0 <= uopr && uopr < OPR_NOUNOPR);
-    csC_varexp2stack(fs, e);
+    csC_dischargevars(fs, e);
     switch (uopr) {
         case OPR_UNM: case OPR_BNOT: {
             if (constfold(fs, e, &dummy, (uopr - OPR_UNM) + CS_OPUNM))
@@ -1277,14 +1323,14 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
             codenot(fs, e); 
             break;
         }
-        default: cs_assert(0); /* invalid unary OPR */
+        default: cs_assert(0); /* invalid unary operation */
     }
 }
 
 
-/* code test jump instruction */
+/* code test jump instruction for and/or */
 static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
-    exp2stack(fs, e); /* ensure test operand is on the stack */
+    discharge2stack(fs, e); /* ensure test operand is on the stack */
     freeslots(fs, 1); /* test removes first expression if it goes through */
     return csC_emitILS(fs, testop, 0, cond);
 }
@@ -1293,7 +1339,7 @@ static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
 /* code test/jump instruction */
 int csC_jmp(FunctionState *fs, OpCode opjump) {
     if (opjump == OP_TESTPOP) /* test jump? */
-        freeslots(fs, 1); /* test pops one value */
+        freeslots(fs, 1); /* test jump pops one value */
     if (opjump == OP_BJMP) /* break jump? */
         return csC_emitILL(fs, OP_BJMP, 0, 0);
     else /* otherwise test or regular jump */
@@ -1309,9 +1355,19 @@ int csC_test(FunctionState *fs, OpCode optest, int cond) {
 }
 
 
-static void patchtruelist(FunctionState *fs, ExpInfo *e) {
-    csC_patchtohere(fs, e->t);
-    e->t = NOJMP;
+static void patchexplist(FunctionState *fs, int *l) {
+    csC_patchtohere(fs, *l); /* patch list 'l' to here */
+    *l = NOJMP; /* mark 'e->t' or 'e->f' as empty */
+}
+
+
+static void finexplist(FunctionState *fs, int *l) {
+    if (*l != NOJMP) { /* and/or list has jump(s)? */
+        int jump = csC_jmp(fs, OP_JMP); /* current and/or jumps over 'l' */
+        patchexplist(fs, l); /* 'l' ends here */
+        csC_emitI(fs, OP_POP); /* 'l' value is removed (it goes through) */
+        csC_patchtohere(fs, jump); /* (current and/or jumps to here) */
+    }
 }
 
 
@@ -1324,29 +1380,18 @@ static void andjump(FunctionState *fs, ExpInfo *e) {
     int pc;
     switch (e->et) {
         case EXP_TRUE: case EXP_STRING: case EXP_INT:
-        case EXP_FLT: case EXP_K: { /* constant true expression */
+        case EXP_FLT: case EXP_K: {
             pc = NOJMP; /* don't jump, always true */
             break;
         }
         default: {
             pc = codetest(fs, e, OP_TESTORPOP, 0); /* jump if false */
-            if (e->t != NOJMP) {
-                int jump = csC_jmp(fs, OP_JMP);
-                patchtruelist(fs, e);
-                csC_emitI(fs, OP_POP);
-                csC_patchtohere(fs, jump);
-            }
+            finexplist(fs, &e->t);
             break;
         }
     }
     csC_concatjl(fs, &e->f, pc); /* insert new jump in false list */
-    patchtruelist(fs, e);
-}
-
-
-static void patchfalselist(FunctionState *fs, ExpInfo *e) {
-    csC_patchtohere(fs, e->f);
-    e->f = NOJMP;
+    patchexplist(fs, &e->t); /* true list jumps to here (to go through) */
 }
 
 
@@ -1364,17 +1409,12 @@ void orjump(FunctionState *fs, ExpInfo *e) {
         }
         default: {
             pc = codetest(fs, e, OP_TESTORPOP, 1); /* jump if true */
-            if (e->f != NOJMP) {
-                int jump = csC_jmp(fs, OP_JMP);
-                patchfalselist(fs, e);
-                csC_emitI(fs, OP_POP);
-                csC_patchtohere(fs, jump);
-            }
+            finexplist(fs, &e->f);
             break;
         }
     }
     csC_concatjl(fs, &e->t, pc); /* insert new jump in true list */
-    patchfalselist(fs, e);
+    patchexplist(fs, &e->f); /* false list jumps to here (to go through) */
 }
 
 
@@ -1387,8 +1427,8 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
         case OPR_NE: case OPR_EQ: {
             if (!tonumeral(e, NULL))
                 csC_exp2stack(fs, e);
-            /* otherwise keep numeral for constant
-            ** or immediate operand variant instruction */
+            /* otherwise keep numeral, which may be folded or used as an
+               immediate operand or for a different variant of instruction */
             break;
         }
         case OPR_GT: case OPR_GE:
@@ -1396,8 +1436,8 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             int dummy;
             if (!isnumIK(e, &dummy))
                 csC_exp2stack(fs, e);
-            /* otherwise keep numeral for immediate
-            ** operand variant instruction */
+            /* otherwise keep numeral, which may be used as an immediate
+               operand or for a different variant of instruction */
             break;
         }
         case OPR_CONCAT: {
@@ -1526,7 +1566,9 @@ static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 }
 
 
-/* code equality binary instruction */
+/*
+** Emit code for equality comparisons ('==', '!=').
+*/
 static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int imm; /* immediate */
     int iseq = (opr == OPR_EQ);
@@ -1550,24 +1592,26 @@ static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 }
 
 
-/* code binary ordering instruction */
+/*
+** Emit code for order comparisons.
+** 'swapped' tells whether ordering transform was performed
+** (see 'csC_binary'), in order to swap the stack values at runtime
+** to perform the ordering correctly (this is a limitation of stack-based VM).
+*/
 static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                       Binopr opr, int swapped) {
     OpCode op;
     int imm;
     cs_assert(OPR_LT == opr || OPR_LE == opr); /* already swapped */
-    csC_varexp2stack(fs, e1);
-    csC_varexp2stack(fs, e2);
     if (isnumIK(e2, &imm)) {
-        csC_exp2stack(fs, e1); /* ensure 'e1' is on stack */
+        /* use immediate operand */
+        csC_exp2stack(fs, e1);
         op = binopr2op(opr, OPR_LT, OP_LTI);
-        goto code;
     } else if (isnumIK(e1, &imm)) {
-        csC_exp2stack(fs, e2); /* ensure 'e2' is on stack */
+        /* transform (A < B) to (B > A) and (A <= B) to (B >= A) */
+        csC_exp2stack(fs, e2);
         op = binopr2op(opr, OPR_LT, OP_GTI);
-code:
-        e1->u.info = csC_emitIL(fs, op, imm);
-    } else {
+    } else { /* regular case, compare two stack values */
         int swap = 0;
         if (!swapped)
             swap = (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR);
@@ -1575,12 +1619,15 @@ code:
             swap = 1;
         else if (e1->et == EXP_FINEXPR && e2->et != EXP_FINEXPR)
             swap = 0;
-        csC_exp2stack(fs, e1); /* ensure first operand is on stack */
-        csC_exp2stack(fs, e2); /* ensure second operand is on stack */
+        csC_exp2stack(fs, e1);
+        csC_exp2stack(fs, e2);
         op = binopr2op(opr, OPR_LT, OP_LT);
         e1->u.info = csC_emitIS(fs, op, swap);
-        freeslots(fs, 1); /* e2 */
+        freeslots(fs, 1); /* one stack value is removed */
+        goto l_fin;
     }
+    e1->u.info = csC_emitIL(fs, op, imm);
+l_fin:
     e1->et = EXP_FINEXPR;
 }
 
@@ -1605,8 +1652,8 @@ static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, int line) {
 }
 
 
-static int codeaddnI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
-                           int line) {
+static int codeaddnegI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
+                       int line) {
     if (!isintK(e2))
         return 0; /* not an integer constant */
     else {
@@ -1622,6 +1669,9 @@ static int codeaddnI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 }
 
 
+/*
+** Finalize code for binary operations, after reading 2nd operand.
+*/
 void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                 int line) {
     int swapped = 0;
@@ -1634,17 +1684,12 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
             break;
         }
         case OPR_SUB: {
-            if (codeaddnI(fs, e1, e2, line))
+            if (codeaddnegI(fs, e1, e2, line))
                 break; /* coded as (r1 + -I) */
-            /* else */
         } /* fall through */
-        case OPR_IDIV: case OPR_DIV: case OPR_MOD: case OPR_POW: {
-            csC_varexp2stack(fs, e2);
-            codebinIK(fs, e1, e2, opr, 0, 0, line);
-            break;
-        }
-        case OPR_SHL: case OPR_SHR:  {
-            csC_varexp2stack(fs, e2);
+        case OPR_SHL: case OPR_SHR: case OPR_IDIV:
+        case OPR_DIV: case OPR_MOD: case OPR_POW: {
+            csC_dischargevars(fs, e2);
             codebinIK(fs, e1, e2, opr, 0, 0, line);
             break;
         }
@@ -1659,8 +1704,8 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
         }
         case OPR_GT: case OPR_GE: {
             /* 'a > b' <==> 'a < b', 'a >= b' <==> 'a <= b' */
-            csC_varexp2stack(fs, e1);
-            csC_varexp2stack(fs, e2);
+            csC_dischargevars(fs, e1);
+            csC_dischargevars(fs, e2);
             swapexp(e1, e2);
             opr = (opr - OPR_GT) + OPR_LT;
             swapped = 1;
@@ -1671,14 +1716,14 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
         }
         case OPR_AND: {
             cs_assert(e1->t == NOJMP); /* list closed by 'csC_prebinary' */
-            exp2stack(fs, e2);
+            csC_dischargevars(fs, e2);
             csC_concatjl(fs, &e2->f, e1->f);
             *e1 = *e2;
             break;
         }
         case OPR_OR: {
             cs_assert(e1->f == NOJMP); /* list closed by 'csC_prebinary' */
-            exp2stack(fs, e2);
+            csC_dischargevars(fs, e2);
             csC_concatjl(fs, &e2->t, e1->t);
             *e1 = *e2;
             break;

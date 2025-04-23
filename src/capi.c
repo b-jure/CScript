@@ -1381,11 +1381,11 @@ CS_API int cs_error(cs_State *C) {
     cs_lock(C);
     api_checknelems(C, 1); /* errobj */
     errobj = s2v(C->sp.p - 1);
-    if (ttisstring(errobj) && strval(errobj) == G(C)->memerror) {
+    if (ttisshrstring(errobj) && eqshrstr(strval(errobj), G(C)->memerror)) {
         csM_error(C); /* raise a memory error */
     } else
         csD_errormsg(C);
-    /* cs_unlock() is called before control leaves the core */
+    /* cs_unlock() is called after control leaves the core */
     cs_assert(0);
 }
 

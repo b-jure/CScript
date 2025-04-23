@@ -851,30 +851,34 @@ static void superkw(Lexer *lx, ExpInfo *e) {
 
 static void primaryexp(Lexer *lx, ExpInfo *e) {
     switch (lx->t.tk) {
-    case '(':
-        csY_scan(lx); /* skip ')' */
-        expr(lx, e);
-        expectnext(lx, ')');
-        csC_varexp2stack(lx->fs, e);
-        break;
-    case TK_NAME:
-        var(lx, str_expectname(lx), e);
-        break;
-    case TK_SUPER:
-        superkw(lx, e);
-        break;
-    default:
-        csY_syntaxerror(lx, "unexpected symbol");
-        break;
+        case '(': {
+            int line = lx->line;
+            csY_scan(lx); /* skip ')' */
+            expr(lx, e);
+            expectmatch(lx, ')', '(', line);
+            csC_exp2val(lx->fs, e);
+            return;
+        }
+        case TK_NAME: {
+            var(lx, str_expectname(lx), e);
+            return;
+        }
+        case TK_SUPER: {
+            superkw(lx, e);
+            return;
+        }
+        default: {
+            csY_syntaxerror(lx, "unexpected symbol");
+        }
     }
 }
 
 
+/* TODO: implement OP_CALLPROPERTY */
 static void call(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int line = lx->line;
     int base = fs->sp - 1;
-    /* TODO(implement OP_CALLPROPERTY) */
     csY_scan(lx); /* skip '(' */
     if (!check(lx, ')')) { /* have args ? */
         explist(lx, e);
@@ -990,7 +994,7 @@ static void listdef(Lexer *lx, ExpInfo *l) {
 static void tabindex(Lexer *lx, ExpInfo *e) {
     expectnext(lx, '[');
     expr(lx, e);
-    csC_varexp2stack(lx->fs, e);
+    csC_exp2val(lx->fs, e);
     expectnext(lx, ']');
 }
 
@@ -998,8 +1002,7 @@ static void tabindex(Lexer *lx, ExpInfo *e) {
 static void tabfield(Lexer *lx, Constructor *c) {
     FunctionState *fs = lx->fs;
     int sp = fs->sp;
-    int extra;
-    ExpInfo *t, k, v;
+    ExpInfo t, k, v;
     UNUSED(sp); /* used only for assertion */
     if (check(lx, TK_NAME)) {
         checklimit(fs, c->u.t.nh, MAXINT, "records in a table constructor");
@@ -1008,12 +1011,11 @@ static void tabfield(Lexer *lx, Constructor *c) {
         tabindex(lx, &k);
     c->u.t.nh++;
     expectnext(lx, '=');
-    t = c->e;
-    csC_indexed(fs, t, &k, 0);
-    expr(lx, &v);               /* get the value... */
-    csC_exp2stack(fs, &v);      /* put it on stack... */
-    extra = csC_store(fs, t);   /* ...and do the store */
-    csC_pop(fs, extra-1);       /* (keep table) */
+    t = *c->e;
+    csC_indexed(fs, &t, &k, 0);
+    expr(lx, &v);
+    csC_exp2stack(fs, &v);
+    csC_pop(fs, csC_store(fs, &t) - 1); /* (keep table) */
     cs_assert(fs->sp == sp);
 }
 
@@ -1338,17 +1340,20 @@ static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
     int need = nvars - nexps;
     if (eismulret(e)) {
         int extra = need + 1;
-        if (extra < 0)
-            extra = 0;
+        if (extra < 0) {
+            extra = 0; /* call returns no values */
+            need++; /* adjust 'need' (nexps - 1) */
+        }
         csC_setreturns(fs, e, extra);
+        csC_exp2stack(fs, e);
     } else {
         if (e->et != EXP_VOID) /* have one or more expressions? */
             csC_exp2stack(fs, e); /* finalize the last expression */
         if (need > 0) { /* missing values? */
             csC_nil(fs, need); /* assign them as nil */
             return; /* done */
-        } /* else ... */
-    } /* fall through */
+        }
+    }
     if (need > 0) /* need to reserve stack slots? */
         csC_reserveslots(fs, need);
     else /* otherwise we might have extra values */
@@ -1366,16 +1371,19 @@ struct LHS_assign {
 };
 
 
+#include <stdio.h>
+
 static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
     int left = 0; /* number of values left in the stack after assignment */
     expect_cond(lx, eisvar(&lhs->v), "expect variable");
     checkreadonly(lx, &lhs->v);
     if (match(lx, ',')) { /* more vars ? */
+        printf("line %d, another var @%d\n", lx->line, nvars);
         struct LHS_assign var;
         var.prev = lhs; /* chain previous variable */
-        suffixedexp(lx, &var.v); /* get the next variable in the list... */
-        enterCstack(lx);
-        left = assign(lx, &var, nvars + 1); /* ...and assign it */
+        suffixedexp(lx, &var.v);
+        enterCstack(lx); /* control recursion depth */
+        left = assign(lx, &var, nvars + 1);
         leaveCstack(lx);
     } else { /* right side of assignment '=' */
         ExpInfo e;
@@ -1395,19 +1403,18 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
 }
 
 
-static void exprstm(Lexer *lx) {
+static void expstm(Lexer *lx) {
     struct LHS_assign v;
     suffixedexp(lx, &v.v);
     if (check(lx, '=') || check(lx, ',')) { /* assignment? */
-        int left;
         v.prev = NULL;
-        left = assign(lx, &v, 1);
-        csC_adjuststack(lx->fs, left);
+        printf("line %d, first var @%d\n", lx->line, 0);
+        csC_adjuststack(lx->fs, assign(lx, &v, 1));
     } else { /* otherwise must be call */
         FunctionState *fs = lx->fs;
         Instruction *inst;
         expect_cond(lx, v.v.et == EXP_CALL, "syntax error");
-        inst = getinstruction(fs, &v.v);
+        inst = getip(fs, &v.v);
         SETARG_L(inst, 1, 1); /* call statement uses no results... */
     }
 }
@@ -1576,7 +1583,6 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
 }
 
 
-#include <stdio.h>
 static void fnstm(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
     ExpInfo var, e;
@@ -1584,7 +1590,7 @@ static void fnstm(Lexer *lx, int linenum) {
     indexedname(lx, &var);
     funcbody(lx, &e, 0, linenum);
     checkreadonly(lx, &var);
-    csC_pop(fs, csC_store(fs, &var)); /* remove leftover (if any) */
+    csC_storepop(fs, &var);
 }
 
 
@@ -1595,7 +1601,7 @@ static void classstm(Lexer *lx) {
     indexedname(lx, &var);
     klass(lx, NULL);
     checkreadonly(lx, &var);
-    csC_pop(fs, csC_store(fs, &var)); /* remove leftover (if any) */
+    csC_storepop(fs, &var);
 }
 
 
@@ -1760,7 +1766,7 @@ static int checkmatch(Lexer *lx, SwitchState *ss, ExpInfo *e) {
         addliteralinfo(lx, ss, e);
         if (ss->isconst) { /* both are constant values? */
             TValue v;
-            csC_constexp2val(lx->fs, e, &v);
+            csC_const2v(lx->fs, e, &v);
             return csV_raweq(&ss->v, &v) + 1; /* NOMATCH or MATCH */
         } /* else fall-through */
     } /* else fall-through */
@@ -1897,7 +1903,7 @@ static void switchstm(Lexer *lx) {
     expectnext(lx, ')');
     if (codepres_exp(fs, &e)) { /* constant expression? */
         ss.isconst = 1;                     /* mark it as such... */
-        csC_constexp2val(fs, &e, &ss.v);    /* ...and get its value */
+        csC_const2v(fs, &e, &ss.v);    /* ...and get its value */
     }
     line = lx->line;
     expectnext(lx, '{');
@@ -2129,7 +2135,7 @@ void forinitializer(Lexer *lx) {
             localstm(lx);
             /* statements end with ';' */
         } else { /* otherwise expression statement */
-            exprstm(lx);
+            expstm(lx);
             expectnext(lx, ';');
         }
     }
@@ -2164,7 +2170,7 @@ void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond, int *clause
     } else {
         bodyjmp = csC_jmp(fs, OP_JMP); /* insert jump in-between */
         *clausepc = currPC; /* set end clause pc */
-        exprstm(lx); /* get the end clause expression statement */
+        expstm(lx); /* get the end clause expression statement */
         if (!inf) { /* loop is not infinite? */
             loopjmp = csC_jmp(fs, OP_JMPS); /* emit jump back to cond... */
             csC_patch(fs, loopjmp, fs->loopstart); /* ...and patch it */
@@ -2344,7 +2350,7 @@ static void stm_(Lexer *lx) {
             break;
         }
         default: {
-            exprstm(lx);
+            expstm(lx);
             expectnext(lx, ';');
             break;
         }

@@ -19,7 +19,7 @@
 
 
 /* get pointer to instruction of 'ExpInfo' */
-#define getinstruction(fs,e)    (&(fs)->p->code[(e)->u.info])
+#define getip(fs,e)     (&(fs)->p->code[(e)->u.info])
 
 
 /* sizes in bytes */
@@ -351,6 +351,7 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 #define csC_setmulret(fs,e)     csC_setreturns(fs, e, CS_MULRET)
 
 #define csC_store(fs,var)       csC_storevar(fs, var, 0)
+#define csC_storepop(fs,var)    csC_storevarpop(fs, var, 0)
 
 
 #define prevOP(fs)      (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->prevpc])
@@ -376,13 +377,15 @@ CSI_FUNC void csC_adjuststack(FunctionState *fs, int left);
 CSI_FUNC int csC_ret(FunctionState *fs, int first, int nreturns);
 CSI_FUNC void csC_method(FunctionState *fs, ExpInfo *e);
 CSI_FUNC int csC_storevar(FunctionState *fs, ExpInfo *var, int left);
+CSI_FUNC void csC_storevarpop(FunctionState *fs, ExpInfo *var, int left);
 CSI_FUNC void csC_setlistsize(FunctionState *fs, int pc, int lsz);
 CSI_FUNC void csC_setlist(FunctionState *fs, int base, int nelems, int tostore);
 CSI_FUNC void csC_settablesize(FunctionState *fs, int pc, int hsize);
-CSI_FUNC void csC_constexp2val(FunctionState *fs, ExpInfo *e, TValue *v);
+CSI_FUNC void csC_const2v(FunctionState *fs, ExpInfo *e, TValue *v);
 CSI_FUNC TValue *csC_getconstant(FunctionState *fs, ExpInfo *v);
-CSI_FUNC void csC_varexp2stack(FunctionState *fs, ExpInfo *e);
+CSI_FUNC int csC_dischargevars(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_exp2stack(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void csC_exp2val(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_getfield(FunctionState *fs, ExpInfo *var,
                               ExpInfo *keystr, int super);
 CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,

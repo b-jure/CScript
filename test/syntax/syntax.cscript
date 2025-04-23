@@ -12,21 +12,21 @@ a[f()], b, a[f()+3] = f(), a, "x";
 assert(a[10] == 10 and b == a and a[13] == "x");
 
 {
-  local f = fn(n) {
-      local x = [];
-      for (local i=0; i < n; i=i+1)
-          x[i] = i;
-      return flatten(x);
-  };
-  local a,b,c;
-  a,b = 0, f(1);
-  assert(a == 0 and b == 0);
-  a,b = 0, f(1);
-  assert(a == 0 and b == 0);
-  a,b,c = 0,5,f(4);
-  assert(a==0 and b==5 and c==0);
-  a,b,c = 0,5,f(0);
-  assert(a==0 and b==5 and c==nil);
+    local f = fn(n) {
+        local x = [];
+        for (local i=0; i < n; i=i+1)
+            x[i] = i;
+        return flatten(x);
+    };
+    local a,b,c;
+    a,b = 0, f(1);
+    assert(a == 0 and b == 0);
+    a,b = 0, f(1);
+    assert(a == 0 and b == 0);
+    a,b,c = 0,5,f(4);
+    assert(a==0 and b==5 and c==0);
+    a,b,c = 0,5,f(0);
+    assert(a==0 and b==5 and c==nil);
 }
 
 {
