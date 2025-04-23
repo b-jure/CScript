@@ -1371,14 +1371,11 @@ struct LHS_assign {
 };
 
 
-#include <stdio.h>
-
 static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
     int left = 0; /* number of values left in the stack after assignment */
     expect_cond(lx, eisvar(&lhs->v), "expect variable");
     checkreadonly(lx, &lhs->v);
     if (match(lx, ',')) { /* more vars ? */
-        printf("line %d, another var @%d\n", lx->line, nvars);
         struct LHS_assign var;
         var.prev = lhs; /* chain previous variable */
         suffixedexp(lx, &var.v);
@@ -1408,7 +1405,6 @@ static void expstm(Lexer *lx) {
     suffixedexp(lx, &v.v);
     if (check(lx, '=') || check(lx, ',')) { /* assignment? */
         v.prev = NULL;
-        printf("line %d, first var @%d\n", lx->line, 0);
         csC_adjuststack(lx->fs, assign(lx, &v, 1));
     } else { /* otherwise must be call */
         FunctionState *fs = lx->fs;

@@ -92,107 +92,111 @@ assert(!pcall(fn() { local a = {[nil] = 10}; }));
 assert(a[nil] == undef);
 a = nil;
 
-///local a, b, c;
-///a = {10,9,8,7,6,5,4,3,2; [-3]='a', [f]=print, a='a', b='ab'}
-///a, a.x, a.y = a, a[-3]
-///assert(a[1]==10 and a[-3]==a.a and a[f]==print and a.x=='a' and !a.y)
-///a[1], f(a)[2], b, c = {['alo']=assert}, 10, a[1], a[f], 6, 10, 23, f(a), 2
-///a[1].alo(a[2]==10 and b==10 and c==print)
-///
-///a.aVeryLongName012345678901234567890123456789012345678901234567890123456789 = 10
-///local function foo ()
-///  return a.aVeryLongName012345678901234567890123456789012345678901234567890123456789
-///end
-///assert(foo() == 10 and
-///a.aVeryLongName012345678901234567890123456789012345678901234567890123456789 ==
-///10)
-///
-///
-///do
-///  -- _ENV constant
-///  local function foo ()
-///    local _ENV <const> = 11
-///    X = "hi"
-///  end
-///  local st, msg = pcall(foo)
-///  assert(!st and string.find(msg, "number"))
-///end
-///
-///
-///-- test of large float/integer indices 
-///
-///-- compute maximum integer where all bits fit in a float
-///local maxint = math.maxinteger
-///
-///-- trim (if needed) to fit in a float
-///while maxint ~= (maxint + 0.0) or (maxint - 1) ~= (maxint - 1.0) do
-///  maxint = maxint // 2
-///end
-///
-///local maxintF = maxint + 0.0   -- float version
-///
-///assert(maxintF == maxint and math.type(maxintF) == "float" and
-///       maxintF >= 2.0^14)
-///
-///-- floats and integers must index the same places
-///a[maxintF] = 10; a[maxintF - 1.0] = 11;
-///a[-maxintF] = 12; a[-maxintF + 1.0] = 13;
-///
-///assert(a[maxint] == 10 and a[maxint - 1] == 11 and
-///       a[-maxint] == 12 and a[-maxint + 1] == 13)
-///
-///a[maxint] = 20
-///a[-maxint] = 22
-///
-///assert(a[maxintF] == 20 and a[maxintF - 1.0] == 11 and
-///       a[-maxintF] == 22 and a[-maxintF + 1.0] == 13)
-///
-///a = nil
-///
-///
-///-- test conflicts in multiple assignment
-///do
-///  local a,i,j,b
-///  a = {'a', 'b'}; i=1; j=2; b=a
-///  i, a[i], a, j, a[j], a[i+j] = j, i, i, b, j, i
-///  assert(i == 2 and b[1] == 1 and a == 1 and j == b and b[2] == 2 and
-///         b[3] == 1)
-///  a = {}
-///  local function foo ()    -- assigining to upvalues
-///    b, a.x, a = a, 10, 20
-///  end
-///  foo()
-///  assert(a == 20 and b.x == 10)
-///end
-///
-///-- repeat test with upvalues
-///do
-///  local a,i,j,b
-///  a = {'a', 'b'}; i=1; j=2; b=a
-///  local function foo ()
-///    i, a[i], a, j, a[j], a[i+j] = j, i, i, b, j, i
-///  end
-///  foo()
-///  assert(i == 2 and b[1] == 1 and a == 1 and j == b and b[2] == 2 and
-///         b[3] == 1)
-///  local t = {}
-///  (function (a) t[a], a = 10, 20  end)(1);
-///  assert(t[1] == 10)
-///end
-///
-///-- bug in 5.2 beta
-///local function foo ()
-///  local a
-///  return function ()
-///    local b
-///    a, b = 3, 14    -- local and upvalue have same index
-///    return a, b
-///  end
-///end
-///
-///local a, b = foo()()
-///assert(a == 3 and b == 14)
-///
-///print('OK')
-///
-///return res
+local a1;
+{
+    local a, b, c;
+    a = [10,9,8,7,6,5,4,3,2];
+    a1= { [-3]="a", [f]=print, a="a", b="ab" };
+    a, a1, a1.x, a1.y = a, a1, a1[-3];
+    assert(a[0]==10 and a1[-3]==a1.a and a1[f]==print and a1.x=="a" and !a1.y);
+    a[0], f(a)[1], b, c = {["alo"]=assert}, 10, a[0], a1[f], 6, 10, 23, f(a), 2;
+    a[0].alo(a[1]==10 and b==10 and c==print);
+
+    a1.aVeryLongName012345678901234567890123456789012345678901234567890123456789 = 10;
+    local fn foo() {
+        return a1.aVeryLongName012345678901234567890123456789012345678901234567890123456789;
+    }
+    assert(foo() == 10 and
+           a1.aVeryLongName012345678901234567890123456789012345678901234567890123456789 ==
+           10);
+}
+
+
+{
+    /// __ENV constant
+    local fn foo() {
+        local __ENV <final> = 11;
+        X = "hi";
+    }
+    local st, msg = pcall(foo);
+    assert(!st and string.find(msg, "number"));
+}
+
+
+/// test of large float/integer indices 
+
+/// compute maximum integer where all bits fit in a float
+local maxint = math.maxint;
+
+/// trim (if needed) to fit in a float
+while (maxint != (maxint + 0.0) or (maxint - 1) != (maxint - 1.0)) {
+    maxint = maxint // 2;
+}
+
+local maxintF = maxint + 0.0;   /// float version
+
+assert(maxintF == maxint and math.type(maxintF) == "float" and
+       maxintF >= 2.0**14);
+
+/// floats and integers must index the same places
+a1[maxintF] = 10; a1[maxintF - 1.0] = 11;
+a1[-maxintF] = 12; a1[-maxintF + 1.0] = 13;
+
+assert(a1[maxint] == 10 and a1[maxint - 1] == 11 and
+       a1[-maxint] == 12 and a1[-maxint + 1] == 13);
+
+a1[maxint] = 20;
+a1[-maxint] = 22;
+
+assert(a1[maxintF] == 20 and a1[maxintF - 1.0] == 11 and
+       a1[-maxintF] == 22 and a1[-maxintF + 1.0] == 13);
+
+a1 = nil;
+
+
+/// test conflicts in multiple assignment
+{
+    local a,i,j,b;
+    a = { [0] = "a", [1] = "b" }; i=0; j=1; b=a;
+    i, a[i], a, j, a[j], a[i+j+1] = j, i, i, b, j, i;
+    assert(i == 1 and b[0] == 0 and a == 0 and j == b and b[1] == 1 and
+           b[2] == 0);
+    a = {};
+    local fn foo() {  /// assigining to upvalues
+        b, a.x, a = a, 10, 20;
+    }
+    foo();
+    assert(a == 20 and b.x == 10);
+}
+
+/// repeat test with upvalues
+{
+    local a,i,j,b;
+    a = { [0] = "a", [1] = "b" }; i=0; j=1; b=a;
+    local fn foo() {
+        i, a[i], a, j, a[j], a[i+j+1] = j, i, i, b, j, i;
+    }
+    foo();
+    assert(i == 1 and b[0] == 0 and a == 0 and j == b and b[1] == 1 and
+           b[2] == 0);
+    local t = {};
+    (fn(a) { t[a], a = 10, 20; })(0);
+    assert(t[0] == 10);
+}
+
+
+local fn foo(){
+    local a;
+    return fn() {
+        local b;
+        a, b = 3, 14;   /// local and upvalue have same index
+        return a, b;
+    };
+}
+
+{
+    local a, b = foo()();
+    assert(a == 3 and b == 14);
+}
+
+return res;
