@@ -121,6 +121,7 @@ typedef struct GState {
     c_byte gcpause; /* how long to wait until next cycle */
     c_byte gcstepmul; /* GC "speed" (heap size grow speed) */
     c_byte gcstepsize; /* log2 of GC granularity */
+    c_byte gccheck; /* true if collection triggered since previous check */
     GCObject *objects; /* list of all collectable objects */
     GCObject **sweeppos; /* current position of sweep in list */
     GCObject *fin; /* list of objects that have finalizer */

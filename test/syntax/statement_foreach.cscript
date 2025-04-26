@@ -35,3 +35,32 @@ foreach i, point in array_iter(points) {
     assert(i == 1 or i == 2);
     assert(point == 420 or point == 1337);
 }
+local X = class {
+    fn __close() {
+        assert(Y == 69);
+        print("Closing " .. tostr(self));
+    }
+    fn __gc() {
+        Y = nil;
+        print("Collecting " .. tostr(self));
+    }
+};
+X = X();
+Y = 69;
+foreach i, point in array_iter(points), nil, nil, X {
+    switch (i) {
+        case 0: assert(point == 69); break;
+        case 1: assert(point == 420); break;
+        case 2: assert(point == 1337); break;
+        default: {
+            print("unreachable");
+            assert(nil);
+        }
+    }
+    if (i == 2) break;
+}
+gc();
+
+X = nil;
+gc(); /// collect instance
+assert(Y == nil);

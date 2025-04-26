@@ -1272,7 +1272,6 @@ returning: /* trap already set */
                 sp -= fetch_l();
                 vm_break;
             }
-            /* } BINARY_OPS { ARITHMETIC_OPS { */
             vm_case(OP_MBIN) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
@@ -1503,7 +1502,6 @@ returning: /* trap already set */
                 setorderres(v2, cond, 1);
                 vm_break;
             }
-            /* }} UNARY_OPS { */
             vm_case(OP_NOT) {
                 TValue *v = peek(0);
                 if (c_isfalse(v))
@@ -1537,7 +1535,6 @@ returning: /* trap already set */
                 }
                 vm_break;
             }
-            /* } JMP_OPS { */
             vm_case(OP_JMP) {
                 int offset = fetch_l();
                 pc += offset;
@@ -1548,13 +1545,6 @@ returning: /* trap already set */
                 pc -= offset;
                 vm_break;
             }
-            vm_case(OP_BJMP) {
-                int offset = fetch_l();
-                int npop = fetch_l();
-                pc += offset;
-                sp -= npop;
-                vm_break;
-            } /* } TEST_OPS { */
             vm_case(OP_TEST) {
                 TValue *v = peek(0);
                 int offset = fetch_l();
@@ -1581,7 +1571,7 @@ returning: /* trap already set */
                     pc += offset;
                 sp--;
                 vm_break;
-            } /* } */
+            }
             vm_case(OP_CALL) {
                 CallFrame *newcf;
                 SPtr func;
@@ -1600,10 +1590,8 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_CLOSE) {
-                SPtr level;
                 savestate(C);
-                level = STK(fetch_l());
-                Protect(csF_close(C, level, CS_OK));
+                Protect(csF_close(C, STK(fetch_l()), CS_OK));
                 vm_break;
             }
             vm_case(OP_TBC) {
@@ -1622,8 +1610,7 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_GETUVAL) {
-                UpVal *uv = cl->upvals[fetch_l()];
-                setobj2s(C, sp, uv->v.p);
+                setobj2s(C, sp, cl->upvals[fetch_l()]->v.p);
                 sp++;
                 vm_break;
             }

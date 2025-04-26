@@ -384,6 +384,7 @@ CSLIB_API void csL_set_usermethods(cs_State *C, const char *tname) {
 }
 
 
+#include "ctrace.h"
 CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname) {
     void *p = csL_to_fulluserdata(C, index);
     if (p != NULL) { /* `index` is full userdata? */

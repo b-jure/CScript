@@ -1,3 +1,5 @@
+gc("check"); /// clear flag (if set)
+assert(!gc("check"));
 local old = gc("count") * 1024; 
 assert(typeof(old) == "number");
 gc("collect");
@@ -13,3 +15,10 @@ gc("step", 0);
 gc("step", 20);
 assert(gc("incremental") == "incremental");
 assert(gc("isrunning"));
+local s = "ok";
+s = s .. s;
+s = nil;
+gc("check"); /// clear flag (if set)
+assert(!gc("check"));
+gc();
+assert(gc("check")); /// 's' string is collected

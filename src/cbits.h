@@ -62,8 +62,7 @@
 
 
 /* 
-** Get first 3 bytes (LE byte order) from 'p' 
-** casted to 'int'.
+** Get first 3 bytes (LE byte order) from 'p' casted to 'uint'.
 */
 #define get3bytes(p) \
     (cast_uint(0) | \
@@ -77,8 +76,9 @@
 ** (integer type) into 'dest'.
 */
 #define set3bytes(dest,src) \
-    { setbyte(dest, 0, getbyte(src, 0)); \
-      setbyte(dest, 1, getbyte(src, 1)); \
-      setbyte(dest, 2, getbyte(src, 2)); }
+    { c_byte *dest_=cast_bytep(dest); int src_=cast_int(src); \
+      setbyte(dest_, 0, getbyte(src_, 0)); \
+      setbyte(dest_, 1, getbyte(src_, 1)); \
+      setbyte(dest_, 2, getbyte(src_, 2)); }
 
 #endif

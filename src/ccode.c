@@ -157,7 +157,6 @@ CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
     opProp(0, FormatI), /* OP_NOT */
     opProp(1, FormatIL), /* OP_JMP */
     opProp(1, FormatIL), /* OP_JMPS */
-    opProp(1, FormatILL), /* OP_BJMP */
     opProp(1, FormatILS), /* OP_TEST */
     opProp(1, FormatILS), /* OP_TESTORPOP */
     opProp(1, FormatILS), /* OP_TESTPOP */
@@ -229,7 +228,7 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "IDIV",
 "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI",
 "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT",
-"NOT", "JMP", "JMPS", "BJMP", "TEST", "TESTORPOP", "TESTPOP", "CALL", "CLOSE",
+"NOT", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTPOP", "CALL", "CLOSE",
 "TBC", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETLIST", "SETPROPERTY",
 "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",
 "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL", "GETSUP",
@@ -569,11 +568,11 @@ void csC_reserveslots(FunctionState *fs, int n) {
 void csC_setoneret(FunctionState *fs, ExpInfo *e) {
     if (e->et == EXP_CALL) {
         /* already returns 1 value */
-        cs_assert(GETARG_L(getip(fs, e), 1) == 2);
+        cs_assert(GET_ARG_L(getip(fs, e), 1) == 2);
         e->et = EXP_FINEXPR; /* just mark as finalized */
     } else if (e->et == EXP_VARARG) {
         Instruction *pi = getip(fs, e);
-        SETARG_L(pi, 0, 2);
+        SET_ARG_L(pi, 0, 2);
         e->et = EXP_FINEXPR;
     }
 }
@@ -583,10 +582,10 @@ void csC_setoneret(FunctionState *fs, ExpInfo *e) {
 void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
     Instruction *pc = getip(fs, e);
     if (e->et == EXP_CALL) {
-        SETARG_L(pc, 1, nreturns + 1);
+        SET_ARG_L(pc, 1, nreturns + 1);
     } else {
         cs_assert(e->et == EXP_VARARG);
-        SETARG_L(pc, 0, nreturns + 1);
+        SET_ARG_L(pc, 0, nreturns + 1);
         csC_reserveslots(fs, 1);
     }
     e->et = EXP_FINEXPR;
@@ -605,15 +604,16 @@ static int sameadjust(OpCode prev, OpCode new) {
 }
 
 
+#include <stdio.h>
 static int adjuststack(FunctionState *fs, OpCode op, int n) {
     Instruction *inst = prevOP(fs);
-    int prevn = 0;
+    int nprev = 0;
     cs_assert((n > 1) == (op == OP_POPN || op == OP_NILN));
     if (inst && sameadjust(*inst, op)) { /* can optimize? */
         switch (*inst) {
             case OP_POPN: case OP_NILN: {
-                prevn = GETARG_L(inst, 0);
-                SETARG_L(inst, 0, n + prevn);
+                nprev = GET_ARG_L(inst, 0);
+                SET_ARG_L(inst, 0, n + nprev);
                 return fs->prevpc; /* done; do not code new instruction */
             }
             case OP_POP: {
@@ -623,20 +623,19 @@ static int adjuststack(FunctionState *fs, OpCode op, int n) {
             case OP_NIL: {
                 op = OP_NILN;
 l_nil:
-                prevn = 1;
+                nprev = 1;
                 removelastinstruction(fs);
                 break;
             }
             default: cs_assert(0); /* invalid OpCode */
         }
-        n += prevn;
+        n += nprev;
     }
     if (n == 1) {
         cs_assert(op == OP_NIL || op == OP_POP);
         return csC_emitI(fs, op);
-    } else {
+    } else
         return csC_emitIL(fs, op, n);
-    }
 }
 
 
@@ -664,13 +663,18 @@ c_sinline void freeslots(FunctionState *fs, int n) {
 }
 
 
-/* pop values from stack and free stack slots */
-int csC_pop(FunctionState *fs, int n) {
-    if (n > 0) {
-        freeslots(fs, n);
+/* pop values from stack */
+int csC_remove(FunctionState *fs, int n) {
+    if (n > 0)
         return adjuststack(fs, n > 1 ? OP_POPN : OP_POP, n);
-    }
-    return -1; /* nothing to pop */
+    return -1; /* nothing to remove */
+}
+
+
+/* pop values from stack and free compiler stack slots */
+int csC_pop(FunctionState *fs, int n) {
+    freeslots(fs, n);
+    return csC_remove(fs, n);
 }
 
 
@@ -809,7 +813,7 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
             break;
         }
         case EXP_LOCAL: {
-            var->u.info = csC_emitIL(fs, OP_SETLOCAL, var->u.info);
+            var->u.info = csC_emitIL(fs, OP_SETLOCAL, var->u.v.sidx);
             break;
         }
         case EXP_INDEXED: {
@@ -866,7 +870,7 @@ static int getindexint(FunctionState *fs, ExpInfo *v) {
 */
 static int getjump(FunctionState *fs, int pc) {
     Instruction *inst = &fs->p->code[pc];
-    int offset = GETARG_L(inst, 0);
+    int offset = GET_ARG_L(inst, 0);
     if (offset == 0)
         return NOJMP;
     else
@@ -878,11 +882,10 @@ static int getjump(FunctionState *fs, int pc) {
 static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
     int offset = c_abs(target - (pc + getOpSize(*jmp)));
-    cs_assert(offset > 0); /* at least one expression in between */
-    cs_assert(testJProp(*jmp)); /* 'jmp' is a valid jump instruction */
-    if (c_unlikely(offset > MAX_ARG_L)) /* jump is too large? */
+    cs_assert(testJProp(*jmp)); /* pc is at valid jump instruction */
+    if (c_unlikely(offset > MAXJMP)) /* jump is too large? */
         csP_semerror(fs->lx, "control structure too long");
-    SETARG_L(jmp, 0, offset); /* fix the jump */
+    SET_ARG_L(jmp, 0, offset); /* fix the jump */
 }
 
 
@@ -971,7 +974,7 @@ int csC_dischargevars(FunctionState *fs, ExpInfo *v) {
             break;
         }
         case EXP_LOCAL: {
-            v->u.info = csC_emitIL(fs, OP_GETLOCAL, v->u.info);
+            v->u.info = csC_emitIL(fs, OP_GETLOCAL, v->u.v.sidx);
             break;
         }
         case EXP_INDEXED: {
@@ -1060,7 +1063,7 @@ void csC_setlistsize(FunctionState *fs, int pc, int lsz) {
     Instruction *inst = &fs->p->code[pc];
     lsz = (lsz != 0 ? csO_ceillog2(lsz) + 1 : 0);
     cs_assert(lsz <= MAX_ARG_S);
-    SETARG_S(inst, 0, lsz); /* set size (log2 - 1) */
+    SET_ARG_S(inst, 0, lsz); /* set size (log2 - 1) */
 }
 
 
@@ -1084,7 +1087,7 @@ void csC_settablesize(FunctionState *fs, int pc, int hsize) {
     Instruction *inst = &fs->p->code[pc];
     hsize = (hsize != 0 ? csO_ceillog2(hsize) + 1 : 0);
     cs_assert(hsize <= MAX_ARG_S);
-    SETARG_S(inst, 0, hsize);
+    SET_ARG_S(inst, 0, hsize);
 }
 
 
@@ -1340,10 +1343,7 @@ static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
 int csC_jmp(FunctionState *fs, OpCode opjump) {
     if (opjump == OP_TESTPOP) /* test jump? */
         freeslots(fs, 1); /* test jump pops one value */
-    if (opjump == OP_BJMP) /* break jump? */
-        return csC_emitILL(fs, OP_BJMP, 0, 0);
-    else /* otherwise test or regular jump */
-        return csC_emitIL(fs, opjump, 0);
+    return csC_emitIL(fs, opjump, 0);
 }
 
 
@@ -1641,8 +1641,8 @@ static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, int line) {
     Instruction *inst = previousinstruction(fs);
     UNUSED(e2);
     if (*inst == OP_CONCAT) { /* 'e2' is a concatenation? */
-        int n = GETARG_L(inst, 0);
-        SETARG_L(inst, 0, n + 1); /* will concatenate one more element */
+        int n = GET_ARG_L(inst, 0);
+        SET_ARG_L(inst, 0, n + 1); /* will concatenate one more element */
     } else { /* 'e2' is not a concatenation */
         e1->u.info = csC_emitIL(fs, OP_CONCAT, 2);
         e1->et = EXP_FINEXPR;
@@ -1735,18 +1735,16 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 
 /* return the final target of a jump (skipping jumps to jumps) */
 static int finaltarget(Instruction *code, int i) {
-  for (int count = 0; count < 100; count++) { /* avoid infinite loops */
-      Instruction *pc = &code[i];
-      if (*pc == OP_JMP) { /* jump forward? */
-          i += (SIZE_INSTR+SIZE_ARG_L); /* skip instruction and offset */
-          i += GETARG_L(pc, 0);
-      } else if (*pc == OP_JMPS) { /* jump back? */
-          i += (SIZE_INSTR+SIZE_ARG_L); /* skip instruction and offset */
-          i -= GETARG_L(pc, 0);
-      } else /* no jumps */
-          break;
-  }
-  return i;
+    for (int count = 0; count < 100; count++) { /* avoid infinite loops */
+        Instruction *pc = &code[i];
+        OpCode op = *pc;
+        if (op == OP_JMP || op == OP_JMPS) { /* jump? */
+            /* skip the jump and the jump offset */
+            i += getOpSize(OP_JMP);
+            i += (1 + (op == OP_JMPS)*-2) * GET_ARG_L(pc, 0);
+        } else break; /* no more jumps */
+    }
+    return i;
 }
 
 
@@ -1762,10 +1760,9 @@ void csC_finish(FunctionState *fs) {
         switch (*pc) {
             case OP_RET: { /* check if need to close variables */
                 if (fs->needclose)
-                    SETARG_LLS(pc, 1); /* set the flag */
+                    SET_ARG_LLS(pc, 1); /* set the flag */
                 break;
             }
-            /* TODO: finaltarget the OP_BJMP and accumulate npop */
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */
                 int target = finaltarget(p->code, i);
                 fixjump(fs, i, target);

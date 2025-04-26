@@ -415,16 +415,16 @@ foreach a,b,c in io.lines(fname, 1, 2, "a")
     assert(a == "0" and b == "12" and c == "3456789\n");
 
 foreach a,b,c in io.lines(fname, "a", 0, 1) {
-  if (a == "") break;
-  assert(a == "0123456789\n" and !b and !c);
+    if (a == "") break;
+    assert(a == "0123456789\n" and !b and !c);
 }
 gc();   # to close file in previous iteration
 
 io.output(fname);
 io.write("00\n10\n20\n30\n40\n").close();
 foreach a, b in io.lines(fname, "n", "n") {
-  if (a == 40) assert(!b);
-  else assert(a == b - 10);
+    if (a == 40) assert(!b);
+    else assert(a == b - 10);
 }
 
 

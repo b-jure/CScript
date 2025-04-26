@@ -179,6 +179,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     setgcparam(gs->gcpause, CSI_GCPAUSE);
     setgcparam(gs->gcstepmul, CSI_GCSTEPMUL);
     gs->gcstepsize = CSI_GCSTEPSIZE;
+    gs->gccheck = 0;
     gs->sweeppos = NULL;
     gs->fixed = gs->fin = gs->tobefin = NULL;
     gs->graylist = gs->grayagain = NULL;

@@ -230,7 +230,7 @@ static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
             mm = CS_MM_SETIDX;
             break;
         case OP_MBIN: {
-            mm = GETARG_S(i, 0);
+            mm = GET_ARG_S(i, 0);
             break;
         }
         case OP_LT: case OP_LTI: case OP_GTI: mm = CS_MM_LT; break;

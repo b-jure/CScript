@@ -19,8 +19,6 @@
 #include "cvm.h"
 #include "cprotected.h"
 
-#include <stdio.h>
-
 
 Proto *csF_newproto(cs_State *C) {
     GCObject *o = csG_new(C, sizeof(Proto), CS_VPROTO); 
@@ -219,6 +217,7 @@ void csF_closeupval(cs_State *C, SPtr level) {
     UpVal *uv;
     while ((uv = C->openupval) != NULL && uvlevel(uv) >= level) {
         TValue *slot = &uv->u.value; /* new position for value */
+        cs_assert(uvlevel(uv) <= C->sp.p);
         csF_unlinkupval(uv); /* remove it from 'openupval' list */
         setobj(C, slot, uv->v.p); /* move value to the upvalue slot */
         uv->v.p = slot; /* adjust its pointer */
@@ -265,15 +264,15 @@ static void callclosemm(cs_State *C, TValue *obj, TValue *errobj) {
 ** won't be used again.
 */
 static void prepcallclose(cs_State *C, SPtr level, int status) {
-    TValue *v = s2v(level); /* value being closed */
+    TValue *uv = s2v(level); /* value being closed */
     TValue *errobj;
     if (status == CLOSEKTOP)
         errobj = &G(C)->nil; /* error object is nil */
-    else { /* top will be set to 'level' + 2 */
-        errobj = s2v(level + 1); /* error object goes after 'v' */
+    else { /* 'csPR_seterrorobj' will set top to level + 2 */
+        errobj = s2v(level + 1); /* error object goes after 'uv' */
         csPR_seterrorobj(C, status, level + 1); /* set error object */
     }
-    callclosemm(C, v, errobj);
+    callclosemm(C, uv, errobj);
 }
 
 

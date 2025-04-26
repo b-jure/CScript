@@ -42,23 +42,22 @@
 
 
 /* gets first arg pc */
-#define GETARG(ip)              ((ip)+SIZE_INSTR)
+#define GET_ARG(ip)             ((ip)+SIZE_INSTR)
 
 /* get short/long argument pc */
-#define GETPC_S(ip,o)           (GETARG(ip)+((o)*SIZE_ARG_S))
-#define GETPC_L(ip,o)           (GETARG(ip)+((o)*SIZE_ARG_L))
+#define GETPC_S(ip,o)           (GET_ARG(ip)+((o)*SIZE_ARG_S))
+#define GETPC_L(ip,o)           (GET_ARG(ip)+((o)*SIZE_ARG_L))
 
 
 /* get/set short parameter */
-#define GETARG_S(ip,o)          cast_byte(*GETPC_S(ip,o))
-#define SETARG_S(ip,o,v)        setbyte(GETPC_S(ip,0), o, v);
-#define SETARG_LS(ip,v)         setbyte(GETARG(ip), SIZE_ARG_L, v)
-#define SETARG_LLS(ip,v)        setbyte(GETARG(ip), 2*SIZE_ARG_L, v)
+#define GET_ARG_S(ip,o)         cast_byte(*GETPC_S(ip,o))
+#define SET_ARG_S(ip,o,v)       setbyte(GETPC_S(ip,0), o, v);
+#define SET_ARG_LLS(ip,v)       setbyte(GET_ARG(ip), 2*SIZE_ARG_L, v)
 
 
 /* get/set long arg */
-#define GETARG_L(ip,o)          get3bytes(GETARG(ip) + ((o)*SIZE_ARG_L))
-#define SETARG_L(ip,o,v)        set3bytes(GETPC_L(ip,o), v)
+#define GET_ARG_L(ip,o)         get3bytes(GET_ARG(ip) + ((o)*SIZE_ARG_L))
+#define SET_ARG_L(ip,o,v)       set3bytes(GETPC_L(ip,o), v)
 
 
 /*
@@ -76,9 +75,6 @@
         (((imm)&0x00800000) ? cast_int(~((imm)&0xff7fffff)+1) : cast_int(imm))
 
 
-
-/* size of instruction jump argument in bytes */
-#define JMPARGSIZE      SIZE_ARGL
 
 /* max code jump offset value */
 #define MAXJMP          MAX_ARG_L
@@ -224,7 +220,6 @@ OP_NOT,/*          V       '!V'                                             */
 
 OP_JMP,/*          L       'pc += L'                                        */
 OP_JMPS,/*         L       'pc -= L'                                        */
-OP_BJMP,/*         L1 L2   'pc += L1; pop(L2)'                              */
 
 OP_TEST,/*         V L S   'if (!c_isfalse(V) == S) pc += L'                */
 OP_TESTORPOP,/*    V L S   'if (!c_isfalse(V) == S) pc += L; else pop V;'   */
@@ -318,10 +313,10 @@ CSI_DEC(const c_byte csC_opProp[NUM_OPCODES];)
 #define opProp(j,f)         (((j) << 4) | (f))
 
 
-/* Instruction format sizes in bytes (aka as bytecode) */
+/* Instruction format sizes in bytes (or units of 'Instruction') */
 CSI_DEC(const c_byte csC_opSize[FormatN];)
 
-#define getOpSize(i)        csC_opSize[getOpFormat(i)]
+#define getOpSize(i)        (csC_opSize[getOpFormat(i)]*sizeof(Instruction))
 
 CSI_DEC(const char *csC_opSizeFormat[FormatN];)
 
@@ -372,6 +367,7 @@ CSI_FUNC void csC_setoneret(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
 CSI_FUNC int csC_nil(FunctionState *fs, int n);
 CSI_FUNC void csC_load(FunctionState *fs, int stk);
+CSI_FUNC int csC_remove(FunctionState *fs, int n);
 CSI_FUNC int csC_pop(FunctionState *fs, int n);
 CSI_FUNC void csC_adjuststack(FunctionState *fs, int left);
 CSI_FUNC int csC_ret(FunctionState *fs, int first, int nreturns);

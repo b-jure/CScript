@@ -57,7 +57,8 @@ typedef enum expt {
      * 'info' = index of upvalue in 'upvals'; */
     EXP_UVAL,
     /* local variable;
-     * 'info' = stack index; */
+     * 'v.sidx' = stack index;
+     * 'v.vidx' = compiler index; */
     EXP_LOCAL,
     /* indexed variable; */
     EXP_INDEXED,
@@ -100,7 +101,11 @@ typedef struct ExpInfo {
         cs_Number n;  /* floating constant */
         cs_Integer i; /* integer constant  */
         OString *str; /* string literal */
-        int info;     /* pc or some other generic information */
+        struct {
+            int vidx; /* compiler index */
+            int sidx; /* stack slot index */
+        } v; /* local var */
+        int info; /* pc or some other generic information */
     } u;
     int t; /* jmp to patch if true */
     int f; /* jmp to patch if false */
@@ -118,44 +123,40 @@ typedef union LVar {
     struct {
         TValueFields;
         c_byte kind;
-        int sidx; /* stack slot holding the value */
-        int pidx; /* index of local variable in Proto's 'locals' array */
+        int sidx; /* stack slot index holding the variable value */
+        int pidx; /* index of variable in Proto's 'locals' array */
         OString *name;
     } s;
     TValue val; /* constant value */
 } LVar;
 
 
-typedef struct Jump {
-    int jmp;
-    int nactlocals;
-    union { /* extra information */
-        int hasclose;   /* true if has to close open upvalues */
-        int iscontinue; /* true if this is continue jump (generic loop) */
-    } e;
-} Jump;
-
-
-/* list of jump instructions to patch */
-typedef struct PatchList {
-    int len;
-    int size;
-    Jump *arr;
-} PatchList;
-
-
-/* literal value information */
+/* switch statement constant description */
 typedef struct LiteralInfo {
-    Literal lit; /* literal value */
+    Literal lit; /* constant */
     int tt; /* type tag */
 } LiteralInfo;
 
 
-/* class declaration information */
-typedef struct ClassState {
-    struct ClassState *prev; /* chain of nested declarations */
-    c_byte super; /* 1 if class has superclass; 2 if it has leftover */
-} ClassState;
+/*
+** Description of pending goto jumps (break/continue).
+** CScript does not support explicit 'goto' statements and labels,
+** instead this structure refers to the 'break' and 'continue' jumps.
+*/
+typedef struct Goto {
+    int pc; /* position in the code */
+    int nactlocals; /* number of active local variables in that position */
+    c_byte close; /* true if goto jump escapes upvalues */
+    c_byte bk; /* true if goto is break (otherwise continue in gen. loop) */
+} Goto;
+
+
+/* list of goto jumps */
+typedef struct GotoList {
+    int len; /* number of labels in use */
+    int size; /* size of 'arr' */
+    Goto *arr; /* array of pending goto jumps */
+} GotoList;
 
 
 /*
@@ -165,55 +166,32 @@ typedef struct ClassState {
 */
 typedef struct ParserState {
     struct { /* list of all active local variables */
-        int len; int size;
-        LVar *arr;
+        int len; /* number of locals in use */
+        int size; /* size of 'arr' */
+        LVar *arr; /* array of compiler local variables */
     } actlocals;
-    struct { /* list of pending break jumps */
-        int len; int size;
-        PatchList *arr;
-    } patches;
-    struct { /* list of switch literals */
-        int len; int size;
-        LiteralInfo *arr;
+    struct { /* list of all switch constants */
+        int len; /* number of constants in use */
+        int size; /* size of 'arr' */
+        struct LiteralInfo *arr; /* array of switch constants */
     } literals;
-    struct ClassState *cs;
+    GotoList gt; /* idem */
 } ParserState;
 
 
-/* 
-** Function state context.
-** (snapshot of state fields for optimizations).
-*/
-typedef struct FuncContext {
-    int ninstpc;
-    int loopstart;
-    int prevpc;
-    int prevline;
-    int sp;
-    int nactlocals;
-    int np;
-    int nk;
-    int pc;
-    int nabslineinfo;
-    int nlocals;
-    int nupvals;
-    int fintestpc;
-    int npatches;
-    int njumps;
-    c_byte iwthabs;
-    c_byte needclose;
-    c_byte lastwasret;
-} FuncContext;
+struct ClassState; /* defined in cparser.c */
+struct Scope; /* defined in cparser.c */
 
 
 /* state for currently compiled function prototype */
 typedef struct FunctionState {
     Proto *p;                   /* current function prototype */
-    struct FunctionState *prev; /* implicit linked-list */
-    struct Lexer *lx;           /* lexer */
-    struct Scope *scope;        /* scope information */
-    struct Scope *loopscope;    /* innermost loop scope */
-    struct Scope *switchscope;  /* innermost switch scope */
+    struct ClassState *cs;      /* chain, class definition */
+    struct FunctionState *prev; /* chain, enclosing function */
+    struct Lexer *lx;           /* lexical state */
+    struct Scope *scope;        /* chain, current scope */
+    struct Scope *loopscope;    /* chain, innermost loop scope */
+    struct Scope *switchscope;  /* chain, innermost switch scope */
     int firstlocal;     /* index of first local in 'lvars' */
     int loopstart;      /* innermost loop start offset */
     int prevpc;         /* previous instruction pc */
@@ -222,15 +200,14 @@ typedef struct FunctionState {
     int nactlocals;     /* number of active local variables */
     int np;             /* number of elements in 'p' */
     int nk;             /* number of elements in 'k' */
-    int pc;             /* number of elements in 'code' (equialent to 'ncode') */
+    int pc;             /* number of elements in 'code' (aka 'ncode') */
     int nabslineinfo;   /* number of elements in 'abslineinfo' */
     int ninstpc;        /* number of elements in 'instpc' */
     int nlocals;        /* number of elements in 'locals' */
     int nupvals;        /* number of elements in 'upvals' */
-    int fintestpc;      /* 'pc' of the last test instruction in 'switchstm' */
-    c_byte iwthabs;     /* instructions issued since last absolute line info */
+    int pcswtest;       /* 'pc' of the last test instruction in 'switchstm' */
+    c_byte iwthabs;     /* instructions issued since last abs. line info */
     c_byte needclose;   /* true if needs to close upvalues before returning */
-    c_byte lastwasret;  /* last statement is 'return' */
     c_byte lastisend;   /* true if last statement ends control flow
                          * (1==return, 2==break, 3==continue)*/
 } FunctionState;

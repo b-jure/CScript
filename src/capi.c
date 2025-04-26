@@ -102,6 +102,7 @@ CS_API cs_Number cs_version(cs_State *C) {
 }
 
 
+#include <stdio.h>
 c_sinline void settop(cs_State *C, int n) {
     CallFrame *cf;
     SPtr func, newtop;
@@ -120,6 +121,7 @@ c_sinline void settop(cs_State *C, int n) {
     api_check(C, C->tbclist.p < C->sp.p, "previous pop of an unclosed slot");
     newtop = C->sp.p + diff;
     if (diff < 0 && C->tbclist.p >= newtop) {
+        printf("cf->nresults => %d\n", cf->nresults);
         cs_assert(hastocloseCfunc(cf->nresults));
         newtop = csF_close(C, newtop, CLOSEKTOP);
     }
@@ -1472,6 +1474,7 @@ CS_API int cs_load(cs_State *C, cs_Reader reader, void *userdata,
 }
 
 
+// TODO: update docs (added new option)
 CS_API int cs_gc(cs_State *C, int option, ...) {
     va_list ap;
     int res = 0;
@@ -1485,7 +1488,12 @@ CS_API int cs_gc(cs_State *C, int option, ...) {
         }
 	case CS_GCRESTART: { /* restart GC */
             csG_setgcdebt(gs, 0);
-            gs->gcstop = 0;
+            gs->gcstop = 0; /* clear stop */
+            break;
+        }
+        case CS_GCCHECK: { /* check and clear collection flag */
+            res = gs->gccheck; /* get check flag */
+            gs->gccheck = 0; /* clear check flag */
             break;
         }
 	case CS_GCCOLLECT: { /* start GC cycle */

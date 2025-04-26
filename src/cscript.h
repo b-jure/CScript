@@ -314,12 +314,13 @@ CS_API int  cs_load(cs_State *C, cs_Reader reader, void *userdata,
 /* GC options */
 #define CS_GCSTOP               0 /* stop GC */
 #define CS_GCRESTART            1 /* restart GC (start if stopped) */
-#define CS_GCCOLLECT            2 /* perform full GC cycle */
-#define CS_GCCOUNT              3 /* get number of (bytes_allocated/1024) */
-#define CS_GCCOUNTBYTES         4 /* get remainder of (bytes_allocated/1024) */
-#define CS_GCSTEP               5 /* perform single GC step and or set gcdebt */
-#define CS_GCISRUNNING          6 /* test whether GC is running */
-#define CS_GCINC                7 /* set GC in incremental mode */
+#define CS_GCCHECK              2 /* check and clear GC collection flag */
+#define CS_GCCOLLECT            3 /* perform full GC cycle */
+#define CS_GCCOUNT              4 /* get number of (bytes_allocated/1024) */
+#define CS_GCCOUNTBYTES         5 /* get remainder of (bytes_allocated/1024) */
+#define CS_GCSTEP               6 /* perform single GC step and or set gcdebt */
+#define CS_GCISRUNNING          7 /* test whether GC is running */
+#define CS_GCINC                8 /* set GC in incremental mode */
 
 CS_API int cs_gc(cs_State *C, int what, ...); 
 

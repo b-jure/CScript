@@ -294,7 +294,7 @@ static void unasmLLL(const Proto *p, Instruction *pc) {
 static void unasmKL(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceK(p, GETARG_L(pc, 0));
+    traceK(p, GET_ARG_L(pc, 0));
     endline();
 }
 
@@ -302,13 +302,13 @@ static void unasmKL(const Proto *p, Instruction *pc) {
 static void unasmK(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceK(p, GETARG_S(pc, 0));
+    traceK(p, GET_ARG_S(pc, 0));
     endline();
 }
 
 
 static int getimm(Instruction *pc, int off, int l) {
-    int imm = (l) ? GETARG_L(pc, off) : GETARG_S(pc, off);
+    int imm = (l) ? GET_ARG_L(pc, off) : GET_ARG_S(pc, off);
     return (l) ? IMML(imm) : IMM(imm);
 }
 
@@ -343,7 +343,7 @@ static void traceSize(int size) {
 static void unasmNewObject(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceSize(GETARG_S(pc, 0));
+    traceSize(GET_ARG_S(pc, 0));
     endline();
 }
 
@@ -352,8 +352,8 @@ static void unasmEQK(const Proto *p, Instruction *pc) {
     TValue aux;
     startline(p, pc);
     traceOp(*pc);
-    traceK(p, GETARG_L(pc, 0));
-    setival(&aux, GETARG_S(pc, SIZE_ARG_L));
+    traceK(p, GET_ARG_L(pc, 0));
+    setival(&aux, GET_ARG_S(pc, SIZE_ARG_L));
     posfix_spaces(traceNumber(&aux));
     endline();
 }
@@ -368,7 +368,7 @@ static void unasmEQI(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
     traceImmediateInt(pc, 0, 1);
-    traceCond(GETARG_S(pc, SIZE_ARG_L));
+    traceCond(GET_ARG_S(pc, SIZE_ARG_L));
     endline();
 }
 
@@ -389,7 +389,7 @@ static void traceNparams(int nparams) {
 static void unasmVarargPrep(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceNparams(GETARG_L(pc, 0));
+    traceNparams(GET_ARG_L(pc, 0));
     endline();
 }
 
@@ -397,7 +397,7 @@ static void unasmVarargPrep(const Proto *p, Instruction *pc) {
 static void unasmS(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceS(GETARG_S(pc, 0));
+    traceS(GET_ARG_S(pc, 0));
     endline();
 }
 
@@ -423,8 +423,8 @@ static void traceNres(int nres) {
 static void unasmCall(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceStackSlot(GETARG_L(pc, 0));
-    traceNres(GETARG_L(pc, 1) - 1);
+    traceStackSlot(GET_ARG_L(pc, 0));
+    traceNres(GET_ARG_L(pc, 1) - 1);
     endline();
 }
 
@@ -442,13 +442,13 @@ static void traceSwap(int swap) {
 static void unasmMM(cs_State *C, const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceMetaName(C, GETARG_S(pc, 0));
+    traceMetaName(C, GET_ARG_S(pc, 0));
     endline();
 }
 
 
 static void unasmMMBin(cs_State *C, const Proto *p, Instruction *pc) {
-    int swap = GETARG_S(pc, 0);
+    int swap = GET_ARG_S(pc, 0);
     startline(p, pc);
     traceOp(*pc);
     traceMetaName(C, swap & 0x7f);
@@ -460,7 +460,7 @@ static void unasmMMBin(cs_State *C, const Proto *p, Instruction *pc) {
 static void unasmIndexedSetInt(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
-    traceStackSlot(GETARG_L(pc, 0));
+    traceStackSlot(GET_ARG_L(pc, 0));
     traceImmediateInt(pc, 1, l);
     endline();
 }
@@ -474,7 +474,7 @@ static void traceImmediateK(const Proto *p, Instruction *pc, int off, int l) {
 static void unasmIndexedSetStr(const Proto *p, Instruction *pc, int l) {
     startline(p, pc);
     traceOp(*pc);
-    traceStackSlot(GETARG_L(pc, 0));
+    traceStackSlot(GET_ARG_L(pc, 0));
     traceImmediateK(p, pc, 1, l);
     endline();
 }
@@ -483,9 +483,9 @@ static void unasmIndexedSetStr(const Proto *p, Instruction *pc, int l) {
 static void unasmSetArray(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceStackSlot(GETARG_L(pc, 0));
-    posfix_spaces(printf("lastindex=%d", GETARG_L(pc, 1)));
-    posfix_spaces(printf("tostore=%d", GETARG_S(pc, SIZE_ARG_L*2)));
+    traceStackSlot(GET_ARG_L(pc, 0));
+    posfix_spaces(printf("lastindex=%d", GET_ARG_L(pc, 1)));
+    posfix_spaces(printf("tostore=%d", GET_ARG_S(pc, SIZE_ARG_L*2)));
     endline();
 }
 
@@ -498,7 +498,7 @@ static void traceLocal(int index) {
 static void unasmLocal(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceLocal(GETARG_L(pc, 0));
+    traceLocal(GET_ARG_L(pc, 0));
     endline();
 }
 
@@ -512,7 +512,7 @@ static void traceUpVal(UpValInfo *uv, int index) {
 static void unasmUpvalue(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceUpVal(p->upvals, GETARG_L(pc, 0));
+    traceUpVal(p->upvals, GET_ARG_L(pc, 0));
     endline();
 }
 
@@ -538,7 +538,7 @@ static void unasmPop(const Proto *p, Instruction *pc) {
     if (*pc == OP_POP)
         traceNpop(1);
     else
-        traceNpop(GETARG_L(pc, 0));
+        traceNpop(GET_ARG_L(pc, 0));
     endline();
 }
 
@@ -546,16 +546,7 @@ static void unasmPop(const Proto *p, Instruction *pc) {
 static void unasmJmp(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceOffset(GETARG_L(pc, 0));
-    endline();
-}
-
-
-static void unasmBreakJmp(const Proto *p, Instruction *pc) {
-    startline(p, pc);
-    traceOp(*pc);
-    traceOffset(GETARG_L(pc, 0));
-    traceNpop(GETARG_L(pc, 1));
+    traceOffset(GET_ARG_L(pc, 0));
     endline();
 }
 
@@ -563,9 +554,9 @@ static void unasmBreakJmp(const Proto *p, Instruction *pc) {
 static void unasmRet(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceStackSlot(GETARG_L(pc, 0));
-    traceNres(GETARG_L(pc, 1) - 1);
-    traceClose(GETARG_S(pc, (2*SIZE_ARG_L)));
+    traceStackSlot(GET_ARG_L(pc, 0));
+    traceNres(GET_ARG_L(pc, 1) - 1);
+    traceClose(GET_ARG_S(pc, (2*SIZE_ARG_L)));
     endline();
 }
 
@@ -573,7 +564,7 @@ static void unasmRet(const Proto *p, Instruction *pc) {
 static void unasmLoad(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceStackSlot(GETARG_L(pc, 0));
+    traceStackSlot(GET_ARG_L(pc, 0));
     endline();
 }
 
@@ -589,7 +580,7 @@ static void unasmIndexedGet(const Proto *p, Instruction *pc, int l) {
 static void unasmBinOp(const Proto *p, Instruction *pc) {
     startline(p, pc);
     traceOp(*pc);
-    traceSwap(GETARG_S(pc, 0));
+    traceSwap(GET_ARG_S(pc, 0));
     endline();
 }
 
@@ -721,7 +712,6 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
             case OP_CONSTFL: unasmIMMflt(p, pc, 1); break;
             case OP_FORLOOP: unasmLLL(p, pc); break;
             case OP_CONST: unasmK(p, pc); break;
-            case OP_BJMP: unasmBreakJmp(p, pc); break;
             case OP_EQK: unasmEQK(p, pc); break;
             case OP_EQI: unasmEQI(p, pc); break;
             case OP_EQ: unasmS(p, pc); break;

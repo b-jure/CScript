@@ -56,13 +56,20 @@ static int pushmode(cs_State *C, int oldmode) {
 /* check if 'optnum' for 'cs_gc' was valid */
 #define checkres(res)   { if (res == -1) break; }
 
+// TODO: update docs (added new option)
 static int b_gc(cs_State *C) {
-    static const char *const opts[] = {"stop", "restart", "collect", "count",
-        "step", "isrunning", "incremental", NULL};
+    static const char *const opts[] = {"stop", "restart", "collect",
+        "check", "count", "step", "isrunning", "incremental", NULL};
     static const int numopts[] = {CS_GCSTOP, CS_GCRESTART, CS_GCCOLLECT,
-        CS_GCCOUNT, CS_GCSTEP, CS_GCISRUNNING, CS_GCINC};
+        CS_GCCHECK, CS_GCCOUNT, CS_GCSTEP, CS_GCISRUNNING, CS_GCINC};
     int optnum = numopts[csL_check_option(C, 0, "collect", opts)];
     switch (optnum) {
+        case CS_GCCHECK: { // TODO: new option
+            int hadcollection = cs_gc(C, optnum);
+            checkres(hadcollection);
+            cs_push_bool(C, hadcollection);
+            return 1;
+        }
         case CS_GCCOUNT: {
             int kb = cs_gc(C, optnum); /* kibibytes */
             int b = cs_gc(C, CS_GCCOUNTBYTES); /* leftover bytes */

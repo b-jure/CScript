@@ -573,6 +573,7 @@ static int sweepstep(cs_State *C, GCObject **nextlist, int nextstate) {
     if (gs->sweeppos) {
         c_smem old_gcdebt = gs->gcdebt;
         int count;
+        gs->gccheck = 1; /* set check flag */
         gs->sweeppos = sweeplist(C, gs->sweeppos, GCSWEEPMAX, &count);
         gs->gcestimate += gs->gcdebt - old_gcdebt; /* update estimate */
         return count;
@@ -970,8 +971,9 @@ void csG_step(cs_State *C) {
     GState *gs = G(C);
     if (!gcrunning(gs)) /* stopped ? */
         csG_setgcdebt(gs, -2000);
-    else
+    else {
         step(C, gs);
+    }
 }
 
 
