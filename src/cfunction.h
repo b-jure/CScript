@@ -28,7 +28,7 @@
 #define isintwups(C)        ((C)->twups != (C))
 
 
-/* maximum amount of upvalues in a closure (both C and CScript) */
+/* maximum amount of upvalues in a CScript closure */
 #define MAXUPVAL    MAX_ARG_L
 
 
@@ -50,7 +50,7 @@ CSI_FUNC void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
                                 const Proto *fn);
 CSI_FUNC void csF_getvarargs(cs_State *C, CallFrame *cf, int wanted);
 CSI_FUNC void csF_initupvals(cs_State *C, CSClosure *cl);
-CSI_FUNC UpVal *csF_findupval(cs_State *C, SPtr sval);
+CSI_FUNC UpVal *csF_findupval(cs_State *C, SPtr level);
 CSI_FUNC void csF_unlinkupval(UpVal *upval);
 CSI_FUNC const char *csF_getlocalname(const Proto *fn, int lnum, int pc);
 CSI_FUNC void csF_newtbcvar(cs_State *C, SPtr level);

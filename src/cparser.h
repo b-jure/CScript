@@ -104,7 +104,7 @@ typedef struct ExpInfo {
         struct {
             int vidx; /* compiler index */
             int sidx; /* stack slot index */
-        } v; /* local var */
+        } var; /* local var */
         int info; /* pc or some other generic information */
     } u;
     int t; /* jmp to patch if true */

@@ -104,7 +104,6 @@ static int split_into_list(cs_State *C, int rev) {
                 p = aux+1;
             }
             cs_assert(lw > 0);
-            printf("pushing = '%.*s'\n", (int)lw, p);
             cs_push_lstring(C, p, lw);
             cs_set_index(C, arr, i);
             if (!rev) s = aux;

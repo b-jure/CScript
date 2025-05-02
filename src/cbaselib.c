@@ -550,6 +550,49 @@ static int b_flatten(cs_State *C) {
 }
 
 
+static int aux_range(cs_State *C) {
+    cs_Integer start = cs_to_integer(C, cs_upvalueindex(1));
+    cs_Integer stop = cs_to_integer(C, cs_upvalueindex(2));
+    cs_Integer step = cs_to_integer(C, cs_upvalueindex(3));
+    cs_Integer next;
+    if (step < 0 && start > stop) /* (reverse range) */
+        next = (start >= CS_INTEGER_MIN-step) ? start+step : stop;
+    else if (step > 0 && start < stop) /* (regular range) */
+        next = (start <= CS_INTEGER_MAX-step) ? start+step : stop;
+    else { /* (end of range) */
+        cs_assert(step != 0);
+        cs_push_nil(C);
+        return 1;
+    }
+    cs_push_integer(C, start); /* current range value */
+    cs_push_integer(C, next); /* next range value */
+    cs_replace(C, cs_upvalueindex(1)); /* update upvalue */
+    return 1;
+}
+
+
+// TODO: add docs and tests
+static int b_range(cs_State *C) {
+    cs_Integer stop, step;
+    cs_Integer start = csL_check_integer(C, 0);
+    if (cs_is_noneornil(C, 1)) { /* no stop? */
+        stop = start; /* range stops at start... */
+        start = 0; /* ...and starts at 0 */
+    } else /* have stop value */
+        stop = csL_check_integer(C, 1);
+    step = csL_opt_integer(C, 2, 1);
+    if (c_unlikely(step == 0)) /* invalid range? */
+        return csL_error(C, "range 'step' is 0");
+    else { /* push iterator */
+        cs_push_integer(C, start);
+        cs_push_integer(C, stop);
+        cs_push_integer(C, step);
+        cs_push_cclosure(C, aux_range, 3);
+        return 1; /* return iterator */
+    }
+}
+
+
 static const cs_Entry basic_funcs[] = {
     {"error", b_error},
     {"assert", b_assert},
@@ -577,6 +620,7 @@ static const cs_Entry basic_funcs[] = {
     {"getclass", b_getclass},
     {"getsuper", b_getsuper},
     {"flatten", b_flatten},
+    {"range", b_range},
     /* placeholders */
     {CS_GNAME, NULL},
     {"__VERSION", NULL},

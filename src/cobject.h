@@ -668,7 +668,7 @@ typedef struct UpVal {
     union {
         struct { /* valid when open */
             struct UpVal *next; /* linked list */
-            struct UpVal **prev;
+            struct UpVal **prev; /* (optimization) */
         } open;
         TValue value; /* value stored here when closed */
     } u;

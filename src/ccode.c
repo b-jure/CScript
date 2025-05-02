@@ -813,7 +813,7 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
             break;
         }
         case EXP_LOCAL: {
-            var->u.info = csC_emitIL(fs, OP_SETLOCAL, var->u.v.sidx);
+            var->u.info = csC_emitIL(fs, OP_SETLOCAL, var->u.var.sidx);
             break;
         }
         case EXP_INDEXED: {
@@ -974,7 +974,7 @@ int csC_dischargevars(FunctionState *fs, ExpInfo *v) {
             break;
         }
         case EXP_LOCAL: {
-            v->u.info = csC_emitIL(fs, OP_GETLOCAL, v->u.v.sidx);
+            v->u.info = csC_emitIL(fs, OP_GETLOCAL, v->u.var.sidx);
             break;
         }
         case EXP_INDEXED: {

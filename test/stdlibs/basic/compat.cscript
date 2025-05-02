@@ -3,4 +3,4 @@ if (__POSIX)
 else if (__WINDOWS)
     assert(typeof(__WINDOWS) == "number" and __POSIX == nil);
 else
-    assert(__POSIX == nil and __WINDOWS);
+    assert(__POSIX == nil and __WINDOWS == nil);

@@ -470,8 +470,8 @@ static void initexp(ExpInfo *e, expt et, int info) {
 static void initvar(FunctionState *fs, ExpInfo *e, int vidx) {
     e->t = e->f = NOJMP;
     e->et = EXP_LOCAL;
-    e->u.v.vidx = vidx;
-    e->u.v.sidx = getlocalvar(fs, vidx)->s.sidx;
+    e->u.var.vidx = vidx;
+    e->u.var.sidx = getlocalvar(fs, vidx)->s.sidx;
 }
 
 
@@ -708,11 +708,10 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e, int limit) 
 /* allocate space for new 'UpValInfo' */
 static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
-    cs_State *C = fs->lx->C;
     int osz = p->sizeupvalues;
     checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
-    csM_growarray(C, p->upvals, p->sizeupvalues, fs->nupvals, MAXUPVAL,
-                  "upvalues", UpValInfo);
+    csM_growarray(fs->lx->C, p->upvals, p->sizeupvalues, fs->nupvals,
+                  MAXUPVAL, "upvalues", UpValInfo);
     while (osz < p->sizeupvalues)
         p->upvals[osz++].name = NULL;
     return &p->upvals[fs->nupvals++];
@@ -725,13 +724,13 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *v) {
     FunctionState *prev = fs->prev;
     if (v->et == EXP_LOCAL) { /* local? */
         uv->onstack = 1;
-        uv->idx = v->u.v.sidx;
-        uv->kind = getlocalvar(prev, v->u.v.vidx)->s.kind;
-        cs_assert(eqstr(name, getlocalvar(prev, v->u.v.vidx)->s.name));
+        uv->idx = v->u.var.sidx;
+        uv->kind = getlocalvar(prev, v->u.var.vidx)->s.kind;
+        cs_assert(eqstr(name, getlocalvar(prev, v->u.var.vidx)->s.name));
     } else { /* must be upvalue */
         cs_assert(v->et == EXP_UVAL);
         uv->onstack = 0;
-        uv->idx = v->u.info;
+        uv->idx = cast_byte(v->u.info);
         uv->kind = prev->p->upvals[v->u.info].kind;
         cs_assert(eqstr(name, prev->p->upvals[v->u.info].name));
     }
@@ -758,21 +757,20 @@ static int searchupvalue(FunctionState *fs, OString *name) {
 static void varaux(FunctionState *fs, OString *name, ExpInfo *var, int base) {
     if (fs == NULL) /* last scope? */
         voidexp(var); /* not found */
-    else { /* otherwise search... */
-        int ret = searchlocal(fs, name, var, -1); /* ...locals */
-        if (ret == EXP_LOCAL) { /* found? */
+    else { /* otherwise search locals/upvalues */
+        if (searchlocal(fs, name, var, -1) == EXP_LOCAL) { /* local found? */
             if (!base) /* in recursive call to 'varaux'? */
-                scopemarkupval(fs, var->u.v.vidx); /* mark scope */
-        } else { /* not found; search for upvalue */
-            ret = searchupvalue(fs, name);
-            if (ret < 0) { /* still not found? */
-                varaux(fs->prev, name, var, 0); /* try enclosing 'fs' */
+                scopemarkupval(fs, var->u.var.vidx); /* use local as upvalue */
+        } else { /* not found as local at current level; try upvalues */
+            int idx = searchupvalue(fs, name); /* try existing upvalues */
+            if (idx < 0) { /* not found? */
+                varaux(fs->prev, name, var, 0); /* try upper levels */
                 if (var->et == EXP_LOCAL || var->et == EXP_UVAL) /* found? */
-                    ret = addupvalue(fs, name, var); /* add upvalue to 'fs' */
-                else
-                    return; /* not found */
+                    idx = addupvalue(fs, name, var); /* add new upvalue */
+                else /* it is global */
+                    return; /* done */
             }
-            initexp(var, EXP_UVAL, ret);
+            initexp(var, EXP_UVAL, idx); /* new or old upvalue */
         }
     }
 }
@@ -1581,15 +1579,12 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
     open_func(lx, &newfs, &scope);
     expectnext(lx, '(');
     if (ismethod) { /* is this method ? */
-        /* set ClassState */
-        cs_assert(newfs.prev->cs);
-        newfs.cs = newfs.prev->cs;
-        /* create 'self' */
-        addlocallit(lx, "self");
-        adjustlocals(lx, 1);
-        /* 'paramlist' reserves stack slots */
+        cs_assert(newfs.prev->cs); /* enclosing func. must have ClassState */
+        newfs.cs = newfs.prev->cs; /* set ClassState */
+        addlocallit(lx, "self"); /* create 'self' local */
+        adjustlocals(lx, 1); /* 'paramlist()' reserves stack slots */
     }
-    paramlist(lx);
+    paramlist(lx); /* get function parameters */
     expectmatch(lx, ')', '(', line);
     line = lx->line; /* line where '{' is located */
     expectnext(lx, '{');
@@ -1597,11 +1592,8 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
     newfs.p->deflastline = lx->line;
     expectmatch(lx, '}', '{', line);
     codeclosure(lx, v);
-    if (ismethod) {
-        /* clear ClassState (if any) */
-        cs_assert(newfs.cs == newfs.prev->cs);
-        newfs.cs = NULL;
-    }
+    cs_assert(ismethod == (newfs.cs != NULL && (newfs.cs == newfs.prev->cs)));
+    newfs.cs = NULL; /* clear ClassState (if any) */
     close_func(lx);
 }
 

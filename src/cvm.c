@@ -77,7 +77,6 @@
 
 
 #if !defined(c_swap)
-
 /* swap 'TValue*' */
 #define c_swap(v1_,v2_) \
     { TValue *temp = (v1_); (v1_) = (v2_); (v2_) = temp; }
@@ -85,7 +84,6 @@
 /* swap 'const TValue*' */
 #define c_cswap(v1_,v2_) \
     { const TValue *temp = (v1_); (v1_) = (v2_); (v2_) = temp; }
-
 #endif
 
 
@@ -96,17 +94,17 @@ static int booleans[2] = { CS_VFALSE, CS_VTRUE };
 ** Allocate new CSript closure, push it on stack and
 ** initialize its upvalues.
 */
-static void pushclosure(cs_State *C, Proto *p, UpVal **enc, SPtr base) {
-    int nupvals = p->sizeupvalues;
-    CSClosure *cl = csF_newCSClosure(C, nupvals);
+static void pushclosure(cs_State *C, Proto *p, UpVal **encup, SPtr base) {
+    int nup = p->sizeupvalues;
+    UpValInfo *uv = p->upvals;
+    CSClosure *cl = csF_newCSClosure(C, nup);
     cl->p = p;
     setclCSval2s(C, C->sp.p++, cl); /* anchor to stack */
-    for (int i = 0; i < nupvals; i++) {
-        UpValInfo *uv = &p->upvals[i];
-        if (uv->onstack)
-            cl->upvals[i] = csF_findupval(C, base + uv->idx);
-        else
-            cl->upvals[i] = enc[uv->idx];
+    for (int i = 0; i < nup; i++) { /* fill its upvalues */
+        if (uv[i].onstack) /* upvalue refers to local variable? */
+            cl->upvals[i] = csF_findupval(C, base + uv[i].idx);
+        else /* get upvalue from enclosing function */
+            cl->upvals[i] = encup[uv[i].idx];
         csG_objbarrier(C, cl, cl->upvals[i]);
     }
 }
@@ -1204,10 +1202,8 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_CLOSURE) {
-                Proto *fn;
                 savestate(C);
-                fn = cl->p->p[fetch_l()];
-                pushclosure(C, fn, cl->upvals, base);
+                pushclosure(C, cl->p->p[fetch_l()], cl->upvals, base);
                 checkGC(C);
                 sp = C->sp.p;
                 vm_break;

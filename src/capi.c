@@ -60,7 +60,7 @@ static TValue *index2value(const cs_State *C, int index) {
         return &G(C)->c_registry;
     } else { /* upvalues */
         index = (CS_REGISTRYINDEX - index) - 1;
-        api_check(C, index < MAXUPVAL, "upvalue index too large");
+        api_check(C, index < USHRT_MAX, "upvalue index too large");
         if (c_likely(ttisCclosure(s2v(cf->func.p)))) { /* C closure? */
             CClosure *ccl = clCval(s2v(cf->func.p));
             return &ccl->upvals[index];
@@ -121,7 +121,6 @@ c_sinline void settop(cs_State *C, int n) {
     api_check(C, C->tbclist.p < C->sp.p, "previous pop of an unclosed slot");
     newtop = C->sp.p + diff;
     if (diff < 0 && C->tbclist.p >= newtop) {
-        printf("cf->nresults => %d\n", cf->nresults);
         cs_assert(hastocloseCfunc(cf->nresults));
         newtop = csF_close(C, newtop, CLOSEKTOP);
     }

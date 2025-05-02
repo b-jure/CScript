@@ -104,7 +104,6 @@ syn match cscriptIdentifier /\<\h\w*\>/
 "-----------------}
 
 "-Keywords--------{
-"syn keyword     cscriptLocal            local
 syn keyword     cscriptStatement        break return continue
 syn keyword     cscriptConditional      if else
 syn keyword     cscriptLabel            case default switch
@@ -123,13 +122,13 @@ endif
 
 "-Parens---------{
 syn cluster cscriptParenGroup   contains=@cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
-syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptStatement,cscriptIf,cscriptParenError,cscriptStatement,cscriptConditional,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
+syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptIf,cscriptParenError,cscriptConditional,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
 syn match   cscriptParenError   display /)/
 syn match   cscriptErrorInParen display contained /]/
 "---------------}
 
 "-Bracket-------{
-syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptStatement,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptConditional,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
+syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptConditional,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
 syn match   cscriptBracketError     display /]/
 syn match   cscriptErrorInBracket   display contained /]/
 "---------------}
@@ -182,10 +181,10 @@ syn match       cscriptFunc             /\<string\.swapupper\>/
 syn match       cscriptFunc             /\<string\.swaplower\>/
 "-----------------}
 
-syn match cscriptComma /,/
 syn match cscriptSemicolon /;/
+syn match cscriptComma /,/
 
-syn region cscriptLocalStatement transparent start=/\<local\_s*\h\w*\_s*/ end=/\ze\%(;\|=\|{\)/ contains=cscriptLocal,cscriptAttribute,cscriptClassDefinition,cscriptFunction,cscriptFn,cscriptFunctionCall
+syn region cscriptLocalStatement transparent start=/\<local\_s*\h\w*\_s*/ end=/\ze\%(;\|=\|{\)/ contains=cscriptComma,cscriptLocal,cscriptAttribute,cscriptClassDefinition,cscriptFunction,cscriptFn,cscriptFunctionCall
 syn keyword cscriptLocal local contained
 syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/ contained
 
@@ -202,7 +201,6 @@ syn keyword cscriptFn fn
 
 hi def link cscriptAttribute            StorageClass
 hi def link cscriptFn                   cscriptStatement
-hi def link cscriptComma                NONE
 hi def link cscriptSemicolon            cscriptStatement
 hi def link cscriptLocal                cscriptStatement
 hi def link cscriptIdentifier           NONE

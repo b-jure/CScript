@@ -109,42 +109,43 @@ void csF_initupvals(cs_State *C, CSClosure *cl) {
 
 
 /*
-** Create a new upvalue and link it into 'openupval' list
-** right after 'prev'.
+** Create a new upvalue at the given level, and link it to the list of
+** open upvalues of 'l' after entry 'prev'.
 */
-static UpVal *newupval(cs_State *C, SPtr val, UpVal **prev) {
+static UpVal *newupval(cs_State *C, SPtr level, UpVal **prev) {
     GCObject *o = csG_new(C, sizeof(UpVal), CS_VUPVALUE);
     UpVal *uv = gco2uv(o);
     UpVal *next = *prev;
-    uv->v.p = s2v(val); /* current value lives on the stack */
+    uv->v.p = s2v(level); /* current value lives on the stack */
     uv->u.open.next = next; /* link it to the list of open upvalues */
-    uv->u.open.prev = prev; /* set 'prev' as previous upvalues 'u.open.next' */
-    if (next) /* have previous upvalue? */
-        next->u.open.prev = &uv->u.open.next; /* adjust its 'u.open.prev' */
-    *prev = uv; /* adjust list head or previous upvalues 'u.open.next' */
-    if (!isintwups(C)) { /* thread not in list of threads with open upvals? */
-        C->twups = G(C)->twups; /* link it to the list... */
-        G(C)->twups = C; /* ...and adjust list head */
+    uv->u.open.prev = prev;
+    if (next)
+        next->u.open.prev = &uv->u.open.next;
+    *prev = uv;
+    if (!isintwups(C)) { /* thread not in list of threads with upvalues? */
+        C->twups = G(C)->twups; /* link it to the list */
+        G(C)->twups = C;
     }
     return uv;
 }
 
 
 /*
-** Find and return already existing upvalue or create
-** and return a new one.
+** Find and reuse, or create if it does not exist, an upvalue
+** at the given level.
 */
-UpVal *csF_findupval(cs_State *C, SPtr sv) {
+UpVal *csF_findupval(cs_State *C, SPtr level) {
     UpVal **pp = &C->openupval; /* good ol' pp */
     UpVal *p;
     cs_assert(isintwups(C) || C->openupval == NULL);
-    while ((p = *pp) != NULL && uvlevel(p) > sv) {
+    while ((p = *pp) != NULL && uvlevel(p) >= level) {
         cs_assert(!isdead(G(C), p));
-        if (uvlevel(p) == sv)
-            return p;
-        pp = &p->u.open.next;
+        if (uvlevel(p) == level) /* corresponding upvalue? */
+            return p; /* return it */
+        pp = &p->u.open.next; /* get next in the list */
     }
-    return newupval(C, sv, pp);
+    /* not found: create a new upvalue after 'pp' */
+    return newupval(C, level, pp);
 }
 
 
@@ -188,7 +189,9 @@ static void checkclosem(cs_State *C, SPtr level) {
         ((256UL << ((sizeof(C->stack.p->tbc.delta) - 1) * 8)) - 1)
 
 
-/* insert variable into the list of to-be-closed variables */
+/*
+** Insert value at the given stack level into the to-be-closed list.
+*/
 void csF_newtbcvar(cs_State *C, SPtr level) {
     cs_assert(level > C->tbclist.p);
     if (c_isfalse(s2v(level)))
@@ -203,7 +206,9 @@ void csF_newtbcvar(cs_State *C, SPtr level) {
 }
 
 
-/* unlinks upvalue from the list */
+/*
+** Unlink upvalue from the list of open upvalues.
+*/
 void csF_unlinkupval(UpVal *uv) {
     cs_assert(uvisopen(uv));
     *uv->u.open.prev = uv->u.open.next;
@@ -212,12 +217,14 @@ void csF_unlinkupval(UpVal *uv) {
 }
 
 
-/* close any open upvalues up to the 'level' */
+/*
+** Close any open upvalues up to the given stack level.
+*/
 void csF_closeupval(cs_State *C, SPtr level) {
     UpVal *uv;
     while ((uv = C->openupval) != NULL && uvlevel(uv) >= level) {
         TValue *slot = &uv->u.value; /* new position for value */
-        cs_assert(uvlevel(uv) <= C->sp.p);
+        cs_assert(uvlevel(uv) < C->sp.p);
         csF_unlinkupval(uv); /* remove it from 'openupval' list */
         setobj(C, slot, uv->v.p); /* move value to the upvalue slot */
         uv->v.p = slot; /* adjust its pointer */
@@ -229,7 +236,9 @@ void csF_closeupval(cs_State *C, SPtr level) {
 }
 
 
-/* remove first element from 'tbclist' */
+/*
+** Remove first value from 'tbclist'.
+*/
 static void poptbclist(cs_State *C) {
     SPtr tbc = C->tbclist.p;
     cs_assert(tbc->tbc.delta > 0);
