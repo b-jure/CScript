@@ -1,0 +1,411 @@
+local fn checkload(s, msg) {
+    assert(string.find(getargs(1, load(s)), msg));
+}
+
+
+{ /// testing semicollons
+    local a;
+    { ;;; }
+    ; { ; a = 3; assert(a == 3); };
+    ;
+}
+
+
+{ /// invalid operations should not raise errors when not executed
+    if (false) { a = 3 // 0; a = 0 % 0; }
+    local a = false;
+    if (a) { a = 3 // 0; a = 0 % 0; }
+}
+
+
+/// testing priorities
+
+assert(2**3**2 == 2**(3**2));
+assert(2**3*4 == (2**3)*4);
+assert(2.0**-2 == 1/4 and -2**- -2 == - - -4);
+assert(!nil and 2 and !(2>3 or 3<2));
+assert(-3-1-5 == 0+0-9);
+assert(-2**2 == -4 and (-2)**2 == 4 and 2*2-3-1 == 0);
+assert(-3%5 == 2 and -3+5 == 2);
+assert(2*1+3/3 == 3 and tostr(1+2) .. tostr(3*1) == "33");
+assert(!(2+1 > 3*1) and "a".."b" > "a");
+
+assert((0xF0 | 0xCC ^ 0xAA & 0xFD) == 0xF4);
+assert((0xFD & 0xAA ^ 0xCC | 0xF0) == 0xF4);
+assert((0xF0 & 0x0F + 1) == 0x10);
+
+assert(3**4//2**3//5 == 2);
+
+assert(-3+4*5//2**3**2//9+4%10/3 == (-3)+(((4*5)//(2**(3**2)))//9)+((4%10)/3));
+
+assert(!((true or false) and nil));
+assert(   true or false  and nil);
+
+assert((((1 or false) and true) or false) == true);
+assert((((nil and true) or false) and true) == false);
+
+local a,b = 1,nil;
+assert(-(1 or 2) == -1 and (1 and 2)+(-1.25 or -4) == 0.75);
+local x = ((b or a)+1 == 2 and (10 or a)+1 == 11); assert(x);
+x = (((2<3) or 1) == true and (2<3 and 4) == 4); assert(x);
+
+{
+    local x, y = 1, 2;
+    assert((x>y) and x or y == 2);
+    x,y=2,1;
+    assert((x>y) and x or y == 2);
+}
+
+assert(1234567890 == tonum("1234567890") and 1234567890+1 == 1234567891);
+
+{ /// testing operators with diffent kinds of constants
+    /*
+    ** operands to consider:
+    **  - fit in register
+    **  - constant doesn't fit in register
+    **  - floats with integral values
+    */
+    local operand = [3, 100, 5.0, -10, -5.0, 10000, -10000];
+    local operator = ["+", "-", "*", "/", "//", "%", "**",
+        "&", "|", "**", "<<", ">>",
+        "==", "!=", "<", ">", "<=", ">=",];
+    foreach _, op in ipairs(operator) {
+        local f = assert(load(string.fmt("""
+                        return fn(x,y) { return x %s y; };
+                        """, op)))();
+        foreach _, o1 in ipairs(operand) {
+            foreach _, o2 in ipairs(operand) {
+                local gab = f(o1, o2);
+
+                __ENV.XX = o1;
+                local code = string.fmt("return XX %s %s;", op, o2);
+                local res = assert(load(code))();
+                assert(res == gab);
+
+                __ENV.XX = o2;
+                code = string.fmt("return (%s) %s XX;", o1, op);
+                res = assert(load(code))();
+                assert(res == gab);
+
+                code = string.fmt("return (%s) %s %s;", o1, op, o2);
+                res = assert(load(code))();
+                assert(res == gab);
+            }
+        }
+    }
+    __ENV.XX = nil;
+}
+
+
+/// silly loops
+loop { break; };
+for(;false;); for(;nil;);
+while (false); while (nil);
+
+{
+    local a; local fn f(x) { x={a=1}; x={x=1}; x={G=1}; }
+}
+
+
+{
+    /// create code with a list using more than 256 constants
+    local code = ["local x = ["];
+    foreach i in range(1, 258) {
+        code[i] = tostr(i) .. ".1,";
+    }
+    code[len(code)] = "];";
+    code = string.concat(code);
+
+    /// add "ret" to the end of that code and checks that
+    /// it produces the expected value "val"
+    local fn check(ret, val) {
+        local code = code .. ret;
+        code = load(code);
+        assert(code() == val);
+    }
+
+    check("return (1 ^ (2 or 3));", 1 ^ 2);
+    check("return (1 | (2 or 3));", 1 | 2);
+    check("return (1 + (2 or 3));", 1 + 2);
+    check("return (1 << (2 or 3));", 1 << 2);
+}
+
+
+
+{
+    local fn f(i) {
+        if (typeof(i) != "number") return i,"jojo";
+        if (i > 0) return i, f(i-1);
+    }
+
+    local x = [f(3), f(5), f(10);];
+    assert(x[0] == 3 and x[1] == 5 and x[2] == 10 and x[3] == 9 and x[11] == 1);
+    x = [f("alo"), f("xixi"), nil];
+    assert(x[0] == "alo" and x[1] == "xixi" and x[2] == nil);
+    x = [f("alo".."xixi")];
+    assert(x[0] == "aloxixi");
+    x = [f({})];
+    assert(x[1] == "jojo" and typeof(x[0]) == "table");
+}
+
+
+{
+    local f = fn(i) {
+        if (i < 10) return "a";
+        else if (i < 20) return "b";
+        else if (i < 30) return "c";
+    };
+
+    assert(f(3) == "a" and f(12) == "b" and f(26) == "c" and f(100) == nil);
+}
+
+{
+    foreach i in range(0, 1000) break;
+    local n=100;
+    local i=3;
+    local l = [];
+    local a=nil;
+    while (!a) {
+        a=0;
+        foreach i in range(0, n) {
+            foreach i in range(i, -1, -1) {
+                a = a + 1;
+                l[i] = 1;
+            }
+        }
+    }
+    assert(a == n*(n+1)/2 and i==3);
+    assert(l[0] and l[n-1] and !l[n]);
+}
+
+{
+    fn f(b) {
+        local x = 1;
+        loop {
+            local a;
+            if (b==1) { local b=1; x=10; break; }
+            else if (b==2) { x=20; break; }
+            else if (b==3) x=30;
+            else { local a,b,c,d=math.sin(1); x=x+1; }
+            if (x >= 12) break;
+        }
+        return x;
+    }
+
+    assert(f(1) == 10 and f(2) == 20 and f(3) == 30 and f(4)==12);
+}
+
+
+{
+    local f = fn(i) {
+        if (i < 10) return "a";
+        else if (i < 20) return "b";
+        else if (i < 30) return "c";
+        else return 8;
+    };
+
+    assert(f(3) == "a" and f(12) == "b" and f(26) == "c" and f(100) == 8);
+
+    local a, b = nil, 23;
+    x = [f(100)*2+3 or a, a or b+2];
+    assert(x[0] == 19 and x[1] == 25);
+    x = {f=2+3 or a, a = b+2};
+    assert(x.f == 5 and x.a == 25);
+
+    a={y=1};
+    x = [a.y];
+    assert(x[0] == 1);
+}
+
+{
+    local fn f(i) {
+        while (1) {
+            if (i>0) i=i-1;
+            else return;
+        }
+    }
+
+    local fn g(i) {
+        while (1) {
+            if (i>0) i=i-1;
+            else return;
+        }
+    }
+
+    f(10); g(10);
+
+    {
+        fn f () { return 1,2,3; }
+        local a, b, c = f();
+        assert(a==1 and b==2 and c==3);
+        a, b, c = (f());
+        assert(a==1 and b==nil and c==nil);
+    }
+
+    local a,b = 3 and f();
+    assert(a==1 and b==nil);
+
+    fn g() { f(); return; }
+    assert(g() == nil);
+    fn g() { return nil or f(); }
+    a,b = g();
+    assert(a==1 and b==nil);
+}
+
+{ /// testing constants
+  local prog <final> = "local x <XXX> = 10;";
+  checkload(prog, "unknown attribute 'XXX'");
+
+  checkload("local xxx <final> = 20; xxx = 10;",
+             ":1: attempt to assign to read-only variable 'xxx'", true);
+
+  checkload("""
+    local xx;
+    local xxx <final> = 20;
+    local yyy;
+    local fn foo() {
+        local abc = xx + yyy + xxx;
+        return fn() { return fn() { xxx = yyy; }; };
+    }
+  """, ":6: attempt to assign to read-only variable 'xxx'");
+
+  checkload("""
+    local x <close> = nil;
+    x = io.open();
+  """, ":2: attempt to assign to read-only variable 'x'");
+}
+
+
+{
+    local f = """
+return fn( a , b , c , d , e ) {
+    local x = a >= b or c or ( d and e ) or nil;
+    return x;
+}, { a = 1 , b = 2 >= 1 , } or [ 1 ];
+    """;
+    f = reg.gsub(f, "%s+", "\n"); /// force a SETLINE between opcodes
+    f,a = load(f)();
+    assert(a.a == 1 and a.b);
+
+    fn g(a,b,c,d,e) {
+        if (!(a>=b or c or d and e or nil)) return 0;
+        else return 1;
+    }
+
+    local fn h(a,b,c,d,e) {
+        while (a>=b or c or (d and e) or nil) return 1;
+        return 0;
+    }
+
+    assert(f(2,1) == true and g(2,1) == 1 and h(2,1) == 1);
+    assert(f(1,2,"a") == "a" and g(1,2,"a") == 1 and h(1,2,"a") == 1);
+    assert(f(1,2,"a")
+            !=          /// force SETLINE before nil
+            nil, "");
+    assert(f(1,2,"a") == "a" and g(1,2,"a") == 1 and h(1,2,"a") == 1);
+    assert(f(1,2,nil,1,"x") == "x" and g(1,2,nil,1,"x") == 1 and
+            h(1,2,nil,1,"x") == 1);
+    assert(f(1,2,nil,nil,"x") == nil and g(1,2,nil,nil,"x") == 0 and
+            h(1,2,nil,nil,"x") == 0);
+    assert(f(1,2,nil,1,nil) == nil and g(1,2,nil,1,nil) == 0 and
+            h(1,2,nil,1,nil) == 0);
+
+    assert(1 and 2<3 == true and 2<3 and "a"<"b" == true);
+    x = 2<3 and !3; assert(x==false);
+    x = 2<1 or (2>1 and "a"); assert(x=="a");
+}
+
+
+{
+    local a;
+    if (nil) a=1; /// if/else is optimized away
+    else a=2;     /// only SETLOCAL is coded
+    assert(a==2);
+}
+
+///================================================================
+///================================================================
+
+{
+    /// sometimes will be 0, sometimes will not...
+    __ENV.GLOB1 = math.rand(0, 1);
+
+    /// basic expressions with their respective values
+    local basiccases = [
+        ["nil", nil],
+        ["false", false],
+        ["true", true],
+        ["10", 10],
+        ["(0==__ENV.GLOB1)", 0 == __ENV.GLOB1],
+    ];
+
+    local prog;
+
+    if (__ENV.GLOB1 == 0) {
+        basiccases[1][0] = "F";   /// constant false
+
+        prog = """
+            local F <final> = false;
+            if (%s) IX = true;
+            return %s;
+        """;
+    } else {
+        basiccases[3][0] = "k10"; /// constant 10
+
+        prog = """
+            local k10 <final> = 10;
+            if (%s) IX = true;
+            return %s;
+        """;
+    }
+
+    /// operators with their respective values
+    local binops <final> = [
+        [" and ", fn(a,b) { if (!a) return a; else return b; }],
+        [" or ", fn(a,b) { if (a) return a; else return b; }],
+    ];
+
+    local cases <final> = [];
+
+    /// creates all combinations of '(cases[i] op cases[n-i])' plus
+    /// '!(cases[i] op cases[n-i])' (syntax + value)
+    local fn createcases(n) {
+        local res = [];
+        foreach i in range(0, n) {
+            foreach _, v1 in ipairs(cases[i]) {
+                foreach _, v2 in ipairs(cases[n - 1]) {
+                    foreach _, op in ipairs(binops) {
+                        local a = [
+                            "(" .. v1[0] .. op[0] .. v2[0] .. ")",
+                            op[1](v1[1], v2[1])
+                        ];
+                        res[len(res)] = a;
+                        res[len(res)] = ["!" .. a[0], !a[1]];
+                    }
+                }
+            }
+        }
+        return res;
+    }
+
+    local level = 3;
+    cases[0] = basiccases;
+    foreach i in range(1, level)
+        cases[i] = createcases(i);
+
+    foreach n in range(0, level) {
+        foreach _, v in ipairs(cases[n]) {
+            local s = v[0];
+            local p = load(string.fmt(prog, s, s), "");
+            IX = false;
+            assert(p() == v[1] and IX == !!v[1]);
+        }
+    }
+    IX = nil;
+    __G.GLOB1 = nil;
+}
+///------------------------------------------------------------------
+
+/// testing some syntax errors
+checkload("foreach x", "expected");
+checkload("if x", "expected");

@@ -208,6 +208,7 @@ typedef struct FunctionState {
     int pcswtest;       /* 'pc' of the last test instruction in 'switchstm' */
     c_byte iwthabs;     /* instructions issued since last abs. line info */
     c_byte needclose;   /* true if needs to close upvalues before returning */
+    c_byte nilbarrier;  /* true if merging nil instrctions is prevented */ 
     c_byte lastisend;   /* true if last statement ends control flow
                          * (1==return, 2==break, 3==continue)*/
 } FunctionState;

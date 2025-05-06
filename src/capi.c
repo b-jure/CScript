@@ -102,7 +102,6 @@ CS_API cs_Number cs_version(cs_State *C) {
 }
 
 
-#include <stdio.h>
 c_sinline void settop(cs_State *C, int n) {
     CallFrame *cf;
     SPtr func, newtop;
@@ -925,12 +924,12 @@ static int auxgetindex(cs_State *C, int index, int begin, int end, int nn) {
 }
 
 
-CS_API int cs_get_nilindex(cs_State *C, int index, uint begin, int end) {
+CS_API int cs_find_nilindex(cs_State *C, int index, uint begin, int end) {
     return auxgetindex(C, index, begin, end, 0);
 }
 
 
-CS_API int cs_get_nnilindex(cs_State *C, int index, uint begin, int end) {
+CS_API int cs_find_nnilindex(cs_State *C, int index, uint begin, int end) {
     return auxgetindex(C, index, begin, end, 1);
 }
 
@@ -948,12 +947,12 @@ static int auxgetrindex(cs_State *C, int index, int begin, int end, int nn) {
 }
 
 
-CS_API int cs_get_nilindex_rev(cs_State *C, int index, int begin, uint end) {
+CS_API int cs_find_nilindex_rev(cs_State *C, int index, int begin, uint end) {
     return auxgetrindex(C, index, begin, end, 0);
 }
 
 
-CS_API int cs_get_nnilindex_rev(cs_State *C, int index, int begin, uint end) {
+CS_API int cs_find_nnilindex_rev(cs_State *C, int index, int begin, uint end) {
     return auxgetrindex(C, index, begin, end, 1);
 }
 
@@ -1757,7 +1756,6 @@ CS_API const char *cs_getupvalue(cs_State *C, int index, int n) {
 }
 
 
-#include <stdio.h>
 CS_API const char *cs_setupvalue(cs_State *C, int index, int n) {
     const char *name;
     TValue *upval = NULL; /* to avoid warnings */

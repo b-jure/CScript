@@ -220,8 +220,8 @@ coslib.o: src/coslib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
  src/cscriptaux.h src/cscriptlib.h
 cparser.o: src/cparser.c src/cprefix.h src/ccode.h src/cbits.h \
  src/cparser.h src/clexer.h src/creader.h src/cscript.h src/cscriptconf.h \
- src/cmem.h src/climits.h src/cobject.h src/cgc.h src/cstate.h \
- src/cstring.h src/cvm.h src/cfunction.h src/ctable.h
+ src/cmem.h src/climits.h src/cobject.h src/cfunction.h src/cstate.h \
+ src/cgc.h src/cstring.h src/ctable.h src/cvm.h src/ctrace.h
 cprotected.o: src/cprotected.c src/cprefix.h src/cprotected.h \
  src/creader.h src/cscript.h src/cscriptconf.h src/cmem.h src/climits.h \
  src/cobject.h src/cparser.h src/clexer.h src/cfunction.h src/ccode.h \
@@ -231,7 +231,8 @@ creader.o: src/creader.c src/cprefix.h src/creader.h src/cscript.h \
 creglib.o: src/creglib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
  src/cstrlib.h src/cscriptaux.h src/cscriptlib.h
 cscriptaux.o: src/cscriptaux.c src/cprefix.h src/cscript.h \
- src/cscriptconf.h src/cscriptaux.h src/climits.h
+ src/cscriptconf.h src/cscriptaux.h src/climits.h src/ctrace.h \
+ src/cobject.h
 cscript.o: src/cscript.c src/cprefix.h src/cscript.h src/cscriptconf.h \
  src/cscriptaux.h src/cscriptlib.h src/climits.h
 cscriptlib.o: src/cscriptlib.c src/cprefix.h src/cscriptlib.h \

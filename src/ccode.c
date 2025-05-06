@@ -49,17 +49,16 @@
 
 /*
 ** Max(Min)imum possible values for immediate operand.
-** Maximum limit is a "bit" smaller than 'MAX_ARG_*',
+** Maximum limit is a value smaller by one "bit" than 'MAX_ARG_*',
 ** in order to ensure that the most significant bit is never set.
 ** This is because immediate operands can be negative values
 ** and we must be able to code them into the array and later decode them.
-** For example, bit pattern of signed integer '1111_1111' encodes value -1,
-** first we take absolute value '0000_0001',
-** then we set the most significant bit '1000_0001',
-** finally we code that result into the array.
-** When decoding, presence of most significant bit is checked,
-** if present first do '1000_0001 & 0111_1111',
-** then convert to signed '(char)(~0000_0001 + 1)'.
+** For example, 8-bit (char) pattern '1111_1111' encodes value -1, first we
+** take absolute value '0000_0001', then we set the most significant
+** bit '1000_0001', finally we code that result into the array.
+** When decoding, presence of most significant bit is checked, if present,
+** first do '1000_0001 & 0111_1111', then convert to signed
+** '(char)(~0000_0001 + 1)'.
 ** Note: all of this is done on integers, so the exact bit operations
 ** differ from the ones shown above.
 */
@@ -604,12 +603,20 @@ static int sameadjust(OpCode prev, OpCode new) {
 }
 
 
-#include <stdio.h>
+/*
+** Auxiliary function for 'adjuststack', checks if the 'op' instruction
+** can be merged. If it's not a NIL(N) op, or if there is no nilbarrier.
+*/
+static int canmerge(FunctionState *fs, OpCode op) {
+    return ((op != OP_NIL && op != OP_NILN) || !fs->nilbarrier);
+}
+
+
 static int adjuststack(FunctionState *fs, OpCode op, int n) {
     Instruction *inst = prevOP(fs);
     int nprev = 0;
     cs_assert((n > 1) == (op == OP_POPN || op == OP_NILN));
-    if (inst && sameadjust(*inst, op)) { /* can optimize? */
+    if (inst && sameadjust(*inst, op) && canmerge(fs, op)) {
         switch (*inst) {
             case OP_POPN: case OP_NILN: {
                 nprev = GET_ARG_L(inst, 0);
@@ -762,8 +769,8 @@ static int imml(int imm) {
 */
 static int encodeimm(int imm) {
     cs_assert(isIMM(imm) || isIMML(imm)); /* must fit */
-    if (imm < 0) { /* must encode? */
-        if (imm >= MIN_ARG_S)
+    if (imm < 0) { /* is negative (must be encoded)? */
+        if (imm >= MIN_IMM)
             imm = imms(imm);
         else
             imm = imml(imm);
@@ -1091,6 +1098,7 @@ void csC_settablesize(FunctionState *fs, int pc, int hsize) {
 }
 
 
+#include <stdio.h>
 /*
 ** Ensure expression 'e' is on top of the stack, making 'e'
 ** a finalized expression.
@@ -1735,6 +1743,7 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 
 /* return the final target of a jump (skipping jumps to jumps) */
 static int finaltarget(Instruction *code, int i) {
+    cs_assert(getOpSize(OP_JMP) == getOpSize(OP_JMPS));
     for (int count = 0; count < 100; count++) { /* avoid infinite loops */
         Instruction *pc = &code[i];
         OpCode op = *pc;
@@ -1742,7 +1751,8 @@ static int finaltarget(Instruction *code, int i) {
             /* skip the jump and the jump offset */
             i += getOpSize(OP_JMP);
             i += (1 + (op == OP_JMPS)*-2) * GET_ARG_L(pc, 0);
-        } else break; /* no more jumps */
+        } else
+            break; /* no more jumps */
     }
     return i;
 }
@@ -1765,6 +1775,13 @@ void csC_finish(FunctionState *fs) {
             }
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */
                 int target = finaltarget(p->code, i);
+                if (*pc == OP_JMP && target < i) {
+                    *pc = OP_JMPS; /* jumps back */
+                    target = (getOpSize(OP_JMP) + i) - target;
+                } else if (*pc == OP_JMPS && i < target) {
+                    *pc = OP_JMP; /* jumps forward */
+                    target = target - (getOpSize(OP_JMP) + i);
+                }
                 fixjump(fs, i, target);
                 break;
             }

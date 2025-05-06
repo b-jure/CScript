@@ -502,13 +502,13 @@ static int gcmm(cs_State *C) {
     cs_Integer i;
     cs_get_uservalue(C, -1, 1); /* get array upvalue */
     /* get initial lib handle index (reverse) */
-    i = cs_get_nnilindex_rev(C, -1, 1, cs_len(C, -1) - 1);
+    i = cs_find_nnilindex_rev(C, -1, 1, cs_len(C, -1) - 1);
     while (i > 0) { /* for each handle (in reverse order) */
         cs_get_index(C, -1, i); /* get handle */
         if (c_unlikely(csys_unloadlib(C, cs_to_userdata(C, -1)) != 0))
             cs_error(C); /* unloading failed; error string is on top */
         cs_pop(C, 1); /* pop handle */
-        i = cs_get_nnilindex_rev(C, -1, 1, i);
+        i = cs_find_nnilindex_rev(C, -1, 1, i);
     }
     return 0;
 }

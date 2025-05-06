@@ -122,13 +122,13 @@ endif
 
 "-Parens---------{
 syn cluster cscriptParenGroup   contains=@cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
-syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptIf,cscriptParenError,cscriptConditional,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
+syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptIf,cscriptParenError,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
 syn match   cscriptParenError   display /)/
 syn match   cscriptErrorInParen display contained /]/
 "---------------}
 
 "-Bracket-------{
-syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptConditional,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
+syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
 syn match   cscriptBracketError     display /]/
 syn match   cscriptErrorInBracket   display contained /]/
 "---------------}

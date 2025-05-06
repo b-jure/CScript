@@ -490,11 +490,11 @@ static int m_srand(cs_State *C) {
             sa.n = 1;
         } else if (t == CS_TLIST) { /* seed with array values? */
             cs_Unsigned len = cs_len(C, 0);
-            int i = cs_get_nnilindex(C, 0, 0, len);
+            int i = cs_find_nnilindex(C, 0, 0, len);
             while (i >= 0) {
                 cs_get_index(C, 0, i);
                 add_seed_elem(C, &sa);
-                i = cs_get_nnilindex(C, 0, i+1, len);
+                i = cs_find_nnilindex(C, 0, i+1, len);
             }
         } else if (t == CS_TTABLE) { /* seed with table values */
             cs_push_nil(C);

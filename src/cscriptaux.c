@@ -824,7 +824,7 @@ CSLIB_API int csL_ref(cs_State *C, int a) {
         cs_get_index(C, a, ref); /* remove it from list */
         cs_set_index(C, a, freelist); /* (a[freelist] = a[ref]) */
     } else /* no free elements */
-        ref = (int)cs_get_nilindex(C, a, freelist+1, 0); /* get a new ref */
+        ref = (int)cs_find_nilindex(C, a, freelist+1, 0); /* get a new ref */
     cs_set_index(C, a, ref);
     return ref;
 }

@@ -190,7 +190,7 @@ CS_API const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n) {
 static void getfuncinfo(Closure *cl, cs_Debug *ar) {
     if (!CScriptClosure(cl)) {
         ar->source = "[C]";
-        ar->srclen = SLL("[C]");
+        ar->srclen = LL("[C]");
         ar->defline = -1;
         ar->lastdefline = -1;
         ar->what = "C";
@@ -201,7 +201,7 @@ static void getfuncinfo(Closure *cl, cs_Debug *ar) {
           ar->srclen = getstrlen(p->source);
         } else {
           ar->source = "?";
-          ar->srclen = SLL("?");
+          ar->srclen = LL("?");
         }
         ar->defline = p->defline;
         ar->lastdefline = p->deflastline;

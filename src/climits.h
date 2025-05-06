@@ -264,8 +264,8 @@ typedef c_byte Instruction;
 #define c_intop(op,x,y)     c_castU2S(c_castS2U(x) op c_castS2U(y))
 
 
-/* string literal length */
-#define SLL(sl)     (sizeof(sl) - 1)
+/* literal length */
+#define LL(sl)     (sizeof(sl) - 1)
 
 
 

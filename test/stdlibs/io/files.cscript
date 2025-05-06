@@ -121,14 +121,14 @@ assert(os.remove(fname));
     f.write(string.fmt("0x%X\n", -maxint));
     f.write("-0xABCp-3", "\n");
     assert(f.close());
-    f = assert(io.open(fname, "r"));
-    assert(f.read("n") == maxint);
-    assert(f.read("n") == maxint);
-    assert(f.read("n") == 0xABCp-3);
-    assert(f.read("n") == 0);
-    assert(f.read("n") == -maxint);
-    assert(f.read("n") == -maxint);
-    assert(f.read("n") == -0xABCp-3);
+    local f2 <close> = assert(io.open(fname, "r"));
+    assert(f2.read("n") == maxint);
+    assert(f2.read("n") == maxint);
+    assert(f2.read("n") == 0xABCp-3);
+    assert(f2.read("n") == 0);
+    assert(f2.read("n") == -maxint);
+    assert(f2.read("n") == -maxint);
+    assert(f2.read("n") == -0xABCp-3);
     assert(os.remove(fname));
 }
 
@@ -141,20 +141,20 @@ assert(os.remove(fname));
         f.write("a line\nanother line\n1234\n3.45\none\ntwo\nthree");
         local l1, l2, l3, l4, n1, n2, c, dummy;
         assert(f.close());
-        f = assert(io.open(fname, "r"));
-        l1, l2, n1, n2, dummy = f.read("l", "L", "n", "n");
+        local f2 <close> = assert(io.open(fname, "r"));
+        l1, l2, n1, n2, dummy = f2.read("l", "L", "n", "n");
         assert(l1 == "a line" and l2 == "another line\n" and
-                n1 == 1234 and n2 == 3.45 and dummy == nil);
-        assert(f.close());
-        f = assert(io.open(fname, "r"));
-        l1, l2, n1, n2, c, l3, l4, dummy = f.read(7, "l", "n", "n", 1, "l", "l");
+               n1 == 1234 and n2 == 3.45 and dummy == nil);
+        assert(f2.close());
+        local f3 <close> = assert(io.open(fname, "r"));
+        l1, l2, n1, n2, c, l3, l4, dummy = f3.read(7, "l", "n", "n", 1, "l", "l");
         assert(l1 == "a line\n" and l2 == "another line" and c == "\n" and
                 n1 == 1234 and n2 == 3.45 and l3 == "one" and l4 == "two"
                 and dummy == nil);
-        assert(f.close());
-        f = assert(io.open(fname, "r"));
+        assert(f3.close());
+        local f4 <close> = assert(io.open(fname, "r"));
         /* second item failing */
-        l1, n1, n2, dummy = f.read("l", "n", "n", "l");
+        l1, n1, n2, dummy = f4.read("l", "n", "n", "l");
         assert(l1 == "a line" and !n1);
     }
     assert(tostr(FF) == "file (closed)");

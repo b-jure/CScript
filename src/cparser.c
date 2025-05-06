@@ -111,9 +111,10 @@ typedef struct FuncContext {
     int nlocals;
     int nupvals;
     int pcswtest;
-    int lastgoto; /* last pending goto in 'goto' array */
+    int lastgoto; /* last pending goto in 'gt' array */
     c_byte iwthabs;
     c_byte needclose;
+    c_byte nilbarrier;
     c_byte lastisend;
 } FuncContext;
 
@@ -135,6 +136,7 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
     ctx->lastgoto = fs->lx->ps->gt.len;
     ctx->iwthabs = fs->iwthabs;
     ctx->needclose = fs->needclose;
+    ctx->nilbarrier = fs->nilbarrier;
     ctx->lastisend = fs->lastisend;
 }
 
@@ -156,6 +158,7 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
     fs->lx->ps->gt.len = ctx->lastgoto;
     fs->iwthabs = ctx->iwthabs;
     fs->needclose = ctx->needclose;
+    fs->nilbarrier = ctx->nilbarrier;
     fs->lastisend = ctx->lastisend;
 }
 
@@ -601,7 +604,7 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->nlocals = 0;
     fs->nupvals = 0;
     fs->pcswtest = 0;
-    fs->iwthabs = fs->needclose = fs->lastisend = 0;
+    fs->iwthabs = fs->needclose = fs->nilbarrier = fs->lastisend = 0;
     p->source = lx->src;
     csG_objbarrier(lx->C, p, p->source);
     p->maxstack = 2; /* stack slots 0/1 are always valid */
@@ -687,7 +690,7 @@ static int addlocal(Lexer *lx, OString *name) {
 
 
 #define addlocallit(lx,lit) \
-        addlocal(lx, csY_newstring(lx, "" lit, SLL(lit)))
+        addlocal(lx, csY_newstring(lx, "" lit, LL(lit)))
 
 
 /*
@@ -797,7 +800,7 @@ static void var(Lexer *lx, OString *varname, ExpInfo *var) {
 }
 
 
-#define varlit(lx,l,e)      var(lx, csY_newstring(lx, "" l, SLL(l)), e)
+#define varlit(lx,l,e)      var(lx, csY_newstring(lx, "" l, LL(l)), e)
 
 
 
@@ -1330,13 +1333,13 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
     switch (var->et) {
         case EXP_UVAL: {
             UpValInfo *uv = &fs->p->upvals[var->u.info];
-            if (uv->kind == VARFINAL)
+            if (uv->kind != VARREG)
                 varid = uv->name;
             break;
         }
         case EXP_LOCAL: {
             LVar *lv = getlocalvar(fs, var->u.info);
-            if (lv->s.kind == VARFINAL)
+            if (lv->s.kind != VARREG)
                 varid = lv->s.name;
             break;
         }
@@ -1344,7 +1347,7 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
     }
     if (varid) {
         const char *msg = csS_pushfstring(lx->C,
-            "attempt to assign to a read-only variable '%s'", getstr(varid));
+            "attempt to assign to read-only variable '%s'", getstr(varid));
         csP_semerror(lx, msg);
     }
 }
@@ -1792,17 +1795,21 @@ static int checkmatch(Lexer *lx, SwitchState *ss, ExpInfo *e) {
 
 /* 
 ** Tries to preserve expression 'e' after consuming it, in order
-** to enable more optimizations.
-** (Only if 'e' was a constant expression without jumps.)
+** to enable more optimizations. Additionally nilbarrier is set,
+** meaning if 'e' is nil, then it should not be merged with previous,
+** as it might get optimized out.
 */
-static int codepres_exp(FunctionState *fs, ExpInfo *e) {
+static int codeconstexp(FunctionState *fs, ExpInfo *e) {
+    fs->nilbarrier = 1;
     csC_exp2val(fs, e);
     if (eisconstant(e)) {
         ExpInfo pres = *e;
         csC_exp2stack(fs, e);
         *e = pres;
+        fs->nilbarrier = 0;
         return 1; /* true; 'e' is a constant */
     }
+    fs->nilbarrier = 0;
     return 0; /* false; 'e' is not a constant */
 }
 
@@ -1837,7 +1844,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                     csP_semerror(lx, "'default' must be the last case");
                 storecontext(fs, &ctxcase); /* case might get optimized away */
                 expr(lx, &e);           /* get the case expression... */
-                codepres_exp(fs, &e);   /* ...and put it on stack */
+                codeconstexp(fs, &e);   /* ...and put it on stack */
                 expectnext(lx, ':');
                 match = checkmatch(lx, ss, &e);
                 if (match == MATCH) { /* case is compile-time match? */
@@ -1920,7 +1927,7 @@ static void switchstm(Lexer *lx) {
     expectnext(lx, '(');
     expr(lx, &e); /* get the 'switch' expression... */
     expectnext(lx, ')');
-    if (codepres_exp(fs, &e)) { /* constant expression? */
+    if (codeconstexp(fs, &e)) { /* constant expression? */
         ss.isconst = 1; /* mark it as such... */
         csC_const2v(fs, &e, &ss.v); /* ...and get its value */
     }
@@ -1935,59 +1942,61 @@ static void switchstm(Lexer *lx) {
 
 
 /* condition statement body; for 'forstm', 'whilestm' and 'ifstm' */
-static void condbody(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond, int isif,
-                     OpCode opT, OpCode opJ, int condpc, int clausepc) {
+static void condbody(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
+                     int isif, OpCode opT, OpCode opJ,
+                     int condpc, int clausepc) {
     FunctionState *fs = lx->fs;
-    int cisctc = eisconstant(cond);
     int bodypc = currPC;
-    FuncContext ctxend; /* context after the condition statement */
-    int test, jump; /* jumps */
-    int optaway, cistrue, ttarget;
-    cs_assert(!isif == (opJ == OP_JMPS));
-    test = jump = ctxend.pc = NOJMP;
-    cistrue = 0;
-    optaway = (cisctc && !(cistrue = eistrue(cond)));
+    int test = NOJMP; /* condition test jump */
+    int jump = NOJMP; /* if/loop jump */
+    int istrue = eistrue(cond); /* is condition true */
+    int old_prevpc; /* in case 'if' jump (opJ) gets removed */
+    int optaway, target;
+    FuncContext ctxend;
+    ctxend.pc = NOJMP;
+    optaway = (eisconstant(cond) && !istrue);
     if (!optaway) { /* statement will not be optimized away? */
-        if (cistrue) { /* condition is true? */
+        if (istrue) { /* condition is true? */
             if (clausepc == NOJMP) { /* not a forloop? */
                 loadcontext(fs, ctxbefore); /* remove condition */
-                bodypc = currPC; /* update bodypc */
-            } /* otherwise already optimized out condition */
+                bodypc = currPC; /* adjust bodypc */
+            } /* (otherwise condition is already optimized out) */
         } else /* otherwise emit condition test jump */
-            test = csC_test(fs, opT, 0); /* condition test */
+            test = csC_test(fs, opT, 0);
     }
     stm(lx); /* loop/if body */
     if (optaway) /* optimize away this statement? */
         loadcontext(fs, ctxbefore);
-    else if (cistrue && (stmIsReturn(fs) || isif))
+    else if (istrue && (stmIsReturn(fs) || isif))
         storecontext(fs, &ctxend);
     else {
+        old_prevpc = fs->prevpc;
         jump = csC_jmp(fs, opJ); /* loop/if jump */
         if (!isif) { /* loop statement? */
-            if (clausepc != NOJMP) { /* 'for' loop? */
+            if (clausepc != NOJMP) /* 'for' loop? */
                 csC_patch(fs, jump, clausepc); /* jump to last clause */
-            } else if (cistrue) { /* 'while' loop with true condition? */
+            else if (istrue) { /* 'while' loop with true condition? */
                 csC_patch(fs, jump, bodypc); /* jump to start of the body */
                 fs->loopstart = bodypc; /* convert it to infinite loop */ 
             } else /* 'while' loop with non-constant condition */
                 csC_patch(fs, jump, condpc); /* jump back to condition */
         }
     }
-    ttarget = currPC; /* set test jump target */
+    target = currPC; /* set test jump target */
     if (isif) { /* is if statement? */
-        int pcjump = (jump != NOJMP ? fs->prevpc : ttarget);
         if (match(lx, TK_ELSE)) /* have else? */
             stm(lx); /* else body */
-        if (ttarget == currPC) { /* no else branch? */
-            currPC = pcjump; /* adjust pc (remove jump) */
-            jump = NOJMP; /* no jump to patch */
-            ttarget = currPC; /* adjust test pc */
-        }
-        if (jump != NOJMP) /* have jump? */
-            csC_patchtohere(fs, jump); /* it jumps after else body */
+        if (target == currPC) { /* no else branch? */
+            if (jump != NOJMP) { /* have if jump (opJ)? */
+                currPC = fs->prevpc; /* remove that jump */
+                target = currPC; /* adjust test target */
+                fs->prevpc = old_prevpc; /* restore old prevpc */
+            } else cs_assert(optaway || istrue);
+        } else if (jump != NOJMP) /* have 'if' jump (opJ) */
+            csC_patchtohere(fs, jump); /* (it jumps over else statement) */
     }
     if (test != NOJMP) /* have condition test? */
-        csC_patch(fs, test, ttarget); /* patch it */
+        csC_patch(fs, test, target); /* patch it */
     if (ctxend.pc != NOJMP) /* statement has "dead" code? */
         loadcontext(fs, &ctxend); /* trim off dead code */
 }
@@ -2005,7 +2014,7 @@ static void ifstm(Lexer *lx) {
     expectnext(lx, '(');
     expr(lx, &cond);
     expectnext(lx, ')');
-    codepres_exp(fs, &cond);
+    codeconstexp(fs, &cond);
     condbody(lx, &ctxbefore, &cond, 1, OP_TESTPOP, OP_JMP, condpc, NOJMP);
 }
 
@@ -2068,7 +2077,7 @@ static void whilestm(Lexer *lx) {
     line = lx->line;
     expectnext(lx, '(');
     expr(lx, &cond);
-    codepres_exp(fs, &cond);
+    codeconstexp(fs, &cond);
     expectmatch(lx, ')', '(', line);
     condbody(lx, &ctxbefore, &cond, 0, OP_TESTPOP, OP_JMPS, pcexpr, NOJMP);
     leaveloop(fs);
@@ -2166,7 +2175,7 @@ int forcondition(Lexer *lx, ExpInfo *e) {
     int isctc;
     if (!match(lx, ';')) { /* have condition? */
         expr(lx, e);                        /* get it... */
-        isctc = codepres_exp(lx->fs, e);    /* ...and put it on stack */
+        isctc = codeconstexp(lx->fs, e);    /* ...and put it on stack */
         expectnext(lx, ';');
     } else { /* otherwise no condition (infinite loop) */
         initexp(e, EXP_TRUE, 0);

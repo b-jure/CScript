@@ -54,7 +54,7 @@ static const char *sfind(const char *s, size_t l, const char *p, size_t lp) {
     while (l > 0 && (aux = (const char *)memchr(s, *p, l)) != NULL) {
         aux++; /* skip first char (already checked) */
         if (memcmp(aux, p+1, lp) == 0)
-            return aux-1;
+            return aux-1; /* found */
         else {
             l -= aux-s;
             s = aux;

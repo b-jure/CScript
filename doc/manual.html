@@ -3534,10 +3534,10 @@ typedef enum cs_MM {
         Returns the type of the pushed value.
         </p>
 
-        <!-- cs_get_nilindex -->
-        <hr><h3><a name="cs_get_nilindex"><code>cs_get_nilindex</code></a></h3>
+        <!-- cs_find_nilindex -->
+        <hr><h3><a name="cs_find_nilindex"><code>cs_find_nilindex</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_nilindex (cs_State *C, int index, uint begin, int end);</pre>
+        <pre>int cs_find_nilindex (cs_State *C, int index, uint begin, int end);</pre>
         <p>
         Returns the first <b>nil</b> index  inside the list at
         the given index starting from <code>begin</code> index up to
@@ -3547,35 +3547,35 @@ typedef enum cs_MM {
         If there is no such index this returns -1.
         </p>
 
-        <!-- cs_get_nnilindex -->
-        <hr><h3><a name="cs_get_nnilindex"><code>cs_get_nnilindex</code></a></h3>
+        <!-- cs_find_nnilindex -->
+        <hr><h3><a name="cs_find_nnilindex"><code>cs_find_nnilindex</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_nnilindex (cs_State *C, int index, uint begin, int end);</pre>
+        <pre>int cs_find_nnilindex (cs_State *C, int index, uint begin, int end);</pre>
         <p>
-        Similar to <a href="#cs_get_nnilindex"><code>cs_get_nnilindex</code></a>
+        Similar to <a href="#cs_find_nnilindex"><code>cs_find_nnilindex</code></a>
         except this returns the first Non-<b>nil</b> index.
         </p>
 
-        <!-- cs_get_nilindex_rev -->
-        <hr><h3><a name="cs_get_nilindex_rev"><code>cs_get_nilindex_rev</code></a></h3>
+        <!-- cs_find_nilindex_rev -->
+        <hr><h3><a name="cs_find_nilindex_rev"><code>cs_find_nilindex_rev</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_nilindex_rev (cs_State *C, int index, int begin, uint end);</pre>
+        <pre>int cs_find_nilindex_rev (cs_State *C, int index, int begin, uint end);</pre>
         <p>
         Similar to
-        <a href="#cs_get_nilindex"><code>cs_get_nilindex</code></a>
+        <a href="#cs_find_nilindex"><code>cs_find_nilindex</code></a>
         except this performs the search in reverse.
         Additionally if <code>begin</code> is greater or equal than the length
         of the list, or is less than 0, it is clipped to the last index
         (list length - 1).
         </p>
 
-        <!-- cs_get_nnilindex_rev -->
-        <hr><h3><a name="cs_get_nnilindex_rev"><code>cs_get_nnilindex_rev</code></a></h3>
+        <!-- cs_find_nnilindex_rev -->
+        <hr><h3><a name="cs_find_nnilindex_rev"><code>cs_find_nnilindex_rev</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_get_nnilindex_rev (cs_State *C, int index, int begin, uint end);</pre>
+        <pre>int cs_find_nnilindex_rev (cs_State *C, int index, int begin, uint end);</pre>
         <p>
         Similar to
-        <a href="#cs_get_nilindex_rev"><code>cs_get_nilindex_rev</code></a>
+        <a href="#cs_find_nilindex_rev"><code>cs_find_nilindex_rev</code></a>
         except this returns the first Non-<b>nil</b> index.
         </p>
 
@@ -6095,7 +6095,7 @@ typedef struct csL_Stream {
         <!-- getargs -->
         <hr/><h3><a name="getargs"><code>getargs (index, &middot;&middot;&middot;)</code></a></h3>
         <p>
-        If <code>index</code> is a number, this returns all arguments after
+        If <code>index</code> is a number, this returns all arguments from
         argument at number <code>index</code> (starting from 0); a negative
         number indexes from the end (-1 is the last argument).
         Otherwise, <code>index</code> must be one of these strings:
@@ -6110,7 +6110,7 @@ typedef struct csL_Stream {
         <br/><br/>
         However if <code>index</code> is 
         <code>"len"</code> string, then <code>getargs</code> returns integer
-        corresponding to total number of extra arguments.
+        corresponding to total number of extra arguments it received.
         </p>
 
         <!-- tonum -->

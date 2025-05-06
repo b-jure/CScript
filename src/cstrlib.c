@@ -243,7 +243,7 @@ static void joinfromtable(cs_State *C, csL_Buffer *b,
 
 static void joinfromlist(cs_State *C, csL_Buffer *b,
                           const char *sep, size_t lsep, int len) {
-    int i = cs_get_nnilindex(C, 1, 0, --len);
+    int i = cs_find_nnilindex(C, 1, 0, --len);
     while (i >= 0) {
         size_t l;
         const char *s;
@@ -252,7 +252,7 @@ static void joinfromlist(cs_State *C, csL_Buffer *b,
         cs_pop(C, 1);
         if (s && l > 0)
             auxjoinstr(b, s, l, sep, lsep);
-        i = cs_get_nnilindex(C, 1, ++i, len);
+        i = cs_find_nnilindex(C, 1, ++i, len);
     }
 }
 
@@ -868,7 +868,7 @@ static void addvalue(cs_State *C, csL_Buffer *b, int i) {
 
 
 #define getnexti(C,begin,end,skip) \
-        ((!skip) ? (int)begin+1 : cs_get_nnilindex(C,0,(uint)begin,(int)end))
+        ((!skip) ? (int)begin+1 : cs_find_nnilindex(C,0,(uint)begin,(int)end))
 
 
 // TODO: add docs and tests
@@ -887,7 +887,7 @@ static int s_concat(cs_State *C) {
         csL_buff_push_lstring(&b, sep, lsep);
         il = getnexti(C, il, j, skipnil);
     }
-    if (il == j && (!skipnil || cs_get_nnilindex(C, 0, il, j) != -1))
+    if (il == j && (!skipnil || cs_find_nnilindex(C, 0, il, j) != -1))
         addvalue(C, &b, (int)j); /* add last value */
     csL_buff_end(&b);
     return 1;

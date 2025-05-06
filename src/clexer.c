@@ -368,25 +368,21 @@ static int read_decesc(Lexer *lx) {
 }
 
 
-/* remove long string terminating delimiter prefix spaces and a newline */
-static void rmdelim_prefix(Lexer *lx) {
-    cs_assert(csR_buff(lx->buff)[csR_bufflen(lx->buff)-4] == '\n');
-    memmove(csR_buff(lx->buff) + csR_bufflen(lx->buff)-4,
-            csR_buff(lx->buff) + csR_bufflen(lx->buff)-3, sizeof(char) * 3);
-    csR_bufflen(lx->buff)--;
-}
-
-
-/* check and return 1 if long string delimiter was read */
+/*
+** Checks if long string delimiter was read (newline) and trims the
+** multi-line string to length newline (+ the delimiter).
+*/
 static int checkdelimiter(Lexer *lx, int newline) {
     if (lx->c == '"') { /* go on... */
         save_and_advance(lx);
         if (lx->c == '"') { /* delimiter? */
             save_and_advance(lx);
-            if (c_unlikely(!newline))
+            if (c_unlikely(newline < 0))
                 lexerror(lx, "multi-line string literal closing "
                              "delimiter must begin on a new line", 0);
-            rmdelim_prefix(lx);
+            cs_assert(csR_buff(lx->buff)[newline] == '\n');
+            csR_bufflen(lx->buff) = newline + LL("\"\"\"");
+            memcpy(csR_buff(lx->buff) + newline, "\"\"\"", LL("\"\"\""));
             return 1;
         }
     }
@@ -397,7 +393,7 @@ static int checkdelimiter(Lexer *lx, int newline) {
 // TODO: add docs for long strings
 static void read_long_string(Lexer *lx, Literal *k) {
     int line = lx->line;
-    int newline = 0; /* newline flag (for delimiter) */
+    int newline = -1; /* length up to newline (for delimiter) */
     save_and_advance(lx); /* skip '"' */
     checkcond(lx, currIsNewline(lx),
                 "multi-line string literal content must begin on a new line");
@@ -417,13 +413,14 @@ static void read_long_string(Lexer *lx, Literal *k) {
                 break;
             }
             case '\n': case '\r': {
-                newline = 1;
+                newline = csR_bufflen(lx->buff);
                 savec(lx, '\n');
                 inclinenr(lx);
                 break;
             }
             default: {
-                newline = 0;
+                if (!cisspace(lx->c))
+                    newline = -1;
                 save_and_advance(lx);
                 break;
             }

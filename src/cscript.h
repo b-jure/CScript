@@ -251,12 +251,6 @@ CS_API int cs_get_rtable(cs_State *C, const char *field);
 CS_API int cs_get(cs_State *C, int index); 
 CS_API int cs_get_raw(cs_State *C, int index); 
 CS_API int cs_get_index(cs_State *C, int index, int i);
-CS_API int cs_get_nilindex(cs_State *C, int index, unsigned int begin, int end);
-CS_API int cs_get_nnilindex(cs_State *C, int index, unsigned int begin, int end);
-CS_API int cs_get_nilindex_rev(cs_State *C, int index, int begin,
-                               unsigned int end);
-CS_API int cs_get_nnilindex_rev(cs_State *C, int index, int begin,
-                                unsigned int end);
 CS_API int cs_get_field(cs_State *C, int index); 
 CS_API int cs_get_fieldstr(cs_State *C, int index, const char *field); 
 CS_API int cs_get_fieldptr(cs_State *C, int index, const void *field); 
@@ -343,6 +337,13 @@ CS_API cs_Alloc    cs_getallocf(cs_State *C, void **ud);
 CS_API void        cs_setallocf(cs_State *C, cs_Alloc falloc, void *ud); 
 CS_API void        cs_toclose(cs_State *C, int index); 
 CS_API void        cs_closeslot(cs_State *C, int index); 
+
+CS_API int cs_find_nilindex(cs_State *C, int index, unsigned int begin, int end);
+CS_API int cs_find_nnilindex(cs_State *C, int index, unsigned int begin, int end);
+CS_API int cs_find_nilindex_rev(cs_State *C, int index, int begin,
+                               unsigned int end);
+CS_API int cs_find_nnilindex_rev(cs_State *C, int index, int begin,
+                                unsigned int end);
 
 #define CS_N2SBUFFSZ     64
 CS_API unsigned cs_numbertocstring(cs_State *C, int index, char *buff); 
