@@ -901,7 +901,7 @@ CS_API int cs_get_index(cs_State *C, int index, int i) {
     cs_lock(C);
     api_check(C, i >= 0, "invalid `index`");
     l = getlist(C, index);
-    if (cast_uint(i) < l->n) {
+    if (i < l->n) {
         setobj2s(C, C->sp.p, &l->b[i]);
     } else
         setnilval(s2v(C->sp.p));

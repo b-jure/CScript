@@ -1,6 +1,5 @@
 local t = {}; /// environment
 local func, err = loadfile("test/stdlibs/basic/loadfile_script", t);
-print(func, err);
 assert(!err and typeof(func) == "function");
 func();
 assert(!a and !b and !c);

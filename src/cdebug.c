@@ -51,6 +51,7 @@ static int Ninstuptopc(const Proto *p, int pc) {
             return m;
     }
     cs_assert(0); /* 'pc' does not correspond to any instruction */
+    return -1; /* prevent compiler warnings */
 }
 
 

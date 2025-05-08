@@ -259,8 +259,8 @@ typedef struct List {
     ObjectHeader;
     GCObject *gclist;
     TValue *b; /* memory block */
-    uint n; /* number of elements in use in 'b' */
-    uint sz; /* size of 'b' */
+    int n; /* number of elements in use in 'b' */
+    int sz; /* size of 'b' */
 } List;
 
 /* } --------------------------------------------------------------------- */

@@ -77,7 +77,7 @@
 
 
 /* max code jump offset value */
-#define MAXJMP          MAX_ARG_L
+#define MAXJMP          MAX_CODE
 
 /* value indicating there is no jump */
 #define NOJMP           (-1)

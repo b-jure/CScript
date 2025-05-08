@@ -1,0 +1,155 @@
+local fn teststring() {
+    print("creating a string too long");
+    local a = "x";
+    local st, msg = pcall(fn() {
+        while (true) {
+            a = a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a
+            .. a .. a.. a.. a.. a.. a.. a.. a.. a.. a;
+            print(string.fmt("string with %d bytes", len(a)));
+        }
+    });
+    assert(!st and
+            (string.find(msg, "string length overflow") or
+             string.find(msg, "out of memory")));
+}
+
+local fn loadrep(x, what) {
+    local p = 1<<20;
+    local s = string.repeat(x, p);
+    local count = 0;
+    local fn f() {
+        count = count + p;
+        if (count % (0x80*p) == 0)
+            io.stderr.write("(", count // 2**20, " M)");
+        return s;
+    }
+    local st, msg = load(f, "big");
+    print("\nmemory: ", gc("count") * 1024);
+    msg = reg.match(msg, "^[^\n]+");  /// get only first line
+    print(string.fmt("total: 0x%x %s ('%s')", count, what, msg));
+    return st, msg;
+}
+
+
+fn controlstruct() {
+    print("control structure too long");
+    /// Magic breakdown:
+    /// - '1 << 24' is maximum value for 3 byte long instruction argument (-1)
+    /// - '- 5' is the size of the instruction (4) (and the additional 1 mentioned previously)
+    /// - '// 24' is the total size of instruction for code in string 's'
+    local lim = ((1 << 24) - 5) // 24;
+    local s = string.repeat("a = a + 1;\n", lim);
+    s = "loop { " .. s .. " }";
+    assert(load(s));
+    print("ok with " .. tostr(lim) .. " lines");
+    lim = lim + 1;
+    s = string.repeat("a = a + 1;\n", lim);
+    s = "loop { " .. s .. " }";
+    local st, msg = load(s);
+    assert(!st and string.find(msg, "too long"));
+    print(msg);
+}
+
+
+fn manylines() {
+    print("loading chunk with too many lines");
+    local st, msg = loadrep("\n", "lines");
+    assert(!st and string.find(msg, "too many lines"));
+    print("+");
+}
+
+
+/// The below note applies only if the 'ulimit' is not used to allocate
+/// smaller amount of memory than installed on the system for the
+/// current process (OOM killer won't get triggered when out of memory).
+/// Note: on Linux and possibly on other UNIX operating systems,
+/// the "out of memory" case will never trigger as the OOM
+/// killer will be triggered and it will send SIGKILL.
+fn hugeid() {
+    print("loading chunk with huge identifier");
+    local st, msg = loadrep("a", "chars");
+    assert(!st and 
+            (string.find(msg, "lexical element too long") or
+             string.find(msg, "out of memory")));
+    print("+");
+}
+
+fn toomanyinst() {
+    print("loading chunk with too many instructions");
+    local st, msg = loadrep("a = 10; ", "instructions");
+    print("+");
+}
+
+
+local fn loadrepfunc(prefix, f) {
+    local count = -1;
+    local fn aux() {
+        count = count + 1;
+        if (count == 0)
+            return prefix;
+        else {
+            if (count % (0x100000) == 0)
+                io.stderr.write("(", count // 2**20, " M)");
+            return f(count);
+        }
+    }
+    local st, msg = load(aux, "k");
+    print("\nmemory: ", gc("count") * 1024);
+    msg = reg.match(msg, "^[^\n]+"); /// get only first line
+    print("expected error: ", msg);
+}
+
+
+fn toomanyconst() {
+    print("loading function with too many constants");
+    loadrepfunc("fn foo() { return [0,",
+        fn (n) {
+        /// convert 'n' to a string in the format "\"...\",",
+        /// where '...' is a kind of number in base 128
+        /// (in a range that does not include either the double quote
+        /// and the escape.)
+        return string.char(34,
+                ((n // 128**0) & 127) + 128,
+                ((n // 128**1) & 127) + 128,
+                ((n // 128**2) & 127) + 128,
+                ((n // 128**3) & 127) + 128,
+                ((n // 128**4) & 127) + 128,
+                34, 44);
+    });
+}
+
+
+fn toomanyidx() {
+    local a = [];
+    local out = 0;
+    local st, msg = pcall(fn() {
+        foreach i in range(0, math.maxint) {
+            out = i;
+            if (i % 0x100000 == 0)
+                io.stderr.write("(", i // 2**20, " M)");
+            a[i] = i;
+        }
+    });
+    print("\nout: ", out);
+    print("\nmemory: ", gc("count") * 1024);
+    print("expected error: ", msg);
+    print("size:", len(a));
+}
+  
+
+
+///teststring();
+///controlstruct();
+///manylines();
+///hugeid();
+///toomanyinst();
+///toomanyconst();
+///toomanyidx();

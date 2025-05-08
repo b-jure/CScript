@@ -1826,7 +1826,9 @@ static void removeliterals(Lexer *lx, int nliterals) {
 static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
     FunctionState *fs = lx->fs;
     int ftjmp = NOJMP; /* fall-through jump */
-    FuncContext ctxend, ctxdefault, ctxcase;
+    FuncContext ctxdefault = {0};
+    FuncContext ctxcase = {0};
+    FuncContext ctxend = {0};
     ctxend.pc = -1;
     while (!check(lx, '}') && !check(lx, TK_EOS)) { /* while switch body... */
         if (check(lx, TK_CASE) || match(lx, TK_DEFAULT)) { /* has case?... */
@@ -1952,7 +1954,7 @@ static void condbody(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
     int istrue = eistrue(cond); /* is condition true */
     int old_prevpc; /* in case 'if' jump (opJ) gets removed */
     int optaway, target;
-    FuncContext ctxend;
+    FuncContext ctxend = {0};
     ctxend.pc = NOJMP;
     optaway = (eisconstant(cond) && !istrue);
     if (!optaway) { /* statement will not be optimized away? */

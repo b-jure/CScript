@@ -831,11 +831,11 @@ static int scan(Lexer *lx, Literal *k) {
 /* fetch next token into 't' */
 void csY_scan(Lexer *lx) {
     lx->lastline = lx->line;
-    if (lx->tahead.tk != TK_EOS) {
+    if (lx->tahead.tk == TK_EOS)
+        lx->t.tk = scan(lx, &lx->t.lit);
+    else {
         lx->t = lx->tahead;
         lx->tahead.tk = TK_EOS;
-    } else {
-        lx->t.tk = scan(lx, &lx->t.lit);
     }
 }
 

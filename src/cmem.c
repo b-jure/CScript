@@ -28,10 +28,11 @@
 ** is true, which means the interpreter is in the middle of a collection
 ** step.
 */
-#define cantryagain(gs)         (statefullybuilt(gs) && !(gs)->gcstopem)
+#define cantryagain(gs)     (statefullybuilt(gs) && !(gs)->gcstopem)
 
 
 #if defined(EMERGENCYGCTESTS)
+
 /*
 ** First allocation will fail except when freeing a block (frees never
 ** fail) and when it cannot try again; this fail will trigger 'tryagain'
@@ -43,8 +44,11 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
     else
         return callfalloc(gs, block, os, ns);
 }
+
 #else
+
 #define firsttry(gs,b,os,ns)    callfalloc(gs,b,os,ns)
+
 #endif
 
 
@@ -102,24 +106,28 @@ void *csM_malloc_(cs_State *C, size_t size, int tag) {
 /* minimum size of array memory block */
 #define MINSIZEARRAY    4
 
-void *csM_growarr_(cs_State *C, void *ptr, int *sizep, int len, int elemsize,
-                   int space, int limit, const char *what) {
+void *csM_growarr_(cs_State *C, void *block, int *sizep, int len,
+                   int elemsize, int nelems, int limit, const char *what) {
     int size = *sizep;
-    cs_assert(space >= 1);
-    if (size - len >= space) { /* have enough space? */
-        return ptr; /* done */
-    } else { /* otherwise expand */
-        size *= 2; /* 2x size */
-        if (c_unlikely(limit - space < len)) /* limit reached? */
-            csD_runerror(C, "too many %s (limit is %d)", what, limit);
+    cs_assert(nelems > 0 && elemsize > 0 && what);
+checkspace:
+    if (c_likely(size - len >= nelems)) { /* have enough space for nelems? */
         cs_assert(size <= limit);
-        if (size < len + space)
-            size = len + space;
-        if (c_unlikely(size < MINSIZEARRAY))
-            size = MINSIZEARRAY;
-        ptr = csM_saferealloc(C, ptr, (*sizep)*elemsize, size*elemsize);
+        return block; /* done; return the current block */
+    } else { /* otherwise grow */
+        if (c_unlikely(size >= limit / 2)) { /* cannot double it? */
+            if (c_unlikely(size >= limit)) /* limit reached? */
+                csD_runerror(C, "too many %s (limit is %d)", what, limit);
+            size = limit;
+        } else {
+            size *= 2;
+            if (size < MINSIZEARRAY)
+                size = MINSIZEARRAY;
+        }
+        block = csM_saferealloc(C, block, cast_sizet(*sizep) * elemsize,
+                                          cast_sizet(size) * elemsize);
         *sizep = size;
-        return ptr;
+        goto checkspace;
     }
 }
 

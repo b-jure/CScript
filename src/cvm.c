@@ -1254,7 +1254,7 @@ returning: /* trap already set */
                     classval(o)->metalist = ml;
                     checkGC(C);
                 }
-                cs_assert(ml && mm < ml->n);
+                cs_assert(ml && cast_int(mm) < ml->n);
                 ml->b[mm] = *f; /* set the entry */
                 csV_finishrawset(C, ml, f);
                 sp--;
@@ -1620,7 +1620,7 @@ returning: /* trap already set */
             vm_case(OP_SETLIST) {
                 List *l;
                 SPtr sl;
-                uint last;
+                int last;
                 int n;
                 savestate(C);
                 sl = STK(fetch_l()); /* list stack slot */

@@ -121,16 +121,15 @@ typedef unsigned long   ulong;
 
 
 /*
-** Type for virtual-machine instructions.
-** Instructions (opcodes) are 1-byte in size not including
-** the arguments; arguments vary in size (short/long) and
-** more on that in 'ccode.h'.
+** Type for vm instructions.
+** Instructions (opcodes) are 1-byte in size not including the instruction
+** arguments.
 */
 typedef c_byte Instruction;
 
 
 #if !defined(MAXLISTINDEX)
-#define MAXLISTINDEX        (MAXINT - 1)
+#define MAXLISTINDEX        MAXINT
 #endif
 
 
@@ -330,15 +329,16 @@ typedef c_byte Instruction;
 ** Macro to control inclusion of some hard tests on stack reallocation.
 */
 #if !defined(HARDSTACKTESTS)
-#define condmovestack(C,pre,pos)	((void)0)
+#define condmovestack(C,pre,pos)    ((void)0)
 #else
 /* realloc stack keeping its size */
 #define condmovestack(C,pre,pos)  \
     { int sz_ = stacksize(C); pre; csT_reallocstack((C), sz_, 0); pos; }
 #endif
 
+
 #if !defined(HARDMEMTESTS)
-#define condchangemem(C,pre,pos)	((void)0)
+#define condchangemem(C,pre,pos)    ((void)0)
 #else
 #define condchangemem(C,pre,pos)  \
     { if (gcrunning(G(C))) { pre; csG_full(C, 0); pos; } }

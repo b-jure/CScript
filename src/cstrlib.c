@@ -858,6 +858,21 @@ static int s_bytes(cs_State *C) {
 }
 
 
+// TODO: add docs and tests
+static int s_char(cs_State *C) {
+    int n = cs_getntop(C); /* number of arguments */
+    csL_Buffer b;
+    char *p = csL_buff_initsz(C, &b, cast_uint(n));
+    for (int i=0; i<n; i++) {
+        cs_Unsigned c = (cs_Unsigned)csL_check_integer(C, i);
+        csL_check_arg(C, c <= (cs_Unsigned)UCHAR_MAX, i, "value out of range");
+        p[i] = cast_char(cast_uchar(c));
+    }
+    csL_buff_endsz(&b, cast_uint(n));
+    return 1;
+}
+
+
 static void addvalue(cs_State *C, csL_Buffer *b, int i) {
     cs_get_index(C, 0, i);
     if (c_unlikely(!cs_is_string(C, -1)))
@@ -935,6 +950,7 @@ static const cs_Entry strlib[] = {
     {"swaplower", s_swaplower},
     {"byte", s_byte},
     {"bytes", s_bytes},
+    {"char", s_char},
     {"concat", s_concat},
     {"cmp", s_cmp},
     {"ascii_uppercase", NULL},

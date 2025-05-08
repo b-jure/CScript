@@ -122,8 +122,7 @@ endif
 
 "-Parens---------{
 syn cluster cscriptParenGroup   contains=@cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
-syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptIf,cscriptParenError,cscriptLabel,cscriptForEach,cscriptRepeat,@cscriptParenGroup,@Spell
-syn match   cscriptParenError   display /)/
+syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptIf,cscriptLabel,cscriptRepeat,@cscriptParenGroup,@Spell
 syn match   cscriptErrorInParen display contained /]/
 "---------------}
 
@@ -235,7 +234,6 @@ hi def link cscriptSymbolOperator       cscriptOperator
 hi def link cscriptOperator             Operator
 hi def link cscriptComment              Comment
 hi def link cscriptConstant             Constant
-hi def link cscriptParenError           cscriptError 
 hi def link cscriptBracketError         cscriptError
 hi def link cscriptCurlyError           cscriptError
 hi def link cscriptErrorInParen         cscriptError

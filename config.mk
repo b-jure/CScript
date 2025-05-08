@@ -41,13 +41,23 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # 			Compiler and Linker Flags
 # ==========================================================================
 # Internal defines used for testing (all of these slow down operations a lot):
-# -DCSI_ASSERT => enables internal asserts
-# -DCSI_TRACE_EXEC => traces bytecode execution (stack and instructions)
-# -DCSI_DISASSEMBLE_BYTECODE => disassembles and outputs compiled chunks
+# -DCSI_ASSERT => Enables all internal asserts inside CScript.
+# -DCSI_TRACE_EXEC => Traces bytecode execution (including stack state).
+# -DCSI_DISASSEMBLE_BYTECODE => Disassembles precompiled chunks.
+# -DEMERGENCYGCTESTS => Forces an emergency collection at every single
+# allocation.
+# -DHARDMEMTESTS => Forces a full collection at all points where the collector
+# can run.
+# -DHARDSTACKTESTS => forces a reallocation of the stack at every point where
+# the stack can be reallocated.
+#
+# Address Sanitizer stuff:
+# ASAN_OPTIONS => environment variable that holds Address Sanitizer options
+# detect_invalid_pointer_pairs=2
 
 CC = gcc -std=c99
-OPTS = -O0
-CFLAGS = -Wall -Wextra $(OPTS) $(SYSCFLAGS) $(MYCFLAGS)
+OPTS = -O2
+CFLAGS = -Wfatal-errors -Wall -Wextra $(OPTS) $(SYSCFLAGS) $(MYCFLAGS)
 LDFLAGS = $(SYSLDFLAGS) $(MYLDFLAGS)
 LIBS = -lm $(SYSLIBS) $(MYLIBS)
 
@@ -56,14 +66,14 @@ SYSCFLAGS =
 SYSLDFLAGS =
 SYSLIBS =
 
-# Flags for production
+# Release flags
 # MYCFLAGS = -DCS_USE_APICHECK
 # MYLDFLAGS =
 # MYLIBS =
 # MYOBJS =
 
-# Flags for testing
-ASANFLAGS = -fsanitize=address -fsanitize=undefined
+# Testing flags
+#ASANFLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=pointer-subtract -fsanitize=pointer-compare
 MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT
 	   #-DCSI_DISASSEMBLE_BYTECODE -DCSI_TRACE_EXEC
 MYLDFLAGS = $(ASANFLAGS)

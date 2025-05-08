@@ -269,9 +269,9 @@ static int errorfile(cs_State *C, const char *what, int filename_index) {
 
 
 CSLIB_API int csL_loadfile(cs_State *C, const char *filename) {
-    LoadFile lf;
+    LoadFile lf = {0};
     int status, readstatus;
-    int filename_index = cs_gettop(C) + 1;
+    int filename_index = cs_getntop(C);
     errno = 0;
     if (filename == NULL) { /* stdin? */
         cs_push_string(C, "stdin");

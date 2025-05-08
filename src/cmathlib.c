@@ -561,7 +561,9 @@ static int m_rand(cs_State *C) {
             up = csL_check_integer(C, 1);
             break;
         }
-        default: csL_error(C, "invalid number of arguments");
+        default: {
+            return csL_error(C, "invalid number of arguments");
+        }
     }
     csL_check_arg(C, low <= up, 0, "interval is empty");
     /* project random integer into the interval [low, up] */

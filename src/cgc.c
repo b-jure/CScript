@@ -444,7 +444,7 @@ static int markopenupvalues(GState *gs) {
 
 static c_mem marklist(GState *gs, List *l) {
     cs_assert(l->n > 0);
-    for (uint i = 0; i < l->n; i++)
+    for (int i = 0; i < l->n; i++)
         markvalue(gs, &l->b[i]);
     return 1 + l->n; /* list + elements */
 }

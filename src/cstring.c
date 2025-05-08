@@ -329,8 +329,9 @@ static const char *str2int(const char *s, cs_Integer *i) {
     cs_Unsigned lim = CS_INTEGER_MIN;
     int sign = 1;
     uint32_t x;
-    cs_Unsigned y;
+    cs_Unsigned y = 0;
     int base, c, empty;
+    empty = 1;
     c = *s++;
     while (cisspace(c)) c = *s++; /* skip leading spaces */
     if (c == '-' || c == '+') { /* have sign? */
@@ -375,11 +376,12 @@ static const char *str2int(const char *s, cs_Integer *i) {
                 y = y * base + val[c];
         }
     }
-    if (val[c] < base || /* 'CS_UNSIGNED_MAX' overflown, */
-        (y >= lim && /* or numeral is bigger or equal than 'lim', */
-         ((sign > 0 && base != 16) || /* and is positive and not hex, */
-          (y > lim && /* or the 'lim' is overflown' */
-          /* and is not hex and less than max unsigned int */
+    if (empty || /* empty numeral... */
+        val[c] < base || /* ...or 'CS_UNSIGNED_MAX' overflown, */
+        (y >= lim && /* ...or numeral is bigger or equal than 'lim', */
+         ((sign > 0 && base != 16) || /* ...and is positive and not hex, */
+          (y > lim && /* ...or the 'lim' is overflown' */
+          /* ...and is not hex and less than max unsigned int */
           !(base == 16 && y <= CS_UNSIGNED_MAX))))) {
         return NULL; /* over(under)flow (do not accept it as integer) */
     } else {

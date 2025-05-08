@@ -28,13 +28,13 @@
         ((p) = csM_realloc_(C, p, (os)*sizeof(t), (ns)*sizeof(t)))
 
 #define csM_ensurearray(C,p,s,n,e,l,w,t) \
-        ((p) = csM_growarr_(C, p, cast(int *,&(s)), n, sizeof(t), e, l, w))
+        ((p) = csM_growarr_(C, p, &(s), n, sizeof(t), e, l, w))
 
 #define csM_growarray(C,p,s,n,l,w,t) \
         csM_ensurearray((C), (p), (s), (n), 1, (l), (w), t)
 
 #define csM_shrinkarray(C,p,s,f,t) \
-        ((p) = csM_shrinkarr_(C, p, cast(int *, &(s)), f, sizeof(t)))
+        ((p) = csM_shrinkarr_(C, p, &(s), f, sizeof(t)))
 
 
 CSI_FUNC void *csM_malloc_(cs_State *C, c_mem size, int tag);
