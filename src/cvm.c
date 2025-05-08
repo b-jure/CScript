@@ -1620,8 +1620,7 @@ returning: /* trap already set */
             vm_case(OP_SETLIST) {
                 List *l;
                 SPtr sl;
-                int last;
-                int n;
+                int last, n;
                 savestate(C);
                 sl = STK(fetch_l()); /* list stack slot */
                 l = listval(s2v(sl)); /* 'sl' as list value */
@@ -1629,16 +1628,16 @@ returning: /* trap already set */
                 n = fetch_s(); /* num of elements to store */
                 if (n == 0)
                     n = (sp - sl) - 1; /* get up to the top */
-                cs_assert(n > 0);
-                last += n - 1;
-                csA_ensureindex(C, l, last);
+                cs_assert(n >= 0);
+                last += n - (n > 0); /* make 'last' be the last index... */
+                csA_ensureindex(C, l, last); /* ...that fits into the list */
                 for (; n > 0; n--) { /* set the values from the stack... */
                     /* ...into the list (in reverse order) */
                     TValue *v = s2v(sl + n);
                     setobj(C, &l->b[last--], v);
                     csV_finishrawset(C, l, v);
                 }
-                sp = C->sp.p = sl + 1; /* pop off elements */
+                sp = C->sp.p = sl + 1; /* pop off elements (if any) */
                 vm_break;
             }
             vm_case(OP_SETPROPERTY) { /* NOTE: optimize? */

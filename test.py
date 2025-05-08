@@ -76,7 +76,6 @@ def end_testsuite(testsuite, total, failed):
     print(f"{end} {testsuite}")
 
 
-
 def print_test_result(test, code):
     tname = str(test)
     isatty = sys.stdout.isatty()
@@ -95,7 +94,6 @@ def print_test_result(test, code):
         return 0
 
 
-
 def run_cscript_testsuite(testsuite, path):
     tests = list(path.glob(f"*.{cscript_extension}"))
     total = len(tests)
@@ -109,14 +107,12 @@ def run_cscript_testsuite(testsuite, path):
     end_testsuite(testsuite, total, failed)
 
 
-
 def get_testsuite_path(testsuite):
     try:
         return cscript_testsuite_paths[testsuite]
     except:
         raise ValueError("invalid testsuite '{}', here is the list of available testsuites: {}"
                          .format(testsuite, list(cscript_testsuite_paths.keys())))
-
 
 
 def run_tests():

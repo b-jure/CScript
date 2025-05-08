@@ -104,7 +104,7 @@
 #define C_TMPNAMBUFSZ       32
 
 #if !defined(C_TEMPLATENAME)
-#define C_TEMPLATENAME      "/tmp/cs_XXXXXX"
+#define C_TEMPLATENAME      "/tmp/cscript_XXXXXX"
 #endif
 
 #define c_tmpnam(b, e) \

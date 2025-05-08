@@ -127,8 +127,7 @@ syn match   cscriptErrorInParen display contained /]/
 "---------------}
 
 "-Bracket-------{
-syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,cscriptBracketError,@cscriptParenGroup,cscriptForEach,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
-syn match   cscriptBracketError     display /]/
+syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,@cscriptParenGroup,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
 syn match   cscriptErrorInBracket   display contained /]/
 "---------------}
 
@@ -234,7 +233,6 @@ hi def link cscriptSymbolOperator       cscriptOperator
 hi def link cscriptOperator             Operator
 hi def link cscriptComment              Comment
 hi def link cscriptConstant             Constant
-hi def link cscriptBracketError         cscriptError
 hi def link cscriptCurlyError           cscriptError
 hi def link cscriptErrorInParen         cscriptError
 hi def link cscriptErrorInBracket       cscriptError

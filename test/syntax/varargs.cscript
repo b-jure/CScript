@@ -2,4 +2,154 @@
 ** Test script file for CScript varargs.
 */
 
-print(...);
+/// TODO: port this
+local fn f(a, ...) {
+    local n = getargs("len", ...);
+    local y = [...];
+    foreach i in range(0, n) assert(a[i] == y[i]);
+    return n;
+}
+
+local fn c12(...) {
+    assert(args == __G.args); /// no local 'args'
+    local x = [...];
+    local n = len(x);
+    local res = (n==2 and x[0] == 1 and x[1] == 2);
+    if (res) res = 55;
+    return res, 2;
+}
+
+local fn vararg(...) {
+    return [getargs("len", ...), ...];
+}
+
+local call = fn (f, args) {
+    return f(flatten(args, 0, len(args)));
+};
+
+assert(f() == 0);
+assert(f([1,2,3], 1, 2, 3) == 3);
+assert(f(["alo", nil, 45, f, nil], "alo", nil, 45, f, nil) == 5);
+
+assert(vararg()[0] == 0);
+assert(vararg(nil, nil)[0] == 2);
+
+assert(c12(1,2)==55);
+local a,b,c = assert(call(c12, [1,2]));
+assert(a == 55 and b == 2 and c == nil);
+a = call(c12, [1,1]);
+assert(!a);
+assert(c12(1,2,3) == false);
+a = vararg(call(next, [__G,nil]));
+b,c = next(__G);
+assert(a[0] == 2, a[1] == b and a[2] == c);
+a = vararg(call(call, [c12, [1,2]]));
+assert(a[0] == 2 and a[1] == 55 and a[2] == 2);
+a = call(print, ['+']);
+assert(a == nil);
+
+{
+    local a = [1, 10];
+    local t = {};
+    fn t.f(a, ...) {
+        local args = [...];
+        return a[...]+len(args);
+    }
+    assert(t.f(a,0,4) == 3 and t.f(a,1) == 11);
+
+    local lim = 20;
+    a = [];
+    for (local i = 0; i < lim; i=i+1)
+        a[i] = i+0.3;
+
+    fn f(a, b, c, d, ...) {
+        local more = [...];
+        assert(a == 0.3 and more[0] == 4.3 and
+               more[lim-5] == lim-0.7 and !more[lim-4]);
+    }
+
+    local fn g(a,b,c) {
+        assert(a == 0.3 and b == 1.3 and c == 2.3);
+    }
+
+    call(f, a);
+    call(g, a);
+
+    a = [];
+    for (local i = 0; i < lim; i=i+1) a[i] = i;
+    assert(call(math.max, a) == lim-1);
+
+}
+
+
+{ /// new-style varargs
+
+    local fn oneless(a, ...) { return ...; }
+
+    fn f(n, a, ...) {
+        local b;
+        assert(args == __G.args);  /// no local 'args'
+        if (n == 0) {
+            local b, c, d = ...;
+            return a, b, c, d, oneless(oneless(oneless(...)));
+        } else {
+            n, b, a = n-1, ..., a;
+            assert(b == ...);
+            return f(n, a, ...);
+        }
+    }
+
+    a,b,c,d,e = assert(f(10,5,4,3,2,1));
+    assert(a==5 and b==4 and c==3 and d==2 and e==1);
+
+    a,b,c,d,e = f(4);
+    assert(a==nil and b==nil and c==nil and d==nil and e==nil);
+
+
+    /// varargs for main chunks
+    local f = load("return [...];");
+    local x = f(2,3);
+    assert(x[0] == 2 and x[1] == 3 and x[2] == undef);
+
+
+    f = load("""
+        local x = [...];
+        foreach i in range(0, getargs("len", ...))
+            assert(x[i] == getargs(i, ...));
+        assert(x[getargs("len", ...)] == undef);
+        return true;
+    """);
+
+    assert(f("a", "b", nil, {}, assert));
+    assert(f());
+
+    a = [getargs(2, flatten([10,20,30,40]))];
+    assert(len(a) == 2 and a[0] == 30 and a[1] == 40);
+    a = [getargs(-1, 3, 5, 7)];
+    assert(a[0] == 7 and a[1] == undef);
+    a = [getargs(-2, 3, 5, 7)];
+    assert(a[0] == 5 and a[1] == 7 and a[2] == undef);
+    pcall(getargs, 10000);
+    pcall(getargs, -10000);
+}
+
+
+{
+    fn f(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10,
+         p11, p12, p13, p14, p15, p16, p17, p18, p19, p20,
+         p21, p22, p23, p24, p25, p26, p27, p28, p29, p30,
+         p31, p32, p33, p34, p35, p36, p37, p38, p39, p40,
+         p41, p42, p43, p44, p45, p46, p48, p49, p50, ...) {
+        local a1,a2,a3,a4,a5,a6,a7;
+        local a8,a9,a10,a11,a12,a13,a14;
+    }
+    f();
+}
+
+
+{ /// missing arguments in tail call
+    local fn f(a,b,c) { return c, b; }
+    local fn g() { return f(1,2); }
+    local a, b = g();
+    assert(a == nil and b == 2);
+}
