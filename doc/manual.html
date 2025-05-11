@@ -545,7 +545,7 @@
         can be sure the object will not be accessed again in the normal
         execution of the program.
         ("Normal execution" here excludes finalizers, which can resurrect
-        dead objects (see <a href="#2.5.3">&sect;2.5.3</a>).)
+        dead objects (see <a href="#2.5.2">&sect;2.5.2</a>).)
         Note that the time when the collector can be sure that an object
         is dead may not coincide with the programmer's expectations.
         The only guarantees are that CScript will not collect an object
@@ -4068,42 +4068,72 @@ typedef enum cs_MM {
         option.
         <ul>
             <li>
-                <b><code>CS_GCSTOP</code>: </b>
+                <b><code>CS_GC_STOP</code>: </b>
                 Stops the garbage collector.
             </li>
             <li>
-                <b><code>CS_GCRESTART</code>: </b>
+                <b><code>CS_GC_RESTART</code>: </b>
                 Restarts the garbage collector.
             </li>
             <li>
-                <b><code>CS_GCCOLLECT</code>: </b>
+                <b><code>CS_GC_CHECK</code>: </b>
+                Resets the check flag, setting it to 0 and returns the
+                previous value of the check flag. Check flag is set to 1 if
+                the collector has swept any object (unmarked reachable one or
+                collected it) since the last time check was made.
+            </li>
+            <li>
+                <b><code>CS_GC_COLLECT</code>: </b>
                 Performs a full garbage-collection cycle.
             </li>
             <li>
-                <b><code>CS_GCCOUNT</code>: </b>
+                <b><code>CS_GC_COUNT</code>: </b>
                 Returns the current amount of memory (in Kbytes) in use by
                 CScript.
             </li>
             <li>
-                <b><code>CS_GCCOUNTBYTES</code>: </b>
+                <b><code>CS_GC_COUNTBYTES</code>: </b>
                 Returns the remainder of dividing the current amount of bytes
                 of memory in use by CScript by 1024.
             </li>
             <li>
-                <b><code>CS_GCSTEP</code> (int stepsize): </b>
+                <b><code>CS_GC_STEP</code> (int stepsize): </b>
                 Performs an incremental step of garbage collection,
                 corresponding to the allocation of <code>stepsize</code> Kbytes.
             </li>
             <li>
-                <b><code>CS_GCISRUNNING</code>: </b>
+                <b><code>CS_GC_SGPAUSE</code> (int val): </b>
+                Changes and/or returns the value of the garbage-collector
+                pause, that is the size of pause between successive GCs
+                (see <a href="#2.5.1">&sect;2.5.1</a>).
+                If <code>val</code> is -1, the call only returns the current
+                value.
+            </li>
+            <li>
+                <b><code>CS_GC_SGSTEPMUL</code> (int val): </b>
+                Changes and/or returns the value of the garbage-collector
+                step multiplier (see <a href="#2.5.1">&sect;2.5.1</a>).
+                If <code>val</code> is -1, the call only returns the
+                current value.
+            </li>
+            <li>
+                <b><code>CS_GC_SGSTEPSIZE</code> (int val): </b>
+                Changes and/or returns the value of the garbage-collector
+                step size (see <a href="#2.5.1">&sect;2.5.1</a>).
+                If <code>val</code> is -1, the call only returns the
+                current value.
+            </li>
+            <li>
+                <b><code>CS_GC_ISRUNNING</code>: </b>
                 Returns a boolean that tells whether the collector is running
                 (i.e., not stopped).
             </li>
             <li>
-                <b><code>CS_GCINC</code> (int pause, int stepmul, stepsize): </b>
+                <b><code>CS_GC_INC</code> (int pause, int stepmul, stepsize): </b>
                 Changes the collector to incremental mode with the given
                 parameters (see <a href="#2.5.1">&sect;2.5.1</a>).
-                Returns the previous mode (which is always <code>CS_GCINC</code>).
+                Returns the previous mode
+                (which is always <code>CS_GC_INC</code>).
             </li>
         </ul>
         For more details about these options,
@@ -5851,6 +5881,11 @@ typedef struct csL_Stream {
                 Restarts automatic execution of the garbage collector.
             </li>
             <li>
+                <b>"<code>check</code>": </b>
+                Returns true if any memory has been swept (this does not
+                necessarily mean <em>collected</em>) by the garbage collector.
+            </li>
+            <li>
                 <b>"<code>count</code>": </b>
                 Returns the total memory in use by CScript in Kbytes.
                 The value has a fractional part, so that it multiplied by
@@ -5867,6 +5902,27 @@ typedef struct csL_Stream {
                 Returns <b>true</b> if the step finished a collection cycle.
             </li>
             <li>
+                <b>"<code>setpause</code>": </b>
+                Change and/or get the garbage-collector pause.
+                If option is followed by a number (an integer), then
+                this value is set as the new garbage-collector pause.
+                If the optional integer is negative, then only the current
+                value of pause is returned
+                (see <a href="#2.5.1">&sect;2.5.1</a>).
+            </li>
+            <li>
+                <b>"<code>setstepmul</code>": </b>
+                Behaves similarly as <b>"<code>setpause</code>"</b>, except
+                this changes and/or gets the garbage-collector step multiplier
+                (see <a href="#2.5.1">&sect;2.5.1</a>).
+            </li>
+            <li>
+                <b>"<code>setstepsize</code>": </b>
+                Behaves similarly as <b>"<code>setpause</code>"</b>, except
+                this changes and/or gets the garbage-collector step size
+                (see <a href="#2.5.1">&sect;2.5.1</a>).
+            </li>
+            <li>
                 <b>"<code>isrunning</code>": </b>
                 Returns a boolean that tells whether the collector is running
                 (i.e., not stopped).
@@ -5876,12 +5932,15 @@ typedef struct csL_Stream {
                 Change the collector mode to incremental.
                 This option can be followed by three numbers:
                 the garbage-collector pause, the step multiplier,
-                and the step size. A zero means to not change that value.
-                Returns the previous collector mode as a string (which
-                is always "incremental").
+                and the step size. A negative integer means to not change
+                that value. Returns the previous collector mode as a
+                string (which is always "incremental").
             </li>
         </ul>
         This function should not be called by a finalizer (<code>__gc</code>).
+        <br/>
+        For more information on what each garbage-collector parameter means,
+        see .
         </p>
 
         <!-- load -->

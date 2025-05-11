@@ -12,16 +12,9 @@
 
 #include "cscriptconf.h"
 
-
-#define CS_VERSION_MAJOR        "1"
-#define CS_VERSION_MINOR        "0"
-#define CS_VERSION_RELEASE      "0"
-
 #define CS_VERSION_NUMBER               100
 #define CS_VERSION_RELEASE_NUM          (CS_VERSION_NUMBER * 100);
 
-#define CS_VERSION      "CScript " CS_VERSION_MAJOR "." CS_VERSION_MINOR
-#define CS_RELEASE      CS_VERSION "." CS_VERSION_RELEASE
 #define LUA_COPYRIGHT   "Copyright (C) 1994-2020 Lua.org, PUC-Rio"
 
 #define CS_COPYRIGHT \
@@ -143,18 +136,19 @@ struct cs_Entry {
 };
 
 
-/* -------------------------------------------------------------------------
- * State manipulation
- * ------------------------------------------------------------------------- */
+/* {======================================================================
+** State manipulation
+** ======================================================================= */
 CS_API cs_State     *cs_newstate(cs_Alloc allocator, void *ud, unsigned seed); 
 CS_API void          cs_close(cs_State *C);
 CS_API cs_State     *cs_newthread(cs_State *C);
 CS_API int           cs_resetthread(cs_State *C);
 CS_API cs_CFunction  cs_atpanic(cs_State *C, cs_CFunction fn);
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Stack manipulation
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API void  cs_settop(cs_State *C, int n); 
 CS_API int   cs_gettop(const cs_State *C); 
 CS_API int   cs_absindex(cs_State *C, int index); 
@@ -163,10 +157,11 @@ CS_API void  cs_copy(cs_State *C, int src, int dest);
 CS_API int   cs_checkstack(cs_State *C, int n); 
 CS_API void  cs_push(cs_State *C, int index); 
 CS_API void  cs_xmove(cs_State *src, cs_State *dest, int n); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Access functions (Stack -> C)
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API int          cs_is_number(cs_State *C, int index); 
 CS_API int          cs_is_integer(cs_State *C, int index); 
 CS_API int          cs_is_string(cs_State *C, int index); 
@@ -183,10 +178,11 @@ CS_API cs_CFunction cs_to_cfunction(cs_State *C, int index);
 CS_API void        *cs_to_userdata(cs_State *C, int index); 
 CS_API const void  *cs_to_pointer(cs_State *C, int index); 
 CS_API cs_State    *cs_to_thread(cs_State *C, int index); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Ordering & Arithmetic functions
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 /* Arithmetic and logical operations */
 #define CS_OPADD        0
 #define CS_OPSUB        1
@@ -217,10 +213,11 @@ CS_API void cs_arith(cs_State *C, int op);
 
 CS_API int cs_rawequal(cs_State *C, int idx1, int idx2); 
 CS_API int cs_compare(cs_State *C, int idx1, int idx2, int op); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Push functions (C -> stack)
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API void        cs_push_nil(cs_State *C); 
 CS_API void        cs_push_number(cs_State *C, cs_Number n); 
 CS_API void        cs_push_integer(cs_State *C, cs_Integer n); 
@@ -242,10 +239,11 @@ CS_API void cs_push_subclass(cs_State *C, int sc, int nup, const cs_Entry *l);
 CS_API void cs_push_metaclass(cs_State *C, int ml, int nup, const cs_Entry *l);
 CS_API void cs_push_metasubclass(cs_State *C, int sc, int ml, int nup,
                                  const cs_Entry *l);
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Get functions (CScript -> stack)
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API int cs_get_global(cs_State *C, const char *name); 
 CS_API int cs_get_rtable(cs_State *C, const char *field); 
 CS_API int cs_get(cs_State *C, int index); 
@@ -263,10 +261,11 @@ CS_API int cs_get_supermethod(cs_State *C, int index);
 CS_API int cs_get_metalist(cs_State *C, int index);
 CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n); 
 CS_API int cs_get_usermethods(cs_State *C, int index); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Set functions (stack -> CScript)
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API void  cs_set_global(cs_State *C, const char *name); 
 CS_API void  cs_set_rtable(cs_State *C, const char *field);
 CS_API void  cs_set(cs_State *C, int index); 
@@ -280,10 +279,11 @@ CS_API void  cs_set_fieldflt(cs_State *C, int index, cs_Number field);
 CS_API int   cs_set_metalist(cs_State *C, int index);
 CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
 CS_API void  cs_set_usermethods(cs_State *C, int index); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Error reporting
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 /* thread status codes */
 #define CS_OK                   0  /* ok */
 #define CS_ERRRUNTIME           1  /* runtime error */
@@ -293,40 +293,52 @@ CS_API void  cs_set_usermethods(cs_State *C, int index);
 
 CS_API int cs_status(cs_State *C); 
 CS_API int cs_error(cs_State *C); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Call/Load CScript chunks
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API void cs_call(cs_State *C, int nargs, int nresults); 
 CS_API int  cs_pcall(cs_State *C, int nargs, int nresults, int msgh); 
 CS_API int  cs_load(cs_State *C, cs_Reader reader, void *userdata,
                     const char *chunkname); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Garbage collector
-** ----------------------------------------------------------------------- */
-/* GC options */
-#define CS_GCSTOP               0 /* stop GC */
-#define CS_GCRESTART            1 /* restart GC (start if stopped) */
-#define CS_GCCHECK              2 /* check and clear GC collection flag */
-#define CS_GCCOLLECT            3 /* perform full GC cycle */
-#define CS_GCCOUNT              4 /* get number of (bytes_allocated/1024) */
-#define CS_GCCOUNTBYTES         5 /* get remainder of (bytes_allocated/1024) */
-#define CS_GCSTEP               6 /* perform single GC step and or set gcdebt */
-#define CS_GCISRUNNING          7 /* test whether GC is running */
-#define CS_GCINC                8 /* set GC in incremental mode */
+** ======================================================================= */
+/* TODO: udpate docs */
+/* GC options (what) */
+#define CS_GC_STOP              0 /* stop GC */
+#define CS_GC_RESTART           1 /* restart GC (start if stopped) */
+#define CS_GC_CHECK             2 /* check and clear GC collection flag */
+#define CS_GC_COLLECT           3 /* perform full GC cycle */
+#define CS_GC_COUNT             4 /* get number of bytes_allocated/1024 */
+#define CS_GC_COUNTBYTES        5 /* get remainder of bytes_allocated/1024 */
+#define CS_GC_STEP              6 /* performs incremental GC step */
+#define CS_GC_PARAM             7 /* set or get GC parameter */
+#define CS_GC_ISRUNNING         8 /* test whether GC is running */
+#define CS_GC_INC               9 /* set GC in incremental mode */
+
+/* parameters for incremental mode */
+#define CS_GCP_PAUSE            0 /* size of GC "pause" */
+#define CS_GCP_STEPMUL          1 /* GC "speed" */
+#define CS_GCP_STEPSIZE         2 /* GC "granularity" */
+#define CS_GCP_N                3 /* number of parameters */
 
 CS_API int cs_gc(cs_State *C, int what, ...); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Warning-related functions
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API void cs_setwarnf(cs_State *C, cs_WarnFunction fwarn, void *ud); 
 CS_API void cs_warning(cs_State *C, const char *msg, int cont); 
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Miscellaneous functions and useful macros
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API cs_Number   cs_version(cs_State *C);
 CS_API cs_Integer  cs_len(cs_State *C, int index); 
 CS_API size_t      cs_lenudata(cs_State *C, int index);
@@ -338,12 +350,12 @@ CS_API void        cs_setallocf(cs_State *C, cs_Alloc falloc, void *ud);
 CS_API void        cs_toclose(cs_State *C, int index); 
 CS_API void        cs_closeslot(cs_State *C, int index); 
 
-CS_API int cs_find_nilindex(cs_State *C, int index, unsigned int begin, int end);
-CS_API int cs_find_nnilindex(cs_State *C, int index, unsigned int begin, int end);
-CS_API int cs_find_nilindex_rev(cs_State *C, int index, int begin,
-                               unsigned int end);
-CS_API int cs_find_nnilindex_rev(cs_State *C, int index, int begin,
-                                unsigned int end);
+CS_API int cs_find_nilindex(cs_State *C, int index, unsigned int b, int e);
+CS_API int cs_find_nilindex_rev(cs_State *C, int index, int b,
+                                unsigned int e);
+CS_API int cs_find_nnilindex(cs_State *C, int index, unsigned int b, int e);
+CS_API int cs_find_nnilindex_rev(cs_State *C, int index, int b,
+                                 unsigned int e);
 
 #define CS_N2SBUFFSZ     64
 CS_API unsigned cs_numbertocstring(cs_State *C, int index, char *buff); 
@@ -397,10 +409,11 @@ CS_API size_t   cs_stringtonumber(cs_State *C, const char *s, int *f);
 #define cs_remove(C,index)      (cs_rotate(C, (index), -1), cs_pop(C, 1))
 
 #define cs_replace(C,index)     (cs_copy(C, -1, (index)), cs_pop(C, 1))
+/* }====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Debug API
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 CS_API int cs_getstack(cs_State *C, int level, cs_Debug *ar); 
 CS_API int cs_getinfo(cs_State *C, const char *what, cs_Debug *ar); 
 
@@ -428,14 +441,24 @@ struct cs_Debug {
     /* private */
     struct CallFrame *cf;
 };
+/* }====================================================================== */
 
 
+#define CSI_TOSTR_AUX(x)        #x
+#define CSI_TOSTR(x)		CSI_TOSTR_AUX(x)
+
+#define CS_VERSION_MAJOR        "1"
+#define CS_VERSION_MINOR        "0"
+#define CS_VERSION_RELEASE      "0"
+
+#define CS_VERSION      "CScript " CS_VERSION_MAJOR "." CS_VERSION_MINOR
+#define CS_RELEASE      CS_VERSION "." CS_VERSION_RELEASE
 
 
 /*----------------------------------,
  | Big Thank You to Lua Developers! |
  \________________________________*/
-/* -----------------------------------------------------------------------
+/* =======================================================================
 ** Copyright (C) 1994-2024 Lua.org, PUC-Rio.
 ** Copyright (C) 2024-2025 Jure Bagić
 **
@@ -457,6 +480,6 @@ struct cs_Debug {
 ** CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 ** TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 ** SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 
 #endif

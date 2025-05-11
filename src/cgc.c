@@ -1,6 +1,6 @@
 /*
 ** cgc.c
-** Garbage Collector
+** Garbage Collector (more or less port of Lua incremental GC)
 ** See Copyright Notice in cscript.h
 */
 
@@ -200,9 +200,9 @@ void csG_barrierback_(cs_State *C, GCObject *r) {
 
 
 
-/* ------------------------------------------------------------------------
-** Mark functions
-** ------------------------------------------------------------------------ */
+/* {======================================================================
+** Mark objects
+** ======================================================================= */
 
 /*
 ** Marks white object 'o'.
@@ -297,7 +297,7 @@ static void markobject_(GState *gs, GCObject *o) {
 ** its associated empty value is enough to signal that the entry is
 ** logically empty.
 */
-static void clearkey (Node *n) {
+static void clearkey(Node *n) {
     cs_assert(isempty(nodeval(n)));
     if (keyiscollectable(n))
         setdeadkey(n); /* unused key; remove it */
@@ -479,11 +479,12 @@ static c_mem propagateall(GState *gs) {
     return work;
 }
 
+/* }===================================================================== */
 
 
-/* -----------------------------------------------------------------------
+/* {=====================================================================
 ** Free objects
-** ----------------------------------------------------------------------- */
+** ====================================================================== */
 
 static void freeupval(cs_State *C, UpVal *uv) {
     if (uvisopen(uv))
@@ -537,11 +538,12 @@ static void freeobject(cs_State *C, GCObject *o) {
     }
 }
 
+/* }===================================================================== */
 
 
-/* -----------------------------------------------------------------------
-** Sweep functions
-** ----------------------------------------------------------------------- */
+/* {======================================================================
+** Sweep objects
+** ======================================================================= */
 
 static GCObject **sweeplist(cs_State *C, GCObject **l, int nobjects, 
                             int *nsweeped) {
@@ -605,11 +607,12 @@ static void entersweep(cs_State *C) {
     gs->sweeppos = sweepuntilalive(C, &gs->objects);
 }
 
+/* }===================================================================== */
 
 
-/* -----------------------------------------------------------------------
+/* {=====================================================================
 ** Finalization (__gc)
-** ----------------------------------------------------------------------- */
+** ====================================================================== */
 
 /*
 ** If possible, shrink string table.
@@ -711,11 +714,7 @@ void csG_checkfin(cs_State *C, GCObject *o, List *ml) {
     setbit(o->mark, FINBIT); /* mark it */
 }
 
-
-
-/* -------------------------------------------------------------------------
- * GState control
- * ------------------------------------------------------------------------- */
+/* }===================================================================== */
 
 
 /* get the last 'next' object in list 'l' */
@@ -788,17 +787,14 @@ static c_mem atomic(cs_State *C) {
 
 
 /* 
-** Set collector pause; called after end of each full GState cycle.
-** The new threshold is calculated as 'gcestimate' / 'pause'.
-** 'PAUSEADJ' is there to provide more precise control over
-** when collection occurs (the value is chosen by testing from
-** the side of Lua developers). 
-** One could think of 'gs->gcpause' to be the percentage as
-** it is divided by 'PAUSEADJ' which is 100.
+** Set collector pause; the new threshold is calculated as
+** 'gcestimate' / 'pause'. 'PAUSEADJ' is there to provide more
+** precise control over when collection occurs (the value is chosen
+** by testing from the side of Lua developers).
 */
 static void setpause(GState *gs) {
     c_smem threshold, debt;
-    int pause = getgcparam(gs->gcpause);
+    int pause = getgcparam(gs->gcparams[CS_GCP_PAUSE]);
     c_smem estimate = gs->gcestimate / PAUSEADJ; /* adjust estimate */
     cs_assert(estimate > 0);
     threshold = (pause < MAXSMEM / estimate) /* can fit ? */
@@ -821,21 +817,15 @@ static void restartgc(GState *gs) {
 
 
 /*
-** Garbage collector state machine.
-** GCSpause marks all the roots.
-** GCSpropagate propagates gray objects into black
-** or links them into 'grayagain' for atomic phase.
-** GCSenteratomic enters the atomic state and
-** marks main thread, globals, etc... and propagates
-** all of them. Finally it clears the strings table
-** and changes white bit.
-** GCSsweepall sweeps all the objects in 'objects'.
-** GCSsweepfin sweeps all the objects in 'fin'.
-** GCSsweeptofin sweeps all the objects in 'tobefin'.
-** GCSsweepend indicates end of the sweep phase.
-** GCScallfin calls finalizers of all the objects
-** in 'tobefin' and puts them back into 'objects'
-** list after the call.
+** Garbage collector state machine. GCSpause marks all the roots.
+** GCSpropagate propagates gray objects into black or links them into
+** 'grayagain' for atomic phase. GCSenteratomic enters the atomic state
+** and marks main thread, globals, etc... and propagates all of them.
+** Finally it clears the strings table and changes white bit. GCSsweepall
+** sweeps all the objects in 'objects'. GCSsweepfin sweeps all the objects
+** in 'fin'. GCSsweeptofin sweeps all the objects in 'tobefin'. GCSsweepend
+** indicates end of the sweep phase. GCScallfin calls finalizers of all the
+** objects in 'tobefin' and puts them back into 'objects' list after the call.
 */
 static c_mem singlestep(cs_State *C) {
     c_mem work;
@@ -852,18 +842,17 @@ static c_mem singlestep(cs_State *C) {
             if (gs->graylist == NULL) { /* no more gray objects? */
                 gs->gcstate = GCSenteratomic;
                 work = 0;
-            } else { /* otherwise propagate them */
+            } else /* otherwise propagate them */
                 work = propagate(gs); /* traverse gray objects */
-            }
             break;
         }
-        case GCSenteratomic: { /* remark */
+        case GCSenteratomic: { /* re-mark all reachable objects */
             work = atomic(C);
-            entersweep(C);
+            entersweep(C); /* set 'objects' as first list to sweep */
             gs->gcestimate = gettotalbytes(gs); /* first estimate */
             break;
         }
-        case GCSsweepall: { /* sweep objects */
+        case GCSsweepall: { /* sweep objects in */
             work = sweepstep(C, &gs->fin, GCSsweepfin);
             break;
         }
@@ -949,20 +938,21 @@ void csG_rununtilstate(cs_State *C, int statemask) {
 ** Both the gcdebt and stepsize are converted to 'work',
 */
 static void step(cs_State *C, GState *gs) {
-    int stepmul = (getgcparam(gs->gcstepmul) | 1); /* avoid division by 0 */
+    int stepmul = (getgcparam(gs->gcparams[CS_GCP_STEPMUL])|1);
+    c_byte nbits = gs->gcparams[CS_GCP_STEPSIZE];
     c_smem debt = (gs->gcdebt / WORK2MEM) * stepmul;
-    c_smem stepsize = (gs->gcstepsize <= sizeof(c_smem) * 8 - 2 /* fits ? */
-                    ? ((cast_mem(1) << gs->gcstepsize) / WORK2MEM) * stepmul
-                    : MAXSMEM); /* overflows; keep maximum value */
+    c_smem stepsize = (nbits <= sizeof(c_smem) * 8 - 2) /* fits ? */
+                    ? ((cast_smem(1) << nbits) / WORK2MEM) * stepmul
+                    : MAXSMEM; /* overflows; keep maximum value */
     do { /* do until pause or enough negative debt */
-        c_mem work = singlestep(C); /* perform one step */
+        c_mem work = singlestep(C); /* perform one single step */
         debt -= work;
     } while (debt > -stepsize && gs->gcstate != GCSpause);
-    if (gs->gcstate == GCSpause) { /* pause? */
+    if (gs->gcstate == GCSpause) /* pause? */
         setpause(gs); /* pause until next cycle */
-    } else { /* otherwise enough debt collected */
-        debt = (debt / stepmul) * WORK2MEM; /* convert 'work' to bytes... */
-        csG_setgcdebt(gs, debt); /* ...and set the new debt */
+    else { /* otherwise enough debt collected */
+        debt = (debt / stepmul) * WORK2MEM; /* convert 'work' to bytes */
+        csG_setgcdebt(gs, debt);
     }
 }
 
@@ -971,9 +961,8 @@ void csG_step(cs_State *C) {
     GState *gs = G(C);
     if (!gcrunning(gs)) /* stopped ? */
         csG_setgcdebt(gs, -2000);
-    else {
+    else
         step(C, gs);
-    }
 }
 
 
@@ -1002,7 +991,7 @@ void csG_full(cs_State *C, int isemergency) {
 
 
 /* traverse a list making all its elements white */
-static void whitelist (GState *gs, GCObject *l) {
+static void whitelist(GState *gs, GCObject *l) {
     int white = csG_white(gs);
     for (; l != NULL; l = l->next)
         l->mark = cast_sbyte((l->mark & ~maskgcbits) | white);
@@ -1014,7 +1003,7 @@ static void whitelist (GState *gs, GCObject *l) {
 ** intermediate lists point to NULL (to avoid invalid pointers),
 ** and go to the pause state.
 */
-static void enterinc (GState *gs) {
+static void enterinc(GState *gs) {
     whitelist(gs, gs->objects);
     whitelist(gs, gs->fin);
     whitelist(gs, gs->tobefin);

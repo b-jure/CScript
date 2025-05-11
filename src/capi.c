@@ -1472,79 +1472,94 @@ CS_API int cs_load(cs_State *C, cs_Reader reader, void *userdata,
 }
 
 
-// TODO: update docs (added new option)
 CS_API int cs_gc(cs_State *C, int option, ...) {
-    va_list ap;
+    va_list argp;
     int res = 0;
     GState *gs = G(C);
+    if (gs->gcstop & (GCSTP | GCSTPCLS)) /* internal stop? */
+        return -1; /* all options are invalid when stopped */
     cs_lock(C);
-    va_start(ap, option);
+    va_start(argp, option);
     switch (option) {
-	case CS_GCSTOP: { /* stop garbage collector */
+	case CS_GC_STOP: { /* stop garbage collector */
             gs->gcstop = GCSTPUSR; /* stopped by user */
             break;
         }
-	case CS_GCRESTART: { /* restart GC */
+	case CS_GC_RESTART: { /* restart GC */
             csG_setgcdebt(gs, 0);
             gs->gcstop = 0; /* clear stop */
             break;
         }
-        case CS_GCCHECK: { /* check and clear collection flag */
+        case CS_GC_CHECK: { /* check and clear collection flag */
             res = gs->gccheck; /* get check flag */
             gs->gccheck = 0; /* clear check flag */
             break;
         }
-	case CS_GCCOLLECT: { /* start GC cycle */
+	case CS_GC_COLLECT: { /* start GC cycle */
             csG_full(C, 0);
             break;
         }
-	case CS_GCCOUNT: { /* total GC memory count in Kibibytes */
+	case CS_GC_COUNT: { /* total GC memory count in Kibibytes */
             res = gettotalbytes(gs) >> 10;
             break;
         }
-	case CS_GCCOUNTBYTES: { /* remainder bytes of total memory / 1024 */
+	case CS_GC_COUNTBYTES: { /* remainder bytes of total memory / 1024 */
             res = gettotalbytes(gs) & 0x3FF; /* all bits before 10th bit */
             break;
         }
-	case CS_GCSTEP: { /* perform GC step */
-            int data = va_arg(ap, int); /* kibibytes */
-            c_smem gcdebt = 69; /* >0 to signal that it did an actual step */
+	case CS_GC_STEP: { /* perform GC step */
+            int data = va_arg(argp, int); /* Kbytes */
+            c_smem gcdebt = 1; /* true if GC did work */
             c_byte old_gcstop = gs->gcstop;
-            if (data == 0) { /* do a regular step ? */
-                csG_setgcdebt(gs, 0);
+            gs->gcstop = 0; /* allow GC to run */
+            if (data == 0) {
+                csG_setgcdebt(gs, 0); /* force to run one basic step */
                 csG_step(C);
             } else { /* add `data` to total gcdebt */
                 /* convert `data` to bytes (data = bytes/2^10) */
-                gcdebt = (data * 1024) + gs->gcdebt;
+                gcdebt = cast(c_smem, data) * 1024 + gs->gcdebt;
                 csG_setgcdebt(gs, gcdebt);
                 csG_checkGC(C);
             }
-            gs->gcstop = old_gcstop;
+            gs->gcstop = old_gcstop; /* restore previous state */
             if (gcdebt > 0 && gs->gcstate == GCSpause) /* end of cycle? */
                 res = 1; /* signal it */
             break;
         }
-	case CS_GCISRUNNING: { /* check if GC is running */
+        case CS_GC_PARAM: {
+            int param = va_arg(argp, int);
+            int value = va_arg(argp, int);
+            api_check(C, 0 <= param && param < CS_GCP_N, "invalid parameter");
+            res = cast_int(getgcparam(gs->gcparams[param]));
+            if ((value) >= 0) {
+                if (param == CS_GCP_STEPSIZE)
+                    gs->gcparams[param] = value;
+                else
+                    setgcparam(gs->gcparams[param], value);
+            }
+            break;
+        }
+	case CS_GC_ISRUNNING: { /* check if GC is running */
             res = gcrunning(gs);
             break;
         }
-        case CS_GCINC: {
-            int pause = va_arg(ap, int);
-            int stepmul = va_arg(ap, int);
-            int stepsize = va_arg(ap, int);
-            res = CS_GCINC;
-            if (pause != 0)
-                setgcparam(gs->gcpause, pause);
-            if (stepmul != 0)
-                setgcparam(gs->gcstepmul, stepmul);
-            if (stepsize != 0)
-                gs->gcstepsize = stepsize;
+        case CS_GC_INC: {
+            int pause = va_arg(argp, int);
+            int stepmul = va_arg(argp, int);
+            int stepsize = va_arg(argp, int);
+            res = CS_GC_INC;
+            if (pause >= 0)
+                setgcparam(gs->gcparams[CS_GCP_PAUSE], pause);
+            if (stepmul >= 0)
+                setgcparam(gs->gcparams[CS_GCP_STEPMUL], stepmul);
+            if (stepsize >= 0)
+                gs->gcparams[CS_GCP_STEPSIZE] = stepsize;
             csG_incmode(C);
             break;
         }
         default: res = -1; /* invalid option */
     }
-    va_end(ap);
+    va_end(argp);
     cs_unlock(C);
     return res;
 }

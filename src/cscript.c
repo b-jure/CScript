@@ -530,8 +530,8 @@ static int pmain(cs_State *C) {
         print_version(); /* print version with copyright */
     csL_openlibs(C); /* open standard libraries */
     create_args_array(C, argv, argc); /* create 'args' array */
-    cs_gc(C, CS_GCRESTART); /* start GC... */
-    cs_gc(C, CS_GCINC, 0, 0, 0); /* ...in incremental mode */
+    cs_gc(C, CS_GC_RESTART); /* start GC... */
+    cs_gc(C, CS_GC_INC, 0, 0, 0); /* ...in incremental mode */
     if (!run_args(C, argv, optlimit)) /* execute arguments -s and -l */
         return 0; /* something failed */
     if (script > 0) { /* execute main script (if there is one) */
@@ -561,7 +561,7 @@ int main(int argc, char* argv[]) {
         errmsg(progname, "cannot create state: out of memory");
         return EXIT_FAILURE;
     }
-    cs_gc(C, CS_GCSTOP); /* stop GC while building state */
+    cs_gc(C, CS_GC_STOP); /* stop GC while building state */
     cs_push_cfunction(C, &pmain); /* to call 'pmain' in protected mode */
     cs_push_integer(C, argc); /* 1st argument */
     cs_push_lightuserdata(C, argv); /* 2nd argument */

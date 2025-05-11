@@ -118,10 +118,8 @@ typedef struct GState {
     c_byte gcstopem; /* stops emergency collections */
     c_byte gcstop; /* control wheter GC is running */
     c_byte gcemergency; /* true if this is emergency collection */
-    c_byte gcpause; /* how long to wait until next cycle */
-    c_byte gcstepmul; /* GC "speed" (heap size grow speed) */
-    c_byte gcstepsize; /* log2 of GC granularity */
-    c_byte gccheck; /* true if collection triggered since previous check */
+    c_byte gcparams[CS_GCP_N];
+    c_byte gccheck; /* true if collection was triggered since last check */
     GCObject *objects; /* list of all collectable objects */
     GCObject **sweeppos; /* current position of sweep in list */
     GCObject *fin; /* list of objects that have finalizer */

@@ -44,67 +44,74 @@ static int b_assert(cs_State *C) {
 }
 
 
-static int pushmode(cs_State *C, int oldmode) {
-    if (oldmode == -1)
-        csL_push_fail(C);
-    else
-        cs_push_string(C, "incremental");
-    return 1;
-}
+/*
+** Auxiliary macro for 'b_gc' that checks if GC option 'optnum' is valid.
+*/
+#define checkres(v)   { if (v == -1) break; }
 
 
-/* check if 'optnum' for 'cs_gc' was valid */
-#define checkres(res)   { if (res == -1) break; }
-
-// TODO: update docs (added new option)
+// TODO: update docs
 static int b_gc(cs_State *C) {
     static const char *const opts[] = {"stop", "restart", "collect",
-        "check", "count", "step", "isrunning", "incremental", NULL};
-    static const int numopts[] = {CS_GCSTOP, CS_GCRESTART, CS_GCCOLLECT,
-        CS_GCCHECK, CS_GCCOUNT, CS_GCSTEP, CS_GCISRUNNING, CS_GCINC};
-    int optnum = numopts[csL_check_option(C, 0, "collect", opts)];
-    switch (optnum) {
-        case CS_GCCHECK: { // TODO: new option
-            int hadcollection = cs_gc(C, optnum);
+        "check", "count", "step", "param", "isrunning", "incremental", NULL};
+    static const int numopts[] = {CS_GC_STOP, CS_GC_RESTART, CS_GC_COLLECT,
+        CS_GC_CHECK, CS_GC_COUNT,  CS_GC_STEP, CS_GC_PARAM, CS_GC_ISRUNNING,
+        CS_GC_INC};
+    int opt = numopts[csL_check_option(C, 0, "collect", opts)];
+    switch (opt) {
+        case CS_GC_CHECK: {
+            int hadcollection = cs_gc(C, opt);
             checkres(hadcollection);
             cs_push_bool(C, hadcollection);
             return 1;
         }
-        case CS_GCCOUNT: {
-            int kb = cs_gc(C, optnum); /* kibibytes */
-            int b = cs_gc(C, CS_GCCOUNTBYTES); /* leftover bytes */
+        case CS_GC_COUNT: {
+            int kb = cs_gc(C, opt); /* Kbytes */
+            int b = cs_gc(C, CS_GC_COUNTBYTES); /* leftover bytes */
             checkres(kb);
             cs_push_number(C, (cs_Number)kb + ((cs_Number)b/1024));
             return 1;
         }
-        case CS_GCSTEP: {
-            int nstep = csL_opt_integer(C, 1, 0);
-            int completecycle = cs_gc(C, optnum, nstep);
+        case CS_GC_STEP: {
+            int nstep = (int)csL_opt_integer(C, 1, 0);
+            int completecycle = cs_gc(C, opt, nstep);
             checkres(completecycle);
             cs_push_bool(C, completecycle);
             return 1;
         }
-        case CS_GCISRUNNING: {
-            int running = cs_gc(C, optnum);
+        case CS_GC_PARAM: {
+            static const char *const params[] = {
+                "pause", "stepmul", "stepsize", NULL};
+            int param = csL_check_option(C, 1, NULL, params);
+            int value = (int)csL_opt_integer(C, 2, -1);
+            cs_push_integer(C, cs_gc(C, opt, param, value));
+            return 1;
+        }
+        case CS_GC_ISRUNNING: {
+            int running = cs_gc(C, opt);
             checkres(running);
             cs_push_bool(C, running);
             return 1;
         }
-        case CS_GCINC: {
-            int pause = (int)csL_opt_integer(C, 1, 0);
-            int stepmul = (int)csL_opt_integer(C, 2, 0);
-            int stepsize = (int)csL_opt_integer(C, 3, 0);
-            return pushmode(C, cs_gc(C, optnum, pause, stepmul, stepsize));
+        case CS_GC_INC: {
+            int pause = (int)csL_opt_integer(C, 1, -1);
+            int stepmul = (int)csL_opt_integer(C, 2, -1);
+            int stepsize = (int)csL_opt_integer(C, 3, -1);
+            int oldmode = cs_gc(C, opt, pause, stepmul, stepsize);
+            checkres(oldmode);
+            cs_assert(oldmode == CS_GC_INC);
+            cs_push_string(C, "incremental");
+            return 1;
         }
         default: {
-            int res = cs_gc(C, optnum);
+            int res = cs_gc(C, opt);
             checkres(res);
             cs_push_integer(C, res);
             return 1;
         }
     }
-    csL_push_fail(C);
-    return 0;
+    csL_push_fail(C); /* invalid call (inside a finalizer) */
+    return 1;
 }
 
 
@@ -197,7 +204,7 @@ static int b_getmetalist(cs_State *C) {
 static int b_setmetalist(cs_State *C) {
     int t = cs_type(C, 1);
     csL_check_type(C, 0, CS_TCLASS);
-    csL_expect_arg(C, t == CS_TNIL || t == CS_TLIST, 2, "nil/list");
+    csL_expect_arg(C, t == CS_TNIL || t == CS_TLIST, 1, "nil/list");
     cs_settop(C, 2);
     cs_set_metalist(C, 0);
     return 1;
@@ -550,24 +557,48 @@ static int b_flatten(cs_State *C) {
 }
 
 
-static int aux_range(cs_State *C) {
-    cs_Integer start = cs_to_integer(C, cs_upvalueindex(1));
-    cs_Integer stop = cs_to_integer(C, cs_upvalueindex(2));
+
+/* {=====================================================================
+** RANGE
+** ====================================================================== */
+
+/*
+** Defined as macro (more ergonomic than static function).
+*/
+#define RANGE_BEGIN(C) \
+    cs_Integer start = cs_to_integer(C, cs_upvalueindex(1)); \
+    cs_Integer stop = cs_to_integer(C, cs_upvalueindex(2)); \
     cs_Integer step = cs_to_integer(C, cs_upvalueindex(3));
-    cs_Integer next;
-    if (step < 0 && start > stop) /* (reverse range) */
-        next = (start >= CS_INTEGER_MIN-step) ? start+step : stop;
-    else if (step > 0 && start < stop) /* (regular range) */
-        next = (start <= CS_INTEGER_MAX-step) ? start+step : stop;
-    else { /* (end of range) */
-        cs_assert(step != 0);
-        cs_push_nil(C);
-        return 1;
-    }
+
+
+static void pushrangeres(cs_State *C, cs_Integer start, cs_Integer next) {
     cs_push_integer(C, start); /* current range value */
     cs_push_integer(C, next); /* next range value */
     cs_replace(C, cs_upvalueindex(1)); /* update upvalue */
-    return 1;
+}
+
+
+static int aux_revrange(cs_State *C) {
+    RANGE_BEGIN(C);
+    cs_assert(step < 0);
+    if (start > stop) {
+        cs_Integer next = (start >= CS_INTEGER_MIN-step) ? start+step : stop;
+        pushrangeres(C, start, next);
+    } else
+        cs_push_nil(C);
+    return 1; /* return 'next' or nil */
+}
+
+
+static int aux_range(cs_State *C) {
+    RANGE_BEGIN(C);
+    cs_assert(step > 0);
+    if (start < stop) {
+        cs_Integer next = (start <= CS_INTEGER_MAX-step) ? start+step : stop;
+        pushrangeres(C, start, next);
+    } else
+        cs_push_nil(C);
+    return 1; /* return 'next' or nil */
 }
 
 
@@ -582,15 +613,17 @@ static int b_range(cs_State *C) {
         stop = csL_check_integer(C, 1);
     step = csL_opt_integer(C, 2, 1);
     if (c_unlikely(step == 0)) /* invalid range? */
-        return csL_error(C, "range 'step' is 0");
+        return csL_error(C, "invalid 'step' (must be positive or negative)");
     else { /* push iterator */
         cs_push_integer(C, start);
         cs_push_integer(C, stop);
         cs_push_integer(C, step);
-        cs_push_cclosure(C, aux_range, 3);
+        cs_push_cclosure(C, (step < 0) ? aux_revrange : aux_range, 3);
         return 1; /* return iterator */
     }
 }
+
+/* ====================================================================} */
 
 
 static const cs_Entry basic_funcs[] = {

@@ -14,9 +14,9 @@
 
 
 
-/* -------------------------------------------------------------------------
- * Tri-color marking
- * ------------------------------------------------------------------------- */
+/* {=====================================================================
+** Tri-color marking
+** ====================================================================== */
 
 /* object 'mark' bits (GC colors) */
 #define WHITEBIT0       0 /* object is white v0 */
@@ -62,11 +62,13 @@
 /* flip object white bit */
 #define changewhite(o)          ((o)->mark ^= maskwhitebits)
 
+/* }==================================================================== */
 
 
-/* -------------------------------------------------------------------------
- * GC states and other parameters
- * ------------------------------------------------------------------------- */
+
+/* {=====================================================================
+** GC states and other parameters
+** ====================================================================== */
 
 /* GC 'state' */
 #define GCSpropagate            0 /* propagating gray object to black */
@@ -98,42 +100,44 @@
 /* GC 'stopped' bits */
 #define GCSTP                   1 /* GC stopped by itself */
 #define GCSTPUSR                2 /* GC stopped by user */
-#define GCSTPCLS                4 /* GC stopped while freeing 'cs_State' */
+#define GCSTPCLS                4 /* GC stopped while closing 'cs_State' */
 #define gcrunning(gs)           ((gs)->gcstop == 0)
 
 
 /* default GC parameters */
-#define CSI_GCSTEPMUL           100 /* 'gcstepmul' */
-#define CSI_GCSTEPSIZE          13  /* 'gcstepsize' (log2; 8KB) */
-#define CSI_GCPAUSE             200 /* 'gcpause' after memory 2x do cycle */
+#define CSI_GCP_STEPMUL         100
+#define CSI_GCP_STEPSIZE        12  /* (log2; 4Kbytes) */
+#define CSI_GCP_PAUSE           200 /* after memory doubles, do cycle */
+
+/* }==================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* {=====================================================================
 ** Check GC gcdebt
-** ----------------------------------------------------------------------- */
+** ====================================================================== */
 
 /*
-** Performs a single step of collection if collector
-** gcdebt is positive.
+** Performs a single step of collection when debt becomes positive.
+** The 'pre'/'pos' allows some adjustments to be done only when needed.
+** Macro 'condchangemem' is used only for heavy tests (forching a full
+** GC cycle on every opportunity).
 */
 #define csG_condGC(C,pre,pos) \
     { pre; if (G(C)->gcdebt > 0) { csG_step(C); pos; } \
       condchangemem(C,pre,pos); }
 
 
-/* 'csG_condGC' but without 'pre' and 'pos' */
+/* 'csG_condGC' but 'pre'/'pos' are empty */
 #define csG_checkGC(C)          csG_condGC(C,(void)0,(void)0)
 
-
-/* get total bytes allocated (by accounting for 'gcdebt') */
-#define gettotalbytes(gs)       cast_mem((gs)->totalbytes + (gs)->gcdebt)
+/* }==================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* {====================================================================
 ** Write barriers
-** ----------------------------------------------------------------------- */
+** ===================================================================== */
 
 /*
 ** Same as 'csG_barrier_' but ensures that it is only called when 'r'
@@ -158,6 +162,11 @@
 #define csG_barrierback(C,r,v) \
         (iscollectable(v) ? csG_objbarrierback(C,r,gcoval(v)) : (void)(0))
 
+/* }==================================================================== */
+
+
+/* get total bytes allocated (by accounting for 'gcdebt') */
+#define gettotalbytes(gs)       cast_mem((gs)->totalbytes + (gs)->gcdebt)
 
 /* 
 ** Some GC parameters are stored divided by 4 to allow a

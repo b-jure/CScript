@@ -147,6 +147,13 @@ static void freestate(cs_State *C) {
 }
 
 
+static void init_gcparams(GState *gs) {
+    setgcparam(gs->gcparams[CS_GCP_PAUSE], CSI_GCP_PAUSE);
+    setgcparam(gs->gcparams[CS_GCP_STEPMUL], CSI_GCP_STEPMUL);
+    gs->gcparams[CS_GCP_STEPSIZE] = CSI_GCP_STEPSIZE;
+}
+
+
 /*
 ** Allocate new thread and global state with 'falloc' and
 ** userdata 'ud', from here on 'falloc' will be the allocator.
@@ -174,11 +181,9 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     gs->gcdebt = 0;
     gs->gcstate = GCSpause;
     gs->gcstopem = 0;
+    init_gcparams(gs);
     gs->gcstop = GCSTP; /* no GC while creating state */
     gs->gcemergency = 0;
-    setgcparam(gs->gcpause, CSI_GCPAUSE);
-    setgcparam(gs->gcstepmul, CSI_GCSTEPMUL);
-    gs->gcstepsize = CSI_GCSTEPSIZE;
     gs->gccheck = 0;
     gs->sweeppos = NULL;
     gs->fixed = gs->fin = gs->tobefin = NULL;

@@ -29,6 +29,7 @@ def rootpath(path):
 
 # Testsuites
 cscript_testsuite_paths = {
+    "other": rootpath("other"),
     "syntax": rootpath("syntax"),
     "basic": rootpath("stdlibs/basic"),
     "package": rootpath("stdlibs/package"),

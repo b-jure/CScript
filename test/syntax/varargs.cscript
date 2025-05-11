@@ -2,7 +2,6 @@
 ** Test script file for CScript varargs.
 */
 
-/// TODO: port this
 local fn f(a, ...) {
     local n = getargs("len", ...);
     local y = [...];
