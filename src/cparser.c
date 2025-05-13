@@ -871,25 +871,18 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
             expr(lx, e);
             expectmatch(lx, ')', '(', line);
             csC_exp2val(lx->fs, e);
-            return;
+            break;
         }
         case TK_NAME: {
             var(lx, str_expectname(lx), e);
-            return;
+            break;
         }
         case TK_SUPER: {
             superkw(lx, e);
-            return;
+            break;
         }
         default: {
-            const char *msg;
-            if (lx->c == '&') /* && */
-                msg = "unexpected symbol, use 'and' instead of '&&'";
-            else if (lx->c == '|')
-                msg = "unexpected symbol, use 'or' instead of '||'";
-            else
-                msg = "unexpected symbol";
-            csY_syntaxerror(lx, msg);
+            csY_syntaxerror(lx, "unexpected symbol");
         }
     }
 }

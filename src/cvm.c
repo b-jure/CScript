@@ -502,15 +502,15 @@ c_sinline void moveresults(cs_State *C, SPtr res, int nres, int wanted) {
     int i;
     SPtr firstresult;
     switch (wanted) {
-        case CS_MULRET: {   /* all values needed */
+        case CS_MULRET: { /* all values needed */
             wanted = nres;
             break;
         }
-        case 0: {           /* no values needed */
+        case 0: { /* no values needed */
             C->sp.p = res;
             return; /* done */
         }
-        case 1: {           /* one value needed */
+        case 1: { /* one value needed */
             if (nres == 0)
                 setnilval(s2v(res));
             else
@@ -518,7 +518,7 @@ c_sinline void moveresults(cs_State *C, SPtr res, int nres, int wanted) {
             C->sp.p = res + 1;
             return; /* done */
         }
-        default: {
+        default: { /* fixed amount of values needed (more than 1) */
             if (hastocloseCfunc(wanted)) { /* tbc variables? */
                 res = csF_close(C, res, CLOSEKTOP); /* do the closing */
                 wanted = decodeNresults(wanted); /* decode nresults */
@@ -632,9 +632,9 @@ retry:
         }
         case CS_VCLASS: { /* Class object */
             const TValue *fmm;
-            Instance *in = csMM_newinstance(C, classval(s2v(func)));
-            csG_checkfin(C, obj2gco(in), in->oclass->metalist);
-            setinsval2s(C, func, in); /* replace class with its instance */
+            Instance *ins = csMM_newinstance(C, classval(s2v(func)));
+            csG_checkfin(C, obj2gco(ins), ins->oclass->metalist);
+            setinsval2s(C, func, ins); /* replace class with its instance */
             fmm = csMM_get(C, s2v(func), CS_MM_INIT);
             if (!ttisnil(fmm)) { /* have __init ? */
                 checkstackGCp(C, 1, func); /* space for fmm */
@@ -646,6 +646,8 @@ retry:
             } else {
             noinit:
                 C->sp.p -= (C->sp.p - func - 1); /* remove args */
+                cs_assert(nres >= CS_MULRET); /* no close */
+                moveresults(C, func, 1, nres);
                 return NULL; /* done */
             }
         }
