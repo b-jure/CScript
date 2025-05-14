@@ -29,8 +29,8 @@ Proto *csF_newproto(cs_State *C) {
     { p->p = NULL; p->sizep = 0; } /* function prototypes */
     { p->k = NULL; p->sizek = 0; } /* constants */
     { p->code = NULL; p->sizecode = 0; } /* code */
-    { p->lineinfo = NULL; p->sizelineinfo = 0; } /* rel line info */
-    { p->abslineinfo = NULL; p->sizeabslineinfo = 0; } /* abs line info */
+    { p->lineinfo = NULL; p->sizelineinfo = 0; } /* rel. line info */
+    { p->abslineinfo = NULL; p->sizeabslineinfo = 0; } /* abs. line info */
     { p->instpc = NULL; p->sizeinstpc = 0; } /* instruction pc's */
     { p->locals = NULL; p->sizelocals = 0; } /* locals */
     { p->upvals = NULL; p->sizeupvalues = 0; } /* upvalues */
@@ -69,7 +69,7 @@ void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
                        const Proto *fn) {
     int actual = cast_int(C->sp.p - cf->func.p) - 1;
     int extra = actual - arity; /* number of varargs */
-    cf->nvarargs = extra;
+    cf->cs.nvarargs = extra;
     csPR_checkstack(C, fn->maxstack + 1);
     setobjs2s(C, C->sp.p++, cf->func.p); /* move function */
     for (int i = 1; i <= arity; i++) {
@@ -83,10 +83,10 @@ void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
 
 
 void csF_getvarargs(cs_State *C, CallFrame *cf, int wanted) {
-    int have = cf->nvarargs;
+    int have = cf->cs.nvarargs;
     if (wanted < 0) { /* CS_MULRET? */
         wanted = have;
-        checkstackGC(C, wanted); /* check stack, maybe 'wanted > have' */
+        checkstackGC(C, wanted); /* check stack, maybe wanted>have */
     }
     for (int i = 0; wanted > 0 && i < have; i++, wanted--)
         setobjs2s(C, C->sp.p++, cf->func.p - have + i);

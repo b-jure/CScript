@@ -33,13 +33,19 @@
 */
 static void preinit_thread(cs_State *C, GState *gs) {
     C->ncf = 0;
-    C->status = CS_OK;
+    C->status = CS_STATUS_OK;
     C->errfunc = 0;
     C->nCcalls = 0;
     C->gclist = NULL;
     C->twups = C; /* if ('C->twups' == 'C') then no upvalues */
     G(C) = gs;
     C->errjmp = NULL;
+    C->hook = NULL;
+    C->hookmask = 0;
+    C->oldpc = 0;
+    C->basehookcount = 0;
+    C->allowhook = 1;
+    resethookcount(C);
     C->stack.p = C->sp.p = C->stackend.p = NULL;
     C->cf = NULL;
     C->openupval = NULL;
@@ -64,8 +70,8 @@ static void init_stack(cs_State *C1, cs_State *C) {
     cf = &C1->basecf;
     cf->next = cf->prev = NULL;
     cf->func.p = C1->sp.p;
-    cf->pc = NULL;
-    cf->nvarargs = 0;
+    cf->cs.pc = NULL;
+    cf->cs.nvarargs = 0;
     cf->nresults = 0;
     cf->status = CFST_CCALL;
     setnilval(s2v(C->sp.p)); /* 'cf' entry function */
@@ -75,15 +81,16 @@ static void init_stack(cs_State *C1, cs_State *C) {
 }
 
 
-static void init_registry(cs_State *C, GState *gs) {
-    List *registry = csA_newl(C, CS_RINDEX_LAST + 1); 
-    setlistval(C, &gs->c_registry, registry);
-    /* registry[CS_RINDEX_MAINTHREAD] = C (mainthread) */
-    setthval(C, &registry->b[CS_RINDEX_MAINTHREAD], C);
-    /* registry[CS_RINDEX_GLOBALS] = new table (for global variables) */
-    settval(C, &registry->b[CS_RINDEX_GLOBALS], csH_new(C));
-    /* registry[CS_RINDEX_REGTABLE] = new table (for C code) */
-    settval(C, &registry->b[CS_RINDEX_REGTABLE], csH_new(C));
+static void init_cstorage(cs_State *C, GState *gs) {
+    List *clist = csA_newl(C, CS_CLIST_LAST + 1); 
+    /* gs->c_list = list */
+    setlistval(C, &gs->c_list, clist);
+    /* clist[CS_CLIST_MAINTHREAD] = C (mainthread) */
+    setthval(C, &clist->b[CS_CLIST_MAINTHREAD], C);
+    /* clist[CS_CLIST_GLOBALS] = global table */
+    settval(C, &clist->b[CS_CLIST_GLOBALS], csH_new(C));
+    /* gs->c_table = table */
+    settval(C, &gs->c_table, csH_new(C));
 }
 
 
@@ -95,7 +102,7 @@ static void f_newstate(cs_State *C, void *ud) {
     GState *gs = G(C);
     UNUSED(ud);
     init_stack(C, C);
-    init_registry(C, gs);
+    init_cstorage(C, gs);
     csS_init(C);
     csMM_init(C);
     csY_init(C);
@@ -136,7 +143,7 @@ static void freestate(cs_State *C) {
         csG_freeallobjects(C);
     } else { /* freeing fully built state */
         C->cf = &C->basecf; /* undwind call frames */
-        csPR_close(C, 1, CS_OK);
+        csPR_close(C, 1, CS_STATUS_OK);
         csG_freeallobjects(C);
         csi_userstateclose(C);
     }
@@ -189,7 +196,8 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     gs->fixed = gs->fin = gs->tobefin = NULL;
     gs->graylist = gs->grayagain = NULL;
     gs->weak = NULL;
-    setnilval(&gs->c_registry);
+    setnilval(&gs->c_list);
+    setnilval(&gs->c_table);
     gs->falloc = falloc;
     gs->ud_alloc = ud;
     gs->fpanic = NULL; /* no panic handler by default */
@@ -198,7 +206,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     gs->twups = NULL;
     gs->fwarn = NULL; gs->ud_warn = NULL;
     cs_assert(gs->totalbytes == sizeof(XSG) && gs->gcdebt == 0);
-    if (csPR_rawcall(C, f_newstate, NULL) != CS_OK) {
+    if (csPR_rawcall(C, f_newstate, NULL) != CS_STATUS_OK) {
         freestate(C);
         C = NULL;
     }
@@ -211,7 +219,6 @@ CS_API void cs_close(cs_State *C) {
     cs_lock(C);
     cs_State *mt = G(C)->mainthread;
     freestate(mt);
-    /* user shall handle unlocking he defined himself (if any) */
 }
 
 
@@ -229,10 +236,14 @@ CS_API cs_State *cs_newthread(cs_State *C) {
     setthval2s(C, C->sp.p, C1);
     api_inctop(C);
     preinit_thread(C1, gs);
-    init_stack(C1, C);
+    C1->hookmask = C->hookmask;
+    C1->basehookcount = C->basehookcount;
+    C1->hook = C->hook;
+    resethookcount(C1);
     memcpy(cs_getextraspace(C1), cs_getextraspace(gs->mainthread),
            CS_EXTRASPACE);
-    csi_userstate(C, C1);
+    csi_userstatethread(C, C1);
+    init_stack(C1, C);
     cs_unlock(C);
     return C1;
 }
@@ -243,9 +254,9 @@ int csT_resetthread(cs_State *C, int status) {
     setnilval(s2v(C->stack.p)); /* 'basecf' func */
     cf->func.p = C->stack.p;
     cf->status = CFST_CCALL;
-    C->status = CS_OK; /* so we can run '__close' */
+    C->status = CS_STATUS_OK; /* so we can run '__close' */
     status = csPR_close(C, 1, status);
-    if (status != CS_OK) /* error? */
+    if (status != CS_STATUS_OK) /* error? */
         csPR_seterrorobj(C, status, C->stack.p + 1);
     else
         C->sp.p = C->stack.p + 1;
@@ -261,7 +272,7 @@ int csT_resetthread(cs_State *C, int status) {
 ** reseting the stack.
 ** In case of errors, error object is placed on top of the
 ** stack and the function returns relevant status code.
-** If no errors occured `CS_OK` status is returned.
+** If no errors occured `CS_STATUS_OK` status is returned.
 */
 CS_API int cs_resetthread(cs_State *C) {
     int status;
@@ -284,7 +295,7 @@ CallFrame *csT_newcf(cs_State *C) {
     C->cf->next = cf;
     cf->prev = C->cf;
     cf->next = NULL;
-    cf->trap = 0;
+    cf->cs.trap = 0;
     C->ncf++;
     return cf;
 }
@@ -313,7 +324,7 @@ static void correctstack(cs_State *C) {
         cf->func.p = restorestack(C, cf->func.offset);
         cf->top.p = restorestack(C, cf->top.offset);
         if (isCScript(cf))
-            cf->trap = 1; /* signal to update 'trap' in 'csV_execute' */
+            cf->cs.trap = 1; /* signal to update 'trap' in 'csV_execute' */
     }
 }
 
@@ -356,7 +367,7 @@ int csT_growstack(cs_State *C, int n, int raiseerr) {
         ** a stack error; cannot grow further than that. */
         cs_assert(size == ERRORSTACKSIZE);
         if (raiseerr)
-            csPR_throw(C, CS_ERRERROR);
+            csPR_throw(C, CS_STATUS_EERROR);
         return 0;
     } else if (n < CSI_MAXSTACK) { /* avoid arithmetic overflow */
         int nsize = size * 2;
@@ -378,17 +389,17 @@ int csT_growstack(cs_State *C, int n, int raiseerr) {
 
 
 static int stackinuse(cs_State *C) {
-    SPtr maxtop = C->cf->top.p;
-    int n;
-    for (CallFrame *cf = C->cf->prev; cf != NULL; cf = cf->prev) {
-        if (maxtop < cf->top.p)
-            maxtop = cf->top.p;
+    int res;
+    SPtr lim = C->sp.p;
+    for (CallFrame *cf = C->cf; cf != NULL; cf = cf->prev) {
+        if (lim < cf->top.p)
+            lim = cf->top.p;
     }
-    cs_assert(maxtop <= C->stackend.p + EXTRA_STACK);
-    n = savestack(C, maxtop);
-    if (n < CS_MINSTACK)
-        n = CS_MINSTACK;
-    return n;
+    cs_assert(lim <= C->stackend.p + EXTRA_STACK);
+    res = cast_int(lim - C->stack.p) + 1; /* part of stack in use */
+    if (res < CS_MINSTACK)
+        res = CS_MINSTACK; /* ensure a minimum size */
+    return res;
 }
 
 
@@ -426,7 +437,7 @@ void csT_checkCstack(cs_State *C) {
     if (getCcalls(C) == CSI_MAXCCALLS) /* not handling error ? */
         csD_runerror(C, "C stack overflow");
     else if (getCcalls(C) >= (CSI_MAXCCALLS / 10 * 11))
-        csPR_throw(C, CS_ERRERROR);
+        csPR_throw(C, CS_STATUS_EERROR);
 }
 
 

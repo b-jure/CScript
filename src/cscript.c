@@ -70,7 +70,7 @@ static void errmsg(const char *prog, const char *msg) {
 
 /* report 'status' if it is error status */
 static int report(cs_State *C, int status) {
-    if (status != CS_OK) { /* have errors? */
+    if (status != CS_STATUS_OK) { /* have errors? */
         const char *msg = cs_to_string(C, -1);
         if (msg == NULL) msg = "(error object not a string)";
         errmsg(progname, msg);
@@ -148,7 +148,7 @@ static int msghandler(cs_State *C) {
     const char *msg = cs_to_string(C, -1);
     if (msg == NULL) { /* error object is not a string? */
         if (csL_callmeta(C, -1, CS_MM_TOSTRING) && /* it has a metamethod, */
-            cs_type(C, -1) == CS_TSTRING) /* that produces a string? */
+            cs_type(C, -1) == CS_T_STRING) /* that produces a string? */
             return 1; /* that is the message */
         else
             msg = cs_push_fstring(C, "(error object is a %s value)",
@@ -172,7 +172,7 @@ static int docall(cs_State *C, int nargs, int nres) {
 
 
 static int run_chunk(cs_State *C, int status) {
-    if (status == CS_OK) status = docall(C, 0, 0);
+    if (status == CS_STATUS_OK) status = docall(C, 0, 0);
     return report(C, status);
 }
 
@@ -207,7 +207,7 @@ static int run_library(cs_State *C, char *globname) {
     cs_get_global(C, "import");
     cs_push_string(C, modname);
     status = docall(C, 1, 1); /* call 'import(modname)' */
-    if (status == CS_OK) {
+    if (status == CS_STATUS_OK) {
         if (suffix != NULL) /* is there a suffix mark? */
             *suffix = '\0'; /* remove suffix from global name */
         cs_set_global(C, globname); /* globname = require(modname) */
@@ -234,7 +234,7 @@ static int run_args(cs_State *C, char **argv, int n)  {
                 status = (option == 's')
                        ? run_string(C, extra, "(command line)")
                        : run_library(C, extra);
-                if (status != CS_OK) return 0;
+                if (status != CS_STATUS_OK) return 0;
                 break;
             }
             case 'w': {
@@ -250,7 +250,7 @@ static int run_args(cs_State *C, char **argv, int n)  {
 
 static int pushargs(cs_State *C) {
     int i, nargs;
-    if (cs_get_global(C, "args") != CS_TLIST)
+    if (cs_get_global(C, "args") != CS_T_LIST)
         csL_error(C, "'args' is not an array");
     nargs = cs_len(C, -1);
     csL_check_stack(C, nargs + 3, "too many arguments to script");
@@ -267,7 +267,7 @@ static int run_script(cs_State *C, char **argv) {
     if (strcmp(filename, "-") == 0 && strcmp(argv[-1], "--") != 0)
         filename = NULL; /* stdin */
     status = csL_loadfile(C, filename);
-    if (status == CS_OK) {
+    if (status == CS_STATUS_OK) {
         int nargs = pushargs(C);
         status = docall(C, nargs, CS_MULRET);
     }
@@ -381,7 +381,7 @@ static int addreturn(cs_State *C) {
     const char *retline = cs_push_fstring(C, "return %s;", line);
     int status = csL_loadbuffer(C, retline, strlen(retline), "stdin");
     /* stack: [line][retline][result] */
-    if (status == CS_OK) {
+    if (status == CS_STATUS_OK) {
         cs_remove(C, -2); /* remove modified line ('retline') */
         if (line[0] != '\0') /* not empty? */
             cs_saveline(C, line); /* keep history */
@@ -401,7 +401,7 @@ static int addreturn(cs_State *C) {
 ** is considered as incomplete.
 */
 static int incomplete(cs_State *C, int status) {
-    if (status == CS_ERRSYNTAX) {
+    if (status == CS_STATUS_ESYNTAX) {
         size_t len;
         const char *msg = cs_to_lstring(C, -1, &len);
         if (len >= EOFLEN && strcmp(msg + len - EOFLEN, EOFTEXT) == 0) {
@@ -440,10 +440,10 @@ static int multi_line(cs_State *C) {
 */
 static int load_line(cs_State *C) {
     int status;
-    cs_settop(C, 0); /* remove all values */
+    cs_setntop(C, 0); /* remove all values */
     if (!pushline(C, 1))
         return -1; /* no input */
-    if ((status = addreturn(C)) != CS_OK) /* 'return ...;' did not work? */
+    if ((status = addreturn(C)) != CS_STATUS_OK) /* 'return ...;' did not work? */
         status = multi_line(C); /* try as command, maybe with continuation lines */
     cs_remove(C, 0); /* remove line from the stack */
     cs_assert(cs_getntop(C) == 1); /* 'csL_loadbuffer' result on top */
@@ -460,7 +460,7 @@ static void print_result(cs_State *C) {
         csL_check_stack(C, CS_MINSTACK, "too many results to print");
         cs_get_global(C, "print");
         cs_insert(C, 0);
-        if (cs_pcall(C, n, 0, -1) != CS_OK)
+        if (cs_pcall(C, n, 0, -1) != CS_STATUS_OK)
             errmsg(progname, cs_push_fstring(C, "error calling 'print' (%s)",
                              cs_to_string(C, -1)));
     }
@@ -476,14 +476,14 @@ static void run_repl(cs_State *C) {
     const char *old_progname = progname;
     progname = NULL;
     while ((status = load_line(C)) != -1) { /* while no empty EOF line */
-        if (status == CS_OK) /* line loaded with no errors? */
+        if (status == CS_STATUS_OK) /* line loaded with no errors? */
             status = docall(C, 0, CS_MULRET);
-        if (status == CS_OK) /* script returned without errors? */
+        if (status == CS_STATUS_OK) /* script returned without errors? */
             print_result(C);
         else
             report(C, status);
     }
-    cs_settop(C, 0); /* remove all values */
+    cs_setntop(C, 0); /* remove all values */
     cs_writeline(stdout);
     progname = old_progname;
 }
@@ -535,7 +535,7 @@ static int pmain(cs_State *C) {
     if (!run_args(C, argv, optlimit)) /* execute arguments -s and -l */
         return 0; /* something failed */
     if (script > 0) { /* execute main script (if there is one) */
-        if (run_script(C, argv + script) != CS_OK)
+        if (run_script(C, argv + script) != CS_STATUS_OK)
             return 0; /* interrupt in case of error */
     }
     if (args & arg_i) /* '-i' option? */
@@ -569,7 +569,7 @@ int main(int argc, char* argv[]) {
     res = cs_to_bool(C, -1); /* get result */
     report(C, status);
     cs_close(C);
-    return (res && status == CS_OK ? EXIT_SUCCESS : EXIT_FAILURE);
+    return (res && status == CS_STATUS_OK ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
 /* }===================================================================== */

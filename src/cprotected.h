@@ -50,8 +50,7 @@ typedef void (*ProtectedFn)(cs_State *C, void *userdata);
 
 
 /* check GC then check stack */
-#define checkstackGC(C,n) \
-        csPR_checkstackaux(C,n,csG_checkGC(C),(void)0)
+#define checkstackGC(C,n)   csPR_checkstackaux(C,n,csG_checkGC(C),(void)0)
 
 
 CSI_FUNC void csPR_seterrorobj(cs_State *C, int errcode, SPtr oldtop);

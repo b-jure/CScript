@@ -43,8 +43,8 @@ static int findfield(cs_State *C, int index, int limit) {
     if (limit == 0 || !cs_is_table(C, -1))
         return 0; /* not found */
     cs_push_nil(C); /* start `next` loop (from beginning) */
-    while (cs_next(C, -2)) { /* for each pair in the table */
-        if (cs_type(C, -2) == CS_TSTRING) { /* ignore non-string keys */
+    while (cs_nextfield(C, -2)) { /* for each pair in the table */
+        if (cs_type(C, -2) == CS_T_STRING) { /* ignore non-string keys */
             if (cs_rawequal(C, index, -1)) { /* found object (function)? */
                 cs_pop(C, 1); /* remove value (but keep name) */
                 return 1;
@@ -71,7 +71,7 @@ static int push_glbfunc_name(cs_State *C, cs_Debug *ar) {
     int top = cs_gettop(C); /* index of value on top of the stack */
     int func = top + 1;
     cs_getinfo(C, "f", ar); /* push function (top + 1) */
-    cs_get_rtable(C, CS_LOADED_TABLE);
+    cs_get_cfieldstr(C, CS_LOADED_TABLE);
     csL_check_stack(C, 6, "not enough stack space"); /* for `findfield` */
     if (findfield(C, func, 2)) { /* found? */
         const char *name = cs_to_string(C, -1);
@@ -80,10 +80,10 @@ static int push_glbfunc_name(cs_State *C, cs_Debug *ar) {
             cs_remove(C, -2); /* remove original name */
         }
         cs_copy(C, -1, func); /* copy name to proper place */
-        cs_settop(C, func + 1); /* remove "loaded" table and name copy */
+        cs_setntop(C, func + 1); /* remove "loaded" table and name copy */
         return 1;
     } else { /* not a global */
-        cs_settop(C, func); /* remove func and Lib */
+        cs_setntop(C, func); /* remove func and Lib */
         return 0;
     }
 }
@@ -107,7 +107,7 @@ CSLIB_API int csL_error_arg(cs_State *C, int arg, const char *extra) {
 
 CSLIB_API int csL_error_type(cs_State *C, int arg, const char *tname) {
     const char *msg, *type;
-    if (cs_type(C, arg) == CS_TLIGHTUSERDATA)
+    if (cs_type(C, arg) == CS_T_LIGHTUSERDATA)
         type = "light userdata";
     else
         type = csL_typename(C, arg);
@@ -125,7 +125,7 @@ CSLIB_API cs_Number csL_check_number(cs_State *C, int index) {
     int isnum;
     cs_Number n = cs_to_numberx(C, index, &isnum);
     if (c_unlikely(!isnum))
-        terror(C, index, CS_TNUMBER);
+        terror(C, index, CS_T_NUMBER);
     return n;
 }
 
@@ -134,7 +134,7 @@ static void interror(cs_State *C, int argindex) {
     if (cs_is_number(C, argindex))
         csL_error_arg(C, argindex, "number has no integer representation");
     else
-        terror(C, argindex, CS_TNUMBER);
+        terror(C, argindex, CS_T_NUMBER);
 }
 
 
@@ -152,7 +152,7 @@ CSLIB_API int csL_check_bool(cs_State *C, int index) {
     int isbool;
     int i = cs_to_boolx(C, index, &isbool);
     if (c_unlikely(!isbool))
-        terror(C, index, CS_TBOOL);
+        terror(C, index, CS_T_BOOL);
     return i;
 }
 
@@ -160,7 +160,7 @@ CSLIB_API int csL_check_bool(cs_State *C, int index) {
 CSLIB_API const char *csL_check_lstring(cs_State *C, int index, size_t *len) {
     const char *str = cs_to_lstring(C, index, len);
     if (c_unlikely(str == NULL))
-        terror(C, index, CS_TSTRING);
+        terror(C, index, CS_T_STRING);
     return str;
 }
 
@@ -190,7 +190,7 @@ CSLIB_API void csL_check_type(cs_State *C, int arg, int t) {
 
 
 CSLIB_API void csL_check_any(cs_State *C, int arg) {
-    if (c_unlikely(cs_type(C, arg) == CS_TNONE))
+    if (c_unlikely(cs_type(C, arg) == CS_T_NONE))
         csL_error_arg(C, arg, "value expected");
 }
 
@@ -264,7 +264,7 @@ static int errorfile(cs_State *C, const char *what, int filename_index) {
     else
         cs_push_fstring(C, "cannot %s %s", what, filename);
     cs_remove(C, filename_index);
-    return CS_ERRFILE;
+    return CS_STATUS_EFILE;
 }
 
 
@@ -287,7 +287,7 @@ CSLIB_API int csL_loadfile(cs_State *C, const char *filename) {
     if (filename) /* real file ? */
         fclose(lf.fp); /* close it */
     if (readstatus) { /* error while reading */
-        cs_settop(C, filename_index); /* remove any results */
+        cs_setntop(C, filename_index); /* remove any results */
         return errorfile(C, "read", filename_index);
     }
     cs_remove(C, filename_index);
@@ -326,12 +326,12 @@ CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
 
 
 CSLIB_API int csL_new_metalist(cs_State *C, const char *lname) {
-    if (csL_get_metalist(C, lname) != CS_TNIL) /* name already in use? */
+    if (csL_get_metalist(C, lname) != CS_T_NIL) /* name already in use? */
         return 0; /* false; metalist already exists */
     cs_pop(C, 1); /* remove nil */
     cs_push_metalist(C); /* create metalist */
     cs_push(C, -1); /* push metalist copy */
-    cs_set_rtable(C, lname); /* registrytable.lname = metalist */
+    cs_set_cfieldstr(C, lname); /* ctable.lname = metalist */
     return 1; /* true; created new metalist */
 }
 
@@ -344,12 +344,12 @@ CSLIB_API int csL_set_metalist(cs_State *C, const char *lname) {
 
 CSLIB_API int csL_get_metaindex(cs_State *C, int index, int mm) {
     if (!cs_get_metalist(C, index)) {
-        return CS_TNONE;
+        return CS_T_NONE;
     } else {
         int t = cs_get_index(C, -1, mm);
-        if (t == CS_TNIL) {
+        if (t == CS_T_NIL) {
             cs_pop(C, 2); /* remove metalist and nil */
-            t = CS_TNONE;
+            t = CS_T_NONE;
         } else
             cs_remove(C, -2); /* remove only metalist */
         return t; /* return metalist index value type */
@@ -359,7 +359,7 @@ CSLIB_API int csL_get_metaindex(cs_State *C, int index, int mm) {
 
 CSLIB_API int csL_callmeta(cs_State *C, int index, int mm) {
     index = cs_absindex(C, index);
-    if (csL_get_metaindex(C, index, mm) == CS_TNONE)
+    if (csL_get_metaindex(C, index, mm) == CS_T_NONE)
         return 0;
     cs_push(C, index);
     cs_call(C, 1, 1);
@@ -368,12 +368,12 @@ CSLIB_API int csL_callmeta(cs_State *C, int index, int mm) {
 
 
 CSLIB_API int csL_new_usermethods(cs_State *C, const char *tname, int sz) {
-    if (csL_get_methods(C, tname) != CS_TNIL) /* name already in use? */
+    if (csL_get_methods(C, tname) != CS_T_NIL) /* name already in use? */
         return 0; /* false; methods table already exists */
     cs_pop(C, 1); /* remove nil */
     cs_push_table(C, sz); /* create methods table */
     cs_push(C, -1); /* push table copy */
-    cs_set_rtable(C, tname); /* registrytable.tname = table */
+    cs_set_cfieldstr(C, tname); /* ctable.tname = table */
     return 1; /* true; created new methods table */
 }
 
@@ -478,22 +478,22 @@ CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
             csL_error(C, "'__tostring' must return a string");
     } else {
         switch (cs_type(C, index)) {
-            case CS_TNIL: {
+            case CS_T_NIL: {
                 cs_push_literal(C, "nil");
                 break;
             }
-            case CS_TBOOL: {
+            case CS_T_BOOL: {
                 cs_push_string(C, (cs_to_bool(C, index) ? "true" : "false"));
                 break;
             }
-            case CS_TNUMBER: {
+            case CS_T_NUMBER: {
                 if (cs_is_integer(C, index))
                     cs_push_fstring(C, "%I", cs_to_integer(C, index));
                 else
                     cs_push_fstring(C, "%f", cs_to_number(C, index));
                 break;
             }
-            case CS_TSTRING: {
+            case CS_T_STRING: {
                 cs_push(C, index);
                 break;
             }
@@ -532,7 +532,7 @@ CSLIB_API void csL_where(cs_State *C, int level) {
 
 
 CSLIB_API int csL_get_property(cs_State *C, int index) {
-    if (cs_get_field(C, index) == CS_TNIL) {
+    if (cs_get_field(C, index) == CS_T_NIL) {
         cs_pop(C, 1); /* remove field */
         cs_get_class(C, index);
         cs_get_method(C, index);
@@ -559,7 +559,7 @@ static void *allocator(void *ptr, size_t osz, size_t nsz, void *ud) {
 
 
 static int panic(cs_State *C) {
-    const char *msg = (cs_type(C, -1) == CS_TSTRING
+    const char *msg = (cs_type(C, -1) == CS_T_STRING
                        ? cs_to_string(C, -1)
                        : "error object is not a string");
     cs_writefmt(stderr, "PANIC: unprotected error in call to CScript API: %s\n",
@@ -658,7 +658,7 @@ CSLIB_API cs_State *csL_newstate(void) {
 
 
 CSLIB_API int csL_get_subtable(cs_State *C, int index, const char *field) {
-    if (cs_get_fieldstr(C, index, field) == CS_TTABLE) {
+    if (cs_get_fieldstr(C, index, field) == CS_T_TABLE) {
         return 1; /* true, already have table */
     } else {
         cs_pop(C, 1); /* pop previous result */
@@ -673,7 +673,7 @@ CSLIB_API int csL_get_subtable(cs_State *C, int index, const char *field) {
 
 CSLIB_API void csL_importf(cs_State *C, const char *modname,
                            cs_CFunction openf, int global) {
-    csL_get_rsubtable(C, CS_LOADED_TABLE);
+    csL_get_subtable(C, CS_CTABLE_INDEX, CS_LOADED_TABLE);
     cs_get_fieldstr(C, -1, modname); /* get __LOADED[modname] */
     if (!cs_to_bool(C, -1)) { /* package not already loaded? */
         cs_pop(C, 1); /* remove field */
@@ -802,7 +802,7 @@ CSLIB_API unsigned csL_makeseed(cs_State *C) {
 ** ------------------------------------------------------------------------ */
 
 /* index of free-list header (after the predefined values) */
-#define freelist    (CS_RINDEX_LAST + 1)
+#define freelist    (CS_CLIST_LAST + 1)
 
 CSLIB_API int csL_ref(cs_State *C, int a) {
     int ref;
@@ -811,7 +811,7 @@ CSLIB_API int csL_ref(cs_State *C, int a) {
         return CS_REFNIL;
     }
     a = cs_absindex(C, a);
-    if (cs_get_index(C, a, freelist) == CS_TNIL) { /* first access? */
+    if (cs_get_index(C, a, freelist) == CS_T_NIL) { /* first access? */
         ref = 0; /* list is empty */
         cs_push_integer(C, 0); /* initialize empty list */
         cs_set_index(C, a, freelist); /* ref = a[freelist] = 0 */
@@ -823,8 +823,10 @@ CSLIB_API int csL_ref(cs_State *C, int a) {
     if (ref != 0) { /* any free element? */
         cs_get_index(C, a, ref); /* remove it from list */
         cs_set_index(C, a, freelist); /* (a[freelist] = a[ref]) */
-    } else /* no free elements */
-        ref = (int)cs_find_nilindex(C, a, freelist+1, 0); /* get a new ref */
+    } else { /* no free elements */
+        /* get a new ref */
+        ref = (int)cs_find_index(C, a, CS_FI_NIL, freelist+1, 0);
+    }
     cs_set_index(C, a, ref);
     return ref;
 }
@@ -877,7 +879,7 @@ static void newbox(cs_State *C) {
     UserBox *box = cs_push_userdata(C, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
-    cs_push_list(C, CS_MM_N);
+    cs_push_list(C, CS_MM_NUM);
     cs_push_cfunction(C, boxgc);
     cs_set_index(C, -2, CS_MM_GC);
     cs_push_cfunction(C, boxgc);

@@ -50,14 +50,14 @@ cs_Integer csO_shiftl(cs_Integer x, cs_Integer y) {
 
 static cs_Number numarithm(cs_State *C, cs_Number x, cs_Number y, int op) {
     switch(op) {
-        case CS_OPADD: return c_numadd(C, x, y);
-        case CS_OPSUB: return c_numsub(C, x, y);
-        case CS_OPMUL: return c_nummul(C, x, y);
-        case CS_OPDIV: return c_numdiv(C, x, y);
-        case CS_OPIDIV: return c_numidiv(C, x, y);
-        case CS_OPMOD: return csV_modf(C, x, y);
-        case CS_OPPOW: return c_numpow(C, x, y);
-        case CS_OPUNM: return c_numunm(C, x);
+        case CS_OP_ADD: return c_numadd(C, x, y);
+        case CS_OP_SUB: return c_numsub(C, x, y);
+        case CS_OP_MUL: return c_nummul(C, x, y);
+        case CS_OP_DIV: return c_numdiv(C, x, y);
+        case CS_OP_IDIV: return c_numidiv(C, x, y);
+        case CS_OP_MOD: return csV_modf(C, x, y);
+        case CS_OP_POW: return c_numpow(C, x, y);
+        case CS_OP_UNM: return c_numunm(C, x);
         default: cs_assert(0); return 0.0;
     }
 }
@@ -65,18 +65,18 @@ static cs_Number numarithm(cs_State *C, cs_Number x, cs_Number y, int op) {
 
 static cs_Integer intarithm(cs_State *C, cs_Integer x, cs_Integer y, int op) {
     switch(op) {
-        case CS_OPADD: return c_intop(+, x, y);
-        case CS_OPSUB: return c_intop(-, x, y);
-        case CS_OPMUL: return c_intop(*, x, y);
-        case CS_OPIDIV: return csV_divi(C, x, y);
-        case CS_OPMOD: return csV_modi(C, x, y);
-        case CS_OPUNM: return c_intop(-, 0, x);
-        case CS_OPBSHL: return csO_shiftl(x, y);
-        case CS_OPBSHR: return csO_shiftr(x, y);
-        case CS_OPBNOT: return c_intop(^, ~c_castS2U(0), x);
-        case CS_OPBAND: return c_intop(&, x, y);
-        case CS_OPBOR: return c_intop(|, x, y);
-        case CS_OPBXOR: return c_intop(^, x, y);
+        case CS_OP_ADD: return intop(+, x, y);
+        case CS_OP_SUB: return intop(-, x, y);
+        case CS_OP_MUL: return intop(*, x, y);
+        case CS_OP_IDIV: return csV_divi(C, x, y);
+        case CS_OP_MOD: return csV_modi(C, x, y);
+        case CS_OP_UNM: return intop(-, 0, x);
+        case CS_OP_BSHL: return csO_shiftl(x, y);
+        case CS_OP_BSHR: return csO_shiftr(x, y);
+        case CS_OP_BNOT: return intop(^, ~c_castS2U(0), x);
+        case CS_OP_BAND: return intop(&, x, y);
+        case CS_OP_BOR: return intop(|, x, y);
+        case CS_OP_BXOR: return intop(^, x, y);
         default: cs_assert(0); return 0;
     }
 }
@@ -114,8 +114,8 @@ int csO_tointeger(const TValue *o, cs_Integer *i, int mode) {
 int csO_arithmraw(cs_State *C, const TValue *a, const TValue *b,
                   TValue *res, int op) {
     switch (op) {
-        case CS_OPBNOT: case CS_OPBXOR: case CS_OPBSHL:
-        case CS_OPBSHR: case CS_OPBOR: case CS_OPBAND: { /* for integers */
+        case CS_OP_BNOT: case CS_OP_BXOR: case CS_OP_BSHL:
+        case CS_OP_BSHR: case CS_OP_BOR: case CS_OP_BAND: { /* for integers */
             cs_Integer i1, i2;
             if (tointeger(a, &i1) && tointeger(b, &i2)) {
                 setival(res, intarithm(C, i1, i2, op));
@@ -123,7 +123,7 @@ int csO_arithmraw(cs_State *C, const TValue *a, const TValue *b,
             }
             return 0; /* fail */
         }
-        case CS_OPDIV: case CS_OPPOW: { /* for floats */
+        case CS_OP_DIV: case CS_OP_POW: { /* for floats */
             cs_Number n1, n2;
             if (tonumber(a, n1) && tonumber(b, n2)) {
                 setfval(res, numarithm(C, n1, n2, op));

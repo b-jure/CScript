@@ -21,7 +21,7 @@ CSMOD_API int lib1_export(cs_State *C) {
 
 CSMOD_API int onefunction(cs_State *C) {
     csL_check_version(C);
-    cs_settop(C, 2);
+    cs_setntop(C, 2);
     cs_push(C, 0);
     return 2;
 }

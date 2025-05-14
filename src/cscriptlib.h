@@ -35,6 +35,10 @@ CSMOD_API int csopen_os(cs_State *C);
 #define CS_REGLIBNAME   "reg"
 CSMOD_API int csopen_reg(cs_State *C);
 
+// TODO: add docs
+#define CS_DBLIBNAME    "debug"
+CSMOD_API int csopen_debug(cs_State *C);
+
 
 /* open all previous libraries */
 CSLIB_API void csL_openlibs(cs_State *C);

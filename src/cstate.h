@@ -17,10 +17,11 @@
 /* 
 ** Increment number of nested non-yieldable calls.
 ** The counter is located in the upper 2 bytes of 'nCcalls'.
+** (As of current version, every call is non-yieldable.)
 */
 #define incnnyc(C)      ((C)->nCcalls += 0x10000)
 
-/* Decrement number of nested non-yieldable calls. */
+/* decrement number of nested non-yieldable calls */
 #define decnnyc(C)      ((C)->nCcalls -= 0x10000)
 
 
@@ -47,14 +48,14 @@ typedef struct cs_longjmp cs_longjmp; /* defined in 'cprotected.c' */
 
 /*
 ** Extra stack space that is used mostly when calling metamethods.
-** Helps in avoiding stack checks (branching).
+** Helps reduce stack checks (branching).
 */
-#define EXTRA_STACK	5
+#define EXTRA_STACK     5
 
 
-#define INIT_STACKSIZE		(CS_MINSTACK * 4)
+#define INIT_STACKSIZE      (CS_MINSTACK * 2)
 
-#define stacksize(th)	    cast_int((th)->stackend.p - (th)->stack.p)
+#define stacksize(th)       cast_int((th)->stackend.p - (th)->stack.p)
 
 
 
@@ -62,27 +63,32 @@ typedef struct cs_longjmp cs_longjmp; /* defined in 'cprotected.c' */
 ** CallFrame
 ** ======================================================================= */
 
-/* 'status' bits */
-#define CFST_FRESH          (1<<0) /* fresh execute of Cript functon */
-#define CFST_CCALL          (1<<1) /* call is running C function */
-#define CFST_FIN            (1<<2) /* function "called" a finalizer */
-
-
-/* 'CallFrame' function is CSript closure */
-#define isCScript(cf)       (!((cf)->status & CFST_CCALL))
+/* bits in CallFrame status */
+#define CFST_CCALL      (1<<0) /* call is running a C function */
+#define CFST_FRESH      (1<<1) /* call is on fresh "csV_execute" frame */
+#define CFST_HOOKED     (1<<2) /* call is running a debug hook */
+#define CFST_FIN        (1<<3) /* function "called" a finalizer */
+#define CFST_TRAN       (1<<4) /* 'cf' has transfer information */
 
 
 typedef struct CallFrame {
     SIndex func; /* function stack index */
     SIndex top; /* top for this function */
     struct CallFrame *prev, *next; /* dynamic call link */
-    const Instruction *pc; /* (only for CScript func.) */
-    const Instruction *realpc; /* (only for CScript func.) */
-    volatile c_signal trap; /* (only for CScript func.) */
-    int nvarargs; /* number of optional arguments (only for CScript func.) */
+    struct { /* only for CScript function */
+        const Instruction *pc; /* current pc */
+        const Instruction *pcret; /* after return continue from this pc */
+        volatile c_signal trap; /* hooks/stack realloc */
+        int nvarargs; /* number of optional arguments */
+    } cs;
+    int ftransfer; /* offset of first value transferred */
+    int ntransfer; /* number of values transferred */
     int nresults; /* number of expected results from this function */
-    c_byte status; /* call status (CFST_*) */
+    c_byte status; /* call status */
 } CallFrame;
+
+
+#define isCScript(cf)       (!((cf)->status & CFST_CCALL))
 
 /* }====================================================================== */
 
@@ -96,11 +102,11 @@ typedef struct CallFrame {
 ** Table for interned strings.
 ** Collision resolution is resolved by chain.
 */
-typedef struct stringtable {
+typedef struct StringTable {
     OString **hash;
     int nuse;
     int size;
-} stringtable;
+} StringTable;
 
 
 typedef struct GState {
@@ -109,16 +115,17 @@ typedef struct GState {
     c_smem totalbytes; /* number of bytes allocated - gcgcdebt */
     c_smem gcdebt; /* number of bbytes not yet compensated by collector */
     c_mem gcestimate; /* gcestimate of non-garbage memory in use */
-    stringtable strtab; /* interned strings (weak refs) */
-    TValue c_registry; /* global registry */
-    TValue nil; /* nil value (init flag) */
+    StringTable strtab; /* interned strings (weak refs) */
+    TValue c_list; /* global C list */
+    TValue c_table; /* global C table */
+    TValue nil; /* special nil value (also init flag) */
     uint seed; /* initial seed for hashing */
     c_byte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
     c_byte gcstate; /* GC state bits */
     c_byte gcstopem; /* stops emergency collections */
     c_byte gcstop; /* control wheter GC is running */
     c_byte gcemergency; /* true if this is emergency collection */
-    c_byte gcparams[CS_GCP_N];
+    c_byte gcparams[CS_GCP_NUM];
     c_byte gccheck; /* true if collection was triggered since last check */
     GCObject *objects; /* list of all collectable objects */
     GCObject **sweeppos; /* current position of sweep in list */
@@ -132,7 +139,7 @@ typedef struct GState {
     cs_CFunction fpanic; /* panic handler (runs in unprotected calls) */
     struct cs_State *mainthread; /* thread that also created global state */
     OString *memerror; /* preallocated message for memory errors */
-    OString *mmnames[CS_MM_N]; /* array with metamethod names */
+    OString *mmnames[CS_MM_NUM]; /* array with metamethod names */
     OString *strcache[STRCACHE_N][STRCACHE_M]; /* cache for strings in API */
     cs_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */
@@ -148,10 +155,9 @@ typedef struct GState {
 /* CScript thread state */
 struct cs_State {
     ObjectHeader;
+    c_byte status;
+    c_byte allowhook;
     ushort ncf; /* number of call frames in 'cf' list */
-    int status; /* status code */
-    ptrdiff_t errfunc; /* error handling function (on stack) */
-    c_uint32 nCcalls; /* number of C calls */
     GCObject *gclist;
     struct cs_State *twups; /* next thread with open upvalues */
     GState *gstate; /* shared global state */
@@ -161,29 +167,40 @@ struct cs_State {
     SIndex stackend; /* end of 'stack' + 1 */
     CallFrame basecf; /* base frame, C's entry point to CScript */
     CallFrame *cf; /* active frame */
+    volatile cs_Hook hook;
     UpVal *openupval; /* list of open upvalues */
     SIndex tbclist; /* list of to-be-closed variables */
+    ptrdiff_t errfunc; /* error handling function (on stack) */
+    c_uint32 nCcalls; /* number of C calls */
+    int oldpc; /* last pc traced */
+    int basehookcount;
+    int hookcount;
+    volatile c_signal hookmask;
 };
 
-
-/* thread global state */
-#define G(C)        ((C)->gstate)
 
 /* check if global state is fully built */
 #define statefullybuilt(gs)     ttisnil(&(gs)->nil)
 
 
+/* get thread global state */
+#define G(C)        ((C)->gstate)
+
+
+/* get the clist */
+#define CL(C)       (&G(C)->c_list)
+
+/* get the ctable */
+#define CT(C)       (&G(C)->c_table)
+
+
 /*
-** Get the global table in the registry. Since all predefined
-** indices in the registry were inserted right when the registry
+** Get the global table in the clist. Since all predefined
+** indices in the clist were inserted right when the clist
 ** was created and never removed, they must always be present.
 */
-#define GT(C) \
-	(&listval(&G(C)->c_registry)->b[CS_RINDEX_GLOBALS])
+#define GT(C)       (&listval(CL(C))->b[CS_CLIST_GLOBALS])
 
-/* get the registry table */
-#define RT(C) \
-        (&listval(&G(C)->c_registry)->b[CS_RINDEX_REGTABLE])
 
 
 
@@ -205,7 +222,6 @@ typedef struct XSG {
 #define fromstate(C)    cast(XS *, cast(c_byte *, (C)) - offsetof(XS, c))
 
 /* }====================================================================== */
-
 
 
 /* union for conversions (casting) */

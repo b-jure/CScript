@@ -11,21 +11,21 @@ local t = {
 assert(x and t);
 assert(typeof(t) == "table");
 
-local k, v = next(t);
+local k, v = nextfield(t);
 assert(k and v);
-k, v = next(t, k);
+k, v = nextfield(t, k);
 assert(k and v);
-k, v = next(t, k);
+k, v = nextfield(t, k);
 assert(k and v);
-k, v = next(t, k);
+k, v = nextfield(t, k);
 assert(k and v);
-k, v = next(t, k);
+k, v = nextfield(t, k);
 assert(k and v);
-k, v = next(t, k);
+k, v = nextfield(t, k);
 assert(k and v);
-k, v = next(t, k);
+k, v = nextfield(t, k);
 assert(k and v);
-k, v = next(t, k);
+k, v = nextfield(t, k);
 assert(!k and !v);
 
 local class X {
@@ -39,11 +39,11 @@ local class X {
 local ins = X(69, 420, 1337);
 assert(typeof(ins) == "instance");
 assert(ins.x == 69 and ins.y == 420 and ins.z == 1337);
-k, v = next(ins);
+k, v = nextfield(ins);
 assert(k and v);
-k, v = next(ins, k);
+k, v = nextfield(ins, k);
 assert(k and v);
-k, v = next(ins, k);
+k, v = nextfield(ins, k);
 assert(k and v);
-k, v = next(ins, k);
+k, v = nextfield(ins, k);
 assert(!k and !v);

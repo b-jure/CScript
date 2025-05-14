@@ -80,20 +80,20 @@ typedef struct cs_longjmp {
 
 void csPR_seterrorobj(cs_State *C, int errcode, SPtr oldtop) {
     switch (errcode) {
-        case CS_ERRMEM: { /* memory error? */
+        case CS_STATUS_EMEM: { /* memory error? */
             setstrval2s(C, oldtop, G(C)->memerror);
             break;
         }
-        case CS_ERRERROR: { /* error while handling error? */
+        case CS_STATUS_EERROR: { /* error while handling error? */
             setstrval2s(C, oldtop, csS_newlit(C, "error in error handling"));
             break;
         }
-        case CS_OK: { /* closing upvalue? */
+        case CS_STATUS_OK: { /* closing upvalue? */
             setnilval(s2v(oldtop)); /* no error message */
             break;
         }
         default: {
-            cs_assert(errcode > CS_OK); /* real error */
+            cs_assert(errcode > CS_STATUS_OK); /* real error */
             setobjs2s(C, oldtop, C->sp.p - 1); /* error msg on current top */
             break;
         }
@@ -132,7 +132,7 @@ c_noret csPR_throw(cs_State *C, int errcode) {
 int csPR_rawcall(cs_State *C, ProtectedFn fn, void *ud) {
     c_uint32 old_nCcalls = C->nCcalls;
     cs_longjmp lj;
-    lj.status = CS_OK;
+    lj.status = CS_STATUS_OK;
     lj.prev = C->errjmp;
     C->errjmp = &lj;
     CSI_TRY(C, &lj, 
@@ -146,15 +146,17 @@ int csPR_rawcall(cs_State *C, ProtectedFn fn, void *ud) {
 /* }====================================================== */
 
 
-int csPR_call(cs_State *C, ProtectedFn fn, void *ud, ptrdiff_t old_top,
-              ptrdiff_t errfunc) {
+int csPR_call(cs_State *C, ProtectedFn fn, void *ud,
+              ptrdiff_t old_top, ptrdiff_t ef) {
     int status;
     CallFrame *old_cf = C->cf;
+    c_byte old_allowhook = C->allowhook;
     ptrdiff_t old_errfunc = C->errfunc;
-    C->errfunc = errfunc;
+    C->errfunc = ef;
     status = csPR_rawcall(C, fn, ud);
-    if (c_unlikely(status != CS_OK)) {
+    if (c_unlikely(status != CS_STATUS_OK)) {
         C->cf = old_cf;
+        C->allowhook = old_allowhook;
         status = csPR_close(C, old_top, status);
         csPR_seterrorobj(C, status, restorestack(C, old_top));
         csT_shrinkstack(C); /* restore stack (overflow might of happened) */
@@ -172,7 +174,7 @@ struct PCloseData {
 
 
 /* auxiliary function to call 'csF_close' in protected mode */
-static void closepaux(cs_State *C, void *ud) {
+static void pclose(cs_State *C, void *ud) {
     struct PCloseData *pcd = (struct PCloseData*)ud;
     csF_close(C, pcd->level, pcd->status);
 }
@@ -181,15 +183,16 @@ static void closepaux(cs_State *C, void *ud) {
 /* call 'csF_close' in protected mode */
 int csPR_close(cs_State *C, ptrdiff_t level, int status) {
     CallFrame *old_cf = C->cf;
+    c_byte old_allowhook = C->allowhook;
     for (;;) { /* keep closing upvalues until no more errors */
-        struct PCloseData pcd;
-        pcd.level = restorestack(C, level);
-        pcd.status = status;
-        status = csPR_rawcall(C, closepaux, &pcd);
-        if (c_likely(status == CS_OK))
+        struct PCloseData pcd = { restorestack(C, level), status };
+        status = csPR_rawcall(C, pclose, &pcd);
+        if (c_likely(status == CS_STATUS_OK))
             return pcd.status;
-        else /* error occurred; restore saved state and repeat */
+        else { /* error occurred; restore saved state and repeat */
             C->cf = old_cf;
+            C->allowhook = old_allowhook;
+        }
     }
 }
 
@@ -204,7 +207,7 @@ struct PParseData {
 
 
 /* auxiliary function to call 'csP_pparse' in protected mode */
-static void parsepaux(cs_State *C, void *userdata) {
+static void pparse(cs_State *C, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);
     CSClosure *cl = csP_parse(C, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
     cs_assert(cl->nupvalues == cl->p->sizeupvalues);
@@ -214,16 +217,10 @@ static void parsepaux(cs_State *C, void *userdata) {
 
 /* call 'csP_parse' in protected mode */
 int csPR_parse(cs_State *C, BuffReader *br, const char *name) {
-    struct PParseData pd;
     int status;
+    struct PParseData pd = { .br = br, .source = name };
     incnnyc(C);
-    pd.br = br;
-    csR_buffinit(&pd.buff);
-    pd.ps.actlocals.len = pd.ps.actlocals.size = 0; pd.ps.actlocals.arr = NULL;
-    pd.ps.literals.len = pd.ps.literals.size = 0; pd.ps.literals.arr = NULL;
-    pd.ps.gt.len = pd.ps.gt.size = 0; pd.ps.gt.arr = NULL;
-    pd.source = name;
-    status = csPR_call(C, parsepaux, &pd, savestack(C, C->sp.p), C->errfunc);
+    status = csPR_call(C, pparse, &pd, savestack(C, C->sp.p), C->errfunc);
     csR_freebuffer(C, &pd.buff);
     csM_freearray(C, pd.ps.actlocals.arr, pd.ps.actlocals.size);
     csM_freearray(C, pd.ps.literals.arr, pd.ps.literals.size);

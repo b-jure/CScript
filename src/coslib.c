@@ -320,7 +320,7 @@ static void set_all_fields(cs_State *C, struct tm *stm) {
 
 
 static int get_bool_field(cs_State *C, const char *key) {
-    int res = (cs_get_fieldstr(C, -1, key) == CS_TNIL)
+    int res = (cs_get_fieldstr(C, -1, key) == CS_T_NIL)
             ? -1
             : cs_to_bool(C, -1);
     cs_pop(C, 1);
@@ -333,7 +333,7 @@ static int get_field(cs_State *C, const char *key, int dfl, int delta) {
     int t = cs_get_fieldstr(C, -1, key); /* get field and its type */
     cs_Integer res = cs_to_integerx(C, -1, &isnum);
     if (!isnum) { /* field is not an integer? */
-        if (c_unlikely(t != CS_TNIL)) /* some other value? */
+        if (c_unlikely(t != CS_T_NIL)) /* some other value? */
             return csL_error(C, "field '%s' is not an integer", key);
         else if (c_unlikely(dfl < 0)) /* absent field; no default? */
             return csL_error(C, "field '%s' missing in date table", key);
@@ -425,8 +425,8 @@ static int os_time(cs_State *C) {
         t = time(NULL); /* get current time */
     else {
         struct tm ts;
-        csL_check_type(C, 0, CS_TTABLE);
-        cs_settop(C, 1); /* make sure table is at the top */
+        csL_check_type(C, 0, CS_T_TABLE);
+        cs_setntop(C, 1); /* make sure table is at the top */
         ts.tm_year = get_field(C, "year", -1, 1900);
         ts.tm_mon = get_field(C, "month", -1, 1);
         ts.tm_mday = get_field(C, "day", -1, 0);

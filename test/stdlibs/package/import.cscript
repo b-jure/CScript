@@ -51,14 +51,13 @@ assert(typeof(package.config) == "string");
 
     local st, msg = pcall(import, "XXX");
 
-    local expected = """
+    local expected = [=[
 module 'XXX' not found:
         no field package.preload['XXX']
         no file 'XXX.cscript'
         no file 'XXX/XXX'
         no file 'XXX.so'
-        no file 'XXX/init'
-""";
+        no file 'XXX/init']=];
 
     assert(msg == expected);
 
@@ -117,11 +116,10 @@ if (__POSIX or __WINDOWS) {
     };
 
     AA = nil;
-    local extras = """
+    local extras = [=[
 NAME = "%s";
 REQUIRED = ...;
-return AA;
-""";
+return AA;]=];
 
     createfiles(files, "", extras);
 

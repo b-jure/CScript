@@ -31,16 +31,17 @@ void csR_init(cs_State *C, BuffReader *br, cs_Reader freader, void *ud) {
 ** to 0 or return NULL.
 */
 int csR_fill(BuffReader *br) {
-    cs_State *C = br->C;
     size_t size;
+    cs_State *C = br->C;
+    const char *buff;
     cs_unlock(C);
-    const char *buff = br->reader(C, br->userdata, &size);
+    buff = br->reader(C, br->userdata, &size);
     cs_lock(C);
     if (buff == NULL || size == 0)
         return CSEOF;
+    br->n = size - 1; /* discount char being returned */
     br->buff = buff;
-    br->n = size - 1;
-    return *br->buff++;
+    return cast_uchar(*(br->buff++));
 }
 
 

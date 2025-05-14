@@ -16,13 +16,13 @@
  * Additional types that are used only internally
  * or as markers.
  */
-#define CS_TUPVALUE     CS_NUM_TYPES        /* upvalue */
-#define CS_TPROTO       (CS_NUM_TYPES + 1)  /* function prototype */
-#define CS_TDEADKEY     (CS_NUM_TYPES + 2)  /* mark for dead table keys */
+#define CS_TUPVALUE     CS_T_NUM        /* upvalue */
+#define CS_TPROTO       (CS_T_NUM + 1)  /* function prototype */
+#define CS_TDEADKEY     (CS_T_NUM + 2)  /* mark for dead table keys */
 
 
 /* 
-** Number of all types ('CS_T*') (including 'CS_TNONE' but excluding DEADKEY).
+** Number of all types ('CS_T*') (including 'CS_T_NONE' but excluding DEADKEY).
 */
 #define CSI_TOTALTYPES      (CS_TPROTO + 2)
 
@@ -190,10 +190,10 @@ typedef struct GCObject {
 ** Boolean {
 ** ------------------------------------------------------------------------ */
 
-#define CS_VFALSE           makevariant(CS_TBOOL, 0) /* false bool */
-#define CS_VTRUE            makevariant(CS_TBOOL, 1) /* true bool */
+#define CS_VFALSE           makevariant(CS_T_BOOL, 0) /* false bool */
+#define CS_VTRUE            makevariant(CS_T_BOOL, 1) /* true bool */
 
-#define ttisbool(o)         checktype(o, CS_TBOOL)
+#define ttisbool(o)         checktype(o, CS_T_BOOL)
 #define ttistrue(o)         checktag(o, CS_VTRUE)
 #define ttisfalse(o)        checktag(o, CS_VFALSE)
 
@@ -210,10 +210,10 @@ typedef struct GCObject {
 ** Numbers {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VNUMFLT      makevariant(CS_TNUMBER, 0) /* float numbers */
-#define CS_VNUMINT      makevariant(CS_TNUMBER, 1) /* integer numbers */
+#define CS_VNUMFLT      makevariant(CS_T_NUMBER, 0) /* float numbers */
+#define CS_VNUMINT      makevariant(CS_T_NUMBER, 1) /* integer numbers */
 
-#define ttisnum(o)      checktype(o, CS_TNUMBER)
+#define ttisnum(o)      checktype(o, CS_T_NUMBER)
 #define ttisflt(o)      checktag(o, CS_VNUMFLT)
 #define ttisint(o)      checktag(o, CS_VNUMINT)
 
@@ -242,7 +242,7 @@ typedef struct GCObject {
 ** List {
 ** ------------------------------------------------------------------------ */
 
-#define CS_VLIST        makevariant(CS_TLIST, 0)
+#define CS_VLIST        makevariant(CS_T_LIST, 0)
 
 #define ttislist(o)     checktag((o), ctb(CS_VLIST))
 
@@ -272,18 +272,18 @@ typedef struct List {
 ** ----------------------------------------------------------------------- */
 
 /* standard nil */
-#define CS_VNIL         makevariant(CS_TNIL, 0)
+#define CS_VNIL         makevariant(CS_T_NIL, 0)
 
 /* empty hashtable slot */
-#define CS_VEMPTY       makevariant(CS_TNIL, 1)
+#define CS_VEMPTY       makevariant(CS_T_NIL, 1)
 
 /* value returned for a key not found in a hashtable (absent key) */
-#define CS_VABSTKEY     makevariant(CS_TNIL, 2)
+#define CS_VABSTKEY     makevariant(CS_T_NIL, 2)
 
 #define setnilval(o)        settt(o, CS_VNIL)
 #define setemptyval(o)      settt(o, CS_VEMPTY)
 
-#define ttisnil(o)      checktype((o), CS_TNIL)
+#define ttisnil(o)      checktype((o), CS_T_NIL)
 #define isempty(o)      ttisnil(o)
 
 #define isabstkey(v)    checktag((v), CS_VABSTKEY)
@@ -298,7 +298,7 @@ typedef struct List {
 ** Thread (cs_State) {
 ** ------------------------------------------------------------------------- */
 
-#define CS_VTHREAD      makevariant(CS_TTHREAD, 0)
+#define CS_VTHREAD      makevariant(CS_T_THREAD, 0)
 
 #define ttisthread(o)   checktag(o, ctb(CS_VTHREAD))
 
@@ -319,7 +319,7 @@ typedef struct List {
 ** Hash Table {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VTABLE           makevariant(CS_TTABLE, 0)
+#define CS_VTABLE           makevariant(CS_T_TABLE, 0)
 
 #define ttistable(o)        checktag((o), ctb(CS_VTABLE))
 
@@ -384,11 +384,11 @@ typedef struct Table {
 #define keystrval(n)            (gco2str(keyval(n).gc))
 
 #define keyiscollectable(n)     (keytt(n) & BIT_COLLECTABLE)
-#define keyisnil(n)	        (keytt(n) == CS_TNIL)
+#define keyisnil(n)	        (keytt(n) == CS_T_NIL)
 #define keyisshrstr(n)          (keytt(n) == ctb(CS_VSHRSTR))
 #define keyisint(n)             (keytt(n) == CS_VNUMINT)
 
-#define setnilkey(n)            (keytt(n) = CS_TNIL)
+#define setnilkey(n)            (keytt(n) = CS_T_NIL)
 
 #define setdeadkey(node)    (keytt(node) = CS_TDEADKEY)
 #define keyisdead(n)	    (keytt(n) == CS_TDEADKEY)
@@ -401,10 +401,10 @@ typedef struct Table {
 ** Strings {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VSHRSTR      makevariant(CS_TSTRING, 0) /* short string */
-#define CS_VLNGSTR      makevariant(CS_TSTRING, 1) /* long string */
+#define CS_VSHRSTR      makevariant(CS_T_STRING, 0) /* short string */
+#define CS_VLNGSTR      makevariant(CS_T_STRING, 1) /* long string */
 
-#define ttisstring(o)       checktype((o), CS_TSTRING)
+#define ttisstring(o)       checktype((o), CS_T_STRING)
 #define ttisshrstring(o)    checktag((o), ctb(CS_VSHRSTR))
 #define ttislngstring(o)    checktag((o), ctb(CS_VLNGSTR))
 
@@ -452,7 +452,7 @@ typedef struct OString {
 ** Class {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VCLASS       makevariant(CS_TCLASS, 0)
+#define CS_VCLASS       makevariant(CS_T_CLASS, 0)
 
 #define ttisclass(o)    checktag(o, ctb(CS_VCLASS))
 
@@ -559,7 +559,7 @@ typedef struct Proto {
 **  Instance {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VINSTANCE        makevariant(CS_TINSTANCE, 0)
+#define CS_VINSTANCE        makevariant(CS_T_INSTANCE, 0)
 
 #define ttisinstance(o)     checktag(o, ctb(CS_VINSTANCE))
 
@@ -588,13 +588,13 @@ typedef struct Instance {
 
 #define CS_VUPVALUE     makevariant(CS_TUPVALUE, 0)
 
-#define CS_VCSCL        makevariant(CS_TFUNCTION, 0) /* CScript closure */
-#define CS_VLCF         makevariant(CS_TFUNCTION, 1) /* light C function */
-#define CS_VCCL         makevariant(CS_TFUNCTION, 2) /* C closure */
-#define CS_VIMETHOD     makevariant(CS_TFUNCTION, 3) /* instance method */
-#define CS_VUMETHOD     makevariant(CS_TFUNCTION, 4) /* userdata method */
+#define CS_VCSCL        makevariant(CS_T_FUNCTION, 0) /* CScript closure */
+#define CS_VLCF         makevariant(CS_T_FUNCTION, 1) /* light C function */
+#define CS_VCCL         makevariant(CS_T_FUNCTION, 2) /* C closure */
+#define CS_VIMETHOD     makevariant(CS_T_FUNCTION, 3) /* instance method */
+#define CS_VUMETHOD     makevariant(CS_T_FUNCTION, 4) /* userdata method */
 
-#define ttisfunction(o)         checktype(o, CS_TFUNCTION)
+#define ttisfunction(o)         checktype(o, CS_T_FUNCTION)
 #define ttisCSclosure(o)        checktag(o, ctb(CS_VCSCL))
 #define ttislcf(o)              checktag(o, CS_VLCF)
 #define ttisCclosure(o)         checktag(o, ctb(CS_VCCL))
@@ -710,8 +710,8 @@ typedef union Closure {
 ** Userdata {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VLIGHTUSERDATA   makevariant(CS_TUSERDATA, 0)
-#define CS_VUSERDATA        makevariant(CS_TUSERDATA, 1)
+#define CS_VLIGHTUSERDATA   makevariant(CS_T_USERDATA, 0)
+#define CS_VUSERDATA        makevariant(CS_T_USERDATA, 1)
 
 #define ttislightuserdata(o)    checktag(o, CS_VLIGHTUSERDATA)
 #define ttisfulluserdata(o)     checktag(o, ctb(CS_VUSERDATA))
@@ -736,7 +736,7 @@ typedef union Closure {
 */
 typedef union UValue {
     TValue val;
-    CSI_MAXALIGN; /* ensures maximum alignment for udata bytes */
+    CSI_MAXALIGN; /* ensures maximum alignment for binary data */
 } UValue;
 
 
@@ -766,14 +766,14 @@ typedef struct EmptyUserData {
     size_t size;
     List *metalist;
     Table *methods;
-    union {CSI_MAXALIGN;} usermem;
+    union {CSI_MAXALIGN;} bin;
     /* 'UserData' memory starts here */
 } EmptyUserData;
 
 
 /* offset in 'UserData' where user memory begins */
 #define udmemoffset(nuv) \
-        ((nuv) == 0 ? offsetof(EmptyUserData, usermem) \
+        ((nuv) == 0 ? offsetof(EmptyUserData, bin) \
                     : offsetof(UserData, uv) + ((nuv)*sizeof(UValue)))
 
 /* get the address of the memory block inside 'UserData' */
@@ -797,6 +797,9 @@ typedef enum N2IMode {
 } N2IMode;
 
 
+#define intop(op,x,y)   c_castU2S(c_castS2U(x) op c_castS2U(y))
+
+
 /* convert value to 'cs_Integer' */
 #define tointeger(v,i) \
         (c_likely(ttisint(v)) ? (*(i) = ival(v), 1) \
@@ -810,7 +813,7 @@ typedef enum N2IMode {
 
 
 /* same as left shift but indicate right by making 'y' negative */
-#define csO_shiftr(x,y)     csO_shiftl(x, -(y))
+#define csO_shiftr(x,y)     csO_shiftl(x, intop(-, 0, y))
 
 
 /* fast 'module' operation for hashing (sz is always power of 2) */

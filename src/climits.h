@@ -128,8 +128,9 @@ typedef unsigned long   ulong;
 typedef c_byte Instruction;
 
 
+
 #if !defined(MAXLISTINDEX)
-#define MAXLISTINDEX        MAXINT
+#define MAXLISTINDEX        (MAXINT - 1)
 #endif
 
 
@@ -181,13 +182,13 @@ typedef c_byte Instruction;
 
 
 /*
-** Maximum call depth for nested C calls including the
-** parser limit for syntactically nested non-terminals and
-** other features implemented through recursion in C.
-** Any value will suffice as long as it fits in 'unsigned short'.
+** Maximum depth for nested C calls, syntactical nested non-terminals,
+** and other features implemented through recursion in C. (Value must
+** fit in a 16-bit unsigned integer. It must also be compatible with
+** the size of the C stack.)
 */
 #if !defined(CSI_MAXCCALLS)
-#define CSI_MAXCCALLS       4096
+#define CSI_MAXCCALLS       200
 #endif
 
 
@@ -205,7 +206,7 @@ typedef c_byte Instruction;
 
 /*
 ** These macros allow user-defined action to be taken each time
-** thread is created/deleted.
+** thread is created/deleted and/or state is opened/closed.
 */
 #if !defined(csi_userstateopen)
 #define csi_userstateopen(C)            ((void)(C))
@@ -215,12 +216,12 @@ typedef c_byte Instruction;
 #define csi_userstateclose(C)           ((void)(C))
 #endif
 
-#if !defined(csi_userstate)
-#define csi_userstate(C,thread)         ((void)(C))
+#if !defined(csi_userstatethread)
+#define csi_userstatethread(C,C1)       ((void)(C))
 #endif
 
 #if !defined(csi_userstatefree)
-#define csi_userstatefree(C,thread)     ((void)(C))
+#define csi_userstatefree(C,C1)         ((void)(C))
 #endif
 
 
@@ -259,9 +260,6 @@ typedef c_byte Instruction;
 
 /* cast 'cs_Unsigned' to 'cs_Integer' */
 #define c_castU2S(i)        ((cs_Integer)(i))
-
-
-#define c_intop(op,x,y)     c_castU2S(c_castS2U(x) op c_castS2U(y))
 
 
 /* literal length */

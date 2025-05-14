@@ -2114,7 +2114,7 @@
         <br/><br/>
         For functions that can be called with acceptable indices, any
         non-valid index is treated as if it contains a value of a virtual
-        type <a name="CS_TNONE"><code>CS_TNONE</code></a>, which behaves
+        type <a name="CS_T_NONE"><code>CS_T_NONE</code></a>, which behaves
         like a nil value.
         </p>
 
@@ -2169,7 +2169,7 @@
         These pseudo-indices are produced by the macro
         <a href="#cs_upvalueindex"><code>cs_upvalueindex</code></a>.
         The first upvalue associated with a function is at index
-        <code>cs_upvalueindex(1)</code>, and so on.
+        <code>cs_upvalueindex(0)</code>, and so on.
         Any access to <code>cs_upvalueindex(<em>n</em>)</code>,
         where <em>n</em> is greater than the number of upvalues of the
         current function, produces an acceptable but invalid index.
@@ -2200,7 +2200,7 @@
         The following constants are defined:
         <ul>
             <li>
-                <b><a name="CS_RINDEX_MAINTHREAD"><code>CS_RINDEX_MAINTHREAD</code></a>:</b>
+                <b><a name="CS_CLIST_MAINTHREAD"><code>CS_CLIST_MAINTHREAD</code></a>:</b>
                 At this index the registry has the main thread of the state.
                 (The main thread is the one created together with the state.)
             </li>
@@ -2284,27 +2284,27 @@
         status codes to indicate different kinds of errors or other conditions:
         <ul>
             <li>
-                <b><a name="CS_OK"><code>CS_OK</code></a> (0):</b>
+                <b><a name="CS_STATUS_OK"><code>CS_STATUS_OK</code></a> (0):</b>
                 no errors.
             </li>
             <li>
-                <b><a name="CS_ERRRUN"><code>CS_ERRRUNTIME</code></a>:</b>
+                <b><a name="CS_ERRRUN"><code>CS_STATUS_ERUNTIME</code></a>:</b>
                 a runtime error.
             </li>
             <li>
-                <b><a name="CS_ERRMEM"><code>CS_ERRMEM</code></a>: </b>
+                <b><a name="CS_STATUS_EMEM"><code>CS_STATUS_EMEM</code></a>: </b>
                 memory allocation error.
                 For such errors, CScript does not call the message handler.
             </li>
             <li>
-                <b><a name="CS_ERRERR"><code>CS_ERRERROR</code></a>: </b>
+                <b><a name="CS_ERRERR"><code>CS_STATUS_EERROR</code></a>: </b>
                 error while running the message handler.
             </li>
             <li>
-                <b><a name="CS_ERRSYNTAX"><code>CS_ERRSYNTAX</code></a>:</b>
+                <b><a name="CS_STATUS_ESYNTAX"><code>CS_STATUS_ESYNTAX</code></a>:</b>
                 syntax error during precompilation.</li>
             <li>
-                <b><a name="CS_ERRFILE"><code>CS_ERRFILE</code></a>:</b>
+                <b><a name="CS_STATUS_EFILE"><code>CS_STATUS_EFILE</code></a>:</b>
                 a file-related error;
                 e.g., it cannot open or read the file.
             </li>
@@ -2451,14 +2451,14 @@
         When <code>ptr</code> is <code>NULL</code>, <code>osz</code> encodes
         the kind of object that CScript is allocating.
         <code>osz</code> is any of
-        <a href="#CS_TUSERDATA"><code>CS_TUSERDATA</code></a>,
-        <a href="#CS_TSTRING"><code>CS_TSTRING</code></a>,
-        <a href="#CS_TLIST"><code>CS_TLIST</code></a>,
-        <a href="#CS_TTABLE"><code>CS_TTABLE</code></a>,
-        <a href="#CS_TFUNCTION"><code>CS_TFUNCTION</code></a>,
-        <a href="#CS_TCLASS"><code>CS_TCLASS</code></a>,
-        <a href="#CS_TINSTANCE"><code>CS_TINSTANCE</code></a>, or
-        <a href="#CS_TTHREAD"><code>CS_TTHREAD</code></a> when
+        <a href="#CS_T_USERDATA"><code>CS_T_USERDATA</code></a>,
+        <a href="#CS_T_STRING"><code>CS_T_STRING</code></a>,
+        <a href="#CS_T_LIST"><code>CS_T_LIST</code></a>,
+        <a href="#CS_T_TABLE"><code>CS_T_TABLE</code></a>,
+        <a href="#CS_T_FUNCTION"><code>CS_T_FUNCTION</code></a>,
+        <a href="#CS_T_CLASS"><code>CS_T_CLASS</code></a>,
+        <a href="#CS_T_INSTANCE"><code>CS_T_INSTANCE</code></a>, or
+        <a href="#CS_T_THREAD"><code>CS_T_THREAD</code></a> when
         (and only when) CScript is creating a new object of that type.
         When <code>osz</code> is some other value, CScript is allocating
         memory for something else.
@@ -2674,12 +2674,12 @@ typedef enum cs_MM {
     CS_MM_EQ,
     CS_MM_LT,
     CS_MM_LE,
-    CS_MM_N,
+    CS_MM_NUM,
 } cs_MM;</pre>
         These values are indices for the metalist.
         <br/>
         Total number of metamethods defined by CScript without any libraries,
-        is denoted by <a name="CS_MM_N"><code>CS_MM_N</code></a>.
+        is denoted by <a name="CS_MM_NUM"><code>CS_MM_NUM</code></a>.
         <br/><br/>
         For more information on metalists and metamethods see
         <a href="#2.4">&sect;2.4</a>.
@@ -2740,7 +2740,7 @@ typedef enum cs_MM {
         <p>
         Resets a thread, cleaning its call stack and closing all pending
         to-be-closed variables.
-        Returns a status code: <a href="#CS_OK"><code>CS_OK</code></a>
+        Returns a status code: <a href="#CS_STATUS_OK"><code>CS_STATUS_OK</code></a>
         for no errors in the thread (either the original error that stopped
         the thread or errors in closing methods), or an error status otherwise.
         In case of error, leaves the error object on the top of the stack.
@@ -2763,10 +2763,10 @@ typedef enum cs_MM {
         Returns the version number of this core.
         </p>
 
-        <!-- cs_settop -->
-        <hr><h3><a name="cs_settop"><code>cs_settop</code></a></h3>
+        <!-- cs_setntop -->
+        <hr><h3><a name="cs_setntop"><code>cs_setntop</code></a></h3>
         <span class="apii">[-?, +?, <em>e</em>]</span>
-        <pre>void cs_settop (cs_State *C, int n);</pre>
+        <pre>void cs_setntop (cs_State *C, int n);</pre>
         <p>
         Sets the stack top to hold <code>n</code> values on the stack.
         If the new top is greater than the old one, then the new elements are
@@ -2908,22 +2908,22 @@ typedef enum cs_MM {
         <pre>int cs_type (cs_State *C, int index);</pre>
         <p>
         Returns the type of the value in the given valid index,
-        or <a href="#CS_TNONE"><code>CS_TNONE</code></a> for a non-valid but
+        or <a href="#CS_T_NONE"><code>CS_T_NONE</code></a> for a non-valid but
         acceptable index.
         The types returned by <a href="#cs_type"><code>cs_type</code></a>
         are coded by the following constants defined in <code>cscript.h</code>:
-        <a name="CS_TNIL"><code>CS_TNIL</code></a>,
-        <a name="CS_TBOOL"><code>CS_TBOOL</code></a>,
-        <a name="CS_TNUMBER"><code>CS_TNUMBER</code></a>,
-        <a name="CS_TUSERDATA"><code>CS_TUSERDATA</code></a>,
-        <a name="CS_TLIGHTUSERDATA"><code>CS_TLIGHTUSERDATA</code></a>,
-        <a name="CS_TSTRING"><code>CS_TSTRING</code></a>,
-        <a name="CS_TLIST"><code>CS_TLIST</code></a>,
-        <a name="CS_TTABLE"><code>CS_TTABLE</code></a>,
-        <a name="CS_TFUNCTION"><code>CS_TFUNCTION</code></a>,
-        <a name="CS_TCLASS"><code>CS_TCLASS</code></a>,
-        <a name="CS_TINSTANCE"><code>CS_TINSTANCE</code></a>
-        and <a name="CS_TTHREAD"><code>CS_TTHREAD</code></a>.
+        <a name="CS_T_NIL"><code>CS_T_NIL</code></a>,
+        <a name="CS_T_BOOL"><code>CS_T_BOOL</code></a>,
+        <a name="CS_T_NUMBER"><code>CS_T_NUMBER</code></a>,
+        <a name="CS_T_USERDATA"><code>CS_T_USERDATA</code></a>,
+        <a name="CS_T_LIGHTUSERDATA"><code>CS_T_LIGHTUSERDATA</code></a>,
+        <a name="CS_T_STRING"><code>CS_T_STRING</code></a>,
+        <a name="CS_T_LIST"><code>CS_T_LIST</code></a>,
+        <a name="CS_T_TABLE"><code>CS_T_TABLE</code></a>,
+        <a name="CS_T_FUNCTION"><code>CS_T_FUNCTION</code></a>,
+        <a name="CS_T_CLASS"><code>CS_T_CLASS</code></a>,
+        <a name="CS_T_INSTANCE"><code>CS_T_INSTANCE</code></a>
+        and <a name="CS_T_THREAD"><code>CS_T_THREAD</code></a>.
         </p>
 
         <!-- cs_typename -->
@@ -3067,59 +3067,59 @@ typedef enum cs_MM {
         The value of <code>op</code> must be one of the following constants:
         <ul>
             <li>
-                <b><a name="CS_OPADD"><code>CS_OPADD</code></a>: </b>
+                <b><a name="CS_OP_ADD"><code>CS_OP_ADD</code></a>: </b>
                 performs addition (<code>+</code>)
             </li>
             <li>
-                <b><a name="CS_OPSUB"><code>CS_OPSUB</code></a>: </b>
+                <b><a name="CS_OP_SUB"><code>CS_OP_SUB</code></a>: </b>
                 performs subtraction (<code>-</code>)
             </li>
             <li>
-                <b><a name="CS_OPMUL"><code>CS_OPMUL</code></a>: </b>
+                <b><a name="CS_OP_MUL"><code>CS_OP_MUL</code></a>: </b>
                 performs multiplication (<code>*</code>)
             </li>
             <li>
-                <b><a name="CS_OPDIV"><code>CS_OPDIV</code></a>: </b>
+                <b><a name="CS_OP_DIV"><code>CS_OP_DIV</code></a>: </b>
                 performs float division (<code>/</code>)
             </li>
             <li>
-                <b><a name="CS_OPIDIV"><code>CS_OPIDIV</code></a>: </b>
+                <b><a name="CS_OP_IDIV"><code>CS_OP_IDIV</code></a>: </b>
                 performs integer division (<code>//</code>)
             </li>
             <li>
-                <b><a name="CS_OPMOD"><code>CS_OPMOD</code></a>: </b>
+                <b><a name="CS_OP_MOD"><code>CS_OP_MOD</code></a>: </b>
                 performs modulo (<code>%</code>)
             </li>
             <li>
-                <b><a name="CS_OPPOW"><code>CS_OPPOW</code></a>: </b>
+                <b><a name="CS_OP_POW"><code>CS_OP_POW</code></a>: </b>
                 performs exponentiation (<code>^</code>)
             </li>
             <li>
-                <b><a name="CS_OPSHL"><code>CS_OPSHL</code></a>: </b>
+                <b><a name="CS_OP_SHL"><code>CS_OP_SHL</code></a>: </b>
                 performs left shift (<code>&lt;&lt;</code>)
             </li>
             <li>
-                <b><a name="CS_OPSHR"><code>CS_OPSHR</code></a>: </b>
+                <b><a name="CS_OP_SHR"><code>CS_OP_SHR</code></a>: </b>
                 performs right shift (<code>&gt;&gt;</code>)
             </li>
             <li>
-                <b><a name="CS_OPBAND"><code>CS_OPBAND</code></a>: </b>
+                <b><a name="CS_OP_BAND"><code>CS_OP_BAND</code></a>: </b>
                 performs bitwise AND (<code>&amp;</code>)
             </li>
             <li>
-                <b><a name="CS_OPBOR"><code>CS_OPBOR</code></a>: </b>
+                <b><a name="CS_OP_BOR"><code>CS_OP_BOR</code></a>: </b>
                 performs bitwise OR (<code>|</code>)
             </li>
             <li>
-                <b><a name="CS_OPBXOR"><code>CS_OPBXOR</code></a>: </b>
+                <b><a name="CS_OP_BXOR"><code>CS_OP_BXOR</code></a>: </b>
                 performs bitwise exclusive OR (<code>~</code>)
             </li>
             <li>
-                <b><a name="CS_OPUNM"><code>CS_OPUNM</code></a>: </b>
+                <b><a name="CS_OP_UNM"><code>CS_OP_UNM</code></a>: </b>
                 performs mathematical negation (unary <code>-</code>)
             </li>
             <li>
-                <b><a name="CS_OPBNOT"><code>CS_OPBNOT</code></a>: </b>
+                <b><a name="CS_OP_BNOT"><code>CS_OP_BNOT</code></a>: </b>
                 performs bitwise NOT (<code>~</code>)
             </li>
         </ul>
@@ -3151,15 +3151,15 @@ typedef enum cs_MM {
         The value of <code>op</code> must be one of the following constants:
         <ul>
             <li>
-                <b><a name="CS_OPEQ"><code>CS_OPEQ</code></a>: </b>
+                <b><a name="CS_ORD_EQ"><code>CS_ORD_EQ</code></a>: </b>
                 compares for equality (<code>==</code>)
             </li>
             <li>
-                <b><a name="CS_OPLT"><code>CS_OPLT</code></a>: </b>
+                <b><a name="CS_ORD_LT"><code>CS_ORD_LT</code></a>: </b>
                 compares for less than (<code>&lt;</code>)
             </li>
             <li>
-                <b><a name="CS_OPLE"><code>CS_OPLE</code></a>: </b>
+                <b><a name="CS_ORD_LE"><code>CS_ORD_LE</code></a>: </b>
                 compares for less or equal (<code>&lt;=</code>)
             </li>
         </ul>
@@ -3483,10 +3483,10 @@ typedef enum cs_MM {
         Returns the type of that value.
         </p>
 
-        <!-- cs_get_rtable -->
-        <hr><h3><a name="cs_get_rtable"><code>cs_get_rtable</code></a></h3><p>
+        <!-- cs_get_cfieldstr -->
+        <hr><h3><a name="cs_get_cfieldstr"><code>cs_get_cfieldstr</code></a></h3><p>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>int cs_get_rtable (cs_State *C, const char *field);</pre>
+        <pre>int cs_get_cfieldstr (cs_State *C, const char *field);</pre>
         <p>
         Equivalent to <code>t[field]</code> where <code>t</code> is the
         registry table located in the registry under index
@@ -3534,49 +3534,37 @@ typedef enum cs_MM {
         Returns the type of the pushed value.
         </p>
 
-        <!-- cs_find_nilindex -->
-        <hr><h3><a name="cs_find_nilindex"><code>cs_find_nilindex</code></a></h3>
+        <!-- cs_find_index -->
+        <hr><h3><a name="cs_find_index"><code>cs_find_index</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_find_nilindex (cs_State *C, int index, uint begin, int end);</pre>
+        <pre>int cs_find_index (cs_State *C, int index, int fi, int s, int e);</pre>
         <p>
-        Returns the first <b>nil</b> index  inside the list at
-        the given index starting from <code>begin</code> index up to
-        <code>end</code> index (inclusive).
-        If <code>end</code> is greater or equal than the length of the list,
-        or is less than 0, it is clipped to the last index (list length - 1).
-        If there is no such index this returns -1.
-        </p>
-
-        <!-- cs_find_nnilindex -->
-        <hr><h3><a name="cs_find_nnilindex"><code>cs_find_nnilindex</code></a></h3>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_find_nnilindex (cs_State *C, int index, uint begin, int end);</pre>
-        <p>
-        Similar to <a href="#cs_find_nnilindex"><code>cs_find_nnilindex</code></a>
-        except this returns the first Non-<b>nil</b> index.
-        </p>
-
-        <!-- cs_find_nilindex_rev -->
-        <hr><h3><a name="cs_find_nilindex_rev"><code>cs_find_nilindex_rev</code></a></h3>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_find_nilindex_rev (cs_State *C, int index, int begin, uint end);</pre>
-        <p>
-        Similar to
-        <a href="#cs_find_nilindex"><code>cs_find_nilindex</code></a>
-        except this performs the search in reverse.
-        Additionally if <code>begin</code> is greater or equal than the length
-        of the list, or is less than 0, it is clipped to the last index
-        (list length - 1).
-        </p>
-
-        <!-- cs_find_nnilindex_rev -->
-        <hr><h3><a name="cs_find_nnilindex_rev"><code>cs_find_nnilindex_rev</code></a></h3>
-        <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int cs_find_nnilindex_rev (cs_State *C, int index, int begin, uint end);</pre>
-        <p>
-        Similar to
-        <a href="#cs_find_nilindex_rev"><code>cs_find_nilindex_rev</code></a>
-        except this returns the first Non-<b>nil</b> index.
+        Finds list index according to bitmask <code>fi</code>.
+        If <code>fi</code> is 0, then search starts from index <code>s</code>
+        and returns the first non-<b>nil</b> index, up to index
+        <code>e</code> (inclusive).
+        Bits for <code>fi</code> bitmask are:
+        <ul>
+            <li>
+                <code>CS_FI_NIL</code>:
+                upon setting this bit, the function will return first
+                <code>nil</code> index.
+            </li>
+            <li>
+                <code>CS_FI_REV</code>:
+                upon setting this bit, the function will search indices
+                starting from <code>e</code> down to <code>s</code> (inclusive).
+            </li>
+            <li>
+                <code>CS_FI_MASK</code>:
+                mask of all possible bits for <code>fi</code>.
+            </li>
+        </ul>
+        If <code>s</code> is less than 0, it is set to 0,
+        if <code>e</code> is greater or equal than the current length of
+        the list at the given index, then it is set to the value of the
+        last index in the list. If no index has been found, that satisfies
+        <code>fi</code>, this returns -1.
         </p>
 
         <!-- cs_get_field -->
@@ -3645,9 +3633,9 @@ typedef enum cs_MM {
         Pushes the class of the object at the <code>index</code> on top of
         the stack.
         <br/>
-        Returns <code>CS_TCLASS</code> if the object at <code>index</code>
+        Returns <code>CS_T_CLASS</code> if the object at <code>index</code>
         is instance, otherwise nothing is pushed and this returns 
-        <a href="#CS_TNONE"><code>CS_TNONE</code></a>.
+        <a href="#CS_T_NONE"><code>CS_T_NONE</code></a>.
         </p>
 
         <!-- cs_get_superclass -->
@@ -3677,12 +3665,12 @@ typedef enum cs_MM {
         the value of the method.
         <br/><br/>
         Returns the type of the pushed value, which is always a
-        <a href="#CS_TFUNCTION"><code>CS_TFUNCTION</code></a>, unless the
+        <a href="#CS_T_FUNCTION"><code>CS_T_FUNCTION</code></a>, unless the
         value was never assigned a methods table
         (see <a href="#cs_push_class"><code>cs_push_class</code></a> and
         <a href="#cs_set_usermethods"><code>cs_set_usermethods</code></a>)
         or the <code>k</code> field in the methods table is <b>nil</b>,
-        in which case this returns <a href="#CS_TNIL"><code>CS_TNIL</code></a>.
+        in which case this returns <a href="#CS_T_NIL"><code>CS_T_NIL</code></a>.
         </p>
 
         <!-- cs_get_supermethod -->
@@ -3695,7 +3683,7 @@ typedef enum cs_MM {
         methods table being queried belongs to the superclass of the instance
         class.
         This also pushes <b>nil</b> and returns
-        <a href="#CS_TNIL"><code>CS_TNIL</code></a> if the class of the
+        <a href="#CS_T_NIL"><code>CS_T_NIL</code></a> if the class of the
         instance does not have a superclass.
         </p>
 
@@ -3704,12 +3692,12 @@ typedef enum cs_MM {
         <span class="apii">[-0, +1, &ndash;]</span>
         <pre>int cs_get_uservalue (cs_State *C, int index, unsigned short n);</pre>
         <p>
-        Pushes onto the stack the <code>n</code>-th user value associated with
-        the full userdata at the given index and returns the type of the
-        pushed value.
+        Pushes onto the stack the user value at index <code>n</code>
+        associated with the full userdata at the given index and returns
+        the type of the pushed value.
         <br/><br/>
         If the userdata does not have that value, pushes <b>nil</b> and
-        returns <a href="#CS_TNONE"><code>CS_TNONE</code></a>.
+        returns <a href="#CS_T_NONE"><code>CS_T_NONE</code></a>.
         </p>
 
         <!-- cs_get_usermethods -->
@@ -3744,10 +3732,10 @@ typedef enum cs_MM {
         <code>name</code>.
         </p>
 
-        <!-- cs_set_rtable -->
-        <hr><h3><a name="cs_set_rtable"><code>cs_set_rtable</code></a></h3>
+        <!-- cs_set_cfieldstr -->
+        <hr><h3><a name="cs_set_cfieldstr"><code>cs_set_cfieldstr</code></a></h3>
         <span class="apii">[-1, +0, <em>m</em>]</span>
-        <pre>void cs_set_rtable (cs_State *C, const char *field);</pre>
+        <pre>void cs_set_cfieldstr (cs_State *C, const char *field);</pre>
         <p>
         Equivalent to <code>t[field] = v</code> where <code>t</code> is the
         registry table located in the registry under index
@@ -3885,9 +3873,9 @@ typedef enum cs_MM {
         <span class="apii">[-1, +0, &ndash;]</span>
         <pre>int cs_set_uservalue (cs_State *C, int index, unsigned short n);</pre>
         <p>
-        Pops a value from the stack and sets it as the new <code>n</code>-th
-        user value associated to the full userdata at the given index.
-        Returns 0 if the userdata does not have that value.
+        Pops a value from the stack and sets it as the new user value at
+        index <code>n</code> associated to the full userdata at the given
+        index. Returns 0 if the userdata does not have that value.
         </p>
 
         <!-- cs_set_usermethods -->
@@ -3907,14 +3895,14 @@ typedef enum cs_MM {
         <p>
         Returns the status of the thread <code>C</code>.
         <br/><br/>
-        The status can be <a href="#CS_OK"><code>CS_OK</code></a> for a normal
+        The status can be <a href="#CS_STATUS_OK"><code>CS_STATUS_OK</code></a> for a normal
         thread.
         <br/>
         (This function is here only for when the coroutines get implemented,
         currently it offers nothing helpful.)
         <br/><br/>
         You can call functions only in threads with status
-        <a href="#CS_OK"><code>CS_OK</code></a>.
+        <a href="#CS_STATUS_OK"><code>CS_STATUS_OK</code></a>.
         </p>
 
         <!-- cs_error -->
@@ -4015,10 +4003,10 @@ typedef enum cs_MM {
         <br/><br/>
         The <a href="#cs_pcall"><code>cs_pcall</code></a> function returns one
         of the following status codes:
-        <a href="#CS_OK"><code>CS_OK</code></a>,
-        <a href="#CS_ERRRUNTIME"><code>CS_ERRRUNTIME</code></a>,
-        <a href="#CS_ERRMEM"><code>CS_ERRMEM</code></a> or
-        <a href="#CS_ERRERROR"><code>CS_ERRERROR</code></a>.
+        <a href="#CS_STATUS_OK"><code>CS_STATUS_OK</code></a>,
+        <a href="#CS_STATUS_ERUNTIME"><code>CS_STATUS_ERUNTIME</code></a>,
+        <a href="#CS_STATUS_EMEM"><code>CS_STATUS_EMEM</code></a> or
+        <a href="#CS_STATUS_EERROR"><code>CS_STATUS_EERROR</code></a>.
         </p>
 
         <!-- cs_load -->
@@ -4048,9 +4036,9 @@ typedef enum cs_MM {
         must always leave the stack unmodified when returning.
         <br/><br/>
         <code>cs_load</code> can return
-        <a href="#CS_OK"><code>CS_OK</code></a>,
-        <a href="#CS_ERRSYNTAX"><code>CS_ERRSYNTAX</code></a>, or
-        <a href="#CS_ERRMEM"><code>CS_ERRMEM</code></a>.
+        <a href="#CS_STATUS_OK"><code>CS_STATUS_OK</code></a>,
+        <a href="#CS_STATUS_ESYNTAX"><code>CS_STATUS_ESYNTAX</code></a>, or
+        <a href="#CS_STATUS_EMEM"><code>CS_STATUS_EMEM</code></a>.
         The function may also return other values corresponding to errors
         raised by the read function (see <a href="#4.4.1">&sect;4.4.1</a>).
         </p>
@@ -4188,23 +4176,23 @@ typedef enum cs_MM {
         at the given index.
         </p>
 
-        <!-- cs_next -->
-        <hr><h3><a name="cs_next"><code>cs_next</code></a></h3>
+        <!-- cs_nextfield -->
+        <hr><h3><a name="cs_nextfield"><code>cs_nextfield</code></a></h3>
         <span class="apii">[-1, +(2|0), <em>v</em>]</span>
-        <pre>int cs_next (cs_State *C, int index);</pre>
+        <pre>int cs_nextfield (cs_State *C, int index);</pre>
         <p>
         Pops a key from the stack, and pushes a key&ndash;value pair from the
         table or instance at the given index, the "next" pair
         after the given key.
         If there are no more elements in the table or no more fields in the
-        instances, then <a href="#cs_next"><code>cs_next</code></a>
+        instances, then <a href="#cs_nextfield"><code>cs_nextfield</code></a>
         returns&nbsp;0 and pushes nothing.
         <br/><br/>
         A typical table traversal looks like this:
         <pre>
     /* table is in the stack at index 't' */
     cs_push_nil(C);  /* first key */
-    while (cs_next(C, t) != 0) {
+    while (cs_nextfield(C, t) != 0) {
         /* uses 'key' (at index -2) and 'value' (at index -1) */
         printf("%s - %s\n",
                cs_typename(C, cs_type(C, -2)),
@@ -4531,7 +4519,7 @@ typedef enum cs_MM {
         <pre>const char *cs_push_metalist (cs_State *C);</pre>
         <p>
         This macro is equivalent to
-        <code>cs_push_list(C, <a href="#CS_MM_N">CS_MM_N</a>)</code>
+        <code>cs_push_list(C, <a href="#CS_MM_NUM">CS_MM_NUM</a>)</code>
         (see <a href="#cs_push_list"><code>cs_push_list</code></a>).
         </p>
 
@@ -4973,7 +4961,7 @@ typedef enum cs_MM {
         <br/><br/>
         This function returns the same results as
         <a href="#cs_load"><code>cs_load</code></a> or
-        <a href="#CS_ERRFILE"><code>CS_ERRFILE</code></a> for file-related
+        <a href="#CS_STATUS_EFILE"><code>CS_STATUS_EFILE</code></a> for file-related
         errors.
         <br/><br/>
         As <a href="#cs_load"><code>cs_load</code></a>, this function only
@@ -5047,7 +5035,7 @@ typedef enum cs_MM {
         metalist of the value at the given index.
         If the value at the given index does not have a metalist or the
         value of metalist at the index <code>mm</code> is <b>nil</b>, then
-        nothing is pushed and <a href="#CS_TNONE"><code>CS_TNONE</code></a>
+        nothing is pushed and <a href="#CS_T_NONE"><code>CS_T_NONE</code></a>
         is returned.
         Otherwise this returns the type of the value pushed on the stack.
         </p>
@@ -5229,7 +5217,7 @@ typedef struct csL_MetaEntry {
         property.
         <br/>
         (Note that if the function returned
-        <a href="#CS_TNIL"><code>CS_TNIL</code></a>, it means that both the
+        <a href="#CS_T_NIL"><code>CS_T_NIL</code></a>, it means that both the
         field and method are <b>nil</b>).
         </p>
 
@@ -5511,32 +5499,12 @@ typedef struct csL_MetaEntry {
         The array <code>l</code> must be the actual array, not a pointer to it.
         </p>
 
-        <hr><h3><a name="csL_get_gsubtable"><code>csL_get_gsubtable</code></a></h3><p>
-        <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void csL_get_gsubtable (cs_State *C, const char *name);</pre>
-        <p>
-        Equivalent to
-        <a href="#csL_get_subtable"><code>csL_get_subtable</code></a>, except
-        here the object being indexed is the global table which is pushed
-        on top of the stack, and later removed after the operation.
-        </p>
-
-        <hr><h3><a name="csL_get_rsubtable"><code>csL_get_rsubtable</code></a></h3><p>
-        <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void csL_get_rsubtable (cs_State *C, const char *name);</pre>
-        <p>
-        Equivalent to
-        <a href="#csL_get_subtable"><code>csL_get_subtable</code></a>, except
-        here the object being indexed is the registry table which is pushed
-        on top of the stack, and later removed after the operation.
-        </p>
-
         <hr><h3><a name="csL_get_methods"><code>csL_get_methods</code></a></h3><p>
         <span class="apii">[-0, +1, &ndash;]</span>
         <pre>int csL_get_methods (cs_State *C, const char *tname);</pre>
         <p>
         This is implemented as a macro equivalent to
-        <a href="#cs_get_rtable"><code>cs_get_rtable</code></a>.
+        <a href="#cs_get_cfieldstr"><code>cs_get_cfieldstr</code></a>.
         </p>
 
         <hr><h3><a name="csL_get_metalist"><code>csL_get_metalist</code></a></h3><p>
@@ -5544,7 +5512,7 @@ typedef struct csL_MetaEntry {
         <pre>int csL_get_metalist (cs_State *C, const char *name);</pre>
         <p>
         This is implemented as a macro equivalent to
-        <a href="#cs_get_rtable"><code>cs_get_rtable</code></a>.
+        <a href="#cs_get_cfieldstr"><code>cs_get_cfieldstr</code></a>.
         </p>
 
         <hr><h3><a name="csL_intop"><code>csL_intop</code></a></h3><p>
@@ -5762,9 +5730,9 @@ typedef struct csL_Stream {
         <br/><br/>
         A file handle is implemented as a full userdata, with a metalist
         called <code>CS_FILEHANDLE</code> and methods table
-        called <code>CS_FILEHANDLE_TABLE</code>
+        called <code>CS_FILEHANDLE_METHODS</code>
         (where <code>CS_FILEHANDLE</code> is a macro with the metalist's
-        name and <code>CS_FILEHANDLE_TABLE</code> is a macro with the name
+        name and <code>CS_FILEHANDLE_METHODS</code> is a macro with the name
         of the methods table).
         The metalist and the methods table are created by the I/O library
         (see <a href="#csL_new_metalist"><code>csL_new_metalist</code></a>

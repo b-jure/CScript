@@ -84,10 +84,9 @@
 
 
 /* 
-** ORDER OPR
 ** Binary operations.
 */
-typedef enum {
+typedef enum { /* ORDER OPR */
         /* arithmetic operators */
         OPR_ADD, OPR_SUB, OPR_MUL,
         OPR_DIV, OPR_IDIV, OPR_MOD, OPR_POW,
@@ -110,10 +109,11 @@ typedef enum {
 
 
 /*
-** ORDER OP
 ** Unary operations.
 */
-typedef enum { OPR_UNM, OPR_BNOT, OPR_NOT, OPR_NOUNOPR } Unopr;
+typedef enum { /* ORDER OP */
+    OPR_UNM, OPR_BNOT, OPR_NOT, OPR_NOUNOPR
+} Unopr;
 
 
 
@@ -383,7 +383,7 @@ CSI_FUNC int csC_dischargevars(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_exp2stack(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_exp2val(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_getfield(FunctionState *fs, ExpInfo *var,
-                              ExpInfo *keystr, int super);
+                           ExpInfo *keystr, int super);
 CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);
 CSI_FUNC void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr, int line);

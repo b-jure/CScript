@@ -7,6 +7,8 @@
 #ifndef capi_h
 #define capi_h
 
+#include "climits.h"
+#include "cstate.h"
 
 /*
 ** If a call returns too many multiple returns, the callee may not have
@@ -18,7 +20,7 @@
 	(C)->cf->top.p = (C)->sp.p; }
 
 
-/* Ensure the stack has at least 'n' elements. */
+/* ensure the stack has at least 'n' elements */
 #define api_checknelems(C, n) \
         api_check(C, (n) < ((C)->sp.p - (C)->cf->func.p), \
                     "not enough elements in the stack")
@@ -28,6 +30,12 @@
 #define api_inctop(C) \
     { (C)->sp.p++; \
       api_check(C, (C)->sp.p <= (C)->cf->top.p, "stack overflow"); }
+
+
+/* checks if list index 'i' is in bounds */
+#define api_checklistidx(C,i) \
+        api_check(C, 0 <= (i) && (i) <= MAXLISTINDEX, \
+                     "list index out of bounds");
 
 
 #define hastocloseCfunc(n)	((n) < CS_MULRET)

@@ -491,7 +491,7 @@ typedef struct GMatchState {
 
 
 static int gmatch_aux(cs_State *C) {
-    GMatchState *gm = (GMatchState *)cs_to_userdata(C, cs_upvalueindex(3));
+    GMatchState *gm = (GMatchState *)cs_to_userdata(C, cs_upvalueindex(2));
     const char *src;
     gm->ms.C = C;
     for (src = gm->src; src <= gm->ms.src_end; src++) {
@@ -512,7 +512,7 @@ static int reg_gmatch(cs_State *C) {
     const char *p = csL_check_lstring(C, 1, &lp);
     size_t init = posrelStart(csL_opt_integer(C, 2, 0), ls - 1);
     GMatchState *gm;
-    cs_settop(C, 2); /* keep strings on closure to avoid being collected */
+    cs_setntop(C, 2); /* keep strings on closure to avoid being collected */
     gm = (GMatchState *)cs_push_userdata(C, sizeof(GMatchState), 0);
     if (init > ls) /* start after string's end? */
         init = ls + 1; /* avoid overflows in 's + init' */
@@ -561,19 +561,19 @@ static int add_value(MatchState *ms, csL_Buffer *b, const char *s,
                                      const char *e, int tr) {
     cs_State *C = ms->C;
     switch (tr) {
-        case CS_TFUNCTION: { /* call the function */
+        case CS_T_FUNCTION: { /* call the function */
             int n;
             cs_push(C, 2); /* push the function */
             n = push_captures(ms, s, e); /* all captures as arguments */
             cs_call(C, n, 1); /* call it */
             break;
         }
-        case CS_TTABLE: { /* index the table */
+        case CS_T_TABLE: { /* index the table */
             push_onecapture(ms, 0, s, e); /* first capture is the index */
             cs_get(C, 2);
             break;
         }
-        default: { /* CS_TSTRING */
+        default: { /* CS_T_STRING */
             add_s(ms, b, s, e); /* add value to the buffer */
             return 1; /* something changed */
         }
@@ -604,8 +604,8 @@ static int reg_gsub(cs_State *C) {
     int changed = 0; /* change flag */
     MatchState ms;
     csL_Buffer b;
-    csL_expect_arg(C, tr == CS_TSTRING || tr == CS_TFUNCTION ||
-                      tr == CS_TTABLE, 2, "string/function/table");
+    csL_expect_arg(C, tr == CS_T_STRING || tr == CS_T_FUNCTION ||
+                      tr == CS_T_TABLE, 2, "string/function/table");
     csL_buff_init(C, &b);
     if (anchor) {
         p++; lp--; /* skip anchor character */

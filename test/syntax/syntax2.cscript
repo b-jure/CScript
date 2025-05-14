@@ -70,9 +70,9 @@ assert(1234567890 == tonum("1234567890") and 1234567890+1 == 1234567891);
         "&", "|", "**", "<<", ">>",
         "==", "!=", "<", ">", "<=", ">=",];
     foreach _, op in ipairs(operator) {
-        local f = assert(load(string.fmt("""
+        local f = assert(load(string.fmt([=[
                         return fn(x,y) { return x %s y; };
-                        """, op)))();
+                  ]=], op)))();
         foreach _, o1 in ipairs(operand) {
             foreach _, o2 in ipairs(operand) {
                 local gab = f(o1, o2);
@@ -259,7 +259,7 @@ while (false); while (nil);
   checkload("local xxx <final> = 20; xxx = 10;",
              ":1: attempt to assign to read-only variable 'xxx'", true);
 
-  checkload("""
+  checkload([=[
     local xx;
     local xxx <final> = 20;
     local yyy;
@@ -267,22 +267,22 @@ while (false); while (nil);
         local abc = xx + yyy + xxx;
         return fn() { return fn() { xxx = yyy; }; };
     }
-  """, ":6: attempt to assign to read-only variable 'xxx'");
+  ]=], ":6: attempt to assign to read-only variable 'xxx'");
 
-  checkload("""
+  checkload([=[
     local x <close> = nil;
     x = io.open();
-  """, ":2: attempt to assign to read-only variable 'x'");
+  ]=], ":2: attempt to assign to read-only variable 'x'");
 }
 
 
 {
-    local f = """
+    local f = [=[
 return fn( a , b , c , d , e ) {
     local x = a >= b or c or ( d and e ) or nil;
     return x;
 }, { a = 1 , b = 2 >= 1 , } or [ 1 ];
-    """;
+    ]=];
     f = reg.gsub(f, "%s+", "\n"); /// force a SETLINE between opcodes
     f,a = load(f)();
     assert(a.a == 1 and a.b);
@@ -344,19 +344,19 @@ return fn( a , b , c , d , e ) {
     if (__ENV.GLOB1 == 0) {
         basiccases[1][0] = "F";   /// constant false
 
-        prog = """
+        prog = [=[
             local F <final> = false;
             if (%s) IX = true;
             return %s;
-        """;
+        ]=];
     } else {
         basiccases[3][0] = "k10"; /// constant 10
 
-        prog = """
+        prog = [=[
             local k10 <final> = 10;
             if (%s) IX = true;
             return %s;
-        """;
+        ]=];
     }
 
     /// operators with their respective values

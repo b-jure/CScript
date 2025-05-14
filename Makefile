@@ -8,7 +8,7 @@ CORE_O = src/capi.o src/clist.o src/ccode.o src/cdebug.o src/cfunction.o\
 	 src/cobject.o src/cparser.o src/cvm.o src/cprotected.o src/creader.o\
 	 src/cscript.o src/cstate.o src/cstring.o src/ctrace.o
 LIB_O = src/cscriptaux.o src/cbaselib.o src/cloadlib.o src/cscriptlib.o src/cstrlib.o\
-	src/cmathlib.o src/ciolib.o src/coslib.o src/creglib.o
+	src/cmathlib.o src/ciolib.o src/coslib.o src/creglib.o src/cdblib.o
 BASE_O = $(CORE_O) $(LIB_O) $(MYOBJS)
 
 CSCRIPT_T = cscript
@@ -173,13 +173,15 @@ capi.o: src/capi.c src/cprefix.h src/clist.h src/cobject.h src/cscript.h \
  src/cscriptconf.h src/climits.h src/cdebug.h src/cstate.h \
  src/cfunction.h src/ccode.h src/cbits.h src/cparser.h src/clexer.h \
  src/creader.h src/cmem.h src/cgc.h src/cmeta.h src/cprotected.h \
- src/ctable.h src/cstring.h src/cvm.h src/capi.h
+ src/ctable.h src/cstring.h src/cvm.h src/ctrace.h src/capi.h
 cbaselib.o: src/cbaselib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
  src/cscriptaux.h src/cscriptlib.h src/climits.h
 ccode.o: src/ccode.c src/cprefix.h src/ccode.h src/cbits.h src/cparser.h \
  src/clexer.h src/creader.h src/cscript.h src/cscriptconf.h src/cmem.h \
  src/climits.h src/cobject.h src/ctable.h src/cdebug.h src/cstate.h \
  src/cvm.h src/cgc.h
+cdblib.o: src/cdblib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
+ src/cscriptaux.h src/cscriptlib.h src/climits.h
 cdebug.o: src/cdebug.c src/cprefix.h src/cscript.h src/cscriptconf.h \
  src/cdebug.h src/cobject.h src/climits.h src/cstate.h src/capi.h \
  src/ccode.h src/cbits.h src/cparser.h src/clexer.h src/creader.h \
@@ -221,7 +223,7 @@ coslib.o: src/coslib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
 cparser.o: src/cparser.c src/cprefix.h src/ccode.h src/cbits.h \
  src/cparser.h src/clexer.h src/creader.h src/cscript.h src/cscriptconf.h \
  src/cmem.h src/climits.h src/cobject.h src/cfunction.h src/cstate.h \
- src/cgc.h src/cstring.h src/ctable.h src/cvm.h src/ctrace.h
+ src/cgc.h src/cstring.h src/ctable.h src/cvm.h
 cprotected.o: src/cprotected.c src/cprefix.h src/cprotected.h \
  src/creader.h src/cscript.h src/cscriptconf.h src/cmem.h src/climits.h \
  src/cobject.h src/cparser.h src/clexer.h src/cfunction.h src/ccode.h \

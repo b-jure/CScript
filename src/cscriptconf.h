@@ -277,7 +277,7 @@
 #define CS_NUMBER               double
 
 #define CS_NUMBER_FMTLEN        ""
-#define CS_NUMBER_FMT           "%.17g"
+#define CS_NUMBER_FMT           "%.15g"
 
 #define c_floatatt(n)           (DBL_##n)
 

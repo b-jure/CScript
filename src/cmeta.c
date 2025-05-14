@@ -10,6 +10,7 @@
 #include "cprefix.h"
 
 #include "cmeta.h"
+#include "clist.h"
 #include "clexer.h"
 #include "cscriptconf.h"
 #include "cstring.h"
@@ -34,13 +35,13 @@ CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
 
 void csMM_init(cs_State *C) {
     // TODO: make 'mmnames' a global symbol and provide the 'cs_metamethodtostring()' API
-    const char *mmnames[CS_MM_N] = { /* ORDER MM */
+    const char *mmnames[CS_MM_NUM] = { /* ORDER MM */
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
         "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",
         "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
         "__bnot", "__eq", "__lt", "__le"
     };
-    for (int i = 0; i < CS_MM_N; i++) {
+    for (int i = 0; i < CS_MM_NUM; i++) {
         OString *s = csS_new(C, mmnames[i]);
         s->extra = i + NUM_KEYWORDS + 1;
         G(C)->mmnames[i] = s;
@@ -121,15 +122,15 @@ int csMM_equmethod(const UMethod *v1, const UMethod *v2) {
 
 
 /* get method 'mm' */
-const TValue *csMM_get(cs_State *C, const TValue *v, cs_MM mm) {
+const TValue *csMM_get(cs_State *C, const TValue *v, int mm) {
     List *ml;
-    cs_assert(0 <= mm && mm < CS_MM_N);
+    cs_assert(0 <= mm && mm < CS_MM_NUM);
     switch (ttypetag(v)) {
         case CS_VINSTANCE: ml = insval(v)->oclass->metalist; break;
         case CS_VUSERDATA: ml = uval(v)->metalist; break;
         default: ml = NULL; break;
     }
-    return (ml ? &ml->b[mm] : &G(C)->nil);
+    return (ml ? csA_getival(C, ml, mm) : &G(C)->nil);
 }
 
 
@@ -191,7 +192,7 @@ static int callbinaux(cs_State *C, const TValue *v1, const TValue *v2,
 
 /* try to call binary arithmetic or bitwise method */
 void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
-                 cs_MM mm) {
+                 int mm) {
     if (c_unlikely(ttypetag(v1) != ttypetag(v2) /* types don't match */
                 || !callbinaux(C, v1, v2, res, mm))) { /* or no method ? */
         switch (mm) {
@@ -229,7 +230,7 @@ static int callunaryaux(cs_State *C, const TValue *v, int mt) {
 
 
 /* try to call unary method */
-void csMM_tryunary(cs_State *C, const TValue *v, cs_MM mm) {
+void csMM_tryunary(cs_State *C, const TValue *v, int mm) {
     if (c_unlikely(!callunaryaux(C, v, mm))) {
         switch (mm) {
             case CS_MM_BNOT: {
@@ -258,8 +259,8 @@ void csMM_tryconcat(cs_State *C) {
 
 
 /* call order method */
-int csMM_order(cs_State *C, const TValue *v1, const TValue *v2, cs_MM mm) {
-    cs_assert(CS_MM_EQ <= mm && mm <= CS_MM_N);
+int csMM_order(cs_State *C, const TValue *v1, const TValue *v2, int mm) {
+    cs_assert(CS_MM_EQ <= mm && mm <= CS_MM_NUM);
     if (c_likely(callbinaux(C, v1, v2, C->sp.p, mm)))
         return !c_isfalse(s2v(C->sp.p));
     csD_ordererror(C, v1, v2);
@@ -273,7 +274,7 @@ int csMM_order(cs_State *C, const TValue *v1, const TValue *v2, cs_MM mm) {
 ** immediate value.
 */
 int csMM_orderI(cs_State *C, const TValue *v1, int v2, int flip, int isflt,
-                cs_MM mm) {
+                int mm) {
     const TValue *v2_;
     TValue aux;
     if (isflt) {

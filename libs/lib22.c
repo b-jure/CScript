@@ -16,7 +16,7 @@ static const struct cs_Entry funcs[] = {
 
 
 CSMOD_API int csopen_lib2(cs_State *C) {
-    cs_settop(C, 2);
+    cs_setntop(C, 2);
     cs_set_global(C, "y"); /* y gets 2nd parameter */
     cs_set_global(C, "x"); /* x gets 1st parameter */
     csL_push_lib(C, funcs);

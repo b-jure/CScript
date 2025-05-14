@@ -1,0 +1,283 @@
+print("testing scanner");
+
+local fn runstring(x) { return assert(load(x, ""))(); }
+
+runstring("x \v\f = \t\r \"a\0a\"; \v\f\f");
+assert(x == "a\0a" and len(x) == 3);
+__G.x = nil;
+
+/// escape sequences
+assert("\n\"'\\" == [=[
+
+"'\]=]);
+
+assert(reg.find("\a\b\f\n\r\t\v", "^%c%c%c%c%c%c%c$"));
+
+/// assume ASCII just for tests:
+assert("\09912" == "c12");
+assert("\99ab" == "cab");
+assert("\099" == "\99");
+assert("\099\n" == "c\10");
+assert("\0\0\0alo" == "\0" .. "\0\0" .. "alo");
+
+assert(tostr(10) .. tostr(20) .. tostr(-30) == "1020-30");
+
+/// hexadecimal escapes
+assert("\x00\x05\x10\x1f\x3C\xfF\xe8" == "\0\5\16\31\60\255\232");
+
+local fn lexstring(x, y) {
+    local f = assert(load("return " .. x .. ";", ""));
+    local s, l = f();
+    assert(s == y);
+}
+
+lexstring("\"abcefg\"", "abcefg");
+lexstring("\"abc\"", "abc");
+lexstring("[=[\nalo\nalo\n\n]=]", "alo\nalo\n\n");
+lexstring("[=[\nalo\ralo\r\n]=]", "alo\nalo\n");
+lexstring("[=[\ralo\n\ralo\r\n]=]", "alo\nalo\n");
+lexstring("[=[\nalo]\n]alo]=]", "alo]\n]alo");
+
+
+/// UTF-8 sequences
+assert("\u{0}\u{00000000}\x00\0" == string.char(0, 0, 0, 0));
+
+/// limits for 1-byte sequences
+assert("\u{0}\u{7F}" == "\x00\x7F");
+
+/// limits for 2-byte sequences
+assert("\u{80}\u{7FF}" == "\xC2\x80\xDF\xBF");
+
+/// limits for 3-byte sequences
+assert("\u{800}\u{FFFF}" == "\xE0\xA0\x80\xEF\xBF\xBF");
+
+/// limits for 4-byte sequences
+assert("\u{10000}\u{1FFFFF}" == "\xF0\x90\x80\x80\xF7\xBF\xBF\xBF");
+
+/// limits for 5-byte sequences
+assert("\u{200000}\u{3FFFFFF}" == "\xF8\x88\x80\x80\x80\xFB\xBF\xBF\xBF\xBF");
+
+/// limits for 6-byte sequences
+assert("\u{4000000}\u{7FFFFFFF}" ==
+       "\xFC\x84\x80\x80\x80\x80\xFD\xBF\xBF\xBF\xBF\xBF");
+
+
+/// Error in escape sequences
+local fn lexerror(s, err) {
+    local st, msg = load("return " .. s .. ";", "");
+    if (err != "<eof>") err = err .. "'";
+    assert(!st and reg.find(msg, "near .-" .. err));
+}
+
+lexerror([=["abc\x"]=], [=[\x"]=]);
+lexerror([=["abc\x]=], [=[\x;]=]);
+lexerror([=["\x]=], [=[\x;]=]);
+lexerror([=["\x5"]=], [=[\x5"]=]);
+lexerror([=["\x5]=], [=[\x5;]=]);
+lexerror([=["\xr"]=], [=[\xr]=]);
+lexerror([=["\xr]=], [=[\xr]=]);
+lexerror([=["\x.]=], [=[\x.]=]);
+lexerror([=["\x8%"]=], [=[\x8%%]=]);
+lexerror([=["\xAG]=], [=[\xAG]=]);
+lexerror([=["\g"]=], [=[\g]=]);
+lexerror([=["\g]=], [=[\g]=]);
+lexerror([=["\."]=], [=[\%.]=]);
+
+lexerror([=["\999"]=], [=[\999"]=]);
+lexerror([=["xyz\300"]=], [=[\300"]=]);
+lexerror([=["   \256"]=], [=[\256"]=]);
+
+/// errors in UTF-8 sequences
+lexerror([=["abc\u{100000000}"]=], [=[abc\u{100000000]=]);   /// too large
+lexerror([=["abc\u11r"]=], [=[abc\u1]=]);   /// missing '{'
+lexerror([=["abc\u"]=], [=[abc\u"]=]);   /// missing '{'
+lexerror([=["abc\u{11r"]=], [=[abc\u{11r]=]);   /// missing '}'
+lexerror([=["abc\u{11"]=], [=[abc\u{11"]=]);   /// missing '}'
+lexerror([=["abc\u{11]=], [=[abc\u{11;]=]);   /// missing '}'
+lexerror([=["abc\u{r"]=], [=[abc\u{r]=]);   /// no digits
+
+/// unfinished strings
+lexerror("[=[\nalo", "<eof>");
+lexerror("\"alo", "<eof>");
+lexerror("\"alo" .. "\n\"", "\"alo");
+lexerror("\"alo" .. "\r\"", "\"alo");
+
+/// long string delimiter errors
+lexerror("[=[alo", "<eof>");
+lexerror("[=[alo]==]", "<eof>");
+lexerror("\"alo\98", "<eof>");
+{ /// long string closing delimiter error
+    local fn lexerror(s, msg) {
+        local st, err = load("return " .. s .. ";", "");
+        assert(!st and string.find(err, msg));
+    }
+    lexerror("[=]alo]=]", "long string delimiter");
+}
+
+/// valid characters in variable names
+foreach i in range(0, 256) {
+    local s = string.char(i);
+    if (s == "#") continue; /// skip comments
+    assert(!reg.find(s, "[a-zA-Z_]") == !load(s .. "=1;", ""));
+    assert(!reg.find(s, "[a-zA-Z_0-9]") == !load("a" .. s .. "1 = 1;", ""));
+}
+
+
+{ /// long variable names
+    local var1 = string.repeat("a", 15000) .. "1";
+    local var2 = string.repeat("a", 15000) .. "2";
+    local prog = string.fmt([=[
+        %s = 5;
+        %s = %s + 1;
+        return fn () { return %s - %s; };
+    ]=], var1, var2, var1, var1, var2);
+    local f = runstring(prog);
+    assert(__G[var1] == 5 and __G[var2] == 6 and f() == -1);
+    __G[var1], __G[var2] = nil;
+    print("+");
+}
+
+/// escapes
+assert("\n\t" == [=[
+
+	]=]);
+assert([=[
+
+ $debug]=] == "\n $debug");
+assert([=[ [ ]=] != [=[ ] ]=]);
+/// long strings
+local b = "001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789";
+assert(len(b) == 960);
+prog = [=[
+print("++");
+
+local a1 = [==[
+"this is a 'string' with several 'quotes'"]==];
+local a2 = "'quotes'";
+
+assert(string.find(a1, a2) == 33);
+print("++");
+
+a1 = [==[ temp = [===[an arbitrary value]===]; ]==];
+assert(load(a1, "load(a1)"))();
+assert(temp == "an arbitrary value");
+__G.temp = nil;
+/// long strings
+local b = "001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789001234567890123456789012345678901234567891234567890123456789012345678901234567890012345678901234567890123456789012345678912345678901234567890123456789012345678900123456789012345678901234567890123456789123456789012345678901234567890123456789";
+assert(len(b) == 960);
+print("++");
+
+local a = [==[
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789
+00123456789012345678901234567890123456789123456789012345678901234567890123456789]==];
+assert(len(a) == 1862);
+assert(string.substr(a, 0, 39) == string.substr(b, 0, 39));
+x = 1;
+]=];
+
+print("+");
+__G.x = nil;
+runstring(prog);
+assert(x);
+__G.x = nil;
+
+
+
+{ /// reuse of long strings
+
+    /// get the address of a string
+    local fn getadd(s) { return string.fmt("%p", s); }
+
+    local s1 <final> = "01234567890123456789012345678901234567890123456789";
+    local s2 <final> = "01234567890123456789012345678901234567890123456789";
+    local s3 = "01234567890123456789012345678901234567890123456789";
+    local fn foo() { return s1; }
+    local fn foo1() { return s3; }
+    local fn foo2() {
+        return "01234567890123456789012345678901234567890123456789";
+    }
+    local a1 = getadd(s1);
+    assert(a1 == getadd(s2));
+    assert(a1 == getadd(foo()));
+    assert(a1 == getadd(foo1()));
+    assert(a1 == getadd(foo2()));
+
+    local sd = "0123456789" .. "0123456789012345678901234567890123456789";
+    assert(sd == s1 and getadd(sd) != a1);
+}
+
+/// testing comments and strings with long brackets
+local a = [=[""""]=];
+assert(a == "\"\"\"\"");
+
+a = [=[""""""""""]=];
+assert(a == "\"\"\"\"\"\"\"\"\"\"");
+
+/// testing decimal point locale
+if (os.setlocale("pt_BR.iso88591") or os.setlocale("ptb")) {
+    assert(tonum("3,4") == 3.4 and tonum("3.4") == 3.4);
+    assert(tonum("  -.4  ") == -0.4);
+    assert(tonum("  +0x.41p0  ") == 0X0.41p0);
+    assert(!load("a = (3,4);"));
+    assert(assert(load("return 3.4;"))() == 3.4);
+    assert(assert(load("return .4,3;"))() == .4);
+    assert(assert(load("return 4.;"))() == 4.);
+    assert(assert(load("return 4.+.5;"))() == 4.5);
+
+    assert(tonum(" 0x.1p0 ") + tonum(" 0x,1p0") + tonum("-0X.1p0\t") == 0x0.1p0);
+
+    assert(tonum("inf") and tonum("infinity"));
+
+    assert(assert(load(string.fmt("return %q;", 4.51)))() == 4.51);
+
+    local a,b = load("return 4.5.;");
+    assert(string.find(b, "expected ';' near '.'"));
+
+    assert(os.setlocale("C"));
+} else {
+    print("\n >>> pt_BR locale not available: skipping decimal point tests <<<\n");
+}
+
+
+/// testing %q x line ends
+local s = "a string with \r and \n and \r\n and \n\r";
+local c = string.fmt("return %q;", s);
+assert(assert(load(c))() == s);
+
+/// testing errors
+assert(!load("a = \"non-ending string"));
+assert(!load("a = \"non-ending string\n\";"));
+assert(!load("a = \"\\345\";"));
+assert(!load("a = [=x];"));
+
+local fn malformednum(n, exp) {
+  local s, msg = load("return " .. n .. ";");
+  assert(!s and string.find(msg, exp));
+}
+
+malformednum("0xe-", "near ';'");
+malformednum("0xep-p", "malformed number");
+malformednum("1print()", "malformed number");
+
+print("OK");

@@ -21,6 +21,7 @@ static const cs_Entry loadedlibs[] = {
     {CS_IOLIBNAME, csopen_io},
     {CS_OSLIBNAME, csopen_os},
     {CS_REGLIBNAME, csopen_reg},
+    {CS_DBLIBNAME, csopen_debug},
     {NULL, NULL}
 };
 

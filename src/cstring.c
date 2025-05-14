@@ -96,7 +96,7 @@ static void rehashtable(OString **arr, int osz, int nsz) {
 ** Resize string table. If allocation fails, keep the current size.
 */
 void csS_resize(cs_State *C, int nsz) {
-    stringtable *tab = &G(C)->strtab;
+    StringTable *tab = &G(C)->strtab;
     int osz = tab->size;
     OString **newarr;
     cs_assert(nsz <= MAXSTRTABLE);
@@ -118,7 +118,7 @@ void csS_resize(cs_State *C, int nsz) {
 
 void csS_init(cs_State *C) {
     GState *gs = G(C);
-    stringtable *tab = &gs->strtab;
+    StringTable *tab = &gs->strtab;
     /* first initialize string table... */
     tab->hash = csM_newarray(C, MINSTRTABSIZE, OString*);
     rehashtable(tab->hash, 0, MINSTRTABSIZE); /* clear array */
@@ -152,7 +152,7 @@ OString *csS_newlngstrobj(cs_State *C, size_t len) {
 
 
 void csS_remove(cs_State *C, OString *s) {
-    stringtable *tab = &G(C)->strtab;
+    StringTable *tab = &G(C)->strtab;
     OString **pp = &tab->hash[hashmod(s->hash, tab->size)];
     while (*pp != s) /* find previous element */
         pp = &(*pp)->u.next;
@@ -162,7 +162,7 @@ void csS_remove(cs_State *C, OString *s) {
 
 
 /* grow string table */
-static void growtable(cs_State *C, stringtable *tab) {
+static void growtable(cs_State *C, StringTable *tab) {
     if (c_unlikely(tab->nuse == MAXINT)) {
         csG_full(C, 1); /* try to reclaim memory */
         if (tab->nuse == MAXINT) /* still too many strings? */
@@ -176,7 +176,7 @@ static void growtable(cs_State *C, stringtable *tab) {
 static OString *internshrstr(cs_State *C, const char *str, size_t l) {
     OString *s;
     GState *gs = G(C);
-    stringtable *tab = &gs->strtab;
+    StringTable *tab = &gs->strtab;
     uint h = csS_hash(str, l, gs->seed);
     OString **list = &tab->hash[hashmod(h, tab->size)];
     cs_assert(str != NULL); /* otherwise 'memcmp'/'memcpy' are undefined */
@@ -430,7 +430,7 @@ static const char *str2flt(const char *s, cs_Number *res, int *pf) {
             return NULL; /* no dot or string too long; fail */
         strcpy(buff, s);
         buff[pdot - s] = cs_getlocaledecpoint(); /* correct decimal point */
-        endptr = loc_str2flt(s, res, pf);
+        endptr = loc_str2flt(buff, res, pf);
         if (endptr != NULL)
             endptr = s + (endptr - buff); /* make relative to 's' */
     }

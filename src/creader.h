@@ -18,7 +18,7 @@
 
 /* Return next char and progress the buffer or try fill the buffer. */
 #define brgetc(br) \
-	((br)->n-- > 0 ? cast(c_byte, *(br)->buff++) : csR_fill(br))
+	((br)->n-- > 0 ? cast_uchar(*(br)->buff++) : csR_fill(br))
 
 
 typedef struct {
@@ -37,15 +37,13 @@ CSI_FUNC size_t csR_readn(BuffReader* br, size_t n);
 
 
 
-#define csR_buffinit(b)     {(b)->str = NULL; (b)->len = (b)->size = 0;}
-
 #define csR_buff(b)       ((b)->str)
 #define csR_bufflen(b)    ((b)->len)
 #define csR_buffsize(b)   ((b)->size)
 
 #define csR_buffpop(b)          ((b)->len -= 1)
 #define csR_buffreset(b)        ((b)->len = 0)
-#define csR_buffpopn(b,n)       ((b)->len -= (n))
+#define csR_buffpopn(b,n)       ((b)->len -= cast_sizet(n))
 
 #define csR_buffresize(C,b,s) \
     { (b)->str = csM_saferealloc(C, (b)->str, (b)->size, s); \

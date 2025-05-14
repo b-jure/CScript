@@ -1069,8 +1069,8 @@ static int codemethod(FunctionState *fs, ExpInfo *var, c_byte *arrmm) {
     int ismethod = 1;
     cs_assert(var->et == EXP_STRING);
     if (ismetatag(var->u.str)) { /* metamethod? */
-        cs_MM mm = var->u.str->extra - NUM_KEYWORDS - 1;
-        cs_assert(0 <= mm && mm < CS_MM_N); /* must be valid tag */
+        int mm = var->u.str->extra - NUM_KEYWORDS - 1;
+        cs_assert(0 <= mm && mm < CS_MM_NUM); /* must be valid tag */
         if (c_unlikely(arrmm[mm])) {
             const char *msg = csS_pushfstring(fs->lx->C,
                     "redefinition of '%s' metamethod", getstr(var->u.str));
@@ -1097,7 +1097,7 @@ static int method(Lexer *lx, c_byte *arrmm) {
 
 
 static int methods(Lexer *lx) {
-    c_byte arrmm[CS_MM_N] = {0};
+    c_byte arrmm[CS_MM_NUM] = {0};
     int i = 0;
     while (!check(lx, '}') && !check(lx, TK_EOS))
         i += method(lx, arrmm);
@@ -2464,15 +2464,16 @@ CSClosure *csP_parse(cs_State *C, BuffReader *br, Buffer *buff,
     CSClosure *cl = csF_newCSClosure(C, 1);
     setclCSval2s(C, C->sp.p, cl); /* anchor main function closure */
     csT_incsp(C);
-    lx.tab = csH_new(C);
-    settval2s(C, C->sp.p, lx.tab); /* anchor scanner table */
+    lx.tab = csH_new(C); /* create table for scanner */
+    settval2s(C, C->sp.p, lx.tab); /* anchor it */
     csT_incsp(C);
     fs.p = cl->p = csF_newproto(C);
     csG_objbarrier(C, cl, cl->p);
     fs.p->source = csS_new(C, source);
     csG_objbarrier(C, fs.p, fs.p->source);
-    lx.ps = ps;
     lx.buff = buff;
+    lx.ps = ps;
+    ps->gt.len = ps->literals.len = ps->actlocals.len = 0;
     csY_setinput(C, &lx, br, fs.p->source);
     mainfunc(&fs, &lx);
     cs_assert(!fs.prev && fs.nupvals == 1 && !lx.fs);

@@ -660,15 +660,18 @@ static void callgc(cs_State *C) {
     setgcoval(C, &v, gettobefin(gs));
     if (!ttisnil(m = csMM_get(C, &v, CS_MM_GC))) { /* have __gc? */
         int status;
+        int old_allowhook = C->allowhook;
         int old_gcstop = gs->gcstop;
-        gs->gcstop = GCSTP; /* avoid GC steps */
+        gs->gcstop |= GCSTP; /* avoid GC steps */
+        C->allowhook = 0; /* stop debug hooks during GC metamethod */
         setobj2s(C, C->sp.p++, m); /* push finalizer... */
         setobj2s(C, C->sp.p++, &v); /* ...and its argument */
         C->cf->status |= CFST_FIN; /* will run a finalizer */
         status = csPR_call(C, pgc, NULL, savestack(C,C->sp.p-2), C->errfunc);
         C->cf->status &= ~CFST_FIN; /* not running a finalizer anymore */
+        C->allowhook = old_allowhook; /* restore hooks */
         gs->gcstop = old_gcstop; /* restore state */
-        if (c_unlikely(status != CS_OK)) { /* error while running __gc? */
+        if (c_unlikely(status != CS_STATUS_OK)) { /* error while running __gc? */
             csT_warnerror(C, "__gc");
             C->sp.p--; /* pop error object */
         }
@@ -767,7 +770,8 @@ static c_mem atomic(cs_State *C) {
     cs_assert(!iswhite(gs->mainthread)); /* mainthread must be marked */
     gs->gcstate = GCSatomic;
     markobject(gs, C); /* mark running thread */
-    markvalue(gs, &gs->c_registry); /* mark registry */
+    markvalue(gs, &gs->c_list); /* mark clist */
+    markvalue(gs, &gs->c_table); /* mark ctable */
     work += propagateall(gs); /* traverse all gray objects */
     work += markopenupvalues(gs); /* mark open upvalues */
     work += propagateall(gs); /* propagate changes */
@@ -811,7 +815,8 @@ static void setpause(GState *gs) {
 static void restartgc(GState *gs) {
     cleargraylists(gs);
     markobject(gs, gs->mainthread); /* mark mainthread */
-    markvalue(gs, &gs->c_registry); /* mark registry */
+    markvalue(gs, &gs->c_list); /* mark clist */
+    markvalue(gs, &gs->c_table); /* mark ctable */
     marktobefin(gs); /* mark any finalizing object left from previous cycle */
 }
 

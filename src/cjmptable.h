@@ -17,7 +17,6 @@
 #define vm_break            fetch(); vm_dispatch(I)
 
 
-/* Make sure the order is the same as in the OpCode enum */
 static const void *const jmptable[NUM_OPCODES] = { /* ORDER OP */
     &&L_OP_TRUE,
     &&L_OP_FALSE,

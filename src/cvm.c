@@ -118,7 +118,7 @@ cs_Integer csV_divi(cs_State *C, cs_Integer x, cs_Integer y) {
     if (c_unlikely(c_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
             csD_runerror(C, "division by zero");
-        return c_intop(-, 0, x);
+        return intop(-, 0, x);
     } else {
         cs_Integer q = x / y; /* perform C division */
         if ((x ^ y) < 0 && x % y != 0) /* 'm/n' would be negative non-integer? */
@@ -161,7 +161,7 @@ cs_Number csV_modf(cs_State *C, cs_Number x, cs_Number y) {
 void csV_binarithm(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
                    int op) {
     if (!csO_arithmraw(C, v1, v2, s2v(res), op))
-        csMM_trybin(C, v1, v2, res, (op - CS_OPADD) + CS_MM_ADD);
+        csMM_trybin(C, v1, v2, res, (op - CS_OP_ADD) + CS_MM_ADD);
 }
 
 
@@ -173,7 +173,7 @@ void csV_unarithm(cs_State *C, const TValue *v, int op) {
     TValue aux;
     setival(&aux, 0);
     if (!csO_arithmraw(C, v, &aux, s2v(C->sp.p - 1), op))
-        csMM_tryunary(C, v, (op - CS_OPUNM) + CS_MM_UNM);
+        csMM_tryunary(C, v, (op - CS_OP_UNM) + CS_MM_UNM);
 }
 
 
@@ -310,7 +310,7 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
     const TValue *fmm;
     int swap = 0;
     if (ttypetag(v1) != ttypetag(v2)) {
-        if (ttype(v1) != ttype(v2) || ttype(v1) != CS_TNUMBER)
+        if (ttype(v1) != ttype(v2) || ttype(v1) != CS_T_NUMBER)
             return 0;
         return (csO_tointeger(v1, &i1, N2IEXACT) &&
                 csO_tointeger(v2, &i2, N2IEXACT) && i1 == i2);
@@ -347,30 +347,13 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
 }
 
 
-static void setlistindex(cs_State *C, List *l, const TValue *index,
-                         const TValue *val) {
-    cs_Integer i;
-    if (c_likely(tointeger(index, &i))) { /* index is integer? */
-        if (c_likely(0 <= i)) { /* non-negative index? */
-            if (c_unlikely(i > MAXLISTINDEX)) /* 'index' too large? */
-                csD_indexerror(C, i, "too large");
-            csA_ensureindex(C, l, i); /* expand list */
-            setobj(C, &l->b[i], val); /* set the value at index */
-        } else /* negative index, error */
-            csD_indexerror(C, i, "negative");
-    } else
-        csD_indextypeerror(C, index);
-}
-
-
 void csV_rawset(cs_State *C, const TValue *obj, const TValue *key,
                 const TValue *val) {
     Table *t;
     switch (ttypetag(obj)) {
         case CS_VLIST: {
             List *l = listval(obj);
-            setlistindex(C, l, key, val);
-            csV_finishrawset(C, l, val);
+            csV_setlist(C, l, key, val);
             break;
         }
         case CS_VTABLE: {
@@ -394,25 +377,10 @@ void csV_rawset(cs_State *C, const TValue *obj, const TValue *key,
 void csV_set(cs_State *C, const TValue *obj, const TValue *key,
              const TValue *val) {
     const TValue *fmm = csMM_get(C, obj, CS_MM_SETIDX);
-    if (!ttisnil(fmm)) /* have metamethod? */
-        csMM_callset(C, fmm, obj, key, val);
-    else /* otherwise perform raw set */
+    if (ttisnil(fmm)) /* no metamethod? */
         csV_rawset(C, obj, key, val);
-}
-
-
-static void listgetindex(cs_State *C, List *l, const TValue *index, SPtr res) {
-    cs_Integer i;
-    if (c_likely(tointeger(index, &i))) { /* index is integer? */
-        if (c_likely(0 <= i)) { /* positive index? */
-            if (i < l->n) { /* index in bounds? */
-                setobj2s(C, res, &l->b[i]);
-            } else /* index out of bounds */
-                setnilval(s2v(res));
-        } else /* negative index */
-            csD_indexerror(C, i, "negative");
-    } else /* invalid index */
-        csD_indextypeerror(C, index);
+    else /* otherwise call metamethod */
+        csMM_callset(C, fmm, obj, key, val);
 }
 
 
@@ -422,15 +390,17 @@ static void listgetindex(cs_State *C, List *l, const TValue *index, SPtr res) {
 
 
 void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
+    const TValue *v;
     switch (ttypetag(obj)) {
         case CS_VLIST: {
-            listgetindex(C, listval(obj), key, res);
-            break;
+            v = csA_get(C, listval(obj), key);
+            goto setv;
         }
         case CS_VTABLE: {
-            const TValue *slot = csH_get(tval(obj), key);
-            if (!ttisnil(slot)) {
-                setobj2s(C, res, slot);
+            v = csH_get(tval(obj), key);
+        setv:
+            if (!ttisnil(v)) {
+                setobj2s(C, res, v);
             } else
                 setnilval(s2v(res));
             break;
@@ -476,24 +446,50 @@ void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
 
 
 /*
-** Call binary meta method, but before that perform a quick check
-** and invoke error if types don't match, the values are instances
-** that belong to different classes or v1 (self) doesn't have the
-** metamethod.
+** Call binary metamethod, but before that perform a quick check
+** and invoke error if types don't match, or the values are instances
+** that belong to different classes, or v1 (self) doesn't have the
+** required metamethod ('mm').
 */
 c_sinline void precallmbin(cs_State *C, const TValue *v1, const TValue *v2,
-                            cs_MM op, SPtr res) {
+                           int mm, SPtr res) {
     const TValue *func;
-    const char *opname = getshrstr(G(C)->mmnames[op]) + 2; /* skip '__' */
+    const char *opname = getshrstr(G(C)->mmnames[mm]) + 2; /* skip '__' */
     if (c_unlikely(ttypetag(v1) != ttypetag(v2)))
         csD_typeerrormeta(C, v1, v2, opname);
     if (c_unlikely(ttisinstance(v1) && insval(v1)->oclass != insval(v2)->oclass))
         csD_runerror(C, "tried to '%s' instances of different class", opname);
-    func = csMM_get(C, v1, op);
+    func = csMM_get(C, v1, mm);
     if (c_unlikely(ttisnil(func)))
         csD_typeerror(C, v1, opname);
     else
         csMM_callbinres(C, func, v1, v2, res);
+}
+
+
+/*
+** Executes a return hook for CScript and C functions and sets/corrects
+** 'oldpc'. (Note that this correction is needed by the line hook, so it
+** is done even when return hooks are off.)
+*/
+static void rethook(cs_State *C, CallFrame *cf, int nres) {
+    if (C->hookmask & CS_MASK_RET) { /* is return hook on? */
+        SPtr firstres = C->sp.p - nres; /* index of first result */
+        int delta = 0; /* correction for vararg functions */
+        int ftransfer;
+        if (isCScript(cf)) {
+            Proto *p = cf_func(cf)->p;
+            if (p->isvararg)
+                delta = cf->cs.nvarargs + p->arity + 1;
+        }
+        cf->func.p += delta; /* if vararg, back to virtual 'func' */
+        ftransfer = cast(ushort, firstres - cf->func.p) - 1;
+        cs_assert(ftransfer >= 0);
+        csD_hook(C, CS_HOOK_RET, -1, ftransfer, nres); /* call it */
+        cf->func.p -= delta;
+    }
+    if (isCScript(cf = cf->prev))
+        C->oldpc = relpc(cf->cs.pc, cf_func(cf)->p); /* set 'oldpc' */
 }
 
 
@@ -518,16 +514,22 @@ c_sinline void moveresults(cs_State *C, SPtr res, int nres, int wanted) {
             C->sp.p = res + 1;
             return; /* done */
         }
-        default: { /* fixed amount of values needed (more than 1) */
-            if (hastocloseCfunc(wanted)) { /* tbc variables? */
+        default: { /* two/more results and/or to-be-closed variables */
+            if (hastocloseCfunc(wanted)) { /* to-be-closed variables? */
                 res = csF_close(C, res, CLOSEKTOP); /* do the closing */
+                if (C->hookmask) { /* if needed, call hook after '__close's */
+                    ptrdiff_t savedres = savestack(C, res);
+                    rethook(C, C->cf, nres);
+                    res = restorestack(C, savedres); /* hook can move stack */
+                }
                 wanted = decodeNresults(wanted); /* decode nresults */
-                if (wanted == CS_MULRET) /* all values needed? */
-                    wanted = nres;
+                if (wanted == CS_MULRET)
+                    wanted = nres; /* we want all results */
             }
             break;
         }
     }
+    /* generic case (all values needed or 2 or more values needed) */
     firstresult = C->sp.p - nres;
     if (nres > wanted) /* have extra results? */
         nres = wanted; /* discard them */
@@ -539,17 +541,10 @@ c_sinline void moveresults(cs_State *C, SPtr res, int nres, int wanted) {
 }
 
 
-/* move the results into correct place and return to caller */
-c_sinline void poscall(cs_State *C, CallFrame *cf, int nres) {
-    moveresults(C, cf->func.p, nres, cf->nresults);
-    C->cf = cf->prev; /* back to caller */
-}
-
-
 #define next_cf(C)   ((C)->cf->next ? (C)->cf->next : csT_newcf(C))
 
-c_sinline CallFrame *initcallframe(cs_State *C, SPtr func, int nres,
-                                    int mask, SPtr top) {
+c_sinline CallFrame *prepCallframe(cs_State *C, SPtr func, int nres,
+                                   int mask, SPtr top) {
     CallFrame *cf = C->cf = next_cf(C);
     cf->func.p = func;
     cf->top.p = top;
@@ -559,12 +554,36 @@ c_sinline CallFrame *initcallframe(cs_State *C, SPtr func, int nres,
 }
 
 
+/* move the results into correct place and return to caller */
+c_sinline void poscall(cs_State *C, CallFrame *cf, int nres) {
+    int wanted = cf->nresults;
+    if (c_unlikely(C->hookmask && !hastocloseCfunc(wanted)))
+        rethook(C, cf, nres);
+    /* move results to proper place */
+    moveresults(C, cf->func.p, nres, cf->nresults);
+    /* function cannot be in any of these cases when returning */
+    cs_assert(!(cf->status & (CFST_HOOKED | CFST_FIN | CFST_TRAN)));
+    C->cf = cf->prev; /* back to caller (after closing variables) */
+}
+
+
+/*
+   TODO: have to store 2 pc references, 1 is just for the line counting
+   to be correct; or maybe I should correct it manually if it is in-between
+   the instructions (only during errors)?
+   check cdebug.c.
+*/
 c_sinline int precallC(cs_State *C, SPtr func, int nres, cs_CFunction f) {
+    int n;
     CallFrame *cf;
-    int n; /* number of returns */
     checkstackGCp(C, CS_MINSTACK, func); /* ensure minimum stack space */
-    C->cf = cf = initcallframe(C, func, nres, CFST_CCALL,
-                               C->sp.p + CS_MINSTACK);
+    C->cf = cf = prepCallframe(C, func, nres, CFST_CCALL,
+                                              C->sp.p + CS_MINSTACK);
+    cs_assert(cf->top.p <= C->stackend.p);
+    if (c_unlikely(C->hookmask & CS_MASK_CALL)) {
+        int narg = cast_int(C->sp.p - func) - 1;
+        csD_hook(C, CS_HOOK_CALL, -1, 0, narg);
+    }
     cs_unlock(C);
     n = (*f)(C);
     cs_lock(C);
@@ -593,7 +612,7 @@ c_sinline void auxinsertf(cs_State *C, SPtr func, const TValue *f) {
 c_sinline SPtr trymetacall(cs_State *C, SPtr func) {
     const TValue *f;
     checkstackGCp(C, 1, func); /* space for func */
-    f = csMM_get(C, s2v(func), CS_MM_CALL); /* (after GC) */
+    f = csMM_get(C, s2v(func), CS_MM_CALL); /* (after previous GC) */
     if (c_unlikely(ttisnil(f))) /* missing __call? (after GC) */
         csD_callerror(C, s2v(func));
     auxinsertf(C, func, f);
@@ -619,14 +638,12 @@ retry:
             int nparams = p->arity;
             int fsize = p->maxstack;
             checkstackGCp(C, fsize, func);
-            C->cf = cf = initcallframe(C, func, nres, 0, func + fsize + 1);
-            cf->pc = cf->realpc = p->code; /* set starting point */
-            for (; nargs < nparams; nargs++) {
-                setnilval(s2v(C->sp.p)); /* set missing args as 'nil' */
-                C->sp.p += 1;
-            }
-            if (!p->isvararg)
-                C->sp.p = func + nparams + 1; /* might have extra args */
+            C->cf = cf = prepCallframe(C, func, nres, 0, func + 1 + fsize);
+            cf->cs.pc = cf->cs.pcret = p->code; /* set starting point */
+            for (; nargs < nparams; nargs++)
+                setnilval(s2v(C->sp.p++)); /* set missing args as 'nil' */
+            if (!p->isvararg) /* not a vararg function? */
+                C->sp.p = func + 1 + nparams; /* might have extra args */
             cs_assert(cf->top.p <= C->stackend.p);
             return cf; /* new call frame */
         }
@@ -677,12 +694,12 @@ c_sinline void ccall(cs_State *C, SPtr func, int nresults, c_uint32 inc) {
     CallFrame *cf;
     C->nCcalls += inc;
     if (c_unlikely(getCcalls(C) >= CSI_MAXCCALLS)) {
-        checkstackp(C, 0, func);  /* free any use of EXTRA_STACK */
+        checkstackp(C, 0, func); /* free any use of EXTRA_STACK */
         csT_checkCstack(C);
     }
-    if ((cf = precall(C, func, nresults)) != NULL) {  /* CScript function? */
-        cf->status = CFST_FRESH;
-        csV_execute(C, cf);
+    if ((cf = precall(C, func, nresults)) != NULL) { /* CScript function? */
+        cf->status = CFST_FRESH; /* mark it as a "fresh" execute */
+        csV_execute(C, cf); /* call it */
     }
     C->nCcalls -= inc;
 }
@@ -766,8 +783,7 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 }
 
 
-#define getbsize(b)     ((b > 0) ? (1<<((b)-1)) : 0)
-
+#define log2size(b)     ((b > 0) ? (1<<((b)-1)) : 0)
 
 c_sinline void pushclass(cs_State *C, int b) {
     OClass *cls = csMM_newclass(C);
@@ -777,7 +793,7 @@ c_sinline void pushclass(cs_State *C, int b) {
         cs_assert(0); /* TODO */
     }
     if (b > 0) /* have methods? */
-        cls->methods = csH_newsz(C, getbsize(b));
+        cls->methods = csH_newsz(C, log2size(b));
 }
 
 
@@ -785,7 +801,7 @@ c_sinline void pushlist(cs_State *C, int b) {
     List *l = csA_new(C);
     setlistval2s(C, C->sp.p++, l);
     if (b > 0) /* list is not empty? */
-        csA_ensure(C, l, getbsize(b));
+        csA_ensure(C, l, log2size(b));
 }
 
 
@@ -793,7 +809,7 @@ c_sinline void pushtable(cs_State *C, int b) {
     Table *t = csH_new(C);
     settval2s(C, C->sp.p++, t);
     if (b > 0) /* table is not empty? */
-        csH_resize(C, t, getbsize(b));
+        csH_resize(C, t, log2size(b));
 }
 
 
@@ -802,14 +818,14 @@ c_sinline void pushtable(cs_State *C, int b) {
 **------------------------------------------------------------------------ */
 
 /* 'cs_Integer' arithmetic operations */
-#define iadd(C,a,b)    (c_intop(+, a, b))
-#define isub(C,a,b)    (c_intop(-, a, b))
-#define imul(C,a,b)    (c_intop(*, a, b))
+#define iadd(C,a,b)    (intop(+, a, b))
+#define isub(C,a,b)    (intop(-, a, b))
+#define imul(C,a,b)    (intop(*, a, b))
 
 /* integer bitwise operations */
-#define iband(a,b)      (c_intop(&, a, b))
-#define ibor(a,b)       (c_intop(|, a, b))
-#define ibxor(a,b)      (c_intop(^, a, b))
+#define iband(a,b)      (intop(&, a, b))
+#define ibor(a,b)       (intop(|, a, b))
+#define ibxor(a,b)      (intop(^, a, b))
 
 /* integer ordering operations */
 #define ilt(a,b)        (a < b)
@@ -1044,25 +1060,43 @@ c_sinline void pushtable(cs_State *C, int b) {
 ** ======================================================================= */
 
 
+/* get reference to constant value from 'k' at index 'idx' */
 #define K(idx)          (k + (idx))
+
+/* get stack slot at index 'i_' */
 #define STK(i_)         (base+(i_))
+
+/* get stack slot of value at 'i_' slots from the value on top */
 #define stkpeek(i_)     (sp-1-(i_))
+
+/* idem but this gets the actual value */
 #define peek(n)         s2v(stkpeek(n))
 
 
-#define updatetrap(cf)      (trap = cf->trap)
+/* update global 'trap' */
+#define updatetrap(cf)      (trap = cf->cs.trap)
+
+/* update global 'base' */
 #define updatebase(cf)      (base = (cf)->func.p + 1)
+
+/*
+** If 'trap' (maybe stack reallocation), then update global 'base'
+** and global 'sp'.
+*/
 #define updatestack(cf) \
     { if (c_unlikely(trap)) { updatebase(cf); sp = C->sp.p; }}
 
 
-#define storepc(C)          (cf->pc = pc)
+/* store global 'pc' */
+#define storepc(C)          (cf->cs.pc = pc)
+
+/* store global 'sp' */
 #define storesp(C)          (C->sp.p = sp)
+
 
 #define savestate(C)        (storepc(C), storesp(C))
 
 
-// TODO
 #if defined(CSI_TRACE_EXEC)
 #include "ctrace.h"
 #define tracepc(C,p)        (csTR_tracepc(C, sp, p, pc))
@@ -1071,26 +1105,29 @@ c_sinline void pushtable(cs_State *C, int b) {
 #endif
 
 
+/* protect code that can reallocate stack or change hooks */
+#define Protect(exp)    ((exp), updatetrap(cf))
+
+
+/* collector might of reallocated stack, so update global 'trap' */
+#define checkGC(C)      csG_condGC(C, (void)0, updatetrap(cf))
+
+
 /* fetch instruction */
 #define fetch() { \
-    if (c_unlikely(trap)) { /* stack reallocation? */ \
-        trap = csD_traceexec(C, pc); \
+    if (c_unlikely(trap)) { /* stack reallocation or hooks? */ \
+        trap = csD_traceexec(C, pc); /* handle hooks */ \
         updatebase(cf); /* correct stack */ \
         sp = C->sp.p; /* correct stack pointer */ \
     } \
     I = (tracepc(C, cl->p), *(pc++)); \
 }
 
-/* fetch instruction arguments (short/long) */
+/* fetch short instruction argument */
 #define fetch_s()       (*(pc++))
+
+/* fetch long instruction argument */
 #define fetch_l()       (pc += SIZE_ARG_L, get3bytes(pc - SIZE_ARG_L))
-
-
-/* protect code that can change stack */
-#define Protect(exp)    ((exp), updatetrap(cf))
-
-
-#define checkGC(C)      csG_checkGC(C)
 
 
 /* In cases where jump table is not available or prefered. */
@@ -1110,12 +1147,14 @@ void csV_execute(cs_State *C, CallFrame *cf) {
 #include "cjmptable.h"
 #endif
 startfunc:
-    trap = 0; /* no hooks */
+    trap = C->hookmask;
 returning: /* trap already set */
     cl = cf_func(cf);
     k = cl->p->k;
     sp = C->sp.p;
-    pc = cf->realpc;
+    pc = cf->cs.pcret;
+    if (c_unlikely(trap))
+        trap = csD_tracecall(C);
     base = cf->func.p + 1;
     /* main loop of interpreter */
     for (;;) {
@@ -1192,8 +1231,13 @@ returning: /* trap already set */
             }
             vm_case(OP_VARARGPREP) {
                 savestate(C);
-                csF_adjustvarargs(C, fetch_l(), cf, cl->p);
-                updatebase(cf); /* update base (changed after adjustment) */
+                Protect(csF_adjustvarargs(C, fetch_l(), cf, cl->p));
+                if (c_unlikely(trap)) {
+                    csD_hookcall(C, cf);
+                    /* next opcode will be seen as a "new" line */
+                    C->oldpc = getOpSize(*pc);
+                }
+                updatebase(cf); /* function has new base after adjustment */
                 sp = C->sp.p;
                 vm_break;
             }
@@ -1246,19 +1290,18 @@ returning: /* trap already set */
                 TValue *o = peek(1); /* class */
                 TValue *f = peek(0); /* func */
                 List *ml = classval(o)->metalist;
-                cs_MM mm; /* metamethod tag */
+                int mm; /* metamethod index */
                 savestate(C);
                 mm = fetch_s();
-                cs_assert(0 <= mm && mm < CS_MM_N);
+                cs_assert(0 <= mm && mm < CS_MM_NUM);
                 /* TODO: remove this check (see pushclass) */
                 if (c_unlikely(!ml)) { /* no metalist? */
-                    ml = csA_newmetalist(C);
+                    ml = csA_new(C);
                     classval(o)->metalist = ml;
                     checkGC(C);
                 }
-                cs_assert(ml && cast_int(mm) < ml->n);
-                ml->b[mm] = *f; /* set the entry */
-                csV_finishrawset(C, ml, f);
+                csA_ensureindex(C, ml, mm);
+                csA_fastset(C, ml, mm, f); /* set the entry */
                 sp--;
                 vm_break;
             }
@@ -1273,7 +1316,7 @@ returning: /* trap already set */
             vm_case(OP_MBIN) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                cs_MM mm;
+                int mm;
                 savestate(C);
                 mm = fetch_s();
                 if (mm & 0x80) c_swap(v1, v2);
@@ -1512,7 +1555,7 @@ returning: /* trap already set */
                 TValue *v = peek(0);
                 if (ttisint(v)) {
                     cs_Integer ib = ival(v);
-                    setival(v, c_intop(-, 0, ib));
+                    setival(v, intop(-, 0, ib));
                 } else if (ttisflt(v)) {
                     cs_Number n = fval(v);
                     setfval(v, c_numunm(C, n));
@@ -1526,7 +1569,7 @@ returning: /* trap already set */
                 TValue *v = peek(0);
                 if (ttisint(v)) {
                     cs_Integer i = ival(v);
-                    setival(v, c_intop(^, ~c_castS2U(0), i));
+                    setival(v, intop(^, ~c_castS2U(0), i));
                 } else {
                     savestate(C);
                     Protect(csMM_tryunary(C, v, CS_MM_BNOT));
@@ -1578,9 +1621,9 @@ returning: /* trap already set */
                 func = STK(fetch_l());
                 nres = fetch_l()-1;
                 if ((newcf = precall(C, func, nres)) == NULL) /* C call? */
-                    updatetrap(cf); /* done; it already returned */
+                    updatetrap(cf); /* done (function already returned) */
                 else { /* CScript call */
-                    cf->realpc = pc; /* after return continue from here */
+                    cf->cs.pcret = pc; /* after return, continue at 'pc' */
                     cf = newcf; /* run function in this same C frame */
                     goto startfunc;
                 }
@@ -1589,7 +1632,7 @@ returning: /* trap already set */
             }
             vm_case(OP_CLOSE) {
                 savestate(C);
-                Protect(csF_close(C, STK(fetch_l()), CS_OK));
+                Protect(csF_close(C, STK(fetch_l()), CS_STATUS_OK));
                 vm_break;
             }
             vm_case(OP_TBC) {
@@ -1631,13 +1674,13 @@ returning: /* trap already set */
                 if (n == 0)
                     n = (sp - sl) - 1; /* get up to the top */
                 cs_assert(n >= 0);
-                last += n - (n > 0); /* make 'last' be the last index... */
-                csA_ensureindex(C, l, last); /* ...that fits into the list */
+                last += n - 1; /* make 'last' be the last index */
+                csA_ensureindex(C, l, check_exp(last >= -1, last));
                 for (; n > 0; n--) { /* set the values from the stack... */
                     /* ...into the list (in reverse order) */
                     TValue *v = s2v(sl + n);
-                    setobj(C, &l->b[last--], v);
-                    csV_finishrawset(C, l, v);
+                    csA_fastset(C, l, last, v); 
+                    last--;
                 }
                 sp = C->sp.p = sl + 1; /* pop off elements (if any) */
                 vm_break;
@@ -1851,9 +1894,10 @@ returning: /* trap already set */
                     updatestack(cf);
                 }
                 if (cl->p->isvararg) /* vararg function? */
-                    cf->func.p -= cf->nvarargs + cl->p->arity + 1;
+                    cf->func.p -= cf->cs.nvarargs + cl->p->arity + 1;
                 C->sp.p = stk + nres; /* set stk ptr for 'poscall' */
                 poscall(C, cf, nres);
+                updatetrap(cf); /* 'poscall' can change hooks */
                 /* return from CScript function */
                 if (cf->status & CFST_FRESH) /* top-level function? */
                     return; /* end this frame */

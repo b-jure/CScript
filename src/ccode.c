@@ -28,23 +28,23 @@
 */
 
 
-/* check if 'ExpInfo' has jumps */
+/* check if expression has jumps */
 #define hasjumps(e)     ((e)->t != (e)->f)
 
 
-/* unary 'opr' to opcode */
+/* unary operation to opcode */
 #define unopr2op(opr) \
         cast(OpCode, cast_int(opr) - OPR_UNM + OP_UNM)
 
 
-/* binary operation to OpCode */
+/* binary operation to opcode */
 #define binopr2op(opr,x,from) \
         cast(OpCode, (cast_int(opr) - cast_int(x)) + cast_int(from))
 
 
-/* binary OpCode to metamethod tag */
+/* binary opcode to metamethod tag */
 #define binop2mm(op) \
-        cast(cs_MM, (cast_int(op) - OP_ADD) + cast_int(CS_MM_ADD))
+        ((cast_int(op) - OP_ADD) + cast_int(CS_MM_ADD))
 
 
 /*
@@ -1098,7 +1098,6 @@ void csC_settablesize(FunctionState *fs, int pc, int hsize) {
 }
 
 
-#include <stdio.h>
 /*
 ** Ensure expression 'e' is on top of the stack, making 'e'
 ** a finalized expression.
@@ -1228,13 +1227,13 @@ void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
 */
 static int validop(TValue *v1, TValue *v2, int op) {
     switch (op) {
-        case CS_OPBSHR: case CS_OPBSHL: case CS_OPBAND:
-        case CS_OPBOR: case CS_OPBXOR: case CS_OPBNOT: { /* conversion */
+        case CS_OP_BSHR: case CS_OP_BSHL: case CS_OP_BAND:
+        case CS_OP_BOR: case CS_OP_BXOR: case CS_OP_BNOT: { /* conversion */
             cs_Integer i;
             return (csO_tointeger(v1, &i, N2IEXACT) &&
                     csO_tointeger(v2, &i, N2IEXACT));
         }
-        case CS_OPDIV: case CS_OPIDIV: case CS_OPMOD: /* division by 0 */
+        case CS_OP_DIV: case CS_OP_IDIV: case CS_OP_MOD: /* division by 0 */
             return (nval(v2) != 0);
         default: return 1; /* everything else is valid */
     }
@@ -1325,7 +1324,7 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
     csC_dischargevars(fs, e);
     switch (uopr) {
         case OPR_UNM: case OPR_BNOT: {
-            if (constfold(fs, e, &dummy, (uopr - OPR_UNM) + CS_OPUNM))
+            if (constfold(fs, e, &dummy, (uopr - OPR_UNM) + CS_OP_UNM))
                 break; /* folded */
             codeunary(fs, e, unopr2op(uopr), line);
             break;
@@ -1683,7 +1682,7 @@ static int codeaddnegI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                 int line) {
     int swapped = 0;
-    if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OPADD))
+    if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OP_ADD))
         return; /* done (folded) */
     switch (opr) {
         case OPR_ADD: case OPR_MUL:

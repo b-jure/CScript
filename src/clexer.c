@@ -38,7 +38,6 @@
 #define save_and_advance(lx)        (save(lx), advance(lx))
 
 
-
 static const char *tkstr[] = { /* ORDER TK */
     "and", "break", "case", "continue", "class",
     "default", "else", "false", "for", "foreach", "fn", "if",
@@ -50,14 +49,12 @@ static const char *tkstr[] = { /* ORDER TK */
 };
 
 
-
 /* type of digit */
 typedef enum DigType {
     DigDec,
     DigHex,
     DigOct,
 } DigType;
-
 
 
 void csY_setinput(cs_State *C, Lexer *lx, BuffReader *br, OString *source) {
@@ -135,7 +132,7 @@ static const char *lextok2str(Lexer *lx, int t) {
         case TK_FLT: case TK_INT:
         case TK_STRING: case TK_NAME: {
             savec(lx, '\0');
-            return csS_pushfstring(lx->C, "%s", csR_buff(lx->buff));
+            return csS_pushfstring(lx->C, "'%s'", csR_buff(lx->buff));
         }
         default: return csY_tok2str(lx, t);
     }
@@ -146,7 +143,7 @@ static const char *lexmsg(Lexer *lx, const char *msg, int token) {
     cs_State *C = lx->C;
     msg = csD_addinfo(C, msg, lx->src, lx->line);
     if (token)
-        msg = csS_pushfstring(C, "%s near: %s", msg, lextok2str(lx, token));
+        msg = csS_pushfstring(C, "%s near %s", msg, lextok2str(lx, token));
     return msg;
 }
 
@@ -161,7 +158,7 @@ static void lexwarn(Lexer *lx, const char *msg, int token) {
 
 static c_noret lexerror(Lexer *lx, const char *err, int token) {
     lexmsg(lx, err, token);
-    csPR_throw(lx->C, CS_ERRSYNTAX);
+    csPR_throw(lx->C, CS_STATUS_ESYNTAX);
 }
 
 
@@ -175,7 +172,7 @@ static void inclinenr(Lexer *lx) {
     int old_c = lx->c;
     cs_assert(currIsNewline(lx));
     advance(lx); /* skip '\n' or '\r' */
-    if (currIsNewline(lx) && lx->c != old_c) /* have '\r\n' or '\n\r'? */
+    if (currIsNewline(lx) && lx->c != old_c) /* have "\r\n" or "\n\r"? */
         advance(lx); /* skip it */
     if (c_unlikely(++lx->line >= MAXINT))
         lexerror(lx, "too many lines in a chunk", 0);
@@ -235,10 +232,10 @@ static void read_longcomment(Lexer *lx) {
 
 
 static void checkcond(Lexer *lx, int cond, const char *msg) {
-    if (c_unlikely(!cond)) {
-        if (lx->c != CSEOF)
-            save_and_advance(lx); /* add current to buffer for error message */
-        lexerror(lx, msg, TK_STRING);
+    if (c_unlikely(!cond)) { /* condition fails? */
+        if (lx->c != CSEOF) /* not end-of-file? */
+            save_and_advance(lx); /* add current char to buffer for err msg */
+        lexerror(lx, msg, TK_STRING); /* invoke syntax error */
     }
 }
 
@@ -368,36 +365,26 @@ static int read_decesc(Lexer *lx) {
 }
 
 
-/*
-** Checks if long string delimiter was read (newline) and trims the
-** multi-line string to length newline (+ the delimiter).
-*/
-static int checkdelimiter(Lexer *lx, int newline) {
-    if (lx->c == '"') { /* go on... */
+static size_t skipsep(Lexer *lx) {
+    size_t count = 0;
+    int s = lx->c;
+    cs_assert(s == '[' || s == ']');
+    save_and_advance(lx);
+    while (lx->c == '=') {
         save_and_advance(lx);
-        if (lx->c == '"') { /* delimiter? */
-            save_and_advance(lx);
-            if (c_unlikely(newline < 0))
-                lexerror(lx, "multi-line string literal closing "
-                             "delimiter must begin on a new line", 0);
-            cs_assert(csR_buff(lx->buff)[newline] == '\n');
-            csR_bufflen(lx->buff) = newline + LL("\"\"\"");
-            memcpy(csR_buff(lx->buff) + newline, "\"\"\"", LL("\"\"\""));
-            return 1;
-        }
+        count++;
     }
-    return 0;
+    return (lx->c == s) ? count + 2
+                        : (count == 0) ? 1 : 0;
 }
 
 
 // TODO: add docs for long strings
-static void read_long_string(Lexer *lx, Literal *k) {
-    int line = lx->line;
-    int newline = -1; /* length up to newline (for delimiter) */
-    save_and_advance(lx); /* skip '"' */
-    checkcond(lx, currIsNewline(lx),
-                "multi-line string literal content must begin on a new line");
-    inclinenr(lx); /* skip new-line */
+static void read_long_string(Lexer *lx, Literal *k, size_t sep) {
+    int line = lx->line; /* initial line */
+    save_and_advance(lx); /* skip second '[' */
+    if (currIsNewline(lx)) /* string starts with a newline? */
+        inclinenr(lx); /* skip it */
     for (;;) {
         switch (lx->c) {
             case CSEOF: { /* error */
@@ -406,91 +393,81 @@ static void read_long_string(Lexer *lx, Literal *k) {
                 lexerror(lx, msg, TK_EOS);
                 break; /* to avoid warnings */
             }
-            case '"': {
-                save_and_advance(lx);
-                if (checkdelimiter(lx, newline))
+            case ']': {
+                if (skipsep(lx) == sep) {
+                    save_and_advance(lx); /* skip 2nd ']' */
                     goto endloop;
+                }
                 break;
             }
             case '\n': case '\r': {
-                newline = csR_bufflen(lx->buff);
                 savec(lx, '\n');
                 inclinenr(lx);
                 break;
             }
             default: {
-                if (!cisspace(lx->c))
-                    newline = -1;
                 save_and_advance(lx);
                 break;
             }
         }
-    } endloop:
-    k->str = csY_newstring(lx, csR_buff(lx->buff)+3, csR_bufflen(lx->buff)-6);
+    }
+endloop:
+    k->str = csY_newstring(lx, csR_buff(lx->buff) + sep,
+                               csR_bufflen(lx->buff) - 2 * sep);
 }
 
 
 /* create string token and handle the escape sequences */
 static void read_string(Lexer *lx, Literal *k) {
     save_and_advance(lx); /* skip '"' */
-    if (lx->c == '"') { /* empty string? */
-        save_and_advance(lx); /* skip '"' */
-        if (lx->c == '"') { /* long string? */
-            read_long_string(lx, k);
-            return; /* done */
-        }
-        goto end;
-    } else {
-        do {
-            switch (lx->c) {
-                case CSEOF:
-                    lexerror(lx, "unterminated string", TK_EOS);
-                    break; /* to avoid warnings */
-                case '\r': case '\n':
-                    lexerror(lx, "unterminated string", TK_STRING);
-                    break; /* to avoid warnings */
-                case '\\': { /* escape sequences */
-                    int c; /* final character to be saved */
-                    save_and_advance(lx); /* keep '\\' for error messages */
-                    switch (lx->c) {
-                        case 'a': c = '\a'; goto read_save;
-                        case 'b': c = '\b'; goto read_save;
-                        case 't': c = '\t'; goto read_save;
-                        case 'n': c = '\n'; goto read_save;
-                        case 'v': c = '\v'; goto read_save;
-                        case 'f': c = '\f'; goto read_save;
-                        case 'r': c = '\r'; goto read_save;
-                        case 'e': c = '\x1B'; goto read_save;
-                        case 'x': c = read_hexesc(lx); goto read_save;
-                        case 'u': utf8esc(lx); goto no_save;
-                        case '\n': case '\r':
-                                  inclinenr(lx); c = '\n'; goto only_save;
-                        case '\"': case '\'': case '\\':
-                                  c = lx->c; goto read_save;
-                        case CSEOF: goto no_save; /* raise err on next iter. */
-                        default: {
-                            checkcond(lx, cisdigit(lx->c),
-                                          "invalid escape sequence");
-                            c = read_decesc(lx); /* '\ddd' */
-                            goto only_save;
-                        }
+    while (lx->c != '"') {
+        switch (lx->c) {
+            case CSEOF: /* end of file */
+                lexerror(lx, "unterminated string", TK_EOS);
+                break; /* to avoid warnings */
+            case '\r': case '\n': /* newline */
+                lexerror(lx, "unterminated string", TK_STRING);
+                break; /* to avoid warnings */
+            case '\\': { /* escape sequences */
+                int c; /* final character to be saved */
+                save_and_advance(lx); /* keep '\\' for error messages */
+                switch (lx->c) {
+                    case 'a': c = '\a'; goto read_save;
+                    case 'b': c = '\b'; goto read_save;
+                    case 't': c = '\t'; goto read_save;
+                    case 'n': c = '\n'; goto read_save;
+                    case 'v': c = '\v'; goto read_save;
+                    case 'f': c = '\f'; goto read_save;
+                    case 'r': c = '\r'; goto read_save;
+                    case 'e': c = '\x1B'; goto read_save;
+                    case 'x': c = read_hexesc(lx); goto read_save;
+                    case 'u': utf8esc(lx); goto no_save;
+                    case '\n': case '\r':
+                              inclinenr(lx); c = '\n'; goto only_save;
+                    case '\"': case '\'': case '\\':
+                              c = lx->c; goto read_save;
+                    case CSEOF: goto no_save; /* raise err on next iter. */
+                    default: {
+                        checkcond(lx, cisdigit(lx->c),
+                                "invalid escape sequence");
+                        c = read_decesc(lx); /* '\ddd' */
+                        goto only_save;
                     }
-                read_save:
-                    advance(lx);
-                    /* fall through */
-                only_save:
-                    csR_buffpop(lx->buff); /* remove '\\' */
-                    savec(lx, c);
-                    /* fall through */
-                no_save:
-                    break;
                 }
-                default: save_and_advance(lx);
+            read_save:
+                advance(lx);
+                /* fall through */
+            only_save:
+                csR_buffpop(lx->buff); /* remove '\\' */
+                savec(lx, c);
+                /* fall through */
+            no_save:
+                break;
             }
-        } while (lx->c != '"');
-        save_and_advance(lx); /* skip terminating '"' */
-    }
-end:
+            default: save_and_advance(lx);
+        }
+    } /* while byte is not a delimiter */
+    save_and_advance(lx); /* skip delimiter */
     k->str = csY_newstring(lx, csR_buff(lx->buff)+1, csR_bufflen(lx->buff)-2);
 }
 
@@ -729,15 +706,24 @@ static int scan(Lexer *lx, Literal *k) {
                         read_comment(lx);
                     else
                         return TK_IDIV;
-                } else if (lxmatch(lx, '*')) {
+                } else if (lxmatch(lx, '*'))
                     read_longcomment(lx);
-                } else 
+                else 
                     return '/';
                 break;
             }
             case '"': {
                 read_string(lx, k);
                 return TK_STRING;
+            }
+            case '[': {
+                size_t sep = skipsep(lx);
+                if (sep >= 2) {
+                    read_long_string(lx, k, sep);
+                    return TK_STRING;
+                } else if (sep == 0) /* '[=...' missing second bracket? */
+                    lexerror(lx, "invalid long string delimiter", TK_STRING);
+                return '[';
             }
             case '\'': {
                 return read_char(lx, k);

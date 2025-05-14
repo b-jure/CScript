@@ -91,7 +91,7 @@ def print_test_result(test, code):
         if isatty:
             print('{:{}} {}'.format(green(tname), cscript_test_result_padding, green("ok")))
         else:
-            print('{:{}} {}'.format(thame, cscript_test_result_padding, "ok"))
+            print('{:{}} {}'.format(tname, cscript_test_result_padding, "ok"))
         return 0
 
 

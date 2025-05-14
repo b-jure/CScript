@@ -430,7 +430,7 @@ foreach a, b in io.lines(fname, "n", "n") {
 
 /* test load x lines */
 io.output(fname);
-io.write("""
+io.write([=[
 local y
 = X;
 X =
@@ -441,8 +441,7 @@ X =
 X
 -                                   y;
 
-"""
-).close();
+]=]).close();
 __G.X = 1;
 assert(load((io.lines(fname))));
 gc();   # to close file in previous iteration
@@ -515,13 +514,12 @@ assert(os.remove(otherfname));
 gc();
 
 {
-    io.output(fname).write("""
+    io.output(fname).write([=[
  123.4	-56e-2  not a number
 second line
 third line
 
-and the rest of the file
-""").close();
+and the rest of the file]=]).close();
     io.input(fname);
     local _,a,b,c,d,e,h,__ = io.read(1, "n", "n", "l", "l", "l", "a", 10);
     assert(io.close(io.input()));

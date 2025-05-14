@@ -227,7 +227,7 @@ static void auxjoinstr(csL_Buffer *b, const char *s, size_t l,
 static void joinfromtable(cs_State *C, csL_Buffer *b,
                           const char *sep, size_t lsep) {
     cs_push_nil(C);
-    while (cs_next(C, 1) != 0) {
+    while (cs_nextfield(C, 1) != 0) {
         size_t l;
         const char *s = cs_to_lstring(C, -1, &l);
         int pop = 1; /* value */
@@ -242,8 +242,8 @@ static void joinfromtable(cs_State *C, csL_Buffer *b,
 
 
 static void joinfromlist(cs_State *C, csL_Buffer *b,
-                          const char *sep, size_t lsep, int len) {
-    int i = cs_find_nnilindex(C, 1, 0, --len);
+                         const char *sep, size_t lsep, int len) {
+    int i = cs_find_index(C, 1, 0, 0, --len);
     while (i >= 0) {
         size_t l;
         const char *s;
@@ -252,7 +252,7 @@ static void joinfromlist(cs_State *C, csL_Buffer *b,
         cs_pop(C, 1);
         if (s && l > 0)
             auxjoinstr(b, s, l, sep, lsep);
-        i = cs_find_nnilindex(C, 1, ++i, len);
+        i = cs_find_index(C, 1, 0, ++i, len);
     }
 }
 
@@ -262,9 +262,9 @@ static int s_join(cs_State *C) {
     const char *sep = csL_check_lstring(C, 0, &lsep);
     int t = cs_type(C, 1);
     csL_Buffer b;
-    csL_expect_arg(C, (t == CS_TLIST || t == CS_TTABLE), 1, "list/table");
+    csL_expect_arg(C, (t == CS_T_LIST || t == CS_T_TABLE), 1, "list/table");
     csL_buff_init(C, &b);
-    if (t == CS_TLIST) {
+    if (t == CS_T_LIST) {
         int len = cs_len(C, 1);
         if (len > 0)
             joinfromlist(C, &b, sep, lsep, len);
@@ -391,13 +391,13 @@ static int quotefloat(cs_State *C, char *buff, cs_Number n) {
 
 static void addliteral(cs_State *C, csL_Buffer *b, int arg) {
     switch (cs_type(C, arg)) {
-        case CS_TSTRING: {
+        case CS_T_STRING: {
             size_t len;
             const char *s = cs_to_lstring(C, arg, &len);
             addquoted(b, s, len);
             break;
         }
-        case CS_TNUMBER: {
+        case CS_T_NUMBER: {
             char *buff = csL_buff_ensure(b, MAX_ITEM);
             int nb;
             if (!cs_is_integer(C, arg)) /* float? */
@@ -412,7 +412,7 @@ static void addliteral(cs_State *C, csL_Buffer *b, int arg) {
             csL_buffadd(b, nb);
             break;
         }
-        case CS_TNIL: case CS_TBOOL: {
+        case CS_T_NIL: case CS_T_BOOL: {
             csL_to_lstring(C, arg, NULL);
             csL_buff_push_stack(b);
             break;
@@ -860,8 +860,8 @@ static int s_bytes(cs_State *C) {
 
 // TODO: add docs and tests
 static int s_char(cs_State *C) {
-    int n = cs_getntop(C); /* number of arguments */
     csL_Buffer b;
+    int n = cs_getntop(C); /* number of arguments */
     char *p = csL_buff_initsz(C, &b, cast_uint(n));
     for (int i=0; i<n; i++) {
         cs_Unsigned c = (cs_Unsigned)csL_check_integer(C, i);
@@ -883,14 +883,14 @@ static void addvalue(cs_State *C, csL_Buffer *b, int i) {
 
 
 #define getnexti(C,begin,end,skip) \
-        ((!skip) ? (int)begin+1 : cs_find_nnilindex(C,0,(uint)begin,(int)end))
+        ((!skip) ? (int)begin+1 : cs_find_index(C,0,0,(int)begin,(int)end))
 
 
 // TODO: add docs and tests
 static int s_concat(cs_State *C) {
     csL_Buffer b;
     size_t lsep;
-    cs_Integer l = (csL_check_type(C, 0, CS_TLIST), cs_len(C, 0));
+    cs_Integer l = (csL_check_type(C, 0, CS_T_LIST), cs_len(C, 0));
     const char *sep = csL_opt_lstring(C, 1, "", &lsep);
     cs_Integer i = posrelStart(csL_opt_integer(C, 2, 0), l);
     cs_Integer j = posrelEnd(csL_opt_integer(C, 3, l - 1), l);
@@ -902,7 +902,7 @@ static int s_concat(cs_State *C) {
         csL_buff_push_lstring(&b, sep, lsep);
         il = getnexti(C, il, j, skipnil);
     }
-    if (il == j && (!skipnil || cs_find_nnilindex(C, 0, il, j) != -1))
+    if (il == j && (!skipnil || cs_find_index(C, 0, 0, il, j) != -1))
         addvalue(C, &b, (int)j); /* add last value */
     csL_buff_end(&b);
     return 1;

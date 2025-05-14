@@ -18,7 +18,7 @@ CSI_DEC(const char *const csO_typenames[CSI_TOTALTYPES]);
 
 
 CSI_FUNC void csMM_init(cs_State *C);
-CSI_FUNC const TValue *csMM_get(cs_State *C, const TValue *v, cs_MM mm);
+CSI_FUNC const TValue *csMM_get(cs_State *C, const TValue *v, int mm);
 CSI_FUNC OClass *csMM_newclass(cs_State *C);
 CSI_FUNC Instance *csMM_newinstance(cs_State *C, OClass *cls);
 CSI_FUNC UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv);
@@ -36,12 +36,12 @@ CSI_FUNC void csMM_callbinres(cs_State *C, const TValue *fn, const TValue *v1,
                               const TValue *v2, SPtr res);
 CSI_FUNC void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *v);
 CSI_FUNC int csMM_order(cs_State *C, const TValue *v1, const TValue *v2,
-		  	cs_MM mm);
+		  	int mm);
 CSI_FUNC int csMM_orderI(cs_State *C, const TValue *v1, int v2, int flip,
-                         int isflt, cs_MM mm);
+                         int isflt, int mm);
 CSI_FUNC void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2,
-		    	  SPtr res, cs_MM mm);
-CSI_FUNC void csMM_tryunary(cs_State *C, const TValue *v, cs_MM mm);
+		    	  SPtr res, int mm);
+CSI_FUNC void csMM_tryunary(cs_State *C, const TValue *v, int mm);
 CSI_FUNC void csMM_tryconcat(cs_State *C);
 
 #endif

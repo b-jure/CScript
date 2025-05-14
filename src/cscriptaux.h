@@ -26,20 +26,19 @@ typedef struct csL_Buffer csL_Buffer;
 
 
 /* extra error code for 'csL_loadfile' */
-#define CS_ERRFILE      (CS_ERRERROR + 1)
+#define CS_STATUS_EFILE     (CS_STATUS_EERROR + 1)
 
 
 /* new index into the metalist, for when converting values to string */
-#define CS_MM_TOSTRING      CS_MM_N
+#define CS_MM_TOSTRING      CS_MM_NUM
 
 
-/* key, in the registry table, for table of loaded modules */
+/* key, in the ctable, for table of loaded modules */
 #define CS_LOADED_TABLE     "__LOADED"
 
 
-/* key, in the registry table, for table of preloaded loaders */
+/* key, in the ctable, for table of preloaded loaders */
 #define CS_PRELOAD_TABLE    "__PRELOAD"
-
 
 
 /* {=======================================================================
@@ -50,9 +49,8 @@ CSLIB_API int csL_error_arg(cs_State *C, int index, const char *extra);
 CSLIB_API int csL_error_type(cs_State *C, int index, const char *tname);
 /* }======================================================================= */
 
-
 /* {=======================================================================
-** Required argument
+** Required argument/option and other checks
 ** ======================================================================== */
 CSLIB_API cs_Number     csL_check_number(cs_State *C, int index);
 CSLIB_API cs_Integer    csL_check_integer(cs_State *C, int index);
@@ -69,7 +67,6 @@ CSLIB_API int           csL_check_option(cs_State *C, int index,
                                          const char *const opts[]);
 /* }======================================================================= */
 
-
 /* {=======================================================================
 ** Optional argument
 ** ======================================================================== */
@@ -80,7 +77,6 @@ CSLIB_API const char *csL_opt_lstring(cs_State *C, int index, const char *dfl,
                                       size_t *l);
 /* }======================================================================= */
 
-
 /* {=======================================================================
 ** Chunk loading
 ** ======================================================================== */
@@ -89,7 +85,6 @@ CSLIB_API int csL_loadstring(cs_State *C, const char *s);
 CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
                              const char *name);
 /* }======================================================================= */
-
 
 /* {=======================================================================
 ** Userdata and Metalist functions
@@ -109,14 +104,12 @@ CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname);
 CSLIB_API void  csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l, int nup);
 /* }======================================================================= */
 
-
 /* {=======================================================================
 ** File/Exec result process functions
 ** ======================================================================== */
 CSLIB_API int csL_fileresult(cs_State *C, int ok, const char *fname);
 CSLIB_API int csL_execresult(cs_State *C, int stat);
 /* }======================================================================= */
-
 
 /* {=======================================================================
 ** Miscellaneous functions
@@ -140,7 +133,6 @@ CSLIB_API const char *csL_gsub(cs_State *C, const char *s, const char *p,
 CSLIB_API unsigned    csL_makeseed(cs_State *C);
 /* }======================================================================= */
 
-
 /* {=======================================================================
 ** Reference system
 ** ======================================================================== */
@@ -151,29 +143,27 @@ CSLIB_API int   csL_ref(cs_State *C, int a);
 CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
 /* }======================================================================= */
 
-
 /* {=======================================================================
 ** Useful macros
 ** ======================================================================== */
-#define csL_check_version(C)    csL_check_version_(C, CS_VERSION_NUMBER)
+#define csL_check_version(C)        csL_check_version_(C, CS_VERSION_NUM)
+#define csL_check_string(C,index)   csL_check_lstring(C, index, NULL)
 
-#define csL_typename(C,index)   cs_typename(C, cs_type(C, index))
+#define csL_check_arg(C,cond,index,extramsg) \
+        ((void)(csi_likely(cond) || csL_error_arg(C, (index), (extramsg))))
 
-#define csL_check_string(C,index)      csL_check_lstring(C, index, NULL)
 #define csL_opt_string(C,index,dfl)    csL_opt_lstring(C, index, dfl, NULL)
 
 #define csL_opt(C,fn,index,dfl) \
         (cs_is_noneornil(C, index) ? (dfl) : fn(C, index))
 
-#define csL_check_arg(C,cond,index,extramsg) \
-        ((void)(csi_likely(cond) || csL_error_arg(C, (index), (extramsg))))
-
 #define csL_expect_arg(C,cond,index,tname) \
         ((void)(csi_likely(cond) || csL_error_type(C, (index), (tname))))
 
-#define csL_push_fail(C)    cs_push_nil(C)
+#define csL_typename(C,index)   cs_typename(C, cs_type(C, index))
 
-#define csL_push_libtable(C,l)  cs_push_table(C, sizeof(l)/sizeof((l)[0]) - 1)
+#define csL_push_fail(C)        cs_push_nil(C)
+#define csL_push_libtable(C,l)  cs_push_table(C, sizeof(l)/sizeof((l)[0])-1)
 
 #define csL_push_lib(C,l) \
         (csL_check_version(C), csL_push_libtable(C,l), csL_set_funcs(C,l,0))
@@ -185,19 +175,8 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
     { csL_new_usermethods(C, tname, sizeof(l)/sizeof(l[0]) - 1); \
       csL_set_funcs(C,l,0); }
 
-#define csL_get_gsubtable(C, name) \
-    { cs_push_globaltable(C); \
-      csL_get_subtable(C, -1, name); \
-      cs_remove(C, -2); }
-
-#define csL_get_rsubtable(C, name) \
-    { cs_push_registrytable(C); \
-      csL_get_subtable(C, -1, name); \
-      cs_remove(C, -2); }
-
-#define csL_get_methods(C, tname)       cs_get_rtable(C, tname)
-
-#define csL_get_metalist(C, lname)      cs_get_rtable(C, lname)
+#define csL_get_methods(C, tname)       cs_get_cfieldstr(C, tname)
+#define csL_get_metalist(C, lname)      cs_get_cfieldstr(C, lname)
 
 
 /*
@@ -220,7 +199,6 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
 
 #endif
 /* }======================================================================= */
-
 
 /* {=======================================================================
 ** Buffer manipulation
@@ -260,21 +238,20 @@ CSLIB_API void  csL_buff_endsz(csL_Buffer *B, size_t sz);
 #define csL_buff_prep(B)    csL_buff_ensure(B, CSL_BUFFERSIZE)
 /* }======================================================================= */
 
-
 /* {=======================================================================
 ** File handles for IO library
 ** ======================================================================== */
 
 /*
 ** A file handle is a userdata with 'CS_FILEHANDLE' metalist,
-** 'CS_FILEHANDLE_TABLE' methods table and initial structure
+** 'CS_FILEHANDLE_METHODS' methods table and initial structure
 ** 'csL_Stream' (it may contain other fields after that initial
 ** structure).
 */
 
-#define CS_FILEHANDLE       "FILE*"
+#define CS_FILEHANDLE   "FILE*"
 
-#define CS_FILEHANDLE_TABLE     "FILE_METHODS*"
+#define CS_FILEHANDLE_METHODS   "FILEMTAB*"
 
 typedef struct csL_Stream {
     FILE *f; /* stream (NULL for incompletely created streams) */
@@ -282,6 +259,5 @@ typedef struct csL_Stream {
 } csL_Stream;
 
 /* }======================================================================= */
-
 
 #endif

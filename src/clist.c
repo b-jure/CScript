@@ -10,10 +10,11 @@
 #include "cprefix.h"
 
 #include "clist.h"
-#include "cgc.h"
 #include "climits.h"
+#include "cgc.h"
 #include "cmem.h"
-#include "cobject.h"
+#include "cmeta.h"
+#include "cdebug.h"
 
 
 List *csA_new(cs_State *C) {
@@ -57,6 +58,73 @@ List *csA_newl(cs_State *C, int n) {
     csA_ensureindex(C, l, n - 1);
     C->sp.p--; /* remove list */
     return l;
+}
+
+
+/*
+** Warning: when using this function the caller probably needs to
+** check a GC barrier.
+*/
+void csA_set(cs_State *C, List *l, const TValue *val, const TValue *index) {
+    cs_Integer i;
+    if (c_likely(tointeger(index, &i))) { /* index is integer? */
+        if (c_likely(0 <= i)) { /* non-negative index? */
+            if (c_unlikely(MAXLISTINDEX < i)) /* 'index' too large? */
+                csD_indexerror(C, i, "too large"); /* error */
+            else { /* ok */
+                csA_ensureindex(C, l, i);
+                setobj(C, &l->b[i], val);
+            }
+        } else /* error; negative index */
+            csD_indexerror(C, i, "negative");
+    } else /* error; invalid index type */
+        csD_indexterror(C, index);
+}
+
+
+const TValue *csA_get(cs_State *C, List *l, const TValue *index) {
+    cs_Integer i;
+    if (c_likely(tointeger(index, &i))) { /* index is integer? */
+        if (c_likely(0 <= i)) { /* positive index? */
+            if (i < l->n) /* index in bounds? */
+                return &l->b[i];
+            else /* otherwise index out of bounds */
+                return &G(C)->nil;
+        } else /* error; negative index */
+            csD_indexerror(C, i, "negative");
+    } else /* error; invalid index type */
+        csD_indexterror(C, index);
+}
+
+
+const TValue *csA_getival(cs_State *C, List *l, int i) {
+    cs_assert(i >= 0);
+    if (i < l->n)
+        return &l->b[i];
+    else
+        return &G(C)->nil;
+}
+
+
+void csA_geti(cs_State *C, List *l, int i, TValue *res) {
+    cs_assert(i >= 0);
+    if (i < l->n) {
+        csA_fastget(C, l, i, res);
+    } else
+        setnilval(res);
+}
+
+
+int csA_findindex(List *l, int rev, int nn, int s, int e) {
+    cs_assert(s >= 0 && e < l->n);
+    if (!rev) { /* search from start */
+        for (; s <= e; s++)
+            if (!ttisnil(&l->b[s]) == nn) return s;
+    } else { /* search from end (reverse) */
+        for (; s <= e; e--)
+            if (!ttisnil(&l->b[e]) == nn) return e;
+    }
+    return -1; /* not found */
 }
 
 

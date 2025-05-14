@@ -78,7 +78,7 @@ static void push_num_or_int(cs_State *C, cs_Number d) {
 /* round up */
 static int m_ceil (cs_State *C) {
     if (cs_is_integer(C, 0))
-        cs_settop(C, 1); /* integer is its own ceiling */
+        cs_setntop(C, 1); /* integer is its own ceiling */
     else {
         cs_Number d = c_mathop(ceil)(csL_check_number(C, 0));
         push_num_or_int(C, d);
@@ -110,7 +110,7 @@ static int m_exp(cs_State *C) {
 /* round down */
 static int m_floor(cs_State *C) {
     if (cs_is_integer(C, 0))
-        cs_settop(C, 1); /* integer is its own floor */
+        cs_setntop(C, 1); /* integer is its own floor */
     else {
         cs_Number d = c_mathop(floor)(csL_check_number(C, 0));
         push_num_or_int(C, d);
@@ -201,7 +201,7 @@ static int m_max(cs_State *C) {
     int imax = 0; /* index of current maximum value */
     csL_check_arg(C, n > 0, 0, "value expected");
     for (int i = 1; i < n; i++) {
-        if (cs_compare(C, imax, i, CS_OPLT))
+        if (cs_compare(C, imax, i, CS_ORD_LT))
             imax = i;
     }
     cs_push(C, imax); /* push value at 'imax' index */
@@ -214,7 +214,7 @@ static int m_min(cs_State *C) {
     int imin = 0; /* index of current minimum value */
     csL_check_arg(C, n > 0, 0, "value expected");
     for (int i = 1; i < n; i++) {
-        if (cs_compare(C, i, imin, CS_OPLT))
+        if (cs_compare(C, i, imin, CS_ORD_LT))
             imin = i;
     }
     cs_push(C, imin); /* push value at 'imin' index */
@@ -229,7 +229,7 @@ static int m_min(cs_State *C) {
 */
 static int m_modf(cs_State *C) {
     if (cs_is_integer(C ,0)) {
-        cs_settop(C, 1); /* number is its own integer part */
+        cs_setntop(C, 1); /* number is its own integer part */
         cs_push_number(C, 0); /* no fractional part */
     } else {
         cs_Number n = csL_check_number(C, 0);
@@ -251,7 +251,7 @@ static int m_rad (cs_State *C) {
 
 
 static int m_type(cs_State *C) {
-    if (cs_type(C, 0) == CS_TNUMBER)
+    if (cs_type(C, 0) == CS_T_NUMBER)
         cs_push_string(C, (cs_is_integer(C, 0)) ? "integer" : "float");
     else {
         csL_check_any(C, 0);
@@ -481,24 +481,24 @@ static void add_seed_elem(cs_State *C, SeedArray *sa) {
 
 static int m_srand(cs_State *C) {
     SeedArray sa = {0};
-    MT19937 *ctx = cast(MT19937 *, cs_to_userdata(C, cs_upvalueindex(1)));
+    MT19937 *ctx = cast(MT19937 *, cs_to_userdata(C, cs_upvalueindex(0)));
     int t = cs_type(C, 0);
-    if (t != CS_TNONE) { /* have at least one argument? */
-        if (t == CS_TNUMBER) { /* seed with integer? */
+    if (t != CS_T_NONE) { /* have at least one argument? */
+        if (t == CS_T_NUMBER) { /* seed with integer? */
             cs_Integer n = csL_check_integer(C, 0);
             sa.seed[0] = U2R(c_castS2U(n));
             sa.n = 1;
-        } else if (t == CS_TLIST) { /* seed with array values? */
+        } else if (t == CS_T_LIST) { /* seed with array values? */
             cs_Unsigned len = cs_len(C, 0);
-            int i = cs_find_nnilindex(C, 0, 0, len);
+            int i = cs_find_index(C, 0, 0, 0, len);
             while (i >= 0) {
                 cs_get_index(C, 0, i);
                 add_seed_elem(C, &sa);
-                i = cs_find_nnilindex(C, 0, i+1, len);
+                i = cs_find_index(C, 0, 0,  i+1, len);
             }
-        } else if (t == CS_TTABLE) { /* seed with table values */
+        } else if (t == CS_T_TABLE) { /* seed with table values */
             cs_push_nil(C);
-            while (cs_next(C, 0))
+            while (cs_nextfield(C, 0))
                 add_seed_elem(C, &sa);
         } else /* invalid argument type */
             csL_error_type(C, 0, "number, list or a table");
@@ -542,7 +542,7 @@ static cs_Unsigned project(cs_State *C, MT19937 *ctx, cs_Unsigned ran,
 
 
 static int m_rand(cs_State *C) {
-    MT19937 *ctx = cs_to_userdata(C, cs_upvalueindex(1));
+    MT19937 *ctx = cs_to_userdata(C, cs_upvalueindex(0));
     Rand64 ran = genrand_integer(C, ctx);
     cs_Integer low, up;
     cs_Unsigned p;
@@ -574,7 +574,7 @@ static int m_rand(cs_State *C) {
 
 
 static int m_randf(cs_State *C) {
-    MT19937 *ctx = cs_to_userdata(C, cs_upvalueindex(1));
+    MT19937 *ctx = cs_to_userdata(C, cs_upvalueindex(0));
     cs_push_number(C, Rf2N(genrand_float(C, ctx)));
     return 1;
 }

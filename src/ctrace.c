@@ -429,7 +429,7 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 }
 
 
-static void traceMetaName(cs_State *C, cs_MM mm) {
+static void traceMetaName(cs_State *C, int mm) {
     posfix_spaces(printf("%s", getstr(G(C)->mmnames[mm])));
 }
 

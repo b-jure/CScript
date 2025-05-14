@@ -20,9 +20,9 @@
 
 static int b_error(cs_State *C) {
     int level = csL_opt_integer(C, 1, 1);
-    cs_settop(C, 1); /* leave only message on top */
-    if (cs_type(C, 0) == CS_TSTRING && level >= 0) {
-        csL_where(C, level); /* add extra information */
+    cs_setntop(C, 1); /* leave only message on top */
+    if (cs_type(C, 0) == CS_T_STRING && level >= 0) {
+        csL_where(C, level); /* push extra information */
         cs_push(C, 0); /* push original error message... */
         cs_concat(C, 2); /* ...and concatenate it with extra information */
         /* error message with extra information is now on top */
@@ -37,8 +37,8 @@ static int b_assert(cs_State *C) {
     } else { /* failed assert (error) */
         csL_check_any(C, 0); /* must have a condition */
         cs_remove(C, 0); /* remove condition */
-        cs_push_literal(C, "assertion failed"); /* push default err message */
-        cs_settop(C, 1); /* leave only one message on top */
+        cs_push_literal(C, "assertion failed"); /* push default error msg */
+        cs_setntop(C, 1); /* leave only one message on top */
         return b_error(C);
     }
 }
@@ -140,7 +140,7 @@ static const char *genericreader(cs_State *C, void *ud, size_t *sz) {
 
 
 static int auxload(cs_State *C, int status, int envidx) {
-    if (c_likely(status == CS_OK)) {
+    if (c_likely(status == CS_STATUS_OK)) {
         if (envidx != 0) { /* 'env' parameter? */
             cs_push(C, envidx); /* environment for loaded function */
             if (!cs_setupvalue(C, -2, 1)) /* set it as 1st upvalue */
@@ -166,8 +166,8 @@ static int b_load(cs_State *C) {
         status = csL_loadbuffer(C, s, l, chunkname);
     } else { /* loading from a reader function */
         const char *chunkname = csL_opt_string(C, 1, "(load)");
-        csL_check_type(C, 0, CS_TFUNCTION); /* 'chunk' must be a function */
-        cs_settop(C, RESERVEDSLOT+1); /* create reserved slot */
+        csL_check_type(C, 0, CS_T_FUNCTION); /* 'chunk' must be a function */
+        cs_setntop(C, RESERVEDSLOT+1); /* create reserved slot */
         status = cs_load(C, genericreader, NULL, chunkname);
     }
     return auxload(C, status, env);
@@ -185,8 +185,8 @@ static int b_loadfile(cs_State *C) {
 
 static int b_runfile(cs_State *C) {
     const char *filename = csL_opt_string(C, 0, NULL);
-    cs_settop(C, 1);
-    if (c_unlikely(csL_loadfile(C, filename) != CS_OK))
+    cs_setntop(C, 1);
+    if (c_unlikely(csL_loadfile(C, filename) != CS_STATUS_OK))
         return cs_error(C);
     cs_call(C, 0, CS_MULRET);
     return cs_gettop(C); /* all except the 'filename' */
@@ -203,20 +203,20 @@ static int b_getmetalist(cs_State *C) {
 
 static int b_setmetalist(cs_State *C) {
     int t = cs_type(C, 1);
-    csL_check_type(C, 0, CS_TCLASS);
-    csL_expect_arg(C, t == CS_TNIL || t == CS_TLIST, 1, "nil/list");
-    cs_settop(C, 2);
+    csL_check_type(C, 0, CS_T_CLASS);
+    csL_expect_arg(C, t == CS_T_NIL || t == CS_T_LIST, 1, "nil/list");
+    cs_setntop(C, 2);
     cs_set_metalist(C, 0);
     return 1;
 }
 
 
-static int b_next(cs_State *C) {
+static int b_nextfield(cs_State *C) {
     int t = cs_type(C, 0);
-    csL_expect_arg(C, (t == CS_TINSTANCE || t == CS_TTABLE), 0,
+    csL_expect_arg(C, (t == CS_T_INSTANCE || t == CS_T_TABLE), 0,
                        "instance/table");
-    cs_settop(C, 2); /* if 2nd argument is missing create it */
-    if (cs_next(C, 0)) { /* found field? */
+    cs_setntop(C, 2); /* if 2nd argument is missing create it */
+    if (cs_nextfield(C, 0)) { /* found field? */
         return 2; /* key (index) + value */
     } else {
         cs_push_nil(C);
@@ -227,25 +227,25 @@ static int b_next(cs_State *C) {
 
 static int b_pairs(cs_State *C) {
     csL_check_any(C, 0);
-    cs_push_cfunction(C, b_next);   /* will return generator, */
-    cs_push(C, 0);                  /* state, */
-    cs_push_nil(C);                 /* and initial value */
+    cs_push_cfunction(C, b_nextfield);  /* will return generator, */
+    cs_push(C, 0);                      /* state, */
+    cs_push_nil(C);                     /* and initial value */
     return 3;
 }
 
 
 static int ipairsaux(cs_State *C) {
     cs_Integer i;
-    csL_check_type(C, 0, CS_TLIST);
+    csL_check_type(C, 0, CS_T_LIST);
     i = csL_check_integer(C, 1);
     i = csL_intop(+, i, 1);
     cs_push_integer(C, i);
-    return (cs_get_index(C, 0, i) == CS_TNIL ? 1 : 2);
+    return (cs_get_index(C, 0, i) == CS_T_NIL ? 1 : 2);
 }
 
 
 static int b_ipairs(cs_State *C) {
-    csL_check_type(C, 0, CS_TLIST);
+    csL_check_type(C, 0, CS_T_LIST);
     cs_push_cfunction(C, ipairsaux); /* iteration function */
     cs_push(C, 0); /* state */
     cs_push_integer(C, -1); /* initial value */
@@ -254,7 +254,7 @@ static int b_ipairs(cs_State *C) {
 
 
 static int finishpcall(cs_State *C, int status, int extra) {
-    if (c_unlikely(status != CS_OK)) {
+    if (c_unlikely(status != CS_STATUS_OK)) {
         cs_push_bool(C, 0);     /* false */
         cs_push(C, -2);         /* error message */
         return 2;               /* return false, message */
@@ -276,7 +276,7 @@ static int b_pcall(cs_State *C) {
 static int b_xpcall(cs_State *C) {
     int status;
     int nargs = cs_getntop(C) - 2;
-    csL_check_type(C, 1, CS_TFUNCTION); /* check error function */
+    csL_check_type(C, 1, CS_T_FUNCTION); /* check error function */
     cs_push_bool(C, 1); /* first result */
     cs_push(C, 0); /* function */
     cs_rotate(C, 2, 2); /* move them below function's arguments */
@@ -315,11 +315,11 @@ static int b_warn(cs_State *C) {
 
 static int b_len(cs_State *C) {
     int t = cs_type(C, 0);
-    csL_expect_arg(C, t == CS_TLIST ||
-                      t == CS_TTABLE ||
-                      t == CS_TINSTANCE ||
-                      t == CS_TCLASS ||
-                      t == CS_TSTRING, 0,
+    csL_expect_arg(C, t == CS_T_LIST ||
+                      t == CS_T_TABLE ||
+                      t == CS_T_INSTANCE ||
+                      t == CS_T_CLASS ||
+                      t == CS_T_STRING, 0,
                       "list/table/class/instance/string");
     cs_push_integer(C, cs_len(C, 0));
     return 1;
@@ -335,19 +335,19 @@ static int b_rawequal(cs_State *C) {
 
 
 static int b_rawget(cs_State *C) {
-    csL_check_type(C, 0, CS_TINSTANCE);
+    csL_check_type(C, 0, CS_T_INSTANCE);
     csL_check_any(C, 1); /* index */
-    cs_settop(C, 2);
+    cs_setntop(C, 2);
     cs_get_raw(C, 0); /* this pops index */
     return 1;
 }
 
 
 static int b_rawset(cs_State *C) {
-    csL_check_type(C, 0, CS_TINSTANCE);
+    csL_check_type(C, 0, CS_T_INSTANCE);
     csL_check_any(C, 1); /* index */
     csL_check_any(C, 2); /* value */
-    cs_settop(C, 3);
+    cs_setntop(C, 3);
     cs_set_raw(C, 0); /* this pops index and value */
     return 1; /* return object */
 }
@@ -355,7 +355,7 @@ static int b_rawset(cs_State *C) {
 
 static int b_getargs(cs_State *C) {
     int nres = cs_getntop(C) - 1;
-    if (cs_type(C, 0) == CS_TSTRING) {
+    if (cs_type(C, 0) == CS_T_STRING) {
         const char *what = cs_to_string(C, 0);
         if (strcmp(what, "list") == 0) { /* list? */
             cs_push_list(C, nres); /* push the list */
@@ -467,8 +467,8 @@ static const char *strtoint(const char *s, int base, cs_Integer *pn, int *of) {
 static int b_tonum(cs_State *C) {
     int overflow = 0;
     if (cs_is_noneornil(C, 1)) { /* no base? */
-        if (cs_type(C, 0) == CS_TNUMBER) { /* number ? */
-            cs_settop(C, 1); /* set it as top */
+        if (cs_type(C, 0) == CS_T_NUMBER) { /* number ? */
+            cs_setntop(C, 1); /* set it as top */
             return 1; /* return it */
         } else { /* must be string */
             size_t l;
@@ -515,7 +515,7 @@ static int b_typeof(cs_State *C) {
 
 static int b_getclass(cs_State *C) {
     csL_check_any(C, 0);
-    if (cs_type(C, 0) == CS_TINSTANCE) /* argument is instance? */
+    if (cs_type(C, 0) == CS_T_INSTANCE) /* argument is instance? */
         cs_get_class(C, 0);
     else /* argument is not an instance */
         csL_push_fail(C);
@@ -525,13 +525,13 @@ static int b_getclass(cs_State *C) {
 
 static int b_getsuper(cs_State *C) {
     int t = cs_type(C, 0);
-    cs_settop(C, 2);
-    csL_expect_arg(C, t == CS_TCLASS || t == CS_TINSTANCE, 0, "class/instance");
+    cs_setntop(C, 2);
+    csL_expect_arg(C, t == CS_T_CLASS || t == CS_T_INSTANCE, 0, "class/instance");
     if (!cs_get_superclass(C, 0))
         cs_push_nil(C); /* value has no superclass */
     else if (!cs_is_noneornil(C, 1)) { /* get superclass method? */
         cs_pop(C, 1); /* remove superclass */
-        csL_check_type(C, 0, CS_TINSTANCE);
+        csL_check_type(C, 0, CS_T_INSTANCE);
         cs_get_supermethod(C, 0);
     }
     return 1;
@@ -566,15 +566,15 @@ static int b_flatten(cs_State *C) {
 ** Defined as macro (more ergonomic than static function).
 */
 #define RANGE_BEGIN(C) \
-    cs_Integer start = cs_to_integer(C, cs_upvalueindex(1)); \
-    cs_Integer stop = cs_to_integer(C, cs_upvalueindex(2)); \
-    cs_Integer step = cs_to_integer(C, cs_upvalueindex(3));
+    cs_Integer start = cs_to_integer(C, cs_upvalueindex(0)); \
+    cs_Integer stop = cs_to_integer(C, cs_upvalueindex(1)); \
+    cs_Integer step = cs_to_integer(C, cs_upvalueindex(2));
 
 
 static void pushrangeres(cs_State *C, cs_Integer start, cs_Integer next) {
     cs_push_integer(C, start); /* current range value */
     cs_push_integer(C, next); /* next range value */
-    cs_replace(C, cs_upvalueindex(1)); /* update upvalue */
+    cs_replace(C, cs_upvalueindex(0)); /* update upvalue */
 }
 
 
@@ -635,7 +635,7 @@ static const cs_Entry basic_funcs[] = {
     {"runfile", b_runfile},
     {"getmetalist", b_getmetalist},
     {"setmetalist", b_setmetalist},
-    {"next", b_next},
+    {"nextfield", b_nextfield},
     {"pairs", b_pairs},
     {"ipairs", b_ipairs},
     {"pcall", b_pcall},
@@ -715,21 +715,21 @@ static void set_compat_flags(cs_State *C) {
 
 
 static void set_metalist_indices(cs_State *C) {
-    const char *mm[CS_MM_N] = {
+    const char *mm[CS_MM_NUM] = {
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
         "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",
         "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
         "__bnot", "__eq", "__lt", "__le"
     };
-    for (int i = 0; i < CS_MM_N; i++) {
+    for (int i = 0; i < CS_MM_NUM; i++) {
         cs_push_integer(C, i);
         cs_set_fieldstr(C, -2, mm[i]);
     }
     /* set __tostring metamethod index */
-    cs_push_integer(C, CS_MM_N);
+    cs_push_integer(C, CS_MM_NUM);
     cs_set_fieldstr(C, -2, "__tostring");
     /* set total number of metamethods */
-    cs_push_integer(C, CS_MM_N + 1);
+    cs_push_integer(C, CS_MM_NUM + 1);
     cs_set_fieldstr(C, -2, "__N");
 }
 

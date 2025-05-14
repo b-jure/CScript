@@ -164,14 +164,14 @@ static FILE *tofile(cs_State *C) {
 
 /*
 ** Create new CScript stream userdata with CS_FILEHANDLE metalist and
-** CS_FILEHANDLE_TABLE methods table.
+** CS_FILEHANDLE_METHODS methods table.
 ** Additionally 'closef' is set as NULL as the stream is considered
 ** "closed".
 */
 static CStream *new_cstream(cs_State *C) {
     CStream *p = (CStream *)cs_push_userdata(C, sizeof(CStream), 0);
     p->closef = NULL; /* mark as closed */
-    csL_set_usermethods(C, CS_FILEHANDLE_TABLE);
+    csL_set_usermethods(C, CS_FILEHANDLE_METHODS);
     csL_set_metalist(C, CS_FILEHANDLE);
     return p;
 }
@@ -234,14 +234,14 @@ static int f_close(cs_State *C);
 
 static int io_close(cs_State *C) {
     if (cs_is_none(C, 0)) /* no arguments? */
-        cs_get_rtable(C, IO_OUTPUT); /* use default output */
+        cs_get_cfieldstr(C, IO_OUTPUT); /* use default output */
     return f_close(C);
 }
 
 
 static FILE *getiofile(cs_State *C, const char *fname) {
     CStream *p;
-    cs_get_rtable(C, fname);
+    cs_get_cfieldstr(C, fname);
     p = (CStream *)cs_to_userdata(C, -1);
     if (c_unlikely(isclosed(p)))
         csL_error(C, "default %s file is closed", fname + IOPREF_LEN);
@@ -265,10 +265,10 @@ static int open_or_set_iofile(cs_State *C, const char *f, const char *mode) {
             tofile(C); /* check that it's a valid file handle */
             cs_push(C, 0); /* push on top */
         }
-        cs_set_rtable(C, f); /* set new file handle */
+        cs_set_cfieldstr(C, f); /* set new file handle */
     }
     /* return current value */
-    cs_get_rtable(C, f);
+    cs_get_cfieldstr(C, f);
     return 1;
 }
 
@@ -365,7 +365,7 @@ static int io_lines(cs_State *C) {
     int toclose;
     if (cs_is_none(C, 0)) cs_push_nil(C); /* at least one argument */
     if (cs_is_nil(C, 0)) { /* no file name? */
-        cs_get_rtable(C, IO_INPUT); /* get default input */
+        cs_get_cfieldstr(C, IO_INPUT); /* get default input */
         cs_replace(C, 0); /* put it at index 0 */
         tofile(C); /* check that it's a valid file handle */
         toclose = 0; /* do not close it after iteration */
@@ -597,7 +597,7 @@ static int aux_read(cs_State *C, FILE *f, int first) {
         csL_check_stack(C, nargs + CS_MINSTACK, "too many arguments");
         success = 1;
         for (n = first; nargs-- && success; n++) {
-            if (cs_type(C, n) == CS_TNUMBER) {
+            if (cs_type(C, n) == CS_T_NUMBER) {
                 size_t l = csL_check_integer(C, n);
                 success = (l == 0) ? test_eof(C, f) : read_chars(C, f, l);
             } else {
@@ -635,15 +635,15 @@ static int io_read(cs_State *C) {
 
 /* iterator function for 'lines' */
 static int iter_readline(cs_State *C) {
-    CStream *p = (CStream *)cs_to_userdata(C, cs_upvalueindex(1));
-    int n = cs_to_integer(C, cs_upvalueindex(2));
+    CStream *p = (CStream *)cs_to_userdata(C, cs_upvalueindex(0));
+    int n = cs_to_integer(C, cs_upvalueindex(1));
     int i;
     if (isclosed(p)) /* file is already closed? */
         return csL_error(C, "file is already closed");
-    cs_settop(C, 1);
+    cs_setntop(C, 1);
     csL_check_stack(C, n, "too many arguments");
     for (i = 1; i <= n; i++) /* push arguments to 'aux_read' */
-        cs_push(C, cs_upvalueindex(3 + i));
+        cs_push(C, cs_upvalueindex(2 + i));
     n = aux_read(C, p->f, 1); /* 'n' is number of results */
     cs_assert(n > 0); /* should return at least a nil */
     if (cs_to_bool(C, -n)) /* read at least one value? */
@@ -653,9 +653,9 @@ static int iter_readline(cs_State *C) {
             /* 2nd result is error message */
             return csL_error(C, "%s", cs_to_string(C, -n + 1));
         }
-        if (cs_to_bool(C, cs_upvalueindex(3))) { /* generator created file? */
-            cs_settop(C, 0); /* clear stack */
-            cs_push(C, cs_upvalueindex(1)); /* push file */
+        if (cs_to_bool(C, cs_upvalueindex(2))) { /* generator created file? */
+            cs_setntop(C, 0); /* clear stack */
+            cs_push(C, cs_upvalueindex(0)); /* push file */
             aux_close(C); /* close it */
         }
         return 0;
@@ -670,7 +670,7 @@ static int aux_write(cs_State *C, FILE *f, int arg) {
     int status = 1;
     errno = 0;
     for (; nargs--; arg++) {
-        if (cs_type(C, arg) == CS_TNUMBER) {
+        if (cs_type(C, arg) == CS_T_NUMBER) {
             int len = cs_is_integer(C, arg)
                     ? fprintf(f, CS_INTEGER_FMT, cs_to_integer(C, arg))
                     : fprintf(f, CS_NUMBER_FMT, cs_to_number(C, arg));
@@ -786,7 +786,7 @@ static const cs_Entry f_methods[] = {
 
 
 static void create_filehandle_methods(cs_State *C) {
-    csL_push_methods(C, CS_FILEHANDLE_TABLE, f_methods);
+    csL_push_methods(C, CS_FILEHANDLE_METHODS, f_methods);
     cs_pop(C, 1); /* remove methods table */
 }
 
@@ -842,7 +842,7 @@ static void create_stdfile(cs_State *C, FILE *f, const char *k,
     p->closef = &io_noclose;
     if (k != NULL) {
         cs_push(C, -1);
-        cs_set_rtable(C, k); /* add file to registry table */
+        cs_set_cfieldstr(C, k); /* add file to ctable */
     }
     cs_set_fieldstr(C, -2, fname); /* add file to module */
 }

@@ -50,7 +50,7 @@ syn match   cscriptSpecialEsc       contained /\\e/
 " highlight control chars
 syn match   cscriptSpecialControl   contained /\\[\\abtnvfr'"]/
 " highlight decimal escape sequence \ddd
-syn match   cscriptSpecialDec       contained /\\[[:digit:]]\{3}/
+syn match   cscriptSpecialDec       contained /\\[[:digit:]]\{1,3}/
 " highlight hexadecimal escape sequence \xhh
 syn match   cscriptSpecialHex       contained /\\x[[:xdigit:]]\{2}/
 " highlight utf8 \u{xxxxxxxx} or \u[xxxxxxxx]
@@ -62,11 +62,6 @@ syn match   cscriptSpecialControlError  /\\[\\abtnvfr'"]/
 syn match   cscriptSpecialDecError      /\\[[:digit:]]\{3}/
 syn match   cscriptSpecialHexError      /\\x[[:xdigit:]]\{2}/
 syn match   cscriptSpecialUtfError      /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
-"-----------------}
-
-"-Strings---------{
-syn region  cscriptString       start=/"/ skip=/\\"/ end=/"/ contains=@cscriptSpecial,@Spell
-syn region  cscriptLongString   start=/"""/ end=/"""/ contains=@Spell
 "-----------------}
 
 "-Characters-----{
@@ -130,6 +125,11 @@ syn match   cscriptErrorInParen display contained /]/
 syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,@cscriptParenGroup,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
 syn match   cscriptErrorInBracket   display contained /]/
 "---------------}
+
+"-Strings---------{
+syn region cscriptString start=/"/ skip=/\\"/ end=/"/ contains=@cscriptSpecial,@Spell
+syn region cscriptLongString start=/\[\z(=\+\)\[/ end=/\]\z1\]/ contains=@Spell
+"-----------------}
 
 "-Foreach---------{
 syn region  cscriptForEach  transparent matchgroup=cscriptRepeat start=/\<foreach\>\ze\_s\+\%(\h\w*\%(,\_s*\h\w*\)*\)\_s\<in\>/ end=/\h\w*\_s\+\zs\<in\>/me=e-2 contains=TOP,cscriptInError skipwhite skipempty
@@ -248,9 +248,8 @@ hi def link cscriptSpecialUtfError      cscriptError
 hi def link cscriptInError              cscriptError
 hi def link cscriptError                Error
 
-
-let b:current_syntax = "cscript"
-
 let &cpo = s:cpo_save
 unlet s:cpo_save
+
+let b:current_syntax = "cscript"
 " vim: et ts=8 sw=2

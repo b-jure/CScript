@@ -1,7 +1,3 @@
-/*
-** Test script file for CScript arrays.
-*/
-
 a = [];
 assert(a);
 # set some indices
@@ -22,7 +18,7 @@ assert(a[6] == nil);
 assert(a[7] == 2);
 assert(a[8] == nil);
 assert(a[9] == 2);
-# new array from constructor
+# new list from constructor
 a = [
     15,
     15.2,

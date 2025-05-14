@@ -72,7 +72,8 @@ static int getbaseline(const Proto *p, int pc, int *basepc) {
         *basepc = 0; /* start from the beginning */
         return p->defline + p->lineinfo[0]; /* first instruction line */
     } else {
-        int i = cast_uint(Ninstuptopc(p, pc)) / MAXIWTHABS - 1; /* get an estimate */
+        /* get an estimate */
+        int i = cast_uint(Ninstuptopc(p, pc)) / MAXIWTHABS - 1;
         /* estimate must be a lower bound of the correct base */
         cs_assert(i < 0 || /* linedif was too large before MAXIWTHABS? */
                  (i < p->sizeabslineinfo && p->abslineinfo[i].pc <= pc));
@@ -94,7 +95,6 @@ int csD_getfuncline(const Proto *p, int pc) {
     int baseline = getbaseline(p, pc, &basepc);
     while (basepc < pc) { /* walk until given instruction */
         basepc += getOpSize(p->code[basepc]); /* next instruction pc */
-        cs_assert(p->lineinfo[basepc] != ABSLINEINFO);
         cs_assert(p->lineinfo[basepc] != ARGLINEINFO);
         baseline += p->lineinfo[basepc]; /* correct line */
     }
@@ -103,21 +103,21 @@ int csD_getfuncline(const Proto *p, int pc) {
 }
 
 
-c_sinline int relpc(const CallFrame *cf) {
-    cs_assert(isCScript(cf));
-    return cast_int(cf->pc - cf_func(cf)->p->code) - 1;
+c_sinline int currentpc(const CallFrame *cf) {
+    return relpc(cf->cs.pc, cf_func(cf)->p);
 }
 
 
 /* get current line number */
 c_sinline int getcurrentline(CallFrame *cf) {
-    return csD_getfuncline(cf_func(cf)->p, relpc(cf));
+    cs_assert(isCScript(cf));
+    return csD_getfuncline(cf_func(cf)->p, currentpc(cf));
 }
 
 
 static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
     if (cf_func(cf)->p->isvararg) {
-        int nextra = cf->nvarargs;
+        int nextra = cf->cs.nvarargs;
         if (n >= -nextra) {
             *pos = cf->func.p - nextra - (n + 1);
             return "(vararg)";
@@ -138,7 +138,7 @@ const char *csD_findlocal(cs_State *C, CallFrame *cf, int n, SPtr *pos) {
         if (n < 0) /* vararg ? */
             return findvararg(cf, pos, n);
         else /* otherwise local variable */
-            name = csF_getlocalname(cf_func(cf)->p, n, relpc(cf));
+            name = csF_getlocalname(cf_func(cf)->p, n, currentpc(cf));
     }
     if (name == NULL) {
         SPtr limit = (cf == C->cf) ? C->sp.p : cf->next->func.p;
@@ -214,7 +214,7 @@ static void getfuncinfo(Closure *cl, cs_Debug *ar) {
 
 static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
                                     const char **name) {
-    cs_MM mm;
+    int mm;
     Instruction *i = &p->code[pc];
     switch (*i) {
         case OP_CALL: return NULL; /* TODO(symbolic execution) */
@@ -251,12 +251,16 @@ static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
 /* try to find a name for a function based on how it was called */
 static const char *funcnamefromcall(cs_State *C, CallFrame *cf,
                                     const char **name) {
-    if (cf->status & CFST_FIN) { /* called as finalizer? */
+    if (cf->status & CFST_HOOKED) { /* was it called inside a hook? */
+        *name = "?";
+        return "hook";
+    }
+    if (cf->status & CFST_FIN) { /* was it called as finalizer? */
         *name = "__gc";
         return "metamethod";
-    } else if (isCScript(cf)) {
-        return funcnamefromcode(C, cf_func(cf)->p, relpc(cf), name);
-    } else
+    } else if (isCScript(cf))
+        return funcnamefromcode(C, cf_func(cf)->p, currentpc(cf), name);
+    else
         return NULL;
 }
 
@@ -292,7 +296,7 @@ static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
                 break;
             }
             case 'l': {
-                ar->currline = (cf && isCScript(cf) ? getcurrentline(cf) : -1);
+                ar->currline = (cf && isCScript(cf)) ? getcurrentline(cf) : -1;
                 break;
             }
             case 'u': {
@@ -318,6 +322,16 @@ static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
 }
 
 
+static TValue *unwrapfunc(TValue *func) {
+    if (ttisinstancemethod(func))
+        return &imval(func)->method; /* unwrap instance method */
+    else if (ttisusermethod(func))
+        return &umval(func)->method; /* unwrap userdata method */
+    else /* otherwise return as is... */
+        return func;
+}
+
+
 /*
 ** Fill out 'cs_Debug' according to 'options'.
 **
@@ -339,7 +353,7 @@ CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
     TValue *func;
     int status = 1;
     cs_lock(C);
-    api_check(C, options, "'options' is NULL");
+    api_check(C, options != NULL, "'options' can't be NULL");
     if (*options == '>') {
         cf = NULL; /* not currently running */
         func = s2v(C->sp.p - 1);
@@ -351,6 +365,7 @@ CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
         func = s2v(cf->func.p);
         cs_assert(ttisfunction(func));
     }
+    func = unwrapfunc(func);
     cl = (ttisCSclosure(func) ? clval(func) : NULL);
     status = auxgetinfo(C, options, cl, cf, ar);
     if (strchr(options, 'f')) {
@@ -359,6 +374,67 @@ CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
     }
     cs_unlock(C);
     return status;
+}
+
+
+/*
+** Set 'trap' for all active CScript frames.
+** This function can be called during a signal, under "reasonable"
+** assumptions. A new 'cf' is completely linked in the list before it
+** becomes part of the "active" list, and we assume that pointers are
+** atomic; see comment in next function.
+** (A compiler doing interprocedural optimizations could, theoretically,
+** reorder memory writes in such a way that the list could be temporarily
+** broken while inserting a new element. We simply assume it has no good
+** reasons to do that.)
+*/
+static void settraps(CallFrame *cf) {
+    for (; cf != NULL; cf = cf->prev)
+        if (isCScript(cf))
+            cf->cs.trap = 1;
+}
+
+
+/*
+** This function can be called during a signal, under "reasonable"
+** assumptions.
+** Fields 'basehookcount' and 'hookcount' (set by 'resethookcount')
+** are for debug only, and it is no problem if they get arbitrary
+** values (causes at most one wrong hook call). 'hookmask' is an atomic
+** value. We assume that pointers are atomic too (e.g., gcc ensures that
+** for all platforms where it runs). Moreover, 'hook' is always checked
+** before being called (see 'csD_hook').
+*/
+// TODO: add docs
+CS_API void cs_sethook(cs_State *C, cs_Hook func, int mask, int count) {
+    if (func == NULL || mask == 0) { /* turn off hooks? */
+        mask = 0;
+        func = NULL;
+    }
+    C->hook = func;
+    C->basehookcount = count;
+    resethookcount(C);
+    C->hookmask = cast_byte(mask);
+    if (mask)
+        settraps(C->cf);  /* to trace inside 'luaV_execute' */
+}
+
+
+// TODO: add docs
+CS_API cs_Hook cs_gethook(cs_State *C) {
+    return C->hook;
+}
+
+
+// TODO: add docs
+CS_API int cs_gethookmask(cs_State *C) {
+    return C->hookmask;
+}
+
+
+// TODO: add docs
+CS_API int cs_gethookcount(cs_State *C) {
+    return C->basehookcount;
 }
 
 
@@ -385,7 +461,7 @@ c_noret csD_errormsg(cs_State *C) {
         C->sp.p++; /* assume EXTRA_STACK */
         csV_call(C, C->sp.p - 2, 1); /* call it */
     }
-    csPR_throw(C, CS_ERRRUNTIME);
+    csPR_throw(C, CS_STATUS_ERUNTIME);
 }
 
 
@@ -421,14 +497,14 @@ c_noret csD_typeerror(cs_State *C, const TValue *v, const char *op) {
 
 c_noret csD_typeerrormeta(cs_State *C, const TValue *v1, const TValue *v2,
                            const char * mop) {
-    csD_runerror(C, "tried to %s %s and %s values",
+    csD_runerror(C, "tried to '%s' %s and %s values",
                      mop, typename(ttype(v1)), typename(ttype(v2)));
 }
 
 
 /* arithmetic operation error */
 c_noret csD_operror(cs_State *C, const TValue *v1, const TValue *v2,
-                     const char *op) {
+                    const char *op) {
     if (ttisnum(v1))
         v1 = v2;  /* correct error value */
     csD_typeerror(C, v1, op);
@@ -458,20 +534,161 @@ c_noret csD_callerror(cs_State *C, const TValue *o) {
 
 
 c_noret csD_indexerror(cs_State *C, cs_Integer index, const char *what) {
-    csD_runerror(C, "list index '%I' is %s", index, what);
+    csD_runerror(C, "list index ('%I') is %s", index, what);
 }
 
 
-c_noret csD_indextypeerror(cs_State *C, const TValue *index) {
+c_noret csD_indexterror(cs_State *C, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
     csD_runerror(C, "invalid list index type (%s), expected integer",
-                     typename(ttype(index)));
+                    typename(ttype(index)));
 }
 
 
-/* TODO(v2.0): implement hooks */
+/*
+** Check whether new instruction 'newpc' is in a different line from
+** previous instruction 'oldpc'. More often than not, 'newpc' is only
+** one or a few instructions after 'oldpc' (it must be after, see
+** caller), so try to avoid calling 'csD_getfuncline'. If they are
+** too far apart, there is a good chance of a ABSLINEINFO in the way,
+** so it goes directly to 'csD_getfuncline'.
+*/
+static int changedline(const Proto *p, int oldpc, int newpc) {
+    cs_assert(p->lineinfo != NULL);
+    cs_assert(oldpc < newpc);
+    if (newpc - oldpc < MAXIWTHABS / 2) { /* not too far apart? */
+        int delta = 0; /* line difference */
+        int pc = oldpc;
+        for (;;) {
+            int lineinfo;
+            pc += getOpSize(p->code[pc]);
+            lineinfo = p->lineinfo[pc];
+            if (lineinfo == ABSLINEINFO)
+                break; /* cannot compute delta; fall through */
+            delta += lineinfo;
+            if (pc == newpc)
+                return (delta != 0); /* delta computed successfully */
+        }
+    }
+    /* either instructions are too far apart or there is an absolute line
+       info in the way; compute line difference explicitly */
+    return (csD_getfuncline(p, oldpc) != csD_getfuncline(p, newpc));
+}
+
+
+/*
+** Call a hook for the given event. Make sure there is a hook to be
+** called. (Both 'C->hook' and 'C->hookmask', which trigger this
+** function, can be changed asynchronously by signals.)
+*/
+void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
+    cs_Hook hook = C->hook;
+    if (hook && C->allowhook) { /* make sure there is a hook */
+        int mask = CFST_HOOKED;
+        CallFrame *cf = C->cf;
+        ptrdiff_t sp = savestack(C, C->sp.p); /* preserve original 'sp' */
+        ptrdiff_t cf_top = savestack(C, cf->top.p); /* idem for 'cf->top' */
+        cs_Debug ar = { .event = event, .currline = line, .cf = cf };
+        if (ntransfer != 0) {
+            mask |= CFST_TRAN; /* 'cf' has transfer information */
+            cf->ftransfer = ftransfer;
+            cf->ntransfer = ntransfer;
+        }
+        csPR_checkstack(C, CS_MINSTACK); /* ensure minimum stack size */
+        if (cf->top.p < C->sp.p + CS_MINSTACK)
+            cf->top.p = C->sp.p + CS_MINSTACK;
+        C->allowhook = 0; /* cannot call hooks inside a hook */
+        cf->status |= mask;
+        cs_unlock(C);
+        (*hook)(C, &ar);
+        cs_lock(C);
+        cs_assert(!C->allowhook);
+        C->allowhook = 1;
+        cf->top.p = restorestack(C, cf_top);
+        C->sp.p = restorestack(C, sp);
+        cf->status &= ~mask;
+    }
+}
+
+
+/*
+** Executes a call hook for Lua functions. This function is called
+** whenever 'hookmask' is not zero, so it checks whether call hooks are
+** active.
+*/
+void csD_hookcall(cs_State *C, CallFrame *cf) {
+    C->oldpc = 0; /* set 'oldpc' for new function */
+    if (C->hookmask & CS_MASK_CALL) { /* is call hook on? */
+        Proto *p = cf_func(cf)->p;
+        int delta = getOpSize(*cf->cs.pc);
+        cf->cs.pc += delta; /* hooks assume 'pc' is already incremented */
+        csD_hook(C, CS_HOOK_CALL, -1, 0, p->arity);
+        cf->cs.pc -= delta; /* correct 'pc' */
+    }
+}
+
+
+/*
+** Traces CScript calls. If code is running the first instruction of
+** a function, and function is not vararg, calls 'luaD_hookcall'.
+** (Vararg functions will call 'luaD_hookcall' after adjusting its
+** variable arguments; otherwise, they could call a line/count hook
+** before the call hook.)
+*/
+int csD_tracecall(cs_State *C) {
+    CallFrame *cf = C->cf;
+    Proto *p = cf_func(cf)->p;
+    cf->cs.trap = 1; /* ensure hooks will be checked */
+    if (cf->cs.pc == p->code) {
+        if (p->isvararg)
+            return 0; /* hooks will start at VARARGPREP instruction */
+        else
+            csD_hookcall(C, cf); /* check 'call' hook */
+    }
+    return 1; /* keep 'trap' on */
+}
+
+
+/*
+** Traces the execution of a CScript function. Called before the execution
+** of each opcode, when debug is on. 'C->oldpc' stores the last
+** instruction traced, to detect line changes. When entering a new
+** function, 'npci' will be zero and will test as a new line whatever
+** the value of 'oldpc'. Some exceptional conditions may return to
+** a function without setting 'oldpc'. In that case, 'oldpc' may be
+** invalid; if so, use zero as a valid value. (A wrong but valid 'oldpc'
+** at most causes an extra call to a line hook.)
+** This function is not "Protected" when called, so it should correct
+** 'C->sp.p' before calling anything that can run the GC.
+*/
 int csD_traceexec(cs_State *C, const Instruction *pc) {
-    UNUSED(pc); /* no hooks */
-    C->cf->trap = 0; /* stack reallocation handled */
-    return 0; /* turn off 'trap' */
+    CallFrame *cf = C->cf;
+    c_byte mask = C->hookmask;
+    const Proto *p = cf_func(cf)->p;
+    int counthook;
+    if (!(mask & (CS_MASK_LINE | CS_MASK_COUNT))) { /* no hooks? */
+        cf->cs.trap = 0; /* don't need to stop again */
+        return 0; /* turn off 'trap' */
+    }
+    pc += getOpSize(*pc); /* reference is always next instruction */
+    cf->cs.pc = pc; /* save 'pc' */
+    counthook = (mask & CS_MASK_COUNT) && (--C->hookcount == 0);
+    if (counthook)
+        resethookcount(C); /* reset count */
+    else if (!(mask & CS_MASK_LINE))
+        return 1; /* no line hook and count != 0; nothing to be done now */
+    if (counthook)
+        csD_hook(C, CS_HOOK_COUNT, -1, 0, 0); /* call count hook */
+    if (mask & CS_MASK_LINE) {
+        /* 'C->oldpc' may be invalid; use zero in this case */
+        int oldpc = (C->oldpc < p->sizecode) ? C->oldpc : 0;
+        int npci = relpc(pc, p);
+        if (npci <= oldpc || /* call hook when jump back (loop), */
+                changedline(p, oldpc, npci)) { /* or when enter new line */
+            int newline = csD_getfuncline(p, npci);
+            csD_hook(C, CS_HOOK_LINE, newline, 0, 0); /* call line hook */
+        }
+        C->oldpc = npci; /* 'pc' of last call to line hook */
+    }
+    return 1; /* keep 'trap' on */
 }
