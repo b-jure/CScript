@@ -204,7 +204,7 @@ struct cs_State {
 
 
 
-/* extra space(X) + main thread state(S) */
+/* eXtra space + main thread State */
 typedef struct XS {
     c_byte extra_[CS_EXTRASPACE];
     cs_State c;

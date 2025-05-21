@@ -54,28 +54,21 @@
 CSI_FUNC int csD_getfuncline(const Proto *fn, int pc);
 CSI_FUNC const char *csD_findlocal(cs_State *C, CallFrame *cf, int n,
                                    SPtr *pos);
-CSI_FUNC const char *csD_addinfo(cs_State *C, const char *msg, OString *src,
-                                 int line);
+CSI_FUNC const char *csD_addinfo(cs_State *C, const char *msg,
+                                              OString *src, int line);
 CSI_FUNC c_noret csD_runerror(cs_State *C, const char *fmt, ...);
 CSI_FUNC c_noret csD_globalerror(cs_State *C, const char *err, OString *name);
 CSI_FUNC c_noret csD_typeerror(cs_State *C, const TValue *v, const char *op);
-CSI_FUNC c_noret csD_ordererror(cs_State *C,
-                                const TValue *v1,
-                                const TValue *v2);
-CSI_FUNC c_noret csD_typeerrormeta(cs_State *C,
-                                   const TValue *v1,
-                                   const TValue *v2,
-                                   const char * mop);
-CSI_FUNC c_noret csD_operror(cs_State *C,
-                             const TValue *v1,
-                             const TValue *v2,
+CSI_FUNC c_noret csD_ordererror(cs_State *C, const TValue *v1,
+                                             const TValue *v2);
+CSI_FUNC c_noret csD_typeerrormeta(cs_State *C, const TValue *v1,
+                                   const TValue *v2, const char * mop);
+CSI_FUNC c_noret csD_operror(cs_State *C, const TValue *v1, const TValue *v2,
                              const char *op);
 CSI_FUNC c_noret csD_callerror(cs_State *C, const TValue *obj);
-CSI_FUNC c_noret csD_concaterror(cs_State *C,
-                                 const TValue *v1,
-                                 const TValue *v2);
-CSI_FUNC c_noret csD_indexerror(cs_State *C,
-                                cs_Integer index,
+CSI_FUNC c_noret csD_concaterror(cs_State *C, const TValue *v1,
+                                              const TValue *v2);
+CSI_FUNC c_noret csD_indexerror(cs_State *C, cs_Integer index,
                                 const char *what);
 CSI_FUNC c_noret csD_indexterror(cs_State *C, const TValue *index);
 CSI_FUNC c_noret csD_errormsg(cs_State *C);

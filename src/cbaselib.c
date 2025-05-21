@@ -143,7 +143,7 @@ static int auxload(cs_State *C, int status, int envidx) {
     if (c_likely(status == CS_STATUS_OK)) {
         if (envidx != 0) { /* 'env' parameter? */
             cs_push(C, envidx); /* environment for loaded function */
-            if (!cs_setupvalue(C, -2, 1)) /* set it as 1st upvalue */
+            if (!cs_setupvalue(C, -2, 0)) /* set it as 1st upvalue */
                 cs_pop(C, 1); /* remove 'env' if not used by previous call */
         }
         return 1; /* compiled function */

@@ -1,0 +1,61 @@
+local db = import("debug");
+local setupvalue, getupvalue = db.setupvalue, db.getupvalue;
+
+/// make sure load behaves correctly
+local env = {};
+a = nil; b = nil; c = nil;
+local f = assert(load("a = 1; b = 2; c = 3;", nil, env));
+f();
+assert(a == nil and b == nil and c == nil);
+assert(env.a == 1 and env.b == 2 and env.c == 3);
+print("+");
+
+/// 'f' upvalues are closed, it won't affect main function
+local env2 = {};
+a = nil; b = nil; c = nil;
+setupvalue(f, 0, env2);
+f();
+assert(a == nil and b == nil and c == nil);
+assert(env2.a == 1 and env2.b == 2 and env2.c == 3);
+local name, val = getupvalue(f, 0);
+assert(name == "__ENV" and val == env2);
+
+assert(!getupvalue(f, 1)); /// too large index
+assert(!getupvalue(f, -1)); /// too large index
+assert(!pcall(getupvalue, f)); /// missing index
+assert(!pcall(getupvalue, f, "asd")); /// invalid index value
+
+pcall(!setupvalue(f, 1, "bla")); /// too large index
+pcall(!setupvalue(f, -1, "bla")); /// too large index
+assert(!pcall(setupvalue, f, 0)); /// missing value
+assert(!pcall(setupvalue, f, "asd")); /// invalid index value
+print("+");
+
+
+/// __ENV is changed both for main function and the nested functions,
+/// as the closure of the main chunk did not yet close its upvalues
+local temp = __ENV;
+env = { assert = assert };
+Z = nil;
+local tab = {
+    f = fn() {
+        local f = fn() {
+            if (!Z) {
+                Z = 1;
+            } else {
+                assert(Z == 1);
+                Z = 2;
+            }
+        };
+        return f;
+    }
+};
+tab.f = tab.f();
+setupvalue(tab.f, 0, env);
+assert(assert and !print);
+tab.f();
+assert(Z == 1 and env.Z == 1);
+tab.f();
+assert(Z == 2 and env.Z == 2);
+__ENV = temp;
+print("+");

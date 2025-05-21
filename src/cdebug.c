@@ -23,6 +23,7 @@
 #include "cmeta.h"
 #include "cvm.h"
 #include "cgc.h"
+#include "ctable.h"
 
 
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
@@ -103,6 +104,16 @@ int csD_getfuncline(const Proto *p, int pc) {
 }
 
 
+static TValue *unwrapfunc(TValue *func) {
+    if (ttisinstancemethod(func))
+        return &imval(func)->method; /* unwrap instance method */
+    else if (ttisusermethod(func))
+        return &umval(func)->method; /* unwrap userdata method */
+    else /* otherwise return as is... */
+        return func;
+}
+
+
 c_sinline int currentpc(const CallFrame *cf) {
     return relpc(cf->cs.pc, cf_func(cf)->p);
 }
@@ -127,10 +138,6 @@ static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
 }
 
 
-/*
-** Find local variable at index 'n', store it in 'pos' and
-** returns its name. If variable is not found return NULL.
-*/
 const char *csD_findlocal(cs_State *C, CallFrame *cf, int n, SPtr *pos) {
     SPtr base = cf->func.p + 1;
     const char *name = NULL;
@@ -156,15 +163,17 @@ const char *csD_findlocal(cs_State *C, CallFrame *cf, int n, SPtr *pos) {
 CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *ar, int n) {
     const char *name;
     cs_lock(C);
-    if (ar == NULL) {
-        if (!ttisCSclosure(s2v(C->sp.p - 1)))
+    if (ar == NULL) { /* information about non-active function? */
+        const TValue *func = unwrapfunc(s2v(C->sp.p - 1));
+        if (!ttisCSclosure(func)) /* not a CScript function? */
             name = NULL;
-        else
-            name = csF_getlocalname(clCSval(s2v(C->sp.p - 1))->p, n, 0);
-    } else {
-        SPtr pos = NULL;
+        else /* consider live variables at function start (parameters) */
+            name = csF_getlocalname(clCSval(func)->p, n, 0);
+    } else { /* active function; get information through 'ar' */
+        SPtr pos = NULL; /* to avoid warnings */
         name = csD_findlocal(C, ar->cf, n, &pos);
         if (name) { /* found ? */
+            /* push its value on top of the stack */
             setobjs2s(C, C->sp.p, pos);
             api_inctop(C);
         }
@@ -180,8 +189,8 @@ CS_API const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n) {
     cs_lock(C);
     name = csD_findlocal(C, ar->cf, n, &pos);
     if (name) { /* found ? */
-        setobjs2s(C, pos, C->sp.p - 1); /* set the value */
-        C->sp.p--; /* remove value */
+        setobjs2s(C, pos, C->sp.p - 1);
+        C->sp.p--; /* pop value */
     }
     cs_unlock(C);
     return name;
@@ -310,7 +319,17 @@ static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
                 }
                 break;
             }
-            case 'f': /* resolved in 'cs_getinfo' */
+            case 'r': {
+                if (cf == NULL || !(cf->status & CFST_TRAN))
+                    ar->ftransfer = ar->ntransfer = 0;
+                else {
+                    ar->ftransfer = cf->ftransfer;
+                    ar->ntransfer = cf->ntransfer;
+                }
+                break;
+            }
+            case 'f':
+            case 'L': /* handled by 'cs_getinfo' */
                 break;
             default: { /* invalid option */
                 status = 0;
@@ -322,31 +341,45 @@ static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
 }
 
 
-static TValue *unwrapfunc(TValue *func) {
-    if (ttisinstancemethod(func))
-        return &imval(func)->method; /* unwrap instance method */
-    else if (ttisusermethod(func))
-        return &umval(func)->method; /* unwrap userdata method */
-    else /* otherwise return as is... */
-        return func;
+static int nextline (const Proto *p, int currline, int pc) {
+    if (p->lineinfo[pc] != ABSLINEINFO)
+        return currline + p->lineinfo[pc];
+    else
+        return csD_getfuncline(p, pc);
 }
 
 
-/*
-** Fill out 'cs_Debug' according to 'options'.
-**
-** `>` - Pops the function on top of the stack and loads it into 'cf'.
-** `n` - Fills in the field `name` and `namewhat`.
-** `s` - Fills in the fields `source`, `shortsrc`, `defline`,
-**       `lastdefline`, and `what`.
-** `l` - Fills in the field `currentline`.
-** `u` - Fills in the field `nupvals`.
-** `f` - Pushes onto the stack the function that is running at the
-**       given level.
-**
-** This function returns 0 on error (for instance if any option in 'options'
-** is invalid).
-*/
+static void collectvalidlines(cs_State *C, Closure *f) {
+    if (!CScriptClosure(f)) {
+        setnilval(s2v(C->sp.p));
+        api_inctop(C);
+    } else {
+        int i;
+        TValue v;
+        const Proto *p = f->cs.p;
+        int currline = p->defline;
+        Table *t = csH_new(C); /* new table to store active lines */
+        settval2s(C, C->sp.p, t); /* push it on stack */
+        api_inctop(C);
+        cs_assert(p->lineinfo != NULL); /* must have debug information */
+        setbtval(&v); /* bool 'true' to be the value of all indices */
+        if (!p->isvararg) /* regular function? */
+            i = 0; /* consider all instructions */
+        else { /* vararg function */
+            cs_assert(p->code[0] == OP_VARARGPREP);
+            currline = nextline(p, currline, 0);
+            i = getOpSize(OP_VARARGPREP); /* skip first instruction */
+        }
+        while (i < p->sizelineinfo) { /* for each instruction */
+            currline = nextline(p, currline, i); /* get its line */
+            csH_setint(C, t, currline, &v); /* table[line] = true */
+            i += getOpSize(p->code[i]); /* get next instruction */
+        }
+    }
+}
+
+
+// TODO: update docs
 CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
     CallFrame *cf;
     Closure *cl;
@@ -372,6 +405,8 @@ CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
         setobj2s(C, C->sp.p, func);
         api_inctop(C);
     }
+    if (strchr(options, 'L'))
+        collectvalidlines(C, cl);
     cs_unlock(C);
     return status;
 }
@@ -416,7 +451,7 @@ CS_API void cs_sethook(cs_State *C, cs_Hook func, int mask, int count) {
     resethookcount(C);
     C->hookmask = cast_byte(mask);
     if (mask)
-        settraps(C->cf);  /* to trace inside 'luaV_execute' */
+        settraps(C->cf); /* to trace inside 'csV_execute' */
 }
 
 
@@ -612,7 +647,7 @@ void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
 
 
 /*
-** Executes a call hook for Lua functions. This function is called
+** Executes a call hook for CScript functions. This function is called
 ** whenever 'hookmask' is not zero, so it checks whether call hooks are
 ** active.
 */
@@ -630,8 +665,8 @@ void csD_hookcall(cs_State *C, CallFrame *cf) {
 
 /*
 ** Traces CScript calls. If code is running the first instruction of
-** a function, and function is not vararg, calls 'luaD_hookcall'.
-** (Vararg functions will call 'luaD_hookcall' after adjusting its
+** a function, and function is not vararg, calls 'csD_hookcall'
+** (Vararg functions will call 'csD_hookcall' after adjusting its
 ** variable arguments; otherwise, they could call a line/count hook
 ** before the call hook.)
 */

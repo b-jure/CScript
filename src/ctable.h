@@ -20,13 +20,13 @@
 #define nodenext(n)         ((n)->s.next)
 
 /* get table slot */
-#define htnode(ht,i)	    (&(ht)->node[(i)])
+#define htnode(t,i)	    (&(t)->node[(i)])
 
 /* one after last node */
-#define htnodelast(ht)      htnode(ht, htsize(ht))
+#define htnodelast(t)       htnode(t, htsize(t))
 
 /* get table size */
-#define htsize(ht)	    (twoto((ht)->size))
+#define htsize(t)	    (twoto((t)->size))
 
 
 
@@ -34,18 +34,19 @@ CSI_FUNC Table *csH_newsz(cs_State *C, int size);
 CSI_FUNC Table *csH_new(cs_State *C);
 CSI_FUNC int csH_next(cs_State *C, Table *tab, SPtr key);
 CSI_FUNC void csH_copykeys(cs_State *C, Table *stab, Table *dtab);
-CSI_FUNC void csH_resize(cs_State *C, Table *ht, uint newsize);
-CSI_FUNC void csH_newkey(cs_State *C, Table *ht, const TValue *key,
+CSI_FUNC void csH_resize(cs_State *C, Table *t, uint newsize);
+CSI_FUNC void csH_newkey(cs_State *C, Table *t, const TValue *key,
                          const TValue *val);
-CSI_FUNC const TValue *csH_getshortstr(Table *ht, OString *key);
-CSI_FUNC const TValue *csH_getstr(Table *ht, OString *key);
-CSI_FUNC const TValue *csH_getint(Table *ht, cs_Integer key);
+CSI_FUNC const TValue *csH_getshortstr(Table *t, OString *key);
+CSI_FUNC const TValue *csH_getstr(Table *t, OString *key);
+CSI_FUNC const TValue *csH_getint(Table *t, cs_Integer key);
 CSI_FUNC const TValue *csH_get(Table *tab, const TValue *key);
-CSI_FUNC void csH_finishset(cs_State *C, Table *ht, const TValue *slot,
+CSI_FUNC void csH_finishset(cs_State *C, Table *t, const TValue *slot,
                             const TValue *key, const TValue *val);
 CSI_FUNC void csH_set(cs_State *C, Table *tab, const TValue *key,
                       const TValue *val);
-CSI_FUNC void csH_free(cs_State *C, Table *ht);
-CSI_FUNC int csH_len(const Table *ht);
+CSI_FUNC void csH_setint(cs_State *C, Table *t, cs_Integer key, TValue *val);
+CSI_FUNC void csH_free(cs_State *C, Table *t);
+CSI_FUNC int csH_len(const Table *t);
 
 #endif

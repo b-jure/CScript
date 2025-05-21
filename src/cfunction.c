@@ -150,15 +150,14 @@ UpVal *csF_findupval(cs_State *C, SPtr level) {
 
 
 /*
-** Find local variable name that must be alive 'endpc > pc'
-** and must be at index 'lnum' in the corresponding scope.
+** Find local variable name that must be alive for the given 'pc',
+** and at the position 'lnum', meaning there are 'lnum' locals before it.
 */
 const char *csF_getlocalname(const Proto *fn, int lnum, int pc) {
     cs_assert(lnum > 0);
-    for (int i = 0; i < fn->sizelocals && fn->locals->startpc <= pc; i++) {
+    for (int i = 0; i < fn->sizelocals && fn->locals[i].startpc <= pc; i++) {
         if (pc < fn->locals[i].endpc) { /* variable is active? */
-            lnum--;
-            if (lnum == 0)
+            if (--lnum == 0)
                 return getstr(fn->locals[i].name);
         }
     }

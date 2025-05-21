@@ -710,8 +710,9 @@ typedef union Closure {
 ** Userdata {
 ** ----------------------------------------------------------------------- */
 
-#define CS_VLIGHTUSERDATA   makevariant(CS_T_USERDATA, 0)
-#define CS_VUSERDATA        makevariant(CS_T_USERDATA, 1)
+#define CS_VLIGHTUSERDATA   makevariant(CS_T_LIGHTUSERDATA, 0)
+
+#define CS_VUSERDATA        makevariant(CS_T_USERDATA, 0)
 
 #define ttislightuserdata(o)    checktag(o, CS_VLIGHTUSERDATA)
 #define ttisfulluserdata(o)     checktag(o, ctb(CS_VUSERDATA))

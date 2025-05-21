@@ -37,6 +37,7 @@ cscript_testsuite_paths = {
     "math": rootpath("stdlibs/math"),
     "io": rootpath("stdlibs/io"),
     "os": rootpath("stdlibs/os"),
+    "debug": rootpath("stdlibs/debug"),
 }
 
 

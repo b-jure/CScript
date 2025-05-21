@@ -431,6 +431,9 @@ CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *ar, int n);
 CS_API const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n); 
 CS_API const char *cs_getupvalue(cs_State *C, int index, int n); 
 CS_API const char *cs_setupvalue(cs_State *C, int index, int n); 
+CS_API void       *cs_upvalueid(cs_State *C, int index, int n);
+CS_API void        cs_upvaluejoin(cs_State *C, int index1, int n1,
+                                               int index2, int n2);
 CS_API void        cs_sethook(cs_State *C, cs_Hook func, int mask, int count);
 CS_API cs_Hook     cs_gethook(cs_State *C);
 CS_API int         cs_gethookmask(cs_State *C);

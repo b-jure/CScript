@@ -40,12 +40,12 @@
 
 
 /* get hashtable 'node' slot from hash 'h' */
-#define hashpow2(ht,h)      htnode(ht, hashmod(h, htsize(ht)))
+#define hashpow2(t,h)      htnode(t, hashmod(h, htsize(t)))
 
 
-#define hashstr(ht,s)       hashpow2(ht, (s)->hash)
-#define hashboolean(ht,b)   hashpow2(ht, b)
-#define hashpointer(ht,p)   hashpow2(ht, pointer2uint(p))
+#define hashstr(t,s)       hashpow2(t, (s)->hash)
+#define hashboolean(t,b)   hashpow2(t, b)
+#define hashpointer(t,p)   hashpow2(t, pointer2uint(p))
 
 
 
@@ -67,12 +67,12 @@ static uint hashflt(cs_Number n) {
 }
 
 
-static Node *hashint(const Table *ht, cs_Integer i) {
+static Node *hashint(const Table *t, cs_Integer i) {
     cs_Unsigned ui = c_castS2U(i);
     if (ui <= cast_uint(MAXINT))
-        return hashpow2(ht, cast_int(ui));
+        return hashpow2(t, cast_int(ui));
     else
-        return hashpow2(ht, ui);
+        return hashpow2(t, ui);
 }
 
 
@@ -88,7 +88,7 @@ static inline void inithash(Node *n, int limit) {
 
 
 /* allocate hash array */
-static void newhasharray(cs_State *cr, Table *ht, uint size) {
+static void newhasharray(cs_State *cr, Table *t, uint size) {
     int nbits;
     if (size < MINHSIZE)
         size = MINHSIZE;
@@ -96,29 +96,29 @@ static void newhasharray(cs_State *cr, Table *ht, uint size) {
     if (c_unlikely(nbits > MAXHBITS || (1u << nbits) > MAXHSIZE))
         csD_runerror(cr, "hashtable overflow");
     size = twoto(nbits);
-    ht->node = csM_newarray(cr, size, Node);
-    inithash(htnode(ht, 0), size);
-    ht->size = nbits;
-    ht->lastfree = htnode(ht, size);
+    t->node = csM_newarray(cr, size, Node);
+    inithash(htnode(t, 0), size);
+    t->size = nbits;
+    t->lastfree = htnode(t, size);
 }
 
 
-c_sinline void htpreinit(Table *ht) {
-    ht->size = 0;
-    ht->node = ht->lastfree = NULL;
-    ht->gclist = NULL;
+c_sinline void htpreinit(Table *t) {
+    t->size = 0;
+    t->node = t->lastfree = NULL;
+    t->gclist = NULL;
 }
 
 
 /* create new table of specific size */
 Table *csH_newsz(cs_State *C, int size) {
     GCObject *o = csG_new(C, sizeof(Table), CS_VTABLE);
-    Table *ht = gco2ht(o);
-    htpreinit(ht);
-    settval2s(C, C->sp.p++, ht); /* assume EXTRA_STACK */
-    newhasharray(C, ht, size);
-    C->sp.p--; /* remove ht */
-    return ht;
+    Table *t = gco2ht(o);
+    htpreinit(t);
+    settval2s(C, C->sp.p++, t); /* assume EXTRA_STACK */
+    newhasharray(C, t, size);
+    C->sp.p--; /* remove t */
+    return t;
 }
 
 
@@ -128,14 +128,14 @@ Table *csH_new(cs_State *C) {
 }
 
 
-static inline void freehash(cs_State *C, Table *ht) {
-    csM_freearray(C, ht->node, htsize(ht));
+static inline void freehash(cs_State *C, Table *t) {
+    csM_freearray(C, t->node, htsize(t));
 }
 
 
-void csH_free(cs_State *C, Table *ht) {
-    freehash(C, ht);
-    csM_free(C, ht);
+void csH_free(cs_State *C, Table *t) {
+    freehash(C, t);
+    csM_free(C, t);
 }
 
 
@@ -143,55 +143,55 @@ void csH_free(cs_State *C, Table *ht) {
 ** Find the main position (slot) for key 'k' inside
 ** the hash array.
 */
-static Node *mainposition(const Table *ht, const TValue *k) {
+static Node *mainposition(const Table *t, const TValue *k) {
     switch (ttypetag(k)) {
-        case CS_VTRUE: return hashboolean(ht, 1);
-        case CS_VFALSE: return hashboolean(ht, 0);
+        case CS_VTRUE: return hashboolean(t, 1);
+        case CS_VFALSE: return hashboolean(t, 0);
         case CS_VSHRSTR: {
             OString *s = strval(k);
-            return hashstr(ht, s);
+            return hashstr(t, s);
         }
         case CS_VLNGSTR: {
             OString *s = strval(k);
-            return hashpow2(ht, csS_hashlngstr(s));
+            return hashpow2(t, csS_hashlngstr(s));
         }
         case CS_VNUMINT: {
             cs_Integer i = ival(k);
-            return hashint(ht, i);
+            return hashint(t, i);
         }
         case CS_VNUMFLT: {
             cs_Number n = fval(k);
-            return hashpow2(ht, hashflt(n));
+            return hashpow2(t, hashflt(n));
         }
         case CS_VLIGHTUSERDATA: {
             void *p = pval(k);
-            return hashpointer(ht, p);
+            return hashpointer(t, p);
         }
         case CS_VLCF: {
             cs_CFunction lcf = lcfval(k);
-            return hashpointer(ht, lcf);
+            return hashpointer(t, lcf);
         }
         default: {
             GCObject *o = gcoval(k);
-            return hashpointer(ht, o);
+            return hashpointer(t, o);
         }
     }
 }
 
 
-static inline Node *mainposfromnode(Table *ht, Node *mp) {
+static inline Node *mainposfromnode(Table *t, Node *mp) {
     TValue key;
     getnodekey(cast(cs_State *, NULL), &key, mp);
-    return mainposition(ht, &key);
+    return mainposition(t, &key);
 }
 
 
 /* get next free hash array position or NULL */
-static Node *getfreepos(Table *ht) {
-    while (ht->lastfree > ht->node) {
-        ht->lastfree--;
-        if (keyisnil(ht->lastfree))
-            return ht->lastfree;
+static Node *getfreepos(Table *t) {
+    while (t->lastfree > t->node) {
+        t->lastfree--;
+        if (keyisnil(t->lastfree))
+            return t->lastfree;
     }
     return NULL;
 }
@@ -228,27 +228,27 @@ static void insertfrom(cs_State *C, Table *src, Table *dest) {
 
 
 /* resize hashtable to new size */
-void csH_resize(cs_State *C, Table *ht, uint newsize) {
+void csH_resize(cs_State *C, Table *t, uint newsize) {
     Table newht;
     if (c_unlikely(newsize < MINHSIZE))
         newsize = MINHSIZE;
     newhasharray(C, &newht, newsize);
-    exchangehashes(ht, &newht);
-    insertfrom(C, &newht, ht);
+    exchangehashes(t, &newht);
+    insertfrom(C, &newht, t);
     freehash(C, &newht);
 }
 
 
 /* rehash hashtable keys */
-static void rehash(cs_State *C, Table *ht) {
-    int arrsize = htsize(ht);
+static void rehash(cs_State *C, Table *t) {
+    int arrsize = htsize(t);
     int usednodes = 0;
     for (int i = 0; i < arrsize; i++) {
-        const Node *n = htnode(ht, i);
+        const Node *n = htnode(t, i);
         usednodes += !isempty(nodeval(n));
     }
     usednodes++; /* for one extra key */
-    csH_resize(C, ht, usednodes);
+    csH_resize(C, t, usednodes);
 }
 
 
@@ -256,8 +256,7 @@ static void rehash(cs_State *C, Table *ht) {
 ** Warning: when using this function the caller probably needs to
 ** check a GC barrier.
 */
-void csH_newkey(cs_State *C, Table *ht, const TValue *key,
-                const TValue *val) {
+void csH_newkey(cs_State *C, Table *t, const TValue *key, const TValue *val) {
     Node *mp;
     TValue aux;
     if (c_unlikely(ttisnil(key))) {
@@ -275,16 +274,16 @@ void csH_newkey(cs_State *C, Table *ht, const TValue *key,
     } /* fall through */
     if (ttisnil(val))
         return;  /* do not insert nil values */
-    mp = mainposition(ht, key); /* get main position for 'key' */
+    mp = mainposition(t, key); /* get main position for 'key' */
     if (!isempty(nodeval(mp))) { /* mainposition already taken ? */
         Node *othern;
-        Node *f = getfreepos(ht); /* get next free position */
+        Node *f = getfreepos(t); /* get next free position */
         if (f == NULL) { /* no free position ? */
-            rehash(C, ht); /* grow table */
-            csH_set(C, ht, key, val); /* insert key */
+            rehash(C, t); /* grow table */
+            csH_set(C, t, key, val); /* insert key */
             return; /* done, key must be a new key */
         }
-        othern = mainposfromnode(ht, mp);
+        othern = mainposfromnode(t, mp);
         if (othern != mp) { /* is colliding node out of its main position? */
             /* yes; move colliding node into free position */
             while (othern + nodenext(othern) != mp) /* find previous */
@@ -307,7 +306,7 @@ void csH_newkey(cs_State *C, Table *ht, const TValue *key,
         }
     }
     setnodekey(C, mp, key); /* set key */
-    csG_barrierback(C, obj2gco(ht), key); /* set 'ht' as gray */
+    csG_barrierback(C, obj2gco(t), key); /* set 't' as gray */
     cs_assert(isempty(nodeval(mp))); /* value slot must be empty */
     setobj(C, nodeval(mp), val); /* set value */
 }
@@ -360,8 +359,8 @@ static int eqkey(const TValue *k, const Node *n, int deadok) {
 }
 
 
-static const TValue *getgeneric(Table *ht, const TValue *key, int deadok) {
-    Node *n = mainposition(ht, key);
+static const TValue *getgeneric(Table *t, const TValue *key, int deadok) {
+    Node *n = mainposition(t, key);
     for (;;) {
         if (eqkey(key, n, deadok)) {
             return nodeval(n);
@@ -379,21 +378,21 @@ static const TValue *getgeneric(Table *ht, const TValue *key, int deadok) {
 ** Returns the index of a 'key' for table traversals.
 ** The beginning of a traversal is signaled by 0.
 */
-static uint getindex(cs_State *C, Table *ht, const TValue *k) {
+static uint getindex(cs_State *C, Table *t, const TValue *k) {
     const TValue *slot;
     if (ttisnil(k)) return 0; /* first iteration */
-    slot = getgeneric(ht, k, 1);
+    slot = getgeneric(t, k, 1);
     if (c_unlikely(isabstkey(slot)))
         csD_runerror(C, "invalid key passed to 'next'"); /* key not found */
-    uint i = cast(Node *, slot) - htnode(ht, 0); /* key index in hash table */
+    uint i = cast(Node *, slot) - htnode(t, 0); /* key index in hash table */
     return i + 1; /* return next slot index */
 }
 
 
-int csH_next(cs_State *C, Table *ht, SPtr key) {
-    uint i = getindex(C, ht, s2v(key));
-    for (; cast_int(i) < htsize(ht); i++) {
-        Node *slot = htnode(ht, i);
+int csH_next(cs_State *C, Table *t, SPtr key) {
+    uint i = getindex(C, t, s2v(key));
+    for (; cast_int(i) < htsize(t); i++) {
+        Node *slot = htnode(t, i);
         if (!isempty(nodeval(slot))) {
             getnodekey(C, s2v(key), slot);
             setobj2s(C, key + 1, nodeval(slot));
@@ -419,8 +418,8 @@ void csH_copykeys(cs_State *C, Table *dest, Table *src) {
 }
 
 
-const TValue *csH_getshortstr(Table *ht, OString *key) {
-    Node *n = hashstr(ht, key);
+const TValue *csH_getshortstr(Table *t, OString *key) {
+    Node *n = hashstr(t, key);
     for (;;) {
         if (keyisshrstr(n) && eqshrstr(key, keystrval(n))) {
             return nodeval(n);
@@ -434,19 +433,19 @@ const TValue *csH_getshortstr(Table *ht, OString *key) {
 }
 
 
-const TValue *csH_getstr(Table *ht, OString *key) {
+const TValue *csH_getstr(Table *t, OString *key) {
     if (key->tt_ == CS_VSHRSTR) {
-        return csH_getshortstr(ht, key);
+        return csH_getshortstr(t, key);
     } else {
         TValue k;
         setstrval(cast(cs_State *, NULL), &k, key);
-        return getgeneric(ht, &k, 0);
+        return getgeneric(t, &k, 0);
     }
 }
 
 
-const TValue *csH_getint(Table *ht, cs_Integer key) {
-    Node *n = hashint(ht, key);
+const TValue *csH_getint(Table *t, cs_Integer key) {
+    Node *n = hashint(t, key);
     for (;;) {
         if (keyisint(n) && keyival(n) == key) {
             return nodeval(n);
@@ -460,19 +459,19 @@ const TValue *csH_getint(Table *ht, cs_Integer key) {
 }
 
 
-const TValue *csH_get(Table *ht, const TValue *key) {
+const TValue *csH_get(Table *t, const TValue *key) {
     switch (ttypetag(key)) {
-        case CS_VSHRSTR: return csH_getstr(ht, strval(key));
-        case CS_VNUMINT: return csH_getint(ht, ival(key));
+        case CS_VSHRSTR: return csH_getstr(t, strval(key));
+        case CS_VNUMINT: return csH_getint(t, ival(key));
         case CS_VNIL: return &absentkey;
         case CS_VNUMFLT: {
             cs_Integer i;
             if (csO_tointeger(key, &i, N2IEXACT))
-                return csH_getint(ht, i);
+                return csH_getint(t, i);
         } /* else fall through */
         default:  {
             cs_assert(!ttisnil(key));
-            return getgeneric(ht, key, 0);
+            return getgeneric(t, key, 0);
         }
     }
 }
@@ -482,10 +481,10 @@ const TValue *csH_get(Table *ht, const TValue *key) {
 ** Warning: when using this function the caller probably needs to
 ** check a GC barrier.
 */
-void csH_finishset(cs_State *C, Table *ht, const TValue *slot,
+void csH_finishset(cs_State *C, Table *t, const TValue *slot,
                    const TValue *key, const TValue *val) {
     if (isabstkey(slot))
-        csH_newkey(C, ht, key, val);
+        csH_newkey(C, t, key, val);
     else
         setobj(C, cast(TValue *, slot), val);
 }
@@ -495,18 +494,29 @@ void csH_finishset(cs_State *C, Table *ht, const TValue *slot,
 ** Warning: when using this function the caller probably needs to
 ** check a GC barrier.
 */
-void csH_set(cs_State *C, Table *ht, const TValue *key, const TValue *val) {
-    const TValue *slot = csH_get(ht, key);
-    csH_finishset(C, ht, slot, key, val);
+void csH_set(cs_State *C, Table *t, const TValue *key, const TValue *val) {
+    const TValue *slot = csH_get(t, key);
+    csH_finishset(C, t, slot, key, val);
+}
+
+
+void csH_setint(cs_State *C, Table *t, cs_Integer key, TValue *val) {
+    const TValue *p = csH_getint(t, key);
+    if (isabstkey(p)) {
+        TValue k;
+        setival(&k, key);
+        csH_newkey(C, t, &k, val);
+    } else
+        setobj(C, cast(TValue *, p), val);
 }
 
 
 /* length of a table is the number of key-value pairs */
-int csH_len(const Table *ht) {
+int csH_len(const Table *t) {
     int len = 0;
-    Node *n = htnode(ht, 0);
-    cs_assert(!(htsize(ht)&(htsize(ht)-1)) && htsize(ht) >= 4);
-    while (n != htnodelast(ht)) {
+    Node *n = htnode(t, 0);
+    cs_assert(!(htsize(t)&(htsize(t)-1)) && htsize(t) >= 4);
+    while (n != htnodelast(t)) {
         len += !isempty(nodeval(n)); n++;
         len += !isempty(nodeval(n)); n++;
         len += !isempty(nodeval(n)); n++;

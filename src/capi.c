@@ -334,8 +334,8 @@ CS_API int cs_is_string(cs_State *C, int index) {
 }
 
 
-static const TValue *getfuncfrom(cs_State *C, int index) {
-    const TValue *o = index2value(C, index);
+static TValue *unwrapfuncat(cs_State *C, int index) {
+    TValue *o = index2value(C, index);
     if (ttisinstancemethod(o))
         o = &imval(o)->method;
     else if (ttisusermethod(o))
@@ -347,7 +347,7 @@ static const TValue *getfuncfrom(cs_State *C, int index) {
 
 /* Check if the value at index is a C function. */
 CS_API int cs_is_cfunction(cs_State *C, int index) {
-    const TValue *o = getfuncfrom(C, index);
+    const TValue *o = unwrapfuncat(C, index);
     return (ttislcf(o) || ttisCclosure(o));
 }
 
@@ -1457,7 +1457,7 @@ static void fcall(cs_State *C, void *ud) {
 }
 
 
-CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int abserrfunc) {
+CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int abserrf) {
     struct PCallData pcd;
     int status;
     ptrdiff_t func;
@@ -1465,10 +1465,10 @@ CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int abserrfunc) {
     api_checknelems(C, nargs+1); /* args + func */
     api_check(C, C->status == CS_STATUS_OK, "can't do calls on non-normal thread");
     checkresults(C, nargs, nresults);
-    if (abserrfunc < 0) {
+    if (abserrf < 0) {
         func = 0;
     } else {
-        SPtr o = index2stack(C, abserrfunc);
+        SPtr o = index2stack(C, abserrf);
         api_check(C, ttisfunction(s2v(o)), "error handler must be a function");
         func = savestack(C, o);
     }
@@ -1787,23 +1787,23 @@ static const char *aux_upvalue(TValue *func, int n, TValue **val,
                                GCObject **owner) {
     switch (ttypetag(func)) {
         case CS_VCCL: { /* C closure */
-            CClosure *ccl = clCval(func);
-            if (!(cast_uint(n) - 1u < cast_uint(ccl->nupvalues)))
+            CClosure *f = clCval(func);
+            if (!(cast_uint(n) < cast_uint(f->nupvalues)))
                 return NULL;  /* 'n' not in [0, cl->nupvalues) */
-            *val = &ccl->upvals[n-1];
-            if (owner) *owner = obj2gco(ccl);
+            *val = &f->upvals[n];
+            if (owner) *owner = obj2gco(f);
             return "";
         }
         case CS_VCSCL: { /* CScript closure */
             OString *name;
-            CSClosure *cl = clCSval(func);
-            Proto *p = cl->p;
-            if (!(cast_uint(n) - 1u < cast_uint(p->sizeupvalues)))
-                return NULL;  /* 'n' not in [0, fn->sizeupvalues) */
-            *val = cl->upvals[n-1]->v.p;
-            if (owner) *owner = obj2gco(cl->upvals[n - 1]);
-            name = p->upvals[n-1].name;
-            return (name == NULL) ? "(no name)" : getstr(name);
+            CSClosure *f = clCSval(func);
+            Proto *p = f->p;
+            if (!(cast_uint(n) < cast_uint(p->sizeupvalues)))
+                return NULL; /* 'n' not in [0, fn->sizeupvalues) */
+            *val = f->upvals[n]->v.p;
+            if (owner) *owner = obj2gco(f->upvals[n]);
+            name = p->upvals[n].name;
+            return check_exp(name != NULL, getstr(name));
         }
         default: return NULL; /* not a closure */
     }
@@ -1814,7 +1814,7 @@ CS_API const char *cs_getupvalue(cs_State *C, int index, int n) {
     const char *name;
     TValue *upval = NULL; /* to avoid warnings */
     cs_lock(C);
-    name = aux_upvalue(index2value(C, index), n, &upval, NULL);
+    name = aux_upvalue(unwrapfuncat(C, index), n, &upval, NULL);
     if (name) { /* have upvalue ? */
         setobj2s(C, C->sp.p, upval);
         api_inctop(C);
@@ -1828,11 +1828,9 @@ CS_API const char *cs_setupvalue(cs_State *C, int index, int n) {
     const char *name;
     TValue *upval = NULL; /* to avoid warnings */
     GCObject *owner = NULL; /* to avoid warnings */
-    TValue *func;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    func = index2value(C, index);
-    name = aux_upvalue(func, n, &upval, &owner);
+    name = aux_upvalue(unwrapfuncat(C, index), n, &upval, &owner);
     if (name) { /* found upvalue ? */
         C->sp.p--;
         setobj(C, upval, s2v(C->sp.p));
@@ -1845,13 +1843,13 @@ CS_API const char *cs_setupvalue(cs_State *C, int index, int n) {
 
 static UpVal **getupvalref(cs_State *C, int index, int n, CSClosure **pf) {
     static const UpVal *const nullup = NULL;
-    const TValue *fi = getfuncfrom(C, index);
+    const TValue *fi = unwrapfuncat(C, index);
     CSClosure *f;
     api_check(C, ttisCSclosure(fi), "CScript function expected");
     f = clCSval(fi);
     if (pf) *pf = f;
-    if (1 <= n && n <= f->p->sizeupvalues)
-        return &f->upvals[n - 1]; /* get its upvalue pointer */
+    if (0 <= n && n < f->p->sizeupvalues)
+        return &f->upvals[n]; /* get its upvalue pointer */
     else
         return (UpVal**)&nullup;
 }
@@ -1859,15 +1857,15 @@ static UpVal **getupvalref(cs_State *C, int index, int n, CSClosure **pf) {
 
 // TODO: add docs
 CS_API void *cs_upvalueid(cs_State *C, int index, int n) {
-    const TValue *fi = getfuncfrom(C, index);
+    const TValue *fi = unwrapfuncat(C, index);
     switch (ttypetag(fi)) {
         case CS_VCSCL: { /* CScript closure */
             return *getupvalref(C, index, n, NULL);
         }
         case CS_VCCL: { /* C closure */
             CClosure *f = clCval(fi);
-            if (1 <= n && n <= f->nupvalues)
-                return &f->upvals[n - 1];
+            if (0 <= n && n < f->nupvalues)
+                return &f->upvals[n];
             /* else */
         } /* fall through */
         case CS_VLCF:
