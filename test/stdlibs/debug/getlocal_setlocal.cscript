@@ -1,24 +1,49 @@
 local db = import("debug");
 local setlocal, getlocal = db.setlocal, db.getlocal;
 
+
+local fn checkerr(msg, f, ...) {
+    local r, err = pcall(f, ...);
+    assert(!r and string.find(err, msg));
+}
+
+
 #{ getlocal
-local fn getloclist(f) {
+local fn getloclist(f, ...) {
     local l = [];
-    for (local i=1; true; i=i+1) {
-        local name, val = getlocal(f or 2, i);
+    for (local i=1;;i=i+1) {
+        local name, val = getlocal(f, i);
         if (!name) break;
         l[i-1] = { name = name, val = val };
+    }
+    foreach i,v in ipairs([...]) {
+        local name, val = getlocal(f, -(i+1));
+        l[len(l)] = { name = name, val = val };
     }
     return l;
 }
 
 
-{ /// active x inactive CScript function x foreach vars
+local fn setloclist(f, l, el, ...) {
+    foreach i, v in ipairs(l) /// set parameters
+        assert(getlocal(f, i+1) == setlocal(f, i+1, v));
+    foreach i, v in ipairs([...]) { /// set varargs
+        local name, val = getlocal(f, -(i+1));
+        assert(name == "(vararg)");
+        assert(name == setlocal(f, -(i+1), el[i]));
+        name, val = getlocal(f, -(i+1));
+        assert(name == "(vararg)" and val == el[i]);
+    }
+    return getloclist(f+1, ...);
+}
+
+
+{
     local fn vars1(extra) {
         local x, y, z = 5, "ok";
         local g = assert(5.15);
         local f = true;
-        local l = getloclist();
+        local l = getloclist(2);
         local unreach = "whateva";
         foreach i, var in ipairs(l) {
             switch (i) {
@@ -28,14 +53,15 @@ local fn getloclist(f) {
                 case 3: assert(var.name == "z" and var.val == nil); break;
                 case 4: assert(var.name == "g" and var.val == 5.15); break;
                 case 5: assert(var.name == "f" and var.val == true); break;
-                case 6: assert(var.name == "l" and typeof(var.val) == "list"); break;
-                default: assert(nil, "unreachable; too many locals");
+                case 6: assert(var.name == "(auto)" and var.val == getloclist); break;
+                case 7: assert(var.name == "(auto)" and var.val == nil); break;
+                default: assert(nil, "unreachable; too many locals/auto vars");
             }
             {
                 local unreach, unreach1;
                 local unreach2;
             }
-            l = getloclist();
+            l = getloclist(2);
             assert(l[7].name == "unreach" and l[7].val == "whateva");
             assert(l[8].name == "(foreach iter)" and typeof(l[8].val) == "function");
             assert(l[9].name == "(foreach invariant)" and typeof(l[9].val) == "list");
@@ -59,38 +85,86 @@ local fn getloclist(f) {
     assert(l[0].name == "x" and l[0].val == nil);
     assert(l[1].name == "y" and l[1].val == nil);
     assert(l[2].name == "z" and l[2].val == nil);
-    print("active x inactive CScript function x foreach vars");
+    print("+active x inactive CScript function x foreach vars (getlocal)");
 }
 
 
-{ /// inactive C function
+{
     l = getloclist(print); assert(len(l) == 0);
     l = getloclist(range); assert(len(l) == 0);
-    print("+inactive C function");
+    print("+inactive C function (getlocal)");
 }
 
 
-{ /// active C function
+{
     foreach _,v in ipairs(l)
         assert(v == "(C auto)");
-    print("+active C function");
+    print("+active C function (getlocal)");
 }
 
 
-{ /// errors
-    local fn checkerr(msg, f, ...) {
-        local r, err = pcall(f, ...);
-        assert(!r and string.find(err, msg));
-    }
+{
     checkerr("number", getlocal);
     checkerr("number", getlocal, nil);
     checkerr("number", getlocal, "");
     assert(!getlocal(checkerr, 3)); /// there are only 2 params
     checkerr("out of range", getlocal, 100, 3);
     assert(!getlocal(2, 100)); /// no such local
-    print("+getlocal errors");
+    print("+getlocal error (getlocal)");
 }
 #}
 
 
-/// TODO: test setlocal
+{
+    local names = ["x", "y", "z", "b"];
+    local vals = [2, 2, 4, "tset"];
+    local lim = len(vals);
+    local extra = [69, "420"];
+    local fn f(x, y, ...) {
+        local z = x + y;
+        local b = "test";
+        return setloclist(2, vals, extra, ...);
+    }
+    local l = f(1, 1, 3, 15);
+    foreach i,v in ipairs(l) { /// local before the call to 'setloclist'
+        if (i == lim) break;
+        assert(v.name == names[i]);
+        assert(v.val == vals[i]);
+    }
+    assert(len(l) - lim == 8);
+    /// 'setloclist' is vararg function, the function itself
+    /// is pushed on top of the stack above the varargs followed by
+    /// function parameters, (old parameters are erased for GC).
+    assert(l[lim].name == "(auto)" and l[lim].val == setloclist);
+    assert(l[lim+1].name == "(auto)" and l[lim+1].val == nil);
+    assert(l[lim+2].name == "(auto)" and l[lim+2].val == nil);
+    assert(l[lim+3].name == "(auto)" and l[lim+3].val == nil);
+    assert(l[lim+4].name == "(auto)" and l[lim+4].val == 3);
+    assert(l[lim+5].name == "(auto)" and l[lim+5].val == 15);
+    /// varargs are stored after auto vars
+    assert(l[lim+6].name == "(vararg)" and l[lim+6].val == extra[0]);
+    assert(l[lim+7].name == "(vararg)" and l[lim+7].val == extra[1]);
+    print("+active CScript function (setlocal)");
+}
+
+
+{
+    load([=[
+        local env = {};
+        a = 5; b = 6;
+        debug.setlocal(2, 3, env);
+    ]=], "", { debug = debug })();
+    assert(a == nil and b == nil);
+    print("+active C function (setlocal)");
+}
+
+
+{
+    checkerr("number", setlocal, fn () { local x = 5; }, 0, 69);
+    checkerr("number", setlocal, 0, "one", 0);
+    checkerr("value expected", setlocal, 0, 0);
+    checkerr("out of range", setlocal, 100, 0, 0);
+    assert(!setlocal(0, 50, 0)); /// no local found
+    assert(!setlocal(0, -50, 0)); /// no vararg found
+    print("+setlocal errors");
+}

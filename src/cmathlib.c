@@ -457,8 +457,8 @@ static RandF genrand_float(cs_State *C, MT19937 *ctx) {
 
 typedef struct SeedArray {
     Rand64 seed[SEEDELEMS]; /* seed elements */
-    ushort i; /* next element position in 'seed' */
-    ushort n; /* total number of elements in 'seed' */
+    c_ushort i; /* next element position in 'seed' */
+    c_ushort n; /* total number of elements in 'seed' */
 } SeedArray;
 
 

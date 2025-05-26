@@ -19,7 +19,7 @@ assert(typeof(package.config) == "string");
     for (local i = 0; i < max; i = i+1)
         l[i] = string.repeat("?", i%10 + 1);
     l[len(l)] = ";";  /// empty template
-    local path = string.concat(l, ";");
+    local path = list.concat(l, ";");
     /// use that path in a search
     local s, err = package.searchpath("xuxu", path);
     /// search fails; check that message has an occurrence of

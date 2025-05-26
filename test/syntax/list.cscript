@@ -33,3 +33,28 @@ assert(a[3][1] == 69);
 assert(a[3][2] == 69);
 assert(a[3][3] == nil);
 assert(a[4] == nil); # out of bounds access
+assert(a.len == 4 and a["len"] == 4);
+a.len = 5;
+assert(a.len == 5 and a["len"] == 5 and len(a) == 5);
+a["len"] = 6;
+assert(a.len == 6 and a["len"] == 6 and len(a) == 6);
+foreach i,v in ipairs(a)
+    print(i,v);
+assert(a.x == 15);
+assert(a.y == 15.2);
+assert(a.z == 13);
+a.x = 12; assert(a.x == 12);
+a.y = 12.2; assert(a.y == 12.2);
+a.z = [69, 28, 29]; assert(a.z == a[2]);
+assert(a.z.x == 69);
+assert(a.z.y == 28);
+assert(a.z.z == 29);
+a[8] = {};
+assert(a.last == a[8]);
+print(a.x, a.last);
+a.last = a.x;
+assert(a.last == a.x and a.last == a[0] and a[8] == a[0] and a[8] == 12);
+a = [];
+assert(!a.last);
+a.last = 5;
+assert(a.len == 0 and !a.last);

@@ -351,7 +351,7 @@ CS_API void cs_warning(cs_State *C, const char *msg, int cont);
 ** ======================================================================= */
 #define CS_FI_NIL        (1 << 0) /* find first nil value */
 #define CS_FI_REV        (1 << 1) /* reverse find */
-#define CS_FI_MASK       (CS_FI_NIL | CS_FI_REV) /* mask of all bits */
+#define CS_FI_MASK       (CS_FI_NIL | CS_FI_REV) /* mask of all options */
 CS_API int cs_find_index(cs_State *C, int index, int fi, int s, int e);
 
 #define CS_N2SBUFFSZ     64

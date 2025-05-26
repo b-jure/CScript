@@ -175,8 +175,12 @@ CSLIB_API void  csL_unref(cs_State *C, int a, int ref);
     { csL_new_usermethods(C, tname, sizeof(l)/sizeof(l[0]) - 1); \
       csL_set_funcs(C,l,0); }
 
-#define csL_get_methods(C, tname)       cs_get_cfieldstr(C, tname)
-#define csL_get_metalist(C, lname)      cs_get_cfieldstr(C, lname)
+#define csL_get_methods(C,tname)    cs_get_cfieldstr(C, tname)
+#define csL_get_metalist(C,lname)   cs_get_cfieldstr(C, lname)
+
+// TODO: add docs
+#define csL_find_index(C,index,mask) \
+        cs_find_index(C, index, mask, 0, cs_len(C, index))
 
 
 /*

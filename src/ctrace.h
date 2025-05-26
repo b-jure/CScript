@@ -1,6 +1,6 @@
 /*
 ** ctrace.h
-** Low-level bytecode tracing and disassembly for internal debugging
+** Functions for low-level bytecode debugging and tracing
 ** See Copyright Notice in cscript.h
 */
 
@@ -10,7 +10,7 @@
 #include "cobject.h"
 
 CSI_FUNC void csTR_tracepc(cs_State *C, SPtr sp, const Proto *fn,
-                           const Instruction *pc);
+                           const Instruction *pc, int tolevel);
 CSI_FUNC void csTR_disassemble(cs_State *C, const Proto *fn);
 CSI_FUNC void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...);
 

@@ -9,7 +9,7 @@
 
 
 #include "cobject.h"
-#include "cobject.h"
+#include "clist.h"
 
 #include <setjmp.h>
 
@@ -119,7 +119,7 @@ typedef struct GState {
     TValue c_list; /* global C list */
     TValue c_table; /* global C table */
     TValue nil; /* special nil value (also init flag) */
-    uint seed; /* initial seed for hashing */
+    c_uint seed; /* initial seed for hashing */
     c_byte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
     c_byte gcstate; /* GC state bits */
     c_byte gcstopem; /* stops emergency collections */
@@ -138,6 +138,7 @@ typedef struct GState {
     struct cs_State *twups; /* list of threads with open upvalues */
     cs_CFunction fpanic; /* panic handler (runs in unprotected calls) */
     struct cs_State *mainthread; /* thread that also created global state */
+    OString *listfields[LFNUM]; /* array with names of list fields */
     OString *memerror; /* preallocated message for memory errors */
     OString *mmnames[CS_MM_NUM]; /* array with metamethod names */
     OString *strcache[STRCACHE_N][STRCACHE_M]; /* cache for strings in API */
@@ -157,7 +158,7 @@ struct cs_State {
     ObjectHeader;
     c_byte status;
     c_byte allowhook;
-    ushort ncf; /* number of call frames in 'cf' list */
+    c_ushort ncf; /* number of call frames in 'cf' list */
     GCObject *gclist;
     struct cs_State *twups; /* next thread with open upvalues */
     GState *gstate; /* shared global state */

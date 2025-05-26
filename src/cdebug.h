@@ -71,6 +71,7 @@ CSI_FUNC c_noret csD_concaterror(cs_State *C, const TValue *v1,
 CSI_FUNC c_noret csD_indexerror(cs_State *C, cs_Integer index,
                                 const char *what);
 CSI_FUNC c_noret csD_indexterror(cs_State *C, const TValue *index);
+CSI_FUNC c_noret csD_llenerror(cs_State *C, const char *extra);
 CSI_FUNC c_noret csD_errormsg(cs_State *C);
 CSI_FUNC void csD_hook(cs_State *C, int event, int line,
                                     int ftransfer, int ntransfer);

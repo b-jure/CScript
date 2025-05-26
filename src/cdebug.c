@@ -183,7 +183,7 @@ CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *ar, int n) {
 }
 
 
-CS_API const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n) {
+CS_API const char *cs_setlocal(cs_State *C, const cs_Debug *ar, int n) {
     SPtr pos = NULL;
     const char *name;
     cs_lock(C);
@@ -575,8 +575,12 @@ c_noret csD_indexerror(cs_State *C, cs_Integer index, const char *what) {
 
 c_noret csD_indexterror(cs_State *C, const TValue *index) {
     cs_assert(ttypetag(index) != CS_VNUMINT);
-    csD_runerror(C, "invalid list index type (%s), expected integer",
-                    typename(ttype(index)));
+    csD_runerror(C, "invalid list index type (%s)", typename(ttype(index)));
+}
+
+
+c_noret csD_llenerror(cs_State *C, const char *extra) {
+    csD_runerror(C, "invalid list length (%s)", extra);
 }
 
 

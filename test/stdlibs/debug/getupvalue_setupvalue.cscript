@@ -33,7 +33,7 @@ print("+");
 
 
 /// __ENV is changed both for main function and the nested functions,
-/// as the closure of the main chunk did not yet close its upvalues
+/// as they all reffer to the same upvalue
 local temp = __ENV;
 env = { assert = assert };
 Z = nil;

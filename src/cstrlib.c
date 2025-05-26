@@ -676,7 +676,7 @@ static int aux_span(cs_State *C, int complement) {
             goto pushlen;
         }
         while (i <= j) {
-            for (uint k = 0; k < lb; k++)
+            for (c_uint k = 0; k < lb; k++)
                 if (s[i] == b[k]) goto pushlen;
             i++;
         }
@@ -686,7 +686,7 @@ static int aux_span(cs_State *C, int complement) {
             goto pushlen;
         }
         while (i <= j) {
-            for (uint k = 0; k < lb; k++)
+            for (c_uint k = 0; k < lb; k++)
                 if (s[i] == b[k]) goto nextc;
             break; /* push segment len */
         nextc:
@@ -873,42 +873,6 @@ static int s_char(cs_State *C) {
 }
 
 
-static void addvalue(cs_State *C, csL_Buffer *b, int i) {
-    cs_get_index(C, 0, i);
-    if (c_unlikely(!cs_is_string(C, -1)))
-        csL_error(C, "invalid value (%s) at index %I in list for 'concat'",
-                     csL_typename(C, -1), i);
-    csL_buff_push_stack(b);
-}
-
-
-#define getnexti(C,begin,end,skip) \
-        ((!skip) ? (int)begin+1 : cs_find_index(C,0,0,(int)begin,(int)end))
-
-
-// TODO: add docs and tests
-static int s_concat(cs_State *C) {
-    csL_Buffer b;
-    size_t lsep;
-    cs_Integer l = (csL_check_type(C, 0, CS_T_LIST), cs_len(C, 0));
-    const char *sep = csL_opt_lstring(C, 1, "", &lsep);
-    cs_Integer i = posrelStart(csL_opt_integer(C, 2, 0), l);
-    cs_Integer j = posrelEnd(csL_opt_integer(C, 3, l - 1), l);
-    int skipnil = csL_opt_bool(C, 4, 0);
-    int il = getnexti(C, (i - !skipnil), j, skipnil);
-    csL_buff_init(C, &b);
-    while (il != -1 && il < j) {
-        addvalue(C, &b, (int)il);
-        csL_buff_push_lstring(&b, sep, lsep);
-        il = getnexti(C, il, j, skipnil);
-    }
-    if (il == j && (!skipnil || cs_find_index(C, 0, 0, il, j) != -1))
-        addvalue(C, &b, (int)j); /* add last value */
-    csL_buff_end(&b);
-    return 1;
-}
-
-
 // TODO: add docs and tests
 static int s_cmp(cs_State *C) {
     int diff;
@@ -951,7 +915,6 @@ static const cs_Entry strlib[] = {
     {"byte", s_byte},
     {"bytes", s_bytes},
     {"char", s_char},
-    {"concat", s_concat},
     {"cmp", s_cmp},
     {"ascii_uppercase", NULL},
     {"ascii_lowercase", NULL},

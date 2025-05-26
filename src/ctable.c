@@ -53,12 +53,12 @@
 static const TValue absentkey = {ABSTKEYCONSTANT};
 
 
-static uint hashflt(cs_Number n) {
+static c_uint hashflt(cs_Number n) {
     cs_Integer ni;
     int exp;
     n = c_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
     if (c_likely(cs_number2integer(n, &ni))) {
-        uint ui = cast_uint(exp) + cast_uint(ni);
+        c_uint ui = cast_uint(exp) + cast_uint(ni);
         return (ui <= cast_uint(MAXINT) ? ui : cast_uint(~ui));
     }
     /* nan or -inf/+inf */
@@ -88,7 +88,7 @@ static inline void inithash(Node *n, int limit) {
 
 
 /* allocate hash array */
-static void newhasharray(cs_State *cr, Table *t, uint size) {
+static void newhasharray(cs_State *cr, Table *t, c_uint size) {
     int nbits;
     if (size < MINHSIZE)
         size = MINHSIZE;
@@ -228,7 +228,7 @@ static void insertfrom(cs_State *C, Table *src, Table *dest) {
 
 
 /* resize hashtable to new size */
-void csH_resize(cs_State *C, Table *t, uint newsize) {
+void csH_resize(cs_State *C, Table *t, c_uint newsize) {
     Table newht;
     if (c_unlikely(newsize < MINHSIZE))
         newsize = MINHSIZE;
@@ -378,19 +378,19 @@ static const TValue *getgeneric(Table *t, const TValue *key, int deadok) {
 ** Returns the index of a 'key' for table traversals.
 ** The beginning of a traversal is signaled by 0.
 */
-static uint getindex(cs_State *C, Table *t, const TValue *k) {
+static c_uint getindex(cs_State *C, Table *t, const TValue *k) {
     const TValue *slot;
     if (ttisnil(k)) return 0; /* first iteration */
     slot = getgeneric(t, k, 1);
     if (c_unlikely(isabstkey(slot)))
         csD_runerror(C, "invalid key passed to 'next'"); /* key not found */
-    uint i = cast(Node *, slot) - htnode(t, 0); /* key index in hash table */
+    c_uint i = cast(Node *, slot) - htnode(t, 0); /* key index in hash table */
     return i + 1; /* return next slot index */
 }
 
 
 int csH_next(cs_State *C, Table *t, SPtr key) {
-    uint i = getindex(C, t, s2v(key));
+    c_uint i = getindex(C, t, s2v(key));
     for (; cast_int(i) < htsize(t); i++) {
         Node *slot = htnode(t, i);
         if (!isempty(nodeval(slot))) {

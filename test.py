@@ -1,4 +1,4 @@
-from pathlib import Path, PosixPath
+from pathlib import Path
 import subprocess
 import sys
 
@@ -22,10 +22,20 @@ cscript_failed_tests = []
 # Padding between test name and test result
 cscript_test_result_padding = 65
 
+# test suites excluded by the option provided via cli
+excluded_testsuites = {};
+
+# testsuites which are to be run, provided explicitly via cli
+explicit_testsuites = {};
 
 # Return path relative to root test directory
 def rootpath(path):
-    return Path(f"{cscript_root}/{path}")
+    return Path(f"{cscript_root}/{path}");
+
+
+def myprint(msg):
+    print(msg, end='', flush=True);
+
 
 # Testsuites
 cscript_testsuite_paths = {
@@ -38,107 +48,143 @@ cscript_testsuite_paths = {
     "io": rootpath("stdlibs/io"),
     "os": rootpath("stdlibs/os"),
     "debug": rootpath("stdlibs/debug"),
+    "list": rootpath("stdlibs/list"),
 }
 
 
 # Coloring
 def red(s):
-    return f"\x1b[31m{s}\x1b[0m"
+    return f"\x1b[31m{s}\x1b[0m";
 def green(s):
-    return f"\x1b[32m{s}\x1b[0m"
+    return f"\x1b[32m{s}\x1b[0m";
 def yellow(s):
-    return f"\x1b[33m{s}\x1b[0m"
+    return f"\x1b[33m{s}\x1b[0m";
 
 
-def begin_testsuite(testsuite, path, total):
-    skip = ""
-    isatty = sys.stdout.isatty()
-    head = yellow("BEGIN") if isatty else "BEGIN"
+def begin_testsuite(testsuite, path, total, isatty):
+    skip = "";
+    head = yellow("BEGIN") if isatty else "BEGIN";
     if total == 0:
-        skip = yellow("SKIPPING") if isatty else "SKIPPING"
-    print(f"{head} {testsuite} at \'{str(path)}\' ({total} tests) {skip}")
+        skip = yellow("SKIPPING") if isatty else "SKIPPING";
+    print(f"{head} {testsuite} at \'{str(path)}\' ({total} tests) {skip}");
 
 
-def end_testsuite(testsuite, total, failed):
-    global cscript_total_fail
-    global cscript_total_pass
-    isatty = sys.stdout.isatty()
-    cscript_total_fail += failed
-    cscript_total_pass += (total - failed)
+def end_testsuite(testsuite, total, failed, isatty):
+    global cscript_total_fail;
+    global cscript_total_pass;
+    cscript_total_fail += failed;
+    cscript_total_pass += (total - failed);
     passed = str(total - failed);
-    failed = str(failed)
-    end = "END"
+    failed = str(failed);
+    end = "END";
     if isatty: # 'stdout' is terminal?
-        passed = green(passed)
-        failed = red(failed)
-        end = yellow(end)
+        passed = green(passed);
+        failed = red(failed);
+        end = yellow(end);
     if total > 0:
-        print(f"Total tests passed: {passed}")
-        print(f"Total tests failed: {failed}")
-    print(f"{end} {testsuite}")
+        print(f"Total tests passed: {passed}");
+        print(f"Total tests failed: {failed}");
+    print(f"{end} {testsuite}");
 
 
-def print_test_result(test, code):
-    tname = str(test)
-    isatty = sys.stdout.isatty()
+def print_test_name(testname):
+    myprint('{:{}}'.format(testname, cscript_test_result_padding));
+        
+
+def print_test_result(testname, code, isatty):
     if code != 0:
-        if isatty:
-            print('{:{}} {}'.format(red(tname), cscript_test_result_padding, red("fail")))
-        else:
-            print('{:{}} {}'.format(tname, cscript_test_result_padding, "fail"))
-        cscript_failed_tests.append(red(tname));
-        return 1
+        print('{}'.format(red("fail") if isatty else "fail"));
+        cscript_failed_tests.append(red(testname) if isatty else testname);
     else:
-        if isatty:
-            print('{:{}} {}'.format(green(tname), cscript_test_result_padding, green("ok")))
-        else:
-            print('{:{}} {}'.format(tname, cscript_test_result_padding, "ok"))
-        return 0
+        print('{}'.format(green("ok") if isatty else "ok"));
 
 
-def run_cscript_testsuite(testsuite, path):
-    tests = list(path.glob(f"*.{cscript_extension}"))
-    total = len(tests)
-    failed = 0
-    begin_testsuite(testsuite, path, total)
+def run_cscript_testsuite(testsuite, path, isatty):
+    tests = list(path.glob(f"*.{cscript_extension}"));
+    total = len(tests);
+    failed = 0;
+    begin_testsuite(testsuite, path, total, isatty);
     for test in tests:
-        cp = subprocess.run([cscript_bin, str(test)],
+        testname = str(test);
+        print_test_name(testname);
+        cp = subprocess.run([cscript_bin, testname],
                             stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL)
-        failed += print_test_result(cp.args[1], cp.returncode)
-    end_testsuite(testsuite, total, failed)
+                            stderr=subprocess.DEVNULL);
+        print_test_result(testname, cp.returncode, isatty);
+        if cp.returncode != 0:
+            failed += 1;
+    end_testsuite(testsuite, total, failed, isatty);
 
 
-def get_testsuite_path(testsuite):
+def get_testsuite_path(tsuite):
     try:
-        return cscript_testsuite_paths[testsuite]
+        return cscript_testsuite_paths[tsuite];
     except:
-        raise ValueError("invalid testsuite '{}', here is the list of available testsuites: {}"
-                         .format(testsuite, list(cscript_testsuite_paths.keys())))
+        raise ValueError("Invalid testsuite '{}', it should be one of: {}."
+                         .format(tsuite, list(cscript_testsuite_paths.keys())));
 
 
-def run_tests():
-    global cscript_testsuite_paths
-    argv = sys.argv
-    argc = len(argv)
+# Errors
+class MissingArgError(Exception):
+    def __init__(self, extra):
+        super().__init__("Missing command line argument. {extra}");
 
-    # Handle command-line arguments
-    if (argc > 1): # run specific testsuites?
-        while (True):
-            argc -= 1;
-            testsuite = argv[argc]
-            run_cscript_testsuite(testsuite, get_testsuite_path(testsuite))
-            if argc <= 1: break;
-    else: # run all testsuites
-        for testsuite in cscript_testsuite_paths.keys():
-            run_cscript_testsuite(testsuite, cscript_testsuite_paths[testsuite])
+class MissingOptError(Exception):
+    def __init__(self):
+        super().__init__("Missing command line option.");
 
-    # Output aggregate test counts
-    print(f">> Total tests  ===> {yellow(cscript_total_pass+cscript_total_fail)}")
-    print(f">> Total passed ===> {green(cscript_total_pass)}")
-    print(f">> Total fail   ===> {red(cscript_total_fail)}")
-    for test in cscript_failed_tests:
-        print(f"\t{test}");
+class InvalidOptError(Exception):
+    def __init__(self, option):
+        super().__init__("Invalid command line option '{option}'.");
 
 
-run_tests()
+# Handle CLI option
+def handle_option(argv, argc, i):
+    i += 1;
+    if i >= argc:
+        raise MissingOptError(option);
+    option = argv[i];
+    if option == "e":
+        if i >= argc:
+            raise MissingArgError("Option 'e' requires a testsuite.");
+        i += 1;
+        tsuite = argv[i];
+        get_testsuite_path(tsuite); # check if tsuite is valid
+        excluded_testsuites[tsuite] = True;
+    else:
+        raise InvalidOptError(option);
+    return i;
+
+
+def handle_cli_args(argv, argc):
+    i = 1; # skip script name
+    while (i <= argc): # while have more cli args
+        arg = argv[i];
+        if arg == "-": # option?
+            i = handleoption(argv, argc, i);
+        else: # otherwise a testsuite
+            get_testsuite_path(arg); # check if 'tsuite' is valid
+            explicit_testsuites[arg] = True; # mark it inside of hashset
+        i += 1; # advance to next arg
+
+
+def run_testsuites(isatty):
+    if 0 < len(explicit_testsuites): # have explicit testsuites?
+        for tsuite in list(explicit_testsuites.keys()):
+            run_cscript_testsuite(tsuite, get_testsuite_path(tsuite), isatty);
+    else: # otherwise try running all testsuites
+        for tsuite in cscript_testsuite_paths.keys():
+            if not excluded_testsuites.get(tsuite, False): # not excluded?
+                run_cscript_testsuite(tsuite, cscript_testsuite_paths[tsuite], isatty);
+
+
+# main()
+handle_cli_args(sys.argv, len(sys.argv)-1);
+run_testsuites(sys.stdout.isatty());
+# output aggregate counts
+print(f">> Total tests  ===> {yellow(cscript_total_pass+cscript_total_fail)}");
+print(f">> Total passed ===> {green(cscript_total_pass)}");
+print(f">> Total fail   ===> {red(cscript_total_fail)}");
+# one more time output failed tests
+for test in cscript_failed_tests:
+    print(f"\t{test}");

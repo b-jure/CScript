@@ -6211,24 +6211,27 @@ typedef struct csL_Stream {
         <code>method</code>, then <b>nil</b> is returned.
         </p>
 
+        <!-- TODO: move this to list library documentation -->
         <!-- flatten -->
-        <hr/><h3><a name="flatten"><code>flatten (v [, i [, j]])</code></a></h3>
+        <hr/><h3><a name="flatten"><code>flatten (l [, i [, j]])</code></a></h3>
         <p>
-        Returns the elements from the given value <code>v</code>.
+        Returns the elements from the list <code>l</code>.
         This function is equivalent to
 
         <pre>
-    return v[i], v[i+1], &middot;&middot;&middot;, v[j-1];</pre>
+    return l[i], l[i+1], &middot;&middot;&middot;, l[j];</pre>
 
         By default, <code>i</code> is&nbsp;0 and <code>j</code> is
-        <a href="#len"><code>len</code></a><code>(v)</code>.
+        <a href="#len"><code>len</code></a><code>(l) - 1</code>.
         </p>
 
         <!-- __G -->
         <hr/><h3><a name="__G"><code>__G</code></a></h3>
         <p>
-        A global variable that holds the global table
+        A global variable that holds the global environment
         (see <a href="#2.2">&sect;2.2</a>).
+        CScript itself does not use this variable; changing its value does
+        not affect any environment, nor vice versa.
         </p>
 
         <!-- __VERSION -->
@@ -6243,24 +6246,23 @@ typedef struct csL_Stream {
         <hr/><h3><a name="__POSIX"><code>__POSIX</code></a></h3>
         A global variable that is set to an integer that
         corresponds to the release year of the POSIX specification.
-        For example, if the CScript library or the standalone interpreter
-        is internally using API's defined by POSIX 2004 revision, then this
-        would have the integer value <code>2004</code>.
+        For example, if the current instalation of CScript is internally
+        using API's defined by POSIX 2004 revision, then this would have the
+        integer value <code>2004</code>.
         Otherwise this is set to <b>nil</b>.
         </p>
 
         <!-- __WINDOWS -->
         <hr/><h3><a name="__WINDOWS"><code>__WINDOWS</code></a></h3>
-        A global variable that is set to an integer that
-        corresponds to the major and minor version of the Microsoft
-        C/C++ compiler.
+        A global variable that is set to an integer that corresponds to
+        the major and minor version of the Microsoft C/C++ compiler.
         For example, if the version number of Microsoft C/C++ compiler is
         17.00.51106.1, the value of
         <a href="#__WINDOWS"><code>__WINDOWS</code></a> will be
         <code>1700</code>.
         Otherwise, if the current installation wasn't built with
-        Microsoft C/C++ compiler, or it is not using Windows API, then this
-        is set to <b>nil</b>.
+        Microsoft C/C++ compiler (or is not using Windows API),
+        then this is set to <b>nil</b>.
         </p>
 
         <!-- __getidx -->

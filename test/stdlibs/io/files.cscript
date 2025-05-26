@@ -1,5 +1,6 @@
 local maxint = math.maxint;
 
+
 local fn testerr(msg, f, ...) {
     local stat, err = pcall(f, ...);
     return (!stat and string.find(err, msg));
@@ -264,7 +265,7 @@ assert(os.remove(otherfname));
     io.close();
     local a = [];
     for (local i = 0; i < 300; i = i + 1) a[i] = 1;
-    a = [io.lines(otherfname, flatten(a))()];
+    a = [io.lines(otherfname, list.flatten(a))()];
     assert(len(a) == 300 and a[0] == "a" and a[len(a)-1] == "a");
     gc(); # ensure 'otherfname' is closed
     assert(os.remove(otherfname));

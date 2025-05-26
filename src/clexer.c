@@ -76,6 +76,7 @@ void csY_init(cs_State *C) {
     OString *e = csS_newlit(C, CS_ENV); /* create env name */
     csG_fix(C, obj2gco(e)); /* never collect this name */
     /* create keyword names and never collect them */
+    cs_assert(NUM_KEYWORDS <= MAXBYTE);
     for (int i = 0; i < NUM_KEYWORDS; i++) {
         OString *s = csS_new(C, tkstr[i]);
         s->extra = cast_byte(i + 1);
@@ -262,7 +263,7 @@ static int read_hexesc(Lexer *lx) {
 ** sequence, then it indicates that to caller through 'strict'.
 */
 static unsigned long read_utf8esc(Lexer *lx, int *strict) {
-    ulong r;
+    c_ulong r;
     int i = 4; /* chars to be removed: '\', 'u', '{', and first digit */
     cs_assert(strict != NULL);
     *strict = 0;
@@ -305,7 +306,7 @@ static c_byte const utf8len_[] = {
 #define utf8len(n)      utf8len_[((n) & 0xFF) >> 4]
 
 
-static int check_utf8(Lexer *lx, ulong n) {
+static int check_utf8(Lexer *lx, c_ulong n) {
     if (!utf8len(n))
         lexerror(lx, "invalid first byte in UTF-8 sequence", 0);
     else if (n <= 0x7F) /* ascii? */
@@ -326,7 +327,7 @@ static int check_utf8(Lexer *lx, ulong n) {
 }
 
 
-static void utf8verfied(char *buff, ulong n, int len) {
+static void utf8verfied(char *buff, c_ulong n, int len) {
     int i = 1; /* number of bytes in the buffer */
     cs_assert(n <= 0x7FFFFFFFu);
     do {

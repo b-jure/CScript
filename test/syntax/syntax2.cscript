@@ -114,7 +114,7 @@ while (false); while (nil);
         code[i] = tostr(i) .. ".1,";
     }
     code[len(code)] = "];";
-    code = string.concat(code);
+    code = list.concat(code);
 
     /// add "ret" to the end of that code and checks that
     /// it produces the expected value "val"

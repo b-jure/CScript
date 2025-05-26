@@ -390,17 +390,15 @@ void csV_set(cs_State *C, const TValue *obj, const TValue *key,
 
 
 void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
-    const TValue *v;
     switch (ttypetag(obj)) {
         case CS_VLIST: {
-            v = csA_get(C, listval(obj), key);
-            goto setv;
+            csA_get(C, listval(obj), key, s2v(res));
+            break;
         }
         case CS_VTABLE: {
-            v = csH_get(tval(obj), key);
-        setv:
-            if (!ttisnil(v)) {
-                setobj2s(C, res, v);
+            const TValue *slot = csH_get(tval(obj), key);
+            if (!ttisnil(slot)) {
+                setobj2s(C, res, slot);
             } else
                 setnilval(s2v(res));
             break;
@@ -483,7 +481,7 @@ static void rethook(cs_State *C, CallFrame *cf, int nres) {
                 delta = cf->cs.nvarargs + p->arity + 1;
         }
         cf->func.p += delta; /* if vararg, back to virtual 'func' */
-        ftransfer = cast(ushort, firstres - cf->func.p) - 1;
+        ftransfer = cast(c_ushort, firstres - cf->func.p) - 1;
         cs_assert(ftransfer >= 0);
         csD_hook(C, CS_HOOK_RET, -1, ftransfer, nres); /* call it */
         cf->func.p -= delta;
@@ -1099,7 +1097,7 @@ c_sinline void pushtable(cs_State *C, int b) {
 
 #if defined(CSI_TRACE_EXEC)
 #include "ctrace.h"
-#define tracepc(C,p)        (csTR_tracepc(C, sp, p, pc))
+#define tracepc(C,p)        (csTR_tracepc(C, sp, p, pc, 2))
 #else
 #define tracepc(C,p)        ((void)0)
 #endif

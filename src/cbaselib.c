@@ -240,7 +240,8 @@ static int ipairsaux(cs_State *C) {
     i = csL_check_integer(C, 1);
     i = csL_intop(+, i, 1);
     cs_push_integer(C, i);
-    return (cs_get_index(C, 0, i) == CS_T_NIL ? 1 : 2);
+    cs_get_index(C, 0, i);
+    return (cs_len(C, 0) <= i) ? 1 : 2;
 }
 
 
@@ -315,11 +316,8 @@ static int b_warn(cs_State *C) {
 
 static int b_len(cs_State *C) {
     int t = cs_type(C, 0);
-    csL_expect_arg(C, t == CS_T_LIST ||
-                      t == CS_T_TABLE ||
-                      t == CS_T_INSTANCE ||
-                      t == CS_T_CLASS ||
-                      t == CS_T_STRING, 0,
+    csL_expect_arg(C, t == CS_T_LIST || t == CS_T_TABLE || t == CS_T_INSTANCE
+                      || t == CS_T_CLASS || t == CS_T_STRING, 0,
                       "list/table/class/instance/string");
     cs_push_integer(C, cs_len(C, 0));
     return 1;
@@ -411,8 +409,8 @@ static const unsigned char table[] = { -1,
 /*
 ** Converts string to 'cs_Integer', skips leading and trailing whitespace,
 ** checks for overflows and underflows and checks if 's' is valid numeral
-** string. Conversion works for bases [2,36] and hexadecimal and octal literal
-** strings.
+** string. Conversion works for bases [2,36] and hexadecimal and octal
+** literal strings.
 */
 static const char *strtoint(const char *s, int base, cs_Integer *pn, int *of) {
     const unsigned char *val = table+1;
@@ -526,7 +524,8 @@ static int b_getclass(cs_State *C) {
 static int b_getsuper(cs_State *C) {
     int t = cs_type(C, 0);
     cs_setntop(C, 2);
-    csL_expect_arg(C, t == CS_T_CLASS || t == CS_T_INSTANCE, 0, "class/instance");
+    csL_expect_arg(C, t == CS_T_CLASS || t == CS_T_INSTANCE, 0,
+                      "class/instance");
     if (!cs_get_superclass(C, 0))
         cs_push_nil(C); /* value has no superclass */
     else if (!cs_is_noneornil(C, 1)) { /* get superclass method? */
@@ -538,34 +537,11 @@ static int b_getsuper(cs_State *C) {
 }
 
 
-static int b_flatten(cs_State *C) {
-    cs_Unsigned n;
-    cs_Integer i = csL_opt_integer(C, 1, 0);
-    cs_Integer e = csL_opt(C, csL_check_integer, 2, cs_len(C, 0));
-    e -= (e > 0);
-    if (i > e) return 0; /* empty range */
-    n = (cs_Unsigned)e - i; /* number of elements minus 1 (avoid overflows) */
-    if (c_unlikely(n >= (uint)INT_MAX  || !cs_checkstack(C, (int)(++n))))
-        return csL_error(C, "too many results to unpack");
-    for (; i < e; i++) { /* push arg[i..e - 1] (to avoid overflows) */
-        cs_push_integer(C, i);
-        cs_get(C, 0);
-    }
-    cs_push_integer(C, e);
-    cs_get(C, 0); /* push last element */
-    return n;
-}
-
-
-
 /* {=====================================================================
 ** RANGE
 ** ====================================================================== */
 
-/*
-** Defined as macro (more ergonomic than static function).
-*/
-#define RANGE_BEGIN(C) \
+#define RANGE_VALUES(C) \
     cs_Integer start = cs_to_integer(C, cs_upvalueindex(0)); \
     cs_Integer stop = cs_to_integer(C, cs_upvalueindex(1)); \
     cs_Integer step = cs_to_integer(C, cs_upvalueindex(2));
@@ -579,7 +555,7 @@ static void pushrangeres(cs_State *C, cs_Integer start, cs_Integer next) {
 
 
 static int aux_revrange(cs_State *C) {
-    RANGE_BEGIN(C);
+    RANGE_VALUES(C);
     cs_assert(step < 0);
     if (start > stop) {
         cs_Integer next = (start >= CS_INTEGER_MIN-step) ? start+step : stop;
@@ -591,7 +567,7 @@ static int aux_revrange(cs_State *C) {
 
 
 static int aux_range(cs_State *C) {
-    RANGE_BEGIN(C);
+    RANGE_VALUES(C);
     cs_assert(step > 0);
     if (start < stop) {
         cs_Integer next = (start <= CS_INTEGER_MAX-step) ? start+step : stop;
@@ -652,16 +628,13 @@ static const cs_Entry basic_funcs[] = {
     {"typeof", b_typeof},
     {"getclass", b_getclass},
     {"getsuper", b_getsuper},
-    {"flatten", b_flatten},
     {"range", b_range},
     /* placeholders */
     {CS_GNAME, NULL},
     {"__VERSION", NULL},
     /* compatibility flags */
     {"__POSIX", NULL},
-    {"__DLOPEN", NULL},
     {"__WINDOWS", NULL},
-    {"__DLL", NULL},
     /* metalist indices */
     {"__getidx", NULL},
     {"__setidx", NULL},

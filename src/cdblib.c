@@ -214,9 +214,9 @@ static int db_getlocal(cs_State *C) {
 
 static int db_setlocal(cs_State *C) {
     int arg;
+    cs_Debug ar;
     const char *name;
     cs_State *C1 = getthread(C, &arg);
-    cs_Debug ar;
     int level = (int)csL_check_integer(C, arg + 1);
     int nvar = (int)csL_check_integer(C, arg + 2);
     if (c_unlikely(!cs_getstack(C1, level, &ar)))  /* out of range? */
@@ -233,7 +233,6 @@ static int db_setlocal(cs_State *C) {
 }
 
 
-#include "ctrace.h"
 /*
 ** get (if 'get' is true) or set an upvalue from a closure
 */

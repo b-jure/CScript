@@ -71,10 +71,10 @@ void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
     int extra = actual - arity; /* number of varargs */
     cf->cs.nvarargs = extra;
     csPR_checkstack(C, fn->maxstack + 1);
-    setobjs2s(C, C->sp.p++, cf->func.p); /* move function */
-    for (int i = 1; i <= arity; i++) {
-        setobjs2s(C, C->sp.p++, cf->func.p + i); /* move param */
-        setnilval(s2v(cf->func.p + i)); /* invalidate old */
+    setobjs2s(C, C->sp.p++, cf->func.p); /* move function to the top */
+    for (int i = 1; i <= arity; i++) { /* move params to the top */
+        setobjs2s(C, C->sp.p++, cf->func.p + i);
+        setnilval(s2v(cf->func.p + i)); /* erase original (for GC) */
     }
     cf->func.p += actual + 1;
     cf->top.p += actual + 1;
@@ -200,7 +200,7 @@ void csF_newtbcvar(cs_State *C, SPtr level) {
         C->tbclist.p += MAXDELTA; /* create a dummy node at maximum delta */
         C->tbclist.p->tbc.delta = 0;
     }
-    level->tbc.delta = cast(ushort, level - C->tbclist.p);
+    level->tbc.delta = cast(c_ushort, level - C->tbclist.p);
     C->tbclist.p = level;
 }
 

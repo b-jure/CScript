@@ -10,12 +10,12 @@
 
 #include "cobject.h"
 #include "cstate.h"
+#include "clexer.h"
 
 
 
 /* memory allocation error message must be preallocated */
 #define MEMERRMSG       "out of memory"
-
 
 
 /* size of 'OString' object */
@@ -28,7 +28,6 @@
         csS_newl(C, "" lit, (sizeof(lit)/sizeof(char)) - 1)
 
 
-
 /* test whether a string is a reserved word */
 #define isreserved(s) \
         ((s)->tt_ == CS_VSHRSTR && 0 < (s)->extra && \
@@ -36,7 +35,9 @@
 
 
 /* test wheter a string is a metamethod tag */
-#define ismetatag(s)    ((s)->tt_ == CS_VSHRSTR && NUM_KEYWORDS < (s)->extra)
+#define ismetatag(s) \
+        ((s)->tt_ == CS_VSHRSTR && NUM_KEYWORDS < (s)->extra && \
+         (s)->extra <= NUM_KEYWORDS + CS_MM_NUM)
 
 
 /* equality for short strings, which are always internalized */
@@ -46,8 +47,8 @@
 
 CSI_FUNC int csS_eqlngstr(const OString *s1, const OString *s2);
 CSI_FUNC void csS_clearcache(GState *gs);
-CSI_FUNC uint csS_hash(const char *str, size_t len, uint seed);
-CSI_FUNC uint csS_hashlngstr(OString *s);
+CSI_FUNC c_uint csS_hash(const char *str, size_t len, c_uint seed);
+CSI_FUNC c_uint csS_hashlngstr(OString *s);
 CSI_FUNC void csS_resize(cs_State *C, int nsz);
 CSI_FUNC void csS_init(cs_State *C);
 CSI_FUNC OString *csS_newlngstrobj(cs_State *C, size_t len);
@@ -67,6 +68,6 @@ CSI_FUNC void csS_strlimit(char *dest, const char *src, size_t len, size_t limit
 CSI_FUNC void csS_sourceid(char *dest, const char *src, size_t len);
 
 #define UTF8BUFFSZ  8
-CSI_FUNC int csS_utf8esc(char *buff, ulong n);
+CSI_FUNC int csS_utf8esc(char *buff, c_ulong n);
 
 #endif

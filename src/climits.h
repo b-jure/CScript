@@ -25,16 +25,16 @@ typedef signed char     c_sbyte;
 
 /* 
 ** Unsigned 32-bit integer; for 'nCcalls'.
-** This value must have 16 bits for counting nested
-** CSript function calls and 16 bits for nested C calls.
+** This value must have 16 bits for counting nested CScript
+** function calls and another 16 bits for nested C calls.
 */
 typedef uint32_t        c_uint32;
 
 
 /* nice to have */
-typedef unsigned int    uint;
-typedef unsigned short  ushort;
-typedef unsigned long   ulong;
+typedef unsigned int    c_uint;
+typedef unsigned short  c_ushort;
+typedef unsigned long   c_ulong;
 
 
 /* maximum value that fits in 'int' type */
@@ -245,7 +245,7 @@ typedef c_byte Instruction;
 #define cast_sbyte(e)       cast(c_sbyte,(e))
 #define cast_num(e)         cast(cs_Number,(e))
 #define cast_int(e)         cast(int,(e))
-#define cast_uint(e)        cast(uint,(e))
+#define cast_uint(e)        cast(c_uint,(e))
 #define cast_mem(e)         cast(c_mem,(e))
 #define cast_smem(e)        cast(c_smem,(e))
 #define cast_charp(e)       cast(char *,(e))

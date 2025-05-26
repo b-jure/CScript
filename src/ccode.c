@@ -239,7 +239,7 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 ** Get absolute value of integer without branching
 ** (assuming two's complement).
 */
-static uint c_abs(int v) {
+static c_uint c_abs(int v) {
     int const mask = v >> (sizeof(int)*CHAR_BIT - 1);
     return (v+mask)^mask;
 }
@@ -758,7 +758,7 @@ static int imms(int imm) {
 ** from 32nd bit to the 24th bit.
 */
 static int imml(int imm) {
-    uint x = check_exp(imm < 0 && MIN_ARG_L <= imm, c_abs(imm));
+    c_uint x = check_exp(imm < 0 && MIN_ARG_L <= imm, c_abs(imm));
     cs_assert(!(x & 0x800000)); /* 24th bit must be free */
     return (x|0x800000); /* set 24th bit */
 }
@@ -798,7 +798,7 @@ static int isnumIK(ExpInfo *e, int *imm) {
 
 
 static int setindexint(FunctionState *fs, ExpInfo *v, int left) {
-    uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
+    c_uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
     if (isIMM(v->u.info))
         return csC_emitILS(fs, OP_SETINDEXINT, left, imm);
     else
@@ -863,7 +863,7 @@ void csC_storevarpop(FunctionState *fs, ExpInfo *var, int left) {
 
 
 static int getindexint(FunctionState *fs, ExpInfo *v) {
-    uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
+    c_uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
     if (isIMM(v->u.info))
         return csC_emitIS(fs, OP_GETINDEXINT, imm);
     else

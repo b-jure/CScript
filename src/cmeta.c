@@ -34,16 +34,17 @@ CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
 
 
 void csMM_init(cs_State *C) {
-    // TODO: make 'mmnames' a global symbol and provide the 'cs_metamethodtostring()' API
     const char *mmnames[CS_MM_NUM] = { /* ORDER MM */
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
         "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",
         "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
         "__bnot", "__eq", "__lt", "__le"
     };
+    const int first = NUM_KEYWORDS + 1;
+    cs_assert(NUM_KEYWORDS + CS_MM_NUM <= MAXBYTE);
     for (int i = 0; i < CS_MM_NUM; i++) {
         OString *s = csS_new(C, mmnames[i]);
-        s->extra = i + NUM_KEYWORDS + 1;
+        s->extra = cast_byte(i + first);
         G(C)->mmnames[i] = s;
         csG_fix(C, obj2gco(G(C)->mmnames[i]));
     }

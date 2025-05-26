@@ -55,15 +55,15 @@ void csS_clearcache(GState *gs) {
 }
 
 
-uint csS_hash(const char *str, size_t l, unsigned int seed) {
-    uint h = seed ^ cast_uint(l);
+c_uint csS_hash(const char *str, size_t l, unsigned int seed) {
+    c_uint h = seed ^ cast_uint(l);
     for (; l > 0; l--)
         h ^= ((h<<5) + (h>>2) + cast_byte(str[l - 1]));
     return h;
 }
 
 
-uint csS_hashlngstr(OString *s) {
+c_uint csS_hashlngstr(OString *s) {
     cs_assert(s->tt_ == CS_VLNGSTR);
     if (s->extra == 0) { /* no hash? */
         size_t len = s->u.lnglen;
@@ -83,7 +83,7 @@ static void rehashtable(OString **arr, int osz, int nsz) {
         arr[i] = NULL; /* clear the slot */
         while (s) { /* for each string in the chain */
             OString *next = s->u.next; /* save 'next' */
-            uint h = hashmod(s->hash, nsz); /* get hash position */
+            c_uint h = hashmod(s->hash, nsz); /* get hash position */
             s->u.next = arr[h]; /* chain it into array */
             arr[h] = s;
             s = next;
@@ -133,7 +133,7 @@ void csS_init(cs_State *C) {
 }
 
 
-static OString *newstrobj(cs_State *C, size_t l, int tag, uint h) {
+static OString *newstrobj(cs_State *C, size_t l, int tag, c_uint h) {
     GCObject *o = csG_new(C, sizeofstring(l), tag);
     OString *s = gco2str(o);
     s->hash = h;
@@ -177,7 +177,7 @@ static OString *internshrstr(cs_State *C, const char *str, size_t l) {
     OString *s;
     GState *gs = G(C);
     StringTable *tab = &gs->strtab;
-    uint h = csS_hash(str, l, gs->seed);
+    c_uint h = csS_hash(str, l, gs->seed);
     OString **list = &tab->hash[hashmod(h, tab->size)];
     cs_assert(str != NULL); /* otherwise 'memcmp'/'memcpy' are undefined */
     for (s = *list; s != NULL; s = s->u.next) { /* probe chain */
@@ -223,7 +223,7 @@ OString *csS_newl(cs_State *C, const char *str, size_t l) {
 ** only zero-terminated strings, so it is safe to use 'strcmp'.
 */
 OString *csS_new(cs_State *C, const char *str) {
-    uint i = pointer2uint(str) % STRCACHE_N; /* hash */
+    c_uint i = pointer2uint(str) % STRCACHE_N; /* hash */
     OString **p = G(C)->strcache[i]; /* address as key */
     int j;
     for (j = 0; j < STRCACHE_M; j++) {
@@ -474,18 +474,18 @@ unsigned csS_tostringbuff(const TValue *obj, char *buff) {
 
 void csS_tostring(cs_State *C, TValue *obj) {
     char buff[CS_N2SBUFFSZ];
-    uint len = csS_tostringbuff(obj, buff);
+    c_uint len = csS_tostringbuff(obj, buff);
     setstrval(C, obj, csS_newl(C, buff, len));
 }
 
 
-int csS_utf8esc(char *buff, ulong n) {
+int csS_utf8esc(char *buff, c_ulong n) {
     int x = 1; /* number of bytes put in buffer (backwards) */
     cs_assert(n <= 0x7FFFFFFFu);
     if (n < 0x80) /* ascii? */
         buff[UTF8BUFFSZ - 1] = cast_char(n);
     else { /* need continuation bytes */
-        uint mfb = 0x3f; /* maximum that fits in first byte */
+        c_uint mfb = 0x3f; /* maximum that fits in first byte */
         do { /* add continuation bytes */
             buff[UTF8BUFFSZ - (x++)] = cast_char(0x80 | (n & 0x3f));
             n >>= 6; /* remove added bits */

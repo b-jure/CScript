@@ -14,7 +14,7 @@ assert(a[10] == 10 and b == a and a[13] == "x");
         local x = [];
         for (local i=0; i < n; i=i+1)
             x[i] = i;
-        return flatten(x);
+        return list.flatten(x);
     };
     local a,b,c;
     a,b = 0, f(1);

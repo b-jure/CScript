@@ -1176,7 +1176,7 @@ CS_API int cs_get_metalist(cs_State *C, int index) {
 }
 
 
-CS_API int cs_get_uservalue(cs_State *C, int index, ushort n) {
+CS_API int cs_get_uservalue(cs_State *C, int index, c_ushort n) {
     UserData *ud;
     int t;
     cs_lock(C);
@@ -1363,7 +1363,7 @@ done:
 }
 
 
-CS_API int cs_set_uservalue(cs_State *C, int index, ushort n) {
+CS_API int cs_set_uservalue(cs_State *C, int index, c_ushort n) {
     UserData *ud;
     int res;
     cs_lock(C);
@@ -1649,7 +1649,7 @@ CS_API int cs_find_index(cs_State *C, int index, int fi, int s, int e) {
 CS_API unsigned cs_numbertocstring(cs_State *C, int index, char *buff) {
     const TValue *o = index2value(C, index);
     if (ttisnum(o)) {
-        uint len = csS_tostringbuff(o, buff);
+        c_uint len = csS_tostringbuff(o, buff);
         buff[len++] = '\0'; /* terminate */
         return len;
     } else

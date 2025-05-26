@@ -128,7 +128,7 @@ typedef union {
     TValue val_;
     struct {
         TValueFields;
-        ushort delta;
+        c_ushort delta;
     } tbc;
 } SValue;
 
@@ -424,7 +424,7 @@ typedef struct OString {
      * flag for long strings indicating that it has hash */
     c_byte extra;
     c_byte shrlen; /* length for short strings, 0xFF for longs strings */
-    uint hash;
+    c_uint hash;
     union {
         size_t lnglen; /* length for long strings */
         struct OString *next; /* linked list for 'strtab' (hash table) */
@@ -743,7 +743,7 @@ typedef union UValue {
 
 typedef struct UserData {
     ObjectHeader;
-    ushort nuv; /* number of 'uservalues' */
+    c_ushort nuv; /* number of 'uservalues' */
     size_t size; /* size of 'UserData' memory in bytes */
     List *metalist;
     Table *methods;
@@ -763,7 +763,7 @@ typedef struct UserData {
 */
 typedef struct EmptyUserData {
     ObjectHeader;
-    ushort nuv;
+    c_ushort nuv;
     size_t size;
     List *metalist;
     Table *methods;
@@ -822,7 +822,7 @@ typedef enum N2IMode {
         (check_exp(((sz&(sz-1))==0), (cast_int((h) & ((sz)-1)))))
 
 
-CSI_FUNC int csO_ceillog2(uint x);
+CSI_FUNC int csO_ceillog2(c_uint x);
 CSI_FUNC int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode);
 CSI_FUNC int csO_tointeger(const TValue *v, cs_Integer *i, int mode);
 CSI_FUNC cs_Integer csO_shiftl(cs_Integer x, cs_Integer y);

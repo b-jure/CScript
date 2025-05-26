@@ -34,7 +34,7 @@ CSI_FUNC Table *csH_newsz(cs_State *C, int size);
 CSI_FUNC Table *csH_new(cs_State *C);
 CSI_FUNC int csH_next(cs_State *C, Table *tab, SPtr key);
 CSI_FUNC void csH_copykeys(cs_State *C, Table *stab, Table *dtab);
-CSI_FUNC void csH_resize(cs_State *C, Table *t, uint newsize);
+CSI_FUNC void csH_resize(cs_State *C, Table *t, c_uint newsize);
 CSI_FUNC void csH_newkey(cs_State *C, Table *t, const TValue *key,
                          const TValue *val);
 CSI_FUNC const TValue *csH_getshortstr(Table *t, OString *key);

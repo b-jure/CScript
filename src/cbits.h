@@ -62,7 +62,7 @@
 
 
 /* 
-** Get first 3 bytes (LE byte order) from 'p' casted to 'uint'.
+** Get first 3 bytes (LE byte order) from 'p' casted to 'c_uint'.
 */
 #define get3bytes(p) \
         cast_int(cast_uint(0) | ((*(cast_bytep(p) + 2)) << 16) | \

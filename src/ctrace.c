@@ -1,6 +1,6 @@
 /*
 ** ctrace.c
-** Low-level bytecode tracing and disassembly for internal debugging
+** Functions for low-level bytecode debugging and tracing
 ** See Copyright Notice in cscript.h
 */
 
@@ -148,11 +148,11 @@ static void traceILLS(const Proto *p, const Instruction *pc) {
 ** Trace the current OpCode and its arguments.
 */
 void csTR_tracepc(cs_State *C, SPtr sp, const Proto *p,
-                  const Instruction *pc) {
+                  const Instruction *pc, int tolevel) {
     SPtr oldsp = C->sp.p;
     C->sp.p = sp; /* save correct stack pointer */
-    csTR_dumpstack(C, 1, NULL); /* first dump current function stack... */
-    switch (getOpFormat(*pc)) { /* ...then trace the instruction */
+    csTR_dumpstack(C, tolevel, NULL); /* dump 'tolevel' stacks */
+    switch (getOpFormat(*pc)) { /* trace the instruction */
         case FormatI: traceI(p, pc); break;
         case FormatIS: traceIS(p, pc); break;
         case FormatISS: traceISS(p, pc); break;
@@ -798,16 +798,15 @@ void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...) {
         printf("\n");
     }
     for (int i = 0; cf != NULL && level != 0; i++) {
-        SPtr base = cf->func.p;
+        SPtr base = cf->func.p + 1;
         level--;
-        printf("[LEVEL %3d] %-25s %s ",
-                i, objtxt(s2v(cf->func.p)), (cf != C->cf) ? "--" : ">>");
-        if (base + 1 >= prevtop)
-            printf("empty");
-        else {
-            for (SPtr sp = base + 1; sp < prevtop; sp++)
+        printf("[L %3d] %-25s %s ", i, objtxt(s2v(cf->func.p)),
+                                        (cf != C->cf) ? "--" : ">>");
+        if (base < prevtop) {
+            for (SPtr sp = base; sp < prevtop; sp++)
                 printf("[%s]", objtxt(s2v(sp)));
-        }
+        } else
+            printf("empty");
         printf("\n");
         prevtop = cf->func.p;
         cf = cf->prev;

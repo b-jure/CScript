@@ -8,7 +8,7 @@ CORE_O = src/capi.o src/clist.o src/ccode.o src/cdebug.o src/cfunction.o\
 	 src/cobject.o src/cparser.o src/cvm.o src/cprotected.o src/creader.o\
 	 src/cscript.o src/cstate.o src/cstring.o src/ctrace.o
 LIB_O = src/cscriptaux.o src/cbaselib.o src/cloadlib.o src/cscriptlib.o src/cstrlib.o\
-	src/cmathlib.o src/ciolib.o src/coslib.o src/creglib.o src/cdblib.o
+	src/cmathlib.o src/ciolib.o src/coslib.o src/creglib.o src/cdblib.o src/clstlib.o
 BASE_O = $(CORE_O) $(LIB_O) $(MYOBJS)
 
 CSCRIPT_T = cscript
@@ -186,7 +186,7 @@ cdebug.o: src/cdebug.c src/cprefix.h src/cscript.h src/cscriptconf.h \
  src/cdebug.h src/cobject.h src/climits.h src/cstate.h src/capi.h \
  src/ccode.h src/cbits.h src/cparser.h src/clexer.h src/creader.h \
  src/cmem.h src/cfunction.h src/cstring.h src/cprotected.h src/cmeta.h \
- src/cvm.h src/cgc.h
+ src/cvm.h src/cgc.h src/ctable.h
 cfunction.o: src/cfunction.c src/cprefix.h src/cfunction.h src/ccode.h \
  src/cbits.h src/cparser.h src/clexer.h src/creader.h src/cscript.h \
  src/cscriptconf.h src/cmem.h src/climits.h src/cobject.h src/cstate.h \
@@ -203,19 +203,21 @@ clexer.o: src/clexer.c src/cprefix.h src/cobject.h src/cscript.h \
  src/cstate.h src/clexer.h src/creader.h src/cmem.h src/cdebug.h \
  src/cprotected.h src/ctable.h src/cstring.h
 clist.o: src/clist.c src/cprefix.h src/clist.h src/cobject.h \
- src/cscript.h src/cscriptconf.h src/climits.h src/cgc.h src/cbits.h \
- src/cstate.h src/cmem.h
+ src/cscript.h src/cscriptconf.h src/climits.h src/cstring.h src/cstate.h \
+ src/cgc.h src/cbits.h src/cmem.h src/cmeta.h src/cdebug.h
 cloadlib.o: src/cloadlib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
  src/cscriptaux.h src/cscriptlib.h
+clstlib.o: src/clstlib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
+ src/cscriptaux.h src/cscriptlib.h src/climits.h
 cmathlib.o: src/cmathlib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
  src/cscriptaux.h src/cscriptlib.h src/climits.h
 cmem.o: src/cmem.c src/cprefix.h src/cgc.h src/cbits.h src/cobject.h \
  src/cscript.h src/cscriptconf.h src/climits.h src/cstate.h src/cdebug.h \
  src/cmem.h src/cprotected.h src/creader.h
 cmeta.o: src/cmeta.c src/cprefix.h src/cmeta.h src/cscriptconf.h \
- src/cscript.h src/cobject.h src/climits.h src/clexer.h src/creader.h \
- src/cmem.h src/cstring.h src/cstate.h src/cdebug.h src/ctable.h \
- src/cbits.h src/cgc.h src/cvm.h src/cprotected.h
+ src/cscript.h src/cobject.h src/climits.h src/clist.h src/clexer.h \
+ src/creader.h src/cmem.h src/cstring.h src/cstate.h src/cdebug.h \
+ src/ctable.h src/cbits.h src/cgc.h src/cvm.h src/cprotected.h
 cobject.o: src/cobject.c src/cprefix.h src/climits.h src/cscript.h \
  src/cscriptconf.h src/cobject.h src/cvm.h src/cstate.h
 coslib.o: src/coslib.c src/cprefix.h src/cscript.h src/cscriptconf.h \
@@ -257,8 +259,8 @@ ctrace.o: src/ctrace.c src/cprefix.h src/ctrace.h src/cobject.h \
  src/cscript.h src/cscriptconf.h src/climits.h src/cmeta.h src/ccode.h \
  src/cbits.h src/cparser.h src/clexer.h src/creader.h src/cmem.h \
  src/cdebug.h src/cstate.h src/cstring.h
-cvm.o: src/cvm.c src/cprefix.h src/capi.h src/clist.h src/cobject.h \
- src/cscript.h src/cscriptconf.h src/climits.h src/cfunction.h \
+cvm.o: src/cvm.c src/cprefix.h src/capi.h src/climits.h src/cscript.h \
+ src/cscriptconf.h src/cstate.h src/cobject.h src/clist.h src/cfunction.h \
  src/ccode.h src/cbits.h src/cparser.h src/clexer.h src/creader.h \
- src/cmem.h src/cstate.h src/cgc.h src/ctable.h src/cdebug.h src/cvm.h \
- src/cmeta.h src/cstring.h src/ctrace.h src/cprotected.h src/cjmptable.h
+ src/cmem.h src/cgc.h src/ctable.h src/cdebug.h src/cvm.h src/cmeta.h \
+ src/cstring.h src/ctrace.h src/cprotected.h src/cjmptable.h

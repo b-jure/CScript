@@ -103,9 +103,10 @@ static void f_newstate(cs_State *C, void *ud) {
     UNUSED(ud);
     init_stack(C, C);
     init_cstorage(C, gs);
-    csS_init(C);
-    csMM_init(C);
+    csS_init(C); /* keep this init first */
     csY_init(C);
+    csMM_init(C);
+    csA_init(C);
     gs->gcstop = 0;
     setnilval(&gs->nil); /* signal that state is fully built */
     csi_userstateopen(C);
