@@ -34,10 +34,14 @@
          (s)->extra <= NUM_KEYWORDS)
 
 
+/* value of 'extra' for first metamethod name */
+#define FIRSTMM     (NUM_KEYWORDS + 1)
+
+
 /* test wheter a string is a metamethod tag */
 #define ismetatag(s) \
-        ((s)->tt_ == CS_VSHRSTR && NUM_KEYWORDS < (s)->extra && \
-         (s)->extra <= NUM_KEYWORDS + CS_MM_NUM)
+        ((s)->tt_ == CS_VSHRSTR && FIRSTMM <= (s)->extra && \
+         (s)->extra < FIRSTMM + CS_MM_NUM)
 
 
 /* equality for short strings, which are always internalized */

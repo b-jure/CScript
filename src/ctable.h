@@ -45,7 +45,10 @@ CSI_FUNC void csH_finishset(cs_State *C, Table *t, const TValue *slot,
                             const TValue *key, const TValue *val);
 CSI_FUNC void csH_set(cs_State *C, Table *tab, const TValue *key,
                       const TValue *val);
-CSI_FUNC void csH_setint(cs_State *C, Table *t, cs_Integer key, TValue *val);
+CSI_FUNC void csH_setstr(cs_State *C, Table *tab, OString *key,
+                                                  const TValue *val);
+CSI_FUNC void csH_setint(cs_State *C, Table *t, cs_Integer key,
+                                                const TValue *val);
 CSI_FUNC void csH_free(cs_State *C, Table *t);
 CSI_FUNC int csH_len(const Table *t);
 

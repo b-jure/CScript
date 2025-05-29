@@ -347,40 +347,73 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
 }
 
 
-void csV_rawset(cs_State *C, const TValue *obj, const TValue *key,
-                const TValue *val) {
+void csV_rawsetstr(cs_State *C, const TValue *o, const TValue *k,
+                                                 const TValue *v) {
     Table *t;
-    switch (ttypetag(obj)) {
+    switch (ttypetag(o)) {
         case CS_VLIST: {
-            List *l = listval(obj);
-            csV_setlist(C, l, key, val);
+            List *l = listval(o);
+            csV_setlist(C, l, strval(k), v, csA_setstr);
             break;
         }
         case CS_VTABLE: {
-            t = tval(obj);
+            t = tval(o);
             goto set_table;
         }
         case CS_VINSTANCE: {
-            t = insval(obj)->fields;
+            t = insval(o)->fields;
         set_table:
-            csV_settable(C, t, key, val);
+            csV_settable(C, t, strval(k), v, csH_setstr);
             break;
         }
         default: {
-            csD_typeerror(C, obj, "index");
+            csD_typeerror(C, o, "index");
             break; /* unreachable */
         }
     }
 }
 
 
-void csV_set(cs_State *C, const TValue *obj, const TValue *key,
-             const TValue *val) {
-    const TValue *fmm = csMM_get(C, obj, CS_MM_SETIDX);
-    if (ttisnil(fmm)) /* no metamethod? */
-        csV_rawset(C, obj, key, val);
-    else /* otherwise call metamethod */
-        csMM_callset(C, fmm, obj, key, val);
+/* generic set */
+#define csV_setgen(C,o,k,v,f) \
+    { const TValue *fmm = csMM_get(C, o, CS_MM_SETIDX); \
+      if (ttisnil(fmm)) { f(C, o, k, v); } \
+      else { csMM_callset(C, fmm, o, k, v); }}
+
+
+void csV_setstr(cs_State *C, const TValue *o, const TValue *k, const TValue *v) {
+    csV_setgen(C, o, k, v, csV_rawsetstr);
+}
+
+
+void csV_rawset(cs_State *C, const TValue *o, const TValue *k, const TValue *v) {
+    Table *t;
+    switch (ttypetag(o)) {
+        case CS_VLIST: {
+            List *l = listval(o);
+            csV_setlist(C, l, k, v, csA_set);
+            break;
+        }
+        case CS_VTABLE: {
+            t = tval(o);
+            goto set_table;
+        }
+        case CS_VINSTANCE: {
+            t = insval(o)->fields;
+        set_table:
+            csV_settable(C, t, k, v, csH_set);
+            break;
+        }
+        default: {
+            csD_typeerror(C, o, "index");
+            break; /* unreachable */
+        }
+    }
+}
+
+
+void csV_set(cs_State *C, const TValue *o, const TValue *k, const TValue *v) {
+    csV_setgen(C, o, k, v, csV_rawset);
 }
 
 
@@ -389,14 +422,21 @@ void csV_set(cs_State *C, const TValue *obj, const TValue *key,
         setimval2s(C, res, csMM_newinsmethod(C, in, fn))
 
 
-void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
-    switch (ttypetag(obj)) {
+/* generic get */
+#define csV_getgen(C,o,k,res,f) \
+    { const TValue *fmm = csMM_get(C, o, CS_MM_GETIDX); \
+      if (ttisnil(fmm)) { f(C, o, k, res); } \
+      else { csMM_callgetres(C, fmm, o, k, res); }}
+
+
+void csV_rawgetstr(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
+    switch (ttypetag(o)) {
         case CS_VLIST: {
-            csA_get(C, listval(obj), key, s2v(res));
+            csA_getstr(C, listval(o), strval(k), s2v(res));
             break;
         }
         case CS_VTABLE: {
-            const TValue *slot = csH_get(tval(obj), key);
+            const TValue *slot = csH_getstr(tval(o), strval(k));
             if (!ttisnil(slot)) {
                 setobj2s(C, res, slot);
             } else
@@ -404,11 +444,11 @@ void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
             break;
         }
         case CS_VINSTANCE: {
-            Instance *in = insval(obj);
-            const TValue *slot = csH_get(in->fields, key);
+            Instance *in = insval(o);
+            const TValue *slot = csH_getstr(in->fields, strval(k));
             if (isempty(slot) && in->oclass->methods) {
                 /* try methods table */
-                slot = csH_get(in->oclass->methods, key);
+                slot = csH_getstr(in->oclass->methods, strval(k));
                 if (!isempty(slot)) { /* have method? */
                     setobj2s(C, res, slot);
                     bindmethod(C, in, slot, res);
@@ -420,19 +460,58 @@ void csV_rawget(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
             break;
         }
         default: {
-            csD_typeerror(C, obj, "index");
+            csD_typeerror(C, o, "index");
             break;
         }
     }
 }
 
 
-void csV_get(cs_State *C, const TValue *obj, const TValue *key, SPtr res) {
-    const TValue *f = csMM_get(C, obj, CS_MM_GETIDX);
-    if (ttisnil(f)) /* no metamethod? */
-        csV_rawget(C, obj, key, res);
-    else /* otherwise call metamethod */
-        csMM_callgetres(C, f, obj, key, res);
+void csV_getstr(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
+    csV_getgen(C, o, k, res, csV_rawgetstr);
+}
+
+
+void csV_rawget(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
+    switch (ttypetag(o)) {
+        case CS_VLIST: {
+            csA_get(C, listval(o), k, s2v(res));
+            break;
+        }
+        case CS_VTABLE: {
+            const TValue *slot = csH_get(tval(o), k);
+            if (!ttisnil(slot)) {
+                setobj2s(C, res, slot);
+            } else
+                setnilval(s2v(res));
+            break;
+        }
+        case CS_VINSTANCE: {
+            Instance *in = insval(o);
+            const TValue *slot = csH_get(in->fields, k);
+            if (isempty(slot) && in->oclass->methods) {
+                /* try methods table */
+                slot = csH_get(in->oclass->methods, k);
+                if (!isempty(slot)) { /* have method? */
+                    setobj2s(C, res, slot);
+                    bindmethod(C, in, slot, res);
+                    break; /* done */
+                } /* else fall through */
+                setnilval(s2v(res));
+            } else
+                setobj2s(C, res, slot);
+            break;
+        }
+        default: {
+            csD_typeerror(C, o, "index");
+            break;
+        }
+    }
+}
+
+
+void csV_get(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
+    csV_getgen(C, o, k, res, csV_rawget);
 }
 
 
@@ -1280,7 +1359,7 @@ returning: /* trap already set */
                 savestate(C);
                 key = K(fetch_l());
                 cs_assert(t && ttisstring(key));
-                csV_settable(C, t, key, f);
+                csV_settable(C, t, strval(key), f, csH_setstr);
                 sp--;
                 vm_break;
             }
@@ -1683,7 +1762,7 @@ returning: /* trap already set */
                 sp = C->sp.p = sl + 1; /* pop off elements (if any) */
                 vm_break;
             }
-            vm_case(OP_SETPROPERTY) { /* NOTE: optimize? */
+            vm_case(OP_SETPROPERTY) {
                 TValue *v = peek(0);
                 TValue *o;
                 TValue *prop;
@@ -1691,17 +1770,17 @@ returning: /* trap already set */
                 o = peek(fetch_l());
                 prop = K(fetch_l());
                 cs_assert(ttisstring(prop));
-                Protect(csV_set(C, o, prop, v));
+                Protect(csV_setstr(C, o, prop, v));
                 sp = --C->sp.p;
                 vm_break;
             }
-            vm_case(OP_GETPROPERTY) { /* NOTE: optimize? */
+            vm_case(OP_GETPROPERTY) {
                 TValue *v = peek(0);
                 TValue *prop;
                 savestate(C);
                 prop = K(fetch_l());
                 cs_assert(ttisstring(prop));
-                Protect(csV_get(C, v, prop, sp - 1));
+                Protect(csV_getstr(C, v, prop, sp - 1));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
@@ -1731,7 +1810,7 @@ returning: /* trap already set */
                 savestate(C);
                 i = K(fetch_l());
                 cs_assert(ttisstring(i));
-                Protect(csV_get(C, v, i, sp - 1));
+                Protect(csV_getstr(C, v, i, sp - 1));
                 vm_break;
             }
             vm_case(OP_SETINDEXSTR) {
@@ -1742,11 +1821,11 @@ returning: /* trap already set */
                 o = peek(fetch_l());
                 idx = K(fetch_l());
                 cs_assert(ttisstring(idx));
-                Protect(csV_set(C, o, idx, v));
+                Protect(csV_setstr(C, o, idx, v));
                 sp = --C->sp.p;
                 vm_break;
             }
-            vm_case(OP_GETINDEXINT) {
+            vm_case(OP_GETINDEXINT) { /* TODO: optimize 'csA_getint' */
                 TValue *v = peek(0);
                 TValue i;
                 int imm;
@@ -1756,7 +1835,7 @@ returning: /* trap already set */
                 Protect(csV_get(C, v, &i, sp - 1));
                 vm_break;
             }
-            vm_case(OP_GETINDEXINTL) {
+            vm_case(OP_GETINDEXINTL) { /* TODO: optimize 'csA_getint' */
                 TValue *v = peek(0);
                 TValue i;
                 int imm;
@@ -1766,7 +1845,7 @@ returning: /* trap already set */
                 Protect(csV_get(C, v, &i, sp - 1));
                 vm_break;
             }
-            vm_case(OP_SETINDEXINT) {
+            vm_case(OP_SETINDEXINT) { /* TODO: optimize 'csA_setint' */
                 TValue *v = peek(0);
                 TValue *o;
                 cs_Integer imm;
@@ -1779,7 +1858,7 @@ returning: /* trap already set */
                 sp = --C->sp.p;
                 vm_break;
             }
-            vm_case(OP_SETINDEXINTL) {
+            vm_case(OP_SETINDEXINTL) { /* TODO: optimize 'csA_setint' */
                 TValue *v = peek(0);
                 TValue *o;
                 cs_Integer imm;

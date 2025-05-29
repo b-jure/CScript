@@ -22,11 +22,11 @@
 #define csV_raweq(v1_,v2_)    csV_ordereq(NULL, v1_, v2_)
 
 
-#define csV_setlist(C,l,key,val) \
-    { csA_set(C, l, val, key); csG_barrierback(C, obj2gco(l), val); }
+#define csV_setlist(C,l,key,val,f) \
+    { f(C, l, key, val); csG_barrierback(C, obj2gco(l), val); }
 
-#define csV_settable(C,t,key,val) \
-    { csH_set(C, t, key, val); csG_barrierback(C, obj2gco(t), val); }
+#define csV_settable(C,t,key,val,f) \
+    { f(C, t, key, val); csG_barrierback(C, obj2gco(t), val); }
 
 
 CSI_FUNC void csV_inherit(cs_State *C, OClass *cls, OClass *scl);
@@ -42,13 +42,17 @@ CSI_FUNC int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2);
 CSI_FUNC int csV_orderlt(cs_State *C, const TValue *v1, const TValue *v2);
 CSI_FUNC int csV_orderle(cs_State *C, const TValue *v1, const TValue *v2);
 CSI_FUNC void csV_execute(cs_State *C, CallFrame *cf);
-CSI_FUNC void csV_rawset(cs_State *C, const TValue *obj, const TValue *key,
+CSI_FUNC void csV_rawsetstr(cs_State *C, const TValue *o, const TValue *k,
+                            const TValue *val);
+CSI_FUNC void csV_rawset(cs_State *C, const TValue *o, const TValue *k,
                          const TValue *val);
-CSI_FUNC void csV_set(cs_State *C, const TValue *obj, const TValue *key,
+CSI_FUNC void csV_set(cs_State *C, const TValue *o, const TValue *k,
                       const TValue *val);
-CSI_FUNC void csV_rawget(cs_State *C, const TValue *obj, const TValue *key,
+CSI_FUNC void csV_rawgetstr(cs_State *C, const TValue *o, const TValue *k,
+                            SPtr res);
+CSI_FUNC void csV_rawget(cs_State *C, const TValue *o, const TValue *k,
                          SPtr res);
-CSI_FUNC void csV_get(cs_State *C, const TValue *obj, const TValue *key,
+CSI_FUNC void csV_get(cs_State *C, const TValue *o, const TValue *k,
                       SPtr res);
 
 #endif

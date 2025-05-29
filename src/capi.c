@@ -798,7 +798,7 @@ c_sinline void aux_rawsetstr(cs_State *C, Table *t, const char *str,
     } else {
         setstrval2s(C, C->sp.p, s);
         api_inctop(C);
-        csV_settable(C, t, s2v(C->sp.p - 1), v);
+        csV_settable(C, t, s, v, csH_setstr);
         C->sp.p -= 2; /* pop string key and value */
     }
     cs_unlock(C);
@@ -1273,7 +1273,7 @@ c_sinline void aux_rawsetfield(cs_State *C, int obj, TValue *key, int n) {
     cs_lock(C);
     api_checknelems(C, n);
     t = gettable(C, obj);
-    csV_settable(C, t, key, s2v(C->sp.p - 1));
+    csV_settable(C, t, key, s2v(C->sp.p - 1), csH_set);
     C->sp.p -= n;
     cs_unlock(C);
 }

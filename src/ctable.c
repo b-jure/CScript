@@ -491,8 +491,7 @@ void csH_finishset(cs_State *C, Table *t, const TValue *slot,
 
 
 /*
-** Warning: when using this function the caller probably needs to
-** check a GC barrier.
+** Ditto for a GC barrier.
 */
 void csH_set(cs_State *C, Table *t, const TValue *key, const TValue *val) {
     const TValue *slot = csH_get(t, key);
@@ -500,14 +499,31 @@ void csH_set(cs_State *C, Table *t, const TValue *key, const TValue *val) {
 }
 
 
-void csH_setint(cs_State *C, Table *t, cs_Integer key, TValue *val) {
-    const TValue *p = csH_getint(t, key);
-    if (isabstkey(p)) {
+/*
+** Ditto for a GC barrier.
+*/
+void csH_setstr(cs_State *C, Table *t, OString *key, const TValue *val) {
+    const TValue *slot = csH_getstr(t, key);
+    if (isabstkey(slot)) {
+        TValue k;
+        setstrval(C, &k, key);
+        csH_newkey(C, t, &k, val);
+    } else
+        setobj(C, cast(TValue *, slot), val);
+}
+
+
+/*
+** Ditto for a GC barrier.
+*/
+void csH_setint(cs_State *C, Table *t, cs_Integer key, const TValue *val) {
+    const TValue *slot = csH_getint(t, key);
+    if (isabstkey(slot)) {
         TValue k;
         setival(&k, key);
         csH_newkey(C, t, &k, val);
     } else
-        setobj(C, cast(TValue *, p), val);
+        setobj(C, cast(TValue *, slot), val);
 }
 
 
