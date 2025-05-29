@@ -456,11 +456,11 @@
 
 
 /*
-** @CS_MAXSRC - maximum description size of function source in debug
-** information.
-** CHANGE if you need different size.
+** @CS_IDSIZE - the maximum size for the description of the source
+** of a function in debug information.
+** CHANGE it if you want a different size.
 */
-#define CS_MAXSRC           60
+#define CS_IDSIZE           60
 
 
 /*

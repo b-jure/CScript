@@ -199,25 +199,25 @@ CS_API const char *cs_setlocal(cs_State *C, const cs_Debug *ar, int n) {
 
 static void getfuncinfo(Closure *cl, cs_Debug *ar) {
     if (!CScriptClosure(cl)) {
-        ar->source = "[C]";
-        ar->srclen = LL("[C]");
+        ar->source = "=[C]";
+        ar->srclen = LL("=[C]");
         ar->defline = -1;
         ar->lastdefline = -1;
         ar->what = "C";
     } else {
         const Proto *p = cl->cs.p;
         if (p->source) { /* have source? */
-          ar->source = getstr(p->source);
-          ar->srclen = getstrlen(p->source);
+            ar->source = getstr(p->source);
+            ar->srclen = getstrlen(p->source);
         } else {
-          ar->source = "?";
-          ar->srclen = LL("?");
+            ar->source = "=?";
+            ar->srclen = LL("=?");
         }
         ar->defline = p->defline;
         ar->lastdefline = p->deflastline;
         ar->what = (ar->lastdefline == 0) ? "main" : "CScript";
     }
-    csS_sourceid(ar->shortsrc, ar->source, ar->srclen);
+    csS_chunkid(ar->shortsrc, ar->source, ar->srclen);
 }
 
 
@@ -476,10 +476,10 @@ CS_API int cs_gethookcount(cs_State *C) {
 /* add usual debug information to 'msg' (source id and line) */
 const char *csD_addinfo(cs_State *C, const char *msg, OString *src,
                         int line) {
-    char buffer[CS_MAXSRC];
-    if (src) {
-        csS_sourceid(buffer, getstr(src), getstrlen(src));
-    } else {
+    char buffer[CS_IDSIZE];
+    if (src)
+        csS_chunkid(buffer, getstr(src), getstrlen(src));
+    else {
         buffer[0] = '?';
         buffer[1] = '\0';
     }

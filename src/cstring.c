@@ -267,28 +267,9 @@ int csS_cmp(const OString *s1, const OString *s2) {
 }
 
 
-void csS_strlimit(char *dest, const char *src, size_t len, size_t limit) {
-    limit--;
-    if (limit < len) {
-        size_t n = limit - LL("...");
-        memcpy(dest, src, n);
-        memcpy(&dest[n], "...", LL("..."));
-        len = limit;
-    } else {
-        memcpy(dest, src, len);
-    }
-    dest[len] = '\0';
-}
-
-
-void csS_sourceid(char *restrict dest, const char *src, size_t len) {
-    csS_strlimit(dest, src, len, CS_MAXSRC - 1);
-}
-
-
-/* -----------------------------------------------------------------------
+/* {=====================================================================
 ** String conversion
-** ----------------------------------------------------------------------- */
+** ====================================================================== */
 
 /* convert hex character into digit */
 c_sinline int hexvalue(int c) {
@@ -509,9 +490,9 @@ int csS_utf8esc(char *buff, c_ulong n) {
 ** strings on stack in case buffer exceeds this limit.
 ** This is all done because 'csS_newvstringf' often
 ** gets called by 'csD_getinfo'; the size should be
-** at least 'CS_MAXSRC' + 'MAXNUM2STR' + size for message.
+** at least 'CS_IDSIZE' + 'MAXNUM2STR' + size for message.
 */
-#define BUFFVFSSIZ	(CS_MAXSRC + CS_N2SBUFFSZ + 100)
+#define BUFFVFSSIZ	(CS_IDSIZE + CS_N2SBUFFSZ + 100)
 
 /* buffer for 'csS_newvstringf' */
 typedef struct BuffVFS {
@@ -656,4 +637,62 @@ const char *csS_pushfstring(cs_State *C, const char *fmt, ...) {
     const char *str = csS_pushvfstring(C, fmt, argp);
     va_end(argp);
     return str;
+}
+
+/* }===================================================================== */
+
+
+void csS_strlimit(char *out, const char *src, size_t len, size_t limit) {
+    limit--;
+    if (limit < len) {
+        size_t n = limit - LL("...");
+        memcpy(out, src, n);
+        memcpy(&out[n], "...", LL("..."));
+        len = limit;
+    } else {
+        memcpy(out, src, len);
+    }
+    out[len] = '\0';
+}
+
+
+#define DOTS	"..."
+#define PRE	"[string \""
+#define POS	"\"]"
+
+#define addstr(a,b,l)	(memcpy(a,b,(l) * sizeof(char)), a += (l))
+
+// TODO: update load docs (when loading strings, functions, etc...)
+void csS_chunkid(char *restrict out, const char *source, size_t srclen) {
+    size_t bufflen = CS_IDSIZE; /* free space in buffer */
+    if (*source == '=') { /* 'literal' source */
+        if (srclen <= bufflen) /* small enough? (excluding '=') */
+            memcpy(out, source + 1, srclen * sizeof(char));
+        else { /* too large, truncate it */
+            addstr(out, source + 1, bufflen - 1);
+            *out = '\0';
+        }
+    } else if (*source == '@') { /* file name */
+        if (srclen <= bufflen) /* small enough? (excluding '@') */
+            memcpy(out, source + 1, srclen * sizeof(char));
+        else { /* too large, add '...' before rest of name */
+            addstr(out, DOTS, LL(DOTS));
+            bufflen -= LL(DOTS);
+            memcpy(out, source + 1 + srclen - bufflen, bufflen * sizeof(char));
+        }
+    } else { /* string; format as [string "source"] */
+        const char *nl = strchr(source, '\n'); /* find first new line */
+        addstr(out, PRE, LL(PRE)); /* add prefix */
+        bufflen -= LL(PRE DOTS POS) + 1; /* save space for prefix+suffix+'\0' */
+        if (srclen < bufflen && nl == NULL) { /* small one-line source? */
+            addstr(out, source, srclen); /* keep it */
+        } else {
+            if (nl != NULL)
+                srclen = (size_t)(nl - source); /* stop at first newline */
+            if (srclen > bufflen) srclen = bufflen;
+            addstr(out, source, srclen);
+            addstr(out, DOTS, LL(DOTS));
+        }
+        memcpy(out, POS, (LL(POS) + 1) * sizeof(char));
+    }
 }

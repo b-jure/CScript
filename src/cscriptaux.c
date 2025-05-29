@@ -272,12 +272,12 @@ CSLIB_API int csL_loadfile(cs_State *C, const char *filename) {
     LoadFile lf = {0};
     int status, readstatus;
     int filename_index = cs_getntop(C);
-    errno = 0;
     if (filename == NULL) { /* stdin? */
-        cs_push_string(C, "stdin");
+        cs_push_string(C, "=stdin");
         lf.fp = stdin;
     } else { /* otherwise real file */
-        cs_push_string(C, filename);
+        cs_push_fstring(C, "@%s", filename);
+        errno = 0;
         lf.fp = fopen(filename, "r");
         if (lf.fp == NULL)
             return errorfile(C, "open", filename_index);

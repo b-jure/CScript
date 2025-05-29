@@ -455,7 +455,7 @@ struct cs_Debug {
     char isvararg;              /* (u) */
     int ftransfer;              /* (r) */
     int ntransfer;              /* (r) */
-    char shortsrc[CS_MAXSRC];   /* (s) */
+    char shortsrc[CS_IDSIZE];   /* (s) */
     /* private part */
     struct CallFrame *cf; /* active function */
 };

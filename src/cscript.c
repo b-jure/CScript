@@ -232,7 +232,7 @@ static int run_args(cs_State *C, char **argv, int n)  {
                 if (*extra == '\0') extra = argv[++i];
                 cs_assert(extra != NULL);
                 status = (option == 's')
-                       ? run_string(C, extra, "(command line)")
+                       ? run_string(C, extra, "=(command line)")
                        : run_library(C, extra);
                 if (status != CS_STATUS_OK) return 0;
                 break;
@@ -379,7 +379,7 @@ static int pushline(cs_State *C, int firstline) {
 static int addreturn(cs_State *C) {
     const char *line = cs_to_string(C, -1); /* original line */
     const char *retline = cs_push_fstring(C, "return %s;", line);
-    int status = csL_loadbuffer(C, retline, strlen(retline), "stdin");
+    int status = csL_loadbuffer(C, retline, strlen(retline), "=stdin");
     /* stack: [line][retline][result] */
     if (status == CS_STATUS_OK) {
         cs_remove(C, -2); /* remove modified line ('retline') */
@@ -420,7 +420,7 @@ static int multi_line(cs_State *C) {
     for (;;) { /* repeat until complete declaration */
         size_t len;
         const char *line = cs_to_lstring(C, 0, &len);
-        int status = csL_loadbuffer(C, line, len, "stdin");
+        int status = csL_loadbuffer(C, line, len, "=stdin");
         if (!incomplete(C, status) || !pushline(C, 0)) {
             cs_saveline(C, line); /* keep history */
             return status; /* cannot or should not try to add continuation */

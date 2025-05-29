@@ -2554,7 +2554,7 @@ typedef struct cs_Debug {
     int nupvals;                /* (u) number of upvalues */
     int nparams;                /* (u) number of parameters */
     char isvararg;              /* (u) */
-    char shortsrc[CS_MAXSRC];   /* (s) */
+    char shortsrc[CS_IDSIZE];   /* (s) */
     /* private part */
     <em>other fields</em>
 } cs_Debug;</pre>

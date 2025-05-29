@@ -165,7 +165,7 @@ static int b_load(cs_State *C) {
         const char *chunkname = csL_opt_string(C, 1, s);
         status = csL_loadbuffer(C, s, l, chunkname);
     } else { /* loading from a reader function */
-        const char *chunkname = csL_opt_string(C, 1, "(load)");
+        const char *chunkname = csL_opt_string(C, 1, "=(load)");
         csL_check_type(C, 0, CS_T_FUNCTION); /* 'chunk' must be a function */
         cs_setntop(C, RESERVEDSLOT+1); /* create reserved slot */
         status = cs_load(C, genericreader, NULL, chunkname);
