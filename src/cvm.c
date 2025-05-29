@@ -347,6 +347,13 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
 }
 
 
+/* generic set */
+#define csV_setgen(C,o,k,v,f) \
+    { const TValue *fmm = csMM_get(C, o, CS_MM_SETIDX); \
+      if (ttisnil(fmm)) { f(C, o, k, v); } \
+      else { csMM_callset(C, fmm, o, k, v); }}
+
+
 void csV_rawsetstr(cs_State *C, const TValue *o, const TValue *k,
                                                  const TValue *v) {
     Table *t;
@@ -374,19 +381,47 @@ void csV_rawsetstr(cs_State *C, const TValue *o, const TValue *k,
 }
 
 
-/* generic set */
-#define csV_setgen(C,o,k,v,f) \
-    { const TValue *fmm = csMM_get(C, o, CS_MM_SETIDX); \
-      if (ttisnil(fmm)) { f(C, o, k, v); } \
-      else { csMM_callset(C, fmm, o, k, v); }}
-
-
-void csV_setstr(cs_State *C, const TValue *o, const TValue *k, const TValue *v) {
+void csV_setstr(cs_State *C, const TValue *o, const TValue *k,
+                                              const TValue *v) {
     csV_setgen(C, o, k, v, csV_rawsetstr);
 }
 
 
-void csV_rawset(cs_State *C, const TValue *o, const TValue *k, const TValue *v) {
+void csV_rawsetint(cs_State *C, const TValue *o, const TValue *k,
+                                                 const TValue *v) {
+    Table *t;
+    switch (ttypetag(o)) {
+        case CS_VLIST: {
+            List *l = listval(o);
+            csV_setlist(C, l, ival(k), v, csA_setint);
+            break;
+        }
+        case CS_VTABLE: {
+            t = tval(o);
+            goto set_table;
+        }
+        case CS_VINSTANCE: {
+            t = insval(o)->fields;
+        set_table:
+            csV_settable(C, t, ival(k), v, csH_setint);
+            break;
+        }
+        default: {
+            csD_typeerror(C, o, "index");
+            break; /* unreachable */
+        }
+    }
+}
+
+
+void csV_setint(cs_State *C, const TValue *o, const TValue *k,
+                                              const TValue *v) {
+    csV_setgen(C, o, k, v, csV_rawsetint);
+}
+
+
+void csV_rawset(cs_State *C, const TValue *o, const TValue *k,
+                                              const TValue *v) {
     Table *t;
     switch (ttypetag(o)) {
         case CS_VLIST: {
@@ -429,6 +464,24 @@ void csV_set(cs_State *C, const TValue *o, const TValue *k, const TValue *v) {
       else { csMM_callgetres(C, fmm, o, k, res); }}
 
 
+c_sinline void finishTget(cs_State *C, const TValue *slot, SPtr res) {
+    if (!ttisnil(slot)) {
+        setobj2s(C, res, slot);
+    } else
+        setnilval(s2v(res));
+}
+
+
+c_sinline void trybindmethod(cs_State *C, const TValue *slot, Instance *in,
+                                          SPtr res) {
+    if (!isempty(slot)) { /* have method? */
+        setobj2s(C, res, slot);
+        bindmethod(C, in, slot, res);
+    } else
+        setnilval(s2v(res));
+}
+
+
 void csV_rawgetstr(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
     switch (ttypetag(o)) {
         case CS_VLIST: {
@@ -436,11 +489,7 @@ void csV_rawgetstr(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
             break;
         }
         case CS_VTABLE: {
-            const TValue *slot = csH_getstr(tval(o), strval(k));
-            if (!ttisnil(slot)) {
-                setobj2s(C, res, slot);
-            } else
-                setnilval(s2v(res));
+            finishTget(C, csH_getstr(tval(o), strval(k)), res);
             break;
         }
         case CS_VINSTANCE: {
@@ -449,12 +498,7 @@ void csV_rawgetstr(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
             if (isempty(slot) && in->oclass->methods) {
                 /* try methods table */
                 slot = csH_getstr(in->oclass->methods, strval(k));
-                if (!isempty(slot)) { /* have method? */
-                    setobj2s(C, res, slot);
-                    bindmethod(C, in, slot, res);
-                    break; /* done */
-                } /* else fall through */
-                setnilval(s2v(res));
+                trybindmethod(C, slot, in, res);
             } else
                 setobj2s(C, res, slot);
             break;
@@ -472,6 +516,40 @@ void csV_getstr(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
 }
 
 
+void csV_rawgetint(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
+    switch (ttypetag(o)) {
+        case CS_VLIST: {
+            csA_getint(C, listval(o), ival(k), s2v(res));
+            break;
+        }
+        case CS_VTABLE: {
+            finishTget(C, csH_getint(tval(o), ival(k)), res);
+            break;
+        }
+        case CS_VINSTANCE: {
+            Instance *in = insval(o);
+            const TValue *slot = csH_getint(in->fields, ival(k));
+            if (isempty(slot) && in->oclass->methods) {
+                /* try methods table */
+                slot = csH_getint(in->oclass->methods, ival(k));
+                trybindmethod(C, slot, in, res);
+            } else
+                setobj2s(C, res, slot);
+            break;
+        }
+        default: {
+            csD_typeerror(C, o, "index");
+            break;
+        }
+    }
+}
+
+
+void csV_getint(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
+    csV_getgen(C, o, k, res, csV_rawgetint);
+}
+
+
 void csV_rawget(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
     switch (ttypetag(o)) {
         case CS_VLIST: {
@@ -479,11 +557,7 @@ void csV_rawget(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
             break;
         }
         case CS_VTABLE: {
-            const TValue *slot = csH_get(tval(o), k);
-            if (!ttisnil(slot)) {
-                setobj2s(C, res, slot);
-            } else
-                setnilval(s2v(res));
+            finishTget(C, csH_get(tval(o), k), res);
             break;
         }
         case CS_VINSTANCE: {
@@ -492,12 +566,7 @@ void csV_rawget(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
             if (isempty(slot) && in->oclass->methods) {
                 /* try methods table */
                 slot = csH_get(in->oclass->methods, k);
-                if (!isempty(slot)) { /* have method? */
-                    setobj2s(C, res, slot);
-                    bindmethod(C, in, slot, res);
-                    break; /* done */
-                } /* else fall through */
-                setnilval(s2v(res));
+                trybindmethod(C, slot, in, res);
             } else
                 setobj2s(C, res, slot);
             break;
@@ -644,12 +713,6 @@ c_sinline void poscall(cs_State *C, CallFrame *cf, int nres) {
 }
 
 
-/*
-   TODO: have to store 2 pc references, 1 is just for the line counting
-   to be correct; or maybe I should correct it manually if it is in-between
-   the instructions (only during errors)?
-   check cdebug.c.
-*/
 c_sinline int precallC(cs_State *C, SPtr func, int nres, cs_CFunction f) {
     int n;
     CallFrame *cf;
@@ -860,7 +923,8 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 }
 
 
-#define log2size(b)     ((b > 0) ? (1<<((b)-1)) : 0)
+#define log2size1(b)     ((b > 0) ? (1<<((b)-1)) : 0)
+
 
 c_sinline void pushclass(cs_State *C, int b) {
     OClass *cls = csMM_newclass(C);
@@ -870,7 +934,7 @@ c_sinline void pushclass(cs_State *C, int b) {
         cs_assert(0); /* TODO */
     }
     if (b > 0) /* have methods? */
-        cls->methods = csH_newsz(C, log2size(b));
+        cls->methods = csH_newsz(C, log2size1(b));
 }
 
 
@@ -878,7 +942,7 @@ c_sinline void pushlist(cs_State *C, int b) {
     List *l = csA_new(C);
     setlistval2s(C, C->sp.p++, l);
     if (b > 0) /* list is not empty? */
-        csA_ensure(C, l, log2size(b));
+        csA_ensure(C, l, log2size1(b));
 }
 
 
@@ -886,13 +950,13 @@ c_sinline void pushtable(cs_State *C, int b) {
     Table *t = csH_new(C);
     settval2s(C, C->sp.p++, t);
     if (b > 0) /* table is not empty? */
-        csH_resize(C, t, log2size(b));
+        csH_resize(C, t, log2size1(b));
 }
 
 
-/* -----------------------------------------------------------------------
+/* {======================================================================
 ** Macros for arithmetic/bitwise/comparison operations on numbers.
-**------------------------------------------------------------------------ */
+** ======================================================================= */
 
 /* 'cs_Integer' arithmetic operations */
 #define iadd(C,a,b)    (intop(+, a, b))
@@ -1131,11 +1195,12 @@ c_sinline void pushtable(cs_State *C, int b) {
     } else op_orderI_error(C, v, imm); \
     setorderres(v, cond, 1); }
 
+/* }====================================================================== */
 
-/* =======================================================================
+
+/* {======================================================================
 ** Interpreter loop
 ** ======================================================================= */
-
 
 /* get reference to constant value from 'k' at index 'idx' */
 #define K(idx)          (k + (idx))
@@ -1825,27 +1890,27 @@ returning: /* trap already set */
                 sp = --C->sp.p;
                 vm_break;
             }
-            vm_case(OP_GETINDEXINT) { /* TODO: optimize 'csA_getint' */
+            vm_case(OP_GETINDEXINT) {
                 TValue *v = peek(0);
                 TValue i;
                 int imm;
                 savestate(C);
                 imm = fetch_s();
                 setival(&i, IMM(imm));
-                Protect(csV_get(C, v, &i, sp - 1));
+                Protect(csV_getint(C, v, &i, sp - 1));
                 vm_break;
             }
-            vm_case(OP_GETINDEXINTL) { /* TODO: optimize 'csA_getint' */
+            vm_case(OP_GETINDEXINTL) {
                 TValue *v = peek(0);
                 TValue i;
                 int imm;
                 savestate(C);
                 imm = fetch_l();
                 setival(&i, IMML(imm));
-                Protect(csV_get(C, v, &i, sp - 1));
+                Protect(csV_getint(C, v, &i, sp - 1));
                 vm_break;
             }
-            vm_case(OP_SETINDEXINT) { /* TODO: optimize 'csA_setint' */
+            vm_case(OP_SETINDEXINT) {
                 TValue *v = peek(0);
                 TValue *o;
                 cs_Integer imm;
@@ -1854,11 +1919,11 @@ returning: /* trap already set */
                 o = peek(fetch_l());
                 imm = fetch_s();
                 setival(&index, IMM(imm));
-                Protect(csV_set(C, o, &index, v));
+                Protect(csV_setint(C, o, &index, v));
                 sp = --C->sp.p;
                 vm_break;
             }
-            vm_case(OP_SETINDEXINTL) { /* TODO: optimize 'csA_setint' */
+            vm_case(OP_SETINDEXINTL) {
                 TValue *v = peek(0);
                 TValue *o;
                 cs_Integer imm;
@@ -1867,7 +1932,7 @@ returning: /* trap already set */
                 o = peek(fetch_l());
                 imm = fetch_l();
                 setival(&index, IMML(imm));
-                Protect(csV_set(C, o, &index, v));
+                Protect(csV_setint(C, o, &index, v));
                 sp = --C->sp.p;
                 vm_break;
             }
@@ -1986,3 +2051,5 @@ returning: /* trap already set */
         }
     }
 }
+
+/* }====================================================================== */

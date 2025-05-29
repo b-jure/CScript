@@ -76,15 +76,15 @@ void csA_init(cs_State *C) {
 }
 
 
-c_sinline void setfield(cs_State *C, List *l, int lf, const TValue *val) {
+c_sinline void setfield(cs_State *C, List *l, int lf, const TValue *v) {
     switch (lf) {
         case LFLEN: { /* set list length */
             cs_Integer i;
-            if (c_likely(tointeger(val, &i))) {
+            if (c_likely(tointeger(v, &i))) {
                 if (c_likely(i >= 0)) {
                     i = (i <= MAXINT) ? i - 1 : MAXINT - 1;
                     csA_ensureindex(C, l, i);
-                    setobj(C, &l->b[i], val);
+                    setobj(C, &l->b[i], v);
                 } else /* otherwise negative length */
                     csD_llenerror(C, "expected positive integer or 0");
             } else
@@ -93,14 +93,14 @@ c_sinline void setfield(cs_State *C, List *l, int lf, const TValue *val) {
         }
         case LFLAST: { /* set the last element */
             if (l->n > 0)
-                setobj(C, &l->b[l->n - 1], val);
+                setobj(C, &l->b[l->n - 1], v);
             /* else, do nothing */
             break;
         }
         case LFX: case LFY: case LFZ: { /* set 1st, 2nd or 3rd element */
             int i = lf - LFX;
             csA_ensureindex(C, l, i);
-            setobj(C, &l->b[i], val);
+            setobj(C, &l->b[i], v);
             break;
         }
         default: cs_assert(0); /* unreachable */
@@ -135,15 +135,15 @@ c_sinline void getfield(cs_State *C, List *l, int lf, TValue *out) {
 
 
 c_sinline void trylistfield(cs_State *C, List *l, OString *idx,
-                            const TValue *val, TValue *out) {
+                            const TValue *v, TValue *out) {
     if (c_likely(islistfield(idx))) { /* valid list field? */
         int lf = idx->extra - FIRSTLF;
         assert(lf >= 0 && lf < LFNUM);
         if (!out) { /* set list field? */
-            assert(val);
-            setfield(C, l, lf, val);
+            assert(v);
+            setfield(C, l, lf, v);
         } else { /* otherwise get list field */
-            assert(!val);
+            assert(!v);
             getfield(C, l, lf, out);
         }
     } else /* otherwise invalid list field */
@@ -163,20 +163,28 @@ void csA_setstr(cs_State *C, List *l, OString *i, const TValue *v) {
 /*
 ** Ditto for GC barrier.
 */
-void csA_set(cs_State *C, List *l, const TValue *idx, const TValue *val) {
+void csA_setint(cs_State *C, List *l, cs_Integer i, const TValue *v) {
+    if (c_likely(0 <= i)) { /* index is 0 or positive? */
+        if (c_unlikely(MAXLISTINDEX < i)) /* 'index' too large? */
+            csD_indexerror(C, i, "too large");
+        else { /* ok */
+            csA_ensureindex(C, l, i);
+            setobj(C, &l->b[i], v);
+        }
+    } else /* otherwise negative index */
+        csD_indexerror(C, i, "negative");
+}
+
+
+/*
+** Ditto for GC barrier.
+*/
+void csA_set(cs_State *C, List *l, const TValue *idx, const TValue *v) {
     cs_Integer i;
-    if (c_likely(tointeger(idx, &i))) { /* index is integer? */
-        if (c_likely(0 <= i)) { /* non-negative index? */
-            if (c_unlikely(MAXLISTINDEX < i)) /* 'index' too large? */
-                csD_indexerror(C, i, "too large"); /* error */
-            else { /* ok */
-                csA_ensureindex(C, l, i);
-                setobj(C, &l->b[i], val);
-            }
-        } else /* error; negative index */
-            csD_indexerror(C, i, "negative");
-    } else if (ttisstring(idx)) /* index is a string? */
-        csA_setstr(C, l, strval(idx), val);
+    if (c_likely(tointeger(idx, &i))) /* index is integer? */
+        csA_setint(C, l, i, v);
+    else if (ttisstring(idx)) /* index is string? */
+        csA_setstr(C, l, strval(idx), v);
     else /* otherwise invalid index value */
         csD_indexterror(C, idx);
 }
@@ -187,23 +195,29 @@ void csA_getstr(cs_State *C, List *l, OString *i, TValue *out) {
 }
 
 
+void csA_getint(cs_State *C, List *l, cs_Integer i, TValue *out) {
+    if (c_likely(0 <= i)) { /* positive index? */
+        if (i < l->n) { /* index in bounds? */
+            setobj(C, out, &l->b[i]);
+        } else /* otherwise index out of bounds */
+            setnilval(out);
+    } else /* error; negative index */
+        csD_indexerror(C, i, "negative");
+}
+
+
 void csA_get(cs_State *C, List *l, const TValue *idx, TValue *out) {
     cs_Integer i;
-    if (c_likely(tointeger(idx, &i))) { /* index is integer? */
-        if (c_likely(0 <= i)) { /* positive index? */
-            if (i < l->n) { /* index in bounds? */
-                setobj(C, out, &l->b[i]);
-            } else /* otherwise index out of bounds */
-                setnilval(out);
-        } else /* error; negative index */
-            csD_indexerror(C, i, "negative");
-    } else if (ttisstring(idx)) /* index is a string? */
+    if (c_likely(tointeger(idx, &i))) /* index is integer? */
+        csA_getint(C, l, i, out);
+    else if (ttisstring(idx)) /* index is a string? */
         csA_getstr(C, l, strval(idx), out);
     else /* otherwise invalid index value */
         csD_indexterror(C, idx);
 }
 
 
+/* returns reference to the value at index 'i' */
 const TValue *csA_getival(cs_State *C, List *l, int i) {
     cs_assert(i >= 0);
     if (i < l->n)
@@ -213,6 +227,7 @@ const TValue *csA_getival(cs_State *C, List *l, int i) {
 }
 
 
+/* similar to above function, except this returns the value into 'res' */
 void csA_geti(cs_State *C, List *l, int i, TValue *res) {
     cs_assert(i >= 0);
     if (i < l->n) {
