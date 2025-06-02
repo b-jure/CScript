@@ -30,8 +30,7 @@
 
 
 /*
-** Mark for entries in 'lineinfo' array that containt instruction
-** arguments.
+** Mark for entries in 'lineinfo' array that contain instruction arguments.
 */
 #define ARGLINEINFO     (ABSLINEINFO + 1)
 

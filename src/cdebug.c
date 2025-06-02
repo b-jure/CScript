@@ -25,6 +25,8 @@
 #include "cgc.h"
 #include "ctable.h"
 
+#include <stdio.h>
+
 
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
@@ -95,7 +97,7 @@ int csD_getfuncline(const Proto *p, int pc) {
     int basepc;
     int baseline = getbaseline(p, pc, &basepc);
     while (basepc < pc) { /* walk until given instruction */
-        basepc += getOpSize(p->code[basepc]); /* next instruction pc */
+        basepc += getopSize(p->code[basepc]); /* next instruction pc */
         cs_assert(p->lineinfo[basepc] != ARGLINEINFO);
         baseline += p->lineinfo[basepc]; /* correct line */
     }
@@ -221,24 +223,238 @@ static void getfuncinfo(Closure *cl, cs_Debug *ar) {
 }
 
 
+static int filterpc(int pc, int jmptarget, int ltop, int *top) {
+    if (pc < jmptarget) /* is code conditional (inside a jump)? */
+        return (*top = -1); /* cannot know who sets that stack slot */
+    else
+        return (*top = ltop, pc); /* current position sets that stack slot */
+}
+
+
+static Instruction symbexec(const Proto *p, int lastpc, int *top, int sp) {
+    const Instruction *code = p->code;
+    int pc = 0;
+    int ltop = p->arity;
+    int setsp = -1;
+    int jmptarget = 0;
+    if (code[0] == OP_VARARGPREP) /* vararg function? */
+        pc += getopSize(OP_VARARGPREP); /* skip first opcode */
+    for (; pc < lastpc; pc += opsize(code, pc)) {
+        const Instruction *i = &code[pc];
+        int change; /* true if current instruction changed 'sp' */
+        printf("ltop = %d, p->maxstack = %d\n", ltop, p->maxstack);
+        cs_assert(0 <= ltop && ltop <= p->maxstack);
+        switch (*i) {
+            case OP_RET: {
+                int stk = GET_ARG_L(i, 0);
+                cs_assert(stk <= ltop);
+                change = (stk == ltop);
+                ltop = stk;
+                break;
+            }
+            case OP_CALL: {
+                int stk = GET_ARG_L(i, 0);
+                int nresults = GET_ARG_L(i, 1);
+                if (nresults == CS_MULRET) nresults = 1;
+                cs_assert(stk <= ltop);
+                change = (sp >= stk);
+                ltop = stk + nresults;
+                break;
+            }
+            case OP_NILN: case OP_VARARG: {
+                int n = GET_ARG_L(i, 0);
+                if (*i == OP_VARARG) {
+                    if (--n == CS_MULRET) n = 1;
+                }
+                change = (ltop <= sp && sp <= ltop + n);
+                ltop += n;
+                break;
+            }
+            case OP_POPN: {
+                ltop -= GET_ARG_L(i, 0);
+                change = 0;
+                break;
+            }
+            case OP_CONCAT: {
+                ltop -= GET_ARG_L(i, 0) - 1;
+                change = (ltop == sp);
+                break;
+            }
+            case OP_SETLIST: {
+                ltop = GET_ARG_L(i, 0);
+                change = 0;
+                break;
+            }
+            case OP_JMP: case OP_JMPS: {
+                int off = GET_ARG_L(i, 0) * (-1 + 2 * (*i == OP_JMP));
+                int dest = (pc + getopSize(*i)) + off;
+                /* jump does not skip 'lastpc' and is larger than current? */
+                if (dest <= lastpc && jmptarget < dest)
+                    jmptarget = dest; /* update 'jmptarget' */
+                change = 0;
+                break;
+            }
+            case OP_FORLOOP: {
+                change = (GET_ARG_L(i, 0) == sp);
+                ltop -= GET_ARG_L(i, 2);
+                break;
+            }
+            default: {
+                int npush = csC_opproperties[*i].push;
+                int delta = getopDelta(*i);
+                cs_assert(delta != VD); /* default case can't handle VD */
+                if (npush > 0)
+                    change = (ltop <= sp && sp <= ltop + npush);
+                else change = 0;
+                ltop += delta;
+            }
+        }
+        if (change)
+            setsp = filterpc(pc, jmptarget, ltop, top);
+    }
+    return setsp;
+}
+
+
+static const char *upvalname(const Proto *p, int uv) {
+    OString *s = check_exp(uv < p->sizeupvals, p->upvals[uv].name);
+    cs_assert(s != NULL); /* must have debug information */
+    return getstr(s);
+}
+
+
+/*
+** Find a "name" for the constant 'c'.
+*/
+static const char *kname(const Proto *p, int index, const char **name) {
+    TValue *kval = &p->k[index];
+    if (ttisstring(kval)) {
+        *name = getstr(strval(kval));
+        return "constant";
+    } else {
+        *name = "?";
+        return NULL;
+    }
+}
+
+
+static const char *basicgetobjname(const Proto *p, int *ppc, int sp,
+                                   int *top, const char **name) {
+    int pc = *ppc;
+    *name = csF_getlocalname(p, sp + 1, pc);
+    if (*name)  /* is a local? */
+        return "local";
+    /* else try symbolic execution */
+    *ppc = pc = symbexec(p, pc, top, sp);
+    if (pc != -1) { /* could find instruction? */
+        Instruction *i = &p->code[pc];
+        switch (*i) {
+            case OP_GETLOCAL: {
+                int stk = GET_ARG_L(i, 0);
+                cs_assert(stk < sp);
+                return basicgetobjname(p, ppc, stk, top, name);
+            }
+            case OP_GETUVAL: {
+                *name = upvalname(p, GET_ARG_L(i, 0));
+                return "upvalue";
+            }
+            case OP_CONST: return kname(p, GET_ARG_S(i, 0), name);
+            case OP_CONSTL: return kname(p, GET_ARG_L(i, 0), name);
+            default: break;
+        }
+    }
+    return NULL; /* could not find reasonable name */
+}
+
+
+/*
+** Find a "name" for the stack slot 'c'.
+*/
+static void sname(const Proto *p, int pc, int c, const char **name) {
+    int dummy;
+    const char *what = basicgetobjname(p, &pc, c, &dummy, name);
+    if (!(what && *what == 'c')) /* did not find a constant name? */
+        *name = "?";
+}
+
+
+/*
+** Check whether table at stack slot 't' is the environment '__ENV'.
+*/
+static const char *isEnv(const Proto *p, int pc, int t, int isup) {
+    int dummy;
+    const char *name; /* name of indexed variable */
+    if (isup) /* is 't' an upvalue? */
+        name = upvalname(p, t);
+    else /* 't' is a stack slot */
+        basicgetobjname(p, &pc, t, &dummy, &name);
+    return (name && strcmp(name, CS_ENV) == 0) ? "global" : "field";
+}
+
+
+/*
+** Extend 'basicgetobjname' to handle table accesses.
+*/
+static const char *getobjname(const Proto *p, int lastpc, int sp,
+                              const char **name) {
+    int top;
+    const char *kind = basicgetobjname(p, &lastpc, sp, &top, name);
+    if (kind != NULL)
+        return kind;
+    else if (lastpc != -1) { /* could find instruction? */
+        Instruction *i = &p->code[lastpc];
+        switch (*i) {
+            case OP_GETPROPERTY: case OP_GETINDEXSTR: {
+                int k = GET_ARG_L(i, 0); /* key index */
+                kname(p, k, name);
+                return isEnv(p, lastpc, top-1, 0);
+            }
+            case OP_GETINDEX: {
+                sname(p, lastpc, top-1, name);
+                return isEnv(p, lastpc, top-2, 0);
+            }
+            case OP_GETINDEXINT: case OP_GETINDEXINTL: {
+                *name = "integer index";
+                return "field";
+            }
+            case OP_GETSUP: case OP_GETSUPIDXSTR: {
+                int k = GET_ARG_L(i, 0);
+                kname(p, k, name);
+                return "superclass field";
+            }
+            case OP_GETSUPIDX: {
+                sname(p, lastpc, top-1, name);
+                return "superclass field";
+            }
+            default: break; /* go through to return NULL */
+        }
+    }
+    return NULL; /* could not find reasonable name */
+}
+
+
 static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
                                     const char **name) {
     int mm;
     Instruction *i = &p->code[pc];
     switch (*i) {
-        case OP_CALL: return NULL; /* TODO(symbolic execution) */
+        case OP_CALL:
+            return NULL;
+            //return getobjname(p, pc, GET_ARG_L(i, 0), name);
         case OP_FORCALL: {
             *name = "for iterator";
             return "for iterator";
         }
         case OP_GETPROPERTY: case OP_GETINDEX:
-        case OP_GETINDEXSTR: case OP_GETINDEXINT:
+        case OP_GETINDEXSTR: case OP_GETINDEXINT: {
             mm = CS_MM_GETIDX;
             break;
+        }
         case OP_SETPROPERTY: case OP_SETINDEX:
-        case OP_SETINDEXSTR: case OP_SETINDEXINT:
+        case OP_SETINDEXSTR: case OP_SETINDEXINT: {
             mm = CS_MM_SETIDX;
             break;
+        }
         case OP_MBIN: {
             mm = GET_ARG_S(i, 0);
             break;
@@ -368,12 +584,12 @@ static void collectvalidlines(cs_State *C, Closure *f) {
         else { /* vararg function */
             cs_assert(p->code[0] == OP_VARARGPREP);
             currline = nextline(p, currline, 0);
-            i = getOpSize(OP_VARARGPREP); /* skip first instruction */
+            i = getopSize(OP_VARARGPREP); /* skip first instruction */
         }
         while (i < p->sizelineinfo) { /* for each instruction */
             currline = nextline(p, currline, i); /* get its line */
             csH_setint(C, t, currline, &v); /* table[line] = true */
-            i += getOpSize(p->code[i]); /* get next instruction */
+            i += getopSize(p->code[i]); /* get next instruction */
         }
     }
 }
@@ -412,6 +628,7 @@ CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
 }
 
 
+#include <stdio.h>
 /*
 ** Set 'trap' for all active CScript frames.
 ** This function can be called during a signal, under "reasonable"
@@ -600,7 +817,7 @@ static int changedline(const Proto *p, int oldpc, int newpc) {
         int pc = oldpc;
         for (;;) {
             int lineinfo;
-            pc += getOpSize(p->code[pc]);
+            pc += getopSize(p->code[pc]);
             lineinfo = p->lineinfo[pc];
             if (lineinfo == ABSLINEINFO)
                 break; /* cannot compute delta; fall through */
@@ -659,7 +876,7 @@ void csD_hookcall(cs_State *C, CallFrame *cf) {
     C->oldpc = 0; /* set 'oldpc' for new function */
     if (C->hookmask & CS_MASK_CALL) { /* is call hook on? */
         Proto *p = cf_func(cf)->p;
-        int delta = getOpSize(*cf->cs.pc);
+        int delta = getopSize(*cf->cs.pc);
         cf->cs.pc += delta; /* hooks assume 'pc' is already incremented */
         csD_hook(C, CS_HOOK_CALL, -1, 0, p->arity);
         cf->cs.pc -= delta; /* correct 'pc' */
@@ -709,7 +926,7 @@ int csD_traceexec(cs_State *C, const Instruction *pc) {
         cf->cs.trap = 0; /* don't need to stop again */
         return 0; /* turn off 'trap' */
     }
-    pc += getOpSize(*pc); /* reference is always next instruction */
+    pc += getopSize(*pc); /* reference is always next instruction */
     cf->cs.pc = pc; /* save 'pc' */
     counthook = (mask & CS_MASK_COUNT) && (--C->hookcount == 0);
     if (counthook)

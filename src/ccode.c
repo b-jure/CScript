@@ -74,124 +74,121 @@
 #define isIMML(i)       (MIN_IMML <= (i) && (i) <= MAX_IMML)
 
 
-
 /* 
 ** OpCode properties table.
 ** ORDER OP
 */
-CSI_DEF const c_byte csC_opProp[NUM_OPCODES] = {
-    /*     J  F      */
-    opProp(0, FormatI), /* OP_TRUE */
-    opProp(0, FormatI), /* OP_FALSE */
-    opProp(0, FormatI), /* OP_SUPER */
-    opProp(0, FormatI), /* OP_NIL */
-    opProp(0, FormatIL), /* OP_NILN */
-    opProp(0, FormatIL), /* OP_LOAD */
-    opProp(0, FormatIS), /* OP_CONST */
-    opProp(0, FormatIL), /* OP_CONSTL */
-    opProp(0, FormatIS), /* OP_CONSTI */
-    opProp(0, FormatIL), /* OP_CONSTIL */
-    opProp(0, FormatIS), /* OP_CONSTF */
-    opProp(0, FormatIL), /* OP_CONSTFL */
-    opProp(0, FormatIL), /* OP_VARARGPREP */
-    opProp(0, FormatIL), /* OP_VARARG */
-    opProp(0, FormatIL), /* OP_CLOSURE */
-    opProp(0, FormatIS), /* OP_NEWLIST */
-    opProp(0, FormatIS), /* OP_NEWCLASS */
-    opProp(0, FormatIS), /* OP_NEWTABLE */
-    opProp(0, FormatIL), /* OP_METHOD */
-    opProp(0, FormatIS), /* OP_SETMM */
-    opProp(0, FormatI), /* OP_POP */
-    opProp(0, FormatIL), /* OP_POPN */
-    opProp(0, FormatIS), /* OP_MBIN */
-    opProp(0, FormatIL), /* OP_ADDK */
-    opProp(0, FormatIL), /* OP_SUBK */
-    opProp(0, FormatIL), /* OP_MULK */
-    opProp(0, FormatIL), /* OP_DIVK */
-    opProp(0, FormatIL), /* OP_IDIVK */
-    opProp(0, FormatIL), /* OP_MODK */
-    opProp(0, FormatIL), /* OP_POWK */
-    opProp(0, FormatIL), /* OP_BSHLK */
-    opProp(0, FormatIL), /* OP_BSHRK */
-    opProp(0, FormatIL), /* OP_BANDK */
-    opProp(0, FormatIL), /* OP_BORK */
-    opProp(0, FormatIL), /* OP_BXORK */
-    opProp(0, FormatIL), /* OP_ADDI */
-    opProp(0, FormatIL), /* OP_SUBI */
-    opProp(0, FormatIL), /* OP_MULI */
-    opProp(0, FormatIL), /* OP_DIVI */
-    opProp(0, FormatIL), /* OP_IDIVI */
-    opProp(0, FormatIL), /* OP_MODI */
-    opProp(0, FormatIL), /* OP_POWI */
-    opProp(0, FormatIL), /* OP_BSHLI */
-    opProp(0, FormatIL), /* OP_BSHRI */
-    opProp(0, FormatIL), /* OP_BANDI */
-    opProp(0, FormatIL), /* OP_BORI */
-    opProp(0, FormatIL), /* OP_BXORI */
-    opProp(0, FormatIS), /* OP_ADD */
-    opProp(0, FormatIS), /* OP_SUB */
-    opProp(0, FormatIS), /* OP_MUL */
-    opProp(0, FormatIS), /* OP_DIV */
-    opProp(0, FormatIS), /* OP_IDIV */
-    opProp(0, FormatIS), /* OP_MOD */
-    opProp(0, FormatIS), /* OP_POW */
-    opProp(0, FormatIS), /* OP_BSHL */
-    opProp(0, FormatIS), /* OP_BSHR */
-    opProp(0, FormatIS), /* OP_BAND */
-    opProp(0, FormatIS), /* OP_BOR */
-    opProp(0, FormatIS), /* OP_BXOR */
-    opProp(0, FormatIL), /* OP_CONCAT */
-    opProp(0, FormatILS), /* OP_EQK */
-    opProp(0, FormatILS), /* OP_EQI */
-    opProp(0, FormatIL), /* OP_LTI */
-    opProp(0, FormatIL), /* OP_LEI */
-    opProp(0, FormatIL), /* OP_GTI */
-    opProp(0, FormatIL), /* OP_GEI */
-    opProp(0, FormatIS), /* OP_EQ */
-    opProp(0, FormatIS), /* OP_LT */
-    opProp(0, FormatIS), /* OP_LE */
-    opProp(0, FormatI), /* OP_EQPRESERVE */
-    opProp(0, FormatI), /* OP_UNM */
-    opProp(0, FormatI), /* OP_BNOT */
-    opProp(0, FormatI), /* OP_NOT */
-    opProp(1, FormatIL), /* OP_JMP */
-    opProp(1, FormatIL), /* OP_JMPS */
-    opProp(1, FormatILS), /* OP_TEST */
-    opProp(1, FormatILS), /* OP_TESTORPOP */
-    opProp(1, FormatILS), /* OP_TESTPOP */
-    opProp(0, FormatILL), /* OP_CALL */
-    opProp(0, FormatIL), /* OP_CLOSE */
-    opProp(0, FormatIL), /* OP_TBC */
-    opProp(0, FormatIL), /* OP_GETLOCAL */
-    opProp(0, FormatIL), /* OP_SETLOCAL */
-    opProp(0, FormatIL), /* OP_GETUVAL */
-    opProp(0, FormatIL), /* OP_SETUVAL */
-    opProp(0, FormatILLS), /* OP_SETLIST */
-    opProp(0, FormatILL), /* OP_SETPROPERTY */
-    opProp(0, FormatIL), /* OP_GETPROPERTY */
-    opProp(0, FormatI), /* OP_GETINDEX */
-    opProp(0, FormatIL), /* OP_SETINDEX */
-    opProp(0, FormatIL), /* OP_GETINDEXSTR */
-    opProp(0, FormatILL), /* OP_SETINDEXSTR */
-    opProp(0, FormatIS), /* OP_GETINDEXINT */
-    opProp(0, FormatIL), /* OP_GETINDEXINTL */
-    opProp(0, FormatILS), /* OP_SETINDEXINT */
-    opProp(0, FormatILL), /* OP_SETINDEXINTL */
-    opProp(0, FormatIL), /* OP_GETSUP */
-    opProp(0, FormatI), /* OP_GETSUPIDX */
-    opProp(0, FormatIL), /* OP_GETSUPIDXSTR */
-    opProp(0, FormatI), /* OP_INHERIT */
-    opProp(0, FormatILL), /* OP_FORPREP */
-    opProp(0, FormatILL), /* OP_FORCALL */
-    opProp(0, FormatILLL), /* OP_FORLOOP */
-    opProp(0, FormatILLS), /* OP_RET */
+CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
+    { FormatI, 1, 0 }, /* OP_TRUE */
+    { FormatI, 1, 0 }, /* OP_FALSE */
+    { FormatI, 0, 0 }, /* OP_SUPER */
+    { FormatI, 1, 0 }, /* OP_NIL */
+    { FormatIL, VD, 0 }, /* OP_NILN */
+    { FormatIL, 1, 0 }, /* OP_LOAD */
+    { FormatIS, 1, 0 }, /* OP_CONST */
+    { FormatIL, 1, 0 }, /* OP_CONSTL */
+    { FormatIS, 1, 0 }, /* OP_CONSTI */
+    { FormatIL, 1, 0 }, /* OP_CONSTIL */
+    { FormatIS, 1, 0 }, /* OP_CONSTF */
+    { FormatIL, 1, 0 }, /* OP_CONSTFL */
+    { FormatIL, VD, 0 }, /* OP_VARARGPREP */
+    { FormatIL, VD, 0 }, /* OP_VARARG */
+    { FormatIL, 1, 0 }, /* OP_CLOSURE */
+    { FormatIS, 1, 0 }, /* OP_NEWLIST */
+    { FormatIS, 1, 0 }, /* OP_NEWCLASS */
+    { FormatIS, 1, 0 }, /* OP_NEWTABLE */
+    { FormatIL, 0, 1 }, /* OP_METHOD */
+    { FormatIS, 0, 1 }, /* OP_SETMM */
+    { FormatI, 0, 1 }, /* OP_POP */
+    { FormatIL, VD, 0 }, /* OP_POPN */
+    { FormatIS, 0, 1 }, /* OP_MBIN */
+    { FormatIL, 0, 0 }, /* OP_ADDK */
+    { FormatIL, 0, 0 }, /* OP_SUBK */
+    { FormatIL, 0, 0 }, /* OP_MULK */
+    { FormatIL, 0, 0 }, /* OP_DIVK */
+    { FormatIL, 0, 0 }, /* OP_IDIVK */
+    { FormatIL, 0, 0 }, /* OP_MODK */
+    { FormatIL, 0, 0 }, /* OP_POWK */
+    { FormatIL, 0, 0 }, /* OP_BSHLK */
+    { FormatIL, 0, 0 }, /* OP_BSHRK */
+    { FormatIL, 0, 0 }, /* OP_BANDK */
+    { FormatIL, 0, 0 }, /* OP_BORK */
+    { FormatIL, 0, 0 }, /* OP_BXORK */
+    { FormatIL, 0, 0 }, /* OP_ADDI */
+    { FormatIL, 0, 0 }, /* OP_SUBI */
+    { FormatIL, 0, 0 }, /* OP_MULI */
+    { FormatIL, 0, 0 }, /* OP_DIVI */
+    { FormatIL, 0, 0 }, /* OP_IDIVI */
+    { FormatIL, 0, 0 }, /* OP_MODI */
+    { FormatIL, 0, 0 }, /* OP_POWI */
+    { FormatIL, 0, 0 }, /* OP_BSHLI */
+    { FormatIL, 0, 0 }, /* OP_BSHRI */
+    { FormatIL, 0, 0 }, /* OP_BANDI */
+    { FormatIL, 0, 0 }, /* OP_BORI */
+    { FormatIL, 0, 0 }, /* OP_BXORI */
+    { FormatIS, 0, 1 }, /* OP_ADD */
+    { FormatIS, 0, 1 }, /* OP_SUB */
+    { FormatIS, 0, 1 }, /* OP_MUL */
+    { FormatIS, 0, 1 }, /* OP_DIV */
+    { FormatIS, 0, 1 }, /* OP_IDIV */
+    { FormatIS, 0, 1 }, /* OP_MOD */
+    { FormatIS, 0, 1 }, /* OP_POW */
+    { FormatIS, 0, 1 }, /* OP_BSHL */
+    { FormatIS, 0, 1 }, /* OP_BSHR */
+    { FormatIS, 0, 1 }, /* OP_BAND */
+    { FormatIS, 0, 1 }, /* OP_BOR */
+    { FormatIS, 0, 1 }, /* OP_BXOR */
+    { FormatIL, VD, 0 }, /* OP_CONCAT */
+    { FormatILS, 0, 0 }, /* OP_EQK */
+    { FormatILS, 0, 0 }, /* OP_EQI */
+    { FormatIL, 0, 0 }, /* OP_LTI */
+    { FormatIL, 0, 0 }, /* OP_LEI */
+    { FormatIL, 0, 0 }, /* OP_GTI */
+    { FormatIL, 0, 0 }, /* OP_GEI */
+    { FormatIS, 0, 1 }, /* OP_EQ */
+    { FormatIS, 0, 1 }, /* OP_LT */
+    { FormatIS, 0, 1 }, /* OP_LE */
+    { FormatI, 0, 0 }, /* OP_EQPRESERVE */
+    { FormatI, 0, 0 }, /* OP_UNM */
+    { FormatI, 0, 0 }, /* OP_BNOT */
+    { FormatI, 0, 0 }, /* OP_NOT */
+    { FormatIL, 0, 0 }, /* OP_JMP */
+    { FormatIL, 0, 0 }, /* OP_JMPS */
+    { FormatIS, 0, 0 }, /* OP_TEST */
+    { FormatIS, 0, 1 }, /* OP_TESTPOP */
+    { FormatILL, 0, 0 }, /* OP_CALL */
+    { FormatIL, 0, 0 }, /* OP_CLOSE */
+    { FormatIL, 0, 0 }, /* OP_TBC */
+    { FormatIL, 1, 0 }, /* OP_GETLOCAL */
+    { FormatIL, 0, 1 }, /* OP_SETLOCAL */
+    { FormatIL, 1, 0 }, /* OP_GETUVAL */
+    { FormatIL, 0, 1 }, /* OP_SETUVAL */
+    { FormatILLS, VD, 0 }, /* OP_SETLIST */
+    { FormatILL, 0, 1 }, /* OP_SETPROPERTY */
+    { FormatIL, 0, 0 }, /* OP_GETPROPERTY */
+    { FormatI, 0, 1 }, /* OP_GETINDEX */
+    { FormatIL, 0, 1 }, /* OP_SETINDEX */
+    { FormatIL, 0, 0 }, /* OP_GETINDEXSTR */
+    { FormatILL, 0, 1 }, /* OP_SETINDEXSTR */
+    { FormatIS, 0, 0 }, /* OP_GETINDEXINT */
+    { FormatIL, 0, 0 }, /* OP_GETINDEXINTL */
+    { FormatILS, 0, 1 }, /* OP_SETINDEXINT */
+    { FormatILL, 0, 1 }, /* OP_SETINDEXINTL */
+    { FormatIL, 0, 0 }, /* OP_GETSUP */
+    { FormatI, 0, 1 }, /* OP_GETSUPIDX */
+    { FormatIL, 0, 0 }, /* OP_GETSUPIDXSTR */
+    { FormatI, 0, 0 }, /* OP_INHERIT */
+    { FormatILL, 0, 0 }, /* OP_FORPREP */
+    { FormatILL, 0, 0 }, /* OP_FORCALL */
+    { FormatILLL, VD, 0 }, /* OP_FORLOOP */
+    { FormatILLS, 0, 0 }, /* OP_RET */
 };
 
 
 /* 
 ** OpFormat size table (in bytes).
 */
-CSI_DEF const c_byte csC_opSize[FormatN] = {    /* ORDER OPFMT */
+CSI_DEF const c_byte csC_opsize[FormatN] = { /* ORDER OPFMT */
     SIZE_INSTR,                             /* FormatI */
     SIZE_INSTR+SIZE_ARG_S,                  /* FormatIS */
     SIZE_INSTR+SIZE_ARG_S*2,                /* FormatISS */
@@ -203,22 +200,10 @@ CSI_DEF const c_byte csC_opSize[FormatN] = {    /* ORDER OPFMT */
 };
 
 
-CSI_DEF const char *csC_opSizeFormat[FormatN] = { /* ORDER OPFMT */
-    "FormatI",
-    "FormatIS",
-    "FormatISS",
-    "FormatIL",
-    "FormatILS",
-    "FormatILL",
-    "FormatILLS",
-    "FormatILLL",
-};
-
-
 /* 
 ** Names of all instructions.
 */
-CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
+CSI_DEF const char *csC_opname[NUM_OPCODES] = { /* ORDER OP */
 "TRUE", "FALSE", "SUPER", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
 "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG", "CLOSURE", "NEWLIST",
 "NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK",
@@ -227,7 +212,7 @@ CSI_DEF const char *csC_opName[NUM_OPCODES] = { /* ORDER OP */
 "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "IDIV",
 "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI",
 "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT",
-"NOT", "JMP", "JMPS", "TEST", "TESTORPOP", "TESTPOP", "CALL", "CLOSE",
+"NOT", "JMP", "JMPS", "TEST", "TESTPOP", "CALL", "CLOSE",
 "TBC", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETLIST", "SETPROPERTY",
 "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",
 "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL", "GETSUP",
@@ -268,7 +253,7 @@ static c_uint c_abs(int v) {
 static void savelineinfo(FunctionState *fs, Proto *p, int line) {
     int linedif = line - fs->prevline;
     int pc = fs->prevpc; /* last coded instruction */
-    int opsize = getOpSize(p->code[pc]); /* size of last coded instruction */
+    int opsize = getopSize(p->code[pc]); /* size of last coded instruction */
     cs_assert(pc < currPC); /* must of emitted instruction */
     if (c_abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS) {
         csM_growarray(fs->lx->C, p->abslineinfo, p->sizeabslineinfo,
@@ -335,7 +320,9 @@ static void removelastinstruction(FunctionState *fs) {
 ** Remove last instruction which must be a jump.
 */
 void csC_removelastjump(FunctionState *fs) {
-    cs_assert(testJProp(fs->p->code[fs->prevpc])); /* last inst. is jump */
+    /* last instruction is jump */
+    cs_assert(fs->p->code[fs->prevpc] == OP_JMP ||
+              fs->p->code[fs->prevpc] == OP_JMPS);
     removelastinstruction(fs);
 }
 
@@ -375,18 +362,13 @@ static void addinstpc(FunctionState *fs) {
 }
 
 
-static int codeinstruction(FunctionState *fs, Instruction i) {
+/* emit instruction */
+int csC_emitI(FunctionState *fs, Instruction i) {
+    cs_assert(fs->prevpc <= currPC);
     addinstpc(fs);
     emitbyte(fs, i);
     savelineinfo(fs, fs->p, fs->lx->lastline);
     return currPC - SIZE_INSTR;
-}
-
-
-/* code instruction 'i' */
-int csC_emitI(FunctionState *fs, Instruction i) {
-    cs_assert(fs->prevpc <= currPC);
-    return codeinstruction(fs, i);
 }
 
 
@@ -871,6 +853,18 @@ static int getindexint(FunctionState *fs, ExpInfo *v) {
 }
 
 
+c_sinline int jumpoffset(Instruction *jmp) {
+    int offset = GET_ARG_L(jmp, 0);
+    cs_assert(*jmp == OP_JMP || *jmp == OP_JMPS);
+    return (*jmp == OP_JMP) ? offset : -offset;
+}
+
+
+c_sinline int destinationpc(Instruction *inst, int pc) {
+    return pc + getopSize(*inst) + jumpoffset(inst);
+}
+
+
 /*
 ** Gets the destination address of a jump instruction.
 ** Used to traverse a list of jumps.
@@ -878,18 +872,18 @@ static int getindexint(FunctionState *fs, ExpInfo *v) {
 static int getjump(FunctionState *fs, int pc) {
     Instruction *inst = &fs->p->code[pc];
     int offset = GET_ARG_L(inst, 0);
-    if (offset == 0)
-        return NOJMP;
+    if (offset == 0) /* no offset represents end of the list */
+        return NOJMP; /* end of the list */
     else
-        return (pc + getOpSize(*inst)) + offset;
+        return destinationpc(inst, pc);
 }
 
 
 /* fix jmp instruction at 'pc' to jump to 'target' */
 static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
-    int offset = c_abs(target - (pc + getOpSize(*jmp)));
-    cs_assert(testJProp(*jmp)); /* pc is at valid jump instruction */
+    int offset = c_abs(target - (pc + getopSize(*jmp)));
+    cs_assert(*jmp == OP_JMP || *jmp == OP_JMPS);
     if (c_unlikely(offset > MAXJMP)) /* jump is too large? */
         csP_semerror(fs->lx, "control structure too long");
     SET_ARG_L(jmp, 0, offset); /* fix the jump */
@@ -901,11 +895,11 @@ void csC_concatjl(FunctionState *fs, int *l1, int l2) {
     if (l2 == NOJMP) return;
     if (*l1 == NOJMP) *l1 = l2;
     else {
-        int curr = *l1;
+        int list = *l1;
         int next;
-        while ((next = getjump(fs, curr)) != NOJMP) /* get last jump pc */
-            curr = next;
-        fixjump(fs, curr, l2); /* last jump jumps to 'l2' */
+        while ((next = getjump(fs, list)) != NOJMP) /* get last jump pc */
+            list = next;
+        fixjump(fs, list, l2); /* last jump jumps to 'l2' */
     }
 }
 
@@ -1338,27 +1332,35 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
 }
 
 
-/* code test jump instruction for and/or */
-static int codetest(FunctionState *fs, ExpInfo *e, OpCode testop, int cond) {
-    discharge2stack(fs, e); /* ensure test operand is on the stack */
-    freeslots(fs, 1); /* test removes first expression if it goes through */
-    return csC_emitILS(fs, testop, 0, cond);
-}
-
-
 /* code test/jump instruction */
 int csC_jmp(FunctionState *fs, OpCode opjump) {
-    if (opjump == OP_TESTPOP) /* test jump? */
-        freeslots(fs, 1); /* test jump pops one value */
+    cs_assert(opjump == OP_JMP || opjump == OP_JMPS);
     return csC_emitIL(fs, opjump, 0);
 }
 
 
-/* code 'OP_TEST' family of instructions */
-int csC_test(FunctionState *fs, OpCode optest, int cond) {
-    int offset = csC_jmp(fs, optest);
-    emitS(fs, cond);
-    return offset;
+/*
+** Code test instruction. The 'extra' is true if test pops one value
+** of the stack in case jump is not performed.
+*/
+int csC_test(FunctionState *fs, OpCode optest, int extra, int cond) {
+    int pcjump;
+    cs_assert(optest == OP_TEST || optest == OP_TESTPOP);
+    cs_assert((extra == 1 && optest == OP_TEST) || extra == 0);
+    if (optest == OP_TESTPOP)
+        freeslots(fs, 1); /* this test always pops one value */
+    csC_emitIS(fs, optest, cond); /* emit condition test... */
+    pcjump = csC_jmp(fs, OP_JMP); /* ...followed by a jump */
+    csC_pop(fs, extra); /* if jump is not preformed, pop extra (if any) */
+    return pcjump;
+}
+
+
+/* code and/or logical operators */
+static int codeAndOr(FunctionState *fs, ExpInfo *e, int cond) {
+    discharge2stack(fs, e); /* ensure test operand is on the stack */
+    /* 'extra' is true, first expression is removed if test goes through */
+    return csC_test(fs, OP_TEST, 1, cond);
 }
 
 
@@ -1383,7 +1385,7 @@ static void finexplist(FunctionState *fs, int *l) {
 ** This test jumps over the second expression if the first expression
 ** is false (nil or false).
 */
-static void andjump(FunctionState *fs, ExpInfo *e) {
+static void codeand(FunctionState *fs, ExpInfo *e) {
     int pc;
     switch (e->et) {
         case EXP_TRUE: case EXP_STRING: case EXP_INT:
@@ -1392,9 +1394,8 @@ static void andjump(FunctionState *fs, ExpInfo *e) {
             break;
         }
         default: {
-            pc = codetest(fs, e, OP_TESTORPOP, 0); /* jump if false */
+            pc = codeAndOr(fs, e, 0); /* jump if false */
             finexplist(fs, &e->t);
-            break;
         }
     }
     csC_concatjl(fs, &e->f, pc); /* insert new jump in false list */
@@ -1407,7 +1408,7 @@ static void andjump(FunctionState *fs, ExpInfo *e) {
 ** This test jumps over the second expression if the first expression
 ** is true (everything else except nil and false).
 */
-void orjump(FunctionState *fs, ExpInfo *e) {
+void codeor(FunctionState *fs, ExpInfo *e) {
     int pc;
     switch (e->et) {
         case EXP_NIL: case EXP_FALSE: {
@@ -1415,9 +1416,8 @@ void orjump(FunctionState *fs, ExpInfo *e) {
             break;
         }
         default: {
-            pc = codetest(fs, e, OP_TESTORPOP, 1); /* jump if true */
+            pc = codeAndOr(fs, e, 1); /* jump if true */
             finexplist(fs, &e->f);
-            break;
         }
     }
     csC_concatjl(fs, &e->t, pc); /* insert new jump in true list */
@@ -1452,11 +1452,11 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             break;
         }
         case OPR_AND: {
-            andjump(fs, e); /* jump out if 'e' is false */
+            codeand(fs, e); /* jump out if 'e' is false */
             break;
         }
         case OPR_OR: {
-            orjump(fs, e); /* jump out if 'e' is true */
+            codeor(fs, e); /* jump out if 'e' is true */
             break;
         }
         default: cs_assert(0); /* invalid binary operation */
@@ -1495,7 +1495,10 @@ c_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
 }
 
 
-/* code generic binary instruction */
+/*
+** Code generic binary instruction followed by meta binary instruction,
+** in case generic binary instruction fails.
+*/
 static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                     int commutative, int line) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
@@ -1742,15 +1745,12 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 
 /* return the final target of a jump (skipping jumps to jumps) */
 static int finaltarget(Instruction *code, int i) {
-    cs_assert(getOpSize(OP_JMP) == getOpSize(OP_JMPS));
+    cs_assert(getopSize(OP_JMP) == getopSize(OP_JMPS));
     for (int count = 0; count < 100; count++) { /* avoid infinite loops */
         Instruction *pc = &code[i];
-        OpCode op = *pc;
-        if (op == OP_JMP || op == OP_JMPS) { /* jump? */
-            /* skip the jump and the jump offset */
-            i += getOpSize(OP_JMP);
-            i += (1 + (op == OP_JMPS)*-2) * GET_ARG_L(pc, 0);
-        } else
+        if (*pc == OP_JMP || *pc == OP_JMPS)
+            i = destinationpc(pc, i);
+        else
             break; /* no more jumps */
     }
     return i;
@@ -1764,7 +1764,7 @@ static int finaltarget(Instruction *code, int i) {
 void csC_finish(FunctionState *fs) {
     Proto *p = fs->p;
     Instruction *pc;
-    for (int i = 0; i < currPC; i += getOpSize(*pc)) {
+    for (int i = 0; i < currPC; i += getopSize(*pc)) {
         pc = &p->code[i];
         switch (*pc) {
             case OP_RET: { /* check if need to close variables */
@@ -1774,13 +1774,11 @@ void csC_finish(FunctionState *fs) {
             }
             case OP_JMP: case OP_JMPS: { /* avoid jumps to jumps */
                 int target = finaltarget(p->code, i);
-                if (*pc == OP_JMP && target < i) {
+                if (*pc == OP_JMP && target < i)
                     *pc = OP_JMPS; /* jumps back */
-                    target = (getOpSize(OP_JMP) + i) - target;
-                } else if (*pc == OP_JMPS && i < target) {
+                else if (*pc == OP_JMPS && i < target)
                     *pc = OP_JMP; /* jumps forward */
-                    target = target - (getOpSize(OP_JMP) + i);
-                }
+                cs_assert(target >= 0);
                 fixjump(fs, i, target);
                 break;
             }

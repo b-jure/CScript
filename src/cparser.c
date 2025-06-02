@@ -52,25 +52,26 @@
 #define stmIsReturn(fs)     ((fs)->lastisend == 1)
 #define stmIsBreak(fs)      ((fs)->lastisend == 2)
 #define stmIsContinue(fs)   ((fs)->lastisend == 3)
+#define stmIsEnd(fs)        ((fs)->lastisend)
 
 
 
 /* expect 'cond' to be true or invoke error */
 #define expect_cond(lx, cond, err) \
-    { if (!(cond)) csY_syntaxerror(lx, err); }
+    { if (c_unlikely(!(cond))) csY_syntaxerror(lx, err); }
 
 
 
 /* control flow masks */
-#define CFML            1 /* regular loop */
-#define CFMGL           2 /* generic loop */
-#define CFMS            4 /* switch */
+#define CFML            (1 << 0) /* regular loop */
+#define CFMGL           (1 << 1) /* generic loop */
+#define CFMS            (1 << 2) /* switch */
 #define CFMASK          (CFML | CFMGL | CFMS)
 
-#define is_loop(s)          (testbits((s)->cf, CFML) != 0)
-#define is_genloop(s)       (testbits((s)->cf, CFMGL) != 0)
-#define is_switch(s)        (testbits((s)->cf, CFMS) != 0)
-#define haspendingjumps(s)  testbits((s)->cf, CFMASK)
+#define is_loop(s)              (testbits((s)->cf, CFML) != 0)
+#define is_genloop(s)           (testbits((s)->cf, CFMGL) != 0)
+#define is_switch(s)            (testbits((s)->cf, CFMS) != 0)
+#define haspendingjumps(s)      testbits((s)->cf, CFMASK)
 
 
 /* lexical scope information */
@@ -388,11 +389,11 @@ static int newbreakjump(Lexer *lx, int pc, int bk, int close) {
 */
 static int newpendingjump(Lexer *lx, int bk, int close) {
     FunctionState *fs = lx->fs;
-    int pc = csC_jmp(fs, OP_JMP);
-    csC_emitIL(fs, OP_POPN, 0);
-    csC_emitIL(fs, OP_CLOSE, 0);
-    cs_assert(getOpSize(OP_JMP) == getOpSize(OP_POPN));
-    cs_assert(getOpSize(OP_JMP) == getOpSize(OP_CLOSE));
+    int pc = csC_jmp(fs, OP_JMP);   /* JMP */
+    csC_emitIL(fs, OP_POPN, 0);     /* POPN */
+    csC_emitIL(fs, OP_CLOSE, 0);    /* CLOSE */
+    cs_assert(getopSize(OP_JMP) == getopSize(OP_POPN));
+    cs_assert(getopSize(OP_JMP) == getopSize(OP_CLOSE));
     return newbreakjump(lx, pc, bk, close);
 }
 
@@ -419,38 +420,44 @@ static void patchpendingjumps(FunctionState *fs, Scope *s, int nactlocals) {
     cs_assert(haspendingjumps(s));
     while (igt < gl->len) {
         Goto *gt = &gl->arr[igt];
+        Instruction *pi = &fs->p->code[gt->pc];
         gt->close |= (s->haveupval && gt->bk);
         if (gt->close) { /* needs a close? */
-            int sz = getOpSize(OP_CLOSE) + getOpSize(OP_POPN);
-            /* move jump to CLOSE position */
-            memmove(&fs->p->code[gt->pc + sz], &fs->p->code[gt->pc],
-                    getOpSize(OP_JMP));
-            /* put CLOSE instruction at the original position */
-            fs->p->code[gt->pc] = OP_CLOSE;
-            SET_ARG_L(&fs->p->code[gt->pc], 0, stklevel);
-            gt->pc += sz; /* must point to jump instruction */
-            cs_assert(gt->bk);
-            goto l_bk;
+            /* (swap JMP and CLOSE) */
+            int sz = getopSize(OP_POPN) + getopSize(OP_CLOSE);
+            cs_assert(getopSize(OP_POPN) == getopSize(OP_CLOSE));
+            /* move JMP into CLOSE position */
+            memmove(pi + sz, pi, getopSize(OP_JMP));
+            /* move CLOSE into JMP position */
+            *pi = OP_CLOSE;
+            SET_ARG_L(pi, 0, stklevel);
+            gt->pc += sz; /* must point to JMP */
+            pi = &fs->p->code[gt->pc]; /* update 'pi' */
+            cs_assert(*pi == OP_JMP && gt->bk);
+            goto l_bk; /* this is break (continue doesn't need CLOSE swap) */
         }
         if (gt->bk) l_bk: { /* 'break'? */
-            Instruction *pi;
             int extra = gt->nactlocals - nactlocals;
             cs_assert(extra >= 0);
-            if (gt->close) /* jump swapped with CLOSE? */
-                pi = &fs->p->code[gt->pc - getOpSize(OP_POPN)];
-            else if (extra == 0) /* no extra variables to pop? */
-                pi = &fs->p->code[gt->pc];
-            else { /* otherwise need to swap jump and POPN */
-                memmove(&fs->p->code[gt->pc + getOpSize(OP_POPN)],
-                        &fs->p->code[gt->pc], getOpSize(OP_JMP));
-                pi = &fs->p->code[gt->pc];
+            if (gt->close) /* JMP swapped with CLOSE? */
+                pi -= getopSize(OP_POPN);
+            else if (extra > 0) { /* have extra variables to pop? */
+                /* (swap JMP and POPN) */
+                cs_assert(getopSize(OP_JMP) == getopSize(OP_POPN));
+                /* move JMP into POPN position */
+                memmove(pi + getopSize(OP_JMP), pi, getopSize(OP_JMP));
+                /* move POPN into JMP position */
                 *pi = OP_POPN;
-                gt->pc += getOpSize(OP_POPN); /* point to jump */
+                gt->pc += getopSize(OP_POPN); /* must point to JMP */
+            } else { /* otherwise nothing is swapped */
+                cs_assert(*pi == OP_JMP); /* JMP -> POPN -> CLOSE */
+                pi += getopSize(OP_JMP); /* adjust 'pi' to POPN */
             }
+            cs_assert(*pi == OP_POPN);
             SET_ARG_L(pi, 0, extra);
             csC_patchtohere(fs, gt->pc);
         } else { /* otherwise 'continue' inside of generic loop */
-            cs_assert(fs->loopscope && fs->loopstart != NOJMP);
+            cs_assert(fs->loopscope && fs->loopstart != NOPC);
             csC_patch(fs, gt->pc, fs->loopstart);
         }
         igt++; /* get next */
@@ -468,6 +475,9 @@ static void initexp(ExpInfo *e, expt et, int info) {
 
 
 #define voidexp(e)      initexp(e, EXP_VOID, 0)
+
+/* 'voidexp' but in macro form */
+#define VOIDEXP         { .t = NOJMP, .f = NOJMP, .et = EXP_VOID }
 
 
 static void initvar(FunctionState *fs, ExpInfo *e, int vidx) {
@@ -591,7 +601,7 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->lx = lx;
     lx->fs = fs;
     fs->scope = fs->loopscope = fs->switchscope = NULL;
-    fs->loopstart = NOJMP;
+    fs->loopstart = NOPC;
     currPC = fs->prevpc = 0;
     fs->prevline = p->defline;
     fs->sp = 0;
@@ -629,7 +639,7 @@ static void close_func(Lexer *lx) {
                        AbsLineInfo);
     csM_shrinkarray(C, p->instpc, p->sizeinstpc, fs->ninstpc, int);
     csM_shrinkarray(C, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
-    csM_shrinkarray(C, p->upvals, p->sizeupvalues, fs->nupvals, UpValInfo);
+    csM_shrinkarray(C, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev; /* go back to enclosing function (if any) */
     csG_checkGC(C); /* try to collect garbage memory */
     unasmfunc(fs->lx->C, fs->p);
@@ -711,11 +721,11 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e, int limit) 
 /* allocate space for new 'UpValInfo' */
 static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
-    int osz = p->sizeupvalues;
+    int osz = p->sizeupvals;
     checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
-    csM_growarray(fs->lx->C, p->upvals, p->sizeupvalues, fs->nupvals,
+    csM_growarray(fs->lx->C, p->upvals, p->sizeupvals, fs->nupvals,
                   MAXUPVAL, "upvalues", UpValInfo);
-    while (osz < p->sizeupvalues)
+    while (osz < p->sizeupvals)
         p->upvals[osz++].name = NULL;
     return &p->upvals[fs->nupvals++];
 }
@@ -1855,7 +1865,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                     cs_assert(!ss->nomatch);
                     ss->c = CASE; /* regular case */
                     csC_emitI(fs, OP_EQPRESERVE); /* EQ but preserves lhs */
-                    ss->jmp = csC_test(fs, OP_TESTPOP, 0); /* test jump */
+                    ss->jmp = csC_test(fs, OP_TESTPOP, 0, 0); /* test jump */
                     fs->pcswtest = ss->jmp;
                 }
             } else if (!ss->havedefault) { /* don't have 'default'? */
@@ -1901,20 +1911,19 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
 
 
 static void switchstm(Lexer *lx) {
+    Scope s;
+    int line;
+    ExpInfo e;
+    FuncContext ctxbefore;
     FunctionState *fs = lx->fs;
     int old_pcswtest = fs->pcswtest;
     Scope *old_switchscope = fs->switchscope;
-    int line;
-    FuncContext ctxbefore;
-    Scope s; /* switch scope */
-    ExpInfo e;
-    SwitchState ss;
-    ss.isconst = 0;
-    ss.nomatch = 1;
-    ss.havedefault = ss.havenil = ss.havetrue = ss.havefalse = 0;
-    ss.firstli = lx->ps->literals.len;
-    ss.jmp = NOJMP;
-    ss.c = CNONE;
+    SwitchState ss = {
+        .isconst = 0, .nomatch = 1,
+        .firstli = lx->ps->literals.len,
+        .jmp = NOJMP,
+        .c = CNONE
+    };
     enterscope(fs, &s, CFMS);
     storecontext(fs, &ctxbefore);
     fs->switchscope = &s; /* set the innermost 'switch' scope */
@@ -1922,10 +1931,8 @@ static void switchstm(Lexer *lx) {
     expectnext(lx, '(');
     expr(lx, &e); /* get the 'switch' expression... */
     expectnext(lx, ')');
-    if (codeconstexp(fs, &e)) { /* constant expression? */
-        ss.isconst = 1; /* mark it as such... */
-        csC_const2v(fs, &e, &ss.v); /* ...and get its value */
-    }
+    if ((ss.isconst = codeconstexp(fs, &e))) /* constant expression? */
+        csC_const2v(fs, &e, &ss.v); /* get its value */
     line = lx->line;
     expectnext(lx, '{');
     switchbody(lx, &ss, &ctxbefore);
@@ -1936,81 +1943,89 @@ static void switchstm(Lexer *lx) {
 }
 
 
+/* data for 'condbody()' */
+typedef struct CondBodyState {
+    FuncContext ctxbefore; /* snapshot before the condition (and body) */
+    FuncContext ctxend; /* pc != NOPC if dead code was found */
+    ExpInfo e; /* condition expression */
+    OpCode opT; /* test opcode */
+    OpCode opJ; /* jump opcode */
+    int isif; /* true if this is 'if' statement body */
+    int pcCond; /* pc of condition */
+    int pcClause; /* pc of last 'for' loop clause */
+} CondBodyState;
+
+
 /* condition statement body; for 'forstm', 'whilestm' and 'ifstm' */
-static void condbody(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
-                     int isif, OpCode opT, OpCode opJ,
-                     int condpc, int clausepc) {
+static void condbody(Lexer *lx, CondBodyState *cb) {
     FunctionState *fs = lx->fs;
-    int bodypc = currPC;
-    int test = NOJMP; /* condition test jump */
-    int jump = NOJMP; /* if/loop jump */
-    int istrue = eistrue(cond); /* is condition true */
-    int old_prevpc; /* in case 'if' jump (opJ) gets removed */
     int optaway, target;
-    FuncContext ctxend = {0};
-    ctxend.pc = NOJMP;
-    optaway = (eisconstant(cond) && !istrue);
+    int bodypc = currPC;
+    int istrue = eistrue(&cb->e);
+    int test = NOJMP, jump = NOJMP;
+    cb->ctxend.pc = NOPC; /* no dead code to begin with */
+    optaway = (eisconstant(&cb->e) && !istrue);
     if (!optaway) { /* statement will not be optimized away? */
         if (istrue) { /* condition is true? */
-            if (clausepc == NOJMP) { /* not a forloop? */
-                loadcontext(fs, ctxbefore); /* remove condition */
+            if (cb->pcClause == NOJMP) { /* not a forloop? */
+                loadcontext(fs, &cb->ctxbefore); /* remove condition */
                 bodypc = currPC; /* adjust bodypc */
             } /* (otherwise condition is already optimized out) */
-        } else /* otherwise emit condition test jump */
-            test = csC_test(fs, opT, 0);
+        } else /* otherwise emit condition test */
+            test = csC_test(fs, cb->opT, 0, 0);
     }
     stm(lx); /* loop/if body */
     if (optaway) /* optimize away this statement? */
-        loadcontext(fs, ctxbefore);
-    else if (istrue && (stmIsReturn(fs) || isif))
-        storecontext(fs, &ctxend);
-    else {
-        old_prevpc = fs->prevpc;
-        jump = csC_jmp(fs, opJ); /* loop/if jump */
-        if (!isif) { /* loop statement? */
-            if (clausepc != NOJMP) /* 'for' loop? */
-                csC_patch(fs, jump, clausepc); /* jump to last clause */
+        loadcontext(fs, &cb->ctxbefore);
+    else if (istrue && (stmIsEnd(fs) || cb->isif)) {
+        /* condition is true and body is cflow. end or this is 'if' */
+        storecontext(fs, &cb->ctxend); /* this is end, rest is dead code */
+    } else { /* otherwise unknown condition value */
+        jump = csC_jmp(fs, cb->opJ); /* loop or if jump */
+        if (!cb->isif) { /* loop statement? */
+            if (cb->pcClause != NOJMP) /* 'for' loop? */
+                csC_patch(fs, jump, cb->pcClause); /* jump to last clause */
             else if (istrue) { /* 'while' loop with true condition? */
                 csC_patch(fs, jump, bodypc); /* jump to start of the body */
                 fs->loopstart = bodypc; /* convert it to infinite loop */ 
             } else /* 'while' loop with non-constant condition */
-                csC_patch(fs, jump, condpc); /* jump back to condition */
+                csC_patch(fs, jump, cb->pcCond); /* jump back to condition */
         }
     }
     target = currPC; /* set test jump target */
-    if (isif) { /* is if statement? */
+    if (cb->isif) { /* is if statement? */
         if (match(lx, TK_ELSE)) /* have else? */
             stm(lx); /* else body */
-        if (target == currPC) { /* no else branch? */
+        if (target == currPC) { /* no else branch or it got removed? */
             if (jump != NOJMP) { /* have if jump (opJ)? */
-                currPC = fs->prevpc; /* remove that jump */
+                cs_assert(fs->p->code[fs->prevpc] == cb->opJ);
+                csC_removelastjump(fs); /* remove that jump */
                 target = currPC; /* adjust test target */
-                fs->prevpc = old_prevpc; /* restore old prevpc */
             } else cs_assert(optaway || istrue);
-        } else if (jump != NOJMP) /* have 'if' jump (opJ) */
+        } else if (jump != NOJMP) /* have else branch and 'if' jump (opJ) */
             csC_patchtohere(fs, jump); /* (it jumps over else statement) */
     }
     if (test != NOJMP) /* have condition test? */
         csC_patch(fs, test, target); /* patch it */
-    if (ctxend.pc != NOJMP) /* statement has "dead" code? */
-        loadcontext(fs, &ctxend); /* trim off dead code */
+    if (cb->ctxend.pc != NOPC) /* statement has "dead" code? */
+        loadcontext(fs, &cb->ctxend); /* trim off dead code */
 }
 
 
 static void ifstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    FuncContext ctxbefore;
-    ExpInfo cond;
-    int condpc;
-    voidexp(&cond);
+    CondBodyState cb = {
+        .e = VOIDEXP, .isif = 1,
+        .opT = OP_TESTPOP, .opJ = OP_JMP,
+        .pcCond = currPC, .pcClause = NOJMP,
+    };
+    storecontext(fs, &cb.ctxbefore);
     csY_scan(lx); /* skip 'if' */
-    storecontext(fs, &ctxbefore);
-    condpc = currPC;
     expectnext(lx, '(');
-    expr(lx, &cond);
+    expr(lx, &cb.e);
     expectnext(lx, ')');
-    codeconstexp(fs, &cond);
-    condbody(lx, &ctxbefore, &cond, 1, OP_TESTPOP, OP_JMP, condpc, NOJMP);
+    codeconstexp(fs, &cb.e);
+    condbody(lx, &cb);
 }
 
 
@@ -2058,23 +2073,24 @@ static void leaveloop(FunctionState *fs) {
 
 
 static void whilestm(Lexer *lx) {
-    FunctionState *fs = lx->fs;
-    FuncContext ctxbefore;
+    Scope s;
+    int line;
     struct LoopState ls;
-    Scope s; /* new 'loopscope' */
-    ExpInfo cond;
-    int pcexpr, line;
-    voidexp(&cond);
+    FunctionState *fs = lx->fs;
+    CondBodyState cb = {
+        .e = VOIDEXP, .isif = 0,
+        .opT = OP_TESTPOP, .opJ = OP_JMPS,
+        .pcCond = currPC, .pcClause = NOJMP,
+    };
     csY_scan(lx); /* skip 'while' */
     enterloop(fs, &s, &ls, 0);
-    storecontext(fs, &ctxbefore);
-    pcexpr = currPC;
+    storecontext(fs, &cb.ctxbefore);
     line = lx->line;
     expectnext(lx, '(');
-    expr(lx, &cond);
-    codeconstexp(fs, &cond);
+    expr(lx, &cb.e);
+    codeconstexp(fs, &cb.e);
     expectmatch(lx, ')', '(', line);
-    condbody(lx, &ctxbefore, &cond, 0, OP_TESTPOP, OP_JMPS, pcexpr, NOJMP);
+    condbody(lx, &cb);
     leaveloop(fs);
 }
 
@@ -2082,7 +2098,7 @@ static void whilestm(Lexer *lx) {
 /* patch for loop jump */
 static void patchforjmp(FunctionState *fs, int pc, int target, int back) {
     Instruction *jmp = &fs->p->code[pc];
-    int offset = target - (pc + getOpSize(*jmp));
+    int offset = target - (pc + getopSize(*jmp));
     if (back) offset = -offset;
     cs_assert(offset >= 0);
     if (c_unlikely(offset > MAXJMP))
@@ -2145,7 +2161,7 @@ static void foreachstm(Lexer *lx) {
     csC_emitILL(fs, OP_FORCALL, base, nvars);
     csC_fixline(fs, line);
     forend = csC_emitILLL(fs, OP_FORLOOP, base, 0, nvars);
-    patchforjmp(fs, forend, prep + getOpSize(OP_FORPREP), 1);
+    patchforjmp(fs, forend, prep + getopSize(OP_FORPREP), 1);
     csC_fixline(fs, line);
     leaveloop(fs); /* leave loop (pops control variables) */
 }
@@ -2166,84 +2182,80 @@ void forinitializer(Lexer *lx) {
 
 
 /* 'for' loop condition */
-int forcondition(Lexer *lx, ExpInfo *e) {
-    int isctc;
+void forcondition(Lexer *lx, ExpInfo *e) {
     if (!match(lx, ';')) { /* have condition? */
-        expr(lx, e);                        /* get it... */
-        isctc = codeconstexp(lx->fs, e);    /* ...and put it on stack */
+        expr(lx, e);                /* get it... */
+        codeconstexp(lx->fs, e);    /* ...and put it on stack */
         expectnext(lx, ';');
-    } else { /* otherwise no condition (infinite loop) */
+    } else /* otherwise no condition (infinite loop) */
         initexp(e, EXP_TRUE, 0);
-        isctc = 1; /* true */
-    }
-    return isctc;
 }
 
 
 /* 'for' loop last clause */
 void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
-                                                      int *clausepc) {
-    FunctionState *fs = lx->fs;
+                                                      int *pcClause) {
     int bodyjmp, loopjmp;
     int inf = eistrue(cond);
-    cs_assert(*clausepc == NOJMP);
+    FunctionState *fs = lx->fs;
+    cs_assert(*pcClause == NOJMP);
     if (inf) /* infinite loop? */
         loadcontext(fs, ctxbefore); /* remove condition */
-    if (check(lx, ')')) { /* no end clause? */
-        return; /* done (converted to a 'while' loop) */
-    } else {
+    if (check(lx, ')')) /* no end clause? */
+        return; /* done (converted to a 'while' or 'loop') */
+    else {
         bodyjmp = csC_jmp(fs, OP_JMP); /* insert jump in-between */
-        *clausepc = currPC; /* set end clause pc */
+        *pcClause = currPC; /* set end clause pc */
         expstm(lx); /* get the end clause expression statement */
         if (!inf) { /* loop is not infinite? */
-            loopjmp = csC_jmp(fs, OP_JMPS); /* emit jump back to cond... */
+            loopjmp = csC_jmp(fs, OP_JMPS); /* emit jump, back to cond... */
             csC_patch(fs, loopjmp, fs->loopstart); /* ...and patch it */
         }
         csC_patchtohere(fs, bodyjmp); /* patch jump from cond to body */
-        fs->loopstart = *clausepc; /* loop starts at end clause pc */
+        fs->loopstart = *pcClause; /* loop starts at end clause pc */
     }
 }
 
 
 static void forstm(Lexer *lx) {
-    FunctionState *fs = lx->fs;
-    int line = lx->line;
-    int condpc, clausepc;
-    FuncContext ctxbefore;
+    int line;
+    Scope init, s;
     struct LoopState ls;
-    Scope s, init;
-    ExpInfo cond;
-    voidexp(&cond);
+    FunctionState *fs = lx->fs;
+    CondBodyState cb = {
+        .e = VOIDEXP, .isif = 0,
+        .opT = OP_TESTPOP, .opJ = OP_JMPS,
+        .pcClause = NOJMP
+    };
     csY_scan(lx); /* skip 'for' */
     enterscope(fs, &init, 0); /* enter initializer scope */
+    line = lx->line;
     expectnext(lx, '(');
-    forinitializer(lx);
+    forinitializer(lx); /* 1st clause (initializer) */
     enterloop(fs, &s, &ls, 0); /* enter loop scope */
-    fs->loopstart = currPC; /* loop is after initializer clause */
-    storecontext(fs, &ctxbefore); /* store context at start of for loop */
-    condpc = currPC;
-    forcondition(lx, &cond);
-    clausepc = NOJMP;
-    forlastclause(lx, &ctxbefore, &cond, &clausepc);
+    cb.pcCond = fs->loopstart = currPC; /* loop is after initializer clause */
+    storecontext(fs, &cb.ctxbefore); /* store context at loop start */
+    forcondition(lx, &cb.e); /* 2nd clause (condition) */
+    forlastclause(lx, &cb.ctxbefore, &cb.e, &cb.pcClause); /* 3rd clause */
     expectmatch(lx, ')', '(', line);
-    condbody(lx, &ctxbefore, &cond, 0, OP_TESTPOP, OP_JMPS, condpc, clausepc);
+    condbody(lx, &cb); /* forbody */
     leaveloop(fs); /* leave loop scope */
     leavescope(fs); /* leave initializer scope */
 }
 
 
 static void loopstm(Lexer *lx) {
-    FunctionState *fs = lx->fs;
-    struct LoopState ls;
     Scope s;
     int jmp, lstart;
+    struct LoopState ls;
+    FunctionState *fs = lx->fs;
     csY_scan(lx); /* skip 'loop' */
     lstart = currPC; /* store the pc where the loop starts */
     enterloop(fs, &s, &ls, 0);
     stm(lx);
     if (!stmIsReturn(fs)) { /* statement is not a return? */
         jmp = csC_jmp(fs, OP_JMPS);
-        csC_patch(fs, jmp, lstart);
+        csC_patch(fs, jmp, lstart); /* jump back to loop start */
     }
     leaveloop(fs);
 }
@@ -2271,7 +2283,7 @@ static void continuestm(Lexer *lx) {
     csY_scan(lx); /* skip 'continue' */
     if (c_unlikely(fs->loopscope == NULL)) /* not in a loop? */
         csP_semerror(lx, "'continue' outside of a loop statement");
-    cs_assert(fs->loopstart != NOJMP); /* must have loop beginning pc */
+    cs_assert(fs->loopstart != NOPC); /* must have loop beginning pc */
     if (needtoclose(lx, fs->loopscope))
         csC_emitIL(fs, OP_CLOSE, stacklevel(fs, fs->loopscope->nactlocals));
     continuepop(fs);

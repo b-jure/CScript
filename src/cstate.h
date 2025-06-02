@@ -76,9 +76,9 @@ typedef struct CallFrame {
     SIndex top; /* top for this function */
     struct CallFrame *prev, *next; /* dynamic call link */
     struct { /* only for CScript function */
-        const Instruction *pc; /* current pc */
+        const Instruction *pc; /* current pc (points to instruction) */
         const Instruction *pcret; /* after return continue from this pc */
-        volatile c_signal trap; /* hooks/stack realloc */
+        volatile c_signal trap; /* hooks or stack reallocation flag */
         int nvarargs; /* number of optional arguments */
     } cs;
     int ftransfer; /* offset of first value transferred */

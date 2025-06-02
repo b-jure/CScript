@@ -532,7 +532,7 @@ typedef struct Proto {
     int sizep;              /* size of 'p' */
     int sizek;              /* size of 'k' */
     int sizecode;           /* size of 'code' */
-    int sizeupvalues;       /* size of 'upvals' */
+    int sizeupvals;         /* size of 'upvals' */
     int sizelineinfo;       /* size of 'lineinfo' */
     int sizeabslineinfo;    /* size of 'abslineinfo' */
     int sizeinstpc;         /* size of 'instpc' */

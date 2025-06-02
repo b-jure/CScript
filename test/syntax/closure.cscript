@@ -5,7 +5,6 @@
     __ENV[true] = nil;
 }
 
-
 local A,B = 0,{g=10};
 local fn f(x) {
     local a = [];
@@ -94,7 +93,6 @@ assert(r == 0 and s == 10);
 a[1].set("a");
 r,s = a[1].get();
 assert(r == 1 and s == "a");
-
 
 
 { /// testing closures with 'foreach' control variable x break

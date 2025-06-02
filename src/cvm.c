@@ -76,14 +76,15 @@
 #endif
 
 
+/* swap (const) TValue* */
 #if !defined(c_swap)
-/* swap 'TValue*' */
+
 #define c_swap(v1_,v2_) \
     { TValue *temp = (v1_); (v1_) = (v2_); (v2_) = temp; }
 
-/* swap 'const TValue*' */
 #define c_cswap(v1_,v2_) \
     { const TValue *temp = (v1_); (v1_) = (v2_); (v2_) = temp; }
+
 #endif
 
 
@@ -95,7 +96,7 @@ static int booleans[2] = { CS_VFALSE, CS_VTRUE };
 ** initialize its upvalues.
 */
 static void pushclosure(cs_State *C, Proto *p, UpVal **encup, SPtr base) {
-    int nup = p->sizeupvalues;
+    int nup = p->sizeupvals;
     UpValInfo *uv = p->upvals;
     CSClosure *cl = csF_newCSClosure(C, nup);
     cl->p = p;
@@ -774,14 +775,14 @@ retry:
         case CS_VCSCL: { /* CScript closure */
             CallFrame *cf;
             Proto *p = clCSval(s2v(func))->p;
-            int nargs = (C->sp.p - func) - 1;
-            int nparams = p->arity;
-            int fsize = p->maxstack;
+            int nargs = (C->sp.p - func) - 1; /* number of args received */
+            int nparams = p->arity; /* number of fixed parameters */
+            int fsize = p->maxstack; /* frame size */
             checkstackGCp(C, fsize, func);
             C->cf = cf = prepCallframe(C, func, nres, 0, func + 1 + fsize);
             cf->cs.pc = cf->cs.pcret = p->code; /* set starting point */
             for (; nargs < nparams; nargs++)
-                setnilval(s2v(C->sp.p++)); /* set missing args as 'nil' */
+                setnilval(s2v(C->sp.p++)); /* set missing as 'nil' */
             if (!p->isvararg) /* not a vararg function? */
                 C->sp.p = func + 1 + nparams; /* might have extra args */
             cs_assert(cf->top.p <= C->stackend.p);
@@ -905,7 +906,7 @@ void csV_concat(cs_State *C, int total) {
 }
 
 
-static OClass *checksuper(cs_State *C, const TValue *scl) {
+c_sinline OClass *checksuper(cs_State *C, const TValue *scl) {
     if (c_unlikely(!ttisclass(scl)))
         csD_runerror(C, "inherit from %s value", typename(ttype(scl)));
     return classval(scl);
@@ -1055,7 +1056,7 @@ c_sinline void pushtable(cs_State *C, int b) {
     if (tonumber(v1, n1) && tonumber(v2, n2)) { \
         setfval(res, fop(C, n1, n2)); \
         sp--; /* v2 */ \
-        pc += getOpSize(OP_MBIN); \
+        pc += getopSize(OP_MBIN); \
     }/* else fall through to 'OP_MBIN' */}
 
 
@@ -1078,7 +1079,7 @@ c_sinline void pushtable(cs_State *C, int b) {
         cs_Integer i1 = ival(v1); cs_Integer i2 = ival(v2); \
         setival(res, iop(C, i1, i2)); \
         sp--; /* v2 */ \
-        pc += getOpSize(OP_MBIN); \
+        pc += getopSize(OP_MBIN); \
     } else { \
         op_arithf_aux(C, res, v1, v2, fop); \
     }}
@@ -1137,7 +1138,7 @@ c_sinline void pushtable(cs_State *C, int b) {
     if (tointeger(v1, &i1) && tointeger(v2, &i2)) { \
         setival(res, op(i1, i2)); \
         sp--; /* v2 */ \
-        pc += getOpSize(OP_MBIN); \
+        pc += getopSize(OP_MBIN); \
     } else if (c_unlikely(ttisnum(v1) && ttisnum(v2))) { \
         csD_runerror(C, "number has no integer representation"); \
     }/* else try 'OP_MBIN' */}
@@ -1241,7 +1242,7 @@ c_sinline void pushtable(cs_State *C, int b) {
 
 #if defined(CSI_TRACE_EXEC)
 #include "ctrace.h"
-#define tracepc(C,p)        (csTR_tracepc(C, sp, p, pc, 2))
+#define tracepc(C,p)        (csTR_tracepc(C, sp, p, pc, 1))
 #else
 #define tracepc(C,p)        ((void)0)
 #endif
@@ -1278,6 +1279,16 @@ c_sinline void pushtable(cs_State *C, int b) {
 #define vm_break            break
 
 
+/*
+** Do a conditional jump: skip next instruction if 'cond' is not what
+** was expected (short arg), else do next instruction, which must be a jump.
+*/
+#define docondjump(pre) \
+    { int cond = fetch_s(); TValue *v = peek(0); pre; \
+      if ((!c_isfalse(v)) != cond) check_exp(getopSize(*pc) == 4, pc += 4); \
+      vm_break; }
+
+
 void csV_execute(cs_State *C, CallFrame *cf) {
     CSClosure *cl;              /* active CScript function (closure) */
     TValue *k;                  /* constants */
@@ -1295,8 +1306,10 @@ returning: /* trap already set */
     k = cl->p->k;
     sp = C->sp.p;
     pc = cf->cs.pcret;
-    if (c_unlikely(trap))
+    if (c_unlikely(trap)) /* hooks? */
         trap = csD_tracecall(C);
+    else
+        cf->cs.trap = 0; /* no hooks and stack pointer is updated */
     base = cf->func.p + 1;
     /* main loop of interpreter */
     for (;;) {
@@ -1377,7 +1390,7 @@ returning: /* trap already set */
                 if (c_unlikely(trap)) {
                     csD_hookcall(C, cf);
                     /* next opcode will be seen as a "new" line */
-                    C->oldpc = getOpSize(*pc);
+                    C->oldpc = getopSize(*pc);
                 }
                 updatebase(cf); /* function has new base after adjustment */
                 sp = C->sp.p;
@@ -1721,39 +1734,20 @@ returning: /* trap already set */
             vm_case(OP_JMP) {
                 int offset = fetch_l();
                 pc += offset;
+                updatetrap(cf);
                 vm_break;
             }
             vm_case(OP_JMPS) {
                 int offset = fetch_l();
                 pc -= offset;
+                updatetrap(cf);
                 vm_break;
             }
             vm_case(OP_TEST) {
-                TValue *v = peek(0);
-                int offset = fetch_l();
-                int cond = fetch_s();
-                if ((!c_isfalse(v)) == cond)
-                    pc += offset;
-                vm_break;
-            }
-            vm_case(OP_TESTORPOP) {
-                TValue *v = peek(0);
-                int offset = fetch_l();
-                int cond = fetch_s();
-                if ((!c_isfalse(v)) == cond)
-                    pc += offset;
-                else
-                    sp--;
-                vm_break;
+                docondjump((void)0);
             }
             vm_case(OP_TESTPOP) {
-                TValue *v = peek(0);
-                int offset = fetch_l();
-                int cond = fetch_s();
-                if ((!c_isfalse(v)) == cond)
-                    pc += offset;
-                sp--;
-                vm_break;
+                docondjump(sp--);
             }
             vm_case(OP_CALL) {
                 CallFrame *newcf;
@@ -1948,7 +1942,7 @@ returning: /* trap already set */
             }
             vm_case(OP_GETSUPIDX) {
                 Instance *in = insval(peek(1));
-                OClass *scl = in->oclass->sclass;;
+                OClass *scl = in->oclass->sclass;
                 TValue *idx = peek(0);
                 savestate(C);
                 cs_assert(scl != NULL);
@@ -2001,8 +1995,8 @@ returning: /* trap already set */
                  * after these values (starting at 'stk + 4'). */
                 /* push function, state and control variable */
                 memcpy(stk+VAR_N, stk, VAR_TBC * sizeof(*stk));
-                C->sp.p = stk + VAR_N + VAR_TBC; /* adjust stk ptr */
-                Protect(csV_call(C, stk + VAR_N, fetch_l())); /* call iter */
+                C->sp.p = stk + VAR_N + VAR_TBC; /* adjust stack pointer */
+                Protect(csV_call(C, stk+VAR_N, fetch_l())); /* call iterator */
                 updatestack(cf);
                 sp = C->sp.p;
                 /* go to the next instruction */

@@ -210,7 +210,7 @@ struct PParseData {
 static void pparse(cs_State *C, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);
     CSClosure *cl = csP_parse(C, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
-    cs_assert(cl->nupvalues == cl->p->sizeupvalues);
+    cs_assert(cl->nupvalues == cl->p->sizeupvals);
     csF_initupvals(C, cl);
 }
 

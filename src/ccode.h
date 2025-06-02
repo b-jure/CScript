@@ -18,6 +18,9 @@
 #define currPC      (fs->pc)
 
 
+#define opsize(code,pc)    getopSize(code[pc])
+
+
 /* get pointer to instruction of 'ExpInfo' */
 #define getip(fs,e)     (&(fs)->p->code[(e)->u.info])
 
@@ -77,10 +80,10 @@
 
 
 /* max code jump offset value */
-#define MAXJMP          MAX_CODE
+#define MAXJMP      MAX_CODE
 
-/* value indicating there is no jump */
-#define NOJMP           (-1)
+#define NOJMP       (-1)  /* value indicating there is no jump */
+#define NOPC        NOJMP /* value indicating there is no pc */
 
 
 /* 
@@ -221,9 +224,8 @@ OP_NOT,/*          V       '!V'                                             */
 OP_JMP,/*          L       'pc += L'                                        */
 OP_JMPS,/*         L       'pc -= L'                                        */
 
-OP_TEST,/*         V L S   'if (!c_isfalse(V) == S) pc += L'                */
-OP_TESTORPOP,/*    V L S   'if (!c_isfalse(V) == S) pc += L; else pop V;'   */
-OP_TESTPOP,/*      V L S   'if (!c_isfalse(V) == S) { pc += L; } pop V;'    */
+OP_TEST,/*         V S     'if (!c_isfalse(V) == S) dojump;'                */
+OP_TESTPOP,/*      V S     'if (!c_isfalse(V) == S) { dojump; } pop;'       */
 
 OP_CALL,/*  L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offsp-1})'
                     (check info)                                            */
@@ -237,7 +239,7 @@ OP_SETLOCAL,/*     V L         'L{L} = V'                                   */
 OP_GETUVAL,/*      L           'U{L}'                                       */
 OP_SETUVAL,/*      V L         'U{L} = V'                                   */
 
-OP_SETLIST,/*     L1 L2 S      'V{-L1}[L2+i] = V{-S+i}, 1 <= i <= S         */
+OP_SETLIST,/*      L1 L2 S     'V{-L1}[L2+i] = V{-S+i}, 1 <= i <= S         */
 
 OP_SETPROPERTY,/*  V L1 L2     'V{-L1}.K{L2}:string = V'                    */
 OP_GETPROPERTY,/*  V  L        'V.K{L}'                                     */
@@ -287,7 +289,8 @@ OP_RET,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notes)*/
 #define NUM_OPCODES     (OP_RET + 1)
 
 
-enum OpFormat { /* ORDER OPFMT */
+/* instruction format */
+typedef enum { /* ORDER OPFMT */
     FormatI,
     FormatIS,
     FormatISS,
@@ -297,43 +300,37 @@ enum OpFormat { /* ORDER OPFMT */
     FormatILLS,
     FormatILLL,
     FormatN,
-};
+} OpFormat;
+
+
+#define VD      (INT_MAX) /* flag for variable delta */
+
+
+typedef struct {
+    OpFormat format;
+    int push; 
+    int pop; 
+} OpProperties; 
 
 
 /*
 ** bits 0-3     instruction format (OpFormat)
 ** bit  4       instruction is a jump
 */
-CSI_DEC(const c_byte csC_opProp[NUM_OPCODES];)
+CSI_DEC(const OpProperties csC_opproperties[NUM_OPCODES];)
 
-#define getOpFormat(i)      (csC_opProp[i] & 0x0F)
-#define testJProp(i)        (csC_opProp[i] & (1 << 4))
-
-/* creates OpCode property */
-#define opProp(j,f)         (((j) << 4) | (f))
+#define getopFormat(i)  (csC_opproperties[i].format)
+#define getopDelta(i)   (csC_opproperties[i].push - csC_opproperties[i].pop)
 
 
-/* Instruction format sizes in bytes (or units of 'Instruction') */
-CSI_DEC(const c_byte csC_opSize[FormatN];)
-
-#define getOpSize(i)        (csC_opSize[getOpFormat(i)]*sizeof(Instruction))
-
-CSI_DEC(const char *csC_opSizeFormat[FormatN];)
-
-#define getOpSizeFormat(i)  csC_opSizeFormat[getOpFormat(i)]
+/* Instruction format sizes in bytes (or in units of 'Instruction's) */
+CSI_DEC(const c_byte csC_opsize[FormatN];)
+#define getopSize(i)    (csC_opsize[getopFormat(i)])
 
 
 /* OpCode names table */ 
-CSI_DEC(const char *csC_opName[NUM_OPCODES];)
-
-#define getOpName(i)        csC_opName[i]
-
-
-/* 
-** Maximum size of a single instruction including all of its
-** arguments (in bytes).
-*/
-#define MAXOPSIZE       csC_opSize[FormatN - 1]
+CSI_DEC(const char *csC_opname[NUM_OPCODES];)
+#define getopName(i)    (csC_opname[i])
 
 
 /* 
@@ -349,8 +346,9 @@ CSI_DEC(const char *csC_opName[NUM_OPCODES];)
 #define csC_storepop(fs,var)    csC_storevarpop(fs, var, 0)
 
 
-#define prevOP(fs)      (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->prevpc])
-#define currOP(fs)      (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->pc])
+#define prevOP(fs)  (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->prevpc])
+#define currOP(fs)  (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->pc])
+
 
 
 CSI_FUNC int csC_emitI(FunctionState *fs, Instruction i);
@@ -388,10 +386,10 @@ CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);
 CSI_FUNC void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr, int line);
 CSI_FUNC int csC_jmp(FunctionState *fs, OpCode jop);
+CSI_FUNC int csC_test(FunctionState *fs, OpCode optest, int orpop, int cond);
 CSI_FUNC void csC_concatjl(FunctionState *fs, int *l1, int l2);
 CSI_FUNC void csC_patch(FunctionState *fs, int pc, int target);
 CSI_FUNC void csC_patchtohere(FunctionState *fs, int pc);
-CSI_FUNC int csC_test(FunctionState *fs, OpCode testop, int cond);
 CSI_FUNC void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
 CSI_FUNC void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                          Binopr opr, int line);

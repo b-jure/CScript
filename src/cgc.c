@@ -327,10 +327,10 @@ static c_mem markproto(GState *gs, Proto *p) {
         markvalue(gs, &p->k[i]);
     for (i = 0; i < p->sizelocals; i++)
         markobjectN(gs, p->locals[i].name);
-    for (i = 0; i < p->sizeupvalues; i++)
+    for (i = 0; i < p->sizeupvals; i++)
         markobjectN(gs, p->upvals[i].name);
     /* p + prototypes + constants + locals + upvalues */
-    return 1 + p->sizep + p->sizek + p->sizelocals + p->sizeupvalues;
+    return 1 + p->sizep + p->sizek + p->sizelocals + p->sizeupvals;
 }
 
 

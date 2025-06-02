@@ -339,7 +339,7 @@ int csT_reallocstack(cs_State *C, int newsize, int raiseerr) {
     relstack(C); /* change pointers to offsets */
     G(C)->gcstopem = 1; /* no emergency collection when reallocating stack */
     newstack = csM_reallocarray(C, C->stack.p, osz + EXTRA_STACK,
-                                newsize + EXTRA_STACK, SValue);
+                                               newsize + EXTRA_STACK, SValue);
     G(C)->gcstopem = old_stopem;
     if (c_unlikely(newstack == NULL)) {
         correctstack(C); /* change offsets back to pointers */

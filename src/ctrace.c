@@ -49,7 +49,7 @@ static void endline(void) {
 
 
 static int traceOp(OpCode op) {
-    posfix_spaces(printf("%-12s", getOpName(op)));
+    posfix_spaces(printf("%-12s", getopName(op)));
     return SIZE_INSTR;
 }
 
@@ -152,7 +152,7 @@ void csTR_tracepc(cs_State *C, SPtr sp, const Proto *p,
     SPtr oldsp = C->sp.p;
     C->sp.p = sp; /* save correct stack pointer */
     csTR_dumpstack(C, tolevel, NULL); /* dump 'tolevel' stacks */
-    switch (getOpFormat(*pc)) { /* trace the instruction */
+    switch (getopFormat(*pc)) { /* trace the instruction */
         case FormatI: traceI(p, pc); break;
         case FormatIS: traceIS(p, pc); break;
         case FormatISS: traceISS(p, pc); break;
@@ -167,22 +167,14 @@ void csTR_tracepc(cs_State *C, SPtr sp, const Proto *p,
 }
 
 
-#define nextOp(pc)      ((pc) + getOpSize(*pc))
+#define nextOp(pc)      ((pc) + getopSize(*pc))
 
 
-static void traceNil(void) {
-    printf("nil");
-}
+#define traceNil()      printf("nil")
 
+#define traceTrue()     printf("true")
 
-static void traceTrue(void) {
-    printf("true");
-}
-
-
-static void traceFalse(void) {
-    printf("false");
-}
+#define traceFalse()    printf("false")
 
 
 // TODO: fix newline escaping...
@@ -259,15 +251,6 @@ static void unasmL(const Proto *p, Instruction *pc) {
     startline(p, pc);
     pc += traceOp(*pc);
     traceL(pc);
-    endline();
-}
-
-
-static void unasmLS(const Proto *p, Instruction *pc) {
-    startline(p, pc);
-    pc += traceOp(*pc);
-    pc += traceL(pc);
-    traceS(*pc);
     endline();
 }
 
@@ -517,11 +500,6 @@ static void unasmUpvalue(const Proto *p, Instruction *pc) {
 }
 
 
-static void traceOffset(int off) {
-    posfix_spaces(printf("offset=%d", off));
-}
-
-
 static void traceClose(int close) {
     posfix_spaces(printf("close=%s", close ? "true" : "false"));
 }
@@ -543,10 +521,27 @@ static void unasmPop(const Proto *p, Instruction *pc) {
 }
 
 
+static int traceOffset(Instruction *pc) {
+    int offset = check_exp(*pc == OP_JMP || *pc == OP_JMPS, GET_ARG_L(pc, 0));
+    int neg = (*pc == OP_JMPS);
+    posfix_spaces(printf("offset=%d", offset));
+    return neg ? -offset : offset;
+}
+
+
+static void traceTarget(const Proto *p, Instruction *pc, int offset) {
+    int target = (pc - p->code) + getopSize(*pc) + offset;
+    cs_assert(*pc == OP_JMP || *pc == OP_JMPS);
+    posfix_spaces(printf("target=%d", target));
+}
+
+
 static void unasmJmp(const Proto *p, Instruction *pc) {
+    int offset;
     startline(p, pc);
     traceOp(*pc);
-    traceOffset(GET_ARG_L(pc, 0));
+    offset = traceOffset(pc);
+    traceTarget(p, pc, offset);
     endline();
 }
 
@@ -694,8 +689,8 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmSetArray(p, pc);
                 break;
             }
-            case OP_TEST: case OP_TESTORPOP: case OP_TESTPOP: {
-                unasmLS(p, pc);
+            case OP_EQ: case OP_TEST: case OP_TESTPOP: {
+                unasmS(p, pc);
                 break;
             }
             case OP_MBIN: {
@@ -714,7 +709,6 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
             case OP_CONST: unasmK(p, pc); break;
             case OP_EQK: unasmEQK(p, pc); break;
             case OP_EQI: unasmEQI(p, pc); break;
-            case OP_EQ: unasmS(p, pc); break;
             case OP_CALL: unasmCall(p, pc); break;
             case OP_RET: unasmRet(p, pc); break;
             default: cs_assert(0 && "invalid OpCode"); break;

@@ -73,42 +73,44 @@ local fn test(s, l, p) {    /// this must be line 14
 }
 
 
-///repeat
-///  local g = {x = fn ()
-///    local a = debug.getinfo(2)
-///    assert(a.name == 'f' and a.namewhat == 'local')
-///    a = debug.getinfo(1)
-///    assert(a.name == 'x' and a.namewhat == 'field')
-///    return 'xixi'
-///  end}
-///  local f = fn () return 1+1 and (not 1 or g.x()) end
-///  assert(f() == 'xixi')
-///  g = debug.getinfo(f)
-///  assert(g.what == "Lua" and g.func == f and g.namewhat == "" and not g.name)
-///
-///  fn f (x, name)   -- local!
-///    name = name or 'f'
-///    local a = debug.getinfo(1)
-///    assert(a.name == name and a.namewhat == 'local')
-///    return x
-///  end
-///
-///  -- breaks in different conditions
-///  if 3>4 then break end; f()
-///  if 3<4 then a=1 else break end; f()
-///  while 1 do local x=10; break end; f()
-///  local b = 1
-///  if 3>4 then return math.sin(1) end; f()
-///  a = 3<4; f()
-///  a = 3<4 or 1; f()
-///  repeat local x=20; if 4>3 then f() else break end; f() until 1
-///  g = {}
-///  f(g).x = f(2) and f(10)+f(9)
-///  assert(g.x == f(19))
-///  fn g(x) if not x then return 3 end return (x('a', 'x')) end
-///  assert(g(f) == 'a')
-///until 1
-///
+loop {
+    local g = {x = fn() {
+        local a = debug.getinfo(2);
+        assert(!a.name and a.namewhat == "");
+        a = debug.getinfo(1);
+        assert(!a.name and a.namewhat == "");
+        return "xixi";
+    }};
+    local f = fn() { return 1+1 and (!1 or g.x()); };
+    assert(f() == "xixi");
+    g = debug.getinfo(f);
+    assert(g.what == "CScript" and g.func == f and g.namewhat == "" and !g.name);
+
+    fn f(x, name) {   /// local!
+        name = name or "f";
+        local a = debug.getinfo(1);
+        assert(a.name == name and a.namewhat == "local");
+        return x;
+    }
+
+    /// breaks in different conditions
+    if (3>4) break; f();
+    if (3<4) a=1; else break; f();
+    while (1) { local x=10; break; } f();
+    local b = 1;
+    if (3>4) return math.sin(1); f();
+    a = 3<4; f();
+    a = 3<4 or 1; f();
+    loop { local x=20; if (4>3) f(); else break; f(); break; }
+    g = {};
+    f(g).x = f(2) and f(10)+f(9);
+    assert(g.x == f(19));
+    fn g(x) { if (!x) return 3; return (x("a", "x")); }
+    assert(g(f) == "a");
+    break;
+}
+
+
 ///test([[if
 ///math.sin(1)
 ///then

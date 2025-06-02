@@ -1798,8 +1798,8 @@ static const char *aux_upvalue(TValue *func, int n, TValue **val,
             OString *name;
             CSClosure *f = clCSval(func);
             Proto *p = f->p;
-            if (!(cast_uint(n) < cast_uint(p->sizeupvalues)))
-                return NULL; /* 'n' not in [0, fn->sizeupvalues) */
+            if (!(cast_uint(n) < cast_uint(p->sizeupvals)))
+                return NULL; /* 'n' not in [0, fn->sizeupvals) */
             *val = f->upvals[n]->v.p;
             if (owner) *owner = obj2gco(f->upvals[n]);
             name = p->upvals[n].name;
@@ -1848,7 +1848,7 @@ static UpVal **getupvalref(cs_State *C, int index, int n, CSClosure **pf) {
     api_check(C, ttisCSclosure(fi), "CScript function expected");
     f = clCSval(fi);
     if (pf) *pf = f;
-    if (0 <= n && n < f->p->sizeupvalues)
+    if (0 <= n && n < f->p->sizeupvals)
         return &f->upvals[n]; /* get its upvalue pointer */
     else
         return (UpVal**)&nullup;
