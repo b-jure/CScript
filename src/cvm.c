@@ -1766,6 +1766,8 @@ returning: /* trap already set */
                 sp = C->sp.p;
                 vm_break;
             }
+            // TODO: bytecode bug, probably with opbarrier regarding POP
+            // instruction.
             vm_case(OP_CLOSE) {
                 savestate(C);
                 Protect(csF_close(C, STK(fetch_l()), CS_STATUS_OK));

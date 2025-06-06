@@ -1,0 +1,50 @@
+{ /// testing closure x break x return x errors
+    local b;
+    fn f(x) {
+        local first = 0;
+        loop {
+            if (x == 2 and !first) return;
+            local a = "xuxu";
+            b = fn(op, y) {
+                if (op == "set")
+                    a = x+y;
+                else
+                    return a;
+            };
+            switch (x) {
+                case 0: case 1: return;
+                case 2: break;
+                default: error();
+            }
+            first = nil;
+        }
+    }
+
+    foreach i in range(0, 3) {
+        f(i);
+        assert(b("get") == "xuxu");
+        b("set", 10);
+        assert(b("get") == 10+i);
+        b = nil;
+    }
+
+    pcall(f, 3);
+    assert(b("get") == "xuxu");
+    b("set", 10);
+    assert(b("get") == 13);
+}
+
+
+{ /// testing multi-level closure
+    local y, w;
+    fn f(x) {
+        return fn(y) {
+            return fn(z) { return w+x+y+z; };
+        };
+    }
+
+    y = f(10);
+    w = 1.345;
+    assert(y(20)(30) == 60+w);
+}
+

@@ -112,10 +112,12 @@ typedef struct FuncContext {
     int nlocals;
     int nupvals;
     int pcswtest;
-    int lastgoto; /* last pending goto in 'gt' array */
+    int firsttarget;
+    int lasttarget; /* last target in 'ttargets' */
+    int lastgoto; /* last pending goto in 'gt' */
     c_byte iwthabs;
     c_byte needclose;
-    c_byte nilbarrier;
+    c_byte opbarrier;
     c_byte lastisend;
 } FuncContext;
 
@@ -134,10 +136,12 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
     ctx->nlocals = fs->nlocals;
     ctx->nupvals = fs->nupvals;
     ctx->pcswtest = fs->pcswtest;
+    ctx->firsttarget = fs->firsttarget;
+    ctx->lasttarget = fs->lx->ps->ttargets.len;
     ctx->lastgoto = fs->lx->ps->gt.len;
     ctx->iwthabs = fs->iwthabs;
     ctx->needclose = fs->needclose;
-    ctx->nilbarrier = fs->nilbarrier;
+    ctx->opbarrier = fs->opbarrier;
     ctx->lastisend = fs->lastisend;
 }
 
@@ -156,10 +160,12 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
     fs->nlocals = ctx->nlocals;
     fs->nupvals = ctx->nupvals;
     fs->pcswtest = ctx->pcswtest;
+    fs->firsttarget = ctx->firsttarget;
+    fs->lx->ps->ttargets.len = ctx->lasttarget;
     fs->lx->ps->gt.len = ctx->lastgoto;
     fs->iwthabs = ctx->iwthabs;
     fs->needclose = ctx->needclose;
-    fs->nilbarrier = ctx->nilbarrier;
+    fs->opbarrier = ctx->opbarrier;
     fs->lastisend = ctx->lastisend;
 }
 
@@ -353,6 +359,29 @@ static void continuepop(FunctionState *fs) {
     csC_pop(fs, fs->nactlocals - fs->loopscope->nactlocals - ncntl);
     /* pop switch expression values up to the loop scope */
     csC_pop(fs, getnswexpr(fs->scope, fs->loopscope)); 
+}
+
+
+static int getlasttarget(Lexer *lx) {
+    if (lx->ps->ttargets.len > 0)
+        return lx->ps->ttargets.arr[lx->ps->ttargets.len - 1];
+    else
+        return NOPC;
+}
+
+
+/*
+** Adds a new test target into the ttargets list.
+*/
+static void newttarget(Lexer *lx, int pc) {
+    FunctionState *fs = lx->fs;
+    ParserState *ps = lx->ps;
+    cs_assert(pc != NOPC);
+    if (pc == getlasttarget(lx)) return; /* do not insert duplicates */
+    checklimit(fs, ps->ttargets.len, MAXINT, "tests");
+    csM_growarray(lx->C, ps->ttargets.arr, ps->ttargets.size,
+                         ps->ttargets.len, MAXINT, "tests", int);
+    ps->ttargets.arr[ps->ttargets.len++] = pc;
 }
 
 
@@ -556,9 +585,12 @@ static void leavescope(FunctionState *fs) {
     cs_assert(s->nactlocals == fs->nactlocals);
     if (haspendingjumps(s)) /* might have pending jumps? */
         patchpendingjumps(fs, s, nactlocals); /* patch them */
-    if (s->prev) /* not main function scope? */
+    if (s->prev) { /* not main function scope? */
+        if (getlasttarget(fs->lx) == currPC) /* test target is this pc? */
+            fs->opbarrier |= 2; /* prevent POP merge */
         csC_pop(fs, popn); /* pop locals and switch expression */
-    else { /* last (implicit) scope */
+        fs->opbarrier &= ~2; /* once again allow POP merge */
+    } else { /* last (implicit) scope */
         if (!stmIsReturn(fs)) /* missing return? */
             csC_ret(fs, 0, 0); /* 'return;' */
         fs->sp = stklevel; /* free slots */
@@ -614,7 +646,8 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->nlocals = 0;
     fs->nupvals = 0;
     fs->pcswtest = 0;
-    fs->iwthabs = fs->needclose = fs->nilbarrier = fs->lastisend = 0;
+    fs->firsttarget = lx->ps->ttargets.len;
+    fs->iwthabs = fs->needclose = fs->opbarrier = fs->lastisend = 0;
     p->source = lx->src;
     csG_objbarrier(lx->C, p, p->source);
     p->maxstack = 2; /* stack slots 0/1 are always valid */
@@ -626,6 +659,7 @@ static void close_func(Lexer *lx) {
     FunctionState *fs = lx->fs;
     Proto *p = fs->p;
     cs_State *C = lx->C;
+    lx->ps->ttargets.len = fs->firsttarget;
     cs_assert(fs->scope && fs->scope->prev == NULL);
     leavescope(fs); /* end final scope */
     cs_assert(fs->scope == NULL && fs->sp == 0);
@@ -672,15 +706,14 @@ static void setvararg(FunctionState *fs, int arity) {
 }
 
 
-
 /* forward declare (can be both part of statement and expression) */
 static void funcbody(Lexer *lx, ExpInfo *v, int linenum, int ismethod);
+
 
 /* forward declare recursive non-terminals */
 static void decl(Lexer *lx);
 static void stm(Lexer *lx);
 static void expr(Lexer *lx, ExpInfo *e);
-
 
 
 /* adds local variable to the 'actlocals' */
@@ -690,7 +723,7 @@ static int addlocal(Lexer *lx, OString *name) {
     LVar *local;
     checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
     csM_growarray(lx->C, ps->actlocals.arr, ps->actlocals.size,
-                  ps->actlocals.len, MAXINT, "locals", LVar);
+                         ps->actlocals.len, MAXINT, "locals", LVar);
     local = &ps->actlocals.arr[ps->actlocals.len++];
     local->s.kind = VARREG;
     local->s.name = name;
@@ -1798,21 +1831,21 @@ static int checkmatch(Lexer *lx, SwitchState *ss, ExpInfo *e) {
 
 /* 
 ** Tries to preserve expression 'e' after consuming it, in order
-** to enable more optimizations. Additionally nilbarrier is set,
+** to enable more optimizations. Additionally opbarrier is set,
 ** meaning if 'e' is nil, then it should not be merged with previous,
 ** as it might get optimized out.
 */
 static int codeconstexp(FunctionState *fs, ExpInfo *e) {
-    fs->nilbarrier = 1;
+    fs->opbarrier |= 1;
     csC_exp2val(fs, e);
     if (eisconstant(e)) {
         ExpInfo pres = *e;
         csC_exp2stack(fs, e);
         *e = pres;
-        fs->nilbarrier = 0;
+        fs->opbarrier &= ~1;
         return 1; /* true; 'e' is a constant */
     }
-    fs->nilbarrier = 0;
+    fs->opbarrier &= ~1;
     return 0; /* false; 'e' is not a constant */
 }
 
@@ -1956,6 +1989,7 @@ typedef struct CondBodyState {
 } CondBodyState;
 
 
+#include <stdio.h>
 /* condition statement body; for 'forstm', 'whilestm' and 'ifstm' */
 static void condbody(Lexer *lx, CondBodyState *cb) {
     FunctionState *fs = lx->fs;
@@ -1993,20 +2027,29 @@ static void condbody(Lexer *lx, CondBodyState *cb) {
         }
     }
     target = currPC; /* set test jump target */
+    printf("currpc = %d\n", currPC);
     if (cb->isif) { /* is if statement? */
+        printf("(if) ");
         if (match(lx, TK_ELSE)) /* have else? */
             stm(lx); /* else body */
         if (target == currPC) { /* no else branch or it got removed? */
+            printf("no else branch\n");
             if (jump != NOJMP) { /* have if jump (opJ)? */
+                printf("have redundant jump at pc %d\n", jump);
                 cs_assert(fs->p->code[fs->prevpc] == cb->opJ);
                 csC_removelastjump(fs); /* remove that jump */
+                printf("after removing it, currpc = %d\n", currPC);
                 target = currPC; /* adjust test target */
+                printf("target is now %d\n", target);
             } else cs_assert(optaway || istrue);
         } else if (jump != NOJMP) /* have else branch and 'if' jump (opJ) */
             csC_patchtohere(fs, jump); /* (it jumps over else statement) */
     }
-    if (test != NOJMP) /* have condition test? */
+    printf("target for test at pc %d is %d\n", test, target);
+    if (test != NOJMP) { /* have condition test? */
         csC_patch(fs, test, target); /* patch it */
+        newttarget(lx, target); /* add new test target */
+    }
     if (cb->ctxend.pc != NOPC) /* statement has "dead" code? */
         loadcontext(fs, &cb->ctxend); /* trim off dead code */
 }
@@ -2485,8 +2528,9 @@ CSClosure *csP_parse(cs_State *C, BuffReader *br, Buffer *buff,
     csG_objbarrier(C, fs.p, fs.p->source);
     lx.buff = buff;
     lx.ps = ps;
-    ps->gt.len = ps->literals.len = ps->actlocals.len = 0;
     csY_setinput(C, &lx, br, fs.p->source);
+    cs_assert(ps->gt.len == 0 && ps->literals.len == 0 &&
+              ps->actlocals.len == 0 && ps->ttargets.len == 0);
     mainfunc(&fs, &lx);
     cs_assert(!fs.prev && fs.nupvals == 1 && !lx.fs);
     /* all scopes should be correctly finished */

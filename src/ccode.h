@@ -142,6 +142,8 @@ OP_FALSE,/*                   'load false constant'                         */
 OP_SUPER,/*        V          'load V.class.superclass'                     */
 OP_NIL,/*                     'load nil constant'                           */
 OP_NILN,/*         L          'load L nils'                                 */
+OP_POP,/*                     'pop value off the stack'                     */
+OP_POPN,/*         L          'pop L values off the stack'                  */
 OP_LOAD,/*         L          'load V{L}'                                   */
 OP_CONST,/*        S          'load K{S}'                                   */
 OP_CONSTL,/*       L          'load K{L}'                                   */
@@ -157,8 +159,6 @@ OP_NEWCLASS,/*     S          'create and load new class of size 1<<(S-1)'  */
 OP_NEWTABLE,/*     S          'create and load new table of size 1<<(S-1)'  */
 OP_METHOD,/*       L V1 V2    'define method V2 for class V1 under key K{L}'*/
 OP_SETMM,/*        S V1 V2    'V1->metalist[S] = V2'                        */
-OP_POP,/*                     'pop value off the stack'                     */
-OP_POPN,/*         L          'pop L values off the stack'                  */
 
 OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop, if S&0x80 swap oper.) */
 

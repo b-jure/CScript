@@ -225,6 +225,7 @@ int csPR_parse(cs_State *C, BuffReader *br, const char *name) {
     csM_freearray(C, pd.ps.actlocals.arr, pd.ps.actlocals.size);
     csM_freearray(C, pd.ps.literals.arr, pd.ps.literals.size);
     csM_freearray(C, pd.ps.gt.arr, pd.ps.gt.size);
+    csM_freearray(C, pd.ps.ttargets.arr, pd.ps.ttargets.size);
     decnnyc(C);
     return status;
 }

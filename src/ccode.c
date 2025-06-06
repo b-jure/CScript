@@ -84,6 +84,8 @@ CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
     { FormatI, 0, 0 }, /* OP_SUPER */
     { FormatI, 1, 0 }, /* OP_NIL */
     { FormatIL, VD, 0 }, /* OP_NILN */
+    { FormatI, 0, 1 }, /* OP_POP */
+    { FormatIL, VD, 0 }, /* OP_POPN */
     { FormatIL, 1, 0 }, /* OP_LOAD */
     { FormatIS, 1, 0 }, /* OP_CONST */
     { FormatIL, 1, 0 }, /* OP_CONSTL */
@@ -99,8 +101,6 @@ CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
     { FormatIS, 1, 0 }, /* OP_NEWTABLE */
     { FormatIL, 0, 1 }, /* OP_METHOD */
     { FormatIS, 0, 1 }, /* OP_SETMM */
-    { FormatI, 0, 1 }, /* OP_POP */
-    { FormatIL, VD, 0 }, /* OP_POPN */
     { FormatIS, 0, 1 }, /* OP_MBIN */
     { FormatIL, 0, 0 }, /* OP_ADDK */
     { FormatIL, 0, 0 }, /* OP_SUBK */
@@ -204,9 +204,9 @@ CSI_DEF const c_byte csC_opsize[FormatN] = { /* ORDER OPFMT */
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opname[NUM_OPCODES] = { /* ORDER OP */
-"TRUE", "FALSE", "SUPER", "NIL", "NILN", "LOAD", "CONST", "CONSTL", "CONSTI",
-"CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG", "CLOSURE", "NEWLIST",
-"NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "POP", "POPN", "MBIN", "ADDK",
+"TRUE", "FALSE", "SUPER", "NIL", "NILN", "POP", "POPN", "LOAD", "CONST",
+"CONSTL", "CONSTI", "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG",
+"CLOSURE", "NEWLIST", "NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "MBIN", "ADDK",
 "SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK",
 "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "IDIVI", "MODI", "POWI",
 "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "IDIV",
@@ -362,8 +362,10 @@ static void addinstpc(FunctionState *fs) {
 }
 
 
+#include <stdio.h>
 /* emit instruction */
 int csC_emitI(FunctionState *fs, Instruction i) {
+    printf("%s at pc %d\n", getopName(i), currPC);
     cs_assert(fs->prevpc <= currPC);
     addinstpc(fs);
     emitbyte(fs, i);
@@ -578,26 +580,33 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
 ** adjusts the stack in the same direction as 'new'.
 */
 static int sameadjust(OpCode prev, OpCode new) {
-    /* adjust instructions do not overlap and are ordered properly */
-    cs_assert(OP_POP-1 != OP_NIL && OP_NIL-1 != OP_POP &&
-              OP_POPN-1 == OP_POP && OP_NILN-1 == OP_NIL);
-    return (prev == new || prev == new-1 || prev-1 == new);
+    return (prev == new) ||
+        (prev == OP_POP && new == OP_POPN) ||
+        (prev == OP_POPN && new == OP_POP) ||
+        (prev == OP_NIL && new == OP_NILN) ||
+        (prev == OP_NILN && new == OP_NIL);
 }
 
 
 /*
 ** Auxiliary function for 'adjuststack', checks if the 'op' instruction
-** can be merged. If it's not a NIL(N) op, or if there is no nilbarrier.
+** can be merged.
 */
 static int canmerge(FunctionState *fs, OpCode op) {
-    return ((op != OP_NIL && op != OP_NILN) || !fs->nilbarrier);
+    static const int okbarrier[] = { 2, 2, 1, 1 }; /* ORDER OP */
+    op -= OP_NIL;
+    cs_assert(0 <= op && op <= sizeof(okbarrier)/sizeof(okbarrier[0]));
+    cs_assert(0 <= fs->opbarrier && fs->opbarrier <= 2);
+    /* no barrier or the barrier permits 'op' to be merged */
+    return !fs->opbarrier || okbarrier[op] == fs->opbarrier;
 }
 
 
 static int adjuststack(FunctionState *fs, OpCode op, int n) {
-    Instruction *inst = prevOP(fs);
     int nprev = 0;
-    cs_assert((n > 1) == (op == OP_POPN || op == OP_NILN));
+    Instruction *inst = prevOP(fs);
+    cs_assert((n == 1) == (op == OP_POP || op == OP_NIL) ||
+              (n > 1) == (op == OP_POPN || op == OP_NILN));
     if (inst && sameadjust(*inst, op) && canmerge(fs, op)) {
         switch (*inst) {
             case OP_POPN: case OP_NILN: {
@@ -611,20 +620,16 @@ static int adjuststack(FunctionState *fs, OpCode op, int n) {
             }
             case OP_NIL: {
                 op = OP_NILN;
-l_nil:
+            l_nil:
                 nprev = 1;
                 removelastinstruction(fs);
                 break;
             }
-            default: cs_assert(0); /* invalid OpCode */
+            default: cs_assert(0); /* unreachable */
         }
         n += nprev;
     }
-    if (n == 1) {
-        cs_assert(op == OP_NIL || op == OP_POP);
-        return csC_emitI(fs, op);
-    } else
-        return csC_emitIL(fs, op, n);
+    return (n == 1) ? csC_emitI(fs, op) : csC_emitIL(fs, op, n);
 }
 
 
@@ -878,11 +883,13 @@ static int getjump(FunctionState *fs, int pc) {
         return destinationpc(inst, pc);
 }
 
+#include <stdio.h>
 
 /* fix jmp instruction at 'pc' to jump to 'target' */
 static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
     int offset = c_abs(target - (pc + getopSize(*jmp)));
+    printf("Patched jump at pc %d, target %d, final offset %d\n", pc, target, offset);
     cs_assert(*jmp == OP_JMP || *jmp == OP_JMPS);
     if (c_unlikely(offset > MAXJMP)) /* jump is too large? */
         csP_semerror(fs->lx, "control structure too long");
@@ -1779,6 +1786,7 @@ void csC_finish(FunctionState *fs) {
                 else if (*pc == OP_JMPS && i < target)
                     *pc = OP_JMP; /* jumps forward */
                 cs_assert(target >= 0);
+                printf("%s\n", __func__);
                 fixjump(fs, i, target);
                 break;
             }
