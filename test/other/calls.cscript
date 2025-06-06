@@ -1,418 +1,418 @@
-///assert(typeof(1<2) == "boolean");
-///assert(typeof(true) == "boolean" and typeof(false) == "boolean");
-///assert(typeof(nil) == "nil"
-///   and typeof(-3) == "number"
-///   and typeof("x") == "string"
-///   and typeof({}) == "table"
-///   and typeof(typeof) == "function");
-///
-///assert(typeof(assert) == typeof(print));
-///local fn f(x) { return a.x(a, x); }
-///assert(typeof(f) == "function");
-///assert(!pcall(typeof));
-///
-///
-////// testing local-function recursion
-///fact = false;
-///{
-///  local res = 1;
-///  local fn fact(n) {
-///    if (n==0) return res;
-///    else return n*fact(n-1);
-///  }
-///  assert(fact(5) == 120);
-///}
-///assert(fact == false);
-///fact = nil;
-///
-///{ /// testing declarations
-///    local class X {
-///        fn x(x) { return x + self.i; }
-///    };
-///    local b = X(); b.i = 10;
-///    local a = {i = 10};
-///    local self = 20;
-///    fn a.y(x) { return x+self; }
-///
-///    assert(b.x(1)+10 == a.y(1));
-///
-///    {
-///        local a;
-///        local class Y {
-///            fn add(x) {
-///                self.x, a.y = self.x+x, 20;
-///                return self;
-///            }
-///        }
-///        a = Y(); a.x = 0;
-///        assert(a.add(10).add(20).add(30).x == 60 and a.y == 20);
-///    }
-///
-///    {
-///        local a = {b={}};
-///        fn a.b.f1(x) { return x+1; }
-///        class a.b.c {
-///            fn f2(x,y) { self[x] = y; }
-///        }
-///        a.b.c = a.b.c();
-///        assert(a.b.f1(4) == 5);
-///        a.b.c.f2("k", 12);
-///        assert(a.b.c.k == 12);
-///    }
-///
-///    print("+");
-///}
-///
-///t = nil; /// 'declare' t
-///fn f(a,b,c) {
-///    local d = "a";
-///    t=[a,b,c,d];
-///}
-///
-///f(      /// this line change must be valid
-///  1,2);
-///assert(t[0] == 1 and t[1] == 2 and t[2] == nil and t[3] == "a");
-///f(1,2,   /// this one too
-///      3,4);
-///assert(t[0] == 1 and t[1] == 2 and t[2] == 3 and t[3] == "a");
-///
-///t = nil; /// delete 't'
-///
-///fn fat(x) {
-///    if (x <= 1)
-///        return 1;
-///    else
-///        return x*load("return fat(" .. tostr(x-1) .. ");", "")();
-///}
-///
-///assert(load("load(\"assert(fat(6)==720);\")();"))();
-///a = load("return fat(5), 3;");
-///{
-///    local a,b = a();
-///    assert(a == 120 and b == 3);
-///}
-///fat = nil;
-///print("+");
-///
-///local fn err_on_n(n) {
-///    if (n==0) { error(); exit(1); }
-///    else { err_on_n(n-1); exit(1); }
-///}
-///
-///{
-///    local fn dummy(n) {
-///        if (n > 0) {
-///            assert(!pcall(err_on_n, n));
-///            dummy(n-1);
-///        }
-///    }
-///    dummy(10);
-///}
-///
-///__G.deep = nil;
-///
-///fn deep(n) {
-///    if (n>0) deep(n-1);
-///}
-///deep(10);
-///deep(180);
-///
-///
-///print("testing tail calls");
-///
-///fn deep(n) {
-///    if (n>0) return deep(n-1);
-///    else return 101;
-///}
-///assert(deep(30000) == 101);
-///a = (class {
-///    fn deep(n) {
-///        if (n>0) return self.deep(n-1);
-///        else return 101;
-///    }
-///})();
-///assert(a.deep(30000) == 101);
-///
-///{ /// tail calls x varargs
-///    local fn foo(x, ...) { local a = [...]; return x, a[0], a[1]; }
-///
-///    local fn foo1(x) { return foo(10, x, x + 1); }
-///
-///    local a, b, c = foo1(-2);
-///    assert(a == 10 and b == -2 and c == -1);
-///
-///    /// tail calls x metamethods
-///    local ml = []; ml[__call] = foo;
-///    local z = setmetalist(class {}, ml)();
-///    local fn foo2(x) { return z(10, x); };
-///    a, b, c = foo2(100);
-///    assert(a == z and b == 10 and c == 100);
-///
-///    a, b = (fn () { return foo(); })();
-///    assert(a == nil and b == nil);
-///
-///    local X, Y, A;
-///    foo = fn(x, y, ...) { X = x; Y = y; A = [...]; };
-///    foo1 = fn(...) { return foo(...); };
-///
-///    a, b, c = foo1();
-///    assert(X == nil and Y == nil and len(A) == 0);
-///
-///    a, b, c = foo1(10);
-///    assert(X == 10 and Y == nil and len(A) == 0);
-///
-///    a, b, c = foo1(10, 20);
-///    assert(X == 10 and Y == 20 and len(A) == 0);
-///
-///    a, b, c = foo1(10, 20, 30);
-///    assert(X == 10 and Y == 20 and len(A) == 1 and A[0] == 30);
-///}
-///
-///
-///{ /// C-stack overflow while handling C-stack overflow
-///    local fn infloop() {
-///        assert(pcall(infloop));
-///    }
-///    local err, msg = xpcall(infloop, infloop);
-///    assert(!err and string.find(msg, "error"));
-///}
-///
-///
-///
-///{ /// tail calls x chain of __call
-///    local n = 10000; /// depth
-///
-///    local fn foo() {
-///        if (n == 0)
-///            return 1023;
-///        else {
-///            n = n - 1;
-///            return foo();
-///        }
-///    }
-///
-///    /// build a chain of __call metamethods ending in function 'foo'
-///    foreach i in range(0, 15) {
-///        local ml = [];
-///        ml[__call] = foo;
-///        foo = setmetalist(class {}, ml)();
-///    }
-///
-///    assert((fn() { return foo(); })() == 1023);
-///    print("+");
-///}
-///
-///
-///{  
-///    print("testing chains of '__call'");
-///    local N = 15;
-///    local u = (class { fn __call(...) { return [...]; } })();
-///    foreach i in range(0, N) {
-///        local ml = []; ml[__call] = u;
-///        u = setmetalist(class {}, ml)();
-///        u[0] = i;
-///    }
-///    local Res = u("a", "b", "c");
-///    assert(len(Res) == N + 3);
-///    foreach i in range(0, N)
-///        assert(Res[i][0] == i);
-///    assert(Res[N] == "a" and Res[N+1] == "b" and Res[N+2] == "c");
-///
-///}
-///
-///
-///a = nil;
-///(fn(x) { a=x; })(23);
-///assert(a == 23 and (fn (x) { return x*2; })(20) == 40);
-///
-///
-////// testing closures
-///
-////// fixed-point operator
-///local Z = fn(le) {
-///    local fn a(f) {
-///        return le(fn(x) { return f(f)(x); });
-///    };
-///    return a(a);
-///};
-///
-///
-////// non-recursive factorial
-///local F = fn(f) {
-///    return fn(n) {
-///        if (n == 0) return 1;
-///        else return n*f(n-1);
-///    };
-///};
-///
-///local fat = Z(F);
-///
-///assert(fat(0) == 1 and fat(4) == 24 and Z(F)(5)==5*Z(F)(4));
-///
-///local fn g(z) {
-///    local fn f(a,b,c,d) {
-///        return fn(x,y) { return a+b+c+d+a+x+y+z; };
-///    }
-///    return f(z,z+1,z+2,z+3);
-///}
-///
-///f = g(10);
-///assert(f(9, 16) == 10+11+12+13+10+9+16+10);
-///
-///print("+");
-///
-///
-////// testing multiple returns
-///
-///local fn unlpack(l, i) {
-///    i = i or 0;
-///    if (i < len(l))
-///        return l[i], unlpack(l, i+1);
-///}
-///
-///local fn equallst(l1, l2) {
-///  assert(len(l1) == len(l2));
-///  foreach i in range(0, len(l1))
-///      assert(l1[i] == l2[i]);
-///}
-///
-///local pack = fn(...) { return ([...]); };
-///
-///f = fn() { return 1,2,30,4; };
-///local fn ret2(a,b) { return a,b; }
-///
-///local a,b,c,d = unlpack([1,2,3]);
-///assert(a==1 and b==2 and c==3 and d==nil);
-///a = [1,2,3,4,false,10,"alo",false,assert];
-///equallst(pack(unlpack(a)), a);
-///equallst(pack(unlpack(a), -1), [1,-1]);
-///a,b,c,d = ret2(f()), ret2(f());
-///assert(a==1 and b==1 and c==2 and d==nil);
-///a,b,c,d = unlpack(pack(ret2(f()), ret2(f())));
-///assert(a==1 and b==1 and c==2 and d==nil);
-///a,b,c,d = unlpack(pack(ret2(f()), (ret2(f()))));
-///assert(a==1 and b==1 and c==nil and d==nil);
-///
-///a = ret2([unlpack([1,2,3]), unlpack([3,2,1]), unlpack(["a", "b"])]);
-///assert(a[0] == 1 and a[1] == 3 and a[2] == "a" and a[3] == "b");
-///
-///
-////// testing calls with 'incorrect' arguments
-///rawget((class {})(), "x", 1);
-///rawset((class {})(), "x", 1, 2);
-///assert(math.sin(1,2) == math.sin(1));
-///
-///
-////// test for generic load
-///local x = "/// a comment\0\0\0\n  x = 10 + \n23; \
-///           local a = fn() { x = \"hi\"; }; \
-///           return \"\0\";";
-///local fn read1(x) {
-///    local i = -1;
-///    return fn() {
-///        gc();
-///        i=i+1;
-///        return string.substr(x, i, i);
-///    };
-///}
-///
-///local fn cannotload(msg, a,b) {
-///    assert(!a and string.find(b, msg));
-///}
-///
-///a = assert(load(read1(x), "modname", __G));
-///assert(a() == "\0" and __G.x == 33);
-///
-///a = assert(load(fn() { return nil; }));
-///a(); /// empty chunk
-///
-///assert(!load(fn() { return true; }));
-///
-///
-///{
-///    local a = [nil, "return ", "3;"];
-///    f, msg = load(fn() {
-///            local res = a[0];
-///            foreach i in range(0, len(a))
-///            a[i] = a[i+1];
-///            return res;
-///            });
-///    assert(f() == nil); /// should read the empty chunk
-///}
-///
-///
-///{
-///    local f = "return \"01234567890123456789012345678901234567890123456789\";";
-///    f = load(read1(f));
-///    assert(f() == "01234567890123456789012345678901234567890123456789");
-///}
-///
-///
-///cannotload("unexpected symbol", load(read1("*a = 123")));
-///cannotload("unexpected symbol", load("*a = 123"));
-///cannotload("hhi", load(fn() { error("hhi"); }));
-///
-///{ /// any value is valid for __ENV
-///    assert(load("return __ENV;", nil, 123)() == 123);
-///}
-///
-///
-///{ /// load when __ENV is not first upvalue
-///    local h = [=[
-///        local x; XX = 123;
-///        return fn() {
-///            local y=x; /// use 'x', so that it becomes 1st upvalue
-///            return XX; /// global name
-///        };
-///    ]=];
-///    x = load(h, "")();
-///    assert(debug.getupvalue(x, 1) == "__ENV");
-///    debug.setupvalue(x, 1, __G);
-///    assert(x() == 123);
-///
-///    assert(assert(load("return XX + ...;", nil, {XX = 13}))(4) == 17);
-///    XX = nil;
-///}
-///
-///
-///{ /// test generic load with nested functions
-///    local x = [=[
-///        return fn(x) {
-///            return fn(y) {
-///                return fn(z) {
-///                    return x+y+z;
-///                };
-///            };
-///        };
-///    ]=];
-///    local a = assert(load(read1(x), "read"));
-///    assert(a()(2)(3)(10) == 15);
-///}
-///
-///
-///{ /// test for long method names
-///    local t = {x = 1};
-///    fn t._012345678901234567890123456789012345678901234567890123456789(self) {
-///        return self.x;
-///    }
-///    assert(t._012345678901234567890123456789012345678901234567890123456789(t) == 1);
-///    t = class {
-///        fn __init() {
-///            self.x = 1;
-///            return self;
-///        }
-///        fn _012345678901234567890123456789012345678901234567890123456789() {
-///            return self.x;
-///        }
-///    };
-///    assert(t()._012345678901234567890123456789012345678901234567890123456789() == 1);
-///}
-///
-///
-////// test for bug in parameter adjustment
-///assert((fn() { return nil; })(4) == nil);
-///assert((fn() { local a; return a; })(4) == nil);
-///assert((fn(a) { return a; })() == nil);
+assert(typeof(1<2) == "boolean");
+assert(typeof(true) == "boolean" and typeof(false) == "boolean");
+assert(typeof(nil) == "nil"
+   and typeof(-3) == "number"
+   and typeof("x") == "string"
+   and typeof({}) == "table"
+   and typeof(typeof) == "function");
+
+assert(typeof(assert) == typeof(print));
+local fn f(x) { return a.x(a, x); }
+assert(typeof(f) == "function");
+assert(!pcall(typeof));
+
+
+/// testing local-function recursion
+fact = false;
+{
+  local res = 1;
+  local fn fact(n) {
+    if (n==0) return res;
+    else return n*fact(n-1);
+  }
+  assert(fact(5) == 120);
+}
+assert(fact == false);
+fact = nil;
+
+{ /// testing declarations
+    local class X {
+        fn x(x) { return x + self.i; }
+    };
+    local b = X(); b.i = 10;
+    local a = {i = 10};
+    local self = 20;
+    fn a.y(x) { return x+self; }
+
+    assert(b.x(1)+10 == a.y(1));
+
+    {
+        local a;
+        local class Y {
+            fn add(x) {
+                self.x, a.y = self.x+x, 20;
+                return self;
+            }
+        }
+        a = Y(); a.x = 0;
+        assert(a.add(10).add(20).add(30).x == 60 and a.y == 20);
+    }
+
+    {
+        local a = {b={}};
+        fn a.b.f1(x) { return x+1; }
+        class a.b.c {
+            fn f2(x,y) { self[x] = y; }
+        }
+        a.b.c = a.b.c();
+        assert(a.b.f1(4) == 5);
+        a.b.c.f2("k", 12);
+        assert(a.b.c.k == 12);
+    }
+
+    print("+");
+}
+
+t = nil; /// 'declare' t
+fn f(a,b,c) {
+    local d = "a";
+    t=[a,b,c,d];
+}
+
+f(      /// this line change must be valid
+  1,2);
+assert(t[0] == 1 and t[1] == 2 and t[2] == nil and t[3] == "a");
+f(1,2,   /// this one too
+      3,4);
+assert(t[0] == 1 and t[1] == 2 and t[2] == 3 and t[3] == "a");
+
+t = nil; /// delete 't'
+
+fn fat(x) {
+    if (x <= 1)
+        return 1;
+    else
+        return x*load("return fat(" .. tostr(x-1) .. ");", "")();
+}
+
+assert(load("load(\"assert(fat(6)==720);\")();"))();
+a = load("return fat(5), 3;");
+{
+    local a,b = a();
+    assert(a == 120 and b == 3);
+}
+fat = nil;
+print("+");
+
+local fn err_on_n(n) {
+    if (n==0) { error(); exit(1); }
+    else { err_on_n(n-1); exit(1); }
+}
+
+{
+    local fn dummy(n) {
+        if (n > 0) {
+            assert(!pcall(err_on_n, n));
+            dummy(n-1);
+        }
+    }
+    dummy(10);
+}
+
+__G.deep = nil;
+
+fn deep(n) {
+    if (n>0) deep(n-1);
+}
+deep(10);
+deep(180);
+
+
+print("testing tail calls");
+
+fn deep(n) {
+    if (n>0) return deep(n-1);
+    else return 101;
+}
+assert(deep(30000) == 101);
+a = (class {
+    fn deep(n) {
+        if (n>0) return self.deep(n-1);
+        else return 101;
+    }
+})();
+assert(a.deep(30000) == 101);
+
+{ /// tail calls x varargs
+    local fn foo(x, ...) { local a = [...]; return x, a[0], a[1]; }
+
+    local fn foo1(x) { return foo(10, x, x + 1); }
+
+    local a, b, c = foo1(-2);
+    assert(a == 10 and b == -2 and c == -1);
+
+    /// tail calls x metamethods
+    local ml = []; ml[__call] = foo;
+    local z = setmetalist(class {}, ml)();
+    local fn foo2(x) { return z(10, x); };
+    a, b, c = foo2(100);
+    assert(a == z and b == 10 and c == 100);
+
+    a, b = (fn () { return foo(); })();
+    assert(a == nil and b == nil);
+
+    local X, Y, A;
+    foo = fn(x, y, ...) { X = x; Y = y; A = [...]; };
+    foo1 = fn(...) { return foo(...); };
+
+    a, b, c = foo1();
+    assert(X == nil and Y == nil and len(A) == 0);
+
+    a, b, c = foo1(10);
+    assert(X == 10 and Y == nil and len(A) == 0);
+
+    a, b, c = foo1(10, 20);
+    assert(X == 10 and Y == 20 and len(A) == 0);
+
+    a, b, c = foo1(10, 20, 30);
+    assert(X == 10 and Y == 20 and len(A) == 1 and A[0] == 30);
+}
+
+
+{ /// C-stack overflow while handling C-stack overflow
+    local fn infloop() {
+        assert(pcall(infloop));
+    }
+    local err, msg = xpcall(infloop, infloop);
+    assert(!err and string.find(msg, "error"));
+}
+
+
+
+{ /// tail calls x chain of __call
+    local n = 10000; /// depth
+
+    local fn foo() {
+        if (n == 0)
+            return 1023;
+        else {
+            n = n - 1;
+            return foo();
+        }
+    }
+
+    /// build a chain of __call metamethods ending in function 'foo'
+    foreach i in range(0, 15) {
+        local ml = [];
+        ml[__call] = foo;
+        foo = setmetalist(class {}, ml)();
+    }
+
+    assert((fn() { return foo(); })() == 1023);
+    print("+");
+}
+
+
+{  
+    print("testing chains of '__call'");
+    local N = 15;
+    local u = (class { fn __call(...) { return [...]; } })();
+    foreach i in range(0, N) {
+        local ml = []; ml[__call] = u;
+        u = setmetalist(class {}, ml)();
+        u[0] = i;
+    }
+    local Res = u("a", "b", "c");
+    assert(len(Res) == N + 3);
+    foreach i in range(0, N)
+        assert(Res[i][0] == i);
+    assert(Res[N] == "a" and Res[N+1] == "b" and Res[N+2] == "c");
+
+}
+
+
+a = nil;
+(fn(x) { a=x; })(23);
+assert(a == 23 and (fn (x) { return x*2; })(20) == 40);
+
+
+/// testing closures
+
+/// fixed-point operator
+local Z = fn(le) {
+    local fn a(f) {
+        return le(fn(x) { return f(f)(x); });
+    };
+    return a(a);
+};
+
+
+/// non-recursive factorial
+local F = fn(f) {
+    return fn(n) {
+        if (n == 0) return 1;
+        else return n*f(n-1);
+    };
+};
+
+local fat = Z(F);
+
+assert(fat(0) == 1 and fat(4) == 24 and Z(F)(5)==5*Z(F)(4));
+
+local fn g(z) {
+    local fn f(a,b,c,d) {
+        return fn(x,y) { return a+b+c+d+a+x+y+z; };
+    }
+    return f(z,z+1,z+2,z+3);
+}
+
+f = g(10);
+assert(f(9, 16) == 10+11+12+13+10+9+16+10);
+
+print("+");
+
+
+/// testing multiple returns
+
+local fn unlpack(l, i) {
+    i = i or 0;
+    if (i < len(l))
+        return l[i], unlpack(l, i+1);
+}
+
+local fn equallst(l1, l2) {
+  assert(len(l1) == len(l2));
+  foreach i in range(0, len(l1))
+      assert(l1[i] == l2[i]);
+}
+
+local pack = fn(...) { return ([...]); };
+
+f = fn() { return 1,2,30,4; };
+local fn ret2(a,b) { return a,b; }
+
+local a,b,c,d = unlpack([1,2,3]);
+assert(a==1 and b==2 and c==3 and d==nil);
+a = [1,2,3,4,false,10,"alo",false,assert];
+equallst(pack(unlpack(a)), a);
+equallst(pack(unlpack(a), -1), [1,-1]);
+a,b,c,d = ret2(f()), ret2(f());
+assert(a==1 and b==1 and c==2 and d==nil);
+a,b,c,d = unlpack(pack(ret2(f()), ret2(f())));
+assert(a==1 and b==1 and c==2 and d==nil);
+a,b,c,d = unlpack(pack(ret2(f()), (ret2(f()))));
+assert(a==1 and b==1 and c==nil and d==nil);
+
+a = ret2([unlpack([1,2,3]), unlpack([3,2,1]), unlpack(["a", "b"])]);
+assert(a[0] == 1 and a[1] == 3 and a[2] == "a" and a[3] == "b");
+
+
+/// testing calls with 'incorrect' arguments
+rawget((class {})(), "x", 1);
+rawset((class {})(), "x", 1, 2);
+assert(math.sin(1,2) == math.sin(1));
+
+
+/// test for generic load
+local x = "/// a comment\0\0\0\n  x = 10 + \n23; \
+           local a = fn() { x = \"hi\"; }; \
+           return \"\0\";";
+local fn read1(x) {
+    local i = -1;
+    return fn() {
+        gc();
+        i=i+1;
+        return string.substr(x, i, i);
+    };
+}
+
+local fn cannotload(msg, a,b) {
+    assert(!a and string.find(b, msg));
+}
+
+a = assert(load(read1(x), "modname", __G));
+assert(a() == "\0" and __G.x == 33);
+
+a = assert(load(fn() { return nil; }));
+a(); /// empty chunk
+
+assert(!load(fn() { return true; }));
+
+
+{
+    local a = [nil, "return ", "3;"];
+    f, msg = load(fn() {
+            local res = a[0];
+            foreach i in range(0, len(a))
+            a[i] = a[i+1];
+            return res;
+            });
+    assert(f() == nil); /// should read the empty chunk
+}
+
+
+{
+    local f = "return \"01234567890123456789012345678901234567890123456789\";";
+    f = load(read1(f));
+    assert(f() == "01234567890123456789012345678901234567890123456789");
+}
+
+
+cannotload("unexpected symbol", load(read1("*a = 123")));
+cannotload("unexpected symbol", load("*a = 123"));
+cannotload("hhi", load(fn() { error("hhi"); }));
+
+{ /// any value is valid for __ENV
+    assert(load("return __ENV;", nil, 123)() == 123);
+}
+
+
+{ /// load when __ENV is not first upvalue
+    local h = [=[
+        local x; XX = 123;
+        return fn() {
+            local y=x; /// use 'x', so that it becomes 1st upvalue
+            return XX; /// global name
+        };
+    ]=];
+    x = load(h, "")();
+    assert(debug.getupvalue(x, 1) == "__ENV");
+    debug.setupvalue(x, 1, __G);
+    assert(x() == 123);
+
+    assert(assert(load("return XX + ...;", nil, {XX = 13}))(4) == 17);
+    XX = nil;
+}
+
+
+{ /// test generic load with nested functions
+    local x = [=[
+        return fn(x) {
+            return fn(y) {
+                return fn(z) {
+                    return x+y+z;
+                };
+            };
+        };
+    ]=];
+    local a = assert(load(read1(x), "read"));
+    assert(a()(2)(3)(10) == 15);
+}
+
+
+{ /// test for long method names
+    local t = {x = 1};
+    fn t._012345678901234567890123456789012345678901234567890123456789(self) {
+        return self.x;
+    }
+    assert(t._012345678901234567890123456789012345678901234567890123456789(t) == 1);
+    t = class {
+        fn __init() {
+            self.x = 1;
+            return self;
+        }
+        fn _012345678901234567890123456789012345678901234567890123456789() {
+            return self.x;
+        }
+    };
+    assert(t()._012345678901234567890123456789012345678901234567890123456789() == 1);
+}
+
+
+/// test for bug in parameter adjustment
+assert((fn() { return nil; })(4) == nil);
+assert((fn() { local a; return a; })(4) == nil);
+assert((fn(a) { return a; })() == nil);
 
 
 { /// test limit of multiple returns (16777215 values)

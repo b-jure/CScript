@@ -362,10 +362,8 @@ static void addinstpc(FunctionState *fs) {
 }
 
 
-#include <stdio.h>
 /* emit instruction */
 int csC_emitI(FunctionState *fs, Instruction i) {
-    printf("%s at pc %d\n", getopName(i), currPC);
     cs_assert(fs->prevpc <= currPC);
     addinstpc(fs);
     emitbyte(fs, i);
@@ -883,13 +881,11 @@ static int getjump(FunctionState *fs, int pc) {
         return destinationpc(inst, pc);
 }
 
-#include <stdio.h>
 
 /* fix jmp instruction at 'pc' to jump to 'target' */
 static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
     int offset = c_abs(target - (pc + getopSize(*jmp)));
-    printf("Patched jump at pc %d, target %d, final offset %d\n", pc, target, offset);
     cs_assert(*jmp == OP_JMP || *jmp == OP_JMPS);
     if (c_unlikely(offset > MAXJMP)) /* jump is too large? */
         csP_semerror(fs->lx, "control structure too long");
@@ -1786,7 +1782,6 @@ void csC_finish(FunctionState *fs) {
                 else if (*pc == OP_JMPS && i < target)
                     *pc = OP_JMP; /* jumps forward */
                 cs_assert(target >= 0);
-                printf("%s\n", __func__);
                 fixjump(fs, i, target);
                 break;
             }
