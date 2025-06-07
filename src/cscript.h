@@ -427,6 +427,7 @@ CS_API void        cs_closeslot(cs_State *C, int index);
 // TODO: add docs
 CS_API int         cs_getstack(cs_State *C, int level, cs_Debug *ar); 
 CS_API int         cs_getinfo(cs_State *C, const char *what, cs_Debug *ar); 
+CS_API int         cs_stackinuse(cs_State *C);
 CS_API const char *cs_getlocal(cs_State *C, const cs_Debug *ar, int n); 
 CS_API const char *cs_setlocal (cs_State *C, const cs_Debug *ar, int n); 
 CS_API const char *cs_getupvalue(cs_State *C, int index, int n); 

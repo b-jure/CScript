@@ -1783,6 +1783,13 @@ CS_API int cs_getstack(cs_State *C, int level, cs_Debug *ar) {
 }
 
 
+// TODO: add docs
+CS_API int cs_stackinuse(cs_State *C) {
+    cs_assert(MAXINT >= savestack(C, C->sp.p));
+    return cast_int(savestack(C, C->sp.p));
+}
+
+
 static const char *aux_upvalue(TValue *func, int n, TValue **val,
                                GCObject **owner) {
     switch (ttypetag(func)) {

@@ -426,6 +426,13 @@ static int db_traceback(cs_State *C) {
 }
 
 
+static int db_stackinuse(cs_State *C) {
+    int res = cs_stackinuse(getthread(C, &res));
+    cs_push_integer(C, res);
+    return 1;
+}
+
+
 static const cs_Entry dblib[] = {
     {"debug", db_debug},
     {"getuservalue", db_getuservalue},
@@ -442,7 +449,9 @@ static const cs_Entry dblib[] = {
     {"setlocal", db_setlocal},
     {"setupvalue", db_setupvalue},
     {"traceback", db_traceback},
+    {"stackinuse", db_stackinuse},
     {"cstacklimit", NULL},
+    {"maxstack", NULL},
     {NULL, NULL}
 };
 
@@ -451,5 +460,7 @@ CSMOD_API int csopen_debug(cs_State *C) {
     csL_push_lib(C, dblib);
     cs_push_integer(C, CSI_MAXCCALLS);
     cs_set_fieldstr(C, -2, "cstacklimit");
+    cs_push_integer(C, CSI_MAXSTACK);
+    cs_set_fieldstr(C, -2, "maxstack");
     return 1;
 }

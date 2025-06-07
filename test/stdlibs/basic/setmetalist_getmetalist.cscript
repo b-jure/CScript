@@ -11,22 +11,22 @@ local t = { x = 1; };
 local x = X();
 local mlX = getmetalist(X);
 assert(mlX);
-assert(mlX[__init]);
-assert(mlX[__init](t) == t);
-assert(mlX[__add]);
-assert(mlX[__add](t, t) == 138);
+assert(mlX[__M.init]);
+assert(mlX[__M.init](t) == t);
+assert(mlX[__M.add]);
+assert(mlX[__M.add](t, t) == 138);
 
 
 class Y {
-    fn __init() { return self; }
+    fn init() { return self; }
 }
 local mlY = [];
-mlY[__init] = fn(self, extra) {
+mlY[__M.init] = fn(self, extra) {
     self.x = 34 + (extra or 0);
     return self;
 };
-mlY[__add] = fn(self, other) { return self.x + other.x; };
-mlY[__sub] = fn(self, other) { return self.x - other.x; };
+mlY[__M.add] = fn(self, other) { return self.x + other.x; };
+mlY[__M.sub] = fn(self, other) { return self.x - other.x; };
 setmetalist(Y, mlY);
 local y1 = Y();
 assert(y1.x and y1.x == 34);

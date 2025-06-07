@@ -78,7 +78,7 @@ local fn GC1() {
     local b;  /// (it is above 'u' in the stack)
     local finish = false;
     local ml = [];
-    ml[__gc] = fn () { finish = true; };
+    ml[__M.gc] = fn () { finish = true; };
     u = setmetalist(class {}, ml);
     b = [34];
     loop {
@@ -110,7 +110,7 @@ local fn GC2() {
     local u;
     local finish = false;
     local ml = [];
-    ml[__gc] = fn () { finish = true; };
+    ml[__M.gc] = fn () { finish = true; };
     u = [setmetalist(class {}, ml)];
     local b = [34];
     loop {
@@ -291,11 +291,11 @@ if (__POSIX or __WINDOWS) {
     local setmetalist,assert,typeof,print,getmetalist =
         setmetalist,assert,typeof,print,getmetalist;
     local ml = [];
-    ml[__gc] = fn (o) {
+    ml[__M.gc] = fn (o) {
         assert(getmetalist(self) == ml);
         /// create new objects during GC
         local a = "xuxu"..tostr(10+3).."test", {};
-        __Glob = o; /// ressurrect object
+        ___Glob = o; /// ressurrect object
         setmetalist(class {}, ml)(); /// new one with the same metalist
         print(">>> closing state " .. "<<<\n");
     };
@@ -309,7 +309,7 @@ assert(gc("isrunning"));
 { /// check that the collector is not reentrant in incremental mode
     local res = true;
     local ml = [];
-    ml[__gc] = fn(o) { print("Collecting object", o); res = gc(); };
+    ml[__M.gc] = fn(o) { print("Collecting object", o); res = gc(); };
     setmetalist(class {}, ml)();
     gc();
     assert(!res);

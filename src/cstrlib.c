@@ -30,18 +30,34 @@
 
 #define CS_BYTES
 
+
+/* uppercase ASCII letters */
 #define CS_BYTES_UPPERCASE      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+/* lowercase ASCII letters */
 #define CS_BYTES_LOWERCASE      "abcdefghijklmnopqrstuvwxyz"
+
+/* (uppercase/lowercase) */
 #define CS_BYTES_LETTERS        CS_BYTES_UPPERCASE CS_BYTES_LOWERCASE
 
+
+/* octal digits */
 #define CS_BYTES_OCTDIGITS      "01234567"
+
+/* decimal digits */
 #define CS_BYTES_DIGITS         CS_BYTES_OCTDIGITS "89"
+
+/* hexadecimal digits */
 #define CS_BYTES_HEXDIGITS      CS_BYTES_DIGITS "abcdef"
 
+
+/* punctuation chars */
 #define CS_BYTES_PUNCTUATION    "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
 
+/* whitespace chars */
 #define CS_BYTES_WHITESPACE     " \t\n\r\v\f"
 
+/* graphical chars */
 #define CS_BYTES_PRINTABLE      CS_BYTES_DIGITS CS_BYTES_LETTERS \
                                 CS_BYTES_PUNCTUATION CS_BYTES_WHITESPACE
 
@@ -923,7 +939,7 @@ static const cs_Entry strlib[] = {
     {"hexdigits", NULL},
     {"octdigits", NULL},
     {"punctuation", NULL},
-    {"printable", NULL},
+    {"whitespace", NULL},
     {"printable", NULL},
     {NULL, NULL}
 };

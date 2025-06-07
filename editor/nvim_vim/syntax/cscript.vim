@@ -2,6 +2,8 @@
 " Language:     CScript 1.0
 " Maintainer:   Jure Bagić <jurebagic99@gmail.com>
 " Last Change:  2025 Mar 7
+" Options:      cscript_version = 1
+"               cscript_subversion = 0 (for 1.0)
 
 
 " quit when a syntax file was already loaded
@@ -12,56 +14,252 @@ endif
 let s:cpo_save = &cpo
 set cpo&vim
 
-
 syn clear
 
+" keep in sync with ftplugin/cscript.vim
+if !exists("cscript_version")
+  " Default is CScript 1.0
+  let cscript_version = 1
+  let cscript_subversion = 0
+elseif !exists("cscript_subversion")
+  " cscript_version exists, but cscript_subversion doesn't.
+  " In this case set it to 0.
+  let cscript_subversion = 0
+endif
 
 " case sensitive
 syn case match
-syn sync fromstart
+
+" sync method
+syn sync minlines=1000
+
+
+"-Metamethods-----{
+syn match cscriptMetaMethod /[^\.]\<__getidx\>/
+syn match cscriptMetaMethod /[^\.]\<__setidx\>/
+syn match cscriptMetaMethod /[^\.]\<__gc\>/
+syn match cscriptMetaMethod /[^\.]\<__close\>/
+syn match cscriptMetaMethod /[^\.]\<__call\>/
+syn match cscriptMetaMethod /[^\.]\<__init\>/
+syn match cscriptMetaMethod /[^\.]\<__concat\>/
+syn match cscriptMetaMethod /[^\.]\<__mod\>/
+syn match cscriptMetaMethod /[^\.]\<__pow\>/
+syn match cscriptMetaMethod /[^\.]\<__add\>/
+syn match cscriptMetaMethod /[^\.]\<__sub\>/
+syn match cscriptMetaMethod /[^\.]\<__mul\>/
+syn match cscriptMetaMethod /[^\.]\<__div\>/
+syn match cscriptMetaMethod /[^\.]\<__shl\>/
+syn match cscriptMetaMethod /[^\.]\<__shr\>/
+syn match cscriptMetaMethod /[^\.]\<__band\>/
+syn match cscriptMetaMethod /[^\.]\<__bor\>/
+syn match cscriptMetaMethod /[^\.]\<__bxor\>/
+syn match cscriptMetaMethod /[^\.]\<__unm\>/
+syn match cscriptMetaMethod /[^\.]\<__bnot\>/
+syn match cscriptMetaMethod /[^\.]\<__eq\>/
+syn match cscriptMetaMethod /[^\.]\<__lt\>/
+syn match cscriptMetaMethod /[^\.]\<__le\>/
+"-----------------}
+
+"-Basic library---{{
+syn match cscriptFunc /[^\.]\<error\>/
+syn match cscriptFunc /[^\.]\<assert\>/
+syn match cscriptFunc /[^\.]\<gc\>/
+syn match cscriptFunc /[^\.]\<load\>/
+syn match cscriptFunc /[^\.]\<loadfile\>/
+syn match cscriptFunc /[^\.]\<runfile\>/
+syn match cscriptFunc /[^\.]\<getmetalist\>/
+syn match cscriptFunc /[^\.]\<setmetalist\>/
+syn match cscriptFunc /[^\.]\<nextfield\>/
+syn match cscriptFunc /[^\.]\<pairs\>/
+syn match cscriptFunc /[^\.]\<ipairs\>/
+syn match cscriptFunc /[^\.]\<pcall\>/
+syn match cscriptFunc /[^\.]\<xpcall\>/
+syn match cscriptFunc /[^\.]\<print\>/
+syn match cscriptFunc /[^\.]\<warn\>/
+syn match cscriptFunc /[^\.]\<len\>/
+syn match cscriptFunc /[^\.]\<rawequal\>/
+syn match cscriptFunc /[^\.]\<rawget\>/
+syn match cscriptFunc /[^\.]\<rawset\>/
+syn match cscriptFunc /[^\.]\<getargs\>/
+syn match cscriptFunc /[^\.]\<tonum\>/
+syn match cscriptFunc /[^\.]\<tostr\>/
+syn match cscriptFunc /[^\.]\<typeof\>/
+syn match cscriptFunc /[^\.]\<getclass\>/
+syn match cscriptFunc /[^\.]\<getsuper\>/
+syn match cscriptFunc /[^\.]\<range\>/
+syn match cscriptFunc /[^\.]\<__G\>/
+syn match cscriptFunc /[^\.]\<__VERSION\>/
+syn match cscriptFunc /[^\.]\<__M\>/
+"-Package library-}{
+syn match cscriptFunc /[^\.]\<import\>/
+syn match cscriptFunc /[^\.]\<package\.loadlib\>/
+syn match cscriptFunc /[^\.]\<package\.searchpath\>/
+syn match cscriptFunc /[^\.]\<package\.preload\>/
+syn match cscriptFunc /[^\.]\<package\.cpath\>/
+syn match cscriptFunc /[^\.]\<package\.path\>/
+syn match cscriptFunc /[^\.]\<package\.searchers\>/
+syn match cscriptFunc /[^\.]\<package\.loaded\>/
+"-String library--}{
+syn match cscriptFunc /[^\.]\<string\.split\>/
+syn match cscriptFunc /[^\.]\<string\.rsplit\>/
+syn match cscriptFunc /[^\.]\<string\.startswith\>/
+syn match cscriptFunc /[^\.]\<string\.reverse\>/
+syn match cscriptFunc /[^\.]\<string\.repeat\>/
+syn match cscriptFunc /[^\.]\<string\.join\>/
+syn match cscriptFunc /[^\.]\<string\.fmt\>/
+syn match cscriptFunc /[^\.]\<string\.toupper\>/
+syn match cscriptFunc /[^\.]\<string\.tolower\>/
+syn match cscriptFunc /[^\.]\<string\.find\>/
+syn match cscriptFunc /[^\.]\<string\.rfind\>/
+syn match cscriptFunc /[^\.]\<string\.span\>/
+syn match cscriptFunc /[^\.]\<string\.cscap\>/
+syn match cscriptFunc /[^\.]\<string\.replace\>/
+syn match cscriptFunc /[^\.]\<string\.substr\>/
+syn match cscriptFunc /[^\.]\<string\.swapcase\>/
+syn match cscriptFunc /[^\.]\<string\.swapupper\>/
+syn match cscriptFunc /[^\.]\<string\.swaplower\>/
+syn match cscriptFunc /[^\.]\<string\.byte\>/
+syn match cscriptFunc /[^\.]\<string\.bytes\>/
+syn match cscriptFunc /[^\.]\<string\.char\>/
+syn match cscriptFunc /[^\.]\<string\.cmp\>/
+syn match cscriptFunc /[^\.]\<string\.ascii_uppercase\>/
+syn match cscriptFunc /[^\.]\<string\.ascii_lowercase\>/
+syn match cscriptFunc /[^\.]\<string\.ascii_letters\>/
+syn match cscriptFunc /[^\.]\<string\.digits\>/
+syn match cscriptFunc /[^\.]\<string\.hexdigits\>/
+syn match cscriptFunc /[^\.]\<string\.octdigits\>/
+syn match cscriptFunc /[^\.]\<string\.punctuation\>/
+syn match cscriptFunc /[^\.]\<string\.whitespace\>/
+syn match cscriptFunc /[^\.]\<string\.printable\>/
+"-Math library----}{
+syn match cscriptFunc /[^\.]\<math\.abs\>/
+syn match cscriptFunc /[^\.]\<math\.acos\>/
+syn match cscriptFunc /[^\.]\<math\.atan\>/
+syn match cscriptFunc /[^\.]\<math\.ceil\>/
+syn match cscriptFunc /[^\.]\<math\.cos\>/
+syn match cscriptFunc /[^\.]\<math\.deg\>/
+syn match cscriptFunc /[^\.]\<math\.exp\>/
+syn match cscriptFunc /[^\.]\<math\.toint\>/
+syn match cscriptFunc /[^\.]\<math\.floor\>/
+syn match cscriptFunc /[^\.]\<math\.fmod\>/
+syn match cscriptFunc /[^\.]\<math\.ult\>/
+syn match cscriptFunc /[^\.]\<math\.log\>/
+syn match cscriptFunc /[^\.]\<math\.max\>/
+syn match cscriptFunc /[^\.]\<math\.min\>/
+syn match cscriptFunc /[^\.]\<math\.modf\>/
+syn match cscriptFunc /[^\.]\<math\.rad\>/
+syn match cscriptFunc /[^\.]\<math\.sin\>/
+syn match cscriptFunc /[^\.]\<math\.sqrt\>/
+syn match cscriptFunc /[^\.]\<math\.tan\>/
+syn match cscriptFunc /[^\.]\<math\.type\>/
+syn match cscriptFunc /[^\.]\<math\.srand\>/
+syn match cscriptFunc /[^\.]\<math\.rand\>/
+syn match cscriptFunc /[^\.]\<math\.randf\>/
+syn match cscriptFunc /[^\.]\<math\.pi\>/
+syn match cscriptFunc /[^\.]\<math\.huge\>/
+syn match cscriptFunc /[^\.]\<math\.maxint\>/
+syn match cscriptFunc /[^\.]\<math\.minint\>/
+"-I/O library-----}{
+syn match cscriptFunc /[^\.]\<io\.open\>/
+syn match cscriptFunc /[^\.]\<io\.close\>/
+syn match cscriptFunc /[^\.]\<io\.flush\>/
+syn match cscriptFunc /[^\.]\<io\.input\>/
+syn match cscriptFunc /[^\.]\<io\.output\>/
+syn match cscriptFunc /[^\.]\<io\.popen\>/
+syn match cscriptFunc /[^\.]\<io\.tmpfile\>/
+syn match cscriptFunc /[^\.]\<io\.type\>/
+syn match cscriptFunc /[^\.]\<io\.lines\>/
+syn match cscriptFunc /[^\.]\<io\.read\>/
+syn match cscriptFunc /[^\.]\<io\.write\>/
+syn match cscriptFunc /[^\.]\<io\.stdin\>/
+syn match cscriptFunc /[^\.]\<io\.stdout\>/
+syn match cscriptFunc /[^\.]\<io\.stderr\>/
+"-OS library------}{
+syn match cscriptFunc /[^\.]\<os\.clock\>/
+syn match cscriptFunc /[^\.]\<os\.date\>/
+syn match cscriptFunc /[^\.]\<os\.difftime\>/
+syn match cscriptFunc /[^\.]\<os\.execute\>/
+syn match cscriptFunc /[^\.]\<os\.exit\>/
+syn match cscriptFunc /[^\.]\<os\.getenv\>/
+syn match cscriptFunc /[^\.]\<os\.setenv\>/
+syn match cscriptFunc /[^\.]\<os\.remove\>/
+syn match cscriptFunc /[^\.]\<os\.rename\>/
+syn match cscriptFunc /[^\.]\<os\.setlocale\>/
+syn match cscriptFunc /[^\.]\<os\.time\>/
+syn match cscriptFunc /[^\.]\<os\.tmpname\>/
+"-Regex library---}{
+syn match cscriptFunc /[^\.]\<reg\.find\>/
+syn match cscriptFunc /[^\.]\<reg\.match\>/
+syn match cscriptFunc /[^\.]\<reg\.gmatch\>/
+syn match cscriptFunc /[^\.]\<reg\.gsub\>/
+"-Debug library---}{
+syn match cscriptFunc /[^\.]\<debug\.debug\>/
+syn match cscriptFunc /[^\.]\<debug\.getuservalue\>/
+syn match cscriptFunc /[^\.]\<debug\.gethook\>/
+syn match cscriptFunc /[^\.]\<debug\.getinfo\>/
+syn match cscriptFunc /[^\.]\<debug\.getlocal\>/
+syn match cscriptFunc /[^\.]\<debug\.getctable\>/
+syn match cscriptFunc /[^\.]\<debug\.getclist\>/
+syn match cscriptFunc /[^\.]\<debug\.getupvalue\>/
+syn match cscriptFunc /[^\.]\<debug\.upvaluejoin\>/
+syn match cscriptFunc /[^\.]\<debug\.upvalueid\>/
+syn match cscriptFunc /[^\.]\<debug\.setuservalue\>/
+syn match cscriptFunc /[^\.]\<debug\.sethook\>/
+syn match cscriptFunc /[^\.]\<debug\.setlocal\>/
+syn match cscriptFunc /[^\.]\<debug\.setupvalue\>/
+syn match cscriptFunc /[^\.]\<debug\.traceback\>/
+syn match cscriptFunc /[^\.]\<debug\.stackinuse\>/
+syn match cscriptFunc /[^\.]\<debug\.cstacklimit\>/
+syn match cscriptFunc /[^\.]\<debug\.maxstack\>/
+"-List library----}{
+syn match cscriptFunc /[^\.]\<list\.len\>/
+syn match cscriptFunc /[^\.]\<list\.insert\>/
+syn match cscriptFunc /[^\.]\<list\.remove\>/
+syn match cscriptFunc /[^\.]\<list\.move\>/
+syn match cscriptFunc /[^\.]\<list\.flatten\>/
+syn match cscriptFunc /[^\.]\<list\.concat\>/
+syn match cscriptFunc /[^\.]\<list\.sort\>/
+syn match cscriptFunc /[^\.]\<list\.maxindex\>/
+"-----------------}}
 
 "-Operators-------{
-syn keyword cscriptOperator         and or
-syn match   cscriptSymbolOperator   /[<>=~^\*&|/%+-\!]\|\.{2,3}/
+syn keyword cscriptOperator and or
+syn match cscriptSymbolOperator /[<>=~^\*&|/%+-\!]\|\.{2,3}/
 "-----------------}
 
 "-Comments--------{
-syn keyword cscriptTodo         contained TODO FIXME XXX
+syn keyword cscriptTodo contained TODO FIXME XXX
 syn cluster cscriptCommentGroup contains=cscriptTodo,cscriptDocTag
 " single line
-syn region  cscriptComment  matchgroup=cscriptCommentStart start=/#/ skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
-syn region  cscriptComment  matchgroup=cscriptCommentStart start="///" skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
+syn region cscriptComment matchgroup=cscriptCommentStart start=/#/ skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
+syn region cscriptComment matchgroup=cscriptCommentStart start="///" skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
 " multi-line
-if exists("c_no_comment_fold")
-    syn region  cscriptComment  matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError extend
-else
-    syn region  cscriptComment  matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError fold extend
-endif
-syn match   cscriptDocTag               display contained /\s\zs@\k\+/
+syn region cscriptComment matchgroup=cscriptCommentStart start=/\/\*/ end=/\*\// contains=@cscriptCommentGroup,cscriptCommentStartError fold extend
+syn match cscriptDocTag display contained /\s\zs@\k\+/
 " errors
-syn match   cscriptCommentError         display /\*\//
-syn match   cscriptCommentStartError    display /\/\*/me=e-1 contained
-syn match   cscriptWrongComTail	        display /\*\//
+syn match cscriptCommentError display /\*\//
+syn match cscriptCommentStartError display /\/\*/me=e-1 contained
+syn match cscriptWrongComTail display /\*\//
 "-----------------}
 
 "-Special---------{
 " highlight \e (aka \x1b)
-syn match   cscriptSpecialEsc       contained /\\e/
+syn match cscriptSpecialEsc contained /\\e/
 " highlight control chars
-syn match   cscriptSpecialControl   contained /\\[\\abtnvfr'"]/
+syn match cscriptSpecialControl contained /\\[\\abtnvfr'"]/
 " highlight decimal escape sequence \ddd
-syn match   cscriptSpecialDec       contained /\\[[:digit:]]\{1,3}/
+syn match cscriptSpecialDec contained /\\[[:digit:]]\{1,3}/
 " highlight hexadecimal escape sequence \xhh
-syn match   cscriptSpecialHex       contained /\\x[[:xdigit:]]\{2}/
+syn match cscriptSpecialHex contained /\\x[[:xdigit:]]\{2}/
 " highlight utf8 \u{xxxxxxxx} or \u[xxxxxxxx]
-syn match   cscriptSpecialUtf       contained /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
-syn cluster cscriptSpecial  contains=cscriptSpecialEsc,cscriptSpecialControl,cscriptSpecialDec,cscriptSpecialHex,cscriptSpecialUtf
+syn match cscriptSpecialUtf contained /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
+syn cluster cscriptSpecial contains=cscriptSpecialEsc,cscriptSpecialControl,cscriptSpecialDec,cscriptSpecialHex,cscriptSpecialUtf
 " errors
-syn match   cscriptSpecialEscError      /\\e/
-syn match   cscriptSpecialControlError  /\\[\\abtnvfr'"]/
-syn match   cscriptSpecialDecError      /\\[[:digit:]]\{3}/
-syn match   cscriptSpecialHexError      /\\x[[:xdigit:]]\{2}/
-syn match   cscriptSpecialUtfError      /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
+syn match cscriptSpecialEscError /\\e/
+syn match cscriptSpecialControlError /\\[\\abtnvfr'"]/
+syn match cscriptSpecialDecError /\\[[:digit:]]\{3}/
+syn match cscriptSpecialHexError /\\x[[:xdigit:]]\{2}/
+syn match cscriptSpecialUtfError /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,8}\]\)/
 "-----------------}
 
 "-Characters-----{
@@ -70,27 +268,27 @@ syn match   cscriptCharacter    /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}
 
 "-Numbers---------{
 syn case ignore
-syn match   cscriptNumbers      transparent /\<\d\|\.\d/ contains=cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError,cscriptConstant
+syn match cscriptNumbers transparent /\<\d\|\.\d/ contains=cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError,cscriptConstant
 " decimal integers
-syn match   cscriptNumber       contained /\%(0\|[^0\d]\d*\)\>/
+syn match cscriptNumber contained /\%(0\|[^0\d]\d*\)\>/
 " hexadecimal integers
-syn match   cscriptNumber       contained /0x\x\+\>/
+syn match cscriptNumber contained /0x\x\+\>/
 " octal integers
-syn match   cscriptOctal        contained /0\o\+\>/ contains=cscriptOctalZero
+syn match cscriptOctal contained /0\o\+\>/ contains=cscriptOctalZero
 " flag the first zero of an octal number as something special
-syn match   cscriptOctalZero    contained /\<0/
+syn match cscriptOctalZero contained /\<0/
 " decimal floating point number, with dot, optional exponent
-syn match   cscriptFloat        contained /\d\+\.\d*\%(e[-+]\=\d\+\)\=/
+syn match cscriptFloat contained /\d\+\.\d*\%(e[-+]\=\d\+\)\=/
 " decimal floating point number, starting with a dot, optional exponent
-syn match   cscriptFloat        contained /\.\d\+\%(e[-+]\=\d\+\)\>/
+syn match cscriptFloat contained /\.\d\+\%(e[-+]\=\d\+\)\>/
 " decimal floating point number, without dot, with exponent
-syn match   cscriptFloat        contained "\d\+e[-+]\=\d\+\>"
+syn match cscriptFloat contained "\d\+e[-+]\=\d\+\>"
 " hexadecimal foating point number, optional leading digits, with dot, with exponent
-syn match   cscriptFloat        contained "0x\x*\.\x\+p[-+]\=\d\+\>"
+syn match cscriptFloat contained "0x\x*\.\x\+p[-+]\=\d\+\>"
 " hexadecimal floating point number, with leading digits, optional dot, with exponent
-syn match   cscriptFloat        contained "0x\x\+\.\=p[-+]\=\d\+\>"
+syn match cscriptFloat contained "0x\x\+\.\=p[-+]\=\d\+\>"
 " flag an octal number with wrong digits
-syn match   cscriptOctalError   contained "0\o*[89]\d*"
+syn match cscriptOctalError contained "0\o*[89]\d*"
 syn case match
 "-----------------}
 
@@ -99,31 +297,31 @@ syn match cscriptIdentifier /\<\h\w*\>/
 "-----------------}
 
 "-Keywords--------{
-syn keyword     cscriptStatement        break return continue
-syn keyword     cscriptConditional      if else
-syn keyword     cscriptLabel            case default switch
-syn keyword     cscriptRepeat           loop while for
-syn keyword     cscriptConstant         true false nil inf infinity
+syn keyword cscriptStatement break return continue
+syn keyword cscriptConditional if else
+syn keyword cscriptLabel case default switch
+syn keyword cscriptRepeat loop while for
+syn keyword cscriptConstant true false nil inf infinity
 "-----------------}
 
 "-Blocks----------{
 if exists("c_curly_error")
-    syn match   cscriptCurlyError   /}/
-    syn region  cscriptBlock        start=/{/ end=/}/ contains=TOP,cscriptCommentStartError,cscriptCurlyError,cscriptSpecialError,cscriptErrorInBracket,@Spell fold
+    syn match cscriptCurlyError /}/
+    syn region cscriptBlock start=/{/ end=/}/ contains=TOP,cscriptCommentStartError,cscriptCurlyError,cscriptSpecialError,cscriptErrorInBracket,@Spell fold
 else
-    syn region   cscriptBlock       start=/{/ end=/}/ transparent fold
+    syn region cscriptBlock start=/{/ end=/}/ transparent fold
 endif
 "-----------------}
 
 "-Parens---------{
-syn cluster cscriptParenGroup   contains=@cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
-syn region  cscriptParen        transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptIf,cscriptLabel,cscriptRepeat,@cscriptParenGroup,@Spell
-syn match   cscriptErrorInParen display contained /]/
+syn cluster cscriptParenGroup contains=@cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
+syn region cscriptParen transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptIf,cscriptLabel,cscriptRepeat,@cscriptParenGroup,@Spell
+syn match cscriptErrorInParen display contained /]/
 "---------------}
 
 "-Bracket-------{
-syn region  cscriptBracket  transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,@cscriptParenGroup,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
-syn match   cscriptErrorInBracket   display contained /]/
+syn region cscriptBracket transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,@cscriptParenGroup,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
+syn match cscriptErrorInBracket display contained /]/
 "---------------}
 
 "-Strings---------{
@@ -132,51 +330,9 @@ syn region cscriptLongString start=/\[\z(=\+\)\[/ end=/\]\z1\]/ contains=@Spell
 "-----------------}
 
 "-Foreach---------{
-syn region  cscriptForEach  transparent matchgroup=cscriptRepeat start=/\<foreach\>\ze\_s\+\%(\h\w*\%(,\_s*\h\w*\)*\)\_s\<in\>/ end=/\h\w*\_s\+\zs\<in\>/me=e-2 contains=TOP,cscriptInError skipwhite skipempty
-syn keyword cscriptForEach  contained containedin=cscriptForEach in
-syn match   cscriptInError  /\<in\>/
-"-----------------}
-
-"-MetaMethods-----{
-syn keyword     cscriptMetaMethod       __getidx __setidx
-syn keyword     cscriptMetaMethod       __gc __close __call __init __concat
-syn keyword     cscriptMetaMethod       __mod __pow __add __sub __mul __div
-syn keyword     cscriptMetaMethod       __shl __shr __band __bor __bxor
-syn keyword     cscriptMetaMethod       __unm __bnot
-syn keyword     cscriptMetaMethod       __eq __lt __le
-" basic library
-syn keyword     cscriptFunc             error assert gc load loadfile runfile
-syn keyword     cscriptFunc             getmetamethod next pairs ipairs pcall
-syn keyword     cscriptFunc             xpcall print warn len rawequal rawget
-syn keyword     cscriptFunc             rawset getresults tonumber tostring typeof
-syn keyword     cscriptFunc             getclass __G __VERSION
-" package library
-syn keyword     cscriptFunc             import
-syn match       cscriptFunc             /\<package\.loadlib\>/
-syn match       cscriptFunc             /\<package\.searchpath\>/
-syn match       cscriptFunc             /\<package\.preload\>/
-syn match       cscriptFunc             /\<package\.cpath\>/
-syn match       cscriptFunc             /\<package\.path\>/
-syn match       cscriptFunc             /\<package\.searchers\>/
-syn match       cscriptFunc             /\<package\.loaded\>/
-" string library
-syn match       cscriptFunc             /\<string\.split\>/
-syn match       cscriptFunc             /\<string\.rsplit\>/
-syn match       cscriptFunc             /\<string\.startswith\>/
-syn match       cscriptFunc             /\<string\.reverse\>/
-syn match       cscriptFunc             /\<string\.repeat\>/
-syn match       cscriptFunc             /\<string\.join\>/
-syn match       cscriptFunc             /\<string\.fmt\>/
-syn match       cscriptFunc             /\<string\.toupper\>/
-syn match       cscriptFunc             /\<string\.tolower\>/
-syn match       cscriptFunc             /\<string\.count\>/
-syn match       cscriptFunc             /\<string\.find\>/
-syn match       cscriptFunc             /\<string\.rfind\>/
-syn match       cscriptFunc             /\<string\.replace\>/
-syn match       cscriptFunc             /\<string\.substr\>/
-syn match       cscriptFunc             /\<string\.swapcase\>/
-syn match       cscriptFunc             /\<string\.swapupper\>/
-syn match       cscriptFunc             /\<string\.swaplower\>/
+syn region cscriptForEach transparent matchgroup=cscriptRepeat start=/\<foreach\>\ze\_s\+\%(\h\w*\%(,\_s*\h\w*\)*\)\_s\<in\>/ end=/\h\w*\_s\+\zs\<in\>/me=e-2 contains=TOP,cscriptInError skipwhite skipempty
+syn keyword cscriptForEach contained containedin=cscriptForEach in
+syn match cscriptInError /\<in\>/
 "-----------------}
 
 syn match cscriptSemicolon /;/

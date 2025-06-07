@@ -1989,7 +1989,6 @@ typedef struct CondBodyState {
 } CondBodyState;
 
 
-#include <stdio.h>
 /* condition statement body; for 'forstm', 'whilestm' and 'ifstm' */
 static void condbody(Lexer *lx, CondBodyState *cb) {
     FunctionState *fs = lx->fs;
@@ -2027,25 +2026,18 @@ static void condbody(Lexer *lx, CondBodyState *cb) {
         }
     }
     target = currPC; /* set test jump target */
-    printf("currpc = %d\n", currPC);
     if (cb->isif) { /* is if statement? */
-        printf("(if) ");
         if (match(lx, TK_ELSE)) /* have else? */
             stm(lx); /* else body */
         if (target == currPC) { /* no else branch or it got removed? */
-            printf("no else branch\n");
             if (jump != NOJMP) { /* have if jump (opJ)? */
-                printf("have redundant jump at pc %d\n", jump);
                 cs_assert(fs->p->code[fs->prevpc] == cb->opJ);
                 csC_removelastjump(fs); /* remove that jump */
-                printf("after removing it, currpc = %d\n", currPC);
                 target = currPC; /* adjust test target */
-                printf("target is now %d\n", target);
             } else cs_assert(optaway || istrue);
         } else if (jump != NOJMP) /* have else branch and 'if' jump (opJ) */
             csC_patchtohere(fs, jump); /* (it jumps over else statement) */
     }
-    printf("target for test at pc %d is %d\n", test, target);
     if (test != NOJMP) { /* have condition test? */
         csC_patch(fs, test, target); /* patch it */
         newttarget(lx, target); /* add new test target */

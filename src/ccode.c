@@ -530,7 +530,7 @@ void csC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
     cs_assert(newstack >= 0);
     if (fs->p->maxstack < newstack) {
-        if (c_unlikely(newstack >= MAX_ARG_L))
+        if (c_unlikely(newstack >= MAX_CODE))
             csY_syntaxerror(fs->lx, "function requires too much stack space");
         fs->p->maxstack = newstack;
     }

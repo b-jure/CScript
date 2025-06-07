@@ -2,10 +2,6 @@
 ** This file serves as a syntax showcase.
 ** It is useful for testing purposes when altering
 ** (n)vim syntax file provided with the distribution.
-** 
-** When modyfing the syntax file,
-** do ':syn reset' followed by ':syn set=cscript'
-** to properly reload the syntax file.
 */
 
 

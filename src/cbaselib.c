@@ -635,33 +635,8 @@ static const cs_Entry basic_funcs[] = {
     /* compatibility flags */
     {"__POSIX", NULL},
     {"__WINDOWS", NULL},
-    /* metalist indices */
-    {"__getidx", NULL},
-    {"__setidx", NULL},
-    {"__gc", NULL},
-    {"__close", NULL},
-    {"__call", NULL},
-    {"__init", NULL},
-    {"__concat", NULL},
-    {"__add", NULL},
-    {"__sub", NULL},
-    {"__mul", NULL},
-    {"__div", NULL},
-    {"__idiv", NULL},
-    {"__mod", NULL},
-    {"__pow", NULL},
-    {"__shl", NULL},
-    {"__shr", NULL},
-    {"__band", NULL},
-    {"__bor", NULL},
-    {"__bxor", NULL},
-    {"__unm", NULL},
-    {"__bnot", NULL},
-    {"__eq", NULL},
-    {"__lt", NULL},
-    {"__le", NULL},
-    {"__tostring", NULL},
-    {"__N", NULL},
+    /* table for meta indices */
+    {"__M", NULL},
     {NULL, NULL},
 };
 
@@ -687,23 +662,23 @@ static void set_compat_flags(cs_State *C) {
 }
 
 
-static void set_metalist_indices(cs_State *C) {
+/* create __M table that holds metalist indices */
+static void create_meta(cs_State *C) {
     const char *mm[CS_MM_NUM] = {
-        "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
-        "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",
-        "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
-        "__bnot", "__eq", "__lt", "__le"
+        "getidx", "setidx", "gc", "close", "call", "init", "concat", "add",
+        "sub", "mul", "div", "idiv", "mod", "pow", "shl", "shr", "band",
+        "bor", "bxor", "unm", "bnot", "eq", "lt", "le"
     };
+    cs_push_table(C, CS_MM_NUM + 1);
     for (int i = 0; i < CS_MM_NUM; i++) {
         cs_push_integer(C, i);
         cs_set_fieldstr(C, -2, mm[i]);
     }
-    /* set __tostring metamethod index */
     cs_push_integer(C, CS_MM_NUM);
-    cs_set_fieldstr(C, -2, "__tostring");
-    /* set total number of metamethods */
+    cs_set_fieldstr(C, -2, "tostring");
     cs_push_integer(C, CS_MM_NUM + 1);
-    cs_set_fieldstr(C, -2, "__N");
+    cs_set_fieldstr(C, -2, "n");
+    cs_set_fieldstr(C, -2, "__M");
 }
 
 
@@ -720,6 +695,6 @@ CSMOD_API int csopen_basic(cs_State *C) {
     /* set compatibility flags */
     set_compat_flags(C);
     /* set global metalist indices */
-    set_metalist_indices(C);
+    create_meta(C);
     return 1;
 }

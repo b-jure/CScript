@@ -142,7 +142,7 @@ assert(a.deep(30000) == 101);
     assert(a == 10 and b == -2 and c == -1);
 
     /// tail calls x metamethods
-    local ml = []; ml[__call] = foo;
+    local ml = []; ml[__M.call] = foo;
     local z = setmetalist(class {}, ml)();
     local fn foo2(x) { return z(10, x); };
     a, b, c = foo2(100);
@@ -194,7 +194,7 @@ assert(a.deep(30000) == 101);
     /// build a chain of __call metamethods ending in function 'foo'
     foreach i in range(0, 15) {
         local ml = [];
-        ml[__call] = foo;
+        ml[__M.call] = foo;
         foo = setmetalist(class {}, ml)();
     }
 
@@ -208,7 +208,7 @@ assert(a.deep(30000) == 101);
     local N = 15;
     local u = (class { fn __call(...) { return [...]; } })();
     foreach i in range(0, N) {
-        local ml = []; ml[__call] = u;
+        local ml = []; ml[__M.call] = u;
         u = setmetalist(class {}, ml)();
         u[0] = i;
     }
@@ -415,15 +415,25 @@ assert((fn() { local a; return a; })(4) == nil);
 assert((fn(a) { return a; })() == nil);
 
 
-{ /// test limit of multiple returns (16777215 values)
-    local code = "return 10;";/// .. string.repeat(",10", 16777214) .. ";";
-    local res, msg = load(code);
-    if (!res) { /* ok? */
+{ /// test stack/bytecode limit
+    local blim <final> = 16_777_215;
+    local inuse = debug.stackinuse();
+    if (debug.maxstack - inuse - 10 > blim) { /// test bytecode limit 
+        local code = "return 10" .. string.repeat(",10", blim - 2);
+        local res, msg = load(code .. ";");
+        assert(res and !msg);
         res = [assert(res())];
-        assert(res.len == 16777214 and res[16777214] == 10);
+        assert(res.len == blim-1 and res.last == 10);
         code = code .. ",10;";
-        local status, msg = load(code);
-        assert(!status and string.find(msg, "too many returns"));
+        res, msg = load(code);
+        assert(!res and string.find(msg, "too much stack space"));
+    } else { /// test stack size limit
+        local fn foverflow(func) { return [func()]; }
+        local code = "return 10" .. string.repeat(",10", debug.maxstack);
+        local res, msg = load(code .. ";");
+        assert(res and !msg);
+        res, msg = pcall(foverflow, res);
+        assert(!res and string.find(msg, "stack overflow"));
     }
 }
 

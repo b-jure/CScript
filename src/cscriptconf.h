@@ -444,7 +444,7 @@
 ** space (and to reserve some numbers for pseudo-indices).
 ** (It must fit into max(size_t)/32 and max(int)/2.)
 */
-#define CSI_MAXSTACK        100000
+#define CSI_MAXSTACK        (1 << 23)
 
 
 /*

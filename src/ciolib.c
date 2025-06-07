@@ -23,7 +23,6 @@
 
 
 
-
 #if !defined(c_checkmode)
 
 static int checkmode(const char *mode) {
