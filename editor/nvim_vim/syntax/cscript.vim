@@ -263,33 +263,32 @@ syn match cscriptSpecialUtfError /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,
 "-----------------}
 
 "-Characters-----{
-syn match   cscriptCharacter    /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}\)'/ contains=cscriptSpecialControl,cscriptSpecialHex
+syn match cscriptCharacter /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}\)'/ contains=cscriptSpecialControl,cscriptSpecialHex
 "-----------------}
 
 "-Numbers---------{
-syn case ignore
-syn match cscriptNumbers transparent /\<\d\|\.\d/ contains=cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError,cscriptConstant
 " decimal integers
-syn match cscriptNumber contained /\%(0\|[^0\d]\d*\)\>/
+syn match cscriptNumber /\<\%(0\|[1-9][[:digit:]_]*\)\>/
 " hexadecimal integers
-syn match cscriptNumber contained /0x\x\+\>/
+syn match cscriptNumber /\<0x\x[[:xdigit:]_]*\>/
 " octal integers
-syn match cscriptOctal contained /0\o\+\>/ contains=cscriptOctalZero
+syn match cscriptOctal /\<0\o[0-7_]*\>/ contains=cscriptOctalZero
 " flag the first zero of an octal number as something special
 syn match cscriptOctalZero contained /\<0/
+
 " decimal floating point number, with dot, optional exponent
-syn match cscriptFloat contained /\d\+\.\d*\%(e[-+]\=\d\+\)\=/
+syn match cscriptFloat /\<\d[[:digit:]_]*\.\d*\%([eE][-+]\=\d[[:digit:]_]*\)\=\>/
 " decimal floating point number, starting with a dot, optional exponent
-syn match cscriptFloat contained /\.\d\+\%(e[-+]\=\d\+\)\>/
+syn match cscriptFloat /\.\d\+\%([eE][-+]\=\d[[:digit:]_]*\)\>/
 " decimal floating point number, without dot, with exponent
-syn match cscriptFloat contained "\d\+e[-+]\=\d\+\>"
+syn match cscriptFloat /\<\d[_0-9]*[eE][-+]\=\d[[:digit:]_]*\>/
 " hexadecimal foating point number, optional leading digits, with dot, with exponent
-syn match cscriptFloat contained "0x\x*\.\x\+p[-+]\=\d\+\>"
+syn match cscriptFloat /\<0[xX]\x[[:xdigit:]_]*\.\x\+[pP][-+]\=\d[[:digit:]_]*\>/
 " hexadecimal floating point number, with leading digits, optional dot, with exponent
-syn match cscriptFloat contained "0x\x\+\.\=p[-+]\=\d\+\>"
+syn match cscriptFloat /\<0x\x[[:digit:]_]*\.\=[pP][-+]\=\d[[:digit:]_]*\>/
+
 " flag an octal number with wrong digits
-syn match cscriptOctalError contained "0\o*[89]\d*"
-syn case match
+syn match cscriptOctalError contained /0\o*[89]\d*/
 "-----------------}
 
 "-Identifier------{
@@ -307,21 +306,20 @@ syn keyword cscriptConstant true false nil inf infinity
 "-Blocks----------{
 if exists("c_curly_error")
     syn match cscriptCurlyError /}/
-    syn region cscriptBlock start=/{/ end=/}/ contains=TOP,cscriptCommentStartError,cscriptCurlyError,cscriptSpecialError,cscriptErrorInBracket,@Spell fold
+    syn region cscriptBlock start=/{/ end=/}/ contains=TOP,cscriptCurlyError,cscriptSpecialError,@Spell fold
 else
     syn region cscriptBlock start=/{/ end=/}/ transparent fold
 endif
 "-----------------}
 
 "-Parens---------{
-syn cluster cscriptParenGroup contains=@cscriptSpecial,@cscriptCommentGroup,cscriptCommentStartError,cscriptOctalZero,cscriptNumber,cscriptFloat,cscriptOctal,cscriptOctalError
-syn region cscriptParen transparent start=/(/ end=/)/ contains=ALLBUT,cscriptAttribute,cscriptIf,cscriptLabel,cscriptRepeat,@cscriptParenGroup,@Spell
-syn match cscriptErrorInParen display contained /]/
+syn region cscriptParen transparent start=/(/ end=/)/ contains=TOP,cscriptErrorInParen,cscriptLabel,cscriptRepeat,@Spell
+syn match cscriptErrorInParen /)/
 "---------------}
 
 "-Bracket-------{
-syn region cscriptBracket transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptIf,@cscriptParenGroup,cscriptLabel,cscriptRepeat,cscriptClass,@Spell
-syn match cscriptErrorInBracket display contained /]/
+syn region cscriptBracket transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptErrorInBracket,cscriptLabel,cscriptRepeat,@Spell
+syn match cscriptErrorInBracket /]/
 "---------------}
 
 "-Strings---------{

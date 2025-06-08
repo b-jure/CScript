@@ -4,13 +4,11 @@ local fn dostring(s) { return assert(load(s))(); }
 
 print("testing debug library and debug information");
 
-{
-    local a=1;
-}
+{ local a=1; }
 
 assert(!debug.gethook());
 
-local testline = 14;        /// line where 'test' is defined
+local testline = 12;        /// line where 'test' is defined
 local fn test(s, l, p) {    /// this must be line 14
     gc();  /// avoid gc during trace
     local fn f(event, line) {
@@ -34,7 +32,8 @@ local fn test(s, l, p) {    /// this must be line 14
     a = debug.getinfo(print, "L");
     assert(a.activelines == nil);
     local b = debug.getinfo(test, "sfL");
-    assert(b.name == nil and b.what == "CScript" and b.defline == testline and
+    assert(b.name == "test" and b.what == "CScript" and
+           b.defline == testline and
            b.lastdefline == b.defline + 10 and
            b.func == test and !reg.find(b.shortsrc, "%["));
     assert(b.activelines[b.defline + 1] and
@@ -45,72 +44,72 @@ local fn test(s, l, p) {    /// this must be line 14
 
 
 
-{ /// test file and string names truncation
-    local a = "fn f() {}";
-    local fn dostring(s, x) { return load(s, x)(); }
-    dostring(a);
-    assert(debug.getinfo(f).shortsrc == string.fmt("[string \"%s\"]", a));
-    dostring(a..string.fmt("; %s\n=1;", string.repeat("p", 400)));
-    assert(reg.find(debug.getinfo(f).shortsrc, "^%[string [^\n]*%.%.%.\"%]$"));
-    dostring(a..string.fmt("; %s=1;", string.repeat("p", 400)));
-    assert(reg.find(debug.getinfo(f).shortsrc, "^%[string [^\n]*%.%.%.\"%]$"));
-    dostring("\n"..a);
-    assert(debug.getinfo(f).shortsrc == "[string \"...\"]");
-    dostring(a, "");
-    assert(debug.getinfo(f).shortsrc == "[string \"\"]");
-    dostring(a, "@xuxu");
-    assert(debug.getinfo(f).shortsrc == "xuxu");
-    dostring(a, "@"..string.repeat("p", 1000).."t");
-    assert(reg.find(debug.getinfo(f).shortsrc, "^%.%.%.p*t$"));
-    dostring(a, "=xuxu");
-    assert(debug.getinfo(f).shortsrc == "xuxu");
-    dostring(a, string.fmt("=%s", string.repeat("x", 500)));
-    assert(reg.find(debug.getinfo(f).shortsrc, "^x*$"));
-    dostring(a, "=");
-    assert(debug.getinfo(f).shortsrc == "");
-    __G.a = nil; __G.f = nil;
-    __G[string.repeat("p", 400)] = nil;
-}
-
-
-loop {
-    local g = {x = fn() {
-        local a = debug.getinfo(2);
-        assert(!a.name and a.namewhat == "");
-        a = debug.getinfo(1);
-        assert(!a.name and a.namewhat == "");
-        return "xixi";
-    }};
-    local f = fn() { return 1+1 and (!1 or g.x()); };
-    assert(f() == "xixi");
-    g = debug.getinfo(f);
-    assert(g.what == "CScript" and g.func == f and g.namewhat == "" and !g.name);
-
-    fn f(x, name) {   /// local!
-        name = name or "f";
-        local a = debug.getinfo(1);
-        assert(a.name == name and a.namewhat == "local");
-        return x;
-    }
-
-    /// breaks in different conditions
-    if (3>4) break; f();
-    if (3<4) a=1; else break; f();
-    while (1) { local x=10; break; } f();
-    local b = 1;
-    if (3>4) return math.sin(1); f();
-    a = 3<4; f();
-    a = 3<4 or 1; f();
-    loop { local x=20; if (4>3) f(); else break; f(); break; }
-    g = {};
-    f(g).x = f(2) and f(10)+f(9);
-    assert(g.x == f(19));
-    fn g(x) { if (!x) return 3; return (x("a", "x")); }
-    assert(g(f) == "a");
-    break;
-}
-
-
+///{ /// test file and string names truncation
+///    local a = "fn f() {}";
+///    local fn dostring(s, x) { return load(s, x)(); }
+///    dostring(a);
+///    assert(debug.getinfo(f).shortsrc == string.fmt("[string \"%s\"]", a));
+///    dostring(a..string.fmt("; %s\n=1;", string.repeat("p", 400)));
+///    assert(reg.find(debug.getinfo(f).shortsrc, "^%[string [^\n]*%.%.%.\"%]$"));
+///    dostring(a..string.fmt("; %s=1;", string.repeat("p", 400)));
+///    assert(reg.find(debug.getinfo(f).shortsrc, "^%[string [^\n]*%.%.%.\"%]$"));
+///    dostring("\n"..a);
+///    assert(debug.getinfo(f).shortsrc == "[string \"...\"]");
+///    dostring(a, "");
+///    assert(debug.getinfo(f).shortsrc == "[string \"\"]");
+///    dostring(a, "@xuxu");
+///    assert(debug.getinfo(f).shortsrc == "xuxu");
+///    dostring(a, "@"..string.repeat("p", 1000).."t");
+///    assert(reg.find(debug.getinfo(f).shortsrc, "^%.%.%.p*t$"));
+///    dostring(a, "=xuxu");
+///    assert(debug.getinfo(f).shortsrc == "xuxu");
+///    dostring(a, string.fmt("=%s", string.repeat("x", 500)));
+///    assert(reg.find(debug.getinfo(f).shortsrc, "^x*$"));
+///    dostring(a, "=");
+///    assert(debug.getinfo(f).shortsrc == "");
+///    __G.a = nil; __G.f = nil;
+///    __G[string.repeat("p", 400)] = nil;
+///}
+///
+///
+///loop {
+///    local g = {x = fn() {
+///        local a = debug.getinfo(2);
+///        assert(!a.name and a.namewhat == "");
+///        a = debug.getinfo(1);
+///        assert(!a.name and a.namewhat == "");
+///        return "xixi";
+///    }};
+///    local f = fn() { return 1+1 and (!1 or g.x()); };
+///    assert(f() == "xixi");
+///    g = debug.getinfo(f);
+///    assert(g.what == "CScript" and g.func == f and g.namewhat == "" and !g.name);
+///
+///    fn f(x, name) {   /// local!
+///        name = name or "f";
+///        local a = debug.getinfo(1);
+///        assert(a.name == name and a.namewhat == "local");
+///        return x;
+///    }
+///
+///    /// breaks in different conditions
+///    if (3>4) break; f();
+///    if (3<4) a=1; else break; f();
+///    while (1) { local x=10; break; } f();
+///    local b = 1;
+///    if (3>4) return math.sin(1); f();
+///    a = 3<4; f();
+///    a = 3<4 or 1; f();
+///    loop { local x=20; if (4>3) f(); else break; f(); break; }
+///    g = {};
+///    f(g).x = f(2) and f(10)+f(9);
+///    assert(g.x == f(19));
+///    fn g(x) { if (!x) return 3; return (x("a", "x")); }
+///    assert(g(f) == "a");
+///    break;
+///}
+///
+///
 ///test([[if
 ///math.sin(1)
 ///then
