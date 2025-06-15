@@ -56,7 +56,7 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # detect_invalid_pointer_pairs=2
 
 CC = gcc -std=c99
-OPTS = -O2
+OPTS = -O0
 CFLAGS = -Wfatal-errors -Wall -Wextra $(OPTS) $(SYSCFLAGS) $(MYCFLAGS)
 LDFLAGS = $(SYSLDFLAGS) $(MYLDFLAGS)
 LIBS = -lm $(SYSLIBS) $(MYLIBS)
@@ -74,8 +74,8 @@ SYSLIBS =
 
 # Testing flags
 ASANFLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=pointer-subtract -fsanitize=pointer-compare
-MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT
-	   #-DCSI_DISASSEMBLE_BYTECODE -DCSI_TRACE_EXEC
+MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT \
+	   -DCSI_DISASSEMBLE_BYTECODE -DCSI_TRACE_EXEC
 MYLDFLAGS = $(ASANFLAGS)
 MYLIBS =
 MYOBJS =

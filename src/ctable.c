@@ -421,9 +421,9 @@ void csH_copykeys(cs_State *C, Table *dest, Table *src) {
 const TValue *csH_getshortstr(Table *t, OString *key) {
     Node *n = hashstr(t, key);
     for (;;) {
-        if (keyisshrstr(n) && eqshrstr(key, keystrval(n))) {
+        if (keyisshrstr(n) && eqshrstr(key, keystrval(n)))
             return nodeval(n);
-        } else {
+        else {
             int next = nodenext(n);
             if (next == 0)
                 return &absentkey;
@@ -434,9 +434,9 @@ const TValue *csH_getshortstr(Table *t, OString *key) {
 
 
 const TValue *csH_getstr(Table *t, OString *key) {
-    if (key->tt_ == CS_VSHRSTR) {
+    if (key->tt_ == CS_VSHRSTR)
         return csH_getshortstr(t, key);
-    } else {
+    else {
         TValue k;
         setstrval(cast(cs_State *, NULL), &k, key);
         return getgeneric(t, &k, 0);
@@ -447,9 +447,9 @@ const TValue *csH_getstr(Table *t, OString *key) {
 const TValue *csH_getint(Table *t, cs_Integer key) {
     Node *n = hashint(t, key);
     for (;;) {
-        if (keyisint(n) && keyival(n) == key) {
+        if (keyisint(n) && keyival(n) == key)
             return nodeval(n);
-        } else {
+        else {
             int next = nodenext(n);
             if (next == 0)
                 return &absentkey;

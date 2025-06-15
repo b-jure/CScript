@@ -68,8 +68,8 @@ CSI_FUNC size_t csS_tonum(const char *s, TValue *o, int *of);
 CSI_FUNC unsigned csS_tostringbuff(const TValue *o, char *buff);
 CSI_FUNC void csS_tostring(cs_State *C, TValue *obj);
 CSI_FUNC int csS_hexvalue(int c);
-CSI_FUNC void csS_strlimit(char *out, const char *source, size_t srclen,
-                                                          size_t limit);
+CSI_FUNC void csS_trimstr(char *restrict out, size_t lout,
+                                const char *s, size_t l);
 CSI_FUNC void csS_chunkid(char *out, const char *source, size_t srclen);
 
 #define UTF8BUFFSZ  8

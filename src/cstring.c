@@ -642,25 +642,28 @@ const char *csS_pushfstring(cs_State *C, const char *fmt, ...) {
 /* }===================================================================== */
 
 
-void csS_strlimit(char *out, const char *src, size_t len, size_t limit) {
-    limit--;
-    if (limit < len) {
-        size_t n = limit - LL("...");
-        memcpy(out, src, n);
-        memcpy(&out[n], "...", LL("..."));
-        len = limit;
-    } else {
-        memcpy(out, src, len);
-    }
-    out[len] = '\0';
-}
-
-
 #define DOTS	"..."
 #define PRE	"[string \""
 #define POS	"\"]"
 
 #define addstr(a,b,l)	(memcpy(a,b,(l) * sizeof(char)), a += (l))
+
+
+void csS_trimstr(char *restrict out, size_t lout, const char *s, size_t l) {
+    const char *nl = strchr(s, '\n'); /* find first new line */
+    lout -= LL(DOTS) + 1; /* save space for '...' and '\0' */
+    if (l < lout && nl == NULL) /* no newlines? */
+        addstr(out, s, l); /* keep it */
+    else {
+        if (nl != NULL)
+            l = cast_sizet(nl - s); /* stop at first newline */
+        if (l > lout) l = lout;
+        addstr(out, s, l);
+        addstr(out, DOTS, LL(DOTS));
+    }
+    *out = '\0'; /* terminate */
+}
+
 
 // TODO: update load docs (when loading strings, functions, etc...)
 void csS_chunkid(char *restrict out, const char *source, size_t srclen) {
@@ -684,9 +687,9 @@ void csS_chunkid(char *restrict out, const char *source, size_t srclen) {
         const char *nl = strchr(source, '\n'); /* find first new line */
         addstr(out, PRE, LL(PRE)); /* add prefix */
         bufflen -= LL(PRE DOTS POS) + 1; /* save space for prefix+suffix+'\0' */
-        if (srclen < bufflen && nl == NULL) { /* small one-line source? */
+        if (srclen < bufflen && nl == NULL) /* small one-line source? */
             addstr(out, source, srclen); /* keep it */
-        } else {
+        else {
             if (nl != NULL)
                 srclen = (size_t)(nl - source); /* stop at first newline */
             if (srclen > bufflen) srclen = bufflen;

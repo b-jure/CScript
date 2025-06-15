@@ -18,9 +18,6 @@
 #define currPC      (fs->pc)
 
 
-#define opsize(code,pc)    getopSize(code[pc])
-
-
 /* get pointer to instruction of 'ExpInfo' */
 #define getip(fs,e)     (&(fs)->p->code[(e)->u.info])
 
@@ -291,15 +288,15 @@ OP_RET,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notes)*/
 
 /* instruction format */
 typedef enum { /* ORDER OPFMT */
-    FormatI,
-    FormatIS,
-    FormatISS,
-    FormatIL,
-    FormatILS,
-    FormatILL,
-    FormatILLS,
-    FormatILLL,
-    FormatN,
+    FormatI,    /* instruction */
+    FormatIS,   /* instruction + short arg */
+    FormatISS,  /* instruction + 2x short arg */
+    FormatIL,   /* instruction + long arg */
+    FormatILS,  /* instruction + long arg + short arg */
+    FormatILL,  /* instruction + 2x long arg */
+    FormatILLS, /* instruction + 2x long arg + short arg */
+    FormatILLL, /* instruction + 3x long arg */
+    FormatN,    /* total number of instruction formats */
 } OpFormat;
 
 
@@ -307,9 +304,10 @@ typedef enum { /* ORDER OPFMT */
 
 
 typedef struct {
-    OpFormat format;
-    int push; 
-    int pop; 
+    OpFormat format; /* opcode format */
+    int push; /* how many values the opcode pushes */
+    int pop; /* how many values the opcode pops */
+    c_byte chgsp; /* true if opcode changes value at current stack pointer */
 } OpProperties; 
 
 

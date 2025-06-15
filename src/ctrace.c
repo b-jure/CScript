@@ -32,8 +32,12 @@
 /* maximum size of value names when tracing execution */
 #define MAXTXT      25
 
-/* string size being displayed when tracing execution */
+/* string size being displayed when tracing execution, reserve 2 for '""' */
 #define MAXSTR      (MAXTXT - 2)
+
+
+#define nextOp(pc)      ((pc) + getopSize(*pc))
+
 
 
 
@@ -150,7 +154,7 @@ static void traceILLS(const Proto *p, const Instruction *pc) {
 void csTR_tracepc(cs_State *C, SPtr sp, const Proto *p,
                   const Instruction *pc, int tolevel) {
     SPtr oldsp = C->sp.p;
-    C->sp.p = sp; /* save correct stack pointer */
+    C->sp.p = sp; /* correct stack pointer */
     csTR_dumpstack(C, tolevel, NULL); /* dump 'tolevel' stacks */
     switch (getopFormat(*pc)) { /* trace the instruction */
         case FormatI: traceI(p, pc); break;
@@ -167,9 +171,6 @@ void csTR_tracepc(cs_State *C, SPtr sp, const Proto *p,
 }
 
 
-#define nextOp(pc)      ((pc) + getopSize(*pc))
-
-
 #define traceNil()      printf("nil")
 
 #define traceTrue()     printf("true")
@@ -177,41 +178,9 @@ void csTR_tracepc(cs_State *C, SPtr sp, const Proto *p,
 #define traceFalse()    printf("false")
 
 
-// TODO: fix newline escaping...
-/* maximum length for string constants */
-#define MAXSTRKLEN      25
-
 static void traceString(OString *s) {
-    char buff[MAXSTRKLEN + 1];
-    char *p = buff;
-    csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
-    while (*p) {
-        int skip = 1;
-        char c;
-        switch (*p++) {
-            case '\n': c = 'n'; break;
-            case '\r': c = 'r'; break;
-            case '\a': c = 'a'; break;
-            case '\b': c = 'b'; break;
-            case '\t': c = 't'; break;
-            case '\v': c = 'v'; break;
-            case '\f': c = 'f'; break;
-            case '\"': c = '\"'; break;
-            case '\x1B': c = 'e'; break;
-            default: skip = 0; break; 
-        }
-        if (skip) {
-            if (p-buff >= MAXSTRKLEN-1) /* can't finish escape sequence? */
-                *(p-1) = '\\'; /* un-escape it partially */
-            else { /* otherwise un-escape fully */
-                memmove(p+1, p, MAXSTRKLEN - ((p - buff) + 1));
-                *(p-1) = '\\';
-                *p++ = c;
-            }
-        }
-    }
-    /* make sure '...' is at the end if needed (after unescaping) */
-    csS_strlimit(buff, getstr(s), getstrlen(s), sizeof(buff));
+    char buff[MAXSTR];
+    csS_trimstr(buff, MAXSTR, getstr(s), getstrlen(s));
     printf("\"%s\"", buff);
 }
 
@@ -582,14 +551,16 @@ static void unasmBinOp(const Proto *p, Instruction *pc) {
 
 /*
 ** Disassemble all of the bytecode in 'p->code'.
-** This function provides more detailed semantic information compared
-** to 'csTR_trace' when tracing OpCode and its arguments.
+** This function provides more detailed human readable information
+** compared to 'csTR_trace' when tracing OpCode and its arguments.
 */
 void csTR_disassemble(cs_State *C, const Proto *p) {
     Instruction *pc = p->code;
-    if (p->defline == 0)
-        printf("%s {\n", getstr(p->source));
-    else
+    if (p->defline == 0) {
+        char id[CS_IDSIZE];
+        csS_chunkid(id, getstr(p->source), getstrlen(p->source));
+        printf("%s {\n", id);
+    } else
         printf("fn at line %d in %s {\n", p->defline, getstr(p->source));
     while (pc < &p->code[p->sizecode]) {
         printf("    ");
@@ -730,19 +701,6 @@ static void *getptr(const TValue *obj) {
 }
 
 
-
-static const char *trimstr(OString *s) {
-    static char temp[MAXSTR];
-    size_t l = getstrlen(s);
-    const char *str = getstr(s);
-    if (l > MAXSTR) { /* trim? */
-        c_snprintf(temp, sizeof(temp), "%.*s...", (int)sizeof(temp)-4, str);
-        return temp;
-    } else
-        return str;
-}
-
-
 static const char *objtxt(const TValue *obj) {
     static char buff[MAXTXT];
     int tt = ttypetag(obj);
@@ -756,8 +714,13 @@ static const char *objtxt(const TValue *obj) {
             break;
         }
         case CS_VSHRSTR: case CS_VLNGSTR: {
-            const char *s = trimstr(strval(obj));
-            c_snprintf(buff, sizeof(buff), "\"%s\"", s);
+            size_t len;
+            OString *os = strval(obj);
+            csS_trimstr(buff, MAXSTR, getstr(os), getstrlen(os));
+            len = strlen(buff);
+            cs_assert(len <= MAXSTR);
+            memmove(buff+1, buff, len * sizeof(char));
+            buff[0] = '"'; buff[len+1] = '"'; buff[len+2] = '\0';
             break;
         }
         case CS_VTRUE: case CS_VFALSE: {
@@ -790,18 +753,21 @@ void csTR_dumpstack(cs_State *C, int level, const char *fmt, ...) {
         vprintf(fmt, ap);
         va_end(ap);
         printf("\n");
+        fflush(stdout);
     }
-    for (int i = 0; cf != NULL && level != 0; i++) {
+    for (int i = 0; cf != NULL && level-- != 0; i++) {
         SPtr base = cf->func.p + 1;
-        level--;
         printf("[L %3d] %-25s %s ", i, objtxt(s2v(cf->func.p)),
-                                        (cf != C->cf) ? "--" : ">>");
+                                       (cf != C->cf) ? "--" : ">>");
+        fflush(stdout);
         if (base < prevtop) {
             for (SPtr sp = base; sp < prevtop; sp++)
                 printf("[%s]", objtxt(s2v(sp)));
-        } else
+        } else {
+            cs_assert(base <= prevtop);
             printf("empty");
-        printf("\n");
+        }
+        printf("\n"); fflush(stdout);
         prevtop = cf->func.p;
         cf = cf->prev;
     }

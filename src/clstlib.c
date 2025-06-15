@@ -51,7 +51,8 @@ static int auxlen(cs_State *C, int index, int push, int border) {
 
 
 static int lst_len(cs_State *C) {
-    return checklist(C, 0, 1, csL_opt_bool(C, 1, 1));
+    checklist(C, 0, 1, csL_opt_bool(C, 1, 1));
+    return 1;
 }
 
 

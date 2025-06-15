@@ -351,14 +351,11 @@ static int nswexpr(FunctionState *fs) {
 }
 
 
-static void continuepop(FunctionState *fs) {
-    int ncntl = (check_exp(fs->loopscope, is_genloop(fs->loopscope))
-              ? VAR_N /* keep 'foreach' local control variables */
-              : 0); /* not in 'foreach' (no control vars) */
-    /* pop locals */
-    csC_pop(fs, fs->nactlocals - fs->loopscope->nactlocals - ncntl);
-    /* pop switch expression values up to the loop scope */
-    csC_pop(fs, getnswexpr(fs->scope, fs->loopscope)); 
+static void contadjust(FunctionState *fs, int push) {
+    int nswexp = getnswexpr(fs->scope, fs->loopscope);
+    int ncntl = is_genloop(fs->loopscope) ? VAR_N : 0;
+    int total = (fs->nactlocals - fs->loopscope->nactlocals - ncntl) + nswexp;
+    csC_adjuststack(fs, push ? -total : total);
 }
 
 
@@ -416,13 +413,15 @@ static int newbreakjump(Lexer *lx, int pc, int bk, int close) {
 ** not to *jump over* the POPN. This final swap is ignored if the number
 ** of extra variables to pop is 0 (the POPN pops nothing off the stack).
 */
-static int newpendingjump(Lexer *lx, int bk, int close) {
+static int newpendingjump(Lexer *lx, const Scope *cfs, int bk, int close) {
     FunctionState *fs = lx->fs;
+    int npop = bk ? fs->nactlocals - cfs->nactlocals : 0;
     int pc = csC_jmp(fs, OP_JMP);   /* JMP */
-    csC_emitIL(fs, OP_POPN, 0);     /* POPN */
+    csC_emitIL(fs, OP_POPN, npop);  /* POPN */
     csC_emitIL(fs, OP_CLOSE, 0);    /* CLOSE */
     cs_assert(getopSize(OP_JMP) == getopSize(OP_POPN));
     cs_assert(getopSize(OP_JMP) == getopSize(OP_CLOSE));
+    if (bk) fs->sp -= npop; /* adjust stack for compiler */
     return newbreakjump(lx, pc, bk, close);
 }
 
@@ -452,38 +451,31 @@ static void patchpendingjumps(FunctionState *fs, Scope *s, int nactlocals) {
         Instruction *pi = &fs->p->code[gt->pc];
         gt->close |= (s->haveupval && gt->bk);
         if (gt->close) { /* needs a close? */
-            /* (swap JMP and CLOSE) */
             int sz = getopSize(OP_POPN) + getopSize(OP_CLOSE);
-            cs_assert(getopSize(OP_POPN) == getopSize(OP_CLOSE));
             /* move JMP into CLOSE position */
             memmove(pi + sz, pi, getopSize(OP_JMP));
-            /* move CLOSE into JMP position */
-            *pi = OP_CLOSE;
-            SET_ARG_L(pi, 0, stklevel);
+            /* set CLOSE into JMP position */
+            *pi = OP_CLOSE; SET_ARG_L(pi, 0, stklevel);
             gt->pc += sz; /* must point to JMP */
             pi = &fs->p->code[gt->pc]; /* update 'pi' */
             cs_assert(*pi == OP_JMP && gt->bk);
             goto l_bk; /* this is break (continue doesn't need CLOSE swap) */
         }
         if (gt->bk) l_bk: { /* 'break'? */
-            int extra = gt->nactlocals - nactlocals;
-            cs_assert(extra >= 0);
-            if (gt->close) /* JMP swapped with CLOSE? */
-                pi -= getopSize(OP_POPN);
-            else if (extra > 0) { /* have extra variables to pop? */
-                /* (swap JMP and POPN) */
-                cs_assert(getopSize(OP_JMP) == getopSize(OP_POPN));
-                /* move JMP into POPN position */
-                memmove(pi + getopSize(OP_JMP), pi, getopSize(OP_JMP));
-                /* move POPN into JMP position */
-                *pi = OP_POPN;
-                gt->pc += getopSize(OP_POPN); /* must point to JMP */
-            } else { /* otherwise nothing is swapped */
-                cs_assert(*pi == OP_JMP); /* JMP -> POPN -> CLOSE */
-                pi += getopSize(OP_JMP); /* adjust 'pi' to POPN */
+            if (!gt->close) { /* JMP and CLOSE did not swap places? */
+                int extra = gt->nactlocals - nactlocals;
+                if (extra > 0) { /* have extra variables at pop? */
+                    cs_assert(extra == GET_ARG_L(pi + getopSize(OP_JMP), 0));
+                    /* move JMP into POPN position */
+                    memmove(pi + getopSize(OP_JMP), pi, getopSize(OP_JMP));
+                    /* set POPN into JMP position */
+                    *pi = OP_POPN; SET_ARG_L(pi, 0, extra);
+                    gt->pc += getopSize(OP_POPN); /* must point to JMP */
+                } else { /* otherwise nothing is swapped */
+                    cs_assert(*pi == OP_JMP); /* JMP -> POPN -> CLOSE */
+                    cs_assert(extra == GET_ARG_L(pi + getopSize(OP_JMP), 0));
+                }
             }
-            cs_assert(*pi == OP_POPN);
-            SET_ARG_L(pi, 0, extra);
             csC_patchtohere(fs, gt->pc);
         } else { /* otherwise 'continue' inside of generic loop */
             cs_assert(fs->loopscope && fs->loopstart != NOPC);
@@ -2159,7 +2151,7 @@ static int forexplist(Lexer *lx, ExpInfo *e, int limit) {
 
 static void foreachstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    int nvars = 1; /* iter func result */
+    int nvars = 1; /* number of results for interator */
     int base = fs->sp;
     int line;
     struct LoopState ls;
@@ -2296,6 +2288,21 @@ static void loopstm(Lexer *lx) {
 }
 
 
+/* 
+** Get the most recent control flow scope, or NULL if none
+** present.
+*/
+static const Scope *getcfscope(const FunctionState *fs) {
+    const Scope *s = NULL;
+    if (fs->switchscope)
+        s = fs->switchscope;
+    if (fs->loopscope && (!s || s->depth < fs->loopscope->depth))
+        s = fs->loopscope;
+    cs_assert(!s || haspendingjumps(s));
+    return s;
+}
+
+
 /*
 ** Return true if jump from current scope to 'limit' scope needs a close.
 ** If 'limit' is NULL, then 'limit' is considered to be the outermost scope.
@@ -2314,36 +2321,25 @@ static int needtoclose(Lexer *lx, const Scope *limit) {
 
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    int old_sp = fs->sp;
+    const Scope *cfs = getcfscope(fs);
+    int old_sp = fs->sp; /* only for debug */
+    UNUSED(old_sp);
     csY_scan(lx); /* skip 'continue' */
     if (c_unlikely(fs->loopscope == NULL)) /* not in a loop? */
         csP_semerror(lx, "'continue' outside of a loop statement");
     cs_assert(fs->loopstart != NOPC); /* must have loop beginning pc */
     if (needtoclose(lx, fs->loopscope))
         csC_emitIL(fs, OP_CLOSE, stacklevel(fs, fs->loopscope->nactlocals));
-    continuepop(fs);
+    contadjust(fs, 0);
     if (is_genloop(fs->loopscope)) /* generic loop? */
-        newpendingjump(lx, 0, 0); /* 'continue' compiles as 'break' */
+        newpendingjump(lx, cfs, 0, 0); /* 'continue' compiles as 'break' */
     else /* otherwise regular loop */
         csC_patch(fs, csC_jmp(fs, OP_JMPS), fs->loopstart);
     expectnext(lx, ';');
-    fs->sp = old_sp; /* (parser continues on...) */
+    /* adjust stack for compiler and symbolic execution */
+    contadjust(fs, 1);
+    cs_assert(old_sp == fs->sp);
     fs->lastisend = 3; /* statement is a continue */
-}
-
-
-/* 
-** Get the most recent control flow scope, or NULL if none
-** present.
-*/
-static const Scope *getcfscope(const FunctionState *fs) {
-    const Scope *s = NULL;
-    if (fs->switchscope)
-        s = fs->switchscope;
-    if (fs->loopscope && (!s || s->depth < fs->loopscope->depth))
-        s = fs->loopscope;
-    cs_assert(!s || haspendingjumps(s));
-    return s;
 }
 
 
@@ -2353,8 +2349,10 @@ static void breakstm(Lexer *lx) {
     csY_scan(lx); /* skip 'break' */
     if (c_unlikely(cfs == NULL)) /* no control flow scope? */
         csP_semerror(lx, "'break' outside of a loop or switch statement");
-    newpendingjump(lx, 1, needtoclose(lx, cfs));
+    newpendingjump(lx, cfs, 1, needtoclose(lx, cfs));
     expectnext(lx, ';');
+    /* adjust stack for compiler and symbolic execution */
+    csC_adjuststack(fs, cfs->nactlocals - fs->nactlocals);
     fs->lastisend = 2; /* statement is a break */
 }
 

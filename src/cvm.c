@@ -1259,9 +1259,10 @@ c_sinline void pushtable(cs_State *C, int b) {
 /* fetch instruction */
 #define fetch() { \
     if (c_unlikely(trap)) { /* stack reallocation or hooks? */ \
-        trap = csD_traceexec(C, pc); /* handle hooks */ \
+        ptrdiff_t sizestack = sp - base; \
+        trap = csD_traceexec(C, pc, sizestack); /* handle hooks */ \
         updatebase(cf); /* correct stack */ \
-        sp = C->sp.p; /* correct stack pointer */ \
+        sp = base + sizestack; /* correct stack pointer */ \
     } \
     I = (tracepc(C, cl->p), *(pc++)); \
 }
@@ -1390,7 +1391,7 @@ returning: /* trap already set */
                 if (c_unlikely(trap)) {
                     csD_hookcall(C, cf);
                     /* next opcode will be seen as a "new" line */
-                    C->oldpc = getopSize(*pc);
+                    C->oldpc = getopSize(OP_VARARGPREP); 
                 }
                 updatebase(cf); /* function has new base after adjustment */
                 sp = C->sp.p;
@@ -1757,13 +1758,14 @@ returning: /* trap already set */
                 func = STK(fetch_l());
                 nres = fetch_l()-1;
                 if ((newcf = precall(C, func, nres)) == NULL) /* C call? */
-                    updatetrap(cf); /* done (function already returned) */
+                    updatetrap(cf); /* done (C function already returned) */
                 else { /* CScript call */
                     cf->cs.pcret = pc; /* after return, continue at 'pc' */
                     cf = newcf; /* run function in this same C frame */
                     goto startfunc;
                 }
-                sp = C->sp.p;
+                /* recalculate 'sp' from maybe outdated (current) 'base' */
+                sp = base + (cast_int(C->sp.p - cf->func.p) - 1);
                 vm_break;
             }
             vm_case(OP_CLOSE) {
@@ -1930,6 +1932,8 @@ returning: /* trap already set */
                 sp = --C->sp.p;
                 vm_break;
             }
+            // p=0x7660243e0040, pc=1755, ptop=0x75902303a220, sp=7
+            // p=0x7660243e0040, pc=1755, ptop=0x75902303a220, sp=7
             vm_case(OP_GETSUP) {
                 Instance *in = insval(peek(0));
                 OClass *scl = in->oclass->sclass;
@@ -1952,7 +1956,7 @@ returning: /* trap already set */
             }
             vm_case(OP_GETSUPIDXSTR) {
                 Instance *in = insval(peek(0));
-                OClass *scl = in->oclass->sclass;;
+                OClass *scl = in->oclass->sclass;
                 TValue *sk;
                 savestate(C);
                 cs_assert(scl != NULL);

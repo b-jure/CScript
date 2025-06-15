@@ -2,7 +2,7 @@ local debug = import("debug");
 
 local fn dostring(s) { return assert(load(s))(); }
 
-print("testing debug library and debug information");
+print("testing debug library and debug information\n");
 
 { local a=1; }
 
@@ -18,11 +18,11 @@ local fn test(s, l, p) {    /// this must be line 14
         assert(l == line, "wrong trace!!");
     }
     debug.sethook(f,"l"); load(s)(); debug.sethook();
-    assert(l.len == 0);
+    assert(list.len(l) == 0);
 }
 
 
-{
+{ /// test basic cases for 'getinfo'
     assert(!pcall(debug.getinfo, print, "X"));  /// invalid option
     assert(!pcall(debug.getinfo, 0, ">"));  /// invalid option
     assert(!debug.getinfo(1000));  /// out of range level
@@ -32,7 +32,7 @@ local fn test(s, l, p) {    /// this must be line 14
     a = debug.getinfo(print, "L");
     assert(a.activelines == nil);
     local b = debug.getinfo(test, "sfL");
-    assert(b.name == "test" and b.what == "CScript" and
+    assert(b.name == nil and b.what == "CScript" and
            b.defline == testline and
            b.lastdefline == b.defline + 10 and
            b.func == test and !reg.find(b.shortsrc, "%["));
@@ -40,95 +40,108 @@ local fn test(s, l, p) {    /// this must be line 14
            b.activelines[b.lastdefline]);
     assert(!b.activelines[b.defline] and
            !b.activelines[b.lastdefline + 1]);
+    print("+");
 }
 
 
 
-///{ /// test file and string names truncation
-///    local a = "fn f() {}";
-///    local fn dostring(s, x) { return load(s, x)(); }
-///    dostring(a);
-///    assert(debug.getinfo(f).shortsrc == string.fmt("[string \"%s\"]", a));
-///    dostring(a..string.fmt("; %s\n=1;", string.repeat("p", 400)));
-///    assert(reg.find(debug.getinfo(f).shortsrc, "^%[string [^\n]*%.%.%.\"%]$"));
-///    dostring(a..string.fmt("; %s=1;", string.repeat("p", 400)));
-///    assert(reg.find(debug.getinfo(f).shortsrc, "^%[string [^\n]*%.%.%.\"%]$"));
-///    dostring("\n"..a);
-///    assert(debug.getinfo(f).shortsrc == "[string \"...\"]");
-///    dostring(a, "");
-///    assert(debug.getinfo(f).shortsrc == "[string \"\"]");
-///    dostring(a, "@xuxu");
-///    assert(debug.getinfo(f).shortsrc == "xuxu");
-///    dostring(a, "@"..string.repeat("p", 1000).."t");
-///    assert(reg.find(debug.getinfo(f).shortsrc, "^%.%.%.p*t$"));
-///    dostring(a, "=xuxu");
-///    assert(debug.getinfo(f).shortsrc == "xuxu");
-///    dostring(a, string.fmt("=%s", string.repeat("x", 500)));
-///    assert(reg.find(debug.getinfo(f).shortsrc, "^x*$"));
-///    dostring(a, "=");
-///    assert(debug.getinfo(f).shortsrc == "");
-///    __G.a = nil; __G.f = nil;
-///    __G[string.repeat("p", 400)] = nil;
-///}
-///
-///
-///loop {
-///    local g = {x = fn() {
-///        local a = debug.getinfo(2);
-///        assert(!a.name and a.namewhat == "");
-///        a = debug.getinfo(1);
-///        assert(!a.name and a.namewhat == "");
-///        return "xixi";
-///    }};
-///    local f = fn() { return 1+1 and (!1 or g.x()); };
-///    assert(f() == "xixi");
-///    g = debug.getinfo(f);
-///    assert(g.what == "CScript" and g.func == f and g.namewhat == "" and !g.name);
-///
-///    fn f(x, name) {   /// local!
-///        name = name or "f";
-///        local a = debug.getinfo(1);
-///        assert(a.name == name and a.namewhat == "local");
-///        return x;
-///    }
-///
-///    /// breaks in different conditions
-///    if (3>4) break; f();
-///    if (3<4) a=1; else break; f();
-///    while (1) { local x=10; break; } f();
-///    local b = 1;
-///    if (3>4) return math.sin(1); f();
-///    a = 3<4; f();
-///    a = 3<4 or 1; f();
-///    loop { local x=20; if (4>3) f(); else break; f(); break; }
-///    g = {};
-///    f(g).x = f(2) and f(10)+f(9);
-///    assert(g.x == f(19));
-///    fn g(x) { if (!x) return 3; return (x("a", "x")); }
-///    assert(g(f) == "a");
-///    break;
-///}
-///
-///
-///test([[if
-///math.sin(1)
-///then
-///  a=1
-///else
-///  a=2
-///end
-///]], {2,4,7})
-///
-///
-///test([[
-///local fn foo()
-///end
-///foo()
-///A = 1
-///A = 2
-///A = 3
-///]], {2, 3, 2, 4, 5, 6})
-///_G.A = nil
+{ /// test file and string names truncation
+    local a = "fn f() {}";
+    local fn dostring(s, x) { return load(s, x)(); }
+    dostring(a);
+    print("----");
+    assert(debug.getinfo(f).shortsrc == string.fmt("[string \"%s\"]", a));
+    dostring(a..string.fmt("; %s\n=1;", string.repeat("p", 400)));
+    assert(reg.find(debug.getinfo(f).shortsrc, "^%[string [^\n]*%.%.%.\"%]$"));
+    dostring(a..string.fmt("; %s=1;", string.repeat("p", 400)));
+    assert(reg.find(debug.getinfo(f).shortsrc, "^%[string [^\n]*%.%.%.\"%]$"));
+    dostring("\n"..a);
+    assert(debug.getinfo(f).shortsrc == "[string \"...\"]");
+    dostring(a, "");
+    assert(debug.getinfo(f).shortsrc == "[string \"\"]");
+    dostring(a, "@xuxu");
+    assert(debug.getinfo(f).shortsrc == "xuxu");
+    dostring(a, "@"..string.repeat("p", 1000).."t");
+    assert(reg.find(debug.getinfo(f).shortsrc, "^%.%.%.p*t$"));
+    dostring(a, "=xuxu");
+    assert(debug.getinfo(f).shortsrc == "xuxu");
+    dostring(a, string.fmt("=%s", string.repeat("x", 500)));
+    assert(reg.find(debug.getinfo(f).shortsrc, "^x*$"));
+    dostring(a, "=");
+    assert(debug.getinfo(f).shortsrc == "");
+    __G.a = nil; __G.f = nil;
+    __G[string.repeat("p", 400)] = nil;
+    print("+");
+}
+
+
+loop {
+    local g = {x = fn() {
+        local a = debug.getinfo(2);
+        assert(a.name == "f" and a.namewhat == "local");
+        a = debug.getinfo(1);
+        assert(a.name == "x" and a.namewhat == "field");
+        return "xixi";
+    }};
+    local f = fn() { return 1+1 and (!1 or g.x()); };
+    assert(f() == "xixi");
+    g = debug.getinfo(f);
+    assert(g.what == "CScript" and g.func == f and g.namewhat == "" and !g.name);
+
+    fn f(x, name) {   /// local!
+        name = name or "f";
+        local a = debug.getinfo(1);
+        print(string.fmt("name='%s', namewhat='%s'", a.name, a.namewhat));
+        assert(a.name == name and a.namewhat == "local");
+        return x;
+    }
+
+    /// breaks in different conditions
+    if (3>4) break; f();
+    if (3<4) a=1; else break; f();
+    while (1) { local x=10; break; } f();
+    local b = 1;
+    if (3>4) return math.sin(1); f();
+    a = 3<4; f();
+    a = 3<4 or 1; f();
+    loop { local x=20; if (4>3) f(); else break; f(); break; }
+    g = {};
+    f(g).x = f(2) and f(10)+f(9);
+    assert(g.x == f(19));
+    fn g(x) { if (!x) return 3; return (x("a", "x")); }
+    assert(g(f) == "a");
+
+    /// continue in different conditions
+    loop {
+        if (3>4) continue; f();
+        if (3<4) a=1; else continue; f();
+        local b = 1;
+        a = 3<4; f();
+        a = 3<4 or 1; f();
+        loop { local x=20; if (4>3) f(); else continue; f(); break; }
+        break;
+    }
+    break;
+}
+
+
+test([=[if
+(math.sin(1))
+  a=1;
+else
+  a=2;
+]=], [2,3,5]);
+
+
+test([=[
+local fn foo() {
+}
+foo();
+A = 1;
+A = 2;
+A = 3;
+]=], [2, 3, 2, 4, 5, 6]);
+__G.A = nil;
 ///
 ///
 ///test([[--

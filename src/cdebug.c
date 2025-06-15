@@ -32,11 +32,12 @@
 
 
 /*
-** Gets the Number of instructions up to 'pc' in O(log(n)).
-** As CSCript implementation is using stack-based architecture for its VM,
-** we then also store additional pc for each instruction emitted for a
-** faster lookup. This is required in order to properly calculate estimate
-** when fetching base line.
+** Gets the Number of instructions up to 'pc'. This CSCript implementation
+** is using stack-based architecture and the sizes of instructions are
+** variable length, we then also store additional pc for each emitted
+** instruction. This is required in order to properly calculate estimate
+** when fetching base line in O(log(n)), otherwise linear search or some
+** other loopkup strategy is required to make this efficient.
 */
 static int Ninstuptopc(const Proto *p, int pc) {
     int l = 0;
@@ -54,7 +55,7 @@ static int Ninstuptopc(const Proto *p, int pc) {
             return m;
     }
     cs_assert(0); /* 'pc' does not correspond to any instruction */
-    return -1; /* prevent compiler warnings */
+    return -1; /* to prevent compiler warnings */
 }
 
 
@@ -223,42 +224,34 @@ static void getfuncinfo(Closure *cl, cs_Debug *ar) {
 }
 
 
-static int filterpc(int pc, int jmptarget, int ltop, int *top) {
-    if (pc < jmptarget) /* is code conditional (inside a jump)? */
-        return (*top = -1); /* cannot know who sets that stack slot */
-    else
-        return (*top = ltop, pc); /* current position sets that stack slot */
-}
-
-
-static Instruction symbexec(const Proto *p, int lastpc, int *top, int sp) {
+static int symbexec(const Proto *p, int lastpc, int sp) {
+    int pc = 0; /* execute from start */
+    int symsp = p->arity - 1; /* initial stack pointer (-1 if no parameters) */
+    int setsp = -1; /* pc of instruction that sets 'sp' (-1 if none) */
     const Instruction *code = p->code;
-    int pc = 0;
-    int ltop = p->arity;
-    int setsp = -1;
-    int jmptarget = 0;
-    if (code[0] == OP_VARARGPREP) /* vararg function? */
-        pc += getopSize(OP_VARARGPREP); /* skip first opcode */
-    for (; pc < lastpc; pc += opsize(code, pc)) {
+    //printf("Symbolic execution\ttop=%d\n", symsp);
+    if (*code == OP_VARARGPREP) /* vararg function? */
+        pc += getopSize(*code); /* skip first opcode */
+    while (pc < lastpc) {
         const Instruction *i = &code[pc];
         int change; /* true if current instruction changed 'sp' */
-        printf("ltop = %d, p->maxstack = %d\n", ltop, p->maxstack);
-        cs_assert(0 <= ltop && ltop <= p->maxstack);
+        //printf("%d:%d:%-20s\t", csD_getfuncline(p, pc), pc, getopName(*i));
+        cs_assert(-1 <= symsp && symsp <= p->maxstack);
         switch (*i) {
             case OP_RET: {
                 int stk = GET_ARG_L(i, 0);
-                cs_assert(stk <= ltop);
-                change = (stk == ltop);
-                ltop = stk;
+                cs_assert(stk <= symsp);
+                symsp = stk - 1; /* remove results */
+                change = 0;
                 break;
             }
             case OP_CALL: {
                 int stk = GET_ARG_L(i, 0);
-                int nresults = GET_ARG_L(i, 1);
+                int nresults = GET_ARG_L(i, 1) - 1;
                 if (nresults == CS_MULRET) nresults = 1;
-                cs_assert(stk <= ltop);
-                change = (sp >= stk);
-                ltop = stk + nresults;
+                cs_assert(stk <= symsp);
+                change = (stk <= sp);
+                symsp = stk + nresults - 1; /* 'symsp' points to last result */
                 break;
             }
             case OP_NILN: case OP_VARARG: {
@@ -266,52 +259,72 @@ static Instruction symbexec(const Proto *p, int lastpc, int *top, int sp) {
                 if (*i == OP_VARARG) {
                     if (--n == CS_MULRET) n = 1;
                 }
-                change = (ltop <= sp && sp <= ltop + n);
-                ltop += n;
+                change = (symsp <= sp && sp <= symsp + n);
+                symsp += n;
                 break;
             }
             case OP_POPN: {
-                ltop -= GET_ARG_L(i, 0);
+                symsp -= GET_ARG_L(i, 0);
                 change = 0;
                 break;
             }
             case OP_CONCAT: {
-                ltop -= GET_ARG_L(i, 0) - 1;
-                change = (ltop == sp);
+                symsp -= GET_ARG_L(i, 0) - 1;
+                change = (symsp == sp);
                 break;
             }
             case OP_SETLIST: {
-                ltop = GET_ARG_L(i, 0);
+                symsp = GET_ARG_L(i, 0);
                 change = 0;
                 break;
             }
-            case OP_JMP: case OP_JMPS: {
-                int off = GET_ARG_L(i, 0) * (-1 + 2 * (*i == OP_JMP));
-                int dest = (pc + getopSize(*i)) + off;
-                /* jump does not skip 'lastpc' and is larger than current? */
-                if (dest <= lastpc && jmptarget < dest)
-                    jmptarget = dest; /* update 'jmptarget' */
+            case OP_MBIN: {
+                /* ignore this instruction */
                 change = 0;
+                break;
+            }
+            case OP_SETPROPERTY: case OP_SETINDEXSTR: case OP_SETINDEX:
+            case OP_SETINDEXINT: case OP_SETINDEXINTL: {
+                change = (sp == symsp - GET_ARG_L(i, 0));
+                --symsp;
+                break;
+            }
+            case OP_FORCALL: {
+                int stk = GET_ARG_L(i, 0);
+                int nresults = GET_ARG_L(i, 1) - 1;
+                cs_assert(nresults >= 0); /* at least one result */
+                symsp = stk + VAR_N + nresults;
+                change = (stk + 2 <= sp);
                 break;
             }
             case OP_FORLOOP: {
                 change = (GET_ARG_L(i, 0) == sp);
-                ltop -= GET_ARG_L(i, 2);
+                symsp -= GET_ARG_L(i, 2);
                 break;
             }
             default: {
-                int npush = csC_opproperties[*i].push;
-                int delta = getopDelta(*i);
+                OpCode op = *i;
+                int delta = getopDelta(op);
                 cs_assert(delta != VD); /* default case can't handle VD */
-                if (npush > 0)
-                    change = (ltop <= sp && sp <= ltop + npush);
-                else change = 0;
-                ltop += delta;
+                if (csC_opproperties[op].chgsp) { /* changes symsp? */
+                    check_exp(delta <= 0, symsp += delta);
+                    change = (sp == symsp);
+                } else {
+                    int npush = csC_opproperties[op].push;
+                    change = npush && (symsp < sp && sp <= symsp + npush);
+                    symsp += delta;
+                }
+                break;
             }
         }
-        if (change)
-            setsp = filterpc(pc, jmptarget, ltop, top);
+        if (change) {
+            setsp = pc;
+            //printf("(change) symsp=%d, setsp=%d [sp=%d]\n", symsp, setsp, sp);
+        } //else
+            //printf("(no change) symsp=%d [sp=%d]\n", symsp, sp);
+        pc += getopSize(code[pc]); /* next instruction */
     }
+    //printf("\n%s RETURNS setsp->%d\n\n", __func__, setsp);
     return setsp;
 }
 
@@ -319,6 +332,7 @@ static Instruction symbexec(const Proto *p, int lastpc, int *top, int sp) {
 static const char *upvalname(const Proto *p, int uv) {
     OString *s = check_exp(uv < p->sizeupvals, p->upvals[uv].name);
     cs_assert(s != NULL); /* must have debug information */
+    //printf("upvalue '%s'\n", getstr(s));
     return getstr(s);
 }
 
@@ -330,8 +344,10 @@ static const char *kname(const Proto *p, int index, const char **name) {
     TValue *kval = &p->k[index];
     if (ttisstring(kval)) {
         *name = getstr(strval(kval));
+        //printf("constant string '%s'\n", *name);
         return "constant";
     } else {
+        //printf("non-string constant '?'\n");
         *name = "?";
         return NULL;
     }
@@ -339,23 +355,31 @@ static const char *kname(const Proto *p, int index, const char **name) {
 
 
 static const char *basicgetobjname(const Proto *p, int *ppc, int sp,
-                                   int *top, const char **name) {
+                                   const char **name) {
     int pc = *ppc;
+    //printf("%s pc=%d, sp=%d\n", __func__, pc, sp);
     *name = csF_getlocalname(p, sp + 1, pc);
-    if (*name)  /* is a local? */
+    if (*name) {  /* is a local? */
+        //printf("Got local '%s'\n", *name);
         return "local";
+    }
     /* else try symbolic execution */
-    *ppc = pc = symbexec(p, pc, top, sp);
+    *ppc = pc = symbexec(p, pc, sp);
     if (pc != -1) { /* could find instruction? */
         Instruction *i = &p->code[pc];
+        //printf("Final instruction %s at pc %d that modifies sp %d\n",
+                //getopName(*i), pc, sp);
         switch (*i) {
             case OP_GETLOCAL: {
                 int stk = GET_ARG_L(i, 0);
                 cs_assert(stk < sp);
-                return basicgetobjname(p, ppc, stk, top, name);
+                const char *nam = basicgetobjname(p, ppc, stk, name);
+                //printf("Local name '%s'\n", nam);
+                return nam;
             }
             case OP_GETUVAL: {
                 *name = upvalname(p, GET_ARG_L(i, 0));
+                //printf("upvalue '%s'\n", *name);
                 return "upvalue";
             }
             case OP_CONST: return kname(p, GET_ARG_S(i, 0), name);
@@ -363,6 +387,7 @@ static const char *basicgetobjname(const Proto *p, int *ppc, int sp,
             default: break;
         }
     }
+    //printf("could not find reasonable name (%s)\n", __func__);
     return NULL; /* could not find reasonable name */
 }
 
@@ -371,8 +396,7 @@ static const char *basicgetobjname(const Proto *p, int *ppc, int sp,
 ** Find a "name" for the stack slot 'c'.
 */
 static void sname(const Proto *p, int pc, int c, const char **name) {
-    int dummy;
-    const char *what = basicgetobjname(p, &pc, c, &dummy, name);
+    const char *what = basicgetobjname(p, &pc, c, name);
     if (!(what && *what == 'c')) /* did not find a constant name? */
         *name = "?";
 }
@@ -382,53 +406,58 @@ static void sname(const Proto *p, int pc, int c, const char **name) {
 ** Check whether table at stack slot 't' is the environment '__ENV'.
 */
 static const char *isEnv(const Proto *p, int pc, int t, int isup) {
-    int dummy;
     const char *name; /* name of indexed variable */
-    if (isup) /* is 't' an upvalue? */
+    if (isup) { /* is 't' an upvalue? */
+        cs_assert(0); /* unreachable */
+        /* TODO: make OP_GETINDEXUP, which indexes upvalue these
+           opcodes would be failry common for __ENV accesses. */
         name = upvalname(p, t);
-    else /* 't' is a stack slot */
-        basicgetobjname(p, &pc, t, &dummy, &name);
+    } else /* 't' is a stack slot */
+        basicgetobjname(p, &pc, t, &name);
     return (name && strcmp(name, CS_ENV) == 0) ? "global" : "field";
 }
 
 
 /*
-** Extend 'basicgetobjname' to handle table accesses.
+** Extends 'basicgetobjname' to handle field accesses.
 */
 static const char *getobjname(const Proto *p, int lastpc, int sp,
                               const char **name) {
-    int top;
-    const char *kind = basicgetobjname(p, &lastpc, sp, &top, name);
-    if (kind != NULL)
+    //printf("%s lastpc=%d sp=%d\n", __func__, lastpc, sp);
+    const char *kind = basicgetobjname(p, &lastpc, sp, name);
+    if (kind != NULL) {
+        //printf("Kind = %s\n", kind);
         return kind;
+    }
     else if (lastpc != -1) { /* could find instruction? */
         Instruction *i = &p->code[lastpc];
+        //printf(">>> %s at pc %d modified stack slot %d <<<\n",
+                //getopName(*i), lastpc, sp);
         switch (*i) {
             case OP_GETPROPERTY: case OP_GETINDEXSTR: {
-                int k = GET_ARG_L(i, 0); /* key index */
-                kname(p, k, name);
-                return isEnv(p, lastpc, top-1, 0);
+                kname(p, GET_ARG_L(i, 0), name);
+                return isEnv(p, lastpc, sp, 0);
             }
             case OP_GETINDEX: {
-                sname(p, lastpc, top-1, name);
-                return isEnv(p, lastpc, top-2, 0);
+                sname(p, lastpc, sp, name); /* key */
+                return isEnv(p, lastpc, sp-1, 0);
             }
             case OP_GETINDEXINT: case OP_GETINDEXINTL: {
-                *name = "integer index";
+                *name = "integer index"; /* key */
                 return "field";
             }
             case OP_GETSUP: case OP_GETSUPIDXSTR: {
-                int k = GET_ARG_L(i, 0);
-                kname(p, k, name);
+                kname(p, GET_ARG_L(i, 0), name); /* key */
                 return "superclass field";
             }
             case OP_GETSUPIDX: {
-                sname(p, lastpc, top-1, name);
+                sname(p, lastpc, sp-1, name); /* key */
                 return "superclass field";
             }
             default: break; /* go through to return NULL */
         }
     }
+    //printf("Could not find reasonable name (lastpc=%d, sp=%d)\n", lastpc, sp);
     return NULL; /* could not find reasonable name */
 }
 
@@ -439,8 +468,7 @@ static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
     Instruction *i = &p->code[pc];
     switch (*i) {
         case OP_CALL:
-            return NULL;
-            //return getobjname(p, pc, GET_ARG_L(i, 0), name);
+            return getobjname(p, pc, GET_ARG_L(i, 0), name);
         case OP_FORCALL: {
             *name = "for iterator";
             return "for iterator";
@@ -812,7 +840,8 @@ c_noret csD_llenerror(cs_State *C, const char *extra) {
 static int changedline(const Proto *p, int oldpc, int newpc) {
     cs_assert(p->lineinfo != NULL);
     cs_assert(oldpc < newpc);
-    if (newpc - oldpc < MAXIWTHABS / 2) { /* not too far apart? */
+    /* instructions are not too far apart? */
+    if (Ninstuptopc(p, newpc) - Ninstuptopc(p, oldpc) < MAXIWTHABS / 2) {
         int delta = 0; /* line difference */
         int pc = oldpc;
         for (;;) {
@@ -832,6 +861,7 @@ static int changedline(const Proto *p, int oldpc, int newpc) {
 }
 
 
+#include "ctrace.h"
 /*
 ** Call a hook for the given event. Make sure there is a hook to be
 ** called. (Both 'C->hook' and 'C->hookmask', which trigger this
@@ -855,11 +885,14 @@ void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
             cf->top.p = C->sp.p + CS_MINSTACK;
         C->allowhook = 0; /* cannot call hooks inside a hook */
         cf->status |= mask;
+        //printf("Running hook\n");
+        csTR_dumpstack(C, 2, "BEFORE hookf");
         cs_unlock(C);
-        (*hook)(C, &ar);
+        (*hook)(C, &ar); /* call hook function */
         cs_lock(C);
+        //printf("Hook done\n");
         cs_assert(!C->allowhook);
-        C->allowhook = 1;
+        C->allowhook = 1; /* hook finished; once again enable hooks */
         cf->top.p = restorestack(C, cf_top);
         C->sp.p = restorestack(C, sp);
         cf->status &= ~mask;
@@ -917,33 +950,42 @@ int csD_tracecall(cs_State *C) {
 ** This function is not "Protected" when called, so it should correct
 ** 'C->sp.p' before calling anything that can run the GC.
 */
-int csD_traceexec(cs_State *C, const Instruction *pc) {
+int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t sizestack) {
     CallFrame *cf = C->cf;
-    c_byte mask = C->hookmask;
     const Proto *p = cf_func(cf)->p;
-    int counthook;
+    c_byte mask = C->hookmask;
+    int isize, extra, counthook;
+    SPtr base;
     if (!(mask & (CS_MASK_LINE | CS_MASK_COUNT))) { /* no hooks? */
         cf->cs.trap = 0; /* don't need to stop again */
         return 0; /* turn off 'trap' */
     }
-    pc += getopSize(*pc); /* reference is always next instruction */
-    cf->cs.pc = pc; /* save 'pc' */
+    base = cf->func.p + 1;
+    isize = getopSize(*pc);
+    extra = (cast_int((pc + isize) - p->code) < p->sizecode) * isize;
+    /* reference is always the next (or last) instruction + SIZE_INSTR */
+    cf->cs.pc = pc + extra + SIZE_INSTR;
     counthook = (mask & CS_MASK_COUNT) && (--C->hookcount == 0);
     if (counthook)
         resethookcount(C); /* reset count */
     else if (!(mask & CS_MASK_LINE))
         return 1; /* no line hook and count != 0; nothing to be done now */
-    if (counthook)
+    if (counthook) {
+        C->sp.p = base + sizestack; /* save 'sp' */
         csD_hook(C, CS_HOOK_COUNT, -1, 0, 0); /* call count hook */
+    }
     if (mask & CS_MASK_LINE) {
         /* 'C->oldpc' may be invalid; use zero in this case */
         int oldpc = (C->oldpc < p->sizecode) ? C->oldpc : 0;
-        int npci = relpc(pc, p);
+        int npci = cast_int(pc - p->code);
         if (npci <= oldpc || /* call hook when jump back (loop), */
                 changedline(p, oldpc, npci)) { /* or when enter new line */
             int newline = csD_getfuncline(p, npci);
+            printf("Line has changed (newline=%d)\n", newline);
+            C->sp.p = base + sizestack; /* save 'sp' */
             csD_hook(C, CS_HOOK_LINE, newline, 0, 0); /* call line hook */
-        }
+        } else
+            printf("Line has NOT been changed\n");
         C->oldpc = npci; /* 'pc' of last call to line hook */
     }
     return 1; /* keep 'trap' on */

@@ -12,7 +12,7 @@
 #include "cstate.h"
 
 
-#define relpc(pc, p)	(cast_int((pc) - (p)->code) - 1)
+#define relpc(pc, p)	(cast_int((pc) - (p)->code) - SIZE_INSTR)
 
 
 /* active CScript function (given call frame) */
@@ -76,6 +76,6 @@ CSI_FUNC void csD_hook(cs_State *C, int event, int line,
                                     int ftransfer, int ntransfer);
 CSI_FUNC void csD_hookcall(cs_State *C, CallFrame *cf);
 CSI_FUNC int csD_tracecall(cs_State *C);
-CSI_FUNC int csD_traceexec(cs_State *C, const Instruction *pc);
+CSI_FUNC int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t sstk);
 
 #endif

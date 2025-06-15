@@ -79,109 +79,109 @@
 ** ORDER OP
 */
 CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
-    { FormatI, 1, 0 }, /* OP_TRUE */
-    { FormatI, 1, 0 }, /* OP_FALSE */
-    { FormatI, 0, 0 }, /* OP_SUPER */
-    { FormatI, 1, 0 }, /* OP_NIL */
-    { FormatIL, VD, 0 }, /* OP_NILN */
-    { FormatI, 0, 1 }, /* OP_POP */
-    { FormatIL, VD, 0 }, /* OP_POPN */
-    { FormatIL, 1, 0 }, /* OP_LOAD */
-    { FormatIS, 1, 0 }, /* OP_CONST */
-    { FormatIL, 1, 0 }, /* OP_CONSTL */
-    { FormatIS, 1, 0 }, /* OP_CONSTI */
-    { FormatIL, 1, 0 }, /* OP_CONSTIL */
-    { FormatIS, 1, 0 }, /* OP_CONSTF */
-    { FormatIL, 1, 0 }, /* OP_CONSTFL */
-    { FormatIL, VD, 0 }, /* OP_VARARGPREP */
-    { FormatIL, VD, 0 }, /* OP_VARARG */
-    { FormatIL, 1, 0 }, /* OP_CLOSURE */
-    { FormatIS, 1, 0 }, /* OP_NEWLIST */
-    { FormatIS, 1, 0 }, /* OP_NEWCLASS */
-    { FormatIS, 1, 0 }, /* OP_NEWTABLE */
-    { FormatIL, 0, 1 }, /* OP_METHOD */
-    { FormatIS, 0, 1 }, /* OP_SETMM */
-    { FormatIS, 0, 1 }, /* OP_MBIN */
-    { FormatIL, 0, 0 }, /* OP_ADDK */
-    { FormatIL, 0, 0 }, /* OP_SUBK */
-    { FormatIL, 0, 0 }, /* OP_MULK */
-    { FormatIL, 0, 0 }, /* OP_DIVK */
-    { FormatIL, 0, 0 }, /* OP_IDIVK */
-    { FormatIL, 0, 0 }, /* OP_MODK */
-    { FormatIL, 0, 0 }, /* OP_POWK */
-    { FormatIL, 0, 0 }, /* OP_BSHLK */
-    { FormatIL, 0, 0 }, /* OP_BSHRK */
-    { FormatIL, 0, 0 }, /* OP_BANDK */
-    { FormatIL, 0, 0 }, /* OP_BORK */
-    { FormatIL, 0, 0 }, /* OP_BXORK */
-    { FormatIL, 0, 0 }, /* OP_ADDI */
-    { FormatIL, 0, 0 }, /* OP_SUBI */
-    { FormatIL, 0, 0 }, /* OP_MULI */
-    { FormatIL, 0, 0 }, /* OP_DIVI */
-    { FormatIL, 0, 0 }, /* OP_IDIVI */
-    { FormatIL, 0, 0 }, /* OP_MODI */
-    { FormatIL, 0, 0 }, /* OP_POWI */
-    { FormatIL, 0, 0 }, /* OP_BSHLI */
-    { FormatIL, 0, 0 }, /* OP_BSHRI */
-    { FormatIL, 0, 0 }, /* OP_BANDI */
-    { FormatIL, 0, 0 }, /* OP_BORI */
-    { FormatIL, 0, 0 }, /* OP_BXORI */
-    { FormatIS, 0, 1 }, /* OP_ADD */
-    { FormatIS, 0, 1 }, /* OP_SUB */
-    { FormatIS, 0, 1 }, /* OP_MUL */
-    { FormatIS, 0, 1 }, /* OP_DIV */
-    { FormatIS, 0, 1 }, /* OP_IDIV */
-    { FormatIS, 0, 1 }, /* OP_MOD */
-    { FormatIS, 0, 1 }, /* OP_POW */
-    { FormatIS, 0, 1 }, /* OP_BSHL */
-    { FormatIS, 0, 1 }, /* OP_BSHR */
-    { FormatIS, 0, 1 }, /* OP_BAND */
-    { FormatIS, 0, 1 }, /* OP_BOR */
-    { FormatIS, 0, 1 }, /* OP_BXOR */
-    { FormatIL, VD, 0 }, /* OP_CONCAT */
-    { FormatILS, 0, 0 }, /* OP_EQK */
-    { FormatILS, 0, 0 }, /* OP_EQI */
-    { FormatIL, 0, 0 }, /* OP_LTI */
-    { FormatIL, 0, 0 }, /* OP_LEI */
-    { FormatIL, 0, 0 }, /* OP_GTI */
-    { FormatIL, 0, 0 }, /* OP_GEI */
-    { FormatIS, 0, 1 }, /* OP_EQ */
-    { FormatIS, 0, 1 }, /* OP_LT */
-    { FormatIS, 0, 1 }, /* OP_LE */
-    { FormatI, 0, 0 }, /* OP_EQPRESERVE */
-    { FormatI, 0, 0 }, /* OP_UNM */
-    { FormatI, 0, 0 }, /* OP_BNOT */
-    { FormatI, 0, 0 }, /* OP_NOT */
-    { FormatIL, 0, 0 }, /* OP_JMP */
-    { FormatIL, 0, 0 }, /* OP_JMPS */
-    { FormatIS, 0, 0 }, /* OP_TEST */
-    { FormatIS, 0, 1 }, /* OP_TESTPOP */
-    { FormatILL, 0, 0 }, /* OP_CALL */
-    { FormatIL, 0, 0 }, /* OP_CLOSE */
-    { FormatIL, 0, 0 }, /* OP_TBC */
-    { FormatIL, 1, 0 }, /* OP_GETLOCAL */
-    { FormatIL, 0, 1 }, /* OP_SETLOCAL */
-    { FormatIL, 1, 0 }, /* OP_GETUVAL */
-    { FormatIL, 0, 1 }, /* OP_SETUVAL */
-    { FormatILLS, VD, 0 }, /* OP_SETLIST */
-    { FormatILL, 0, 1 }, /* OP_SETPROPERTY */
-    { FormatIL, 0, 0 }, /* OP_GETPROPERTY */
-    { FormatI, 0, 1 }, /* OP_GETINDEX */
-    { FormatIL, 0, 1 }, /* OP_SETINDEX */
-    { FormatIL, 0, 0 }, /* OP_GETINDEXSTR */
-    { FormatILL, 0, 1 }, /* OP_SETINDEXSTR */
-    { FormatIS, 0, 0 }, /* OP_GETINDEXINT */
-    { FormatIL, 0, 0 }, /* OP_GETINDEXINTL */
-    { FormatILS, 0, 1 }, /* OP_SETINDEXINT */
-    { FormatILL, 0, 1 }, /* OP_SETINDEXINTL */
-    { FormatIL, 0, 0 }, /* OP_GETSUP */
-    { FormatI, 0, 1 }, /* OP_GETSUPIDX */
-    { FormatIL, 0, 0 }, /* OP_GETSUPIDXSTR */
-    { FormatI, 0, 0 }, /* OP_INHERIT */
-    { FormatILL, 0, 0 }, /* OP_FORPREP */
-    { FormatILL, 0, 0 }, /* OP_FORCALL */
-    { FormatILLL, VD, 0 }, /* OP_FORLOOP */
-    { FormatILLS, 0, 0 }, /* OP_RET */
+    { FormatI, 1, 0, 0 }, /* OP_TRUE */
+    { FormatI, 1, 0, 0 }, /* OP_FALSE */
+    { FormatI, 0, 0, 1 }, /* OP_SUPER */
+    { FormatI, 1, 0, 0 }, /* OP_NIL */
+    { FormatIL, VD, 0, 0 }, /* OP_NILN */
+    { FormatI, 0, 1, 0 }, /* OP_POP */
+    { FormatIL, VD, 0, 0 }, /* OP_POPN */
+    { FormatIL, 1, 0, 0 }, /* OP_LOAD */
+    { FormatIS, 1, 0, 0 }, /* OP_CONST */
+    { FormatIL, 1, 0, 0 }, /* OP_CONSTL */
+    { FormatIS, 1, 0, 0 }, /* OP_CONSTI */
+    { FormatIL, 1, 0, 0 }, /* OP_CONSTIL */
+    { FormatIS, 1, 0, 0 }, /* OP_CONSTF */
+    { FormatIL, 1, 0, 0 }, /* OP_CONSTFL */
+    { FormatIL, VD, 0, 0 }, /* OP_VARARGPREP */
+    { FormatIL, VD, 0, 0 }, /* OP_VARARG */
+    { FormatIL, 1, 0, 0 }, /* OP_CLOSURE */
+    { FormatIS, 1, 0, 0 }, /* OP_NEWLIST */
+    { FormatIS, 1, 0, 0 }, /* OP_NEWCLASS */
+    { FormatIS, 1, 0, 0 }, /* OP_NEWTABLE */
+    { FormatIL, 0, 1, 0 }, /* OP_METHOD */
+    { FormatIS, 0, 1, 0 }, /* OP_SETMM */
+    { FormatIS, 0, 1, 0 }, /* OP_MBIN */
+    { FormatIL, 0, 0, 1 }, /* OP_ADDK */
+    { FormatIL, 0, 0, 1 }, /* OP_SUBK */
+    { FormatIL, 0, 0, 1 }, /* OP_MULK */
+    { FormatIL, 0, 0, 1 }, /* OP_DIVK */
+    { FormatIL, 0, 0, 1 }, /* OP_IDIVK */
+    { FormatIL, 0, 0, 1 }, /* OP_MODK */
+    { FormatIL, 0, 0, 1 }, /* OP_POWK */
+    { FormatIL, 0, 0, 1 }, /* OP_BSHLK */
+    { FormatIL, 0, 0, 1 }, /* OP_BSHRK */
+    { FormatIL, 0, 0, 1 }, /* OP_BANDK */
+    { FormatIL, 0, 0, 1 }, /* OP_BORK */
+    { FormatIL, 0, 0, 1 }, /* OP_BXORK */
+    { FormatIL, 0, 0, 1 }, /* OP_ADDI */
+    { FormatIL, 0, 0, 1 }, /* OP_SUBI */
+    { FormatIL, 0, 0, 1 }, /* OP_MULI */
+    { FormatIL, 0, 0, 1 }, /* OP_DIVI */
+    { FormatIL, 0, 0, 1 }, /* OP_IDIVI */
+    { FormatIL, 0, 0, 1 }, /* OP_MODI */
+    { FormatIL, 0, 0, 1 }, /* OP_POWI */
+    { FormatIL, 0, 0, 1 }, /* OP_BSHLI */
+    { FormatIL, 0, 0, 1 }, /* OP_BSHRI */
+    { FormatIL, 0, 0, 1 }, /* OP_BANDI */
+    { FormatIL, 0, 0, 1 }, /* OP_BORI */
+    { FormatIL, 0, 0, 1 }, /* OP_BXORI */
+    { FormatIS, 0, 1, 1 }, /* OP_ADD */
+    { FormatIS, 0, 1, 1 }, /* OP_SUB */
+    { FormatIS, 0, 1, 1 }, /* OP_MUL */
+    { FormatIS, 0, 1, 1 }, /* OP_DIV */
+    { FormatIS, 0, 1, 1 }, /* OP_IDIV */
+    { FormatIS, 0, 1, 1 }, /* OP_MOD */
+    { FormatIS, 0, 1, 1 }, /* OP_POW */
+    { FormatIS, 0, 1, 1 }, /* OP_BSHL */
+    { FormatIS, 0, 1, 1 }, /* OP_BSHR */
+    { FormatIS, 0, 1, 1 }, /* OP_BAND */
+    { FormatIS, 0, 1, 1 }, /* OP_BOR */
+    { FormatIS, 0, 1, 1 }, /* OP_BXOR */
+    { FormatIL, VD, 0, 1 }, /* OP_CONCAT */
+    { FormatILS, 0, 0, 1 }, /* OP_EQK */
+    { FormatILS, 0, 0, 1 }, /* OP_EQI */
+    { FormatIL, 0, 0, 1 }, /* OP_LTI */
+    { FormatIL, 0, 0, 1 }, /* OP_LEI */
+    { FormatIL, 0, 0, 1 }, /* OP_GTI */
+    { FormatIL, 0, 0, 1 }, /* OP_GEI */
+    { FormatIS, 0, 1, 1 }, /* OP_EQ */
+    { FormatIS, 0, 1, 1 }, /* OP_LT */
+    { FormatIS, 0, 1, 1 }, /* OP_LE */
+    { FormatI, 0, 0, 1 }, /* OP_EQPRESERVE */
+    { FormatI, 0, 0, 1 }, /* OP_UNM */
+    { FormatI, 0, 0, 1 }, /* OP_BNOT */
+    { FormatI, 0, 0, 1 }, /* OP_NOT */
+    { FormatIL, 0, 0, 0 }, /* OP_JMP */
+    { FormatIL, 0, 0, 0 }, /* OP_JMPS */
+    { FormatIS, 0, 0, 0 }, /* OP_TEST */
+    { FormatIS, 0, 1, 0 }, /* OP_TESTPOP */
+    { FormatILL, VD, 0, 1 }, /* OP_CALL */
+    { FormatIL, 0, 0, 0 }, /* OP_CLOSE */
+    { FormatIL, 0, 0, 0 }, /* OP_TBC */
+    { FormatIL, 1, 0, 0 }, /* OP_GETLOCAL */
+    { FormatIL, 0, 1, 0 }, /* OP_SETLOCAL */
+    { FormatIL, 1, 0, 0 }, /* OP_GETUVAL */
+    { FormatIL, 0, 1, 0 }, /* OP_SETUVAL */
+    { FormatILLS, VD, 0, 0 }, /* OP_SETLIST */
+    { FormatILL, 0, 1, 0 }, /* OP_SETPROPERTY */
+    { FormatIL, 0, 0, 1 }, /* OP_GETPROPERTY */
+    { FormatI, 0, 1, 1 }, /* OP_GETINDEX */
+    { FormatIL, 0, 1, 0 }, /* OP_SETINDEX */
+    { FormatIL, 0, 0, 1 }, /* OP_GETINDEXSTR */
+    { FormatILL, 0, 1, 0 }, /* OP_SETINDEXSTR */
+    { FormatIS, 0, 0, 1 }, /* OP_GETINDEXINT */
+    { FormatIL, 0, 0, 1 }, /* OP_GETINDEXINTL */
+    { FormatILS, 0, 1, 0 }, /* OP_SETINDEXINT */
+    { FormatILL, 0, 1, 0 }, /* OP_SETINDEXINTL */
+    { FormatIL, 0, 0, 1 }, /* OP_GETSUP */
+    { FormatI, 0, 1, 1 }, /* OP_GETSUPIDX */
+    { FormatIL, 0, 0, 1 }, /* OP_GETSUPIDXSTR */
+    { FormatI, 0, 0, 0 }, /* OP_INHERIT */
+    { FormatILL, 0, 0, 0 }, /* OP_FORPREP */
+    { FormatILL, VD, 0, 0 }, /* OP_FORCALL */
+    { FormatILLL, VD, 0, 0 }, /* OP_FORLOOP */
+    { FormatILLS, 0, 0, 0 }, /* OP_RET */
 };
 
 
@@ -595,8 +595,8 @@ static int canmerge(FunctionState *fs, OpCode op) {
     op -= OP_NIL;
     cs_assert(0 <= op && op <= sizeof(okbarrier)/sizeof(okbarrier[0]));
     cs_assert(0 <= fs->opbarrier && fs->opbarrier <= 2);
-    /* no barrier or the barrier permits 'op' to be merged */
-    return !fs->opbarrier || okbarrier[op] == fs->opbarrier;
+    return !fs->opbarrier || /* no barrier or... */
+           (okbarrier[op] == fs->opbarrier); /* ...no 'op' barrier? */
 }
 
 

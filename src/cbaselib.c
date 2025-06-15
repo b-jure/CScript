@@ -139,6 +139,7 @@ static const char *genericreader(cs_State *C, void *ud, size_t *sz) {
 }
 
 
+#include <stdio.h>
 static int auxload(cs_State *C, int status, int envidx) {
     if (c_likely(status == CS_STATUS_OK)) {
         if (envidx != 0) { /* 'env' parameter? */
@@ -146,8 +147,10 @@ static int auxload(cs_State *C, int status, int envidx) {
             if (!cs_setupvalue(C, -2, 0)) /* set it as 1st upvalue */
                 cs_pop(C, 1); /* remove 'env' if not used by previous call */
         }
+        printf("Load done ok\n");
         return 1; /* compiled function */
     } else { /* error (message is on top of the stack) */
+        printf("Load done fail\n");
         csL_push_fail(C); /* push fail */
         cs_insert(C, -2); /* and put it before error message */
         return 2; /* return fail + error message */
@@ -163,9 +166,11 @@ static int b_load(cs_State *C) {
     int env = (!cs_is_none(C, 2) ? 2 : 0);
     if (s != NULL) { /* loading a string? */
         const char *chunkname = csL_opt_string(C, 1, s);
+        printf("Loading string: '%s'\n", chunkname);
         status = csL_loadbuffer(C, s, l, chunkname);
     } else { /* loading from a reader function */
         const char *chunkname = csL_opt_string(C, 1, "=(load)");
+        printf("Loading from a reader function: '%s'\n", chunkname);
         csL_check_type(C, 0, CS_T_FUNCTION); /* 'chunk' must be a function */
         cs_setntop(C, RESERVEDSLOT+1); /* create reserved slot */
         status = cs_load(C, genericreader, NULL, chunkname);
@@ -512,9 +517,13 @@ static int b_typeof(cs_State *C) {
 
 
 static int b_getclass(cs_State *C) {
+    cs_setntop(C, 2);
     csL_check_any(C, 0);
     if (cs_type(C, 0) == CS_T_INSTANCE) /* argument is instance? */
-        cs_get_class(C, 0);
+        if (!cs_is_noneornil(C, 1)) /* have key? */
+            cs_get_method(C, 0); /* get method */
+        else /* otherwise only have instance */
+            cs_get_class(C, 0); /* get it's class */
     else /* argument is not an instance */
         csL_push_fail(C);
     return 1;
