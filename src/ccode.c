@@ -82,10 +82,8 @@ CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
     { FormatI, 1, 0, 0 }, /* OP_TRUE */
     { FormatI, 1, 0, 0 }, /* OP_FALSE */
     { FormatI, 0, 0, 1 }, /* OP_SUPER */
-    { FormatI, 1, 0, 0 }, /* OP_NIL */
-    { FormatIL, VD, 0, 0 }, /* OP_NILN */
-    { FormatI, 0, 1, 0 }, /* OP_POP */
-    { FormatIL, VD, 0, 0 }, /* OP_POPN */
+    { FormatIL, VD, 0, 0 }, /* OP_NIL */
+    { FormatIL, VD, 0, 0 }, /* OP_POP */
     { FormatIL, 1, 0, 0 }, /* OP_LOAD */
     { FormatIS, 1, 0, 0 }, /* OP_CONST */
     { FormatIL, 1, 0, 0 }, /* OP_CONSTL */
@@ -204,8 +202,8 @@ CSI_DEF const c_byte csC_opsize[FormatN] = { /* ORDER OPFMT */
 ** Names of all instructions.
 */
 CSI_DEF const char *csC_opname[NUM_OPCODES] = { /* ORDER OP */
-"TRUE", "FALSE", "SUPER", "NIL", "NILN", "POP", "POPN", "LOAD", "CONST",
-"CONSTL", "CONSTI", "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG",
+"TRUE", "FALSE", "SUPER", "NIL", "POP", "LOAD", "CONST", "CONSTL",
+"CONSTI", "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG",
 "CLOSURE", "NEWLIST", "NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "MBIN", "ADDK",
 "SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK",
 "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "IDIVI", "MODI", "POWI",
@@ -423,6 +421,18 @@ int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c) {
 }
 
 
+int csC_call(FunctionState *fs, int base, int nreturns) {
+    cs_assert(nreturns >= CS_MULRET);
+    return csC_emitILL(fs, OP_CALL, base, nreturns + 1);
+}
+
+
+int csC_vararg(FunctionState *fs, int nreturns) {
+    cs_assert(nreturns >= CS_MULRET);
+    return csC_emitIL(fs, OP_VARARG, nreturns + 1);
+}
+
+
 /* add constant value to the function */
 static int addK(FunctionState *fs, TValue *key, TValue *v) {
     TValue val;
@@ -539,50 +549,51 @@ void csC_checkstack(FunctionState *fs, int n) {
 
 /* reserve 'n' stack slots */
 void csC_reserveslots(FunctionState *fs, int n) {
+    cs_assert(n >= 0);
     csC_checkstack(fs, n);
     fs->sp += n;
     cs_assert(fs->sp >= 0);
 }
 
 
-/* set single return for call and vararg expressions */
-void csC_setoneret(FunctionState *fs, ExpInfo *e) {
-    if (e->et == EXP_CALL) {
-        /* already returns 1 value */
-        cs_assert(GET_ARG_L(getip(fs, e), 1) == 2);
-        e->et = EXP_FINEXPR; /* just mark as finalized */
-    } else if (e->et == EXP_VARARG) {
-        Instruction *pi = getip(fs, e);
-        SET_ARG_L(pi, 0, 2);
-        e->et = EXP_FINEXPR;
-    }
+/* check whether last instruction is an open function call */
+static int lastisopenfunc(FunctionState *fs) {
+    Instruction *pi = prevOP(fs);
+    return (*pi == OP_CALL && GET_ARG_L(pi, 1) == 0);
 }
 
 
-/* set 'nreturns', for call and vararg expressions */
-void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
-    Instruction *pc = getip(fs, e);
+/* check whether last instruction is an open vararg expression */
+static int lastisopenvarg(FunctionState *fs) {
+    Instruction *pi = prevOP(fs);
+    return (*pi == OP_VARARG && GET_ARG_L(pi, 0) == 0);
+}
+
+
+/* finalize open call or vararg expression */
+static void setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
+    cs_assert(lastisopenvarg(fs) || lastisopenfunc(fs));
+    cs_assert(nreturns >= CS_MULRET);
     if (e->et == EXP_CALL) {
-        SET_ARG_L(pc, 1, nreturns + 1);
+        SET_ARG_L(getpi(fs, e), 1, nreturns + 1);
     } else {
         cs_assert(e->et == EXP_VARARG);
-        SET_ARG_L(pc, 0, nreturns + 1);
-        csC_reserveslots(fs, 1);
+        SET_ARG_L(getpi(fs, e), 0, nreturns + 1);
     }
-    e->et = EXP_FINEXPR;
+    e->et = EXP_FINEXPR; /* closed */
 }
 
 
-/*
-** Auxiliary function for 'adjuststack', checks if the 'prev' instruction
-** adjusts the stack in the same direction as 'new'.
-*/
-static int sameadjust(OpCode prev, OpCode new) {
-    return (prev == new) ||
-        (prev == OP_POP && new == OP_POPN) ||
-        (prev == OP_POPN && new == OP_POP) ||
-        (prev == OP_NIL && new == OP_NILN) ||
-        (prev == OP_NILN && new == OP_NIL);
+void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
+    cs_assert(nreturns >= 0); /* for CS_MULRET use 'csC_setmulret' */
+    setreturns(fs, e, nreturns);
+    csC_reserveslots(fs, nreturns);
+}
+
+
+void csC_setmulret(FunctionState *fs, ExpInfo *e) {
+    cs_assert(lastisopenvarg(fs) || lastisopenfunc(fs));
+    setreturns(fs, e, CS_MULRET);
 }
 
 
@@ -591,48 +602,28 @@ static int sameadjust(OpCode prev, OpCode new) {
 ** can be merged.
 */
 static int canmerge(FunctionState *fs, OpCode op) {
-    static const int okbarrier[] = { 2, 2, 1, 1 }; /* ORDER OP */
+    static const int okbarrier[] = { 2, 1, }; /* ORDER OP */
     op -= OP_NIL;
-    cs_assert(0 <= op && op <= sizeof(okbarrier)/sizeof(okbarrier[0]));
-    cs_assert(0 <= fs->opbarrier && fs->opbarrier <= 2);
+    cs_assert(0 <= op && op < 2);
+    cs_assert(0 <= fs->opbarrier && fs->opbarrier <= 3);
     return !fs->opbarrier || /* no barrier or... */
            (okbarrier[op] == fs->opbarrier); /* ...no 'op' barrier? */
 }
 
 
 static int adjuststack(FunctionState *fs, OpCode op, int n) {
-    int nprev = 0;
-    Instruction *inst = prevOP(fs);
-    cs_assert((n == 1) == (op == OP_POP || op == OP_NIL) ||
-              (n > 1) == (op == OP_POPN || op == OP_NILN));
-    if (inst && sameadjust(*inst, op) && canmerge(fs, op)) {
-        switch (*inst) {
-            case OP_POPN: case OP_NILN: {
-                nprev = GET_ARG_L(inst, 0);
-                SET_ARG_L(inst, 0, n + nprev);
-                return fs->prevpc; /* done; do not code new instruction */
-            }
-            case OP_POP: {
-                op = OP_POPN;
-                goto l_nil;
-            }
-            case OP_NIL: {
-                op = OP_NILN;
-            l_nil:
-                nprev = 1;
-                removelastinstruction(fs);
-                break;
-            }
-            default: cs_assert(0); /* unreachable */
-        }
-        n += nprev;
-    }
-    return (n == 1) ? csC_emitI(fs, op) : csC_emitIL(fs, op, n);
+    Instruction *pi = prevOP(fs);
+    if (pi && *pi == op && canmerge(fs, op)) {
+        int newn = GET_ARG_L(pi, 0) + n;
+        SET_ARG_L(pi, 0, newn);
+        return fs->prevpc; /* done; do not code new instruction */
+    } else /* otherwise code new instruction */
+        return csC_emitIL(fs, op, n);
 }
 
 
 static int codenil(FunctionState *fs, int n) {
-    return adjuststack(fs, n > 1 ? OP_NILN : OP_NIL, n);
+    return adjuststack(fs, OP_NIL, n);
 }
 
 
@@ -657,8 +648,7 @@ c_sinline void freeslots(FunctionState *fs, int n) {
 
 /* pop values from stack */
 int csC_remove(FunctionState *fs, int n) {
-    if (n > 0)
-        return adjuststack(fs, n > 1 ? OP_POPN : OP_POP, n);
+    if (n > 0) return adjuststack(fs, OP_POP, n);
     return -1; /* nothing to remove */
 }
 
@@ -982,50 +972,47 @@ int csC_dischargevars(FunctionState *fs, ExpInfo *v) {
             break;
         }
         case EXP_INDEXED: {
-            freeslots(fs, 2); /* receiver, key */
+            freeslots(fs, 2);
             v->u.info = csC_emitI(fs, OP_GETINDEX);
             break;
         }
         case EXP_INDEXSTR: {
-            freeslots(fs, 1); /* receiver */
+            freeslots(fs, 1);
             v->u.info = csC_emitIL(fs, OP_GETINDEXSTR, v->u.info);
             break;
         }
         case EXP_INDEXINT: {
-            freeslots(fs, 1); /* receiver */
+            freeslots(fs, 1);
             v->u.info = getindexint(fs, v);
             break;
         }
         case EXP_INDEXSUPER: {
-            freeslots(fs, 2); /* 'self' (instance), key */
+            freeslots(fs, 2);
             v->u.info = csC_emitI(fs, OP_GETSUPIDX);
             break;
         }
         case EXP_INDEXSUPERSTR: {
-            freeslots(fs, 1); /* 'self' (instance) */
+            freeslots(fs, 1);
             v->u.info = csC_emitIL(fs, OP_GETSUPIDXSTR, v->u.info);
             break;
         }
         case EXP_DOT: {
-            freeslots(fs, 1); /* receiver */
+            freeslots(fs, 1);
             v->u.info = csC_emitIL(fs, OP_GETPROPERTY, v->u.info);
             break;
         }
         case EXP_DOTSUPER: {
-            freeslots(fs, 1); /* 'self' (instance) */
+            freeslots(fs, 1);
             v->u.info = csC_emitIL(fs, OP_GETSUP, v->u.info);
             break;
         }
         case EXP_CALL: case EXP_VARARG: {
-            int slot_reserved = (v->et == EXP_CALL);
-            csC_setoneret(fs, v);
-            if (slot_reserved) goto l_fin; /* callee slot already reserved */
-            break;
+            csC_setreturns(fs, v, 1); /* default is one value returned */
+            return 1; /* done */
         }
         default: return 0; /* expression is not a variable */
     }
     csC_reserveslots(fs, 1);
-l_fin:
     v->et = EXP_FINEXPR;
     return 1;
 }
@@ -1083,7 +1070,7 @@ void csC_setlist(FunctionState *fs, int base, int nelems, int tostore) {
     cs_assert(tostore != 0 && tostore <= LISTFIELDS_PER_FLUSH);
     if (tostore == CS_MULRET) tostore = 0; /* return up to stack top */
     emitILLS(fs, OP_SETLIST, base, nelems, tostore);
-    freeslots(fs, tostore); /* free slots holding the list values */
+    fs->sp = base + 1; /* free stack slots */
 }
 
 
@@ -1342,43 +1329,31 @@ int csC_jmp(FunctionState *fs, OpCode opjump) {
 }
 
 
-/*
-** Code test instruction. The 'extra' is true if test pops one value
-** of the stack in case jump is not performed.
-*/
-int csC_test(FunctionState *fs, OpCode optest, int extra, int cond) {
+int csC_test(FunctionState *fs, OpCode optest, int cond) {
     int pcjump;
     cs_assert(optest == OP_TEST || optest == OP_TESTPOP);
-    cs_assert((extra == 1 && optest == OP_TEST) || extra == 0);
     if (optest == OP_TESTPOP)
-        freeslots(fs, 1); /* this test always pops one value */
+        freeslots(fs, 1); /* this test pops one value */
     csC_emitIS(fs, optest, cond); /* emit condition test... */
     pcjump = csC_jmp(fs, OP_JMP); /* ...followed by a jump */
-    csC_pop(fs, extra); /* if jump is not preformed, pop extra (if any) */
     return pcjump;
 }
 
 
 /* code and/or logical operators */
 static int codeAndOr(FunctionState *fs, ExpInfo *e, int cond) {
+    int test;
     discharge2stack(fs, e); /* ensure test operand is on the stack */
-    /* 'extra' is true, first expression is removed if test goes through */
-    return csC_test(fs, OP_TEST, 1, cond);
+    test = csC_test(fs, OP_TEST, cond); /* emit test */
+    csC_pop(fs, 1); /* if it goes through, pop the previous value */
+    return test;
 }
 
 
-static void patchexplist(FunctionState *fs, int *l) {
-    csC_patchtohere(fs, *l); /* patch list 'l' to here */
-    *l = NOJMP; /* mark 'e->t' or 'e->f' as empty */
-}
-
-
-static void finexplist(FunctionState *fs, int *l) {
-    if (*l != NOJMP) { /* and/or list has jump(s)? */
-        int jump = csC_jmp(fs, OP_JMP); /* current and/or jumps over 'l' */
-        patchexplist(fs, l); /* 'l' ends here */
-        csC_emitI(fs, OP_POP); /* 'l' value is removed (it goes through) */
-        csC_patchtohere(fs, jump); /* (current and/or jumps to here) */
+static void patchexplist(FunctionState *fs, int *l, int target) {
+    if (*l != NOJMP) {
+        csC_patch(fs, *l, target);
+        *l = NOJMP; /* mark 'e->t' or 'e->f' as empty */
     }
 }
 
@@ -1389,20 +1364,21 @@ static void finexplist(FunctionState *fs, int *l) {
 ** is false (nil or false).
 */
 static void codeand(FunctionState *fs, ExpInfo *e) {
-    int pc;
+    int pc, target;
     switch (e->et) {
         case EXP_TRUE: case EXP_STRING: case EXP_INT:
         case EXP_FLT: case EXP_K: {
             pc = NOJMP; /* don't jump, always true */
+            target = currPC;
             break;
         }
         default: {
             pc = codeAndOr(fs, e, 0); /* jump if false */
-            finexplist(fs, &e->t);
+            target = fs->prevpc; /* POP */
         }
     }
     csC_concatjl(fs, &e->f, pc); /* insert new jump in false list */
-    patchexplist(fs, &e->t); /* true list jumps to here (to go through) */
+    patchexplist(fs, &e->t, target); /* patch true list */
 }
 
 
@@ -1412,19 +1388,20 @@ static void codeand(FunctionState *fs, ExpInfo *e) {
 ** is true (everything else except nil and false).
 */
 void codeor(FunctionState *fs, ExpInfo *e) {
-    int pc;
+    int pc, target;
     switch (e->et) {
         case EXP_NIL: case EXP_FALSE: {
             pc = NOJMP; /* don't jump, always false */
+            target = currPC;
             break;
         }
         default: {
             pc = codeAndOr(fs, e, 1); /* jump if true */
-            finexplist(fs, &e->f);
+            target = fs->prevpc; /* POP */
         }
     }
     csC_concatjl(fs, &e->t, pc); /* insert new jump in true list */
-    patchexplist(fs, &e->f); /* false list jumps to here (to go through) */
+    patchexplist(fs, &e->f, target);
 }
 
 
@@ -1582,7 +1559,7 @@ static void codecommutative(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 /*
 ** Emit code for equality comparisons ('==', '!=').
 */
-static void codeeq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
+static void codeEq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int imm; /* immediate */
     int iseq = (opr == OPR_EQ);
     cs_assert(opr == OPR_NE || opr == OPR_EQ);
@@ -1686,7 +1663,7 @@ static int codeaddnegI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 ** Finalize code for binary operations, after reading 2nd operand.
 */
 void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
-                int line) {
+                                                             int line) {
     int swapped = 0;
     if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + CS_OP_ADD))
         return; /* done (folded) */
@@ -1712,7 +1689,7 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
             break;
         }
         case OPR_NE: case OPR_EQ: {
-            codeeq(fs, e1, e2, opr);
+            codeEq(fs, e1, e2, opr);
             break;
         }
         case OPR_GT: case OPR_GE: {

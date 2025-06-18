@@ -7,7 +7,6 @@
 #ifndef cprefix_h
 #define cprefix_h
 
-
 /* Enable some POSIX functions and definitions */
 #if !defined(_XOPEN_SOURCE)
 #define _XOPEN_SOURCE       600
@@ -32,5 +31,10 @@
 #endif
 
 #endif			/* } */
+
+
+/* TODO: remove */
+#include <stdio.h>
+
 
 #endif

@@ -4,8 +4,13 @@
 
 local fn f(a, ...) {
     local n = getargs("len", ...);
+    print(n);
     local y = [...];
-    foreach i in range(0, n) assert(a[i] == y[i]);
+    foreach i in range(0, n) {
+        print(a[i], y[i]);
+        assert(a[i] == y[i]);
+    }
+    print(n);
     return n;
 }
 

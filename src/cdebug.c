@@ -240,7 +240,7 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
         switch (*i) {
             case OP_RET: {
                 int stk = GET_ARG_L(i, 0);
-                cs_assert(stk <= symsp);
+                cs_assert(stk-1 <= symsp);
                 symsp = stk - 1; /* remove results */
                 change = 0;
                 break;
@@ -254,7 +254,7 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
                 symsp = stk + nresults - 1; /* 'symsp' points to last result */
                 break;
             }
-            case OP_NILN: case OP_VARARG: {
+            case OP_NIL: case OP_VARARG: {
                 int n = GET_ARG_L(i, 0);
                 if (*i == OP_VARARG) {
                     if (--n == CS_MULRET) n = 1;
@@ -263,7 +263,7 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
                 symsp += n;
                 break;
             }
-            case OP_POPN: {
+            case OP_POP: {
                 symsp -= GET_ARG_L(i, 0);
                 change = 0;
                 break;

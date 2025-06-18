@@ -18,8 +18,8 @@
 #define currPC      (fs->pc)
 
 
-/* get pointer to instruction of 'ExpInfo' */
-#define getip(fs,e)     (&(fs)->p->code[(e)->u.info])
+/* get pointer to instruction from 'ExpInfo' */
+#define getpi(fs,e)     (&(fs)->p->code[(e)->u.info])
 
 
 /* sizes in bytes */
@@ -137,10 +137,8 @@ typedef enum { /* ORDER OP */
 OP_TRUE = 0,/*                'load true constant'                          */
 OP_FALSE,/*                   'load false constant'                         */
 OP_SUPER,/*        V          'load V.class.superclass'                     */
-OP_NIL,/*                     'load nil constant'                           */
-OP_NILN,/*         L          'load L nils'                                 */
-OP_POP,/*                     'pop value off the stack'                     */
-OP_POPN,/*         L          'pop L values off the stack'                  */
+OP_NIL,/*          L          'load L nils'                                 */
+OP_POP,/*          L          'pop L values off the stack'                  */
 OP_LOAD,/*         L          'load V{L}'                                   */
 OP_CONST,/*        S          'load K{S}'                                   */
 OP_CONSTL,/*       L          'load K{L}'                                   */
@@ -338,15 +336,11 @@ CSI_DEC(const char *csC_opname[NUM_OPCODES];)
 #define LISTFIELDS_PER_FLUSH     50
 
 
-#define csC_setmulret(fs,e)     csC_setreturns(fs, e, CS_MULRET)
-
 #define csC_store(fs,var)       csC_storevar(fs, var, 0)
 #define csC_storepop(fs,var)    csC_storevarpop(fs, var, 0)
 
 
 #define prevOP(fs)  (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->prevpc])
-#define currOP(fs)  (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->pc])
-
 
 
 CSI_FUNC int csC_emitI(FunctionState *fs, Instruction i);
@@ -355,12 +349,14 @@ CSI_FUNC int csC_emitIL(FunctionState *fs, Instruction i, int a);
 CSI_FUNC int csC_emitILS(FunctionState *fs, Instruction op, int a, int b);
 CSI_FUNC int csC_emitILL(FunctionState *fs, Instruction i, int a, int b);
 CSI_FUNC int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c);
+CSI_FUNC int csC_call(FunctionState *fs, int base, int nreturns);
+CSI_FUNC int csC_vararg(FunctionState *fs, int nreturns);
 CSI_FUNC void csC_fixline(FunctionState *fs, int line);
 CSI_FUNC void csC_removelastjump(FunctionState *fs);
 CSI_FUNC void csC_checkstack(FunctionState *fs, int n);
 CSI_FUNC void csC_reserveslots(FunctionState *fs, int n);
-CSI_FUNC void csC_setoneret(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns);
+CSI_FUNC void csC_setmulret(FunctionState *fs, ExpInfo *e);
 CSI_FUNC int csC_nil(FunctionState *fs, int n);
 CSI_FUNC void csC_load(FunctionState *fs, int stk);
 CSI_FUNC int csC_remove(FunctionState *fs, int n);
@@ -384,7 +380,7 @@ CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);
 CSI_FUNC void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr, int line);
 CSI_FUNC int csC_jmp(FunctionState *fs, OpCode jop);
-CSI_FUNC int csC_test(FunctionState *fs, OpCode optest, int orpop, int cond);
+CSI_FUNC int csC_test(FunctionState *fs, OpCode optest, int cond);
 CSI_FUNC void csC_concatjl(FunctionState *fs, int *l1, int l2);
 CSI_FUNC void csC_patch(FunctionState *fs, int pc, int target);
 CSI_FUNC void csC_patchtohere(FunctionState *fs, int pc);

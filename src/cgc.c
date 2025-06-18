@@ -671,7 +671,7 @@ static void callgc(cs_State *C) {
         C->cf->status &= ~CFST_FIN; /* not running a finalizer anymore */
         C->allowhook = old_allowhook; /* restore hooks */
         gs->gcstop = old_gcstop; /* restore state */
-        if (c_unlikely(status != CS_STATUS_OK)) { /* error while running __gc? */
+        if (c_unlikely(status != CS_STATUS_OK)) { /* error in __gc? */
             csT_warnerror(C, "__gc");
             C->sp.p--; /* pop error object */
         }

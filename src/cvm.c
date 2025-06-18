@@ -1256,6 +1256,7 @@ c_sinline void pushtable(cs_State *C, int b) {
 #define checkGC(C)      csG_condGC(C, (void)0, updatetrap(cf))
 
 
+#include <stdio.h>
 /* fetch instruction */
 #define fetch() { \
     if (c_unlikely(trap)) { /* stack reallocation or hooks? */ \
@@ -1290,6 +1291,7 @@ c_sinline void pushtable(cs_State *C, int b) {
       vm_break; }
 
 
+#include <stdio.h>
 void csV_execute(cs_State *C, CallFrame *cf) {
     CSClosure *cl;              /* active CScript function (closure) */
     TValue *k;                  /* constants */
@@ -1330,20 +1332,15 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_NIL) {
-                setnilval(s2v(sp));
-                sp++;
+                int n = fetch_l();
+                while (n--)
+                    setnilval(s2v(sp++));
                 vm_break;
             }
             vm_case(OP_SUPER) {
                 OClass *scl = insval(peek(0))->oclass->sclass;
                 cs_assert(scl != NULL);
                 setclsval2s(C, sp - 1, scl);
-                vm_break;
-            }
-            vm_case(OP_NILN) {
-                int n = fetch_l();
-                while (n--)
-                    setnilval(s2v(sp++));
                 vm_break;
             }
             vm_case(OP_LOAD) {
@@ -1387,48 +1384,49 @@ returning: /* trap already set */
             }
             vm_case(OP_VARARGPREP) {
                 savestate(C);
-                Protect(csF_adjustvarargs(C, fetch_l(), cf, cl->p));
+                /* 'csF_adjustvarargs' handles 'sp' */
+                Protect(csF_adjustvarargs(C, fetch_l(), cf, &sp, cl->p));
                 if (c_unlikely(trap)) {
                     csD_hookcall(C, cf);
                     /* next opcode will be seen as a "new" line */
                     C->oldpc = getopSize(OP_VARARGPREP); 
                 }
                 updatebase(cf); /* function has new base after adjustment */
-                sp = C->sp.p;
                 vm_break;
             }
             vm_case(OP_VARARG) {
                 savestate(C);
-                Protect(csF_getvarargs(C, cf, fetch_l() - 1));
-                sp = C->sp.p;
+                /* 'csF_getvarargs' handles 'sp' */
+                Protect(csF_getvarargs(C, cf, &sp, fetch_l() - 1));
+                updatebase(cf); /* make sure 'base' is up-to-date */
                 vm_break;
             }
             vm_case(OP_CLOSURE) {
                 savestate(C);
                 pushclosure(C, cl->p->p[fetch_l()], cl->upvals, base);
                 checkGC(C);
-                sp = C->sp.p;
+                sp++;
                 vm_break;
             }
             vm_case(OP_NEWLIST) {
                 savestate(C);
                 pushlist(C, fetch_s());
                 checkGC(C);
-                sp = C->sp.p;
+                sp++;
                 vm_break;
             }
             vm_case(OP_NEWCLASS) { /* TODO: 'b' 7th bit flag */
                 savestate(C);
                 pushclass(C, fetch_s());
                 checkGC(C);
-                sp = C->sp.p;
+                sp++;
                 vm_break;
             }
             vm_case(OP_NEWTABLE) {
                 savestate(C);
                 pushtable(C, fetch_s());
                 checkGC(C);
-                sp = C->sp.p;
+                sp++;
                 vm_break;
             }
             vm_case(OP_METHOD) {
@@ -1462,10 +1460,6 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_POP) {
-                sp--;
-                vm_break;
-            }
-            vm_case(OP_POPN) {
                 sp -= fetch_l();
                 vm_break;
             }
@@ -1477,7 +1471,7 @@ returning: /* trap already set */
                 mm = fetch_s();
                 if (mm & 0x80) c_swap(v1, v2);
                 Protect(precallmbin(C, v1, v2, mm&0x7f, sp - 2));
-                sp = --C->sp.p;
+                sp--;
                 vm_break;
             }
             vm_case(OP_ADDK) {
@@ -1626,10 +1620,12 @@ returning: /* trap already set */
             }
             /* } CONCAT_OP { */
             vm_case(OP_CONCAT) {
+                int total;
                 savestate(C);
-                Protect(csV_concat(C, fetch_l()));
+                total = fetch_l();
+                Protect(csV_concat(C, total));
                 checkGC(C);
-                sp = C->sp.p;
+                sp -= total - 1;
                 vm_break;
             }
             /* } ORDERING_OPS { */
@@ -1679,7 +1675,7 @@ returning: /* trap already set */
                 condexp = fetch_s();
                 Protect(cond = csV_ordereq(C, v1, v2));
                 setorderres(v1, cond, condexp);
-                sp = --C->sp.p;
+                sp--;
                 vm_break;
             }
             vm_case(OP_LT) {
@@ -1820,7 +1816,7 @@ returning: /* trap already set */
                     csA_fastset(C, l, last, v); 
                     last--;
                 }
-                sp = C->sp.p = sl + 1; /* pop off elements (if any) */
+                sp = sl + 1; /* pop off elements (if any) */
                 vm_break;
             }
             vm_case(OP_SETPROPERTY) {
@@ -1832,7 +1828,7 @@ returning: /* trap already set */
                 prop = K(fetch_l());
                 cs_assert(ttisstring(prop));
                 Protect(csV_setstr(C, o, prop, v));
-                sp = --C->sp.p;
+                sp--;
                 vm_break;
             }
             vm_case(OP_GETPROPERTY) {
@@ -1849,7 +1845,7 @@ returning: /* trap already set */
                 TValue *key = peek(0);
                 savestate(C);
                 Protect(csV_get(C, o, key, sp - 2));
-                sp = --C->sp.p;
+                sp--;
                 vm_break;
             }
             vm_case(OP_SETINDEX) {
@@ -1862,7 +1858,7 @@ returning: /* trap already set */
                 o = s2v(os);
                 idx = s2v(os+1);
                 Protect(csV_set(C, o, idx, v));
-                sp = --C->sp.p;
+                sp--;
                 vm_break;
             }
             vm_case(OP_GETINDEXSTR) {
@@ -1883,7 +1879,7 @@ returning: /* trap already set */
                 idx = K(fetch_l());
                 cs_assert(ttisstring(idx));
                 Protect(csV_setstr(C, o, idx, v));
-                sp = --C->sp.p;
+                sp--;
                 vm_break;
             }
             vm_case(OP_GETINDEXINT) {
@@ -1916,7 +1912,7 @@ returning: /* trap already set */
                 imm = fetch_s();
                 setival(&index, IMM(imm));
                 Protect(csV_setint(C, o, &index, v));
-                sp = --C->sp.p;
+                sp--;
                 vm_break;
             }
             vm_case(OP_SETINDEXINTL) {
@@ -1929,11 +1925,9 @@ returning: /* trap already set */
                 imm = fetch_l();
                 setival(&index, IMML(imm));
                 Protect(csV_setint(C, o, &index, v));
-                sp = --C->sp.p;
+                sp--;
                 vm_break;
             }
-            // p=0x7660243e0040, pc=1755, ptop=0x75902303a220, sp=7
-            // p=0x7660243e0040, pc=1755, ptop=0x75902303a220, sp=7
             vm_case(OP_GETSUP) {
                 Instance *in = insval(peek(0));
                 OClass *scl = in->oclass->sclass;

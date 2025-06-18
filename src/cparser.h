@@ -182,6 +182,7 @@ typedef struct ParserState {
 } ParserState;
 
 
+struct LoopState; /* defined in cparser.c */
 struct ClassState; /* defined in cparser.c */
 struct Scope; /* defined in cparser.c */
 
@@ -190,6 +191,7 @@ struct Scope; /* defined in cparser.c */
 typedef struct FunctionState {
     Proto *p;                   /* current function prototype */
     struct ClassState *cs;      /* chain, class definition */
+    struct LoopState *ls;       /* chain, loop specific state */
     struct FunctionState *prev; /* chain, enclosing function */
     struct Lexer *lx;           /* lexical state */
     struct Scope *scope;        /* chain, current scope */

@@ -3,6 +3,8 @@ assert(import("math") == math);
 assert(import("io") == io);
 assert(import("os") == os);
 assert(import("reg") == reg);
+assert(import("list") == list);
+assert(import("debug") == debug);
 
 assert(typeof(package.path) == "string");
 assert(typeof(package.cpath) == "string");
@@ -83,7 +85,7 @@ if (__POSIX or __WINDOWS) {
 
     /// prepend DIR and pospend proper C lib. extension to a name
     local fn DC(x) {
-        local ext = (dirsep == '\\') and ".dll" or ".so";
+        local ext = (dirsep == "\\") and ".dll" or ".so";
         return D(x .. ext);
     }
 

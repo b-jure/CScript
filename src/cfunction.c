@@ -66,11 +66,11 @@ CClosure *csF_newCClosure(cs_State *C, int nupvalues) {
 ** 'cf' and invalidates old named parameters (after they get moved).
 */
 void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
-                       const Proto *fn) {
+                       SPtr *sp, const Proto *fn) {
     int actual = cast_int(C->sp.p - cf->func.p) - 1;
     int extra = actual - arity; /* number of varargs */
     cf->cs.nvarargs = extra;
-    csPR_checkstack(C, fn->maxstack + 1);
+    checkstackp(C, fn->maxstack + 1, *sp);
     setobjs2s(C, C->sp.p++, cf->func.p); /* move function to the top */
     for (int i = 1; i <= arity; i++) { /* move params to the top */
         setobjs2s(C, C->sp.p++, cf->func.p + i);
@@ -79,19 +79,21 @@ void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
     cf->func.p += actual + 1;
     cf->top.p += actual + 1;
     cs_assert(C->sp.p <= cf->top.p && cf->top.p <= C->stackend.p);
+    *sp = C->sp.p;
 }
 
 
-void csF_getvarargs(cs_State *C, CallFrame *cf, int wanted) {
+void csF_getvarargs(cs_State *C, CallFrame *cf, SPtr *sp, int wanted) {
     int have = cf->cs.nvarargs;
     if (wanted < 0) { /* CS_MULRET? */
         wanted = have;
-        checkstackGC(C, wanted); /* check stack, maybe wanted>have */
+        checkstackGCp(C, wanted, *sp); /* check stack, maybe wanted>have */
     }
     for (int i = 0; wanted > 0 && i < have; i++, wanted--)
         setobjs2s(C, C->sp.p++, cf->func.p - have + i);
     while (wanted-- > 0)
         setnilval(s2v(C->sp.p++));
+    *sp = C->sp.p;
 }
 
 
@@ -284,14 +286,16 @@ static void prepcallclose(cs_State *C, SPtr level, int status) {
 }
 
 
+#include <stdio.h>
 /*
 ** Close all up-values and to-be-closed variables up to (stack) 'level'.
-** Returns (potentially restored stack) 'level'.
+** Returns (restored) level.
 */
 SPtr csF_close(cs_State *C, SPtr level, int status) {
     ptrdiff_t levelrel = savestack(C, level);
     csF_closeupval(C, level);
     while (C->tbclist.p >= level) {
+        printf("tbclist greater than level\n");
         SPtr tbc = C->tbclist.p;
         poptbclist(C);
         prepcallclose(C, tbc, status);

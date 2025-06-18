@@ -174,7 +174,7 @@ struct PCloseData {
 
 
 /* auxiliary function to call 'csF_close' in protected mode */
-static void pclose(cs_State *C, void *ud) {
+static void closep(cs_State *C, void *ud) {
     struct PCloseData *pcd = (struct PCloseData*)ud;
     csF_close(C, pcd->level, pcd->status);
 }
@@ -186,7 +186,7 @@ int csPR_close(cs_State *C, ptrdiff_t level, int status) {
     c_byte old_allowhook = C->allowhook;
     for (;;) { /* keep closing upvalues until no more errors */
         struct PCloseData pcd = { restorestack(C, level), status };
-        status = csPR_rawcall(C, pclose, &pcd);
+        status = csPR_rawcall(C, closep, &pcd);
         if (c_likely(status == CS_STATUS_OK))
             return pcd.status;
         else { /* error occurred; restore saved state and repeat */

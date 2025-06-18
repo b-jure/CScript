@@ -40,10 +40,12 @@ local tests = [
     [progname .. " -s \"os.exit(0, true);\"", "ok"],
     [progname .. " -s \"os.exit(20, true);\"", "exit", 20],
 ];
-foreach _, v in ipairs(tests) {
+foreach i, v in ipairs(tests) {
+    ///print(i, v.x, v.y, v.z);
     local f = io.popen(v[0]);
     local x, y, z = io.popen(v[0]).close();
     local x1, y1, z1 = os.execute(v[0]);
+    ///print(x,x1,y,y1,z,z1);
     assert(x == x1 and y == y1 and z == z1);
     if (v[1] == "ok")
         assert(x and y == "exit" and z == 0);

@@ -47,8 +47,8 @@ CSI_FUNC Proto *csF_newproto(cs_State *C);
 CSI_FUNC CSClosure *csF_newCSClosure(cs_State *C, int nup);
 CSI_FUNC CClosure *csF_newCClosure(cs_State *C, int nup);
 CSI_FUNC void csF_adjustvarargs(cs_State *C, int arity, CallFrame *cf,
-                                const Proto *fn);
-CSI_FUNC void csF_getvarargs(cs_State *C, CallFrame *cf, int wanted);
+                                SPtr *sp, const Proto *fn);
+CSI_FUNC void csF_getvarargs(cs_State *C, CallFrame *cf, SPtr *sp, int wanted);
 CSI_FUNC void csF_initupvals(cs_State *C, CSClosure *cl);
 CSI_FUNC UpVal *csF_findupval(cs_State *C, SPtr level);
 CSI_FUNC void csF_unlinkupval(UpVal *upval);
