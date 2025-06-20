@@ -265,7 +265,7 @@ static void savelineinfo(FunctionState *fs, Proto *p, int line) {
                     MAXINT, "opcodes", c_sbyte);
     p->lineinfo[pc] = linedif;
     while (--opsize) /* fill func args (if any) */
-        p->lineinfo[++pc] = ARGLINEINFO;
+        p->lineinfo[++pc] = ABSLINEINFO; /* set as invalid entry */
     fs->prevline = line; /* last line saved */
 }
 
@@ -1329,22 +1329,24 @@ int csC_jmp(FunctionState *fs, OpCode opjump) {
 }
 
 
-int csC_test(FunctionState *fs, OpCode optest, int cond) {
+int csC_test(FunctionState *fs, OpCode optest, int cond, int line) {
     int pcjump;
     cs_assert(optest == OP_TEST || optest == OP_TESTPOP);
     if (optest == OP_TESTPOP)
         freeslots(fs, 1); /* this test pops one value */
     csC_emitIS(fs, optest, cond); /* emit condition test... */
+    csC_fixline(fs, line);
     pcjump = csC_jmp(fs, OP_JMP); /* ...followed by a jump */
+    csC_fixline(fs, line);
     return pcjump;
 }
 
 
 /* code and/or logical operators */
-static int codeAndOr(FunctionState *fs, ExpInfo *e, int cond) {
+static int codeAndOr(FunctionState *fs, ExpInfo *e, int cond, int line) {
     int test;
     discharge2stack(fs, e); /* ensure test operand is on the stack */
-    test = csC_test(fs, OP_TEST, cond); /* emit test */
+    test = csC_test(fs, OP_TEST, cond, line); /* emit test */
     csC_pop(fs, 1); /* if it goes through, pop the previous value */
     return test;
 }
@@ -1363,7 +1365,7 @@ static void patchexplist(FunctionState *fs, int *l, int target) {
 ** This test jumps over the second expression if the first expression
 ** is false (nil or false).
 */
-static void codeand(FunctionState *fs, ExpInfo *e) {
+static void codeand(FunctionState *fs, ExpInfo *e, int line) {
     int pc, target;
     switch (e->et) {
         case EXP_TRUE: case EXP_STRING: case EXP_INT:
@@ -1373,7 +1375,7 @@ static void codeand(FunctionState *fs, ExpInfo *e) {
             break;
         }
         default: {
-            pc = codeAndOr(fs, e, 0); /* jump if false */
+            pc = codeAndOr(fs, e, 0, line); /* jump if false */
             target = fs->prevpc; /* POP */
         }
     }
@@ -1387,7 +1389,7 @@ static void codeand(FunctionState *fs, ExpInfo *e) {
 ** This test jumps over the second expression if the first expression
 ** is true (everything else except nil and false).
 */
-void codeor(FunctionState *fs, ExpInfo *e) {
+void codeor(FunctionState *fs, ExpInfo *e, int line) {
     int pc, target;
     switch (e->et) {
         case EXP_NIL: case EXP_FALSE: {
@@ -1396,7 +1398,7 @@ void codeor(FunctionState *fs, ExpInfo *e) {
             break;
         }
         default: {
-            pc = codeAndOr(fs, e, 1); /* jump if true */
+            pc = codeAndOr(fs, e, 1, line); /* jump if true */
             target = fs->prevpc; /* POP */
         }
     }
@@ -1405,7 +1407,7 @@ void codeor(FunctionState *fs, ExpInfo *e) {
 }
 
 
-void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
+void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op, int line) {
     switch (op) {
         case OPR_ADD: case OPR_SUB: case OPR_MUL:
         case OPR_DIV: case OPR_IDIV: case OPR_MOD:
@@ -1432,11 +1434,11 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op) {
             break;
         }
         case OPR_AND: {
-            codeand(fs, e); /* jump out if 'e' is false */
+            codeand(fs, e, line); /* jump out if 'e' is false */
             break;
         }
         case OPR_OR: {
-            codeor(fs, e); /* jump out if 'e' is true */
+            codeor(fs, e, line); /* jump out if 'e' is true */
             break;
         }
         default: cs_assert(0); /* invalid binary operation */

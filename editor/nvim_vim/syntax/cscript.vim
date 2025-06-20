@@ -35,29 +35,10 @@ syn sync minlines=1000
 
 
 "-Metamethods-----{
-syn match cscriptMetaMethod /[^\.]\<__getidx\>/
-syn match cscriptMetaMethod /[^\.]\<__setidx\>/
-syn match cscriptMetaMethod /[^\.]\<__gc\>/
-syn match cscriptMetaMethod /[^\.]\<__close\>/
-syn match cscriptMetaMethod /[^\.]\<__call\>/
-syn match cscriptMetaMethod /[^\.]\<__init\>/
-syn match cscriptMetaMethod /[^\.]\<__concat\>/
-syn match cscriptMetaMethod /[^\.]\<__mod\>/
-syn match cscriptMetaMethod /[^\.]\<__pow\>/
-syn match cscriptMetaMethod /[^\.]\<__add\>/
-syn match cscriptMetaMethod /[^\.]\<__sub\>/
-syn match cscriptMetaMethod /[^\.]\<__mul\>/
-syn match cscriptMetaMethod /[^\.]\<__div\>/
-syn match cscriptMetaMethod /[^\.]\<__shl\>/
-syn match cscriptMetaMethod /[^\.]\<__shr\>/
-syn match cscriptMetaMethod /[^\.]\<__band\>/
-syn match cscriptMetaMethod /[^\.]\<__bor\>/
-syn match cscriptMetaMethod /[^\.]\<__bxor\>/
-syn match cscriptMetaMethod /[^\.]\<__unm\>/
-syn match cscriptMetaMethod /[^\.]\<__bnot\>/
-syn match cscriptMetaMethod /[^\.]\<__eq\>/
-syn match cscriptMetaMethod /[^\.]\<__lt\>/
-syn match cscriptMetaMethod /[^\.]\<__le\>/
+syn keyword cscriptMetaMethod __getidx __setidx __gc __close __call __init
+syn keyword cscriptMetaMethod __concat __mod __pow __add __sub __mul __div
+syn keyword cscriptMetaMethod __shl __shr __band __bor __bxor __unm __bnot
+syn keyword cscriptMetaMethod __eq __lt __le
 "-----------------}
 
 "-Basic library---{{
@@ -65,7 +46,7 @@ syn keyword cscriptFunc error assert gc load loadfile runfile getmetalist
 syn keyword cscriptFunc setmetalist nextfield pairs ipairs pcall xpcall
 syn keyword cscriptFunc print warn len rawequal rawget rawset getargs
 syn keyword cscriptFunc tonum tostr typeof getclass getsuper range
-syn keyword cscriptFunc __G __VERSION __M
+syn keyword cscriptFunc __G __ENV __VERSION __M
 "-Package library-}{
 syn keyword cscriptFunc import
 syn match cscriptFunc /\<package\.loadlib\>/

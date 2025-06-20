@@ -380,11 +380,11 @@ CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);
 CSI_FUNC void csC_unary(FunctionState *fs, ExpInfo *e, Unopr opr, int line);
 CSI_FUNC int csC_jmp(FunctionState *fs, OpCode jop);
-CSI_FUNC int csC_test(FunctionState *fs, OpCode optest, int cond);
+CSI_FUNC int csC_test(FunctionState *fs, OpCode optest, int cond, int line);
 CSI_FUNC void csC_concatjl(FunctionState *fs, int *l1, int l2);
 CSI_FUNC void csC_patch(FunctionState *fs, int pc, int target);
 CSI_FUNC void csC_patchtohere(FunctionState *fs, int pc);
-CSI_FUNC void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op);
+CSI_FUNC void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op, int line);
 CSI_FUNC void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                          Binopr opr, int line);
 CSI_FUNC void csC_finish(FunctionState *fs);

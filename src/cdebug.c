@@ -25,14 +25,16 @@
 #include "cgc.h"
 #include "ctable.h"
 
-#include <stdio.h>
-
 
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
 
+// TODO: line information gets messed when testing absolute difference
+// between previous pc, 255 or more raises error, last good known value
+// is 130 lines of spacing!
+
 /*
-** Gets the Number of instructions up to 'pc'. This CSCript implementation
+** Gets the Number of instructions up to 'pc'. This CScript implementation
 ** is using stack-based architecture and the sizes of instructions are
 ** variable length, we then also store additional pc for each emitted
 ** instruction. This is required in order to properly calculate estimate
@@ -99,7 +101,7 @@ int csD_getfuncline(const Proto *p, int pc) {
     int baseline = getbaseline(p, pc, &basepc);
     while (basepc < pc) { /* walk until given instruction */
         basepc += getopSize(p->code[basepc]); /* next instruction pc */
-        cs_assert(p->lineinfo[basepc] != ARGLINEINFO);
+        cs_assert(p->lineinfo[basepc] != ABSLINEINFO);
         baseline += p->lineinfo[basepc]; /* correct line */
     }
     cs_assert(pc == basepc);
@@ -861,7 +863,6 @@ static int changedline(const Proto *p, int oldpc, int newpc) {
 }
 
 
-#include "ctrace.h"
 /*
 ** Call a hook for the given event. Make sure there is a hook to be
 ** called. (Both 'C->hook' and 'C->hookmask', which trigger this
@@ -870,11 +871,11 @@ static int changedline(const Proto *p, int oldpc, int newpc) {
 void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
     cs_Hook hook = C->hook;
     if (hook && C->allowhook) { /* make sure there is a hook */
-        int mask = CFST_HOOKED;
         CallFrame *cf = C->cf;
         ptrdiff_t sp = savestack(C, C->sp.p); /* preserve original 'sp' */
         ptrdiff_t cf_top = savestack(C, cf->top.p); /* idem for 'cf->top' */
         cs_Debug ar = { .event = event, .currline = line, .cf = cf };
+        int mask = CFST_HOOKED;
         if (ntransfer != 0) {
             mask |= CFST_TRAN; /* 'cf' has transfer information */
             cf->ftransfer = ftransfer;
@@ -886,7 +887,6 @@ void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
         C->allowhook = 0; /* cannot call hooks inside a hook */
         cf->status |= mask;
         //printf("Running hook\n");
-        csTR_dumpstack(C, 2, "BEFORE hookf");
         cs_unlock(C);
         (*hook)(C, &ar); /* call hook function */
         cs_lock(C);
@@ -905,13 +905,14 @@ void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
 ** whenever 'hookmask' is not zero, so it checks whether call hooks are
 ** active.
 */
-void csD_hookcall(cs_State *C, CallFrame *cf) {
+void csD_hookcall(cs_State *C, CallFrame *cf, int delta) {
     C->oldpc = 0; /* set 'oldpc' for new function */
     if (C->hookmask & CS_MASK_CALL) { /* is call hook on? */
-        Proto *p = cf_func(cf)->p;
-        int delta = getopSize(*cf->cs.pc);
+        //printf("Doing call hook (delta=%d)\n", delta);
+        cs_assert(delta > 0);
         cf->cs.pc += delta; /* hooks assume 'pc' is already incremented */
-        csD_hook(C, CS_HOOK_CALL, -1, 0, p->arity);
+        //printf("Corrected pc = %ld\n", cf->cs.pc - cf_func(cf)->p->code);
+        csD_hook(C, CS_HOOK_CALL, -1, 0, cf_func(cf)->p->arity);
         cf->cs.pc -= delta; /* correct 'pc' */
     }
 }
@@ -924,7 +925,7 @@ void csD_hookcall(cs_State *C, CallFrame *cf) {
 ** variable arguments; otherwise, they could call a line/count hook
 ** before the call hook.)
 */
-int csD_tracecall(cs_State *C) {
+int csD_tracecall(cs_State *C, int delta) {
     CallFrame *cf = C->cf;
     Proto *p = cf_func(cf)->p;
     cf->cs.trap = 1; /* ensure hooks will be checked */
@@ -932,7 +933,7 @@ int csD_tracecall(cs_State *C) {
         if (p->isvararg)
             return 0; /* hooks will start at VARARGPREP instruction */
         else
-            csD_hookcall(C, cf); /* check 'call' hook */
+            csD_hookcall(C, cf, delta); /* check 'call' hook */
     }
     return 1; /* keep 'trap' on */
 }
@@ -950,7 +951,7 @@ int csD_tracecall(cs_State *C) {
 ** This function is not "Protected" when called, so it should correct
 ** 'C->sp.p' before calling anything that can run the GC.
 */
-int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t sizestack) {
+int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t stacksize) {
     CallFrame *cf = C->cf;
     const Proto *p = cf_func(cf)->p;
     c_byte mask = C->hookmask;
@@ -971,7 +972,7 @@ int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t sizestack) {
     else if (!(mask & CS_MASK_LINE))
         return 1; /* no line hook and count != 0; nothing to be done now */
     if (counthook) {
-        C->sp.p = base + sizestack; /* save 'sp' */
+        C->sp.p = base + stacksize; /* save 'sp' */
         csD_hook(C, CS_HOOK_COUNT, -1, 0, 0); /* call count hook */
     }
     if (mask & CS_MASK_LINE) {
@@ -981,11 +982,9 @@ int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t sizestack) {
         if (npci <= oldpc || /* call hook when jump back (loop), */
                 changedline(p, oldpc, npci)) { /* or when enter new line */
             int newline = csD_getfuncline(p, npci);
-            printf("Line has changed (newline=%d)\n", newline);
-            C->sp.p = base + sizestack; /* save 'sp' */
+            C->sp.p = base + stacksize; /* save 'sp' */
             csD_hook(C, CS_HOOK_LINE, newline, 0, 0); /* call line hook */
-        } else
-            printf("Line has NOT been changed\n");
+        }
         C->oldpc = npci; /* 'pc' of last call to line hook */
     }
     return 1; /* keep 'trap' on */

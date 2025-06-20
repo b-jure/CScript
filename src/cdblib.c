@@ -18,8 +18,6 @@
 #include "cscriptlib.h"
 #include "climits.h"
 
-#include "ctrace.h"
-
 
 /*
 ** The hook table at ctable[HOOKKEY] maps threads to their current
@@ -299,7 +297,6 @@ static int db_upvaluejoin(cs_State *C) {
 }
 
 
-#include <stdio.h>
 /*
 ** Call hook function registered at hook table for the current
 ** thread (if there is one).
@@ -307,19 +304,17 @@ static int db_upvaluejoin(cs_State *C) {
 static void hookf(cs_State *C, cs_Debug *ar) {
     static const char *const hooknames[] = {"call","return","line","count"};
     cs_get_cfieldstr(C, HOOKKEY);
-    csTR_dumpstack(C, 2, "hookf HOOKKEY");
     cs_push_thread(C);
     if (cs_get_raw(C, -2) == CS_T_FUNCTION) { /* is there a hook function? */
         cs_push_string(C, hooknames[ar->event]); /* push event name */
+        printf("Hook event => %s\n", hooknames[ar->event]);
         if (ar->currline >= 0)
             cs_push_integer(C, ar->currline); /* push current line */
         else cs_push_nil(C);
-        csTR_dumpstack(C, 2, "hookf");
-        printf("ASSERTING LS\n");
         cs_assert(cs_getinfo(C, "ls", ar));
-        printf("CALLING HOOK FUNC\n"); fflush(stdout);
+        printf("Calling hook function\n");
         cs_call(C, 2, 0); /* call hook function */
-    }
+    } else printf("No hook function\n");
 }
 
 
@@ -374,8 +369,8 @@ static int db_sethook(cs_State *C) {
 
 static int db_gethook(cs_State *C) {
     int arg;
-    cs_State *C1 = getthread(C, &arg);
     char buff[5];
+    cs_State *C1 = getthread(C, &arg);
     int mask = cs_gethookmask(C1);
     cs_Hook hook = cs_gethook(C1);
     if (hook == NULL) { /* no hook? */

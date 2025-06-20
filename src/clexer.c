@@ -788,26 +788,24 @@ static int scan(Lexer *lx, Literal *k) {
                 return TK_EOS;
             }
             default: {
-                if (cisalpha(lx->c) || lx->c == '_') {
-                    OString *s;
+                if (!cisalpha(lx->c) && lx->c != '_') {
+                    int c = lx->c;
+                    advance(lx);
+                    return c;
+                } else {
                     do {
                         save_and_advance(lx);
                     } while (cisalnum(lx->c) || lx->c == '_');
-                    s = csY_newstring(lx, csR_buff(lx->buff),
-                                          csR_bufflen(lx->buff));
-                    k->str = s;
-                    if (isreserved(s)) { /* reserved keywword? */
-                        int tk = s->extra + FIRSTTK - 1;
+                    k->str = csY_newstring(lx, csR_buff(lx->buff),
+                                               csR_bufflen(lx->buff));
+                    if (isreserved(k->str)) { /* reserved keywword? */
+                        int tk = k->str->extra + FIRSTTK - 1;
                         if (tk == TK_INF || tk == TK_INFINITY)
                             return lexstr2num(lx, k);
                         else
                             return tk;
                     } else /* identifier */
                         return TK_NAME;
-                } else { /* unknown character */
-                    int c = lx->c;
-                    advance(lx);
-                    return c;
                 }
             }
         }

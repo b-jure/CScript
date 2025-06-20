@@ -225,13 +225,13 @@ typedef unsigned int Idx;
 ** For tiny lists, instead of quicksort, insertion sort
 ** is used, this value is the cutoff size.
 */
-#define NTINY           10u
+#define NTINY       10u
 
 
 /*
 ** Lists larger than 'RANLIMIT' may use randomized pivots.
 */
-#define RANLIMIT	100u
+#define RANLIMIT    100u
 
 
 static void get2(cs_State *C, Idx idx1, Idx idx2) {

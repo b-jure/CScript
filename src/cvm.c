@@ -1256,7 +1256,6 @@ c_sinline void pushtable(cs_State *C, int b) {
 #define checkGC(C)      csG_condGC(C, (void)0, updatetrap(cf))
 
 
-#include <stdio.h>
 /* fetch instruction */
 #define fetch() { \
     if (c_unlikely(trap)) { /* stack reallocation or hooks? */ \
@@ -1291,7 +1290,6 @@ c_sinline void pushtable(cs_State *C, int b) {
       vm_break; }
 
 
-#include <stdio.h>
 void csV_execute(cs_State *C, CallFrame *cf) {
     CSClosure *cl;              /* active CScript function (closure) */
     TValue *k;                  /* constants */
@@ -1304,15 +1302,16 @@ void csV_execute(cs_State *C, CallFrame *cf) {
 #endif
 startfunc:
     trap = C->hookmask;
+    cs_assert(cf->cs.pcret == cf_func(cf)->p->code); /* must be at start */
 returning: /* trap already set */
     cl = cf_func(cf);
     k = cl->p->k;
     sp = C->sp.p;
     pc = cf->cs.pcret;
     if (c_unlikely(trap)) /* hooks? */
-        trap = csD_tracecall(C);
-    else
-        cf->cs.trap = 0; /* no hooks and stack pointer is updated */
+        trap = csD_tracecall(C, getopSize(*pc) + SIZE_INSTR);
+    //else
+    //    cf->cs.trap = 0; /* no hooks and stack pointer is updated */
     base = cf->func.p + 1;
     /* main loop of interpreter */
     for (;;) {
@@ -1387,7 +1386,8 @@ returning: /* trap already set */
                 /* 'csF_adjustvarargs' handles 'sp' */
                 Protect(csF_adjustvarargs(C, fetch_l(), cf, &sp, cl->p));
                 if (c_unlikely(trap)) {
-                    csD_hookcall(C, cf);
+                    storepc(C);
+                    csD_hookcall(C, cf, getopSize(*pc) + SIZE_INSTR);
                     /* next opcode will be seen as a "new" line */
                     C->oldpc = getopSize(OP_VARARGPREP); 
                 }

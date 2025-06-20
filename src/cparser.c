@@ -1320,7 +1320,7 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
         Binopr next;
         int line = lx->line;
         csY_scan(lx); /* skip operator */
-        csC_prebinary(lx->fs, e, op);
+        csC_prebinary(lx->fs, e, op, line);
         next = subexpr(lx, &e2, priority[op].right);
         csC_binary(lx->fs, e, &e2, op, line);
         op = next;
@@ -1477,12 +1477,14 @@ static int getlocalattribute(Lexer *lx) {
 }
 
 
-static int newlocalvar(Lexer *lx, OString *name) {
-    int limit = lx->fs->scope->nactlocals - 1;
-    ExpInfo dummy;
-    if (c_unlikely(searchlocal(lx->fs, name, &dummy, limit) >= 0))
-        csP_semerror(lx, csS_pushfstring(lx->C,
-                     "redefinition of local variable '%s'", getstr(name)));
+static int newlocalvar(Lexer *lx, OString *name, int ign) {
+    if (!ign || !(getstrlen(name) == 1 && *getstr(name) == '_')) {
+        ExpInfo dummy;
+        int limit = lx->fs->scope->nactlocals - 1;
+        if (c_unlikely(searchlocal(lx->fs, name, &dummy, limit) >= 0))
+            csP_semerror(lx, csS_pushfstring(lx->C,
+                        "redefinition of local variable '%s'", getstr(name)));
+    }
     return addlocal(lx, name);
 }
 
@@ -1503,9 +1505,9 @@ static void localstm(Lexer *lx) {
     int nexps;
     ExpInfo e = INIT_EXP;
     do {
-        vidx = newlocalvar(lx, str_expectname(lx)); /* create new local... */
-        kind = getlocalattribute(lx);               /* get its attribute... */
-        getlocalvar(fs, vidx)->s.kind = kind;       /* ...and set the attr. */
+        vidx = newlocalvar(lx, str_expectname(lx), 1);
+        kind = getlocalattribute(lx);
+        getlocalvar(fs, vidx)->s.kind = kind;
         if (kind & VARTBC) { /* to-be-closed? */
             if (toclose != -1) /* one already present? */
                 csP_semerror(fs->lx,
@@ -1530,7 +1532,7 @@ static void localfn(Lexer *lx) {
     ExpInfo e;
     FunctionState *fs = lx->fs;
     int fvar = fs->nactlocals; /* function's variable index */
-    newlocalvar(lx, str_expectname(lx)); /* create new local... */
+    newlocalvar(lx, str_expectname(lx), 0); /* create new local... */
     adjustlocals(lx, 1); /* ...and register it */
     funcbody(lx, &e, 0, lx->line);
     /* debug information will only see the variable after this point! */
@@ -1543,7 +1545,7 @@ static void localclass(Lexer *lx) {
     int cvar = fs->nactlocals; /* class variable index */
     OString *name;
     name = str_expectname(lx);
-    newlocalvar(lx, name); /* create new local... */
+    newlocalvar(lx, name, 0); /* create new local... */
     adjustlocals(lx, 1); /* ...and register it */
     klass(lx, NULL);
     /* debug information will only see the variable after this point! */
@@ -1571,7 +1573,7 @@ static void paramlist(Lexer *lx) {
         do {
             switch (lx->t.tk) {
                 case TK_NAME: {
-                    newlocalvar(lx, str_expectname(lx));
+                    newlocalvar(lx, str_expectname(lx), 0);
                     nparams++;
                     break;
                 }
@@ -1865,10 +1867,11 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
             }
             if (match(lx, TK_CASE)) { /* 'case'? */
                 ExpInfo e = INIT_EXP; /* case expression */
-                int match;
+                int match, line;
                 if (c_unlikely(ss->havedefault))
                     csP_semerror(lx, "'default' must be the last case");
                 storecontext(fs, &ctxcase); /* case might get optimized away */
+                line = lx->line;
                 expr(lx, &e);           /* get the case expression... */
                 codeconstexp(fs, &e);   /* ...and put it on stack */
                 expectnext(lx, ':');
@@ -1886,7 +1889,7 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                     cs_assert(!ss->nomatch);
                     ss->c = CASE; /* regular case */
                     csC_emitI(fs, OP_EQPRESERVE); /* EQ but preserves lhs */
-                    ss->jmp = csC_test(fs, OP_TESTPOP, 0); /* test jump */
+                    ss->jmp = csC_test(fs, OP_TESTPOP, 0, line);
                     fs->pcswtest = ss->jmp;
                 }
             } else if (!ss->havedefault) { /* don't have 'default'? */
@@ -1974,6 +1977,7 @@ typedef struct CondBodyState {
     int isif; /* true if this is 'if' statement body */
     int pcCond; /* pc of condition */
     int pcClause; /* pc of last 'for' loop clause */
+    int condline; /* condition line (for test instruction) */
 } CondBodyState;
 
 
@@ -1993,7 +1997,7 @@ static void condbody(Lexer *lx, CondBodyState *cb) {
                 bodypc = currPC; /* adjust bodypc */
             } /* (otherwise condition is already optimized out) */
         } else /* otherwise emit condition test */
-            test = csC_test(fs, cb->opT, 0);
+            test = csC_test(fs, cb->opT, 0, cb->condline);
     }
     stm(lx); /* loop/if body */
     if (optaway) /* optimize away this statement? */
@@ -2045,6 +2049,7 @@ static void ifstm(Lexer *lx) {
     storecontext(fs, &cb.ctxbefore);
     csY_scan(lx); /* skip 'if' */
     expectnext(lx, '(');
+    cb.condline = lx->line;
     expr(lx, &cb.e);
     expectnext(lx, ')');
     codeconstexp(fs, &cb.e);
@@ -2080,6 +2085,7 @@ static void whilestm(Lexer *lx) {
     storecontext(fs, &cb.ctxbefore);
     line = lx->line;
     expectnext(lx, '(');
+    cb.condline = lx->line;
     expr(lx, &cb.e);
     codeconstexp(fs, &cb.e);
     expectmatch(lx, ')', '(', line);
@@ -2131,9 +2137,9 @@ static void foreachstm(Lexer *lx) {
     addlocallit(lx, "(foreach cntlvar)");   /* control var      (base+2) */
     addlocallit(lx, "(foreach tbcvar)");    /* to-be-closed var (base+3) */
     /* create locals variables */
-    newlocalvar(lx, str_expectname(lx)); /* at least one variable expected */
+    newlocalvar(lx, str_expectname(lx), 1); /* at least one var. expected */
     while (match(lx, ',')) {
-        newlocalvar(lx, str_expectname(lx));
+        newlocalvar(lx, str_expectname(lx), 1);
         nvars++;
     }
     expectnext(lx, TK_IN);
@@ -2174,19 +2180,22 @@ void forinitializer(Lexer *lx) {
 
 
 /* 'for' loop condition */
-void forcondition(Lexer *lx, ExpInfo *e) {
+int forcondition(Lexer *lx, ExpInfo *e) {
+    int line = lx->line;
     if (!match(lx, ';')) { /* have condition? */
         expr(lx, e);                /* get it... */
         codeconstexp(lx->fs, e);    /* ...and put it on stack */
+        line = lx->line; /* update line */
         expectnext(lx, ';');
     } else /* otherwise no condition (infinite loop) */
         initexp(e, EXP_TRUE, 0);
+    return line;
 }
 
 
 /* 'for' loop last clause */
 void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
-                                                      int *pcClause) {
+                              int condline, int *pcClause) {
     int bodyjmp, loopjmp;
     int inf = eistrue(cond);
     FunctionState *fs = lx->fs;
@@ -2197,13 +2206,14 @@ void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
         return; /* done (converted to a 'while' or 'loop') */
     else {
         bodyjmp = csC_jmp(fs, OP_JMP); /* insert jump in-between */
+        csC_fixline(fs, condline); /* this is condition jump */
         *pcClause = currPC; /* set end clause pc */
         expstm(lx); /* get the end clause expression statement */
         if (!inf) { /* loop is not infinite? */
             loopjmp = csC_jmp(fs, OP_JMPS); /* emit jump, back to cond... */
             csC_patch(fs, loopjmp, fs->ls->pcloop); /* ...and patch it */
         }
-        csC_patchtohere(fs, bodyjmp); /* patch jump from cond to body */
+        csC_patchtohere(fs, bodyjmp); /* patch jump from condition to body */
         fs->ls->pcloop = *pcClause; /* loop starts at end clause pc */
     }
 }
@@ -2223,12 +2233,15 @@ static void forstm(Lexer *lx) {
     enterscope(fs, &s, 0); /* enter initializer scope */
     line = lx->line;
     expectnext(lx, '(');
-    forinitializer(lx); /* 1st clause (initializer) */
+    /* 1st clause (initializer) */
+    forinitializer(lx); 
     enterloop(fs, &ls, 0); /* enter loop scope */
     cb.pcCond = fs->ls->pcloop = currPC; /* loop is after initializer clause */
     storecontext(fs, &cb.ctxbefore); /* store context at loop start */
-    forcondition(lx, &cb.e); /* 2nd clause (condition) */
-    forlastclause(lx, &cb.ctxbefore, &cb.e, &cb.pcClause); /* 3rd clause */
+    /* 2nd clause (condition) */
+    cb.condline = forcondition(lx, &cb.e);
+    /* 3rd clause */
+    forlastclause(lx, &cb.ctxbefore, &cb.e, cb.condline, &cb.pcClause);
     expectmatch(lx, ')', '(', line);
     condbody(lx, &cb); /* forbody */
     leaveloop(fs); /* leave loop scope */

@@ -24,15 +24,9 @@
 
 /*
 ** Mark for entries in 'lineinfo' array that has absolute information in
-** 'abslineinfo' array.
+** 'abslineinfo' array, or for instruction arguments.
 */
 #define ABSLINEINFO     (-0x80)
-
-
-/*
-** Mark for entries in 'lineinfo' array that contain instruction arguments.
-*/
-#define ARGLINEINFO     (ABSLINEINFO + 1)
 
 
 /*
@@ -74,8 +68,8 @@ CSI_FUNC c_noret csD_llenerror(cs_State *C, const char *extra);
 CSI_FUNC c_noret csD_errormsg(cs_State *C);
 CSI_FUNC void csD_hook(cs_State *C, int event, int line,
                                     int ftransfer, int ntransfer);
-CSI_FUNC void csD_hookcall(cs_State *C, CallFrame *cf);
-CSI_FUNC int csD_tracecall(cs_State *C);
-CSI_FUNC int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t sstk);
+CSI_FUNC void csD_hookcall(cs_State *C, CallFrame *cf, int delta);
+CSI_FUNC int csD_tracecall(cs_State *C, int delta);
+CSI_FUNC int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t stks);
 
 #endif

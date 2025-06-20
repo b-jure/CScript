@@ -156,7 +156,6 @@ UpVal *csF_findupval(cs_State *C, SPtr level) {
 ** and at the position 'lnum', meaning there are 'lnum' locals before it.
 */
 const char *csF_getlocalname(const Proto *fn, int lnum, int pc) {
-    cs_assert(lnum > 0);
     for (int i = 0; i < fn->sizelocals && fn->locals[i].startpc <= pc; i++) {
         if (pc < fn->locals[i].endpc) { /* variable is active? */
             if (--lnum == 0)
@@ -286,7 +285,6 @@ static void prepcallclose(cs_State *C, SPtr level, int status) {
 }
 
 
-#include <stdio.h>
 /*
 ** Close all up-values and to-be-closed variables up to (stack) 'level'.
 ** Returns (restored) level.
@@ -295,7 +293,6 @@ SPtr csF_close(cs_State *C, SPtr level, int status) {
     ptrdiff_t levelrel = savestack(C, level);
     csF_closeupval(C, level);
     while (C->tbclist.p >= level) {
-        printf("tbclist greater than level\n");
         SPtr tbc = C->tbclist.p;
         poptbclist(C);
         prepcallclose(C, tbc, status);
