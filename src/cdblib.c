@@ -307,14 +307,12 @@ static void hookf(cs_State *C, cs_Debug *ar) {
     cs_push_thread(C);
     if (cs_get_raw(C, -2) == CS_T_FUNCTION) { /* is there a hook function? */
         cs_push_string(C, hooknames[ar->event]); /* push event name */
-        printf("Hook event => %s\n", hooknames[ar->event]);
         if (ar->currline >= 0)
             cs_push_integer(C, ar->currline); /* push current line */
         else cs_push_nil(C);
         cs_assert(cs_getinfo(C, "ls", ar));
-        printf("Calling hook function\n");
         cs_call(C, 2, 0); /* call hook function */
-    } else printf("No hook function\n");
+    }
 }
 
 

@@ -35,6 +35,7 @@
 
 /* TODO: remove */
 #include <stdio.h>
+#include "ctrace.h"
 
 
 #endif

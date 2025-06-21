@@ -17,6 +17,8 @@
 #include "cscriptlib.h"
 #include "climits.h"
 
+#include "ctrace.h"
+
 
 static int b_error(cs_State *C) {
     int level = csL_opt_integer(C, 1, 1);
@@ -201,9 +203,11 @@ static int b_getmetalist(cs_State *C) {
 }
 
 
+// TODO: update docs and tests
 static int b_setmetalist(cs_State *C) {
-    int t = cs_type(C, 1);
-    csL_check_type(C, 0, CS_T_CLASS);
+    int t = cs_type(C, 0);
+    csL_expect_arg(C, t == CS_T_CLASS || t == CS_T_INSTANCE, 0, "class/instance");
+    t = cs_type(C, 1);
     csL_expect_arg(C, t == CS_T_NIL || t == CS_T_LIST, 1, "nil/list");
     cs_setntop(C, 2);
     cs_set_metalist(C, 0);
@@ -288,6 +292,7 @@ static int b_xpcall(cs_State *C) {
 
 static int b_print(cs_State *C) {
     int n = cs_getntop(C);
+    //csTR_dumpstack(C, 1, "print stack");
     for (int i = 0; i < n; i++) {
         size_t len;
         const char *str = csL_to_lstring(C, i, &len);
@@ -334,16 +339,16 @@ static int b_rawequal(cs_State *C) {
 
 static int b_rawget(cs_State *C) {
     csL_check_type(C, 0, CS_T_INSTANCE);
-    csL_check_any(C, 1); /* index */
+    csL_check_any(C, 1); /* key */
     cs_setntop(C, 2);
-    cs_get_raw(C, 0); /* this pops index */
+    cs_get_raw(C, 0);
     return 1;
 }
 
 
 static int b_rawset(cs_State *C) {
     csL_check_type(C, 0, CS_T_INSTANCE);
-    csL_check_any(C, 1); /* index */
+    csL_check_any(C, 1); /* key */
     csL_check_any(C, 2); /* value */
     cs_setntop(C, 3);
     cs_set_raw(C, 0); /* this pops index and value */

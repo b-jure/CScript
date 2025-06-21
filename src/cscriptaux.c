@@ -343,9 +343,9 @@ CSLIB_API int csL_set_metalist(cs_State *C, const char *lname) {
 
 
 CSLIB_API int csL_get_metaindex(cs_State *C, int index, int mm) {
-    if (!cs_get_metalist(C, index)) {
+    if (!cs_get_metalist(C, index))
         return CS_T_NONE;
-    } else {
+    else {
         int t = cs_get_index(C, -1, mm);
         if (t == CS_T_NIL) {
             cs_pop(C, 2); /* remove metalist and nil */
@@ -358,8 +358,10 @@ CSLIB_API int csL_get_metaindex(cs_State *C, int index, int mm) {
 
 
 CSLIB_API int csL_callmeta(cs_State *C, int index, int mm) {
+    int t = cs_type(C, index);
     index = cs_absindex(C, index);
-    if (csL_get_metaindex(C, index, mm) == CS_T_NONE)
+    if ((t != CS_T_INSTANCE && t != CS_T_USERDATA) ||
+            csL_get_metaindex(C, index, mm) == CS_T_NONE)
         return 0;
     cs_push(C, index);
     cs_call(C, 1, 1);
@@ -718,20 +720,20 @@ static void push_func_name(cs_State *C, cs_Debug *ar) {
         cs_push_fstring(C, "%s '%s'", ar->namewhat, ar->name);
     else if (*ar->what == 'm') /* main? */
         cs_push_literal(C, "main chunk");
-    else if (*ar->what != 'C') /* CScript function? */
-        cs_push_fstring(C, "function <%s:%d>", ar->shortsrc, ar->defline);
     else if (push_glbfunc_name(C, ar)) { /* try global name */
         cs_push_fstring(C, "function '%s'", cs_to_string(C, -1));
         cs_remove(C, -2); /* remove name */
-    } else /* unknown */
+    } else if (*ar->what != 'C') /* for CScript functions, use <file:line> */
+        cs_push_fstring(C, "function <%s:%d>", ar->shortsrc, ar->defline);
+    else /* unknown */
         cs_push_literal(C, "?");
 }
 
 
 #define STACKLEVELS     10
 
-CSLIB_API void csL_traceback(cs_State *C, cs_State *C1, int level,
-                             const char *msg) {
+CSLIB_API void csL_traceback(cs_State *C, cs_State *C1,
+                             int level, const char *msg) {
     csL_Buffer B;
     cs_Debug ar;
     int last = lastlevel(C1);

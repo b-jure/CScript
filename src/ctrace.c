@@ -592,20 +592,24 @@ static void unasmBinOp(const Proto *p, Instruction *pc) {
 }
 
 
+static void printFunc(const Proto *p) {
+    char id[CS_IDSIZE];
+    csS_chunkid(id, getstr(p->source), getstrlen(p->source));
+    if (p->defline == 0) /* main chunk? */
+        printf("MAIN %s {\n", id);
+    else /* otherwise subroutine */
+        printf("FUNCTION %s:%d {\n", id, p->defline);
+}
+
+
 /*
 ** Disassemble all of the bytecode in 'p->code'.
 ** This function provides more detailed human readable information
 ** compared to 'csTR_trace' when tracing OpCode and its arguments.
 */
 void csTR_disassemble(cs_State *C, const Proto *p) {
-    Instruction *pc = p->code;
-    if (p->defline == 0) {
-        char id[CS_IDSIZE];
-        csS_chunkid(id, getstr(p->source), getstrlen(p->source));
-        printf("%s {\n", id);
-    } else
-        printf("fn at line %d in %s {\n", p->defline, getstr(p->source));
-    while (pc < &p->code[p->sizecode]) {
+    printFunc(p);
+    for (Instruction *pc = p->code; pc < &p->code[p->sizecode];) {
         printf("    ");
         switch (*pc) {
             case OP_TRUE: case OP_FALSE: case OP_SUPER:

@@ -482,7 +482,7 @@ const TValue *csH_get(Table *t, const TValue *key) {
 ** check a GC barrier.
 */
 void csH_finishset(cs_State *C, Table *t, const TValue *slot,
-                   const TValue *key, const TValue *val) {
+                                const TValue *key, const TValue *val) {
     if (isabstkey(slot))
         csH_newkey(C, t, key, val);
     else

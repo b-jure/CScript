@@ -514,7 +514,7 @@ CS_API void cs_arith(cs_State *C, int op) {
         C->sp.p--; /* pop second operand */
     } else { /* unary op */
         api_checknelems(C, 1);
-        csV_unarithm(C, s2v(C->sp.p-1), op);
+        csV_unarithm(C, s2v(C->sp.p-1), C->sp.p-1, op);
         /* done */
     }
     cs_unlock(C);
@@ -1036,8 +1036,8 @@ CS_API int cs_get_fieldflt(cs_State *C, int index, cs_Number n) {
 
 
 CS_API int cs_get_class(cs_State *C, int index) {
-    const TValue *o;
     int t;
+    const TValue *o;
     cs_lock(C);
     o = index2value(C, index);
     if (ttisinstance(o)) {

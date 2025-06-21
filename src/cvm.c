@@ -170,11 +170,11 @@ void csV_binarithm(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
 ** Perform unary arithmetic operations on objects, this function is free
 ** to call metamethods in cases where raw arithmetics are not possible.
 */
-void csV_unarithm(cs_State *C, const TValue *v, int op) {
+void csV_unarithm(cs_State *C, const TValue *v, SPtr res, int op) {
     TValue aux;
     setival(&aux, 0);
     if (!csO_arithmraw(C, v, &aux, s2v(C->sp.p - 1), op))
-        csMM_tryunary(C, v, (op - CS_OP_UNM) + CS_MM_UNM);
+        csMM_tryunary(C, v, res, (op - CS_OP_UNM) + CS_MM_UNM);
 }
 
 
@@ -474,7 +474,7 @@ c_sinline void finishTget(cs_State *C, const TValue *slot, SPtr res) {
 
 
 c_sinline void trybindmethod(cs_State *C, const TValue *slot, Instance *in,
-                                          SPtr res) {
+                                                              SPtr res) {
     if (!isempty(slot)) { /* have method? */
         setobj2s(C, res, slot);
         bindmethod(C, in, slot, res);
@@ -735,17 +735,14 @@ c_sinline int precallC(cs_State *C, SPtr func, int nres, cs_CFunction f) {
 
 
 /* 
-** Adjust stack for metamethod or instance method call.
-** 'func' is the instance or the object that has a metamethod
-** and 'f' is the function.
-** Stack is shifted so that 'f' is in place of 'func' and 'func' is its
-** argument at 'func + 1'. This function assumes there is enough space
-** on the stack for 'f'.
+** Shifts stack by one slot in direction of stack pointer,
+** and inserts 'f' in place of 'func'.
+** Warning: this function assumes there is enough space for 'f'.
 */
 c_sinline void auxinsertf(cs_State *C, SPtr func, const TValue *f) {
     for (SPtr p = C->sp.p; p > func; p--)
         setobjs2s(C, p, p-1);
-    C->sp.p += 1;
+    C->sp.p++;
     setobj2s(C, func, f);
 }
 
@@ -1274,6 +1271,9 @@ c_sinline void pushtable(cs_State *C, int b) {
 #define fetch_l()       (pc += SIZE_ARG_L, get3bytes(pc - SIZE_ARG_L))
 
 
+#define hookdelta()     (getopSize(*pc) + SIZE_INSTR)
+
+
 /* In cases where jump table is not available or prefered. */
 #define vm_dispatch(x)      switch(x)
 #define vm_case(l)          case l:
@@ -1309,9 +1309,7 @@ returning: /* trap already set */
     sp = C->sp.p;
     pc = cf->cs.pcret;
     if (c_unlikely(trap)) /* hooks? */
-        trap = csD_tracecall(C, getopSize(*pc) + SIZE_INSTR);
-    //else
-    //    cf->cs.trap = 0; /* no hooks and stack pointer is updated */
+        trap = csD_tracecall(C, hookdelta());
     base = cf->func.p + 1;
     /* main loop of interpreter */
     for (;;) {
@@ -1387,9 +1385,10 @@ returning: /* trap already set */
                 Protect(csF_adjustvarargs(C, fetch_l(), cf, &sp, cl->p));
                 if (c_unlikely(trap)) {
                     storepc(C);
-                    csD_hookcall(C, cf, getopSize(*pc) + SIZE_INSTR);
+                    csD_hookcall(C, cf, hookdelta());
                     /* next opcode will be seen as a "new" line */
                     C->oldpc = getopSize(OP_VARARGPREP); 
+                    sp = C->sp.p; /* to properly calculate stack size */
                 }
                 updatebase(cf); /* function has new base after adjustment */
                 vm_break;
@@ -1713,7 +1712,7 @@ returning: /* trap already set */
                     setfval(v, c_numunm(C, n));
                 } else {
                     savestate(C);
-                    Protect(csMM_tryunary(C, v, CS_MM_UNM));
+                    Protect(csMM_tryunary(C, v, sp-1, CS_MM_UNM));
                 }
                 vm_break;
             }
@@ -1724,7 +1723,7 @@ returning: /* trap already set */
                     setival(v, intop(^, ~c_castS2U(0), i));
                 } else {
                     savestate(C);
-                    Protect(csMM_tryunary(C, v, CS_MM_BNOT));
+                    Protect(csMM_tryunary(C, v, sp-1, CS_MM_BNOT));
                 }
                 vm_break;
             }
@@ -2024,7 +2023,8 @@ returning: /* trap already set */
                 if (nres < 0) /* not fixed ? */
                     nres = sp - stk;
                 if (fetch_s()) { /* have open upvalues? */
-                    Protect(csF_close(C, base, CLOSEKTOP));
+                    csF_close(C, base, CLOSEKTOP);
+                    updatetrap(cf);
                     updatestack(cf);
                 }
                 if (cl->p->isvararg) /* vararg function? */

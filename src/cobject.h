@@ -463,7 +463,7 @@ typedef struct OString {
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VCLASS)); \
       checkliveness(C, o_); }
 
-#define setclsval2s(C,o,cls)        setclsval(C,s2v(o),cls)
+#define setclsval2s(C,o,cls)    setclsval(C,s2v(o),cls)
 
 typedef struct OClass {
     ObjectHeader;

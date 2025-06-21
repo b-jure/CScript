@@ -234,6 +234,8 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
     //printf("Symbolic execution\ttop=%d\n", symsp);
     if (*code == OP_VARARGPREP) /* vararg function? */
         pc += getopSize(*code); /* skip first opcode */
+    //if (code[lastpc] == OP_MBIN)
+    //    lastpc -= getopSize(OP_ADD); /* instruction was never executed */
     while (pc < lastpc) {
         const Instruction *i = &code[pc];
         int change; /* true if current instruction changed 'sp' */
@@ -486,7 +488,7 @@ static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
             break;
         }
         case OP_MBIN: {
-            mm = GET_ARG_S(i, 0);
+            mm = GET_ARG_S(i, 0) & 0x7f;
             break;
         }
         case OP_LT: case OP_LTI: case OP_GTI: mm = CS_MM_LT; break;
@@ -509,8 +511,7 @@ static const char *funcnamefromcall(cs_State *C, CallFrame *cf,
     if (cf->status & CFST_HOOKED) { /* was it called inside a hook? */
         *name = "?";
         return "hook";
-    }
-    if (cf->status & CFST_FIN) { /* was it called as finalizer? */
+    } else if (cf->status & CFST_FIN) { /* was it called as finalizer? */
         *name = "__gc";
         return "metamethod";
     } else if (isCScript(cf))
@@ -638,14 +639,14 @@ CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
         func = s2v(C->sp.p - 1);
         api_check(C, ttisfunction(func), "expect function");
         options++; /* skip '>' */
-        C->sp.p--;
+        C->sp.p--; /* pop function */
     } else {
         cf = ar->cf;
         func = s2v(cf->func.p);
         cs_assert(ttisfunction(func));
     }
     func = unwrapfunc(func);
-    cl = (ttisCSclosure(func) ? clval(func) : NULL);
+    cl = (ttisclosure(func) ? clval(func) : NULL);
     status = auxgetinfo(C, options, cl, cf, ar);
     if (strchr(options, 'f')) {
         setobj2s(C, C->sp.p, func);
@@ -658,7 +659,6 @@ CS_API int cs_getinfo(cs_State *C, const char *options, cs_Debug *ar) {
 }
 
 
-#include <stdio.h>
 /*
 ** Set 'trap' for all active CScript frames.
 ** This function can be called during a signal, under "reasonable"
@@ -886,11 +886,9 @@ void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
             cf->top.p = C->sp.p + CS_MINSTACK;
         C->allowhook = 0; /* cannot call hooks inside a hook */
         cf->status |= mask;
-        //printf("Running hook\n");
         cs_unlock(C);
         (*hook)(C, &ar); /* call hook function */
         cs_lock(C);
-        //printf("Hook done\n");
         cs_assert(!C->allowhook);
         C->allowhook = 1; /* hook finished; once again enable hooks */
         cf->top.p = restorestack(C, cf_top);

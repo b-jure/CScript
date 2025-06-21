@@ -135,26 +135,26 @@ const TValue *csMM_get(cs_State *C, const TValue *v, int mm) {
 
 
 /* call __setidx metamethod */
-void csMM_callset(cs_State *C, const TValue *f, const TValue *p1,
-                  const TValue *p2, const TValue *p3) {
+void csMM_callset(cs_State *C, const TValue *f, const TValue *o,
+                               const TValue *k, const TValue *v) {
     SPtr func = C->sp.p;
     setobj2s(C, func, f);
-    setobj2s(C, func + 1, p1);
-    setobj2s(C, func + 2, p2);
-    setobj2s(C, func + 3, p3);
+    setobj2s(C, func + 1, o);
+    setobj2s(C, func + 2, k);
+    setobj2s(C, func + 3, v);
     C->sp.p = func + 4;
     csV_call(C, func, 0);
 }
 
 
 /* call __getidx metamethod */
-void csMM_callgetres(cs_State *C, const TValue *f, const TValue *p1,
-                     const TValue *p2, SPtr res) {
+void csMM_callgetres(cs_State *C, const TValue *f, const TValue *o,
+                                  const TValue *k, SPtr res) {
     ptrdiff_t result = savestack(C, res);
     SPtr func = C->sp.p;
     setobj2s(C, func, f);
-    setobj2s(C, func + 1, p1);
-    setobj2s(C, func + 2, p2);
+    setobj2s(C, func + 1, o);
+    setobj2s(C, func + 2, k);
     C->sp.p = func + 3;
     csV_call(C, func, 1);
     res = restorestack(C, result);
@@ -163,15 +163,14 @@ void csMM_callgetres(cs_State *C, const TValue *f, const TValue *p1,
 
 
 /* call binary method and store the result in 'res' */
-void csMM_callbinres(cs_State *C, const TValue *f, const TValue *self,
-                     const TValue *rhs, SPtr res) {
-    /* assuming EXTRA_STACK */
+void csMM_callbinres(cs_State *C, const TValue *f, const TValue *o1,
+                                  const TValue *o2, SPtr res) {
     ptrdiff_t result = savestack(C, res);
     SPtr func = C->sp.p;
-    setobj2s(C, func, f); /* push function */
-    setobj2s(C, func + 1, self); /* lhs arg */
-    setobj2s(C, func + 2, rhs); /* rhs arg */
-    C->sp.p += 3;
+    setobj2s(C, func, f);
+    setobj2s(C, func + 1, o1);
+    setobj2s(C, func + 2, o2);
+    C->sp.p += 3; /* assuming EXTRA_STACK */
     csV_call(C, func, 1);
     res = restorestack(C, result);
     setobj2s(C, res, s2v(--C->sp.p));
@@ -179,7 +178,7 @@ void csMM_callbinres(cs_State *C, const TValue *f, const TValue *self,
 
 
 static int callbinaux(cs_State *C, const TValue *v1, const TValue *v2,
-                      SPtr res, int mt) {
+                                   SPtr res, int mt) {
     const TValue *fn = csMM_get(C, v1, mt);
     if (ttisnil(fn)) {
         fn = csMM_get(C, v2, mt);
@@ -191,8 +190,8 @@ static int callbinaux(cs_State *C, const TValue *v1, const TValue *v2,
 
 
 /* try to call binary arithmetic or bitwise method */
-void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
-                 int mm) {
+void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2,
+                              SPtr res, int mm) {
     if (c_unlikely(ttypetag(v1) != ttypetag(v2) /* types don't match */
                 || !callbinaux(C, v1, v2, res, mm))) { /* or no method ? */
         switch (mm) {
@@ -209,20 +208,23 @@ void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
 
 
 /* call unary method and store result in 'res' */
-void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *v) {
+void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *o,
+                                                      SPtr res) {
+    ptrdiff_t result = savestack(C, res);
     SPtr func = C->sp.p;
-    setobj2s(C, func, fn); /* push function */
-    setobj2s(C, func + 1, v); /* 'self' */
-    C->sp.p += 2;
+    setobj2s(C, func, fn);
+    setobj2s(C, func + 1, o);
+    C->sp.p += 2; /* assuming EXTRA_STACK */
     csV_call(C, func, 1);
-    /* value is already in the correct place (on the stack top) */
+    res = restorestack(C, result);
+    setobj2s(C, res, s2v(--C->sp.p));
 }
 
 
-static int callunaryaux(cs_State *C, const TValue *v, int mt) {
-    const TValue *fn = csMM_get(C, v, mt);
+static int callunaryaux(cs_State *C, const TValue *o, SPtr res, int mt) {
+    const TValue *fn = csMM_get(C, o, mt);
     if (c_likely(!ttisnil(fn))) {
-        csMM_callunaryres(C, fn, v);
+        csMM_callunaryres(C, fn, o, res);
         return 1;
     }
     return 0;
@@ -230,15 +232,15 @@ static int callunaryaux(cs_State *C, const TValue *v, int mt) {
 
 
 /* try to call unary method */
-void csMM_tryunary(cs_State *C, const TValue *v, int mm) {
-    if (c_unlikely(!callunaryaux(C, v, mm))) {
+void csMM_tryunary(cs_State *C, const TValue *o, SPtr res, int mm) {
+    if (c_unlikely(!callunaryaux(C, o, res, mm))) {
         switch (mm) {
             case CS_MM_BNOT: {
-                csD_bitwerror(C, v, v);
+                csD_bitwerror(C, o, o);
                 break; /* UNREACHED */
             }
             case CS_MM_UNM: {
-                csD_aritherror(C, v, v);
+                csD_aritherror(C, o, o);
                 break; /* UNREACHED */
             }
             default: cs_assert(0); break;

@@ -2,8 +2,13 @@ assert(typeof(1<2) == "boolean");
 assert(typeof(true) == "boolean" and typeof(false) == "boolean");
 assert(typeof(nil) == "nil"
    and typeof(-3) == "number"
+   and typeof(inf) == "number"
+   and typeof(infinity) == "number"
    and typeof("x") == "string"
    and typeof({}) == "table"
+   and typeof([]) == "list"
+   and typeof(class{}) == "class"
+   and typeof((class{})()) == "instance"
    and typeof(typeof) == "function");
 
 assert(typeof(assert) == typeof(print));
@@ -217,8 +222,24 @@ assert(a.deep(30000) == 101);
     foreach i in range(0, N)
         assert(Res[i][0] == i);
     assert(Res[N] == "a" and Res[N+1] == "b" and Res[N+2] == "c");
-
 }
+
+
+/// TODO: test this
+///{
+///    print("testing chains of '__init'");
+///    local N = 15;
+///    local u = (class { fn __init(...) { return [...]; }});
+///    foreach i in range(0, N) {
+///        local ml = []; ml[__M.init] = u;
+///        u = setmetalist(class {}, ml);
+///    }
+///    local Res = u("a", "b", "c");
+///    assert(len(Res) == N + 3);
+///    foreach i in range(0, N)
+///        assert(typeof(Res[i]) == "instance");
+///    assert(Res[N] == "a" and Res[N+1] == "b" and Res[N+2] == "c");
+///}
 
 
 a = nil;

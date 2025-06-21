@@ -37,7 +37,7 @@ CSI_FUNC cs_Integer csV_modi(cs_State *C, cs_Integer x, cs_Integer y);
 CSI_FUNC cs_Number csV_modf(cs_State *C, cs_Number x, cs_Number y);
 CSI_FUNC void csV_binarithm(cs_State *C, const TValue *a, const TValue *b,
                             SPtr res, int op);
-CSI_FUNC void csV_unarithm(cs_State *C, const TValue *v, int op);
+CSI_FUNC void csV_unarithm(cs_State *C, const TValue *v, SPtr res, int op);
 CSI_FUNC int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2);
 CSI_FUNC int csV_orderlt(cs_State *C, const TValue *v1, const TValue *v2);
 CSI_FUNC int csV_orderle(cs_State *C, const TValue *v1, const TValue *v2);
