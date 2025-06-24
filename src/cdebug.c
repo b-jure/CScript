@@ -234,8 +234,6 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
     //printf("Symbolic execution\ttop=%d\n", symsp);
     if (*code == OP_VARARGPREP) /* vararg function? */
         pc += getopSize(*code); /* skip first opcode */
-    //if (code[lastpc] == OP_MBIN)
-    //    lastpc -= getopSize(OP_ADD); /* instruction was never executed */
     while (pc < lastpc) {
         const Instruction *i = &code[pc];
         int change; /* true if current instruction changed 'sp' */
@@ -293,6 +291,14 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
                 --symsp;
                 break;
             }
+            case OP_FORPREP: {
+                int off = GET_ARG_L(i, 1);
+                const Instruction *ni = i + off + getopSize(*i);
+                int nvars = check_exp(*ni == OP_FORCALL, GET_ARG_L(ni, 1));
+                symsp += nvars;
+                change = 0;
+                break;
+            }
             case OP_FORCALL: {
                 int stk = GET_ARG_L(i, 0);
                 int nresults = GET_ARG_L(i, 1) - 1;
@@ -324,8 +330,9 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
         if (change) {
             setsp = pc;
             //printf("(change) symsp=%d, setsp=%d [sp=%d]\n", symsp, setsp, sp);
-        } //else
+        } else {
             //printf("(no change) symsp=%d [sp=%d]\n", symsp, sp);
+        }
         pc += getopSize(code[pc]); /* next instruction */
     }
     //printf("\n%s RETURNS setsp->%d\n\n", __func__, setsp);
@@ -414,7 +421,7 @@ static const char *isEnv(const Proto *p, int pc, int t, int isup) {
     if (isup) { /* is 't' an upvalue? */
         cs_assert(0); /* unreachable */
         /* TODO: make OP_GETINDEXUP, which indexes upvalue these
-           opcodes would be failry common for __ENV accesses. */
+           opcodes would be fairly common for __ENV accesses. */
         name = upvalname(p, t);
     } else /* 't' is a stack slot */
         basicgetobjname(p, &pc, t, &name);

@@ -747,7 +747,7 @@ CSLIB_API void csL_traceback(cs_State *C, cs_State *C1,
     while (cs_getstack(C1, level++, &ar)) { /* tracing back... */
         if (limit2show-- == 0) { /* too many levels? */
             int n = last - level - STACKLEVELS + 1; /* levels to skip */
-            cs_push_fstring(C, "\n\t(skipping %d levels)", n);
+            cs_push_fstring(C, "\n\t...\t(skipping %d levels)", n);
             csL_buff_push_stack(&B);
             level += n; /* skip to last levels */
         } else {

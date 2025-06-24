@@ -598,7 +598,7 @@ static int b_range(cs_State *C) {
         stop = csL_check_integer(C, 1);
     step = csL_opt_integer(C, 2, 1);
     if (c_unlikely(step == 0)) /* invalid range? */
-        return csL_error(C, "invalid 'step' (must be positive or negative)");
+        return csL_error(C, "invalid 'step' (expect positive/negative integer)");
     else { /* push iterator */
         cs_push_integer(C, start);
         cs_push_integer(C, stop);
