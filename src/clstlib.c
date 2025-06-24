@@ -58,13 +58,16 @@ static int lst_len(cs_State *C) {
 
 static int lst_insert(cs_State *C) {
     cs_Integer pos;
-    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
-    switch (cs_getntop(C) - 1) {
-        case 0: { /* no position */
+    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 3, 1));
+    switch (cs_getntop(C)) {
+        case 2: { /* no position */
             pos = size; /* insert at end */
             break;
         }
-        case 1: case 2: { /* have position */
+        case 4: {
+            cs_setntop(C, 3); /* remove optional bool (border flag) */
+        } /* fall through */
+        case 3: { /* have position */
             pos = csL_check_integer(C, 1);
             csL_check_arg(C, 0 <= pos && pos <= size, 1,
                              "position out of bounds");
@@ -75,8 +78,7 @@ static int lst_insert(cs_State *C) {
             }
             break;
         }
-        default:
-            csL_error(C, "wrong number of arguments to 'insert'");
+        default: csL_error(C, "wrong number of arguments to 'insert'");
     }
     cs_set_index(C, 0, pos);
     return 0;
@@ -85,10 +87,8 @@ static int lst_insert(cs_State *C) {
 
 static int lst_remove(cs_State *C) {
     cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
-    cs_Integer pos = csL_opt_integer(C, 1, size-1);
-    if (pos != size-1)
-        csL_check_arg(C, c_castS2U(pos) < c_castS2U(size), 1,
-                         "position out of bounds");
+    cs_Integer pos = csL_opt_integer(C, 1, size-(size>0));
+    csL_check_arg(C, 0 <= pos && pos < size+(size==0), 1, "position out of bounds");
     cs_get_index(C, 0, pos); /* result = l[pos]; */
     if (size != 0) { /* the list is not empty? */
         /* memcpy(&l[pos], &l[pos]+1, size-pos-1) */
@@ -104,9 +104,9 @@ static int lst_remove(cs_State *C) {
 
 
 /* check list start/end indices */
-static void check_bounds(cs_State *C, int idx1, int idx2,
-                                     cs_Integer s, cs_Integer e) {
-    csL_check_arg(C, bcheck(s), idx1, "start index out of bounds");
+static void check_bounds(cs_State *C, int idx1, cs_Integer i,
+                                      int idx2, cs_Integer e) {
+    csL_check_arg(C, bcheck(i), idx1, "start index out of bounds");
     csL_check_arg(C, bcheck(e), idx2, "end index out of bounds");
 }
 
@@ -121,7 +121,7 @@ static int lst_move(cs_State *C) {
     int dl = !cs_is_noneornil(C, 4) ? 4 : 0; /* destination list */
     csL_check_type(C, 0, CS_T_LIST);
     csL_check_type(C, dl, CS_T_LIST);
-    check_bounds(C, 1, 2, f, e);
+    check_bounds(C, 1, f, 2, e);
     if (e >= f) { /* otherwise, nothing to move */
         int n;
         csL_check_arg(C, bcheck(d), 3, "destination index out of bounds");
@@ -157,7 +157,7 @@ static int lst_flatten(cs_State *C) {
     last = ltoi(checklist(C, 0, 0, 0));
     i = csL_opt_integer(C, 1, 0);
     e = csL_opt(C, csL_check_integer, 2, last);
-    check_bounds(C, 1, 2, i, e);
+    check_bounds(C, 1, i, 2, e);
     e = (e > last) ? last : e; /* flatten up to last index */
     if (i > e) return 0; /* empty range */
     n = c_castS2U(e) - c_castS2U(i); /* number of elements minus 1 */
@@ -199,7 +199,7 @@ static int lst_concat(cs_State *C) {
     cs_Integer i = csL_opt_integer(C, 2, 0);
     cs_Integer e = csL_opt_integer(C, 3, ltoi(l));
     int skipnil = csL_opt_bool(C, 4, 1);
-    check_bounds(C, 2, 3, i, e);
+    check_bounds(C, 2, i, 3, e);
     if (e >= i) { /* otherwise, nothing to concat */
         csL_buff_init(C, &b);
         next = getnexti(C, (i - !skipnil), e, skipnil);
@@ -374,7 +374,7 @@ static void auxsort(cs_State *C, Idx lo, Idx hi, unsigned rnd) {
 
 static int lst_sort(cs_State *C) {
     cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
-    if (size > 1) {
+    if (size > 1) { /* non trivial? */
         csL_check_arg(C, size <= INT_MAX, 0, "list too big");
         if (!cs_is_noneornil(C, 1)) /* is there a 2nd argument? */
             csL_check_type(C, 1, CS_T_FUNCTION); /* it must be a function */
@@ -387,6 +387,34 @@ static int lst_sort(cs_State *C) {
 /* }=================================================================== */
 
 
+static int lst_isordered(cs_State *C) {
+    int sorted = 1;
+    cs_Integer i, e;
+    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 4, 1));
+    if (!cs_is_noneornil(C, 1)) /* is there a 2nd argument? */
+        csL_check_type(C, 1, CS_T_FUNCTION); /* must be a function */
+    i = csL_opt_integer(C, 2, 0); /* start index */
+    e = csL_opt_integer(C, 3, size-(size>0)); /* end index */
+    check_bounds(C, 2, i, 3, e);
+    if (e > i) {
+        cs_setntop(C, 2); /* make sure there are two arguments */
+        while (sorted && i < e) {
+            cs_get_index(C, 0, (int)i);
+            cs_get_index(C, 0, (int)i+1);
+            sorted = sort_cmp(C, -2, -1);
+            cs_pop(C, 2);
+            i++;
+        }
+    }
+    cs_push_bool(C, sorted);
+    if (!sorted) {
+        cs_push_integer(C, i-1);
+        return 2; /* return false and first index which breaks ordering */
+    }
+    return 1; /* return true */
+}
+
+
 /// TODO: add tests and docs
 static cs_Entry lstlib[] = {
     {"len", lst_len},
@@ -397,6 +425,7 @@ static cs_Entry lstlib[] = {
     {"flatten", lst_flatten},
     {"concat", lst_concat},
     {"sort", lst_sort},
+    {"isordered", lst_isordered},
     {"maxindex", NULL},
     {NULL, NULL}
 };

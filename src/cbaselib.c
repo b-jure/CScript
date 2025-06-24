@@ -359,7 +359,6 @@ static int b_rawset(cs_State *C) {
 static int b_getargs(cs_State *C) {
     cs_Integer i;
     int nres = cs_getntop(C) - 1;
-    csL_check_any(C, 1); /* at  least 1 argument */
     if (cs_type(C, 0) == CS_T_STRING) {
         const char *what = cs_to_string(C, 0);
         if (strcmp(what, "list") == 0) { /* list? */
@@ -375,13 +374,13 @@ static int b_getargs(cs_State *C) {
                 cs_set_field(C, 0);
             }
         } else if (strcmp(what, "last") == 0) { /* last? */
-            i = nres - 1; /* get last argument */
+            i = nres - (nres>0); /* get last argument */
             goto l_getargs;
         } else if (strcmp(what, "len") == 0) /* len? */
             cs_push_integer(C, nres); 
         else
             csL_error_arg(C, 0,
-            "invalid string value, expected \"list\", \"table\" or \"len\"");
+            "invalid mode, expected \"list\"/\"table\"/\"len\"/\"last\"");
         return 1; /* return (list|table|len) */
     } else {
         i = csL_check_integer(C, 0);

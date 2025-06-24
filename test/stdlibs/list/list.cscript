@@ -37,8 +37,6 @@ local fn checkerror(msg, f, ...) {
 
     local flatten = list.flatten;
 
-    checkerror("wrong number of arguments", list.insert, [], 0, nil, 8);
-
     local x,y,z,a,n;
     a = []; local lim = 2000;
     for (local i=0; i <= lim; i=i+1) a[i]=i;

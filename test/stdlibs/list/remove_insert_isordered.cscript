@@ -1,0 +1,96 @@
+local fn checkerr(msg, f, ...) {
+    st, err = pcall(f, ...);
+    print(st, err);
+    assert(!st and string.find(err, msg));
+}
+
+{ /// 'list.new' errors
+    checkerr("number expected", list.new);
+    checkerr("no integer representation", list.new, 5.15);
+}
+
+{ /// 'list.insert' errors
+    local l = list.new(50);
+    assert(l.len == 0 and list.len(l) == 0 and len(l) == 0);
+    checkerr("list expected", list.insert, 0, 0);
+    checkerr("number expected", list.insert, l, true, 0);
+    checkerr("boolean expected", list.insert, l, 0, 5, 5);
+    checkerr("out of bounds", list.insert, l, 1, "val");
+    checkerr("out of bounds", list.insert, l, -1, "val");
+    checkerr("wrong number of arguments", list.insert, l, 0, "ok", true, 5);
+    checkerr("wrong number of arguments", list.insert, []);
+}
+
+{/// insert without position
+    local l = [];
+    for (local i=0; i<5; i=i+1)
+        list.insert(l, i+5);
+    assert(l[0] == 5 and l[1] == 6 and l[2] == 7 and
+           l[3] == 8 and l[4] == 9 and !l[5]);
+    assert(l.len == list.len(l) and len(l) == 5);
+}
+
+{ /// insert with position
+    local l = [4, 6, 8, 10, 12];
+    assert(l.len == 5 and list.len(l) == 5);
+    list.insert(l, 1, 5);
+    assert(list.isordered(l));
+    assert(l[1] == 5 and l.len == 6 and list.len(l) == 6);
+    list.insert(l, 3, 7);
+    assert(list.isordered(l));
+    list.insert(l, 5, 9);
+    assert(list.isordered(l));
+    list.insert(l, 7, 11);
+    assert(list.isordered(l));
+    assert(list.len(l) == 9);
+    list.insert(l, 8);
+    assert(!list.isordered(l));
+}
+
+{ /// 'list.remove' errors
+    local l = list.new(8);
+    checkerr("list expected", list.remove, 0, 0);
+    checkerr("number expected", list.remove, l, "test");
+    checkerr("boolean expected", list.remove, l, 0, 5);
+    checkerr("out of bounds", list.remove, l, 1);
+    checkerr("out of bounds", list.remove, l, -1);
+}
+
+{ /// remove without position
+    l = [0, 1, 2, 3, 4, 5, 6, 7];
+    assert(l.len == 8 and list.len(l) == 8 and len(l) == 8);
+    assert(list.remove(l) == 7);
+    assert(l[6] == 6 and list.last == nil and l.len == 8);
+    assert(list.remove(l) == 6);
+    assert(l[5] == 5 and list.last == nil and l.len == 8);
+    assert(list.remove(l) == 5);
+    assert(list.remove(l) == 4);
+    assert(list.remove(l) == 3);
+    assert(list.remove(l) == 2);
+    assert(list.remove(l) == 1);
+    assert(list.remove(l) == 0);
+    assert(list.remove(l) == nil);
+    assert(list.len(l) == 0 and l.len == 8 and len(l) == 8);
+    assert(list.remove(l) == nil);
+}
+
+{ /// remove with position
+    l = [0, 1, 2, 3, 4, 5, 6, 7];
+    assert(list.remove(l, 3) == 3);
+    assert(list.isordered(l));
+    assert(list.remove(l, 3) == 4);
+    assert(list.isordered(l));
+    assert(list.remove(l, 5) == 7);
+    assert(list.isordered(l));
+    assert(list.remove(l, 1) == 1);
+    assert(list.isordered(l));
+    assert(list.remove(l, 2) == 5);
+    assert(list.isordered(l));
+    assert(list.remove(l, 2) == 6);
+    assert(list.isordered(l));
+    assert(list.remove(l, 0) == 0);
+    assert(list.isordered(l));
+    assert(list.remove(l, 0) == 2);
+    assert(list.len(l) == 0);
+    assert(list.isordered(l));
+}
