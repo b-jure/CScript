@@ -32,10 +32,10 @@
 #define advance(lx)     ((lx)->c = brgetc((lx)->br))
 
 /* save current character into lexer buffer */
-#define save(lx)        savec(lx, (lx)->c)
+#define save(lx)    savec(lx, (lx)->c)
 
 /* save the current character into lexer buffer and advance */
-#define save_and_advance(lx)        (save(lx), advance(lx))
+#define save_and_advance(lx)    (save(lx), advance(lx))
 
 
 static const char *tkstr[] = { /* ORDER TK */
@@ -371,12 +371,15 @@ static size_t skipsep(Lexer *lx) {
     int s = lx->c;
     cs_assert(s == '[' || s == ']');
     save_and_advance(lx);
-    while (lx->c == '=') {
-        save_and_advance(lx);
-        count++;
+    if (lx->c != '=')
+        return 1; /* only a single '[' */
+    else { /* otherwise read separator */
+        do {
+            count++;
+            save_and_advance(lx);
+        } while (lx->c == '=');
+        return (lx->c == s) ? count + 2 : 0;
     }
-    return (lx->c == s) ? count + 2
-                        : (count == 0) ? 1 : 0;
 }
 
 

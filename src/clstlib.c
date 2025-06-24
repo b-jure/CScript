@@ -28,7 +28,7 @@
 
 
 
-/* list length to index */
+/* list Length TO Index */
 #define ltoi(l)         ((l) - ((l) > 0))
 
 
@@ -57,16 +57,16 @@ static int lst_len(cs_State *C) {
 
 
 static int lst_insert(cs_State *C) {
+    cs_Integer pos;
     cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
-    cs_Integer pos = csL_opt_integer(C, 1, size);
-    switch (cs_getntop(C)) {
-        case 2: { /* no position */
+    switch (cs_getntop(C) - 1) {
+        case 0: { /* no position */
             pos = size; /* insert at end */
             break;
         }
-        case 3: { /* have position */
+        case 1: case 2: { /* have position */
             pos = csL_check_integer(C, 1);
-            csL_check_arg(C, c_castS2U(pos) - 1u < c_castS2U(size), 1,
+            csL_check_arg(C, 0 <= pos && pos <= size, 1,
                              "position out of bounds");
             /* memmove(&l[pos+1], &l[pos], size-pos) */
             for (int i=size-1; pos <= i; i--) {
@@ -143,6 +143,14 @@ static int lst_move(cs_State *C) {
 }
 
 
+static int lst_new(cs_State *C) {
+    cs_Unsigned size = (cs_Unsigned)csL_check_integer(C, 0);
+    csL_check_arg(C, size <= cast_uint(INT_MAX), 0, "out of range");
+    cs_push_list(C, cast_int(size));
+    return 1;
+}
+
+
 static int lst_flatten(cs_State *C) {
     cs_Unsigned n;
     cs_Integer e, i, last;
@@ -150,11 +158,12 @@ static int lst_flatten(cs_State *C) {
     i = csL_opt_integer(C, 1, 0);
     e = csL_opt(C, csL_check_integer, 2, last);
     check_bounds(C, 1, 2, i, e);
-    if (i > e) return 0; /* empty range */
     e = (e > last) ? last : e; /* flatten up to last index */
+    if (i > e) return 0; /* empty range */
     n = c_castS2U(e) - c_castS2U(i); /* number of elements minus 1 */
-    if (c_unlikely(cast_uint(INT_MAX) <= n || !cs_checkstack(C, (int)(++n))))
-        return csL_error(C, "list has too many results to flatten");
+    cs_assert(n < cast_uint(INT_MAX)); /* bounds are already checked */
+    if (c_unlikely(!cs_checkstack(C, (int)(++n))))
+        return csL_error(C, "too many results");
     for (; i < e; i++) /* push l[i..e - 1] (to avoid overflows in 'i') */
         cs_get_index(C, 0, i);
     cs_get_index(C, 0, e); /* push last element */
@@ -208,9 +217,7 @@ static int lst_concat(cs_State *C) {
 
 
 /* {===================================================================
-** Quicksort implementation
-** (based on 'Algorithms (4th Edition)', Robert Sedgewick;
-** Kevin Wayne, 2012., and Lua 5.4.7 implementation based on
+** Quicksort implementation (based on Lua's implementation of
 ** 'Algorithms in MODULA-3', Robert Sedgewick, Addison-Wesley, 1993.)
 ** ==================================================================== */
 
@@ -222,16 +229,15 @@ typedef unsigned int Idx;
 
 
 /*
-** For tiny lists, instead of quicksort, insertion sort
-** is used, this value is the cutoff size.
-*/
-#define NTINY       10u
-
-
-/*
 ** Lists larger than 'RANLIMIT' may use randomized pivots.
 */
 #define RANLIMIT    100u
+
+
+/*
+** Error for invalid sorting function.
+*/
+#define FNSORTERR   "invalid order function for sorting"
 
 
 static void get2(cs_State *C, Idx idx1, Idx idx2) {
@@ -262,22 +268,6 @@ static int sort_cmp(cs_State *C, Idx a, Idx b) {
 }
 
 
-static void insertion_sort(cs_State *C, Idx lo, Idx hi) {
-    Idx N = hi - lo;
-    cs_assert(0 < N && N <= NTINY);
-    for (unsigned i = 1; i < N; i++) {
-        for (int j = i; j > 0; j--) {
-            get2(C, j, j-1);
-            if (!sort_cmp(C, -2, -1)) { /* l[j] >= l[j-1]? */
-                cs_pop(C, 2); /* remove both values */
-                break; /* done; element sorted */
-            }
-            set2(C, j-1, j); /* swap */
-        }
-    }
-}
-
-
 /*
 ** Does the partition: pivot P is at the top of the stack.
 ** precondition: l[lo] <= P == l[hi-1] <= l[hi],
@@ -294,7 +284,7 @@ static Idx partition(cs_State *C, Idx lo, Idx hi) {
         while ((void)geti(C, 0, ++i), sort_cmp(C, -1, -2)) {
             if (c_unlikely(i == hi - 1)) { /* l[hi - 1] < P == l[hi - 1] */
                 /* (pivot element can't be less than itself...) */
-                csL_error(C, "invalid order function for sorting");
+                csL_error(C, FNSORTERR);
             }
             cs_pop(C, 1); /* remove l[i] */
         }
@@ -303,7 +293,7 @@ static Idx partition(cs_State *C, Idx lo, Idx hi) {
         while ((void)geti(C, 0, --j), sort_cmp(C, -3, -1)) {
             if (c_unlikely(j < i)) { /* j <= i-1 and l[j] > P, contradicts (l) */
                 /* (can't have P < l[j] <= l[i-1] and P < l[i-1] */
-                csL_error(C, "invalid order function for sorting");
+                csL_error(C, FNSORTERR);
             }
             cs_pop(C, 1); /* remove l[j] */
         }
@@ -389,10 +379,7 @@ static int lst_sort(cs_State *C) {
         if (!cs_is_noneornil(C, 1)) /* is there a 2nd argument? */
             csL_check_type(C, 1, CS_T_FUNCTION); /* it must be a function */
         cs_setntop(C, 2); /* make sure there are two arguments */
-        if (size <= NTINY) /* tiny list? */
-            insertion_sort(C, 0, (Idx)size-1u); /* insertion sort */
-        else /* otherwise quicksort */
-            auxsort(C, 0, (Idx)size-1u, 0);
+        auxsort(C, 0, (Idx)size-1u, 0);
     }
     return 0;
 }
@@ -406,6 +393,7 @@ static cs_Entry lstlib[] = {
     {"insert", lst_insert},
     {"remove", lst_remove},
     {"move", lst_move},
+    {"new", lst_new},
     {"flatten", lst_flatten},
     {"concat", lst_concat},
     {"sort", lst_sort},

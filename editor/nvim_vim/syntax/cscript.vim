@@ -173,6 +173,7 @@ syn match cscriptFunc /\<list\.len\>/
 syn match cscriptFunc /\<list\.insert\>/
 syn match cscriptFunc /\<list\.remove\>/
 syn match cscriptFunc /\<list\.move\>/
+syn match cscriptFunc /\<list\.new\>/
 syn match cscriptFunc /\<list\.flatten\>/
 syn match cscriptFunc /\<list\.concat\>/
 syn match cscriptFunc /\<list\.sort\>/

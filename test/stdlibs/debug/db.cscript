@@ -765,7 +765,6 @@ assert(typeof(debug.getclist()) == "list");
     }
 
     local fn checkdeep(total, start) {
-        if (start > 0) return;
         local s = deep(total, start);
         local rest = reg.match(s, "^message\nstack traceback:\n(.*)$");
         local cl = countlines(rest);

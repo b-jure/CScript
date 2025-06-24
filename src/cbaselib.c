@@ -357,7 +357,9 @@ static int b_rawset(cs_State *C) {
 
 
 static int b_getargs(cs_State *C) {
+    cs_Integer i;
     int nres = cs_getntop(C) - 1;
+    csL_check_any(C, 1); /* at  least 1 argument */
     if (cs_type(C, 0) == CS_T_STRING) {
         const char *what = cs_to_string(C, 0);
         if (strcmp(what, "list") == 0) { /* list? */
@@ -372,14 +374,18 @@ static int b_getargs(cs_State *C) {
                 cs_push_bool(C, 1);
                 cs_set_field(C, 0);
             }
+        } else if (strcmp(what, "last") == 0) { /* last? */
+            i = nres - 1; /* get last argument */
+            goto l_getargs;
         } else if (strcmp(what, "len") == 0) /* len? */
-            cs_push_integer(C, nres);
+            cs_push_integer(C, nres); 
         else
             csL_error_arg(C, 0,
             "invalid string value, expected \"list\", \"table\" or \"len\"");
         return 1; /* return (list|table|len) */
     } else {
-        cs_Integer i = csL_check_integer(C, 0);
+        i = csL_check_integer(C, 0);
+    l_getargs:
         if (i < 0) i = nres + i;
         else if (i > nres) i = nres - 1;
         csL_check_arg(C, 0 <= i, 0, "index out of range");
@@ -563,11 +569,16 @@ static void pushrangeres(cs_State *C, cs_Integer start, cs_Integer next) {
 }
 
 
+/* get next range value */
+#define getnext(start,step,stop,op,lim) \
+        (((start) op (lim)-(step)) ? (start)+(step) : (stop))
+
+
 static int aux_revrange(cs_State *C) {
     RANGE_VALUES(C);
     cs_assert(step < 0);
     if (start > stop) {
-        cs_Integer next = (start >= CS_INTEGER_MIN-step) ? start+step : stop;
+        cs_Integer next = getnext(start, step, stop, >=, CS_INTEGER_MIN);
         pushrangeres(C, start, next);
     } else
         cs_push_nil(C);
@@ -579,7 +590,7 @@ static int aux_range(cs_State *C) {
     RANGE_VALUES(C);
     cs_assert(step > 0);
     if (start < stop) {
-        cs_Integer next = (start <= CS_INTEGER_MAX-step) ? start+step : stop;
+        cs_Integer next = getnext(start, step, stop, <=, CS_INTEGER_MAX);
         pushrangeres(C, start, next);
     } else
         cs_push_nil(C);
@@ -598,7 +609,7 @@ static int b_range(cs_State *C) {
         stop = csL_check_integer(C, 1);
     step = csL_opt_integer(C, 2, 1);
     if (c_unlikely(step == 0)) /* invalid range? */
-        return csL_error(C, "invalid 'step' (expect positive/negative integer)");
+        return csL_error(C, "invalid 'step', expected non-zero integer");
     else { /* push iterator */
         cs_push_integer(C, start);
         cs_push_integer(C, stop);

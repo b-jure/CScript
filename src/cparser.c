@@ -1573,7 +1573,7 @@ static void paramlist(Lexer *lx) {
         do {
             switch (lx->t.tk) {
                 case TK_NAME: {
-                    newlocalvar(lx, str_expectname(lx), 0);
+                    newlocalvar(lx, str_expectname(lx), 1);
                     nparams++;
                     break;
                 }
