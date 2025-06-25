@@ -486,7 +486,7 @@ static void unasmVararg(const Proto *p, Instruction *pc) {
 
 
 static int traceOffset(Instruction *pc) {
-    int offset;
+    int offset = 0; /* to prevent warnings */
     switch (*pc) {
         case OP_JMP: case OP_JMPS: {
             offset = GET_ARG_L(pc, 0);

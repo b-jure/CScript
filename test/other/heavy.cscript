@@ -31,7 +31,7 @@ local fn loadrep(x, what) {
             io.stderr.write("(", count // 2**20, " M)");
         return s;
     }
-    local st, msg = load(f, "big");
+    local st, msg = load(f, "=big");
     print("\nmemory: ", gc("count") * 1024);
     msg = reg.match(msg, "^[^\n]+");  /// get only first line
     print(string.fmt("total: 0x%x %s ('%s')", count, what, msg));
@@ -42,15 +42,15 @@ local fn loadrep(x, what) {
 fn controlstruct() {
     print("control structure too long");
     /// Magic breakdown:
-    /// - '1 << 24' is maximum value for 3 byte long instruction argument (-1)
-    /// - '- 5' is the size of the instruction (4) (and the additional 1 mentioned previously)
-    /// - '// 24' is the total size of instruction for code in string 's'
-    local lim = ((1 << 24) - 5) // 24;
+    /// '(1<<24) - 1' - max value of a long instruction argument (in bytes)
+    /// '16' - size of the loop chunk excluding the loop body (in bytes)
+    /// '27' - total size of repeated code in 's' (in bytes)
+    local lim = ((1 << 24)-1-16) // 27;
     local s = string.repeat("a = a + 1;\n", lim);
     s = "loop { " .. s .. " }";
     assert(load(s));
     print("ok with " .. tostr(lim) .. " lines");
-    lim = lim + 1;
+    lim = lim + 2; /* add 2 instead of 1 in case of leftover during division */
     s = string.repeat("a = a + 1;\n", lim);
     s = "loop { " .. s .. " }";
     local st, msg = load(s);
@@ -146,10 +146,10 @@ fn toomanyidx() {
   
 
 
-///teststring();
-///controlstruct();
-///manylines();
-///hugeid();
-///toomanyinst();
-///toomanyconst();
-///toomanyidx();
+#teststring();
+#controlstruct();
+#manylines();
+#hugeid();
+#toomanyinst();
+#toomanyconst();
+#toomanyidx();

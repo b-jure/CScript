@@ -1105,7 +1105,7 @@ unlock:
 
 static const TValue *objwithmethods(cs_State *C, int index, Table **t) {
     const TValue *obj = index2value(C, index);
-    assert(t != NULL);
+    cs_assert(t != NULL);
     api_check(C, ttisinstance(obj) || ttisfulluserdata(obj),
                  "expect full userdata or instance");
     if (ttisinstance(obj))

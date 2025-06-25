@@ -341,7 +341,7 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
         }
         default: return gcoval(v1) == gcoval(v2);
     }
-    assert(!ttisnil(fmm));
+    cs_assert(!ttisnil(fmm));
     if (swap) c_cswap(v1, v2);
     csMM_callbinres(C, fmm, v1, v2, C->sp.p);
     return !c_isfalse(s2v(C->sp.p));

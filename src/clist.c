@@ -138,12 +138,12 @@ c_sinline void trylistfield(cs_State *C, List *l, OString *idx,
                             const TValue *v, TValue *out) {
     if (c_likely(islistfield(idx))) { /* valid list field? */
         int lf = idx->extra - FIRSTLF;
-        assert(lf >= 0 && lf < LFNUM);
+        cs_assert(lf >= 0 && lf < LFNUM);
         if (!out) { /* set list field? */
-            assert(v);
+            cs_assert(v);
             setfield(C, l, lf, v);
         } else { /* otherwise get list field */
-            assert(!v);
+            cs_assert(!v);
             getfield(C, l, lf, out);
         }
     } else /* otherwise invalid list field */

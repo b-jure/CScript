@@ -57,13 +57,10 @@ static int lst_len(cs_State *C) {
 
 
 static int lst_insert(cs_State *C) {
-    cs_Integer pos;
     cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 3, 1));
+    cs_Integer pos = size;
     switch (cs_getntop(C)) {
-        case 2: { /* no position */
-            pos = size; /* insert at end */
-            break;
-        }
+        case 2: break; /* position is already set */
         case 4: {
             cs_setntop(C, 3); /* remove optional bool (border flag) */
         } /* fall through */

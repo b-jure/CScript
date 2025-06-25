@@ -337,8 +337,8 @@ void csC_fixline(FunctionState *fs, int line) {
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->C, p->code, p->sizecode, currPC, MAXINT, "code",
-                  Instruction);
+    csM_growarray(fs->lx->C, p->code, p->sizecode, currPC, MAXINT,
+                  "instructions", Instruction);
     p->code[currPC++] = cast_byte(code);
 }
 
@@ -346,7 +346,7 @@ static void emitbyte(FunctionState *fs, int code) {
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
     csM_ensurearray(fs->lx->C, p->code, p->sizecode, currPC, 3, MAXINT,
-                    "code", Instruction);
+                    "instructions", Instruction);
     set3bytes(&p->code[currPC], code);
     currPC += SIZE_ARG_L;
 }
@@ -355,7 +355,7 @@ static void emit3bytes(FunctionState *fs, int code) {
 static void addinstpc(FunctionState *fs) {
     Proto *p = fs->p;
     csM_growarray(fs->lx->C, p->instpc, p->sizeinstpc, fs->ninstpc, MAXINT,
-                  "code", int);
+                  "instructions", int);
     fs->prevpc = p->instpc[fs->ninstpc++] = currPC;
 }
 
@@ -556,23 +556,20 @@ void csC_reserveslots(FunctionState *fs, int n) {
 }
 
 
-/* check whether last instruction is an open function call */
-static int lastisopenfunc(FunctionState *fs) {
-    Instruction *pi = prevOP(fs);
-    return (*pi == OP_CALL && GET_ARG_L(pi, 1) == 0);
-}
-
-
-/* check whether last instruction is an open vararg expression */
-static int lastisopenvarg(FunctionState *fs) {
-    Instruction *pi = prevOP(fs);
-    return (*pi == OP_VARARG && GET_ARG_L(pi, 0) == 0);
-}
+/*
+** Non-finalized expression with multiple returns must be open,
+** meaning the emited code is either a vararg or call instruction,
+** and the instruction 'nretruns' argument is set as CS_MULRET (+1).
+*/
+#define mulretinvariant(fs) { \
+    Instruction *pi = prevOP(fs); UNUSED(pi); \
+    cs_assert((*pi == OP_VARARG && GET_ARG_L(pi, 0) == 0) || \
+              (*pi == OP_CALL && GET_ARG_L(pi, 1) == 0)); }
 
 
 /* finalize open call or vararg expression */
 static void setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
-    cs_assert(lastisopenvarg(fs) || lastisopenfunc(fs));
+    mulretinvariant(fs);
     cs_assert(nreturns >= CS_MULRET);
     if (e->et == EXP_CALL) {
         SET_ARG_L(getpi(fs, e), 1, nreturns + 1);
@@ -592,7 +589,6 @@ void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
 
 
 void csC_setmulret(FunctionState *fs, ExpInfo *e) {
-    cs_assert(lastisopenvarg(fs) || lastisopenfunc(fs));
     setreturns(fs, e, CS_MULRET);
 }
 

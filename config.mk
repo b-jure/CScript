@@ -55,9 +55,8 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # ASAN_OPTIONS => environment variable that holds Address Sanitizer options
 # detect_invalid_pointer_pairs=2
 
-CC = gcc -std=c99
-OPTS = -O0
-CFLAGS = -Wfatal-errors -Wall -Wextra $(OPTS) $(SYSCFLAGS) $(MYCFLAGS)
+CC = gcc
+CFLAGS = -std=c99 -Wfatal-errors -Wall -Wextra $(SYSCFLAGS) $(MYCFLAGS)
 LDFLAGS = $(SYSLDFLAGS) $(MYLDFLAGS)
 LIBS = -lm $(SYSLIBS) $(MYLIBS)
 
@@ -67,15 +66,14 @@ SYSLDFLAGS =
 SYSLIBS =
 
 # Release flags
-# MYCFLAGS = -DCS_USE_APICHECK
+# MYCFLAGS = -O2 -march=native -fno-stack-protector -fno-common 
 # MYLDFLAGS =
 # MYLIBS =
 # MYOBJS =
 
 # Testing flags
 ASANFLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=pointer-subtract -fsanitize=pointer-compare
-MYCFLAGS = $(ASANFLAGS) -ggdb -DCS_USE_APICHECK -DCSI_ASSERT
-	   #-DCSI_DISASSEMBLE_BYTECODE -DCSI_TRACE_EXEC
+MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DCS_USE_APICHECK -DCSI_ASSERT
 MYLDFLAGS = $(ASANFLAGS)
 MYLIBS =
 MYOBJS =

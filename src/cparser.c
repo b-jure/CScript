@@ -346,14 +346,6 @@ static int getnswexpr(Scope *s, Scope *limit) {
 }
 
 
-/*
-** Get total number of switch expressions up to the outermost scope.
-*/
-static int nswexpr(FunctionState *fs) {
-    return getnswexpr(fs->switchscope, NULL);
-}
-
-
 static void contadjust(FunctionState *fs, int push) {
     int nswexp = getnswexpr(fs->scope, &fs->ls->s);
     int ncntl = is_genloop(&fs->ls->s) * VAR_N;
@@ -2257,7 +2249,7 @@ static void loopstm(Lexer *lx) {
     lstart = currPC; /* store the pc where the loop starts */
     enterloop(fs, &ls, 0);
     stm(lx);
-    if (!stmIsReturn(fs)) { /* statement is not a return? */
+    if (!stmIsEnd(fs)) { /* statement (body) does not end control flow? */
         jmp = csC_jmp(fs, OP_JMPS);
         csC_patch(fs, jmp, lstart); /* jump back to loop start */
     }
@@ -2366,7 +2358,8 @@ static void stm_(Lexer *lx) {
 
 
 #define stackinvariant(fs) \
-        (fs->p->maxstack >= fs->sp && fs->sp >= nvarstack(fs) + nswexpr(fs))
+        (fs->p->maxstack >= fs->sp && fs->sp >= \
+         nvarstack(fs) + getnswexpr(fs->switchscope, NULL))
 
 
 static void decl(Lexer *lx) {
