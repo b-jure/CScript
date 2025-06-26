@@ -30,6 +30,7 @@ CSI_FUNC UMethod *csMM_newudmethod(cs_State *C,
                                    UserData *ud,
                                    const TValue *method);
 CSI_FUNC int csMM_equmethod(const UMethod *v1, const UMethod *v2);
+CSI_FUNC const char *csMM_objtypename(cs_State *C, const TValue *o);
 CSI_FUNC void csMM_callset(cs_State *C,
                            const TValue *fn,
                            const TValue *o,
@@ -59,7 +60,7 @@ CSI_FUNC int csMM_orderI(cs_State *C,
 CSI_FUNC void csMM_trybin(cs_State *C,
                           const TValue *v1,
                           const TValue *v2,
-		    	  SPtr res, int mm);
+		    	  SPtr res, int texpect, int mm);
 CSI_FUNC void csMM_tryunary(cs_State *C, const TValue *o, SPtr res, int mm);
 CSI_FUNC void csMM_tryconcat(cs_State *C);
 

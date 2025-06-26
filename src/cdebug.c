@@ -29,9 +29,9 @@
 #define CScriptClosure(cl)      ((cl) != NULL && (cl)->c.tt_ == CS_VCSCL)
 
 
-// TODO: line information gets messed when testing absolute difference
-// between previous pc, 255 or more raises error, last good known value
-// is 130 lines of spacing!
+static const char strlocal[] = "local";
+static const char strupval[] = "upvalue";
+
 
 /*
 ** Gets the Number of instructions up to 'pc'. This CScript implementation
@@ -372,7 +372,7 @@ static const char *basicgetobjname(const Proto *p, int *ppc, int sp,
     *name = csF_getlocalname(p, sp + 1, pc);
     if (*name) {  /* is a local? */
         //printf("Got local '%s'\n", *name);
-        return "local";
+        return strlocal;
     }
     /* else try symbolic execution */
     *ppc = pc = symbexec(p, pc, sp);
@@ -391,7 +391,7 @@ static const char *basicgetobjname(const Proto *p, int *ppc, int sp,
             case OP_GETUVAL: {
                 *name = upvalname(p, GET_ARG_L(i, 0));
                 //printf("upvalue '%s'\n", *name);
-                return "upvalue";
+                return strupval;
             }
             case OP_CONST: return kname(p, GET_ARG_S(i, 0), name);
             case OP_CONSTL: return kname(p, GET_ARG_L(i, 0), name);
@@ -514,7 +514,7 @@ static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
 
 /* try to find a name for a function based on how it was called */
 static const char *funcnamefromcall(cs_State *C, CallFrame *cf,
-                                    const char **name) {
+                                                 const char **name) {
     if (cf->status & CFST_HOOKED) { /* was it called inside a hook? */
         *name = "?";
         return "hook";
@@ -750,6 +750,10 @@ c_noret csD_errormsg(cs_State *C) {
         C->sp.p++; /* assume EXTRA_STACK */
         csV_call(C, C->sp.p - 2, 1); /* call it */
     }
+    if (ttisnil(s2v(C->sp.p - 1))) { /* error object is nil? */
+        /* change it to a proper message */
+        setstrval2s(C, C->sp.p - 1, csS_newlit(C, "<no error object>"));
+    }
     csPR_throw(C, CS_STATUS_ERUNTIME);
 }
 
@@ -772,69 +776,203 @@ c_noret csD_runerror(cs_State *C, const char *fmt, ...) {
 }
 
 
-/* global variable related error */
-c_noret csD_globalerror(cs_State *C, const char *err, OString *name) {
-    csD_runerror(C, "%s global variable '%s'", err, getstr(name));
+/*
+** Check whether pointer 'o' points to some value in the stack frame of
+** the current function and, if so, returns its index.  Because 'o' may
+** not point to a value in this stack, we cannot compare it with the
+** region boundaries (undefined behavior in ISO C).
+*/
+static int instack(CallFrame *cf, const TValue *o) {
+    SPtr base = cf->func.p + 1;
+    for (int pos = 0; base + pos < cf->top.p; pos++) {
+        if (o == s2v(base + pos))
+            return pos;
+    }
+    return -1; /* not found */
 }
 
 
-/* operation on invalid type error */
-c_noret csD_typeerror(cs_State *C, const TValue *v, const char *op) {
-    csD_runerror(C, "tried to %s %s value", op, typename(ttype(v)));
+/*
+** Checks whether value 'o' came from an upvalue.
+*/
+static const char *getupvalname(CallFrame *cf, const TValue *o,
+                                               const char **name) {
+    CSClosure *cl = cf_func(cf);
+    for (int i = 0; i < cl->nupvalues; i++) {
+        if (cl->upvals[i]->v.p == o) {
+            *name = upvalname(cl->p, i);
+            return strupval;
+        }
+    }
+    return NULL;
 }
 
 
-c_noret csD_typeerrormeta(cs_State *C, const TValue *v1, const TValue *v2,
-                           const char * mop) {
-    csD_runerror(C, "tried to '%s' %s and %s values",
-                     mop, typename(ttype(v1)), typename(ttype(v2)));
+static const char *formatvarinfo(cs_State *C, const char *kind,
+                                              const char *name) {
+    if (kind == NULL)
+        return ""; /* no information */
+    else
+        return csS_pushfstring(C, " (%s '%s')", kind, name);
 }
 
 
-/* arithmetic operation error */
-c_noret csD_operror(cs_State *C, const TValue *v1, const TValue *v2,
-                    const char *op) {
-    if (ttisnum(v1))
-        v1 = v2;  /* correct error value */
+/*
+** Build a string with a "description" for the value 'o', such as
+** "variable 'x'" or "upvalue 'y'".
+*/
+static const char *varinfo(cs_State *C, const TValue *o) {
+    CallFrame *cf = C->cf;
+    const char *name = NULL;  /* to avoid warnings */
+    const char *kind = NULL;
+    if (isCScript(cf)) {
+        kind = getupvalname(cf, o, &name); /* check whether 'o' is an upvalue */
+        if (!kind) { /* not an upvalue? */
+            int sp = instack(cf, o); /* try a stack slot */
+            if (sp >= 0) /* found? */
+                kind = getobjname(cf_func(cf)->p, currentpc(cf), sp, &name);
+        }
+    }
+    return formatvarinfo(C, kind, name);
+}
+
+
+/*
+** Raise a generic type error.
+*/
+static c_noret typeerror(cs_State *C, const TValue *o, const char *op,
+                                                       const char *extra) {
+    const char *t = csMM_objtypename(C, o);
+    csD_runerror(C, "attempt to %s a %s value%s", op, t, extra);
+}
+
+
+/*
+** Raise a type error with "standard" information about the faulty
+** object 'o' (using 'varinfo').
+*/
+c_noret csD_typeerror(cs_State *C, const TValue *o, const char *op) {
+    typeerror(C, o, op, varinfo(C, o));
+}
+
+
+/*
+** Return the reason for the error, 0 for type errors or missing
+** metamethod and -1 for instances with mismatched class.
+** Additionally set the invalid value into 'pv1'.
+*/
+static int binerrval(const TValue **pv1, const TValue *v2, const int *tarr) {
+    const TValue *v1 = *pv1;
+    int t1 = ttype(v1);
+    int t2 = ttype(v2);
+    if (t1 == t2) {
+        if (t1 == CS_T_INSTANCE && (insval(v1)->oclass != insval(v2)->oclass))
+            return -1; /* class mismatch */
+        /* fall through */
+    } else { /* otherwise check types */
+        for (int t; (t = *tarr) != CS_T_NONE; tarr++) {
+            if (t1 == t) { /* 'v1' has the expected type? */
+                *pv1 = v2; /* 'v2' is invalid type */
+                break; /* done */
+            }
+        }
+    }
+    return 0; /* wrong type or missing metamethod */
+}
+
+
+/*
+** Raise binary operation error. The type of error raised depends on
+** the reason for the error, as returned by 'binerrval'.
+*/
+static c_noret binerror(cs_State *C, const TValue *v1, const TValue *v2,
+                                     const int *tarr, int mm) {
+    const char *op = getstr(G(C)->mmnames[mm]) + 2; /* skip '__' */
+    if (binerrval(&v1, v2, tarr) < 0) { /* mismatched class? */
+        const char *t1 = csMM_objtypename(C, v1);
+        const char *t2 = csMM_objtypename(C, v2);
+        csD_runerror(C, "attempt to %s %s value%s and %s value%s which are"
+                        " instances of different class",
+                        op, t1, varinfo(C, v1), t2, varinfo(C, v2));
+    } else { /* otherwise raise standard type error */
+        if (mm == CS_MM_LT || mm == CS_MM_LE || mm == CS_MM_EQ)
+            op = "compare"; /* use a more reasonable operation name */
+        csD_typeerror(C, v1, op);
+    }
+}
+
+
+/*
+** External interface for 'binerror'.
+*/
+c_noret csD_binoperror(cs_State *C, const TValue *v1, const TValue *v2,
+                                    const int *tarr, int mm) {
+    binerror(C, v1, v2, tarr, mm);
+}
+
+
+/*
+** Identical to 'csD_typeerror', but it takes as a parameter metamethod
+** index instead of the usual operation name.
+*/
+c_noret csD_unoperror(cs_State *C, const TValue *v1, int mm) {
+    const char *op;
+    if (mm == CS_MM_BNOT)
+        op = "perform bitwise-not on";
+    else {
+        cs_assert(mm == CS_MM_UNM);
+        op = "perform unary-minus on";
+    }
     csD_typeerror(C, v1, op);
 }
 
 
-/* ordering error */
-c_noret csD_ordererror(cs_State *C, const TValue *v1, const TValue *v2) {
-    const char *name1 = typename(ttype(v1));
-    const char *name2 = typename(ttype(v2));
-    if (name1 == name2) /* point to same entry ? */
-        csD_runerror(C, "tried to compare two %s values", name1);
-    else
-        csD_runerror(C, "tried to compare %s with %s", name1, name2);
+/*
+** Raise error (during operation) for integer/float type.
+*/
+c_noret csD_opinterror(cs_State *C, const TValue *v1, const TValue *v2,
+                                                      const char *msg) {
+    if (!ttisnum(v1)) /* first operand is wrong? */
+        v2 = v1; /* now second is wrong */
+    csD_typeerror(C, v2, msg);
+}
+
+
+c_noret csD_ordererror(cs_State *C, const TValue *v1, const TValue *v2,
+                                                      int mm) {
+    int tarr[] = { CS_T_NUMBER, CS_T_STRING, CS_T_NONE };
+    binerror(C, v1, v2, tarr, mm);
 }
 
 
 c_noret csD_concaterror(cs_State *C, const TValue *v1, const TValue *v2) {
-    if (ttisstring(v1)) v1 = v2;
-    csD_typeerror(C, v1, "concatenate");
+    int tarr[] = { CS_T_STRING, CS_T_NONE };
+    binerror(C, v1, v2, tarr, CS_MM_CONCAT);
 }
 
 
+/*
+** Raise an error for calling a non-callable object. Try to find a name
+** for the object based on how it was called ('funcnamefromcall'); if it
+** cannot get a name there, try 'varinfo'.
+*/
 c_noret csD_callerror(cs_State *C, const TValue *o) {
-    csD_typeerror(C, o, "call");
+    CallFrame *cf = C->cf;
+    const char *name = NULL; /* to avoid warnings */
+    const char *kind = funcnamefromcall(C, cf, &name);
+    const char *extra = kind ? formatvarinfo(C, kind, name) : varinfo(C, o);
+    typeerror(C, o, "call", extra);
 }
 
 
-c_noret csD_indexerror(cs_State *C, cs_Integer index, const char *what) {
-    csD_runerror(C, "list index ('%I') is %s", index, what);
-}
-
-
-c_noret csD_indexterror(cs_State *C, const TValue *index) {
-    cs_assert(ttypetag(index) != CS_VNUMINT);
-    csD_runerror(C, "invalid list index type (%s)", typename(ttype(index)));
-}
-
-
-c_noret csD_llenerror(cs_State *C, const char *extra) {
-    csD_runerror(C, "invalid list length (%s)", extra);
+/*
+** Raise generic list-related error.
+*/
+c_noret csD_listerror(cs_State *C, const TValue *o, const char *what,
+                                                    const char *msg) {
+    const char *t = csMM_objtypename(C, o);
+    const char *e = varinfo(C, o);
+    csD_runerror(C, "list %s %s value%s is %s", what, t, e, msg);
 }
 
 

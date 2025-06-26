@@ -1078,17 +1078,17 @@ c_sinline Instance *getinstance(cs_State *C, int index) {
 }
 
 
-static int aux_getmethod(cs_State *C, const TValue *index, Table *t) {
+static int aux_getmethod(cs_State *C, const TValue *o, Table *t) {
     int tt;
     if (t) { /* have methods table? */
         const TValue *method = csH_get(t, s2v(C->sp.p - 1));
         if (!isempty(method)) { /* method found? */
             tt = ttype(method);
-            if (ttisinstance(index)) { /* instance method? */
-                IMethod *im = csMM_newinsmethod(C, insval(index), method);
+            if (ttisinstance(o)) { /* instance method? */
+                IMethod *im = csMM_newinsmethod(C, insval(o), method);
                 setimval2s(C, C->sp.p-1, im);
             } else { /* userdata method */
-                UMethod *um = csMM_newudmethod(C, uval(index), method);
+                UMethod *um = csMM_newudmethod(C, uval(o), method);
                 setumval2s(C, C->sp.p-1, um);
             }
             csG_checkGC(C);
@@ -1117,12 +1117,12 @@ static const TValue *objwithmethods(cs_State *C, int index, Table **t) {
 
 
 CS_API int cs_get_method(cs_State *C, int index) {
-    const TValue *obj;
+    const TValue *o;
     Table *t;
     cs_lock(C);
     api_checknelems(C, 1); /* key */
-    obj = objwithmethods(C, index, &t);
-    return aux_getmethod(C, obj, t);
+    o = objwithmethods(C, index, &t);
+    return aux_getmethod(C, o, t);
 }
 
 

@@ -36,6 +36,16 @@
          (s)->extra < FIRSTLF + LFNUM)
 
 
+/*
+** For passing both the stack value and integer to 'csA_set(get)int',
+** without breaking generic macros in 'cvm.c'.
+*/
+typedef struct FatValue {
+    const TValue *v;
+    cs_Integer i;
+} FatValue;
+
+
 CSI_FUNC List *csA_new(cs_State *C);
 CSI_FUNC List *csA_newl(cs_State *C, int n);
 CSI_FUNC void csA_init(cs_State *C);
@@ -43,11 +53,11 @@ CSI_FUNC void csA_shrink(cs_State *C, List *l);
 CSI_FUNC int csA_ensure(cs_State *C, List *l, int n);
 CSI_FUNC void csA_ensureindex(cs_State *C, List *l, int index);
 CSI_FUNC void csA_set(cs_State *C, List *l, const TValue *i, const TValue *v);
-CSI_FUNC void csA_setstr(cs_State *C, List *l, OString *i, const TValue *v);
-CSI_FUNC void csA_setint(cs_State *C, List *l, cs_Integer i, const TValue *v);
-CSI_FUNC void csA_get(cs_State *C, List *l, const TValue *i, TValue *out);
-CSI_FUNC void csA_getstr(cs_State *C, List *l, OString *i, TValue *out);
-CSI_FUNC void csA_getint(cs_State *C, List *l, cs_Integer i, TValue *out);
+CSI_FUNC void csA_setstr(cs_State *C, List *l, const TValue *k, const TValue *v);
+CSI_FUNC void csA_setint(cs_State *C, List *l, const FatValue *k, const TValue *v);
+CSI_FUNC void csA_get(cs_State *C, List *l, const TValue *k, TValue *out);
+CSI_FUNC void csA_getstr(cs_State *C, List *l, const TValue *k, TValue *out);
+CSI_FUNC void csA_getint(cs_State *C, List *l, const FatValue *k, TValue *out);
 CSI_FUNC const TValue *csA_getival(cs_State *C, List *l, int i);
 CSI_FUNC void csA_geti(cs_State *C, List *l, int i, TValue *res);
 CSI_FUNC int csA_findindex(List *l, int rev, int nn, int s, int e);

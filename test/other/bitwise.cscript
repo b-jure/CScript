@@ -79,7 +79,7 @@ assert((10 | toint(tonum(tostr(1) .. "9"))) == 27);
     local st, msg = pcall(fn() { return 4 & "a"; });
     assert(string.find(msg, "perform bitwise operation on"));
     st, msg = pcall(fn() { return ~"a"; });
-    assert(string.find(msg, "perform bitwise operation on"));
+    assert(string.find(msg, "perform bitwise-not on a string value"));
 }
 
 /// out of range number

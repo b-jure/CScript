@@ -218,7 +218,7 @@ typedef struct GCObject {
 #define ttisint(o)      checktag(o, CS_VNUMINT)
 
 #define nval(o)         check_exp(ttisnum(o), \
-                        ttisint(o) ? cast_num(ival(o)) : fval(o))
+                                  ttisint(o) ? cast_num(ival(o)) : fval(o))
 #define ival(o)         check_exp(ttisint(o), val(o).i)
 #define fval(o)         check_exp(ttisflt(o), val(o).n)
 
@@ -467,9 +467,9 @@ typedef struct OString {
 
 typedef struct OClass {
     ObjectHeader;
+    struct OClass *sclass;
     List *metalist;
     Table *methods;
-    struct OClass *sclass;
 } OClass;
 
 /* } --------------------------------------------------------------------- */

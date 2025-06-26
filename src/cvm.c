@@ -159,10 +159,10 @@ cs_Number csV_modf(cs_State *C, cs_Number x, cs_Number y) {
 ** Perform binary arithmetic operations on objects, this function is free
 ** to call metamethods in cases where raw arithmetics are not possible.
 */
-void csV_binarithm(cs_State *C, const TValue *v1, const TValue *v2, SPtr res,
-                   int op) {
+void csV_binarithm(cs_State *C, const TValue *v1,
+                                const TValue *v2, SPtr res, int op) {
     if (!csO_arithmraw(C, v1, v2, s2v(res), op))
-        csMM_trybin(C, v1, v2, res, (op - CS_OP_ADD) + CS_MM_ADD);
+        csMM_trybin(C, v1, v2, res, CS_T_NUMBER, (op - CS_OP_ADD) + CS_MM_ADD);
 }
 
 
@@ -361,7 +361,7 @@ void csV_rawsetstr(cs_State *C, const TValue *o, const TValue *k,
     switch (ttypetag(o)) {
         case CS_VLIST: {
             List *l = listval(o);
-            csV_setlist(C, l, strval(k), v, csA_setstr);
+            csV_setlist(C, l, k, v, csA_setstr);
             break;
         }
         case CS_VTABLE: {
@@ -394,7 +394,8 @@ void csV_rawsetint(cs_State *C, const TValue *o, const TValue *k,
     switch (ttypetag(o)) {
         case CS_VLIST: {
             List *l = listval(o);
-            csV_setlist(C, l, ival(k), v, csA_setint);
+            FatValue fv = { .v=k, .i=ival(k) };
+            csV_setlist(C, l, &fv, v, csA_setint);
             break;
         }
         case CS_VTABLE: {
@@ -486,7 +487,7 @@ c_sinline void trybindmethod(cs_State *C, const TValue *slot, Instance *in,
 void csV_rawgetstr(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
     switch (ttypetag(o)) {
         case CS_VLIST: {
-            csA_getstr(C, listval(o), strval(k), s2v(res));
+            csA_getstr(C, listval(o), k, s2v(res));
             break;
         }
         case CS_VTABLE: {
@@ -520,7 +521,8 @@ void csV_getstr(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
 void csV_rawgetint(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
     switch (ttypetag(o)) {
         case CS_VLIST: {
-            csA_getint(C, listval(o), ival(k), s2v(res));
+            FatValue fv = { .v=k, .i=ival(k) };
+            csA_getint(C, listval(o), &fv, s2v(res));
             break;
         }
         case CS_VTABLE: {
@@ -602,10 +604,15 @@ c_sinline void precallmbin(cs_State *C, const TValue *v1, const TValue *v2,
                            int mm, SPtr res) {
     const TValue *func;
     const char *opname = getshrstr(G(C)->mmnames[mm]) + 2; /* skip '__' */
-    if (c_unlikely(ttypetag(v1) != ttypetag(v2)))
-        csD_typeerrormeta(C, v1, v2, opname);
+    if (c_unlikely(ttypetag(v1) != ttypetag(v2))) {
+        const TValue *fo;
+        if (ttypetag(v2) != CS_T_INSTANCE && ttypetag(v2) != CS_T_USERDATA)
+            fo = v2; /* set 'v2' as faulty object */
+        else fo = v1; /* otherwise 'v1' is the faulty object */
+        csD_typeerror(C, fo, opname);
+    }
     if (c_unlikely(ttisinstance(v1) && insval(v1)->oclass != insval(v2)->oclass))
-        csD_runerror(C, "tried to '%s' instances of different class", opname);
+        csD_runerror(C, "attempt to '%s' instances of different class", opname);
     func = csMM_get(C, v1, mm);
     if (c_unlikely(ttisnil(func)))
         csD_typeerror(C, v1, opname);
@@ -1174,7 +1181,7 @@ c_sinline void pushtable(cs_State *C, int b) {
 
 /* order operation error with immediate operand */
 #define op_orderI_error(C,v,imm) \
-    { TValue v2; setival(&v2, imm); csD_ordererror(C, v, &v2); }
+    { TValue v2; setival(&v2, imm); csD_ordererror(C, v, &v2, CS_MM_EQ); }
 
 
 /* order operations with immediate operand */

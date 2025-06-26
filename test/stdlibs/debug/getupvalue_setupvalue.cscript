@@ -58,4 +58,3 @@ assert(Z == 1 and env.Z == 1);
 tab.f();
 assert(Z == 2 and env.Z == 2);
 __ENV = temp;
-print("+");

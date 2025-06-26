@@ -39,10 +39,10 @@
 
 
 #define csD_aritherror(C,v1,v2) \
-        csD_operror(C, v1, v2, "perform arithmetic operation on")
+        csD_opinterror(C, v1, v2, "perform arithmetic on")
 
 #define csD_bitwerror(C,v1,v2) \
-        csD_operror(C, v1, v2, "perform bitwise operation on")
+        csD_opinterror(C, v1, v2, "perform bitwise operation on")
 
 CSI_FUNC int csD_getfuncline(const Proto *fn, int pc);
 CSI_FUNC const char *csD_findlocal(cs_State *C, CallFrame *cf, int n,
@@ -50,21 +50,24 @@ CSI_FUNC const char *csD_findlocal(cs_State *C, CallFrame *cf, int n,
 CSI_FUNC const char *csD_addinfo(cs_State *C, const char *msg,
                                               OString *src, int line);
 CSI_FUNC c_noret csD_runerror(cs_State *C, const char *fmt, ...);
-CSI_FUNC c_noret csD_globalerror(cs_State *C, const char *err, OString *name);
-CSI_FUNC c_noret csD_typeerror(cs_State *C, const TValue *v, const char *op);
+CSI_FUNC c_noret csD_typeerror(cs_State *C, const TValue *o, const char *op);
+CSI_FUNC c_noret csD_binoperror(cs_State *C, const TValue *v1,
+                                             const TValue *v2,
+                                             const int *tarr,
+                                             int mm);
+CSI_FUNC c_noret csD_unoperror(cs_State *C, const TValue *v1, int mm);
 CSI_FUNC c_noret csD_ordererror(cs_State *C, const TValue *v1,
-                                             const TValue *v2);
-CSI_FUNC c_noret csD_typeerrormeta(cs_State *C, const TValue *v1,
-                                   const TValue *v2, const char * mop);
-CSI_FUNC c_noret csD_operror(cs_State *C, const TValue *v1, const TValue *v2,
-                             const char *op);
+                                             const TValue *v2,
+                                             int mm);
+CSI_FUNC c_noret csD_opinterror(cs_State *C, const TValue *v1,
+                                             const TValue *v2,
+                                             const char *msg);
 CSI_FUNC c_noret csD_callerror(cs_State *C, const TValue *obj);
 CSI_FUNC c_noret csD_concaterror(cs_State *C, const TValue *v1,
                                               const TValue *v2);
-CSI_FUNC c_noret csD_indexerror(cs_State *C, cs_Integer index,
-                                const char *what);
-CSI_FUNC c_noret csD_indexterror(cs_State *C, const TValue *index);
-CSI_FUNC c_noret csD_llenerror(cs_State *C, const char *extra);
+CSI_FUNC c_noret csD_listerror(cs_State *C, const TValue *o,
+                                            const char *what,
+                                            const char *msg);
 CSI_FUNC c_noret csD_errormsg(cs_State *C);
 CSI_FUNC void csD_hook(cs_State *C, int event, int line,
                                     int ftransfer, int ntransfer);

@@ -29,7 +29,7 @@ typedef struct csL_Buffer csL_Buffer;
 #define CS_STATUS_EFILE     (CS_STATUS_EERROR + 1)
 
 
-/* new index into the metalist, for when converting values to string */
+/* meta field that triggers in 'csL_to_lstring' */
 #define CS_MM_TOSTRING      CS_MM_NUM
 
 
@@ -118,8 +118,8 @@ CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *len);
 CSLIB_API void       *csL_to_fulluserdata(cs_State *C, int index);
 CSLIB_API void       *csL_to_lightuserdata(cs_State *C, int index);
 CSLIB_API void        csL_where(cs_State *C, int level);
+CSLIB_API int         csL_get_fieldstr(cs_State *C, int index, const char *f);
 CSLIB_API int         csL_get_property(cs_State *C, int index);
-CSLIB_API void        csL_set_index(cs_State *C, int index, int i);
 CSLIB_API cs_State   *csL_newstate(void);
 CSLIB_API int         csL_get_subtable(cs_State *C, int index,
                                        const char *field);
@@ -218,8 +218,8 @@ struct csL_Buffer {
     } init;
 };
 
-#define csL_buffptr(B)          ((B)->b)
-#define csL_bufflen(B)          ((B)->n)
+#define csL_buffptr(B)      ((B)->b)
+#define csL_bufflen(B)      ((B)->n)
 
 #define csL_buffadd(B, sz)      ((B)->n += (sz))
 #define csL_buffsub(B, sz)      ((B)->n -= (sz))

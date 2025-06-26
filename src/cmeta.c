@@ -53,9 +53,9 @@ void csMM_init(cs_State *C) {
 OClass *csMM_newclass(cs_State *C) {
     GCObject *o = csG_new(C, sizeof(OClass), CS_VCLASS);
     OClass *cls = gco2cls(o);
+    cls->sclass = NULL;
     cls->metalist = NULL;
     cls->methods = NULL;
-    cls->sclass = NULL;
     return cls;
 }
 
@@ -134,6 +134,22 @@ const TValue *csMM_get(cs_State *C, const TValue *v, int mm) {
 }
 
 
+/*
+** Return the name of the type of an object. For tables and userdata
+** with metatable, use their '__name' metafield, if present.
+*/
+const char *csMM_objtypename(cs_State *C, const TValue *o) {
+    Table *t;
+    if ((ttistable(o) && (t = tval(o))) ||
+        (ttisinstance(o) && (t = insval(o)->fields))) {
+        const TValue *name = csH_getshortstr(t, csS_new(C, "__name"));
+        if (ttisstring(name)) /* is '__name' a string? */
+            return getstr(strval(name)); /* use it as type name */
+    }
+    return typename(ttype(o)); /* else use standard type name */
+}
+
+
 /* call __setidx metamethod */
 void csMM_callset(cs_State *C, const TValue *f, const TValue *o,
                                const TValue *k, const TValue *v) {
@@ -177,39 +193,34 @@ void csMM_callbinres(cs_State *C, const TValue *f, const TValue *o1,
 }
 
 
-static int callbinaux(cs_State *C, const TValue *v1, const TValue *v2,
-                                   SPtr res, int mt) {
-    const TValue *fn = csMM_get(C, v1, mt);
-    if (ttisnil(fn)) {
-        fn = csMM_get(C, v2, mt);
-        if (ttisnil(fn)) return 0;
-    }
-    csMM_callbinres(C, fn, v1, v2, res);
-    return 1;
-}
-
-
-/* try to call binary arithmetic or bitwise method */
-void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2,
-                              SPtr res, int mm) {
-    if (c_unlikely(ttypetag(v1) != ttypetag(v2) /* types don't match */
-                || !callbinaux(C, v1, v2, res, mm))) { /* or no method ? */
-        switch (mm) {
-        case CS_MM_BNOT: case CS_MM_BSHL: case CS_MM_BSHR:
-        case CS_MM_BAND: case CS_MM_BOR: case CS_MM_BXOR:
-            csD_bitwerror(C, v1, v2);
-            break; /* unreached */
-        default:
-            csD_aritherror(C, v1, v2);
-            break; /* unreached */
+static int callbinMM(cs_State *C, const TValue *v1, const TValue *v2,
+                                                    SPtr res, int mm) {
+    int t1 = ttypetag(v1);
+    if (t1 != ttypetag(v2) ||
+            (t1 == CS_VINSTANCE && insval(v1)->oclass != insval(v2)->oclass)) {
+        return 0; /* different types or different classes */
+    } else {
+        const TValue *fn = csMM_get(C, v1, mm);
+        if (ttisnil(fn)) { /* metamethod not found? */
+            fn = csMM_get(C, v2, mm); /* try other instance */
+            if (ttisnil(fn)) return 0; /* no metamethod entry */
         }
+        csMM_callbinres(C, fn, v1, v2, res);
+        return 1; /* ok */
     }
 }
 
 
-/* call unary method and store result in 'res' */
-void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *o,
-                                                      SPtr res) {
+void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2,
+                              SPtr res, int texpect, int mm) {
+    const int tarr[] = { texpect, CS_T_NONE };
+    if (c_unlikely(!callbinMM(C, v1, v2, res, mm)))
+        csD_binoperror(C, v1, v2, tarr, mm);
+}
+
+
+void csMM_callunaryres(cs_State *C, const TValue *fn,
+                                    const TValue *o, SPtr res) {
     ptrdiff_t result = savestack(C, res);
     SPtr func = C->sp.p;
     setobj2s(C, func, fn);
@@ -221,7 +232,7 @@ void csMM_callunaryres(cs_State *C, const TValue *fn, const TValue *o,
 }
 
 
-static int callunaryaux(cs_State *C, const TValue *o, SPtr res, int mt) {
+static int callunMM(cs_State *C, const TValue *o, SPtr res, int mt) {
     const TValue *fn = csMM_get(C, o, mt);
     if (c_likely(!ttisnil(fn))) {
         csMM_callunaryres(C, fn, o, res);
@@ -231,41 +242,25 @@ static int callunaryaux(cs_State *C, const TValue *o, SPtr res, int mt) {
 }
 
 
-/* try to call unary method */
 void csMM_tryunary(cs_State *C, const TValue *o, SPtr res, int mm) {
-    if (c_unlikely(!callunaryaux(C, o, res, mm))) {
-        switch (mm) {
-            case CS_MM_BNOT: {
-                csD_bitwerror(C, o, o);
-                break; /* UNREACHED */
-            }
-            case CS_MM_UNM: {
-                csD_aritherror(C, o, o);
-                break; /* UNREACHED */
-            }
-            default: cs_assert(0); break;
-        }
-    }
+    if (c_unlikely(!callunMM(C, o, res, mm)))
+        csD_unoperror(C, o, mm);
 }
 
 
 void csMM_tryconcat(cs_State *C) {
-    SPtr top = C->sp.p;
-    const TValue *self = s2v(top - 2);
-    const TValue *rhs = s2v(top - 1);
-    if (c_unlikely(ttypetag(self) != ttypetag(rhs) || /* types not matching */
-                !callbinaux(C, self, rhs, top - 2, CS_MM_CONCAT))) {
-        csD_concaterror(C, self, rhs);
-    }
+    SPtr p1 = C->sp.p - 2; /* first argument */
+    if (c_unlikely(!callbinMM(C, s2v(p1), s2v(p1 + 1), p1, CS_MM_CONCAT)))
+        csD_concaterror(C, s2v(p1), s2v(p1 + 1));
 }
 
 
 /* call order method */
 int csMM_order(cs_State *C, const TValue *v1, const TValue *v2, int mm) {
     cs_assert(CS_MM_EQ <= mm && mm <= CS_MM_NUM);
-    if (c_likely(callbinaux(C, v1, v2, C->sp.p, mm)))
+    if (c_likely(callbinMM(C, v1, v2, C->sp.p, mm)))
         return !c_isfalse(s2v(C->sp.p));
-    csD_ordererror(C, v1, v2);
+    csD_ordererror(C, v1, v2, mm);
     /* UNREACHED */
     return 0;
 }

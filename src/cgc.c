@@ -262,9 +262,9 @@ static void markobject_(GState *gs, GCObject *o) {
         }
         case CS_VCLASS: {
             OClass *cls = gco2cls(o);
+            markobjectN(gs, cls->sclass);
             markobjectN(gs, cls->metalist);
             markobjectN(gs, cls->methods);
-            markobjectN(gs, cls->sclass);
             markblack(cls); /* nothing else to mark */
             break;
         }
@@ -503,6 +503,7 @@ static void freeobject(cs_State *C, GCObject *o) {
         case CS_VIMETHOD: csM_free(C, gco2im(o)); break;
         case CS_VUMETHOD: csM_free(C, gco2um(o)); break;
         case CS_VTHREAD: csT_free(C, gco2th(o)); break;
+        case CS_VCLASS: csM_free(C, gco2cls(o)); break;
         case CS_VSHRSTR: {
             OString *s = gco2str(o);
             csS_remove(C, s); /* remove it from the string table */
@@ -522,11 +523,6 @@ static void freeobject(cs_State *C, GCObject *o) {
         case CS_VCCL: {
             CClosure *cl = gco2clc(o);
             csM_freemem(C, cl, sizeofCcl(cl->nupvalues));
-            break;
-        }
-        case CS_VCLASS: {
-            OClass *cls = gco2cls(o);
-            csM_free(C, cls);
             break;
         }
         case CS_VUSERDATA: {

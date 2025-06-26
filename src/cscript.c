@@ -143,7 +143,9 @@ static int collect_args(char **argv, int *first) {
 }
 
 
-/* msghandler for protected calls */
+/*
+** Message handler for protected calls.
+*/
 static int msghandler(cs_State *C) {
     const char *msg = cs_to_string(C, -1);
     if (msg == NULL) { /* error object is not a string? */

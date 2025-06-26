@@ -1,0 +1,609 @@
+print("testing errors");
+
+local debug = import("debug");
+
+local fn checkerr(msg, f, ...) {
+    local st, err = pcall(f, ...);
+    assert(!st and reg.find(err, msg));
+}
+
+local fn doit(s, debug) {
+    local f, msg = load(s);
+    if (!f) {
+        if (debug) print("stat fail", msg);
+        return msg;
+    } else {
+        local cond;
+        cond, msg = pcall(f);
+        if (debug) print("did pcall", msg);
+        return !cond and msg;
+    }
+}
+
+local fn checkmessage(prog, msg, debug) {
+    local m = doit(prog, debug);
+    if (debug) print(m, msg);
+    ///print(m, msg);
+    assert(reg.find(m, msg, 0, true));
+}
+
+local fn checksyntax(prog, extra, token, line) {
+    local msg = doit(prog);
+    if (!reg.find(token, "^<%a") and !reg.find(token, "^char%("))
+        token = "'"..token.."'";
+    token = reg.gsub(token, "(%p)", "%%%1");
+    local pt = string.fmt([=[^%%[string ".*"%%]:%d: .- near %s$]=], line, token);
+    assert(reg.find(msg, pt));
+    assert(reg.find(msg, msg, 0, true));
+}
+
+/// test error message with no extra info
+assert(doit("error(\"hi\", 0);") == "hi");
+
+/// test nil error message
+assert(doit("error();") == "<no error object>");
+
+/// test common errors
+assert(doit("list.flatten([], 0, n=2**30);"));
+assert(doit("a=math.sin();"));
+assert(!doit("tostr(1);") and doit("tostr()"));
+assert(doit("tonum()"));
+assert(doit("loop break; a;"));
+assert(doit("return;;"));
+assert(doit("assert(false);"));
+assert(doit("assert(nil);"));
+assert(doit("fn a(... , ...) {}"));
+assert(doit("fn a(, ...) {}"));
+assert(doit("local l=[]; l = l[l.len] + 1"));
+
+checksyntax([=[
+  local a = [4
+
+]=], "expected ']' (to close '[' at line 1)", "<eof>", 3);
+
+
+/// tests for better error messages
+
+checkmessage("a = {} + 1;", "arithmetic");
+checkmessage("a = {} | 1;", "bitwise operation");
+checkmessage("a = {} < 1;", "attempt to compare", true);
+checkmessage("a = {} <= 1;", "attempt to compare");
+
+checkmessage("aaa=1; bbbb=2; aaa=math.sin(3)+bbbb(3);", "global 'bbbb'");
+checkmessage("local a={}; a.bbbb(3);", "field 'bbbb'");
+assert(!reg.find(doit("aaa=[13]; local bbbb=0; aaa[bbbb](3);", "'bbbb'")));
+checkmessage("aaa=[13]; local bbbb=0; aaa[bbbb](3);", "number");
+checkmessage("aaa=(1)..{};", "a table value");
+
+checkmessage("a = {__ENV = {}}; print(a.__ENV.x + 1);", "field 'x'");
+
+/// maybe index string value, (constant '__ENV') ?
+checkmessage("print((\"__ENV\").x + 1)", "field 'x'");
+
+__G.aaa, __G.bbbb = nil;
+
+/// calls
+checkmessage("local a; a(13);", "local 'a'");
+
+/// tail calls
+checkmessage("local a={}; return a.bbbb(3);", "field 'bbbb'");
+
+__G.aaa = nil;
+
+checkmessage("aaa.bbb:ddd(9);", "global 'aaa'");
+checkmessage("local aaa={bbb=1}; aaa.bbb:ddd(9);", "field 'bbb'");
+checkmessage("local aaa={bbb={}}; aaa.bbb:ddd(9);", "method 'ddd'");
+checkmessage("local a,b,c; (fn() { a = b+1.1; })();", "upvalue 'b'");
+assert(!doit("local aaa={bbb={ddd=next}}; aaa.bbb:ddd(nil);"));
+
+/// upvalues being indexed do not go to the stack
+checkmessage("local a,b,cc; (fn() { a = cc[1]; })();", "upvalue 'cc'");
+checkmessage("local a,b,cc; (fn() { a.x = 1; })();", "upvalue 'a'");
+
+checkmessage("local __ENV = {x={}}; a = a + 1;", "global 'a'");
+
+checkmessage("BB=1; local aaa={}; x=aaa+BB;", "local 'aaa'");
+checkmessage("aaa={}; x=3.3/aaa;", "global 'aaa'");
+checkmessage("aaa=2; BB=nil;x=aaa*BB;", "global 'BB'");
+checkmessage("aaa={}; x=-aaa;", "global 'aaa'");
+
+/// short circuit
+checkmessage("aaa=1; local aaa,bbbb=2,3; aaa = math.sin(1) and bbbb(3);",
+             "local 'bbbb'");
+checkmessage("aaa=1; local aaa,bbbb=2,3; aaa = bbbb(1) or aaa(3);",
+             "local 'bbbb'");
+checkmessage("local a,b,c,f = 1,1,1; f((a and b) or c);", "local 'f'");
+checkmessage("local a,b,c = 1,1,1; ((a and b) or c)();", "call a number value");
+assert(!reg.find(doit("aaa={}; x=(aaa or aaa)+(aaa and aaa);", "'aaa'")));
+assert(!reg.find(doit("aaa={}; (aaa or aaa)();", "'aaa'")));
+
+checkmessage("print(print < 10);", "function with number");
+checkmessage("print(print < print);", "two function values");
+checkmessage("print(\"10\" < 10);", "string with number");
+checkmessage("print(10 < \"23\");", "number with string");
+
+/// float->integer conversions
+checkmessage("local a = 2.0**100; x = a << 2;", "local a");
+checkmessage("local a = 1 >> 2.0**100;", "has no integer representation");
+checkmessage("local a = 10.1 << 2.0**100;", "has no integer representation");
+checkmessage("local a = 2.0**100 & 1;", "has no integer representation");
+checkmessage("local a = 2.0**100 & 1e100;", "has no integer representation");
+checkmessage("local a = 2.0 | 1e40;", "has no integer representation");
+checkmessage("local a = 2e100 ^ 1;", "has no integer representation");
+checkmessage("string.sub(\"a\", 2.0**100);", "has no integer representation");
+checkmessage("string.rep(\"a\", 3.3);", "has no integer representation");
+checkmessage("return 6e40 & 7;", "has no integer representation");
+checkmessage("return 34 << 7e30;", "has no integer representation");
+checkmessage("return ~-3e40;", "has no integer representation");
+checkmessage("return ~-3.009;", "has no integer representation");
+checkmessage("return 3.009 & 1;", "has no integer representation");
+checkmessage("return 34 >> {};", "table value");
+checkmessage("aaa = 24 // 0;", "divide by zero");
+checkmessage("aaa = 1 % 0;", "'n%0'");
+
+
+/// passing light userdata instead of full userdata
+__G.D = debug;
+checkmessage([=[
+  /// create light udata
+  local x = D.upvalueid(fn() { return debug; }, 0);
+  D.setuservalue(x, {});
+]=], "light userdata");
+__G.D = nil;
+
+{ /// named objects (field '__name')
+    checkmessage("math.sin(io.input())", "(number expected, got FILE*)");
+    __G.XX = (class{})(); XX.__name = "My Type";
+    assert(reg.find(tostr(XX), "^My Type"));
+    checkmessage("io.input(XX);", "(FILE* expected, got My Type)");
+    checkmessage("return XX + 1;", "on a My Type value");
+    checkmessage("return ~io.stdin;", "on a FILE* value");
+    checkmessage("return XX < XX;", "two My Type values");
+    checkmessage("return {} < XX;", "table with My Type");
+    checkmessage("return XX < io.stdin;", "My Type with FILE*");
+    __G.XX = nil;
+}
+
+////// global functions
+///checkmessage("(io.write or print){}", "io.write")
+///checkmessage("(collectgarbage or print){}", "collectgarbage")
+///
+////// errors in functions without debug info
+///{
+///  local f = fn (a) return a + 1 }
+///  f = assert(load(string.dump(f, true)))
+///  assert(f(3) == 4)
+///  checkerr("^%?:%?:", f, {})
+///
+///  /// code with a move to a local var ('OP_MOV A B' with A<B)
+///  f = fn () local a; a = {}; return a + 2 }
+///  /// no debug info (so that 'a' is unknown)
+///  f = assert(load(string.dump(f, true)))
+///  /// symbolic execution should not get lost
+///  checkerr("^%?:%?:.*table value", f)
+///}
+///
+///
+////// tests for field accesses after RK limit
+///local t = {}
+///for i = 1, 1000 {
+///  t[i] = "aaa = x" .. i
+///}
+///local s = table.concat(t, "; ")
+///t = nil
+///checkmessage(s.."; aaa = bbb + 1", "global 'bbb'")
+///checkmessage("local _ENV=_ENV;"..s.."; aaa = bbb + 1", "global 'bbb'")
+///checkmessage(s.."; local t = {}; aaa = t.bbb + 1", "field 'bbb'")
+////// cannot use 'self' opcode
+///checkmessage(s.."; local t = {}; t:bbb()", "field 'bbb'")
+///
+///checkmessage([[aaa=9
+///repeat until 3==3
+///local x=math.sin(math.cos(3))
+///if math.sin(1) == x { return math.sin(1) }   /// tail call
+///local a,b = 1, {
+///  {x='a'..'b'..'c', y='b', z=x},
+///  {1,2,3,4,5} or 3+3<=3+3,
+///  3+1>3+1,
+///  {d = x and aaa[x or y]}}
+///]], "global 'aaa'")
+///
+///checkmessage([[
+///local x,y = {},1
+///if math.sin(1) == 0 { return 3 }    /// return
+///x.a()]], "field 'a'")
+///
+///checkmessage([[
+///prefix = nil
+///insert = nil
+///while 1 {
+///  local a
+///  if nil { break }
+///  insert(prefix, a)
+///}]], "global 'insert'")
+///
+///checkmessage([[  /// tail call
+///  return math.sin("a")
+///]], "sin")
+///
+///checkmessage([[collectgarbage("nooption")]], "invalid option")
+///
+///checkmessage([[x = print .. "a"]], "concatenate")
+///checkmessage([[x = "a" .. false]], "concatenate")
+///checkmessage([[x = {} .. 2]], "concatenate")
+///
+///checkmessage("getmetatable(io.stdin).__gc()", "no value")
+///
+///checkmessage([[
+///local Var
+///local fn main()
+///  NoSuchName (fn() Var=0 })
+///}
+///main()
+///]], "global 'NoSuchName'")
+///print'+'
+///
+///aaa = {}; setmetatable(aaa, {__index = string})
+///checkmessage("aaa:sub()", "bad self")
+///checkmessage("string.sub('a', {})", "#2")
+///checkmessage("('a'):sub{}", "#1")
+///
+///checkmessage("table.sort({1,2,3}, table.sort)", "'table.sort'")
+///checkmessage("string.gsub('s', 's', setmetatable)", "'setmetatable'")
+///
+///_G.aaa = nil
+///
+///
+////// testing size of 'source' info; size of buffer for that info is
+////// LUA_IDSIZE, declared as 60 in luaconf. Get one position for '\0'.
+///local idsize = 60 - 1
+///local fn checksize (source)
+///  /// syntax error
+///  local _, msg = load("x", source)
+///  msg = string.match(msg, "^([^:]*):")   /// get source (1st part before ':')
+///  assert(msg:len() <= idsize)
+///}
+///
+///for i = 60 - 10, 60 + 10 {   /// check border cases around 60
+///  checksize("@" .. string.rep("x", i))   /// file names
+///  checksize(string.rep("x", i - 10))     /// string sources
+///  checksize("=" .. string.rep("x", i))   /// exact sources
+///}
+///
+///
+////// testing line error
+///
+///local fn lineerror (s, l)
+///  local err,msg = pcall(load(s))
+///  local line = tonum(string.match(msg, ":(%d+):"))
+///  assert(line == l or (!line and !l))
+///}
+///
+///lineerror("local a\n for i=1,'a' { \n print(i) \n }", 2)
+///lineerror("\n local a \n for k,v in 3 \n { \n print(k) \n }", 3)
+///lineerror("\n\n for k,v in \n 3 \n { \n print(k) \n }", 4)
+///lineerror("fn a.x.y ()\na=a+1\n}", 1)
+///
+///lineerror("a = \na\n+\n{}", 3)
+///lineerror("a = \n3\n+\n(\n4\n/\nprint)", 6)
+///lineerror("a = \nprint\n+\n(\n4\n/\n7)", 3)
+///
+///lineerror("a\n=\n-\n\nprint\n;", 3)
+///
+///lineerror([[
+///a
+///(     /// <<
+///23)
+///]], 2)
+///
+///lineerror([[
+///local a = {x = 13}
+///a
+///.
+///x
+///(     /// <<
+///23
+///)
+///]], 5)
+///
+///lineerror([[
+///local a = {x = 13}
+///a
+///.
+///x
+///(
+///23 + a
+///)
+///]], 6)
+///
+///local p = [[
+///  fn g() f() }
+///  fn f(x) error('a', XX) }
+///g()
+///]]
+///XX=3;lineerror((p), 3)
+///XX=0;lineerror((p), false)
+///XX=1;lineerror((p), 2)
+///XX=2;lineerror((p), 1)
+///_G.XX, _G.g, _G.f = nil
+///
+///
+///lineerror([[
+///local b = false
+///if !b {
+///  error 'test'
+///}]], 3)
+///
+///lineerror([[
+///local b = false
+///if !b {
+///  if !b {
+///    if !b {
+///      error 'test'
+///    }
+///  }
+///}]], 5)
+///
+///lineerror([[
+///_ENV = 1
+///fn foo ()
+///  local a = 10
+///  return a
+///}
+///]], 2)
+///
+///
+////// bug in 5.4.0
+///lineerror([[
+///  local a = 0
+///  local b = 1
+///  local c = b % a
+///]], 3)
+///
+///{
+///  /// Force a negative estimate for base line. Error in instruction 2
+///  /// (after VARARGPREP, GETGLOBAL), with first absolute line information
+///  /// (forced by too many lines) in instruction 0.
+///  local s = string.format("%s return __A.x", string.rep("\n", 300))
+///  lineerror(s, 301)
+///}
+///
+///
+///if !_soft {
+///  /// several tests that exhaust the Lua stack
+///  collectgarbage()
+///  print"testing stack overflow"
+///  local C = 0
+///  /// get line where stack overflow will happen
+///  local l = debug.getinfo(1, "l").currentline + 1
+///  local fn auxy () C=C+1; auxy() }     /// produce a stack overflow
+///  fn YY ()
+///    collectgarbage("stop")   /// avoid running finalizers without stack space
+///    auxy()
+///    collectgarbage("restart")
+///  }
+///
+///  local fn checkstackmessage (m)
+///    print("(expected stack overflow after " .. C .. " calls)")
+///    C = 0    /// prepare next count
+///    return (reg.find(m, "stack overflow"))
+///  }
+///  /// repeated stack overflows (to check stack recovery)
+///  assert(checkstackmessage(doit('YY()')))
+///  assert(checkstackmessage(doit('YY()')))
+///  assert(checkstackmessage(doit('YY()')))
+///
+///  _G.YY = nil
+///
+///
+///  /// error lines in stack overflow
+///  local l1
+///  local fn g(x)
+///    l1 = debug.getinfo(x, "l").currentline + 2
+///    collectgarbage("stop")   /// avoid running finalizers without stack space
+///    auxy()
+///    collectgarbage("restart")
+///  }
+///  local _, stackmsg = xpcall(g, debug.traceback, 1)
+///  print('+')
+///  local stack = {}
+///  for line in string.gmatch(stackmsg, "[^\n]*") {
+///    local curr = string.match(line, ":(%d+):")
+///    if curr { table.insert(stack, tonum(curr)) }
+///  }
+///  local i=1
+///  while stack[i] ~= l1 {
+///    assert(stack[i] == l)
+///    i = i+1
+///  }
+///  assert(i > 15)
+///
+///
+///  /// error in error handling
+///  local res, msg = xpcall(error, error)
+///  assert(!res and msg == 'error in error handling')
+///  print('+')
+///
+///  local fn f (x)
+///    if x==0 { error('a\n')
+///    else
+///      local aux = fn () return f(x-1) }
+///      local a,b = xpcall(aux, aux)
+///      return a,b
+///    }
+///  }
+///  f(3)
+///
+///  local fn loop (x,y,z) return 1 + loop(x, y, z) }
+/// 
+///  local res, msg = xpcall(loop, fn (m)
+///    assert(reg.find(m, "stack overflow"))
+///    checkerr("error handling", loop)
+///    assert(math.sin(0) == 0)
+///    return 15
+///  })
+///  assert(msg == 15)
+///
+///  local f = fn ()
+///    for i = 999900, 1000000, 1 { table.unpack({}, 1, i) }
+///  }
+///  checkerr("too many results", f)
+///
+///}
+///
+///
+///{  /// errors in error handle that not necessarily go forever
+///  local fn err (n)   /// function to be used as message handler
+///    /// generate an error unless n is zero, so that there is a limited
+///    /// loop of errors
+///    if type(n) ~= "number" {   /// some other error?
+///      return n   /// report it
+///    elseif n == 0 {
+///      return "}"   /// that will be the final message
+///    else error(n - 1)   /// does the loop
+///    }
+///  }
+///
+///  local res, msg = xpcall(error, err, 170)
+///  assert(!res and msg == "}")
+///
+///  /// too many levels
+///  local res, msg = xpcall(error, err, 300)
+///  assert(!res and msg == "C stack overflow")
+///}
+///
+///
+///{
+///  /// non string messages
+///  local t = {}
+///  local res, msg = pcall(fn () error(t) })
+///  assert(!res and msg == t)
+///
+///  res, msg = pcall(fn () error(nil) })
+///  assert(!res and msg == "<no error object>")
+///
+///  local fn f() error{msg='x'} }
+///  res, msg = xpcall(f, fn (r) return {msg=r.msg..'y'} })
+///  assert(msg.msg == 'xy')
+///
+///  /// 'assert' with extra arguments
+///  res, msg = pcall(assert, false, "X", t)
+///  assert(!res and msg == "X")
+/// 
+///  /// 'assert' with no message
+///  res, msg = pcall(fn () assert(false) })
+///  local line = string.match(msg, "%w+%.lua:(%d+): assertion failed!$")
+///  assert(tonum(line) == debug.getinfo(1, "l").currentline - 2)
+///
+///  /// 'assert' with non-string messages
+///  res, msg = pcall(assert, false, t)
+///  assert(!res and msg == t)
+///
+///  res, msg = pcall(assert, nil, nil)
+///  assert(!res and type(msg) == "string")
+///
+///  /// 'assert' without arguments
+///  res, msg = pcall(assert)
+///  assert(!res and reg.find(msg, "value expected"))
+///}
+///
+////// xpcall with arguments
+///local a, b, c = xpcall(reg.find, error, "alo", "al")
+///assert(a and b == 1 and c == 2)
+///a, b, c = xpcall(reg.find, fn (x) return {} }, true, "al")
+///assert(!a and type(b) == "table" and c == nil)
+///
+///
+///print("testing tokens in error messages")
+///checksyntax("syntax error", "", "error", 1)
+///checksyntax("1.000", "", "1.000", 1)
+///checksyntax("[[a]]", "", "[[a]]", 1)
+///checksyntax("'aa'", "", "'aa'", 1)
+///checksyntax("while << { }", "", "<<", 1)
+///checksyntax("for >> { }", "", ">>", 1)
+///
+////// test invalid non-printable char in a chunk
+///checksyntax("a\1a = 1", "", "<\\1>", 1)
+///
+////// test 255 as first char in a chunk
+///checksyntax("\255a = 1", "", "<\\255>", 1)
+///
+///doit('I = load("a=9+"); aaa=3')
+///assert(_G.aaa==3 and !_G.I)
+///_G.I,_G.aaa = nil
+///print('+')
+///
+///local lim = 1000
+///if _soft { lim = 100 }
+///for i=1,lim {
+///  doit('a = ')
+///  doit('a = 4+nil')
+///}
+///
+///
+////// testing syntax limits
+///
+///local fn testrep (init, rep, close, repc, finalresult)
+///  local s = init .. string.rep(rep, 100) .. close .. string.rep(repc, 100)
+///  local res, msg = load(s)
+///  assert(res)   /// 100 levels is OK
+///  if (finalresult) {
+///    assert(res() == finalresult)
+///  }
+///  s = init .. string.rep(rep, 500)
+///  local res, msg = load(s)   /// 500 levels not ok
+///  assert(!res and (reg.find(msg, "too many") or
+///                      reg.find(msg, "overflow")))
+///}
+///
+///testrep("local a; a", ",a", "= 1", ",1")    /// multiple assignment
+///testrep("local a; a=", "{", "0", "}")
+///testrep("return ", "(", "2", ")", 2)
+///testrep("local fn a (x) return x }; return ", "a(", "2.2", ")", 2.2)
+///testrep("", "{ ", "", " }")
+///testrep("", "while a { ", "", " }")
+///testrep("local a; ", "if a { else ", "", " }")
+///testrep("", "fn foo () ", "", " }")
+///testrep("local a = ''; return ", "a..", "'a'", "", "a")
+///testrep("local a = 1; return ", "a^", "a", "", 1)
+///
+///checkmessage("a = f(x" .. string.rep(",x", 260) .. ")", "too many registers")
+///
+///
+////// testing other limits
+///
+////// upvalues
+///local lim = 127
+///local  s = "local fn fooA ()\n  local "
+///for j = 1,lim {
+///  s = s.."a"..j..", "
+///}
+///s = s.."b,c\n"
+///s = s.."local fn fooB ()\n  local "
+///for j = 1,lim {
+///  s = s.."b"..j..", "
+///}
+///s = s.."b\n"
+///s = s.."fn fooC () return b+c"
+///local c = 1+2
+///for j = 1,lim {
+///  s = s.."+a"..j.."+b"..j
+///  c = c + 2
+///}
+///s = s.."\n}  } }"
+///local a,b = load(s)
+///assert(c > 255 and reg.find(b, "too many upvalues") and
+///       reg.find(b, "line 5"))
+///
+////// local variables
+///s = "\nfunction foo ()\n  local "
+///for j = 1,200 {
+///  s = s.."a"..j..", "
+///}
+///s = s.."b\n"
+///local a,b = load(s)
+///assert(reg.find(b, "line 2") and reg.find(b, "too many local variables"))
+///
+///mt.__index = oldmm
+///
+///print('OK')

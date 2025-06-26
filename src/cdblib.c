@@ -260,7 +260,7 @@ static int db_setupvalue(cs_State *C) {
 
 
 /*
-** Check whether a given upvalue from a given closure exists and
+** Checks whether a given upvalue from a given closure exists and
 ** returns its index.
 */
 static void *checkupval(cs_State *C, int argf, int argnup, int *pnup) {

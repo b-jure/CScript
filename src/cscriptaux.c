@@ -500,8 +500,11 @@ CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
                 break;
             }
             default: {
-                const char *kind = csL_typename(C, index);
+                int tt = csL_get_fieldstr(C, index, "__name");
+                const char *kind = (tt == CS_T_STRING) ? cs_to_string(C, -1)
+                                                       : csL_typename(C, index);
                 cs_push_fstring(C, "%s: %p", kind, cs_to_pointer(C, index));
+                if (tt != CS_T_NONE) cs_remove(C, -2); /* remove '__name' */
                 break;
             }
         }
@@ -533,20 +536,22 @@ CSLIB_API void csL_where(cs_State *C, int level) {
 }
 
 
-CSLIB_API int csL_get_property(cs_State *C, int index) {
-    if (cs_get_field(C, index) == CS_T_NIL) {
-        cs_pop(C, 1); /* remove field */
-        cs_get_class(C, index);
-        cs_get_method(C, index);
-    }
-    return cs_type(C, -1);
+// TODO: add docs
+CSLIB_API int csL_get_fieldstr(cs_State *C, int index, const char *field) {
+    int t = cs_type(C, index);
+    if (t == CS_T_INSTANCE || t == CS_T_TABLE)
+        return cs_get_fieldstr(C, index, field);
+    return CS_T_NONE;
 }
 
 
-CSLIB_API void csL_set_index(cs_State *C, int index, int i) {
-    if (c_unlikely(i < 0 || MAXLISTINDEX < i))
-        csL_error(C, "list index out of bounds (%d)", i);
-    cs_set_index(C, index, i);
+// TODO: update docs?
+CSLIB_API int csL_get_property(cs_State *C, int index) {
+    if (cs_get_field(C, index) == CS_T_NIL) {
+        cs_pop(C, 1); /* remove nil */
+        cs_get_method(C, index);
+    }
+    return cs_type(C, -1);
 }
 
 

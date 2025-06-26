@@ -1,0 +1,39 @@
+local debug = import("debug");
+
+local foo1, foo2, foo3;
+{
+    local a, b, c = 3, 5, 7;
+    foo1 = fn() { return a+b; };
+    foo2 = fn() { return b+a; };
+    {
+        local a = 10;
+        foo3 = fn() { return a+b; };
+    }
+}
+
+assert(debug.upvalueid(foo1, 0));
+assert(debug.upvalueid(foo1, 1));
+assert(!debug.upvalueid(foo1, 2));
+assert(debug.upvalueid(foo1, 0) == debug.upvalueid(foo2, 1));
+assert(debug.upvalueid(foo1, 1) == debug.upvalueid(foo2, 0));
+assert(debug.upvalueid(foo3, 0));
+assert(debug.upvalueid(foo1, 0) != debug.upvalueid(foo3, 0));
+assert(debug.upvalueid(foo1, 1) == debug.upvalueid(foo3, 1));
+
+assert(debug.upvalueid(reg.gmatch("x", "x"), 0) != nil);
+
+assert(foo1() == 3 + 5 and foo2() == 5 + 3);
+debug.upvaluejoin(foo1, 1, foo2, 1);
+assert(foo1() == 3 + 3 and foo2() == 5 + 3);
+assert(foo3() == 10 + 5);
+debug.upvaluejoin(foo3, 1, foo2, 0);
+assert(foo3() == 10 + 5);
+debug.upvaluejoin(foo3, 1, foo2, 1);
+assert(foo3() == 10 + 3);
+
+assert(!pcall(debug.upvaluejoin, foo1, 2, foo2, 0));
+assert(!pcall(debug.upvaluejoin, foo1, 0, foo2, 2));
+assert(!pcall(debug.upvaluejoin, foo1, -1, foo2, 1));
+assert(!pcall(debug.upvaluejoin, print, 0, foo2, 0));
+assert(!pcall(debug.upvaluejoin, {}, 0, foo2, 0));
+assert(!pcall(debug.upvaluejoin, foo1, 0, print, 0));

@@ -19,6 +19,12 @@
 #include "clexer.h"
 
 
+static const char *strneg = "negative";
+static const char *stroit = "of invalid type";
+static const char *stridx = "index";
+static const char *strlng = "length";
+
+
 List *csA_new(cs_State *C) {
     GCObject *o = csG_new(C, sizeof(List), CS_VLIST);
     List *l = gco2list(o);
@@ -38,8 +44,8 @@ int csA_ensure(cs_State *C, List *l, int space) {
     if (space < l->n) /* in bound? */
         return 0; /* done */
     else {
-        csM_ensurearray(C, l->b, l->sz, l->n, (space - l->n) + 1, MAXLISTINDEX,
-                        "list elements", TValue);
+        csM_ensurearray(C, l->b, l->sz, l->n, (space - l->n) + 1,
+                           MAXLISTINDEX, "list elements", TValue);
         for (int i = l->n; i < space; i++)
             setnilval(&l->b[i]); /* clear new part */
         return 1;
@@ -86,9 +92,9 @@ c_sinline void setfield(cs_State *C, List *l, int lf, const TValue *v) {
                     csA_ensureindex(C, l, i);
                     setobj(C, &l->b[i], v);
                 } else /* otherwise negative length */
-                    csD_llenerror(C, "expected positive integer or 0");
+                    csD_listerror(C, v, strlng, strneg);
             } else
-                csD_llenerror(C, "expected integer");
+                csD_listerror(C, v, strlng, stroit);
             break;
         }
         case LFLAST: { /* set the last element */
@@ -134,8 +140,9 @@ c_sinline void getfield(cs_State *C, List *l, int lf, TValue *out) {
 }
 
 
-c_sinline void trylistfield(cs_State *C, List *l, OString *idx,
-                            const TValue *v, TValue *out) {
+c_sinline void trylistfield(cs_State *C, List *l, const TValue *k,
+                                         const TValue *v, TValue *out) {
+    OString *idx = strval(k);
     if (c_likely(islistfield(idx))) { /* valid list field? */
         int lf = idx->extra - FIRSTLF;
         cs_assert(lf >= 0 && lf < LFNUM);
@@ -147,7 +154,7 @@ c_sinline void trylistfield(cs_State *C, List *l, OString *idx,
             getfield(C, l, lf, out);
         }
     } else /* otherwise invalid list field */
-        csD_runerror(C, "invalid list field ('%s')", getstr(idx));
+        csD_listerror(C, k, stridx, "unknown field");
 }
 
 
@@ -155,65 +162,67 @@ c_sinline void trylistfield(cs_State *C, List *l, OString *idx,
 ** Warning: when using this function the caller probably needs to
 ** check a GC barrier.
 */
-void csA_setstr(cs_State *C, List *l, OString *i, const TValue *v) {
-    trylistfield(C, l, i, v, NULL);
+void csA_setstr(cs_State *C, List *l, const TValue *k, const TValue *v) {
+    trylistfield(C, l, k, v, NULL);
 }
 
 
 /*
 ** Ditto for GC barrier.
 */
-void csA_setint(cs_State *C, List *l, cs_Integer i, const TValue *v) {
-    if (c_likely(0 <= i)) { /* index is 0 or positive? */
-        if (c_unlikely(MAXLISTINDEX < i)) /* 'index' too large? */
-            csD_indexerror(C, i, "too large");
+void csA_setint(cs_State *C, List *l, const FatValue *k, const TValue *v) {
+    if (c_likely(0 <= k->i)) { /* index is 0 or positive? */
+        if (c_unlikely(MAXLISTINDEX < k->i)) /* 'index' too large? */
+            csD_listerror(C, k->v, stridx, "too large");
         else { /* ok */
-            csA_ensureindex(C, l, i);
-            setobj(C, &l->b[i], v);
+            csA_ensureindex(C, l, k->i);
+            setobj(C, &l->b[k->i], v);
         }
-    } else /* otherwise negative index */
-        csD_indexerror(C, i, "negative");
+    } else /* TODO: remove this branch (wrap as unsigned) */
+        csD_listerror(C, k->v, stridx, strneg);
 }
 
 
 /*
 ** Ditto for GC barrier.
 */
-void csA_set(cs_State *C, List *l, const TValue *idx, const TValue *v) {
-    cs_Integer i;
-    if (c_likely(tointeger(idx, &i))) /* index is integer? */
-        csA_setint(C, l, i, v);
-    else if (ttisstring(idx)) /* index is string? */
-        csA_setstr(C, l, strval(idx), v);
+void csA_set(cs_State *C, List *l, const TValue *k, const TValue *v) {
+    FatValue fv;
+    if (c_likely(tointeger(k, &fv.i))) { /* index is integer? */
+        fv.v = k;
+        csA_setint(C, l, &fv, v);
+    } else if (ttisstring(k)) /* index is string? */
+        csA_setstr(C, l, k, v);
     else /* otherwise invalid index value */
-        csD_indexterror(C, idx);
+        csD_listerror(C, k, stridx, stroit);
 }
 
 
-void csA_getstr(cs_State *C, List *l, OString *i, TValue *out) {
-    trylistfield(C, l, i, NULL, out);
+void csA_getstr(cs_State *C, List *l, const TValue *k, TValue *out) {
+    trylistfield(C, l, k, NULL, out);
 }
 
 
-void csA_getint(cs_State *C, List *l, cs_Integer i, TValue *out) {
-    if (c_likely(0 <= i)) { /* positive index? */
-        if (i < l->n) { /* index in bounds? */
-            setobj(C, out, &l->b[i]);
+void csA_getint(cs_State *C, List *l, const FatValue *k, TValue *out) {
+    if (c_likely(0 <= k->i)) { /* positive index? */
+        if (k->i < l->n) { /* index in bounds? */
+            setobj(C, out, &l->b[k->i]);
         } else /* otherwise index out of bounds */
             setnilval(out);
-    } else /* error; negative index */
-        csD_indexerror(C, i, "negative");
+    } else /* TODO: remove this branch */
+        csD_listerror(C, k->v, stridx, strneg);
 }
 
 
-void csA_get(cs_State *C, List *l, const TValue *idx, TValue *out) {
-    cs_Integer i;
-    if (c_likely(tointeger(idx, &i))) /* index is integer? */
-        csA_getint(C, l, i, out);
-    else if (ttisstring(idx)) /* index is a string? */
-        csA_getstr(C, l, strval(idx), out);
+void csA_get(cs_State *C, List *l, const TValue *k, TValue *out) {
+    FatValue fv;
+    if (c_likely(tointeger(k, &fv.i))) { /* index is integer? */
+        fv.v = k;
+        csA_getint(C, l, &fv, out);
+    } else if (ttisstring(k)) /* index is a string? */
+        csA_getstr(C, l, k, out);
     else /* otherwise invalid index value */
-        csD_indexterror(C, idx);
+        csD_listerror(C, k, stridx, stroit);
 }
 
 
