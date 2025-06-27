@@ -1,32 +1,32 @@
 class X {
-    fn __init() {
+    __init = fn() {
         self.x = 69;
         return self;
-    }
-    fn __add(other) {
+    };
+    __add = fn(other) {
         return self.x + other.x;
-    }
+    };
 }
 local t = { x = 1; };
 local x = X();
 local mlX = getmetalist(X);
 assert(mlX);
-assert(mlX[__M.init]);
-assert(mlX[__M.init](t) == t);
-assert(mlX[__M.add]);
-assert(mlX[__M.add](t, t) == 138);
+assert(mlX[__MT.init]);
+assert(mlX[__MT.init](t) == t);
+assert(mlX[__MT.add]);
+assert(mlX[__MT.add](t, t) == 138);
 
 
 class Y {
     fn init() { return self; }
 }
 local mlY = [];
-mlY[__M.init] = fn(self, extra) {
+mlY[__MT.init] = fn(self, extra) {
     self.x = 34 + (extra or 0);
     return self;
 };
-mlY[__M.add] = fn(self, other) { return self.x + other.x; };
-mlY[__M.sub] = fn(self, other) { return self.x - other.x; };
+mlY[__MT.add] = fn(self, other) { return self.x + other.x; };
+mlY[__MT.sub] = fn(self, other) { return self.x - other.x; };
 setmetalist(Y, mlY);
 local y1 = Y();
 assert(y1.x and y1.x == 34);

@@ -16,7 +16,7 @@ assert(typeof(points) == "list");
 assert(points[0] == 69);
 assert(points[1] == 420);
 assert(points[2] == 1337);
-local array_iter = fn (arr) {
+local array_iter = fn(arr) {
     local i = 0;
     local n = len(arr);
     return fn () {
@@ -36,14 +36,14 @@ foreach i, point in array_iter(points) {
     assert(point == 420 or point == 1337);
 }
 local X = class {
-    fn __close() {
+    __close = fn() {
         assert(Y == 69);
         print("Closing " .. tostr(self));
-    }
-    fn __gc() {
+    };
+    __gc = fn() {
         Y = nil;
         print("Collecting " .. tostr(self));
-    }
+    };
 };
 X = X();
 Y = 69;

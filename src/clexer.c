@@ -123,7 +123,7 @@ const char *csY_tok2str(Lexer *lx, int t) {
         if (cisprint(t))
             return csS_pushfstring(lx->C, "'%c'", t);
         else
-            return csS_pushfstring(lx->C, "'\\%d'", t);
+            return csS_pushfstring(lx->C, "'<\\%d>'", t);
     }
 }
 

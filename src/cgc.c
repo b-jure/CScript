@@ -654,7 +654,7 @@ static void callgc(cs_State *C) {
     GState *gs = G(C);
     cs_assert(!gs->gcemergency);
     setgcoval(C, &v, gettobefin(gs));
-    if (!ttisnil(m = csMM_get(C, &v, CS_MM_GC))) { /* have __gc? */
+    if (!ttisnil(m = csMM_get(C, &v, CS_MT_GC))) { /* have __gc? */
         int status;
         int old_allowhook = C->allowhook;
         int old_gcstop = gs->gcstop;
@@ -696,7 +696,7 @@ void csG_checkfin(cs_State *C, GCObject *o, List *ml) {
     GState *gs = G(C);
     if (!ml ||                          /* no metalist... */
         isfin(o) ||                     /* or object is already marked... */
-        ttisnil(&ml->b[CS_MM_GC]) ||    /* or it has no finalizer... */
+        ttisnil(&ml->b[CS_MT_GC]) ||    /* or it has no finalizer... */
         (gs->gcstop & GCSTPCLS))        /* ...or state is closing? */
         return; /* nothing to be done */
     /* otherwise move 'o' to 'fin' list */

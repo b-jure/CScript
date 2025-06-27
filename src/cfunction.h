@@ -29,7 +29,7 @@
 
 
 /* maximum amount of upvalues in a CScript closure */
-#define MAXUPVAL    MAX_ARG_L
+#define MAXUPVAL        MAX_ARG_L
 
 
 #define uvisopen(uv)    ((uv)->v.p != &(uv)->u.value)

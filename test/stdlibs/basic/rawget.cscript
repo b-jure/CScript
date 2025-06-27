@@ -1,8 +1,8 @@
 local a = class {
-    fn __getidx(k) {
+    __getidx = fn(k) {
         assert(k);
         return nil;
-    }
+    };
 };
 local x = a();
 x.ok = 69;

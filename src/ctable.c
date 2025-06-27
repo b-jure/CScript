@@ -264,7 +264,7 @@ void csH_newkey(cs_State *C, Table *t, const TValue *key, const TValue *val) {
     } else if (ttisflt(key)) {
         cs_Number f = fval(key);
         cs_Integer k;
-        if (csO_n2i(f, &k, N2IEXACT)) { /* does key fit in an integer? */
+        if (csO_n2i(f, &k, N2IEQ)) { /* does key fit in an integer? */
             setival(&aux, k);
             key = &aux; /* insert it as an integer */
         }
@@ -466,7 +466,7 @@ const TValue *csH_get(Table *t, const TValue *key) {
         case CS_VNIL: return &absentkey;
         case CS_VNUMFLT: {
             cs_Integer i;
-            if (csO_tointeger(key, &i, N2IEXACT))
+            if (csO_tointeger(key, &i, N2IEQ))
                 return csH_getint(t, i);
         } /* else fall through */
         default:  {

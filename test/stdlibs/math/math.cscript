@@ -262,7 +262,7 @@ local fn checkcompt(msg, code) {
     assert(x);
     checkerror(msg, x);
 }
-checkcompt("division by zero", "return 2 // 0;");
+checkcompt("divide by zero", "return 2 // 0;");
 checkcompt(msgf2i, "return 2.3 >> 0;");
 checkcompt(msgf2i, string.fmt("return 2.0**%d & 1;", intbits - 1));
 checkcompt(msgf2i, "return math.huge << 1;");

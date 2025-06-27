@@ -112,6 +112,9 @@ typedef struct ExpInfo {
 } ExpInfo;
 
 
+#define onstack(e)      ((e)->et == EXP_FINEXPR)
+
+
 /* variable kind */
 #define VARREG      0   /* regular */
 #define VARFINAL    1   /* final (immutable) */
@@ -221,6 +224,8 @@ typedef struct FunctionState {
 
 
 CSI_FUNC c_noret csP_semerror(Lexer *lx, const char *err);
+CSI_FUNC void csP_checklimit(FunctionState *fs, int n,
+                             int limit, const char *what);
 CSI_FUNC CSClosure *csP_parse(cs_State *C, BuffReader *br, Buffer *buff,
                               ParserState *ps, const char *source);
 

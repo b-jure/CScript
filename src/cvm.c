@@ -118,7 +118,7 @@ static void pushclosure(cs_State *C, Proto *p, UpVal **encup, SPtr base) {
 cs_Integer csV_divi(cs_State *C, cs_Integer x, cs_Integer y) {
     if (c_unlikely(c_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
-            csD_runerror(C, "division by zero");
+            csD_runerror(C, "divide by zero");
         return intop(-, 0, x);
     } else {
         cs_Integer q = x / y; /* perform C division */
@@ -136,7 +136,7 @@ cs_Integer csV_divi(cs_State *C, cs_Integer x, cs_Integer y) {
 cs_Integer csV_modi(cs_State *C, cs_Integer x, cs_Integer y) {
     if (c_unlikely(c_castS2U(y) + 1 <= 1)) {
         if (y == 0)
-            csD_runerror(C, "attempt to x%%0");
+            csD_runerror(C, "attempt to 'n%%0'");
         return 0;
     } else {
         cs_Integer r = x % y;
@@ -162,7 +162,7 @@ cs_Number csV_modf(cs_State *C, cs_Number x, cs_Number y) {
 void csV_binarithm(cs_State *C, const TValue *v1,
                                 const TValue *v2, SPtr res, int op) {
     if (!csO_arithmraw(C, v1, v2, s2v(res), op))
-        csMM_trybin(C, v1, v2, res, CS_T_NUMBER, (op - CS_OP_ADD) + CS_MM_ADD);
+        csMM_trybin(C, v1, v2, res, (op - CS_OP_ADD) + CS_MT_ADD);
 }
 
 
@@ -174,7 +174,7 @@ void csV_unarithm(cs_State *C, const TValue *v, SPtr res, int op) {
     TValue aux;
     setival(&aux, 0);
     if (!csO_arithmraw(C, v, &aux, s2v(C->sp.p - 1), op))
-        csMM_tryunary(C, v, res, (op - CS_OP_UNM) + CS_MM_UNM);
+        csMM_tryunary(C, v, res, (op - CS_OP_UNM) + CS_MT_UNM);
 }
 
 
@@ -228,7 +228,7 @@ c_sinline int LEother(cs_State *C, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
         return (csS_cmp(strval(v1), strval(v2)) <= 0);
     else
-        return csMM_order(C, v1, v2, CS_MM_LE);
+        return csMM_order(C, v1, v2, CS_MT_LE);
 }
 
 
@@ -290,7 +290,7 @@ c_sinline int LTother(cs_State *C, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
         return csS_cmp(strval(v1), strval(v2)) < 0;
     else
-        return csMM_order(C, v1, v2, CS_MM_LT);
+        return csMM_order(C, v1, v2, CS_MT_LT);
 }
 
 
@@ -313,8 +313,8 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
     if (ttypetag(v1) != ttypetag(v2)) {
         if (ttype(v1) != ttype(v2) || ttype(v1) != CS_T_NUMBER)
             return 0;
-        return (csO_tointeger(v1, &i1, N2IEXACT) &&
-                csO_tointeger(v2, &i2, N2IEXACT) && i1 == i2);
+        return (csO_tointeger(v1, &i1, N2IEQ) &&
+                csO_tointeger(v2, &i2, N2IEQ) && i1 == i2);
     }
     switch (ttypetag(v1)) {
         case CS_VNIL: case CS_VFALSE: case CS_VTRUE: return 1;
@@ -327,15 +327,15 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
         case CS_VIMETHOD: return csMM_eqimethod(imval(v1), imval(v2));
         case CS_VUMETHOD: return csMM_equmethod(umval(v1), umval(v2));
         case CS_VUSERDATA: {
-            if  (C == NULL || (ttisnil(fmm = csMM_get(C, v1, CS_MM_EQ)) &&
-                    (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MM_EQ))))
+            if  (C == NULL || (ttisnil(fmm = csMM_get(C, v1, CS_MT_EQ)) &&
+                    (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MT_EQ))))
                 return uval(v1) == uval(v2);
             break;
         }
         case CS_VINSTANCE: {
             if (C == NULL || (insval(v1)->oclass != insval(v2)->oclass) ||
-                    (ttisnil(fmm = csMM_get(C, v1, CS_MM_EQ)) &&
-                    (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MM_EQ))))
+                    (ttisnil(fmm = csMM_get(C, v1, CS_MT_EQ)) &&
+                    (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MT_EQ))))
                 return insval(v1) == insval(v2);
             break;
         }
@@ -350,7 +350,7 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
 
 /* generic set */
 #define csV_setgen(C,o,k,v,f) \
-    { const TValue *fmm = csMM_get(C, o, CS_MM_SETIDX); \
+    { const TValue *fmm = csMM_get(C, o, CS_MT_SETIDX); \
       if (ttisnil(fmm)) { f(C, o, k, v); } \
       else { csMM_callset(C, fmm, o, k, v); }}
 
@@ -461,7 +461,7 @@ void csV_set(cs_State *C, const TValue *o, const TValue *k, const TValue *v) {
 
 /* generic get */
 #define csV_getgen(C,o,k,res,f) \
-    { const TValue *fmm = csMM_get(C, o, CS_MM_GETIDX); \
+    { const TValue *fmm = csMM_get(C, o, CS_MT_GETIDX); \
       if (ttisnil(fmm)) { f(C, o, k, res); } \
       else { csMM_callgetres(C, fmm, o, k, res); }}
 
@@ -592,33 +592,6 @@ void csV_get(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
         const TValue *f = fget((scl)->methods, k); \
         if (!isempty(f)) { bindmethod(C, in, f, res); } \
       } else setnilval(s2v(res)); }
-
-
-/*
-** Call binary metamethod, but before that perform a quick check
-** and invoke error if types don't match, or the values are instances
-** that belong to different classes, or v1 (self) doesn't have the
-** required metamethod ('mm').
-*/
-c_sinline void precallmbin(cs_State *C, const TValue *v1, const TValue *v2,
-                           int mm, SPtr res) {
-    const TValue *func;
-    const char *opname = getshrstr(G(C)->mmnames[mm]) + 2; /* skip '__' */
-    if (c_unlikely(ttypetag(v1) != ttypetag(v2))) {
-        const TValue *fo;
-        if (ttypetag(v2) != CS_T_INSTANCE && ttypetag(v2) != CS_T_USERDATA)
-            fo = v2; /* set 'v2' as faulty object */
-        else fo = v1; /* otherwise 'v1' is the faulty object */
-        csD_typeerror(C, fo, opname);
-    }
-    if (c_unlikely(ttisinstance(v1) && insval(v1)->oclass != insval(v2)->oclass))
-        csD_runerror(C, "attempt to '%s' instances of different class", opname);
-    func = csMM_get(C, v1, mm);
-    if (c_unlikely(ttisnil(func)))
-        csD_typeerror(C, v1, opname);
-    else
-        csMM_callbinres(C, func, v1, v2, res);
-}
 
 
 /*
@@ -757,7 +730,7 @@ c_sinline void auxinsertf(cs_State *C, SPtr func, const TValue *f) {
 c_sinline SPtr trymetacall(cs_State *C, SPtr func) {
     const TValue *f;
     checkstackGCp(C, 1, func); /* space for func */
-    f = csMM_get(C, s2v(func), CS_MM_CALL); /* (after previous GC) */
+    f = csMM_get(C, s2v(func), CS_MT_CALL); /* (after previous GC) */
     if (c_unlikely(ttisnil(f))) /* missing __call? (after GC) */
         csD_callerror(C, s2v(func));
     auxinsertf(C, func, f);
@@ -797,10 +770,10 @@ retry:
             Instance *ins = csMM_newinstance(C, classval(s2v(func)));
             csG_checkfin(C, obj2gco(ins), ins->oclass->metalist);
             setinsval2s(C, func, ins); /* replace class with its instance */
-            fmm = csMM_get(C, s2v(func), CS_MM_INIT);
+            fmm = csMM_get(C, s2v(func), CS_MT_INIT);
             if (!ttisnil(fmm)) { /* have __init ? */
                 checkstackGCp(C, 1, func); /* space for fmm */
-                fmm = csMM_get(C, s2v(func), CS_MM_INIT); /* (after GC) */
+                fmm = csMM_get(C, s2v(func), CS_MT_INIT); /* (after GC) */
                 if (c_likely(!ttisnil(fmm))) { /* have __init (after GC)? */
                     auxinsertf(C, func, fmm); /* insert it into stack... */
                     goto retry; /* ...and try calling it */
@@ -1103,12 +1076,7 @@ c_sinline void pushtable(cs_State *C, int b) {
     lk = K(fetch_l()); \
     if (c_likely(tointeger(v, &i1) && tointeger(lk, &i2))) { \
         setival(v, op(i1, i2)); \
-    } else { \
-        if (ttisnum(v) && ttisnum(lk)) \
-            csD_runerror(C, "number has no integer representation"); \
-        else \
-            csD_bitwerror(C, v, lk); \
-    }}
+    } else csD_binoperror(C, v, lk, CS_MT_BAND); }
 
 
 /* bitwise operations with immediate operand */
@@ -1122,12 +1090,8 @@ c_sinline void pushtable(cs_State *C, int b) {
     if (c_likely(tointeger(v, &i))) { \
         setival(v, op(i, imm)); \
     } else { \
-        if (ttisnum(v)) \
-            csD_runerror(C, "number has no integer representation"); \
-        else { \
-            TValue vimm; setival(&vimm, imm); \
-            csD_bitwerror(C, v, &vimm); \
-        } \
+        TValue vimm; setival(&vimm, imm); \
+        csD_binoperror(C, v, &vimm, CS_MT_BAND); \
     }}
 
 
@@ -1143,9 +1107,7 @@ c_sinline void pushtable(cs_State *C, int b) {
         setival(res, op(i1, i2)); \
         sp--; /* v2 */ \
         pc += getopSize(OP_MBIN); \
-    } else if (c_unlikely(ttisnum(v1) && ttisnum(v2))) { \
-        csD_runerror(C, "number has no integer representation"); \
-    }/* else try 'OP_MBIN' */}
+    }/* fall through to OP_MBIN */}
 
 
 
@@ -1181,7 +1143,7 @@ c_sinline void pushtable(cs_State *C, int b) {
 
 /* order operation error with immediate operand */
 #define op_orderI_error(C,v,imm) \
-    { TValue v2; setival(&v2, imm); csD_ordererror(C, v, &v2, CS_MM_EQ); }
+    { TValue v2; setival(&v2, imm); csD_ordererror(C, v, &v2); }
 
 
 /* order operations with immediate operand */
@@ -1450,18 +1412,18 @@ returning: /* trap already set */
                 TValue *o = peek(1); /* class */
                 TValue *f = peek(0); /* func */
                 List *ml = classval(o)->metalist;
-                int mm; /* metamethod index */
+                int mt; /* metalist index */
                 savestate(C);
-                mm = fetch_s();
-                cs_assert(0 <= mm && mm < CS_MM_NUM);
+                mt = fetch_s();
+                cs_assert(0 <= mt && mt < CS_MT_NUM);
                 /* TODO: remove this check (see pushclass) */
                 if (c_unlikely(!ml)) { /* no metalist? */
                     ml = csA_new(C);
                     classval(o)->metalist = ml;
                     checkGC(C);
                 }
-                csA_ensureindex(C, ml, mm);
-                csA_fastset(C, ml, mm, f); /* set the entry */
+                csA_ensureindex(C, ml, mt);
+                csA_fastset(C, ml, mt, f); /* set the entry */
                 sp--;
                 vm_break;
             }
@@ -1472,11 +1434,9 @@ returning: /* trap already set */
             vm_case(OP_MBIN) {
                 TValue *v1 = peek(1);
                 TValue *v2 = peek(0);
-                int mm;
                 savestate(C);
-                mm = fetch_s();
-                if (mm & 0x80) c_swap(v1, v2);
-                Protect(precallmbin(C, v1, v2, mm&0x7f, sp - 2));
+                /* operands are already swapped */
+                Protect(csMM_trybin(C, v1, v2, sp-2, fetch_s()));
                 sp--;
                 vm_break;
             }
@@ -1593,10 +1553,12 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_IDIV) {
+                savestate(C);
                 op_arith(C, csV_divi, c_numidiv);
                 vm_break;
             }
             vm_case(OP_MOD) {
+                savestate(C);
                 op_arith(C, csV_modi, csV_modf);
                 vm_break;
             }
@@ -1719,7 +1681,7 @@ returning: /* trap already set */
                     setfval(v, c_numunm(C, n));
                 } else {
                     savestate(C);
-                    Protect(csMM_tryunary(C, v, sp-1, CS_MM_UNM));
+                    Protect(csMM_tryunary(C, v, sp-1, CS_MT_UNM));
                 }
                 vm_break;
             }
@@ -1730,7 +1692,7 @@ returning: /* trap already set */
                     setival(v, intop(^, ~c_castS2U(0), i));
                 } else {
                     savestate(C);
-                    Protect(csMM_tryunary(C, v, sp-1, CS_MM_BNOT));
+                    Protect(csMM_tryunary(C, v, sp-1, CS_MT_BNOT));
                 }
                 vm_break;
             }

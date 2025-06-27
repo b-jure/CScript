@@ -29,12 +29,12 @@ k, v = nextfield(t, k);
 assert(!k and !v);
 
 local class X {
-    fn __init(x, y, z) {
+    __init = fn(x, y, z) {
         self.x = x;
         self.y = y;
         self.z = z;
         return self;
-    }
+    };
 };
 local ins = X(69, 420, 1337);
 assert(typeof(ins) == "instance");

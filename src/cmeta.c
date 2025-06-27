@@ -34,14 +34,14 @@ CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
 
 
 void csMM_init(cs_State *C) {
-    const char *mmnames[CS_MM_NUM] = { /* ORDER MM */
+    const char *mmnames[CS_MT_NUM] = { /* ORDER MT */
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
         "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",
         "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
-        "__bnot", "__eq", "__lt", "__le"
+        "__bnot", "__eq", "__lt", "__le", "__name"
     };
-    cs_assert(FIRSTMM + CS_MM_NUM <= MAXBYTE);
-    for (int i = 0; i < CS_MM_NUM; i++) {
+    cs_assert(FIRSTMM + CS_MT_NUM <= MAXBYTE);
+    for (int i = 0; i < CS_MT_NUM; i++) {
         OString *s = csS_new(C, mmnames[i]);
         s->extra = cast_byte(i + FIRSTMM);
         G(C)->mmnames[i] = s;
@@ -124,7 +124,7 @@ int csMM_equmethod(const UMethod *v1, const UMethod *v2) {
 /* get method 'mm' */
 const TValue *csMM_get(cs_State *C, const TValue *v, int mm) {
     List *ml;
-    cs_assert(0 <= mm && mm < CS_MM_NUM);
+    cs_assert(0 <= mm && mm < CS_MT_NUM);
     switch (ttypetag(v)) {
         case CS_VINSTANCE: ml = insval(v)->oclass->metalist; break;
         case CS_VUSERDATA: ml = uval(v)->metalist; break;
@@ -135,18 +135,19 @@ const TValue *csMM_get(cs_State *C, const TValue *v, int mm) {
 
 
 /*
-** Return the name of the type of an object. For tables and userdata
-** with metatable, use their '__name' metafield, if present.
+** Return the name of the type of an object. For instances, classes and
+** userdata with metalist, use their '__name', if it is a string value.
 */
 const char *csMM_objtypename(cs_State *C, const TValue *o) {
-    Table *t;
-    if ((ttistable(o) && (t = tval(o))) ||
-        (ttisinstance(o) && (t = insval(o)->fields))) {
-        const TValue *name = csH_getshortstr(t, csS_new(C, "__name"));
-        if (ttisstring(name)) /* is '__name' a string? */
-            return getstr(strval(name)); /* use it as type name */
+    List *ml;
+    if ((ttisinstance(o) && (ml = insval(o)->oclass->metalist)) ||
+        (ttisfulluserdata(o) && (ml = uval(o)->metalist))) {
+        const TValue *v = csA_getival(C, ml, CS_MT_NAME);
+        if (ttisstring(v))
+            return getstr(strval(v));
+        /* else fall through */
     }
-    return typename(ttype(o)); /* else use standard type name */
+    return typename(ttype(o));
 }
 
 
@@ -212,10 +213,9 @@ static int callbinMM(cs_State *C, const TValue *v1, const TValue *v2,
 
 
 void csMM_trybin(cs_State *C, const TValue *v1, const TValue *v2,
-                              SPtr res, int texpect, int mm) {
-    const int tarr[] = { texpect, CS_T_NONE };
+                              SPtr res, int mm) {
     if (c_unlikely(!callbinMM(C, v1, v2, res, mm)))
-        csD_binoperror(C, v1, v2, tarr, mm);
+        csD_binoperror(C, v1, v2, mm);
 }
 
 
@@ -243,24 +243,27 @@ static int callunMM(cs_State *C, const TValue *o, SPtr res, int mt) {
 
 
 void csMM_tryunary(cs_State *C, const TValue *o, SPtr res, int mm) {
-    if (c_unlikely(!callunMM(C, o, res, mm)))
-        csD_unoperror(C, o, mm);
+    if (c_unlikely(!callunMM(C, o, res, mm))) {
+        TValue dummy;
+        setival(&dummy, 0);
+        csD_binoperror(C, o, &dummy, mm);
+    }
 }
 
 
 void csMM_tryconcat(cs_State *C) {
     SPtr p1 = C->sp.p - 2; /* first argument */
-    if (c_unlikely(!callbinMM(C, s2v(p1), s2v(p1 + 1), p1, CS_MM_CONCAT)))
+    if (c_unlikely(!callbinMM(C, s2v(p1), s2v(p1 + 1), p1, CS_MT_CONCAT)))
         csD_concaterror(C, s2v(p1), s2v(p1 + 1));
 }
 
 
 /* call order method */
 int csMM_order(cs_State *C, const TValue *v1, const TValue *v2, int mm) {
-    cs_assert(CS_MM_EQ <= mm && mm <= CS_MM_NUM);
+    cs_assert(CS_MT_EQ <= mm && mm <= CS_MT_NUM);
     if (c_likely(callbinMM(C, v1, v2, C->sp.p, mm)))
         return !c_isfalse(s2v(C->sp.p));
-    csD_ordererror(C, v1, v2, mm);
+    csD_ordererror(C, v1, v2);
     /* UNREACHED */
     return 0;
 }

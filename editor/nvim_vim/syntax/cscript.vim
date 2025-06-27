@@ -38,7 +38,7 @@ syn sync minlines=1000
 syn keyword cscriptMetaMethod __getidx __setidx __gc __close __call __init
 syn keyword cscriptMetaMethod __concat __mod __pow __add __sub __mul __div
 syn keyword cscriptMetaMethod __shl __shr __band __bor __bxor __unm __bnot
-syn keyword cscriptMetaMethod __eq __lt __le
+syn keyword cscriptMetaMethod __eq __lt __le __name
 "-----------------}
 
 "-Basic library---{{
@@ -46,7 +46,7 @@ syn keyword cscriptFunc error assert gc load loadfile runfile getmetalist
 syn keyword cscriptFunc setmetalist nextfield pairs ipairs pcall xpcall
 syn keyword cscriptFunc print warn len rawequal rawget rawset getargs
 syn keyword cscriptFunc tonum tostr typeof getclass getsuper range
-syn keyword cscriptFunc __G __ENV __VERSION __M
+syn keyword cscriptFunc __G __ENV __VERSION __MT
 "-Package library-}{
 syn keyword cscriptFunc import
 syn match cscriptFunc /\<package\.loadlib\>/

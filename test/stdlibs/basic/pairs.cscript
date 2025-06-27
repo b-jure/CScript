@@ -19,12 +19,12 @@ foreach k, v in pairs(t) {
 assert(i == 7);
 
 local class X {
-    fn __init(x, y, z) {
+    __init = fn(x, y, z) {
         self.x = x;
         self.y = y;
         self.z = z;
         return self;
-    }
+    };
 };
 local ins = X(69, 420, 1337);
 assert(typeof(ins) == "instance");

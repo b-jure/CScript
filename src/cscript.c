@@ -149,7 +149,7 @@ static int collect_args(char **argv, int *first) {
 static int msghandler(cs_State *C) {
     const char *msg = cs_to_string(C, -1);
     if (msg == NULL) { /* error object is not a string? */
-        if (csL_callmeta(C, -1, CS_MM_TOSTRING) && /* it has a metamethod, */
+        if (csL_callmeta(C, -1, CS_MT_TOSTRING) && /* it has a metamethod, */
             cs_type(C, -1) == CS_T_STRING) /* that produces a string? */
             return 1; /* that is the message */
         else

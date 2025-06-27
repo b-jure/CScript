@@ -41,7 +41,7 @@
 /* test wheter a string is a metamethod tag */
 #define ismetatag(s) \
         ((s)->tt_ == CS_VSHRSTR && FIRSTMM <= (s)->extra && \
-         (s)->extra < FIRSTMM + CS_MM_NUM)
+         (s)->extra < FIRSTMM + CS_MT_NUM)
 
 
 /* equality for short strings, which are always internalized */

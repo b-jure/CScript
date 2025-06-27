@@ -794,7 +794,7 @@ typedef struct EmptyUserData {
 typedef enum N2IMode {
     N2IFLOOR,
     N2ICEIL,
-    N2IEXACT,
+    N2IEQ,
 } N2IMode;
 
 
@@ -804,7 +804,7 @@ typedef enum N2IMode {
 /* convert value to 'cs_Integer' */
 #define tointeger(v,i) \
         (c_likely(ttisint(v)) ? (*(i) = ival(v), 1) \
-                              : csO_tointeger(v, i, N2IEXACT))
+                              : csO_tointeger(v, i, N2IEQ))
 
 
 /* convert value to 'cs_Number' */

@@ -44,7 +44,7 @@
 
 /* binary opcode to metamethod tag */
 #define binop2mm(op) \
-        ((cast_int(op) - OP_ADD) + cast_int(CS_MM_ADD))
+        ((cast_int(op) - OP_ADD) + cast_int(CS_MT_ADD))
 
 
 /*
@@ -79,6 +79,7 @@
 ** ORDER OP
 */
 CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
+    /* FORMAT PSH POP CHGTOP */
     { FormatI, 1, 0, 0 }, /* OP_TRUE */
     { FormatI, 1, 0, 0 }, /* OP_FALSE */
     { FormatI, 0, 0, 1 }, /* OP_SUPER */
@@ -99,7 +100,7 @@ CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
     { FormatIS, 1, 0, 0 }, /* OP_NEWTABLE */
     { FormatIL, 0, 1, 0 }, /* OP_METHOD */
     { FormatIS, 0, 1, 0 }, /* OP_SETMM */
-    { FormatIS, 0, 1, 0 }, /* OP_MBIN */
+    { FormatIS, 0, 0, 0 }, /* OP_MBIN */
     { FormatIL, 0, 0, 1 }, /* OP_ADDK */
     { FormatIL, 0, 0, 1 }, /* OP_SUBK */
     { FormatIL, 0, 0, 1 }, /* OP_MULK */
@@ -517,7 +518,7 @@ static int fltK(FunctionState *fs, cs_Number n) {
     TValue vn;
     cs_Integer ik;
     setfval(&vn, n);
-    if (!csO_n2i(n, &ik, N2IEXACT)) { /* not an integral value? */
+    if (!csO_n2i(n, &ik, N2IEQ)) { /* not an integral value? */
         return addK(fs, &vn, &vn); /* use number itself as key */
     } else { /* otherwise must build an alternative key */
         /* number of mantissa bits including the leading bit (1) */
@@ -528,7 +529,7 @@ static int fltK(FunctionState *fs, cs_Number n) {
         TValue kv;
         setfval(&kv, k);
         /* result is not an integral value, unless value is too large */
-        cs_assert(!csO_n2i(k, &ik, N2IEXACT) ||
+        cs_assert(!csO_n2i(k, &ik, N2IEQ) ||
                    c_mathop(fabs)(n) >= c_mathop(1e6));
         return addK(fs, &kv, &vn);
     }
@@ -540,8 +541,7 @@ void csC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
     cs_assert(newstack >= 0);
     if (fs->p->maxstack < newstack) {
-        if (c_unlikely(newstack >= MAX_CODE))
-            csY_syntaxerror(fs->lx, "function requires too much stack space");
+        csP_checklimit(fs, newstack, MAX_CODE, "stack slots");
         fs->p->maxstack = newstack;
     }
 }
@@ -672,9 +672,17 @@ int csC_ret(FunctionState *fs, int first, int nreturns) {
 }
 
 
-void csC_method(FunctionState *fs, ExpInfo *e) {
+void csC_methodset(FunctionState *fs, ExpInfo *e) {
     e->u.info = csC_emitIL(fs, OP_METHOD, stringK(fs, e->u.str));
     e->et = EXP_FINEXPR;
+    freeslots(fs, 1);
+}
+
+
+void csC_mtset(FunctionState *fs, int mt) {
+    cs_assert(0 <= mt && mt < CS_MT_NUM);
+    csC_emitIS(fs, OP_SETMM, mt);
+    freeslots(fs, 1);
 }
 
 
@@ -758,7 +766,7 @@ static int isnumIK(ExpInfo *e, int *imm) {
     cs_Integer i;
     if (e->et == EXP_INT)
         i = e->u.i;
-    else if (!(e->et == EXP_FLT && csO_n2i(e->u.n, &i, N2IEXACT)))
+    else if (!(e->et == EXP_FLT && csO_n2i(e->u.n, &i, N2IEQ)))
         return 0;
     if (!hasjumps(e) && isIMML(i)) {
         *imm = (i < 0) ? imml(i) : i;
@@ -825,11 +833,6 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
     var->et = EXP_FINEXPR;
     freeslots(fs, 1); /* 'exp' (value) */
     return extra;
-}
-
-
-void csC_storevarpop(FunctionState *fs, ExpInfo *var, int left) {
-    csC_pop(fs, csC_storevar(fs, var, left));
 }
 
 
@@ -1036,7 +1039,7 @@ static int codeintIK(FunctionState *fs, cs_Integer i) {
 /* code float as constant or immediate operand */
 static int codefltIK(FunctionState *fs, cs_Number n) {
     cs_Integer i;
-    if (csO_n2i(n, &i, N2IEXACT)) { /* try code as immediate? */
+    if (csO_n2i(n, &i, N2IEQ)) { /* try code as immediate? */
         if (isIMM(i))
             return csC_emitIS(fs, OP_CONSTF, encodeimm(i));
         else if (isIMML(i))
@@ -1136,7 +1139,7 @@ void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
         e->f = e->t = NOJMP;
     }
     cs_assert(e->f == NOJMP && e->t == NOJMP);
-    cs_assert(e->et == EXP_FINEXPR);
+    cs_assert(onstack(e));
 }
 
 
@@ -1157,8 +1160,8 @@ void csC_exp2val(FunctionState *fs, ExpInfo *e) {
 ** If 'super' is true, then this indexing is considered as
 ** indexing 'super' (superclass).
 */
-void csC_getfield(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
-    cs_assert(v->et == EXP_FINEXPR); /* 'v' must be on stack */
+void csC_getdotted(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
+    cs_assert(onstack(v)); /* 'v' must be on stack */
     v->u.info = stringK(fs, key->u.str);
     v->et = (super ? EXP_DOTSUPER : EXP_DOT);
 }
@@ -1171,7 +1174,7 @@ void csC_getfield(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
 */
 void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
     int strK = 0;
-    cs_assert(var->et == EXP_FINEXPR); /* 'var' must be finalized (on stack) */
+    cs_assert(onstack(var)); /* 'var' must be finalized (on stack) */
     csC_exp2val(fs, key);
     if (key->et == EXP_STRING) {
         string2K(fs, key); /* make constant */
@@ -1210,8 +1213,8 @@ static int validop(TValue *v1, TValue *v2, int op) {
         case CS_OP_BSHR: case CS_OP_BSHL: case CS_OP_BAND:
         case CS_OP_BOR: case CS_OP_BXOR: case CS_OP_BNOT: { /* conversion */
             cs_Integer i;
-            return (csO_tointeger(v1, &i, N2IEXACT) &&
-                    csO_tointeger(v2, &i, N2IEXACT));
+            return (csO_tointeger(v1, &i, N2IEQ) &&
+                    csO_tointeger(v2, &i, N2IEQ));
         }
         case CS_OP_DIV: case CS_OP_IDIV: case CS_OP_MOD: /* division by 0 */
             return (nval(v2) != 0);
@@ -1480,14 +1483,14 @@ c_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
 static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                     int commutative, int line) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
-    int swap = !commutative && (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR);
+    int swap = !commutative && !onstack(e1) && onstack(e2);
     csC_exp2stack(fs, e1);
     csC_exp2stack(fs, e2);
     freeslots(fs, 1); /* e2 */
     e1->u.info = csC_emitIS(fs, op, swap);
     e1->et = EXP_FINEXPR;
     csC_fixline(fs, line);
-    csC_emitIS(fs, OP_MBIN, binop2mm(op) | ((swap) ? 0x80 : 0));
+    csC_emitIS(fs, OP_MBIN, binop2mm(op));
     csC_fixline(fs, line);
 }
 
@@ -1561,7 +1564,7 @@ static void codeEq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
     int imm; /* immediate */
     int iseq = (opr == OPR_EQ);
     cs_assert(opr == OPR_NE || opr == OPR_EQ);
-    if (e1->et != EXP_FINEXPR) {
+    if (!onstack(e1)) {
         /* 'e1' is either a numerical or stored string constant */
         cs_assert(e1->et == EXP_K || e1->et == EXP_INT || e1->et == EXP_FLT);
         swapexp(e1, e2);
@@ -1602,10 +1605,10 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
     } else { /* regular case, compare two stack values */
         int swap = 0;
         if (!swapped)
-            swap = (e1->et != EXP_FINEXPR && e2->et == EXP_FINEXPR);
-        else if (e2->et == EXP_FINEXPR)
+            swap = (!onstack(e1) && onstack(e2));
+        else if (onstack(e2))
             swap = 1;
-        else if (e1->et == EXP_FINEXPR && e2->et != EXP_FINEXPR)
+        else if (onstack(e1) && !onstack(e2))
             swap = 0;
         csC_exp2stack(fs, e1);
         csC_exp2stack(fs, e2);

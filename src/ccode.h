@@ -155,7 +155,7 @@ OP_NEWTABLE,/*     S          'create and load new table of size 1<<(S-1)'  */
 OP_METHOD,/*       L V1 V2    'define method V2 for class V1 under key K{L}'*/
 OP_SETMM,/*        S V1 V2    'V1->metalist[S] = V2'                        */
 
-OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop, if S&0x80 swap oper.) */
+OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop)                       */
 
 OP_ADDK,/*         V L     'V + K{L}:number'                                */
 OP_SUBK,/*         V L     'V - K{L}:number'                                */
@@ -336,12 +336,14 @@ CSI_DEC(const char *csC_opname[NUM_OPCODES];)
 #define LISTFIELDS_PER_FLUSH     50
 
 
-#define csC_store(fs,var)       csC_storevar(fs, var, 0)
-#define csC_storepop(fs,var)    csC_storevarpop(fs, var, 0)
-
-
 #define prevOP(fs)  (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->prevpc])
 
+
+#define csC_store(fs,v)    csC_storevar(fs, v, 0)
+
+#define csC_storepop(fs,v,ln) { \
+    int left_ = csC_storevar(fs, v, 0); csC_fixline(fs, ln); \
+    csC_pop(fs, left_); }
 
 CSI_FUNC int csC_emitI(FunctionState *fs, Instruction i);
 CSI_FUNC int csC_emitIS(FunctionState *fs, Instruction i, int a);
@@ -363,9 +365,9 @@ CSI_FUNC int csC_remove(FunctionState *fs, int n);
 CSI_FUNC int csC_pop(FunctionState *fs, int n);
 CSI_FUNC void csC_adjuststack(FunctionState *fs, int left);
 CSI_FUNC int csC_ret(FunctionState *fs, int first, int nreturns);
-CSI_FUNC void csC_method(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void csC_methodset(FunctionState *fs, ExpInfo *e);
+CSI_FUNC void csC_mtset(FunctionState *fs, int mt);
 CSI_FUNC int csC_storevar(FunctionState *fs, ExpInfo *var, int left);
-CSI_FUNC void csC_storevarpop(FunctionState *fs, ExpInfo *var, int left);
 CSI_FUNC void csC_setlistsize(FunctionState *fs, int pc, int lsz);
 CSI_FUNC void csC_setlist(FunctionState *fs, int base, int nelems, int tostore);
 CSI_FUNC void csC_settablesize(FunctionState *fs, int pc, int hsize);
@@ -374,7 +376,7 @@ CSI_FUNC TValue *csC_getconstant(FunctionState *fs, ExpInfo *v);
 CSI_FUNC int csC_dischargevars(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_exp2stack(FunctionState *fs, ExpInfo *e);
 CSI_FUNC void csC_exp2val(FunctionState *fs, ExpInfo *e);
-CSI_FUNC void csC_getfield(FunctionState *fs, ExpInfo *var,
+CSI_FUNC void csC_getdotted(FunctionState *fs, ExpInfo *var,
                            ExpInfo *keystr, int super);
 CSI_FUNC void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key,
                           int super);

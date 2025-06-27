@@ -390,11 +390,9 @@ static void unasmMM(cs_State *C, const Proto *p, Instruction *pc) {
 
 
 static void unasmMMBin(cs_State *C, const Proto *p, Instruction *pc) {
-    int swap = GET_ARG_S(pc, 0);
     prefix(p, pc);
     traceOp(*pc);
-    traceMetaName(C, swap & 0x7f);
-    traceSwap(swap & 0x80);
+    traceMetaName(C, GET_ARG_S(pc, 0));
     posfix();
 }
 

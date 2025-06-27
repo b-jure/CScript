@@ -389,22 +389,6 @@ static int io_lines(cs_State *C) {
 ** READ
 ** ======================================================= */
 
-/* valid formats for 'aux_read' */
-#define READFORMATS \
-    "\"n\" read number, \"l\" read line without end of line, " \
-    "\"L\" read line, or \"a\" read all file contents"
-
-/* errors for 'aux_read' */
-static const char *read_format_err[] = {
-    "invalid format, expected " READFORMATS,
-    "format too long, expected " READFORMATS, 
-};
-
-/* errors for 'aux_read' as macros */
-#define EREAD_FMT         read_format_err[0]
-#define EREAD_FMTLEN      read_format_err[1]
-
-
 /* types of digits for 'read_digits' */
 #define DIGDEC  0
 #define DIGHEX  1
@@ -603,14 +587,14 @@ static int aux_read(cs_State *C, FILE *f, int first) {
                 size_t lp;
                 const char *p = csL_check_lstring(C, n, &lp);
                 if (c_unlikely(lp > 1))
-                    return csL_error_arg(C, n, EREAD_FMTLEN);
+                    return csL_error_arg(C, n, "format string too long");
                 else {
                     switch (*p) {
                         case 'n': success = read_number(C, f); break;
                         case 'l': success = read_line(C, f, 1); break;
                         case 'L': success = read_line(C, f, 0); break;
                         case 'a': read_all(C, f); success = 1; break;
-                        default: return csL_error_arg(C, n, EREAD_FMT);
+                        default: return csL_error_arg(C, n, "invalid format");
                     }
                 }
             }
@@ -807,17 +791,20 @@ static int f_tostring(cs_State *C) {
 }
 
 
-static const csL_MetaEntry f_mm[] = {
-    {CS_MM_GETIDX, f_getidx},
-    {CS_MM_GC, f_gc},
-    {CS_MM_CLOSE, f_gc},
-    {CS_MM_TOSTRING, f_tostring},
+static const csL_MetaEntry f_meta[] = {
+    {CS_MT_GETIDX, f_getidx},
+    {CS_MT_GC, f_gc},
+    {CS_MT_CLOSE, f_gc},
+    {CS_MT_TOSTRING, f_tostring},
+    {CS_MT_NAME, NULL},
     {-1, NULL},
 };
 
 
 static void create_filehandle_metalist(cs_State *C) {
-    csL_push_metalist(C, CS_FILEHANDLE, f_mm);
+    csL_push_metalist(C, CS_FILEHANDLE, f_meta);
+    cs_push_literal(C, CS_FILEHANDLE);
+    cs_set_index(C, -2, CS_MT_NAME); /* set __name */
     cs_pop(C, 1); /* remove metalist */
 }
 

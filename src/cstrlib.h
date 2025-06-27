@@ -30,13 +30,14 @@
 */
 #define MAX_SIZET	((size_t)(~(size_t)0))
 
+
 #define STR_MAXSIZE \
 	(sizeof(size_t) < sizeof(int) ? MAX_SIZET : (size_t)(INT_MAX))
 
 
-
-
-/* Translate relative starting position to absolute slice index. */
+/*
+** Translate relative starting position to absolute slice index.
+*/
 static size_t posrelStart(cs_Integer pos, size_t len) {
     if (pos >= 0) /* already absolute? */
         return (size_t)pos;

@@ -1,8 +1,8 @@
 local a = class {
-    fn __setidx(k, v) {
+    __setidx = fn(k, v) {
         assert(k and (typeof(v) == "number"));
         rawset(self, k, v*2);
-    }
+    };
 };
 local x = a();
 x.a = 210;

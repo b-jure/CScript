@@ -289,9 +289,8 @@ c_noret csP_semerror(Lexer *lx, const char *err) {
 }
 
 
-static void checklimit(FunctionState *fs, int n, int limit, const char *what) {
-    if (n >= limit)
-        limiterror(fs, what, limit);
+void csP_checklimit(FunctionState *fs, int n, int limit, const char *what) {
+    if (c_unlikely(n >= limit)) limiterror(fs, what, limit);
 }
 
 
@@ -370,7 +369,7 @@ static void newttarget(Lexer *lx, int pc) {
     ParserState *ps = lx->ps;
     cs_assert(pc != NOPC);
     if (pc == getlasttarget(lx)) return; /* do not insert duplicates */
-    checklimit(fs, ps->ttargets.len, MAXINT, "tests");
+    csP_checklimit(fs, ps->ttargets.len, MAXINT, "tests");
     csM_growarray(lx->C, ps->ttargets.arr, ps->ttargets.size,
                          ps->ttargets.len, MAXINT, "tests", int);
     ps->ttargets.arr[ps->ttargets.len++] = pc;
@@ -695,7 +694,7 @@ static int addlocal(Lexer *lx, OString *name) {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
     LVar *local;
-    checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
+    csP_checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
     csM_growarray(lx->C, ps->actlocals.arr, ps->actlocals.size,
                          ps->actlocals.len, MAXINT, "locals", LVar);
     local = &ps->actlocals.arr[ps->actlocals.len++];
@@ -729,7 +728,7 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e, int limit) 
 static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
     int osz = p->sizeupvals;
-    checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
+    csP_checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
     csM_growarray(fs->lx->C, p->upvals, p->sizeupvals, fs->nupvals,
                   MAXUPVAL, "upvalues", UpValInfo);
     while (osz < p->sizeupvals)
@@ -847,12 +846,12 @@ static void indexed(Lexer *lx, ExpInfo *var, int super) {
 }
 
 
-static void getfield(Lexer *lx, ExpInfo *v, int super) {
+static void getdotted(Lexer *lx, ExpInfo *v, int super) {
     ExpInfo key = INIT_EXP;
     csY_scan(lx); /* skip '.' */
     csC_exp2stack(lx->fs, v);
     expname(lx, &key);
-    csC_getfield(lx->fs, v, &key, super);
+    csC_getdotted(lx->fs, v, &key, super);
 }
 
 
@@ -871,7 +870,7 @@ static void superkw(Lexer *lx, ExpInfo *e) {
         if (check(lx, '[')) /* index access? */
             indexed(lx, e, 1);
         else if (check(lx, '.')) /* field access? */
-            getfield(lx, e, 1);
+            getdotted(lx, e, 1);
         else /* get superclass */
             csC_emitI(lx->fs, OP_SUPER);
     }
@@ -929,7 +928,7 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
     for (;;) {
         switch (lx->t.tk) {
             case '.': {
-                getfield(lx, e, 0);
+                getdotted(lx, e, 0);
                 break;
             }
             case '[': {
@@ -971,7 +970,7 @@ static void checklistlimit(FunctionState *fs, LConstructor *c) {
        size = c->narray + c->tostore;
     else /* otherwise overflow */
         size = MAXINT; /* force error */
-    checklimit(fs, size, MAXINT, "elements in a list constructor");
+    csP_checklimit(fs, size, MAXINT, "elements in a list constructor");
 }
 
 
@@ -1049,7 +1048,7 @@ static void tabfield(Lexer *lx, TConstructor *c) {
     FunctionState *fs = lx->fs;
     ExpInfo t, k, v;
     if (check(lx, TK_NAME)) {
-        checklimit(fs, c->nhash, MAXINT, "records in a table constructor");
+        csP_checklimit(fs, c->nhash, MAXINT, "records in a table constructor");
         expname(lx, &k);
     } else
         tabindex(lx, &k);
@@ -1082,55 +1081,60 @@ static void tabledef(Lexer *lx, ExpInfo *t) {
 /* }==================================================================== */
 
 
-static OString *indexedname(Lexer *lx, ExpInfo *v) {
-    OString *name = str_expectname(lx);
-    int field = 0;
-    var(lx, name, v);
-    while (check(lx, '.')) {
-        getfield(lx, v, 0);
-        field = 1;
-    }
-    return (field ? strval(csC_getconstant(lx->fs, v)) : name);
+static void dottedname(Lexer *lx, ExpInfo *v) {
+    var(lx, str_expectname(lx), v);
+    while (check(lx, '.'))
+        getdotted(lx, v, 0);
 }
 
 
-static int codemethod(FunctionState *fs, ExpInfo *var, c_byte *arrmm) {
-    int ismethod = 1;
-    cs_assert(var->et == EXP_STRING);
-    if (ismetatag(var->u.str)) { /* metamethod? */
-        int mm = var->u.str->extra - NUM_KEYWORDS - 1;
-        cs_assert(0 <= mm && mm < CS_MM_NUM); /* must be valid tag */
-        if (c_unlikely(arrmm[mm])) {
-            const char *msg = csS_pushfstring(fs->lx->C,
-                    "redefinition of '%s' metamethod", getstr(var->u.str));
-            csP_semerror(fs->lx, msg);
-        } /* else fall through */
-        arrmm[mm] = 1; /* mark as defined */
-        csC_emitIS(fs, OP_SETMM, mm);
-        ismethod = 0; /* (this function goes into VMT) */
-    } else /* otherwise have methods hashtable entry */
-        csC_method(fs, var);
-    fs->sp--; /* function is removed from stack */
-    return ismethod; 
-}
-
-
-static int method(Lexer *lx, c_byte *arrmm) {
+static void method(Lexer *lx) {
     ExpInfo var, dummy;
     int line = lx->line;
-    expectnext(lx, TK_FN);
+    csY_scan(lx); /* skip 'fn' */
     expname(lx, &var);
     funcbody(lx, &dummy, 1, line);
-    return codemethod(lx->fs, &var, arrmm);
+    csC_methodset(lx->fs, &var);
 }
 
 
-static int methods(Lexer *lx) {
-    c_byte arrmm[CS_MM_NUM] = {0};
-    int i = 0;
-    while (!check(lx, '}') && !check(lx, TK_EOS))
-        i += method(lx, arrmm);
-    return i;
+static void metafield(Lexer *lx, c_byte *amt) {
+    FunctionState *fs = lx->fs;
+    OString *mtname;
+    ExpInfo e;
+    int mt;
+    expname(lx, &e);
+    mtname = e.u.str;
+    if (c_unlikely(!ismetatag(mtname)))
+        csP_semerror(lx, "invalid metafield name");
+    mt = mtname->extra - NUM_KEYWORDS - 1;
+    if (c_unlikely(amt[mt]))
+        csP_semerror(lx, "metafield redefinition");
+    amt[mt] = 1; /* mark as defined */
+    expectnext(lx, '=');
+    if (check(lx, TK_FN)) { /* function expression? */
+        csY_scan(lx); /* skip 'fn' */
+        funcbody(lx, &e, 1, lx->line); /* also a method */
+    } else
+        expr(lx, &e);
+    csC_exp2stack(fs, &e);
+    expectnext(lx, ';');
+    csC_mtset(fs, mt);
+}
+
+
+static int classbody(Lexer *lx) {
+    int nmethods = 0;
+    c_byte amt[CS_MT_NUM] = {0};
+    while (!check(lx, '}') && !check(lx, TK_EOS)) {
+        if (!check(lx, TK_FN))
+            metafield(lx, amt);
+        else {
+            method(lx);
+            nmethods++;
+        }
+    }
+    return nmethods;
 }
 
 
@@ -1145,7 +1149,7 @@ static void klass(Lexer *lx, ExpInfo *e) {
     if (match(lx, TK_INHERITS)) { /* class object inherits? */
         int cls = fs->sp - 1;
         ExpInfo v;
-        indexedname(lx, &v);            /* get superclass... */
+        dottedname(lx, &v);             /* get superclass... */
         csC_exp2stack(fs, &v);          /* put it on stack... */
         csC_load(fs, cls);              /* load class... */
         csC_emitI(fs, OP_INHERIT);      /* ...and do the inherit */
@@ -1153,11 +1157,9 @@ static void klass(Lexer *lx, ExpInfo *e) {
     }
     line = lx->line;
     expectnext(lx, '{');
-    nm = methods(lx);
-    if (nm > 0) {
-        nm += (nm == 1); /* avoid 0 edge case in 'csO_ceillog' */
-        SET_ARG_S(&fs->p->code[pc], 0, csO_ceillog2(nm));
-    }
+    nm = classbody(lx);
+    if (nm > 0) /* have methods? */
+        SET_ARG_S(&fs->p->code[pc], 0, csO_ceillog2(nm + (nm == 1)));
     expectmatch(lx, '}', '{', line);
     if (cs.super) /* have superclass? */
         csC_pop(fs, 2); /* pop superclass and class copy */
@@ -1624,21 +1626,21 @@ static void fnstm(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
     ExpInfo var, e;
     csY_scan(lx); /* skip 'fn' */
-    indexedname(lx, &var);
+    dottedname(lx, &var);
     funcbody(lx, &e, 0, linenum);
     checkreadonly(lx, &var);
-    csC_storepop(fs, &var);
+    csC_storepop(fs, &var, linenum);
 }
 
 
-static void classstm(Lexer *lx) {
+static void classstm(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
     ExpInfo var;
     csY_scan(lx); /* skip 'class' */
-    indexedname(lx, &var);
+    dottedname(lx, &var);
     klass(lx, NULL);
     checkreadonly(lx, &var);
-    csC_storepop(fs, &var);
+    csC_storepop(fs, &var, linenum);
 }
 
 
@@ -1780,7 +1782,7 @@ static void addliteralinfo(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     ParserState *ps = lx->ps;
     LiteralInfo li;
     checkduplicate(lx, ss, e, &li);
-    checklimit(lx->fs, ps->literals.len, MAX_CODE, "switch cases");
+    csP_checklimit(lx->fs, ps->literals.len, MAX_CODE, "switch cases");
     csM_growarray(lx->C, ps->literals.arr, ps->literals.size,
                   ps->literals.len, MAX_CODE, "switch literals", LiteralInfo);
     ps->literals.arr[ps->literals.len++] = li;
@@ -2334,7 +2336,7 @@ static void stm_(Lexer *lx) {
     int tk = lx->t.tk;
     switch (tk) {
         case TK_FN: fnstm(lx, lx->line); break;
-        case TK_CLASS: classstm(lx); break;
+        case TK_CLASS: classstm(lx, lx->line); break;
         case TK_WHILE: whilestm(lx); break;
         case TK_FOR: forstm(lx); break;
         case TK_FOREACH: foreachstm(lx); break;

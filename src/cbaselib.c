@@ -39,7 +39,7 @@ static int b_assert(cs_State *C) {
     } else { /* failed assert (error) */
         csL_check_any(C, 0); /* must have a condition */
         cs_remove(C, 0); /* remove condition */
-        cs_push_literal(C, "assertion failed"); /* push default error msg */
+        cs_push_literal(C, "assertion failed!"); /* push default error msg */
         cs_setntop(C, 1); /* leave only one message on top */
         return b_error(C);
     }
@@ -286,13 +286,12 @@ static int b_xpcall(cs_State *C) {
     cs_push(C, 0); /* function */
     cs_rotate(C, 2, 2); /* move them below function's arguments */
     status = cs_pcall(C, nargs, CS_MULRET, 1);
-    return finishpcall(C, status, 1);
+    return finishpcall(C, status, 2);
 }
 
 
 static int b_print(cs_State *C) {
     int n = cs_getntop(C);
-    //csTR_dumpstack(C, 1, "print stack");
     for (int i = 0; i < n; i++) {
         size_t len;
         const char *str = csL_to_lstring(C, i, &len);
@@ -301,6 +300,35 @@ static int b_print(cs_State *C) {
         cs_writelen(stdout, str, len);
         cs_pop(C, 1); /* pop result from 'csL_to_string' */
     }
+    cs_writeline(stdout);
+    return 0;
+}
+
+
+static int b_printf(cs_State *C) {
+    size_t lfmt;
+    const char *fmt = csL_check_lstring(C, 0, &lfmt);
+    const char *efmt = fmt + lfmt;
+    int top = cs_gettop(C);
+    int arg = 0;
+    csL_Buffer b;
+    csL_buff_initsz(C, &b, lfmt);
+    while (fmt < efmt) {
+        if (*fmt != '%') {
+            csL_buff_push(&b, *fmt++);
+            continue;
+        } else if (*++fmt == '%') {
+            csL_buff_push(&b, *fmt++);
+            continue;
+        } /* else '%' */
+        if (++arg > top) /* too many format specifiers? */
+            return csL_error_arg(C, arg, "missing format value");
+        csL_to_lstring(C, arg, NULL);
+        csL_buff_push_stack(&b);
+    }
+    csL_buff_end(&b);
+    fmt = cs_to_lstring(C, -1, &lfmt);
+    cs_writelen(stdout, fmt, lfmt);
     cs_writeline(stdout);
     return 0;
 }
@@ -636,6 +664,7 @@ static const cs_Entry basic_funcs[] = {
     {"pcall", b_pcall},
     {"xpcall", b_xpcall},
     {"print", b_print},
+    {"printf", b_printf},
     {"warn", b_warn},
     {"len", b_len},
     {"rawequal", b_rawequal},
@@ -655,7 +684,7 @@ static const cs_Entry basic_funcs[] = {
     {"__POSIX", NULL},
     {"__WINDOWS", NULL},
     /* table for meta indices */
-    {"__M", NULL},
+    {"__MT", NULL},
     {NULL, NULL},
 };
 
@@ -681,23 +710,23 @@ static void set_compat_flags(cs_State *C) {
 }
 
 
-/* create __M table that holds metalist indices */
+/* create __MT table that holds meta tags */
 static void create_meta(cs_State *C) {
-    const char *mm[CS_MM_NUM] = {
+    const char *mm[CS_MT_NUM] = {
         "getidx", "setidx", "gc", "close", "call", "init", "concat", "add",
         "sub", "mul", "div", "idiv", "mod", "pow", "shl", "shr", "band",
-        "bor", "bxor", "unm", "bnot", "eq", "lt", "le"
+        "bor", "bxor", "unm", "bnot", "eq", "lt", "le", "name"
     };
-    cs_push_table(C, CS_MM_NUM + 1);
-    for (int i = 0; i < CS_MM_NUM; i++) {
+    cs_push_table(C, CS_MT_NUM + 1);
+    for (int i = 0; i < CS_MT_NUM; i++) {
         cs_push_integer(C, i);
         cs_set_fieldstr(C, -2, mm[i]);
     }
-    cs_push_integer(C, CS_MM_NUM);
+    cs_push_integer(C, CS_MT_NUM);
     cs_set_fieldstr(C, -2, "tostring");
-    cs_push_integer(C, CS_MM_NUM + 1);
+    cs_push_integer(C, CS_MT_NUM + 1);
     cs_set_fieldstr(C, -2, "n");
-    cs_set_fieldstr(C, -2, "__M");
+    cs_set_fieldstr(C, -2, "__MT");
 }
 
 

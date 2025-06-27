@@ -86,7 +86,7 @@ static cs_Integer intarithm(cs_State *C, cs_Integer x, cs_Integer y, int op) {
 int csO_n2i(cs_Number n, cs_Integer *i, N2IMode mode) {
     cs_Number floored = c_floor(n);
     if (floored != n) {
-        if (mode == N2IEXACT) return 0;
+        if (mode == N2IEQ) return 0;
         else if (mode == N2ICEIL) floored++;
     }
     return cs_number2integer(n, i);

@@ -234,6 +234,8 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
     //printf("Symbolic execution\ttop=%d\n", symsp);
     if (*code == OP_VARARGPREP) /* vararg function? */
         pc += getopSize(*code); /* skip first opcode */
+    if (code[lastpc] == OP_MBIN)
+        lastpc = p->instpc[Ninstuptopc(p, lastpc) - 1];
     while (pc < lastpc) {
         const Instruction *i = &code[pc];
         int change; /* true if current instruction changed 'sp' */
@@ -280,8 +282,7 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
                 change = 0;
                 break;
             }
-            case OP_MBIN: {
-                /* ignore this instruction */
+            case OP_MBIN: { /* ignore */
                 change = 0;
                 break;
             }
@@ -486,28 +487,28 @@ static const char *funcnamefromcode(cs_State *C, const Proto *p, int pc,
         }
         case OP_GETPROPERTY: case OP_GETINDEX:
         case OP_GETINDEXSTR: case OP_GETINDEXINT: {
-            mm = CS_MM_GETIDX;
+            mm = CS_MT_GETIDX;
             break;
         }
         case OP_SETPROPERTY: case OP_SETINDEX:
         case OP_SETINDEXSTR: case OP_SETINDEXINT: {
-            mm = CS_MM_SETIDX;
+            mm = CS_MT_SETIDX;
             break;
         }
         case OP_MBIN: {
             mm = GET_ARG_S(i, 0) & 0x7f;
             break;
         }
-        case OP_LT: case OP_LTI: case OP_GTI: mm = CS_MM_LT; break;
-        case OP_LE: case OP_LEI: case OP_GEI: mm = CS_MM_LE; break;
-        case OP_CLOSE: case OP_RET: mm = CS_MM_CLOSE; break;
-        case OP_UNM: mm = CS_MM_UNM; break;
-        case OP_BNOT: mm = CS_MM_BNOT; break;
-        case OP_CONCAT: mm = CS_MM_CONCAT; break;
-        case OP_EQ: mm = CS_MM_EQ; break;
+        case OP_LT: case OP_LTI: case OP_GTI: mm = CS_MT_LT; break;
+        case OP_LE: case OP_LEI: case OP_GEI: mm = CS_MT_LE; break;
+        case OP_CLOSE: case OP_RET: mm = CS_MT_CLOSE; break;
+        case OP_UNM: mm = CS_MT_UNM; break;
+        case OP_BNOT: mm = CS_MT_BNOT; break;
+        case OP_CONCAT: mm = CS_MT_CONCAT; break;
+        case OP_EQ: mm = CS_MT_EQ; break;
         default: return NULL;
     }
-    *name = getstr(G(C)->mmnames[mm]) + 2; /* skip '__' */
+    *name = metaname(C, mm);
     return "metamethod";
 }
 
@@ -857,78 +858,7 @@ c_noret csD_typeerror(cs_State *C, const TValue *o, const char *op) {
 
 
 /*
-** Return the reason for the error, 0 for type errors or missing
-** metamethod and -1 for instances with mismatched class.
-** Additionally set the invalid value into 'pv1'.
-*/
-static int binerrval(const TValue **pv1, const TValue *v2, const int *tarr) {
-    const TValue *v1 = *pv1;
-    int t1 = ttype(v1);
-    int t2 = ttype(v2);
-    if (t1 == t2) {
-        if (t1 == CS_T_INSTANCE && (insval(v1)->oclass != insval(v2)->oclass))
-            return -1; /* class mismatch */
-        /* fall through */
-    } else { /* otherwise check types */
-        for (int t; (t = *tarr) != CS_T_NONE; tarr++) {
-            if (t1 == t) { /* 'v1' has the expected type? */
-                *pv1 = v2; /* 'v2' is invalid type */
-                break; /* done */
-            }
-        }
-    }
-    return 0; /* wrong type or missing metamethod */
-}
-
-
-/*
-** Raise binary operation error. The type of error raised depends on
-** the reason for the error, as returned by 'binerrval'.
-*/
-static c_noret binerror(cs_State *C, const TValue *v1, const TValue *v2,
-                                     const int *tarr, int mm) {
-    const char *op = getstr(G(C)->mmnames[mm]) + 2; /* skip '__' */
-    if (binerrval(&v1, v2, tarr) < 0) { /* mismatched class? */
-        const char *t1 = csMM_objtypename(C, v1);
-        const char *t2 = csMM_objtypename(C, v2);
-        csD_runerror(C, "attempt to %s %s value%s and %s value%s which are"
-                        " instances of different class",
-                        op, t1, varinfo(C, v1), t2, varinfo(C, v2));
-    } else { /* otherwise raise standard type error */
-        if (mm == CS_MM_LT || mm == CS_MM_LE || mm == CS_MM_EQ)
-            op = "compare"; /* use a more reasonable operation name */
-        csD_typeerror(C, v1, op);
-    }
-}
-
-
-/*
-** External interface for 'binerror'.
-*/
-c_noret csD_binoperror(cs_State *C, const TValue *v1, const TValue *v2,
-                                    const int *tarr, int mm) {
-    binerror(C, v1, v2, tarr, mm);
-}
-
-
-/*
-** Identical to 'csD_typeerror', but it takes as a parameter metamethod
-** index instead of the usual operation name.
-*/
-c_noret csD_unoperror(cs_State *C, const TValue *v1, int mm) {
-    const char *op;
-    if (mm == CS_MM_BNOT)
-        op = "perform bitwise-not on";
-    else {
-        cs_assert(mm == CS_MM_UNM);
-        op = "perform unary-minus on";
-    }
-    csD_typeerror(C, v1, op);
-}
-
-
-/*
-** Raise error (during operation) for integer/float type.
+** Raise type error for operation over integers and numbers.
 */
 c_noret csD_opinterror(cs_State *C, const TValue *v1, const TValue *v2,
                                                       const char *msg) {
@@ -938,16 +868,68 @@ c_noret csD_opinterror(cs_State *C, const TValue *v1, const TValue *v2,
 }
 
 
-c_noret csD_ordererror(cs_State *C, const TValue *v1, const TValue *v2,
-                                                      int mm) {
-    int tarr[] = { CS_T_NUMBER, CS_T_STRING, CS_T_NONE };
-    binerror(C, v1, v2, tarr, mm);
+/*
+** Error when value is convertible to numbers, but not integers.
+*/
+c_noret csD_tointerror(cs_State *C, const TValue *v1, const TValue *v2) {
+    cs_Integer temp;
+    if (!csO_tointeger(v1, &temp, N2IEQ))
+        v2 = v1;
+    csD_runerror(C, "number%s has no integer representation", varinfo(C, v2));
+}
+
+
+static int differentclasses(const TValue *v1, const TValue *v2) {
+    int t1 = ttype(v1);
+    return (t1 == ttype(v2) && t1 == CS_T_INSTANCE && /* instances and, */
+            (insval(v1)->oclass != insval(v2)->oclass)); /* class mismatch? */
+}
+
+
+static c_noret classerror(cs_State *C, const char *op) {
+    csD_runerror(C, "attempt to %s instances of different class", op);
+}
+
+
+c_noret csD_binoperror(cs_State *C, const TValue *v1,
+                                    const TValue *v2, int mm) {
+    switch (mm) {
+        case CS_MT_BAND: case CS_MT_BOR: case CS_MT_BXOR:
+        case CS_MT_BSHL: case CS_MT_BSHR: case CS_MT_BNOT: {
+            if (ttisnum(v1))
+                csD_tointerror(C, v1, v2);
+            else
+                csD_opinterror(C, v1, v2, "perform bitwise operation on");
+            break;
+        }
+        /* to avoid warnings *//* fall through */
+        default:
+            csD_opinterror(C, v1, v2, "perform arithmetic on");
+    }
+}
+
+
+c_noret csD_ordererror(cs_State *C, const TValue *v1, const TValue *v2) {
+    if (differentclasses(v1, v2))
+        classerror(C, "compare");
+    else {
+        const char *t1 = csMM_objtypename(C, v1);
+        const char *t2 = csMM_objtypename(C, v2);
+        if (strcmp(t1, t2) == 0)
+            csD_runerror(C, "attempt to compare two %s values", t1);
+        else
+            csD_runerror(C, "attempt to compare %s with %s", t1, t2);
+    }
 }
 
 
 c_noret csD_concaterror(cs_State *C, const TValue *v1, const TValue *v2) {
-    int tarr[] = { CS_T_STRING, CS_T_NONE };
-    binerror(C, v1, v2, tarr, CS_MM_CONCAT);
+    if (differentclasses(v1, v2))
+        classerror(C, metaname(C, CS_MT_CONCAT));
+    else {
+        if (ttisstring(v1)) v1 = v2;
+        csD_typeerror(C, v1, "concatenate");
+    }
 }
 
 

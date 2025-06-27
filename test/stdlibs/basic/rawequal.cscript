@@ -1,7 +1,5 @@
 local a = class {
-    fn __eq(rhs) {
-        return nil;
-    }
+    __eq = fn(rhs) { return nil; };
 };
 local x = a();
 assert(!(x == x));

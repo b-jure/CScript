@@ -1,11 +1,11 @@
 local table = {};
 assert(typeof(table) == "table");
 class table.line {
-    fn __init(x, y) {
+    __init = fn(x, y) {
         self.x = x;
         self.y = y;
         return self;
-    }
+    };
     fn cords() {
         return self.x, self.y;
     }
@@ -22,11 +22,11 @@ assert(y == 12);
 table.config = {};
 assert(typeof(table.config) == "table");
 class table.config.point {
-    fn __init(x, y) {
+    __init = fn(x, y) {
         self.x = x;
         self.y = y;
         return self;
-    }
+    };
     fn cords() {
         return self.x, self.y;
     }

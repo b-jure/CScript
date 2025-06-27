@@ -687,25 +687,25 @@ assert(typeof(debug.getclist()) == "list");
         return info.name;
     }
     local ml = [];
-    foreach i in range(0, __M.n) {
-        if (i == __M.init)
+    foreach i in range(0, __MT.n) {
+        if (i == __MT.init)
             continue;
         ml[i] = f;
     }
     setmetalist(getclass(a), ml);
-    assert(ml[__M.getidx] == f); assert(ml[__M.setidx] == f);
-    assert(ml[__M.gc] == f); assert(ml[__M.close] == f);
-    assert(ml[__M.call] == f); assert(ml[__M.init] == nil);
-    assert(ml[__M.concat] == f); assert(ml[__M.add] == f);
-    assert(ml[__M.sub] == f); assert(ml[__M.mul] == f);
-    assert(ml[__M.div] == f); assert(ml[__M.idiv] == f);
-    assert(ml[__M.mod] == f); assert(ml[__M.pow] == f);
-    assert(ml[__M.shl] == f); assert(ml[__M.shr] == f);
-    assert(ml[__M.band] == f); assert(ml[__M.bor] == f);
-    assert(ml[__M.bxor] == f); assert(ml[__M.unm] == f);
-    assert(ml[__M.bnot] == f); assert(ml[__M.eq] == f);
-    assert(ml[__M.lt] == f); assert(ml[__M.le] == f);
-    assert(__M.n == ml.len);
+    assert(ml[__MT.getidx] == f); assert(ml[__MT.setidx] == f);
+    assert(ml[__MT.gc] == f); assert(ml[__MT.close] == f);
+    assert(ml[__MT.call] == f); assert(ml[__MT.init] == nil);
+    assert(ml[__MT.concat] == f); assert(ml[__MT.add] == f);
+    assert(ml[__MT.sub] == f); assert(ml[__MT.mul] == f);
+    assert(ml[__MT.div] == f); assert(ml[__MT.idiv] == f);
+    assert(ml[__MT.mod] == f); assert(ml[__MT.pow] == f);
+    assert(ml[__MT.shl] == f); assert(ml[__MT.shr] == f);
+    assert(ml[__MT.band] == f); assert(ml[__MT.bor] == f);
+    assert(ml[__MT.bxor] == f); assert(ml[__MT.unm] == f);
+    assert(ml[__MT.bnot] == f); assert(ml[__MT.eq] == f);
+    assert(ml[__MT.lt] == f); assert(ml[__MT.le] == f);
+    assert(__MT.n == ml.len);
 
     local b = getclass(a)();
     assert(a[3] == "getidx" and a**b == "pow" and a..a == "concat");
@@ -721,7 +721,7 @@ assert(typeof(debug.getclist()) == "list");
     assert(~a == "bnot");
 
     /// test __init
-    assert(getmetalist(a))[__M.init] = fn(self) {
+    assert(getmetalist(a))[__MT.init] = fn(self) {
         local info = debug.getinfo(1);
         assert(info.namewhat == "" and !info.name);
         return self;
@@ -738,7 +738,7 @@ assert(typeof(debug.getclist()) == "list");
 { /// testing debug info for finalizers
     local name = nil;
     /// create a piece of garbage with a finalizer
-    local l = []; l[__M.gc] = fn() {
+    local l = []; l[__MT.gc] = fn() {
         local t = debug.getinfo(1);  /// get function information
         assert(t.namewhat == "metamethod");
         name = t.name;

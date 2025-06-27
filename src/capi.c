@@ -1636,7 +1636,7 @@ CS_API int cs_find_index(cs_State *C, int index, int fi, int s, int e) {
     cs_lock(C);
     api_check(C, !(fi & ~CS_FI_MASK), "invalid 'fi' mask");
     l = getlist(C, index);
-    if (e >= l->n) /* end out upper bound? */
+    if (e >= l->n) /* end out of upper bound? */
         e = l->n - 1; /* end at the last index in use */
     if (s < 0) /* start is negative? */
         s = 0; /* start from beginning */

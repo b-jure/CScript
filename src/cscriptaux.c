@@ -92,22 +92,25 @@ static int push_glbfunc_name(cs_State *C, cs_Debug *ar) {
 CSLIB_API int csL_error_arg(cs_State *C, int arg, const char *extra) {
     cs_Debug ar;
     if (!cs_getstack(C, 0, &ar)) /* no stack frame? */
-        return csL_error(C, "bad argument #%d (%s)", arg, extra);
+        return csL_error(C, "bad argument #%d (%s)", arg+1, extra);
     cs_getinfo(C, "n", &ar);
-    if (strcmp(ar.namewhat, "method") == 0) {
+    if (strcmp(ar.namewhat, "metamethod") == 0) {
+        /* NOTE: currently, this is unreachable! */
         arg--; /* ignore 'self' */
         if (arg == -1) /* 'self' is the invalid argument? */
             csL_error(C, "calling '%s' on a bad 'self' (%s)", ar.name, extra);
     }
     if (ar.name == NULL)
         ar.name = (push_glbfunc_name(C, &ar)) ? cs_to_string(C, -1) : "?";
-    return csL_error(C, "bad argument #%d to '%s' (%s)", arg, ar.name, extra);
+    return csL_error(C, "bad argument #%d to '%s' (%s)", arg+1, ar.name, extra);
 }
 
 
 CSLIB_API int csL_error_type(cs_State *C, int arg, const char *tname) {
     const char *msg, *type;
-    if (cs_type(C, arg) == CS_T_LIGHTUSERDATA)
+    if (csL_get_metaindex(C, arg, CS_MT_NAME) == CS_T_STRING)
+        type = cs_to_string(C, -1);
+    else if (cs_type(C, arg) == CS_T_LIGHTUSERDATA)
         type = "light userdata";
     else
         type = csL_typename(C, arg);
@@ -386,7 +389,6 @@ CSLIB_API void csL_set_usermethods(cs_State *C, const char *tname) {
 }
 
 
-#include "ctrace.h"
 CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname) {
     void *p = csL_to_fulluserdata(C, index);
     if (p != NULL) { /* 'index' is full userdata? */
@@ -406,12 +408,13 @@ CSLIB_API void csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l,
                                  int nup) {
     csL_check_stack(C, nup, "too many upvalues");
     for (; l->mm >= 0; l++) { /* for each metamethod */
-        if (l->metaf != NULL) { /* have function? */
+        if (l->metaf == NULL) /* placeholder? */
+            cs_push_bool(C, 0);
+        else {
             for (int i = 0; i < nup; i++) /* copy upvalues */
                 cs_push(C, -nup);
             cs_push_cclosure(C, l->metaf, nup); /* create closure */
-        } else /* otherwise set as nil */
-            cs_push_nil(C);
+        }
         cs_set_index(C, -(nup + 2), l->mm);
     }
     cs_pop(C, nup);
@@ -475,7 +478,7 @@ CSLIB_API int csL_execresult(cs_State *C, int stat) {
 
 CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
     index = cs_absindex(C, index);
-    if (csL_callmeta(C, index, CS_MM_TOSTRING)) {
+    if (csL_callmeta(C, index, CS_MT_TOSTRING)) {
         if (!cs_is_string(C, -1))
             csL_error(C, "'__tostring' must return a string");
     } else {
@@ -500,9 +503,11 @@ CSLIB_API const char *csL_to_lstring(cs_State *C, int index, size_t *plen) {
                 break;
             }
             default: {
-                int tt = csL_get_fieldstr(C, index, "__name");
-                const char *kind = (tt == CS_T_STRING) ? cs_to_string(C, -1)
-                                                       : csL_typename(C, index);
+                /* get metalist entry '__name' */
+                int tt = csL_get_metaindex(C, index, CS_MT_NAME);
+                const char *kind = (tt == CS_T_STRING) /* is it a string? */
+                                 ? cs_to_string(C, -1) /* use it */
+                                 : csL_typename(C, index); /* fallback name */
                 cs_push_fstring(C, "%s: %p", kind, cs_to_pointer(C, index));
                 if (tt != CS_T_NONE) cs_remove(C, -2); /* remove '__name' */
                 break;
@@ -883,11 +888,11 @@ static void newbox(cs_State *C) {
     UserBox *box = cs_push_userdata(C, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
-    cs_push_list(C, CS_MM_NUM);
+    cs_push_list(C, CS_MT_NUM);
     cs_push_cfunction(C, boxgc);
-    cs_set_index(C, -2, CS_MM_GC);
+    cs_set_index(C, -2, CS_MT_GC);
     cs_push_cfunction(C, boxgc);
-    cs_set_index(C, -2, CS_MM_CLOSE);
+    cs_set_index(C, -2, CS_MT_CLOSE);
     cs_set_metalist(C, -2);
 }
 

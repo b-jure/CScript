@@ -17,6 +17,9 @@ CSI_DEC(const char *const csO_typenames[CSI_TOTALTYPES]);
 #define typename(t)     csO_typenames[(t) + 1]
 
 
+#define metaname(C,mm)      (getstr(G(C)->mmnames[mm]) + 2)
+
+
 CSI_FUNC void csMM_init(cs_State *C);
 CSI_FUNC const TValue *csMM_get(cs_State *C, const TValue *v, int mm);
 CSI_FUNC OClass *csMM_newclass(cs_State *C);
@@ -56,11 +59,12 @@ CSI_FUNC int csMM_order(cs_State *C,
 		  	int mm);
 CSI_FUNC int csMM_orderI(cs_State *C,
                          const TValue *v1,
-                         int v2, int flip, int isflt, int mm);
+                         int v2, int flip,
+                         int isflt, int mm);
 CSI_FUNC void csMM_trybin(cs_State *C,
                           const TValue *v1,
                           const TValue *v2,
-		    	  SPtr res, int texpect, int mm);
+		    	  SPtr res, int mm);
 CSI_FUNC void csMM_tryunary(cs_State *C, const TValue *o, SPtr res, int mm);
 CSI_FUNC void csMM_tryconcat(cs_State *C);
 

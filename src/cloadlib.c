@@ -532,9 +532,9 @@ static void create_clibs_userdata(cs_State *C) {
         cs_push(C, -1); /* copy of clibs */
         cs_set_cfieldstr(C, CLIBS); /* ctable[CLIBS] = userdata */
     }
-    cs_push_list(C, CS_MM_GC + 1); /* push metalist */
+    cs_push_list(C, CS_MT_GC + 1); /* push metalist */
     cs_push_cfunction(C, gcmm); /* push finalizer */
-    cs_set_index(C, -2, CS_MM_GC); /* set metalist finalizer */
+    cs_set_index(C, -2, CS_MT_GC); /* set metalist finalizer */
     cs_set_metalist(C, -2); /* set clibs metalist */
     cs_pop(C, 1); /* pop clibs */
 }

@@ -171,7 +171,7 @@ const char *csF_getlocalname(const Proto *fn, int lnum, int pc) {
 ** raise error if not.
 */
 static void checkclosem(cs_State *C, SPtr level) {
-    const TValue *fmm = csMM_get(C, s2v(level), CS_MM_CLOSE);
+    const TValue *fmm = csMM_get(C, s2v(level), CS_MT_CLOSE);
     if (c_unlikely(ttisnil(fmm))) { /* missing __close metamethod? */
         int vidx = cast_int(level - C->cf->func.p);
         const char *name = csD_findlocal(C, C->cf, vidx, NULL);
@@ -255,7 +255,7 @@ static void poptbclist(cs_State *C) {
 */
 static void callclosemm(cs_State *C, TValue *obj, TValue *errobj) {
     SPtr top = C->sp.p;
-    const TValue *method = csMM_get(C, obj, CS_MM_CLOSE);
+    const TValue *method = csMM_get(C, obj, CS_MT_CLOSE);
     cs_assert(!ttisnil(method));
     setobj2s(C, top, method);
     setobj2s(C, top + 1, obj);

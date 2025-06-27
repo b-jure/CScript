@@ -2651,35 +2651,35 @@ typedef struct cs_Debug {
         <p>
         <pre>
 typedef enum cs_MM {
-    CS_MM_GETIDX = 0,
-    CS_MM_SETIDX,
-    CS_MM_GC,
-    CS_MM_CLOSE,
-    CS_MM_CALL,
-    CS_MM_CONCAT,
-    CS_MM_ADD, 
-    CS_MM_SUB,
-    CS_MM_MUL,
-    CS_MM_DIV,
-    CS_MM_IDIV,
-    CS_MM_MOD,
-    CS_MM_POW,
-    CS_MM_BSHL,
-    CS_MM_BSHR,
-    CS_MM_BAND,
-    CS_MM_BOR,
-    CS_MM_BXOR,
-    CS_MM_UNM,
-    CS_MM_BNOT,
-    CS_MM_EQ,
-    CS_MM_LT,
-    CS_MM_LE,
-    CS_MM_NUM,
+    CS_MT_GETIDX = 0,
+    CS_MT_SETIDX,
+    CS_MT_GC,
+    CS_MT_CLOSE,
+    CS_MT_CALL,
+    CS_MT_CONCAT,
+    CS_MT_ADD, 
+    CS_MT_SUB,
+    CS_MT_MUL,
+    CS_MT_DIV,
+    CS_MT_IDIV,
+    CS_MT_MOD,
+    CS_MT_POW,
+    CS_MT_BSHL,
+    CS_MT_BSHR,
+    CS_MT_BAND,
+    CS_MT_BOR,
+    CS_MT_BXOR,
+    CS_MT_UNM,
+    CS_MT_BNOT,
+    CS_MT_EQ,
+    CS_MT_LT,
+    CS_MT_LE,
+    CS_MT_NUM,
 } cs_MM;</pre>
         These values are indices for the metalist.
         <br/>
         Total number of metamethods defined by CScript without any libraries,
-        is denoted by <a name="CS_MM_NUM"><code>CS_MM_NUM</code></a>.
+        is denoted by <a name="CS_MT_NUM"><code>CS_MT_NUM</code></a>.
         <br/><br/>
         For more information on metalists and metamethods see
         <a href="#2.4">&sect;2.4</a>.
@@ -4519,7 +4519,7 @@ typedef enum cs_MM {
         <pre>const char *cs_push_metalist (cs_State *C);</pre>
         <p>
         This macro is equivalent to
-        <code>cs_push_list(C, <a href="#CS_MM_NUM">CS_MM_NUM</a>)</code>
+        <code>cs_push_list(C, <a href="#CS_MT_NUM">CS_MT_NUM</a>)</code>
         (see <a href="#cs_push_list"><code>cs_push_list</code></a>).
         </p>
 
@@ -5165,7 +5165,7 @@ typedef struct csL_MetaEntry {
         <code>*len</code> with the string length.
         <br/><br/>
         If the value has a metalist with a
-        <a name="CS_MM_TOSTRING"><code>CS_MM_TOSTRING</code></a> index
+        <a name="CS_MT_TOSTRING"><code>CS_MT_TOSTRING</code></a> index
         set, then <code>csL_to_lstring</code> calls the corresponding
         metamethod with the value as argument, and uses the result of the
         call as its result.

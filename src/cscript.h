@@ -107,32 +107,33 @@ typedef void (*cs_Hook)(cs_State *C, cs_Debug *ar);
 
 
 // TODO: update docs
-/* metamethod list indices (ORDER MM) */
-#define CS_MM_GETIDX	0
-#define CS_MM_SETIDX	1
-#define CS_MM_GC	2
-#define CS_MM_CLOSE	3
-#define CS_MM_CALL	4
-#define CS_MM_INIT	5
-#define CS_MM_CONCAT	6
-#define CS_MM_ADD	7
-#define CS_MM_SUB	8
-#define CS_MM_MUL	9
-#define CS_MM_DIV	10
-#define CS_MM_IDIV	11
-#define CS_MM_MOD	12
-#define CS_MM_POW	13
-#define CS_MM_BSHL	14
-#define CS_MM_BSHR	15
-#define CS_MM_BAND	16
-#define CS_MM_BOR	17
-#define CS_MM_BXOR	18
-#define CS_MM_UNM	19
-#define CS_MM_BNOT	20
-#define CS_MM_EQ	21
-#define CS_MM_LT	22
-#define CS_MM_LE	23
-#define CS_MM_NUM	24
+/* meta tags for indexing the metalist (ORDER MT) */
+#define CS_MT_GETIDX    0
+#define CS_MT_SETIDX	1
+#define CS_MT_GC	2
+#define CS_MT_CLOSE	3
+#define CS_MT_CALL	4
+#define CS_MT_INIT	5
+#define CS_MT_CONCAT	6
+#define CS_MT_ADD	7
+#define CS_MT_SUB	8
+#define CS_MT_MUL	9
+#define CS_MT_DIV	10
+#define CS_MT_IDIV	11
+#define CS_MT_MOD	12
+#define CS_MT_POW	13
+#define CS_MT_BSHL	14
+#define CS_MT_BSHR	15
+#define CS_MT_BAND	16
+#define CS_MT_BOR	17
+#define CS_MT_BXOR	18
+#define CS_MT_UNM	19
+#define CS_MT_BNOT	20
+#define CS_MT_EQ	21
+#define CS_MT_LT	22
+#define CS_MT_LE	23
+#define CS_MT_NAME	24
+#define CS_MT_NUM	25
 
 
 /* {======================================================================
@@ -294,11 +295,12 @@ CS_API void  cs_set_usermethods(cs_State *C, int index);
 ** ======================================================================= */
 // TODO: update docs
 /* thread status codes */
-#define CS_STATUS_OK            0  /* ok */
-#define CS_STATUS_ERUNTIME      1  /* runtime error */
-#define CS_STATUS_ESYNTAX       2  /* syntax (compiler) error */
-#define CS_STATUS_EMEM          3  /* memory related error */
-#define CS_STATUS_EERROR        4  /* error while handling error */
+#define CS_STATUS_OK            0 /* ok */
+#define CS_STATUS_ERUNTIME      1 /* runtime error */
+#define CS_STATUS_ESYNTAX       2 /* syntax (compiler) error */
+#define CS_STATUS_EMEM          3 /* memory related error */
+#define CS_STATUS_EERROR        4 /* error while handling error */
+#define CS_STATUS_NUM           5 /* total number of status codes */
 
 CS_API int cs_status(cs_State *C); 
 CS_API int cs_error(cs_State *C); 
@@ -391,7 +393,7 @@ CS_API void        cs_closeslot(cs_State *C, int index);
 #define cs_push_mainthread(C)   ((void)cs_get_cindex(C, CS_CLIST_MAINTHREAD))
 #define cs_push_globaltable(C)  ((void)cs_get_cindex(C, CS_CLIST_GLOBALS))
 #define cs_push_ctable(C)       ((void)cs_push(C, CS_CTABLE_INDEX))
-#define cs_push_metalist(C)     cs_push_list(C, CS_MM_NUM)
+#define cs_push_metalist(C)     cs_push_list(C, CS_MT_NUM)
 #define cs_push_literal(C, s)   cs_push_string(C, "" s)
 #define cs_push_cfunction(C,f)  cs_push_cclosure(C,f,0)
 

@@ -21,16 +21,20 @@
 /* type for storing metaindex:function pairs */
 typedef struct csL_MetaEntry csL_MetaEntry;
 
+
 /* type for buffering system */
 typedef struct csL_Buffer csL_Buffer;
 
 
-/* extra error code for 'csL_loadfile' */
-#define CS_STATUS_EFILE     (CS_STATUS_EERROR + 1)
+/* new status code for file-related errors in 'csL_loadfile' */
+#define CS_STATUS_EFILE     CS_STATUS_NUM
 
 
-/* meta field that triggers in 'csL_to_lstring' */
-#define CS_MM_TOSTRING      CS_MM_NUM
+/*
+** Meta tag for a new metalist metamethod that triggers in
+** 'csL_to_lstring'
+*/
+#define CS_MT_TOSTRING      CS_MT_NUM
 
 
 /* key, in the ctable, for table of loaded modules */

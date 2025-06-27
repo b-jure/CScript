@@ -147,7 +147,7 @@ assert(a.deep(30000) == 101);
     assert(a == 10 and b == -2 and c == -1);
 
     /// tail calls x metamethods
-    local ml = []; ml[__M.call] = foo;
+    local ml = []; ml[__MT.call] = foo;
     local z = setmetalist(class {}, ml)();
     local fn foo2(x) { return z(10, x); };
     a, b, c = foo2(100);
@@ -199,7 +199,7 @@ assert(a.deep(30000) == 101);
     /// build a chain of __call metamethods ending in function 'foo'
     foreach i in range(0, 15) {
         local ml = [];
-        ml[__M.call] = foo;
+        ml[__MT.call] = foo;
         foo = setmetalist(class {}, ml)();
     }
 
@@ -211,9 +211,9 @@ assert(a.deep(30000) == 101);
 {  
     print("testing chains of '__call'");
     local N = 15;
-    local u = (class { fn __call(...) { return [...]; } })();
+    local u = (class { __call = fn(...) { return [...]; }; })();
     foreach i in range(0, N) {
-        local ml = []; ml[__M.call] = u;
+        local ml = []; ml[__MT.call] = u;
         u = setmetalist(class {}, ml)();
         u[0] = i;
     }
@@ -225,21 +225,20 @@ assert(a.deep(30000) == 101);
 }
 
 
-/// TODO: test this
-///{
-///    print("testing chains of '__init'");
-///    local N = 15;
-///    local u = (class { fn __init(...) { return [...]; }});
-///    foreach i in range(0, N) {
-///        local ml = []; ml[__M.init] = u;
-///        u = setmetalist(class {}, ml);
-///    }
-///    local Res = u("a", "b", "c");
-///    assert(len(Res) == N + 3);
-///    foreach i in range(0, N)
-///        assert(typeof(Res[i]) == "instance");
-///    assert(Res[N] == "a" and Res[N+1] == "b" and Res[N+2] == "c");
-///}
+{
+    print("testing chains of '__init'");
+    local N = 15;
+    local u = (class { __init = fn(...) { return [...]; }; });
+    foreach i in range(0, N) {
+        local ml = []; ml[__MT.init] = u;
+        u = setmetalist(class {}, ml);
+    }
+    local Res = u("a", "b", "c");
+    assert(len(Res) == N + 3);
+    foreach i in range(0, N)
+        assert(typeof(Res[i]) == "instance");
+    assert(Res[N] == "a" and Res[N+1] == "b" and Res[N+2] == "c");
+}
 
 
 a = nil;
@@ -418,10 +417,10 @@ cannotload("hhi", load(fn() { error("hhi"); }));
     }
     assert(t._012345678901234567890123456789012345678901234567890123456789(t) == 1);
     t = class {
-        fn __init() {
+        __init = fn() {
             self.x = 1;
             return self;
-        }
+        };
         fn _012345678901234567890123456789012345678901234567890123456789() {
             return self.x;
         }
